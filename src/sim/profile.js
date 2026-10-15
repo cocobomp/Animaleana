@@ -40,6 +40,8 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     equipment: [], // mangeoires, abreuvoirs… { id, type, place, stock }
     helpers: [], // aides embauchées { id, type, name, place }
     farm: { autoHerd: true },
+    // Événements spéciaux (orage, animal blessé…) : voir src/sim/events.js.
+    events: { active: null, cooldowns: {}, nextAt: 0, lastRoll: -1, weather: null, done: {} },
     settings: { camera: 'third', timeSpeed: 'normal' },
   };
 }

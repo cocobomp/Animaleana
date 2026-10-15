@@ -14,6 +14,7 @@ export const XP = {
   birth: 50,
   quest: 60,
   build: 30,
+  event: 40, // un événement spécial réussi (src/sim/events.js)
 };
 
 /** XP totale nécessaire pour atteindre le niveau n (niveau 1 = 0 XP). */

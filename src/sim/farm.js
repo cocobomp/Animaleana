@@ -6,6 +6,7 @@ import { SPECIES } from './species.js';
 import { applyCare, cure, lifeStage, NEEDS } from './animal.js';
 import { isSandbox, spend, earn } from './profile.js';
 import { pick, uid } from './rng.js';
+import { droppingsAt, removeDroppings } from './droppings.js';
 
 const PETS = ['dog', 'cat', 'rabbit'];
 const LIVESTOCK = ['sheep', 'goat', 'cow'];
@@ -155,6 +156,11 @@ export function helperTask(profile, helper, animals) {
   }
   // Les tâches confiées par le joueur (par défaut : tout ce que l'aide sait faire).
   const duties = helper.duties ?? def.actions;
+  // Ramasser les crottins des animaux dont l'aide s'occupe.
+  if (duties.includes('clean')) {
+    const poop = droppingsAt(profile, helper.place).find((d) => def.species.includes(d.species));
+    if (poop) return { kind: 'scoop', droppingId: poop.id };
+  }
   let best = null;
   for (const a of animals) {
     if (!def.species.includes(a.species)) continue;
@@ -178,6 +184,10 @@ export function doHelperTask(profile, task, animals) {
     const eq = profile.equipment.find((e) => e.id === task.equipmentId);
     if (!eq) return { ok: false };
     return refillEquipment(profile, eq);
+  }
+  if (task.kind === 'scoop') {
+    removeDroppings(profile, [task.droppingId]);
+    return { ok: true, scooped: task.droppingId };
   }
   const a = animals.find((x) => x.id === task.animalId);
   if (!a) return { ok: false };

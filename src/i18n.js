@@ -575,6 +575,13 @@ const fr = {
   r_needHalter_f: 'Mets d\'abord un licol à {name} pour la mener (fiche de l\'animal).',
   gear_halter: 'Licol',
   geard_halter: 'pour mener l\'animal à la main',
+
+  dogPoop: '💩 {name} a fait sa crotte : ramasse-la avec un sac (touche-la) !',
+  scooped: '🧹 Ramassé, c\'est propre !',
+  scoopedN: '🧹 {n} crottins ramassés.',
+  scoopedN_one: '🧹 1 crottin ramassé.',
+  do_cleanPen: 'Ramasser les crottins de l\'enclos',
+  why_alreadyClean: 'C\'est déjà propre.',
 };
 
 const en = {
@@ -1102,6 +1109,13 @@ const en = {
   r_needHalter: 'Put a halter on {name} first to lead them (animal card).',
   gear_halter: 'Halter',
   geard_halter: 'to lead the animal by hand',
+
+  dogPoop: '💩 {name} did a poo: pick it up with a bag (tap it)!',
+  scooped: '🧹 Picked up, all clean!',
+  scoopedN: '🧹 {n} droppings picked up.',
+  scoopedN_one: '🧹 1 dropping picked up.',
+  do_cleanPen: 'Pick up droppings in the pen',
+  why_alreadyClean: 'It\'s already clean.',
 };
 
 const DICTS = { fr, en };

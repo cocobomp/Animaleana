@@ -7,15 +7,20 @@ import { SPECIES } from '../sim/species.js';
 import { canRide } from '../sim/animal.js';
 import { canProduce } from '../sim/farm.js';
 import { speciesName } from './names.js';
+import { CARE, NEEDS, happiness } from '../sim/animal.js';
+import { NEED_ICON } from './UI.js';
+import { bar } from './dom.js';
 
 const BUILDING_ICON = { stable: '🐴', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋' };
 
-function sheet(ui, title, subtitle, items) {
+function sheet(ui, title, subtitle, items, header = null, live = false) {
   ui.openPanel({
     title,
     kind: 'actions',
+    live,
     render: () => [
       subtitle ? h('p', { class: 'note' }, subtitle) : null,
+      header ? header() : null,
       h('div', { class: 'action-sheet' }, items().map((it) => h('button', {
         class: `big-action ${it.enabled === false ? 'off' : ''} ${it.primary ? 'primary' : ''}`,
         onClick: () => {
@@ -25,7 +30,8 @@ function sheet(ui, title, subtitle, items) {
           }
           it.run();
         },
-      }, h('span', { class: 'ba-icon' }, it.icon), h('span', { class: 'ba-text' }, h('b', {}, it.label), it.enabled === false && it.why ? h('small', {}, it.why) : null)))),
+      }, h('span', { class: 'ba-icon' }, it.icon), h('span', { class: 'ba-text' }, h('b', {}, it.label),
+        it.enabled === false && it.why ? h('small', {}, it.why) : it.effect ? h('small', { class: 'effect' }, it.effect) : null)))),
     ],
   });
 }
@@ -42,7 +48,12 @@ export function openBuilding(ui, kind) {
     hayHorses: () => ui.groupCareWithGame((a) => a.species === 'horse', 'feed'),
     waterHorses: () => ui.groupCareWithGame((a) => a.species === 'horse', 'water'),
     brushHorses: () => ui.groupCareWithGame((a) => a.species === 'horse', 'brush'),
-    cleanStalls: () => ui.groupCareWithGame((a) => a.species === 'horse', 'clean'),
+    cleanStalls: () => {
+      const n = g.cleanZone('paddock');
+      if (n) ui.toast(t('scoopedN', { n }));
+      ui.groupCareWithGame((a) => a.species === 'horse', 'clean');
+    },
+    cleanPen: () => { ui.toast(t('scoopedN', { n: g.cleanZone('pen') })); ui.renderPanel(); },
     outFlock: () => { close(); g.moveFlock('field'); },
     inFlock: () => { close(); g.moveFlock('pen'); },
     hayFlock: () => ui.groupCareWithGame((a) => SPECIES[a.species].livestock, 'feed'),
@@ -83,6 +94,7 @@ export function openAnimalActions(ui, a) {
         label: x === 'clean' ? t(`act_${a.species}_clean`) : t(`act_${x}`),
         enabled: allowed.ok,
         why: allowed.ok ? '' : ta(`why_${allowed.reason}`, a),
+        effect: effectText(x),
         run: () => ui.careWithGame(a, x),
       };
     });
@@ -114,5 +126,15 @@ export function openAnimalActions(ui, a) {
     });
     items.push({ icon: '📋', label: t('more'), run: () => ui.openAnimal(a) });
     return items;
-  });
+  }, () => h('div', { class: 'bars compact' },
+    bar(t('happiness'), happiness(a), 'big'),
+    NEEDS.map((n) => bar(`${NEED_ICON[n]} ${t(`need_${n}`)}`, a.needs[n]))), true);
+}
+
+/** « 🍖 Faim +45 · ❤️ +6 » : ce que remplit chaque soin. */
+function effectText(action) {
+  return Object.entries(CARE[action]?.needs ?? {})
+    .filter(([, v]) => v > 0)
+    .map(([n, v]) => `${NEED_ICON[n]} ${t(`need_${n}`)} +${v}`)
+    .join(' · ');
 }

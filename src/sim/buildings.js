@@ -17,7 +17,7 @@ const RULES = {
     { id: 'hayHorses', icon: '🌾', when: (c) => need(c.count.horse) },
     { id: 'waterHorses', icon: '💧', when: (c) => need(c.count.horse) },
     { id: 'brushHorses', icon: '🪮', when: (c) => need(c.count.horse) ?? sleeping(c, 6, 21) },
-    { id: 'cleanStalls', icon: '🧹', when: (c) => need(c.count.horse) ?? sleeping(c, 6, 21) },
+    { id: 'cleanStalls', icon: '🧹', when: (c) => (c.count.horse || c.count.paddockDroppings ? null : { reason: 'noAnimals' }) ?? sleeping(c, 6, 21) },
     { id: 'tack', icon: '🏇', when: () => null },
     { id: 'farm', icon: '🔧', when: () => null },
   ],
@@ -26,6 +26,7 @@ const RULES = {
     { id: 'inFlock', icon: '🏠', when: (c) => need(c.count.livestock) },
     { id: 'hayFlock', icon: '🌾', when: (c) => need(c.count.livestock) },
     { id: 'waterFlock', icon: '💧', when: (c) => need(c.count.livestock) },
+    { id: 'cleanPen', icon: '🧹', when: (c) => (c.count.penDroppings > 0 ? null : { reason: 'alreadyClean' }) },
     // La traite se fait le matin et le soir.
     { id: 'milkAll', icon: '🥛', when: (c) => need(c.count.milkable, 'noneReady') ?? (inHours(c.hour, 6, 10) || inHours(c.hour, 17, 21) ? null : { reason: 'milkTime' }) },
     // On tond au printemps et en été.

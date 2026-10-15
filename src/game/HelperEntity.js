@@ -5,8 +5,8 @@ import { HELPERS, helperTask } from '../sim/farm.js';
 import { buildAvatar } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 
-const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e];
-const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0x9a9a9a];
+const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x5a3a24];
+const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xa63a1f, 0x9a9a9a];
 
 function label(text) {
   const c = document.createElement('canvas');
@@ -34,15 +34,18 @@ export class HelperEntity {
     this.def = HELPERS[data.type];
     this.world = world;
     this.scene = scene;
-    const seed = data.name.charCodeAt(0) + data.name.length;
+    // Apparence variée : les aides femmes et hommes ont des coiffures, peaux et tenues différentes.
+    const seed = [...data.name].reduce((n, c) => n + c.charCodeAt(0), 0);
+    const female = data.sex === 'f';
+    const styles = female ? ['ponytail', 'long', 'curly', 'long'] : ['short', 'curly', 'short', 'bald'];
     this.avatar = buildAvatar({
       skin: SKINS[seed % SKINS.length],
       hair: HAIRS[(seed * 3) % HAIRS.length],
-      hairStyle: ['short', 'ponytail', 'curly', 'long'][seed % 4],
+      hairStyle: styles[seed % styles.length],
       top: this.def.color,
-      bottom: 0x3a3f4a,
+      bottom: female && seed % 2 ? 0x5a4a6a : 0x3a3f4a,
       shoes: 0x3b2a20,
-      hat: data.type !== 'vet',
+      hat: data.type !== 'vet' && seed % 3 === 0,
     });
     this.root = new THREE.Group();
     this.root.add(this.avatar.root);

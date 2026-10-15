@@ -9,6 +9,8 @@ import { openVet } from './vet.js';
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
 
+export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
+
 export class UI {
   constructor(root) {
     this.root = root;
@@ -40,7 +42,9 @@ export class UI {
     hold(runBtn, () => { this.game.input.btnRun = true; }, () => { this.game.input.btnRun = false; });
     this.touchPad = h('div', { id: 'touch-pad', hidden: true }, left, runBtn, right);
     this.statusBar = h('div', { id: 'status-bar' });
-    root.append(this.touchPad, this.statusBar);
+    this.labels = h('div', { id: 'labels' });
+    this.labelEls = new Map();
+    root.append(this.touchPad, this.statusBar, this.labels);
 
     // Ne pas redessiner un panneau pendant qu'on appuie dessus (sinon le clic se perd).
     this.holding = false;
@@ -72,6 +76,7 @@ export class UI {
     this.touchPad.hidden = true;
     this.statusBar.replaceChildren();
     this.statusKey = '';
+    this.clearLabels();
     document.getElementById('joystick').hidden = true;
     showProfiles(this);
   }
@@ -92,7 +97,8 @@ export class UI {
     this.applyControls();
     this.buildHud();
     {
-      this.help.textContent = `${t('tapHint')} · ${t('controlsHelp')}`;
+      const touch = matchMedia('(pointer: coarse)').matches;
+      this.help.textContent = touch ? t('tapHint') : `${t('tapHint')} · ${t('controlsHelp')}`;
       this.help.hidden = false;
       clearTimeout(this.helpTimer);
       this.helpTimer = setTimeout(() => this.hideHelp(), 15000);
@@ -137,6 +143,64 @@ export class UI {
     this.renderStatus();
   }
 
+  /**
+   * Étiquettes des noms au-dessus des animaux proches, qu'on peut toucher.
+   * Quand plusieurs animaux sont serrés, les étiquettes s'écartent pour rester lisibles.
+   */
+  updateLabels(entities, camera, playerPos) {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const seen = new Set();
+    const placed = [];
+    const items = [];
+    for (const e of entities) {
+      if (e.ridden) continue;
+      const d = e.position.distanceTo(playerPos);
+      if (d > 14) continue;
+      const v = e.position.clone();
+      v.y += e.label.position.y;
+      v.project(camera);
+      if (v.z > 1 || v.x < -1.1 || v.x > 1.1 || v.y < -1.1 || v.y > 1.1) continue;
+      items.push({ e, x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, d });
+    }
+    items.sort((a, b) => a.d - b.d);
+    for (const it of items) {
+      const a = it.e.data;
+      seen.add(a.id);
+      let el = this.labelEls.get(a.id);
+      if (!el) {
+        el = h('button', { class: 'animal-label', onClick: (ev) => { ev.stopPropagation(); this.game.walkTo(it.e.position, it.e.radius + 1.2, () => this.openAnimalActions(a), true); } });
+        this.labels.append(el);
+        this.labelEls.set(a.id, el);
+      }
+      const m = this.game.moodOf(a);
+      const text = `${{ happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' }[m]} ${a.name}${it.e.sleeping ? ' 💤' : ''}`;
+      if (el.textContent !== text) el.textContent = text;
+      // Écarte l'étiquette vers le haut tant qu'elle chevauche une autre.
+      const w = 14 + text.length * 8;
+      let y = it.y;
+      for (let k = 0; k < 6; k++) {
+        const hit = placed.find((q) => Math.abs(q.x - it.x) < (q.w + w) / 2 && Math.abs(q.y - y) < 30);
+        if (!hit) break;
+        y = hit.y - 32;
+      }
+      placed.push({ x: it.x, y, w });
+      el.style.transform = `translate(${it.x - w / 2}px, ${y - 30}px)`;
+      el.style.opacity = it.d > 10 ? 0.6 : 1;
+    }
+    for (const [id, el] of this.labelEls) {
+      if (!seen.has(id)) {
+        el.remove();
+        this.labelEls.delete(id);
+      }
+    }
+  }
+
+  clearLabels() {
+    for (const el of this.labelEls.values()) el.remove();
+    this.labelEls.clear();
+  }
+
   /** Bandeau d'état : qui me suit, sur qui je suis monté, le troupeau en route. */
   renderStatus() {
     const g = this.game;
@@ -178,6 +242,16 @@ export class UI {
     const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', stable: '🐴', pen: '🐑', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
+  }
+
+  /** Montre ce que le soin a changé : « 🍖 Faim 30 → 75 ». */
+  showDeltas(a, before) {
+    const parts = [];
+    for (const [n, v] of Object.entries(a.needs)) {
+      const d = Math.round(v - before[n]);
+      if (Math.abs(d) >= 1) parts.push(`${NEED_ICON[n]} ${t(`need_${n}`)} ${Math.round(before[n])} → ${Math.round(v)}`);
+    }
+    if (parts.length) this.toast(`${a.name} : ${parts.join(' · ')}`, 3500);
   }
 
   levelUp(level, names) {

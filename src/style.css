@@ -166,8 +166,11 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
   #hud { flex-direction: column; }
   .hud-info { max-width: 100%; font-size: 0.8rem; padding: 6px 10px; }
   .hud-buttons { justify-content: flex-start; }
-  .hud-btn { min-width: 52px; min-height: 48px; }
+  .hud-buttons { gap: 4px; flex-wrap: nowrap; }
+  .hud-btn { min-width: 44px; width: 44px; min-height: 44px; padding: 4px; }
+  .hud-btn span { font-size: 1.25rem; }
   .hud-btn small { display: none; }
+  #help { bottom: auto; top: calc(150px + var(--safe-t)); font-size: 0.8rem; }
 }
 
 #action {
@@ -460,3 +463,27 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 
 .chip.weight-fat, .chip.weight-thin { background: #fde3df; }
 .chip.weight-chubby { background: #fdf0d8; }
+
+/* ---------- étiquettes des noms */
+#labels { position: fixed; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+.animal-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(20, 28, 24, 0.62);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  will-change: transform;
+  transition: opacity 0.2s;
+}
+.big-action small.effect { color: var(--primary); font-weight: 600; }
+.big-action.primary small.effect { color: #e9fff2; }
+.bars.compact { gap: 3px; margin: 4px 0 10px; }
+.bars.compact .bar { grid-template-columns: 118px 1fr 28px; font-size: 0.8em; }

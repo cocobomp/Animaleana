@@ -192,6 +192,8 @@ export function tickAnimal(a, hours, ctx = {}) {
     if (stage === 'senior' && n === 'energy') rate *= 1.2;
     // Un animal de troupeau seul s'ennuie (cheval, mouton, chèvre, vache).
     if (n === 'affection' && ctx.alone) rate *= 1.6;
+    // Des crottins tout autour : on se salit plus vite.
+    if (n === 'hygiene' && ctx.dirt) rate *= 1 + Math.min(2, ctx.dirt * 0.25);
     a.needs[n] = clamp(a.needs[n] - rate * hours);
   }
   if (ctx.companions > 0) a.needs.affection = clamp(a.needs.affection + Math.min(2, ctx.companions) * 0.8 * hours);

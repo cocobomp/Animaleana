@@ -309,7 +309,7 @@ export class AnimalEntity {
 
     // Le nom n'apparaît que lorsque le joueur est proche.
     const distPlayer = p.distanceTo(ctx.playerPos);
-    this.label.visible = distPlayer < 9 && !this.ridden;
+    this.label.visible = false; // les noms sont affichés en HTML (étiquettes qu'on peut toucher)
 
     if (this.ridden) {
       this.sleeping = false;

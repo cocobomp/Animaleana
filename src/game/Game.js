@@ -26,6 +26,8 @@ import { checkObjectives } from '../sim/objectives.js';
 import { saveProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
 import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
 import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
+import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone } from '../sim/droppings.js';
+import { enclosure } from './nav.js';
 import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { t, L } from '../i18n.js';
@@ -77,6 +79,7 @@ export class Game {
     this.helpers = new Map();
     this.equipment = [];
     this.herding = new Herding(this);
+    this.droppingMeshes = new Map();
     this.profile = null;
     this.running = false;
     this.simAcc = 0;
@@ -157,6 +160,8 @@ export class Game {
     this.world.build(placeId, this.season);
     this.equipment = [];
     for (const eq of equipmentAt(this.profile, placeId)) this.spawnEquipment(eq);
+    this.droppingMeshes.clear();
+    for (const d of this.profile.droppings ?? []) if (d.place === placeId) this.spawnDropping(d);
     for (const h of this.profile.helpers) {
       if (h.place === placeId) this.helpers.set(h.id, new HelperEntity(h, this.world, this.scene));
     }
@@ -180,6 +185,51 @@ export class Game {
     const entry = { eq, def, mesh, pos: new THREE.Vector3(x, 0, z) };
     this.equipment.push(entry);
     return entry;
+  }
+
+  /** Crottin (petits tas bruns) ou flaque de pipi. */
+  spawnDropping(d) {
+    const g = new THREE.Group();
+    if (d.kind === 'poop') {
+      const big = d.species === 'horse' || d.species === 'cow' ? 1 : 0.45;
+      const mat = new THREE.MeshStandardMaterial({ color: d.species === 'cow' ? 0x4a3a22 : 0x5a4126, roughness: 0.9 });
+      const n = d.species === 'cow' ? 1 : 4;
+      for (let i = 0; i < n; i++) {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(0.09 * big * (d.species === 'cow' ? 2.2 : 1), 8, 6), mat);
+        m.position.set((Math.random() - 0.5) * 0.18 * big, 0.05 * big, (Math.random() - 0.5) * 0.18 * big);
+        m.scale.y = d.species === 'cow' ? 0.35 : 0.8;
+        m.castShadow = true;
+        g.add(m);
+      }
+    } else {
+      const m = new THREE.Mesh(new THREE.CircleGeometry(0.35, 16).rotateX(-Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0x3a3320, roughness: 0.2, transparent: true, opacity: 0.45, depthWrite: false }));
+      m.position.y = 0.02;
+      g.add(m);
+    }
+    g.position.set(d.x, this.world.heightAt(d.x, d.z), d.z);
+    g.userData.dropping = d;
+    this.world.group.add(g);
+    this.droppingMeshes.set(d.id, g);
+  }
+
+  removeDroppingMeshes(ids) {
+    for (const id of ids) {
+      const m = this.droppingMeshes.get(id);
+      if (!m) continue;
+      m.parent?.remove(m);
+      m.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+      this.droppingMeshes.delete(id);
+    }
+  }
+
+  scoop(ids) {
+    removeDroppings(this.profile, ids);
+    this.removeDroppingMeshes(ids);
+    if (ids.length) {
+      addStat(this.profile, 'scoop', ids.length);
+      this.xp('care', Math.min(2, ids.length));
+    }
   }
 
   spawnEntity(a, near = null) {
@@ -316,6 +366,7 @@ export class Game {
     const entities = [...this.entities.values()];
     const ctx = { playerPos: this.player.position, night, entities, game: this };
     for (const e of entities) e.update(dt, ctx);
+    this.ui.updateLabels(entities, this.camera, this.player.position);
     for (const h of this.helpers.values()) h.update(dt, this);
     this.herding.update(dt);
     for (const q of this.equipment) {
@@ -337,10 +388,22 @@ export class Game {
       const weather = this.simWeather();
       const here = this.animalsHere();
       this.farmTick(here, hours);
+      this.removeDroppingMeshes(dryPuddles(this.profile, this.profile.clock));
       for (const a of here) {
         const e = this.entities.get(a.id);
         const before = mood(a);
+        if (e) {
+          const kind = digest(a, hours);
+          if (kind) {
+            const back = 0.5 * (a.look.bodyLen * e.scale);
+            const d = addDropping(this.profile, this.profile.place, e.position.x - Math.sin(e.heading) * back, e.position.z - Math.cos(e.heading) * back, kind, this.profile.clock, a.species);
+            this.spawnDropping(d);
+            if (kind === 'poop' && a.species === 'dog' && a.following) this.ui.toast(t('dogPoop', { name: a.name, g: a.sex }), 4000);
+          }
+        }
+        const dirt = e ? dirtNear(this.profile, this.profile.place, e.position.x, e.position.z) : 0;
         const events = tickAnimal(a, hours, {
+          dirt,
           weather: feltWeather(a, weather, this.temperature, this.season), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
         });
         tickProduce(a, hours);
@@ -397,6 +460,20 @@ export class Game {
         return;
       }
     }
+    const poops = [...this.droppingMeshes.values()].filter((m) => m.userData.dropping.kind === 'poop');
+    const hitP = this.raycaster.intersectObjects(poops, true)[0];
+    if (hitP && !this.player.mount) {
+      let o = hitP.object;
+      while (o && !o.userData.dropping) o = o.parent;
+      if (o) {
+        const id = o.userData.dropping.id;
+        this.walkTo(o.position.clone(), 1, () => {
+          this.scoop([id]);
+          this.ui.toast(t('scooped'));
+        });
+        return;
+      }
+    }
     if (this.player.mount) {
       const hitG = this.raycaster.intersectObject(this.world.group, true)[0];
       if (hitG) this.walkTo(hitG.point, 1);
@@ -438,8 +515,27 @@ export class Game {
         sick: here.filter((a) => a.sick).length,
         milkable: here.filter((a) => a.produceReady && sp(a).product?.action === 'milk').length,
         shearable: here.filter((a) => a.produceReady && sp(a).product?.action === 'shear').length,
+        paddockDroppings: this.zoneDroppings('paddock'),
+        penDroppings: this.zoneDroppings('pen'),
       },
     };
+  }
+
+  zoneDroppings(id) {
+    const z = enclosure(id);
+    return (this.profile.droppings ?? []).filter((d) => d.place === this.profile.place && d.kind === 'poop'
+      && Math.abs(d.x - z.x) < z.hw + 1 && Math.abs(d.z - z.z) < z.hd + 1).length;
+  }
+
+  /** Curer : ramasse tous les crottins d'un enclos. */
+  cleanZone(id) {
+    const ids = scoopZone(this.profile, this.profile.place, enclosure(id));
+    this.removeDroppingMeshes(ids);
+    if (ids.length) {
+      addStat(this.profile, 'scoop', ids.length);
+      this.xp('care', Math.min(3, ids.length));
+    }
+    return ids.length;
   }
 
   buildingActions(kind) {
@@ -456,7 +552,9 @@ export class Game {
     for (const a of this.animalsHere().filter(filter)) {
       if (!SPECIES[a.species].actions.includes(action)) continue;
       if (!canAfford(this.profile, CARE[action].cost)) break;
+      const before = { ...a.needs };
       if (applyCare(a, action, quality).ok) {
+        if (n === 0) this.ui.showDeltas(a, before);
         spend(this.profile, CARE[action].cost);
         addStat(this.profile, action);
         this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️', 2);
@@ -695,7 +793,9 @@ export class Game {
   care(a, action, quality = 1) {
     const care = CARE[action];
     if (!canAfford(this.profile, care.cost)) return this.ui.toast(t('r_money'));
+    const before = { ...a.needs };
     const res = applyCare(a, action, quality);
+    if (res.ok) this.ui.showDeltas(a, before);
     if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name, g: a.sex }));
     spend(this.profile, care.cost);
     addStat(this.profile, action);
@@ -912,6 +1012,10 @@ export class Game {
   }
 
   taskPosition(task) {
+    if (task.droppingId) {
+      const m = this.droppingMeshes.get(task.droppingId);
+      return m ? m.position : null;
+    }
     if (task.animalId) {
       const e = this.entities.get(task.animalId);
       return e ? e.position : null;
@@ -924,6 +1028,10 @@ export class Game {
     if (!task) return;
     const r = doHelperTask(this.profile, task, this.animalsHere());
     if (!r.ok) return;
+    if (r.scooped) {
+      this.removeDroppingMeshes([r.scooped]);
+      return;
+    }
     const e = task.animalId && this.entities.get(task.animalId);
     if (e) e.emit(task.kind === 'cure' ? '💚' : task.kind === 'product' ? '🪣' : '❤️', 2);
     if (task.kind === 'product') this.ui.toast(t(`collected_${r.product}`, { name: helper.data.name, g: helper.data.sex, n: r.earned }));

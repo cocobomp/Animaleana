@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { SPECIES } from '../sim/species.js';
 import { growthScale, mood, lifeStage } from '../sim/animal.js';
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
+import { buildGltfAnimal } from './models/gltfAnimal.js';
 import { emojiTexture } from './textures.js';
 import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
@@ -89,9 +90,11 @@ export class AnimalEntity {
   build() {
     if (this.root) {
       this.scene.remove(this.root);
+      this.model.dispose?.();
       disposeModel(this.model.root);
     }
-    this.model = buildAnimalModel(this.data.species, this.data.look);
+    // Modèle GLB animé si l'espèce en a un (src/game/assets.js), sinon le modèle procédural.
+    this.model = buildGltfAnimal(this.data.species, this.data.look) ?? buildAnimalModel(this.data.species, this.data.look);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
     this.scaleGroup = new THREE.Group();
@@ -645,6 +648,7 @@ export class AnimalEntity {
   animate(dt, sad) {
     const md = this.model;
     const sp = this.sp;
+    if (md.gltf) return this.animateGltf(dt, sad);
     const legLen = this.data.look.legLen * (this.data.look.legs ?? 1);
     const v = this.speed / Math.max(0.3, this.scale);
     const moving = this.speed > 0.05;
@@ -804,8 +808,22 @@ export class AnimalEntity {
     if (md.hairSway) md.hairSway.value = Math.min(2.5, v * 0.5) + (Math.abs(swish) > 0.2 ? 1 : 0);
   }
 
+  /** Animation d'un modèle GLB : clips idle/walk/run pilotés par l'état, tête baissée pour manger. */
+  animateGltf(dt, sad) {
+    const md = this.model;
+    const sp = this.sp;
+    const v = this.speed / Math.max(0.3, this.scale);
+    const moving = this.speed > 0.05 && this.perch?.phase !== 'on';
+    const gallop = this.speed > sp.runSpeed * 0.65;
+    const grazing = sp.livestock && this.state === 'idle' && Math.sin(this.time * 0.3 + this.phase) > 0.2;
+    const eat = this.state === 'eat' || (grazing && !this.herdCtrl) ? 0.9 + Math.sin(this.time * 4) * 0.06 : 0;
+    this.headDown = (this.headDown ?? 0) + (eat - (this.headDown ?? 0)) * Math.min(1, dt * 3);
+    md.animate(dt, { moving, gallop, v, sleeping: this.sleeping, headDown: this.headDown, sad, time: this.time });
+  }
+
   dispose() {
     this.scene.remove(this.root);
+    this.model.dispose?.();
     disposeModel(this.model.root);
     this.label.material.map.dispose();
     this.label.material.dispose();

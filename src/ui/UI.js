@@ -259,6 +259,7 @@ export class UI {
       chips.push(chip(`🐕 ${t('statusHerding', { name: pd.name, g: pd.sex })}`, t('statusStop'), () => { g.herding.stop(false); this.renderStatus(); }));
     }
     chips.push(...tripChips(this)); // chargement du véhicule de voyage
+    chips.push(...(g.events?.statusChips(chip) ?? [])); // événement en cours (bandeau réduit)
     const key = chips.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
     this.statusKey = key;
@@ -501,7 +502,10 @@ export class UI {
   chorewithGame(kind, target = null) {
     return this.choreWithGame(kind, target);
   }
-  openAnimalActions(a) { openAnimalActions(this, a); }
+  openAnimalActions(a) {
+    if (a.stray) return this.game.events.askStray(this.game.events.active); // petit animal perdu (événement)
+    return openAnimalActions(this, a);
+  }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {

@@ -10,6 +10,7 @@ import { HelperEntity } from './HelperEntity.js';
 import { Herding } from './Herding.js';
 import { TaskQueue } from './TaskQueue.js';
 import { Interiors } from './Interiors.js'; // écurie et maison où l'on entre, box, corvées
+import { Events } from './Events.js'; // événements spéciaux (orage, animal blessé…)
 import { EQUIPMENT_MODELS } from './models/equipment.js';
 import { disposeModel } from './models/animalModel.js';
 import {
@@ -91,6 +92,7 @@ export class Game {
     this.herding = new Herding(this);
     this.tasks = new TaskQueue(this);
     this.interiors = new Interiors(this);
+    this.events = new Events(this);
     this.droppingMeshes = new Map();
     this.timeScale = 1; // 0 = pause
     this.profile = null;
@@ -282,15 +284,17 @@ export class Game {
   // ---------------------------------------------------------------- météo
 
   updateWeather() {
-    const key = `${this.day}-${Math.floor(this.hour / 6)}`;
+    // Un événement (orage, canicule, neige) peut imposer sa météo : voir Events.weatherOverride.
+    const forced = this.events?.weatherOverride();
+    const key = `${this.day}-${Math.floor(this.hour / 6)}${forced ? `-${forced.weather}` : ''}`;
     if (key === this.weatherKey) return;
     this.weatherKey = key;
-    this.weather = rollWeather(this.profile.place, this.season, key);
+    this.weather = forced?.weather ?? rollWeather(this.profile.place, this.season, key);
     this.weather3d.set(this.weather);
   }
 
   get temperature() {
-    return temperature(this.profile.place, this.season, this.hour, this.weather);
+    return temperature(this.profile.place, this.season, this.hour, this.weather) + (this.events?.weatherOverride()?.tempDelta ?? 0);
   }
 
   simWeather() {
@@ -500,6 +504,7 @@ export class Game {
       if (!this.player.auto) this.marker.visible = false;
     }
     this.updateFocus();
+    this.events.update(dt); // événements spéciaux
     this.renderer.render(this.scene, this.camera);
   }
 

@@ -80,6 +80,7 @@ export class Game {
     this.equipment = [];
     this.herding = new Herding(this);
     this.droppingMeshes = new Map();
+    this.timeScale = 1; // 0 = pause
     this.profile = null;
     this.running = false;
     this.simAcc = 0;
@@ -358,7 +359,8 @@ export class Game {
       return;
     }
     const p = this.profile;
-    const mps = minutesPerSecond(p.settings.timeSpeed);
+    // Vitesse : réglage de la durée d'une journée × boutons pause / ×1 / ×2 / ×4.
+    const mps = minutesPerSecond(p.settings.timeSpeed) * this.timeScale;
     p.clock += dt * mps;
     const night = isNight(p.clock);
 
@@ -390,8 +392,9 @@ export class Game {
       this.simAcc = 0;
       this.updateWeather();
       const weather = this.simWeather();
-      const here = this.animalsHere();
-      this.farmTick(here, hours);
+      // En pause, rien ne change (on peut quand même se promener).
+      const here = hours > 0 ? this.animalsHere() : [];
+      if (hours > 0) this.farmTick(here, hours);
       this.removeDroppingMeshes(dryPuddles(this.profile, this.profile.clock));
       for (const a of here) {
         const e = this.entities.get(a.id);
@@ -617,9 +620,30 @@ export class Game {
    * ⏩ Avance jusqu'au prochain moment intéressant : un animal qui a besoin de toi,
    * ou un rendez-vous de la journée (traite, sortie au pré, ouverture du refuge…). 12 h au plus.
    */
-  skipAhead() {
+  setTimeScale(x) {
+    this.timeScale = x;
+    this.ui.refresh();
+  }
+
+  /** Avance jusqu'à une heure précise (aujourd'hui ou demain). Les aides travaillent pendant ce temps. */
+  skipTo(hour) {
+    const now = this.hour;
+    let hours = hour - now;
+    if (hours <= 0.05) hours += 24;
+    let done = 0;
+    while (done < hours) {
+      const step = Math.min(0.5, hours - done);
+      this.advanceTime(step);
+      done += step;
+    }
+    this.ui.toast(t('skippedTo', { h: `${hour} h` }), 3500);
+    this.ui.refresh();
+    return done;
+  }
+
+  skipAhead(force = false) {
     const now = this.needsAttention();
-    if (now.length) {
+    if (now.length && !force) {
       const { a, what } = now[0];
       this.ui.toast(t('skipBusy', { name: a.name, g: a.sex, what: t(`attn_${what}`, { g: a.sex }) }), 5000);
       return 0;

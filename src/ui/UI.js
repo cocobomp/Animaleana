@@ -117,7 +117,6 @@ export class UI {
       this.hudInfo,
       h('nav', { class: 'hud-buttons' },
         btn('🐾', t('animals'), () => this.openAnimals()),
-        btn('⏩', t('skip'), () => this.game.skipAhead()),
         btn('🚜', t('farm'), () => this.openFarm()),
         btn('🧭', t('travel'), () => this.openTravel()),
         btn('📖', t('journal'), () => this.openJournal()),
@@ -135,7 +134,8 @@ export class UI {
       h('div', { class: 'hud-line strong' }, `👤 ${s.name}`, h('span', { class: 'coin' }, `🪙 ${money}`)),
       h('div', { class: 'hud-line level' }, `⭐ ${t('level', { n: s.level })}`,
         h('span', { class: 'xp-track' }, h('span', { class: 'xp-fill', style: { width: `${s.levelProgress * 100}%` } }))),
-      h('div', { class: 'hud-line' }, `📅 ${t('day', { n: s.day })} · 🕐 ${formatClock(s.clock)}`),
+      h('div', { class: 'hud-line' }, `📅 ${t('day', { n: s.day })} · 🕐 ${formatClock(s.clock)}${g.timeScale === 0 ? ` · ⏸ ${t('paused')}` : ''}`),
+      this.timeControls(),
       h('div', { class: 'hud-line' }, `${s.isHome ? '🏠' : s.place.flag} ${L(s.place.name)}`),
       h('div', { class: 'hud-line' }, `${WEATHER_EMOJI[s.weather]} ${t('weatherNow', { w: t(`w_${s.weather}`), t: s.temperature })} · ${t(`season_${s.season}`)}`),
     );
@@ -221,6 +221,41 @@ export class UI {
     if (key === this.statusKey) return;
     this.statusKey = key;
     this.statusBar.replaceChildren(...chips);
+  }
+
+  /** Barre du temps : pause, ×1, ×2, ×4, avancer. */
+  timeControls() {
+    const g = this.game;
+    const b = (label, scale, title) => h('button', {
+      class: `time-btn ${g.timeScale === scale ? 'on' : ''}`,
+      title,
+      onClick: () => g.setTimeScale(scale),
+    }, label);
+    return h('div', { class: 'time-bar' },
+      b('⏸', 0, t('pause')),
+      b('▶', 1, '×1'),
+      b('⏩', 2, '×2'),
+      b('⏩⏩', 4, '×4'),
+      h('button', { class: 'time-btn skip', title: t('skip'), onClick: () => this.openSkipMenu() }, '⏭'));
+  }
+
+  openSkipMenu() {
+    const g = this.game;
+    const busy = g.needsAttention();
+    const go = (fn) => () => {
+      this.hideModal();
+      fn();
+    };
+    const hour = (hh, label) => h('button', { class: 'big-action', onClick: go(() => g.skipTo(hh)) },
+      h('span', { class: 'ba-icon' }, label), h('span', { class: 'ba-text' }, h('b', {}, t('skipToHour', { h: hh }))));
+    this.showModal([
+      h('h3', {}, `⏭ ${t('skipTitle')}`),
+      busy.length ? h('p', { class: 'warn' }, t('skipBusy', { name: busy[0].a.name, g: busy[0].a.sex, what: t(`attn_${busy[0].what}`, { g: busy[0].a.sex }) })) : null,
+      h('div', { class: 'action-sheet' },
+        h('button', { class: 'big-action primary', onClick: go(() => g.skipAhead(true)) }, h('span', { class: 'ba-icon' }, '✨'), h('span', { class: 'ba-text' }, h('b', {}, t('skipNext')))),
+        hour(7, '🌅'), hour(12, '☀️'), hour(18, '🌇'), hour(21, '🌙')),
+      h('div', { class: 'row end' }, h('button', { onClick: () => this.hideModal() }, t('cancel'))),
+    ]);
   }
 
   setFocus(f) {

@@ -586,6 +586,13 @@ const fr = {
   chooseHome: 'Où veux-tu habiter ?',
   chooseHomeHelp: 'Le paysage, la météo, les saisons et les races du refuge dépendent de l\'endroit choisi.',
   liveHere: 'Habiter ici',
+
+  pause: 'Pause',
+  paused: 'en pause',
+  skipTitle: 'Avancer le temps',
+  skipNext: 'Jusqu\'au prochain moment intéressant',
+  skipToHour: 'Jusqu\'à {h} h',
+  skippedTo: '⏭ Il est maintenant {h}.',
 };
 
 const en = {
@@ -1124,6 +1131,13 @@ const en = {
   chooseHome: 'Where do you want to live?',
   chooseHomeHelp: 'The landscape, weather, seasons and shelter breeds depend on where you choose.',
   liveHere: 'Live here',
+
+  pause: 'Pause',
+  paused: 'paused',
+  skipTitle: 'Skip time',
+  skipNext: 'Until the next interesting moment',
+  skipToHour: 'Until {h}:00',
+  skippedTo: '⏭ It is now {h}.',
 };
 
 const DICTS = { fr, en };

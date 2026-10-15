@@ -241,7 +241,7 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 
 #help {
   position: fixed;
-  bottom: calc(150px + var(--safe-b));
+  bottom: calc(190px + var(--safe-b));
   left: 50%;
   transform: translateX(-50%);
   background: var(--glass);

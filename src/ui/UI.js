@@ -246,7 +246,8 @@ export class UI {
       chips.push(chip(`🏇 ${t('statusRiding', { name: a.name, g: a.sex })}`, t('dismount'), () => { g.dismount(); this.renderStatus(); }));
     }
     for (const a of g.animalsHere().filter((x) => x.following)) {
-      chips.push(chip(`🦮 ${t('statusFollowing', { name: a.name, g: a.sex })}`, t('statusStop'), () => { g.toggleFollow(a); this.renderStatus(); }));
+      const label = a.leashed ? t('statusLeash', { name: a.name, g: a.sex }) : t('statusFollowing', { name: a.name, g: a.sex });
+      chips.push(chip(`🦮 ${label}`, t('statusStop'), () => { if (a.leashed) g.toggleLeash(a); else g.toggleFollow(a); this.renderStatus(); }));
     }
     if (g.herding.active) {
       const pd = g.herding.active.pusher.data;

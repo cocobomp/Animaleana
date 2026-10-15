@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createProfile } from '../src/sim/profile.js';
 import { createAnimal } from '../src/sim/animal.js';
-import { buyGear, equip, rideGear, feltWeather, owned, canLead } from '../src/sim/gear.js';
+import { buyGear, equip, rideGear, feltWeather, owned, canLead, canLeash, heelSkill } from '../src/sim/gear.js';
 import { applyCare, weightClass } from '../src/sim/animal.js';
 
 describe('équipement', () => {
@@ -49,5 +49,22 @@ describe('licol et poids', () => {
     const dog = createAnimal({ species: 'dog', ageDays: 40 });
     for (let i = 0; i < 8; i++) applyCare(dog, 'treat');
     expect(weightClass(dog)).toBe('fat');
+  });
+});
+
+describe('laisse', () => {
+  it('il faut un collier et une laisse ; un chien dressé marche au pied', () => {
+    const p = createProfile('A');
+    const dog = createAnimal({ species: 'dog', ageDays: 40 });
+    p.animals.push(dog);
+    expect(canLeash(dog)).toBe(false);
+    equip(p, dog, 'collar', 'red');
+    equip(p, dog, 'leash');
+    expect(canLeash(dog)).toBe(true);
+    const puppy = heelSkill(dog);
+    dog.skills.obedience = 90;
+    dog.tricks.heel = 100;
+    expect(heelSkill(dog)).toBeGreaterThan(puppy);
+    expect(heelSkill(dog)).toBeGreaterThan(0.9);
   });
 });

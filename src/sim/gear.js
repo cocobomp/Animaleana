@@ -14,10 +14,11 @@ export const GEAR = {
   flyMask: { emoji: '🕸️', price: 35, species: ['horse', 'cow'], slot: 'head' },
   dogCoat: { emoji: '🧥', price: 40, species: ['dog'], slot: 'blanket', colors: true },
   collar: { emoji: '📿', price: 15, species: ['dog', 'cat'], slot: 'neck', colors: true },
+  leash: { emoji: '🦮', price: 15, species: ['dog'], slot: 'leash' },
 };
 
 /** Tout nouveau profil reçoit un licol, un filet et une selle. */
-export const STARTER_ITEMS = { halter: 1, bridle: 1, saddle: 1 };
+export const STARTER_ITEMS = { halter: 1, bridle: 1, saddle: 1, collar: 1, leash: 1 };
 
 export const owned = (profile, item) => profile.items?.[item] ?? 0;
 
@@ -52,6 +53,17 @@ export const wears = (a, item) => Object.values(a.gear ?? {}).some((g) => g.item
 export function rideGear(a) {
   if (!wears(a, 'bridle')) return { ok: false, reason: 'needBridle' };
   return { ok: true, bareback: !wears(a, 'saddle') };
+}
+
+/** Promener un chien en laisse : il faut le collier et la laisse. */
+export const canLeash = (a) => a.species === 'dog' && wears(a, 'collar') && wears(a, 'leash');
+
+/**
+ * À quel point le chien marche sagement (0 = tire partout, 1 = parfaitement au pied).
+ * Dépend de l'obéissance et du tour « Au pied ».
+ */
+export function heelSkill(a) {
+  return Math.min(1, (a.skills?.obedience ?? 10) / 100 * 0.5 + (a.tricks?.heel ?? 0) / 100 * 0.5);
 }
 
 /** Pour mener un cheval à la main, il faut un licol (ou le filet). */

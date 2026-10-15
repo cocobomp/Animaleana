@@ -29,7 +29,7 @@ import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
 import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
 import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone } from '../sim/droppings.js';
 import { enclosure } from './nav.js';
-import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead } from '../sim/gear.js';
+import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { t, L } from '../i18n.js';
 
@@ -385,6 +385,7 @@ export class Game {
     }
     this.rig.update(dt, ctrl, this.player, this.world);
     this.ui.updateLabels(entities, this.camera, this.player.position);
+    this.updateLeashes(entities);
     for (const q of this.equipment) {
       if (q.mesh.userData.spin) q.mesh.userData.spin.rotation.y += dt * 2;
     }
@@ -425,6 +426,11 @@ export class Game {
           weather: feltWeather(a, weather, this.temperature, this.season), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
         });
         tickProduce(a, hours);
+        // Chaque promenade fait progresser le chien (obéissance et « Au pied »).
+        if (a.species === 'dog' && a.following && e && e.speed > 0.5) {
+          a.skills.obedience = Math.min(100, a.skills.obedience + 1.2 * hours * (a.leashed ? 1 : 0.5));
+          a.tricks.heel = Math.min(100, (a.tricks.heel ?? 0) + 2.5 * hours * (a.leashed ? 1 : 0.4));
+        }
         if (before !== 'sad' && mood(a) === 'sad') this.ui.toast(t('sad', { name: a.name, g: a.sex }), 4000);
         this.handleEvents(a, events);
         if (e && e.stage !== undefined) {
@@ -934,7 +940,64 @@ export class Game {
     this.player.dismount();
   }
 
+  /** Laisses : un trait entre la main du joueur et le collier ; le chien qui tire entraîne le joueur. */
+  updateLeashes(entities) {
+    this.leashLines = this.leashLines ?? new Map();
+    let pull = null;
+    const seen = new Set();
+    for (const e of entities) {
+      if (!(e.data.following && e.data.leashed && canLeash(e.data))) continue;
+      seen.add(e.data.id);
+      let line = this.leashLines.get(e.data.id);
+      if (!line) {
+        const geo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 10 }, () => new THREE.Vector3()));
+        line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xc0392b }));
+        line.frustumCulled = false;
+        this.scene.add(line);
+        this.leashLines.set(e.data.id, line);
+      }
+      const pl = this.player.position;
+      const h = this.player.heading;
+      const hand = new THREE.Vector3(pl.x + Math.cos(h) * 0.3, pl.y + 0.85, pl.z - Math.sin(h) * 0.3);
+      const neck = e.position.clone();
+      neck.y += (e.model.y0 + e.data.look.bodyR) * e.scale;
+      const dist = hand.distanceTo(neck);
+      const slack = Math.max(0, 2.8 - dist) * 0.35;
+      const pos = line.geometry.attributes.position;
+      for (let i = 0; i < 10; i++) {
+        const tt = i / 9;
+        pos.setXYZ(i, hand.x + (neck.x - hand.x) * tt, hand.y + (neck.y - hand.y) * tt - Math.sin(tt * Math.PI) * slack, hand.z + (neck.z - hand.z) * tt);
+      }
+      pos.needsUpdate = true;
+      if (e.leashPull > 0) pull = { x: e.leashDir.x * e.leashPull, z: e.leashDir.z * e.leashPull };
+    }
+    for (const [id, line] of this.leashLines) {
+      if (!seen.has(id)) {
+        this.scene.remove(line);
+        line.geometry.dispose();
+        line.material.dispose();
+        this.leashLines.delete(id);
+      }
+    }
+    this.player.pull = pull;
+  }
+
+  /** Promener un chien en laisse (collier + laisse). */
+  toggleLeash(a) {
+    if (!a.following || !a.leashed) {
+      if (!canLeash(a)) return this.ui.toast(t('r_needLeash', { name: a.name, g: a.sex }), 5000);
+      a.following = true;
+      a.leashed = true;
+      this.ui.toast(t('leashOn', { name: a.name, g: a.sex }));
+    } else {
+      a.following = false;
+      a.leashed = false;
+      this.ui.toast(t('leashOff', { name: a.name, g: a.sex }));
+    }
+  }
+
   toggleFollow(a) {
+    a.leashed = false;
     if (!a.following) {
       const lead = canLead(a);
       if (!lead.ok) return this.ui.toast(t('r_needHalter', { name: a.name, g: a.sex }), 5000);
@@ -968,6 +1031,10 @@ export class Game {
     addStat(this.profile, 'adopted');
     this.xp('adopt');
     // Le premier cheval reçoit tout de suite le filet et la selle offerts.
+    if (a.species === 'dog') {
+      equip(this.profile, a, 'collar', 'red');
+      equip(this.profile, a, 'leash');
+    }
     if (a.species === 'horse') {
       equip(this.profile, a, 'halter', 'red');
       equip(this.profile, a, 'bridle');

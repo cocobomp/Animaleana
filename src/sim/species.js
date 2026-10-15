@@ -73,7 +73,7 @@ export const SPECIES = {
     decay: { hunger: 1.1, thirst: 1.1, hygiene: 1, energy: 1, exercise: 1.3, affection: 1.2, grooming: 0.8 },
     actions: ['feed', 'water', 'brush', 'wash', 'nails', 'pet', 'treat', 'play', 'follow'],
     training: ['agility', 'obedience', 'herding'],
-    tricks: ['sit', 'down', 'paw', 'fetch', 'roll', 'jump'],
+    tricks: ['heel', 'sit', 'down', 'paw', 'fetch', 'roll', 'jump'],
     model: {
       bodyLen: 0.62, bodyR: 0.16, legLen: 0.34, legR: 0.042, neckLen: 0.18, neckAngle: 0.7,
       headLen: 0.26, headR: 0.11, earType: 'floppy', tailType: 'dog', snout: 1,

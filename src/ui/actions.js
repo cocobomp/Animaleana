@@ -6,6 +6,9 @@ import { t, ta } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { canRide } from '../sim/animal.js';
 import { canProduce } from '../sim/farm.js';
+import { canLeash } from '../sim/gear.js';
+
+const canLeashNow = (a) => canLeash(a) || (a.following && a.leashed);
 import { speciesName } from './names.js';
 import { CARE, NEEDS, happiness } from '../sim/animal.js';
 import { NEED_ICON } from './UI.js';
@@ -151,8 +154,18 @@ export function openAnimalActions(ui, a) {
         run: () => { if (g.ride(a)) ui.closePanel(); },
       });
     }
+    if (a.species === 'dog') {
+      items.push({
+        icon: '🦮',
+        label: a.following && a.leashed ? t('leashStop') : t('leashWalk'),
+        enabled: canLeashNow(a),
+        why: ta('r_needLeash', a),
+        primary: !a.following,
+        run: () => { g.toggleLeash(a); ui.closePanel(); },
+      });
+    }
     items.push({
-      icon: a.following ? '✋' : '🦮',
+      icon: a.following ? '✋' : '🐾',
       label: a.following ? t('act_stay') : t('act_follow'),
       run: () => { g.toggleFollow(a); ui.closePanel(); },
     });

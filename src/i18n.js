@@ -152,7 +152,8 @@ const fr = {
   trick_roll: 'Rouler',
   trick_jump: 'Sauter',
   trick_highfive: 'Tape-m\'en cinq',
-  trick_come: 'Au pied',
+  trick_come: 'Viens ici',
+  trick_heel: 'Au pied',
   trick_spin: 'Tourner',
   trick_bow: 'Révérence',
   trick_back: 'Reculer',
@@ -646,6 +647,16 @@ const fr = {
   taskDone: 'Fait',
   addToTasks: 'Ajouter à ma liste',
   addedToTasks: '📝 Ajouté à ta liste : {what}',
+
+  gear_leash: 'Laisse',
+  geard_leash: 'pour promener ton chien',
+  leashWalk: 'Promener en laisse',
+  leashStop: 'Enlever la laisse',
+  leashOn: '🦮 Tu promènes {name} en laisse. Plus il est dressé, moins il tire !',
+  leashOn_f: '🦮 Tu promènes {name} en laisse. Plus elle est dressée, moins elle tire !',
+  leashOff: '{name} n\'est plus en laisse.',
+  r_needLeash: 'Mets d\'abord un collier et une laisse à {name} (dans sa fiche).',
+  statusLeash: 'Tu promènes {name}',
 };
 
 const en = {
@@ -800,6 +811,7 @@ const en = {
   trick_jump: 'Jump',
   trick_highfive: 'High five',
   trick_come: 'Come',
+  trick_heel: 'Heel',
   trick_spin: 'Spin',
   trick_bow: 'Bow',
   trick_back: 'Back up',
@@ -1241,6 +1253,15 @@ const en = {
   taskDone: 'Done',
   addToTasks: 'Add to my list',
   addedToTasks: '📝 Added to your list: {what}',
+
+  gear_leash: 'Leash',
+  geard_leash: 'to walk your dog',
+  leashWalk: 'Walk on a leash',
+  leashStop: 'Take off the leash',
+  leashOn: '🦮 You are walking {name} on a leash. The better trained, the less they pull!',
+  leashOff: '{name} is off the leash.',
+  r_needLeash: 'Put a collar and a leash on {name} first (in their card).',
+  statusLeash: 'Walking {name}',
 };
 
 const DICTS = { fr, en };

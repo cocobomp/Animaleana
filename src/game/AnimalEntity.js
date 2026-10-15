@@ -7,6 +7,7 @@ import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { emojiTexture } from './textures.js';
 import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
+import { canLeash, heelSkill } from '../sim/gear.js';
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 const HOME = {
@@ -299,6 +300,48 @@ export class AnimalEntity {
     }
   }
 
+  /**
+   * Promenade du chien. Bien dressé : il marche au pied, à gauche du joueur.
+   * Pas encore dressé : il part renifler à droite et à gauche, et en laisse il tire.
+   */
+  followDog(dt, ctx, distPlayer) {
+    const d = this.data;
+    const skill = heelSkill(d);
+    const leashed = canLeash(d) && d.leashed;
+    const pl = ctx.game.player;
+    const h = pl.heading;
+    // Place « au pied » : à gauche, un peu en arrière.
+    const heel = { x: pl.position.x + Math.cos(h) * 0.9 - Math.sin(h) * 0.3, z: pl.position.z - Math.sin(h) * 0.9 - Math.cos(h) * 0.3 };
+    this.sniff = (this.sniff ?? 0) - dt;
+    if (this.sniff <= 0) {
+      // Plus il est dressé, moins il est distrait.
+      this.sniffing = Math.random() > skill;
+      this.sniffSpot = { x: pl.position.x + (Math.random() - 0.5) * 10, z: pl.position.z + (Math.random() - 0.5) * 10 };
+      this.sniff = 1.5 + Math.random() * 3;
+    }
+    const goal = this.sniffing ? this.sniffSpot : heel;
+    this.target.set(goal.x, 0, goal.z);
+    const dist = Math.hypot(goal.x - this.root.position.x, goal.z - this.root.position.z);
+    this.targetSpeed = dist < 0.3 ? 0 : Math.min(this.sp.runSpeed, 0.8 + dist * 1.6);
+    // Sans laisse, un chien pas dressé peut s'éloigner beaucoup ; il revient quand il en a envie.
+    if (!leashed && distPlayer > 14 && Math.random() < dt) this.sniffing = false;
+    this.leashPull = 0;
+    if (leashed) {
+      const LEASH = 2.6;
+      const p = this.root.position;
+      const dx = p.x - pl.position.x;
+      const dz = p.z - pl.position.z;
+      const len = Math.hypot(dx, dz);
+      if (len > LEASH) {
+        // La laisse est tendue : le chien est retenu… et il tire un peu le joueur.
+        p.x = pl.position.x + (dx / len) * LEASH;
+        p.z = pl.position.z + (dz / len) * LEASH;
+        this.leashPull = (1 - skill) * Math.min(1, (len - LEASH) * 4 + 0.4);
+        this.leashDir = { x: dx / len, z: dz / len };
+      }
+    }
+  }
+
   update(dt, ctx) {
     this.time += dt;
     const d = this.data;
@@ -339,6 +382,8 @@ export class AnimalEntity {
         }
       } else if (this.sleeping) {
         this.targetSpeed = 0;
+      } else if (d.following && d.species === 'dog') {
+        this.followDog(dt, ctx, distPlayer);
       } else if (d.following) {
         this.target.copy(ctx.playerPos);
         const far = distPlayer > 7;

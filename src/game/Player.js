@@ -153,6 +153,12 @@ export class Player {
       }
       this.world.resolveCollisions(p, mount ? 0.9 : 0.35, { mounted: !!mount });
     }
+    // Un chien pas encore dressé tire sur la laisse.
+    if (this.pull && !mount) {
+      p.x += this.pull.x * dt * 1.4;
+      p.z += this.pull.z * dt * 1.4;
+      this.world.resolveCollisions(p, 0.35);
+    }
     p.y = this.world.heightAt(p.x, p.z);
     this.root.rotation.y = this.heading;
 

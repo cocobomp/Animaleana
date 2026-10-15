@@ -19,6 +19,7 @@ import { TOOLS, hasTool } from '../sim/tools.js';
 import { facilitiesTab } from './facilitiesPanel.js'; // onglet « Bâtiments »
 import { homeSection } from './construction.js'; // rubrique « Maison » (constructions)
 import { travelAdvice } from './trip.js'; // voyages réalistes
+import { questExtras } from './tutorial.js';
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -376,7 +377,8 @@ export function openJournal(ui) {
           h('span', { class: 'obj-icon' }, done ? '✅' : o.kind === 'quest' ? '🎯' : '🏆'),
           h('span', { class: 'card-main' },
             h('b', {}, t(`o_${o.id}`)),
-            h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${Math.min(100, (cur / max) * 100)}%` } }))),
+            h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${Math.min(100, (cur / max) * 100)}%` } })),
+            questExtras(ui, o, done)), // où faire la quête + « Montre-moi » (src/ui/tutorial.js)
           h('small', {}, `${Math.min(cur, max)}/${max}${o.reward && !isSandbox(p) ? ` · ${o.reward} 🪙` : ''}`));
       });
       return [tabs, h('div', { class: 'objectives' }, list)];
@@ -444,6 +446,8 @@ export function openSettings(ui) {
           },
         }, name))),
         h('p', { class: 'note' }, t('controlsHelp')),
+        // Revoir le tutoriel guidé (src/ui/tutorial.js).
+        ui.tutorial ? h('button', { class: 'big', onClick: () => ui.tutorial.replay() }, `🎓 ${t('tuto_replay')}`) : null,
         h('button', {
           class: 'danger big',
           onClick: () => {

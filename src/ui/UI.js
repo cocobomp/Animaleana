@@ -475,17 +475,18 @@ export class UI {
     return this.game.collect(a);
   }
 
-  openAnimal(a) { panels.openAnimal(this, a); }
-  openAnimals() { panels.openAnimals(this); }
-  openAdoption() { panels.openAdoption(this); }
-  openTravel() { panels.openTravel(this); }
-  openJournal() { panels.openJournal(this); }
+  // game.emit(…) : annonce les fenêtres ouvertes (utilisé par le tutoriel guidé et « Suivre la quête »).
+  openAnimal(a) { panels.openAnimal(this, a); this.game?.emit('panel', 'animal'); }
+  openAnimals() { panels.openAnimals(this); this.game?.emit('panel', 'animals'); }
+  openAdoption() { panels.openAdoption(this); this.game?.emit('panel', 'adoption'); }
+  openTravel() { panels.openTravel(this); this.game?.emit('panel', 'travel'); }
+  openJournal() { panels.openJournal(this); this.game?.emit('panel', 'journal'); }
   openJobs() { panels.openJobs(this); }
-  openSettings() { panels.openSettings(this); }
-  openFarm() { panels.openFarm(this); }
+  openSettings() { panels.openSettings(this); this.game?.emit('panel', 'settings'); }
+  openFarm() { panels.openFarm(this); this.game?.emit('panel', 'farm'); }
   openTack() { panels.openTack(this); }
   openShop() { panels.openShop(this); }
-  openBuilding(kind) { openBuilding(this, kind); }
+  openBuilding(kind) { openBuilding(this, kind); this.game?.emit('building', kind); }
   // Bâtiments à entretenir (src/ui/facilitiesPanel.js)
   openFacility(kind) { openFacility(this, kind); }
   openBox(i) { openBox(this, i); }
@@ -504,7 +505,9 @@ export class UI {
   }
   openAnimalActions(a) {
     if (a.stray) return this.game.events.askStray(this.game.events.active); // petit animal perdu (événement)
-    return openAnimalActions(this, a);
+    const r = openAnimalActions(this, a);
+    this.game?.emit('animalActions', a);
+    return r;
   }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
@@ -539,6 +542,6 @@ export class UI {
     document.getElementById('joystick').hidden = !on;
     this.touchPad.hidden = !on;
   }
-  openVetClinic() { panels.openVetClinic(this); }
-  openVet(a, atClinic) { openVet(this, a, atClinic); }
+  openVetClinic() { panels.openVetClinic(this); this.game?.emit('panel', 'vetClinic'); }
+  openVet(a, atClinic) { openVet(this, a, atClinic); this.game?.emit('panel', 'vetExam'); }
 }

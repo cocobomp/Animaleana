@@ -837,3 +837,149 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
   .ev-head-text { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
   .ev-min { width: 40px; min-height: 40px; }
 }
+/* ==========================================================================
+   Tutoriel guidé, repère 3D et quêtes claires (src/ui/tutorial.js, src/game/Marker.js)
+   ========================================================================== */
+#tuto-bubble {
+  position: fixed;
+  left: calc(10px + var(--safe-l));
+  top: var(--tuto-top, 160px);
+  width: min(380px, calc(100vw - 20px));
+  z-index: 55;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: #fffdf5;
+  color: var(--ink);
+  border: 3px solid #ffd23f;
+  border-radius: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  animation: tuto-in 0.3s ease-out;
+}
+#tuto-bubble[hidden] { display: none; }
+#tuto-bubble.cheer { border-color: var(--good); }
+@keyframes tuto-in { from { transform: translateY(-10px) scale(0.95); opacity: 0; } to { transform: none; opacity: 1; } }
+.tuto-guide {
+  font-size: 2.6rem;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  background: #ffe9a8;
+  border-radius: 50%;
+  animation: tuto-wiggle 2.4s ease-in-out infinite;
+}
+@keyframes tuto-wiggle { 0%, 100% { transform: rotate(0); } 10% { transform: rotate(-10deg); } 20% { transform: rotate(8deg); } 30% { transform: rotate(0); } }
+.tuto-main { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.tuto-top { display: flex; align-items: center; gap: 8px; }
+.tuto-emoji { font-size: 2rem; line-height: 1; }
+.tuto-emoji.big { font-size: 2.6rem; }
+.tuto-emoji.pop { animation: pop 0.4s ease-out; }
+.tuto-dots { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+.tuto-dots i { width: 9px; height: 9px; border-radius: 50%; background: #e7dfcb; }
+.tuto-dots i.on { background: var(--good); }
+.tuto-dots i.now { background: #f0a500; transform: scale(1.3); }
+.tuto-icon { min-height: 48px; min-width: 48px; padding: 0; border-radius: 50%; font-size: 1.3rem; }
+.tuto-text { margin: 0; font-size: 1.25rem; font-weight: 700; line-height: 1.3; }
+.tuto-hint { margin: 0; font-size: 1rem; color: var(--muted); line-height: 1.3; }
+.tuto-ok { min-height: 52px; font-size: 1.15rem; padding: 0 22px; margin-top: 4px; }
+.tuto-skip { min-height: 48px; padding: 0 4px; background: transparent; border: none; color: var(--muted); text-decoration: underline; font-size: 0.85rem; }
+
+/* Cercle qui clignote autour du bouton à presser, avec un doigt qui montre. */
+#tuto-ring {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  border: 4px solid #ffd23f;
+  border-radius: 18px;
+  box-shadow: 0 0 0 4px rgba(255, 210, 63, 0.35), 0 0 22px 6px rgba(255, 190, 0, 0.7);
+  animation: tuto-pulse 1s ease-in-out infinite;
+}
+#tuto-ring[hidden] { display: none; }
+@keyframes tuto-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: 0.75; } }
+.tuto-finger {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  font-size: 2.4rem;
+  margin-left: -0.6em;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
+  animation: tuto-tap 0.9s ease-in-out infinite;
+}
+#tuto-ring.from-top .tuto-finger { top: auto; bottom: 100%; transform: rotate(180deg); animation-name: tuto-tap-down; }
+@keyframes tuto-tap { 0%, 100% { translate: 0 6px; } 50% { translate: 0 -4px; } }
+@keyframes tuto-tap-down { 0%, 100% { translate: 0 -6px; } 50% { translate: 0 4px; } }
+
+/* Flèche au bord de l'écran vers une cible cachée (repère 3D). */
+.marker-edge {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 15;
+  width: 64px;
+  height: 64px;
+  min-height: 64px;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid #8a5a00;
+  background: #ffd23f;
+  color: #5b3b00;
+  font-size: 2rem;
+  font-weight: 900;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  animation: tuto-pulse 1s ease-in-out infinite;
+}
+.marker-edge[hidden] { display: none; }
+.marker-edge-arrow { display: inline-block; line-height: 1; }
+
+/* Objectif épinglé : la quête conseillée, ou la quête suivie avec ses étapes. */
+#quest-tracker {
+  position: fixed;
+  left: calc(10px + var(--safe-l));
+  top: calc(156px + var(--safe-t));
+  z-index: 11;
+  width: min(340px, calc(100vw - 20px));
+  padding: 6px;
+  background: rgba(255, 253, 245, 0.96);
+  border: 2px solid #ffd23f;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 4px;
+}
+#quest-tracker[hidden] { display: none; }
+#quest-tracker.following { border-color: var(--primary); }
+.qt-head { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 4px 6px; text-align: left; background: transparent; border: none; }
+.qt-icon { font-size: 1.6rem; }
+.qt-main { display: grid; min-width: 0; flex: 1; }
+.qt-main b { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qt-main small { color: var(--muted); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qt-side { font-weight: 700; font-size: 0.9rem; }
+.qt-steps { list-style: none; margin: 0; padding: 0 6px; display: grid; gap: 3px; }
+.qt-step { display: flex; gap: 6px; align-items: center; font-size: 0.9rem; color: var(--muted); }
+.qt-step.done { text-decoration: line-through; }
+.qt-step.now { color: var(--ink); font-weight: 700; font-size: 1rem; }
+.qt-check { width: 1.4em; text-align: center; flex-shrink: 0; }
+.qt-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.qt-follow, .qt-stop { min-height: 44px; padding: 0 14px; border-radius: 12px; font-size: 0.9rem; }
+.qt-stop { background: transparent; }
+
+/* Journal : où faire la quête et « Montre-moi ». */
+.quest-extra { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 4px; }
+.quest-where { font-weight: 700; font-size: 0.88rem; color: var(--ink); }
+.quest-hint { font-size: 0.85rem; color: var(--muted); flex-basis: 100%; }
+.quest-show { min-height: 48px; padding: 0 14px; border-radius: 12px; }
+
+@media (max-width: 640px) {
+  #tuto-bubble { top: calc(6px + var(--safe-t)); left: calc(8px + var(--safe-l)); right: calc(8px + var(--safe-r)); width: auto; padding: 8px 10px; }
+  #tuto-bubble.low { top: var(--tuto-top, 180px); }
+  .tuto-dots i { width: 7px; height: 7px; }
+  .tuto-guide { width: 48px; height: 48px; font-size: 2.1rem; }
+  .tuto-text { font-size: 1.12rem; }
+  .tuto-hint { font-size: 0.92rem; }
+  #quest-tracker { width: min(300px, calc(100vw - 20px)); }
+  .qt-step { font-size: 0.85rem; }
+}

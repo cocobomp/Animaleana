@@ -50,7 +50,7 @@ export class ManagementView {
     if (!g.running || this.active) return;
     g.player.cancelGoTo();
     g.player.speed = 0;
-    g.marker.visible = false;
+    g.tapRing.visible = false;
     const cam = g.camera;
     this.saved = { pos: cam.position.clone(), quat: cam.quaternion.clone() };
     this.focus.set(g.player.position.x, 0, g.player.position.z + 6);

@@ -43,6 +43,8 @@ import { openStructure } from '../ui/construction.js';
 import { doorOf, equipmentPos } from '../sim/construction.js';
 import { applyCoreLayout } from './coreLayout.js';
 import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, trajet, pauses)
+import { Marker } from './Marker.js';
+import { Emitter } from './events.js';
 
 const CARE_EMOJI = {
   feed: '🍖', water: '💧', brush: '✨', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨',
@@ -84,12 +86,16 @@ export class Game {
     this.input.onKey = (code) => this.onKey(code);
     this.input.onTap = (x, y) => this.onTap(x, y);
     this.raycaster = new THREE.Raycaster();
-    this.marker = new THREE.Mesh(
+    // Petit cercle blanc là où on a touché le sol (renommé : game.marker est le repère réutilisable).
+    this.tapRing = new THREE.Mesh(
       new THREE.RingGeometry(0.35, 0.5, 32).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }),
     );
-    this.marker.visible = false;
-    this.scene.add(this.marker);
+    this.tapRing.visible = false;
+    this.scene.add(this.tapRing);
+    // Événements du jeu (game.on / game.emit) et repère 3D réutilisable (game.marker.show / hide).
+    this.bus = new Emitter(); // (game.events = événements spéciaux)
+    this.marker = new Marker(this);
     this.entities = new Map();
     this.helpers = new Map();
     this.equipment = [];
@@ -133,13 +139,26 @@ export class Game {
     this.running = true;
     this.clock.getDelta();
     this.ui.onStart(this);
-    if (profile.animals.length === 0) this.ui.toast(t('welcome', { name: profile.name }), 7000);
+    // Pendant le tutoriel guidé, c'est le guide qui explique quoi faire.
+    if (profile.animals.length === 0 && profile.tutorial?.done !== false) this.ui.toast(t('welcome', { name: profile.name }), 7000);
+    this.emit('start', profile);
+  }
+
+  /** Événements : game.on('adopted', fn), game.emit('adopted', a). */
+  on(name, fn) {
+    return this.bus.on(name, fn);
+  }
+
+  emit(name, data) {
+    this.bus.emit(name, data);
   }
 
   stop() {
     this.tasks.clear();
     this.mgmt.stop();
     this.tripFlow.reset();
+    this.emit('stop');
+    this.marker.hide();
     this.save();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
@@ -503,10 +522,11 @@ export class Game {
       this.save();
     }
 
-    if (this.marker.visible) {
-      this.marker.scale.setScalar(1 + Math.sin(performance.now() / 150) * 0.12);
-      if (!this.player.auto) this.marker.visible = false;
+    if (this.tapRing.visible) {
+      this.tapRing.scale.setScalar(1 + Math.sin(performance.now() / 150) * 0.12);
+      if (!this.player.auto) this.tapRing.visible = false;
     }
+    this.marker.update(dt);
     this.updateFocus();
     this.events.update(dt); // événements spéciaux
     this.renderer.render(this.scene, this.camera);
@@ -633,8 +653,8 @@ export class Game {
 
   walkTo(point, radius, onArrive = null, follow = false) {
     const target = point.clone ? point : new THREE.Vector3(point.x, 0, point.z);
-    this.marker.position.set(target.x, this.world.heightAt(target.x, target.z) + 0.05, target.z);
-    this.marker.visible = !follow;
+    this.tapRing.position.set(target.x, this.world.heightAt(target.x, target.z) + 0.05, target.z);
+    this.tapRing.visible = !follow;
     // Si on vise un animal qui bouge, on vise sa position actuelle.
     this.player.goTo(follow ? target.clone() : target, radius, onArrive);
   }
@@ -805,6 +825,7 @@ export class Game {
     if (now.length && !force) {
       const { a, what } = now[0];
       this.ui.toast(t('skipBusy', { name: a.name, g: a.sex, what: t(`attn_${what}`, { g: a.sex }) }), 5000);
+      this.emit('skip', 0);
       return 0;
     }
     const RDV = [6, 8, 9, 17, 20];
@@ -820,6 +841,7 @@ export class Game {
     }
     this.ui.toast(t('skipped', { h: Math.round(hours * 10) / 10 }), 4000);
     this.ui.refresh();
+    this.emit('skip', hours);
     return hours;
   }
 
@@ -1068,6 +1090,7 @@ export class Game {
     this.xp('care');
     this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
     this.ui.refresh();
+    this.emit('care', { a, action });
     return res;
   }
 
@@ -1233,6 +1256,7 @@ export class Game {
     e.emit('❤️', 5);
     this.ui.toast(t('adopted', { name: a.name, g: a.sex }));
     this.save();
+    this.emit('adopted', a);
     return a;
   }
 

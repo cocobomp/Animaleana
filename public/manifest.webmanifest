@@ -1,0 +1,15 @@
+{
+  "name": "Animaleana",
+  "short_name": "Animaleana",
+  "description": "Adopte, soigne et voyage avec tes animaux. Jeu 3D gratuit qui fonctionne sans réseau.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#2f5a46",
+  "theme_color": "#2f5a46",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

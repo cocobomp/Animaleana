@@ -29,6 +29,7 @@ import { adoptionPrice, shopPrice, stageAgeDays } from '../sim/adoption.js';
 import { checkObjectives } from '../sim/objectives.js';
 import { saveProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
 import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
+import { addHelperXp, tireHelper, restHelper, updateBreak, onBreak, startBreak } from '../sim/helpers.js'; // les aides progressent
 import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
 import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone } from '../sim/droppings.js';
 import { enclosure } from './nav.js';
@@ -368,8 +369,17 @@ export class Game {
         for (let i = 0; i < Math.min(12, Math.ceil(hours)); i++) {
           const task = this.helperTaskFor(h);
           if (!task) break;
-          doHelperTask(p, task, here);
+          if (doHelperTask(p, task, here, h).ok) addHelperXp(h, 3);
         }
+        restHelper(h, hours * 0.5); // la nuit, on se repose aussi
+      }
+    }
+    // Pauses des aides : fin de la pause, ou pause d'office quand elles sont épuisées.
+    for (const h of p.helpers.filter((x) => x.place === p.place)) {
+      if (updateBreak(h, p.clock)) this.ui.toast(t('helperBack', { name: h.name, g: h.sex }), 4000);
+      else if (!onBreak(h, p.clock) && (h.mood ?? 80) < 12) {
+        startBreak(h, p.clock);
+        this.ui.toast(t('helperTiredBreak', { name: h.name, g: h.sex }), 5000);
       }
     }
     const day = this.day;
@@ -601,6 +611,16 @@ export class Game {
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
     if (this.tripFlow.onTap(this.raycaster)) return; // chargement du véhicule de voyage
+    // Une aide : on va la voir et on discute (src/ui/helperChat.js).
+    const hitH = this.raycaster.intersectObjects([...this.helpers.values()].map((x) => x.root), true)[0];
+    if (hitH) {
+      const helper = [...this.helpers.values()].find((x) => { let o = hitH.object; while (o && o !== x.root) o = o.parent; return !!o; });
+      if (helper) {
+        if (paused) this.ui.openHelper(helper.data);
+        else this.walkTo(helper.position, 1.8, () => this.ui.openHelper(helper.data), true);
+        return;
+      }
+    }
     const roots = [...this.entities.values()].filter((e) => !e.ridden && !e.inside).map((e) => e.root);
     const hitA = this.raycaster.intersectObjects(roots, true).find((h) => !h.object.isSprite || h.object === h.object.parent?.userData?.entity?.label);
     if (hitA) {
@@ -1061,6 +1081,13 @@ export class Game {
           best = { kind: 'animal', entity: e };
         }
       }
+      for (const hp of this.helpers.values()) {
+        const d = Math.hypot(hp.position.x - pp.x, hp.position.z - pp.z) - 0.4;
+        if (d < 1.4 && d < bestD) {
+          bestD = d;
+          best = { kind: 'helper', helper: hp, id: hp.data.id };
+        }
+      }
       if (!best) {
         for (const it of this.world.interactables) {
           const d = Math.hypot(it.x - pp.x, it.z - pp.z);
@@ -1091,6 +1118,7 @@ export class Game {
     if (!f) return;
     switch (f.kind) {
       case 'animal': this.ui.openAnimalActions(f.entity.data); break;
+      case 'helper': this.ui.openHelper(f.helper.data); break;
       case 'refuge':
       case 'petshop':
       case 'tackroom':
@@ -1488,8 +1516,15 @@ export class Game {
 
   helperDone(helper, task) {
     if (!task) return;
-    const r = doHelperTask(this.profile, task, this.animalsHere());
+    const r = doHelperTask(this.profile, task, this.animalsHere(), helper.data);
     if (!r.ok) return;
+    // L'aide gagne de l'expérience (et se fatigue un peu).
+    tireHelper(helper.data);
+    const up = addHelperXp(helper.data, 5);
+    if (up.levelUp) {
+      helper.refreshTag();
+      this.ui.toast(t('helperLevelUp', { name: helper.data.name, g: helper.data.sex, n: up.level }), 5000);
+    }
     if (r.scooped) {
       this.removeDroppingMeshes([r.scooped]);
       return;

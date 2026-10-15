@@ -536,7 +536,9 @@ export function openFarm(ui) {
               h('b', {}, hired ? `${hired.name} · ${t(`helper_${type}`, { g: hired.sex })}` : t(`helper_${type}`)),
               h('small', {}, t(`helperd_${type}`))),
             hired
-              ? h('button', { onClick: async () => { if (await ui.confirm(t('fireConfirm', { name: hired.name }))) { g.fire(hired.id); ui.renderPanel(); } } }, t('fire'))
+              ? h('span', { class: 'row' },
+                h('button', { class: 'primary', onClick: () => ui.openHelper(hired) }, `💬 ${t('hc_talk')}`), // discuter, consignes, formation
+                h('button', { onClick: async () => { if (await ui.confirm(t('fireConfirm', { name: hired.name }))) { g.fire(hired.id); ui.renderPanel(); } } }, t('fire')))
               : h('button', { class: 'primary', onClick: () => { g.hire(type); ui.renderPanel(); } }, sandbox ? t('hire') : `${t('hire')} · ${def.salary} 🪙/${t('perDay')}`),
             duties);
         })));

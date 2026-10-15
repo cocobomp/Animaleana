@@ -41,6 +41,7 @@ Ouvre le jeu une première fois, puis installe-le (« Ajouter à l'écran d'accu
 - 6 lieux : Normandie, Bretagne, Alpes suisses, Islande, Québec, Kyoto. Voyage en voiture, en van, à cheval, en bateau ou en avion
 - Jour et nuit, météo selon le lieu et la vraie saison
 - Quêtes facultatives et succès
+- **Vue d'ensemble** (🗺️) : la ferme vue d'en haut, on donne des ordres à chaque bâtiment, enclos ou animal, et on **construit** niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs et décorations
 
 Les règles du jeu sont décrites dans [docs/GDD.md](docs/GDD.md).
 

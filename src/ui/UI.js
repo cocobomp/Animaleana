@@ -125,6 +125,7 @@ export class UI {
       h('nav', { class: 'hud-buttons' },
         btn('🐾', t('animals'), () => this.openAnimals()),
         btn('🚜', t('farm'), () => this.openFarm()),
+        btn('🗺️', t('mgmt_btn'), () => this.game.mgmt.toggle()), // vue d'ensemble et construction
         btn('🧭', t('travel'), () => this.openTravel()),
         btn('📖', t('journal'), () => this.openJournal()),
         btn('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen())),

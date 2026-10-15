@@ -40,6 +40,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     equipment: [], // mangeoires, abreuvoirs… { id, type, place, stock }
     helpers: [], // aides embauchées { id, type, name, place }
     farm: { autoHerd: true },
+    structures: [], // constructions du joueur { id, type, place, x, z, rot } (src/sim/construction.js)
     settings: { camera: 'third', timeSpeed: 'normal' },
   };
 }

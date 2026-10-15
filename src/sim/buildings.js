@@ -89,6 +89,31 @@ function sleeping(c, from, to) {
   return inHours(c.hour, from, to) ? null : { reason: 'asleep', params: { h: fmtHour(from) } };
 }
 
+// ---------------------------------------------------------------- constructions du joueur
+// Une feuille d'actions par famille de construction (voir src/sim/construction.js).
+// ctx.count : { residents, droppings, horse }.
+const hasResidents = (c) => need(c.count.residents, 'noResidents');
+const CON_CARE = [
+  { id: 'conFeed', icon: '🍖', when: hasResidents },
+  { id: 'conWater', icon: '💧', when: hasResidents },
+];
+const CON_END = [
+  { id: 'conResidents', icon: '🐾', when: () => null },
+  { id: 'conMove', icon: '↔️', when: () => null },
+  { id: 'conDemolish', icon: '🗑️', when: () => null },
+];
+const CON_CLEAN = { id: 'conClean', icon: '🧹', when: (c) => (c.count.droppings > 0 ? null : { reason: 'alreadyClean' }) };
+const CON_HOME = { id: 'conCallHome', icon: '🏠', when: hasResidents };
+const CON_FIELD = [...CON_CARE, { id: 'conBrush', icon: '🪮', when: (c) => hasResidents(c) ?? sleeping(c, 6, 21) }, CON_CLEAN, CON_HOME, ...CON_END];
+Object.assign(RULES, {
+  con_home: [...CON_CARE, { id: 'conPet', icon: '🤚', when: hasResidents }, CON_HOME, ...CON_END],
+  con_enclosure: CON_FIELD,
+  con_building: CON_FIELD,
+  con_ranch: CON_FIELD,
+  con_arena: [{ id: 'conTrain', icon: '🏇', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 20) }, CON_CLEAN, ...CON_END.slice(1)],
+  con_decor: CON_END.slice(1),
+});
+
 export function buildingActions(kind, ctx) {
   return (RULES[kind] ?? []).map((r) => {
     const block = r.when(ctx);

@@ -141,8 +141,16 @@ export class AnimalEntity {
 
   /** Zone de vie : les animaux de ferme sont soit à la bergerie, soit au pré. */
   get home() {
+    // Maison choisie par le joueur (niche, paddock, ranch… voir src/game/Structures.js).
+    const built = this.customHome;
+    if (built) return built;
     if (this.sp.livestock) return this.data.zone === 'field' ? FIELD : PEN;
     return HOME[this.data.species];
+  }
+
+  /** Zone de vie de la construction attribuée à l'animal, ou null. */
+  get customHome() {
+    return (this.data.homeId && this.world.structureHomes?.get(this.data.homeId)) || null;
   }
 
   get position() {

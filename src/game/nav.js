@@ -13,6 +13,17 @@ export const ENCLOSURES = [
 
 export const enclosure = (id) => ENCLOSURES.find((e) => e.id === id);
 
+// Enclos construits par le joueur (src/game/Structures.js) : ajoutés après les enclos de base.
+const BASE_ENCLOSURES = ENCLOSURES.length;
+// obstacles : bâtiments construits (grange, niche…) dont on fait aussi le tour.
+const OBSTACLES = [];
+export function setBuiltEnclosures(list, obstacles = []) {
+  ENCLOSURES.length = BASE_ENCLOSURES;
+  ENCLOSURES.push(...list);
+  OBSTACLES.length = 0;
+  OBSTACLES.push(...obstacles);
+}
+
 export function inside(e, x, z, margin = 0) {
   return Math.abs(x - e.x) < e.hw - margin && Math.abs(z - e.z) < e.hd - margin;
 }
@@ -34,31 +45,92 @@ const out = new THREE.Vector3();
 
 /** Prochain point de passage pour aller de pos à goal sans traverser de clôture. */
 export function navTarget(pos, goal, small = false) {
-  for (const e of ENCLOSURES) {
-    if (small && !e.mesh) continue; // les petits animaux passent sous les barrières en bois
-    const pIn = inside(e, pos.x, pos.z);
-    if (pIn === inside(e, goal.x, goal.z)) continue;
-    const { n, t, extN, extT, gateLat } = frame(e);
-    const rel = new THREE.Vector3(pos.x - e.x, 0, pos.z - e.z);
-    const dN = rel.dot(n);
-    const dT = rel.dot(t);
-    const center = new THREE.Vector3(e.x, 0, e.z);
-    const gateIn = center.clone().addScaledVector(n, extN - 2.5).addScaledVector(t, gateLat);
-    const gateOut = center.clone().addScaledVector(n, extN + 2.5).addScaledVector(t, gateLat);
-    const corridor = Math.abs(dT - gateLat) < e.gate.width / 2 + 0.6 && dN > extN - 3 && dN < extN + 3;
-    if (pIn) return out.copy(corridor ? gateOut : gateIn);
-    if (corridor) return out.copy(gateIn);
-    if (dN < extN + 1) {
-      const s = dT >= gateLat ? 1 : -1;
-      // Encore à côté ou derrière l'enclos : on s'écarte d'abord sur le côté, puis on va vers le coin.
-      if (Math.abs(dT) < extT + 1.5) {
-        return out.copy(center).addScaledVector(t, s * (extT + 2.5)).addScaledVector(n, Math.max(-extN - 2.5, Math.min(extN + 2.5, dN)));
-      }
-      return out.copy(center).addScaledVector(t, s * (extT + 2.5)).addScaledVector(n, extN + 2.5);
+  // Les petits animaux passent sous les barrières en bois (pas sous le grillage).
+  const list = small ? ENCLOSURES.filter((e) => e.mesh) : ENCLOSURES;
+  return detour(pos, gateStep(pos, goal, list), 0, small ? list : [...list, ...OBSTACLES]);
+}
+
+// Avec plusieurs enclos (constructions du joueur) : si le chemin vers le point de passage
+// traverse un autre enclos, on passe d'abord par le coin le plus pratique de cet enclos.
+const out2 = new THREE.Vector3();
+
+/** Le segment a→b coupe-t-il le rectangle r (agrandi de m) ? */
+function crosses(a, b, r, m) {
+  let t0 = 0;
+  let t1 = 1;
+  const d = [b.x - a.x, b.z - a.z];
+  const p = [a.x - r.x, a.z - r.z];
+  const ext = [r.hw + m, r.hd + m];
+  for (let i = 0; i < 2; i++) {
+    if (Math.abs(d[i]) < 1e-9) {
+      if (Math.abs(p[i]) > ext[i]) return false;
+    } else {
+      let ta = (-ext[i] - p[i]) / d[i];
+      let tb = (ext[i] - p[i]) / d[i];
+      if (ta > tb) [ta, tb] = [tb, ta];
+      t0 = Math.max(t0, ta);
+      t1 = Math.min(t1, tb);
+      if (t0 > t1) return false;
     }
-    return out.copy(gateOut);
   }
-  return goal;
+  return true;
+}
+
+function detour(pos, wp, depth, list) {
+  let best = null;
+  let bestD = Infinity;
+  for (const e of list) {
+    if (inside(e, pos.x, pos.z) || inside(e, wp.x, wp.z) || !crosses(pos, wp, e, 0.8)) continue;
+    const d = Math.hypot(e.x - pos.x, e.z - pos.z);
+    if (d >= bestD) continue;
+    bestD = d;
+    best = e;
+  }
+  if (!best) return wp;
+  // Le coin (un peu à l'extérieur) qui fait le moins de détour.
+  let corner = null;
+  let cost = Infinity;
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const c = { x: best.x + sx * (best.hw + 2.2), z: best.z + sz * (best.hd + 2.2) };
+      if (Math.hypot(c.x - pos.x, c.z - pos.z) < 1 || crosses(pos, c, best, -0.3)) continue;
+      // Un coin d'où l'on voit déjà le but vaut mieux qu'un coin d'où il faudra encore tourner.
+      // Sinon, le coin le plus proche du but (pour ne pas hésiter entre deux coins).
+      const toC = Math.hypot(c.x - pos.x, c.z - pos.z);
+      const toW = Math.hypot(wp.x - c.x, wp.z - c.z);
+      const k = crosses(c, wp, best, -0.3) ? 1000 + toW + toC * 0.1 : toC + toW;
+      if (k < cost) {
+        cost = k;
+        corner = c;
+      }
+    }
+  }
+  if (!corner) return wp;
+  // Le chemin vers ce coin peut lui-même passer par un autre enclos.
+  if (depth < 2) {
+    const next = detour(pos, corner, depth + 1, list);
+    if (next !== corner) return next;
+  }
+  return out2.set(corner.x, 0, corner.z);
+}
+
+function gateStep(pos, goal, list) {
+  // D'abord sortir de l'enclos où l'on est (par l'ouverture), puis entrer dans celui du but.
+  const from = list.find((e) => inside(e, pos.x, pos.z) && !inside(e, goal.x, goal.z));
+  const to = from ? null : list.find((e) => !inside(e, pos.x, pos.z) && inside(e, goal.x, goal.z));
+  const e = from ?? to;
+  if (!e) return goal;
+  const { n, t, extN, gateLat } = frame(e);
+  const rel = new THREE.Vector3(pos.x - e.x, 0, pos.z - e.z);
+  const dN = rel.dot(n);
+  const dT = rel.dot(t);
+  const center = new THREE.Vector3(e.x, 0, e.z);
+  const gateIn = center.clone().addScaledVector(n, extN - 2.5).addScaledVector(t, gateLat);
+  const gateOut = center.clone().addScaledVector(n, extN + 2.5).addScaledVector(t, gateLat);
+  const corridor = Math.abs(dT - gateLat) < e.gate.width / 2 + 0.6 && dN > extN - 3 && dN < extN + 3;
+  if (from) return out.copy(corridor ? gateOut : gateIn);
+  // Pour entrer : devant l'ouverture, puis dedans (detour() fait le tour de l'enclos si besoin).
+  return out.copy(corridor ? gateIn : gateOut);
 }
 
 /** Barrières de l'enclos sous forme de murs fins (avec l'ouverture). */

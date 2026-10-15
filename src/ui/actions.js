@@ -195,3 +195,6 @@ function effectText(action) {
     .map(([n, v]) => `${NEED_ICON[n]} ${t(`need_${n}`)} +${v}`)
     .join(' · ');
 }
+
+// Pour les feuilles d'actions des constructions (src/ui/construction.js).
+export { sheet as actionSheet };

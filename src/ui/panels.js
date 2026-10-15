@@ -13,6 +13,7 @@ import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
 import { speciesName } from './names.js';
 import { GEAR, BLANKET_COLORS, owned, inUse } from '../sim/gear.js';
+import { homeSection } from './construction.js'; // rubrique « Maison » (constructions)
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -130,6 +131,9 @@ function renderAnimal(ui, g, a) {
   if (gearItems.length) {
     out.push(h('h3', {}, t('gearTitle')), gearSection(ui, a, gearItems));
   }
+
+  // Maison construite par le joueur (niche, paddock, ranch…)
+  out.push(...homeSection(ui, a));
 
   // Laine et lait
   if (sp.product) {

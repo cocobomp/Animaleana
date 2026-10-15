@@ -44,6 +44,8 @@ import { openStructure } from '../ui/construction.js';
 import { doorOf, equipmentPos } from '../sim/construction.js';
 import { applyCoreLayout } from './coreLayout.js';
 import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, trajet, pauses)
+import { CompetitionVenue } from './CompetitionVenue.js'; // concours à l'extérieur : site, épreuve, podium
+import './Dressage.js'; // séances de dressage (s'enregistrent dans Activities)
 import { Marker } from './Marker.js';
 import { Emitter } from './events.js';
 
@@ -119,6 +121,7 @@ export class Game {
     this.structures = new Structures(this);
     this.mgmt = new ManagementView(this);
     this.tripFlow = new TripFlow(this);
+    this.venue = new CompetitionVenue(this);
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -165,6 +168,7 @@ export class Game {
     this.emit('stop');
     this.marker.hide();
     this.activities.abort();
+    this.venue.dispose();
     this.save();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
@@ -232,6 +236,7 @@ export class Game {
     for (const a of this.profile.animals) {
       if (a.location === placeId) this.spawnEntity(a);
     }
+    this.venue.onPlaceLoaded(); // un concours ici aujourd'hui ? on installe le site
   }
 
   spawnEquipment(eq) {
@@ -541,6 +546,7 @@ export class Game {
     this.marker.update(dt);
     this.updateFocus();
     this.events.update(dt); // événements spéciaux
+    this.venue.update(dt); // concours à l'extérieur
     this.renderer.render(this.scene, this.camera);
   }
 

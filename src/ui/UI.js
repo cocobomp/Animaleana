@@ -263,6 +263,7 @@ export class UI {
     }
     chips.push(...tripChips(this)); // chargement du véhicule de voyage
     chips.push(...(g.events?.statusChips(chip) ?? [])); // événement en cours (bandeau réduit)
+    chips.push(...(g.venue?.statusChips(chip) ?? [])); // concours du jour sur place (src/game/CompetitionVenue.js)
     const key = chips.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
     this.statusKey = key;
@@ -521,7 +522,7 @@ export class UI {
     this.game?.emit('animalActions', a);
     return r;
   }
-  openActivities(opts) { openActivities(this, opts); }
+  openActivities(opts) { openActivities(this, opts); this.game?.emit('panel', 'activities'); }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {

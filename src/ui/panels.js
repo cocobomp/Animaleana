@@ -21,6 +21,7 @@ import { homeSection } from './construction.js'; // rubrique « Maison » (const
 import { travelAdvice } from './trip.js'; // voyages réalistes
 import { questExtras } from './tutorial.js';
 import { animalActivitySection } from './activities.js';
+import { competitionSection, journalCalendarButton } from './competitions.js'; // concours à l'extérieur, dressage
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -170,6 +171,7 @@ function renderAnimal(ui, g, a) {
   }
 
   out.push(...animalActivitySection(ui, a)); // activités : saut, balade, agility, spectacle
+  out.push(...competitionSection(ui, a)); // chevaux : carrière sportive (dressage, saut, concours)
 
   out.push(h('h3', {}, t('training')), h('div', { class: 'grid' },
     sp.training.map((x) => btn(t(`tr_${x}`), () => g.train(a, x), { disabled: stage === 'baby' })),
@@ -384,7 +386,7 @@ export function openJournal(ui) {
             questExtras(ui, o, done)), // où faire la quête + « Montre-moi » (src/ui/tutorial.js)
           h('small', {}, `${Math.min(cur, max)}/${max}${o.reward && !isSandbox(p) ? ` · ${o.reward} 🪙` : ''}`));
       });
-      return [tabs, h('div', { class: 'objectives' }, list)];
+      return [tabs, journalCalendarButton(ui), h('div', { class: 'objectives' }, list)]; // + calendrier des concours
     },
   });
 }

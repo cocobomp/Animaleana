@@ -59,7 +59,8 @@ export class Activities {
       activityData(g.profile).entered.push(comp.id);
     }
     g.ui.closePanel();
-    const Cls = { jumping: JumpingSession, lesson: JumpingSession, trail: TrailSession, agility: AgilitySession, show: ShowSession, hop: HopSession }[type];
+    const Cls = SESSION_TYPES[type]?.cls; // registre des séances (le dressage s'y ajoute : src/game/Dressage.js)
+    if (!Cls) return null;
     this.session = new Cls(this, type, opts);
     if (!this.session.ok) {
       this.session.end(true);
@@ -255,7 +256,7 @@ export class Activities {
 
 // ---------------------------------------------------------------- base commune
 
-class Session {
+export class Session {
   constructor(mgr, type, opts) {
     this.mgr = mgr;
     this.game = mgr.game;
@@ -276,7 +277,7 @@ class Session {
     this.cheer = 0;
     this.ok = true;
     this.hud = new ActivityHud(this.game.ui, {
-      icon: { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', show: '🎪', hop: '🐇' }[type],
+      icon: SESSION_TYPES[type]?.icon ?? '🏇',
       title: this.comp ? t('actv_comp_title', { type: t(`actv_type_${type}`) }) : t(`actv_type_${type}`),
       onQuit: () => this.quit(),
     });
@@ -397,7 +398,15 @@ class Session {
     this.state = 'done';
     const animals = info.animals;
     const main = animals[0];
-    addStat(p, { jumping: 'actvJumping', trail: 'actvTrail', agility: 'actvAgility', show: 'actvShows', lesson: 'actvLessons', hop: 'actvHop' }[this.type]);
+    if (this.opts.onResult) {
+      // Concours à l'extérieur (src/game/CompetitionVenue.js) : le site gère classement, barrage et podium.
+      this.hud.setMain(null);
+      const cb = this.opts.onResult;
+      this.end(false);
+      cb(result, info);
+      return;
+    }
+    addStat(p, SESSION_TYPES[this.type]?.stat ?? 'actvOther');
     if (this.type === 'jumping' && result.clear) addStat(p, 'actvClear');
     g.xp(this.type === 'show' ? 'show' : 'activity');
     let award = null;
@@ -432,7 +441,7 @@ class Session {
     this.hud.setMain(null);
     showActivityResults(g.ui, {
       type: this.type, result, comp: this.comp, rank, table, award: saved, money: isSandbox(p) ? 0 : money,
-      animal: main, record, extra: info.extra,
+      animal: main, record, extra: info.extra, body: info.body,
       onAgain: this.comp ? null : () => this.again(),
       onClose: () => this.end(false),
     });
@@ -524,7 +533,8 @@ class JumpingSession extends Session {
     this.lesson = type === 'lesson';
     // Le parcours : des barres au sol pour débuter, plus haut quand le cheval a appris.
     this.stage = this.comp ? stageForLevel(this.level) : (opts.stage ?? stageFor(a.skills.jump));
-    const course = courseForStage(this.stage);
+    // opts.course : parcours de concours (src/sim/competitions.js), sinon le parcours du niveau.
+    const course = opts.course ?? courseForStage(this.stage);
     this.start = this.lesson ? LESSON_START : course.start;
     if (this.lesson) {
       // Leçon : un seul obstacle au milieu, la barre monte à chaque réussite.
@@ -544,11 +554,12 @@ class JumpingSession extends Session {
       });
     }
     const st = toWorld(this.start);
-    const fin = toWorld(JUMP_COURSE.finish);
-    this.finishLine = { ...JUMP_COURSE.finish, x: fin.x, z: fin.z };
+    const finishDef = course.finish ?? JUMP_COURSE.finish;
+    const fin = toWorld(finishDef);
+    this.finishLine = { ...finishDef, x: fin.x, z: fin.z };
     if (!this.lesson) {
-      this.put(flagPair(JUMP_COURSE.finish.width, t('actv_finish')), fin.x, fin.z, JUMP_COURSE.finish.heading);
-      this.put(flagPair(6, t('actv_start')), st.x - 2.5, st.z, JUMP_COURSE.start.heading);
+      this.put(flagPair(finishDef.width, t('actv_finish')), fin.x, fin.z, finishDef.heading);
+      this.put(flagPair(6, t('actv_start')), st.x - 2.5, st.z, this.start.heading);
     }
     this.arrow = guideArrow();
     this.group.add(this.arrow);
@@ -558,7 +569,7 @@ class JumpingSession extends Session {
     this.jump = null;
     this.push = 0;
     this.want = -1;
-    this.par = parTime(JUMP_COURSE);
+    this.par = course.par ?? parTime(JUMP_COURSE);
     this.prev = this.obstacles.map(() => null);
     if (this.comp) this.addCrowd();
 
@@ -836,7 +847,8 @@ class JumpingSession extends Session {
       if (pole) pole.userData.fall = { t: 0, y0: pole.position.y };
       if (j.counts) {
         this.rails++;
-        this.hud.big(t('actv_rail'), 900, 'bad');
+        this.hud.big(t(j.o.type === 'water' ? 'actv_splash' : 'actv_rail'), 900, 'bad');
+        if (j.o.type === 'water') this.burst('💦', pl.root.position.clone(), 5, 1.2, 0.5);
       }
     }
     if (j.t >= 1) {
@@ -1878,3 +1890,18 @@ class HopSession extends Session {
     setTimeout(() => !this.ended && this.finish(result, { animals: [this.animal], quality: Math.max(0, 1 - this.faults / 4) }), 1200);
   }
 }
+
+// ---------------------------------------------------------------- registre des séances
+
+/**
+ * Types de séance : classe, icône de la barre de jeu et statistique comptée à la fin.
+ * D'autres modules s'y ajoutent (src/game/Dressage.js : plat, figures, reprise de dressage).
+ */
+export const SESSION_TYPES = {
+  jumping: { cls: JumpingSession, icon: '🏇', stat: 'actvJumping' },
+  lesson: { cls: JumpingSession, icon: '🎓', stat: 'actvLessons' },
+  trail: { cls: TrailSession, icon: '🧭', stat: 'actvTrail' },
+  agility: { cls: AgilitySession, icon: '🐕', stat: 'actvAgility' },
+  show: { cls: ShowSession, icon: '🎪', stat: 'actvShows' },
+  hop: { cls: HopSession, icon: '🐇', stat: 'actvHop' },
+};

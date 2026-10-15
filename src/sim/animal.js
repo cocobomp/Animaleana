@@ -62,7 +62,7 @@ export const CARE = {
 export const TRAINING = {
   jump: { skill: 'jump', needs: { exercise: 25, energy: -15 } },
   speed: { skill: 'speed', needs: { exercise: 30, energy: -18 } },
-  dressage: { skill: 'obedience', needs: { exercise: 20, energy: -12 } },
+  dressage: { skill: 'dressage', needs: { exercise: 20, energy: -12 } }, // compétence de dressage (src/sim/dressage.js)
   endurance: { skill: 'endurance', needs: { exercise: 35, energy: -20 } },
   agility: { skill: 'jump', needs: { exercise: 30, energy: -15 } },
   obedience: { skill: 'obedience', needs: { exercise: 10, energy: -6 } },
@@ -119,7 +119,7 @@ export function createAnimal({
     sick: null,
     neglect: 0,
     tricks: {},
-    skills: { obedience: 10, speed: 10, endurance: 10, jump: 10, ...(breedDef.herder ? { herding: 35 } : species === 'dog' ? { herding: 5 } : {}) },
+    skills: { obedience: 10, speed: 10, endurance: 10, jump: 10, ...(species === 'horse' ? { dressage: 10 } : {}), ...(breedDef.herder ? { herding: 35 } : species === 'dog' ? { herding: 5 } : {}) },
     produce: 0,
     bond: 5, // lien avec le joueur : grandit quand on joue et qu'on s'en occupe
     weight: 50, // 50 = poids idéal ; plus de 75 = trop gros, moins de 25 = trop maigre
@@ -329,7 +329,7 @@ export function trainSkill(a, trainingId, rng = Math.random) {
   if (lifeStage(a) === 'baby') return { ok: false, reason: 'baby' };
   for (const [n, v] of Object.entries(tr.needs)) a.needs[n] = clamp(a.needs[n] + v);
   const gain = Math.round((2 + rng() * 3) * successChance(a) * 2);
-  a.skills[tr.skill] = Math.min(100, a.skills[tr.skill] + gain);
+  a.skills[tr.skill] = Math.min(100, (a.skills[tr.skill] ?? 10) + gain); // (anciens chevaux sans dressage)
   return { ok: true, gain, skill: tr.skill };
 }
 

@@ -189,6 +189,11 @@ export const QUEST_GUIDE = {
   actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
   actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
   actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
+  // Dressage et concours à l'extérieur (src/sim/dressage.js, src/sim/competitions.js)
+  drTrain3: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
+  drReprise1: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
+  compRegister1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, ready: hasAnimal },
+  compAway1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, ready: hasAnimal },
 };
 
 /** Ordre conseillé des quêtes, de la plus facile à la plus difficile. */
@@ -196,6 +201,7 @@ export const QUEST_ORDER = [
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
+  'drTrain3', 'drReprise1', 'compRegister1', 'compAway1',
 ];
 
 /**
@@ -267,6 +273,7 @@ export const FOLLOW_STEPS = {
   goTravel: { target: travelEl('#panel button.primary.big:not([disabled])'), done: questDone },
   goShowground: { target: SHOWGROUND, done: seenAny('building:showground') },
   goHutch: { target: { type: 'building', id: 'hutch' }, done: seenAny('building:hutch') },
+  openCalendar: { target: { type: 'hud', id: 'actv_hud' }, done: seenAny('panel:activities') }, // calendrier des concours
   doActivity: { target: null, done: questDone, progress: true },
 };
 
@@ -294,6 +301,10 @@ export const QUEST_STEPS = {
   actvCompete1: ['goShowground', 'doActivity'],
   actvHop1: ['goShowground', 'doActivity'],
   actvHutch5: ['goHutch', 'doActivity'],
+  drTrain3: ['goShowground', 'doActivity'],
+  drReprise1: ['goShowground', 'doActivity'],
+  compRegister1: ['openCalendar', 'doActivity'],
+  compAway1: ['openCalendar', 'doActivity'],
 };
 
 /** Étapes d'une quête selon la situation : sans animal (ou sans cheval), on va d'abord en adopter un. */

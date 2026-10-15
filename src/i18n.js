@@ -1,5 +1,7 @@
 // Textes du jeu : français (langue principale) et anglais.
 
+import { fr as frComp, en as enComp } from './i18n-competitions.js'; // concours à l'extérieur et dressage
+
 const fr = {
   title: 'Animadichelle',
   tagline: 'Adopte, soigne et voyage avec tes animaux',
@@ -3244,6 +3246,10 @@ const en = {
   o_actvPhotos: 'Take 8 photos on trail rides',
   o_actvStar: 'Put on 10 shows',
 };
+
+// Textes des concours à l'extérieur et du dressage (fichier à part : src/i18n-competitions.js)
+Object.assign(fr, frComp);
+Object.assign(en, enComp);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

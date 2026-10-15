@@ -78,7 +78,16 @@ réussite au dressage…).
 - **Travail à pied** (chevaux) : longe, liberté, désensibilisation.
 - **Équitation** : balade libre, galop, saut d'obstacles, dressage, concours.
 - **Entraînement** : stats qui progressent (vitesse, endurance, obéissance,
-  saut).
+  saut, dressage).
+- **Dressage des chevaux** (`src/sim/dressage.js`, `src/game/Dressage.js`) : un
+  rectangle 18 × 36 m avec les lettres A-K-E-H-C-M-B-F dessiné dans la carrière.
+  Séances à la carrière, une fois par heure de jeu et par cheval (+2 à +6 en
+  dressage ; un cheval fatigué, stressé ou peu attaché apprend moins) :
+  **plat** (prendre l'allure annoncée au bon moment : pas / trot / galop avec un
+  seul bouton d'allure), **figures** (suivre les pastilles au sol et la flèche :
+  cercle, diagonale, serpentine, arrêt, reculer) et la **leçon de saut**.
+  **Reprise de dressage** : 8 à 10 figures notées sur 10 par le juge à C
+  (précision, allure, calme, rythme), total en pourcentage.
 
 ## 6. Adoption et argent
 - Partout : **refuge**, **animalerie**, **élevage**, animaux **trouvés** en
@@ -101,6 +110,19 @@ réussite au dressage…).
   le bateau ou l'avion pour traverser la mer, et on peut aller à cheval jusqu'en
   Suisse.
 - Sur place : animaux uniques à adopter, concours, quêtes, exploration, photos.
+- **Concours à l'extérieur** (`src/sim/competitions.js`,
+  `src/game/CompetitionVenue.js`, `src/ui/competitions.js`) : un calendrier sur
+  plusieurs lieux (Normandie, Cotswolds, Kentucky, Andalousie, Alpes, Bretagne)
+  avec date, discipline (saut, dressage, agility, spectacle ; crochet `beauty`),
+  niveau (club / régional / Grand Prix), frais et prix. On s'inscrit à l'avance
+  (Activités → 📅 Calendrier ou Journal), puis on part en van / voiture avec les
+  animaux inscrits (« Mes inscriptions » → 🚐). Le jour J, sur place, un **site de
+  concours** s'installe autour de la carrière (tribunes pleines, paddock
+  d'échauffement, boxes, podium, fanions) : échauffement, épreuve (parcours de
+  saut plus grands avec double, triple, rivière, mur ; **barrage** en cas
+  d'égalité), podium avec photo dans l'album, coupes, flots, argent, XP, titres
+  (Champion club / régional / Grand Prix). L'animal doit être en forme (faim,
+  soif, énergie ≥ 50, ni malade ni enceinte).
 - Destinations prévues : campagne (maison), Alpes, plage de Bretagne, forêt
   canadienne, Japon, savane africaine, Islande…
 

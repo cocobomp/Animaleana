@@ -5,6 +5,8 @@ export class Input {
     this.keys = new Set();
     this.move = { x: 0, y: 0 }; // x : droite, y : avant
     this.look = { dx: 0, dy: 0 };
+    this.btnLook = 0; // boutons ⟲ ⟳ à l'écran (-1, 0, 1)
+    this.btnRun = false; // bouton « Courir » à l'écran
     this.zoom = 0;
     this.run = false;
     this.enabled = true;
@@ -26,7 +28,7 @@ export class Input {
     // Vue : glisser sur l'écran (souris ou doigt), molette ou pincer pour zoomer.
     canvas.addEventListener('pointerdown', (e) => {
       canvas.setPointerCapture(e.pointerId);
-      this.lookPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      this.lookPointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() });
     });
     canvas.addEventListener('pointermove', (e) => {
       const p = this.lookPointers.get(e.pointerId);
@@ -46,6 +48,12 @@ export class Input {
       p.y = e.clientY;
     });
     const end = (e) => {
+      const p = this.lookPointers.get(e.pointerId);
+      // Un appui court sans glisser = « toucher » (aller quelque part, choisir un animal ou un bâtiment).
+      if (p && e.type === 'pointerup' && this.lookPointers.size === 1
+        && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < 12 && performance.now() - p.t < 400) {
+        this.onTap?.(e.clientX, e.clientY);
+      }
       this.lookPointers.delete(e.pointerId);
       this.pinchDist = 0;
     };
@@ -112,12 +120,17 @@ export class Input {
     this.move.x = x;
     this.move.y = y;
     // Sur le joystick, pousser jusqu'au bord fait courir.
-    this.run = this.enabled && (k.has('ShiftLeft') || k.has('ShiftRight') || Math.hypot(this.joy.x, this.joy.y) > 0.95);
+    this.run = this.enabled && (k.has('ShiftLeft') || k.has('ShiftRight') || this.btnRun || Math.hypot(this.joy.x, this.joy.y) > 0.95);
+    // Tourner la vue au clavier (pavé numérique) ou avec les boutons de l'écran.
+    const keyLook = {
+      x: (k.has('Numpad6') ? 1 : 0) - (k.has('Numpad4') ? 1 : 0) + this.btnLook,
+      y: (k.has('Numpad2') ? 1 : 0) - (k.has('Numpad8') ? 1 : 0),
+    };
     const look = { ...this.look };
     const zoom = this.zoom;
     this.look.dx = 0;
     this.look.dy = 0;
     this.zoom = 0;
-    return { move: this.move, run: this.run, look, zoom };
+    return { move: this.move, run: this.run, look, zoom, keyLook };
   }
 }

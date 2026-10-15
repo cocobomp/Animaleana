@@ -30,7 +30,7 @@ export function openVet(ui, a, atClinic) {
     if (state.done) {
       out.push(
         h('div', { class: 'vet-done' }, '💚'),
-        h('p', { class: 'big-text' }, t(ill ? 'vetCured' : 'vetCheckupDone', { name: a.name })),
+        h('p', { class: 'big-text' }, t(ill ? 'vetCured' : 'vetCheckupDone', { name: a.name, g: a.sex })),
         ill ? h('p', { class: 'note' }, t('diagnosis', { ill: t(`ill_${Object.keys(ILLNESSES).find((k) => ILLNESSES[k] === ill)}`) })) : null,
         h('button', { class: 'primary big', onClick: () => ui.closePanel() }, t('close')),
       );
@@ -39,7 +39,7 @@ export function openVet(ui, a, atClinic) {
 
     if (state.step === 1) {
       out.push(h('h3', {}, ill ? t('vetExam') : t('vetExamCheckup')));
-      if (ill) out.push(h('p', { class: 'hint' }, t('vetHint', { hint: t(`hint_${a.sick}`) })));
+      if (ill) out.push(h('p', { class: 'hint' }, t('vetHint', { hint: t(`hint_${a.sick}`, { g: a.sex }) })));
       out.push(h('div', { class: 'grid zones' }, ZONES.map((z) => {
         const ok = state.checked.has(z);
         const wrong = state.wrong.has(z);

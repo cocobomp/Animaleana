@@ -17,13 +17,15 @@ import {
 } from '../sim/farm.js';
 import { SPECIES } from '../sim/species.js';
 import {
-  tickAnimal, applyCare, CARE, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
+  NEEDS, tickAnimal, applyCare, CARE, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
 } from '../sim/animal.js';
-import { GAME_MINUTES_PER_REAL_SECOND, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
+import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
 import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES } from '../sim/places.js';
 import { adoptionPrice } from '../sim/adoption.js';
 import { checkObjectives } from '../sim/objectives.js';
 import { saveProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
+import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
+import { PEN, FIELD } from './AnimalEntity.js';
 import { t, L } from '../i18n.js';
 
 const CARE_EMOJI = {
@@ -61,6 +63,14 @@ export class Game {
     this.rig = new CameraRig(this.camera);
     this.input = new Input(renderer.domElement, document.getElementById('joystick'));
     this.input.onKey = (code) => this.onKey(code);
+    this.input.onTap = (x, y) => this.onTap(x, y);
+    this.raycaster = new THREE.Raycaster();
+    this.marker = new THREE.Mesh(
+      new THREE.RingGeometry(0.35, 0.5, 32).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }),
+    );
+    this.marker.visible = false;
+    this.scene.add(this.marker);
     this.entities = new Map();
     this.helpers = new Map();
     this.equipment = [];
@@ -253,7 +263,7 @@ export class Game {
       for (const h of left) {
         this.helpers.get(h.id)?.dispose();
         this.helpers.delete(h.id);
-        this.ui.toast(t('helperLeft', { name: h.name }), 6000);
+        this.ui.toast(t('helperLeft', { name: h.name, g: h.sex }), 6000);
       }
     }
     this.autoHerd();
@@ -264,7 +274,7 @@ export class Game {
   }
 
   handleEvents(a, events) {
-    if (events.includes('sick')) this.ui.toast(t('gotSick', { name: a.name }), 6000);
+    if (events.includes('sick')) this.ui.toast(t('gotSick', { name: a.name, g: a.sex }), 6000);
     if (events.includes('died')) this.animalDied(a);
   }
 
@@ -272,7 +282,7 @@ export class Game {
     const p = this.profile;
     p.animals = p.animals.filter((x) => x.id !== a.id);
     const y = Math.floor(ageYears(a));
-    p.memorial.push({ name: a.name, species: a.species, breed: a.breed, years: y, day: this.day });
+    p.memorial.push({ name: a.name, g: a.sex, species: a.species, breed: a.breed, years: y, day: this.day });
     const e = this.entities.get(a.id);
     if (e) {
       if (this.player.mount === e) this.player.dismount();
@@ -280,7 +290,7 @@ export class Game {
       this.entities.delete(a.id);
     }
     this.ui.closePanelFor(a.id);
-    this.ui.alert(t('died', { name: a.name, age: t('years', { n: y }) }));
+    this.ui.alert(t('died', { name: a.name, g: a.sex, age: t('years', { n: y }) }));
   }
 
   // ---------------------------------------------------------------- boucle
@@ -292,7 +302,8 @@ export class Game {
       return;
     }
     const p = this.profile;
-    p.clock += dt * GAME_MINUTES_PER_REAL_SECOND;
+    const mps = minutesPerSecond(p.settings.timeSpeed);
+    p.clock += dt * mps;
     const night = isNight(p.clock);
 
     const ctrl = this.input.poll();
@@ -318,7 +329,7 @@ export class Game {
     // Simulation des besoins 2 fois par seconde.
     this.simAcc += dt;
     if (this.simAcc >= 0.5) {
-      const hours = (this.simAcc * GAME_MINUTES_PER_REAL_SECOND) / 60;
+      const hours = (this.simAcc * mps) / 60;
       this.simAcc = 0;
       this.updateWeather();
       const weather = this.simWeather();
@@ -331,7 +342,7 @@ export class Game {
           weather, sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
         });
         tickProduce(a, hours);
-        if (before !== 'sad' && mood(a) === 'sad') this.ui.toast(t('sad', { name: a.name }), 4000);
+        if (before !== 'sad' && mood(a) === 'sad') this.ui.toast(t('sad', { name: a.name, g: a.sex }), 4000);
         this.handleEvents(a, events);
         if (e && e.stage !== undefined) {
           const oldScale = e.scale;
@@ -357,8 +368,197 @@ export class Game {
       this.save();
     }
 
+    if (this.marker.visible) {
+      this.marker.scale.setScalar(1 + Math.sin(performance.now() / 150) * 0.12);
+      if (!this.player.auto) this.marker.visible = false;
+    }
     this.updateFocus();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  // ---------------------------------------------------------------- toucher l'écran
+
+  /** Toucher le sol : on y va. Toucher un animal ou un bâtiment : on y va puis on choisit quoi faire. */
+  onTap(sx, sy) {
+    if (!this.running || this.ui.isBlocking()) return;
+    const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const roots = [...this.entities.values()].filter((e) => !e.ridden).map((e) => e.root);
+    const hitA = this.raycaster.intersectObjects(roots, true).find((h) => !h.object.isSprite || h.object === h.object.parent?.userData?.entity?.label);
+    if (hitA) {
+      let o = hitA.object;
+      while (o && !o.userData.entity) o = o.parent;
+      const e = o?.userData.entity;
+      if (e) {
+        this.walkTo(e.position, e.radius + 1.2, () => this.ui.openAnimalActions(e.data), true);
+        return;
+      }
+    }
+    if (this.player.mount) {
+      const hitG = this.raycaster.intersectObject(this.world.group, true)[0];
+      if (hitG) this.walkTo(hitG.point, 1);
+      return;
+    }
+    const hit = this.raycaster.intersectObject(this.world.group, true)[0];
+    if (!hit) return;
+    const kind = this.world.kindAt(hit.point.x, hit.point.z);
+    if (kind) {
+      const door = this.world.interactables.find((i) => i.kind === kind);
+      if (door) {
+        this.walkTo(new THREE.Vector3(door.x, 0, door.z), 1.2, () => this.ui.openBuilding(kind));
+        return;
+      }
+    }
+    if (this.world.isWater(hit.point.x, hit.point.z)) return;
+    this.walkTo(hit.point, 0.5);
+  }
+
+  walkTo(point, radius, onArrive = null, follow = false) {
+    const target = point.clone ? point : new THREE.Vector3(point.x, 0, point.z);
+    this.marker.position.set(target.x, this.world.heightAt(target.x, target.z) + 0.05, target.z);
+    this.marker.visible = !follow;
+    // Si on vise un animal qui bouge, on vise sa position actuelle.
+    this.player.goTo(follow ? target.clone() : target, radius, onArrive);
+  }
+
+  buildingContext() {
+    const here = this.animalsHere();
+    const sp = (a) => SPECIES[a.species];
+    return {
+      hour: this.hour,
+      season: this.season,
+      home: this.placeDef.home,
+      count: {
+        horse: here.filter((a) => a.species === 'horse').length,
+        livestock: here.filter((a) => sp(a).livestock).length,
+        pets: here.filter((a) => ['dog', 'cat', 'rabbit'].includes(a.species)).length,
+        sick: here.filter((a) => a.sick).length,
+        milkable: here.filter((a) => a.produceReady && sp(a).product?.action === 'milk').length,
+        shearable: here.filter((a) => a.produceReady && sp(a).product?.action === 'shear').length,
+      },
+    };
+  }
+
+  buildingActions(kind) {
+    return buildingActions(kind, this.buildingContext());
+  }
+
+  animalActionAllowed(a, action) {
+    return animalActionAllowed(action, { sleeping: this.entities.get(a.id)?.sleeping });
+  }
+
+  /** Un soin pour tout un groupe d'animaux (ex. foin pour tous les chevaux). */
+  groupCare(filter, action, quality = 1) {
+    let n = 0;
+    for (const a of this.animalsHere().filter(filter)) {
+      if (!SPECIES[a.species].actions.includes(action)) continue;
+      if (!canAfford(this.profile, CARE[action].cost)) break;
+      if (applyCare(a, action, quality).ok) {
+        spend(this.profile, CARE[action].cost);
+        addStat(this.profile, action);
+        this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️', 2);
+        n++;
+      }
+    }
+    this.ui.toast(n ? t('doneAll', { n }) : t('nobody'));
+    this.ui.refresh();
+    return n;
+  }
+
+  groupCollect(action) {
+    let n = 0;
+    for (const a of this.animalsHere()) {
+      if (a.produceReady && SPECIES[a.species].product?.action === action && collectProduct(this.profile, a).ok) {
+        this.entities.get(a.id)?.emit(action === 'shear' ? '🧶' : '🥛', 2);
+        n++;
+      }
+    }
+    this.ui.toast(n ? t('doneAll', { n }) : t('nobody'));
+    return n;
+  }
+
+  /** Les chevaux rentrent au paddock (ou en sortent pour aller au pré). */
+  sendHorses(where) {
+    const target = where === 'field' ? FIELD : { x: -16, z: 16 };
+    let n = 0;
+    for (const e of this.entities.values()) {
+      if (e.data.species !== 'horse' || e.ridden) continue;
+      e.data.following = false;
+      e.data.zone = where === 'field' ? 'field' : undefined;
+      e.state = 'walk';
+      e.target.set(target.x + (Math.random() - 0.5) * 6, 0, target.z + (Math.random() - 0.5) * 6);
+      e.timer = 30;
+      n++;
+    }
+    this.ui.toast(n ? t(where === 'field' ? 'horsesOut' : 'storedHorses') : t('nobody'));
+  }
+
+  /** Ce qui demande l'attention du joueur maintenant (pour le bouton ⏩). */
+  needsAttention() {
+    const out = [];
+    for (const a of this.animalsHere()) {
+      if (a.sick) out.push({ a, what: 'sick' });
+      else {
+        const low = NEEDS.filter((n) => a.needs[n] < 40).sort((x, y) => a.needs[x] - a.needs[y])[0];
+        if (low) out.push({ a, what: low });
+        else if (a.produceReady) out.push({ a, what: SPECIES[a.species].product.id });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * ⏩ Avance jusqu'au prochain moment intéressant : un animal qui a besoin de toi,
+   * ou un rendez-vous de la journée (traite, sortie au pré, ouverture du refuge…). 12 h au plus.
+   */
+  skipAhead() {
+    const now = this.needsAttention();
+    if (now.length) {
+      const { a, what } = now[0];
+      this.ui.toast(t('skipBusy', { name: a.name, g: a.sex, what: t(`attn_${what}`, { g: a.sex }) }), 5000);
+      return 0;
+    }
+    const RDV = [6, 8, 9, 17, 20];
+    let hours = 0;
+    while (hours < 12) {
+      const step = 0.25;
+      const before = this.hour;
+      this.advanceTime(step);
+      hours += step;
+      const after = this.hour;
+      const crossed = RDV.find((r) => (before < r && after >= r) || (before > after && after >= r));
+      if (this.needsAttention().length || crossed !== undefined) break;
+    }
+    this.ui.toast(t('skipped', { h: Math.round(hours * 10) / 10 }), 4000);
+    this.ui.refresh();
+    return hours;
+  }
+
+  moodOf(a) {
+    return mood(a);
+  }
+
+  /** Emmène le troupeau : avec le chien ou le berger s'il y en a un, sinon les animaux y vont seuls. */
+  moveFlock(dest) {
+    if (this.herder()) return this.startHerding(dest);
+    let n = 0;
+    for (const e of this.entities.values()) {
+      if (!e.sp.livestock) continue;
+      e.data.zone = dest;
+      e.data.following = false;
+      e.state = 'walk';
+      e.pickWanderTarget();
+      e.timer = 40;
+      n++;
+    }
+    this.ui.toast(n ? t('flockMoving') : t('noFlock'), 5000);
+    return n > 0;
+  }
+
+  checkHorses() {
+    const horses = this.animalsHere().filter((a) => a.species === 'horse');
+    const sick = horses.filter((a) => a.sick || mood(a) === 'sad');
+    this.ui.toast(sick.length ? t('checkBad', { names: sick.map((a) => a.name).join(', ') }) : t('checkGood', { n: horses.length }), 5000);
   }
 
   /** Cherche ce qui est à portée de main (animal, porte…) pour le bouton d'action. */
@@ -404,12 +604,14 @@ export class Game {
     const f = this.focus;
     if (!f) return;
     switch (f.kind) {
-      case 'animal': this.ui.openAnimal(f.entity.data); break;
-      case 'refuge': this.ui.openAdoption(); break;
-      case 'vet': this.ui.openVetClinic(); break;
+      case 'animal': this.ui.openAnimalActions(f.entity.data); break;
+      case 'refuge':
+      case 'vet':
       case 'house':
-      case 'lodge': this.sleep(); break;
-      case 'jobs': this.ui.openJobs(); break;
+      case 'lodge':
+      case 'jobs':
+      case 'stable':
+      case 'pen': this.ui.openBuilding(f.kind); break;
       case 'dismount': this.dismount(); break;
       default:
     }
@@ -444,7 +646,7 @@ export class Game {
     const care = CARE[action];
     if (!canAfford(this.profile, care.cost)) return this.ui.toast(t('r_money'));
     const res = applyCare(a, action, quality);
-    if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name }));
+    if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name, g: a.sex }));
     spend(this.profile, care.cost);
     addStat(this.profile, action);
     this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
@@ -454,17 +656,17 @@ export class Game {
 
   trick(a, trickId) {
     const r = trainTrick(a, trickId);
-    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name }));
+    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
     const e = this.entities.get(a.id);
     if (r.learned) {
       addStat(this.profile, 'tricksLearned');
       e?.emit('🎉', 5);
-      this.ui.toast(t('trickLearned', { name: a.name, trick: t(`trick_${trickId}`) }));
+      this.ui.toast(t('trickLearned', { name: a.name, g: a.sex, trick: t(`trick_${trickId}`) }));
     } else if (r.success) {
       e?.emit('⭐', 2);
-      this.ui.toast(t('trickSuccess', { name: a.name, p: r.progress }));
+      this.ui.toast(t('trickSuccess', { name: a.name, g: a.sex, p: r.progress }));
     } else {
-      this.ui.toast(t('trickFail', { name: a.name }));
+      this.ui.toast(t('trickFail', { name: a.name, g: a.sex }));
     }
     this.ui.refresh();
     return r;
@@ -472,22 +674,22 @@ export class Game {
 
   train(a, trainingId) {
     const r = trainSkill(a, trainingId);
-    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name }));
+    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
     addStat(this.profile, 'trainings');
     this.entities.get(a.id)?.emit('💪', 2);
-    this.ui.toast(t('skillGain', { name: a.name, skill: t(`skill_${r.skill}`), n: r.gain }));
+    this.ui.toast(t('skillGain', { name: a.name, g: a.sex, skill: t(`skill_${r.skill}`), n: r.gain }));
     this.ui.refresh();
     return r;
   }
 
   ride(a) {
     const r = canRide(a);
-    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name }));
+    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
     const e = this.entities.get(a.id);
     if (!e) return null;
     this.player.ride(e);
     addStat(this.profile, 'rides');
-    this.ui.toast(t('ridingHint', { name: a.name }));
+    this.ui.toast(t('ridingHint', { name: a.name, g: a.sex }));
     return r;
   }
 
@@ -497,7 +699,7 @@ export class Game {
 
   toggleFollow(a) {
     a.following = !a.following;
-    this.ui.toast(t(a.following ? 'following' : 'staying', { name: a.name }));
+    this.ui.toast(t(a.following ? 'following' : 'staying', { name: a.name, g: a.sex }));
     if (a.following) addStat(this.profile, 'walks');
   }
 
@@ -526,7 +728,7 @@ export class Game {
     const door = this.world.interactables.find((i) => i.kind === 'refuge');
     const e = this.spawnEntity(a, door);
     e.emit('❤️', 5);
-    this.ui.toast(t('adopted', { name: a.name }));
+    this.ui.toast(t('adopted', { name: a.name, g: a.sex }));
     this.save();
     return a;
   }
@@ -566,7 +768,7 @@ export class Game {
     else checkup(a);
     addStat(this.profile, 'vet');
     this.entities.get(a.id)?.emit('💚', 4);
-    this.ui.toast(t(wasSick ? 'vetCured' : 'vetCheckupDone', { name: a.name }));
+    this.ui.toast(t(wasSick ? 'vetCured' : 'vetCheckupDone', { name: a.name, g: a.sex }));
     this.ui.refresh();
   }
 
@@ -626,7 +828,7 @@ export class Game {
     if (!r.ok) return this.ui.toast(t('alreadyHired'));
     this.helpers.set(r.helper.id, new HelperEntity(r.helper, this.world, this.scene));
     addStat(this.profile, 'hired');
-    this.ui.toast(t('hired', { name: r.helper.name, job: t(`helper_${type}`) }));
+    this.ui.toast(t('hired', { name: r.helper.name, g: r.helper.sex, job: t(`helper_${type}`, { g: r.helper.sex }) }));
     this.save();
     return r;
   }
@@ -653,14 +855,14 @@ export class Game {
     if (!r.ok) return;
     const e = task.animalId && this.entities.get(task.animalId);
     if (e) e.emit(task.kind === 'cure' ? '💚' : task.kind === 'product' ? '🪣' : '❤️', 2);
-    if (task.kind === 'product') this.ui.toast(t(`collected_${r.product}`, { name: helper.data.name, n: r.earned }));
+    if (task.kind === 'product') this.ui.toast(t(`collected_${r.product}`, { name: helper.data.name, g: helper.data.sex, n: r.earned }));
   }
 
   collect(a) {
     const r = collectProduct(this.profile, a);
-    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name }));
+    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
     this.entities.get(a.id)?.emit(r.product === 'wool' ? '🧶' : '🥛', 3);
-    this.ui.toast(t(`got_${r.product}`, { name: a.name, n: r.earned }));
+    this.ui.toast(t(`got_${r.product}`, { name: a.name, g: a.sex, n: r.earned }));
     this.ui.refresh();
     return r;
   }
@@ -675,7 +877,7 @@ export class Game {
   startHerding(dest, pusher = this.herder()) {
     if (!pusher) return this.ui.toast(t('noHerder'));
     if (!this.herding.start(dest, pusher)) return this.ui.toast(t('noFlock'));
-    this.ui.toast(t(dest === 'pen' ? 'herdingIn' : 'herdingOut', { name: pusher.data.name }));
+    this.ui.toast(t(dest === 'pen' ? 'herdingIn' : 'herdingOut', { name: pusher.data.name, g: pusher.data.sex }));
     return true;
   }
 
@@ -712,7 +914,7 @@ export class Game {
   setHerder(a, on) {
     for (const x of this.profile.animals) if (x.role === 'herder' && x.location === a.location) delete x.role;
     if (on) a.role = 'herder';
-    this.ui.toast(t(on ? 'herderOn' : 'herderOff', { name: a.name }));
+    this.ui.toast(t(on ? 'herderOn' : 'herderOff', { name: a.name, g: a.sex }));
   }
 
   equipmentHere() {
@@ -748,7 +950,7 @@ export class Game {
       a.following = true;
       delete a.pos;
       if (events.includes('died')) this.animalDied(a);
-      else if (events.includes('sick')) this.ui.toast(t('gotSick', { name: a.name }), 6000);
+      else if (events.includes('sick')) this.ui.toast(t('gotSick', { name: a.name, g: a.sex }), 6000);
     }
     p.place = destId;
     if (!p.visited.includes(destId)) p.visited.push(destId);

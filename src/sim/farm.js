@@ -34,6 +34,7 @@ export const HELPERS = {
 };
 
 const HELPER_NAMES = ['Lucie', 'Hugo', 'Inès', 'Jules', 'Chloé', 'Nathan', 'Manon', 'Théo', 'Sarah', 'Louis', 'Emma', 'Yanis'];
+const FEMALE_NAMES = ['Lucie', 'Inès', 'Chloé', 'Manon', 'Sarah', 'Emma'];
 
 // Quel besoin remplit chaque soin (pour que l'aide choisisse le plus urgent).
 const ACTION_FOR_NEED = {
@@ -109,7 +110,7 @@ export function hireHelper(profile, type, placeId, rng = Math.random) {
   if (profile.helpers.some((h) => h.type === type && h.place === placeId)) return { ok: false, reason: 'owned' };
   const used = profile.helpers.map((h) => h.name);
   const name = pick(HELPER_NAMES.filter((n) => !used.includes(n)), rng) ?? pick(HELPER_NAMES, rng);
-  const helper = { id: uid(), type, name, place: placeId };
+  const helper = { id: uid(), type, name, sex: FEMALE_NAMES.includes(name) ? 'f' : 'm', place: placeId };
   profile.helpers.push(helper);
   return { ok: true, helper };
 }

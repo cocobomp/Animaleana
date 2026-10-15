@@ -83,6 +83,7 @@ export class AnimalEntity {
     }
     this.model = buildAnimalModel(this.data.species, this.data.look);
     this.root = new THREE.Group();
+    this.root.userData.entity = this;
     this.scaleGroup = new THREE.Group();
     this.scaleGroup.add(this.model.root);
     this.root.add(this.scaleGroup);

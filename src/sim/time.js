@@ -1,7 +1,10 @@
 // Le temps du jeu ne passe que pendant qu'on joue.
-// 1 jour de jeu = 10 minutes réelles ; 1 an d'animal = 12 jours de jeu.
+// Par défaut 1 jour de jeu = 30 minutes réelles (réglable) ; 1 an d'animal = 12 jours de jeu.
 
-export const REAL_SECONDS_PER_GAME_DAY = 600;
+// Durée réelle d'une journée de jeu selon le réglage « Vitesse du temps ».
+export const TIME_SPEEDS = { slow: 3600, normal: 1800, fast: 600 };
+export const REAL_SECONDS_PER_GAME_DAY = TIME_SPEEDS.normal;
+export const minutesPerSecond = (speed = 'normal') => (24 * 60) / (TIME_SPEEDS[speed] ?? TIME_SPEEDS.normal);
 export const GAME_MINUTES_PER_REAL_SECOND = (24 * 60) / REAL_SECONDS_PER_GAME_DAY;
 export const DAYS_PER_YEAR = 12;
 

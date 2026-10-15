@@ -11,6 +11,7 @@ import { OBJECTIVES } from '../sim/objectives.js';
 import { canAfford, isSandbox } from '../sim/profile.js';
 import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
+import { speciesName } from './names.js';
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -61,14 +62,14 @@ function renderAnimal(ui, g, a) {
 
   const info = h('div', { class: 'animal-info' },
     h('div', { class: 'chips' },
-      h('span', { class: 'chip' }, breedName(a)),
+      h('span', { class: 'chip' }, `${speciesName(a)} · ${breedName(a)}`),
       h('span', { class: 'chip' }, `${sexIcon(a)} ${t(a.sex === 'f' ? 'female' : 'male')}`),
       h('span', { class: 'chip' }, `${ageText(a)} · ${t(`stage_${stage}`)}`),
-      h('span', { class: 'chip' }, t(`p_${a.personality}`)),
-      h('span', { class: `chip mood-${m}` }, `${MOOD_EMOJI[m]} ${t(`mood_${m}`)}`),
+      h('span', { class: 'chip' }, t(`p_${a.personality}`, { g: a.sex })),
+      h('span', { class: `chip mood-${m}` }, `${MOOD_EMOJI[m]} ${t(`mood_${m}`, { g: a.sex })}`),
       h('span', { class: 'chip swatch', style: { background: hexColor(a.look.coat) } }, L(a.look.colorName) || ''),
     ),
-    a.sick ? h('p', { class: 'warn' }, `🤒 ${t('r_sick', { name: a.name })}`) : null,
+    a.sick ? h('p', { class: 'warn' }, `🤒 ${t('r_sick', { name: a.name, g: a.sex })}`) : null,
     !here ? h('p', { class: 'note' }, t('isAt', { place: `${PLACES[a.location].flag} ${L(PLACES[a.location].name)}` })) : null,
   );
 
@@ -124,9 +125,9 @@ function renderAnimal(ui, g, a) {
     const skill = a.skills.herding ?? 0;
     const able = skill >= 25;
     out.push(h('h3', {}, `🐑 ${t('herdDog')}`),
-      h('p', { class: 'note' }, able ? t('herdDogHelp') : t('herdDogTrain', { n: Math.round(skill) })),
+      h('p', { class: 'note' }, able ? t('herdDogHelp', { g: a.sex }) : t('herdDogTrain', { n: Math.round(skill), g: a.sex })),
       h('div', { class: 'grid' },
-        btn(a.role === 'herder' ? `✅ ${t('herderIs')}` : t('herderMake'), () => { g.setHerder(a, a.role !== 'herder'); ui.renderPanel(); }, { disabled: !able, cls: a.role === 'herder' ? 'done' : '' }),
+        btn(a.role === 'herder' ? `✅ ${t('herderIs', { g: a.sex })}` : t('herderMake', { g: a.sex }), () => { g.setHerder(a, a.role !== 'herder'); ui.renderPanel(); }, { disabled: !able, cls: a.role === 'herder' ? 'done' : '' }),
         btn(`🏠 ${t('herdIn')}`, () => g.startHerding('pen', g.entities.get(a.id)), { disabled: !able }),
         btn(`🌿 ${t('herdOut')}`, () => g.startHerding('field', g.entities.get(a.id)), { disabled: !able })));
   }
@@ -172,7 +173,7 @@ export function openAnimals(ui) {
           h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
           h('span', { class: 'card-main' },
             h('b', {}, `${a.name} ${sexIcon(a)}`),
-            h('small', {}, `${breedName(a)} · ${ageText(a)}`),
+            h('small', {}, `${speciesName(a)} · ${breedName(a)} · ${ageText(a)}`),
             h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${happiness(a)}%` } }))),
           h('span', { class: 'card-side' }, MOOD_EMOJI[m], h('small', {}, here ? '' : PLACES[a.location].flag)));
       });
@@ -201,8 +202,8 @@ export function openAdoption(ui) {
         h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
         h('span', { class: 'card-main' },
           h('b', {}, `${a.name} ${sexIcon(a)}`),
-          h('small', {}, `${breedName(a)} · ${L(a.look.colorName)}`),
-          h('small', {}, `${ageText(a)} · ${t(`p_${a.personality}`)}`)),
+          h('small', {}, `${speciesName(a)} · ${breedName(a)} · ${L(a.look.colorName)}`),
+          h('small', {}, `${ageText(a)} · ${t(`p_${a.personality}`, { g: a.sex })}`)),
         h('span', { class: 'swatch-dot', style: { background: hexColor(a.look.coat) } }),
         h('button', {
           class: 'primary',
@@ -372,6 +373,16 @@ export function openSettings(ui) {
           class: quality === q ? 'primary' : '',
           onClick: () => { g.setQuality(q); location.reload(); },
         }, t(q === 'high' ? 'qualityHigh' : 'qualityLow')))),
+        h('h3', {}, t('timeSpeed')),
+        h('div', { class: 'row wrap' }, ['slow', 'normal', 'fast'].map((sp) => h('button', {
+          class: (g.profile.settings.timeSpeed ?? 'normal') === sp ? 'primary' : '',
+          onClick: () => { g.profile.settings.timeSpeed = sp; ui.renderPanel(); },
+        }, t(`speed_${sp}`)))),
+        h('h3', {}, t('onScreenControls')),
+        h('div', { class: 'row' }, [[true, 'onScreenOn'], [false, 'onScreenOff']].map(([on, key]) => h('button', {
+          class: ui.onScreenControls() === on ? 'primary' : '',
+          onClick: () => { ui.setOnScreenControls(on); ui.renderPanel(); },
+        }, t(key)))),
         h('h3', {}, t('language')),
         h('div', { class: 'row' }, [['fr', 'Français'], ['en', 'English']].map(([l, name]) => h('button', {
           class: getLang() === l ? 'primary' : '',
@@ -447,7 +458,7 @@ export function openFarm(ui) {
           return h('div', { class: 'card' },
             h('span', { class: 'card-emoji' }, def.emoji),
             h('span', { class: 'card-main' },
-              h('b', {}, hired ? `${hired.name} · ${t(`helper_${type}`)}` : t(`helper_${type}`)),
+              h('b', {}, hired ? `${hired.name} · ${t(`helper_${type}`, { g: hired.sex })}` : t(`helper_${type}`)),
               h('small', {}, t(`helperd_${type}`))),
             hired
               ? h('button', { onClick: async () => { if (await ui.confirm(t('fireConfirm', { name: hired.name }))) { g.fire(hired.id); ui.renderPanel(); } } }, t('fire'))

@@ -52,7 +52,7 @@ const fr = {
   quit: 'Sauver et quitter',
   close: 'Fermer',
   saved: 'Partie sauvegardée',
-  controlsHelp: 'ZQSD / flèches : marcher · Maj : courir · E : interagir · C : caméra · glisser : tourner la vue',
+  controlsHelp: 'ZQSD / flèches : marcher · Maj : courir · E : interagir · C : caméra · glisser ou pavé numérique (4 6 8 2) : tourner la vue',
 
   interact: 'S\'occuper de {name}',
   enterRefuge: 'Entrer au refuge',
@@ -424,6 +424,92 @@ const fr = {
   doneAll: '✅ C\'est fait pour {n} animaux !',
   nobody: 'Il n\'y a personne à qui le faire ici.',
   storedHorses: '🐴 Les chevaux rentrent au paddock.',
+
+  // Accords au féminin (utilisés automatiquement par t() quand l'animal est une femelle)
+  mood_happy_f: 'Heureuse',
+  mood_ok_f: 'Contente',
+  p_playful_f: 'Joueuse',
+  p_cuddly_f: 'Câline',
+  p_stubborn_f: 'Têtue',
+  p_curious_f: 'Curieuse',
+  r_tired_f: '{name} est trop fatiguée.',
+  r_sick_f: '{name} est malade, emmène-la chez le vétérinaire.',
+  r_tooYoung_f: '{name} est trop jeune pour être montée.',
+  died_f: '🌈 {name} s\'est éteinte paisiblement à {age}. Elle restera dans tes souvenirs.',
+  gotSick_f: '🤒 {name} est tombée malade ! Emmène-la chez le vétérinaire.',
+  sad_f: '😢 {name} est triste, occupe-toi d\'elle.',
+  vetCured_f: '💚 {name} est guérie ! Merci docteur !',
+  herderOn_f: '🐕 {name} est maintenant la chienne de troupeau.',
+  herderOff_f: '{name} n\'est plus la chienne de troupeau.',
+  herderMake_f: 'En faire la chienne de troupeau',
+  herderIs_f: 'C\'est la chienne de troupeau',
+  herdDogHelp_f: 'Cette chienne sait conduire un troupeau.',
+  herdDogTrain_f: 'Entraîne-la en « Conduite de troupeau » pour qu\'elle apprenne ({n}/25).',
+  why_animalAsleep: '{name} dort. On ne le réveille pas pour ça.',
+  hint_ear_f: 'elle secoue la tête et se gratte les oreilles',
+  hint_paw_f: 'elle boite',
+  hint_belly_f: 'elle ne veut plus manger',
+  hint_cold_f: 'elle éternue',
+  hint_fleas_f: 'elle se gratte le dos sans arrêt',
+  hint_flu_f: 'elle est toute chaude et fatiguée',
+  why_animalAsleep_f: '{name} dort. On ne la réveille pas pour ça.',
+  hired_f: '👋 {name} est ta nouvelle {job} !',
+  helperLeft_f: '😕 {name} est partie : tu n\'avais plus assez d\'argent pour la payer.',
+  helper_groom_f: 'Palefrenière',
+  helper_shepherd_f: 'Bergère',
+  helper_farmhand_f: 'Ouvrière agricole',
+  helper_vet_f: 'Vétérinaire attitrée',
+  born_one: '🍼 Un bébé est né ! Bienvenue {names} !',
+  doneAll_one: '✅ C\'est fait pour 1 animal !',
+  checkGood: '🔦 Tes {n} chevaux dorment tranquillement. Tout va bien.',
+  checkGood_one: '🔦 Ton cheval dort tranquillement. Tout va bien.',
+  checkBad: '🔦 Attention : {names} ne va pas bien. Va voir sa fiche.',
+  horsesOut: '🐴 Les chevaux partent au pré.',
+  flockMoving: '🐑 Le troupeau y va tout seul… (un chien de troupeau ou un berger le ferait plus vite)',
+  bldd_stable: 'Les box et le paddock des chevaux.',
+  bldd_pen: 'L\'enclos et l\'abri du troupeau.',
+  bldd_house: 'Ta maison.',
+  bldd_lodge: 'Le gîte où tu dors en voyage.',
+  bldd_refuge: 'Des animaux attendent une famille. Ouvert de 9 h à 18 h.',
+  bldd_vet: 'Ouvert de 8 h à 19 h, et la nuit pour les urgences.',
+  bldd_jobs: 'Des petits boulots pour aider les voisins, de 8 h à 18 h.',
+  do_checkHorses: 'Vérifier que les chevaux vont bien',
+  do_outHorses: 'Emmener les chevaux au pré',
+  do_outFlock: 'Emmener le troupeau au pré',
+  do_inFlock: 'Rentrer le troupeau',
+  do_milkAll: 'Faire la traite',
+  do_shearAll: 'Tondre les moutons',
+  do_avatar: 'Changer de tenue',
+  why_noAnimals: 'Il n\'y a pas d\'animal ici pour ça.',
+  why_noneReady: 'Personne n\'est prêt pour l\'instant.',
+  why_closed: 'Fermé. Ouvert de {from} à {to}.',
+  why_night: 'Il fait nuit : c\'est possible de {from} à {to}.',
+  why_asleep: 'Les animaux dorment. Reviens à partir de {h}.',
+  why_notTired: 'Tu n\'es pas encore fatigué(e). Tu pourras dormir à partir de {h}.',
+  why_vetClosed: 'La clinique ouvre à {h} (sauf urgence : un animal malade).',
+  why_milkTime: 'On trait le matin (6 h – 10 h) et le soir (17 h – 21 h).',
+  why_shearSeason: 'On tond les moutons au printemps et en été.',
+
+  skip: 'Avancer',
+  skipBusy: '{name} {what} : occupe-t\'en d\'abord !',
+  skipped: '⏩ {h} h plus tard…',
+  attn_sick: 'est malade',
+  attn_hunger: 'a faim',
+  attn_thirst: 'a soif',
+  attn_hygiene: 'est sale',
+  attn_hygiene_f: 'est sale',
+  attn_energy: 'est fatigué',
+  attn_energy_f: 'est fatiguée',
+  attn_exercise: 'veut se dépenser',
+  attn_affection: 'veut un câlin',
+  attn_grooming: 'a besoin d\'être brossé',
+  attn_grooming_f: 'a besoin d\'être brossée',
+  attn_wool: 'a sa laine prête à être tondue',
+  attn_milk: 'est prête pour la traite',
+  timeSpeed: 'Vitesse du temps',
+  speed_slow: 'Lente (1 h par jour)',
+  speed_normal: 'Normale (30 min par jour)',
+  speed_fast: 'Rapide (10 min par jour)',
 };
 
 const en = {
@@ -478,7 +564,7 @@ const en = {
   quit: 'Save and quit',
   close: 'Close',
   saved: 'Game saved',
-  controlsHelp: 'WASD / arrows: walk · Shift: run · E: interact · C: camera · drag: look around',
+  controlsHelp: 'WASD / arrows: walk · Shift: run · E: interact · C: camera · drag or numpad (4 6 8 2): look around',
 
   interact: 'Take care of {name}',
   enterRefuge: 'Enter the shelter',
@@ -842,6 +928,56 @@ const en = {
   doneAll: '✅ Done for {n} animals!',
   nobody: 'There\'s nobody here to do that for.',
   storedHorses: '🐴 The horses are heading back to the paddock.',
+
+  why_animalAsleep: '{name} is asleep. Let them rest.',
+  born_one: '🍼 A baby is born! Welcome {names}!',
+  doneAll_one: '✅ Done for 1 animal!',
+  checkGood: '🔦 Your {n} horses are sleeping peacefully. All is well.',
+  checkGood_one: '🔦 Your horse is sleeping peacefully. All is well.',
+  checkBad: '🔦 Careful: {names} is not well. Check their card.',
+  horsesOut: '🐴 The horses are heading to the field.',
+  flockMoving: '🐑 The herd is going by itself… (a herding dog or a shepherd would be faster)',
+  bldd_stable: 'The horses\' stalls and paddock.',
+  bldd_pen: 'The herd\'s enclosure and shelter.',
+  bldd_house: 'Your house.',
+  bldd_lodge: 'Where you sleep while travelling.',
+  bldd_refuge: 'Animals are waiting for a family. Open 9 am – 6 pm.',
+  bldd_vet: 'Open 8 am – 7 pm, and at night for emergencies.',
+  bldd_jobs: 'Odd jobs to help the neighbours, 8 am – 6 pm.',
+  do_checkHorses: 'Check on the horses',
+  do_outHorses: 'Take the horses to the field',
+  do_outFlock: 'Take the herd to the field',
+  do_inFlock: 'Bring the herd in',
+  do_milkAll: 'Milking time',
+  do_shearAll: 'Shear the sheep',
+  do_avatar: 'Change outfit',
+  why_noAnimals: 'There\'s no animal here for that.',
+  why_noneReady: 'Nobody is ready yet.',
+  why_closed: 'Closed. Open {from} – {to}.',
+  why_night: 'It\'s night: possible from {from} to {to}.',
+  why_asleep: 'The animals are asleep. Come back from {h}.',
+  why_notTired: 'You\'re not tired yet. You can sleep from {h}.',
+  why_vetClosed: 'The clinic opens at {h} (except emergencies: a sick animal).',
+  why_milkTime: 'Milking is in the morning (6–10) and evening (17–21).',
+  why_shearSeason: 'Sheep are sheared in spring and summer.',
+
+  skip: 'Skip',
+  skipBusy: '{name} {what}: take care of that first!',
+  skipped: '⏩ {h} h later…',
+  attn_sick: 'is sick',
+  attn_hunger: 'is hungry',
+  attn_thirst: 'is thirsty',
+  attn_hygiene: 'is dirty',
+  attn_energy: 'is tired',
+  attn_exercise: 'wants exercise',
+  attn_affection: 'wants a cuddle',
+  attn_grooming: 'needs brushing',
+  attn_wool: 'is ready to be sheared',
+  attn_milk: 'is ready for milking',
+  timeSpeed: 'Time speed',
+  speed_slow: 'Slow (1 h per day)',
+  speed_normal: 'Normal (30 min per day)',
+  speed_fast: 'Fast (10 min per day)',
 };
 
 const DICTS = { fr, en };
@@ -869,10 +1005,21 @@ export function setLang(l) {
   }
 }
 
+/**
+ * Texte traduit. Si params.g === 'f' et qu'une version féminine existe (clé + '_f'),
+ * elle est utilisée : « Heureuse », « fatiguée », « emmène-la »…
+ */
 export function t(key, params = {}) {
-  const s = DICTS[lang][key] ?? fr[key] ?? key;
+  const dict = DICTS[lang];
+  let k = key;
+  if (params.n === 1 && (dict[`${key}_one`] ?? fr[`${key}_one`])) k = `${key}_one`;
+  if (params.g === 'f' && (dict[`${k}_f`] ?? (lang === 'fr' ? fr[`${k}_f`] : undefined))) k = `${k}_f`;
+  const s = dict[k] ?? fr[k] ?? key;
   return s.replace(/\{(\w+)\}/g, (_, k) => (params[k] ?? `{${k}}`));
 }
+
+/** Texte qui parle d'un animal (ou d'une aide) : prénom et accord au féminin automatiques. */
+export const ta = (key, who, params = {}) => t(key, { name: who.name, g: who.sex, ...params });
 
 /** Texte localisé d'un objet { fr, en }. */
 export const L = (obj) => (obj ? obj[lang] ?? obj.fr : '');

@@ -7,6 +7,7 @@ import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
 import { openVet } from './vet.js';
 import { showProfiles, showAvatarEditor } from './screens.js';
+import { openBuilding, openAnimalActions } from './actions.js';
 
 export class UI {
   constructor(root) {
@@ -25,6 +26,20 @@ export class UI {
     this.help = h('div', { id: 'help', hidden: true });
     root.append(this.hud, this.actionBtn, this.camBtn, this.toasts, this.panelEl, this.screen, this.modal, this.help);
     this.camBtn.hidden = true;
+
+    // Boutons à l'écran : tourner la vue et courir (en plus du joystick).
+    const hold = (el, down, up) => {
+      el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); down(); });
+      for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(ev, up);
+    };
+    const left = h('button', { class: 'pad-btn', 'aria-label': '⟲' }, '⟲');
+    const right = h('button', { class: 'pad-btn', 'aria-label': '⟳' }, '⟳');
+    const runBtn = h('button', { class: 'pad-btn run' }, '🏃');
+    hold(left, () => { this.game.input.btnLook = 1; }, () => { this.game.input.btnLook = 0; });
+    hold(right, () => { this.game.input.btnLook = -1; }, () => { this.game.input.btnLook = 0; });
+    hold(runBtn, () => { this.game.input.btnRun = true; }, () => { this.game.input.btnRun = false; });
+    this.touchPad = h('div', { id: 'touch-pad', hidden: true }, left, runBtn, right);
+    root.append(this.touchPad);
 
     // Ne pas redessiner un panneau pendant qu'on appuie dessus (sinon le clic se perd).
     this.holding = false;
@@ -53,6 +68,7 @@ export class UI {
     this.hud.hidden = true;
     this.actionBtn.hidden = true;
     this.camBtn.hidden = true;
+    this.touchPad.hidden = true;
     document.getElementById('joystick').hidden = true;
     showProfiles(this);
   }
@@ -70,11 +86,10 @@ export class UI {
     this.clearScreen();
     this.hud.hidden = false;
     this.camBtn.hidden = false;
-    const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-    document.getElementById('joystick').hidden = !touch;
+    this.applyControls();
     this.buildHud();
-    if (!touch) {
-      this.help.textContent = t('controlsHelp');
+    {
+      this.help.textContent = `${t('tapHint')} · ${t('controlsHelp')}`;
       this.help.hidden = false;
       clearTimeout(this.helpTimer);
       this.helpTimer = setTimeout(() => this.hideHelp(), 15000);
@@ -93,6 +108,7 @@ export class UI {
       this.hudInfo,
       h('nav', { class: 'hud-buttons' },
         btn('🐾', t('animals'), () => this.openAnimals()),
+        btn('⏩', t('skip'), () => this.game.skipAhead()),
         btn('🚜', t('farm'), () => this.openFarm()),
         btn('🧭', t('travel'), () => this.openTravel()),
         btn('📖', t('journal'), () => this.openJournal()),
@@ -127,9 +143,11 @@ export class UI {
       house: () => t('enterHouse'),
       lodge: () => t('enterLodge'),
       jobs: () => t('jobBoard'),
+      stable: () => t('bld_stable'),
+      pen: () => t('bld_pen'),
       dismount: () => t('dismount'),
     };
-    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🛏️', lodge: '🛏️', jobs: '📋', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', stable: '🐴', pen: '🐑', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }
@@ -239,7 +257,7 @@ export class UI {
   async careWithGame(a, action) {
     const g = this.game;
     const check = g.canCare(a, action);
-    if (!check.ok) return this.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name }));
+    if (!check.ok) return this.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name, g: a.sex }));
     return g.care(a, action, 1);
   }
 
@@ -256,6 +274,40 @@ export class UI {
   openJobs() { panels.openJobs(this); }
   openSettings() { panels.openSettings(this); }
   openFarm() { panels.openFarm(this); }
+  openBuilding(kind) { openBuilding(this, kind); }
+  openAnimalActions(a) { openAnimalActions(this, a); }
+
+  /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
+  async groupCareWithGame(filter, action) {
+    return this.game.groupCare(filter, action, 1);
+  }
+
+  // ------------------------------------------------------------ commandes à l'écran
+
+  onScreenControls() {
+    try {
+      const v = localStorage.getItem('animaleana.onscreen');
+      if (v) return v === 'on';
+    } catch {
+      /* rien */
+    }
+    return matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  }
+
+  setOnScreenControls(on) {
+    try {
+      localStorage.setItem('animaleana.onscreen', on ? 'on' : 'off');
+    } catch {
+      /* rien */
+    }
+    this.applyControls();
+  }
+
+  applyControls() {
+    const on = this.onScreenControls();
+    document.getElementById('joystick').hidden = !on;
+    this.touchPad.hidden = !on;
+  }
   openVetClinic() { panels.openVetClinic(this); }
   openVet(a, atClinic) { openVet(this, a, atClinic); }
 }

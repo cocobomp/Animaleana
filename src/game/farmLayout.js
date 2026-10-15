@@ -43,5 +43,6 @@ export function buildFarm(world, group) {
   fold.position.set(cx, world.heightAt(cx, cz - D / 2 + 2.6), cz - D / 2 + 2.6);
   group.add(fold);
 
+  world.interactables.push({ kind: 'pen', x: PEN.gate.x, z: PEN.gate.z - 1 });
   world.clearZones.push({ x: cx, z: cz, r: 13 }, { x: FIELD.x, z: FIELD.z, r: FIELD.r + 3 }, { x: PEN.gate.x, z: PEN.gate.z + 6, r: 6 });
 }

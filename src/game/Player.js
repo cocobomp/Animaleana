@@ -84,12 +84,41 @@ export class Player {
     return e;
   }
 
+  /** Marcher tout seul jusqu'à un point (toucher l'écran). onArrive est appelé à l'arrivée. */
+  goTo(point, radius = 0.6, onArrive = null) {
+    this.auto = { target: point.clone().setY(0), radius, onArrive, stuck: 0, last: this.root.position.clone() };
+  }
+
+  cancelGoTo() {
+    this.auto = null;
+  }
+
   update(dt, ctrl, camYaw, firstPerson) {
-    const { move, run } = ctrl;
+    let { run } = ctrl;
+    const { move } = ctrl;
     const f = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));
     const r = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));
-    const dir = f.multiplyScalar(move.y).add(r.multiplyScalar(move.x));
-    const amount = dir.length();
+    let dir = f.multiplyScalar(move.y).add(r.multiplyScalar(move.x));
+    let amount = dir.length();
+    if (amount > 0.05) this.auto = null;
+    else if (this.auto) {
+      const a = this.auto;
+      const pos = this.root.position;
+      const to = new THREE.Vector3(a.target.x - pos.x, 0, a.target.z - pos.z);
+      const d = to.length();
+      // Bloqué contre un mur depuis un moment : on s'arrête là.
+      a.stuck = pos.distanceTo(a.last) < dt * 0.5 ? a.stuck + dt : 0;
+      a.last.copy(pos);
+      if (d < a.radius || a.stuck > 1.2) {
+        const cb = a.onArrive;
+        this.auto = null;
+        cb?.();
+      } else {
+        dir = to.normalize();
+        amount = 1;
+        run = d > 10;
+      }
+    }
     const mount = this.mount;
     let max = run ? RUN : WALK;
     if (mount) {
@@ -101,7 +130,7 @@ export class Player {
     this.speed += (target - this.speed) * Math.min(1, dt * (mount ? 2.5 : 8));
 
     if (amount > 0.05) {
-      const want = firstPerson && !mount ? camYaw : Math.atan2(dir.x, dir.z);
+      const want = firstPerson && !mount && !this.auto ? camYaw : Math.atan2(dir.x, dir.z);
       let diff = want - this.heading;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       const turn = mount ? 3 : 10;
@@ -110,7 +139,7 @@ export class Player {
 
     const p = this.root.position;
     if (this.speed > 0.01) {
-      const moveDir = firstPerson && !mount && amount > 0.05 ? dir.normalize() : new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
+      const moveDir = firstPerson && !mount && !this.auto && amount > 0.05 ? dir.normalize() : new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
       const nx = p.x + moveDir.x * this.speed * dt;
       const nz = p.z + moveDir.z * this.speed * dt;
       if (!this.world.isWater(nx, nz)) {
@@ -159,8 +188,18 @@ export class CameraRig {
   }
 
   update(dt, ctrl, player, world) {
-    const { look, zoom } = ctrl;
-    this.yaw -= look.dx * 0.006;
+    const { look, zoom, keyLook = { x: 0, y: 0 } } = ctrl;
+    const touch = matchMedia('(pointer: coarse)').matches;
+    this.yaw -= look.dx * (touch ? 0.009 : 0.006);
+    this.yaw -= keyLook.x * dt * 2.2;
+    look.dy += keyLook.y * dt * 300;
+    // Quand on marche sans toucher la vue, la caméra revient doucement derrière le personnage.
+    this.idleLook = look.dx || look.dy || keyLook.x || keyLook.y ? 0 : (this.idleLook ?? 0) + dt;
+    if (this.mode === 'third' && player.speed > 1 && this.idleLook > 1.5 && !player.auto) {
+      let diff = player.heading - this.yaw;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      this.yaw += diff * Math.min(1, dt * 0.8);
+    }
     if (this.mode === 'third') {
       this.pitch = THREE.MathUtils.clamp(this.pitch + look.dy * 0.004, 0.02, 1.25);
       this.dist = THREE.MathUtils.clamp(this.dist + zoom, 2.5, 18);

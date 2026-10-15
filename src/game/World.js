@@ -176,31 +176,30 @@ export class World {
     }
 
     // Bâtiments
-    const place = (obj, x, z, rotY = 0, collide = true) => {
+    const place = (obj, x, z, rotY = 0, kind = null) => {
       obj.group.position.set(x, this.heightAt(x, z), z);
       obj.group.rotation.y = rotY;
       g.add(obj.group);
-      if (collide) {
-        const [w, d] = obj.size;
-        const swap = Math.abs(Math.sin(rotY)) > 0.5;
-        this.colliders.push({ x, z, hw: (swap ? d : w) / 2 + 0.3, hd: (swap ? w : d) / 2 + 0.3 });
-      }
+      const [w, d] = obj.size;
+      const swap = Math.abs(Math.sin(rotY)) > 0.5;
+      this.colliders.push({ x, z, hw: (swap ? d : w) / 2 + 0.3, hd: (swap ? w : d) / 2 + 0.3, kind });
     };
     const doorOf = (x, z, d, rotY = 0) => ({ x: x + Math.sin(rotY) * (d / 2 + 1.4), z: z + Math.cos(rotY) * (d / 2 + 1.4) });
 
     if (p.home) {
-      place(B.house(t('title')), 0, -16);
+      place(B.house(t('title')), 0, -16, 0, 'house');
       this.interactables.push({ kind: 'house', ...doorOf(0, -16, 7) });
-      place(B.stable(L({ fr: 'Écurie', en: 'Stable' })), -22, -2, Math.PI / 2);
-      place(B.jobBoard(t('jobBoard')), 6, -9.5);
+      place(B.stable(L({ fr: 'Écurie', en: 'Stable' })), -22, -2, Math.PI / 2, 'stable');
+      this.interactables.push({ kind: 'stable', ...doorOf(-22, -2, 7, Math.PI / 2) });
+      place(B.jobBoard(t('jobBoard')), 6, -9.5, 0, 'jobs');
       this.interactables.push({ kind: 'jobs', x: 6, z: -8.4 });
     } else {
-      place(B.lodge(L({ fr: 'Gîte', en: 'Lodge' }), p.biome), 0, -16);
+      place(B.lodge(L({ fr: 'Gîte', en: 'Lodge' }), p.biome), 0, -16, 0, 'lodge');
       this.interactables.push({ kind: 'lodge', ...doorOf(0, -16, 7) });
     }
-    place(B.refuge(p.home ? t('refuge') : t('breeder'), !p.home), 18, -6, -Math.PI / 2);
+    place(B.refuge(p.home ? t('refuge') : t('breeder'), !p.home), 18, -6, -Math.PI / 2, 'refuge');
     this.interactables.push({ kind: 'refuge', ...doorOf(18, -6, 7, -Math.PI / 2) });
-    place(B.vetClinic(L({ fr: 'Vétérinaire', en: 'Vet' })), 18, 9, -Math.PI / 2);
+    place(B.vetClinic(L({ fr: 'Vétérinaire', en: 'Vet' })), 18, 9, -Math.PI / 2, 'vet');
     this.interactables.push({ kind: 'vet', ...doorOf(18, 9, 7, -Math.PI / 2) });
 
     const pad = B.paddock(18, 14);
@@ -349,6 +348,15 @@ export class World {
       c.position.x += dt * 1.5;
       if (c.position.x > 380) c.position.x = -380;
     }
+  }
+
+  /** Que représente ce point du sol ? (bâtiment, enclos, paddock…) */
+  kindAt(x, z) {
+    const c = this.colliders.find((k) => k.kind && Math.abs(x - k.x) < k.hw + 0.5 && Math.abs(z - k.z) < k.hd + 0.5);
+    if (c) return c.kind;
+    if (x > -24 && x < -8 && z > 6 && z < 26) return 'stable';
+    if (Math.abs(x - 14) < 10.5 && Math.abs(z - 35) < 7.5) return 'pen';
+    return null;
   }
 
   /** Vrai si le point est à l'intérieur d'un bâtiment (pour la caméra). */

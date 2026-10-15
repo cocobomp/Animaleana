@@ -326,8 +326,7 @@ export class TripFlow {
       if (g.player.mount) g.dismount();
     }
     if (!watch || !animals.length) {
-      runToEnd(trip, animals);
-      this.handleEvents(animals);
+      this.handleEvents(runToEnd(trip, animals));
       this.finish();
       return;
     }

@@ -866,9 +866,11 @@ export class Game {
    * ou un rendez-vous de la journée (traite, sortie au pré, ouverture du refuge…). 12 h au plus.
    */
   setTimeScale(x) {
+    const was = this.timeScale;
     this.timeScale = x;
     if (x === 0) this.player.cancelGoTo();
     this.ui.refresh();
+    if (x > 1 && was !== x) this.emit('timeFast', x); // tutoriel : « ⏩ fait avancer le temps »
   }
 
   get paused() {

@@ -203,3 +203,20 @@ describe('suivre une quête', () => {
     expect(followView(p, OBJECTIVES)).toBeNull();
   });
 });
+
+describe('⏩ de la barre du temps', () => {
+  it("l'étape « time » se termine quand on appuie sur Avance rapide et vise ce bouton", () => {
+    const p = createProfile('Lou');
+    p.tutorial.step = 'time';
+    expect(tutorialStep(p.tutorial).target).toEqual({ type: 'hud', id: 'timeFast' });
+    expect(updateTutorial(p)).toBeNull();
+    noteEvent(p.tutorial, 'timeFast');
+    updateTutorial(p);
+    expect(p.tutorial.step).toBe('farm');
+    expect(p.tutorial.flags.skipUsed).toBe(true);
+  });
+
+  it("l'attente du refuge vise aussi Avance rapide", () => {
+    expect(TUTORIAL_STEPS.find((s) => s.id === 'wait').target).toEqual({ type: 'hud', id: 'timeFast' });
+  });
+});

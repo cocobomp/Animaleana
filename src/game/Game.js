@@ -821,6 +821,53 @@ export class Game {
     this.entities.get(a.id)?.applyGear();
   }
 
+  /**
+   * Mode Auto : les tâches simples les plus urgentes (nourrir, abreuver, brosser,
+   * nettoyer, câliner, ramasser les crottins). keys : tâches déjà prévues, à ne pas doubler.
+   */
+  planAutoTasks(max, keys = new Set()) {
+    if (max <= 0) return [];
+    const ICON = { feed: '🍖', water: '💧', brush: '🪮', clean: '🧹', pet: '🤚', play: '⚽' };
+    const NEED_ACTION = { hunger: 'feed', thirst: 'water', grooming: 'brush', hygiene: 'clean', affection: 'pet', exercise: 'play' };
+    const out = [];
+    for (const a of this.animalsHere()) {
+      const e = this.entities.get(a.id);
+      if (!e || e.ridden) continue;
+      for (const [need, action] of Object.entries(NEED_ACTION)) {
+        if (a.needs[need] >= 55) continue;
+        if (!SPECIES[a.species].actions.includes(action) || !this.canCare(a, action).ok) continue;
+        if (e.sleeping && !['feed', 'water', 'pet'].includes(action)) continue;
+        const key = `${a.id}:${action}`;
+        if (keys.has(key)) continue;
+        out.push({
+          key,
+          urgency: a.needs[need],
+          label: `${action === 'clean' ? t(`act_${a.species}_clean`) : t(`act_${action}`)} · ${a.name}`,
+          icon: ICON[action],
+          target: () => this.entities.get(a.id)?.position ?? null,
+          radius: 1.8,
+          auto: () => this.autoCare(a, action),
+          manual: () => this.ui.careWithGame(a, action),
+        });
+      }
+    }
+    for (const d of (this.profile.droppings ?? []).filter((x) => x.place === this.profile.place && x.kind === 'poop').slice(0, 3)) {
+      const key = `poop:${d.id}`;
+      if (keys.has(key)) continue;
+      out.push({
+        key,
+        urgency: 50,
+        label: t('autoScoop'),
+        icon: '💩',
+        target: () => this.droppingMeshes.get(d.id)?.position ?? null,
+        radius: 1,
+        auto: () => this.scoop([d.id]),
+        manual: () => this.scoop([d.id]),
+      });
+    }
+    return out.sort((x, y) => x.urgency - y.urgency).slice(0, max);
+  }
+
   /** Endroit où aller pour un bâtiment ou un enclos (sa porte). */
   buildingSpot(kind) {
     const it = this.world.interactables.find((i) => i.kind === kind);

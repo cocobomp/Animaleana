@@ -272,10 +272,14 @@ export class UI {
     }, label);
     return h('div', { class: 'time-bar' },
       b('⏸', 0, t('pause')),
-      b('▶', 1, '×1'),
-      b('⏩', 2, '×2'),
-      b('⏩⏩', 4, '×4'),
-      h('button', { class: 'time-btn skip', title: t('skip'), onClick: () => this.openSkipMenu() }, '⏭'));
+      b('▶', 1, t('timeNormal')),
+      b('⏩', 3, t('timeFast')),
+      // 🤖 Auto : le personnage s'occupe tout seul des tâches simples (visibles dans « Ma liste »).
+      h('button', {
+        class: `time-btn auto ${g.tasks.autoMode ? 'on' : ''}`,
+        title: t('autoModeHelp'),
+        onClick: () => g.tasks.setAuto(!g.tasks.autoMode),
+      }, `🤖 ${t('autoMode')}`));
   }
 
   openSkipMenu() {

@@ -10,6 +10,33 @@ export class TaskQueue {
     this.tasks = [];
     this.running = false;
     this.current = null; // { task, phase: 'walk' | 'doing' | 'manual' }
+    this.autoMode = false;
+    this.planTimer = 0;
+  }
+
+  /** Mode Auto : le personnage prévoit lui-même ses 5 prochaines actions et les fait. */
+  setAuto(on) {
+    this.autoMode = on;
+    if (on) {
+      this.replenish();
+      this.running = true;
+      this.game.ui.toast(this.game.ui.t('autoOn'), 4500);
+    } else {
+      // On garde les tâches choisies par le joueur, on retire celles prévues par le mode Auto.
+      this.tasks = this.tasks.filter((x) => !x.planned || x === this.current?.task);
+      if (!this.tasks.length) this.stop();
+    }
+    this.game.ui.refresh();
+    this.game.ui.renderTasks();
+  }
+
+  /** Complète la liste jusqu'à 5 actions avec ce qui est le plus urgent. */
+  replenish() {
+    const keys = new Set(this.tasks.map((x) => x.key).filter(Boolean));
+    for (const task of this.game.planAutoTasks(5 - this.tasks.length, keys)) {
+      this.tasks.push({ id: uid(), mode: 'auto', planned: true, ...task });
+    }
+    this.game.ui.renderTasks();
   }
 
   /**
@@ -63,7 +90,7 @@ export class TaskQueue {
   next() {
     if (this.current) this.tasks = this.tasks.filter((t) => t !== this.current.task);
     this.current = null;
-    if (!this.tasks.length) {
+    if (!this.tasks.length && !this.autoMode) {
       this.running = false;
       this.game.ui.toast(this.game.ui.t('tasksDone'));
     }
@@ -77,6 +104,14 @@ export class TaskQueue {
 
   update() {
     const g = this.game;
+    if (this.autoMode && !g.paused) {
+      this.planTimer -= 1 / 60;
+      if (this.planTimer <= 0 && this.tasks.length < 5) {
+        this.planTimer = 2;
+        this.replenish();
+        if (this.tasks.length) this.running = true;
+      }
+    }
     if (!this.running || g.paused || this.current) return;
     const task = this.tasks[0];
     if (!task) return;

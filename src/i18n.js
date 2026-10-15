@@ -831,6 +831,13 @@ const fr = {
   vetSelf: 'tu le soignes toi-même',
   vetSelfTitle: 'Soigner moi-même (trousse)',
   tool_firstAid: 'Trousse de soins', toold_firstAid: 'pour examiner et soigner toi-même',
+
+  timeNormal: 'Vitesse normale',
+  timeFast: 'Avance rapide',
+  autoMode: 'Auto',
+  autoModeHelp: 'Ton personnage s\'occupe tout seul des tâches simples. Tu vois ses prochaines actions dans « Ma liste ».',
+  autoOn: '🤖 Mode Auto : je m\'occupe des tâches simples ! Regarde « Ma liste » et passe une action en ✋ Moi si tu veux la faire.',
+  autoScoop: 'Ramasser un crottin',
 };
 
 const en = {
@@ -1607,6 +1614,13 @@ const en = {
   vetSelf: 'you treat them yourself',
   vetSelfTitle: 'Treat it myself (kit)',
   tool_firstAid: 'First-aid kit', toold_firstAid: 'to examine and treat yourself',
+
+  timeNormal: 'Normal speed',
+  timeFast: 'Fast forward',
+  autoMode: 'Auto',
+  autoModeHelp: 'Your character takes care of simple tasks alone. See the next actions in "My list".',
+  autoOn: '🤖 Auto mode: I take care of simple tasks! Check "My list" and switch an action to ✋ Me to do it yourself.',
+  autoScoop: 'Pick up a dropping',
 };
 
 const DICTS = { fr, en };

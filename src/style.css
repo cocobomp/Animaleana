@@ -593,3 +593,6 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .vet-notes { background: #fffdf5; border: 1px dashed var(--line); border-radius: 12px; padding: 8px 12px; margin: 8px 0; }
 .vet-notes ul { margin: 6px 0 0; padding-left: 4px; list-style: none; display: grid; gap: 4px; }
 .vet-notes li.bad { color: #8b2b22; font-weight: 600; }
+
+.time-btn.auto { margin-left: auto; font-weight: 700; }
+.time-btn.auto.on { background: #7ed0a0; color: #123; }

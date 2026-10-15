@@ -503,3 +503,15 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .time-btn.on { background: #ffd35a; color: #23302a; border-color: transparent; }
 .time-btn.skip { margin-left: auto; }
 .hud-info { pointer-events: auto; }
+
+/* ---------- fiche d'identité (adoption, renommer) */
+.id-card { display: grid; gap: 4px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; margin-bottom: 8px; }
+.id-head { display: flex; align-items: center; gap: 10px; }
+.id-emoji { font-size: 2.2rem; }
+.id-row { display: flex; justify-content: space-between; gap: 12px; font-size: 0.95rem; }
+.id-row span { color: var(--muted); }
+
+/* ---------- bébés : conditions */
+.breed-box { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: grid; gap: 6px; margin-bottom: 8px; }
+.checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 0.9em; }
+.checklist li.ko { color: #8b2b22; }

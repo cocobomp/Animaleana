@@ -11,7 +11,7 @@ import { CARE, NEEDS, happiness } from '../sim/animal.js';
 import { NEED_ICON } from './UI.js';
 import { bar } from './dom.js';
 
-const BUILDING_ICON = { stable: '🐴', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋' };
+const BUILDING_ICON = { stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋' };
 
 function sheet(ui, title, subtitle, items, header = null, live = false) {
   ui.openPanel({
@@ -60,6 +60,13 @@ export function openBuilding(ui, kind) {
     waterFlock: () => ui.groupCareWithGame((a) => SPECIES[a.species].livestock, 'water'),
     milkAll: () => g.groupCollect('milk'),
     shearAll: () => g.groupCollect('shear'),
+    horsesToPaddock: () => { g.sendHorses('paddock'); close(); },
+    hayPaddock: () => ui.groupCareWithGame((a) => a.species === 'horse', 'feed'),
+    cleanPaddock: () => { ui.toast(t('scoopedN', { n: g.cleanZone('paddock') })); ui.renderPanel(); },
+    feedDogs: () => ui.groupCareWithGame((a) => a.species === 'dog', 'feed'),
+    waterDogs: () => ui.groupCareWithGame((a) => a.species === 'dog', 'water'),
+    feedRabbits: () => ui.groupCareWithGame((a) => a.species === 'rabbit', 'feed'),
+    cleanHutch: () => ui.groupCareWithGame((a) => a.species === 'rabbit', 'clean'),
     farm: () => ui.openFarm(),
     tack: () => ui.openTack(),
     sleep: () => { close(); g.sleep(); },

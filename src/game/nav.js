@@ -7,6 +7,8 @@ import * as THREE from 'three';
 export const ENCLOSURES = [
   { id: 'pen', x: 14, z: 35, hw: 10, hd: 7, gate: { side: '+z', at: 14, width: 4 } },
   { id: 'paddock', x: -16, z: 16, hw: 7, hd: 9, gate: { side: '+x', at: 16, width: 3 } },
+  // Enclos grillagé des lapins : même les petits animaux passent par la porte.
+  { id: 'hutch', x: 9, z: 4, hw: 2.6, hd: 2.2, gate: { side: '+z', at: 9, width: 1.2 }, mesh: true },
 ];
 
 export const enclosure = (id) => ENCLOSURES.find((e) => e.id === id);
@@ -31,8 +33,9 @@ function frame(e) {
 const out = new THREE.Vector3();
 
 /** Prochain point de passage pour aller de pos à goal sans traverser de clôture. */
-export function navTarget(pos, goal) {
+export function navTarget(pos, goal, small = false) {
   for (const e of ENCLOSURES) {
+    if (small && !e.mesh) continue; // les petits animaux passent sous les barrières en bois
     const pIn = inside(e, pos.x, pos.z);
     if (pIn === inside(e, goal.x, goal.z)) continue;
     const { n, t, extN, extT, gateLat } = frame(e);
@@ -65,7 +68,7 @@ export function fenceColliders(e) {
   const center = new THREE.Vector3(e.x, 0, e.z);
   const seg = (a, b) => {
     const mid = a.clone().add(b).multiplyScalar(0.5);
-    walls.push({ x: mid.x, z: mid.z, hw: Math.max(0.12, Math.abs(a.x - b.x) / 2), hd: Math.max(0.12, Math.abs(a.z - b.z) / 2), fence: true });
+    walls.push({ x: mid.x, z: mid.z, hw: Math.max(0.12, Math.abs(a.x - b.x) / 2), hd: Math.max(0.12, Math.abs(a.z - b.z) / 2), fence: !e.mesh, wire: !!e.mesh });
   };
   const corner = (sn, st) => center.clone().addScaledVector(n, sn * extN).addScaledVector(t, st * extT);
   seg(corner(-1, -1), corner(-1, 1)); // fond

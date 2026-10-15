@@ -11,9 +11,9 @@ import { buildGear, removeGear } from './gearModels.js';
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 const HOME = {
   horse: { x: -16, z: 16, r: 5 },
-  dog: { x: 2, z: 2, r: 10 },
-  cat: { x: -3, z: -7, r: 7 },
-  rabbit: { x: 8, z: 4, r: 4 },
+  dog: { x: -8, z: -5, r: 3.5 }, // près de la niche
+  cat: { x: -1, z: -10.5, r: 3.5 }, // sur le perron de la maison
+  rabbit: { x: 9, z: 3.6, r: 1.6 }, // dans l'enclos du clapier
 };
 export const PEN = { x: 14, z: 35, r: 5, gate: { x: 14, z: 46 } };
 export const FIELD = { x: 0, z: 60, r: 12 };
@@ -131,8 +131,7 @@ export class AnimalEntity {
 
   /** Passe par la barrière pour entrer dans l'enclos ou en sortir. */
   navTarget(goal) {
-    if (this.small) return goal;
-    return navTarget(this.root.position, goal);
+    return navTarget(this.root.position, goal, this.small);
   }
 
   get small() {

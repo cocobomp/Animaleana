@@ -271,10 +271,13 @@ export class UI {
       lodge: () => t('enterLodge'),
       jobs: () => t('jobBoard'),
       stable: () => t('bld_stable'),
+      paddock: () => t('bld_paddock'),
+      kennel: () => t('bld_kennel'),
+      hutch: () => t('bld_hutch'),
       pen: () => t('bld_pen'),
       dismount: () => t('dismount'),
     };
-    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', stable: '🐴', pen: '🐑', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }
@@ -339,16 +342,19 @@ export class UI {
     });
   }
 
-  prompt(label, value = '') {
+  /** Demande un texte. info : contenu affiché au-dessus du champ (ex. fiche de l'animal). */
+  prompt(label, value = '', info = null) {
     return new Promise((resolve) => {
-      const input = h('input', { type: 'text', value, maxlength: 20 });
+      const input = h('input', { type: 'text', value, maxlength: 20, id: 'prompt-input' });
       const done = (v) => { this.hideModal(); resolve(v); };
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') done(input.value);
         if (e.key === 'Escape') done(null);
       });
       this.showModal([
+        info,
         h('label', { class: 'field' }, h('span', {}, label), input),
+        value ? h('p', { class: 'note' }, t('keepNameHint', { name: value })) : null,
         h('div', { class: 'row end' },
           h('button', { onClick: () => done(null) }, t('cancel')),
           h('button', { class: 'primary', onClick: () => done(input.value) }, 'OK')),

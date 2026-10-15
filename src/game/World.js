@@ -357,20 +357,23 @@ export class World {
   kindAt(x, z) {
     const c = this.colliders.find((k) => k.kind && Math.abs(x - k.x) < k.hw + 0.5 && Math.abs(z - k.z) < k.hd + 0.5);
     if (c) return c.kind;
-    if (x > -24 && x < -8 && z > 6 && z < 26) return 'stable';
+    if (x > -24 && x < -8 && z > 6 && z < 26) return 'paddock';
+    if (Math.abs(x - 9) < 3 && Math.abs(z - 4) < 2.6) return 'hutch';
+    if (Math.abs(x + 9) < 1.5 && Math.abs(z + 7) < 1.5) return 'kennel';
     if (Math.abs(x - 14) < 10.5 && Math.abs(z - 35) < 7.5) return 'pen';
     return null;
   }
 
   /** Vrai si le point est à l'intérieur d'un bâtiment (pour la caméra). */
   insideBuilding(x, y, z) {
-    return this.colliders.some((c) => !c.fence && !c.equip && Math.abs(x - c.x) < c.hw && Math.abs(z - c.z) < c.hd && y < this.heightAt(c.x, c.z) + 7);
+    return this.colliders.some((c) => !c.fence && !c.equip && !c.wire && !c.jump && !c.small && Math.abs(x - c.x) < c.hw && Math.abs(z - c.z) < c.hd && y < this.heightAt(c.x, c.z) + 7);
   }
 
   /** Repousse un point (x, z, rayon) hors des bâtiments. */
   resolveCollisions(pos, radius = 0.4, opts = {}) {
     for (const c of this.colliders) {
-      if (opts.small && c.fence) continue; // les petits animaux passent sous les barrières
+      if (opts.small && (c.fence || c.jump)) continue; // les petits animaux passent sous les barrières
+      if (opts.mounted && c.jump) continue; // à cheval, on saute les obstacles
       const dx = pos.x - c.x;
       const dz = pos.z - c.z;
       const ox = c.hw + radius - Math.abs(dx);

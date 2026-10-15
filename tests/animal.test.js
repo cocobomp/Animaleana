@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createAnimal, tickAnimal, applyCare, happiness, mood, lifeStage, canBreed, breed,
-  trainTrick, canRide, cure, NEGLECT_LIMIT,
+  trainTrick, canRide, cure, NEGLECT_LIMIT, breedingChecklist, mate, checkup,
 } from '../src/sim/animal.js';
 import { mulberry32 } from '../src/sim/rng.js';
 import { DAYS_PER_YEAR } from '../src/sim/time.js';
@@ -66,14 +66,35 @@ describe('âge', () => {
 });
 
 describe('reproduction', () => {
-  it('deux adultes de sexe opposé font des bébés', () => {
+  const ready = (a) => {
+    for (const n of Object.keys(a.needs)) a.needs[n] = 95;
+    checkup(a, 9);
+    return a;
+  };
+
+  it('il faut remplir toutes les conditions (santé, bonheur, vétérinaire, niveau…)', () => {
     const m = adult('dog', 'm');
     const f = adult('dog', 'f');
-    expect(canBreed(m, f, 10).ok).toBe(true);
-    const babies = breed(m, f, 10, rng());
+    const list = breedingChecklist(m, f, { day: 10, level: 1 });
+    expect(list.find((c) => c.id === 'level').ok).toBe(false);
+    expect(list.some((c) => c.id === 'vet' && !c.ok)).toBe(true);
+    ready(m);
+    ready(f);
+    expect(canBreed(m, f, 10, 4).ok).toBe(true);
+    expect(canBreed(m, f, 10, 1).reason).toBe('level');
+  });
+
+  it('la femelle attend des petits, qui naissent à la fin de la gestation', () => {
+    const m = ready(adult('dog', 'm'));
+    const f = ready(adult('dog', 'f'));
+    const mother = mate(m, f, 10);
+    expect(mother).toBe(f);
+    expect(f.pregnant.due).toBe(12);
+    expect(canBreed(m, f, 11, 4).reason).toBe('cooldown');
+    const babies = breed(m, f, 12, rng());
     expect(babies.length).toBeGreaterThanOrEqual(1);
     expect(lifeStage(babies[0])).toBe('baby');
-    expect(canBreed(m, f, 11).reason).toBe('cooldown');
+    expect(f.pregnant).toBeUndefined();
   });
 
   it('refuse deux animaux du même sexe ou d\'espèces différentes', () => {

@@ -17,7 +17,7 @@ import {
 } from '../sim/farm.js';
 import { SPECIES } from '../sim/species.js';
 import {
-  NEEDS, tickAnimal, applyCare, CARE, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
+  NEEDS, tickAnimal, applyCare, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
 } from '../sim/animal.js';
 import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
 import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeason } from '../sim/places.js';
@@ -395,6 +395,7 @@ export class Game {
       // En pause, rien ne change (on peut quand même se promener).
       const here = hours > 0 ? this.animalsHere() : [];
       if (hours > 0) this.farmTick(here, hours);
+      if (hours > 0) this.checkBirths();
       this.removeDroppingMeshes(dryPuddles(this.profile, this.profile.clock));
       for (const a of here) {
         const e = this.entities.get(a.id);
@@ -489,6 +490,11 @@ export class Game {
     const hit = this.raycaster.intersectObject(this.world.group, true)[0];
     if (!hit) return;
     const kind = this.world.kindAt(hit.point.x, hit.point.z);
+    // Un enclos : on va à l'endroit touché (en passant par la porte), puis on choisit quoi faire.
+    if (['paddock', 'pen', 'hutch'].includes(kind)) {
+      this.walkTo(hit.point, 0.8, () => this.ui.openBuilding(kind));
+      return;
+    }
     if (kind) {
       const door = this.world.interactables.find((i) => i.kind === kind);
       if (door) {
@@ -519,6 +525,8 @@ export class Game {
         horse: here.filter((a) => a.species === 'horse').length,
         livestock: here.filter((a) => sp(a).livestock).length,
         pets: here.filter((a) => ['dog', 'cat', 'rabbit'].includes(a.species)).length,
+        dog: here.filter((a) => a.species === 'dog').length,
+        rabbit: here.filter((a) => a.species === 'rabbit').length,
         sick: here.filter((a) => a.sick).length,
         milkable: here.filter((a) => a.produceReady && sp(a).product?.action === 'milk').length,
         shearable: here.filter((a) => a.produceReady && sp(a).product?.action === 'shear').length,
@@ -787,6 +795,9 @@ export class Game {
       case 'lodge':
       case 'jobs':
       case 'stable':
+      case 'paddock':
+      case 'kennel':
+      case 'hutch':
       case 'pen': this.ui.openBuilding(f.kind); break;
       case 'dismount': this.dismount(); break;
       default:
@@ -933,24 +944,41 @@ export class Game {
   }
 
   canBreed(a, b) {
-    return canBreed(a, b, this.day);
+    return canBreed(a, b, this.day, this.level);
   }
 
+  breedingChecklist(a, b) {
+    return breedingChecklist(a, b, { day: this.day, level: this.level });
+  }
+
+  /** Les deux animaux se rencontrent ; les petits naîtront à la fin de la gestation. */
   breed(a, b) {
-    const r = canBreed(a, b, this.day);
-    if (!r.ok) return this.ui.toast(t(r.reason === 'cooldown' ? 'breedCooldown' : 'breedNone'));
-    const babies = breed(a, b, this.day);
-    const mother = a.sex === 'f' ? a : b;
-    const near = this.entities.get(mother.id)?.position;
-    for (const baby of babies) {
-      this.profile.animals.push(baby);
-      this.spawnEntity(baby, near).emit('🍼', 3);
-    }
-    addStat(this.profile, 'births', babies.length);
-    this.xp('birth');
-    this.ui.toast(t('born', { n: babies.length, names: babies.map((x) => x.name).join(', ') }), 6000);
+    const r = canBreed(a, b, this.day, this.level);
+    if (!r.ok) return this.ui.toast(t('breedNotReady'));
+    const mother = mate(a, b, this.day);
+    this.entities.get(a.id)?.emit('💕', 3);
+    this.entities.get(b.id)?.emit('💕', 3);
+    this.ui.toast(t('pregnant', { name: mother.name, n: mother.pregnant.due - this.day }), 6000);
     this.save();
-    return babies;
+    return mother;
+  }
+
+  /** Naissances quand la gestation est terminée. */
+  checkBirths() {
+    for (const mother of [...this.profile.animals]) {
+      if (!mother.pregnant || this.day < mother.pregnant.due) continue;
+      const father = this.profile.animals.find((x) => x.id === mother.pregnant.father) ?? mother;
+      const babies = breed(mother, father, this.day);
+      for (const baby of babies) {
+        baby.location = mother.location;
+        this.profile.animals.push(baby);
+        if (mother.location === this.profile.place) this.spawnEntity(baby, this.entities.get(mother.id)?.position).emit('🍼', 3);
+      }
+      addStat(this.profile, 'births', babies.length);
+      this.xp('birth');
+      this.ui.alert(t('born', { n: babies.length, names: babies.map((x) => x.name).join(', ') }));
+      this.save();
+    }
   }
 
   vetCost(atClinic) {
@@ -960,8 +988,8 @@ export class Game {
   vetDone(a, atClinic) {
     spend(this.profile, this.vetCost(atClinic));
     const wasSick = !!a.sick;
-    if (wasSick) cure(a);
-    else checkup(a);
+    if (wasSick) cure(a, this.day);
+    else checkup(a, this.day);
     addStat(this.profile, 'vet');
     this.xp('vet');
     this.entities.get(a.id)?.emit('💚', 4);

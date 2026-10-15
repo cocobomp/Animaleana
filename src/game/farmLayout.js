@@ -1,7 +1,7 @@
 // Bergerie, clôture du troupeau et pré : ajoutés à chaque lieu par World.build().
 
 import * as THREE from 'three';
-import { sheepfold } from './models/equipment.js';
+import { sheepfold, kennel, hutch, wireFence } from './models/equipment.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { enclosure, fenceColliders } from './nav.js';
 
@@ -43,10 +43,46 @@ export function buildFarm(world, group) {
   world.colliders.push(...fenceColliders(enclosure('pen')), ...fenceColliders(enclosure('paddock')));
   world.fences = [...fenceColliders(enclosure('pen')), ...fenceColliders(enclosure('paddock'))];
 
+  world.colliders.push(...fenceColliders(enclosure('hutch')));
+
+  // Obstacles solides : bottes de foin, abreuvoir, barre de saut (franchissable à cheval).
+  world.colliders.push(
+    { x: -21.5, z: 21, hw: 0.7, hd: 0.7, small: true },
+    { x: -27, z: 8, hw: 0.7, hd: 0.7, small: true },
+    { x: -21.5, z: 11, hw: 0.45, hd: 1, small: true },
+    { x: -16, z: 16, hw: 0.15, hd: 1.7, jump: true },
+  );
+
+  // Niche des chiens
+  const k = kennel();
+  k.position.set(-9, world.heightAt(-9, -7), -7);
+  group.add(k);
+  world.colliders.push({ x: -9, z: -7, hw: 0.8, hd: 0.9, small: true });
+  world.interactables.push({ kind: 'kennel', x: -9, z: -5.4 });
+
+  // Clapier et son enclos grillagé
+  const hu = enclosure('hutch');
+  const hb = hutch();
+  hb.position.set(hu.x, world.heightAt(hu.x, hu.z - 1.4), hu.z - 1.4);
+  group.add(hb);
+  for (const s of [
+    { x: hu.x, z: hu.z - hu.hd, len: hu.hw * 2, alongX: true },
+    { x: hu.x - hu.hw, z: hu.z, len: hu.hd * 2, alongX: false },
+    { x: hu.x + hu.hw, z: hu.z, len: hu.hd * 2, alongX: false },
+    { x: hu.x - (hu.hw + 0.6) / 2, z: hu.z + hu.hd, len: hu.hw - 0.6, alongX: true },
+    { x: hu.x + (hu.hw + 0.6) / 2, z: hu.z + hu.hd, len: hu.hw - 0.6, alongX: true },
+  ]) {
+    const f = wireFence(s.len, s.alongX);
+    f.position.set(s.x, world.heightAt(s.x, s.z), s.z);
+    group.add(f);
+  }
+  world.interactables.push({ kind: 'hutch', x: hu.x, z: hu.z + hu.hd + 1 });
+  world.interactables.push({ kind: 'paddock', x: -7.6, z: 16 });
+
   const fold = sheepfold();
   fold.position.set(cx, world.heightAt(cx, cz - D / 2 + 2.6), cz - D / 2 + 2.6);
   group.add(fold);
 
   world.interactables.push({ kind: 'pen', x: PEN.gate.x, z: PEN.gate.z - 1 });
-  world.clearZones.push({ x: cx, z: cz, r: 13 }, { x: FIELD.x, z: FIELD.z, r: FIELD.r + 3 }, { x: PEN.gate.x, z: PEN.gate.z + 6, r: 6 });
+  world.clearZones.push({ x: 9, z: 4, r: 4 }, { x: -9, z: -7, r: 2.5 }, { x: cx, z: cz, r: 13 }, { x: FIELD.x, z: FIELD.z, r: FIELD.r + 3 }, { x: PEN.gate.x, z: PEN.gate.z + 6, r: 6 });
 }

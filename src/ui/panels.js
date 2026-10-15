@@ -41,6 +41,21 @@ function money(ui, n) {
   return isSandbox(ui.game.profile) || !n ? '' : ` · ${n} 🪙`;
 }
 
+/** Petite fiche d'identité : espèce, race, âge, sexe, caractère, robe. */
+export function animalCard(a) {
+  const row = (k, v) => h('div', { class: 'id-row' }, h('span', {}, k), h('b', {}, v));
+  return h('div', { class: 'id-card' },
+    h('div', { class: 'id-head' },
+      h('span', { class: 'id-emoji' }, SPECIES[a.species].emoji),
+      h('span', { class: 'swatch-dot', style: { background: hexColor(a.look.coat) } })),
+    row(t('species'), speciesName(a)),
+    row(t('breed'), breedName(a)),
+    row(t('age'), `${ageText(a)} · ${t(`stage_${lifeStage(a)}`)}`),
+    row(t('sexLabel'), `${sexIcon(a)} ${t(a.sex === 'f' ? 'female' : 'male')}`),
+    row(t('personality'), t(`p_${a.personality}`, { g: a.sex })),
+    row(t('coat'), L(a.look.colorName) || '—'));
+}
+
 // ---------------------------------------------------------------- fiche animal
 
 export function openAnimal(ui, a) {
@@ -67,6 +82,7 @@ function renderAnimal(ui, g, a) {
       h('span', { class: 'chip' }, `${sexIcon(a)} ${t(a.sex === 'f' ? 'female' : 'male')}`),
       h('span', { class: 'chip' }, `${ageText(a)} · ${t(`stage_${stage}`)}`),
       h('span', { class: 'chip' }, t(`p_${a.personality}`, { g: a.sex })),
+      a.pregnant ? h('span', { class: 'chip' }, `🤰 ${t('pregnantChip')}`) : null,
       h('span', { class: `chip weight-${weightClass(a)}` }, `⚖️ ${t(`weight_${weightClass(a)}`, { g: a.sex })}`),
       h('span', { class: `chip mood-${m}` }, `${MOOD_EMOJI[m]} ${t(`mood_${m}`, { g: a.sex })}`),
       h('span', { class: 'chip swatch', style: { background: hexColor(a.look.coat) } }, L(a.look.colorName) || ''),
@@ -101,7 +117,7 @@ function renderAnimal(ui, g, a) {
   acts.push(btn(`📍 ${t('callHere')}`, () => g.callHere(a)));
   acts.push(btn(`🩺 ${t('act_vet')}${money(ui, g.vetCost(false))}`, () => ui.openVet(a, false), { cls: a.sick ? 'primary' : '' }));
   acts.push(btn(`✏️ ${t('rename')}`, async () => {
-    const name = await ui.prompt(t('newName'), a.name);
+    const name = await ui.prompt(t('newName'), a.name, animalCard(a));
     if (name) {
       g.rename(a, name);
       ui.renderPanel();
@@ -154,13 +170,23 @@ function renderAnimal(ui, g, a) {
     }),
   ));
 
-  const partners = g.breedingPartners(a);
-  const fam = partners.map((b) => {
-    const r = g.canBreed(a, b);
-    return btn(`🍼 ${t('breedWith', { name: b.name })}`, () => g.breed(a, b), { disabled: !r.ok });
-  });
-  out.push(h('h3', {}, t('breedTitle')),
-    fam.length ? h('div', { class: 'grid' }, fam) : h('p', { class: 'note' }, t('breedNone')));
+  // Bébés : une liste de conditions à remplir, pour donner envie de bien s'occuper des parents.
+  out.push(h('h3', {}, t('breedTitle')));
+  if (a.pregnant) {
+    out.push(h('p', { class: 'note' }, `🤰 ${t('pregnantInfo', { name: a.name, n: Math.max(0, a.pregnant.due - g.day) })}`));
+  } else {
+    const partners = g.breedingPartners(a);
+    if (!partners.length) out.push(h('p', { class: 'note' }, t('breedNone')));
+    for (const b of partners) {
+      const list = g.breedingChecklist(a, b);
+      const ok = list.every((c) => c.ok);
+      out.push(h('div', { class: 'breed-box' },
+        h('b', {}, t('breedWith', { name: b.name })),
+        h('ul', { class: 'checklist' }, list.map((c) => h('li', { class: c.ok ? 'ok' : 'ko' },
+          `${c.ok ? '✅' : '❌'} ${t(`bc_${c.id}`, { name: c.who, g: c.g, n: c.n })}`))),
+        btn(`💕 ${t('breedGo')}`, () => { g.breed(a, b); ui.renderPanel(); }, { disabled: !ok, cls: ok ? 'primary' : '' })));
+    }
+  }
   return out;
 }
 
@@ -217,7 +243,7 @@ export function openAdoption(ui) {
           class: 'primary',
           disabled: !afford,
           onClick: async () => {
-            const name = await ui.prompt(t('chooseName'), a.name);
+            const name = await ui.prompt(t('chooseName'), a.name, animalCard(a));
             if (name === null) return;
             g.adopt(a, name);
             ui.renderPanel();

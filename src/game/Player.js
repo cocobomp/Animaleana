@@ -151,7 +151,7 @@ export class Player {
       } else {
         this.speed = 0;
       }
-      this.world.resolveCollisions(p, mount ? 0.9 : 0.35);
+      this.world.resolveCollisions(p, mount ? 0.9 : 0.35, { mounted: !!mount });
     }
     p.y = this.world.heightAt(p.x, p.z);
     this.root.rotation.y = this.heading;

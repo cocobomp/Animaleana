@@ -315,33 +315,69 @@ export function canRide(a) {
   if (!sp.rideable) return { ok: false, reason: 'notRideable' };
   if (ageYears(a) < sp.rideYears) return { ok: false, reason: 'tooYoung' };
   if (a.sick) return { ok: false, reason: 'sick' };
+  if (a.pregnant) return { ok: false, reason: 'pregnant' };
   if (a.needs.energy < 10) return { ok: false, reason: 'tired' };
   return { ok: true };
 }
 
 /** Le vétérinaire a soigné l'animal. */
-export function cure(a) {
+export function cure(a, day) {
+  if (day !== undefined) a.lastVet = day;
   a.sick = null;
   a.neglect = 0;
   a.health = clamp(a.health + 40);
   a.needs.affection = clamp(a.needs.affection + 10);
 }
 
-export function checkup(a) {
+export function checkup(a, day) {
+  if (day !== undefined) a.lastVet = day;
   a.health = clamp(a.health + 10);
 }
 
 const BREED_COOLDOWN_DAYS = 6;
 
-export function canBreed(a, b, day) {
+// Durée de la gestation en jours de jeu (raccourcie mais dans le bon ordre de grandeur).
+export const GESTATION_DAYS = { horse: 6, cow: 5, sheep: 3, goat: 3, dog: 2, cat: 2, rabbit: 1 };
+export const BREED_LEVEL = 4;
+const VET_RECENT_DAYS = 5;
+
+/**
+ * Conditions pour avoir des bébés, sous forme de liste à cocher.
+ * ctx : { day, level }. Chaque ligne : { id, ok, who? } (who = nom de l'animal concerné).
+ */
+export function breedingChecklist(a, b, ctx) {
+  const list = [];
+  const both = (id, test) => {
+    for (const x of [a, b]) list.push({ id, ok: test(x), who: x.name, g: x.sex });
+  };
+  list.push({ id: 'pair', ok: a.species === b.species && a.sex !== b.sex });
+  list.push({ id: 'level', ok: (ctx.level ?? 1) >= BREED_LEVEL, n: BREED_LEVEL });
+  both('adult', (x) => lifeStage(x) === 'adult');
+  both('healthy', (x) => !x.sick && x.health >= 70);
+  both('happy', (x) => happiness(x) >= 70);
+  both('weight', (x) => (x.weight ?? 50) >= 25 && (x.weight ?? 50) <= 65);
+  both('bond', (x) => x.needs.affection >= 70);
+  both('vet', (x) => x.lastVet !== undefined && ctx.day - x.lastVet <= VET_RECENT_DAYS);
+  both('rest', (x) => ctx.day - x.lastBirthDay >= BREED_COOLDOWN_DAYS && !x.pregnant);
+  return list;
+}
+
+export function canBreed(a, b, day, level = BREED_LEVEL) {
   if (a.species !== b.species) return { ok: false, reason: 'species' };
   if (a.sex === b.sex) return { ok: false, reason: 'sex' };
-  for (const x of [a, b]) {
-    if (lifeStage(x) !== 'adult') return { ok: false, reason: 'age' };
-    if (x.sick || x.health < 50) return { ok: false, reason: 'health' };
-    if (day - x.lastBirthDay < BREED_COOLDOWN_DAYS) return { ok: false, reason: 'cooldown' };
-  }
+  const missing = breedingChecklist(a, b, { day, level }).find((c) => !c.ok);
+  if (missing) return { ok: false, reason: missing.id === 'rest' ? 'cooldown' : missing.id };
   return { ok: true };
+}
+
+/** Les deux animaux se rencontrent : la femelle attend des petits. */
+export function mate(a, b, day) {
+  const mother = a.sex === 'f' ? a : b;
+  const father = mother === a ? b : a;
+  mother.pregnant = { due: day + GESTATION_DAYS[mother.species], father: father.id };
+  a.lastBirthDay = day;
+  b.lastBirthDay = day;
+  return mother;
 }
 
 const mixColor = (c1, c2, t) => {
@@ -382,5 +418,6 @@ export function breed(a, b, day, rng = Math.random) {
   }
   a.lastBirthDay = day;
   b.lastBirthDay = day;
+  delete mother.pregnant;
   return babies;
 }

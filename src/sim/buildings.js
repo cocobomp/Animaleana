@@ -21,6 +21,23 @@ const RULES = {
     { id: 'tack', icon: '🏇', when: () => null },
     { id: 'farm', icon: '🔧', when: () => null },
   ],
+  paddock: [
+    { id: 'horsesToPaddock', icon: '🐴', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 22) },
+    { id: 'hayPaddock', icon: '🌾', when: (c) => need(c.count.horse) },
+    { id: 'waterHorses', icon: '💧', when: (c) => need(c.count.horse) },
+    { id: 'cleanPaddock', icon: '🧹', when: (c) => (c.count.paddockDroppings > 0 ? null : { reason: 'alreadyClean' }) },
+    { id: 'farm', icon: '🔧', when: () => null },
+  ],
+  kennel: [
+    { id: 'feedDogs', icon: '🥣', when: (c) => need(c.count.dog) },
+    { id: 'waterDogs', icon: '💧', when: (c) => need(c.count.dog) },
+    { id: 'farm', icon: '🔧', when: () => null },
+  ],
+  hutch: [
+    { id: 'feedRabbits', icon: '🥕', when: (c) => need(c.count.rabbit) },
+    { id: 'cleanHutch', icon: '🧹', when: (c) => need(c.count.rabbit) },
+    { id: 'farm', icon: '🔧', when: () => null },
+  ],
   pen: [
     { id: 'outFlock', icon: '🌿', when: (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18) },
     { id: 'inFlock', icon: '🏠', when: (c) => need(c.count.livestock) },

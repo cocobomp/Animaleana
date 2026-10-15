@@ -179,8 +179,11 @@ export function tickAnimal(a, hours, ctx = {}) {
     let rate = BASE_DECAY[n] * (sp.decay[n] ?? 1) * (pers[n] ?? 1) * (weather[n] ?? 1);
     if (stage === 'baby' && (n === 'hunger' || n === 'affection')) rate *= 1.3;
     if (stage === 'senior' && n === 'energy') rate *= 1.2;
+    // Un animal de troupeau seul s'ennuie (cheval, mouton, chèvre, vache).
+    if (n === 'affection' && ctx.alone) rate *= 1.6;
     a.needs[n] = clamp(a.needs[n] - rate * hours);
   }
+  if (ctx.companions > 0) a.needs.affection = clamp(a.needs.affection + Math.min(2, ctx.companions) * 0.8 * hours);
   if (ctx.sleeping) a.needs.energy = clamp(a.needs.energy + 9 * hours);
   if (ctx.ridden) {
     a.needs.exercise = clamp(a.needs.exercise + 14 * hours);
@@ -218,8 +221,11 @@ export function availableActions(a) {
   return SPECIES[a.species].actions;
 }
 
-/** Applique un soin. Renvoie { ok, reason }. */
-export function applyCare(a, actionId) {
+/**
+ * Applique un soin. quality (0 à 1) vient du mini-jeu : un soin bien fait remplit plus.
+ * Renvoie { ok, reason }.
+ */
+export function applyCare(a, actionId, quality = 1) {
   const care = CARE[actionId];
   if (!care) return { ok: false, reason: 'unknown' };
   if (care.full && a.needs[care.full] >= 96) return { ok: false, reason: 'full' };
@@ -227,7 +233,7 @@ export function applyCare(a, actionId) {
   if (care.tiring && a.sick) return { ok: false, reason: 'sick' };
   const bonus = actionId === 'pet' && a.personality === 'cuddly' ? 1.5 : 1;
   for (const [n, v] of Object.entries(care.needs)) {
-    a.needs[n] = clamp(a.needs[n] + v * (v > 0 ? bonus : 1));
+    a.needs[n] = clamp(a.needs[n] + v * (v > 0 ? bonus * (0.4 + 0.6 * quality) : 1));
   }
   for (const [s, v] of Object.entries(care.skills ?? {})) {
     a.skills[s] = Math.min(100, a.skills[s] + v);

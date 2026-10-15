@@ -33,6 +33,9 @@ export function createProfile(name, mode = 'sandbox') {
     stats: {},
     completed: [],
     adoptedKeys: [],
+    equipment: [], // mangeoires, abreuvoirs… { id, type, place, stock }
+    helpers: [], // aides embauchées { id, type, name, place }
+    farm: { autoHerd: true },
     settings: { camera: 'third' },
   };
 }

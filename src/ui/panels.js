@@ -10,6 +10,7 @@ import { PLACES, PLACE_IDS, distanceKm, TRAVEL_MODES } from '../sim/places.js';
 import { OBJECTIVES } from '../sim/objectives.js';
 import { canAfford, isSandbox } from '../sim/profile.js';
 import { JOBS } from '../game/Game.js';
+import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -80,15 +81,15 @@ function renderAnimal(ui, g, a) {
   const out = [info, bars];
   if (!here) return out;
 
-  const careActions = sp.actions.filter((x) => !['play', 'lunge', 'liberty', 'ride', 'follow'].includes(x));
+  const careActions = sp.actions.filter((x) => !['play', 'lunge', 'liberty', 'ride', 'follow', 'shear', 'milk'].includes(x));
   out.push(h('h3', {}, t('care')), h('div', { class: 'grid' },
-    careActions.map((x) => btn(`${CARE_ICONS[x] ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => g.care(a, x))),
+    careActions.map((x) => btn(`${CARE_ICONS[x] ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => ui.careWithGame(a, x))),
   ));
 
   const acts = [];
-  if (sp.actions.includes('play')) acts.push(btn(`⚽ ${t('act_play')}`, () => g.care(a, 'play')));
-  if (sp.actions.includes('lunge')) acts.push(btn(`🌀 ${t('act_lunge')}`, () => g.care(a, 'lunge')));
-  if (sp.actions.includes('liberty')) acts.push(btn(`💛 ${t('act_liberty')}`, () => g.care(a, 'liberty')));
+  if (sp.actions.includes('play')) acts.push(btn(`⚽ ${t('act_play')}`, () => ui.careWithGame(a, 'play')));
+  if (sp.actions.includes('lunge')) acts.push(btn(`🌀 ${t('act_lunge')}`, () => ui.careWithGame(a, 'lunge')));
+  if (sp.actions.includes('liberty')) acts.push(btn(`💛 ${t('act_liberty')}`, () => ui.careWithGame(a, 'liberty')));
   if (sp.rideable) {
     const r = canRide(a);
     acts.push(btn(`🏇 ${t('act_ride')}`, () => { if (g.ride(a)) ui.closePanel(); }, { cls: 'primary', disabled: !r.ok && r.reason === 'tooYoung' }));
@@ -104,6 +105,31 @@ function renderAnimal(ui, g, a) {
     }
   }));
   out.push(h('h3', {}, t('activities')), h('div', { class: 'grid' }, acts));
+
+  // Laine et lait
+  if (sp.product) {
+    const prod = sp.product;
+    out.push(h('h3', {}, t(`product_${prod.id}`)));
+    if (canProduce(a)) {
+      out.push(h('div', { class: 'bars small' }, bar(t(`product_${prod.id}`), a.produce ?? 0)),
+        h('div', { class: 'grid' }, btn(`${prod.id === 'wool' ? '🧶' : '🥛'} ${t(`act_${prod.action}`)}${isSandbox(g.profile) ? '' : ` · +${prod.value} 🪙`}`,
+          () => ui.collectWithGame(a), { disabled: !a.produceReady, cls: a.produceReady ? 'primary' : '' })));
+    } else {
+      out.push(h('p', { class: 'note' }, t(prod.females ? 'productFemales' : 'productAdults')));
+    }
+  }
+
+  // Chien de troupeau
+  if (a.species === 'dog') {
+    const skill = a.skills.herding ?? 0;
+    const able = skill >= 25;
+    out.push(h('h3', {}, `🐑 ${t('herdDog')}`),
+      h('p', { class: 'note' }, able ? t('herdDogHelp') : t('herdDogTrain', { n: Math.round(skill) })),
+      h('div', { class: 'grid' },
+        btn(a.role === 'herder' ? `✅ ${t('herderIs')}` : t('herderMake'), () => { g.setHerder(a, a.role !== 'herder'); ui.renderPanel(); }, { disabled: !able, cls: a.role === 'herder' ? 'done' : '' }),
+        btn(`🏠 ${t('herdIn')}`, () => g.startHerding('pen', g.entities.get(a.id)), { disabled: !able }),
+        btn(`🌿 ${t('herdOut')}`, () => g.startHerding('field', g.entities.get(a.id)), { disabled: !able })));
+  }
 
   out.push(h('h3', {}, t('training')), h('div', { class: 'grid' },
     sp.training.map((x) => btn(t(`tr_${x}`), () => g.train(a, x), { disabled: stage === 'baby' })),
@@ -369,6 +395,86 @@ export function openSettings(ui) {
           },
         }, t('quit')),
       ];
+    },
+  });
+}
+
+// ---------------------------------------------------------------- ferme
+
+export function openFarm(ui) {
+  const g = ui.game;
+  const state = { tab: 'equipment' };
+  ui.openPanel({
+    title: `🚜 ${t('farm')}`,
+    live: true,
+    render: () => {
+      const p = g.profile;
+      const sandbox = isSandbox(p);
+      const tabs = h('div', { class: 'tabs' }, [['equipment', `🥣 ${t('equipment')}`], ['helpers', `🧑‍🌾 ${t('helpers')}`], ['herd', `🐑 ${t('herd')}`]]
+        .map(([k, label]) => h('button', { class: state.tab === k ? 'active' : '', onClick: () => { state.tab = k; ui.renderPanel(); } }, label)));
+      const out = [tabs];
+
+      if (state.tab === 'equipment') {
+        out.push(h('p', { class: 'note' }, t('equipmentHelp')));
+        out.push(h('div', { class: 'cards' }, Object.entries(EQUIPMENT).map(([type, def]) => {
+          const owned = g.equipment.find((q) => q.eq.type === type);
+          const who = def.serves.map((sid) => SPECIES[sid].emoji).join(' ');
+          let side;
+          if (!owned) {
+            side = h('button', { class: 'primary', onClick: () => { g.buyEquipment(type); ui.renderPanel(); } }, sandbox ? t('install') : `${t('install')} · ${def.price} 🪙`);
+          } else if (def.stock !== null && !sandbox) {
+            side = h('button', { onClick: () => { g.refillEquipment(owned.eq); ui.renderPanel(); }, disabled: owned.eq.stock >= def.stock },
+              `${t('refill')} · ${def.refill} 🪙`);
+          } else {
+            side = h('span', { class: 'card-side' }, '✅');
+          }
+          return h('div', { class: 'card' },
+            h('span', { class: 'card-emoji' }, def.emoji),
+            h('span', { class: 'card-main' },
+              h('b', {}, t(`eq_${type}`)),
+              h('small', {}, `${who} · ${t(`eqd_${type}`)}`),
+              owned && def.stock !== null && !sandbox
+                ? h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${(owned.eq.stock / def.stock) * 100}%` } }))
+                : null),
+            side);
+        })));
+      }
+
+      if (state.tab === 'helpers') {
+        out.push(h('p', { class: 'note' }, sandbox ? t('helpersHelpSandbox') : t('helpersHelp')));
+        out.push(h('div', { class: 'cards' }, Object.entries(HELPERS).map(([type, def]) => {
+          const hired = p.helpers.find((x) => x.type === type && x.place === p.place);
+          return h('div', { class: 'card' },
+            h('span', { class: 'card-emoji' }, def.emoji),
+            h('span', { class: 'card-main' },
+              h('b', {}, hired ? `${hired.name} · ${t(`helper_${type}`)}` : t(`helper_${type}`)),
+              h('small', {}, t(`helperd_${type}`))),
+            hired
+              ? h('button', { onClick: async () => { if (await ui.confirm(t('fireConfirm', { name: hired.name }))) { g.fire(hired.id); ui.renderPanel(); } } }, t('fire'))
+              : h('button', { class: 'primary', onClick: () => { g.hire(type); ui.renderPanel(); } }, sandbox ? t('hire') : `${t('hire')} · ${def.salary} 🪙/${t('perDay')}`));
+        })));
+      }
+
+      if (state.tab === 'herd') {
+        const flock = g.animalsHere().filter((a) => SPECIES[a.species].livestock);
+        const herder = g.herder();
+        out.push(h('p', { class: 'note' }, t('herdHelp')));
+        out.push(h('p', {}, herder ? t('herderNow', { name: herder.data.name }) : t('noHerder')));
+        out.push(h('p', {}, flock.length ? t('flockCount', {
+          n: flock.length,
+          pen: flock.filter((a) => (a.zone ?? 'pen') === 'pen').length,
+          field: flock.filter((a) => a.zone === 'field').length,
+        }) : t('noFlock')));
+        out.push(h('div', { class: 'grid' },
+          h('button', { class: 'act', disabled: !herder || !flock.length || !!g.herding.active, onClick: () => g.startHerding('pen') }, `🏠 ${t('herdIn')}`),
+          h('button', { class: 'act', disabled: !herder || !flock.length || !!g.herding.active, onClick: () => g.startHerding('field') }, `🌿 ${t('herdOut')}`)));
+        out.push(h('label', { class: 'check' }, h('input', {
+          type: 'checkbox',
+          checked: p.farm.autoHerd,
+          onChange: (e) => { p.farm.autoHerd = e.target.checked; },
+        }), ` ${t('autoHerd')}`));
+      }
+      return out;
     },
   });
 }

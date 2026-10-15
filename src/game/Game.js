@@ -6,6 +6,15 @@ import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
 import { Input } from './Input.js';
+import { HelperEntity } from './HelperEntity.js';
+import { Herding } from './Herding.js';
+import { EQUIPMENT_MODELS } from './models/equipment.js';
+import { disposeModel } from './models/animalModel.js';
+import {
+  EQUIPMENT, HERD_SPECIES, equipmentAt, buyEquipment, refillEquipment, wantedEquipment, useEquipment,
+  passiveEquipment, hireHelper, fireHelper, payHelpers, doHelperTask, tickProduce, collectProduct,
+  socialMoment, graze, companionsOf, hasStock, helperTask as helperTaskFn,
+} from '../sim/farm.js';
 import { SPECIES } from '../sim/species.js';
 import {
   tickAnimal, applyCare, CARE, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
@@ -53,6 +62,9 @@ export class Game {
     this.input = new Input(renderer.domElement, document.getElementById('joystick'));
     this.input.onKey = (code) => this.onKey(code);
     this.entities = new Map();
+    this.helpers = new Map();
+    this.equipment = [];
+    this.herding = new Herding(this);
     this.profile = null;
     this.running = false;
     this.simAcc = 0;
@@ -90,8 +102,11 @@ export class Game {
   stop() {
     this.save();
     if (this.player?.mount) this.player.dismount();
+    this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
     this.entities.clear();
+    for (const h of this.helpers.values()) h.dispose();
+    this.helpers.clear();
     this.running = false;
     this.profile = null;
   }
@@ -122,9 +137,17 @@ export class Game {
 
   loadPlace(placeId) {
     if (this.player?.mount) this.player.dismount();
+    this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
     this.entities.clear();
+    for (const h of this.helpers.values()) h.dispose();
+    this.helpers.clear();
     this.world.build(placeId, this.season);
+    this.equipment = [];
+    for (const eq of equipmentAt(this.profile, placeId)) this.spawnEquipment(eq);
+    for (const h of this.profile.helpers) {
+      if (h.place === placeId) this.helpers.set(h.id, new HelperEntity(h, this.world, this.scene));
+    }
     this.weatherKey = null;
     this.updateWeather();
     this.player.spawn(0, -6);
@@ -133,6 +156,18 @@ export class Game {
     for (const a of this.profile.animals) {
       if (a.location === placeId) this.spawnEntity(a);
     }
+  }
+
+  spawnEquipment(eq) {
+    const def = EQUIPMENT[eq.type];
+    const mesh = EQUIPMENT_MODELS[eq.type]();
+    const [x, z] = def.slot;
+    mesh.position.set(x, this.world.heightAt(x, z), z);
+    this.world.group.add(mesh);
+    this.world.colliders.push({ x, z, hw: 0.5, hd: 0.4, fence: true });
+    const entry = { eq, def, mesh, pos: new THREE.Vector3(x, 0, z) };
+    this.equipment.push(entry);
+    return entry;
   }
 
   spawnEntity(a, near = null) {
@@ -177,12 +212,55 @@ export class Game {
   /** Fait passer du temps d'un coup (sommeil, voyage, petit boulot). */
   advanceTime(hours, ctx = {}, decayFactor = 1) {
     this.profile.clock += hours * 60;
-    for (const a of this.animalsHere()) {
-      const events = tickAnimal(a, hours * decayFactor, { ...ctx, weather: this.simWeather() });
+    const here = this.animalsHere();
+    for (const a of here) {
+      const events = tickAnimal(a, hours * decayFactor, { ...ctx, weather: this.simWeather(), ...this.socialCtx(a, here) });
       a.ageDays += (hours * (1 - decayFactor)) / 24;
+      tickProduce(a, hours);
       this.handleEvents(a, events);
     }
+    this.farmTick(here, hours, true);
     this.updateWeather();
+  }
+
+  socialCtx(a, here) {
+    const companions = companionsOf(a, here);
+    return { companions, alone: HERD_SPECIES.includes(a.species) && companions === 0 };
+  }
+
+  /** Effets de la ferme pendant `hours` heures : litière, pâturage, aides (si temps sauté), salaires. */
+  farmTick(here, hours, skipped = false) {
+    const p = this.profile;
+    passiveEquipment(p, here, p.place, hours);
+    for (const a of here) {
+      if (a.zone === 'field') graze(a, hours, this.world.snowy);
+    }
+    // Quand on saute du temps (nuit, voyage…), les aides travaillent quand même.
+    if (skipped) {
+      for (const h of p.helpers.filter((x) => x.place === p.place)) {
+        for (let i = 0; i < Math.min(12, Math.ceil(hours)); i++) {
+          const task = this.helperTaskFor(h);
+          if (!task) break;
+          doHelperTask(p, task, here);
+        }
+      }
+    }
+    const day = this.day;
+    if (p.lastPayDay === undefined) p.lastPayDay = day;
+    if (day > p.lastPayDay) {
+      const left = payHelpers(p, day - p.lastPayDay);
+      p.lastPayDay = day;
+      for (const h of left) {
+        this.helpers.get(h.id)?.dispose();
+        this.helpers.delete(h.id);
+        this.ui.toast(t('helperLeft', { name: h.name }), 6000);
+      }
+    }
+    this.autoHerd();
+  }
+
+  helperTaskFor(h) {
+    return helperTaskFn(this.profile, h, this.animalsHere());
   }
 
   handleEvents(a, events) {
@@ -222,8 +300,14 @@ export class Game {
     this.player.update(dt, ctrl, this.rig.yaw, this.rig.mode === 'first');
     this.rig.update(dt, ctrl, this.player, this.world);
 
-    const ctx = { playerPos: this.player.position, night };
-    for (const e of this.entities.values()) e.update(dt, ctx);
+    const entities = [...this.entities.values()];
+    const ctx = { playerPos: this.player.position, night, entities, game: this };
+    for (const e of entities) e.update(dt, ctx);
+    for (const h of this.helpers.values()) h.update(dt, this);
+    this.herding.update(dt);
+    for (const q of this.equipment) {
+      if (q.mesh.userData.spin) q.mesh.userData.spin.rotation.y += dt * 2;
+    }
 
     const { day } = this.world.updateSky(this.hour, this.weather, this.player.position);
     this.world.updateClouds(dt);
@@ -238,12 +322,15 @@ export class Game {
       this.simAcc = 0;
       this.updateWeather();
       const weather = this.simWeather();
-      for (const a of this.animalsHere()) {
+      const here = this.animalsHere();
+      this.farmTick(here, hours);
+      for (const a of here) {
         const e = this.entities.get(a.id);
         const before = mood(a);
         const events = tickAnimal(a, hours, {
-          weather, sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3,
+          weather, sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
         });
+        tickProduce(a, hours);
         if (before !== 'sad' && mood(a) === 'sad') this.ui.toast(t('sad', { name: a.name }), 4000);
         this.handleEvents(a, events);
         if (e && e.stage !== undefined) {
@@ -343,10 +430,20 @@ export class Game {
 
   // ---------------------------------------------------------------- actions
 
-  care(a, action) {
+  /** Vérifie qu'un soin est possible avant de lancer son mini-jeu. */
+  canCare(a, action) {
+    const care = CARE[action];
+    if (!canAfford(this.profile, care.cost)) return { ok: false, reason: 'money' };
+    if (care.full && a.needs[care.full] >= 96) return { ok: false, reason: 'full' };
+    if (care.tiring && a.needs.energy < 15) return { ok: false, reason: 'tired' };
+    if (care.tiring && a.sick) return { ok: false, reason: 'sick' };
+    return { ok: true };
+  }
+
+  care(a, action, quality = 1) {
     const care = CARE[action];
     if (!canAfford(this.profile, care.cost)) return this.ui.toast(t('r_money'));
-    const res = applyCare(a, action);
+    const res = applyCare(a, action, quality);
     if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name }));
     spend(this.profile, care.cost);
     addStat(this.profile, action);
@@ -487,6 +584,143 @@ export class Game {
     earn(this.profile, job.pay);
     addStat(this.profile, 'jobs');
     this.ui.toast(t('jobDone', { n: job.pay }));
+  }
+
+  // ---------------------------------------------------------------- ferme
+
+  wantedEquipment(a) {
+    const eq = wantedEquipment(this.profile, a, this.profile.place);
+    return eq ? this.equipment.find((q) => q.eq.id === eq.id) ?? null : null;
+  }
+
+  animalUsedEquipment(entity, entry) {
+    if (!entry) return;
+    const r = useEquipment(this.profile, entity.data, entry.eq);
+    if (r.ok) entity.emit({ hunger: '🍖', thirst: '💧', grooming: '✨' }[r.need] ?? '❤️', 2);
+  }
+
+  socialMoment(entity, kind) {
+    socialMoment(entity.data, kind);
+    entity.emit({ play: '⚽', groom: '💕', nurse: '🍼' }[kind], 1);
+  }
+
+  buyEquipment(type) {
+    const r = buyEquipment(this.profile, type, this.profile.place);
+    if (!r.ok) return this.ui.toast(t(r.reason === 'money' ? 'r_money' : 'alreadyOwned'));
+    this.spawnEquipment(r.equipment);
+    addStat(this.profile, 'equipment');
+    this.ui.toast(t('equipmentBought', { name: t(`eq_${type}`) }));
+    this.save();
+    return r;
+  }
+
+  refillEquipment(eq) {
+    const r = refillEquipment(this.profile, eq);
+    if (!r.ok) return this.ui.toast(t(r.reason === 'money' ? 'r_money' : 'alreadyFull'));
+    this.ui.toast(t('refilled', { name: t(`eq_${eq.type}`) }));
+    return r;
+  }
+
+  hire(type) {
+    const r = hireHelper(this.profile, type, this.profile.place);
+    if (!r.ok) return this.ui.toast(t('alreadyHired'));
+    this.helpers.set(r.helper.id, new HelperEntity(r.helper, this.world, this.scene));
+    addStat(this.profile, 'hired');
+    this.ui.toast(t('hired', { name: r.helper.name, job: t(`helper_${type}`) }));
+    this.save();
+    return r;
+  }
+
+  fire(helperId) {
+    this.helpers.get(helperId)?.dispose();
+    this.helpers.delete(helperId);
+    fireHelper(this.profile, helperId);
+    this.save();
+  }
+
+  taskPosition(task) {
+    if (task.animalId) {
+      const e = this.entities.get(task.animalId);
+      return e ? e.position : null;
+    }
+    if (task.equipmentId) return this.equipment.find((q) => q.eq.id === task.equipmentId)?.pos ?? null;
+    return null;
+  }
+
+  helperDone(helper, task) {
+    if (!task) return;
+    const r = doHelperTask(this.profile, task, this.animalsHere());
+    if (!r.ok) return;
+    const e = task.animalId && this.entities.get(task.animalId);
+    if (e) e.emit(task.kind === 'cure' ? '💚' : task.kind === 'product' ? '🪣' : '❤️', 2);
+    if (task.kind === 'product') this.ui.toast(t(`collected_${r.product}`, { name: helper.data.name, n: r.earned }));
+  }
+
+  collect(a) {
+    const r = collectProduct(this.profile, a);
+    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name }));
+    this.entities.get(a.id)?.emit(r.product === 'wool' ? '🧶' : '🥛', 3);
+    this.ui.toast(t(`got_${r.product}`, { name: a.name, n: r.earned }));
+    this.ui.refresh();
+    return r;
+  }
+
+  /** Qui peut conduire le troupeau ici : un chien de troupeau, sinon le berger. */
+  herder() {
+    const dog = [...this.entities.values()].find((e) => e.data.role === 'herder' && !e.ridden);
+    if (dog) return dog;
+    return [...this.helpers.values()].find((h) => h.def.herds) ?? null;
+  }
+
+  startHerding(dest, pusher = this.herder()) {
+    if (!pusher) return this.ui.toast(t('noHerder'));
+    if (!this.herding.start(dest, pusher)) return this.ui.toast(t('noFlock'));
+    this.ui.toast(t(dest === 'pen' ? 'herdingIn' : 'herdingOut', { name: pusher.data.name }));
+    return true;
+  }
+
+  herdingDone(dest, pusher) {
+    addStat(this.profile, 'herds');
+    if (pusher.data.skills) {
+      pusher.data.skills.herding = Math.min(100, (pusher.data.skills.herding ?? 0) + 2);
+      socialMoment(pusher.data, 'play');
+      pusher.emit('⭐', 2);
+    }
+    this.ui.toast(t(dest === 'pen' ? 'herdedIn' : 'herdedOut'), 4000);
+  }
+
+  autoHerd() {
+    const p = this.profile;
+    if (!p.farm?.autoHerd || this.herding.active) return;
+    const h = this.hour;
+    const slot = h >= 20 || h < 8 ? 'pen' : 'field';
+    const key = `${this.day}-${slot}`;
+    if (p.farm.lastHerd === key) return;
+    if (h < 8 && slot === 'pen' && p.farm.lastHerd === `${this.day - 1}-pen`) return;
+    const flock = [...this.entities.values()].filter((e) => e.sp.livestock);
+    if (!flock.length) return;
+    const pusher = this.herder();
+    if (!pusher) return;
+    if (flock.every((e) => (e.data.zone ?? 'pen') === slot)) {
+      p.farm.lastHerd = key;
+      return;
+    }
+    p.farm.lastHerd = key;
+    this.startHerding(slot, pusher);
+  }
+
+  setHerder(a, on) {
+    for (const x of this.profile.animals) if (x.role === 'herder' && x.location === a.location) delete x.role;
+    if (on) a.role = 'herder';
+    this.ui.toast(t(on ? 'herderOn' : 'herderOff', { name: a.name }));
+  }
+
+  equipmentHere() {
+    return this.equipment;
+  }
+
+  equipmentStock(eq) {
+    return hasStock(this.profile, eq);
   }
 
   travelOptions(destId, travelers) {

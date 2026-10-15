@@ -8,6 +8,7 @@ import { t, L } from '../i18n.js';
 import { groundDetail } from './textures.js';
 import * as B from './models/buildings.js';
 import { forest, rocks, groundCover, mountainRing } from './models/nature.js';
+import { buildFarm } from './farmLayout.js';
 
 const SIZE = 420;
 const SEGMENTS = 168;
@@ -157,6 +158,7 @@ export class World {
     this.group = g;
     this.colliders = [];
     this.interactables = [];
+    this.clearZones = [];
     this.waterLevel = p.sea || p.lake ? WATER_LEVEL : null;
     const rng = mulberry32(placeId.length * 977 + 13);
     const snowy = GROUND[p.biome][season] === 0xeef2f6 || GROUND[p.biome][season] === 0xeef1f4 || GROUND[p.biome][season] === 0xf0f3f6;
@@ -213,6 +215,7 @@ export class World {
     deco(B.trough(), -21.5, 11, Math.PI / 2);
     deco(B.hayBale(), -21.5, 21);
     deco(B.hayBale(), -27, 8, 0.4);
+    buildFarm(this, g);
     if (p.biome === 'garden') deco(B.torii(), 0, 30);
     if (p.biome === 'beach') deco(B.lighthouse(), 70, -60);
 
@@ -232,6 +235,7 @@ export class World {
         if (this.isWater(x, z)) continue;
         if (this.colliders.some((c) => Math.abs(x - c.x) < c.hw + 2 && Math.abs(z - c.z) < c.hd + 2)) continue;
         if (x > -25 && x < -7 && z > 6 && z < 26) continue; // paddock
+        if (this.clearZones.some((c) => Math.hypot(x - c.x, z - c.z) < c.r)) continue; // bergerie et pré
         out.push({ x, y: this.heightAt(x, z), z, s: sMin + rng() * (sMax - sMin), r: rng() * Math.PI * 2 });
       }
       return out;
@@ -349,7 +353,7 @@ export class World {
 
   /** Vrai si le point est à l'intérieur d'un bâtiment (pour la caméra). */
   insideBuilding(x, y, z) {
-    return this.colliders.some((c) => Math.abs(x - c.x) < c.hw && Math.abs(z - c.z) < c.hd && y < this.heightAt(c.x, c.z) + 7);
+    return this.colliders.some((c) => !c.fence && Math.abs(x - c.x) < c.hw && Math.abs(z - c.z) < c.hd && y < this.heightAt(c.x, c.z) + 7);
   }
 
   /** Repousse un point (x, z, rayon) hors des bâtiments. */

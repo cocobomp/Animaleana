@@ -42,4 +42,5 @@ export default defineConfig({
   base: './',
   plugins: [offlineServiceWorker()],
   build: { chunkSizeWarningLimit: 1200 },
+  test: { exclude: ['**/node_modules/**', '.claude/**'] },
 });

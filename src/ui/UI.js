@@ -93,6 +93,7 @@ export class UI {
       this.hudInfo,
       h('nav', { class: 'hud-buttons' },
         btn('🐾', t('animals'), () => this.openAnimals()),
+        btn('🚜', t('farm'), () => this.openFarm()),
         btn('🧭', t('travel'), () => this.openTravel()),
         btn('📖', t('journal'), () => this.openJournal()),
         btn('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen())),
@@ -231,6 +232,22 @@ export class UI {
     if (this.panel?.animalId === animalId) this.closePanel();
   }
 
+  /**
+   * Point d'entrée de chaque soin fait par le joueur : lance le mini-jeu du soin,
+   * puis applique le soin avec la qualité obtenue (0 à 1).
+   */
+  async careWithGame(a, action) {
+    const g = this.game;
+    const check = g.canCare(a, action);
+    if (!check.ok) return this.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name }));
+    return g.care(a, action, 1);
+  }
+
+  /** Tonte ou traite (mini-jeu aussi). */
+  async collectWithGame(a) {
+    return this.game.collect(a);
+  }
+
   openAnimal(a) { panels.openAnimal(this, a); }
   openAnimals() { panels.openAnimals(this); }
   openAdoption() { panels.openAdoption(this); }
@@ -238,6 +255,7 @@ export class UI {
   openJournal() { panels.openJournal(this); }
   openJobs() { panels.openJobs(this); }
   openSettings() { panels.openSettings(this); }
+  openFarm() { panels.openFarm(this); }
   openVetClinic() { panels.openVetClinic(this); }
   openVet(a, atClinic) { openVet(this, a, atClinic); }
 }

@@ -1,5 +1,7 @@
 // Textes du jeu : français (langue principale) et anglais.
 
+import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
+
 const fr = {
   title: 'Animadichelle',
   tagline: 'Adopte, soigne et voyage avec tes animaux',
@@ -3297,6 +3299,10 @@ const en = {
   o_actvPhotos: 'Take 8 photos on trail rides',
   o_actvStar: 'Put on 10 shows',
 };
+
+// Clients et métiers : textes ajoutés aux deux dictionnaires.
+Object.assign(fr, CLIENTS_FR);
+Object.assign(en, CLIENTS_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

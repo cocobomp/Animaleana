@@ -7,6 +7,10 @@ const stat = (p, k) => p.stats[k] ?? 0;
 
 export const OBJECTIVES = [
   { id: 'adopt1', kind: 'quest', reward: 50, progress: (p) => [stat(p, 'adopted'), 1] },
+  // Quêtes pour bien débuter (tutoriel) : voir aussi QUEST_GUIDE dans tutorial.js.
+  { id: 'pet3', kind: 'quest', reward: 20, progress: (p) => [stat(p, 'pet'), 3] },
+  { id: 'water3', kind: 'quest', reward: 20, progress: (p) => [stat(p, 'water'), 3] },
+  { id: 'scoop1', kind: 'quest', reward: 20, progress: (p) => [stat(p, 'scoop'), 1] },
   { id: 'feed5', kind: 'quest', reward: 30, progress: (p) => [stat(p, 'feed'), 5] },
   { id: 'brush3', kind: 'quest', reward: 30, progress: (p) => [stat(p, 'brush'), 3] },
   { id: 'ride1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'rides'), 1] },

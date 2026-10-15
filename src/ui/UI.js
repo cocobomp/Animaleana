@@ -372,17 +372,18 @@ export class UI {
     return this.game.collect(a);
   }
 
-  openAnimal(a) { panels.openAnimal(this, a); }
-  openAnimals() { panels.openAnimals(this); }
-  openAdoption() { panels.openAdoption(this); }
-  openTravel() { panels.openTravel(this); }
-  openJournal() { panels.openJournal(this); }
+  // game.emit(…) : annonce les fenêtres ouvertes (utilisé par le tutoriel guidé et « Suivre la quête »).
+  openAnimal(a) { panels.openAnimal(this, a); this.game?.emit('panel', 'animal'); }
+  openAnimals() { panels.openAnimals(this); this.game?.emit('panel', 'animals'); }
+  openAdoption() { panels.openAdoption(this); this.game?.emit('panel', 'adoption'); }
+  openTravel() { panels.openTravel(this); this.game?.emit('panel', 'travel'); }
+  openJournal() { panels.openJournal(this); this.game?.emit('panel', 'journal'); }
   openJobs() { panels.openJobs(this); }
-  openSettings() { panels.openSettings(this); }
-  openFarm() { panels.openFarm(this); }
+  openSettings() { panels.openSettings(this); this.game?.emit('panel', 'settings'); }
+  openFarm() { panels.openFarm(this); this.game?.emit('panel', 'farm'); }
   openTack() { panels.openTack(this); }
-  openBuilding(kind) { openBuilding(this, kind); }
-  openAnimalActions(a) { openAnimalActions(this, a); }
+  openBuilding(kind) { openBuilding(this, kind); this.game?.emit('building', kind); }
+  openAnimalActions(a) { openAnimalActions(this, a); this.game?.emit('animalActions', a); }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {
@@ -415,6 +416,6 @@ export class UI {
     document.getElementById('joystick').hidden = !on;
     this.touchPad.hidden = !on;
   }
-  openVetClinic() { panels.openVetClinic(this); }
-  openVet(a, atClinic) { openVet(this, a, atClinic); }
+  openVetClinic() { panels.openVetClinic(this); this.game?.emit('panel', 'vetClinic'); }
+  openVet(a, atClinic) { openVet(this, a, atClinic); this.game?.emit('panel', 'vetExam'); }
 }

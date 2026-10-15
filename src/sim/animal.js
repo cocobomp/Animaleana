@@ -54,6 +54,8 @@ export const CARE = {
   play: { needs: { exercise: 30, affection: 10, energy: -10 }, cost: 0, tiring: true },
   lunge: { needs: { exercise: 35, energy: -12 }, cost: 0, tiring: true, skills: { obedience: 2, endurance: 1 } },
   liberty: { needs: { exercise: 25, affection: 12, energy: -8 }, cost: 0, tiring: true, skills: { obedience: 3 } },
+  shear: { needs: { grooming: 30, hygiene: 10 }, cost: 0, product: true },
+  milk: { needs: { affection: 4 }, cost: 0, product: true },
 };
 
 export const TRAINING = {
@@ -63,6 +65,7 @@ export const TRAINING = {
   endurance: { skill: 'endurance', needs: { exercise: 35, energy: -20 } },
   agility: { skill: 'jump', needs: { exercise: 30, energy: -15 } },
   obedience: { skill: 'obedience', needs: { exercise: 10, energy: -6 } },
+  herding: { skill: 'herding', needs: { exercise: 30, energy: -15 } },
 };
 
 const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
@@ -111,7 +114,8 @@ export function createAnimal({
     sick: null,
     neglect: 0,
     tricks: {},
-    skills: { obedience: 10, speed: 10, endurance: 10, jump: 10 },
+    skills: { obedience: 10, speed: 10, endurance: 10, jump: 10, ...(breedDef.herder ? { herding: 35 } : species === 'dog' ? { herding: 5 } : {}) },
+    produce: 0,
     location,
     lastBirthDay: -999,
     bornDay: day,

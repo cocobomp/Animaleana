@@ -23,7 +23,7 @@ describe('adoption', () => {
   it('propose des races locales en voyage', () => {
     const list = adoptionCandidates('japon', 1);
     expect(list.length).toBeGreaterThan(0);
-    expect(list.every((a) => ['shiba', 'akita', 'bobtail', 'kiso'].includes(a.breed))).toBe(true);
+    expect(list.every((a) => ['shiba', 'akita', 'bobtail', 'kiso', 'wagyu'].includes(a.breed))).toBe(true);
   });
 
   it('retire les animaux déjà adoptés', () => {

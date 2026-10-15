@@ -132,6 +132,11 @@ const fr = {
   act_horse_clean: 'Curer le box',
   act_cat_clean: 'Changer la litière',
   act_rabbit_clean: 'Nettoyer le clapier',
+  act_cow_clean: 'Nettoyer l\'étable',
+  act_shear: 'Tondre',
+  act_milk: 'Traire',
+  tr_herding: 'Conduite de troupeau',
+  skill_herding: 'Troupeau',
 
   tr_jump: 'Saut d\'obstacles',
   tr_speed: 'Galop',
@@ -443,6 +448,11 @@ const en = {
   act_horse_clean: 'Muck out the stall',
   act_cat_clean: 'Change the litter',
   act_rabbit_clean: 'Clean the hutch',
+  act_cow_clean: 'Clean the barn',
+  act_shear: 'Shear',
+  act_milk: 'Milk',
+  tr_herding: 'Herding',
+  skill_herding: 'Herding',
 
   tr_jump: 'Show jumping',
   tr_speed: 'Gallop',

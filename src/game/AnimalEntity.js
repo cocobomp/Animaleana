@@ -12,6 +12,9 @@ const HOME = {
   dog: { x: 2, z: 2, r: 10 },
   cat: { x: -3, z: -7, r: 7 },
   rabbit: { x: 8, z: 4, r: 4 },
+  sheep: { x: 14, z: 36, r: 8 },
+  goat: { x: 14, z: 36, r: 8 },
+  cow: { x: 14, z: 36, r: 9 },
 };
 
 const MOOD_EMOJI = { sick: '🤒', sad: '😢' };

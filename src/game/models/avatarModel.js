@@ -116,8 +116,7 @@ export function buildAvatar(look) {
   add(torso, pelvis, bottom);
   const chest = shared(`chest${R}`, () => limbGeo([[0.9, 0.152, 0.1], [1.02, 0.145, 0.095], [1.15, 0.16, 0.105, 0.005], [1.27, 0.18, 0.105], [1.35, 0.185, 0.095], [1.4, 0.14, 0.08], [1.43, 0.07, 0.06]], R + 4));
   add(torso, chest, top);
-  // Ceinture et col.
-  add(torso, new THREE.TorusGeometry(0.155, 0.012, 6, R + 4), mat(0x3a2a20, 0.5), [0, 0.92, 0], [Math.PI / 2, 0, 0], [1, 0.68, 1]);
+  // Col.
   add(torso, new THREE.TorusGeometry(0.058, 0.014, 6, R), top, [0, 1.43, 0.005], [Math.PI / 2 - 0.15, 0, 0]);
 
   // --- Bras (pivot à l'épaule)

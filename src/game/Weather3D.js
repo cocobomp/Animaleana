@@ -30,11 +30,12 @@ export class Weather3D {
       const x = (Math.random() - 0.5) * BOX.x;
       const y = Math.random() * BOX.y;
       const z = (Math.random() - 0.5) * BOX.z;
-      rainPos.set([x, y, z, x + 0.03, y - 0.6, z], i * 6);
+      const len = 0.45 + Math.random() * 0.45;
+      rainPos.set([x, y, z, x + len * 0.18, y - len, z + len * 0.05], i * 6);
     }
     const rainGeo = new THREE.BufferGeometry();
     rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
-    this.rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xaec4d6, transparent: true, opacity: 0.55 }));
+    this.rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xc4d4e2, transparent: true, opacity: 0.38, depthWrite: false }));
     this.rain.frustumCulled = false;
     this.rain.visible = false;
     scene.add(this.rain);
@@ -67,13 +68,21 @@ export class Weather3D {
     if (this.rain.visible) {
       this.rain.position.set(center.x, center.y - 8, center.z);
       const arr = this.rain.geometry.attributes.position.array;
+      // Gouttes un peu penchées par le vent.
       const fall = dt * 22;
+      const drift = fall * 0.18;
       for (let i = 0; i < arr.length; i += 6) {
         arr[i + 1] -= fall;
         arr[i + 4] -= fall;
+        arr[i] += drift;
+        arr[i + 3] += drift;
         if (arr[i + 4] < 0) {
           arr[i + 1] += BOX.y;
           arr[i + 4] += BOX.y;
+        }
+        if (arr[i] > BOX.x / 2) {
+          arr[i] -= BOX.x;
+          arr[i + 3] -= BOX.x;
         }
       }
       this.rain.geometry.attributes.position.needsUpdate = true;

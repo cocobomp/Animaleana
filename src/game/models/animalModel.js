@@ -270,6 +270,17 @@ const cylUv = (yc, z0, z1) => (x, y, z) => {
   return [u, (z - z0) / (z1 - z0)];
 };
 
+/** Projection « boîte » en mètres (laine) : pas de pincement aux bouts du corps. */
+const boxUv = (sdf, tile) => (x, y, z) => {
+  const e = 0.004;
+  const gx = Math.abs(sdf(x + e, y, z) - sdf(x - e, y, z));
+  const gy = Math.abs(sdf(x, y + e, z) - sdf(x, y - e, z));
+  const gz = Math.abs(sdf(x, y, z + e) - sdf(x, y, z - e));
+  if (gx >= gy && gx >= gz) return [z / tile, y / tile];
+  if (gy >= gz) return [x / tile, z / tile];
+  return [x / tile, y / tile];
+};
+
 /**
  * Fourrure en couches : la même forme répétée et gonflée ; chaque poil est une petite
  * cellule d'un réseau 3D. Elle s'efface avec la distance (coût nul au loin).
@@ -403,7 +414,7 @@ export function buildAnimalModel(speciesId, look) {
   if (wool) {
     const w = woolTextures(look.coat);
     woolMat = mat(0xffffff, { map: w.map, bumpMap: high ? w.bump : null, bumpScale: 2.5, roughness: 0.95 });
-    woolMat.map.repeat.set(3, 3);
+    woolMat.map.repeat.set(1, 1);
   }
 
   const root = new THREE.Group();
@@ -459,8 +470,8 @@ export function buildAnimalModel(speciesId, look) {
   };
   const shag = (x, y, z, nx, ny) => (noise3(x * 30, y * 6, z * 30) - 0.4) * R * 0.08 * Math.min(1, 1.2 - ny);
   const shapeKey = [speciesId, L, R, y0, nl, na, m.headR, m.headLen, m.snout, fluff, wool, shaggy, gfx.quality].join('|');
-  const torsoGeo = cachedGeo(`torso|${shapeKey}`, () => sdfMesh(torsoSdf, torsoBounds, L / (high ? 50 : 30), {
-    uv: cylUv(y0, -0.6 * L, 0.62 * L),
+  const torsoGeo = cachedGeo(`torso|${shapeKey}`, () => sdfMesh(torsoSdf, torsoBounds, L / (high ? 50 : 26), {
+    uv: wool ? boxUv(torsoSdf, 0.5) : cylUv(y0, -0.6 * L, 0.62 * L),
     displace: wool ? (x, y, z) => lump(x, y, z) + R * 0.06 : shaggy ? shag : null,
   }));
   const torsoMesh = add(body, torsoGeo, wool ? woolMat : M.body);
@@ -524,7 +535,7 @@ export function buildAnimalModel(speciesId, look) {
   }
   const neckGeo = loft(neckSecs, {
     radial: high ? 24 : 14, sub: high ? 3 : 2, capStart: false,
-    displace: wool ? (x, y, z) => lump(x, y + 1, z) + R * 0.05 : null,
+    displace: wool ? (x, y, z) => (lump(x, y + 1, z) + R * 0.05) * Math.max(0, 1 - y / (nl * 1.05)) : null,
   });
   const neckMesh = add(neck, neckGeo, wool ? woolMat : M.neck);
   if (!wool) addShells(neckMesh, furLen);
@@ -576,7 +587,7 @@ export function buildAnimalModel(speciesId, look) {
   const { sdf: headSdf, bounds: hb } = buildShapes(S.head(F), [hr, hr, hr], [hr, hr, hr]);
   const hpad = hr * 0.3;
   const headGeo = cachedGeo(`head|${shapeKey}`, () => sdfMesh(headSdf, [[hb[0][0] - hpad, hb[0][1] - hpad, hb[0][2] - hpad], [hb[1][0] + hpad, hb[1][1] + hpad, hb[1][2] + hpad]],
-    hr / (high ? 8 : 5), { uv: cylUv(0, hb[0][2], hb[1][2]) }));
+    hr / (high ? 8 : 4.5), { uv: cylUv(0, hb[0][2], hb[1][2]) }));
   const headMesh = add(head, headGeo, M.head);
   addShells(headMesh, furLen * fur.head);
   const H = (v) => v.map((x) => x * hr);

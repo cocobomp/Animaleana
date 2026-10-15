@@ -324,7 +324,8 @@ export class World {
     if (!snowy) {
       const grassColor = new THREE.Color(GROUND[p.biome][season]).offsetHSL(0, 0.08, 0.02).getHex();
       // Pas d'herbe haute dans la cour en terre battue.
-      const yard = (s) => Math.hypot(s.x, s.z) > 15 + noise3(s.x * 0.15, s.z * 0.15, 8) * 8;
+      const yard = (s) => Math.hypot(s.x, s.z) > 15 + noise3(s.x * 0.15, s.z * 0.15, 8) * 8
+        && !(p.sea && s.x > 38) && (this.waterLevel === null || s.y > this.waterLevel + 1);
       g.add(groundCover(spots(this.quality === 'high' ? 9000 : 1800, 5, 95, 0.7, 1.3).filter(yard), grassColor, FLOWERS[season]));
     }
 
@@ -391,6 +392,7 @@ export class World {
     // Shader du sol : mélange de détails (herbe, terre, sable/neige, roche) et relief fin.
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.terrainDetail = { value: detail };
+      sh.uniforms.gWet = gfx.wet;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
 attribute vec4 splat;
@@ -402,6 +404,7 @@ vTUv = position.xz;`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
 uniform sampler2D terrainDetail;
+uniform float gWet;
 varying vec4 vSplat;
 varying vec2 vTUv;`)
         .replace('#include <color_fragment>', `#include <color_fragment>
@@ -409,12 +412,14 @@ vec4 dA = texture2D(terrainDetail, vTUv * 0.42);
 vec4 dB = texture2D(terrainDetail, vTUv * 0.093 + 0.37);
 vec4 dC = texture2D(terrainDetail, vTUv * 0.021 + 0.61);
 float wGrass = max(0.0, 1.0 - vSplat.x - vSplat.y - vSplat.z - vSplat.w);
-vec3 dd = dA.rgb * 0.2 + dB.rgb * 0.5 + dC.rgb * 0.3;
+vec3 dd = dA.rgb * 0.1 + dB.rgb * 0.55 + dC.rgb * 0.35;
 float th = dd.r * wGrass + dd.g * vSplat.x + dd.b * (vSplat.y + vSplat.w * 0.5) + (dB.g * 0.6 + dC.b * 0.4) * vSplat.z;
 th += (dC.r - 0.5) * 0.25 * wGrass;
-diffuseColor.rgb *= 0.7 + 0.6 * th;`)
+diffuseColor.rgb *= 0.76 + 0.48 * th;
+diffuseColor.rgb *= 1.0 - gWet * 0.28 * (1.0 - vSplat.w);`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-roughnessFactor = mix(roughnessFactor, 0.55, vSplat.w * 0.6);`);
+roughnessFactor = mix(roughnessFactor, 0.55, vSplat.w * 0.6);
+roughnessFactor = mix(roughnessFactor, 0.32, gWet * (1.0 - vSplat.w) * (0.6 + 0.4 * (vSplat.x + vSplat.y)));`);
       if (high) {
         sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 {
@@ -465,7 +470,7 @@ roughnessFactor = mix(roughnessFactor, 0.55, vSplat.w * 0.6);`);
       transparent: true, opacity: 0.92, normalMap: ice ? null : waterNormalTexture(),
     });
     if (!ice) {
-      mat.normalScale.set(0.35, 0.35);
+      mat.normalScale.set(0.2, 0.2);
       mat.onBeforeCompile = (sh) => {
         sh.uniforms.gTime = gfx.time;
         sh.uniforms.waterDepth = { value: depthTex };
@@ -487,7 +492,7 @@ vec2 wuv2 = vWPos * 0.11 + vec2(-gTime * 0.017, gTime * 0.013);
 vec3 wn1 = texture2D(normalMap, wuv1).xyz * 2.0 - 1.0;
 vec3 wn2 = texture2D(normalMap, wuv2).xyz * 2.0 - 1.0;
 ${high ? 'vec3 wn3 = texture2D(normalMap, vWPos * 0.31 + vec2(gTime * 0.03, -gTime * 0.02)).xyz * 2.0 - 1.0;' : 'vec3 wn3 = vec3(0.0, 0.0, 1.0);'}
-vec3 mapN = normalize(vec3((wn1.xy + wn2.xy * 0.7 + wn3.xy * 0.35) * normalScale, 1.0));
+vec3 mapN = normalize(vec3((wn1.xy + wn2.xy * 0.6 + wn3.xy * 0.2) * normalScale, 1.0));
 normal = normalize(tbn * mapN);`)
           .replace('#include <color_fragment>', `#include <color_fragment>
 wDepth = texture2D(waterDepth, vWPos / ${SIZE.toFixed(1)} + 0.5).r;
@@ -524,6 +529,9 @@ roughnessFactor = mix(roughnessFactor, 0.8, wFoam);`);
     const overcast = { clear: 0, cloudy: 0.5, rain: 0.8, storm: 0.95, snow: 0.75, fog: 0.7 }[weather] ?? 0;
     const wind = { clear: 0.6, cloudy: 1, rain: 1.4, storm: 2.2, snow: 0.8, fog: 0.3 }[weather] ?? 0.8;
     gfx.wind.value += (wind - gfx.wind.value) * 0.02;
+    // Le sol se mouille vite sous la pluie et sèche lentement.
+    const rainy = weather === 'rain' || weather === 'storm';
+    gfx.wet.value = Math.min(1, Math.max(0, gfx.wet.value + (rainy ? 0.004 : -0.0006)));
     const low = smooth(30, 0, elev) * smooth(-8, 2, elev);
     u.turbidity.value = 2 + overcast * 14 + low * 5;
     u.rayleigh.value = 1.2 + overcast * 1.5 + low * 1.3;

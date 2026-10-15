@@ -398,8 +398,8 @@ export function mountainRing(count, radius, snowLine, color = 0x6f6a66, rng = Ma
     }
     return h;
   };
-  const base = snowLine ? 22 : -4;
-  const peak = snowLine ? 120 : 55;
+  const base = snowLine ? 18 : -4;
+  const peak = snowLine ? 95 : 55;
   for (let j = 0; j <= segR; j++) {
     const t = j / segR;
     const r = r0 + (r1 - r0) * t * t;
@@ -407,12 +407,12 @@ export function mountainRing(count, radius, snowLine, color = 0x6f6a66, rng = Ma
       const a = (i / segA) * Math.PI * 2;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
-      const env = Math.min(1, t * 3.2) * (1 - Math.max(0, t - 0.75) * 2.5);
+      const env = Math.min(1, t * 2.2) * (1 - Math.max(0, t - 0.75) * 2.5);
       const h = base + ridged(x, z) * peak * env * (0.55 + noise3(x * 0.004, z * 0.004, seed) * 0.8);
       pos.push(x, h, z);
       const rel = (h - base) / peak;
       c.copy(grassC).lerp(forestC, Math.min(1, rel * 3) * 0.6).lerp(rock, Math.min(1, Math.max(0, (rel - 0.18) * 3)));
-      if (snowLine) c.lerp(snowC, Math.min(1, Math.max(0, (rel - 0.45) * 4)));
+      if (snowLine) c.lerp(snowC, Math.min(1, Math.max(0, (rel - 0.34) * 4)));
       col.push(c.r, c.g, c.b);
     }
   }
@@ -433,8 +433,8 @@ export function mountainRing(count, radius, snowLine, color = 0x6f6a66, rng = Ma
   const nrm = geo.attributes.normal;
   for (let i = 0; i < nrm.count; i++) {
     const steep = 1 - nrm.getY(i);
-    if (steep > 0.25) {
-      c.setRGB(col[i * 3], col[i * 3 + 1], col[i * 3 + 2]).lerp(rock, Math.min(1, (steep - 0.25) * 2.5));
+    if (steep > 0.35) {
+      c.setRGB(col[i * 3], col[i * 3 + 1], col[i * 3 + 2]).lerp(rock, Math.min(0.7, (steep - 0.35) * 1.6));
       geo.attributes.color.setXYZ(i, c.r, c.g, c.b);
     }
   }

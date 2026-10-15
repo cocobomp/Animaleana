@@ -562,8 +562,8 @@ export function terrainDetail() {
       const x = rng() * size;
       const y = rng() * size;
       const r = (1 + rng() * 4) * Math.max(0.6, s);
-      const v = 90 + rng() * 120;
-      dc.fillStyle = `rgb(${v * 0.6},${v * 0.6},${v * 0.6})`;
+      const v = 120 + rng() * 80;
+      dc.fillStyle = `rgb(${v * 0.8},${v * 0.8},${v * 0.8})`;
       dc.beginPath();
       dc.ellipse(x + r * 0.25, y + r * 0.3, r, r * 0.75, 0, 0, Math.PI * 2);
       dc.fill();

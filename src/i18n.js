@@ -1,6 +1,7 @@
 // Textes du jeu : français (langue principale) et anglais.
 
 import { fr as frComp, en as enComp } from './i18n-competitions.js'; // concours à l'extérieur et dressage
+import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
 
 const fr = {
   title: 'Animadichelle',
@@ -351,6 +352,35 @@ const fr = {
   eqd_cowBrush: 'les vaches et chevaux se grattent dessus',
   helpersHelp: 'Une aide s\'occupe des animaux toute seule. Elle est payée chaque jour.',
   helpersHelpSandbox: 'Une aide s\'occupe des animaux toute seule.',
+  talkTo: 'Parler à {name}',
+  helperBack: '💪 {name} est de retour de pause, en pleine forme !',
+  helperTiredBreak: '😮‍💨 {name} est épuisé et fait une pause d\'une heure.',
+  helperTiredBreak_f: '😮‍💨 {name} est épuisée et fait une pause d\'une heure.',
+  helperLevelUp: '⭐ {name} passe au niveau {n} : plus rapide et plus doux avec les animaux !',
+  helperLevelUp_f: '⭐ {name} passe au niveau {n} : plus rapide et plus douce avec les animaux !',
+  hc_hello: 'Bonjour !',
+  hc_howAreYou: 'Comment ça va ?',
+  hc_news: 'Des nouvelles des animaux ?',
+  hc_praise: 'Bravo, super travail !',
+  hc_break: 'Prends une pause',
+  hc_backToWork: 'Au travail !',
+  hc_train: 'Former',
+  hc_why_maxLevel: 'Déjà au niveau maximum : c\'est un expert !',
+  hc_why_maxLevel_f: 'Déjà au niveau maximum : c\'est une experte !',
+  hc_why_trainedToday: 'Déjà formé aujourd\'hui. Reviens demain !',
+  hc_why_trainedToday_f: 'Déjà formée aujourd\'hui. Reviens demain !',
+  hc_mood_great: 'en forme',
+  hc_mood_ok: 'ça va',
+  hc_mood_tired: 'fatigué',
+  hc_mood_tired_f: 'fatiguée',
+  hc_onBreak: 'en pause',
+  hc_levelHelp: 'Chaque soin donne de l\'expérience. Plus le niveau monte, plus les soins sont rapides et bien faits. Les pauses et les compliments gardent la bonne humeur.',
+  hc_duties: 'Ses tâches',
+  hc_priority: 'Qui passer en premier ?',
+  hc_everyone: 'Tout le monde',
+  hc_tabChat: 'Discuter',
+  hc_tabOrders: 'Consignes',
+  hc_talk: 'Parler',
   helper_groom: 'Palefrenier',
   helper_petsitter: 'Pet-sitter',
   helper_shepherd: 'Berger',
@@ -2014,6 +2044,30 @@ const en = {
   eqd_cowBrush: 'cows and horses scratch on it',
   helpersHelp: 'A helper looks after the animals on their own. They are paid every day.',
   helpersHelpSandbox: 'A helper looks after the animals on their own.',
+  talkTo: 'Talk to {name}',
+  helperBack: '💪 {name} is back from their break, full of energy!',
+  helperTiredBreak: '😮‍💨 {name} is worn out and takes a one-hour break.',
+  helperLevelUp: '⭐ {name} reaches level {n}: faster and gentler with the animals!',
+  hc_hello: 'Hello!',
+  hc_howAreYou: 'How are you?',
+  hc_news: 'Any news about the animals?',
+  hc_praise: 'Well done, great work!',
+  hc_break: 'Take a break',
+  hc_backToWork: 'Back to work!',
+  hc_train: 'Train',
+  hc_why_maxLevel: 'Already at max level: a real expert!',
+  hc_why_trainedToday: 'Already trained today. Come back tomorrow!',
+  hc_mood_great: 'great',
+  hc_mood_ok: 'okay',
+  hc_mood_tired: 'tired',
+  hc_onBreak: 'on a break',
+  hc_levelHelp: 'Every task gives experience. The higher the level, the faster and better the care. Breaks and compliments keep spirits up.',
+  hc_duties: 'Their tasks',
+  hc_priority: 'Who comes first?',
+  hc_everyone: 'Everyone',
+  hc_tabChat: 'Chat',
+  hc_tabOrders: 'Orders',
+  hc_talk: 'Talk',
   helper_groom: 'Groom',
   helper_petsitter: 'Pet sitter',
   helper_shepherd: 'Shepherd',
@@ -3250,6 +3304,9 @@ const en = {
 // Textes des concours à l'extérieur et du dressage (fichier à part : src/i18n-competitions.js)
 Object.assign(fr, frComp);
 Object.assign(en, enComp);
+// Clients et métiers : textes ajoutés aux deux dictionnaires.
+Object.assign(fr, CLIENTS_FR);
+Object.assign(en, CLIENTS_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

@@ -27,20 +27,25 @@ export const RAIL_LETTERS = ['A', 'K', 'E', 'H', 'C', 'M', 'B', 'F'];
 
 // ---------------------------------------------------------------- allures
 
-/** Vitesse maximale de chaque allure (m/s) : on plafonne la vitesse du cheval monté. */
+/**
+ * Vitesse maximale de chaque allure (m/s) : on plafonne la vitesse du cheval monté.
+ * Les seuils suivent l'animation du cheval (AnimalEntity.animateHorse / animateGltf) : trot au-delà de
+ * 1,45 × la vitesse de marche (≈ 2,3 m/s), galop au-delà de 0,65 × la vitesse de course (≈ 3,25 m/s).
+ * Ainsi l'allure affichée est bien celle que l'on voit.
+ */
 export const GAITS = {
   halt: { speed: 0, icon: '🛑' },
-  walk: { speed: 1.9, icon: '🚶' },
-  trot: { speed: 4.3, icon: '🏃' },
-  canter: { speed: 7.2, icon: '🐎' },
+  walk: { speed: 1.8, icon: '🚶' },
+  trot: { speed: 2.9, icon: '🏃' },
+  canter: { speed: 5.0, icon: '🐎' },
 };
 export const GAIT_ORDER = ['walk', 'trot', 'canter'];
 
 /** L'allure observée d'après la vitesse réelle. */
 export function gaitOf(speed) {
   if (speed < 0.35) return 'halt';
-  if (speed < 2.7) return 'walk';
-  if (speed < 5.4) return 'trot';
+  if (speed < 2.35) return 'walk';
+  if (speed < 3.3) return 'trot';
   return 'canter';
 }
 

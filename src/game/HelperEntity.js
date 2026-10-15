@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { HELPERS, helperTask } from '../sim/farm.js';
+import { helperLevel, helperSpeed, onBreak } from '../sim/helpers.js';
 import { buildAvatar } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
@@ -50,7 +51,7 @@ export class HelperEntity {
     });
     this.root = new THREE.Group();
     this.root.add(this.avatar.root);
-    this.tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: label(`${this.def.emoji} ${data.name}`), depthTest: false, transparent: true }));
+    this.tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: label(this.tagText()), depthTest: false, transparent: true }));
     this.tag.position.y = 2.05;
     this.tag.scale.set(1.6, 0.4, 1);
     this.tag.renderOrder = 10;
@@ -66,6 +67,17 @@ export class HelperEntity {
     this.think = 1 + Math.random() * 2;
     this.workTimer = 0;
     this.forced = null; // cible imposée (conduite du troupeau)
+  }
+
+  /** Nom affiché au-dessus de la tête, avec son niveau (⭐2). */
+  tagText() {
+    return `${this.def.emoji} ${this.data.name} ⭐${helperLevel(this.data)}`;
+  }
+
+  refreshTag() {
+    this.tag.material.map.dispose();
+    this.tag.material.map = label(this.tagText());
+    this.tag.material.needsUpdate = true;
   }
 
   get position() {
@@ -87,6 +99,12 @@ export class HelperEntity {
         this.think = 1.5;
         this.avatar.arms.forEach((a) => { a.rotation.x = 0; });
       }
+    } else if (onBreak(this.data, game.profile.clock)) {
+      // En pause : on rentre à son coin et on souffle un peu.
+      this.task = null;
+      const [bx, bz] = this.def.base;
+      this.target.set(bx, 0, bz);
+      if (Math.hypot(bx - p.x, bz - p.z) > 0.8) targetSpeed = 1.2;
     } else {
       this.think -= dt;
       if (!this.task && this.think <= 0) {
@@ -104,7 +122,7 @@ export class HelperEntity {
         } else {
           this.target.copy(goal);
           const d = Math.hypot(goal.x - p.x, goal.z - p.z);
-          if (d < 1.6) this.workTimer = 2.5;
+          if (d < 1.6) this.workTimer = 2.5 * helperSpeed(this.data); // plus d'expérience = plus rapide
           else targetSpeed = d > 12 ? 4 : 2.4;
         }
       } else if (Math.hypot(this.target.x - p.x, this.target.z - p.z) > 0.6) {

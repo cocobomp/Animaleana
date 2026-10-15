@@ -516,7 +516,7 @@ const fr = {
   // longe
   mg_lunge_hint: 'Mets {name} au {gait} !',
   mg_lunge_keep: 'Super, garde cette allure !',
-  mg_lunge_slow: 'Ho, doucement',
+  mg_lunge_slow: 'Doucement',
   mg_lunge_fast: 'Allez !',
   mg_gait_walk: 'pas',
   mg_gait_trot: 'trot',
@@ -1039,7 +1039,7 @@ const en = {
   // lunge
   mg_lunge_hint: 'Ask {name} to {gait}!',
   mg_lunge_keep: 'Great, keep that pace!',
-  mg_lunge_slow: 'Easy, slow down',
+  mg_lunge_slow: 'Slow down',
   mg_lunge_fast: 'Go on!',
   mg_gait_walk: 'walk',
   mg_gait_trot: 'trot',

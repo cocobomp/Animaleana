@@ -8,6 +8,7 @@ import { AnimalEntity } from './AnimalEntity.js';
 import { Input } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
 import { Herding } from './Herding.js';
+import { TaskQueue } from './TaskQueue.js';
 import { EQUIPMENT_MODELS } from './models/equipment.js';
 import { disposeModel } from './models/animalModel.js';
 import {
@@ -79,6 +80,7 @@ export class Game {
     this.helpers = new Map();
     this.equipment = [];
     this.herding = new Herding(this);
+    this.tasks = new TaskQueue(this);
     this.droppingMeshes = new Map();
     this.timeScale = 1; // 0 = pause
     this.profile = null;
@@ -116,6 +118,7 @@ export class Game {
   }
 
   stop() {
+    this.tasks.clear();
     this.save();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
@@ -366,15 +369,22 @@ export class Game {
 
     const ctrl = this.input.poll();
     if (ctrl.look.dx || ctrl.look.dy || ctrl.zoom) this.ui.hideHelp?.();
-    this.player.update(dt, ctrl, this.rig.yaw, this.rig.mode === 'first');
-    this.rig.update(dt, ctrl, this.player, this.world);
-
+    // En pause, personne ne bouge (on peut seulement tourner la vue et ouvrir les menus).
+    // En ×2 / ×4, le monde est simulé en plusieurs petits pas : tout le monde va plus vite.
+    const steps = this.paused ? 1 : Math.max(1, Math.round(this.timeScale));
+    const wdt = this.paused ? 0 : dt;
+    if (this.paused) ctrl.move = { x: 0, y: 0 };
     const entities = [...this.entities.values()];
     const ctx = { playerPos: this.player.position, night, entities, game: this };
-    for (const e of entities) e.update(dt, ctx);
+    for (let i = 0; i < steps; i++) {
+      this.player.update(wdt, ctrl, this.rig.yaw, this.rig.mode === 'first');
+      for (const e of entities) e.update(wdt, ctx);
+      for (const h of this.helpers.values()) h.update(wdt, this);
+      this.herding.update(wdt);
+      this.tasks?.update();
+    }
+    this.rig.update(dt, ctrl, this.player, this.world);
     this.ui.updateLabels(entities, this.camera, this.player.position);
-    for (const h of this.helpers.values()) h.update(dt, this);
-    this.herding.update(dt);
     for (const q of this.equipment) {
       if (q.mesh.userData.spin) q.mesh.userData.spin.rotation.y += dt * 2;
     }
@@ -455,6 +465,7 @@ export class Game {
   /** Toucher le sol : on y va. Toucher un animal ou un bâtiment : on y va puis on choisit quoi faire. */
   onTap(sx, sy) {
     if (!this.running || this.ui.isBlocking()) return;
+    const paused = this.paused;
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
     const roots = [...this.entities.values()].filter((e) => !e.ridden).map((e) => e.root);
@@ -464,7 +475,8 @@ export class Game {
       while (o && !o.userData.entity) o = o.parent;
       const e = o?.userData.entity;
       if (e) {
-        this.walkTo(e.position, e.radius + 1.2, () => this.ui.openAnimalActions(e.data), true);
+        if (paused) this.ui.openAnimalActions(e.data);
+        else this.walkTo(e.position, e.radius + 1.2, () => this.ui.openAnimalActions(e.data), true);
         return;
       }
     }
@@ -490,6 +502,11 @@ export class Game {
     const hit = this.raycaster.intersectObject(this.world.group, true)[0];
     if (!hit) return;
     const kind = this.world.kindAt(hit.point.x, hit.point.z);
+    if (paused) {
+      if (kind) this.ui.openBuilding(kind);
+      else this.ui.toast(t('pausedNoMove'));
+      return;
+    }
     // Un enclos : on va à l'endroit touché (en passant par la porte), puis on choisit quoi faire.
     if (['paddock', 'pen', 'hutch'].includes(kind)) {
       this.walkTo(hit.point, 0.8, () => this.ui.openBuilding(kind));
@@ -630,7 +647,19 @@ export class Game {
    */
   setTimeScale(x) {
     this.timeScale = x;
+    if (x === 0) this.player.cancelGoTo();
     this.ui.refresh();
+  }
+
+  get paused() {
+    return this.timeScale === 0;
+  }
+
+  /** Les actions sont bloquées pendant la pause. Renvoie vrai si c'est bloqué. */
+  blockedByPause() {
+    if (!this.paused) return false;
+    this.ui.toast(t('pausedNoAction'));
+    return true;
   }
 
   /** Avance jusqu'à une heure précise (aujourd'hui ou demain). Les aides travaillent pendant ce temps. */
@@ -716,6 +745,19 @@ export class Game {
   unequip(a, slot) {
     unequip(a, slot);
     this.entities.get(a.id)?.applyGear();
+  }
+
+  /** Endroit où aller pour un bâtiment ou un enclos (sa porte). */
+  buildingSpot(kind) {
+    const it = this.world.interactables.find((i) => i.kind === kind);
+    return it ? new THREE.Vector3(it.x, 0, it.z) : null;
+  }
+
+  /** Soin fait automatiquement (liste de tâches) : un peu moins bien qu'à la main. */
+  autoCare(a, action) {
+    const check = this.canCare(a, action);
+    if (!check.ok) return this.ui.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name, g: a.sex }));
+    return this.care(a, action, 0.75);
   }
 
   moodOf(a) {

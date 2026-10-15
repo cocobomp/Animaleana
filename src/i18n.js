@@ -630,6 +630,22 @@ const fr = {
   bc_vet: '{name} a vu le vétérinaire il y a moins de 5 jours',
   bc_rest: '{name} s\'est reposé depuis la dernière portée',
   bc_rest_f: '{name} s\'est reposée depuis la dernière portée',
+
+  resume: 'Reprendre',
+  pausedNoAction: '⏸ Le jeu est en pause : appuie sur ▶ pour reprendre.',
+  pausedNoMove: '⏸ En pause, on ne peut pas bouger. Tu peux ouvrir les menus.',
+
+  myTasks: 'Ma liste',
+  tasksGo: 'Lancer',
+  tasksStop: 'Arrêter',
+  tasksDone: '✅ Liste terminée !',
+  taskAuto: 'Auto',
+  taskManual: 'Moi',
+  taskModeHelp: 'Auto : ton personnage le fait tout seul. Moi : la liste s\'arrête et c\'est toi qui le fais.',
+  taskYourTurn: 'À toi de jouer !',
+  taskDone: 'Fait',
+  addToTasks: 'Ajouter à ma liste',
+  addedToTasks: '📝 Ajouté à ta liste : {what}',
 };
 
 const en = {
@@ -1209,6 +1225,22 @@ const en = {
   bc_bond: '{name} loves you (affection 70+: pet them)',
   bc_vet: '{name} saw the vet less than 5 days ago',
   bc_rest: '{name} has rested since the last litter',
+
+  resume: 'Resume',
+  pausedNoAction: '⏸ The game is paused: press ▶ to resume.',
+  pausedNoMove: '⏸ You can\'t move while paused. You can open menus.',
+
+  myTasks: 'My list',
+  tasksGo: 'Start',
+  tasksStop: 'Stop',
+  tasksDone: '✅ List finished!',
+  taskAuto: 'Auto',
+  taskManual: 'Me',
+  taskModeHelp: 'Auto: your character does it alone. Me: the list stops and you do it.',
+  taskYourTurn: 'Your turn!',
+  taskDone: 'Done',
+  addToTasks: 'Add to my list',
+  addedToTasks: '📝 Added to your list: {what}',
 };
 
 const DICTS = { fr, en };

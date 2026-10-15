@@ -21,17 +21,25 @@ function sheet(ui, title, subtitle, items, header = null, live = false) {
     render: () => [
       subtitle ? h('p', { class: 'note' }, subtitle) : null,
       header ? header() : null,
-      h('div', { class: 'action-sheet' }, items().map((it) => h('button', {
+      h('div', { class: 'action-sheet' }, items().map((it) => h('div', { class: 'ba-wrap' }, h('button', {
         class: `big-action ${it.enabled === false ? 'off' : ''} ${it.primary ? 'primary' : ''}`,
         onClick: () => {
           if (it.enabled === false) {
             ui.toast(it.why);
             return;
           }
+          if (!it.free && ui.game.blockedByPause()) return;
           it.run();
         },
       }, h('span', { class: 'ba-icon' }, it.icon), h('span', { class: 'ba-text' }, h('b', {}, it.label),
-        it.enabled === false && it.why ? h('small', {}, it.why) : it.effect ? h('small', { class: 'effect' }, it.effect) : null)))),
+        it.enabled === false && it.why ? h('small', {}, it.why) : it.effect ? h('small', { class: 'effect' }, it.effect) : null)),
+      // 📝 : ajouter cette action à « Ma liste de tâches »
+      it.queue ? h('button', {
+        class: 'ba-queue',
+        title: t('addToTasks'),
+        'aria-label': t('addToTasks'),
+        onClick: (e) => { e.stopPropagation(); ui.game.tasks.add(it.queue); ui.toast(t('addedToTasks', { what: it.queue.label })); },
+      }, '📝') : null))),
     ],
   });
 }
@@ -82,6 +90,15 @@ export function openBuilding(ui, kind) {
     enabled: a.enabled,
     why: a.reason ? t(`why_${a.reason}`, a.params) : '',
     run: run[a.id],
+    queue: ['farm', 'tack', 'avatar', 'adopt', 'vet', 'jobs', 'sleep'].includes(a.id) ? null : {
+      label: `${t(`do_${a.id}`)} (${name})`,
+      icon: a.icon,
+      target: () => g.buildingSpot(kind),
+      radius: 1.5,
+      auto: () => run[a.id](),
+      manual: () => { ui.openBuilding(kind); },
+    },
+    free: ['farm', 'tack', 'avatar', 'adopt', 'checkHorses'].includes(a.id), // possible même en pause
   })));
 }
 
@@ -103,6 +120,14 @@ export function openAnimalActions(ui, a) {
         why: allowed.ok ? '' : ta(`why_${allowed.reason}`, a),
         effect: effectText(x),
         run: () => ui.careWithGame(a, x),
+        queue: {
+          label: `${x === 'clean' ? t(`act_${a.species}_clean`) : t(`act_${x}`)} · ${a.name}`,
+          icon: icons[x],
+          target: () => g.entities.get(a.id)?.position ?? null,
+          radius: 1.8,
+          auto: () => g.autoCare(a, x),
+          manual: () => ui.careWithGame(a, x),
+        },
       };
     });
     if (sp.product && canProduce(a)) {
@@ -131,7 +156,7 @@ export function openAnimalActions(ui, a) {
       label: a.following ? t('act_stay') : t('act_follow'),
       run: () => { g.toggleFollow(a); ui.closePanel(); },
     });
-    items.push({ icon: '📋', label: t('more'), run: () => ui.openAnimal(a) });
+    items.push({ icon: '📋', label: t('more'), free: true, run: () => ui.openAnimal(a) });
     return items;
   }, () => h('div', { class: 'bars compact' },
     bar(t('happiness'), happiness(a), 'big'),

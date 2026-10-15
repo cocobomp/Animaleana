@@ -515,3 +515,55 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .breed-box { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: grid; gap: 6px; margin-bottom: 8px; }
 .checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 0.9em; }
 .checklist li.ko { color: #8b2b22; }
+
+/* ---------- pause */
+#pause-banner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px 12px 22px;
+  border-radius: 999px;
+  background: var(--glass);
+  color: #fff;
+  font-size: 1.3rem;
+  font-weight: 800;
+  backdrop-filter: blur(6px);
+}
+#pause-banner[hidden] { display: none; }
+
+/* ---------- ma liste de tâches */
+#task-list {
+  position: fixed;
+  right: calc(10px + var(--safe-r));
+  bottom: calc(90px + var(--safe-b));
+  width: min(330px, calc(100vw - 20px));
+  max-height: 45vh;
+  overflow-y: auto;
+  z-index: 12;
+  background: rgba(247, 243, 234, 0.96);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+#task-list[hidden] { display: none; }
+@media (pointer: coarse) { #task-list { bottom: calc(180px + var(--safe-b)); } }
+.task-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.task-toggle { border: none; background: none; font-weight: 800; padding: 4px; min-height: 36px; }
+.task-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 4px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 4px 6px; }
+.task-row.current { border-color: var(--primary); background: #e9f6ee; }
+.task-label { font-size: 0.85rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-mode { min-height: 32px; padding: 2px 8px; font-size: 0.75rem; border-radius: 999px; }
+.task-mode.auto { background: #e2f0fb; }
+.task-mode.manual { background: #fdf0d8; }
+.task-icon { min-height: 32px; width: 32px; padding: 0; }
+.task-icon-space { width: 32px; }
+.task-manual { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: #fdf0d8; border-radius: 12px; padding: 6px 8px; font-weight: 700; font-size: 0.9rem; }
+.ba-wrap { position: relative; display: grid; }
+.ba-queue { position: absolute; top: 4px; right: 4px; min-height: 34px; width: 34px; padding: 0; border-radius: 10px; font-size: 1rem; background: rgba(255, 255, 255, 0.9); }

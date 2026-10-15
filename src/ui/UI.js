@@ -42,6 +42,13 @@ export class UI {
     hold(runBtn, () => { this.game.input.btnRun = true; }, () => { this.game.input.btnRun = false; });
     this.touchPad = h('div', { id: 'touch-pad', hidden: true }, left, runBtn, right);
     this.statusBar = h('div', { id: 'status-bar' });
+    this.pauseBanner = h('div', { id: 'pause-banner', hidden: true },
+      h('span', {}, `⏸ ${t('pause')}`),
+      h('button', { class: 'primary', onClick: () => this.game.setTimeScale(1) }, `▶ ${t('resume')}`));
+    root.append(this.pauseBanner);
+    this.taskBox = h('div', { id: 'task-list', hidden: true });
+    root.append(this.taskBox);
+    this.t = t;
     this.labels = h('div', { id: 'labels' });
     this.labelEls = new Map();
     root.append(this.touchPad, this.statusBar, this.labels);
@@ -141,6 +148,7 @@ export class UI {
     );
     if (this.panel?.live && !this.holding) this.renderPanel();
     this.renderStatus();
+    this.pauseBanner.hidden = !g.paused;
   }
 
   /**
@@ -199,6 +207,33 @@ export class UI {
   clearLabels() {
     for (const el of this.labelEls.values()) el.remove();
     this.labelEls.clear();
+  }
+
+  /** « Ma liste de tâches », en bas à droite. */
+  renderTasks() {
+    const q = this.game?.tasks;
+    if (!q) return;
+    this.taskBox.hidden = !q.tasks.length;
+    if (!q.tasks.length) {
+      this.taskBox.replaceChildren();
+      return;
+    }
+    const cur = q.current?.task;
+    const open = this.taskOpen !== false;
+    const head = h('div', { class: 'task-head' },
+      h('button', { class: 'task-toggle', onClick: () => { this.taskOpen = !open; this.renderTasks(); } }, `📝 ${t('myTasks')} (${q.tasks.length}) ${open ? '▾' : '▸'}`),
+      q.running
+        ? h('button', { class: 'small', onClick: () => q.stop() }, `⏹ ${t('tasksStop')}`)
+        : h('button', { class: 'small primary', onClick: () => q.start() }, `▶ ${t('tasksGo')}`));
+    const rows = open ? q.tasks.map((task, i) => h('div', { class: `task-row ${task === cur ? 'current' : ''}` },
+      h('span', { class: 'task-label' }, `${task.icon} ${task.label}`),
+      h('button', { class: `task-mode ${task.mode}`, onClick: () => q.toggleMode(task.id), title: t('taskModeHelp') }, task.mode === 'auto' ? `🤖 ${t('taskAuto')}` : `✋ ${t('taskManual')}`),
+      i > 0 ? h('button', { class: 'task-icon', onClick: () => q.move(task.id, -1), 'aria-label': '↑' }, '↑') : h('span', { class: 'task-icon-space' }),
+      h('button', { class: 'task-icon', onClick: () => q.remove(task.id), 'aria-label': '✕' }, '✕'))) : [];
+    const manual = q.current?.phase === 'manual'
+      ? h('div', { class: 'task-manual' }, h('span', {}, `✋ ${t('taskYourTurn')}`), h('button', { class: 'small primary', onClick: () => q.next() }, `✓ ${t('taskDone')}`))
+      : null;
+    this.taskBox.replaceChildren(...[head, manual, ...rows].filter(Boolean));
   }
 
   /** Bandeau d'état : qui me suit, sur qui je suis monté, le troupeau en route. */
@@ -403,6 +438,7 @@ export class UI {
    */
   async careWithGame(a, action) {
     const g = this.game;
+    if (g.blockedByPause()) return null;
     const check = g.canCare(a, action);
     if (!check.ok) return this.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name, g: a.sex }));
     return g.care(a, action, 1);
@@ -410,6 +446,7 @@ export class UI {
 
   /** Tonte ou traite (mini-jeu aussi). */
   async collectWithGame(a) {
+    if (this.game.blockedByPause()) return null;
     return this.game.collect(a);
   }
 
@@ -427,6 +464,7 @@ export class UI {
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {
+    if (this.game.blockedByPause()) return null;
     return this.game.groupCare(filter, action, 1);
   }
 

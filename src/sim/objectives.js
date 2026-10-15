@@ -31,6 +31,13 @@ export const OBJECTIVES = [
   { id: 'actvLesson1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvLessons'), 1] },
   { id: 'actvHop1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvHop'), 1] },
   { id: 'actvHutch5', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'actvHutchPlay'), 5] },
+  // 🧭 Guide de randonnée (src/sim/trailGuide.js)
+  { id: 'tgFirst', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'tgRides'), 1] },
+  { id: 'tgStars3', kind: 'quest', reward: 120, progress: (p) => [stat(p, 'tgStars3'), 1] },
+  { id: 'tgRiders10', kind: 'quest', reward: 150, progress: (p) => [stat(p, 'tgRiders'), 10] },
+  { id: 'tgAbroad', kind: 'quest', reward: 200, progress: (p) => [stat(p, 'tgAbroad'), 1] },
+  { id: 'tgPhotos10', kind: 'achievement', progress: (p) => [stat(p, 'tgPhotos'), 10] },
+  { id: 'tgExpert', kind: 'achievement', progress: (p) => [Math.min(400, p.careers?.xp?.trailGuide ?? 0), 400] },
   { id: 'zoo10', kind: 'achievement', progress: (p) => [p.animals.length, 10] },
   { id: 'world', kind: 'achievement', progress: (p) => [p.visited.length, PLACE_IDS.length] },
   { id: 'allHappy', kind: 'achievement', progress: (p) => {

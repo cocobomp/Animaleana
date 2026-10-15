@@ -37,6 +37,7 @@ import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
+import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
 import { t, L } from '../i18n.js';
 // Vue d'ensemble (d'en haut) et constructions du joueur.
 import { Structures } from './Structures.js';
@@ -109,6 +110,7 @@ export class Game {
     this.interiors = new Interiors(this);
     this.events = new Events(this);
     this.activities = new Activities(this);
+    this.trailGuide = new TrailGuide(this); // 🧭 guide de randonnée
     this.droppingMeshes = new Map();
     this.timeScale = 1; // 0 = pause
     this.profile = null;
@@ -551,6 +553,7 @@ export class Game {
     this.marker.update(dt);
     this.updateFocus();
     this.events.update(dt); // événements spéciaux
+    this.trailGuide.update(dt); // 🧭 visiteurs qui demandent une balade
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -611,6 +614,7 @@ export class Game {
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
     if (this.tripFlow.onTap(this.raycaster)) return; // chargement du véhicule de voyage
+    if (this.trailGuide.onTap(this.raycaster)) return; // 🧭 des visiteurs : on va leur parler
     // Une aide : on va la voir et on discute (src/ui/helperChat.js).
     const hitH = this.raycaster.intersectObjects([...this.helpers.values()].map((x) => x.root), true)[0];
     if (hitH) {
@@ -1071,7 +1075,7 @@ export class Game {
     if (this.player.mount) {
       best = { kind: 'dismount' };
     } else {
-      best = this.tripFlow.focusNear(pp); // près du véhicule de voyage : faire monter les animaux
+      best = this.tripFlow.focusNear(pp) ?? this.trailGuide.focusNear(pp); // véhicule de voyage, ou 🧭 visiteurs
       let bestD = best ? -1 : Infinity;
       for (const e of this.entities.values()) {
         if (e.inside) continue; // rangé dans la maison des animaux
@@ -1136,6 +1140,7 @@ export class Game {
       case 'dismount': this.dismount(); break;
       case 'spot': f.run(); break; // un coin de l'écurie ou de la maison
       case 'vehicle': this.tripFlow.interact(); break;
+      case 'trailVisitor': this.trailGuide.talk(); break; // 🧭 parler aux visiteurs (src/game/TrailGuide.js)
       default:
     }
   }

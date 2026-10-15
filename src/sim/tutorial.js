@@ -189,6 +189,11 @@ export const QUEST_GUIDE = {
   actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
   actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
   actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
+  // 🧭 Guide de randonnée (src/sim/trailGuide.js) : les visiteurs arrivent près de l'écurie.
+  tgFirst: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
+  tgStars3: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
+  tgRiders10: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
+  tgAbroad: { where: 'travel', target: { type: 'hud', id: 'travel' }, horse: true, ready: hasHorse },
 };
 
 /** Ordre conseillé des quêtes, de la plus facile à la plus difficile. */
@@ -196,6 +201,7 @@ export const QUEST_ORDER = [
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
+  'tgFirst', 'tgStars3', 'tgRiders10', 'tgAbroad', // 🧭 guide de randonnée
 ];
 
 /**
@@ -268,6 +274,10 @@ export const FOLLOW_STEPS = {
   goShowground: { target: SHOWGROUND, done: seenAny('building:showground') },
   goHutch: { target: { type: 'building', id: 'hutch' }, done: seenAny('building:hutch') },
   doActivity: { target: null, done: questDone, progress: true },
+  // 🧭 Guide de randonnée : attendre les visiteurs, préparer, partir.
+  tgWait: { target: { type: 'building', id: 'stable' }, done: (c) => (c.profile.trailGuide?.bookings ?? []).some((b) => b.place === c.profile.place) || c.questDone },
+  tgPrepare: { target: null, done: (c) => !!c.profile.trailGuide?.riding || c.questDone },
+  tgRide: { target: null, done: questDone, progress: true },
 };
 
 export const QUEST_STEPS = {
@@ -294,6 +304,11 @@ export const QUEST_STEPS = {
   actvCompete1: ['goShowground', 'doActivity'],
   actvHop1: ['goShowground', 'doActivity'],
   actvHutch5: ['goHutch', 'doActivity'],
+  // 🧭 Guide de randonnée
+  tgFirst: ['tgWait', 'tgPrepare', 'tgRide'],
+  tgStars3: ['tgWait', 'tgPrepare', 'tgRide'],
+  tgRiders10: ['tgWait', 'tgPrepare', 'tgRide'],
+  tgAbroad: ['openTravel', 'pickAbroad', 'pickMode', 'tgWait', 'tgPrepare', 'tgRide'],
 };
 
 /** Étapes d'une quête selon la situation : sans animal (ou sans cheval), on va d'abord en adopter un. */

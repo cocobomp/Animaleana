@@ -13,6 +13,7 @@ import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
 import { speciesName } from './names.js';
 import { GEAR, BLANKET_COLORS, owned, inUse } from '../sim/gear.js';
+import { travelAdvice } from './trip.js'; // voyages réalistes
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -302,13 +303,16 @@ export function openTravel(ui) {
         onClick: () => { state.mode = o.mode; ui.renderPanel(); },
       }, h('span', { class: 'card-emoji' }, mode.emoji), h('span', { class: 'card-main' }, h('b', {}, t(`mode_${o.mode}`)), h('small', {}, detail)));
     })));
+    // Voyage réaliste (ui/trip.js) : qui reste chez le voisin, véhicule, pauses, alerte long trajet.
+    out.push(...travelAdvice(ui, { here, travelers, state, option: opts.find((o) => o.mode === state.mode) }));
     out.push(h('button', {
       class: 'primary big',
       disabled: !state.mode,
       onClick: () => {
-        if (g.travel(state.dest, state.mode, [...state.bring])) ui.closePanel();
+        // On ne part plus directement : le véhicule se gare dans la cour (game/TripFlow.js).
+        if (g.tripFlow.begin(state.dest, state.mode, [...state.bring].filter((id) => here.some((a) => a.id === id)))) ui.closePanel();
       },
-    }, `${t('go')} ${PLACES[state.dest].flag}`));
+    }, `${travelers.length ? t('trip_go') : t('trip_goAlone')} ${PLACES[state.dest].flag}`));
     return out;
   };
   ui.openPanel({ title: `🧭 ${t('travelTitle')}`, render });

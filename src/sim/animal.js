@@ -78,6 +78,10 @@ export function resolveLook(speciesId, breedId, colorIndex = 0) {
   return {
     ...sp.model,
     earType: breed.earType ?? sp.model.earType,
+    horns: breed.horns ?? sp.model.horns,
+    wool: breed.wool ?? sp.model.wool,
+    beard: breed.beard ?? sp.model.beard,
+    udder: breed.udder ?? sp.model.udder,
     tailType: breed.tailType ?? sp.model.tailType,
     scale: breed.scale ?? 1,
     fluff: breed.fluff ?? 1,

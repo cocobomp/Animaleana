@@ -37,3 +37,21 @@ describe('bâtiments', () => {
     expect(animalActionAllowed('play', { sleeping: true }).ok).toBe(false);
   });
 });
+
+describe('sellerie et maison des animaux', () => {
+  const find = (list, id) => list.find((a) => a.id === id);
+  it('on range les petits animaux seulement si on en a dehors', () => {
+    const none = buildingActions('pethouse', { hour: 20, count: { pets: 0, petsOut: 0, housed: 0 } });
+    expect(find(none, 'storePets').reason).toBe('noPets');
+    const out = buildingActions('pethouse', { hour: 20, count: { pets: 2, petsOut: 2, housed: 0 } });
+    expect(find(out, 'storePets').enabled).toBe(true);
+    expect(find(out, 'outPets').reason).toBe('noneHoused');
+    const inside = buildingActions('pethouse', { hour: 20, count: { pets: 2, petsOut: 0, housed: 2, petHouseDirt: 1 } });
+    expect(find(inside, 'storePets').reason).toBe('allHoused');
+    expect(find(inside, 'cleanPetHouse').enabled).toBe(true);
+  });
+  it('le cuir ne se nettoie que s\'il est sale', () => {
+    expect(find(buildingActions('tackroom', { hour: 10, count: { tackDirty: 0 } }), 'cleanTack').reason).toBe('tackClean');
+    expect(find(buildingActions('tackroom', { hour: 10, count: { tackDirty: 1 } }), 'cleanTack').enabled).toBe(true);
+  });
+});

@@ -15,7 +15,7 @@ import { NEED_ICON } from './UI.js';
 import { bar } from './dom.js';
 import { horseBoxItems } from './facilitiesPanel.js';
 
-const BUILDING_ICON = { petshop: '🛒', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋' };
+const BUILDING_ICON = { petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋' };
 
 export function sheet(ui, title, subtitle, items, header = null, live = false) {
   ui.openPanel({
@@ -84,6 +84,11 @@ export function openBuilding(ui, kind) {
     farm: () => ui.openFarm(),
     moveCore: () => { close(); g.mgmt.build.moveCore(kind); }, // vue d'ensemble : déplacer cette installation
     tack: () => ui.openTack(),
+    cleanTack: () => ui.choreWithGame('tack').then((q) => { if (q !== null) g.cleanTack(); ui.renderPanel(); }),
+    // Maison des animaux
+    storePets: () => { g.housePets(true); close(); },
+    outPets: () => { g.housePets(false); close(); },
+    cleanPetHouse: () => ui.choreWithGame('pethouse').then((q) => { if (q !== null) g.cleanPetHouse(); ui.renderPanel(); }),
     sleep: () => { close(); g.sleep(); },
     feedPets: () => ui.groupCareWithGame((a) => ['dog', 'cat', 'rabbit'].includes(a.species), 'feed'),
     avatar: () => { close(); ui.showAvatarEditor(g.profile, () => ui.clearScreen()); },
@@ -96,6 +101,8 @@ export function openBuilding(ui, kind) {
     facEnter: () => { close(); g.interiors.enter(kind); },
     facManage: () => ui.openFacility(kind),
   };
+  // Maison des animaux : qui dort dans quel coin.
+  const header = kind === 'pethouse' ? () => petHouseList(g) : null;
   sheet(ui, `${BUILDING_ICON[kind]} ${name}`, t(`bldd_${kind}`), () => g.buildingActions(kind).map((a) => ({
     icon: a.icon,
     label: t(`do_${a.id}`),
@@ -111,7 +118,22 @@ export function openBuilding(ui, kind) {
       manual: () => { ui.openBuilding(kind); },
     },
     free: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'checkHorses'].includes(a.id), // possible même en pause
-  })));
+  })), header, kind === 'pethouse');
+}
+
+/** Les coins de la maison des animaux : un panier par chien, chat ou lapin. */
+function petHouseList(g) {
+  const pets = g.animalsHere().filter((a) => ['dog', 'cat', 'rabbit'].includes(a.species));
+  if (!pets.length) return h('p', { class: 'note' }, t('ph_empty'));
+  return h('div', { class: 'ph-list' }, pets.map((a, i) => {
+    const e = g.entities.get(a.id);
+    const where = !a.housed ? t('ph_outside') : e?.inside ? (e.sleeping ? t('ph_sleeping') : t('ph_inside')) : t('ph_coming');
+    return h('div', { class: `ph-row ${a.housed ? 'in' : ''}` },
+      h('span', { class: 'ph-spot' }, `${i + 1}`),
+      h('span', { class: 'ph-emoji' }, SPECIES[a.species].emoji),
+      h('b', {}, a.name),
+      h('small', {}, where));
+  }));
 }
 
 /** Menu rapide d'un animal touché : les soins les plus courants + « Plus… » pour la fiche complète. */

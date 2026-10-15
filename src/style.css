@@ -983,3 +983,11 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
   #quest-tracker { width: min(300px, calc(100vw - 20px)); }
   .qt-step { font-size: 0.85rem; }
 }
+
+/* Maison des animaux : un coin par animal */
+.ph-list { display: grid; gap: 6px; margin-bottom: 10px; }
+.ph-row { display: grid; grid-template-columns: 28px 28px 1fr auto; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; }
+.ph-row.in { background: #fff6e2; }
+.ph-spot { width: 24px; height: 24px; border-radius: 50%; background: #3d7a8c; color: #fff; display: grid; place-items: center; font-size: 0.8rem; font-weight: 700; }
+.ph-emoji { font-size: 1.3rem; }
+.ph-row small { color: var(--muted); }

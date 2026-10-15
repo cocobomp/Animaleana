@@ -46,6 +46,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     farm: { autoHerd: true },
     facilities: defaultFacilities(), // propreté, usure, améliorations et box (src/sim/facilities.js)
     structures: [], // constructions du joueur { id, type, place, x, z, rot } (src/sim/construction.js)
+    petHouse: { dirt: 0 }, // saleté des paniers de la maison des animaux
     // Événements spéciaux (orage, animal blessé…) : voir src/sim/events.js.
     events: { active: null, cooldowns: {}, nextAt: 0, lastRoll: -1, weather: null, done: {} },
     settings: { camera: 'third', timeSpeed: 'normal' },

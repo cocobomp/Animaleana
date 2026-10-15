@@ -156,6 +156,19 @@ export class AnimalEntity {
     return (this.data.homeId && this.world.structureHomes?.get(this.data.homeId)) || null;
   }
 
+  /** Ressort de la maison des animaux (devant la porte). */
+  leaveHouse() {
+    if (this.inside) {
+      const den = this.world.petHouse;
+      if (den) this.root.position.set(den.door.x + (Math.random() - 0.5) * 2, 0, den.door.z + 0.8 + Math.random());
+      this.snap();
+    }
+    this.inside = false;
+    this.root.visible = true;
+    this.state = 'idle';
+    this.timer = 1;
+  }
+
   get position() {
     return this.root.position;
   }
@@ -372,12 +385,35 @@ export class AnimalEntity {
     const distPlayer = p.distanceTo(ctx.playerPos);
     this.label.visible = false; // les noms sont affichés en HTML (étiquettes qu'on peut toucher)
 
+    // Maison des animaux : on y va par la porte, puis on dort à l'abri dans son panier.
+    if (d.housed && (d.following || this.ridden)) d.housed = false;
+    const den = d.housed ? this.world.petHouse : null;
+    if (!den && this.inside) this.leaveHouse();
+    if (den && this.inside) {
+      this.sleeping = ctx.night || d.needs.energy < 90;
+      this.speed = 0;
+      return;
+    }
+    if (den) {
+      const dx = den.door.x - p.x;
+      const dz = den.door.z - p.z;
+      if (Math.hypot(dx, dz) < 1.3) {
+        this.inside = true;
+        this.root.visible = false;
+        this.state = 'idle';
+        return;
+      }
+      this.state = 'walk';
+      this.target.set(den.door.x, 0, den.door.z);
+      this.timer = 5;
+    }
+
     if (this.ridden) {
       this.sleeping = false;
     } else {
       // Un cheval qui rentre au box ne s'endort pas en chemin.
       const stall = d.stalled ? this.world.stallOf?.(d) : null;
-      const busy = this.herdCtrl || this.state === 'goTo' || this.state === 'eat'
+      const busy = this.herdCtrl || this.state === 'goTo' || this.state === 'eat' || den
         || (stall && Math.hypot(p.x - stall.x, p.z - stall.z) > 1.2);
       const tired = d.needs.energy < 12 || (this.sleeping && d.needs.energy < 60);
       this.sleeping = !busy && !d.following && (ctx.night || tired) && distPlayer > 2.5;

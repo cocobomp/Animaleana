@@ -1,4 +1,4 @@
-# Animaleana 🐴🐶🐱🐰
+# Animadichelle 🐴🐶🐱🐰
 
 Jeu 3D **gratuit** et **sans réseau** : adopte des animaux, occupe-toi d'eux comme dans la vraie vie et voyage avec eux à travers le monde, même à cheval.
 

@@ -80,6 +80,18 @@ const RULES = {
   petshop: [
     { id: 'shop', icon: '🛒', when: (c) => open(c, 9, 19) },
   ],
+  // Sellerie : on y achète et range le matériel, et on entretient le cuir.
+  tackroom: [
+    { id: 'tack', icon: '🏇', when: () => null },
+    { id: 'cleanTack', icon: '🧽', when: (c) => (c.count.tackDirty ? null : { reason: 'tackClean' }) },
+  ],
+  // Maison des animaux : chiens, chats et lapins y ont chacun leur coin pour dormir.
+  pethouse: [
+    { id: 'storePets', icon: '🏠', when: (c) => (c.count.pets ? (c.count.petsOut ? null : { reason: 'allHoused' }) : { reason: 'noPets' }) },
+    { id: 'outPets', icon: '🌿', when: (c) => (c.count.housed ? null : { reason: 'noneHoused' }) },
+    { id: 'feedPets', icon: '🥣', when: (c) => need(c.count.pets, 'noPets') },
+    { id: 'cleanPetHouse', icon: '🧹', when: (c) => (c.count.petHouseDirt ? null : { reason: 'alreadyClean' }) },
+  ],
   vet: [
     { id: 'vet', icon: '🩺', when: (c) => (inHours(c.hour, 8, 19) || c.count.sick > 0 ? null : { reason: 'vetClosed', params: { h: fmtHour(8) } }) },
   ],

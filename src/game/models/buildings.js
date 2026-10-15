@@ -328,3 +328,44 @@ export function lighthouse() {
   add(g, new THREE.ConeGeometry(1.4, 1.2, 16), mat(0x2b2b2b), [0, 13.8, 0]);
   return g;
 }
+
+/** Sellerie : petit bâtiment en bois où l'on range selles, filets et licols. */
+export function tackRoom(label) {
+  const g = building({ w: 7, d: 5, h: 3, wall: 0x8a5a36, roof: 0x5a4636, roofH: 1.6, windows: 1, doorColor: 0x4a2c18, doorW: 1.4, wallTex: 'planks', roofTex: 'shingle' });
+  const wood = mat(0x6e4a2c, 0.8, { map: tiled(planksTexture(), 0.3, 0.3) });
+  const leather = mat(0x7a3f1c, 0.45);
+  const dark = mat(0x2a1a10, 0.6);
+  // Porte-selles devant la façade, avec une selle posée dessus et un tapis.
+  for (const x of [1.9, 3.1]) add(g, new THREE.BoxGeometry(0.1, 1, 0.1), wood, [x, 0.5, 2.9]);
+  add(g, new THREE.BoxGeometry(1.4, 0.1, 0.12), wood, [2.5, 1.0, 2.9]);
+  const seat = add(g, new THREE.CylinderGeometry(0.32, 0.32, 0.55, 14, 1, false, 0, Math.PI), leather, [2.5, 1.05, 2.9], [0, 0, Math.PI / 2]);
+  seat.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+  add(g, new THREE.BoxGeometry(0.05, 0.4, 0.04), dark, [2.18, 0.82, 2.9]); // étrivière
+  add(g, new THREE.BoxGeometry(0.16, 0.05, 0.1), mat(0xb8b8b8, 0.3, { metalness: 0.8 }), [2.18, 0.6, 2.9]); // étrier
+  add(g, new THREE.BoxGeometry(0.75, 0.04, 0.6), mat(0x2f5f9e, 0.9), [2.5, 1.02, 2.9]); // tapis de selle
+  // Licols accrochés au mur.
+  [-3.05, -2.65].forEach((x, i) => {
+    const ring = add(g, new THREE.TorusGeometry(0.16, 0.035, 6, 14), mat(i ? 0xc0392b : 0x2e86c1, 0.5), [x, 1.5, 2.56]);
+    ring.castShadow = false;
+  });
+  sign(g, label, [0, 3.35, 2.56], '#4a2c18', '🏇', 2.6);
+  return { group: g, size: [7, 5] };
+}
+
+/** Maison des animaux : chaque chien, chat ou lapin y a son coin, son panier et sa gamelle. */
+export function petHouse(label) {
+  const g = building({ w: 8, d: 5, h: 2.8, wall: 0xf3d9a4, roof: 0xb4553a, roofH: 1.5, windows: 2, doorColor: 0x3d7a8c, wallTex: 'plaster', roofTex: 'tiles', shutters: 0x3d7a8c });
+  const dark = mat(0x22180f, 0.9);
+  const frame = mat(0xfff4e0, 0.6);
+  // Petites chatières et trappes pour chiens, de chaque côté de la porte.
+  for (const [x, r] of [[-2.4, 0.32], [-1.5, 0.22], [1.5, 0.22], [2.4, 0.42]]) {
+    add(g, new THREE.CircleGeometry(r + 0.06, 18, 0, Math.PI), frame, [x, 0.55, 2.52]);
+    add(g, new THREE.CircleGeometry(r, 18, 0, Math.PI), dark, [x, 0.56, 2.53]);
+    add(g, new THREE.PlaneGeometry(r * 2 + 0.12, 0.55), frame, [x, 0.28, 2.52]);
+    add(g, new THREE.PlaneGeometry(r * 2, 0.55), dark, [x, 0.29, 2.53]);
+  }
+  // Gamelles devant la porte.
+  for (const [x, c] of [[-0.9, 0xd94f4f], [0.9, 0x3f8fd9]]) add(g, new THREE.CylinderGeometry(0.17, 0.13, 0.09, 14), mat(c, 0.4), [x, 0.05, 3.1]);
+  sign(g, label, [0, 3.15, 2.56], '#3d7a8c', '🐾', 2.8);
+  return { group: g, size: [8, 5] };
+}

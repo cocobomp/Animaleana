@@ -1,4 +1,4 @@
-# Animaleana — Document de conception (GDD)
+# Animadichelle — Document de conception (GDD)
 
 > Jeu gratuit, **sans réseau**, en 3D semi-réaliste : adopter des animaux, s'en
 > occuper comme dans la vraie vie, et voyager avec eux (même à cheval jusqu'à

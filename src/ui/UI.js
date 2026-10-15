@@ -167,7 +167,7 @@ export class UI {
     const placed = [];
     const items = [];
     for (const e of entities) {
-      if (e.ridden) continue;
+      if (e.ridden || e.inside) continue; // (dans la maison des animaux : on ne le voit pas)
       const d = e.position.distanceTo(playerPos);
       if (d > 14) continue;
       const v = e.position.clone();
@@ -329,6 +329,8 @@ export class UI {
       lodge: () => t('enterLodge'),
       jobs: () => t('jobBoard'),
       petshop: () => t('bld_petshop'),
+      tackroom: () => t('bld_tackroom'),
+      pethouse: () => t('bld_pethouse'),
       stable: () => t('bld_stable'),
       paddock: () => t('bld_paddock'),
       kennel: () => t('bld_kennel'),
@@ -336,7 +338,7 @@ export class UI {
       pen: () => t('bld_pen'),
       dismount: () => t('dismount'),
     };
-    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }

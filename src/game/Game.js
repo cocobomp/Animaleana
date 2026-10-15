@@ -46,6 +46,9 @@ import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, traj
 import { Marker } from './Marker.js';
 import { Emitter } from './events.js';
 
+// Animaux qu'on range dans la maison des animaux.
+const PET_HOUSED = ['dog', 'cat', 'rabbit'];
+
 const CARE_EMOJI = {
   feed: '🍖', water: '💧', brush: '✨', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨',
   pet: '❤️', treat: '🍪', play: '⚽', lunge: '⭐', liberty: '💛',
@@ -474,7 +477,10 @@ export class Game {
         const before = mood(a);
         if (e) {
           const kind = digest(a, hours);
-          if (kind) {
+          if (kind && e.inside) {
+            // Dans la maison des animaux : ça salit les paniers (à nettoyer).
+            this.profile.petHouse = { ...(this.profile.petHouse ?? {}), dirt: Math.min(9, (this.profile.petHouse?.dirt ?? 0) + (kind === 'poop' ? 1 : 0.5)) };
+          } else if (kind) {
             const back = 0.5 * (a.look.bodyLen * e.scale);
             const d = addDropping(this.profile, this.profile.place, e.position.x - Math.sin(e.heading) * back, e.position.z - Math.cos(e.heading) * back, kind, this.profile.clock, a.species);
             this.spawnDropping(d);
@@ -484,10 +490,11 @@ export class Game {
           }
         }
         // + la saleté de son box / de la maison (src/game/Interiors.js)
-        const dirt = (e ? dirtNear(this.profile, this.profile.place, e.position.x, e.position.z) : 0) + this.interiors.dirtFor(a);
+        const dirt = e?.inside ? Math.floor(this.profile.petHouse?.dirt ?? 0)
+          : (e ? dirtNear(this.profile, this.profile.place, e.position.x, e.position.z) : 0) + this.interiors.dirtFor(a);
         const events = tickAnimal(a, hours, {
           dirt,
-          weather: this.interiors.feltWeather(a, feltWeather(a, weather, this.temperature, this.season)), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
+          weather: e?.inside ? 'clear' : this.interiors.feltWeather(a, feltWeather(a, weather, this.temperature, this.season)), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
         });
         tickProduce(a, hours);
         // Chaque promenade fait progresser le chien (obéissance et « Au pied »).
@@ -588,7 +595,7 @@ export class Game {
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
     if (this.tripFlow.onTap(this.raycaster)) return; // chargement du véhicule de voyage
-    const roots = [...this.entities.values()].filter((e) => !e.ridden).map((e) => e.root);
+    const roots = [...this.entities.values()].filter((e) => !e.ridden && !e.inside).map((e) => e.root);
     const hitA = this.raycaster.intersectObjects(roots, true).find((h) => !h.object.isSprite || h.object === h.object.parent?.userData?.entity?.label);
     if (hitA) {
       let o = hitA.object;
@@ -676,6 +683,11 @@ export class Game {
         milkable: here.filter((a) => a.produceReady && sp(a).product?.action === 'milk').length,
         shearable: here.filter((a) => a.produceReady && sp(a).product?.action === 'shear').length,
         paddockDroppings: this.zoneDroppings('paddock'),
+        // Maison des animaux et sellerie
+        petsOut: here.filter((a) => PET_HOUSED.includes(a.species) && !a.housed).length,
+        housed: here.filter((a) => a.housed).length,
+        petHouseDirt: Math.floor(this.profile.petHouse?.dirt ?? 0),
+        tackDirty: this.day - (this.profile.tackCleanedDay ?? -99) >= 2 ? 1 : 0,
         penDroppings: this.zoneDroppings('pen'),
       },
     };
@@ -767,6 +779,46 @@ export class Game {
       n++;
     }
     this.ui.toast(n ? t(where === 'field' ? 'horsesOut' : 'storedHorses') : t('nobody'));
+  }
+
+  /** Chiens, chats et lapins vont dormir dans la maison des animaux (in = true) ou en sortent. */
+  housePets(inside = true) {
+    if (inside && !this.world.petHouse) return this.ui.toast(t('noPetHouse'));
+    let n = 0;
+    for (const e of this.entities.values()) {
+      const a = e.data;
+      if (!PET_HOUSED.includes(a.species) || !!a.housed === inside) continue;
+      if (inside && a.following) {
+        a.following = false;
+        a.leashed = false;
+      }
+      a.housed = inside;
+      if (!inside) e.leaveHouse();
+      n++;
+    }
+    this.ui.toast(n ? t(inside ? 'petsHoused' : 'petsOutside', { n }) : t('nobody'));
+    if (n) this.xp('care');
+    return n;
+  }
+
+  /** Nettoyer les paniers et les coins de la maison des animaux. */
+  cleanPetHouse() {
+    const p = this.profile;
+    const n = Math.floor(p.petHouse?.dirt ?? 0);
+    p.petHouse = { ...(p.petHouse ?? {}), dirt: 0 };
+    if (n) {
+      addStat(p, 'scoop', n);
+      this.xp('care', Math.min(3, n));
+    }
+    this.ui.toast(n ? t('petHouseCleaned', { n }) : t('why_alreadyClean'));
+  }
+
+  /** Entretenir le cuir (selles, filets, licols) : nettoyer puis graisser. */
+  cleanTack() {
+    this.profile.tackCleanedDay = this.day;
+    addStat(this.profile, 'tackClean');
+    this.xp('care', 2);
+    this.ui.toast(t('tackCleaned'));
   }
 
   /** Ce qui demande l'attention du joueur maintenant (pour le bouton ⏩). */
@@ -996,6 +1048,7 @@ export class Game {
       best = this.tripFlow.focusNear(pp); // près du véhicule de voyage : faire monter les animaux
       let bestD = best ? -1 : Infinity;
       for (const e of this.entities.values()) {
+        if (e.inside) continue; // rangé dans la maison des animaux
         const d = Math.hypot(e.position.x - pp.x, e.position.z - pp.z) - e.radius;
         if (d < 1.6 && d < bestD) {
           bestD = d;
@@ -1033,6 +1086,8 @@ export class Game {
       case 'animal': this.ui.openAnimalActions(f.entity.data); break;
       case 'refuge':
       case 'petshop':
+      case 'tackroom':
+      case 'pethouse':
       case 'vet':
       case 'house':
       case 'lodge':

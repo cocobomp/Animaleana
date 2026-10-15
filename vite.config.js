@@ -7,7 +7,8 @@ function offlineServiceWorker() {
     name: 'animaleana-offline',
     apply: 'build',
     generateBundle(_, bundle) {
-      const files = ['./', './index.html', './manifest.webmanifest', './icon.svg',
+      const files = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png',
+        './icon-maskable-512.png', './apple-touch-icon.png',
         ...Object.keys(bundle).map((f) => `./${f}`)];
       const version = Date.now().toString(36);
       const source = `// Généré automatiquement au build.

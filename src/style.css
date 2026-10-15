@@ -565,5 +565,17 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .task-icon { min-height: 32px; width: 32px; padding: 0; }
 .task-icon-space { width: 32px; }
 .task-manual { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: #fdf0d8; border-radius: 12px; padding: 6px 8px; font-weight: 700; font-size: 0.9rem; }
-.ba-wrap { position: relative; display: grid; }
-.ba-queue { position: absolute; top: 4px; right: 4px; min-height: 34px; width: 34px; padding: 0; border-radius: 10px; font-size: 1rem; background: rgba(255, 255, 255, 0.9); }
+.ba-wrap { display: grid; grid-template-columns: 1fr auto; gap: 4px; align-items: stretch; }
+.ba-queue { min-height: 44px; width: 40px; padding: 0; border-radius: 12px; font-size: 1.1rem; }
+
+/* ---------------------------------------------------------------- Bâtiments à entretenir (fac_) */
+.fac-main .bar { grid-template-columns: 110px 1fr 34px; }
+.fac-cap { font-weight: 600; margin: 4px 0 8px; }
+.fac-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 8px 0; }
+.fac-box { display: grid; gap: 4px; text-align: left; min-height: 64px; padding: 8px 10px; border-radius: 14px; }
+.fac-box b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fac-box small { color: var(--muted); font-size: 0.78rem; }
+.mini-fill.low { background: var(--low); }
+.fac-row button { min-height: 52px; }
+
+.color-pick { display: inline-flex; align-items: center; gap: 6px; }

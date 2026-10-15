@@ -4,12 +4,14 @@ import * as THREE from 'three';
 import { sheepfold, kennel, hutch, wireFence } from './models/equipment.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { enclosure, fenceColliders } from './nav.js';
+import * as B from './models/buildings.js';
+import { t } from '../i18n.js';
 
 const W = 20;
 const D = 14;
 const GATE = 4;
 
-export function buildFarm(world, group) {
+export function buildFarm(world, group, isHome = false) {
   const cx = PEN.x;
   const cz = PEN.z;
   const wood = new THREE.MeshStandardMaterial({ color: 0x9a7650, roughness: 0.9 });
@@ -78,6 +80,16 @@ export function buildFarm(world, group) {
   }
   world.interactables.push({ kind: 'hutch', x: hu.x, z: hu.z + hu.hd + 1 });
   world.interactables.push({ kind: 'paddock', x: -7.6, z: 16 });
+
+  // Animalerie (à la maison) : on y choisit et on y achète son animal.
+  if (isHome) {
+    const shop = B.refuge(t('bld_petshop'), true);
+    shop.group.position.set(18, world.heightAt(18, -20), -20);
+    shop.group.rotation.y = -Math.PI / 2;
+    group.add(shop.group);
+    world.colliders.push({ x: 18, z: -20, hw: 3.8, hd: 4.8, kind: 'petshop' });
+    world.interactables.push({ kind: 'petshop', x: 18 - 4.9, z: -20 });
+  }
 
   const fold = sheepfold();
   fold.position.set(cx, world.heightAt(cx, cz - D / 2 + 2.6), cz - D / 2 + 2.6);

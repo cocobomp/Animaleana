@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { checkTravel, rollWeather } from '../src/sim/places.js';
-import { adoptionCandidates } from '../src/sim/adoption.js';
+import { adoptionCandidates, adoptionPrice, shopPrice } from '../src/sim/adoption.js';
 
 describe('voyages', () => {
   it('on peut aller dans les Alpes à cheval, mais pas au Japon', () => {
@@ -30,5 +30,14 @@ describe('adoption', () => {
     const list = adoptionCandidates('maison', 2);
     const again = adoptionCandidates('maison', 2, [list[0].adoptKey]);
     expect(again.length).toBe(list.length - 1);
+  });
+});
+
+describe('animalerie', () => {
+  it('le refuge est gratuit, une race rare coûte plus cher', () => {
+    expect(adoptionPrice()).toBe(0);
+    expect(shopPrice('horse', 'arabe')).toBeGreaterThan(shopPrice('horse', 'shetland'));
+    expect(shopPrice('cat', 'maine_coon')).toBeGreaterThan(shopPrice('cat', 'europeen'));
+    expect(shopPrice('horse', 'selle_francais', 'adult')).toBeGreaterThan(shopPrice('horse', 'selle_francais', 'baby'));
   });
 });

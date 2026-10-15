@@ -9,6 +9,7 @@ import { groundDetail } from './textures.js';
 import * as B from './models/buildings.js';
 import { forest, rocks, groundCover, mountainRing } from './models/nature.js';
 import { buildFarm } from './farmLayout.js';
+import { buildInteriors } from './Interiors.js'; // écurie et maison où l'on entre
 
 const SIZE = 420;
 const SEGMENTS = 168;
@@ -189,11 +190,9 @@ export class World {
     };
     const doorOf = (x, z, d, rotY = 0) => ({ x: x + Math.sin(rotY) * (d / 2 + 1.4), z: z + Math.cos(rotY) * (d / 2 + 1.4) });
 
+    // Maison et écurie où l'on entre (murs, portes, pièces) : voir src/game/Interiors.js.
+    buildInteriors(this, g, isHome);
     if (isHome) {
-      place(B.house(t('title')), 0, -16, 0, 'house');
-      this.interactables.push({ kind: 'house', ...doorOf(0, -16, 7) });
-      place(B.stable(L({ fr: 'Écurie', en: 'Stable' })), -22, -2, Math.PI / 2, 'stable');
-      this.interactables.push({ kind: 'stable', ...doorOf(-22, -2, 7, Math.PI / 2) });
       place(B.jobBoard(t('jobBoard')), 6, -9.5, 0, 'jobs');
       this.interactables.push({ kind: 'jobs', x: 6, z: -8.4 });
     } else {
@@ -217,7 +216,7 @@ export class World {
     deco(B.trough(), -21.5, 11, Math.PI / 2);
     deco(B.hayBale(), -21.5, 21);
     deco(B.hayBale(), -27, 8, 0.4);
-    buildFarm(this, g);
+    buildFarm(this, g, isHome);
     if (p.biome === 'garden') deco(B.torii(), 0, 30);
     if (p.biome === 'beach') deco(B.lighthouse(), 70, -60);
 
@@ -366,7 +365,9 @@ export class World {
 
   /** Vrai si le point est à l'intérieur d'un bâtiment (pour la caméra). */
   insideBuilding(x, y, z) {
-    return this.colliders.some((c) => !c.fence && !c.equip && !c.wire && !c.jump && !c.small && Math.abs(x - c.x) < c.hw && Math.abs(z - c.z) < c.hd && y < this.heightAt(c.x, c.z) + 7);
+    // Bâtiments où l'on entre : leur volume compte, sauf celui où l'on est (vue en coupe).
+    if ((this.camVolumes ?? []).some((v) => v.id !== this.cutaway && Math.abs(x - v.x) < v.hw && Math.abs(z - v.z) < v.hd && y < v.top)) return true;
+    return this.colliders.some((c) => !c.fence && !c.equip && !c.wire && !c.jump && !c.small && !c.room && Math.abs(x - c.x) < c.hw && Math.abs(z - c.z) < c.hd && y < this.heightAt(c.x, c.z) + 7);
   }
 
   /** Repousse un point (x, z, rayon) hors des bâtiments. */

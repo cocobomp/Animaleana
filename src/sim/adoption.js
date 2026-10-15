@@ -17,10 +17,40 @@ export function breedsFor(placeId, isHome = false) {
   return list;
 }
 
-export function adoptionPrice(a) {
-  const sp = SPECIES[a.species];
-  const breed = sp.breeds.find((b) => b.id === a.breed);
-  return Math.round(sp.price * (breed?.rarity ?? 1) * (a.ageDays < sp.adultYears * DAYS_PER_YEAR ? 1.2 : 1));
+/** Au refuge, on recueille les animaux gratuitement. */
+export function adoptionPrice() {
+  return 0;
+}
+
+export const AGE_STAGES = ['baby', 'young', 'adult'];
+
+/** Âge (en jours de jeu) pour chaque choix d'âge à l'animalerie. */
+export function stageAgeDays(speciesId, stage) {
+  const sp = SPECIES[speciesId];
+  const adult = sp.adultYears * DAYS_PER_YEAR;
+  if (stage === 'baby') return adult * 0.15;
+  if (stage === 'young') return adult * 0.6;
+  return adult * 1.6;
+}
+
+/**
+ * Prix à l'animalerie / à l'élevage : prix de base de l'espèce, plus cher pour une race
+ * rare et prisée. Un cheval adulte (déjà débourré) coûte plus cher qu'un poulain ;
+ * pour les petits animaux, c'est le bébé qui est le plus demandé.
+ */
+export function shopPrice(speciesId, breedId, stage = 'young') {
+  const sp = SPECIES[speciesId];
+  const breed = sp.breeds.find((b) => b.id === breedId);
+  const rarity = breed?.rarity ?? 1;
+  const breedFactor = 0.7 + 0.45 * rarity ** 1.4;
+  const big = ['horse', 'cow'].includes(speciesId);
+  const ageFactor = { baby: big ? 0.75 : 1.2, young: 1, adult: big ? 1.3 : 0.85 }[stage];
+  return Math.round((sp.price * breedFactor * ageFactor) / 5) * 5;
+}
+
+/** Races vendues : à l'animalerie de la maison, les races courantes et locales ; en voyage, celles de l'élevage local. */
+export function shopBreeds(placeId, isHome) {
+  return breedsFor(placeId, isHome);
 }
 
 /** Liste du jour, identique tant que le jour ne change pas (graine fixe). */

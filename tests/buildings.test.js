@@ -13,7 +13,8 @@ describe('bâtiments', () => {
   });
 
   it('le refuge est fermé la nuit', () => {
-    expect(find(buildingActions('refuge', { hour: 21, count }), 'adopt')).toMatchObject({ enabled: false, reason: 'closed' });
+    expect(find(buildingActions('refuge', { hour: 21, home: true, count }), 'adopt')).toMatchObject({ enabled: false, reason: 'closed' });
+    expect(find(buildingActions('refuge', { hour: 10, home: false, count }), 'shop').enabled).toBe(true);
   });
 
   it('on trait le matin et le soir, on tond au printemps et en été', () => {

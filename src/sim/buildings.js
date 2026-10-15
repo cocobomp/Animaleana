@@ -12,7 +12,7 @@ const fmtHour = (h) => `${Math.floor(h)} h`;
 const RULES = {
   stable: [
     { id: 'checkHorses', icon: '🔦', when: (c) => need(c.count.horse) },
-    { id: 'storeHorses', icon: '🏠', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 22) },
+    { id: 'storeHorses', icon: '🏠', when: (c) => need(c.count.horse) }, // au box, même le soir
     { id: 'outHorses', icon: '🌿', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 19) },
     { id: 'hayHorses', icon: '🌾', when: (c) => need(c.count.horse) },
     { id: 'waterHorses', icon: '💧', when: (c) => need(c.count.horse) },
@@ -20,6 +20,10 @@ const RULES = {
     { id: 'cleanStalls', icon: '🧹', when: (c) => (c.count.horse || c.count.paddockDroppings ? null : { reason: 'noAnimals' }) ?? sleeping(c, 6, 21) },
     { id: 'tack', icon: '🏇', when: () => null },
     { id: 'farm', icon: '🔧', when: () => null },
+    // Bâtiments à entretenir (src/sim/facilities.js)
+    { id: 'facPaddock', icon: '🌳', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 22) },
+    { id: 'facEnter', icon: '🚪', when: () => null },
+    { id: 'facManage', icon: '📋', when: () => null },
   ],
   paddock: [
     { id: 'horsesToPaddock', icon: '🐴', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 22) },
@@ -51,18 +55,26 @@ const RULES = {
     // On tond au printemps et en été.
     { id: 'shearAll', icon: '🧶', when: (c) => need(c.count.shearable, 'noneReady') ?? (['spring', 'summer'].includes(c.season) ? null : { reason: 'shearSeason' }) ?? dayOnly(c, 7, 19) },
     { id: 'farm', icon: '🔧', when: () => null },
+    { id: 'facManage', icon: '📋', when: () => null }, // entretien et améliorations
   ],
   house: [
     { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 10) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },
     { id: 'feedPets', icon: '🥣', when: (c) => need(c.count.pets) },
     { id: 'avatar', icon: '👕', when: () => null },
+    { id: 'facEnter', icon: '🚪', when: () => null }, // entrer dans la maison
+    { id: 'facManage', icon: '📋', when: () => null },
   ],
   lodge: [
     { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 10) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },
     { id: 'feedPets', icon: '🥣', when: (c) => need(c.count.pets) },
   ],
   refuge: [
-    { id: 'adopt', icon: '🐾', when: (c) => open(c, 9, 18) },
+    // À la maison : refuge (gratuit). En voyage : élevage local (payant, on choisit).
+    { id: 'adopt', icon: '🐾', when: (c) => (c.home ? open(c, 9, 18) : { reason: 'notHere' }) },
+    { id: 'shop', icon: '🛒', when: (c) => (c.home ? { reason: 'notHere' } : open(c, 9, 19)) },
+  ],
+  petshop: [
+    { id: 'shop', icon: '🛒', when: (c) => open(c, 9, 19) },
   ],
   vet: [
     { id: 'vet', icon: '🩺', when: (c) => (inHours(c.hour, 8, 19) || c.count.sick > 0 ? null : { reason: 'vetClosed', params: { h: fmtHour(8) } }) },
@@ -90,9 +102,10 @@ function sleeping(c, from, to) {
 }
 
 export function buildingActions(kind, ctx) {
-  return (RULES[kind] ?? []).map((r) => {
+  return (RULES[kind] ?? []).flatMap((r) => {
     const block = r.when(ctx);
-    return { id: r.id, icon: r.icon, enabled: !block, reason: block?.reason ?? null, params: block?.params ?? {} };
+    if (block?.reason === 'notHere') return [];
+    return [{ id: r.id, icon: r.icon, enabled: !block, reason: block?.reason ?? null, params: block?.params ?? {} }];
   });
 }
 

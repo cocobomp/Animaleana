@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { HELPERS, helperTask } from '../sim/farm.js';
 import { buildAvatar } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
+import { navTarget } from './nav.js';
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x5a3a24];
 const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xa63a1f, 0x9a9a9a];
@@ -112,7 +113,9 @@ export class HelperEntity {
     }
 
     if (targetSpeed > 0) {
-      const want = Math.atan2(this.target.x - p.x, this.target.z - p.z);
+      // Passe par les portes (enclos, écurie, maison).
+      const way = navTarget(p, this.target);
+      const want = Math.atan2(way.x - p.x, way.z - p.z);
       let diff = want - this.heading;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 6);

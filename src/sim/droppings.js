@@ -22,7 +22,9 @@ export function addDropping(profile, place, x, z, kind, clock, species = 'horse'
   profile.droppings = profile.droppings ?? [];
   const d = { id: uid(), place, x, z, kind, clock, species };
   profile.droppings.push(d);
-  if (profile.droppings.length > MAX_DROPPINGS) profile.droppings.shift();
+  // Trop de crottins : les plus vieux disparaissent (le jeu retire aussi leur affichage).
+  d.removed = [];
+  while (profile.droppings.length > MAX_DROPPINGS) d.removed.push(profile.droppings.shift().id);
   return d;
 }
 

@@ -141,6 +141,9 @@ export class AnimalEntity {
 
   /** Zone de vie : les animaux de ferme sont soit à la bergerie, soit au pré. */
   get home() {
+    // Cheval rentré : sa zone de vie est son box (src/game/Interiors.js).
+    const stall = this.data.stalled ? this.world.stallOf?.(this.data) : null;
+    if (stall) return stall;
     if (this.sp.livestock) return this.data.zone === 'field' ? FIELD : PEN;
     return HOME[this.data.species];
   }
@@ -211,6 +214,14 @@ export class AnimalEntity {
     const g = ctx.game;
     this.partner = null;
 
+    // Au box, le cheval reste chez lui : il tourne un peu, mange, dort.
+    if (d.stalled && this.world.stallOf?.(d)) {
+      this.state = this.state === 'idle' ? 'walk' : 'idle';
+      if (this.state === 'walk') this.pickWanderTarget();
+      this.timer = 3 + Math.random() * 6;
+      return;
+    }
+
     const eq = g.wantedEquipment(d);
     if (eq) {
       this.state = 'goTo';
@@ -268,7 +279,7 @@ export class AnimalEntity {
 
     // Les chevaux (et vaches, chèvres) se font des toilettages mutuels.
     if (['horse', 'cow', 'goat'].includes(d.species) && Math.random() < 0.2) {
-      const mate = others.find((o) => o.data.species === d.species && near(o, 8) && o.state !== 'groom');
+      const mate = others.find((o) => o.data.species === d.species && near(o, 8) && o.state !== 'groom' && !o.data.stalled);
       if (mate) {
         this.state = 'groom';
         this.partner = mate;
@@ -356,7 +367,10 @@ export class AnimalEntity {
     if (this.ridden) {
       this.sleeping = false;
     } else {
-      const busy = this.herdCtrl || this.state === 'goTo' || this.state === 'eat';
+      // Un cheval qui rentre au box ne s'endort pas en chemin.
+      const stall = d.stalled ? this.world.stallOf?.(d) : null;
+      const busy = this.herdCtrl || this.state === 'goTo' || this.state === 'eat'
+        || (stall && Math.hypot(p.x - stall.x, p.z - stall.z) > 1.2);
       const tired = d.needs.energy < 12 || (this.sleeping && d.needs.energy < 60);
       this.sleeping = !busy && !d.following && (ctx.night || tired) && distPlayer > 2.5;
       this.targetSpeed = 0;

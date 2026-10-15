@@ -2,10 +2,12 @@
 
 import { h, bar, hexColor } from './dom.js';
 import { t, L, getLang, setLang } from '../i18n.js';
-import { SPECIES, getBreed } from '../sim/species.js';
+import { SPECIES, getBreed, NAMES } from '../sim/species.js';
+import { pick } from '../sim/rng.js';
 import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass } from '../sim/animal.js';
 import { DAYS_PER_YEAR } from '../sim/time.js';
-import { adoptionCandidates, adoptionPrice } from '../sim/adoption.js';
+import { adoptionCandidates, adoptionPrice, shopPrice, shopBreeds, AGE_STAGES, stageAgeDays } from '../sim/adoption.js';
+import { createAnimal } from '../sim/animal.js';
 import { PLACES, PLACE_IDS, distanceKm, TRAVEL_MODES } from '../sim/places.js';
 import { OBJECTIVES } from '../sim/objectives.js';
 import { canAfford, isSandbox } from '../sim/profile.js';
@@ -13,6 +15,7 @@ import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
 import { speciesName } from './names.js';
 import { GEAR, BLANKET_COLORS, owned, inUse } from '../sim/gear.js';
+import { facilitiesTab } from './facilitiesPanel.js'; // onglet « Bâtiments »
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -248,10 +251,10 @@ export function openAdoption(ui) {
             g.adopt(a, name);
             ui.renderPanel();
           },
-        }, `${t('adopt')}${isSandbox(g.profile) ? '' : ` · ${price} 🪙`}`));
+        }, `${t('adopt')} · ${t('free')}`));
     }))];
   };
-  ui.openPanel({ title: `${home ? '🐾' : '🏡'} ${home ? t('refuge') : `${t('breeder')} ${g.placeDef.flag}`}`, render });
+  ui.openPanel({ title: `🐾 ${t('refuge')}`, render: () => [h('p', { class: 'note' }, t('refugeHelp')), ...render()] });
 }
 
 // ---------------------------------------------------------------- vétérinaire
@@ -455,7 +458,7 @@ export function openFarm(ui) {
     render: () => {
       const p = g.profile;
       const sandbox = isSandbox(p);
-      const tabs = h('div', { class: 'tabs' }, [['equipment', `🥣 ${t('equipment')}`], ['helpers', `🧑‍🌾 ${t('helpers')}`], ['herd', `🐑 ${t('herd')}`]]
+      const tabs = h('div', { class: 'tabs' }, [['equipment', `🥣 ${t('equipment')}`], ['helpers', `🧑‍🌾 ${t('helpers')}`], ['herd', `🐑 ${t('herd')}`], ['buildings', `🏚️ ${t('fac_tab')}`]]
         .map(([k, label]) => h('button', { class: state.tab === k ? 'active' : '', onClick: () => { state.tab = k; ui.renderPanel(); } }, label)));
       const out = [tabs];
 
@@ -520,6 +523,8 @@ export function openFarm(ui) {
             duties);
         })));
       }
+
+      if (state.tab === 'buildings') out.push(...facilitiesTab(ui));
 
       if (state.tab === 'herd') {
         const flock = g.animalsHere().filter((a) => SPECIES[a.species].livestock);
@@ -595,4 +600,59 @@ export function openTack(ui) {
       ];
     },
   });
+}
+
+// ---------------------------------------------------------------- animalerie
+
+/** Animalerie : on choisit l'espèce, la race, la couleur, le sexe et l'âge. C'est payant. */
+export function openShop(ui) {
+  const g = ui.game;
+  const pool = shopBreeds(g.profile.place, g.isHome);
+  const speciesList = [...new Set(pool.map((p) => p.species))];
+  const st = { species: speciesList[0], breed: null, colorIndex: 0, sex: 'f', stage: 'young' };
+  const render = () => {
+    const breeds = pool.filter((p) => p.species === st.species).map((p) => p.breed);
+    if (!breeds.find((b) => b.id === st.breed)) {
+      st.breed = breeds[0].id;
+      st.colorIndex = 0;
+    }
+    const breed = breeds.find((b) => b.id === st.breed);
+    const price = shopPrice(st.species, st.breed, st.stage);
+    const sandbox = isSandbox(g.profile);
+    const preview = createAnimal({ species: st.species, breed: st.breed, colorIndex: st.colorIndex, sex: st.sex, ageDays: stageAgeDays(st.species, st.stage), name: '' });
+    const chip = (label, on, fn) => h('button', { class: `small ${on ? 'primary' : ''}`, onClick: () => { fn(); ui.renderPanel(); } }, label);
+    return [
+      h('p', { class: 'note' }, g.isHome ? t('shopHelp') : t('breederHelp')),
+      h('h3', {}, t('species')),
+      h('div', { class: 'row wrap' }, speciesList.map((sid) => chip(`${SPECIES[sid].emoji} ${L(SPECIES[sid].name)}`, st.species === sid, () => { st.species = sid; }))),
+      h('h3', {}, t('breed')),
+      h('div', { class: 'cards' }, breeds.map((b) => h('button', {
+        class: `card ${b.id === st.breed ? 'selected' : ''}`,
+        onClick: () => { st.breed = b.id; st.colorIndex = 0; ui.renderPanel(); },
+      },
+      h('span', { class: 'card-main' }, h('b', {}, L(b.name)), h('small', {}, '⭐'.repeat(b.rarity ?? 1))),
+      h('span', { class: 'card-side' }, sandbox ? '' : h('small', {}, `${shopPrice(st.species, b.id, st.stage)} 🪙`))))),
+      h('h3', {}, t('coat')),
+      h('div', { class: 'row wrap' }, breed.colors.map((c, i) => h('button', {
+        class: `small color-pick ${st.colorIndex === i ? 'primary' : ''}`,
+        onClick: () => { st.colorIndex = i; ui.renderPanel(); },
+      }, h('span', { class: 'swatch-dot', style: { background: hexColor(c.coat) } }), ` ${L(c.name)}`))),
+      h('h3', {}, t('sexLabel')),
+      h('div', { class: 'row' }, chip(`♀ ${t('female')}`, st.sex === 'f', () => { st.sex = 'f'; }), chip(`♂ ${t('male')}`, st.sex === 'm', () => { st.sex = 'm'; })),
+      h('h3', {}, t('age')),
+      h('div', { class: 'row wrap' }, AGE_STAGES.map((sg) => chip(t(`stage_${sg}`), st.stage === sg, () => { st.stage = sg; }))),
+      h('h3', {}, t('shopSummary')),
+      animalCard(preview),
+      h('button', {
+        class: 'primary big',
+        disabled: !canAfford(g.profile, price),
+        onClick: async () => {
+          const name = await ui.prompt(t('chooseName'), pick(NAMES), animalCard(preview));
+          if (name === null) return;
+          if (g.buyAnimal({ ...st }, name)) ui.closePanel();
+        },
+      }, sandbox ? `🛒 ${t('buy')}` : `🛒 ${t('buy')} · ${price} 🪙`),
+    ];
+  };
+  ui.openPanel({ title: `🛒 ${g.isHome ? t('bld_petshop') : t('breeder')}`, render });
 }

@@ -107,7 +107,7 @@ export function kennel() {
   const wood = mat(0xa0683c);
   add(g, new THREE.BoxGeometry(1.4, 1, 1.6), wood, [0, 0.5, 0]);
   const roofMat = mat(0xb5432f, 0.7);
-  for (const s of [1, -1]) add(g, new THREE.BoxGeometry(0.95, 0.08, 1.8), roofMat, [s * 0.38, 1.22, 0], [0, 0, s * 0.62]);
+  for (const s of [1, -1]) add(g, new THREE.BoxGeometry(0.95, 0.08, 1.8), roofMat, [s * 0.36, 1.2, 0], [0, 0, -s * 0.62]);
   add(g, new THREE.BoxGeometry(0.6, 0.65, 0.05), mat(0x2a1a10), [0, 0.38, 0.81]);
   add(g, new THREE.CylinderGeometry(0.2, 0.22, 0.08, 16), mat(0x3f7cc4, 0.4), [0.9, 0.04, 0.6]);
   return g;

@@ -2,6 +2,7 @@
 
 import { uid } from './rng.js';
 import { STARTER_ITEMS } from './gear.js';
+import { defaultFacilities } from './facilities.js'; // bâtiments à entretenir (écurie, maison, bergerie)
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -40,6 +41,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     equipment: [], // mangeoires, abreuvoirs… { id, type, place, stock }
     helpers: [], // aides embauchées { id, type, name, place }
     farm: { autoHerd: true },
+    facilities: defaultFacilities(), // propreté, usure, améliorations et box (src/sim/facilities.js)
     settings: { camera: 'third', timeSpeed: 'normal' },
   };
 }

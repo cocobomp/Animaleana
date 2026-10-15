@@ -9,6 +9,7 @@ import { Input } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
 import { Herding } from './Herding.js';
 import { TaskQueue } from './TaskQueue.js';
+import { Interiors } from './Interiors.js'; // écurie et maison où l'on entre, box, corvées
 import { EQUIPMENT_MODELS } from './models/equipment.js';
 import { disposeModel } from './models/animalModel.js';
 import {
@@ -18,11 +19,11 @@ import {
 } from '../sim/farm.js';
 import { SPECIES } from '../sim/species.js';
 import {
-  NEEDS, tickAnimal, applyCare, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
+  NEEDS, createAnimal, tickAnimal, applyCare, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
 } from '../sim/animal.js';
 import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
 import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeason } from '../sim/places.js';
-import { adoptionPrice } from '../sim/adoption.js';
+import { adoptionPrice, shopPrice, stageAgeDays } from '../sim/adoption.js';
 import { checkObjectives } from '../sim/objectives.js';
 import { saveProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
 import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
@@ -81,6 +82,7 @@ export class Game {
     this.equipment = [];
     this.herding = new Herding(this);
     this.tasks = new TaskQueue(this);
+    this.interiors = new Interiors(this);
     this.droppingMeshes = new Map();
     this.timeScale = 1; // 0 = pause
     this.profile = null;
@@ -166,6 +168,7 @@ export class Game {
     for (const h of this.helpers.values()) h.dispose();
     this.helpers.clear();
     this.world.build(placeId, this.season, placeId === this.profile.home);
+    this.interiors.onPlaceLoaded(); // coins de corvées, box des chevaux
     this.equipment = [];
     for (const eq of equipmentAt(this.profile, placeId)) this.spawnEquipment(eq);
     this.droppingMeshes.clear();
@@ -302,6 +305,7 @@ export class Game {
   farmTick(here, hours, skipped = false) {
     const p = this.profile;
     passiveEquipment(p, here, p.place, hours);
+    this.interiors.farmTick(here, hours); // propreté et usure des bâtiments
     for (const a of here) {
       if (a.zone === 'field') graze(a, hours, this.world.snowy);
     }
@@ -386,6 +390,7 @@ export class Game {
     this.rig.update(dt, ctrl, this.player, this.world);
     this.ui.updateLabels(entities, this.camera, this.player.position);
     this.updateLeashes(entities);
+    this.interiors.update(dt);
     for (const q of this.equipment) {
       if (q.mesh.userData.spin) q.mesh.userData.spin.rotation.y += dt * 2;
     }
@@ -417,13 +422,16 @@ export class Game {
             const back = 0.5 * (a.look.bodyLen * e.scale);
             const d = addDropping(this.profile, this.profile.place, e.position.x - Math.sin(e.heading) * back, e.position.z - Math.cos(e.heading) * back, kind, this.profile.clock, a.species);
             this.spawnDropping(d);
+            this.removeDroppingMeshes(d.removed);
+            delete d.removed;
             if (kind === 'poop' && a.species === 'dog' && a.following) this.ui.toast(t('dogPoop', { name: a.name, g: a.sex }), 4000);
           }
         }
-        const dirt = e ? dirtNear(this.profile, this.profile.place, e.position.x, e.position.z) : 0;
+        // + la saleté de son box / de la maison (src/game/Interiors.js)
+        const dirt = (e ? dirtNear(this.profile, this.profile.place, e.position.x, e.position.z) : 0) + this.interiors.dirtFor(a);
         const events = tickAnimal(a, hours, {
           dirt,
-          weather: feltWeather(a, weather, this.temperature, this.season), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
+          weather: this.interiors.feltWeather(a, feltWeather(a, weather, this.temperature, this.season)), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
         });
         tickProduce(a, hours);
         // Chaque promenade fait progresser le chien (obéissance et « Au pied »).
@@ -507,6 +515,7 @@ export class Game {
     }
     const hit = this.raycaster.intersectObject(this.world.group, true)[0];
     if (!hit) return;
+    if (this.interiors.onTap(hit)) return; // dans l'écurie ou la maison
     const kind = this.world.kindAt(hit.point.x, hit.point.z);
     if (paused) {
       if (kind) this.ui.openBuilding(kind);
@@ -569,6 +578,7 @@ export class Game {
   cleanZone(id) {
     const ids = scoopZone(this.profile, this.profile.place, enclosure(id));
     this.removeDroppingMeshes(ids);
+    this.interiors.zoneCleaned(id);
     if (ids.length) {
       addStat(this.profile, 'scoop', ids.length);
       this.xp('care', Math.min(3, ids.length));
@@ -587,20 +597,30 @@ export class Game {
   /** Un soin pour tout un groupe d'animaux (ex. foin pour tous les chevaux). */
   groupCare(filter, action, quality = 1) {
     let n = 0;
-    for (const a of this.animalsHere().filter(filter)) {
-      if (!SPECIES[a.species].actions.includes(action)) continue;
-      if (!canAfford(this.profile, CARE[action].cost)) break;
+    const reasons = new Set();
+    const group = this.animalsHere().filter(filter).filter((a) => SPECIES[a.species].actions.includes(action));
+    for (const a of group) {
+      if (!canAfford(this.profile, CARE[action].cost)) {
+        reasons.add('money');
+        break;
+      }
       const before = { ...a.needs };
-      if (applyCare(a, action, quality).ok) {
+      const res = applyCare(a, action, quality);
+      if (res.ok) {
         if (n === 0) this.ui.showDeltas(a, before);
         spend(this.profile, CARE[action].cost);
         addStat(this.profile, action);
         this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️', 2);
         n++;
-      }
+      } else reasons.add(res.reason);
     }
-    if (n) this.xp('care', Math.min(n, 3));
-    this.ui.toast(n ? t('doneAll', { n }) : t('nobody'));
+    if (n) {
+      this.xp('care', Math.min(n, 3));
+      this.ui.toast(t('doneAll', { n }));
+    } else if (!group.length) this.ui.toast(t('nobody'));
+    else if (reasons.has('money')) this.ui.toast(t('r_money'));
+    else if (reasons.has('full')) this.ui.toast(t(`allFull_${CARE[action].full ?? 'x'}`));
+    else this.ui.toast(t(`r_${[...reasons][0]}`, { name: group[0].name, g: group[0].sex }));
     this.ui.refresh();
     return n;
   }
@@ -619,11 +639,14 @@ export class Game {
 
   /** Les chevaux rentrent au paddock (ou en sortent pour aller au pré). */
   sendHorses(where) {
+    // Au box : chaque cheval rentre dans son box de l'écurie.
+    if (where === 'box') return this.interiors.stallAll();
     const target = where === 'field' ? FIELD : { x: -16, z: 16 };
     let n = 0;
     for (const e of this.entities.values()) {
       if (e.data.species !== 'horse' || e.ridden) continue;
       e.data.following = false;
+      e.data.stalled = false; // il sort de son box
       e.data.zone = where === 'field' ? 'field' : undefined;
       e.state = 'walk';
       e.target.set(target.x + (Math.random() - 0.5) * 6, 0, target.z + (Math.random() - 0.5) * 6);
@@ -826,7 +849,7 @@ export class Game {
         }
       }
     }
-    const key = best ? `${best.kind}-${best.entity?.data.id ?? ''}` : '';
+    const key = best ? `${best.kind}-${best.entity?.data.id ?? best.id ?? ''}` : '';
     if (key !== this.focusKey) {
       this.focusKey = key;
       this.focus = best;
@@ -846,6 +869,7 @@ export class Game {
     switch (f.kind) {
       case 'animal': this.ui.openAnimalActions(f.entity.data); break;
       case 'refuge':
+      case 'petshop':
       case 'vet':
       case 'house':
       case 'lodge':
@@ -856,6 +880,7 @@ export class Game {
       case 'hutch':
       case 'pen': this.ui.openBuilding(f.kind); break;
       case 'dismount': this.dismount(); break;
+      case 'spot': f.run(); break; // un coin de l'écurie ou de la maison
       default:
     }
   }
@@ -1030,11 +1055,10 @@ export class Game {
     this.entities.get(a.id)?.rename();
   }
 
-  adopt(candidate, name) {
-    const price = adoptionPrice(candidate);
+  adopt(candidate, name, price = adoptionPrice(candidate), from = 'refuge') {
     if (!spend(this.profile, price)) return this.ui.toast(t('r_money'));
     const a = { ...candidate, name: name?.trim() || candidate.name, location: this.profile.place };
-    this.profile.adoptedKeys.push(candidate.adoptKey);
+    if (candidate.adoptKey) this.profile.adoptedKeys.push(candidate.adoptKey);
     delete a.adoptKey;
     this.profile.animals.push(a);
     addStat(this.profile, 'adopted');
@@ -1049,12 +1073,22 @@ export class Game {
       equip(this.profile, a, 'bridle');
       equip(this.profile, a, 'saddle');
     }
-    const door = this.world.interactables.find((i) => i.kind === 'refuge');
+    const door = this.world.interactables.find((i) => i.kind === from) ?? this.world.interactables.find((i) => i.kind === 'refuge');
     const e = this.spawnEntity(a, door);
     e.emit('❤️', 5);
     this.ui.toast(t('adopted', { name: a.name, g: a.sex }));
     this.save();
     return a;
+  }
+
+  /** Acheter un animal choisi à l'animalerie (ou à l'élevage en voyage). */
+  buyAnimal(cfg, name) {
+    const price = shopPrice(cfg.species, cfg.breed, cfg.stage);
+    const a = createAnimal({
+      species: cfg.species, breed: cfg.breed, colorIndex: cfg.colorIndex, sex: cfg.sex,
+      ageDays: stageAgeDays(cfg.species, cfg.stage), name, location: this.profile.place, day: this.day,
+    });
+    return this.adopt(a, name, price, this.isHome ? 'petshop' : 'refuge');
   }
 
   breedingPartners(a) {
@@ -1134,6 +1168,7 @@ export class Game {
   // ---------------------------------------------------------------- ferme
 
   wantedEquipment(a) {
+    if (a.stalled && this.interiors.stallOf(a)) return null; // au box, on ne va pas au paddock boire
     const eq = wantedEquipment(this.profile, a, this.profile.place);
     return eq ? this.equipment.find((q) => q.eq.id === eq.id) ?? null : null;
   }

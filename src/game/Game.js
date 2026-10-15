@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { World } from './World.js';
 import { gfx } from './gfx.js';
+import { preloadModels } from './assets.js';
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
@@ -131,11 +132,18 @@ export class Game {
     window.addEventListener('pagehide', () => this.save());
     this.clock = new THREE.Clock();
     renderer.setAnimationLoop(() => this.frame());
+    // Modèles 3D (GLB) : chargés pendant l'écran des profils ; start() attend qu'ils soient prêts.
+    this.modelsLoaded = false;
+    this.modelsReady = preloadModels().then((n) => { this.modelsLoaded = true; return n; });
   }
 
   // ---------------------------------------------------------------- partie
 
   start(profile) {
+    if (!this.modelsLoaded) {
+      this.modelsReady.then(() => this.start(profile));
+      return;
+    }
     this.profile = profile;
     this.rig.mode = profile.settings.camera ?? 'third';
     this.player = this.player ?? new Player(this.scene, this.world, profile.avatar);

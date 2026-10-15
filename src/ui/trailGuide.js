@@ -95,6 +95,7 @@ export function openTrailPrep(ui, tg) {
   const g = ui.game;
   const b = tg.booking;
   if (!b) return openTrailCarnet(ui);
+  tg.tutorial('prepare'); // explication la première fois (carnet)
   const state = { pickFor: null }; // 'guide' | rider.id
   const horses = () => tg.horses();
   const horseName = (id) => horses().find((x) => x.id === id)?.name ?? '?';
@@ -255,9 +256,9 @@ const pickComment = (mood, i) => `tg_c_${mood}_${(i % 3) + 1}`;
 /** r : { booking, result, applied, gains, sandbox, rankName, onClose } */
 export function showRideResult(ui, r) {
   const res = r.result;
-  const close = () => { ui.hideModal(); r.onClose?.(); };
-  ui.showModal([
-    h('div', { class: 'actv-result tg-result' },
+  let guard = null;
+  const close = () => { clearInterval(guard); ui.hideModal(); r.onClose?.(); };
+  const box = h('div', { class: 'actv-result tg-result' },
       h('h2', {}, `🧭 ${t('tg_resultTitle')}`),
       h('div', { class: 'actv-stars', 'aria-label': `${res.stars}/3` }, Array.from({ length: 3 }, (_, i) => h('span', { class: i < res.stars ? 'on' : '' }, '★'))),
       h('ul', { class: 'tg-comments' }, res.comments.map((c, i) => h('li', { class: c.mood }, `${AGE_EMOJI[c.rider.age]} ${t(pickComment(c.mood, i), { name: c.rider.name })}`))),
@@ -269,8 +270,13 @@ export function showRideResult(ui, r) {
         res.photos ? h('li', {}, `📷 ${t('tg_result_photos')} : ${res.photos}`) : null,
         h('li', {}, t('tg_result_horses', { n: r.gains.endurance })),
         r.applied.rankUp ? h('li', { class: 'good' }, t('tg_rankUp', { rank: r.rankName })) : null),
-      h('div', { class: 'row end' }, h('button', { class: 'primary', onClick: close }, t('actv_done')))),
-  ]);
+      h('div', { class: 'row end' }, h('button', { class: 'primary', onClick: close }, t('actv_done'))));
+  ui.showModal([box]);
+  // Si une autre fenêtre (« Niveau supérieur ! ») passe par-dessus, on remontre le résultat après.
+  guard = setInterval(() => {
+    if (box.isConnected) return;
+    if (!ui.modalOpen) ui.showModal([box]);
+  }, 500);
 }
 
 export { riderMood, gearFit };

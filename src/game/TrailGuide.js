@@ -906,7 +906,8 @@ class GuidedRideSession extends ActivitySession {
       }
       e.snap(dt);
       // Trop loin derrière (bloqué derrière un arbre) : petit saut pour rattraper.
-      if (d > 26) {
+      // Pas pour le retardataire (c'est le jeu), ni pour un cheval qui a peur ou qui pose (il doit rester là).
+      if (d > 14 && !r.lag && !r.scared && !r.poseUntil) {
         e.position.set(want.x, 0, want.z);
         e.snap();
       }
@@ -1035,6 +1036,9 @@ class GuidedRideSession extends ActivitySession {
 
   startEvent(ev) {
     ev.active = true;
+    // Un cheval a peur : on garde sa consigne à l'écran, les autres attendront.
+    const quiet = this.events.some((x) => x.type === 'scare' && x.active && x.since && !x.done);
+    const hint = (text, ms) => { if (!quiet) this.hud.hint(text, ms); };
     const beginner = this.riders.find((r) => r.rider.level === 'beginner') ?? this.riders[this.riders.length - 1];
     switch (ev.type) {
       case 'lag':
@@ -1049,13 +1053,13 @@ class GuidedRideSession extends ActivitySession {
         ev.sprite.visible = true;
         break;
       case 'stream':
-        this.hud.hint(t('tg_ev_stream'), 7000);
+        hint(t('tg_ev_stream'), 7000);
         break;
       case 'sight':
-        this.hud.hint(t('tg_ev_sight'), 7000);
+        hint(t('tg_ev_sight'), 7000);
         break;
       case 'break':
-        this.hud.hint(t('tg_ev_break'), 7000);
+        hint(t('tg_ev_break'), 7000);
         break;
       default:
     }

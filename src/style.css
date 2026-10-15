@@ -238,7 +238,7 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 
 #help {
   position: fixed;
-  bottom: calc(90px + var(--safe-b));
+  bottom: calc(150px + var(--safe-b));
   left: 50%;
   transform: translateX(-50%);
   background: var(--glass);
@@ -413,3 +413,50 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 @media (pointer: coarse) {
   #action { bottom: calc(170px + var(--safe-b)); }
 }
+
+/* ---------- progression */
+.hud-line.level { display: flex; align-items: center; gap: 8px; }
+.xp-track { flex: 1; min-width: 60px; height: 6px; background: rgba(255, 255, 255, 0.25); border-radius: 999px; overflow: hidden; }
+.xp-fill { display: block; height: 100%; background: #ffd35a; }
+.lock { color: var(--muted); font-size: 0.85em; white-space: nowrap; }
+.card.locked { opacity: 0.6; }
+.card.with-duties { flex-wrap: wrap; }
+.duties { flex-basis: 100%; display: grid; gap: 4px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.duties small { color: var(--muted); }
+
+/* ---------- bandeau d'état */
+#status-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(86px + var(--safe-b));
+  display: grid;
+  gap: 6px;
+  z-index: 11;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+.status-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--glass);
+  color: #fff;
+  padding: 4px 6px 4px 14px;
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+  font-weight: 600;
+}
+.status-chip button { min-height: 34px; }
+@media (pointer: coarse) {
+  #status-bar { bottom: auto; top: calc(200px + var(--safe-t)); left: auto; right: calc(10px + var(--safe-r)); transform: none; justify-items: end; }
+}
+
+/* ---------- équipement */
+.gear-list { display: grid; gap: 8px; }
+.gear-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+.gear-name { flex: 1; min-width: 140px; }
+.swatches.small .swatch-btn { width: 30px; height: 30px; min-height: 30px; }
+
+.chip.weight-fat, .chip.weight-thin { background: #fde3df; }
+.chip.weight-chubby { background: #fdf0d8; }

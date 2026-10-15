@@ -26,6 +26,7 @@ const WEATHER_DECAY = {
   storm: { hygiene: 1.8, affection: 1.2 },
   snow: { energy: 1.3, hygiene: 1.2 },
   heat: { thirst: 1.5, energy: 1.2 },
+  flies: { affection: 1.25, energy: 1.1 },
 };
 
 // Le sick-o-mètre : au-delà de NEGLECT_LIMIT heures de tristesse, l'animal tombe malade.
@@ -116,6 +117,7 @@ export function createAnimal({
     tricks: {},
     skills: { obedience: 10, speed: 10, endurance: 10, jump: 10, ...(breedDef.herder ? { herding: 35 } : species === 'dog' ? { herding: 5 } : {}) },
     produce: 0,
+    weight: 50, // 50 = poids idéal ; plus de 75 = trop gros, moins de 25 = trop maigre
     location,
     lastBirthDay: -999,
     bornDay: day,
@@ -139,6 +141,15 @@ export function growthScale(a) {
   const sp = SPECIES[a.species];
   const t = Math.min(1, ageYears(a) / sp.adultYears);
   return 0.42 + 0.58 * Math.sqrt(t);
+}
+
+/** 'thin' | 'ideal' | 'chubby' | 'fat' */
+export function weightClass(a) {
+  const w = a.weight ?? 50;
+  if (w < 25) return 'thin';
+  if (w <= 65) return 'ideal';
+  if (w <= 80) return 'chubby';
+  return 'fat';
 }
 
 export function happiness(a) {
@@ -184,6 +195,11 @@ export function tickAnimal(a, hours, ctx = {}) {
     a.needs[n] = clamp(a.needs[n] - rate * hours);
   }
   if (ctx.companions > 0) a.needs.affection = clamp(a.needs.affection + Math.min(2, ctx.companions) * 0.8 * hours);
+  // Poids : il baisse avec l'exercice, il monte quand on mange trop sans bouger.
+  a.weight = a.weight ?? 50;
+  if (ctx.ridden || ctx.moving) a.weight = Math.max(0, a.weight - 0.6 * hours);
+  if (a.needs.hunger < 15) a.weight = Math.max(0, a.weight - 0.4 * hours);
+  else if (a.weight > 50 && a.needs.exercise > 60) a.weight -= 0.1 * hours;
   if (ctx.sleeping) a.needs.energy = clamp(a.needs.energy + 9 * hours);
   if (ctx.ridden) {
     a.needs.exercise = clamp(a.needs.exercise + 14 * hours);
@@ -200,14 +216,21 @@ export function tickAnimal(a, hours, ctx = {}) {
 
   if (!a.sick) {
     const neglected = a.neglect >= NEGLECT_LIMIT;
-    const unlucky = h < 50 && rng() < 0.002 * hours;
-    if (neglected || unlucky) {
+    // Un animal trop gros tombe plus souvent malade (mal de ventre).
+    const overweight = a.weight > 80 && rng() < 0.01 * hours;
+    if (overweight) {
+      a.sick = 'belly';
+      events.push('sick');
+    }
+    const unlucky = !a.sick && h < 50 && rng() < 0.002 * hours;
+    if (!a.sick && (neglected || unlucky)) {
       a.sick = pick(Object.keys(ILLNESSES), rng);
       a.neglect = 0;
       events.push('sick');
     }
   }
 
+  if ((a.weight ?? 50) > 80 || (a.weight ?? 50) < 20) a.health = clamp(a.health - 0.3 * hours, 40);
   if (a.sick) a.health = clamp(a.health - 2 * hours, 15);
   else if (h > 50) a.health = clamp(a.health + 1.5 * hours);
   else if (h < 25) a.health = clamp(a.health - 0.5 * hours, 30);
@@ -238,6 +261,11 @@ export function applyCare(a, actionId, quality = 1) {
   for (const [s, v] of Object.entries(care.skills ?? {})) {
     a.skills[s] = Math.min(100, a.skills[s] + v);
   }
+  // Les friandises et la nourriture en trop font grossir ; l'exercice fait maigrir.
+  a.weight = a.weight ?? 50;
+  if (actionId === 'treat') a.weight = Math.min(100, a.weight + 5);
+  if (actionId === 'feed' && a.needs.hunger > 90) a.weight = Math.min(100, a.weight + 2);
+  if (care.tiring) a.weight = Math.max(0, a.weight - 2);
   return { ok: true };
 }
 

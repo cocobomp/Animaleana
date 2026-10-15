@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { buildAvatar } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
+import { navTarget } from './nav.js';
 
 const WALK = 3.2;
 const RUN = 6.2;
@@ -104,8 +105,10 @@ export class Player {
     else if (this.auto) {
       const a = this.auto;
       const pos = this.root.position;
-      const to = new THREE.Vector3(a.target.x - pos.x, 0, a.target.z - pos.z);
-      const d = to.length();
+      // On contourne les enclos par leur ouverture.
+      const way = navTarget(pos, a.target);
+      const to = new THREE.Vector3(way.x - pos.x, 0, way.z - pos.z);
+      const d = way === a.target ? to.length() : Math.max(to.length(), a.radius + 0.1);
       // Bloqué contre un mur depuis un moment : on s'arrête là.
       a.stuck = pos.distanceTo(a.last) < dt * 0.5 ? a.stuck + dt : 0;
       a.last.copy(pos);
@@ -123,7 +126,7 @@ export class Player {
     let max = run ? RUN : WALK;
     if (mount) {
       const skill = 1 + mount.data.skills.speed / 150;
-      max = (run ? 11 : 4.5) * skill * Math.min(1.2, mount.scale + 0.2);
+      max = (run ? 11 : 4.5) * skill * Math.min(1.2, mount.scale + 0.2) * (mount.data.gear?.saddle ? 1 : 0.75);
       if (mount.data.needs.energy < 10) max = 2;
     }
     const target = amount > 0.05 ? max * Math.min(1, amount) : 0;

@@ -39,7 +39,8 @@ export class UI {
     hold(right, () => { this.game.input.btnLook = -1; }, () => { this.game.input.btnLook = 0; });
     hold(runBtn, () => { this.game.input.btnRun = true; }, () => { this.game.input.btnRun = false; });
     this.touchPad = h('div', { id: 'touch-pad', hidden: true }, left, runBtn, right);
-    root.append(this.touchPad);
+    this.statusBar = h('div', { id: 'status-bar' });
+    root.append(this.touchPad, this.statusBar);
 
     // Ne pas redessiner un panneau pendant qu'on appuie dessus (sinon le clic se perd).
     this.holding = false;
@@ -69,6 +70,8 @@ export class UI {
     this.actionBtn.hidden = true;
     this.camBtn.hidden = true;
     this.touchPad.hidden = true;
+    this.statusBar.replaceChildren();
+    this.statusKey = '';
     document.getElementById('joystick').hidden = true;
     showProfiles(this);
   }
@@ -124,11 +127,36 @@ export class UI {
     const money = s.money === null ? t('infinite') : s.money;
     this.hudInfo.replaceChildren(
       h('div', { class: 'hud-line strong' }, `👤 ${s.name}`, h('span', { class: 'coin' }, `🪙 ${money}`)),
+      h('div', { class: 'hud-line level' }, `⭐ ${t('level', { n: s.level })}`,
+        h('span', { class: 'xp-track' }, h('span', { class: 'xp-fill', style: { width: `${s.levelProgress * 100}%` } }))),
       h('div', { class: 'hud-line' }, `📅 ${t('day', { n: s.day })} · 🕐 ${formatClock(s.clock)}`),
       h('div', { class: 'hud-line' }, `${s.place.flag} ${L(s.place.name)}`),
       h('div', { class: 'hud-line' }, `${WEATHER_EMOJI[s.weather]} ${t('weatherNow', { w: t(`w_${s.weather}`), t: s.temperature })} · ${t(`season_${s.season}`)}`),
     );
     if (this.panel?.live && !this.holding) this.renderPanel();
+    this.renderStatus();
+  }
+
+  /** Bandeau d'état : qui me suit, sur qui je suis monté, le troupeau en route. */
+  renderStatus() {
+    const g = this.game;
+    const chips = [];
+    const chip = (text, label, fn) => h('div', { class: 'status-chip' }, h('span', {}, text), h('button', { class: 'small', onClick: fn }, label));
+    if (g.player.mount) {
+      const a = g.player.mount.data;
+      chips.push(chip(`🏇 ${t('statusRiding', { name: a.name, g: a.sex })}`, t('dismount'), () => { g.dismount(); this.renderStatus(); }));
+    }
+    for (const a of g.animalsHere().filter((x) => x.following)) {
+      chips.push(chip(`🦮 ${t('statusFollowing', { name: a.name, g: a.sex })}`, t('statusStop'), () => { g.toggleFollow(a); this.renderStatus(); }));
+    }
+    if (g.herding.active) {
+      const pd = g.herding.active.pusher.data;
+      chips.push(chip(`🐕 ${t('statusHerding', { name: pd.name, g: pd.sex })}`, t('statusStop'), () => { g.herding.stop(false); this.renderStatus(); }));
+    }
+    const key = chips.map((c) => c.textContent).join('|');
+    if (key === this.statusKey) return;
+    this.statusKey = key;
+    this.statusBar.replaceChildren(...chips);
   }
 
   setFocus(f) {
@@ -150,6 +178,10 @@ export class UI {
     const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', stable: '🐴', pen: '🐑', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
+  }
+
+  levelUp(level, names) {
+    this.alert(names ? t('levelUp', { n: level, names }) : t('levelUpPlain', { n: level }));
   }
 
   // ------------------------------------------------------------ notifications
@@ -274,6 +306,7 @@ export class UI {
   openJobs() { panels.openJobs(this); }
   openSettings() { panels.openSettings(this); }
   openFarm() { panels.openFarm(this); }
+  openTack() { panels.openTack(this); }
   openBuilding(kind) { openBuilding(this, kind); }
   openAnimalActions(a) { openAnimalActions(this, a); }
 

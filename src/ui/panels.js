@@ -3,7 +3,7 @@
 import { h, bar, hexColor } from './dom.js';
 import { t, L, getLang, setLang } from '../i18n.js';
 import { SPECIES, getBreed } from '../sim/species.js';
-import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide } from '../sim/animal.js';
+import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass } from '../sim/animal.js';
 import { DAYS_PER_YEAR } from '../sim/time.js';
 import { adoptionCandidates, adoptionPrice } from '../sim/adoption.js';
 import { PLACES, PLACE_IDS, distanceKm, TRAVEL_MODES } from '../sim/places.js';
@@ -12,6 +12,7 @@ import { canAfford, isSandbox } from '../sim/profile.js';
 import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
 import { speciesName } from './names.js';
+import { GEAR, BLANKET_COLORS, owned, inUse } from '../sim/gear.js';
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -66,6 +67,7 @@ function renderAnimal(ui, g, a) {
       h('span', { class: 'chip' }, `${sexIcon(a)} ${t(a.sex === 'f' ? 'female' : 'male')}`),
       h('span', { class: 'chip' }, `${ageText(a)} · ${t(`stage_${stage}`)}`),
       h('span', { class: 'chip' }, t(`p_${a.personality}`, { g: a.sex })),
+      h('span', { class: `chip weight-${weightClass(a)}` }, `⚖️ ${t(`weight_${weightClass(a)}`, { g: a.sex })}`),
       h('span', { class: `chip mood-${m}` }, `${MOOD_EMOJI[m]} ${t(`mood_${m}`, { g: a.sex })}`),
       h('span', { class: 'chip swatch', style: { background: hexColor(a.look.coat) } }, L(a.look.colorName) || ''),
     ),
@@ -106,6 +108,12 @@ function renderAnimal(ui, g, a) {
     }
   }));
   out.push(h('h3', {}, t('activities')), h('div', { class: 'grid' }, acts));
+
+  // Équipement
+  const gearItems = Object.entries(GEAR).filter(([, d]) => d.species.includes(a.species));
+  if (gearItems.length) {
+    out.push(h('h3', {}, t('gearTitle')), gearSection(ui, a, gearItems));
+  }
 
   // Laine et lait
   if (sp.product) {
@@ -431,7 +439,9 @@ export function openFarm(ui) {
           const owned = g.equipment.find((q) => q.eq.type === type);
           const who = def.serves.map((sid) => SPECIES[sid].emoji).join(' ');
           let side;
-          if (!owned) {
+          if (!owned && !g.isUnlocked(type)) {
+            side = h('span', { class: 'lock' }, `🔒 ${t('level', { n: g.unlockLevel(type) })}`);
+          } else if (!owned) {
             side = h('button', { class: 'primary', onClick: () => { g.buyEquipment(type); ui.renderPanel(); } }, sandbox ? t('install') : `${t('install')} · ${def.price} 🪙`);
           } else if (def.stock !== null && !sandbox) {
             side = h('button', { onClick: () => { g.refillEquipment(owned.eq); ui.renderPanel(); }, disabled: owned.eq.stock >= def.stock },
@@ -455,14 +465,33 @@ export function openFarm(ui) {
         out.push(h('p', { class: 'note' }, sandbox ? t('helpersHelpSandbox') : t('helpersHelp')));
         out.push(h('div', { class: 'cards' }, Object.entries(HELPERS).map(([type, def]) => {
           const hired = p.helpers.find((x) => x.type === type && x.place === p.place);
-          return h('div', { class: 'card' },
+          const locked = !hired && !g.isUnlocked(type);
+          const duties = hired && def.actions ? h('div', { class: 'duties' },
+            h('small', {}, t('dutiesTitle', { g: hired.sex })),
+            h('div', { class: 'checks' }, def.actions.map((act) => h('label', { class: 'check' }, h('input', {
+              type: 'checkbox',
+              checked: (hired.duties ?? def.actions).includes(act),
+              onChange: (e) => {
+                const cur = new Set(hired.duties ?? def.actions);
+                if (e.target.checked) cur.add(act); else cur.delete(act);
+                hired.duties = [...cur];
+              },
+            }), ` ${t(`act_${act}`)}`)))) : null;
+          if (locked) {
+            return h('div', { class: 'card locked' },
+              h('span', { class: 'card-emoji' }, def.emoji),
+              h('span', { class: 'card-main' }, h('b', {}, t(`helper_${type}`)), h('small', {}, t(`helperd_${type}`))),
+              h('span', { class: 'lock' }, `🔒 ${t('level', { n: g.unlockLevel(type) })}`));
+          }
+          return h('div', { class: `card ${duties ? 'with-duties' : ''}` },
             h('span', { class: 'card-emoji' }, def.emoji),
             h('span', { class: 'card-main' },
               h('b', {}, hired ? `${hired.name} · ${t(`helper_${type}`, { g: hired.sex })}` : t(`helper_${type}`)),
               h('small', {}, t(`helperd_${type}`))),
             hired
               ? h('button', { onClick: async () => { if (await ui.confirm(t('fireConfirm', { name: hired.name }))) { g.fire(hired.id); ui.renderPanel(); } } }, t('fire'))
-              : h('button', { class: 'primary', onClick: () => { g.hire(type); ui.renderPanel(); } }, sandbox ? t('hire') : `${t('hire')} · ${def.salary} 🪙/${t('perDay')}`));
+              : h('button', { class: 'primary', onClick: () => { g.hire(type); ui.renderPanel(); } }, sandbox ? t('hire') : `${t('hire')} · ${def.salary} 🪙/${t('perDay')}`),
+            duties);
         })));
       }
 
@@ -486,6 +515,58 @@ export function openFarm(ui) {
         }), ` ${t('autoHerd')}`));
       }
       return out;
+    },
+  });
+}
+
+function gearSection(ui, a, items) {
+  const g = ui.game;
+  const p = g.profile;
+  return h('div', { class: 'gear-list' }, items.map(([item, def]) => {
+    const worn = a.gear?.[def.slot]?.item === item;
+    const free = owned(p, item) - inUse(p, item);
+    const colors = def.colors ? h('div', { class: 'swatches small' }, Object.entries(BLANKET_COLORS).map(([key, c]) => h('button', {
+      class: `swatch-btn ${worn && a.gear[def.slot].color === key ? 'selected' : ''}`,
+      style: { background: `#${c.toString(16).padStart(6, '0')}` },
+      'aria-label': key,
+      onClick: () => { g.equip(a, item, key); ui.renderPanel(); },
+    }))) : null;
+    return h('div', { class: 'gear-row' },
+      h('span', { class: 'gear-name' }, `${def.emoji} ${t(`gear_${item}`)}`),
+      worn
+        ? h('button', { class: 'small', onClick: () => { g.unequip(a, def.slot); ui.renderPanel(); } }, t('gearRemove'))
+        : h('button', { class: 'small primary', disabled: free <= 0 && !def.colors, onClick: () => { g.equip(a, item); ui.renderPanel(); } },
+          free > 0 ? t('gearPut') : t('gearNone')),
+      colors);
+  }));
+}
+
+// ---------------------------------------------------------------- sellerie
+
+export function openTack(ui) {
+  const g = ui.game;
+  ui.openPanel({
+    title: `🏇 ${t('tackRoom')}`,
+    render: () => {
+      const p = g.profile;
+      const sandbox = isSandbox(p);
+      return [
+        h('p', { class: 'note' }, t('tackHelp')),
+        h('div', { class: 'cards' }, Object.entries(GEAR).map(([item, def]) => h('div', { class: 'card' },
+          h('span', { class: 'card-emoji' }, def.emoji),
+          h('span', { class: 'card-main' },
+            h('b', {}, t(`gear_${item}`)),
+            h('small', {}, `${def.species.map((sid) => SPECIES[sid].emoji).join(' ')} · ${t(`geard_${item}`)}`),
+            h('small', {}, t('gearOwned', { n: owned(p, item), used: inUse(p, item) }))),
+          h('button', { class: 'primary', onClick: () => { g.buyGear(item); ui.renderPanel(); } },
+            sandbox ? t('buy') : `${t('buy')} · ${def.price} 🪙`)))),
+        h('h3', {}, t('gearOnAnimals')),
+        h('div', { class: 'cards' }, g.animalsHere().filter((a) => Object.values(GEAR).some((d) => d.species.includes(a.species)))
+          .map((a) => h('button', { class: 'card', onClick: () => ui.openAnimal(a) },
+            h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+            h('span', { class: 'card-main' }, h('b', {}, a.name),
+              h('small', {}, Object.values(a.gear ?? {}).map((x) => GEAR[x.item].emoji).join(' ') || t('gearNothing')))))),
+      ];
     },
   });
 }

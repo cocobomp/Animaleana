@@ -5,6 +5,8 @@ import { SPECIES } from '../sim/species.js';
 import { growthScale, mood, lifeStage } from '../sim/animal.js';
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { emojiTexture } from './textures.js';
+import { enclosure, inside, navTarget } from './nav.js';
+import { buildGear, removeGear } from './gearModels.js';
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 const HOME = {
@@ -17,10 +19,10 @@ export const PEN = { x: 14, z: 35, r: 5, gate: { x: 14, z: 46 } };
 export const FIELD = { x: 0, z: 60, r: 12 };
 
 /** Vrai si (x, z) est dans l'enclos de la bergerie (20 m × 14 m). */
-export const inPen = (x, z, margin = 0) => Math.abs(x - PEN.x) < 10 - margin && Math.abs(z - PEN.z) < 7 - margin;
-const GATE_OUT = new THREE.Vector3(PEN.x, 0, PEN.z + 9.5);
-const GATE_IN = new THREE.Vector3(PEN.x, 0, PEN.z + 4.5);
-const CORNER = new THREE.Vector3();
+export const inPen = (x, z, margin = 0) => inside(enclosure('pen'), x, z, margin);
+
+// Les petits animaux passent sous les barrières.
+const SMALL = (e) => e.data.species === 'cat' || e.data.species === 'rabbit' || (e.data.species === 'dog' && e.scale < 0.65);
 
 const MOOD_EMOJI = { sick: '🤒', sad: '😢' };
 const HERD = ['horse', 'sheep', 'goat', 'cow'];
@@ -96,7 +98,15 @@ export class AnimalEntity {
     this.status.visible = false;
     this.root.add(this.status);
     this.statusEmoji = null;
+    this.gearGroup = null;
+    this.applyGear();
     this.placeLabels();
+  }
+
+  /** Met à jour l'équipement visible (selle, couverture…). */
+  applyGear() {
+    if (this.gearGroup) removeGear(this.gearGroup);
+    this.gearGroup = buildGear(this.model, this.data.look, this.data.gear ?? {});
   }
 
   applyScale() {
@@ -121,18 +131,12 @@ export class AnimalEntity {
 
   /** Passe par la barrière pour entrer dans l'enclos ou en sortir. */
   navTarget(goal) {
-    const p = this.root.position;
-    const inside = inPen(p.x, p.z);
-    if (inside === inPen(goal.x, goal.z)) return goal;
-    const corridor = Math.abs(p.x - PEN.x) < 2.2 && p.z > GATE_IN.z - 0.5 && p.z < GATE_OUT.z + 0.5;
-    if (inside) return corridor ? GATE_OUT : GATE_IN;
-    if (corridor) return GATE_IN;
-    // Derrière l'enclos : on le contourne par le côté le plus proche.
-    if (p.z < PEN.z + 7.5 && Math.abs(p.x - PEN.x) < 11.5) {
-      CORNER.set(PEN.x + (p.x < PEN.x ? -12 : 12), 0, PEN.z + 9);
-      return CORNER;
-    }
-    return GATE_OUT;
+    if (this.small) return goal;
+    return navTarget(this.root.position, goal);
+  }
+
+  get small() {
+    return SMALL(this);
   }
 
   /** Zone de vie : les animaux de ferme sont soit à la bergerie, soit au pré. */
@@ -150,9 +154,12 @@ export class AnimalEntity {
     return (this.data.look.bodyLen * 0.5 + 0.4) * this.scale;
   }
 
-  snap() {
+  snap(dt = 0.016) {
     const p = this.root.position;
-    p.y = this.world.heightAt(p.x, p.z);
+    // Hauteur de la barre du haut quand le chat est perché dessus.
+    const want = this.perch?.phase === 'on' ? 0.97 : 0;
+    this.perchY = (this.perchY ?? 0) + (want - (this.perchY ?? 0)) * Math.min(1, dt * 10);
+    p.y = this.world.heightAt(p.x, p.z) + this.perchY;
   }
 
   pickWanderTarget() {
@@ -223,6 +230,22 @@ export class AnimalEntity {
         this.state = 'mother';
         this.partner = mother;
         this.timer = 6 + Math.random() * 6;
+        return;
+      }
+    }
+
+    // Les chats aiment sauter sur les barrières et y marcher en équilibre.
+    if (d.species === 'cat' && this.stage !== 'baby' && Math.random() < 0.25 && this.world.fences) {
+      const fence = this.world.fences.find((f) => Math.max(f.hw, f.hd) > 2
+        && Math.abs(p.x - f.x) < f.hw + 5 && Math.abs(p.z - f.z) < f.hd + 5);
+      if (fence) {
+        const alongX = fence.hw > fence.hd;
+        this.perch = { fence, alongX, dir: Math.random() < 0.5 ? 1 : -1, phase: 'go' };
+        this.state = 'perch';
+        this.timer = 8 + Math.random() * 6;
+        const tx = alongX ? Math.max(fence.x - fence.hw + 0.5, Math.min(fence.x + fence.hw - 0.5, p.x)) : fence.x;
+        const tz = alongX ? fence.z : Math.max(fence.z - fence.hd + 0.5, Math.min(fence.z + fence.hd - 0.5, p.z));
+        this.target.set(tx, 0, tz);
         return;
       }
     }
@@ -387,6 +410,45 @@ export class AnimalEntity {
             }
             break;
           }
+          case 'perch': {
+            const pc = this.perch;
+            const f = pc.fence;
+            if (pc.phase === 'go') {
+              // Marcher jusqu'au pied de la barrière, puis sauter dessus.
+              const dd = Math.hypot(this.target.x - p.x, this.target.z - p.z);
+              this.targetSpeed = this.sp.walkSpeed;
+              if (dd < 0.4) {
+                pc.phase = 'on';
+                p.x = this.target.x;
+                p.z = this.target.z;
+                this.heading = pc.alongX ? (pc.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (pc.dir > 0 ? 0 : Math.PI);
+                this.emit('✨', 1);
+              }
+            } else if (pc.phase === 'on') {
+              // En équilibre : on avance doucement le long de la barre.
+              this.targetSpeed = 0;
+              const step = this.sp.walkSpeed * 0.45 * dt * pc.dir;
+              if (pc.alongX) {
+                p.x += step;
+                if (Math.abs(p.x - f.x) > f.hw - 0.4) pc.dir *= -1;
+              } else {
+                p.z += step;
+                if (Math.abs(p.z - f.z) > f.hd - 0.4) pc.dir *= -1;
+              }
+              this.heading = pc.alongX ? (pc.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (pc.dir > 0 ? 0 : Math.PI);
+              this.speed = this.sp.walkSpeed * 0.45;
+              if (this.timer <= 0) {
+                pc.phase = 'down';
+                if (pc.alongX) p.z += Math.random() < 0.5 ? 0.6 : -0.6;
+                else p.x += Math.random() < 0.5 ? 0.6 : -0.6;
+              }
+            } else {
+              this.perch = null;
+              this.state = 'idle';
+              this.timer = 2;
+            }
+            break;
+          }
           case 'mother': {
             if (!partner) {
               this.state = 'idle';
@@ -425,8 +487,8 @@ export class AnimalEntity {
         diff = Math.atan2(Math.sin(diff), Math.cos(diff));
         this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 3.5);
       }
-      this.speed += (this.targetSpeed - this.speed) * Math.min(1, dt * 3);
-      if (this.speed > 0.01) {
+      if (this.perch?.phase !== 'on') this.speed += (this.targetSpeed - this.speed) * Math.min(1, dt * 3);
+      if (this.speed > 0.01 && this.perch?.phase !== 'on') {
         const step = this.speed * dt;
         const nx = p.x + Math.sin(this.heading) * step;
         const nz = p.z + Math.cos(this.heading) * step;
@@ -437,10 +499,10 @@ export class AnimalEntity {
         } else {
           p.x = nx;
           p.z = nz;
-          this.world.resolveCollisions(p, this.radius * 0.6);
+          this.world.resolveCollisions(p, this.radius * 0.6, { small: this.small });
         }
       }
-      this.snap();
+      this.snap(dt);
     }
 
     this.root.rotation.y = this.heading;
@@ -498,7 +560,10 @@ export class AnimalEntity {
 
     // Respiration, tête, queue
     const breathe = Math.sin(this.time * (this.sleeping ? 1.2 : 2.4)) * 0.012;
-    md.body.scale.set(1 + breathe, 1 + breathe, 1);
+    // Un animal trop gros a le ventre plus large, un animal maigre est plus fin.
+    const w = this.data.weight ?? 50;
+    const girth = 1 + (w - 50) / 50 * 0.22;
+    md.body.scale.set(girth + breathe, 1 + (girth - 1) * 0.4 + breathe, 1);
     const look = Math.sin(this.time * 0.4) * 0.35 * (moving ? 0.2 : 1);
     md.head.rotation.y = look;
     const baseNeck = this.data.look.neckAngle;

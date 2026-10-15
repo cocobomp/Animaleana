@@ -18,6 +18,7 @@ const RULES = {
     { id: 'waterHorses', icon: '💧', when: (c) => need(c.count.horse) },
     { id: 'brushHorses', icon: '🪮', when: (c) => need(c.count.horse) ?? sleeping(c, 6, 21) },
     { id: 'cleanStalls', icon: '🧹', when: (c) => need(c.count.horse) ?? sleeping(c, 6, 21) },
+    { id: 'tack', icon: '🏇', when: () => null },
     { id: 'farm', icon: '🔧', when: () => null },
   ],
   pen: [

@@ -50,6 +50,7 @@ export function openBuilding(ui, kind) {
     milkAll: () => g.groupCollect('milk'),
     shearAll: () => g.groupCollect('shear'),
     farm: () => ui.openFarm(),
+    tack: () => ui.openTack(),
     sleep: () => { close(); g.sleep(); },
     feedPets: () => ui.groupCareWithGame((a) => ['dog', 'cat', 'rabbit'].includes(a.species), 'feed'),
     avatar: () => { close(); ui.showAvatarEditor(g.profile, () => ui.clearScreen()); },

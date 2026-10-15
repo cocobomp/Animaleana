@@ -25,6 +25,8 @@ import { adoptionPrice } from '../sim/adoption.js';
 import { checkObjectives } from '../sim/objectives.js';
 import { saveProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
 import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
+import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
+import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { t, L } from '../i18n.js';
 
@@ -174,7 +176,7 @@ export class Game {
     const [x, z] = def.slot;
     mesh.position.set(x, this.world.heightAt(x, z), z);
     this.world.group.add(mesh);
-    this.world.colliders.push({ x, z, hw: 0.5, hd: 0.4, fence: true });
+    this.world.colliders.push({ x, z, hw: 0.5, hd: 0.4, equip: true });
     const entry = { eq, def, mesh, pos: new THREE.Vector3(x, 0, z) };
     this.equipment.push(entry);
     return entry;
@@ -339,7 +341,7 @@ export class Game {
         const e = this.entities.get(a.id);
         const before = mood(a);
         const events = tickAnimal(a, hours, {
-          weather, sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
+          weather: feltWeather(a, weather, this.temperature, this.season), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
         });
         tickProduce(a, hours);
         if (before !== 'sad' && mood(a) === 'sad') this.ui.toast(t('sad', { name: a.name, g: a.sex }), 4000);
@@ -357,6 +359,7 @@ export class Game {
     if (this.checkAcc > 2) {
       this.checkAcc = 0;
       for (const o of checkObjectives(p)) {
+        this.xp('quest');
         const name = t(`o_${o.id}`);
         const msg = o.kind === 'quest' ? t('questDone', { name }) : t('achievementDone', { name });
         this.ui.toast(o.reward && p.mode === 'manage' ? `${msg} ${t('reward', { n: o.reward })}` : msg, 5000);
@@ -460,6 +463,7 @@ export class Game {
         n++;
       }
     }
+    if (n) this.xp('care', Math.min(n, 3));
     this.ui.toast(n ? t('doneAll', { n }) : t('nobody'));
     this.ui.refresh();
     return n;
@@ -532,6 +536,52 @@ export class Game {
     this.ui.toast(t('skipped', { h: Math.round(hours * 10) / 10 }), 4000);
     this.ui.refresh();
     return hours;
+  }
+
+  /** Gagne de l'expérience ; annonce le nouveau niveau et ce qu'il débloque. */
+  xp(kind, times = 1) {
+    const up = addXp(this.profile, kind, times);
+    if (!up) return;
+    const names = up.unlocked.map((k) => this.unlockName(k)).join(', ');
+    this.ui.levelUp(up.level, names);
+  }
+
+  unlockName(key) {
+    if (EQUIPMENT[key]) return t(`eq_${key}`);
+    if (['petsitter', 'groom', 'shepherd', 'farmhand', 'vet'].includes(key)) return t(`helper_${key}`);
+    return t(`st_${key}`);
+  }
+
+  get level() {
+    return levelOf(this.profile.xp ?? 0);
+  }
+
+  isUnlocked(key) {
+    return isUnlocked(this.profile, key);
+  }
+
+  unlockLevel(key) {
+    return UNLOCKS[key] ?? 1;
+  }
+
+  buyGear(item) {
+    const r = buyGear(this.profile, item);
+    if (!r.ok) return this.ui.toast(t('r_money'));
+    this.ui.toast(t('gearBought', { name: t(`gear_${item}`) }));
+    return r;
+  }
+
+  equip(a, item, color) {
+    const r = equip(this.profile, a, item, color);
+    if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`));
+    this.entities.get(a.id)?.applyGear();
+    if (this.player.mount?.data === a) this.player.seat();
+    return r;
+  }
+
+  unequip(a, slot) {
+    unequip(a, slot);
+    this.entities.get(a.id)?.applyGear();
   }
 
   moodOf(a) {
@@ -649,6 +699,7 @@ export class Game {
     if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name, g: a.sex }));
     spend(this.profile, care.cost);
     addStat(this.profile, action);
+    this.xp('care');
     this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
     this.ui.refresh();
     return res;
@@ -658,6 +709,7 @@ export class Game {
     const r = trainTrick(a, trickId);
     if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
     const e = this.entities.get(a.id);
+    this.xp(r.learned ? 'trickLearned' : 'trick');
     if (r.learned) {
       addStat(this.profile, 'tricksLearned');
       e?.emit('🎉', 5);
@@ -685,11 +737,15 @@ export class Game {
   ride(a) {
     const r = canRide(a);
     if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
+    const gear = rideGear(a);
+    if (!gear.ok) return this.ui.toast(t('r_needBridle', { name: a.name, g: a.sex }), 5000);
+    this.bareback = gear.bareback;
     const e = this.entities.get(a.id);
     if (!e) return null;
     this.player.ride(e);
     addStat(this.profile, 'rides');
-    this.ui.toast(t('ridingHint', { name: a.name, g: a.sex }));
+    this.xp('ride');
+    this.ui.toast(t(gear.bareback ? 'ridingBareback' : 'ridingHint', { name: a.name, g: a.sex }));
     return r;
   }
 
@@ -698,6 +754,10 @@ export class Game {
   }
 
   toggleFollow(a) {
+    if (!a.following) {
+      const lead = canLead(a);
+      if (!lead.ok) return this.ui.toast(t('r_needHalter', { name: a.name, g: a.sex }), 5000);
+    }
     a.following = !a.following;
     this.ui.toast(t(a.following ? 'following' : 'staying', { name: a.name, g: a.sex }));
     if (a.following) addStat(this.profile, 'walks');
@@ -725,6 +785,13 @@ export class Game {
     delete a.adoptKey;
     this.profile.animals.push(a);
     addStat(this.profile, 'adopted');
+    this.xp('adopt');
+    // Le premier cheval reçoit tout de suite le filet et la selle offerts.
+    if (a.species === 'horse') {
+      equip(this.profile, a, 'halter', 'red');
+      equip(this.profile, a, 'bridle');
+      equip(this.profile, a, 'saddle');
+    }
     const door = this.world.interactables.find((i) => i.kind === 'refuge');
     const e = this.spawnEntity(a, door);
     e.emit('❤️', 5);
@@ -752,6 +819,7 @@ export class Game {
       this.spawnEntity(baby, near).emit('🍼', 3);
     }
     addStat(this.profile, 'births', babies.length);
+    this.xp('birth');
     this.ui.toast(t('born', { n: babies.length, names: babies.map((x) => x.name).join(', ') }), 6000);
     this.save();
     return babies;
@@ -767,6 +835,7 @@ export class Game {
     if (wasSick) cure(a);
     else checkup(a);
     addStat(this.profile, 'vet');
+    this.xp('vet');
     this.entities.get(a.id)?.emit('💚', 4);
     this.ui.toast(t(wasSick ? 'vetCured' : 'vetCheckupDone', { name: a.name, g: a.sex }));
     this.ui.refresh();
@@ -807,6 +876,7 @@ export class Game {
   }
 
   buyEquipment(type) {
+    if (!this.isUnlocked(type)) return this.ui.toast(t('lockedLevel', { n: this.unlockLevel(type) }));
     const r = buyEquipment(this.profile, type, this.profile.place);
     if (!r.ok) return this.ui.toast(t(r.reason === 'money' ? 'r_money' : 'alreadyOwned'));
     this.spawnEquipment(r.equipment);
@@ -824,6 +894,7 @@ export class Game {
   }
 
   hire(type) {
+    if (!this.isUnlocked(type)) return this.ui.toast(t('lockedLevel', { n: this.unlockLevel(type) }));
     const r = hireHelper(this.profile, type, this.profile.place);
     if (!r.ok) return this.ui.toast(t('alreadyHired'));
     this.helpers.set(r.helper.id, new HelperEntity(r.helper, this.world, this.scene));
@@ -862,6 +933,7 @@ export class Game {
     const r = collectProduct(this.profile, a);
     if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
     this.entities.get(a.id)?.emit(r.product === 'wool' ? '🧶' : '🥛', 3);
+    this.xp('collect');
     this.ui.toast(t(`got_${r.product}`, { name: a.name, g: a.sex, n: r.earned }));
     this.ui.refresh();
     return r;
@@ -883,6 +955,7 @@ export class Game {
 
   herdingDone(dest, pusher) {
     addStat(this.profile, 'herds');
+    this.xp('herd');
     if (pusher.data.skills) {
       pusher.data.skills.herding = Math.min(100, (pusher.data.skills.herding ?? 0) + 2);
       socialMoment(pusher.data, 'play');
@@ -955,6 +1028,7 @@ export class Game {
     p.place = destId;
     if (!p.visited.includes(destId)) p.visited.push(destId);
     addStat(p, 'travels');
+    this.xp('travel');
     if (mode === 'horse') addStat(p, 'horseTravels');
     this.loadPlace(destId);
     if (mode === 'horse' && horse && this.entities.get(horse.id)) this.player.ride(this.entities.get(horse.id));
@@ -975,6 +1049,14 @@ export class Game {
       weather: this.weather,
       temperature: this.temperature,
       season: this.season,
+      level: this.level,
+      levelProgress: (() => {
+        const xp = p.xp ?? 0;
+        const lv = levelOf(xp);
+        const a = 25 * lv * (lv - 1);
+        const b = 25 * (lv + 1) * lv;
+        return (xp - a) / (b - a);
+      })(),
     };
   }
 }

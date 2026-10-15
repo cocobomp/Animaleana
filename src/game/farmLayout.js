@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { sheepfold } from './models/equipment.js';
 import { PEN, FIELD } from './AnimalEntity.js';
+import { enclosure, fenceColliders } from './nav.js';
 
 const W = 20;
 const D = 14;
@@ -37,8 +38,11 @@ export function buildFarm(world, group) {
       post.castShadow = true;
       group.add(post);
     }
-    world.colliders.push({ x: s.x, z: s.z, hw: s.alongX ? s.len / 2 : 0.12, hd: s.alongX ? 0.12 : s.len / 2, fence: true });
   }
+  // Barrières de la bergerie et du paddock : on ne passe que par l'ouverture.
+  world.colliders.push(...fenceColliders(enclosure('pen')), ...fenceColliders(enclosure('paddock')));
+  world.fences = [...fenceColliders(enclosure('pen')), ...fenceColliders(enclosure('paddock'))];
+
   const fold = sheepfold();
   fold.position.set(cx, world.heightAt(cx, cz - D / 2 + 2.6), cz - D / 2 + 2.6);
   group.add(fold);

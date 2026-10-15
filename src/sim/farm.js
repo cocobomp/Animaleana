@@ -153,16 +153,18 @@ export function helperTask(profile, helper, animals) {
     });
     return low ? { kind: 'refill', equipmentId: low.id } : null;
   }
+  // Les tâches confiées par le joueur (par défaut : tout ce que l'aide sait faire).
+  const duties = helper.duties ?? def.actions;
   let best = null;
   for (const a of animals) {
     if (!def.species.includes(a.species)) continue;
     if (a.produceReady) {
       const action = SPECIES[a.species].product.action;
-      if (def.actions.includes(action)) return { kind: 'product', animalId: a.id, action };
+      if (duties.includes(action)) return { kind: 'product', animalId: a.id, action };
     }
     for (const n of NEEDS) {
       const action = n === 'grooming' && a.species === 'horse' && a.needs.grooming < 25 ? 'shoe' : ACTION_FOR_NEED[n];
-      if (!action || !def.actions.includes(action) || !careable(a, action)) continue;
+      if (!action || !duties.includes(action) || !careable(a, action)) continue;
       if (a.needs[n] < 55 && (!best || a.needs[n] < best.value)) best = { kind: 'care', animalId: a.id, action, value: a.needs[n] };
     }
   }

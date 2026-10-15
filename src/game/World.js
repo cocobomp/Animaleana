@@ -361,12 +361,13 @@ export class World {
 
   /** Vrai si le point est à l'intérieur d'un bâtiment (pour la caméra). */
   insideBuilding(x, y, z) {
-    return this.colliders.some((c) => !c.fence && Math.abs(x - c.x) < c.hw && Math.abs(z - c.z) < c.hd && y < this.heightAt(c.x, c.z) + 7);
+    return this.colliders.some((c) => !c.fence && !c.equip && Math.abs(x - c.x) < c.hw && Math.abs(z - c.z) < c.hd && y < this.heightAt(c.x, c.z) + 7);
   }
 
   /** Repousse un point (x, z, rayon) hors des bâtiments. */
-  resolveCollisions(pos, radius = 0.4) {
+  resolveCollisions(pos, radius = 0.4, opts = {}) {
     for (const c of this.colliders) {
+      if (opts.small && c.fence) continue; // les petits animaux passent sous les barrières
       const dx = pos.x - c.x;
       const dz = pos.z - c.z;
       const ox = c.hw + radius - Math.abs(dx);

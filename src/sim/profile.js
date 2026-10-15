@@ -1,6 +1,7 @@
 // Profils de joueurs, argent et sauvegarde sur l'appareil (localStorage, sans réseau).
 
 import { uid } from './rng.js';
+import { STARTER_ITEMS } from './gear.js';
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -24,6 +25,8 @@ export function createProfile(name, mode = 'sandbox') {
     mode, // 'sandbox' (argent illimité) ou 'manage' (gestion)
     createdAt: Date.now(),
     money: 500,
+    xp: 0,
+    items: { ...STARTER_ITEMS }, // objets achetés (selles, couvertures…)
     avatar: { ...DEFAULT_AVATAR },
     animals: [],
     memorial: [],

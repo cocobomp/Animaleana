@@ -1,15 +1,22 @@
-// Mode construction (dans la vue d'ensemble) : une construction « fantôme » suit le doigt ou la souris,
-// alignée sur une grille de 1 m. Vert = on peut construire ici, rouge = impossible (et on dit pourquoi).
-// On peut la tourner, puis confirmer ou annuler. Sert aussi à déplacer une construction existante.
+// Mode construction (dans la vue d'ensemble) : un objet « fantôme » suit le doigt ou la souris,
+// aligné sur une grille de 1 m. Vert = on peut le poser ici, rouge = impossible (et on dit pourquoi).
+// On peut le tourner, puis confirmer ou annuler.
+// Sert à construire, à déplacer une construction, une installation de base (bergerie, paddock,
+// niche, clapier) ou un équipement (mangeoire, abreuvoir…), et à poser un équipement neuf.
 
 import * as THREE from 'three';
 import { t } from '../i18n.js';
-import { STRUCTURES, footprint, snap, frontDir } from '../sim/construction.js';
+import { STRUCTURES, CORE_ITEMS, snap, frontDir, corePos, equipmentPos, moveFeeFor, EQUIP_SIZE } from '../sim/construction.js';
+import { EQUIPMENT } from '../sim/farm.js';
+import { isSandbox } from '../sim/profile.js';
 import { buildStructureModel } from './models/structures.js';
+import { EQUIPMENT_MODELS, kennel as kennelModel, hutch as hutchModel, sheepfold } from './models/equipment.js';
+import { paddock as paddockModel } from './models/buildings.js';
 import { structureName } from '../ui/construction.js';
 
 const GOOD = 0x3fae62;
 const BAD = 0xe0574a;
+const SIDE_ROT = { '+z': 0, '+x': 1, '-z': 2, '-x': 3 };
 
 function disposeGroup(g) {
   g.traverse((o) => {
@@ -21,11 +28,24 @@ function disposeGroup(g) {
   });
 }
 
+/** Modèle d'une installation de base, pour le fantôme. */
+function coreModel(id) {
+  if (id === 'kennel') return kennelModel();
+  if (id === 'hutch') return hutchModel();
+  if (id === 'pen') return sheepfold();
+  const g = paddockModel(18, 14);
+  g.rotation.y = Math.PI / 2;
+  const wrap = new THREE.Group();
+  wrap.add(g);
+  return wrap;
+}
+
 export class BuildMode {
   constructor(game, view) {
     this.game = game;
     this.view = view;
     this.active = false;
+    this.spec = null;
     this.ghost = null;
     this.dragging = false;
     this.pinned = false;
@@ -56,25 +76,162 @@ export class BuildMode {
     return this.game.ui;
   }
 
-  /** Commence à placer un nouveau type, ou à déplacer la structure movingId. */
+  get st() {
+    return this.game.structures;
+  }
+
+  // ---------------------------------------------------------------- ce qu'on place
+
+  /** Nouvelle construction du catalogue. */
   start(type, movingId = null) {
+    if (movingId) return this.begin(this.specMoveStructure(this.st.get(movingId)));
+    const def = STRUCTURES[type];
+    const st = this.st;
+    return this.begin({
+      emoji: def.emoji,
+      name: structureName(type),
+      cost: def.price,
+      w: def.w,
+      d: def.d,
+      rotatable: true,
+      arrow: def.cat !== 'decor',
+      model: () => buildStructureModel(type, def.cat === 'decor' ? '' : structureName(type)),
+      validate: (x, z, rot) => {
+        const v = st.validate(type, x, z, rot);
+        if (!v.ok) return v;
+        const c = st.canBuild(type);
+        return c.ok ? v : { ok: false, reason: c.reason, level: c.level };
+      },
+      confirm: (x, z, rot) => {
+        const r = st.build(type, x, z, rot);
+        if (!r.ok) return r;
+        this.ui.toast(t('con_built', { name: structureName(type), g: def.g }), 4000);
+        if (def.capacity) setTimeout(() => this.ui.toast(t('con_builtHelp'), 6000), 600);
+        return r;
+      },
+    });
+  }
+
+  specMoveStructure(s) {
+    const def = STRUCTURES[s.type];
+    const st = this.st;
+    const grp = st.group(s.id);
+    return {
+      emoji: def.emoji,
+      name: structureName(s.type),
+      cost: moveFeeFor('structure', s.type),
+      moving: true,
+      w: def.w,
+      d: def.d,
+      rotatable: true,
+      arrow: def.cat !== 'decor',
+      at: { x: s.x, z: s.z, rot: s.rot },
+      model: () => buildStructureModel(s.type, def.cat === 'decor' ? '' : structureName(s.type)),
+      validate: (x, z, rot) => st.validate(s.type, x, z, rot, s.id),
+      confirm: (x, z, rot) => {
+        const r = st.move(s.id, x, z, rot);
+        if (r.ok) this.ui.toast(t('con_moved', { name: structureName(s.type), g: def.g }));
+        return r;
+      },
+      hide: () => { if (grp) grp.visible = false; },
+      show: () => { if (grp) grp.visible = true; },
+    };
+  }
+
+  /** Déplacer la bergerie, le paddock, la niche ou le clapier. */
+  moveCore(id) {
+    const def = CORE_ITEMS[id];
+    const st = this.st;
+    const p = corePos(st.layout, id);
+    const name = t(`bld_${id}`);
+    return this.begin({
+      emoji: def.emoji,
+      name,
+      cost: moveFeeFor('core'),
+      moving: true,
+      w: def.w,
+      d: def.d,
+      rot: SIDE_ROT[def.gate.side],
+      rotatable: false,
+      arrow: true,
+      at: { x: p.x, z: p.z, rot: 0 },
+      model: () => coreModel(id),
+      validate: (x, z) => st.validateCore(id, x, z),
+      confirm: (x, z) => {
+        const r = st.moveCore(id, x, z);
+        if (r.ok) this.ui.toast(t('mgmt_coreMoved', { name }));
+        return r;
+      },
+    });
+  }
+
+  /** Déplacer un équipement acheté. */
+  moveEquipment(entry) {
+    const type = entry.eq.type;
+    const st = this.st;
+    const p = equipmentPos(st.layout, entry.eq);
+    return this.begin({
+      emoji: EQUIPMENT[type].emoji,
+      name: t(`eq_${type}`),
+      cost: moveFeeFor('equipment'),
+      moving: true,
+      w: EQUIP_SIZE,
+      d: EQUIP_SIZE,
+      rotatable: false,
+      at: { x: p.x, z: p.z, rot: 0 },
+      model: () => EQUIPMENT_MODELS[type](),
+      validate: (x, z) => st.validateEquipment(x, z, entry),
+      confirm: (x, z) => {
+        const r = st.moveEquipment(entry, x, z);
+        if (r.ok) this.ui.toast(t('mgmt_eqMoved', { name: t(`eq_${type}`) }));
+        return r;
+      },
+      hide: () => { entry.mesh.visible = false; },
+      show: () => { entry.mesh.visible = true; },
+    });
+  }
+
+  /** Poser un équipement neuf (on l'achète en confirmant). */
+  newEquipment(type) {
+    const def = EQUIPMENT[type];
+    const st = this.st;
+    return this.begin({
+      emoji: def.emoji,
+      name: t(`eq_${type}`),
+      cost: def.price,
+      w: EQUIP_SIZE,
+      d: EQUIP_SIZE,
+      rotatable: false,
+      model: () => EQUIPMENT_MODELS[type](),
+      validate: (x, z) => st.validateEquipment(x, z),
+      confirm: (x, z) => st.buyEquipmentAt(type, x, z),
+    });
+  }
+
+  // ---------------------------------------------------------------- fantôme
+
+  begin(spec) {
     if (this.active) this.cancel();
-    const s = movingId ? this.game.structures.get(movingId) : null;
+    if (!this.view.active) this.view.enter();
     this.active = true;
-    this.type = type;
-    this.moving = s;
-    this.rot = s ? s.rot : 0;
-    this.pinned = !!s || matchMedia('(pointer: coarse)').matches;
+    this.spec = spec;
+    this.rot = spec.at?.rot ?? 0;
+    this.pinned = !!spec.at || matchMedia('(pointer: coarse)').matches;
     this.dragging = false;
-    const at = s ?? this.view.focus;
+    const at = spec.at ?? this.view.focus;
+    if (spec.at) this.view.focus.set(spec.at.x, 0, spec.at.z);
     this.x = null;
-    if (s) {
-      const g = this.game.structures.group(s.id);
-      if (g) g.visible = false;
-    }
+    spec.hide?.();
     this.makeGhost();
     this.setPos(at.x, at.z, true);
     this.view.refreshBar();
+  }
+
+  /** Rectangle au sol pour la rotation actuelle. */
+  rect(x = this.x, z = this.z) {
+    const sp = this.spec;
+    const swap = this.rot % 2 === 1;
+    return { x, z, hw: (swap ? sp.d : sp.w) / 2, hd: (swap ? sp.w : sp.d) / 2 };
   }
 
   makeGhost() {
@@ -82,9 +239,9 @@ export class BuildMode {
       this.ghost.parent?.remove(this.ghost);
       disposeGroup(this.ghost);
     }
-    const def = STRUCTURES[this.type];
+    const sp = this.spec;
     const g = new THREE.Group();
-    const model = buildStructureModel(this.type, def.cat === 'decor' ? '' : structureName(this.type));
+    const model = sp.model();
     model.traverse((o) => {
       if (!o.isMesh && !o.isInstancedMesh) return;
       const old = o.material;
@@ -98,7 +255,7 @@ export class BuildMode {
     model.rotation.y = (this.rot * Math.PI) / 2;
     g.add(model);
     // Plaque colorée au sol (toujours visible) et flèche vers l'entrée.
-    const f = footprint(this.type, 0, 0, this.rot);
+    const f = this.rect(0, 0);
     this.plateMat = new THREE.MeshBasicMaterial({ color: GOOD, transparent: true, opacity: 0.35, depthTest: false, depthWrite: false });
     const plate = new THREE.Mesh(new THREE.PlaneGeometry(f.hw * 2, f.hd * 2).rotateX(-Math.PI / 2), this.plateMat);
     plate.position.y = 0.15;
@@ -111,9 +268,10 @@ export class BuildMode {
     edge.position.y = 0.16;
     edge.renderOrder = 21;
     g.add(edge);
-    this.edgeMat = edge.material;
-    if (def.cat !== 'decor') {
-      const dir = frontDir(this.rot);
+    this.arrowMat = null;
+    if (sp.arrow) {
+      const arot = sp.rot ?? this.rot;
+      const dir = frontDir(arot);
       const ext = dir.x !== 0 ? f.hw : f.hd;
       const shape = new THREE.Shape();
       shape.moveTo(-0.7, 0);
@@ -122,13 +280,11 @@ export class BuildMode {
       shape.closePath();
       const arrow = new THREE.Mesh(new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2).rotateY(Math.PI), this.plateMat.clone());
       arrow.material.opacity = 0.9;
-      arrow.rotation.y = (this.rot * Math.PI) / 2;
+      arrow.rotation.y = (arot * Math.PI) / 2;
       arrow.position.set(dir.x * (ext + 0.4), 0.17, dir.z * (ext + 0.4));
       arrow.renderOrder = 22;
       g.add(arrow);
       this.arrowMat = arrow.material;
-    } else {
-      this.arrowMat = null;
     }
     this.ghost = g;
     this.game.scene.add(g);
@@ -141,18 +297,12 @@ export class BuildMode {
     if (!force && sx === this.x && sz === this.z) return;
     this.x = sx;
     this.z = sz;
-    const w = this.game.world;
-    this.ghost.position.set(sx, w.heightAt(sx, sz), sz);
+    this.ghost.position.set(sx, this.game.world.heightAt(sx, sz), sz);
     this.check();
   }
 
   check() {
-    const st = this.game.structures;
-    this.valid = st.validate(this.type, this.x, this.z, this.rot, this.moving?.id ?? null);
-    if (this.valid.ok && !this.moving) {
-      const c = st.canBuild(this.type);
-      if (!c.ok) this.valid = { ok: false, reason: c.reason, level: c.level };
-    }
+    this.valid = this.spec.validate(this.x, this.z, this.rot);
     const color = this.valid.ok ? GOOD : BAD;
     this.plateMat.color.setHex(color);
     this.arrowMat?.color.setHex(color);
@@ -160,14 +310,14 @@ export class BuildMode {
   }
 
   rotate() {
-    if (!this.active) return;
+    if (!this.active || !this.spec.rotatable) return;
     this.rot = (this.rot + 1) % 4;
     this.makeGhost();
   }
 
-  /** Le pointeur est-il sur la construction fantôme ? */
+  /** Le pointeur est-il sur l'objet fantôme ? */
   overGhost(p) {
-    const f = footprint(this.type, this.x, this.z, this.rot);
+    const f = this.rect();
     const m = Math.max(1, Math.min(f.hw, f.hd) * 0.2);
     return Math.abs(p.x - f.x) < f.hw + m && Math.abs(p.z - f.z) < f.hd + m;
   }
@@ -178,8 +328,7 @@ export class BuildMode {
     if (!p) return;
     if (this.overGhost(p) || !this.pinned) {
       this.dragging = true;
-      this.offset = { x: this.x - p.x, z: this.z - p.z };
-      if (!this.pinned) this.offset = { x: 0, z: 0 };
+      this.offset = this.pinned ? { x: this.x - p.x, z: this.z - p.z } : { x: 0, z: 0 };
       this.view.lockPan = true;
     }
   }
@@ -194,7 +343,7 @@ export class BuildMode {
     this.setPos(p.x + off.x, p.z + off.z);
   }
 
-  /** Toucher le sol : la construction vient ici. */
+  /** Toucher le sol : l'objet vient ici. */
   onTap(sx, sy) {
     const p = this.view.groundAt(sx, sy);
     if (!p) return;
@@ -204,8 +353,7 @@ export class BuildMode {
 
   update() {
     if (!this.active || !this.ghost) return;
-    const k = 0.3 + Math.sin(performance.now() / 220) * 0.08;
-    this.plateMat.opacity = k;
+    this.plateMat.opacity = 0.3 + Math.sin(performance.now() / 220) * 0.08;
   }
 
   reasonText() {
@@ -214,44 +362,41 @@ export class BuildMode {
     return t(`con_bad_${v.reason}`, { n: v.level });
   }
 
+  /** Prix affiché dans la barre (rien en bac à sable). */
+  priceText() {
+    const c = this.spec.cost;
+    if (!c || isSandbox(this.game.profile)) return '';
+    return ` · ${c} 🪙`;
+  }
+
   confirm() {
     if (!this.active) return;
-    const st = this.game.structures;
-    const name = structureName(this.type);
-    const g = STRUCTURES[this.type].g;
     if (!this.valid.ok) {
       this.ui.toast(this.reasonText());
       return;
     }
-    if (this.moving) {
-      const r = st.move(this.moving.id, this.x, this.z, this.rot);
-      if (!r.ok) return this.ui.toast(t(`con_bad_${r.reason}`));
-      this.ui.toast(t('con_moved', { name, g }));
-      this.end();
+    const sp = this.spec;
+    const r = sp.confirm(this.x, this.z, this.rot);
+    if (!r?.ok) {
+      if (!r?.silent) this.ui.toast(t(`con_bad_${r?.reason ?? 'unknown'}`, { n: r?.level }));
       return;
     }
-    const r = st.build(this.type, this.x, this.z, this.rot);
-    if (!r.ok) return this.ui.toast(t(`con_bad_${r.reason}`, { n: r.level }));
-    this.ui.toast(t('con_built', { name, g }), 4000);
-    if (STRUCTURES[this.type].capacity) setTimeout(() => this.ui.toast(t('con_builtHelp'), 6000), 600);
-    this.end();
+    this.end(true);
     this.ui.refresh();
   }
 
   cancel() {
     if (!this.active) return;
-    if (this.moving) {
-      const grp = this.game.structures.group(this.moving.id);
-      if (grp) grp.visible = true;
-    }
-    this.end();
+    this.end(false);
   }
 
-  end() {
+  end(done) {
+    const sp = this.spec;
     this.active = false;
-    this.moving = null;
+    this.spec = null;
     this.dragging = false;
     this.view.lockPan = false;
+    if (!done || sp?.moving) sp?.show?.();
     if (this.ghost) {
       this.ghost.parent?.remove(this.ghost);
       disposeGroup(this.ghost);
@@ -260,3 +405,4 @@ export class BuildMode {
     this.view.refreshBar();
   }
 }
+

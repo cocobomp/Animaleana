@@ -7,9 +7,10 @@ import { t } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import {
-  STRUCTURES, CATEGORIES, spaceSummary, canAssign, refundOf, accepts, hasResidents,
+  STRUCTURES, CATEGORIES, spaceSummary, canAssign, refundOf, accepts, hasResidents, moveFeeFor,
 } from '../sim/construction.js';
 import { buildingActions } from '../sim/buildings.js';
+import { EQUIPMENT } from '../sim/farm.js';
 import { actionSheet } from './actions.js';
 
 /** Nom d'une construction (les décorations ont leurs propres noms). */
@@ -30,19 +31,18 @@ export function renderBar(ui, view) {
   let key;
   let content;
   if (b.active) {
-    const def = STRUCTURES[b.type];
-    const sandbox = isSandbox(ui.game.profile);
-    const price = b.moving || sandbox ? '' : ` · ${def.price} 🪙`;
+    const sp = b.spec;
     const touch = matchMedia('(pointer: coarse)').matches;
     const reason = b.reasonText();
-    key = `b|${b.type}|${b.moving?.id}|${b.valid.ok}|${reason}|${b.rot}`;
+    const title = `${sp.moving ? '↔️ ' : ''}${sp.emoji} ${sp.name}${b.priceText()}`;
+    key = `b|${title}|${b.valid.ok}|${reason}|${b.rot}`;
     content = [
       h('div', { class: `mgmt-info ${b.valid.ok ? 'ok' : 'bad'}` },
-        h('b', {}, `${def.emoji} ${structureName(b.type)}${price}`),
+        h('b', {}, title),
         h('small', {}, b.valid.ok ? t(touch ? 'con_hint' : 'con_hintMouse') : `⛔ ${reason}`)),
       h('div', { class: 'mgmt-row' },
-        big('⟳', t('con_rotate'), () => b.rotate()),
-        big('✅', t(b.moving ? 'con_confirmMove' : 'con_confirm'), () => b.confirm(), `primary ${b.valid.ok ? '' : 'off'}`),
+        sp.rotatable ? big('⟳', t('con_rotate'), () => b.rotate()) : null,
+        big('✅', t(sp.moving ? 'con_confirmMove' : 'con_confirm'), () => b.confirm(), `primary ${b.valid.ok ? '' : 'off'}`),
         big('✖', t('cancel'), () => b.cancel())),
     ];
   } else {
@@ -75,6 +75,31 @@ export function openCatalogue(ui) {
         h('div', { class: 'chips' }, [['horse', '🐴'], ['livestock', '🐑'], ['dog', '🐶'], ['rabbit', '🐰']]
           .map(([k, e]) => h('span', { class: 'chip' }, `${e} ${t('con_spaceChip', { used: space[k].used, cap: space[k].cap })}`))),
       ];
+      // Équipements de la ferme (mangeoires, abreuvoirs…) : on choisit où les poser.
+      const eqTypes = Object.keys(EQUIPMENT).filter((type) => !g.equipment.some((q) => q.eq.type === type));
+      if (eqTypes.length) {
+        out.push(h('h3', {}, t('mgmt_cat_equipment')));
+        out.push(h('div', { class: 'cards' }, eqTypes.map((type) => {
+          const def = EQUIPMENT[type];
+          const locked = !g.isUnlocked(type);
+          const who = def.serves.map((sid) => SPECIES[sid].emoji).join(' ');
+          const side = locked
+            ? h('span', { class: 'lock' }, `🔒 ${t('level', { n: g.unlockLevel(type) })}`)
+            : h('button', {
+              class: `primary con-place ${canAfford(p, def.price) ? '' : 'off'}`,
+              onClick: () => {
+                if (!canAfford(p, def.price)) return ui.toast(t('r_money'));
+                ui.closePanel();
+                g.mgmt.build.newEquipment(type);
+                return null;
+              },
+            }, sandbox ? t('con_place') : `${t('con_place')} · ${def.price} 🪙`);
+          return h('div', { class: `card ${locked ? 'locked' : ''}` },
+            h('span', { class: 'card-emoji' }, def.emoji),
+            h('span', { class: 'card-main' }, h('b', {}, t(`eq_${type}`)), h('small', {}, `${who} · ${t(`eqd_${type}`)}`)),
+            side);
+        })));
+      }
       for (const cat of CATEGORIES) {
         const types = Object.keys(STRUCTURES).filter((k) => STRUCTURES[k].cat === cat);
         out.push(h('h3', {}, t(`con_cat_${cat}`)));
@@ -130,8 +155,6 @@ export function openStructure(ui, s) {
     conTrain: () => { const n = st.trainHorses(s); ui.toast(n ? t('con_trained', { n }) : t('nobody')); },
     conMove: () => {
       close();
-      if (!g.mgmt.active) g.mgmt.enter();
-      g.mgmt.focus.set(s.x, 0, s.z);
       g.mgmt.build.start(s.type, s.id);
     },
     conDemolish: async () => {
@@ -167,7 +190,8 @@ export function openStructure(ui, s) {
     };
     return buildingActions(kind, ctx).map((a) => ({
       icon: a.icon,
-      label: a.id === 'conResidents' ? `${t('con_do_conResidents')} (${ctx.count.residents}/${def.capacity})` : t(`con_do_${a.id}`),
+      label: a.id === 'conResidents' ? `${t('con_do_conResidents')} (${ctx.count.residents}/${def.capacity})`
+        : a.id === 'conMove' && !isSandbox(g.profile) ? `${t('con_do_conMove')} · ${moveFeeFor('structure', s.type)} 🪙` : t(`con_do_${a.id}`),
       enabled: a.enabled,
       why: a.reason ? why(a.reason, a.params) : '',
       primary: a.id === 'conResidents' && ctx.count.residents === 0,
@@ -253,4 +277,33 @@ export function homeSection(ui, a) {
   if (btns.length) out.push(h('div', { class: 'grid' }, btns));
   else out.push(h('p', { class: 'note' }, t('con_homeHint')));
   return out;
+}
+
+// ---------------------------------------------------------------- équipements
+
+/** Un équipement touché dans la vue d'ensemble : le déplacer ou le remplir. */
+export function openEquipment(ui, entry) {
+  const g = ui.game;
+  const type = entry.eq.type;
+  const def = EQUIPMENT[type];
+  const sandbox = isSandbox(g.profile);
+  const fee = sandbox ? '' : ` · ${moveFeeFor('equipment')} 🪙`;
+  actionSheet(ui, `${def.emoji} ${t(`eq_${type}`)}`, t(`eqd_${type}`), () => {
+    const items = [{
+      icon: '↔️',
+      label: `${t('con_do_conMove')}${fee}`,
+      primary: true,
+      run: () => { ui.closePanel(); g.mgmt.build.moveEquipment(entry); },
+    }];
+    if (def.stock !== null && !sandbox) {
+      items.push({
+        icon: '🔄',
+        label: `${t('refill')} · ${def.refill} 🪙`,
+        enabled: entry.eq.stock < def.stock,
+        why: t('alreadyFull'),
+        run: () => { g.refillEquipment(entry.eq); ui.renderPanel(); },
+      });
+    }
+    return items;
+  }, null, true);
 }

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { sheepfold, kennel, hutch, wireFence } from './models/equipment.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { enclosure, fenceColliders } from './nav.js';
+import { coreAt } from './coreLayout.js'; // installations déplaçables (vue d'ensemble)
 
 const W = 20;
 const D = 14;
@@ -46,19 +47,21 @@ export function buildFarm(world, group) {
   world.colliders.push(...fenceColliders(enclosure('hutch')));
 
   // Obstacles solides : bottes de foin, abreuvoir, barre de saut (franchissable à cheval).
+  const pad = (x, z) => { const [px, pz] = coreAt('paddock', x, z); return { x: px, z: pz }; };
   world.colliders.push(
-    { x: -21.5, z: 21, hw: 0.7, hd: 0.7, small: true },
-    { x: -27, z: 8, hw: 0.7, hd: 0.7, small: true },
-    { x: -21.5, z: 11, hw: 0.45, hd: 1, small: true },
-    { x: -16, z: 16, hw: 0.15, hd: 1.7, jump: true },
+    { ...pad(-21.5, 21), hw: 0.7, hd: 0.7, small: true },
+    { ...pad(-27, 8), hw: 0.7, hd: 0.7, small: true },
+    { ...pad(-21.5, 11), hw: 0.45, hd: 1, small: true },
+    { ...pad(-16, 16), hw: 0.15, hd: 1.7, jump: true },
   );
 
   // Niche des chiens
   const k = kennel();
-  k.position.set(-9, world.heightAt(-9, -7), -7);
+  const [kx, kz] = coreAt('kennel', -9, -7);
+  k.position.set(kx, world.heightAt(kx, kz), kz);
   group.add(k);
-  world.colliders.push({ x: -9, z: -7, hw: 0.8, hd: 0.9, small: true });
-  world.interactables.push({ kind: 'kennel', x: -9, z: -5.4 });
+  world.colliders.push({ x: kx, z: kz, hw: 0.8, hd: 0.9, small: true });
+  world.interactables.push({ kind: 'kennel', x: kx, z: kz + 1.6 });
 
   // Clapier et son enclos grillagé
   const hu = enclosure('hutch');
@@ -77,12 +80,12 @@ export function buildFarm(world, group) {
     group.add(f);
   }
   world.interactables.push({ kind: 'hutch', x: hu.x, z: hu.z + hu.hd + 1 });
-  world.interactables.push({ kind: 'paddock', x: -7.6, z: 16 });
+  world.interactables.push({ kind: 'paddock', ...pad(-7.6, 16) });
 
   const fold = sheepfold();
   fold.position.set(cx, world.heightAt(cx, cz - D / 2 + 2.6), cz - D / 2 + 2.6);
   group.add(fold);
 
   world.interactables.push({ kind: 'pen', x: PEN.gate.x, z: PEN.gate.z - 1 });
-  world.clearZones.push({ x: 9, z: 4, r: 4 }, { x: -9, z: -7, r: 2.5 }, { x: cx, z: cz, r: 13 }, { x: FIELD.x, z: FIELD.z, r: FIELD.r + 3 }, { x: PEN.gate.x, z: PEN.gate.z + 6, r: 6 });
+  world.clearZones.push({ x: hu.x, z: hu.z, r: 4 }, { x: kx, z: kz, r: 2.5 }, { x: cx, z: cz, r: 13 }, { x: FIELD.x, z: FIELD.z, r: FIELD.r + 3 }, { x: PEN.gate.x, z: PEN.gate.z + 6, r: 6 });
 }

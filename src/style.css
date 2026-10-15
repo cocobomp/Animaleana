@@ -592,6 +592,7 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
 .mgmt-label.structure { background: rgba(122, 82, 54, 0.9); }
 .mgmt-label.animal { background: rgba(20, 28, 24, 0.62); min-height: 36px; padding: 4px 10px; font-size: 0.82rem; font-weight: 500; }
 .mgmt-label.warn { border-color: var(--mid); }
+.mgmt-label.equip { background: rgba(63, 111, 168, 0.85); min-height: 40px; min-width: 40px; padding: 4px 8px; font-size: 1.05rem; }
 #mgmt-bar {
   position: fixed;
   left: 50%;

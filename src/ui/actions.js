@@ -81,6 +81,7 @@ export function openBuilding(ui, kind) {
     feedRabbits: () => ui.groupCareWithGame((a) => a.species === 'rabbit', 'feed'),
     cleanHutch: () => ui.groupCareWithGame((a) => a.species === 'rabbit', 'clean'),
     farm: () => ui.openFarm(),
+    moveCore: () => { close(); g.mgmt.build.moveCore(kind); }, // vue d'ensemble : déplacer cette installation
     tack: () => ui.openTack(),
     sleep: () => { close(); g.sleep(); },
     feedPets: () => ui.groupCareWithGame((a) => ['dog', 'cat', 'rabbit'].includes(a.species), 'feed'),

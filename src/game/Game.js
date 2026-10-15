@@ -36,7 +36,8 @@ import { t, L } from '../i18n.js';
 import { Structures } from './Structures.js';
 import { ManagementView } from './ManagementView.js';
 import { openStructure } from '../ui/construction.js';
-import { doorOf } from '../sim/construction.js';
+import { doorOf, equipmentPos } from '../sim/construction.js';
+import { applyCoreLayout } from './coreLayout.js';
 
 const CARE_EMOJI = {
   feed: '🍖', water: '💧', brush: '✨', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨',
@@ -166,17 +167,18 @@ export class Game {
     return PLACES[this.profile.place];
   }
 
-  loadPlace(placeId) {
+  loadPlace(placeId, opts = {}) {
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
     this.entities.clear();
     for (const h of this.helpers.values()) h.dispose();
     this.helpers.clear();
+    applyCoreLayout(this.profile.coreLayout?.[placeId]); // bergerie, paddock… déplacés par le joueur
     this.world.build(placeId, this.season, placeId === this.profile.home);
     this.equipment = [];
     for (const eq of equipmentAt(this.profile, placeId)) this.spawnEquipment(eq);
-    this.mgmt.stop();
+    if (!opts.keepView) this.mgmt.stop();
     this.structures.rebuild(placeId); // constructions du joueur (avant les animaux : leur maison)
     this.droppingMeshes.clear();
     for (const d of this.profile.droppings ?? []) if (d.place === placeId) this.spawnDropping(d);
@@ -196,11 +198,13 @@ export class Game {
   spawnEquipment(eq) {
     const def = EQUIPMENT[eq.type];
     const mesh = EQUIPMENT_MODELS[eq.type]();
-    const [x, z] = def.slot;
+    // Position choisie dans la vue d'ensemble (eq.pos), sinon l'emplacement prévu.
+    const { x, z } = equipmentPos(this.profile.coreLayout?.[eq.place], eq);
     mesh.position.set(x, this.world.heightAt(x, z), z);
     this.world.group.add(mesh);
-    this.world.colliders.push({ x, z, hw: 0.5, hd: 0.4, equip: true });
-    const entry = { eq, def, mesh, pos: new THREE.Vector3(x, 0, z) };
+    const col = { x, z, hw: 0.5, hd: 0.4, equip: true };
+    this.world.colliders.push(col);
+    const entry = { eq, def, mesh, col, pos: new THREE.Vector3(x, 0, z) };
     this.equipment.push(entry);
     return entry;
   }
@@ -646,7 +650,7 @@ export class Game {
 
   /** Les chevaux rentrent au paddock (ou en sortent pour aller au pré). */
   sendHorses(where) {
-    const target = where === 'field' ? FIELD : { x: -16, z: 16 };
+    const target = where === 'field' ? FIELD : enclosure('paddock'); // (le paddock peut être déplacé)
     let n = 0;
     for (const e of this.entities.values()) {
       if (e.data.species !== 'horse' || e.ridden) continue;

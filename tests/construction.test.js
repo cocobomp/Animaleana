@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   STRUCTURES, footprint, validatePlacement, build, moveStructure, demolish, canBuild, canAssign, assign, residents,
-  homeZone, gateOf, enclosureOf, comfortBonus, applyComfort, spaceSummary, structureAtPoint, homeOf, frontSide, toWorld, refundOf,
+  homeZone, gateOf, MOVE_FEE, validateCore, validateEquipment, moveCore, moveEquipment, corePos, slotOf, equipmentPos, coreRects, enclosureOf, comfortBonus, applyComfort, spaceSummary, structureAtPoint, homeOf, frontSide, toWorld, refundOf,
 } from '../src/sim/construction.js';
 import { createProfile } from '../src/sim/profile.js';
 import { createAnimal } from '../src/sim/animal.js';
@@ -67,7 +67,7 @@ describe('construction : placement', () => {
 });
 
 describe('construction : achats', () => {
-  it('niveau requis, prix, déplacement gratuit et démolition remboursée à moitié', () => {
+  it('niveau requis, prix, petit prix pour déplacer et démolition remboursée à moitié', () => {
     const p = createProfile('B', 'manage');
     expect(canBuild(p, 'ranch')).toMatchObject({ ok: false, reason: 'locked', level: 10 });
     p.xp = xpForLevel(12);
@@ -79,11 +79,11 @@ describe('construction : achats', () => {
     expect(r.structure).toMatchObject({ x: 40, z: 21, rot: 1 });
     expect(p.money).toBe(100);
     moveStructure(p, r.structure.id, 60, 20, 2);
-    expect(p.money).toBe(100);
+    expect(p.money).toBe(100 - MOVE_FEE.structure);
     expect(structureAtPoint(p, 'maison', 62, 21)?.id).toBe(r.structure.id);
     const d = demolish(p, r.structure.id);
     expect(d.refund).toBe(refundOf('barn'));
-    expect(p.money).toBe(100 + 450);
+    expect(p.money).toBe(100 - MOVE_FEE.structure + 450);
     expect(p.structures).toHaveLength(0);
   });
 
@@ -178,5 +178,43 @@ describe('construction : feuilles d\'actions', () => {
     expect(find(buildingActions('con_arena', { hour: 10, count: c }), 'conTrain').enabled).toBe(true);
     expect(find(buildingActions('con_arena', { hour: 22, count: c }), 'conTrain').reason).toBe('night');
     expect(buildingActions('con_decor', { hour: 10, count: c }).map((a) => a.id)).toEqual(['conMove', 'conDemolish']);
+  });
+});
+
+describe('construction : déplacer la ferme de base et les équipements', () => {
+  it('la bergerie déménage avec ses équipements prévus ; on ne la pose pas sur la maison', () => {
+    const p = manage(100);
+    expect(validateCore('pen', 0, -10, flat).ok).toBe(false);
+    expect(validateCore('pen', 50, 40, flat).ok).toBe(true);
+    // Reposer la bergerie sur place : elle ne se gêne pas elle-même.
+    expect(validateCore('pen', 14, 35, flat).ok).toBe(true);
+    expect(moveCore(p, 'maison', 'pen', 50.3, 40).ok).toBe(true);
+    expect(p.money).toBe(100 - MOVE_FEE.core);
+    const layout = p.coreLayout.maison;
+    expect(corePos(layout, 'pen')).toEqual({ x: 50, z: 40 });
+    expect(slotOf(layout, 'penFeeder')).toEqual({ x: 56, z: 46 });
+    expect(slotOf(layout, 'petFeeder')).toEqual({ x: 3.5, z: -9.5 });
+    // L'ancien emplacement est libre maintenant.
+    expect(validatePlacement('kennel', 14, 35, 0, { ...flat, core: layout }).ok).toBe(true);
+    expect(validatePlacement('kennel', 50, 40, 0, { ...flat, core: layout }).ok).toBe(false);
+    expect(coreRects(layout).some((r) => r.id === 'pen' && r.x === 50)).toBe(true);
+  });
+
+  it('un équipement va où l\'on veut, même dans la cour, mais pas devant une entrée', () => {
+    const p = createProfile('E', 'sandbox');
+    const eq = { id: 'e', type: 'petFeeder', place: 'maison', stock: 30 };
+    expect(equipmentPos(null, eq)).toEqual({ x: 3.5, z: -9.5 });
+    expect(validateEquipment(2, -3, flat).ok).toBe(true);
+    expect(validateEquipment(14, 49, flat).reason).toBe('core'); // devant la bergerie
+    expect(validateEquipment(2, -3, { ...flat, colliders: [{ x: 2, z: -3, hw: 1, hd: 1 }] }).reason).toBe('overlap');
+    expect(moveEquipment(p, eq, 2.2, -3).ok).toBe(true);
+    expect(equipmentPos(null, eq)).toEqual({ x: 2, z: -3 });
+    expect(p.money).toBe(500); // gratuit en bac à sable
+  });
+
+  it('sans argent, on ne déménage pas', () => {
+    const p = manage(5);
+    expect(moveCore(p, 'maison', 'kennel', 40, 0)).toMatchObject({ ok: false, reason: 'money' });
+    expect(moveEquipment(p, { type: 'penTrough' }, 1, 1).reason).toBe('money');
   });
 });

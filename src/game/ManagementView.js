@@ -10,9 +10,11 @@ import { SPECIES } from '../sim/species.js';
 import { STRUCTURES, footprint } from '../sim/construction.js';
 import { PEN } from './AnimalEntity.js';
 import { BuildMode } from './BuildMode.js';
-import { renderBar, openStructure, structureName } from '../ui/construction.js';
+import { renderBar, openStructure, openEquipment, structureName } from '../ui/construction.js';
+import { enclosure } from './nav.js';
+import { EQUIPMENT } from '../sim/farm.js';
 
-const BLD_ICON = { stable: '🐴', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋' };
+const BLD_ICON = { stable: '🐴', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋', paddock: '🐎', kennel: '🐶', hutch: '🐰' };
 const MIN_H = 16;
 const MAX_H = 150;
 const smoothstep = (x) => x * x * (3 - 2 * x);
@@ -52,7 +54,7 @@ export class ManagementView {
     const cam = g.camera;
     this.saved = { pos: cam.position.clone(), quat: cam.quaternion.clone() };
     this.focus.set(g.player.position.x, 0, g.player.position.z + 6);
-    this.height = 55;
+    this.height = window.innerWidth < 640 ? 70 : 55; // sur téléphone, on voit un peu plus large
     this.trans = { t: 0, dur: 0.9, from: cam.position.clone(), fromQ: cam.quaternion.clone(), out: false };
     this.active = true;
     this.leaving = false;
@@ -224,6 +226,14 @@ export class ManagementView {
         return;
       }
     }
+    const eqHit = rc.intersectObjects(g.equipment.map((q) => q.mesh), true)[0];
+    if (eqHit) {
+      const q = g.equipment.find((x) => { let o = eqHit.object; while (o && o !== x.mesh) o = o.parent; return !!o; });
+      if (q) {
+        openEquipment(this.ui, q);
+        return;
+      }
+    }
     const s = g.structures.pick(rc, ground);
     if (s) {
       openStructure(this.ui, s);
@@ -255,12 +265,14 @@ export class ManagementView {
       const col = w.colliders.find((c) => c.kind === it.kind);
       let pos = col ? { x: col.x, z: col.z } : { x: it.x, z: it.z };
       if (it.kind === 'pen') pos = { x: PEN.x, z: PEN.z - 3 };
-      if (it.kind === 'stable') pos = { x: -16, z: 6 };
+      if (it.kind === 'paddock') pos = { x: enclosure('paddock').x, z: enclosure('paddock').z };
       const name = it.kind === 'refuge' && !g.isHome ? t('bld_breeder') : t(`bld_${it.kind}`);
       let extra = '';
       if (it.kind === 'stable') extra = status(free.filter((a) => a.species === 'horse'), '🐴');
       if (it.kind === 'pen') extra = status(free.filter((a) => SPECIES[a.species].livestock), '🐑');
-      if (it.kind === 'house' || it.kind === 'lodge') extra = status(free.filter((a) => ['dog', 'cat', 'rabbit'].includes(a.species)), '🐾');
+      if (it.kind === 'house' || it.kind === 'lodge') extra = status(free.filter((a) => a.species === 'cat'), '🐱');
+      if (it.kind === 'kennel') extra = status(free.filter((a) => a.species === 'dog'), '🐶');
+      if (it.kind === 'hutch') extra = status(free.filter((a) => a.species === 'rabbit'), '🐰');
       if (it.kind === 'vet') {
         const sick = here.filter((a) => a.sick);
         extra = sick.length ? ` · 🤒 ${sick.length} ⚠️` : '';
@@ -284,6 +296,17 @@ export class ManagementView {
           : `${def.emoji} ${structureName(s.type)}${def.capacity ? ` · 👥 ${res.length}/${def.capacity}` : ''}${warn ? ' ⚠️' : ''}`,
         tap: () => openStructure(this.ui, s),
       });
+    }
+    // Équipements : on peut les toucher pour les déplacer (comme dans un jeu de construction).
+    if (!far) {
+      for (const q of g.equipment) {
+        const low = q.def.stock !== null && !g.equipmentStock(q.eq);
+        items.push({
+          key: `e-${q.eq.id}`, x: q.pos.x, z: q.pos.z, y: 1.4, cls: `mgmt-label equip${low ? ' warn' : ''}`,
+          text: `${EQUIPMENT[q.eq.type].emoji}${low ? ' ⚠️' : ''}`,
+          tap: () => openEquipment(this.ui, q),
+        });
+      }
     }
     if (!far) {
       for (const e of g.entities.values()) {

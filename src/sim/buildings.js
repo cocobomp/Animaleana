@@ -27,16 +27,19 @@ const RULES = {
     { id: 'waterHorses', icon: '💧', when: (c) => need(c.count.horse) },
     { id: 'cleanPaddock', icon: '🧹', when: (c) => (c.count.paddockDroppings > 0 ? null : { reason: 'alreadyClean' }) },
     { id: 'farm', icon: '🔧', when: () => null },
+    { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
   kennel: [
     { id: 'feedDogs', icon: '🥣', when: (c) => need(c.count.dog) },
     { id: 'waterDogs', icon: '💧', when: (c) => need(c.count.dog) },
     { id: 'farm', icon: '🔧', when: () => null },
+    { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
   hutch: [
     { id: 'feedRabbits', icon: '🥕', when: (c) => need(c.count.rabbit) },
     { id: 'cleanHutch', icon: '🧹', when: (c) => need(c.count.rabbit) },
     { id: 'farm', icon: '🔧', when: () => null },
+    { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
   pen: [
     { id: 'outFlock', icon: '🌿', when: (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18) },
@@ -51,6 +54,7 @@ const RULES = {
     // On tond au printemps et en été.
     { id: 'shearAll', icon: '🧶', when: (c) => need(c.count.shearable, 'noneReady') ?? (['spring', 'summer'].includes(c.season) ? null : { reason: 'shearSeason' }) ?? dayOnly(c, 7, 19) },
     { id: 'farm', icon: '🔧', when: () => null },
+    { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
   house: [
     { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 10) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },

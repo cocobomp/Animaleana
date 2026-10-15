@@ -757,6 +757,10 @@ const fr = {
   con_homeNone: 'Vit à sa place habituelle.',
   con_moveOut: 'Place habituelle',
   con_homeHint: 'Construis-lui une maison dans la vue d\'ensemble (🗺️ puis 🔨).',
+  mgmt_cat_equipment: 'Équipements',
+  mgmt_coreMoved: '↔️ Déménagement terminé : {name}.',
+  mgmt_eqMoved: '↔️ {name} : nouvelle place !',
+  do_moveCore: 'Déplacer',
 };
 
 const en = {
@@ -1458,6 +1462,10 @@ const en = {
   con_homeNone: 'Lives in the usual place.',
   con_moveOut: 'Usual place',
   con_homeHint: 'Build a home in the overview (🗺️ then 🔨).',
+  mgmt_cat_equipment: 'Equipment',
+  mgmt_coreMoved: '↔️ Move done: {name}.',
+  mgmt_eqMoved: '↔️ {name}: new spot!',
+  do_moveCore: 'Move',
 };
 
 const DICTS = { fr, en };

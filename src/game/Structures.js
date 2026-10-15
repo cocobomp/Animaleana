@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import {
   STRUCTURES, structuresAt, findStructure, footprint, toWorld, enclosureOf, homeZone, zoneRect, hasResidents,
   validatePlacement, build, moveStructure, demolish, assign, unassign, residents, applyComfort, homeOf, structureAtPoint,
-  isEnclosure, canBuild,
+  isEnclosure, canBuild, validateCore, validateEquipment, moveCore, moveEquipment, coreRect, equipmentPos,
 } from '../sim/construction.js';
 import { addStat } from '../sim/profile.js';
 import { scoopZone } from '../sim/droppings.js';
@@ -179,11 +179,17 @@ export class Structures {
     return null;
   }
 
+  /** Positions des installations de base dans ce lieu (bergerie, paddock… déplacés). */
+  get layout() {
+    return this.profile.coreLayout?.[this.profile.place] ?? null;
+  }
+
   /** Obstacles et zones interdites pour valider un emplacement. */
   env(ignore = null) {
     const w = this.world;
     return {
       ignore,
+      core: this.layout,
       structures: this.here(),
       colliders: w.colliders.filter((c) => !c.structure),
       blocked: w.interactables.map((d) => ({ x: d.x, z: d.z, hw: 1.6, hd: 1.6 })),
@@ -194,6 +200,23 @@ export class Structures {
 
   validate(type, x, z, rot, ignore = null) {
     return validatePlacement(type, x, z, rot, this.env(ignore));
+  }
+
+  /** Déplacer la bergerie, le paddock, la niche ou le clapier : on ignore ses propres barrières. */
+  validateCore(id, x, z) {
+    const env = this.env();
+    const old = coreRect(this.layout, id);
+    const mine = (c) => Math.abs(c.x - old.x) <= old.hw + 0.6 && Math.abs(c.z - old.z) <= old.hd + 0.6;
+    env.colliders = env.colliders.filter((c) => !mine(c));
+    env.blocked = env.blocked.filter((c) => !mine(c));
+    return validateCore(id, x, z, env);
+  }
+
+  /** Poser un équipement : toutes les barrières comptent (on peut le mettre dans un enclos). */
+  validateEquipment(x, z, entry = null) {
+    const env = this.env();
+    env.colliders = this.world.colliders.filter((c) => c !== entry?.col);
+    return validateEquipment(x, z, env);
   }
 
   residents(s) {
@@ -239,6 +262,64 @@ export class Structures {
     for (const a of r.freed) this.sendHome(a);
     this.game.save();
     return r;
+  }
+
+  /** Déplace une installation de base : le lieu est reconstruit autour du joueur. */
+  moveCore(id, x, z) {
+    const v = this.validateCore(id, x, z);
+    if (!v.ok) return v;
+    const r = moveCore(this.profile, this.profile.place, id, x, z);
+    if (!r.ok) return r;
+    this.reloadPlace();
+    return r;
+  }
+
+  /** Reconstruit le lieu (après un déménagement) sans bouger le joueur ni quitter la vue d'ensemble. */
+  reloadPlace() {
+    const g = this.game;
+    const pp = g.player.position.clone();
+    const yaw = g.rig.yaw;
+    g.save();
+    g.loadPlace(this.profile.place, { keepView: true });
+    g.player.spawn(pp.x, pp.z);
+    this.world.resolveCollisions(g.player.position);
+    g.rig.yaw = yaw;
+  }
+
+  /** Déplace un équipement acheté (sans reconstruire le lieu). */
+  moveEquipment(entry, x, z, free = false) {
+    const v = this.validateEquipment(x, z, entry);
+    if (!v.ok) return v;
+    if (free) entry.eq.pos = [Math.round(x), Math.round(z)];
+    else {
+      const r = moveEquipment(this.profile, entry.eq, x, z);
+      if (!r.ok) return r;
+    }
+    this.placeEquipment(entry);
+    this.game.save();
+    return { ok: true };
+  }
+
+  placeEquipment(entry) {
+    const { x, z } = equipmentPos(this.layout, entry.eq);
+    entry.mesh.position.set(x, this.world.heightAt(x, z), z);
+    entry.mesh.visible = true;
+    entry.pos.set(x, 0, z);
+    if (entry.col) {
+      entry.col.x = x;
+      entry.col.z = z;
+    }
+  }
+
+  /** Acheter un équipement et le poser à l'endroit choisi. */
+  buyEquipmentAt(type, x, z) {
+    const v = this.validateEquipment(x, z);
+    if (!v.ok) return v;
+    const r = this.game.buyEquipment(type);
+    if (!r?.ok) return { ok: false, reason: 'money', silent: true }; // (buyEquipment a déjà prévenu)
+    const entry = this.game.equipment.find((q) => q.eq.id === r.equipment.id);
+    if (entry) this.moveEquipment(entry, x, z, true);
+    return { ok: true };
   }
 
   canBuild(type) {

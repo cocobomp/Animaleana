@@ -45,20 +45,85 @@ export const refundOf = (type) => Math.floor(STRUCTURES[type].price * REFUND);
 /** Zone constructible : un carré autour de la ferme. */
 export const BOUNDS = 90;
 
+// ---------------------------------------------------------------- installations de base
+// Bergerie, paddock, niche et clapier existent dès le début ; on peut les déplacer (sans les tourner).
+// layout : { pen: { x, z }, … } (positions choisies par le joueur, par lieu : profile.coreLayout[lieu]).
+export const CORE_ITEMS = {
+  pen: { x: 14, z: 35, w: 20, d: 14, emoji: '🐑', encl: true, gate: { side: '+z', width: 4 } },
+  paddock: { x: -16, z: 16, w: 14, d: 18, emoji: '🐴', encl: true, gate: { side: '+x', width: 3 } },
+  kennel: { x: -9, z: -7, w: 2, d: 2, emoji: '🐶', gate: { side: '+z', width: 1.5 } },
+  hutch: { x: 9, z: 4, w: 5.2, d: 4.4, emoji: '🐰', gate: { side: '+z', width: 1.2 } },
+};
+export const CORE_IDS = Object.keys(CORE_ITEMS);
+
+/** Où est cette installation maintenant (position d'origine si le joueur ne l'a pas déplacée). */
+export function corePos(layout, id) {
+  const def = CORE_ITEMS[id];
+  const p = layout?.[id];
+  return p ? { x: p.x, z: p.z } : { x: def.x, z: def.z };
+}
+
+/** Décalage par rapport à la position d'origine. */
+export function coreOffset(layout, id) {
+  const p = corePos(layout, id);
+  return { dx: p.x - CORE_ITEMS[id].x, dz: p.z - CORE_ITEMS[id].z };
+}
+
+export function coreRect(layout, id, at = null) {
+  const def = CORE_ITEMS[id];
+  const p = at ?? corePos(layout, id);
+  return { x: p.x, z: p.z, hw: def.w / 2, hd: def.d / 2 };
+}
+
+/** Espace à garder libre devant l'entrée d'une installation de base. */
+function coreApron(id, p) {
+  const def = CORE_ITEMS[id];
+  const f = coreRect(null, id, p);
+  const wide = Math.max(1.5, def.gate.width / 2 + 0.5);
+  const depth = { pen: 4, paddock: 3, hutch: 1.75, kennel: 1 }[id];
+  if (def.gate.side === '+x') return { x: p.x + f.hw + depth, z: p.z, hw: depth, hd: wide };
+  return { x: p.x, z: p.z + f.hd + depth, hw: wide, hd: depth };
+}
+
+/** Les équipements rangés dans un enclos le suivent quand on le déplace. */
+export const EQUIPMENT_ZONE = { hayrack: 'paddock', paddockTrough: 'paddock', penFeeder: 'pen', penTrough: 'pen', cowBrush: 'pen' };
+
+/** Emplacement prévu d'un équipement (décalé avec son enclos). */
+export function slotOf(layout, type) {
+  const [x, z] = EQUIPMENT[type].slot;
+  const zone = EQUIPMENT_ZONE[type];
+  if (!zone) return { x, z };
+  const o = coreOffset(layout, zone);
+  return { x: x + o.dx, z: z + o.dz };
+}
+
+/** Position d'un équipement acheté : celle choisie par le joueur (eq.pos), sinon son emplacement prévu. */
+export function equipmentPos(layout, eq) {
+  return eq.pos ? { x: eq.pos[0], z: eq.pos[1] } : slotOf(layout, eq.type);
+}
+
+export const EQUIP_SIZE = 1.2;
+
 /**
  * Le cœur de la ferme, où l'on ne construit pas : la cour devant la maison (on y arrive),
- * l'entrée de la bergerie, le pré du troupeau, l'ouverture du paddock et les emplacements des équipements.
+ * le pré du troupeau, les installations de base avec leur entrée,
+ * et les emplacements prévus des équipements. id : à quelle installation appartient la zone.
  */
-export function coreRects() {
+export function coreRects(layout = null) {
   const rects = [
-    { x: 0, z: -4.5, hw: 9.5, hd: 7 },
-    { x: 14, z: 48, hw: 4, hd: 4 },
-    { x: 0, z: 60, hw: 15, hd: 15 },
-    { x: -6.5, z: 16, hw: 3, hd: 3 },
-    { x: 14, z: 35, hw: 10.5, hd: 7.5, encl: true }, // bergerie
-    { x: -16, z: 16, hw: 7.5, hd: 9.5, encl: true }, // paddock
+    { x: 0, z: -4.5, hw: 9.5, hd: 7, id: 'yard' },
+    { x: 0, z: 60, hw: 15, hd: 15, id: 'field' },
   ];
-  for (const def of Object.values(EQUIPMENT)) rects.push({ x: def.slot[0], z: def.slot[1], hw: 1, hd: 1 });
+  for (const id of CORE_IDS) {
+    const p = corePos(layout, id);
+    const r = coreRect(layout, id);
+    rects.push({ ...r, hw: r.hw + 0.5, hd: r.hd + 0.5, encl: CORE_ITEMS[id].encl, id });
+    rects.push({ ...coreApron(id, p), id, gate: true });
+  }
+  for (const type of Object.keys(EQUIPMENT)) {
+    const p = slotOf(layout, type);
+    rects.push({ x: p.x, z: p.z, hw: 1, hd: 1, id: EQUIPMENT_ZONE[type] ?? 'slot' });
+  }
   return rects;
 }
 
@@ -187,20 +252,48 @@ export function validatePlacement(type, x, z, rot, env = {}) {
   const def = STRUCTURES[type];
   if (!def) return { ok: false, reason: 'unknown' };
   const f = footprint(type, x, z, rot);
-  if (Math.abs(x) + f.hw > BOUNDS || Math.abs(z) + f.hd > BOUNDS) return { ok: false, reason: 'bounds' };
   const me = { id: env.ignore ?? '__new', type, x, z, rot };
-  const myApron = apron(me);
+  return checkRect(f, { apron: apron(me), encl: isEnclosure(type), slope: MAX_SLOPE[def.cat] }, env);
+}
+
+/** Déplacer une installation de base (bergerie, paddock, niche, clapier) en (x, z). */
+export function validateCore(id, x, z, env = {}) {
+  const def = CORE_ITEMS[id];
+  const p = { x, z };
+  const f = coreRect(null, id, p);
+  return checkRect(f, { apron: coreApron(id, p), encl: def.encl, slope: def.encl ? 3 : 1.2, skipCore: id }, env);
+}
+
+/** Poser un équipement (mangeoire, abreuvoir…) : dans un enclos ou dehors, mais pas sur un passage. */
+export function validateEquipment(x, z, env = {}) {
+  const f = { x, z, hw: EQUIP_SIZE / 2, hd: EQUIP_SIZE / 2 };
+  return checkRect(f, { equipment: true, slope: 1.5 }, env);
+}
+
+const grow = (r, m) => ({ ...r, hw: r.hw + m, hd: r.hd + m });
+
+/** Vérifications communes (voir validatePlacement). */
+function checkRect(f, opts, env) {
+  if (Math.abs(f.x) + f.hw > BOUNDS || Math.abs(f.z) + f.hd > BOUNDS) return { ok: false, reason: 'bounds' };
+  const myApron = opts.apron ?? null;
   // Autour d'un enclos, on garde un passage (pour en faire le tour et rejoindre son ouverture).
-  const mine = isEnclosure(type) ? GAP : 0;
-  const grow = (r, m) => ({ ...r, hw: r.hw + m, hd: r.hd + m });
-  const blocked = [...coreRects(), ...(env.blocked ?? [])];
-  if (blocked.some((b) => overlap(f, grow(b, b.encl ? Math.max(mine, GAP) : mine)))) return { ok: false, reason: 'core' };
+  const mine = opts.encl ? GAP : 0;
+  // Un équipement peut aller dans la cour ou dans un enclos, mais pas devant une entrée.
+  const core = coreRects(env.core).filter((b) => b.id !== opts.skipCore && (!opts.equipment || b.gate));
+  const blocked = [...core, ...(env.blocked ?? [])];
+  // (le pré n'a pas de clôture : pas besoin de passage autour)
+  if (blocked.some((b) => overlap(f, grow(b, b.encl ? Math.max(mine, GAP) : b.id === 'field' ? 0 : mine)))) return { ok: false, reason: 'core' };
   const others = (env.structures ?? []).filter((s) => s.id !== env.ignore);
   for (const s of others) {
     const o = footprint(s.type, s.x, s.z, s.rot);
-    if (overlap(f, grow(o, Math.max(mine, isEnclosure(s.type) ? GAP : 0)))) return { ok: false, reason: 'overlap' };
     const ap = apron(s);
     if (ap && overlap(f, ap)) return { ok: false, reason: 'overlap' };
+    if (opts.equipment) {
+      // Dans un enclos construit : d'accord (ses barrières sont dans colliders).
+      if (!isEnclosure(s.type) && overlap(f, o)) return { ok: false, reason: 'overlap' };
+      continue;
+    }
+    if (overlap(f, grow(o, Math.max(mine, isEnclosure(s.type) ? GAP : 0)))) return { ok: false, reason: 'overlap' };
     if (myApron && overlap(myApron, o)) return { ok: false, reason: 'overlap' };
   }
   for (const c of env.colliders ?? []) {
@@ -208,10 +301,40 @@ export function validatePlacement(type, x, z, rot, env = {}) {
   }
   const pts = samples(f);
   if (env.isWater && pts.some((p) => env.isWater(p.x, p.z))) return { ok: false, reason: 'water' };
-  if (env.heightAt) {
+  if (env.heightAt && opts.slope) {
     const hs = pts.map((p) => env.heightAt(p.x, p.z));
-    if (Math.max(...hs) - Math.min(...hs) > MAX_SLOPE[def.cat]) return { ok: false, reason: 'slope' };
+    if (Math.max(...hs) - Math.min(...hs) > opts.slope) return { ok: false, reason: 'slope' };
   }
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------- déplacer (payant en mode gestion)
+
+/** Prix d'un déménagement : petit en mode gestion, gratuit en bac à sable. */
+export const MOVE_FEE = { decor: 5, equipment: 10, structure: 25, core: 40 };
+
+export function moveFeeFor(kind, type = null) {
+  if (kind === 'structure' && type && STRUCTURES[type]?.cat === 'decor') return MOVE_FEE.decor;
+  return MOVE_FEE[kind] ?? 0;
+}
+
+/** Payer le déménagement. */
+export function payMove(profile, kind, type = null) {
+  return spend(profile, moveFeeFor(kind, type));
+}
+
+/** Déplacer une installation de base. */
+export function moveCore(profile, place, id, x, z) {
+  if (!payMove(profile, 'core')) return { ok: false, reason: 'money' };
+  profile.coreLayout = profile.coreLayout ?? {};
+  profile.coreLayout[place] = { ...(profile.coreLayout[place] ?? {}), [id]: { x: snap(x), z: snap(z) } };
+  return { ok: true };
+}
+
+/** Déplacer un équipement. */
+export function moveEquipment(profile, eq, x, z) {
+  if (!payMove(profile, 'equipment')) return { ok: false, reason: 'money' };
+  eq.pos = [snap(x), snap(z)];
   return { ok: true };
 }
 
@@ -248,10 +371,11 @@ export function build(profile, type, place, x, z, rot = 0) {
   return { ok: true, structure: s };
 }
 
-/** Déplacer est gratuit. */
+/** Déplacer : petit prix en mode gestion (gratuit en bac à sable). */
 export function moveStructure(profile, id, x, z, rot) {
   const s = findStructure(profile, id);
   if (!s) return { ok: false, reason: 'unknown' };
+  if (!payMove(profile, 'structure', s.type)) return { ok: false, reason: 'money' };
   s.x = snap(x);
   s.z = snap(z);
   s.rot = normRot(rot);

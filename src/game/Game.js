@@ -30,6 +30,7 @@ import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
 import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
 import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone } from '../sim/droppings.js';
 import { enclosure } from './nav.js';
+import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { t, L } from '../i18n.js';
@@ -388,6 +389,7 @@ export class Game {
       this.tasks?.update();
     }
     this.rig.update(dt, ctrl, this.player, this.world);
+    this.fadeOccluders();
     this.ui.updateLabels(entities, this.camera, this.player.position);
     this.updateLeashes(entities);
     this.interiors.update(dt);
@@ -454,7 +456,7 @@ export class Game {
     if (this.checkAcc > 2) {
       this.checkAcc = 0;
       for (const o of checkObjectives(p)) {
-        this.xp('quest');
+        this.xp(o.kind === 'quest' ? 'quest' : 'achievement');
         const name = t(`o_${o.id}`);
         const msg = o.kind === 'quest' ? t('questDone', { name }) : t('achievementDone', { name });
         this.ui.toast(o.reward && p.mode === 'manage' ? `${msg} ${t('reward', { n: o.reward })}` : msg, 5000);
@@ -472,6 +474,49 @@ export class Game {
     }
     this.updateFocus();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Les murs et toits qui cachent le personnage deviennent transparents. */
+  fadeOccluders() {
+    if (this.rig.mode !== 'third') return;
+    if (this.occluderGroup !== this.world.group) {
+      // Liste des objets qui peuvent cacher la vue (bâtiments), calculée une fois par lieu.
+      this.occluderGroup = this.world.group;
+      this.occluders = [];
+      this.world.group.traverse((o) => {
+        if (!o.isMesh || o.isInstancedMesh || o.geometry.type === 'PlaneGeometry') return;
+        if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        if (o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z) > 0.8) this.occluders.push(o);
+      });
+      this.faded = new Set();
+    }
+    const head = this.player.position.clone();
+    head.y += this.player.eyeHeight * 0.8;
+    const dir = head.clone().sub(this.camera.position);
+    const len = dir.length();
+    this.raycaster.set(this.camera.position, dir.normalize());
+    this.raycaster.far = len - 0.3;
+    const hits = new Set(this.raycaster.intersectObjects(this.occluders, false).map((h) => h.object));
+    this.raycaster.far = Infinity;
+    for (const o of hits) {
+      if (this.faded.has(o)) continue;
+      if (!o.userData.fadeMat) {
+        o.userData.solidMat = o.material;
+        o.userData.fadeMat = o.material.clone();
+        o.userData.fadeMat.transparent = true;
+        o.userData.fadeMat.opacity = 0.18;
+        o.userData.fadeMat.depthWrite = false;
+      }
+      o.material = o.userData.fadeMat;
+      o.castShadow = false;
+      this.faded.add(o);
+    }
+    for (const o of this.faded) {
+      if (hits.has(o)) continue;
+      o.material = o.userData.solidMat;
+      o.castShadow = true;
+      this.faded.delete(o);
+    }
   }
 
   // ---------------------------------------------------------------- toucher l'écran
@@ -903,6 +948,8 @@ export class Game {
   /** Vérifie qu'un soin est possible avant de lancer son mini-jeu. */
   canCare(a, action) {
     const care = CARE[action];
+    const tool = missingTool(this.profile, action);
+    if (tool) return { ok: false, reason: 'needTool', tool };
     if (!canAfford(this.profile, care.cost)) return { ok: false, reason: 'money' };
     if (care.full && a.needs[care.full] >= 96) return { ok: false, reason: 'full' };
     if (care.tiring && a.needs.energy < 15) return { ok: false, reason: 'tired' };
@@ -912,6 +959,8 @@ export class Game {
 
   care(a, action, quality = 1) {
     const care = CARE[action];
+    const tool = missingTool(this.profile, action);
+    if (tool) return this.ui.toast(t('r_needTool', { tool: `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}` }), 5000);
     if (!canAfford(this.profile, care.cost)) return this.ui.toast(t('r_money'));
     const before = { ...a.needs };
     const res = applyCare(a, action, quality);
@@ -927,7 +976,7 @@ export class Game {
 
   trick(a, trickId) {
     const r = trainTrick(a, trickId);
-    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
+    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex, n: r.need }));
     const e = this.entities.get(a.id);
     this.xp(r.learned ? 'trickLearned' : 'trick');
     if (r.learned) {
@@ -944,9 +993,18 @@ export class Game {
     return r;
   }
 
+  buyTool(tool) {
+    const r = buyTool(this.profile, tool);
+    if (!r.ok) return this.ui.toast(t(r.reason === 'money' ? 'r_money' : 'alreadyOwned'));
+    this.ui.toast(t('gearBought', { name: t(`tool_${tool}`) }));
+    return r;
+  }
+
   train(a, trainingId) {
+    const tool = missingTool(this.profile, trainingId);
+    if (tool) return this.ui.toast(t('r_needTool', { tool: `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}` }), 5000);
     const r = trainSkill(a, trainingId);
-    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
+    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex, n: r.need }));
     addStat(this.profile, 'trainings');
     this.entities.get(a.id)?.emit('💪', 2);
     this.ui.toast(t('skillGain', { name: a.name, g: a.sex, skill: t(`skill_${r.skill}`), n: r.gain }));
@@ -1131,6 +1189,17 @@ export class Game {
       this.ui.alert(t('born', { n: babies.length, names: babies.map((x) => x.name).join(', ') }));
       this.save();
     }
+  }
+
+  /** Soins faits soi-même avec la trousse (sans vétérinaire, gratuit). */
+  selfCare(a) {
+    const wasSick = !!a.sick;
+    if (wasSick) cure(a, this.day);
+    else checkup(a, this.day);
+    addStat(this.profile, 'vet');
+    this.xp('vet');
+    this.entities.get(a.id)?.emit('💚', 4);
+    this.ui.refresh();
   }
 
   vetCost(atClinic) {

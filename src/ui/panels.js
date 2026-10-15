@@ -15,6 +15,7 @@ import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
 import { speciesName } from './names.js';
 import { GEAR, BLANKET_COLORS, owned, inUse } from '../sim/gear.js';
+import { TOOLS, hasTool } from '../sim/tools.js';
 import { facilitiesTab } from './facilitiesPanel.js'; // onglet « Bâtiments »
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
@@ -97,6 +98,7 @@ function renderAnimal(ui, g, a) {
   const bars = h('div', { class: 'bars' },
     bar(t('health'), a.health, 'big'),
     bar(t('happiness'), happiness(a), 'big'),
+    bar(`🤝 ${t('bond')}`, a.bond ?? 0, 'big'),
     NEEDS.map((n) => bar(t(`need_${n}`), a.needs[n])),
   );
 
@@ -119,6 +121,7 @@ function renderAnimal(ui, g, a) {
   acts.push(btn(a.following ? `✋ ${t('act_stay')}` : `🦮 ${t('act_follow')}`, () => { g.toggleFollow(a); ui.renderPanel(); }));
   acts.push(btn(`📍 ${t('callHere')}`, () => g.callHere(a)));
   acts.push(btn(`🩺 ${t('act_vet')}${money(ui, g.vetCost(false))}`, () => ui.openVet(a, false), { cls: a.sick ? 'primary' : '' }));
+  if (hasTool(g.profile, 'firstAid')) acts.push(btn(`🧰 ${t('vetSelfTitle')}`, () => ui.openVet(a, 'self')));
   acts.push(btn(`✏️ ${t('rename')}`, async () => {
     const name = await ui.prompt(t('newName'), a.name, animalCard(a));
     if (name) {
@@ -591,6 +594,16 @@ export function openTack(ui) {
             h('small', {}, t('gearOwned', { n: owned(p, item), used: inUse(p, item) }))),
           h('button', { class: 'primary', onClick: () => { g.buyGear(item); ui.renderPanel(); } },
             sandbox ? t('buy') : `${t('buy')} · ${def.price} 🪙`)))),
+        h('h3', {}, t('toolsTitle')),
+        h('p', { class: 'note' }, t('toolsHelp')),
+        h('div', { class: 'cards' }, Object.entries(TOOLS).map(([tool, def]) => {
+          const have = hasTool(p, tool);
+          return h('div', { class: 'card' },
+            h('span', { class: 'card-emoji' }, def.emoji),
+            h('span', { class: 'card-main' }, h('b', {}, t(`tool_${tool}`)), h('small', {}, t(`toold_${tool}`))),
+            have ? h('span', { class: 'card-side' }, '✅')
+              : h('button', { class: 'primary', onClick: () => { g.buyTool(tool); ui.renderPanel(); } }, sandbox ? t('buy') : `${t('buy')} · ${def.price} 🪙`));
+        })),
         h('h3', {}, t('gearOnAnimals')),
         h('div', { class: 'cards' }, g.animalsHere().filter((a) => Object.values(GEAR).some((d) => d.species.includes(a.species)))
           .map((a) => h('button', { class: 'card', onClick: () => ui.openAnimal(a) },

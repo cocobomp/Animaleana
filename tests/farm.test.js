@@ -96,3 +96,15 @@ describe('vie de groupe', () => {
     expect(friends.needs.affection).toBeGreaterThan(alone.needs.affection);
   });
 });
+
+import { missingTool, buyTool } from '../src/sim/tools.js';
+describe('matériel', () => {
+  it('il faut une tondeuse pour tondre, la brosse est offerte', () => {
+    const p = createProfile('A', 'manage');
+    expect(missingTool(p, 'brush')).toBeNull();
+    expect(missingTool(p, 'shear')).toBe('shears');
+    expect(buyTool(p, 'shears').ok).toBe(true);
+    expect(missingTool(p, 'shear')).toBeNull();
+    expect(p.money).toBe(420);
+  });
+});

@@ -117,6 +117,7 @@ export function createAnimal({
     tricks: {},
     skills: { obedience: 10, speed: 10, endurance: 10, jump: 10, ...(breedDef.herder ? { herding: 35 } : species === 'dog' ? { herding: 5 } : {}) },
     produce: 0,
+    bond: 5, // lien avec le joueur : grandit quand on joue et qu'on s'en occupe
     weight: 50, // 50 = poids idéal ; plus de 75 = trop gros, moins de 25 = trop maigre
     location,
     lastBirthDay: -999,
@@ -263,6 +264,9 @@ export function applyCare(a, actionId, quality = 1) {
   for (const [s, v] of Object.entries(care.skills ?? {})) {
     a.skills[s] = Math.min(100, a.skills[s] + v);
   }
+  // Le lien avec le joueur grandit quand on s'occupe de l'animal (surtout en jouant).
+  const BOND = { pet: 3, play: 4, treat: 2, brush: 2, feed: 1, water: 0.5, wash: 1, lunge: 2, liberty: 3 };
+  a.bond = Math.min(100, (a.bond ?? 5) + (BOND[actionId] ?? 0.5));
   // Les friandises et la nourriture en trop font grossir ; l'exercice fait maigrir.
   a.weight = a.weight ?? 50;
   if (actionId === 'treat') a.weight = Math.min(100, a.weight + 5);
@@ -280,8 +284,13 @@ function successChance(a) {
 }
 
 /** Apprendre un tour. Renvoie { ok, reason, success, learned, progress }. */
+// Lien minimum avant de pouvoir apprendre des tours / s'entraîner : il faut d'abord jouer avec l'animal.
+export const BOND_FOR_TRICKS = 20;
+export const BOND_FOR_TRAINING = 35;
+
 export function trainTrick(a, trickId, rng = Math.random) {
   if (!SPECIES[a.species].tricks.includes(trickId)) return { ok: false, reason: 'unknown' };
+  if ((a.bond ?? 0) < BOND_FOR_TRICKS) return { ok: false, reason: 'bond', need: BOND_FOR_TRICKS };
   if (a.sick) return { ok: false, reason: 'sick' };
   if (a.needs.energy < 15) return { ok: false, reason: 'tired' };
   const current = a.tricks[trickId] ?? 0;
@@ -291,6 +300,7 @@ export function trainTrick(a, trickId, rng = Math.random) {
   const success = rng() < successChance(a);
   if (success) {
     a.tricks[trickId] = Math.min(100, current + 25 + Math.round(rng() * 10));
+    a.bond = Math.min(100, (a.bond ?? 0) + 1);
     a.skills.obedience = Math.min(100, a.skills.obedience + 2);
     a.needs.affection = clamp(a.needs.affection + 5);
   }
@@ -301,6 +311,7 @@ export function trainTrick(a, trickId, rng = Math.random) {
 export function trainSkill(a, trainingId, rng = Math.random) {
   const tr = TRAINING[trainingId];
   if (!tr || !SPECIES[a.species].training.includes(trainingId)) return { ok: false, reason: 'unknown' };
+  if ((a.bond ?? 0) < BOND_FOR_TRAINING) return { ok: false, reason: 'bond', need: BOND_FOR_TRAINING };
   if (a.sick) return { ok: false, reason: 'sick' };
   if (a.needs.energy < 20) return { ok: false, reason: 'tired' };
   if (lifeStage(a) === 'baby') return { ok: false, reason: 'baby' };

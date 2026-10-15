@@ -13,6 +13,8 @@ export const XP = {
   collect: 10,
   birth: 50,
   quest: 60,
+  achievement: 120,
+  helperTraining: 0,
   build: 30,
 };
 

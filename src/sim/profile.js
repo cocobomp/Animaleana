@@ -2,6 +2,7 @@
 
 import { uid } from './rng.js';
 import { STARTER_ITEMS } from './gear.js';
+import { STARTER_TOOLS } from './tools.js';
 import { defaultFacilities } from './facilities.js'; // bâtiments à entretenir (écurie, maison, bergerie)
 
 const INDEX_KEY = 'animaleana.profiles';
@@ -27,7 +28,8 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     createdAt: Date.now(),
     money: 500,
     xp: 0,
-    items: { ...STARTER_ITEMS }, // objets achetés (selles, couvertures…)
+    items: { ...STARTER_ITEMS },
+    tools: [...STARTER_TOOLS], // matériel possédé (brosse, tondeuse…) // objets achetés (selles, couvertures…)
     avatar: { ...DEFAULT_AVATAR },
     animals: [],
     memorial: [],

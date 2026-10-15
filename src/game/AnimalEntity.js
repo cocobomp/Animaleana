@@ -595,7 +595,10 @@ export class AnimalEntity {
     this.phase += dt * (v / stride) * Math.PI * 2 * 0.5;
     const moving = this.speed > 0.05;
     const gallop = this.speed > sp.runSpeed * 0.65;
-    this.lie += ((this.sleeping ? 1 : 0) - this.lie) * Math.min(1, dt * 2);
+    // Les chevaux dorment debout (tête basse) ; les autres se couchent, pattes repliées sous eux.
+    const standingSleeper = this.data.species === 'horse';
+    this.lie += ((this.sleeping && !standingSleeper ? 1 : 0) - this.lie) * Math.min(1, dt * 2);
+    this.doze = (this.doze ?? 0) + ((this.sleeping && standingSleeper ? 1 : 0) - (this.doze ?? 0)) * Math.min(1, dt * 1.5);
     const lie = this.lie;
 
     if (sp.hops) {
@@ -609,7 +612,8 @@ export class AnimalEntity {
       md.legs.forEach((l, i) => {
         const offset = gallop ? [0, 0.35, Math.PI, Math.PI + 0.35][i] : [0, Math.PI, Math.PI, 0][i];
         const swing = Math.sin(this.phase + offset) * amp;
-        const rest = l.front ? -1.35 : 1.35;
+        // Couché : les pattes avant se replient vers l'arrière, les pattes arrière vers l'avant.
+        const rest = l.front ? 1.45 : -1.45;
         l.pivot.rotation.x = swing * (1 - lie) + rest * lie;
       });
       const bob = moving ? Math.abs(Math.sin(this.phase)) * (gallop ? 0.06 : 0.02) : 0;
@@ -629,7 +633,7 @@ export class AnimalEntity {
     const grazing = this.sp.livestock && this.state === 'idle' && Math.sin(this.time * 0.3 + this.phase) > 0.2;
     const eat = this.state === 'eat' || (grazing && !this.herdCtrl) ? 0.9 + Math.sin(this.time * 4) * 0.06 : 0;
     this.headDown = (this.headDown ?? 0) + (eat - (this.headDown ?? 0)) * Math.min(1, dt * 3);
-    md.neck.rotation.x = baseNeck + (sad ? 0.35 : 0) + lie * 0.4 + this.headDown;
+    md.neck.rotation.x = baseNeck + (sad ? 0.35 : 0) + lie * 0.4 + this.headDown + (this.doze ?? 0) * 0.55;
 
     const happy = !sad;
     switch (this.data.look.tailType) {

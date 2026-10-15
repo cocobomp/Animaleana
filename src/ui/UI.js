@@ -8,6 +8,7 @@ import * as panels from './panels.js';
 import { openVet } from './vet.js';
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
+import { openHelp } from './help.js';
 import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
@@ -129,6 +130,7 @@ export class UI {
         btn('🧭', t('travel'), () => this.openTravel()),
         btn('📖', t('journal'), () => this.openJournal()),
         btn('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen())),
+        btn('❓', t('help'), () => openHelp(this)),
         btn('⚙️', t('settings'), () => this.openSettings())),
     );
   }
@@ -449,6 +451,7 @@ export class UI {
     const g = this.game;
     if (g.blockedByPause()) return null;
     const check = g.canCare(a, action);
+    if (check.reason === 'needTool') return this.toast(t('r_needTool', { tool: t(`tool_${check.tool}`) }), 5000);
     if (!check.ok) return this.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name, g: a.sex }));
     return g.care(a, action, 1);
   }

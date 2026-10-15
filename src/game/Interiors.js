@@ -462,21 +462,37 @@ export class Interiors {
       w.cutaway = cut;
     }
 
-    // Portes : elles s'ouvrent quand quelqu'un s'approche.
-    const movers = [pp, ...[...this.game.entities.values()].filter((e) => !e.sleeping).map((e) => e.position)];
-    const near = (b, lx, lz, r) => {
-      const p = toWorld(b, lx, lz);
-      return movers.some((m) => Math.hypot(m.x - p.x, m.z - p.z) < r);
+    // Portes : elles ne s'ouvrent que si quelqu'un essaie vraiment de passer
+    // (il avance vers la porte, ou il est en train de la franchir), puis se referment.
+    const pl = this.game.player;
+    const movers = [{ p: pp, heading: pl.heading, speed: pl.speed },
+      ...[...this.game.entities.values()].filter((e) => !e.sleeping).map((e) => ({ p: e.position, heading: e.heading, speed: e.speed }))];
+    const wants = (b, lx, lz, r) => {
+      const d = toWorld(b, lx, lz);
+      return movers.some((m) => {
+        const dx = d.x - m.p.x;
+        const dz = d.z - m.p.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 0.9) return true; // en train de passer
+        if (dist > r || m.speed < 0.2) return false;
+        return (Math.sin(m.heading) * dx + Math.cos(m.heading) * dz) / dist > 0.6; // va vers la porte
+      });
+    };
+    this.doorHold = this.doorHold ?? new Map();
+    const hold = (key, now) => {
+      const left = now ? 1.2 : Math.max(0, (this.doorHold.get(key) ?? 0) - dt);
+      this.doorHold.set(key, left);
+      return left > 0;
     };
     const st = w.interiors.stable;
     for (const box of st.model.boxes) {
-      const open = box.i < boxCount(this.f) && near(st, box.door.lx, box.door.lz, 1.9);
+      const open = box.i < boxCount(this.f) && hold(`box${box.i}`, wants(st, box.door.lx, box.door.lz, 1.9));
       const want = open ? -box.sign * 1.75 : 0;
       box.hinge.rotation.y += (want - box.hinge.rotation.y) * Math.min(1, dt * 5);
     }
     const hs = w.interiors.house;
     const hd = hs.model.doorHinge;
-    const wantH = near(hs, 0, HOUSE_D / 2, 2.2) ? 1.5 : 0;
+    const wantH = hold('house', wants(hs, 0, HOUSE_D / 2, 2.2)) ? 1.5 : 0;
     hd.rotation.y += (wantH - hd.rotation.y) * Math.min(1, dt * 5);
     // Robot aspirateur.
     if (hs.model.robot.visible) {

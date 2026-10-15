@@ -579,3 +579,17 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .fac-row button { min-height: 52px; }
 
 .color-pick { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---------- aide */
+.help-list { display: grid; gap: 8px; }
+.help-topic { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 4px 6px 8px; display: grid; gap: 6px; }
+.help-topic.open { border-color: var(--primary); }
+.help-title { border: none; background: none; text-align: left; font-weight: 700; font-size: 1rem; }
+.help-steps { margin: 0; padding-left: 26px; display: grid; gap: 4px; line-height: 1.4; }
+.pulse { animation: pulse 0.8s ease-in-out infinite; box-shadow: 0 0 0 4px #ffd35a; }
+@keyframes pulse { 50% { transform: scale(1.12); } }
+
+/* ---------- vétérinaire : carnet */
+.vet-notes { background: #fffdf5; border: 1px dashed var(--line); border-radius: 12px; padding: 8px 12px; margin: 8px 0; }
+.vet-notes ul { margin: 6px 0 0; padding-left: 4px; list-style: none; display: grid; gap: 4px; }
+.vet-notes li.bad { color: #8b2b22; font-weight: 600; }

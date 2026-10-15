@@ -229,16 +229,36 @@ export class CameraRig {
     player.avatar.root.visible = true;
     const target = eye.clone().add(new THREE.Vector3(0, -0.2, 0));
     const back = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
-    // La caméra se rapproche si un mur se trouve entre elle et le joueur.
+    // Si un mur se trouve entre la caméra et le joueur, la caméra monte pour regarder
+    // par-dessus (au lieu de se coller au mur) ; en dernier recours, elle se rapproche.
     let dist = this.dist + (player.mount ? 2 : 0);
-    for (let i = 1; i <= 16; i++) {
-      const d = (dist * i) / 16;
-      const q = target.clone().addScaledVector(back, d);
-      if (world.insideBuilding(q.x, q.y, q.z)) {
-        dist = Math.max(1.2, d - dist / 16);
-        break;
+    const blocked = (pitch, d) => {
+      const b = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(this.yaw) * Math.cos(pitch));
+      for (let i = 1; i <= 12; i++) {
+        const q = target.clone().addScaledVector(b, (d * i) / 12);
+        if (world.insideBuilding(q.x, q.y, q.z)) return true;
       }
+      return false;
+    };
+    if (blocked(this.pitch, dist)) {
+      let pitch = this.pitch;
+      while (pitch < 1.35 && blocked(pitch, dist)) pitch += 0.1;
+      if (!blocked(pitch, dist)) {
+        this.autoPitch = pitch;
+      } else {
+        this.autoPitch = this.pitch;
+        for (let i = 12; i >= 1; i--) {
+          if (!blocked(this.pitch, (dist * i) / 12)) {
+            dist = Math.max(2.2, (dist * i) / 12);
+            break;
+          }
+        }
+      }
+    } else {
+      this.autoPitch = this.pitch;
     }
+    this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
+    back.set(-Math.sin(this.yaw) * Math.cos(this.curPitch), Math.sin(this.curPitch), -Math.cos(this.yaw) * Math.cos(this.curPitch));
     const want = target.clone().addScaledVector(back, dist);
     const ground = world.heightAt(want.x, want.z) + 0.4;
     if (want.y < ground) want.y = ground;

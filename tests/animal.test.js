@@ -104,8 +104,18 @@ describe('reproduction', () => {
 });
 
 describe('dressage', () => {
+  it('il faut d\'abord créer un lien en jouant avec l\'animal', () => {
+    const a = adult('dog', 'f');
+    a.bond = 0;
+    expect(trainTrick(a, 'sit').reason).toBe('bond');
+    for (let i = 0; i < 6; i++) { a.needs.exercise = 10; a.needs.energy = 100; applyCare(a, 'play'); }
+    expect(a.bond).toBeGreaterThanOrEqual(20);
+    expect(trainTrick(a, 'sit').ok).toBe(true);
+  });
+
   it('finit par apprendre un tour', () => {
     const a = adult('dog', 'f');
+    a.bond = 50;
     const r = rng();
     let learned = false;
     for (let i = 0; i < 40 && !learned; i++) {

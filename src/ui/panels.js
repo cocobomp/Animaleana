@@ -13,6 +13,7 @@ import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
 import { speciesName } from './names.js';
 import { GEAR, BLANKET_COLORS, owned, inUse } from '../sim/gear.js';
+import { facilitiesTab } from './facilitiesPanel.js'; // onglet « Bâtiments »
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -429,7 +430,7 @@ export function openFarm(ui) {
     render: () => {
       const p = g.profile;
       const sandbox = isSandbox(p);
-      const tabs = h('div', { class: 'tabs' }, [['equipment', `🥣 ${t('equipment')}`], ['helpers', `🧑‍🌾 ${t('helpers')}`], ['herd', `🐑 ${t('herd')}`]]
+      const tabs = h('div', { class: 'tabs' }, [['equipment', `🥣 ${t('equipment')}`], ['helpers', `🧑‍🌾 ${t('helpers')}`], ['herd', `🐑 ${t('herd')}`], ['buildings', `🏚️ ${t('fac_tab')}`]]
         .map(([k, label]) => h('button', { class: state.tab === k ? 'active' : '', onClick: () => { state.tab = k; ui.renderPanel(); } }, label)));
       const out = [tabs];
 
@@ -494,6 +495,8 @@ export function openFarm(ui) {
             duties);
         })));
       }
+
+      if (state.tab === 'buildings') out.push(...facilitiesTab(ui));
 
       if (state.tab === 'herd') {
         const flock = g.animalsHere().filter((a) => SPECIES[a.species].livestock);

@@ -10,10 +10,11 @@ import { speciesName } from './names.js';
 import { CARE, NEEDS, happiness } from '../sim/animal.js';
 import { NEED_ICON } from './UI.js';
 import { bar } from './dom.js';
+import { horseBoxItems } from './facilitiesPanel.js';
 
 const BUILDING_ICON = { stable: '🐴', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋' };
 
-function sheet(ui, title, subtitle, items, header = null, live = false) {
+export function sheet(ui, title, subtitle, items, header = null, live = false) {
   ui.openPanel({
     title,
     kind: 'actions',
@@ -43,7 +44,7 @@ export function openBuilding(ui, kind) {
   const close = () => ui.closePanel();
   const run = {
     checkHorses: () => g.checkHorses(),
-    storeHorses: () => { g.sendHorses('paddock'); close(); },
+    storeHorses: () => { g.sendHorses('box'); close(); }, // chacun dans son box
     outHorses: () => { g.sendHorses('field'); close(); },
     hayHorses: () => ui.groupCareWithGame((a) => a.species === 'horse', 'feed'),
     waterHorses: () => ui.groupCareWithGame((a) => a.species === 'horse', 'water'),
@@ -68,6 +69,10 @@ export function openBuilding(ui, kind) {
     adopt: () => ui.openAdoption(),
     vet: () => ui.openVetClinic(),
     jobs: () => ui.openJobs(),
+    // Bâtiments à entretenir (src/ui/facilitiesPanel.js)
+    facPaddock: () => { g.sendHorses('paddock'); close(); },
+    facEnter: () => { close(); g.interiors.enter(kind); },
+    facManage: () => ui.openFacility(kind),
   };
   sheet(ui, `${BUILDING_ICON[kind]} ${name}`, t(`bldd_${kind}`), () => g.buildingActions(kind).map((a) => ({
     icon: a.icon,
@@ -124,6 +129,7 @@ export function openAnimalActions(ui, a) {
       label: a.following ? t('act_stay') : t('act_follow'),
       run: () => { g.toggleFollow(a); ui.closePanel(); },
     });
+    items.push(...horseBoxItems(ui, a)); // box à l'écurie
     items.push({ icon: '📋', label: t('more'), run: () => ui.openAnimal(a) });
     return items;
   }, () => h('div', { class: 'bars compact' },

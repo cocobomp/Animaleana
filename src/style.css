@@ -487,3 +487,13 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .big-action.primary small.effect { color: #e9fff2; }
 .bars.compact { gap: 3px; margin: 4px 0 10px; }
 .bars.compact .bar { grid-template-columns: 118px 1fr 28px; font-size: 0.8em; }
+
+/* ---------------------------------------------------------------- Bâtiments à entretenir (fac_) */
+.fac-main .bar { grid-template-columns: 110px 1fr 34px; }
+.fac-cap { font-weight: 600; margin: 4px 0 8px; }
+.fac-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 8px 0; }
+.fac-box { display: grid; gap: 4px; text-align: left; min-height: 64px; padding: 8px 10px; border-radius: 14px; }
+.fac-box b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fac-box small { color: var(--muted); font-size: 0.78rem; }
+.mini-fill.low { background: var(--low); }
+.fac-row button { min-height: 52px; }

@@ -12,7 +12,7 @@ const fmtHour = (h) => `${Math.floor(h)} h`;
 const RULES = {
   stable: [
     { id: 'checkHorses', icon: '🔦', when: (c) => need(c.count.horse) },
-    { id: 'storeHorses', icon: '🏠', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 22) },
+    { id: 'storeHorses', icon: '🏠', when: (c) => need(c.count.horse) }, // au box, même le soir
     { id: 'outHorses', icon: '🌿', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 19) },
     { id: 'hayHorses', icon: '🌾', when: (c) => need(c.count.horse) },
     { id: 'waterHorses', icon: '💧', when: (c) => need(c.count.horse) },
@@ -20,6 +20,10 @@ const RULES = {
     { id: 'cleanStalls', icon: '🧹', when: (c) => (c.count.horse || c.count.paddockDroppings ? null : { reason: 'noAnimals' }) ?? sleeping(c, 6, 21) },
     { id: 'tack', icon: '🏇', when: () => null },
     { id: 'farm', icon: '🔧', when: () => null },
+    // Bâtiments à entretenir (src/sim/facilities.js)
+    { id: 'facPaddock', icon: '🌳', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 22) },
+    { id: 'facEnter', icon: '🚪', when: () => null },
+    { id: 'facManage', icon: '📋', when: () => null },
   ],
   pen: [
     { id: 'outFlock', icon: '🌿', when: (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18) },
@@ -32,11 +36,14 @@ const RULES = {
     // On tond au printemps et en été.
     { id: 'shearAll', icon: '🧶', when: (c) => need(c.count.shearable, 'noneReady') ?? (['spring', 'summer'].includes(c.season) ? null : { reason: 'shearSeason' }) ?? dayOnly(c, 7, 19) },
     { id: 'farm', icon: '🔧', when: () => null },
+    { id: 'facManage', icon: '📋', when: () => null }, // entretien et améliorations
   ],
   house: [
     { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 10) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },
     { id: 'feedPets', icon: '🥣', when: (c) => need(c.count.pets) },
     { id: 'avatar', icon: '👕', when: () => null },
+    { id: 'facEnter', icon: '🚪', when: () => null }, // entrer dans la maison
+    { id: 'facManage', icon: '📋', when: () => null },
   ],
   lodge: [
     { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 10) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },

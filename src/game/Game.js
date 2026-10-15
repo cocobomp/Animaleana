@@ -8,6 +8,7 @@ import { AnimalEntity } from './AnimalEntity.js';
 import { Input } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
 import { Herding } from './Herding.js';
+import { Interiors } from './Interiors.js'; // écurie et maison où l'on entre, box, corvées
 import { EQUIPMENT_MODELS } from './models/equipment.js';
 import { disposeModel } from './models/animalModel.js';
 import {
@@ -79,6 +80,7 @@ export class Game {
     this.helpers = new Map();
     this.equipment = [];
     this.herding = new Herding(this);
+    this.interiors = new Interiors(this);
     this.droppingMeshes = new Map();
     this.profile = null;
     this.running = false;
@@ -162,6 +164,7 @@ export class Game {
     for (const h of this.helpers.values()) h.dispose();
     this.helpers.clear();
     this.world.build(placeId, this.season, placeId === this.profile.home);
+    this.interiors.onPlaceLoaded(); // coins de corvées, box des chevaux
     this.equipment = [];
     for (const eq of equipmentAt(this.profile, placeId)) this.spawnEquipment(eq);
     this.droppingMeshes.clear();
@@ -298,6 +301,7 @@ export class Game {
   farmTick(here, hours, skipped = false) {
     const p = this.profile;
     passiveEquipment(p, here, p.place, hours);
+    this.interiors.farmTick(here, hours); // propreté et usure des bâtiments
     for (const a of here) {
       if (a.zone === 'field') graze(a, hours, this.world.snowy);
     }
@@ -373,6 +377,7 @@ export class Game {
     this.ui.updateLabels(entities, this.camera, this.player.position);
     for (const h of this.helpers.values()) h.update(dt, this);
     this.herding.update(dt);
+    this.interiors.update(dt);
     for (const q of this.equipment) {
       if (q.mesh.userData.spin) q.mesh.userData.spin.rotation.y += dt * 2;
     }
@@ -405,10 +410,11 @@ export class Game {
             if (kind === 'poop' && a.species === 'dog' && a.following) this.ui.toast(t('dogPoop', { name: a.name, g: a.sex }), 4000);
           }
         }
-        const dirt = e ? dirtNear(this.profile, this.profile.place, e.position.x, e.position.z) : 0;
+        // + la saleté de son box / de la maison (src/game/Interiors.js)
+        const dirt = (e ? dirtNear(this.profile, this.profile.place, e.position.x, e.position.z) : 0) + this.interiors.dirtFor(a);
         const events = tickAnimal(a, hours, {
           dirt,
-          weather: feltWeather(a, weather, this.temperature, this.season), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
+          weather: this.interiors.feltWeather(a, feltWeather(a, weather, this.temperature, this.season)), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
         });
         tickProduce(a, hours);
         if (before !== 'sad' && mood(a) === 'sad') this.ui.toast(t('sad', { name: a.name, g: a.sex }), 4000);
@@ -485,6 +491,7 @@ export class Game {
     }
     const hit = this.raycaster.intersectObject(this.world.group, true)[0];
     if (!hit) return;
+    if (this.interiors.onTap(hit)) return; // dans l'écurie ou la maison
     const kind = this.world.kindAt(hit.point.x, hit.point.z);
     if (kind) {
       const door = this.world.interactables.find((i) => i.kind === kind);
@@ -535,6 +542,7 @@ export class Game {
   cleanZone(id) {
     const ids = scoopZone(this.profile, this.profile.place, enclosure(id));
     this.removeDroppingMeshes(ids);
+    this.interiors.zoneCleaned(id);
     if (ids.length) {
       addStat(this.profile, 'scoop', ids.length);
       this.xp('care', Math.min(3, ids.length));
@@ -585,11 +593,14 @@ export class Game {
 
   /** Les chevaux rentrent au paddock (ou en sortent pour aller au pré). */
   sendHorses(where) {
+    // Au box : chaque cheval rentre dans son box de l'écurie.
+    if (where === 'box') return this.interiors.stallAll();
     const target = where === 'field' ? FIELD : { x: -16, z: 16 };
     let n = 0;
     for (const e of this.entities.values()) {
       if (e.data.species !== 'horse' || e.ridden) continue;
       e.data.following = false;
+      e.data.stalled = false; // il sort de son box
       e.data.zone = where === 'field' ? 'field' : undefined;
       e.state = 'walk';
       e.target.set(target.x + (Math.random() - 0.5) * 6, 0, target.z + (Math.random() - 0.5) * 6);
@@ -738,7 +749,7 @@ export class Game {
         }
       }
     }
-    const key = best ? `${best.kind}-${best.entity?.data.id ?? ''}` : '';
+    const key = best ? `${best.kind}-${best.entity?.data.id ?? best.id ?? ''}` : '';
     if (key !== this.focusKey) {
       this.focusKey = key;
       this.focus = best;
@@ -765,6 +776,7 @@ export class Game {
       case 'stable':
       case 'pen': this.ui.openBuilding(f.kind); break;
       case 'dismount': this.dismount(); break;
+      case 'spot': f.run(); break; // un coin de l'écurie ou de la maison
       default:
     }
   }
@@ -964,6 +976,7 @@ export class Game {
   // ---------------------------------------------------------------- ferme
 
   wantedEquipment(a) {
+    if (a.stalled && this.interiors.stallOf(a)) return null; // au box, on ne va pas au paddock boire
     const eq = wantedEquipment(this.profile, a, this.profile.place);
     return eq ? this.equipment.find((q) => q.eq.id === eq.id) ?? null : null;
   }

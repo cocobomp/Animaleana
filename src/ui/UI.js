@@ -8,6 +8,7 @@ import * as panels from './panels.js';
 import { openVet } from './vet.js';
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
+import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -228,6 +229,12 @@ export class UI {
       this.actionBtn.hidden = true;
       return;
     }
+    // Coin de l'écurie ou de la maison (src/game/Interiors.js).
+    if (f.kind === 'spot') {
+      this.actionBtn.replaceChildren(h('span', {}, f.icon), ` ${f.label()}`, h('kbd', {}, 'E'));
+      this.actionBtn.hidden = false;
+      return;
+    }
     const labels = {
       animal: () => t('interact', { name: f.entity.data.name }),
       refuge: () => (this.game.isHome ? t('enterRefuge') : t('enterBreeder')),
@@ -382,6 +389,22 @@ export class UI {
   openFarm() { panels.openFarm(this); }
   openTack() { panels.openTack(this); }
   openBuilding(kind) { openBuilding(this, kind); }
+  // Bâtiments à entretenir (src/ui/facilitiesPanel.js)
+  openFacility(kind) { openFacility(this, kind); }
+  openBox(i) { openBox(this, i); }
+  openBed() { openBed(this); }
+
+  /**
+   * Point d'entrée de chaque corvée (curer un box, balayer, ranger…). Renvoie la qualité (0 à 1),
+   * ou null si on abandonne. Un mini-jeu pourra être branché ici plus tard.
+   */
+  async choreWithGame(kind, target = null) {
+    return 1;
+  }
+
+  chorewithGame(kind, target = null) {
+    return this.choreWithGame(kind, target);
+  }
   openAnimalActions(a) { openAnimalActions(this, a); }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */

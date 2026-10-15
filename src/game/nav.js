@@ -30,8 +30,18 @@ function frame(e) {
 
 const out = new THREE.Vector3();
 
+/**
+ * Navigation à l'intérieur des bâtiments (src/game/Interiors.js) : chaque fonction renvoie
+ * un point de passage, ou null si elle n'a rien à dire. Elles passent avant les enclos.
+ */
+export const NAV_HOOKS = [];
+
 /** Prochain point de passage pour aller de pos à goal sans traverser de clôture. */
 export function navTarget(pos, goal) {
+  for (const hook of NAV_HOOKS) {
+    const w = hook(pos, goal);
+    if (w) return w;
+  }
   for (const e of ENCLOSURES) {
     const pIn = inside(e, pos.x, pos.z);
     if (pIn === inside(e, goal.x, goal.z)) continue;

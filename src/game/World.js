@@ -44,6 +44,57 @@ const FLOWERS = {
   winter: [],
 };
 
+let glowTex = null;
+/** Tache de lumière douce (plus forte contre la façade, en haut de l'image) pour les fenêtres allumées. */
+function windowGlowTexture() {
+  if (glowTex) return glowTex;
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = S;
+  c.height = S;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(S / 2, S * 0.12, 2, S / 2, S * 0.18, S * 0.78);
+  g.addColorStop(0, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  glowTex = new THREE.CanvasTexture(c);
+  glowTex.colorSpace = THREE.SRGBColorSpace;
+  glowTex.userData.shared = true;
+  return glowTex;
+}
+
+// Palette de la lumière (valeurs linéaires), partagée par toutes les images : rien n'est alloué par image.
+const C = (r, g, b) => new THREE.Color(r, g, b);
+const PAL = {
+  sunNoon: C(1.0, 0.965, 0.92), sunGold: C(1.0, 0.76, 0.5), sunSet: C(1.0, 0.55, 0.3), sunMorning: C(0.9, 0.95, 1.0),
+  moon: C(0.55, 0.68, 1.0),
+  skyClear: C(0.55, 0.72, 1.0), skyGrey: C(0.72, 0.74, 0.78), skyGold: C(1.0, 0.72, 0.5),
+  nightClear: C(0.32, 0.42, 0.68), nightGrey: C(0.22, 0.24, 0.3),
+  fogDay: C(0.73, 0.82, 0.93), fogGrey: C(0.69, 0.72, 0.76), fogGold: C(0.96, 0.7, 0.46), fogDusk: C(0.32, 0.18, 0.3),
+  fogNight: C(0.012, 0.018, 0.04), fogNightGrey: C(0.01, 0.011, 0.016),
+  nightSky: C(0.012, 0.022, 0.055), nightTint: C(0.6, 0.75, 1.3),
+  cloudLit: C(1, 1, 1), cloudGrey: C(0.72, 0.73, 0.75), cloudShade: C(0.66, 0.7, 0.78), cloudShadeGrey: C(0.42, 0.44, 0.48),
+  cloudShadeGold: C(0.75, 0.42, 0.3), cloudNight: C(0.14, 0.17, 0.26), cloudNightShade: C(0.05, 0.06, 0.1),
+};
+const scratch = { sun: C(0, 0, 0), sky: C(0, 0, 0), night: C(0, 0, 0), ground: C(0, 0, 0), fogDay: C(0, 0, 0), fogNight: C(0, 0, 0), lit: C(0, 0, 0), shade: C(0, 0, 0) };
+
+/** Couleur de la lumière du soleil selon sa hauteur (degrés) et le moment de la journée. */
+function sunlightColor(out, elev, hour) {
+  const low = smooth(32, 0, elev); // 1 à l'horizon, 0 au-dessus de 32°
+  const veryLow = smooth(9, -2, elev);
+  out.copy(PAL.sunNoon); // plein jour : blanc à peine chaud
+  out.lerp(PAL.sunGold, low * low * 0.85); // soleil bas : doré
+  out.lerp(PAL.sunSet, veryLow * 0.7); // lever / coucher : orangé
+  // Matin : lumière un peu plus fraîche qu'en fin de journée.
+  if (hour < 12) out.lerp(PAL.sunMorning, smooth(12, 8, hour) * (1 - low) * 0.35);
+  return out;
+}
+
+// Demi-largeur de la zone d'ombre autour du joueur (mètres) : plus elle est petite, plus les ombres sont fines.
+const SHADOW_HALF = 30;
+
 export class World {
   constructor(scene, quality) {
     this.scene = scene;
@@ -53,12 +104,15 @@ export class World {
     this.interactables = [];
     this.place = null;
     this.waterLevel = null;
+    // Les autres systèmes de la scène (pluie, neige…) retrouvent le monde par ici, pour la hauteur du sol.
+    scene.userData.world = this;
 
     // Ciel physique (diffusion de la lumière), soleil, lumière d'ambiance.
     this.sky = new Sky();
     this.sky.scale.setScalar(4000);
     scene.add(this.sky);
     this.sunDir = new THREE.Vector3();
+    this.moonDir = new THREE.Vector3(0, 1, 0);
 
     this.hemi = new THREE.HemisphereLight(0xcfe6ff, 0x5a6b3a, 0.8);
     scene.add(this.hemi);
@@ -66,18 +120,23 @@ export class World {
     this.sun.castShadow = quality === 'high';
     const s = this.sun.shadow;
     s.mapSize.set(quality === 'high' ? 2048 : 1024, quality === 'high' ? 2048 : 1024);
-    s.camera.left = -35;
-    s.camera.right = 35;
-    s.camera.top = 35;
-    s.camera.bottom = -35;
+    s.camera.left = -SHADOW_HALF;
+    s.camera.right = SHADOW_HALF;
+    s.camera.top = SHADOW_HALF;
+    s.camera.bottom = -SHADOW_HALF;
     s.camera.near = 1;
     s.camera.far = 220;
-    s.bias = -0.0005;
-    s.normalBias = 0.03;
+    // Biais : assez pour éviter l'acné sur le sol en pente, assez peu pour garder les pieds collés à leur ombre.
+    s.bias = -0.00035;
+    s.normalBias = 0.045;
     scene.add(this.sun);
     scene.add(this.sun.target);
+    this._shadowBasis = new THREE.Matrix4();
+    this._shadowInv = new THREE.Matrix4();
+    this._tmpV = new THREE.Vector3();
 
     scene.fog = new THREE.Fog(0xbfd6ea, 60, 380);
+    this.fogColor = new THREE.Color();
 
     // Éclairage d'ambiance par le ciel (image-based lighting) : une copie du ciel sans disque
     // solaire, plus un sol, est « photographiée » de temps en temps (PMREM) et sert
@@ -85,12 +144,36 @@ export class World {
     this.envScene = new THREE.Scene();
     const envSkyMat = this.sky.material.clone();
     envSkyMat.uniforms = this.sky.material.uniforms;
-    // Teinte du ciel (bleu nuit) appliquée au ciel visible et à sa copie d'éclairage.
-    this.sky.material.uniforms.skyTint = { value: new THREE.Color(1, 1, 1) };
+    // Ciel enrichi : teinte globale, lueur du crépuscule à l'horizon (orange côté soleil couché,
+    // violet ailleurs) et ciel de nuit bleu profond, plus clair vers l'horizon — rien n'est jamais noir.
+    const u = this.sky.material.uniforms;
+    u.skyTint = { value: new THREE.Color(1, 1, 1) };
+    u.duskGlow = { value: 0 };
+    u.nightSky = { value: new THREE.Color(0, 0, 0) };
+    u.hazeColor = { value: new THREE.Color(0, 0, 0) };
+    u.hazeAmount = { value: 0 };
     const tint = (sh) => {
       sh.fragmentShader = sh.fragmentShader
-        .replace('uniform vec3 up;', 'uniform vec3 up;\nuniform vec3 skyTint;')
-        .replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * skyTint, 1.0 );');
+        .replace('uniform vec3 up;', `uniform vec3 up;
+uniform vec3 skyTint;
+uniform float duskGlow;
+uniform vec3 nightSky;
+uniform vec3 hazeColor;
+uniform float hazeAmount;`)
+        .replace('gl_FragColor = vec4( retColor, 1.0 );', `
+float hz = pow(1.0 - clamp(direction.y, 0.0, 1.0), 4.0);
+vec3 sunH = normalize(vec3(vSunDirection.x, 0.0, vSunDirection.z) + vec3(1e-4, 0.0, 0.0));
+vec3 dirH = normalize(vec3(direction.x, 0.0, direction.z) + vec3(1e-4, 0.0, 0.0));
+float toward = dot(dirH, sunH) * 0.5 + 0.5;
+vec3 dusk = mix(vec3(0.22, 0.11, 0.28), vec3(1.0, 0.46, 0.16), toward * toward) * (duskGlow * hz * (0.22 + 0.78 * toward * toward));
+vec3 night = nightSky * (0.45 + 1.2 * hz);
+retColor = retColor * skyTint + dusk + night;
+// Brume : l'horizon se fond dans la couleur du brouillard (un peu par beau temps, beaucoup par temps
+// couvert) ; tout en bas, le ciel prend exactement cette couleur : les lointains noyés de brume s'y
+// raccordent sans couture.
+float hzBand = pow(1.0 - clamp(direction.y * 6.0, 0.0, 1.0), 3.0);
+retColor = mix(retColor, hazeColor, max(hazeAmount * pow(1.0 - clamp(direction.y, 0.0, 1.0), 2.5), hzBand));
+gl_FragColor = vec4( retColor, 1.0 );`);
     };
     this.sky.material.onBeforeCompile = tint;
     envSkyMat.onBeforeCompile = (sh) => {
@@ -114,12 +197,15 @@ export class World {
     scene.add(this.stars);
     this.clouds = this.makeClouds();
     scene.add(this.clouds);
+    this.windowGlow = null;
   }
 
   /** Donne au monde l'accès au moteur de rendu (pour l'éclairage par le ciel). */
   setRenderer(renderer) {
     this.renderer = renderer;
     this.pmrem = new THREE.PMREMGenerator(renderer);
+    this.stars.material.uniforms.uPixelRatio.value = renderer.getPixelRatio();
+    this.scene.userData.pixelRatio = renderer.getPixelRatio();
   }
 
   /** Recalcule l'environnement lumineux quand le soleil a assez bougé (ou que la météo change). */
@@ -140,75 +226,258 @@ export class World {
   }
 
   makeMoon() {
+    // Lune : disque avec ses « mers » et un bord doux, dans un halo léger.
+    const S = 256;
     const c = document.createElement('canvas');
-    c.width = 128;
-    c.height = 128;
+    c.width = S;
+    c.height = S;
     const ctx = c.getContext('2d');
-    const glow = ctx.createRadialGradient(64, 64, 10, 64, 64, 64);
-    glow.addColorStop(0, 'rgba(220,230,255,0.5)');
-    glow.addColorStop(1, 'rgba(220,230,255,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, 128, 128);
-    ctx.fillStyle = '#eef1f6';
+    const h = S / 2;
+    const halo = ctx.createRadialGradient(h, h, S * 0.12, h, h, h);
+    halo.addColorStop(0, 'rgba(200,215,255,0.42)');
+    halo.addColorStop(0.45, 'rgba(190,205,250,0.12)');
+    halo.addColorStop(1, 'rgba(190,205,250,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, S, S);
+    const R = S * 0.13;
+    const disc = ctx.createRadialGradient(h - R * 0.3, h - R * 0.3, R * 0.2, h, h, R);
+    disc.addColorStop(0, '#fbfcff');
+    disc.addColorStop(0.85, '#e6ebf5');
+    disc.addColorStop(1, '#c9d2e3');
+    ctx.fillStyle = disc;
     ctx.beginPath();
-    ctx.arc(64, 64, 18, 0, Math.PI * 2);
+    ctx.arc(h, h, R, 0, Math.PI * 2);
     ctx.fill();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(h, h, R, 0, Math.PI * 2);
+    ctx.clip();
     const rng = mulberry32(4);
-    ctx.fillStyle = 'rgba(150,160,175,0.45)';
-    for (let i = 0; i < 9; i++) {
-      ctx.beginPath();
-      ctx.arc(52 + rng() * 24, 52 + rng() * 24, 2 + rng() * 4, 0, Math.PI * 2);
-      ctx.fill();
+    for (let i = 0; i < 16; i++) {
+      const r = R * (0.08 + rng() * 0.22);
+      const x = h + (rng() - 0.5) * R * 1.5;
+      const y = h + (rng() - 0.5) * R * 1.5;
+      const m = ctx.createRadialGradient(x, y, 0, x, y, r);
+      m.addColorStop(0, 'rgba(150,162,185,0.5)');
+      m.addColorStop(1, 'rgba(150,162,185,0)');
+      ctx.fillStyle = m;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
     }
+    ctx.restore();
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, fog: false, depthWrite: false }));
-    moon.scale.setScalar(260);
+    moon.scale.setScalar(320);
     return moon;
   }
 
   makeStars() {
+    // Étoiles : tailles et éclats variés, scintillement léger, une Voie lactée discrète.
     const rng = mulberry32(99);
     const pos = [];
-    for (let i = 0; i < 1500; i++) {
-      const u = rng() * 2 - 1;
-      const a = rng() * Math.PI * 2;
-      const r = Math.sqrt(1 - u * u);
+    const col = [];
+    const size = [];
+    const phase = [];
+    const count = this.quality === 'high' ? 2200 : 1200;
+    const c = new THREE.Color();
+    for (let i = 0; i < count; i++) {
+      const milky = i > count * 0.6;
+      let u;
+      let a;
+      if (milky) {
+        // Bande inclinée : étoiles faibles et serrées autour d'un grand cercle.
+        const along = rng() * Math.PI * 2;
+        const off = (rng() + rng() + rng() - 1.5) * 0.22;
+        const x = Math.cos(along);
+        const y = Math.sin(along) * 0.55 + off;
+        const z = Math.sin(along) * 0.83 - off * 0.5;
+        const l = Math.hypot(x, y, z);
+        u = y / l;
+        a = Math.atan2(z / l, x / l);
+      } else {
+        u = rng() * 2 - 1;
+        a = rng() * Math.PI * 2;
+      }
+      const r = Math.sqrt(Math.max(0, 1 - u * u));
       const y = Math.abs(u);
       pos.push(Math.cos(a) * r * 1500, y * 1500 + 40, Math.sin(a) * r * 1500);
+      const bright = milky ? 0.25 + rng() * 0.3 : 0.5 + rng() * rng() * 0.5;
+      const warm = rng();
+      c.setRGB(1, 1, 1);
+      if (warm < 0.2) c.setRGB(1, 0.86, 0.72);
+      else if (warm > 0.8) c.setRGB(0.78, 0.86, 1);
+      col.push(c.r * bright, c.g * bright, c.b * bright);
+      size.push(milky ? 1.2 + rng() * 0.8 : 1.6 + rng() * rng() * 2.4);
+      phase.push(rng() * 6.283);
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    const m = new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false });
-    return new THREE.Points(geo, m);
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setAttribute('aSize', new THREE.Float32BufferAttribute(size, 1));
+    geo.setAttribute('aPhase', new THREE.Float32BufferAttribute(phase, 1));
+    const m = new THREE.ShaderMaterial({
+      uniforms: { uTime: gfx.time, uOpacity: { value: 0 }, uPixelRatio: { value: 1 } },
+      vertexShader: `
+attribute float aSize;
+attribute float aPhase;
+uniform float uTime;
+uniform float uOpacity;
+uniform float uPixelRatio;
+varying vec3 vColor;
+varying float vAlpha;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * mv;
+  float tw = 0.7 + 0.3 * sin(uTime * (1.2 + aPhase * 0.5) + aPhase * 17.0);
+  gl_PointSize = aSize * uPixelRatio * (0.85 + 0.15 * tw);
+  vColor = color;
+  vAlpha = uOpacity * (0.55 + 0.45 * tw);
+}`,
+      fragmentShader: `
+varying vec3 vColor;
+varying float vAlpha;
+void main() {
+  float d = length(gl_PointCoord - 0.5) * 2.0;
+  float a = smoothstep(1.0, 0.25, d);
+  gl_FragColor = vec4(vColor, a * vAlpha);
+}`,
+      transparent: true, depthWrite: false, vertexColors: true, fog: false,
+    });
+    const stars = new THREE.Points(geo, m);
+    stars.frustumCulled = false;
+    return stars;
   }
 
   makeClouds() {
-    // Nuages : des grappes de « bouffées » toujours tournées vers la caméra (sprites),
-    // claires en haut et grisées en dessous.
-    const g = new THREE.Group();
+    // Nuages : des grappes de « bouffées » toujours tournées vers la caméra, claires en haut et
+    // ombrées en dessous. Toutes les bouffées tiennent dans un seul maillage instancié (un seul
+    // appel de rendu) ; leur dérive avec le vent se calcule dans le shader.
     const rng = mulberry32(5);
-    const mat = new THREE.SpriteMaterial({ map: cloudTexture(), color: 0xffffff, transparent: true, opacity: 0.9, fog: false, depthWrite: false });
-    const count = this.quality === 'high' ? 34 : 20;
+    const high = this.quality === 'high';
+    const count = high ? 34 : 20;
+    const puffs = [];
     for (let i = 0; i < count; i++) {
-      const cloud = new THREE.Group();
       const n = 5 + Math.floor(rng() * 6);
       const w = 30 + rng() * 40;
-      for (let j = 0; j < n; j++) {
-        const sp = new THREE.Sprite(mat);
-        const t = j / (n - 1) - 0.5;
-        const s = (22 + rng() * 22) * (1 - Math.abs(t) * 0.8);
-        sp.scale.set(s * 1.6, s, 1);
-        sp.position.set(t * w + (rng() - 0.5) * 8, Math.sin((t + 0.5) * Math.PI) * 6 + rng() * 3, (rng() - 0.5) * 16);
-        cloud.add(sp);
-      }
       const a = rng() * Math.PI * 2;
       const d = 90 + rng() * 300;
-      cloud.position.set(Math.cos(a) * d, 110 + rng() * 50, Math.sin(a) * d);
-      g.add(cloud);
+      const cx = Math.cos(a) * d;
+      const cy = 110 + rng() * 50;
+      const cz = Math.sin(a) * d;
+      for (let j = 0; j < n; j++) {
+        const t = j / (n - 1) - 0.5;
+        const s = (22 + rng() * 22) * (1 - Math.abs(t) * 0.8);
+        puffs.push({
+          x: cx + t * w + (rng() - 0.5) * 8, y: cy + Math.sin((t + 0.5) * Math.PI) * 6 + rng() * 3, z: cz + (rng() - 0.5) * 16,
+          sx: s * 1.6, sy: s, cx,
+        });
+      }
     }
-    g.userData.mat = mat;
-    return g;
+    const geo = new THREE.InstancedBufferGeometry().copy(new THREE.PlaneGeometry(1, 1));
+    geo.instanceCount = puffs.length;
+    const off = new Float32Array(puffs.length * 3);
+    const sc = new Float32Array(puffs.length * 3);
+    puffs.forEach((p, i) => {
+      off.set([p.x, p.y, p.z], i * 3);
+      sc.set([p.sx, p.sy, p.cx], i * 3);
+    });
+    geo.setAttribute('iOffset', new THREE.InstancedBufferAttribute(off, 3));
+    geo.setAttribute('iScale', new THREE.InstancedBufferAttribute(sc, 3));
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        map: { value: cloudTexture() }, uTime: gfx.time, uSpeed: { value: 1.5 },
+        uColor: { value: new THREE.Color(1, 1, 1) }, uShade: { value: new THREE.Color(0.6, 0.62, 0.68) },
+        uOpacity: { value: 0.9 },
+        uFogColor: { value: this.scene.fog.color }, uFogRange: { value: new THREE.Vector3(60, 400, 0.65) },
+      },
+      vertexShader: `
+attribute vec3 iOffset;
+attribute vec3 iScale;
+uniform float uTime;
+uniform float uSpeed;
+uniform vec3 uFogRange;
+varying vec2 vUv;
+varying float vFog;
+void main() {
+  vUv = uv;
+  // Dérive du nuage entier (toutes ses bouffées ensemble), en boucle sur 760 m.
+  float cx = mod(iScale.z + uTime * uSpeed + 380.0, 760.0) - 380.0;
+  vec3 center = vec3(cx + (iOffset.x - iScale.z), iOffset.y, iOffset.z);
+  vec4 mv = modelViewMatrix * vec4(center, 1.0);
+  mv.xy += position.xy * iScale.xy;
+  gl_Position = projectionMatrix * mv;
+  // Perspective aérienne : les nuages lointains se fondent dans la brume (à moitié par beau temps,
+  // entièrement par temps de brouillard : uFogRange.z).
+  vFog = smoothstep(uFogRange.x, uFogRange.y * 1.5, length(mv.xyz)) * uFogRange.z;
+}`,
+      fragmentShader: `
+uniform sampler2D map;
+uniform vec3 uColor;
+uniform vec3 uShade;
+uniform vec3 uFogColor;
+uniform float uOpacity;
+varying vec2 vUv;
+varying float vFog;
+void main() {
+  vec4 t = texture2D(map, vUv);
+  float l = smoothstep(0.55, 1.0, max(t.r, max(t.g, t.b)));
+  vec3 col = mix(mix(uShade, uColor, l), uFogColor, vFog);
+  gl_FragColor = vec4(col, t.a * uOpacity);
+}`,
+      transparent: true, depthWrite: false, fog: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    mesh.userData.mat = mat;
+    mesh.renderOrder = -1;
+    return mesh;
+  }
+
+  /**
+   * Lueur chaude que les fenêtres allumées projettent au sol, la nuit : un seul maillage
+   * instancié (une tache par fenêtre), additif, posé juste au-dessus du sol devant la façade.
+   */
+  makeWindowGlow(g) {
+    const spots = [];
+    const wm = new Set(B.windowMaterials);
+    const p = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    g.updateMatrixWorld(true);
+    g.traverse((o) => {
+      if (!o.isMesh || !wm.has(o.material)) return;
+      o.getWorldPosition(p);
+      n.set(0, 0, 1).transformDirection(o.matrixWorld);
+      n.y = 0;
+      if (n.lengthSq() < 0.5) return;
+      n.normalize();
+      spots.push({ x: p.x, z: p.z, h: p.y - this.heightAt(p.x, p.z), nx: n.x, nz: n.z });
+    });
+    if (!spots.length) return null;
+    const geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({
+      map: windowGlowTexture(), color: 0xffb870, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
+      depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
+    const mesh = new THREE.InstancedMesh(geo, mat, spots.length);
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    spots.forEach((w, i) => {
+      // Plus la fenêtre est haute, plus la tache s'étale loin de la façade.
+      const reach = 2.2 + Math.max(0, w.h - 1.5) * 1.1;
+      const width = 2.6 + Math.max(0, w.h - 1.5) * 0.6;
+      const cx = w.x + w.nx * (reach / 2 - 0.05);
+      const cz = w.z + w.nz * (reach / 2 - 0.05);
+      q.setFromAxisAngle(up, Math.atan2(w.nx, w.nz));
+      s.set(width, 1, reach);
+      m.compose(p.set(cx, this.heightAt(cx, cz) + 0.05, cz), q, s);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    return mesh;
   }
 
   /** Hauteur du sol en (x, z), la même pour le terrain et pour tout ce qui marche dessus. */
@@ -340,6 +609,8 @@ export class World {
       g.add(groundCover(spots(this.quality === 'high' ? 9000 : 1800, 5, 95, 0.7, 1.3).filter(yard), grassColor, FLOWERS[season]));
     }
 
+    this.windowGlow = this.makeWindowGlow(g);
+    if (this.windowGlow) g.add(this.windowGlow);
     this.scene.add(g);
     this.snowy = snowy;
   }
@@ -485,15 +756,20 @@ roughnessFactor = mix(roughnessFactor, 0.32, gWet * (1.0 - vSplat.w) * (0.6 + 0.
       mat.onBeforeCompile = (sh) => {
         sh.uniforms.gTime = gfx.time;
         sh.uniforms.waterDepth = { value: depthTex };
+        sh.uniforms.wSky = { value: this.fogColor };
         sh.vertexShader = sh.vertexShader
           .replace('#include <common>', `#include <common>
+uniform float gTime;
 varying vec2 vWPos;`)
           .replace('#include <begin_vertex>', `#include <begin_vertex>
-vWPos = vec2(position.x, -position.y);`);
+vWPos = vec2(position.x, -position.y);
+${high ? `// Houle très douce : le plan d'eau respire.
+transformed.z += (sin(vWPos.x * 0.21 + gTime * 0.9) * 0.5 + sin(vWPos.y * 0.17 - gTime * 0.7) * 0.5 + sin((vWPos.x + vWPos.y) * 0.09 + gTime * 0.5) * 0.4) * 0.09;` : ''}`);
         sh.fragmentShader = sh.fragmentShader
           .replace('#include <common>', `#include <common>
 uniform float gTime;
 uniform sampler2D waterDepth;
+uniform vec3 wSky;
 varying vec2 vWPos;
 float wDepth;
 float wFoam;`)
@@ -504,7 +780,11 @@ vec3 wn1 = texture2D(normalMap, wuv1).xyz * 2.0 - 1.0;
 vec3 wn2 = texture2D(normalMap, wuv2).xyz * 2.0 - 1.0;
 ${high ? 'vec3 wn3 = texture2D(normalMap, vWPos * 0.31 + vec2(gTime * 0.03, -gTime * 0.02)).xyz * 2.0 - 1.0;' : 'vec3 wn3 = vec3(0.0, 0.0, 1.0);'}
 vec3 mapN = normalize(vec3((wn1.xy + wn2.xy * 0.6 + wn3.xy * 0.2) * normalScale, 1.0));
-normal = normalize(tbn * mapN);`)
+normal = normalize(tbn * mapN);
+// Fresnel : vue de loin et en rasant, l'eau devient un miroir du ciel (opaque, couleur de l'horizon).
+float wFres = pow(1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0), 3.5);
+diffuseColor.rgb = mix(diffuseColor.rgb, wSky, wFres * 0.55);
+diffuseColor.a = mix(diffuseColor.a, 1.0, wFres * 0.9);`)
           .replace('#include <color_fragment>', `#include <color_fragment>
 wDepth = texture2D(waterDepth, vWPos / ${SIZE.toFixed(1)} + 0.5).r;
 if (abs(vWPos.x) > ${(SIZE / 2).toFixed(1)} || abs(vWPos.y) > ${(SIZE / 2).toFixed(1)}) wDepth = 1.0;
@@ -519,7 +799,8 @@ roughnessFactor = mix(roughnessFactor, 0.8, wFoam);`);
       };
       mat.customProgramCacheKey = () => `water-${high}`;
     }
-    const geo = new THREE.PlaneGeometry(SIZE * 1.5, SIZE * 1.5);
+    const seg = high && !ice ? 48 : 1;
+    const geo = new THREE.PlaneGeometry(SIZE * 1.5, SIZE * 1.5, seg, seg);
     const water = new THREE.Mesh(geo, mat);
     water.rotation.x = -Math.PI / 2;
     water.position.y = this.waterLevel;
@@ -535,6 +816,8 @@ roughnessFactor = mix(roughnessFactor, 0.8, wFoam);`);
     const phi = THREE.MathUtils.degToRad(90 - elev);
     const theta = THREE.MathUtils.degToRad(azim);
     this.sunDir.setFromSphericalCoords(1, phi, theta);
+    // La lune se lève à l'opposé du soleil, assez haut pour éclairer la nuit.
+    this.moonDir.set(-this.sunDir.x, Math.abs(this.sunDir.y) * 0.8 + 0.25, -this.sunDir.z).normalize();
     const u = this.sky.material.uniforms;
     u.sunPosition.value.copy(this.sunDir);
     const overcast = { clear: 0, cloudy: 0.5, rain: 0.8, storm: 0.95, snow: 0.75, fog: 0.7 }[weather] ?? 0;
@@ -551,58 +834,104 @@ roughnessFactor = mix(roughnessFactor, 0.8, wFoam);`);
 
     const day = smooth(-6, 10, elev);
     const golden = smooth(25, 2, elev) * day;
+    // Crépuscule : entre -16° et +6°, l'horizon s'embrase côté soleil puis vire au violet.
+    const twilight = smooth(-16, -4, elev) * smooth(12, 4, elev);
+    const night = 1 - day;
+    const clear = 1 - overcast;
     const env = !!this.pmrem;
-    this.sun.intensity = (env ? 3.6 : 2.8) * day * (1 - overcast * 0.8);
-    this.sun.color.setHSL(0.08, 0.35 + golden * 0.55, 0.93 - golden * 0.22);
-    // Avec l'éclairage par le ciel, la lumière d'ambiance ne sert plus que d'appoint (et la nuit).
-    this.hemi.intensity = env ? 0.12 + 0.2 * day * (1 - overcast * 0.3) + 0.18 * (1 - day) : 0.22 + 0.9 * day * (1 - overcast * 0.3);
-    this.hemi.color.setHSL(0.6, 0.45, 0.3 + 0.45 * day);
-    this.hemi.groundColor.setHSL(0.22, 0.3, 0.08 + 0.22 * day);
-    const groundCol = new THREE.Color(this.place ? GROUND[this.place.biome][this.season] : 0x6f9a44);
+    const sunCol = sunlightColor(scratch.sun, elev, hour);
+    this.sun.color.copy(sunCol);
+    this.sun.intensity = (env ? 3.5 : 2.8) * day * (1 - overcast * 0.8) * (1 - low * 0.3);
+    // Lumière d'ambiance : ciel bleu (gris par temps couvert, doré le soir) au-dessus, reflet du sol en dessous.
+    const skyCol = scratch.sky.copy(PAL.skyClear).lerp(PAL.skyGrey, overcast).lerp(PAL.skyGold, golden * 0.4 * clear);
+    const nightSkyCol = scratch.night.copy(PAL.nightClear).lerp(PAL.nightGrey, overcast * 0.6);
+    this.hemi.color.copy(nightSkyCol).lerp(skyCol, day);
+    const groundCol = scratch.ground.setHex(this.place ? GROUND[this.place.biome][this.season] : 0x6f9a44);
+    this.hemi.groundColor.copy(groundCol).multiplyScalar(0.25 + 0.35 * day);
+    this.hemi.intensity = env
+      ? 0.12 + 0.22 * day * (1 - overcast * 0.3) + 0.42 * night
+      : 0.3 + 0.9 * day * (1 - overcast * 0.3) + 0.5 * night;
     this.updateEnvironment(day, overcast, groundCol);
     this.scene.environmentIntensity = 0.45 + 0.4 * overcast;
 
-    // Lumière : le soleil suit le joueur pour garder des ombres nettes autour de lui.
-    const lightDir = elev > 0 ? this.sunDir : this.sunDir.clone().setY(Math.abs(this.sunDir.y) + 0.3);
-    this.sun.position.copy(focus).addScaledVector(lightDir, 100);
-    this.sun.target.position.copy(focus);
+    // Lumière principale : le soleil (ou la lune) suit le joueur pour garder des ombres nettes autour de lui.
+    const lightDir = elev > 0 ? this.sunDir : this.moonDir;
     if (elev <= 0) {
-      // Clair de lune bleuté.
-      this.sun.intensity = 0.45 * (1 - overcast * 0.6);
-      this.sun.color.setHex(0x9fb7e8);
+      // Clair de lune bleuté, plus faible sous les nuages.
+      this.sun.intensity = 0.7 * (1 - overcast * 0.7) * smooth(0, -4, elev);
+      this.sun.color.copy(PAL.moon);
     }
+    this.placeShadowLight(focus, lightDir);
 
-    const fogDay = new THREE.Color(0xbfd3e6).lerp(new THREE.Color(0xb7bcc2), overcast);
-    const fogNight = new THREE.Color(0x0d1626);
-    const fogColor = fogNight.lerp(fogDay, day).lerp(new THREE.Color(0xe7a678), golden * 0.35 * (1 - overcast));
+    // Brume de distance : sa couleur suit celle de l'horizon (bleutée, grise sous les nuages,
+    // dorée le soir, violette au crépuscule, bleu nuit la nuit — jamais noire).
+    const fogDay = scratch.fogDay.copy(PAL.fogDay).lerp(PAL.fogGrey, overcast);
+    const fogNight = scratch.fogNight.copy(PAL.fogNight).lerp(PAL.fogNightGrey, overcast * 0.7);
+    const fogColor = this.fogColor.copy(fogNight).lerp(fogDay, day)
+      .lerp(PAL.fogGold, golden * 0.45 * clear)
+      .lerp(PAL.fogDusk, twilight * night * 0.5 * clear);
     this.scene.fog.color.copy(fogColor);
-    const foggy = weather === 'fog' ? 1 : weather === 'snow' || weather === 'rain' || weather === 'storm' ? 0.5 : 0;
-    this.scene.fog.near = 90 - foggy * 82;
-    this.scene.fog.far = 650 - foggy * 570;
+    // Perspective aérienne : les lointains (montagnes) se fondent doucement dans l'horizon ;
+    // plus dense sous la pluie et la neige, épaisse par temps de brouillard.
+    const foggy = weather === 'fog' ? 1 : weather === 'snow' ? 0.6 : weather === 'rain' || weather === 'storm' ? 0.5 : 0;
+    this.scene.fog.near = THREE.MathUtils.lerp(70 - overcast * 20, 8, foggy);
+    this.scene.fog.far = THREE.MathUtils.lerp(480 - overcast * 100, 80, foggy);
+    this.foggy = foggy;
 
-    this.stars.material.opacity = (1 - day) * (1 - overcast);
-    u.skyTint.value.setRGB(1, 1, 1).lerp(new THREE.Color(0.55, 0.75, 1.5), 1 - day);
+    // Ciel : lueur du crépuscule, fond de nuit bleu, horizon fondu dans la brume (toujours un peu,
+    // pour que le ciel et le brouillard se rejoignent sans cassure ; beaucoup quand le temps est bouché).
+    u.duskGlow.value = twilight * clear * 0.9;
+    u.nightSky.value.copy(PAL.nightSky).multiplyScalar(night * (1 - overcast * 0.6));
+    u.hazeColor.value.copy(fogColor);
+    u.hazeAmount.value = Math.max(foggy, 0.45 + overcast * 0.4);
+    u.skyTint.value.setRGB(1, 1, 1).lerp(PAL.nightTint, night);
+
+    this.stars.material.uniforms.uOpacity.value = smooth(-4, -12, elev) * clear;
     this.moon.visible = day < 0.6;
-    this.moon.material.opacity = (1 - day) * (1 - overcast * 0.8);
-    this.moon.position.copy(focus).addScaledVector(new THREE.Vector3(-this.sunDir.x, Math.abs(this.sunDir.y) * 0.8 + 0.25, -this.sunDir.z).normalize(), 1800);
+    this.moon.material.opacity = night * (1 - overcast * 0.8);
+    this.moon.position.copy(focus).addScaledVector(this.moonDir, 1800);
     this.stars.position.set(focus.x, 0, focus.z);
-    const cloudVis = { clear: 0.35, cloudy: 0.9, rain: 1, storm: 1, snow: 1, fog: 0.6 }[weather] ?? 0.4;
+    // (brouillard : les nuages sont noyés dans la brume, on ne les dessine pas)
+    const cloudVis = { clear: 0.35, cloudy: 0.9, rain: 1, storm: 1, snow: 1, fog: 0 }[weather] ?? 0.4;
     const cm = this.clouds.userData.mat;
-    cm.opacity = Math.min(1, cloudVis * 1.05);
-    cm.color.setHSL(0.07, 0.6 * golden, 0.12 + 0.82 * day * (1 - overcast * 0.45));
+    cm.uniforms.uOpacity.value = Math.min(1, cloudVis * 1.05);
+    // Nuages : blancs au soleil, dorés le soir, gris sous un ciel couvert, bleu sombre la nuit.
+    const lit = scratch.lit.copy(PAL.cloudLit).lerp(PAL.cloudGrey, overcast * 0.8).lerp(sunCol, golden * 0.6 * clear);
+    const shade = scratch.shade.copy(PAL.cloudShade).lerp(PAL.cloudShadeGrey, overcast).lerp(PAL.cloudShadeGold, golden * 0.5 * clear);
+    cm.uniforms.uColor.value.copy(PAL.cloudNight).lerp(lit, day);
+    cm.uniforms.uShade.value.copy(PAL.cloudNightShade).lerp(shade, day);
+    cm.uniforms.uSpeed.value = 1.2 + gfx.wind.value * 1.2;
     this.clouds.visible = cloudVis > 0.01;
 
-    const lit = 1 - day;
-    for (const m of B.windowMaterials) m.emissiveIntensity = lit * 1.4;
+    for (const m of B.windowMaterials) m.emissiveIntensity = night * 1.4;
+    if (this.windowGlow) {
+      this.windowGlow.visible = night > 0.03;
+      this.windowGlow.material.opacity = night * 0.85;
+    }
     return { day, elev };
+  }
+
+  /**
+   * Cadre la caméra d'ombre sur la zone utile autour du joueur, en alignant son centre sur la grille
+   * des texels : l'ombre ne « grouille » plus quand on marche.
+   */
+  placeShadowLight(focus, lightDir) {
+    const sun = this.sun;
+    const basis = this._shadowBasis.lookAt(lightDir, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0));
+    const inv = this._shadowInv.copy(basis).transpose();
+    const texel = (SHADOW_HALF * 2) / sun.shadow.mapSize.x;
+    const f = this._tmpV.copy(focus).applyMatrix4(inv);
+    f.x = Math.round(f.x / texel) * texel;
+    f.y = Math.round(f.y / texel) * texel;
+    f.applyMatrix4(basis);
+    sun.target.position.copy(f);
+    sun.position.copy(f).addScaledVector(lightDir, 100);
   }
 
   updateClouds(dt) {
     gfx.time.value += dt;
-    for (const c of this.clouds.children) {
-      c.position.x += dt * 1.5;
-      if (c.position.x > 380) c.position.x = -380;
-    }
+    // (après updateSky et l'éventuel recul du brouillard en vue d'ensemble)
+    this.clouds.userData.mat.uniforms.uFogRange.value.set(this.scene.fog.near, this.scene.fog.far, 0.65 + 0.35 * (this.foggy ?? 0));
   }
 
   /** Que représente ce point du sol ? (bâtiment, enclos, paddock…) */

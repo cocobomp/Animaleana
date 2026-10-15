@@ -762,34 +762,51 @@ export function waterNormalTexture() {
   });
 }
 
-/** Bouffée de nuage : boules douces, éclairées par le haut. */
+/**
+ * Bouffée de nuage : un amas de boules cotonneuses, bien éclairées sur le dessus et ombrées
+ * en dessous (la luminosité code l'éclairage : le shader des nuages la teinte selon l'heure).
+ */
 export function cloudTexture() {
   return cached('cloud', () => {
-    const w = 256;
-    const h = 160;
+    const w = gfx.quality === 'high' ? 512 : 256;
+    const h = Math.round(w * 0.625);
     const c = makeCanvas(w, h);
     const ctx = c.getContext('2d');
     const rng = mulberry32(8);
     const puffs = [];
-    for (let i = 0; i < 26; i++) {
-      const x = w * (0.18 + rng() * 0.64);
-      const y = h * (0.35 + rng() * 0.35) - Math.sin(((x / w) - 0.18) / 0.64 * Math.PI) * h * 0.15;
-      const r = h * (0.12 + rng() * 0.16) * (1 - Math.abs(x / w - 0.5) * 1.2);
+    for (let i = 0; i < 34; i++) {
+      const u = 0.14 + rng() * 0.72;
+      const x = w * u;
+      const dome = Math.sin(((u - 0.14) / 0.72) * Math.PI);
+      const y = h * (0.62 - dome * 0.22 - rng() * 0.18);
+      const r = h * (0.1 + rng() * 0.15) * (0.55 + dome * 0.6);
       puffs.push([x, y, r]);
     }
-    // Ombre douce en dessous puis volumes éclairés.
+    // 1) Masse ombrée (gris-bleu doux), un peu plus basse : le ventre du nuage.
     for (const [x, y, r] of puffs) {
-      const g = ctx.createRadialGradient(x, y + r * 0.25, r * 0.1, x, y + r * 0.25, r * 1.15);
-      g.addColorStop(0, 'rgba(170,178,190,0.55)');
-      g.addColorStop(1, 'rgba(170,178,190,0)');
+      const g = ctx.createRadialGradient(x, y + r * 0.3, r * 0.05, x, y + r * 0.3, r * 1.25);
+      g.addColorStop(0, 'rgba(168,176,190,0.75)');
+      g.addColorStop(0.55, 'rgba(168,176,190,0.4)');
+      g.addColorStop(1, 'rgba(168,176,190,0)');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
     }
+    // 2) Volumes éclairés par le haut, bords cotonneux.
     for (const [x, y, r] of puffs) {
-      const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.35, r * 0.05, x, y, r);
-      g.addColorStop(0, 'rgba(255,255,255,0.95)');
-      g.addColorStop(0.6, 'rgba(238,241,246,0.7)');
-      g.addColorStop(1, 'rgba(225,230,238,0)');
+      const g = ctx.createRadialGradient(x - r * 0.2, y - r * 0.4, r * 0.05, x, y, r);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.45, 'rgba(250,251,253,0.85)');
+      g.addColorStop(0.8, 'rgba(236,240,246,0.35)');
+      g.addColorStop(1, 'rgba(230,235,243,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+    }
+    // 3) Petites boules brillantes sur la crête : la lumière accroche le sommet.
+    for (const [x, y, r] of puffs) {
+      if (y > h * 0.5) continue;
+      const g = ctx.createRadialGradient(x - r * 0.15, y - r * 0.55, 1, x - r * 0.15, y - r * 0.4, r * 0.55);
+      g.addColorStop(0, 'rgba(255,255,255,0.9)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
     }

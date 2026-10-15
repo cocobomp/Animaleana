@@ -3,14 +3,13 @@
 
 import { SHOWGROUND, HUTCH_TOYS } from '../sim/activities.js';
 import { showgroundModel, hutchToy } from './models/course.js';
-import { ENCLOSURES, fenceColliders, enclosure } from './nav.js';
+import { ENCLOSURES, addBaseEnclosure, fenceColliders, enclosure } from './nav.js';
 import { t } from '../i18n.js';
 
 // La carrière a une barrière avec une ouverture : on l'ajoute aux enclos connus de la navigation
-// (pour que toucher l'intérieur y emmène par l'entrée).
-if (!ENCLOSURES.some((e) => e.id === 'showground')) {
-  ENCLOSURES.push({ id: 'showground', x: SHOWGROUND.x, z: SHOWGROUND.z, hw: SHOWGROUND.hw, hd: SHOWGROUND.hd, gate: SHOWGROUND.gate });
-}
+// (pour que toucher l'intérieur y emmène par l'entrée). Enclos de base : il doit survivre à
+// setBuiltEnclosures(), appelé à chaque chargement de lieu (voyage, construction, changement de langue).
+addBaseEnclosure({ id: 'showground', x: SHOWGROUND.x, z: SHOWGROUND.z, hw: SHOWGROUND.hw, hd: SHOWGROUND.hd, gate: SHOWGROUND.gate });
 
 export function buildShowground(world, group) {
   const S = SHOWGROUND;

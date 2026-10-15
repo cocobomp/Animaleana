@@ -26,8 +26,9 @@
 ### Espèces
 Toutes les espèces sont prévues, ajoutées progressivement :
 - **Version 0.1** : cheval, chien, chat, lapin.
-- **Ensuite** : poney, âne, cochon d'Inde, hamster, oiseaux, poules, chèvres,
-  vaches, moutons, tortue, perroquet, furet, etc.
+- **Version 0.3** : mouton, chèvre, vache (laine, lait, chiens de troupeau).
+- **Ensuite** : poney, âne, cochon d'Inde, hamster, oiseaux, poules, tortue,
+  perroquet, furet, etc.
 
 ### Races
 Plusieurs races par espèce, chacune avec sa taille, ses couleurs de robe et ses
@@ -129,7 +130,7 @@ réussite au dressage…).
 | Version | Contenu |
 |---|---|
 | **0.1** (prototype, fait) | Profils, avatar, maison + écurie + carrière, 4 espèces et 39 races, besoins, personnalités, vieillissement et mort de vieillesse, bébés, refuge et élevages locaux, vétérinaire (mini-jeu), dressage des tours, entraînement, longe et liberté, monter à cheval, caméra 1ʳᵉ/3ᵉ personne, jour/nuit, météo par lieu et saison, voyage dans 6 lieux (voiture, van, cheval, bateau, avion), quêtes et succès, petits boulots, modes bac à sable et gestion, FR/EN, hors ligne |
-| 0.2 | Concours, parcours d'obstacles jouables à cheval, mini-jeux pour chaque soin (brosser, laver…) |
-| 0.3 | Décoration de la maison, construction d'enclos et de niches, nouvelles espèces |
-| 0.4 | Modèles 3D réalistes et animations, sons, voyage à cheval en temps réel |
+| **0.2** (fait) | Concours et spectacles sur le terrain de concours, apprentissage du saut, parcours d'obstacles, agility, balade, lapin-hop ; mini-jeux pour chaque soin (brosser, laver, ferrer, tonte, traite…) ; vétérinaire à jouer soi-même |
+| **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison |
+| **0.4** (en cours) | Graphismes plus beaux (sol, végétation, lumière, bâtiments, animaux, animations), sons, voyage à cheval en temps réel, nouvelles espèces |
 | 1.0 | Publication |

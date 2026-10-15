@@ -30,18 +30,22 @@ Ouvre le jeu une première fois, puis installe-le (« Ajouter à l'écran d'accu
 | C | 🎥 | caméra 1ʳᵉ / 3ᵉ personne |
 | glisser la souris, molette | glisser, pincer | tourner la vue, zoomer |
 
-## Contenu (version 0.1)
+## Contenu (version 0.3)
 
-- Plusieurs profils, avatar personnalisable, modes **bac à sable** et **gestion** (argent)
-- 4 espèces et 39 races : chevaux, chiens, chats, lapins (avec des races locales en voyage)
-- Besoins réalistes, personnalités, maladies et **vétérinaire en mini-jeu**
+- Plusieurs profils, avatar personnalisable, modes **bac à sable** et **gestion** (argent, petits boulots)
+- 7 espèces et 91 races : chevaux, chiens, chats, lapins, moutons, chèvres, vaches (avec des races locales en voyage) ; chiens de troupeau
+- Besoins réalistes, personnalités, maladies ; **vétérinaire à jouer soi-même** (examen, carnet, diagnostic, soin) et trousse de soins
+- **Mini-jeux pour chaque soin** : nourrir, boire, brosser, laver, nettoyer, griffes, ferrer, caresser, friandise, jouer, longe, liberté, tonte et traite
 - Les animaux grandissent, vieillissent et peuvent avoir des bébés
-- Dressage de tours, entraînement (saut, galop, dressage, agility), longe et travail en liberté
-- Équitation
-- 6 lieux : Normandie, Bretagne, Alpes suisses, Islande, Québec, Kyoto. Voyage en voiture, en van, à cheval, en bateau ou en avion
-- Jour et nuit, météo selon le lieu et la vraie saison
-- Quêtes facultatives et succès
+- Dressage de tours, entraînement, longe et travail en liberté ; équitation (même à cru) ; promenade en laisse
+- **Activités** : apprendre à sauter pas à pas, saut d'obstacles, agility, balade, lapin-hop, spectacles et concours sur le terrain de concours
+- **Événements spéciaux** : orage, canicule, grand froid, animal blessé, cheval échappé, chiot perdu, voisin, naissance, fête du village
+- **Aides** à embaucher (palefrenier, berger, ouvrier agricole, vétérinaire) : on discute avec elles, on donne des consignes, elles font des pauses, gagnent de l'expérience et se forment
+- 11 lieux : Normandie, Bretagne, Alpes suisses, Islande, Alberta, Kyoto, Cotswolds, Andalousie, Kentucky, Pampa, bush australien. Voyage réaliste en voiture, en van (chargement, pauses, stress), à cheval, en bateau ou en avion
+- Jour et nuit, météo selon le lieu et la vraie saison (saisons inversées dans l'hémisphère sud)
+- Tutoriel guidé pour les enfants, quêtes facultatives et succès, mode Auto (le personnage prévoit et fait ses prochaines tâches simples)
 - **Vue d'ensemble** (🗺️) : la ferme vue d'en haut, on donne des ordres à chaque bâtiment, enclos ou animal, et on **construit** niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs et décorations ; on **déplace** aussi les équipements (mangeoires, abreuvoirs…), la bergerie, le paddock, la niche et le clapier (petit prix en mode gestion, gratuit en bac à sable)
+- Installable sur téléphone (« Ajouter à l'écran d'accueil ») et jouable sans réseau après la première ouverture
 
 Les règles du jeu sont décrites dans [docs/GDD.md](docs/GDD.md).
 

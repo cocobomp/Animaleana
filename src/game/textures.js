@@ -988,10 +988,17 @@ export function signTexture(text, bg = '#6b4a2f', fg = '#fff8e8', emoji = '') {
   ctx.lineWidth = 8;
   ctx.strokeRect(4, 4, 504, 120);
   ctx.fillStyle = fg;
-  ctx.font = 'bold 56px system-ui, sans-serif';
+  const label = `${emoji} ${text}`.trim();
+  // Les noms longs (« Maison des animaux ») rapetissent pour tenir dans le panneau.
+  let size = 56;
+  ctx.font = `bold ${size}px system-ui, sans-serif`;
+  while (size > 26 && ctx.measureText(label).width > 480) {
+    size -= 2;
+    ctx.font = `bold ${size}px system-ui, sans-serif`;
+  }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`${emoji} ${text}`.trim(), 256, 68);
+  ctx.fillText(label, 256, 68);
   return toTexture(canvas, { repeat: false });
 }
 

@@ -12,6 +12,7 @@ import { openBuilding, openAnimalActions } from './actions.js';
 import { openHelp } from './help.js';
 import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
 import { tripChips } from './trip.js'; // voyages réalistes
+import { openActivities } from './activities.js';
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -130,6 +131,7 @@ export class UI {
         btn('🐾', t('animals'), () => this.openAnimals()),
         btn('🚜', t('farm'), () => this.openFarm()),
         btn('🗺️', t('mgmt_btn'), () => this.game.mgmt.toggle()), // vue d'ensemble et construction
+        btn('🏆', t('actv_hud'), () => this.openActivities()),
         btn('🧭', t('travel'), () => this.openTravel()),
         btn('📖', t('journal'), () => this.openJournal()),
         btn('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen())),
@@ -337,9 +339,10 @@ export class UI {
       kennel: () => t('bld_kennel'),
       hutch: () => t('bld_hutch'),
       pen: () => t('bld_pen'),
+      showground: () => t('actv_enterShowground'),
       dismount: () => t('dismount'),
     };
-    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }
@@ -518,6 +521,7 @@ export class UI {
     this.game?.emit('animalActions', a);
     return r;
   }
+  openActivities(opts) { openActivities(this, opts); }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {

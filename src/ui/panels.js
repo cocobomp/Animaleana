@@ -20,6 +20,7 @@ import { facilitiesTab } from './facilitiesPanel.js'; // onglet « Bâtiments »
 import { homeSection } from './construction.js'; // rubrique « Maison » (constructions)
 import { travelAdvice } from './trip.js'; // voyages réalistes
 import { questExtras } from './tutorial.js';
+import { animalActivitySection } from './activities.js';
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -167,6 +168,8 @@ function renderAnimal(ui, g, a) {
         btn(`🏠 ${t('herdIn')}`, () => g.startHerding('pen', g.entities.get(a.id)), { disabled: !able }),
         btn(`🌿 ${t('herdOut')}`, () => g.startHerding('field', g.entities.get(a.id)), { disabled: !able })));
   }
+
+  out.push(...animalActivitySection(ui, a)); // activités : saut, balade, agility, spectacle
 
   out.push(h('h3', {}, t('training')), h('div', { class: 'grid' },
     sp.training.map((x) => btn(t(`tr_${x}`), () => g.train(a, x), { disabled: stage === 'baby' })),

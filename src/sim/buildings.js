@@ -19,6 +19,7 @@ const RULES = {
     { id: 'brushHorses', icon: '🪮', when: (c) => need(c.count.horse) ?? sleeping(c, 6, 21) },
     { id: 'cleanStalls', icon: '🧹', when: (c) => (c.count.horse || c.count.paddockDroppings ? null : { reason: 'noAnimals' }) ?? sleeping(c, 6, 21) },
     { id: 'tack', icon: '🏇', when: () => null },
+    { id: 'actvOpen', icon: '🏆', when: () => null }, // activités et concours
     { id: 'farm', icon: '🔧', when: () => null },
     // Bâtiments à entretenir (src/sim/facilities.js)
     { id: 'facPaddock', icon: '🌳', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 22) },
@@ -30,6 +31,7 @@ const RULES = {
     { id: 'hayPaddock', icon: '🌾', when: (c) => need(c.count.horse) },
     { id: 'waterHorses', icon: '💧', when: (c) => need(c.count.horse) },
     { id: 'cleanPaddock', icon: '🧹', when: (c) => (c.count.paddockDroppings > 0 ? null : { reason: 'alreadyClean' }) },
+    { id: 'actvLesson', icon: '🎓', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) }, // activités : apprendre à sauter
     { id: 'farm', icon: '🔧', when: () => null },
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
@@ -42,6 +44,7 @@ const RULES = {
   hutch: [
     { id: 'feedRabbits', icon: '🥕', when: (c) => need(c.count.rabbit) },
     { id: 'cleanHutch', icon: '🧹', when: (c) => need(c.count.rabbit) },
+    { id: 'actvHutchPlay', icon: '🎡', when: (c) => need(c.count.rabbit) }, // activités : jouer dans l'enclos
     { id: 'farm', icon: '🔧', when: () => null },
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
@@ -91,6 +94,17 @@ const RULES = {
     { id: 'outPets', icon: '🌿', when: (c) => (c.count.housed ? null : { reason: 'noneHoused' }) },
     { id: 'feedPets', icon: '🥣', when: (c) => need(c.count.pets, 'noPets') },
     { id: 'cleanPetHouse', icon: '🧹', when: (c) => (c.count.petHouseDirt ? null : { reason: 'alreadyClean' }) },
+  ],
+  // Terrain de concours (activités) : on monte de jour, les spectacles se jouent aussi le soir.
+  showground: [
+    { id: 'actvLesson', icon: '🎓', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) },
+    { id: 'actvJumping', icon: '🏇', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) },
+    { id: 'actvAgility', icon: '🐕', when: (c) => dayOnly(c, 7, 21) },
+    { id: 'actvHop', icon: '🐇', when: (c) => need(c.count.rabbit) ?? dayOnly(c, 7, 21) },
+    { id: 'actvShow', icon: '🎪', when: (c) => dayOnly(c, 9, 23) },
+    { id: 'actvTrail', icon: '🧭', when: (c) => dayOnly(c, 7, 20) },
+    { id: 'actvCalendar', icon: '📅', when: () => null },
+    { id: 'actvTrophies', icon: '🏆', when: () => null },
   ],
   vet: [
     { id: 'vet', icon: '🩺', when: (c) => (inHours(c.hour, 8, 19) || c.count.sick > 0 ? null : { reason: 'vetClosed', params: { h: fmtHour(8) } }) },

@@ -408,7 +408,8 @@ export class AnimalEntity {
       this.timer = 5;
     }
 
-    if (this.ridden) {
+    // scripted : l'animal est guidé par une activité (agility, spectacle, src/game/Activities.js).
+    if (this.ridden || this.scripted) {
       this.sleeping = false;
     } else {
       // Un cheval qui rentre au box ne s'endort pas en chemin.

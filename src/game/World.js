@@ -13,6 +13,8 @@ import { forest, rocks, groundCover, mountainRing } from './models/nature.js';
 import { buildFarm } from './farmLayout.js';
 import { buildInteriors } from './Interiors.js'; // écurie et maison où l'on entre
 import { coreAt } from './coreLayout.js'; // installations déplaçables (vue d'ensemble)
+import { buildShowground } from './showground.js'; // activités : terrain de concours
+import { showgroundFlat } from '../sim/activities.js';
 
 const SIZE = 420;
 const SEGMENTS = 168;
@@ -220,6 +222,7 @@ export class World {
       + Math.sin((x + z) * 0.09) * 0.4
     );
     h *= smooth(34, 75, r);
+    h *= 1 - showgroundFlat(x, z); // activités : terrain de concours bien plat
     if (p.mountains) h += smooth(100, 190, r) * (30 + 14 * Math.sin(Math.atan2(z, x) * 5));
     if (p.sea) h -= smooth(42, 80, x) * 7;
     if (p.lake) {
@@ -300,6 +303,7 @@ export class World {
     deco(B.hayBale(), ...coreAt('paddock', -21.5, 21));
     deco(B.hayBale(), ...coreAt('paddock', -27, 8), 0.4);
     buildFarm(this, g, isHome);
+    buildShowground(this, g); // activités : carrière, tribune et jury
     if (p.biome === 'garden') deco(B.torii(), 0, 30);
     if (p.biome === 'beach') deco(B.lighthouse(), 70, -60);
 

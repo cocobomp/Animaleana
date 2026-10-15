@@ -162,6 +162,8 @@ export function restartTutorial(profile) {
 const hasHorse = (p) => p.animals.some((a) => a.species === 'horse');
 const hasAnimal = (p) => p.animals.length > 0;
 
+const SHOWGROUND = { type: 'building', id: 'showground' };
+
 export const QUEST_GUIDE = {
   adopt1: { where: 'refuge', target: { type: 'building', id: 'refuge' } },
   feed5: { where: 'animal', target: { type: 'action', id: 'feed' }, ready: hasAnimal },
@@ -177,12 +179,23 @@ export const QUEST_GUIDE = {
   horseTrip: { where: 'travel', target: { type: 'hud', id: 'travel' }, ready: hasHorse },
   baby: { where: 'sheet', target: { type: 'action', id: 'more' }, ready: (p) => p.animals.length >= 2 },
   species4: { where: 'refuge', target: { type: 'building', id: 'refuge' } },
+  // Activités : au terrain de concours (src/sim/activities.js)
+  actvLesson1: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
+  actvJump1: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
+  actvClear1: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
+  actvTrail1: { where: 'showground', target: SHOWGROUND },
+  actvAgility1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
+  actvShow1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
+  actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
+  actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
+  actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
 };
 
 /** Ordre conseillé des quêtes, de la plus facile à la plus difficile. */
 export const QUEST_ORDER = [
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
+  'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
 ];
 
 /**
@@ -192,9 +205,9 @@ export const QUEST_ORDER = [
 export function questGuide(id, profile) {
   const g = QUEST_GUIDE[id];
   if (!g) return null;
-  const needsAnimal = g.target.type === 'action' || g.where === 'vet';
+  const needsAnimal = g.target.type === 'action' || g.where === 'vet' || g.animal || g.horse;
   if (needsAnimal && !hasAnimal(profile)) return { where: 'refuge', target: { type: 'building', id: 'refuge' }, first: 'adopt' };
-  if (g.where === 'horse' && !hasHorse(profile)) return { where: 'refuge', target: { type: 'building', id: 'refuge' }, first: 'horse' };
+  if ((g.where === 'horse' || g.horse) && !hasHorse(profile)) return { where: 'refuge', target: { type: 'building', id: 'refuge' }, first: 'horse' };
   return { where: g.where, target: g.target };
 }
 
@@ -252,6 +265,9 @@ export const FOLLOW_STEPS = {
   pickMode: { target: travelEl('#panel .card.mode:not([disabled])'), done: (c) => c.travelMode || c.questDone },
   pickHorse: { target: travelEl('#panel .card.mode:not([disabled])'), done: (c) => c.travelMode || c.questDone },
   goTravel: { target: travelEl('#panel button.primary.big:not([disabled])'), done: questDone },
+  goShowground: { target: SHOWGROUND, done: seenAny('building:showground') },
+  goHutch: { target: { type: 'building', id: 'hutch' }, done: seenAny('building:hutch') },
+  doActivity: { target: null, done: questDone, progress: true },
 };
 
 export const QUEST_STEPS = {
@@ -269,6 +285,15 @@ export const QUEST_STEPS = {
   abroad: ['openTravel', 'pickAbroad', 'pickMode', 'goTravel'],
   horseTrip: ['openTravel', 'pickPlace', 'pickHorse', 'goTravel'],
   baby: ['tapAnimal', 'openMore', 'breedNow'],
+  actvLesson1: ['goShowground', 'doActivity'],
+  actvJump1: ['goShowground', 'doActivity'],
+  actvClear1: ['goShowground', 'doActivity'],
+  actvTrail1: ['goShowground', 'doActivity'],
+  actvAgility1: ['goShowground', 'doActivity'],
+  actvShow1: ['goShowground', 'doActivity'],
+  actvCompete1: ['goShowground', 'doActivity'],
+  actvHop1: ['goShowground', 'doActivity'],
+  actvHutch5: ['goHutch', 'doActivity'],
 };
 
 /** Étapes d'une quête selon la situation : sans animal (ou sans cheval), on va d'abord en adopter un. */

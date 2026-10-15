@@ -17,6 +17,12 @@ export const XP = {
   helperTraining: 0,
   build: 30,
   event: 40, // un événement spécial réussi (src/sim/events.js)
+  // activités (src/sim/activities.js)
+  activity: 25,
+  show: 30,
+  competition: 40,
+  podium: 60,
+  photo: 5,
 };
 
 /** XP totale nécessaire pour atteindre le niveau n (niveau 1 = 0 XP). */

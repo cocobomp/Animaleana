@@ -35,6 +35,7 @@ import { enclosure } from './nav.js';
 import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
+import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
 import { t, L } from '../i18n.js';
 // Vue d'ensemble (d'en haut) et constructions du joueur.
 import { Structures } from './Structures.js';
@@ -106,6 +107,7 @@ export class Game {
     this.tasks = new TaskQueue(this);
     this.interiors = new Interiors(this);
     this.events = new Events(this);
+    this.activities = new Activities(this);
     this.droppingMeshes = new Map();
     this.timeScale = 1; // 0 = pause
     this.profile = null;
@@ -162,6 +164,7 @@ export class Game {
     this.tripFlow.reset();
     this.emit('stop');
     this.marker.hide();
+    this.activities.abort();
     this.save();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
@@ -202,6 +205,7 @@ export class Game {
   }
 
   loadPlace(placeId, opts = {}) {
+    this.activities.abort();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
@@ -440,6 +444,7 @@ export class Game {
       for (const h of this.helpers.values()) h.update(wdt, this);
       this.herding.update(wdt);
       this.tasks?.update();
+      this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
     }
     if (mgmt) this.mgmt.update(dt, ctrl);
     else {
@@ -591,6 +596,7 @@ export class Game {
       this.mgmt.onTap(sx, sy);
       return;
     }
+    if (this.activities.onTap(sx, sy)) return;
     const paused = this.paused;
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
@@ -1080,6 +1086,7 @@ export class Game {
   }
 
   interact() {
+    if (this.activities.onInteract()) return;
     const f = this.focus;
     if (!f) return;
     switch (f.kind) {
@@ -1096,6 +1103,7 @@ export class Game {
       case 'paddock':
       case 'kennel':
       case 'hutch':
+      case 'showground':
       case 'pen': this.ui.openBuilding(f.kind); break;
       case 'dismount': this.dismount(); break;
       case 'spot': f.run(); break; // un coin de l'écurie ou de la maison

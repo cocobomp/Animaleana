@@ -26,6 +26,9 @@ const GROUND = {
   tundra: { spring: 0x6c8a52, summer: 0x6f9152, autumn: 0x8a7e4c, winter: 0xeef1f4 },
   forest: { spring: 0x5f8f3e, summer: 0x568a38, autumn: 0x7d8a3e, winter: 0xf0f3f6 },
   garden: { spring: 0x7aa64c, summer: 0x6d9c42, autumn: 0x9a9446, winter: 0x8a9670 },
+  prairie: { spring: 0x8fa653, summer: 0xb5a45c, autumn: 0xa8995a, winter: 0xeef2f6 },
+  mediterranean: { spring: 0x93a656, summer: 0xbca462, autumn: 0xa39a5c, winter: 0x8d9c60 },
+  outback: { spring: 0xa77a42, summer: 0xb26e3c, autumn: 0xa9763f, winter: 0x9c7c4a },
 };
 
 const FLOWERS = {
@@ -139,7 +142,7 @@ export class World {
     return this.waterLevel !== null && this.heightAt(x, z) < this.waterLevel + 0.15;
   }
 
-  build(placeId, season) {
+  build(placeId, season, isHome = false) {
     if (this.group) {
       this.scene.remove(this.group);
       this.group.traverse((o) => {
@@ -161,7 +164,7 @@ export class World {
     this.clearZones = [];
     this.waterLevel = p.sea || p.lake ? WATER_LEVEL : null;
     const rng = mulberry32(placeId.length * 977 + 13);
-    const snowy = GROUND[p.biome][season] === 0xeef2f6 || GROUND[p.biome][season] === 0xeef1f4 || GROUND[p.biome][season] === 0xf0f3f6;
+    const snowy = [0xeef2f6, 0xeef1f4, 0xf0f3f6].includes(GROUND[p.biome][season]);
 
     g.add(this.makeTerrain(season, rng));
     if (this.waterLevel !== null) {
@@ -186,7 +189,7 @@ export class World {
     };
     const doorOf = (x, z, d, rotY = 0) => ({ x: x + Math.sin(rotY) * (d / 2 + 1.4), z: z + Math.cos(rotY) * (d / 2 + 1.4) });
 
-    if (p.home) {
+    if (isHome) {
       place(B.house(t('title')), 0, -16, 0, 'house');
       this.interactables.push({ kind: 'house', ...doorOf(0, -16, 7) });
       place(B.stable(L({ fr: 'Écurie', en: 'Stable' })), -22, -2, Math.PI / 2, 'stable');
@@ -197,7 +200,7 @@ export class World {
       place(B.lodge(L({ fr: 'Gîte', en: 'Lodge' }), p.biome), 0, -16, 0, 'lodge');
       this.interactables.push({ kind: 'lodge', ...doorOf(0, -16, 7) });
     }
-    place(B.refuge(p.home ? t('refuge') : t('breeder'), !p.home), 18, -6, -Math.PI / 2, 'refuge');
+    place(B.refuge(isHome ? t('refuge') : t('breeder'), !isHome), 18, -6, -Math.PI / 2, 'refuge');
     this.interactables.push({ kind: 'refuge', ...doorOf(18, -6, 7, -Math.PI / 2) });
     place(B.vetClinic(L({ fr: 'Vétérinaire', en: 'Vet' })), 18, 9, -Math.PI / 2, 'vet');
     this.interactables.push({ kind: 'vet', ...doorOf(18, 9, 7, -Math.PI / 2) });

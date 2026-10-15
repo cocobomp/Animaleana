@@ -17,7 +17,7 @@ export const DEFAULT_AVATAR = {
   hat: false,
 };
 
-export function createProfile(name, mode = 'sandbox') {
+export function createProfile(name, mode = 'sandbox', home = 'maison') {
   return {
     version: SAVE_VERSION,
     id: uid(),
@@ -30,8 +30,9 @@ export function createProfile(name, mode = 'sandbox') {
     avatar: { ...DEFAULT_AVATAR },
     animals: [],
     memorial: [],
-    place: 'maison',
-    visited: ['maison'],
+    home, // le lieu où l'on habite (choisi au début)
+    place: home,
+    visited: [home],
     clock: 8 * 60, // minutes de jeu depuis le début (jour 1, 8 h)
     stats: {},
     completed: [],
@@ -86,7 +87,7 @@ export function loadProfile(id) {
 }
 
 function migrate(p) {
-  const fresh = createProfile(p.name, p.mode);
+  const fresh = createProfile(p.name, p.mode, p.home ?? 'maison');
   return { ...fresh, ...p, stats: p.stats ?? {}, settings: { ...fresh.settings, ...p.settings } };
 }
 

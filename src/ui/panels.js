@@ -199,9 +199,9 @@ export function openAnimals(ui) {
 
 export function openAdoption(ui) {
   const g = ui.game;
-  const home = g.placeDef.home;
+  const home = g.isHome;
   const render = () => {
-    const list = adoptionCandidates(g.profile.place, g.day, g.profile.adoptedKeys);
+    const list = adoptionCandidates(g.profile.place, g.day, g.profile.adoptedKeys, g.isHome);
     if (!list.length) return [h('p', { class: 'note' }, t('nothingToday'))];
     return [h('div', { class: 'cards' }, list.map((a) => {
       const price = adoptionPrice(a);
@@ -265,7 +265,7 @@ export function openTravel(ui) {
         onClick: () => { state.dest = id; state.mode = null; ui.renderPanel(); },
       },
       h('span', { class: 'card-emoji' }, pl.flag),
-      h('span', { class: 'card-main' }, h('b', {}, L(pl.name)), h('small', {}, L(pl.region))),
+      h('span', { class: 'card-main' }, h('b', {}, `${id === p.home ? '🏠 ' : ''}${L(pl.name)}`), h('small', {}, L(pl.region))),
       h('span', { class: 'card-side' }, current ? h('small', {}, t('currentPlace')) : h('small', {}, t('km', { n: distanceKm(from, pl) }))));
     });
     const out = [h('div', { class: 'cards' }, places)];

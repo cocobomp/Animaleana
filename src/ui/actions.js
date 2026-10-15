@@ -38,7 +38,7 @@ function sheet(ui, title, subtitle, items, header = null, live = false) {
 
 export function openBuilding(ui, kind) {
   const g = ui.game;
-  const home = g.placeDef.home;
+  const home = g.isHome;
   const name = kind === 'refuge' && !home ? t('bld_breeder') : t(`bld_${kind}`);
   const close = () => ui.closePanel();
   const run = {

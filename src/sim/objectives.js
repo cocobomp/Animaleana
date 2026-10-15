@@ -13,7 +13,7 @@ export const OBJECTIVES = [
   { id: 'trick1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'tricksLearned'), 1] },
   { id: 'vet1', kind: 'quest', reward: 50, progress: (p) => [stat(p, 'vet'), 1] },
   { id: 'travel1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'travels'), 1] },
-  { id: 'abroad', kind: 'quest', reward: 120, progress: (p) => [p.visited.some((id) => PLACES[id].abroad) ? 1 : 0, 1] },
+  { id: 'abroad', kind: 'quest', reward: 120, progress: (p) => [p.visited.some((id) => PLACES[id].country !== PLACES[p.home ?? 'maison'].country) ? 1 : 0, 1] },
   { id: 'horseTrip', kind: 'quest', reward: 150, progress: (p) => [stat(p, 'horseTravels'), 1] },
   { id: 'baby', kind: 'quest', reward: 100, progress: (p) => [stat(p, 'births'), 1] },
   { id: 'species4', kind: 'quest', reward: 150, progress: (p) => [new Set(p.animals.map((a) => a.species)).size, 4] },

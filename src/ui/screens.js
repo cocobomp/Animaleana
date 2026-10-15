@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { h, hexColor } from './dom.js';
 import { t, getLang, setLang } from '../i18n.js';
 import { listProfiles, loadProfile, createProfile, deleteProfile, saveProfile } from '../sim/profile.js';
+import { PLACES, PLACE_IDS } from '../sim/places.js';
+import { L } from '../i18n.js';
 import { buildAvatar } from '../game/models/avatarModel.js';
 import { disposeModel } from '../game/models/animalModel.js';
 
@@ -67,9 +69,11 @@ function newProfile(ui, back) {
       name.focus();
       return;
     }
-    const p = createProfile(n, mode);
-    saveProfile(p);
-    showAvatarEditor(ui, p, () => ui.game.start(p));
+    chooseHome(ui, (home) => {
+      const p = createProfile(n, mode, home);
+      saveProfile(p);
+      showAvatarEditor(ui, p, () => ui.game.start(p));
+    }, () => newProfile(ui, back));
   };
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') create(); });
   ui.screen.replaceChildren(h('div', { class: 'menu' },
@@ -81,6 +85,27 @@ function newProfile(ui, back) {
       h('button', { class: 'primary', onClick: create }, t('create')))));
   ui.screen.hidden = false;
   setTimeout(() => name.focus(), 30);
+}
+
+/** Où veux-tu habiter ? Le décor, la météo et les races du refuge en dépendent. */
+function chooseHome(ui, onChoose, back) {
+  let selected = 'maison';
+  const render = () => {
+    ui.screen.replaceChildren(h('div', { class: 'menu home-picker' },
+      h('h1', {}, `🏡 ${t('chooseHome')}`),
+      h('p', { class: 'tagline' }, t('chooseHomeHelp')),
+      h('div', { class: 'cards' }, PLACE_IDS.map((id) => {
+        const pl = PLACES[id];
+        return h('button', { class: `card place ${selected === id ? 'selected' : ''}`, onClick: () => { selected = id; render(); } },
+          h('span', { class: 'card-emoji' }, pl.flag),
+          h('span', { class: 'card-main' }, h('b', {}, L(pl.name)), h('small', {}, L(pl.region)), h('small', {}, L(pl.climate))));
+      })),
+      h('div', { class: 'row end' },
+        h('button', { onClick: back }, t('cancel')),
+        h('button', { class: 'primary', onClick: () => onChoose(selected) }, `${t('liveHere')} ${PLACES[selected].flag}`))));
+    ui.screen.hidden = false;
+  };
+  render();
 }
 
 // ---------------------------------------------------------------- avatar

@@ -4,16 +4,16 @@ import { SPECIES, SPECIES_IDS } from './species.js';
 import { createAnimal } from './animal.js';
 import { DAYS_PER_YEAR } from './time.js';
 import { seeded, pick } from './rng.js';
-import { PLACES } from './places.js';
 
-export function breedsFor(placeId) {
-  const home = PLACES[placeId].home;
+/** Races proposées : à la maison, les races courantes + celles de la région ; en voyage, les races locales. */
+export function breedsFor(placeId, isHome = false) {
   const list = [];
   for (const sid of SPECIES_IDS) {
     for (const b of SPECIES[sid].breeds) {
-      if (home ? b.origin === null : b.origin === placeId) list.push({ species: sid, breed: b });
+      if (b.origin === placeId || (isHome && b.origin === null)) list.push({ species: sid, breed: b });
     }
   }
+  if (!list.length) return breedsFor(placeId, true);
   return list;
 }
 
@@ -24,10 +24,10 @@ export function adoptionPrice(a) {
 }
 
 /** Liste du jour, identique tant que le jour ne change pas (graine fixe). */
-export function adoptionCandidates(placeId, day, adoptedKeys = []) {
+export function adoptionCandidates(placeId, day, adoptedKeys = [], isHome = false) {
   const rng = seeded(`adopt-${placeId}-${day}`);
-  const pool = breedsFor(placeId);
-  const count = PLACES[placeId].home ? 8 : 5;
+  const pool = breedsFor(placeId, isHome);
+  const count = isHome ? 9 : 5;
   const out = [];
   for (let i = 0; i < count; i++) {
     const key = `${placeId}-${day}-${i}`;

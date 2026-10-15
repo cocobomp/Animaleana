@@ -582,6 +582,10 @@ const fr = {
   scoopedN_one: '🧹 1 crottin ramassé.',
   do_cleanPen: 'Ramasser les crottins de l\'enclos',
   why_alreadyClean: 'C\'est déjà propre.',
+
+  chooseHome: 'Où veux-tu habiter ?',
+  chooseHomeHelp: 'Le paysage, la météo, les saisons et les races du refuge dépendent de l\'endroit choisi.',
+  liveHere: 'Habiter ici',
 };
 
 const en = {
@@ -1116,6 +1120,10 @@ const en = {
   scoopedN_one: '🧹 1 dropping picked up.',
   do_cleanPen: 'Pick up droppings in the pen',
   why_alreadyClean: 'It\'s already clean.',
+
+  chooseHome: 'Where do you want to live?',
+  chooseHomeHelp: 'The landscape, weather, seasons and shelter breeds depend on where you choose.',
+  liveHere: 'Live here',
 };
 
 const DICTS = { fr, en };

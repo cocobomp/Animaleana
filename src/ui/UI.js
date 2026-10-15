@@ -136,7 +136,7 @@ export class UI {
       h('div', { class: 'hud-line level' }, `⭐ ${t('level', { n: s.level })}`,
         h('span', { class: 'xp-track' }, h('span', { class: 'xp-fill', style: { width: `${s.levelProgress * 100}%` } }))),
       h('div', { class: 'hud-line' }, `📅 ${t('day', { n: s.day })} · 🕐 ${formatClock(s.clock)}`),
-      h('div', { class: 'hud-line' }, `${s.place.flag} ${L(s.place.name)}`),
+      h('div', { class: 'hud-line' }, `${s.isHome ? '🏠' : s.place.flag} ${L(s.place.name)}`),
       h('div', { class: 'hud-line' }, `${WEATHER_EMOJI[s.weather]} ${t('weatherNow', { w: t(`w_${s.weather}`), t: s.temperature })} · ${t(`season_${s.season}`)}`),
     );
     if (this.panel?.live && !this.holding) this.renderPanel();
@@ -230,7 +230,7 @@ export class UI {
     }
     const labels = {
       animal: () => t('interact', { name: f.entity.data.name }),
-      refuge: () => (this.game.placeDef.home ? t('enterRefuge') : t('enterBreeder')),
+      refuge: () => (this.game.isHome ? t('enterRefuge') : t('enterBreeder')),
       vet: () => t('enterVet'),
       house: () => t('enterHouse'),
       lodge: () => t('enterLodge'),

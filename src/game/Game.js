@@ -20,7 +20,7 @@ import {
   NEEDS, tickAnimal, applyCare, CARE, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
 } from '../sim/animal.js';
 import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
-import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES } from '../sim/places.js';
+import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeason } from '../sim/places.js';
 import { adoptionPrice } from '../sim/adoption.js';
 import { checkObjectives } from '../sim/objectives.js';
 import { saveProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
@@ -143,7 +143,11 @@ export class Game {
   }
 
   get season() {
-    return seasonOf(new Date());
+    return placeSeason(this.profile?.place ?? 'maison', seasonOf(new Date()));
+  }
+
+  get isHome() {
+    return this.profile.place === this.profile.home;
   }
 
   get placeDef() {
@@ -157,7 +161,7 @@ export class Game {
     this.entities.clear();
     for (const h of this.helpers.values()) h.dispose();
     this.helpers.clear();
-    this.world.build(placeId, this.season);
+    this.world.build(placeId, this.season, placeId === this.profile.home);
     this.equipment = [];
     for (const eq of equipmentAt(this.profile, placeId)) this.spawnEquipment(eq);
     this.droppingMeshes.clear();
@@ -507,7 +511,7 @@ export class Game {
     return {
       hour: this.hour,
       season: this.season,
-      home: this.placeDef.home,
+      home: this.isHome,
       count: {
         horse: here.filter((a) => a.species === 'horse').length,
         livestock: here.filter((a) => sp(a).livestock).length,
@@ -1154,6 +1158,7 @@ export class Game {
       day: this.day,
       clock: p.clock,
       place: this.placeDef,
+      isHome: this.isHome,
       weather: this.weather,
       temperature: this.temperature,
       season: this.season,

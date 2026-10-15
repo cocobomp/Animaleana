@@ -10,6 +10,7 @@ import * as B from './models/buildings.js';
 import { forest, rocks, groundCover, mountainRing } from './models/nature.js';
 import { buildFarm } from './farmLayout.js';
 import { buildInteriors } from './Interiors.js'; // écurie et maison où l'on entre
+import { coreAt } from './coreLayout.js'; // installations déplaçables (vue d'ensemble)
 
 const SIZE = 420;
 const SEGMENTS = 168;
@@ -205,7 +206,8 @@ export class World {
     this.interactables.push({ kind: 'vet', ...doorOf(18, 9, 7, -Math.PI / 2) });
 
     const pad = B.paddock(18, 14);
-    pad.position.set(-16, this.heightAt(-16, 16), 16);
+    const [padX, padZ] = coreAt('paddock', -16, 16); // le paddock peut être déplacé
+    pad.position.set(padX, this.heightAt(padX, padZ), padZ);
     pad.rotation.y = Math.PI / 2;
     g.add(pad);
     const deco = (obj, x, z, ry = 0) => {
@@ -213,9 +215,9 @@ export class World {
       obj.rotation.y = ry;
       g.add(obj);
     };
-    deco(B.trough(), -21.5, 11, Math.PI / 2);
-    deco(B.hayBale(), -21.5, 21);
-    deco(B.hayBale(), -27, 8, 0.4);
+    deco(B.trough(), ...coreAt('paddock', -21.5, 11), Math.PI / 2);
+    deco(B.hayBale(), ...coreAt('paddock', -21.5, 21));
+    deco(B.hayBale(), ...coreAt('paddock', -27, 8), 0.4);
     buildFarm(this, g, isHome);
     if (p.biome === 'garden') deco(B.torii(), 0, 30);
     if (p.biome === 'beach') deco(B.lighthouse(), 70, -60);
@@ -235,7 +237,7 @@ export class World {
         const z = Math.sin(a) * r;
         if (this.isWater(x, z)) continue;
         if (this.colliders.some((c) => Math.abs(x - c.x) < c.hw + 2 && Math.abs(z - c.z) < c.hd + 2)) continue;
-        if (x > -25 && x < -7 && z > 6 && z < 26) continue; // paddock
+        if (Math.abs(x - padX) < 9 && Math.abs(z - padZ) < 10) continue; // paddock
         if (this.clearZones.some((c) => Math.hypot(x - c.x, z - c.z) < c.r)) continue; // bergerie et pré
         out.push({ x, y: this.heightAt(x, z), z, s: sMin + rng() * (sMax - sMin), r: rng() * Math.PI * 2 });
       }
@@ -356,10 +358,15 @@ export class World {
   kindAt(x, z) {
     const c = this.colliders.find((k) => k.kind && Math.abs(x - k.x) < k.hw + 0.5 && Math.abs(z - k.z) < k.hd + 0.5);
     if (c) return c.kind;
-    if (x > -24 && x < -8 && z > 6 && z < 26) return 'paddock';
-    if (Math.abs(x - 9) < 3 && Math.abs(z - 4) < 2.6) return 'hutch';
-    if (Math.abs(x + 9) < 1.5 && Math.abs(z + 7) < 1.5) return 'kennel';
-    if (Math.abs(x - 14) < 10.5 && Math.abs(z - 35) < 7.5) return 'pen';
+    // (positions décalées si le joueur a déplacé ces installations : coreLayout.js)
+    const [pdx, pdz] = coreAt('paddock', -16, 16);
+    const [hx, hz] = coreAt('hutch', 9, 4);
+    const [kx, kz] = coreAt('kennel', -9, -7);
+    const [px, pz] = coreAt('pen', 14, 35);
+    if (Math.abs(x - pdx) < 8 && Math.abs(z - pdz) < 10) return 'paddock';
+    if (Math.abs(x - hx) < 3 && Math.abs(z - hz) < 2.6) return 'hutch';
+    if (Math.abs(x - kx) < 1.5 && Math.abs(z - kz) < 1.5) return 'kennel';
+    if (Math.abs(x - px) < 10.5 && Math.abs(z - pz) < 7.5) return 'pen';
     return null;
   }
 

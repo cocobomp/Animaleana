@@ -34,6 +34,12 @@ import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { t, L } from '../i18n.js';
+// Vue d'ensemble (d'en haut) et constructions du joueur.
+import { Structures } from './Structures.js';
+import { ManagementView } from './ManagementView.js';
+import { openStructure } from '../ui/construction.js';
+import { doorOf, equipmentPos } from '../sim/construction.js';
+import { applyCoreLayout } from './coreLayout.js';
 
 const CARE_EMOJI = {
   feed: '🍖', water: '💧', brush: '✨', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨',
@@ -92,6 +98,8 @@ export class Game {
     this.checkAcc = 0;
     this.saveAcc = 0;
     this.focus = null;
+    this.structures = new Structures(this);
+    this.mgmt = new ManagementView(this);
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -122,6 +130,7 @@ export class Game {
 
   stop() {
     this.tasks.clear();
+    this.mgmt.stop();
     this.save();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
@@ -161,17 +170,20 @@ export class Game {
     return PLACES[this.profile.place];
   }
 
-  loadPlace(placeId) {
+  loadPlace(placeId, opts = {}) {
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
     this.entities.clear();
     for (const h of this.helpers.values()) h.dispose();
     this.helpers.clear();
+    applyCoreLayout(this.profile.coreLayout?.[placeId]); // bergerie, paddock… déplacés par le joueur
     this.world.build(placeId, this.season, placeId === this.profile.home);
     this.interiors.onPlaceLoaded(); // coins de corvées, box des chevaux
     this.equipment = [];
     for (const eq of equipmentAt(this.profile, placeId)) this.spawnEquipment(eq);
+    if (!opts.keepView) this.mgmt.stop();
+    this.structures.rebuild(placeId); // constructions du joueur (avant les animaux : leur maison)
     this.droppingMeshes.clear();
     for (const d of this.profile.droppings ?? []) if (d.place === placeId) this.spawnDropping(d);
     for (const h of this.profile.helpers) {
@@ -190,11 +202,13 @@ export class Game {
   spawnEquipment(eq) {
     const def = EQUIPMENT[eq.type];
     const mesh = EQUIPMENT_MODELS[eq.type]();
-    const [x, z] = def.slot;
+    // Position choisie dans la vue d'ensemble (eq.pos), sinon l'emplacement prévu.
+    const { x, z } = equipmentPos(this.profile.coreLayout?.[eq.place], eq);
     mesh.position.set(x, this.world.heightAt(x, z), z);
     this.world.group.add(mesh);
-    this.world.colliders.push({ x, z, hw: 0.5, hd: 0.4, equip: true });
-    const entry = { eq, def, mesh, pos: new THREE.Vector3(x, 0, z) };
+    const col = { x, z, hw: 0.5, hd: 0.4, equip: true };
+    this.world.colliders.push(col);
+    const entry = { eq, def, mesh, col, pos: new THREE.Vector3(x, 0, z) };
     this.equipment.push(entry);
     return entry;
   }
@@ -307,6 +321,7 @@ export class Game {
     const p = this.profile;
     passiveEquipment(p, here, p.place, hours);
     this.interiors.farmTick(here, hours); // propreté et usure des bâtiments
+    this.structures.tick(here, hours, skipped); // confort de la maison pendant le sommeil
     for (const a of here) {
       if (a.zone === 'field') graze(a, hours, this.world.snowy);
     }
@@ -379,17 +394,23 @@ export class Game {
     const steps = this.paused ? 1 : Math.max(1, Math.round(this.timeScale));
     const wdt = this.paused ? 0 : dt;
     if (this.paused) ctrl.move = { x: 0, y: 0 };
+    // Vue d'ensemble : le joueur ne bouge pas, la caméra est au-dessus de la ferme.
+    const mgmt = this.mgmt.active;
+    const pctrl = mgmt ? { ...ctrl, move: { x: 0, y: 0 }, run: false } : ctrl;
     const entities = [...this.entities.values()];
     const ctx = { playerPos: this.player.position, night, entities, game: this };
     for (let i = 0; i < steps; i++) {
-      this.player.update(wdt, ctrl, this.rig.yaw, this.rig.mode === 'first');
+      this.player.update(mgmt ? 0 : wdt, pctrl, this.rig.yaw, this.rig.mode === 'first');
       for (const e of entities) e.update(wdt, ctx);
       for (const h of this.helpers.values()) h.update(wdt, this);
       this.herding.update(wdt);
       this.tasks?.update();
     }
-    this.rig.update(dt, ctrl, this.player, this.world);
-    this.fadeOccluders();
+    if (mgmt) this.mgmt.update(dt, ctrl);
+    else {
+      this.rig.update(dt, ctrl, this.player, this.world);
+      this.fadeOccluders();
+    }
     this.ui.updateLabels(entities, this.camera, this.player.position);
     this.updateLeashes(entities);
     this.interiors.update(dt);
@@ -397,7 +418,8 @@ export class Game {
       if (q.mesh.userData.spin) q.mesh.userData.spin.rotation.y += dt * 2;
     }
 
-    const { day } = this.world.updateSky(this.hour, this.weather, this.player.position);
+    const { day } = this.world.updateSky(this.hour, this.weather, this.mgmt.active ? this.mgmt.focus : this.player.position);
+    if (this.mgmt.active) this.mgmt.liftFog(); // vue d'en haut : le brouillard commence plus loin
     this.world.updateClouds(dt);
     this.player.torch.intensity = (1 - day) * 6;
     const flash = this.weather3d.update(dt, this.camera.position);
@@ -524,6 +546,10 @@ export class Game {
   /** Toucher le sol : on y va. Toucher un animal ou un bâtiment : on y va puis on choisit quoi faire. */
   onTap(sx, sy) {
     if (!this.running || this.ui.isBlocking()) return;
+    if (this.mgmt.active) {
+      this.mgmt.onTap(sx, sy);
+      return;
+    }
     const paused = this.paused;
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
@@ -561,6 +587,13 @@ export class Game {
     const hit = this.raycaster.intersectObject(this.world.group, true)[0];
     if (!hit) return;
     if (this.interiors.onTap(hit)) return; // dans l'écurie ou la maison
+    // Une construction du joueur : on va devant son entrée, puis on choisit quoi faire.
+    const built = this.structures.pick(this.raycaster, hit.point);
+    if (built) {
+      const door = doorOf(built);
+      this.walkTo(new THREE.Vector3(door.x, 0, door.z), 1.2, () => openStructure(this.ui, built));
+      return;
+    }
     const kind = this.world.kindAt(hit.point.x, hit.point.z);
     if (paused) {
       if (kind) this.ui.openBuilding(kind);
@@ -686,7 +719,7 @@ export class Game {
   sendHorses(where) {
     // Au box : chaque cheval rentre dans son box de l'écurie.
     if (where === 'box') return this.interiors.stallAll();
-    const target = where === 'field' ? FIELD : { x: -16, z: 16 };
+    const target = where === 'field' ? FIELD : enclosure('paddock'); // (le paddock peut être déplacé)
     let n = 0;
     for (const e of this.entities.values()) {
       if (e.data.species !== 'horse' || e.ridden) continue;
@@ -1405,7 +1438,7 @@ export class Game {
     const key = `${this.day}-${slot}`;
     if (p.farm.lastHerd === key) return;
     if (h < 8 && slot === 'pen' && p.farm.lastHerd === `${this.day - 1}-pen`) return;
-    const flock = [...this.entities.values()].filter((e) => e.sp.livestock);
+    const flock = [...this.entities.values()].filter((e) => e.sp.livestock && !e.customHome);
     if (!flock.length) return;
     const pusher = this.herder();
     if (!pusher) return;

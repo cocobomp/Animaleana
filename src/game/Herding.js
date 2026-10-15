@@ -11,7 +11,8 @@ export class Herding {
   }
 
   flock() {
-    return [...this.game.entities.values()].filter((e) => e.sp.livestock);
+    // Les bêtes qui habitent une construction (pré, grange, ranch) restent chez elles.
+    return [...this.game.entities.values()].filter((e) => e.sp.livestock && !e.customHome);
   }
 
   /** dest : 'pen' (bergerie) ou 'field' (pré). pusher : chien (AnimalEntity) ou berger (HelperEntity). */

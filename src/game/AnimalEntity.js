@@ -10,7 +10,7 @@ import { buildGear, removeGear } from './gearModels.js';
 import { canLeash, heelSkill } from '../sim/gear.js';
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
-const HOME = {
+export const HOME = { // (décalé par coreLayout.js si l'installation est déplacée)
   horse: { x: -16, z: 16, r: 5 },
   dog: { x: -8, z: -5, r: 3.5 }, // près de la niche
   cat: { x: -1, z: -10.5, r: 3.5 }, // sur le perron de la maison
@@ -144,8 +144,16 @@ export class AnimalEntity {
     // Cheval rentré : sa zone de vie est son box (src/game/Interiors.js).
     const stall = this.data.stalled ? this.world.stallOf?.(this.data) : null;
     if (stall) return stall;
+    // Maison choisie par le joueur (niche, paddock, ranch… voir src/game/Structures.js).
+    const built = this.customHome;
+    if (built) return built;
     if (this.sp.livestock) return this.data.zone === 'field' ? FIELD : PEN;
     return HOME[this.data.species];
+  }
+
+  /** Zone de vie de la construction attribuée à l'animal, ou null. */
+  get customHome() {
+    return (this.data.homeId && this.world.structureHomes?.get(this.data.homeId)) || null;
   }
 
   get position() {

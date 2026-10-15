@@ -31,16 +31,19 @@ const RULES = {
     { id: 'waterHorses', icon: '💧', when: (c) => need(c.count.horse) },
     { id: 'cleanPaddock', icon: '🧹', when: (c) => (c.count.paddockDroppings > 0 ? null : { reason: 'alreadyClean' }) },
     { id: 'farm', icon: '🔧', when: () => null },
+    { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
   kennel: [
     { id: 'feedDogs', icon: '🥣', when: (c) => need(c.count.dog) },
     { id: 'waterDogs', icon: '💧', when: (c) => need(c.count.dog) },
     { id: 'farm', icon: '🔧', when: () => null },
+    { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
   hutch: [
     { id: 'feedRabbits', icon: '🥕', when: (c) => need(c.count.rabbit) },
     { id: 'cleanHutch', icon: '🧹', when: (c) => need(c.count.rabbit) },
     { id: 'farm', icon: '🔧', when: () => null },
+    { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
   pen: [
     { id: 'outFlock', icon: '🌿', when: (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18) },
@@ -56,6 +59,7 @@ const RULES = {
     { id: 'shearAll', icon: '🧶', when: (c) => need(c.count.shearable, 'noneReady') ?? (['spring', 'summer'].includes(c.season) ? null : { reason: 'shearSeason' }) ?? dayOnly(c, 7, 19) },
     { id: 'farm', icon: '🔧', when: () => null },
     { id: 'facManage', icon: '📋', when: () => null }, // entretien et améliorations
+    { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
   house: [
     { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 10) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },
@@ -100,6 +104,31 @@ function dayOnly(c, from, to) {
 function sleeping(c, from, to) {
   return inHours(c.hour, from, to) ? null : { reason: 'asleep', params: { h: fmtHour(from) } };
 }
+
+// ---------------------------------------------------------------- constructions du joueur
+// Une feuille d'actions par famille de construction (voir src/sim/construction.js).
+// ctx.count : { residents, droppings, horse }.
+const hasResidents = (c) => need(c.count.residents, 'noResidents');
+const CON_CARE = [
+  { id: 'conFeed', icon: '🍖', when: hasResidents },
+  { id: 'conWater', icon: '💧', when: hasResidents },
+];
+const CON_END = [
+  { id: 'conResidents', icon: '🐾', when: () => null },
+  { id: 'conMove', icon: '↔️', when: () => null },
+  { id: 'conDemolish', icon: '🗑️', when: () => null },
+];
+const CON_CLEAN = { id: 'conClean', icon: '🧹', when: (c) => (c.count.droppings > 0 ? null : { reason: 'alreadyClean' }) };
+const CON_HOME = { id: 'conCallHome', icon: '🏠', when: hasResidents };
+const CON_FIELD = [...CON_CARE, { id: 'conBrush', icon: '🪮', when: (c) => hasResidents(c) ?? sleeping(c, 6, 21) }, CON_CLEAN, CON_HOME, ...CON_END];
+Object.assign(RULES, {
+  con_home: [...CON_CARE, { id: 'conPet', icon: '🤚', when: hasResidents }, CON_HOME, ...CON_END],
+  con_enclosure: CON_FIELD,
+  con_building: CON_FIELD,
+  con_ranch: CON_FIELD,
+  con_arena: [{ id: 'conTrain', icon: '🏇', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 20) }, CON_CLEAN, ...CON_END.slice(1)],
+  con_decor: CON_END.slice(1),
+});
 
 export function buildingActions(kind, ctx) {
   return (RULES[kind] ?? []).flatMap((r) => {

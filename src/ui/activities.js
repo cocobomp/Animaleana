@@ -10,8 +10,9 @@ import {
   COMPETITION_TYPES, competitionsAt, entryBlock, eligibility, knownTricks, rivals, activityData, awardCounts, MAX_ACTS,
   JUMP_STAGES, comfortHeight, courseForStage, stageForLevel, stageFor, HUTCH_TOYS, hutchPlayBlock,
 } from '../sim/activities.js';
+import { openBeauty, beautyPick, beautyAnimalButtons, beautyRuns } from './beauty.js'; // concours de beauté
 
-export const TYPE_ICON = { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', hop: '🐇', show: '🎪' };
+export const TYPE_ICON = { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', hop: '🐇', show: '🎪', beauty: '🎀' };
 const TIER_ICON = { gold: '🏆', silver: '🥈', bronze: '🥉' };
 const SKILL_OF = { jumping: ['jump', 'obedience'], lesson: ['jump', 'obedience'], trail: ['endurance', 'speed'], agility: ['jump', 'obedience', 'speed'], hop: ['jump', 'obedience'], show: ['obedience'] };
 const STAGE_ICON = ['🟫', '✖️', '🏇', '🏆'];
@@ -49,9 +50,9 @@ function playTab(ui, state) {
   const g = ui.game;
   const here = g.animalsHere();
   const count = (type) => here.filter((a) => !eligibility(a, type)).length;
-  const cards = ['lesson', 'jumping', 'trail', 'agility', 'hop', 'show'].map((type) => {
+  const cards = ['lesson', 'jumping', 'trail', 'agility', 'hop', 'show', 'beauty'].map((type) => {
     const n = type === 'trail' ? count('trail') + here.filter((a) => a.following).length : count(type);
-    return h('button', { class: 'card actv-card', onClick: () => { state.pick = type; ui.renderPanel(); } },
+    return h('button', { class: 'card actv-card', onClick: () => { if (type === 'beauty') return openBeauty(ui); state.pick = type; ui.renderPanel(); } },
       h('span', { class: 'card-emoji' }, TYPE_ICON[type]),
       h('span', { class: 'card-main' }, h('b', {}, t(`actv_type_${type}`)), h('small', {}, t(`actv_desc_${type}`))),
       h('span', { class: 'card-side' }, n ? h('small', {}, t('actv_ready', { n })) : h('small', {}, '—')));
@@ -81,6 +82,7 @@ function pickAnimal(ui, state) {
   const type = state.pick;
   const back = h('button', { class: 'small', onClick: () => { state.pick = null; state.comp = null; ui.renderPanel(); } }, `← ${t('actv_back')}`);
   const head = [h('div', { class: 'row' }, back, h('b', {}, `${TYPE_ICON[type]} ${state.comp ? compName(state.comp) : t(`actv_type_${type}`)}`))];
+  if (type === 'beauty') return [...head, ...beautyPick(ui, state)]; // concours de beauté (src/ui/beauty.js)
   if (state.comp) {
     head.push(h('p', { class: 'note' }, isSandbox(g.profile) ? t('actv_compHelpSandbox') : t('actv_compHelp', { fee: state.comp.fee, a: state.comp.prizes[0] })));
     head.push(rivalsList(state.comp));
@@ -313,6 +315,7 @@ export function animalActivitySection(ui, a) {
   }
   if (sp.training.includes('agility')) btns.push(btn('agility', t('actv_type_agility')));
   if (knownTricks(a).length) btns.push(btn('show', t('actv_type_show')));
+  btns.push(...beautyAnimalButtons(ui, a)); // « Préparer pour le concours » (concours de beauté)
   const won = activityData(g.profile).awards.filter((x) => x.animal === a.name).length;
   if (!btns.length && !won) return [];
   return [h('h3', {}, `🏆 ${t('actv_title')}`),
@@ -333,6 +336,7 @@ export function activityRuns(ui) {
     actvLesson: () => openActivities(ui, { pick: 'lesson' }),
     actvHop: () => openActivities(ui, { pick: 'hop' }),
     actvHutchPlay: () => openHutchPlay(ui),
+    ...beautyRuns(ui), // concours de beauté
   };
 }
 

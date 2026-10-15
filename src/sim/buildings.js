@@ -102,6 +102,7 @@ const RULES = {
     { id: 'actvAgility', icon: '🐕', when: (c) => dayOnly(c, 7, 21) },
     { id: 'actvHop', icon: '🐇', when: (c) => need(c.count.rabbit) ?? dayOnly(c, 7, 21) },
     { id: 'actvShow', icon: '🎪', when: (c) => dayOnly(c, 9, 23) },
+    { id: 'actvBeauty', icon: '🎀', when: (c) => dayOnly(c, 8, 20) }, // concours de beauté (src/sim/beauty.js)
     { id: 'actvTrail', icon: '🧭', when: (c) => dayOnly(c, 7, 20) },
     { id: 'actvCalendar', icon: '📅', when: () => null },
     { id: 'actvTrophies', icon: '🏆', when: () => null },

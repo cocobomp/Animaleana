@@ -31,6 +31,10 @@ export const OBJECTIVES = [
   { id: 'actvLesson1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvLessons'), 1] },
   { id: 'actvHop1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvHop'), 1] },
   { id: 'actvHutch5', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'actvHutchPlay'), 5] },
+  // concours de beauté (src/sim/beauty.js)
+  { id: 'beautyPrep1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'beautyReady'), 1] },
+  { id: 'beautyBraid1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'beautyBraid'), 1] },
+  { id: 'beauty1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvBeauty'), 1] },
   { id: 'zoo10', kind: 'achievement', progress: (p) => [p.animals.length, 10] },
   { id: 'world', kind: 'achievement', progress: (p) => [p.visited.length, PLACE_IDS.length] },
   { id: 'allHappy', kind: 'achievement', progress: (p) => {
@@ -45,6 +49,7 @@ export const OBJECTIVES = [
   { id: 'actvPodium5', kind: 'achievement', progress: (p) => [stat(p, 'actvPodiums'), 5] },
   { id: 'actvPhotos', kind: 'achievement', progress: (p) => [stat(p, 'actvPhotos'), 8] },
   { id: 'actvStar', kind: 'achievement', progress: (p) => [stat(p, 'actvShows'), 10] },
+  { id: 'beautyPodium', kind: 'achievement', progress: (p) => [stat(p, 'beautyPodium'), 1] }, // concours de beauté
 ];
 
 /** Renvoie les objectifs qui viennent d'être terminés (et les marque comme faits). */

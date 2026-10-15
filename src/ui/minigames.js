@@ -15,6 +15,7 @@ import { brushGame, washGame, nailsGame, shoeGame, shearGame } from './minigames
 import { cleanGame } from './minigames/clean.js';
 import { petGame, playGame, milkGame } from './minigames/fun.js';
 import { lungeGame, libertyGame } from './minigames/horse.js';
+import { braidGame, shineGame, bowGame, fluffGame } from './minigames/beauty.js'; // concours de beauté
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -34,11 +35,13 @@ const GAMES = {
   milk: milkGame,
   lunge: lungeGame,
   liberty: libertyGame,
+  braid: braidGame, shine: shineGame, bow: bowGame, fluff: fluffGame, // concours de beauté (src/ui/beauty.js)
 };
 
 const ICONS = {
   feed: '🍽️', water: '💧', brush: '🪮', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨', pet: '🤚',
   treat: '🍪', play: '⚽', lunge: '🌀', liberty: '💛', shear: '🧶', milk: '🥛',
+  braid: '🎀', shine: '✨', bow: '🎀', fluff: '🧶', // concours de beauté
 };
 
 /** Texte traduit, ou null s'il n'existe pas. */
@@ -141,8 +144,9 @@ class Fx {
 /**
  * Lance le mini-jeu d'un soin. action : un soin de CARE, ou 'collect' (tonte / traite).
  * Renvoie une promesse : la qualité (0,4 à 1) si l'enfant a fini, null s'il a fermé.
+ * opts : options passées au jeu (ctx.opts) ; un jeu peut y écrire son choix dans opts.out (concours de beauté).
  */
-export function runMinigame(ui, a, action) {
+export function runMinigame(ui, a, action, opts = {}) {
   if (action === 'collect') action = SPECIES[a.species].product?.action;
   const make = GAMES[action];
   if (!make) return Promise.resolve(1);
@@ -205,6 +209,7 @@ export function runMinigame(ui, a, action) {
       a,
       sp: SPECIES[a.species],
       action,
+      opts,
       W: MG_W,
       H: MG_H,
       view,

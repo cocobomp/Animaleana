@@ -14,7 +14,16 @@ export const ENCLOSURES = [
 export const enclosure = (id) => ENCLOSURES.find((e) => e.id === id);
 
 // Enclos construits par le joueur (src/game/Structures.js) : ajoutés après les enclos de base.
-const BASE_ENCLOSURES = ENCLOSURES.length;
+let BASE_ENCLOSURES = ENCLOSURES.length;
+/**
+ * Enclos de base présent dans tous les lieux mais déclaré ailleurs (ex. le terrain de concours,
+ * src/game/showground.js). Il survit à setBuiltEnclosures(), contrairement à un simple push.
+ */
+export function addBaseEnclosure(e) {
+  if (ENCLOSURES.some((x) => x.id === e.id)) return;
+  ENCLOSURES.splice(BASE_ENCLOSURES, 0, e);
+  BASE_ENCLOSURES += 1;
+}
 // obstacles : bâtiments construits (grange, niche…) dont on fait aussi le tour.
 const OBSTACLES = [];
 export function setBuiltEnclosures(list, obstacles = []) {

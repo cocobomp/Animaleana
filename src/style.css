@@ -374,3 +374,106 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 #modal[hidden] { display: none; }
 .modal-box { background: var(--bg); border-radius: 18px; padding: 18px 20px; width: min(420px, 100%); box-shadow: var(--shadow); }
 .modal-box p { font-size: 1.05rem; line-height: 1.4; }
+
+/* ==========================================================================
+   Mini-jeux des soins (src/ui/minigames.js)
+   Par-dessus le panneau (20), sous les fenêtres modales (50).
+   ========================================================================== */
+.mg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: calc(12px + var(--safe-t)) calc(12px + var(--safe-r)) calc(12px + var(--safe-b)) calc(12px + var(--safe-l));
+  background: rgba(20, 28, 24, 0.45);
+  animation: mg-fade 0.2s ease-out;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+@keyframes mg-fade { from { opacity: 0; } to { opacity: 1; } }
+.mg-box {
+  width: min(680px, 100%);
+  height: min(720px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  padding: 10px 12px 12px;
+  animation: pop 0.25s ease-out;
+}
+.mg-head { display: flex; align-items: center; gap: 8px; }
+.mg-title { flex: 1; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 1.25rem; font-weight: 800; min-width: 0; }
+.mg-title small { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.mg-icon { font-size: 1.5rem; }
+.mg-close { width: 48px; height: 48px; padding: 0; border-radius: 50%; font-size: 1.1rem; flex-shrink: 0; }
+.mg-close[hidden] { display: none; }
+.mg-hint {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #fff7df;
+  font-weight: 700;
+  font-size: 1.05rem;
+  line-height: 1.3;
+  text-align: center;
+  min-height: 2.6em;
+  display: grid;
+  place-items: center;
+}
+.mg-hint[data-kind='good'] { background: #e2f5e7; color: #1e5c3e; }
+.mg-hint[data-kind='warn'] { background: #fde8e5; color: #8b2b22; }
+.mg-hint.flash { animation: mg-flash 0.35s ease-out; }
+@keyframes mg-flash { from { transform: scale(0.96); } to { transform: none; } }
+.mg-progress { position: relative; height: 18px; background: #e9e3d6; border-radius: 999px; overflow: visible; margin-right: 22px; }
+.mg-progress-fill { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #3fae62, #8fd36a); transition: width 0.25s; }
+.mg-progress-goal { position: absolute; right: -24px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; }
+.mg-stage { position: relative; flex: 1; min-height: 0; border-radius: 18px; overflow: hidden; background: #dfeee4; }
+.mg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: pointer; }
+.mg-controls { display: flex; gap: 8px; }
+.mg-controls:empty { display: none; }
+.mg-btn { flex: 1; min-height: 60px; font-size: 1.2rem; font-weight: 800; border-radius: 18px; touch-action: none; }
+.mg-btn.held { transform: scale(0.96); filter: brightness(0.92); }
+.mg-btn.primary { box-shadow: 0 4px 0 #1e5c3e; }
+.mg-btn.primary.held { box-shadow: 0 1px 0 #1e5c3e; transform: translateY(3px); }
+.mg-end {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(2px);
+  animation: mg-fade 0.3s ease-out;
+  padding: 12px;
+}
+.mg-end[hidden] { display: none; }
+.mg-end-card {
+  background: var(--bg);
+  border-radius: 22px;
+  padding: 18px 22px;
+  box-shadow: var(--shadow);
+  text-align: center;
+  width: min(360px, 100%);
+  animation: pop 0.35s ease-out;
+}
+.mg-end-card h2 { margin: 0.1em 0; font-size: 1.9rem; color: var(--primary); }
+.mg-end-card p { margin: 0.5em 0 0.9em; font-size: 1.05rem; font-weight: 600; }
+.mg-end-emoji { font-size: 3rem; animation: mg-bounce 0.9s ease-in-out infinite alternate; }
+@keyframes mg-bounce { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+.mg-stars { display: flex; justify-content: center; gap: 6px; font-size: 2.6rem; line-height: 1; }
+.mg-stars span { animation: mg-star 0.4s ease-out both; }
+.mg-stars .on { color: #f2b824; text-shadow: 0 2px 0 #c98a10; }
+.mg-stars .off { color: #d9d2c2; }
+@keyframes mg-star { from { transform: scale(0) rotate(-40deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.mg-continue { width: 100%; min-height: 56px; font-size: 1.2rem; }
+@media (max-width: 640px) {
+  .mg-overlay { padding: calc(6px + var(--safe-t)) 6px calc(6px + var(--safe-b)); }
+  /* En portrait, la scène garde sa forme : la fenêtre se resserre au lieu de laisser du vide. */
+  .mg-box { height: auto; max-height: 100%; border-radius: 20px; padding: 8px 10px 10px; }
+  .mg-stage { flex: none; aspect-ratio: 400 / 390; max-height: 64vh; }
+  .mg-title { font-size: 1.1rem; }
+  .mg-hint { font-size: 1rem; }
+}

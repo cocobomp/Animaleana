@@ -6,6 +6,7 @@ import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
 import { openVet } from './vet.js';
+import { runMinigame } from './minigames.js';
 import { showProfiles, showAvatarEditor } from './screens.js';
 
 export class UI {
@@ -240,11 +241,17 @@ export class UI {
     const g = this.game;
     const check = g.canCare(a, action);
     if (!check.ok) return this.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name }));
-    return g.care(a, action, 1);
+    const quality = await runMinigame(this, a, action);
+    if (quality === null) return null; // fermé avec ✕ : rien n'est appliqué
+    return g.care(a, action, quality);
   }
 
   /** Tonte ou traite (mini-jeu aussi). */
   async collectWithGame(a) {
+    // Pas encore prêt : collect() affiche pourquoi, sans mini-jeu.
+    if (!a.produceReady) return this.game.collect(a);
+    const quality = await runMinigame(this, a, 'collect');
+    if (quality === null) return null;
     return this.game.collect(a);
   }
 

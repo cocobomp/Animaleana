@@ -32,6 +32,7 @@ import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone }
 import { enclosure } from './nav.js';
 import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
+import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
 import { t, L } from '../i18n.js';
 
 const CARE_EMOJI = {
@@ -83,6 +84,7 @@ export class Game {
     this.herding = new Herding(this);
     this.tasks = new TaskQueue(this);
     this.interiors = new Interiors(this);
+    this.activities = new Activities(this);
     this.droppingMeshes = new Map();
     this.timeScale = 1; // 0 = pause
     this.profile = null;
@@ -121,6 +123,7 @@ export class Game {
 
   stop() {
     this.tasks.clear();
+    this.activities.abort();
     this.save();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
@@ -161,6 +164,7 @@ export class Game {
   }
 
   loadPlace(placeId) {
+    this.activities.abort();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
@@ -386,6 +390,7 @@ export class Game {
       for (const h of this.helpers.values()) h.update(wdt, this);
       this.herding.update(wdt);
       this.tasks?.update();
+      this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
     }
     this.rig.update(dt, ctrl, this.player, this.world);
     this.ui.updateLabels(entities, this.camera, this.player.position);
@@ -479,6 +484,7 @@ export class Game {
   /** Toucher le sol : on y va. Toucher un animal ou un bâtiment : on y va puis on choisit quoi faire. */
   onTap(sx, sy) {
     if (!this.running || this.ui.isBlocking()) return;
+    if (this.activities.onTap(sx, sy)) return;
     const paused = this.paused;
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
@@ -864,6 +870,7 @@ export class Game {
   }
 
   interact() {
+    if (this.activities.onInteract()) return;
     const f = this.focus;
     if (!f) return;
     switch (f.kind) {
@@ -878,6 +885,7 @@ export class Game {
       case 'paddock':
       case 'kennel':
       case 'hutch':
+      case 'showground':
       case 'pen': this.ui.openBuilding(f.kind); break;
       case 'dismount': this.dismount(); break;
       case 'spot': f.run(); break; // un coin de l'écurie ou de la maison

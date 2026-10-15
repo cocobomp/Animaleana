@@ -14,8 +14,9 @@ import { CARE, NEEDS, happiness } from '../sim/animal.js';
 import { NEED_ICON } from './UI.js';
 import { bar } from './dom.js';
 import { horseBoxItems } from './facilitiesPanel.js';
+import { activityRuns } from './activities.js';
 
-const BUILDING_ICON = { petshop: '🛒', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋' };
+const BUILDING_ICON = { petshop: '🛒', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋', showground: '🏆' };
 
 export function sheet(ui, title, subtitle, items, header = null, live = false) {
   ui.openPanel({
@@ -94,6 +95,7 @@ export function openBuilding(ui, kind) {
     facPaddock: () => { g.sendHorses('paddock'); close(); },
     facEnter: () => { close(); g.interiors.enter(kind); },
     facManage: () => ui.openFacility(kind),
+    ...activityRuns(ui), // activités : terrain de concours
   };
   sheet(ui, `${BUILDING_ICON[kind]} ${name}`, t(`bldd_${kind}`), () => g.buildingActions(kind).map((a) => ({
     icon: a.icon,

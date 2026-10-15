@@ -9,6 +9,7 @@ import { openVet } from './vet.js';
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
 import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
+import { openActivities } from './activities.js';
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -126,6 +127,7 @@ export class UI {
       h('nav', { class: 'hud-buttons' },
         btn('🐾', t('animals'), () => this.openAnimals()),
         btn('🚜', t('farm'), () => this.openFarm()),
+        btn('🏆', t('actv_hud'), () => this.openActivities()),
         btn('🧭', t('travel'), () => this.openTravel()),
         btn('📖', t('journal'), () => this.openJournal()),
         btn('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen())),
@@ -319,9 +321,10 @@ export class UI {
       kennel: () => t('bld_kennel'),
       hutch: () => t('bld_hutch'),
       pen: () => t('bld_pen'),
+      showground: () => t('actv_enterShowground'),
       dismount: () => t('dismount'),
     };
-    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }
@@ -487,6 +490,7 @@ export class UI {
     return this.choreWithGame(kind, target);
   }
   openAnimalActions(a) { openAnimalActions(this, a); }
+  openActivities(opts) { openActivities(this, opts); }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {

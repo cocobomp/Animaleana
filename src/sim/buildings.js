@@ -19,6 +19,7 @@ const RULES = {
     { id: 'brushHorses', icon: '🪮', when: (c) => need(c.count.horse) ?? sleeping(c, 6, 21) },
     { id: 'cleanStalls', icon: '🧹', when: (c) => (c.count.horse || c.count.paddockDroppings ? null : { reason: 'noAnimals' }) ?? sleeping(c, 6, 21) },
     { id: 'tack', icon: '🏇', when: () => null },
+    { id: 'actvOpen', icon: '🏆', when: () => null }, // activités et concours
     { id: 'farm', icon: '🔧', when: () => null },
     // Bâtiments à entretenir (src/sim/facilities.js)
     { id: 'facPaddock', icon: '🌳', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 22) },
@@ -75,6 +76,15 @@ const RULES = {
   ],
   petshop: [
     { id: 'shop', icon: '🛒', when: (c) => open(c, 9, 19) },
+  ],
+  // Terrain de concours (activités) : on monte de jour, les spectacles se jouent aussi le soir.
+  showground: [
+    { id: 'actvJumping', icon: '🏇', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) },
+    { id: 'actvAgility', icon: '🐕', when: (c) => dayOnly(c, 7, 21) },
+    { id: 'actvShow', icon: '🎪', when: (c) => dayOnly(c, 9, 23) },
+    { id: 'actvTrail', icon: '🧭', when: (c) => dayOnly(c, 7, 20) },
+    { id: 'actvCalendar', icon: '📅', when: () => null },
+    { id: 'actvTrophies', icon: '🏆', when: () => null },
   ],
   vet: [
     { id: 'vet', icon: '🩺', when: (c) => (inHours(c.hour, 8, 19) || c.count.sick > 0 ? null : { reason: 'vetClosed', params: { h: fmtHour(8) } }) },

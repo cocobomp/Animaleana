@@ -364,7 +364,8 @@ export class AnimalEntity {
     const distPlayer = p.distanceTo(ctx.playerPos);
     this.label.visible = false; // les noms sont affichés en HTML (étiquettes qu'on peut toucher)
 
-    if (this.ridden) {
+    // scripted : l'animal est guidé par une activité (agility, spectacle, src/game/Activities.js).
+    if (this.ridden || this.scripted) {
       this.sleeping = false;
     } else {
       // Un cheval qui rentre au box ne s'endort pas en chemin.

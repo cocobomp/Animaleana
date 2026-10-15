@@ -8,11 +8,13 @@ import { PLACES } from '../sim/places.js';
 import { isSandbox } from '../sim/profile.js';
 import {
   COMPETITION_TYPES, competitionsAt, entryBlock, eligibility, knownTricks, rivals, activityData, awardCounts, MAX_ACTS,
+  JUMP_STAGES, comfortHeight, courseForStage, stageForLevel, stageFor, HUTCH_TOYS, hutchPlayBlock,
 } from '../sim/activities.js';
 
-export const TYPE_ICON = { jumping: '🏇', trail: '🧭', agility: '🐕', show: '🎪' };
+export const TYPE_ICON = { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', hop: '🐇', show: '🎪' };
 const TIER_ICON = { gold: '🏆', silver: '🥈', bronze: '🥉' };
-const SKILL_OF = { jumping: ['jump', 'obedience'], trail: ['endurance', 'speed'], agility: ['jump', 'obedience', 'speed'], show: ['obedience'] };
+const SKILL_OF = { jumping: ['jump', 'obedience'], lesson: ['jump', 'obedience'], trail: ['endurance', 'speed'], agility: ['jump', 'obedience', 'speed'], hop: ['jump', 'obedience'], show: ['obedience'] };
+const STAGE_ICON = ['🟫', '✖️', '🏇', '🏆'];
 
 // ---------------------------------------------------------------- menu principal
 
@@ -47,7 +49,7 @@ function playTab(ui, state) {
   const g = ui.game;
   const here = g.animalsHere();
   const count = (type) => here.filter((a) => !eligibility(a, type)).length;
-  const cards = ['jumping', 'trail', 'agility', 'show'].map((type) => {
+  const cards = ['lesson', 'jumping', 'trail', 'agility', 'hop', 'show'].map((type) => {
     const n = type === 'trail' ? count('trail') + here.filter((a) => a.following).length : count(type);
     return h('button', { class: 'card actv-card', onClick: () => { state.pick = type; ui.renderPanel(); } },
       h('span', { class: 'card-emoji' }, TYPE_ICON[type]),
@@ -86,11 +88,21 @@ function pickAnimal(ui, state) {
     head.push(h('p', { class: 'note' }, t(`actv_how_${type}`)));
   }
   if (type === 'show') return [...head, ...programme(ui, state)];
-  const here = g.animalsHere().filter((a) => (type === 'jumping' || type === 'trail' ? SPECIES[a.species].rideable : type === 'agility' ? SPECIES[a.species].training.includes('agility') : true));
+  const fits = {
+    jumping: (a) => SPECIES[a.species].rideable,
+    lesson: (a) => SPECIES[a.species].rideable,
+    trail: (a) => SPECIES[a.species].rideable,
+    agility: (a) => SPECIES[a.species].training.includes('agility'),
+    hop: (a) => a.species === 'rabbit',
+  }[type] ?? (() => true);
+  const here = g.animalsHere().filter(fits);
   const out = [...head];
   if (!here.length) out.push(h('p', { class: 'warn' }, t(`actv_none_${type}`)));
   out.push(h('div', { class: 'cards' }, here.map((a) => {
     const why = eligibility(a, type);
+    // Saut d'obstacles à l'entraînement : on choisit le niveau du parcours (débloqué par la compétence de saut).
+    if (type === 'jumping' && !state.comp && !why) return stageCard(ui, a);
+    const tooHigh = type === 'jumping' && state.comp && !why && comfortHeight(a.skills.jump) < courseForStage(stageForLevel(state.comp.level)).obstacles.at(-1).height - 0.05;
     return h('button', {
       class: `card ${why ? 'locked' : ''}`,
       onClick: () => {
@@ -100,7 +112,8 @@ function pickAnimal(ui, state) {
     },
     h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
     h('span', { class: 'card-main' }, h('b', {}, a.name),
-      why ? h('small', {}, ta(`actv_why_${why}`, a)) : h('div', { class: 'bars small' }, SKILL_OF[type].map((k) => bar(t(`skill_${k}`), a.skills[k] ?? 0)))),
+      why ? h('small', {}, ta(`actv_why_${why}`, a)) : h('div', { class: 'bars small' }, SKILL_OF[type].map((k) => bar(t(`skill_${k}`), a.skills[k] ?? 0))),
+      tooHigh ? h('small', { class: 'actv-warn' }, ta('actv_tooHighWarn', a)) : null),
     h('span', { class: 'card-side' }, why ? '🔒' : '▶️'));
   })));
   // La balade peut aussi se faire à pied avec les animaux qui nous suivent.
@@ -114,6 +127,66 @@ function pickAnimal(ui, state) {
       h('small', {}, followers.length ? followers.map((a) => a.name).join(', ') : t('actv_trailFootHelp')))));
   }
   return out;
+}
+
+/** Carte d'un cheval avec les niveaux de parcours : barres au sol, petites croix, club, grand parcours. */
+function stageCard(ui, a) {
+  const g = ui.game;
+  const skill = a.skills.jump;
+  const best = stageFor(skill);
+  return h('div', { class: 'card actv-stages' },
+    h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+    h('span', { class: 'card-main' },
+      h('b', {}, a.name),
+      h('div', { class: 'bars small' }, SKILL_OF.jumping.map((k) => bar(t(`skill_${k}`), a.skills[k] ?? 0))),
+      h('small', {}, ta('actv_comfort', a, { h: Math.round(comfortHeight(skill) * 100) })),
+      h('div', { class: 'actv-stage-row' }, JUMP_STAGES.map((st, i) => {
+        const locked = skill < st.minSkill;
+        return h('button', {
+          class: `actv-stage ${i === best ? 'primary' : ''} ${locked ? 'locked' : ''}`,
+          onClick: () => {
+            if (locked) return ui.toast(ta('actv_stageLocked', a, { n: st.minSkill }), 4000);
+            g.activities.start('jumping', { animal: a, stage: i });
+          },
+        }, h('span', { class: 'ico' }, locked ? '🔒' : STAGE_ICON[i]), h('span', {}, t(`actv_stage_${st.id}`)),
+        locked ? h('small', {}, `${t('skill_jump')} ${st.minSkill}`) : null);
+      })),
+      h('button', { class: 'small actv-teach', onClick: () => g.activities.start('lesson', { animal: a }) }, `🎓 ${t('actv_type_lesson')}`)));
+}
+
+/** « Tu vas jouer avec… » : choisir un lapin et un coin de l'enclos du clapier. */
+export function openHutchPlay(ui, preset = null) {
+  const g = ui.game;
+  const state = { rabbit: preset?.id ?? null };
+  ui.openPanel({
+    title: () => `🎡 ${t('actv_hutchTitle')}`,
+    kind: 'hutchPlay',
+    render: () => {
+      const rabbits = g.animalsHere().filter((a) => a.species === 'rabbit');
+      if (!rabbits.length) return [h('p', { class: 'warn' }, t('actv_noRabbit'))];
+      if (!rabbits.some((a) => a.id === state.rabbit)) state.rabbit = rabbits[0].id;
+      const a = rabbits.find((x) => x.id === state.rabbit);
+      const out = [h('p', { class: 'note' }, t('actv_hutchHelp'))];
+      if (rabbits.length > 1) {
+        out.push(h('div', { class: 'row wrap' }, rabbits.map((r) => h('button', {
+          class: r.id === state.rabbit ? 'primary' : '',
+          onClick: () => { state.rabbit = r.id; ui.renderPanel(); },
+        }, `🐰 ${r.name}`))));
+      }
+      const why = hutchPlayBlock(a);
+      if (why) out.push(h('p', { class: 'warn' }, ta(`actv_why_${why}`, a)));
+      out.push(h('div', { class: 'action-sheet' }, Object.entries(HUTCH_TOYS).map(([id, toy]) => h('button', {
+        class: `big-action ${why ? 'off' : ''}`,
+        onClick: () => {
+          if (why) return ui.toast(ta(`actv_why_${why}`, a));
+          if (g.activities.playInHutch(a, id)) ui.closePanel();
+        },
+      }, h('span', { class: 'ba-icon' }, toy.icon), h('span', { class: 'ba-text' }, h('b', {}, ta('actv_playWith', a, { toy: t(`actv_toy_${id}`) })),
+        h('small', { class: 'effect' }, t(`actv_toyd_${id}`)))))));
+      out.push(h('p', { class: 'note' }, t('actv_hutchTap')));
+      return out;
+    },
+  });
 }
 
 function rivalsList(comp) {
@@ -233,7 +306,11 @@ export function animalActivitySection(ui, a) {
     },
   }, `${TYPE_ICON[type]} ${label}`);
   const btns = [];
-  if (sp.rideable) btns.push(btn('jumping', t('actv_type_jumping')), btn('trail', t('actv_type_trail')));
+  if (sp.rideable) btns.push(btn('lesson', t('actv_type_lesson')), btn('jumping', t('actv_type_jumping')), btn('trail', t('actv_type_trail')));
+  if (a.species === 'rabbit') {
+    btns.push(btn('hop', t('actv_type_hop')));
+    btns.push(h('button', { class: 'act', onClick: () => openHutchPlay(ui, a) }, `🎡 ${t('do_actvHutchPlay')}`));
+  }
   if (sp.training.includes('agility')) btns.push(btn('agility', t('actv_type_agility')));
   if (knownTricks(a).length) btns.push(btn('show', t('actv_type_show')));
   const won = activityData(g.profile).awards.filter((x) => x.animal === a.name).length;
@@ -253,6 +330,9 @@ export function activityRuns(ui) {
     actvCalendar: () => openActivities(ui, { tab: 'calendar' }),
     actvTrophies: () => openActivities(ui, { tab: 'trophies' }),
     actvOpen: () => openActivities(ui),
+    actvLesson: () => openActivities(ui, { pick: 'lesson' }),
+    actvHop: () => openActivities(ui, { pick: 'hop' }),
+    actvHutchPlay: () => openHutchPlay(ui),
   };
 }
 
@@ -405,7 +485,9 @@ export class ActivityHud {
 export function showActivityResults(ui, r) {
   const res = r.result;
   const lines = [];
-  if (r.type === 'jumping' || r.type === 'agility') {
+  if (r.type === 'lesson') {
+    // Les lignes de la leçon sont dans r.extra.
+  } else if (r.type === 'jumping' || r.type === 'agility' || r.type === 'hop') {
     lines.push(`⏱️ ${t('actv_time', { n: res.time })}`, `❌ ${t('actv_faults', { n: res.total })}${res.timePenalty ? ` (${t('actv_timePenalty', { n: res.timePenalty })})` : ''}`);
   } else {
     lines.push(`⭐ ${t('actv_points', { n: res.points })}`);
@@ -427,8 +509,8 @@ export function showActivityResults(ui, r) {
       r.table ? h('table', { class: 'actv-table' }, h('tbody', {}, r.table.map((x) => h('tr', { class: x.you ? 'you' : '' },
         h('td', {}, x.rank <= 3 ? TIER_ICON[['gold', 'silver', 'bronze'][x.rank - 1]] : String(x.rank)),
         h('td', {}, `${SPECIES[x.species]?.emoji ?? ''} ${x.you ? t('actv_you') : x.name} & ${x.animal}`),
-        h('td', {}, r.type === 'jumping' || r.type === 'agility' ? `${x.total} · ${x.time} s` : t('actv_points', { n: x.points })))))) : null,
-      r.award ? h('div', { class: 'actv-won' }, awardEl(r.award, true), h('b', {}, t(r.award.kind === 'trophy' ? 'actv_wonTrophy' : 'actv_wonRibbon'))) : null,
+        h('td', {}, ['jumping', 'agility', 'hop'].includes(r.type) ? `${x.total} · ${x.time} s` : t('actv_points', { n: x.points })))))) : null,
+      r.award ? h('div', { class: 'actv-won' }, awardEl(r.award, true), h('b', {}, t(r.award.kind !== 'trophy' ? 'actv_wonRibbon' : r.award.tier === 'gold' ? 'actv_wonTrophy' : 'actv_wonMedal'))) : null,
       r.money ? h('p', { class: 'actv-money' }, `🪙 +${r.money}`) : null,
       h('div', { class: 'row end' },
         r.onAgain ? h('button', { onClick: close(r.onAgain) }, `🔁 ${t('actv_again')}`) : null,

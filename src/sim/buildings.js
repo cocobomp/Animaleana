@@ -31,6 +31,7 @@ const RULES = {
     { id: 'hayPaddock', icon: '🌾', when: (c) => need(c.count.horse) },
     { id: 'waterHorses', icon: '💧', when: (c) => need(c.count.horse) },
     { id: 'cleanPaddock', icon: '🧹', when: (c) => (c.count.paddockDroppings > 0 ? null : { reason: 'alreadyClean' }) },
+    { id: 'actvLesson', icon: '🎓', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) }, // activités : apprendre à sauter
     { id: 'farm', icon: '🔧', when: () => null },
   ],
   kennel: [
@@ -41,6 +42,7 @@ const RULES = {
   hutch: [
     { id: 'feedRabbits', icon: '🥕', when: (c) => need(c.count.rabbit) },
     { id: 'cleanHutch', icon: '🧹', when: (c) => need(c.count.rabbit) },
+    { id: 'actvHutchPlay', icon: '🎡', when: (c) => need(c.count.rabbit) }, // activités : jouer dans l'enclos
     { id: 'farm', icon: '🔧', when: () => null },
   ],
   pen: [
@@ -79,8 +81,10 @@ const RULES = {
   ],
   // Terrain de concours (activités) : on monte de jour, les spectacles se jouent aussi le soir.
   showground: [
+    { id: 'actvLesson', icon: '🎓', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) },
     { id: 'actvJumping', icon: '🏇', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) },
     { id: 'actvAgility', icon: '🐕', when: (c) => dayOnly(c, 7, 21) },
+    { id: 'actvHop', icon: '🐇', when: (c) => need(c.count.rabbit) ?? dayOnly(c, 7, 21) },
     { id: 'actvShow', icon: '🎪', when: (c) => dayOnly(c, 9, 23) },
     { id: 'actvTrail', icon: '🧭', when: (c) => dayOnly(c, 7, 20) },
     { id: 'actvCalendar', icon: '📅', when: () => null },

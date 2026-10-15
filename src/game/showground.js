@@ -1,9 +1,9 @@
 // Terrain de concours : ajouté à chaque lieu par World.build() (carrière, tribune, jury, fanions).
 // Sert au saut d'obstacles, à l'agility, aux spectacles et aux concours (src/game/Activities.js).
 
-import { SHOWGROUND } from '../sim/activities.js';
-import { showgroundModel } from './models/course.js';
-import { ENCLOSURES, fenceColliders } from './nav.js';
+import { SHOWGROUND, HUTCH_TOYS } from '../sim/activities.js';
+import { showgroundModel, hutchToy } from './models/course.js';
+import { ENCLOSURES, fenceColliders, enclosure } from './nav.js';
 import { t } from '../i18n.js';
 
 // La carrière a une barrière avec une ouverture : on l'ajoute aux enclos connus de la navigation
@@ -28,4 +28,20 @@ export function buildShowground(world, group) {
   );
   world.interactables.push({ kind: 'showground', x: S.x + S.hw + 2.2, z: S.z });
   world.clearZones.push({ x: S.x, z: S.z, r: Math.hypot(S.hw, S.hd) + 6 });
+  buildHutchToys(world, group);
+}
+
+/** Jouets dans l'enclos grillagé du clapier (roue, tunnel, balle, plateforme, foin). */
+function buildHutchToys(world, group) {
+  const hu = enclosure('hutch');
+  world.hutchToys = {};
+  if (!hu) return;
+  for (const [id, def] of Object.entries(HUTCH_TOYS)) {
+    const x = hu.x + def.x;
+    const z = hu.z + def.z;
+    const toy = hutchToy(id);
+    toy.position.set(x, world.heightAt(x, z), z);
+    group.add(toy);
+    world.hutchToys[id] = { id, x, z, group: toy, part: toy.userData.part };
+  }
 }

@@ -45,7 +45,7 @@ const S = Math.PI;
 
 // ---------------------------------------------------------------- saut d'obstacles
 
-export const JUMP_TYPES = ['vertical', 'oxer', 'wall', 'cross', 'triple'];
+export const JUMP_TYPES = ['poles', 'cavaletti', 'vertical', 'oxer', 'wall', 'cross', 'triple'];
 
 /** Le parcours d'obstacles (7 obstacles + arrivée), en coordonnées locales de la carrière. */
 export const JUMP_COURSE = {
@@ -105,12 +105,96 @@ export const takeoffQuality = (u) => clamp(1 - Math.abs(-u - TAKEOFF) / 1.6);
  * skill : saut (0–100), height (m), align et timing (0–1), boots : guêtres, energy (0–100).
  */
 export function jumpChance({ skill = 10, height = 0.8, align = 1, timing = 0.7, boots = false, energy = 80, obedience = 10 }) {
-  let p = 0.5 + (skill / 100) * 0.38 + (obedience / 100) * 0.07 - Math.max(0, height - 0.7) * 0.45;
+  // Ce qui compte, c'est la hauteur par rapport à ce que le cheval a appris à sauter.
+  const over = Math.max(0, height - comfortHeight(skill));
+  let p = 0.62 + (skill / 100) * 0.26 + (obedience / 100) * 0.07 - over * 1.1 - Math.max(0, height - 0.7) * 0.1;
   p *= 0.55 + 0.45 * align;
   p += (timing - 0.5) * 0.24;
   if (boots) p += 0.06;
   if (energy < 30) p -= 0.12;
   return clamp(p, 0.12, 0.97);
+}
+
+// ---------------------------------------------------------------- apprendre à sauter, pas à pas
+
+/** Hauteur que le cheval saute sans peur (m) : elle grandit avec sa compétence de saut. */
+export const comfortHeight = (skill = 10) => Math.round((0.2 + (skill / 100) * 1.0) * 100) / 100;
+
+/**
+ * Risque de refus (dérobade) quand l'obstacle est trop haut pour ce que le cheval a appris.
+ * 0 tant que l'obstacle est à sa portée.
+ */
+export function refusalChance(skill, height) {
+  const over = height - comfortHeight(skill);
+  return over <= 0.05 ? 0 : clamp((over - 0.05) / 0.35) * 0.85;
+}
+
+/**
+ * Niveaux de parcours : on commence par des barres au sol, puis des petites croix…
+ * minSkill : compétence de saut conseillée pour débloquer le niveau.
+ */
+export const JUMP_STAGES = [
+  { id: 'poles', minSkill: 0, types: ['poles', 'cavaletti'], heights: [0.12, 0.3] },
+  { id: 'crosses', minSkill: 20, types: ['cross', 'cross', 'vertical'], heights: [0.4, 0.55] },
+  { id: 'club', minSkill: 40, types: null, heights: null }, // le parcours de base (JUMP_COURSE)
+  { id: 'grand', minSkill: 65, types: null, heights: [1.0, 1.2] },
+];
+
+/** Niveaux débloqués pour un cheval (indices de JUMP_STAGES). */
+export const unlockedStages = (skill) => JUMP_STAGES.map((st, i) => (skill >= st.minSkill ? i : -1)).filter((i) => i >= 0);
+
+/** Le niveau conseillé pour un cheval (le plus haut débloqué). */
+export const stageFor = (skill) => Math.max(...unlockedStages(skill));
+
+/** Niveau de parcours d'un concours : club → petites croix, régional → club, Grand Prix → grand. */
+export const stageForLevel = (level) => Math.min(3, level);
+
+/** Le parcours d'un niveau : mêmes emplacements, obstacles et hauteurs adaptés. */
+export function courseForStage(stage) {
+  const st = JUMP_STAGES[stage] ?? JUMP_STAGES[2];
+  const n = JUMP_COURSE.obstacles.length;
+  const obstacles = JUMP_COURSE.obstacles.map((o, i) => {
+    if (!st.types && !st.heights) return { ...o };
+    const [h0, h1] = st.heights;
+    const type = st.types ? st.types[i % st.types.length] : o.type;
+    return { ...o, type, height: Math.round((h0 + ((h1 - h0) * i) / (n - 1)) * 100) / 100 };
+  });
+  return { ...JUMP_COURSE, stage, obstacles };
+}
+
+/** Étapes de la leçon « Apprendre à sauter » : chaque réussite fait monter la barre. */
+export const LESSON_STEPS = [
+  { type: 'poles', height: 0.12 },
+  { type: 'cavaletti', height: 0.3 },
+  { type: 'cross', height: 0.45 },
+  { type: 'cross', height: 0.6 },
+  { type: 'vertical', height: 0.7 },
+  { type: 'vertical', height: 0.85 },
+  { type: 'oxer', height: 0.95 },
+  { type: 'oxer', height: 1.1 },
+  { type: 'triple', height: 1.2 },
+];
+
+export const LESSON_JUMPS = 6;
+
+/** Étape de départ de la leçon : la plus haute que le cheval saute déjà sans peur, moins une. */
+export function lessonStart(skill) {
+  const c = comfortHeight(skill);
+  let i = 0;
+  while (i < LESSON_STEPS.length - 1 && LESSON_STEPS[i + 1].height <= c) i++;
+  return Math.max(0, i - 1);
+}
+
+/** Gain de compétence après un saut de leçon réussi : plus la barre est à sa limite, plus il apprend. */
+export function lessonGain(skill, height) {
+  const margin = comfortHeight(skill) - height;
+  return margin > 0.25 ? 1 : margin > 0 ? 2 : 3;
+}
+
+/** Résultat d'une leçon : étoiles selon les sauts réussis. */
+export function lessonResult({ success, jumps, gained, step }) {
+  const stars = success >= jumps - 1 ? 3 : success >= jumps / 2 ? 2 : 1;
+  return { points: success, success, jumps, gained, step, stars, max: jumps };
 }
 
 /** Paramètres de saut d'un cheval (avec ses guêtres). */
@@ -299,6 +383,70 @@ export function showAudience(stars, acts, isHome = true) {
   return { spectators, earnings: Math.round(spectators * (1 + stars * 0.5)) };
 }
 
+
+// ---------------------------------------------------------------- lapins : saut d'obstacles (« lapin-hop ») et jeux au clapier
+
+/** Petit parcours pour lapins : le lapin suit le joueur et saute les petites haies (coordonnées locales de la carrière). */
+export const HOP_COURSE = {
+  start: { x: 12, z: -2, heading: W },
+  obstacles: [
+    { n: 1, type: 'hurdle', x: 8, z: -2, heading: W },
+    { n: 2, type: 'hurdle', x: 4, z: -2, heading: W },
+    { n: 3, type: 'tunnel', x: -1, z: -2, heading: W },
+    { n: 4, type: 'hurdle', x: -6, z: 0.8, heading: N },
+    { n: 5, type: 'hurdle', x: -2, z: 3.5, heading: E },
+    { n: 6, type: 'hurdle', x: 3, z: 3.5, heading: E },
+  ],
+  finish: { x: 8, z: 3.5, heading: E, width: 3 },
+};
+
+/** Les lapins font le lapin-hop. */
+export const canHop = (a) => a.species === 'rabbit';
+
+/** Chance qu'un lapin passe une petite haie sans la toucher. */
+export function hopChance(a) {
+  let p = 0.6 + (a.skills.jump / 100) * 0.3 + (a.skills.obedience / 100) * 0.05;
+  if (a.needs.energy < 30) p -= 0.1;
+  return clamp(p, 0.2, 0.96);
+}
+
+export const hopPar = () => Math.ceil(courseLength(HOP_COURSE) / 1.6 / 5) * 5 + 5;
+
+/** Résultat du lapin-hop : 5 points par barre touchée, + temps. */
+export function hopResult({ faults = 0, time, par }) {
+  return agilityResult({ faults, time, par });
+}
+
+/**
+ * Jouets de l'enclos du clapier (coordonnées relatives au centre de l'enclos grillagé).
+ * effect : ce que le jeu apporte au lapin.
+ */
+export const HUTCH_TOYS = {
+  wheel: { x: -1.7, z: 0.6, icon: '🎡', effect: { exercise: 30, energy: -10, affection: 4 } },
+  tunnel: { x: 1.6, z: 0.2, icon: '🕳️', effect: { exercise: 18, affection: 8, energy: -5 } },
+  ball: { x: 0.4, z: 1.2, icon: '⚽', effect: { exercise: 20, affection: 10, energy: -6 } },
+  platform: { x: 1.9, z: 1.5, icon: '🪵', effect: { exercise: 12, affection: 6, energy: -3 } },
+  hay: { x: -1.6, z: 1.7, icon: '🌾', effect: { hunger: 15, affection: 6 } },
+};
+
+/** Peut-on jouer maintenant ? (raison si non) */
+export function hutchPlayBlock(a) {
+  if (a.species !== 'rabbit') return 'notRabbit';
+  if (a.sick) return 'sick';
+  if (a.needs.energy < 12) return 'tired';
+  return null;
+}
+
+/** Applique le jeu à un lapin. Renvoie les changements. */
+export function hutchPlay(a, toyId) {
+  const toy = HUTCH_TOYS[toyId];
+  if (!toy) return { ok: false };
+  for (const [k, v] of Object.entries(toy.effect)) a.needs[k] = Math.max(0, Math.min(100, a.needs[k] + v));
+  if (toyId === 'wheel' || toyId === 'tunnel') a.skills.jump = Math.min(100, a.skills.jump + 0.5);
+  if (toy.effect.exercise) a.weight = Math.max(0, (a.weight ?? 50) - 1);
+  return { ok: true, effect: toy.effect };
+}
+
 // ---------------------------------------------------------------- concours
 
 export const COMPETITION_TYPES = ['jumping', 'agility', 'show', 'trail'];
@@ -364,6 +512,8 @@ export function eligibility(a, type) {
     return null;
   }
   if (type === 'agility') return canDoAgility(a) ? null : 'noAgility';
+  if (type === 'hop') return canHop(a) ? null : 'notRabbit';
+  if (type === 'lesson') return eligibility(a, 'jumping');
   if (type === 'show') return knownTricks(a).length ? null : 'noTricks';
   return null;
 }
@@ -413,7 +563,7 @@ export const agilityPar = () => Math.ceil(courseLength(AGILITY_COURSE) / 4 / 5) 
 
 /** Les points ou pénalités font le classement : moins de pénalités puis meilleur temps, ou plus de points. */
 export function compareResults(type) {
-  if (type === 'jumping' || type === 'agility') return (a, b) => a.total - b.total || a.time - b.time;
+  if (type === 'jumping' || type === 'agility' || type === 'hop') return (a, b) => a.total - b.total || a.time - b.time;
   return (a, b) => b.points - a.points;
 }
 
@@ -436,7 +586,7 @@ export function placementAward(comp, rank) {
 /** Flot gagné à l'entraînement (sans concours) selon le nombre d'étoiles. */
 export function practiceAward(type, stars, maxStars = 3) {
   if (stars < maxStars - (type === 'show' ? 1 : 0)) return null;
-  const tier = { jumping: 'blue', agility: 'yellow', trail: 'green', show: 'purple' }[type];
+  const tier = { jumping: 'blue', agility: 'yellow', trail: 'green', show: 'purple', hop: 'pink', lesson: 'white' }[type];
   return { kind: 'ribbon', tier, money: 0 };
 }
 
@@ -492,11 +642,13 @@ export function activitySkillGain(a, type, quality = 0.5) {
     agility: { jump: 1 + Math.round(quality), obedience: 1 + Math.round(quality), speed: 1 },
     trail: { endurance: 0 },
     show: { obedience: 1 },
+    hop: { jump: 1 + Math.round(quality * 2), obedience: 1 },
+    lesson: { obedience: 1 },
   }[type] ?? {};
   for (const [k, v] of Object.entries(gains)) a.skills[k] = Math.min(100, (a.skills[k] ?? 0) + v);
-  const tired = { jumping: 14, agility: 12, trail: 18, show: 6 }[type] ?? 8;
+  const tired = { jumping: 14, agility: 12, trail: 18, show: 6, hop: 8, lesson: 12 }[type] ?? 8;
   a.needs.energy = Math.max(0, a.needs.energy - tired);
-  a.needs.exercise = Math.min(100, a.needs.exercise + { jumping: 30, agility: 30, trail: 40, show: 10 }[type]);
+  a.needs.exercise = Math.min(100, a.needs.exercise + ({ jumping: 30, agility: 30, trail: 40, show: 10, hop: 25, lesson: 25 }[type] ?? 15));
   a.needs.affection = Math.min(100, a.needs.affection + 8);
   return gains;
 }

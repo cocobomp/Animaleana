@@ -4,6 +4,8 @@ import {
   parTime, courseLength, trailCollectibles, trailResult, agilityResult, agilityChance, commandQuality, showResult, trickPoints,
   trickWindow, knownTricks, competitionsAt, entryBlock, eligibility, rivals, ranking, placementAward, practiceAward,
   activityData, addAward, awardCounts, recordBest, showgroundFlat, inShowground, activitySkillGain, showAudience,
+  comfortHeight, refusalChance, JUMP_STAGES, unlockedStages, stageFor, courseForStage, LESSON_STEPS, lessonStart, lessonGain,
+  lessonResult, HOP_COURSE, hopChance, hopPar, HUTCH_TOYS, hutchPlay, hutchPlayBlock,
 } from '../src/sim/activities.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { createProfile } from '../src/sim/profile.js';
@@ -192,5 +194,62 @@ describe('concours', () => {
     activitySkillGain(h, 'jumping', 1);
     expect(h.skills.jump).toBeGreaterThan(before);
     expect(h.needs.energy).toBeLessThan(90);
+  });
+});
+
+describe('apprendre à sauter pas à pas', () => {
+  it('un jeune sauteur commence par des barres au sol', () => {
+    expect(unlockedStages(10)).toEqual([0]);
+    expect(stageFor(45)).toBe(2);
+    expect(unlockedStages(90).length).toBe(JUMP_STAGES.length);
+    const poles = courseForStage(0);
+    expect(poles.obstacles.every((o) => o.height <= 0.3)).toBe(true);
+    expect(poles.obstacles[0].type).toBe('poles');
+    expect(courseForStage(3).obstacles.every((o) => o.height >= 1)).toBe(true);
+    expect(courseForStage(2).obstacles).toEqual(JUMP_COURSE.obstacles);
+  });
+
+  it('un obstacle trop haut fait refuser ; la barre monte avec la compétence', () => {
+    expect(refusalChance(10, 0.12)).toBe(0);
+    expect(refusalChance(10, 1.1)).toBeGreaterThan(0.6);
+    expect(refusalChance(80, 1.0)).toBe(0);
+    expect(comfortHeight(80)).toBeGreaterThan(comfortHeight(10));
+    expect(jumpChance({ skill: 10, height: 1.1 })).toBeLessThan(jumpChance({ skill: 10, height: 0.2 }));
+  });
+
+  it('la leçon part du bon niveau et apprend plus à la limite', () => {
+    expect(lessonStart(0)).toBe(0);
+    expect(LESSON_STEPS[lessonStart(60)].height).toBeLessThan(comfortHeight(60));
+    expect(lessonStart(60)).toBeGreaterThan(lessonStart(20));
+    expect(lessonGain(50, 0.2)).toBe(1);
+    expect(lessonGain(10, 0.3)).toBe(3);
+    expect(lessonResult({ success: 6, jumps: 6, gained: 8, step: 4 }).stars).toBe(3);
+  });
+});
+
+describe('lapins', () => {
+  it('petit parcours de lapin-hop', () => {
+    expect(HOP_COURSE.obstacles.length).toBeGreaterThanOrEqual(5);
+    expect(hopPar()).toBeGreaterThan(10);
+    const r = createAnimal({ species: 'rabbit', ageDays: 20 });
+    r.needs.energy = 80;
+    expect(eligibility(r, 'hop')).toBeNull();
+    expect(eligibility(horse(), 'hop')).toBe('notRabbit');
+    const before = hopChance(r);
+    r.skills.jump = 90;
+    expect(hopChance(r)).toBeGreaterThan(before);
+  });
+
+  it('jouer dans l\'enclos du clapier fait faire de l\'exercice', () => {
+    const r = createAnimal({ species: 'rabbit', ageDays: 20 });
+    r.needs.exercise = 20;
+    r.needs.energy = 80;
+    expect(hutchPlayBlock(r)).toBeNull();
+    expect(hutchPlay(r, 'wheel').ok).toBe(true);
+    expect(r.needs.exercise).toBe(50);
+    expect(hutchPlay(r, 'nope').ok).toBe(false);
+    expect(Object.keys(HUTCH_TOYS)).toContain('tunnel');
+    r.needs.energy = 5;
+    expect(hutchPlayBlock(r)).toBe('tired');
   });
 });

@@ -795,3 +795,15 @@ body.actv-nomove #touch-pad { display: none !important; }
 .actv-money { font-size: 1.3rem; font-weight: 800; color: #8a6a00; margin: 4px 0; }
 .actv-result .row.end { justify-content: center; }
 .actv-result .row.end button { min-height: 52px; min-width: 130px; }
+/* Niveaux du parcours de saut (barres au sol → grand parcours) */
+.actv-stages { align-items: flex-start; }
+.actv-stage-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 6px; }
+.actv-stage { display: grid; justify-items: center; gap: 0; min-height: 56px; padding: 4px 6px; font-size: 0.85rem; font-weight: 700; border-radius: 12px; }
+.actv-stage .ico { font-size: 1.2rem; }
+.actv-stage small { font-weight: 400; color: var(--muted); font-size: 0.7rem; }
+.actv-stage.locked { opacity: 0.55; background: #f1ede4; }
+.actv-teach { margin-top: 6px; min-height: 44px; }
+.actv-warn { color: #8b5a00; font-weight: 600; }
+@media (max-width: 640px) {
+  .actv-hint { top: calc(150px + var(--safe-t)); font-size: 0.9rem; }
+}

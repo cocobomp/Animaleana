@@ -201,6 +201,25 @@ export function jumpObstacle(def, height) {
     if (h > 0.95) pole(g, w, h - 0.75, z, tex);
   };
   switch (def.type) {
+    case 'poles': {
+      // Barres au sol (pour apprendre) : trois barres posées sur de petits plots.
+      const block = mat(c1, 0.7);
+      for (const z of [-1, 0, 1]) {
+        for (const s of [-1, 1]) add(g, new THREE.BoxGeometry(0.25, Math.max(0.06, height - 0.05), 0.25), block, [s * (w / 2 - 0.3), Math.max(0.03, (height - 0.05) / 2), z]);
+        const pl = pole(g, w - 0.2, height, z, tex);
+        if (z === 0) poles.unshift(pl);
+      }
+      break;
+    }
+    case 'cavaletti': {
+      // Cavaletti : une barre sur deux croisillons en bois.
+      const wood = mat(0x9a7650, 0.85);
+      for (const s of [-1, 1]) {
+        for (const r of [0.7, -0.7]) add(g, new THREE.BoxGeometry(0.08, height * 1.9, 0.08), wood, [s * (w / 2 - 0.15), height * 0.55, 0], [r, 0, 0]);
+      }
+      poles.unshift(pole(g, w, height, 0, tex));
+      break;
+    }
     case 'oxer':
       set(-0.45, height - 0.1);
       set(0.45, height);
@@ -240,10 +259,12 @@ export function jumpObstacle(def, height) {
     default: // vertical
       set(0, height);
   }
-  flowerBox(g, w, def.type === 'triple' ? -1.25 : -0.85);
+  const low = def.type === 'poles' || def.type === 'cavaletti';
+  if (!low) flowerBox(g, w, def.type === 'triple' ? -1.25 : -0.85);
+  else add(g, new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), mat(0xf4f4f0), [w / 2 + 0.33, 0.45, 0]);
   if (def.n) {
     const p = plate(def.n, 0.42, '#ffffff', hex(c1));
-    p.position.set(w / 2 + 0.33, Math.max(1.4, height + 0.5) * 0.84 + 0.32, -0.02);
+    p.position.set(w / 2 + 0.33, low ? 1.05 : Math.max(1.4, height + 0.5) * 0.84 + 0.32, -0.02);
     p.rotation.y = Math.PI;
     g.add(p);
     const p2 = p.clone();
@@ -626,6 +647,73 @@ export function sightModel(id) {
       for (const s of [-1, 1]) add(g, new THREE.CylinderGeometry(0.01, 0.01, 2.6, 4), mat(0xd9c3a0), [1.8 + s * 0.3, 2.0, 0]);
     }
   }
+  return g;
+}
+
+// ---------------------------------------------------------------- jouets du clapier
+
+/** Jouets de l'enclos des lapins : roue, tunnel, balle, plateforme, foin. userData.part = pièce animée. */
+export function hutchToy(id) {
+  const g = new THREE.Group();
+  const wood = mat(0xc49a6c, 0.85);
+  let part = null;
+  switch (id) {
+    case 'wheel': {
+      // Grande roue d'exercice sur un support
+      for (const s of [-1, 1]) {
+        add(g, new THREE.BoxGeometry(0.06, 0.62, 0.06), wood, [s * 0.24, 0.31, 0.18], [0, 0, 0]);
+        add(g, new THREE.BoxGeometry(0.06, 0.62, 0.06), wood, [s * 0.24, 0.31, -0.18]);
+      }
+      add(g, new THREE.BoxGeometry(0.56, 0.05, 0.5), wood, [0, 0.025, 0]);
+      part = new THREE.Group();
+      part.position.y = 0.42;
+      g.add(part);
+      const rim = mat(0x2fb8b0, 0.5);
+      for (const s of [-1, 1]) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.03, 8, 28), rim);
+        ring.rotation.y = Math.PI / 2;
+        ring.position.x = s * 0.17;
+        part.add(ring);
+      }
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.36, 5), mat(0xf2f2f2, 0.5));
+        rung.rotation.z = Math.PI / 2;
+        rung.position.set(0, Math.sin(a) * 0.37, Math.cos(a) * 0.37);
+        part.add(rung);
+      }
+      break;
+    }
+    case 'tunnel': {
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.2, 16, 1, true), new THREE.MeshStandardMaterial({ color: 0x9a6ad8, roughness: 0.8, side: THREE.DoubleSide }));
+      tube.rotation.z = Math.PI / 2;
+      tube.position.y = 0.2;
+      tube.castShadow = true;
+      g.add(tube);
+      for (const s of [-1, 1]) add(g, new THREE.TorusGeometry(0.2, 0.025, 6, 18), mat(0xffcf2e, 0.5), [s * 0.6, 0.2, 0], [0, Math.PI / 2, 0]);
+      break;
+    }
+    case 'ball': {
+      part = add(g, new THREE.SphereGeometry(0.11, 14, 10), mat(0xe0473a, 0.4), [0, 0.11, 0]);
+      add(part, new THREE.TorusGeometry(0.11, 0.015, 6, 16), mat(0xffffff, 0.4), [0, 0, 0]);
+      break;
+    }
+    case 'platform': {
+      add(g, new THREE.BoxGeometry(0.6, 0.32, 0.5), wood, [0, 0.16, 0]);
+      add(g, new THREE.BoxGeometry(0.62, 0.04, 0.52), mat(0x8a6342, 0.8), [0, 0.34, 0]);
+      add(g, new THREE.BoxGeometry(0.3, 0.03, 0.6), wood, [-0.42, 0.15, 0], [0, 0, -0.5]);
+      add(g, new THREE.CircleGeometry(0.12, 12), mat(0x3a2a1a, 0.9), [0.0, 0.16, 0.255]);
+      break;
+    }
+    default: { // foin
+      const hay = mat(0xd9b860, 1);
+      for (let i = 0; i < 7; i++) add(g, new THREE.SphereGeometry(0.13, 7, 5), hay, [Math.sin(i * 2.1) * 0.15, 0.08 + (i % 3) * 0.04, Math.cos(i * 1.7) * 0.12]);
+      add(g, new THREE.BoxGeometry(0.5, 0.04, 0.04), wood, [0, 0.32, -0.2]);
+    }
+  }
+  g.userData.part = part;
+  if (part) part.userData.keep = true;
+  mergeStatic(g, part ? [part] : []);
   return g;
 }
 

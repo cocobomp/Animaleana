@@ -5,7 +5,9 @@
 import * as THREE from 'three';
 import {
   SHOWGROUND, JUMP_COURSE, AGILITY_COURSE, AGILITY_LENGTH, TRAIL, toWorld, approach, alignment, takeoffQuality, TAKEOFF,
-  jumpChance, horseJumpStats, refuses, jumpingResult, parTime, obstacleHeight, trailCollectibles, trailResult, trailEnduranceGain,
+  jumpChance, horseJumpStats, refuses, jumpingResult, parTime, trailCollectibles, trailResult, trailEnduranceGain,
+  courseForStage, stageFor, stageForLevel, refusalChance, LESSON_STEPS, LESSON_JUMPS, lessonStart, lessonGain, lessonResult, JUMP_STAGES,
+  HOP_COURSE, hopChance, hopPar, hopResult, HUTCH_TOYS, hutchPlay, hutchPlayBlock,
   agilityChance, agilitySpeed, agilityResult, agilityPar, commandQuality, AGILITY_TYPES, trickWindow, trickPoints, showResult,
   showAudience, ranking, placementAward, practiceAward, addAward, recordBest, activityData, activitySkillGain, eligibility,
 } from '../sim/activities.js';
@@ -15,12 +17,16 @@ import { mulberry32 } from '../sim/rng.js';
 import {
   jumpObstacle, flagPair, agilityObstacle, spectators, showStage, trailMarker, sightModel, guideArrow,
 } from './models/course.js';
+import { enclosure, navTarget } from './nav.js';
 import { emojiTexture } from './textures.js';
 import { ActivityHud, showActivityResults } from '../ui/activities.js';
 import { t, ta } from '../i18n.js';
 
 const COLLECT_EMOJI = { apple: '🍎', flower: '🌼', horseshoe: '🍀', carrot: '🥕' };
 const ARENA_SPEED = 7.2; // galop de concours, un peu plus calme que le galop de balade
+// Leçon de saut : un seul obstacle au milieu de la carrière (coordonnées locales).
+const LESSON_SPOT = { x: 0, z: -4, heading: -Math.PI / 2 };
+const LESSON_START = { x: 14, z: -4, heading: -Math.PI / 2 };
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const fwd = (h) => new THREE.Vector3(Math.sin(h), 0, Math.cos(h));
@@ -29,6 +35,7 @@ export class Activities {
   constructor(game) {
     this.game = game;
     this.session = null;
+    this.plays = []; // lapins qui jouent au clapier
   }
 
   get active() {
@@ -52,7 +59,7 @@ export class Activities {
       activityData(g.profile).entered.push(comp.id);
     }
     g.ui.closePanel();
-    const Cls = { jumping: JumpingSession, trail: TrailSession, agility: AgilitySession, show: ShowSession }[type];
+    const Cls = { jumping: JumpingSession, lesson: JumpingSession, trail: TrailSession, agility: AgilitySession, show: ShowSession, hop: HopSession }[type];
     this.session = new Cls(this, type, opts);
     if (!this.session.ok) {
       this.session.end(true);
@@ -62,6 +69,7 @@ export class Activities {
   }
 
   update(dt) {
+    this.updatePlays(dt);
     const s = this.session;
     if (!s) return;
     if (this.game.profile.place !== s.place) {
@@ -73,6 +81,7 @@ export class Activities {
 
   abort() {
     this.session?.end(true);
+    this.stopPlays();
   }
 
   /** Bouton d'action (E) pendant une activité. Renvoie true si l'activité l'a utilisé. */
@@ -84,8 +93,164 @@ export class Activities {
 
   /** Toucher l'écran pendant une activité. Renvoie true si l'activité a utilisé le toucher. */
   onTap(sx, sy) {
-    return this.session?.onTap?.(sx, sy) ?? false;
+    if (this.session) return this.session.onTap?.(sx, sy) ?? false;
+    return this.tapHutchToy(sx, sy);
   }
+
+  // ------------------------------------------------------------ jeux des lapins au clapier
+
+  /** Toucher un jouet de l'enclos du clapier : un lapin va y jouer. Renvoie true si on a touché un jouet. */
+  tapHutchToy(sx, sy) {
+    const g = this.game;
+    const toys = g.world.hutchToys;
+    if (!toys) return false;
+    const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
+    g.raycaster.setFromCamera(ndc, g.camera);
+    const hit = g.raycaster.intersectObjects(Object.values(toys).map((x) => x.group), true)[0];
+    if (!hit || hit.distance > 30) return false;
+    const id = Object.keys(toys).find((k) => {
+      for (let o = hit.object; o; o = o.parent) if (o === toys[k].group) return true;
+      return false;
+    });
+    const rabbit = this.pickRabbit(toys[id]);
+    if (!rabbit) {
+      g.ui.toast(t('actv_noRabbit'), 4000);
+      return true;
+    }
+    this.playInHutch(rabbit, id);
+    return true;
+  }
+
+  /** Le lapin libre le plus proche du jouet. */
+  pickRabbit(toy) {
+    const g = this.game;
+    const free = g.animalsHere().filter((a) => a.species === 'rabbit' && !hutchPlayBlock(a) && !this.plays.some((p) => p.a === a) && g.entities.get(a.id));
+    free.sort((a, b) => g.entities.get(a.id).position.distanceTo(new THREE.Vector3(toy.x, 0, toy.z))
+      - g.entities.get(b.id).position.distanceTo(new THREE.Vector3(toy.x, 0, toy.z)));
+    return free[0] ?? null;
+  }
+
+  /** « Tu vas jouer avec la roue ! » : le lapin va au jouet et joue un moment. */
+  playInHutch(a, toyId) {
+    const g = this.game;
+    const why = hutchPlayBlock(a);
+    if (why) return g.ui.toast(ta(`actv_why_${why}`, a), 4000);
+    if (this.session) return g.ui.toast(t('actv_busy'));
+    if (this.plays.some((p) => p.a === a)) return g.ui.toast(ta('actv_hutchBusy', a));
+    if (this.plays.some((p) => p.toyId === toyId)) return g.ui.toast(t('actv_toyBusy'));
+    const e = g.entities.get(a.id);
+    const toy = g.world.hutchToys?.[toyId];
+    if (!e || !toy) return null;
+    e.scripted = true;
+    e.sleeping = false;
+    a.following = false;
+    this.plays.push({ a, e, toyId, toy, phase: 'go', t: 0 });
+    g.ui.toast(ta('actv_hutchGo', a, { toy: t(`actv_toy_${toyId}`) }), 3500);
+    return true;
+  }
+
+  updatePlays(dt) {
+    const g = this.game;
+    for (const pl of [...this.plays]) {
+      const { e, toy, toyId } = pl;
+      const p = e.position;
+      pl.t += dt;
+      const ground = (x, z) => g.world.heightAt(x, z);
+      if (pl.phase === 'go') {
+        const goal = new THREE.Vector3(toy.x, 0, toy.z + (toyId === 'hay' ? 0.4 : toyId === 'wheel' ? 0.55 : 0));
+        if (toyId === 'tunnel') goal.x -= 0.9;
+        const way = navTarget(p, goal);
+        const to = new THREE.Vector3(way.x - p.x, 0, way.z - p.z);
+        const d = Math.hypot(goal.x - p.x, goal.z - p.z);
+        if (d < 0.2 || pl.t > 20) {
+          if (pl.t > 20) p.set(goal.x, 0, goal.z);
+          pl.phase = 'play';
+          pl.t = 0;
+        } else {
+          e.heading += wrap(Math.atan2(to.x, to.z) - e.heading) * Math.min(1, dt * 8);
+          const v = Math.min(e.sp.runSpeed * 0.7, Math.max(0.6, d * 2));
+          p.addScaledVector(fwd(e.heading), Math.min(to.length(), v * dt));
+          e.speed = v;
+        }
+        p.y = ground(p.x, p.z);
+      } else {
+        const T = 6;
+        const k = pl.t;
+        const part = toy.part;
+        e.speed = 0;
+        switch (toyId) {
+          case 'wheel':
+            // Dans la roue : elle tourne pendant que le lapin court.
+            p.set(toy.x, ground(toy.x, toy.z) + 0.07, toy.z);
+            e.heading = 0;
+            e.speed = 2.6;
+            if (part) part.rotation.x -= dt * 6;
+            break;
+          case 'tunnel': {
+            const dir = Math.floor(k / 2) % 2 ? -1 : 1;
+            const u = ((k % 2) / 2) * 1.8 - 0.9;
+            p.set(toy.x + u * dir, ground(toy.x, toy.z), toy.z);
+            e.heading = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+            e.speed = 1.8;
+            e.scaleGroup.visible = Math.abs(u) > 0.5;
+            break;
+          }
+          case 'ball': {
+            const ang = k * 1.7;
+            if (part) {
+              part.position.set(Math.cos(ang) * 0.35, 0.11, Math.sin(ang) * 0.35);
+              part.rotation.x += dt * 7;
+            }
+            const back = ang - 0.55;
+            p.set(toy.x + Math.cos(back) * 0.35, ground(toy.x, toy.z), toy.z + Math.sin(back) * 0.35);
+            e.heading = Math.atan2(-Math.sin(back), Math.cos(back));
+            e.speed = 1.4;
+            break;
+          }
+          case 'platform': {
+            const up = Math.min(1, k / 0.6);
+            const hop = k > 0.6 ? Math.max(0, Math.sin(k * 4)) * 0.08 : Math.sin(up * Math.PI) * 0.25;
+            p.set(toy.x - 0.5 * (1 - up), ground(toy.x, toy.z) + 0.36 * up + hop, toy.z);
+            e.heading = Math.PI / 2;
+            break;
+          }
+          default: // foin : il mange, la tête en bas
+            p.set(toy.x, ground(toy.x, toy.z), toy.z + 0.38);
+            e.heading = Math.PI;
+            e.model.neck.rotation.x = e.data.look.neckAngle + 0.9 + Math.sin(k * 7) * 0.06;
+        }
+        if (k > 1 && Math.floor(k) !== Math.floor(k - dt) && Math.floor(k) % 2 === 0) e.emit(toyId === 'hay' ? '🌾' : '💕', 1);
+        if (k >= T) this.endPlay(pl, true);
+      }
+      e.root.rotation.y = e.heading;
+    }
+  }
+
+  endPlay(pl, done) {
+    const g = this.game;
+    const { e, a, toy, toyId } = pl;
+    this.plays = this.plays.filter((x) => x !== pl);
+    e.scripted = false;
+    e.scaleGroup.visible = true;
+    e.state = 'idle';
+    e.timer = 3;
+    if (toyId === 'wheel') e.position.z = toy.z + 0.6;
+    if (toyId === 'platform') e.position.x = toy.x - 0.6;
+    if (toy.part && toyId === 'ball') toy.part.position.set(0, 0.11, 0);
+    if (!done) return;
+    const r = hutchPlay(a, toyId);
+    if (!r.ok) return;
+    e.emit('❤️', 3);
+    addStat(g.profile, 'actvHutchPlay');
+    g.xp('care');
+    g.ui.toast(ta('actv_hutchDone', a, { toy: t(`actv_toy_${toyId}`) }), 4000);
+    g.ui.refresh();
+  }
+
+  stopPlays() {
+    for (const pl of [...this.plays]) this.endPlay(pl, false);
+  }
+
 }
 
 // ---------------------------------------------------------------- base commune
@@ -111,7 +276,7 @@ class Session {
     this.cheer = 0;
     this.ok = true;
     this.hud = new ActivityHud(this.game.ui, {
-      icon: { jumping: '🏇', trail: '🧭', agility: '🐕', show: '🎪' }[type],
+      icon: { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', show: '🎪', hop: '🐇' }[type],
       title: this.comp ? t('actv_comp_title', { type: t(`actv_type_${type}`) }) : t(`actv_type_${type}`),
       onQuit: () => this.quit(),
     });
@@ -232,7 +397,7 @@ class Session {
     this.state = 'done';
     const animals = info.animals;
     const main = animals[0];
-    addStat(p, { jumping: 'actvJumping', trail: 'actvTrail', agility: 'actvAgility', show: 'actvShows' }[this.type]);
+    addStat(p, { jumping: 'actvJumping', trail: 'actvTrail', agility: 'actvAgility', show: 'actvShows', lesson: 'actvLessons', hop: 'actvHop' }[this.type]);
     if (this.type === 'jumping' && result.clear) addStat(p, 'actvClear');
     g.xp(this.type === 'show' ? 'show' : 'activity');
     let award = null;
@@ -260,7 +425,7 @@ class Session {
         level: this.comp?.levelId ?? null, rank,
       });
     }
-    const record = this.type !== 'show' && recordBest(p, this.type, main.id, result);
+    const record = !['show', 'lesson'].includes(this.type) && recordBest(p, this.type, main.id, result);
     for (const a of animals) activitySkillGain(a, this.type, info.quality ?? 0.5);
     g.save();
     g.ui.refresh();
@@ -356,19 +521,35 @@ class JumpingSession extends Session {
     this.animal = a;
     this.level = this.comp?.level ?? 1;
     this.autoJump = opts.autoJump ?? true;
-    // Le parcours
-    this.obstacles = JUMP_COURSE.obstacles.map((o) => {
-      const w = toWorld(o);
-      const height = obstacleHeight(o, this.level);
-      const model = jumpObstacle(o, height);
-      this.put(model.group, w.x, w.z, o.heading);
-      return { ...o, x: w.x, z: w.z, height, model, done: false };
-    });
-    const st = toWorld(JUMP_COURSE.start);
+    this.lesson = type === 'lesson';
+    // Le parcours : des barres au sol pour débuter, plus haut quand le cheval a appris.
+    this.stage = this.comp ? stageForLevel(this.level) : (opts.stage ?? stageFor(a.skills.jump));
+    const course = courseForStage(this.stage);
+    this.start = this.lesson ? LESSON_START : course.start;
+    if (this.lesson) {
+      // Leçon : un seul obstacle au milieu, la barre monte à chaque réussite.
+      this.step = lessonStart(a.skills.jump);
+      this.lessonJumps = 0;
+      this.lessonOk = 0;
+      this.gained = 0;
+      const w = toWorld(LESSON_SPOT);
+      this.obstacles = [{ ...LESSON_SPOT, x: w.x, z: w.z, n: null, width: 3.6, colors: [0xd8402f, 0xffffff], done: false }];
+      this.buildLessonObstacle();
+    } else {
+      this.obstacles = course.obstacles.map((o) => {
+        const w = toWorld(o);
+        const model = jumpObstacle(o, o.height);
+        this.put(model.group, w.x, w.z, o.heading);
+        return { ...o, x: w.x, z: w.z, model, done: false };
+      });
+    }
+    const st = toWorld(this.start);
     const fin = toWorld(JUMP_COURSE.finish);
     this.finishLine = { ...JUMP_COURSE.finish, x: fin.x, z: fin.z };
-    this.put(flagPair(JUMP_COURSE.finish.width, t('actv_finish')), fin.x, fin.z, JUMP_COURSE.finish.heading);
-    this.put(flagPair(6, t('actv_start')), st.x - 2.5, st.z, JUMP_COURSE.start.heading);
+    if (!this.lesson) {
+      this.put(flagPair(JUMP_COURSE.finish.width, t('actv_finish')), fin.x, fin.z, JUMP_COURSE.finish.heading);
+      this.put(flagPair(6, t('actv_start')), st.x - 2.5, st.z, JUMP_COURSE.start.heading);
+    }
     this.arrow = guideArrow();
     this.group.add(this.arrow);
     this.next = 0;
@@ -391,11 +572,60 @@ class JumpingSession extends Session {
       }
     }
     this.mount = e;
-    this.teleportPlayer(st.x, st.z, JUMP_COURSE.start.heading);
+    this.teleportPlayer(st.x, st.z, this.start.heading);
     this.hud.setMain({ icon: '⤴️', label: t('actv_jumpBtn'), key: t('actv_key_space'), onClick: () => this.action() });
     this.hud.setToggle(t('actv_autoJump'), this.autoJump, (v) => { this.autoJump = v; });
-    this.hud.hint(t('actv_jumpHint'));
+    this.hud.hint(ta(this.lesson ? 'actv_lessonHint' : 'actv_jumpHint', a));
     this.refreshHud();
+  }
+
+  /** (Re)construit l'obstacle de la leçon à la hauteur de l'étape actuelle. */
+  buildLessonObstacle() {
+    const o = this.obstacles[0];
+    const st = LESSON_STEPS[this.step];
+    if (o.model) {
+      this.group.remove(o.model.group);
+      o.model.group.traverse((m) => { if (m.isMesh) { m.geometry.dispose(); m.material.map?.dispose(); m.material.dispose(); } });
+    }
+    o.type = st.type;
+    o.height = st.height;
+    o.model = jumpObstacle(o, st.height);
+    this.put(o.model.group, o.x, o.z, o.heading);
+  }
+
+  /** Après un saut de leçon : la barre monte si c'est réussi. */
+  lessonJumped(clean) {
+    const a = this.animal;
+    this.lessonJumps++;
+    if (clean) {
+      this.lessonOk++;
+      const gain = lessonGain(a.skills.jump, LESSON_STEPS[this.step].height);
+      a.skills.jump = Math.min(100, a.skills.jump + gain);
+      this.gained += gain;
+      if (this.step < LESSON_STEPS.length - 1) {
+        this.step++;
+        this.hud.big(t('actv_lessonUp'), 1100, 'good');
+      } else this.hud.big(t('actv_perfect'), 900, 'good');
+      this.mount.emit('💪', 2);
+    } else {
+      this.hud.big(t('actv_lessonAgain'), 1000, 'bad');
+    }
+    this.buildLessonObstacle();
+    this.obstacles[0].done = false;
+    this.next = 0;
+    if (this.lessonJumps >= LESSON_JUMPS) this.completeLesson();
+  }
+
+  completeLesson() {
+    const a = this.animal;
+    const result = lessonResult({ success: this.lessonOk, jumps: this.lessonJumps, gained: this.gained, step: this.step });
+    this.state = 'finishing';
+    this.hud.big(t('actv_lessonDone'), 1500, 'good');
+    const extra = [t('actv_lessonResult', { n: this.lessonOk, total: this.lessonJumps }), t('actv_jumpSkill', { n: this.gained, v: Math.round(a.skills.jump) })];
+    const before = stageFor(a.skills.jump - this.gained);
+    const after = stageFor(a.skills.jump);
+    if (after > before) extra.push(t('actv_nextStage', { stage: t(`actv_stage_${JUMP_STAGES[after].id}`) }));
+    setTimeout(() => !this.ended && this.finish(result, { animals: [a], quality: this.lessonOk / this.lessonJumps, extra }), 1200);
   }
 
   onKeyDown(e) {
@@ -410,6 +640,15 @@ class JumpingSession extends Session {
   }
 
   refreshHud() {
+    if (this.lesson) {
+      const st = LESSON_STEPS[this.step];
+      this.hud.stats([
+        ['🎓', t('actv_lessonStep', { n: this.step + 1, total: LESSON_STEPS.length, what: t(`actv_ob_${st.type}`), h: Math.round(st.height * 100) })],
+        ['🔁', t('actv_lessonJumps', { n: this.lessonJumps, total: LESSON_JUMPS })],
+        ['💪', `${t('skill_jump')} ${Math.round(this.animal.skills.jump)}`],
+      ]);
+      return;
+    }
     const total = this.obstacles.length;
     const faults = this.rails * 4 + this.refusals * 4;
     this.hud.stats([
@@ -431,9 +670,9 @@ class JumpingSession extends Session {
     }
     const p = pl.root.position;
     if (this.state === 'countdown') {
-      const st = toWorld(JUMP_COURSE.start);
+      const st = toWorld(this.start);
       p.set(st.x, this.y(st.x, st.z), st.z);
-      pl.heading = JUMP_COURSE.start.heading;
+      pl.heading = this.start.heading;
       pl.speed = 0;
       this.mount.position.copy(p);
       this.mount.heading = pl.heading;
@@ -474,7 +713,7 @@ class JumpingSession extends Session {
 
     if (this.state === 'run') {
       // Arrivée
-      if (this.next >= this.obstacles.length && !this.jump) {
+      if (!this.lesson && this.next >= this.obstacles.length && !this.jump) {
         const a = approach(this.finishLine, p.x, p.z);
         if (Math.abs(a.v) < this.finishLine.width / 2 + 0.5 && a.u > 0 && (this.prevFinish ?? -1) <= 0) this.complete();
         this.prevFinish = a.u;
@@ -487,6 +726,16 @@ class JumpingSession extends Session {
     const pl = this.game.player;
     const p = pl.root.position;
     const pressed = this.time - this.want < 0.45;
+    if (this.lesson) {
+      // Leçon : on peut sauter l'obstacle dans les deux sens (il se tourne vers le cavalier).
+      const o = this.obstacles[0];
+      const a = approach(o, p.x, p.z);
+      if (Math.abs(a.u) > 4 && alignment({ heading: o.heading + Math.PI }, pl.heading) > alignment(o, pl.heading)) {
+        o.heading = wrap(o.heading + Math.PI);
+        o.model.group.rotation.y = o.heading;
+        this.prev[0] = null;
+      }
+    }
     this.obstacles.forEach((o, i) => {
       const a = approach(o, p.x, p.z);
       const prev = this.prev[i];
@@ -523,18 +772,31 @@ class JumpingSession extends Session {
     });
   }
 
-  refuse(o) {
+  refuse(o, tooHigh = false) {
     this.refusals++;
     this.refusedAt = o;
     this.push = 0.8;
     this.game.player.speed = 0;
-    this.mount.emit('❗', 1);
+    this.mount.emit(tooHigh ? '😨' : '❗', 1);
     this.hud.big(t('actv_refusal'), 900, 'bad');
-    this.game.ui.toast(ta('actv_refusalHint', this.animal), 3500);
+    this.game.ui.toast(ta(tooHigh ? (this.lesson ? 'actv_lessonDown' : 'actv_tooHigh') : 'actv_refusalHint', this.animal), 4500);
+    if (this.lesson) {
+      // Trop haut pour l'instant : on redescend la barre d'un cran.
+      this.refusals--;
+      this.step = Math.max(0, this.step - 1);
+      this.lessonJumps++;
+      this.buildLessonObstacle();
+      if (this.lessonJumps >= LESSON_JUMPS) this.completeLesson();
+    }
   }
 
   startJump(o, heading, timing, counts) {
     const pl = this.game.player;
+    // Un obstacle trop haut pour ce qu'il a appris : le cheval a peur et se dérobe.
+    if (counts && Math.random() < refusalChance(this.animal.skills.jump, o.height)) {
+      this.refuse(o, true);
+      return;
+    }
     const stats = horseJumpStats(this.animal);
     const al = alignment({ heading }, pl.heading);
     const chance = jumpChance({ ...stats, height: o.height, align: al, timing });
@@ -543,7 +805,7 @@ class JumpingSession extends Session {
     this.jump = {
       o, counts, clean, t: 0, dur: 0.62 + o.height * 0.22,
       from: pl.root.position.clone(), heading, h0: pl.heading,
-      dist: Math.max(3.6, speed * (0.62 + o.height * 0.22)), height: o.height + 0.45, speed, timing,
+      dist: Math.max(3.6, speed * (0.62 + o.height * 0.22)), height: o.height * 1.1 + 0.3, speed, timing,
     };
     if (counts && timing > 0.85) this.hud.big(t('actv_perfect'), 700, 'good');
   }
@@ -581,7 +843,10 @@ class JumpingSession extends Session {
       this.jump = null;
       resetPose(e);
       pl.avatar.root.rotation.x = 0;
-      if (j.counts) {
+      if (j.counts && this.lesson) {
+        this.prev[0] = null;
+        this.lessonJumped(j.clean);
+      } else if (j.counts) {
         j.o.done = true;
         this.next++;
         if (j.clean) {
@@ -1459,4 +1724,157 @@ function animateTrick(e, trick, k, dt) {
       sg.position.y = 0.2 * s;
   }
   void dt;
+}
+
+// ---------------------------------------------------------------- lapin-hop (le lapin suit le joueur)
+
+const HOP_SCALE = 0.42;
+
+class HopSession extends Session {
+  constructor(mgr, type, opts) {
+    super(mgr, type, opts);
+    const g = this.game;
+    const a = opts.animal;
+    const e = g.entities.get(a?.id);
+    const why = a ? eligibility(a, 'hop') : 'notHere';
+    if (!e || why) {
+      if (a) g.ui.toast(ta(`actv_why_${why ?? 'notHere'}`, a), 5000);
+      this.ok = false;
+      return;
+    }
+    if (g.player.mount) g.dismount();
+    this.animal = a;
+    this.e = e;
+    this.script(e);
+    this.obstacles = HOP_COURSE.obstacles.map((o) => {
+      const w = toWorld(o);
+      const model = agilityObstacle(o.type, o.n);
+      model.scale.setScalar(HOP_SCALE);
+      this.put(model, w.x, w.z, o.heading);
+      const half = o.type === 'tunnel' ? (4 * HOP_SCALE) / 2 + 0.1 : 0.42;
+      return { ...o, x: w.x, z: w.z, model, half, done: false };
+    });
+    const fin = toWorld(HOP_COURSE.finish);
+    this.finishLine = { ...HOP_COURSE.finish, x: fin.x, z: fin.z };
+    const flags = flagPair(HOP_COURSE.finish.width, t('actv_finish'));
+    flags.scale.setScalar(0.7);
+    this.put(flags, fin.x, fin.z, HOP_COURSE.finish.heading);
+    this.arrow = guideArrow(0xe86aa0);
+    this.arrow.scale.setScalar(0.6);
+    this.group.add(this.arrow);
+    this.st = toWorld(HOP_COURSE.start);
+    this.teleportPlayer(this.st.x, this.st.z, HOP_COURSE.start.heading);
+    g.rig.dist = 5;
+    g.rig.pitch = 0.5;
+    this.placeRabbit();
+    this.crumbs = [];
+    this.prev = this.obstacles.map(() => null);
+    this.next = 0;
+    this.faults = 0;
+    this.par = hopPar();
+    if (this.comp) this.addCrowd();
+    this.hud.hint(ta('actv_hopHint', a));
+    this.refreshHud();
+  }
+
+  /** Le lapin attend derrière le joueur. */
+  placeRabbit() {
+    const b = fwd(HOP_COURSE.start.heading);
+    const x = this.st.x - b.x * 1.2;
+    const z = this.st.z - b.z * 1.2;
+    this.e.position.set(x, this.y(x, z), z);
+    this.e.heading = HOP_COURSE.start.heading;
+  }
+
+  refreshHud() {
+    this.hud.stats([
+      ['🚧', this.next < this.obstacles.length ? t('actv_nextObstacle', { n: this.next + 1, total: this.obstacles.length }) : t('actv_toFinish')],
+      ['⏱️', `${this.clock.toFixed(1)} s / ${this.par} s`],
+      ['❌', t('actv_faults', { n: this.faults * 5 })],
+    ]);
+  }
+
+  update(dt) {
+    this.updateCommon(dt);
+    if (this.state === 'done') return;
+    const g = this.game;
+    const pl = g.player;
+    const p = pl.root.position;
+    const e = this.e;
+    if (this.state === 'countdown') {
+      p.set(this.st.x, this.y(this.st.x, this.st.z), this.st.z);
+      pl.heading = HOP_COURSE.start.heading;
+      pl.speed = 0;
+      this.placeRabbit();
+    }
+    // Le lapin suit le chemin du joueur (miettes de pain), un peu derrière lui.
+    const last = this.crumbs[this.crumbs.length - 1];
+    if (!last || Math.hypot(last.x - p.x, last.z - p.z) > 0.25) this.crumbs.push({ x: p.x, z: p.z });
+    while (this.crumbs.length && Math.hypot(this.crumbs[0].x - e.position.x, this.crumbs[0].z - e.position.z) < 0.2) this.crumbs.shift();
+    const far = Math.hypot(p.x - e.position.x, p.z - e.position.z);
+    let speed = 0;
+    if (this.state !== 'countdown' && this.crumbs.length && far > 1.0) {
+      const c = this.crumbs[0];
+      const to = new THREE.Vector3(c.x - e.position.x, 0, c.z - e.position.z);
+      speed = Math.min(3.4, 1.2 + far * 0.9);
+      e.heading += wrap(Math.atan2(to.x, to.z) - e.heading) * Math.min(1, dt * 10);
+      e.position.addScaledVector(to.normalize(), Math.min(to.length() + 0.01, speed * dt));
+    }
+    e.speed = speed;
+
+    // Sauts et tunnel selon la position du lapin.
+    let y = 0;
+    let visible = true;
+    this.obstacles.forEach((o, i) => {
+      const a = approach(o, e.position.x, e.position.z);
+      const inLane = Math.abs(a.v) < 0.45;
+      if (inLane && Math.abs(a.u) < o.half) {
+        if (o.type === 'tunnel') visible = Math.abs(a.u) > o.half - 0.3;
+        else y = Math.sin((Math.PI * (a.u + o.half)) / (2 * o.half)) * 0.3;
+      }
+      const prev = this.prev[i];
+      this.prev[i] = a.u;
+      if (this.state !== 'run' || prev === null || !inLane || !(prev < 0 && a.u >= 0)) return;
+      if (i === this.next) {
+        const clean = o.type === 'tunnel' || Math.random() < hopChance(this.animal);
+        if (!clean) {
+          this.faults++;
+          const bar = o.model.userData.parts.bar;
+          if (bar) bar.position.y = 0.05;
+          this.hud.big(t('actv_agFault_hurdle'), 900, 'bad');
+        } else {
+          e.emit('⭐', 1);
+          if (this.comp) this.applause(0.35);
+        }
+        o.done = true;
+        this.next++;
+      } else if (!o.done) {
+        g.ui.toast(t('actv_wrongObstacle', { n: this.next + 1 }), 2500);
+      }
+    });
+    e.position.y = this.y(e.position.x, e.position.z) + Math.max(0, y);
+    e.scaleGroup.visible = visible;
+    e.root.rotation.y = e.heading;
+
+    const target = this.obstacles[this.next] ?? this.finishLine;
+    this.arrow.position.set(target.x, this.y(target.x, target.z) + 1.6 + Math.sin(this.time * 4) * 0.15, target.z);
+    this.arrow.visible = Math.hypot(target.x - p.x, target.z - p.z) > 2.5;
+    if (this.state === 'run') {
+      if (this.next >= this.obstacles.length) {
+        const a = approach(this.finishLine, e.position.x, e.position.z);
+        if (Math.abs(a.v) < this.finishLine.width / 2 + 0.5 && a.u >= 0 && (this.prevFinish ?? -1) < 0) this.complete();
+        this.prevFinish = a.u;
+      }
+      this.refreshHud();
+    }
+  }
+
+  complete() {
+    this.state = 'finishing';
+    const result = hopResult({ faults: this.faults, time: this.clock, par: this.par });
+    this.applause(result.clear ? 1 : 0.5);
+    this.e.emit('🎉', 4);
+    this.hud.big(result.clear ? t('actv_clearRound') : t('actv_finished'), 1500, result.clear ? 'good' : '');
+    setTimeout(() => !this.ended && this.finish(result, { animals: [this.animal], quality: Math.max(0, 1 - this.faults / 4) }), 1200);
+  }
 }

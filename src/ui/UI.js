@@ -10,6 +10,7 @@ import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
 import { openHelp } from './help.js';
 import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
+import { tripChips } from './trip.js'; // voyages réalistes
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -257,6 +258,7 @@ export class UI {
       const pd = g.herding.active.pusher.data;
       chips.push(chip(`🐕 ${t('statusHerding', { name: pd.name, g: pd.sex })}`, t('statusStop'), () => { g.herding.stop(false); this.renderStatus(); }));
     }
+    chips.push(...tripChips(this)); // chargement du véhicule de voyage
     const key = chips.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
     this.statusKey = key;
@@ -313,6 +315,11 @@ export class UI {
       this.actionBtn.hidden = false;
       return;
     }
+    if (f.kind === 'vehicle') { // voyage : faire monter les animaux (game/TripFlow.js)
+      this.actionBtn.replaceChildren(this.game.tripFlow.focusLabel(), h('kbd', {}, 'E'));
+      this.actionBtn.hidden = false;
+      return;
+    }
     const labels = {
       animal: () => t('interact', { name: f.entity.data.name }),
       refuge: () => (this.game.isHome ? t('enterRefuge') : t('enterBreeder')),
@@ -359,7 +366,7 @@ export class UI {
   }
 
   isBlocking() {
-    return this.modalOpen || !this.screen.hidden;
+    return this.modalOpen || !this.screen.hidden || !!this.tripBlocking; // tripBlocking : écran du trajet
   }
 
   showModal(content) {

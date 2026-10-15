@@ -40,6 +40,7 @@ import { ManagementView } from './ManagementView.js';
 import { openStructure } from '../ui/construction.js';
 import { doorOf, equipmentPos } from '../sim/construction.js';
 import { applyCoreLayout } from './coreLayout.js';
+import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, trajet, pauses)
 
 const CARE_EMOJI = {
   feed: '🍖', water: '💧', brush: '✨', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨',
@@ -100,6 +101,7 @@ export class Game {
     this.focus = null;
     this.structures = new Structures(this);
     this.mgmt = new ManagementView(this);
+    this.tripFlow = new TripFlow(this);
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -131,6 +133,7 @@ export class Game {
   stop() {
     this.tasks.clear();
     this.mgmt.stop();
+    this.tripFlow.reset();
     this.save();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
@@ -381,6 +384,8 @@ export class Game {
       this.renderer.render(this.scene, this.camera);
       return;
     }
+    // Pendant le trajet (écran du voyage), la ferme est en pause : TripFlow fait avancer le voyage et dessine la 3D.
+    if (this.tripFlow.frame(dt)) return;
     const p = this.profile;
     // Vitesse : réglage de la durée d'une journée × boutons pause / ×1 / ×2 / ×4.
     const mps = minutesPerSecond(p.settings.timeSpeed) * this.timeScale;
@@ -553,6 +558,7 @@ export class Game {
     const paused = this.paused;
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
+    if (this.tripFlow.onTap(this.raycaster)) return; // chargement du véhicule de voyage
     const roots = [...this.entities.values()].filter((e) => !e.ridden).map((e) => e.root);
     const hitA = this.raycaster.intersectObjects(roots, true).find((h) => !h.object.isSprite || h.object === h.object.parent?.userData?.entity?.label);
     if (hitA) {
@@ -956,7 +962,8 @@ export class Game {
     if (this.player.mount) {
       best = { kind: 'dismount' };
     } else {
-      let bestD = Infinity;
+      best = this.tripFlow.focusNear(pp); // près du véhicule de voyage : faire monter les animaux
+      let bestD = best ? -1 : Infinity;
       for (const e of this.entities.values()) {
         const d = Math.hypot(e.position.x - pp.x, e.position.z - pp.z) - e.radius;
         if (d < 1.6 && d < bestD) {
@@ -974,7 +981,7 @@ export class Game {
         }
       }
     }
-    const key = best ? `${best.kind}-${best.entity?.data.id ?? best.id ?? ''}` : '';
+    const key = best ? `${best.kind}-${best.entity?.data.id ?? best.id ?? best.key ?? ''}` : '';
     if (key !== this.focusKey) {
       this.focusKey = key;
       this.focus = best;
@@ -1006,6 +1013,7 @@ export class Game {
       case 'pen': this.ui.openBuilding(f.kind); break;
       case 'dismount': this.dismount(); break;
       case 'spot': f.run(); break; // un coin de l'écurie ou de la maison
+      case 'vehicle': this.tripFlow.interact(); break;
       default:
     }
   }
@@ -1471,20 +1479,25 @@ export class Game {
     }));
   }
 
-  travel(destId, mode, travelerIds) {
+  /**
+   * Change de lieu. opts.trip : voyage réaliste déjà fait par TripFlow (sim/trip.js) :
+   * le coût, le temps qui passe et les besoins pendant le trajet ont déjà été comptés.
+   */
+  travel(destId, mode, travelerIds, opts = {}) {
     const p = this.profile;
+    const done = !!opts.trip;
     const travelers = this.animalsHere().filter((a) => travelerIds.includes(a.id));
     const horse = travelers.find((a) => a.species === 'horse' && canRide(a).ok);
-    const check = checkTravel(p.place, destId, mode, travelers, !!horse);
+    const check = checkTravel(p.place, destId, mode, travelers, done || !!horse);
     if (!check.ok) return this.ui.toast(t(`tr_${check.reason}`));
-    if (!spend(p, check.cost)) return this.ui.toast(t('r_money'));
+    if (!done && !spend(p, check.cost)) return this.ui.toast(t('r_money'));
 
     // Pendant le voyage on fait des pauses : les besoins baissent moins vite.
     const hours = check.hours;
-    p.clock += hours * 60;
+    if (!done) p.clock += hours * 60;
     for (const a of travelers) {
-      const events = tickAnimal(a, hours * 0.25, { moving: true, ridden: mode === 'horse' && a === horse });
-      a.ageDays += (hours * 0.75) / 24;
+      const events = done ? [] : tickAnimal(a, hours * 0.25, { moving: true, ridden: mode === 'horse' && a === horse });
+      if (!done) a.ageDays += (hours * 0.75) / 24;
       a.location = destId;
       a.following = true;
       delete a.pos;

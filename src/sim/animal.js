@@ -162,6 +162,8 @@ export function happiness(a) {
   }
   let h = (sum / weights) * (0.55 + 0.45 * (a.health / 100));
   if (a.sick) h -= 20;
+  // Stress du voyage (voir sim/trip.js) : un animal stressé est moins heureux.
+  if (a.stress) h -= a.stress * 0.3;
   return clamp(Math.round(h));
 }
 
@@ -175,7 +177,7 @@ export function mood(a) {
 
 /**
  * Fait passer `hours` heures de jeu pour l'animal.
- * ctx : { sleeping, moving, ridden, weather, rng }
+ * ctx : { sleeping, moving, ridden, weather, rng, travelling (en voyage : le stress ne redescend pas) }
  * Renvoie la liste des événements : 'sick', 'died'.
  */
 export function tickAnimal(a, hours, ctx = {}) {
@@ -211,6 +213,12 @@ export function tickAnimal(a, hours, ctx = {}) {
     a.skills.speed = Math.min(100, a.skills.speed + 0.4 * hours);
   } else if (ctx.moving) {
     a.needs.exercise = clamp(a.needs.exercise + 8 * hours);
+  }
+
+  // Stress du voyage (voir sim/trip.js) : il redescend tout seul en quelques heures au calme, et fatigue en attendant.
+  if (a.stress && !ctx.travelling) {
+    if (a.stress > 40) a.needs.energy = clamp(a.needs.energy - 1.5 * hours);
+    a.stress = clamp(a.stress - (ctx.sleeping ? 10 : 6) * hours);
   }
 
   const h = happiness(a);

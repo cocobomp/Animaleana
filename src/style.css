@@ -1337,3 +1337,43 @@ body.actv-nomove #touch-pad { display: none !important; }
 .hc-prio { display: flex; flex-wrap: wrap; gap: 6px; }
 .hc-prio button { min-height: 44px; border-radius: 999px; padding: 0 14px; }
 .hc-prio button.on { background: var(--primary); color: #fff; border-color: transparent; }
+
+/* ==========================================================================
+   Éducateur canin (métier) — src/ui/dogTrainer.js, src/game/DogTrainer.js
+   ========================================================================== */
+.dt-tuto { display: grid; gap: 10px; text-align: center; }
+.dt-tuto-emoji { font-size: 3rem; line-height: 1; }
+.dt-tuto h3 { margin: 0; }
+.dt-tuto p { margin: 0; font-size: 1.05rem; line-height: 1.35; }
+.dt-tuto .dt-how { background: #f3f7f1; border-radius: 12px; padding: 8px 10px; }
+.dt-tuto .dt-go { min-height: 52px; font-size: 1.1rem; }
+.dt-dogcard { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; margin: 8px 0; display: grid; gap: 6px; }
+.dt-probs { display: grid; gap: 6px; margin: 6px 0 10px; }
+.dt-prob { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; }
+.dt-prob .mini-track { grid-column: 1 / -1; }
+.dt-prob.fixed { border-color: var(--good); }
+.dt-prob b { font-size: 0.95rem; }
+.act.dt-session.done { opacity: 0.6; }
+#panel .checklist li.locked { color: var(--muted); }
+.dt-client { display: flex; gap: 10px; align-items: center; }
+.dt-client .card-body { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.dt-client small { color: var(--muted); }
+.dt-result .dt-pay { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 4px; font-size: 1rem; }
+.dt-result .dt-quote { font-style: italic; }
+.dt-result .row { justify-content: center; gap: 8px; }
+/* Bandeau de la promenade-séance « tire en laisse » */
+#dt-walk { position: fixed; left: 50%; bottom: calc(118px + var(--safe-b, 0px)); transform: translateX(-50%); width: min(420px, calc(100vw - 32px)); background: rgba(255,255,255,0.94); border: 1px solid var(--line); border-radius: 16px; padding: 8px 12px; display: grid; gap: 6px; z-index: 30; box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
+#dt-walk .dt-walk-head { display: flex; justify-content: space-between; font-weight: 700; }
+#dt-walk .dt-pull-track { display: block; height: 14px; background: #e4ebe6; border-radius: 7px; overflow: hidden; }
+#dt-walk .dt-pull-fill { display: block; height: 100%; width: 0; background: #3fae62; border-radius: 7px; transition: width 0.15s; }
+#dt-walk .dt-pull-fill[data-level="high"] { background: #e0574a; }
+#dt-walk .dt-walk-hint { margin: 0; min-height: 1.3em; font-size: 1rem; }
+#dt-walk .dt-walk-hint[data-kind="good"] { color: var(--good); font-weight: 700; }
+#dt-walk .dt-walk-hint[data-kind="warn"] { color: #c0392b; font-weight: 700; }
+#dt-walk .row { display: flex; gap: 8px; }
+#dt-walk .row button { flex: 1; min-height: 46px; }
+#dt-walk .dt-reward.glow { animation: dt-glow 0.8s ease-in-out infinite alternate; }
+@keyframes dt-glow { from { box-shadow: 0 0 0 0 rgba(63,174,98,0.4); } to { box-shadow: 0 0 0 8px rgba(63,174,98,0); } }
+@media (max-width: 720px) {
+  #dt-walk { bottom: calc(150px + var(--safe-b, 0px)); width: calc(100vw - 24px); padding: 6px 10px; }
+}

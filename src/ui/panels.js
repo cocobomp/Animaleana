@@ -1,5 +1,6 @@
 // Fenêtres du jeu : fiche d'un animal, liste, adoption, voyage, journal, petits boulots, réglages.
 
+import { dogTrainerSection } from './dogTrainer.js'; // éducateur canin : séances dans la fiche
 import { h, bar, hexColor } from './dom.js';
 import { t, L, getLang, setLang } from '../i18n.js';
 import { SPECIES, getBreed, NAMES } from '../sim/species.js';
@@ -126,7 +127,7 @@ function renderAnimal(ui, g, a) {
   acts.push(btn(`📍 ${t('callHere')}`, () => g.callHere(a)));
   acts.push(btn(`🩺 ${t('act_vet')}${money(ui, g.vetCost(false))}`, () => ui.openVet(a, false), { cls: a.sick ? 'primary' : '' }));
   if (hasTool(g.profile, 'firstAid')) acts.push(btn(`🧰 ${t('vetSelfTitle')}`, () => ui.openVet(a, 'self')));
-  acts.push(btn(`✏️ ${t('rename')}`, async () => {
+  if (!a.client) acts.push(btn(`✏️ ${t('rename')}`, async () => {
     const name = await ui.prompt(t('newName'), a.name, animalCard(a));
     if (name) {
       g.rename(a, name);
@@ -171,6 +172,8 @@ function renderAnimal(ui, g, a) {
 
   out.push(...animalActivitySection(ui, a)); // activités : saut, balade, agility, spectacle
 
+  out.push(...dogTrainerSection(ui, a)); // éducateur canin : séances (client ou animal à soi)
+
   out.push(h('h3', {}, t('training')), h('div', { class: 'grid' },
     sp.training.map((x) => btn(t(`tr_${x}`), () => g.train(a, x), { disabled: stage === 'baby' })),
   ), h('div', { class: 'bars small' },
@@ -186,6 +189,7 @@ function renderAnimal(ui, g, a) {
   ));
 
   // Bébés : une liste de conditions à remplir, pour donner envie de bien s'occuper des parents.
+  if (a.client) return out; // chien d'un client : pas de bébés ici
   out.push(h('h3', {}, t('breedTitle')));
   if (a.pregnant) {
     out.push(h('p', { class: 'note' }, `🤰 ${t('pregnantInfo', { name: a.name, n: Math.max(0, a.pregnant.due - g.day) })}`));

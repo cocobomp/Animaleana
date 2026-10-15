@@ -8,6 +8,7 @@ import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
 import { Input } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
+import { DogTrainer } from './DogTrainer.js'; // métier éducateur canin : clients, séances, livraison
 import { Herding } from './Herding.js';
 import { TaskQueue } from './TaskQueue.js';
 import { Interiors } from './Interiors.js'; // écurie et maison où l'on entre, box, corvées
@@ -109,6 +110,7 @@ export class Game {
     this.interiors = new Interiors(this);
     this.events = new Events(this);
     this.activities = new Activities(this);
+    this.dogTrainer = new DogTrainer(this);
     this.droppingMeshes = new Map();
     this.timeScale = 1; // 0 = pause
     this.profile = null;
@@ -166,6 +168,7 @@ export class Game {
     this.emit('stop');
     this.marker.hide();
     this.activities.abort();
+    this.dogTrainer.reset();
     this.save();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
@@ -213,6 +216,7 @@ export class Game {
     this.entities.clear();
     for (const h of this.helpers.values()) h.dispose();
     this.helpers.clear();
+    this.dogTrainer.onPlaceLoaded();
     applyCoreLayout(this.profile.coreLayout?.[placeId]); // bergerie, paddock… déplacés par le joueur
     this.world.build(placeId, this.season, placeId === this.profile.home);
     this.interiors.onPlaceLoaded(); // coins de corvées, box des chevaux
@@ -452,6 +456,7 @@ export class Game {
       this.player.update(mgmt ? 0 : wdt, pctrl, this.rig.yaw, this.rig.mode === 'first');
       for (const e of entities) e.update(wdt, ctx);
       for (const h of this.helpers.values()) h.update(wdt, this);
+      this.dogTrainer.update(wdt); // maîtres en visite, promenade-séance, démonstration
       this.herding.update(wdt);
       this.tasks?.update();
       this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
@@ -621,6 +626,7 @@ export class Game {
         return;
       }
     }
+    if (this.dogTrainer.onTap(this.raycaster, paused)) return; // un maître en visite (éducateur canin)
     const roots = [...this.entities.values()].filter((e) => !e.ridden && !e.inside).map((e) => e.root);
     const hitA = this.raycaster.intersectObjects(roots, true).find((h) => !h.object.isSprite || h.object === h.object.parent?.userData?.entity?.label);
     if (hitA) {
@@ -1088,6 +1094,11 @@ export class Game {
           best = { kind: 'helper', helper: hp, id: hp.data.id };
         }
       }
+      const visitor = this.dogTrainer.focusNear(pp); // maître en visite (éducateur canin)
+      if (visitor && visitor.d < bestD) {
+        bestD = visitor.d;
+        best = visitor.focus;
+      }
       if (!best) {
         for (const it of this.world.interactables) {
           const d = Math.hypot(it.x - pp.x, it.z - pp.z);
@@ -1362,7 +1373,8 @@ export class Game {
   }
 
   breedingPartners(a) {
-    return this.animalsHere().filter((b) => b.id !== a.id && b.species === a.species && b.sex !== a.sex);
+    if (a.client) return []; // un chien en pension d'éducation n'est pas à nous
+    return this.animalsHere().filter((b) => b.id !== a.id && !b.client && b.species === a.species && b.sex !== a.sex);
   }
 
   canBreed(a, b) {

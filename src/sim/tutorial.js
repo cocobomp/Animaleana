@@ -189,6 +189,11 @@ export const QUEST_GUIDE = {
   actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
   actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
   actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
+  // Métier éducateur canin : les clients arrivent à la ferme (niveau 3), les séances se font depuis la fiche du chien.
+  dtClient1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, ready: (p) => (p.xp ?? 0) >= 150 },
+  dtSession3: { where: 'dogSheet', target: { type: 'action', id: 'more' }, ready: (p) => p.animals.some((a) => a.client) },
+  dtDeliver1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, ready: (p) => p.animals.some((a) => a.client) },
+  dtCoach1: { where: 'dogSheet', target: { type: 'action', id: 'more' }, ready: (p) => (p.xp ?? 0) >= 150 && p.animals.some((a) => a.species === 'dog' && !a.client) },
 };
 
 /** Ordre conseillé des quêtes, de la plus facile à la plus difficile. */
@@ -196,6 +201,7 @@ export const QUEST_ORDER = [
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
+  'dtClient1', 'dtSession3', 'dtCoach1', 'dtDeliver1',
 ];
 
 /**
@@ -268,6 +274,12 @@ export const FOLLOW_STEPS = {
   goShowground: { target: SHOWGROUND, done: seenAny('building:showground') },
   goHutch: { target: { type: 'building', id: 'hutch' }, done: seenAny('building:hutch') },
   doActivity: { target: null, done: questDone, progress: true },
+  // éducateur canin
+  waitClient: { target: { type: 'building', id: 'kennel' }, done: seenAny('panel:dogTrainerChat') },
+  acceptClient: { target: { type: 'el', sel: '#panel .dt-accept', fallback: null }, done: questDone },
+  tapDog: { target: { type: 'animal', species: 'dog' }, done: seenAny('animalActions', 'panel:animal') },
+  doSession: { target: { type: 'section', h3: 'dt_sectionTitle', fallback: { type: 'action', id: 'more' } }, done: questDone, progress: true },
+  deliverDog: { target: { type: 'building', id: 'kennel' }, done: questDone },
 };
 
 export const QUEST_STEPS = {
@@ -294,6 +306,10 @@ export const QUEST_STEPS = {
   actvCompete1: ['goShowground', 'doActivity'],
   actvHop1: ['goShowground', 'doActivity'],
   actvHutch5: ['goHutch', 'doActivity'],
+  dtClient1: ['waitClient', 'acceptClient'],
+  dtSession3: ['tapDog', 'openMore', 'doSession'],
+  dtCoach1: ['tapDog', 'openMore', 'doSession'],
+  dtDeliver1: ['tapDog', 'openMore', 'doSession', 'deliverDog'],
 };
 
 /** Étapes d'une quête selon la situation : sans animal (ou sans cheval), on va d'abord en adopter un. */

@@ -14,6 +14,7 @@ import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtim
 import { tripChips } from './trip.js'; // voyages réalistes
 import { openActivities } from './activities.js';
 import { openHelperChat } from './helperChat.js'; // parler aux aides
+import { openDogTrainerPanel } from './dogTrainer.js'; // métier éducateur canin
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -525,6 +526,7 @@ export class UI {
   }
   openActivities(opts) { openActivities(this, opts); }
   openHelper(h) { openHelperChat(this, h); this.game?.emit('panel', 'helper'); }
+  openDogTrainer() { openDogTrainerPanel(this); this.game?.emit('panel', 'dogTrainer'); }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {

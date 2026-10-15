@@ -101,6 +101,7 @@ export function openBuilding(ui, kind) {
     facPaddock: () => { g.sendHorses('paddock'); close(); },
     facEnter: () => { close(); g.interiors.enter(kind); },
     facManage: () => ui.openFacility(kind),
+    dogTrainer: () => ui.openDogTrainer(), // carnet de l'éducateur canin (niche)
     ...activityRuns(ui), // activités : terrain de concours
   };
   // Maison des animaux : qui dort dans quel coin.
@@ -111,7 +112,7 @@ export function openBuilding(ui, kind) {
     enabled: a.enabled,
     why: a.reason ? t(`why_${a.reason}`, a.params) : '',
     run: run[a.id],
-    queue: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'vet', 'jobs', 'sleep'].includes(a.id) ? null : {
+    queue: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'vet', 'jobs', 'sleep', 'dogTrainer'].includes(a.id) ? null : {
       label: `${t(`do_${a.id}`)} (${name})`,
       icon: a.icon,
       target: () => g.buildingSpot(kind),
@@ -119,7 +120,7 @@ export function openBuilding(ui, kind) {
       auto: () => run[a.id](),
       manual: () => { ui.openBuilding(kind); },
     },
-    free: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'checkHorses'].includes(a.id), // possible même en pause
+    free: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'checkHorses', 'dogTrainer'].includes(a.id), // possible même en pause
   })), header, kind === 'pethouse');
 }
 

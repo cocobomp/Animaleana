@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { World } from './World.js';
+import { gfx } from './gfx.js';
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
@@ -35,19 +36,22 @@ export class Game {
   constructor(container, ui) {
     this.ui = ui;
     this.quality = readQuality();
+    gfx.quality = this.quality;
     const renderer = new THREE.WebGLRenderer({ antialias: this.quality === 'high', powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality === 'high' ? 2 : 1.25));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = this.quality === 'high';
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Tons filmiques : les hautes lumières (ciel, soleil) restent douces.
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.75;
+    renderer.toneMappingExposure = 0.9;
     container.prepend(renderer.domElement);
     this.renderer = renderer;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
     this.world = new World(this.scene, this.quality);
+    this.world.setRenderer(renderer);
     this.weather3d = new Weather3D(this.scene, this.quality);
     this.rig = new CameraRig(this.camera);
     this.input = new Input(renderer.domElement, document.getElementById('joystick'));

@@ -5,7 +5,9 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { PLACES } from '../sim/places.js';
 import { mulberry32 } from '../sim/rng.js';
 import { t, L } from '../i18n.js';
-import { groundDetail } from './textures.js';
+import { terrainDetail, waterNormalTexture, cloudTexture } from './textures.js';
+import { noise3 } from './models/shapes.js';
+import { gfx } from './gfx.js';
 import * as B from './models/buildings.js';
 import { forest, rocks, groundCover, mountainRing } from './models/nature.js';
 
@@ -19,8 +21,8 @@ const smooth = (a, b, x) => {
 };
 
 const GROUND = {
-  countryside: { spring: 0x6fa344, summer: 0x7aa53f, autumn: 0x8f9a48, winter: 0x7f8f6c },
-  beach: { spring: 0x78a44a, summer: 0x86a84b, autumn: 0x8a9a4c, winter: 0x7a8c66 },
+  countryside: { spring: 0x63983c, summer: 0x6c9a3a, autumn: 0x7a9242, winter: 0x74866a },
+  beach: { spring: 0x6e9a44, summer: 0x7a9c45, autumn: 0x7f9246, winter: 0x728463 },
   mountain: { spring: 0x6f9e4a, summer: 0x6a9a44, autumn: 0x8a8f4a, winter: 0xeef2f6 },
   tundra: { spring: 0x6c8a52, summer: 0x6f9152, autumn: 0x8a7e4c, winter: 0xeef1f4 },
   forest: { spring: 0x5f8f3e, summer: 0x568a38, autumn: 0x7d8a3e, winter: 0xf0f3f6 },
@@ -68,10 +70,93 @@ export class World {
     scene.add(this.sun.target);
 
     scene.fog = new THREE.Fog(0xbfd6ea, 60, 380);
+
+    // Éclairage d'ambiance par le ciel (image-based lighting) : une copie du ciel sans disque
+    // solaire, plus un sol, est « photographiée » de temps en temps (PMREM) et sert
+    // d'environnement à tous les matériaux. Mise à jour rare : coût négligeable.
+    this.envScene = new THREE.Scene();
+    const envSkyMat = this.sky.material.clone();
+    envSkyMat.uniforms = this.sky.material.uniforms;
+    // Teinte du ciel (bleu nuit) appliquée au ciel visible et à sa copie d'éclairage.
+    this.sky.material.uniforms.skyTint = { value: new THREE.Color(1, 1, 1) };
+    const tint = (sh) => {
+      sh.fragmentShader = sh.fragmentShader
+        .replace('uniform vec3 up;', 'uniform vec3 up;\nuniform vec3 skyTint;')
+        .replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * skyTint, 1.0 );');
+    };
+    this.sky.material.onBeforeCompile = tint;
+    envSkyMat.onBeforeCompile = (sh) => {
+      tint(sh);
+      sh.fragmentShader = sh.fragmentShader.replace('L0 += ( vSunE * 19000.0 * Fex ) * sundisk;', '');
+    };
+    this.moon = this.makeMoon();
+    scene.add(this.moon);
+    const envSky = new THREE.Mesh(this.sky.geometry, envSkyMat);
+    envSky.scale.setScalar(400);
+    this.envScene.add(envSky);
+    this.envGround = new THREE.Mesh(new THREE.CircleGeometry(300, 32), new THREE.MeshBasicMaterial({ color: 0x40502c }));
+    this.envGround.rotation.x = -Math.PI / 2;
+    this.envGround.position.y = -2;
+    this.envScene.add(this.envGround);
+    this.pmrem = null;
+    this.envTarget = null;
+    this.envKey = null;
+    this.envTime = 0;
     this.stars = this.makeStars();
     scene.add(this.stars);
     this.clouds = this.makeClouds();
     scene.add(this.clouds);
+  }
+
+  /** Donne au monde l'accès au moteur de rendu (pour l'éclairage par le ciel). */
+  setRenderer(renderer) {
+    this.renderer = renderer;
+    this.pmrem = new THREE.PMREMGenerator(renderer);
+  }
+
+  /** Recalcule l'environnement lumineux quand le soleil a assez bougé (ou que la météo change). */
+  updateEnvironment(day, overcast, groundColor) {
+    if (!this.pmrem) return;
+    const high = this.quality === 'high';
+    const step = high ? 0.025 : 0.06;
+    const key = `${Math.round(this.sunDir.x / step)}|${Math.round(this.sunDir.y / step)}|${Math.round(this.sunDir.z / step)}|${overcast.toFixed(2)}`;
+    const now = performance.now();
+    if (key === this.envKey || (this.envKey && now - this.envTime < (high ? 800 : 3000))) return;
+    this.envKey = key;
+    this.envTime = now;
+    this.envGround.material.color.copy(groundColor).multiplyScalar(0.12 + 0.5 * day);
+    const rt = this.pmrem.fromScene(this.envScene, 0, 1, 1000, { size: high ? 128 : 64 });
+    this.scene.environment = rt.texture;
+    if (this.envTarget) this.envTarget.dispose();
+    this.envTarget = rt;
+  }
+
+  makeMoon() {
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 128;
+    const ctx = c.getContext('2d');
+    const glow = ctx.createRadialGradient(64, 64, 10, 64, 64, 64);
+    glow.addColorStop(0, 'rgba(220,230,255,0.5)');
+    glow.addColorStop(1, 'rgba(220,230,255,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillStyle = '#eef1f6';
+    ctx.beginPath();
+    ctx.arc(64, 64, 18, 0, Math.PI * 2);
+    ctx.fill();
+    const rng = mulberry32(4);
+    ctx.fillStyle = 'rgba(150,160,175,0.45)';
+    for (let i = 0; i < 9; i++) {
+      ctx.beginPath();
+      ctx.arc(52 + rng() * 24, 52 + rng() * 24, 2 + rng() * 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, fog: false, depthWrite: false }));
+    moon.scale.setScalar(260);
+    return moon;
   }
 
   makeStars() {
@@ -91,23 +176,27 @@ export class World {
   }
 
   makeClouds() {
+    // Nuages : des grappes de « bouffées » toujours tournées vers la caméra (sprites),
+    // claires en haut et grisées en dessous.
     const g = new THREE.Group();
     const rng = mulberry32(5);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.85, fog: false, depthWrite: false });
-    const geo = new THREE.IcosahedronGeometry(1, 2);
-    for (let i = 0; i < 26; i++) {
+    const mat = new THREE.SpriteMaterial({ map: cloudTexture(), color: 0xffffff, transparent: true, opacity: 0.9, fog: false, depthWrite: false });
+    const count = this.quality === 'high' ? 34 : 20;
+    for (let i = 0; i < count; i++) {
       const cloud = new THREE.Group();
-      const n = 4 + Math.floor(rng() * 4);
+      const n = 5 + Math.floor(rng() * 6);
+      const w = 30 + rng() * 40;
       for (let j = 0; j < n; j++) {
-        const m = new THREE.Mesh(geo, mat);
-        const s = 10 + rng() * 14;
-        m.scale.set(s * 1.4, s * 0.55, s);
-        m.position.set(j * 12 - n * 6, rng() * 4, rng() * 10 - 5);
-        cloud.add(m);
+        const sp = new THREE.Sprite(mat);
+        const t = j / (n - 1) - 0.5;
+        const s = (22 + rng() * 22) * (1 - Math.abs(t) * 0.8);
+        sp.scale.set(s * 1.6, s, 1);
+        sp.position.set(t * w + (rng() - 0.5) * 8, Math.sin((t + 0.5) * Math.PI) * 6 + rng() * 3, (rng() - 0.5) * 16);
+        cloud.add(sp);
       }
       const a = rng() * Math.PI * 2;
-      const d = 80 + rng() * 260;
-      cloud.position.set(Math.cos(a) * d, 90 + rng() * 40, Math.sin(a) * d);
+      const d = 90 + rng() * 300;
+      cloud.position.set(Math.cos(a) * d, 110 + rng() * 50, Math.sin(a) * d);
       g.add(cloud);
     }
     g.userData.mat = mat;
@@ -145,6 +234,7 @@ export class World {
         if (o.isMesh || o.isInstancedMesh) {
           o.geometry.dispose();
           if (o.material.map && !o.material.map.userData?.shared) o.material.map.dispose?.();
+          o.userData.depthTex?.dispose();
           o.material.dispose();
         }
       });
@@ -162,16 +252,7 @@ export class World {
     const snowy = GROUND[p.biome][season] === 0xeef2f6 || GROUND[p.biome][season] === 0xeef1f4 || GROUND[p.biome][season] === 0xf0f3f6;
 
     g.add(this.makeTerrain(season, rng));
-    if (this.waterLevel !== null) {
-      const water = new THREE.Mesh(
-        new THREE.PlaneGeometry(SIZE * 1.5, SIZE * 1.5),
-        new THREE.MeshStandardMaterial({ color: snowy && p.lake ? 0xcfe3ef : 0x2f7392, roughness: snowy && p.lake ? 0.6 : 0.12, metalness: 0.15, transparent: true, opacity: 0.88 }),
-      );
-      water.rotation.x = -Math.PI / 2;
-      water.position.y = this.waterLevel;
-      water.receiveShadow = true;
-      g.add(water);
-    }
+    if (this.waterLevel !== null) g.add(this.makeWater(snowy && p.lake));
 
     // Bâtiments
     const place = (obj, x, z, rotY = 0, collide = true) => {
@@ -242,7 +323,9 @@ export class World {
     g.add(rocks(spots(p.biome === 'tundra' ? 90 : 35, 15, 160, 0.3, 1.6), p.biome === 'tundra' ? 0x403c3a : 0x8c8a86));
     if (!snowy) {
       const grassColor = new THREE.Color(GROUND[p.biome][season]).offsetHSL(0, 0.08, 0.02).getHex();
-      g.add(groundCover(spots(this.quality === 'high' ? 2500 : 900, 6, 90, 0.6, 1.2), grassColor, FLOWERS[season]));
+      // Pas d'herbe haute dans la cour en terre battue.
+      const yard = (s) => Math.hypot(s.x, s.z) > 15 + noise3(s.x * 0.15, s.z * 0.15, 8) * 8;
+      g.add(groundCover(spots(this.quality === 'high' ? 9000 : 1800, 5, 95, 0.7, 1.3).filter(yard), grassColor, FLOWERS[season]));
     }
 
     this.scene.add(g);
@@ -251,13 +334,19 @@ export class World {
 
   makeTerrain(season, rng) {
     const p = this.place;
+    const high = this.quality === 'high';
     const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEGMENTS, SEGMENTS);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
     const colors = [];
+    const splat = [];
     const base = new THREE.Color(GROUND[p.biome][season]);
-    const sand = new THREE.Color(0xdcc89a);
-    const dirt = new THREE.Color(0x9c8664);
+    const snowyGround = base.getHSL({}).l > 0.85;
+    const dry = base.clone().offsetHSL(0.03, -0.05, 0.08);
+    const lush = base.clone().offsetHSL(0.015, 0.06, -0.07);
+    const sand = new THREE.Color(0xd8c495);
+    const wetSand = new THREE.Color(0x9c8a66);
+    const dirt = new THREE.Color(0x8f7a5a);
     const rock = new THREE.Color(p.volcano ? 0x3d3a38 : 0x86817a);
     const snow = new THREE.Color(0xf3f6f9);
     const c = new THREE.Color();
@@ -266,24 +355,161 @@ export class World {
       const z = pos.getZ(i);
       const y = this.heightAt(x, z);
       pos.setY(i, y);
-      c.copy(base).offsetHSL((rng() - 0.5) * 0.02, (rng() - 0.5) * 0.05, (rng() - 0.5) * 0.05);
+      // Variations de grande taille : plaques d'herbe sèche et d'herbe grasse.
+      const n = noise3(x * 0.03, z * 0.03, 1.7) * 0.65 + noise3(x * 0.11, z * 0.11, 4.2) * 0.35;
+      c.copy(base);
+      if (!snowyGround) {
+        if (n > 0.5) c.lerp(dry, Math.min(1, (n - 0.5) * 2.2));
+        else c.lerp(lush, Math.min(1, (0.5 - n) * 2.2));
+      }
+      c.offsetHSL((rng() - 0.5) * 0.01, (rng() - 0.5) * 0.03, (rng() - 0.5) * 0.03);
       const r = Math.hypot(x, z);
-      // Cour en terre battue autour des bâtiments.
-      c.lerp(dirt, (1 - smooth(14, 24, r)) * 0.55);
-      if (p.sea) c.lerp(sand, smooth(36, 50, x) * 0.95);
-      if (this.waterLevel !== null && y < this.waterLevel + 0.8) c.lerp(sand, 0.7);
-      if (p.mountains && y > 14) c.lerp(rock, smooth(14, 22, y));
-      if (p.mountains && y > 26) c.lerp(snow, smooth(26, 32, y));
-      if (p.volcano) c.lerp(rock, Math.max(0, Math.sin(x * 0.08) * Math.cos(z * 0.06)) * 0.6);
+      let wDirt = 0;
+      let wSand = 0;
+      let wRock = 0;
+      let wSnow = snowyGround ? 1 : 0;
+      // Cour en terre battue autour des bâtiments, aux bords irréguliers.
+      wDirt = (1 - smooth(13, 24, r + (noise3(x * 0.15, z * 0.15, 8) - 0.5) * 8)) * 0.75;
+      if (p.sea) wSand = Math.max(wSand, smooth(36, 50, x + (noise3(z * 0.08, 1, 3) - 0.5) * 6) * 0.95);
+      if (this.waterLevel !== null && y < this.waterLevel + 0.9) wSand = Math.max(wSand, smooth(this.waterLevel + 0.9, this.waterLevel + 0.3, y));
+      if (p.mountains && y > 14) wRock = Math.max(wRock, smooth(14, 22, y + (n - 0.5) * 4));
+      if (p.mountains && y > 26) wSnow = Math.max(wSnow, smooth(26, 32, y + (n - 0.5) * 3));
+      if (p.volcano) wRock = Math.max(wRock, Math.max(0, Math.sin(x * 0.08) * Math.cos(z * 0.06)) * 0.6);
+      c.lerp(dirt, wDirt);
+      const wet = this.waterLevel !== null ? smooth(this.waterLevel + 0.35, this.waterLevel - 0.1, y) : 0;
+      c.lerp(sand.clone().lerp(wetSand, wet), wSand);
+      c.lerp(rock, wRock);
+      c.lerp(snow, wSnow * (snowyGround ? 0.95 : 1));
       colors.push(c.r, c.g, c.b);
+      splat.push(wDirt * (1 - wSand), wSand, wRock, wSnow);
     }
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.setAttribute('splat', new THREE.Float32BufferAttribute(splat, 4));
     geo.computeVertexNormals();
-    const detail = groundDetail();
-    detail.userData.shared = true;
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, map: detail, roughness: 1 }));
+    const detail = terrainDetail();
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+    // Shader du sol : mélange de détails (herbe, terre, sable/neige, roche) et relief fin.
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.terrainDetail = { value: detail };
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', `#include <common>
+attribute vec4 splat;
+varying vec4 vSplat;
+varying vec2 vTUv;`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+vSplat = splat;
+vTUv = position.xz;`);
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+uniform sampler2D terrainDetail;
+varying vec4 vSplat;
+varying vec2 vTUv;`)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+vec4 dA = texture2D(terrainDetail, vTUv * 0.42);
+vec4 dB = texture2D(terrainDetail, vTUv * 0.093 + 0.37);
+vec4 dC = texture2D(terrainDetail, vTUv * 0.021 + 0.61);
+float wGrass = max(0.0, 1.0 - vSplat.x - vSplat.y - vSplat.z - vSplat.w);
+vec3 dd = dA.rgb * 0.2 + dB.rgb * 0.5 + dC.rgb * 0.3;
+float th = dd.r * wGrass + dd.g * vSplat.x + dd.b * (vSplat.y + vSplat.w * 0.5) + (dB.g * 0.6 + dC.b * 0.4) * vSplat.z;
+th += (dC.r - 0.5) * 0.25 * wGrass;
+diffuseColor.rgb *= 0.7 + 0.6 * th;`)
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+roughnessFactor = mix(roughnessFactor, 0.55, vSplat.w * 0.6);`);
+      if (high) {
+        sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+{
+  vec3 dpx = dFdx(-vViewPosition);
+  vec3 dpy = dFdy(-vViewPosition);
+  float tb = (dA.r * wGrass + dA.g * (vSplat.x + vSplat.z) + dA.b * (vSplat.y + vSplat.w)) * (1.0 - smoothstep(8.0, 30.0, length(vViewPosition)));
+  float hx = dFdx(tb);
+  float hy = dFdy(tb);
+  vec3 r1 = cross(dpy, normal);
+  vec3 r2 = cross(normal, dpx);
+  float det = dot(dpx, r1);
+  vec3 grad = sign(det) * (hx * r1 + hy * r2);
+  normal = normalize(abs(det) * normal - grad * 0.5);
+}`);
+      }
+    };
+    mat.customProgramCacheKey = () => `terrain-${high}`;
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     return mesh;
+  }
+
+  /**
+   * Eau : vagues animées (deux couches de normales qui glissent), reflets du ciel,
+   * couleur et transparence selon la profondeur, écume sur le rivage.
+   */
+  makeWater(ice) {
+    const high = this.quality === 'high';
+    // Profondeur de l'eau sur le terrain, calculée une fois (texture).
+    const n = high ? 256 : 128;
+    const depth = new Uint8Array(n * n * 4);
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const x = (i / (n - 1) - 0.5) * SIZE;
+        const z = (j / (n - 1) - 0.5) * SIZE;
+        const d = Math.min(1, Math.max(0, (this.waterLevel - this.heightAt(x, z)) / 3));
+        const k = (j * n + i) * 4;
+        depth[k] = d * 255;
+        depth[k + 3] = 255;
+      }
+    }
+    const depthTex = new THREE.DataTexture(depth, n, n, THREE.RGBAFormat);
+    depthTex.magFilter = THREE.LinearFilter;
+    depthTex.minFilter = THREE.LinearFilter;
+    depthTex.needsUpdate = true;
+    const mat = new THREE.MeshStandardMaterial({
+      color: ice ? 0xcfe3ef : 0x1d5a73, roughness: ice ? 0.5 : 0.04, metalness: 0,
+      transparent: true, opacity: 0.92, normalMap: ice ? null : waterNormalTexture(),
+    });
+    if (!ice) {
+      mat.normalScale.set(0.35, 0.35);
+      mat.onBeforeCompile = (sh) => {
+        sh.uniforms.gTime = gfx.time;
+        sh.uniforms.waterDepth = { value: depthTex };
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', `#include <common>
+varying vec2 vWPos;`)
+          .replace('#include <begin_vertex>', `#include <begin_vertex>
+vWPos = vec2(position.x, -position.y);`);
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', `#include <common>
+uniform float gTime;
+uniform sampler2D waterDepth;
+varying vec2 vWPos;
+float wDepth;
+float wFoam;`)
+          .replace('#include <normal_fragment_maps>', `
+vec2 wuv1 = vWPos * 0.045 + vec2(gTime * 0.012, gTime * 0.007);
+vec2 wuv2 = vWPos * 0.11 + vec2(-gTime * 0.017, gTime * 0.013);
+vec3 wn1 = texture2D(normalMap, wuv1).xyz * 2.0 - 1.0;
+vec3 wn2 = texture2D(normalMap, wuv2).xyz * 2.0 - 1.0;
+${high ? 'vec3 wn3 = texture2D(normalMap, vWPos * 0.31 + vec2(gTime * 0.03, -gTime * 0.02)).xyz * 2.0 - 1.0;' : 'vec3 wn3 = vec3(0.0, 0.0, 1.0);'}
+vec3 mapN = normalize(vec3((wn1.xy + wn2.xy * 0.7 + wn3.xy * 0.35) * normalScale, 1.0));
+normal = normalize(tbn * mapN);`)
+          .replace('#include <color_fragment>', `#include <color_fragment>
+wDepth = texture2D(waterDepth, vWPos / ${SIZE.toFixed(1)} + 0.5).r;
+if (abs(vWPos.x) > ${(SIZE / 2).toFixed(1)} || abs(vWPos.y) > ${(SIZE / 2).toFixed(1)}) wDepth = 1.0;
+vec3 shallow = vec3(0.16, 0.42, 0.42);
+diffuseColor.rgb = mix(shallow, diffuseColor.rgb, smoothstep(0.0, 0.7, wDepth));
+float fn = texture2D(normalMap, vWPos * 0.6 + vec2(gTime * 0.05, 0.0)).x;
+wFoam = (1.0 - smoothstep(0.0, 0.09, wDepth)) * smoothstep(0.35, 0.65, fn + 0.25 * sin(gTime * 1.3 + vWPos.x * 0.7 + vWPos.y * 0.4));
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 0.97), wFoam * 0.85);
+diffuseColor.a = mix(0.35, 0.94, smoothstep(0.0, 0.5, wDepth)) + wFoam * 0.5;`)
+          .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+roughnessFactor = mix(roughnessFactor, 0.8, wFoam);`);
+      };
+      mat.customProgramCacheKey = () => `water-${high}`;
+    }
+    const geo = new THREE.PlaneGeometry(SIZE * 1.5, SIZE * 1.5);
+    const water = new THREE.Mesh(geo, mat);
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = this.waterLevel;
+    water.receiveShadow = true;
+    water.userData.depthTex = depthTex;
+    return water;
   }
 
   /** Met à jour le ciel et la lumière selon l'heure (0–24) et la météo. */
@@ -296,18 +522,26 @@ export class World {
     const u = this.sky.material.uniforms;
     u.sunPosition.value.copy(this.sunDir);
     const overcast = { clear: 0, cloudy: 0.5, rain: 0.8, storm: 0.95, snow: 0.75, fog: 0.7 }[weather] ?? 0;
-    u.turbidity.value = 2 + overcast * 14;
-    u.rayleigh.value = 1.2 + overcast * 1.5;
-    u.mieCoefficient.value = 0.004 + overcast * 0.02;
-    u.mieDirectionalG.value = 0.8;
+    const wind = { clear: 0.6, cloudy: 1, rain: 1.4, storm: 2.2, snow: 0.8, fog: 0.3 }[weather] ?? 0.8;
+    gfx.wind.value += (wind - gfx.wind.value) * 0.02;
+    const low = smooth(30, 0, elev) * smooth(-8, 2, elev);
+    u.turbidity.value = 2 + overcast * 14 + low * 5;
+    u.rayleigh.value = 1.2 + overcast * 1.5 + low * 1.3;
+    u.mieCoefficient.value = 0.004 + overcast * 0.02 + low * 0.005;
+    u.mieDirectionalG.value = 0.8 + low * 0.08;
 
     const day = smooth(-6, 10, elev);
     const golden = smooth(25, 2, elev) * day;
-    this.sun.intensity = 2.8 * day * (1 - overcast * 0.75);
-    this.sun.color.setHSL(0.09, 0.4 + golden * 0.5, 0.92 - golden * 0.2);
-    this.hemi.intensity = 0.22 + 0.9 * day * (1 - overcast * 0.3);
-    this.hemi.color.setHSL(0.58, 0.4, 0.35 + 0.45 * day);
-    this.hemi.groundColor.setHSL(0.25, 0.3, 0.1 + 0.25 * day);
+    const env = !!this.pmrem;
+    this.sun.intensity = (env ? 3.6 : 2.8) * day * (1 - overcast * 0.8);
+    this.sun.color.setHSL(0.08, 0.35 + golden * 0.55, 0.93 - golden * 0.22);
+    // Avec l'éclairage par le ciel, la lumière d'ambiance ne sert plus que d'appoint (et la nuit).
+    this.hemi.intensity = env ? 0.12 + 0.2 * day * (1 - overcast * 0.3) + 0.18 * (1 - day) : 0.22 + 0.9 * day * (1 - overcast * 0.3);
+    this.hemi.color.setHSL(0.6, 0.45, 0.3 + 0.45 * day);
+    this.hemi.groundColor.setHSL(0.22, 0.3, 0.08 + 0.22 * day);
+    const groundCol = new THREE.Color(this.place ? GROUND[this.place.biome][this.season] : 0x6f9a44);
+    this.updateEnvironment(day, overcast, groundCol);
+    this.scene.environmentIntensity = 0.45 + 0.4 * overcast;
 
     // Lumière : le soleil suit le joueur pour garder des ombres nettes autour de lui.
     const lightDir = elev > 0 ? this.sunDir : this.sunDir.clone().setY(Math.abs(this.sunDir.y) + 0.3);
@@ -315,7 +549,7 @@ export class World {
     this.sun.target.position.copy(focus);
     if (elev <= 0) {
       // Clair de lune bleuté.
-      this.sun.intensity = 0.35 * (1 - overcast * 0.6);
+      this.sun.intensity = 0.45 * (1 - overcast * 0.6);
       this.sun.color.setHex(0x9fb7e8);
     }
 
@@ -324,15 +558,19 @@ export class World {
     const fogColor = fogNight.lerp(fogDay, day).lerp(new THREE.Color(0xe7a678), golden * 0.35 * (1 - overcast));
     this.scene.fog.color.copy(fogColor);
     const foggy = weather === 'fog' ? 1 : weather === 'snow' || weather === 'rain' || weather === 'storm' ? 0.5 : 0;
-    this.scene.fog.near = 60 - foggy * 52;
-    this.scene.fog.far = 380 - foggy * 300;
+    this.scene.fog.near = 90 - foggy * 82;
+    this.scene.fog.far = 650 - foggy * 570;
 
     this.stars.material.opacity = (1 - day) * (1 - overcast);
+    u.skyTint.value.setRGB(1, 1, 1).lerp(new THREE.Color(0.55, 0.75, 1.5), 1 - day);
+    this.moon.visible = day < 0.6;
+    this.moon.material.opacity = (1 - day) * (1 - overcast * 0.8);
+    this.moon.position.copy(focus).addScaledVector(new THREE.Vector3(-this.sunDir.x, Math.abs(this.sunDir.y) * 0.8 + 0.25, -this.sunDir.z).normalize(), 1800);
     this.stars.position.set(focus.x, 0, focus.z);
     const cloudVis = { clear: 0.35, cloudy: 0.9, rain: 1, storm: 1, snow: 1, fog: 0.6 }[weather] ?? 0.4;
     const cm = this.clouds.userData.mat;
-    cm.opacity = cloudVis * 0.9;
-    cm.color.setHSL(0, 0, 0.25 + 0.7 * day * (1 - overcast * 0.45));
+    cm.opacity = Math.min(1, cloudVis * 1.05);
+    cm.color.setHSL(0.07, 0.6 * golden, 0.12 + 0.82 * day * (1 - overcast * 0.45));
     this.clouds.visible = cloudVis > 0.01;
 
     const lit = 1 - day;
@@ -341,6 +579,7 @@ export class World {
   }
 
   updateClouds(dt) {
+    gfx.time.value += dt;
     for (const c of this.clouds.children) {
       c.position.x += dt * 1.5;
       if (c.position.x > 380) c.position.x = -380;

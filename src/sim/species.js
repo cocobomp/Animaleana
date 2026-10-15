@@ -191,7 +191,7 @@ export const SPECIES = {
     training: [],
     tricks: ['come'],
     model: {
-      bodyLen: 0.95, bodyR: 0.3, legLen: 0.42, legR: 0.035, neckLen: 0.2, neckAngle: 0.95,
+      bodyLen: 0.95, bodyR: 0.3, legLen: 0.42, legR: 0.035, neckLen: 0.26, neckAngle: 0.95,
       headLen: 0.22, headR: 0.085, earType: 'sheep', tailType: 'stub', snout: 0.7, wool: true,
     },
     breeds: [

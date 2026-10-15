@@ -47,7 +47,7 @@ export function showProfiles(ui) {
       profiles.length ? h('h2', {}, t('profiles')) : null,
       h('div', { class: 'profiles' }, list),
       h('button', { class: 'primary big', onClick: () => newProfile(ui, render) }, `➕ ${t('newProfile')}`),
-      h('p', { class: 'offline' }, `📴 ${t('offline')}`)));
+      h('p', { class: 'offline' }, window.offlineState ? `${window.offlineState === 'ready' ? '✅' : '⏳'} ${t(window.offlineState === 'ready' ? 'offlineReady' : 'offlinePreparing')}` : `📴 ${t('offline')}`)));
     ui.screen.hidden = false;
   };
   render();

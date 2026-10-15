@@ -1,7 +1,7 @@
 // Point d'entrée : prépare l'interface, le moteur 3D et le mode hors ligne.
 
 import './style.css';
-import { setLang, getLang } from './i18n.js';
+import { t, setLang, getLang } from './i18n.js';
 import { UI } from './ui/UI.js';
 import { Game } from './game/Game.js';
 import { Tutorial } from './ui/tutorial.js';
@@ -17,10 +17,22 @@ ui.tutorial = new Tutorial(ui, game);
 ui.showProfiles();
 
 // Le service worker garde tout le jeu en cache pour jouer sans réseau.
+// L'écran d'accueil dit quand c'est prêt (« ✅ Prêt à jouer sans Internet »).
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
+  const show = (state) => {
+    window.offlineState = state;
+    const el = document.querySelector('.offline');
+    if (el) el.textContent = `${state === 'ready' ? '✅' : '⏳'} ${t(state === 'ready' ? 'offlineReady' : 'offlinePreparing')}`;
+  };
+  show('preparing');
+  const check = async () => {
+    const keys = await caches.keys();
+    const ok = await Promise.all(keys.filter((k) => k.startsWith('animaleana-')).map((k) => caches.open(k).then((c) => c.match('./index.html'))));
+    if (ok.some(Boolean)) show('ready');
+  };
+  navigator.serviceWorker.register('./sw.js').then(() => navigator.serviceWorker.ready).then(check).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', check);
+  setTimeout(check, 4000);
 }
 
 // Accès depuis la console du navigateur (pratique pour tester).

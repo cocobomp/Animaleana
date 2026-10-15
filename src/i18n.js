@@ -17,6 +17,8 @@ const fr = {
   modeManageDesc: 'Il faut gagner et gérer son argent.',
   language: 'Langue',
   animalsCount: '{n} animaux',
+  offlineReady: 'Prêt : le jeu marche maintenant sans Internet',
+  offlinePreparing: 'Préparation pour jouer sans Internet… garde Internet quelques secondes',
   offline: 'Fonctionne sans réseau',
 
   avatarTitle: 'Ton avatar',
@@ -1685,6 +1687,8 @@ const en = {
   modeManageDesc: 'Earn and manage your money.',
   language: 'Language',
   animalsCount: '{n} animals',
+  offlineReady: 'Ready: the game now works without Internet',
+  offlinePreparing: 'Getting ready to play offline… keep Internet on for a few seconds',
   offline: 'Works offline',
 
   avatarTitle: 'Your avatar',

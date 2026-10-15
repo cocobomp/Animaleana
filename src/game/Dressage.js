@@ -197,7 +197,7 @@ class DressageSession extends ArenaSession {
     const f = this.fig;
     this.marks.push({ n: f.n, id: f.id, mark, comment });
     this.hud.big(`${mark}/10 ${mark >= 8 ? '✨' : mark >= 5 ? '👍' : '💭'}`, 1300, mark >= 7 ? 'good' : mark < 4 ? 'bad' : '');
-    this.game.ui.toast(`🧑‍⚖️ ${t(`dr_say_${comment}`)}`, 3500);
+    this.hud.hint(`🧑‍⚖️ ${t(`dr_say_${comment}`)}`, 3500); // le mot du juge (à la place de l'aide)
     if (mark >= 8) this.mount.emit('⭐', 2);
     if (this.comp && mark >= 7) this.applause(0.4);
     this.fig = null;

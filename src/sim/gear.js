@@ -49,10 +49,13 @@ export function unequip(a, slot) {
 
 export const wears = (a, item) => Object.values(a.gear ?? {}).some((g) => g.item === item);
 
-/** Il faut un filet pour monter ; sans selle on monte « à cru », moins vite. */
-export function rideGear(a) {
-  if (!wears(a, 'bridle')) return { ok: false, reason: 'needBridle' };
-  return { ok: true, bareback: !wears(a, 'saddle') };
+/**
+ * Pour monter il faut au moins un filet ou un licol (avec les rênes).
+ * Sans selle, ou si on le choisit, on monte « à cru » : un peu moins vite.
+ */
+export function rideGear(a, wantBareback = false) {
+  if (!wears(a, 'bridle') && !wears(a, 'halter')) return { ok: false, reason: 'needBridle' };
+  return { ok: true, bareback: wantBareback || !wears(a, 'saddle') };
 }
 
 /** Promener un chien en laisse : il faut le collier et la laisse. */

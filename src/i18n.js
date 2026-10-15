@@ -532,8 +532,8 @@ const fr = {
   statusFollowing: '{name} te suit',
   statusHerding: '{name} conduit le troupeau',
   statusStop: 'Arrêter',
-  r_needBridle: 'Il faut mettre un filet à {name} pour le monter (fiche de l\'animal ou sellerie de l\'écurie).',
-  r_needBridle_f: 'Il faut mettre un filet à {name} pour la monter (fiche de l\'animal ou sellerie de l\'écurie).',
+  r_needBridle: 'Il faut mettre un filet ou un licol à {name} pour le monter (fiche de l\'animal).',
+  r_needBridle_f: 'Il faut mettre un filet ou un licol à {name} pour la monter (fiche de l\'animal).',
   ridingBareback: 'Tu montes {name} à cru (sans selle) : il va moins vite. Maj pour galoper !',
   ridingBareback_f: 'Tu montes {name} à cru (sans selle) : elle va moins vite. Maj pour galoper !',
   do_tack: 'Sellerie (selles, couvertures…)',
@@ -657,6 +657,12 @@ const fr = {
   leashOff: '{name} n\'est plus en laisse.',
   r_needLeash: 'Mets d\'abord un collier et une laisse à {name} (dans sa fiche).',
   statusLeash: 'Tu promènes {name}',
+
+  rideBareback: 'Monter à cru',
+  do_leadIn: 'Rentrer le troupeau moi-même',
+  do_leadOut: 'Emmener le troupeau au pré moi-même',
+  leadFlockRiding: '🤠 À toi de diriger le troupeau ! Place-toi derrière les animaux pour les pousser vers la bonne direction.',
+  leadFlockFoot: '🤠 À toi de diriger le troupeau ! Marche derrière les animaux pour les pousser (c\'est plus facile à cheval).',
 };
 
 const en = {
@@ -1262,6 +1268,12 @@ const en = {
   leashOff: '{name} is off the leash.',
   r_needLeash: 'Put a collar and a leash on {name} first (in their card).',
   statusLeash: 'Walking {name}',
+
+  rideBareback: 'Ride bareback',
+  do_leadIn: 'Bring the herd in myself',
+  do_leadOut: 'Take the herd to the field myself',
+  leadFlockRiding: '🤠 Your turn to drive the herd! Get behind the animals to push them the right way.',
+  leadFlockFoot: '🤠 Your turn to drive the herd! Walk behind the animals to push them (easier on horseback).',
 };
 
 const DICTS = { fr, en };

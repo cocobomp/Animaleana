@@ -10,10 +10,13 @@ describe('équipement', () => {
     const horse = createAnimal({ species: 'horse', ageDays: 80 });
     p.animals.push(horse);
     expect(rideGear(horse).reason).toBe('needBridle');
+    equip(p, horse, 'halter');
+    expect(rideGear(horse)).toEqual({ ok: true, bareback: true });
     expect(equip(p, horse, 'bridle').ok).toBe(true);
     expect(rideGear(horse)).toEqual({ ok: true, bareback: true });
     equip(p, horse, 'saddle');
     expect(rideGear(horse).bareback).toBe(false);
+    expect(rideGear(horse, true).bareback).toBe(true);
   });
 
   it('on ne peut pas mettre un objet qu\'on n\'a pas', () => {

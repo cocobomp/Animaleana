@@ -41,6 +41,8 @@ const RULES = {
   pen: [
     { id: 'outFlock', icon: '🌿', when: (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18) },
     { id: 'inFlock', icon: '🏠', when: (c) => need(c.count.livestock) },
+    { id: 'leadIn', icon: '🤠', when: (c) => need(c.count.livestock) },
+    { id: 'leadOut', icon: '🤠', when: (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18) },
     { id: 'hayFlock', icon: '🌾', when: (c) => need(c.count.livestock) },
     { id: 'waterFlock', icon: '💧', when: (c) => need(c.count.livestock) },
     { id: 'cleanPen', icon: '🧹', when: (c) => (c.count.penDroppings > 0 ? null : { reason: 'alreadyClean' }) },

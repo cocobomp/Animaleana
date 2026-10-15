@@ -78,11 +78,12 @@ export class Herding {
       spot.x = Math.max(PEN.x - 9, Math.min(PEN.x + 9, spot.x));
       spot.z = Math.max(PEN.z - 6, Math.min(PEN.z + 6, spot.z));
     }
-    if (h.pusher.herdCtrl?.pusher) h.pusher.herdCtrl.target.copy(spot);
+    // Quand c'est le joueur qui dirige, c'est lui qui se place : on ne le déplace pas.
+    if (h.pusher.isPlayer) { /* rien */ } else if (h.pusher.herdCtrl?.pusher) h.pusher.herdCtrl.target.copy(spot);
     else h.pusher.forced = spot;
 
     if (flock.every((e) => this.arrived(e, h.dest))) this.stop(true);
-    else if (h.time > 90) this.stop(true);
+    else if (h.time > (h.pusher.isPlayer ? 300 : 90)) this.stop(h.pusher.isPlayer ? false : true);
   }
 
   stop(success) {
@@ -96,7 +97,7 @@ export class Herding {
       if (success) e.data.zone = h.dest;
     }
     if (h.pusher.herdCtrl) h.pusher.herdCtrl = null;
-    h.pusher.forced = null;
+    if (!h.pusher.isPlayer) h.pusher.forced = null;
     if (success) this.game.herdingDone(h.dest, h.pusher);
   }
 }

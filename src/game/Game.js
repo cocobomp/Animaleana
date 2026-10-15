@@ -787,6 +787,14 @@ export class Game {
     return n > 0;
   }
 
+  /** Diriger le troupeau soi-même, à pied ou à cheval : les animaux s'écartent devant le joueur. */
+  leadFlock(dest) {
+    const me = { isPlayer: true, position: this.player.position, data: { name: this.profile.name } };
+    if (!this.herding.start(dest, me)) return this.ui.toast(t('noFlock'));
+    this.ui.toast(t(this.player.mount ? 'leadFlockRiding' : 'leadFlockFoot'), 6000);
+    return true;
+  }
+
   checkHorses() {
     const horses = this.animalsHere().filter((a) => a.species === 'horse');
     const sick = horses.filter((a) => a.sick || mood(a) === 'sad');
@@ -921,12 +929,13 @@ export class Game {
     return r;
   }
 
-  ride(a) {
+  ride(a, bareback = false) {
     const r = canRide(a);
     if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
-    const gear = rideGear(a);
+    const gear = rideGear(a, bareback);
     if (!gear.ok) return this.ui.toast(t('r_needBridle', { name: a.name, g: a.sex }), 5000);
     this.bareback = gear.bareback;
+    this.player.bareback = gear.bareback;
     const e = this.entities.get(a.id);
     if (!e) return null;
     this.player.ride(e);

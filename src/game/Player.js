@@ -126,7 +126,7 @@ export class Player {
     let max = run ? RUN : WALK;
     if (mount) {
       const skill = 1 + mount.data.skills.speed / 150;
-      max = (run ? 11 : 4.5) * skill * Math.min(1.2, mount.scale + 0.2) * (mount.data.gear?.saddle ? 1 : 0.75);
+      max = (run ? 11 : 4.5) * skill * Math.min(1.2, mount.scale + 0.2) * (this.bareback || !mount.data.gear?.saddle ? 0.8 : 1);
       if (mount.data.needs.energy < 10) max = 2;
     }
     const target = amount > 0.05 ? max * Math.min(1, amount) : 0;

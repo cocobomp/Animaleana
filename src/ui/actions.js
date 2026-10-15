@@ -67,6 +67,8 @@ export function openBuilding(ui, kind) {
     cleanPen: () => { ui.toast(t('scoopedN', { n: g.cleanZone('pen') })); ui.renderPanel(); },
     outFlock: () => { close(); g.moveFlock('field'); },
     inFlock: () => { close(); g.moveFlock('pen'); },
+    leadIn: () => { close(); g.leadFlock('pen'); },
+    leadOut: () => { close(); g.leadFlock('field'); },
     hayFlock: () => ui.groupCareWithGame((a) => SPECIES[a.species].livestock, 'feed'),
     waterFlock: () => ui.groupCareWithGame((a) => SPECIES[a.species].livestock, 'water'),
     milkAll: () => g.groupCollect('milk'),
@@ -140,6 +142,16 @@ export function openAnimalActions(ui, a) {
         enabled: !!a.produceReady,
         why: ta('r_notReady', a),
         run: () => ui.collectWithGame(a),
+      });
+    }
+    if (sp.rideable && a.gear?.saddle) {
+      const r = canRide(a);
+      items.push({
+        icon: '🐎',
+        label: t('rideBareback'),
+        enabled: r.ok,
+        why: ta(`r_${r.reason}`, a),
+        run: () => { if (g.ride(a, true)) ui.closePanel(); },
       });
     }
     if (sp.rideable) {

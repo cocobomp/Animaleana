@@ -9,7 +9,7 @@ import { barkTexture, leafTexture } from '../textures.js';
 import { mulberry32 } from '../../sim/rng.js';
 
 // Couleurs du feuillage selon la saison (null = arbre sans feuilles).
-const FOLIAGE = {
+export const FOLIAGE = {
   deciduous: { spring: 0x6fa13d, summer: 0x4f8a32, autumn: 0xc77a2a, winter: null },
   maple: { spring: 0x76a845, summer: 0x4d8a34, autumn: 0xc8422a, winter: null },
   cherry: { spring: 0xf2b6c8, summer: 0x5a8f38, autumn: 0xd0702e, winter: null },

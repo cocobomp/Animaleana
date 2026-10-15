@@ -88,6 +88,61 @@ function braidMesh(from, to, radius, color) {
   return g;
 }
 
+/**
+ * Repère de l'encolure, valable pour les deux sortes de modèles : le modèle procédural (groupe « neck »,
+ * y vers la tête, crête du côté −z) et le modèle GLB (ancre « neck » posée sur l'os, même convention).
+ * Renvoie { len (longueur jusqu'à la tête), down (le bas du monde vu depuis l'encolure) }.
+ */
+function neckFrame(model, fallbackLen) {
+  const neck = model.neck;
+  model.root?.updateMatrixWorld?.(true);
+  let len = fallbackLen;
+  if (model.head) {
+    const p = neck.worldToLocal(model.head.getWorldPosition(new THREE.Vector3()));
+    const d = p.length();
+    if (d > 0.02 && d < 6) len = d;
+  }
+  const rootQ = model.root?.getWorldQuaternion(new THREE.Quaternion()) ?? new THREE.Quaternion();
+  const neckQ = neck.getWorldQuaternion(new THREE.Quaternion());
+  const rel = rootQ.invert().multiply(neckQ); // encolure dans le repère de l'animal
+  const down = new THREE.Vector3(0, -1, 0).applyQuaternion(rel.invert()).normalize();
+  return { len, down };
+}
+
+/** Les maillages du modèle qu'on peut toucher avec un rayon (corps, encolure, crinière). */
+function modelMeshes(model, skip) {
+  const list = [];
+  model.root?.traverse((o) => {
+    if (!o.isMesh || skip.has(o) || o.material?.transparent) return;
+    list.push(o);
+  });
+  return list;
+}
+
+const _ray = new THREE.Raycaster();
+
+/**
+ * Point de la surface du modèle vu depuis l'extérieur : on lance un rayon depuis `outside` (repère du parent)
+ * vers `inside`. Ainsi les tresses se posent sur le dessus de la crinière, quelle que soit la forme du cou
+ * (procédural, nouveau cheval, modèle GLB). Renvoie null si le rayon ne touche rien.
+ */
+function surfaceHit(parent, outside, inside, meshes) {
+  if (!meshes.length) return null;
+  const o = parent.localToWorld(outside.clone());
+  const target = parent.localToWorld(inside.clone());
+  const dir = target.sub(o);
+  const far = dir.length();
+  _ray.set(o, dir.normalize());
+  _ray.far = far;
+  let hit = null;
+  try {
+    hit = _ray.intersectObjects(meshes, false)[0] ?? null;
+  } catch {
+    hit = null;
+  }
+  return hit ? parent.worldToLocal(hit.point.clone()) : null;
+}
+
 /** Construit (ou enlève) les tresses, nœuds et le brillant de l'animal selon sa préparation. */
 export function applyBeautyDecor(e, now) {
   const a = e.data;
@@ -99,42 +154,56 @@ export function applyBeautyDecor(e, now) {
   const model = e.model;
   const decor = { key, model, groups: [], mats: [] };
   e.beautyDecor = decor;
-  if (!model || !look) return;
+  if (!model || !look || !key.replace(/\|/g, '')) return;
   const R = (look.bodyR ?? 0.3) * (look.fluff ?? 1);
-  const nl = look.neckLen ?? R;
   const prep = a.beauty?.prep ?? {};
   const add = (parent, obj) => {
     if (!parent) return;
     parent.add(obj);
     decor.groups.push(obj);
   };
+  let meshes = null;
+  const hitList = () => {
+    meshes = meshes ?? modelMeshes(model, new Set());
+    return meshes;
+  };
 
   // Tresses de crinière et de queue (chevaux), rubans à la couleur choisie.
   if (isFresh(a, 'braid', now) && a.species === 'horse') {
     const ribbon = RIBBON_COLORS[prep.braid?.color] ?? RIBBON_COLORS.red;
     const mane = look.mane ?? look.secondary ?? 0x4a2f1d;
-    const na = look.neckAngle ?? 0.9;
-    const down = new THREE.Vector3(0, -Math.cos(na), Math.sin(na));
-    const group = new THREE.Group();
-    const count = 7;
-    for (let i = 0; i < count; i++) {
-      const tt = 0.1 + (i / (count - 1)) * 0.8;
-      // La ligne du dessus de l'encolure (crête), un peu plus près du cou vers la tête.
-      const base = new THREE.Vector3(0.03, tt * nl, -R * (0.66 - 0.36 * tt));
-      const len = R * (0.5 - tt * 0.12);
-      const end = base.clone().addScaledVector(down, len).add(new THREE.Vector3(R * 0.1, 0, 0));
-      group.add(braidMesh(base, end, R * 0.075, mane));
-      const bow = bowMesh(ribbon, R * 0.07, 'plain');
-      bow.position.copy(end);
-      bow.rotation.x = -na;
-      group.add(bow);
+    if (model.neck) {
+      const { len: nl, down } = neckFrame(model, look.neckLen ?? R);
+      const group = new THREE.Group();
+      const count = 7;
+      for (let i = 0; i < count; i++) {
+        const tt = 0.12 + (i / (count - 1)) * 0.72;
+        // Sur la crête de l'encolure : un rayon venu d'au-dessus (côté −z) trouve la crinière.
+        const guess = new THREE.Vector3(0, tt * nl, -R * (0.66 - 0.36 * tt));
+        const hit = surfaceHit(model.neck, new THREE.Vector3(0, tt * nl, -R * 2.5), new THREE.Vector3(0, tt * nl, 0), hitList());
+        const base = (hit ?? guess).add(new THREE.Vector3(0, 0, -R * 0.03));
+        const blen = R * (0.42 - tt * 0.12);
+        const end = base.clone().addScaledVector(down, blen).add(new THREE.Vector3(R * 0.12, 0, 0));
+        group.add(braidMesh(base, end, R * 0.075, mane));
+        // Le petit nœud au bout de chaque tresse, tourné vers le côté
+        const bow = bowMesh(ribbon, R * 0.075, 'plain');
+        bow.position.copy(end);
+        bow.lookAt(end.clone().add(new THREE.Vector3(1, 0, 0)));
+        group.add(bow);
+        // Et un pompon sur la crête
+        const knob = new THREE.Mesh(new THREE.SphereGeometry(R * 0.06, 10, 8), mat(ribbon, 0.5));
+        knob.position.copy(base);
+        group.add(knob);
+      }
+      add(model.neck, group);
     }
-    add(model.neck, group);
     if (model.tail) {
+      // La queue : modèle procédural (groupe « tail » à la racine) ou ancre GLB (même repère que l'animal).
       const tg = new THREE.Group();
-      tg.add(braidMesh(new THREE.Vector3(0, -R * 0.12, -R * 0.14), new THREE.Vector3(0, -R * 0.75, -R * 0.24), R * 0.09, mane));
-      const bow = bowMesh(ribbon, R * 0.09, 'plain');
+      tg.add(braidMesh(new THREE.Vector3(0, -R * 0.08, -R * 0.14), new THREE.Vector3(0, -R * 0.7, -R * 0.26), R * 0.1, mane));
+      const bow = bowMesh(ribbon, R * 0.11, 'plain');
       bow.position.set(0, -R * 0.02, -R * 0.2);
+      bow.rotation.y = Math.PI;
       tg.add(bow);
       add(model.tail, tg);
     }
@@ -145,7 +214,10 @@ export function applyBeautyDecor(e, now) {
     const color = RIBBON_COLORS[prep.bow?.color] ?? RIBBON_COLORS.red;
     const bow = bowMesh(color, R * 0.16, prep.bow?.pattern ?? 'plain');
     if (model.neck) {
-      bow.position.set(R * 0.08, nl * 0.55, -R * 0.52);
+      const { len: nl } = neckFrame(model, look.neckLen ?? R);
+      const t = 0.5;
+      const hit = surfaceHit(model.neck, new THREE.Vector3(0, t * nl, -R * 2.5), new THREE.Vector3(0, t * nl, 0), hitList());
+      bow.position.copy(hit ?? new THREE.Vector3(0, t * nl, -R * 0.52)).add(new THREE.Vector3(0, 0, -R * 0.05));
       bow.rotation.x = -0.5;
       add(model.neck, bow);
     } else if (model.body) {
@@ -156,10 +228,15 @@ export function applyBeautyDecor(e, now) {
 
   // Robe lustrée : la robe est moins rugueuse (elle brille au soleil) tant que le lustrage est frais.
   if (isFresh(a, 'shine', now) && model.root) {
+    const own = new Set();
+    for (const g of decor.groups) g.traverse((o) => own.add(o));
     model.root.traverse((o) => {
       const m = o.material;
-      if (!o.isMesh || !m?.isMeshStandardMaterial || m.transparent || m.alphaTest > 0) return;
+      if (!o.isMesh || own.has(o) || !m?.isMeshStandardMaterial || m.transparent || m.alphaTest > 0) return;
       const shiny = m.clone();
+      // Les matériaux à shader maison (fourrure, crins) gardent leur shader.
+      shiny.onBeforeCompile = m.onBeforeCompile;
+      shiny.customProgramCacheKey = m.customProgramCacheKey;
       shiny.roughness = Math.max(0.12, (m.roughness ?? 0.8) - 0.4);
       shiny.metalness = Math.min(0.3, (m.metalness ?? 0) + 0.08);
       o.material = shiny;

@@ -1,0 +1,22 @@
+Ultimate Nature Pack (150 lowpoly nature models) — par Quaternius
+Fichier(s) du jeu : tree_common.glb (CommonTree_4), tree_common2.glb (CommonTree_3),
+                    tree_birch.glb (BirchTree_2), tree_pine.glb (PineTree_2),
+                    rock_a.glb (Rock_1), rock_b.glb (Rock_3), rock_moss.glb (Rock_Moss_2), bush.glb (Bush_2)
+                    (convertis de FBX, couleurs de matériaux rétablies, compression meshopt)
+
+Source : https://quaternius.itch.io/150-lowpoly-nature-models
+         https://quaternius.com/packs/ultimatenature.html
+
+Licence (License.txt fourni dans l'archive, reproduit tel quel) :
+
+------------------------------------------------------
+LowPoly Models by @Quaternius
+Consider supporting me on Patreon, even $1 helps me a lot!
+
+https://www.patreon.com/quaternius
+-------------------------------------------------------
+
+License:
+CC0 1.0 Universal (CC0 1.0)
+Public Domain Dedication
+https://creativecommons.org/publicdomain/zero/1.0/

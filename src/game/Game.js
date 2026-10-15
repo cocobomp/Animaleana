@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { World } from './World.js';
 import { gfx } from './gfx.js';
+import { preloadModels } from './assets.js';
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
@@ -12,6 +13,7 @@ import { Herding } from './Herding.js';
 import { TaskQueue } from './TaskQueue.js';
 import { Interiors } from './Interiors.js'; // écurie et maison où l'on entre, box, corvées
 import { Events } from './Events.js'; // événements spéciaux (orage, animal blessé…)
+import { Clients } from './Clients.js'; // clients (pension, soins) et métiers
 import { EQUIPMENT_MODELS } from './models/equipment.js';
 import { disposeModel } from './models/animalModel.js';
 import {
@@ -29,6 +31,7 @@ import { adoptionPrice, shopPrice, stageAgeDays } from '../sim/adoption.js';
 import { checkObjectives } from '../sim/objectives.js';
 import { saveProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
 import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
+import { addHelperXp, tireHelper, restHelper, updateBreak, onBreak, startBreak } from '../sim/helpers.js'; // les aides progressent
 import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
 import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone } from '../sim/droppings.js';
 import { enclosure } from './nav.js';
@@ -108,6 +111,7 @@ export class Game {
     this.tasks = new TaskQueue(this);
     this.interiors = new Interiors(this);
     this.events = new Events(this);
+    this.clients = new Clients(this); // visiteurs, animaux confiés, métiers
     this.activities = new Activities(this);
     this.beauty = new Beauty(this); // concours de beauté (game.beauty)
     this.droppingMeshes = new Map();
@@ -133,11 +137,18 @@ export class Game {
     window.addEventListener('pagehide', () => this.save());
     this.clock = new THREE.Clock();
     renderer.setAnimationLoop(() => this.frame());
+    // Modèles 3D (GLB) : chargés pendant l'écran des profils ; start() attend qu'ils soient prêts.
+    this.modelsLoaded = false;
+    this.modelsReady = preloadModels().then((n) => { this.modelsLoaded = true; return n; });
   }
 
   // ---------------------------------------------------------------- partie
 
   start(profile) {
+    if (!this.modelsLoaded) {
+      this.modelsReady.then(() => this.start(profile));
+      return;
+    }
     this.profile = profile;
     this.rig.mode = profile.settings.camera ?? 'third';
     this.player = this.player ?? new Player(this.scene, this.world, profile.avatar);
@@ -347,6 +358,7 @@ export class Game {
       this.handleEvents(a, events);
     }
     this.farmTick(here, hours, true);
+    this.clients.onTimeSkipped(); // les journées des animaux confiés sont notées (src/game/Clients.js)
     this.updateWeather();
   }
 
@@ -370,8 +382,17 @@ export class Game {
         for (let i = 0; i < Math.min(12, Math.ceil(hours)); i++) {
           const task = this.helperTaskFor(h);
           if (!task) break;
-          doHelperTask(p, task, here);
+          if (doHelperTask(p, task, here, h).ok) addHelperXp(h, 3);
         }
+        restHelper(h, hours * 0.5); // la nuit, on se repose aussi
+      }
+    }
+    // Pauses des aides : fin de la pause, ou pause d'office quand elles sont épuisées.
+    for (const h of p.helpers.filter((x) => x.place === p.place)) {
+      if (updateBreak(h, p.clock)) this.ui.toast(t('helperBack', { name: h.name, g: h.sex }), 4000);
+      else if (!onBreak(h, p.clock) && (h.mood ?? 80) < 12) {
+        startBreak(h, p.clock);
+        this.ui.toast(t('helperTiredBreak', { name: h.name, g: h.sex }), 5000);
       }
     }
     const day = this.day;
@@ -543,6 +564,7 @@ export class Game {
     this.marker.update(dt);
     this.updateFocus();
     this.events.update(dt); // événements spéciaux
+    this.clients.update(dt); // clients et métiers
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -603,6 +625,17 @@ export class Game {
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
     if (this.tripFlow.onTap(this.raycaster)) return; // chargement du véhicule de voyage
+    // Une aide : on va la voir et on discute (src/ui/helperChat.js).
+    const hitH = this.raycaster.intersectObjects([...this.helpers.values()].map((x) => x.root), true)[0];
+    if (hitH) {
+      const helper = [...this.helpers.values()].find((x) => { let o = hitH.object; while (o && o !== x.root) o = o.parent; return !!o; });
+      if (helper) {
+        if (paused) this.ui.openHelper(helper.data);
+        else this.walkTo(helper.position, 1.8, () => this.ui.openHelper(helper.data), true);
+        return;
+      }
+    }
+    if (this.clients.onTap(this.raycaster)) return; // un visiteur (client) : on va lui parler
     const roots = [...this.entities.values()].filter((e) => !e.ridden && !e.inside).map((e) => e.root);
     const hitA = this.raycaster.intersectObjects(roots, true).find((h) => !h.object.isSprite || h.object === h.object.parent?.userData?.entity?.label);
     if (hitA) {
@@ -1053,7 +1086,7 @@ export class Game {
     if (this.player.mount) {
       best = { kind: 'dismount' };
     } else {
-      best = this.tripFlow.focusNear(pp); // près du véhicule de voyage : faire monter les animaux
+      best = this.tripFlow.focusNear(pp) ?? this.clients.focusNear(pp); // véhicule de voyage, ou visiteur (client)
       let bestD = best ? -1 : Infinity;
       for (const e of this.entities.values()) {
         if (e.inside) continue; // rangé dans la maison des animaux
@@ -1061,6 +1094,13 @@ export class Game {
         if (d < 1.6 && d < bestD) {
           bestD = d;
           best = { kind: 'animal', entity: e };
+        }
+      }
+      for (const hp of this.helpers.values()) {
+        const d = Math.hypot(hp.position.x - pp.x, hp.position.z - pp.z) - 0.4;
+        if (d < 1.4 && d < bestD) {
+          bestD = d;
+          best = { kind: 'helper', helper: hp, id: hp.data.id };
         }
       }
       if (!best) {
@@ -1093,6 +1133,7 @@ export class Game {
     if (!f) return;
     switch (f.kind) {
       case 'animal': this.ui.openAnimalActions(f.entity.data); break;
+      case 'helper': this.ui.openHelper(f.helper.data); break;
       case 'refuge':
       case 'petshop':
       case 'tackroom':
@@ -1110,6 +1151,7 @@ export class Game {
       case 'dismount': this.dismount(); break;
       case 'spot': f.run(); break; // un coin de l'écurie ou de la maison
       case 'vehicle': this.tripFlow.interact(); break;
+      case 'client': this.clients.talk(); break; // parler au visiteur (src/game/Clients.js)
       default:
     }
   }
@@ -1160,6 +1202,7 @@ export class Game {
   }
 
   trick(a, trickId) {
+    if (a.client) return this.ui.toast(t('cl_notYours', { name: a.name, g: a.sex })); // animal confié (src/sim/clients.js)
     const r = trainTrick(a, trickId);
     if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex, n: r.need }));
     const e = this.entities.get(a.id);
@@ -1186,6 +1229,7 @@ export class Game {
   }
 
   train(a, trainingId) {
+    if (a.client) return this.ui.toast(t('cl_notYours', { name: a.name, g: a.sex })); // animal confié
     const tool = missingTool(this.profile, trainingId);
     if (tool) return this.ui.toast(t('r_needTool', { tool: `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}` }), 5000);
     const r = trainSkill(a, trainingId);
@@ -1336,7 +1380,8 @@ export class Game {
   }
 
   breedingPartners(a) {
-    return this.animalsHere().filter((b) => b.id !== a.id && b.species === a.species && b.sex !== a.sex);
+    if (a.client) return []; // animal confié : pas de bébés
+    return this.animalsHere().filter((b) => b.id !== a.id && !b.client && b.species === a.species && b.sex !== a.sex);
   }
 
   canBreed(a, b) {
@@ -1490,8 +1535,15 @@ export class Game {
 
   helperDone(helper, task) {
     if (!task) return;
-    const r = doHelperTask(this.profile, task, this.animalsHere());
+    const r = doHelperTask(this.profile, task, this.animalsHere(), helper.data);
     if (!r.ok) return;
+    // L'aide gagne de l'expérience (et se fatigue un peu).
+    tireHelper(helper.data);
+    const up = addHelperXp(helper.data, 5);
+    if (up.levelUp) {
+      helper.refreshTag();
+      this.ui.toast(t('helperLevelUp', { name: helper.data.name, g: helper.data.sex, n: up.level }), 5000);
+    }
     if (r.scooped) {
       this.removeDroppingMeshes([r.scooped]);
       return;

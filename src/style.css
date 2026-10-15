@@ -1321,3 +1321,80 @@ body.actv-nomove #touch-pad { display: none !important; }
 @media (max-width: 640px) {
   .actv-hint { top: calc(150px + var(--safe-t)); font-size: 0.9rem; }
 }
+
+/* ---------- salon de toilettage (métier Toiletteur ✂️, src/ui/groomer.js) */
+.grm-head { display: grid; gap: 6px; margin: 6px 0 10px; }
+.grm-rank { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.grm-rank-chip { background: #f3dff0; }
+.grm-xp { display: grid; gap: 2px; }
+.grm-xp .xp-track { display: block; height: 8px; background: #ead9e6; border-radius: 999px; overflow: hidden; }
+.grm-xp .xp-fill { display: block; height: 100%; background: linear-gradient(90deg, #e07b9a, #9b59d0); border-radius: 999px; }
+.grm-xp small { color: var(--muted); }
+.grm-client { display: grid; gap: 8px; padding: 10px; margin: 8px 0; background: #fff; border: 1px solid var(--line); border-radius: 16px; }
+.grm-chat { display: flex; gap: 8px; align-items: flex-start; }
+.grm-chat.small .grm-avatar { font-size: 1.5rem; width: 36px; height: 36px; }
+.grm-avatar { font-size: 2rem; width: 48px; height: 48px; display: grid; place-items: center; background: #f3dff0; border-radius: 50%; flex-shrink: 0; }
+.grm-bubble { position: relative; flex: 1; background: #fff4f8; border: 2px solid #f3cfe0; border-radius: 16px; padding: 8px 12px; }
+.grm-bubble::before { content: ''; position: absolute; left: -9px; top: 14px; border: 7px solid transparent; border-right-color: #f3cfe0; border-left: 0; }
+.grm-bubble p { margin: 2px 0 0; line-height: 1.35; }
+.grm-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.grm-steps .chip.grm-style { background: #ffe3b3; }
+.grm-actions { align-items: center; gap: 8px; }
+.grm-actions .grm-price { flex: 1; font-size: 1.1rem; }
+.grm-actions button { min-height: 44px; }
+.grm-session-head { display: flex; gap: 10px; align-items: center; margin: 6px 0; }
+.grm-session-head small { color: var(--muted); display: block; }
+.grm-step-list { display: grid; gap: 6px; margin: 6px 0; }
+.grm-step { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+.grm-step.required { border-color: #e9b7cf; }
+.grm-step.done { background: #eef9f1; border-color: var(--good); }
+.grm-step-name { flex: 1; font-weight: 700; }
+.grm-step-name small { font-weight: 500; color: var(--muted); }
+.grm-step-q { color: var(--primary); font-weight: 700; }
+.grm-step button { min-width: 84px; min-height: 40px; }
+.grm-extra summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.grm-styles .chip { border: 2px solid transparent; }
+.grm-styles .chip.on { border-color: var(--primary); background: #dff3e6; }
+.grm-styles .chip:disabled { opacity: 0.5; }
+.grm-finish { justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.grm-finish .big { min-height: 52px; font-size: 1.1rem; }
+.note.good { color: var(--primary); font-weight: 700; }
+.grm-shop-slot { display: grid; gap: 6px; padding: 8px 10px; margin: 6px 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+.grm-shop-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.grm-shop-item { display: grid; gap: 4px; justify-items: stretch; }
+.grm-shop-item.on .grm-shop-btn { border-color: var(--primary); background: #eef9f1; }
+.grm-shop-btn { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; min-height: 64px; }
+.grm-shop-btn small { font-size: 0.72rem; color: var(--muted); text-align: center; }
+.grm-shop-emoji { font-size: 1.6rem; }
+.grm-colors { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+.grm-colors .swatch-btn { width: 24px; height: 24px; }
+.grm-tuto { display: grid; justify-items: center; text-align: center; gap: 6px; }
+.grm-tuto-emoji { font-size: 4rem; line-height: 1.1; animation: ev-pop 0.5s ease-out; }
+.grm-tuto h2 { margin: 0; }
+.grm-tuto p { font-size: 1.1rem; line-height: 1.45; margin: 4px 0; }
+.grm-result { display: grid; justify-items: center; text-align: center; gap: 8px; }
+.grm-result .grm-chat { text-align: left; width: 100%; }
+.grm-result h2 { margin: 0; }
+.grm-stars { display: flex; gap: 4px; font-size: 2rem; line-height: 1; }
+.grm-stars .on { color: #f2b63a; animation: grm-star 0.4s ease-out both; }
+.grm-stars .off { color: #ddd5d8; }
+@keyframes grm-star { from { transform: scale(0) rotate(-30deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.grm-photos { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.grm-photos figure { margin: 0; display: grid; gap: 4px; justify-items: center; }
+.grm-photos figcaption { font-weight: 700; color: var(--muted); }
+.grm-photo { width: min(220px, 42vw); height: auto; border-radius: 14px; border: 3px solid #fff; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }
+.grm-rankup { font-weight: 800; color: #8d4a9c; font-size: 1.1rem; }
+.grm-carnet { display: grid; gap: 8px; }
+.grm-carnet h2 { margin: 0; }
+.grm-ranks { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.grm-ranks li { display: grid; padding: 8px 10px; border-radius: 12px; background: #fff; border: 1px solid var(--line); }
+.grm-ranks li.now { border-color: #9b59d0; background: #f6eefb; }
+.grm-ranks li.done { opacity: 0.8; }
+.grm-ranks small { color: var(--muted); }
+.grm-history { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.grm-history td { padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.mg-btn.mg-swatch { border-left: 14px solid var(--sw, #ff7eb6); }
+@media (max-width: 640px) {
+  .grm-photo { width: min(200px, 44vw); }
+  .grm-avatar { width: 40px; height: 40px; font-size: 1.6rem; }
+}

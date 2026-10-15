@@ -5,6 +5,7 @@ import { STARTER_ITEMS } from './gear.js';
 import { STARTER_TOOLS } from './tools.js';
 import { defaultFacilities } from './facilities.js'; // bâtiments à entretenir (écurie, maison, bergerie)
 import { createTutorial } from './tutorial.js';
+import { defaultGroomerState, ensureGroomer } from './groomer.js'; // métier Toiletteur
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -51,6 +52,8 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     events: { active: null, cooldowns: {}, nextAt: 0, lastRoll: -1, weather: null, done: {} },
     settings: { camera: 'third', timeSpeed: 'normal' },
     tutorial: createTutorial(), // tutoriel guidé (src/sim/tutorial.js)
+    careers: { xp: { groomer: 0 } }, // XP par métier (src/sim/careersRegistry.js)
+    groomer: defaultGroomerState(), // salon de toilettage : réputation, clients, carnet (src/sim/groomer.js)
   };
 }
 
@@ -98,6 +101,7 @@ export function loadProfile(id) {
 
 function migrate(p) {
   const fresh = createProfile(p.name, p.mode, p.home ?? 'maison');
+  ensureGroomer(p); // anciennes sauvegardes : métier Toiletteur
   return {
     ...fresh, ...p, stats: p.stats ?? {}, settings: { ...fresh.settings, ...p.settings },
     // Anciennes sauvegardes : pas de tutoriel (on peut le revoir dans les réglages).

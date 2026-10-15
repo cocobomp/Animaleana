@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import {
   STRUCTURES, structuresAt, findStructure, footprint, toWorld, enclosureOf, homeZone, zoneRect, hasResidents,
   validatePlacement, build, moveStructure, demolish, assign, unassign, residents, applyComfort, homeOf, structureAtPoint,
-  isEnclosure, canBuild, validateCore, validateEquipment, moveCore, moveEquipment, coreRect, equipmentPos,
+  isEnclosure, canBuild, validateCore, validateEquipment, moveCore, moveEquipment, coreRect, equipmentPos, doorOf,
 } from '../sim/construction.js';
 import { addStat } from '../sim/profile.js';
 import { scoopZone } from '../sim/droppings.js';
@@ -59,6 +59,7 @@ export class Structures {
     this.items.clear();
     w.colliders = w.colliders.filter((c) => !c.structure);
     w.fences = (w.fences ?? []).filter((f) => !f.structure);
+    w.interactables = w.interactables.filter((i) => !i.structure); // porte du salon de toilettage
     w.structureHomes = new Map();
     const encl = [];
     const list = structuresAt(this.profile, placeId);
@@ -107,6 +108,7 @@ export class Structures {
     }
     w.colliders.push(...cols);
     if (hasResidents(s.type)) w.structureHomes.set(s.id, homeZone(s));
+    if (s.type === 'salon') w.interactables.push({ kind: 'salon', ...doorOf(s), structure: s.id }); // métier Toiletteur
   }
 
   /** Cache les arbres (et l'herbe sous les bâtiments) qui se trouvent sur une construction. */

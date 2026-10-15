@@ -25,6 +25,8 @@ export const STRUCTURES = {
   barn: { cat: 'building', emoji: '🏚️', w: 12, d: 8, price: 900, species: [...LIVESTOCK, 'horse'], capacity: 8, comfort: 10, g: 'f' },
   arena: { cat: 'enclosure', emoji: '🏇', w: 18, d: 28, price: 800, species: [], capacity: 0, comfort: 0, gate: 4, g: 'f', arena: true },
   newStable: { cat: 'building', emoji: '🐴', w: 16, d: 7, price: 1200, species: ['horse'], capacity: 4, comfort: 12, g: 'f' },
+  // Salon de toilettage (métier Toiletteur ✂️, src/sim/groomer.js) : pas d'habitants, on y reçoit des clients.
+  salon: { cat: 'building', emoji: '✂️', w: 6, d: 5, price: 350, species: [], capacity: 0, comfort: 0, g: 'm' },
   // Le ranch : une grange, un grand paddock et un abri, pour les chevaux et le bétail.
   ranch: { cat: 'ranch', emoji: '🤠', w: 30, d: 24, price: 2500, species: ['horse', ...LIVESTOCK], capacity: 12, comfort: 10, gate: 5, g: 'm' },
   // Décorations (sans animaux).

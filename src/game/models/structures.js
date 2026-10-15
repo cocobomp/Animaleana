@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { signTexture } from '../textures.js';
 import { STRUCTURES } from '../../sim/construction.js';
+import { salonModel } from './salon.js'; // salon de toilettage (métier Toiletteur)
 
 const mat = (color, roughness = 0.85, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
 const FLAT = () => 0;
@@ -357,6 +358,7 @@ export function buildStructureModel(type, label = '', ground = FLAT) {
     case 'barn': return barnModel(def, label);
     case 'arena': return arenaModel(def, label, ground);
     case 'newStable': return stableModel(def, label);
+    case 'salon': return salonModel(def, label);
     case 'ranch': return ranchModel(def, label, ground);
     case 'flowerBed': return flowerBed();
     case 'tree': return tree();

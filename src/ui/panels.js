@@ -18,6 +18,7 @@ import { GEAR, BLANKET_COLORS, owned, inUse } from '../sim/gear.js';
 import { TOOLS, hasTool } from '../sim/tools.js';
 import { facilitiesTab } from './facilitiesPanel.js'; // onglet « Bâtiments »
 import { homeSection } from './construction.js'; // rubrique « Maison » (constructions)
+import { groomingSection } from './groomer.js'; // métier Toiletteur : coupe et accessoires
 import { travelAdvice } from './trip.js'; // voyages réalistes
 import { questExtras } from './tutorial.js';
 import { animalActivitySection } from './activities.js';
@@ -143,6 +144,7 @@ function renderAnimal(ui, g, a) {
 
   // Maison construite par le joueur (niche, paddock, ranch…)
   out.push(...homeSection(ui, a));
+  out.push(...groomingSection(ui, a)); // salon de toilettage : coupe et accessoires (src/ui/groomer.js)
 
   // Laine et lait
   if (sp.product) {

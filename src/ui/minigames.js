@@ -41,6 +41,12 @@ const ICONS = {
   treat: '🍪', play: '⚽', lunge: '🌀', liberty: '💛', shear: '🧶', milk: '🥛',
 };
 
+/** D'autres modules (ex. le salon de toilettage, minigames/groomer.js) ajoutent leurs mini-jeux ici. */
+export function registerMinigames(games, icons = {}) {
+  Object.assign(GAMES, games);
+  Object.assign(ICONS, icons);
+}
+
 /** Texte traduit, ou null s'il n'existe pas. */
 const tt = (key, params) => {
   const s = t(key, params);
@@ -352,7 +358,8 @@ export function runMinigame(ui, a, action) {
       last = now;
       ctx.time += dt;
       // L'animal n'est plus là (il est parti, ou mort de vieillesse) : on ferme sans rien appliquer.
-      if (game?.profile && !game.profile.animals.some((x) => x.id === a.id)) return close(null);
+      // (a.guest : l'animal d'un client du salon de toilettage, qui n'est pas au joueur)
+      if (game?.profile && !a.guest && !game.profile.animals.some((x) => x.id === a.id)) return close(null);
       play.update?.(dt);
       ctx.fx.update(dt);
       g2.setTransform(1, 0, 0, 1, 0, 0);

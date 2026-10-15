@@ -12,6 +12,7 @@ import {
 import { buildingActions } from '../sim/buildings.js';
 import { EQUIPMENT } from '../sim/farm.js';
 import { actionSheet } from './actions.js';
+import { openSalon } from './groomer.js'; // salon de toilettage (métier Toiletteur)
 
 /** Nom d'une construction (les décorations ont leurs propres noms). */
 export const structureName = (type) => (STRUCTURES[type].cat === 'decor' ? t(`con_n_${type}`) : t(`st_${type}`));
@@ -137,6 +138,7 @@ export function openCatalogue(ui) {
 
 /** Ce qu'on peut faire avec une construction : soigner ses habitants, ramasser, déplacer, démolir… */
 export function openStructure(ui, s) {
+  if (s.type === 'salon') return openSalon(ui, s); // métier Toiletteur ✂️
   const g = ui.game;
   const st = g.structures;
   const def = STRUCTURES[s.type];

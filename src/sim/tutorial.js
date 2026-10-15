@@ -161,6 +161,7 @@ export function restartTutorial(profile) {
  */
 const hasHorse = (p) => p.animals.some((a) => a.species === 'horse');
 const hasAnimal = (p) => p.animals.length > 0;
+const hasSalon = (p) => (p.structures ?? []).some((s) => s.type === 'salon'); // salon de toilettage
 
 const SHOWGROUND = { type: 'building', id: 'showground' };
 
@@ -189,6 +190,12 @@ export const QUEST_GUIDE = {
   actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
   actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
   actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
+  // Métier Toiletteur (src/sim/groomer.js) : construire le salon, puis y travailler.
+  grmSalon: { where: 'build', target: { type: 'hud', id: 'mgmt_btn' }, ready: (p) => (p.xp ?? 0) >= 150 },
+  grmClient1: { where: 'salon', target: { type: 'building', id: 'salon' }, ready: hasSalon },
+  grmOwn1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, ready: (p) => hasSalon(p) && hasAnimal(p) },
+  grmAccessory1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, ready: (p) => hasSalon(p) && hasAnimal(p) },
+  grmFive1: { where: 'salon', target: { type: 'building', id: 'salon' }, ready: hasSalon },
 };
 
 /** Ordre conseillé des quêtes, de la plus facile à la plus difficile. */
@@ -196,6 +203,7 @@ export const QUEST_ORDER = [
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
+  'grmSalon', 'grmOwn1', 'grmAccessory1', 'grmClient1', 'grmFive1',
 ];
 
 /**
@@ -268,6 +276,11 @@ export const FOLLOW_STEPS = {
   goShowground: { target: SHOWGROUND, done: seenAny('building:showground') },
   goHutch: { target: { type: 'building', id: 'hutch' }, done: seenAny('building:hutch') },
   doActivity: { target: null, done: questDone, progress: true },
+  // Salon de toilettage (src/ui/groomer.js émet building:salon)
+  openBuild: { target: { type: 'hud', id: 'mgmt_btn' }, done: (c) => c.seen.has('mgmt') || c.questDone },
+  buildSalon: { target: null, done: questDone },
+  goSalon: { target: { type: 'building', id: 'salon' }, done: seenAny('building:salon') },
+  doGrooming: { target: null, done: questDone, progress: true },
 };
 
 export const QUEST_STEPS = {
@@ -294,6 +307,11 @@ export const QUEST_STEPS = {
   actvCompete1: ['goShowground', 'doActivity'],
   actvHop1: ['goShowground', 'doActivity'],
   actvHutch5: ['goHutch', 'doActivity'],
+  grmSalon: ['openBuild', 'buildSalon'],
+  grmClient1: ['goSalon', 'doGrooming'],
+  grmOwn1: ['goSalon', 'doGrooming'],
+  grmAccessory1: ['goSalon', 'doGrooming'],
+  grmFive1: ['goSalon', 'doGrooming'],
 };
 
 /** Étapes d'une quête selon la situation : sans animal (ou sans cheval), on va d'abord en adopter un. */

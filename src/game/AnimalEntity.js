@@ -7,6 +7,7 @@ import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { emojiTexture } from './textures.js';
 import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
+import { buildAccessories, removeAccessories } from './models/salon.js'; // accessoires de toilettage
 import { canLeash, heelSkill } from '../sim/gear.js';
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
@@ -108,6 +109,9 @@ export class AnimalEntity {
   applyGear() {
     if (this.gearGroup) removeGear(this.gearGroup);
     this.gearGroup = buildGear(this.model, this.data.look, this.data.gear ?? {});
+    // Accessoires du salon de toilettage (src/game/models/salon.js)
+    removeAccessories(this.accessoryMeshes);
+    this.accessoryMeshes = buildAccessories(this.model, this.data.look, this.data.accessories);
   }
 
   applyScale() {

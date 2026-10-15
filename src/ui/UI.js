@@ -340,9 +340,10 @@ export class UI {
       hutch: () => t('bld_hutch'),
       pen: () => t('bld_pen'),
       showground: () => t('actv_enterShowground'),
+      salon: () => t('grm_enter'), // salon de toilettage (src/game/Groomer.js)
       dismount: () => t('dismount'),
     };
-    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', salon: '✂️', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }

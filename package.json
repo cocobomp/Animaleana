@@ -1,0 +1,20 @@
+{
+  "name": "animadichelle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Jeu 3D hors ligne : adopter, soigner et voyager avec ses animaux.",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "vite": "6.4.4",
+    "vitest": "3.2.7"
+  }
+}

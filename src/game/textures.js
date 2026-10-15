@@ -1,0 +1,1019 @@
+// Textures dessinées par le code (pelage, sol, bois, eau, panneaux) : aucun fichier à télécharger.
+
+import * as THREE from 'three';
+import { mulberry32 } from '../sim/rng.js';
+import { noise3 } from './models/shapes.js';
+import { gfx } from './gfx.js';
+
+const cache = new Map();
+
+const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
+const rgbOf = (c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+/** Luminance (0–1) d'une couleur 0xRRGGBB. */
+export const lum = (c) => {
+  const [r, g, b] = rgbOf(c);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+};
+
+function shade(c, f) {
+  const [r, g, b] = rgbOf(c);
+  return `rgb(${Math.min(255, r * f) | 0},${Math.min(255, g * f) | 0},${Math.min(255, b * f) | 0})`;
+}
+
+const smooth = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+function makeCanvas(w, h = w) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+}
+
+function toTexture(canvas, { srgb = true, repeat = true, shared = false } = {}) {
+  const tex = new THREE.CanvasTexture(canvas);
+  if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+  if (repeat) {
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+  }
+  tex.anisotropy = gfx.quality === 'high' ? 4 : 1;
+  if (shared) tex.userData.shared = true;
+  return tex;
+}
+
+function cached(key, make) {
+  if (!cache.has(key)) {
+    const t = make();
+    t.userData.shared = true;
+    cache.set(key, t);
+  }
+  return cache.get(key);
+}
+
+/** Bruit qui boucle en u (autour du corps) : pas de couture visible. */
+function wrapNoise(u, v, freq, seed) {
+  const a = u * Math.PI * 2;
+  const r = freq / (Math.PI * 2);
+  return noise3(Math.cos(a) * r + seed, Math.sin(a) * r, v * freq);
+}
+
+function furStrokes(ctx, w, h, color, rng, count, len = 5, alpha = 0.4) {
+  ctx.lineWidth = Math.max(1, w / 256);
+  for (let i = 0; i < count; i++) {
+    const x = rng() * w;
+    const y = rng() * h;
+    const l = (len * 0.4 + rng() * len) * (h / 128);
+    ctx.strokeStyle = shade(color, 0.78 + rng() * 0.44);
+    ctx.globalAlpha = alpha * (0.5 + rng());
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (rng() - 0.5) * 2, y + l);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** Tache organique, dessinée trois fois pour boucler horizontalement. */
+function blob(ctx, x, y, r, rng, w, squash = 0.8) {
+  const n = 14;
+  const pts = [];
+  const ph = [rng() * 6, rng() * 6, rng() * 6];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const rr = r * (0.75 + 0.18 * Math.sin(a * 2 + ph[0]) + 0.12 * Math.sin(a * 3 + ph[1]) + 0.08 * Math.sin(a * 5 + ph[2]));
+    pts.push([Math.cos(a) * rr, Math.sin(a) * rr * squash]);
+  }
+  for (const dx of [-w, 0, w]) {
+    ctx.beginPath();
+    const mid = (i) => {
+      const [ax, ay] = pts[i % n];
+      const [bx, by] = pts[(i + 1) % n];
+      return [x + dx + (ax + bx) / 2, y + (ay + by) / 2];
+    };
+    const [sx, sy] = mid(n - 1);
+    ctx.moveTo(sx, sy);
+    for (let i = 0; i < n; i++) {
+      const [mx, my] = mid(i);
+      ctx.quadraticCurveTo(x + dx + pts[i][0], y + pts[i][1], mx, my);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+// ------------------------------------------------------------------ pelage
+
+/**
+ * Textures du pelage d'un animal, une par partie du corps :
+ * body, neck, head, tail, ear et legs[4] (avant gauche, avant droite, arrière gauche, arrière droite).
+ * Chaque texture suit les UV des « lofts » : u fait le tour (0 = ventre), v suit la forme.
+ */
+export function coatTextures(look, speciesId) {
+  const high = gfx.quality === 'high';
+  const big = high ? 256 : 128;
+  const small = high ? 128 : 64;
+  const rng = mulberry32(look.seed || 1);
+  const pattern = look.pattern;
+  const seed = (look.seed % 1000) * 0.37;
+  const dark = lum(look.coat) < 0.12;
+  const bay = speciesId === 'horse' && lum(look.mane) < 0.06 && lum(look.coat) > 0.06 && pattern !== 'spots';
+  const sheep = !!look.wool;
+  const cowLike = speciesId === 'cow';
+  const sleek = speciesId === 'horse' || speciesId === 'cow' || speciesId === 'goat';
+
+  // Motif de base (taches, plaques, rayures), commun à toutes les parties.
+  const baseCanvas = (size, part) => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const s = size / 256;
+    const r2 = mulberry32((look.seed || 1) + part.length * 31);
+    ctx.fillStyle = hex(look.coat);
+    ctx.fillRect(0, 0, size, size);
+    if (pattern === 'spots') {
+      const appaloosaBlanket = speciesId === 'horse' && lum(look.coat) < lum(look.secondary);
+      ctx.fillStyle = hex(look.secondary);
+      if (appaloosaBlanket && part === 'body') {
+        // Couverture blanche sur la croupe, parsemée de taches de la robe.
+        ctx.fillRect(0, size * 0.55, size, size * 0.45);
+        for (let i = 0; i < 6; i++) blob(ctx, r2() * size, size * (0.55 + r2() * 0.1), 30 * s, r2, size);
+        ctx.fillStyle = hex(look.coat);
+        for (let i = 0; i < 40; i++) blob(ctx, r2() * size, size * (0.62 + r2() * 0.38), (3 + r2() * 5) * s, r2, size);
+      } else if (!appaloosaBlanket) {
+        const n = speciesId === 'dog' ? 70 : 110;
+        for (let i = 0; i < n; i++) blob(ctx, r2() * size, r2() * size, (speciesId === 'dog' ? 4 + r2() * 6 : 3 + r2() * 5) * s, r2, size);
+      }
+    } else if (pattern === 'patches' || (pattern === 'tricolor' && speciesId === 'cat')) {
+      const n = cowLike ? 7 : 5;
+      const colors = pattern === 'tricolor' ? [look.secondary, look.third] : [look.secondary];
+      for (let i = 0; i < n; i++) {
+        ctx.fillStyle = hex(colors[i % colors.length]);
+        const r = (cowLike ? 34 + r2() * 38 : 22 + r2() * 30) * s;
+        blob(ctx, r2() * size, r2() * size, r, r2, size, 0.9);
+        // Petites taches satellites autour des grandes, comme sur les vraies robes pie.
+        if (cowLike || r2() < 0.5) blob(ctx, r2() * size, r2() * size, r * 0.35, r2, size);
+      }
+    } else if (pattern === 'tabby') {
+      // Rayures qui font le tour du corps, plus une raie sombre sur le dos.
+      ctx.fillStyle = hex(look.secondary);
+      ctx.globalAlpha = 0.8;
+      const step = 22 * s;
+      for (let y = r2() * step; y < size; y += step * (0.8 + r2() * 0.5)) {
+        ctx.beginPath();
+        const th = (4 + r2() * 4) * s;
+        for (let x = 0; x <= size; x += 8 * s) {
+          const fade = Math.sin((x / size) * Math.PI); // s'estompent vers le ventre
+          ctx.lineTo(x, y + Math.sin(x * 0.05 / s + y) * 5 * s - th * fade);
+        }
+        for (let x = size; x >= 0; x -= 8 * s) ctx.lineTo(x, y + Math.sin(x * 0.05 / s + y) * 5 * s + th * Math.sin((x / size) * Math.PI));
+        ctx.fill();
+      }
+      ctx.globalAlpha = 0.6;
+      ctx.fillRect(size * 0.47, 0, size * 0.06, size);
+      ctx.globalAlpha = 1;
+    }
+    return c;
+  };
+
+  // Couche de « marques » (ventre blanc, masque, balzanes…) calculée pixel par pixel.
+  const paint = (size, part, marks, opts = {}) => {
+    const c = baseCanvas(size, part);
+    const ctx = c.getContext('2d');
+    const img = ctx.getImageData(0, 0, size, size);
+    const d = img.data;
+    const sec = rgbOf(look.secondary);
+    const third = rgbOf(look.third);
+    const mane = rgbOf(look.mane);
+    const white = rgbOf(0xf6f3ee);
+    const pick = { secondary: sec, third, mane, white, coat: rgbOf(look.coat), muzzle: rgbOf(0x2b2522) };
+    for (let py = 0; py < size; py++) {
+      const v = 1 - (py + 0.5) / size;
+      for (let px = 0; px < size; px++) {
+        const u = (px + 0.5) / size;
+        const i = (py * size + px) * 4;
+        const n = wrapNoise(u, v, 9, seed + part.length) - 0.5;
+        const layers = marks ? marks(u, v, n) : null;
+        if (layers) {
+          for (const [col, w] of layers) {
+            if (w <= 0) continue;
+            const cc = pick[col];
+            d[i] += (cc[0] - d[i]) * w;
+            d[i + 1] += (cc[1] - d[i + 1]) * w;
+            d[i + 2] += (cc[2] - d[i + 2]) * w;
+          }
+        }
+        if (opts.counter) {
+          // Dos un peu plus sombre, ventre un peu plus clair (contre-ombrage naturel).
+          const back = 1 - Math.abs(u - 0.5) * 2;
+          const f = 1.07 - back * 0.12;
+          d[i] = Math.min(255, d[i] * f);
+          d[i + 1] = Math.min(255, d[i + 1] * f);
+          d[i + 2] = Math.min(255, d[i + 2] * f);
+        }
+        // Grain très fin.
+        const g = 1 + (rng() - 0.5) * (sleek ? 0.05 : 0.1);
+        d[i] *= g;
+        d[i + 1] *= g;
+        d[i + 2] *= g;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const strokeColor = look.coat;
+    if (!sheep || part === 'head' || part.startsWith('leg') || part === 'ear') {
+      furStrokes(ctx, size, size, strokeColor, rng, (sleek ? 500 : 1400) * (size / 256) ** 2, sleek ? 4 : 6, sleek ? 0.18 : 0.35);
+    }
+    return toTexture(c);
+  };
+
+  // Fonctions utiles pour les marques.
+  const belly = (u) => Math.min(u, 1 - u) * 2; // 0 au milieu du ventre, 1 sur le dos
+  const edge = (x, e, f = 0.04) => smooth(e - f, e + f, x);
+  const dogTri = pattern === 'tricolor' && speciesId === 'dog';
+  const darkTri = dogTri && dark;
+
+  const bodyMarks = (u, v, n) => {
+    const b = belly(u);
+    if (pattern === 'bicolor' || (dogTri && !darkTri) || darkTri) {
+      const reach = 0.28 + 0.4 * smooth(0.6, 0.98, v) + n * 0.25;
+      const out = [['secondary', 1 - edge(b, reach)]];
+      if (dogTri && !darkTri) {
+        // Selle noire du beagle.
+        out.push(['third', edge(b, 0.62 + n * 0.3) * edge(v, 0.18 + n * 0.1) * (1 - edge(v, 0.78 + n * 0.1))]);
+      }
+      return out;
+    }
+    if (pattern === 'tan') return [['secondary', 1 - edge(b, 0.45 + n * 0.25 + 0.15 * smooth(0.7, 1, v))]];
+    if (pattern === 'points' && speciesId === 'goat') return [['secondary', edge(v, 0.62 + n * 0.15, 0.03)]];
+    if (pattern === 'points' && speciesId === 'cat') return [['secondary', 0.25 * smooth(0.75, 1, v)]];
+    return null;
+  };
+  const neckMarks = (u, v, n) => {
+    const b = belly(u);
+    if (pattern === 'bicolor' || dogTri) return [['secondary', 1 - edge(b, 0.42 + n * 0.3 - v * 0.1)]];
+    if (pattern === 'tan') return [['secondary', 1 - edge(b, 0.4 + n * 0.25)]];
+    if (pattern === 'points' && (speciesId === 'goat')) return [['secondary', 1]];
+    if (pattern === 'points' && sheep) return [['secondary', smooth(0.55, 0.95, v)]];
+    if (pattern === 'points' && speciesId === 'cat') return [['secondary', 0.3 * v]];
+    return null;
+  };
+  const headMarks = (u, v, n) => {
+    const b = belly(u);
+    if (sheep) return [['secondary', 1]];
+    if (pattern === 'points') {
+      if (speciesId === 'cat') return [['secondary', edge(v, 0.5 + n * 0.12, 0.07)]];
+      return [['secondary', 1]];
+    }
+    if (speciesId === 'horse') {
+      // Bout du nez foncé (peau presque nue), liste blanche sur le chanfrein pour certains.
+      const out = [['muzzle', edge(v, 0.86 + n * 0.04, 0.03) * 0.6]];
+      if (pattern === 'socks' || (look.seed % 3 === 0 && pattern !== 'spots')) {
+        out.push(['white', (1 - edge(Math.abs(u - 0.5), 0.035 + v * 0.04 + n * 0.02, 0.01)) * edge(v, 0.3, 0.02) * (1 - edge(v, 0.95, 0.02))]);
+      }
+      return out;
+    }
+    if (cowLike && pattern === 'patches') {
+      // Tête foncée avec une liste claire (Holstein, Normande, Bretonne pie noire).
+      const darkCol = lum(look.coat) < lum(look.secondary) ? 'coat' : 'secondary';
+      const lightCol = darkCol === 'coat' ? 'secondary' : 'coat';
+      const blaze = (1 - edge(Math.abs(u - 0.5), 0.05 + v * 0.12 + n * 0.08, 0.02)) * edge(v, 0.15 + n * 0.1);
+      return [[darkCol, 1], [lightCol, blaze], [lightCol, edge(v, 0.86) * 0.9]];
+    }
+    if (pattern === 'bicolor' || dogTri) {
+      const muzzle = (1 - edge(b, 0.55 + n * 0.3)) * edge(v, 0.4 + n * 0.15);
+      const blaze = speciesId === 'dog' ? (1 - edge(Math.abs(u - 0.5), 0.04 + v * 0.1 + n * 0.03, 0.015)) * edge(v, 0.25) : 0;
+      const out = [['secondary', Math.max(muzzle, blaze)]];
+      if (darkTri) out.unshift(['third', (1 - edge(b, 0.75 + n * 0.2)) * edge(v, 0.25) * (1 - muzzle)]);
+      return out;
+    }
+    if (pattern === 'tan') return [['secondary', (1 - edge(b, 0.55 + n * 0.25)) * (1 - edge(v, 0.82)) * edge(v, 0.15)]];
+    return null;
+  };
+  const legMarks = (i) => (u, v, n) => {
+    const front = i < 2;
+    const low = (at, f = 0.03) => edge(v, at + n * 0.12, f);
+    if (sheep) return [['secondary', 1]];
+    if (pattern === 'socks' && i < look.seed % 5) return [['white', low(0.62)]];
+    if (bay) return [['mane', low(0.5, 0.08)]];
+    if (pattern === 'points') {
+      if (speciesId === 'goat') return front ? [['secondary', 1]] : [['secondary', low(0.75)]];
+      return [['secondary', speciesId === 'cat' ? low(0.3, 0.15) : low(0.42)]];
+    }
+    if (pattern === 'bicolor') return [['secondary', speciesId === 'cat' ? low(0.72) : low(0.42)]];
+    if (pattern === 'tan') return [['secondary', low(0.3)]];
+    if (darkTri) return [['third', low(0.35)], ['secondary', low(0.82)]];
+    if (dogTri) return [['secondary', low(0.35)]];
+    if (cowLike && pattern === 'patches') return [[lum(look.coat) > lum(look.secondary) ? 'coat' : 'secondary', low(0.62) * 0.9]];
+    return null;
+  };
+  const tailMarks = (u, v, n) => {
+    if (pattern === 'points') return [['secondary', speciesId === 'cat' ? smooth(0, 0.4, v) : 1]];
+    if ((pattern === 'bicolor' && speciesId === 'dog') || dogTri) return [['secondary', edge(v, 0.82 + n * 0.1)]];
+    return null;
+  };
+  const earMarks = () => {
+    if (sheep || pattern === 'points') return [['secondary', 1]];
+    if (darkTri) return null;
+    if (cowLike && pattern === 'patches') return [[lum(look.coat) < lum(look.secondary) ? 'coat' : 'secondary', 1]];
+    return null;
+  };
+
+  const legs = [];
+  const legKey = (i) => {
+    // Les pattes identiques partagent la même texture.
+    if (pattern === 'socks') return `l${i}`;
+    if (pattern === 'points' && speciesId === 'goat') return i < 2 ? 'lf' : 'lh';
+    return 'l';
+  };
+  const legCache = {};
+  for (let i = 0; i < 4; i++) {
+    const k = legKey(i);
+    legCache[k] = legCache[k] ?? paint(small, `leg${k}`, legMarks(i));
+    legs.push(legCache[k]);
+  }
+  return {
+    body: paint(big, 'body', bodyMarks, { counter: true }),
+    neck: paint(small, 'neck', neckMarks, { counter: true }),
+    head: paint(small, 'head', headMarks),
+    tail: paint(small, 'tail', tailMarks),
+    ear: paint(64, 'ear', earMarks),
+    legs,
+  };
+}
+
+/** Laine bouclée (moutons) : couleur + relief. */
+export function woolTextures(color) {
+  const key = `wool-${color}-${gfx.quality}`;
+  if (cache.has(key)) return cache.get(key);
+  const size = gfx.quality === 'high' ? 256 : 128;
+  const s = size / 256;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  const b = makeCanvas(size);
+  const bctx = b.getContext('2d');
+  ctx.fillStyle = hex(color);
+  ctx.fillRect(0, 0, size, size);
+  bctx.fillStyle = '#606060';
+  bctx.fillRect(0, 0, size, size);
+  const rng = mulberry32(color + 3);
+  const curl = (cx, cy, r, f) => {
+    for (const dx of [-size, 0, size]) {
+      for (const dy of [-size, 0, size]) {
+        ctx.beginPath();
+        ctx.arc(cx + dx, cy + dy, r, 0, Math.PI * 2);
+        ctx.fill();
+        bctx.beginPath();
+        bctx.arc(cx + dx, cy + dy, r, 0, Math.PI * 2);
+        bctx.fill();
+      }
+    }
+    return f;
+  };
+  for (let i = 0; i < 900 * s * s * 4; i++) {
+    const x = rng() * size;
+    const y = rng() * size;
+    const r = (3 + rng() * 5) * s;
+    const f = 0.9 + rng() * 0.2;
+    // Ombre de la boucle puis boucle éclairée.
+    ctx.fillStyle = shade(color, f * 0.78);
+    bctx.fillStyle = 'rgba(0,0,0,0.5)';
+    curl(x + 1.2 * s, y + 1.2 * s, r, f);
+    const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+    grad.addColorStop(0, shade(color, f * 1.0));
+    grad.addColorStop(1, shade(color, f * 0.86));
+    ctx.fillStyle = grad;
+    const bg = bctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+    bg.addColorStop(0, '#ffffff');
+    bg.addColorStop(1, '#707070');
+    bctx.fillStyle = bg;
+    curl(x, y, r * 0.9, f);
+  }
+  const res = { map: toTexture(c, { shared: true }), bump: toTexture(b, { srgb: false, shared: true }) };
+  cache.set(key, res);
+  return res;
+}
+
+/** Masque de poils pour la fourrure en couches (« shells ») : valeur = hauteur du poil. */
+export function furStrandTexture() {
+  return cached('furStrands', () => {
+    const size = 128;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, size, size);
+    const rng = mulberry32(42);
+    for (let i = 0; i < 5200; i++) {
+      const v = 70 + rng() * 185;
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      const x = rng() * size;
+      const y = rng() * size;
+      const r = 0.6 + rng() * 0.9;
+      for (const dx of [-size, 0, size]) {
+        for (const dy of [-size, 0, size]) {
+          ctx.beginPath();
+          ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    return toTexture(c, { srgb: false });
+  });
+}
+
+/** Mèches de crins (crinière, queue de cheval) avec transparence. */
+export function hairTexture() {
+  return cached('hair', () => {
+    const w = 128;
+    const h = 256;
+    const c = makeCanvas(w, h);
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    const rng = mulberry32(11);
+    for (let i = 0; i < 420; i++) {
+      const x = 4 + rng() * (w - 8);
+      const end = h * (0.55 + rng() * 0.45);
+      const v = 150 + rng() * 105;
+      ctx.strokeStyle = `rgb(${v},${v},${v})`;
+      ctx.lineWidth = 0.8 + rng() * 1.6;
+      ctx.globalAlpha = 0.7 + rng() * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      const bend = (rng() - 0.5) * 14;
+      ctx.bezierCurveTo(x + bend * 0.3, end * 0.3, x - bend, end * 0.7, x + bend * 0.5, end);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    const tex = toTexture(c);
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+  });
+}
+
+/** Œil : iris, pupille (ronde, fendue ou horizontale) et reflet, plaqués sur une sphère. */
+export function eyeTexture(color, pupil = 'round') {
+  return cached(`eye-${color}-${pupil}`, () => {
+    const w = 128;
+    const h = 64;
+    const c = makeCanvas(w, h);
+    const ctx = c.getContext('2d');
+    // Le devant de la sphère (+Z) correspond à u = 0.25, v = 0.5.
+    const cx = w * 0.25;
+    const cy = h * 0.5;
+    ctx.fillStyle = '#2a1d17';
+    ctx.fillRect(0, 0, w, h);
+    const iris = pupil === 'oval' ? 1.05 : 0.92; // l'iris occupe presque tout l'œil visible
+    const rx = w * 0.16 * iris;
+    const ry = h * 0.32 * iris;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(rx, ry);
+    const g = ctx.createRadialGradient(0, 0, 0.1, 0, 0, 1);
+    g.addColorStop(0, shade(color, 1.5));
+    g.addColorStop(0.6, hex(color));
+    g.addColorStop(1, shade(color, 0.45));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
+    ctx.fill();
+    // Fibres de l'iris.
+    const rng = mulberry32(color);
+    ctx.lineWidth = 0.04;
+    for (let i = 0; i < 60; i++) {
+      const a = rng() * Math.PI * 2;
+      ctx.strokeStyle = rng() < 0.5 ? shade(color, 1.4) : shade(color, 0.6);
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 0.3, Math.sin(a) * 0.3);
+      ctx.lineTo(Math.cos(a) * 0.95, Math.sin(a) * 0.95);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#050505';
+    ctx.beginPath();
+    if (pupil === 'slit') ctx.ellipse(0, 0, 0.16, 0.85, 0, 0, Math.PI * 2);
+    else if (pupil === 'bar') ctx.roundRect(-0.7, -0.22, 1.4, 0.44, 0.2);
+    else if (pupil === 'oval') ctx.ellipse(0, 0, 0.65, 0.4, 0, 0, Math.PI * 2);
+    else ctx.arc(0, 0, 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return toTexture(c, { repeat: false });
+  });
+}
+
+// ------------------------------------------------------------------ décor
+
+/** Texture de détail pour le sol (petits grains), répétée sur le terrain. */
+export function groundDetail() {
+  return cached('ground', () => {
+    const size = 256;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+    const rng = mulberry32(7);
+    for (let i = 0; i < 9000; i++) {
+      const v = 200 + rng() * 55;
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(rng() * size, rng() * size, 1 + rng() * 2, 1 + rng() * 3);
+    }
+    const tex = toTexture(c, { srgb: false });
+    tex.repeat.set(60, 60);
+    return tex;
+  });
+}
+
+/**
+ * Détails du sol, trois motifs en niveaux de gris rangés dans les canaux R, G, B :
+ * R = herbe (brins), G = terre (cailloux, mottes), B = sable/neige (grain fin, rides).
+ * Répétés sur le terrain et mélangés selon le type de sol (shader du terrain).
+ */
+export function terrainDetail() {
+  return cached(`terrain-${gfx.quality}`, () => {
+    const size = gfx.quality === 'high' ? 512 : 256;
+    const s = size / 512;
+    const rng = mulberry32(21);
+    // Herbe : petits brins clairs et sombres.
+    const g = makeCanvas(size);
+    const gc = g.getContext('2d', { willReadFrequently: true });
+    gc.fillStyle = '#808080';
+    gc.fillRect(0, 0, size, size);
+    gc.lineCap = 'round';
+    for (let i = 0; i < 26000 * s * s; i++) {
+      const x = rng() * size;
+      const y = rng() * size;
+      const v = 95 + rng() * 105;
+      gc.strokeStyle = `rgb(${v},${v},${v})`;
+      gc.lineWidth = (0.8 + rng() * 1.4) * Math.max(0.6, s);
+      const a = -Math.PI / 2 + (rng() - 0.5) * 1.6;
+      const l = (3 + rng() * 7) * Math.max(0.6, s);
+      gc.beginPath();
+      gc.moveTo(x, y);
+      gc.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+      gc.stroke();
+    }
+    // Terre : cailloux.
+    const d = makeCanvas(size);
+    const dc = d.getContext('2d', { willReadFrequently: true });
+    dc.fillStyle = '#7a7a7a';
+    dc.fillRect(0, 0, size, size);
+    for (let i = 0; i < 2600 * s * s; i++) {
+      const x = rng() * size;
+      const y = rng() * size;
+      const r = (1 + rng() * 4) * Math.max(0.6, s);
+      const v = 120 + rng() * 80;
+      dc.fillStyle = `rgb(${v * 0.8},${v * 0.8},${v * 0.8})`;
+      dc.beginPath();
+      dc.ellipse(x + r * 0.25, y + r * 0.3, r, r * 0.75, 0, 0, Math.PI * 2);
+      dc.fill();
+      dc.fillStyle = `rgb(${v},${v},${v})`;
+      dc.beginPath();
+      dc.ellipse(x, y, r, r * 0.75, 0, 0, Math.PI * 2);
+      dc.fill();
+    }
+    const gd = gc.getImageData(0, 0, size, size).data;
+    const dd = dc.getImageData(0, 0, size, size).data;
+    const data = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+        const u = x / size;
+        const v = y / size;
+        // Bruit qui boucle (tuile sans couture).
+        const n1 = wrapNoise(u, v, 8, 1.3);
+        const n2 = wrapNoise(u, v, 32, 7.1);
+        const n3 = wrapNoise(v, u, 64, 3.7);
+        const big = wrapNoise(u, v, 4, 9.2);
+        // Brins adoucis (moyenne 3×3) pour éviter le grésillement au loin.
+        let gs = 0;
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) gs += gd[((((y + oy + size) % size) * size + ((x + ox + size) % size)) * 4)];
+        }
+        data[i] = Math.min(255, Math.max(0, (gs / 9 * 0.6 + gd[i] * 0.4) * (0.75 + n1 * 0.5)));
+        data[i + 1] = Math.min(255, Math.max(0, dd[i] * (0.6 + n2 * 0.5 + big * 0.3)));
+        const ripple = 0.5 + 0.5 * Math.sin((v + n1 * 0.08) * Math.PI * 2 * 18);
+        data[i + 2] = Math.min(255, Math.max(0, 255 * (0.35 + n3 * 0.35 + ripple * 0.12 + n2 * 0.18)));
+        data[i + 3] = 255;
+      }
+    }
+    const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    tex.anisotropy = gfx.quality === 'high' ? 8 : 2;
+    tex.needsUpdate = true;
+    return tex;
+  });
+}
+
+/** Écorce : sillons verticaux (bouleau : blanc avec des marques sombres horizontales). */
+export function barkTexture(birch = false) {
+  return cached(`bark-${birch}`, () => {
+    const w = 128;
+    const h = 256;
+    const c = makeCanvas(w, h);
+    const ctx = c.getContext('2d');
+    const rng = mulberry32(birch ? 5 : 6);
+    ctx.fillStyle = birch ? '#e9e5dc' : '#6a5040';
+    ctx.fillRect(0, 0, w, h);
+    if (birch) {
+      for (let i = 0; i < 90; i++) {
+        ctx.fillStyle = `rgba(30,25,20,${0.4 + rng() * 0.5})`;
+        const x = rng() * w;
+        const y = rng() * h;
+        const l = 4 + rng() * 22;
+        ctx.fillRect(x, y, l, 1 + rng() * 3);
+        ctx.fillRect(x - w, y, l, 1 + rng() * 3);
+      }
+    } else {
+      for (let i = 0; i < 220; i++) {
+        const x = rng() * w;
+        const v = rng();
+        ctx.strokeStyle = v < 0.6 ? `rgba(25,15,10,${0.35 + rng() * 0.4})` : `rgba(160,135,110,${0.2 + rng() * 0.3})`;
+        ctx.lineWidth = 1 + rng() * 3;
+        ctx.beginPath();
+        const y0 = rng() * h;
+        const l = 20 + rng() * 80;
+        ctx.moveTo(x, y0);
+        ctx.bezierCurveTo(x + (rng() - 0.5) * 6, y0 + l * 0.3, x + (rng() - 0.5) * 6, y0 + l * 0.6, x + (rng() - 0.5) * 4, y0 + l);
+        ctx.stroke();
+      }
+    }
+    return toTexture(c);
+  });
+}
+
+/** Grappe de feuilles (gris clair, teintée par instance) avec transparence, pour les houppiers. */
+export function leafTexture(kind = 'broad') {
+  return cached(`leaves-${kind}`, () => {
+    const size = 256;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    const rng = mulberry32(kind.length * 13 + 1);
+    if (kind === 'needle') {
+      // Rameau de sapin : tige centrale et aiguilles.
+      for (let b = 0; b < 5; b++) {
+        const x0 = size * (0.15 + b * 0.17);
+        ctx.strokeStyle = 'rgb(120,120,120)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x0, size);
+        ctx.lineTo(x0 + (rng() - 0.5) * 30, 10);
+        ctx.stroke();
+        for (let i = 0; i < 70; i++) {
+          const t = rng();
+          const x = x0 + (rng() - 0.5) * 10;
+          const y = size - t * (size - 10);
+          const v = 150 + rng() * 105;
+          ctx.strokeStyle = `rgb(${v},${v},${v})`;
+          ctx.lineWidth = 1.5;
+          const a = (rng() < 0.5 ? -1 : 1) * (0.5 + rng() * 0.6) - Math.PI / 2;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + Math.cos(a) * 22, y + Math.sin(a) * 22 + 10);
+          ctx.stroke();
+        }
+      }
+    } else {
+      for (let i = 0; i < 320; i++) {
+        const x = 20 + rng() * (size - 40);
+        const y = 20 + rng() * (size - 40);
+        // Plus de feuilles au centre de la grappe.
+        const dx = x - size / 2;
+        const dy = y - size / 2;
+        if (Math.hypot(dx, dy) > size * 0.48 * (0.6 + rng() * 0.4)) continue;
+        const v = 140 + rng() * 115;
+        const a = rng() * Math.PI * 2;
+        const l = kind === 'small' ? 5 + rng() * 4 : 7 + rng() * 6;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(a);
+        ctx.fillStyle = `rgb(${v * 0.85},${v * 0.85},${v * 0.85})`;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, l, l * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.beginPath();
+        ctx.ellipse(-l * 0.1, -l * 0.08, l * 0.8, l * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(60,60,60,0.5)`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-l, 0);
+        ctx.lineTo(l, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    const tex = toTexture(c);
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+  });
+}
+
+/** Normales de vagues (tuile sans couture), pour l'eau animée. */
+export function waterNormalTexture() {
+  return cached('waterNormals', () => {
+    const size = 256;
+    const hgt = new Float32Array(size * size);
+    const rng = mulberry32(3);
+    const waves = [];
+    for (let i = 0; i < 14; i++) {
+      // Fréquences entières : la tuile boucle parfaitement.
+      waves.push({ fx: Math.round((rng() - 0.5) * 16), fy: Math.round((rng() - 0.5) * 16) || 1, a: 1 / (1 + i * 0.45), p: rng() * 6.28 });
+    }
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const u = x / size;
+        const v = y / size;
+        let h = 0;
+        for (const w of waves) h += Math.sin((u * w.fx + v * w.fy) * Math.PI * 2 + w.p) * w.a;
+        h += (wrapNoise(u, v, 24, 2) - 0.5) * 1.2;
+        hgt[y * size + x] = h;
+      }
+    }
+    const data = new Uint8Array(size * size * 4);
+    const at = (x, y) => hgt[((y + size) % size) * size + ((x + size) % size)];
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = (at(x + 1, y) - at(x - 1, y)) * 0.35;
+        const dy = (at(x, y + 1) - at(x, y - 1)) * 0.35;
+        const l = Math.hypot(dx, dy, 1);
+        const i = (y * size + x) * 4;
+        data[i] = ((-dx / l) * 0.5 + 0.5) * 255;
+        data[i + 1] = ((-dy / l) * 0.5 + 0.5) * 255;
+        data[i + 2] = ((1 / l) * 0.5 + 0.5) * 255;
+        data[i + 3] = 255;
+      }
+    }
+    const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = true;
+    tex.needsUpdate = true;
+    return tex;
+  });
+}
+
+/** Bouffée de nuage : boules douces, éclairées par le haut. */
+export function cloudTexture() {
+  return cached('cloud', () => {
+    const w = 256;
+    const h = 160;
+    const c = makeCanvas(w, h);
+    const ctx = c.getContext('2d');
+    const rng = mulberry32(8);
+    const puffs = [];
+    for (let i = 0; i < 26; i++) {
+      const x = w * (0.18 + rng() * 0.64);
+      const y = h * (0.35 + rng() * 0.35) - Math.sin(((x / w) - 0.18) / 0.64 * Math.PI) * h * 0.15;
+      const r = h * (0.12 + rng() * 0.16) * (1 - Math.abs(x / w - 0.5) * 1.2);
+      puffs.push([x, y, r]);
+    }
+    // Ombre douce en dessous puis volumes éclairés.
+    for (const [x, y, r] of puffs) {
+      const g = ctx.createRadialGradient(x, y + r * 0.25, r * 0.1, x, y + r * 0.25, r * 1.15);
+      g.addColorStop(0, 'rgba(170,178,190,0.55)');
+      g.addColorStop(1, 'rgba(170,178,190,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+    }
+    for (const [x, y, r] of puffs) {
+      const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.35, r * 0.05, x, y, r);
+      g.addColorStop(0, 'rgba(255,255,255,0.95)');
+      g.addColorStop(0.6, 'rgba(238,241,246,0.7)');
+      g.addColorStop(1, 'rgba(225,230,238,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+    }
+    const tex = toTexture(c, { repeat: false });
+    return tex;
+  });
+}
+
+// ------------------------------------------------------------------ bâtiments
+// Textures presque blanches : la couleur du matériau leur donne leur teinte.
+
+/** Enduit de façade : grain, petites taches, coulures légères. */
+export function plasterTexture() {
+  return cached('plaster', () => {
+    const size = 256;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const img = ctx.createImageData(size, size);
+    const rng = mulberry32(31);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const u = x / size;
+        const v = y / size;
+        const n = wrapNoise(u, v, 6, 1) * 0.5 + wrapNoise(u, v, 24, 2) * 0.3 + rng() * 0.2;
+        const streak = wrapNoise(u * 3, v * 0.3, 8, 5) * 0.06;
+        const val = 205 + n * 50 - streak * 255;
+        const i = (y * size + x) * 4;
+        img.data[i] = val;
+        img.data[i + 1] = val;
+        img.data[i + 2] = val * 0.98;
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return toTexture(c);
+  });
+}
+
+/** Planches de bois verticales avec veinage. */
+export function planksTexture() {
+  return cached('planks', () => {
+    const size = 256;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d');
+    const rng = mulberry32(32);
+    const n = 6;
+    const pw = size / n;
+    for (let i = 0; i < n; i++) {
+      const v = 200 + rng() * 45;
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(i * pw, 0, pw, size);
+      // Veinage.
+      for (let k = 0; k < 14; k++) {
+        const x = i * pw + rng() * pw;
+        ctx.strokeStyle = `rgba(60,45,35,${0.08 + rng() * 0.15})`;
+        ctx.lineWidth = 0.6 + rng() * 1.4;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.bezierCurveTo(x + (rng() - 0.5) * 8, size * 0.33, x + (rng() - 0.5) * 8, size * 0.66, x + (rng() - 0.5) * 4, size);
+        ctx.stroke();
+      }
+      // Nœud du bois.
+      if (rng() < 0.6) {
+        ctx.fillStyle = 'rgba(70,50,35,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(i * pw + pw * (0.3 + rng() * 0.4), rng() * size, 2 + rng() * 3, 4 + rng() * 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Joint sombre entre les planches.
+      ctx.fillStyle = 'rgba(25,18,12,0.75)';
+      ctx.fillRect(i * pw, 0, 2, size);
+    }
+    return toTexture(c);
+  });
+}
+
+/** Toiture : 'tiles' (tuiles rondes), 'slate' (ardoises), 'shingle' (bardeaux de bois). */
+export function roofTexture(kind = 'slate') {
+  return cached(`roof-${kind}`, () => {
+    const size = 256;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d');
+    const rng = mulberry32(kind.length * 7 + 33);
+    ctx.fillStyle = '#9a9a9a';
+    ctx.fillRect(0, 0, size, size);
+    const rows = kind === 'tiles' ? 10 : 12;
+    const rh = size / rows;
+    for (let r = 0; r < rows; r++) {
+      const cols = kind === 'tiles' ? 8 : 10;
+      const cw = size / cols;
+      const off = (r % 2) * cw * 0.5;
+      for (let k = -1; k <= cols; k++) {
+        const x = k * cw + off + (kind === 'tiles' ? 0 : (rng() - 0.5) * 2);
+        const y = r * rh;
+        const v = 175 + rng() * 70;
+        if (kind === 'tiles') {
+          const g = ctx.createLinearGradient(x, 0, x + cw, 0);
+          g.addColorStop(0, `rgb(${v * 0.7},${v * 0.7},${v * 0.7})`);
+          g.addColorStop(0.5, `rgb(${v},${v},${v})`);
+          g.addColorStop(1, `rgb(${v * 0.65},${v * 0.65},${v * 0.65})`);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.roundRect(x + 1, y, cw - 2, rh + 3, [0, 0, cw / 2, cw / 2]);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = `rgb(${v},${v},${v})`;
+          ctx.fillRect(x + 1, y, cw - 2, rh + 2);
+          ctx.fillStyle = 'rgba(0,0,0,0.35)';
+          ctx.fillRect(x + 1, y + rh, cw - 2, 2);
+        }
+      }
+      // Ombre portée de la rangée du dessus.
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(0, r * rh, size, 2);
+    }
+    return toTexture(c);
+  });
+}
+
+/** Soubassement en pierres maçonnées. */
+export function stoneTexture() {
+  return cached('stone', () => {
+    const size = 256;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d');
+    const rng = mulberry32(34);
+    ctx.fillStyle = '#8a8680';
+    ctx.fillRect(0, 0, size, size);
+    let y = 0;
+    while (y < size) {
+      const h = 18 + rng() * 16;
+      let x = -rng() * 30;
+      while (x < size) {
+        const w = 26 + rng() * 34;
+        const v = 150 + rng() * 90;
+        ctx.fillStyle = `rgb(${v},${v * 0.97},${v * 0.93})`;
+        ctx.beginPath();
+        ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 5);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(x + 4, y + 3, w - 10, 3);
+        x += w;
+      }
+      y += h;
+    }
+    return toTexture(c);
+  });
+}
+
+/** Paille (bottes de foin, litière). */
+export function strawTexture() {
+  return cached('straw', () => {
+    const size = 128;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#c9a54e';
+    ctx.fillRect(0, 0, size, size);
+    const rng = mulberry32(35);
+    for (let i = 0; i < 900; i++) {
+      const x = rng() * size;
+      const y = rng() * size;
+      const a = (rng() - 0.5) * 0.9;
+      const l = 6 + rng() * 14;
+      const v = rng();
+      ctx.strokeStyle = v < 0.5 ? `rgba(240,215,140,${0.5 + rng() * 0.5})` : `rgba(130,95,40,${0.3 + rng() * 0.4})`;
+      ctx.lineWidth = 0.8 + rng();
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+      ctx.stroke();
+    }
+    return toTexture(c);
+  });
+}
+
+/** Panneau avec du texte (refuge, vétérinaire…). */
+export function signTexture(text, bg = '#6b4a2f', fg = '#fff8e8', emoji = '') {
+  const canvas = makeCanvas(512, 128);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 512, 128);
+  // Veinage du bois du panneau.
+  const rng = mulberry32(text.length * 17 + 3);
+  ctx.globalAlpha = 0.12;
+  for (let i = 0; i < 40; i++) {
+    ctx.strokeStyle = rng() < 0.5 ? '#000' : '#fff';
+    ctx.lineWidth = 1 + rng() * 2;
+    const y = rng() * 128;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.bezierCurveTo(170, y + (rng() - 0.5) * 10, 340, y + (rng() - 0.5) * 10, 512, y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(4, 4, 504, 120);
+  ctx.fillStyle = fg;
+  const label = `${emoji} ${text}`.trim();
+  // Les noms longs (« Maison des animaux ») rapetissent pour tenir dans le panneau.
+  let size = 56;
+  ctx.font = `bold ${size}px system-ui, sans-serif`;
+  while (size > 26 && ctx.measureText(label).width > 480) {
+    size -= 2;
+    ctx.font = `bold ${size}px system-ui, sans-serif`;
+  }
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, 256, 68);
+  return toTexture(canvas, { repeat: false });
+}
+
+/** Sprite emoji (cœurs, zzz, bulles d'humeur). */
+export function emojiTexture(emoji) {
+  const key = `emoji-${emoji}`;
+  if (cache.has(key)) return cache.get(key);
+  const canvas = makeCanvas(64);
+  const ctx = canvas.getContext('2d');
+  ctx.font = '48px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(emoji, 32, 36);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  cache.set(key, tex);
+  return tex;
+}

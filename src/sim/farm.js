@@ -6,6 +6,7 @@ import { SPECIES } from './species.js';
 import { applyCare, cure, lifeStage, NEEDS } from './animal.js';
 import { isSandbox, spend, earn } from './profile.js';
 import { pick, uid } from './rng.js';
+import { onBreak, helperQuality } from './helpers.js'; // progression des aides
 import { droppingsAt, removeDroppings } from './droppings.js';
 
 const PETS = ['dog', 'cat', 'rabbit'];
@@ -143,6 +144,16 @@ const careable = (a, action) => SPECIES[a.species].actions.includes(action);
  */
 export function helperTask(profile, helper, animals) {
   const def = HELPERS[helper.type];
+  if (onBreak(helper, profile.clock ?? 0)) return null; // en pause
+  // Consigne du joueur : s'occuper d'abord de cet animal (même s'il n'a pas encore très faim).
+  const first = helper.priority && def.species && animals.find((a) => a.id === helper.priority && def.species.includes(a.species));
+  if (first) {
+    const duties = helper.duties ?? def.actions ?? [];
+    for (const n of NEEDS) {
+      const action = ACTION_FOR_NEED[n];
+      if (action && duties.includes(action) && careable(first, action) && first.needs[n] < 80) return { kind: 'care', animalId: first.id, action };
+    }
+  }
   if (def.cures) {
     const sick = animals.find((a) => a.sick);
     return sick ? { kind: 'cure', animalId: sick.id } : null;
@@ -179,7 +190,7 @@ export function helperTask(profile, helper, animals) {
 }
 
 /** L'aide est arrivée : elle fait la tâche. Renvoie { ok, earned? }. */
-export function doHelperTask(profile, task, animals) {
+export function doHelperTask(profile, task, animals, helper = null) {
   if (task.kind === 'refill') {
     const eq = profile.equipment.find((e) => e.id === task.equipmentId);
     if (!eq) return { ok: false };
@@ -197,7 +208,7 @@ export function doHelperTask(profile, task, animals) {
     return { ok: true };
   }
   if (task.kind === 'product') return collectProduct(profile, a);
-  return applyCare(a, task.action);
+  return applyCare(a, task.action, helper ? helperQuality(helper) : 1); // une aide expérimentée soigne mieux
 }
 
 // ---------------------------------------------------------------- produits

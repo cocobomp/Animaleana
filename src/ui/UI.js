@@ -13,6 +13,7 @@ import { openHelp } from './help.js';
 import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
 import { tripChips } from './trip.js'; // voyages réalistes
 import { openActivities } from './activities.js';
+import { openHelperChat } from './helperChat.js'; // parler aux aides
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -326,6 +327,7 @@ export class UI {
     }
     const labels = {
       animal: () => t('interact', { name: f.entity.data.name }),
+      helper: () => t('talkTo', { name: f.helper.data.name }),
       refuge: () => (this.game.isHome ? t('enterRefuge') : t('enterBreeder')),
       vet: () => t('enterVet'),
       house: () => t('enterHouse'),
@@ -342,7 +344,7 @@ export class UI {
       showground: () => t('actv_enterShowground'),
       dismount: () => t('dismount'),
     };
-    const emoji = { animal: '🤲', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', helper: '💬', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }
@@ -522,6 +524,7 @@ export class UI {
     return r;
   }
   openActivities(opts) { openActivities(this, opts); }
+  openHelper(h) { openHelperChat(this, h); this.game?.emit('panel', 'helper'); }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {

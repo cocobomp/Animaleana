@@ -422,7 +422,11 @@ export class VetStage {
     if (!st.beeped && this.time - st.t0 >= THERMO_TIME) {
       st.beeped = true;
       sfx('beep');
-      this.addFx({ x: this.zones().rump.x, y: this.zones().rump.y - 64, text: t('vx_beep'), color: '#2f6fb0', size: 20, vy: -30, life: 1 });
+      // « bip bip ! » au-dessus de l'écran du thermomètre (même place que dans drawThermo).
+      const rump = this.zones().rump;
+      const bx = clamp(rump.x - 100, 6, SW - 96);
+      const by = clamp(rump.y - 84, 8, SH - 50);
+      this.addFx({ x: bx + 45, y: Math.max(14, by - 12), text: t('vx_beep'), color: '#2f6fb0', size: 18, vy: -24, life: 1 });
       this.measure('temp');
       setTimeout(() => { if (!this.dead && this.mode === 'thermo') this.idle(); }, 1100);
     }

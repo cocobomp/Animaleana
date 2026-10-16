@@ -326,6 +326,22 @@ div.vs-lesson { background: #fff; border: 1px solid var(--line); }
   .vs-exam .vx-notes { max-height: 460px; }
 }
 
+/* ---- téléphone en paysage : plein écran, deux colonnes compactes */
+@media (max-height: 480px) and (min-width: 641px) {
+  .vx-overlay { padding: 0; }
+  .vx-box { width: 100%; height: 100%; border-radius: 0; padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l); }
+  .vx-head { padding: 4px 8px 4px 14px; }
+  .vx-title { flex-direction: row; align-items: baseline; gap: 8px; font-size: 1rem; }
+  .vx-close { width: 40px; height: 40px; }
+  .vx-main { padding: 0 10px 8px; gap: 10px; }
+  .vx-work { overflow-y: auto; }
+  .vx-stage { max-height: calc(100vh - 150px); }
+  .vx-tool { min-height: 44px; font-size: 0.66rem; }
+  .vx-tool-ico { font-size: 1.15rem; }
+  .vx-hint { min-height: 2em; font-size: 0.88rem; padding: 4px 8px; }
+  .vx-foot .big { min-height: 46px; }
+}
+
 /* ---- téléphone : plein écran, une colonne (scène, outils, consigne, puis le carnet) */
 @media (max-width: 640px) {
   .vx-overlay { padding: 0; }

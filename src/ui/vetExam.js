@@ -207,7 +207,7 @@ export function openOverlay(ui, { title, sub = '', cls = '', onClose }) {
   ui.root.append(overlay);
   document.body.classList.add('vx-open');
   // Téléphone : la fenêtre couvre tout l'écran, le jeu 3D n'a pas besoin d'être dessiné derrière.
-  const cover = !!window.matchMedia?.('(max-width: 640px)').matches;
+  const cover = !!window.matchMedia?.('(max-width: 640px), (max-height: 480px)').matches;
   if (cover) ui.vxCover = (ui.vxCover ?? 0) + 1;
   ui.vxOpen = (ui.vxOpen ?? 0) + 1; // pas de visiteur ni d'événement pendant l'examen (ui.isBlocking)
   let closed = false;

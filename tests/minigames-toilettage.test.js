@@ -124,7 +124,8 @@ function expectVerdict(ctx, expected, name = 'Pomme') {
   }
   expect(ctx.finished.msg).toBeTruthy();
   if (expected === 'just') expect(ctx.finished.msg).toBe(t('mg_justRight', { name }));
-  if (expected === 'low') expect(ctx.finished.msg).toBe(t('mg_tooLittle', { name }));
+  // (Griffes et onglons : leur propre « encore un peu long », mg_nails_end_long, s'il existe.)
+  if (expected === 'low') expect([t('mg_tooLittle', { name }), t('mg_nails_end_long', { name })]).toContain(ctx.finished.msg);
 }
 
 /** Avance le temps du jeu (update + horloge du cadre). */
@@ -366,6 +367,11 @@ describe('laver : de la mousse partout, ni trop ni trop peu, puis rincer', () =>
         game.draw(fakeG());
         rinse(game, ctx);
         expectVerdict(ctx, expected);
+        // La carte de fin montre la mousse NOTÉE et sa bande verte, pas la jauge du rinçage
+        // (avant : pleine à 100 %, même sous « Un peu trop peu… »).
+        const p = game.peek();
+        expect(ctx.zones.at(-1)).toEqual({ lo: p.lo / p.max, hi: p.hi / p.max });
+        expect(ctx.prog).toBeCloseTo(v / p.max, 9);
       }
     }
   });
@@ -461,7 +467,8 @@ describe('griffes et onglons : couper juste ce qu\'il faut (un coup par griffe)'
         expect(game.peek().cuts.every((c) => c !== null)).toBe(true);
         game.draw(fakeG());
         expectVerdict(ctx, expected);
-        if (expected === 'high') expect(ctx.finished.msg).toBe(t('mg_tooMuch', { name: 'Pomme' }));
+        // (« trop court » sans toucher le rose : le message des griffes, mg_nails_end_short, s'il existe)
+        if (expected === 'high') expect([t('mg_tooMuch', { name: 'Pomme' }), t('mg_nails_end_short', { name: 'Pomme' })]).toContain(ctx.finished.msg);
       }
     }
   });

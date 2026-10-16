@@ -41,6 +41,34 @@ export function verdict(value, lo, hi) {
   return 'just';
 }
 
+/**
+ * Note de fin d'un jeu « juste ce qu'il faut » : { q, verdict }, toujours d'accord entre eux.
+ * La note est arrondie au centième (comme dans le cadre) : à un cheveu du bord de la zone, elle
+ * fait 1,00 et le verdict devient « juste » (sinon « Bravo ! ★★★ » avec « Un peu trop ! »).
+ * À l'inverse, hors de la zone, q reste sous 1. opts : { floor, slack } de justRight.
+ */
+export function justOutcome(value, lo, hi, opts = {}) {
+  let q = justRight(value, lo, hi, opts);
+  let v = verdict(value, lo, hi);
+  if (Math.round(q * 100) >= 100) {
+    q = 1;
+    v = 'just';
+  }
+  return { q, verdict: v };
+}
+
+/**
+ * Étoiles de la carte de fin (1 à 3) pour une qualité 0–1 (arrondie au centième par le cadre).
+ * Trois étoiles veut dire « juste ce qu'il fallait » : seulement si la note vaut 1 et que le
+ * verdict (s'il y en a un) est « juste ». Hors de la zone : 2 étoiles si la note reste bonne
+ * (≥ 0,6), 1 sinon (l'enfant a quand même fini).
+ */
+export function starsFor(quality, why = null) {
+  const q = Math.round((Number.isFinite(quality) ? quality : 0) * 100) / 100;
+  if (q >= 1 && (why === null || why === undefined || why === 'just')) return 3;
+  return q >= 0.6 ? 2 : 1;
+}
+
 /** Zone juste autour d'une cible : ± pct (12 % par défaut) de la cible. */
 export function zoneAround(target, pct = 0.12) {
   const d = Math.abs(target) * pct;

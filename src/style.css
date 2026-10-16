@@ -1218,6 +1218,10 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
   z-index: 45;
   display: grid;
   place-items: center;
+  /* Une rangée de la hauteur de l'écran (et pas « auto ») : sans elle, la rangée prenait la hauteur
+     de la fenêtre, et le max-height: 100% de .mg-box ne la retenait plus (360 × 640 : « C'est
+     bon ! » sortait de l'écran). */
+  grid-template-rows: minmax(0, 1fr);
   padding: calc(12px + var(--safe-t)) calc(12px + var(--safe-r)) calc(12px + var(--safe-b)) calc(12px + var(--safe-l));
   background: rgba(20, 28, 24, 0.45);
   animation: mg-fade 0.2s ease-out;
@@ -1243,7 +1247,9 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
 .mg-title small { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
 .mg-icon { font-size: 1.5rem; }
 .mg-close { width: 48px; height: 48px; padding: 0; border-radius: 50%; font-size: 1.1rem; flex-shrink: 0; }
-.mg-close[hidden] { display: none; }
+/* Caché sur la carte de fin, mais à sa place : l'en-tête gardait 29 px au lieu de 48, et la fenêtre,
+   centrée, sautait de ~10 px (19 px de scène en plus sur ordinateur) quand la carte apparaissait. */
+.mg-close[hidden] { display: block; visibility: hidden; pointer-events: none; }
 .mg-hint {
   margin: 0;
   padding: 10px 14px;
@@ -1253,7 +1259,9 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
   font-size: 1.05rem;
   line-height: 1.3;
   text-align: center;
-  min-height: 2.6em;
+  /* Place pour deux lignes (+ le padding) : passer d'une consigne d'une ligne à une de deux ne
+     fait plus bouger (ni rétrécir) la scène sous le doigt. */
+  min-height: calc(2.6em + 20px);
   display: grid;
   place-items: center;
 }
@@ -1289,23 +1297,37 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
   color: #1e5c3e;
   text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff;
 }
-.mg-progress:has(.mg-progress-zone:not([hidden])) { margin-top: 4px; margin-bottom: 4px; }
+/* Toujours la place de la bande verte au-dessus et en dessous (même cachée) : rien ne bouge
+   quand un jeu la montre ou la cache en cours de route (laver : savon, puis rinçage). */
+.mg-progress { margin-top: 4px; margin-bottom: 4px; }
 .mg-stage { position: relative; flex: 1; min-height: 0; border-radius: 18px; overflow: hidden; background: #dfeee4; }
 .mg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: pointer; }
-.mg-controls { display: flex; gap: 8px; }
-.mg-controls:empty { display: none; }
-.mg-btn { flex: 1; min-height: 60px; font-size: 1.2rem; font-weight: 800; border-radius: 18px; touch-action: none; }
+/* La rangée de boutons garde sa place (66 px, la hauteur de « C'est bon ! ») même vide : quand un
+   jeu ajoute son bouton en cours de route (nettoyer : « C'est bon ! » à l'étape « étaler »), la
+   fenêtre, centrée, ne grandit plus, et la scène ne saute plus de ~37 px sous le doigt. */
+.mg-controls { display: flex; flex-wrap: wrap; gap: 8px; min-height: 66px; }
+.mg-controls:empty { visibility: hidden; }
+/* Libellés : jamais de « ! » seul à la ligne (espaces insécables posés par le cadre, nbsp) ; un
+   libellé trop long pour son bouton (« 🚰 Ouvrir le robinet » en 360 px) passe sur deux lignes
+   équilibrées. « C'est bon ! » reste toujours sur une seule ligne. */
+.mg-btn { flex: 1 1 0; min-width: 0; min-height: 60px; padding-inline: 10px; font-size: 1.2rem; font-weight: 800; line-height: 1.15; border-radius: 18px; touch-action: none; text-wrap: balance; overflow: hidden; }
 .mg-btn.held { transform: scale(0.96); filter: brightness(0.92); }
 .mg-btn.primary { box-shadow: 0 4px 0 #1e5c3e; }
 .mg-btn.primary.held { box-shadow: 0 1px 0 #1e5c3e; transform: translateY(3px); }
 /* Gros bouton « ✅ C'est bon ! » (ctx.stopButton) : on s'arrête là, juste ce qu'il faut. */
-.mg-btn.stop { min-height: 66px; font-size: 1.3rem; background: #2f8a5f; color: #fff; border-color: transparent; box-shadow: 0 5px 0 #1e5c3e; }
+.mg-btn.stop { min-height: 66px; font-size: 1.3rem; background: #2f8a5f; color: #fff; border-color: transparent; box-shadow: 0 5px 0 #1e5c3e; white-space: nowrap; text-overflow: ellipsis; }
 .mg-btn.stop:active:not(:disabled) { box-shadow: 0 1px 0 #1e5c3e; transform: translateY(4px); }
+/* Carte de fin : centrée sur la scène ; plus haute que la scène, elle défile (le bouton
+   « Continuer » reste atteignable) au lieu d'être coupée en haut et en bas. */
 .mg-end {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   background: rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(2px);
   animation: mg-fade 0.3s ease-out;
@@ -1313,6 +1335,8 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
 }
 .mg-end[hidden] { display: none; }
 .mg-end-card {
+  margin: auto 0; /* centrée quand elle tient, en haut (et qui défile) sinon */
+  flex-shrink: 0;
   background: var(--bg);
   border-radius: 22px;
   padding: 18px 22px;
@@ -1331,13 +1355,78 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
 .mg-stars .off { color: #d9d2c2; }
 @keyframes mg-star { from { transform: scale(0) rotate(-40deg); opacity: 0; } to { transform: none; opacity: 1; } }
 .mg-continue { width: 100%; min-height: 56px; font-size: 1.2rem; }
+/* Carte trop haute pour la scène (360 × 780 avec un message de 3 lignes, long prénom) : version
+   compacte, posée par le cadre (minigames.js, fitEnd) seulement quand la carte normale ne tient pas. */
+.mg-end.tight { padding: 4px; }
+.mg-end.tight .mg-end-card { padding: 12px 16px 10px; border-radius: 18px; }
+.mg-end.tight .mg-end-emoji { font-size: 2rem; line-height: 1.1; }
+.mg-end.tight .mg-end-card h2 { font-size: 1.45rem; }
+.mg-end.tight .mg-stars { font-size: 2rem; }
+.mg-end.tight .mg-end-card p { margin: 0.3em 0 0.6em; font-size: 1rem; }
+.mg-end.tight .mg-continue { min-height: 50px; }
+/* Le guide du tutoriel (bulle 55, anneau 60) ne passe jamais par-dessus un mini-jeu ouvert : il
+   cachait la consigne et le ✕, et montrait un bouton caché sous le jeu (tutorial.js le cache aussi). */
+body.mg-open #tuto-bubble,
+body.mg-open #tuto-ring { display: none !important; }
 @media (max-width: 640px) {
-  .mg-overlay { padding: calc(6px + var(--safe-t)) 6px calc(6px + var(--safe-b)); }
+  .mg-overlay { padding: calc(6px + var(--safe-t)) calc(6px + var(--safe-r)) calc(6px + var(--safe-b)) calc(6px + var(--safe-l)); }
   /* En portrait, la scène garde sa forme : la fenêtre se resserre au lieu de laisser du vide. */
   .mg-box { height: auto; max-height: 100%; border-radius: 20px; padding: 8px 10px 10px; }
-  .mg-stage { flex: none; aspect-ratio: 400 / 390; max-height: 64vh; }
+  /* Portrait court (360 × 640) : la scène cède ce qui manque (la fenêtre ne dépasse plus de l'écran) ;
+     ailleurs elle garde sa forme. */
+  .mg-stage { flex: 0 1 auto; min-height: 160px; aspect-ratio: 400 / 390; max-height: 64vh; }
   .mg-title { font-size: 1.1rem; }
   .mg-hint { font-size: 1rem; }
+}
+/* Téléphone en portrait : avec deux boutons d'action en plus (Gauche / Droite, Doucement / Allez !),
+   « C'est bon ! » passe sur sa propre ligne, en entier, sous les deux autres. */
+@media (max-width: 640px) and (orientation: portrait) {
+  .mg-controls:has(> .mg-btn:nth-child(3)) > .mg-btn.stop { flex-basis: 100%; }
+}
+/* Petit téléphone (360 px) : boutons de ~160 px côte à côte, « ✅ C'est bon ! » y tient sur une ligne. */
+@media (max-width: 380px) {
+  .mg-controls .mg-btn { font-size: 1.05rem; padding-inline: 6px; }
+  .mg-controls .mg-btn.stop { font-size: 1.15rem; }
+}
+/* Téléphone en paysage (844 × 390, 740 × 360) : empilés, titre, consigne, jauge et boutons ne
+   laissaient que ~110 à 140 px de haut à la scène (animal minuscule, cibles de 28 px), et la carte
+   de fin était coupée. Ici la scène prend toute la hauteur, à gauche ; le reste est en colonne à
+   droite (titre, consigne, jauge, puis les boutons en bas, sous le pouce). */
+@media (orientation: landscape) and (max-height: 520px) {
+  .mg-overlay { padding: calc(4px + var(--safe-t)) calc(6px + var(--safe-r)) calc(4px + var(--safe-b)) calc(6px + var(--safe-l)); }
+  .mg-box {
+    width: min(1100px, 100%);
+    height: 100%;
+    max-height: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(210px, 38%);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-areas: 'stage head' 'stage hint' 'stage progress' 'stage controls';
+    gap: 6px 10px;
+    padding: 6px 8px;
+    border-radius: 18px;
+  }
+  .mg-head { grid-area: head; gap: 6px; }
+  .mg-title { font-size: 1rem; gap: 2px 6px; }
+  .mg-icon { font-size: 1.2rem; }
+  .mg-close { width: 44px; height: 44px; }
+  .mg-hint { grid-area: hint; min-height: 0; padding: 6px 10px; font-size: 0.95rem; line-height: 1.25; }
+  .mg-progress { grid-area: progress; }
+  .mg-stage { grid-area: stage; flex: none; aspect-ratio: auto; max-height: none; min-height: 0; height: 100%; border-radius: 14px; }
+  /* (!important : les styles en ligne qu'un jeu pose pour le portrait — retour à la ligne, marges,
+     « C'est bon ! » sur toute la largeur — n'ont pas de sens dans cette colonne) */
+  .mg-controls { grid-area: controls; flex-direction: column; flex-wrap: nowrap !important; justify-content: flex-end; min-height: 0; }
+  .mg-controls > .mg-btn { flex: 0 0 auto !important; min-height: 50px; font-size: 1.1rem; margin: 0 !important; }
+  .mg-controls > .mg-btn.stop { min-height: 56px; font-size: 1.2rem; }
+  /* Carte de fin sur tout l'écran (pas enfermée dans la scène), plus compacte, et qui défile. */
+  .mg-end { position: fixed; inset: 0; z-index: 46; padding: calc(6px + var(--safe-t)) calc(8px + var(--safe-r)) calc(6px + var(--safe-b)) calc(8px + var(--safe-l)); }
+  .mg-end.tight { padding: calc(2px + var(--safe-t)) calc(8px + var(--safe-r)) calc(2px + var(--safe-b)) calc(8px + var(--safe-l)); }
+  .mg-end-card { padding: 14px 18px 12px; width: min(400px, 100%); }
+  .mg-end-emoji { font-size: 2.1rem; line-height: 1.1; }
+  .mg-end-card h2 { font-size: 1.45rem; }
+  .mg-stars { font-size: 2rem; }
+  .mg-end-card p { margin: 0.3em 0 0.6em; font-size: 1rem; }
+  .mg-continue { min-height: 50px; }
 }
 /* ==========================================================================
    Activités, concours et spectacles (src/ui/activities.js)

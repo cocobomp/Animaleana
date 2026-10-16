@@ -435,7 +435,9 @@ describe('la vaisselle : chaque assiette frottée juste assez', () => {
       expect(ctx.done).toBe(true);
       expect(game.peek().plates.length).toBe(5);
       const key = expected === 'just' ? 'mg_chore_justRight' : expected === 'low' ? 'mg_chore_tooLittle' : 'mg_chore_tooMuch';
-      expect(ctx.finished.msg).toBe(t(key));
+      // (le message propre à la vaisselle, mg_chore_kitchen_low / _high, s'il existe dans i18n.js)
+      const own = expected === 'just' ? key : `mg_chore_kitchen_${expected}`;
+      expect(ctx.finished.msg).toBe(t(own) !== own ? t(own) : t(key));
       if (expected === 'just') expect(ctx.finished.q).toBe(1);
       else {
         expect(ctx.finished.q).toBeLessThan(0.8);

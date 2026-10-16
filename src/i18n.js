@@ -1488,15 +1488,18 @@ const fr = {
   mg_hooves_hint: 'Coupe le bout qui dépasse, dans la zone verte. Évite le rose !',
   mg_nails_btn: 'Couper',
   mg_nails_end_ouch: 'C\'est fini ! Un peu court parfois : regarde bien la zone verte.',
+  mg_nails_end_short: 'Un peu trop court ! La prochaine fois, coupe dans la zone verte.',
+  mg_nails_end_long: 'Encore un peu long : la prochaine fois, coupe un peu plus près, dans la zone verte.',
   // ferrer
-  mg_shoe_hint: 'Tape quand le cercle bleu touche le cercle jaune !',
+  mg_shoe_hint_just: 'Tape 3 fois 🔨 sur chaque clou, pas plus, puis ✅ C\'est bon !',
   mg_shoe_btn: 'Taper',
   // tondre
-  mg_shear_hint: 'Passe la tondeuse sur la laine pour tout enlever.',
+  mg_shear_hint_just: 'Passe la tondeuse une fois sur toute la laine, sans raser, puis ✅ C\'est bon !',
   mg_shear_more: 'Super ! Il en reste encore un peu…',
   // nettoyer
   mg_clean_hint: 'Touche les saletés (ou glisse-les) pour les mettre dans la brouette.',
   mg_clean_hint_cat: 'Touche les crottes et les boules de litière pour les jeter.',
+  mg_clean_hint_rabbit: 'Touche les crottes (ou glisse-les) pour les mettre dans le seau.',
   mg_clean_spread: 'Bravo ! Maintenant, étale de la paille fraîche partout.',
   mg_clean_spread_cat: 'Bravo ! Maintenant, verse de la litière propre partout.',
   // caresser
@@ -1570,9 +1573,23 @@ const fr = {
   mg_tooLittle: 'Un peu trop peu… {name} en voulait encore un peu.',
   mg_stopHere: 'C\'est bon !',
   mg_zoneHint: 'Arrête-toi dans la zone verte 🟩',
+  // dans la zone verte : c'est le bouton ✅ qui termine (pas « lâcher », qui ne vaut que pour verser)
+  mg_pressStop: 'Parfait ! Appuie sur ✅ C\'est bon !',
+  mg_tapStop: 'Dans le vert ! Appuie sur ✅ C\'est bon !',
+  mg_tooMuchStop: 'C\'est trop ! Appuie vite sur ✅ C\'est bon !',
   mg_chore_justRight: 'Juste ce qu\'il fallait ! Tout est nickel !',
   mg_chore_tooLittle: 'Un peu trop peu… Il en manquait encore un peu.',
   mg_chore_tooMuch: 'Un peu trop ! Mais c\'est fait quand même.',
+  // fins des corvées qui disent pourquoi (chores.js, whyMsgs : mg_chore_<corvée>_low / _high)
+  mg_chore_muck_low: 'Un peu trop peu… Il reste du crottin par terre.',
+  mg_chore_muck_high: 'Un peu trop ! De la paille propre est partie à la brouette.',
+  mg_chore_straw_low: 'Un peu trop peu… Il reste du sol sans paille.',
+  mg_chore_straw_high: 'Un peu trop ! Des tas de paille, c\'est du gaspillage.',
+  mg_chore_sweep_low: 'Un peu trop peu… Il reste de la poussière dans l\'allée.',
+  mg_chore_sweep_high: 'Un peu trop ! Balayer du propre, ça soulève la poussière.',
+  mg_chore_living_low: 'Un peu trop peu… Tout n\'est pas à sa place.',
+  mg_chore_kitchen_low: 'Un peu trop peu… Il restait de la saleté sur les assiettes.',
+  mg_chore_kitchen_high: 'Un peu trop ! Frotter trop longtemps, c\'est de l\'eau gaspillée.',
   // ---------- activités, concours et spectacles (src/sim/activities.js, src/game/Activities.js, src/ui/activities.js)
   actv_hud: 'Activités',
   actv_title: 'Activités et concours',
@@ -3203,15 +3220,18 @@ const en = {
   mg_hooves_hint: 'Trim the overgrown tip in the green zone. Avoid the pink!',
   mg_nails_btn: 'Cut',
   mg_nails_end_ouch: 'All done! A bit short sometimes: watch the green zone.',
+  mg_nails_end_short: 'A little too short! Next time, cut in the green zone.',
+  mg_nails_end_long: 'Still a bit long: next time, cut a little closer, in the green zone.',
   // shoe
-  mg_shoe_hint: 'Tap when the blue circle touches the yellow one!',
+  mg_shoe_hint_just: 'Hit each nail 3 times 🔨, no more, then ✅ That\'s it!',
   mg_shoe_btn: 'Hammer',
   // shear
-  mg_shear_hint: 'Run the clippers over the wool to take it all off.',
+  mg_shear_hint_just: 'Run the clippers once over all the wool, without shaving it bare, then ✅ That\'s it!',
   mg_shear_more: 'Great! Just a little left…',
   // clean
   mg_clean_hint: 'Tap the mess (or drag it) to put it in the wheelbarrow.',
   mg_clean_hint_cat: 'Tap the poops and litter clumps to throw them away.',
+  mg_clean_hint_rabbit: 'Tap the droppings (or drag them) to put them in the bucket.',
   mg_clean_spread: 'Well done! Now spread fresh straw everywhere.',
   mg_clean_spread_cat: 'Well done! Now pour clean litter everywhere.',
   // pet
@@ -3285,9 +3305,23 @@ const en = {
   mg_tooLittle: 'A bit too little… {name} wanted a little more.',
   mg_stopHere: 'That\'s it!',
   mg_zoneHint: 'Stop in the green zone 🟩',
+  // in the green zone: the ✅ button ends the game (not "let go", which is only for pouring)
+  mg_pressStop: 'Perfect! Tap ✅ That\'s it!',
+  mg_tapStop: 'In the green! Tap ✅ That\'s it!',
+  mg_tooMuchStop: 'Too much! Quickly tap ✅ That\'s it!',
   mg_chore_justRight: 'Just right! Spotless!',
   mg_chore_tooLittle: 'A bit too little… there was still a little left to do.',
   mg_chore_tooMuch: 'A bit too much! But it\'s done all the same.',
+  // chore endings that say why (chores.js, whyMsgs: mg_chore_<chore>_low / _high)
+  mg_chore_muck_low: 'A bit too little… there are still droppings on the floor.',
+  mg_chore_muck_high: 'A bit too much! Some clean straw went in the wheelbarrow.',
+  mg_chore_straw_low: 'A bit too little… some of the floor has no straw.',
+  mg_chore_straw_high: 'A bit too much! Piles of straw are a waste.',
+  mg_chore_sweep_low: 'A bit too little… there is still dust in the aisle.',
+  mg_chore_sweep_high: 'A bit too much! Sweeping a clean floor stirs up dust.',
+  mg_chore_living_low: 'A bit too little… not everything is in its place.',
+  mg_chore_kitchen_low: 'A bit too little… there was still some dirt on the plates.',
+  mg_chore_kitchen_high: 'A bit too much! Scrubbing too long wastes water.',
   // ---------- activities, competitions and shows
   actv_hud: 'Activities',
   actv_title: 'Activities & contests',

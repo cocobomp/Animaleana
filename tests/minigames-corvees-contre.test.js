@@ -23,6 +23,13 @@ beforeAll(async () => {
 
 const KEY = { just: 'justRight', low: 'tooLittle', high: 'tooMuch' };
 const endMsg = (v, name = '') => (name ? t(`mg_${KEY[v]}`, { name }) : t(`mg_chore_${KEY[v]}`));
+/**
+ * Messages de fin acceptés : le standard (endMsg), ou, pour « trop peu » / « trop », celui qui dit
+ * pourquoi, propre à une corvée (mg_chore_<corvée>_low / _high : chores.js, whyMsgs) dès qu'il
+ * existe dans i18n.js. Les textes propres sont différents pour low et high : le verdict reste vérifié.
+ */
+const CHORE_KINDS = ['muck', 'straw', 'sweep', 'living', 'kitchen'];
+const endMsgs = (v, name = '') => [endMsg(v, name), ...(v === 'just' ? [] : CHORE_KINDS.map((k) => `mg_chore_${k}_${v}`).filter((k) => t(k) !== k).map((k) => t(k)))];
 
 /** Le cadre, en faux (mêmes méthodes que le ctx de src/ui/minigames.js, finish arrondi pareil). */
 function fakeCtx({ a = null, seed = 7 } = {}) {
@@ -94,14 +101,14 @@ describe('messages de fin, avec le cheval du box', () => {
     const tap = (it) => { game.down({ x: it.x, y: it.y }); game.up({ x: it.x, y: it.y }); tick(game, 30); };
     tap(game.peek().items.find((x) => x.good));
     while (game.peek().items.some((x) => !x.good) && !ctx.done) tap(game.peek().items.find((x) => !x.good));
-    expect(ctx.finished.msg).toBe(endMsg('high'));
+    expect(endMsgs('high')).toContain(ctx.finished.msg);
   });
 
   it('paille : le prénom reste (« Pomme en voulait encore un peu » parle bien de paille)', () => {
     const ctx = fakeCtx({ a: pomme });
     chores.strawGame(ctx);
     press(ctx);
-    expect(ctx.finished.msg).toBe(endMsg('low', 'Pomme'));
+    expect(endMsgs('low', 'Pomme')).toContain(ctx.finished.msg);
   });
 });
 
@@ -133,7 +140,7 @@ describe('curer : la course entre le dernier crottin et une touffe propre', () =
     tick(game, 30);
     expect(ctx.done).toBe(true);
     expect(ctx.finishes).toBe(1);
-    expect(ctx.finished.msg).toBe(endMsg('high'));
+    expect(endMsgs('high')).toContain(ctx.finished.msg);
     expect(ctx.finished.q).toBeLessThan(1);
     expect(ctx.finished.q).toBeCloseTo(justRight(9, 7.5, 8.5, { slack: 1.5 }), 2);
   });
@@ -147,7 +154,7 @@ describe('curer : la course entre le dernier crottin et une touffe propre', () =
     expect(ctx.done).toBe(false);
     launch(game, tuftsOf(game)[0]);
     tick(game, 40);
-    expect(ctx.finished.msg).toBe(endMsg('high'));
+    expect(endMsgs('high')).toContain(ctx.finished.msg);
     expect(ctx.finished.q).toBeLessThan(1);
   });
 
@@ -161,7 +168,7 @@ describe('curer : la course entre le dernier crottin et une touffe propre', () =
     expect(game.peek().holding).toBe('tuft');
     expect(game.peek().thrown).toBe(0);
     tick(game, 40);
-    expect(ctx.finished.msg).toBe(endMsg('just'));
+    expect(endMsgs('just')).toContain(ctx.finished.msg);
     expect(ctx.finished.q).toBe(1);
   });
 
@@ -173,7 +180,7 @@ describe('curer : la course entre le dernier crottin et une touffe propre', () =
     game.down({ x: last.x, y: last.y });
     expect(game.peek().left).toBe(1);
     press(ctx);
-    expect(ctx.finished.msg).toBe(endMsg('low'));
+    expect(endMsgs('low')).toContain(ctx.finished.msg);
     expect(ctx.finished.q).toBeLessThan(1);
   });
 });
@@ -191,7 +198,7 @@ describe('curer : la fourche ne perd rien', () => {
     expect(dirtOf(game).length).toBe(7); // B est toujours par terre
     while (dirtOf(game).length && !ctx.done) tapItem(game, dirtOf(game)[0]);
     expect(ctx.done).toBe(true); // la fin automatique arrive bien
-    expect(ctx.finished.msg).toBe(endMsg('just'));
+    expect(endMsgs('just')).toContain(ctx.finished.msg);
   });
 
   it('un crottin glissé puis lâché sous la scène reste visible, et on peut le reprendre', () => {
@@ -253,7 +260,7 @@ describe('curer : la jauge dit vrai', () => {
     const game = chores.muckGame(ctx);
     for (const it of tuftsOf(game)) tapItem(game, it);
     while (dirtOf(game).length && !ctx.done) tapItem(game, dirtOf(game)[0]);
-    expect(ctx.finished.msg).toBe(endMsg('high'));
+    expect(endMsgs('high')).toContain(ctx.finished.msg);
     expect(ctx.finished.q).toBe(JUST_FLOOR);
   });
 });
@@ -284,7 +291,7 @@ describe('paille : une couche PARTOUT', () => {
     expect(p.layers).toBeGreaterThan(0.85); // assez de paille… mais pas partout
     expect(inGreen(ctx)).toBe(false);
     press(ctx);
-    expect(ctx.finished.msg).toBe(endMsg('low'));
+    expect(endMsgs('low')).toContain(ctx.finished.msg);
     expect(ctx.finished.q).toBeLessThan(0.85);
   });
 
@@ -300,7 +307,7 @@ describe('paille : une couche PARTOUT', () => {
     }
     expect(game.peek().layers).toBeGreaterThan(2); // de très gros tas
     press(ctx);
-    expect(ctx.finished.msg).toBe(endMsg('low'));
+    expect(endMsgs('low')).toContain(ctx.finished.msg);
   });
 
   it('des tas, puis le sol enfin couvert : « trop » (la jauge saute au-dessus du vert)', () => {
@@ -319,7 +326,7 @@ describe('paille : une couche PARTOUT', () => {
     expect(q.covered).toBeGreaterThanOrEqual(0.85);
     expect(q.value).toBeGreaterThan(q.hi);
     press(ctx);
-    expect(ctx.finished.msg).toBe(endMsg('high'));
+    expect(endMsgs('high')).toContain(ctx.finished.msg);
     expect(ctx.finished.q).toBeLessThan(1);
   });
 
@@ -329,7 +336,7 @@ describe('paille : une couche PARTOUT', () => {
     expect(p.covered).toBeGreaterThan(0.85);
     expect(inGreen(ctx)).toBe(true);
     press(ctx);
-    expect(ctx.finished.msg).toBe(endMsg('just'));
+    expect(endMsgs('just')).toContain(ctx.finished.msg);
     expect(ctx.finished.q).toBe(1);
   });
 
@@ -402,7 +409,7 @@ describe('ranger : « trop » n\'existe pas, mais « mal fait » compte', () => 
     }
     expect(game.peek().misplacedCount).toBeGreaterThan(4);
     press(ctx);
-    expect(ctx.finished.msg).toBe(endMsg('low'));
+    expect(endMsgs('low')).toContain(ctx.finished.msg);
     expect(ctx.finished.q).toBe(JUST_FLOOR);
   });
 
@@ -492,7 +499,7 @@ describe('vaisselle : le vert dure assez longtemps pour s\'arrêter à temps', (
     const mean = plates.map((v) => justRight(v, 0.9, 1.15)).reduce((s, x) => s + x, 0) / 5;
     expect(Math.round(mean * 100) / 100).toBe(1); // l'arrondi du cadre en faisait 1
     expect(ctx.finished.q).toBe(0.99);
-    expect(ctx.finished.msg).toBe(endMsg('low'));
+    expect(endMsgs('low')).toContain(ctx.finished.msg);
   });
 
   it('ne jamais s\'arrêter : chaque assiette part toute seule, au plancher, « trop »', () => {
@@ -504,7 +511,7 @@ describe('vaisselle : le vert dure assez longtemps pour s\'arrêter à temps', (
     }
     expect(ctx.done).toBe(true);
     expect(game.peek().plates.every((v) => v >= 1.6)).toBe(true);
-    expect(ctx.finished.msg).toBe(endMsg('high'));
+    expect(endMsgs('high')).toContain(ctx.finished.msg);
     expect(ctx.finished.q).toBe(JUST_FLOOR);
   });
 });

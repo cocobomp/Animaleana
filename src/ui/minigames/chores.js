@@ -3,17 +3,24 @@
 // Pas d'animal ici (ou seulement celui qui habite le box, pour le décor : ctx.sp).
 // Chaque jeu reçoit le ctx du cadre (minigames.js) et renvoie { update, draw, down, move, up, peek }.
 // Tout se joue au doigt ou à la souris : toucher, glisser, lâcher.
+//
+// Règle « juste ce qu'il faut » (score.js) : chaque corvée a une quantité juste, visible en
+// vert sur la jauge (et dans la scène), et l'enfant s'arrête avec « C'est bon ! » ; trop peu
+// ou trop, c'est moins de points, de la même façon des deux côtés.
+// - curer : tout le crottin, mais pas la paille propre (la jeter, c'est trop) ;
+// - paille : une couche partout (0,85 à 1,15 couche), plus c'est du gaspillage ;
+// - balayer : tout ramasser, sans passes à vide (balayer du propre soulève la poussière) ;
+// - ranger : chaque objet à sa place (un objet au mauvais endroit compte en moins) ;
+// - vaisselle : frotter chaque assiette juste assez (trop longtemps, c'est de l'eau gaspillée).
 
 import { rrect, ellipse, circle, emoji, label, fillView, tiles, clamp, dist, distToSegment } from './draw.js';
-import { cleanGame, drawBoxWall } from './clean.js';
+import { cleanGame, drawBoxWall, drawMiniGauge } from './clean.js';
+import { justRight, verdict as verdictOf } from './score.js';
 
 /** Les corvées qui ont un mini-jeu (l'écurie, puis la maison). */
 export const CHORE_KINDS = ['muck', 'straw', 'sweep', 'living', 'kitchen'];
 
 export const CHORE_ICONS = { muck: '🧹', straw: '🌾', sweep: '🧹', living: '🧽', kitchen: '🍽️' };
-
-/** Qualité selon le temps : 1 jusqu'à `par` secondes, puis baisse doucement (jamais sous 0,6). */
-const timeQuality = (time, par) => (time <= par ? 1 : Math.max(0.6, 1 - (time - par) / 40));
 
 /** Flèche qui invite à aller quelque part (petit rebond). */
 function bounceArrow(g, ch, x, y, time, size = 24) {
@@ -49,12 +56,19 @@ function drawFork(g, x, y) {
   g.restore();
 }
 
-/** Curer : le jeu « nettoyer » du cheval, à la fourche, sans la 2e étape (la paille a son propre jeu). */
+/**
+ * Curer : le jeu « nettoyer » du cheval, à la fourche, sans la 2e étape (la paille a son propre
+ * jeu). Juste ce qu'il faut : les 8 crottins dans la brouette, et pas les 3 touffes de paille
+ * propre qui traînent (les jeter, c'est du gaspillage : trop).
+ */
 export function muckGame(ctx) {
-  return cleanGame(ctx, { species: 'horse', n: 8, spread: false, tool: drawFork, hint: ctx.t('mg_chore_muck_hint') });
+  return cleanGame(ctx, { species: 'horse', n: 8, decoys: 3, spread: false, tool: drawFork, hint: ctx.t('mg_chore_muck_hint') });
 }
 
 // ---------------------------------------------------------------- paille fraîche
+
+/** Zone juste : une couche partout (0,85 à 1,15 couche) ; à 1,6 couche, c'est des tas de gaspillage. */
+const STRAW = { lo: 0.85, hi: 1.15, max: 1.6 };
 
 export function strawGame(ctx) {
   const { t, fx, rng } = ctx;
@@ -69,9 +83,14 @@ export function strawGame(ctx) {
   let arm = 0; // paille dans les bras (0 à 1)
   let last = null;
   let armfuls = 0;
+  let zoneState = '';
 
   ctx.hint(t('mg_chore_straw_hint'));
+  ctx.zone(STRAW.lo / STRAW.max, STRAW.hi / STRAW.max);
+  ctx.stopButton(() => end());
 
+  /** Couches de paille posées, en moyenne (la quantité juste). */
+  const layers = () => cells.reduce((s, c) => s + c.n, 0) / cells.length;
   const covered = () => cells.filter((c) => c.n > 0).length / cells.length;
   const onBale = (p) => p.x > bale.x - 34 && p.y > bale.y - 70;
   const onFloor = (p) => p.x > floor.x && p.x < floor.x + floor.w && p.y > floor.y && p.y < floor.y + floor.h;
@@ -81,45 +100,64 @@ export function strawGame(ctx) {
     armfuls++;
     for (const c of cells) c.hit = false;
     fx.burst(bale.x + bale.w / 2, bale.y, '🌾', 4, { speed: 90, size: 16, life: 0.6 });
-    ctx.hint(t('mg_chore_straw_spread'), 'good');
+    if (!zoneState) ctx.hint(t('mg_chore_straw_spread'), 'good');
+  }
+
+  /** Fin : tous les points dans la zone verte, un peu moins si c'est clairsemé ou en tas. */
+  function end() {
+    if (ctx.done) return;
+    const { verdict } = ctx.finishJust(layers(), STRAW.lo, STRAW.hi);
+    const cx = floor.x + floor.w / 2;
+    const cy = floor.y + floor.h / 2;
+    if (verdict === 'just') {
+      fx.burst(cx, cy, '✨', 8, { speed: 160 });
+      fx.text(cx, cy - 20, t('mg_chore_straw_even'), '#2f8a5f', 24);
+    } else if (verdict === 'low') fx.text(cx, cy - 20, t('mg_more_short'), '#c07a10', 26);
+    else fx.text(cx, cy - 20, t('mg_oops'), '#c8463c', 26);
   }
 
   function spread(p) {
     if (!last) { last = p; return; }
     const d = dist(p.x, p.y, last.x, last.y);
     if (arm > 0 && (onFloor(p) || onFloor(last))) {
+      // En arrivant de la botte, on ne fait que boucher des trous : les couches (et donc les
+      // tas) ne se posent qu'en glissant sur le sol.
+      const inside = onFloor(p) && onFloor(last);
       let any = false;
       for (const c of cells) {
         if (c.hit) continue;
-        if (distToSegment(c.x, c.y, last.x, last.y, p.x, p.y) < 24) {
+        const dc = distToSegment(c.x, c.y, last.x, last.y, p.x, p.y);
+        // Le cœur de la brassée (15 px) pose une couche ; le bord (jusqu'à 24 px) ne fait que
+        // boucher les trous, pour que deux passages voisins ne fassent pas des tas.
+        if ((dc < 15 && inside) || (dc < 24 && c.n === 0)) {
           c.n++;
           c.hit = true;
           any = true;
         }
       }
       if (any && Math.random() < 0.6) fx.dot(p.x, p.y, '#f3d86b', 3, { vx: (Math.random() - 0.5) * 80, vy: -40, grav: 300, life: 0.5 });
-      arm = Math.max(0, arm - d / ARM);
+      // La brassée s'use en l'étalant (pas sur le trajet depuis la botte).
+      if (onFloor(p) && onFloor(last)) arm = Math.max(0, arm - d / ARM);
       if (arm <= 0) {
         ctx.hint(t('mg_chore_straw_empty'), 'warn');
         fx.text(p.x, p.y - 30, t('mg_chore_straw_empty_short'), '#c07a10', 20);
       }
     }
     last = p;
-    const f = covered();
-    ctx.progress(Math.min(1, f / 0.9));
-    if (f >= 0.9 && !ctx.done) {
-      for (const c of cells) if (c.n === 0) c.n = 1;
-      fx.burst(floor.x + floor.w / 2, floor.y + floor.h / 2, '✨', 8, { speed: 160 });
-      // Bonus si c'est régulier : peu de tas (cases couvertes 3 fois ou plus).
-      const heaps = cells.filter((c) => c.n >= 3).length / cells.length;
-      const even = heaps < 0.1;
-      if (even) fx.text(200, 80, t('mg_chore_straw_even'), '#2f8a5f', 24);
-      ctx.finish(clamp(timeQuality(ctx.time, 30) - heaps * 1.2, 0.5, 1), even ? t('mg_chore_straw_end_even') : undefined);
+    const v = layers();
+    ctx.progress(Math.min(1, v / STRAW.max));
+    const zs = v > STRAW.hi ? 'over' : v >= STRAW.lo ? 'in' : '';
+    if (zs !== zoneState) {
+      zoneState = zs;
+      if (zs === 'in') { ctx.hint(t('mg_nowStop'), 'good'); fx.text(200, 80, t('mg_good'), '#2f8a5f', 26); }
+      else if (zs === 'over') ctx.hint(t('mg_stop'), 'warn');
     }
+    // Des tas partout : c'est trop, et c'est fini.
+    if (v >= STRAW.max) end();
   }
 
   return {
-    peek: () => ({ bale, floor, covered: covered(), arm, armfuls }),
+    peek: () => ({ bale, floor, covered: covered(), arm, armfuls, value: layers(), lo: STRAW.lo, hi: STRAW.hi, max: STRAW.max }),
     down(p) {
       last = p;
       if (onBale(p)) grab();
@@ -155,18 +193,18 @@ export function strawGame(ctx) {
         }
         g.fillStyle = '#f3d86b';
         g.fillRect(c.x - step / 2 - 1, c.y - step / 2 - 1, step + 2, step + 2);
-        if (c.n >= 3) {
+        if (c.n >= 2) {
           // un tas : plus épais, plus foncé
           g.fillStyle = '#dcb447';
-          ellipse(g, c.x, c.y, 16, 11, c.k);
+          ellipse(g, c.x, c.y, 14 + Math.min(3, c.n), 10, c.k);
           g.fill();
         }
       }
       for (const c of cells) {
         if (c.n === 0) continue;
-        g.strokeStyle = c.n >= 3 ? '#b8902e' : '#d9b84a';
+        g.strokeStyle = c.n >= 2 ? '#b8902e' : '#d9b84a';
         g.lineWidth = 2;
-        const strands = c.n >= 3 ? 4 : 2;
+        const strands = c.n >= 2 ? 4 : 2;
         for (let i = 0; i < strands; i++) {
           const a0 = c.k * 9 + i * 2.1;
           const x = c.x + Math.cos(a0) * 10;
@@ -198,7 +236,9 @@ export function strawGame(ctx) {
       g.fillRect(bale.x + 22, bale.y, 6, bale.h);
       g.fillRect(bale.x + bale.w - 28, bale.y, 6, bale.h);
       if (arm <= 0 && !ctx.done) bounceArrow(g, '⬇️', bale.x + bale.w / 2, bale.y - 30, ctx.time);
-      label(g, `${Math.round(covered() * 100)} %`, 371, 60, 18);
+      // Petite jauge au mur : la même zone verte que sur la jauge du cadre.
+      drawMiniGauge(g, 352, 40, 14, 120, layers() / STRAW.max, STRAW.lo / STRAW.max, STRAW.hi / STRAW.max);
+      label(g, `${Math.round(layers() * 100)} %`, 359, 180, 15);
       // les bras pleins de paille
       const pp = ctx.pointer;
       if ((pp.over || pp.down) && !ctx.done) {
@@ -211,14 +251,20 @@ export function strawGame(ctx) {
 
 // ---------------------------------------------------------------- balayer l'allée
 
+/**
+ * Zone juste : au moins 90 % des brins dans la pelle, et pas de passes à vide (chaque passe
+ * qui ne touche rien soulève de la poussière : + 0,05). À 1,5, la poussière est partout.
+ */
+const SWEEP = { lo: 0.9, hi: 1.1, max: 1.5, dust: 0.05 };
+
 export function sweepGame(ctx) {
   const { t, fx, rng } = ctx;
   const aisle = { y: 104, h: 250 }; // l'allée, vue de dessus : tout le bas de la vue
-  const pan = { x: 338, y: 116, w: 90, h: 228 }; // la pelle, au bout de l'allée
+  const pan = { x: 310, y: 116, w: 80, h: 228 }; // la pelle, au bout de l'allée (dans les 400 px)
   const bits = [];
   for (let i = 0; i < 46; i++) {
     bits.push({
-      x: 26 + rng() * 280,
+      x: 20 + rng() * 270,
       y: aisle.y + 20 + rng() * (aisle.h - 44),
       kind: rng() < 0.55 ? 'straw' : 'dust',
       rot: rng() * Math.PI,
@@ -234,10 +280,42 @@ export function sweepGame(ctx) {
   let dir = 0;
   let strokes = 0;
   let strokeGain = 0;
+  let strokeTouched = 0; // brins déplacés pendant la passe
+  let strokeLen = 0;
+  let emptyStrokes = 0; // passes à vide : de la poussière soulevée
+  let zoneState = '';
 
   ctx.hint(t('mg_chore_sweep_hint'));
+  ctx.zone(SWEEP.lo / SWEEP.max, SWEEP.hi / SWEEP.max);
+  ctx.stopButton(() => end());
 
   const inPan = (b) => b.x > pan.x + 10 && b.y > pan.y + 8 && b.y < pan.y + pan.h - 8;
+  /** La quantité juste : part ramassée, plus la poussière soulevée par les passes à vide. */
+  const value = () => collected / total + emptyStrokes * SWEEP.dust;
+
+  /** Fin : tous les points dans la zone verte, un peu moins s'il en reste ou si on a trop balayé. */
+  function end() {
+    if (ctx.done) return;
+    const { verdict } = ctx.finishJust(value(), SWEEP.lo, SWEEP.hi, { slack: 0.3 });
+    if (verdict === 'just') {
+      fx.burst(pan.x + 40, pan.y + pan.h / 2, '✨', 8, { speed: 160 });
+      fx.text(200, 220, t('mg_perfect'), '#2f8a5f', 26);
+    } else if (verdict === 'low') fx.text(200, 220, t('mg_more_short'), '#c07a10', 26);
+    else fx.text(200, 220, t('mg_oops'), '#c8463c', 26);
+  }
+
+  function refresh() {
+    const v = value();
+    ctx.progress(Math.min(1, v / SWEEP.max));
+    const zs = v > SWEEP.hi ? 'over' : v >= SWEEP.lo ? 'in' : '';
+    if (zs !== zoneState) {
+      zoneState = zs;
+      if (zs === 'in') { ctx.hint(t('mg_zoneHint'), 'good'); fx.text(200, 220, t('mg_good'), '#2f8a5f', 26); }
+      else if (zs === 'over') ctx.hint(t('mg_zoneHint'), 'warn');
+    }
+    // De la poussière partout : c'est trop, et c'est fini.
+    if (v >= SWEEP.max) end();
+  }
 
   function sweep(p) {
     if (!last) { last = p; return; }
@@ -245,6 +323,7 @@ export function sweepGame(ctx) {
     const dy = p.y - last.y;
     const d = Math.hypot(dx, dy);
     if (d < 0.5) return;
+    strokeLen += d;
     dir = Math.atan2(dy, dx);
     const nx = -dy / d; // normale à la passe : les brins au bord du balai glissent sur le côté
     const ny = dx / d;
@@ -256,39 +335,43 @@ export function sweepGame(ctx) {
         b.x = clamp(b.x + dx * 1.08 + nx * slip + (rng() - 0.5) * 3, 8, pan.x + pan.w - 18);
         b.y = clamp(b.y + dy * 1.08 + ny * slip + (rng() - 0.5) * 3, aisle.y + 8, aisle.y + aisle.h - 8);
         b.rot += dx * 0.02;
+        strokeTouched++;
         if (inPan(b)) {
           b.done = true;
           collected++;
           strokeGain++;
-          b.x = pan.x + 30 + rng() * 44;
+          b.x = pan.x + 26 + rng() * 40;
           b.y = clamp(b.y, pan.y + 20, pan.y + pan.h - 20);
         }
       }
     }
     if (Math.random() < 0.35) fx.dot(p.x - dx, p.y - dy + 8, 'rgba(160, 140, 110, 0.5)', 3, { vx: -dx * 3, vy: -20, life: 0.5 });
     last = p;
-    ctx.progress(collected / total);
-    if (collected / total >= 0.92 && !ctx.done) {
-      for (const b of bits) if (!b.done) { b.done = true; b.x = pan.x + 30 + rng() * 44; b.y = pan.y + 30 + rng() * (pan.h - 60); }
-      collected = total;
-      fx.burst(pan.x + 40, pan.y + pan.h / 2, '✨', 8, { speed: 160 });
-      ctx.finish(timeQuality(ctx.time, 30));
-    }
+    if (strokeGain) refresh();
   }
 
   return {
-    peek: () => ({ pan, aisle, collected, total, bits: bits.filter((b) => !b.done).map((b) => ({ x: b.x, y: b.y })) }),
+    peek: () => ({ pan, aisle, collected, total, emptyStrokes, strokes, value: value(), lo: SWEEP.lo, hi: SWEEP.hi, max: SWEEP.max, bits: bits.filter((b) => !b.done).map((b) => ({ x: b.x, y: b.y })) }),
     down(p) {
       last = p;
       strokeGain = 0;
+      strokeTouched = 0;
+      strokeLen = 0;
     },
     move(p, down) { if (down) sweep(p); },
     up() {
       last = null;
       if (ctx.done) return;
       strokes++;
-      if (strokeGain > 0) { fx.text(pan.x + 30, pan.y - 16, t('mg_hop'), '#2f8a5f', 20); ctx.hint(t('mg_chore_sweep_more'), 'good'); }
-      else if (strokes >= 2) ctx.hint(t('mg_chore_sweep_toPan'), 'warn');
+      if (strokeGain > 0) { fx.text(pan.x + 30, pan.y - 16, t('mg_hop'), '#2f8a5f', 20); if (!zoneState) ctx.hint(t('mg_chore_sweep_more'), 'good'); }
+      else if (strokeTouched === 0 && strokeLen >= 40) {
+        // Une passe à vide : ça soulève la poussière (trop balayé).
+        emptyStrokes++;
+        const pp = ctx.pointer;
+        for (let i = 0; i < 8; i++) fx.dot(pp.x + (Math.random() - 0.5) * 60, pp.y + (Math.random() - 0.5) * 40, 'rgba(150, 135, 110, 0.6)', 4 + Math.random() * 4, { vx: (Math.random() - 0.5) * 60, vy: -30 - Math.random() * 30, life: 0.9 });
+        fx.float(pp.x, pp.y - 20, '💨', 24);
+        refresh();
+      } else if (strokes >= 2 && !zoneState) ctx.hint(t('mg_chore_sweep_toPan'), 'warn');
     },
     update() {},
     draw(g) {
@@ -340,8 +423,10 @@ export function sweepGame(ctx) {
           g.fill();
         }
       }
-      label(g, `${collected} / ${total}`, pan.x + 22, pan.y - 20, 18); // reste visible en portrait (400 px)
-      if (collected < total && !ctx.done) bounceArrow(g, '➡️', pan.x - 36, aisle.y + aisle.h / 2 + 60, ctx.time);
+      label(g, `${collected} / ${total}`, pan.x + 40, pan.y - 20, 18);
+      // Petite jauge sur le mur du haut : la même zone verte que sur la jauge du cadre.
+      drawMiniGauge(g, 30, 14, 250, 14, value() / SWEEP.max, SWEEP.lo / SWEEP.max, SWEEP.hi / SWEEP.max);
+      if (collected < total && !ctx.done && !zoneState) bounceArrow(g, '➡️', pan.x - 36, aisle.y + aisle.h / 2 + 60, ctx.time);
       // le balai
       const pp = ctx.pointer;
       if ((pp.over || pp.down) && !ctx.done) {
@@ -421,6 +506,11 @@ function drawLivingItem(g, it, x, y, alpha = 1) {
   g.restore();
 }
 
+/**
+ * Juste ce qu'il faut : chaque objet à sa place. Un objet posé au mauvais endroit y reste
+ * (avec un ❗) et compte en moins : score = bien rangés − mal rangés. Tout bien rangé, c'est
+ * fini tout seul ; sinon on s'arrête avec « C'est bon ! ».
+ */
 export function livingGame(ctx) {
   const { t, fx, rng } = ctx;
   const spots = [...LIVING_SPOTS];
@@ -428,23 +518,51 @@ export function livingGame(ctx) {
     const j = Math.floor(rng() * (i + 1));
     [spots[i], spots[j]] = [spots[j], spots[i]];
   }
-  const items = LIVING_ITEMS.map((it, i) => ({ ...it, x: spots[i].x, y: spots[i].y, home: spots[i], placed: false }));
+  const items = LIVING_ITEMS.map((it, i) => ({ ...it, x: spots[i].x, y: spots[i].y, home: spots[i], placed: false, misplaced: false }));
+  const N = items.length;
+  const LO = N - 0.4; // le dernier objet compte : à 7, ce n'est plus tout à fait juste
   let held = null;
   let off = { x: 0, y: 0 };
-  let wrong = 0;
-  let placed = 0;
+  let wrong = 0; // erreurs faites en tout (pour les tests)
 
   ctx.hint(t('mg_chore_living_hint'));
+  ctx.zone(LO / N, 1);
+  ctx.stopButton(() => end());
 
   const inPlace = (p, pl) => p.x > pl.x - 10 && p.x < pl.x + pl.w + 10 && p.y > pl.y - 10 && p.y < pl.y + pl.h + 10;
+  const placed = () => items.filter((it) => it.placed).length;
+  const misplaced = () => items.filter((it) => it.misplaced).length;
+  /** La quantité juste : bien rangés − mal rangés. */
+  const value = () => placed() - misplaced();
+
+  function end() {
+    if (ctx.done) return;
+    const { verdict } = ctx.finishJust(value(), LO, N, { slack: 2 });
+    if (verdict === 'just') {
+      fx.burst(200, 200, '✨', 8, { speed: 160 });
+      fx.text(200, 180, t('mg_perfect'), '#2f8a5f', 26);
+    } else fx.text(200, 180, t('mg_more_short'), '#c07a10', 26);
+  }
 
   return {
-    peek: () => ({ items: items.filter((it) => !it.placed).map((it) => ({ id: it.id, x: it.x, y: it.y, slot: it.slot })), placed, wrong }),
+    peek: () => ({
+      items: items.filter((it) => !it.placed).map((it) => ({ id: it.id, x: it.x, y: it.y, slot: it.slot, misplaced: it.misplaced })),
+      placed: placed(),
+      misplacedCount: misplaced(),
+      wrong,
+      value: value(),
+      lo: LO,
+      hi: N,
+      max: N,
+      places: LIVING_PLACES,
+    }),
     down(p) {
       const it = items.filter((x) => !x.placed).sort((u, v) => dist(u.x, u.y, p.x, p.y) - dist(v.x, v.y, p.x, p.y))[0];
       if (it && dist(it.x, it.y, p.x, p.y) < 40) {
         held = it;
+        it.misplaced = false;
         off = { x: it.x - p.x, y: it.y - p.y };
+        ctx.progress(Math.max(0, value()) / N);
       }
     },
     move(p, down) {
@@ -460,23 +578,25 @@ export function livingGame(ctx) {
         it.placed = true;
         it.x = it.slot.x;
         it.y = it.slot.y;
-        placed++;
         fx.burst(it.x, it.y, '✨', 4, { speed: 80, size: 16 });
         fx.text(it.x, it.y - 34, t('mg_hop'), '#2f8a5f', 20);
-        ctx.progress(placed / items.length);
-        if (placed === items.length) ctx.finish(clamp(timeQuality(ctx.time, 32) - wrong * 0.07, 0.5, 1));
-        else ctx.hint(t('mg_chore_living_more'), 'good');
+        ctx.progress(Math.max(0, value()) / N);
+        if (placed() === N) end();
+        else ctx.hint(t(misplaced() ? 'mg_chore_living_wrong' : 'mg_chore_living_more'), misplaced() ? 'warn' : 'good');
         return;
       }
       const wrongPlace = Object.entries(LIVING_PLACES).find(([id, pl]) => id !== it.place && inPlace(p, pl));
       if (wrongPlace) {
-        // Pas sa place : l'objet retombe par terre, là où il était.
+        // Pas sa place : l'objet y reste, avec un ❗, et compte en moins (on peut le reprendre).
+        const pl = wrongPlace[1];
         wrong++;
-        it.x = it.home.x;
-        it.y = it.home.y;
+        it.misplaced = true;
+        it.x = clamp(it.x, pl.x + 20, pl.x + pl.w - 20);
+        it.y = clamp(it.y, pl.y + 16, pl.y + pl.h - 12);
         fx.text(p.x, p.y - 30, t('mg_chore_living_wrong_short'), '#c07a10', 22);
         fx.float(p.x, p.y - 10, '❗', 24);
         ctx.hint(t('mg_chore_living_wrong'), 'warn');
+        ctx.progress(Math.max(0, value()) / N);
       } else {
         it.x = clamp(it.x, 24, 376);
         it.y = clamp(it.y, 206, 344);
@@ -540,23 +660,28 @@ export function livingGame(ctx) {
       g.fill();
       g.fillStyle = '#4a2f17';
       g.fillRect(ch.x + 4, ch.y + 24, ch.w - 8, 24);
-      // silhouettes (où ranger) : un cercle par objet, une seule zone pour le coffre
+      // silhouettes (où ranger) : un cercle vert par objet, une seule zone pour le coffre
       g.save();
       g.setLineDash([5, 4]);
-      g.strokeStyle = 'rgba(60, 40, 20, 0.45)';
-      g.lineWidth = 2;
+      g.strokeStyle = 'rgba(30, 138, 74, 0.7)';
+      g.fillStyle = 'rgba(63, 174, 98, 0.18)';
+      g.lineWidth = 2.5;
       for (const it of items) {
         if (it.placed || it.place === 'chest') continue;
         circle(g, it.slot.x, it.slot.y, 24);
+        g.fill();
         g.stroke();
       }
       if (items.some((it) => !it.placed && it.place === 'chest')) {
         rrect(g, ch.x - 4, ch.y - 22, ch.w + 8, 72, 14);
+        g.fill();
         g.stroke();
       }
       g.restore();
       for (const it of items) if (!it.placed) drawLivingItem(g, it, it.slot.x, it.slot.y, it.place === 'chest' ? 0.25 : 0.3);
       for (const it of items) if (it.placed) drawLivingItem(g, it, it.x, it.y);
+      // objets posés au mauvais endroit (sur un meuble), avec leur ❗
+      for (const it of items) if (it.misplaced && it !== held) { drawLivingItem(g, it, it.x, it.y); emoji(g, '❗', it.x + 20, it.y - 22, 20); }
       // devant du coffre (les jouets dépassent)
       g.fillStyle = '#8a5a2b';
       rrect(g, ch.x, ch.y + 44, ch.w, ch.h - 44, 8);
@@ -564,14 +689,14 @@ export function livingGame(ctx) {
       g.fillStyle = '#c99b63';
       g.fillRect(ch.x + 34, ch.y + 56, 16, 6);
       // objets par terre (celui qu'on tient en dernier)
-      for (const it of items) if (!it.placed && it !== held) drawLivingItem(g, it, it.x, it.y);
+      for (const it of items) if (!it.placed && !it.misplaced && it !== held) drawLivingItem(g, it, it.x, it.y);
       if (held) {
         g.fillStyle = 'rgba(0,0,0,0.15)';
         ellipse(g, held.x, held.y + 22, 20, 6);
         g.fill();
         drawLivingItem(g, held, held.x, held.y - 6);
       }
-      label(g, `${placed} / ${items.length}`, 362, 66, 18);
+      label(g, `${placed()} / ${N}`, 362, 66, 18);
     },
   };
 }
@@ -580,22 +705,31 @@ export function livingGame(ctx) {
 
 const PLATES = 5;
 const SMEAR_COLORS = ['#c8762c', '#8fae3a', '#b54848'];
+/**
+ * Zone juste, par assiette : frottée entre 0,9 (presque propre) et 1,15 (propre, et un petit
+ * tour de plus) ; au-delà, c'est de l'eau gaspillée, et à 1,6 l'assiette part toute seule.
+ */
+const DISH = { lo: 0.9, hi: 1.15, max: 1.6 };
 
 export function kitchenGame(ctx) {
   const { t, fx, rng } = ctx;
   const sink = { x: 118, y: 236, r: 48 };
   const rack = { x: 258, y: 176, w: 130, h: 128 };
   const slots = Array.from({ length: PLATES }, (_, i) => ({ x: rack.x + 20 + i * 23, y: rack.y + rack.h - 34 }));
+  const plates = []; // ce que chaque assiette finie a reçu (sa valeur)
   let done = 0;
   let plate = newPlate();
-  let phase = 'scrub'; // 'scrub' : on frotte ; 'drag' : on la pose sur l'égouttoir
-  let held = false;
+  let phase = 'scrub'; // 'scrub' : on frotte ; 'fly' : elle file sur l'égouttoir
   let last = null;
   let lastAng = null;
   let straight = 0;
-  let misdrops = 0;
+  let extra = 0; // frotté en plus une fois l'assiette propre (eau gaspillée)
+  let splash = 0;
+  let zoneState = '';
 
   ctx.hint(t('mg_chore_kitchen_hint'));
+  ctx.zone(DISH.lo / DISH.max, DISH.hi / DISH.max);
+  const stopBtn = ctx.stopButton(() => send());
 
   function newPlate() {
     const smears = [];
@@ -604,11 +738,37 @@ export function kitchenGame(ctx) {
       const r = 8 + rng() * 24;
       smears.push({ dx: Math.cos(ang) * r, dy: Math.sin(ang) * r, amt: 1, col: SMEAR_COLORS[i % 3], r: 7 + rng() * 6, rot: rng() * 3 });
     }
-    return { x: sink.x, y: sink.y, smears };
+    return { x: sink.x, y: sink.y, smears, k: 0 };
   }
 
   const dirt = () => plate.smears.reduce((s, q) => s + q.amt, 0) / plate.smears.length;
-  const inRack = (p) => p.x > rack.x - 24 && p.x < rack.x + rack.w + 24 && p.y > rack.y - 30 && p.y < rack.y + rack.h + 30;
+  /** La quantité juste de cette assiette : ce qui est nettoyé, plus ce qu'on a frotté en trop. */
+  const value = () => 1 - dirt() + extra;
+
+  /** « C'est bon ! » : l'assiette file sur l'égouttoir, avec sa note ; puis la suivante, ou la fin. */
+  function send() {
+    if (ctx.done || phase !== 'scrub') return;
+    const v = value();
+    plates.push(v);
+    const why = verdictOf(v, DISH.lo, DISH.hi);
+    if (why === 'just') { fx.text(plate.x, plate.y - 60, t('mg_perfect'), '#2f8a5f', 24); fx.burst(plate.x, plate.y, '✨', 5, { speed: 90, size: 16 }); }
+    else if (why === 'low') fx.text(plate.x, plate.y - 60, t('mg_more_short'), '#c07a10', 24);
+    else fx.text(plate.x, plate.y - 60, t('mg_oops'), '#c8463c', 24);
+    phase = 'fly';
+    stopBtn.disabled = true;
+    last = null;
+  }
+
+  function finishAll() {
+    if (ctx.done) return;
+    const qs = plates.map((v) => justRight(v, DISH.lo, DISH.hi));
+    const q = qs.reduce((s, x) => s + x, 0) / qs.length;
+    const lows = plates.filter((v) => verdictOf(v, DISH.lo, DISH.hi) === 'low').length;
+    const highs = plates.filter((v) => verdictOf(v, DISH.lo, DISH.hi) === 'high').length;
+    const key = !lows && !highs ? 'justRight' : lows >= highs ? 'tooLittle' : 'tooMuch';
+    ctx.finish(q, ctx.name ? t(`mg_${key}`, { name: ctx.name }) : t(`mg_chore_${key}`));
+    fx.burst(rack.x + rack.w / 2, rack.y + 30, '✨', 8, { speed: 140 });
+  }
 
   function scrub(p) {
     if (!last) {
@@ -627,69 +787,75 @@ export function kitchenGame(ctx) {
       // Des ronds (le doigt tourne autour du centre) : ça frotte mieux.
       const circular = Math.abs(da) > 0.04 && Math.abs(da) < 1.2;
       const k = circular ? 1.6 : 0.8;
-      for (const s of plate.smears) {
-        if (s.amt <= 0) continue;
-        if (distToSegment(plate.x + s.dx, plate.y + s.dy, last.x, last.y, p.x, p.y) < s.r + 12) s.amt = Math.max(0, s.amt - d * 0.011 * k);
+      const clean = dirt() <= 0.04;
+      if (clean) {
+        // Propre, et on frotte encore : de l'eau gaspillée.
+        extra += d * 0.0009 * k;
+        splash -= d;
+        if (splash <= 0) { splash = 70; fx.burst(plate.x + (Math.random() - 0.5) * 60, plate.y - 30, '💧', 2, { speed: 70, size: 14, life: 0.6 }); }
+      } else {
+        for (const s of plate.smears) {
+          if (s.amt <= 0) continue;
+          if (distToSegment(plate.x + s.dx, plate.y + s.dy, last.x, last.y, p.x, p.y) < s.r + 12) s.amt = Math.max(0, s.amt - d * 0.011 * k);
+        }
+        if (dirt() <= 0.04) for (const s of plate.smears) s.amt = 0;
       }
       if (Math.random() < 0.35) fx.dot(p.x + (Math.random() - 0.5) * 24, p.y + (Math.random() - 0.5) * 24, '', 3 + Math.random() * 4, { vy: -25, life: 0.8, bubble: true });
       if (!circular) {
         straight += d;
-        if (straight > 360) { ctx.hint(t('mg_chore_kitchen_circles'), 'warn'); straight = 0; }
+        if (straight > 360 && !zoneState) { ctx.hint(t('mg_chore_kitchen_circles'), 'warn'); straight = 0; }
       } else straight = Math.max(0, straight - d);
-      const left = dirt();
-      ctx.progress((done + (1 - left) * 0.7) / PLATES);
-      if (left <= 0.04) {
-        for (const s of plate.smears) s.amt = 0;
-        phase = 'drag';
-        fx.burst(plate.x, plate.y, '✨', 5, { speed: 90, size: 16 });
-        ctx.hint(t('mg_chore_kitchen_rack'), 'good');
+      const v = value();
+      ctx.progress(Math.min(1, v / DISH.max));
+      const zs = v > DISH.hi ? 'over' : v >= DISH.lo ? 'in' : '';
+      if (zs !== zoneState) {
+        zoneState = zs;
+        if (zs === 'in') { ctx.hint(t('mg_zoneHint'), 'good'); fx.text(plate.x, plate.y - 60, t('mg_good'), '#2f8a5f', 24); }
+        else if (zs === 'over') ctx.hint(t('mg_stop'), 'warn');
       }
+      // Beaucoup trop frotté : l'assiette part toute seule (trop).
+      if (v >= DISH.max) send();
     }
     last = p;
   }
 
   return {
-    peek: () => ({ phase, plate: { x: plate.x, y: plate.y }, rack, done, dirt: dirt() }),
+    peek: () => ({ phase, plate: { x: plate.x, y: plate.y }, sink, rack, done, dirt: dirt(), extra, value: value(), lo: DISH.lo, hi: DISH.hi, max: DISH.max, plates: [...plates] }),
     down(p) {
       last = null;
       if (phase === 'scrub') scrub(p);
-      else if (dist(p.x, p.y, plate.x, plate.y) < sink.r + 16) held = true;
     },
     move(p, down) {
       if (!down) return;
       if (phase === 'scrub') scrub(p);
-      else if (held) {
-        plate.x = p.x;
-        plate.y = p.y;
-      }
     },
-    up(p) {
-      last = null;
-      if (!held) return;
-      held = false;
-      if (inRack(p)) {
+    up() { last = null; },
+    key(code, down) { if (down && (code === 'Enter' || code === 'NumpadEnter' || code === 'Space')) send(); },
+    update(dt) {
+      if (phase !== 'fly') return;
+      plate.k = Math.min(1, plate.k + dt * 2);
+      const s = slots[done];
+      const k = plate.k;
+      plate.x = sink.x + (s.x - sink.x) * k;
+      plate.y = sink.y + (s.y - sink.y) * k - Math.sin(k * Math.PI) * 60;
+      if (k >= 1) {
         done++;
-        fx.text(rack.x + rack.w / 2, rack.y - 20, t('mg_hop'), '#2f8a5f', 20);
-        fx.burst(slots[done - 1].x, slots[done - 1].y, '💧', 3, { speed: 60, size: 14, life: 0.6 });
-        ctx.progress(done / PLATES);
+        fx.burst(s.x, s.y, '💧', 3, { speed: 60, size: 14, life: 0.6 });
         if (done >= PLATES) {
-          ctx.finish(clamp(timeQuality(ctx.time, 34) - misdrops * 0.04, 0.5, 1));
+          phase = 'done';
+          finishAll();
           return;
         }
         plate = newPlate();
         phase = 'scrub';
+        extra = 0;
         straight = 0;
+        zoneState = '';
+        stopBtn.disabled = false;
+        ctx.progress(0);
         ctx.hint(t('mg_chore_kitchen_next'));
-      } else {
-        // Lâchée ailleurs : elle retombe dans l'évier. Plouf !
-        misdrops++;
-        plate.x = sink.x;
-        plate.y = sink.y;
-        fx.burst(sink.x, sink.y - 20, '💦', 6, { speed: 120, size: 16 });
-        ctx.hint(t('mg_chore_kitchen_drop'), 'warn');
       }
     },
-    update() {},
     draw(g) {
       const v = ctx.view;
       // carrelage, plan de travail, placards
@@ -768,24 +934,25 @@ export function kitchenGame(ctx) {
         ellipse(g, 226, 300 - i * 5, 22, 7);
         g.stroke();
       }
-      if (phase === 'drag' && !held && !ctx.done) bounceArrow(g, '➡️', 214, 232, ctx.time);
-      // l'assiette en cours
-      if (!ctx.done || held) {
+      // l'assiette en cours (et l'anneau « juste ce qu'il faut » autour, quand on frotte)
+      if (phase !== 'done') {
         const { x, y } = plate;
-        if (held) {
+        if (phase === 'scrub') drawPlateRing(g, x, y, sink.r + 12, value() / DISH.max, DISH.lo / DISH.max, DISH.hi / DISH.max);
+        if (phase === 'fly') {
           g.fillStyle = 'rgba(0,0,0,0.15)';
           ellipse(g, x, y + 54, 40, 10);
           g.fill();
         }
+        const pr = phase === 'fly' ? sink.r * (1 - 0.5 * plate.k) : sink.r;
         g.fillStyle = '#ffffff';
-        circle(g, x, y, sink.r);
+        circle(g, x, y, pr);
         g.fill();
         g.strokeStyle = '#bcd8e8';
         g.lineWidth = 3;
-        circle(g, x, y, sink.r - 9);
+        circle(g, x, y, pr - 9);
         g.stroke();
         g.lineWidth = 2;
-        circle(g, x, y, sink.r);
+        circle(g, x, y, pr);
         g.stroke();
         for (const s of plate.smears) {
           if (s.amt <= 0.02) continue;
@@ -796,7 +963,7 @@ export function kitchenGame(ctx) {
           g.fill();
           g.restore();
         }
-        if (phase === 'drag') emoji(g, '✨', x + 20, y - 24, 18, 0, 0.8);
+        if (dirt() <= 0.04 && phase === 'scrub') emoji(g, '✨', x + 20, y - 24, 18, 0, 0.8);
       }
       // l'éponge
       const pp = ctx.pointer;
@@ -816,6 +983,36 @@ export function kitchenGame(ctx) {
       }
     },
   };
+}
+
+/**
+ * Anneau autour de l'assiette : il se remplit (en bleu, dans le sens des aiguilles) avec le
+ * frottage, la part verte est la zone juste [lo, hi] (fractions 0–1), le tour complet = trop.
+ */
+function drawPlateRing(g, x, y, R, k, lo, hi) {
+  const a0 = -Math.PI / 2;
+  const ang = (f) => a0 + clamp(f) * Math.PI * 2;
+  g.save();
+  g.lineCap = 'butt';
+  g.strokeStyle = 'rgba(255,255,255,0.75)';
+  g.lineWidth = 9;
+  circle(g, x, y, R);
+  g.stroke();
+  g.strokeStyle = 'rgba(63,174,98,0.95)';
+  g.lineWidth = 13;
+  g.beginPath();
+  g.arc(x, y, R, ang(lo), ang(hi));
+  g.stroke();
+  if (k > 0) {
+    g.strokeStyle = '#3c7bd9';
+    g.lineWidth = 7;
+    g.beginPath();
+    g.arc(x, y, R, a0, ang(k));
+    g.stroke();
+  }
+  const am = ang((lo + hi) / 2);
+  label(g, '✓', x + Math.cos(am) * (R + 14), y + Math.sin(am) * (R + 14), 16, '#1e5c3e');
+  g.restore();
 }
 
 /** Un mini-jeu par corvée (même ordre que CHORE_KINDS). */

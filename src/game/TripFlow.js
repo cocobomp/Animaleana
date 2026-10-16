@@ -30,6 +30,7 @@ import { t, ta, L } from '../i18n.js';
 import { openJourney, closeJourney, updateJourney, renderJourney, showReport, showDepartChoice } from '../ui/trip.js';
 import { openVehicleMenu, renderVehiclePanel } from '../ui/vehicle.js';
 
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 // Distance au véhicule (m) pour pouvoir faire monter un animal.
 const LOAD_RADIUS = 5;
 const CRATE_TAP_RADIUS = 9;
@@ -43,6 +44,9 @@ export class TripFlow {
     this.loading = null;
     this.journey = null; // { trip, watch, speed, vehicle, destId, ids, cargo }
     this.camLook = new THREE.Vector3();
+    this.tv1 = new THREE.Vector3(); // vecteurs réutilisés (rien n'est créé à chaque image)
+    this.tv2 = new THREE.Vector3();
+    this.ramp = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
     this.camYaw = 0;
     this.camPitch = 0;
     this.feedAcc = 0;
@@ -593,9 +597,9 @@ export class TripFlow {
       // On regarde autour de soi en faisant glisser le doigt (ou la souris).
       this.camYaw = THREE.MathUtils.clamp(this.camYaw - (ctrl.look?.dx ?? 0) * 0.006, -1.9, 1.9);
       this.camPitch = THREE.MathUtils.clamp(this.camPitch - (ctrl.look?.dy ?? 0) * 0.004, -0.75, 0.45);
-      const dir = pose.look.clone().sub(pose.pos);
-      dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.camYaw);
-      const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+      const dir = this.tv1.copy(pose.look).sub(pose.pos);
+      dir.applyAxisAngle(Y_AXIS, this.camYaw);
+      const right = this.tv2.crossVectors(dir, Y_AXIS).normalize();
       dir.applyAxisAngle(right, this.camPitch);
       pose.look.copy(pose.pos).add(dir);
       this.updateFeed(dt);
@@ -613,7 +617,7 @@ export class TripFlow {
   /** Ce que la caméra regardait juste avant (pour glisser doucement vers la vue). */
   lookTarget() {
     const cam = this.game.camera;
-    return cam.position.clone().add(new THREE.Vector3(0, 0, -6).applyQuaternion(cam.quaternion));
+    return this.tv1.set(0, 0, -6).applyQuaternion(cam.quaternion).add(cam.position);
   }
 
   /** Vue de la montée : de côté, derrière le van, on voit le pont, le cheval et le joueur. */
@@ -623,10 +627,14 @@ export class TripFlow {
     const w = this.loading.walk?.w;
     // En portrait (téléphone), on recule un peu plus pour tout voir.
     const far = window.innerWidth < window.innerHeight ? 1.45 : 1;
-    const pos = v.trailerToWorld(new THREE.Vector3(tr.width / 2 + 2.6 * far, 2.3 + 0.4 * far, tr.rearZ - 5.2 * far));
-    const look = v.trailerToWorld(new THREE.Vector3(0, 0.9, tr.rearZ - 1.1));
-    if (w?.e && w.step < 3) look.lerp(w.e.position.clone().setY(look.y), 0.5);
-    return { pos, look };
+    const out = this.ramp;
+    v.trailerToWorld(this.tv1.set(tr.width / 2 + 2.6 * far, 2.3 + 0.4 * far, tr.rearZ - 5.2 * far), out.pos);
+    v.trailerToWorld(this.tv1.set(0, 0.9, tr.rearZ - 1.1), out.look);
+    if (w?.e && w.step < 3) {
+      const y = out.look.y;
+      out.look.lerp(this.tv2.copy(w.e.position).setY(y), 0.5);
+    }
+    return out;
   }
 
   /** Écran du tableau de bord : la caméra du van montre les chevaux (quelques images par seconde). */
@@ -642,7 +650,9 @@ export class TripFlow {
       this.feedRT.texture.colorSpace = THREE.SRGBColorSpace;
       this.feedCam = new THREE.PerspectiveCamera(75, 256 / 160, 0.05, 8);
     }
-    const pose = v.view('camera');
+    // (son propre objet : la vue de la cabine utilise déjà celui du véhicule pendant cette image)
+    this.feedPose = this.feedPose ?? { pos: new THREE.Vector3(), look: new THREE.Vector3() };
+    const pose = v.view('camera', this.feedPose);
     this.feedCam.position.copy(pose.pos);
     this.feedCam.lookAt(pose.look);
     const scene = v.root.parent ?? g.scene;

@@ -18,6 +18,7 @@ export const PARKING = { x: 3, z: 4, heading: Math.PI / 2 };
 const CRATE_COLORS = [0x3f8fd0, 0xe07a3a, 0x6b3fa0, 0x2f8a5f, 0xd0a03f];
 const SMALL_LIVESTOCK = ['sheep', 'goat'];
 const UP = new THREE.Vector3(0, 1, 0);
+const CAB_LOOK = new THREE.Vector3(0, -0.05, 3); // le conducteur regarde droit devant
 
 /** Une caisse de transport à la taille de l'animal, avec l'animal dedans (on le voit à travers la grille). */
 export function crateWithAnimal(a, colorIndex = 0) {
@@ -603,16 +604,21 @@ export class TripVehicle {
    * Caméra pour une vue : 'cab' (au volant), 'stall' (dans le compartiment), 'tack' (sellerie ou coffre de toit),
    * 'boot' (coffre de la voiture), 'camera' (caméra du van). Renvoie { pos, look } dans le monde.
    */
-  view(kind) {
-    this.root.updateWorldMatrix(true, true);
+  view(kind, out = this.pose ?? (this.pose = { pos: new THREE.Vector3(), look: new THREE.Vector3() })) {
+    // (renvoie toujours le même objet : rien n'est créé à chaque image)
     if (kind === 'cab') {
-      const pos = this.main.eye.clone().applyMatrix4(this.main.group.matrixWorld);
-      const look = this.main.eye.clone().add(new THREE.Vector3(0, -0.05, 3)).applyMatrix4(this.main.group.matrixWorld);
-      return { pos, look };
+      const m = this.main.group;
+      m.updateWorldMatrix(true, false);
+      out.pos.copy(this.main.eye).applyMatrix4(m.matrixWorld);
+      out.look.copy(this.main.eye).add(CAB_LOOK).applyMatrix4(m.matrixWorld);
+      return out;
     }
     const src = this.trailer ?? this.main;
     const v = src.views?.[kind] ?? src.views?.tack;
-    return { pos: v.pos.clone().applyMatrix4(src.group.matrixWorld), look: v.look.clone().applyMatrix4(src.group.matrixWorld) };
+    src.group.updateWorldMatrix(true, false);
+    out.pos.copy(v.pos).applyMatrix4(src.group.matrixWorld);
+    out.look.copy(v.look).applyMatrix4(src.group.matrixWorld);
+    return out;
   }
 
   // ------------------------------------------------------------ chaque image

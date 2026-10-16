@@ -110,7 +110,7 @@ export class UI {
     }
     // La bulle du guide s'efface pendant qu'on tape (CSS) : la fenêtre reprend alors sa place en haut.
     for (const ev of ['focusin', 'focusout']) {
-      document.addEventListener(ev, () => { if (this.modalOpen) requestAnimationFrame(() => this.syncModalTop()); });
+      document.addEventListener(ev, () => { if (this.modalOpen) setTimeout(() => this.syncModalTop(), 0); });
     }
   }
 

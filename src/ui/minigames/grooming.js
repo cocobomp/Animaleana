@@ -172,9 +172,39 @@ function justRule(ctx, { lo, hi, max, slack, msgs }) {
 // ---------------------------------------------------------------- brosser
 
 /**
+ * Taches de poussière bien séparées, toutes sur le pelage : on essaie un rayon, et s'il ne
+ * laisse pas la place pour `count` taches, on recommence un peu plus petit. Deux taches
+ * gardent toujours un petit jour entre elles (cercles écartés de 6 %, quelle que soit la
+ * rotation de l'ellipse dessinée) : avant, rayon 0,62 × l'écart = diamètre plus grand que
+ * l'écart, et sur la chèvre, la vache ou le cheval les taches se fondaient en une seule plaque.
+ * fixed : taches déjà posées (le garrot du cheval), que les autres évitent.
+ */
+function dustPatches(sh, rng, count, r0, fixed = []) {
+  let patches = fixed.slice();
+  for (let r = r0; r > 6; r *= 0.92) {
+    patches = fixed.slice();
+    for (let tries = 0; patches.length < count + fixed.length && tries < 300; tries++) {
+      const lx = (rng() * 2 - 1) * sh.rx;
+      const ly = (rng() * 2 - 1) * sh.ry;
+      const rr = r * (0.9 + rng() * 0.2);
+      // La tache entière reste sur le corps (pas à cheval sur le ventre ou le dos).
+      if (((Math.abs(lx) + rr * 0.75) / sh.rx) ** 2 + ((Math.abs(ly) + rr * 0.75) / sh.ry) ** 2 > 1) continue;
+      const p = sh.L(lx, ly);
+      if (patches.some((q) => dist(q.x, q.y, p.x, p.y) < (q.r + rr) * 1.06)) continue;
+      patches.push({ ...p, r: rr, dirt: 1, seed: rng() * 10 });
+    }
+    if (patches.length >= count + fixed.length) break;
+  }
+  return patches;
+}
+
+/**
  * Brosser : enlever les taches de poussière (0 → 1 sur la jauge) puis s'arrêter avec ✅.
- * Juste : 0,85 à 1,05. Continuer à frotter une fois le poil propre irrite la peau (marques
- * roses, 💢) : la jauge monte jusqu'à 1,4 et le jeu finit tout seul si on y arrive.
+ * Juste : de « une demi-tache qui reste » (1 − 0,5 / nombre de taches) à 1,05. Laisser une
+ * tache entière, c'est trop peu (avant, avec lo = 0,85, une tache sur 7 pouvait rester sale
+ * et la carte disait « Juste ce qu'il fallait »). Continuer à frotter le poil une fois dans la
+ * zone irrite la peau (marques roses, 💢) : la jauge monte jusqu'à 1,4 et le jeu finit tout
+ * seul si on y arrive.
  */
 export function brushGame(ctx) {
   const { a, t, fx } = ctx;
@@ -182,33 +212,24 @@ export function brushGame(ctx) {
   const fit = fitAnimal(a, { groundY: floorY, maxW: 340, maxH: 255 });
   const sh = animalShape(a, { x: fit.x, y: floorY, s: fit.s, f: 1 });
   const tailDir = -1; // le poil va de la tête (à droite) vers la queue (à gauche)
-  const patches = [];
   const rng = ctx.rng;
-  const count = 7;
-  // Taches écartées les unes des autres ; si le corps est trop petit pour 7 (chien, chat en
-  // gros plan : corps allongé et peu haut), on les rapproche peu à peu. Avec 4 taches
-  // seulement, en laisser une suffisait à sortir de la zone juste.
-  // Les taches rapetissent avec l'écart, pour ne pas se recouvrir en une grosse plaque.
-  for (let gap = 34 * fit.s; patches.length < count && gap > 10; gap *= 0.85) {
-    for (let tries = 0; patches.length < count && tries < 160; tries++) {
-      const lx = (rng() * 2 - 1) * sh.rx * 0.8;
-      const ly = (rng() * 2 - 1) * sh.ry * 0.65;
-      if ((lx * lx) / (sh.rx * 0.8) ** 2 + (ly * ly) / (sh.ry * 0.7) ** 2 > 1) continue;
-      const p = sh.L(lx, ly);
-      if (patches.some((q) => dist(q.x, q.y, p.x, p.y) < gap)) continue;
-      patches.push({ ...p, r: Math.min(20 * Math.max(0.8, fit.s), gap * 0.62), dirt: 1, seed: rng() * 10 });
-    }
-  }
-  if (a.species === 'horse') patches.push({ ...sh.neck, r: 18 * fit.s, dirt: 1, seed: 3 });
+  // 7 taches pour toutes les espèces (avec 4, en laisser une suffisait à sortir de la zone),
+  // plus une sur le garrot du cheval.
+  const neck = a.species === 'horse' ? [{ ...sh.neck, r: 16 * fit.s, dirt: 1, seed: 3 }] : [];
+  const patches = dustPatches(sh, rng, 7, 20 * Math.max(0.8, fit.s), neck);
   const MAX = 1.4;
-  // Irritation par pixel frotté une fois tout propre : un trait de plus sur le corps (≈ 200 px)
-  // reste dans la zone (+0,04), deux traits en sortent. Le trait qui enlève la dernière tache
-  // ne compte pas (on ne lève pas le doigt pile au bon pixel).
+  // Irritation par pixel frotté dans la zone sans toucher de poussière : un trait de plus sur
+  // le corps (≈ 200 px) reste dans la zone (+0,04), deux traits en sortent.
   const OVER_RATE = 0.0002;
-  let grace = false; // vrai jusqu'à la fin du trait qui a tout nettoyé
-  const rule = justRule(ctx, { lo: 0.85, hi: 1.05, max: MAX, slack: 0.3 });
-  let over = 0; // brossage « à vide » après propreté, en unités de jauge
-  let nextMark = 0.05; // prochaine marque d'irritation (la première : en sortant de la zone)
+  // Sursis : après la dernière poussière touchée, la fin du geste (jusqu'à une longueur de
+  // corps) ne compte pas (on ne lève pas le doigt pile au bon pixel). Avant, le sursis durait
+  // jusqu'à ce qu'on lève le doigt : un enfant qui frottait sans jamais lever le doigt
+  // pouvait brosser à l'infini sans jamais être « trop ».
+  const GRACE_PX = 2 * sh.rx;
+  let grace = 0; // pixels encore sans irritation dans ce trait
+  const rule = justRule(ctx, { lo: 1 - 0.5 / patches.length, hi: 1.05, max: MAX, slack: 0.3 });
+  let over = 0; // brossage « à vide » dans la zone, en unités de jauge
+  let nextMark = 0; // prochaine marque d'irritation (la première : en sortant de la zone)
   const marks = []; // marques roses sur la peau
   let good = 0;
   let bad = 0;
@@ -246,16 +267,18 @@ export function brushGame(ctx) {
     if (touched) {
       if (withHair) good += d;
       else bad += d;
-      if (clean() >= 0.999) grace = true;
+      grace = GRACE_PX;
       if (rule.state() === 'low') {
         if (bad > 260 && bad > good) ctx.hint(t('mg_brush_dir'), 'warn');
         else if (withHair && good > 120) ctx.hint(t('mg_brush_good'), 'good');
       }
-    } else if (clean() >= 0.999 && !grace && inBody(sh, p.x, p.y, 1.1)) {
-      // Tout est propre : continuer à frotter irrite la peau.
-      over += d * OVER_RATE;
-      if (over >= nextMark) {
-        nextMark += 0.06;
+    } else if (value() >= rule.lo && inBody(sh, p.x, p.y, 1.1)) {
+      // Dans la zone (« C'est bon ! ») : continuer à frotter le poil propre irrite la peau.
+      const free = Math.min(grace, d);
+      grace -= free;
+      over += (d - free) * OVER_RATE;
+      if (value() > rule.hi && over >= nextMark) {
+        nextMark = over + 0.06;
         marks.push({ x: p.x + (Math.random() - 0.5) * 16, y: p.y + (Math.random() - 0.5) * 12, r: 7 + Math.random() * 5, seed: Math.random() * 10 });
         fx.float(p.x, p.y - 20, '💢', 20);
       }
@@ -269,11 +292,12 @@ export function brushGame(ctx) {
     peek: () => ({
       value: value(), lo: rule.lo, hi: rule.hi, max: MAX, clean: clean(), over,
       body: { x: sh.bx, y: sh.by, rx: sh.rx, ry: sh.ry }, head: sh.head,
-      patches: patches.filter((q) => q.dirt > 0).map((q) => ({ x: q.x, y: q.y })),
+      patches: patches.filter((q) => q.dirt > 0).map((q) => ({ x: q.x, y: q.y, r: q.r, dirt: q.dirt })),
+      n: patches.length, marks: marks.length,
     }),
-    down(p) { last = p; grace = false; },
+    down(p) { last = p; grace = 0; },
     move(p, down) { if (down) rub(p); },
-    up() { last = null; grace = false; },
+    up() { last = null; grace = 0; },
     key(code, down) { if (down && (code === 'Space' || code === 'Enter' || code === 'NumpadEnter')) stop(); },
     update(dt) { if (ctx.done || clean() >= 0.999) shine += dt; },
     draw(g) {
@@ -333,8 +357,8 @@ export function brushGame(ctx) {
 
 /**
  * Laver : savonner (la jauge monte avec la part du corps bien savonnée) puis ✅, et rincer.
- * Juste : 0,85 à 1,05 (une passe partout = 1). Une fois tout savonné, continuer à frotter
- * met de la mousse en trop (la jauge dépasse, jusqu'à 1,5 : long à rincer) ; pas assez :
+ * Juste : 0,85 à 1,05 (une passe partout = 1). Une fois dans la zone, continuer à frotter
+ * sur la mousse en met trop (la jauge dépasse, jusqu'à 1,5 : long à rincer) ; pas assez :
  * la boue reste. La note vient de la mousse au moment du ✅.
  * Avant, chaque passe qui chevauchait la précédente ajoutait du surplus : une seule passe
  * normale (rangées qui se recouvrent) donnait déjà 1,2 à 1,3, donc « trop » pour un travail juste.
@@ -357,10 +381,13 @@ export function washGame(ctx) {
   }));
   const SOAP_MAX = 1.5; // mousse par point : 1 = bien savonné, au-delà = mousse en trop (dessin, rinçage)
   const MAX = 1.5;
-  const FULL_AT = 0.97; // tout savonné (à un ou deux points près) : frotter encore, c'est trop
+  const LO = 0.85;
   const OVER_RATE = 0.00025; // mousse en trop par pixel frotté ensuite (un trait sur le corps ≈ +0,05)
   let over = 0; // mousse en trop, en unités de jauge
-  const rule = justRule(ctx, { lo: 0.85, hi: 1.05, max: MAX, slack: 0.3 });
+  const GRACE_PX = sh.rx;
+  let grace = 0; // pixels encore sans mousse en trop dans ce trait
+  let spare = 3 * sh.rx; // frottage « pour rien » encore permis dans la zone
+  const rule = justRule(ctx, { lo: LO, hi: 1.05, max: MAX, slack: 0.3 });
   let phase = 'soap';
   let soapValue = 0; // mousse au moment du ✅ (c'est elle qui est notée)
   let last = null;
@@ -382,27 +409,43 @@ export function washGame(ctx) {
 
   const frac = (fn) => cells.filter(fn).length / cells.length;
   const covered = () => frac((c) => c.soap >= 1);
-  // Mousse : part des points bien savonnés (≥ 1) + mousse en trop (frotté après avoir tout savonné).
+  // Mousse : part des points bien savonnés (≥ 1) + mousse en trop (frotté sur la mousse dans la zone).
   const soapNow = () => Math.min(MAX, covered() + over);
   const value = () => (phase === 'soap' ? soapNow() : soapValue);
 
   function scrub(p) {
     if (!last) { last = p; return; }
     const d = dist(p.x, p.y, last.x, last.y);
-    // Tout est déjà savonné : ce trait-ci, c'est de la mousse en plus.
-    const full = covered() >= FULL_AT;
-    let touched = false;
-    for (const c of cells) {
-      if (distToSegment(c.x, c.y, last.x, last.y, p.x, p.y) >= 26) continue;
-      touched = true;
-      // Jusqu'à 1 la mousse monte vite (une passe suffit) ; les passes qui se recouvrent ne
-      // comptent pas en trop tant qu'il reste des endroits à savonner.
+    const near = cells.filter((c) => distToSegment(c.x, c.y, last.x, last.y, p.x, p.y) < 26);
+    // Mousse en trop : les bouts de trait qui ne passent que sur des endroits déjà bien
+    // savonnés, une fois dans la zone. Un trait qui savonne encore un endroit neuf ne compte
+    // jamais en trop, ni la fin du geste juste après (une demi-longueur de corps : bouts de
+    // rangées qui repassent sur la rangée d'avant). Dans la zone, on a aussi droit à un peu
+    // de frottage « pour rien » (une longueur et demie de corps : une rangée de trop, chercher
+    // un coin oublié) ; au-delà, tout compte.
+    // Avant, la mousse en trop ne comptait qu'à 97 % du corps savonné : s'il manquait un coin
+    // (une oreille, le haut de la tête), on pouvait frotter à l'infini sans jamais être « trop ».
+    let extra = 0; // pixels de ce bout de trait qui mettent de la mousse en trop
+    if (near.some((c) => c.soap < 1)) grace = GRACE_PX;
+    else if (near.length) {
+      const free = Math.min(grace, d);
+      grace -= free;
+      let rest = d - free;
+      if (covered() >= LO) {
+        const s2 = Math.min(spare, rest);
+        spare -= s2;
+        rest -= s2;
+      } else rest = 0;
+      extra = rest;
+    }
+    for (const c of near) {
+      // Jusqu'à 1 la mousse monte vite (une passe suffit).
       if (c.soap < 1) c.soap = Math.min(1, c.soap + d * 0.022 + 0.04);
-      else if (full) c.soap = Math.min(SOAP_MAX, c.soap + d * 0.004); // la mousse gonfle
+      else if (extra > 0) c.soap = Math.min(SOAP_MAX, c.soap + extra * 0.004); // la mousse gonfle
       c.peak = Math.max(c.peak, c.soap);
       if (Math.random() < 0.15) fx.dot(c.x, c.y, '', 4 + Math.random() * 5, { vy: -30 - Math.random() * 30, life: 0.9, bubble: true });
     }
-    if (touched && full) over += d * OVER_RATE;
+    over += extra * OVER_RATE;
     last = p;
     rule.show(soapNow());
     if (soapNow() >= MAX - 0.08) toRinse();
@@ -417,7 +460,9 @@ export function washGame(ctx) {
     ctx.zone(null);
     ctx.progress(0);
     ctx.clearButtons();
-    ctx.button('🚿 💦', { cls: 'primary', hold: true, onDown: () => { auto = true; }, onUp: () => { auto = false; } });
+    const shower = ctx.button('🚿 💦', { cls: 'primary', hold: true, onDown: () => { auto = true; }, onUp: () => { auto = false; } });
+    // Bouton sans texte : un nom pour les lecteurs d'écran (la consigne du rinçage).
+    shower?.setAttribute?.('aria-label', t('mg_wash_rinse'));
     ctx.hint(t('mg_wash_rinse'), 'good');
     fx.text(200, 80, t('mg_good'), '#2f8a5f', 26);
   }
@@ -429,9 +474,9 @@ export function washGame(ctx) {
       soaped: covered(), rinsed: frac((c) => c.soap <= 0.05),
       body: { x: sh.bx, y: sh.by, rx: sh.rx, ry: sh.ry }, head: sh.head,
     }),
-    down(p) { last = p; },
+    down(p) { last = p; grace = 0; },
     move(p, down) { if (down && phase === 'soap') scrub(p); },
-    up() { last = null; },
+    up() { last = null; grace = 0; },
     key(code, down) {
       if (code !== 'Space' && code !== 'Enter' && code !== 'NumpadEnter') return;
       if (phase === 'soap') { if (down) toRinse(); } else auto = down;
@@ -579,18 +624,42 @@ export function nailsGame(ctx) {
 
   const pos = (c, k) => ({ x: c.bx + Math.sin(c.ang) * c.len * k, y: c.by - Math.cos(c.ang) * c.len * k });
 
-  /** Note finale : moyenne des écarts à la zone, du côté le plus fréquent. */
+  // Un cheveu à côté de la zone (0,02 de longueur), griffe par griffe, compte comme juste :
+  // la même règle pour « Parfait ! », le ✅ sur la griffe et la note.
+  const TOL = 0.02;
+  const errOf = (len) => {
+    const d = len < LO ? LO - len : len > HI ? len - HI : 0;
+    return d <= TOL ? 0 : d;
+  };
+
+  /**
+   * Note finale : moyenne des écarts à la zone, du côté le plus fréquent. Une griffe coupée
+   * dans le rose (« Aïe », 🩹) n'est jamais « juste », même si les trois autres sont parfaites :
+   * avant, le cheveu de tolérance portait sur la moyenne (≤ 0,02), et une seule griffe dans le
+   * rose avec trois parfaites donnait « Juste ce qu'il fallait ! ★★★ ».
+   */
   function finishAll() {
     let low = 0;
     let high = 0;
     for (const c of claws) {
-      if (c.cutLen < LO) low += LO - c.cutLen;
-      else if (c.cutLen > HI) high += c.cutLen - HI;
+      if (c.cutLen < LO) low += errOf(c.cutLen);
+      else high += errOf(c.cutLen);
     }
     const mean = (low + high) / claws.length;
-    // Un écart moyen minuscule (≤ 0,02 : un cheveu à côté) compte comme juste.
-    const value = mean <= 0.02 ? (LO + HI) / 2 : high >= low ? HI + mean : LO - mean;
-    ctx.finishJust(value, LO, HI, { who: a.name, slack: SLACK, msgs: { high: ouch ? t('mg_nails_end_ouch', { name: a.name }) : undefined } });
+    let value = mean === 0 ? (LO + HI) / 2 : ouch || high >= low ? HI + mean : LO - mean;
+    // Note arrondie à 1,00 (trois étoiles) : la carte dit « juste », pas « trop » (sauf « Aïe »).
+    if (!ouch && justRight(value, LO, HI, { slack: SLACK }) >= 0.995) value = (LO + HI) / 2;
+    const who = { name: a.name };
+    ctx.finishJust(value, LO, HI, {
+      who: a.name,
+      slack: SLACK,
+      // Clés attendues dans i18n.js (griffe trop courte sans toucher le rose / encore trop
+      // longue) ; en attendant, les messages standard « trop » / « trop peu ».
+      msgs: {
+        high: ouch ? t('mg_nails_end_ouch', who) : tOr(t, 'mg_nails_end_short', undefined, who),
+        low: tOr(t, 'mg_nails_end_long', undefined, who),
+      },
+    });
   }
 
   function cut() {
@@ -606,7 +675,7 @@ export function nailsGame(ctx) {
       fx.text(p.x, p.y - 30, t('mg_ouch'), '#c8463c', 24);
       face = '😣';
       faceT = 1.2;
-    } else if (u >= GOOD_LO && u <= GOOD_HI) {
+    } else if (errOf(c.cutLen) === 0) {
       fx.text(p.x, p.y - 30, t('mg_perfect'), '#2f8a5f', 24);
       fx.burst(p.x, p.y, '✨', 3, { speed: 70, size: 14 });
       face = '😊';
@@ -732,7 +801,7 @@ export function nailsGame(ctx) {
           const zm = pos(c, (GOOD_LO + GOOD_HI) / 2);
           label(g, '✓', zm.x + Math.cos(c.ang) * (c.w * 0.5 + 20), zm.y + Math.sin(c.ang) * (c.w * 0.5 + 20), 18, '#1e8a4a');
         }
-        if (c.done) emoji(g, c.cutLen >= LO && c.cutLen <= HI ? '✅' : c.cut < QUICK + 0.04 ? '🩹' : '😕', tip.x, tip.y - 18, 18);
+        if (c.done) emoji(g, c.cut < QUICK + 0.04 ? '🩹' : errOf(c.cutLen) === 0 ? '✅' : '😕', tip.x, tip.y - 18, 18);
         g.restore();
       });
       // la pince
@@ -833,14 +902,19 @@ export function shoeGame(ctx) {
     showGauge();
   }
 
-  /** 🔨 (bouton, Espace) : si le clou choisi est déjà juste, on passe au prochain qui attend. */
+  /**
+   * 🔨 (bouton, Espace) : si le clou choisi est déjà juste, on passe au prochain qui attend.
+   * S'il est déjà enfoncé au maximum, on passe au prochain qui peut encore être tapé : sans
+   * ça, l'enfant qui ne s'arrêtait jamais tapait dans le vide (« Oups ») sans fin, et le jeu
+   * ne finissait jamais tout seul.
+   */
   function hammer() {
     if (ctx.done) return;
-    if (nails[sel].hits >= JUST) {
-      for (let k = 1; k < n; k++) {
-        if (nails[(sel + k) % n].hits < JUST) { select(sel + k); break; }
-      }
-    }
+    const next = (ok) => {
+      for (let k = 1; k < n; k++) if (ok(nails[(sel + k) % n])) return select(sel + k);
+    };
+    if (nails[sel].hits >= JUST) next((x) => x.hits < JUST);
+    if (nails[sel].hits >= MAXHITS) next((x) => x.hits < MAXHITS);
     hit();
   }
 
@@ -1081,11 +1155,10 @@ export function shearGame(ctx) {
     key(code, down) { if (down && (code === 'Space' || code === 'Enter' || code === 'NumpadEnter')) stop(); },
     draw(g) {
       sky(g, ctx.view, '#a9d8f2', '#e4f3fb', floorY, '#8cc268', '#6fa94f');
-      // tas de laine
+      // tas de laine (vide tant que rien n'est coupé : avant, une pelote y était dès le début)
       g.fillStyle = css(woolCol);
-      const pr = value() / MAX;
-      for (let i = 0; i < 9; i++) {
-        if (i / 9 > pr) break;
+      const balls = Math.ceil((value() / MAX) * 9 - 1e-9);
+      for (let i = 0; i < balls; i++) {
         circle(g, 330 + ((i * 37) % 50) - 20, floorY + 20 - Math.floor(i / 3) * 12, 16);
         g.fill();
       }
@@ -1116,20 +1189,34 @@ export function shearGame(ctx) {
       }
       rule.dial(g, value(), dialX(full));
       const pp = ctx.pointer;
-      if ((pp.over || pp.down) && !ctx.done) {
-        g.save();
-        g.translate(pp.x, pp.y);
-        g.rotate(-0.3);
-        g.fillStyle = '#3c7bd9';
-        rrect(g, -10, 0, 20, 50, 8);
-        g.fill();
-        g.fillStyle = '#c9ced3';
-        rrect(g, -18, -14, 36, 16, 3);
-        g.fill();
-        g.fillStyle = '#5d6870';
-        for (let i = -16; i < 18; i += 5) g.fillRect(i, -20, 3, 7);
-        g.restore();
+      if ((pp.over || pp.down) && !ctx.done) drawClipper(g, pp.x, pp.y);
+      else if (!ctx.done && value() === 0) {
+        // Rien de coupé encore : la tondeuse se promène sur la laine (↔) pour montrer le geste.
+        // La consigne de secours (sans clé mg_shear_hint_just) ne parle que de la zone verte,
+        // et au doigt, la tondeuse n'apparaît qu'une fois l'écran touché.
+        const k = Math.sin(ctx.time * 2.2);
+        const x = full.bx + k * full.rx * 0.6;
+        const y = full.by - full.ry * 0.1;
+        drawClipper(g, x, y, 0.75);
+        label(g, '↔', full.bx, full.by - full.ry - 18, 30, 'rgba(35, 48, 42, 0.55)');
       }
     },
   };
+}
+
+/** La tondeuse (manche bleu, peigne en haut). */
+function drawClipper(g, x, y, alpha = 1) {
+  g.save();
+  g.globalAlpha = alpha;
+  g.translate(x, y);
+  g.rotate(-0.3);
+  g.fillStyle = '#3c7bd9';
+  rrect(g, -10, 0, 20, 50, 8);
+  g.fill();
+  g.fillStyle = '#c9ced3';
+  rrect(g, -18, -14, 36, 16, 3);
+  g.fill();
+  g.fillStyle = '#5d6870';
+  for (let i = -16; i < 18; i += 5) g.fillRect(i, -20, 3, 7);
+  g.restore();
 }

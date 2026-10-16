@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // Version affichée sur l'écran d'accueil : numéro du package.json, date du build et commit.
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -20,9 +22,14 @@ function offlineServiceWorker() {
     name: 'animaleana-offline',
     apply: 'build',
     generateBundle(_, bundle) {
+      // Les modèles 3D (public/models/*.glb) ne passent pas par le bundle : on les ajoute à la main.
+      const modelDir = path.resolve('public/models');
+      const models = fs.existsSync(modelDir)
+        ? fs.readdirSync(modelDir, { recursive: true }).filter((f) => /\.(glb|gltf|bin|png|jpg|webp)$/i.test(String(f))).map((f) => `./models/${String(f).split(path.sep).join('/')}`)
+        : [];
       const files = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png',
         './icon-maskable-512.png', './apple-touch-icon.png',
-        ...Object.keys(bundle).map((f) => `./${f}`)];
+        ...Object.keys(bundle).map((f) => `./${f}`), ...models];
       const version = Date.now().toString(36);
       const source = `// Généré automatiquement au build.
 const CACHE = 'animaleana-${version}';
@@ -80,6 +87,13 @@ function portableFile() {
       html = html.replace(/<link rel="stylesheet"[^>]*href="\.\/(assets\/[^"]+\.css)">/, (_, f) => `<style>\n${read(f)}\n</style>`);
       html = html.replace(/\s*<link rel="manifest"[^>]*>/, '').replace(/\s*<link rel="apple-touch-icon"[^>]*>/, '');
       html = html.replace(/<link rel="icon" href="\.\/icon\.svg"/, `<link rel="icon" href="data:image/svg+xml;base64,${Buffer.from(read('icon.svg')).toString('base64')}"`);
+      // Modèles 3D (public/models) inclus en data: URI : la version à emporter a les mêmes graphismes.
+      const modelDir = join(outDir, 'models');
+      if (fs.existsSync(modelDir)) {
+        const models = Object.fromEntries(fs.readdirSync(modelDir).filter((f) => /\.glb$/i.test(f))
+          .map((f) => [f, `data:model/gltf-binary;base64,${fs.readFileSync(join(modelDir, f)).toString('base64')}`]));
+        html = html.replace('<script type="module">', () => `<script>window.__ANIMADICHELLE_MODELS__ = ${JSON.stringify(models)};</script>\n<script type="module">`);
+      }
       writeFileSync(join(outDir, 'animadichelle.html'), html);
     },
   };

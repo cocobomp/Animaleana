@@ -5,6 +5,8 @@ import { STARTER_ITEMS } from './gear.js';
 import { STARTER_TOOLS } from './tools.js';
 import { defaultFacilities } from './facilities.js'; // bâtiments à entretenir (écurie, maison, bergerie)
 import { createTutorial } from './tutorial.js';
+import { defaultClients } from './clients.js'; // clients (pension, soins)
+import { defaultCareers } from './careers.js'; // métiers
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -51,6 +53,8 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     events: { active: null, cooldowns: {}, nextAt: 0, lastRoll: -1, weather: null, done: {} },
     settings: { camera: 'third', timeSpeed: 'normal', sound: { on: true, volume: 0.7 } }, // sound : src/game/audio.js
     tutorial: createTutorial(), // tutoriel guidé (src/sim/tutorial.js)
+    clients: defaultClients(), // visiteurs et animaux confiés (src/sim/clients.js)
+    careers: defaultCareers(), // métiers appris (src/sim/careers.js)
   };
 }
 
@@ -106,6 +110,9 @@ function migrate(p) {
     settings: { ...fresh.settings, ...p.settings, sound: { ...fresh.settings.sound, ...(p.settings?.sound ?? {}) } },
     // Anciennes sauvegardes : pas de tutoriel (on peut le revoir dans les réglages).
     tutorial: p.tutorial ?? createTutorial(true),
+    // Clients et métiers (ajoutés plus tard) : champs manquants complétés.
+    clients: { ...defaultClients(), ...(p.clients ?? {}) },
+    careers: { ...defaultCareers(), ...(p.careers ?? {}) },
   };
 }
 

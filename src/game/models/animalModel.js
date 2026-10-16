@@ -12,6 +12,7 @@ import { ellipsoid, roundCone, blend, sdfMesh, rayHit, sdfNormal } from './sdf.j
 import { coatTextures, woolTextures, hairTexture, eyeTexture, lum } from '../textures.js';
 import { gfx } from '../gfx.js';
 import { SPECIES } from '../../sim/species.js';
+import { hairMaterial, buildHorseLeg, buildHorseMane, buildHorseForelock, buildHorseTail } from './horseParts.js';
 
 // ------------------------------------------------------------------ anatomie par espèce
 // torso : formes du tronc. ['e', miroir, centre (x/R, y/R, z/L), rayons (x/R, y/R, z/L), k (fondu, /R)]
@@ -19,36 +20,42 @@ import { SPECIES } from '../../sim/species.js';
 // head : formes de la tête en unités de hr (F = longueur du museau / hr).
 const SPEC = {
   horse: {
-    tilt: 1.0, rough: 0.5, legs: 'hoof', legX: 0.42,
+    tilt: 1.0, rough: 0.5, legs: 'horse', legX: 0.4,
     fur: { len: 0.005, head: 0.5 },
+    // Silhouette : poitrail profond, garrot marqué, dos légèrement creusé, croupe ronde.
     torso: [
-      ['e', 0, [0, 0.05, 0.1], [0.92, 1.0, 0.3]],
-      ['e', 0, [0, -0.18, -0.05], [0.88, 0.82, 0.3], 0.3],
-      ['e', 0, [0, 0.08, -0.32], [0.86, 0.93, 0.22], 0.3],
-      ['e', 0, [0, -0.05, -0.42], [0.72, 0.86, 0.12], 0.25],
-      ['e', 0, [0, -0.08, 0.36], [0.66, 0.88, 0.15], 0.3],
-      ['e', 1, [0.42, 0.05, 0.32], [0.36, 0.85, 0.14], 0.3],
-      ['e', 1, [0.4, -0.22, -0.33], [0.46, 0.85, 0.16], 0.3],
-      ['e', 0, [0, 0.72, 0.28], [0.32, 0.32, 0.12], 0.35],
+      ['e', 0, [0, -0.12, 0.02], [0.95, 1.0, 0.33]], // barrel
+      ['e', 0, [0, -0.06, 0.3], [0.8, 0.98, 0.2], 0.3], // cage thoracique
+      ['e', 0, [0, 0.0, 0.42], [0.6, 0.72, 0.12], 0.3], // poitrail
+      ['e', 0, [0, 0.62, 0.22], [0.3, 0.42, 0.16], 0.35], // garrot
+      ['e', 0, [0, 0.3, -0.1], [0.55, 0.62, 0.26], 0.3], // dos et rein
+      ['e', 0, [0, 0.12, -0.36], [0.82, 0.85, 0.2], 0.3], // croupe
+      ['e', 1, [0.42, -0.15, -0.33], [0.5, 0.9, 0.17], 0.3], // cuisses
+      ['e', 1, [0.44, 0.08, 0.32], [0.38, 0.85, 0.15], 0.3], // épaules
+      ['e', 1, [0.5, 0.42, -0.3], [0.28, 0.28, 0.12], 0.3], // pointes des hanches
     ],
-    neck: { base: [0.32, 0.28], s: [[-0.3, 0.55, 0.75, 0, 1.05], [0, 0.5, 0.68, 0, 0.92], [0.3, 0.38, 0.52, 0, 0.62], [0.6, 0.29, 0.4, 0, 0.42], [0.85, 0.25, 0.34, 0, 0.32], [1.0, 0.23, 0.31, 0, 0.28], [1.12, 0.2, 0.26, 0, 0.24]] },
+    // Encolure arquée : la ligne du dessus (crinière) bombe au milieu, la gorge est creusée.
+    neck: { base: [0.34, 0.3], s: [[-0.3, 0.55, 0.74, 0, 1.05], [0, 0.46, 0.74, 0, 0.8], [0.3, 0.36, 0.7, 0, 0.52], [0.6, 0.28, 0.6, 0, 0.38], [0.85, 0.25, 0.46, 0, 0.3], [1.0, 0.23, 0.33, 0, 0.26], [1.1, 0.21, 0.28, 0, 0.24]] },
     muzzleLen: (hl, hr, s) => hl * 0.85 * s - 0.69 * hr,
-    head: (F) => {
+    // Tête longue et fine : front large, ganaches rondes, chanfrein droit (ou creusé : arabe).
+    head: (F, variant) => {
       const t = 0.69 + F;
-      return [
-        ['e', 0, [0, 0.2, -0.75], [0.9, 0.8, 0.75]],
-        ['e', 1, [0.42, -0.5, -0.3], [0.5, 0.75, 0.7], 0.35],
-        ['c', 0, [0, 0.05, -0.3], [0, -0.22, t - 0.55], 0.8, 0.48, 0.95, 0.3],
-        ['e', 0, [0, -0.3, t - 0.5], [0.55, 0.55, 0.5], 0.2],
-        ['e', 0, [0, -0.62, t - 0.55], [0.42, 0.28, 0.45], 0.15],
-        ['e', 1, [0.32, -0.12, t - 0.35], [0.22, 0.28, 0.3], 0.12],
-        ['e', 1, [0.5, 0.42, 0.05], [0.28, 0.16, 0.35], 0.2],
+      const list = [
+        ['e', 0, [0, 0.22, -0.62], [0.86, 0.74, 0.8]], // crâne et front
+        ['e', 1, [0.4, -0.5, -0.22], [0.5, 0.74, 0.8], 0.3], // ganaches (joues)
+        ['c', 0, [0, 0.12, -0.2], [0, -0.26, t - 0.6], 0.78, 0.46, 0.92, 0.3], // chanfrein
+        ['e', 0, [0, -0.3, t - 0.5], [0.52, 0.5, 0.5], 0.2], // museau
+        ['e', 0, [0, -0.66, t - 0.62], [0.38, 0.26, 0.42], 0.15], // menton et lèvre
+        ['e', 1, [0.36, -0.14, t - 0.42], [0.2, 0.26, 0.3], 0.12], // naseaux
+        ['e', 1, [0.52, 0.4, 0.02], [0.26, 0.16, 0.36], 0.2], // arcades sourcilières
       ];
+      if (variant === 'dish') list.push(['e', 0, [0, 0.5, -0.35], [0.55, 0.32, 0.5], 0.3], ['e', 0, [0, -0.2, t - 0.45], [0.5, 0.46, 0.46], 0.25]);
+      return list;
     },
-    eye: { o: [0, 0.25, 0.1], d: [1, 0.3, 0.15], r: 0.21, fwd: 0.2, pupil: 'oval' },
-    ear: { o: [0, 0.3, -0.8], d: [0.42, 1, -0.1], len: 1.15, w: 0.3 },
+    eye: { o: [0, 0.2, 0.25], d: [1, 0.25, 0.1], r: 0.21, fwd: 0.2, pupil: 'oval' },
+    ear: { o: [0, 0.3, -0.75], d: [0.4, 1, -0.15], len: 1.15, w: 0.3 },
     nose: { y: -0.15 },
-    tail: [-0.5, 0.55],
+    tail: [-0.5, 0.72],
   },
   dog: {
     tilt: 0.15, rough: 0.8, legs: 'paw', legX: 0.45,
@@ -421,10 +428,14 @@ export function buildAnimalModel(speciesId, look) {
     hoof: mat(0x2f2924, { roughness: 0.55, side: THREE.DoubleSide }),
     pink: mat(0xc98d8a, { roughness: 0.6 }),
     innerEar: mat(speciesId === 'horse' || speciesId === 'cow' ? 0x3a302a : 0xc99a94, { roughness: 0.8 }),
-    mane: new THREE.MeshStandardMaterial({
-      color: look.mane, map: hairTexture(), alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.55,
-    }),
+    mane: null,
   };
+  // Crins : les mèches du cheval ondulent (vent, course) ; les autres espèces ont des mèches fixes.
+  const hairSway = { value: 0 };
+  const horse = speciesId === 'horse';
+  M.mane = horse ? hairMaterial(look.mane, hairSway) : new THREE.MeshStandardMaterial({
+    color: look.mane, map: hairTexture(), alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.55,
+  });
   for (let i = 1; i < 4; i++) if (!M.legs[i]) M.legs[i] = M.legs[i - 1];
   const faceColor = wool || pattern === 'points' ? look.secondary
     : speciesId === 'cow' && pattern === 'patches' ? (lum(look.coat) < lum(look.secondary) ? look.coat : look.secondary) : look.coat;
@@ -438,7 +449,13 @@ export function buildAnimalModel(speciesId, look) {
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
-  const parts = { root, body, legs: [], y0 };
+  const parts = { root, body, legs: [], y0, hairSway };
+  // Variantes de race du cheval (tête concave de l'arabe, fanons des Frisons et traits, port de queue).
+  const breedId = breed?.id ?? '';
+  const headVariant = horse && breedId === 'arabe' ? 'dish' : '';
+  const feathers = horse && (breedId === 'frison' || breedId === 'trait_breton');
+  const rngHorse = mulberry((look.seed ?? 1) + 5);
+  const maneSide = horse && look.seed % 2 === 0 ? -1 : 1;
   const fur = S.fur;
   const rawFur = speciesId === 'dog' ? fur.len * fluff ** 3 : speciesId === 'cat' || speciesId === 'rabbit' ? fur.len * fluff ** 4 : fur.len * fluff ** 2;
   // Pelage ras (chevaux, vaches, chèvres) : pas de couches de poils, le reflet satiné suffit.
@@ -487,8 +504,10 @@ export function buildAnimalModel(speciesId, look) {
     return (a * a - 0.3) * R * 0.3 + (b * b - 0.3) * R * 0.1;
   };
   const shag = (x, y, z, nx, ny) => (noise3(x * 30, y * 6, z * 30) - 0.4) * R * 0.08 * Math.min(1, 1.2 - ny);
-  const shapeKey = [speciesId, L, R, y0, nl, na, m.headR, m.headLen, m.snout, fluff, wool, shaggy, gfx.quality].join('|');
-  const torsoGeo = cachedGeo(`torso|${shapeKey}`, () => sdfMesh(torsoSdf, torsoBounds, L / (high ? 50 : 26), {
+  const shapeKey = [speciesId, L, R, y0, nl, na, m.headR, m.headLen, m.snout, fluff, wool, shaggy, headVariant, gfx.quality].join('|');
+  // Le cheval est grand et lisse : une grille un peu plus lâche suffit (économie de triangles).
+  const torsoCell = horse ? L / (high ? 34 : 22) : L / (high ? 50 : 26);
+  const torsoGeo = cachedGeo(`torso|${shapeKey}`, () => sdfMesh(torsoSdf, torsoBounds, torsoCell, {
     uv: wool ? boxUv(torsoSdf, 0.5) : cylUv(y0, -0.6 * L, 0.62 * L),
     displace: wool ? (x, y, z) => lump(x, y, z) + R * 0.06 : shaggy ? shag : null,
   }));
@@ -521,13 +540,24 @@ export function buildAnimalModel(speciesId, look) {
     ? [[legX * 0.8, L * 0.25, true], [-legX * 0.8, L * 0.25, true], [legX, -L * 0.18, false], [-legX, -L * 0.18, false]]
     : [[legX, L / 2 - R * 0.75, true], [-legX, L / 2 - R * 0.75, true], [legX, -L / 2 + R * 0.75, false], [-legX, -L / 2 + R * 0.75, false]];
   const skins = [];
+  const hoofMats = {};
   corners.forEach(([x, z, front], i) => {
     const pivot = new THREE.Group();
     pivot.position.set(x, legTop, z);
     body.add(pivot);
-    buildLeg(pivot, { kind: S.legs, front, T, r: legR, R, mat: M.legs[i], M, high, wool, woolMat, speciesId, furLen, index: i });
-    if (pivot.userData.skin) skins.push(pivot.userData.skin);
-    parts.legs.push({ pivot, knee: pivot.userData.knee ?? null, front, side: x > 0 ? 1 : -1 });
+    let knee = null;
+    if (S.legs === 'horse') {
+      // Sabot clair sous une balzane (patte blanche), sombre sinon.
+      const sock = pattern === 'socks' && i < look.seed % 5;
+      const key = sock ? 'light' : 'dark';
+      hoofMats[key] = hoofMats[key] ?? mat(sock ? 0xb8a98e : 0x3a322c, { roughness: 0.45 });
+      knee = buildHorseLeg(pivot, { front, T, r: legR, high, legMat: M.legs[i], hoofMat: hoofMats[key], hairMat: M.mane, feathers });
+    } else {
+      buildLeg(pivot, { kind: S.legs, front, T, r: legR, R, mat: M.legs[i], M, high, wool, woolMat, speciesId, furLen, index: i });
+      if (pivot.userData.skin) skins.push(pivot.userData.skin);
+      knee = pivot.userData.knee ?? null;
+    }
+    parts.legs.push({ pivot, knee, front, side: x > 0 ? 1 : -1 });
   });
   if (skins.length) {
     // Un seul squelette pour les quatre pattes (une seule texture d'os par animal).
@@ -563,47 +593,14 @@ export function buildAnimalModel(speciesId, look) {
     neckSecs.push({ p: [0, t * nl, q.zo * R], rx: q.w * R, ry: q.dc * R, ryb: q.dt * R });
   }
   const neckGeo = loft(neckSecs, {
-    radial: high ? 24 : 14, sub: high ? 3 : 2, capStart: false,
+    radial: high ? (horse ? 20 : 24) : 14, sub: high ? 3 : 2, capStart: false,
     displace: wool ? (x, y, z) => (lump(x, y + 1, z) + R * 0.05) * Math.max(0, 1 - y / (nl * 1.05)) : null,
   });
   const neckMesh = add(neck, neckGeo, wool ? woolMat : M.neck);
   if (!wool) addShells(neckMesh, furLen);
 
-  // Crinière du cheval : des mèches qui partent du haut de l'encolure et retombent sur le côté.
-  if (speciesId === 'horse') {
-    const down = new THREE.Vector3(0, -Math.cos(na), Math.sin(na));
-    const side = new THREE.Vector3(1, 0, 0);
-    const maneLen = 0.16 + (fluff - 1) * 1.3;
-    const list = [];
-    const rng = mulberry(look.seed + 5);
-    const n = high ? 36 : 18;
-    const t0 = -0.02;
-    const t1 = ns[ns.length - 1][0] - 0.02;
-    for (let i = 0; i < n; i++) {
-      const t = t0 + (i / (n - 1)) * (t1 - t0);
-      const q = neckAt(ns, t);
-      const c = new THREE.Vector3(0, t * nl, q.zo * R - q.dc * R * 0.96);
-      const len = maneLen * (0.75 + rng() * 0.5) * (t > 0.95 ? 0.6 : 1) * (t < 0.1 ? 0.7 : 1);
-      const lean = 0.3 + rng() * 0.4;
-      const pts = [];
-      for (let k = 0; k <= 5; k++) {
-        const f = k / 5;
-        pts.push(c.clone()
-          .add(new THREE.Vector3(0, 0, -(0.02 * Math.sin(f * Math.PI) + 0.012)))
-          .addScaledVector(side, (0.02 + lean * len * 0.35) * Math.sin(f * Math.PI * 0.5) + 0.008)
-          .addScaledVector(down, len * f * f * 0.9));
-      }
-      list.push({ pts, w0: 0.07, w1: 0.05, side: new THREE.Vector3(0, 1, 0), u0: rng() * 0.5, u1: 0.5 + rng() * 0.5 });
-    }
-    // Brosse de crins dressés le long de l'encolure (épaisseur de la crinière).
-    for (let i = 0; i < n / 2; i++) {
-      const t = 0.05 + (i / (n / 2 - 1)) * (t1 - 0.1);
-      const q = neckAt(ns, t);
-      const c = new THREE.Vector3(0, t * nl, q.zo * R - q.dc * R * 0.95);
-      list.push({ pts: [c, c.clone().add(new THREE.Vector3(-0.012, 0.01, -0.045)), c.clone().add(new THREE.Vector3(-0.03, -0.02, -0.065))], w0: 0.08, w1: 0.06, side: new THREE.Vector3(0, 1, 0) });
-    }
-    add(neck, strands(list), M.mane);
-  }
+  // Crinière du cheval : nappes de mèches qui retombent d'un côté de l'encolure.
+  if (horse) buildHorseMane(neck, { ns, nl, R, na, neckAt, rng: rngHorse, high, fluff, hairMat: M.mane, side: maneSide });
 
   // --- Tête
   const head = new THREE.Group();
@@ -613,10 +610,10 @@ export function buildAnimalModel(speciesId, look) {
   const hr = m.headR * (1 + (fluff - 1) * 0.5);
   const ml = S.muzzleLen(m.headLen, hr, m.snout ?? 1);
   const F = Math.max(0.12, ml / hr);
-  const { sdf: headSdf, bounds: hb } = buildShapes(S.head(F), [hr, hr, hr], [hr, hr, hr]);
+  const { sdf: headSdf, bounds: hb } = buildShapes(S.head(F, headVariant), [hr, hr, hr], [hr, hr, hr]);
   const hpad = hr * 0.3;
   const headGeo = cachedGeo(`head|${shapeKey}`, () => sdfMesh(headSdf, [[hb[0][0] - hpad, hb[0][1] - hpad, hb[0][2] - hpad], [hb[1][0] + hpad, hb[1][1] + hpad, hb[1][2] + hpad]],
-    hr / (high ? 8 : 4.5), { uv: cylUv(0, hb[0][2], hb[1][2]) }));
+    hr / (horse ? (high ? 6.5 : 4) : (high ? 8 : 4.5)), { uv: cylUv(0, hb[0][2], hb[1][2]) }));
   const headMesh = add(head, headGeo, M.head);
   addShells(headMesh, furLen * fur.head);
   const H = (v) => v.map((x) => x * hr);
@@ -637,11 +634,13 @@ export function buildAnimalModel(speciesId, look) {
     eye.position.copy(hit).addScaledVector(n, -eyeR * 0.6);
     eye.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
     head.add(eye);
-    add(eye, sphere(eyeR, 20, 14), eyeMat, null, null, null, false);
+    add(eye, sphere(eyeR, horse ? 16 : 20, horse ? 10 : 14), eyeMat, null, null, null, false);
     // Paupières : anneau sombre (bord de l'œil) et léger repli de peau au-dessus.
-    add(eye, new THREE.TorusGeometry(eyeR * 0.8, eyeR * 0.1, 8, 24), M.rim, [0, 0, eyeR * 0.58], null, [1.1, 0.78, 1], false);
-    const lid = new THREE.SphereGeometry(eyeR * 1.05, 18, 6, 0, Math.PI * 2, 0, Math.PI * 0.24);
-    add(eye, lid, mat(faceColor, { roughness: 0.8 }), null, [0.2, 0, 0], null, false);
+    add(eye, new THREE.TorusGeometry(eyeR * 0.8, eyeR * 0.1, horse ? 6 : 8, horse ? 20 : 24), M.rim, [0, 0, eyeR * 0.58], null, [1.1, 0.78, 1], false);
+    const lid = new THREE.SphereGeometry(eyeR * 1.05, horse ? 14 : 18, horse ? 5 : 6, 0, Math.PI * 2, 0, Math.PI * (horse ? 0.3 : 0.24));
+    add(eye, lid, mat(faceColor, { roughness: 0.8 }), null, [horse ? 0.42 : 0.2, 0, 0], null, false);
+    // Petit reflet blanc en haut de l'œil : le regard paraît vif et brillant.
+    if (horse) add(eye, sphere(eyeR * 0.17, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), [s * eyeR * 0.3, eyeR * 0.32, eyeR * 0.86], null, [1, 0.8, 0.5], false);
   }
 
   // Nez, naseaux, mufle.
@@ -655,7 +654,13 @@ export function buildAnimalModel(speciesId, look) {
       g.position.copy(p).addScaledVector(nn, -nr * 0.35);
       g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), nn);
       head.add(g);
-      add(g, sphere(nr, 12, 8), M.dark, null, [0, 0, s * 0.5], [0.55, 1, 0.5], false);
+      if (horse) {
+        // Naseau en virgule : bord charnu sombre et creux plus clair à l'intérieur.
+        add(g, new THREE.TorusGeometry(nr * 0.7, nr * 0.3, 6, 14, Math.PI * 1.5), M.dark, [0, 0, 0], [0, 0, s * 0.9 + Math.PI], [0.6, 1, 0.6], false);
+        add(g, sphere(nr * 0.75, 10, 6), mat(0x5a3a35, { roughness: 0.7 }), [0, 0, -nr * 0.2], [0, 0, s * 0.5], [0.5, 0.9, 0.4], false);
+      } else {
+        add(g, sphere(nr, 12, 8), M.dark, null, [0, 0, s * 0.5], [0.55, 1, 0.5], false);
+      }
     }
   } else if (speciesId === 'cow') {
     const muffle = lum(faceColor) > 0.3 ? 0xd9a49a : 0x2e2826;
@@ -679,8 +684,11 @@ export function buildAnimalModel(speciesId, look) {
     }
   }
 
-  // Toupet du cheval, frange des Highland.
-  if (speciesId === 'horse' || shaggy) {
+  // Toupet du cheval (entre les oreilles, sur le front), frange des Highland.
+  if (horse) {
+    const top = rayHit(headSdf, H([0, 0.2, -0.55]), [0, 1, 0.3], hr * 3).addScaledVector(new THREE.Vector3(0, 1, 0), -hr * 0.03);
+    buildHorseForelock(head, { hr, top, rng: rngHorse, high, fluff, hairMat: M.mane });
+  } else if (shaggy) {
     const list = [];
     const rng = mulberry(look.seed + 9);
     const top = rayHit(headSdf, H([0, 0.2, -0.45]), [0, 1, 0.25], hr * 3).addScaledVector(new THREE.Vector3(0, 1, 0), -hr * 0.05);
@@ -742,6 +750,7 @@ export function buildAnimalModel(speciesId, look) {
     buildEar(ear, m.earType, s, hr, S, M, speciesId, high);
     ear.userData.rest = ear.rotation.clone();
     ear.userData.side = s;
+    ear.userData.base = ear.rotation.clone(); // orientation de repos (le cheval fait pivoter ses oreilles)
     parts.ears.push(ear);
   }
 
@@ -752,13 +761,27 @@ export function buildAnimalModel(speciesId, look) {
   tail.position.set(0, tailRoot.y, tailRoot.z + R * 0.06);
   void tz;
   body.add(tail);
-  buildTail(tail, m.tailType, { R, L, legLen, y0, ty, fluff, M, look, high, wool, woolMat, furLen, pattern, speciesId });
+  if (horse) {
+    const raised = breedId === 'arabe' ? 1 : breedId === 'saddlebred' ? 0.6 : 0;
+    tail.rotation.x = -0.25 * raised;
+    tail.userData.baseX = tail.rotation.x;
+    buildHorseTail(tail, { R, drop: tailRoot.y, rng: rngHorse, high, fluff, hairMat: M.mane, tailMat: M.tail, raised });
+  } else {
+    buildTail(tail, m.tailType, { R, L, legLen, y0, ty, fluff, M, look, high, wool, woolMat, furLen, pattern, speciesId });
+  }
 
   Object.assign(parts, {
     neck, head, tail, snoutTip, headTilt: S.tilt - na,
     headHeight: neckBase.y + nl * Math.cos(na),
     saddleY: backTop(-L * 0.05),
+    legTop,
   });
+  if (horse) {
+    // Pour l'équipement : les surfaces sculptées, afin que selle, sangle et filet épousent le corps.
+    parts.sdf = { torso: torsoSdf, head: headSdf };
+    parts.dims = { L, R, hr, legR, snoutZ: tip.z, headBack: hb[0][2], earZ: S.ear.o[2] * hr, earY: S.ear.o[1] * hr };
+    parts.backTop = backTop;
+  }
   return parts;
 }
 
@@ -886,29 +909,31 @@ function buildLeg(pivot, o) {
 
 // ------------------------------------------------------------------ oreilles
 
-function earLoft(len, w, profile, curve = null, depth = 0.32, high = true) {
+function earLoft(len, w, profile, curve = null, depth = 0.32, high = true, lean = false) {
   const n = profile.length;
   return loft(profile.map((pw, i) => {
     const t = i / (n - 1);
     const c = curve ? curve(t) : [0, 0];
     return { p: [0, t * len + c[0], c[1]], rx: Math.max(0.0008, pw * w), ry: Math.max(0.0006, pw * w * depth) };
-  }), { radial: high ? 12 : 8, sub: 3 });
+  }), { radial: lean ? (high ? 10 : 8) : (high ? 12 : 8), sub: lean ? 2 : 3 });
 }
 
 function buildEar(ear, type, s, hr, S, M, speciesId, high) {
   const tilt = S.tilt;
   const outer = M.ear;
   const inner = M.innerEar;
+  const lean = speciesId === 'horse'; // oreilles moins fines en triangles (le cheval en a déjà beaucoup)
   const upright = (len, w, prof, rotX, rotZ, cup = 0.7, curve = null) => {
-    const g = earLoft(len, w, prof, curve, 0.32, high);
+    const g = earLoft(len, w, prof, curve, 0.32, high, lean);
     add(ear, g, outer);
-    const gi = earLoft(len * 0.82, w * cup, prof, curve, 0.12, high);
+    const gi = earLoft(len * 0.82, w * cup, prof, curve, 0.12, high, lean);
     add(ear, gi, inner, [0, len * 0.06, w * 0.18], null, null, false);
     ear.rotation.set(rotX, 0, rotZ);
   };
   switch (type) {
     case 'horse':
-      upright(hr * S.ear.len, hr * S.ear.w, [0.75, 1, 0.95, 0.7, 0.35, 0.02], -tilt + 0.2, -s * 0.18);
+      // Oreilles en cornet, pointes qui se rapprochent légèrement.
+      upright(hr * S.ear.len, hr * S.ear.w, [0.7, 1, 0.95, 0.72, 0.38, 0.02], -tilt + 0.25, -s * 0.12, 0.72, (t) => [0, -(t ** 2) * hr * 0.12]);
       break;
     case 'pointed':
     case 'bat':

@@ -17,6 +17,7 @@ import { TOOLS } from '../sim/tools.js';
 import { isSandbox } from '../sim/profile.js';
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
+import { openCareers, careerChips } from './careers.js'; // 💼 métiers
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -172,6 +173,7 @@ export class UI {
         btn('🚜', t('farm'), () => this.openFarm()),
         btn('🗺️', t('mgmt_btn'), () => this.game.mgmt.toggle()), // vue d'ensemble et construction
         btn('🏆', t('actv_hud'), () => this.openActivities()),
+        btn('💼', t('careers'), () => this.openCareers()), // métiers (src/ui/careers.js)
         btn('🧭', t('travel'), () => this.openTravel()),
         btn('📖', t('journal'), () => this.openJournal()),
         // Sur téléphone (une seule rangée), ces trois-là passent dans « ⋯ Plus » ; sur ordinateur ils restent visibles.
@@ -334,6 +336,7 @@ export class UI {
     }
     chips.push(...tripChips(this)); // chargement du véhicule de voyage
     chips.push(...(g.events?.statusChips(chip) ?? [])); // événement en cours (bandeau réduit)
+    chips.push(...(g.clients?.statusChips(chip) ?? []), ...careerChips(this, chip)); // visiteur, clients, carnet du métier
     const key = chips.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
     this.statusKey = key;
@@ -419,8 +422,9 @@ export class UI {
       pen: () => t('bld_pen'),
       showground: () => t('actv_enterShowground'),
       dismount: () => t('dismount'),
+      client: () => t('cl_talk', { owner: f.name }), // visiteur (src/game/Clients.js)
     };
-    const emoji = { animal: '🤲', helper: '💬', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', helper: '💬', client: '💬', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }
@@ -602,7 +606,8 @@ export class UI {
   openAnimals() { panels.openAnimals(this); this.game?.emit('panel', 'animals'); }
   openAdoption() { panels.openAdoption(this); this.game?.emit('panel', 'adoption'); }
   openTravel() { panels.openTravel(this); this.game?.emit('panel', 'travel'); }
-  openJournal() { panels.openJournal(this); this.game?.emit('panel', 'journal'); }
+  openJournal(tab) { panels.openJournal(this, tab); this.game?.emit('panel', 'journal'); }
+  openCareers() { openCareers(this); } // 💼 métiers (src/ui/careers.js)
   openJobs() { panels.openJobs(this); }
   openSettings() { panels.openSettings(this); this.game?.emit('panel', 'settings'); }
   openFarm() { panels.openFarm(this); this.game?.emit('panel', 'farm'); }

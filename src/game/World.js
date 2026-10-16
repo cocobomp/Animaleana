@@ -10,6 +10,7 @@ import { noise3 } from './models/shapes.js';
 import { gfx } from './gfx.js';
 import * as B from './models/buildings.js';
 import { forest, rocks, groundCover, bushes, mountainRing, tintHSL } from './models/nature.js';
+import { gltfForest, gltfRocks, hasGltfTrees } from './models/gltfNature.js'; // modèles GLB (Quaternius) s'ils sont chargés
 import { buildFarm } from './farmLayout.js';
 import { buildInteriors } from './Interiors.js'; // écurie et maison où l'on entre
 import { coreAt } from './coreLayout.js'; // installations déplaçables (vue d'ensemble)
@@ -614,9 +615,12 @@ void main() {
       return out;
     };
     const treeCount = this.quality === 'high' ? p.treeCount : Math.round(p.treeCount * 0.6);
-    g.add(forest(p.trees, spots(treeCount, 30, 190, 0.8, 1.5), season, snowy));
-    if (p.trees !== 'pine') g.add(forest('pine', spots(Math.round(treeCount * 0.15), 60, 190, 0.9, 1.4), season, snowy));
-    g.add(rocks(spots(p.biome === 'tundra' ? 90 : 35, 15, 160, 0.3, 1.6), p.biome === 'tundra' ? 0x403c3a : 0x8c8a86));
+    // Modèles GLB (Quaternius) s'ils sont chargés, sinon la végétation procédurale.
+    const gl = hasGltfTrees();
+    const woods = gl ? gltfForest : forest;
+    g.add(woods(p.trees, spots(treeCount, 30, 190, 0.8, 1.5), season, snowy));
+    if (p.trees !== 'pine') g.add(woods('pine', spots(Math.round(treeCount * 0.15), 60, 190, 0.9, 1.4), season, snowy));
+    g.add((gl ? gltfRocks : rocks)(spots(p.biome === 'tundra' ? 90 : 35, 15, 160, 0.3, 1.6), p.biome === 'tundra' ? 0x403c3a : 0x8c8a86));
     // Buissons : le long des murs des bâtiments (jamais devant une porte) et dans la campagne.
     const bushColor = tintHSL(new THREE.Color(snowy ? 0x4e7a3a : GROUND[p.biome][season]), 0.02, 0.0, -0.13).getHex();
     const bushSpots = [];

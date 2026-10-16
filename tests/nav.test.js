@@ -22,3 +22,16 @@ describe('enclos de base et enclos construits', () => {
     expect(enclosure('showground')).toBeTruthy();
   });
 });
+
+describe('bâtiments où l\'on entre', () => {
+  it('leurs enclos « interior » survivent au rechargement des constructions', () => {
+    ENCLOSURES.push({ id: 'stableTest', interior: true, x: 40, z: 40, hw: 4, hd: 6, gate: { side: '+z', at: 40, width: 2 } });
+    setBuiltEnclosures([{ id: 'b2', x: 60, z: 60, hw: 3, hd: 3, gate: { side: '+z', at: 60, width: 2 } }]);
+    expect(enclosure('stableTest')).toBeTruthy();
+    expect(enclosure('b2')).toBeTruthy();
+    setBuiltEnclosures([]);
+    expect(enclosure('stableTest')).toBeTruthy();
+    expect(enclosure('b2')).toBeUndefined();
+    expect(ENCLOSURES.filter((e) => e.id === 'stableTest')).toHaveLength(1);
+  });
+});

@@ -72,7 +72,7 @@ export const PLACES = {
     },
   },
   angleterre: {
-    id: 'angleterre', flag: '🇬🇧', lat: 51.8, lon: -1.8, landmass: 'europe', biome: 'countryside', country: 'gb',
+    id: 'angleterre', flag: '🇬🇧', lat: 51.8, lon: -1.8, landmass: 'grande-bretagne', // une île : bateau ou avion biome: 'countryside', country: 'gb',
     name: { fr: 'Campagne anglaise', en: 'English countryside' }, region: { fr: 'Cotswolds, Royaume-Uni', en: 'Cotswolds, United Kingdom' },
     climate: { fr: 'Collines vertes, haies et murets de pierre, souvent gris.', en: 'Green hills, hedges and stone walls, often grey.' },
     hills: 1.1, trees: 'deciduous', treeCount: 110,

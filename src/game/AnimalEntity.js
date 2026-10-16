@@ -386,7 +386,7 @@ export class AnimalEntity {
     this.label.visible = false; // les noms sont affichés en HTML (étiquettes qu'on peut toucher)
 
     // Maison des animaux : on y va par la porte, puis on dort à l'abri dans son panier.
-    if (d.housed && (d.following || this.ridden)) d.housed = false;
+    if (d.housed && (d.following || this.ridden || this.herdCtrl?.pusher)) d.housed = false;
     const den = d.housed ? this.world.petHouse : null;
     if (!den && this.inside) this.leaveHouse();
     if (den && this.inside) {

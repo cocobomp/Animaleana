@@ -6,7 +6,7 @@ import {
   tickProduce, collectProduct, passiveEquipment,
 } from '../src/sim/farm.js';
 import { mulberry32 } from '../src/sim/rng.js';
-import { DAYS_PER_YEAR } from '../src/sim/time.js';
+import { DAYS_PER_YEAR, dayOf } from '../src/sim/time.js';
 
 const rng = () => mulberry32(7);
 const adult = (species, sex = 'f') => createAnimal({ species, sex, ageDays: 4 * DAYS_PER_YEAR, rng: rng() });
@@ -106,5 +106,36 @@ describe('matériel', () => {
     expect(buyTool(p, 'shears').ok).toBe(true);
     expect(missingTool(p, 'shear')).toBeNull();
     expect(p.money).toBe(420);
+  });
+});
+
+describe('aides et animaux malades', () => {
+  it("le pet-sitter ne s'acharne pas à jouer avec un chien malade : il nourrit le chat", () => {
+    const p = createProfile('A');
+    hireHelper(p, 'petsitter', 'maison', rng());
+    const helper = p.helpers.find((h) => h.type === 'petsitter');
+    const dog = adult('dog');
+    dog.sick = 'flu';
+    dog.needs.exercise = 20; // le besoin le plus bas, mais « jouer » est impossible avec un malade
+    const cat = adult('cat');
+    cat.needs.hunger = 40;
+    const task = helperTask(p, helper, [dog, cat]);
+    expect(task).toMatchObject({ kind: 'care', animalId: cat.id, action: 'feed' });
+    expect(doHelperTask(p, task, [dog, cat], helper).ok).toBe(true);
+  });
+
+  it('le vétérinaire embauché compte comme une visite chez le vétérinaire', () => {
+    const p = createProfile('A');
+    p.clock = 24 * 60 * 4 + 600; // 5e jour, 10 h
+    hireHelper(p, 'vet', 'maison', rng());
+    const helper = p.helpers.find((h) => h.type === 'vet');
+    const cow = adult('cow');
+    cow.sick = 'flu';
+    const task = helperTask(p, helper, [cow]);
+    expect(task).toMatchObject({ kind: 'cure', animalId: cow.id });
+    doHelperTask(p, task, [cow], helper);
+    expect(cow.sick).toBeNull();
+    expect(cow.lastVet).toBe(dayOf(p.clock));
+    expect(dayOf(p.clock)).toBeGreaterThan(1);
   });
 });

@@ -421,7 +421,7 @@ class Session {
     let saved = null;
     if (award) {
       saved = addAward(p, award, {
-        type: this.type, day: g.day, place: p.place, animal: main.name, species: main.species,
+        type: this.type, day: g.day, place: p.place, animal: main.name, animalId: main.id, species: main.species,
         level: this.comp?.levelId ?? null, rank,
       });
     }

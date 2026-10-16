@@ -112,6 +112,13 @@ export class TaskQueue {
         if (this.tasks.length) this.running = true;
       }
     }
+    // Le joueur a repris la main (joystick, clavier, toucher, pause) pendant la marche vers une tâche :
+    // en manuel la liste s'arrête proprement, en mode Auto la tâche repart dès qu'il lâche.
+    if (this.current?.phase === 'walk' && !g.player.auto) {
+      this.current = null;
+      if (!this.autoMode) this.running = false;
+      g.ui.renderTasks();
+    }
     if (!this.running || g.paused || this.current) return;
     const task = this.tasks[0];
     if (!task) return;

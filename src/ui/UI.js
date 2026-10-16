@@ -186,7 +186,11 @@ export class UI {
       seen.add(a.id);
       let el = this.labelEls.get(a.id);
       if (!el) {
-        el = h('button', { class: 'animal-label', onClick: (ev) => { ev.stopPropagation(); this.game.walkTo(it.e.position, it.e.radius + 1.2, () => this.openAnimalActions(a), true); } });
+        el = h('button', { class: 'animal-label', onClick: (ev) => {
+          ev.stopPropagation();
+          const e = this.game.entities.get(a.id); // retrouvée au clic : l'entité change à chaque rechargement du lieu
+          if (e) this.game.walkTo(e.position, e.radius + 1.2, () => this.openAnimalActions(e.data), true);
+        } });
         this.labels.append(el);
         this.labelEls.set(a.id, el);
       }

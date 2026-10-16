@@ -126,3 +126,15 @@ describe('dressage', () => {
     expect(happiness(a)).toBeGreaterThan(0);
   });
 });
+
+describe('poids', () => {
+  it('un animal bien nourri revient vers son poids idéal après avoir maigri', () => {
+    const a = adult('horse', 'm');
+    a.weight = 40;
+    a.needs.hunger = 90;
+    tickAnimal(a, 6, { rng: rng() });
+    expect(a.weight).toBeGreaterThan(40);
+    tickAnimal(a, 48, { rng: rng() });
+    expect(a.weight).toBeLessThanOrEqual(50);
+  });
+});

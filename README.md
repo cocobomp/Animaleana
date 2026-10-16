@@ -11,14 +11,15 @@ npm install
 npm run dev        # ouvre http://localhost:5173 (aussi accessible depuis un téléphone du même réseau)
 ```
 
-Pour une version installable et utilisable hors ligne :
+La version installable et utilisable **hors ligne** est publiée sur GitHub Pages à chaque mise à jour de `main` :
+**https://cocobomp.github.io/Animaleana/**. Ouvre-la une première fois, puis installe-la (« Ajouter à l'écran d'accueil » sur téléphone). Elle marche ensuite sans connexion. Les sauvegardes restent sur l'appareil.
+
+Pour vérifier le build sur l'ordinateur :
 
 ```bash
 npm run build      # crée le dossier dist/
-npm run preview
+npm run preview    # http://localhost:4173 ; depuis un téléphone du même réseau, c'est du http : pas de cache hors ligne
 ```
-
-Ouvre le jeu une première fois, puis installe-le (« Ajouter à l'écran d'accueil » sur téléphone). Il marche ensuite sans connexion. Les sauvegardes restent sur l'appareil.
 
 ## Commandes
 

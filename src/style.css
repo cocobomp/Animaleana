@@ -554,7 +554,7 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
   gap: 6px;
 }
 #task-list[hidden] { display: none; }
-@media (pointer: coarse) { #task-list { bottom: calc(180px + var(--safe-b)); } }
+@media (pointer: coarse) { #task-list { bottom: calc(230px + var(--safe-b)); max-height: 40vh; } }
 .task-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .task-toggle { border: none; background: none; font-weight: 800; padding: 4px; min-height: 36px; }
 .task-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 4px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 4px 6px; }

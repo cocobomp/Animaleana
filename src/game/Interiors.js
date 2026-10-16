@@ -8,6 +8,7 @@ import { houseModel, houseRooms, HOUSE_HALL, HOUSE_W, HOUSE_D } from './models/h
 import { plateTexture } from './models/interiorKit.js';
 import { emojiTexture } from './textures.js';
 import { ENCLOSURES, NAV_HOOKS } from './nav.js';
+import { HOME } from './AnimalEntity.js'; // paddock (déplaçable en vue d'ensemble)
 import {
   ensureFacilities, boxCount, boxOccupants, assignBox, doChore, tickFacilities, applyStallEffects,
   stallDirt, houseDirt, penDirt, hasUpgrade,
@@ -309,7 +310,7 @@ export class Interiors {
     const e = this.game.entities.get(a.id);
     if (e && !e.ridden) {
       e.state = 'walk';
-      e.target.set(-16 + (Math.random() - 0.5) * 6, 0, 16 + (Math.random() - 0.5) * 6);
+      e.target.set(HOME.horse.x + (Math.random() - 0.5) * 6, 0, HOME.horse.z + (Math.random() - 0.5) * 6);
       e.timer = 60;
     }
     if (where) this.game.ui.toast(t('fac_toPaddock', { name: a.name, g: a.sex }));

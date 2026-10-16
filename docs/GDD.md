@@ -43,7 +43,7 @@ Illimité.
 - **Reproduction** possible entre deux adultes de même espèce et de sexes
   opposés : les petits héritent d'un mélange de races et de couleurs.
 - Le temps ne passe **que pendant qu'on joue** (pas d'effet Tamagotchi).
-- Échelle : 1 jour de jeu = 10 minutes réelles ; 1 an d'animal = 12 jours de jeu.
+- Échelle : 1 jour de jeu = 30 minutes réelles en vitesse normale (1 h en lente, 10 min en rapide, réglable) ; 1 an d'animal = 12 jours de jeu.
 
 ### Personnalité
 Chaque animal a un caractère : *joueur, timide, câlin, têtu, curieux, calme*.

@@ -27,8 +27,10 @@ export function addBaseEnclosure(e) {
 // obstacles : bâtiments construits (grange, niche…) dont on fait aussi le tour.
 const OBSTACLES = [];
 export function setBuiltEnclosures(list, obstacles = []) {
+  // Les bâtiments où l'on entre (src/game/Interiors.js) restent connus : seuls les enclos construits sont remplacés.
+  const interiors = ENCLOSURES.slice(BASE_ENCLOSURES).filter((e) => e.interior);
   ENCLOSURES.length = BASE_ENCLOSURES;
-  ENCLOSURES.push(...list);
+  ENCLOSURES.push(...interiors, ...list);
   OBSTACLES.length = 0;
   OBSTACLES.push(...obstacles);
 }
@@ -64,8 +66,8 @@ export function navTarget(pos, goal, small = false) {
     const w = hook(pos, goal);
     if (w) return w;
   }
-  // Les petits animaux passent sous les barrières en bois (pas sous le grillage).
-  const list = small ? ENCLOSURES.filter((e) => e.mesh) : ENCLOSURES;
+  // Les petits animaux passent sous les barrières en bois (pas sous le grillage, ni à travers les murs).
+  const list = small ? ENCLOSURES.filter((e) => e.mesh || e.interior) : ENCLOSURES;
   return detour(pos, gateStep(pos, goal, list), 0, small ? list : [...list, ...OBSTACLES]);
 }
 

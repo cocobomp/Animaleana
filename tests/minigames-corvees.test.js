@@ -23,6 +23,13 @@ beforeAll(async () => {
 const KEY = { just: 'justRight', low: 'tooLittle', high: 'tooMuch' };
 /** Le message de fin attendu (comme ctx.finishJust du vrai cadre). */
 const endMsg = (v, name = '') => (name ? t(`mg_${KEY[v]}`, { name }) : t(`mg_chore_${KEY[v]}`));
+/**
+ * Messages de fin acceptés : le standard (endMsg), ou, pour « trop peu » / « trop », celui qui dit
+ * pourquoi, propre à une corvée (mg_chore_<corvée>_low / _high : chores.js, whyMsgs) dès qu'il
+ * existe dans i18n.js. Les textes propres sont différents pour low et high : le verdict reste vérifié.
+ */
+const CHORE_KINDS = ['muck', 'straw', 'sweep', 'living', 'kitchen'];
+const endMsgs = (v, name = '') => [endMsg(v, name), ...(v === 'just' ? [] : CHORE_KINDS.map((k) => `mg_chore_${k}_${v}`).filter((k) => t(k) !== k).map((k) => t(k)))];
 
 /** Le cadre, en faux : mêmes méthodes (et mêmes messages de fin) que le ctx de minigames.js. */
 function fakeCtx({ a = null, seed = 7 } = {}) {
@@ -93,13 +100,13 @@ function expectZoneShown(ctx, p) {
 /** Une fin « trop peu » ou « trop » : moins que plein, au moins le plancher, message qui le dit. */
 function expectLess(ctx, v, name = '') {
   expect(ctx.finished, 'le jeu doit être fini').toBeTruthy();
-  expect(ctx.finished.msg).toBe(endMsg(v, name));
+  expect(endMsgs(v, name)).toContain(ctx.finished.msg);
   expect(ctx.finished.q).toBeLessThan(1);
   expect(ctx.finished.q).toBeGreaterThanOrEqual(JUST_FLOOR);
 }
 function expectJust(ctx, name = '') {
   expect(ctx.finished, 'le jeu doit être fini').toBeTruthy();
-  expect(ctx.finished.msg).toBe(endMsg('just', name));
+  expect(endMsgs('just', name)).toContain(ctx.finished.msg);
   expect(ctx.finished.q).toBe(1);
 }
 
@@ -201,7 +208,7 @@ describe('curer le box : tout le crottin, pas la paille propre', () => {
     expect(game.peek().inBin).toBe(8);
     press(ctx);
     expect(ctx.finished.q).toBeLessThan(0.8);
-    expect(ctx.finished.msg).toBe(endMsg('low')); // à égalité : il en manquait
+    expect(endMsgs('low')).toContain(ctx.finished.msg); // à égalité : il en manquait
 
     const ctx2 = fakeCtx();
     const game2 = chores.muckGame(ctx2);
@@ -220,7 +227,7 @@ describe('curer le box : tout le crottin, pas la paille propre', () => {
     press(ctx);
     expect(ctx.finished.q).toBeCloseTo(justRight(7, 7.5, 8.5, { slack: 1.5 }), 2);
     tick(game, 30); // il atterrit : pas de deuxième fin
-    expect(ctx.finished.msg).toBe(endMsg('low'));
+    expect(endMsgs('low')).toContain(ctx.finished.msg);
   });
 
   it('avec le cheval du box : son prénom quand c\'est juste ; sinon le message de la corvée', () => {
@@ -568,7 +575,7 @@ describe('la vaisselle : chaque assiette frottée juste assez', () => {
     expect(ctx.finished.q).toBeCloseTo(expected, 2);
     expect(ctx.finished.q).toBeLessThan(1);
     expect(ctx.finished.q).toBeGreaterThan(0.8);
-    expect(ctx.finished.msg).toBe(endMsg('low'));
+    expect(endMsgs('low')).toContain(ctx.finished.msg);
   });
 
   it('Entrée envoie l\'assiette (comme « C\'est bon ! »)', () => {

@@ -345,9 +345,10 @@ function ranchModel(def, label, ground) {
   const gy = ground(0, d / 2);
   for (const s of [-1, 1]) add(g, new THREE.BoxGeometry(0.3, 4, 0.3), wood, [s * (def.gate / 2 + 0.2), gy + 2, d / 2]);
   add(g, new THREE.BoxGeometry(def.gate + 1.2, 0.3, 0.3), wood, [0, gy + 3.9, d / 2]);
-  trough(g, 9, 2, ground(9, 2));
+  // (places par rapport aux bords : le ranch peut être agrandi)
+  trough(g, w / 2 - 6, 2, ground(w / 2 - 6, 2));
   hayBale(g, -2, -4, ground(-2, -4), 0.5);
-  hayBale(g, 13, 6, ground(13, 6), 1.2);
+  hayBale(g, w / 2 - 2, 6, ground(w / 2 - 2, 6), 1.2);
   flush(g);
   const s1 = sign(g, label, '🤠', [0, gy + 3.25, d / 2 + 0.17], 3.4, '#5a3a22');
   const s2 = s1.clone();
@@ -356,18 +357,20 @@ function ranchModel(def, label, ground) {
   g.add(s2);
   // Grange au fond à gauche, abri au fond à droite
   const barn = barnModel(STRUCTURES.barn, label, 0.85);
-  const bx = RANCH_BARN.x;
-  const bz = RANCH_BARN.z;
-  barn.position.set(bx, ground(bx, bz), bz);
+  const rb = ranchBarn(w, d);
+  barn.position.set(rb.x, ground(rb.x, rb.z), rb.z);
   g.add(barn);
   const shelter = shelterModel(STRUCTURES.shelter, label);
-  shelter.position.set(9, ground(9, -d / 2 + 2.6), -d / 2 + 2.6);
+  shelter.position.set(w / 2 - 6, ground(w / 2 - 6, -d / 2 + 2.6), -d / 2 + 2.6);
   g.add(shelter);
   return g;
 }
 
-/** Position locale de la grange du ranch (pour sa collision). */
-export const RANCH_BARN = { x: -8, z: -7, hw: (12 * 0.85) / 2 + 0.2, hd: (8 * 0.85) / 2 + 0.2 };
+/** Position locale de la grange du ranch (pour sa collision), dans le coin du fond à gauche. */
+export function ranchBarn(w = STRUCTURES.ranch.w, d = STRUCTURES.ranch.d) {
+  return { x: -w / 2 + 7, z: -d / 2 + 5, hw: (12 * 0.85) / 2 + 0.2, hd: (8 * 0.85) / 2 + 0.2 };
+}
+export const RANCH_BARN = ranchBarn();
 
 // ---------------------------------------------------------------- décorations
 
@@ -424,9 +427,12 @@ function fenceSegment(ground) {
 
 // ---------------------------------------------------------------- point d'entrée
 
-/** Construit le modèle d'une structure. label : nom affiché sur le panneau. */
-export function buildStructureModel(type, label = '', ground = FLAT) {
-  const def = STRUCTURES[type];
+/**
+ * Construit le modèle d'une structure. label : nom affiché sur le panneau.
+ * size : { w, d } d'un enclos agrandi (vue construction), sinon la taille du catalogue.
+ */
+export function buildStructureModel(type, label = '', ground = FLAT, size = null) {
+  const def = size ? { ...STRUCTURES[type], w: size.w, d: size.d } : STRUCTURES[type];
   switch (type) {
     case 'kennel': return kennel(label);
     case 'hutch': return hutch(label);

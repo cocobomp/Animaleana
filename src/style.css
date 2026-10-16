@@ -191,6 +191,7 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
   .hud-btn small { display: block; font-size: 0.58rem; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
   .hud-btn.secondary { display: none; }
   .hud-btn.more { display: grid; }
+  .hud-btn.build { flex-grow: 1.35; max-width: 72px; } /* « Construire » en entier */
   #help { bottom: auto; top: calc(150px + var(--safe-t)); font-size: 0.8rem; }
 }
 /* Paysage sur téléphone : la carte à gauche, les boutons à droite, pour laisser le joystick et les boutons de vue libres. */
@@ -727,12 +728,113 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
 .mgmt-info.bad small { color: var(--low); font-weight: 600; }
 .con-place { flex-shrink: 0; min-height: 48px; }
 .con-place.off { opacity: 0.55; }
+
+/* ---------- Vue construction — src/game/ConstructionView.js : poignées, étiquette de taille, bulles d'aide */
+/* Plus de place pour la ferme : la quête en cours et la carte d'infos se cachent (l'argent est dans la barre). */
+body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto-ring { display: none !important; }
+@media (max-width: 640px), (max-height: 480px) {
+  body.construct .hud-info { display: none; }
+}
+.hud-btn.build { background: rgba(214, 150, 40, 0.85); } /* bouton 🏗️ Construire bien visible */
+#mgmt-bar.construct { width: min(580px, calc(100vw - 20px)); }
+.cv-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cv-head .mgmt-info { text-align: left; max-width: none; flex: 1 1 auto; min-width: 0; }
+.cv-head .mgmt-info.ok small { color: #2a7a4f; font-weight: 600; }
+.cv-money { flex-shrink: 0; font-weight: 700; background: #fff1bf; border-radius: 999px; padding: 5px 11px; white-space: nowrap; }
+.cv-tabs .mgmt-btn { flex: 1 1 0; min-width: 0; }
+#cv-layer { position: fixed; inset: 0; pointer-events: none; z-index: 8; overflow: hidden; }
+#cv-layer.busy { display: none; }
+.cv-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 48px;
+  height: 48px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 5px solid var(--primary);
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  touch-action: none;
+  transition: background 0.15s, border-color 0.15s;
+  animation: cv-pulse 1.6s ease-in-out infinite;
+}
+.cv-handle.corner { width: 52px; height: 52px; border-color: #2f6fb0; }
+.cv-handle[hidden], .cv-handle.far { display: none; }
+.cv-handle:active, .cv-handle.active { background: #ffe27a; animation: none; transform: none; }
+.cv-handle.h-n, .cv-handle.h-s { cursor: ns-resize; }
+.cv-handle.h-e, .cv-handle.h-w { cursor: ew-resize; }
+.cv-handle.h-ne, .cv-handle.h-sw { cursor: nwse-resize; } /* (le nord du jeu, +z, est en bas de l'écran) */
+.cv-handle.h-nw, .cv-handle.h-se { cursor: nesw-resize; }
+.cv-handle.wiggle { animation: cv-wiggle 0.5s ease-in-out 3; }
+@keyframes cv-pulse { 0%, 100% { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); } 50% { box-shadow: 0 0 0 7px rgba(255, 255, 255, 0.45), 0 2px 10px rgba(0, 0, 0, 0.35); } }
+@keyframes cv-wiggle { 0%, 100% { scale: 1; } 50% { scale: 1.3; } }
+.cv-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: calc(100vw - 24px);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(20, 28, 24, 0.85);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+}
+.cv-tag[hidden] { display: none; }
+.cv-tag.ok { background: rgba(47, 138, 95, 0.94); }
+.cv-tag.bad { background: rgba(200, 70, 60, 0.94); }
+.cv-tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: min(320px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+.cv-tip p { margin: 0; justify-self: stretch; font-weight: 600; line-height: 1.35; }
+.cv-tip.resize { width: min(190px, calc(100vw - 32px)); padding: 10px 12px; font-size: 0.88rem; }
+.cv-tip.resize::after {
+  content: '';
+  position: absolute;
+  top: calc(50% - 9px);
+  right: -9px;
+  border: 9px solid transparent;
+  border-right: 0;
+  border-left-color: #fff;
+}
+.cv-tip.start::before {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: calc(50% - 9px);
+  border: 9px solid transparent;
+  border-top: 0;
+  border-bottom-color: #fff;
+}
 @media (max-width: 640px) {
   #mgmt-bar { left: 8px; right: 8px; transform: none; max-width: none; padding: 8px; }
   .mgmt-row { gap: 5px; }
   .mgmt-btn { min-width: 0; flex: 1; min-height: 56px; padding: 4px 2px; }
   .mgmt-btn .mb-label { font-size: 0.68rem; }
   .mgmt-label { font-size: 0.85rem; padding: 5px 11px; }
+  #mgmt-bar.construct { width: auto; }
+  .cv-head .mgmt-info b { font-size: 0.92rem; }
+  .cv-head .mgmt-info small { font-size: 0.78rem; }
+  .cv-money { font-size: 0.85rem; padding: 4px 9px; }
 }
 
 /* ===================================================================

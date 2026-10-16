@@ -1,15 +1,17 @@
 // Vue d'ensemble de la ferme, vue d'en haut : la caméra monte au-dessus de la ferme,
 // on glisse pour se déplacer, on pince (ou molette, ou boutons ±) pour zoomer,
 // et on touche un bâtiment, un enclos ou un animal pour lui donner un ordre sans marcher.
-// Le joueur ne bouge pas pendant ce temps. Le mode construction (🔨) est dans BuildMode.js.
+// Le joueur ne bouge pas pendant ce temps. La vue construction (🏗️ : grille, poignées pour agrandir)
+// est dans ConstructionView.js, la pose d'une construction (fantôme vert/rouge) dans BuildMode.js.
 
 import * as THREE from 'three';
 import { h } from '../ui/dom.js';
 import { t } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
-import { STRUCTURES, footprint } from '../sim/construction.js';
+import { STRUCTURES, RESIZABLE_CORE, footprintOf, capacityOf } from '../sim/construction.js';
 import { PEN } from './AnimalEntity.js';
 import { BuildMode } from './BuildMode.js';
+import { ConstructionView, fmt } from './ConstructionView.js';
 import { renderBar, openStructure, openEquipment, structureName } from '../ui/construction.js';
 import { enclosure } from './nav.js';
 import { EQUIPMENT } from '../sim/farm.js';
@@ -33,7 +35,9 @@ export class ManagementView {
     this.labelEls = new Map();
     this.labelAcc = 0;
     this.items = [];
+    this.glide = null; // { x, z, h } : la caméra y va doucement (choix dans la vue construction)
     this.build = new BuildMode(game, this);
+    this.construct = new ConstructionView(game, this);
   }
 
   get ui() {
@@ -45,7 +49,22 @@ export class ManagementView {
     else if (!this.active) this.enter();
   }
 
-  enter() {
+  /** Bouton 🏗️ Construire : la vue construction (depuis le jeu ou depuis la vue d'ensemble). */
+  openBuild() {
+    if (this.leaving) return;
+    if (!this.active) this.enter('build');
+    else if (!this.construct.active) {
+      if (this.build.active) this.build.cancel();
+      this.construct.open('view');
+    }
+  }
+
+  /** La caméra glisse vers (x, z) à la hauteur h ; glisser ou zoomer soi-même l'arrête. */
+  glideTo(x, z, height) {
+    this.glide = { x, z, h: THREE.MathUtils.clamp(height, MIN_H, MAX_H) };
+  }
+
+  enter(mode = 'overview') {
     const g = this.game;
     if (!g.running || this.active) return;
     g.player.cancelGoTo();
@@ -64,21 +83,26 @@ export class ManagementView {
     this.bar = h('div', { id: 'mgmt-bar' });
     this.ui.root.append(this.layer, this.bar);
     this.barKey = '';
+    this.glide = null;
+    if (mode === 'build') this.construct.open('hud');
     this.refreshBar();
     this.refreshLabels();
-    this.ui.toast(t('mgmt_hint'), 6000);
+    if (mode !== 'build') this.ui.toast(t('mgmt_hint'), 6000);
   }
 
   exit() {
     if (!this.active || this.leaving) return;
     if (this.build.active) this.build.cancel();
+    this.construct.close();
     this.ui.closePanel();
     this.leaving = true;
+    this.glide = null;
     this.trans = { t: 0, dur: 0.7, from: this.game.camera.position.clone(), fromQ: this.game.camera.quaternion.clone(), out: true };
   }
 
   /** Fin de la vue : le joueur reprend la main, la caméra est revenue à sa place. */
   finish() {
+    this.construct.close();
     this.active = false;
     this.leaving = false;
     this.trans = null;
@@ -93,6 +117,7 @@ export class ManagementView {
   stop() {
     if (!this.active) return;
     if (this.build.active) this.build.cancel();
+    this.construct.close();
     if (this.saved) {
       this.game.camera.position.copy(this.saved.pos);
       this.game.camera.quaternion.copy(this.saved.quat);
@@ -101,22 +126,30 @@ export class ManagementView {
   }
 
   zoomBy(f) {
+    this.glide = null;
     this.height = THREE.MathUtils.clamp(this.height * f, MIN_H, MAX_H);
   }
 
   recenter() {
     const p = this.game.player.position;
+    this.glide = null;
     this.focus.set(p.x, 0, p.z + 6);
   }
 
-  /** Où la caméra veut être pour la vue d'en haut. */
+  /**
+   * Où la caméra veut être pour la vue d'en haut. Vue construction : presque d'aplomb
+   * (la grille et les poignées se lisent mieux), sinon un peu de biais.
+   */
   desired() {
     const w = this.game.world;
     const y = w.heightAt(this.focus.x, this.focus.z);
-    const target = new THREE.Vector3(this.focus.x, y, this.focus.z);
-    this.dummy.position.set(this.focus.x, y + this.height, this.focus.z + this.height * 0.5);
-    this.dummy.lookAt(target);
-    return { pos: this.dummy.position, quat: this.dummy.quaternion };
+    const back = this.construct.active ? 0.16 : 0.5;
+    this.lookAt = this.lookAt ?? new THREE.Vector3();
+    this.lookAt.set(this.focus.x, y, this.focus.z);
+    this.dummy.position.set(this.focus.x, y + this.height, this.focus.z + this.height * back);
+    this.dummy.lookAt(this.lookAt);
+    this.wanted = this.wanted ?? { pos: this.dummy.position, quat: this.dummy.quaternion };
+    return this.wanted;
   }
 
   update(dt, ctrl) {
@@ -131,6 +164,16 @@ export class ManagementView {
       this.focus.x += ctrl.move.x * speed * dt;
       this.focus.z -= ctrl.move.y * speed * dt;
       if (ctrl.zoom) this.zoomBy(1 + ctrl.zoom * 0.08);
+      // Glisser ou se déplacer soi-même arrête le trajet automatique de la caméra.
+      if (this.glide && (ctrl.look.dx || ctrl.look.dy || ctrl.move.x || ctrl.move.y) && !this.lockPan) this.glide = null;
+      const gl = this.glide;
+      if (gl) {
+        const a = Math.min(1, dt * 4);
+        this.focus.x += (gl.x - this.focus.x) * a;
+        this.focus.z += (gl.z - this.focus.z) * a;
+        this.height += (gl.h - this.height) * a;
+        if (Math.abs(gl.x - this.focus.x) + Math.abs(gl.z - this.focus.z) + Math.abs(gl.h - this.height) < 0.05) this.glide = null;
+      }
       this.focus.x = THREE.MathUtils.clamp(this.focus.x, -110, 110);
       this.focus.z = THREE.MathUtils.clamp(this.focus.z, -110, 110);
     }
@@ -154,6 +197,7 @@ export class ManagementView {
       cam.quaternion.slerp(d.quat, Math.min(1, dt * 10));
     }
     this.build.update(dt);
+    this.construct.update(dt);
     this.labelAcc += dt;
     if (this.labelAcc > 0.5) {
       this.labelAcc = 0;
@@ -195,6 +239,11 @@ export class ManagementView {
     if (this.leaving) return;
     if (this.build.active) {
       this.build.onTap(sx, sy);
+      return;
+    }
+    // Vue construction : toucher choisit un enclos, un bâtiment ou un équipement à modifier.
+    if (this.construct.active) {
+      this.construct.onTap(sx, sy);
       return;
     }
     const g = this.game;
@@ -261,12 +310,25 @@ export class ManagementView {
     const items = [];
     const far = this.height > 85; // de très haut : étiquettes courtes (emoji + nombre)
     const status = (list, emoji) => (list.length ? ` · ${emoji} ${list.length}${list.some(care) ? ' ⚠️' : ''}` : '');
+    // Vue construction : les noms (et la taille des enclos) ; toucher une étiquette choisit l'élément.
+    const cv = this.construct.active ? this.construct : null;
+    const size = (r) => ` · ${t('con_size', { w: fmt(r.hw * 2), d: fmt(r.hd * 2) })}`;
     for (const it of w.interactables) {
+      if (it.kind === 'spot') continue;
       const col = w.colliders.find((c) => c.kind === it.kind);
       let pos = col ? { x: col.x, z: col.z } : { x: it.x, z: it.z };
       if (it.kind === 'pen') pos = { x: PEN.x, z: PEN.z - 3 };
       if (it.kind === 'paddock') pos = { x: enclosure('paddock').x, z: enclosure('paddock').z };
       const name = it.kind === 'refuge' && !g.isHome ? t('bld_breeder') : t(`bld_${it.kind}`);
+      if (cv) {
+        const e = enclosure(it.kind);
+        items.push({
+          key: `b-${it.kind}`, x: pos.x, z: pos.z, y: 5, cls: 'mgmt-label building',
+          text: `${BLD_ICON[it.kind] ?? '🏠'} ${name}${e && RESIZABLE_CORE.includes(it.kind) && !far ? size(e) : ''}`,
+          tap: () => cv.tapLabel(it.kind),
+        });
+        continue;
+      }
       let extra = '';
       if (it.kind === 'stable') extra = status(free.filter((a) => a.species === 'horse'), '🐴');
       if (it.kind === 'pen') extra = status(free.filter((a) => SPECIES[a.species].livestock), '🐑');
@@ -288,13 +350,16 @@ export class ManagementView {
       if (def.cat === 'decor') continue;
       const res = st.residents(s);
       const warn = res.some(care) || st.droppings(s) > 3;
-      const f = footprint(s.type, s.x, s.z, s.rot);
+      const f = footprintOf(s);
+      const cap = capacityOf(s);
       items.push({
         key: `s-${s.id}`, x: s.x, z: s.z - f.hd * 0.3, y: def.cat === 'home' ? 2.2 : 4, cls: 'mgmt-label structure',
-        text: far
-          ? `${def.emoji}${def.capacity ? ` ${res.length}/${def.capacity}` : ''}${warn ? ' ⚠️' : ''}`
-          : `${def.emoji} ${structureName(s.type)}${def.capacity ? ` · 👥 ${res.length}/${def.capacity}` : ''}${warn ? ' ⚠️' : ''}`,
-        tap: () => openStructure(this.ui, s),
+        text: cv
+          ? `${def.emoji} ${structureName(s.type)}${['enclosure', 'ranch'].includes(def.cat) && !far ? size(f) : ''}`
+          : far
+            ? `${def.emoji}${cap ? ` ${res.length}/${cap}` : ''}${warn ? ' ⚠️' : ''}`
+            : `${def.emoji} ${structureName(s.type)}${cap ? ` · 👥 ${res.length}/${cap}` : ''}${warn ? ' ⚠️' : ''}`,
+        tap: () => (cv ? cv.pick({ kind: 'structure', id: s.id }) : openStructure(this.ui, s)),
       });
     }
     // Équipements : on peut les toucher pour les déplacer (comme dans un jeu de construction).
@@ -304,11 +369,11 @@ export class ManagementView {
         items.push({
           key: `e-${q.eq.id}`, x: q.pos.x, z: q.pos.z, y: 1.4, cls: `mgmt-label equip${low ? ' warn' : ''}`,
           text: `${EQUIPMENT[q.eq.type].emoji}${low ? ' ⚠️' : ''}`,
-          tap: () => openEquipment(this.ui, q),
+          tap: () => (cv ? cv.pick({ kind: 'equipment', id: q.eq.id }) : openEquipment(this.ui, q)),
         });
       }
     }
-    if (!far) {
+    if (!far && !cv) {
       for (const e of g.entities.values()) {
         if (e.ridden) continue;
         const a = e.data;
@@ -348,10 +413,12 @@ export class ManagementView {
     const W = window.innerWidth;
     const H = window.innerHeight;
     const cam = this.game.camera;
-    const v = new THREE.Vector3();
+    const v = this.labelV ?? (this.labelV = new THREE.Vector3());
     const w = this.game.world;
-    const placed = [];
-    const dim = this.build.active;
+    // (cases réutilisées d'une image à l'autre : pas de nouvel objet à chaque image)
+    const placed = this.placedPool ?? (this.placedPool = []);
+    let n = 0;
+    const dim = this.build.active || !!this.construct.sel;
     for (const it of this.items) {
       const el = this.labelEls.get(it.key);
       if (!el) continue;
@@ -359,21 +426,33 @@ export class ManagementView {
       else v.set(it.x, w.heightAt(it.x, it.z) + it.y, it.z);
       v.project(cam);
       if (v.z > 1 || v.x < -1.05 || v.x > 1.05 || v.y < -1.05 || v.y > 1.05) {
-        el.style.display = 'none';
+        if (el.style.display !== 'none') el.style.display = 'none';
         continue;
       }
-      el.style.display = '';
+      if (el.style.display) el.style.display = '';
       const x = ((v.x + 1) / 2) * W;
       let y = ((1 - v.y) / 2) * H;
       const wpx = el.labelW || 120;
       for (let k = 0; k < 5; k++) {
-        const hit = placed.find((q) => Math.abs(q.x - x) < (q.w + wpx) / 2 && Math.abs(q.y - y) < 30);
+        let hit = null;
+        for (let i = 0; i < n; i++) {
+          const q = placed[i];
+          if (Math.abs(q.x - x) < (q.w + wpx) / 2 && Math.abs(q.y - y) < 30) {
+            hit = q;
+            break;
+          }
+        }
         if (!hit) break;
         y = hit.y - 32;
       }
-      placed.push({ x, y, w: wpx });
+      const slot = placed[n] ?? (placed[n] = { x: 0, y: 0, w: 0 });
+      slot.x = x;
+      slot.y = y;
+      slot.w = wpx;
+      n++;
       el.style.transform = `translate(${Math.round(x - wpx / 2)}px, ${Math.round(y - 20)}px)`;
-      el.style.opacity = dim ? 0.45 : 1;
+      const op = dim ? '0.45' : '1';
+      if (el.style.opacity !== op) el.style.opacity = op;
     }
   }
 }

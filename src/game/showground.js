@@ -27,17 +27,22 @@ export function buildShowground(world, group) {
   );
   world.interactables.push({ kind: 'showground', x: S.x + S.hw + 2.2, z: S.z });
   world.clearZones.push({ x: S.x, z: S.z, r: Math.hypot(S.hw, S.hd) + 6 });
-  buildHutchToys(world, group);
 }
 
-/** Jouets dans l'enclos grillagé du clapier (roue, tunnel, balle, plateforme, foin). */
-function buildHutchToys(world, group) {
+/**
+ * Jouets dans l'enclos grillagé du clapier (roue, tunnel, balle, plateforme, foin). Appelé avec les
+ * installations de base (src/game/farmLayout.js) : ils suivent l'enclos quand on le déplace ou l'agrandit
+ * (leurs places s'écartent ou se resserrent avec sa taille, sans sortir du grillage).
+ */
+export function buildHutchToys(world, group) {
   const hu = enclosure('hutch');
   world.hutchToys = {};
   if (!hu) return;
+  const kx = hu.hw / 2.6; // (places prévues pour l'ancien enclos de 5,2 × 4,4 m)
+  const kz = hu.hd / 2.2;
   for (const [id, def] of Object.entries(HUTCH_TOYS)) {
-    const x = hu.x + def.x;
-    const z = hu.z + def.z;
+    const x = hu.x + Math.max(-hu.hw + 0.5, Math.min(hu.hw - 0.5, def.x * kx));
+    const z = hu.z + Math.max(-hu.hd + 0.5, Math.min(hu.hd - 0.5, def.z * kz));
     const toy = hutchToy(id);
     toy.position.set(x, world.heightAt(x, z), z);
     group.add(toy);

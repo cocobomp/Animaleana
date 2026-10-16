@@ -3,7 +3,7 @@ import { createAnimal } from '../src/sim/animal.js';
 import { mulberry32 } from '../src/sim/rng.js';
 import { DAYS_PER_YEAR } from '../src/sim/time.js';
 import {
-  CONFIDENCE_OK, loadConfidence, startLoad, willLoad, encourage, stallSteps, newStall, enterStall, canStep, doStep,
+  CONFIDENCE_OK, MAX_TRIES, loadConfidence, startLoad, willLoad, encourage, stallSteps, newStall, enterStall, canStep, doStep,
   nextStep, secured, secureAll, safetyMap,
 } from '../src/sim/loading.js';
 import { planTrip, tickTrip, doStopAction, currentStop } from '../src/sim/trip.js';
@@ -34,6 +34,14 @@ describe('devant le pont', () => {
     encourage(w, 'wait');
     expect(w.conf).toBeGreaterThan(before);
     expect(w.tries).toBe(1);
+  });
+
+  it('avec de la patience, même un cheval très stressé finit par monter', () => {
+    const s = startLoad(horse('shy', { stress: 90 }));
+    expect(willLoad(s)).toBe(false);
+    let ok = false;
+    for (let i = 0; i < MAX_TRIES && !ok; i++) ok = encourage(s, 'wait');
+    expect(ok).toBe(true);
   });
 
   it('un cheval stressé a moins confiance, un cheval qui a l\'habitude des voyages monte mieux', () => {

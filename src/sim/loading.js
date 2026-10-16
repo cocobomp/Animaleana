@@ -15,6 +15,8 @@ const PERSONALITY_CONFIDENCE = { calm: 75, curious: 64, cuddly: 62, playful: 58,
 
 /** Ce que rapporte chaque façon d'aider (un peu moins à chaque fois qu'on recommence la même). */
 export const ENCOURAGE = { reassure: 18, treat: 30, wait: 8 };
+/** Avec de la patience, il finit toujours par monter : au plus ce nombre d'essais. */
+export const MAX_TRIES = 4;
 
 /**
  * Confiance de l'animal devant le pont (0–100) : son caractère, l'habitude des voyages,
@@ -47,6 +49,7 @@ export function encourage(s, how) {
   s[how] = n + 1;
   s.conf = Math.round(clamp(s.conf + base / (1 + n * 0.5)));
   s.tries += 1;
+  if (s.tries >= MAX_TRIES) s.conf = Math.max(s.conf, CONFIDENCE_OK);
   return willLoad(s);
 }
 

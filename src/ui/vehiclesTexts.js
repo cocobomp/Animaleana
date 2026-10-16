@@ -57,7 +57,7 @@ export const VEHICLES_FR = {
   veh_gaveUp_f: '{name} redescend et te suit. Réessaie quand elle sera plus calme.',
 
   // Compartiment.
-  veh_stallTitle: 'Compartiment des chevaux',
+  veh_stallTitle: 'Dans le van',
   veh_stallOrder: 'Dans l\'ordre : 1. barre de poitrail fermée · 2. le cheval monte · 3. barre arrière · 4. on l\'attache.',
   veh_place: 'Place {n}',
   veh_stallFree: 'libre',
@@ -155,6 +155,7 @@ export const VEHICLES_FR = {
 
   // Matériel resté à la maison (sim/gear.js, sim/tools.js).
   gear_leftAtHome: '🏠 Il est resté à la maison : il n\'était pas dans le coffre du voyage.',
+  gearAtHome: '🏠 À la maison',
   buyToolAskAway: '🏠 {tool} est resté à la maison (pas dans le coffre du voyage). En acheter un ici pour {price} 🪙 ?',
 };
 
@@ -207,7 +208,7 @@ export const VEHICLES_EN = {
   veh_stillHesitates_wait: '⏳ You wait quietly. {name} sniffs the ramp…',
   veh_gaveUp: '{name} comes back down and follows you. Try again when it is calmer.',
 
-  veh_stallTitle: 'Horse area',
+  veh_stallTitle: 'Inside the trailer',
   veh_stallOrder: 'In order: 1. breast bar closed · 2. the horse walks in · 3. rear bar · 4. tie it up.',
   veh_place: 'Space {n}',
   veh_stallFree: 'free',
@@ -297,5 +298,6 @@ export const VEHICLES_EN = {
   trip_tip_unload: 'On arrival, untie the horse first, then open the rear bar and lead it down calmly.',
 
   gear_leftAtHome: '🏠 It stayed at home: it wasn\'t in the travel trunk.',
+  gearAtHome: '🏠 At home',
   buyToolAskAway: '🏠 {tool} stayed at home (not in the travel trunk). Buy one here for {price} 🪙?',
 };

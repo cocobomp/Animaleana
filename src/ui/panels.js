@@ -15,7 +15,7 @@ import { canAfford, isSandbox } from '../sim/profile.js';
 import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
 import { speciesName } from './names.js';
-import { GEAR, BLANKET_COLORS, owned, inUse } from '../sim/gear.js';
+import { GEAR, BLANKET_COLORS, owned, inUse, leftAtHome } from '../sim/gear.js'; // leftAtHome : resté à la maison (coffre du voyage)
 import { TOOLS, hasTool } from '../sim/tools.js';
 import { audio } from '../game/audio.js'; // réglage des sons
 import { facilitiesTab } from './facilitiesPanel.js'; // onglet « Bâtiments »
@@ -623,7 +623,7 @@ function gearSection(ui, a, items) {
       worn
         ? h('button', { class: 'small', onClick: () => { g.unequip(a, def.slot); ui.renderPanel(); } }, t('gearRemove'))
         : h('button', { class: 'small primary', disabled: free <= 0 && !def.colors, onClick: () => { g.equip(a, item); ui.renderPanel(); } },
-          free > 0 ? t('gearPut') : t('gearNone')),
+          free > 0 ? t('gearPut') : t(leftAtHome(p, item) ? 'gearAtHome' : 'gearNone')),
       colors);
   }));
 }

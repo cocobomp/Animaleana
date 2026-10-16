@@ -767,7 +767,9 @@ export class TripFlow {
     }
     this.ui.tripBlocking = true;
     g.input.enabled = true; // on peut regarder autour de soi dans la cabine
-    if (vehicle) {
+    // Par la route (voiture, van) : on suit le trajet depuis la cabine. En avion ou en bateau, le véhicule
+    // ne fait que le trajet jusqu'au port ou à l'aéroport : on le voit partir, comme avant.
+    if (vehicle && (l.mode === 'car' || l.mode === 'van')) {
       this.journey.road = new RoadView(g, vehicle, trip);
       document.body.classList.add('trip-road'); // on cache le reste de l'interface : on regarde la route
     }

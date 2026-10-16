@@ -364,6 +364,7 @@ export function updateJourney(ui, flow) {
 export function showReport(ui, flow, report) {
   const el = overlay(ui);
   el.hidden = false;
+  el.classList.remove('with-road'); // le bilan se lit au milieu de l'écran
   ui.tripRefs = null;
   const j = flow.journey;
   const stopsMade = j.trip.stops.filter((s) => s.done).length;

@@ -290,9 +290,9 @@ function wheel(P, r, w, x, z, side) {
   return g;
 }
 
-/** Garde-boue arrondi au-dessus d'une roue (axe x). */
+/** Garde-boue arrondi au-dessus d'une roue (axe x) : la moitié haute d'un cylindre. */
 function fender(P, r, w, x, z, y) {
-  const g = new THREE.CylinderGeometry(r, r, w, 16, 1, true, -Math.PI / 2, Math.PI);
+  const g = new THREE.CylinderGeometry(r, r, w, 16, 1, true, 0, Math.PI);
   g.rotateZ(Math.PI / 2);
   const m = mesh(g, P.black, x, y, z);
   m.material.side = THREE.DoubleSide;

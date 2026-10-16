@@ -8,6 +8,9 @@
 //   verte est sur la jauge et sur la petite jauge au mur ; on s'arrête avec « C'est bon ! ».
 // - curer (corvée) : tout le crottin dans la brouette, mais pas la paille propre qui traîne
 //   (la jeter, c'est trop).
+//
+// Tout tient dans les 400 × 360 du cadre : en portrait (téléphone) la largeur visible est
+// exactement 400, en paysage la hauteur est exactement 360 (tests/minigames-nettoyage-cheval).
 
 import { rrect, ellipse, circle, emoji, label, fillView, dist, distToSegment } from './draw.js';
 
@@ -20,6 +23,17 @@ const SCENES = {
 
 /** Zone juste du tapis de paille : au moins 0,85 couche, au plus 1,25 ; à 1,6 c'est des tas partout. */
 export const SPREAD_ZONE = { lo: 0.85, hi: 1.25, max: 1.6 };
+
+/**
+ * Ce qui reçoit les saletés, à droite du sol : brouette (box, étable), seau (clapier) ou sac
+ * (litière). left / right : ce que le dessin occupe de part et d'autre de bin.x (poignée et
+ * trait compris), pour que rien ne dépasse le bord droit (400) sur un téléphone en portrait.
+ */
+export const BINS = {
+  barrow: { x: 354, left: 46, right: 40 },
+  bucket: { x: 360, left: 40, right: 34 },
+  bag: { x: 360, left: 40, right: 35 },
+};
 
 /** Mur de planches du box (ou de l'étable), du haut de la vue jusqu'au sol. */
 export function drawBoxWall(g, v, wall, floorY, floorColor) {
@@ -86,7 +100,8 @@ export function cleanGame(ctx, o = {}) {
   const who = a?.name;
   // Zone du sol (la litière pour le chat)
   const floor = cat ? { x: 30, y: 110, w: 290, h: 210 } : { x: 14, y: 96, w: 312, h: 246 };
-  const bin = { x: 362, y: 250 };
+  const binDef = BINS[sc.bin] ?? BINS.barrow;
+  const bin = { x: binDef.x, y: 250 };
   const items = [];
   const nDirt = o.n ?? sc.n;
   const nDecoys = o.decoys ?? 0;
@@ -111,7 +126,7 @@ export function cleanGame(ctx, o = {}) {
   let dirtInBin = 0;
   let zoneState = '';
 
-  ctx.hint(o.hint ?? t(cat ? 'mg_clean_hint_cat' : 'mg_clean_hint'));
+  ctx.hint(o.hint ?? hintFor(t, species, cat ? 'mg_clean_hint_cat' : 'mg_clean_hint'));
   /** Part de la barre réservée au ramassage (tout, s'il n'y a pas de 2e étape). */
   const pickShare = withSpread ? 0.35 : 1;
   // Corvée : la quantité juste, c'est tout le crottin (nDirt) et rien d'autre. Jauge jusqu'à
@@ -194,7 +209,7 @@ export function cleanGame(ctx, o = {}) {
       phase,
       items: items.filter((x) => x.state === 'floor').map((x) => ({ x: x.x, y: x.y, good: x.good })),
       floor,
-      bin,
+      bin: { ...bin, kind: sc.bin, left: bin.x - binDef.left, right: bin.x + binDef.right },
       inBin,
       dirtInBin,
       nDirt,
@@ -329,10 +344,10 @@ export function cleanGame(ctx, o = {}) {
       const labelY = ctx.sp ? 100 : 60;
       if (phase === 'pick') label(g, `${dirtInBin} / ${nDirt}`, 362, labelY, 18);
       else if (withSpread) {
-        // Petite jauge au mur : la même zone verte que sur la jauge du cadre.
+        // Petite jauge au mur : la même zone verte que sur la jauge du cadre. Pas de
+        // pourcentage (125 % qui serait « juste », c'est trop compliqué) : la bande verte suffit.
         const gy = labelY + 14;
-        drawMiniGauge(g, 350, gy, 14, 186 - gy, layers() / Z.max, Z.lo / Z.max, Z.hi / Z.max);
-        label(g, `${Math.round(layers() * 100)} %`, 362, 204, 15);
+        drawMiniGauge(g, 350, gy, 14, 192 - gy, layers() / Z.max, Z.lo / Z.max, Z.hi / Z.max);
       }
       // outil
       const pp = ctx.pointer;
@@ -344,6 +359,13 @@ export function cleanGame(ctx, o = {}) {
       if (held) drawItem(g, held.good ? 'straw' : sc.item, held);
     },
   };
+}
+
+/** Consigne propre à l'espèce (mg_clean_hint_rabbit : le seau du clapier), sinon la consigne commune. */
+function hintFor(t, species, fallback) {
+  const key = `mg_clean_hint_${species}`;
+  const s = t(key);
+  return s && s !== key ? s : t(fallback);
 }
 
 function drawItem(g, kind, it) {
@@ -409,14 +431,15 @@ function drawBin(g, kind, bin, n, total) {
   const { x, y } = bin;
   g.save();
   if (kind === 'barrow') {
+    // Brouette compacte (BINS.barrow) : roue sous la caisse, poignée vers le bas à droite.
     g.fillStyle = '#3a3f44';
-    circle(g, x - 18, y + 46, 12); g.fill();
+    circle(g, x - 14, y + 42, 12); g.fill();
     g.fillStyle = '#2f8a5f';
     g.beginPath();
-    g.moveTo(x - 48, y - 26);
-    g.lineTo(x + 34, y - 26);
-    g.lineTo(x + 20, y + 30);
-    g.lineTo(x - 40, y + 30);
+    g.moveTo(x - 44, y - 26);
+    g.lineTo(x + 30, y - 26);
+    g.lineTo(x + 18, y + 28);
+    g.lineTo(x - 36, y + 28);
     g.closePath();
     g.fill();
     g.strokeStyle = '#1e5c3e';
@@ -424,9 +447,10 @@ function drawBin(g, kind, bin, n, total) {
     g.stroke();
     g.strokeStyle = '#8a5a2b';
     g.lineWidth = 6;
+    g.lineCap = 'round';
     g.beginPath();
-    g.moveTo(x + 20, y + 20);
-    g.lineTo(x + 46, y + 50);
+    g.moveTo(x + 16, y + 18);
+    g.lineTo(x + 36, y + 42);
     g.stroke();
   } else if (kind === 'bucket') {
     g.fillStyle = '#e0574a';

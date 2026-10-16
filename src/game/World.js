@@ -591,8 +591,9 @@ void main() {
     g.add(this.makeTerrain(season, rng));
 
     // Montagnes au loin
-    if (p.mountains) g.add(mountainRing(16, 230, true, p.volcano ? 0x4a4644 : 0x77716b, rng));
-    else g.add(mountainRing(10, 300, false, 0x6f8a6a, rng));
+    const mountains = p.mountains ? mountainRing(16, 230, true, p.volcano ? 0x4a4644 : 0x77716b, rng) : mountainRing(10, 300, false, 0x6f8a6a, rng);
+    mountains.userData.noOccluder = true; // trop loin pour cacher le joueur : pas de rayon dessus à chaque image
+    g.add(mountains);
 
     // Végétation, posée en dehors de la cour et de l'eau.
     const spots = (count, rMin, rMax, sMin, sMax) => {

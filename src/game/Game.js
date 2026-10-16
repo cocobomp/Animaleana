@@ -575,7 +575,7 @@ export class Game {
       this.occluderGroup = this.world.group;
       this.occluders = [];
       this.world.group.traverse((o) => {
-        if (!o.isMesh || o.isInstancedMesh || o.geometry.type === 'PlaneGeometry') return;
+        if (!o.isMesh || o.isInstancedMesh || o.userData.noOccluder || o.geometry.type === 'PlaneGeometry') return;
         if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
         if (o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z) > 0.8) this.occluders.push(o);
       });

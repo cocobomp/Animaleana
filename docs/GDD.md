@@ -86,12 +86,14 @@ réussite au dressage…).
   balade ou en voyage.
 - **Mode bac à sable** au début : argent illimité.
 - **Mode gestion** (au choix dans le profil) : il faut gagner de l'argent
-  (petits boulots, concours, pension pour animaux) et le dépenser (nourriture,
-  soins, accessoires, logements).
+  (petits boulots, concours, spectacles, produits de la ferme ; pension pour animaux
+  prévue plus tard) et le dépenser (nourriture, soins, accessoires, logements, aides).
 
 ## 7. Maison et logements
 - Maison, jardin et **écuries présentes par défaut**.
-- Ensuite : décoration, niches, enclos, clapiers, carrière, paddocks.
+- Construction depuis la vue d'ensemble : niches, clapiers, paddocks, prés, abris,
+  granges, carrières, écuries, ranchs, décorations (fait). Décoration de l'intérieur
+  de la maison : plus tard.
 
 ## 8. Voyages
 - Libre : carte du monde, voiture, van, avion, bateau **ou à cheval**.
@@ -102,8 +104,9 @@ réussite au dressage…).
   le bateau ou l'avion pour traverser la mer, et on peut aller à cheval jusqu'en
   Suisse.
 - Sur place : animaux uniques à adopter, concours, quêtes, exploration, photos.
-- Destinations prévues : campagne (maison), Alpes, plage de Bretagne, forêt
-  canadienne, Japon, savane africaine, Islande…
+- Destinations (11) : Normandie (maison), plage de Bretagne, Alpes suisses, Islande,
+  ranch en Alberta, campagne de Kyoto, Cotswolds, Andalousie, haras du Kentucky,
+  Pampa, bush australien. Prévu ensuite : savane africaine…
 
 ## 9. Météo, jour et nuit, saisons
 - Cycle jour/nuit.

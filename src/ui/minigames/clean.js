@@ -126,7 +126,8 @@ export function cleanGame(ctx, o = {}) {
   let dirtInBin = 0;
   let zoneState = '';
 
-  ctx.hint(o.hint ?? hintFor(t, species, cat ? 'mg_clean_hint_cat' : 'mg_clean_hint'));
+  // Consigne propre à l'espèce (mg_clean_hint_rabbit : le seau du clapier), sinon la commune.
+  ctx.hint(o.hint ?? tOr(t, `mg_clean_hint_${species}`, cat ? 'mg_clean_hint_cat' : 'mg_clean_hint'));
   /** Part de la barre réservée au ramassage (tout, s'il n'y a pas de 2e étape). */
   const pickShare = withSpread ? 0.35 : 1;
   // Corvée : la quantité juste, c'est tout le crottin (nDirt) et rien d'autre. Jauge jusqu'à
@@ -197,8 +198,9 @@ export function cleanGame(ctx, o = {}) {
     const zs = v > Z.hi ? 'over' : v >= Z.lo ? 'in' : '';
     if (zs !== zoneState) {
       zoneState = zs;
-      if (zs === 'in') { ctx.hint(t('mg_nowStop'), 'good'); fx.text(200, 80, t('mg_good'), '#2f8a5f', 26); }
-      else if (zs === 'over') ctx.hint(t('mg_stop'), 'warn');
+      // On étale au doigt et on finit avec « C'est bon ! » : pas de « lâche maintenant » ici.
+      if (zs === 'in') { ctx.hint(tOr(t, 'mg_tapStop', 'mg_zoneHint'), 'good'); fx.text(200, 80, t('mg_good'), '#2f8a5f', 26); }
+      else if (zs === 'over') ctx.hint(tOr(t, 'mg_tooMuchStop', 'mg_zoneHint'), 'warn');
     }
     // Des tas partout : c'est trop, et c'est fini.
     if (v >= Z.max) endSpread();
@@ -361,11 +363,10 @@ export function cleanGame(ctx, o = {}) {
   };
 }
 
-/** Consigne propre à l'espèce (mg_clean_hint_rabbit : le seau du clapier), sinon la consigne commune. */
-function hintFor(t, species, fallback) {
-  const key = `mg_clean_hint_${species}`;
-  const s = t(key);
-  return s && s !== key ? s : t(fallback);
+/** Texte de `key` s'il existe dans i18n.js, sinon celui de `fallback` (jamais une clé brute à l'écran). */
+export function tOr(t, key, fallback, params) {
+  const s = t(key, params);
+  return s && s !== key ? s : t(fallback, params);
 }
 
 function drawItem(g, kind, it) {

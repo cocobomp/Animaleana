@@ -10,6 +10,7 @@
 // visible 360) et l'anneau ne passe pas sous la jauge des allures (tests/minigames-nettoyage-cheval).
 
 import { drawHorseTop, drawPersonTop, rrect, circle, emoji, label, fillView, clamp, lerp, dist } from './draw.js';
+import { tOr } from './clean.js';
 
 const C = { x: 200, y: 158 };
 const ARENA = 126;
@@ -173,8 +174,9 @@ export function lungeGame(ctx) {
         if (zs !== zoneState) {
           zoneState = zs;
           wasIn = ok;
-          if (zs === 'in') { ctx.hint(t('mg_zoneHint'), 'good'); fx.text(C.x, C.y + 40, t('mg_good'), '#2f8a5f', 22); }
-          else if (zs === 'over') ctx.hint(t('mg_zoneHint'), 'warn');
+          // Dans le vert : « appuie sur C'est bon ! » (mg_tapStop, sinon la consigne de la zone).
+          if (zs === 'in') { ctx.hint(tOr(t, 'mg_tapStop', 'mg_zoneHint'), 'good'); fx.text(C.x, C.y + 40, t('mg_good'), '#2f8a5f', 22); }
+          else if (zs === 'over') ctx.hint(tOr(t, 'mg_tooMuchStop', 'mg_zoneHint'), 'warn');
         } else if (!zs) {
           if (ok && !wasIn) ctx.hint(t('mg_lunge_keep'), 'good');
           else if (!ok && wasIn) say();

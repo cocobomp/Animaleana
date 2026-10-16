@@ -360,6 +360,30 @@ describe('nettoyer : la consigne parle du bon bac', () => {
   it('chaque bac tient dans les 400 px de large', () => {
     for (const [kind, b] of Object.entries(clean.BINS)) expect(b.x + b.right, kind).toBeLessThanOrEqual(W);
   });
+
+  it('étaler : dans le vert, on dit d\'appuyer sur « C\'est bon ! » (pas « lâche maintenant »)', () => {
+    const run = (tt) => {
+      const ctx = fakeCtx(ANIMALS.horse, { t: tt });
+      const game = clean.cleanGame(ctx);
+      pickAll(game, ctx);
+      const ys = rowYs(game.peek().floor);
+      spreadRows(game, ys);
+      const inZone = ctx.hints.at(-1);
+      spreadRows(game, ys.slice(0, 3));
+      return { inZone, over: ctx.hints.at(-1) };
+    };
+    const real = run(t);
+    expect(real.inZone).toEqual({ text: clean.tOr(t, 'mg_tapStop', 'mg_zoneHint'), kind: 'good' });
+    expect(real.over).toEqual({ text: clean.tOr(t, 'mg_tooMuchStop', 'mg_zoneHint'), kind: 'warn' });
+    for (const h of [real.inZone, real.over]) {
+      expect(h.text).not.toBe(t('mg_nowStop'));
+      expect(h.text).not.toBe(t('mg_stop'));
+    }
+    const extra = { mg_tapStop: 'Appuie sur C\'est bon !', mg_tooMuchStop: 'Ça fait des tas !' };
+    const withKeys = run((k, p) => extra[k] ?? t(k, p));
+    expect(withKeys.inZone.text).toBe(extra.mg_tapStop);
+    expect(withKeys.over.text).toBe(extra.mg_tooMuchStop);
+  });
 });
 
 // ------------------------------------------------------------------ longe
@@ -417,6 +441,15 @@ describe('longe : le travail juste (secondes à la bonne allure)', () => {
     lungeUntil(game, ctx, () => false, 9000);
     expectVerdict(ctx, 'high', a.name);
     expect(ctx.finished.value).toBeGreaterThanOrEqual(game.peek().max);
+  });
+
+  it('dans le vert, la consigne dit d\'appuyer sur « C\'est bon ! » ; au-delà, elle prévient', () => {
+    const { ctx, game } = start();
+    const p0 = game.peek();
+    lungeUntil(game, ctx, (q) => q.value >= p0.lo + 0.2);
+    expect(ctx.hints.at(-1)).toEqual({ text: clean.tOr(t, 'mg_tapStop', 'mg_zoneHint'), kind: 'good' });
+    lungeUntil(game, ctx, (q) => q.value >= p0.hi + 0.2);
+    expect(ctx.hints.at(-1)).toEqual({ text: clean.tOr(t, 'mg_tooMuchStop', 'mg_zoneHint'), kind: 'warn' });
   });
 
   it('toucher la jauge des allures ne change pas la vitesse ; le centre ralentit, le bord accélère', () => {

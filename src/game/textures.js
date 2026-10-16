@@ -122,7 +122,18 @@ export function coatTextures(look, speciesId) {
   const bay = speciesId === 'horse' && lum(look.mane) < 0.06 && lum(look.coat) > 0.06 && pattern !== 'spots';
   const sheep = !!look.wool;
   const cowLike = speciesId === 'cow';
-  const sleek = speciesId === 'horse' || speciesId === 'cow' || speciesId === 'goat';
+  const horse = speciesId === 'horse';
+  const sleek = horse || speciesId === 'cow' || speciesId === 'goat';
+  // Robes du cheval : gris pommelé, isabelle (raie de mulet), rouan (poils blancs mêlés), nez sombre.
+  const colorFr = look.colorName?.fr ?? '';
+  const grey = horse && pattern !== 'spots' && lum(look.coat) > 0.42 && Math.abs(lum(look.coat) - lum(look.secondary)) < 0.2 && !/Palomino|Isabelle|Alezan|Rouan/.test(colorFr);
+  const dun = horse && colorFr === 'Isabelle';
+  const roan = horse && colorFr === 'Rouan';
+  const darkMuzzle = horse && (bay || dark || grey || dun);
+  // Marque en tête : liste, étoile, pelote ou rien, selon la graine et la robe.
+  const faceMark = !horse || pattern === 'spots' || pattern === 'patches' || (grey && lum(look.coat) > 0.6) ? 'none'
+    : pattern === 'socks' ? ['blaze', 'stripe', 'star', 'snip', 'star', 'none'][look.seed % 6]
+      : (look.seed % 4 === 0 && lum(look.coat) < 0.5 ? 'star' : 'none');
 
   // Motif de base (taches, plaques, rayures), commun à toutes les parties.
   const baseCanvas = (size, part) => {
@@ -154,6 +165,25 @@ export function coatTextures(look, speciesId) {
         blob(ctx, r2() * size, r2() * size, r, r2, size, 0.9);
         // Petites taches satellites autour des grandes, comme sur les vraies robes pie.
         if (cowLike || r2() < 0.5) blob(ctx, r2() * size, r2() * size, r * 0.35, r2, size);
+      }
+    } else if (grey && (part === 'body' || part === 'neck')) {
+      // Pommelures : anneaux un peu plus sombres, centre clair, serrés sur le corps.
+      const n = part === 'body' ? 110 : 30;
+      for (let i = 0; i < n; i++) {
+        const x = r2() * size;
+        // Surtout sur le dos et la croupe (u autour de 0,5), moins sous le ventre.
+        const y = size * (part === 'body' ? 0.5 + (r2() - 0.5) * 0.7 : r2());
+        const xx = part === 'body' ? size * (0.5 + (r2() - 0.5) * 0.8) : x;
+        const rr = (5 + r2() * 5) * s;
+        for (const dx of [-size, 0, size]) {
+          const g = ctx.createRadialGradient(xx + dx, y, 0, xx + dx, y, rr);
+          g.addColorStop(0, 'rgba(255,255,255,0.12)');
+          g.addColorStop(0.45, 'rgba(255,255,255,0.04)');
+          g.addColorStop(0.8, 'rgba(70,65,60,0.13)');
+          g.addColorStop(1, 'rgba(70,65,60,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(xx + dx - rr, y - rr, rr * 2, rr * 2);
+        }
       }
     } else if (pattern === 'tabby') {
       // Rayures qui font le tour du corps, plus une raie sombre sur le dos.
@@ -207,10 +237,17 @@ export function coatTextures(look, speciesId) {
         if (opts.counter) {
           // Dos un peu plus sombre, ventre un peu plus clair (contre-ombrage naturel).
           const back = 1 - Math.abs(u - 0.5) * 2;
-          const f = 1.07 - back * 0.12;
+          let f = horse ? 1.1 - back * 0.16 : 1.07 - back * 0.12;
+          // Cheval : léger moiré de grandes taches (reflets de la robe), poils blancs du rouan.
+          if (horse) f *= 1 + (wrapNoise(u, v, 3.5, seed + 11) - 0.5) * 0.09;
           d[i] = Math.min(255, d[i] * f);
           d[i + 1] = Math.min(255, d[i + 1] * f);
           d[i + 2] = Math.min(255, d[i + 2] * f);
+          if (roan && rng() < 0.3) {
+            d[i] += (245 - d[i]) * 0.6;
+            d[i + 1] += (242 - d[i + 1]) * 0.6;
+            d[i + 2] += (238 - d[i + 2]) * 0.6;
+          }
         }
         // Grain très fin.
         const g = 1 + (rng() - 0.5) * (sleek ? 0.05 : 0.1);
@@ -235,6 +272,7 @@ export function coatTextures(look, speciesId) {
 
   const bodyMarks = (u, v, n) => {
     const b = belly(u);
+    if (dun) return [['mane', (1 - edge(Math.abs(u - 0.5), 0.012 + n * 0.004, 0.006)) * 0.75]];
     if (pattern === 'bicolor' || (dogTri && !darkTri) || darkTri) {
       const reach = 0.28 + 0.4 * smooth(0.6, 0.98, v) + n * 0.25;
       const out = [['secondary', 1 - edge(b, reach)]];
@@ -251,6 +289,7 @@ export function coatTextures(look, speciesId) {
   };
   const neckMarks = (u, v, n) => {
     const b = belly(u);
+    if (dun) return [['mane', (1 - edge(Math.abs(u - 0.5), 0.012 + n * 0.004, 0.006)) * 0.6]];
     if (pattern === 'bicolor' || dogTri) return [['secondary', 1 - edge(b, 0.42 + n * 0.3 - v * 0.1)]];
     if (pattern === 'tan') return [['secondary', 1 - edge(b, 0.4 + n * 0.25)]];
     if (pattern === 'points' && (speciesId === 'goat')) return [['secondary', 1]];
@@ -265,12 +304,17 @@ export function coatTextures(look, speciesId) {
       if (speciesId === 'cat') return [['secondary', edge(v, 0.5 + n * 0.12, 0.07)]];
       return [['secondary', 1]];
     }
-    if (speciesId === 'horse') {
-      // Bout du nez foncé (peau presque nue), liste blanche sur le chanfrein pour certains.
-      const out = [['muzzle', edge(v, 0.86 + n * 0.04, 0.03) * 0.6]];
-      if (pattern === 'socks' || (look.seed % 3 === 0 && pattern !== 'spots')) {
-        out.push(['white', (1 - edge(Math.abs(u - 0.5), 0.035 + v * 0.04 + n * 0.02, 0.01)) * edge(v, 0.3, 0.02) * (1 - edge(v, 0.95, 0.02))]);
-      }
+    if (horse) {
+      // Bout du nez foncé (peau presque nue : bai, noir, gris), un peu plus clair pour les alezans.
+      const out = [['muzzle', edge(v, 0.85 + n * 0.04, 0.04) * (darkMuzzle ? 0.8 : 0.3)]];
+      if (grey) out.push(['muzzle', 0.12 * (1 - edge(v, 0.25 + n * 0.1, 0.15))]); // tête un peu plus sombre
+      const du = Math.abs(u - 0.5);
+      const star = 1 - edge(Math.hypot(du / 0.075, (v - 0.33) / 0.05) + n * 0.4, 1, 0.25);
+      const snip = 1 - edge(Math.hypot(du / 0.07, (v - 0.9) / 0.045) + n * 0.4, 1, 0.3);
+      if (faceMark === 'star') out.push(['white', star]);
+      else if (faceMark === 'snip') out.push(['white', snip]);
+      else if (faceMark === 'stripe') out.push(['white', Math.max(star * 0.8, (1 - edge(du, 0.02 + n * 0.01, 0.008)) * edge(v, 0.3, 0.03) * (1 - edge(v, 0.93, 0.03)))]);
+      else if (faceMark === 'blaze') out.push(['white', Math.max(star, snip, (1 - edge(du, 0.045 + v * 0.03 + n * 0.02, 0.012)) * edge(v, 0.28, 0.03))]);
       return out;
     }
     if (cowLike && pattern === 'patches') {
@@ -294,8 +338,8 @@ export function coatTextures(look, speciesId) {
     const front = i < 2;
     const low = (at, f = 0.03) => edge(v, at + n * 0.12, f);
     if (sheep) return [['secondary', 1]];
-    if (pattern === 'socks' && i < look.seed % 5) return [['white', low(0.62)]];
-    if (bay) return [['mane', low(0.5, 0.08)]];
+    if (pattern === 'socks' && i < look.seed % 5) return [['white', low(0.55 + ((look.seed >> (2 + i)) % 4) * 0.07, 0.04)]];
+    if (bay || dun) return [['mane', low(0.52, 0.1)]];
     if (pattern === 'points') {
       if (speciesId === 'goat') return front ? [['secondary', 1]] : [['secondary', low(0.75)]];
       return [['secondary', speciesId === 'cat' ? low(0.3, 0.15) : low(0.42)]];
@@ -441,6 +485,43 @@ export function hairTexture() {
       ctx.moveTo(x, 0);
       const bend = (rng() - 0.5) * 14;
       ctx.bezierCurveTo(x + bend * 0.3, end * 0.3, x - bend, end * 0.7, x + bend * 0.5, end);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    const tex = toTexture(c);
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+  });
+}
+
+/** Crins du cheval : mèches denses et effilées, plus contrastées que les poils génériques. */
+export function maneTexture() {
+  return cached('mane', () => {
+    const w = 128;
+    const h = 256;
+    const c = makeCanvas(w, h);
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    const rng = mulberry32(23);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 1100; i++) {
+      const x = 2 + rng() * (w - 4);
+      const end = h * (0.5 + rng() * 0.5);
+      const v = 120 + rng() * 135;
+      ctx.strokeStyle = `rgb(${v},${v},${v})`;
+      ctx.globalAlpha = 0.75 + rng() * 0.25;
+      const bend = (rng() - 0.5) * 16;
+      // Deux tronçons : épais à la racine, fin vers la pointe.
+      ctx.lineWidth = 1.4 + rng() * 1.8;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.quadraticCurveTo(x + bend * 0.3, end * 0.35, x - bend * 0.3, end * 0.6);
+      ctx.stroke();
+      ctx.lineWidth = 0.6 + rng() * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(x - bend * 0.3, end * 0.6);
+      ctx.quadraticCurveTo(x - bend * 0.7, end * 0.8, x + bend * 0.4, end);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;

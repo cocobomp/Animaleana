@@ -6,6 +6,8 @@ import { STARTER_TOOLS } from './tools.js';
 import { defaultFacilities } from './facilities.js'; // bâtiments à entretenir (écurie, maison, bergerie)
 import { createTutorial } from './tutorial.js';
 import { defaultDogTrainer } from './dogTrainer.js'; // métier éducateur canin
+import { defaultClients } from './clients.js'; // clients (pension, soins)
+import { defaultCareers } from './careers.js'; // métiers
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -52,8 +54,9 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     events: { active: null, cooldowns: {}, nextAt: 0, lastRoll: -1, weather: null, done: {} },
     settings: { camera: 'third', timeSpeed: 'normal' },
     tutorial: createTutorial(), // tutoriel guidé (src/sim/tutorial.js)
-    careers: { xp: {}, active: null }, // métiers : XP par métier et métier en cours (src/sim/careersRegistry.js)
-    dogTrainer: defaultDogTrainer(), // éducateur canin : réputation, clients, historique (src/sim/dogTrainer.js)
+    clients: defaultClients(), // visiteurs et animaux confiés (src/sim/clients.js)
+    careers: defaultCareers(), // métiers appris (src/sim/careers.js)
+    dogTrainer: defaultDogTrainer(), // éducateur canin : chiens en éducation, historique (src/sim/dogTrainer.js)
   };
 }
 
@@ -105,7 +108,9 @@ function migrate(p) {
     ...fresh, ...p, stats: p.stats ?? {}, settings: { ...fresh.settings, ...p.settings },
     // Anciennes sauvegardes : pas de tutoriel (on peut le revoir dans les réglages).
     tutorial: p.tutorial ?? createTutorial(true),
-    careers: { ...fresh.careers, ...p.careers, xp: { ...(p.careers?.xp ?? {}) } },
+    // Clients et métiers (ajoutés plus tard) : champs manquants complétés.
+    clients: { ...defaultClients(), ...(p.clients ?? {}) },
+    careers: { ...defaultCareers(), ...(p.careers ?? {}) },
     dogTrainer: { ...fresh.dogTrainer, ...p.dogTrainer },
   };
 }

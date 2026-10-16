@@ -5,9 +5,16 @@
 import { spend, canAfford } from './profile.js';
 import { levelOf } from './progress.js';
 
-/** Nombre de box construits dans l'écurie (certains sont débloqués par des améliorations). */
-export const MAX_BOXES = 8;
+/**
+ * Box de l'écurie. Elle en a 8 au début (4 utilisables, les autres débloqués par des améliorations) ;
+ * on peut la rallonger deux fois (vue construction) : 12 puis 16 box, 4 de plus utilisables à chaque fois.
+ */
+export const STABLE_SIZES = [8, 12, 16];
+export const MAX_BOXES = STABLE_SIZES[STABLE_SIZES.length - 1];
 export const BASE_BOXES = 4;
+/** Rallonger l'écurie : prix (mode gestion) et niveau requis, pour passer à la taille suivante. */
+export const STABLE_EXTENSIONS = [{ price: 900, level: 3 }, { price: 1600, level: 5 }];
+export const EXTENSION_BOXES = 4;
 /** Prix de la paille fraîche pour un box (mode gestion). */
 export const STRAW_COST = 4;
 
@@ -85,10 +92,54 @@ export function ensureFacilities(profile) {
 
 export const hasUpgrade = (f, kind, id) => !!f[kind]?.upgrades.includes(id);
 
+/** Taille de l'écurie : 0 (8 box), 1 (12 box) ou 2 (16 box). */
+export const stableExt = (f) => Math.max(0, Math.min(STABLE_SIZES.length - 1, Math.floor(f.stable?.ext ?? 0)));
+/** Box construits (utilisables ou non). */
+export const stableSlots = (f) => STABLE_SIZES[stableExt(f)];
+
 /** Nombre de box utilisables. */
 export function boxCount(f) {
-  return BASE_BOXES + UPGRADES.stable.filter((u) => u.boxes && hasUpgrade(f, 'stable', u.id)).reduce((s, u) => s + u.boxes, 0);
+  const upgrades = UPGRADES.stable.filter((u) => u.boxes && hasUpgrade(f, 'stable', u.id)).reduce((s, u) => s + u.boxes, 0);
+  return Math.min(stableSlots(f), BASE_BOXES + upgrades + stableExt(f) * EXTENSION_BOXES);
 }
+
+/** Peut-on rallonger l'écurie ? reason : 'max' | 'level' | 'money'. */
+export function canExtendStable(profile) {
+  const f = ensureFacilities(profile);
+  const ext = stableExt(f);
+  const next = STABLE_EXTENSIONS[ext];
+  if (!next) return { ok: false, reason: 'max' };
+  if (levelOf(profile.xp ?? 0) < next.level) return { ok: false, reason: 'level', level: next.level };
+  if (!canAfford(profile, next.price)) return { ok: false, reason: 'money', price: next.price };
+  return { ok: true, price: next.price, boxes: STABLE_SIZES[ext + 1] };
+}
+
+/** Rallonge l'écurie (le bâtiment, l'allée et les box suivent : src/game/models/stableInterior.js). */
+export function extendStable(profile) {
+  const check = canExtendStable(profile);
+  if (!check.ok) return check;
+  spend(profile, check.price);
+  profile.facilities.stable.ext = stableExt(profile.facilities) + 1;
+  return { ok: true, ext: profile.facilities.stable.ext, boxes: check.boxes };
+}
+
+// Emprise de l'écurie à la maison (repère du monde). Elle est tournée d'un quart de tour : sa longueur
+// suit l'axe z, sa porte regarde vers +x (la cour). Le bout nord reste contre le paddock ;
+// on la rallonge vers le sud, et la sellerie recule d'autant.
+export const STABLE_PLAN = { x: -22, north: 6, depth: 10, length: 16, column: 3.2 };
+
+/** Longueur de l'écurie (m) pour une taille donnée : deux rangées de box de plus à chaque fois. */
+export const stableLength = (ext) => STABLE_PLAN.length + ext * 2 * STABLE_PLAN.column;
+
+/** Rectangle au sol de l'écurie { x, z, hw, hd }. */
+export function stableRect(ext) {
+  const len = stableLength(ext);
+  return { x: STABLE_PLAN.x, z: STABLE_PLAN.north - len / 2, hw: STABLE_PLAN.depth / 2, hd: len / 2 };
+}
+
+/** Sellerie (à côté de l'écurie, au sud) : position de son centre. */
+export const tackRoomPos = (ext) => ({ x: -24, z: STABLE_PLAN.north - stableLength(ext) - 7 });
+export const TACKROOM_SIZE = { hw: 2.8, hd: 3.8 };
 
 /** Confort d'un box (0–100) : moyenne de la propreté et de la fraîcheur de la paille. */
 export const boxComfort = (box) => (box.clean + box.straw) / 2;

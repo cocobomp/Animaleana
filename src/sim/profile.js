@@ -7,6 +7,7 @@ import { defaultFacilities } from './facilities.js'; // bâtiments à entretenir
 import { createTutorial } from './tutorial.js';
 import { defaultClients } from './clients.js'; // clients (pension, soins)
 import { defaultCareers } from './careers.js'; // métiers
+import { migrateCoreSizes, CORE_VERSION } from './resize.js'; // tailles des enclos (vue construction)
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -47,7 +48,12 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     helpers: [], // aides embauchées { id, type, name, place }
     farm: { autoHerd: true },
     facilities: defaultFacilities(), // propreté, usure, améliorations et box (src/sim/facilities.js)
-    structures: [], // constructions du joueur { id, type, place, x, z, rot } (src/sim/construction.js)
+    structures: [], // constructions du joueur { id, type, place, x, z, rot, w?, d? } (src/sim/construction.js)
+    // Place et taille des installations de base, par lieu : { [lieu]: { paddock: { x, z, w, d }, … } }
+    // (absentes = par défaut ; src/sim/construction.js et src/sim/resize.js).
+    coreLayout: {},
+    coreVersion: CORE_VERSION,
+    tips: {}, // petites bulles d'aide déjà vues (vue construction…)
     petHouse: { dirt: 0 }, // saleté des paniers de la maison des animaux
     // Événements spéciaux (orage, animal blessé…) : voir src/sim/events.js.
     events: { active: null, cooldowns: {}, nextAt: 0, lastRoll: -1, weather: null, done: {} },
@@ -100,11 +106,16 @@ export function loadProfile(id) {
   }
 }
 
-function migrate(p) {
+/** Complète une sauvegarde ancienne (champs ajoutés depuis) sans rien perdre. */
+export function migrate(p) {
   const fresh = createProfile(p.name, p.mode, p.home ?? 'maison');
-  return {
+  const out = {
     ...fresh,
     ...p,
+    // Anciennes sauvegardes : enclos de l'ancienne taille (on les agrandit en douceur, voir plus bas).
+    coreVersion: p.coreVersion ?? 1,
+    coreLayout: p.coreLayout ?? {},
+    tips: p.tips ?? {},
     stats: p.stats ?? {},
     // Anciennes sauvegardes : réglage des sons absent (ou incomplet).
     settings: { ...fresh.settings, ...p.settings, sound: { ...fresh.settings.sound, ...(p.settings?.sound ?? {}) } },
@@ -114,6 +125,8 @@ function migrate(p) {
     clients: { ...defaultClients(), ...(p.clients ?? {}) },
     careers: { ...defaultCareers(), ...(p.careers ?? {}) },
   };
+  // Paddock, bergerie et enclos des lapins plus grands : on agrandit sans casser les déplacements enregistrés.
+  return migrateCoreSizes(out);
 }
 
 export function saveProfile(p) {

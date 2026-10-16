@@ -9,12 +9,14 @@
 // ou trop, c'est moins de points, de la même façon des deux côtés.
 // - curer : tout le crottin, mais pas la paille propre (la jeter, c'est trop) ; un crottin
 //   oublié compte autant qu'une touffe jetée ;
-// - paille : une couche partout (0,85 à 1,15 couche), plus c'est du gaspillage ;
+// - paille : une couche partout (0,85 à 1,15), plus c'est du gaspillage ; tant qu'il reste
+//   plus de 15 % de sol nu, ce n'est pas « partout » (les tas ne comptent pas) ;
 // - balayer : tout ramasser, sans passes à vide une fois fini (balayer du propre soulève la
 //   poussière) ;
 // - ranger : chaque objet à sa place (un objet au mauvais endroit compte en moins ; « trop »
 //   n'existe pas) ;
 // - vaisselle : frotter chaque assiette juste assez (trop longtemps, c'est de l'eau gaspillée).
+// Le message de fin dit pourquoi (whyMsgs : le texte propre à la corvée, s'il existe).
 
 import { rrect, ellipse, circle, emoji, label, fillView, tiles, clamp, dist, distToSegment } from './draw.js';
 import { cleanGame, drawBoxWall, drawMiniGauge } from './clean.js';
@@ -30,6 +32,25 @@ export const CHORE_ICONS = { muck: '🧹', straw: '🌾', sweep: '🧹', living:
  * montrer quoi toucher. (Pas « Lâche maintenant ! » : dans les corvées, lever le doigt n'arrête rien.)
  */
 const STOP_HINT = (t) => `✅ ${t('mg_stopHere')}`;
+
+const VERDICT_KEY = { just: 'justRight', low: 'tooLittle', high: 'tooMuch' };
+
+/**
+ * Messages de fin qui disent pourquoi (o.msgs de ctx.finishJust) : le texte propre à la corvée
+ * s'il existe dans i18n.js (mg_chore_<kind>_low / _high : « Il reste du crottin par terre »…).
+ * noName : pour trop peu / trop, le message standard des corvées plutôt que celui avec le prénom
+ * du cheval du box. Renvoie undefined s'il n'y a rien à changer (message standard du cadre).
+ */
+function whyMsgs(ctx, kind, noName = false) {
+  const { t } = ctx;
+  const msgs = {};
+  for (const v of ['low', 'high']) {
+    const own = `mg_chore_${kind}_${v}`;
+    if (t(own) !== own) msgs[v] = t(own);
+    else if (noName && ctx.name) msgs[v] = t(`mg_chore_${VERDICT_KEY[v]}`);
+  }
+  return Object.keys(msgs).length ? msgs : undefined;
+}
 
 /** Flèche qui invite à aller quelque part (petit rebond). */
 function bounceArrow(g, ch, x, y, time, size = 24) {
@@ -72,27 +93,49 @@ function drawFork(g, x, y) {
  * Tout le crottin dans la brouette, c'est fini tout seul (clean.js) ; « C'est bon ! » permet de
  * s'arrêter avant (comme ranger le salon) : chaque crottin oublié compte autant qu'une touffe
  * jetée, et le message dit lequel des deux l'emporte (trop peu / trop).
+ * La note et la jauge suivent toujours ces erreurs (en vol comprises), jamais le seul nombre
+ * d'objets dans la brouette : 7 crottins + 1 touffe = 8 objets, mais ce n'est pas « juste ».
  */
 export function muckGame(ctx) {
   const { t, fx } = ctx;
   const game = cleanGame(ctx, { species: 'horse', n: 8, decoys: 3, spread: false, tool: drawFork, hint: t('mg_chore_muck_hint') });
   const tufts = game.peek().items.filter((x) => x.good).length;
-  /** Ce qui ne va pas : crottins encore par terre, touffes propres parties vers la brouette. */
-  const faults = () => {
-    const floor = game.peek().items;
-    return { left: floor.filter((x) => !x.good).length, thrown: tufts - floor.filter((x) => x.good).length };
-  };
+  /** Ce que la fourche tient en ce moment ('dirt' | 'tuft' | null) : ni par terre, ni jeté. */
+  let holding = null;
+  const count = (good) => game.peek().items.filter((x) => x.good === good).length;
+  /** Ce qui ne va pas : crottins encore par terre (ou dans la fourche), touffes propres parties vers la brouette. */
+  const faults = () => ({
+    left: count(false) + (holding === 'dirt' ? 1 : 0),
+    thrown: tufts - count(true) - (holding === 'tuft' ? 1 : 0),
+  });
   /** La valeur notée : nDirt − erreurs si c'est surtout du crottin oublié, nDirt + erreurs sinon. */
   const scored = () => {
     const { nDirt } = game.peek();
     const { left, thrown } = faults();
     return left >= thrown ? nDirt - left - thrown : nDirt + left + thrown;
   };
+  /** Note et message (sans effets) : le prénom du cheval seulement pour « juste » (« Pomme en
+   * avait déjà assez » ne veut rien dire pour de la paille propre jetée). */
+  const finishJust = ctx.finishJust.bind(ctx);
+  const score = () => {
+    const p = game.peek();
+    return finishJust(scored(), p.lo, p.hi, { slack: 1.5, msgs: whyMsgs(ctx, 'muck', true) });
+  };
+  /**
+   * Ce que la fourche tient reste dans la scène : glissé puis lâché sous le jeu (sur le bouton),
+   * un crottin restait par terre hors de la vue, impossible à reprendre ni à finir.
+   */
+  const inScene = (p) => (holding ? { ...p, x: clamp(p.x, 16, 384), y: clamp(p.y, 16, 350) } : p);
+  // clean.js finit tout seul quand le dernier crottin atterrit, en notant ce qui est DÉJÀ dans
+  // la brouette : une touffe lancée dans la même image, ou encore en vol, n'y était pas encore,
+  // et c'était « Juste ce qu'il fallait ! » au lieu de « trop ». Ce jeu-ci (son propre ctx) note
+  // donc toujours avec ses erreurs à lui ; clean.js garde ses effets (« Oups ! », étincelles).
+  ctx.finishJust = () => score();
 
   ctx.stopButton(() => {
     if (ctx.done) return;
     const p = game.peek();
-    const { verdict } = ctx.finishJust(scored(), p.lo, p.hi, { slack: 1.5 });
+    const { verdict } = score();
     const cx = p.floor.x + p.floor.w / 2;
     const cy = p.floor.y + p.floor.h / 2;
     if (verdict === 'just') {
@@ -102,12 +145,44 @@ export function muckGame(ctx) {
     else fx.text(cx, cy - 20, t('mg_oops'), '#c8463c', 26);
   });
 
-  return { ...game, peek: () => ({ ...game.peek(), ...faults(), scored: scored() }) };
+  return {
+    ...game,
+    peek: () => ({ ...game.peek(), ...faults(), holding, scored: scored() }),
+    down(p) {
+      // Un 2e doigt pendant qu'on tient déjà quelque chose : ignoré. (clean.js prenait le 2e
+      // objet et le premier restait « tenu » pour toujours : jamais dans la brouette, plus de
+      // fin automatique, et compté comme ramassé.)
+      if (holding) return;
+      const dirt = count(false);
+      const clean = count(true);
+      game.down(p);
+      holding = count(false) < dirt ? 'dirt' : count(true) < clean ? 'tuft' : null;
+    },
+    move(p, down) { game.move(inScene(p), down); },
+    up(p) {
+      game.up(inScene(p));
+      holding = null;
+    },
+    update(dt) {
+      game.update(dt);
+      // La jauge suit la valeur notée (clean.js y mettait le nombre d'objets dans la brouette :
+      // vert avec 7 crottins + 1 touffe, puis « trop peu » en touchant « C'est bon ! »).
+      if (!ctx.done) ctx.progress(Math.max(0, scored()) / game.peek().max);
+    },
+  };
 }
 
 // ---------------------------------------------------------------- paille fraîche
 
-/** Zone juste : une couche partout (0,85 à 1,15 couche) ; à 1,6 couche, c'est des tas de gaspillage. */
+/**
+ * Zone juste : une couche partout (0,85 à 1,15) ; à 1,6, c'est des tas de gaspillage.
+ * La valeur : tant que plus de 15 % du sol est nu, c'est la part du sol couverte (les tas n'y
+ * changent rien) ; ensuite, c'est la paille posée (couches en moyenne). Avant, seules les
+ * couches comptaient : tout en tas sur un tiers du box (60 % de sol nu), et c'était « Juste ce
+ * qu'il fallait ! ». Maintenant, le vert veut dire « couvert partout (à 85 % au moins) ET juste
+ * assez épais ». La valeur ne fait que monter quand on ajoute de la paille, où que ce soit ; si
+ * on a fait des tas, elle saute au-dessus du vert quand le sol est enfin couvert (c'est trop).
+ */
 const STRAW = { lo: 0.85, hi: 1.15, max: 1.6 };
 
 export function strawGame(ctx) {
@@ -129,9 +204,14 @@ export function strawGame(ctx) {
   ctx.zone(STRAW.lo / STRAW.max, STRAW.hi / STRAW.max);
   ctx.stopButton(() => end());
 
-  /** Couches de paille posées, en moyenne (la quantité juste). */
+  /** Couches de paille posées, en moyenne. */
   const layers = () => cells.reduce((s, c) => s + c.n, 0) / cells.length;
   const covered = () => cells.filter((c) => c.n > 0).length / cells.length;
+  /** La quantité juste : la part du sol couverte, puis (sol couvert à 85 %) les couches. */
+  const value = () => {
+    const c = covered();
+    return c < STRAW.lo ? c : layers();
+  };
   const onBale = (p) => p.x > bale.x - 34 && p.y > bale.y - 70;
   const onFloor = (p) => p.x > floor.x && p.x < floor.x + floor.w && p.y > floor.y && p.y < floor.y + floor.h;
 
@@ -146,7 +226,7 @@ export function strawGame(ctx) {
   /** Fin : tous les points dans la zone verte, un peu moins si c'est clairsemé ou en tas. */
   function end() {
     if (ctx.done) return;
-    const { verdict } = ctx.finishJust(layers(), STRAW.lo, STRAW.hi);
+    const { verdict } = ctx.finishJust(value(), STRAW.lo, STRAW.hi, { msgs: whyMsgs(ctx, 'straw') });
     const cx = floor.x + floor.w / 2;
     const cy = floor.y + floor.h / 2;
     if (verdict === 'just') {
@@ -184,7 +264,7 @@ export function strawGame(ctx) {
       }
     }
     last = p;
-    const v = layers();
+    const v = value();
     ctx.progress(Math.min(1, v / STRAW.max));
     const zs = v > STRAW.hi ? 'over' : v >= STRAW.lo ? 'in' : '';
     if (zs !== zoneState) {
@@ -198,7 +278,7 @@ export function strawGame(ctx) {
   }
 
   return {
-    peek: () => ({ bale, floor, covered: covered(), arm, armfuls, value: layers(), lo: STRAW.lo, hi: STRAW.hi, max: STRAW.max }),
+    peek: () => ({ bale, floor, covered: covered(), layers: layers(), arm, armfuls, value: value(), lo: STRAW.lo, hi: STRAW.hi, max: STRAW.max }),
     down(p) {
       last = p;
       if (onBale(p)) grab();
@@ -278,8 +358,8 @@ export function strawGame(ctx) {
       g.fillRect(bale.x + bale.w - 28, bale.y, 6, bale.h);
       if (arm <= 0 && !ctx.done) bounceArrow(g, '⬇️', bale.x + bale.w / 2, bale.y - 30, ctx.time);
       // Petite jauge au mur : la même zone verte que sur la jauge du cadre.
-      drawMiniGauge(g, 352, 40, 14, 120, layers() / STRAW.max, STRAW.lo / STRAW.max, STRAW.hi / STRAW.max);
-      label(g, `${Math.round(layers() * 100)} %`, 359, 180, 15);
+      drawMiniGauge(g, 352, 40, 14, 120, value() / STRAW.max, STRAW.lo / STRAW.max, STRAW.hi / STRAW.max);
+      label(g, `${Math.round(value() * 100)} %`, 359, 180, 15);
       // les bras pleins de paille
       const pp = ctx.pointer;
       if ((pp.over || pp.down) && !ctx.done) {
@@ -335,14 +415,17 @@ export function sweepGame(ctx) {
   ctx.zone(SWEEP.lo / SWEEP.max, SWEEP.hi / SWEEP.max);
   ctx.stopButton(() => end());
 
-  const inPan = (b) => b.x > pan.x + 10 && b.y > pan.y + 8 && b.y < pan.y + pan.h - 8;
+  // Dans la pelle dès qu'il passe son bord gauche : la pelle couvre toute la hauteur de l'allée
+  // (à 4 px près), et un brin poussé en biais tout en haut ou tout en bas restait coincé sur son
+  // rebord, dessiné « dans » la pelle mais jamais compté (et plus moyen de tout ramasser).
+  const inPan = (b) => b.x > pan.x + 10;
   /** La quantité juste : part ramassée, plus la poussière soulevée par les passes à vide. */
   const value = () => collected / total + emptyStrokes * SWEEP.dust;
 
   /** Fin : tous les points dans la zone verte, un peu moins s'il en reste ou si on a trop balayé. */
   function end() {
     if (ctx.done) return;
-    const { verdict } = ctx.finishJust(value(), SWEEP.lo, SWEEP.hi, { slack: 0.3 });
+    const { verdict } = ctx.finishJust(value(), SWEEP.lo, SWEEP.hi, { slack: 0.3, msgs: whyMsgs(ctx, 'sweep') });
     if (verdict === 'just') {
       fx.burst(pan.x + pan.w / 2, pan.y + pan.h / 2, '✨', 8, { speed: 160 });
       fx.text(200, 220, t('mg_perfect'), '#2f8a5f', 26);
@@ -598,7 +681,7 @@ export function livingGame(ctx) {
 
   function end() {
     if (ctx.done) return;
-    const { verdict } = ctx.finishJust(value(), LO, HI, { slack: 2 });
+    const { verdict } = ctx.finishJust(value(), LO, HI, { slack: 2, msgs: whyMsgs(ctx, 'living') });
     if (verdict === 'just') {
       fx.burst(200, 200, '✨', 8, { speed: 160 });
       fx.text(200, 180, t('mg_perfect'), '#2f8a5f', 26);
@@ -772,8 +855,12 @@ const SMEAR_COLORS = ['#c8762c', '#8fae3a', '#b54848'];
 /**
  * Zone juste, par assiette : frottée entre 0,9 (presque propre) et 1,15 (propre, et un petit
  * tour de plus) ; au-delà, c'est de l'eau gaspillée, et à 1,6 l'assiette part toute seule.
+ * scrubExtra : ce qu'ajoute chaque px frotté une fois l'assiette propre (× 1,6 en ronds). À
+ * 0,0009, le vert durait ~120 à 170 px de frottage (un seul petit rond, une demi-seconde à
+ * vitesse calme) : presque impossible de s'arrêter à temps. À 0,00025, il dure ~400 à 450 px
+ * (2 à 3 ronds, ~1,4 s) ; l'assiette part toute seule ~1 500 px après être devenue propre.
  */
-const DISH = { lo: 0.9, hi: 1.15, max: 1.6 };
+const DISH = { lo: 0.9, hi: 1.15, max: 1.6, scrubExtra: 0.00025 };
 
 export function kitchenGame(ctx) {
   const { t, fx, rng } = ctx;
@@ -826,11 +913,15 @@ export function kitchenGame(ctx) {
   function finishAll() {
     if (ctx.done) return;
     const qs = plates.map((v) => justRight(v, DISH.lo, DISH.hi));
-    const q = qs.reduce((s, x) => s + x, 0) / qs.length;
     const lows = plates.filter((v) => verdictOf(v, DISH.lo, DISH.hi) === 'low').length;
     const highs = plates.filter((v) => verdictOf(v, DISH.lo, DISH.hi) === 'high').length;
-    const key = !lows && !highs ? 'justRight' : lows >= highs ? 'tooLittle' : 'tooMuch';
-    ctx.finish(q, ctx.name ? t(`mg_${key}`, { name: ctx.name }) : t(`mg_chore_${key}`));
+    const verdict = !lows && !highs ? 'just' : lows >= highs ? 'low' : 'high';
+    // La moyenne des cinq assiettes ; une seule un peu à côté ne doit pas, une fois arrondie à
+    // 2 décimales par le cadre, redevenir 1 (avec « Un peu trop peu… ») : au plus 0,99.
+    const mean = qs.reduce((s, x) => s + x, 0) / qs.length;
+    const key = VERDICT_KEY[verdict];
+    const msg = whyMsgs(ctx, 'kitchen')?.[verdict] ?? (ctx.name ? t(`mg_${key}`, { name: ctx.name }) : t(`mg_chore_${key}`));
+    ctx.finish(verdict === 'just' ? 1 : Math.min(0.99, mean), msg);
     fx.burst(rack.x + rack.w / 2, rack.y + 30, '✨', 8, { speed: 140 });
   }
 
@@ -854,7 +945,7 @@ export function kitchenGame(ctx) {
       const clean = dirt() <= 0.04;
       if (clean) {
         // Propre, et on frotte encore : de l'eau gaspillée.
-        extra += d * 0.0009 * k;
+        extra += d * DISH.scrubExtra * k;
         splash -= d;
         if (splash <= 0) { splash = 70; fx.burst(plate.x + (Math.random() - 0.5) * 60, plate.y - 30, '💧', 2, { speed: 70, size: 14, life: 0.6 }); }
       } else {

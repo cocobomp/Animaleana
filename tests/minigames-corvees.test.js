@@ -223,12 +223,19 @@ describe('curer le box : tout le crottin, pas la paille propre', () => {
     expect(ctx.finished.msg).toBe(endMsg('low'));
   });
 
-  it('avec le cheval du box, le message parle de lui', () => {
-    const ctx = fakeCtx({ a: { id: 'h1', name: 'Pomme', species: 'horse', look: { seed: 3 } } });
+  it('avec le cheval du box : son prénom quand c\'est juste ; sinon le message de la corvée', () => {
+    // « Pomme en avait déjà assez » ne veut rien dire pour de la paille propre jetée.
+    const pomme = { id: 'h1', name: 'Pomme', species: 'horse', look: { seed: 3 } };
+    const ctx = fakeCtx({ a: pomme });
     const game = chores.muckGame(ctx);
     for (const it of dirtOf(game).slice(0, 7)) tapItem(game, it);
     press(ctx);
-    expectLess(ctx, 'low', 'Pomme');
+    expectLess(ctx, 'low');
+
+    const ctx2 = fakeCtx({ a: pomme });
+    const game2 = chores.muckGame(ctx2);
+    while (dirtOf(game2).length && !ctx2.done) tapItem(game2, dirtOf(game2)[0]);
+    expectJust(ctx2, 'Pomme');
   });
 });
 

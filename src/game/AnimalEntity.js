@@ -8,6 +8,7 @@ import { emojiTexture } from './textures.js';
 import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
 import { canLeash, heelSkill } from '../sim/gear.js';
+import { audio } from './audio.js'; // voix des animaux
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 export const HOME = { // (décalé par coreLayout.js si l'installation est déplacée)
@@ -213,6 +214,18 @@ export class AnimalEntity {
     }
   }
 
+  /**
+   * Voix de l'animal (hennissement, aboiement, miaulement…). kind : 'happy', ou null = selon son humeur
+   * (plaintive s'il est triste ou malade). dist : distance au joueur (plus loin = plus doux).
+   * Les bébés ont la voix plus aiguë, les gros animaux plus grave. Limité à une voix toutes les ~2 s.
+   */
+  speak(kind = null, dist = 0) {
+    const m = mood(this.data);
+    const how = kind ?? (m === 'sick' ? 'sick' : m === 'sad' ? 'sad' : m === 'happy' ? 'happy' : 'neutral');
+    const pitch = this.stage === 'baby' ? 1.6 : this.stage === 'young' ? 1.25 : 1 / (0.55 + this.scale * 0.45);
+    return audio.animal(this.data.species, how, this.data.id, { pitch, gain: 1 / (1 + dist / 7) });
+  }
+
   /** Changement d'emoji au-dessus de la tête selon l'humeur. */
   updateStatus() {
     const m = mood(this.data);
@@ -384,6 +397,13 @@ export class AnimalEntity {
     // Le nom n'apparaît que lorsque le joueur est proche.
     const distPlayer = p.distanceTo(ctx.playerPos);
     this.label.visible = false; // les noms sont affichés en HTML (étiquettes qu'on peut toucher)
+
+    // De temps en temps (rarement), l'animal se manifeste s'il est assez près ; plus souvent s'il va mal.
+    this.voiceTimer = (this.voiceTimer ?? 8 + Math.random() * 30) - dt;
+    if (this.voiceTimer <= 0) {
+      this.voiceTimer = (sad ? 20 : 40) + Math.random() * 50;
+      if (!this.sleeping && !this.inside && distPlayer < 28 && Math.random() < 0.6) this.speak(null, distPlayer);
+    }
 
     // Maison des animaux : on y va par la porte, puis on dort à l'abri dans son panier.
     if (d.housed && (d.following || this.ridden || this.herdCtrl?.pusher)) d.housed = false;

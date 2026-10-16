@@ -44,6 +44,7 @@ npm run preview    # http://localhost:4173 ; depuis un téléphone du même rés
 - **Aides** à embaucher (palefrenier, berger, ouvrier agricole, vétérinaire) : on discute avec elles, on donne des consignes, elles font des pauses, gagnent de l'expérience et se forment
 - 11 lieux : Normandie, Bretagne, Alpes suisses, Islande, Alberta, Kyoto, Cotswolds, Andalousie, Kentucky, Pampa, bush australien. Voyage réaliste en voiture, en van (chargement, pauses, stress), à cheval, en bateau ou en avion
 - Jour et nuit, météo selon le lieu et la vraie saison (saisons inversées dans l'hémisphère sud)
+- **Sons** doux, tous fabriqués par le code : voix des animaux (hennissement, aboiement, miaulement, bêlement, meuglement…), pas selon le sol, oiseaux le jour, grillons la nuit, vent, pluie et tonnerre ; réglables dans ⚙️ Réglages
 - Tutoriel guidé pour les enfants, quêtes facultatives et succès, mode Auto (le personnage prévoit et fait ses prochaines tâches simples)
 - **Vue d'ensemble** (🗺️) : la ferme vue d'en haut, on donne des ordres à chaque bâtiment, enclos ou animal, et on **construit** niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs et décorations ; on **déplace** aussi les équipements (mangeoires, abreuvoirs…), la bergerie, le paddock, la niche et le clapier (petit prix en mode gestion, gratuit en bac à sable)
 - Installable sur téléphone (« Ajouter à l'écran d'accueil ») et jouable sans réseau après la première ouverture
@@ -54,5 +55,5 @@ Les règles du jeu sont décrites dans [docs/GDD.md](docs/GDD.md).
 
 - [Three.js](https://threejs.org) + [Vite](https://vitejs.dev), JavaScript.
 - `src/sim/` : la logique du jeu (besoins, âge, voyages…), sans 3D, testée avec `npm test`.
-- `src/game/` : le monde 3D. Tous les modèles et textures sont générés par le code, il n'y a aucun fichier à télécharger.
+- `src/game/` : le monde 3D. Tous les modèles, textures et sons (`audio.js`, Web Audio) sont générés par le code, il n'y a aucun fichier à télécharger.
 - `src/ui/` : l'interface.

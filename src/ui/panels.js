@@ -16,6 +16,7 @@ import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
 import { speciesName } from './names.js';
 import { GEAR, BLANKET_COLORS, owned, inUse } from '../sim/gear.js';
 import { TOOLS, hasTool } from '../sim/tools.js';
+import { audio } from '../game/audio.js'; // réglage des sons
 import { facilitiesTab } from './facilitiesPanel.js'; // onglet « Bâtiments »
 import { homeSection } from './construction.js'; // rubrique « Maison » (constructions)
 import { travelAdvice } from './trip.js'; // voyages réalistes
@@ -409,12 +410,21 @@ export function openJobs(ui) {
 
 export function openSettings(ui) {
   const g = ui.game;
+  // Sons : s'applique tout de suite (src/game/audio.js) ; sauvegardé avec le profil.
+  const sound = () => ({ on: true, volume: 0.7, ...(g.profile.settings.sound ?? {}) });
+  const setSound = (patch) => {
+    g.profile.settings.sound = { ...sound(), ...patch };
+    audio.configure(g.profile.settings.sound);
+    ui.renderPanel();
+  };
+  const VOLUMES = [[0.4, 'volLow'], [0.7, 'volMid'], [1, 'volHigh']];
   ui.openPanel({
     title: `⚙️ ${t('settings')}`,
     render: () => {
       const quality = (() => {
         try { return localStorage.getItem('animaleana.quality') ?? g.quality; } catch { return g.quality; }
       })();
+      const snd = sound();
       return [
         h('h3', {}, t('camera')),
         h('div', { class: 'row' }, ['third', 'first'].map((m) => h('button', {
@@ -431,6 +441,16 @@ export function openSettings(ui) {
           class: (g.profile.settings.timeSpeed ?? 'normal') === sp ? 'primary' : '',
           onClick: () => { g.profile.settings.timeSpeed = sp; ui.renderPanel(); },
         }, t(`speed_${sp}`)))),
+        h('h3', {}, `🔊 ${t('sound')}`),
+        h('div', { class: 'row' }, [[true, 'soundOn'], [false, 'soundOff']].map(([on, key]) => h('button', {
+          class: snd.on === on ? 'primary' : '',
+          onClick: () => setSound({ on }),
+        }, t(key)))),
+        h('div', { class: 'row wrap' }, VOLUMES.map(([v, key]) => h('button', {
+          class: snd.on && Math.abs(snd.volume - v) < 0.05 ? 'primary' : '',
+          disabled: !snd.on,
+          onClick: () => setSound({ volume: v }),
+        }, t(key)))),
         h('h3', {}, t('onScreenControls')),
         h('div', { class: 'row' }, [[true, 'onScreenOn'], [false, 'onScreenOff']].map(([on, key]) => h('button', {
           class: ui.onScreenControls() === on ? 'primary' : '',

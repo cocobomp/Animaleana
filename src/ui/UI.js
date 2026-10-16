@@ -14,6 +14,7 @@ import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtim
 import { tripChips } from './trip.js'; // voyages réalistes
 import { openActivities } from './activities.js';
 import { openHelperChat } from './helperChat.js'; // parler aux aides
+import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -58,6 +59,14 @@ export class UI {
     this.labels = h('div', { id: 'labels' });
     this.labelEls = new Map();
     root.append(this.touchPad, this.statusBar, this.labels);
+
+    // Un seul écouteur pour tous les boutons : petit « tic », plus chantant pour les boutons principaux,
+    // descendant pour les boutons rouges. (Pas pour les boutons de direction qu'on garde appuyés.)
+    root.addEventListener('click', (e) => {
+      const b = e.target?.closest?.('button');
+      if (!b || b.disabled || b.classList.contains('pad-btn')) return;
+      audio.ui(b.classList.contains('primary') ? 'ok' : b.classList.contains('danger') ? 'cancel' : 'tap');
+    });
 
     // Ne pas redessiner un panneau pendant qu'on appuie dessus (sinon le clic se perd).
     this.holding = false;
@@ -367,12 +376,14 @@ export class UI {
   }
 
   levelUp(level, names) {
+    audio.ui('levelUp');
     this.alert(names ? t('levelUp', { n: level, names }) : t('levelUpPlain', { n: level }));
   }
 
   // ------------------------------------------------------------ notifications
 
   toast(msg, ms = 3200) {
+    audio.ui('toast');
     const el = h('div', { class: 'toast' }, msg);
     this.toasts.append(el);
     while (this.toasts.children.length > 4) this.toasts.firstChild.remove();

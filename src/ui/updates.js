@@ -32,7 +32,7 @@ export function initUpdates(root, save) {
   if (!reg) return;
   // Un contrôleur existait déjà et change : une nouvelle version vient de s'installer (skipWaiting + claim).
   const hadController = !!reg.controller;
-  reg.addEventListener('controllerchange', () => { if (hadController || reg.controller) showBanner(); });
+  reg.addEventListener('controllerchange', () => { if (hadController) showBanner(); });
 }
 
 /**

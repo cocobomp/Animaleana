@@ -607,6 +607,9 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 }
 #update-banner button { min-height: 40px; }
 #update-banner[hidden] { display: none; }
+@media (pointer: coarse) {
+  #update-banner { top: auto; bottom: calc(236px + var(--safe-b)); }
+}
 
 /* ---------- ma liste de tâches */
 #task-list {

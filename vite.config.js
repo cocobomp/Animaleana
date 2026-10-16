@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 
 // Version affichée sur l'écran d'accueil : numéro du package.json, date du build et commit.
@@ -61,6 +62,29 @@ self.addEventListener('fetch', (e) => {
   };
 }
 
+// Version « à emporter » : un seul fichier HTML (script et styles inclus) qui s'ouvre en double-cliquant,
+// sans serveur ni réseau — pour passer le jeu sur un ordinateur par AirDrop, clé USB ou mail.
+function portableFile() {
+  let outDir = 'dist';
+  return {
+    name: 'animaleana-portable',
+    apply: 'build',
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    closeBundle() {
+      const read = (f) => readFileSync(join(outDir, f), 'utf8');
+      let html = read('index.html');
+      // Script et feuille de style inclus dans la page ; les liens vers le manifeste et les icônes ne servent à rien ici.
+      html = html.replace(/<script type="module"[^>]*src="\.\/(assets\/[^"]+\.js)"><\/script>/, (_, f) => `<script type="module">\n${read(f).replace(/<\/script/gi, '<\\/script')}\n</script>`);
+      html = html.replace(/<link rel="stylesheet"[^>]*href="\.\/(assets\/[^"]+\.css)">/, (_, f) => `<style>\n${read(f)}\n</style>`);
+      html = html.replace(/\s*<link rel="manifest"[^>]*>/, '').replace(/\s*<link rel="apple-touch-icon"[^>]*>/, '');
+      html = html.replace(/<link rel="icon" href="\.\/icon\.svg"/, `<link rel="icon" href="data:image/svg+xml;base64,${Buffer.from(read('icon.svg')).toString('base64')}"`);
+      writeFileSync(join(outDir, 'animadichelle.html'), html);
+    },
+  };
+}
+
 export default defineConfig({
   base: './',
   define: {
@@ -68,7 +92,7 @@ export default defineConfig({
     __APP_COMMIT__: JSON.stringify(commit),
     __APP_BUILT__: JSON.stringify(built),
   },
-  plugins: [offlineServiceWorker()],
+  plugins: [offlineServiceWorker(), portableFile()],
   build: { chunkSizeWarningLimit: 1200 },
   test: { exclude: ['**/node_modules/**', '.claude/**'] },
 });

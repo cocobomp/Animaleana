@@ -27,18 +27,22 @@ document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.prev
 // L'écran d'accueil dit quand c'est prêt (« ✅ Prêt à jouer sans Internet »).
 // Le cache hors ligne n'existe qu'en https (ou sur localhost) : depuis un téléphone sur l'adresse http
 // de l'ordinateur, le jeu marche mais ne s'installe pas ; on l'écrit au lieu de « Préparation… » sans fin.
-const ICONS = { ready: '✅', preparing: '⏳', unavailable: 'ℹ️' };
-const KEYS = { ready: 'offlineReady', preparing: 'offlinePreparing', unavailable: 'offlineUnavailable' };
+const ICONS = { ready: '✅', preparing: '⏳', unavailable: 'ℹ️', file: '📁' };
+const KEYS = { ready: 'offlineReady', preparing: 'offlinePreparing', unavailable: 'offlineUnavailable', file: 'offlineFile' };
 const show = (state) => {
   window.offlineState = state;
   const el = document.querySelector('.offline');
   if (el) el.textContent = `${ICONS[state]} ${t(KEYS[state])}`;
 };
-if (import.meta.env.PROD && !(window.isSecureContext && 'serviceWorker' in navigator)) {
+if (location.protocol === 'file:') {
+  // Fichier unique ouvert depuis le disque (version « à emporter ») : tout est déjà là, pas de cache à préparer.
+  show('file');
+} else if (import.meta.env.PROD && !(window.isSecureContext && 'serviceWorker' in navigator)) {
   show('unavailable');
 } else if ('serviceWorker' in navigator && import.meta.env.PROD) {
   show('preparing');
   const check = async () => {
+    if (!('caches' in window)) return;
     const keys = await caches.keys();
     const ok = await Promise.all(keys.filter((k) => k.startsWith('animaleana-')).map((k) => caches.open(k).then((c) => c.match('./index.html'))));
     if (ok.some(Boolean)) show('ready');

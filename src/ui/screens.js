@@ -49,10 +49,15 @@ export function showProfiles(ui) {
       h('button', { class: 'primary big', onClick: () => newProfile(ui, render) }, `➕ ${t('newProfile')}`),
       // État du cache hors ligne (src/main.js) : prêt, en préparation, ou impossible en http.
       h('p', { class: 'offline' }, window.offlineState
-        ? `${{ ready: '✅', preparing: '⏳', unavailable: 'ℹ️' }[window.offlineState]} ${t({ ready: 'offlineReady', preparing: 'offlinePreparing', unavailable: 'offlineUnavailable' }[window.offlineState])}`
+        ? `${{ ready: '✅', preparing: '⏳', unavailable: 'ℹ️', file: '📁' }[window.offlineState]} ${t({ ready: 'offlineReady', preparing: 'offlinePreparing', unavailable: 'offlineUnavailable', file: 'offlineFile' }[window.offlineState])}`
         : `📴 ${t('offline')}`),
       // Version du jeu (injectée au build par vite.config.js) : pratique pour savoir ce qu'on teste.
-      h('p', { class: 'version' }, versionLine())));
+      h('p', { class: 'version' }, versionLine()),
+      // Depuis le site : un fichier unique à télécharger puis à passer par AirDrop, clé USB ou mail
+      // à un ordinateur sans internet (il s'ouvre en double-cliquant). Pas proposé quand on y joue déjà.
+      location.protocol.startsWith('http') && typeof __APP_VERSION__ !== 'undefined'
+        ? h('p', { class: 'portable' }, h('a', { href: './animadichelle.html', download: 'Animadichelle.html' }, `💾 ${t('portableLink')}`), h('small', {}, t('portableHelp')))
+        : null));
     ui.screen.hidden = false;
   };
   render();

@@ -95,7 +95,23 @@ export function resolveLook(speciesId, breedId, colorIndex = 0) {
     eye: color.eye ?? 0x2a1a10,
     colorName: color.name,
     seed: Math.floor(Math.random() * 1e6),
+    // Chevaux (vague 3) : la race est gardée dans la robe (gabarit du modèle 3D, même pour un poulain
+    // croisé) avec les détails de robe : raie de mulet, crins noirs, crinière bicolore du Fjord…
+    breed: breed.id,
+    ...Object.fromEntries(COAT_FLAGS.filter((k) => color[k] !== undefined).map((k) => [k, color[k]])),
   };
+}
+
+/** Détails de robe facultatifs recopiés de la race vers l'animal (voir src/sim/horseLook.js). */
+const COAT_FLAGS = ['dun', 'points', 'roan', 'grey', 'dapple', 'mealy', 'maneCore'];
+
+/** Caractère d'un nouvel animal : souvent l'un des tempéraments typiques de la race (un seul tirage). */
+function pickPersonality(breedDef, rng) {
+  const r = rng();
+  const temper = breedDef.temper?.filter((p) => PERSONALITIES.includes(p)) ?? [];
+  if (!temper.length) return PERSONALITIES[Math.floor(r * PERSONALITIES.length)];
+  if (r < 0.6) return temper[Math.floor((r / 0.6) * temper.length)];
+  return PERSONALITIES[Math.min(PERSONALITIES.length - 1, Math.floor(((r - 0.6) / 0.4) * PERSONALITIES.length))];
 }
 
 export function createAnimal({
@@ -112,7 +128,7 @@ export function createAnimal({
     sex: sex ?? (rng() < 0.5 ? 'f' : 'm'),
     ageDays: ageDays ?? randRange(sp.adultYears * DAYS_PER_YEAR, sp.lifespanYears * 0.4 * DAYS_PER_YEAR, rng),
     lifespanYears: sp.lifespanYears * randRange(0.85, 1.15, rng),
-    personality: personality ?? pick(PERSONALITIES, rng),
+    personality: personality ?? pickPersonality(breedDef, rng),
     look,
     needs: Object.fromEntries(NEEDS.map((n) => [n, Math.round(randRange(65, 95, rng))])),
     health: 100,

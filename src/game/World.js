@@ -592,7 +592,7 @@ void main() {
     const padE = enclosure('paddock');
     buildShowground(this, g); // activités : carrière, tribune et jury
     // Bâtiments fixes : la navigation ne choisit jamais un coin de contournement dans leurs murs.
-    setNavBlockers(this.colliders.filter((c) => c.kind && !c.core));
+    setNavBlockers(this.colliders.filter((c) => c.kind && c.kind !== 'jobs' && !c.core)); // (le panneau des petits boulots est petit : on le frôle)
     if (p.biome === 'garden') {
       // Torii : sur le chemin entre le paddock et la bergerie (agrandis ou déplacés), sans toucher leurs barrières.
       const spot = this.toriiSpot();

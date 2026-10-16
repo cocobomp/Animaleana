@@ -17,8 +17,10 @@ let nav;
 let interiors;
 let coreLayout;
 let facilities;
+let buildings;
 beforeAll(async () => {
   nav = await import('../src/game/nav.js');
+  buildings = await import('../src/game/models/buildings.js');
   interiors = await import('../src/game/Interiors.js');
   coreLayout = await import('../src/game/coreLayout.js');
   facilities = await import('../src/sim/facilities.js');
@@ -32,6 +34,9 @@ function farm(layout = null, ext = 0) {
   const world = { heightAt: () => 0, colliders: [], interactables: [], camVolumes: [] };
   interiors.buildInteriors(world, { add() {} }, true);
   for (const id of ['paddock', 'pen', 'hutch']) world.colliders.push(...nav.fenceColliders(nav.enclosure(id)));
+  // L'obstacle de saut du paddock (les chevaux en liberté s'y cognent ; à cheval, on le saute).
+  const pd = nav.enclosure('paddock');
+  world.colliders.push({ x: pd.x, z: pd.z - buildings.jumpOffset(pd.hd * 2), hw: 0.15, hd: 1.7, jump: true });
   // La sellerie et la maison des animaux (bâtiments fixes, comme World.build).
   const tk = facilities.tackRoomPos(ext);
   world.colliders.push({ x: tk.x, z: tk.z, ...facilities.TACKROOM_SIZE, kind: 'tackroom' });
@@ -62,7 +67,6 @@ function walk(world, start, goal, secs = 200) {
     pos.x += (dx / d) * step;
     pos.z += (dz / d) * step;
     for (const c of world.colliders) {
-      if (c.jump) continue;
       const ox = c.hw + R - Math.abs(pos.x - c.x);
       const oz = c.hd + R - Math.abs(pos.z - c.z);
       if (ox > 0 && oz > 0) {
@@ -89,7 +93,8 @@ describe('du paddock au box', () => {
       const world = farm(layout, ext);
       const pd = nav.enclosure('paddock');
       const box = roomCenter(world, 'box0');
-      for (const start of [{ x: pd.x + pd.hw - 3, z: pd.z + pd.hd - 3 }, { x: pd.x - pd.hw + 3, z: pd.z }, { x: 0, z: 58 }]) {
+      // (dont un cheval juste à l'ouest du milieu, sur le chemin de la porte : l'obstacle de saut n'y est plus)
+      for (const start of [{ x: pd.x + pd.hw - 3, z: pd.z + pd.hd - 3 }, { x: pd.x - pd.hw + 3, z: pd.z }, { x: pd.x - 1, z: pd.z }, { x: 0, z: 58 }]) {
         const r = walk(world, start, box);
         expect(r.t, `${name} depuis ${start.x},${start.z} : bloqué en ${r.pos.x.toFixed(1)},${r.pos.z.toFixed(1)}`).toBeLessThan(200);
       }

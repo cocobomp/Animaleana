@@ -147,7 +147,7 @@ function cornerBlocked(c, best, list, pos) {
   for (const e of list) {
     if (e !== best && walled(e, e.gate && !e.interior ? 0 : R)) return true; // (enclos : seulement dedans)
   }
-  return BLOCKERS.some((b) => walled(b, R));
+  return BLOCKERS.some((b) => walled(b, 0.3)); // (bâtiments fixes : seulement dedans ou contre le mur)
 }
 
 function detour(pos, wp, depth, list) {

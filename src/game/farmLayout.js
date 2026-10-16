@@ -118,7 +118,7 @@ export function buildCores(world, parent) {
     { x: x0 + 1.5, z: z1 - 4, hw: 0.7, hd: 0.7, small: true },
     { x: x0 + 2, z: z0 + 1.5, hw: 0.7, hd: 0.7, small: true },
     { x: x0 + 1.5, z: z0 + 4, hw: 0.45, hd: 1, small: true },
-    { x: pd.x, z: pd.z, hw: 0.15, hd: 1.7, jump: true },
+    { x: pd.x, z: pd.z - B.jumpOffset(pd.hd * 2), hw: 0.15, hd: 1.7, jump: true }, // (décalée : pas sur le chemin de la porte)
   ]));
 
   // Niche des chiens

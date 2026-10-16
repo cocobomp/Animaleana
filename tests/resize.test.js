@@ -26,6 +26,8 @@ const manage = (money = 5000) => {
 };
 const flat = { heightAt: () => 0, isWater: () => false };
 const pad = (layout = null) => coreRect(layout, 'paddock');
+// Le paddock amené ici depuis loin (sa place actuelle est ailleurs) : alors rien n'est toléré.
+const comingFromFar = (env, p) => validateCore('paddock', p.x, p.z, { ...env, core: { paddock: { x: p.x + 40, z: p.z + 40 } } }).ok;
 
 describe('agrandir : tailles et poignées', () => {
   it('le paddock de départ fait au moins 22 × 26 m, la bergerie et le clapier sont plus grands qu\'avant', () => {
@@ -374,6 +376,22 @@ describe('agrandir : prix juste, habitants et équipements', () => {
     p.animals.push(createAnimal({ species: 'rabbit', ageDays: 80, location: 'maison' }));
     expect(coreResidents(p, 'maison', 'pen')).toBe(1);
     expect(coreResidents(p, 'maison', 'hutch')).toBe(1);
+  });
+
+  it('déplacer le paddock d\'un mètre : un voisin déjà proche (écurie, entrée du concours) ne bloque que si l\'on s\'en rapproche', () => {
+    const env = {
+      ...flat,
+      colliders: [{ x: -22, z: 6, hw: 5, hd: 0.12, room: 'stable' }], // mur nord de l'écurie, à 1 m du paddock
+      blocked: [{ x: -29.8, z: 14, hw: 1.6, hd: 1.6, kind: 'showground' }], // devant l'entrée du terrain de concours
+    };
+    const p = corePos(null, 'paddock');
+    expect(validateCore('paddock', p.x, p.z, env).ok).toBe(true);
+    expect(validateCore('paddock', p.x + 1, p.z, env).ok).toBe(true); // on s'éloigne du concours
+    expect(validateCore('paddock', p.x, p.z + 1, env).ok).toBe(true); // et de l'écurie
+    expect(validateCore('paddock', p.x - 1, p.z, env).reason).toBe('core'); // plus près de l'entrée du concours
+    expect(validateCore('paddock', p.x, p.z - 1, env).reason).toBe('overlap'); // collé à l'écurie
+    // Amené ici depuis loin : la règle habituelle (2,5 m de passage partout).
+    expect(comingFromFar(env, p)).toBe(false);
   });
 
   it('les équipements rangés dans un enclos le suivent : ils ne bloquent pas son déplacement', () => {

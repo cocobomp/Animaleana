@@ -346,9 +346,16 @@ export function jobBoard(label) {
 }
 
 /**
+ * Où est l'obstacle de saut du paddock : décalé du milieu (de la profondeur w du modèle), pour ne pas être
+ * sur le chemin entre l'ouverture et le fond (les chevaux qui sortaient s'y cognaient).
+ */
+export const jumpOffset = (w) => Math.min(5, w / 4);
+
+/**
  * Clôture rectangulaire avec une ouverture au milieu du côté avant (+z), sable et obstacle de saut (paddock).
  * w × d : taille en mètres (le paddock s'agrandit dans la vue construction).
  * ground(lx, lz) : hauteur du sol par rapport au centre, pour que poteaux, lisses et sable suivent le terrain.
+ * L'obstacle de saut est en (jumpOffset(w), 0).
  */
 export function paddock(w, d, ground = () => 0) {
   const g = new THREE.Group();
@@ -391,18 +398,19 @@ export function paddock(w, d, ground = () => 0) {
   const sand = new THREE.Mesh(sandGeo, mat(0xc4ae86, 1));
   sand.receiveShadow = true;
   g.add(sand);
-  // Obstacle de saut au milieu (chandeliers et barres rayées).
+  // Obstacle de saut (chandeliers et barres rayées), à côté du chemin de l'ouverture.
   const red = mat(0xc8463c, 0.5);
   const white = mat(0xf2f2f2, 0.5);
-  const y0 = ground(0, 0);
+  const jx = jumpOffset(w);
+  const y0 = ground(jx, 0);
   for (const s of [-1, 1]) {
-    b.add(new THREE.BoxGeometry(0.15, 1.3, 0.15), white, [s * 1.6, y0 + 0.65, 0]);
-    b.add(new THREE.BoxGeometry(0.5, 0.06, 0.5), white, [s * 1.6, y0 + 0.03, 0]);
+    b.add(new THREE.BoxGeometry(0.15, 1.3, 0.15), white, [jx + s * 1.6, y0 + 0.65, 0]);
+    b.add(new THREE.BoxGeometry(0.5, 0.06, 0.5), white, [jx + s * 1.6, y0 + 0.03, 0]);
   }
   for (let k = 0; k < 6; k++) {
-    b.add(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), k % 2 ? white : red, [-1.25 + k * 0.5, y0 + 0.85, 0], [0, 0, Math.PI / 2]);
+    b.add(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), k % 2 ? white : red, [jx - 1.25 + k * 0.5, y0 + 0.85, 0], [0, 0, Math.PI / 2]);
   }
-  b.add(new THREE.CylinderGeometry(0.05, 0.05, 3, 8), white, [0, y0 + 0.45, 0], [0, 0, Math.PI / 2]);
+  b.add(new THREE.CylinderGeometry(0.05, 0.05, 3, 8), white, [jx, y0 + 0.45, 0], [0, 0, Math.PI / 2]);
   b.build(g);
   return g;
 }

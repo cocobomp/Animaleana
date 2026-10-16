@@ -338,12 +338,17 @@ export function validatePlacement(type, x, z, rot, env = {}) {
   return checkRect(f, { apron: apron(me), encl: isEnclosure(type), slope: MAX_SLOPE[def.cat] }, env);
 }
 
-/** Déplacer une installation de base (bergerie, paddock, niche, clapier) en (x, z). size : sa taille actuelle. */
+/**
+ * Déplacer une installation de base (bergerie, paddock, niche, clapier) en (x, z). size : sa taille actuelle.
+ * Un voisin déjà un peu trop proche à sa place actuelle (env.core) ne bloque que si l'on s'en rapproche :
+ * le paddock de départ, tout près de l'écurie et de l'entrée du terrain de concours, peut bouger d'un mètre.
+ */
 export function validateCore(id, x, z, env = {}, size = null) {
   const def = CORE_ITEMS[id];
   const p = { x, z };
   const f = coreRect(null, id, p, size);
-  return checkRect(f, { apron: coreApron(id, p, size), encl: def.encl, slope: def.encl ? 3 : 1.2, skipCore: id }, env);
+  const from = coreRect(env.core ?? null, id);
+  return checkRect(f, { apron: coreApron(id, p, size), encl: def.encl, slope: def.encl ? 3 : 1.2, skipCore: id, from }, env);
 }
 
 /** Poser un équipement (mangeoire, abreuvoir…) : dans un enclos ou dehors, mais pas sur un passage. */
@@ -354,17 +359,27 @@ export function validateEquipment(x, z, env = {}) {
 
 export const grow = (r, m) => ({ ...r, hw: r.hw + m, hd: r.hd + m });
 
-/** Vérifications communes (voir validatePlacement). */
+/** Écart (m) entre deux rectangles : 0 s'ils se touchent ou se chevauchent. */
+const gapBetween = (a, b) => Math.max(Math.abs(a.x - b.x) - a.hw - b.hw, Math.abs(a.z - b.z) - a.hd - b.hd, 0);
+
+/** Vérifications communes (voir validatePlacement). opts.from : place actuelle de ce qu'on déplace. */
 function checkRect(f, opts, env) {
   if (Math.abs(f.x) + f.hw > BOUNDS || Math.abs(f.z) + f.hd > BOUNDS) return { ok: false, reason: 'bounds' };
   const myApron = opts.apron ?? null;
   // Autour d'un enclos, on garde un passage (pour en faire le tour et rejoindre son ouverture).
   const mine = opts.encl ? GAP : 0;
+  // Trop près de b (à moins de m) ? Sauf s'il l'était déjà à la place actuelle et qu'on ne s'en rapproche pas.
+  const from = opts.from ?? null;
+  const tooClose = (b, m) => {
+    if (!overlap(f, grow(b, m))) return false;
+    if (!from || overlap(f, b) || !overlap(from, grow(b, m))) return true;
+    return gapBetween(f, b) < gapBetween(from, b) - 1e-6;
+  };
   // Un équipement peut aller dans la cour ou dans un enclos, mais pas devant une entrée.
   const core = coreRects(env.core).filter((b) => b.id !== opts.skipCore && (!opts.equipment || b.gate));
   const blocked = [...core, ...(env.blocked ?? [])];
   // (le pré n'a pas de clôture : pas besoin de passage autour)
-  if (blocked.some((b) => overlap(f, grow(b, b.encl ? Math.max(mine, GAP) : b.id === 'field' ? 0 : mine)))) return { ok: false, reason: 'core' };
+  if (blocked.some((b) => tooClose(b, b.encl ? Math.max(mine, GAP) : b.id === 'field' ? 0 : mine))) return { ok: false, reason: 'core' };
   const others = (env.structures ?? []).filter((s) => s.id !== env.ignore);
   for (const s of others) {
     const o = footprintOf(s);
@@ -375,11 +390,11 @@ function checkRect(f, opts, env) {
       if (!isEnclosure(s.type) && overlap(f, o)) return { ok: false, reason: 'overlap' };
       continue;
     }
-    if (overlap(f, grow(o, Math.max(mine, isEnclosure(s.type) ? GAP : 0)))) return { ok: false, reason: 'overlap' };
+    if (tooClose(o, Math.max(mine, isEnclosure(s.type) ? GAP : 0))) return { ok: false, reason: 'overlap' };
     if (myApron && overlap(myApron, o)) return { ok: false, reason: 'overlap' };
   }
   for (const c of env.colliders ?? []) {
-    if (overlap(f, grow(c, mine)) || (myApron && overlap(myApron, c))) return { ok: false, reason: 'overlap' };
+    if (tooClose(c, mine) || (myApron && overlap(myApron, c))) return { ok: false, reason: 'overlap' };
   }
   const pts = samples(f);
   if (env.isWater && pts.some((p) => env.isWater(p.x, p.z))) return { ok: false, reason: 'water' };

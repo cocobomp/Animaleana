@@ -623,7 +623,7 @@ export class TripFlow {
     const w = this.loading.walk?.w;
     // En portrait (téléphone), on recule un peu plus pour tout voir.
     const far = window.innerWidth < window.innerHeight ? 1.45 : 1;
-    const pos = v.trailerToWorld(new THREE.Vector3(tr.width / 2 + 3.6 * far, 2.3 + 0.4 * far, tr.rearZ - 4.6 * far));
+    const pos = v.trailerToWorld(new THREE.Vector3(tr.width / 2 + 2.6 * far, 2.3 + 0.4 * far, tr.rearZ - 5.2 * far));
     const look = v.trailerToWorld(new THREE.Vector3(0, 0.9, tr.rearZ - 1.1));
     if (w?.e && w.step < 3) look.lerp(w.e.position.clone().setY(look.y), 0.5);
     return { pos, look };

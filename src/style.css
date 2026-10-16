@@ -1042,7 +1042,8 @@ body.trip-road #pause-banner, body.trip-road #quest-tracker, body.veh-view #ev-b
 .trip-luggage { display: grid; gap: 2px; background: #eef4fb; border-radius: 12px; padding: 8px 12px; margin: 8px 0; line-height: 1.35; }
 .trip-luggage small { color: var(--muted); }
 /* Trajet suivi depuis la cabine : la fiche se range en bas pour laisser voir la route. */
-#trip-overlay.with-road { background: none; align-items: flex-end; }
+#trip-overlay.with-road { background: none; align-items: flex-end; pointer-events: none; } /* on peut regarder autour de soi */
+#trip-overlay.with-road .trip-sheet { pointer-events: auto; }
 @media (min-width: 900px) {
   /* Écran large : la fiche du trajet se range à droite, la route reste visible. */
   #trip-overlay.with-road { justify-content: flex-end; align-items: stretch; }

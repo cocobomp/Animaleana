@@ -1172,6 +1172,7 @@ export class Game {
 
   onKey(code) {
     if (!this.running || this.ui.isBlocking()) return;
+    if (code === 'Escape' && this.tripFlow.view && this.tripFlow.view !== 'ramp') this.tripFlow.setView(null); // sortir du véhicule
     if (code === 'KeyE' || code === 'Enter') this.interact();
     if (code === 'KeyC') this.toggleCamera();
   }

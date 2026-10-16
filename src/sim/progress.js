@@ -17,6 +17,7 @@ export const XP = {
   helperTraining: 0,
   build: 30,
   event: 40, // un événement spécial réussi (src/sim/events.js)
+  client: 45, // un animal confié rendu à son propriétaire (src/sim/clients.js)
   // activités (src/sim/activities.js)
   activity: 25,
   show: 30,

@@ -161,6 +161,7 @@ export function restartTutorial(profile) {
  */
 const hasHorse = (p) => p.animals.some((a) => a.species === 'horse');
 const hasAnimal = (p) => p.animals.length > 0;
+const hasCareer = (p) => Object.keys(p.careers?.started ?? {}).length > 0;
 
 const SHOWGROUND = { type: 'building', id: 'showground' };
 
@@ -189,6 +190,12 @@ export const QUEST_GUIDE = {
   actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
   actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
   actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
+  // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
+  career1: { where: 'careers', target: { type: 'hud', id: 'careers' } },
+  client1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
+  clientVet1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: (p) => !!p.careers?.started?.vet },
+  clientHappy5: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
+  clientMoney500: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
   // 🧭 Guide de randonnée (src/sim/trailGuide.js) : les visiteurs arrivent près de l'écurie.
   tgFirst: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
   tgStars3: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
@@ -201,6 +208,7 @@ export const QUEST_ORDER = [
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
+  'career1', 'client1', 'clientVet1', 'clientHappy5', 'clientMoney500',
   'tgFirst', 'tgStars3', 'tgRiders10', 'tgAbroad', // 🧭 guide de randonnée
 ];
 
@@ -274,6 +282,11 @@ export const FOLLOW_STEPS = {
   goShowground: { target: SHOWGROUND, done: seenAny('building:showground') },
   goHutch: { target: { type: 'building', id: 'hutch' }, done: seenAny('building:hutch') },
   doActivity: { target: null, done: questDone, progress: true },
+  // Métiers et clients
+  careerStart: { target: { type: 'hud', id: 'careers' }, done: questDone },
+  clientWait: { target: null, done: (c) => c.hasClient || c.questDone },
+  clientCare: { target: null, done: questDone, progress: true },
+  clientVet: { target: null, done: questDone, progress: true },
   // 🧭 Guide de randonnée : attendre les visiteurs, préparer, partir.
   tgWait: { target: { type: 'building', id: 'stable' }, done: (c) => (c.profile.trailGuide?.bookings ?? []).some((b) => b.place === c.profile.place) || c.questDone },
   tgPrepare: { target: null, done: (c) => !!c.profile.trailGuide?.riding || c.questDone },
@@ -304,6 +317,11 @@ export const QUEST_STEPS = {
   actvCompete1: ['goShowground', 'doActivity'],
   actvHop1: ['goShowground', 'doActivity'],
   actvHutch5: ['goHutch', 'doActivity'],
+  career1: ['careerStart'],
+  client1: ['clientWait', 'clientCare'],
+  clientVet1: ['clientWait', 'clientVet'],
+  clientHappy5: ['clientWait', 'clientCare'],
+  clientMoney500: ['clientWait', 'clientCare'],
   // 🧭 Guide de randonnée
   tgFirst: ['tgWait', 'tgPrepare', 'tgRide'],
   tgStars3: ['tgWait', 'tgPrepare', 'tgRide'],

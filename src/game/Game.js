@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { World } from './World.js';
 import { gfx } from './gfx.js';
+import { preloadModels } from './assets.js';
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
@@ -12,6 +13,7 @@ import { Herding } from './Herding.js';
 import { TaskQueue } from './TaskQueue.js';
 import { Interiors } from './Interiors.js'; // écurie et maison où l'on entre, box, corvées
 import { Events } from './Events.js'; // événements spéciaux (orage, animal blessé…)
+import { Clients } from './Clients.js'; // clients (pension, soins) et métiers
 import { EQUIPMENT_MODELS } from './models/equipment.js';
 import { disposeModel } from './models/animalModel.js';
 import {
@@ -109,6 +111,7 @@ export class Game {
     this.tasks = new TaskQueue(this);
     this.interiors = new Interiors(this);
     this.events = new Events(this);
+    this.clients = new Clients(this); // visiteurs, animaux confiés, métiers
     this.activities = new Activities(this);
     this.trailGuide = new TrailGuide(this); // 🧭 guide de randonnée
     this.droppingMeshes = new Map();
@@ -134,11 +137,18 @@ export class Game {
     window.addEventListener('pagehide', () => this.save());
     this.clock = new THREE.Clock();
     renderer.setAnimationLoop(() => this.frame());
+    // Modèles 3D (GLB) : chargés pendant l'écran des profils ; start() attend qu'ils soient prêts.
+    this.modelsLoaded = false;
+    this.modelsReady = preloadModels().then((n) => { this.modelsLoaded = true; return n; });
   }
 
   // ---------------------------------------------------------------- partie
 
   start(profile) {
+    if (!this.modelsLoaded) {
+      this.modelsReady.then(() => this.start(profile));
+      return;
+    }
     this.profile = profile;
     this.rig.mode = profile.settings.camera ?? 'third';
     this.player = this.player ?? new Player(this.scene, this.world, profile.avatar);
@@ -348,6 +358,7 @@ export class Game {
       this.handleEvents(a, events);
     }
     this.farmTick(here, hours, true);
+    this.clients.onTimeSkipped(); // les journées des animaux confiés sont notées (src/game/Clients.js)
     this.updateWeather();
   }
 
@@ -553,6 +564,7 @@ export class Game {
     this.marker.update(dt);
     this.updateFocus();
     this.events.update(dt); // événements spéciaux
+    this.clients.update(dt); // clients et métiers
     this.trailGuide.update(dt); // 🧭 visiteurs qui demandent une balade
     this.renderer.render(this.scene, this.camera);
   }
@@ -625,6 +637,7 @@ export class Game {
         return;
       }
     }
+    if (this.clients.onTap(this.raycaster)) return; // un visiteur (client) : on va lui parler
     const roots = [...this.entities.values()].filter((e) => !e.ridden && !e.inside).map((e) => e.root);
     const hitA = this.raycaster.intersectObjects(roots, true).find((h) => !h.object.isSprite || h.object === h.object.parent?.userData?.entity?.label);
     if (hitA) {
@@ -1075,7 +1088,7 @@ export class Game {
     if (this.player.mount) {
       best = { kind: 'dismount' };
     } else {
-      best = this.tripFlow.focusNear(pp) ?? this.trailGuide.focusNear(pp); // véhicule de voyage, ou 🧭 visiteurs
+      best = this.tripFlow.focusNear(pp) ?? this.clients.focusNear(pp) ?? this.trailGuide.focusNear(pp); // véhicule de voyage, visiteur (client) ou 🧭 visiteurs
       let bestD = best ? -1 : Infinity;
       for (const e of this.entities.values()) {
         if (e.inside) continue; // rangé dans la maison des animaux
@@ -1140,6 +1153,7 @@ export class Game {
       case 'dismount': this.dismount(); break;
       case 'spot': f.run(); break; // un coin de l'écurie ou de la maison
       case 'vehicle': this.tripFlow.interact(); break;
+      case 'client': this.clients.talk(); break; // parler au visiteur (src/game/Clients.js)
       case 'trailVisitor': this.trailGuide.talk(); break; // 🧭 parler aux visiteurs (src/game/TrailGuide.js)
       default:
     }
@@ -1191,6 +1205,7 @@ export class Game {
   }
 
   trick(a, trickId) {
+    if (a.client) return this.ui.toast(t('cl_notYours', { name: a.name, g: a.sex })); // animal confié (src/sim/clients.js)
     const r = trainTrick(a, trickId);
     if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex, n: r.need }));
     const e = this.entities.get(a.id);
@@ -1217,6 +1232,7 @@ export class Game {
   }
 
   train(a, trainingId) {
+    if (a.client) return this.ui.toast(t('cl_notYours', { name: a.name, g: a.sex })); // animal confié
     const tool = missingTool(this.profile, trainingId);
     if (tool) return this.ui.toast(t('r_needTool', { tool: `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}` }), 5000);
     const r = trainSkill(a, trainingId);
@@ -1367,7 +1383,8 @@ export class Game {
   }
 
   breedingPartners(a) {
-    return this.animalsHere().filter((b) => b.id !== a.id && b.species === a.species && b.sex !== a.sex);
+    if (a.client) return []; // animal confié : pas de bébés
+    return this.animalsHere().filter((b) => b.id !== a.id && !b.client && b.species === a.species && b.sex !== a.sex);
   }
 
   canBreed(a, b) {

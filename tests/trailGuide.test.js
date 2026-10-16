@@ -5,7 +5,8 @@ import {
   ridePlan, isPony, horseFit, autoAssign, gearFit, weatherBlock, prepChecklist, rideResult, applyRideResult, horseGains, noteAction,
   riderMood, changeReputation,
 } from '../src/sim/trailGuide.js';
-import { getCareer, listCareers } from '../src/sim/careersRegistry.js';
+import { CAREERS, CAREER_IDS, startCareer, noteAction as noteCareerAction, careerSummary } from '../src/sim/careers.js';
+import { maxClients } from '../src/sim/clients.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { createProfile } from '../src/sim/profile.js';
 import { PLACE_IDS, PLACES } from '../src/sim/places.js';
@@ -33,13 +34,15 @@ const profile = (xp = 0) => {
 const seq = (vals) => { let i = 0; return () => vals[i++ % vals.length]; };
 
 describe('le métier guide de randonnée', () => {
-  it('est inscrit dans le registre des métiers avec 3 rangs et un carnet', () => {
-    expect(getCareer('trailGuide')).toBe(TRAIL_GUIDE_CAREER);
-    expect(listCareers().some((c) => c.id === 'trailGuide')).toBe(true);
+  it('est inscrit dans le registre des métiers (panneau 💼) avec 3 rangs et un carnet', () => {
+    expect(CAREERS.trailGuide).toBe(TRAIL_GUIDE_CAREER);
+    expect(CAREER_IDS).toContain('trailGuide');
+    expect(TRAIL_GUIDE_CAREER.building).toBe('stable');
     expect(TRAIL_GUIDE_CAREER.emoji).toBe('🧭');
     expect(TRAIL_GUIDE_CAREER.level).toBe(4);
     expect(TRAIL_GUIDE_CAREER.ranks).toHaveLength(3);
     expect(TRAIL_GUIDE_CAREER.perks).toHaveLength(3);
+    expect(TRAIL_GUIDE_CAREER.perks.every((x) => x.maxClients === 0)).toBe(true); // pas de clients vétérinaire / pension
     expect(TRAIL_GUIDE_CAREER.actions.map((a) => a.id)).toEqual(['accept', 'prepare', 'ride', 'photo', 'break', 'return']);
     expect(RANK_IDS).toEqual(['apprentice', 'skilled', 'expert']);
   });
@@ -66,6 +69,19 @@ describe('le métier guide de randonnée', () => {
     expect(rankOf(p)).toBe(2);
     expect(rankProgress(p).to).toBeNull();
     expect(perksOf(p).durations).toContain('trek');
+  });
+
+  it('partage l\'XP, le carnet, la réputation et les gains avec le registre des métiers', () => {
+    const p = createProfile('Lou', 'manage');
+    expect(startCareer(p, 'trailGuide', 1, { level: 4 }).ok).toBe(true);
+    expect(noteCareerAction(p, 'trailGuide', 'accept').first).toBe(true);
+    expect(careerSummary(p, 'trailGuide', { level: 4 }).carnet[0].done).toBe(true);
+    expect(rankProgress(p).xp).toBe(p.careers.xp.trailGuide); // même XP des deux côtés
+    addTrailXp(p, 200);
+    expect(careerSummary(p, 'trailGuide').rank).toBe(1);
+    changeReputation(p, 10);
+    expect(p.careers.reputation.trailGuide).toBe(60);
+    expect(maxClients(p)).toBe(0); // ne fait pas venir de clients vétérinaire / pension
   });
 
   it('la première fois, chaque action du carnet est expliquée', () => {

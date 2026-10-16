@@ -1,5 +1,7 @@
 // Textes du jeu : français (langue principale) et anglais.
 
+import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
+
 const fr = {
   title: 'Animadichelle',
   tagline: 'Adopte, soigne et voyage avec tes animaux',
@@ -1707,6 +1709,10 @@ const fr = {
   ca_trailGuide_photo: 'La photo de groupe',
   ca_trailGuide_break: 'La pause goûter',
   ca_trailGuide_return: 'Rentrer à l\'écurie',
+  ca_offer_trailGuide: 'Tu veux devenir guide de randonnée ? Des visiteurs viendront te demander des balades à cheval : tu choisis les chevaux, tu prépares tout et tu les emmènes !',
+  ca_perk_apprentice_trailGuide: 'Apprenti : balades d\'une heure près de la ferme, 2 cavaliers.',
+  ca_perk_skilled_trailGuide: 'Confirmé : demi-journées, 4 cavaliers, rendez-vous dans d\'autres lieux, les chiens viennent, pourboires.',
+  ca_perk_expert_trailGuide: 'Expert : randonnées de deux jours avec nuit au gîte, 6 cavaliers, itinéraires spéciaux (Islande, Alpes).',
   tg_title: 'Guide de randonnée',
   tg_pony: 'poney',
   tg_noBooking: 'Pas de rendez-vous pour l\'instant : les visiteurs arrivent près de l\'écurie, entre 9 h et 17 h.',
@@ -3501,6 +3507,10 @@ const en = {
   ca_trailGuide_photo: 'The group photo',
   ca_trailGuide_break: 'The snack break',
   ca_trailGuide_return: 'Back to the stable',
+  ca_offer_trailGuide: 'Do you want to become a trail guide? Visitors will ask you for horseback rides: you pick the horses, pack everything and take them out!',
+  ca_perk_apprentice_trailGuide: 'Apprentice: one-hour rides near the farm, 2 riders.',
+  ca_perk_skilled_trailGuide: 'Skilled: half-day rides, 4 riders, bookings in other places, dogs come along, tips.',
+  ca_perk_expert_trailGuide: 'Expert: two-day treks with a night at the lodge, 6 riders, special routes (Iceland, Alps).',
   tg_title: 'Trail guide',
   tg_pony: 'pony',
   tg_noBooking: 'No booking yet: visitors arrive near the stable, between 9 am and 5 pm.',
@@ -3680,6 +3690,10 @@ const en = {
   quest_step_tgPrepare: 'Prepare the ride: horses, gear, water, snack',
   quest_step_tgRide: 'Guide the ride back to the stable!',
 };
+
+// Clients et métiers : textes ajoutés aux deux dictionnaires.
+Object.assign(fr, CLIENTS_FR);
+Object.assign(en, CLIENTS_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

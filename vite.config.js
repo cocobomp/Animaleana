@@ -1,4 +1,6 @@
 import { defineConfig } from 'vite';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // Génère sw.js avec la liste de tous les fichiers du jeu,
 // pour qu'il fonctionne entièrement hors ligne après la première ouverture.
@@ -7,9 +9,14 @@ function offlineServiceWorker() {
     name: 'animaleana-offline',
     apply: 'build',
     generateBundle(_, bundle) {
+      // Les modèles 3D (public/models/*.glb) ne passent pas par le bundle : on les ajoute à la main.
+      const modelDir = path.resolve('public/models');
+      const models = fs.existsSync(modelDir)
+        ? fs.readdirSync(modelDir, { recursive: true }).filter((f) => /\.(glb|gltf|bin|png|jpg|webp)$/i.test(String(f))).map((f) => `./models/${String(f).split(path.sep).join('/')}`)
+        : [];
       const files = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png',
         './icon-maskable-512.png', './apple-touch-icon.png',
-        ...Object.keys(bundle).map((f) => `./${f}`)];
+        ...Object.keys(bundle).map((f) => `./${f}`), ...models];
       const version = Date.now().toString(36);
       const source = `// Généré automatiquement au build.
 const CACHE = 'animaleana-${version}';

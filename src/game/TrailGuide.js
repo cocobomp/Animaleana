@@ -21,6 +21,7 @@ import {
   FUN, WATER_PER_MIN, addFun, STABLE_DOOR, LODGE_DOOR, RANK_IDS, TRAIL_GUIDE_CAREER, GROUPS, DURATIONS, ROUTES,
 } from '../sim/trailGuide.js';
 import { openBookingChat, openTrailPrep, showRideResult } from '../ui/trailGuide.js';
+import { isStarted, startCareer, CAREERS } from '../sim/careers.js'; // registre des métiers (💼)
 import { t, ta, L } from '../i18n.js';
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x5a3a24];
@@ -311,16 +312,31 @@ export class TrailGuide {
   /** Petit tutoriel la première fois qu'on fait une action du carnet. */
   tutorial(actionId) {
     const g = this.game;
+    // Carnet du panneau 💼 : l'action se coche (et donne un peu d'XP de métier la première fois).
+    if (isStarted(g.profile, 'trailGuide')) g.clients?.noteCareer?.('trailGuide', actionId);
     if (!noteAction(g.profile, actionId)) return;
     const text = t(`tg_tuto_${actionId}`);
     g.ui.toast(text, 10000);
     g.ui.tutorial?.speak?.(text);
   }
 
+  /** Le métier commence dans le registre 💼 à la première balade acceptée (s'il ne l'est pas déjà). */
+  ensureCareer() {
+    const g = this.game;
+    const p = g.profile;
+    if (isStarted(p, 'trailGuide')) return;
+    if (!startCareer(p, 'trailGuide', g.day, { level: Math.max(g.level, CAREERS.trailGuide.level) }).ok) return;
+    p.careers.reputation.trailGuide = this.st.reputation;
+    g.ui.toast(t('ca_started', { career: t('career_trailGuide') }), 6000);
+    g.emit('careerStarted', 'trailGuide');
+  }
+
   accept() {
     const g = this.game;
+    this.ensureCareer();
     const b = acceptOffer(g.profile, g.day);
     if (!b) return null;
+    g.clients?.noteCareer?.('trailGuide', 'accept');
     if (b.place === g.profile.place && b.day === g.day) {
       this.visitorsFor = 'booking';
     } else {
@@ -387,6 +403,21 @@ export class TrailGuide {
     g.ui.toast(t('tg_goTack'), 3000);
     g.ui.closePanel();
     g.walkTo(new THREE.Vector3(spot.x, 0, spot.z), 1.5, () => { done(); openTrailPrep(g.ui, this); });
+  }
+
+  /** « 👉 Montre-moi » du carnet (panneau 💼) : où faire cette action du métier. */
+  showMeAction(action) {
+    const g = this.game;
+    const b = this.booking;
+    if (this.session) return g.ui.toast(t('tg_hintStart'), 5000);
+    if (this.visitors.length) {
+      this.showMe(this.visitors[0].root);
+      return g.ui.toast(t(this.visitorsFor === 'offer' ? 'tg_chip_visitor' : 'tg_waiting'), 5000);
+    }
+    if (b && action !== 'accept') return openTrailPrep(g.ui, this);
+    const door = g.world.interactables.find((i) => i.kind === 'stable') ?? g.world.interactables.find((i) => i.kind === 'lodge');
+    if (door) this.showMe({ x: door.x, z: door.z });
+    g.ui.toast(t(g.level >= CAREERS.trailGuide.level ? 'tg_noBooking' : 'tg_level', { n: CAREERS.trailGuide.level }), 6000);
   }
 
   /** Montre où est quelque chose : un cheval, la sellerie, les visiteurs. */

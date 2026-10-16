@@ -172,6 +172,7 @@ export class Tutorial {
       hasDropping: [...g.droppingMeshes.values()].some((m) => m.userData.dropping.kind === 'poop'),
       travelDest: !!panel.querySelector('.card.place.selected'),
       travelMode: !!panel.querySelector('.card.mode.selected'),
+      hasClient: g.profile.animals.some((a) => a.client), // un animal confié par un client
     };
   }
 

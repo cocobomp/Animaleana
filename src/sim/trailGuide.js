@@ -2,6 +2,8 @@
 // prête nos chevaux, on prépare le matériel, on les emmène sur un itinéraire et on gère les
 // petits événements du chemin. Logique pure (sans 3D ni DOM), testée dans tests/trailGuide.test.js.
 // La partie 3D est dans src/game/TrailGuide.js, l'interface dans src/ui/trailGuide.js.
+// Le métier est inscrit dans le registre des métiers (CAREERS.trailGuide dans src/sim/careers.js) :
+// il apparaît dans le panneau 💼, partage l'XP (profile.careers.xp.trailGuide) et le carnet.
 //
 // Dans le profil :
 //   profile.careers.xp.trailGuide : expérience du métier (rangs apprenti / confirmé / expert)
@@ -15,9 +17,9 @@
 //     started: null,         // jour où l'on a accepté sa première balade
 //   }
 
-import { registerCareer } from './careersRegistry.js';
 import { canRide } from './animal.js';
-import { wears } from './gear.js';
+// (comme wears() de gear.js, recopié ici : gear.js importe profile.js → careers.js → ce fichier, une boucle)
+const wears = (a, item) => Object.values(a.gear ?? {}).some((g) => g.item === item);
 import { seeded, pick, uid } from './rng.js';
 import { PLACES, PLACE_IDS } from './places.js';
 
@@ -28,13 +30,16 @@ const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 export const RANK_IDS = ['apprentice', 'skilled', 'expert'];
 
 /**
- * Définition du métier (inscrite dans src/sim/careersRegistry.js).
- * ranks : XP de métier pour chaque rang ; perks : ce que chaque rang permet.
+ * Définition du métier (inscrite dans CAREERS, src/sim/careers.js).
+ * ranks : XP de métier pour chaque rang ; perks : ce que chaque rang permet
+ * (maxClients: 0 → ce métier ne fait pas venir de clients qui confient leurs animaux, src/sim/clients.js).
+ * building : toucher l'écurie propose le métier (« Tu veux apprendre le métier de… ? »).
  */
 export const TRAIL_GUIDE_CAREER = {
   id: 'trailGuide',
   emoji: '🧭',
   level: 4, // niveau du joueur pour que les premiers visiteurs arrivent
+  building: 'stable',
   name: { fr: 'Guide de randonnée', en: 'Trail guide' },
   desc: {
     fr: 'Emmène des visiteurs en balade à cheval : choisis le bon cheval pour chacun, prépare le matériel et veille sur tout le monde en chemin.',
@@ -51,12 +56,11 @@ export const TRAIL_GUIDE_CAREER = {
     { id: 'return', emoji: '⭐', where: 'stable' },
   ],
   perks: [
-    { maxRiders: 2, durations: ['short'], abroad: false, dogs: false, special: false, price: 1, tips: false },
-    { maxRiders: 4, durations: ['short', 'half'], abroad: true, dogs: true, special: false, price: 1.15, tips: true },
-    { maxRiders: 6, durations: ['short', 'half', 'trek'], abroad: true, dogs: true, special: true, price: 1.3, tips: true },
+    { maxRiders: 2, durations: ['short'], abroad: false, dogs: false, special: false, price: 1, tips: false, maxClients: 0 },
+    { maxRiders: 4, durations: ['short', 'half'], abroad: true, dogs: true, special: false, price: 1.15, tips: true, maxClients: 0 },
+    { maxRiders: 6, durations: ['short', 'half', 'trek'], abroad: true, dogs: true, special: true, price: 1.3, tips: true, maxClients: 0 },
   ],
 };
-registerCareer(TRAIL_GUIDE_CAREER);
 
 export function defaultTrailGuide() {
   return { reputation: 50, bookings: [], history: [], offer: null, seen: [], nextOfferAt: 0, started: null };
@@ -105,6 +109,7 @@ export function addTrailXp(p, n) {
 export function changeReputation(p, delta) {
   const st = tgState(p);
   st.reputation = clamp(st.reputation + delta);
+  if (p.careers?.reputation) p.careers.reputation.trailGuide = st.reputation; // carte du panneau 💼
   return st.reputation;
 }
 
@@ -521,6 +526,7 @@ export function applyRideResult(p, booking, result, { day = 1, earn = null, home
   st.bookings = st.bookings.filter((b) => b.id !== booking.id);
   const money = result.pay + result.tip;
   if (earn && money) earn(money);
+  if (p.careers?.earned) p.careers.earned.trailGuide = (p.careers.earned.trailGuide ?? 0) + money; // panneau 💼
   const reputation = changeReputation(p, result.repDelta);
   const x = addTrailXp(p, result.xp);
   st.history.unshift({ day, place: booking.place, group: booking.group, riders: booking.riders.length, stars: result.stars, pay: result.pay, tip: result.tip, duration: booking.duration });

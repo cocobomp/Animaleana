@@ -1,0 +1,19 @@
+Farm Animals Animated — par Quaternius (juin 2018)
+Fichier(s) du jeu : horse.glb (converti de Horse.fbx, 4 animations conservées : idle, walk, run, jump,
+                    ré-échantillonnées à 12 i/s, couleurs de matériaux rétablies, compression meshopt)
+
+Source : https://quaternius.itch.io/lowpoly-animated-animals
+         https://quaternius.com/packs/farmanimal.html
+         https://opengameart.org/content/lowpoly-animated-farm-animal-pack
+
+Licence : CC0 1.0 Universal (Public Domain Dedication)
+          https://creativecommons.org/publicdomain/zero/1.0/
+          La page itch.io indique « CC0 License » et le site : « free to use in personal and
+          commercial projects ». Aucune attribution n'est exigée ; nous créditons l'auteur par
+          courtoisie (voir CREDITS.md à la racine du dépôt).
+
+Texte de la licence CC0 1.0 (résumé) :
+  The person who associated a work with this deed has dedicated the work to the public domain by
+  waiving all of his or her rights to the work worldwide under copyright law, including all related
+  and neighboring rights, to the extent allowed by law. You can copy, modify, distribute and perform
+  the work, even for commercial purposes, all without asking permission.

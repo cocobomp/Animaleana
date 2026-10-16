@@ -571,8 +571,7 @@ export class ConstructionView {
     const p = this.view.groundAt(e.clientX, e.clientY);
     if (!p) return;
     const r = dragRect(d.start, d.name, p.x + d.offX, p.z + d.offZ, d.lim);
-    const cur = this.pending ?? this.info()?.rect;
-    if (cur && sameRect(r, cur)) return;
+    if (sameRect(r, this.pending ?? d.start)) return; // (pas encore un mètre de plus : rien à refaire)
     this.propose(r);
   }
 
@@ -620,6 +619,7 @@ export class ConstructionView {
   }
 
   reasonText(v) {
+    if (v.reason === 'crowded' && v.n) return t('cv_bad_crowdedN', { n: v.n }); // (combien d'animaux y vivent)
     const key = `cv_bad_${v.reason}`;
     return t(key) !== key ? t(key, { n: v.level }) : t(`con_bad_${v.reason}`, { n: v.level });
   }

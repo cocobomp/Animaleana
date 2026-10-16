@@ -77,7 +77,7 @@ export class Game {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     // Tons filmiques : les hautes lumières (ciel, soleil) restent douces.
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.9;
+    renderer.toneMappingExposure = 1.0;
     container.prepend(renderer.domElement);
     this.renderer = renderer;
 

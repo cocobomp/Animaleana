@@ -6,6 +6,7 @@ import { h } from './dom.js';
 import { t } from '../i18n.js';
 import { isSandbox } from '../sim/profile.js';
 import { CAREERS, CAREER_IDS, RANKS, careerSummary, setActiveCareer, nextAction } from '../sim/careers.js';
+import { schoolSummary } from '../sim/vetSchool.js'; // 🎓 école vétérinaire
 
 const rankLabel = (rank) => t(`ca_rank_${RANKS[rank]}`);
 
@@ -63,7 +64,18 @@ function careerCard(ui, s) {
     if (!s.active) body.push(h('button', { class: 'small', onClick: () => { setActiveCareer(p, s.id); ui.renderPanel(); ui.renderStatus(); } }, `📌 ${t('ca_follow')}`));
     else body.push(h('small', { class: 'ca-following' }, `📌 ${t('ca_following')}`));
   }
+  if (s.id === 'vet') body.push(schoolBlock(ui)); // 🎓 apprendre le métier en leçons (src/ui/vetSchool.js)
   return h('div', { class: `ca-card ${s.state} ${s.active ? 'active' : ''}` }, head, ...body);
+}
+
+/** L'école vétérinaire dans la carte du métier : progression et bouton. */
+function schoolBlock(ui) {
+  const sc = schoolSummary(ui.game.profile);
+  const started = !!ui.game.profile.careers?.started?.vet;
+  return h('div', { class: 'ca-school' },
+    h('span', {}, t('vs_card', { n: sc.done, total: sc.total })),
+    !started && !sc.diploma ? h('small', {}, t('vs_cardLocked')) : null,
+    h('button', { class: 'small primary', onClick: () => ui.openVetSchool() }, t('vs_cardBtn')));
 }
 
 /** « Tu veux apprendre le métier de vétérinaire ? » */

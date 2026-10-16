@@ -6,6 +6,7 @@ import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
 import { openVet } from './vet.js';
+import { openVetSchool } from './vetSchool.js'; // 🎓 école vétérinaire
 import { runMinigame, runChoreGame } from './minigames.js';
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
@@ -457,7 +458,8 @@ export class UI {
   }
 
   isBlocking() {
-    return this.modalOpen || !this.screen.hidden || !!this.tripBlocking; // tripBlocking : écran du trajet
+    // tripBlocking : écran du trajet ; vxOpen : examen ou leçon vétérinaire ouverts (src/ui/vetExam.js)
+    return this.modalOpen || !this.screen.hidden || !!this.tripBlocking || this.vxOpen > 0;
   }
 
   showModal(content) {
@@ -679,4 +681,5 @@ export class UI {
   }
   openVetClinic() { panels.openVetClinic(this); this.game?.emit('panel', 'vetClinic'); }
   openVet(a, atClinic) { openVet(this, a, atClinic); this.game?.emit('panel', 'vetExam'); }
+  openVetSchool() { openVetSchool(this); } // 🎓 école vétérinaire (src/ui/vetSchool.js)
 }

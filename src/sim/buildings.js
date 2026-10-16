@@ -108,6 +108,7 @@ const RULES = {
   ],
   vet: [
     { id: 'vet', icon: '🩺', when: (c) => (inHours(c.hour, 8, 19) || c.count.sick > 0 ? null : { reason: 'vetClosed', params: { h: fmtHour(8) } }) },
+    { id: 'vetSchool', icon: '🎓', when: () => null }, // apprendre le métier (src/ui/vetSchool.js), à toute heure
   ],
   jobs: [
     { id: 'jobs', icon: '📋', when: (c) => open(c, 8, 18) },

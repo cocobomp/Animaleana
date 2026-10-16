@@ -79,6 +79,11 @@ const TOPICS = [
     title: { fr: 'Dormir', en: 'Sleep' },
     keys: 'dormir nuit lit maison sleep night bed house',
     steps: { fr: ['Va à la maison le soir (à partir de 19 h).', 'Touche « Dormir jusqu\'au matin ».'], en: ['Go to the house in the evening (from 7 pm).', 'Tap "Sleep until morning".'] } },
+  // Concours de beauté (src/ui/beauty.js)
+  { id: 'beauty', icon: '🎀', where: 'showground',
+    title: { fr: 'Concours de beauté : préparer et présenter', en: 'Beauty contest: prepare and show' },
+    keys: 'beauté concours tresse tresser crinière ruban nœud bandana lustrer briller juge présenter beauty contest braid mane ribbon bow shine judge show',
+    steps: { fr: ['Touche ton animal → « Plus… » → « Préparer pour le concours ».', 'Fais chaque geste de la liste : bain, brossage, tresses ou nœud, lustrage.', 'Au terrain de concours : « Concours de beauté », puis présente ton animal au juge (au pas, halte, immobile, demi-tour, trot).'], en: ['Tap your animal → "More…" → "Prepare for the contest".', 'Do every step of the list: bath, brushing, braids or a bow, coat shine.', 'At the showground: "Beauty contest", then show your animal to the judge (walk, halt, stand still, turn, trot).'] } },
 ];
 
 const norm = (str) => str.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');

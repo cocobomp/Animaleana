@@ -198,6 +198,11 @@ describe('concours de beauté dans le calendrier', () => {
     expect(Object.keys(RIBBON_COLORS).length).toBeGreaterThanOrEqual(5);
   });
 
+  it("l'aide trouve la fiche du concours de beauté", async () => {
+    const { searchHelp } = await import('../src/ui/help.js');
+    expect(searchHelp('tresser la crinière')[0].id).toBe('beauty');
+  });
+
   it('les quêtes de beauté ont un guide et des étapes', () => {
     for (const id of ['beautyPrep1', 'beautyBraid1', 'beauty1']) {
       expect(OBJECTIVES.find((o) => o.id === id)).toBeTruthy();

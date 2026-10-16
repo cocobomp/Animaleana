@@ -75,6 +75,16 @@ describe('coffre de transport', () => {
     expect(inCargo(small, 'water')).toBe(1);
   });
 
+  it('à cheval, pas de foin dans les sacoches : ils broutent en route', () => {
+    const p = profile();
+    const h = horse({ location: p.place });
+    p.animals.push(h);
+    const bags = suggestCargo(p, [h], capacityFor('none'), { mode: 'horse' });
+    expect(inCargo(bags, 'hay')).toBe(0);
+    expect(inCargo(bags, 'water')).toBe(1);
+    expect(missingSupplies(bags, [h], 'horse')).toEqual([]);
+  });
+
   it('le coffre du dernier voyage est proposé la fois suivante', () => {
     const p = profile();
     p.lastCargo = { brush: 1, saddle: 1 };

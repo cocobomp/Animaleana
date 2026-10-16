@@ -109,14 +109,15 @@ const PETS = ['dog', 'cat', 'rabbit'];
 /**
  * Ce qu'il faut emporter pour ces voyageurs, du plus important au moins important.
  * (les objets que les animaux portent déjà, comme le licol, voyagent avec eux)
+ * mode : 'horse' quand on part à cheval (ils broutent en route : pas de foin dans les sacoches).
  */
-export function wishList(travellers = []) {
+export function wishList(travellers = [], mode = null) {
   const sp = new Set(travellers.map((a) => a.species));
   const has = (...list) => list.some((s) => sp.has(s));
   const wears = (a, item) => Object.values(a.gear ?? {}).some((g) => g?.item === item);
   const list = [];
   if (travellers.length) list.push('water');
-  if (has(...HERBIVORES)) list.push('hay');
+  if (has(...HERBIVORES) && mode !== 'horse') list.push('hay');
   if (has(...PETS)) list.push('bowls');
   list.push('firstAid');
   // De quoi monter à cheval sur place, et promener le chien.
@@ -148,21 +149,25 @@ export function wishList(travellers = []) {
  * Prépare le coffre : d'abord ce qui était dans le coffre au dernier voyage (s'il y en a un),
  * sinon le nécessaire pour ces voyageurs, tant qu'il y a de la place.
  */
-export function suggestCargo(profile, travellers, capacity, { last = profile.lastCargo } = {}) {
+export function suggestCargo(profile, travellers, capacity, { last = profile.lastCargo, mode = null } = {}) {
   const cargo = createCargo();
+  const wish = wishList(travellers, mode);
   if (last && Object.keys(last).length) {
-    for (const [id, n] of Object.entries(last)) for (let i = 0; i < n; i++) pack(profile, cargo, id, capacity);
+    for (const [id, n] of Object.entries(last)) {
+      if (SUPPLIES[id] && !wish.includes(id)) continue; // pas de foin pour un voyage sans herbivore
+      for (let i = 0; i < n; i++) pack(profile, cargo, id, capacity);
+    }
     // Les provisions indispensables pour ces voyageurs, si on les avait oubliées la dernière fois.
-    for (const id of wishList(travellers).filter((x) => SUPPLIES[x])) if (!inCargo(cargo, id)) pack(profile, cargo, id, capacity);
+    for (const id of wish.filter((x) => SUPPLIES[x])) if (!inCargo(cargo, id)) pack(profile, cargo, id, capacity);
     return cargo;
   }
-  for (const id of wishList(travellers)) pack(profile, cargo, id, capacity);
+  for (const id of wish) pack(profile, cargo, id, capacity);
   return cargo;
 }
 
 /** Le coffre est-il bien préparé pour ces voyageurs ? Renvoie les provisions qui manquent (['hay', 'water'…]). */
-export function missingSupplies(cargo, travellers) {
-  return wishList(travellers).filter((id) => SUPPLIES[id] && !inCargo(cargo, id));
+export function missingSupplies(cargo, travellers, mode = null) {
+  return wishList(travellers, mode).filter((id) => SUPPLIES[id] && !inCargo(cargo, id));
 }
 
 /**

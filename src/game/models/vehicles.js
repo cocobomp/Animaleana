@@ -10,7 +10,8 @@
 // renvoyés avec le modèle ; Vehicle.js les anime.
 
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { strawTexture, emojiTexture } from '../textures.js';
 import { isHigh } from '../gfx.js';
 
@@ -214,7 +215,7 @@ function mesh(geo, mat, x = 0, y = 0, z = 0, shadow = false) {
   return m;
 }
 
-const rbox = (w, h, d, r = 0.03, seg = 2) => new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3));
+const rbox = (w, h, d, r = 0.03, seg = isHigh() ? 2 : 1) => new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3));
 const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 const curveSegs = () => (isHigh() ? 12 : 7);
 
@@ -298,6 +299,44 @@ function fender(P, r, w, x, z, y) {
   return m;
 }
 
+/**
+ * Fusionne les pièces fixes qui ont le même matériau, groupe par groupe (les pièces qui bougent restent
+ * des groupes à part) : beaucoup moins d'objets à dessiner, donc plus rapide sur téléphone.
+ * Les maillages marqués userData.keep (écran…) ne sont pas touchés ; userData.cut (vue en coupe) est gardé.
+ */
+function mergeStatic(group) {
+  const buckets = new Map();
+  for (const child of [...group.children]) {
+    if (child.isMesh && !child.userData.keep) {
+      const key = `${child.material.uuid}|${child.userData.cut ? 1 : 0}|${child.castShadow ? 1 : 0}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(child);
+    } else if (!child.isMesh) mergeStatic(child);
+  }
+  for (const list of buckets.values()) {
+    if (list.length < 2) continue;
+    const geos = list.map((m) => {
+      m.updateMatrix();
+      const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix);
+      for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+      if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+      return g;
+    });
+    const merged = mergeGeometries(geos, false);
+    for (const g of geos) g.dispose();
+    if (!merged) continue;
+    const m = new THREE.Mesh(merged, list[0].material);
+    m.castShadow = list[0].castShadow;
+    m.receiveShadow = list[0].receiveShadow;
+    m.userData.cut = list[0].userData.cut;
+    group.add(m);
+    for (const old of list) {
+      group.remove(old);
+      old.geometry.dispose();
+    }
+  }
+}
+
 /** Un pivot : groupe placé à la charnière ; les pièces sont ajoutées dedans. */
 function pivot(x, y, z) {
   const g = new THREE.Group();
@@ -372,10 +411,12 @@ function cabin(P, o) {
   const mon = new THREE.Group();
   mon.position.set(dx - 0.3, dy + 0.17, dz + 0.02);
   mon.rotation.set(-0.2, Math.PI - 0.22, 0);
-  mon.add(mesh(rbox(0.25, 0.165, 0.03, 0.012), P.black, 0, 0, 0.012));
-  const screen = mesh(new THREE.PlaneGeometry(0.225, 0.14), P.screen, 0, 0, -0.005);
+  // (le groupe est retourné vers le conducteur : son +z local regarde le conducteur)
+  mon.add(mesh(rbox(0.25, 0.165, 0.03, 0.012), P.black, 0, 0, -0.016));
+  const screen = mesh(new THREE.PlaneGeometry(0.225, 0.14), P.screen, 0, 0, 0.001);
+  screen.userData.keep = true; // son image change (caméra du van)
   mon.add(screen);
-  mon.add(mesh(new THREE.CylinderGeometry(0.012, 0.02, 0.09, 8), P.black, 0, -0.11, 0.02));
+  mon.add(mesh(new THREE.CylinderGeometry(0.012, 0.02, 0.09, 8), P.black, 0, -0.11, -0.024));
   g.add(mon);
   // Aérateurs et boutons.
   for (const x of [-0.62, -0.2, 0.2, 0.62]) g.add(mesh(rbox(0.1, 0.05, 0.03, 0.01), P.black, x * (o.W / 1.9), dy - 0.12, dz - 0.05));
@@ -516,6 +557,7 @@ export function towCar(color = 0x2f5d4e, accent = 0xd8d2c0) {
   const spare = wheel(P, 0.38, 0.24, 0, 0, 1);
   spare.rotation.y = Math.PI / 2;
   spare.position.set(0.84, 1.12, -0.16);
+  spare.userData.wheel = 0; // la roue de secours ne tourne pas
   rearDoor.add(spare);
   rearDoor.add(mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.06, 20).rotateX(Math.PI / 2), P.accent, 0.84, 1.12, -0.3));
   rearDoor.add(mesh(rbox(0.12, 0.3, 0.12, 0.02), P.black, 0.84, 1.12, -0.12));
@@ -538,6 +580,7 @@ export function towCar(color = 0x2f5d4e, accent = 0xd8d2c0) {
     rear: -1.15, roofY: 1.84, roofFrontZ: 0.5,
   });
   g.add(inside.group);
+  mergeStatic(g);
   return {
     group: g, length: L, width: W, hitchZ: -2.64, door, rearDoor, P,
     // Caisses des petits animaux : dans le coffre, puis sur la banquette (attachées par la ceinture).
@@ -560,7 +603,7 @@ export function horseTrailer(rows = 1, color = 0xf4f1ea, accent = 0x2f6b4f) {
   const cut = [];
   const add = (m, x = 1) => {
     g.add(m);
-    if (x > 0) cut.push(m);
+    if (x > 0) m.userData.cut = true;
     return m;
   };
   const W = 1.84;
@@ -627,8 +670,12 @@ export function horseTrailer(rows = 1, color = 0xf4f1ea, accent = 0x2f6b4f) {
   g.add(mesh(matGeo, P.mat, 0, floorY + 0.006, (zf + zr) / 2));
   // Mur avant (poitrail) et mangeoire : la sellerie avant est dessous, devant.
   g.add(mesh(box(W - 0.1, floorY + 1.05 - floorY, 0.05), P.kick, 0, floorY + 0.52, 1.52));
-  g.add(mesh(rbox(W - 0.14, 0.12, 0.34, 0.04), P.plastic, 0, floorY + 1.1, 1.68));
-  g.add(mesh(box(W - 0.14, 0.03, 0.52), P.lining, 0, floorY + 1.02, 1.82));
+  // (la mangeoire et sa tablette se cachent aussi quand on regarde dans la sellerie, par-dessus)
+  const manger = mesh(rbox(W - 0.14, 0.12, 0.34, 0.04), P.plastic, 0, floorY + 1.1, 1.68);
+  const shelf = mesh(box(W - 0.14, 0.03, 0.52), P.lining, 0, floorY + 1.02, 1.82);
+  manger.userData.keep = true;
+  shelf.userData.keep = true;
+  g.add(manger, shelf);
   // Roues, garde-boue, timon, roue jockey, feux arrière.
   const axles = rows > 1 ? [zr + 0.5 * (zf - zr) - 0.45, zr + 0.5 * (zf - zr) + 0.45] : [-0.08];
   for (const az of axles) {
@@ -703,11 +750,11 @@ export function horseTrailer(rows = 1, color = 0xf4f1ea, accent = 0x2f6b4f) {
       bb.add(mesh(new THREE.SphereGeometry(0.055, 10, 8), P.alu));
       bb.userData = { kind: 'breastBar', side: x, row: r, open: { z: -x * 1.35 } };
       g.add(bb);
-      // Barre arrière (barre de fesse) : se replie contre la paroi quand elle est ouverte.
+      // Barre arrière (barre de fesse) : ouverte, elle pend le long de la paroi.
       const rb = pivot(x * (W / 2 - 0.08), floorY + 1.02, zrb);
       rb.add(beam(new V3(0, 0, 0), new V3(-x * 0.8, 0, 0), 0.05, P.pad, 10));
       rb.add(mesh(new THREE.SphereGeometry(0.055, 10, 8), P.alu));
-      rb.userData = { kind: 'rearBar', side: x, row: r, open: { y: -x * 1.5 } };
+      rb.userData = { kind: 'rearBar', side: x, row: r, open: { z: x * 1.45 } };
       g.add(rb);
       // Filet à foin (garni ou vide) accroché au-dessus de la mangeoire.
       const net = new THREE.Group();
@@ -737,15 +784,18 @@ export function horseTrailer(rows = 1, color = 0xf4f1ea, accent = 0x2f6b4f) {
     trunkYaw: 0,
   };
   for (const p of cargo.rack) g.add(mesh(rbox(0.36, 0.05, 0.16, 0.02), P.alu, p.x, p.y - 0.05, p.z));
+  for (const net of hayNets) for (const c of net.children) c.userData.keep = true; // garnis ou vides
+  mergeStatic(g);
+  for (const c of g.children) if (c.userData.cut) cut.push(c);
   return {
     group: g, P, length: hitchZ - zr, bodyLength: zf + 0.5 - zr, width: W, frontZ: 2.14, rearZ: zr, hitchZ, floorY, roofY, rampLength: RL,
-    ramp, upperDoors, tackDoor, stalls, bars, hayNets, tieRings, cargo, rows, cutaway: cut,
+    ramp, upperDoors, tackDoor, stalls, bars, hayNets, tieRings, cargo, rows, cutaway: cut, cutTack: [manger, shelf, ...hayNets],
     views: {
       // Compartiment et sellerie vus en coupe, de côté (le flanc gauche et le toit sont cachés) :
       // on voit le cheval de profil, la barre de poitrail devant lui, la barre arrière, le filet à foin.
-      stall: { pos: new V3(W / 2 + 2.6, 3.2, (zf + zr) / 2 + 0.1), look: new V3(-0.1, floorY + 0.55, (zf + zr) / 2 + 0.2) },
+      stall: { pos: new V3(W / 2 + 2.6 + (rows - 1) * 2.2, 3.2 + (rows - 1) * 0.9, (zf + zr) / 2 + 0.1), look: new V3(-0.1, floorY + 0.55, (zf + zr) / 2 + 0.2) },
       // Sellerie : à hauteur du coffre, sous la tablette de la mangeoire (le coffre apparaît en haut de l'écran).
-      tack: { pos: new V3(W / 2 + 1.55, 1.05, 1.62), look: new V3(-0.2, floorY - 0.38, 1.74) },
+      tack: { pos: new V3(W / 2 + 1.45, 2.35, 1.25), look: new V3(-0.15, floorY + 0.2, 1.8) },
       // Caméra du van (écran du tableau de bord) : dans un coin à l'avant, elle regarde les chevaux.
       camera: { pos: new V3(-0.66, roofY - 0.24, 1.42), look: new V3(0.3, floorY + 1.2, zBreast(0) - 1.4) },
     },
@@ -844,6 +894,7 @@ export function car(color = 0x2f6fb0, accent = 0x1d1d1f) {
   });
   g.add(inside.group);
   g.add(mesh(box(W - 0.24, 0.04, 0.95), P.carpet, 0, 0.62, -1.62)); // plancher du coffre
+  mergeStatic(g);
   // Caisses : deux dans le coffre, deux sur la banquette (attachées par la ceinture), puis empilées.
   const crateSlots = [
     new V3(-0.4, 0.64, -1.62), new V3(0.4, 0.64, -1.62),
@@ -854,7 +905,7 @@ export function car(color = 0x2f6fb0, accent = 0x1d1d1f) {
     eye: new V3(0.42, 1.17, -0.22), screen: inside.screen, mirror: inside.mirror, steering: inside.steering,
     cargo: { roof: new V3(0, 1.76, -0.9) },
     views: {
-      tack: { pos: new V3(2.2, 3.0, -0.9), look: new V3(0, 1.62, -0.9) },
+      tack: { pos: new V3(1.9, 3.5, -0.9), look: new V3(-0.1, 1.45, -0.9) },
       boot: { pos: new V3(0, 1.75, -4.4), look: new V3(0, 0.8, -1.5) },
     },
   };
@@ -911,6 +962,7 @@ export function crate(size = 0.6, color = 0x3f8fd0) {
   for (let i = 0; i <= 6; i++) door.add(mesh(box(0.008, h - 0.06, 0.008), grid, -((i * (w - 0.04)) / 6), h / 2, 0));
   for (let i = 0; i <= 3; i++) door.add(mesh(box(w - 0.04, 0.008, 0.008), grid, -(w - 0.04) / 2, 0.03 + (i * (h - 0.06)) / 3, 0));
   g.add(door);
+  mergeStatic(g);
   return { group: g, size: { w, h, d }, door };
 }
 
@@ -936,6 +988,7 @@ export function trunk(P = palette(0x8a5a32, 0x2f6b4f)) {
   // Cases à l'intérieur (3 × 2), à plat au fond du coffre.
   const cells = [];
   for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) cells.push(new V3(-w / 2 + 0.13 + c * 0.23, h - 0.005, -d / 2 + 0.11 + r * 0.2));
+  mergeStatic(g);
   return { group: g, lid, cells, size: { w, h, d } };
 }
 

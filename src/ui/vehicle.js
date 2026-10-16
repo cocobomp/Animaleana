@@ -117,6 +117,7 @@ function stallBody(ui, flow, redraw) {
   const l = flow.loading;
   const v = l.vehicle;
   const rows = [];
+  const many = v.stallUse.filter((x) => x.length).length > 2;
   v.trailer.stalls.forEach((st, i) => {
     const ids = v.stallUse[i];
     const animals = ids.map((id) => flow.game.profile.animals.find((x) => x.id === id)).filter(Boolean);
@@ -140,7 +141,7 @@ function stallBody(ui, flow, redraw) {
   return [
     h('p', { class: 'veh-title' }, `🔒 ${t('veh_stallTitle')}`),
     h('p', { class: 'veh-hint' }, t('veh_stallOrder')),
-    h('div', { class: 'veh-stalls' }, rows),
+    h('div', { class: `veh-stalls ${many ? 'many' : ''}` }, rows),
     h('p', { class: 'veh-hint small' }, t(inCargo(l.cargo, 'hay') ? 'veh_hayFull' : 'veh_hayEmpty')),
     h('div', { class: 'row end' }, h('button', { class: 'primary', onClick: () => flow.setView(null) }, t('veh_leaveStall'))),
   ];
@@ -178,7 +179,7 @@ export function trunkBody(ui, flow, redraw, onClose) {
   const cargo = l.cargo;
   const used = cargoUsed(cargo);
   const travellers = flow.travellers(l.ids);
-  const missing = missingSupplies(cargo, travellers);
+  const missing = missingSupplies(cargo, travellers, l.mode);
   const items = cargoItems();
   const shown = (it) => it.kind === 'supply' || inCargo(cargo, it.id) > 0 || available(p, it.id) > 0;
   const groups = CARGO_KINDS.map((kind) => {
@@ -216,7 +217,7 @@ export function trunkBody(ui, flow, redraw, onClose) {
       h('span', { class: 'bar-track' }, h('span', { class: `bar-fill ${pct >= 100 ? 'low' : pct > 75 ? 'mid' : 'good'}`, style: { width: `${pct}%` } }))),
     missing.length ? h('p', { class: 'veh-warn' }, t('veh_missingSupplies', { list: missing.map(cargoName).join(', ') })) : null,
     h('div', { class: 'row wrap veh-cargo-tools' },
-      h('button', { class: 'small', onClick: () => { l.cargo = suggestCargo(p, travellers, l.capacity, { last: null }); flow.cargoChanged(); redraw(); } }, `✨ ${t('veh_suggest')}`),
+      h('button', { class: 'small', onClick: () => { l.cargo = suggestCargo(p, travellers, l.capacity, { last: null, mode: l.mode }); flow.cargoChanged(); redraw(); } }, `✨ ${t('veh_suggest')}`),
       h('button', { class: 'small', onClick: () => { l.cargo.items = {}; flow.cargoChanged(); redraw(); } }, `🗑️ ${t('veh_empty')}`)),
     h('div', { class: 'veh-cargo' }, groups),
     h('div', { class: 'row end' }, h('button', { class: 'primary', onClick: onClose }, `✔ ${t('veh_closeTrunk')}`)),

@@ -72,7 +72,9 @@ export class TripVehicle {
       this.tackDoor = this.part(tr.tackDoor, 'y', 0, -1.75);
       this.bars = tr.bars.map((b) => {
         const axis = b.userData.open.z !== undefined ? 'z' : 'y';
-        return { ...b.userData, p: this.part(b, axis, 0, b.userData.open[axis]) };
+        const p = this.part(b, axis, 0, b.userData.open[axis]);
+        this.open(p, true, true); // au début, toutes les barres sont ouvertes
+        return { ...b.userData, p };
       });
       // Le coffre de sellerie dans la sellerie avant.
       this.trunk = trunk(tr.P);
@@ -531,9 +533,10 @@ export class TripVehicle {
   }
 
   /** Vue en coupe : on cache le flanc gauche et le toit du van pour voir dedans (compartiment, sellerie). */
-  setCutaway(on) {
+  setCutaway(on, tack = false) {
     if (!this.trailer) return;
     for (const m of this.trailer.cutaway) m.visible = !on;
+    for (const m of this.trailer.cutTack) m.visible = !(on && tack);
   }
 
   /** Filets à foin garnis (foin dans le coffre) ou vides. */

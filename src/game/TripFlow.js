@@ -79,7 +79,7 @@ export class TripFlow {
     if (!canAfford(p, check.cost)) return this.ui.toast(t('r_money'));
     const kind = travellers.length ? vehicleFor(mode, travellers) : 'car';
     const capacity = capacityFor(mode === 'horse' ? 'none' : kind);
-    const base = { destId, mode, check, loaded: new Set(), capacity, cargo: suggestCargo(p, travellers, capacity), stalls: new Map(), conf: new Map(), walk: null, view: null };
+    const base = { destId, mode, check, loaded: new Set(), capacity, cargo: suggestCargo(p, travellers, capacity, { mode }), stalls: new Map(), conf: new Map(), walk: null, view: null };
 
     // Personne ne vient : les animaux restent chez le voisin ; on choisit juste ses bagages.
     if (!travellers.length) {
@@ -514,11 +514,8 @@ export class TripFlow {
     }
     // Le joueur ne se voit pas dans les vues du véhicule (sauf quand il mène le cheval sur le pont).
     g.player.root.visible = !kind || kind === 'ramp';
-    v.setCutaway(kind === 'stall' || kind === 'tack');
-    if (!kind && g.camera.fov !== 60) {
-      g.camera.fov = 60;
-      g.camera.updateProjectionMatrix();
-    }
+    v.setCutaway(kind === 'stall' || kind === 'tack', kind === 'tack');
+    if (!kind) this.resetCamera();
     if (kind === 'cab') {
       v.setOpen('door', true);
       setTimeout(() => this.loading?.view === 'cab' && this.loading.vehicle.setOpen('door', false), 1100);
@@ -546,8 +543,21 @@ export class TripFlow {
     }
   }
 
+  /** La caméra habituelle du jeu (champ de vision normal, image centrée). */
+  resetCamera() {
+    const cam = this.game.camera;
+    this.camKey = null;
+    cam.fov = 60;
+    cam.clearViewOffset();
+    cam.updateProjectionMatrix();
+  }
+
   renderPanel() {
     renderVehiclePanel(this.ui, this);
+    // Part de l'écran cachée par le panneau (la moitié sert à remonter l'image de la vue).
+    const el = this.ui.vehEl?.firstChild;
+    const h = el && this.loading?.view ? el.getBoundingClientRect().height : 0;
+    this.panelFrac = Math.min(0.28, h / Math.max(1, window.innerHeight) / 2);
   }
 
   /**
@@ -568,8 +578,15 @@ export class TripFlow {
       pose.pos.sub(pose.look).multiplyScalar(l.view === 'stall' ? 1.55 : 1.3).add(pose.look);
     }
     const fov = l.view === 'cab' ? (portrait ? 80 : 68) : 60;
-    if (cam.fov !== fov) {
+    // Le panneau du bas cache le bas de l'écran : on remonte l'image d'autant (la scène reste visible au-dessus).
+    const H = window.innerHeight;
+    const shift = Math.round(H * (this.panelFrac ?? 0));
+    const key = `${fov}|${shift}|${window.innerWidth}x${H}`;
+    if (key !== this.camKey) {
+      this.camKey = key;
       cam.fov = fov;
+      if (shift) cam.setViewOffset(window.innerWidth, H, 0, shift, window.innerWidth, H);
+      else cam.clearViewOffset();
       cam.updateProjectionMatrix();
     }
     if (l.view === 'cab') {
@@ -731,10 +748,7 @@ export class TripFlow {
     });
     const vehicle = l.vehicle;
     // On quitte la vue de chargement (la cabine du trajet prend le relais).
-    if (l.view) {
-      l.view = null;
-      renderVehiclePanel(this.ui, this);
-    }
+    if (l.view) this.setView(null);
     for (const w of vehicle?.walkers ?? []) vehicle.abortWalk(w);
     this.journey = { trip, watch, speed: 1, vehicle, destId: l.destId, mode: l.mode, ids: l.ids, cargo: l.cargo, startClock: p.clock, camT: 0, report: null };
     this.loading = null;
@@ -888,6 +902,7 @@ export class TripFlow {
       l.view = null;
       renderVehiclePanel(this.ui, this);
       g.player.root.visible = true;
+      this.resetCamera();
     }
     g.player.scripted = false;
     if (l.walk?.w) l.vehicle.abortWalk(l.walk.w);

@@ -1007,6 +1007,11 @@ body.trip-road #pause-banner, body.trip-road #quest-tracker, body.veh-view #ev-b
 .veh-step.next { background: var(--primary); color: #fff; border-color: transparent; animation: veh-pulse 1.6s ease-in-out infinite; }
 .veh-step.done { background: #e2f5e7; }
 .veh-step.off { opacity: 0.55; background: #f1ede4; }
+/* Beaucoup de places (camion, grande remorque) : des lignes plus serrées. */
+.veh-stalls.many .veh-stall { padding: 5px 8px; }
+.veh-stalls.many .veh-stall-head { margin-bottom: 3px; }
+.veh-stalls.many .veh-step { min-height: 44px; padding: 3px; }
+.veh-stalls.many .veh-step span { font-size: 1.05rem; }
 @keyframes veh-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(47, 138, 95, 0.45); } 50% { box-shadow: 0 0 0 7px rgba(47, 138, 95, 0); } }
 .veh-checks { list-style: none; padding: 0; margin: 6px 0 8px; display: grid; gap: 4px; }
 .veh-checks li { background: #fff; border-radius: 10px; padding: 6px 10px; font-size: 0.95rem; line-height: 1.3; }
@@ -1038,6 +1043,11 @@ body.trip-road #pause-banner, body.trip-road #quest-tracker, body.veh-view #ev-b
 .trip-luggage small { color: var(--muted); }
 /* Trajet suivi depuis la cabine : la fiche se range en bas pour laisser voir la route. */
 #trip-overlay.with-road { background: none; align-items: flex-end; }
+@media (min-width: 900px) {
+  /* Écran large : la fiche du trajet se range à droite, la route reste visible. */
+  #trip-overlay.with-road { justify-content: flex-end; align-items: stretch; }
+  #trip-overlay.with-road .trip-sheet { width: min(460px, 40vw); align-self: flex-end; }
+}
 .trip-sheet.compact { max-height: 46vh; }
 @media (max-width: 640px) {
   #veh-overlay { width: 100%; left: 0; transform: none; bottom: 0; }

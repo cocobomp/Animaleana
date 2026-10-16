@@ -116,6 +116,7 @@ export class RoadView {
     vehicle.removeColliders();
     vehicle.root.removeFromParent();
     vehicle.lead.visible = false;
+    vehicle.setCutaway(false);
     vehicle.closeRamp();
     for (const p of vehicle.parts) {
       p.t = p.target;
@@ -438,6 +439,25 @@ export class RoadView {
       cam.position.set(center.x + Math.sin(this.orbit) * r, 3.4, center.z + Math.cos(this.orbit) * r);
       this.lookAt.copy(center);
       cam.fov = 55;
+    }
+    // La fiche du trajet cache une partie de l'écran : à droite sur un écran large, en bas sur un téléphone.
+    // On décale l'image pour que la route et le véhicule restent visibles à côté.
+    this.sheetAcc = (this.sheetAcc ?? 1) + dt;
+    if (this.sheetAcc > 0.5) {
+      this.sheetAcc = 0;
+      const sheet = this.game.ui.tripEl?.firstChild;
+      this.sheetH = sheet ? sheet.getBoundingClientRect().height : 0;
+    }
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const wide = W >= 900 && cam.aspect > 1.25;
+    const ox = wide ? W * 0.2 : 0;
+    const oy = wide ? 0 : Math.round(H * Math.min(0.24, (this.sheetH ?? 0) / H / 2));
+    const key = `${ox}|${oy}|${W}x${H}|${cam.fov}`;
+    if (key !== this.offsetKey) {
+      this.offsetKey = key;
+      if (ox || oy) cam.setViewOffset(W, H, ox, oy, W, H);
+      else cam.clearViewOffset();
     }
     cam.updateProjectionMatrix();
     cam.lookAt(this.lookAt);

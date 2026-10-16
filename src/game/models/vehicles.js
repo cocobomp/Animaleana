@@ -881,7 +881,11 @@ export function car(color = 0x2f6fb0, accent = 0x1d1d1f) {
   // Coffre de toit (s'ouvre sur le côté gauche) : le matériel du voyage.
   const roofBox = new THREE.Group();
   roofBox.position.set(0, 1.56, -0.9);
-  roofBox.add(mesh(rbox(0.86, 0.2, 1.7, 0.09), P.black, 0, 0.1, 0, true));
+  // Un bac creux (fond et bords) : quand le couvercle est ouvert, on voit le matériel rangé dedans.
+  roofBox.add(mesh(rbox(0.86, 0.05, 1.7, 0.02), P.black, 0, 0.025, 0, true));
+  for (const x of [-1, 1]) roofBox.add(mesh(rbox(0.04, 0.2, 1.66, 0.015), P.black, x * 0.41, 0.1, 0, true));
+  for (const z of [-1, 1]) roofBox.add(mesh(rbox(0.82, 0.2, 0.04, 0.015), P.black, 0, 0.1, z * 0.83, true));
+  roofBox.add(mesh(box(0.78, 0.01, 1.58), P.carpet, 0, 0.052, 0));
   const lid = pivot(-0.43, 0.2, 0);
   lid.add(mesh(rbox(0.88, 0.14, 1.72, 0.09), P.black, 0.44, 0.04, 0, true));
   lid.add(mesh(box(0.5, 0.01, 1.2), P.plastic, 0.44, 0.115, 0));

@@ -587,10 +587,12 @@ export class TripVehicle {
     } else {
       // Voiture : tout va dans le coffre de toit, bien rangé.
       const base = this.main.cargo.roof;
-      list.forEach((id, k) => {
-        const col = k % 3;
-        const row = Math.floor(k / 3);
-        put(id, new THREE.Vector3(base.x - 0.26 + col * 0.26, base.y - 0.16, base.z - 0.62 + row * 0.42), 0.55, 0);
+      // (4 objets dans la longueur du coffre, sur 2 rangées ; les gros objets un peu plus petits)
+      list.slice(0, 8).forEach((id, k) => {
+        const col = k % 4;
+        const row = Math.floor(k / 4);
+        const big = ['saddle', 'hay', 'water', 'blanket'].includes(id);
+        put(id, new THREE.Vector3(base.x - 0.19 + row * 0.38, base.y - 0.15, base.z - 0.6 + col * 0.4), big ? 0.55 : 0.95, big ? Math.PI / 2 : 0);
       });
     }
   }

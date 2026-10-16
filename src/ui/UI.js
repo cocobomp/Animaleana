@@ -1,6 +1,7 @@
 // Interface : barre du haut, bouton d'action, notifications, fenêtres.
 
-import { h, isPhone } from './dom.js';
+import { h, isPhone, safeInsets } from './dom.js';
+import { watchViewport, focusField } from './viewport.js'; // clavier à l'écran
 import { t, L } from '../i18n.js';
 import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
@@ -90,11 +91,37 @@ export class UI {
     }
 
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Escape') {
+      // defaultPrevented : touche déjà traitée (Échap dans la fenêtre du nom ne ferme pas aussi le panneau dessous).
+      if (e.code === 'Escape' && !e.defaultPrevented) {
         if (this.modalOpen) return;
         if (this.panel) this.closePanel();
       }
     });
+
+    // Clavier à l'écran (iPhone) : fenêtres et panneaux restent dans la partie visible (src/ui/viewport.js).
+    watchViewport();
+    // Hauteur de la barre du haut, pour le CSS (#panel commence sous la barre d'outils en paysage et sur ordinateur).
+    this.hudObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.syncHudVars()) : null;
+    this.hudObserver?.observe(this.hud);
+    window.addEventListener('resize', () => this.syncHudVars());
+    // Messages : quand on les déplace (tutorial.layoutTop pose leur top) ou qu'on en ajoute, ils restent dans l'écran.
+    if (typeof MutationObserver === 'function') {
+      new MutationObserver(() => this.fitToasts()).observe(this.toasts, { attributes: true, attributeFilter: ['style'], childList: true });
+    }
+    // La bulle du guide s'efface pendant qu'on tape (CSS) : la fenêtre reprend alors sa place en haut.
+    for (const ev of ['focusin', 'focusout']) {
+      document.addEventListener(ev, () => { if (this.modalOpen) requestAnimationFrame(() => this.syncModalTop()); });
+    }
+  }
+
+  /** Pose --hud-tools-bottom et --hud-info-right (px) : où finissent la barre d'outils et la carte d'infos. */
+  syncHudVars() {
+    const root = document.documentElement.style;
+    const tools = this.hud.hidden ? null : this.hud.querySelector('.hud-buttons')?.getBoundingClientRect();
+    const info = this.hud.hidden ? null : this.hudInfo?.getBoundingClientRect();
+    const set = (k, v) => { if (root.getPropertyValue(k) !== v) root.setProperty(k, v); };
+    set('--hud-tools-bottom', tools?.height ? `${Math.round(tools.bottom)}px` : '');
+    set('--hud-info-right', info?.width ? `${Math.round(info.right)}px` : '');
   }
 
   attach(game) {
@@ -121,6 +148,7 @@ export class UI {
 
   clearScreen() {
     this.screen.replaceChildren();
+    this.screen.scrollTop = 0;
     this.screen.hidden = true;
   }
 
@@ -172,7 +200,8 @@ export class UI {
       h('nav', { class: 'hud-buttons' },
         btn('🐾', t('animals'), () => this.openAnimals()),
         btn('🚜', t('farm'), () => this.openFarm()),
-        btn('🗺️', t('mgmt_btn'), () => this.game.mgmt.toggle()), // vue d'ensemble
+        // Vue d'ensemble : dans « ⋯ Plus » sur téléphone (sept boutons d'au moins 44 px tiennent sur la rangée, pas huit).
+        btn('🗺️', t('mgmt_btn'), () => this.game.mgmt.toggle(), 'secondary'),
         // Vue construction : grille, agrandir le paddock et les enclos, construire (src/game/ConstructionView.js).
         btn('🏗️', t('hud_build'), () => this.game.mgmt.openBuild(), 'build'),
         btn('💼', t('careers'), () => this.openCareers()), // métiers (src/ui/careers.js)
@@ -187,12 +216,13 @@ export class UI {
     );
   }
 
-  /** « ⋯ Plus » (téléphone) : Activités, Avatar, Aide et Réglages dans une petite feuille. */
+  /** « ⋯ Plus » (téléphone) : Vue d'ensemble, Activités, Avatar, Aide et Réglages dans une petite feuille. */
   openMore() {
     const item = (emoji, label, fn) => h('button', { class: 'big-action', onClick: () => { this.hideModal(); fn(); } },
       h('span', { class: 'ba-icon' }, emoji), h('span', { class: 'ba-text' }, h('b', {}, label)));
     this.showModal([
       h('div', { class: 'action-sheet more-sheet' },
+        item('🗺️', t('mgmt_btn'), () => this.game.mgmt.toggle()),
         item('🏆', t('actv_hud'), () => this.openActivities()),
         item('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen())),
         item('❓', t('help'), () => openHelp(this)),
@@ -230,6 +260,7 @@ export class UI {
     if (this.panel?.live && !this.holding) this.refreshPanel();
     this.renderStatus();
     this.pauseBanner.hidden = !g.paused;
+    this.fitToasts();
   }
 
   /**
@@ -269,16 +300,17 @@ export class UI {
       const m = this.game.moodOf(a);
       const text = `${{ happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' }[m]} ${a.name}${it.e.sleeping ? ' 💤' : ''}`;
       if (el.textContent !== text) el.textContent = text;
-      // Écarte l'étiquette vers le haut tant qu'elle chevauche une autre.
+      // Écarte l'étiquette vers le haut tant qu'elle chevauche une autre. La zone qu'on touche fait 44 px de
+      // haut (la pastille visible 28 px, au milieu, cf. .animal-label) : on les espace donc de 46 px.
       const w = 14 + text.length * 8;
       let y = it.y;
       for (let k = 0; k < 6; k++) {
-        const hit = placed.find((q) => Math.abs(q.x - it.x) < (q.w + w) / 2 && Math.abs(q.y - y) < 30);
+        const hit = placed.find((q) => Math.abs(q.x - it.x) < (q.w + w) / 2 && Math.abs(q.y - y) < 44);
         if (!hit) break;
-        y = hit.y - 32;
+        y = hit.y - 46;
       }
       placed.push({ x: it.x, y, w });
-      el.style.transform = `translate(${it.x - w / 2}px, ${y - 30}px)`;
+      el.style.transform = `translate(${it.x - w / 2}px, ${y - 38}px)`;
       el.style.opacity = it.d > 10 ? 0.6 : 1;
     }
     for (const [id, el] of this.labelEls) {
@@ -455,9 +487,18 @@ export class UI {
     const el = h('div', { class: 'toast' }, msg);
     this.toasts.append(el);
     while (this.toasts.children.length > 4) this.toasts.firstChild.remove();
+    this.fitToasts();
     setTimeout(() => el.classList.add('out'), ms);
     setTimeout(() => el.remove(), ms + 400);
     return null;
+  }
+
+  /** Les messages ne sortent jamais par le bas de l'écran (paysage : peu de hauteur) : les plus anciens partent. */
+  fitToasts() {
+    const box = this.toasts;
+    if (box.children.length < 2) return;
+    const limit = window.innerHeight - safeInsets().b - 8;
+    while (box.children.length > 1 && box.getBoundingClientRect().bottom > limit) box.firstChild.remove();
   }
 
   isBlocking() {
@@ -468,7 +509,9 @@ export class UI {
     // Pas par-dessus un mini-jeu en cours (#modal, z-index 50, couvrait .mg-overlay, 45 : « ⭐ Tu
     // passes au niveau 2 ! » en plein milieu des griffes) : la fenêtre attend la fin du mini-jeu,
     // qui appelle flushModals en se fermant. Ses boutons (et ses promesses) marchent pareil.
-    if (this.minigameOpen) {
+    // Ni à la place d'une fenêtre où l'on tape un nom : « ⭐ Niveau 2 » la remplaçait, le nom tapé était
+    // perdu et l'adoption n'aboutissait jamais. Elle attend que le nom soit validé (hideModal la ressort).
+    if (this.minigameOpen || (this.modalOpen && this.modal.querySelector('input[data-autofocus]'))) {
       this.modalQueue.push(content);
       return;
     }
@@ -476,11 +519,46 @@ export class UI {
     this.game && (this.game.input.enabled = false);
     this.modal.replaceChildren(h('div', { class: 'modal-box' }, content));
     this.modal.hidden = false;
+    document.body.classList.add('modal-open');
+    this.watchTutoBubble();
+    // Champ à remplir : le focus est donné ici, tout de suite, encore dans le geste (le tap) qui a ouvert la
+    // fenêtre ; sur iPhone, c'est la seule façon d'ouvrir le clavier sans que l'enfant touche le champ.
+    const field = this.modal.querySelector('input[data-autofocus]');
+    if (field) {
+      focusField(field, true);
+      // Repli (fenêtre sortie de la file d'attente, navigateur qui refuse) : un peu plus tard, hors du geste.
+      if (document.activeElement !== field) setTimeout(() => { if (field.isConnected) focusField(field, true); }, 30);
+    }
+  }
+
+  /**
+   * Fenêtre ouverte pendant le tutoriel : la bulle du guide monte en haut de l'écran (CSS, body.modal-open)
+   * et la fenêtre commence sous elle (--modal-top) au lieu d'être cachée par elle (z-index 55 > 50).
+   */
+  watchTutoBubble() {
+    const bubble = document.getElementById('tuto-bubble');
+    if (bubble && !this.bubbleObserver && typeof ResizeObserver === 'function') {
+      this.bubbleObserver = new ResizeObserver(() => this.syncModalTop());
+      this.bubbleObserver.observe(bubble);
+    }
+    this.syncModalTop();
+  }
+
+  syncModalTop() {
+    const bubble = document.getElementById('tuto-bubble');
+    let top = '';
+    if (this.modalOpen && bubble && !bubble.hidden) {
+      const r = bubble.getBoundingClientRect();
+      if (r.height > 0) top = `${Math.round(r.bottom - this.modal.getBoundingClientRect().top + 8)}px`;
+    }
+    if (this.modal.style.getPropertyValue('--modal-top') !== top) this.modal.style.setProperty('--modal-top', top);
   }
 
   hideModal() {
     this.modalOpen = false;
     this.modal.hidden = true;
+    document.body.classList.remove('modal-open');
+    this.syncModalTop();
     if (this.game) this.game.input.enabled = !this.panel || !this.panel.blocking;
     // La suivante en attente, s'il y en a : après coup, pour laisser la suite de celle-ci
     // (une autre fenêtre qu'elle ouvre tout de suite) passer d'abord.
@@ -511,14 +589,33 @@ export class UI {
     });
   }
 
-  /** Demande un texte. info : contenu affiché au-dessus du champ (ex. fiche de l'animal). */
+  /**
+   * Demande un texte (un nom). info : contenu affiché au-dessus du champ (ex. fiche de l'animal).
+   * À appeler directement dans le gestionnaire du tap (avant tout await) : le champ reçoit alors le focus
+   * dans le geste et le clavier de l'iPhone s'ouvre tout seul (voir showModal).
+   */
   prompt(label, value = '', info = null) {
     return new Promise((resolve) => {
-      const input = h('input', { type: 'text', value, maxlength: 20, id: 'prompt-input' });
-      const done = (v) => { this.hideModal(); resolve(v); };
+      const input = h('input', {
+        type: 'text', value, maxlength: 20, id: 'prompt-input', 'data-autofocus': true,
+        // Des prénoms inventés : ni correction automatique ni suggestions ; « OK » sur la touche Entrée du clavier.
+        enterkeyhint: 'done', autocapitalize: 'words', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false',
+      });
+      let finished = false;
+      const done = (v) => {
+        if (finished) return;
+        finished = true;
+        this.hideModal();
+        resolve(v);
+      };
       input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') done(input.value);
-        if (e.key === 'Escape') done(null);
+        if (e.isComposing) return; // Entrée qui valide un mot en cours de saisie (accents, japonais…)
+        if (e.key === 'Enter' || e.key === 'Escape') {
+          // La touche est traitée ici : elle ne remonte pas jusqu'au jeu (Échap fermait aussi le panneau dessous).
+          e.preventDefault();
+          e.stopPropagation();
+          done(e.key === 'Enter' ? input.value : null);
+        }
       });
       this.showModal([
         info,
@@ -528,7 +625,6 @@ export class UI {
           h('button', { onClick: () => done(null) }, t('cancel')),
           h('button', { class: 'primary', onClick: () => done(input.value) }, 'OK')),
       ]);
-      setTimeout(() => { input.focus(); input.select(); }, 30);
     });
   }
 
@@ -546,6 +642,7 @@ export class UI {
       this.panelBody,
     );
     this.panelEl.hidden = false;
+    document.body.classList.add('panel-open'); // (CSS : bulle du guide, messages et pastilles hors du panneau)
     this.renderPanel(true);
     this.tutorial?.layoutTop?.(); // téléphone : la fiche commence sous la bulle du guide
   }
@@ -579,6 +676,7 @@ export class UI {
     this.panel = null;
     this.panelBody = null;
     this.panelEl.hidden = true;
+    document.body.classList.remove('panel-open');
     this.panelEl.replaceChildren();
     this.panelEl.style.maxHeight = '';
     if (this.game) this.game.input.enabled = true;

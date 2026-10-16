@@ -10,7 +10,7 @@
 // dessinée par src/ui/construction.js. Grille, cadre et poignées n'existent que pendant la vue construction.
 
 import * as THREE from 'three';
-import { h } from '../ui/dom.js';
+import { h, safeInsets } from '../ui/dom.js';
 import { t, getLang } from '../i18n.js';
 import {
   STRUCTURES, CORE_ITEMS, RESIZABLE_CORE, BOUNDS, coreRect, coreRects, footprintOf, apron, isEnclosure, EQUIP_SIZE, capacityOf,
@@ -456,12 +456,14 @@ export class ConstructionView {
     if (key === this.areaKey) return this.area;
     this.areaKey = key;
     const a = this.area;
-    a.x0 = 0;
-    a.y0 = 0;
-    a.x1 = W;
-    a.y1 = H;
+    // Jamais sous l'encoche ni sous la barre d'accueil (paysage : la bulle « Compris ! » passait sous l'encoche).
+    const safe = safeInsets();
+    a.x0 = safe.l;
+    a.y0 = safe.t;
+    a.x1 = W - safe.r;
+    a.y1 = H - safe.b;
     const top = document.querySelector('#hud .hud-buttons')?.getBoundingClientRect();
-    if (top?.height) a.y0 = top.bottom + 6;
+    if (top?.height) a.y0 = Math.max(a.y0, top.bottom + 6);
     const bar = this.view.bar?.getBoundingClientRect();
     if (bar?.height) {
       if (bar.right < W * 0.5) a.x0 = bar.right + 6; // barre sur le côté (paysage)

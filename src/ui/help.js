@@ -132,25 +132,39 @@ function showMe(ui, where) {
 
 export function openHelp(ui) {
   const st = { q: '', open: null };
-  const input = h('input', { type: 'text', id: 'help-search', placeholder: t('helpSearch'), value: '' });
-  input.addEventListener('input', () => { st.q = input.value; ui.renderPanel(); setTimeout(() => { const el = document.getElementById('help-search'); el?.focus(); el?.setSelectionRange(st.q.length, st.q.length); }, 0); });
+  // Le champ et son en-tête sont créés une seule fois et ne sont jamais redessinés : déplacer le champ
+  // dans la page lui fait perdre le focus (sur iPhone, le clavier se fermait après chaque lettre).
+  // Taper ne redessine que la liste des fiches (results).
+  const input = h('input', {
+    type: 'search', id: 'help-search', placeholder: t('helpSearch'), value: '',
+    enterkeyhint: 'search', autocomplete: 'off', autocorrect: 'off', autocapitalize: 'none', spellcheck: 'false',
+  });
+  const results = h('div', { class: 'help-results' });
+  const head = [h('p', { class: 'note' }, t('helpIntro')), h('label', { class: 'field' }, input)];
+  const drawList = () => {
+    const list = searchHelp(st.q);
+    results.replaceChildren(
+      list.length ? '' : h('p', { class: 'note' }, t('helpNothing')),
+      h('div', { class: 'help-list' }, list.map((topic) => {
+        const open = st.open === topic.id || (st.q && list[0] === topic);
+        return h('div', { class: `help-topic ${open ? 'open' : ''}` },
+          h('button', { class: 'help-title', onClick: () => { st.open = open ? null : topic.id; drawList(); } }, `${topic.icon} ${L(topic.title)}`),
+          open ? h('ol', { class: 'help-steps' }, (topic.steps[getLang()] ?? topic.steps.fr).map((step) => h('li', {}, step))) : null,
+          open && topic.where ? h('button', { class: 'primary', onClick: () => showMe(ui, topic.where) }, `👉 ${t('helpShowMe')}`) : null);
+      })));
+  };
+  input.addEventListener('input', () => { st.q = input.value; drawList(); });
+  // Entrée (« Rechercher » du clavier) : on garde les résultats et on ferme le clavier pour les voir.
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    input.blur();
+  });
   ui.openPanel({
     title: `❓ ${t('help')}`,
     render: () => {
-      input.value = st.q;
-      const list = searchHelp(st.q);
-      return [
-        h('p', { class: 'note' }, t('helpIntro')),
-        h('label', { class: 'field' }, input),
-        list.length ? null : h('p', { class: 'note' }, t('helpNothing')),
-        h('div', { class: 'help-list' }, list.map((topic) => {
-          const open = st.open === topic.id || (st.q && list[0] === topic);
-          return h('div', { class: `help-topic ${open ? 'open' : ''}` },
-            h('button', { class: 'help-title', onClick: () => { st.open = open ? null : topic.id; ui.renderPanel(); } }, `${topic.icon} ${L(topic.title)}`),
-            open ? h('ol', { class: 'help-steps' }, (topic.steps[getLang()] ?? topic.steps.fr).map((step) => h('li', {}, step))) : null,
-            open && topic.where ? h('button', { class: 'primary', onClick: () => showMe(ui, topic.where) }, `👉 ${t('helpShowMe')}`) : null);
-        })),
-      ];
+      drawList();
+      return [...head, results];
     },
   });
 }

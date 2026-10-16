@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { h, hexColor } from './dom.js';
+import { focusField } from './viewport.js';
 import { t, getLang, setLang } from '../i18n.js';
 import { listProfiles, loadProfile, createProfile, deleteProfile, saveProfile } from '../sim/profile.js';
 import { PLACES, PLACE_IDS } from '../sim/places.js';
@@ -61,11 +62,16 @@ export function showProfiles(ui) {
     ui.screen.hidden = false;
   };
   render();
+  ui.screen.scrollTop = 0;
 }
 
 function newProfile(ui, back) {
   let mode = 'sandbox';
-  const name = h('input', { type: 'text', maxlength: 16, placeholder: t('profileName') });
+  // Prénom de l'enfant : majuscule au début, pas de correction ni de suggestions ; Entrée = « Créer » (go).
+  const name = h('input', {
+    type: 'text', maxlength: 16, placeholder: t('profileName'),
+    enterkeyhint: 'go', autocapitalize: 'words', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false',
+  });
   const modes = h('div', { class: 'modes' });
   const drawModes = () => modes.replaceChildren(...['sandbox', 'manage'].map((m) => h('button', {
     class: `mode-card ${mode === m ? 'selected' : ''}`,
@@ -85,7 +91,11 @@ function newProfile(ui, back) {
       showAvatarEditor(ui, p, () => ui.game.start(p));
     }, () => newProfile(ui, back));
   };
-  name.addEventListener('keydown', (e) => { if (e.key === 'Enter') create(); });
+  name.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    create();
+  });
   ui.screen.replaceChildren(h('div', { class: 'menu' },
     h('h1', {}, t('newProfile')),
     h('label', { class: 'field' }, h('span', {}, t('profileName')), name),
@@ -93,8 +103,17 @@ function newProfile(ui, back) {
     h('div', { class: 'row end' },
       h('button', { onClick: back }, t('cancel')),
       h('button', { class: 'primary', onClick: create }, t('create')))));
+  showScreen(ui);
+  // Focus tout de suite, dans le tap sur « Nouveau profil » : sur iPhone, le clavier s'ouvre alors tout seul
+  // (un focus donné plus tard, dans un setTimeout, ne l'ouvre pas). Repli si le navigateur l'a refusé.
+  focusField(name);
+  if (document.activeElement !== name) setTimeout(() => focusField(name), 30);
+}
+
+/** Montre l'écran plein écran, remonté en haut (sinon il gardait le défilement de l'écran précédent). */
+function showScreen(ui) {
   ui.screen.hidden = false;
-  setTimeout(() => name.focus(), 30);
+  ui.screen.scrollTop = 0;
 }
 
 /** Où veux-tu habiter ? Le décor, la météo et les races du refuge en dépendent. */
@@ -116,6 +135,7 @@ function chooseHome(ui, onChoose, back) {
     ui.screen.hidden = false;
   };
   render();
+  ui.screen.scrollTop = 0; // (redessiné à chaque choix en gardant le défilement ; en haut seulement à l'arrivée)
 }
 
 // ---------------------------------------------------------------- avatar
@@ -217,7 +237,7 @@ export function showAvatarEditor(ui, profile, onDone) {
         h('h3', {}, t('shoes')), swatches('shoes', CLOTHES),
         hat)),
     h('button', { class: 'primary big', onClick: done }, `✅ ${t('done')}`)));
-  ui.screen.hidden = false;
+  showScreen(ui);
 }
 
 /** « v0.3.0 · 2026-10-16 11:05 UTC · cb4307f » (valeurs définies au build ; vides en développement). */

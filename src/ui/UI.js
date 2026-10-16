@@ -13,6 +13,8 @@ import { openHelp } from './help.js';
 import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
 import { tripChips } from './trip.js'; // voyages réalistes
 import { openActivities } from './activities.js';
+import { TOOLS } from '../sim/tools.js';
+import { isSandbox } from '../sim/profile.js';
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
 
@@ -570,8 +572,15 @@ export class UI {
   async careWithGame(a, action) {
     const g = this.game;
     if (g.blockedByPause()) return null;
-    const check = g.canCare(a, action);
-    if (check.reason === 'needTool') return this.toast(t('r_needTool', { tool: t(`tool_${check.tool}`) }), 5000);
+    let check = g.canCare(a, action);
+    if (check.reason === 'needTool') {
+      // Il manque l'outil (longe, shampoing…) : on propose de l'acheter maintenant, sans passer par la sellerie.
+      const tool = check.tool;
+      const label = `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}`;
+      const ok = await this.confirm(t(isSandbox(g.profile) ? 'buyToolAskFree' : 'buyToolAsk', { tool: label, price: TOOLS[tool].price }));
+      if (!ok || !g.buyTool(tool)?.ok) return null;
+      check = g.canCare(a, action);
+    }
     if (!check.ok) return this.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name, g: a.sex }));
     const quality = await runMinigame(this, a, action);
     if (quality === null) return null; // fermé avec ✕ : rien n'est appliqué

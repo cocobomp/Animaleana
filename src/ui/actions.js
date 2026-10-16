@@ -6,7 +6,10 @@ import { t, ta } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { canRide } from '../sim/animal.js';
 import { canProduce } from '../sim/farm.js';
-import { canLeash } from '../sim/gear.js';
+import { canLeash, owned, inUse } from '../sim/gear.js';
+import { eligibility, knownTricks } from '../sim/activities.js';
+import { TOOLS } from '../sim/tools.js';
+import { isSandbox } from '../sim/profile.js';
 
 const canLeashNow = (a) => canLeash(a) || (a.following && a.leashed);
 import { speciesName } from './names.js';
@@ -14,7 +17,7 @@ import { CARE, NEEDS, happiness } from '../sim/animal.js';
 import { NEED_ICON } from './UI.js';
 import { bar } from './dom.js';
 import { horseBoxItems } from './facilitiesPanel.js';
-import { activityRuns } from './activities.js';
+import { activityRuns, openActivities } from './activities.js';
 
 const BUILDING_ICON = { petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋', showground: '🏆' };
 
@@ -213,11 +216,79 @@ export function openAnimalActions(ui, a) {
       run: () => { g.toggleFollow(a); ui.closePanel(); },
     });
     items.push(...horseBoxItems(ui, a)); // box à l'écurie
+    // Longe, liberté, saut d'obstacles, balade, agility… : un sous-menu qui dit ce qui est possible.
+    const acts = activityItems(ui, a);
+    if (acts.length) {
+      items.push({
+        icon: '🎯',
+        label: t('actv_hud'),
+        effect: acts.map((it) => it.label).join(' · '),
+        free: true,
+        run: () => openAnimalActivities(ui, a),
+      });
+    }
     items.push({ icon: '📋', label: t('more'), free: true, run: () => ui.openAnimal(a) });
     return items;
   }, () => h('div', { class: 'bars compact' },
     bar(t('happiness'), happiness(a), 'big'),
     NEEDS.map((n) => bar(`${NEED_ICON[n]} ${t(`need_${n}`)}`, a.needs[n]))), true);
+}
+
+/**
+ * Les activités d'un animal : travail à pied (longe, liberté), saut d'obstacles, leçon, balade,
+ * agility, lapin-hop, spectacle. Chaque entrée dit pourquoi elle n'est pas possible ; sans l'outil,
+ * on propose de l'acheter ; sans filet mais avec un filet en stock, on le met d'abord.
+ */
+export function activityItems(ui, a) {
+  const g = ui.game;
+  const sp = SPECIES[a.species];
+  const items = [];
+  const sandbox = isSandbox(g.profile);
+  const groundWork = (x, icon) => {
+    const check = g.canCare(a, x);
+    const missing = check.reason === 'needTool';
+    const tool = missing ? `${TOOLS[check.tool].emoji} ${t(`tool_${check.tool}`)}` : '';
+    items.push({
+      icon,
+      label: t(`act_${x}`),
+      enabled: check.ok || missing,
+      why: check.ok || missing ? '' : ta(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, a),
+      effect: missing ? t(sandbox ? 'needToolTapFree' : 'needToolTap', { tool, price: TOOLS[check.tool].price }) : effectText(x),
+      run: () => ui.careWithGame(a, x),
+    });
+  };
+  if (sp.actions.includes('lunge')) groundWork('lunge', '🌀');
+  if (sp.actions.includes('liberty')) groundWork('liberty', '💛');
+  const activity = (type, icon) => {
+    const why = eligibility(a, type);
+    const spareBridle = why === 'needBridle' && owned(g.profile, 'bridle') > inUse(g.profile, 'bridle');
+    items.push({
+      icon,
+      label: t(`actv_type_${type}`),
+      enabled: !why || spareBridle,
+      why: why && !spareBridle ? ta(`actv_why_${why}`, a) : '',
+      effect: spareBridle ? ta('actv_putBridleFirst', a) : t(`actv_desc_${type}`),
+      run: () => {
+        if (spareBridle && !g.equip(a, 'bridle')?.ok) return;
+        openActivities(ui, { pick: type, animal: a });
+      },
+    });
+  };
+  if (sp.rideable) {
+    activity('lesson', '🎓');
+    activity('jumping', '🏇');
+    activity('trail', '🧭');
+  }
+  if (sp.training?.includes('agility')) activity('agility', '🐕');
+  if (a.species === 'rabbit') activity('hop', '🐇');
+  if (knownTricks(a).length) activity('show', '🎪');
+  return items;
+}
+
+/** Sous-menu « Activités » d'un animal (depuis son menu rapide). */
+export function openAnimalActivities(ui, a) {
+  const sp = SPECIES[a.species];
+  sheet(ui, `🎯 ${t('actv_hud')} · ${a.name}`, `${sp.emoji} ${t('actv_sheetHelp')}`, () => activityItems(ui, a));
 }
 
 /** « 🍖 Faim +45 · ❤️ +6 » : ce que remplit chaque soin. */

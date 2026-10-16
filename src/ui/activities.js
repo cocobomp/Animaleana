@@ -6,6 +6,7 @@ import { t, ta, L } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { PLACES } from '../sim/places.js';
 import { isSandbox } from '../sim/profile.js';
+import { owned, inUse } from '../sim/gear.js';
 import {
   COMPETITION_TYPES, competitionsAt, entryBlock, eligibility, knownTricks, rivals, activityData, awardCounts, MAX_ACTS,
   JUMP_STAGES, comfortHeight, courseForStage, stageForLevel, stageFor, HUTCH_TOYS, hutchPlayBlock,
@@ -299,7 +300,11 @@ export function animalActivitySection(ui, a) {
   const btn = (type, label) => h('button', {
     class: 'act',
     onClick: () => {
-      const why = eligibility(a, type);
+      let why = eligibility(a, type);
+      if (why === 'needBridle' && owned(g.profile, 'bridle') > inUse(g.profile, 'bridle') && g.equip(a, 'bridle')?.ok) {
+        ui.toast(ta('actv_putBridleFirst', a), 2500);
+        why = eligibility(a, type);
+      }
       if (why) return ui.toast(ta(`actv_why_${why}`, a), 4000);
       if (type === 'show') return openActivities(ui, { pick: 'show', animal: a });
       g.activities.start(type, { animal: a });

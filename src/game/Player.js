@@ -5,6 +5,7 @@ import { buildAvatar, animateAvatarWalk, poseAvatar } from './models/avatarModel
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 import { tackEffects } from '../sim/gear.js';
+import { helmetModel } from './models/tackModels.js'; // bombe du cavalier
 
 const WALK = 3.2;
 const RUN = 6.2;
@@ -27,11 +28,15 @@ export class Player {
 
   setAvatar(look) {
     if (this.avatar) {
+      this.helmet?.parent?.remove(this.helmet); // la bombe passe sur le nouvel avatar
       this.root.remove(this.avatar.root);
       disposeModel(this.avatar.root);
     }
     this.avatar = buildAvatar(look);
     this.root.add(this.avatar.root);
+    if (this.helmet) {
+      this.avatar.head.add(this.helmet);
+    }
     if (this.mount) this.seat();
   }
 
@@ -65,9 +70,24 @@ export class Player {
     poseAvatar(a, 'ride');
   }
 
+  /** Bombe du cavalier sur la tête de l'avatar (null : on l'enlève). */
+  setHelmet(h) {
+    if (this.helmet) {
+      this.helmet.parent?.remove(this.helmet);
+      this.helmet = null;
+    }
+    if (!h) return;
+    this.helmet = helmetModel(h.item, h.color);
+    this.helmet.position.set(0, 0.105, -0.01);
+    this.helmet.rotation.x = -0.12;
+    this.helmet.scale.setScalar(1.36);
+    this.avatar.head.add(this.helmet);
+  }
+
   dismount() {
     const e = this.mount;
     if (!e) return null;
+    this.setHelmet(null);
     e.ridden = false;
     e.speed = 0;
     this.mount = null;

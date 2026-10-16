@@ -15,8 +15,9 @@ import { canAfford, isSandbox } from '../sim/profile.js';
 import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
 import { speciesName } from './names.js';
-import { GEAR, BLANKET_COLORS, owned, inUse } from '../sim/gear.js';
-import { TOOLS, hasTool } from '../sim/tools.js';
+import { GEAR } from '../sim/gear.js';
+import { openTackShop, animalGearSection } from './tack.js'; // sellerie : catalogue, fiches, équipement
+import { hasTool } from '../sim/tools.js';
 import { audio } from '../game/audio.js'; // réglage des sons
 import { facilitiesTab } from './facilitiesPanel.js'; // onglet « Bâtiments »
 import { homeSection } from './construction.js'; // rubrique « Maison » (constructions)
@@ -140,9 +141,8 @@ function renderAnimal(ui, g, a) {
   out.push(h('h3', {}, t('activities')), h('div', { class: 'grid' }, acts));
 
   // Équipement
-  const gearItems = Object.entries(GEAR).filter(([, d]) => d.species.includes(a.species));
-  if (gearItems.length) {
-    out.push(h('h3', {}, t('gearTitle')), gearSection(ui, a, gearItems));
+  if (Object.values(GEAR).some((d) => d.species.includes(a.species))) {
+    out.push(h('h3', {}, t('gearTitle')), gearSection(ui, a));
   }
 
   // Maison construite par le joueur (niche, paddock, ranch…)
@@ -606,66 +606,16 @@ export function openFarm(ui) {
   });
 }
 
-function gearSection(ui, a, items) {
-  const g = ui.game;
-  const p = g.profile;
-  return h('div', { class: 'gear-list' }, items.map(([item, def]) => {
-    const worn = a.gear?.[def.slot]?.item === item;
-    const free = owned(p, item) - inUse(p, item);
-    const colors = def.colors ? h('div', { class: 'swatches small' }, Object.entries(BLANKET_COLORS).map(([key, c]) => h('button', {
-      class: `swatch-btn ${worn && a.gear[def.slot].color === key ? 'selected' : ''}`,
-      style: { background: `#${c.toString(16).padStart(6, '0')}` },
-      'aria-label': key,
-      onClick: () => { g.equip(a, item, key); ui.renderPanel(); },
-    }))) : null;
-    return h('div', { class: 'gear-row' },
-      h('span', { class: 'gear-name' }, `${def.emoji} ${t(`gear_${item}`)}`),
-      worn
-        ? h('button', { class: 'small', onClick: () => { g.unequip(a, def.slot); ui.renderPanel(); } }, t('gearRemove'))
-        : h('button', { class: 'small primary', disabled: free <= 0 && !def.colors, onClick: () => { g.equip(a, item); ui.renderPanel(); } },
-          free > 0 ? t('gearPut') : t('gearNone')),
-      colors);
-  }));
+// Équipement de l'animal : par emplacement, avec ce qui lui va (src/ui/tack.js).
+function gearSection(ui, a) {
+  return animalGearSection(ui, a);
 }
 
 // ---------------------------------------------------------------- sellerie
 
-export function openTack(ui) {
-  const g = ui.game;
-  ui.openPanel({
-    title: `🏇 ${t('tackRoom')}`,
-    render: () => {
-      const p = g.profile;
-      const sandbox = isSandbox(p);
-      return [
-        h('p', { class: 'note' }, t('tackHelp')),
-        h('div', { class: 'cards' }, Object.entries(GEAR).map(([item, def]) => h('div', { class: 'card' },
-          h('span', { class: 'card-emoji' }, def.emoji),
-          h('span', { class: 'card-main' },
-            h('b', {}, t(`gear_${item}`)),
-            h('small', {}, `${def.species.map((sid) => SPECIES[sid].emoji).join(' ')} · ${t(`geard_${item}`)}`),
-            h('small', {}, t('gearOwned', { n: owned(p, item), used: inUse(p, item) }))),
-          h('button', { class: 'primary', onClick: () => { g.buyGear(item); ui.renderPanel(); } },
-            sandbox ? t('buy') : `${t('buy')} · ${def.price} 🪙`)))),
-        h('h3', {}, t('toolsTitle')),
-        h('p', { class: 'note' }, t('toolsHelp')),
-        h('div', { class: 'cards' }, Object.entries(TOOLS).map(([tool, def]) => {
-          const have = hasTool(p, tool);
-          return h('div', { class: 'card' },
-            h('span', { class: 'card-emoji' }, def.emoji),
-            h('span', { class: 'card-main' }, h('b', {}, t(`tool_${tool}`)), h('small', {}, t(`toold_${tool}`))),
-            have ? h('span', { class: 'card-side' }, '✅')
-              : h('button', { class: 'primary', onClick: () => { g.buyTool(tool); ui.renderPanel(); } }, sandbox ? t('buy') : `${t('buy')} · ${def.price} 🪙`));
-        })),
-        h('h3', {}, t('gearOnAnimals')),
-        h('div', { class: 'cards' }, g.animalsHere().filter((a) => Object.values(GEAR).some((d) => d.species.includes(a.species)))
-          .map((a) => h('button', { class: 'card', onClick: () => ui.openAnimal(a) },
-            h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
-            h('span', { class: 'card-main' }, h('b', {}, a.name),
-              h('small', {}, Object.values(a.gear ?? {}).map((x) => GEAR[x.item].emoji).join(' ') || t('gearNothing')))))),
-      ];
-    },
-  });
+export function openTack(ui, opts = {}) {
+  // La sellerie a maintenant son catalogue et ses fiches (src/ui/tack.js) ; ce raccourci y mène.
+  return openTackShop(ui, opts);
 }
 
 // ---------------------------------------------------------------- animalerie

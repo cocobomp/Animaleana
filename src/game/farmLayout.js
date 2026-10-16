@@ -12,8 +12,8 @@ const W = 20;
 const D = 14;
 const GATE = 4;
 
-// Sellerie et maison des animaux (à la maison seulement).
-export const TACKROOM = { x: -24, z: -17 };
+// Sellerie (bâtiment où l'on entre, construit par src/game/Interiors.js) et maison des animaux (à la maison seulement).
+export const TACKROOM = { x: -24, z: -17.5 };
 export const PETHOUSE = { x: -12, z: -17, door: { x: -12, z: -13.4 } };
 
 export function buildFarm(world, group, isHome = false) {
@@ -97,13 +97,7 @@ export function buildFarm(world, group, isHome = false) {
     world.colliders.push({ x: 18, z: -20, hw: 3.8, hd: 4.8, kind: 'petshop' });
     world.interactables.push({ kind: 'petshop', x: 18 - 4.9, z: -20 });
 
-    // Sellerie, à côté de l'écurie : selles, filets, licols et outils.
-    const tk = B.tackRoom(t('bld_tackroom'));
-    tk.group.position.set(TACKROOM.x, world.heightAt(TACKROOM.x, TACKROOM.z), TACKROOM.z);
-    tk.group.rotation.y = Math.PI / 2; // la porte regarde vers la cour
-    group.add(tk.group);
-    world.colliders.push({ x: TACKROOM.x, z: TACKROOM.z, hw: 2.8, hd: 3.8, kind: 'tackroom' });
-    world.interactables.push({ kind: 'tackroom', x: TACKROOM.x + 3.9, z: TACKROOM.z });
+    // (La sellerie, à côté de l'écurie, est un bâtiment où l'on entre : voir src/game/Interiors.js.)
 
     // Maison des animaux : on y range chiens, chats et lapins pour la nuit.
     const ph = B.petHouse(t('bld_pethouse'));
@@ -112,7 +106,7 @@ export function buildFarm(world, group, isHome = false) {
     world.colliders.push({ x: PETHOUSE.x, z: PETHOUSE.z, hw: 4.3, hd: 2.8, kind: 'pethouse' });
     world.interactables.push({ kind: 'pethouse', ...PETHOUSE.door });
     world.petHouse = PETHOUSE;
-    world.clearZones.push({ x: TACKROOM.x, z: TACKROOM.z, r: 5 }, { x: PETHOUSE.x, z: PETHOUSE.z, r: 5.5 });
+    world.clearZones.push({ x: TACKROOM.x, z: TACKROOM.z, r: 6 }, { x: PETHOUSE.x, z: PETHOUSE.z, r: 5.5 });
   } else {
     world.petHouse = null;
   }

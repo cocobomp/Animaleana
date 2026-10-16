@@ -27,7 +27,7 @@ export const COLORS = {
   black: 0x1e1b19,
   brown: 0x5a3418, // cuir marron
   havana: 0x8a4a1f, // cuir havane (plus clair)
-  tan: 0xb27a43, // cuir fauve (western)
+  tan: 0x8e5627, // cuir fauve (western)
   gold: 0xc9a227,
   silver: 0xbfc5cc,
 };
@@ -197,6 +197,14 @@ export function inUse(profile, key) {
   ensureTack(profile);
   let n = 0;
   for (const a of profile.animals ?? []) for (const g of Object.values(a.gear ?? {})) if (matches(g.item, key)) n++;
+  return n;
+}
+
+/** Nombre d'exemplaires d'une variante précise (toutes tailles) : ownedVariant(p, 'saddle') = les selles mixtes. */
+export function ownedVariant(profile, id) {
+  ensureTack(profile);
+  let n = 0;
+  for (const [k, c] of Object.entries(profile.items ?? {})) if (parseKey(k).id === id) n += c;
   return n;
 }
 

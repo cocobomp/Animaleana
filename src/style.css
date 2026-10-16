@@ -1543,3 +1543,30 @@ body.actv-nomove #touch-pad { display: none !important; }
   .cl-btn { min-height: 54px; font-size: 1.05rem; }
   .cl-stars { font-size: 1.8rem; }
 }
+
+/* ---------- sellerie : catalogue et fiche d'un objet (src/ui/tack.js) */
+.tk-go { width: 100%; margin: 6px 0 4px; }
+.tk-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 6px; margin: 4px 0; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.tk-tabs::-webkit-scrollbar { display: none; }
+.tk-tabs button { flex-shrink: 0; white-space: nowrap; }
+.tk-card { padding: 6px 10px 6px 6px; }
+.tk-thumb { width: 72px; height: 54px; object-fit: cover; border-radius: 10px; flex-shrink: 0; background: #f4ecdc; }
+.tk-price { font-size: 0.95rem; white-space: nowrap; }
+.tk-mine { color: var(--primary) !important; font-weight: 600; }
+.tk-back { margin: 2px 0 6px; }
+.tk-pic { margin: 0; border-radius: 16px; overflow: hidden; background: #f4ecdc; border: 1px solid var(--line); }
+.tk-pic img { display: block; width: 100%; aspect-ratio: 36 / 25; object-fit: cover; }
+.tk-pic.try { background: #dfe9ef; }
+.tk-pic figcaption { display: grid; gap: 2px; padding: 6px 10px 8px; font-size: 0.9rem; }
+.tk-pic figcaption small { color: var(--muted); }
+.tk-disc { background: #fbf3df; border-color: #e3cfa3; font-weight: 600; }
+.tk-own { background: #e2f5e7; border-color: #b9dfc4; }
+.tk-desc { font-size: 1.02rem; margin: 6px 0; }
+.tk-fx { margin: 6px 0; padding: 8px 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; font-size: 0.92rem; }
+.tk-sizes button { flex: 1 1 auto; }
+.tk-swap { margin: 4px 0; }
+.tk-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 12px 0 6px; }
+.tk-actions .big-action { min-height: 56px; }
+.tk-pick { display: grid; gap: 8px; padding: 10px; background: #fff; border: 1px dashed var(--primary); border-radius: 12px; }
+.tk-slot { display: inline-block; min-width: 74px; color: var(--muted); }
+.tk-dot { display: inline-block; vertical-align: middle; width: 16px; height: 16px; margin-left: 6px; }

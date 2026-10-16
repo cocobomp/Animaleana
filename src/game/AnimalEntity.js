@@ -115,10 +115,10 @@ export class AnimalEntity {
     this.placeLabels();
   }
 
-  /** Met à jour l'équipement visible (selle, couverture…). */
-  applyGear() {
+  /** Met à jour l'équipement visible (selle, couverture…). override : essayage à la sellerie. */
+  applyGear(override = null) {
     if (this.gearGroup) removeGear(this.gearGroup);
-    this.gearGroup = buildGear(this.model, this.data.look, this.data.gear ?? {});
+    this.gearGroup = buildGear(this.model, this.data.look, override ?? this.data.gear ?? {});
   }
 
   applyScale() {

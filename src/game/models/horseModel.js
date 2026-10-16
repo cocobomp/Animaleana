@@ -828,6 +828,20 @@ function buildHair(S, B, look, rig, high) {
         hair.strand(pts, 0.036 * hw, (0.046 + rng() * 0.016) * hw, dir, tint(maneC), neckW, rng() * 0.5, 0.5 + rng() * 0.5, out);
       }
     }
+    // Racines sur la crête : la ligne du dessus de l'encolure reste fournie, des deux côtés.
+    const nr = high ? 40 : 24;
+    for (let i = 0; i < nr; i++) {
+      const t = 0.02 + (i / nr) * 0.95;
+      const c = crestAt(t);
+      const dir = crestDir(t);
+      const nrm = sdfNormal(torso, c, 0.005);
+      const sd = i % 3 === 0 ? -side : side;
+      const h = 0.05 + rng() * 0.03;
+      const p0 = c.clone().addScaledVector(nrm, -0.01);
+      const p1 = p0.clone().addScaledVector(nrm, h * 0.7).add(V(sd * h * 0.4, 0, 0));
+      const p2 = p1.clone().add(V(sd * h * 0.7, -h * 0.5, 0));
+      hair.strand([p0, p1, p2], 0.05, 0.045, dir, tint(maneC), neckW, rng() * 0.5, 0.5 + rng() * 0.5, nrm.clone().add(V(sd * 0.6, 0, 0)).normalize());
+    }
   }
 
   // --- Toupet : retombe entre les yeux, le long du chanfrein.

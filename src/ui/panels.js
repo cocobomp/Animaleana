@@ -1,5 +1,6 @@
 // Fenêtres du jeu : fiche d'un animal, liste, adoption, voyage, journal, petits boulots, réglages.
 
+import { checkForUpdate } from './updates.js';
 import { h, bar, hexColor } from './dom.js';
 import { t, L, getLang, setLang } from '../i18n.js';
 import { SPECIES, getBreed, NAMES } from '../sim/species.js';
@@ -471,6 +472,16 @@ export function openSettings(ui) {
         h('p', { class: 'note' }, t('controlsHelp')),
         // Revoir le tutoriel guidé (src/ui/tutorial.js).
         ui.tutorial ? h('button', { class: 'big', onClick: () => ui.tutorial.replay() }, `🎓 ${t('tuto_replay')}`) : null,
+        // Mise à jour du jeu installé (src/ui/updates.js) : cherche, puis bandeau « Recharger » si une version est prête.
+        h('button', {
+          class: 'big',
+          onClick: async (e) => {
+            e.currentTarget.disabled = true;
+            const r = await checkForUpdate();
+            if (r !== 'ready') ui.toast(t(r === 'none' ? 'updateNone' : 'updateUnavailable'), 4500);
+            ui.renderPanel();
+          },
+        }, `🔄 ${t('updateCheck')}`),
         h('button', {
           class: 'danger big',
           onClick: () => {

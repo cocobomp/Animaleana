@@ -12,7 +12,7 @@ npm run dev        # ouvre http://localhost:5173 (aussi accessible depuis un té
 ```
 
 La version installable et utilisable **hors ligne** est publiée sur GitHub Pages à chaque mise à jour de `main` :
-**https://cocobomp.github.io/Animaleana/**. Ouvre-la une première fois, puis installe-la (« Ajouter à l'écran d'accueil » sur téléphone). Elle marche ensuite sans connexion. Les sauvegardes restent sur l'appareil.
+**https://cocobomp.github.io/Animaleana/**. Ouvre-la une première fois, puis installe-la (« Ajouter à l'écran d'accueil » sur téléphone). Elle marche ensuite sans connexion. Les sauvegardes restent sur l'appareil. Quand une nouvelle version est publiée, un bandeau « Nouvelle version prête » propose de recharger (ou ⚙️ Réglages → Rechercher une mise à jour) ; l'écran d'accueil affiche la version en cours.
 
 Pour vérifier le build sur l'ordinateur :
 

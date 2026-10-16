@@ -29,6 +29,11 @@ const fr = {
   volMid: 'Moyen',
   volHigh: 'Fort',
   saveFailed: 'Oups, la sauvegarde a échoué (mémoire pleine ou stockage bloqué)',
+  updateReady: 'Nouvelle version prête',
+  updateReload: 'Recharger',
+  updateCheck: 'Rechercher une mise à jour',
+  updateNone: 'Tu as déjà la dernière version 👍',
+  updateUnavailable: 'Mise à jour impossible ici : ouvre le jeu depuis son adresse https',
 
   avatarTitle: 'Ton avatar',
   skin: 'Peau',
@@ -1766,6 +1771,11 @@ const en = {
   volMid: 'Medium',
   volHigh: 'Loud',
   saveFailed: 'Oops, saving failed (storage full or blocked)',
+  updateReady: 'New version ready',
+  updateReload: 'Reload',
+  updateCheck: 'Check for updates',
+  updateNone: 'You already have the latest version 👍',
+  updateUnavailable: 'Cannot update here: open the game from its https address',
 
   avatarTitle: 'Your avatar',
   skin: 'Skin',

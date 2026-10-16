@@ -5,6 +5,7 @@ import { t, setLang, getLang } from './i18n.js';
 import { UI } from './ui/UI.js';
 import { Game } from './game/Game.js';
 import { Tutorial } from './ui/tutorial.js';
+import { initUpdates } from './ui/updates.js'; // bandeau « nouvelle version prête »
 
 setLang(getLang());
 
@@ -15,6 +16,7 @@ ui.attach(game);
 // Tutoriel guidé + objectif à l'écran (écoute les événements du jeu).
 ui.tutorial = new Tutorial(ui, game);
 ui.showProfiles();
+initUpdates(app, () => game.running && game.save());
 
 // Le service worker garde tout le jeu en cache pour jouer sans réseau.
 // L'écran d'accueil dit quand c'est prêt (« ✅ Prêt à jouer sans Internet »).

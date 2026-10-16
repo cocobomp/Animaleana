@@ -1,6 +1,7 @@
-// Mini-jeux des soins : chaque soin (nourrir, brosser, laver…) se fait en jouant.
-// Le mini-jeu s'ouvre par-dessus le jeu 3D (qui continue de tourner) et renvoie
-// une qualité de 0 à 1, ou null si l'enfant le ferme avec ✕.
+// Mini-jeux des soins et des corvées : chaque soin (nourrir, brosser, laver…) et chaque
+// corvée (curer, balayer, ranger…) se fait en jouant. Le mini-jeu s'ouvre par-dessus le
+// jeu 3D (qui continue de tourner) et renvoie une qualité de 0 à 1, ou null si l'enfant
+// le ferme avec ✕.
 //
 // Chaque mini-jeu (dossier minigames/) est une fonction qui reçoit un `ctx` et
 // renvoie { update(dt), draw(g), down(p), move(p), up(p), key(code, pressed) }.
@@ -16,6 +17,7 @@ import { cleanGame } from './minigames/clean.js';
 import { petGame, playGame, milkGame } from './minigames/fun.js';
 import { lungeGame, libertyGame } from './minigames/horse.js';
 import { audio } from '../game/audio.js'; // petits sons : bien joué / raté / fini
+import { CHORE_GAMES, CHORE_ICONS } from './minigames/chores.js';
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -149,6 +151,54 @@ export function runMinigame(ui, a, action) {
   if (action === 'collect') action = SPECIES[a.species].product?.action;
   const make = GAMES[action];
   if (!make) return Promise.resolve(1);
+  const sp = SPECIES[a.species];
+  return openMinigame(ui, {
+    make,
+    action,
+    a,
+    icon: ICONS[action] ?? '⭐',
+    title: titleFor(a, action),
+    subtitle: `${sp.emoji} ${a.name}`,
+    seed: a.look?.seed ?? 1,
+    endEmoji: sp.emoji,
+    endText: (stars) => t(`mg_end${stars}`, { name: a.name }),
+    // L'animal n'est plus là (il est parti, ou mort de vieillesse) : on ferme sans rien appliquer.
+    stillThere: (game) => !game?.profile || game.profile.animals.some((x) => x.id === a.id),
+  });
+}
+
+/**
+ * Lance le mini-jeu d'une corvée (curer un box, balayer, ranger…) : même cadre, sans animal.
+ * kind : une corvée de CHORE_GAMES ; target : le n° du box pour 'muck' et 'straw'.
+ * o.a : l'animal qui habite là (pour le décor seulement) ; o.subtitle : « Box de Pomme ».
+ * Les corvées sans mini-jeu renvoient tout de suite 1, comme avant.
+ */
+export function runChoreGame(ui, kind, target = null, o = {}) {
+  const make = CHORE_GAMES[kind];
+  if (!make) return Promise.resolve(1);
+  const icon = CHORE_ICONS[kind] ?? '🧹';
+  return openMinigame(ui, {
+    make,
+    action: kind,
+    a: o.a ?? null,
+    chore: { kind, target },
+    icon,
+    title: t(`mg_chore_${kind}`),
+    subtitle: o.subtitle ?? null,
+    seed: 17 + (target ?? 0),
+    endEmoji: icon,
+    endText: (stars) => t(`mg_chore_end${stars}`),
+    stillThere: (game) => !game || !!game.profile,
+  });
+}
+
+/**
+ * Cadre commun : fenêtre, consigne, barre de progression, canvas agrandi, entrées, boucle,
+ * carte de fin et fermeture. o : { make, action, a, chore, icon, title, subtitle, seed,
+ * endEmoji, endText(stars), stillThere(game) }.
+ */
+function openMinigame(ui, o) {
+  const { make, action, a } = o;
   if (ui.minigameOpen) return Promise.resolve(null);
   ui.minigameOpen = true;
 
@@ -159,7 +209,6 @@ export function runMinigame(ui, a, action) {
     // Le bouton du panneau garde le focus : on l'enlève pour qu'Espace / Entrée ne le reclique pas.
     document.activeElement?.blur?.();
 
-    const icon = ICONS[action] ?? '⭐';
     const closeBtn = h('button', { class: 'mg-close', 'aria-label': t('mg_close'), title: t('mg_close') }, '✕');
     const hintEl = h('p', { class: 'mg-hint' });
     const fillEl = h('div', { class: 'mg-progress-fill' });
@@ -170,7 +219,7 @@ export function runMinigame(ui, a, action) {
     const controls = h('div', { class: 'mg-controls' });
     const box = h('div', { class: 'mg-box' },
       h('header', { class: 'mg-head' },
-        h('div', { class: 'mg-title' }, h('span', { class: 'mg-icon' }, icon), h('span', {}, titleFor(a, action)), h('small', {}, `${SPECIES[a.species].emoji} ${a.name}`)),
+        h('div', { class: 'mg-title' }, h('span', { class: 'mg-icon' }, o.icon), h('span', {}, o.title), o.subtitle ? h('small', {}, o.subtitle) : null),
         closeBtn),
       hintEl, progressEl, stage, controls);
     const overlay = h('div', { class: 'mg-overlay', role: 'dialog', 'aria-modal': 'true' }, box);
@@ -204,21 +253,23 @@ export function runMinigame(ui, a, action) {
     let closed = false;
     let quality = null;
 
+    // Pour une corvée, a / sp / col sont null (ou l'animal qui habite là, pour le décor).
     const ctx = {
       a,
-      sp: SPECIES[a.species],
+      sp: a ? SPECIES[a.species] : null,
       action,
+      chore: o.chore ?? null,
       W: MG_W,
       H: MG_H,
       view,
-      col: coatColors(a),
+      col: a ? coatColors(a) : null,
       fx: new Fx(),
-      rng: makeRng((a.look?.seed ?? 1) + Date.now()),
+      rng: makeRng((o.seed ?? 1) + Date.now()),
       time: 0,
       done: false,
       pointer: { x: MG_W / 2, y: MG_H / 2, down: false, over: false, type: 'mouse' },
       t,
-      name: a.name,
+      name: a?.name ?? '',
       /** Consigne en une ligne. kind : '' | 'good' | 'warn'. */
       hint(text, kind = '') {
         if (hintEl.textContent !== text) {
@@ -277,7 +328,7 @@ export function runMinigame(ui, a, action) {
 
     const play = make(ctx);
     // État lisible par les tests automatiques (peek).
-    ui.minigame = { action, ctx, peek: () => play.peek?.() };
+    ui.minigame = { action, chore: o.chore ?? null, ctx, peek: () => play.peek?.() };
 
     function showEnd(msg) {
       if (closed) return;
@@ -285,10 +336,10 @@ export function runMinigame(ui, a, action) {
       const cont = h('button', { class: 'primary mg-continue' }, `${t('mg_continue')} ➜`);
       cont.addEventListener('click', () => close(quality));
       endEl.replaceChildren(h('div', { class: 'mg-end-card' },
-        h('div', { class: 'mg-end-emoji' }, SPECIES[a.species].emoji),
+        h('div', { class: 'mg-end-emoji' }, o.endEmoji),
         h('h2', {}, t(stars === 3 ? 'mg_bravo' : stars === 2 ? 'mg_wellDone' : 'mg_done')),
         h('div', { class: 'mg-stars', 'aria-label': `${stars}/3` }, [1, 2, 3].map((i) => h('span', { class: i <= stars ? 'on' : 'off', style: { animationDelay: `${0.15 + i * 0.18}s` } }, '★'))),
-        h('p', {}, msg ?? t(`mg_end${stars}`, { name: a.name })),
+        h('p', {}, msg ?? o.endText(stars)),
         cont));
       endEl.hidden = false;
       closeBtn.hidden = true;
@@ -356,8 +407,8 @@ export function runMinigame(ui, a, action) {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       ctx.time += dt;
-      // L'animal n'est plus là (il est parti, ou mort de vieillesse) : on ferme sans rien appliquer.
-      if (game?.profile && !game.profile.animals.some((x) => x.id === a.id)) return close(null);
+      // L'animal n'est plus là, ou la partie est finie : on ferme sans rien appliquer.
+      if (!o.stillThere(game)) return close(null);
       play.update?.(dt);
       ctx.fx.update(dt);
       g2.setTransform(1, 0, 0, 1, 0, 0);

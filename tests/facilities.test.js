@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   defaultFacilities, ensureFacilities, boxCount, BASE_BOXES, MAX_BOXES, cleanliness, condition, tickFacilities,
-  doChore, repair, repairCost, canBuyUpgrade, buyUpgrade, assignBox, boxOccupants, releaseBox, stallDirt,
+  canChore, doChore, repair, repairCost, canBuyUpgrade, buyUpgrade, assignBox, boxOccupants, releaseBox, stallDirt,
   applyStallEffects, hasUpgrade, STRAW_COST,
 } from '../src/sim/facilities.js';
 import { createProfile } from '../src/sim/profile.js';
@@ -69,6 +69,28 @@ describe('bâtiments à entretenir', () => {
     p.facilities.house.rooms.kitchen = 10;
     expect(doChore(p, 'kitchen').ok).toBe(true);
     expect(p.facilities.house.rooms.kitchen).toBe(100);
+  });
+
+  it('canChore prévient avant le mini-jeu, sans rien changer ni dépenser', () => {
+    const p = createProfile('Tom', 'manage');
+    p.facilities.boxes[0].clean = 40;
+    p.facilities.boxes[0].straw = 40;
+    p.facilities.house.rooms.living = 50;
+    const money = p.money;
+    expect(canChore(p, 'muck', 0)).toEqual({ ok: true });
+    expect(canChore(p, 'straw', 0)).toEqual({ ok: true });
+    expect(canChore(p, 'living')).toEqual({ ok: true });
+    expect(canChore(p, 'kitchen')).toMatchObject({ ok: false, reason: 'alreadyClean' });
+    expect(canChore(p, 'muck', 7)).toMatchObject({ ok: false, reason: 'locked' });
+    expect(canChore(p, 'fold')).toMatchObject({ ok: false, reason: 'alreadyClean' });
+    expect(canChore(p, 'nope')).toMatchObject({ ok: false, reason: 'unknown' });
+    p.money = 0;
+    expect(canChore(p, 'straw', 0)).toMatchObject({ ok: false, reason: 'money' });
+    expect(canChore(p, 'muck', 0)).toEqual({ ok: true }); // curer est gratuit
+    expect(p.money).toBe(0);
+    expect(p.facilities.boxes[0].clean).toBe(40);
+    expect(p.facilities.house.rooms.living).toBe(50);
+    expect(money).toBeGreaterThan(0);
   });
 
   it('réparer coûte selon l\'usure, gratuit en bac à sable', () => {

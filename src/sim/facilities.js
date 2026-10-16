@@ -150,16 +150,35 @@ export function tickFacilities(f, hours, ctx = {}) {
   wear('pen', 0.03 + 0.005 * (ctx.livestock ?? 0));
 }
 
-/** Fait une corvée. target : index du box pour 'muck' et 'straw'. */
-export function doChore(profile, kind, target = null) {
+/**
+ * La corvée est-elle possible ? Mêmes règles que doChore, sans rien changer ni dépenser :
+ * on le vérifie avant de lancer le mini-jeu, pour ne pas jouer pour rien.
+ */
+export function canChore(profile, kind, target = null) {
   const f = ensureFacilities(profile);
   const c = CHORES[kind];
   if (!c) return { ok: false, reason: 'unknown' };
   if (kind === 'muck' || kind === 'straw') {
     if (target === null || target < 0 || target >= boxCount(f)) return { ok: false, reason: 'locked' };
+    const field = kind === 'muck' ? 'clean' : 'straw';
+    if (f.boxes[target][field] >= 97) return { ok: false, reason: 'alreadyClean' };
+    if (c.cost && !canAfford(profile, c.cost)) return { ok: false, reason: 'money' };
+    return { ok: true };
+  }
+  const [b, room] = c.room;
+  if (f[b].rooms[room] >= 97) return { ok: false, reason: 'alreadyClean' };
+  return { ok: true };
+}
+
+/** Fait une corvée. target : index du box pour 'muck' et 'straw'. */
+export function doChore(profile, kind, target = null) {
+  const check = canChore(profile, kind, target);
+  if (!check.ok) return check;
+  const f = ensureFacilities(profile);
+  const c = CHORES[kind];
+  if (kind === 'muck' || kind === 'straw') {
     const box = f.boxes[target];
     const field = kind === 'muck' ? 'clean' : 'straw';
-    if (box[field] >= 97) return { ok: false, reason: 'alreadyClean' };
     if (c.cost && !spend(profile, c.cost)) return { ok: false, reason: 'money' };
     const gain = 100 - box[field];
     box[field] = 100;
@@ -167,7 +186,6 @@ export function doChore(profile, kind, target = null) {
   }
   const [b, room] = c.room;
   const before = f[b].rooms[room];
-  if (before >= 97) return { ok: false, reason: 'alreadyClean' };
   f[b].rooms[room] = 100;
   return { ok: true, gain: 100 - before };
 }

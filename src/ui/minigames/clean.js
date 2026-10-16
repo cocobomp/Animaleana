@@ -1,5 +1,6 @@
 // Mini-jeu « nettoyer » : curer le box (cheval), l'étable (vache), le clapier (lapin)
 // ou changer la litière (chat). 1) Mettre les saletés dans la brouette. 2) Étaler du propre.
+// Sert aussi à la corvée « curer le box » (chores.js) : sans animal, à la fourche, sans la 2e étape.
 
 import { rrect, ellipse, circle, emoji, label, fillView, dist, distToSegment } from './draw.js';
 
@@ -10,16 +11,33 @@ const SCENES = {
   cat: { floor: '#c9c3b8', dirty: '#a49d90', fresh: '#efe9dc', wall: '#cfe6f2', bin: 'bag', item: 'clump', n: 6 },
 };
 
-export function cleanGame(ctx) {
+/** Mur de planches du box (ou de l'étable), du haut de la vue jusqu'au sol. */
+export function drawBoxWall(g, v, wall, floorY, floorColor) {
+  fillView(g, v, wall, wall);
+  g.strokeStyle = 'rgba(60, 35, 15, 0.35)';
+  g.lineWidth = 3;
+  for (let x = Math.floor(v.x0 / 40) * 40; x < v.x1; x += 40) { g.beginPath(); g.moveTo(x, v.y0); g.lineTo(x, floorY); g.stroke(); }
+  g.fillStyle = floorColor;
+  g.fillRect(v.x0, floorY, v.w, v.y1 - floorY);
+}
+
+/**
+ * o (facultatif, pour les corvées) : species (décor si pas d'animal), n (nombre de saletés),
+ * spread (false : on s'arrête quand tout est dans la brouette), tool(g, x, y) (outil dessiné
+ * sous le doigt), hint (consigne de départ).
+ */
+export function cleanGame(ctx, o = {}) {
   const { a, t, fx } = ctx;
-  const sc = SCENES[a.species] ?? SCENES.horse;
-  const cat = a.species === 'cat';
+  const species = o.species ?? a?.species;
+  const sc = SCENES[species] ?? SCENES.horse;
+  const cat = species === 'cat';
+  const withSpread = o.spread ?? true;
   // Zone du sol (la litière pour le chat)
   const floor = cat ? { x: 30, y: 110, w: 290, h: 210 } : { x: 14, y: 96, w: 312, h: 246 };
   const bin = { x: 362, y: 250 };
   const items = [];
   let tries = 0;
-  while (items.length < sc.n && tries < 500) {
+  while (items.length < (o.n ?? sc.n) && tries < 500) {
     tries++;
     const x = floor.x + 30 + ctx.rng() * (floor.w - 60);
     const y = floor.y + 30 + ctx.rng() * (floor.h - 60);
@@ -37,7 +55,9 @@ export function cleanGame(ctx) {
   let last = null;
   let inBin = 0;
 
-  ctx.hint(t(cat ? 'mg_clean_hint_cat' : 'mg_clean_hint'));
+  ctx.hint(o.hint ?? t(cat ? 'mg_clean_hint_cat' : 'mg_clean_hint'));
+  /** Part de la barre réservée au ramassage (tout, s'il n'y a pas de 2e étape). */
+  const pickShare = withSpread ? 0.6 : 1;
 
   function toBin(it) {
     it.state = 'fly';
@@ -107,26 +127,28 @@ export function cleanGame(ctx) {
           it.state = 'bin';
           inBin++;
           fx.text(bin.x, bin.y - 70, t('mg_hop'), '#2f8a5f', 20);
-          ctx.progress(0.6 * (inBin / items.length));
+          ctx.progress(pickShare * (inBin / items.length));
           if (inBin === items.length && phase === 'pick') {
-            phase = 'spread';
-            ctx.hint(t(cat ? 'mg_clean_spread_cat' : 'mg_clean_spread'), 'good');
-            fx.text(200, 80, t('mg_good'), '#2f8a5f', 26);
+            if (!withSpread) {
+              // Corvée : tout est dans la brouette, c'est fini.
+              phase = 'done';
+              fx.burst(floor.x + floor.w / 2, floor.y + floor.h / 2, '✨', 8, { speed: 160 });
+              const time = ctx.time;
+              ctx.finish(time <= 22 ? 1 : Math.max(0.6, 1 - (time - 22) / 40));
+            } else {
+              phase = 'spread';
+              ctx.hint(t(cat ? 'mg_clean_spread_cat' : 'mg_clean_spread'), 'good');
+              fx.text(200, 80, t('mg_good'), '#2f8a5f', 26);
+            }
           }
         }
       }
     },
     draw(g) {
       const v = ctx.view;
-      fillView(g, v, sc.wall, sc.wall);
-      if (!cat) {
-        // planches du mur
-        g.strokeStyle = 'rgba(60, 35, 15, 0.35)';
-        g.lineWidth = 3;
-        for (let x = Math.floor(v.x0 / 40) * 40; x < v.x1; x += 40) { g.beginPath(); g.moveTo(x, v.y0); g.lineTo(x, floor.y); g.stroke(); }
-        g.fillStyle = sc.dirty;
-        g.fillRect(v.x0, floor.y, v.w, v.y1 - floor.y);
-      } else {
+      if (!cat) drawBoxWall(g, v, sc.wall, floor.y, sc.dirty);
+      else {
+        fillView(g, v, sc.wall, sc.wall);
         g.fillStyle = '#e9dccb';
         g.fillRect(v.x0, 300, v.w, v.y1 - 300);
         // bac à litière
@@ -168,22 +190,26 @@ export function cleanGame(ctx) {
         }
       }
       g.restore();
-      // saletés
-      for (const it of items) if (it.state !== 'bin') drawItem(g, sc.item, it);
+      // saletés (celle qu'on tient est dessinée en dernier, sur l'outil)
+      for (const it of items) if (it.state !== 'bin' && it !== held) drawItem(g, sc.item, it);
       // poubelle / brouette
       drawBin(g, sc.bin, bin, inBin, items.length);
-      // l'animal qui attend
-      g.fillStyle = 'rgba(255,255,255,0.85)';
-      circle(g, 362, 48, 32);
-      g.fill();
-      emoji(g, ctx.sp.emoji, 362, 50, 38);
-      if (phase === 'pick') label(g, `${inBin} / ${items.length}`, 362, 100, 18);
+      // l'animal qui attend (pas d'animal pour une corvée dans un box vide)
+      if (ctx.sp) {
+        g.fillStyle = 'rgba(255,255,255,0.85)';
+        circle(g, 362, 48, 32);
+        g.fill();
+        emoji(g, ctx.sp.emoji, 362, 50, 38);
+      }
+      if (phase === 'pick') label(g, `${inBin} / ${items.length}`, 362, ctx.sp ? 100 : 60, 18);
       // outil
       const pp = ctx.pointer;
       if ((pp.over || pp.down) && !ctx.done) {
         if (phase === 'spread') emoji(g, cat ? '🥄' : '🌾', pp.x + 10, pp.y - 14, 34);
+        else if (o.tool) o.tool(g, pp.x, pp.y + 6);
         else if (!held) emoji(g, cat ? '🥄' : '🧤', pp.x + 12, pp.y - 12, 30);
       }
+      if (held) drawItem(g, sc.item, held);
     },
   };
 }

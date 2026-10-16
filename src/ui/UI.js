@@ -6,7 +6,7 @@ import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
 import { openVet } from './vet.js';
-import { runMinigame } from './minigames.js';
+import { runMinigame, runChoreGame } from './minigames.js';
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
 import { openHelp } from './help.js';
@@ -552,16 +552,22 @@ export class UI {
   openBed() { openBed(this); }
 
   /**
-   * Point d'entrée de chaque corvée (curer un box, balayer, ranger…). Renvoie la qualité (0 à 1),
-   * ou null si on abandonne. Un mini-jeu pourra être branché ici plus tard.
+   * Point d'entrée de chaque corvée (curer un box, balayer, ranger…) : lance son mini-jeu
+   * (src/ui/minigames/chores.js) et renvoie la qualité (0,4 à 1), ou null si on abandonne
+   * (Interiors.chore n'applique alors rien). Une corvée sans mini-jeu renvoie 1.
    */
   async choreWithGame(kind, target = null) {
-    return 1;
+    const g = this.game;
+    if (g?.blockedByPause()) return null;
+    const o = {};
+    // Dans un box : son nom en sous-titre, et le cheval qui y habite regarde faire.
+    if ((kind === 'muck' || kind === 'straw') && Number.isInteger(target) && g?.interiors) {
+      o.subtitle = g.interiors.boxLabel(target);
+      o.a = g.interiors.boxOccupant(target);
+    }
+    return runChoreGame(this, kind, target, o);
   }
 
-  chorewithGame(kind, target = null) {
-    return this.choreWithGame(kind, target);
-  }
   openAnimalActions(a) {
     if (a.stray) return this.game.events.askStray(this.game.events.active); // petit animal perdu (événement)
     const r = openAnimalActions(this, a);

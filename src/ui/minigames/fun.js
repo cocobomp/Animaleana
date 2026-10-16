@@ -1,8 +1,8 @@
 // Mini-jeux « câlins et jeux » : caresser, jouer (balle ou plumeau), traire.
 
-import { drawAnimal, animalShape, fitAnimal, hitAnimal, rrect, ellipse, circle, emoji, label, fillView, sky, clamp, lerp, dist, shade } from './draw.js';
-import { homeBackground, sizeFor, isBig, drawCountZone } from './food.js';
-import { justRight, verdict } from './score.js'; // règle « juste ce qu'il faut »
+import { drawAnimal, animalShape, fitAnimal, hitAnimal, rrect, ellipse, circle, label, fillView, sky, clamp, lerp, dist, shade } from './draw.js';
+// emoji toujours opaque (voir food.js : un emoji prend l'opacité du dernier fillStyle)
+import { homeBackground, sizeFor, isBig, drawCountZone, emojiOpaque as emoji, stopLabel } from './food.js';
 
 // ---------------------------------------------------------------- caresser
 
@@ -45,7 +45,7 @@ function drawHeartGauge(g, x, y, r, value, lo, hi) {
   g.strokeStyle = '#d6457a';
   g.lineWidth = 3;
   g.stroke();
-  label(g, '✓', x + r * 1.55, (yOf(lo) + yOf(hi)) / 2, 20, '#1e5c3e');
+  label(g, '✓', x - r * 1.55, (yOf(lo) + yOf(hi)) / 2, 20, '#1e5c3e');
   g.restore();
 }
 
@@ -75,11 +75,12 @@ export function petGame(ctx) {
   let cool = 0;
   let calmStroke = 0;
   let purr = 0;
+  let lastLove = -9; // dernier « Ronron… » affiché
   let zoneState = 'low'; // 'low' | 'just' | 'high' : pour ne changer la consigne qu'en entrant dans une zone
 
   ctx.hint(t(shy ? 'mg_pet_hint_shy' : 'mg_pet_hint', { name: a.name }));
   ctx.zone(lo, hi);
-  const stopBtn = ctx.stopButton(() => end());
+  const stopBtn = ctx.stopButton(() => { if (prog >= 0.03) end(); }, stopLabel(t)); // (un bouton grisé ne finit jamais le jeu)
   stopBtn.disabled = true;
 
   /** Fin : la note suit le remplissage du cœur par rapport à la zone verte. */
@@ -122,7 +123,12 @@ export function petGame(ctx) {
       heartAcc = 0;
       fx.float(p.x, p.y - 12, prog > hi ? '💤' : atFav ? '💖' : '❤️', atFav ? 26 : 20);
     }
-    if (prog <= hi && atFav && Math.random() < 0.04) fx.text(sh.head.x, sh.head.y - sh.hr * 2, t(a.species === 'cat' ? 'mg_purr' : 'mg_loves'), '#d6457a', 18);
+    // « Ronron… » / « J'adore ! » : pas plus d'une fois par seconde, à gauche de la tête pour ne
+    // pas cacher le grand cœur (en haut à droite).
+    if (prog <= hi && atFav && ctx.time - lastLove > 1.2 && Math.random() < 0.08) {
+      lastLove = ctx.time;
+      fx.text(Math.max(70, sh.head.x - sh.hr * 2.4), sh.head.y - sh.hr * 1.6, t(a.species === 'cat' ? 'mg_purr' : 'mg_loves'), '#d6457a', 18);
+    }
     if (atFav) purr = 0.6;
     stopBtn.disabled = prog < 0.03;
     ctx.progress(prog);
@@ -140,6 +146,7 @@ export function petGame(ctx) {
 
   return {
     peek: () => ({ fav, prog, value: prog, lo, hi, fast, body: { x: sh.bx, y: sh.by } }),
+    key(code, down) { if (down && (code === 'Enter' || code === 'NumpadEnter') && !stopBtn.disabled) end(); },
     down(p) { last = p; lastT = ctx.time; },
     move(p, down) { if (down) stroke(p); },
     up() { last = null; speed *= 0.5; },
@@ -227,7 +234,7 @@ function ballGame(ctx) {
 
   ctx.hint(`${t('mg_ball_hint', { name: a.name })} ${'⚽'.repeat(n)}`);
   ctx.zone((n - 0.5) / max, (n + 0.5) / max);
-  const stopBtn = ctx.stopButton(() => end());
+  const stopBtn = ctx.stopButton(() => { if (rounds >= 1 && ball.state === 'hand') end(); }, stopLabel(t));
   stopBtn.disabled = true;
 
   function throwAt(p) {
@@ -259,7 +266,10 @@ function ballGame(ctx) {
     peek: () => ({ x: pet.x, y: pet.y, ball: ball.state, rounds, n, max, lo: n, hi: n, value: rounds, state: pet.state }),
     down(p) { throwAt(p); },
     key(code, down) {
-      if (down && (code === 'Space' || code === 'Enter')) throwAt({ x: pet.x + pet.f * 40, y: pet.y });
+      // Espace : lancer près de l'animal ; Entrée : « C'est bon ! ».
+      if (!down) return;
+      if (code === 'Space') throwAt({ x: pet.x + pet.f * 40, y: pet.y });
+      else if ((code === 'Enter' || code === 'NumpadEnter') && !stopBtn.disabled) end();
     },
     update(dt) {
       pet.lift = Math.max(0, pet.lift - dt * 80);
@@ -422,7 +432,7 @@ function featherGame(ctx) {
 
   ctx.hint(`${t('mg_feather_hint', { name: a.name })} ${'🪶'.repeat(n)}`);
   ctx.zone((n - 0.5) / max, (n + 0.5) / max);
-  const stopBtn = ctx.stopButton(() => end());
+  const stopBtn = ctx.stopButton(() => { if (catches >= 1) end(); }, stopLabel(t));
   stopBtn.disabled = true;
 
   /** Fin : la note suit le nombre de bonds attrapés par rapport à n. */
@@ -435,6 +445,7 @@ function featherGame(ctx) {
 
   return {
     peek: () => ({ x: cat.x, catches, n, max, lo: n, hi: n, value: catches, jumping: !!cat.jump, held: held > 0 }),
+    key(code, down) { if (down && (code === 'Enter' || code === 'NumpadEnter') && !stopBtn.disabled) end(); },
     move(p) {
       if (held > 0) return;
       feather = { x: clamp(p.x, 20, 380), y: clamp(p.y, 40, floorY - 6) };
@@ -543,8 +554,9 @@ export function milkGame(ctx) {
   const teats = { L: { x: 160, y: 200 }, R: { x: 240, y: 200 } };
   // « Juste ce qu'il faut » : le lait doit arriver au trait vert du seau (une vache en donne
   // plus qu'une chèvre), puis on appuie sur « C'est bon ! ». Un seau plein, c'est trop (et fini).
-  // Le rythme compte toujours, en second : en mesure, chaque pression donne plus de lait, et
-  // les pressions à contretemps coûtent un peu (jusqu'à 0,12), la quantité restant l'essentiel.
+  // Dans la zone = tous les points. Le rythme compte quand même, mais dans le jeu : en mesure,
+  // chaque pression donne plus de lait (on arrive plus vite au trait), et se tromper de côté
+  // ne donne rien.
   const target = (cow ? 0.72 : 0.64) + (ctx.rng() - 0.5) * 0.08;
   const band = 0.08;
   const lo = target - band;
@@ -566,17 +578,26 @@ export function milkGame(ctx) {
   ctx.zone(lo, hi);
   ctx.button(`👈 ${t('mg_left')}`, { cls: 'mg-half', onTap: () => press('L') });
   ctx.button(`${t('mg_right')} 👉`, { cls: 'mg-half', onTap: () => press('R') });
-  const stopBtn = ctx.stopButton(() => end());
+  const stopBtn = ctx.stopButton(() => { if (hits > 0) end(); }, stopLabel(t));
   stopBtn.disabled = true;
+  // Trois boutons côte à côte, c'est trop serré sur un téléphone en portrait (libellés coupés
+  // en deux) : Gauche / Droite sur une ligne, « C'est bon ! » en dessous, sur toute la largeur.
+  // Sur un écran large (paysage, ordinateur), on garde une seule ligne : la scène a besoin de
+  // toute la hauteur. Même seuil que le style des mini-jeux en portrait (640 px).
+  const narrow = typeof matchMedia === 'function' ? matchMedia('(max-width: 640px)') : null;
+  const layoutButtons = () => {
+    const wrap = !!narrow?.matches;
+    if (stopBtn.style) stopBtn.style.flexBasis = wrap ? '100%' : '';
+    if (stopBtn.parentElement?.style) stopBtn.parentElement.style.flexWrap = wrap ? 'wrap' : '';
+  };
+  layoutButtons();
+  narrow?.addEventListener?.('change', layoutButtons);
 
-  /** Fin : la note suit le niveau du seau par rapport au trait vert, moins les fautes de rythme. */
+  /** Fin : la note suit le niveau du seau par rapport au trait vert. */
   function end() {
     if (ctx.done) return;
-    const rhythm = onBeat / Math.max(1, hits);
-    const q = justRight(level, lo, hi) - 0.12 * (1 - rhythm) - 0.02 * mistakes;
-    const why = verdict(level, lo, hi);
+    const { verdict: why } = ctx.finishJust(level, lo, hi, { who: a.name });
     face = why === 'high' ? 2 : 1;
-    ctx.finish(q, t(why === 'just' ? 'mg_justRight' : why === 'low' ? 'mg_tooLittle' : 'mg_tooMuch', { name: a.name }));
   }
 
   function press(side) {
@@ -617,12 +638,14 @@ export function milkGame(ctx) {
 
   return {
     peek: () => ({ expect, phase: (ctx.time % P) / P, P, level, value: level, lo, hi, onBeat, hits, mistakes }),
+    destroy() { narrow?.removeEventListener?.('change', layoutButtons); },
     down(p) { press(p.x < 200 ? 'L' : 'R'); },
     key(code, down) {
       if (!down) return;
       if (code === 'ArrowLeft' || code === 'KeyA' || code === 'KeyQ') press('L');
       if (code === 'ArrowRight' || code === 'KeyD') press('R');
-      if (code === 'Space' || code === 'Enter') press(expect);
+      if (code === 'Space') press(expect);
+      if ((code === 'Enter' || code === 'NumpadEnter') && !stopBtn.disabled) end();
     },
     update(dt) {
       squirt.L = Math.max(0, squirt.L - dt);

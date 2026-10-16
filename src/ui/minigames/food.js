@@ -1,7 +1,24 @@
 // Mini-jeux « repas » : nourrir, donner à boire, donner une friandise.
 
-import { drawAnimal, animalShape, rrect, ellipse, circle, emoji, label, fillView, clamp, lerp, shade } from './draw.js';
-import { justRight, verdict } from './score.js'; // règle « juste ce qu'il faut »
+import { drawAnimal, animalShape, rrect, ellipse, circle, emoji as emojiRaw, label, fillView, clamp, lerp, shade } from './draw.js';
+
+/**
+ * emoji() de draw.js, mais toujours bien opaque : sur un canvas, un emoji en couleur prend
+ * l'opacité du fillStyle courant (après un remplissage translucide, il serait tout pâle).
+ */
+export function emojiOpaque(g, ...args) {
+  g.save();
+  g.fillStyle = '#000';
+  emojiRaw(g, ...args);
+  g.restore();
+}
+const emoji = emojiOpaque;
+
+/**
+ * Libellé du bouton « ✅ C'est bon ! » avec une espace insécable avant « ! » : sur un bouton
+ * étroit (deux boutons côte à côte en 360 px), le « ! » ne part pas seul à la ligne.
+ */
+export const stopLabel = (t) => `✅ ${t('mg_stopHere')}`.replace(/ ([!?:;»])/g, '\u00a0$1');
 
 const BIG = ['horse', 'cow', 'sheep', 'goat'];
 export const isBig = (a) => BIG.includes(a.species);
@@ -57,20 +74,26 @@ const FOOD = {
   cow: { bits: ['#d6c060', '#bfae52', '#a8b84a'], kind: 'hay', label: 'mg_food_hay' },
 };
 
+/** En dessous, « C'est bon ! » reste grisé : une simple tape qui n'a presque rien versé n'est pas une décision. */
+const MIN_POUR = 0.05;
+
 function pourGame(ctx, water) {
   const { a, t, fx } = ctx;
   const big = isBig(a);
   const food = FOOD[a.species] ?? FOOD.dog;
   const floorY = 300;
   // Récipient : gamelle, mangeoire ou seau
+  // (la cible 🎯 dessinée à droite du récipient doit tenir dans les 400 px du cadre)
   const box = water
-    ? (big ? { x: 290, w: 110, h: 100, kind: 'bucket' } : { x: 285, w: 120, h: 44, kind: 'bowl' })
-    : (big ? { x: 285, w: 170, h: 62, kind: 'trough' } : { x: 285, w: 130, h: 46, kind: 'bowl' });
+    ? (big ? { x: 290, w: 110, h: 100, kind: 'bucket' } : { x: 285, w: 120, h: 56, kind: 'bowl' })
+    : (big ? { x: 272, w: 170, h: 62, kind: 'trough' } : { x: 285, w: 130, h: 58, kind: 'bowl' });
   box.bottom = floorY + 6;
   box.top = box.bottom - box.h;
   // « Juste ce qu'il faut » : entre la moitié et les trois quarts du récipient (1 = plein),
   // avec une zone verte de ± 0,12 autour, visible sur la jauge et sur le récipient.
-  // Trop peu OU trop : moins de points, de la même façon des deux côtés (score.js).
+  // On verse en gardant le doigt appuyé (en plusieurs fois si on veut), puis on appuie sur
+  // « ✅ C'est bon ! ». Trop peu OU trop : moins de points, de la même façon des deux côtés
+  // (score.js). Si ça déborde, c'est trop, et c'est fini tout de suite.
   const target = 0.6 + ctx.rng() * 0.16;
   const band = 0.12;
   const lo = target - band;
@@ -85,9 +108,8 @@ function pourGame(ctx, water) {
   let pouring = false;
   let holdTime = 0;
   let spawn = 0;
-  let released = false;
-  let wait = 0;
-  let poured = false;
+  let released = false; // on vient de lâcher : la consigne dira quoi faire ensuite
+  let finishing = false; // « C'est bon ! » appuyé : on finit dès que tout est tombé
   let flow = 0;
   let eatX = 0;
   const drops = [];
@@ -100,33 +122,31 @@ function pourGame(ctx, water) {
 
   ctx.hint(t(water ? 'mg_water_hint' : 'mg_feed_hint'));
   ctx.zone(lo, hi);
-  ctx.button(`${water ? '🚰' : '🫗'} ${t(water ? 'mg_water_btn' : 'mg_feed_btn')}`, {
+  // (🥣 / 🌾 plutôt que 🫗, trop récent : il ne s'affiche pas sur les tablettes un peu anciennes)
+  ctx.button(`${water ? '🚰' : big ? '🌾' : '🥣'} ${t(water ? 'mg_water_btn' : 'mg_feed_btn')}`, {
     hold: true, cls: 'primary', onDown: () => start(), onUp: () => stop(),
   });
+  // « C'est bon ! » : c'est lui qui termine, dès que quelque chose a été versé.
+  const stopBtn = ctx.stopButton(() => askEnd(), stopLabel(t));
+  stopBtn.disabled = true;
+  const canStop = () => !ctx.done && !pouring && !finishing && value() >= MIN_POUR;
 
   function start() {
-    if (ctx.done) return;
+    if (ctx.done || finishing) return;
     pouring = true;
     released = false;
     holdTime = 0;
   }
-  /** Lâcher, c'est décider : dès que tout est tombé, on compte ce qu'il y a dans le récipient. */
+  /** Lâcher arrête de verser ; on peut reprendre, ou appuyer sur « C'est bon ! ». */
   function stop() {
     if (!pouring) return;
     pouring = false;
     released = true;
-    wait = 0;
   }
-
-  function evaluate() {
-    released = false;
-    // Une simple tape qui n'a presque rien versé : ce n'est pas une décision, on laisse réessayer.
-    if (value() < 0.1) {
-      ctx.hint(t('mg_more'), 'warn');
-      fx.text(box.x, box.top - 30, t('mg_more_short'), '#c07a10');
-      return;
-    }
-    end();
+  /** « C'est bon ! » : on attend que tout soit tombé, puis on compte ce qu'il y a dans le récipient. */
+  function askEnd() {
+    if (!canStop()) return;
+    finishing = true;
   }
 
   /** Fin : tous les points dans la zone verte, un peu moins si c'est un peu trop peu ou un peu trop. */
@@ -145,18 +165,19 @@ function pourGame(ctx, water) {
   }
 
   return {
-    peek: () => ({ level, inFlight, value: value(), lo, hi, target, pouring }),
+    peek: () => ({ level, inFlight, value: value(), lo, hi, target, pouring, finishing, canStop: canStop() }),
     down() { start(); },
     up() { stop(); },
     key(code, down) {
-      if (code !== 'Space' && code !== 'Enter') return;
-      if (down) start();
-      else stop();
+      // Espace : verser (garder appuyé) ; Entrée : « C'est bon ! ».
+      if (code === 'Space') {
+        if (down) start();
+        else stop();
+      } else if (down && (code === 'Enter' || code === 'NumpadEnter')) askEnd();
     },
     update(dt) {
       if (pouring) {
         holdTime += dt;
-        poured = true;
         // L'eau coule de plus en plus fort ; les croquettes à vitesse régulière.
         flow = water ? 0.1 + 0.22 * clamp(holdTime / 1.5) : 0.22;
         spawn += dt * (water ? 40 : 16);
@@ -195,6 +216,7 @@ function pourGame(ctx, water) {
       if (!ctx.done) {
         const v = value();
         ctx.progress(v);
+        stopBtn.disabled = !canStop();
         if (v >= 1) {
           // Ça déborde : trop, et c'est fini.
           level = 1;
@@ -203,16 +225,21 @@ function pourGame(ctx, water) {
           pouring = false;
           fx.burst(box.x, box.top, water ? '💦' : '🍂', 8);
           end();
+        } else if (finishing) {
+          if (drops.length === 0) end();
         } else if (pouring && v > hi) {
           ctx.hint(t('mg_stop'), 'warn');
         } else if (pouring && v >= lo) {
           ctx.hint(t('mg_nowStop'), 'good');
         } else if (pouring) {
           ctx.hint(t(water ? 'mg_water_hint' : 'mg_feed_hint'));
-        }
-        if (released && poured) {
-          wait += dt;
-          if (wait > 0.45 && drops.length === 0) evaluate();
+        } else if (released) {
+          // On vient de lâcher : on dit où on en est (encore un peu, c'est bon, ou un peu trop) ;
+          // ce qui tombe encore est déjà compté.
+          released = false;
+          if (v < lo) ctx.hint(t('mg_more'), 'warn');
+          else if (v <= hi) ctx.hint(`✅ ${t('mg_stopHere')}`, 'good');
+          else ctx.hint(t('mg_tooMuch', { name: a.name }), 'warn');
         }
       } else {
         // L'animal vient manger / boire.
@@ -408,7 +435,7 @@ function drawBag(g, x, y, pouring, text, time) {
   g.fillStyle = '#c9b07a';
   g.fillRect(-38, -50, 76, 10);
   g.restore();
-  label(g, text, x + 40, y - 105, 14, '#6b4426');
+  label(g, text, x + 40, y - 94, 14, '#6b4426');
 }
 
 function drawTap(g, box, pouring, flow) {
@@ -475,6 +502,10 @@ export function drawHand(g, x, y, s = 1, flat = true, skin = '#f0c29a') {
  */
 export function drawCountZone(g, x, y, given, n, max, icon, step = 34) {
   g.save();
+  // Fond clair sous tout le compteur : il reste lisible sur le bois foncé comme sur le ciel.
+  g.fillStyle = 'rgba(255, 255, 255, 0.82)';
+  rrect(g, x - 22, y - 22, step * (max - 1) + 44, 44, 14);
+  g.fill();
   // Cadre vert sur les n premières cases
   g.fillStyle = 'rgba(63, 174, 98, 0.3)';
   g.strokeStyle = '#1e8a4a';
@@ -486,7 +517,7 @@ export function drawCountZone(g, x, y, given, n, max, icon, step = 34) {
   for (let i = 0; i < max; i++) {
     const over = i >= n;
     const done = i < given;
-    emoji(g, icon, x + i * step, y, over ? 22 : 26, 0, done ? 1 : over ? 0.22 : 0.4);
+    emoji(g, icon, x + i * step, y, over ? 22 : 26, 0, done ? 1 : over ? 0.3 : 0.45);
     if (over && done) label(g, '!', x + i * step + 12, y - 12, 16, '#c8463c');
   }
   g.restore();
@@ -508,9 +539,11 @@ export function treatGame(ctx) {
   const ax = big ? 150 : 165;
   const treat = TREATS[a.species] ?? '🍪';
   const calmTime = a.personality === 'shy' || a.personality === 'calm' ? 1.6 : a.personality === 'playful' ? 1.05 : 1.25;
-  // « Juste ce qu'il faut » : n friandises (selon l'animal), visibles en haut dans le cadre vert.
-  // Une de plus ou de moins : un peu moins de points ; deux : le plancher. À max, l'animal
-  // a tout mangé et c'est fini (trop).
+  // « Juste ce qu'il faut » : n friandises (selon l'animal), visibles en haut dans le cadre vert,
+  // puis « ✅ C'est bon ! ». Une de plus ou de moins : un peu moins de points ; deux : le
+  // plancher. À max, l'animal a tout mangé et c'est fini (trop). Juste = tous les points :
+  // donner trop tôt (l'animal n'est pas sage) ne retire rien, mais il s'agite de plus belle et
+  // la friandise attend.
   const n = treatCount(a);
   const max = n + 2;
   let state = 'wiggle';
@@ -525,8 +558,9 @@ export function treatGame(ctx) {
   ctx.hint(`${t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint')} ${treat.repeat(n)}`);
   ctx.zone((n - 0.5) / max, (n + 0.5) / max);
   ctx.button(`${treat} ${t('mg_treat_btn')}`, { cls: 'primary', onTap: () => give() });
-  // « C'est bon ! » pour s'arrêter là : disponible dès la première friandise.
-  const stopBtn = ctx.stopButton(() => end());
+  // « C'est bon ! » pour s'arrêter là : disponible dès la première friandise (on revérifie au
+  // tap : un bouton grisé ne doit jamais finir le jeu, même si le navigateur transmet le geste).
+  const stopBtn = ctx.stopButton(() => { if (given > 0) end(); }, stopLabel(t));
   stopBtn.disabled = true;
 
   const shape = () => animalShape(a, { x: ax, y: floorY, s, f: 1, pose: state === 'calm' || state === 'eat' ? pose : 'stand' });
@@ -550,26 +584,31 @@ export function treatGame(ctx) {
       else fx.text(hp.x - 40, hp.y - 60, t('mg_oops'), '#c8463c', 24);
       ctx.progress(given / max);
     } else {
+      // Trop tôt : la main recule, et l'animal, tout excité, met un peu plus longtemps à se calmer.
       penalties++;
       handBack = 1;
+      next = Math.max(next, timer + 0.8);
       const sh = shape();
       fx.text(sh.head.x, sh.head.y - 50, t('mg_wait'), '#c07a10', 22);
       ctx.hint(t('mg_treat_wait', { name: a.name }), 'warn');
     }
   }
 
-  /** Fin : la note suit le nombre donné (juste / un peu trop peu / un peu trop), moins les impatiences. */
+  /** Fin : la note suit le nombre donné (juste / un peu trop peu / un peu trop). */
   function end() {
     if (ctx.done) return;
-    const q = justRight(given, n, n, { slack: 2 }) - 0.08 * penalties;
-    const why = verdict(given, n, n);
-    ctx.finish(q, t(why === 'just' ? 'mg_justRight' : why === 'low' ? 'mg_tooLittle' : 'mg_tooMuch', { name: a.name }));
+    ctx.finishJust(given, n, n, { who: a.name, slack: 2 });
   }
 
   return {
     peek: () => ({ state, given, rounds: given, n, max, lo: n, hi: n, value: given, penalties }),
     down() { give(); },
-    key(code, down) { if (down && (code === 'Space' || code === 'Enter')) give(); },
+    key(code, down) {
+      // Espace : donner ; Entrée : « C'est bon ! » (dès la première friandise).
+      if (!down) return;
+      if (code === 'Space') give();
+      else if ((code === 'Enter' || code === 'NumpadEnter') && given > 0) end();
+    },
     update(dt) {
       timer += dt;
       handBack = Math.max(0, handBack - dt * 2);

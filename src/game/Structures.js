@@ -9,11 +9,11 @@ import {
   STRUCTURES, structuresAt, findStructure, toWorld, enclosureOf, homeZone, zoneRect, hasResidents,
   validatePlacement, build, moveStructure, demolish, assign, unassign, residents, applyComfort, homeOf, structureAtPoint,
   isEnclosure, canBuild, validateCore, validateEquipment, moveCore, moveEquipment, coreRect, coreSize, equipmentPos,
-  footprintOf, sizeOf, RESIZABLE_CORE,
+  footprintOf, sizeOf, RESIZABLE_CORE, followsCore,
 } from '../sim/construction.js';
 import {
   validateResize, resizeCore, resizeStructure, coreResizeOpts, structureResizeOpts, growthCandidates,
-  validateStableExtension,
+  validateStableExtension, coreResidents,
 } from '../sim/resize.js';
 import { extendStable } from '../sim/facilities.js';
 import { addStat } from '../sim/profile.js';
@@ -231,12 +231,14 @@ export class Structures {
   }
 
   /**
-   * Obstacles sans ceux d'une installation de base (ses barrières, ses obstacles, sa porte).
-   * Les équipements comptent (ils sont dans colliders) ; ceux rangés dans l'enclos le suivent.
+   * Obstacles sans ceux d'une installation de base (ses barrières, ses obstacles, sa porte), ni les
+   * équipements rangés dedans : ils la suivent (followsCore, keepEquipmentInside). Les autres comptent.
    */
   envWithout(coreId, ignore = null) {
     const env = this.env(ignore);
-    env.colliders = env.colliders.filter((c) => c.core !== coreId);
+    const layout = this.layout;
+    const mine = new Set(this.game.equipment.filter((q) => followsCore(layout, q.eq, coreId)).map((q) => q.col));
+    env.colliders = env.colliders.filter((c) => c.core !== coreId && !mine.has(c));
     env.blocked = env.blocked.filter((c) => c.core !== coreId);
     return env;
   }
@@ -306,9 +308,10 @@ export class Structures {
 
   // ---------------------------------------------------------------- agrandir
 
-  /** Peut-on donner ce rectangle à l'installation id ? */
+  /** Peut-on donner ce rectangle à l'installation id ? (assez de place pour ceux qui y vivent) */
   validateCoreResize(id, rect) {
-    return validateResize(coreRect(this.layout, id), rect, coreResizeOpts(id), this.envWithout(id));
+    const opts = coreResizeOpts(id, coreResidents(this.profile, this.profile.place, id));
+    return validateResize(coreRect(this.layout, id), rect, opts, this.envWithout(id));
   }
 
   /** Agrandit (ou réduit) la bergerie, le paddock ou l'enclos des lapins. */

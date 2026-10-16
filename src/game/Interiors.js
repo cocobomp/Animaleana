@@ -9,7 +9,7 @@ import { setStableExt as placeTackRoom } from './farmLayout.js';
 import { houseModel, houseRooms, HOUSE_HALL, HOUSE_W, HOUSE_D } from './models/houseInterior.js';
 import { plateTexture } from './models/interiorKit.js';
 import { emojiTexture } from './textures.js';
-import { ENCLOSURES, NAV_HOOKS } from './nav.js';
+import { ENCLOSURES, NAV_HOOKS, pathBlocked } from './nav.js';
 import { HOME } from './AnimalEntity.js'; // paddock (déplaçable en vue d'ensemble)
 import {
   ensureFacilities, boxCount, boxOccupants, assignBox, canChore, doChore, tickFacilities, applyStallEffects,
@@ -88,7 +88,12 @@ export function interiorNav(pos, goal) {
     // Devant l'écurie en venant du paddock : on longe sa barrière avant d'aller à la porte.
     // (marge de 0,3 m : une fois arrivé à ce point, on n'y retourne pas — l'écurie rallongée a des
     // coordonnées à virgule, et sans marge le cheval pouvait rester planté là)
-    if (b.aroundSide && p.lz > D + 3 && p.lx < -(W - 1) - 0.3 && p.lx * b.aroundSide < 0) return way(b, { lx: -(W - 1) * b.aroundSide, lz: D + 9 });
+    // Seulement si on y va tout droit : le paddock agrandi (ou déplacé) peut cacher ce point derrière
+    // sa barrière ; nav.js fait alors le tour de l'enclos par le bon coin, puis passe par la porte.
+    if (b.aroundSide && p.lz > D + 3 && p.lx < -(W - 1) - 0.3 && p.lx * b.aroundSide < 0) {
+      const w = toWorld(b, -(W - 1) * b.aroundSide, D + 9);
+      if (!pathBlocked(pos, w)) return navOut.set(w.x, 0, w.z);
+    }
     if (p.lz >= D - 0.5) return null; // devant : nav.js fait passer par la porte
     // L'écurie se contourne par le côté opposé au paddock.
     const side = b.aroundSide ?? (Math.sign(p.lx) || 1);

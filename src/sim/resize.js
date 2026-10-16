@@ -10,7 +10,7 @@
 import {
   STRUCTURES, CORE_ITEMS, RESIZABLE_CORE, BOUNDS, GAP, REFUND, APRON_DEPTH, coreRect, coreRects, coreSize,
   footprintOf, apron, structuresAt, findStructure, residents, capacityOf, rectsOverlap, sampleRect, grow,
-  EQUIP_SIZE, normRot, frontSide,
+  EQUIP_SIZE, normRot, frontSide, SPACE_GROUPS,
 } from './construction.js';
 import { spend, earn, isSandbox } from './profile.js';
 import { ensureFacilities, stableExt, stableRect, tackRoomPos, TACKROOM_SIZE, canExtendStable } from './facilities.js';
@@ -130,9 +130,22 @@ export function capacityFor(kind, w, d) {
 /**
  * Ce qu'il faut savoir pour redimensionner une installation de base. free : sa place par défaut,
  * qu'on sait bonne : on peut toujours y revenir après avoir réduit (même si un bâtiment la touche presque).
+ * residents : animaux qui y vivent (coreResidents) : on ne la réduit pas au point de ne plus les loger.
  */
-export function coreResizeOpts(id) {
-  return { kind: id, coreId: id, rot: 0, gate: CORE_ITEMS[id].gate, apronDepth: APRON_DEPTH[id], free: coreRect(null, id) };
+export function coreResizeOpts(id, residents = 0) {
+  return { kind: id, coreId: id, rot: 0, gate: CORE_ITEMS[id].gate, apronDepth: APRON_DEPTH[id], free: coreRect(null, id), residents };
+}
+
+/**
+ * Animaux qui vivent dans une installation de base de ce lieu (sans maison construite) : les chevaux au
+ * paddock, le troupeau à la bergerie (pas ceux du pré), les lapins au clapier.
+ */
+export function coreResidents(profile, place, id) {
+  const here = (profile.animals ?? []).filter((a) => a.location === place && !a.homeId);
+  if (id === 'paddock') return here.filter((a) => a.species === 'horse').length;
+  if (id === 'hutch') return here.filter((a) => a.species === 'rabbit').length;
+  if (id === 'pen') return here.filter((a) => SPACE_GROUPS.livestock.includes(a.species) && a.zone !== 'field').length;
+  return 0;
 }
 
 const within = (r, f) => !!f && r.x - r.hw >= f.x - f.hw - 1e-6 && r.x + r.hw <= f.x + f.hw + 1e-6
@@ -166,8 +179,13 @@ export function validateResize(old, nu, opts, env = {}) {
   if (W > lim.max[0] + 1e-6 || D > lim.max[1] + 1e-6) return { ok: false, reason: 'tooBig' };
   if (Math.abs(nu.x) + nu.hw > BOUNDS || Math.abs(nu.z) + nu.hd > BOUNDS) return { ok: false, reason: 'bounds' };
   if (opts.residents) {
-    const { w, d } = localSize(nu, opts.rot);
-    if (capacityFor(opts.kind, w, d) < opts.residents) return { ok: false, reason: 'crowded' };
+    // Trop petit pour ses habitants : refusé si on réduit (agrandir un enclos déjà plein reste permis).
+    const cap = (r) => {
+      const { w, d } = localSize(r, opts.rot);
+      return capacityFor(opts.kind, w, d);
+    };
+    const n = cap(nu);
+    if (n < opts.residents && n < cap(old)) return { ok: false, reason: 'crowded', n: opts.residents };
   }
   const strips = addedStrips(old, nu);
   // (dans sa place par défaut, pas besoin de passage en plus : on ne vérifie que ce qu'on touche vraiment)
@@ -212,13 +230,20 @@ export function validateResize(old, nu, opts, env = {}) {
   return { ok: true };
 }
 
-/** Prix d'un changement de taille : la surface ajoutée se paie, la surface rendue est remboursée à moitié. */
+/**
+ * Prix d'un changement de taille : la surface ajoutée se paie, la surface rendue est remboursée à moitié.
+ * Une installation de base a sa taille de départ offerte : on ne paie que ce qui la dépasse, et réduire ne
+ * rembourse que ce qui la dépassait (réduire le paddock offert ne rapporte rien, et le ramener à sa taille
+ * de départ ne coûte rien).
+ */
 export function resizeCost(profile, kind, old, nu) {
   const l = resizeLimits(kind);
   const delta = round2(areaOf(nu) - areaOf(old));
   if (isSandbox(profile) || Math.abs(delta) < 1e-6) return { cost: 0, refund: 0, delta };
-  if (delta > 0) return { cost: Math.ceil(delta * l.m2), refund: 0, delta };
-  return { cost: 0, refund: Math.floor(-delta * l.m2 * REFUND), delta };
+  const free = CORE_ITEMS[kind] ? CORE_ITEMS[kind].w * CORE_ITEMS[kind].d : 0;
+  const paid = round2(Math.max(areaOf(nu), free) - Math.max(areaOf(old), free));
+  if (paid > 0) return { cost: Math.ceil(paid * l.m2), refund: 0, delta };
+  return { cost: 0, refund: paid < 0 ? Math.floor(-paid * l.m2 * REFUND) : 0, delta };
 }
 
 /** Agrandit (ou réduit) une installation de base de ce lieu : rect = nouveau rectangle (déjà validé). */

@@ -158,6 +158,16 @@ export function equipmentPos(layout, eq) {
 export const EQUIP_SIZE = 1.2;
 
 /**
+ * Cet équipement suit-il l'installation id quand on la déplace (ou l'agrandit) ? Oui s'il est à son
+ * emplacement prévu dans cet enclos, ou si le joueur l'a posé dedans. Il ne gêne donc pas ce déplacement.
+ */
+export function followsCore(layout, eq, id) {
+  if (!eq.pos) return EQUIPMENT_ZONE[eq.type] === id;
+  const r = coreRect(layout, id);
+  return Math.abs(eq.pos[0] - r.x) < r.hw + 0.3 && Math.abs(eq.pos[1] - r.z) < r.hd + 0.3;
+}
+
+/**
  * Le cœur de la ferme, où l'on ne construit pas : la cour devant la maison (on y arrive),
  * le pré du troupeau, les installations de base avec leur entrée,
  * et les emplacements prévus des équipements. id : à quelle installation appartient la zone.

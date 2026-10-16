@@ -14,7 +14,7 @@ import { gltfForest, gltfRocks, hasGltfTrees } from './models/gltfNature.js'; //
 import { buildFarm, rebuildCores } from './farmLayout.js';
 import { buildInteriors } from './Interiors.js'; // écurie et maison où l'on entre
 import { coreAt } from './coreLayout.js'; // installations déplaçables (vue d'ensemble)
-import { enclosure, inside } from './nav.js'; // enclos de base (déplacés ou agrandis : coreLayout.js)
+import { enclosure, inside, setNavBlockers } from './nav.js'; // enclos de base (déplacés ou agrandis : coreLayout.js)
 import { buildShowground } from './showground.js'; // activités : terrain de concours
 import { showgroundFlat } from '../sim/activities.js';
 
@@ -573,6 +573,8 @@ void main() {
     buildFarm(this, g, isHome);
     const padE = enclosure('paddock');
     buildShowground(this, g); // activités : carrière, tribune et jury
+    // Bâtiments fixes : la navigation ne choisit jamais un coin de contournement dans leurs murs.
+    setNavBlockers(this.colliders.filter((c) => c.kind && !c.core));
     if (p.biome === 'garden') deco(B.torii(), 0, 30);
     if (p.biome === 'beach') deco(B.lighthouse(), 70, -60);
 

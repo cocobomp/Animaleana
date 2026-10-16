@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   resizeLimits, worldLimits, dragRect, addedStrips, validateResize, resizeCost, resizeCore, resizeStructure,
   capacityFor, coreResizeOpts, structureResizeOpts, migrateCoreSizes, growthCandidates, validateStableExtension,
-  gateApron, localSize, CORE_VERSION, canResize,
+  gateApron, localSize, CORE_VERSION, canResize, coreResidents,
 } from '../src/sim/resize.js';
 import {
   CORE_ITEMS, coreRect, coreSize, slotOf, footprintOf, capacityOf, refundOf, homeZone, build, assign, enclosureOf,
-  validateCore, moveCore,
+  validateCore, moveCore, followsCore, equipmentPos, corePos,
 } from '../src/sim/construction.js';
 import {
   ensureFacilities, boxCount, stableSlots, canExtendStable, extendStable, stableRect, tackRoomPos, buyUpgrade,
@@ -303,5 +303,74 @@ describe('rallonger l\'écurie', () => {
     const t = tackRoomPos(1);
     const structures = [{ id: 'x', type: 'kennel', place: 'maison', x: t.x, z: t.z, rot: 0 }];
     expect(validateStableExtension(p, { structures }).reason).toBe('overlap');
+  });
+});
+
+describe('agrandir : prix juste, habitants et équipements', () => {
+  it('réduire une installation sous sa taille de départ (offerte) ne rapporte rien ; y revenir ne coûte rien', () => {
+    const p = manage(500);
+    const r = pad(); // 22 × 26 m, offert
+    const small = { ...r, hw: 6, hd: 7 }; // 12 × 14 m
+    expect(resizeCost(p, 'paddock', r, small)).toMatchObject({ cost: 0, refund: 0 });
+    expect(resizeCost(p, 'paddock', small, r)).toMatchObject({ cost: 0, refund: 0 });
+    // Agrandi de 88 m² (176 pièces), puis réduit au minimum : on récupère la moitié de ce qu'on a payé.
+    const big = { ...r, z: r.z + 1, hd: r.hd + 2 };
+    expect(resizeCost(p, 'paddock', r, big).cost).toBe(176);
+    expect(resizeCost(p, 'paddock', big, small).refund).toBe(88);
+    // Agrandir, réduire, revenir : on ne gagne jamais d'argent.
+    for (const rect of [big, small, r, small, big, r]) resizeCore(p, 'maison', 'paddock', rect);
+    expect(p.money).toBeLessThan(500);
+    // La bergerie et le clapier : pareil.
+    const pen = coreRect(null, 'pen');
+    expect(resizeCost(p, 'pen', pen, { ...pen, hw: 6, hd: 4 }).refund).toBe(0);
+    const hu = coreRect(null, 'hutch');
+    expect(resizeCost(p, 'hutch', hu, { ...hu, hw: 2, hd: 2 }).refund).toBe(0);
+    // Un enclos construit a été payé : le réduire rembourse toujours la moitié.
+    const s = build(manage(), 'paddockLarge', 'maison', 40, -30, 0).structure;
+    const f = footprintOf(s);
+    expect(resizeCost(p, 'paddockLarge', f, { ...f, hw: f.hw - 1 }).refund).toBeGreaterThan(0);
+  });
+
+  it('une installation de base ne se réduit pas sous le nombre d\'animaux qui y vivent', () => {
+    const p = manage();
+    for (let i = 0; i < 4; i++) p.animals.push(createAnimal({ species: 'horse', ageDays: 80, location: 'maison' }));
+    expect(coreResidents(p, 'maison', 'paddock')).toBe(4);
+    const r = pad();
+    const tiny = { ...r, hw: 6, hd: 7 }; // 12 × 14 m : 2 places
+    expect(capacityFor('paddock', 12, 14)).toBeLessThan(4);
+    expect(validateResize(r, tiny, coreResizeOpts('paddock', 4), flat).reason).toBe('crowded');
+    expect(validateResize(r, tiny, coreResizeOpts('paddock', 2), flat).ok).toBe(true);
+    // Déjà trop plein : il peut quand même grandir.
+    expect(validateResize(tiny, { ...tiny, x: tiny.x + 2, hw: 8 }, coreResizeOpts('paddock', 9), flat).ok).toBe(true);
+    // Un cheval logé dans une construction, ou en voyage, ne compte pas ; le troupeau au pré non plus.
+    p.animals[0].homeId = 'abc';
+    p.animals[1].location = 'japon';
+    expect(coreResidents(p, 'maison', 'paddock')).toBe(2);
+    p.animals.push({ ...createAnimal({ species: 'sheep', ageDays: 80, location: 'maison' }), zone: 'field' });
+    p.animals.push(createAnimal({ species: 'goat', ageDays: 80, location: 'maison' }));
+    p.animals.push(createAnimal({ species: 'rabbit', ageDays: 80, location: 'maison' }));
+    expect(coreResidents(p, 'maison', 'pen')).toBe(1);
+    expect(coreResidents(p, 'maison', 'hutch')).toBe(1);
+  });
+
+  it('les équipements rangés dans un enclos le suivent : ils ne bloquent pas son déplacement', () => {
+    const layout = {};
+    const feeder = { type: 'penFeeder' }; // à son emplacement prévu, dans la bergerie
+    const brush = { type: 'cowBrush', pos: [10, 33] }; // posé par le joueur dans la bergerie
+    const other = { type: 'petFeeder', pos: [40, 40] }; // ailleurs
+    expect(followsCore(layout, feeder, 'pen')).toBe(true);
+    expect(followsCore(layout, brush, 'pen')).toBe(true);
+    expect(followsCore(layout, other, 'pen')).toBe(false);
+    expect(followsCore(layout, feeder, 'paddock')).toBe(false);
+    const col = (eq) => {
+      const q = equipmentPos(layout, eq);
+      return { x: q.x, z: q.z, hw: 0.5, hd: 0.4, equip: true };
+    };
+    const all = [feeder, brush, other];
+    const p = corePos(layout, 'pen');
+    // Comptées comme obstacles, ses propres mangeoires l'empêchaient de bouger d'un mètre.
+    expect(validateCore('pen', p.x + 1, p.z, { ...flat, colliders: all.map(col) }).ok).toBe(false);
+    const env = { ...flat, colliders: all.filter((eq) => !followsCore(layout, eq, 'pen')).map(col) };
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) expect(validateCore('pen', p.x + dx, p.z + dz, env).ok).toBe(true);
   });
 });

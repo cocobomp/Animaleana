@@ -249,8 +249,10 @@ export function cleanGame(ctx, o = {}) {
     move(p, down) {
       if (!down) return;
       if (held) {
-        held.x = p.x;
-        held.y = p.y;
+        // Gardé dans la scène : glissé puis lâché sous le jeu (sur un bouton), il restait par
+        // terre hors de la vue, impossible à reprendre, et la partie ne finissait plus.
+        held.x = Math.max(16, Math.min(384, p.x));
+        held.y = Math.max(16, Math.min(350, p.y));
       } else if (phase === 'spread') spread(p);
     },
     up(p) {

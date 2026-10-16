@@ -441,10 +441,19 @@ function openMinigame(ui, o) {
       // La mise en page a changé et le ResizeObserver n'est pas encore passé : on remesure.
       if (Math.abs(canvas.clientWidth - layout.w) > 1 || Math.abs(canvas.clientHeight - layout.h) > 1) resize();
       const p = toLocal(e);
+      // Un deuxième doigt pendant que le premier est posé : les jeux n'en suivent qu'un, donc le
+      // premier est lâché là où il était, et le nouveau prend la main. Avant, le « up » du premier
+      // n'arrivait jamais au jeu (objet tenu pour toujours au nettoyage, pouce posé qui bloquait).
+      if (activeId !== null && activeId !== e.pointerId) {
+        const old = activeId;
+        activeId = null;
+        try { canvas.releasePointerCapture?.(old); } catch { /* déjà relâché */ }
+        play.up?.({ x: ctx.pointer.x, y: ctx.pointer.y, id: old, type: ctx.pointer.type });
+      }
       ctx.pointer = { ...ctx.pointer, ...p, down: true, over: true };
       if (activeId === null) {
         activeId = e.pointerId;
-        canvas.setPointerCapture?.(e.pointerId);
+        try { canvas.setPointerCapture?.(e.pointerId); } catch { /* doigt déjà levé */ }
       }
       play.down?.(p);
     });

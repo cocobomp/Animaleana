@@ -417,12 +417,12 @@ export function openSettings(ui) {
       })();
       return [
         h('h3', {}, t('camera')),
-        h('div', { class: 'row' }, ['third', 'first'].map((m) => h('button', {
+        h('div', { class: 'row wrap' }, ['third', 'first'].map((m) => h('button', {
           class: g.rig.mode === m ? 'primary' : '',
           onClick: () => { if (g.rig.mode !== m) g.toggleCamera(); ui.renderPanel(); },
         }, t(m === 'third' ? 'cameraThird' : 'cameraFirst')))),
         h('h3', {}, t('quality')),
-        h('div', { class: 'row' }, ['high', 'low'].map((q) => h('button', {
+        h('div', { class: 'row wrap' }, ['high', 'low'].map((q) => h('button', {
           class: quality === q ? 'primary' : '',
           onClick: () => { g.setQuality(q); location.reload(); },
         }, t(q === 'high' ? 'qualityHigh' : 'qualityLow')))),
@@ -432,12 +432,12 @@ export function openSettings(ui) {
           onClick: () => { g.profile.settings.timeSpeed = sp; ui.renderPanel(); },
         }, t(`speed_${sp}`)))),
         h('h3', {}, t('onScreenControls')),
-        h('div', { class: 'row' }, [[true, 'onScreenOn'], [false, 'onScreenOff']].map(([on, key]) => h('button', {
+        h('div', { class: 'row wrap' }, [[true, 'onScreenOn'], [false, 'onScreenOff']].map(([on, key]) => h('button', {
           class: ui.onScreenControls() === on ? 'primary' : '',
           onClick: () => { ui.setOnScreenControls(on); ui.renderPanel(); },
         }, t(key)))),
         h('h3', {}, t('language')),
-        h('div', { class: 'row' }, [['fr', 'Français'], ['en', 'English']].map(([l, name]) => h('button', {
+        h('div', { class: 'row wrap' }, [['fr', 'Français'], ['en', 'English']].map(([l, name]) => h('button', {
           class: getLang() === l ? 'primary' : '',
           onClick: () => {
             setLang(l);

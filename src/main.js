@@ -16,6 +16,11 @@ ui.attach(game);
 ui.tutorial = new Tutorial(ui, game);
 ui.showProfiles();
 
+// Téléphone : pas de zoom à deux doigts ni au double-tap (la mise en page est fixe : zoomée, la fiche
+// d'un animal sort de l'écran et les boutons du haut deviennent inaccessibles). Le CSS met aussi touch-action: manipulation.
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
 // Le service worker garde tout le jeu en cache pour jouer sans réseau.
 // L'écran d'accueil dit quand c'est prêt (« ✅ Prêt à jouer sans Internet »).
 // Le cache hors ligne n'existe qu'en https (ou sur localhost) : depuis un téléphone sur l'adresse http

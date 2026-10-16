@@ -6,7 +6,7 @@
 //   (« Suivre la quête ») avec ses petites étapes qui se cochent toutes seules.
 // La logique (étapes, réussite) est dans src/sim/tutorial.js.
 
-import { h } from './dom.js';
+import { h, isPhone } from './dom.js';
 import { t, getLang } from '../i18n.js';
 import { OBJECTIVES } from '../sim/objectives.js';
 import { earn } from '../sim/profile.js';
@@ -18,7 +18,7 @@ import {
 
 const GUIDE = '🐶';
 const isTouch = () => matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-const isNarrow = () => window.innerWidth <= 640;
+const isNarrow = isPhone;
 
 export class Tutorial {
   constructor(ui, game) {
@@ -275,13 +275,8 @@ export class Tutorial {
       );
     }
     this.bubble.hidden = false;
-    // Sur téléphone, la bulle descend sous la barre du haut quand il faut toucher un de ses boutons ;
-    // sur ordinateur, elle se place sous la carte d'infos (en haut à gauche).
-    const low = isNarrow() && !!this.highlight?.closest?.('#hud');
-    this.bubble.classList.toggle('low', low);
-    const hudInfo = this.ui.hud.querySelector('.hud-info');
-    const top = low ? this.ui.hud.getBoundingClientRect().bottom + 8 : hudInfo ? hudInfo.getBoundingClientRect().bottom + 12 : 160;
-    this.bubble.style.setProperty('--tuto-top', `${Math.round(top)}px`);
+    // Sa position : sous la carte d'infos (ordinateur) ou sous tout le bloc du haut (téléphone), voir layoutTop().
+    this.layoutTop();
   }
 
   async askSkip() {
@@ -465,69 +460,126 @@ export class Tutorial {
 
   // ------------------------------------------------------------ quêtes claires
 
-  /** Position de l'objectif : sous la carte d'infos (ordinateur) ou sous la barre du haut (téléphone). */
-  trackerTop() {
-    const ref = isNarrow() ? this.ui.hud : this.ui.hud.querySelector('.hud-info');
-    return ref ? Math.round(ref.getBoundingClientRect().bottom + 8) : 156;
-  }
-
   /**
    * L'objectif épinglé à l'écran.
    * - quête suivie : son nom, ses étapes (✅ faite, 👉 en cours, ⬜ à faire), « Arrêter » ;
    * - sinon : la quête conseillée et un bouton « Suivre ».
+   * Sur téléphone, c'est une pastille d'une ligne (la quête, ou l'étape en cours quand on la suit)
+   * avec un petit bouton 🧭 / ⏹ ; on la touche pour la déplier.
    */
   renderTracker() {
     const p = this.profile;
-    if (!p || this.active || this.ui.isBlocking()) {
+    // Téléphone : une fenêtre ouverte prend presque tout l'écran ; on range la pastille pour laisser la place aux messages.
+    if (!p || this.active || this.ui.isBlocking() || (isNarrow() && this.ui.panel)) {
       this.tracker.hidden = true;
-      this.moveToasts();
+      this.layoutTop();
       return;
     }
     const view = followView(p, OBJECTIVES);
     const q = view ? OBJECTIVES.find((o) => o.id === view.id) : suggestedQuest(p, OBJECTIVES);
     if (!q) {
       this.tracker.hidden = true;
-      this.moveToasts();
+      this.layoutTop();
       return;
     }
     const [cur, max] = q.progress(p);
     const where = this.whereText(q.id);
     const stepsKey = view ? view.steps.map((s) => s.state[0]).join('') : '';
-    const key = `${q.id}|${cur}|${where}|${getLang()}|${stepsKey}|${this.questFocus?.id === q.id}`;
+    const compact = isNarrow();
+    const open = !compact || !!this.trackerOpen;
+    const key = `${q.id}|${cur}|${where}|${getLang()}|${stepsKey}|${this.questFocus?.id === q.id}|${compact}|${open}`;
     if (key !== this.trackerKey) {
       this.trackerKey = key;
+      const count = `${Math.min(cur, max)}/${max}`;
+      const show = () => (view ? this.reshow() : this.showQuest(q.id));
+      // Repliée et suivie : on ne lit que l'étape en cours.
+      const title = compact && !open && view?.current ? `👉 ${t(`quest_step_${view.current.id}`)}` : t(`o_${q.id}`);
       const head = h('button', {
         class: 'qt-head',
         title: t('quest_trackerTitle'),
-        onClick: () => (view ? this.reshow() : this.showQuest(q.id)),
+        'aria-expanded': compact ? String(open) : null,
+        onClick: () => {
+          if (!compact) return show();
+          this.trackerOpen = !open;
+          this.trackerKey = '';
+          this.renderTracker();
+        },
       },
       h('span', { class: 'qt-icon' }, view ? '🧭' : '🎯'),
-      h('span', { class: 'qt-main' }, h('b', {}, t(`o_${q.id}`)), h('small', {}, `📍 ${where}`)),
-      h('span', { class: 'qt-side' }, `${Math.min(cur, max)}/${max}`));
-      const items = view
+      h('span', { class: 'qt-main' }, h('b', {}, title), open ? h('small', {}, `📍 ${where}`) : null),
+      h('span', { class: 'qt-side' }, count),
+      compact ? h('span', { class: 'qt-chevron', 'aria-hidden': 'true' }, open ? '▴' : '▾') : null);
+      // Petit bouton de la pastille : suivre la quête, ou arrêter de la suivre.
+      const quick = compact && !open
+        ? (view
+          ? h('button', { class: 'qt-quick', title: t('quest_stop'), 'aria-label': t('quest_stop'), onClick: () => this.stopFollowing() }, '⏹')
+          : h('button', { class: 'qt-quick primary', title: t('quest_follow'), 'aria-label': t('quest_follow'), onClick: () => this.startFollow(q.id) }, '🧭'))
+        : null;
+      const items = open && view
         ? h('ol', { class: 'qt-steps' }, view.steps.map((s) => h('li', { class: `qt-step ${s.state}` },
           h('span', { class: 'qt-check' }, s.state === 'done' ? '✅' : s.state === 'now' ? '👉' : '⬜'),
-          h('span', {}, t(`quest_step_${s.id}`), s.progress && s.state === 'now' ? ` (${Math.min(cur, max)}/${max})` : ''))))
+          h('span', {}, t(`quest_step_${s.id}`), s.progress && s.state === 'now' ? ` (${count})` : ''))))
         : null;
-      const actions = h('div', { class: 'qt-actions' },
-        view
-          ? h('button', { class: 'qt-stop', onClick: () => this.stopFollowing() }, `✋ ${t('quest_stop')}`)
-          : h('button', { class: 'primary qt-follow', onClick: () => this.startFollow(q.id) }, `🧭 ${t('quest_follow')}`));
-      this.tracker.replaceChildren(...[head, items, actions].filter(Boolean));
+      const actions = open
+        ? h('div', { class: 'qt-actions' },
+          compact ? h('button', { class: 'qt-show', onClick: show }, `👉 ${t('quest_showMe')}`) : null,
+          view
+            ? h('button', { class: 'qt-stop', onClick: () => this.stopFollowing() }, `✋ ${t('quest_stop')}`)
+            : h('button', { class: 'primary qt-follow', onClick: () => this.startFollow(q.id) }, `🧭 ${t('quest_follow')}`))
+        : null;
+      this.tracker.replaceChildren(...[h('div', { class: 'qt-row' }, head, quick), items, actions].filter(Boolean));
       this.tracker.classList.toggle('following', !!view);
+      this.tracker.classList.toggle('compact', compact && !open);
     }
-    this.tracker.style.top = `${this.trackerTop()}px`;
     this.tracker.hidden = false;
-    this.moveToasts();
+    this.layoutTop();
   }
 
-  /** Sur téléphone, les messages s'affichent sous l'objectif (sinon ils le cachent). */
+  /**
+   * Place ce qui s'affiche en haut de l'écran.
+   * - Ordinateur : la bulle et l'objectif sous la carte d'infos (en haut à gauche), le reste via le CSS.
+   * - Téléphone : rien ne doit recouvrir la barre du haut ni ses boutons. Sous le bloc HUD + outils, on empile
+   *   la bulle du guide, l'objectif, le bandeau d'événement, les pastilles d'état, l'aide puis les messages.
+   *   Quand une fenêtre (fiche) est ouverte, elle commence sous la bulle (renderTracker range la pastille).
+   */
+  layoutTop() {
+    const ui = this.ui;
+    const hud = ui.hud;
+    const panel = ui.panelEl;
+    const ev = document.getElementById('ev-banner');
+    const stacked = [this.tracker, ev, ui.statusBar, ui.help, ui.toasts];
+    const reset = (el) => { if (el && el.style.top) el.style.top = ''; };
+    if (!isNarrow() || hud.hidden) {
+      const info = hud.querySelector('.hud-info');
+      const base = info ? info.getBoundingClientRect().bottom : 148;
+      this.bubble.style.top = `${Math.round(base + 12)}px`;
+      this.tracker.style.top = `${Math.round(base + 8)}px`;
+      for (const el of stacked.slice(1)) reset(el);
+      if (ui.toasts.style.bottom) ui.toasts.style.bottom = '';
+      if (panel.style.maxHeight) panel.style.maxHeight = '';
+      return;
+    }
+    let y = hud.getBoundingClientRect().bottom + 6;
+    const place = (el, gap = 6) => {
+      if (!el || el.hidden) return;
+      const top = `${Math.round(y)}px`;
+      if (el.style.top !== top) el.style.top = top;
+      const r = el.getBoundingClientRect();
+      if (r.height > 0) y = r.bottom + gap;
+    };
+    place(this.bubble);
+    // La fiche ouverte commence sous la bulle (sinon elle cacherait le bouton ✕ que le guide montre).
+    const panelOpen = !!ui.panel && !panel.hidden;
+    const maxH = panelOpen && !this.bubble.hidden ? `${Math.max(Math.round(window.innerHeight * 0.4), Math.round(window.innerHeight - y))}px` : '';
+    if (panel.style.maxHeight !== maxH) panel.style.maxHeight = maxH;
+    // Les messages viennent en dernier ; fenêtre ouverte, ils se posent entre la barre du haut et la fenêtre
+    // (ils peuvent déborder sur son titre quelques secondes, jamais sur les boutons du haut).
+    for (const el of stacked) place(el);
+    if (ui.toasts.style.bottom) ui.toasts.style.bottom = '';
+  }
+
   moveToasts() {
-    const toasts = this.ui.toasts;
-    if (!toasts) return;
-    const ref = !this.bubble.hidden ? this.bubble : !this.tracker.hidden ? this.tracker : null;
-    const top = ref && isNarrow() && !this.ui.panel ? `${Math.round(ref.getBoundingClientRect().bottom + 8)}px` : '';
-    if (toasts.style.top !== top) toasts.style.top = top;
+    this.layoutTop();
   }
 
   whereText(id) {
@@ -547,6 +599,7 @@ export class Tutorial {
     this.questFocus = null;
     this.ui.closePanel();
     this.trackerKey = '';
+    this.trackerOpen = false; // téléphone : la pastille se replie sur l'étape en cours
     const v = followView(p, OBJECTIVES);
     this.ui.toast(`🧭 ${t(`o_${id}`)} — ${t(`quest_step_${v.current.id}`)}`, 5000);
     this.tick();
@@ -559,6 +612,7 @@ export class Tutorial {
     this.highlight = null;
     this.releaseMarker();
     this.trackerKey = '';
+    this.trackerOpen = false;
     this.tick();
   }
 
@@ -606,6 +660,7 @@ export class Tutorial {
     if (p.questFollow?.id === id) return this.reshow();
     if (p.questFollow) stopFollow(p); // une seule quête guidée à la fois
     this.ui.closePanel();
+    this.trackerOpen = false;
     this.questFocus = { id, spec: g.target, until: performance.now() + 45000 };
     this.markerKey = '';
     this.ui.toast(`${t(`o_${id}`)} — ${t(g.first ? `quest_hint_first_${g.first}` : `quest_hint_${id}`)}`, 6000);

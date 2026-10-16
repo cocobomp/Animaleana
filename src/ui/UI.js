@@ -1,6 +1,6 @@
 // Interface : barre du haut, bouton d'action, notifications, fenêtres.
 
-import { h } from './dom.js';
+import { h, isPhone } from './dom.js';
 import { t, L } from '../i18n.js';
 import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
@@ -124,11 +124,28 @@ export class UI {
   }
 
   buildHud() {
-    const btn = (emoji, label, fn) => h('button', { class: 'hud-btn', onClick: fn, title: label }, h('span', {}, emoji), h('small', {}, label));
+    // Le tutoriel et l'aide retrouvent chaque bouton par son title (= le libellé traduit) : on le garde exact.
+    const btn = (emoji, label, fn, cls = '') => h('button', { class: `hud-btn ${cls}`, onClick: fn, title: label }, h('span', {}, emoji), h('small', {}, label));
     // Refait avec l'interface : il garde ainsi la langue choisie dans les réglages.
     this.pauseBanner.replaceChildren(h('span', {}, `⏸ ${t('pause')}`),
       h('button', { class: 'primary', onClick: () => this.game.setTimeScale(1) }, `▶ ${t('resume')}`));
-    this.hudInfo = h('div', { class: 'hud-info' });
+    // Carte d'infos : les nœuds sont créés une fois ici ; refresh() ne change que les textes.
+    // (Recréer les boutons à chaque rafraîchissement faisait perdre le tap qu'on était en train de donner.)
+    this.hudName = h('span', { class: 'hud-name' });
+    this.hudCoin = h('span', { class: 'coin' });
+    this.hudLevel = h('span', { class: 'hud-lv' });
+    this.xpFill = h('span', { class: 'xp-fill' });
+    this.hudClock = h('div', { class: 'hud-line clock' });
+    this.hudPlace = h('div', { class: 'hud-line place' });
+    this.hudWeather = h('div', { class: 'hud-line weather' });
+    this.timeBar = this.timeControls();
+    this.hudInfo = h('div', { class: 'hud-info' },
+      h('div', { class: 'hud-line strong' }, this.hudName, this.hudCoin),
+      h('div', { class: 'hud-line level' }, this.hudLevel, h('span', { class: 'xp-track' }, this.xpFill)),
+      this.hudClock,
+      this.timeBar,
+      this.hudPlace,
+      this.hudWeather);
     this.hud.replaceChildren(
       this.hudInfo,
       h('nav', { class: 'hud-buttons' },
@@ -138,26 +155,53 @@ export class UI {
         btn('🏆', t('actv_hud'), () => this.openActivities()),
         btn('🧭', t('travel'), () => this.openTravel()),
         btn('📖', t('journal'), () => this.openJournal()),
-        btn('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen())),
-        btn('❓', t('help'), () => openHelp(this)),
-        btn('⚙️', t('settings'), () => this.openSettings())),
+        // Sur téléphone (une seule rangée), ces trois-là passent dans « ⋯ Plus » ; sur ordinateur ils restent visibles.
+        btn('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen()), 'secondary'),
+        btn('❓', t('help'), () => openHelp(this), 'secondary'),
+        btn('⚙️', t('settings'), () => this.openSettings(), 'secondary'),
+        btn('⋯', t('hud_more'), () => this.openMore(), 'more')),
     );
+  }
+
+  /** « ⋯ Plus » (téléphone) : Avatar, Aide et Réglages dans une petite feuille. */
+  openMore() {
+    const item = (emoji, label, fn) => h('button', { class: 'big-action', onClick: () => { this.hideModal(); fn(); } },
+      h('span', { class: 'ba-icon' }, emoji), h('span', { class: 'ba-text' }, h('b', {}, label)));
+    this.showModal([
+      h('div', { class: 'action-sheet more-sheet' },
+        item('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen())),
+        item('❓', t('help'), () => openHelp(this)),
+        item('⚙️', t('settings'), () => this.openSettings())),
+      h('div', { class: 'row end' }, h('button', { onClick: () => this.hideModal() }, t('cancel'))),
+    ]);
   }
 
   refresh() {
     const g = this.game;
-    if (!g?.profile) return;
+    if (!g?.profile || !this.hudInfo) return;
     const s = g.hud();
+    const set = (el, text) => { if (el.textContent !== text) el.textContent = text; };
+    const narrow = isPhone(); // téléphone : carte sur deux lignes + barre du temps
     const money = s.money === null ? t('infinite') : s.money;
-    this.hudInfo.replaceChildren(
-      h('div', { class: 'hud-line strong' }, `👤 ${s.name}`, h('span', { class: 'coin' }, `🪙 ${money}`)),
-      h('div', { class: 'hud-line level' }, `⭐ ${t('level', { n: s.level })}`,
-        h('span', { class: 'xp-track' }, h('span', { class: 'xp-fill', style: { width: `${s.levelProgress * 100}%` } }))),
-      h('div', { class: 'hud-line' }, `📅 ${t('day', { n: s.day })} · 🕐 ${formatClock(s.clock)}${g.timeScale === 0 ? ` · ⏸ ${t('paused')}` : ''}`),
-      this.timeControls(),
-      h('div', { class: 'hud-line' }, `${s.isHome ? '🏠' : s.place.flag} ${L(s.place.name)}`),
-      h('div', { class: 'hud-line' }, `${WEATHER_EMOJI[s.weather]} ${t('weatherNow', { w: t(`w_${s.weather}`), t: s.temperature })} · ${t(`season_${s.season}`)}`),
-    );
+    set(this.hudName, `👤 ${s.name}`);
+    set(this.hudCoin, `🪙 ${money}`);
+    set(this.hudLevel, `⭐ ${t(narrow ? 'levelShort' : 'level', { n: s.level })}`);
+    const xp = `${Math.round(s.levelProgress * 100)}%`;
+    if (this.xpFill.style.width !== xp) this.xpFill.style.width = xp;
+    const placeIcon = s.isHome ? '🏠' : s.place.flag;
+    const weather = `${WEATHER_EMOJI[s.weather]} ${t('weatherNow', { w: t(`w_${s.weather}`), t: s.temperature })}`;
+    const clock = `📅 ${t('day', { n: s.day })} · 🕐 ${formatClock(s.clock)}`;
+    // Téléphone : date, heure et météo sur une ligne (le drapeau du pays quand on voyage) ; le détail en info-bulle.
+    set(this.hudClock, narrow
+      ? `${clock} · ${s.isHome ? '' : `${s.place.flag} `}${WEATHER_EMOJI[s.weather]} ${s.temperature} °C${g.timeScale === 0 ? ' · ⏸' : ''}`
+      : `${clock}${g.timeScale === 0 ? ` · ⏸ ${t('paused')}` : ''}`);
+    set(this.hudPlace, `${placeIcon} ${L(s.place.name)}`);
+    set(this.hudWeather, `${weather} · ${t(`season_${s.season}`)}`);
+    this.hudPlace.hidden = narrow;
+    this.hudWeather.hidden = narrow;
+    const tip = narrow ? `${placeIcon} ${L(s.place.name)} · ${weather} · ${t(`season_${s.season}`)}` : '';
+    if (this.hudInfo.title !== tip) this.hudInfo.title = tip;
+    this.updateTimeBar();
     if (this.panel?.live && !this.holding) this.renderPanel();
     this.renderStatus();
     this.pauseBanner.hidden = !g.paused;
@@ -277,24 +321,30 @@ export class UI {
     this.statusBar.replaceChildren(...chips);
   }
 
-  /** Barre du temps : pause, ×1, ×2, ×4, avancer. */
+  /** Barre du temps : pause, ▶, ⏩ et 🤖 Auto. Créée une fois ; updateTimeBar() allume le bon bouton. */
   timeControls() {
     const g = this.game;
     const b = (label, scale, title) => h('button', {
-      class: `time-btn ${g.timeScale === scale ? 'on' : ''}`,
+      class: 'time-btn',
+      'data-scale': scale,
       title,
       onClick: () => g.setTimeScale(scale),
     }, label);
-    return h('div', { class: 'time-bar' },
-      b('⏸', 0, t('pause')),
-      b('▶', 1, t('timeNormal')),
-      b('⏩', 3, t('timeFast')),
-      // 🤖 Auto : le personnage s'occupe tout seul des tâches simples (visibles dans « Ma liste »).
-      h('button', {
-        class: `time-btn auto ${g.tasks.autoMode ? 'on' : ''}`,
-        title: t('autoModeHelp'),
-        onClick: () => g.tasks.setAuto(!g.tasks.autoMode),
-      }, `🤖 ${t('autoMode')}`));
+    this.timeBtns = [b('⏸', 0, t('pause')), b('▶', 1, t('timeNormal')), b('⏩', 3, t('timeFast'))];
+    // 🤖 Auto : le personnage s'occupe tout seul des tâches simples (visibles dans « Ma liste »).
+    this.autoBtn = h('button', {
+      class: 'time-btn auto',
+      title: t('autoModeHelp'),
+      onClick: () => g.tasks.setAuto(!g.tasks.autoMode),
+    }, `🤖 ${t('autoMode')}`);
+    return h('div', { class: 'time-bar' }, ...this.timeBtns, this.autoBtn);
+  }
+
+  updateTimeBar() {
+    const g = this.game;
+    if (!this.timeBtns) return;
+    for (const b of this.timeBtns) b.classList.toggle('on', g.timeScale === Number(b.dataset.scale));
+    this.autoBtn.classList.toggle('on', !!g.tasks?.autoMode);
   }
 
   openSkipMenu() {
@@ -443,6 +493,7 @@ export class UI {
     this.panel = { title, render, live, animalId, kind };
     this.panelEl.hidden = false;
     this.renderPanel(true);
+    this.tutorial?.layoutTop?.(); // téléphone : la fiche commence sous la bulle du guide
   }
 
   renderPanel(first = false) {
@@ -450,13 +501,18 @@ export class UI {
     if (!p) return;
     const body = this.panelEl.querySelector('.panel-body');
     const scroll = first ? 0 : body?.scrollTop ?? 0;
+    const title = typeof p.title === 'function' ? p.title() : p.title;
+    // L'en-tête (titre, bouton ✕) est gardé d'un rafraîchissement à l'autre : une fenêtre « live » se redessine
+    // toutes les demi-secondes, et un ✕ recréé sous le doigt ne recevait pas le tap.
+    if (first || !this.panelHead?.isConnected) {
+      this.panelTitle = h('h2', {}, title);
+      this.panelHead = h('header', { class: 'panel-head' },
+        this.panelTitle,
+        h('button', { class: 'close', onClick: () => this.closePanel(), 'aria-label': t('close') }, '✕'));
+    } else if (this.panelTitle.textContent !== title) this.panelTitle.textContent = title;
     const content = h('div', { class: 'panel-body' }, p.render());
-    this.panelEl.replaceChildren(
-      h('header', { class: 'panel-head' },
-        h('h2', {}, typeof p.title === 'function' ? p.title() : p.title),
-        h('button', { class: 'close', onClick: () => this.closePanel(), 'aria-label': t('close') }, '✕')),
-      content,
-    );
+    if (body && this.panelHead.isConnected) body.replaceWith(content);
+    else this.panelEl.replaceChildren(this.panelHead, content);
     content.scrollTop = scroll;
   }
 
@@ -464,7 +520,9 @@ export class UI {
     this.panel = null;
     this.panelEl.hidden = true;
     this.panelEl.replaceChildren();
+    this.panelEl.style.maxHeight = '';
     if (this.game) this.game.input.enabled = true;
+    this.tutorial?.layoutTop?.();
   }
 
   closePanelFor(animalId) {

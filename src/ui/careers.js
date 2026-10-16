@@ -74,6 +74,7 @@ function schoolBlock(ui) {
   const started = !!ui.game.profile.careers?.started?.vet;
   return h('div', { class: 'ca-school' },
     h('span', {}, t('vs_card', { n: sc.done, total: sc.total })),
+    h('span', { class: 'ca-school-ticks', 'aria-hidden': 'true' }, sc.lessons.map((l) => (l.done ? '✅' : '⬜')).join('')),
     !started && !sc.diploma ? h('small', {}, t('vs_cardLocked')) : null,
     h('button', { class: 'small primary', onClick: () => ui.openVetSchool() }, t('vs_cardBtn')));
 }

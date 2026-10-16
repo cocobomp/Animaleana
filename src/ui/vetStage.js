@@ -373,6 +373,7 @@ export class VetStage {
           if (this.dead || this.mode !== 'count') return;
           if (this.attempts >= 2) {
             this.measure('heart', { assisted: true });
+            this.attempts = 0;
             this.idle();
           } else {
             Object.assign(this.st, { started: null, taps: 0, ended: false });
@@ -891,12 +892,27 @@ export class VetStage {
       }
     }
     if (cs.coat === 'fleas') {
+      // Des puces un peu partout sur le dos, et un petit groupe là où regarde la loupe (pelage).
       g.fillStyle = '#1b130e';
-      for (let i = 0; i < 9; i++) {
-        const hop = Math.max(0, Math.sin(this.time * 7 + i * 2.3)) * 3 * s;
-        const p = sh.L((Math.sin(i * 12.9) * 0.55 - 0.15) * sh.rx, (Math.cos(i * 7.3) * 0.35 - 0.45) * sh.ry);
-        ellipse(g, p.x, p.y - hop, 0.9 * s, 0.6 * s);
+      g.strokeStyle = '#1b130e';
+      for (let i = 0; i < 16; i++) {
+        const near = i >= 9;
+        const hop = Math.max(0, Math.sin(this.time * 7 + i * 2.3)) * (near ? 1.6 : 3) * s;
+        const p = near
+          ? { x: z.back.x + Math.sin(i * 4.1) * z.back.r * 0.55, y: z.back.y + Math.cos(i * 2.7) * z.back.r * 0.45 }
+          : sh.L((Math.sin(i * 12.9) * 0.55 - 0.15) * sh.rx, (Math.cos(i * 7.3) * 0.35 - 0.45) * sh.ry);
+        ellipse(g, p.x, p.y - hop, 1.1 * s, 0.7 * s, 0.4);
         g.fill();
+        if (zoomed) {
+          // Les pattes, visibles seulement à la loupe.
+          g.lineWidth = 0.25 * s;
+          for (const d of [-0.8, 0, 0.8]) {
+            g.beginPath();
+            g.moveTo(p.x + d * 0.6 * s, p.y - hop + 0.4 * s);
+            g.lineTo(p.x + d * 1.2 * s, p.y - hop + 1.3 * s);
+            g.stroke();
+          }
+        }
       }
     }
   }

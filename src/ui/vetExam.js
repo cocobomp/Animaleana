@@ -175,7 +175,13 @@ export function createExamView(ui, o) {
 
   const work = h('div', { class: 'vx-work' }, stage.el, tools, hintEl);
   const notes = h('div', { class: 'vx-notes' }, h('b', { class: 'vx-notes-title' }, `📒 ${t('vx_notebook')}`), tasksEl, listEl);
-  const view = { work, notes, results, stage, setTool, setHint, destroy: () => stage.destroy() };
+  const view = {
+    work, notes, results, stage, setTool, setHint,
+    destroy: () => {
+      stage.destroy();
+      if (ui.examView === view) ui.examView = null;
+    },
+  };
   ui.examView = view; // la dernière vue d'examen ouverte (lisible par les tests automatiques)
   return view;
 }

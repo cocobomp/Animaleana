@@ -87,7 +87,7 @@ export function openVetSchool(ui) {
       h('span', { class: 'vs-lesson-emoji' }, l.emoji),
       h('span', {}, h('b', {}, `${i + 1}. ${t(`vs_${l.id}_title`)}`, l.basic ? h('span', { class: 'vs-tag' }, t('vs_basicTag')) : null),
         h('small', {}, t(`vs_${l.id}_sub`))),
-      h('span', { class: 'vs-lesson-side' }, l.done ? h('span', { class: 'vs-stars' }, '★'.repeat(l.stars) + '☆'.repeat(3 - l.stars))
+      h('span', { class: 'vs-lesson-side' }, l.done ? ['✅ ', h('span', { class: 'vs-stars' }, '★'.repeat(l.stars) + '☆'.repeat(3 - l.stars))]
         : l.unlocked ? '▶' : '🔒')))));
       return out;
     },

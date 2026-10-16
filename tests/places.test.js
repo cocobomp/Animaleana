@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkTravel, rollWeather } from '../src/sim/places.js';
+import { checkTravel, rollWeather, PLACES } from '../src/sim/places.js';
 import { adoptionCandidates, adoptionPrice, shopPrice } from '../src/sim/adoption.js';
 
 describe('voyages', () => {
@@ -12,6 +12,15 @@ describe('voyages', () => {
   it('un cheval ne rentre pas dans une voiture', () => {
     expect(checkTravel('maison', 'bretagne', 'car', [{ species: 'horse' }]).reason).toBe('horseNeedsVan');
     expect(checkTravel('maison', 'bretagne', 'van', [{ species: 'horse' }]).ok).toBe(true);
+  });
+
+  it('chaque lieu a un biome connu (couleurs du sol de World.js) et un pays', () => {
+    // (un commentaire mal placé avait avalé le biome de l'Angleterre : le voyage plantait)
+    const biomes = ['countryside', 'beach', 'mountain', 'tundra', 'forest', 'garden', 'prairie', 'mediterranean', 'outback'];
+    for (const p of Object.values(PLACES)) {
+      expect(biomes, p.id).toContain(p.biome);
+      expect(p.country, p.id).toMatch(/^[a-z]{2}$/);
+    }
   });
 
   it('la météo est stable pour une même période', () => {

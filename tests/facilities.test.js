@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  defaultFacilities, ensureFacilities, boxCount, BASE_BOXES, MAX_BOXES, cleanliness, condition, tickFacilities,
+  defaultFacilities, ensureFacilities, boxCount, BASE_BOXES, MAX_BOXES, stableSlots, cleanliness, condition, tickFacilities,
   canChore, doChore, repair, repairCost, canBuyUpgrade, buyUpgrade, assignBox, boxOccupants, releaseBox, stallDirt,
   applyStallEffects, hasUpgrade, STRAW_COST,
 } from '../src/sim/facilities.js';
@@ -124,7 +124,7 @@ describe('bâtiments à entretenir', () => {
     s.xp = xpForLevel(6);
     expect(buyUpgrade(s, 'stable', 'boxes1').ok).toBe(true);
     expect(buyUpgrade(s, 'stable', 'boxes2').ok).toBe(true);
-    expect(boxCount(s.facilities)).toBe(MAX_BOXES);
+    expect(boxCount(s.facilities)).toBe(stableSlots(s.facilities)); // les 8 box de l'écurie de départ
   });
 });
 

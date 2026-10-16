@@ -518,6 +518,10 @@ export function washGame(ctx) {
         for (const c of cells) c.soap = 0;
         shake = 1;
         fx.burst(sh.bx, sh.by - sh.ry, '💦', 10, { speed: 220, spread: 3 });
+        // Fin : la jauge remontrait le rinçage (pleine, même sous « Un peu trop peu… ») ; elle
+        // remontre la mousse notée et sa bande verte, comme les autres jeux.
+        ctx.zone(rule.lo / MAX, rule.hi / MAX);
+        ctx.progress(soapValue / MAX);
         rule.finish(soapValue);
       }
     },

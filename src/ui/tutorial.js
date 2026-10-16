@@ -129,7 +129,11 @@ export class Tutorial {
     }
     const step = tutorialStep(p.tutorial);
     if (step?.id !== this.stepId) this.enterStep(step);
-    if (step) {
+    if (step && this.ui.minigameOpen) {
+      // Un mini-jeu a tout l'écran : la bulle (« touche 🍖 Nourrir ») cachait sa consigne et son ✕,
+      // et l'anneau montrait un bouton caché sous le jeu. Ils reviennent au tick qui suit la fin.
+      this.bubble.hidden = true;
+    } else if (step) {
       // Étape « OK » : on montre le bouton de la bulle (ou celui d'un message ouvert).
       if (step.manual) this.applyTarget({ el: this.ui.modalOpen ? this.ui.modal.querySelector('button.primary') : this.bubble.querySelector('.tuto-ok') });
       else this.updateTarget(step.target);
@@ -199,6 +203,7 @@ export class Tutorial {
   }
 
   cheer() {
+    if (this.ui.minigameOpen) return; // pas de bulle « Bravo » par-dessus un mini-jeu en cours
     this.cheerUntil = performance.now() + 1300;
     this.highlight = null;
     this.bubbleKey = 'cheer';
@@ -437,7 +442,8 @@ export class Tutorial {
   /** Le cercle qui clignote autour du bouton à presser, et le doigt 👆. */
   placeRing() {
     const el = this.highlight;
-    const show = el && el.isConnected && el.getClientRects().length > 0 && performance.now() > this.cheerUntil && this.profile;
+    // Jamais par-dessus un mini-jeu (z-index 60 > 45) : le bouton qu'il montre est caché dessous.
+    const show = el && el.isConnected && el.getClientRects().length > 0 && performance.now() > this.cheerUntil && this.profile && !this.ui.minigameOpen;
     if (!show) {
       if (!this.ring.hidden) this.ring.hidden = true;
       return;

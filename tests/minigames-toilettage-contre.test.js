@@ -115,7 +115,10 @@ function expectEnd(ctx, expected) {
     expect(ctx.finished.q).toBeGreaterThanOrEqual(JUST_FLOOR);
   }
   const key = expected === 'just' ? 'mg_justRight' : expected === 'low' ? 'mg_tooLittle' : 'mg_tooMuch';
-  if (!ctx.finished.msg?.includes(t('mg_nails_end_ouch', { name: 'Pomme' }))) expect(ctx.finished.msg).toBe(t(key, { name: 'Pomme' }));
+  // (Griffes et onglons : leurs propres messages « trop court » / « encore un peu long » s'ils existent.)
+  const nails = { low: 'mg_nails_end_long', high: 'mg_nails_end_short' }[expected];
+  const ok = [t(key, { name: 'Pomme' }), ...(nails ? [t(nails, { name: 'Pomme' })] : [])];
+  if (!ctx.finished.msg?.includes(t('mg_nails_end_ouch', { name: 'Pomme' }))) expect(ok).toContain(ctx.finished.msg);
 }
 
 const SPECIES_BRUSH = ['horse', 'dog', 'cat', 'rabbit', 'sheep', 'goat', 'cow'];

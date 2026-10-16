@@ -62,6 +62,10 @@ export function circle(g, cx, cy, r) {
 
 export function emoji(g, ch, x, y, size, rot = 0, alpha = 1) {
   g.save();
+  // Sur un canvas, un emoji en couleur prend l'opacité du fillStyle courant : après un
+  // remplissage translucide (rgba(…, 0.3)), il était tout pâle. Opaque ici ; la transparence
+  // voulue passe par alpha (globalAlpha).
+  g.fillStyle = '#000';
   g.globalAlpha *= alpha;
   g.translate(x, y);
   if (rot) g.rotate(rot);
@@ -173,7 +177,7 @@ export function animalShape(a, o = {}) {
   const mouth = { x: head.x + f * (hr * 0.6 + P.snout * s * 0.9), y: head.y + hr * 0.45 };
   if (a.species === 'horse') { mouth.x = head.x + f * hr * 1.7; mouth.y = head.y + hr * 1.25; }
   return {
-    a, P, s, f, pose, ang, rx, ry, leg, bx, by, groundY, L, hr,
+    a, P, s, f, pose, ang, rx, ry, leg, bx, by, groundY, lift, L, hr,
     head,
     mouth,
     chest: L(rx * 0.72, ry * 0.25),
@@ -227,7 +231,10 @@ export function coatColors(a) {
 
 /**
  * Dessine l'animal de profil.
- * o : options d'animalShape + { walk (phase des pattes), blink, happy, mouth, wag, earsBack, shorn, noWool, shake }
+ * o : options d'animalShape + { walk (phase des pattes), blink, happy, mouth, wag, earsBack, shorn, noWool, shake,
+ *       shadow (false : pas d'ombre au sol) }
+ * lift (animalShape) : l'animal saute, pattes comprises (elles ne vont plus jusqu'au sol) ; son
+ * ombre reste au sol, plus petite quand il est haut.
  * Renvoie la forme (animalShape) pour placer des choses dessus.
  */
 export function drawAnimal(g, a, o = {}) {
@@ -251,10 +258,17 @@ export function drawAnimal(g, a, o = {}) {
   g.lineJoin = 'round';
   g.lineCap = 'round';
 
-  // Ombre au sol
-  g.fillStyle = 'rgba(0,0,0,0.13)';
-  ellipse(g, sh.bx, sh.groundY + 2, rx * 1.15, 9 * s);
-  g.fill();
+  // Les pieds : au sol, ou en l'air de `lift` quand l'animal saute (sinon, pattes en échasses).
+  const lift = Math.max(0, sh.lift ?? 0);
+  const feetY = sh.groundY - lift;
+
+  // Ombre au sol (plus petite quand l'animal est en l'air)
+  if (o.shadow !== false) {
+    const k = 1 - Math.min(0.4, lift / 250);
+    g.fillStyle = 'rgba(0,0,0,0.13)';
+    ellipse(g, sh.bx, sh.groundY + 2, rx * 1.15 * k, 9 * s * k);
+    g.fill();
+  }
 
   // ---- pattes
   const legW = P.legW * s;
@@ -262,7 +276,7 @@ export function drawAnimal(g, a, o = {}) {
   const drawLeg = (lx, phase, far) => {
     const top = legTop(lx);
     const swing = o.walk != null ? Math.sin(o.walk + phase) * 0.38 : 0;
-    const len = sh.groundY - top.y;
+    const len = feetY - top.y;
     const foot = { x: top.x + Math.sin(swing) * len, y: top.y + Math.cos(swing) * len };
     g.strokeStyle = far ? shade(legColor === c.coat ? c.coat : c.sec, -0.25) : css(legColor);
     g.lineWidth = legW;
@@ -333,10 +347,10 @@ export function drawAnimal(g, a, o = {}) {
   if (sh.pose !== 'stand') {
     const hp = L(-rx * 0.5, ry * 0.25);
     g.fillStyle = shade(c.coat, -0.06);
-    ellipse(g, hp.x, Math.min(hp.y, sh.groundY - ry * 0.7), ry * 0.95, ry * 0.75, sh.ang * 0.4);
+    ellipse(g, hp.x, Math.min(hp.y, feetY - ry * 0.7), ry * 0.95, ry * 0.75, sh.ang * 0.4);
     g.fill();
     g.fillStyle = css(legColor);
-    ellipse(g, hp.x + f * ry * 0.5, sh.groundY - 5 * s, ry * 0.6, 6 * s);
+    ellipse(g, hp.x + f * ry * 0.5, feetY - 5 * s, ry * 0.6, 6 * s);
     g.fill();
   }
 
@@ -350,10 +364,10 @@ export function drawAnimal(g, a, o = {}) {
     g.lineWidth = legW;
     g.beginPath();
     g.moveTo(top.x, top.y);
-    g.lineTo(top.x + f * 4 * s, sh.groundY - legW * 0.4);
+    g.lineTo(top.x + f * 4 * s, feetY - legW * 0.4);
     g.stroke();
     g.fillStyle = css(legColor);
-    ellipse(g, top.x + f * (4 + legW * 0.3) * s, sh.groundY - legW * 0.35, legW * 0.75, legW * 0.45);
+    ellipse(g, top.x + f * (4 + legW * 0.3) * s, feetY - legW * 0.35, legW * 0.75, legW * 0.45);
     g.fill();
   } else {
     // Debout sur les pattes arrière : petites pattes devant le ventre

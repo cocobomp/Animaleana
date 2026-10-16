@@ -192,7 +192,8 @@ describe('construction : déplacer la ferme de base et les équipements', () => 
     expect(p.money).toBe(100 - MOVE_FEE.core);
     const layout = p.coreLayout.maison;
     expect(corePos(layout, 'pen')).toEqual({ x: 50, z: 40 });
-    expect(slotOf(layout, 'penFeeder')).toEqual({ x: 56, z: 46 });
+    // (4 m du bord est et 1 m du bord nord de la bergerie de 24 × 16 m)
+    expect(slotOf(layout, 'penFeeder')).toEqual({ x: 58, z: 47 });
     expect(slotOf(layout, 'petFeeder')).toEqual({ x: 3.5, z: -9.5 });
     // L'ancien emplacement est libre maintenant.
     expect(validatePlacement('kennel', 14, 35, 0, { ...flat, core: layout }).ok).toBe(true);

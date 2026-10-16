@@ -5,10 +5,11 @@ import * as THREE from 'three';
 
 // side : côté de l'ouverture ('+x', '-x', '+z', '-z'), at : position de l'ouverture le long de ce côté.
 export const ENCLOSURES = [
-  { id: 'pen', x: 14, z: 35, hw: 10, hd: 7, gate: { side: '+z', at: 14, width: 4 } },
-  { id: 'paddock', x: -16, z: 16, hw: 7, hd: 9, gate: { side: '+x', at: 16, width: 3 } },
+  // (place et taille par défaut ; coreLayout.js applique celles choisies par le joueur)
+  { id: 'pen', x: 14, z: 35, hw: 12, hd: 8, gate: { side: '+z', at: 14, width: 4 } },
+  { id: 'paddock', x: -16, z: 20, hw: 11, hd: 13, gate: { side: '+x', at: 20, width: 3 } },
   // Enclos grillagé des lapins : même les petits animaux passent par la porte.
-  { id: 'hutch', x: 9, z: 4, hw: 2.6, hd: 2.2, gate: { side: '+z', at: 9, width: 1.2 }, mesh: true },
+  { id: 'hutch', x: 9, z: 4.5, hw: 3, hd: 2.5, gate: { side: '+z', at: 9, width: 1.2 }, mesh: true },
 ];
 
 export const enclosure = (id) => ENCLOSURES.find((e) => e.id === id);
@@ -26,6 +27,13 @@ export function addBaseEnclosure(e) {
 }
 // obstacles : bâtiments construits (grange, niche…) dont on fait aussi le tour.
 const OBSTACLES = [];
+// Bâtiments fixes du lieu (sellerie, maison des animaux, refuge…), donnés par World.build : on ne les
+// contourne pas, mais detour() n'y choisit jamais un coin (on ne fait pas le tour d'un enclos par un mur).
+const BLOCKERS = [];
+export function setNavBlockers(list) {
+  BLOCKERS.length = 0;
+  BLOCKERS.push(...list);
+}
 export function setBuiltEnclosures(list, obstacles = []) {
   // Les bâtiments où l'on entre (src/game/Interiors.js) restent connus : seuls les enclos construits sont remplacés.
   const interiors = ENCLOSURES.slice(BASE_ENCLOSURES).filter((e) => e.interior);
@@ -97,6 +105,51 @@ function crosses(a, b, r, m) {
   return true;
 }
 
+/**
+ * Le chemin tout droit de a à b traverse-t-il une barrière (enclos, sauf les bâtiments où l'on entre)
+ * ou un bâtiment construit ? margin : marge autour (rayon de l'animal et un peu d'air).
+ */
+export function pathBlocked(a, b, margin = 0.8) {
+  for (const e of ENCLOSURES) if (!e.interior && crosses(a, b, e, margin)) return true;
+  for (const o of OBSTACLES) if (crosses(a, b, o, margin)) return true;
+  return false;
+}
+
+/** Écart (m) entre deux rectangles : 0 s'ils se touchent ou se chevauchent. */
+const gapBetween = (a, b) => Math.max(Math.abs(a.x - b.x) - a.hw - b.hw, Math.abs(a.z - b.z) - a.hd - b.hd, 0);
+
+/** La bande entre deux rectangles proches (la fente qui les sépare). */
+function between(a, b) {
+  const iv = (a0, a1, b0, b1) => {
+    const lo = Math.max(a0, b0);
+    const hi = Math.min(a1, b1);
+    return lo <= hi ? [lo, hi] : [hi, lo];
+  };
+  const [x0, x1] = iv(a.x - a.hw, a.x + a.hw, b.x - b.hw, b.x + b.hw);
+  const [z0, z1] = iv(a.z - a.hd, a.z + a.hd, b.z - b.hd, b.z + b.hd);
+  return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, hw: (x1 - x0) / 2, hd: (z1 - z0) / 2 };
+}
+
+/**
+ * Ce coin de contournement de best est-il pris (depuis pos) ? Dans un bâtiment (où l'on entre, construit
+ * ou fixe), avec la place d'un cheval autour, ou dans un autre enclos. Ou derrière un obstacle presque
+ * collé à best : les deux font un seul mur, on ne passe pas par la fente entre eux (un paddock réduit ou
+ * déplacé contre l'écurie : le cheval restait coincé dans la fente).
+ */
+function cornerBlocked(c, best, list, pos) {
+  const R = 0.9;
+  const walled = (e, m) => {
+    if (Math.abs(c.x - e.x) < e.hw + m && Math.abs(c.z - e.z) < e.hd + m) return true;
+    if (gapBetween(e, best) >= 2 || inside(e, pos.x, pos.z)) return false;
+    const slit = between(e, best);
+    return crosses(pos, c, e, 0.3) || (!inside(slit, pos.x, pos.z, -0.6) && crosses(pos, c, slit, 0.6));
+  };
+  for (const e of list) {
+    if (e !== best && walled(e, e.gate && !e.interior ? 0 : R)) return true; // (enclos : seulement dedans)
+  }
+  return BLOCKERS.some((b) => walled(b, 0.3)); // (bâtiments fixes : seulement dedans ou contre le mur)
+}
+
 function detour(pos, wp, depth, list) {
   let best = null;
   let bestD = Infinity;
@@ -115,6 +168,7 @@ function detour(pos, wp, depth, list) {
     for (const sz of [-1, 1]) {
       const c = { x: best.x + sx * (best.hw + 2.2), z: best.z + sz * (best.hd + 2.2) };
       if (Math.hypot(c.x - pos.x, c.z - pos.z) < 1 || crosses(pos, c, best, -0.3)) continue;
+      if (cornerBlocked(c, best, list, pos)) continue; // (pas dans un mur, ni par une fente)
       // Un coin d'où l'on voit déjà le but vaut mieux qu'un coin d'où il faudra encore tourner.
       // Sinon, le coin le plus proche du but (pour ne pas hésiter entre deux coins).
       const toC = Math.hypot(c.x - pos.x, c.z - pos.z);

@@ -11,9 +11,10 @@ import { gfx } from './gfx.js';
 import * as B from './models/buildings.js';
 import { forest, rocks, groundCover, bushes, mountainRing, tintHSL } from './models/nature.js';
 import { gltfForest, gltfRocks, hasGltfTrees } from './models/gltfNature.js'; // modèles GLB (Quaternius) s'ils sont chargés
-import { buildFarm } from './farmLayout.js';
+import { buildFarm, rebuildCores } from './farmLayout.js';
 import { buildInteriors } from './Interiors.js'; // écurie et maison où l'on entre
 import { coreAt } from './coreLayout.js'; // installations déplaçables (vue d'ensemble)
+import { ENCLOSURES, enclosure, inside, setNavBlockers } from './nav.js'; // enclos de base (déplacés ou agrandis : coreLayout.js)
 import { buildShowground } from './showground.js'; // activités : terrain de concours
 import { showgroundFlat } from '../sim/activities.js';
 
@@ -481,6 +482,24 @@ void main() {
     return mesh;
   }
 
+  /**
+   * Place du torii (Japon) : au milieu du passage entre le paddock et la bergerie, tourné pour qu'on le
+   * traverse en suivant le chemin ; sinon une place de rechange libre. null si rien ne convient.
+   */
+  toriiSpot() {
+    const pd = enclosure('paddock');
+    const pe = enclosure('pen');
+    const spots = [];
+    if (pd && pe) spots.push({ x: (pd.x + pd.hw + pe.x - pe.hw) / 2, z: 30, rot: Math.PI / 2 });
+    spots.push({ x: 0, z: 30, rot: 0 }, { x: -1.5, z: 50, rot: Math.PI / 2 }, { x: 30, z: 52, rot: 0 });
+    const fenced = ENCLOSURES.filter((e) => !e.interior && !e.built); // (les enclos du joueur ne sont pas encore là)
+    return spots.find((sp) => {
+      const r = { x: sp.x, z: sp.z, hw: sp.rot ? 0.6 : 3.6, hd: sp.rot ? 3.6 : 0.6 };
+      const hit = (c, m) => Math.abs(r.x - c.x) < r.hw + c.hw + m && Math.abs(r.z - c.z) < r.hd + c.hd + m;
+      return !this.isWater(sp.x, sp.z) && !fenced.some((e) => hit(e, 0.8)) && !this.colliders.some((c) => hit(c, 0.3));
+    }) ?? null;
+  }
+
   /** Hauteur du sol en (x, z), la même pour le terrain et pour tout ce qui marche dessus. */
   heightAt(x, z) {
     const p = this.place;
@@ -512,10 +531,13 @@ void main() {
       this.group.traverse((o) => {
         if (o.isMesh || o.isInstancedMesh) {
           o.geometry.dispose();
-          if (o.material.map && !o.material.map.userData?.shared) o.material.map.dispose?.();
-          if (o.material.normalMap && !o.material.normalMap.userData?.shared) o.material.normalMap.dispose?.();
           o.userData.depthTex?.dispose();
-          o.material.dispose();
+          // (les arbres GLB ont plusieurs matériaux par maillage)
+          for (const m of [].concat(o.material)) {
+            if (m.map && !m.map.userData?.shared) m.map.dispose?.();
+            if (m.normalMap && !m.normalMap.userData?.shared) m.normalMap.dispose?.();
+            m.dispose();
+          }
         }
       });
     }
@@ -528,6 +550,7 @@ void main() {
     this.colliders = [];
     this.interactables = [];
     this.clearZones = [];
+    this.fences = [];
     this.waterLevel = p.sea || p.lake ? WATER_LEVEL : null;
     const rng = mulberry32(placeId.length * 977 + 13);
     const snowy = [0xeef2f6, 0xeef1f4, 0xf0f3f6].includes(GROUND[p.biome][season]);
@@ -559,22 +582,28 @@ void main() {
     place(B.vetClinic(L({ fr: 'Vétérinaire', en: 'Vet' })), 18, 9, -Math.PI / 2, 'vet');
     this.interactables.push({ kind: 'vet', ...doorOf(18, 9, 7, -Math.PI / 2) });
 
-    const pad = B.paddock(18, 14);
-    const [padX, padZ] = coreAt('paddock', -16, 16); // le paddock peut être déplacé
-    pad.position.set(padX, this.heightAt(padX, padZ), padZ);
-    pad.rotation.y = Math.PI / 2;
-    g.add(pad);
     const deco = (obj, x, z, ry = 0) => {
       obj.position.set(x, this.heightAt(x, z), z);
       obj.rotation.y = ry;
       g.add(obj);
     };
-    deco(B.trough(), ...coreAt('paddock', -21.5, 11), Math.PI / 2);
-    deco(B.hayBale(), ...coreAt('paddock', -21.5, 21));
-    deco(B.hayBale(), ...coreAt('paddock', -27, 8), 0.4);
+    // Bergerie, paddock, clapier et niche (déplaçables et agrandissables : farmLayout.js, coreLayout.js).
     buildFarm(this, g, isHome);
+    const padE = enclosure('paddock');
     buildShowground(this, g); // activités : carrière, tribune et jury
-    if (p.biome === 'garden') deco(B.torii(), 0, 30);
+    // Bâtiments fixes : la navigation ne choisit jamais un coin de contournement dans leurs murs.
+    setNavBlockers(this.colliders.filter((c) => c.kind && c.kind !== 'jobs' && !c.core)); // (le panneau des petits boulots est petit : on le frôle)
+    if (p.biome === 'garden') {
+      // Torii : sur le chemin entre le paddock et la bergerie (agrandis ou déplacés), sans toucher leurs barrières.
+      const spot = this.toriiSpot();
+      if (spot) {
+        deco(B.torii(), spot.x, spot.z, spot.rot);
+        for (const k of [-1, 1]) {
+          const along = spot.rot ? { x: 0, z: k * 2.2 } : { x: k * 2.2, z: 0 };
+          this.colliders.push({ x: spot.x + along.x, z: spot.z + along.z, hw: 0.3, hd: 0.3 }); // ses deux piliers
+        }
+      }
+    }
     if (p.biome === 'beach') deco(B.lighthouse(), 70, -60);
 
     // Terrain : construit après les bâtiments pour dessiner la terre battue autour d'eux
@@ -608,7 +637,7 @@ void main() {
         const z = Math.sin(a) * r;
         if (this.isWater(x, z)) continue;
         if (this.colliders.some((c) => Math.abs(x - c.x) < c.hw + 2 && Math.abs(z - c.z) < c.hd + 2)) continue;
-        if (Math.abs(x - padX) < 9 && Math.abs(z - padZ) < 10) continue; // paddock
+        if (inside(padE, x, z, -2)) continue; // paddock
         if (this.clearZones.some((c) => Math.hypot(x - c.x, z - c.z) < c.r)) continue; // bergerie et pré
         out.push({ x, y: this.heightAt(x, z), z, s: sMin + rng() * (sMax - sMin), r: rng() * Math.PI * 2 });
       }
@@ -634,7 +663,7 @@ void main() {
         const z = side < 2 ? f.z + (side === 0 ? -1 : 1) * (f.hd + out) : f.z + t * f.hd;
         if (this.interactables.some((i) => Math.hypot(x - i.x, z - i.z) < 2.8)) continue;
         if (this.colliders.some((c) => Math.abs(x - c.x) < c.hw + 0.45 && Math.abs(z - c.z) < c.hd + 0.45)) continue;
-        if (this.isWater(x, z) || Math.abs(x - padX) < 9.5 && Math.abs(z - padZ) < 10.5) continue;
+        if (this.isWater(x, z) || inside(padE, x, z, -2.5)) continue;
         bushSpots.push({ x, y: this.heightAt(x, z), z, s: 0.5 + rng() * 0.4, r: rng() * Math.PI * 2 });
       }
     }
@@ -1017,16 +1046,18 @@ roughnessFactor = mix(roughnessFactor, 0.8, wFoam);`);
   kindAt(x, z) {
     const c = this.colliders.find((k) => k.kind && Math.abs(x - k.x) < k.hw + 0.5 && Math.abs(z - k.z) < k.hd + 0.5);
     if (c) return c.kind;
-    // (positions décalées si le joueur a déplacé ces installations : coreLayout.js)
-    const [pdx, pdz] = coreAt('paddock', -16, 16);
-    const [hx, hz] = coreAt('hutch', 9, 4);
+    // (places et tailles choisies par le joueur : coreLayout.js)
     const [kx, kz] = coreAt('kennel', -9, -7);
-    const [px, pz] = coreAt('pen', 14, 35);
-    if (Math.abs(x - pdx) < 8 && Math.abs(z - pdz) < 10) return 'paddock';
-    if (Math.abs(x - hx) < 3 && Math.abs(z - hz) < 2.6) return 'hutch';
+    if (inside(enclosure('paddock'), x, z, -1)) return 'paddock';
+    if (inside(enclosure('hutch'), x, z, -0.4)) return 'hutch';
     if (Math.abs(x - kx) < 1.5 && Math.abs(z - kz) < 1.5) return 'kennel';
-    if (Math.abs(x - px) < 10.5 && Math.abs(z - pz) < 7.5) return 'pen';
+    if (inside(enclosure('pen'), x, z, -0.5)) return 'pen';
     return null;
+  }
+
+  /** Refait la bergerie, le paddock, le clapier et la niche après un déplacement ou un agrandissement. */
+  rebuildCores() {
+    rebuildCores(this);
   }
 
   /** Vrai si le point est à l'intérieur d'un bâtiment (pour la caméra). */

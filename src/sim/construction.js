@@ -40,21 +40,47 @@ export const CATEGORIES = ['home', 'enclosure', 'building', 'ranch', 'decor'];
 export const isEnclosure = (type) => ['enclosure', 'ranch'].includes(STRUCTURES[type].cat);
 export const hasResidents = (type) => (STRUCTURES[type].capacity ?? 0) > 0;
 export const REFUND = 0.5;
-export const refundOf = (type) => Math.floor(STRUCTURES[type].price * REFUND);
+
+/** Taille d'une construction (w × d avant rotation) : les enclos peuvent être agrandis (s.w, s.d). */
+export function sizeOf(s) {
+  const def = STRUCTURES[s.type];
+  return { w: s.w ?? def.w, d: s.d ?? def.d };
+}
+
+/** Démolir rend la moitié du prix, au prorata de la surface (un enclos agrandi rapporte plus). */
+export function refundOf(type, size = null) {
+  const def = STRUCTURES[type];
+  const k = size ? (size.w * size.d) / (def.w * def.d) : 1;
+  return Math.floor(def.price * k * REFUND);
+}
+
+/** Places pour les habitants : elles suivent la surface quand on agrandit un enclos. */
+export function capacityOf(s) {
+  const def = STRUCTURES[s.type];
+  if (!def.capacity) return 0;
+  if (s.w === undefined && s.d === undefined) return def.capacity;
+  const { w, d } = sizeOf(s);
+  return Math.max(1, Math.round((def.capacity * w * d) / (def.w * def.d)));
+}
 
 /** Zone constructible : un carré autour de la ferme. */
 export const BOUNDS = 90;
 
 // ---------------------------------------------------------------- installations de base
-// Bergerie, paddock, niche et clapier existent dès le début ; on peut les déplacer (sans les tourner).
-// layout : { pen: { x, z }, … } (positions choisies par le joueur, par lieu : profile.coreLayout[lieu]).
+// Bergerie, paddock, niche et clapier existent dès le début ; on peut les déplacer (sans les tourner)
+// et agrandir les trois enclos (src/sim/resize.js).
+// layout : { pen: { x, z, w?, d? }, … } (choix du joueur, par lieu : profile.coreLayout[lieu]).
+// w × d : largeur (le long de x) × profondeur (le long de z) en mètres ; absentes = taille par défaut.
+// legacy : position et taille d'avant l'agrandissement (anciennes sauvegardes, voir resize.js).
 export const CORE_ITEMS = {
-  pen: { x: 14, z: 35, w: 20, d: 14, emoji: '🐑', encl: true, gate: { side: '+z', width: 4 } },
-  paddock: { x: -16, z: 16, w: 14, d: 18, emoji: '🐴', encl: true, gate: { side: '+x', width: 3 } },
+  pen: { x: 14, z: 35, w: 24, d: 16, emoji: '🐑', encl: true, gate: { side: '+z', width: 4 }, legacy: { x: 14, z: 35, w: 20, d: 14 } },
+  paddock: { x: -16, z: 20, w: 22, d: 26, emoji: '🐴', encl: true, gate: { side: '+x', width: 3 }, legacy: { x: -16, z: 16, w: 14, d: 18 } },
   kennel: { x: -9, z: -7, w: 2, d: 2, emoji: '🐶', gate: { side: '+z', width: 1.5 } },
-  hutch: { x: 9, z: 4, w: 5.2, d: 4.4, emoji: '🐰', gate: { side: '+z', width: 1.2 } },
+  hutch: { x: 9, z: 4.5, w: 6, d: 5, emoji: '🐰', gate: { side: '+z', width: 1.2 }, legacy: { x: 9, z: 4, w: 5.2, d: 4.4 } },
 };
 export const CORE_IDS = Object.keys(CORE_ITEMS);
+/** Les installations de base qu'on peut agrandir. */
+export const RESIZABLE_CORE = ['paddock', 'pen', 'hutch'];
 
 /** Où est cette installation maintenant (position d'origine si le joueur ne l'a pas déplacée). */
 export function corePos(layout, id) {
@@ -63,38 +89,65 @@ export function corePos(layout, id) {
   return p ? { x: p.x, z: p.z } : { x: def.x, z: def.z };
 }
 
+/** Taille actuelle (w le long de x, d le long de z). */
+export function coreSize(layout, id) {
+  const def = CORE_ITEMS[id];
+  const p = layout?.[id];
+  return { w: p?.w ?? def.w, d: p?.d ?? def.d };
+}
+
 /** Décalage par rapport à la position d'origine. */
 export function coreOffset(layout, id) {
   const p = corePos(layout, id);
   return { dx: p.x - CORE_ITEMS[id].x, dz: p.z - CORE_ITEMS[id].z };
 }
 
-export function coreRect(layout, id, at = null) {
-  const def = CORE_ITEMS[id];
+/** Rectangle au sol { x, z, hw, hd }. at / size : position ou taille à essayer (sinon l'actuelle). */
+export function coreRect(layout, id, at = null, size = null) {
   const p = at ?? corePos(layout, id);
-  return { x: p.x, z: p.z, hw: def.w / 2, hd: def.d / 2 };
+  const s = size ?? coreSize(layout, id);
+  return { x: p.x, z: p.z, hw: s.w / 2, hd: s.d / 2 };
 }
 
-/** Espace à garder libre devant l'entrée d'une installation de base. */
-function coreApron(id, p) {
+/** Profondeur de l'espace libre devant l'entrée de chaque installation. */
+export const APRON_DEPTH = { pen: 4, paddock: 3, hutch: 1.75, kennel: 1 };
+
+/** Espace à garder libre devant l'entrée d'une installation de base (la porte est au milieu de son côté). */
+export function coreApron(id, p, size = null) {
   const def = CORE_ITEMS[id];
-  const f = coreRect(null, id, p);
+  const f = coreRect(null, id, p, size);
   const wide = Math.max(1.5, def.gate.width / 2 + 0.5);
-  const depth = { pen: 4, paddock: 3, hutch: 1.75, kennel: 1 }[id];
+  const depth = APRON_DEPTH[id];
   if (def.gate.side === '+x') return { x: p.x + f.hw + depth, z: p.z, hw: depth, hd: wide };
   return { x: p.x, z: p.z + f.hd + depth, hw: wide, hd: depth };
 }
 
-/** Les équipements rangés dans un enclos le suivent quand on le déplace. */
+/** Les équipements rangés dans un enclos le suivent quand on le déplace ou qu'on l'agrandit. */
 export const EQUIPMENT_ZONE = { hayrack: 'paddock', paddockTrough: 'paddock', penFeeder: 'pen', penTrough: 'pen', cowBrush: 'pen' };
 
-/** Emplacement prévu d'un équipement (décalé avec son enclos). */
+/**
+ * Emplacement prévu de ces équipements, par rapport aux bords de leur enclos : [côté, retrait en mètres].
+ * côté 1 = bord du haut (x ou z le plus grand), -1 = bord du bas, 0 = depuis le centre.
+ * (Mêmes places qu'avant pour un enclos de l'ancienne taille.)
+ */
+export const SLOT_ANCHORS = {
+  hayrack: { x: [1, 3], z: [1, 3] },
+  paddockTrough: { x: [-1, 3], z: [0, 1] },
+  penFeeder: { x: [1, 4], z: [1, 1] },
+  penTrough: { x: [-1, 4], z: [1, 1] },
+  cowBrush: { x: [-1, 5], z: [-1, 3] },
+};
+
+const anchorAt = (c, half, [side, inset]) => (side === 0 ? c + inset : side > 0 ? c + half - inset : c - half + inset);
+
+/** Emplacement prévu d'un équipement (il suit son enclos : déplacé, agrandi ou réduit). */
 export function slotOf(layout, type) {
   const [x, z] = EQUIPMENT[type].slot;
   const zone = EQUIPMENT_ZONE[type];
   if (!zone) return { x, z };
-  const o = coreOffset(layout, zone);
-  return { x: x + o.dx, z: z + o.dz };
+  const r = coreRect(layout, zone);
+  const a = SLOT_ANCHORS[type];
+  return { x: anchorAt(r.x, r.hw, a.x), z: anchorAt(r.z, r.hd, a.z) };
 }
 
 /** Position d'un équipement acheté : celle choisie par le joueur (eq.pos), sinon son emplacement prévu. */
@@ -103,6 +156,16 @@ export function equipmentPos(layout, eq) {
 }
 
 export const EQUIP_SIZE = 1.2;
+
+/**
+ * Cet équipement suit-il l'installation id quand on la déplace (ou l'agrandit) ? Oui s'il est à son
+ * emplacement prévu dans cet enclos, ou si le joueur l'a posé dedans. Il ne gêne donc pas ce déplacement.
+ */
+export function followsCore(layout, eq, id) {
+  if (!eq.pos) return EQUIPMENT_ZONE[eq.type] === id;
+  const r = coreRect(layout, id);
+  return Math.abs(eq.pos[0] - r.x) < r.hw + 0.3 && Math.abs(eq.pos[1] - r.z) < r.hd + 0.3;
+}
 
 /**
  * Le cœur de la ferme, où l'on ne construit pas : la cour devant la maison (on y arrive),
@@ -118,7 +181,7 @@ export function coreRects(layout = null) {
     const p = corePos(layout, id);
     const r = coreRect(layout, id);
     rects.push({ ...r, hw: r.hw + 0.5, hd: r.hd + 0.5, encl: CORE_ITEMS[id].encl, id });
-    rects.push({ ...coreApron(id, p), id, gate: true });
+    rects.push({ ...coreApron(id, p, coreSize(layout, id)), id, gate: true });
   }
   for (const type of Object.keys(EQUIPMENT)) {
     const p = slotOf(layout, type);
@@ -130,12 +193,20 @@ export function coreRects(layout = null) {
 export const snap = (v) => Math.round(v);
 export const normRot = (r) => ((Math.round(r) % 4) + 4) % 4;
 
-/** Rectangle occupé au sol : { x, z, hw, hd } (moitiés de largeur et de profondeur, après rotation). */
-export function footprint(type, x, z, rot = 0) {
+/**
+ * Rectangle occupé au sol : { x, z, hw, hd } (moitiés de largeur et de profondeur, après rotation).
+ * size : { w, d } d'un enclos agrandi (sinon la taille du catalogue).
+ */
+export function footprint(type, x, z, rot = 0, size = null) {
   const def = STRUCTURES[type];
+  const w = size?.w ?? def.w;
+  const d = size?.d ?? def.d;
   const swap = normRot(rot) % 2 === 1;
-  return { x, z, hw: (swap ? def.d : def.w) / 2, hd: (swap ? def.w : def.d) / 2 };
+  return { x, z, hw: (swap ? d : w) / 2, hd: (swap ? w : d) / 2 };
 }
+
+/** Emprise d'une construction posée (avec sa taille à elle). */
+export const footprintOf = (s) => footprint(s.type, s.x, s.z, s.rot, sizeOf(s));
 
 /** Côté de l'entrée selon la rotation (quarts de tour) : la façade regarde vers +z, puis +x, -z, -x. */
 export const frontSide = (rot) => ['+z', '+x', '-z', '-x'][normRot(rot)];
@@ -165,7 +236,7 @@ export function gateOf(s) {
 /** L'enclos pour la navigation (passer par l'ouverture), ou null. */
 export function enclosureOf(s) {
   if (!isEnclosure(s.type)) return null;
-  const f = footprint(s.type, s.x, s.z, s.rot);
+  const f = footprintOf(s);
   return { id: s.id, x: s.x, z: s.z, hw: f.hw, hd: f.hd, gate: gateOf(s), built: true };
 }
 
@@ -173,7 +244,7 @@ export function enclosureOf(s) {
 export function apron(s) {
   const def = STRUCTURES[s.type];
   if (def.cat === 'decor') return null;
-  const f = footprint(s.type, s.x, s.z, s.rot);
+  const f = footprintOf(s);
   const dir = frontDir(s.rot);
   const wide = Math.max(1.5, (def.gate ?? 2) / 2 + 0.5);
   const depth = 1.75;
@@ -183,23 +254,30 @@ export function apron(s) {
 
 /** Point où l'on se tient pour utiliser la structure (devant l'entrée). */
 export function doorOf(s) {
-  const f = footprint(s.type, s.x, s.z, s.rot);
+  const f = footprintOf(s);
   const dir = frontDir(s.rot);
   const ext = dir.x !== 0 ? f.hw : f.hd;
   return { x: s.x + dir.x * (ext + 1.2), z: s.z + dir.z * (ext + 1.2) };
 }
 
 /**
- * Zone de vie des habitants : un cercle { x, z, r }.
+ * Zone de vie des habitants : un cercle { x, z, r } (et, pour les enclos, le rectangle intérieur hw × hd :
+ * les animaux profitent de toute la place, même quand on agrandit).
  * Enclos : l'intérieur ; ranch : la moitié avant (la grange est au fond) ; bâtiments et niches : devant l'entrée.
  */
 export function homeZone(s) {
   const def = STRUCTURES[s.type];
-  const f = footprint(s.type, s.x, s.z, s.rot);
-  if (def.cat === 'enclosure') return { x: s.x, z: s.z, r: Math.max(1.5, Math.min(f.hw, f.hd) - 2) };
+  const f = footprintOf(s);
+  if (def.cat === 'enclosure') {
+    return { x: s.x, z: s.z, r: Math.max(1.5, Math.min(f.hw, f.hd) - 2), hw: Math.max(1, f.hw - 1.5), hd: Math.max(1, f.hd - 1.5) };
+  }
   if (def.cat === 'ranch') {
-    const c = toWorld(s, 0, def.d / 4);
-    return { x: c.x, z: c.z, r: Math.max(2, Math.min(def.w / 2, def.d / 4) - 2) };
+    const { w, d } = sizeOf(s);
+    const c = toWorld(s, 0, d / 4);
+    const lw = Math.max(1, w / 2 - 1.5);
+    const ld = Math.max(1, d / 4 - 1.5);
+    const swap = normRot(s.rot) % 2 === 1;
+    return { x: c.x, z: c.z, r: Math.max(2, Math.min(w / 2, d / 4) - 2), hw: swap ? ld : lw, hd: swap ? lw : ld };
   }
   if (def.open) return { x: s.x, z: s.z, r: Math.min(def.w, def.d) / 2 - 0.6 };
   const dir = frontDir(s.rot);
@@ -211,7 +289,7 @@ export function homeZone(s) {
 /** Rectangle de la zone (pour ramasser les crottins). */
 export function zoneRect(s) {
   if (isEnclosure(s.type)) {
-    const f = footprint(s.type, s.x, s.z, s.rot);
+    const f = footprintOf(s);
     return { x: f.x, z: f.z, hw: f.hw, hd: f.hd };
   }
   const z = homeZone(s);
@@ -232,6 +310,9 @@ function samples(r) {
   return out;
 }
 
+// (aussi utilisés pour agrandir les enclos : src/sim/resize.js)
+export { overlap as rectsOverlap, samples as sampleRect };
+
 /** Passage minimal (m) autour d'un enclos. */
 export const GAP = 2.5;
 
@@ -251,17 +332,23 @@ export const MAX_SLOPE = { home: 1.2, building: 1.2, enclosure: 3, ranch: 3, dec
 export function validatePlacement(type, x, z, rot, env = {}) {
   const def = STRUCTURES[type];
   if (!def) return { ok: false, reason: 'unknown' };
-  const f = footprint(type, x, z, rot);
-  const me = { id: env.ignore ?? '__new', type, x, z, rot };
+  // env.size : taille d'un enclos agrandi qu'on déplace.
+  const f = footprint(type, x, z, rot, env.size);
+  const me = { id: env.ignore ?? '__new', type, x, z, rot, ...(env.size ?? {}) };
   return checkRect(f, { apron: apron(me), encl: isEnclosure(type), slope: MAX_SLOPE[def.cat] }, env);
 }
 
-/** Déplacer une installation de base (bergerie, paddock, niche, clapier) en (x, z). */
-export function validateCore(id, x, z, env = {}) {
+/**
+ * Déplacer une installation de base (bergerie, paddock, niche, clapier) en (x, z). size : sa taille actuelle.
+ * Un voisin déjà un peu trop proche à sa place actuelle (env.core) ne bloque que si l'on s'en rapproche :
+ * le paddock de départ, tout près de l'écurie et de l'entrée du terrain de concours, peut bouger d'un mètre.
+ */
+export function validateCore(id, x, z, env = {}, size = null) {
   const def = CORE_ITEMS[id];
   const p = { x, z };
-  const f = coreRect(null, id, p);
-  return checkRect(f, { apron: coreApron(id, p), encl: def.encl, slope: def.encl ? 3 : 1.2, skipCore: id }, env);
+  const f = coreRect(null, id, p, size);
+  const from = coreRect(env.core ?? null, id);
+  return checkRect(f, { apron: coreApron(id, p, size), encl: def.encl, slope: def.encl ? 3 : 1.2, skipCore: id, from }, env);
 }
 
 /** Poser un équipement (mangeoire, abreuvoir…) : dans un enclos ou dehors, mais pas sur un passage. */
@@ -270,22 +357,32 @@ export function validateEquipment(x, z, env = {}) {
   return checkRect(f, { equipment: true, slope: 1.5 }, env);
 }
 
-const grow = (r, m) => ({ ...r, hw: r.hw + m, hd: r.hd + m });
+export const grow = (r, m) => ({ ...r, hw: r.hw + m, hd: r.hd + m });
 
-/** Vérifications communes (voir validatePlacement). */
+/** Écart (m) entre deux rectangles : 0 s'ils se touchent ou se chevauchent. */
+const gapBetween = (a, b) => Math.max(Math.abs(a.x - b.x) - a.hw - b.hw, Math.abs(a.z - b.z) - a.hd - b.hd, 0);
+
+/** Vérifications communes (voir validatePlacement). opts.from : place actuelle de ce qu'on déplace. */
 function checkRect(f, opts, env) {
   if (Math.abs(f.x) + f.hw > BOUNDS || Math.abs(f.z) + f.hd > BOUNDS) return { ok: false, reason: 'bounds' };
   const myApron = opts.apron ?? null;
   // Autour d'un enclos, on garde un passage (pour en faire le tour et rejoindre son ouverture).
   const mine = opts.encl ? GAP : 0;
+  // Trop près de b (à moins de m) ? Sauf s'il l'était déjà à la place actuelle et qu'on ne s'en rapproche pas.
+  const from = opts.from ?? null;
+  const tooClose = (b, m) => {
+    if (!overlap(f, grow(b, m))) return false;
+    if (!from || overlap(f, b) || !overlap(from, grow(b, m))) return true;
+    return gapBetween(f, b) < gapBetween(from, b) - 1e-6;
+  };
   // Un équipement peut aller dans la cour ou dans un enclos, mais pas devant une entrée.
   const core = coreRects(env.core).filter((b) => b.id !== opts.skipCore && (!opts.equipment || b.gate));
   const blocked = [...core, ...(env.blocked ?? [])];
   // (le pré n'a pas de clôture : pas besoin de passage autour)
-  if (blocked.some((b) => overlap(f, grow(b, b.encl ? Math.max(mine, GAP) : b.id === 'field' ? 0 : mine)))) return { ok: false, reason: 'core' };
+  if (blocked.some((b) => tooClose(b, b.encl ? Math.max(mine, GAP) : b.id === 'field' ? 0 : mine))) return { ok: false, reason: 'core' };
   const others = (env.structures ?? []).filter((s) => s.id !== env.ignore);
   for (const s of others) {
-    const o = footprint(s.type, s.x, s.z, s.rot);
+    const o = footprintOf(s);
     const ap = apron(s);
     if (ap && overlap(f, ap)) return { ok: false, reason: 'overlap' };
     if (opts.equipment) {
@@ -293,11 +390,11 @@ function checkRect(f, opts, env) {
       if (!isEnclosure(s.type) && overlap(f, o)) return { ok: false, reason: 'overlap' };
       continue;
     }
-    if (overlap(f, grow(o, Math.max(mine, isEnclosure(s.type) ? GAP : 0)))) return { ok: false, reason: 'overlap' };
+    if (tooClose(o, Math.max(mine, isEnclosure(s.type) ? GAP : 0))) return { ok: false, reason: 'overlap' };
     if (myApron && overlap(myApron, o)) return { ok: false, reason: 'overlap' };
   }
   for (const c of env.colliders ?? []) {
-    if (overlap(f, grow(c, mine)) || (myApron && overlap(myApron, c))) return { ok: false, reason: 'overlap' };
+    if (tooClose(c, mine) || (myApron && overlap(myApron, c))) return { ok: false, reason: 'overlap' };
   }
   const pts = samples(f);
   if (env.isWater && pts.some((p) => env.isWater(p.x, p.z))) return { ok: false, reason: 'water' };
@@ -327,7 +424,10 @@ export function payMove(profile, kind, type = null) {
 export function moveCore(profile, place, id, x, z) {
   if (!payMove(profile, 'core')) return { ok: false, reason: 'money' };
   profile.coreLayout = profile.coreLayout ?? {};
-  profile.coreLayout[place] = { ...(profile.coreLayout[place] ?? {}), [id]: { x: snap(x), z: snap(z) } };
+  const layout = profile.coreLayout[place] ?? {};
+  // Il garde sa taille (s'il a été agrandi). Le joueur a choisi sa place : plus d'agrandissement automatique.
+  const { grow, ...rest } = layout[id] ?? {};
+  profile.coreLayout[place] = { ...layout, [id]: { ...rest, x: snap(x), z: snap(z) } };
   return { ok: true };
 }
 
@@ -346,7 +446,7 @@ export const findStructure = (profile, id) => (profile.structures ?? []).find((s
 /** Structure dont l'emprise contient (x, z), ou null. */
 export function structureAtPoint(profile, place, x, z, margin = 0.3) {
   return structuresAt(profile, place).find((s) => {
-    const f = footprint(s.type, s.x, s.z, s.rot);
+    const f = footprintOf(s);
     return insideRect({ ...f, hw: f.hw + margin, hd: f.hd + margin }, x, z);
   }) ?? null;
 }
@@ -394,7 +494,7 @@ export function demolish(profile, id) {
       freed.push(a);
     }
   }
-  const refund = profile.mode === 'sandbox' ? 0 : refundOf(s.type);
+  const refund = profile.mode === 'sandbox' ? 0 : refundOf(s.type, sizeOf(s));
   earn(profile, refund);
   return { ok: true, refund, freed };
 }
@@ -410,7 +510,7 @@ export function canAssign(profile, a, s) {
   if (!accepts(s.type, a.species)) return { ok: false, reason: 'species' };
   if (a.location !== s.place) return { ok: false, reason: 'place' };
   if (a.homeId === s.id) return { ok: false, reason: 'already' };
-  if (residents(profile, s.id).length >= STRUCTURES[s.type].capacity) return { ok: false, reason: 'full' };
+  if (residents(profile, s.id).length >= capacityOf(s)) return { ok: false, reason: 'full' };
   return { ok: true };
 }
 
@@ -465,7 +565,7 @@ export function spaceSummary(profile, place) {
     let used = 0;
     for (const s of list) {
       if (!species.some((sp) => accepts(s.type, sp))) continue;
-      cap += STRUCTURES[s.type].capacity;
+      cap += capacityOf(s);
       used += residents(profile, s.id).filter((a) => species.includes(a.species)).length;
     }
     out[group] = { used, cap };

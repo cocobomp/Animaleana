@@ -3,16 +3,17 @@
 // box des chevaux, et lien avec la propreté / l'usure (src/sim/facilities.js).
 
 import * as THREE from 'three';
-import { stableModel, stableRooms, STABLE_HALL, STABLE_W, STABLE_D } from './models/stableInterior.js';
+import { stableModel, stableRooms, stableHall, stableWidth, STABLE_D } from './models/stableInterior.js';
+import { stableRect } from '../sim/facilities.js'; // l'écurie se rallonge (vue construction)
+import { setStableExt as placeTackRoom, TACKROOM } from './farmLayout.js';
 import { houseModel, houseRooms, HOUSE_HALL, HOUSE_W, HOUSE_D } from './models/houseInterior.js';
 import { plateTexture } from './models/interiorKit.js';
 // Sellerie où l'on entre : objets exposés, étiquettes de prix, comptoir (src/game/models/tackRoomInterior.js).
 import { tackRoomModel, TACK_HALL, TACK_W, TACK_D } from './models/tackRoomInterior.js';
-import { TACKROOM } from './farmLayout.js';
 import { GEAR, gearPrice, ownedVariant, wornBy, defaultSize } from '../sim/gear.js';
 import { isSandbox } from '../sim/profile.js';
 import { emojiTexture } from './textures.js';
-import { ENCLOSURES, NAV_HOOKS } from './nav.js';
+import { ENCLOSURES, NAV_HOOKS, pathBlocked } from './nav.js';
 import { HOME } from './AnimalEntity.js'; // paddock (déplaçable en vue d'ensemble)
 import {
   ensureFacilities, boxCount, boxOccupants, assignBox, canChore, doChore, tickFacilities, applyStallEffects,
@@ -89,7 +90,14 @@ export function interiorNav(pos, goal) {
     const W = b.w / 2;
     const D = b.d / 2;
     // Devant l'écurie en venant du paddock : on longe sa barrière avant d'aller à la porte.
-    if (b.aroundSide && p.lz > D + 3 && p.lx < -(W - 1) && p.lx * b.aroundSide < 0) return way(b, { lx: -(W - 1) * b.aroundSide, lz: D + 9 });
+    // (marge de 0,3 m : une fois arrivé à ce point, on n'y retourne pas — l'écurie rallongée a des
+    // coordonnées à virgule, et sans marge le cheval pouvait rester planté là)
+    // Seulement si on y va tout droit : le paddock agrandi (ou déplacé) peut cacher ce point derrière
+    // sa barrière ; nav.js fait alors le tour de l'enclos par le bon coin, puis passe par la porte.
+    if (b.aroundSide && p.lz > D + 3 && p.lx < -(W - 1) - 0.3 && p.lx * b.aroundSide < 0) {
+      const w = toWorld(b, -(W - 1) * b.aroundSide, D + 9);
+      if (!pathBlocked(pos, w)) return navOut.set(w.x, 0, w.z);
+    }
     if (p.lz >= D - 0.5) return null; // devant : nav.js fait passer par la porte
     // L'écurie se contourne par le côté opposé au paddock.
     const side = b.aroundSide ?? (Math.sign(p.lx) || 1);
@@ -111,18 +119,32 @@ NAV_HOOKS.push(interiorNav);
 
 const DEFS = {
   // aroundSide : côté par où l'on fait le tour (l'écurie touche presque le paddock au nord).
-  stable: { kind: 'stable', x: -22, z: -2, rot: Math.PI / 2, w: STABLE_W, d: STABLE_D, top: 5.5, door: 3.2, aroundSide: 1 },
+  // (place et longueur de l'écurie : setStableExt, selon sa taille)
+  stable: { kind: 'stable', x: -22, z: -2, rot: Math.PI / 2, w: stableWidth(0), d: STABLE_D, top: 5.5, door: 3.2, aroundSide: 1 },
   house: { kind: 'house', x: 0, z: -16, rot: 0, w: HOUSE_W, d: HOUSE_D, top: 5.2, door: 1.6 },
   // Sellerie : à côté de l'écurie, la porte regarde vers la cour.
   tackroom: { kind: 'tackroom', x: TACKROOM.x, z: TACKROOM.z, rot: Math.PI / 2, w: TACK_W, d: TACK_D, top: 4.8, door: 1.6 },
 };
+let stableExtNow = 0;
 const MODELS = {
-  stable: () => stableModel(L({ fr: 'Écurie', en: 'Stable' })),
+  stable: () => stableModel(L({ fr: 'Écurie', en: 'Stable' }), stableExtNow),
   house: () => houseModel(t('title')),
   tackroom: () => tackRoomModel(t('bld_tackroom')),
 };
-const ROOMS = { stable: stableRooms, house: houseRooms, tackroom: () => [] };
-const HALLS = { stable: STABLE_HALL, house: HOUSE_HALL, tackroom: TACK_HALL };
+const ROOMS = { stable: () => stableRooms(stableExtNow), house: houseRooms, tackroom: () => [] };
+const HALLS = { stable: () => stableHall(stableExtNow), house: () => HOUSE_HALL, tackroom: () => TACK_HALL };
+
+/**
+ * Taille de l'écurie (0 : 8 box, 1 : 12, 2 : 16) : son bout nord reste contre le paddock, elle s'allonge
+ * vers le sud et la sellerie recule d'autant. Appelé par Game.loadPlace avant World.build.
+ */
+export function setStableExt(ext) {
+  stableExtNow = ext;
+  const r = stableRect(ext);
+  Object.assign(DEFS.stable, { x: r.x, z: r.z, w: stableWidth(ext) });
+  placeTackRoom(ext);
+  Object.assign(DEFS.tackroom, { x: TACKROOM.x, z: TACKROOM.z }); // la sellerie où l'on entre recule aussi
+}
 
 /**
  * Ajoute l'écurie et la maison (à la maison seulement) au monde, à la place des anciens bâtiments fermés.
@@ -145,7 +167,7 @@ export function buildInteriors(world, group, isHome) {
       model,
       box: { x0: -def.w / 2, x1: def.w / 2, z0: -def.d / 2, z1: def.d / 2 },
       rooms: ROOMS[id](),
-      hall: HALLS[id],
+      hall: HALLS[id](),
     };
     b.entry = id === 'stable' ? b.rooms.find((r) => r.id === 'passage') : null;
     const y = world.heightAt(def.x, def.z);

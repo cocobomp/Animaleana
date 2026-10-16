@@ -18,7 +18,8 @@ import { petGame, playGame, milkGame } from './minigames/fun.js';
 import { lungeGame, libertyGame } from './minigames/horse.js';
 import { audio } from '../game/audio.js'; // petits sons : bien joué / raté / fini
 import { CHORE_GAMES, CHORE_ICONS } from './minigames/chores.js';
-import { justRight, verdict } from './minigames/score.js'; // règle « juste ce qu'il faut »
+import { justOutcome, starsFor } from './minigames/score.js'; // règle « juste ce qu'il faut »
+import { fitView, toLocalPoint, nbsp } from './minigames/frame.js'; // échelle, doigt, typographie
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -114,6 +115,7 @@ class Fx {
         g.font = `${p.size * (0.6 + 0.4 * pop)}px ${EMOJI_FONT}`;
         g.textAlign = 'center';
         g.textBaseline = 'middle';
+        g.fillStyle = '#000'; // opaque : un emoji prend l'alpha du fillStyle courant (voir draw.js, emoji)
         g.fillText(p.emoji, 0, 0);
       } else if (p.text) {
         g.font = `900 ${p.size}px ${TEXT_FONT}`;
@@ -228,35 +230,48 @@ function openMinigame(ui, o) {
       hintEl, progressEl, stage, controls);
     const overlay = h('div', { class: 'mg-overlay', role: 'dialog', 'aria-modal': 'true' }, box);
     ui.root.append(overlay);
+    // Tout ce qui flotte au-dessus du jeu (bulle et anneau du tutoriel, z-index 55 et 60) se cache
+    // tant que le mini-jeu est ouvert : voir style.css, body.mg-open.
+    document.body?.classList?.add('mg-open');
 
     const g2 = canvas.getContext('2d');
     const view = { x0: 0, y0: 0, x1: MG_W, y1: MG_H, w: MG_W, h: MG_H, scale: 1, ox: 0, oy: 0 };
     let dpr = 1;
+    const layout = { w: 0, h: 0 }; // taille de mise en page du canvas, en pixels CSS
+    // Hauteur de consigne déjà atteinte pendant la partie (voir ctx.hint), oubliée si l'écran change de largeur.
+    let hintMin = 0;
+    let lastVW = window.innerWidth;
     const resize = () => {
-      const r = stage.getBoundingClientRect();
+      if (window.innerWidth !== lastVW) {
+        lastVW = window.innerWidth;
+        hintMin = 0;
+        hintEl.style.minHeight = '';
+      }
+      // Taille de MISE EN PAGE (style calculé, sans les transformations), pas getBoundingClientRect() :
+      // la première mesure tombe pendant l'animation d'ouverture « pop » de .mg-box (scale 0,9), et le
+      // ResizeObserver ne la voit pas finir (un transform ne change pas la mise en page). L'échelle
+      // restait alors 10 % trop petite toute la partie : canvas flou, et doigt lu 11 % trop loin.
+      const cs = getComputedStyle(canvas);
+      layout.w = parseFloat(cs.width) || canvas.clientWidth;
+      layout.h = parseFloat(cs.height) || canvas.clientHeight;
       dpr = Math.min(2.5, window.devicePixelRatio || 1);
-      canvas.width = Math.max(1, Math.round(r.width * dpr));
-      canvas.height = Math.max(1, Math.round(r.height * dpr));
-      const sc = Math.min(r.width / MG_W, r.height / MG_H) || 1;
-      view.scale = sc;
-      view.ox = (r.width - MG_W * sc) / 2;
-      view.oy = (r.height - MG_H * sc) / 2;
-      view.x0 = -view.ox / sc;
-      view.y0 = -view.oy / sc;
-      view.x1 = MG_W + view.ox / sc;
-      view.y1 = MG_H + view.oy / sc;
-      view.w = view.x1 - view.x0;
-      view.h = view.y1 - view.y0;
+      canvas.width = Math.max(1, Math.round(layout.w * dpr));
+      canvas.height = Math.max(1, Math.round(layout.h * dpr));
+      Object.assign(view, fitView(layout.w, layout.h, MG_W, MG_H));
+      fitEnd(); // écran tourné, fenêtre redimensionnée : la carte de fin tient-elle encore ?
     };
     const ro = new ResizeObserver(resize);
     ro.observe(stage);
     resize();
+    // Par prudence, on remesure aussi à la fin de l'animation d'ouverture.
+    box.addEventListener('animationend', (e) => { if (e.target === box) resize(); });
 
     let progress = 0;
     let ended = false;
     let closed = false;
     let quality = null;
     let zoneRange = null; // { lo, hi } de la bande verte affichée, ou null
+    let endVerdict = null; // 'just' | 'low' | 'high' : verdict de la fin (finishJust), pour les étoiles
 
     // Pour une corvée, a / sp / col sont null (ou l'animal qui habite là, pour le décor).
     const ctx = {
@@ -275,10 +290,20 @@ function openMinigame(ui, o) {
       pointer: { x: MG_W / 2, y: MG_H / 2, down: false, over: false, type: 'mouse' },
       t,
       name: a?.name ?? '',
-      /** Consigne en une ligne. kind : '' | 'good' | 'warn'. */
+      /** Consigne en une ligne. kind : '' | 'good' | 'warn'. (Typographie française : nbsp.) */
       hint(text, kind = '') {
+        text = nbsp(text);
         if (hintEl.textContent !== text) {
           hintEl.textContent = text;
+          // La consigne ne rétrécit pas pendant la partie : après une longue consigne de départ
+          // (3 lignes en 360 px), une plus courte faisait remonter la scène sous le doigt.
+          // Hauteur de mise en page arrondie AU-DESSUS (offsetHeight arrondit au plus près : 72,4 px
+          // donnait 72, et la consigne « C'est fait ! » faisait encore bouger la scène de 0,2 px).
+          const hh = Math.ceil(parseFloat(getComputedStyle(hintEl).height) || hintEl.offsetHeight);
+          if (hh > hintMin) {
+            hintMin = hh;
+            hintEl.style.minHeight = `${hh}px`;
+          }
           hintEl.classList.remove('flash');
           void hintEl.offsetWidth;
           hintEl.classList.add('flash');
@@ -293,37 +318,51 @@ function openMinigame(ui, o) {
       },
       /** Ajoute un gros bouton sous le jeu. hold : appelle onDown / onUp (on garde appuyé). */
       button(text, opts = {}) {
-        const b = h('button', { class: `mg-btn ${opts.cls ?? ''}`, type: 'button' }, text);
+        const b = h('button', { class: `mg-btn ${opts.cls ?? ''}`, type: 'button' }, nbsp(text));
         if (opts.hold) {
           const up = () => { if (b.classList.contains('held')) { b.classList.remove('held'); opts.onUp?.(); } };
+          const down = () => {
+            if (ended || b.classList.contains('held')) return;
+            b.classList.add('held');
+            opts.onDown?.();
+          };
           b.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             if (ended) return;
             b.setPointerCapture?.(e.pointerId);
-            b.classList.add('held');
-            opts.onDown?.();
+            down();
           });
           b.addEventListener('pointerup', up);
           b.addEventListener('pointercancel', up);
           b.addEventListener('lostpointercapture', up);
+          // Au clavier (bouton choisi avec Tab) : Entrée / Espace enfoncée = doigt posé (voir onKey).
+          b.mgKey = (pressed) => (pressed ? down() : up());
         } else {
           b.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             if (!ended) opts.onTap?.();
           });
+          b.mgKey = (pressed) => { if (pressed && !ended) opts.onTap?.(); };
         }
         b.addEventListener('contextmenu', (e) => e.preventDefault());
         controls.append(b);
         return b;
       },
       clearButtons() { controls.replaceChildren(); },
-      /** Fin du mini-jeu : qualité 0 à 1 (au moins 0,4 car l'enfant a réussi). */
-      finish(q, msg) {
+      /**
+       * Fin du mini-jeu : qualité 0 à 1 (au moins 0,4 car l'enfant a réussi). why : le verdict
+       * « juste ce qu'il faut » s'il y en a un ('just' | 'low' | 'high', donné par finishJust) :
+       * trois étoiles seulement si c'est « juste » (et, sans verdict, si la note vaut 1).
+       */
+      finish(q, msg, why = null) {
         if (ended) return;
         ended = true;
         ctx.done = true;
         quality = Math.round(clamp(q, 0.4, 1) * 100) / 100;
-        ctx.progress(1);
+        endVerdict = why;
+        // Avec une bande verte, la jauge reste là où l'enfant s'est arrêté (pleine, elle disait
+        // « trop » sous « Un peu trop peu… ») ; sans zone, elle se remplit jusqu'au 🏁.
+        if (!zoneRange) ctx.progress(1);
         audio.minigame('done');
         ctx.hint(`🎉 ${t('mg_done')}`, 'good');
         controls.querySelectorAll('button').forEach((b) => { b.disabled = true; });
@@ -355,15 +394,16 @@ function openMinigame(ui, o) {
        * o : { who (prénom, ou animal : par défaut celui du jeu), floor, slack,
        *       msgs: { just, low, high } (textes déjà traduits, pour remplacer les messages
        *       standard) }. Sans prénom (corvée), les messages mg_chore_* sont utilisés.
+       * La note et le verdict sont toujours d'accord (justOutcome) : à un cheveu de la zone, la
+       * note arrondie fait 1 et c'est « juste » ; hors de la zone, moins de 1 et deux étoiles au plus.
        * Renvoie { q, verdict }.
        */
       finishJust(value, lo, hi, o = {}) {
-        const q = justRight(value, lo, hi, { floor: o.floor, slack: o.slack });
-        const v = verdict(value, lo, hi);
+        const { q, verdict: v } = justOutcome(value, lo, hi, { floor: o.floor, slack: o.slack });
         const name = typeof o.who === 'string' ? o.who : o.who?.name ?? ctx.name;
         const key = v === 'just' ? 'justRight' : v === 'low' ? 'tooLittle' : 'tooMuch';
         const msg = o.msgs?.[v] ?? (name ? t(`mg_${key}`, { name }) : t(`mg_chore_${key}`));
-        ctx.finish(q, msg);
+        ctx.finish(q, msg, v);
         return { q, verdict: v };
       },
       /** Gros bouton « ✅ C'est bon ! » pour s'arrêter là : raccourci vers button(). */
@@ -377,36 +417,67 @@ function openMinigame(ui, o) {
     // État lisible par les tests automatiques (peek).
     ui.minigame = { action, chore: o.chore ?? null, ctx, peek: () => play.peek?.(), get zone() { return zoneRange; } };
 
+    /**
+     * Carte de fin trop haute pour la scène (360 px de large, message de 3 lignes, long prénom) :
+     * version compacte (.mg-end.tight), plutôt qu'une carte coupée en bas qui défile.
+     */
+    function fitEnd() {
+      if (endEl.hidden) return;
+      const card = endEl.firstElementChild;
+      if (!card) return;
+      endEl.classList.remove('tight');
+      const cs = getComputedStyle(endEl);
+      const room = endEl.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+      // offsetHeight : taille de mise en page, sans l'animation d'apparition (scale) de la carte.
+      if (card.offsetHeight > room + 0.5) endEl.classList.add('tight');
+    }
+
     function showEnd(msg) {
       if (closed) return;
-      const stars = quality >= 0.85 ? 3 : quality >= 0.6 ? 2 : 1;
+      const stars = starsFor(quality, endVerdict); // ★★★ = « juste ce qu'il fallait », et rien d'autre
       const cont = h('button', { class: 'primary mg-continue' }, `${t('mg_continue')} ➜`);
       cont.addEventListener('click', () => close(quality));
       endEl.replaceChildren(h('div', { class: 'mg-end-card' },
         h('div', { class: 'mg-end-emoji' }, o.endEmoji),
-        h('h2', {}, t(stars === 3 ? 'mg_bravo' : stars === 2 ? 'mg_wellDone' : 'mg_done')),
+        h('h2', {}, nbsp(t(stars === 3 ? 'mg_bravo' : stars === 2 ? 'mg_wellDone' : 'mg_done'))),
         h('div', { class: 'mg-stars', 'aria-label': `${stars}/3` }, [1, 2, 3].map((i) => h('span', { class: i <= stars ? 'on' : 'off', style: { animationDelay: `${0.15 + i * 0.18}s` } }, '★'))),
-        h('p', {}, msg ?? o.endText(stars)),
+        h('p', {}, nbsp(msg ?? o.endText(stars))),
         cont));
       endEl.hidden = false;
+      // Le ✕ disparaît (fermer ici perdrait le soin) mais garde sa place (style.css,
+      // .mg-close[hidden]) : l'en-tête ne rapetisse plus et la fenêtre ne saute plus.
       closeBtn.hidden = true;
+      fitEnd();
       setTimeout(() => cont.focus({ preventScroll: true }), 50);
     }
 
     // ---------------------------------------------------------- entrées
+    // Écran → jeu : ce qu'on voit (getBoundingClientRect, qui suit l'animation d'ouverture) ramené
+    // à la mise en page, puis à la vue. Le point touché tombe exactement sous le doigt.
     const toLocal = (e) => {
-      const r = canvas.getBoundingClientRect();
-      return { x: (e.clientX - r.left - view.ox) / view.scale, y: (e.clientY - r.top - view.oy) / view.scale, id: e.pointerId, type: e.pointerType };
+      const p = toLocalPoint(e.clientX, e.clientY, canvas.getBoundingClientRect(), layout.w, layout.h, view);
+      return { x: p.x, y: p.y, id: e.pointerId, type: e.pointerType };
     };
     let activeId = null;
     canvas.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       if (ended) return;
+      // La mise en page a changé et le ResizeObserver n'est pas encore passé : on remesure.
+      if (Math.abs(canvas.clientWidth - layout.w) > 1 || Math.abs(canvas.clientHeight - layout.h) > 1) resize();
       const p = toLocal(e);
+      // Un deuxième doigt pendant que le premier est posé : les jeux n'en suivent qu'un, donc le
+      // premier est lâché là où il était, et le nouveau prend la main. Avant, le « up » du premier
+      // n'arrivait jamais au jeu (objet tenu pour toujours au nettoyage, pouce posé qui bloquait).
+      if (activeId !== null && activeId !== e.pointerId) {
+        const old = activeId;
+        activeId = null;
+        try { canvas.releasePointerCapture?.(old); } catch { /* déjà relâché */ }
+        play.up?.({ x: ctx.pointer.x, y: ctx.pointer.y, id: old, type: ctx.pointer.type });
+      }
       ctx.pointer = { ...ctx.pointer, ...p, down: true, over: true };
       if (activeId === null) {
         activeId = e.pointerId;
-        canvas.setPointerCapture?.(e.pointerId);
+        try { canvas.setPointerCapture?.(e.pointerId); } catch { /* doigt déjà levé */ }
       }
       play.down?.(p);
     });
@@ -434,6 +505,16 @@ function openMinigame(ui, o) {
       if (e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.code)) return;
       e.stopPropagation();
       const down = e.type === 'keydown';
+      // Un bouton du cadre choisi avec Tab : Entrée / Espace l'active, au lieu d'aller au jeu (au
+      // ferrage, Entrée tapait au marteau et « ✅ C'est bon ! » restait inatteignable au clavier).
+      const focused = e.target?.closest?.('.mg-overlay button');
+      if (focused && ['Space', 'Enter', 'NumpadEnter'].includes(e.code)) {
+        if (focused.mgKey) {
+          e.preventDefault();
+          if (!focused.disabled && (!down || !e.repeat)) focused.mgKey(down);
+        }
+        return; // ✕, « Continuer » : le clic natif du bouton
+      }
       if (['Space', 'Enter', 'NumpadEnter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       if (down && e.code === 'Escape') return close(ended ? quality : null);
       if (ended) {
@@ -478,10 +559,14 @@ function openMinigame(ui, o) {
       window.removeEventListener('keyup', onKey, true);
       play.destroy?.();
       overlay.remove();
+      document.body?.classList?.remove('mg-open');
       ui.minigameOpen = false;
       ui.minigame = null;
       if (game?.input) game.input.enabled = prevInput;
       resolve(result);
+      // Les fenêtres arrivées pendant la partie (« ⭐ niveau supérieur »…) attendaient la fin :
+      // juste après (le temps que le soin s'applique), une par une (UI.flushModals).
+      setTimeout(() => ui.flushModals?.(), 0);
     }
   });
 }

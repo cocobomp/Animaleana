@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import { t } from '../i18n.js';
-import { STRUCTURES, CORE_ITEMS, snap, frontDir, corePos, equipmentPos, moveFeeFor, EQUIP_SIZE } from '../sim/construction.js';
+import { STRUCTURES, CORE_ITEMS, snap, frontDir, corePos, coreSize, sizeOf, equipmentPos, moveFeeFor, EQUIP_SIZE } from '../sim/construction.js';
 import { EQUIPMENT } from '../sim/farm.js';
 import { isSandbox } from '../sim/profile.js';
 import { buildStructureModel } from './models/structures.js';
@@ -28,12 +28,12 @@ function disposeGroup(g) {
   });
 }
 
-/** Modèle d'une installation de base, pour le fantôme. */
-function coreModel(id) {
+/** Modèle d'une installation de base, pour le fantôme (size : sa taille actuelle, w le long de x). */
+function coreModel(id, size) {
   if (id === 'kennel') return kennelModel();
   if (id === 'hutch') return hutchModel();
   if (id === 'pen') return sheepfold();
-  const g = paddockModel(18, 14);
+  const g = paddockModel(size.d, size.w);
   g.rotation.y = Math.PI / 2;
   const wrap = new THREE.Group();
   wrap.add(g);
@@ -116,17 +116,18 @@ export class BuildMode {
     const def = STRUCTURES[s.type];
     const st = this.st;
     const grp = st.group(s.id);
+    const size = sizeOf(s); // (un enclos agrandi garde sa taille)
     return {
       emoji: def.emoji,
       name: structureName(s.type),
       cost: moveFeeFor('structure', s.type),
       moving: true,
-      w: def.w,
-      d: def.d,
+      w: size.w,
+      d: size.d,
       rotatable: true,
       arrow: def.cat !== 'decor',
       at: { x: s.x, z: s.z, rot: s.rot },
-      model: () => buildStructureModel(s.type, def.cat === 'decor' ? '' : structureName(s.type)),
+      model: () => buildStructureModel(s.type, def.cat === 'decor' ? '' : structureName(s.type), undefined, size),
       validate: (x, z, rot) => st.validate(s.type, x, z, rot, s.id),
       confirm: (x, z, rot) => {
         const r = st.move(s.id, x, z, rot);
@@ -143,19 +144,20 @@ export class BuildMode {
     const def = CORE_ITEMS[id];
     const st = this.st;
     const p = corePos(st.layout, id);
+    const size = coreSize(st.layout, id);
     const name = t(`bld_${id}`);
     return this.begin({
       emoji: def.emoji,
       name,
       cost: moveFeeFor('core'),
       moving: true,
-      w: def.w,
-      d: def.d,
+      w: size.w,
+      d: size.d,
       rot: SIDE_ROT[def.gate.side],
       rotatable: false,
       arrow: true,
       at: { x: p.x, z: p.z, rot: 0 },
-      model: () => coreModel(id),
+      model: () => coreModel(id, size),
       validate: (x, z) => st.validateCore(id, x, z),
       confirm: (x, z) => {
         const r = st.moveCore(id, x, z);
@@ -402,6 +404,7 @@ export class BuildMode {
       disposeGroup(this.ghost);
       this.ghost = null;
     }
+    this.view.construct?.refresh(); // vue construction : zones occupées et cadre de la sélection à jour
     this.view.refreshBar();
   }
 }

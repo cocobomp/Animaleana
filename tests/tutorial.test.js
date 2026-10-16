@@ -3,7 +3,7 @@ import { createProfile, addStat } from '../src/sim/profile.js';
 import {
   TUTORIAL_STEPS, updateTutorial, noteEvent, tutorialStep, skipTutorial, restartTutorial,
   suggestedQuest, questGuide, QUEST_GUIDE, stepNumber,
-  followQuest, updateFollow, noteFollowEvent, followView, stopFollow, QUEST_STEPS, FOLLOW_STEPS,
+  followQuest, updateFollow, noteFollowEvent, followView, stopFollow, QUEST_STEPS, FOLLOW_STEPS, stepWindow,
 } from '../src/sim/tutorial.js';
 import { OBJECTIVES } from '../src/sim/objectives.js';
 
@@ -218,5 +218,46 @@ describe('⏩ de la barre du temps', () => {
 
   it("l'attente du refuge vise aussi Avance rapide", () => {
     expect(TUTORIAL_STEPS.find((s) => s.id === 'wait').target).toEqual({ type: 'hud', id: 'timeFast' });
+  });
+});
+
+describe('suivi de quête sur le côté : quelques lignes seulement', () => {
+  const steps = (states) => states.map((state, i) => ({ id: `s${i}`, state }));
+  const ids = (w) => w.steps.map((s) => s.id);
+
+  it('une quête courte se montre en entier', () => {
+    const w = stepWindow(steps(['done', 'now', 'todo']), 3);
+    expect(ids(w)).toEqual(['s0', 's1', 's2']);
+    expect([w.before, w.after]).toEqual([0, 0]);
+  });
+
+  it('une longue quête : la dernière faite, celle en cours et la suivante', () => {
+    const w = stepWindow(steps(['done', 'done', 'done', 'now', 'todo', 'todo', 'todo']), 3);
+    expect(ids(w)).toEqual(['s2', 's3', 's4']);
+    expect([w.before, w.after]).toEqual([2, 2]);
+  });
+
+  it('avec 2 lignes (téléphone en paysage) : celle en cours et la suivante', () => {
+    const w = stepWindow(steps(['done', 'done', 'now', 'todo', 'todo']), 2);
+    expect(ids(w)).toEqual(['s2', 's3']);
+    expect([w.before, w.after]).toEqual([2, 1]);
+  });
+
+  it('au début et à la fin, la fenêtre reste pleine', () => {
+    expect(ids(stepWindow(steps(['now', 'todo', 'todo', 'todo', 'todo']), 3))).toEqual(['s0', 's1', 's2']);
+    const end = stepWindow(steps(['done', 'done', 'done', 'done', 'now']), 3);
+    expect(ids(end)).toEqual(['s2', 's3', 's4']);
+    expect(end.after).toBe(0);
+  });
+
+  it('la vraie quête du vétérinaire sans animal (7 étapes) tient en 3 lignes', () => {
+    const p = createProfile('Lou');
+    followQuest(p, 'vet1');
+    const v = followView(p, OBJECTIVES);
+    expect(v.steps.length).toBe(7);
+    const w = stepWindow(v.steps, 3);
+    expect(w.steps.length).toBe(3);
+    expect(w.steps[0].state).toBe('now');
+    expect(w.before + w.steps.length + w.after).toBe(7);
   });
 });

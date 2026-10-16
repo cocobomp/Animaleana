@@ -148,7 +148,10 @@ export class Marker {
     const H = window.innerHeight;
     const ny = ahead ? Math.max(-0.4, Math.min(0.3, v.y)) : -0.1;
     const sx = right ? W - 44 : 44;
-    const sy = (1 - (ny + 1) / 2) * H;
+    let sy = (1 - (ny + 1) / 2) * H;
+    // Pas sur le suivi de quête rangé contre ce bord (src/ui/tutorial.js) : la flèche passe juste en dessous.
+    const box = this.game.ui?.tutorial?.trackerBox;
+    if (box && sx + 32 > box.left && sx - 32 < box.right && sy + 32 > box.top - 6 && sy - 32 < box.bottom + 6) sy = box.bottom + 40;
     this.edgeEl.hidden = false;
     this.edgeEl.style.left = `${sx - 32}px`;
     this.edgeEl.style.top = `${sy - 32}px`;

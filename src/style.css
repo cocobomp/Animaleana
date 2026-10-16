@@ -1013,40 +1013,56 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
 .marker-edge[hidden] { display: none; }
 .marker-edge-arrow { display: inline-block; line-height: 1; }
 
-/* Objectif épinglé : la quête conseillée, ou la quête suivie avec ses étapes. */
+/* Suivi de quête discret, sur le côté (src/ui/tutorial.js : renderTracker, placeTracker qui pose son `top`).
+   Une ligne « titre 0/3 🧭 – » ; les étapes en petit dessous quand on suit la quête ; rangé, une pastille
+   « 🎯 0/3 › » contre le bord. Ordinateur : à gauche sous la carte d'infos ; téléphone : à droite (plus bas). */
 #quest-tracker {
   position: fixed;
   left: calc(10px + var(--safe-l));
-  top: calc(156px + var(--safe-t));
+  top: calc(180px + var(--safe-t));
   z-index: 11;
-  width: min(340px, calc(100vw - 20px));
-  padding: 6px;
-  background: rgba(255, 253, 245, 0.96);
+  width: max-content;
+  min-width: 190px;
+  max-width: min(288px, calc(100vw - 20px));
+  padding: 2px 3px 3px;
+  background: rgba(255, 253, 245, 0.94);
   border: 2px solid #ffd23f;
-  border-radius: 16px;
-  box-shadow: var(--shadow);
+  border-radius: 14px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
   display: grid;
-  gap: 4px;
+  gap: 0;
+  color: var(--ink);
 }
 #quest-tracker[hidden] { display: none; }
 #quest-tracker.following { border-color: var(--primary); }
-.qt-row { display: flex; align-items: center; gap: 4px; }
-.qt-head { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; min-height: 48px; padding: 4px 6px; text-align: left; background: transparent; border: none; }
-.qt-chevron { color: var(--muted); font-size: 0.9rem; }
-.qt-quick { width: 40px; min-height: 40px; padding: 0; border-radius: 50%; font-size: 1.1rem; flex-shrink: 0; }
-.qt-icon { font-size: 1.6rem; }
-.qt-main { display: grid; min-width: 0; flex: 1; }
-.qt-main b { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.qt-main small { color: var(--muted); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.qt-side { font-weight: 700; font-size: 0.9rem; }
-.qt-steps { list-style: none; margin: 0; padding: 0 6px; display: grid; gap: 3px; }
-.qt-step { display: flex; gap: 6px; align-items: center; font-size: 0.9rem; color: var(--muted); }
-.qt-step.done { text-decoration: line-through; }
-.qt-step.now { color: var(--ink); font-weight: 700; font-size: 1rem; }
-.qt-check { width: 1.4em; text-align: center; flex-shrink: 0; }
-.qt-actions { display: flex; justify-content: flex-end; gap: 6px; }
-.qt-follow, .qt-stop { min-height: 44px; padding: 0 14px; border-radius: 12px; font-size: 0.9rem; }
-.qt-stop { background: transparent; }
+#quest-tracker.bump { animation: qt-bump 0.6s ease-out; }
+@keyframes qt-bump { 35% { transform: scale(1.07); } }
+body.actv-running #quest-tracker { display: none !important; } /* pendant une activité, l'écran est à elle */
+.qt-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.qt-head { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; min-height: 38px; padding: 2px 2px 2px 7px; text-align: left; background: transparent; border: none; border-radius: 10px; color: inherit; }
+.qt-icon { font-size: 1.1rem; line-height: 1; flex-shrink: 0; }
+/* Le nom de la quête : deux lignes au plus (coupé avec « … » au-delà ; le nom entier est dans le journal). */
+.qt-title { flex: 1; min-width: 0; font-size: 0.84rem; line-height: 1.18; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: break-word; }
+.qt-count { flex-shrink: 0; font-weight: 800; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.qt-quick { width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 50%; font-size: 1rem; flex-shrink: 0; }
+.qt-fold { width: 26px; min-width: 26px; min-height: 38px; padding: 0 0 2px; border: none; background: transparent; color: var(--muted); font-size: 1.3rem; font-weight: 800; line-height: 1; flex-shrink: 0; }
+.qt-dots { display: flex; gap: 3px; padding: 1px 8px 2px; }
+.qt-dots i { width: 6px; height: 6px; border-radius: 50%; background: #e7dfcb; }
+.qt-dots i.done { background: var(--good); }
+.qt-dots i.now { background: #f0a500; transform: scale(1.3); }
+.qt-steps { list-style: none; margin: 0; padding: 0 6px 2px 7px; display: grid; gap: 1px; }
+.qt-step { display: flex; gap: 4px; align-items: baseline; min-width: 0; font-size: 0.76rem; line-height: 1.3; color: var(--muted); }
+.qt-check { width: 1.35em; text-align: center; flex-shrink: 0; font-size: 0.9em; }
+.qt-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qt-step.done .qt-label { text-decoration: line-through; }
+.qt-step.now { color: var(--ink); font-weight: 700; font-size: 0.8rem; }
+.qt-step.now .qt-label { white-space: normal; } /* l'étape à faire se lit en entier */
+/* Rangé : une petite pastille contre le bord ; on la touche pour rouvrir. */
+#quest-tracker.folded { min-width: 0; padding: 1px; border-radius: 999px; }
+.qt-pill { display: flex; align-items: center; gap: 5px; min-height: 38px; padding: 0 8px 2px 10px; border: none; border-radius: 999px; background: transparent; color: inherit; }
+#quest-tracker.side-right .qt-pill { padding: 0 10px 2px 8px; }
+.qt-pill .qt-count { color: var(--ink); font-size: 0.85rem; }
+.qt-chev { color: var(--muted); font-size: 1.35rem; font-weight: 700; line-height: 1; }
 
 /* Journal : où faire la quête et « Montre-moi ». */
 .quest-extra { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 4px; }
@@ -1054,7 +1070,7 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
 .quest-hint { font-size: 0.85rem; color: var(--muted); flex-basis: 100%; }
 .quest-show { min-height: 48px; padding: 0 14px; border-radius: 12px; }
 
-/* Téléphone : la bulle prend toute la largeur sous le bloc du haut ; l'objectif devient une pastille d'une ligne. */
+/* Téléphone : la bulle prend toute la largeur sous le bloc du haut ; le suivi de quête passe à droite. */
 @media (max-width: 640px), (max-height: 480px) {
   #tuto-bubble { left: calc(8px + var(--safe-l)); right: calc(8px + var(--safe-r)); width: auto; padding: 8px 10px; gap: 8px; border-width: 2px; border-radius: 18px; }
   .tuto-dots i { width: 7px; height: 7px; }
@@ -1064,22 +1080,15 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
   .tuto-hint { font-size: 0.88rem; }
   .tuto-ok { min-height: 48px; font-size: 1.05rem; }
   .tuto-icon { min-height: 44px; min-width: 44px; font-size: 1.1rem; }
-  #quest-tracker { left: calc(8px + var(--safe-l)); right: calc(8px + var(--safe-r)); width: auto; padding: 2px 4px; gap: 2px; }
-  #quest-tracker.compact { border-radius: 999px; }
-  .qt-head { min-height: 40px; padding: 2px 4px 2px 8px; gap: 6px; }
-  .qt-icon { font-size: 1.25rem; }
-  .qt-main b { font-size: 0.9rem; }
-  .qt-main small { font-size: 0.78rem; }
-  .qt-side { font-size: 0.85rem; }
-  .qt-step { font-size: 0.85rem; }
-  .qt-step.now { font-size: 0.95rem; }
-  .qt-actions { padding: 0 4px 2px; }
-  .qt-follow, .qt-stop, .qt-show { min-height: 40px; padding: 0 12px; font-size: 0.88rem; }
+  /* Suivi de quête : contre le bord droit, sous la barre d'outils (le joystick est en bas à gauche). */
+  #quest-tracker { left: auto; right: calc(8px + var(--safe-r)); min-width: 168px; max-width: min(250px, 66vw); }
 }
-/* Paysage : bulle et pastille au milieu, entre le joystick (à gauche) et les boutons de vue (à droite). */
+/* Paysage : la bulle au milieu, entre le joystick (à gauche) et les boutons de vue (à droite) ;
+   le suivi de quête à droite sous les boutons du haut, sans toucher les messages du milieu. */
 @media (max-height: 480px) and (min-width: 641px) {
-  /* Centrées avec left (pas transform) : l'animation d'entrée de la bulle remplace transform pendant qu'elle joue. */
-  #tuto-bubble, #quest-tracker { left: max(190px, calc(50% - 200px)); right: auto; width: min(400px, calc(100vw - 380px)); transform: none; }
+  /* Centrée avec left (pas transform) : l'animation d'entrée de la bulle remplace transform pendant qu'elle joue. */
+  #tuto-bubble { left: max(190px, calc(50% - 200px)); right: auto; width: min(400px, calc(100vw - 380px)); transform: none; }
+  #quest-tracker { min-width: 150px; max-width: max(150px, min(240px, calc(50vw - 216px))); }
   #toasts { width: min(400px, calc(100vw - 380px)); }
   #status-bar { left: max(190px, calc(50% - 200px)); right: auto; width: min(400px, calc(100vw - 380px)); transform: none; justify-items: center; }
 }

@@ -1359,6 +1359,10 @@ const fr = {
   o_scoop1: 'Ramasse un crottin',
   quest_follow: 'Suivre la quête',
   quest_stop: 'Arrêter',
+  // Suivi de quête sur le côté (src/ui/tutorial.js) : le ranger en pastille, le rouvrir.
+  quest_fold: 'Ranger la quête sur le côté',
+  quest_unfold: 'Voir la quête',
+  quest_stepOf: 'Étape {n} sur {total}',
   quest_followDone: 'Quête réussie : {name} !',
   quest_step_goRefuge: 'Va au refuge 🐾',
   quest_step_waitOpen: 'Attends l\'ouverture avec ⏩',
@@ -3029,6 +3033,10 @@ const en = {
   o_scoop1: 'Pick up a dropping',
   quest_follow: 'Follow the quest',
   quest_stop: 'Stop',
+  // Side quest tracker (src/ui/tutorial.js): tuck it away as a pill, open it again.
+  quest_fold: 'Tuck the quest away',
+  quest_unfold: 'Show the quest',
+  quest_stepOf: 'Step {n} of {total}',
   quest_followDone: 'Quest complete: {name}!',
   quest_step_goRefuge: 'Go to the shelter 🐾',
   quest_step_waitOpen: 'Wait for opening time with ⏩',

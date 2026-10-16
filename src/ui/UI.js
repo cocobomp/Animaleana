@@ -125,6 +125,9 @@ export class UI {
 
   buildHud() {
     const btn = (emoji, label, fn) => h('button', { class: 'hud-btn', onClick: fn, title: label }, h('span', {}, emoji), h('small', {}, label));
+    // Refait avec l'interface : il garde ainsi la langue choisie dans les réglages.
+    this.pauseBanner.replaceChildren(h('span', {}, `⏸ ${t('pause')}`),
+      h('button', { class: 'primary', onClick: () => this.game.setTimeScale(1) }, `▶ ${t('resume')}`));
     this.hudInfo = h('div', { class: 'hud-info' });
     this.hud.replaceChildren(
       this.hudInfo,

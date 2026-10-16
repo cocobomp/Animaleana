@@ -31,11 +31,12 @@ npm run preview    # http://localhost:4173 ; depuis un téléphone du même rés
 | C | 🎥 | caméra 1ʳᵉ / 3ᵉ personne |
 | glisser la souris, molette | glisser, pincer | tourner la vue, zoomer |
 
-## Contenu (version 0.3)
+## Contenu (version 0.4)
 
 - Plusieurs profils, avatar personnalisable, modes **bac à sable** et **gestion** (argent, petits boulots)
 - 7 espèces et 91 races : chevaux, chiens, chats, lapins, moutons, chèvres, vaches (avec des races locales en voyage) ; chiens de troupeau
 - Besoins réalistes, personnalités, maladies ; **vétérinaire à jouer soi-même** (examen, carnet, diagnostic, soin) et trousse de soins
+- **Mini-jeux pour chaque corvée** : curer le box, pailler, balayer l'allée, ranger le salon, faire la vaisselle
 - **Mini-jeux pour chaque soin** : nourrir, boire, brosser, laver, nettoyer, griffes, ferrer, caresser, friandise, jouer, longe, liberté, tonte et traite
 - Les animaux grandissent, vieillissent et peuvent avoir des bébés
 - Dressage de tours, entraînement, longe et travail en liberté ; équitation (même à cru) ; promenade en laisse

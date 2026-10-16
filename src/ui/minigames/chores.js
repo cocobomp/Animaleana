@@ -7,10 +7,13 @@
 // Règle « juste ce qu'il faut » (score.js) : chaque corvée a une quantité juste, visible en
 // vert sur la jauge (et dans la scène), et l'enfant s'arrête avec « C'est bon ! » ; trop peu
 // ou trop, c'est moins de points, de la même façon des deux côtés.
-// - curer : tout le crottin, mais pas la paille propre (la jeter, c'est trop) ;
+// - curer : tout le crottin, mais pas la paille propre (la jeter, c'est trop) ; un crottin
+//   oublié compte autant qu'une touffe jetée ;
 // - paille : une couche partout (0,85 à 1,15 couche), plus c'est du gaspillage ;
-// - balayer : tout ramasser, sans passes à vide (balayer du propre soulève la poussière) ;
-// - ranger : chaque objet à sa place (un objet au mauvais endroit compte en moins) ;
+// - balayer : tout ramasser, sans passes à vide une fois fini (balayer du propre soulève la
+//   poussière) ;
+// - ranger : chaque objet à sa place (un objet au mauvais endroit compte en moins ; « trop »
+//   n'existe pas) ;
 // - vaisselle : frotter chaque assiette juste assez (trop longtemps, c'est de l'eau gaspillée).
 
 import { rrect, ellipse, circle, emoji, label, fillView, tiles, clamp, dist, distToSegment } from './draw.js';
@@ -21,6 +24,12 @@ import { justRight, verdict as verdictOf } from './score.js';
 export const CHORE_KINDS = ['muck', 'straw', 'sweep', 'living', 'kitchen'];
 
 export const CHORE_ICONS = { muck: '🧹', straw: '🌾', sweep: '🧹', living: '🧽', kitchen: '🍽️' };
+
+/**
+ * Consigne quand la jauge entre dans le vert : le texte du bouton (« ✅ C'est bon ! »), pour
+ * montrer quoi toucher. (Pas « Lâche maintenant ! » : dans les corvées, lever le doigt n'arrête rien.)
+ */
+const STOP_HINT = (t) => `✅ ${t('mg_stopHere')}`;
 
 /** Flèche qui invite à aller quelque part (petit rebond). */
 function bounceArrow(g, ch, x, y, time, size = 24) {
@@ -60,9 +69,40 @@ function drawFork(g, x, y) {
  * Curer : le jeu « nettoyer » du cheval, à la fourche, sans la 2e étape (la paille a son propre
  * jeu). Juste ce qu'il faut : les 8 crottins dans la brouette, et pas les 3 touffes de paille
  * propre qui traînent (les jeter, c'est du gaspillage : trop).
+ * Tout le crottin dans la brouette, c'est fini tout seul (clean.js) ; « C'est bon ! » permet de
+ * s'arrêter avant (comme ranger le salon) : chaque crottin oublié compte autant qu'une touffe
+ * jetée, et le message dit lequel des deux l'emporte (trop peu / trop).
  */
 export function muckGame(ctx) {
-  return cleanGame(ctx, { species: 'horse', n: 8, decoys: 3, spread: false, tool: drawFork, hint: ctx.t('mg_chore_muck_hint') });
+  const { t, fx } = ctx;
+  const game = cleanGame(ctx, { species: 'horse', n: 8, decoys: 3, spread: false, tool: drawFork, hint: t('mg_chore_muck_hint') });
+  const tufts = game.peek().items.filter((x) => x.good).length;
+  /** Ce qui ne va pas : crottins encore par terre, touffes propres parties vers la brouette. */
+  const faults = () => {
+    const floor = game.peek().items;
+    return { left: floor.filter((x) => !x.good).length, thrown: tufts - floor.filter((x) => x.good).length };
+  };
+  /** La valeur notée : nDirt − erreurs si c'est surtout du crottin oublié, nDirt + erreurs sinon. */
+  const scored = () => {
+    const { nDirt } = game.peek();
+    const { left, thrown } = faults();
+    return left >= thrown ? nDirt - left - thrown : nDirt + left + thrown;
+  };
+
+  ctx.stopButton(() => {
+    if (ctx.done) return;
+    const p = game.peek();
+    const { verdict } = ctx.finishJust(scored(), p.lo, p.hi, { slack: 1.5 });
+    const cx = p.floor.x + p.floor.w / 2;
+    const cy = p.floor.y + p.floor.h / 2;
+    if (verdict === 'just') {
+      fx.burst(cx, cy, '✨', 8, { speed: 160 });
+      fx.text(cx, cy - 20, t('mg_perfect'), '#2f8a5f', 26);
+    } else if (verdict === 'low') fx.text(cx, cy - 20, t('mg_more_short'), '#c07a10', 26);
+    else fx.text(cx, cy - 20, t('mg_oops'), '#c8463c', 26);
+  });
+
+  return { ...game, peek: () => ({ ...game.peek(), ...faults(), scored: scored() }) };
 }
 
 // ---------------------------------------------------------------- paille fraîche
@@ -149,8 +189,9 @@ export function strawGame(ctx) {
     const zs = v > STRAW.hi ? 'over' : v >= STRAW.lo ? 'in' : '';
     if (zs !== zoneState) {
       zoneState = zs;
-      if (zs === 'in') { ctx.hint(t('mg_nowStop'), 'good'); fx.text(200, 80, t('mg_good'), '#2f8a5f', 26); }
-      else if (zs === 'over') ctx.hint(t('mg_stop'), 'warn');
+      // Pas « lâche ! » (lever le doigt n'arrête rien ici) : on montre le bouton « C'est bon ! ».
+      if (zs === 'in') { ctx.hint(STOP_HINT(t), 'good'); fx.text(200, 80, t('mg_good'), '#2f8a5f', 26); }
+      else if (zs === 'over') ctx.hint(t('mg_zoneHint'), 'warn');
     }
     // Des tas partout : c'est trop, et c'est fini.
     if (v >= STRAW.max) end();
@@ -252,19 +293,24 @@ export function strawGame(ctx) {
 // ---------------------------------------------------------------- balayer l'allée
 
 /**
- * Zone juste : au moins 90 % des brins dans la pelle, et pas de passes à vide (chaque passe
- * qui ne touche rien soulève de la poussière : + 0,05). À 1,5, la poussière est partout.
+ * Zone juste : au moins 90 % des brins dans la pelle, et pas de passes à vide une fois le
+ * travail fait (chaque passe qui ne touche rien soulève de la poussière : + 0,05). À 1,5, la
+ * poussière est partout. Avant d'avoir atteint 90 %, une passe à côté ne compte pas : sinon la
+ * poussière comblerait les brins oubliés et la jauge serait dans le vert avec l'allée sale.
  */
 const SWEEP = { lo: 0.9, hi: 1.1, max: 1.5, dust: 0.05 };
 
 export function sweepGame(ctx) {
   const { t, fx, rng } = ctx;
   const aisle = { y: 104, h: 250 }; // l'allée, vue de dessus : tout le bas de la vue
-  const pan = { x: 310, y: 116, w: 80, h: 228 }; // la pelle, au bout de l'allée (dans les 400 px)
+  // La pelle, au bout de l'allée, ET son manche : tout tient dans les 400 px (en portrait, la
+  // vue s'arrête pile à x = 400 ; le manche n'est plus coupé au bord).
+  const pan = { x: 300, y: 116, w: 70, h: 228 };
+  const handle = { x0: pan.x + pan.w - 8, x1: 395, y: pan.y + pan.h / 2, h: 18 };
   const bits = [];
   for (let i = 0; i < 46; i++) {
     bits.push({
-      x: 20 + rng() * 270,
+      x: 20 + rng() * 262,
       y: aisle.y + 20 + rng() * (aisle.h - 44),
       kind: rng() < 0.55 ? 'straw' : 'dust',
       rot: rng() * Math.PI,
@@ -298,7 +344,7 @@ export function sweepGame(ctx) {
     if (ctx.done) return;
     const { verdict } = ctx.finishJust(value(), SWEEP.lo, SWEEP.hi, { slack: 0.3 });
     if (verdict === 'just') {
-      fx.burst(pan.x + 40, pan.y + pan.h / 2, '✨', 8, { speed: 160 });
+      fx.burst(pan.x + pan.w / 2, pan.y + pan.h / 2, '✨', 8, { speed: 160 });
       fx.text(200, 220, t('mg_perfect'), '#2f8a5f', 26);
     } else if (verdict === 'low') fx.text(200, 220, t('mg_more_short'), '#c07a10', 26);
     else fx.text(200, 220, t('mg_oops'), '#c8463c', 26);
@@ -310,7 +356,7 @@ export function sweepGame(ctx) {
     const zs = v > SWEEP.hi ? 'over' : v >= SWEEP.lo ? 'in' : '';
     if (zs !== zoneState) {
       zoneState = zs;
-      if (zs === 'in') { ctx.hint(t('mg_zoneHint'), 'good'); fx.text(200, 220, t('mg_good'), '#2f8a5f', 26); }
+      if (zs === 'in') { ctx.hint(STOP_HINT(t), 'good'); fx.text(200, 220, t('mg_good'), '#2f8a5f', 26); }
       else if (zs === 'over') ctx.hint(t('mg_zoneHint'), 'warn');
     }
     // De la poussière partout : c'est trop, et c'est fini.
@@ -340,7 +386,7 @@ export function sweepGame(ctx) {
           b.done = true;
           collected++;
           strokeGain++;
-          b.x = pan.x + 26 + rng() * 40;
+          b.x = pan.x + 20 + rng() * (pan.w - 36);
           b.y = clamp(b.y, pan.y + 20, pan.y + pan.h - 20);
         }
       }
@@ -351,7 +397,7 @@ export function sweepGame(ctx) {
   }
 
   return {
-    peek: () => ({ pan, aisle, collected, total, emptyStrokes, strokes, value: value(), lo: SWEEP.lo, hi: SWEEP.hi, max: SWEEP.max, bits: bits.filter((b) => !b.done).map((b) => ({ x: b.x, y: b.y })) }),
+    peek: () => ({ pan, handle, aisle, collected, total, emptyStrokes, strokes, value: value(), lo: SWEEP.lo, hi: SWEEP.hi, max: SWEEP.max, bits: bits.filter((b) => !b.done).map((b) => ({ x: b.x, y: b.y })) }),
     down(p) {
       last = p;
       strokeGain = 0;
@@ -363,9 +409,10 @@ export function sweepGame(ctx) {
       last = null;
       if (ctx.done) return;
       strokes++;
-      if (strokeGain > 0) { fx.text(pan.x + 30, pan.y - 16, t('mg_hop'), '#2f8a5f', 20); if (!zoneState) ctx.hint(t('mg_chore_sweep_more'), 'good'); }
-      else if (strokeTouched === 0 && strokeLen >= 40) {
-        // Une passe à vide : ça soulève la poussière (trop balayé).
+      // « Hop ! » dans la pelle (au-dessus, il cachait le compteur).
+      if (strokeGain > 0) { fx.text(pan.x + pan.w / 2, pan.y + 44, t('mg_hop'), '#2f8a5f', 20); if (!zoneState) ctx.hint(t('mg_chore_sweep_more'), 'good'); }
+      else if (strokeTouched === 0 && strokeLen >= 40 && collected / total >= SWEEP.lo) {
+        // Une passe à vide quand le travail est fait : ça soulève la poussière (trop balayé).
         emptyStrokes++;
         const pp = ctx.pointer;
         for (let i = 0; i < 8; i++) fx.dot(pp.x + (Math.random() - 0.5) * 60, pp.y + (Math.random() - 0.5) * 40, 'rgba(150, 135, 110, 0.6)', 4 + Math.random() * 4, { vx: (Math.random() - 0.5) * 60, vy: -30 - Math.random() * 30, life: 0.9 });
@@ -393,9 +440,17 @@ export function sweepGame(ctx) {
       }
       g.fillStyle = '#7a5230';
       g.fillRect(v.x0, aisle.y - 8, v.w, 8);
-      // la pelle (ouverte vers la gauche, manche vers la droite)
+      // la pelle (ouverte vers la gauche), et son manche court, arrondi, avec son trou pour
+      // l'accrocher : il s'arrête avant le bord de la vue (x = 400 en portrait).
+      g.fillStyle = 'rgba(0,0,0,0.15)';
+      rrect(g, handle.x0 + 3, handle.y - handle.h / 2 + 5, handle.x1 - handle.x0, handle.h, handle.h / 2);
+      g.fill();
       g.fillStyle = '#6b4a2b';
-      g.fillRect(pan.x + pan.w - 10, pan.y + pan.h / 2 - 8, v.x1 - pan.x, 16);
+      rrect(g, handle.x0, handle.y - handle.h / 2, handle.x1 - handle.x0, handle.h, handle.h / 2);
+      g.fill();
+      g.fillStyle = '#4a2f17';
+      circle(g, handle.x1 - 10, handle.y, 3.5);
+      g.fill();
       g.fillStyle = 'rgba(0,0,0,0.15)';
       rrect(g, pan.x + 4, pan.y + 6, pan.w, pan.h, 14);
       g.fill();
@@ -423,7 +478,7 @@ export function sweepGame(ctx) {
           g.fill();
         }
       }
-      label(g, `${collected} / ${total}`, pan.x + 40, pan.y - 20, 18);
+      label(g, `${collected} / ${total}`, pan.x + pan.w / 2, pan.y - 20, 18);
       // Petite jauge sur le mur du haut : la même zone verte que sur la jauge du cadre.
       drawMiniGauge(g, 30, 14, 250, 14, value() / SWEEP.max, SWEEP.lo / SWEEP.max, SWEEP.hi / SWEEP.max);
       if (collected < total && !ctx.done && !zoneState) bounceArrow(g, '➡️', pan.x - 36, aisle.y + aisle.h / 2 + 60, ctx.time);
@@ -510,6 +565,8 @@ function drawLivingItem(g, it, x, y, alpha = 1) {
  * Juste ce qu'il faut : chaque objet à sa place. Un objet posé au mauvais endroit y reste
  * (avec un ❗) et compte en moins : score = bien rangés − mal rangés. Tout bien rangé, c'est
  * fini tout seul ; sinon on s'arrête avec « C'est bon ! ».
+ * « Trop » n'existe pas ici (on ne peut pas ranger plus que tout) : tout est du côté « trop
+ * peu » (oublié par terre, ou mal rangé, qui compte double).
  */
 export function livingGame(ctx) {
   const { t, fx, rng } = ctx;
@@ -521,12 +578,16 @@ export function livingGame(ctx) {
   const items = LIVING_ITEMS.map((it, i) => ({ ...it, x: spots[i].x, y: spots[i].y, home: spots[i], placed: false, misplaced: false }));
   const N = items.length;
   const LO = N - 0.4; // le dernier objet compte : à 7, ce n'est plus tout à fait juste
+  // La jauge va un peu au-delà de N, pour que « tout rangé » tombe au milieu de la bande verte
+  // (et pas collé au 🏁, où la bande était un trait de 5 %). HI n'est jamais dépassé.
+  const HI = N + 0.4;
+  const MAX = N + 0.5;
   let held = null;
   let off = { x: 0, y: 0 };
   let wrong = 0; // erreurs faites en tout (pour les tests)
 
   ctx.hint(t('mg_chore_living_hint'));
-  ctx.zone(LO / N, 1);
+  ctx.zone(LO / MAX, HI / MAX);
   ctx.stopButton(() => end());
 
   const inPlace = (p, pl) => p.x > pl.x - 10 && p.x < pl.x + pl.w + 10 && p.y > pl.y - 10 && p.y < pl.y + pl.h + 10;
@@ -537,7 +598,7 @@ export function livingGame(ctx) {
 
   function end() {
     if (ctx.done) return;
-    const { verdict } = ctx.finishJust(value(), LO, N, { slack: 2 });
+    const { verdict } = ctx.finishJust(value(), LO, HI, { slack: 2 });
     if (verdict === 'just') {
       fx.burst(200, 200, '✨', 8, { speed: 160 });
       fx.text(200, 180, t('mg_perfect'), '#2f8a5f', 26);
@@ -552,8 +613,8 @@ export function livingGame(ctx) {
       wrong,
       value: value(),
       lo: LO,
-      hi: N,
-      max: N,
+      hi: HI,
+      max: MAX,
       places: LIVING_PLACES,
     }),
     down(p) {
@@ -562,7 +623,7 @@ export function livingGame(ctx) {
         held = it;
         it.misplaced = false;
         off = { x: it.x - p.x, y: it.y - p.y };
-        ctx.progress(Math.max(0, value()) / N);
+        ctx.progress(Math.max(0, value()) / MAX);
       }
     },
     move(p, down) {
@@ -574,13 +635,16 @@ export function livingGame(ctx) {
       if (!held) return;
       const it = held;
       held = null;
-      if (dist(it.x, it.y, it.slot.x, it.slot.y) < 46) {
+      // Près de sa silhouette, ou n'importe où sur SON meuble (le coffre n'a qu'une grande
+      // silhouette pour ses trois jouets) : il file à sa place. Avant, un jouet lâché dans le
+      // coffre mais à plus de 46 px de son emplacement restait posé dessus, sans rien dire.
+      if (dist(it.x, it.y, it.slot.x, it.slot.y) < 46 || (p && inPlace(p, LIVING_PLACES[it.place]))) {
         it.placed = true;
         it.x = it.slot.x;
         it.y = it.slot.y;
         fx.burst(it.x, it.y, '✨', 4, { speed: 80, size: 16 });
         fx.text(it.x, it.y - 34, t('mg_hop'), '#2f8a5f', 20);
-        ctx.progress(Math.max(0, value()) / N);
+        ctx.progress(Math.max(0, value()) / MAX);
         if (placed() === N) end();
         else ctx.hint(t(misplaced() ? 'mg_chore_living_wrong' : 'mg_chore_living_more'), misplaced() ? 'warn' : 'good');
         return;
@@ -596,7 +660,7 @@ export function livingGame(ctx) {
         fx.text(p.x, p.y - 30, t('mg_chore_living_wrong_short'), '#c07a10', 22);
         fx.float(p.x, p.y - 10, '❗', 24);
         ctx.hint(t('mg_chore_living_wrong'), 'warn');
-        ctx.progress(Math.max(0, value()) / N);
+        ctx.progress(Math.max(0, value()) / MAX);
       } else {
         it.x = clamp(it.x, 24, 376);
         it.y = clamp(it.y, 206, 344);
@@ -810,8 +874,10 @@ export function kitchenGame(ctx) {
       const zs = v > DISH.hi ? 'over' : v >= DISH.lo ? 'in' : '';
       if (zs !== zoneState) {
         zoneState = zs;
-        if (zs === 'in') { ctx.hint(t('mg_zoneHint'), 'good'); fx.text(plate.x, plate.y - 60, t('mg_good'), '#2f8a5f', 24); }
-        else if (zs === 'over') ctx.hint(t('mg_stop'), 'warn');
+        // Dans le vert : le bouton à toucher. Au-delà : « Arrête-toi dans la zone verte »
+        // (pas « Lâche vite ! » : lever l'éponge n'envoie pas l'assiette).
+        if (zs === 'in') { ctx.hint(STOP_HINT(t), 'good'); fx.text(plate.x, plate.y - 60, t('mg_good'), '#2f8a5f', 24); }
+        else if (zs === 'over') ctx.hint(t('mg_zoneHint'), 'warn');
       }
       // Beaucoup trop frotté : l'assiette part toute seule (trop).
       if (v >= DISH.max) send();

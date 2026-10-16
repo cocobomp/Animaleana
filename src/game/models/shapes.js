@@ -2,6 +2,7 @@
 // d'une courbe lisse) et mèches de poils. Elles servent aux animaux et à l'avatar.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const _v = new THREE.Vector3();
 
@@ -275,4 +276,59 @@ export function noise3(x, y, z) {
     l(l(h(xi, yi, zi + 1), h(xi + 1, yi, zi + 1), u), l(h(xi, yi + 1, zi + 1), h(xi + 1, yi + 1, zi + 1), u), v),
     w,
   );
+}
+
+/**
+ * Regroupe des pièces statiques par matériau en un seul maillage (un appel de rendu par matériau).
+ * add(geo, material, pos, rot, scale) accumule ; build(parent) crée les maillages fusionnés.
+ * Les géométries passées sont consommées (transformées puis libérées).
+ */
+export class MeshBatch {
+  constructor() {
+    this.parts = new Map();
+    this.frame = null; // matrice parente optionnelle (repère local d'un sous-ensemble)
+  }
+
+  /** Exécute fn avec un repère local (position, rotation autour de y). */
+  local(pos, rotY, fn) {
+    const prev = this.frame;
+    const m = new THREE.Matrix4().makeRotationY(rotY);
+    m.setPosition(pos[0], pos[1], pos[2]);
+    this.frame = prev ? prev.clone().multiply(m) : m;
+    fn();
+    this.frame = prev;
+  }
+
+  add(geo, material, pos = null, rot = null, scale = null) {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    if (g !== geo) geo.dispose();
+    const m = new THREE.Matrix4();
+    if (rot) m.makeRotationFromEuler(rot.isEuler ? rot : new THREE.Euler(...rot));
+    if (scale) m.scale(new THREE.Vector3(...scale));
+    if (pos) m.setPosition(pos[0], pos[1], pos[2]);
+    if (this.frame) m.premultiply(this.frame);
+    g.applyMatrix4(m);
+    let list = this.parts.get(material);
+    if (!list) {
+      list = [];
+      this.parts.set(material, list);
+    }
+    list.push(g);
+    return g;
+  }
+
+  build(parent, { shadow = true, receive = true } = {}) {
+    const meshes = [];
+    for (const [material, geos] of this.parts) {
+      const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos);
+      if (geos.length > 1) geos.forEach((g) => g.dispose());
+      const mesh = new THREE.Mesh(merged, material);
+      mesh.castShadow = shadow;
+      mesh.receiveShadow = receive;
+      parent.add(mesh);
+      meshes.push(mesh);
+    }
+    this.parts.clear();
+    return meshes;
+  }
 }

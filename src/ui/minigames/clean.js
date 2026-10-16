@@ -35,6 +35,17 @@ export const BINS = {
   bag: { x: 360, left: 40, right: 35 },
 };
 
+/**
+ * Distance (px du cadre) jusqu'à laquelle un toucher attrape la saleté la plus proche. Les
+ * saletés sont à au moins 58 px les unes des autres et c'est toujours la plus proche qui vient :
+ * on peut être large, pour les doigts d'enfant (et pour un toucher un peu décalé : à 44 px, une
+ * saleté du coin bas-droit touchée pile dessus pouvait rester au sol sur un téléphone).
+ * Quand il y a de la paille propre à laisser (corvée), on reste à PICK_RADIUS_STRICT : un
+ * toucher à côté d'un crottin ne doit pas envoyer la touffe voisine dans la brouette.
+ */
+export const PICK_RADIUS = 56;
+export const PICK_RADIUS_STRICT = 44;
+
 /** Mur de planches du box (ou de l'étable), du haut de la vue jusqu'au sol. */
 export function drawBoxWall(g, v, wall, floorY, floorColor) {
   fillView(g, v, wall, wall);
@@ -98,8 +109,8 @@ export function cleanGame(ctx, o = {}) {
   const cat = species === 'cat';
   const withSpread = o.spread ?? true;
   const who = a?.name;
-  // Zone du sol (la litière pour le chat)
-  const floor = cat ? { x: 30, y: 110, w: 290, h: 210 } : { x: 14, y: 96, w: 312, h: 246 };
+  // Zone du sol (la litière pour le chat : son bord bleu va de x = 8 à 320, juste avant le sac).
+  const floor = cat ? { x: 24, y: 110, w: 280, h: 210 } : { x: 14, y: 96, w: 312, h: 246 };
   const binDef = BINS[sc.bin] ?? BINS.barrow;
   const bin = { x: binDef.x, y: 250 };
   const items = [];
@@ -221,10 +232,14 @@ export function cleanGame(ctx, o = {}) {
       hi: withSpread ? Z.hi : PICK.hi,
       max: withSpread ? Z.max : PICK.max,
     }),
+    // Clavier : Entrée fait comme « C'est bon ! » une fois qu'on étale (comme à la longe).
+    key(code, down) {
+      if (down && phase === 'spread' && (code === 'Enter' || code === 'NumpadEnter')) endSpread();
+    },
     down(p) {
       if (phase === 'pick') {
         const it = items.filter((x) => x.state === 'floor').sort((u, v) => dist(u.x, u.y, p.x, p.y) - dist(v.x, v.y, p.x, p.y))[0];
-        if (it && dist(it.x, it.y, p.x, p.y) < 44) {
+        if (it && dist(it.x, it.y, p.x, p.y) < (nDecoys > 0 ? PICK_RADIUS_STRICT : PICK_RADIUS)) {
           held = it;
           it.state = 'held';
           downAt = { x: p.x, y: p.y };

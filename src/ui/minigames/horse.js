@@ -20,6 +20,8 @@ const PATH = 102;
 export const WORK_RING = { x: C.x, y: C.y, r: ARENA + 12, width: 16 };
 /** Jauge des allures (longe), en bas : son cadre blanc va de top à bottom, sous l'anneau. */
 export const GAIT_GAUGE = { x0: 30, y0: 328, w: 340, top: 306, bottom: 358 };
+/** Taille des noms d'allure (pas, trot, galop) sous la jauge. */
+export const GAIT_LABEL_SIZE = 14;
 
 function arena(g, ctx) {
   fillView(g, ctx.view, '#8cc268', '#6fa94f');
@@ -224,6 +226,9 @@ export function lungeGame(ctx) {
   };
 }
 
+/** Espace en plus (px) entre « C'est bon ! » et les autres boutons (la rangée en met déjà 8). */
+export const STOP_GAP = 8;
+
 /**
  * Téléphone en portrait : « C'est bon ! » passe sur sa propre ligne, en entier, sous
  * « Doucement » / « Allez ! ». Trois boutons côte à côte coupaient les mots sur deux ou trois
@@ -234,9 +239,13 @@ function stopOnOwnRow(btn) {
   const row = btn?.parentElement;
   const mq = globalThis.matchMedia?.('(max-width: 640px) and (orientation: portrait)');
   if (!row?.style || !btn.style || !mq) return null;
+  // Un peu plus d'espace entre « Allez ! » (qu'on tape sans arrêt) et « C'est bon ! » (qui
+  // termine) : dessous en portrait, à côté en paysage.
   const apply = () => {
     row.style.flexWrap = mq.matches ? 'wrap' : '';
     btn.style.flexBasis = mq.matches ? '100%' : '';
+    btn.style.marginTop = mq.matches ? `${STOP_GAP}px` : '';
+    btn.style.marginLeft = mq.matches ? '' : `${STOP_GAP}px`;
   };
   apply();
   mq.addEventListener?.('change', apply);
@@ -255,7 +264,8 @@ function drawGaitGauge(g, t, v, target, done) {
     g.fillStyle = on ? '#3fae62' : '#dfe8e2';
     rrect(g, xa + 2, y0 - 8, xb - xa - 4, 16, 8);
     g.fill();
-    label(g, t(`mg_gait_${id}`), (xa + xb) / 2, y0 + 19, 12, on ? '#1e7a40' : '#66746c');
+    // 14 px du cadre : environ 12 px à l'écran sur un téléphone de 360 px (12 px du cadre y faisait moins de 10 px).
+    label(g, t(`mg_gait_${id}`), (xa + xb) / 2, y0 + 18, GAIT_LABEL_SIZE, on ? '#1e7a40' : '#66746c');
   }
   emoji(g, '🐴', x0 + (clamp(v, 0, 100) / 100) * w, y0 - 4, 24);
 }

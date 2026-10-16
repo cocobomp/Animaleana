@@ -141,6 +141,17 @@ export function stableRect(ext) {
 export const tackRoomPos = (ext) => ({ x: -24, z: STABLE_PLAN.north - stableLength(ext) - 7 });
 export const TACKROOM_SIZE = { hw: 2.8, hd: 3.8 };
 
+/**
+ * Maison des animaux : en face de la sellerie, de l'autre côté de l'allée. Elle recule avec elle quand
+ * on rallonge l'écurie (sinon l'écurie rallongée la touchait presque : plus de passage le long de la façade).
+ * door : où l'on se tient pour y entrer (côté cour, +z).
+ */
+export function petHousePos(ext) {
+  const z = tackRoomPos(ext).z;
+  return { x: -12, z, door: { x: -12, z: z + 3.6 } };
+}
+export const PETHOUSE_SIZE = { hw: 4.3, hd: 2.8 };
+
 /** Confort d'un box (0–100) : moyenne de la propreté et de la fraîcheur de la paille. */
 export const boxComfort = (box) => (box.clean + box.straw) / 2;
 

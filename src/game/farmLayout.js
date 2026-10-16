@@ -11,18 +11,19 @@ import { enclosure, fenceColliders } from './nav.js';
 import * as B from './models/buildings.js';
 import { t } from '../i18n.js';
 import { coreAt } from './coreLayout.js'; // installations déplaçables (vue d'ensemble)
-import { tackRoomPos, TACKROOM_SIZE } from '../sim/facilities.js';
+import { tackRoomPos, TACKROOM_SIZE, petHousePos, PETHOUSE_SIZE } from '../sim/facilities.js';
 import { buildHutchToys } from './showground.js'; // jouets des lapins (activités)
 
 const GATE = 4;
 
-// Sellerie et maison des animaux (à la maison seulement). La sellerie recule quand on rallonge l'écurie.
+// Sellerie et maison des animaux (à la maison seulement). Elles reculent quand on rallonge l'écurie.
 export const TACKROOM = { ...tackRoomPos(0) };
-export const PETHOUSE = { x: -12, z: -17, door: { x: -12, z: -13.4 } };
+export const PETHOUSE = petHousePos(0);
 
-/** Taille de l'écurie (0, 1 ou 2) : place de la sellerie. Appelé par Game.loadPlace avant World.build. */
+/** Taille de l'écurie (0, 1 ou 2) : place de la sellerie et de la maison des animaux. Appelé avant World.build. */
 export function setStableExt(ext) {
   Object.assign(TACKROOM, tackRoomPos(ext));
+  Object.assign(PETHOUSE, petHousePos(ext));
 }
 
 function disposeGroup(g) {
@@ -192,7 +193,7 @@ export function buildFarm(world, group, isHome = false) {
     const ph = B.petHouse(t('bld_pethouse'));
     ph.group.position.set(PETHOUSE.x, world.heightAt(PETHOUSE.x, PETHOUSE.z), PETHOUSE.z);
     group.add(ph.group);
-    world.colliders.push({ x: PETHOUSE.x, z: PETHOUSE.z, hw: 4.3, hd: 2.8, kind: 'pethouse' });
+    world.colliders.push({ x: PETHOUSE.x, z: PETHOUSE.z, ...PETHOUSE_SIZE, kind: 'pethouse' });
     world.interactables.push({ kind: 'pethouse', ...PETHOUSE.door });
     world.petHouse = PETHOUSE;
     world.clearZones.push({ x: TACKROOM.x, z: TACKROOM.z, r: 5 }, { x: PETHOUSE.x, z: PETHOUSE.z, r: 5.5 });

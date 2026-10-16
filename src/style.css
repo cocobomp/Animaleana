@@ -807,23 +807,38 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
 }
 .cv-tip p { margin: 0; justify-self: stretch; font-weight: 600; line-height: 1.35; }
 .cv-tip.resize { width: min(190px, calc(100vw - 32px)); padding: 10px 12px; font-size: 0.88rem; }
-.cv-tip.resize::after {
-  content: '';
-  position: absolute;
-  top: calc(50% - 9px);
-  right: -9px;
-  border: 9px solid transparent;
-  border-right: 0;
-  border-left-color: #fff;
-}
-.cv-tip.start::before {
-  content: '';
-  position: absolute;
-  top: -9px;
-  left: calc(50% - 9px);
-  border: 9px solid transparent;
-  border-top: 0;
-  border-bottom-color: #fff;
+/* La flèche de la bulle montre ce qu'il faut toucher : la bulle est à côté (right / left), en dessous (below)
+   ou au-dessus (above) ; --arrow : où est la flèche le long de son bord (ConstructionView.placeTip). */
+.cv-tip::before { content: ''; position: absolute; border: 9px solid transparent; }
+.cv-tip.below::before { top: -9px; left: calc(var(--arrow, 50%) - 9px); border-top: 0; border-bottom-color: #fff; }
+.cv-tip.above::before { bottom: -9px; left: calc(var(--arrow, 50%) - 9px); border-bottom: 0; border-top-color: #fff; }
+.cv-tip.right::before { left: -9px; top: calc(var(--arrow, 50%) - 9px); border-left: 0; border-right-color: #fff; }
+.cv-tip.left::before { right: -9px; top: calc(var(--arrow, 50%) - 9px); border-right: 0; border-left-color: #fff; }
+/* Téléphone en paysage : la barre de construction passe sur le côté gauche (sous les boutons du haut),
+   pour laisser toute la hauteur de l'écran à la ferme, aux poignées et aux bulles. */
+@media (max-height: 480px) and (min-width: 641px) {
+  #mgmt-bar.construct {
+    left: calc(8px + var(--safe-l));
+    right: auto;
+    top: calc(58px + var(--safe-t));
+    bottom: calc(8px + var(--safe-b));
+    transform: none;
+    width: 252px;
+    max-width: 252px;
+    overflow-y: auto;
+    align-content: start;
+    padding: 8px;
+    gap: 6px;
+  }
+  #mgmt-bar.construct .cv-head { gap: 6px; align-items: flex-start; }
+  #mgmt-bar.construct .mgmt-info b { font-size: 0.9rem; }
+  #mgmt-bar.construct .mgmt-info small { font-size: 0.74rem; }
+  #mgmt-bar.construct .cv-money { font-size: 0.82rem; padding: 3px 8px; }
+  #mgmt-bar.construct .mgmt-row { flex-wrap: wrap; gap: 6px; }
+  #mgmt-bar.construct .mgmt-btn { flex: 1 1 calc(33.3% - 6px); min-width: 0; min-height: 48px; padding: 3px 2px; border-radius: 14px; }
+  #mgmt-bar.construct .mb-icon { font-size: 1.2rem; }
+  #mgmt-bar.construct .mb-label { font-size: 0.68rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .cv-tip { width: min(280px, calc(100vw - 290px)); }
 }
 @media (max-width: 640px) {
   #mgmt-bar { left: 8px; right: 8px; transform: none; max-width: none; padding: 8px; }

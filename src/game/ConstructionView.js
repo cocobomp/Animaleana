@@ -37,6 +37,9 @@ const TINT = {
 };
 // Espèce montrée pour les places de chaque installation de base.
 const PLACE_EMOJI = { paddock: '🐴', pen: '🐑', hutch: '🐰' };
+// Ancrage des éléments placés à l'écran (voir moveEl).
+const CENTER = 'translate(-50%, -50%)';
+const ABOVE = 'translate(-50%, -100%)';
 
 const VERT = /* glsl */`
 varying vec2 vXZ;
@@ -84,6 +87,14 @@ export class ConstructionView {
     this.version = 0; // change à chaque nouveau cadre (pour ne replacer les poignées que si besoin)
     this.v = new THREE.Vector3();
     this.lastCam = new Float64Array(8);
+    // Ce qui est replacé à chaque image (poignées, étiquette, bulle) : dernières positions écrites, en pixels,
+    // pour ne réécrire style.transform que si elles changent (et rien n'est alloué quand rien ne bouge).
+    this.px = new Int32Array(HANDLES.length * 2 + 4).fill(-99999);
+    this.inf = null; // infos de la sélection, gardées tant que this.version ne change pas
+    this.infV = -1;
+    this.area = { x0: 0, y0: 0, x1: 0, y1: 0 }; // partie de l'écran que la barre et les boutons laissent libre
+    this.areaKey = '';
+    this.tagW = 0;
     window.addEventListener('keydown', (e) => this.onKey(e));
   }
 
@@ -118,17 +129,17 @@ export class ConstructionView {
     this.sel = null;
     this.pending = null;
     this.refresh();
+    this.view.refreshLabels();
+    this.view.refreshBar();
     if (!this.profile.tips?.build) {
-      // La première fois : le paddock bien en vue, avec la bulle « touche le paddock ».
+      // La première fois : le paddock bien en vue (dans la partie libre de l'écran), avec la bulle « touche le paddock ».
       this.showTip('start');
-      this.focusOn(coreRect(this.st.layout, 'paddock'), 1.5);
+      this.focusOn(coreRect(this.st.layout, 'paddock'), 1.25);
     } else {
       // Sinon la ferme, assez haut pour voir les enclos autour.
       const phone = window.innerWidth < 640;
       this.view.glideTo(this.view.focus.x, this.view.focus.z, Math.max(this.view.height, phone ? 78 : 58));
     }
-    this.view.refreshLabels();
-    this.view.refreshBar();
   }
 
   close() {
@@ -156,6 +167,9 @@ export class ConstructionView {
     this.tipEl = null;
     this.sel = null;
     this.pending = null;
+    this.inf = null;
+    this.infV = -1;
+    this.px.fill(-99999);
     if (this.view.active) {
       this.view.refreshLabels();
       this.view.refreshBar();
@@ -335,11 +349,14 @@ export class ConstructionView {
     }
     if (this.pending) {
       if (!this.check.ok) lines.push(`⛔ ${this.reasonText(this.check)}`);
-      else lines.push(this.costText());
+      else if (this.costText()) lines.push(this.costText());
     }
     const text = lines.join(' · ');
     this.tag.hidden = !lines.length || !!this.game.mgmt.build.active;
-    if (this.tag.textContent !== text) this.tag.textContent = text;
+    if (this.tag.textContent !== text) {
+      this.tag.textContent = text;
+      this.tagW = this.tag.hidden ? 0 : this.tag.offsetWidth; // (mesurée quand le texte change, pas à chaque image)
+    }
     this.tag.classList.toggle('bad', !!this.pending && !this.check.ok);
     this.tag.classList.toggle('ok', !!this.pending && this.check.ok);
   }
@@ -405,11 +422,11 @@ export class ConstructionView {
     this.sel = sel;
     const inf = this.info();
     if (!inf) this.sel = null;
-    else this.focusOn(inf.rect);
     if (inf && sel.kind === 'core' && sel.id === 'paddock') this.markTip('build');
     this.syncFrame();
     this.view.refreshLabels();
     this.view.refreshBar();
+    if (inf) this.focusOn(inf.rect, 1, inf.resizable && !this.profile.tips?.resize); // (après la barre : sa taille a changé)
     if (inf?.resizable && !this.profile.tips?.resize) this.showTip('resize');
     else if (this.tipKind === 'resize') this.hideTip();
   }
@@ -429,17 +446,58 @@ export class ConstructionView {
   }
 
   /**
-   * La caméra vient se placer au-dessus de r, assez haut pour tout voir (et les poignées).
-   * room : marge en plus (1 = juste ce qu'il faut).
+   * Partie de l'écran (pixels) que laissent libre les boutons du haut et la barre de construction (en bas
+   * en portrait et sur ordinateur, à gauche sur un téléphone en paysage). Recalculée si la barre change.
    */
-  focusOn(r, room = 1) {
+  freeArea() {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const key = `${this.view.barKey}|${W}|${H}`;
+    if (key === this.areaKey) return this.area;
+    this.areaKey = key;
+    const a = this.area;
+    a.x0 = 0;
+    a.y0 = 0;
+    a.x1 = W;
+    a.y1 = H;
+    const top = document.querySelector('#hud .hud-buttons')?.getBoundingClientRect();
+    if (top?.height) a.y0 = top.bottom + 6;
+    const bar = this.view.bar?.getBoundingClientRect();
+    if (bar?.height) {
+      if (bar.right < W * 0.5) a.x0 = bar.right + 6; // barre sur le côté (paysage)
+      else if (bar.top > H * 0.4) a.y1 = bar.top - 6; // barre en bas
+    }
+    return a;
+  }
+
+  /**
+   * La caméra vient se placer au-dessus de r, assez haut pour tout voir (et les poignées), au milieu de la
+   * partie libre de l'écran. room : marge en plus (1 = juste ce qu'il faut). tip : garder à côté la place
+   * de la bulle « tire un rond » (à droite sur un écran large, en dessous sur un écran haut).
+   */
+  focusOn(r, room = 1, tip = false) {
     const v = this.view;
-    const aspect = window.innerWidth / window.innerHeight;
-    const k = 1.15; // largeur de sol vue ≈ 1,15 × la hauteur de la caméra (vue plongeante)
-    const need = room * Math.max((r.hd * 2 + 10) / (k * 0.62), (r.hw * 2 + 8) / (k * aspect * 0.9));
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const a = this.freeArea();
+    let x1 = a.x1;
+    let y1 = a.y1;
+    if (tip) {
+      const tw = 240;
+      const th = 175;
+      if (a.x1 - a.x0 - tw > a.y1 - a.y0 - th) x1 -= tw;
+      else y1 -= th;
+    }
+    const pad = 62; // place pour les poignées (52 px) autour du cadre
+    const fw = Math.max(60, x1 - a.x0 - pad * 2);
+    const fh = Math.max(60, y1 - a.y0 - pad * 2);
+    // Vue presque d'aplomb (60°) : la hauteur de sol vue ≈ 1,17 × la hauteur de la caméra, sur H pixels.
+    const k = 1.17;
+    const need = room * Math.max((r.hd * 2 * H) / (k * fh), (r.hw * 2 * H) / (k * fw));
     const height = Math.max(22, Math.min(110, need));
-    // Un peu au-dessus du centre de l'écran : la barre du bas en cache plus que les boutons du haut.
-    v.glideTo(r.x, r.z + height * 0.05, height);
+    const mpp = (k * height) / H; // mètres par pixel
+    // Le centre de r au centre de la partie libre (l'écran a +x à droite et +z en bas).
+    v.glideTo(r.x - ((a.x0 + x1) / 2 - W / 2) * mpp, r.z + (H / 2 - (a.y0 + y1) / 2) * mpp, height);
   }
 
   // ---------------------------------------------------------------- toucher
@@ -672,6 +730,10 @@ export class ConstructionView {
       h('button', { class: 'small primary', onClick: ok }, t('cv_tipOk')));
     this.layer.append(this.tipEl);
     this.tipPlaced = false;
+    this.tipW = 0;
+    this.tipH = 0;
+    this.tipSide = '';
+    this.tipArrow = -1;
   }
 
   hideTip() {
@@ -707,52 +769,126 @@ export class ConstructionView {
     L[0] = m[12]; L[1] = m[13]; L[2] = m[14]; L[3] = m[0]; L[4] = m[5]; L[5] = m[10];
     L[6] = this.version;
     L[7] = window.innerWidth + window.innerHeight * 10000;
-    const inf = this.info();
+    if (this.infV !== this.version) {
+      this.inf = this.info(); // (une fois par nouveau cadre, pas à chaque image)
+      this.infV = this.version;
+    }
+    const inf = this.inf;
     const r = inf && (this.pending ?? inf.rect);
+    const a = this.freeArea();
     if (r && this.handleEls && inf.resizable) {
       const x0 = r.x - r.hw;
       const x1 = r.x + r.hw;
       const z0 = r.z - r.hd;
       const z1 = r.z + r.hd;
-      // Sur un petit enclos vu de loin, les poignées des bords se cachent (il reste les coins).
-      const a = this.screen(x0, z1);
-      const ax = a.x;
-      const ay = a.y;
-      const b = this.screen(x1, z0);
-      const small = Math.abs(b.x - ax) < 150 || Math.abs(b.y - ay) < 150;
-      for (const name of HANDLES) {
+      // Sur un petit enclos vu de loin, les poignées du milieu des bords se cachent (il reste les coins) :
+      // celles du haut et du bas si le cadre est étroit à l'écran, celles des côtés s'il est bas.
+      const p = this.screen(x0, z1);
+      const ax = p.x;
+      const ay = p.y;
+      const q = this.screen(x1, z0);
+      const narrow = Math.abs(q.x - ax) < 140;
+      const flat = Math.abs(q.y - ay) < 140;
+      for (let i = 0; i < HANDLES.length; i++) {
+        const name = HANDLES[i];
         const el = this.handleEls[name];
         const x = name.includes('e') ? x1 : name.includes('w') ? x0 : r.x;
         const z = name.includes('n') ? z1 : name.includes('s') ? z0 : r.z;
         const sp = this.screen(x, z);
-        el.style.transform = `translate(${Math.round(sp.x)}px, ${Math.round(sp.y)}px) translate(-50%, -50%)`;
-        el.classList.toggle('far', name.length === 1 && small);
+        this.moveEl(el, i, sp.x, sp.y, CENTER);
+        el.classList.toggle('far', name.length === 1 && (name === 'n' || name === 's' ? narrow : flat));
       }
     }
     if (r && !this.tag.hidden) {
-      // Au-dessus du bord du haut de l'écran (côté -z : la caméra regarde vers -z), au-dessus des poignées.
+      // Au-dessus du bord du haut de l'écran (côté -z : la caméra regarde vers -z), au-dessus des poignées,
+      // sans sortir de la partie libre de l'écran.
       const sp = this.screen(r.x, r.z - r.hd);
-      const y = Math.max(64, sp.y - 30);
-      this.tag.style.transform = `translate(${Math.round(sp.x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
+      const half = (this.tagW || 200) / 2;
+      const x = Math.max(a.x0 + half + 4, Math.min(a.x1 - half - 4, sp.x));
+      const y = Math.max(a.y0 + 34, sp.y - 30);
+      this.moveEl(this.tag, HANDLES.length, x, y, ABOVE);
     }
-    // Bulle « tire un rond » : à gauche de la poignée du bord droit.
-    if (this.tipEl && this.tipKind === 'resize' && r) {
-      const sp = this.screen(r.x + r.hw, r.z);
-      const w = this.tipEl.offsetWidth || 230;
-      const x = Math.max(16 + w, sp.x - 34);
-      const y = Math.max(120, Math.min(window.innerHeight - 260, sp.y));
-      this.tipEl.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-100%, -50%)`;
-      this.tipPlaced = true;
+    if (this.tipEl) this.placeTip(r, a);
+  }
+
+  /** Place un élément (poignée, étiquette, bulle) : style.transform n'est réécrit que si les pixels changent. */
+  moveEl(el, slot, x, y, anchor) {
+    const X = Math.round(x);
+    const Y = Math.round(y);
+    const k = slot * 2;
+    if (this.px[k] === X && this.px[k + 1] === Y) return;
+    this.px[k] = X;
+    this.px[k + 1] = Y;
+    el.style.transform = `translate(${X}px, ${Y}px) ${anchor}`;
+  }
+
+  /**
+   * Bulles d'aide. « Touche le paddock » : sous le paddock (ou au-dessus s'il n'y a pas la place), la flèche
+   * sur lui. « Tire un rond » : à côté du cadre (à droite, à gauche, en dessous ou au-dessus : la première
+   * place libre), jamais sur les poignées. Toujours dans la partie libre de l'écran.
+   */
+  placeTip(r, a) {
+    const el = this.tipEl;
+    if (!this.tipW) {
+      this.tipW = el.offsetWidth || 230;
+      this.tipH = el.offsetHeight || 110;
     }
-    if (this.tipEl && this.tipKind === 'start') {
+    const tw = this.tipW;
+    const th = this.tipH;
+    let x = 0;
+    let y = 0;
+    let side = 'below';
+    let arrow = 0;
+    if (this.tipKind === 'start') {
       const pr = coreRect(this.st.layout, 'paddock');
       const sp = this.screen(pr.x, pr.z);
-      const half = Math.min(160, (window.innerWidth - 32) / 2);
-      const x = Math.max(16 + half, Math.min(window.innerWidth - 16 - half, sp.x));
-      const y = Math.max(90, Math.min(window.innerHeight - 330, sp.y + 34));
-      this.tipEl.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, 0)`;
-      this.tipPlaced = true;
+      const px = sp.x;
+      const py = sp.y;
+      side = py + 30 + th <= a.y1 - 4 ? 'below' : 'above';
+      y = clamp(side === 'below' ? py + 30 : py - 30 - th, a.y0 + 4, a.y1 - th - 4);
+      x = clamp(px - tw / 2, a.x0 + 4, a.x1 - tw - 4);
+      arrow = clamp(px - x, 18, tw - 18);
+    } else if (this.tipKind === 'resize' && r) {
+      // Les bords du cadre à l'écran (avec la place des poignées).
+      const e = this.screen(r.x + r.hw, r.z).x + 34;
+      const w = this.screen(r.x - r.hw, r.z).x - 34;
+      const n = this.screen(r.x, r.z + r.hd).y + 34;
+      const s = this.screen(r.x, r.z - r.hd).y - 34;
+      const c = this.screen(r.x, r.z);
+      const cx = c.x;
+      const cy = c.y;
+      side = 'right';
+      x = e + 8;
+      y = cy - th / 2;
+      if (!fitsIn(a, x, y, tw, th)) {
+        side = 'left';
+        x = w - 8 - tw;
+      }
+      if (!fitsIn(a, x, y, tw, th)) {
+        side = 'below';
+        x = cx - tw / 2;
+        y = n + 8;
+      }
+      if (!fitsIn(a, x, y, tw, th) && fitsIn(a, x, s - 8 - th, tw, th)) {
+        side = 'above';
+        y = s - 8 - th;
+      }
+      x = clamp(x, a.x0 + 4, a.x1 - tw - 4);
+      y = clamp(y, a.y0 + 4, a.y1 - th - 4);
+      arrow = side === 'right' || side === 'left' ? clamp(cy - y, 18, th - 18) : clamp(cx - x, 18, tw - 18);
+    } else return;
+    if (side !== this.tipSide) {
+      el.classList.remove('right', 'left', 'below', 'above');
+      el.classList.add(side);
+      this.tipSide = side;
     }
+    const A = Math.round(arrow);
+    if (A !== this.tipArrow) {
+      this.tipArrow = A;
+      el.style.setProperty('--arrow', `${A}px`);
+    }
+    this.moveEl(el, HANDLES.length + 1, x, y, '');
+    this.tipPlaced = true;
   }
 
   /** Point du sol (x, z) → position à l'écran (réutilise le même vecteur). */
@@ -772,6 +908,11 @@ export class ConstructionView {
     if (e.code === 'Enter' && this.pending) this.applyPending();
   }
 }
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+/** Le rectangle (x, y, w, h) tient-il dans la partie libre a de l'écran ? */
+const fitsIn = (a, x, y, w, h) => x >= a.x0 && x + w <= a.x1 && y >= a.y0 && y + h <= a.y1;
 
 /** 22 → « 22 », 22.4 → « 22,4 » (virgule en français). */
 export function fmt(v) {

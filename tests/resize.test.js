@@ -10,6 +10,7 @@ import {
 } from '../src/sim/construction.js';
 import {
   ensureFacilities, boxCount, stableSlots, canExtendStable, extendStable, stableRect, tackRoomPos, buyUpgrade,
+  petHousePos, PETHOUSE_SIZE, TACKROOM_SIZE,
 } from '../src/sim/facilities.js';
 import { createProfile, migrate } from '../src/sim/profile.js';
 import { createAnimal } from '../src/sim/animal.js';
@@ -303,6 +304,28 @@ describe('rallonger l\'écurie', () => {
     const t = tackRoomPos(1);
     const structures = [{ id: 'x', type: 'kennel', place: 'maison', x: t.x, z: t.z, rot: 0 }];
     expect(validateStableExtension(p, { structures }).reason).toBe('overlap');
+    // La nouvelle place de la maison des animaux, et le passage devant la façade, doivent aussi être libres.
+    const ph = petHousePos(1);
+    expect(validateStableExtension(p, { structures: [{ id: 'y', type: 'kennel', place: 'maison', x: ph.x, z: ph.z, rot: 0 }] }).reason).toBe('overlap');
+    const s = stableRect(1);
+    const kennelFront = { id: 'z', type: 'kennel', place: 'maison', x: s.x + s.hw + 1.2, z: s.z - s.hd + 2, rot: 0 };
+    expect(validateStableExtension(p, { structures: [kennelFront] }).reason).toBe('overlap');
+  });
+
+  it('écurie rallongée : la maison des animaux recule avec la sellerie, on passe toujours le long de la façade', () => {
+    for (const ext of [0, 1, 2]) {
+      const s = stableRect(ext);
+      const ph = petHousePos(ext);
+      const tk = tackRoomPos(ext);
+      // Même rangée que la sellerie, porte côté cour.
+      expect(ph.z).toBe(tk.z);
+      expect(ph.door.z).toBeGreaterThan(ph.z + PETHOUSE_SIZE.hd);
+      // Pas à côté de la façade de l'écurie (sinon un couloir de 0,6 m), ou alors avec 2 m de passage.
+      const besideFacade = ph.z + PETHOUSE_SIZE.hd > s.z - s.hd;
+      if (besideFacade) expect(ph.x - PETHOUSE_SIZE.hw - (s.x + s.hw)).toBeGreaterThanOrEqual(2);
+      // Allée entre la sellerie et la maison des animaux.
+      expect(ph.x - PETHOUSE_SIZE.hw - (tk.x + TACKROOM_SIZE.hw)).toBeGreaterThanOrEqual(2);
+    }
   });
 });
 

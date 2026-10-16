@@ -429,11 +429,12 @@ export class Structures {
 
   // ---------------------------------------------------------------- l'écurie
 
-  /** Peut-on rallonger l'écurie ? (la sellerie et sa porte vont bouger, les murs de l'écurie aussi) */
+  /** Peut-on rallonger l'écurie ? (la sellerie, la maison des animaux, leurs portes et les murs de l'écurie vont bouger) */
   validateStableExtension() {
     const env = this.env();
-    env.colliders = env.colliders.filter((c) => c.room !== 'stable' && c.kind !== 'tackroom');
-    env.blocked = env.blocked.filter((c) => c.kind !== 'tackroom' && c.kind !== 'stable');
+    const moving = ['tackroom', 'pethouse', 'stable']; // (ils bougent avec la rallonge)
+    env.colliders = env.colliders.filter((c) => c.room !== 'stable' && !moving.includes(c.kind));
+    env.blocked = env.blocked.filter((c) => !moving.includes(c.kind));
     env.equipment = this.game.equipment.map((q) => ({ x: q.pos.x, z: q.pos.z }));
     return validateStableExtension(this.profile, env);
   }

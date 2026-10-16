@@ -14,7 +14,7 @@ import { gltfForest, gltfRocks, hasGltfTrees } from './models/gltfNature.js'; //
 import { buildFarm, rebuildCores } from './farmLayout.js';
 import { buildInteriors } from './Interiors.js'; // écurie et maison où l'on entre
 import { coreAt } from './coreLayout.js'; // installations déplaçables (vue d'ensemble)
-import { enclosure, inside, setNavBlockers } from './nav.js'; // enclos de base (déplacés ou agrandis : coreLayout.js)
+import { ENCLOSURES, enclosure, inside, setNavBlockers } from './nav.js'; // enclos de base (déplacés ou agrandis : coreLayout.js)
 import { buildShowground } from './showground.js'; // activités : terrain de concours
 import { showgroundFlat } from '../sim/activities.js';
 
@@ -482,6 +482,24 @@ void main() {
     return mesh;
   }
 
+  /**
+   * Place du torii (Japon) : au milieu du passage entre le paddock et la bergerie, tourné pour qu'on le
+   * traverse en suivant le chemin ; sinon une place de rechange libre. null si rien ne convient.
+   */
+  toriiSpot() {
+    const pd = enclosure('paddock');
+    const pe = enclosure('pen');
+    const spots = [];
+    if (pd && pe) spots.push({ x: (pd.x + pd.hw + pe.x - pe.hw) / 2, z: 30, rot: Math.PI / 2 });
+    spots.push({ x: 0, z: 30, rot: 0 }, { x: -1.5, z: 50, rot: Math.PI / 2 }, { x: 30, z: 52, rot: 0 });
+    const fenced = ENCLOSURES.filter((e) => !e.interior && !e.built); // (les enclos du joueur ne sont pas encore là)
+    return spots.find((sp) => {
+      const r = { x: sp.x, z: sp.z, hw: sp.rot ? 0.6 : 3.6, hd: sp.rot ? 3.6 : 0.6 };
+      const hit = (c, m) => Math.abs(r.x - c.x) < r.hw + c.hw + m && Math.abs(r.z - c.z) < r.hd + c.hd + m;
+      return !this.isWater(sp.x, sp.z) && !fenced.some((e) => hit(e, 0.8)) && !this.colliders.some((c) => hit(c, 0.3));
+    }) ?? null;
+  }
+
   /** Hauteur du sol en (x, z), la même pour le terrain et pour tout ce qui marche dessus. */
   heightAt(x, z) {
     const p = this.place;
@@ -575,7 +593,17 @@ void main() {
     buildShowground(this, g); // activités : carrière, tribune et jury
     // Bâtiments fixes : la navigation ne choisit jamais un coin de contournement dans leurs murs.
     setNavBlockers(this.colliders.filter((c) => c.kind && !c.core));
-    if (p.biome === 'garden') deco(B.torii(), 0, 30);
+    if (p.biome === 'garden') {
+      // Torii : sur le chemin entre le paddock et la bergerie (agrandis ou déplacés), sans toucher leurs barrières.
+      const spot = this.toriiSpot();
+      if (spot) {
+        deco(B.torii(), spot.x, spot.z, spot.rot);
+        for (const k of [-1, 1]) {
+          const along = spot.rot ? { x: 0, z: k * 2.2 } : { x: k * 2.2, z: 0 };
+          this.colliders.push({ x: spot.x + along.x, z: spot.z + along.z, hw: 0.3, hd: 0.3 }); // ses deux piliers
+        }
+      }
+    }
     if (p.biome === 'beach') deco(B.lighthouse(), 70, -60);
 
     // Terrain : construit après les bâtiments pour dessiner la terre battue autour d'eux

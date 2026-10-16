@@ -13,7 +13,9 @@ import {
   EQUIP_SIZE, normRot, frontSide, SPACE_GROUPS,
 } from './construction.js';
 import { spend, earn, isSandbox } from './profile.js';
-import { ensureFacilities, stableExt, stableRect, tackRoomPos, TACKROOM_SIZE, canExtendStable } from './facilities.js';
+import {
+  ensureFacilities, stableExt, stableRect, tackRoomPos, TACKROOM_SIZE, petHousePos, PETHOUSE_SIZE, canExtendStable,
+} from './facilities.js';
 
 /**
  * Tailles permises (mètres) : w × d dans le repère de l'objet. Enclos construits : la porte est sur un
@@ -274,10 +276,14 @@ export function resizeStructure(profile, id, rect) {
 
 // ---------------------------------------------------------------- l'écurie
 
+/** Largeur du passage à garder devant la façade de l'écurie (côté cour, +x) le long de la partie ajoutée. */
+export const STABLE_FRONT_PASSAGE = 2.5;
+
 /**
- * Peut-on rallonger l'écurie ? La partie ajoutée (au sud) et la nouvelle place de la sellerie
- * doivent être libres. env : structures, core, equipment, colliders et blocked du monde
- * (sans les murs de l'écurie, ni la sellerie et sa porte, qui vont bouger).
+ * Peut-on rallonger l'écurie ? La partie ajoutée (au sud), un passage devant sa façade, et les nouvelles
+ * places de la sellerie et de la maison des animaux (avec leurs portes) doivent être libres.
+ * env : structures, core, equipment, colliders et blocked du monde (sans les murs de l'écurie, ni la
+ * sellerie, ni la maison des animaux et leurs portes, qui vont bouger).
  */
 export function validateStableExtension(profile, env = {}) {
   const check = canExtendStable(profile);
@@ -288,7 +294,13 @@ export function validateStableExtension(profile, env = {}) {
   const tp = tackRoomPos(ext + 1);
   const tack = { x: tp.x, z: tp.z, ...TACKROOM_SIZE };
   const door = { x: tp.x + TACKROOM_SIZE.hw + 1.2, z: tp.z, hw: 1.2, hd: 1.5 };
-  const zones = [...addedStrips(old, nu).map((s) => outward(s, 1)), grow(tack, 1), door];
+  const ph = petHousePos(ext + 1);
+  const pet = { x: ph.x, z: ph.z, ...PETHOUSE_SIZE };
+  const petDoor = { x: ph.door.x, z: ph.door.z, hw: 1.5, hd: 1.2 };
+  // Devant la façade, tout le long de la partie ajoutée : on doit pouvoir longer l'écurie.
+  const added = edgesOf(addedStrips(old, nu)[0] ?? nu);
+  const front = rectOf({ x0: nu.x + nu.hw, x1: nu.x + nu.hw + STABLE_FRONT_PASSAGE, z0: added.z0, z1: added.z1 });
+  const zones = [...addedStrips(old, nu).map((s) => outward(s, 1)), front, grow(tack, 1), door, grow(pet, 1), petDoor];
   const core = coreRects(env.core).filter((b) => b.id !== 'yard' && b.id !== 'field');
   for (const z of zones) {
     if (core.some((b) => rectsOverlap(z, b))) return { ok: false, reason: 'core' };

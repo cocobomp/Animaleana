@@ -27,6 +27,7 @@ export class UI {
     this.game = null;
     this.panel = null; // { el, render, animalId, kind }
     this.modalOpen = false;
+    this.modalQueue = []; // fenêtres arrivées pendant un mini-jeu, montrées après (showModal)
 
     this.hud = h('div', { id: 'hud', hidden: true });
     this.actionBtn = h('button', { id: 'action', hidden: true, onClick: () => this.game?.interact() });
@@ -461,6 +462,13 @@ export class UI {
   }
 
   showModal(content) {
+    // Pas par-dessus un mini-jeu en cours (#modal, z-index 50, couvrait .mg-overlay, 45 : « ⭐ Tu
+    // passes au niveau 2 ! » en plein milieu des griffes) : la fenêtre attend la fin du mini-jeu,
+    // qui appelle flushModals en se fermant. Ses boutons (et ses promesses) marchent pareil.
+    if (this.minigameOpen) {
+      this.modalQueue.push(content);
+      return;
+    }
     this.modalOpen = true;
     this.game && (this.game.input.enabled = false);
     this.modal.replaceChildren(h('div', { class: 'modal-box' }, content));
@@ -471,6 +479,15 @@ export class UI {
     this.modalOpen = false;
     this.modal.hidden = true;
     if (this.game) this.game.input.enabled = !this.panel || !this.panel.blocking;
+    // La suivante en attente, s'il y en a : après coup, pour laisser la suite de celle-ci
+    // (une autre fenêtre qu'elle ouvre tout de suite) passer d'abord.
+    if (this.modalQueue.length) setTimeout(() => this.flushModals(), 0);
+  }
+
+  /** Montre la prochaine fenêtre mise en attente pendant un mini-jeu (une à la fois). */
+  flushModals() {
+    if (this.minigameOpen || this.modalOpen || !this.modalQueue.length) return;
+    this.showModal(this.modalQueue.shift());
   }
 
   alert(msg) {

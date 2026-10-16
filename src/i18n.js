@@ -21,6 +21,13 @@ const fr = {
   offlinePreparing: 'Préparation pour jouer sans Internet… garde Internet quelques secondes',
   offline: 'Fonctionne sans réseau',
   offlineUnavailable: 'Pour jouer sans Internet, ouvre le jeu depuis son adresse https et installe-le',
+  // Sons (src/game/audio.js)
+  sound: 'Sons',
+  soundOn: 'Activés',
+  soundOff: 'Coupés',
+  volLow: 'Doux',
+  volMid: 'Moyen',
+  volHigh: 'Fort',
   saveFailed: 'Oups, la sauvegarde a échoué (mémoire pleine ou stockage bloqué)',
 
   avatarTitle: 'Ton avatar',
@@ -1723,6 +1730,13 @@ const en = {
   offlinePreparing: 'Getting ready to play offline… keep Internet on for a few seconds',
   offline: 'Works offline',
   offlineUnavailable: 'To play without Internet, open the game from its https address and install it',
+  // Sounds (src/game/audio.js)
+  sound: 'Sounds',
+  soundOn: 'On',
+  soundOff: 'Off',
+  volLow: 'Soft',
+  volMid: 'Medium',
+  volHigh: 'Loud',
   saveFailed: 'Oops, saving failed (storage full or blocked)',
 
   avatarTitle: 'Your avatar',

@@ -418,6 +418,7 @@ class Session {
       if (this.type === 'show') money = info.earnings ?? 0;
     }
     if (money && !isSandbox(p)) earn(p, money);
+    if (money) g.audio?.ui('coin');
     let saved = null;
     if (award) {
       saved = addAward(p, award, {

@@ -47,6 +47,7 @@ import { applyCoreLayout } from './coreLayout.js';
 import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, trajet, pauses)
 import { Marker } from './Marker.js';
 import { Emitter } from './events.js';
+import { audio } from './audio.js'; // sons synthétisés : voix, pas, ambiance, interface
 
 // Animaux qu'on range dans la maison des animaux.
 const PET_HOUSED = ['dog', 'cat', 'rabbit'];
@@ -120,6 +121,12 @@ export class Game {
     this.structures = new Structures(this);
     this.mgmt = new ManagementView(this);
     this.tripFlow = new TripFlow(this);
+    // Sons (src/game/audio.js) : l'animal répond quand on s'occupe de lui, petits sons sur ⏩ et ×2/×4.
+    this.audio = audio;
+    this.on('care', ({ a, action }) => this.entities.get(a.id)?.speak(['pet', 'treat', 'play', 'feed', 'water'].includes(action) ? 'happy' : null));
+    this.on('adopted', (a) => setTimeout(() => this.entities.get(a.id)?.speak('happy'), 350));
+    this.on('skip', (hours) => audio.ui(hours > 0 ? 'skip' : 'cancel'));
+    this.on('timeFast', () => audio.ui('fast'));
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -141,6 +148,10 @@ export class Game {
     this.rig.mode = profile.settings.camera ?? 'third';
     this.player = this.player ?? new Player(this.scene, this.world, profile.avatar);
     this.player.setAvatar(profile.avatar);
+    // Bruit des pas selon le sol (herbe, terre, plancher, pierre…), sabots à cheval.
+    this.player.onStep = (running, hoof) => audio.step(hoof ? 'hoof' : this.surfaceAt(), running);
+    audio.configure(profile.settings.sound);
+    audio.setActive(true);
     this.loadPlace(profile.place);
     this.running = true;
     this.clock.getDelta();
@@ -166,6 +177,7 @@ export class Game {
     const saved = this.save(); // avant d'annuler un trajet en cours : on ne sauvegarde pas un voyage à moitié fait
     this.tripFlow.reset();
     this.emit('stop');
+    audio.setActive(false); // écran des profils : silence
     this.marker.hide();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
@@ -204,6 +216,17 @@ export class Game {
 
   get isHome() {
     return this.profile.place === this.profile.home;
+  }
+
+  /** Sol sous les pieds du joueur, pour le bruit des pas : grass / dirt / wood / stone / snow / sand. */
+  surfaceAt() {
+    const inside = this.interiors.inside;
+    if (inside) return inside === 'house' ? 'wood' : 'stone';
+    const w = this.world;
+    const p = this.player.position;
+    if (w.snowy) return 'snow';
+    if (w.waterLevel !== null && w.waterLevel !== undefined && w.heightAt(p.x, p.z) < w.waterLevel + 0.9) return 'sand';
+    return (w.dirtAt?.(p.x, p.z) ?? 0) > 0.5 ? 'dirt' : 'grass';
   }
 
   get placeDef() {
@@ -474,11 +497,15 @@ export class Game {
     }
 
     const { day } = this.world.updateSky(this.hour, this.weather, this.mgmt.active ? this.mgmt.focus : this.player.position);
+    this.dayLight = day; // 0 la nuit, 1 le jour (ambiance sonore)
     if (this.mgmt.active) this.mgmt.liftFog(); // vue d'en haut : le brouillard commence plus loin
     this.world.updateClouds(dt);
     this.player.torch.intensity = (1 - day) * 6;
     const flash = this.weather3d.update(dt, this.camera.position);
     if (flash) this.world.hemi.intensity += flash * 3;
+    // Le tonnerre suit l'éclair, un peu après.
+    if (flash > (this.lastFlash ?? 0) + 0.4) audio.thunder(0.3 + Math.random() * 1.2);
+    this.lastFlash = flash;
 
     // Simulation des besoins 2 fois par seconde.
     this.simAcc += dt;
@@ -486,6 +513,8 @@ export class Game {
       const hours = (this.simAcc * mps) / 60;
       this.simAcc = 0;
       this.updateWeather();
+      // Nappe sonore : oiseaux le jour, grillons la nuit, vent, pluie ; assourdie dans un bâtiment.
+      audio.ambience({ weather: this.weather, night: (this.dayLight ?? 1) < 0.35, biome: this.placeDef.biome, indoors: !!this.interiors.inside });
       const weather = this.simWeather();
       // En pause, rien ne change (on peut quand même se promener).
       const here = hours > 0 ? this.animalsHere() : [];
@@ -1458,6 +1487,7 @@ export class Game {
   doJob(job) {
     this.advanceTime(job.hours);
     earn(this.profile, job.pay);
+    audio.ui('coin');
     addStat(this.profile, 'jobs');
     this.ui.toast(t('jobDone', { n: job.pay }));
   }
@@ -1554,6 +1584,7 @@ export class Game {
     const r = collectProduct(this.profile, a);
     if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
     this.entities.get(a.id)?.emit(r.product === 'wool' ? '🧶' : '🥛', 3);
+    audio.ui('coin');
     this.xp('collect');
     this.ui.toast(t(`got_${r.product}`, { name: a.name, g: a.sex, n: r.earned }));
     this.ui.refresh();

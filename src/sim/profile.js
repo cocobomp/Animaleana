@@ -49,7 +49,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     petHouse: { dirt: 0 }, // saleté des paniers de la maison des animaux
     // Événements spéciaux (orage, animal blessé…) : voir src/sim/events.js.
     events: { active: null, cooldowns: {}, nextAt: 0, lastRoll: -1, weather: null, done: {} },
-    settings: { camera: 'third', timeSpeed: 'normal' },
+    settings: { camera: 'third', timeSpeed: 'normal', sound: { on: true, volume: 0.7 } }, // sound : src/game/audio.js
     tutorial: createTutorial(), // tutoriel guidé (src/sim/tutorial.js)
   };
 }
@@ -99,7 +99,11 @@ export function loadProfile(id) {
 function migrate(p) {
   const fresh = createProfile(p.name, p.mode, p.home ?? 'maison');
   return {
-    ...fresh, ...p, stats: p.stats ?? {}, settings: { ...fresh.settings, ...p.settings },
+    ...fresh,
+    ...p,
+    stats: p.stats ?? {},
+    // Anciennes sauvegardes : réglage des sons absent (ou incomplet).
+    settings: { ...fresh.settings, ...p.settings, sound: { ...fresh.settings.sound, ...(p.settings?.sound ?? {}) } },
     // Anciennes sauvegardes : pas de tutoriel (on peut le revoir dans les réglages).
     tutorial: p.tutorial ?? createTutorial(true),
   };

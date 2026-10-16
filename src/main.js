@@ -42,4 +42,4 @@ if (import.meta.env.PROD && !(window.isSecureContext && 'serviceWorker' in navig
 }
 
 // Accès depuis la console du navigateur (pratique pour tester).
-window.animaleana = { game, ui };
+window.animaleana = { game, ui, audio: game.audio };

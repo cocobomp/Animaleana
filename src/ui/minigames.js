@@ -15,6 +15,7 @@ import { brushGame, washGame, nailsGame, shoeGame, shearGame } from './minigames
 import { cleanGame } from './minigames/clean.js';
 import { petGame, playGame, milkGame } from './minigames/fun.js';
 import { lungeGame, libertyGame } from './minigames/horse.js';
+import { audio } from '../game/audio.js'; // petits sons : bien joué / raté / fini
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -77,6 +78,8 @@ class Fx {
   /** Un petit mot (« Parfait ! »). */
   text(x, y, text, color = '#2f8a5f', size = 22) {
     this.add({ x, y, text, color, vy: -40, life: 1.1, size, fade: true });
+    // Les mots orange / rouges (« Trop court », « Aïe ») sonnent « raté », les autres « bien joué ».
+    audio.minigame(color === '#c07a10' || color === '#c8463c' ? 'bad' : 'good');
   }
 
   /** Une tache ronde (poussière, gouttes, bulles). */
@@ -223,6 +226,7 @@ export function runMinigame(ui, a, action) {
           hintEl.classList.remove('flash');
           void hintEl.offsetWidth;
           hintEl.classList.add('flash');
+          if (kind === 'good' || kind === 'warn') audio.minigame(kind === 'good' ? 'good' : 'bad');
         }
         hintEl.dataset.kind = kind;
       },
@@ -264,6 +268,7 @@ export function runMinigame(ui, a, action) {
         ctx.done = true;
         quality = Math.round(clamp(q, 0.4, 1) * 100) / 100;
         ctx.progress(1);
+        audio.minigame('done');
         ctx.hint(`🎉 ${t('mg_done')}`, 'good');
         controls.querySelectorAll('button').forEach((b) => { b.disabled = true; });
         setTimeout(() => showEnd(msg), 900);

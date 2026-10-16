@@ -162,6 +162,12 @@ export class Player {
       mount.position.copy(p);
       mount.heading = this.heading;
       mount.speed = this.speed;
+      // Sabots : un bruit à chaque demi-foulée du cheval.
+      const k = Math.floor(mount.phase / Math.PI);
+      if (k !== this.hoofK) {
+        if (this.hoofK !== undefined && this.speed > 0.6) this.onStep?.(this.speed > 6, true);
+        this.hoofK = k;
+      }
       // Petit balancement de l'avatar avec le pas du cheval.
       this.avatar.root.position.y = mount.model.saddleY * mount.scale - 0.78 + mount.model.body.position.y * mount.scale;
       this.avatar.torso.rotation.x = Math.sin(mount.phase * 2) * 0.03 * Math.min(1, this.speed / 4);
@@ -173,6 +179,12 @@ export class Player {
   animateWalk(dt) {
     this.phase += dt * this.speed * 2.2;
     animateAvatarWalk(this.avatar, this.phase, this.speed);
+    // Un pied se pose à chaque demi-tour de la marche : bruit de pas (onStep est branché par Game).
+    const k = Math.floor(this.phase / Math.PI);
+    if (k !== this.stepK) {
+      if (this.stepK !== undefined && this.speed > 0.6) this.onStep?.(this.speed > 4.5, false);
+      this.stepK = k;
+    }
   }
 }
 

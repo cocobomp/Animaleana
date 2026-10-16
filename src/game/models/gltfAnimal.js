@@ -10,6 +10,8 @@ import { noise3 } from './shapes.js';
 import { gfx } from '../gfx.js';
 
 // Réglages par espèce : hauteur totale (m, tête levée), matériaux de robe / crins, noms d'os.
+// (Le cheval n'a plus de fichier GLB : il est sculpté par le code, voir horseModel.js. Ces réglages ne
+// servent que si un modèle « horse » revient un jour dans assets.js.)
 const SPEC = {
   horse: {
     height: 2.1,

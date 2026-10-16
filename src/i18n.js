@@ -854,6 +854,9 @@ const fr = {
   do_shop: 'Choisir et acheter un animal',
   shopHelp: 'Choisis exactement l\'animal que tu veux. Les races rares coûtent plus cher.',
   breederHelp: 'L\'élevage local vend les races de la région.',
+  // Vague 3 (chevaux) : origine et caractère typique de la race, à l'animalerie.
+  breedFrom: 'Origine : {place}',
+  breedTemper: 'Souvent {list}',
   refugeHelp: 'Ces animaux attendent une famille. Au refuge, on les recueille gratuitement !',
   shopSummary: 'Ton futur compagnon',
 
@@ -2556,6 +2559,9 @@ const en = {
   do_shop: 'Choose and buy an animal',
   shopHelp: 'Choose exactly the animal you want. Rare breeds cost more.',
   breederHelp: 'The local breeder sells the breeds of the region.',
+  // Wave 3 (horses): breed origin and typical temperament, in the pet shop.
+  breedFrom: 'Origin: {place}',
+  breedTemper: 'Often {list}',
   refugeHelp: 'These animals are waiting for a family. At the shelter, adoption is free!',
   shopSummary: 'Your future companion',
 

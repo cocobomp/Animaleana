@@ -878,12 +878,14 @@ export class AnimalEntity {
     const grazing = this.state === 'idle' && !this.sleeping && Math.sin(t * 0.3 + this.phase) > 0.2;
     // Cheval réaliste (horseModel.js) : l'encolure descend jusqu'à l'herbe et la tête se met d'aplomb.
     const v3 = !!md.horseV3;
-    const reach = v3 ? 1.38 : 0.92;
+    // Brouter : le bout du nez touche l'herbe ; manger à la mangeoire : tête moins basse.
+    const reach = !v3 ? 0.92 : this.state === 'eat' ? 1.2 : 1.6;
     const eat = this.state === 'eat' || (grazing && !this.herdCtrl) ? reach + Math.sin(t * 4) * 0.05 : 0;
     this.headDown = (this.headDown ?? 0) + (eat - (this.headDown ?? 0)) * Math.min(1, dt * 2.5);
     const nod = moving ? Math.sin(ph * 2) * 0.05 * wWalk + Math.sin(ph) * 0.12 * wGallop - 0.1 * wGallop : 0;
     md.neck.rotation.x = baseNeck + (sad ? 0.3 : 0) + this.headDown + this.doze * (v3 ? 0.45 : 0.6) + nod;
-    md.head.rotation.x = (md.head.userData.baseX ??= md.head.rotation.x) + this.headDown * (v3 ? 0.42 : 0.25) - nod * 0.5 + (v3 ? this.doze * 0.2 : 0);
+    // (modèle réaliste : quand l'encolure descend, la tête se redresse pour rester d'aplomb, chanfrein vertical.)
+    md.head.rotation.x = (md.head.userData.baseX ??= md.head.rotation.x) + this.headDown * (v3 ? -0.5 : 0.25) - nod * 0.5 + (v3 ? this.doze * 0.15 : 0);
 
     // Oreilles : elles pivotent vers ce que le cheval écoute, tombent sur le côté quand il somnole.
     md.ears.forEach((e, i) => {

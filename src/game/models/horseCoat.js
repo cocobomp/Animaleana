@@ -48,7 +48,7 @@ const COAT_FRAGMENT = /* glsl */ `
   float legI = vHInfo.y;
   float up = normalize(vHNrm).y;
   float aa = clamp(length(fwidth(P)) * 140.0, 0.0, 1.0); // atténue les détails fins au loin (pas de scintillement)
-  vec3 c = hCoat;
+  vec3 c = hCoat * 0.9;
 
   // Reflets doux : zones un peu plus chaudes ou plus froides, jamais un aplat.
   float n1 = hFbm(P * 2.3 + hSeed);
@@ -123,7 +123,7 @@ const COAT_FRAGMENT = /* glsl */ `
   if (hFace > 0.5 && isHead > 0.5) {
     float fn = (hNoise(P * 40.0) - 0.5) * 0.06;
     float front = smoothstep(-0.02, 0.06, hl.y + 0.1 * smoothstep(0.75, 1.0, hl.z));
-    float star = 1.0 - smoothstep(0.85, 1.05, length(vec2(hl.x / 0.05, (hl.z - 0.31) / 0.045)) + fn * 5.0);
+    float star = 1.0 - smoothstep(0.8, 1.0, length(vec2(hl.x / 0.045, (hl.z - 0.31) / 0.05)) + fn * 6.0 + (hNoise(P * 90.0) - 0.5) * 0.35);
     float stripe = (1.0 - smoothstep(0.018, 0.03, abs(hl.x) + fn * 0.4)) * smoothstep(0.3, 0.34, hl.z) * (1.0 - smoothstep(0.9, 0.95, hl.z));
     float blaze = (1.0 - smoothstep(0.045, 0.06, abs(hl.x) - hl.z * 0.035 + fn)) * smoothstep(0.24, 0.28, hl.z);
     float snip = 1.0 - smoothstep(0.85, 1.05, length(vec2(hl.x / 0.05, (hl.z - 0.93) / 0.05)) + fn * 4.0);

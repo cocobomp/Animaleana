@@ -228,7 +228,7 @@ function torsoPrims(A, B) {
     const cb = pb.clone().addScaledVector(upN, (s1[1] - s1[2]) / 2 * nw);
     const ra = (s0[1] + s0[2]) / 2 * nw;
     const rb = (s1[1] + s1[2]) / 2 * nw;
-    P.push(RC(ca.toArray(), cb.toArray(), ra, rb, (s0[3] / ((s0[1] + s0[2]) / 2) + s1[3] / ((s1[1] + s1[2]) / 2)) / 2, 0.09));
+    P.push(RC(ca.toArray(), cb.toArray(), ra, rb, (s0[3] / ((s0[1] + s0[2]) / 2) + s1[3] / ((s1[1] + s1[2]) / 2)) / 2, i === 0 ? 0.15 : 0.09));
   }
   // Crête de l'encolure (bombée chez les baroques et les traits).
   const crest = B.crest;
@@ -265,9 +265,9 @@ function headPrims(A, B) {
     cuts.push([E3(s([0, 0.13, 0.55]), s([0.12, 0.05, 0.2])), 0.06 * u]); // chanfrein concave
     P.push(E3(s([0, 0.09, 0.22]), s([0.15, 0.08, 0.12]), 0.06 * u)); // front bombé (jibbah)
   }
-  // Naseaux creusés.
-  const nostril = both((k) => E3(s([k * 0.066, -0.045, 0.975]), s([0.014, 0.036, 0.03])));
-  for (const n of nostril) cuts.push([n, 0.012 * u]);
+  // Naseaux : à peine creusés (le dessin en virgule est peint par le shader du pelage).
+  const nostril = both((k) => E3(s([k * 0.066, -0.045, 0.985]), s([0.012, 0.03, 0.022])));
+  for (const n of nostril) cuts.push([n, 0.02 * u]);
   return { prims: P, cuts, nostril };
 }
 
@@ -460,7 +460,7 @@ function sculpt(B, high) {
   const neckN = V(0, -wl.z, wl.y); // normale du plan garrot–poitrail, vers l'encolure
   if (neckN.z < 0) neckN.negate();
   const neckDir = A.poll.clone().sub(nb).normalize();
-  const throat = A.poll.clone().addScaledVector(neckDir, -0.1);
+  const throat = A.poll.clone().addScaledVector(neckDir, -0.07);
   const segDist = (p, a, b) => {
     const ab = b.clone().sub(a);
     const t = Math.min(1, Math.max(0, p.clone().sub(a).dot(ab) / ab.lengthSq()));
@@ -470,7 +470,7 @@ function sculpt(B, high) {
     const w = [];
     const sN = p.clone().sub(withers).dot(neckN);
     const wNeck = smooth(-0.03, 0.3, sN);
-    const wHead = wNeck * smooth(-0.05, 0.06, p.clone().sub(throat).dot(neckDir));
+    const wHead = wNeck * smooth(-0.03, 0.04, p.clone().sub(throat).dot(neckDir));
     const s = p.x >= 0 ? 1 : -1;
     const li = (front) => LEG_SIDES.findIndex(([f, sd]) => f === front && sd === s);
     // Avant : coude et triceps suivent la jambe.
@@ -625,6 +625,35 @@ function sculpt(B, high) {
 
 const shapeCache = new Map();
 
+/**
+ * Mesures du cheval au repos (mètres, cheval de taille 1), lues sur la surface sculptée : sert aux
+ * tests des proportions (tête ≈ 1/2,5 du corps, garrot ≈ croupe, membres longs, gabarits par race).
+ */
+export function horseMeasures(build) {
+  const A = anatomy(build, 0.85);
+  const torso = field(torsoPrims(A, build));
+  const hd = headPrims(A, build);
+  const head = field(hd.prims, hd.cuts);
+  const up = (z) => rayHit(torso, [0, A.yC, z], [0, 1, 0], 1.5).y;
+  const down = (z) => rayHit(torso, [0, A.yC, z], [0, -1, 0], 1.5).y;
+  const front = rayHit(torso, [0, A.yB + 0.2, 0], [0, 0, 1], 2).z;
+  const rear = rayHit(torso, [0, A.yC + 0.04, 0], [0, 0, -1], 2).z;
+  const u = A.Hl;
+  const muzzle = rayHit(head, [0, -0.07 * u, 0.6 * u], [0, 0, 1], u).z;
+  const nape = rayHit(head, [0, 0.03 * u, 0.1 * u], [0, 0, -1], u).z;
+  return {
+    withers: up(0.38 * A.bk),
+    back: up(0),
+    croup: up(-0.48 * A.bk),
+    belly: down(-0.05 * A.bk),
+    chestDepth: up(0.38 * A.bk) - down(0.3 * A.bk),
+    length: front - rear,
+    width: 2 * rayHit(torso, [0, A.yC, -0.05], [1, 0, 0], 1).x,
+    head: muzzle - nape,
+    cannon: build.bone * 0.03 * 2,
+  };
+}
+
 // ------------------------------------------------------------------ crins
 
 /** Rubans de crins colorés et pondérés (os), drapés hors d'un champ de distance. */
@@ -731,10 +760,10 @@ function buildHair(S, B, look, rig, high) {
   const wl = chest.clone().sub(withers).normalize();
   const neckN = V(0, -wl.z, wl.y);
   if (neckN.z < 0) neckN.negate();
-  const throat = A.poll.clone().addScaledVector(neckDir, -0.1);
+  const throat = A.poll.clone().addScaledVector(neckDir, -0.07);
   const neckW = (p) => {
     const wn = smooth(-0.03, 0.3, p.clone().sub(withers).dot(neckN));
-    const wh = wn * smooth(-0.05, 0.06, p.clone().sub(throat).dot(neckDir));
+    const wh = wn * smooth(-0.03, 0.04, p.clone().sub(throat).dot(neckDir));
     return [[BONE.neck, wn - wh], [BONE.head, wh], [BONE.body, 1 - wn]].filter(([, x]) => x > 0.001);
   };
   const K = high ? 7 : 5;
@@ -746,20 +775,23 @@ function buildHair(S, B, look, rig, high) {
   };
   const crestDir = (t) => crestAt(Math.min(1, t + 0.02)).sub(crestAt(Math.max(0, t - 0.02))).normalize();
   if (style === 'brush') {
-    // Fjord : crinière taillée en brosse, droite, bicolore (cœur foncé, bords crème).
-    const n = high ? 70 : 40;
+    // Fjord : crinière taillée en brosse, droite, bicolore (cœur foncé, bords crème). Rubans croisés
+    // (le long de la crête et en travers) pour qu'elle ait du volume sous tous les angles.
+    const n = high ? 64 : 36;
     for (let i = 0; i < n; i++) {
       const t = 0.04 + (i / n) * 0.9;
       const c = crestAt(t);
       const dir = crestDir(t);
       const nrm = sdfNormal(torso, c, 0.005);
-      for (const lane of [-1, 0, 1]) {
-        const h = 0.07 + 0.025 * Math.sin(t * Math.PI) + rng() * 0.012;
-        const lat = V(1, 0, 0).multiplyScalar(lane * 0.011);
-        const p0 = c.clone().add(lat).addScaledVector(nrm, -0.01);
-        const pts = [p0, p0.clone().addScaledVector(nrm, h * 0.5).addScaledVector(lat, 0.3), p0.clone().addScaledVector(nrm, h).addScaledVector(lat, 0.6)];
+      for (const lane of [-2, -1, 0, 1, 2]) {
+        const h = (0.075 + 0.03 * Math.sin(t * Math.PI)) * (lane === 0 ? 1.04 : 1 - Math.abs(lane) * 0.06) + rng() * 0.012;
+        const lat = V(lane * 0.011, 0, 0);
+        const p0 = c.clone().add(lat).addScaledVector(nrm, -0.012);
+        const tip = p0.clone().addScaledVector(nrm, h).addScaledVector(lat, 0.5 + rng() * 0.3);
+        const pts = [p0, p0.clone().lerp(tip, 0.5), tip];
         const color = lane === 0 ? tint(coreC, 0.08) : tint(maneC, 0.06);
-        hair.strand(pts, 0.03, 0.026, dir, color, neckW, rng() * 0.5, 0.5 + rng() * 0.5, nrm.clone().add(V(lane * 0.5, 0, 0)).normalize());
+        const side = (i + lane) % 2 === 0 ? dir : V(1, 0, 0);
+        hair.strand(pts, 0.028, 0.024, side, color, neckW, rng() * 0.5, 0.5 + rng() * 0.5, nrm.clone().add(V(lane * 0.3, 0, 0)).normalize());
       }
     }
   } else {

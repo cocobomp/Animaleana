@@ -86,7 +86,9 @@ export function interiorNav(pos, goal) {
     const W = b.w / 2;
     const D = b.d / 2;
     // Devant l'écurie en venant du paddock : on longe sa barrière avant d'aller à la porte.
-    if (b.aroundSide && p.lz > D + 3 && p.lx < -(W - 1) && p.lx * b.aroundSide < 0) return way(b, { lx: -(W - 1) * b.aroundSide, lz: D + 9 });
+    // (marge de 0,3 m : une fois arrivé à ce point, on n'y retourne pas — l'écurie rallongée a des
+    // coordonnées à virgule, et sans marge le cheval pouvait rester planté là)
+    if (b.aroundSide && p.lz > D + 3 && p.lx < -(W - 1) - 0.3 && p.lx * b.aroundSide < 0) return way(b, { lx: -(W - 1) * b.aroundSide, lz: D + 9 });
     if (p.lz >= D - 0.5) return null; // devant : nav.js fait passer par la porte
     // L'écurie se contourne par le côté opposé au paddock.
     const side = b.aroundSide ?? (Math.sign(p.lx) || 1);

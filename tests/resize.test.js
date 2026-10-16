@@ -14,6 +14,8 @@ import {
 import { createProfile, migrate } from '../src/sim/profile.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { xpForLevel } from '../src/sim/progress.js';
+import { buildingActions } from '../src/sim/buildings.js';
+import { boxSlots, stableWidth } from '../src/game/models/stableInterior.js';
 
 const manage = (money = 5000) => {
   const p = createProfile('A', 'manage');
@@ -96,6 +98,11 @@ describe('agrandir : où c\'est permis', () => {
     // Un cabanon à 1 m du nouveau bord : trop serré.
     const shed = { x: r.x, z: r.z + r.hd + 3 + 1.5, hw: 1, hd: 0.5 };
     expect(validateResize(r, north, opts, { ...flat, colliders: [shed] }).reason).toBe('overlap');
+    // Après avoir réduit côté sud, on peut revenir à la place d'origine (contre le mur), pas plus loin.
+    const small = dragRect(r, 's', 0, r.z - r.hd + 4, worldLimits('paddock'));
+    expect(validateResize(small, r, opts, { ...flat, colliders: [wall] }).ok).toBe(true);
+    const further = dragRect(small, 's', 0, r.z - r.hd - 1, worldLimits('paddock'));
+    expect(validateResize(small, further, opts, { ...flat, colliders: [wall] }).reason).toBe('overlap');
   });
 
   it('on n\'écrase pas une porte, et la porte du paddock (au milieu de son côté) doit rester libre', () => {
@@ -230,6 +237,34 @@ describe('agrandir : anciennes sauvegardes', () => {
       expect(r.x - r.hw).toBeLessThanOrEqual(o.x - o.hw + 1e-6);
       expect(r.z + r.hd).toBeGreaterThanOrEqual(o.z + o.hd - 1e-6);
     }
+  });
+});
+
+describe('agrandir : depuis les menus', () => {
+  it('le paddock, la bergerie et le clapier proposent « Agrandir » ; la niche non ; l\'écurie « Agrandir l\'écurie »', () => {
+    const ctx = { hour: 10, season: 'summer', count: { horse: 1, livestock: 1, dog: 1, rabbit: 1, paddockDroppings: 0, penDroppings: 0 } };
+    const ids = (kind, c = ctx) => buildingActions(kind, c).map((a) => a.id);
+    for (const kind of ['paddock', 'pen', 'hutch']) expect(ids(kind)).toContain('resizeCore');
+    expect(ids('kennel')).not.toContain('resizeCore');
+    expect(ids('stable')).toContain('extendStable');
+    // Une construction : seulement les enclos.
+    const con = { hour: 10, count: { residents: 0, droppings: 0, horse: 0 } };
+    expect(ids('con_enclosure', { ...con, resizable: true })).toContain('conResize');
+    expect(ids('con_building', { ...con, resizable: false })).not.toContain('conResize');
+  });
+
+  it('les box de l\'écurie rallongée : les 8 premiers gardent leur rôle, les nouveaux aux deux bouts', () => {
+    const a = boxSlots(0);
+    const b = boxSlots(1);
+    const c = boxSlots(2);
+    expect([a.length, b.length, c.length]).toEqual([8, 12, 16]);
+    // Même rangée pour les 8 premiers (et toujours la même place par rapport à l'entrée, au milieu).
+    expect(b.slice(0, 8)).toEqual(a);
+    expect(c.slice(0, 12)).toEqual(b);
+    // Pas deux box au même endroit, et tous dans le bâtiment.
+    const w = stableWidth(2);
+    expect(new Set(c.map((s) => `${s.cx}|${s.row}`)).size).toBe(16);
+    for (const s of c) expect(Math.abs(s.cx)).toBeLessThan(w / 2);
   });
 });
 

@@ -127,10 +127,16 @@ export function capacityFor(kind, w, d) {
   return capacityOf({ type: kind, w, d });
 }
 
-/** Ce qu'il faut savoir pour redimensionner une installation de base. */
+/**
+ * Ce qu'il faut savoir pour redimensionner une installation de base. free : sa place par défaut,
+ * qu'on sait bonne : on peut toujours y revenir après avoir réduit (même si un bâtiment la touche presque).
+ */
 export function coreResizeOpts(id) {
-  return { kind: id, coreId: id, rot: 0, gate: CORE_ITEMS[id].gate, apronDepth: APRON_DEPTH[id] };
+  return { kind: id, coreId: id, rot: 0, gate: CORE_ITEMS[id].gate, apronDepth: APRON_DEPTH[id], free: coreRect(null, id) };
 }
+
+const within = (r, f) => !!f && r.x - r.hw >= f.x - f.hw - 1e-6 && r.x + r.hw <= f.x + f.hw + 1e-6
+  && r.z - r.hd >= f.z - f.hd - 1e-6 && r.z + r.hd <= f.z + f.hd + 1e-6;
 
 /** … ou une construction du joueur (ses habitants doivent garder leur place). */
 export function structureResizeOpts(profile, s) {
@@ -164,7 +170,8 @@ export function validateResize(old, nu, opts, env = {}) {
     if (capacityFor(opts.kind, w, d) < opts.residents) return { ok: false, reason: 'crowded' };
   }
   const strips = addedStrips(old, nu);
-  const zones = strips.map((s) => ({ raw: s, wide: outward(s, lim.gap) }));
+  // (dans sa place par défaut, pas besoin de passage en plus : on ne vérifie que ce qu'on touche vraiment)
+  const zones = strips.map((s) => ({ raw: s, wide: within(s, opts.free) ? s : outward(s, lim.gap) }));
   const ap = gateApron(nu, opts.gate, opts.apronDepth);
   zones.push({ raw: ap, wide: ap, apron: true });
   // Ce qui chevauchait déjà l'enclos (un ancien voisin trop proche) ne l'empêche pas de grandir ailleurs.
@@ -311,7 +318,7 @@ export function migrateCoreSizes(profile) {
           structures: structuresAt(profile, place),
           equipment: (profile.equipment ?? []).filter((e) => e.place === place && e.pos).map((e) => ({ x: e.pos[0], z: e.pos[1] })),
         };
-        if (validateResize(legacyRect(id), coreRect(null, id), coreResizeOpts(id), env).ok) continue;
+        if (validateResize(legacyRect(id), coreRect(null, id), { ...coreResizeOpts(id), free: null }, env).ok) continue; // (avec un passage partout)
       }
       const at = cur ?? lg;
       layout[id] = { ...(cur ?? {}), x: at.x, z: at.z, w: lg.w, d: lg.d, grow: true };

@@ -399,7 +399,7 @@ export class Structures {
     for (const id of ids) {
       const old = coreRect(layout, id);
       const env = this.envWithout(id);
-      const fit = growthCandidates(layout, id).find((r) => validateResize(old, r, coreResizeOpts(id), env).ok);
+      const fit = growthCandidates(layout, id).find((r) => validateResize(old, r, { ...coreResizeOpts(id), free: null }, env).ok);
       const { grow, ...rest } = layout[id];
       layout[id] = fit ? { ...rest, x: fit.x, z: fit.z, w: fit.hw * 2, d: fit.hd * 2 } : rest;
       if (fit) {

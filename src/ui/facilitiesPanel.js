@@ -8,7 +8,7 @@ import { SPECIES } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
 import {
   ensureFacilities, cleanliness, condition, boxCount, boxOccupants, repairCost, repair, UPGRADES, ROOMS,
-  canBuyUpgrade, buyUpgrade, hasUpgrade, MAX_BOXES, STRAW_COST,
+  canBuyUpgrade, buyUpgrade, hasUpgrade, stableSlots, STRAW_COST,
 } from '../sim/facilities.js';
 
 const ICON = { stable: '🐴', house: '🏠', pen: '🐑' };
@@ -26,7 +26,7 @@ function capacityText(g, kind) {
   const n = residents(g, kind).length;
   if (kind === 'stable') {
     const used = boxOccupants(f, g.interiors.homeHorses()).filter(Boolean).length;
-    return t('fac_capBoxes', { used, n: boxCount(f), max: MAX_BOXES });
+    return t('fac_capBoxes', { used, n: boxCount(f), max: stableSlots(f) });
   }
   return t(kind === 'house' ? 'fac_capPets' : 'fac_capFlock', { n });
 }

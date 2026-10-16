@@ -5,10 +5,11 @@ import * as THREE from 'three';
 
 // side : côté de l'ouverture ('+x', '-x', '+z', '-z'), at : position de l'ouverture le long de ce côté.
 export const ENCLOSURES = [
-  { id: 'pen', x: 14, z: 35, hw: 10, hd: 7, gate: { side: '+z', at: 14, width: 4 } },
-  { id: 'paddock', x: -16, z: 16, hw: 7, hd: 9, gate: { side: '+x', at: 16, width: 3 } },
+  // (place et taille par défaut ; coreLayout.js applique celles choisies par le joueur)
+  { id: 'pen', x: 14, z: 35, hw: 12, hd: 8, gate: { side: '+z', at: 14, width: 4 } },
+  { id: 'paddock', x: -16, z: 20, hw: 11, hd: 13, gate: { side: '+x', at: 20, width: 3 } },
   // Enclos grillagé des lapins : même les petits animaux passent par la porte.
-  { id: 'hutch', x: 9, z: 4, hw: 2.6, hd: 2.2, gate: { side: '+z', at: 9, width: 1.2 }, mesh: true },
+  { id: 'hutch', x: 9, z: 4.5, hw: 3, hd: 2.5, gate: { side: '+z', at: 9, width: 1.2 }, mesh: true },
 ];
 
 export const enclosure = (id) => ENCLOSURES.find((e) => e.id === id);

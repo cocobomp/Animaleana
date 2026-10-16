@@ -345,58 +345,64 @@ export function jobBoard(label) {
   return { group: g, size: [2, 0.5] };
 }
 
-/** Clôture rectangulaire avec une ouverture devant (paddock, carrière). */
-export function paddock(w, d) {
+/**
+ * Clôture rectangulaire avec une ouverture au milieu du côté avant (+z), sable et obstacle de saut (paddock).
+ * w × d : taille en mètres (le paddock s'agrandit dans la vue construction).
+ * ground(lx, lz) : hauteur du sol par rapport au centre, pour que poteaux, lisses et sable suivent le terrain.
+ */
+export function paddock(w, d, ground = () => 0) {
   const g = new THREE.Group();
   const b = new MeshBatch();
   const wood = mat(0xe9dfcf, 0.75, surface('planks', planksTexture(), 0.15, 0.6));
-  const posts = [];
-  const rails = [];
   const gap = 3;
-  const push = (x, z) => posts.push([x, z]);
-  for (let x = -w / 2; x <= w / 2 + 0.01; x += 2.5) {
-    push(x, -d / 2);
-    if (Math.abs(x) > gap / 2) push(x, d / 2);
-  }
-  for (let z = -d / 2 + 2.5; z < d / 2; z += 2.5) {
-    push(-w / 2, z);
-    push(w / 2, z);
+  // Poteaux tous les 2,5 m environ, toujours aux coins et de chaque côté de l'ouverture.
+  const path = [[gap / 2, d / 2], [w / 2, d / 2], [w / 2, -d / 2], [-w / 2, -d / 2], [-w / 2, d / 2], [-gap / 2, d / 2]];
+  const posts = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const [ax, az] = path[i];
+    const [bx, bz] = path[i + 1];
+    const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 2.5));
+    for (let k = i === 0 ? 0 : 1; k <= n; k++) posts.push([ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n]);
   }
   const postGeo = new THREE.CylinderGeometry(0.08, 0.09, 1.35, 8);
   const im = new THREE.InstancedMesh(postGeo, wood, posts.length);
   const m4 = new THREE.Matrix4();
-  posts.forEach(([x, z], i) => im.setMatrixAt(i, m4.makeTranslation(x, 0.67, z)));
+  posts.forEach(([x, z], i) => im.setMatrixAt(i, m4.makeTranslation(x, ground(x, z) + 0.67, z)));
   im.castShadow = true;
   im.receiveShadow = true;
   g.add(im);
-  const side = (len, x, z, rotY) => rails.push({ len, x, z, rotY });
-  side(w, 0, -d / 2, 0);
-  side(d, -w / 2, 0, Math.PI / 2);
-  side(d, w / 2, 0, Math.PI / 2);
-  side(w / 2 - gap / 2, -(w / 4 + gap / 4), d / 2, 0);
-  side(w / 2 - gap / 2, w / 4 + gap / 4, d / 2, 0);
-  for (const r of rails) {
+  // Lisses d'un poteau à l'autre (penchées si le sol penche).
+  for (let i = 0; i < posts.length - 1; i++) {
+    const [ax, az] = posts[i];
+    const [bx, bz] = posts[i + 1];
+    const ya = ground(ax, az);
+    const yb = ground(bx, bz);
+    const flat = Math.hypot(bx - ax, bz - az);
+    const rot = new THREE.Euler(0, -Math.atan2(bz - az, bx - ax), Math.atan2(yb - ya, flat), 'YZX');
     for (const y of [0.55, 1.1]) {
-      b.add(new THREE.BoxGeometry(r.len, 0.12, 0.05), wood, [r.x, y, r.z], [0, r.rotY, 0]);
+      b.add(new THREE.BoxGeometry(Math.hypot(flat, yb - ya), 0.12, 0.05), wood, [(ax + bx) / 2, (ya + yb) / 2 + y, (az + bz) / 2], rot);
     }
   }
-  // Sable de carrière, piétiné.
-  const sand = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.3, d - 0.3), mat(0xc4ae86, 1));
-  sand.rotation.x = -Math.PI / 2;
-  sand.position.y = 0.03;
+  // Sable de carrière, piétiné (il épouse le terrain).
+  const sandGeo = new THREE.PlaneGeometry(w - 0.3, d - 0.3, Math.ceil(w / 3), Math.ceil(d / 3)).rotateX(-Math.PI / 2);
+  const sp = sandGeo.attributes.position;
+  for (let i = 0; i < sp.count; i++) sp.setY(i, ground(sp.getX(i), sp.getZ(i)) + 0.03);
+  sandGeo.computeVertexNormals();
+  const sand = new THREE.Mesh(sandGeo, mat(0xc4ae86, 1));
   sand.receiveShadow = true;
   g.add(sand);
   // Obstacle de saut au milieu (chandeliers et barres rayées).
   const red = mat(0xc8463c, 0.5);
   const white = mat(0xf2f2f2, 0.5);
+  const y0 = ground(0, 0);
   for (const s of [-1, 1]) {
-    b.add(new THREE.BoxGeometry(0.15, 1.3, 0.15), white, [s * 1.6, 0.65, 0]);
-    b.add(new THREE.BoxGeometry(0.5, 0.06, 0.5), white, [s * 1.6, 0.03, 0]);
+    b.add(new THREE.BoxGeometry(0.15, 1.3, 0.15), white, [s * 1.6, y0 + 0.65, 0]);
+    b.add(new THREE.BoxGeometry(0.5, 0.06, 0.5), white, [s * 1.6, y0 + 0.03, 0]);
   }
   for (let k = 0; k < 6; k++) {
-    b.add(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), k % 2 ? white : red, [-1.25 + k * 0.5, 0.85, 0], [0, 0, Math.PI / 2]);
+    b.add(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), k % 2 ? white : red, [-1.25 + k * 0.5, y0 + 0.85, 0], [0, 0, Math.PI / 2]);
   }
-  b.add(new THREE.CylinderGeometry(0.05, 0.05, 3, 8), white, [0, 0.45, 0], [0, 0, Math.PI / 2]);
+  b.add(new THREE.CylinderGeometry(0.05, 0.05, 3, 8), white, [0, y0 + 0.45, 0], [0, 0, Math.PI / 2]);
   b.build(g);
   return g;
 }

@@ -25,6 +25,7 @@ const RULES = {
     { id: 'facPaddock', icon: '🌳', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 22) },
     { id: 'facEnter', icon: '🚪', when: () => null },
     { id: 'facManage', icon: '📋', when: () => null },
+    { id: 'extendStable', icon: '➕', when: () => null }, // rallonger l'écurie (vue construction)
   ],
   paddock: [
     { id: 'horsesToPaddock', icon: '🐴', when: (c) => need(c.count.horse) ?? dayOnly(c, 6, 22) },
@@ -34,6 +35,7 @@ const RULES = {
     { id: 'actvLesson', icon: '🎓', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) }, // activités : apprendre à sauter
     { id: 'farm', icon: '🔧', when: () => null },
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
+    { id: 'resizeCore', icon: '⤢', when: () => null }, // agrandir (vue construction, src/game/ConstructionView.js)
   ],
   kennel: [
     { id: 'feedDogs', icon: '🥣', when: (c) => need(c.count.dog) },
@@ -47,6 +49,7 @@ const RULES = {
     { id: 'actvHutchPlay', icon: '🎡', when: (c) => need(c.count.rabbit) }, // activités : jouer dans l'enclos
     { id: 'farm', icon: '🔧', when: () => null },
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
+    { id: 'resizeCore', icon: '⤢', when: () => null }, // agrandir (vue construction, src/game/ConstructionView.js)
   ],
   pen: [
     { id: 'outFlock', icon: '🌿', when: (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18) },
@@ -63,6 +66,7 @@ const RULES = {
     { id: 'farm', icon: '🔧', when: () => null },
     { id: 'facManage', icon: '📋', when: () => null }, // entretien et améliorations
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
+    { id: 'resizeCore', icon: '⤢', when: () => null }, // agrandir (vue construction, src/game/ConstructionView.js)
   ],
   house: [
     { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 7) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },
@@ -142,6 +146,7 @@ const CON_CARE = [
 const CON_END = [
   { id: 'conResidents', icon: '🐾', when: () => null },
   { id: 'conMove', icon: '↔️', when: () => null },
+  { id: 'conResize', icon: '⤢', when: (c) => (c.resizable ? null : { reason: 'notHere' }) }, // agrandir (enclos seulement)
   { id: 'conDemolish', icon: '🗑️', when: () => null },
 ];
 const CON_CLEAN = { id: 'conClean', icon: '🧹', when: (c) => (c.count.droppings > 0 ? null : { reason: 'alreadyClean' }) };

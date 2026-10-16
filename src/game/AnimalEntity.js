@@ -12,16 +12,17 @@ import { canLeash, heelSkill } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
-export const HOME = { // (décalé par coreLayout.js si l'installation est déplacée)
-  horse: { x: -16, z: 16, r: 5 },
+// Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
+export const HOME = { // (place et taille appliquées par coreLayout.js : enclos déplacés ou agrandis)
+  horse: { x: -16, z: 20, r: 9, hw: 9, hd: 11 },
   dog: { x: -8, z: -5, r: 3.5 }, // près de la niche
   cat: { x: -1, z: -10.5, r: 3.5 }, // sur le perron de la maison
-  rabbit: { x: 9, z: 3.6, r: 1.6 }, // dans l'enclos du clapier
+  rabbit: { x: 9, z: 4.7, r: 1.6, hw: 2.2, hd: 1.5 }, // dans l'enclos du clapier
 };
-export const PEN = { x: 14, z: 35, r: 5, gate: { x: 14, z: 46 } };
+export const PEN = { x: 14, z: 35, r: 6, hw: 10.5, hd: 6.5, gate: { x: 14, z: 47 } };
 export const FIELD = { x: 0, z: 60, r: 12 };
 
-/** Vrai si (x, z) est dans l'enclos de la bergerie (20 m × 14 m). */
+/** Vrai si (x, z) est dans l'enclos de la bergerie. */
 export const inPen = (x, z, margin = 0) => inside(enclosure('pen'), x, z, margin);
 
 // Les petits animaux passent sous les barrières.
@@ -204,10 +205,18 @@ export class AnimalEntity {
   pickWanderTarget() {
     const h = this.home;
     for (let i = 0; i < 8; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = Math.random() * h.r;
-      const x = h.x + Math.cos(a) * r;
-      const z = h.z + Math.sin(a) * r;
+      let x;
+      let z;
+      if (h.hw) {
+        // Enclos : n'importe où à l'intérieur (s'il est agrandi, les animaux en profitent).
+        x = h.x + (Math.random() * 2 - 1) * h.hw;
+        z = h.z + (Math.random() * 2 - 1) * h.hd;
+      } else {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.random() * h.r;
+        x = h.x + Math.cos(a) * r;
+        z = h.z + Math.sin(a) * r;
+      }
       if (!this.world.isWater(x, z)) {
         this.target.set(x, 0, z);
         return;

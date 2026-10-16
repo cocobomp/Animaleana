@@ -11,7 +11,8 @@ import { Input } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
 import { Herding } from './Herding.js';
 import { TaskQueue } from './TaskQueue.js';
-import { Interiors } from './Interiors.js'; // écurie et maison où l'on entre, box, corvées
+import { Interiors, setStableExt } from './Interiors.js'; // écurie et maison où l'on entre, box, corvées
+import { ensureFacilities, stableExt } from '../sim/facilities.js'; // taille de l'écurie
 import { Events } from './Events.js'; // événements spéciaux (orage, animal blessé…)
 import { Clients } from './Clients.js'; // clients (pension, soins) et métiers
 import { EQUIPMENT_MODELS } from './models/equipment.js';
@@ -251,13 +252,16 @@ export class Game {
     this.entities.clear();
     for (const h of this.helpers.values()) h.dispose();
     this.helpers.clear();
-    applyCoreLayout(this.profile.coreLayout?.[placeId]); // bergerie, paddock… déplacés par le joueur
+    applyCoreLayout(this.profile.coreLayout?.[placeId]); // bergerie, paddock… déplacés ou agrandis par le joueur
+    setStableExt(stableExt(ensureFacilities(this.profile))); // écurie rallongée (8, 12 ou 16 box)
     this.world.build(placeId, this.season, placeId === this.profile.home);
     this.interiors.onPlaceLoaded(); // coins de corvées, box des chevaux
     this.equipment = [];
     for (const eq of equipmentAt(this.profile, placeId)) this.spawnEquipment(eq);
     if (!opts.keepView) this.mgmt.stop();
     this.structures.rebuild(placeId); // constructions du joueur (avant les animaux : leur maison)
+    // Anciennes sauvegardes : paddock, bergerie ou clapier qui attendent d'être agrandis (si la place le permet).
+    if (this.structures.growPending()) this.save();
     this.droppingMeshes.clear();
     for (const d of this.profile.droppings ?? []) if (d.place === placeId) this.spawnDropping(d);
     for (const h of this.profile.helpers) {

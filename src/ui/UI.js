@@ -171,12 +171,14 @@ export class UI {
       h('nav', { class: 'hud-buttons' },
         btn('🐾', t('animals'), () => this.openAnimals()),
         btn('🚜', t('farm'), () => this.openFarm()),
-        btn('🗺️', t('mgmt_btn'), () => this.game.mgmt.toggle()), // vue d'ensemble et construction
-        btn('🏆', t('actv_hud'), () => this.openActivities()),
+        btn('🗺️', t('mgmt_btn'), () => this.game.mgmt.toggle()), // vue d'ensemble
+        // Vue construction : grille, agrandir le paddock et les enclos, construire (src/game/ConstructionView.js).
+        btn('🏗️', t('hud_build'), () => this.game.mgmt.openBuild(), 'build'),
         btn('💼', t('careers'), () => this.openCareers()), // métiers (src/ui/careers.js)
         btn('🧭', t('travel'), () => this.openTravel()),
         btn('📖', t('journal'), () => this.openJournal()),
-        // Sur téléphone (une seule rangée), ces trois-là passent dans « ⋯ Plus » ; sur ordinateur ils restent visibles.
+        // Sur téléphone (une seule rangée), ceux-là passent dans « ⋯ Plus » ; sur ordinateur ils restent visibles.
+        btn('🏆', t('actv_hud'), () => this.openActivities(), 'secondary'),
         btn('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen()), 'secondary'),
         btn('❓', t('help'), () => openHelp(this), 'secondary'),
         btn('⚙️', t('settings'), () => this.openSettings(), 'secondary'),
@@ -184,12 +186,13 @@ export class UI {
     );
   }
 
-  /** « ⋯ Plus » (téléphone) : Avatar, Aide et Réglages dans une petite feuille. */
+  /** « ⋯ Plus » (téléphone) : Activités, Avatar, Aide et Réglages dans une petite feuille. */
   openMore() {
     const item = (emoji, label, fn) => h('button', { class: 'big-action', onClick: () => { this.hideModal(); fn(); } },
       h('span', { class: 'ba-icon' }, emoji), h('span', { class: 'ba-text' }, h('b', {}, label)));
     this.showModal([
       h('div', { class: 'action-sheet more-sheet' },
+        item('🏆', t('actv_hud'), () => this.openActivities()),
         item('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen())),
         item('❓', t('help'), () => openHelp(this)),
         item('⚙️', t('settings'), () => this.openSettings())),

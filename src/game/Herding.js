@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import { PEN, FIELD, inPen } from './AnimalEntity.js';
+import { enclosure } from './nav.js'; // la bergerie peut être agrandie
 
 export class Herding {
   constructor(game) {
@@ -76,8 +77,9 @@ export class Herding {
       .addScaledVector(side, Math.sin(h.time * 1.3 + h.sweep) * Math.min(6, spread + 1.5));
     // Si le troupeau est dans l'enclos, le chien reste dedans (pas derrière la clôture).
     if (inPen(center.x, center.z)) {
-      spot.x = Math.max(PEN.x - 9, Math.min(PEN.x + 9, spot.x));
-      spot.z = Math.max(PEN.z - 6, Math.min(PEN.z + 6, spot.z));
+      const pen = enclosure('pen');
+      spot.x = Math.max(pen.x - pen.hw + 1, Math.min(pen.x + pen.hw - 1, spot.x));
+      spot.z = Math.max(pen.z - pen.hd + 1, Math.min(pen.z + pen.hd - 1, spot.z));
     }
     // Quand c'est le joueur qui dirige, c'est lui qui se place : on ne le déplace pas.
     if (h.pusher.isPlayer) { /* rien */ } else if (h.pusher.herdCtrl?.pusher) h.pusher.herdCtrl.target.copy(spot);

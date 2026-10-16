@@ -57,6 +57,7 @@ rouvrir le même fichier (au même endroit) pour les retrouver. Ce fichier est p
 - **Sons** doux, tous fabriqués par le code : voix des animaux (hennissement, aboiement, miaulement, bêlement, meuglement…), pas selon le sol, oiseaux le jour, grillons la nuit, vent, pluie et tonnerre ; réglables dans ⚙️ Réglages
 - Tutoriel guidé pour les enfants, quêtes facultatives et succès, mode Auto (le personnage prévoit et fait ses prochaines tâches simples)
 - **Vue d'ensemble** (🗺️) : la ferme vue d'en haut, on donne des ordres à chaque bâtiment, enclos ou animal, et on **construit** niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs et décorations ; on **déplace** aussi les équipements (mangeoires, abreuvoirs…), la bergerie, le paddock, la niche et le clapier (petit prix en mode gestion, gratuit en bac à sable)
+- **Vue construction** (🏗️ Construire) : la ferme vue d'aplomb avec une grille de 1 m et les zones occupées en couleur ; on touche un enclos puis on **tire ses poignées** pour l'agrandir ou le réduire au mètre près (paddock de 22 × 26 m au départ, bergerie, enclos des lapins, paddocks, pré, carrière et ranch construits) : barrières, porte, places des animaux et équipements suivent. On y **rallonge l'écurie** (8 → 12 → 16 box), on déplace, tourne et vend
 - Installable sur téléphone (« Ajouter à l'écran d'accueil ») et jouable sans réseau après la première ouverture
 
 Les règles du jeu sont décrites dans [docs/GDD.md](docs/GDD.md).

@@ -1,6 +1,7 @@
-// Écurie où l'on entre : une grande porte, une allée, 8 box à demi-portes (4 au début,
+// Écurie où l'on entre : une grande porte, une allée, des box à demi-portes (4 au début,
 // les autres servent de réserve tant qu'on ne les a pas achetés), le foin, l'eau et la sellerie.
-// Repère local : 16 m (x) × 10 m (z), la porte regarde vers +Z.
+// Repère local : 16 m (x) × 10 m (z), la porte regarde vers +Z. On peut la rallonger (vue construction) :
+// deux colonnes de box de plus à chaque fois (8 → 12 → 16 box), une de chaque côté de l'entrée.
 //
 //   z = -5  ┌────┬────┬────┬────┬────┐   rangée du fond : box 3, 0, 1, 2, 6
 //           │ B3 │ B0 │ B1 │ B2 │ B6 │
@@ -21,41 +22,57 @@ const AISLE = 1.4; // l'allée va de z = -1.4 à z = 1.4
 const BOX_W = 3.2;
 const DOOR_GAP = 1.7;
 
-/** Box dans l'ordre où on les débloque : x du centre et rangée (-1 fond, +1 devant). */
-export const BOX_SLOTS = [
-  { cx: -3.2, row: -1 }, { cx: 0, row: -1 }, { cx: 3.2, row: -1 }, { cx: -6.4, row: -1 },
-  { cx: -3.2, row: 1 }, { cx: 3.2, row: 1 },
-  { cx: 6.4, row: -1 }, { cx: 6.4, row: 1 },
-];
+/** Nombre de colonnes (de 3,2 m) et longueur de l'écurie pour une taille donnée (0, 1, 2). */
+export const stableColumns = (ext = 0) => 5 + 2 * ext;
+export const stableWidth = (ext = 0) => stableColumns(ext) * BOX_W;
+
+/**
+ * Box dans l'ordre où on les débloque : x du centre et rangée (-1 fond, +1 devant).
+ * Les 8 premiers ne changent pas de rôle quand on rallonge ; les nouveaux s'ajoutent aux deux bouts.
+ */
+export function boxSlots(ext = 0) {
+  const m = (stableColumns(ext) - 1) / 2; // colonne de l'entrée
+  const order = [[-1, m - 1], [-1, m], [-1, m + 1], [-1, m - 2], [1, m - 1], [1, m + 1], [-1, m + 2], [1, m + 2]];
+  for (let k = 1; k <= ext; k++) order.push([-1, m + 2 + k], [1, m + 2 + k], [-1, m - 2 - k], [1, m - 1 - k]);
+  return order.map(([row, col]) => ({ cx: (col - m) * BOX_W, row }));
+}
+export const BOX_SLOTS = boxSlots(0);
 
 const rowRange = (row) => (row < 0 ? [-STABLE_D / 2, -AISLE] : [AISLE, STABLE_D / 2]);
 
 /** Pièces (pour la navigation) : chaque pièce a une porte sur un mur. */
-export function stableRooms() {
-  const rooms = BOX_SLOTS.map((b, i) => {
+export function stableRooms(ext = 0) {
+  const W = stableWidth(ext);
+  const rooms = boxSlots(ext).map((b, i) => {
     const [z0, z1] = rowRange(b.row);
     return { id: `box${i}`, box: i, x0: b.cx - BOX_W / 2, x1: b.cx + BOX_W / 2, z0, z1, door: { axis: 'z', wall: b.row < 0 ? -AISLE : AISLE, at: b.cx, gap: DOOR_GAP } };
   });
-  rooms.push({ id: 'tack', x0: -8, x1: -4.8, z0: AISLE, z1: 5, door: { axis: 'z', wall: AISLE, at: -6.4, gap: 1.3 } });
+  rooms.push({ id: 'tack', x0: -W / 2, x1: -W / 2 + BOX_W, z0: AISLE, z1: 5, door: { axis: 'z', wall: AISLE, at: -W / 2 + BOX_W / 2, gap: 1.3 } });
   rooms.push({ id: 'passage', x0: -1.6, x1: 1.6, z0: AISLE, z1: 5, door: { axis: 'z', wall: AISLE, at: 0, gap: 3.2 } });
   return rooms;
 }
 
-export const STABLE_HALL = { x0: -8, x1: 8, z0: -AISLE, z1: AISLE };
+/** L'allée, d'un bout à l'autre. */
+export const stableHall = (ext = 0) => ({ x0: -stableWidth(ext) / 2, x1: stableWidth(ext) / 2, z0: -AISLE, z1: AISLE });
+export const STABLE_HALL = stableHall(0);
 
-export function stableModel(label) {
+export function stableModel(label, ext = 0) {
   const g = new THREE.Group();
   const lower = new THREE.Group();
   const upper = new THREE.Group(); // caché quand le joueur est dedans
   g.add(lower, upper);
   const kit = new WallKit(lower, upper, { h: H, cut: CUT });
-  const W = STABLE_W;
+  const W = stableWidth(ext);
   const D = STABLE_D;
+  const X0 = -W / 2; // bout de la sellerie
+  const slots = boxSlots(ext);
+  const walls = [];
+  for (let k = 1; k < stableColumns(ext); k++) walls.push(X0 + k * BOX_W); // cloisons entre les colonnes
 
   // Sol : dalles dans l'allée, terre battue ailleurs.
   const floor = add(g, new THREE.BoxGeometry(W, 0.06, D), mat(0x7d6a52, 1), [0, 0.03, 0], null, false);
   floor.receiveShadow = true;
-  add(g, new THREE.BoxGeometry(W - 0.2, 0.02, AISLE * 2), texturedMat(tileTexture('#9c958a', '#8e877c', 4), 8, 1.4), [0, 0.07, 0], null, false);
+  add(g, new THREE.BoxGeometry(W - 0.2, 0.02, AISLE * 2), texturedMat(tileTexture('#9c958a', '#8e877c', 4), W / 2, 1.4), [0, 0.07, 0], null, false);
   add(g, new THREE.BoxGeometry(3.2, 0.02, 5 - AISLE), texturedMat(tileTexture('#9c958a', '#8e877c', 4), 1.6, 1.8), [0, 0.07, (5 + AISLE) / 2], null, false);
 
   // Murs extérieurs (bois foncé) et cloisons des box (bois clair).
@@ -68,12 +85,13 @@ export function stableModel(label) {
   kit.withGaps('x', D / 2, -W / 2, W / 2, [[0, 3.2, 2.7]], outer, { upperMat: outerUp });
 
   // Cloisons : bas plein, haut en barreaux (les barreaux sont dans le haut, cachés quand on est dedans).
-  const backGaps = BOX_SLOTS.map((b) => [b.cx, b.row]).filter(([, r]) => r < 0).map(([cx]) => [cx, DOOR_GAP, 0]);
+  const backGaps = slots.filter((b) => b.row < 0).map((b) => [b.cx, DOOR_GAP, 0]).sort((a, b) => a[0] - b[0]);
   kit.withGaps('x', -AISLE, -W / 2, W / 2, backGaps, inner, { h: CUT });
-  const frontGaps = [[-6.4, 1.3, 0], [-3.2, DOOR_GAP, 0], [3.2, DOOR_GAP, 0], [6.4, DOOR_GAP, 0]];
+  // Devant : la porte de la sellerie (premier bout), puis celles des box.
+  const frontGaps = [[X0 + BOX_W / 2, 1.3, 0], ...slots.filter((b) => b.row > 0).map((b) => [b.cx, DOOR_GAP, 0])].sort((a, b) => a[0] - b[0]);
   kit.withGaps('x', AISLE, -W / 2, -1.6, frontGaps.filter(([c]) => c < 0), inner, { h: CUT });
   kit.withGaps('x', AISLE, 1.6, W / 2, frontGaps.filter(([c]) => c > 0), inner, { h: CUT });
-  for (const x of [-4.8, -1.6, 1.6, 4.8]) {
+  for (const x of walls) {
     kit.segment('z', x, -D / 2, -AISLE, inner, { h: CUT });
     kit.segment('z', x, AISLE, D / 2, inner, { h: CUT });
   }
@@ -84,7 +102,7 @@ export function stableModel(label) {
   const barRow = (axis, fixed, a, b) => {
     for (let v = a + 0.15; v < b - 0.1; v += 0.22) bars.push(axis === 'x' ? [v, fixed] : [fixed, v]);
   };
-  for (const x of [-4.8, -1.6, 1.6, 4.8]) {
+  for (const x of walls) {
     barRow('z', x, -D / 2, -AISLE);
     barRow('z', x, AISLE, D / 2);
   }
@@ -94,7 +112,7 @@ export function stableModel(label) {
   inst.castShadow = true;
   upper.add(inst);
   // Lisses en bois au-dessus des barreaux.
-  for (const x of [-4.8, -1.6, 1.6, 4.8]) {
+  for (const x of walls) {
     add(upper, new THREE.BoxGeometry(0.12, 0.08, D / 2 - AISLE), mat(0x6e4a2c), [x, CUT + 0.88, -(D / 2 + AISLE) / 2]);
     add(upper, new THREE.BoxGeometry(0.12, 0.08, D / 2 - AISLE), mat(0x6e4a2c), [x, CUT + 0.88, (D / 2 + AISLE) / 2]);
   }
@@ -120,7 +138,7 @@ export function stableModel(label) {
 
   // Fenêtres au-dessus des box du fond.
   const glass = mat(0x9fc4d8, 0.2, { emissive: 0xffc66b, emissiveIntensity: 0 });
-  for (const b of BOX_SLOTS.filter((x) => x.row < 0)) {
+  for (const b of slots.filter((x) => x.row < 0)) {
     add(upper, new THREE.BoxGeometry(1, 0.7, 0.24), trim, [b.cx, 2.3, -D / 2]);
     add(upper, new THREE.BoxGeometry(0.84, 0.54, 0.26), glass, [b.cx, 2.3, -D / 2]);
   }
@@ -133,30 +151,31 @@ export function stableModel(label) {
   upper.add(roof);
   // Lampes sous la charpente (s'allument la nuit si on a acheté l'éclairage).
   const lampMat = mat(0xfff3d0, 0.4, { emissive: 0xffd27a, emissiveIntensity: 0 });
-  for (const x of [-5, 0, 5]) add(upper, new THREE.SphereGeometry(0.16, 10, 8), lampMat, [x, H - 0.25, 0], null, false);
+  const lamps = Math.max(3, Math.round(W / 5.3));
+  for (let i = 0; i < lamps; i++) add(upper, new THREE.SphereGeometry(0.16, 10, 8), lampMat, [(i / (lamps - 1) - 0.5) * (W - 6), H - 0.25, 0], null, false);
 
   // ------------------------------------------------ contenu des box
-  const boxes = BOX_SLOTS.map((b, i) => buildBox(g, b, i));
+  const boxes = slots.map((b, i) => buildBox(g, b, i));
 
   // Sellerie : selles sur leurs porte-selles, filets aux crochets, coffre.
   const tack = new THREE.Group();
   g.add(tack);
   const saddleMat = mat(0x5a3218, 0.5);
   for (const [i, z] of [[0, 2.4], [1, 3.8]]) {
-    add(tack, new THREE.BoxGeometry(0.5, 0.08, 0.08), mat(0x777777, 0.5, { metalness: 0.5 }), [-7.65, 1.1, z]);
+    add(tack, new THREE.BoxGeometry(0.5, 0.08, 0.08), mat(0x777777, 0.5, { metalness: 0.5 }), [X0 + 0.35, 1.1, z]);
     // Selle posée sur son porte-selle : siège, quartiers qui pendent, pommeau, tapis dessous.
-    add(tack, new THREE.BoxGeometry(0.62, 0.05, 0.5), mat(i ? 0x2f4f7a : 0x7a2f2f, 0.8), [-7.6, 1.15, z]);
-    add(tack, new THREE.BoxGeometry(0.55, 0.1, 0.36), saddleMat, [-7.6, 1.23, z]);
-    for (const sz of [-1, 1]) add(tack, new THREE.BoxGeometry(0.4, 0.42, 0.04), saddleMat, [-7.6, 1.0, z + sz * 0.24]);
-    add(tack, new THREE.BoxGeometry(0.1, 0.12, 0.2), saddleMat, [-7.32, 1.32, z]);
-    add(tack, new THREE.CylinderGeometry(0.012, 0.012, 0.5, 6), mat(0x999999, 0.3, { metalness: 0.8 }), [-7.55, 0.78, z + 0.27]);
+    add(tack, new THREE.BoxGeometry(0.62, 0.05, 0.5), mat(i ? 0x2f4f7a : 0x7a2f2f, 0.8), [X0 + 0.4, 1.15, z]);
+    add(tack, new THREE.BoxGeometry(0.55, 0.1, 0.36), saddleMat, [X0 + 0.4, 1.23, z]);
+    for (const sz of [-1, 1]) add(tack, new THREE.BoxGeometry(0.4, 0.42, 0.04), saddleMat, [X0 + 0.4, 1.0, z + sz * 0.24]);
+    add(tack, new THREE.BoxGeometry(0.1, 0.12, 0.2), saddleMat, [X0 + 0.68, 1.32, z]);
+    add(tack, new THREE.CylinderGeometry(0.012, 0.012, 0.5, 6), mat(0x999999, 0.3, { metalness: 0.8 }), [X0 + 0.45, 0.78, z + 0.27]);
   }
   for (const z of [2.2, 2.8, 3.4, 4.0]) {
-    add(tack, new THREE.TorusGeometry(0.14, 0.02, 6, 14), mat(0x3a2414, 0.6), [-7.88, 1.85, z], [0, Math.PI / 2, 0]);
+    add(tack, new THREE.TorusGeometry(0.14, 0.02, 6, 14), mat(0x3a2414, 0.6), [X0 + 0.12, 1.85, z], [0, Math.PI / 2, 0]);
   }
-  const chest = add(tack, new THREE.BoxGeometry(1.1, 0.55, 0.6), mat(0x7a5532, 0.8), [-5.9, 0.3, 4.55]);
-  add(tack, new THREE.BoxGeometry(1.14, 0.06, 0.64), mat(0x4a3220, 0.8), [-5.9, 0.6, 4.55]);
-  add(tack, new THREE.BoxGeometry(0.9, 0.04, 0.6), mat(0x2f6f9a, 0.7), [-5.9, 0.64, 4.5]); // tapis de selle plié
+  const chest = add(tack, new THREE.BoxGeometry(1.1, 0.55, 0.6), mat(0x7a5532, 0.8), [X0 + 2.1, 0.3, 4.55]);
+  add(tack, new THREE.BoxGeometry(1.14, 0.06, 0.64), mat(0x4a3220, 0.8), [X0 + 2.1, 0.6, 4.55]);
+  add(tack, new THREE.BoxGeometry(0.9, 0.04, 0.6), mat(0x2f6f9a, 0.7), [X0 + 2.1, 0.64, 4.5]); // tapis de selle plié
 
   // Réserve de foin et coin d'eau dans l'entrée.
   const hay = new THREE.Group();
@@ -198,7 +217,7 @@ export function stableModel(label) {
     return seed / 2147483647;
   };
   for (let i = 0; i < 26; i++) {
-    const m = add(aisleDirt, new THREE.PlaneGeometry(0.35 + rnd() * 0.3, 0.12 + rnd() * 0.12), strawBit, [(rnd() - 0.5) * 14.5, 0.09, (rnd() - 0.5) * 2.4], [-Math.PI / 2, 0, rnd() * 3], false);
+    const m = add(aisleDirt, new THREE.PlaneGeometry(0.35 + rnd() * 0.3, 0.12 + rnd() * 0.12), strawBit, [(rnd() - 0.5) * (W - 1.5), 0.09, (rnd() - 0.5) * 2.4], [-Math.PI / 2, 0, rnd() * 3], false);
     m.userData.threshold = rnd() * 90;
   }
 
@@ -212,7 +231,7 @@ export function stableModel(label) {
     glass,
     boxes,
     spots: {
-      tack: { obj: tack, lx: -6.4, lz: 3.2 },
+      tack: { obj: tack, lx: X0 + BOX_W / 2, lz: 3.2 },
       hay: { obj: hay, lx: -0.5, lz: 2.8 },
       water: { obj: water, lx: 0.6, lz: 3.6 },
       broom: { obj: broom, lx: 0.6, lz: 2.2 },

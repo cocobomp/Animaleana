@@ -18,7 +18,7 @@ import {
   EVENTS, EVENT_TYPES, eventState, startEvent, maybeStartEvent, eventProgress, eventOutcome, resolveEvent,
   eventWeather, nextStep, minutesLeft, shelterOf,
 } from '../sim/events.js';
-import { STRUCTURES, footprint } from '../sim/construction.js';
+import { STRUCTURES, footprintOf } from '../sim/construction.js';
 import { GEAR, owned, inUse } from '../sim/gear.js';
 import { canAfford, addStat } from '../sim/profile.js';
 import { XP } from '../sim/progress.js';
@@ -179,7 +179,7 @@ export class Events {
     for (const s of this.game.structures?.here() ?? []) {
       const def = STRUCTURES[s.type];
       if (!def?.species?.includes(a.species) || !['building', 'ranch', 'home'].includes(def.cat)) continue;
-      if (inside(footprint(s.type, s.x, s.z, s.rot), x, z, -0.5)) return shelterOf(a.species);
+      if (inside(footprintOf(s), x, z, -0.5)) return shelterOf(a.species);
     }
     if (inside(enclosure('paddock'), x, z)) return 'paddock';
     if (inside(enclosure('pen'), x, z)) return 'pen';

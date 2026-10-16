@@ -87,6 +87,9 @@ export function openBuilding(ui, kind) {
     cleanHutch: () => ui.groupCareWithGame((a) => a.species === 'rabbit', 'clean'),
     farm: () => ui.openFarm(),
     moveCore: () => { close(); g.mgmt.build.moveCore(kind); }, // vue d'ensemble : déplacer cette installation
+    // Vue construction, cet enclos (ou l'écurie) déjà choisi : il n'y a plus qu'à tirer les poignées.
+    resizeCore: () => { close(); g.mgmt.openBuild(); g.mgmt.construct.select({ kind: 'core', id: kind }); },
+    extendStable: () => { close(); g.mgmt.openBuild(); g.mgmt.construct.select({ kind: 'stable' }); },
     tack: () => ui.openTack(),
     cleanTack: () => ui.choreWithGame('tack').then((q) => { if (q !== null) g.cleanTack(); ui.renderPanel(); }),
     // Maison des animaux

@@ -1,20 +1,31 @@
 // Constructions du joueur dans le monde 3D : modèles, collisions, enclos pour la navigation,
-// zones de vie des habitants, et les actions (construire, déplacer, démolir, attribuer une maison).
-// La logique pure (catalogue, placement, prix, places) est dans src/sim/construction.js.
+// zones de vie des habitants, et les actions (construire, déplacer, agrandir, démolir, attribuer une maison).
+// Aussi : déplacer et agrandir les installations de base (bergerie, paddock, clapier, niche) et rallonger
+// l'écurie, sans recharger tout le lieu quand c'est possible.
+// La logique pure (catalogue, placement, prix, places, tailles) est dans src/sim/construction.js et resize.js.
 
 import * as THREE from 'three';
 import {
-  STRUCTURES, structuresAt, findStructure, footprint, toWorld, enclosureOf, homeZone, zoneRect, hasResidents,
+  STRUCTURES, structuresAt, findStructure, toWorld, enclosureOf, homeZone, zoneRect, hasResidents,
   validatePlacement, build, moveStructure, demolish, assign, unassign, residents, applyComfort, homeOf, structureAtPoint,
-  isEnclosure, canBuild, validateCore, validateEquipment, moveCore, moveEquipment, coreRect, equipmentPos,
+  isEnclosure, canBuild, validateCore, validateEquipment, moveCore, moveEquipment, coreRect, coreSize, equipmentPos,
+  footprintOf, sizeOf, RESIZABLE_CORE,
 } from '../sim/construction.js';
+import {
+  validateResize, resizeCore, resizeStructure, coreResizeOpts, structureResizeOpts, growthCandidates,
+  validateStableExtension,
+} from '../sim/resize.js';
+import { extendStable } from '../sim/facilities.js';
 import { addStat } from '../sim/profile.js';
 import { scoopZone } from '../sim/droppings.js';
 import { trainSkill, NEEDS } from '../sim/animal.js';
 import { isNight } from '../sim/time.js';
 import { fenceColliders, setBuiltEnclosures } from './nav.js';
-import { buildStructureModel, RANCH_BARN } from './models/structures.js';
+import { buildStructureModel, ranchBarn } from './models/structures.js';
+import { applyCoreLayout } from './coreLayout.js';
 import { t } from '../i18n.js';
+
+const insideRect = (r, x, z, m = 0) => Math.abs(x - r.x) < r.hw + m && Math.abs(z - r.z) < r.hd + m;
 
 /** Rectangle local (lx, lz, hw, hd) d'une structure → rectangle du monde (rotation en quarts de tour). */
 function localRect(s, lx, lz, hw, hd, extra = {}) {
@@ -65,10 +76,11 @@ export class Structures {
     for (const s of list) this.spawn(s, encl);
     // Les bâtiments pleins (grange, écurie, niche…) : les animaux et le joueur en font le tour.
     const solid = list.filter((s) => !isEnclosure(s.type) && !STRUCTURES[s.type].open && STRUCTURES[s.type].cat !== 'decor')
-      .map((s) => footprint(s.type, s.x, s.z, s.rot));
+      .map((s) => footprintOf(s));
     setBuiltEnclosures(encl, solid);
     this.hideVegetation();
     if (this.game.mgmt?.active) this.game.mgmt.refreshLabels();
+    this.game.mgmt?.construct?.refresh();
   }
 
   spawn(s, encl) {
@@ -79,7 +91,8 @@ export class Structures {
       const p = toWorld(s, lx, lz);
       return w.heightAt(p.x, p.z) - base;
     };
-    const group = buildStructureModel(s.type, def.cat === 'decor' ? '' : t(`st_${s.type}`), ground);
+    const size = s.w !== undefined || s.d !== undefined ? sizeOf(s) : null; // enclos agrandi
+    const group = buildStructureModel(s.type, def.cat === 'decor' ? '' : t(`st_${s.type}`), ground, size);
     group.position.set(s.x, base, s.z);
     group.rotation.y = (s.rot * Math.PI) / 2;
     group.userData.structure = s;
@@ -93,7 +106,11 @@ export class Structures {
       const fences = fenceColliders(e).map((c) => ({ ...c, structure: s.id }));
       cols.push(...fences);
       w.fences = [...(w.fences ?? []), ...fences];
-      if (def.cat === 'ranch') cols.push(localRect(s, RANCH_BARN.x, RANCH_BARN.z, RANCH_BARN.hw, RANCH_BARN.hd));
+      if (def.cat === 'ranch') {
+        const { w: rw, d: rd } = sizeOf(s);
+        const rb = ranchBarn(rw, rd);
+        cols.push(localRect(s, rb.x, rb.z, rb.hw, rb.hd));
+      }
     } else if (def.open) {
       // Abri ouvert : seulement le mur du fond et les côtés.
       cols.push(localRect(s, 0, -def.d / 2 + 0.1, def.w / 2, 0.2), localRect(s, -def.w / 2 + 0.1, 0, 0.2, def.d / 2), localRect(s, def.w / 2 - 0.1, 0, 0.2, def.d / 2));
@@ -102,14 +119,17 @@ export class Structures {
     } else if (s.type === 'fence') {
       cols.push(localRect(s, 0, 0, 2, 0.12, { fence: true }));
     } else if (!def.walkable) {
-      const f = footprint(s.type, s.x, s.z, s.rot);
+      const f = footprintOf(s);
       cols.push({ ...f, hw: f.hw + 0.15, hd: f.hd + 0.15, structure: s.id, equip: def.cat !== 'building' });
     }
     w.colliders.push(...cols);
     if (hasResidents(s.type)) w.structureHomes.set(s.id, homeZone(s));
   }
 
-  /** Cache les arbres (et l'herbe sous les bâtiments) qui se trouvent sur une construction. */
+  /**
+   * Cache les arbres (et l'herbe sous les bâtiments) qui se trouvent sur une construction, ou dans un enclos
+   * de base déplacé ou agrandi (le paddock a du sable : on y cache aussi l'herbe).
+   */
   hideVegetation() {
     const w = this.world;
     if (this.hiddenRoot === w.group) {
@@ -121,13 +141,13 @@ export class Structures {
     this.hidden = [];
     this.hiddenRoot = w.group;
     const list = [...this.items.values()].map(({ s }) => ({
-      f: footprint(s.type, s.x, s.z, s.rot),
+      f: footprintOf(s),
       floor: !['enclosure', 'ranch'].includes(STRUCTURES[s.type].cat) || STRUCTURES[s.type].arena,
     }));
-    if (!list.length) return;
+    for (const id of RESIZABLE_CORE) list.push({ f: coreRect(this.layout, id), floor: id === 'paddock' });
     const meshes = [];
     for (const child of w.group.children) {
-      if (child.userData.structure) continue;
+      if (child.userData.structure || child.userData.cores) continue;
       child.traverse((o) => { if (o.isInstancedMesh) meshes.push(o); });
     }
     const m = new THREE.Matrix4();
@@ -184,15 +204,17 @@ export class Structures {
     return this.profile.coreLayout?.[this.profile.place] ?? null;
   }
 
-  /** Obstacles et zones interdites pour valider un emplacement. */
+  /** Obstacles et zones interdites pour valider un emplacement (core / kind : à qui ils appartiennent). */
   env(ignore = null) {
     const w = this.world;
+    const s = ignore ? this.get(ignore) : null;
     return {
       ignore,
+      size: s && (s.w !== undefined || s.d !== undefined) ? sizeOf(s) : undefined, // enclos agrandi qu'on déplace
       core: this.layout,
       structures: this.here(),
       colliders: w.colliders.filter((c) => !c.structure),
-      blocked: w.interactables.map((d) => ({ x: d.x, z: d.z, hw: 1.6, hd: 1.6 })),
+      blocked: w.interactables.filter((d) => d.kind !== 'spot').map((d) => ({ x: d.x, z: d.z, hw: 1.6, hd: 1.6, core: d.core, kind: d.kind })),
       isWater: (x, z) => w.isWater(x, z),
       heightAt: (x, z) => w.heightAt(x, z),
     };
@@ -204,12 +226,19 @@ export class Structures {
 
   /** Déplacer la bergerie, le paddock, la niche ou le clapier : on ignore ses propres barrières. */
   validateCore(id, x, z) {
-    const env = this.env();
-    const old = coreRect(this.layout, id);
-    const mine = (c) => Math.abs(c.x - old.x) <= old.hw + 0.6 && Math.abs(c.z - old.z) <= old.hd + 0.6;
-    env.colliders = env.colliders.filter((c) => !mine(c));
-    env.blocked = env.blocked.filter((c) => !mine(c));
-    return validateCore(id, x, z, env);
+    const env = this.envWithout(id);
+    return validateCore(id, x, z, env, coreSize(this.layout, id));
+  }
+
+  /**
+   * Obstacles sans ceux d'une installation de base (ses barrières, ses obstacles, sa porte).
+   * Les équipements comptent (ils sont dans colliders) ; ceux rangés dans l'enclos le suivent.
+   */
+  envWithout(coreId, ignore = null) {
+    const env = this.env(ignore);
+    env.colliders = env.colliders.filter((c) => c.core !== coreId);
+    env.blocked = env.blocked.filter((c) => c.core !== coreId);
+    return env;
   }
 
   /** Poser un équipement : toutes les barrières comptent (on peut le mettre dans un enclos). */
@@ -264,12 +293,147 @@ export class Structures {
     return r;
   }
 
-  /** Déplace une installation de base : le lieu est reconstruit autour du joueur. */
+  /** Déplace une installation de base : elle est refaite à sa nouvelle place (sans recharger le lieu). */
   moveCore(id, x, z) {
     const v = this.validateCore(id, x, z);
     if (!v.ok) return v;
+    const old = coreRect(this.layout, id);
     const r = moveCore(this.profile, this.profile.place, id, x, z);
     if (!r.ok) return r;
+    this.afterCoreChange(id, old);
+    return r;
+  }
+
+  // ---------------------------------------------------------------- agrandir
+
+  /** Peut-on donner ce rectangle à l'installation id ? */
+  validateCoreResize(id, rect) {
+    return validateResize(coreRect(this.layout, id), rect, coreResizeOpts(id), this.envWithout(id));
+  }
+
+  /** Agrandit (ou réduit) la bergerie, le paddock ou l'enclos des lapins. */
+  resizeCore(id, rect) {
+    const v = this.validateCoreResize(id, rect);
+    if (!v.ok) return v;
+    const old = coreRect(this.layout, id);
+    const r = resizeCore(this.profile, this.profile.place, id, rect);
+    if (!r.ok) return r;
+    addStat(this.profile, 'resized');
+    this.afterCoreChange(id, old);
+    return r;
+  }
+
+  validateStructureResize(s, rect) {
+    return validateResize(footprintOf(s), rect, structureResizeOpts(this.profile, s), this.env(s.id));
+  }
+
+  /** Agrandit (ou réduit) un enclos construit : refait, ses habitants rentrent par la porte s'ils sont dehors. */
+  resizeStructure(id, rect) {
+    const s = this.get(id);
+    if (!s) return { ok: false, reason: 'unknown' };
+    const v = this.validateStructureResize(s, rect);
+    if (!v.ok) return v;
+    const r = resizeStructure(this.profile, id, rect);
+    if (!r.ok) return r;
+    addStat(this.profile, 'resized');
+    this.rebuild();
+    this.callBackInside();
+    this.game.save();
+    return r;
+  }
+
+  /**
+   * Après un déplacement ou un agrandissement : enclos de la navigation et zones de vie, barrières refaites,
+   * équipements rangés dedans qui suivent (ou restent dedans), végétation, animaux qui rentrent par la porte.
+   */
+  afterCoreChange(id, old) {
+    const g = this.game;
+    const layout = this.layout;
+    applyCoreLayout(layout);
+    this.world.rebuildCores();
+    const nu = coreRect(layout, id);
+    const moved = Math.abs(nu.hw - old.hw) < 1e-6 && Math.abs(nu.hd - old.hd) < 1e-6;
+    for (const q of g.equipment) {
+      const p = q.eq.pos;
+      if (p && insideRect(old, p[0], p[1], 0.3)) {
+        if (moved) q.eq.pos = [p[0] + nu.x - old.x, p[1] + nu.z - old.z];
+        else if (!insideRect(nu, p[0], p[1], -1)) {
+          q.eq.pos = [
+            Math.max(nu.x - nu.hw + 1.2, Math.min(nu.x + nu.hw - 1.2, p[0])),
+            Math.max(nu.z - nu.hd + 1.2, Math.min(nu.z + nu.hd - 1.2, p[1])),
+          ];
+        }
+      }
+      this.placeEquipment(q);
+    }
+    this.hideVegetation();
+    this.world.resolveCollisions(g.player.position);
+    this.callBackInside();
+    if (g.mgmt?.active) g.mgmt.refreshLabels();
+    g.mgmt?.construct?.refresh();
+    g.save();
+  }
+
+  /** Les animaux qui se retrouvent hors de leur enclos y retournent (en passant par la porte). */
+  callBackInside() {
+    for (const e of this.game.entities.values()) {
+      if (e.ridden || e.sleeping || e.data.following || e.inside || e.herdCtrl) continue;
+      const h = e.home;
+      if (!h?.hw) continue;
+      if (insideRect(h, e.position.x, e.position.z, 1.2)) continue;
+      e.state = 'walk';
+      e.pickWanderTarget();
+      e.timer = 40;
+    }
+  }
+
+  /**
+   * Anciennes sauvegardes : les installations marquées grow (src/sim/resize.js, migrateCoreSizes)
+   * essaient de prendre la nouvelle taille, maintenant que tout le lieu est construit. Appelé par loadPlace.
+   */
+  growPending() {
+    const layout = this.layout;
+    const ids = RESIZABLE_CORE.filter((id) => layout?.[id]?.grow);
+    if (!ids.length) return false;
+    let changed = false;
+    for (const id of ids) {
+      const old = coreRect(layout, id);
+      const env = this.envWithout(id);
+      const fit = growthCandidates(layout, id).find((r) => validateResize(old, r, coreResizeOpts(id), env).ok);
+      const { grow, ...rest } = layout[id];
+      layout[id] = fit ? { ...rest, x: fit.x, z: fit.z, w: fit.hw * 2, d: fit.hd * 2 } : rest;
+      if (fit) {
+        changed = true;
+        applyCoreLayout(layout);
+        this.world.rebuildCores();
+      }
+    }
+    if (changed) {
+      for (const q of this.game.equipment) this.placeEquipment(q);
+      this.hideVegetation();
+    }
+    return changed;
+  }
+
+  // ---------------------------------------------------------------- l'écurie
+
+  /** Peut-on rallonger l'écurie ? (la sellerie et sa porte vont bouger, les murs de l'écurie aussi) */
+  validateStableExtension() {
+    const env = this.env();
+    env.colliders = env.colliders.filter((c) => c.room !== 'stable' && c.kind !== 'tackroom');
+    env.blocked = env.blocked.filter((c) => c.kind !== 'tackroom' && c.kind !== 'stable');
+    env.equipment = this.game.equipment.map((q) => ({ x: q.pos.x, z: q.pos.z }));
+    return validateStableExtension(this.profile, env);
+  }
+
+  /** Rallonge l'écurie de 4 box : le lieu est reconstruit (intérieur, box, sellerie). */
+  extendStable() {
+    if (!this.game.isHome) return { ok: false, reason: 'notHome' };
+    const v = this.validateStableExtension();
+    if (!v.ok) return v;
+    const r = extendStable(this.profile);
+    if (!r.ok) return r;
+    addStat(this.profile, 'resized');
     this.reloadPlace();
     return r;
   }

@@ -3,7 +3,9 @@
 // box des chevaux, et lien avec la propreté / l'usure (src/sim/facilities.js).
 
 import * as THREE from 'three';
-import { stableModel, stableRooms, STABLE_HALL, STABLE_W, STABLE_D } from './models/stableInterior.js';
+import { stableModel, stableRooms, stableHall, stableWidth, STABLE_D } from './models/stableInterior.js';
+import { stableRect } from '../sim/facilities.js'; // l'écurie se rallonge (vue construction)
+import { setStableExt as placeTackRoom } from './farmLayout.js';
 import { houseModel, houseRooms, HOUSE_HALL, HOUSE_W, HOUSE_D } from './models/houseInterior.js';
 import { plateTexture } from './models/interiorKit.js';
 import { emojiTexture } from './textures.js';
@@ -106,9 +108,22 @@ NAV_HOOKS.push(interiorNav);
 
 const DEFS = {
   // aroundSide : côté par où l'on fait le tour (l'écurie touche presque le paddock au nord).
-  stable: { kind: 'stable', x: -22, z: -2, rot: Math.PI / 2, w: STABLE_W, d: STABLE_D, top: 5.5, door: 3.2, aroundSide: 1 },
+  // (place et longueur de l'écurie : setStableExt, selon sa taille)
+  stable: { kind: 'stable', x: -22, z: -2, rot: Math.PI / 2, w: stableWidth(0), d: STABLE_D, top: 5.5, door: 3.2, aroundSide: 1 },
   house: { kind: 'house', x: 0, z: -16, rot: 0, w: HOUSE_W, d: HOUSE_D, top: 5.2, door: 1.6 },
 };
+let stableExtNow = 0;
+
+/**
+ * Taille de l'écurie (0 : 8 box, 1 : 12, 2 : 16) : son bout nord reste contre le paddock, elle s'allonge
+ * vers le sud et la sellerie recule d'autant. Appelé par Game.loadPlace avant World.build.
+ */
+export function setStableExt(ext) {
+  stableExtNow = ext;
+  const r = stableRect(ext);
+  Object.assign(DEFS.stable, { x: r.x, z: r.z, w: stableWidth(ext) });
+  placeTackRoom(ext);
+}
 
 /**
  * Ajoute l'écurie et la maison (à la maison seulement) au monde, à la place des anciens bâtiments fermés.
@@ -122,7 +137,7 @@ export function buildInteriors(world, group, isHome) {
   for (let i = ENCLOSURES.length - 1; i >= 0; i--) if (ENCLOSURES[i].interior) ENCLOSURES.splice(i, 1);
   if (!isHome) return;
   for (const [id, def] of Object.entries(DEFS)) {
-    const model = id === 'stable' ? stableModel(L({ fr: 'Écurie', en: 'Stable' })) : houseModel(t('title'));
+    const model = id === 'stable' ? stableModel(L({ fr: 'Écurie', en: 'Stable' }), stableExtNow) : houseModel(t('title'));
     const b = {
       id,
       ...def,
@@ -130,8 +145,8 @@ export function buildInteriors(world, group, isHome) {
       s: Math.sin(def.rot),
       model,
       box: { x0: -def.w / 2, x1: def.w / 2, z0: -def.d / 2, z1: def.d / 2 },
-      rooms: id === 'stable' ? stableRooms() : houseRooms(),
-      hall: id === 'stable' ? STABLE_HALL : HOUSE_HALL,
+      rooms: id === 'stable' ? stableRooms(stableExtNow) : houseRooms(),
+      hall: id === 'stable' ? stableHall(stableExtNow) : HOUSE_HALL,
     };
     b.entry = id === 'stable' ? b.rooms.find((r) => r.id === 'passage') : null;
     const y = world.heightAt(def.x, def.z);

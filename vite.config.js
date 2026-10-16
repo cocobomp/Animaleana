@@ -39,6 +39,16 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // La page elle-même : d'abord le réseau (un seul rechargement suffit pour avoir la nouvelle version),
+  // le cache seulement hors ligne. Les fichiers du jeu ont un nom unique par version : cache d'abord.
+  if (e.request.mode === 'navigate') {
+    e.respondWith(fetch(e.request).then((res) => {
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put('./index.html', copy));
+      return res;
+    }).catch(() => caches.match('./index.html')));
+    return;
+  }
   e.respondWith(caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request).then((res) => {
     const copy = res.clone();
     caches.open(CACHE).then((c) => c.put(e.request, copy));

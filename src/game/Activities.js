@@ -3,6 +3,7 @@
 // La logique (notes, chances, classements) est dans src/sim/activities.js ; l'interface dans src/ui/activities.js.
 
 import * as THREE from 'three';
+import { tackEffects } from '../sim/gear.js'; // effets de la selle en balade
 import {
   SHOWGROUND, JUMP_COURSE, AGILITY_COURSE, AGILITY_LENGTH, TRAIL, toWorld, approach, alignment, takeoffQuality, TAKEOFF,
   jumpChance, horseJumpStats, refuses, jumpingResult, parTime, trailCollectibles, trailResult, trailEnduranceGain,
@@ -1072,6 +1073,7 @@ class TrailSession extends Session {
     const result = trailResult({
       checkpoints: this.next, totalCheckpoints: this.points.length, collected: this.collected,
       totalCollectibles: this.collectibles.length, photos: this.photos, time: this.clock,
+      longRide: tackEffects(this.mount?.data).longRide, // selle de randonnée ou western (src/sim/gear.js)
     });
     // Endurance : le cheval et les animaux qui ont marché avec nous.
     const gain = trailEnduranceGain(this.next);

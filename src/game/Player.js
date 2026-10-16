@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { buildAvatar, animateAvatarWalk, poseAvatar } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
+import { tackEffects } from '../sim/gear.js';
 
 const WALK = 3.2;
 const RUN = 6.2;
@@ -122,7 +123,8 @@ export class Player {
     let max = run ? RUN : WALK;
     if (mount) {
       const skill = 1 + mount.data.skills.speed / 150;
-      max = (run ? 11 : 4.5) * skill * Math.min(1.2, mount.scale + 0.2) * (this.bareback || !mount.data.gear?.saddle ? 0.8 : 1);
+      // À cru : un peu moins vite ; la selle de course fait aller plus vite (src/sim/gear.js).
+      max = (run ? 11 : 4.5) * skill * Math.min(1.2, mount.scale + 0.2) * (this.bareback || !mount.data.gear?.saddle ? 0.8 : tackEffects(mount.data).speed);
       if (mount.data.needs.energy < 10) max = 2;
     }
     const target = amount > 0.05 ? max * Math.min(1, amount) : 0;

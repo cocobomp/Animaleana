@@ -1,6 +1,7 @@
 // Textes du jeu : français (langue principale) et anglais.
 
 import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
+import { TACK_FR, TACK_EN } from './ui/tackTexts.js'; // sellerie : catalogue d'équipement (gear_*, tk_*, col_*)
 
 const fr = {
   title: 'Animadichelle',
@@ -3427,6 +3428,9 @@ const en = {
 // Clients et métiers : textes ajoutés aux deux dictionnaires.
 Object.assign(fr, CLIENTS_FR);
 Object.assign(en, CLIENTS_EN);
+// Sellerie : noms, phrases et effets de chaque selle, filet, couverture… (remplace les anciens noms courts).
+Object.assign(fr, TACK_FR);
+Object.assign(en, TACK_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

@@ -334,8 +334,11 @@ export class AnimalEntity {
         if (herd.length) {
           const cx = herd.reduce((s, o) => s + o.position.x, 0) / herd.length;
           const cz = herd.reduce((s, o) => s + o.position.z, 0) / herd.length;
-          this.target.x = this.target.x * 0.5 + cx * 0.5;
-          this.target.z = this.target.z * 0.5 + cz * 0.5;
+          // Chacun vise un point différent autour du groupe (sinon tout le monde finit au même endroit).
+          const spread = 1.5 + herd.length * 0.8;
+          const ang = Math.random() * Math.PI * 2;
+          this.target.x = this.target.x * 0.5 + cx * 0.5 + Math.cos(ang) * spread;
+          this.target.z = this.target.z * 0.5 + cz * 0.5 + Math.sin(ang) * spread;
         }
       }
       this.timer = 4 + Math.random() * 6;
@@ -385,6 +388,33 @@ export class AnimalEntity {
         this.leashDir = { x: dx / len, z: dz / len };
       }
     }
+  }
+
+  /** Les animaux ne se marchent pas dessus : ceux qui se chevauchent s'écartent doucement. */
+  separate(ctx, dt) {
+    if (this.sleeping || this.ridden || this.inside || this.data.stalled || this.perch?.phase === 'on') return;
+    const p = this.root.position;
+    let moved = false;
+    for (const o of ctx.entities) {
+      if (o === this || o.inside || o.ridden || o.data.stalled) continue;
+      const minD = (this.radius + o.radius) * 0.85;
+      const dx = p.x - o.position.x;
+      const dz = p.z - o.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist >= minD) continue;
+      // Chacun fait la moitié du chemin, en douceur (quelques images pour se dégager).
+      const push = (minD - dist) * Math.min(1, dt * 4) * 0.5;
+      if (dist < 1e-3) {
+        const a = Math.random() * Math.PI * 2;
+        p.x += Math.cos(a) * push;
+        p.z += Math.sin(a) * push;
+      } else {
+        p.x += (dx / dist) * push;
+        p.z += (dz / dist) * push;
+      }
+      moved = true;
+    }
+    if (moved) this.world.resolveCollisions(p, this.radius * 0.6, { small: this.small });
   }
 
   update(dt, ctx) {
@@ -625,6 +655,7 @@ export class AnimalEntity {
           this.world.resolveCollisions(p, this.radius * 0.6, { small: this.small });
         }
       }
+      this.separate(ctx, dt);
       this.snap(dt);
     }
 

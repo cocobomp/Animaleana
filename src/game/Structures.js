@@ -333,9 +333,11 @@ export class Structures {
     if (!s) return { ok: false, reason: 'unknown' };
     const v = this.validateStructureResize(s, rect);
     if (!v.ok) return v;
+    const old = footprintOf(s);
     const r = resizeStructure(this.profile, id, rect);
     if (!r.ok) return r;
     addStat(this.profile, 'resized');
+    this.keepEquipmentInside(old, footprintOf(s));
     this.rebuild();
     this.callBackInside();
     this.game.save();
@@ -343,17 +345,12 @@ export class Structures {
   }
 
   /**
-   * Après un déplacement ou un agrandissement : enclos de la navigation et zones de vie, barrières refaites,
-   * équipements rangés dedans qui suivent (ou restent dedans), végétation, animaux qui rentrent par la porte.
+   * Équipements posés dans un enclos qui change : ils le suivent s'il est déplacé (même taille),
+   * ou restent dedans s'il rapetisse.
    */
-  afterCoreChange(id, old) {
-    const g = this.game;
-    const layout = this.layout;
-    applyCoreLayout(layout);
-    this.world.rebuildCores();
-    const nu = coreRect(layout, id);
+  keepEquipmentInside(old, nu) {
     const moved = Math.abs(nu.hw - old.hw) < 1e-6 && Math.abs(nu.hd - old.hd) < 1e-6;
-    for (const q of g.equipment) {
+    for (const q of this.game.equipment) {
       const p = q.eq.pos;
       if (p && insideRect(old, p[0], p[1], 0.3)) {
         if (moved) q.eq.pos = [p[0] + nu.x - old.x, p[1] + nu.z - old.z];
@@ -366,6 +363,18 @@ export class Structures {
       }
       this.placeEquipment(q);
     }
+  }
+
+  /**
+   * Après un déplacement ou un agrandissement : enclos de la navigation et zones de vie, barrières refaites,
+   * équipements rangés dedans qui suivent (ou restent dedans), végétation, animaux qui rentrent par la porte.
+   */
+  afterCoreChange(id, old) {
+    const g = this.game;
+    const layout = this.layout;
+    applyCoreLayout(layout);
+    this.world.rebuildCores();
+    this.keepEquipmentInside(old, coreRect(layout, id));
     this.hideVegetation();
     this.world.resolveCollisions(g.player.position);
     this.callBackInside();

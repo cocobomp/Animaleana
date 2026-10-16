@@ -413,9 +413,11 @@ export class ManagementView {
     const W = window.innerWidth;
     const H = window.innerHeight;
     const cam = this.game.camera;
-    const v = new THREE.Vector3();
+    const v = this.labelV ?? (this.labelV = new THREE.Vector3());
     const w = this.game.world;
-    const placed = [];
+    // (cases réutilisées d'une image à l'autre : pas de nouvel objet à chaque image)
+    const placed = this.placedPool ?? (this.placedPool = []);
+    let n = 0;
     const dim = this.build.active || !!this.construct.sel;
     for (const it of this.items) {
       const el = this.labelEls.get(it.key);
@@ -424,21 +426,33 @@ export class ManagementView {
       else v.set(it.x, w.heightAt(it.x, it.z) + it.y, it.z);
       v.project(cam);
       if (v.z > 1 || v.x < -1.05 || v.x > 1.05 || v.y < -1.05 || v.y > 1.05) {
-        el.style.display = 'none';
+        if (el.style.display !== 'none') el.style.display = 'none';
         continue;
       }
-      el.style.display = '';
+      if (el.style.display) el.style.display = '';
       const x = ((v.x + 1) / 2) * W;
       let y = ((1 - v.y) / 2) * H;
       const wpx = el.labelW || 120;
       for (let k = 0; k < 5; k++) {
-        const hit = placed.find((q) => Math.abs(q.x - x) < (q.w + wpx) / 2 && Math.abs(q.y - y) < 30);
+        let hit = null;
+        for (let i = 0; i < n; i++) {
+          const q = placed[i];
+          if (Math.abs(q.x - x) < (q.w + wpx) / 2 && Math.abs(q.y - y) < 30) {
+            hit = q;
+            break;
+          }
+        }
         if (!hit) break;
         y = hit.y - 32;
       }
-      placed.push({ x, y, w: wpx });
+      const slot = placed[n] ?? (placed[n] = { x: 0, y: 0, w: 0 });
+      slot.x = x;
+      slot.y = y;
+      slot.w = wpx;
+      n++;
       el.style.transform = `translate(${Math.round(x - wpx / 2)}px, ${Math.round(y - 20)}px)`;
-      el.style.opacity = dim ? 0.45 : 1;
+      const op = dim ? '0.45' : '1';
+      if (el.style.opacity !== op) el.style.opacity = op;
     }
   }
 }

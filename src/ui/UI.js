@@ -62,11 +62,14 @@ export class UI {
     // Ne pas redessiner un panneau pendant qu'on appuie dessus (sinon le clic se perd).
     this.holding = false;
     this.panelEl.addEventListener('pointerdown', () => { this.holding = true; });
-    window.addEventListener('pointerup', () => {
-      if (!this.holding) return;
-      this.holding = false;
-      setTimeout(() => this.panel?.live && this.renderPanel(), 0);
-    });
+    // pointercancel : le navigateur a pris la main (défilement) ; sans ça le panneau restait figé jusqu'au prochain tap.
+    for (const ev of ['pointerup', 'pointercancel']) {
+      window.addEventListener(ev, () => {
+        if (!this.holding) return;
+        this.holding = false;
+        setTimeout(() => this.panel?.live && this.renderPanel(), 0);
+      });
+    }
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape') {
@@ -128,7 +131,20 @@ export class UI {
     // Refait avec l'interface : il garde ainsi la langue choisie dans les réglages.
     this.pauseBanner.replaceChildren(h('span', {}, `⏸ ${t('pause')}`),
       h('button', { class: 'primary', onClick: () => this.game.setTimeScale(1) }, `▶ ${t('resume')}`));
-    this.hudInfo = h('div', { class: 'hud-info' });
+    // Les lignes du HUD sont créées une fois ; refresh() ne change que leur texte. Les reconstruire toutes les
+    // 0,5 s faisait perdre les taps tombés pendant la reconstruction (surtout la barre du temps, sur téléphone).
+    this.hudNameText = document.createTextNode('');
+    this.hudCoin = h('span', { class: 'coin' });
+    this.hudLevelText = document.createTextNode('');
+    this.hudXp = h('span', { class: 'xp-fill' });
+    this.hudClock = h('div', { class: 'hud-line' });
+    this.timeBar = this.timeControls();
+    this.hudPlace = h('div', { class: 'hud-line' });
+    this.hudWeather = h('div', { class: 'hud-line' });
+    this.hudInfo = h('div', { class: 'hud-info' },
+      h('div', { class: 'hud-line strong' }, this.hudNameText, this.hudCoin),
+      h('div', { class: 'hud-line level' }, this.hudLevelText, h('span', { class: 'xp-track' }, this.hudXp)),
+      this.hudClock, this.timeBar, this.hudPlace, this.hudWeather);
     this.hud.replaceChildren(
       this.hudInfo,
       h('nav', { class: 'hud-buttons' },
@@ -149,15 +165,16 @@ export class UI {
     if (!g?.profile) return;
     const s = g.hud();
     const money = s.money === null ? t('infinite') : s.money;
-    this.hudInfo.replaceChildren(
-      h('div', { class: 'hud-line strong' }, `👤 ${s.name}`, h('span', { class: 'coin' }, `🪙 ${money}`)),
-      h('div', { class: 'hud-line level' }, `⭐ ${t('level', { n: s.level })}`,
-        h('span', { class: 'xp-track' }, h('span', { class: 'xp-fill', style: { width: `${s.levelProgress * 100}%` } }))),
-      h('div', { class: 'hud-line' }, `📅 ${t('day', { n: s.day })} · 🕐 ${formatClock(s.clock)}${g.timeScale === 0 ? ` · ⏸ ${t('paused')}` : ''}`),
-      this.timeControls(),
-      h('div', { class: 'hud-line' }, `${s.isHome ? '🏠' : s.place.flag} ${L(s.place.name)}`),
-      h('div', { class: 'hud-line' }, `${WEATHER_EMOJI[s.weather]} ${t('weatherNow', { w: t(`w_${s.weather}`), t: s.temperature })} · ${t(`season_${s.season}`)}`),
-    );
+    const set = (node, text) => { if (node.data !== text) node.data = text; };
+    const setText = (el, text) => { if (el.textContent !== text) el.textContent = text; };
+    set(this.hudNameText, `👤 ${s.name}`);
+    setText(this.hudCoin, `🪙 ${money}`);
+    set(this.hudLevelText, `⭐ ${t('level', { n: s.level })}`);
+    this.hudXp.style.width = `${s.levelProgress * 100}%`;
+    setText(this.hudClock, `📅 ${t('day', { n: s.day })} · 🕐 ${formatClock(s.clock)}${g.timeScale === 0 ? ` · ⏸ ${t('paused')}` : ''}`);
+    this.updateTimeBar();
+    setText(this.hudPlace, `${s.isHome ? '🏠' : s.place.flag} ${L(s.place.name)}`);
+    setText(this.hudWeather, `${WEATHER_EMOJI[s.weather]} ${t('weatherNow', { w: t(`w_${s.weather}`), t: s.temperature })} · ${t(`season_${s.season}`)}`);
     if (this.panel?.live && !this.holding) this.renderPanel();
     this.renderStatus();
     this.pauseBanner.hidden = !g.paused;
@@ -282,6 +299,7 @@ export class UI {
     const g = this.game;
     const b = (label, scale, title) => h('button', {
       class: `time-btn ${g.timeScale === scale ? 'on' : ''}`,
+      'data-scale': String(scale),
       title,
       onClick: () => g.setTimeScale(scale),
     }, label);
@@ -295,6 +313,15 @@ export class UI {
         title: t('autoModeHelp'),
         onClick: () => g.tasks.setAuto(!g.tasks.autoMode),
       }, `🤖 ${t('autoMode')}`));
+  }
+
+  /** Met à jour l'état allumé des boutons de la barre du temps sans les recréer. */
+  updateTimeBar() {
+    const g = this.game;
+    for (const b of this.timeBar?.querySelectorAll('.time-btn') ?? []) {
+      const on = b.classList.contains('auto') ? !!g.tasks.autoMode : Number(b.dataset.scale) === g.timeScale;
+      b.classList.toggle('on', on);
+    }
   }
 
   openSkipMenu() {

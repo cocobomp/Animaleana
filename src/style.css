@@ -32,7 +32,9 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
-#app { position: fixed; inset: 0; }
+#app { position: fixed; inset: 0; overflow: hidden; }
+/* Pas de zoom au double-tap ni de délai de 300 ms sur les boutons (le pincement reste possible). */
+body { touch-action: manipulation; }
 
 canvas { display: block; touch-action: none; }
 
@@ -57,6 +59,7 @@ button.icon { width: 48px; padding: 0; }
 
 input[type='text'] {
   font: inherit;
+  font-size: max(16px, 1em); /* sous 16 px, iPhone zoome la page quand on touche le champ, et n'en revient pas */
   width: 100%;
   padding: 12px 14px;
   border: 1px solid var(--line);

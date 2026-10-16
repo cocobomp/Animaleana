@@ -22,6 +22,7 @@ import { groomingSection } from './groomer.js'; // métier Toiletteur : coupe et
 import { travelAdvice } from './trip.js'; // voyages réalistes
 import { questExtras } from './tutorial.js';
 import { animalActivitySection } from './activities.js';
+import { clientBadge, clientInfo, clientsTab } from './clients.js'; // animaux confiés par des clients
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -97,6 +98,7 @@ function renderAnimal(ui, g, a) {
       h('span', { class: 'chip swatch', style: { background: hexColor(a.look.coat) } }, L(a.look.colorName) || ''),
     ),
     a.sick ? h('p', { class: 'warn' }, `🤒 ${t('r_sick', { name: a.name, g: a.sex })}`) : null,
+    clientInfo(a, g), // animal confié : propriétaire, jours restants, soin
     !here ? h('p', { class: 'note' }, t('isAt', { place: `${PLACES[a.location].flag} ${L(PLACES[a.location].name)}` })) : null,
   );
 
@@ -127,7 +129,7 @@ function renderAnimal(ui, g, a) {
   acts.push(btn(`📍 ${t('callHere')}`, () => g.callHere(a)));
   acts.push(btn(`🩺 ${t('act_vet')}${money(ui, g.vetCost(false))}`, () => ui.openVet(a, false), { cls: a.sick ? 'primary' : '' }));
   if (hasTool(g.profile, 'firstAid')) acts.push(btn(`🧰 ${t('vetSelfTitle')}`, () => ui.openVet(a, 'self')));
-  acts.push(btn(`✏️ ${t('rename')}`, async () => {
+  if (!a.client) acts.push(btn(`✏️ ${t('rename')}`, async () => { // (pas pour un animal confié)
     const name = await ui.prompt(t('newName'), a.name, animalCard(a));
     if (name) {
       g.rename(a, name);
@@ -173,6 +175,7 @@ function renderAnimal(ui, g, a) {
 
   out.push(...animalActivitySection(ui, a)); // activités : saut, balade, agility, spectacle
 
+  if (a.client) return out; // animal confié : ni entraînement, ni tours, ni bébés (il repart bientôt)
   out.push(h('h3', {}, t('training')), h('div', { class: 'grid' },
     sp.training.map((x) => btn(t(`tr_${x}`), () => g.train(a, x), { disabled: stage === 'baby' })),
   ), h('div', { class: 'bars small' },
@@ -225,6 +228,7 @@ export function openAnimals(ui) {
           h('span', { class: 'card-main' },
             h('b', {}, `${a.name} ${sexIcon(a)}`),
             h('small', {}, `${speciesName(a)} · ${breedName(a)} · ${ageText(a)}`),
+            clientBadge(a, g), // 🏡 en pension / 🩺 en soins
             h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${happiness(a)}%` } }))),
           h('span', { class: 'card-side' }, MOOD_EMOJI[m], h('small', {}, here ? '' : PLACES[a.location].flag)));
       });
@@ -295,7 +299,7 @@ export function openVetClinic(ui) {
 
 export function openTravel(ui) {
   const g = ui.game;
-  const state = { dest: null, mode: null, bring: new Set(g.animalsHere().map((a) => a.id)) };
+  const state = { dest: null, mode: null, bring: new Set(g.animalsHere().filter((a) => !a.client).map((a) => a.id)) };
   const render = () => {
     const p = g.profile;
     const from = PLACES[p.place];
@@ -314,7 +318,7 @@ export function openTravel(ui) {
     const out = [h('div', { class: 'cards' }, places)];
     if (!state.dest) return out;
 
-    const here = g.animalsHere();
+    const here = g.animalsHere().filter((a) => !a.client); // (les animaux confiés restent à la maison)
     const travelers = here.filter((a) => state.bring.has(a.id));
     if (here.length) {
       out.push(h('h3', {}, t('bring')), h('div', { class: 'row wrap' },
@@ -362,19 +366,20 @@ export function openTravel(ui) {
 
 // ---------------------------------------------------------------- journal
 
-export function openJournal(ui) {
+export function openJournal(ui, tab = 'quest') {
   const g = ui.game;
-  const state = { tab: 'quest' };
+  const state = { tab };
   ui.openPanel({
     title: `📖 ${t('journal')}`,
     live: true,
     render: () => {
       const p = g.profile;
       const tabs = h('div', { class: 'tabs' },
-        ['quest', 'achievement'].map((k) => h('button', {
+        ['quest', 'achievement', 'clients'].map((k) => h('button', {
           class: state.tab === k ? 'active' : '',
           onClick: () => { state.tab = k; ui.renderPanel(); },
-        }, k === 'quest' ? `🎯 ${t('quests')}` : `🏆 ${t('achievements')}`)));
+        }, k === 'quest' ? `🎯 ${t('quests')}` : k === 'clients' ? `🏷️ ${t('cl_tab')}` : `🏆 ${t('achievements')}`)));
+      if (state.tab === 'clients') return [tabs, ...clientsTab(ui)]; // clients (src/ui/clients.js)
       const list = OBJECTIVES.filter((o) => o.kind === state.tab).map((o) => {
         const done = p.completed.includes(o.id);
         const [cur, max] = o.progress(p);
@@ -538,7 +543,9 @@ export function openFarm(ui) {
               h('b', {}, hired ? `${hired.name} · ${t(`helper_${type}`, { g: hired.sex })}` : t(`helper_${type}`)),
               h('small', {}, t(`helperd_${type}`))),
             hired
-              ? h('button', { onClick: async () => { if (await ui.confirm(t('fireConfirm', { name: hired.name }))) { g.fire(hired.id); ui.renderPanel(); } } }, t('fire'))
+              ? h('span', { class: 'row' },
+                h('button', { class: 'primary', onClick: () => ui.openHelper(hired) }, `💬 ${t('hc_talk')}`), // discuter, consignes, formation
+                h('button', { onClick: async () => { if (await ui.confirm(t('fireConfirm', { name: hired.name }))) { g.fire(hired.id); ui.renderPanel(); } } }, t('fire')))
               : h('button', { class: 'primary', onClick: () => { g.hire(type); ui.renderPanel(); } }, sandbox ? t('hire') : `${t('hire')} · ${def.salary} 🪙/${t('perDay')}`),
             duties);
         })));

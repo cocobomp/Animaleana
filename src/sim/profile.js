@@ -5,6 +5,8 @@ import { STARTER_ITEMS } from './gear.js';
 import { STARTER_TOOLS } from './tools.js';
 import { defaultFacilities } from './facilities.js'; // bâtiments à entretenir (écurie, maison, bergerie)
 import { createTutorial } from './tutorial.js';
+import { defaultClients } from './clients.js'; // clients (pension, soins)
+import { defaultCareers } from './careers.js'; // métiers
 import { defaultGroomerState, ensureGroomer } from './groomer.js'; // métier Toiletteur
 
 const INDEX_KEY = 'animaleana.profiles';
@@ -52,7 +54,8 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     events: { active: null, cooldowns: {}, nextAt: 0, lastRoll: -1, weather: null, done: {} },
     settings: { camera: 'third', timeSpeed: 'normal' },
     tutorial: createTutorial(), // tutoriel guidé (src/sim/tutorial.js)
-    careers: { xp: { groomer: 0 } }, // XP par métier (src/sim/careersRegistry.js)
+    clients: defaultClients(), // visiteurs et animaux confiés (src/sim/clients.js)
+    careers: defaultCareers(), // métiers appris (src/sim/careers.js)
     groomer: defaultGroomerState(), // salon de toilettage : réputation, clients, carnet (src/sim/groomer.js)
   };
 }
@@ -106,6 +109,9 @@ function migrate(p) {
     ...fresh, ...p, stats: p.stats ?? {}, settings: { ...fresh.settings, ...p.settings },
     // Anciennes sauvegardes : pas de tutoriel (on peut le revoir dans les réglages).
     tutorial: p.tutorial ?? createTutorial(true),
+    // Clients et métiers (ajoutés plus tard) : champs manquants complétés.
+    clients: { ...defaultClients(), ...(p.clients ?? {}) },
+    careers: { ...defaultCareers(), ...(p.careers ?? {}) },
   };
 }
 

@@ -39,6 +39,14 @@ export const OBJECTIVES = [
   { id: 'grmFive1', kind: 'quest', reward: 100, progress: (p) => [stat(p, 'groomFive'), 1] },
   { id: 'grmClients10', kind: 'achievement', progress: (p) => [stat(p, 'groomClients'), 10] },
   { id: 'grmExpert', kind: 'achievement', progress: (p) => [p.careers?.xp?.groomer ?? 0, 900] },
+  // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
+  { id: 'career1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'careersStarted'), 1] },
+  { id: 'client1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'clients'), 1] },
+  { id: 'clientVet1', kind: 'quest', reward: 100, progress: (p) => [stat(p, 'clientsVet'), 1] },
+  { id: 'clientHappy5', kind: 'quest', reward: 150, progress: (p) => [stat(p, 'clientsHappy'), 5] },
+  { id: 'clientMoney500', kind: 'quest', reward: 200, progress: (p) => [stat(p, 'clientMoney'), 500] },
+  { id: 'client5Stars10', kind: 'achievement', progress: (p) => [stat(p, 'clients5Stars'), 10] },
+  { id: 'reputation90', kind: 'achievement', progress: (p) => [Math.max(0, ...Object.values(p.careers?.reputation ?? {})) >= 90 ? 1 : 0, 1] },
   { id: 'zoo10', kind: 'achievement', progress: (p) => [p.animals.length, 10] },
   { id: 'world', kind: 'achievement', progress: (p) => [p.visited.length, PLACE_IDS.length] },
   { id: 'allHappy', kind: 'achievement', progress: (p) => {

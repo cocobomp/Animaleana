@@ -162,6 +162,7 @@ export function restartTutorial(profile) {
 const hasHorse = (p) => p.animals.some((a) => a.species === 'horse');
 const hasAnimal = (p) => p.animals.length > 0;
 const hasSalon = (p) => (p.structures ?? []).some((s) => s.type === 'salon'); // salon de toilettage
+const hasCareer = (p) => Object.keys(p.careers?.started ?? {}).length > 0;
 
 const SHOWGROUND = { type: 'building', id: 'showground' };
 
@@ -196,6 +197,12 @@ export const QUEST_GUIDE = {
   grmOwn1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, ready: (p) => hasSalon(p) && hasAnimal(p) },
   grmAccessory1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, ready: (p) => hasSalon(p) && hasAnimal(p) },
   grmFive1: { where: 'salon', target: { type: 'building', id: 'salon' }, ready: hasSalon },
+  // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
+  career1: { where: 'careers', target: { type: 'hud', id: 'careers' } },
+  client1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
+  clientVet1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: (p) => !!p.careers?.started?.vet },
+  clientHappy5: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
+  clientMoney500: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
 };
 
 /** Ordre conseillé des quêtes, de la plus facile à la plus difficile. */
@@ -204,6 +211,7 @@ export const QUEST_ORDER = [
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
   'grmSalon', 'grmOwn1', 'grmAccessory1', 'grmClient1', 'grmFive1',
+  'career1', 'client1', 'clientVet1', 'clientHappy5', 'clientMoney500',
 ];
 
 /**
@@ -281,6 +289,11 @@ export const FOLLOW_STEPS = {
   buildSalon: { target: null, done: questDone },
   goSalon: { target: { type: 'building', id: 'salon' }, done: seenAny('building:salon') },
   doGrooming: { target: null, done: questDone, progress: true },
+  // Métiers et clients
+  careerStart: { target: { type: 'hud', id: 'careers' }, done: questDone },
+  clientWait: { target: null, done: (c) => c.hasClient || c.questDone },
+  clientCare: { target: null, done: questDone, progress: true },
+  clientVet: { target: null, done: questDone, progress: true },
 };
 
 export const QUEST_STEPS = {
@@ -312,6 +325,11 @@ export const QUEST_STEPS = {
   grmOwn1: ['goSalon', 'doGrooming'],
   grmAccessory1: ['goSalon', 'doGrooming'],
   grmFive1: ['goSalon', 'doGrooming'],
+  career1: ['careerStart'],
+  client1: ['clientWait', 'clientCare'],
+  clientVet1: ['clientWait', 'clientVet'],
+  clientHappy5: ['clientWait', 'clientCare'],
+  clientMoney500: ['clientWait', 'clientCare'],
 };
 
 /** Étapes d'une quête selon la situation : sans animal (ou sans cheval), on va d'abord en adopter un. */

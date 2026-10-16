@@ -9,6 +9,7 @@ import { uid, pick } from './rng.js';
 import { levelOf } from './progress.js';
 import { dayOf } from './time.js';
 import { registerCareer } from './careersRegistry.js';
+import { careerState, reputationOf, changeReputation, addEarnings } from './careers.js'; // registre des métiers
 
 // ---------------------------------------------------------------- le métier
 
@@ -87,20 +88,34 @@ export const ACC_COLORS = {
 /** Nombre de jours pendant lesquels une coupe reste belle (bonus au concours de beauté). */
 export const CUT_DAYS = 6;
 export const MAX_WAITING = 2;
-export const START_REPUTATION = 10;
 
-/** Définition du métier, au format commun des « Métiers ». */
+/**
+ * Définition du métier, au format du registre des métiers (src/sim/careers.js) : il apparaît dans 💼 Métiers.
+ * actions : le carnet (cochées la première fois) ; steps : chaque étape du toilettage avec sa fiche « Montre-moi ».
+ * perks : ce que permet chaque rang au salon. maxClients = 0 : aucun animal en pension (src/sim/clients.js)
+ * grâce à ce métier ; les clients du salon (MAX_WAITING) repartent le jour même.
+ */
 export const GROOMER_CAREER = {
   id: 'groomer',
   emoji: '✂️',
-  name: { fr: 'Toiletteur', en: 'Groomer' },
-  name_f: { fr: 'Toiletteuse', en: 'Groomer' },
-  desc: { fr: 'Lave, brosse, coiffe et décore les animaux dans ton salon de toilettage.', en: 'Wash, brush, style and decorate animals in your grooming salon.' },
   level: GROOMER_LEVEL,
-  xpKey: 'groomer',
-  ranks: RANKS.map((r) => ({ ...r, name: `grm_rank_${r.id}` })),
-  actions: STEP_IDS.map((id) => ({ id, emoji: STEPS[id].emoji, rank: STEPS[id].rank, name: `grm_step_${id}`, tutorial: `grm_tuto_${id}` })),
-  requirement: 'grm_req_salon', // il faut construire le salon
+  building: 'salon',
+  ranks: RANKS.map((r) => r.xp),
+  actions: [
+    { id: 'welcome', emoji: '👋', where: 'salon' },
+    { id: 'bath', emoji: '🫧', where: 'salon' },
+    { id: 'cut', emoji: '✂️', where: 'salon' },
+    { id: 'finish', emoji: '🎀', where: 'salon' },
+    { id: 'return', emoji: '🎁', where: 'salon' },
+  ],
+  steps: STEP_IDS.map((id) => ({ id, emoji: STEPS[id].emoji, rank: STEPS[id].rank, tutorial: `grm_tuto_${id}` })),
+  perks: SPECIES_BY_RANK.map((_, i) => ({
+    maxClients: 0,
+    salonClients: MAX_WAITING,
+    species: SPECIES_BY_RANK.slice(0, i + 1).flat(),
+    styles: Object.keys(STYLES).filter((k) => STYLES[k].rank <= i),
+    tips: i >= 1,
+  })),
 };
 registerCareer(GROOMER_CAREER);
 
@@ -108,14 +123,12 @@ registerCareer(GROOMER_CAREER);
 
 /** État sauvegardé dans profile.groomer. */
 export function defaultGroomerState() {
-  return { reputation: START_REPUTATION, clients: [], history: [], seen: [], nextClientAt: 0, served: 0 };
+  return { clients: [], history: [], seen: [], nextClientAt: 0, served: 0 };
 }
 
 /** S'assure que le profil a tout ce qu'il faut (anciennes sauvegardes). */
 export function ensureGroomer(profile) {
-  profile.careers = profile.careers ?? { xp: {} };
-  profile.careers.xp = profile.careers.xp ?? {};
-  profile.careers.xp.groomer = profile.careers.xp.groomer ?? 0;
+  careerState(profile); // profile.careers (src/sim/careers.js)
   if (!profile.groomer) profile.groomer = defaultGroomerState();
   else for (const [k, v] of Object.entries(defaultGroomerState())) if (profile.groomer[k] === undefined) profile.groomer[k] = v;
   return profile.groomer;
@@ -141,11 +154,14 @@ export function rankProgress(p) {
   return { rank: i, xp, next: next?.xp ?? null, share: next ? Math.min(1, (xp - from) / (next.xp - from)) : 1 };
 }
 
-/** Ajoute de l'XP de métier. Renvoie { rankUp: bool, rank }. */
+/** Réputation du salon (celle du métier dans profile.careers.reputation, 50 au départ). */
+export const reputation = (p) => reputationOf(p, 'groomer');
+
+/** Ajoute de l'XP de métier (même compteur que 💼 Métiers). Renvoie { rankUp: bool, rank }. */
 export function addCareerXp(p, n) {
-  ensureGroomer(p);
+  const st = careerState(p);
   const before = rankOf(p);
-  p.careers.xp.groomer += Math.max(0, Math.round(n));
+  st.xp.groomer = (st.xp.groomer ?? 0) + Math.max(0, Math.round(n));
   const after = rankOf(p);
   return { rankUp: after > before, rank: after };
 }
@@ -213,7 +229,7 @@ export function newClient(profile, opts = {}) {
   animal.needs.hygiene = Math.round(20 + rng() * 30);
   animal.needs.grooming = Math.round(15 + rng() * 30);
   const [name, sex] = pick(OWNERS, rng);
-  const bonus = Math.round(req.price * Math.min(0.5, (profile.groomer?.reputation ?? START_REPUTATION) / 200));
+  const bonus = Math.round(req.price * Math.min(0.5, reputation(profile) / 200));
   return {
     id: uid(),
     owner: { name, sex, seed: Math.floor(rng() * 1000) },
@@ -258,7 +274,8 @@ export function acceptClient(profile, client) {
 export function dismissClient(profile, client, refused = false) {
   const st = ensureGroomer(profile);
   st.clients = st.clients.filter((c) => c.id !== client.id);
-  if (refused) st.reputation = Math.max(0, st.reputation - 1);
+  ensureGroomer(profile);
+  if (refused) changeReputation(profile, 'groomer', -1);
   return { ok: true };
 }
 
@@ -272,8 +289,7 @@ export function expireClients(profile, day) {
 
 /** Heures d'attente entre deux clients : plus on est connu, plus ils viennent. */
 export function clientInterval(profile) {
-  const rep = profile.groomer?.reputation ?? START_REPUTATION;
-  return Math.max(1.5, 5 - rep / 25);
+  return Math.max(1.5, 5 - reputation(profile) / 25);
 }
 
 /** Note une étape faite pendant un toilettage (client). extra : stress (0 à 1) pour le séchage. */
@@ -318,7 +334,8 @@ export function completeService(profile, client, day = dayOf(profile.clock ?? 0)
   const tip = r.stars >= 4 ? Math.round(client.price * 0.15 * (r.stars - 3) * TIP_MULT[rank]) : 0;
   pay(profile, base + tip);
   const rep = REP_DELTA[r.stars] + (REQUESTS[client.request]?.rank === 2 && r.stars >= 4 ? 2 : 0);
-  st.reputation = Math.max(0, Math.min(100, st.reputation + rep));
+  changeReputation(profile, 'groomer', rep);
+  addEarnings(profile, 'groomer', sandbox(profile) ? 0 : base + tip);
   const xp = 15 + 10 * r.stars + (REQUESTS[client.request]?.rank ?? 0) * 10;
   const up = addCareerXp(profile, xp);
   st.served += 1;

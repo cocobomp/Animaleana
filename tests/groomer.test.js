@@ -6,12 +6,13 @@ import { UNLOCKS, xpForLevel } from '../src/sim/progress.js';
 import { OBJECTIVES, checkObjectives } from '../src/sim/objectives.js';
 import { QUEST_GUIDE, QUEST_STEPS, FOLLOW_STEPS } from '../src/sim/tutorial.js';
 import { listCareers, getCareer, registerCareer } from '../src/sim/careersRegistry.js';
+import { CAREERS, CAREER_IDS, careerSummary, startCareer, rankOf as careerRank, reputationOf } from '../src/sim/careers.js';
 import { t } from '../src/i18n.js';
 import {
   GROOMER_CAREER, RANKS, STEPS, STEP_IDS, STYLES, REQUESTS, ACCESSORIES, ACC_COLORS, MAX_WAITING, CUT_DAYS, GROOMER_LEVEL,
   ensureGroomer, rankOf, rankProgress, addCareerXp, canGroom, speciesAllowed, stylesFor, requestsFor,
   newClient, addClient, canWelcome, acceptClient, dismissClient, expireClients, recordStep, rateService, completeService,
-  applyCut, cutFresh, groomingBonus, wearAccessory, removeAccessory, recordOwnGrooming, clientInterval, salonAt,
+  applyCut, cutFresh, groomingBonus, wearAccessory, removeAccessory, recordOwnGrooming, clientInterval, salonAt, careerXp, reputation,
 } from '../src/sim/groomer.js';
 
 const rng = () => 0.42;
@@ -24,19 +25,38 @@ const manage = (level = 3) => {
 const has = (key) => t(key) !== key;
 
 describe('métier Toiletteur : définition', () => {
-  it('est inscrit au registre des métiers, avec 3 rangs et une action par étape', () => {
+  it('est inscrit au registre des métiers (💼 Métiers), avec 3 rangs, un carnet et une fiche par étape', () => {
+    expect(CAREERS.groomer).toBe(GROOMER_CAREER);
+    expect(CAREER_IDS).toContain('groomer');
     expect(getCareer('groomer')).toBe(GROOMER_CAREER);
-    expect(listCareers().map((c) => c.id)).toContain('groomer');
-    expect(GROOMER_CAREER.emoji).toBe('✂️');
-    expect(GROOMER_CAREER.level).toBe(GROOMER_LEVEL);
-    expect(GROOMER_CAREER.ranks.map((r) => r.id)).toEqual(['apprenti', 'confirme', 'expert']);
-    expect(GROOMER_CAREER.actions.map((a) => a.id)).toEqual(STEP_IDS);
-    for (const a of GROOMER_CAREER.actions) {
-      expect(has(a.tutorial), a.tutorial).toBe(true);
-      expect(has(a.name), a.name).toBe(true);
-    }
-    registerCareer({ id: 'test', emoji: '🧪', ranks: [], actions: [] });
+    expect(listCareers().map((c) => c.id)).toEqual(expect.arrayContaining(['vet', 'pension', 'groomer']));
+    expect(GROOMER_CAREER).toMatchObject({ emoji: '✂️', level: GROOMER_LEVEL, building: 'salon' });
+    expect(GROOMER_CAREER.ranks).toEqual(RANKS.map((r) => r.xp));
+    expect(GROOMER_CAREER.perks).toHaveLength(3);
+    expect(GROOMER_CAREER.perks.every((k) => k.maxClients === 0)).toBe(true); // pas de pension grâce au salon
+    expect(GROOMER_CAREER.perks[1].species).toContain('horse');
+    expect(GROOMER_CAREER.steps.map((a) => a.id)).toEqual(STEP_IDS);
+    for (const a of GROOMER_CAREER.steps) expect(has(a.tutorial), a.tutorial).toBe(true);
+    for (const a of GROOMER_CAREER.actions) expect(has(`ca_groomer_${a.id}`), a.id).toBe(true);
+    for (const k of ['career_groomer', 'careerd_groomer', 'ca_offer_groomer', 'ca_perk_apprentice_groomer', 'ca_perk_skilled_groomer', 'ca_perk_expert_groomer']) expect(has(k), k).toBe(true);
+    registerCareer({ id: 'test', emoji: '🧪', ranks: [0], actions: [] });
     expect(getCareer('test').emoji).toBe('🧪');
+    delete CAREERS.test;
+    CAREER_IDS.splice(CAREER_IDS.indexOf('test'), 1);
+  });
+
+  it('le panneau des métiers voit le Toiletteur : verrouillé, disponible, puis commencé avec le même compteur d’XP', () => {
+    const p = manage();
+    expect(careerSummary(p, 'groomer', { level: 2 }).state).toBe('locked');
+    expect(careerSummary(p, 'groomer', { level: 3 }).state).toBe('available');
+    startCareer(p, 'groomer', 1, { level: 3 });
+    addCareerXp(p, 320);
+    const s = careerSummary(p, 'groomer', { level: 3 });
+    expect(s.state).toBe('started');
+    expect(s.rank).toBe(1);
+    expect(careerRank(p, 'groomer')).toBe(rankOf(p));
+    expect(s.progress.xp).toBe(careerXp(p));
+    expect(s.carnet.map((a) => a.id)).toEqual(['welcome', 'bath', 'cut', 'finish', 'return']);
   });
 
   it('tous les textes existent (étapes, coupes, demandes, accessoires, couleurs, quêtes)', () => {
@@ -64,14 +84,15 @@ describe('métier Toiletteur : définition', () => {
 describe('métier Toiletteur : profil et rangs', () => {
   it('un profil neuf a le métier à zéro ; une vieille sauvegarde est complétée', () => {
     const p = createProfile('Lou');
-    expect(p.careers.xp.groomer).toBe(0);
-    expect(p.groomer.reputation).toBe(10);
+    expect(careerXp(p)).toBe(0);
+    expect(reputation(p)).toBe(50);
     expect(p.groomer.clients).toEqual([]);
     const old = { ...createProfile('Vieux') };
     delete old.careers;
     delete old.groomer;
     ensureGroomer(old);
-    expect(old.careers.xp.groomer).toBe(0);
+    expect(careerXp(old)).toBe(0);
+    expect(old.careers.started).toEqual({});
     expect(old.groomer.clients).toEqual([]);
   });
 
@@ -126,7 +147,7 @@ describe('métier Toiletteur : clients', () => {
     expect(acceptClient(p, a).ok).toBe(true);
     expect(acceptClient(p, b)).toMatchObject({ ok: false, reason: 'busy' });
     dismissClient(p, b, true);
-    expect(p.groomer.reputation).toBe(9);
+    expect(reputationOf(p, 'groomer')).toBe(49);
     expect(p.groomer.clients).toHaveLength(1);
     // Le lendemain, ceux qui attendaient sont partis.
     addClient(p, newClient(p, { rng, day: 1 }));
@@ -155,8 +176,9 @@ describe('métier Toiletteur : clients', () => {
     expect(r.pay).toBe(Math.round(c.price * 1.4));
     expect(r.tip).toBeGreaterThan(0);
     expect(p.money).toBe(money + r.pay + r.tip);
-    expect(p.groomer.reputation).toBe(15);
-    expect(p.careers.xp.groomer).toBe(r.xp);
+    expect(reputation(p)).toBe(55);
+    expect(careerXp(p)).toBe(r.xp);
+    expect(p.careers.earned.groomer).toBe(r.pay + r.tip);
     expect(p.groomer.served).toBe(1);
     expect(p.groomer.history[0]).toMatchObject({ stars: 5, name: c.animal.name });
     expect(p.groomer.clients).toHaveLength(0);
@@ -186,7 +208,7 @@ describe('métier Toiletteur : clients', () => {
     recordStep(c, 'brush', 1);
     completeService(p, c, 1);
     expect(p.money).toBe(500);
-    expect(p.careers.xp.groomer).toBeGreaterThan(0);
+    expect(careerXp(p)).toBeGreaterThan(0);
   });
 });
 
@@ -233,7 +255,7 @@ describe('métier Toiletteur : mes animaux et accessoires', () => {
     recordOwnGrooming(p, a, ['bath', 'cut']);
     expect(p.stats.groomOwn).toBe(1);
     expect(p.stats.groomCuts).toBe(1);
-    expect(p.careers.xp.groomer).toBe(11);
+    expect(careerXp(p)).toBe(11);
     expect(checkObjectives(p).map((o) => o.id)).toContain('grmOwn1');
   });
 

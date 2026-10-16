@@ -14,8 +14,9 @@ import {
   STEPS, STEP_IDS, STYLES, REQUESTS, ACCESSORIES, ACC_COLORS, ACC_SLOTS, RANKS, GROOMER_LEVEL, CUT_DAYS,
   ensureGroomer, rankOf, rankProgress, careerXp, canGroom, waitingClients, stepAllowed, stylesFor, accessoryAllowed,
   recordStep, completeService, applyCut, wearAccessory, removeAccessory, recordOwnGrooming, speciesAllowed,
-  salonAt, cutFresh, stepsDone,
+  salonAt, cutFresh, stepsDone, reputation, GROOMER_CAREER,
 } from '../sim/groomer.js';
+import { isStarted } from '../sim/careers.js'; // 💼 Métiers
 import { applyCare } from '../sim/animal.js';
 import { addStat, isSandbox } from '../sim/profile.js';
 import { dayOf } from '../sim/time.js';
@@ -32,6 +33,7 @@ const ownerEmoji = (o) => (o.sex === 'f' ? '👩' : '👨');
 
 export function openSalon(ui) {
   const g = ui.game;
+  if (canGroom(g.profile) && !isStarted(g.profile, 'groomer')) g.clients?.startCareer('groomer');
   g.emit('building', 'salon');
   ui.openPanel({
     title: `✂️ ${t('grm_title')}`,
@@ -47,7 +49,7 @@ function rankHeader(ui) {
   return h('div', { class: 'grm-head' },
     h('div', { class: 'grm-rank' },
       h('span', { class: 'chip grm-rank-chip' }, `🎓 ${t(`grm_rank_${RANKS[pr.rank].id}`, { g: p.avatar?.female ? 'f' : 'm' })}`),
-      h('span', { class: 'chip' }, `⭐ ${t('grm_reputation')} ${Math.round(st.reputation)}`),
+      h('span', { class: 'chip' }, `⭐ ${t('grm_reputation')} ${Math.round(reputation(p))}`),
       h('button', { class: 'small', onClick: () => openCarnet(ui) }, `📒 ${t('grm_carnet')}`)),
     h('div', { class: 'grm-xp' },
       h('span', { class: 'xp-track' }, h('span', { class: 'xp-fill', style: { width: `${Math.round(pr.share * 100)}%` } })),
@@ -275,11 +277,17 @@ export async function runStep(ui, s, id) {
     if (id === 'cut' || id === 'finish') e?.applyGear();
     if (id === 'cut') gr.refreshCutVisuals();
   }
+  noteCareer(g, id);
   g.xp('care');
   g.save();
   ui.refresh();
   if (ui.panel?.kind === 'salon') ui.renderPanel();
   return q;
+}
+
+/** Coche une action du carnet de 💼 Métiers (la première fois : petit message et XP). */
+export function noteCareer(g, action) {
+  if (GROOMER_CAREER.actions.some((x) => x.id === action)) g.clients?.noteCareer?.('groomer', action);
 }
 
 function applyFinish(p, a, choice, free, ui = null) {
@@ -361,6 +369,7 @@ function finishSession(ui, s) {
   if (s.client) {
     const c = s.client;
     const r = completeService(p, c, day);
+    noteCareer(g, 'return');
     g.xp('care', r.stars >= 4 ? 2 : 1);
     const lines = [
       `🪙 ${t('grm_paid', { n: r.pay })}${r.tip ? ` · 🎁 ${t('grm_tip', { n: r.tip })}` : ''}`,
@@ -418,7 +427,7 @@ export function openCarnet(ui) {
       h('small', {}, `${r.xp} XP · ${t(`grm_rankDesc_${r.id}`)}`)))),
     h('div', { class: 'chips' },
       h('span', { class: 'chip' }, `🎓 ${xp} XP`),
-      h('span', { class: 'chip' }, `⭐ ${t('grm_reputation')} ${Math.round(st.reputation)}`),
+      h('span', { class: 'chip' }, `⭐ ${t('grm_reputation')} ${Math.round(reputation(p))}`),
       h('span', { class: 'chip' }, `🐾 ${t('grm_served', { n: st.served })}`)),
     st.history.length ? h('table', { class: 'grm-history' }, h('tbody', {}, st.history.map((e) => h('tr', {},
       h('td', {}, t('day', { n: e.day })),

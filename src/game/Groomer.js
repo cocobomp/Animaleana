@@ -14,7 +14,7 @@ import {
   clientInterval, currentClient, cutFresh,
 } from '../sim/groomer.js';
 import { dayOf, hourOf } from '../sim/time.js';
-import { openSalon } from '../ui/groomer.js';
+import { openSalon, noteCareer } from '../ui/groomer.js';
 import { t } from '../i18n.js';
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x5a3a24];
@@ -319,6 +319,18 @@ export class Groomer {
     openSalon(this.game.ui);
   }
 
+  /** « 👉 Montre-moi » du carnet (💼 Métiers) : le repère sur le salon, ou la construction s'il n'y en a pas. */
+  showMe() {
+    const g = this.game;
+    const d = this.door();
+    if (!d) {
+      g.ui.toast(t('grm_buildSalon'), 6000);
+      return;
+    }
+    g.marker.show(new THREE.Vector3(d.x, 0, d.z), { hideNear: 2.5 });
+    g.ui.toast(t('grm_showSalon'), 5000);
+  }
+
   // ---------------------------------------------------------------- séance
 
   accept(client) {
@@ -326,6 +338,7 @@ export class Groomer {
     if (!r.ok) return r;
     this.session = { client, animal: client.animal, own: false, done: [], style: client.style };
     this.visitors.get(client.id)?.table(this.spots()?.table);
+    noteCareer(this.game, 'welcome'); // carnet de 💼 Métiers
     this.game.save();
     return r;
   }

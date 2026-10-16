@@ -1,9 +1,71 @@
-// Équipement visible sur l'animal en 3D : couverture, selle, filet, guêtres, bonnet, collier.
+// Équipement visible sur l'animal en 3D : couverture, selle, filet, licol, guêtres, bonnet, collier.
+// Sur le cheval, les pièces épousent le corps sculpté (champ de distance) : sangle sous le ventre,
+// muserolle autour du nez, couverture posée sur le dos.
 
 import * as THREE from 'three';
 import { BLANKET_COLORS } from '../sim/gear.js';
+import { loft } from './models/shapes.js';
+import { rayHit, sdfNormal } from './models/sdf.js';
 
-const mat = (color, roughness = 0.7) => new THREE.MeshStandardMaterial({ color, roughness });
+const mat = (color, roughness = 0.7, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
+const LEATHER = 0x2a1a10;
+const METAL = 0xc8c8cc;
+
+/**
+ * Boucle de points autour d'une forme sculptée, dans un plan z = c.z (incliné de tilt autour de x).
+ * Angles : 0 = côté +x, π/2 = dessus, -π/2 = dessous. out = décalage le long de la normale.
+ */
+function loop(sdf, c, n, out, a0 = 0, a1 = Math.PI * 2, tilt = 0, maxDist = 1.2) {
+  const pts = [];
+  const ct = Math.cos(tilt);
+  const st = Math.sin(tilt);
+  for (let i = 0; i < n; i++) {
+    const a = a0 + ((a1 - a0) * i) / (n - 1);
+    const dir = [Math.cos(a), Math.sin(a) * ct, -Math.sin(a) * st];
+    const p = rayHit(sdf, c, dir, maxDist);
+    pts.push(p.addScaledVector(sdfNormal(sdf, p, 0.004), out));
+  }
+  return pts;
+}
+
+/** Sangle plate qui suit une liste de points (fermée si closed). */
+function strap(pts, halfWidth, thick, closed = false) {
+  const list = closed ? [pts[pts.length - 1], ...pts, pts[0], pts[1]] : pts;
+  return loft(list.map((p) => ({ p: [p.x, p.y, p.z], rx: halfWidth, ry: thick })), {
+    radial: 6, sub: closed ? 1 : 2, side: [0, 0, 1], capStart: !closed, capEnd: !closed,
+  });
+}
+
+/**
+ * Nappe posée sur une forme : grille (z, angle) de points pris sur la surface, décalés de out.
+ * Sert à la couverture, au tapis de selle et au bonnet anti-mouches.
+ */
+function shell(sdf, yc, z0, z1, nz, a0, a1, na, out, tilt = 0) {
+  const pos = [];
+  const uv = [];
+  const idx = [];
+  for (let i = 0; i < nz; i++) {
+    const z = z0 + ((z1 - z0) * i) / (nz - 1);
+    const pts = loop(sdf, [0, yc, z], na, out, a0, a1, tilt);
+    for (let j = 0; j < na; j++) {
+      pos.push(pts[j].x, pts[j].y, pts[j].z);
+      uv.push(j / (na - 1), i / (nz - 1));
+    }
+  }
+  for (let i = 0; i < nz - 1; i++) {
+    for (let j = 0; j < na - 1; j++) {
+      const a = i * na + j;
+      const b = a + na;
+      idx.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
 
 /** Ajoute l'équipement de l'animal sur son modèle. Renvoie le groupe créé (à retirer pour changer). */
 export function buildGear(model, look, gear = {}) {
@@ -14,14 +76,140 @@ export function buildGear(model, look, gear = {}) {
   const y0 = model.y0;
   const add = (parent, geo, material, pos, rot) => {
     const m = new THREE.Mesh(geo, material);
-    m.position.set(...pos);
+    if (pos) m.position.set(...pos);
     if (rot) m.rotation.set(...rot);
     m.castShadow = true;
     parent.add(m);
     holders.push(m);
     return m;
   };
+  if (model.sdf) buildHorseGear(model, look, gear, add);
+  else buildGenericGear(model, look, gear, add, L, R, y0);
+  group.userData.meshes = holders;
+  return group;
+}
 
+// ------------------------------------------------------------------ cheval
+
+function buildHorseGear(model, look, gear, add) {
+  const { torso, head } = model.sdf;
+  const { L, R, hr, snoutZ, earZ } = model.dims;
+  const y0 = model.y0;
+  const body = model.body;
+  const PI = Math.PI;
+  const deg = (d) => (d * PI) / 180;
+  const zSeat = -L * 0.05; // là où s'assoit le cavalier (src/game/Player.js)
+
+  const blanket = gear.blanket;
+  if (blanket) {
+    const color = BLANKET_COLORS[blanket.color] ?? BLANKET_COLORS.red;
+    const cloth = mat(color, 0.9, { side: THREE.DoubleSide });
+    // Couverture : du garrot à la queue, retombant sur les flancs ; liseré clair devant.
+    add(body, shell(torso, y0 - R * 0.2, -L * 0.52, L * 0.3, 12, deg(192), deg(-12), 20, 0.012), cloth);
+    const edge = loop(torso, [0, y0 - R * 0.2, L * 0.3], 20, 0.016, deg(192), deg(-12));
+    add(body, strap(edge, 0.018, 0.005), mat(0xf2ede4, 0.9));
+    // Sangle de poitrail et sous-ventrière.
+    add(body, strap(loop(torso, [0, y0 - R * 0.2, L * 0.02], 16, 0.014, deg(-15), deg(-165)), 0.014, 0.004), mat(0x332a26, 0.6));
+  }
+
+  if (gear.saddle) {
+    const leather = mat(0x5a3418, 0.45);
+    const dark = mat(0x3b2110, 0.5);
+    // Tapis de selle (blanc cassé) sous la selle, qui dépasse un peu.
+    add(body, shell(torso, y0 - R * 0.2, zSeat - L * 0.2, zSeat + L * 0.22, 8, deg(165), deg(15), 14, 0.01), mat(0xe9e2d4, 0.9, { side: THREE.DoubleSide }));
+    // Siège : profil creusé, pommeau relevé devant, troussequin derrière.
+    const secs = [];
+    const N = 9;
+    for (let i = 0; i <= N; i++) {
+      const f = i / N;
+      const z = zSeat - L * 0.14 + f * L * 0.28;
+      const dip = Math.sin(f * PI);
+      const lift = f < 0.5 ? (0.5 - f) ** 2 * 0.2 : (f - 0.5) ** 2 * 0.28;
+      secs.push({ p: [0, model.backTop(z) + 0.022 - dip * 0.012 + lift, z], rx: R * (0.3 + dip * 0.18), ry: 0.018 + lift * 0.5, ryb: 0.03 + dip * 0.01 });
+    }
+    add(body, loft(secs, { radial: 14, sub: 2, exp: 2.6, round: [0.6, 0.6] }), leather);
+    for (const s of [1, -1]) {
+      // Quartier : grand pan de cuir qui descend le long du flanc, un peu vers l'avant.
+      const flapPts = [];
+      for (let i = 0; i <= 6; i++) {
+        const a = deg(78 - i * 11);
+        const p = rayHit(torso, [0, y0 - R * 0.2, zSeat + L * 0.03 + i * 0.014], [s * Math.cos(a), Math.sin(a), 0], 1.2);
+        flapPts.push(p.addScaledVector(sdfNormal(torso, p, 0.004), 0.016));
+      }
+      add(body, loft(flapPts.map((p, i) => ({ p: [p.x, p.y, p.z], rx: L * (0.12 - i * 0.003), ry: 0.006 })), { radial: 6, sub: 2, side: [0, 0, 1], round: [0, 0.8] }), leather);
+      // Étrivière et étrier qui pend sous le quartier.
+      const top = flapPts[1];
+      const iron = new THREE.Vector3(top.x + s * 0.035, y0 - R * 0.5, top.z + 0.03);
+      add(body, loft([{ p: top.toArray(), rx: 0.014, ry: 0.004 }, { p: iron.toArray(), rx: 0.014, ry: 0.004 }], { radial: 4, sub: 2, side: [0, 0, 1] }), dark);
+      add(body, new THREE.TorusGeometry(0.05, 0.007, 6, 14), mat(METAL, 0.3, { metalness: 0.6 }), [iron.x, iron.y - 0.04, iron.z], [0, PI / 2, 0]);
+    }
+    // Sangle sous le ventre, juste derrière les coudes.
+    add(body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + L * 0.1], 18, 0.012, deg(-10), deg(-170)), 0.03, 0.005), dark);
+  }
+
+  const bridle = gear.bridle;
+  const halter = gear.halter && !bridle;
+  if (bridle || halter) {
+    const color = halter ? (BLANKET_COLORS[gear.halter.color] ?? BLANKET_COLORS.red) : LEATHER;
+    const strapMat = mat(color, halter ? 0.75 : 0.45);
+    const w = halter ? 0.015 : 0.011; // demi-largeur des sangles (le licol est en toile plus large)
+    const th = 0.0045;
+    const yc = -hr * 0.2;
+    // Muserolle : autour du nez, entre les yeux et les naseaux.
+    const zNose = snoutZ - hr * (halter ? 1.45 : 1.3);
+    const nose = loop(head, [0, yc, zNose], 22, 0.006);
+    add(model.head, strap(nose, w, th, true), strapMat);
+    // Têtière et sous-gorge : boucle derrière les oreilles, qui passe sous la gorge.
+    const zCrown = earZ - hr * 0.15;
+    const crown = loop(head, [0, hr * 0.05, zCrown], 22, 0.006, 0, PI * 2, 0.38);
+    add(model.head, strap(crown, w, th, true), strapMat);
+    // Montants : de la têtière (côté) vers la muserolle ou le mors.
+    const sideOf = (pts) => [pts[0], pts[Math.round(pts.length / 2) - 1]];
+    const [cR, cL] = sideOf(crown);
+    const [nR, nL] = sideOf(nose);
+    if (bridle) {
+      add(model.head, strap(loop(head, [0, hr * 0.15, earZ + hr * 0.3], 12, 0.006, deg(20), deg(160)), w, th), strapMat); // frontal
+      for (const [c, s] of [[cR, 1], [cL, -1]]) {
+        // Anneau du mors à la commissure des lèvres.
+        const m = rayHit(head, [0, -hr * 0.42, snoutZ - hr * 0.8], [s, -0.1, 0], hr * 3);
+        const ring = m.clone().add(new THREE.Vector3(s * hr * 0.1, 0, 0));
+        add(model.head, strap([c, new THREE.Vector3().lerpVectors(c, ring, 0.5).add(new THREE.Vector3(s * 0.006, 0, 0)), ring], w * 0.9, th), strapMat);
+        add(model.head, new THREE.TorusGeometry(hr * 0.24, hr * 0.035, 6, 16), mat(METAL, 0.3, { metalness: 0.6 }), ring.toArray(), [0, PI / 2, 0]);
+      }
+    } else {
+      for (const [c, n, s] of [[cR, nR, 1], [cL, nL, -1]]) {
+        add(model.head, strap([c, new THREE.Vector3().lerpVectors(c, n, 0.5).add(new THREE.Vector3(s * 0.006, 0, 0)), n], w, th), strapMat);
+      }
+      // Anneau sous le menton, pour la longe.
+      const chin = nose[Math.round(nose.length * 0.75)];
+      add(model.head, new THREE.TorusGeometry(hr * 0.14, hr * 0.03, 6, 12), mat(METAL, 0.3, { metalness: 0.6 }), [chin.x, chin.y - hr * 0.1, chin.z], [0, 0, 0]);
+    }
+  }
+
+  if (gear.head) {
+    // Bonnet anti-mouches : voile clair qui couvre le front, les yeux et le haut des joues.
+    const g = shell(head, hr * 0.05, earZ - hr * 0.1, snoutZ - hr * 1.45, 8, deg(200), deg(-20), 14, 0.012);
+    add(model.head, g, new THREE.MeshStandardMaterial({ color: 0xd8e4ea, roughness: 0.9, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
+    add(model.head, strap(loop(head, [0, hr * 0.05, snoutZ - hr * 1.45], 14, 0.014, deg(200), deg(-20)), 0.01, 0.004), mat(0x9fb3bd, 0.8));
+  }
+
+  if (gear.legs) {
+    // Guêtres sur les canons, du genou (ou du jarret) au boulet.
+    const T = model.legTop;
+    const r = model.dims.legR;
+    for (const leg of model.legs) {
+      const parent = leg.knee ?? leg.pivot;
+      const len = (leg.front ? 0.27 : 0.2) * T;
+      const boot = new THREE.CylinderGeometry(r * 1.0, r * 1.08, len, 10);
+      add(parent, boot, mat(0x22324a, 0.8), [0, -0.07 * T - len / 2, 0]);
+      add(parent, new THREE.CylinderGeometry(r * 1.1, r * 1.1, len * 0.18, 10), mat(0x8da0b8, 0.7), [0, -0.07 * T - len * 0.4, 0]);
+    }
+  }
+}
+
+// ------------------------------------------------------------------ autres animaux
+
+function buildGenericGear(model, look, gear, add, L, R, y0) {
   const blanket = gear.blanket;
   if (blanket) {
     const color = BLANKET_COLORS[blanket.color] ?? BLANKET_COLORS.red;
@@ -37,13 +225,13 @@ export function buildGear(model, look, gear = {}) {
     add(model.body, new THREE.CapsuleGeometry(R * 0.55, R * 0.5, 4, 12), mat(0x5a3418, 0.5), [0, y0 + R * 1.02, L * 0.08], [Math.PI / 2, 0, 0]).scale.set(1, 1, 0.35);
     add(model.body, new THREE.BoxGeometry(R * 1.9, R * 0.06, R * 1.1), mat(0xe9e2d4, 0.9), [0, y0 + R * 0.93, L * 0.08]);
     for (const s of [1, -1]) {
-      add(model.body, new THREE.BoxGeometry(0.02, R * 1.3, 0.03), mat(0x2a1a10), [s * R * 1.0, y0 + R * 0.35, L * 0.1]);
+      add(model.body, new THREE.BoxGeometry(0.02, R * 1.3, 0.03), mat(LEATHER), [s * R * 1.0, y0 + R * 0.35, L * 0.1]);
       add(model.body, new THREE.TorusGeometry(0.05, 0.012, 6, 12), mat(0xb8b8b8, 0.3), [s * R * 1.02, y0 - R * 0.35, L * 0.1], [0, Math.PI / 2, 0]);
     }
   }
   if (gear.bridle && model.head) {
     const hr = look.headR;
-    const strap = mat(0x2a1a10, 0.5);
+    const strap = mat(LEATHER, 0.5);
     add(model.head, new THREE.TorusGeometry(hr * 0.95, hr * 0.06, 6, 20), strap, [0, -hr * 0.1, look.headLen * 0.75]);
     add(model.head, new THREE.TorusGeometry(hr * 1.15, hr * 0.06, 6, 20), strap, [0, hr * 0.1, hr * 0.1], [0, 0, 0]);
     for (const s of [1, -1]) add(model.head, new THREE.SphereGeometry(hr * 0.12, 8, 8), mat(0xc0c0c0, 0.3), [s * hr * 0.8, -hr * 0.2, look.headLen * 0.85]);
@@ -70,8 +258,6 @@ export function buildGear(model, look, gear = {}) {
     const color = BLANKET_COLORS[gear.neck.color] ?? BLANKET_COLORS.red;
     add(model.neck, new THREE.TorusGeometry(R * 0.6, R * 0.08, 6, 18), mat(color, 0.5), [0, look.neckLen * 0.6, 0], [Math.PI / 2, 0, 0]);
   }
-  group.userData.meshes = holders;
-  return group;
 }
 
 export function removeGear(group) {

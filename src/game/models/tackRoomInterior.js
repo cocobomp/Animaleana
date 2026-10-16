@@ -171,7 +171,7 @@ export function tackRoomModel(label) {
     add(lower, new THREE.BoxGeometry(0.24, CUT, 0.24), trim, [x, CUT / 2, z]);
     add(upper, new THREE.BoxGeometry(0.24, H - CUT, 0.24), trim, [x, CUT + (H - CUT) / 2, z]);
   }
-  add(upper, new THREE.BoxGeometry(2.0, 0.14, 0.26), trim, [0, 2.32, D / 2]);
+  add(upper, new THREE.BoxGeometry(2.0, 0.12, 0.26), trim, [0, 2.3, D / 2]);
   for (const s of [-1, 1]) add(lower, new THREE.BoxGeometry(0.12, CUT, 0.26), trim, [s * 0.86, CUT / 2, D / 2]);
   for (const s of [-1, 1]) add(upper, new THREE.BoxGeometry(0.12, 2.25 - CUT, 0.26), trim, [s * 0.86, CUT + (2.25 - CUT) / 2, D / 2]);
 
@@ -184,10 +184,10 @@ export function tackRoomModel(label) {
   add(doorHinge, new THREE.BoxGeometry(1.4, 0.07, 0.03), trim, [0.78, 1.18, 0.05], [0, 0, 0.9]);
   add(doorHinge, new THREE.SphereGeometry(0.045, 8, 6), mat(0xd9b44a, 0.3, { metalness: 0.8 }), [1.4, 1.1, 0.07]);
   add(g, new THREE.BoxGeometry(2.0, 0.12, 0.9), stone, [0, 0.06, D / 2 + 0.45], null, false);
-  const shoe = add(upper, new THREE.TorusGeometry(0.11, 0.022, 6, 18, Math.PI * 1.35), mat(0x9aa0a6, 0.35, { metalness: 0.8 }), [0, 2.62, D / 2 + 0.14]);
+  const shoe = add(upper, new THREE.TorusGeometry(0.09, 0.02, 6, 18, Math.PI * 1.35), mat(0x9aa0a6, 0.35, { metalness: 0.8 }), [0, 2.36, D / 2 + 0.16]);
   shoe.rotation.z = -Math.PI * 0.175 - Math.PI / 2 + Math.PI;
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6), new THREE.MeshStandardMaterial({ map: plateTexture(`🏇 ${label}`, '#4a2c18', '#fff8e8'), roughness: 0.7 }));
-  sign.position.set(0, 2.95, D / 2 + 0.13);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), new THREE.MeshStandardMaterial({ map: plateTexture(`🏇 ${label}`, '#4a2c18', '#fff8e8'), roughness: 0.7, emissive: 0x2a1a10, emissiveIntensity: 0.25 }));
+  sign.position.set(0, 2.68, D / 2 + 0.15);
   upper.add(sign);
 
   // Fenêtres (s'allument la nuit), lanterne de la porte.
@@ -206,6 +206,20 @@ export function tackRoomModel(label) {
   const lampMat = mat(0xfff3d0, 0.4, { emissive: 0xffd27a, emissiveIntensity: 0 });
   add(upper, new THREE.BoxGeometry(0.14, 0.2, 0.14), lampMat, [1.2, 2.2, D / 2 + 0.2]);
   add(upper, new THREE.BoxGeometry(0.18, 0.04, 0.18), mat(0x2b2b2b, 0.5), [1.2, 2.32, D / 2 + 0.2]);
+
+  // Jardinières sous les fenêtres de la façade et enseigne en drapeau (un fer à cheval doré).
+  for (const x of [-2.4, 2.4]) {
+    add(upper, new THREE.BoxGeometry(1.0, 0.18, 0.22), mat(0x6e4a2c, 0.8), [x, 1.52, D / 2 + 0.2]);
+    for (let i = 0; i < 5; i++) {
+      add(upper, new THREE.SphereGeometry(0.09, 8, 6), mat(0x4f7f3a, 0.9), [x - 0.38 + i * 0.19, 1.65, D / 2 + 0.2]);
+      add(upper, new THREE.SphereGeometry(0.035, 6, 5), mat([0xe0574a, 0xf2c94c, 0xe07aa5, 0xffffff, 0x9b59b6][i], 0.6), [x - 0.36 + i * 0.19, 1.72, D / 2 + 0.25]);
+    }
+  }
+  add(upper, new THREE.BoxGeometry(0.05, 0.05, 0.75), mat(0x2b2b2b, 0.5, { metalness: 0.5 }), [1.25, 2.55, D / 2 + 0.4]);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.55), new THREE.MeshStandardMaterial({ map: plateTexture('🏇', '#4a2c18', '#ffd479'), roughness: 0.6, side: THREE.DoubleSide }));
+  flag.position.set(1.25, 2.22, D / 2 + 0.55);
+  flag.rotation.y = Math.PI / 2;
+  upper.add(flag);
 
   // Toit en bardeaux.
   const roof = new THREE.Group();

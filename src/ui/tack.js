@@ -282,19 +282,25 @@ const SLOT_ORDER = ['saddle', 'pad', 'bridle', 'halter', 'blanket', 'legs', 'bel
 export function animalGearSection(ui, a) {
   const g = ui.game;
   const p = g.profile;
-  const slots = SLOT_ORDER.filter((slot) => Object.values(GEAR).some((d) => d.slot === slot && d.species.includes(a.species)));
+  const forMe = (id) => GEAR[id].species.includes(a.species);
+  const slots = SLOT_ORDER.filter((slot) => Object.keys(GEAR).some((id) => GEAR[id].slot === slot && forMe(id)));
   if (!slots.length) return null;
-  return h('div', { class: 'gear-list' }, slots.map((slot) => {
+  // Rangé à la sellerie et à sa taille (à la maison, une autre taille s'échange toute seule).
+  const spareOf = (id) => !fitReason(id, a) && (freeStock(p, id, sizeFor(id, a)) > 0
+    || (g.isHome && (GEAR[id].sizes ?? []).some((sz) => freeStock(p, id, sz) > 0)));
+  const rows = slots.map((slot) => {
     const worn = a.gear?.[slot];
-    const spare = Object.keys(GEAR).filter((id) => GEAR[id].slot === slot && !fitReason(id, a) && worn?.item !== id
-      && freeStock(p, id, sizeFor(id, a)) > 0);
-    return h('div', { class: 'gear-row' },
+    const spare = Object.keys(GEAR).filter((id) => GEAR[id].slot === slot && worn?.item !== id && spareOf(id));
+    return { slot, worn, spare };
+  }).filter((r) => r.worn || r.spare.length);
+  const firstCat = catOf(Object.keys(GEAR).find(forMe));
+  return h('div', { class: 'gear-list' },
+    rows.length ? rows.map(({ slot, worn, spare }) => h('div', { class: 'gear-row' },
       h('span', { class: 'gear-name' }, h('small', { class: 'tk-slot' }, t(`tk_slot_${slot}`)), ' ',
         worn ? h('b', {}, `${GEAR[worn.item].emoji} ${name(worn.item)}`) : h('span', { class: 'note' }, t('tk_none')),
         worn?.color ? h('span', { class: 'swatch-dot tk-dot', style: { background: hex(worn.color) } }) : null),
       worn ? h('button', { class: 'small', onClick: () => { g.unequip(a, slot); ui.renderPanel(); } }, t('gearRemove')) : null,
-      ...spare.slice(0, 3).map((id) => h('button', { class: 'small primary', onClick: () => { g.equip(a, id, colorOf(p, id)); ui.renderPanel(); } }, `${GEAR[id].emoji} ${name(id)}`)),
-      !worn && !spare.length ? h('button', { class: 'small', onClick: () => openTackShop(ui, { tab: catOf(Object.keys(GEAR).find((id) => GEAR[id].slot === slot && GEAR[id].species.includes(a.species))) }) }, `🏇 ${t('tk_goShop')}`) : null);
-  }));
+      ...spare.slice(0, 3).map((id) => h('button', { class: 'small primary', onClick: () => { g.equip(a, id, colorOf(p, id)); ui.renderPanel(); } }, `${GEAR[id].emoji} ${name(id)}`))))
+      : h('p', { class: 'note' }, t('tk_gearNone')),
+    h('button', { class: 'small tk-goshop', onClick: () => openTackShop(ui, { tab: firstCat }) }, `🏇 ${t('tk_goShop')}`));
 }
-

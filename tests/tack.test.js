@@ -91,6 +91,23 @@ describe('tailles poney / cheval / trait', () => {
     expect(freeStock(p, 'saddleJump', 'pony')).toBe(0);
   });
 
+  it('à la maison, la sellière échange la taille toute seule (licol offert → poney)', () => {
+    const p = createProfile('A', 'manage');
+    const pony = horse('shetland');
+    p.animals.push(pony);
+    expect(equip(p, pony, 'halter', 'pink').reason).toBe('wrongSize');
+    const m0 = p.money;
+    const r = equip(p, pony, 'halter', 'pink', { autoSwap: true });
+    expect(r).toEqual({ ok: true, item: 'halter', swapped: 'pony' });
+    expect(pony.gear.halter).toEqual({ item: 'halter', color: 'pink', size: 'pony' });
+    expect(ownedStock(p, 'halter', 'pony')).toBe(1);
+    expect(ownedStock(p, 'halter', 'horse')).toBe(0);
+    expect(p.money).toBe(m0);
+    // Un type demandé : le filet offert, échangé à la taille du poney.
+    expect(equip(p, pony, 'bridle', null, { autoSwap: true }).swapped).toBe('pony');
+    expect(rideGear(pony).ok).toBe(true);
+  });
+
   it('on peut échanger gratuitement un objet rangé contre une autre taille', () => {
     const p = createProfile('A', 'manage');
     const before = p.money;
@@ -254,5 +271,27 @@ describe('effets en jeu', () => {
     expect(feltWeather(summer, 'clear', 28, 'summer')).toBe('clear'); // ni chaud, ni mouches
     expect(feltWeather(summer, 'rain', 15, 'summer')).toBe('rain');
     expect(feltWeather(horse(), 'clear', 28, 'summer')).toBe('flies');
+  });
+});
+
+describe('textes de la sellerie', () => {
+  it('chaque texte utilisé par la sellerie existe en français et en anglais', async () => {
+    globalThis.document = globalThis.document ?? { documentElement: {} };
+    const { readFileSync } = await import('node:fs');
+    const i18n = await import('../src/i18n.js');
+    const keys = new Set();
+    for (const file of ['src/ui/tack.js', 'src/game/Interiors.js']) {
+      const src = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+      for (const m of src.matchAll(/\bt\('([a-zA-Z_]+)'/g)) keys.add(m[1]);
+    }
+    for (const c of TACK_CATEGORIES) keys.add(`tk_cat_${c.id}`);
+    for (const k of ['tk_cat_tools', 'tk_cat_mine', ...SIZES.map((sz) => `tk_size_${sz}`)]) keys.add(k);
+    for (const d of Object.values(GEAR)) if (d.slot !== 'helmet') keys.add(`tk_slot_${d.slot}`);
+    for (const reason of ['noSize', 'wrongSize', 'tooAdvanced', 'notOwned', 'wrongSpecies']) keys.add(`gear_${reason}`);
+    for (const lang of ['fr', 'en']) {
+      i18n.setLang(lang);
+      for (const k of keys) expect(i18n.t(k), `${lang}:${k}`).not.toBe(k);
+    }
+    i18n.setLang('fr');
   });
 });

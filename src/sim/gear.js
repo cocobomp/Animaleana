@@ -247,28 +247,36 @@ export function buyGear(profile, item, size = defaultSize(item)) {
 /**
  * Met un objet sur l'animal. color : clé de COLORS (sinon la première couleur du modèle).
  * item peut être un type ('bridle') : on prend alors un filet libre qui lui va.
+ * autoSwap : à la maison, la sellière échange gratuitement un exemplaire rangé d'une autre taille
+ * (le licol taille cheval offert au début devient un licol poney pour un Shetland).
  */
-export function equip(profile, a, item, color) {
+export function equip(profile, a, item, color, { autoSwap = false } = {}) {
   ensureTack(profile);
   let id = item;
   const def0 = GEAR[id];
   if (!def0) return { ok: false, reason: 'wrongSpecies' };
   const size = () => sizeFor(id, a);
   const freeFor = (v) => freeStock(profile, v, sizeFor(v, a)) > 0 && !fitReason(v, a);
+  const swappable = (v) => !fitReason(v, a) && (GEAR[v].sizes ?? []).some((sz) => freeStock(profile, v, sz) > 0);
   const wearing = (v) => a.gear?.[GEAR[v].slot]?.item === v && (a.gear[GEAR[v].slot].size ?? defaultSize(v)) === sizeFor(v, a);
   // Un type demandé : si le modèle de base n'est pas libre, un autre modèle du même type fera l'affaire.
   if (TYPES.has(item) && !wearing(id) && !freeFor(id)) {
-    const other = Object.keys(GEAR).find((v) => GEAR[v].type === item && freeFor(v));
+    const types = Object.keys(GEAR).filter((v) => GEAR[v].type === item);
+    const other = types.find(freeFor) ?? (autoSwap && !swappable(id) ? types.find(swappable) : null);
     if (other) id = other;
   }
   const def = GEAR[id];
   const fit = fitReason(id, a);
   if (fit) return { ok: false, reason: fit };
   if (def.minObedience && (a.skills?.obedience ?? 0) < def.minObedience) return { ok: false, reason: 'tooAdvanced', need: def.minObedience };
+  let swapped = null;
   if (!wearing(id) && freeStock(profile, id, size()) <= 0) {
-    // On en a un, mais pas à la bonne taille (un échange est possible à la sellerie).
+    // On en a un, mais pas à la bonne taille : échange gratuit à la sellerie.
     const other = (def.sizes ?? []).find((s) => s !== size() && freeStock(profile, id, s) > 0);
-    return other ? { ok: false, reason: 'wrongSize', have: other, need: size() } : { ok: false, reason: 'notOwned' };
+    if (!other) return { ok: false, reason: 'notOwned' };
+    if (!autoSwap) return { ok: false, reason: 'wrongSize', have: other, need: size() };
+    swapSize(profile, id, other, size());
+    swapped = size();
   }
   a.gear = a.gear ?? {};
   const colors = def.colors ?? [];
@@ -277,7 +285,7 @@ export function equip(profile, a, item, color) {
   const s = size();
   if (s && s !== defaultSize(id)) entry.size = s;
   a.gear[def.slot] = entry;
-  return { ok: true, item: id };
+  return { ok: true, item: id, swapped };
 }
 
 /**

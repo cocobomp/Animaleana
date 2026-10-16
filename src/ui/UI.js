@@ -70,13 +70,18 @@ export class UI {
 
     // Ne pas redessiner un panneau pendant qu'on appuie dessus (sinon le clic se perd).
     this.holding = false;
-    this.panelEl.addEventListener('pointerdown', () => { this.holding = true; });
+    // Sur Safari iOS, le clic arrive APRÈS le relâchement du doigt : si le panneau se redessine entre les deux,
+    // le clic tombe sur un bouton qui n'existe plus. On bloque donc tout redessin automatique pendant le toucher
+    // et dans la demi-seconde qui suit (panelBusyUntil) ; les redessins explicites (onglets…) restent immédiats.
+    this.panelBusyUntil = 0;
+    this.panelEl.addEventListener('pointerdown', () => { this.holding = true; this.panelBusyUntil = performance.now() + 2000; });
     // pointercancel : le navigateur a pris la main (défilement) ; sans ça le panneau restait figé jusqu'au prochain tap.
     for (const ev of ['pointerup', 'pointercancel']) {
       window.addEventListener(ev, () => {
         if (!this.holding) return;
         this.holding = false;
-        setTimeout(() => this.panel?.live && this.renderPanel(), 0);
+        this.panelBusyUntil = performance.now() + 450;
+        setTimeout(() => this.refreshPanel(), 500);
       });
     }
 
@@ -184,7 +189,7 @@ export class UI {
     this.updateTimeBar();
     setText(this.hudPlace, `${s.isHome ? '🏠' : s.place.flag} ${L(s.place.name)}`);
     setText(this.hudWeather, `${WEATHER_EMOJI[s.weather]} ${t('weatherNow', { w: t(`w_${s.weather}`), t: s.temperature })} · ${t(`season_${s.season}`)}`);
-    if (this.panel?.live && !this.holding) this.renderPanel();
+    if (this.panel?.live && !this.holding) this.refreshPanel();
     this.renderStatus();
     this.pauseBanner.hidden = !g.paused;
   }
@@ -479,27 +484,47 @@ export class UI {
 
   openPanel({ title, render, live = false, animalId = null, kind = '' }) {
     this.panel = { title, render, live, animalId, kind };
+    // L'en-tête (titre, croix) est créé une fois par panneau : la croix reste le même bouton pendant
+    // toute la vie du panneau, les redessins ne touchent que le corps.
+    this.panelTitle = h('h2', {});
+    this.panelBody = h('div', { class: 'panel-body' });
+    this.panelEl.replaceChildren(
+      h('header', { class: 'panel-head' }, this.panelTitle,
+        h('button', { class: 'close', onClick: () => this.closePanel(), 'aria-label': t('close') }, '✕')),
+      this.panelBody,
+    );
     this.panelEl.hidden = false;
     this.renderPanel(true);
   }
 
+  /** Redessine le panneau tout de suite (changement d'onglet, action faite…). */
   renderPanel(first = false) {
     const p = this.panel;
-    if (!p) return;
-    const body = this.panelEl.querySelector('.panel-body');
-    const scroll = first ? 0 : body?.scrollTop ?? 0;
-    const content = h('div', { class: 'panel-body' }, p.render());
-    this.panelEl.replaceChildren(
-      h('header', { class: 'panel-head' },
-        h('h2', {}, typeof p.title === 'function' ? p.title() : p.title),
-        h('button', { class: 'close', onClick: () => this.closePanel(), 'aria-label': t('close') }, '✕')),
-      content,
-    );
-    content.scrollTop = scroll;
+    if (!p || !this.panelBody) return;
+    this.panelDirty = false;
+    const title = typeof p.title === 'function' ? p.title() : p.title;
+    if (this.panelTitle.textContent !== title) this.panelTitle.textContent = title;
+    const scroll = first ? 0 : this.panelBody.scrollTop;
+    const fresh = h('div', {}, p.render());
+    // Rien n'a changé à l'écran : on garde les boutons existants (moins de redessins = moins de taps perdus).
+    if (!first && fresh.innerHTML === this.panelBody.innerHTML) return;
+    this.panelBody.replaceChildren(...fresh.childNodes);
+    this.panelBody.scrollTop = scroll;
+  }
+
+  /** Redessin automatique (panneau « vivant ») : reporté tant qu'un doigt vient de toucher le panneau. */
+  refreshPanel() {
+    if (!this.panel?.live) return;
+    if (performance.now() < this.panelBusyUntil) {
+      this.panelDirty = true;
+      return;
+    }
+    this.renderPanel();
   }
 
   closePanel() {
     this.panel = null;
+    this.panelBody = null;
     this.panelEl.hidden = true;
     this.panelEl.replaceChildren();
     if (this.game) this.game.input.enabled = true;

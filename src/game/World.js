@@ -9,7 +9,7 @@ import { terrainDetail, waterNormalTexture, cloudTexture } from './textures.js';
 import { noise3 } from './models/shapes.js';
 import { gfx } from './gfx.js';
 import * as B from './models/buildings.js';
-import { forest, rocks, groundCover, mountainRing } from './models/nature.js';
+import { forest, rocks, groundCover, bushes, mountainRing, tintHSL } from './models/nature.js';
 import { buildFarm } from './farmLayout.js';
 import { buildInteriors } from './Interiors.js'; // écurie et maison où l'on entre
 import { coreAt } from './coreLayout.js'; // installations déplaçables (vue d'ensemble)
@@ -261,7 +261,6 @@ export class World {
     const rng = mulberry32(placeId.length * 977 + 13);
     const snowy = [0xeef2f6, 0xeef1f4, 0xf0f3f6].includes(GROUND[p.biome][season]);
 
-    g.add(this.makeTerrain(season, rng));
     if (this.waterLevel !== null) g.add(this.makeWater(snowy && p.lake));
 
     // Bâtiments
@@ -307,6 +306,21 @@ export class World {
     if (p.biome === 'garden') deco(B.torii(), 0, 30);
     if (p.biome === 'beach') deco(B.lighthouse(), 70, -60);
 
+    // Terrain : construit après les bâtiments pour dessiner la terre battue autour d'eux
+    // et les chemins qui mènent à leurs portes.
+    this.footprints = [
+      ...this.colliders.filter((c) => c.kind && c.kind !== 'jobs').map((c) => ({ x: c.x, z: c.z, hw: c.hw, hd: c.hd })),
+      ...(this.camVolumes ?? []).map((v) => ({ x: v.x, z: v.z, hw: v.hw, hd: v.hd })),
+    ];
+    this.paths = this.interactables
+      .filter((i) => i.kind !== 'jobs' && i.kind !== 'showground' && Math.hypot(i.x, i.z) > 11)
+      .map((i) => {
+        const d = Math.hypot(i.x, i.z);
+        const k = 11 / d;
+        return { x0: i.x, z0: i.z, x1: i.x * k, z1: i.z * k };
+      });
+    g.add(this.makeTerrain(season, rng));
+
     // Montagnes au loin
     if (p.mountains) g.add(mountainRing(16, 230, true, p.volcano ? 0x4a4644 : 0x77716b, rng));
     else g.add(mountainRing(10, 300, false, 0x6f8a6a, rng));
@@ -332,16 +346,59 @@ export class World {
     g.add(forest(p.trees, spots(treeCount, 30, 190, 0.8, 1.5), season, snowy));
     if (p.trees !== 'pine') g.add(forest('pine', spots(Math.round(treeCount * 0.15), 60, 190, 0.9, 1.4), season, snowy));
     g.add(rocks(spots(p.biome === 'tundra' ? 90 : 35, 15, 160, 0.3, 1.6), p.biome === 'tundra' ? 0x403c3a : 0x8c8a86));
+    // Buissons : le long des murs des bâtiments (jamais devant une porte) et dans la campagne.
+    const bushColor = tintHSL(new THREE.Color(snowy ? 0x4e7a3a : GROUND[p.biome][season]), 0.02, 0.0, -0.13).getHex();
+    const bushSpots = [];
+    for (const f of this.footprints) {
+      const n = 3 + Math.floor(rng() * 3);
+      for (let k = 0; k < n; k++) {
+        const side = Math.floor(rng() * 4);
+        const t = rng() * 1.8 - 0.9;
+        const out = 0.9 + rng() * 0.5;
+        const x = side < 2 ? f.x + t * f.hw : f.x + (side === 2 ? -1 : 1) * (f.hw + out);
+        const z = side < 2 ? f.z + (side === 0 ? -1 : 1) * (f.hd + out) : f.z + t * f.hd;
+        if (this.interactables.some((i) => Math.hypot(x - i.x, z - i.z) < 2.8)) continue;
+        if (this.colliders.some((c) => Math.abs(x - c.x) < c.hw + 0.45 && Math.abs(z - c.z) < c.hd + 0.45)) continue;
+        if (this.isWater(x, z) || Math.abs(x - padX) < 9.5 && Math.abs(z - padZ) < 10.5) continue;
+        bushSpots.push({ x, y: this.heightAt(x, z), z, s: 0.5 + rng() * 0.4, r: rng() * Math.PI * 2 });
+      }
+    }
+    bushSpots.push(...spots(this.quality === 'high' ? 40 : 16, 24, 120, 0.6, 1.2));
+    g.add(bushes(bushSpots, bushColor, snowy));
     if (!snowy) {
       const grassColor = new THREE.Color(GROUND[p.biome][season]).offsetHSL(0, 0.08, 0.02).getHex();
-      // Pas d'herbe haute dans la cour en terre battue.
-      const yard = (s) => Math.hypot(s.x, s.z) > 15 + noise3(s.x * 0.15, s.z * 0.15, 8) * 8
+      // Pas d'herbe haute dans la cour en terre battue, ni sur les chemins et le long des murs.
+      const yard = (s) => this.dirtAt(s.x, s.z) < 0.3
         && !(p.sea && s.x > 38) && (this.waterLevel === null || s.y > this.waterLevel + 1);
-      g.add(groundCover(spots(this.quality === 'high' ? 9000 : 1800, 5, 95, 0.7, 1.3).filter(yard), grassColor, FLOWERS[season]));
+      g.add(groundCover(spots(this.quality === 'high' ? 5000 : 1500, 5, 95, 0.7, 1.3).filter(yard), grassColor, FLOWERS[season]));
     }
 
     this.scene.add(g);
     this.snowy = snowy;
+  }
+
+  /**
+   * Terre battue en (x, z), de 0 à 1 : la cour, le tour des bâtiments et les chemins
+   * vers leurs portes, aux bords irréguliers. Sert au terrain et à l'herbe.
+   */
+  dirtAt(x, z) {
+    const r = Math.hypot(x, z);
+    const n = noise3(x * 0.15, z * 0.15, 8) - 0.5;
+    let w = (1 - smooth(13, 24, r + n * 8)) * (0.32 + 0.3 * (1 - smooth(3, 15, r)));
+    for (const f of this.footprints ?? []) {
+      const dx = Math.max(0, Math.abs(x - f.x) - f.hw);
+      const dz = Math.max(0, Math.abs(z - f.z) - f.hd);
+      w = Math.max(w, (1 - smooth(0.5, 2.8, Math.hypot(dx, dz) + n * 1.8)) * 0.92);
+    }
+    for (const pth of this.paths ?? []) {
+      const vx = pth.x1 - pth.x0;
+      const vz = pth.z1 - pth.z0;
+      const l2 = vx * vx + vz * vz || 1;
+      const t = Math.min(1, Math.max(0, ((x - pth.x0) * vx + (z - pth.z0) * vz) / l2));
+      const d = Math.hypot(x - (pth.x0 + vx * t), z - (pth.z0 + vz * t));
+      w = Math.max(w, (1 - smooth(0.6, 2.1, d + n * 1.6)) * 0.8);
+    }
+    return w;
   }
 
   makeTerrain(season, rng) {
@@ -358,7 +415,7 @@ export class World {
     const lush = base.clone().offsetHSL(0.015, 0.06, -0.07);
     const sand = new THREE.Color(0xd8c495);
     const wetSand = new THREE.Color(0x9c8a66);
-    const dirt = new THREE.Color(0x8f7a5a);
+    const dirt = new THREE.Color(p.biome === 'outback' ? 0x8f5230 : p.biome === 'mountain' || p.biome === 'tundra' ? 0x6f6050 : 0x6f5339);
     const rock = new THREE.Color(p.volcano ? 0x3d3a38 : 0x86817a);
     const snow = new THREE.Color(0xf3f6f9);
     const c = new THREE.Color();
@@ -373,36 +430,36 @@ export class World {
       if (!snowyGround) {
         if (n > 0.5) c.lerp(dry, Math.min(1, (n - 0.5) * 2.2));
         else c.lerp(lush, Math.min(1, (0.5 - n) * 2.2));
+        // Douces nuances de teinte (pas de grain par sommet).
+        c.offsetHSL((noise3(x * 0.05 + 7, z * 0.05, 2) - 0.5) * 0.02, (noise3(x * 0.07, z * 0.07 + 3, 5) - 0.5) * 0.08, 0);
       }
-      c.offsetHSL((rng() - 0.5) * 0.01, (rng() - 0.5) * 0.03, (rng() - 0.5) * 0.03);
-      const r = Math.hypot(x, z);
-      let wDirt = 0;
       let wSand = 0;
       let wRock = 0;
       let wSnow = snowyGround ? 1 : 0;
-      // Cour en terre battue autour des bâtiments, aux bords irréguliers.
-      wDirt = (1 - smooth(13, 24, r + (noise3(x * 0.15, z * 0.15, 8) - 0.5) * 8)) * 0.75;
+      // Cour en terre battue, tour des bâtiments et chemins (mélangés finement dans le shader).
+      const wDirt = this.dirtAt(x, z);
       if (p.sea) wSand = Math.max(wSand, smooth(36, 50, x + (noise3(z * 0.08, 1, 3) - 0.5) * 6) * 0.95);
       if (this.waterLevel !== null && y < this.waterLevel + 0.9) wSand = Math.max(wSand, smooth(this.waterLevel + 0.9, this.waterLevel + 0.3, y));
       if (p.mountains && y > 14) wRock = Math.max(wRock, smooth(14, 22, y + (n - 0.5) * 4));
       if (p.mountains && y > 26) wSnow = Math.max(wSnow, smooth(26, 32, y + (n - 0.5) * 3));
       if (p.volcano) wRock = Math.max(wRock, Math.max(0, Math.sin(x * 0.08) * Math.cos(z * 0.06)) * 0.6);
-      c.lerp(dirt, wDirt);
       const wet = this.waterLevel !== null ? smooth(this.waterLevel + 0.35, this.waterLevel - 0.1, y) : 0;
       c.lerp(sand.clone().lerp(wetSand, wet), wSand);
       c.lerp(rock, wRock);
       c.lerp(snow, wSnow * (snowyGround ? 0.95 : 1));
       colors.push(c.r, c.g, c.b);
-      splat.push(wDirt * (1 - wSand), wSand, wRock, wSnow);
+      splat.push(wDirt * (1 - wSand) * (1 - wSnow), wSand, wRock, wSnow);
     }
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     geo.setAttribute('splat', new THREE.Float32BufferAttribute(splat, 4));
     geo.computeVertexNormals();
     const detail = terrainDetail();
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
-    // Shader du sol : mélange de détails (herbe, terre, sable/neige, roche) et relief fin.
+    // Shader du sol : mélange de détails (herbe, terre, sable/neige, roche) à trois échelles,
+    // bords de terre irréguliers, léger relief (high) tiré de la hauteur du détail, qui s'efface au loin.
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.terrainDetail = { value: detail };
+      sh.uniforms.dirtColor = { value: dirt };
       sh.uniforms.gWet = gfx.wet;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
@@ -415,35 +472,51 @@ vTUv = position.xz;`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
 uniform sampler2D terrainDetail;
+uniform vec3 dirtColor;
 uniform float gWet;
 varying vec4 vSplat;
 varying vec2 vTUv;`)
         .replace('#include <color_fragment>', `#include <color_fragment>
-vec4 dA = texture2D(terrainDetail, vTUv * 0.42);
-vec4 dB = texture2D(terrainDetail, vTUv * 0.093 + 0.37);
-vec4 dC = texture2D(terrainDetail, vTUv * 0.021 + 0.61);
-float wGrass = max(0.0, 1.0 - vSplat.x - vSplat.y - vSplat.z - vSplat.w);
-vec3 dd = dA.rgb * 0.1 + dB.rgb * 0.55 + dC.rgb * 0.35;
-float th = dd.r * wGrass + dd.g * vSplat.x + dd.b * (vSplat.y + vSplat.w * 0.5) + (dB.g * 0.6 + dC.b * 0.4) * vSplat.z;
-th += (dC.r - 0.5) * 0.25 * wGrass;
-diffuseColor.rgb *= 0.76 + 0.48 * th;
-diffuseColor.rgb *= 1.0 - gWet * 0.28 * (1.0 - vSplat.w);`)
+// Trois échelles (5 m, 14 m tournée de 30°, 53 m) : pas de motif répété visible.
+vec4 dA = texture2D(terrainDetail, vTUv * 0.2);
+vec4 dB = texture2D(terrainDetail, vec2(vTUv.x * 0.866 - vTUv.y * 0.5, vTUv.x * 0.5 + vTUv.y * 0.866) * 0.071 + 0.37);
+vec4 dC = texture2D(terrainDetail, vTUv * 0.019 + 0.61);
+float wSand = vSplat.y;
+float wRock = vSplat.z;
+float wSnow = vSplat.w;
+// Terre battue : bord irrégulier suivant la texture (touffes d'herbe qui mordent sur la terre).
+float edgeN = dB.g * 0.55 + dC.r * 0.45;
+float wDirt = smoothstep(0.12, 0.62, vSplat.x * (0.5 + edgeN)) * (1.0 - wSnow);
+float wGrass = max(0.0, 1.0 - wDirt - wSand - wRock - wSnow);
+// Herbe : plaques et touffes douces, teinte qui varie (sèche / grasse).
+float gTone = (dA.r - 0.5) * 0.45 + (dB.r - 0.5) * 0.5 + (dC.r - 0.5) * 0.35;
+vec3 grassTint = mix(vec3(0.9, 1.0, 0.86), vec3(1.1, 1.03, 0.74), smoothstep(0.3, 0.7, dC.r * 0.6 + dB.r * 0.4));
+// Sable / neige : grain fin ; roche : mottes.
+float sTone = (dA.b - 0.5) * 0.3 + (dB.b - 0.5) * 0.25;
+float tone = gTone * 0.5 * wGrass + sTone * (wSand + 0.5 * wSnow) + (dB.g - 0.5) * 0.4 * wRock;
+vec3 col = diffuseColor.rgb * mix(vec3(1.0), grassTint, wGrass) * (1.0 + tone);
+// Terre : mottes et cailloux.
+float dTone = (dA.g - 0.5) * 0.5 + (dB.g - 0.5) * 0.35 + (dC.g - 0.5) * 0.25;
+vec3 dirtCol = dirtColor * (1.0 + dTone * 0.8) * mix(vec3(1.0), vec3(0.85, 0.9, 0.8), wSand);
+diffuseColor.rgb = mix(col, dirtCol, wDirt);
+diffuseColor.rgb *= 1.0 - gWet * 0.28 * (1.0 - wSnow);`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = mix(roughnessFactor, 0.55, vSplat.w * 0.6);
 roughnessFactor = mix(roughnessFactor, 0.32, gWet * (1.0 - vSplat.w) * (0.6 + 0.4 * (vSplat.x + vSplat.y)));`);
       if (high) {
+        // Relief : dérivées écran de la hauteur (lisse) du détail, sans texture supplémentaire.
         sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 {
+  float tb = dA.a * (wGrass + wDirt * 0.9 + wSand * 0.35 + wSnow * 0.3 + wRock * 0.6) * (1.0 - smoothstep(6.0, 32.0, length(vViewPosition)));
   vec3 dpx = dFdx(-vViewPosition);
   vec3 dpy = dFdy(-vViewPosition);
-  float tb = (dA.r * wGrass + dA.g * (vSplat.x + vSplat.z) + dA.b * (vSplat.y + vSplat.w)) * (1.0 - smoothstep(8.0, 30.0, length(vViewPosition)));
   float hx = dFdx(tb);
   float hy = dFdy(tb);
   vec3 r1 = cross(dpy, normal);
   vec3 r2 = cross(normal, dpx);
   float det = dot(dpx, r1);
   vec3 grad = sign(det) * (hx * r1 + hy * r2);
-  normal = normalize(abs(det) * normal - grad * 0.5);
+  normal = normalize(abs(det) * normal - grad * 0.12);
 }`);
       }
     };

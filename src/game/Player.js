@@ -1,7 +1,7 @@
 // Le joueur : son avatar, ses déplacements à pied ou à cheval, et la caméra.
 
 import * as THREE from 'three';
-import { buildAvatar } from './models/avatarModel.js';
+import { buildAvatar, animateAvatarWalk, poseAvatar } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 
@@ -61,10 +61,7 @@ export class Player {
     const a = this.avatar;
     const e = this.mount;
     a.root.position.set(0, e.model.saddleY * e.scale - 0.78, -e.data.look.bodyLen * e.scale * 0.05);
-    a.legs.forEach((l, i) => {
-      l.rotation.set(-1.1, 0, (i === 0 ? -1 : 1) * 0.35);
-    });
-    a.arms.forEach((arm) => arm.rotation.set(-0.7, 0, 0));
+    poseAvatar(a, 'ride');
   }
 
   dismount() {
@@ -75,8 +72,7 @@ export class Player {
     this.mount = null;
     const a = this.avatar;
     a.root.position.set(0, 0, 0);
-    a.legs.forEach((l) => l.rotation.set(0, 0, 0));
-    a.arms.forEach((arm, i) => arm.rotation.set(0, 0, (i === 0 ? 1 : -1) * 0.08));
+    poseAvatar(a, 'stand');
     // On descend à côté du cheval.
     const side = new THREE.Vector3(Math.cos(this.heading), 0, -Math.sin(this.heading)).multiplyScalar(1.4);
     this.root.position.add(side);
@@ -168,20 +164,15 @@ export class Player {
       mount.speed = this.speed;
       // Petit balancement de l'avatar avec le pas du cheval.
       this.avatar.root.position.y = mount.model.saddleY * mount.scale - 0.78 + mount.model.body.position.y * mount.scale;
+      this.avatar.torso.rotation.x = Math.sin(mount.phase * 2) * 0.03 * Math.min(1, this.speed / 4);
     } else {
       this.animateWalk(dt);
     }
   }
 
   animateWalk(dt) {
-    const a = this.avatar;
     this.phase += dt * this.speed * 2.2;
-    const amp = Math.min(0.7, this.speed * 0.16);
-    a.legs[0].rotation.x = Math.sin(this.phase) * amp;
-    a.legs[1].rotation.x = -Math.sin(this.phase) * amp;
-    a.arms[0].rotation.x = -Math.sin(this.phase) * amp * 0.8;
-    a.arms[1].rotation.x = Math.sin(this.phase) * amp * 0.8;
-    a.root.position.y = Math.abs(Math.sin(this.phase)) * 0.04 * Math.min(1, this.speed);
+    animateAvatarWalk(this.avatar, this.phase, this.speed);
   }
 }
 

@@ -212,11 +212,15 @@ export function coatTextures(look, speciesId) {
           d[i + 1] = Math.min(255, d[i + 1] * f);
           d[i + 2] = Math.min(255, d[i + 2] * f);
         }
+        // Variation douce de teinte (pelage jamais uniforme) : zones un peu plus chaudes ou plus froides.
+        const mot = wrapNoise(u, v, 3, seed * 1.7 + 11) - 0.5;
+        const mot2 = wrapNoise(u, v, 7, seed * 0.9 + 23) - 0.5;
+        const ml = 1 + mot * 0.14 + mot2 * 0.06;
         // Grain très fin.
-        const g = 1 + (rng() - 0.5) * (sleek ? 0.05 : 0.1);
-        d[i] *= g;
-        d[i + 1] *= g;
-        d[i + 2] *= g;
+        const g = ml * (1 + (rng() - 0.5) * (sleek ? 0.05 : 0.1));
+        d[i] = Math.min(255, d[i] * g * (1 + mot * 0.04));
+        d[i + 1] = Math.min(255, d[i + 1] * g);
+        d[i + 2] = Math.min(255, d[i + 2] * g * (1 - mot * 0.04));
       }
     }
     ctx.putImageData(img, 0, 0);
@@ -461,9 +465,18 @@ export function eyeTexture(color, pupil = 'round') {
     // Le devant de la sphère (+Z) correspond à u = 0.25, v = 0.5.
     const cx = w * 0.25;
     const cy = h * 0.5;
-    ctx.fillStyle = '#2a1d17';
+    const human = pupil === 'human';
+    ctx.fillStyle = human ? '#f6f3ee' : '#2a1d17';
     ctx.fillRect(0, 0, w, h);
-    const iris = pupil === 'oval' ? 1.05 : 0.92; // l'iris occupe presque tout l'œil visible
+    if (human) {
+      // Blanc de l'œil légèrement ombré vers le haut (paupière).
+      const sh = ctx.createLinearGradient(0, 0, 0, h);
+      sh.addColorStop(0, 'rgba(120,100,95,0.35)');
+      sh.addColorStop(0.35, 'rgba(120,100,95,0)');
+      ctx.fillStyle = sh;
+      ctx.fillRect(0, 0, w, h);
+    }
+    const iris = pupil === 'oval' ? 1.05 : human ? 0.72 : 0.92; // l'iris occupe presque tout l'œil visible (sauf humain)
     const rx = w * 0.16 * iris;
     const ry = h * 0.32 * iris;
     ctx.save();
@@ -495,8 +508,20 @@ export function eyeTexture(color, pupil = 'round') {
     if (pupil === 'slit') ctx.ellipse(0, 0, 0.16, 0.85, 0, 0, Math.PI * 2);
     else if (pupil === 'bar') ctx.roundRect(-0.7, -0.22, 1.4, 0.44, 0.2);
     else if (pupil === 'oval') ctx.ellipse(0, 0, 0.65, 0.4, 0, 0, Math.PI * 2);
-    else ctx.arc(0, 0, 0.42, 0, Math.PI * 2);
+    else ctx.arc(0, 0, human ? 0.5 : 0.42, 0, Math.PI * 2);
     ctx.fill();
+    if (human) {
+      // Bord de l'iris plus sombre et reflet peint (lisible même sans reflets du ciel).
+      ctx.strokeStyle = shade(color, 0.4);
+      ctx.lineWidth = 0.1;
+      ctx.beginPath();
+      ctx.arc(0, 0, 0.95, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath();
+      ctx.ellipse(-0.32, -0.35, 0.22, 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
     return toTexture(c, { repeat: false });
   });
@@ -800,6 +825,70 @@ export function cloudTexture() {
 
 // ------------------------------------------------------------------ bâtiments
 // Textures presque blanches : la couleur du matériau leur donne leur teinte.
+// Chaque texture a sa carte de normales (relief léger : joints, tuiles, grain), en qualité « high ».
+
+/**
+ * Carte de normales à partir d'une image de hauteur (gris = hauteur).
+ * Dessinée sur un canvas pour garder la même orientation que la texture de couleur.
+ */
+function normalFromHeight(src, strength = 2, blur = 1) {
+  const w = src.width;
+  const h = src.height;
+  const d = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+  let hg = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) hg[i] = (d[i * 4] * 0.5 + d[i * 4 + 1] * 0.3 + d[i * 4 + 2] * 0.2) / 255;
+  for (let b = 0; b < blur; b++) {
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let sum = 0;
+        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) sum += hg[((y + oy + h) % h) * w + ((x + ox + w) % w)];
+        out[y * w + x] = sum / 9;
+      }
+    }
+    hg = out;
+  }
+  const c = makeCanvas(w, h);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const at = (x, y) => hg[((y + h) % h) * w + ((x + w) % w)];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * strength;
+      const l = Math.hypot(dx, dy, 1);
+      const i = (y * w + x) * 4;
+      img.data[i] = ((-dx / l) * 0.5 + 0.5) * 255;
+      img.data[i + 1] = ((dy / l) * 0.5 + 0.5) * 255; // le canvas a l'axe y vers le bas
+      img.data[i + 2] = ((1 / l) * 0.5 + 0.5) * 255;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTexture(c, { srgb: false });
+}
+
+/** Canvas de hauteur (gris) pour l'enduit : bosses douces sans grain fin. */
+function plasterHeight(size) {
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const v = y / size;
+      const n = wrapNoise(u, v, 5, 1) * 0.55 + wrapNoise(u, v, 18, 2) * 0.3 + wrapNoise(u, v, 40, 4) * 0.15;
+      const val = 60 + n * 160;
+      const i = (y * size + x) * 4;
+      img.data[i] = val;
+      img.data[i + 1] = val;
+      img.data[i + 2] = val;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
 
 /** Enduit de façade : grain, petites taches, coulures légères. */
 export function plasterTexture() {
@@ -815,7 +904,7 @@ export function plasterTexture() {
         const v = y / size;
         const n = wrapNoise(u, v, 6, 1) * 0.5 + wrapNoise(u, v, 24, 2) * 0.3 + rng() * 0.2;
         const streak = wrapNoise(u * 3, v * 0.3, 8, 5) * 0.06;
-        const val = 205 + n * 50 - streak * 255;
+        const val = 212 + n * 43 - streak * 255;
         const i = (y * size + x) * 4;
         img.data[i] = val;
         img.data[i + 1] = val;
@@ -830,112 +919,162 @@ export function plasterTexture() {
 
 /** Planches de bois verticales avec veinage. */
 export function planksTexture() {
-  return cached('planks', () => {
-    const size = 256;
-    const c = makeCanvas(size);
-    const ctx = c.getContext('2d');
-    const rng = mulberry32(32);
-    const n = 6;
-    const pw = size / n;
-    for (let i = 0; i < n; i++) {
-      const v = 200 + rng() * 45;
-      ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.fillRect(i * pw, 0, pw, size);
-      // Veinage.
-      for (let k = 0; k < 14; k++) {
-        const x = i * pw + rng() * pw;
-        ctx.strokeStyle = `rgba(60,45,35,${0.08 + rng() * 0.15})`;
-        ctx.lineWidth = 0.6 + rng() * 1.4;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.bezierCurveTo(x + (rng() - 0.5) * 8, size * 0.33, x + (rng() - 0.5) * 8, size * 0.66, x + (rng() - 0.5) * 4, size);
-        ctx.stroke();
-      }
-      // Nœud du bois.
-      if (rng() < 0.6) {
-        ctx.fillStyle = 'rgba(70,50,35,0.35)';
-        ctx.beginPath();
-        ctx.ellipse(i * pw + pw * (0.3 + rng() * 0.4), rng() * size, 2 + rng() * 3, 4 + rng() * 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Joint sombre entre les planches.
-      ctx.fillStyle = 'rgba(25,18,12,0.75)';
-      ctx.fillRect(i * pw, 0, 2, size);
+  return cached('planks', () => planksCanvas());
+}
+
+function planksCanvas() {
+  const size = 256;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  const rng = mulberry32(32);
+  const n = 6;
+  const pw = size / n;
+  for (let i = 0; i < n; i++) {
+    const v = 200 + rng() * 45;
+    ctx.fillStyle = `rgb(${v},${v * 0.985},${v * 0.96})`;
+    ctx.fillRect(i * pw, 0, pw, size);
+    // Veinage.
+    for (let k = 0; k < 14; k++) {
+      const x = i * pw + rng() * pw;
+      ctx.strokeStyle = `rgba(60,45,35,${0.08 + rng() * 0.15})`;
+      ctx.lineWidth = 0.6 + rng() * 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.bezierCurveTo(x + (rng() - 0.5) * 8, size * 0.33, x + (rng() - 0.5) * 8, size * 0.66, x + (rng() - 0.5) * 4, size);
+      ctx.stroke();
     }
-    return toTexture(c);
-  });
+    // Nœud du bois.
+    if (rng() < 0.6) {
+      ctx.fillStyle = 'rgba(70,50,35,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(i * pw + pw * (0.3 + rng() * 0.4), rng() * size, 2 + rng() * 3, 4 + rng() * 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Joint sombre entre les planches, arête claire à côté.
+    ctx.fillStyle = 'rgba(25,18,12,0.75)';
+    ctx.fillRect(i * pw, 0, 2.5, size);
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.fillRect(i * pw + 2.5, 0, 1.5, size);
+  }
+  const tex = toTexture(c);
+  tex.userData.canvas = c;
+  return tex;
 }
 
 /** Toiture : 'tiles' (tuiles rondes), 'slate' (ardoises), 'shingle' (bardeaux de bois). */
 export function roofTexture(kind = 'slate') {
-  return cached(`roof-${kind}`, () => {
-    const size = 256;
-    const c = makeCanvas(size);
-    const ctx = c.getContext('2d');
-    const rng = mulberry32(kind.length * 7 + 33);
-    ctx.fillStyle = '#9a9a9a';
-    ctx.fillRect(0, 0, size, size);
-    const rows = kind === 'tiles' ? 10 : 12;
-    const rh = size / rows;
-    for (let r = 0; r < rows; r++) {
-      const cols = kind === 'tiles' ? 8 : 10;
-      const cw = size / cols;
-      const off = (r % 2) * cw * 0.5;
-      for (let k = -1; k <= cols; k++) {
-        const x = k * cw + off + (kind === 'tiles' ? 0 : (rng() - 0.5) * 2);
-        const y = r * rh;
-        const v = 175 + rng() * 70;
-        if (kind === 'tiles') {
-          const g = ctx.createLinearGradient(x, 0, x + cw, 0);
-          g.addColorStop(0, `rgb(${v * 0.7},${v * 0.7},${v * 0.7})`);
-          g.addColorStop(0.5, `rgb(${v},${v},${v})`);
-          g.addColorStop(1, `rgb(${v * 0.65},${v * 0.65},${v * 0.65})`);
-          ctx.fillStyle = g;
-          ctx.beginPath();
-          ctx.roundRect(x + 1, y, cw - 2, rh + 3, [0, 0, cw / 2, cw / 2]);
-          ctx.fill();
-        } else {
-          ctx.fillStyle = `rgb(${v},${v},${v})`;
-          ctx.fillRect(x + 1, y, cw - 2, rh + 2);
-          ctx.fillStyle = 'rgba(0,0,0,0.35)';
-          ctx.fillRect(x + 1, y + rh, cw - 2, 2);
+  return cached(`roof-${kind}`, () => roofCanvas(kind));
+}
+
+function roofCanvas(kind) {
+  const size = 256;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  const rng = mulberry32(kind.length * 7 + 33);
+  ctx.fillStyle = '#8a8a8a';
+  ctx.fillRect(0, 0, size, size);
+  const rows = kind === 'tiles' ? 10 : 12;
+  const rh = size / rows;
+  for (let r = 0; r < rows; r++) {
+    const cols = kind === 'tiles' ? 8 : kind === 'shingle' ? 9 : 10;
+    const cw = size / cols;
+    const off = (r % 2) * cw * 0.5;
+    for (let k = -1; k <= cols; k++) {
+      const x = k * cw + off + (kind === 'tiles' ? 0 : (rng() - 0.5) * 2);
+      const y = r * rh;
+      const v = 178 + rng() * 62;
+      if (kind === 'tiles') {
+        // Tuile canal : bombée (clair au milieu, sombre sur les bords).
+        const g = ctx.createLinearGradient(x, 0, x + cw, 0);
+        g.addColorStop(0, `rgb(${v * 0.62},${v * 0.62},${v * 0.62})`);
+        g.addColorStop(0.45, `rgb(${v},${v},${v})`);
+        g.addColorStop(0.7, `rgb(${v * 0.92},${v * 0.92},${v * 0.92})`);
+        g.addColorStop(1, `rgb(${v * 0.58},${v * 0.58},${v * 0.58})`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.roundRect(x + 1, y, cw - 2, rh + 3, [0, 0, cw / 2, cw / 2]);
+        ctx.fill();
+      } else if (kind === 'shingle') {
+        ctx.fillStyle = `rgb(${v},${v * 0.97},${v * 0.92})`;
+        ctx.fillRect(x + 1, y, cw - 2, rh + 2);
+        // Fibres du bois.
+        for (let f = 0; f < 5; f++) {
+          ctx.fillStyle = `rgba(0,0,0,${0.06 + rng() * 0.1})`;
+          ctx.fillRect(x + 2 + rng() * (cw - 4), y, 1, rh);
         }
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(x + 1, y + rh, cw - 2, 2);
+      } else {
+        // Ardoise : légère variation de teinte, bord inférieur ombré.
+        const g = ctx.createLinearGradient(0, y, 0, y + rh);
+        g.addColorStop(0, `rgb(${v * 1.04},${v * 1.04},${v * 1.06})`);
+        g.addColorStop(1, `rgb(${v * 0.9},${v * 0.9},${v * 0.93})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(x + 1, y, cw - 2, rh + 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(x + 1, y + rh, cw - 2, 2);
       }
-      // Ombre portée de la rangée du dessus.
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.fillRect(0, r * rh, size, 2);
     }
-    return toTexture(c);
-  });
+    // Ombre portée de la rangée du dessus.
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(0, r * rh, size, 2.5);
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(0, r * rh + 2.5, size, 3);
+  }
+  const tex = toTexture(c);
+  tex.userData.canvas = c;
+  return tex;
 }
 
 /** Soubassement en pierres maçonnées. */
 export function stoneTexture() {
-  return cached('stone', () => {
-    const size = 256;
-    const c = makeCanvas(size);
-    const ctx = c.getContext('2d');
-    const rng = mulberry32(34);
-    ctx.fillStyle = '#8a8680';
-    ctx.fillRect(0, 0, size, size);
-    let y = 0;
-    while (y < size) {
-      const h = 18 + rng() * 16;
-      let x = -rng() * 30;
-      while (x < size) {
-        const w = 26 + rng() * 34;
-        const v = 150 + rng() * 90;
-        ctx.fillStyle = `rgb(${v},${v * 0.97},${v * 0.93})`;
-        ctx.beginPath();
-        ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 5);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        ctx.fillRect(x + 4, y + 3, w - 10, 3);
-        x += w;
-      }
-      y += h;
+  return cached('stone', () => stoneCanvas());
+}
+
+function stoneCanvas() {
+  const size = 256;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  const rng = mulberry32(34);
+  ctx.fillStyle = '#7e7a74';
+  ctx.fillRect(0, 0, size, size);
+  let y = 0;
+  while (y < size) {
+    const h = 18 + rng() * 16;
+    let x = -rng() * 30;
+    while (x < size) {
+      const w = 26 + rng() * 34;
+      const v = 150 + rng() * 90;
+      const g = ctx.createLinearGradient(x, y, x + w * 0.4, y + h);
+      g.addColorStop(0, `rgb(${v * 1.05},${v * 1.02},${v * 0.97})`);
+      g.addColorStop(1, `rgb(${v * 0.9},${v * 0.88},${v * 0.85})`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 5);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(x + 4, y + 3, w - 10, 3);
+      x += w;
     }
-    return toTexture(c);
+    y += h;
+  }
+  const tex = toTexture(c);
+  tex.userData.canvas = c;
+  return tex;
+}
+
+/**
+ * Carte de normales d'un matériau de bâtiment : 'plaster', 'planks', 'stone',
+ * 'roof-tiles', 'roof-slate', 'roof-shingle'. Null en qualité « low » (pas de relief).
+ */
+export function buildingNormal(kind) {
+  if (gfx.quality !== 'high') return null;
+  return cached(`normal-${kind}`, () => {
+    if (kind === 'plaster') return normalFromHeight(plasterHeight(256), 1.6, 1);
+    if (kind === 'planks') return normalFromHeight(planksTexture().userData.canvas, 2.2, 0);
+    if (kind === 'stone') return normalFromHeight(stoneTexture().userData.canvas, 2.4, 1);
+    if (kind.startsWith('roof-')) return normalFromHeight(roofTexture(kind.slice(5)).userData.canvas, 2.6, 0);
+    return normalFromHeight(plasterHeight(128), 1, 1);
   });
 }
 

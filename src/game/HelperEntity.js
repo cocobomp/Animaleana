@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { HELPERS, helperTask } from '../sim/farm.js';
 import { helperLevel, helperSpeed, onBreak } from '../sim/helpers.js';
-import { buildAvatar } from './models/avatarModel.js';
+import { buildAvatar, animateAvatarWalk } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 
@@ -92,12 +92,17 @@ export class HelperEntity {
       targetSpeed = 4.5;
     } else if (this.workTimer > 0) {
       this.workTimer -= dt;
-      this.avatar.arms.forEach((a, i) => { a.rotation.x = -1 + Math.sin(this.workTimer * 8 + i) * 0.4; });
+      // Au travail : les bras s'activent, coudes pliés, le buste se penche un peu.
+      this.avatar.arms.forEach((a, i) => { a.rotation.x = -0.8 + Math.sin(this.workTimer * 8 + i) * 0.4; });
+      this.avatar.elbows?.forEach((e, i) => { e.rotation.x = -0.9 + Math.cos(this.workTimer * 8 + i) * 0.35; });
+      this.avatar.torso.rotation.x = 0.12;
+      this.avatar.knees?.forEach((k) => { k.rotation.x = 0.1; });
       if (this.workTimer <= 0) {
         game.helperDone(this, this.task);
         this.task = null;
         this.think = 1.5;
         this.avatar.arms.forEach((a) => { a.rotation.x = 0; });
+        this.avatar.torso.rotation.x = 0;
       }
     } else if (onBreak(this.data, game.profile.clock)) {
       // En pause : on rentre à son coin et on souffle un peu.
@@ -153,11 +158,7 @@ export class HelperEntity {
 
     if (this.workTimer <= 0) {
       this.phase += dt * this.speed * 2.2;
-      const amp = Math.min(0.7, this.speed * 0.16);
-      this.avatar.legs[0].rotation.x = Math.sin(this.phase) * amp;
-      this.avatar.legs[1].rotation.x = -Math.sin(this.phase) * amp;
-      this.avatar.arms[0].rotation.x = -Math.sin(this.phase) * amp * 0.8;
-      this.avatar.arms[1].rotation.x = Math.sin(this.phase) * amp * 0.8;
+      animateAvatarWalk(this.avatar, this.phase, this.speed);
     }
   }
 

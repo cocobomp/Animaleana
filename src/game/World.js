@@ -243,6 +243,7 @@ export class World {
         if (o.isMesh || o.isInstancedMesh) {
           o.geometry.dispose();
           if (o.material.map && !o.material.map.userData?.shared) o.material.map.dispose?.();
+          if (o.material.normalMap && !o.material.normalMap.userData?.shared) o.material.normalMap.dispose?.();
           o.userData.depthTex?.dispose();
           o.material.dispose();
         }

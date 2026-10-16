@@ -1,6 +1,8 @@
 // Modèle 3D du personnage du joueur (regarde vers +Z, environ 1,6 m).
 // Corps en « lofts » (formes lisses), tête sculptée (champ de distance), mains, chaussures,
 // yeux avec iris et cils, vêtements avec plis légers (relief peint).
+// Squelette : hanches → genoux (jambes), épaules → coudes (bras), torse, tête.
+// Les proportions sont un peu enfantines (grosse tête, membres ronds).
 
 import * as THREE from 'three';
 import { loft } from './shapes.js';
@@ -62,8 +64,8 @@ function clothBump() {
   return _cloth;
 }
 
-/** Tube vertical (membre) : sections [y, rayon x, rayon z, décalage z]. */
-const limbGeo = (secs, radial) => loft(secs.map(([y, rx, rz, oz = 0]) => ({ p: [0, y, oz], rx, ry: rz })), { radial, sub: 3, side: [1, 0, 0] });
+/** Tube vertical (membre) : sections [y, rayon x, rayon z, décalage z]. round = bouts arrondis. */
+const limbGeo = (secs, radial, round = null) => loft(secs.map(([y, rx, rz, oz = 0]) => ({ p: [0, y, oz], rx, ry: rz })), { radial, sub: 3, side: [1, 0, 0], round });
 
 /** Tête : crâne, mâchoire, joues, nez et oreilles fondus. */
 const HEAD_SHAPES = [
@@ -81,6 +83,12 @@ const HEAD_SHAPES = [
 ];
 const headSdf = blend(HEAD_SHAPES);
 
+/** Hauteur de la hanche, du genou (sous la hanche), de l'épaule et du coude (sous l'épaule). */
+const HIP_Y = 0.82;
+const KNEE = 0.4;
+const SHOULDER_Y = 1.33;
+const ELBOW = 0.27;
+
 export function buildAvatar(look) {
   const high = gfx.quality === 'high';
   const R = high ? 18 : 12;
@@ -94,19 +102,26 @@ export function buildAvatar(look) {
   const shoes = mat(look.shoes, 0.45);
   const sole = mat(0xe8e2d8, 0.7);
 
-  // --- Jambes (pivot à la hanche)
+  // --- Jambes (pivot à la hanche, genou articulé)
   const legs = [];
+  const knees = [];
   for (const s of [1, -1]) {
     const hip = new THREE.Group();
-    hip.position.set(s * 0.095, 0.82, 0);
+    hip.position.set(s * 0.095, HIP_Y, 0);
     root.add(hip);
-    const leg = shared(`leg${R}`, () => limbGeo([[0.06, 0.08, 0.08], [0, 0.082, 0.085], [-0.18, 0.07, 0.075], [-0.38, 0.055, 0.058, 0.005], [-0.45, 0.058, 0.062], [-0.6, 0.052, 0.055, -0.005], [-0.72, 0.042, 0.045], [-0.76, 0.044, 0.046]], R));
-    add(hip, leg, bottom);
+    const thigh = shared(`thigh${R}`, () => limbGeo([[0.06, 0.082, 0.082], [0, 0.085, 0.088], [-0.18, 0.072, 0.077], [-0.36, 0.058, 0.062, 0.004], [-KNEE, 0.056, 0.06, 0.004]], R, [0, 0.9]));
+    add(hip, thigh, bottom);
+    const knee = new THREE.Group();
+    knee.position.set(0, -KNEE, 0);
+    hip.add(knee);
+    const shin = shared(`shin${R}`, () => limbGeo([[0, 0.056, 0.06, 0.004], [-0.05, 0.06, 0.064], [-0.2, 0.053, 0.056, -0.004], [-0.32, 0.043, 0.046], [-0.36, 0.045, 0.047]], R, [0.9, 0]));
+    add(knee, shin, bottom);
     // Chaussure : bout arrondi, semelle claire.
-    const shoe = shared(`shoe${R}`, () => loft([[-0.07, 0.04, 0.035], [-0.03, 0.05, 0.05], [0.04, 0.052, 0.045], [0.1, 0.046, 0.035], [0.13, 0.03, 0.025]].map(([z, w, h]) => ({ p: [0, 0, z], rx: w, ry: h, ryb: 0.012 })), { radial: R, sub: 3, round: [0.4, 0.6] }));
-    add(hip, shoe, shoes, [0, -0.775, 0.02]);
-    add(hip, new THREE.BoxGeometry(0.1, 0.018, 0.22), sole, [0, -0.8, 0.035]);
+    const shoe = shared(`shoe${R}`, () => loft([[-0.07, 0.042, 0.036], [-0.03, 0.052, 0.052], [0.04, 0.054, 0.046], [0.1, 0.048, 0.036], [0.135, 0.032, 0.026]].map(([z, w, h]) => ({ p: [0, 0, z], rx: w, ry: h, ryb: 0.012 })), { radial: R, sub: 3, round: [0.4, 0.6] }));
+    add(knee, shoe, shoes, [0, -0.775 + KNEE, 0.02]);
+    add(knee, new THREE.BoxGeometry(0.104, 0.018, 0.23), sole, [0, -0.8 + KNEE, 0.035]);
     legs.push(hip);
+    knees.push(knee);
   }
 
   // --- Torse (bassin + buste, avec épaules)
@@ -114,65 +129,80 @@ export function buildAvatar(look) {
   root.add(torso);
   const pelvis = shared(`pelvis${R}`, () => limbGeo([[0.74, 0.12, 0.09], [0.8, 0.165, 0.11], [0.9, 0.16, 0.105], [0.96, 0.15, 0.1]], R + 4));
   add(torso, pelvis, bottom);
-  const chest = shared(`chest${R}`, () => limbGeo([[0.9, 0.152, 0.1], [1.02, 0.145, 0.095], [1.15, 0.16, 0.105, 0.005], [1.27, 0.18, 0.105], [1.35, 0.185, 0.095], [1.4, 0.14, 0.08], [1.43, 0.07, 0.06]], R + 4));
+  const chest = shared(`chest${R}`, () => limbGeo([[0.9, 0.158, 0.105], [1.02, 0.15, 0.1], [1.15, 0.162, 0.108, 0.005], [1.27, 0.18, 0.108], [1.35, 0.186, 0.098], [1.4, 0.14, 0.08], [1.43, 0.07, 0.06]], R + 4));
   add(torso, chest, top);
-  // Col.
+  // Ourlet du tee-shirt et col.
+  add(torso, new THREE.TorusGeometry(0.157, 0.012, 6, R + 4), top, [0, 0.925, 0.002], [Math.PI / 2, 0, 0], [1, 1, 0.68]);
   add(torso, new THREE.TorusGeometry(0.058, 0.014, 6, R), top, [0, 1.43, 0.005], [Math.PI / 2 - 0.15, 0, 0]);
 
-  // --- Bras (pivot à l'épaule)
+  // --- Bras (pivot à l'épaule, coude articulé, manches courtes)
   const arms = [];
+  const elbows = [];
   for (const s of [1, -1]) {
     const shoulder = new THREE.Group();
-    shoulder.position.set(s * 0.2, 1.33, 0);
+    shoulder.position.set(s * 0.2, SHOULDER_Y, 0);
     shoulder.rotation.z = s * 0.08;
     root.add(shoulder);
-    const arm = shared(`arm${R}`, () => limbGeo([[0.04, 0.05, 0.05], [0, 0.056, 0.056], [-0.14, 0.047, 0.05], [-0.27, 0.04, 0.042], [-0.3, 0.042, 0.042], [-0.45, 0.034, 0.036], [-0.5, 0.033, 0.034]], R - 2));
-    add(shoulder, arm, top);
+    const upper = shared(`upperArm${R}`, () => limbGeo([[0.04, 0.052, 0.052], [0, 0.058, 0.058], [-0.14, 0.048, 0.051], [-ELBOW, 0.041, 0.043]], R - 2, [0, 0.9]));
+    add(shoulder, upper, top);
+    // Manche courte un peu évasée.
+    const sleeve = shared(`sleeve${R}`, () => limbGeo([[0.05, 0.062, 0.062], [0, 0.066, 0.066], [-0.1, 0.064, 0.066], [-0.13, 0.066, 0.068]], R - 2, [0.3, 0.3]));
+    add(shoulder, sleeve, top);
+    const elbow = new THREE.Group();
+    elbow.position.set(0, -ELBOW, 0);
+    shoulder.add(elbow);
+    const fore = shared(`foreArm${R}`, () => limbGeo([[0, 0.041, 0.043], [-0.04, 0.042, 0.043], [-0.18, 0.035, 0.037], [-0.23, 0.034, 0.035]], R - 2, [0.9, 0]));
+    add(elbow, fore, skin);
     // Main : paume, doigts serrés, pouce.
     const hand = new THREE.Group();
-    hand.position.set(0, -0.53, 0.005);
-    shoulder.add(hand);
-    add(hand, new THREE.SphereGeometry(0.036, 12, 10), skin, [0, 0, 0], null, [0.62, 1.05, 1], false);
-    add(hand, new THREE.CapsuleGeometry(0.02, 0.03, 4, 8), skin, [0, -0.045, 0.004], null, [0.95, 1, 1.2], false);
-    add(hand, new THREE.CapsuleGeometry(0.01, 0.025, 4, 6), skin, [-s * 0.012, -0.012, 0.03], [0.5, 0, s * 0.3], null, false);
+    hand.position.set(0, -0.26, 0.005);
+    elbow.add(hand);
+    add(hand, new THREE.SphereGeometry(0.038, 12, 10), skin, [0, 0, 0], null, [0.64, 1.05, 1], false);
+    add(hand, new THREE.CapsuleGeometry(0.021, 0.03, 4, 8), skin, [0, -0.046, 0.004], null, [0.95, 1, 1.2], false);
+    add(hand, new THREE.CapsuleGeometry(0.011, 0.025, 4, 6), skin, [-s * 0.012, -0.012, 0.03], [0.5, 0, s * 0.3], null, false);
     arms.push(shoulder);
+    elbows.push(elbow);
   }
 
-  // --- Tête
+  // --- Tête (un peu grosse : proportions d'enfant)
   const head = new THREE.Group();
   head.position.set(0, 1.5, 0);
+  head.scale.setScalar(1.1);
   root.add(head);
   add(head, new THREE.CylinderGeometry(0.048, 0.056, 0.12, R), skin, [0, -0.07, 0]);
   const headGeo = shared(`head${high}`, () => sdfMesh(headSdf, [[-0.16, -0.12, -0.16], [0.16, 0.24, 0.17]], high ? 0.008 : 0.013));
   add(head, headGeo, skin, [0, 0.0, 0]);
-  // Yeux : globe, iris, paupière, sourcils.
-  const eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTexture(0x5a3a22, 'round'), roughness: 0.05, clearcoat: high ? 1 : 0 });
+  // Yeux : globe avec blanc, iris, paupière, cils, sourcils.
+  const eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTexture(look.eyes ?? 0x4a6b8a, 'human'), roughness: 0.08, clearcoat: high ? 1 : 0 });
   const lidMat = mat(look.skin, 0.6);
   const brow = mat(look.hair, 0.7);
   for (const s of [1, -1]) {
-    const hit = rayHit(headSdf, [s * 0.04, 0.068, 0], [s * 0.15, 0, 1], 0.3);
+    const hit = rayHit(headSdf, [s * 0.042, 0.066, 0], [s * 0.15, 0, 1], 0.3);
     const n = sdfNormal(headSdf, hit, 0.003);
     const eye = new THREE.Group();
-    eye.position.copy(hit).addScaledVector(n, -0.009);
+    eye.position.copy(hit).addScaledVector(n, -0.01);
     eye.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(s * 0.05, 0, 1).normalize());
     head.add(eye);
-    add(eye, new THREE.SphereGeometry(0.0145, 16, 12), eyeMat, null, null, null, false);
-    add(eye, new THREE.SphereGeometry(0.0155, 16, 6, 0, Math.PI * 2, 0, Math.PI * 0.32), lidMat, null, [0.3, 0, 0], null, false);
-    add(eye, new THREE.TorusGeometry(0.013, 0.0022, 6, 16, Math.PI), mat(0x2a1a14, 0.6), [0, 0.001, 0.006], [0.3, 0, 0], null, false);
-    add(head, new THREE.CapsuleGeometry(0.004, 0.026, 4, 6), brow, [s * 0.044, 0.103, 0.118], [0, 0, Math.PI / 2 + s * 0.12], null, false);
+    add(eye, new THREE.SphereGeometry(0.0165, 16, 12), eyeMat, null, null, null, false);
+    add(eye, new THREE.SphereGeometry(0.0175, 16, 6, 0, Math.PI * 2, 0, Math.PI * 0.3), lidMat, null, [0.3, 0, 0], null, false);
+    add(eye, new THREE.TorusGeometry(0.0148, 0.0022, 6, 16, Math.PI), mat(0x2a1a14, 0.6), [0, 0.001, 0.007], [0.3, 0, 0], null, false);
+    add(head, new THREE.CapsuleGeometry(0.004, 0.026, 4, 6), brow, [s * 0.046, 0.104, 0.118], [0, 0, Math.PI / 2 + s * 0.12], null, false);
   }
-  // Bouche (sourire) et lèvres.
+  // Bouche (sourire), lèvres et joues roses.
   const lips = mat(new THREE.Color(look.skin).lerp(new THREE.Color(0xb05a55), 0.45).getHex(), 0.5);
   add(head, new THREE.TorusGeometry(0.02, 0.0045, 6, 14, Math.PI * 0.9), lips, [0, -0.028, 0.118], [0.2, 0, Math.PI * 1.05], null, false);
+  const blush = mat(new THREE.Color(look.skin).lerp(new THREE.Color(0xe08a80), 0.35).getHex(), 0.7);
+  for (const s of [1, -1]) add(head, new THREE.SphereGeometry(0.018, 10, 8), blush, [s * 0.072, 0.0, 0.082], null, [1.3, 0.8, 0.35], false);
 
   // --- Cheveux
   const style = look.hairStyle;
-  const capR = style === 'bald' ? 0.133 : 0.141;
-  const cap = new THREE.SphereGeometry(capR, R + 6, 12, 0, Math.PI * 2, 0, style === 'bald' ? Math.PI * 0.42 : Math.PI * 0.55);
+  const capR = style === 'bald' ? 0.133 : 0.143;
+  const cap = new THREE.SphereGeometry(capR, R + 6, 12, 0, Math.PI * 2, 0, style === 'bald' ? Math.PI * 0.42 : Math.PI * 0.56);
   add(head, cap, hair, [0, 0.075, -0.012], [-0.32, 0, 0], [0.96, 1.04, 1.02]);
   if (style !== 'bald') {
     // Frange et mèches sur les tempes.
     add(head, new THREE.SphereGeometry(0.06, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), hair, [0.03, 0.155, 0.075], [0.6, 0, -0.3], [1.6, 0.6, 1]);
+    add(head, new THREE.SphereGeometry(0.05, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), hair, [-0.045, 0.15, 0.08], [0.65, 0, 0.35], [1.3, 0.55, 0.9]);
     for (const s of [1, -1]) add(head, new THREE.CapsuleGeometry(0.02, 0.06, 4, 8), hair, [s * 0.118, 0.06, 0.03], [0.15, 0, s * 0.08], null, false);
   }
   if (style === 'long') {
@@ -193,10 +223,52 @@ export function buildAvatar(look) {
   }
   if (look.hat) {
     const capMat = mat(look.top, 0.6);
-    add(head, new THREE.SphereGeometry(0.148, R + 6, 10, 0, Math.PI * 2, 0, Math.PI * 0.45), capMat, [0, 0.09, -0.005], [-0.15, 0, 0]);
+    add(head, new THREE.SphereGeometry(0.15, R + 6, 10, 0, Math.PI * 2, 0, Math.PI * 0.45), capMat, [0, 0.09, -0.005], [-0.15, 0, 0]);
     add(head, new THREE.CylinderGeometry(0.1, 0.1, 0.012, 20, 1, false, -Math.PI / 2, Math.PI), capMat, [0, 0.135, 0.1], [0.12, 0, 0], [1, 1, 1.15]);
-    add(head, new THREE.SphereGeometry(0.012, 8, 6), capMat, [0, 0.235, 0.0]);
+    add(head, new THREE.SphereGeometry(0.012, 8, 6), capMat, [0, 0.237, 0.0]);
   }
 
-  return { root, legs, arms, head, torso };
+  return { root, legs, knees, arms, elbows, head, torso };
+}
+
+/**
+ * Cycle de marche articulé (hanches, genoux, épaules, coudes, buste).
+ * phase avance avec la distance parcourue ; speed en m/s.
+ */
+export function animateAvatarWalk(a, phase, speed) {
+  const amp = Math.min(0.7, speed * 0.16);
+  const run = Math.min(1, Math.max(0, (speed - 3.5) / 3));
+  for (let i = 0; i < 2; i++) {
+    const ph = phase + i * Math.PI;
+    const swing = Math.sin(ph) * amp;
+    a.legs[i].rotation.x = swing;
+    // Le genou se plie quand la jambe revient vers l'avant, un peu plus en courant.
+    const lift = Math.max(0, -Math.cos(ph));
+    if (a.knees) a.knees[i].rotation.x = lift * amp * (1.1 + run * 0.5) + run * 0.15;
+    const arm = -swing * 0.8;
+    a.arms[i].rotation.x = arm;
+    if (a.elbows) a.elbows[i].rotation.x = -(0.25 + run * 0.6) - Math.max(0, -arm) * 0.6;
+  }
+  // Buste penché quand on court, léger balancement des épaules.
+  a.torso.rotation.x = run * 0.18;
+  a.torso.rotation.y = Math.sin(phase) * 0.05 * amp;
+  a.head.rotation.x = -run * 0.12;
+  a.root.position.y = Math.abs(Math.sin(phase)) * 0.04 * Math.min(1, speed);
+}
+
+/** Pose assise (à cheval) ou debout. */
+export function poseAvatar(a, pose) {
+  if (pose === 'ride') {
+    a.legs.forEach((l, i) => l.rotation.set(-1.1, 0, (i === 0 ? -1 : 1) * 0.35));
+    a.knees?.forEach((k) => k.rotation.set(1.25, 0, 0));
+    a.arms.forEach((arm) => arm.rotation.set(-0.45, 0, 0));
+    a.elbows?.forEach((e) => e.rotation.set(-0.8, 0, 0));
+  } else {
+    a.legs.forEach((l) => l.rotation.set(0, 0, 0));
+    a.knees?.forEach((k) => k.rotation.set(0, 0, 0));
+    a.arms.forEach((arm, i) => arm.rotation.set(0, 0, (i === 0 ? 1 : -1) * 0.08));
+    a.elbows?.forEach((e) => e.rotation.set(-0.2, 0, 0));
+  }
+  a.torso.rotation.set(0, 0, 0);
+  a.head.rotation.set(0, 0, 0);
 }

@@ -235,7 +235,15 @@ function openMinigame(ui, o) {
     const view = { x0: 0, y0: 0, x1: MG_W, y1: MG_H, w: MG_W, h: MG_H, scale: 1, ox: 0, oy: 0 };
     let dpr = 1;
     const layout = { w: 0, h: 0 }; // taille de mise en page du canvas, en pixels CSS
+    // Hauteur de consigne déjà atteinte pendant la partie (voir ctx.hint), oubliée si l'écran change de largeur.
+    let hintMin = 0;
+    let lastVW = window.innerWidth;
     const resize = () => {
+      if (window.innerWidth !== lastVW) {
+        lastVW = window.innerWidth;
+        hintMin = 0;
+        hintEl.style.minHeight = '';
+      }
       // Taille de MISE EN PAGE (style calculé, sans les transformations), pas getBoundingClientRect() :
       // la première mesure tombe pendant l'animation d'ouverture « pop » de .mg-box (scale 0,9), et le
       // ResizeObserver ne la voit pas finir (un transform ne change pas la mise en page). L'échelle
@@ -283,6 +291,13 @@ function openMinigame(ui, o) {
         text = nbsp(text);
         if (hintEl.textContent !== text) {
           hintEl.textContent = text;
+          // La consigne ne rétrécit pas pendant la partie : après une longue consigne de départ
+          // (3 lignes en 360 px), une plus courte faisait remonter la scène sous le doigt.
+          const hh = hintEl.offsetHeight;
+          if (hh > hintMin) {
+            hintMin = hh;
+            hintEl.style.minHeight = `${hh}px`;
+          }
           hintEl.classList.remove('flash');
           void hintEl.offsetWidth;
           hintEl.classList.add('flash');

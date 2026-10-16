@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { ellipsoid, roundCone, smin, sdfMesh, rayHit, sdfNormal } from './sdf.js';
 import { loft } from './shapes.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { gfx } from '../gfx.js';
 import { horseBuild, horseBreedOf } from '../../sim/horseLook.js';
 import { coatMaterial, maneMaterial, eyeMaterial, PART } from './horseCoat.js';
@@ -177,20 +178,20 @@ function torsoPrims(A, B) {
   const z = (v) => v * bk;
   // Silhouette du tronc (ligne du dessus, ligne du dessous, demi-largeur).
   const top = [[-0.86, -0.36], [-0.8, -0.28], [-0.72, -0.15], [-0.6, -0.06], [-0.48, -0.025], [-0.36, -0.035], [-0.22, -0.055],
-    [-0.05, -0.075], [0.12, -0.065], [0.28, -0.025], [0.38, 0], [0.48, -0.04], [0.6, -0.16], [0.72, -0.27], [0.8, -0.36], [0.86, -0.42]]
+    [-0.05, -0.075], [0.12, -0.065], [0.28, -0.025], [0.38, 0], [0.48, -0.04], [0.6, -0.16], [0.7, -0.27], [0.76, -0.36], [0.8, -0.42]]
     .map(([zz, v]) => [z(zz), yW + v * (zz < -0.6 ? cr : 1)]);
   const bot = [[-0.86, 0.27], [-0.8, 0.2], [-0.66, 0.08], [-0.5, 0.05], [-0.36, 0.065], [-0.22, 0.025], [-0.05, -0.025],
-    [0.15, -0.035], [0.35, -0.022], [0.52, 0.02], [0.66, 0.08], [0.76, 0.15], [0.82, 0.2], [0.86, 0.22]]
+    [0.15, -0.035], [0.35, -0.022], [0.52, 0.02], [0.64, 0.08], [0.72, 0.15], [0.77, 0.2], [0.8, 0.22]]
     .map(([zz, v]) => [z(zz), yB + v]);
   const wid = [[-0.86, 0.02], [-0.8, 0.11], [-0.72, 0.19], [-0.6, 0.25], [-0.45, 0.272], [-0.25, 0.283], [-0.05, 0.293],
-    [0.15, 0.285], [0.32, 0.258], [0.48, 0.232], [0.62, 0.205], [0.74, 0.165], [0.8, 0.11], [0.86, 0.03]]
+    [0.15, 0.285], [0.32, 0.258], [0.48, 0.232], [0.6, 0.205], [0.7, 0.165], [0.76, 0.11], [0.8, 0.03]]
     .map(([zz, v]) => [z(zz), v * (W / 0.28) * (zz < -0.3 ? cr ** 0.5 : 1)]);
-  P.push(trunkShape(top, bot, wid, z(-0.86), z(0.86)));
+  P.push(trunkShape(top, bot, wid, z(-0.86), z(0.8)));
 
   // Muscles, fondus en douceur (petits congés : on garde le dessin des muscles).
   // Épaule : omoplate inclinée qui descend du garrot vers la pointe de l'épaule.
-  P.push(...both((s) => RC([s * W * 0.66, yW - 0.16, z(0.3)], [s * W * 0.74, yB + 0.3, z(0.62)], 0.1, 0.1, 0.42, 0.06)));
-  P.push(...both((s) => E3([s * W * 0.6, yB + 0.28, z(0.64)], [0.06, 0.07, 0.06], 0.07))); // pointe de l'épaule
+  P.push(...both((s) => RC([s * W * 0.66, yW - 0.16, z(0.3)], [s * W * 0.64, yB + 0.33, z(0.55)], 0.1, 0.09, 0.42, 0.07)));
+  P.push(...both((s) => E3([s * W * 0.62, yB + 0.27, z(0.6)], [0.05, 0.06, 0.05], 0.08))); // pointe de l'épaule (discrète)
   // Bras et triceps au-dessus du coude, puis coude.
   P.push(...both((s) => RC([s * W * 0.7, yB + 0.26, z(0.6)], [s * (xF + 0.01), yB + 0.06, zF - 0.04], 0.09, 0.07, 0.7, 0.07)));
   P.push(...both((s) => E3([s * (xF + 0.005), yB + 0.02, zF - 0.07], [0.035, 0.045, 0.04], 0.05)));
@@ -208,7 +209,7 @@ function torsoPrims(A, B) {
 
   // Encolure : longue, part sous le garrot (qui reste marqué) et du poitrail ; gorge fine sous la nuque.
   const nw = B.neckW;
-  const base = V(0, yC + 0.05, z(0.56));
+  const base = V(0, yC + 0.04, z(0.55));
   const topN = V(0, poll.y - 0.07, poll.z - 0.08);
   const ctrl = V(0, yW + 0.0, z(0.78));
   const at = (t) => {
@@ -216,7 +217,7 @@ function torsoPrims(A, B) {
     return a.lerp(ctrl.clone().lerp(topN, t), t);
   };
   // [t, demi-épaisseur côté crinière, côté gorge, demi-largeur]
-  const secs = [[0, 0.22, 0.26, 0.2], [0.3, 0.18, 0.16, 0.15], [0.6, 0.145, 0.115, 0.118], [0.85, 0.125, 0.095, 0.098], [1, 0.115, 0.09, 0.088]];
+  const secs = [[0, 0.23, 0.26, 0.2], [0.3, 0.18, 0.16, 0.15], [0.6, 0.145, 0.115, 0.118], [0.85, 0.125, 0.095, 0.098], [1, 0.115, 0.09, 0.088]];
   for (let i = 0; i < secs.length - 1; i++) {
     const s0 = secs[i];
     const s1 = secs[i + 1];
@@ -228,7 +229,7 @@ function torsoPrims(A, B) {
     const cb = pb.clone().addScaledVector(upN, (s1[1] - s1[2]) / 2 * nw);
     const ra = (s0[1] + s0[2]) / 2 * nw;
     const rb = (s1[1] + s1[2]) / 2 * nw;
-    P.push(RC(ca.toArray(), cb.toArray(), ra, rb, (s0[3] / ((s0[1] + s0[2]) / 2) + s1[3] / ((s1[1] + s1[2]) / 2)) / 2, i === 0 ? 0.15 : 0.09));
+    P.push(RC(ca.toArray(), cb.toArray(), ra, rb, (s0[3] / ((s0[1] + s0[2]) / 2) + s1[3] / ((s1[1] + s1[2]) / 2)) / 2, i === 0 ? 0.18 : 0.09));
   }
   // Crête de l'encolure (bombée chez les baroques et les traits).
   const crest = B.crest;
@@ -511,13 +512,13 @@ function sculpt(B, high) {
 
   // --- Tronc + encolure.
   const tb = boundsOf(torsoP, 0.06);
-  const torsoGeo = sdfMesh(torso, tb, high ? 0.04 : 0.055);
+  const torsoGeo = sdfMesh(torso, tb, high ? 0.04 : 0.06);
   out.add(torsoGeo, new THREE.Matrix4(), (p, n) => ({ part: PART.body, ao: aoAt(occ, p, n), w: bodyWeights(p) }));
   out.mark('torso');
 
   // --- Tête : plus fine, rigide sur l'os de la tête. Peau des naseaux (creux) en peau nue.
   const hb = boundsOf(headDef.prims, 0.03 * u);
-  const headGeo = sdfMesh(headF, hb, (high ? 0.03 : 0.045) * u);
+  const headGeo = sdfMesh(headF, hb, (high ? 0.03 : 0.05) * u);
   const tmp = V();
   out.add(headGeo, M.head, (p, n) => {
     tmp.copy(p).applyMatrix4(headInv);
@@ -539,7 +540,7 @@ function sculpt(B, high) {
   });
   for (const e of eyes) {
     const q = new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), e.dir);
-    for (const [theta, flip, sc] of [[0.37, false, 1.1], [0.3, true, 1.07]]) {
+    for (const [theta, flip, sc] of [[0.33, false, 1.1], [0.26, true, 1.07]]) {
       const lid = new THREE.SphereGeometry(eyeR * sc, high ? 14 : 10, 3, 0, Math.PI * 2, 0, Math.PI * theta);
       const ly = lid.attributes.position;
       const edge = eyeR * sc * Math.cos(Math.PI * theta * 0.8);
@@ -797,7 +798,7 @@ function buildHair(S, B, look, rig, high) {
   } else {
     const lenBase = { normal: 0.27, long: 0.42, thick: 0.32, short: 0.12 }[style] ?? 0.27;
     const len = lenBase * B.mane;
-    const n = Math.round((high ? 96 : 50) * B.maneN * (style === 'short' ? 0.7 : 1));
+    const n = Math.round((high ? 96 : 66) * B.maneN * (style === 'short' ? 0.7 : 1));
     const layers = style === 'thick' || style === 'long' ? 3 : 2;
     for (let L = 0; L < layers; L++) {
       const count = Math.round(n * (L === 0 ? 0.5 : 0.5 / (layers - 1)));
@@ -994,20 +995,22 @@ export function buildHorseModel(look, breedId = null) {
   hairMesh.boundingSphere = S.bounds.clone();
   rig.root.add(hairMesh);
 
-  // Yeux : globes brillants dans la tête (rigides), un peu enfoncés dans l'orbite.
-  const eyeMat = eyeMaterial(look.eye ?? 0x2a1a10);
-  const eyeGeo = new THREE.SphereGeometry(S.eyeR, high ? 16 : 10, high ? 10 : 7);
-  for (const e of S.eyes) {
-    const m = new THREE.Mesh(eyeGeo, eyeMat);
-    m.position.copy(e.center); // repère de la tête
-    m.quaternion.setFromUnitVectors(V(0, 0, 1), e.dir);
-    m.scale.set(1.2, 0.86, 0.9); // en amande
-    rig.head.add(m);
-    // Petit reflet blanc : le regard paraît vif.
-    const glint = new THREE.Mesh(new THREE.SphereGeometry(S.eyeR * 0.1, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
-    glint.position.set(S.eyeR * 0.22, S.eyeR * 0.18, S.eyeR * 0.95);
-    m.add(glint);
+  // Yeux : globes brillants dans la tête (rigides), un peu enfoncés dans l'orbite, en amande. Les deux
+  // yeux forment un seul maillage partagé par les chevaux de même gabarit (un seul appel de rendu) ;
+  // le reflet du ciel sur le globe verni donne le regard vif.
+  if (!S.eyeGeo) {
+    const parts = S.eyes.map((e) => {
+      const g = new THREE.SphereGeometry(S.eyeR, high ? 16 : 10, high ? 10 : 7);
+      g.applyMatrix4(new THREE.Matrix4().compose(e.center, new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), e.dir), V(1.2, 0.86, 0.9)));
+      return g;
+    });
+    S.eyeGeo = mergeGeometries(parts);
+    parts.forEach((g) => g.dispose());
+    S.eyeGeo.userData.shared = true;
   }
+  const eyes = new THREE.Mesh(S.eyeGeo, eyeMaterial(look.eye ?? 0x2a1a10));
+  eyes.castShadow = false;
+  rig.head.add(eyes);
 
   const { L, R } = S.dims;
   rig.root.add(contactShadow(A.W + 0.05, L));

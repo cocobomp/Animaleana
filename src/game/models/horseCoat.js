@@ -34,6 +34,7 @@ vec2 hCell(vec3 p) {
 }`;
 
 const COAT_FRAGMENT = /* glsl */ `
+hBare = 0.0;
 {
   vec3 P = vHPos;
   float part = vHPart;
@@ -142,6 +143,7 @@ const COAT_FRAGMENT = /* glsl */ `
   c = mix(c, hSkin * 0.6, nos);
   // Peau nue (intérieur des oreilles et des naseaux, paupières) et sabots.
   c = mix(c, hSkin, isSkin);
+  hBare = max(isSkin, max(nos, isHoof * 0.7));
   vec3 hoof = mix(hHoof, hHoofLight, step(0.01, sockH));
   hoof *= 0.9 + 0.12 * hNoise(vec3(P.x * 260.0, P.y * 8.0, P.z * 260.0));
   c = mix(c, hoof, isHoof);
@@ -209,7 +211,7 @@ attribute vec3 hInfo;
 attribute float hAO;
 varying vec3 vHPos;
 varying vec3 vHNrm;
-varying float vHPart;
+flat varying float vHPart; // pas d'interpolation entre deux parties (sinon : fausses balzanes aux bords)
 varying vec3 vHInfo;
 varying float vHAO;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -219,15 +221,20 @@ vHPos = position; vHNrm = normal; vHPart = hPart; vHInfo = hInfo; vHAO = hAO;`);
 ${Object.keys(u).map((k) => `uniform ${k === 'hSocks' ? 'vec4' : u[k].value.isColor ? 'vec3' : 'float'} ${k};`).join('\n')}
 varying vec3 vHPos;
 varying vec3 vHNrm;
-varying float vHPart;
+flat varying float vHPart; // pas d'interpolation entre deux parties (sinon : fausses balzanes aux bords)
 varying vec3 vHInfo;
 varying float vHAO;
+float hBare; // peau nue et sabots : pas de reflet satiné du poil
 ${NOISE}`)
       .replace('#include <map_fragment>', `#include <map_fragment>
 ${COAT_FRAGMENT}`)
       // Sabots plus lisses et brillants que le poil.
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-roughnessFactor *= mix(1.0, 0.55, step(5.5, vHPart) * step(vHPart, 6.5));`);
+roughnessFactor *= mix(1.0, 0.55, step(5.5, vHPart) * step(vHPart, 6.5));`)
+      .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+#ifdef USE_SHEEN
+material.sheenColor *= 1.0 - hBare;
+#endif`);
   };
   m.customProgramCacheKey = () => `horsecoat${high ? 'p' : 's'}`;
   m.userData.horseUniforms = u;
@@ -277,6 +284,6 @@ normal = normalize( vNormal );`);
 export function eyeMaterial(color) {
   const high = gfx.quality === 'high';
   return high
-    ? new THREE.MeshPhysicalMaterial({ map: eyeTexture(color, 'oval'), roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.03 })
-    : new THREE.MeshStandardMaterial({ map: eyeTexture(color, 'oval'), roughness: 0.08 });
+    ? new THREE.MeshPhysicalMaterial({ map: eyeTexture(color, 'oval'), roughness: 0.2, clearcoat: 0.6, clearcoatRoughness: 0.12, envMapIntensity: 0.6 })
+    : new THREE.MeshStandardMaterial({ map: eyeTexture(color, 'oval'), roughness: 0.22, envMapIntensity: 0.6 });
 }

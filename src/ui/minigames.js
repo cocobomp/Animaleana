@@ -297,7 +297,9 @@ function openMinigame(ui, o) {
           hintEl.textContent = text;
           // La consigne ne rétrécit pas pendant la partie : après une longue consigne de départ
           // (3 lignes en 360 px), une plus courte faisait remonter la scène sous le doigt.
-          const hh = hintEl.offsetHeight;
+          // Hauteur de mise en page arrondie AU-DESSUS (offsetHeight arrondit au plus près : 72,4 px
+          // donnait 72, et la consigne « C'est fait ! » faisait encore bouger la scène de 0,2 px).
+          const hh = Math.ceil(parseFloat(getComputedStyle(hintEl).height) || hintEl.offsetHeight);
           if (hh > hintMin) {
             hintMin = hh;
             hintEl.style.minHeight = `${hh}px`;

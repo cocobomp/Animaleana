@@ -548,14 +548,14 @@ export class Tutorial {
     const panel = ui.panelEl;
     const ev = document.getElementById('ev-banner');
     const stacked = [this.tracker, ev, ui.statusBar, ui.help, ui.toasts];
-    const reset = (el) => { if (el && el.style.top) el.style.top = ''; };
+    // Remet un élément à sa place CSS (top ET bottom : #help a un `bottom` dans le CSS).
+    const reset = (el) => { if (el && (el.style.top || el.style.bottom)) { el.style.top = ''; el.style.bottom = ''; } };
     if (!isNarrow() || hud.hidden) {
       const info = hud.querySelector('.hud-info');
       const base = info ? info.getBoundingClientRect().bottom : 148;
       this.bubble.style.top = `${Math.round(base + 12)}px`;
       this.tracker.style.top = `${Math.round(base + 8)}px`;
       for (const el of stacked.slice(1)) reset(el);
-      if (ui.toasts.style.bottom) ui.toasts.style.bottom = '';
       if (panel.style.maxHeight) panel.style.maxHeight = '';
       return;
     }
@@ -564,6 +564,8 @@ export class Tutorial {
       if (!el || el.hidden) return;
       const top = `${Math.round(y)}px`;
       if (el.style.top !== top) el.style.top = top;
+      // Posé par le haut seulement : un `bottom` venu du CSS l'étirerait jusqu'en bas de l'écran.
+      if (el.style.bottom !== 'auto') el.style.bottom = 'auto';
       const r = el.getBoundingClientRect();
       if (r.height > 0) y = r.bottom + gap;
     };
@@ -575,7 +577,6 @@ export class Tutorial {
     // Les messages viennent en dernier ; fenêtre ouverte, ils se posent entre la barre du haut et la fenêtre
     // (ils peuvent déborder sur son titre quelques secondes, jamais sur les boutons du haut).
     for (const el of stacked) place(el);
-    if (ui.toasts.style.bottom) ui.toasts.style.bottom = '';
   }
 
   moveToasts() {

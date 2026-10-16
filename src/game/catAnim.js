@@ -23,19 +23,20 @@ const TAIL_UP = 21; // premier os : positif = vers le haut
 const TAIL_CURL = 22; // chaque os suivant (vers le haut)
 const TAIL_SIDE = 23; // premier os : sur le côté
 const TAIL_WRAP = 24; // chaque os suivant : s'enroule sur le côté
-const TAIL_TIP = 25; // bout de la queue qui frétille
+const TAIL_TIP = 25; // le bout de la queue se recourbe (point d'interrogation)
 const EARS_BACK = 26;
 const LIDS = 27; // 0 ouvert, 1 fermé
 const SPLAY = 28; // pattes arrière écartées
-const PUFF = 29; // queue gonflée (peur)
-const TWITCH = 30; // le bout de la queue frétille sur le côté
-const REACH = 31; // pattes avant allongées (assis : l'épaule remonte, la patte reste au sol)
-const TOE = 32; // 32 à 35 : la patte reste à plat au sol (assis, couché)
-const N = 36;
+const TWITCH = 29; // le bout de la queue frétille sur le côté
+const REACH = 30; // pattes avant allongées (assis : l'épaule remonte, la patte reste au sol)
+const TOE = 31; // 31 à 34 : la patte reste à plat au sol (assis, couché)
+const N = 35;
 
 const POSES = ['stand', 'move', 'sit', 'groom', 'loaf', 'curl', 'stretch', 'crouch'];
 const acc = new Float32Array(N);
 const tmp = new Float32Array(N);
+// Contexte des poses, réutilisé d'une image à l'autre (rempli par animateCat).
+const ctx = { t: 0, d: null, ph: 0, run: 0, amp: 0, side: 1, sub: 0, stretch: 0, seed: 0, perch: false, tailHigh: false };
 const P = Math.PI;
 const OFF_WALK = [-P / 2, P / 2, 0, P];
 const OFF_RUN = [0, 0.35, P, P + 0.35];
@@ -316,10 +317,17 @@ export function animateCat(e, dt, sad) {
   if (moving) e.phase += dt * (v / stride) * Math.PI * 2 * 0.5;
 
   // Mélange des poses (poids lissés : les poses se fondent l'une dans l'autre).
-  const ctx = {
-    t, d, ph: e.phase, run, amp: moving ? 0.32 + run * 0.4 : 0, side: st.side, sub: st.sub, stretch: st.stretch, seed: st.seed,
-    perch: !!e.perch, tailHigh: !!e.data.following,
-  };
+  ctx.t = t;
+  ctx.d = d;
+  ctx.ph = e.phase;
+  ctx.run = run;
+  ctx.amp = moving ? 0.32 + run * 0.4 : 0;
+  ctx.side = st.side;
+  ctx.sub = st.sub;
+  ctx.stretch = st.stretch;
+  ctx.seed = st.seed;
+  ctx.perch = e.perch?.phase === 'on';
+  ctx.tailHigh = !!e.data.following;
   acc.fill(0);
   let total = 0;
   for (const name of POSES) {
@@ -376,6 +384,8 @@ export function animateCat(e, dt, sad) {
   const low = sad ? 1 : 0;
   md.neck.rotation.set(C.neckRest + acc[NECK_X] + low * 0.3, acc[NECK_Y], 0);
   md.head.rotation.set(md.headTilt + acc[HEAD_X], acc[HEAD_Y], acc[HEAD_Z]);
+  // Chaton : grosse tête (grands yeux, grandes oreilles) par rapport au corps.
+  md.head.scale.setScalar(e.stage === 'baby' ? 1.3 : e.stage === 'young' ? 1.12 : 1);
   // Queue.
   const bones = C.tailBones;
   const nb = bones.length;
@@ -391,8 +401,7 @@ export function animateCat(e, dt, sad) {
       b.rotation.y = acc[TAIL_WRAP] + Math.sin(t * 2.2 - i * 0.7) * 0.04 + tip * acc[TWITCH];
     }
   }
-  const puff = Math.max(acc[PUFF], fear);
-  const tailScale = 1 + puff * 0.45;
+  const tailScale = 1 + fear * 0.45; // queue gonflée quand il a peur
   md.tail.scale.set(tailScale, tailScale, 1);
   // Oreilles : frémissements, elles pivotent un peu, se couchent quand il a peur ou qu'il est triste.
   const back = Math.min(1, acc[EARS_BACK] + fear * 0.9 + low * 0.45);

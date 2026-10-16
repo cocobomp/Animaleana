@@ -570,13 +570,13 @@ function buildCatLeg(pivot, o) {
   const at = (x, y, z) => [x - A[0], y - A[1], z - A[2]];
   const pieces = [];
   const ball = sphere(pr, 14, 10);
-  ball.scale(1.05, 0.66, 1.3);
-  ball.translate(...at(0, -T + pr * 0.64, pz));
+  ball.scale(1.0, 0.7, 1.25);
+  ball.translate(...at(0, -T + pr * 0.66, pz));
   pieces.push(ball);
   for (const k of [-1.5, -0.5, 0.5, 1.5]) {
-    const toe = sphere(pr * 0.34, 8, 6);
-    toe.scale(1, 0.8, 1.1);
-    toe.translate(...at(k * pr * 0.33, -T + pr * 0.3, pz + pr * 0.9 - Math.abs(k) * pr * 0.14));
+    const toe = sphere(pr * 0.3, 8, 6);
+    toe.scale(1, 0.75, 1.05);
+    toe.translate(...at(k * pr * 0.31, -T + pr * 0.28, pz + pr * 0.84 - Math.abs(k) * pr * 0.13));
     pieces.push(toe);
   }
   const pawGeo = mergeGeometries(pieces);

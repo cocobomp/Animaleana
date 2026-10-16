@@ -87,12 +87,11 @@ export function catSkinColors(look, traits) {
   const sat = Math.max(r, g, b) - Math.min(r, g, b);
   if (traits.hair === 'hairless') return { nose: 0xc98480, pad: 0xc98480 };
   if (p === 'points') {
-    const [sr, sg, sb] = rgb(look.secondary);
+    const [sr, , sb] = rgb(look.secondary);
     const L = lum(look.secondary);
     if (L < 0.2) return { nose: 0x3a2b26, pad: traits.white ? 0xe3a2a0 : 0x3d2e29 };
     if (sb > sr) return { nose: 0x5e6674, pad: traits.white ? 0xe0a4a4 : 0x66707c };
     if (sr > sb + 30 && L < 0.4) return { nose: 0x6e4a3e, pad: traits.white ? 0xe3a2a0 : 0x7a5446 };
-    void sg;
     return { nose: 0xc09aa4, pad: 0xd8a8b0 };
   }
   if (lum(coat) < 0.09) return { nose: 0x2b2523, pad: p === 'bicolor' ? 0xe0a0a0 : 0x2e2725 };
@@ -207,8 +206,11 @@ export function catCoatTextures(look, traits, marks) {
       if (part === 'body') {
         if (p === 'tabby') {
           // Rayures « tigre » en travers, qui s'effacent sous le ventre ; raie sombre sur le dos.
-          const x = v * 10.5 + Math.sin(u * Math.PI * 6) * 0.18 + n * 0.55;
-          mix(sec, bands(x, 0, 0.36) * smooth(0.18, 0.5, b) * 0.9);
+          // Rayures fines et nombreuses, un peu cassées par endroits (vrai tigré « maquereau »).
+          // Elles partent de la raie du dos et filent un peu vers l'arrière en descendant (arêtes de poisson).
+          const x = v * 13 + (1 - b) * 1.1 + Math.sin(u * Math.PI * 6) * 0.15 + n * 0.6;
+          const broken = smooth(-0.25, 0.05, wrapNoise(u, v, 14, seed + 31) - 0.5);
+          mix(sec, bands(x, 0, 0.26) * smooth(0.18, 0.5, b) * (0.4 + 0.42 * broken));
           mix(sec, (1 - edge(du(u, 0.5), 0.035 + n * 0.012, 0.015)) * 0.85);
         } else {
           // Marbré : une cible sur chaque flanc, trois lignes sur le dos, un papillon sur les épaules.
@@ -276,6 +278,8 @@ export function catCoatTextures(look, traits, marks) {
       const d = Math.hypot(du(u, ue) * 1.3, v - ve);
       mix(light, (1 - smooth(0.045, 0.07, d)) * 0.5);
     }
+    // Museau et menton plus clairs (coussinets des moustaches).
+    mix(light, smooth(vN - 0.17, vN - 0.07, v) * 0.45 + (1 - smooth(0.12, 0.3, Math.min(u, 1 - u) * 2)) * smooth(vE - 0.1, vE + 0.05, v) * 0.35);
     // Rayures sur les joues.
     for (const c of [0.15, 0.85]) {
       const d = du(u, c);

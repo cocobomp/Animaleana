@@ -502,14 +502,26 @@ function drawLongFur(g, sh, c, ct) {
   const long = ct.hair === 'long' ? 1 : 0.6;
   const belly = ct.white === 'bicolor' || ct.white === 'mitted' ? '#f6f3ee' : css(c.coat);
   g.fillStyle = belly;
-  // Mèches arrondies qui débordent sous le ventre (silhouette duveteuse).
-  for (let i = 0; i < 8; i++) {
-    const t = -0.68 + i * 0.19;
-    const q = L(rx * t, ry * (0.82 + 0.06 * long) * Math.sqrt(Math.max(0.2, 1 - t * t)));
-    circle(g, q.x, q.y, ry * (0.2 + 0.08 * long) * (1 - Math.abs(t) * 0.3));
-    g.fill();
+  // Frange de mèches sous le ventre : une seule forme, festonnée en bas (silhouette duveteuse).
+  const n = 8;
+  const edgeY = (t) => ry * Math.sqrt(Math.max(0.05, 1 - t * t));
+  g.beginPath();
+  const p0 = L(-rx * 0.8, edgeY(-0.8) * 0.4);
+  g.moveTo(p0.x, p0.y);
+  for (let i = 0; i <= n; i++) {
+    const t = -0.8 + (i / n) * 1.6;
+    const a = L(rx * t, edgeY(t) * 0.92);
+    if (i === 0) g.lineTo(a.x, a.y);
+    else {
+      const tm = t - 0.8 / n;
+      const b = L(rx * tm, edgeY(tm) * (1.08 + 0.14 * long) + 2 * s);
+      g.quadraticCurveTo(b.x, b.y, a.x, a.y);
+    }
   }
-  void s;
+  const p1 = L(rx * 0.8, edgeY(0.8) * 0.4);
+  g.lineTo(p1.x, p1.y);
+  g.closePath();
+  g.fill();
   // Collerette.
   g.fillStyle = ct.pattern === 'points' || ct.white ? '#f4f0e8' : shade(c.coat, 0.12);
   const q = L(rx * 0.78, -ry * 0.05);

@@ -17,7 +17,7 @@ import { animateCat } from './catAnim.js'; // chats : assis, toilette, en boule,
 export const HOME = { // (place et taille appliquées par coreLayout.js : enclos déplacés ou agrandis)
   horse: { x: -16, z: 20, r: 9, hw: 9, hd: 11 },
   dog: { x: -8, z: -5, r: 3.5 }, // près de la niche
-  cat: { x: -1, z: -10.5, r: 3.5 }, // sur le perron de la maison
+  cat: { x: -1, z: -8.4, r: 2.6 }, // devant le perron de la maison (pas sur la marche : ils s'y enfonçaient)
   rabbit: { x: 9, z: 4.7, r: 1.6, hw: 2.2, hd: 1.5 }, // dans l'enclos du clapier
 };
 export const PEN = { x: 14, z: 35, r: 6, hw: 10.5, hd: 6.5, gate: { x: 14, z: 47 } };

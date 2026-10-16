@@ -20,15 +20,24 @@ export const GEAR = {
 /** Tout nouveau profil reçoit un licol, un filet et une selle. */
 export const STARTER_ITEMS = { halter: 1, bridle: 1, saddle: 1, collar: 1, leash: 1 };
 
-export const owned = (profile, item) => profile.items?.[item] ?? 0;
+// En voyage, seul le matériel emporté dans le coffre de transport est là (profile.luggage, src/sim/cargo.js).
+// Sans coffre (anciennes sauvegardes) ou à la maison : tout le matériel acheté est disponible.
+const away = (p) => !!(p.luggage && p.place !== p.home && p.luggage.place === p.place);
 
-/** Combien de cet objet sont déjà portés par des animaux. */
-export const inUse = (profile, item) => profile.animals.filter((a) => Object.values(a.gear ?? {}).some((g) => g.item === item)).length;
+export const owned = (profile, item) => (away(profile) ? profile.luggage.items?.[item] ?? 0 : profile.items?.[item] ?? 0);
+
+/** Combien de cet objet sont déjà portés par des animaux (en voyage : par les animaux qui sont là). */
+export const inUse = (profile, item) => profile.animals.filter((a) => (!away(profile) || a.location === profile.place)
+  && Object.values(a.gear ?? {}).some((g) => g.item === item)).length;
+
+/** Cet objet est-il resté à la maison ? (on en a, mais pas dans le coffre du voyage) */
+export const leftAtHome = (profile, item) => away(profile) && (profile.items?.[item] ?? 0) > 0;
 
 export function buyGear(profile, item) {
   if (!spend(profile, GEAR[item].price)) return { ok: false, reason: 'money' };
   profile.items = profile.items ?? {};
-  profile.items[item] = owned(profile, item) + 1;
+  profile.items[item] = (profile.items[item] ?? 0) + 1;
+  if (away(profile)) profile.luggage.items[item] = (profile.luggage.items[item] ?? 0) + 1; // acheté ici : il est là
   return { ok: true };
 }
 
@@ -37,7 +46,7 @@ export function equip(profile, a, item, color = 'red') {
   const def = GEAR[item];
   if (!def.species.includes(a.species)) return { ok: false, reason: 'wrongSpecies' };
   const already = a.gear?.[def.slot]?.item === item;
-  if (!already && inUse(profile, item) >= owned(profile, item)) return { ok: false, reason: 'notOwned' };
+  if (!already && inUse(profile, item) >= owned(profile, item)) return { ok: false, reason: leftAtHome(profile, item) ? 'leftAtHome' : 'notOwned' };
   a.gear = a.gear ?? {};
   a.gear[def.slot] = { item, color: def.colors ? color : undefined };
   return { ok: true };

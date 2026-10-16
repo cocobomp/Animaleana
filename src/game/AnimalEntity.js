@@ -10,6 +10,7 @@ import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
 import { canLeash, heelSkill } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
+import { animateCat } from './catAnim.js'; // chats : assis, toilette, en boule, queue levée
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 // Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
@@ -709,6 +710,7 @@ export class AnimalEntity {
     const md = this.model;
     const sp = this.sp;
     if (md.gltf) return this.animateGltf(dt, sad);
+    if (md.cat) return animateCat(this, dt, sad); // chats : poses et allures dédiées (catAnim.js)
     const legLen = this.data.look.legLen * (this.data.look.legs ?? 1);
     const v = this.speed / Math.max(0.3, this.scale);
     const moving = this.speed > 0.05;

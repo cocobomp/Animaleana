@@ -45,7 +45,8 @@ export function shopPrice(speciesId, breedId, stage = 'young') {
   const breedFactor = 0.7 + 0.45 * rarity ** 1.4;
   const big = ['horse', 'cow'].includes(speciesId);
   const ageFactor = { baby: big ? 0.75 : 1.2, young: 1, adult: big ? 1.3 : 0.85 }[stage];
-  return Math.round((sp.price * breedFactor * ageFactor) / 5) * 5;
+  // Une race peut avoir son propre prix de base (chats : catBreeds.js).
+  return Math.round(((breed?.price ?? sp.price * breedFactor) * ageFactor) / 5) * 5;
 }
 
 /** Races vendues : à l'animalerie de la maison, les races courantes et locales ; en voyage, celles de l'élevage local. */

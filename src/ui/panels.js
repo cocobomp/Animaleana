@@ -696,7 +696,10 @@ export function openShop(ui) {
         class: `card ${b.id === st.breed ? 'selected' : ''}`,
         onClick: () => { st.breed = b.id; st.colorIndex = 0; ui.renderPanel(); },
       },
-      h('span', { class: 'card-main' }, h('b', {}, L(b.name)), h('small', {}, '⭐'.repeat(b.rarity ?? 1))),
+      h('span', { class: 'card-main' }, h('b', {}, L(b.name)), h('small', {}, '⭐'.repeat(b.rarity ?? 1)),
+        // Chats : taille, poil et caractère de la race (catBreeds.js).
+        b.desc ? h('small', { class: 'breed-desc' }, L(b.desc)) : null,
+        b.temper ? h('small', {}, `${t('personality')} : ${b.temper.map((p) => t(`p_${p}`).toLowerCase()).join(', ')}`) : null),
       h('span', { class: 'card-side' }, sandbox ? '' : h('small', {}, `${shopPrice(st.species, b.id, st.stage)} 🪙`))))),
       h('h3', {}, t('coat')),
       h('div', { class: 'row wrap' }, breed.colors.map((c, i) => h('button', {

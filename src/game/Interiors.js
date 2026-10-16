@@ -129,7 +129,7 @@ let stableExtNow = 0;
 const MODELS = {
   stable: () => stableModel(L({ fr: 'Écurie', en: 'Stable' }), stableExtNow),
   house: () => houseModel(t('title')),
-  tackroom: () => tackRoomModel(t('bld_tackroom')),
+  tackroom: () => tackRoomModel(t('bld_tackroom'), t('tk_board')),
 };
 const ROOMS = { stable: () => stableRooms(stableExtNow), house: houseRooms, tackroom: () => [] };
 const HALLS = { stable: () => stableHall(stableExtNow), house: () => HOUSE_HALL, tackroom: () => TACK_HALL };

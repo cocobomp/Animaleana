@@ -122,7 +122,7 @@ function bridleHook(parent, wood) {
   add(parent, new THREE.CylinderGeometry(0.06, 0.06, 0.08, 16, 1, false, 0, Math.PI), wood, [0, -0.02, 0.025], [0, Math.PI / 2, Math.PI / 2]);
 }
 
-export function tackRoomModel(label) {
+export function tackRoomModel(label, boardLabel = 'Filets, licols') {
   // Matériaux réutilisés (même couleur = même matériau) : les meubles fusionnés font moins d'appels de rendu.
   const mats = new Map();
   const mat = (color, roughness = 0.85, extra = {}) => {
@@ -235,7 +235,7 @@ export function tackRoomModel(label) {
 
   // Porte-filets : planche le long du mur du fond, grande enseigne peinte.
   add(lower, new THREE.BoxGeometry(3.4, 0.16, 0.03), lightWood, [-1.55, 1.64, -D / 2 + 0.135]);
-  const boardSign = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.36), new THREE.MeshStandardMaterial({ map: plateTexture(label === 'Tack room' ? 'Bridles · Halters' : 'Filets · Licols', '#5a3418', '#fff3d6'), roughness: 0.7 }));
+  const boardSign = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.36), new THREE.MeshStandardMaterial({ map: plateTexture(boardLabel, '#5a3418', '#fff3d6'), roughness: 0.7 }));
   boardSign.position.set(-1.6, 2.1, -D / 2 + 0.13);
   lower.add(boardSign);
 

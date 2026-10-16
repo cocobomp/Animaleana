@@ -10,7 +10,7 @@ import { emojiTexture } from './textures.js';
 import { ENCLOSURES, NAV_HOOKS } from './nav.js';
 import { HOME } from './AnimalEntity.js'; // paddock (déplaçable en vue d'ensemble)
 import {
-  ensureFacilities, boxCount, boxOccupants, assignBox, doChore, tickFacilities, applyStallEffects,
+  ensureFacilities, boxCount, boxOccupants, assignBox, canChore, doChore, tickFacilities, applyStallEffects,
   stallDirt, houseDirt, penDirt, hasUpgrade,
 } from '../sim/facilities.js';
 import { droppingsAt } from '../sim/droppings.js';
@@ -240,8 +240,13 @@ export class Interiors {
 
   boxLabel(i) {
     if (i >= boxCount(this.f)) return t('fac_boxLocked');
-    const a = boxOccupants(this.f, this.homeHorses())[i];
+    const a = this.boxOccupant(i);
     return a ? t('fac_boxOf', { name: a.name }) : t('fac_boxEmpty', { n: i + 1 });
+  }
+
+  /** Le cheval qui habite ce box (null s'il est vide). */
+  boxOccupant(i) {
+    return boxOccupants(this.f, this.homeHorses())[i] ?? null;
   }
 
   /** Zone de vie d'un cheval rentré : son box (null s'il n'est pas rentré). */
@@ -326,9 +331,15 @@ export class Interiors {
 
   // ------------------------------------------------------------ corvées
 
-  /** Une corvée (curer, balayer, ranger…). Le mini-jeu éventuel passe par ui.choreWithGame. */
+  /** Une corvée (curer, balayer, ranger…). Son mini-jeu passe par ui.choreWithGame. */
   async chore(kind, target = null) {
     const g = this.game;
+    // Déjà propre, box fermé, pas assez d'argent : on le dit tout de suite, sans faire jouer pour rien.
+    const pre = canChore(g.profile, kind, target);
+    if (!pre.ok) {
+      g.ui.toast(t(`fac_r_${pre.reason}`));
+      return pre;
+    }
     const quality = await g.ui.choreWithGame(kind, target);
     if (quality === null || quality === false || !g.profile) return null;
     const r = doChore(g.profile, kind, target);

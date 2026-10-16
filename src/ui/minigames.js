@@ -230,6 +230,9 @@ function openMinigame(ui, o) {
       hintEl, progressEl, stage, controls);
     const overlay = h('div', { class: 'mg-overlay', role: 'dialog', 'aria-modal': 'true' }, box);
     ui.root.append(overlay);
+    // Tout ce qui flotte au-dessus du jeu (bulle et anneau du tutoriel, z-index 55 et 60) se cache
+    // tant que le mini-jeu est ouvert : voir style.css, body.mg-open.
+    document.body?.classList?.add('mg-open');
 
     const g2 = canvas.getContext('2d');
     const view = { x0: 0, y0: 0, x1: MG_W, y1: MG_H, w: MG_W, h: MG_H, scale: 1, ox: 0, oy: 0 };
@@ -255,6 +258,7 @@ function openMinigame(ui, o) {
       canvas.width = Math.max(1, Math.round(layout.w * dpr));
       canvas.height = Math.max(1, Math.round(layout.h * dpr));
       Object.assign(view, fitView(layout.w, layout.h, MG_W, MG_H));
+      fitEnd(); // écran tourné, fenêtre redimensionnée : la carte de fin tient-elle encore ?
     };
     const ro = new ResizeObserver(resize);
     ro.observe(stage);
@@ -411,6 +415,21 @@ function openMinigame(ui, o) {
     // État lisible par les tests automatiques (peek).
     ui.minigame = { action, chore: o.chore ?? null, ctx, peek: () => play.peek?.(), get zone() { return zoneRange; } };
 
+    /**
+     * Carte de fin trop haute pour la scène (360 px de large, message de 3 lignes, long prénom) :
+     * version compacte (.mg-end.tight), plutôt qu'une carte coupée en bas qui défile.
+     */
+    function fitEnd() {
+      if (endEl.hidden) return;
+      const card = endEl.firstElementChild;
+      if (!card) return;
+      endEl.classList.remove('tight');
+      const cs = getComputedStyle(endEl);
+      const room = endEl.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+      // offsetHeight : taille de mise en page, sans l'animation d'apparition (scale) de la carte.
+      if (card.offsetHeight > room + 0.5) endEl.classList.add('tight');
+    }
+
     function showEnd(msg) {
       if (closed) return;
       const stars = starsFor(quality, endVerdict); // ★★★ = « juste ce qu'il fallait », et rien d'autre
@@ -423,7 +442,10 @@ function openMinigame(ui, o) {
         h('p', {}, nbsp(msg ?? o.endText(stars))),
         cont));
       endEl.hidden = false;
+      // Le ✕ disparaît (fermer ici perdrait le soin) mais garde sa place (style.css,
+      // .mg-close[hidden]) : l'en-tête ne rapetisse plus et la fenêtre ne saute plus.
       closeBtn.hidden = true;
+      fitEnd();
       setTimeout(() => cont.focus({ preventScroll: true }), 50);
     }
 
@@ -535,6 +557,7 @@ function openMinigame(ui, o) {
       window.removeEventListener('keyup', onKey, true);
       play.destroy?.();
       overlay.remove();
+      document.body?.classList?.remove('mg-open');
       ui.minigameOpen = false;
       ui.minigame = null;
       if (game?.input) game.input.enabled = prevInput;

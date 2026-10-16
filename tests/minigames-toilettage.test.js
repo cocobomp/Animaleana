@@ -367,6 +367,11 @@ describe('laver : de la mousse partout, ni trop ni trop peu, puis rincer', () =>
         game.draw(fakeG());
         rinse(game, ctx);
         expectVerdict(ctx, expected);
+        // La carte de fin montre la mousse NOTÉE et sa bande verte, pas la jauge du rinçage
+        // (avant : pleine à 100 %, même sous « Un peu trop peu… »).
+        const p = game.peek();
+        expect(ctx.zones.at(-1)).toEqual({ lo: p.lo / p.max, hi: p.hi / p.max });
+        expect(ctx.prog).toBeCloseTo(v / p.max, 9);
       }
     }
   });

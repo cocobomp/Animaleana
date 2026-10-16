@@ -1101,6 +1101,10 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
   z-index: 45;
   display: grid;
   place-items: center;
+  /* Une rangée de la hauteur de l'écran (et pas « auto ») : sans elle, la rangée prenait la hauteur
+     de la fenêtre, et le max-height: 100% de .mg-box ne la retenait plus (360 × 640 : « C'est
+     bon ! » sortait de l'écran). */
+  grid-template-rows: minmax(0, 1fr);
   padding: calc(12px + var(--safe-t)) calc(12px + var(--safe-r)) calc(12px + var(--safe-b)) calc(12px + var(--safe-l));
   background: rgba(20, 28, 24, 0.45);
   animation: mg-fade 0.2s ease-out;
@@ -1126,7 +1130,9 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
 .mg-title small { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
 .mg-icon { font-size: 1.5rem; }
 .mg-close { width: 48px; height: 48px; padding: 0; border-radius: 50%; font-size: 1.1rem; flex-shrink: 0; }
-.mg-close[hidden] { display: none; }
+/* Caché sur la carte de fin, mais à sa place : l'en-tête gardait 29 px au lieu de 48, et la fenêtre,
+   centrée, sautait de ~10 px (19 px de scène en plus sur ordinateur) quand la carte apparaissait. */
+.mg-close[hidden] { display: block; visibility: hidden; pointer-events: none; }
 .mg-hint {
   margin: 0;
   padding: 10px 14px;
@@ -1232,11 +1238,26 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
 .mg-stars .off { color: #d9d2c2; }
 @keyframes mg-star { from { transform: scale(0) rotate(-40deg); opacity: 0; } to { transform: none; opacity: 1; } }
 .mg-continue { width: 100%; min-height: 56px; font-size: 1.2rem; }
+/* Carte trop haute pour la scène (360 × 780 avec un message de 3 lignes, long prénom) : version
+   compacte, posée par le cadre (minigames.js, fitEnd) seulement quand la carte normale ne tient pas. */
+.mg-end.tight { padding: 4px; }
+.mg-end.tight .mg-end-card { padding: 12px 16px 10px; border-radius: 18px; }
+.mg-end.tight .mg-end-emoji { font-size: 2rem; line-height: 1.1; }
+.mg-end.tight .mg-end-card h2 { font-size: 1.45rem; }
+.mg-end.tight .mg-stars { font-size: 2rem; }
+.mg-end.tight .mg-end-card p { margin: 0.3em 0 0.6em; font-size: 1rem; }
+.mg-end.tight .mg-continue { min-height: 50px; }
+/* Le guide du tutoriel (bulle 55, anneau 60) ne passe jamais par-dessus un mini-jeu ouvert : il
+   cachait la consigne et le ✕, et montrait un bouton caché sous le jeu (tutorial.js le cache aussi). */
+body.mg-open #tuto-bubble,
+body.mg-open #tuto-ring { display: none !important; }
 @media (max-width: 640px) {
   .mg-overlay { padding: calc(6px + var(--safe-t)) calc(6px + var(--safe-r)) calc(6px + var(--safe-b)) calc(6px + var(--safe-l)); }
   /* En portrait, la scène garde sa forme : la fenêtre se resserre au lieu de laisser du vide. */
   .mg-box { height: auto; max-height: 100%; border-radius: 20px; padding: 8px 10px 10px; }
-  .mg-stage { flex: none; aspect-ratio: 400 / 390; max-height: 64vh; }
+  /* Portrait court (360 × 640) : la scène cède ce qui manque (la fenêtre ne dépasse plus de l'écran) ;
+     ailleurs elle garde sa forme. */
+  .mg-stage { flex: 0 1 auto; min-height: 160px; aspect-ratio: 400 / 390; max-height: 64vh; }
   .mg-title { font-size: 1.1rem; }
   .mg-hint { font-size: 1rem; }
 }
@@ -1282,6 +1303,7 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
   .mg-controls > .mg-btn.stop { min-height: 56px; font-size: 1.2rem; }
   /* Carte de fin sur tout l'écran (pas enfermée dans la scène), plus compacte, et qui défile. */
   .mg-end { position: fixed; inset: 0; z-index: 46; padding: calc(6px + var(--safe-t)) calc(8px + var(--safe-r)) calc(6px + var(--safe-b)) calc(8px + var(--safe-l)); }
+  .mg-end.tight { padding: calc(2px + var(--safe-t)) calc(8px + var(--safe-r)) calc(2px + var(--safe-b)) calc(8px + var(--safe-l)); }
   .mg-end-card { padding: 14px 18px 12px; width: min(400px, 100%); }
   .mg-end-emoji { font-size: 2.1rem; line-height: 1.1; }
   .mg-end-card h2 { font-size: 1.45rem; }

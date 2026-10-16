@@ -261,4 +261,51 @@ describe('clés mg_* des mini-jeux : présentes en français ET en anglais', () 
     setLang('fr');
     expect(t('mg_clean_hint_rabbit')).toMatch(/seau/); // le lapin : un seau, pas une brouette
   });
+
+  it('vaisselle « trop peu » : vrai quel que soit le nombre d\'assiettes ratées', () => {
+    expect(t('mg_chore_kitchen_low')).not.toMatch(/Une assiette/);
+    setLang('en');
+    expect(t('mg_chore_kitchen_low')).not.toMatch(/a plate was/);
+    setLang('fr');
+  });
+});
+
+// ---------------------------------------------------------------- rien ne bouge, rien par-dessus
+
+describe('cadre : la fenêtre ne saute pas à la fin, et rien ne passe par-dessus le jeu', () => {
+  const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+  const frame = readFileSync(new URL('../src/ui/minigames.js', import.meta.url), 'utf8');
+  const tuto = readFileSync(new URL('../src/ui/tutorial.js', import.meta.url), 'utf8');
+  /** Le bloc de déclarations d'une règle CSS (première occurrence du sélecteur exact). */
+  const rule = (sel) => {
+    const at = css.indexOf(`${sel} {`);
+    return at < 0 ? null : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('le ✕ caché sur la carte de fin garde sa place (en-tête de 48 px, pas 29)', () => {
+    expect(frame).toMatch(/closeBtn\.hidden = true/);
+    const r = rule('.mg-close[hidden]');
+    expect(r).toMatch(/visibility:\s*hidden/);
+    expect(r).toMatch(/pointer-events:\s*none/); // pas cliquable : fermer ici perdrait le soin
+    expect(r).not.toMatch(/display:\s*none/);
+  });
+
+  it('la fenêtre est retenue par l\'écran (rangée de grille bornée), la scène cède en portrait court', () => {
+    expect(rule('.mg-overlay')).toMatch(/grid-template-rows:\s*minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/\.mg-stage \{ flex: 0 1 auto; min-height: \d+px; aspect-ratio: 400 \/ 390;/);
+  });
+
+  it('carte de fin trop haute : version compacte (fitEnd), aussi après un redimensionnement', () => {
+    expect(frame).toMatch(/function fitEnd\(\)/);
+    expect(frame).toMatch(/classList\.add\('tight'\)/);
+    expect(frame.match(/fitEnd\(\);/g)?.length).toBeGreaterThanOrEqual(2); // à l'affichage et dans resize()
+    expect(rule('.mg-end.tight')).toMatch(/padding/);
+  });
+
+  it('bulle et anneau du tutoriel cachés pendant un mini-jeu (CSS et tutorial.js)', () => {
+    expect(frame).toMatch(/classList\?\.add\('mg-open'\)/);
+    expect(frame).toMatch(/classList\?\.remove\('mg-open'\)/);
+    expect(css).toMatch(/body\.mg-open #tuto-bubble,\s*body\.mg-open #tuto-ring \{ display: none !important; \}/);
+    expect(tuto).toMatch(/this\.ui\.minigameOpen/);
+  });
 });

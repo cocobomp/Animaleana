@@ -1543,7 +1543,7 @@ const fr = {
   mg_chore_sweep_low: 'Un peu trop peu… Il reste de la poussière dans l\'allée.',
   mg_chore_sweep_high: 'Un peu trop ! Balayer du propre, ça soulève la poussière.',
   mg_chore_living_low: 'Un peu trop peu… Tout n\'est pas à sa place.',
-  mg_chore_kitchen_low: 'Un peu trop peu… Une assiette était encore sale.',
+  mg_chore_kitchen_low: 'Un peu trop peu… Il restait de la saleté sur les assiettes.',
   mg_chore_kitchen_high: 'Un peu trop ! Frotter trop longtemps, c\'est de l\'eau gaspillée.',
   // ---------- activités, concours et spectacles (src/sim/activities.js, src/game/Activities.js, src/ui/activities.js)
   actv_hud: 'Activités',
@@ -3230,7 +3230,7 @@ const en = {
   mg_chore_sweep_low: 'A bit too little… there is still dust in the aisle.',
   mg_chore_sweep_high: 'A bit too much! Sweeping a clean floor stirs up dust.',
   mg_chore_living_low: 'A bit too little… not everything is in its place.',
-  mg_chore_kitchen_low: 'A bit too little… a plate was still dirty.',
+  mg_chore_kitchen_low: 'A bit too little… there was still some dirt on the plates.',
   mg_chore_kitchen_high: 'A bit too much! Scrubbing too long wastes water.',
   // ---------- activities, competitions and shows
   actv_hud: 'Activities',

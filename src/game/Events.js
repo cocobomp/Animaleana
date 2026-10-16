@@ -12,12 +12,13 @@ import { buildAvatar } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 import { emojiTexture, signTexture } from './textures.js';
 import { enclosure, inside } from './nav.js';
-import { PEN, FIELD } from './AnimalEntity.js';
+import { PEN, FIELD, HOME } from './AnimalEntity.js';
 import { SPECIES } from '../sim/species.js';
 import {
   EVENTS, EVENT_TYPES, eventState, startEvent, maybeStartEvent, eventProgress, eventOutcome, resolveEvent,
-  eventWeather, nextStep, minutesLeft,
+  eventWeather, nextStep, minutesLeft, shelterOf,
 } from '../sim/events.js';
+import { STRUCTURES, footprint } from '../sim/construction.js';
 import { GEAR, owned, inUse } from '../sim/gear.js';
 import { canAfford, addStat } from '../sim/profile.js';
 import { XP } from '../sim/progress.js';
@@ -30,7 +31,8 @@ const PETS = ['dog', 'cat', 'rabbit'];
 // Où se tiennent le voisin et le stand de la fête (dans la cour, faciles à trouver).
 const NEIGHBOUR_SPOT = { x: -7, z: -7 };
 const FAIR_SPOT = { x: 5, z: 15 };
-const AREA = { paddock: { x: -16, z: 16, r: 5 }, pen: { x: PEN.x, z: PEN.z, r: PEN.r } };
+// Zones vivantes (déplacées par la vue d'ensemble, src/game/coreLayout.js) : lues au moment de l'usage.
+const areaOf = (group) => (group === 'paddock' ? HOME.horse : PEN);
 const DOOR_OF = { paddock: 'stable', pen: 'pen' };
 const BABY_EMOJI = { horse: '🐴', sheep: '🐑', goat: '🐐', cow: '🐄' };
 
@@ -169,7 +171,16 @@ export class Events {
   whereOf(a) {
     const e = this.game.entities.get(a.id);
     if (!e || e.ridden) return 'out';
+    // Rangé dans la maison des animaux, ou cheval dans son box : à l'abri.
+    if (e.inside && a.housed) return 'house';
+    if (a.species === 'horse' && this.game.interiors?.inBox(a)) return 'paddock';
     const { x, z } = e.position;
+    // Dans un abri construit par le joueur (abri, grange, écurie neuve, ranch, niche, clapier) : à l'abri aussi.
+    for (const s of this.game.structures?.here() ?? []) {
+      const def = STRUCTURES[s.type];
+      if (!def?.species?.includes(a.species) || !['building', 'ranch', 'home'].includes(def.cat)) continue;
+      if (inside(footprint(s.type, s.x, s.z, s.rot), x, z, -0.5)) return shelterOf(a.species);
+    }
     if (inside(enclosure('paddock'), x, z)) return 'paddock';
     if (inside(enclosure('pen'), x, z)) return 'pen';
     const door = this.houseDoor();
@@ -254,7 +265,7 @@ export class Events {
       if (e) unpin(e);
       if (outcome === 'fail' && e) {
         // Un voisin le ramène à son abri.
-        const area = a.species === 'horse' ? AREA.paddock : AREA.pen;
+        const area = areaOf(a.species === 'horse' ? 'paddock' : 'pen');
         a.following = false;
         e.position.set(area.x, 0, area.z);
         e.snap();
@@ -379,7 +390,7 @@ export class Events {
       case 'lead':
         if (ev.type === 'fair') return { text: ta('ev_step_fetch', a), ...onAnimal(() => { if (!a.following) g.toggleFollow(a); }) };
         {
-          const area = AREA[step.group];
+          const area = areaOf(step.group);
           const pos = new THREE.Vector3(area.x, 0, area.z);
           return { text: ta(`ev_step_lead_${step.group}`, a), pos, go: () => g.walkTo(pos, 2) };
         }

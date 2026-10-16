@@ -47,7 +47,10 @@ export function showProfiles(ui) {
       profiles.length ? h('h2', {}, t('profiles')) : null,
       h('div', { class: 'profiles' }, list),
       h('button', { class: 'primary big', onClick: () => newProfile(ui, render) }, `➕ ${t('newProfile')}`),
-      h('p', { class: 'offline' }, window.offlineState ? `${window.offlineState === 'ready' ? '✅' : '⏳'} ${t(window.offlineState === 'ready' ? 'offlineReady' : 'offlinePreparing')}` : `📴 ${t('offline')}`)));
+      // État du cache hors ligne (src/main.js) : prêt, en préparation, ou impossible en http.
+      h('p', { class: 'offline' }, window.offlineState
+        ? `${{ ready: '✅', preparing: '⏳', unavailable: 'ℹ️' }[window.offlineState]} ${t({ ready: 'offlineReady', preparing: 'offlinePreparing', unavailable: 'offlineUnavailable' }[window.offlineState])}`
+        : `📴 ${t('offline')}`)));
     ui.screen.hidden = false;
   };
   render();

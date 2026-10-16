@@ -20,6 +20,8 @@ const fr = {
   offlineReady: 'Prêt : le jeu marche maintenant sans Internet',
   offlinePreparing: 'Préparation pour jouer sans Internet… garde Internet quelques secondes',
   offline: 'Fonctionne sans réseau',
+  offlineUnavailable: 'Pour jouer sans Internet, ouvre le jeu depuis son adresse https et installe-le',
+  saveFailed: 'Oups, la sauvegarde a échoué (mémoire pleine ou stockage bloqué)',
 
   avatarTitle: 'Ton avatar',
   skin: 'Peau',
@@ -1507,6 +1509,7 @@ const fr = {
   actv_why_noAgility: '{name} ne fait pas d\'agility.',
   actv_why_noTricks: '{name} ne connaît encore aucun tour par cœur.',
   actv_why_notHere: '{name} n\'est pas ici.',
+  actv_why_pregnant: '{name} attend des petits : pas de saut ni de balade pour l\'instant.',
   actv_comp_title: 'Concours : {type}',
   actv_compName: '{type} · {level}',
   actv_level_club: 'Club',
@@ -1719,6 +1722,8 @@ const en = {
   offlineReady: 'Ready: the game now works without Internet',
   offlinePreparing: 'Getting ready to play offline… keep Internet on for a few seconds',
   offline: 'Works offline',
+  offlineUnavailable: 'To play without Internet, open the game from its https address and install it',
+  saveFailed: 'Oops, saving failed (storage full or blocked)',
 
   avatarTitle: 'Your avatar',
   skin: 'Skin',
@@ -3111,6 +3116,7 @@ const en = {
   actv_why_noAgility: '{name} doesn\'t do agility.',
   actv_why_noTricks: '{name} doesn\'t know any trick by heart yet.',
   actv_why_notHere: '{name} isn\'t here.',
+  actv_why_pregnant: '{name} is expecting: no jumping or riding for now.',
   actv_comp_title: 'Contest: {type}',
   actv_compName: '{type} · {level}',
   actv_level_club: 'Club',
@@ -3330,7 +3336,7 @@ export function setLang(l) {
 export function t(key, params = {}) {
   const dict = DICTS[lang];
   let k = key;
-  if (params.n === 1 && (dict[`${key}_one`] ?? fr[`${key}_one`])) k = `${key}_one`;
+  if (params.n === 1 && dict[`${key}_one`]) k = `${key}_one`; // singulier seulement s'il existe dans cette langue
   if (params.g === 'f' && (dict[`${k}_f`] ?? (lang === 'fr' ? fr[`${k}_f`] : undefined))) k = `${k}_f`;
   const s = dict[k] ?? fr[k] ?? key;
   return s.replace(/\{(\w+)\}/g, (_, k) => (params[k] ?? `{${k}}`));

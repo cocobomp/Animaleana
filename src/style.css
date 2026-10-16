@@ -166,7 +166,8 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
   #hud { flex-direction: column; }
   .hud-info { max-width: 100%; font-size: 0.8rem; padding: 6px 10px; }
   .hud-buttons { justify-content: flex-start; }
-  .hud-buttons { gap: 4px; flex-wrap: nowrap; }
+  /* 9 boutons de 44 px ne tiennent pas sur 390 px : le dernier (Réglages) passe à la ligne au lieu de sortir de l'écran. */
+  .hud-buttons { gap: 4px; flex-wrap: wrap; }
   .hud-btn { min-width: 44px; width: 44px; min-height: 44px; padding: 4px; }
   .hud-btn span { font-size: 1.25rem; }
   .hud-btn small { display: none; }
@@ -553,7 +554,7 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
   gap: 6px;
 }
 #task-list[hidden] { display: none; }
-@media (pointer: coarse) { #task-list { bottom: calc(180px + var(--safe-b)); } }
+@media (pointer: coarse) { #task-list { bottom: calc(230px + var(--safe-b)); max-height: 40vh; } }
 .task-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .task-toggle { border: none; background: none; font-weight: 800; padding: 4px; min-height: 36px; }
 .task-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 4px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 4px 6px; }

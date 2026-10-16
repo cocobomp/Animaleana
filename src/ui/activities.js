@@ -313,7 +313,8 @@ export function animalActivitySection(ui, a) {
   }
   if (sp.training.includes('agility')) btns.push(btn('agility', t('actv_type_agility')));
   if (knownTricks(a).length) btns.push(btn('show', t('actv_type_show')));
-  const won = activityData(g.profile).awards.filter((x) => x.animal === a.name).length;
+  // Par identifiant (anciennes sauvegardes : par prénom), pour survivre à un renommage et ne pas confondre deux homonymes.
+  const won = activityData(g.profile).awards.filter((x) => (x.animalId ? x.animalId === a.id : x.animal === a.name)).length;
   if (!btns.length && !won) return [];
   return [h('h3', {}, `🏆 ${t('actv_title')}`),
     btns.length ? h('div', { class: 'grid' }, btns) : null,

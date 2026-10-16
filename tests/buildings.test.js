@@ -55,3 +55,14 @@ describe('sellerie et maison des animaux', () => {
     expect(find(buildingActions('tackroom', { hour: 10, count: { tackDirty: 1 } }), 'cleanTack').enabled).toBe(true);
   });
 });
+
+describe('dormir', () => {
+  it("n'est possible qu'entre 19 h et 7 h (sinon on sauterait une journée entière)", () => {
+    const c = { season: 'summer', count };
+    expect(find(buildingActions('house', { ...c, hour: 8 }), 'sleep')).toMatchObject({ enabled: false, reason: 'notTired' });
+    expect(find(buildingActions('house', { ...c, hour: 12 }), 'sleep').enabled).toBe(false);
+    expect(find(buildingActions('house', { ...c, hour: 20 }), 'sleep').enabled).toBe(true);
+    expect(find(buildingActions('house', { ...c, hour: 3 }), 'sleep').enabled).toBe(true);
+    expect(find(buildingActions('lodge', { ...c, hour: 8 }), 'sleep').enabled).toBe(false);
+  });
+});

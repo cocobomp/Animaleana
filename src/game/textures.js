@@ -44,6 +44,38 @@ function toTexture(canvas, { srgb = true, repeat = true, shared = false } = {}) 
   return tex;
 }
 
+/**
+ * Carte transparente (feuilles, brins, fleurs) : texture d'octets bruts dont les pixels
+ * transparents reçoivent la couleur indiquée. Un canvas stocke ses pixels prémultipliés et
+ * perd la couleur sous alpha 0 : ses mipmaps mélangeraient du noir et les cartes
+ * noirciraient au loin.
+ */
+function alphaTexture(canvas, [r, g, b]) {
+  const w = canvas.width;
+  const h = canvas.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const src = ctx.getImageData(0, 0, w, h).data;
+  const data = new Uint8Array(src.length);
+  for (let i = 0; i < src.length; i += 4) {
+    const a = src[i + 3] / 255;
+    data[i] = src[i] * a + r * (1 - a);
+    data[i + 1] = src[i + 1] * a + g * (1 - a);
+    data[i + 2] = src[i + 2] * a + b * (1 - a);
+    data[i + 3] = src[i + 3];
+  }
+  const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = true;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = gfx.quality === 'high' ? 4 : 1;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 function cached(key, make) {
   if (!cache.has(key)) {
     const t = make();
@@ -212,11 +244,15 @@ export function coatTextures(look, speciesId) {
           d[i + 1] = Math.min(255, d[i + 1] * f);
           d[i + 2] = Math.min(255, d[i + 2] * f);
         }
+        // Variation douce de teinte (pelage jamais uniforme) : zones un peu plus chaudes ou plus froides.
+        const mot = wrapNoise(u, v, 3, seed * 1.7 + 11) - 0.5;
+        const mot2 = wrapNoise(u, v, 7, seed * 0.9 + 23) - 0.5;
+        const ml = 1 + mot * 0.14 + mot2 * 0.06;
         // Grain très fin.
-        const g = 1 + (rng() - 0.5) * (sleek ? 0.05 : 0.1);
-        d[i] *= g;
-        d[i + 1] *= g;
-        d[i + 2] *= g;
+        const g = ml * (1 + (rng() - 0.5) * (sleek ? 0.05 : 0.1));
+        d[i] = Math.min(255, d[i] * g * (1 + mot * 0.04));
+        d[i + 1] = Math.min(255, d[i + 1] * g);
+        d[i + 2] = Math.min(255, d[i + 2] * g * (1 - mot * 0.04));
       }
     }
     ctx.putImageData(img, 0, 0);
@@ -461,9 +497,18 @@ export function eyeTexture(color, pupil = 'round') {
     // Le devant de la sphère (+Z) correspond à u = 0.25, v = 0.5.
     const cx = w * 0.25;
     const cy = h * 0.5;
-    ctx.fillStyle = '#2a1d17';
+    const human = pupil === 'human';
+    ctx.fillStyle = human ? '#f6f3ee' : '#2a1d17';
     ctx.fillRect(0, 0, w, h);
-    const iris = pupil === 'oval' ? 1.05 : 0.92; // l'iris occupe presque tout l'œil visible
+    if (human) {
+      // Blanc de l'œil légèrement ombré vers le haut (paupière).
+      const sh = ctx.createLinearGradient(0, 0, 0, h);
+      sh.addColorStop(0, 'rgba(120,100,95,0.35)');
+      sh.addColorStop(0.35, 'rgba(120,100,95,0)');
+      ctx.fillStyle = sh;
+      ctx.fillRect(0, 0, w, h);
+    }
+    const iris = pupil === 'oval' ? 1.05 : human ? 0.72 : 0.92; // l'iris occupe presque tout l'œil visible (sauf humain)
     const rx = w * 0.16 * iris;
     const ry = h * 0.32 * iris;
     ctx.save();
@@ -495,8 +540,20 @@ export function eyeTexture(color, pupil = 'round') {
     if (pupil === 'slit') ctx.ellipse(0, 0, 0.16, 0.85, 0, 0, Math.PI * 2);
     else if (pupil === 'bar') ctx.roundRect(-0.7, -0.22, 1.4, 0.44, 0.2);
     else if (pupil === 'oval') ctx.ellipse(0, 0, 0.65, 0.4, 0, 0, Math.PI * 2);
-    else ctx.arc(0, 0, 0.42, 0, Math.PI * 2);
+    else ctx.arc(0, 0, human ? 0.5 : 0.42, 0, Math.PI * 2);
     ctx.fill();
+    if (human) {
+      // Bord de l'iris plus sombre et reflet peint (lisible même sans reflets du ciel).
+      ctx.strokeStyle = shade(color, 0.4);
+      ctx.lineWidth = 0.1;
+      ctx.beginPath();
+      ctx.arc(0, 0, 0.95, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath();
+      ctx.ellipse(-0.32, -0.35, 0.22, 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
     return toTexture(c, { repeat: false });
   });
@@ -526,86 +583,223 @@ export function groundDetail() {
 
 /**
  * Détails du sol, trois motifs en niveaux de gris rangés dans les canaux R, G, B :
- * R = herbe (brins), G = terre (cailloux, mottes), B = sable/neige (grain fin, rides).
- * Répétés sur le terrain et mélangés selon le type de sol (shader du terrain).
+ * R = herbe (touffes et plaques douces), G = terre (mottes, cailloux), B = sable/neige (grain fin, rides).
+ * Répétés sur le terrain à trois échelles et mélangés selon le type de sol (shader du terrain).
+ * Tout est doux (pas de brin d'un pixel) : le sol ne grésille plus quand la caméra bouge.
+ * A = hauteur du relief (touffes, mottes), dont le shader du sol tire un léger bosselage.
  */
-export function terrainDetail() {
-  return cached(`terrain-${gfx.quality}`, () => {
-    const size = gfx.quality === 'high' ? 512 : 256;
-    const s = size / 512;
-    const rng = mulberry32(21);
-    // Herbe : petits brins clairs et sombres.
-    const g = makeCanvas(size);
-    const gc = g.getContext('2d', { willReadFrequently: true });
-    gc.fillStyle = '#808080';
-    gc.fillRect(0, 0, size, size);
-    gc.lineCap = 'round';
-    for (let i = 0; i < 26000 * s * s; i++) {
-      const x = rng() * size;
-      const y = rng() * size;
-      const v = 95 + rng() * 105;
-      gc.strokeStyle = `rgb(${v},${v},${v})`;
-      gc.lineWidth = (0.8 + rng() * 1.4) * Math.max(0.6, s);
-      const a = -Math.PI / 2 + (rng() - 0.5) * 1.6;
-      const l = (3 + rng() * 7) * Math.max(0.6, s);
+function buildTerrainMaps() {
+  const high = gfx.quality === 'high';
+  const size = high ? 512 : 256;
+  const s = size / 512;
+  const rng = mulberry32(21);
+  // Couche peinte (touffes = petits dégradés doux, cailloux), bouclée en dessinant 9 copies.
+  const wrapped = (ctx, fn) => {
+    for (const dx of [-size, 0, size]) {
+      for (const dy of [-size, 0, size]) {
+        ctx.save();
+        ctx.translate(dx, dy);
+        fn();
+        ctx.restore();
+      }
+    }
+  };
+  const g = makeCanvas(size);
+  const gc = g.getContext('2d', { willReadFrequently: true });
+  gc.fillStyle = '#808080';
+  gc.fillRect(0, 0, size, size);
+  // Touffes d'herbe : taches rondes très douces, claires et sombres.
+  for (let i = 0; i < 700 * s * s; i++) {
+    const x = rng() * size;
+    const y = rng() * size;
+    const r = (5 + rng() * 13) * s;
+    const v = 70 + rng() * 150;
+    wrapped(gc, () => {
+      const grad = gc.createRadialGradient(x, y - r * 0.2, 0, x, y, r);
+      grad.addColorStop(0, `rgba(${v},${v},${v},0.5)`);
+      grad.addColorStop(1, `rgba(${v},${v},${v},0)`);
+      gc.fillStyle = grad;
+      gc.fillRect(x - r, y - r, r * 2, r * 2);
+    });
+  }
+  // Brins : traits courts, épais et transparents (lisibles sans scintiller).
+  gc.lineCap = 'round';
+  for (let i = 0; i < 2200 * s * s; i++) {
+    const x = rng() * size;
+    const y = rng() * size;
+    const v = 60 + rng() * 170;
+    const a = -Math.PI / 2 + (rng() - 0.5) * 1.3;
+    const l = (5 + rng() * 9) * s;
+    gc.strokeStyle = `rgba(${v},${v},${v},${0.18 + rng() * 0.2})`;
+    gc.lineWidth = (1.6 + rng() * 2.2) * s;
+    wrapped(gc, () => {
       gc.beginPath();
       gc.moveTo(x, y);
       gc.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
       gc.stroke();
-    }
-    // Terre : cailloux.
-    const d = makeCanvas(size);
-    const dc = d.getContext('2d', { willReadFrequently: true });
-    dc.fillStyle = '#7a7a7a';
-    dc.fillRect(0, 0, size, size);
-    for (let i = 0; i < 2600 * s * s; i++) {
-      const x = rng() * size;
-      const y = rng() * size;
-      const r = (1 + rng() * 4) * Math.max(0.6, s);
-      const v = 120 + rng() * 80;
-      dc.fillStyle = `rgb(${v * 0.8},${v * 0.8},${v * 0.8})`;
+    });
+  }
+  // Terre : mottes douces et cailloux ronds.
+  const d = makeCanvas(size);
+  const dc = d.getContext('2d', { willReadFrequently: true });
+  dc.fillStyle = '#7e7e7e';
+  dc.fillRect(0, 0, size, size);
+  for (let i = 0; i < 900 * s * s; i++) {
+    const x = rng() * size;
+    const y = rng() * size;
+    const r = (1.5 + rng() * 4) * s;
+    const v = 110 + rng() * 90;
+    wrapped(dc, () => {
+      dc.fillStyle = `rgba(${v * 0.7},${v * 0.7},${v * 0.7},0.7)`;
       dc.beginPath();
-      dc.ellipse(x + r * 0.25, y + r * 0.3, r, r * 0.75, 0, 0, Math.PI * 2);
+      dc.ellipse(x + r * 0.3, y + r * 0.35, r, r * 0.75, 0, 0, Math.PI * 2);
       dc.fill();
-      dc.fillStyle = `rgb(${v},${v},${v})`;
+      const grad = dc.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+      grad.addColorStop(0, `rgba(${v + 30},${v + 30},${v + 30},0.9)`);
+      grad.addColorStop(1, `rgba(${v},${v},${v},0.8)`);
+      dc.fillStyle = grad;
       dc.beginPath();
       dc.ellipse(x, y, r, r * 0.75, 0, 0, Math.PI * 2);
       dc.fill();
-    }
-    const gd = gc.getImageData(0, 0, size, size).data;
-    const dd = dc.getImageData(0, 0, size, size).data;
-    const data = new Uint8Array(size * size * 4);
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const i = (y * size + x) * 4;
-        const u = x / size;
-        const v = y / size;
-        // Bruit qui boucle (tuile sans couture).
-        const n1 = wrapNoise(u, v, 8, 1.3);
-        const n2 = wrapNoise(u, v, 32, 7.1);
-        const n3 = wrapNoise(v, u, 64, 3.7);
-        const big = wrapNoise(u, v, 4, 9.2);
-        // Brins adoucis (moyenne 3×3) pour éviter le grésillement au loin.
-        let gs = 0;
-        for (let oy = -1; oy <= 1; oy++) {
-          for (let ox = -1; ox <= 1; ox++) gs += gd[((((y + oy + size) % size) * size + ((x + ox + size) % size)) * 4)];
+    });
+  }
+  const gd = gc.getImageData(0, 0, size, size).data;
+  const dd = dc.getImageData(0, 0, size, size).data;
+  const data = new Uint8Array(size * size * 4);
+  const clamp = (v) => Math.min(255, Math.max(0, v));
+  const at = (arr, x, y) => arr[(((y + size) % size) * size + ((x + size) % size)) * 4];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const u = x / size;
+      const v = y / size;
+      // Bruits qui bouclent (tuile sans couture), du plus large au plus fin.
+      const n1 = wrapNoise(u, v, 4, 1.3);
+      const n2 = wrapNoise(u, v, 11, 7.1);
+      const n3 = wrapNoise(u, v, 29, 3.7);
+      const n4 = wrapNoise(v, u, 61, 5.2);
+      // Couche peinte adoucie (moyenne 3×3).
+      let gs = 0;
+      let ds = 0;
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          gs += at(gd, x + ox, y + oy);
+          ds += at(dd, x + ox, y + oy);
         }
-        data[i] = Math.min(255, Math.max(0, (gs / 9 * 0.6 + gd[i] * 0.4) * (0.75 + n1 * 0.5)));
-        data[i + 1] = Math.min(255, Math.max(0, dd[i] * (0.6 + n2 * 0.5 + big * 0.3)));
-        const ripple = 0.5 + 0.5 * Math.sin((v + n1 * 0.08) * Math.PI * 2 * 18);
-        data[i + 2] = Math.min(255, Math.max(0, 255 * (0.35 + n3 * 0.35 + ripple * 0.12 + n2 * 0.18)));
-        data[i + 3] = 255;
+      }
+      gs /= 9;
+      ds /= 9;
+      // Herbe : plaques larges, touffes, et un léger grain.
+      const grass = 128 + (n1 - 0.5) * 70 + (n2 - 0.5) * 60 + (n3 - 0.5) * 30 + (gs - 128) * 0.9 + (n4 - 0.5) * 12;
+      data[i] = clamp(grass);
+      // Terre : mottes (bruit moyen) et cailloux.
+      const dirt = 120 + (n1 - 0.5) * 40 + (n2 - 0.5) * 55 + (n3 - 0.5) * 25 + (ds - 126) * 1.1;
+      data[i + 1] = clamp(dirt);
+      // Sable / neige : grain fin et rides ondulées.
+      const ripple = 0.5 + 0.5 * Math.sin((v + n2 * 0.1) * Math.PI * 2 * 14);
+      data[i + 2] = clamp(255 * (0.4 + (n3 - 0.5) * 0.3 + ripple * 0.12 + (n4 - 0.5) * 0.14));
+      // Hauteur du relief : touffes et mottes, douce.
+      data[i + 3] = clamp(128 + ((n2 - 0.5) * 1.2 + (n3 - 0.5) * 0.7 + (gs - 128) / 128 + (ds - 126) / 256) * 70);
+    }
+  }
+  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = high ? 4 : 2;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** Texture de détail du sol (voir buildTerrainMaps). */
+export function terrainDetail() {
+  return cached(`terrain-${gfx.quality}`, buildTerrainMaps);
+}
+
+/**
+ * Touffe d'herbe (carte transparente) : brins en éventail, sombres à la base et clairs au bout,
+ * quelques brins jaunis. Presque blanche : la couleur du matériau et de l'instance la teinte.
+ */
+export function grassTuftTexture() {
+  return cached(`tuft-${gfx.quality}`, () => {
+    const high = gfx.quality === 'high';
+    const size = high ? 256 : 128;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    const rng = mulberry32(23);
+    ctx.lineCap = 'round';
+    const n = high ? 26 : 18;
+    for (let i = 0; i < n; i++) {
+      const x0 = size * (0.5 + (rng() - 0.5) * 0.22);
+      const lean = (rng() - 0.5) * 1.6;
+      const len = size * (0.5 + rng() * 0.48);
+      const w = size * (0.028 + rng() * 0.02);
+      const dry = rng() < 0.25;
+      // Dégradé le long du brin : base sombre, pointe claire.
+      const tipX = x0 + lean * len * 0.55;
+      const tipY = size - len;
+      const grad = ctx.createLinearGradient(x0, size, tipX, tipY);
+      const base = dry ? 'rgb(150,140,90)' : 'rgb(118,132,96)';
+      const tip = dry ? 'rgb(240,228,170)' : 'rgb(236,246,222)';
+      grad.addColorStop(0, base);
+      grad.addColorStop(0.55, dry ? 'rgb(205,195,130)' : 'rgb(186,206,160)');
+      grad.addColorStop(1, tip);
+      ctx.strokeStyle = grad;
+      // Brin effilé : plusieurs segments de plus en plus fins.
+      const segs = 5;
+      let px = x0;
+      let py = size;
+      for (let k = 1; k <= segs; k++) {
+        const t = k / segs;
+        const nx = x0 + lean * len * t * t * 0.55;
+        const ny = size - len * t;
+        ctx.lineWidth = w * (1 - t * 0.85);
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(nx, ny);
+        ctx.stroke();
+        px = nx;
+        py = ny;
       }
     }
-    const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.magFilter = THREE.LinearFilter;
-    tex.minFilter = THREE.LinearMipmapLinearFilter;
-    tex.generateMipmaps = true;
-    tex.anisotropy = gfx.quality === 'high' ? 8 : 2;
-    tex.needsUpdate = true;
-    return tex;
+    return alphaTexture(c, [175, 192, 140]);
+  });
+}
+
+/** Petite fleur vue de dessus (pétales blancs à teinter, cœur doré), carte transparente. */
+export function flowerTexture() {
+  return cached('flower', () => {
+    const size = 64;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    const cx = size / 2;
+    const cy = size / 2;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      ctx.save();
+      ctx.translate(cx + Math.cos(a) * size * 0.2, cy + Math.sin(a) * size * 0.2);
+      ctx.rotate(a);
+      const grad = ctx.createLinearGradient(-size * 0.1, 0, size * 0.18, 0);
+      grad.addColorStop(0, 'rgb(225,225,225)');
+      grad.addColorStop(1, 'rgb(255,255,255)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, size * 0.19, size * 0.11, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    const heart = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.12);
+    heart.addColorStop(0, 'rgb(255,220,110)');
+    heart.addColorStop(1, 'rgb(220,170,60)');
+    ctx.fillStyle = heart;
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    return alphaTexture(c, [235, 235, 235]);
   });
 }
 
@@ -668,9 +862,9 @@ export function leafTexture(kind = 'broad') {
           const t = rng();
           const x = x0 + (rng() - 0.5) * 10;
           const y = size - t * (size - 10);
-          const v = 150 + rng() * 105;
+          const v = 175 + rng() * 80;
           ctx.strokeStyle = `rgb(${v},${v},${v})`;
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.8;
           const a = (rng() < 0.5 ? -1 : 1) * (0.5 + rng() * 0.6) - Math.PI / 2;
           ctx.beginPath();
           ctx.moveTo(x, y);
@@ -686,13 +880,13 @@ export function leafTexture(kind = 'broad') {
         const dx = x - size / 2;
         const dy = y - size / 2;
         if (Math.hypot(dx, dy) > size * 0.48 * (0.6 + rng() * 0.4)) continue;
-        const v = 140 + rng() * 115;
+        const v = 185 + rng() * 70;
         const a = rng() * Math.PI * 2;
-        const l = kind === 'small' ? 5 + rng() * 4 : 7 + rng() * 6;
+        const l = kind === 'small' ? 6 + rng() * 5 : 8 + rng() * 7;
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(a);
-        ctx.fillStyle = `rgb(${v * 0.85},${v * 0.85},${v * 0.85})`;
+        ctx.fillStyle = `rgb(${v * 0.88},${v * 0.9},${v * 0.86})`;
         ctx.beginPath();
         ctx.ellipse(0, 0, l, l * 0.5, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -700,7 +894,7 @@ export function leafTexture(kind = 'broad') {
         ctx.beginPath();
         ctx.ellipse(-l * 0.1, -l * 0.08, l * 0.8, l * 0.35, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = `rgba(60,60,60,0.5)`;
+        ctx.strokeStyle = `rgba(90,100,80,0.35)`;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(-l, 0);
@@ -709,10 +903,7 @@ export function leafTexture(kind = 'broad') {
         ctx.restore();
       }
     }
-    const tex = toTexture(c);
-    tex.wrapS = THREE.ClampToEdgeWrapping;
-    tex.wrapT = THREE.ClampToEdgeWrapping;
-    return tex;
+    return alphaTexture(c, [205, 210, 200]);
   });
 }
 
@@ -762,34 +953,51 @@ export function waterNormalTexture() {
   });
 }
 
-/** Bouffée de nuage : boules douces, éclairées par le haut. */
+/**
+ * Bouffée de nuage : un amas de boules cotonneuses, bien éclairées sur le dessus et ombrées
+ * en dessous (la luminosité code l'éclairage : le shader des nuages la teinte selon l'heure).
+ */
 export function cloudTexture() {
   return cached('cloud', () => {
-    const w = 256;
-    const h = 160;
+    const w = gfx.quality === 'high' ? 512 : 256;
+    const h = Math.round(w * 0.625);
     const c = makeCanvas(w, h);
     const ctx = c.getContext('2d');
     const rng = mulberry32(8);
     const puffs = [];
-    for (let i = 0; i < 26; i++) {
-      const x = w * (0.18 + rng() * 0.64);
-      const y = h * (0.35 + rng() * 0.35) - Math.sin(((x / w) - 0.18) / 0.64 * Math.PI) * h * 0.15;
-      const r = h * (0.12 + rng() * 0.16) * (1 - Math.abs(x / w - 0.5) * 1.2);
+    for (let i = 0; i < 34; i++) {
+      const u = 0.14 + rng() * 0.72;
+      const x = w * u;
+      const dome = Math.sin(((u - 0.14) / 0.72) * Math.PI);
+      const y = h * (0.62 - dome * 0.22 - rng() * 0.18);
+      const r = h * (0.1 + rng() * 0.15) * (0.55 + dome * 0.6);
       puffs.push([x, y, r]);
     }
-    // Ombre douce en dessous puis volumes éclairés.
+    // 1) Masse ombrée (gris-bleu doux), un peu plus basse : le ventre du nuage.
     for (const [x, y, r] of puffs) {
-      const g = ctx.createRadialGradient(x, y + r * 0.25, r * 0.1, x, y + r * 0.25, r * 1.15);
-      g.addColorStop(0, 'rgba(170,178,190,0.55)');
-      g.addColorStop(1, 'rgba(170,178,190,0)');
+      const g = ctx.createRadialGradient(x, y + r * 0.3, r * 0.05, x, y + r * 0.3, r * 1.25);
+      g.addColorStop(0, 'rgba(168,176,190,0.75)');
+      g.addColorStop(0.55, 'rgba(168,176,190,0.4)');
+      g.addColorStop(1, 'rgba(168,176,190,0)');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
     }
+    // 2) Volumes éclairés par le haut, bords cotonneux.
     for (const [x, y, r] of puffs) {
-      const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.35, r * 0.05, x, y, r);
-      g.addColorStop(0, 'rgba(255,255,255,0.95)');
-      g.addColorStop(0.6, 'rgba(238,241,246,0.7)');
-      g.addColorStop(1, 'rgba(225,230,238,0)');
+      const g = ctx.createRadialGradient(x - r * 0.2, y - r * 0.4, r * 0.05, x, y, r);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.45, 'rgba(250,251,253,0.85)');
+      g.addColorStop(0.8, 'rgba(236,240,246,0.35)');
+      g.addColorStop(1, 'rgba(230,235,243,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+    }
+    // 3) Petites boules brillantes sur la crête : la lumière accroche le sommet.
+    for (const [x, y, r] of puffs) {
+      if (y > h * 0.5) continue;
+      const g = ctx.createRadialGradient(x - r * 0.15, y - r * 0.55, 1, x - r * 0.15, y - r * 0.4, r * 0.55);
+      g.addColorStop(0, 'rgba(255,255,255,0.9)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
     }
@@ -800,6 +1008,70 @@ export function cloudTexture() {
 
 // ------------------------------------------------------------------ bâtiments
 // Textures presque blanches : la couleur du matériau leur donne leur teinte.
+// Chaque texture a sa carte de normales (relief léger : joints, tuiles, grain), en qualité « high ».
+
+/**
+ * Carte de normales à partir d'une image de hauteur (gris = hauteur).
+ * Dessinée sur un canvas pour garder la même orientation que la texture de couleur.
+ */
+function normalFromHeight(src, strength = 2, blur = 1) {
+  const w = src.width;
+  const h = src.height;
+  const d = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+  let hg = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) hg[i] = (d[i * 4] * 0.5 + d[i * 4 + 1] * 0.3 + d[i * 4 + 2] * 0.2) / 255;
+  for (let b = 0; b < blur; b++) {
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let sum = 0;
+        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) sum += hg[((y + oy + h) % h) * w + ((x + ox + w) % w)];
+        out[y * w + x] = sum / 9;
+      }
+    }
+    hg = out;
+  }
+  const c = makeCanvas(w, h);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const at = (x, y) => hg[((y + h) % h) * w + ((x + w) % w)];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * strength;
+      const l = Math.hypot(dx, dy, 1);
+      const i = (y * w + x) * 4;
+      img.data[i] = ((-dx / l) * 0.5 + 0.5) * 255;
+      img.data[i + 1] = ((dy / l) * 0.5 + 0.5) * 255; // le canvas a l'axe y vers le bas
+      img.data[i + 2] = ((1 / l) * 0.5 + 0.5) * 255;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTexture(c, { srgb: false });
+}
+
+/** Canvas de hauteur (gris) pour l'enduit : bosses douces sans grain fin. */
+function plasterHeight(size) {
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const v = y / size;
+      const n = wrapNoise(u, v, 5, 1) * 0.55 + wrapNoise(u, v, 18, 2) * 0.3 + wrapNoise(u, v, 40, 4) * 0.15;
+      const val = 60 + n * 160;
+      const i = (y * size + x) * 4;
+      img.data[i] = val;
+      img.data[i + 1] = val;
+      img.data[i + 2] = val;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
 
 /** Enduit de façade : grain, petites taches, coulures légères. */
 export function plasterTexture() {
@@ -815,7 +1087,7 @@ export function plasterTexture() {
         const v = y / size;
         const n = wrapNoise(u, v, 6, 1) * 0.5 + wrapNoise(u, v, 24, 2) * 0.3 + rng() * 0.2;
         const streak = wrapNoise(u * 3, v * 0.3, 8, 5) * 0.06;
-        const val = 205 + n * 50 - streak * 255;
+        const val = 212 + n * 43 - streak * 255;
         const i = (y * size + x) * 4;
         img.data[i] = val;
         img.data[i + 1] = val;
@@ -830,112 +1102,162 @@ export function plasterTexture() {
 
 /** Planches de bois verticales avec veinage. */
 export function planksTexture() {
-  return cached('planks', () => {
-    const size = 256;
-    const c = makeCanvas(size);
-    const ctx = c.getContext('2d');
-    const rng = mulberry32(32);
-    const n = 6;
-    const pw = size / n;
-    for (let i = 0; i < n; i++) {
-      const v = 200 + rng() * 45;
-      ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.fillRect(i * pw, 0, pw, size);
-      // Veinage.
-      for (let k = 0; k < 14; k++) {
-        const x = i * pw + rng() * pw;
-        ctx.strokeStyle = `rgba(60,45,35,${0.08 + rng() * 0.15})`;
-        ctx.lineWidth = 0.6 + rng() * 1.4;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.bezierCurveTo(x + (rng() - 0.5) * 8, size * 0.33, x + (rng() - 0.5) * 8, size * 0.66, x + (rng() - 0.5) * 4, size);
-        ctx.stroke();
-      }
-      // Nœud du bois.
-      if (rng() < 0.6) {
-        ctx.fillStyle = 'rgba(70,50,35,0.35)';
-        ctx.beginPath();
-        ctx.ellipse(i * pw + pw * (0.3 + rng() * 0.4), rng() * size, 2 + rng() * 3, 4 + rng() * 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Joint sombre entre les planches.
-      ctx.fillStyle = 'rgba(25,18,12,0.75)';
-      ctx.fillRect(i * pw, 0, 2, size);
+  return cached('planks', () => planksCanvas());
+}
+
+function planksCanvas() {
+  const size = 256;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  const rng = mulberry32(32);
+  const n = 6;
+  const pw = size / n;
+  for (let i = 0; i < n; i++) {
+    const v = 200 + rng() * 45;
+    ctx.fillStyle = `rgb(${v},${v * 0.985},${v * 0.96})`;
+    ctx.fillRect(i * pw, 0, pw, size);
+    // Veinage.
+    for (let k = 0; k < 14; k++) {
+      const x = i * pw + rng() * pw;
+      ctx.strokeStyle = `rgba(60,45,35,${0.08 + rng() * 0.15})`;
+      ctx.lineWidth = 0.6 + rng() * 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.bezierCurveTo(x + (rng() - 0.5) * 8, size * 0.33, x + (rng() - 0.5) * 8, size * 0.66, x + (rng() - 0.5) * 4, size);
+      ctx.stroke();
     }
-    return toTexture(c);
-  });
+    // Nœud du bois.
+    if (rng() < 0.6) {
+      ctx.fillStyle = 'rgba(70,50,35,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(i * pw + pw * (0.3 + rng() * 0.4), rng() * size, 2 + rng() * 3, 4 + rng() * 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Joint sombre entre les planches, arête claire à côté.
+    ctx.fillStyle = 'rgba(25,18,12,0.75)';
+    ctx.fillRect(i * pw, 0, 2.5, size);
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.fillRect(i * pw + 2.5, 0, 1.5, size);
+  }
+  const tex = toTexture(c);
+  tex.userData.canvas = c;
+  return tex;
 }
 
 /** Toiture : 'tiles' (tuiles rondes), 'slate' (ardoises), 'shingle' (bardeaux de bois). */
 export function roofTexture(kind = 'slate') {
-  return cached(`roof-${kind}`, () => {
-    const size = 256;
-    const c = makeCanvas(size);
-    const ctx = c.getContext('2d');
-    const rng = mulberry32(kind.length * 7 + 33);
-    ctx.fillStyle = '#9a9a9a';
-    ctx.fillRect(0, 0, size, size);
-    const rows = kind === 'tiles' ? 10 : 12;
-    const rh = size / rows;
-    for (let r = 0; r < rows; r++) {
-      const cols = kind === 'tiles' ? 8 : 10;
-      const cw = size / cols;
-      const off = (r % 2) * cw * 0.5;
-      for (let k = -1; k <= cols; k++) {
-        const x = k * cw + off + (kind === 'tiles' ? 0 : (rng() - 0.5) * 2);
-        const y = r * rh;
-        const v = 175 + rng() * 70;
-        if (kind === 'tiles') {
-          const g = ctx.createLinearGradient(x, 0, x + cw, 0);
-          g.addColorStop(0, `rgb(${v * 0.7},${v * 0.7},${v * 0.7})`);
-          g.addColorStop(0.5, `rgb(${v},${v},${v})`);
-          g.addColorStop(1, `rgb(${v * 0.65},${v * 0.65},${v * 0.65})`);
-          ctx.fillStyle = g;
-          ctx.beginPath();
-          ctx.roundRect(x + 1, y, cw - 2, rh + 3, [0, 0, cw / 2, cw / 2]);
-          ctx.fill();
-        } else {
-          ctx.fillStyle = `rgb(${v},${v},${v})`;
-          ctx.fillRect(x + 1, y, cw - 2, rh + 2);
-          ctx.fillStyle = 'rgba(0,0,0,0.35)';
-          ctx.fillRect(x + 1, y + rh, cw - 2, 2);
+  return cached(`roof-${kind}`, () => roofCanvas(kind));
+}
+
+function roofCanvas(kind) {
+  const size = 256;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  const rng = mulberry32(kind.length * 7 + 33);
+  ctx.fillStyle = '#8a8a8a';
+  ctx.fillRect(0, 0, size, size);
+  const rows = kind === 'tiles' ? 10 : 12;
+  const rh = size / rows;
+  for (let r = 0; r < rows; r++) {
+    const cols = kind === 'tiles' ? 8 : kind === 'shingle' ? 9 : 10;
+    const cw = size / cols;
+    const off = (r % 2) * cw * 0.5;
+    for (let k = -1; k <= cols; k++) {
+      const x = k * cw + off + (kind === 'tiles' ? 0 : (rng() - 0.5) * 2);
+      const y = r * rh;
+      const v = 178 + rng() * 62;
+      if (kind === 'tiles') {
+        // Tuile canal : bombée (clair au milieu, sombre sur les bords).
+        const g = ctx.createLinearGradient(x, 0, x + cw, 0);
+        g.addColorStop(0, `rgb(${v * 0.62},${v * 0.62},${v * 0.62})`);
+        g.addColorStop(0.45, `rgb(${v},${v},${v})`);
+        g.addColorStop(0.7, `rgb(${v * 0.92},${v * 0.92},${v * 0.92})`);
+        g.addColorStop(1, `rgb(${v * 0.58},${v * 0.58},${v * 0.58})`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.roundRect(x + 1, y, cw - 2, rh + 3, [0, 0, cw / 2, cw / 2]);
+        ctx.fill();
+      } else if (kind === 'shingle') {
+        ctx.fillStyle = `rgb(${v},${v * 0.97},${v * 0.92})`;
+        ctx.fillRect(x + 1, y, cw - 2, rh + 2);
+        // Fibres du bois.
+        for (let f = 0; f < 5; f++) {
+          ctx.fillStyle = `rgba(0,0,0,${0.06 + rng() * 0.1})`;
+          ctx.fillRect(x + 2 + rng() * (cw - 4), y, 1, rh);
         }
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(x + 1, y + rh, cw - 2, 2);
+      } else {
+        // Ardoise : légère variation de teinte, bord inférieur ombré.
+        const g = ctx.createLinearGradient(0, y, 0, y + rh);
+        g.addColorStop(0, `rgb(${v * 1.04},${v * 1.04},${v * 1.06})`);
+        g.addColorStop(1, `rgb(${v * 0.9},${v * 0.9},${v * 0.93})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(x + 1, y, cw - 2, rh + 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(x + 1, y + rh, cw - 2, 2);
       }
-      // Ombre portée de la rangée du dessus.
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.fillRect(0, r * rh, size, 2);
     }
-    return toTexture(c);
-  });
+    // Ombre portée de la rangée du dessus.
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(0, r * rh, size, 2.5);
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(0, r * rh + 2.5, size, 3);
+  }
+  const tex = toTexture(c);
+  tex.userData.canvas = c;
+  return tex;
 }
 
 /** Soubassement en pierres maçonnées. */
 export function stoneTexture() {
-  return cached('stone', () => {
-    const size = 256;
-    const c = makeCanvas(size);
-    const ctx = c.getContext('2d');
-    const rng = mulberry32(34);
-    ctx.fillStyle = '#8a8680';
-    ctx.fillRect(0, 0, size, size);
-    let y = 0;
-    while (y < size) {
-      const h = 18 + rng() * 16;
-      let x = -rng() * 30;
-      while (x < size) {
-        const w = 26 + rng() * 34;
-        const v = 150 + rng() * 90;
-        ctx.fillStyle = `rgb(${v},${v * 0.97},${v * 0.93})`;
-        ctx.beginPath();
-        ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 5);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        ctx.fillRect(x + 4, y + 3, w - 10, 3);
-        x += w;
-      }
-      y += h;
+  return cached('stone', () => stoneCanvas());
+}
+
+function stoneCanvas() {
+  const size = 256;
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  const rng = mulberry32(34);
+  ctx.fillStyle = '#7e7a74';
+  ctx.fillRect(0, 0, size, size);
+  let y = 0;
+  while (y < size) {
+    const h = 18 + rng() * 16;
+    let x = -rng() * 30;
+    while (x < size) {
+      const w = 26 + rng() * 34;
+      const v = 150 + rng() * 90;
+      const g = ctx.createLinearGradient(x, y, x + w * 0.4, y + h);
+      g.addColorStop(0, `rgb(${v * 1.05},${v * 1.02},${v * 0.97})`);
+      g.addColorStop(1, `rgb(${v * 0.9},${v * 0.88},${v * 0.85})`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 5);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(x + 4, y + 3, w - 10, 3);
+      x += w;
     }
-    return toTexture(c);
+    y += h;
+  }
+  const tex = toTexture(c);
+  tex.userData.canvas = c;
+  return tex;
+}
+
+/**
+ * Carte de normales d'un matériau de bâtiment : 'plaster', 'planks', 'stone',
+ * 'roof-tiles', 'roof-slate', 'roof-shingle'. Null en qualité « low » (pas de relief).
+ */
+export function buildingNormal(kind) {
+  if (gfx.quality !== 'high') return null;
+  return cached(`normal-${kind}`, () => {
+    if (kind === 'plaster') return normalFromHeight(plasterHeight(256), 1.6, 1);
+    if (kind === 'planks') return normalFromHeight(planksTexture().userData.canvas, 2.2, 0);
+    if (kind === 'stone') return normalFromHeight(stoneTexture().userData.canvas, 2.4, 1);
+    if (kind.startsWith('roof-')) return normalFromHeight(roofTexture(kind.slice(5)).userData.canvas, 2.6, 0);
+    return normalFromHeight(plasterHeight(128), 1, 1);
   });
 }
 

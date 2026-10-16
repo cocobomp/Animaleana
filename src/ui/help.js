@@ -61,8 +61,8 @@ const TOPICS = [
     steps: { fr: ['Appuie sur 🧭 Voyager.', 'Choisis la destination, qui vient avec toi et le transport.', 'Les longs voyages fatiguent les animaux : pense à les laisser au voisin.'], en: ['Tap 🧭 Travel.', 'Choose the destination, who comes and the transport.', 'Long trips tire animals: consider leaving them with the neighbour.'] } },
   { id: 'time', icon: '⏩', where: 'hud:time',
     title: { fr: 'Gérer le temps', en: 'Manage time' },
-    keys: 'temps pause vite avancer heure nuit time pause fast skip hour night',
-    steps: { fr: ['Sous l\'horloge : ⏸ pause, ▶ ×1, ⏩ ×2, ⏩⏩ ×4.', '⏭ pour avancer jusqu\'à une heure ou au prochain moment intéressant.', 'Dans Réglages : la durée d\'une journée.'], en: ['Under the clock: ⏸ pause, ▶ ×1, ⏩ ×2, ⏩⏩ ×4.', '⏭ to skip to an hour or the next interesting moment.', 'In Settings: the length of a day.'] } },
+    keys: 'temps pause vite avancer nuit dormir time pause fast skip night sleep',
+    steps: { fr: ['Sous l\'horloge : ⏸ pause, ▶ vitesse normale, ⏩ avance rapide.', '🤖 Auto : ton personnage fait tout seul les tâches simples.', 'Pour passer la nuit : va dormir dans la maison (à partir de 19 h).', 'Dans Réglages : la durée d\'une journée.'], en: ['Under the clock: ⏸ pause, ▶ normal speed, ⏩ fast forward.', '🤖 Auto: your character does the simple chores by itself.', 'To get through the night: go to sleep in the house (from 7 pm).', 'In Settings: the length of a day.'] } },
   { id: 'tasks', icon: '📝', where: null,
     title: { fr: 'Préparer ma liste de tâches', en: 'Plan my task list' },
     keys: 'liste tâches automatique manuel planifier task list auto manual plan',
@@ -112,9 +112,9 @@ function showMe(ui, where) {
   const g = ui.game;
   ui.closePanel();
   if (where?.startsWith('hud:')) {
-    const map = { farm: 1, travel: 2, journal: 3, animals: 0 };
-    const sel = where === 'hud:time' ? '.time-bar' : `.hud-buttons .hud-btn:nth-child(${map[where.slice(4)] + 1})`;
-    const el = document.querySelector(sel);
+    // Le bouton est reconnu par son titre (comme dans src/ui/tutorial.js), pas par sa position.
+    const el = where === 'hud:time' ? document.querySelector('.time-bar')
+      : [...document.querySelectorAll('.hud-buttons .hud-btn')].find((b) => b.title === t(where.slice(4))) ?? null;
     el?.classList.add('pulse');
     setTimeout(() => el?.classList.remove('pulse'), 5000);
     return;

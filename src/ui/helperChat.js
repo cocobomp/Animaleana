@@ -192,8 +192,8 @@ export function openHelperChat(ui, helper) {
     render: () => [
       head(),
       h('div', { class: 'tabs' },
-        h('button', { class: state.tab === 'chat' ? 'on' : '', onClick: () => { state.tab = 'chat'; ui.renderPanel(); } }, `💬 ${t('hc_tabChat')}`),
-        h('button', { class: state.tab === 'orders' ? 'on' : '', onClick: () => { state.tab = 'orders'; ui.renderPanel(); } }, `📋 ${t('hc_tabOrders')}`)),
+        h('button', { class: state.tab === 'chat' ? 'active' : '', onClick: () => { state.tab = 'chat'; ui.renderPanel(); } }, `💬 ${t('hc_tabChat')}`),
+        h('button', { class: state.tab === 'orders' ? 'active' : '', onClick: () => { state.tab = 'orders'; ui.renderPanel(); } }, `📋 ${t('hc_tabOrders')}`)),
       ...(state.tab === 'chat' ? chat() : orders()),
     ],
   });

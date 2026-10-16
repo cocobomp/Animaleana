@@ -386,7 +386,7 @@ export class AnimalEntity {
     this.label.visible = false; // les noms sont affichés en HTML (étiquettes qu'on peut toucher)
 
     // Maison des animaux : on y va par la porte, puis on dort à l'abri dans son panier.
-    if (d.housed && (d.following || this.ridden)) d.housed = false;
+    if (d.housed && (d.following || this.ridden || this.herdCtrl?.pusher)) d.housed = false;
     const den = d.housed ? this.world.petHouse : null;
     if (!den && this.inside) this.leaveHouse();
     if (den && this.inside) {
@@ -656,13 +656,24 @@ export class AnimalEntity {
       const amp = (gallop ? 0.75 : Math.min(0.45, 0.15 + v * 0.12)) * (moving ? 1 : 0);
       md.legs.forEach((l, i) => {
         const offset = gallop ? [0, 0.35, Math.PI, Math.PI + 0.35][i] : [0, Math.PI, Math.PI, 0][i];
-        const swing = Math.sin(this.phase + offset) * amp;
+        const ph = this.phase + offset;
+        const swing = Math.sin(ph) * amp;
         // Couché : les pattes avant se replient vers l'arrière, les pattes arrière vers l'avant.
-        const rest = l.front ? 1.45 : -1.45;
+        const rest = l.front ? 1.25 : -1.25;
         l.pivot.rotation.x = swing * (1 - lie) + rest * lie;
+        if (l.knee) {
+          // Le genou (devant) se plie vers l'arrière et le jarret (derrière) vers l'avant quand la patte
+          // revient vers l'avant ; au galop les pattes se replient davantage.
+          const lift = Math.max(0, -Math.cos(ph));
+          const bend = lift * amp * (gallop ? 1.5 : 1.2);
+          const fold = l.front ? 0.7 : -0.7;
+          l.knee.rotation.x = (l.front ? bend : -bend) * (1 - lie) + fold * lie;
+        }
       });
       const bob = moving ? Math.abs(Math.sin(this.phase)) * (gallop ? 0.06 : 0.02) : 0;
       md.body.position.y = bob - lie * md.y0 * 0.62;
+      // Le dos se cabre un peu au galop, et l'encolure accompagne le pas.
+      md.body.rotation.x = gallop ? Math.sin(this.phase) * 0.05 : 0;
     }
 
     // Respiration, tête, queue
@@ -678,24 +689,55 @@ export class AnimalEntity {
     const grazing = this.sp.livestock && this.state === 'idle' && Math.sin(this.time * 0.3 + this.phase) > 0.2;
     const eat = this.state === 'eat' || (grazing && !this.herdCtrl) ? 0.9 + Math.sin(this.time * 4) * 0.06 : 0;
     this.headDown = (this.headDown ?? 0) + (eat - (this.headDown ?? 0)) * Math.min(1, dt * 3);
-    md.neck.rotation.x = baseNeck + (sad ? 0.35 : 0) + lie * 0.4 + this.headDown + (this.doze ?? 0) * 0.55;
+    // Hochement de l'encolure au pas (chevaux, vaches) ; la tête suit un peu.
+    const nod = moving && !sp.hops ? Math.sin(this.phase * 2) * (gallop ? 0.08 : 0.04) * (this.data.species === 'horse' || this.data.species === 'cow' ? 1 : 0.4) : 0;
+    md.neck.rotation.x = baseNeck + (sad ? 0.35 : 0) + lie * 0.4 + this.headDown + (this.doze ?? 0) * 0.55 + nod;
+    if (md.headTilt !== undefined) md.head.rotation.x = md.headTilt - nod * 0.5 + (this.sleeping ? 0.15 : 0);
 
     const happy = !sad;
+    const t = this.time;
+    // Coup de queue occasionnel (chasser une mouche).
+    const swish = Math.sin(t * 0.21 + this.phase * 0.01) > 0.93 ? Math.sin(t * 9) : 0;
     switch (this.data.look.tailType) {
       case 'dog':
       case 'curl':
-        md.tail.rotation.y = Math.sin(this.time * (happy ? 14 : 3)) * (happy ? 0.5 : 0.1);
+        md.tail.rotation.y = Math.sin(t * (happy ? 14 : 3)) * (happy ? 0.5 : 0.1);
         break;
       case 'cat':
-        md.tail.rotation.z = Math.sin(this.time * 1.5) * 0.3;
+        md.tail.rotation.z = Math.sin(t * 1.5) * 0.3;
+        md.tail.rotation.y = Math.sin(t * 0.7) * 0.15;
         break;
       case 'horse':
-        md.tail.rotation.z = Math.sin(this.time * 0.9) * 0.12 + (Math.sin(this.time * 0.23) > 0.95 ? Math.sin(this.time * 9) * 0.3 : 0);
+        md.tail.rotation.z = Math.sin(t * 0.9) * 0.12 + swish * 0.35;
+        break;
+      case 'cow':
+        md.tail.rotation.z = Math.sin(t * 1.1) * 0.18 + swish * 0.6;
+        md.tail.rotation.x = -Math.max(0, Math.sin(t * 0.37)) * 0.1;
+        break;
+      case 'goat':
+        md.tail.rotation.z = Math.sin(t * (happy ? 7 : 2)) * (happy ? 0.3 : 0.1);
+        break;
+      case 'stub':
+      case 'pompom':
+        md.tail.rotation.z = Math.sin(t * (this.state === 'eat' || this.headDown > 0.5 ? 9 : 2.5)) * 0.25;
         break;
       default:
     }
-    if (md.ears.length && this.data.look.earType === 'rabbit') {
-      md.ears.forEach((e, i) => { e.rotation.x = -0.25 + Math.sin(this.time * 0.8 + i) * 0.1 - lie * 0.6; });
+    if (md.ears.length) {
+      const rabbit = this.data.look.earType === 'rabbit';
+      md.ears.forEach((e, i) => {
+        const rest = e.userData.rest;
+        if (!rest) return;
+        // Petits mouvements d'oreille : une oreille pivote de temps en temps, les deux se couchent au repos.
+        const flick = Math.max(0, Math.sin(t * 1.3 + i * 2.6 + this.phase * 0.02) - 0.9) * 10;
+        if (rabbit) {
+          e.rotation.x = rest.x + Math.sin(t * 0.8 + i) * 0.1 - lie * 0.6 - flick * 0.25;
+          e.rotation.z = rest.z + (e.userData.side ?? 1) * flick * 0.12;
+        } else {
+          e.rotation.x = rest.x - flick * 0.25 - (this.sleeping ? 0.2 : 0);
+          e.rotation.z = rest.z + (e.userData.side ?? 1) * (flick * 0.15 + (this.sleeping ? 0.08 : 0));
+        }
+      });
     }
   }
 

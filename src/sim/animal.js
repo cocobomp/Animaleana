@@ -209,6 +209,7 @@ export function tickAnimal(a, hours, ctx = {}) {
   if (ctx.ridden || ctx.moving) a.weight = Math.max(0, a.weight - 0.6 * hours);
   if (a.needs.hunger < 15) a.weight = Math.max(0, a.weight - 0.4 * hours);
   else if (a.weight > 50 && a.needs.exercise > 60) a.weight -= 0.1 * hours;
+  else if (a.weight < 50 && a.needs.hunger > 50) a.weight = Math.min(50, a.weight + 0.4 * hours); // bien nourri : retour au poids idéal
   if (ctx.sleeping) a.needs.energy = clamp(a.needs.energy + 9 * hours);
   if (ctx.ridden) {
     a.needs.exercise = clamp(a.needs.exercise + 14 * hours);

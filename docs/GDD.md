@@ -26,8 +26,9 @@
 ### Espèces
 Toutes les espèces sont prévues, ajoutées progressivement :
 - **Version 0.1** : cheval, chien, chat, lapin.
-- **Ensuite** : poney, âne, cochon d'Inde, hamster, oiseaux, poules, chèvres,
-  vaches, moutons, tortue, perroquet, furet, etc.
+- **Version 0.3** : mouton, chèvre, vache (laine, lait, chiens de troupeau).
+- **Ensuite** : poney, âne, cochon d'Inde, hamster, oiseaux, poules, tortue,
+  perroquet, furet, etc.
 
 ### Races
 Plusieurs races par espèce, chacune avec sa taille, ses couleurs de robe et ses
@@ -42,7 +43,7 @@ Illimité.
 - **Reproduction** possible entre deux adultes de même espèce et de sexes
   opposés : les petits héritent d'un mélange de races et de couleurs.
 - Le temps ne passe **que pendant qu'on joue** (pas d'effet Tamagotchi).
-- Échelle : 1 jour de jeu = 10 minutes réelles ; 1 an d'animal = 12 jours de jeu.
+- Échelle : 1 jour de jeu = 30 minutes réelles en vitesse normale (1 h en lente, 10 min en rapide, réglable) ; 1 an d'animal = 12 jours de jeu.
 
 ### Personnalité
 Chaque animal a un caractère : *joueur, timide, câlin, têtu, curieux, calme*.
@@ -85,12 +86,14 @@ réussite au dressage…).
   balade ou en voyage.
 - **Mode bac à sable** au début : argent illimité.
 - **Mode gestion** (au choix dans le profil) : il faut gagner de l'argent
-  (petits boulots, concours, pension pour animaux) et le dépenser (nourriture,
-  soins, accessoires, logements).
+  (petits boulots, concours, spectacles, produits de la ferme ; pension pour animaux
+  prévue plus tard) et le dépenser (nourriture, soins, accessoires, logements, aides).
 
 ## 7. Maison et logements
 - Maison, jardin et **écuries présentes par défaut**.
-- Ensuite : décoration, niches, enclos, clapiers, carrière, paddocks.
+- Construction depuis la vue d'ensemble : niches, clapiers, paddocks, prés, abris,
+  granges, carrières, écuries, ranchs, décorations (fait). Décoration de l'intérieur
+  de la maison : plus tard.
 
 ## 8. Voyages
 - Libre : carte du monde, voiture, van, avion, bateau **ou à cheval**.
@@ -101,8 +104,9 @@ réussite au dressage…).
   le bateau ou l'avion pour traverser la mer, et on peut aller à cheval jusqu'en
   Suisse.
 - Sur place : animaux uniques à adopter, concours, quêtes, exploration, photos.
-- Destinations prévues : campagne (maison), Alpes, plage de Bretagne, forêt
-  canadienne, Japon, savane africaine, Islande…
+- Destinations (11) : Normandie (maison), plage de Bretagne, Alpes suisses, Islande,
+  ranch en Alberta, campagne de Kyoto, Cotswolds, Andalousie, haras du Kentucky,
+  Pampa, bush australien. Prévu ensuite : savane africaine…
 
 ## 9. Météo, jour et nuit, saisons
 - Cycle jour/nuit.
@@ -129,7 +133,7 @@ réussite au dressage…).
 | Version | Contenu |
 |---|---|
 | **0.1** (prototype, fait) | Profils, avatar, maison + écurie + carrière, 4 espèces et 39 races, besoins, personnalités, vieillissement et mort de vieillesse, bébés, refuge et élevages locaux, vétérinaire (mini-jeu), dressage des tours, entraînement, longe et liberté, monter à cheval, caméra 1ʳᵉ/3ᵉ personne, jour/nuit, météo par lieu et saison, voyage dans 6 lieux (voiture, van, cheval, bateau, avion), quêtes et succès, petits boulots, modes bac à sable et gestion, FR/EN, hors ligne |
-| 0.2 | Concours, parcours d'obstacles jouables à cheval, mini-jeux pour chaque soin (brosser, laver…) |
-| 0.3 | Décoration de la maison, construction d'enclos et de niches, nouvelles espèces |
-| 0.4 | Modèles 3D réalistes et animations, sons, voyage à cheval en temps réel |
+| **0.2** (fait) | Concours et spectacles sur le terrain de concours, apprentissage du saut, parcours d'obstacles, agility, balade, lapin-hop ; mini-jeux pour chaque soin (brosser, laver, ferrer, tonte, traite…) ; vétérinaire à jouer soi-même |
+| **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison |
+| **0.4** (en cours) | Graphismes plus beaux (sol, végétation, lumière, bâtiments, animaux, animations), sons, voyage à cheval en temps réel, nouvelles espèces |
 | 1.0 | Publication |

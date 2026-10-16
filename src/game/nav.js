@@ -14,12 +14,23 @@ export const ENCLOSURES = [
 export const enclosure = (id) => ENCLOSURES.find((e) => e.id === id);
 
 // Enclos construits par le joueur (src/game/Structures.js) : ajoutés après les enclos de base.
-const BASE_ENCLOSURES = ENCLOSURES.length;
+let BASE_ENCLOSURES = ENCLOSURES.length;
+/**
+ * Enclos de base présent dans tous les lieux mais déclaré ailleurs (ex. le terrain de concours,
+ * src/game/showground.js). Il survit à setBuiltEnclosures(), contrairement à un simple push.
+ */
+export function addBaseEnclosure(e) {
+  if (ENCLOSURES.some((x) => x.id === e.id)) return;
+  ENCLOSURES.splice(BASE_ENCLOSURES, 0, e);
+  BASE_ENCLOSURES += 1;
+}
 // obstacles : bâtiments construits (grange, niche…) dont on fait aussi le tour.
 const OBSTACLES = [];
 export function setBuiltEnclosures(list, obstacles = []) {
+  // Les bâtiments où l'on entre (src/game/Interiors.js) restent connus : seuls les enclos construits sont remplacés.
+  const interiors = ENCLOSURES.slice(BASE_ENCLOSURES).filter((e) => e.interior);
   ENCLOSURES.length = BASE_ENCLOSURES;
-  ENCLOSURES.push(...list);
+  ENCLOSURES.push(...interiors, ...list);
   OBSTACLES.length = 0;
   OBSTACLES.push(...obstacles);
 }
@@ -55,8 +66,8 @@ export function navTarget(pos, goal, small = false) {
     const w = hook(pos, goal);
     if (w) return w;
   }
-  // Les petits animaux passent sous les barrières en bois (pas sous le grillage).
-  const list = small ? ENCLOSURES.filter((e) => e.mesh) : ENCLOSURES;
+  // Les petits animaux passent sous les barrières en bois (pas sous le grillage, ni à travers les murs).
+  const list = small ? ENCLOSURES.filter((e) => e.mesh || e.interior) : ENCLOSURES;
   return detour(pos, gateStep(pos, goal, list), 0, small ? list : [...list, ...OBSTACLES]);
 }
 

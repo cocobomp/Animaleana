@@ -77,7 +77,7 @@ export class Game {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     // Tons filmiques : les hautes lumières (ciel, soleil) restent douces.
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.9;
+    renderer.toneMappingExposure = 1.0;
     container.prepend(renderer.domElement);
     this.renderer = renderer;
 
@@ -162,11 +162,11 @@ export class Game {
   stop() {
     this.tasks.clear();
     this.mgmt.stop();
+    this.activities.abort();
+    const saved = this.save(); // avant d'annuler un trajet en cours : on ne sauvegarde pas un voyage à moitié fait
     this.tripFlow.reset();
     this.emit('stop');
     this.marker.hide();
-    this.activities.abort();
-    this.save();
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
@@ -175,14 +175,19 @@ export class Game {
     this.helpers.clear();
     this.running = false;
     this.profile = null;
+    return saved;
   }
 
+  /** Sauvegarde le profil. Renvoie false si rien n'a été écrit (pas de profil, voyage en cours, stockage plein). */
   save() {
-    if (!this.profile) return;
+    if (!this.profile) return false;
+    // Pendant un trajet suivi, le profil est entre deux lieux (billet payé, animaux en route) :
+    // on garde la sauvegarde d'avant le départ plutôt qu'un voyage à moitié fait.
+    if (this.tripFlow?.journey && !this.tripFlow.journey.report) return false;
     for (const e of this.entities.values()) {
       e.data.pos = [e.position.x, e.position.z];
     }
-    saveProfile(this.profile);
+    return saveProfile(this.profile);
   }
 
   get day() {
@@ -556,13 +561,21 @@ export class Game {
 
   /** Les murs et toits qui cachent le personnage deviennent transparents. */
   fadeOccluders() {
-    if (this.rig.mode !== 'third') return;
+    if (this.rig.mode !== 'third') {
+      // 1re personne : on rend aux murs leur aspect normal.
+      for (const o of this.faded ?? []) {
+        o.material = o.userData.solidMat;
+        o.castShadow = true;
+      }
+      this.faded?.clear();
+      return;
+    }
     if (this.occluderGroup !== this.world.group) {
       // Liste des objets qui peuvent cacher la vue (bâtiments), calculée une fois par lieu.
       this.occluderGroup = this.world.group;
       this.occluders = [];
       this.world.group.traverse((o) => {
-        if (!o.isMesh || o.isInstancedMesh || o.geometry.type === 'PlaneGeometry') return;
+        if (!o.isMesh || o.isInstancedMesh || o.userData.noOccluder || o.geometry.type === 'PlaneGeometry') return;
         if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
         if (o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z) > 0.8) this.occluders.push(o);
       });
@@ -866,9 +879,11 @@ export class Game {
    * ou un rendez-vous de la journée (traite, sortie au pré, ouverture du refuge…). 12 h au plus.
    */
   setTimeScale(x) {
+    const was = this.timeScale;
     this.timeScale = x;
     if (x === 0) this.player.cancelGoTo();
     this.ui.refresh();
+    if (x > 1 && was !== x) this.emit('timeFast', x); // tutoriel : « ⏩ fait avancer le temps »
   }
 
   get paused() {
@@ -1356,7 +1371,7 @@ export class Game {
     const price = shopPrice(cfg.species, cfg.breed, cfg.stage);
     const a = createAnimal({
       species: cfg.species, breed: cfg.breed, colorIndex: cfg.colorIndex, sex: cfg.sex,
-      ageDays: stageAgeDays(cfg.species, cfg.stage), name, location: this.profile.place, day: this.day,
+      ageDays: stageAgeDays(cfg.species, cfg.stage), name: name?.trim() || undefined, location: this.profile.place, day: this.day,
     });
     return this.adopt(a, name, price, this.isHome ? 'petshop' : 'refuge');
   }
@@ -1432,6 +1447,7 @@ export class Game {
 
   sleep() {
     const h = this.hour;
+    if (h >= 7 && h < 19) return this.ui.toast(t('why_notTired', { h: '19 h' })); // on dort de 19 h à 7 h
     const hours = h < 7 ? 7 - h : 31 - h;
     this.advanceTime(hours, { sleeping: true });
     for (const a of this.animalsHere()) a.needs.energy = Math.max(a.needs.energy, 90);
@@ -1546,7 +1562,8 @@ export class Game {
 
   /** Qui peut conduire le troupeau ici : un chien de troupeau, sinon le berger. */
   herder() {
-    const dog = [...this.entities.values()].find((e) => e.data.role === 'herder' && !e.ridden);
+    const dogs = [...this.entities.values()].filter((e) => e.data.role === 'herder' && !e.ridden);
+    const dog = dogs.find((e) => !e.data.housed) ?? dogs[0]; // de préférence un chien qui n'est pas rangé pour la nuit
     if (dog) return dog;
     return [...this.helpers.values()].find((h) => h.def.herds) ?? null;
   }

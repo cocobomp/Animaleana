@@ -65,14 +65,14 @@ const RULES = {
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
   house: [
-    { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 10) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },
+    { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 7) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },
     { id: 'feedPets', icon: '🥣', when: (c) => need(c.count.pets) },
     { id: 'avatar', icon: '👕', when: () => null },
     { id: 'facEnter', icon: '🚪', when: () => null }, // entrer dans la maison
     { id: 'facManage', icon: '📋', when: () => null },
   ],
   lodge: [
-    { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 10) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },
+    { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 7) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },
     { id: 'feedPets', icon: '🥣', when: (c) => need(c.count.pets) },
   ],
   refuge: [

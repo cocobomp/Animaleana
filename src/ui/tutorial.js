@@ -45,6 +45,7 @@ export class Tutorial {
       if (ui.panel && !ui.panel.live) ui.renderPanel();
       this.event('skip');
     });
+    game.on('timeFast', () => this.event('timeFast')); // ⏩ de la barre du temps
     game.on('adopted', (a) => { this.animalId = a.id; this.event('adopted'); });
     game.on('care', ({ action }) => this.event(`care:${action}`));
 
@@ -303,8 +304,9 @@ export class Tutorial {
 
   // ------------------------------------------------------------ cibles
 
+  /** Bouton du haut (barre d'outils) ou de la barre du temps (⏸ ▶ ⏩), reconnu par son titre. */
   hudButton(id) {
-    return [...this.ui.hud.querySelectorAll('.hud-btn')].find((b) => b.title === t(id)) ?? null;
+    return [...this.ui.hud.querySelectorAll('.hud-btn, .time-btn')].find((b) => b.title === t(id)) ?? null;
   }
 
   sheetButton(label) {

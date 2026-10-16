@@ -454,9 +454,9 @@ export function openSettings(ui) {
         h('button', {
           class: 'danger big',
           onClick: () => {
-            g.stop();
+            const ok = g.stop();
             ui.closePanel();
-            ui.toast(t('saved'));
+            ui.toast(t(ok ? 'saved' : 'saveFailed'), ok ? 3000 : 6000);
             ui.showProfiles();
           },
         }, t('quit')),

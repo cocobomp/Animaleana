@@ -22,7 +22,7 @@ export const TUTORIAL_STEPS = [
   },
   {
     // Le refuge ouvre à 9 h : on apprend le bouton ⏩ pour attendre.
-    id: 'wait', emoji: '⏩', target: { type: 'hud', id: 'skip' },
+    id: 'wait', emoji: '⏩', target: { type: 'hud', id: 'timeFast' },
     skip: (c) => c.animals > 0 || c.refugeOpen,
     done: (c) => c.refugeOpen,
   },
@@ -49,9 +49,9 @@ export const TUTORIAL_STEPS = [
   { id: 'journal', emoji: '📖', target: { type: 'hud', id: 'journal' }, done: (c) => c.seen.has('panel:journal') },
   {
     // Si on a déjà utilisé ⏩ (refuge fermé), pas besoin de le réapprendre.
-    id: 'time', emoji: '⏩', target: { type: 'hud', id: 'skip' },
+    id: 'time', emoji: '⏩', target: { type: 'hud', id: 'timeFast' },
     skip: (c) => !!c.flags.skipUsed,
-    done: (c) => c.seen.has('skip'),
+    done: (c) => c.seen.has('timeFast') || c.seen.has('skip'),
   },
   { id: 'farm', emoji: '🚜', target: { type: 'hud', id: 'farm' }, done: (c) => c.seen.has('panel:farm') },
   { id: 'end', emoji: '🎉', manual: true },
@@ -84,7 +84,8 @@ const snapshot = (p) => ({ ...Object.fromEntries(STAT_KEYS.map((k) => [k, stat(p
 /** Un événement du jeu (« building:refuge », « panel:journal », « skip », « next »…). */
 export function noteEvent(tuto, name) {
   if (!tuto) return;
-  if (name === 'skip') tuto.flags.skipUsed = true;
+  // ⏩ (avance rapide) ou un saut dans le temps : le bouton est appris.
+  if (name === 'skip' || name === 'timeFast') tuto.flags.skipUsed = true;
   if (tuto.done) return;
   if (!tuto.seen.includes(name)) tuto.seen.push(name);
 }
@@ -238,7 +239,7 @@ const travelEl = (sel) => ({ type: 'el', sel, fallback: { type: 'hud', id: 'trav
 /** Toutes les petites étapes possibles, par identifiant. */
 export const FOLLOW_STEPS = {
   goRefuge: { target: { type: 'building', id: 'refuge' }, done: seenAny('building:refuge', 'panel:adoption') },
-  waitOpen: { target: { type: 'hud', id: 'skip' }, skip: (c) => c.refugeOpen, done: (c) => c.refugeOpen },
+  waitOpen: { target: { type: 'hud', id: 'timeFast' }, skip: (c) => c.refugeOpen, done: (c) => c.refugeOpen },
   adoptOne: { target: { type: 'adopt' }, done: questDone },
   adoptFirst: { target: { type: 'adopt' }, done: (c) => hasAnimal(c.profile) },
   adoptHorse: { target: { type: 'adopt' }, done: (c) => hasHorse(c.profile) },

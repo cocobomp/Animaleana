@@ -3,7 +3,8 @@
 // Ce fichier ne dépend pas de la 3D, il est testé dans tests/farm.test.js.
 
 import { SPECIES } from './species.js';
-import { applyCare, cure, lifeStage, NEEDS } from './animal.js';
+import { applyCare, cure, lifeStage, NEEDS, CARE } from './animal.js';
+import { dayOf } from './time.js';
 import { isSandbox, spend, earn } from './profile.js';
 import { pick, uid } from './rng.js';
 import { onBreak, helperQuality } from './helpers.js'; // progression des aides
@@ -136,7 +137,9 @@ export function payHelpers(profile, days = 1) {
   return left;
 }
 
-const careable = (a, action) => SPECIES[a.species].actions.includes(action);
+// Les soins fatigants (jouer, longe, liberté) sont refusés par applyCare sur un animal malade ou épuisé :
+// l'aide ne les propose pas, sinon elle recommencerait sans fin au lieu de passer au besoin suivant.
+const careable = (a, action) => SPECIES[a.species].actions.includes(action) && !(CARE[action]?.tiring && (a.sick || a.needs.energy < 15));
 
 /**
  * Choisit la prochaine tâche d'une aide parmi les animaux du lieu.
@@ -204,7 +207,7 @@ export function doHelperTask(profile, task, animals, helper = null) {
   if (!a) return { ok: false };
   if (task.kind === 'cure') {
     if (!a.sick) return { ok: false };
-    cure(a);
+    cure(a, dayOf(profile.clock ?? 0)); // compte comme une visite du vétérinaire
     return { ok: true };
   }
   if (task.kind === 'product') return collectProduct(profile, a);

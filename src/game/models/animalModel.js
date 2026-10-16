@@ -6,6 +6,7 @@
 // En qualité « high », une fourrure en couches (shells) recouvre le pelage de près.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { loft, strands, noise3 } from './shapes.js';
 import { ellipsoid, roundCone, blend, sdfMesh, rayHit, sdfNormal } from './sdf.js';
 import { coatTextures, woolTextures, hairTexture, eyeTexture, lum } from '../textures.js';
@@ -291,16 +292,20 @@ function addShells(mesh, len) {
   if (gfx.quality !== 'high' || len < 0.002) return;
   const base = mesh.material;
   const m = base.clone();
+  // Sur une patte à os (SkinnedMesh), les couches ne peuvent pas être instanciées : la géométrie est
+  // dupliquée par couche (attribut furLayer) dans un second SkinnedMesh qui suit les mêmes os.
+  const skinned = !!mesh.isSkinnedMesh;
   m.onBeforeCompile = (sh) => {
     sh.uniforms.furLen = { value: len };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 uniform float furLen;
+${skinned ? 'attribute float furLayer;' : ''}
 varying vec3 vFurPos;
 varying float vFurH;
 varying float vFurFade;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-vFurH = (float(gl_InstanceID) + 1.0) / ${SHELLS}.0;
+vFurH = ${skinned ? 'furLayer' : `(float(gl_InstanceID) + 1.0) / ${SHELLS}.0`};
 vFurPos = position * ${FUR_CELL}.0;
 transformed += objectNormal * furLen * vFurH;
 transformed.y -= furLen * vFurH * vFurH * 0.4;`)
@@ -320,8 +325,21 @@ float furRad = 0.62 * (1.0 - vFurH * 0.6);
 if (dot(furF, furF) > furRad * furRad || vFurH > (0.3 + 0.7 * furRnd) * vFurFade) discard;
 diffuseColor.rgb *= mix(0.86, 1.03, vFurH);`);
   };
-  m.customProgramCacheKey = () => `fur${SHELLS}`;
-  const shells = new THREE.InstancedMesh(mesh.geometry, m, SHELLS);
+  m.customProgramCacheKey = () => `fur${SHELLS}${skinned ? 's' : ''}`;
+  let shells;
+  if (skinned) {
+    const layers = [];
+    for (let i = 0; i < SHELLS; i++) {
+      const g = mesh.geometry.clone();
+      g.setAttribute('furLayer', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill((i + 1) / SHELLS), 1));
+      layers.push(g);
+    }
+    shells = new THREE.SkinnedMesh(mergeGeometries(layers), m);
+    layers.forEach((g) => g.dispose());
+    shells.bind(mesh.skeleton, mesh.bindMatrix);
+  } else {
+    shells = new THREE.InstancedMesh(mesh.geometry, m, SHELLS);
+  }
   shells.castShadow = false;
   shells.receiveShadow = true;
   shells.userData.shells = true;
@@ -502,13 +520,24 @@ export function buildAnimalModel(speciesId, look) {
   const corners = speciesId === 'rabbit'
     ? [[legX * 0.8, L * 0.25, true], [-legX * 0.8, L * 0.25, true], [legX, -L * 0.18, false], [-legX, -L * 0.18, false]]
     : [[legX, L / 2 - R * 0.75, true], [-legX, L / 2 - R * 0.75, true], [legX, -L / 2 + R * 0.75, false], [-legX, -L / 2 + R * 0.75, false]];
+  const skins = [];
   corners.forEach(([x, z, front], i) => {
     const pivot = new THREE.Group();
     pivot.position.set(x, legTop, z);
     body.add(pivot);
-    buildLeg(pivot, { kind: S.legs, front, T, r: legR, R, mat: M.legs[i], M, high, wool, woolMat, speciesId, furLen });
-    parts.legs.push({ pivot, front, side: x > 0 ? 1 : -1 });
+    buildLeg(pivot, { kind: S.legs, front, T, r: legR, R, mat: M.legs[i], M, high, wool, woolMat, speciesId, furLen, index: i });
+    if (pivot.userData.skin) skins.push(pivot.userData.skin);
+    parts.legs.push({ pivot, knee: pivot.userData.knee ?? null, front, side: x > 0 ? 1 : -1 });
   });
+  if (skins.length) {
+    // Un seul squelette pour les quatre pattes (une seule texture d'os par animal).
+    const skeleton = new THREE.Skeleton(skins.flatMap((s) => s.bones), skins.flatMap((s) => s.inverses));
+    for (const s of skins) {
+      s.mesh.bind(skeleton, new THREE.Matrix4());
+      addShells(s.mesh, s.fur);
+    }
+    parts.skeleton = skeleton;
+  }
 
   // Mamelle des vaches (dessinée petite, pour toutes).
   if (opt('udder')) {
@@ -711,6 +740,8 @@ export function buildAnimalModel(speciesId, look) {
     const p = rayHit(headSdf, H(S.ear.o), [s * S.ear.d[0], S.ear.d[1], S.ear.d[2]], hr * 3);
     ear.position.copy(p).addScaledVector(sdfNormal(headSdf, p, hr * 0.02), -hr * 0.06);
     buildEar(ear, m.earType, s, hr, S, M, speciesId, high);
+    ear.userData.rest = ear.rotation.clone();
+    ear.userData.side = s;
     parts.ears.push(ear);
   }
 
@@ -724,7 +755,7 @@ export function buildAnimalModel(speciesId, look) {
   buildTail(tail, m.tailType, { R, L, legLen, y0, ty, fluff, M, look, high, wool, woolMat, furLen, pattern, speciesId });
 
   Object.assign(parts, {
-    neck, head, tail, snoutTip,
+    neck, head, tail, snoutTip, headTilt: S.tilt - na,
     headHeight: neckBase.y + nl * Math.cos(na),
     saddleY: backTop(-L * 0.05),
   });
@@ -787,15 +818,46 @@ function buildLeg(pivot, o) {
     : (front ? LEG_PATHS.pawFront : LEG_PATHS.pawHind);
   // Les moutons ont des pattes fines, les vaches des canons plus épais.
   const thin = o.wool ? 0.85 : o.speciesId === 'cow' ? 1.12 : 1;
-  const g = loft(path.map(([z, y, w, d], i) => {
+  const sec = ([z, y, w, d], i) => {
     const k = i < 3 ? 1 : thin;
     return { p: [0, y * T, z * T], rx: w * r * k, ry: d * r * k };
-  }), { radial: high ? 14 : 9, sub: high ? 4 : 2 });
-  const legMesh = add(pivot, g, o.mat);
-  addShells(legMesh, o.furLen * 0.6);
+  };
+  const g = loft(path.map(sec), { radial: high ? 14 : 9, sub: high ? 4 : 2 });
+  // Genou (devant) ou jarret (derrière) : la patte est un seul tube plié par deux os (peau lissée),
+  // avec un fondu des poids autour de l'articulation : ni couture ni boule au pli.
+  const ki = kind === 'hoof' || kind === 'cloven' ? 5 : 3;
+  const kneeP = [0, path[ki][1] * T, path[ki][0] * T];
+  const pos = g.attributes.position;
+  const n = pos.count;
+  const si = new Uint16Array(n * 4);
+  const sw = new Float32Array(n * 4);
+  const band = T * 0.09;
+  const b0 = (o.index ?? 0) * 2;
+  for (let i = 0; i < n; i++) {
+    const w1 = THREE.MathUtils.smoothstep(kneeP[1] - pos.getY(i), -band, band);
+    si[i * 4] = b0;
+    si[i * 4 + 1] = b0 + 1;
+    sw[i * 4] = 1 - w1;
+    sw[i * 4 + 1] = w1;
+  }
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  const hipBone = new THREE.Bone();
+  const knee = new THREE.Bone();
+  knee.position.set(...kneeP);
+  hipBone.add(knee);
+  const legMesh = new THREE.SkinnedMesh(g, o.mat);
+  legMesh.castShadow = true;
+  legMesh.receiveShadow = true;
+  legMesh.add(hipBone);
+  pivot.add(legMesh);
+  pivot.userData.knee = knee;
+  // Le squelette est partagé par les quatre pattes : il est créé (et la fourrure ajoutée) par l'appelant.
+  pivot.userData.skin = { mesh: legMesh, bones: [hipBone, knee], inverses: [new THREE.Matrix4(), new THREE.Matrix4().makeTranslation(-kneeP[0], -kneeP[1], -kneeP[2])], fur: o.furLen * 0.6 };
   const end = path[path.length - 1];
   const ez = end[0] * T;
   const ey = end[1] * T;
+  const at = (x, y, z) => [x, y - kneeP[1], z - kneeP[2]]; // repère de l'os du genou
   if (o.wool) {
     // Laine qui couvre le haut des pattes.
     const wg = loft([[0, 0.15, 2.6], [0, 0, 2.8], [0, -0.22, 2.4], [0.0, -0.3, 1.2]].map(([z, y, w]) => ({ p: [0, y * T, z * T], rx: w * r * 1.2, ry: w * r * 1.4 })), { radial: 12, sub: 3 });
@@ -804,20 +866,20 @@ function buildLeg(pivot, o) {
   if (kind === 'hoof') {
     const h = T + ey;
     const hoof = new THREE.CylinderGeometry(r * 0.62, r * 0.95, h + r * 0.1, high ? 16 : 10);
-    add(pivot, hoof, M.hoof, [0, -T + (h + r * 0.1) / 2, ez + r * 0.06], [0.12, 0, 0], [1, 1, 1.12]);
+    add(knee, hoof, M.hoof, at(0, -T + (h + r * 0.1) / 2, ez + r * 0.06), [0.12, 0, 0], [1, 1, 1.12]);
   } else if (kind === 'cloven') {
     const h = T + ey;
     for (const s of [1, -1]) {
       const half = new THREE.CylinderGeometry(r * 0.5, r * 0.78, h + r * 0.1, 10, 1, false, 0, Math.PI);
-      add(pivot, half, M.hoof, [s * r * 0.08, -T + (h + r * 0.1) / 2, ez + r * 0.1], [0.15, s > 0 ? 0 : Math.PI, 0], [1, 1, 1.25]);
+      add(knee, half, M.hoof, at(s * r * 0.08, -T + (h + r * 0.1) / 2, ez + r * 0.1), [0.15, s > 0 ? 0 : Math.PI, 0], [1, 1, 1.25]);
     }
   } else {
     // Patte : coussinet arrondi et doigts.
     const pr = r * 1.25;
     const pz = ez + (front ? 0.04 : 0.06) * T;
-    add(pivot, sphere(pr, 14, 10), o.mat, [0, -T + pr * 0.62, pz], null, [1.05, 0.68, 1.35]);
+    add(knee, sphere(pr, 14, 10), o.mat, at(0, -T + pr * 0.62, pz), null, [1.05, 0.68, 1.35]);
     for (const k of [-1, 0, 1]) {
-      add(pivot, sphere(pr * 0.42, 10, 8), o.mat, [k * pr * 0.42, -T + pr * 0.32, pz + pr * 0.95 - Math.abs(k) * pr * 0.12], null, [1, 0.8, 1.1], false);
+      add(knee, sphere(pr * 0.42, 10, 8), o.mat, at(k * pr * 0.42, -T + pr * 0.32, pz + pr * 0.95 - Math.abs(k) * pr * 0.12), null, [1, 0.8, 1.1], false);
     }
   }
 }
@@ -1039,6 +1101,10 @@ export function disposeModel(object) {
   const done = new Set();
   object.traverse((o) => {
     if (!o.isMesh && !o.isLineSegments) return;
+    if (o.isSkinnedMesh && o.skeleton && !done.has(o.skeleton)) {
+      done.add(o.skeleton);
+      o.skeleton.dispose();
+    }
     if (!done.has(o.geometry) && !o.geometry.userData.shared) {
       o.geometry.dispose();
       done.add(o.geometry);

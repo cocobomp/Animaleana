@@ -149,7 +149,13 @@ describe('arrivée', () => {
     const caring = [adult('horse')];
     const t1 = planTrip({ mode: 'van', hours: 9, animals: lazy });
     const t2 = planTrip({ mode: 'van', hours: 9, animals: caring });
-    runToEnd(t1, lazy, { rng: rng() });
+    // runToEnd renvoie les événements survenus, sous la forme attendue par TripFlow.handleEvents : [{ a, events }].
+    const happened = runToEnd(t1, lazy, { rng: rng() });
+    expect(Array.isArray(happened)).toBe(true);
+    for (const h of happened) {
+      expect(h.a).toBe(lazy[0]);
+      expect(Array.isArray(h.events)).toBe(true);
+    }
     while (t2.status !== 'arrived') {
       if (t2.status === 'moving') tickTrip(t2, caring, 0.5, { rng: rng() });
       else {

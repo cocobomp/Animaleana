@@ -18,19 +18,25 @@ ui.showProfiles();
 
 // Le service worker garde tout le jeu en cache pour jouer sans réseau.
 // L'écran d'accueil dit quand c'est prêt (« ✅ Prêt à jouer sans Internet »).
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  const show = (state) => {
-    window.offlineState = state;
-    const el = document.querySelector('.offline');
-    if (el) el.textContent = `${state === 'ready' ? '✅' : '⏳'} ${t(state === 'ready' ? 'offlineReady' : 'offlinePreparing')}`;
-  };
+// Le cache hors ligne n'existe qu'en https (ou sur localhost) : depuis un téléphone sur l'adresse http
+// de l'ordinateur, le jeu marche mais ne s'installe pas ; on l'écrit au lieu de « Préparation… » sans fin.
+const ICONS = { ready: '✅', preparing: '⏳', unavailable: 'ℹ️' };
+const KEYS = { ready: 'offlineReady', preparing: 'offlinePreparing', unavailable: 'offlineUnavailable' };
+const show = (state) => {
+  window.offlineState = state;
+  const el = document.querySelector('.offline');
+  if (el) el.textContent = `${ICONS[state]} ${t(KEYS[state])}`;
+};
+if (import.meta.env.PROD && !(window.isSecureContext && 'serviceWorker' in navigator)) {
+  show('unavailable');
+} else if ('serviceWorker' in navigator && import.meta.env.PROD) {
   show('preparing');
   const check = async () => {
     const keys = await caches.keys();
     const ok = await Promise.all(keys.filter((k) => k.startsWith('animaleana-')).map((k) => caches.open(k).then((c) => c.match('./index.html'))));
     if (ok.some(Boolean)) show('ready');
   };
-  navigator.serviceWorker.register('./sw.js').then(() => navigator.serviceWorker.ready).then(check).catch(() => {});
+  navigator.serviceWorker.register('./sw.js').then(() => navigator.serviceWorker.ready).then(check).catch(() => show('unavailable'));
   navigator.serviceWorker.addEventListener('controllerchange', check);
   setTimeout(check, 4000);
 }

@@ -104,6 +104,7 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .tagline { text-align: center; color: var(--muted); margin-top: 0; }
 .lang { display: flex; gap: 8px; justify-content: center; margin: 10px 0; }
 .offline { text-align: center; color: var(--muted); font-size: 0.85em; }
+.version { text-align: center; color: var(--muted); font-size: 0.72em; opacity: 0.8; margin-top: -6px; }
 .profiles { display: grid; gap: 8px; }
 .profile { display: flex; gap: 8px; }
 .profile-play { flex: 1; display: grid; text-align: left; gap: 2px; }

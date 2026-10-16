@@ -50,7 +50,9 @@ export function showProfiles(ui) {
       // État du cache hors ligne (src/main.js) : prêt, en préparation, ou impossible en http.
       h('p', { class: 'offline' }, window.offlineState
         ? `${{ ready: '✅', preparing: '⏳', unavailable: 'ℹ️' }[window.offlineState]} ${t({ ready: 'offlineReady', preparing: 'offlinePreparing', unavailable: 'offlineUnavailable' }[window.offlineState])}`
-        : `📴 ${t('offline')}`)));
+        : `📴 ${t('offline')}`),
+      // Version du jeu (injectée au build par vite.config.js) : pratique pour savoir ce qu'on teste.
+      h('p', { class: 'version' }, versionLine())));
     ui.screen.hidden = false;
   };
   render();
@@ -211,4 +213,12 @@ export function showAvatarEditor(ui, profile, onDone) {
         hat)),
     h('button', { class: 'primary big', onClick: done }, `✅ ${t('done')}`)));
   ui.screen.hidden = false;
+}
+
+/** « v0.3.0 · 2026-10-16 11:05 UTC · cb4307f » (valeurs définies au build ; vides en développement). */
+function versionLine() {
+  const v = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
+  const built = typeof __APP_BUILT__ !== 'undefined' ? __APP_BUILT__ : '';
+  const commit = typeof __APP_COMMIT__ !== 'undefined' ? __APP_COMMIT__ : '';
+  return [`v${v}`, built && `${built} UTC`, commit].filter(Boolean).join(' · ');
 }

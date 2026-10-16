@@ -1,4 +1,16 @@
 import { defineConfig } from 'vite';
+import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+
+// Version affichée sur l'écran d'accueil : numéro du package.json, date du build et commit.
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+let commit = '';
+try {
+  commit = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+} catch {
+  /* pas de dépôt git : pas de commit affiché */
+}
+const built = new Date().toISOString().slice(0, 16).replace('T', ' ');
 
 // Génère sw.js avec la liste de tous les fichiers du jeu,
 // pour qu'il fonctionne entièrement hors ligne après la première ouverture.
@@ -41,6 +53,11 @@ self.addEventListener('fetch', (e) => {
 
 export default defineConfig({
   base: './',
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_COMMIT__: JSON.stringify(commit),
+    __APP_BUILT__: JSON.stringify(built),
+  },
   plugins: [offlineServiceWorker()],
   build: { chunkSizeWarningLimit: 1200 },
   test: { exclude: ['**/node_modules/**', '.claude/**'] },

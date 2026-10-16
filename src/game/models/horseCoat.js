@@ -73,17 +73,17 @@ const COAT_FRAGMENT = /* glsl */ `
   float muzzleZone = isHead * smoothstep(0.82, 0.95, hl.z);
   c = mix(c, mix(c, vec3(0.94, 0.86, 0.72), 0.55), hMealy * clamp(belly * 1.4 + muzzleZone, 0.0, 1.0));
 
-  // Pie (tobiano) : grandes plaques blanches qui coupent le dos, membres blancs, tête foncée.
-  if (hPinto > 0.0) {
-    float pn = hFbm(P * vec3(1.7, 1.4, 1.7) + hSeed * 3.1) + (hNoise(P * 9.0) - 0.5) * 0.06;
-    float t = pn + isLeg * (1.0 - smoothstep(0.1, 0.7, h)) * 0.45 - isHead * 0.5 + isBody * smoothstep(0.35, 0.9, up) * smoothstep(-0.6, -0.2, -abs(P.z + 0.1)) * 0.12;
-    c = mix(c, hSec, smoothstep(0.545, 0.565, t) * hPinto * (1.0 - isHoof - isSkin));
-  }
-
   // Bai, isabelle : crins noirs et bas des membres noirs ; pointes des oreilles noires.
   float pts = isLeg * (1.0 - smoothstep(0.42, 0.62, h + (hNoise(P * 24.0) - 0.5) * 0.1));
   c = mix(c, hPointC * 0.95 + c * 0.05, pts * hPoints);
   c = mix(c, hPointC, isEar * smoothstep(0.65, 0.95, h) * max(hPoints, 0.6));
+
+  // Pie (tobiano) : grandes plaques blanches qui coupent le dos, membres blancs, tête foncée.
+  if (hPinto > 0.0) {
+    float pn = hFbm(P * vec3(1.7, 1.4, 1.7) + hSeed * 3.1) + (hNoise(P * 9.0) - 0.5) * 0.06;
+    float t = pn + isLeg * (1.0 - smoothstep(0.1, 0.7, h)) * 0.45 - isHead * 0.5 + isBody * smoothstep(0.35, 0.9, up) * smoothstep(-0.6, -0.2, -abs(P.z + 0.1)) * 0.12;
+    c = mix(c, hSec, smoothstep(0.49, 0.51, t) * hPinto * (1.0 - isHoof - isSkin));
+  }
 
   // Isabelle / souris : raie de mulet le long du dos, zébrures sur les membres.
   if (hDun > 0.0) {

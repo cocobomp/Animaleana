@@ -96,6 +96,7 @@ export class HelperEntity {
       this.avatar.arms.forEach((a, i) => { a.rotation.x = -0.8 + Math.sin(this.workTimer * 8 + i) * 0.4; });
       this.avatar.elbows?.forEach((e, i) => { e.rotation.x = -0.9 + Math.cos(this.workTimer * 8 + i) * 0.35; });
       this.avatar.torso.rotation.x = 0.12;
+      this.avatar.legs.forEach((l) => { l.rotation.x *= 0.85; });
       this.avatar.knees?.forEach((k) => { k.rotation.x = 0.1; });
       if (this.workTimer <= 0) {
         game.helperDone(this, this.task);

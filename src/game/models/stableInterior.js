@@ -175,9 +175,18 @@ export function stableModel(label) {
   g.add(broom);
   add(broom, new THREE.CylinderGeometry(0.025, 0.025, 1.4, 6), mat(0xb08350, 0.7), [1.45, 0.75, 2.2], [0.18, 0, 0]);
   add(broom, new THREE.BoxGeometry(0.4, 0.1, 0.12), mat(0x7a5a2a, 0.9), [1.45, 0.08, 2.05]);
-  add(broom, new THREE.BoxGeometry(0.62, 0.32, 0.9), mat(0x2f6a3f, 0.6, { metalness: 0.3 }), [1.2, 0.35, 4.4]);
-  add(broom, new THREE.CylinderGeometry(0.12, 0.12, 0.08, 12), mat(0x222222, 0.9), [1.2, 0.12, 3.85], [0, 0, Math.PI / 2]);
-  add(broom, new THREE.CylinderGeometry(0.02, 0.02, 0.9, 6), mat(0x8a6a44, 0.7), [1.32, 0.15, 4.4], [Math.PI / 2, 0, 0.3]);
+  // Brouette : caisse évasée (avec un peu de paille dedans), roue devant, brancards et pieds derrière.
+  const barrow = new THREE.Group();
+  barrow.position.set(1.2, 0, 4.4);
+  broom.add(barrow);
+  add(barrow, new THREE.CylinderGeometry(1, 0.66, 0.3, 4, 1).rotateY(Math.PI / 4), mat(0x2f6a3f, 0.6, { metalness: 0.3 }), [0, 0.4, 0], null, [0.45, 1, 0.64]);
+  add(barrow, new THREE.BoxGeometry(0.5, 0.03, 0.76), mat(0xc9a95a, 1), [0, 0.53, 0], null, null, false);
+  add(barrow, new THREE.CylinderGeometry(0.13, 0.13, 0.07, 14), mat(0x222222, 0.9), [0, 0.13, -0.5], [0, 0, Math.PI / 2]);
+  add(barrow, new THREE.CylinderGeometry(0.03, 0.03, 0.07, 8), mat(0x888888, 0.4, { metalness: 0.7 }), [0, 0.13, -0.5], [0, 0, Math.PI / 2]);
+  for (const s of [-1, 1]) {
+    add(barrow, new THREE.CylinderGeometry(0.02, 0.02, 1.35, 6), mat(0x8a6a44, 0.7), [s * 0.2, 0.26, 0.12], [Math.PI / 2 - 0.1, 0, 0]);
+    add(barrow, new THREE.CylinderGeometry(0.018, 0.018, 0.28, 6), mat(0x555555, 0.6, { metalness: 0.5 }), [s * 0.17, 0.14, 0.32]);
+  }
 
   // Saleté de l'allée : brins de paille et poussière (plus ou moins visibles).
   const aisleDirt = new THREE.Group();

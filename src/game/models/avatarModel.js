@@ -1,7 +1,7 @@
 // Modèle 3D du personnage du joueur (regarde vers +Z, environ 1,6 m).
 // Corps en « lofts » (formes lisses), tête sculptée (champ de distance), mains, chaussures,
 // yeux avec iris et cils, vêtements avec plis légers (relief peint).
-// Squelette : hanches → genoux (jambes), épaules → coudes (bras), torse, tête.
+// Squelette : hanches → genoux (jambes) ; torse (pivot aux hanches) → épaules → coudes (bras), tête.
 // Les proportions sont un peu enfantines (grosse tête, membres ronds).
 
 import * as THREE from 'three';
@@ -124,29 +124,35 @@ export function buildAvatar(look) {
     knees.push(knee);
   }
 
-  // --- Torse (bassin + buste, avec épaules)
+  // --- Torse (bassin + buste, avec épaules). Le pivot est aux hanches : quand le buste se penche
+  // (course, travail), les bras et la tête suivent. Les formes restent décrites en hauteur absolue.
   const torso = new THREE.Group();
+  torso.position.y = HIP_Y;
   root.add(torso);
+  const body = new THREE.Group();
+  body.position.y = -HIP_Y;
+  torso.add(body);
   const pelvis = shared(`pelvis${R}`, () => limbGeo([[0.74, 0.12, 0.09], [0.8, 0.165, 0.11], [0.9, 0.16, 0.105], [0.96, 0.15, 0.1]], R + 4));
-  add(torso, pelvis, bottom);
-  const chest = shared(`chest${R}`, () => limbGeo([[0.9, 0.158, 0.105], [1.02, 0.15, 0.1], [1.15, 0.162, 0.108, 0.005], [1.27, 0.18, 0.108], [1.35, 0.186, 0.098], [1.4, 0.14, 0.08], [1.43, 0.07, 0.06]], R + 4));
-  add(torso, chest, top);
+  add(body, pelvis, bottom);
+  const chest = shared(`chest${R}`, () => limbGeo([[0.9, 0.158, 0.105], [1.02, 0.15, 0.1], [1.15, 0.162, 0.108, 0.005], [1.27, 0.19, 0.108], [1.34, 0.215, 0.1], [1.385, 0.17, 0.085], [1.42, 0.085, 0.065], [1.44, 0.06, 0.055]], R + 4));
+  add(body, chest, top);
   // Ourlet du tee-shirt et col.
-  add(torso, new THREE.TorusGeometry(0.157, 0.012, 6, R + 4), top, [0, 0.925, 0.002], [Math.PI / 2, 0, 0], [1, 1, 0.68]);
-  add(torso, new THREE.TorusGeometry(0.058, 0.014, 6, R), top, [0, 1.43, 0.005], [Math.PI / 2 - 0.15, 0, 0]);
+  // (le tore est couché par la rotation : pour l'aplatir dans la profondeur du corps, c'est son axe Y local qu'on réduit)
+  add(body, new THREE.TorusGeometry(0.15, 0.008, 6, R + 4), top, [0, 0.925, 0.002], [Math.PI / 2, 0, 0], [1, 0.64, 1]);
+  add(body, new THREE.TorusGeometry(0.058, 0.014, 6, R), top, [0, 1.43, 0.005], [Math.PI / 2 - 0.15, 0, 0]);
 
   // --- Bras (pivot à l'épaule, coude articulé, manches courtes)
   const arms = [];
   const elbows = [];
   for (const s of [1, -1]) {
     const shoulder = new THREE.Group();
-    shoulder.position.set(s * 0.2, SHOULDER_Y, 0);
+    shoulder.position.set(s * 0.19, SHOULDER_Y - 0.03 - HIP_Y, 0);
     shoulder.rotation.z = s * 0.08;
-    root.add(shoulder);
+    torso.add(shoulder);
     const upper = shared(`upperArm${R}`, () => limbGeo([[0.04, 0.052, 0.052], [0, 0.058, 0.058], [-0.14, 0.048, 0.051], [-ELBOW, 0.041, 0.043]], R - 2, [0, 0.9]));
     add(shoulder, upper, top);
     // Manche courte un peu évasée.
-    const sleeve = shared(`sleeve${R}`, () => limbGeo([[0.05, 0.062, 0.062], [0, 0.066, 0.066], [-0.1, 0.064, 0.066], [-0.13, 0.066, 0.068]], R - 2, [0.3, 0.3]));
+    const sleeve = shared(`sleeve${R}`, () => limbGeo([[0.025, 0.06, 0.06], [-0.02, 0.065, 0.065], [-0.1, 0.063, 0.065], [-0.13, 0.066, 0.068]], R - 2, [0.3, 0.3]));
     add(shoulder, sleeve, top);
     const elbow = new THREE.Group();
     elbow.position.set(0, -ELBOW, 0);
@@ -166,9 +172,9 @@ export function buildAvatar(look) {
 
   // --- Tête (un peu grosse : proportions d'enfant)
   const head = new THREE.Group();
-  head.position.set(0, 1.5, 0);
+  head.position.set(0, 1.5 - HIP_Y, 0);
   head.scale.setScalar(1.1);
-  root.add(head);
+  torso.add(head);
   add(head, new THREE.CylinderGeometry(0.048, 0.056, 0.12, R), skin, [0, -0.07, 0]);
   const headGeo = shared(`head${high}`, () => sdfMesh(headSdf, [[-0.16, -0.12, -0.16], [0.16, 0.24, 0.17]], high ? 0.008 : 0.013));
   add(head, headGeo, skin, [0, 0.0, 0]);
@@ -232,28 +238,35 @@ export function buildAvatar(look) {
 }
 
 /**
- * Cycle de marche articulé (hanches, genoux, épaules, coudes, buste).
- * phase avance avec la distance parcourue ; speed en m/s.
+ * Cycle de marche / course articulé. phase avance avec la distance parcourue ; speed en m/s.
+ * Marche : petits pas, bras ballants. Course : foulée plus ample mais pas en grand écart, genoux
+ * hauts, coudes à 90°, buste penché en avant depuis les hanches, tête qui reste droite.
+ * À l'arrêt : jambes droites et respiration lente.
  */
 export function animateAvatarWalk(a, phase, speed) {
-  const amp = Math.min(0.7, speed * 0.16);
-  const run = Math.min(1, Math.max(0, (speed - 3.5) / 3));
+  const go = Math.min(1, speed / 1.2); // 0 à l'arrêt, 1 dès qu'on avance franchement
+  const run = Math.min(1, Math.max(0, (speed - 3.6) / 2.6));
+  const amp = Math.min(0.52, speed * 0.13); // demi-amplitude des hanches (rad)
+  const t = performance.now() / 1000;
   for (let i = 0; i < 2; i++) {
     const ph = phase + i * Math.PI;
-    const swing = Math.sin(ph) * amp;
-    a.legs[i].rotation.x = swing;
-    // Le genou se plie quand la jambe revient vers l'avant, un peu plus en courant.
+    const swing = Math.sin(ph); // > 0 : jambe en arrière
+    // La hanche fléchit plus vers l'avant qu'elle ne s'étend vers l'arrière.
+    a.legs[i].rotation.set(swing * amp - amp * 0.25, 0, 0);
+    // Le genou se plie pendant le retour de la jambe (haut en courant), presque droit à la pose du pied.
     const lift = Math.max(0, -Math.cos(ph));
-    if (a.knees) a.knees[i].rotation.x = lift * amp * (1.1 + run * 0.5) + run * 0.15;
-    const arm = -swing * 0.8;
-    a.arms[i].rotation.x = arm;
-    if (a.elbows) a.elbows[i].rotation.x = -(0.25 + run * 0.6) - Math.max(0, -arm) * 0.6;
+    if (a.knees) a.knees[i].rotation.x = 0.06 * go + run * 0.22 + lift * lift * (amp * 1.7 + run * 0.7);
+    // Bras opposé à la jambe ; coudes de plus en plus pliés quand on court.
+    const arm = -swing * amp * 0.8;
+    a.arms[i].rotation.set(arm, 0, (i === 0 ? 1 : -1) * (0.08 + run * 0.06));
+    if (a.elbows) a.elbows[i].rotation.x = -(0.2 + run * 1.1) - Math.max(0, -arm) * 0.5;
   }
-  // Buste penché quand on court, léger balancement des épaules.
-  a.torso.rotation.x = run * 0.18;
-  a.torso.rotation.y = Math.sin(phase) * 0.05 * amp;
-  a.head.rotation.x = -run * 0.12;
-  a.root.position.y = Math.abs(Math.sin(phase)) * 0.04 * Math.min(1, speed);
+  // Buste penché depuis les hanches quand on court, léger roulis des épaules ; la tête compense.
+  const breath = Math.sin(t * 1.6) * 0.012 * (1 - go);
+  a.torso.rotation.set(0.03 * go + run * 0.26 + breath, Math.sin(phase) * 0.06 * amp, Math.sin(phase) * 0.015 * go);
+  a.head.rotation.set(-(0.02 * go + run * 0.2) - breath * 0.6, 0, 0);
+  // Rebond : deux appuis par cycle, plus marqué en courant (petite phase de vol).
+  a.root.position.y = Math.abs(Math.sin(phase)) * (0.025 + run * 0.045) * go;
 }
 
 /** Pose assise (à cheval) ou debout. */

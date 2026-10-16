@@ -5,12 +5,23 @@
 // liberté). La zone verte est sur la jauge et sur l'anneau autour du manège ; l'enfant
 // s'arrête avec « C'est bon ! » (ou en appelant le cheval). Trop peu ou trop : moins de
 // points, de la même façon des deux côtés.
+//
+// Tout tient dans les 400 × 360 du cadre (portrait : largeur visible 400 ; paysage : hauteur
+// visible 360) et l'anneau ne passe pas sous la jauge des allures (tests/minigames-nettoyage-cheval).
 
 import { drawHorseTop, drawPersonTop, rrect, circle, emoji, label, fillView, clamp, lerp, dist } from './draw.js';
+import { tOr } from './clean.js';
 
 const C = { x: 200, y: 158 };
-const ARENA = 132;
+const ARENA = 126;
 const PATH = 102;
+
+/** Anneau « juste ce qu'il faut » autour du manège : centre, rayon, épaisseur du trait le plus large. */
+export const WORK_RING = { x: C.x, y: C.y, r: ARENA + 12, width: 16 };
+/** Jauge des allures (longe), en bas : son cadre blanc va de top à bottom, sous l'anneau. */
+export const GAIT_GAUGE = { x0: 30, y0: 328, w: 340, top: 306, bottom: 358 };
+/** Taille des noms d'allure (pas, trot, galop) sous la jauge. */
+export const GAIT_LABEL_SIZE = 14;
 
 function arena(g, ctx) {
   fillView(g, ctx.view, '#8cc268', '#6fa94f');
@@ -38,7 +49,7 @@ function arena(g, ctx) {
  * fait, la part verte est la zone juste [lo, hi] (avec son ✓), le tour complet = max (trop).
  */
 function drawWorkRing(g, value, lo, hi, max) {
-  const R = ARENA + 12;
+  const R = WORK_RING.r;
   const a0 = -Math.PI / 2;
   const ang = (k) => a0 + clamp(k) * Math.PI * 2;
   g.save();
@@ -48,7 +59,7 @@ function drawWorkRing(g, value, lo, hi, max) {
   circle(g, C.x, C.y, R);
   g.stroke();
   g.strokeStyle = 'rgba(63,174,98,0.95)';
-  g.lineWidth = 16;
+  g.lineWidth = WORK_RING.width;
   g.beginPath();
   g.arc(C.x, C.y, R, ang(lo / max), ang(hi / max));
   g.stroke();
@@ -97,7 +108,7 @@ export function lungeGame(ctx) {
   ctx.zone(LO / MAX, HI / MAX);
   ctx.button(`🐢 ${t('mg_lunge_slow')}`, { cls: 'mg-half', onTap: () => slow() });
   ctx.button(`✨ ${t('mg_lunge_fast')}`, { cls: 'mg-half primary', onTap: () => fast() });
-  ctx.stopButton(() => end());
+  const unstack = stopOnOwnRow(ctx.stopButton(() => end()));
 
   function slow() { if (!ctx.done) v = Math.max(0, v - 13); }
   function fast() {
@@ -123,7 +134,9 @@ export function lungeGame(ctx) {
 
   return {
     peek: () => ({ v, gait: gait(), step, value: work, lo: LO, hi: HI, max: MAX, gaits: GAITS }),
-    down(p) { if (p.y > 300) return; if (dist(p.x, p.y, C.x, C.y) < 60) slow(); else fast(); },
+    destroy() { unstack?.(); },
+    // Toucher le manège : au centre, doucement ; ailleurs, allez ! (pas sur la jauge des allures).
+    down(p) { if (p.y > GAIT_GAUGE.top) return; if (dist(p.x, p.y, C.x, C.y) < 60) slow(); else fast(); },
     key(code, down) {
       if (!down) return;
       if (code === 'ArrowUp' || code === 'Space' || code === 'ArrowRight') fast();
@@ -163,8 +176,9 @@ export function lungeGame(ctx) {
         if (zs !== zoneState) {
           zoneState = zs;
           wasIn = ok;
-          if (zs === 'in') { ctx.hint(t('mg_zoneHint'), 'good'); fx.text(C.x, C.y + 40, t('mg_good'), '#2f8a5f', 22); }
-          else if (zs === 'over') ctx.hint(t('mg_zoneHint'), 'warn');
+          // Dans le vert : « appuie sur C'est bon ! » (mg_tapStop, sinon la consigne de la zone).
+          if (zs === 'in') { ctx.hint(tOr(t, 'mg_tapStop', 'mg_zoneHint'), 'good'); fx.text(C.x, C.y + 40, t('mg_good'), '#2f8a5f', 22); }
+          else if (zs === 'over') ctx.hint(tOr(t, 'mg_tooMuchStop', 'mg_zoneHint'), 'warn');
         } else if (!zs) {
           if (ok && !wasIn) ctx.hint(t('mg_lunge_keep'), 'good');
           else if (!ok && wasIn) say();
@@ -212,12 +226,36 @@ export function lungeGame(ctx) {
   };
 }
 
+/** Espace en plus (px) entre « C'est bon ! » et les autres boutons (la rangée en met déjà 8). */
+export const STOP_GAP = 8;
+
+/**
+ * Téléphone en portrait : « C'est bon ! » passe sur sa propre ligne, en entier, sous
+ * « Doucement » / « Allez ! ». Trois boutons côte à côte coupaient les mots sur deux ou trois
+ * lignes (« Allez / ! »), et un « Allez ! » tapé un peu trop à droite finissait la séance.
+ * En paysage, ils restent sur une ligne : la hauteur y est comptée. Renvoie de quoi se désabonner.
+ */
+function stopOnOwnRow(btn) {
+  const row = btn?.parentElement;
+  const mq = globalThis.matchMedia?.('(max-width: 640px) and (orientation: portrait)');
+  if (!row?.style || !btn.style || !mq) return null;
+  // Un peu plus d'espace entre « Allez ! » (qu'on tape sans arrêt) et « C'est bon ! » (qui
+  // termine) : dessous en portrait, à côté en paysage.
+  const apply = () => {
+    row.style.flexWrap = mq.matches ? 'wrap' : '';
+    btn.style.flexBasis = mq.matches ? '100%' : '';
+    btn.style.marginTop = mq.matches ? `${STOP_GAP}px` : '';
+    btn.style.marginLeft = mq.matches ? '' : `${STOP_GAP}px`;
+  };
+  apply();
+  mq.addEventListener?.('change', apply);
+  return () => mq.removeEventListener?.('change', apply);
+}
+
 function drawGaitGauge(g, t, v, target, done) {
-  const x0 = 30;
-  const y0 = 322;
-  const w = 340;
+  const { x0, y0, w, top, bottom } = GAIT_GAUGE;
   g.fillStyle = 'rgba(255,255,255,0.9)';
-  rrect(g, x0 - 10, y0 - 22, w + 20, 52, 16);
+  rrect(g, x0 - 10, top, w + 20, bottom - top, 16);
   g.fill();
   for (const [id, [lo, hi]] of Object.entries(GAITS)) {
     const xa = x0 + (lo / 100) * w;
@@ -226,7 +264,8 @@ function drawGaitGauge(g, t, v, target, done) {
     g.fillStyle = on ? '#3fae62' : '#dfe8e2';
     rrect(g, xa + 2, y0 - 8, xb - xa - 4, 16, 8);
     g.fill();
-    label(g, t(`mg_gait_${id}`), (xa + xb) / 2, y0 + 19, 12, on ? '#1e7a40' : '#66746c');
+    // 14 px du cadre : environ 12 px à l'écran sur un téléphone de 360 px (12 px du cadre y faisait moins de 10 px).
+    label(g, t(`mg_gait_${id}`), (xa + xb) / 2, y0 + 18, GAIT_LABEL_SIZE, on ? '#1e7a40' : '#66746c');
   }
   emoji(g, '🐴', x0 + (clamp(v, 0, 100) / 100) * w, y0 - 4, 24);
 }
@@ -392,8 +431,9 @@ export function libertyGame(ctx) {
       const meDir = Math.atan2(hp.y - me.y, hp.x - me.x);
       drawPersonTop(g, me.x, me.y, meDir, 1);
       if (phase === 'drive' && drive >= LO) {
+        // La main « touche-le » au-dessus du cheval, sans sortir du cadre quand il passe en haut.
         const s = 1 + Math.sin(ctx.time * 6) * 0.15;
-        emoji(g, '👆', hp.x, hp.y - 44, 30 * s);
+        emoji(g, '👆', hp.x, Math.max(20, hp.y - 44), 30 * s);
       }
       if (join && join.k > 0.2) emoji(g, '💛', (hp.x + me.x) / 2, (hp.y + me.y) / 2 - 30, 26);
       label(g, '🟢 ' + t('mg_liberty_zone'), 200, 330, 15, '#1e5c3e');

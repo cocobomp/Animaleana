@@ -1,6 +1,11 @@
 // Mini-jeux de toilette : brosser, laver, couper les griffes, ferrer, tondre.
+//
+// Règle « juste ce qu'il faut » (score.js, via ctx.zone / ctx.finishJust) : chaque jeu a une
+// quantité idéale — pelage démêlé sans insister, mousse, longueur de griffe coupée, coups de
+// marteau par clou, laine laissée — montrée sur la jauge (bande verte) et dans la scène
+// (cadran, repères). Un peu trop peu ou un peu trop : moins de points, pareil des deux côtés.
 
-import { drawAnimal, animalShape, fitAnimal, rrect, ellipse, circle, emoji, label, fillView, sky, tiles, clamp, lerp, dist, distToSegment, shade, css, mix } from './draw.js';
+import { drawAnimal, animalShape, fitAnimal, inBody, rrect, ellipse, circle, emoji, label, fillView, sky, tiles, clamp, lerp, dist, distToSegment, shade, css, mix } from './draw.js';
 import { isBig } from './food.js';
 
 /** Décor de toilette : sol de la cour (grands animaux) ou pièce claire. */
@@ -64,8 +69,92 @@ function drawBrush(g, x, y, rot) {
   g.restore();
 }
 
+// ---------------------------------------------------------------- « juste ce qu'il faut »
+
+/**
+ * Petit cadran dans la scène : l'arc vert est la zone juste [lo, hi] (sur 0 → max), le point
+ * est la valeur. Bleu : pas encore assez ; vert (✓) : juste ; rouge (!) : trop.
+ */
+function drawDial(g, x, y, value, lo, hi, max, r = 24) {
+  const A0 = Math.PI * 0.75;
+  const A1 = Math.PI * 2.25;
+  const ang = (v) => A0 + (A1 - A0) * clamp(v / max);
+  const state = value < lo ? 'low' : value > hi ? 'high' : 'just';
+  const col = state === 'low' ? '#3c7bd9' : state === 'high' ? '#e0574a' : '#1e8a4a';
+  g.save();
+  g.fillStyle = 'rgba(255,255,255,0.88)';
+  circle(g, x, y, r + 11);
+  g.fill();
+  g.lineCap = 'round';
+  g.strokeStyle = '#d9d2c2';
+  g.lineWidth = 9;
+  g.beginPath();
+  g.arc(x, y, r, A0, A1);
+  g.stroke();
+  g.lineCap = 'butt';
+  g.strokeStyle = '#3fae62';
+  g.lineWidth = 11;
+  g.beginPath();
+  g.arc(x, y, r, ang(lo), ang(hi));
+  g.stroke();
+  g.lineCap = 'round';
+  if (value > 0) {
+    g.strokeStyle = col;
+    g.lineWidth = 5;
+    g.beginPath();
+    g.arc(x, y, r, A0, ang(value));
+    g.stroke();
+  }
+  const av = ang(value);
+  g.fillStyle = col;
+  circle(g, x + Math.cos(av) * r, y + Math.sin(av) * r, 6.5);
+  g.fill();
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 2;
+  g.stroke();
+  if (state !== 'low') label(g, state === 'just' ? '✓' : '!', x, y + 1, 22, col);
+  g.restore();
+}
+
+/**
+ * Suivi « juste ce qu'il faut » d'un jeu qui s'arrête au bouton ✅ : la zone [lo, hi] sur la
+ * jauge (qui va de 0 à max), les consignes quand on entre dans la zone ou qu'on la dépasse,
+ * le cadran dans la scène et la note finale (ctx.finishJust).
+ */
+function justRule(ctx, { lo, hi, max, slack, msgs }) {
+  const { t } = ctx;
+  const name = ctx.a?.name ?? ctx.name;
+  ctx.zone(lo / max, hi / max);
+  let state = 'low';
+  return {
+    lo,
+    hi,
+    max,
+    state: () => state,
+    /** Met la jauge à jour ; dit « C'est bon » en entrant dans la zone, « Un peu trop » au-delà. */
+    show(value) {
+      ctx.progress(value / max);
+      if (ctx.done) return state;
+      const s = value < lo ? 'low' : value > hi ? 'high' : 'just';
+      if (s !== state) {
+        state = s;
+        if (s === 'just') ctx.hint(t('mg_nowStop'), 'good');
+        else if (s === 'high') ctx.hint(t('mg_tooMuch', { name }), 'warn');
+      }
+      return state;
+    },
+    dial(g, value, x = 354, y = 50) { drawDial(g, x, y, value, lo, hi, max); },
+    finish(value) { return ctx.finishJust(value, lo, hi, { who: name, slack, msgs }); },
+  };
+}
+
 // ---------------------------------------------------------------- brosser
 
+/**
+ * Brosser : enlever les taches de poussière (0 → 1 sur la jauge) puis s'arrêter avec ✅.
+ * Juste : 0,85 à 1,05. Continuer à frotter une fois le poil propre irrite la peau (marques
+ * roses, 💢) : la jauge monte jusqu'à 1,4 et le jeu finit tout seul si on y arrive.
+ */
 export function brushGame(ctx) {
   const { a, t, fx } = ctx;
   const floorY = 305;
@@ -86,6 +175,12 @@ export function brushGame(ctx) {
     patches.push({ ...p, r: 20 * Math.max(0.8, fit.s), dirt: 1, seed: rng() * 10 });
   }
   if (a.species === 'horse') patches.push({ ...sh.neck, r: 18 * fit.s, dirt: 1, seed: 3 });
+  const MAX = 1.4;
+  const OVER_RATE = 0.0004; // irritation par pixel frotté une fois tout propre (≈ 1 passe = +0,07)
+  const rule = justRule(ctx, { lo: 0.85, hi: 1.05, max: MAX, slack: 0.3 });
+  let over = 0; // brossage « à vide » après propreté, en unités de jauge
+  let nextMark = 0.08; // prochaine marque d'irritation
+  const marks = []; // marques roses sur la peau
   let good = 0;
   let bad = 0;
   let last = null;
@@ -94,7 +189,10 @@ export function brushGame(ctx) {
 
   ctx.hint(t('mg_brush_hint'));
 
-  const progress = () => 1 - patches.reduce((s, p) => s + p.dirt, 0) / patches.length;
+  const clean = () => 1 - patches.reduce((s, p) => s + p.dirt, 0) / patches.length;
+  const value = () => Math.min(MAX, clean() + over);
+  const stop = () => { if (!ctx.done) rule.finish(value()); };
+  ctx.stopButton(stop);
 
   function rub(p) {
     if (!last) { last = p; return; }
@@ -119,30 +217,41 @@ export function brushGame(ctx) {
     if (touched) {
       if (withHair) good += d;
       else bad += d;
-      if (bad > 260 && bad > good) ctx.hint(t('mg_brush_dir'), 'warn');
-      else if (withHair && good > 120) ctx.hint(t('mg_brush_good'), 'good');
+      if (rule.state() === 'low') {
+        if (bad > 260 && bad > good) ctx.hint(t('mg_brush_dir'), 'warn');
+        else if (withHair && good > 120) ctx.hint(t('mg_brush_good'), 'good');
+      }
+    } else if (clean() >= 0.999 && inBody(sh, p.x, p.y, 1.1)) {
+      // Tout est propre : continuer à frotter irrite la peau.
+      over += d * OVER_RATE;
+      if (over >= nextMark) {
+        nextMark += 0.08;
+        marks.push({ x: p.x + (Math.random() - 0.5) * 16, y: p.y + (Math.random() - 0.5) * 12, r: 7 + Math.random() * 5, seed: Math.random() * 10 });
+        fx.float(p.x, p.y - 20, '💢', 20);
+      }
     }
     last = p;
-    const pr = progress();
-    ctx.progress(pr);
-    if (pr >= 0.999 && !ctx.done) {
-      const share = good / Math.max(1, good + bad);
-      ctx.finish(0.55 + 0.45 * clamp(share / 0.75), share > 0.6 ? t('mg_brush_end', { name: a.name }) : undefined);
-      fx.text(200, 120, t('mg_perfect'), '#2f8a5f', 28);
-    }
+    rule.show(value());
+    if (value() >= MAX) stop();
   }
 
   return {
-    peek: () => ({ body: { x: sh.bx, y: sh.by, rx: sh.rx, ry: sh.ry }, head: sh.head, patches: patches.filter((q) => q.dirt > 0).map((q) => ({ x: q.x, y: q.y })) }),
+    peek: () => ({
+      value: value(), lo: rule.lo, hi: rule.hi, max: MAX, clean: clean(), over,
+      body: { x: sh.bx, y: sh.by, rx: sh.rx, ry: sh.ry }, head: sh.head,
+      patches: patches.filter((q) => q.dirt > 0).map((q) => ({ x: q.x, y: q.y })),
+    }),
     down(p) { last = p; },
     move(p, down) { if (down) rub(p); },
     up() { last = null; },
-    update(dt) { if (ctx.done) shine += dt; },
+    key(code, down) { if (down && (code === 'Space' || code === 'Enter' || code === 'NumpadEnter')) stop(); },
+    update(dt) { if (ctx.done || clean() >= 0.999) shine += dt; },
     draw(g) {
       groomBackground(g, ctx, floorY);
-      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, happy: ctx.done || progress() > 0.6, wag: ctx.done });
-      // Sens du poil
-      if (!ctx.done) {
+      const st = rule.state();
+      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, happy: st === 'just' || (ctx.done && over < 0.1), wag: ctx.done && st !== 'high', earsBack: st === 'high', shake: st === 'high' && !ctx.done && ctx.pointer.down ? 0.4 : 0 });
+      // Sens du poil (tant qu'il reste des taches)
+      if (!ctx.done && clean() < 0.999) {
         g.save();
         g.globalAlpha = 0.45 + Math.sin(ctx.time * 3) * 0.15;
         for (let i = -1; i <= 1; i++) {
@@ -167,20 +276,36 @@ export function brushGame(ctx) {
         }
         g.restore();
       }
-      if (ctx.done) {
+      // Peau irritée (brossé trop longtemps)
+      for (const m of marks) {
+        g.save();
+        g.globalAlpha = 0.55;
+        g.fillStyle = '#f08ba3';
+        ellipse(g, m.x, m.y, m.r, m.r * 0.7, m.seed);
+        g.fill();
+        g.restore();
+      }
+      // Le poil brille : c'est le moment de s'arrêter
+      if (clean() >= 0.999 && st !== 'high') {
         for (let i = 0; i < 4; i++) {
           const p = sh.L(Math.cos(shine * 2 + i * 1.6) * sh.rx * 0.6, Math.sin(shine * 3 + i) * sh.ry * 0.5);
           emoji(g, '✨', p.x, p.y, 18, 0, 0.8);
         }
       }
+      rule.dial(g, value());
       const pp = ctx.pointer;
-      if (pp.over || pp.down) drawBrush(g, pp.x, pp.y - 6, rot);
+      if ((pp.over || pp.down) && !ctx.done) drawBrush(g, pp.x, pp.y - 6, rot);
     },
   };
 }
 
 // ---------------------------------------------------------------- laver
 
+/**
+ * Laver : savonner (la jauge monte avec la mousse : points bien savonnés + surplus) puis ✅,
+ * et rincer. Juste : 0,85 à 1,05. Trop de mousse (jusqu'à 1,5) : long à rincer ; pas assez :
+ * la boue reste. La note vient de la mousse au moment du ✅.
+ */
 export function washGame(ctx) {
   const { a, t, fx } = ctx;
   const floorY = 305;
@@ -191,12 +316,17 @@ export function washGame(ctx) {
     x: p.x + (ctx.rng() - 0.5) * step * 0.7,
     y: p.y + (ctx.rng() - 0.5) * step * 0.7,
     soap: 0,
+    peak: 0, // le plus de mousse qu'il y a eu (la boue part à partir de 0,7)
     mud: ctx.rng() < 0.45,
     k: ctx.rng(),
     // petites bulles autour du point
     b: [0, 1, 2].map(() => ({ dx: (ctx.rng() - 0.5) * step * 0.9, dy: (ctx.rng() - 0.5) * step * 0.9, r: 0.35 + ctx.rng() * 0.5 })),
   }));
+  const SOAP_MAX = 1.5; // mousse par point : 1 = bien savonné, au-delà = surplus
+  const MAX = 1.5;
+  const rule = justRule(ctx, { lo: 0.85, hi: 1.05, max: MAX, slack: 0.3 });
   let phase = 'soap';
+  let soapValue = 0; // mousse au moment du ✅ (c'est elle qui est notée)
   let last = null;
   let shake = 0;
   let spray = 0;
@@ -204,63 +334,85 @@ export function washGame(ctx) {
   ctx.hint(t('mg_wash_hint'));
 
   const frac = (fn) => cells.filter(fn).length / cells.length;
+  // Mousse : part des points bien savonnés (≥ 1) + surplus moyen (au-delà de 1).
+  const soapNow = () => frac((c) => c.soap >= 1) + cells.reduce((s, c) => s + Math.max(0, c.soap - 1), 0) / cells.length;
+  const value = () => (phase === 'soap' ? soapNow() : soapValue);
 
   function scrub(p) {
     if (!last) { last = p; return; }
     const d = dist(p.x, p.y, last.x, last.y);
     for (const c of cells) {
-      if (c.soap >= 1) continue;
+      if (c.soap >= SOAP_MAX) continue;
       if (distToSegment(c.x, c.y, last.x, last.y, p.x, p.y) < 26) {
-        c.soap = Math.min(1, c.soap + d * 0.022 + 0.04);
+        // Jusqu'à 1 la mousse monte vite (une passe suffit) ; au-delà, le surplus vient
+        // lentement : il faut vraiment insister pour en mettre trop.
+        let inc = d * 0.022 + 0.04;
+        if (c.soap < 1) {
+          const room = 1 - c.soap;
+          c.soap = Math.min(1, c.soap + inc);
+          inc = Math.max(0, inc - room);
+        }
+        c.soap = Math.min(SOAP_MAX, c.soap + inc * 0.15);
+        c.peak = Math.max(c.peak, c.soap);
         if (Math.random() < 0.15) fx.dot(c.x, c.y, '', 4 + Math.random() * 5, { vy: -30 - Math.random() * 30, life: 0.9, bubble: true });
       }
     }
     last = p;
+    rule.show(soapNow());
+    if (soapNow() >= MAX - 0.08) toRinse();
   }
 
+  /** ✅ : on garde la mousse telle quelle pour la note, et on passe au rinçage. */
+  function toRinse() {
+    if (ctx.done || phase !== 'soap') return;
+    soapValue = soapNow();
+    phase = 'rinse';
+    last = null;
+    ctx.zone(null);
+    ctx.progress(0);
+    ctx.clearButtons();
+    ctx.hint(t('mg_wash_rinse'), 'good');
+    fx.text(200, 80, t('mg_good'), '#2f8a5f', 26);
+  }
+  ctx.stopButton(toRinse);
+
   return {
-    peek: () => ({ phase, body: { x: sh.bx, y: sh.by, rx: sh.rx, ry: sh.ry }, head: sh.head }),
+    peek: () => ({
+      phase, value: value(), lo: rule.lo, hi: rule.hi, max: MAX,
+      soaped: frac((c) => c.soap >= 1), rinsed: frac((c) => c.soap <= 0.05),
+      body: { x: sh.bx, y: sh.by, rx: sh.rx, ry: sh.ry }, head: sh.head,
+    }),
     down(p) { last = p; },
     move(p, down) { if (down && phase === 'soap') scrub(p); },
     up() { last = null; },
+    key(code, down) { if (down && (code === 'Space' || code === 'Enter' || code === 'NumpadEnter')) toRinse(); },
     update(dt) {
       if (ctx.done) {
         shake = Math.max(0, shake - dt * 0.8);
         return;
       }
+      if (phase !== 'rinse') return;
       const pp = ctx.pointer;
-      if (phase === 'soap') {
-        const f = frac((c) => c.soap >= 1);
-        ctx.progress(0.6 * f / 0.9);
-        if (f >= 0.9) {
-          for (const c of cells) c.soap = 1;
-          phase = 'rinse';
-          ctx.hint(t('mg_wash_rinse'), 'good');
-          fx.text(200, 80, t('mg_good'), '#2f8a5f', 26);
+      if (pp.down) {
+        spray += dt * 40;
+        while (spray > 1) {
+          spray--;
+          fx.dot(pp.x + (Math.random() - 0.5) * 36, pp.y + 16, 'rgba(80, 160, 235, 0.85)', 2.5, { vy: 260 + Math.random() * 80, vx: (Math.random() - 0.5) * 30, life: 0.5 });
         }
-      } else {
-        if (pp.down) {
-          spray += dt * 40;
-          while (spray > 1) {
-            spray--;
-            fx.dot(pp.x + (Math.random() - 0.5) * 36, pp.y + 16, 'rgba(80, 160, 235, 0.85)', 2.5, { vy: 260 + Math.random() * 80, vx: (Math.random() - 0.5) * 30, life: 0.5 });
-          }
-          for (const c of cells) {
-            if (c.soap <= 0) continue;
-            const dx = c.x - pp.x;
-            const dy = c.y - pp.y;
-            if (Math.abs(dx) < 34 && dy > -20 && dy < 110) c.soap = Math.max(0, c.soap - dt * 2.2);
-          }
+        for (const c of cells) {
+          if (c.soap <= 0) continue;
+          const dx = c.x - pp.x;
+          const dy = c.y - pp.y;
+          if (Math.abs(dx) < 34 && dy > -20 && dy < 110) c.soap = Math.max(0, c.soap - dt * 2.2);
         }
-        const f = frac((c) => c.soap <= 0.05);
-        ctx.progress(0.6 + 0.4 * f / 0.92);
-        if (f >= 0.92) {
-          for (const c of cells) c.soap = 0;
-          shake = 1;
-          fx.burst(sh.bx, sh.by - sh.ry, '💦', 10, { speed: 220, spread: 3 });
-          const time = ctx.time;
-          ctx.finish(time <= 24 ? 1 : Math.max(0.6, 1 - (time - 24) / 40));
-        }
+      }
+      const f = frac((c) => c.soap <= 0.05);
+      ctx.progress(f / 0.92);
+      if (f >= 0.92) {
+        for (const c of cells) c.soap = 0;
+        shake = 1;
+        fx.burst(sh.bx, sh.by - sh.ry, '💦', 10, { speed: 220, spread: 3 });
+        rule.finish(soapValue);
       }
     },
     draw(g) {
@@ -275,21 +427,22 @@ export function washGame(ctx) {
         g.fill();
       }
       drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, shake, happy: ctx.done, blink: phase === 'rinse' && ctx.pointer.down, earsBack: phase === 'rinse' && ctx.pointer.down });
-      // Boue puis mousse
+      // Boue (elle part dès qu'il y a eu assez de mousse ; sinon elle reste : encore sale)
       for (const c of cells) {
-        if (c.mud && c.soap < 0.7 && phase === 'soap') {
-          g.fillStyle = `rgba(110, 80, 50, ${0.55 * (1 - c.soap / 0.7)})`;
+        if (c.mud && c.peak < 0.7) {
+          g.fillStyle = `rgba(110, 80, 50, ${0.55 * (1 - c.peak / 0.7)})`;
           circle(g, c.x, c.y, step * 0.45);
           g.fill();
         }
       }
+      // Mousse (plus grosse quand on en a mis trop)
       for (const c of cells) {
         if (c.soap <= 0.02) continue;
-        const k = Math.min(1, c.soap);
+        const k = Math.min(SOAP_MAX, c.soap);
         for (const b of c.b) {
           const r = step * 0.42 * b.r * (0.4 + k * 0.6);
-          const x = c.x + b.dx * k;
-          const y = c.y + b.dy * k;
+          const x = c.x + b.dx * Math.min(1, k);
+          const y = c.y + b.dy * Math.min(1, k);
           g.fillStyle = 'rgba(255,255,255,0.88)';
           circle(g, x, y, r);
           g.fill();
@@ -301,6 +454,7 @@ export function washGame(ctx) {
           g.fill();
         }
       }
+      if (phase === 'soap') rule.dial(g, soapNow());
       const pp = ctx.pointer;
       if ((pp.over || pp.down) && !ctx.done) {
         if (phase === 'soap') {
@@ -323,6 +477,12 @@ export function washGame(ctx) {
 
 // ---------------------------------------------------------------- griffes et onglons
 
+/**
+ * Griffes : un seul coup de ciseaux par griffe, quand ils passent dans la zone verte.
+ * La quantité notée est la longueur coupée (0 = rien, 1 = tout) : juste entre 0,34 et 0,54 ;
+ * en dessous la griffe reste longue, au-dessus on approche du rose (ça fait mal). La jauge
+ * suit les ciseaux en direct ; la note finale est la moyenne des écarts à la zone.
+ */
 export function nailsGame(ctx) {
   const { a, t, fx } = ctx;
   const goat = a.species === 'goat';
@@ -332,86 +492,94 @@ export function nailsGame(ctx) {
   if (goat) {
     // Deux pieds, deux onglons chacun
     // (les onglons poussent vers le bas, sous la patte)
-    [[-66, 0.08], [-32, -0.08], [32, 0.08], [66, -0.08]].forEach(([dx, ang]) => claws.push({ bx: base.x + dx, by: 150, ang: Math.PI + ang, len: 80, w: 32, cut: 1, done: false, score: 0 }));
+    [[-66, 0.08], [-32, -0.08], [32, 0.08], [66, -0.08]].forEach(([dx, ang]) => claws.push({ bx: base.x + dx, by: 150, ang: Math.PI + ang, len: 80, w: 32, cut: 1, done: false, cutLen: 0 }));
   } else {
-    [[-66, -0.42], [-24, -0.14], [24, 0.14], [66, 0.42]].forEach(([dx, ang]) => claws.push({ bx: base.x + dx, by: 210 - Math.abs(dx) * 0.35, ang, len: 74, w: 16, cut: 1, done: false, score: 0 }));
+    [[-66, -0.42], [-24, -0.14], [24, 0.14], [66, 0.42]].forEach(([dx, ang]) => claws.push({ bx: base.x + dx, by: 210 - Math.abs(dx) * 0.35, ang, len: 74, w: 16, cut: 1, done: false, cutLen: 0 }));
   }
-  const QUICK = 0.38;
-  const GOOD_LO = 0.46;
+  const QUICK = 0.38; // en dessous : le rose (la veine)
+  const GOOD_LO = 0.46; // position des ciseaux (0 = base, 1 = bout) : zone verte
   const GOOD_HI = 0.66;
+  const LO = 1 - GOOD_HI; // longueur coupée juste : 0,34 à 0,54
+  const HI = 1 - GOOD_LO;
+  const SLACK = 0.15;
   const period = a.personality === 'shy' || a.personality === 'calm' ? 2.8 : a.personality === 'playful' || a.personality === 'stubborn' ? 2.0 : 2.4;
   let cur = 0;
   let u = 1;
   let phase = 0;
   let snip = 0;
-  let tries = 0;
+  let ouch = false;
   let face = '';
   let faceT = 0;
 
   ctx.hint(t(goat ? 'mg_hooves_hint' : 'mg_nails_hint'));
+  ctx.zone(LO, HI);
   ctx.button(`✂️ ${t('mg_nails_btn')}`, { cls: 'primary', onTap: () => cut() });
 
   const pos = (c, k) => ({ x: c.bx + Math.sin(c.ang) * c.len * k, y: c.by - Math.cos(c.ang) * c.len * k });
 
+  /** Note finale : moyenne des écarts à la zone, du côté le plus fréquent. */
+  function finishAll() {
+    let low = 0;
+    let high = 0;
+    for (const c of claws) {
+      if (c.cutLen < LO) low += LO - c.cutLen;
+      else if (c.cutLen > HI) high += c.cutLen - HI;
+    }
+    const mean = (low + high) / claws.length;
+    // Un écart moyen minuscule (≤ 0,02 : un cheveu à côté) compte comme juste.
+    const value = mean <= 0.02 ? (LO + HI) / 2 : high >= low ? HI + mean : LO - mean;
+    ctx.finishJust(value, LO, HI, { who: a.name, slack: SLACK, msgs: { high: ouch ? t('mg_nails_end_ouch', { name: a.name }) : undefined } });
+  }
+
   function cut() {
-    if (ctx.done) return;
+    if (ctx.done || cur >= claws.length) return;
     const c = claws[cur];
     snip = 1;
     const p = pos(c, u);
+    c.cut = u;
+    c.cutLen = 1 - u;
+    c.done = true;
     if (u < QUICK + 0.04) {
-      c.cut = Math.max(QUICK, u);
-      c.score = 0.35;
-      c.done = true;
+      ouch = true;
       fx.text(p.x, p.y - 30, t('mg_ouch'), '#c8463c', 24);
       face = '😣';
       faceT = 1.2;
-    } else if (u <= GOOD_HI + 0.02) {
-      c.cut = u;
-      const perfect = u >= GOOD_LO && u <= GOOD_HI;
-      c.score = perfect ? 1 : 0.8;
-      c.done = true;
-      fx.text(p.x, p.y - 30, t(perfect ? 'mg_perfect' : 'mg_good'), '#2f8a5f', 24);
+    } else if (u >= GOOD_LO && u <= GOOD_HI) {
+      fx.text(p.x, p.y - 30, t('mg_perfect'), '#2f8a5f', 24);
       fx.burst(p.x, p.y, '✨', 3, { speed: 70, size: 14 });
       face = '😊';
       faceT = 1;
+    } else if (u < GOOD_LO) {
+      fx.text(p.x, p.y - 30, t('mg_oops'), '#c07a10', 22);
+      face = '😬';
+      faceT = 1;
     } else {
-      // Trop long : on raccourcit un peu, il faut recouper.
-      c.cut = u;
-      tries++;
+      // Trop long : il en reste un bout qui dépasse.
       fx.text(p.x, p.y - 30, t('mg_shorter'), '#c07a10', 22);
-      if (tries >= 3) {
-        c.score = 0.7;
-        c.done = true;
-      }
+      face = '😕';
+      faceT = 1;
     }
     fx.dot(p.x, p.y, '#f4efe2', 4, { vx: (Math.random() - 0.5) * 80, vy: -60, grav: 500, life: 0.8 });
-    if (c.done) {
-      tries = 0;
-      cur++;
-      phase = 0;
-      ctx.progress(cur / claws.length);
-      if (cur >= claws.length) {
-        const q = claws.reduce((s, x) => s + x.score, 0) / claws.length;
-        ctx.finish(q, q < 0.6 ? t('mg_nails_end_ouch', { name: a.name }) : undefined);
-        return;
-      }
-    }
+    cur++;
+    phase = 0;
+    if (cur >= claws.length) finishAll();
   }
 
   return {
-    peek: () => ({ u, lo: GOOD_LO, hi: GOOD_HI, cur }),
+    peek: () => ({
+      u, value: 1 - u, lo: LO, hi: HI, uLo: GOOD_LO, uHi: GOOD_HI, quick: QUICK, cur, n: claws.length,
+      cuts: claws.map((c) => (c.done ? c.cutLen : null)),
+    }),
     down() { cut(); },
-    key(code, down) { if (down && (code === 'Space' || code === 'Enter')) cut(); },
+    key(code, down) { if (down && (code === 'Space' || code === 'Enter' || code === 'NumpadEnter')) cut(); },
     update(dt) {
       snip = Math.max(0, snip - dt * 4);
       faceT = Math.max(0, faceT - dt);
       if (ctx.done || cur >= claws.length) return;
       phase += dt / period;
-      const c = claws[cur];
-      const top = Math.min(1, c.cut);
-      const lo = 0.2;
       const tri = 1 - Math.abs(((phase % 1) * 2) - 1); // 0 → 1 → 0
-      u = lerp(top, lo, tri);
+      u = lerp(1, 0.2, tri);
+      ctx.progress(1 - u); // la jauge suit les ciseaux : longueur qui serait coupée
     },
     draw(g) {
       fillView(g, ctx.view, '#dff1fb', '#c4e3f4');
@@ -488,7 +656,7 @@ export function nailsGame(ctx) {
           g.lineTo(q.x, q.y);
           g.stroke();
         }
-        // zone verte où couper (claw en cours)
+        // zone verte où couper (griffe en cours)
         if (i === cur && !ctx.done) {
           const z0 = pos(c, GOOD_LO);
           const z1 = pos(c, Math.min(GOOD_HI, c.cut));
@@ -499,8 +667,10 @@ export function nailsGame(ctx) {
           g.moveTo(z0.x, z0.y);
           g.lineTo(z1.x, z1.y);
           g.stroke();
+          const zm = pos(c, (GOOD_LO + GOOD_HI) / 2);
+          label(g, '✓', zm.x + Math.cos(c.ang) * (c.w * 0.5 + 20), zm.y + Math.sin(c.ang) * (c.w * 0.5 + 20), 18, '#1e8a4a');
         }
-        if (c.done) emoji(g, c.score >= 0.8 ? '✅' : '🩹', tip.x, tip.y - 18, 18);
+        if (c.done) emoji(g, c.cutLen >= LO && c.cutLen <= HI ? '✅' : c.cut < QUICK + 0.04 ? '🩹' : '😕', tip.x, tip.y - 18, 18);
         g.restore();
       });
       // la pince
@@ -532,65 +702,118 @@ export function nailsGame(ctx) {
 
 // ---------------------------------------------------------------- ferrer (maréchal-ferrant)
 
+/**
+ * Ferrer : quatre clous ; on tape sur un clou (doigt, souris, ou bouton 🔨 / Espace) et il
+ * s'enfonce d'un tiers à chaque coup. Juste : 3 coups par clou (la tête affleure, ✓). Un coup
+ * de plus et le clou plie (💢). On s'arrête avec ✅ ; la jauge montre les coups du clou choisi.
+ * Note : moyenne des coups en trop ou en moins (1 clou plié = 0,925 ; tous à 4 = 0,7).
+ */
 export function shoeGame(ctx) {
   const { a, t, fx } = ctx;
   const cx = 200;
   const cy = 200;
+  const JUST = 3;
+  const MAXHITS = 5;
   const nails = [];
-  for (let i = 0; i < 3; i++) {
-    const ang = Math.PI * (0.92 - i * 0.2);
-    nails.push({ x: cx + Math.cos(ang) * 88, y: cy - Math.sin(ang) * 88 * 0.95 + 30, h: 1 });
-    nails.push({ x: cx - Math.cos(ang) * 88, y: cy - Math.sin(ang) * 88 * 0.95 + 30, h: 1 });
+  for (const ang of [Math.PI * 0.9, Math.PI * 0.66]) {
+    const dx = Math.cos(ang) * 88;
+    const dy = -Math.sin(ang) * 88 * 0.95 + 30;
+    nails.push({ x: cx + dx, y: cy + dy, hits: 0, bend: 0 }, { x: cx - dx, y: cy + dy, hits: 0, bend: 0 });
   }
   nails.sort((p, q) => p.y - q.y || p.x - q.x);
-  const TARGET = 18;
-  const DURATION = 1.35;
-  let cur = 0;
-  let ring = 0;
+  const n = nails.length;
+  const TOTAL = JUST * n;
+  const TAP_R = 46; // rayon de la cible autour d'un clou (≥ 44 px pour le doigt)
+  let sel = 0;
   let swing = 0;
-  let misses = 0;
-  let goods = 0;
+  let saidStop = false;
 
-  ctx.hint(t('mg_shoe_hint'));
+  // Pas de clé dédiée : « Taper 3× 🔨 — Arrête-toi dans la zone verte 🟩 »
+  ctx.hint(`${t('mg_shoe_btn')} 3× 🔨 — ${t('mg_zoneHint')}`);
+  ctx.zone((JUST - 0.5) / MAXHITS, (JUST + 0.5) / MAXHITS);
   ctx.button(`🔨 ${t('mg_shoe_btn')}`, { cls: 'primary', onTap: () => hit() });
+  ctx.stopButton(() => finishAll());
 
-  const radius = () => 64 - (ring / DURATION) * 64;
+  const showGauge = () => { if (!ctx.done) ctx.progress(nails[sel].hits / MAXHITS); };
+  showGauge();
+
+  /** Coups en trop (high) et en moins (low) sur tous les clous, et la valeur notée. */
+  function tally() {
+    let low = 0;
+    let high = 0;
+    for (const x of nails) {
+      if (x.hits < JUST) low += JUST - x.hits;
+      else high += x.hits - JUST;
+    }
+    const value = low + high === 0 ? TOTAL : high >= low ? TOTAL + low + high : TOTAL - low - high;
+    return { low, high, value };
+  }
+
+  function finishAll() {
+    if (ctx.done) return;
+    ctx.finishJust(tally().value, TOTAL, TOTAL, { who: a.name, slack: 2 * n });
+  }
+
+  function select(i) {
+    sel = (i + n) % n;
+    showGauge();
+  }
 
   function hit() {
     if (ctx.done) return;
-    const n = nails[cur];
-    const diff = Math.abs(radius() - TARGET);
+    const nl = nails[sel];
     swing = 1;
-    if (diff < 6) {
-      n.h = 0;
-      fx.text(n.x, n.y - 40, t('mg_perfect'), '#2f8a5f', 24);
-      fx.burst(n.x, n.y, '✨', 5, { speed: 120, size: 14 });
-    } else if (diff < 14) {
-      n.h = Math.max(0, n.h - 0.5);
-      goods++;
-      fx.text(n.x, n.y - 40, t('mg_good'), '#3c7bd9', 22);
-      fx.burst(n.x, n.y, '💥', 2, { speed: 60, size: 14 });
-    } else {
-      misses++;
-      fx.text(n.x, n.y - 40, t('mg_missed'), '#c07a10', 22);
+    if (nl.hits >= MAXHITS) {
+      fx.text(nl.x, nl.y - 40, t('mg_oops'), '#c07a10', 22);
+      return;
     }
-    ring = 0;
-    if (n.h <= 0) {
-      cur++;
-      ctx.progress(cur / nails.length);
-      if (cur >= nails.length) ctx.finish(1 - 0.06 * goods - 0.07 * misses);
+    nl.hits++;
+    if (nl.hits < JUST) {
+      fx.text(nl.x, nl.y - 40, t('mg_hop'), '#3c7bd9', 22);
+      fx.burst(nl.x, nl.y, '💥', 2, { speed: 60, size: 14 });
+    } else if (nl.hits === JUST) {
+      fx.text(nl.x, nl.y - 40, t('mg_perfect'), '#2f8a5f', 24);
+      fx.burst(nl.x, nl.y, '✨', 5, { speed: 120, size: 14 });
+    } else {
+      // Le clou plie.
+      nl.bend = Math.min(1, nl.bend + 0.5);
+      fx.text(nl.x, nl.y - 40, t('mg_oops'), '#c07a10', 22);
+      fx.float(nl.x + 16, nl.y - 20, '💢', 22);
+      ctx.hint(t('mg_tooMuch', { name: a.name }), 'warn');
+      saidStop = true;
+    }
+    showGauge();
+    if (nails.every((x) => x.hits >= MAXHITS)) finishAll();
+    else if (!saidStop && nails.every((x) => x.hits >= JUST)) {
+      saidStop = true;
+      ctx.hint(t('mg_nowStop'), 'good');
     }
   }
 
   return {
-    peek: () => ({ r: radius(), target: TARGET, cur }),
-    down() { hit(); },
-    key(code, down) { if (down && (code === 'Space' || code === 'Enter')) hit(); },
+    peek: () => ({
+      value: tally().value, lo: TOTAL, hi: TOTAL, just: JUST, max: MAXHITS, sel,
+      hits: nails.map((x) => x.hits), nails: nails.map(({ x, y }) => ({ x, y })),
+    }),
+    down(p) {
+      let best = -1;
+      let bd = TAP_R;
+      nails.forEach((nl, i) => {
+        const d = dist(p.x, p.y, nl.x, nl.y);
+        if (d < bd) { bd = d; best = i; }
+      });
+      if (best < 0) return;
+      select(best);
+      hit();
+    },
+    key(code, down) {
+      if (!down) return;
+      if (code === 'Space' || code === 'Enter' || code === 'NumpadEnter') hit();
+      else if (code === 'ArrowLeft' || code === 'ArrowUp') select(sel - 1);
+      else if (code === 'ArrowRight' || code === 'ArrowDown') select(sel + 1);
+    },
     update(dt) {
       swing = Math.max(0, swing - dt * 5);
-      if (ctx.done) return;
-      ring += dt;
-      if (ring > DURATION) ring = 0;
     },
     draw(g) {
       fillView(g, ctx.view, '#e8d9c0', '#cbb393');
@@ -626,39 +849,63 @@ export function shoeGame(ctx) {
       g.ellipse(cx, cy + 30, 92, 94, 0, Math.PI * 0.9, Math.PI * 1.5);
       g.stroke();
       // clous
-      nails.forEach((n, i) => {
-        g.fillStyle = '#3a3f44';
-        circle(g, n.x, n.y, 6);
-        g.fill();
-        if (n.h > 0) {
-          g.fillStyle = '#c9ced3';
-          rrect(g, n.x - 4, n.y - 26 * n.h, 8, 26 * n.h, 2);
-          g.fill();
-          g.fillStyle = '#e8ecef';
-          rrect(g, n.x - 9, n.y - 26 * n.h - 5, 18, 7, 3);
-          g.fill();
-        } else {
-          g.fillStyle = '#e8ecef';
-          circle(g, n.x, n.y, 7);
-          g.fill();
-        }
-        if (i === cur && !ctx.done) {
+      nails.forEach((nl, i) => {
+        const isSel = i === sel && !ctx.done;
+        if (isSel) {
+          // cible du clou choisi (assez grande pour le doigt)
           g.strokeStyle = '#f2c84b';
           g.lineWidth = 5;
-          circle(g, n.x, n.y, TARGET);
+          circle(g, nl.x, nl.y, TAP_R - 10 + Math.sin(ctx.time * 5) * 2);
           g.stroke();
-          const r = radius();
-          const close = Math.abs(r - TARGET) < 6;
-          g.strokeStyle = close ? '#3fae62' : '#3c7bd9';
-          g.lineWidth = close ? 6 : 4;
-          circle(g, n.x, n.y, r);
-          g.stroke();
+        }
+        g.fillStyle = '#3a3f44';
+        circle(g, nl.x, nl.y, 6);
+        g.fill();
+        const h = 1 - Math.min(JUST, nl.hits) / JUST; // ce qui dépasse encore
+        if (nl.hits < JUST) {
+          g.fillStyle = '#c9ced3';
+          rrect(g, nl.x - 4, nl.y - 26 * h, 8, 26 * h, 2);
+          g.fill();
+          g.fillStyle = '#e8ecef';
+          rrect(g, nl.x - 9, nl.y - 26 * h - 5, 18, 7, 3);
+          g.fill();
+        } else if (nl.hits === JUST) {
+          // la tête affleure : juste
+          g.fillStyle = '#e8ecef';
+          circle(g, nl.x, nl.y, 7);
+          g.fill();
+          label(g, '✓', nl.x + 16, nl.y - 10, 16, '#1e8a4a');
+        } else {
+          // plié
+          g.save();
+          g.translate(nl.x, nl.y);
+          g.rotate(0.9 * nl.bend);
+          g.fillStyle = '#9aa3ab';
+          rrect(g, -4, -16 * nl.bend - 4, 8, 16 * nl.bend + 4, 2);
+          g.fill();
+          g.fillStyle = '#c9ced3';
+          rrect(g, -9, -16 * nl.bend - 8, 18, 7, 3);
+          g.fill();
+          g.restore();
+          emoji(g, '💢', nl.x + 18, nl.y - 14, 16);
+        }
+        // compte des coups : ●●● (3 = juste), ✕ pour les coups en trop
+        for (let k = 0; k < MAXHITS; k++) {
+          const px = nl.x - 16 + k * 8;
+          const py = nl.y + 20;
+          if (k < JUST) {
+            g.fillStyle = k < nl.hits ? '#1e8a4a' : 'rgba(255,255,255,0.8)';
+            circle(g, px, py, 3.2);
+            g.fill();
+          } else if (k < nl.hits) {
+            label(g, '✕', px, py, 11, '#e0574a');
+          }
         }
       });
       // marteau
-      const n = nails[Math.min(cur, nails.length - 1)];
+      const nl = nails[Math.min(sel, n - 1)];
       g.save();
-      g.translate(n.x + 46, n.y - 30);
+      g.translate(nl.x + 46, nl.y - 30);
       g.rotate(-0.9 + swing * 0.9);
       g.fillStyle = '#8a5a2b';
       rrect(g, -5, -6, 10, 80, 4);
@@ -667,7 +914,7 @@ export function shoeGame(ctx) {
       rrect(g, -26, -20, 46, 22, 5);
       g.fill();
       g.restore();
-      label(g, `${Math.min(cur + 1, nails.length)} / ${nails.length}`, 50, 40, 20);
+      label(g, `${nails.filter((x) => x.hits >= JUST).length} / ${n}`, 50, 40, 20);
       emoji(g, '🐴', 350, 44, 40);
     },
   };
@@ -675,6 +922,12 @@ export function shoeGame(ctx) {
 
 // ---------------------------------------------------------------- tondre
 
+/**
+ * Tondre : chaque touffe a 3 états (longue → courte → à ras). Une passe de tondeuse la
+ * raccourcit ; pour la raser il faut repasser juste dessus. La jauge compte la laine enlevée
+ * (0 → 2) : juste entre 0,85 et 1,15 (tout court, rien à ras). On s'arrête avec ✅ ; tout
+ * raser finit le jeu tout seul (trop).
+ */
 export function shearGame(ctx) {
   const { a, t, fx } = ctx;
   const floorY = 305;
@@ -686,71 +939,93 @@ export function shearGame(ctx) {
     for (let lx = -full.rx * 1.05; lx <= full.rx * 1.05; lx += step) {
       if ((lx * lx) / (full.rx * 1.05) ** 2 + (ly * ly) / (full.ry * 1.05) ** 2 > 1) continue;
       const p = full.L(lx + ((Math.round(ly / step) % 2) * step) / 2, ly);
-      wool.push({ ...p, on: true, r: step * 0.75, k: ctx.rng() });
+      wool.push({ ...p, len: 2, r: step * 0.75, k: ctx.rng(), away: true, at: -9 });
     }
   }
   // Toupet sur la tête
-  wool.push({ x: full.head.x - full.hr * 0.3, y: full.head.y - full.hr * 0.6, on: true, r: full.hr * 0.6, k: 0.5 });
+  wool.push({ x: full.head.x - full.hr * 0.3, y: full.head.y - full.hr * 0.6, len: 2, r: full.hr * 0.6, k: 0.5, away: true, at: -9 });
   const total = wool.length;
-  let removed = 0;
+  const MAX = 2;
+  const rule = justRule(ctx, { lo: 0.85, hi: 1.15, max: MAX, slack: 0.35 });
   let last = null;
-  let pile = 0;
   const woolCol = ctx.col.raw.coat;
 
-  ctx.hint(t('mg_shear_hint'));
+  // Pas de clé dédiée à « ni à ras, ni trop long » : la zone verte sert de consigne.
+  ctx.hint(`🧶 ${t('mg_zoneHint')}`);
+
+  const value = () => wool.reduce((s, w) => s + (2 - w.len), 0) / total;
+  const stop = () => { if (!ctx.done) rule.finish(value()); };
+  ctx.stopButton(stop);
 
   function cutAlong(p) {
     if (!last) { last = p; return; }
     for (const w of wool) {
-      if (!w.on) continue;
-      if (distToSegment(w.x, w.y, last.x, last.y, p.x, p.y) < 20 + w.r * 0.3) {
-        w.on = false;
-        removed++;
-        pile++;
+      if (w.len <= 0) continue;
+      // Une touffe longue se coupe de loin ; pour la raser, il faut passer juste dessus.
+      const reach = w.len === 2 ? 20 + w.r * 0.3 : 9 + w.r * 0.3;
+      const near = distToSegment(w.x, w.y, last.x, last.y, p.x, p.y) < reach;
+      // Une seule coupe par passage : pour recouper, il faut s'éloigner (ou lever le doigt),
+      // laisser passer 1,5 s et revenir. Un doigt lent qui s'attarde, ou deux passes voisines
+      // qui se chevauchent, ne rasent donc pas : il faut vraiment repasser.
+      if (near && w.away && (w.len === 2 || ctx.time - w.at > 1.5)) {
+        w.len--;
+        w.at = ctx.time;
+        w.away = false;
         if (Math.random() < 0.6) fx.dot(w.x, w.y, css(woolCol), 7 + Math.random() * 4, { vx: (Math.random() - 0.5) * 60, vy: -20, grav: 420, life: 0.9 });
-      }
+        if (w.len === 0 && Math.random() < 0.3) fx.float(w.x, w.y - 10, '💢', 16);
+      } else if (!near && dist(w.x, w.y, p.x, p.y) > reach + 12) w.away = true;
     }
     last = p;
-    const pr = removed / total;
-    ctx.progress(pr);
-    if (pr > 0.5 && pr < 0.9) ctx.hint(t('mg_shear_more'), 'good');
-    if (pr >= 0.96 && !ctx.done) {
-      for (const w of wool) w.on = false;
-      fx.burst(full.bx, full.by - full.ry, '✨', 6);
-      const time = ctx.time;
-      ctx.finish(time <= 18 ? 1 : Math.max(0.6, 1 - (time - 18) / 40));
-    }
+    const v = value();
+    const s = rule.show(v);
+    if (s === 'low' && v > 0.5) ctx.hint(t('mg_shear_more'), 'good');
+    if (v >= MAX - 0.02) stop();
   }
 
   return {
-    peek: () => ({ body: { x: full.bx, y: full.by, rx: full.rx, ry: full.ry }, head: full.head }),
+    peek: () => ({
+      value: value(), lo: rule.lo, hi: rule.hi, max: MAX,
+      long: wool.filter((w) => w.len === 2).length, short: wool.filter((w) => w.len === 1).length, bald: wool.filter((w) => w.len === 0).length,
+      longAt: wool.filter((w) => w.len === 2).map(({ x, y }) => ({ x: Math.round(x), y: Math.round(y) })),
+      body: { x: full.bx, y: full.by, rx: full.rx, ry: full.ry }, head: full.head,
+    }),
     down(p) { last = p; },
     move(p, down) { if (down) cutAlong(p); },
-    up() { last = null; },
+    up() { last = null; for (const w of wool) w.away = true; },
+    key(code, down) { if (down && (code === 'Space' || code === 'Enter' || code === 'NumpadEnter')) stop(); },
     draw(g) {
       sky(g, ctx.view, '#a9d8f2', '#e4f3fb', floorY, '#8cc268', '#6fa94f');
       // tas de laine
       g.fillStyle = css(woolCol);
-      const pr = pile / total;
+      const pr = value() / MAX;
       for (let i = 0; i < 9; i++) {
         if (i / 9 > pr) break;
         circle(g, 330 + ((i * 37) % 50) - 20, floorY + 20 - Math.floor(i / 3) * 12, 16);
         g.fill();
       }
-      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, shorn: true, happy: ctx.done });
-      // laine restante
+      const st = rule.state();
+      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, shorn: true, happy: ctx.done && st !== 'high', earsBack: st === 'high' });
+      // peau à ras (trop)
       for (const w of wool) {
-        if (!w.on) continue;
+        if (w.len !== 0) continue;
+        g.fillStyle = 'rgba(241, 183, 192, 0.7)';
+        circle(g, w.x, w.y, w.r * 0.7);
+        g.fill();
+      }
+      // laine restante : longue (grosse touffe) ou courte (petite, plus claire)
+      for (const w of wool) {
+        if (w.len <= 0) continue;
         g.fillStyle = shade(woolCol, -0.1);
-        circle(g, w.x, w.y + 2, w.r);
+        circle(g, w.x, w.y + 2, w.len === 2 ? w.r : w.r * 0.5);
         g.fill();
       }
       for (const w of wool) {
-        if (!w.on) continue;
-        g.fillStyle = mix(woolCol, 0xffffff, 0.1 + w.k * 0.2);
-        circle(g, w.x, w.y, w.r * 0.92);
+        if (w.len <= 0) continue;
+        g.fillStyle = mix(woolCol, 0xffffff, (w.len === 2 ? 0.1 : 0.3) + w.k * 0.2);
+        circle(g, w.x, w.y, (w.len === 2 ? w.r : w.r * 0.5) * 0.92);
         g.fill();
       }
+      rule.dial(g, value());
       const pp = ctx.pointer;
       if ((pp.over || pp.down) && !ctx.done) {
         g.save();
@@ -769,4 +1044,3 @@ export function shearGame(ctx) {
     },
   };
 }
-

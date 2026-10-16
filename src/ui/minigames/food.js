@@ -1,6 +1,7 @@
 // Mini-jeux « repas » : nourrir, donner à boire, donner une friandise.
 
 import { drawAnimal, animalShape, rrect, ellipse, circle, emoji, label, fillView, clamp, lerp, shade } from './draw.js';
+import { justRight, verdict } from './score.js'; // règle « juste ce qu'il faut »
 
 const BIG = ['horse', 'cow', 'sheep', 'goat'];
 export const isBig = (a) => BIG.includes(a.species);
@@ -67,8 +68,11 @@ function pourGame(ctx, water) {
     : (big ? { x: 285, w: 170, h: 62, kind: 'trough' } : { x: 285, w: 130, h: 46, kind: 'bowl' });
   box.bottom = floorY + 6;
   box.top = box.bottom - box.h;
-  const target = 0.6 + ctx.rng() * 0.18;
-  const band = 0.1;
+  // « Juste ce qu'il faut » : entre la moitié et les trois quarts du récipient (1 = plein),
+  // avec une zone verte de ± 0,12 autour, visible sur la jauge et sur le récipient.
+  // Trop peu OU trop : moins de points, de la même façon des deux côtés (score.js).
+  const target = 0.6 + ctx.rng() * 0.16;
+  const band = 0.12;
   const lo = target - band;
   const hi = target + band;
   const s = sizeFor(a);
@@ -76,7 +80,8 @@ function pourGame(ctx, water) {
   const mouthOff = animalShape(a, { x: animalX, y: floorY, s, f: 1 }).mouth.x - animalX;
   const eatTarget = Math.max(0, box.x - box.w * 0.3 - animalX - mouthOff);
 
-  let level = 0;
+  let level = 0; // ce qui est déjà dans le récipient (0 = vide, 1 = plein)
+  let inFlight = 0; // ce qui tombe encore (ça va atterrir : la jauge le compte déjà)
   let pouring = false;
   let holdTime = 0;
   let spawn = 0;
@@ -87,12 +92,14 @@ function pourGame(ctx, water) {
   let eatX = 0;
   const drops = [];
   const pile = [];
+  const value = () => Math.min(1, level + inFlight);
 
   const surfaceY = () => box.bottom - 6 - level * (box.h - 10);
   const sourceX = box.x + (water ? 22 : -8);
   const sourceY = water ? 96 : 108;
 
   ctx.hint(t(water ? 'mg_water_hint' : 'mg_feed_hint'));
+  ctx.zone(lo, hi);
   ctx.button(`${water ? '🚰' : '🫗'} ${t(water ? 'mg_water_btn' : 'mg_feed_btn')}`, {
     hold: true, cls: 'primary', onDown: () => start(), onUp: () => stop(),
   });
@@ -103,6 +110,7 @@ function pourGame(ctx, water) {
     released = false;
     holdTime = 0;
   }
+  /** Lâcher, c'est décider : dès que tout est tombé, on compte ce qu'il y a dans le récipient. */
   function stop() {
     if (!pouring) return;
     pouring = false;
@@ -112,27 +120,32 @@ function pourGame(ctx, water) {
 
   function evaluate() {
     released = false;
-    if (level < lo) {
+    // Une simple tape qui n'a presque rien versé : ce n'est pas une décision, on laisse réessayer.
+    if (value() < 0.1) {
       ctx.hint(t('mg_more'), 'warn');
       fx.text(box.x, box.top - 30, t('mg_more_short'), '#c07a10');
       return;
     }
-    let q;
-    let msg;
-    if (level <= hi) {
-      q = 1 - (0.25 * Math.abs(level - target)) / band;
+    end();
+  }
+
+  /** Fin : tous les points dans la zone verte, un peu moins si c'est un peu trop peu ou un peu trop. */
+  function end() {
+    if (ctx.done) return;
+    const v = value();
+    const { verdict: why } = ctx.finishJust(v, lo, hi, { who: a.name });
+    if (why === 'just') {
       fx.text(box.x, box.top - 30, t('mg_perfect'), '#2f8a5f', 26);
       fx.burst(box.x, box.top, '✨', 6);
+    } else if (why === 'low') {
+      fx.text(box.x, box.top - 30, t('mg_more_short'), '#c07a10', 26);
     } else {
-      q = Math.max(0.45, 0.72 - (level - hi) * 2.5);
-      msg = t('mg_tooMuch', { name: a.name });
       fx.text(box.x, box.top - 30, t('mg_oops'), '#c8463c', 26);
     }
-    ctx.finish(q, msg);
   }
 
   return {
-    peek: () => ({ level, lo, hi, target }),
+    peek: () => ({ level, inFlight, value: value(), lo, hi, target, pouring }),
     down() { start(); },
     up() { stop(); },
     key(code, down) {
@@ -145,14 +158,14 @@ function pourGame(ctx, water) {
         holdTime += dt;
         poured = true;
         // L'eau coule de plus en plus fort ; les croquettes à vitesse régulière.
-        flow = water ? 0.1 + 0.3 * clamp(holdTime / 1.6) : 0.22;
+        flow = water ? 0.1 + 0.22 * clamp(holdTime / 1.5) : 0.22;
         spawn += dt * (water ? 40 : 16);
         while (spawn > 1) {
           spawn -= 1;
           drops.push({
             x: sourceX + (Math.random() - 0.5) * (water ? 4 : 16),
             y: sourceY,
-            vy: water ? 120 : 40,
+            vy: water ? 200 : 70,
             vx: (Math.random() - 0.5) * (water ? 6 : 30),
             amount: flow / (water ? 40 : 16),
             c: food.bits[Math.floor(Math.random() * food.bits.length)],
@@ -168,7 +181,7 @@ function pourGame(ctx, water) {
         d.x += d.vx * dt;
         if (d.y >= sy) {
           d.dead = true;
-          level += d.amount;
+          level = Math.min(1, level + d.amount);
           if (water) {
             if (Math.random() < 0.3) fx.dot(d.x, sy, 'rgba(180,225,255,0.9)', 2.5, { vx: (Math.random() - 0.5) * 80, vy: -80 - Math.random() * 60, grav: 500, life: 0.4 });
           } else if (pile.length < 160) {
@@ -177,17 +190,22 @@ function pourGame(ctx, water) {
         }
       }
       for (let i = drops.length - 1; i >= 0; i--) if (drops[i].dead) drops.splice(i, 1);
+      inFlight = drops.reduce((sum, d) => sum + d.amount, 0);
 
       if (!ctx.done) {
-        ctx.progress(level / target);
-        if (level >= 1) {
+        const v = value();
+        ctx.progress(v);
+        if (v >= 1) {
+          // Ça déborde : trop, et c'est fini.
           level = 1;
+          inFlight = 0;
+          drops.length = 0;
           pouring = false;
           fx.burst(box.x, box.top, water ? '💦' : '🍂', 8);
-          ctx.finish(0.4, t('mg_tooMuch', { name: a.name }));
-        } else if (pouring && level > hi) {
+          end();
+        } else if (pouring && v > hi) {
           ctx.hint(t('mg_stop'), 'warn');
-        } else if (pouring && level >= lo) {
+        } else if (pouring && v >= lo) {
           ctx.hint(t('mg_nowStop'), 'good');
         } else if (pouring) {
           ctx.hint(t(water ? 'mg_water_hint' : 'mg_feed_hint'));
@@ -329,11 +347,14 @@ function drawContainer(g, box, level, water, food, pile, lo, hi, target, ctx) {
     }
   }
   g.restore();
-  // Bande cible
+  // Zone verte « juste ce qu'il faut » sur le récipient, avec la ligne 🎯 au milieu et un ✓
   const yl = yOf(lo);
   const yh = yOf(hi);
-  g.fillStyle = 'rgba(63, 174, 98, 0.22)';
+  g.fillStyle = 'rgba(63, 174, 98, 0.32)';
   g.fillRect(x - w / 2 - 8, yh, w + 16, yl - yh);
+  g.strokeStyle = '#1e8a4a';
+  g.lineWidth = 2;
+  g.strokeRect(x - w / 2 - 8, yh, w + 16, yl - yh);
   g.setLineDash([6, 5]);
   g.strokeStyle = '#1e7a40';
   g.lineWidth = 3;
@@ -343,6 +364,7 @@ function drawContainer(g, box, level, water, food, pile, lo, hi, target, ctx) {
   g.stroke();
   g.setLineDash([]);
   emoji(g, '🎯', x + w / 2 + 22, yOf(target), 22);
+  label(g, '✓', x - w / 2 - 20, yOf(target), 22, '#1e5c3e');
   // Bord avant
   g.lineWidth = 5;
   g.strokeStyle = kind === 'trough' ? '#4a2c16' : kind === 'bucket' ? '#5d6870' : '#3c7bd9';
@@ -445,6 +467,39 @@ export function drawHand(g, x, y, s = 1, flat = true, skin = '#f0c29a') {
   g.restore();
 }
 
+/**
+ * Compteur « juste ce qu'il faut » pour les jeux qui comptent (friandises, lancers…) :
+ * n cases dans un cadre vert avec un ✓ (la bonne quantité), puis des cases grisées
+ * (trop). Les cases données sont pleines, les autres en transparence.
+ * x, y : la première case ; icon : l'emoji ; step : l'écart entre deux cases.
+ */
+export function drawCountZone(g, x, y, given, n, max, icon, step = 34) {
+  g.save();
+  // Cadre vert sur les n premières cases
+  g.fillStyle = 'rgba(63, 174, 98, 0.3)';
+  g.strokeStyle = '#1e8a4a';
+  g.lineWidth = 2.5;
+  rrect(g, x - 18, y - 19, step * (n - 1) + 36, 38, 12);
+  g.fill();
+  g.stroke();
+  label(g, '✓', x + step * (n - 1) + 18, y - 19, 18, '#1e5c3e');
+  for (let i = 0; i < max; i++) {
+    const over = i >= n;
+    const done = i < given;
+    emoji(g, icon, x + i * step, y, over ? 22 : 26, 0, done ? 1 : over ? 0.22 : 0.4);
+    if (over && done) label(g, '!', x + i * step + 12, y - 12, 16, '#c8463c');
+  }
+  g.restore();
+}
+
+/** Nombre de friandises « juste ce qu'il faut » pour cet animal (1 à 3). */
+const TREAT_COUNT = { rabbit: 1, cat: 2, dog: 2, sheep: 2, goat: 2, horse: 3, cow: 3 };
+export function treatCount(a) {
+  const base = TREAT_COUNT[a.species] ?? 2;
+  // Un animal déjà bien rond en a une de moins (jamais moins d'une).
+  return Math.max(1, (a.weight ?? 50) > 75 ? base - 1 : base);
+}
+
 export function treatGame(ctx) {
   const { a, t, fx } = ctx;
   const big = isBig(a);
@@ -453,24 +508,33 @@ export function treatGame(ctx) {
   const ax = big ? 150 : 165;
   const treat = TREATS[a.species] ?? '🍪';
   const calmTime = a.personality === 'shy' || a.personality === 'calm' ? 1.6 : a.personality === 'playful' ? 1.05 : 1.25;
+  // « Juste ce qu'il faut » : n friandises (selon l'animal), visibles en haut dans le cadre vert.
+  // Une de plus ou de moins : un peu moins de points ; deux : le plancher. À max, l'animal
+  // a tout mangé et c'est fini (trop).
+  const n = treatCount(a);
+  const max = n + 2;
   let state = 'wiggle';
   let timer = 0;
   let next = 1.2 + ctx.rng();
-  let rounds = 0;
+  let given = 0;
   let penalties = 0;
   let fly = null;
   let handBack = 0;
-  const ROUNDS = 3;
   const pose = a.species === 'rabbit' ? 'beg' : a.species === 'dog' || a.species === 'cat' ? 'sit' : 'stand';
 
-  ctx.hint(t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint'));
+  ctx.hint(`${t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint')} ${treat.repeat(n)}`);
+  ctx.zone((n - 0.5) / max, (n + 0.5) / max);
   ctx.button(`${treat} ${t('mg_treat_btn')}`, { cls: 'primary', onTap: () => give() });
+  // « C'est bon ! » pour s'arrêter là : disponible dès la première friandise.
+  const stopBtn = ctx.stopButton(() => end());
+  stopBtn.disabled = true;
 
   const shape = () => animalShape(a, { x: ax, y: floorY, s, f: 1, pose: state === 'calm' || state === 'eat' ? pose : 'stand' });
   const handPos = () => {
     const sh = shape();
     return { x: Math.max(sh.mouth.x + 70, 300) + handBack * 30, y: Math.min(sh.mouth.y + 10, 250) };
   };
+  const waitHint = () => t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint');
 
   function give() {
     if (ctx.done || state === 'eat') return;
@@ -479,9 +543,12 @@ export function treatGame(ctx) {
       fly = { x0: hp.x - 20, y0: hp.y - 14, k: 0 };
       state = 'eat';
       timer = 0;
-      rounds++;
-      fx.text(hp.x - 40, hp.y - 60, t(rounds === ROUNDS ? 'mg_perfect' : 'mg_good'), '#2f8a5f', 24);
-      ctx.progress(rounds / ROUNDS);
+      given++;
+      stopBtn.disabled = false;
+      if (given === n) fx.text(hp.x - 40, hp.y - 60, t('mg_perfect'), '#2f8a5f', 24);
+      else if (given < n) fx.text(hp.x - 40, hp.y - 60, t('mg_good'), '#2f8a5f', 24);
+      else fx.text(hp.x - 40, hp.y - 60, t('mg_oops'), '#c8463c', 24);
+      ctx.progress(given / max);
     } else {
       penalties++;
       handBack = 1;
@@ -491,8 +558,16 @@ export function treatGame(ctx) {
     }
   }
 
+  /** Fin : la note suit le nombre donné (juste / un peu trop peu / un peu trop), moins les impatiences. */
+  function end() {
+    if (ctx.done) return;
+    const q = justRight(given, n, n, { slack: 2 }) - 0.08 * penalties;
+    const why = verdict(given, n, n);
+    ctx.finish(q, t(why === 'just' ? 'mg_justRight' : why === 'low' ? 'mg_tooLittle' : 'mg_tooMuch', { name: a.name }));
+  }
+
   return {
-    peek: () => ({ state, rounds }),
+    peek: () => ({ state, given, rounds: given, n, max, lo: n, hi: n, value: given, penalties }),
     down() { give(); },
     key(code, down) { if (down && (code === 'Space' || code === 'Enter')) give(); },
     update(dt) {
@@ -502,28 +577,31 @@ export function treatGame(ctx) {
       if (state === 'wiggle' && timer > next) {
         state = 'calm';
         timer = 0;
-        ctx.hint(t(big ? 'mg_treat_now_flat' : 'mg_treat_now'), 'good');
+        if (given < n) ctx.hint(t(big ? 'mg_treat_now_flat' : 'mg_treat_now'), 'good');
       } else if (state === 'calm' && timer > calmTime) {
         state = 'wiggle';
         timer = 0;
         next = 1 + ctx.rng() * 1.6;
-        ctx.hint(t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint'));
+        if (given < n) ctx.hint(waitHint());
       } else if (state === 'eat') {
         if (fly) fly.k = Math.min(1, fly.k + dt * 3.2);
         if (Math.random() < dt * 6) {
           const sh = shape();
-          fx.float(sh.head.x, sh.head.y - 30, '💛', 20);
+          fx.float(sh.head.x, sh.head.y - 30, given > n ? '💤' : '💛', 20);
         }
         if (timer > 1.1) {
           fly = null;
-          if (rounds >= ROUNDS) {
-            ctx.finish(1 - 0.15 * penalties);
+          if (given >= max) {
+            // Il a tout mangé : c'est trop, et c'est fini.
+            end();
             return;
           }
           state = 'wiggle';
           timer = 0;
           next = 1 + ctx.rng() * 1.8;
-          ctx.hint(t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint'));
+          if (given === n) ctx.hint(`✅ ${t('mg_stopHere')}`, 'good');
+          else if (given > n) ctx.hint(t('mg_tooMuch', { name: a.name }), 'warn');
+          else ctx.hint(waitHint());
         }
       }
     },
@@ -541,10 +619,10 @@ export function treatGame(ctx) {
         pose: calm ? pose : 'stand',
         lift,
         walk: wig ? tm * 12 : null,
-        wag: true,
+        wag: given <= n,
         headDip: wig && big ? 0.25 + Math.sin(tm * 7) * 0.2 : 0,
         mouth: state === 'eat' && fly?.k >= 1,
-        happy: state === 'eat' || ctx.done,
+        happy: (state === 'eat' && given <= n) || (ctx.done && given <= n),
         time: tm,
       });
       if (state === 'calm' && !ctx.done) {
@@ -566,6 +644,8 @@ export function treatGame(ctx) {
         g.arc(sh.head.x, sh.head.y - sh.hr * 2.6, 12, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
         g.stroke();
       }
+      // Rassasié (juste) ou gavé (trop) : une petite bulle au-dessus de la tête
+      if (given >= n && state !== 'eat' && !ctx.done) emoji(g, given > n ? '🥱' : '😋', sh.head.x + sh.hr * 1.4, sh.head.y - sh.hr * 1.8, 26);
       // Main + friandise
       const hp = handPos();
       drawHand(g, hp.x, hp.y, 1.1, true);
@@ -576,8 +656,8 @@ export function treatGame(ctx) {
         const y = lerp(fly.y0, sh.mouth.y, k) - Math.sin(k * Math.PI) * 40;
         if (k < 1) emoji(g, treat, x, y, 30 * (1 - k * 0.4));
       }
-      // Compteur de friandises
-      for (let i = 0; i < ROUNDS; i++) emoji(g, treat, 30 + i * 34, 30, 26, 0, i < rounds ? 0.25 : 1);
+      // Compteur : n friandises dans le cadre vert, les suivantes grisées (trop)
+      drawCountZone(g, 36, 32, given, n, max, treat);
     },
   };
 }

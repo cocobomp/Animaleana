@@ -1147,6 +1147,32 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
 .mg-progress { position: relative; height: 18px; background: #e9e3d6; border-radius: 999px; overflow: visible; margin-right: 22px; }
 .mg-progress-fill { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #3fae62, #8fd36a); transition: width 0.25s; }
 .mg-progress-goal { position: absolute; right: -24px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; }
+/* Zone « juste ce qu'il faut » : bande verte translucide, bord foncé pour rester visible quand
+   le remplissage passe dessous, et un petit ✓ au milieu. left / width sont posés par ctx.zone(). */
+.mg-progress-zone {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 0;
+  width: 0;
+  box-sizing: border-box;
+  border: 2px solid #1e8a4a;
+  border-radius: 8px;
+  background: rgba(63, 174, 98, 0.35);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+}
+.mg-progress-zone[hidden] { display: none; }
+.mg-progress-zone-mark {
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 900;
+  color: #1e5c3e;
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff;
+}
+.mg-progress:has(.mg-progress-zone:not([hidden])) { margin-top: 4px; margin-bottom: 4px; }
 .mg-stage { position: relative; flex: 1; min-height: 0; border-radius: 18px; overflow: hidden; background: #dfeee4; }
 .mg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: pointer; }
 .mg-controls { display: flex; gap: 8px; }
@@ -1155,6 +1181,9 @@ body.mgmt #labels, body.mgmt #status-bar, body.mgmt #help { display: none !impor
 .mg-btn.held { transform: scale(0.96); filter: brightness(0.92); }
 .mg-btn.primary { box-shadow: 0 4px 0 #1e5c3e; }
 .mg-btn.primary.held { box-shadow: 0 1px 0 #1e5c3e; transform: translateY(3px); }
+/* Gros bouton « ✅ C'est bon ! » (ctx.stopButton) : on s'arrête là, juste ce qu'il faut. */
+.mg-btn.stop { min-height: 66px; font-size: 1.3rem; background: #2f8a5f; color: #fff; border-color: transparent; box-shadow: 0 5px 0 #1e5c3e; }
+.mg-btn.stop:active:not(:disabled) { box-shadow: 0 1px 0 #1e5c3e; transform: translateY(4px); }
 .mg-end {
   position: absolute;
   inset: 0;

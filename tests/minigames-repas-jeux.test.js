@@ -130,11 +130,11 @@ describe('nourrir et donner à boire : verser jusqu\'à la zone verte, puis « C
       run(game, ctx, 90);
       expect(ctx.done).toBe(false);
       expect(stopOf(ctx).disabled).toBe(false);
-      expect(ctx.hints.at(-1).text).toBe(t('mg_more')); // encore un peu
+      expect(ctx.hints.at(-1).text).toBe(food.nb(t('mg_more'))); // encore un peu
       const p = pourTo(game, ctx, p0.lo + 0.03); // on complète
       expect(p.value).toBeGreaterThanOrEqual(p.lo);
       expect(p.value).toBeLessThanOrEqual(p.hi);
-      expect(ctx.hints.at(-1)).toEqual({ text: `✅ ${t('mg_stopHere')}`, kind: 'good' });
+      expect(ctx.hints.at(-1)).toEqual({ text: food.stopLabel(t), kind: 'good' });
       run(game, ctx, 60);
       expect(ctx.done).toBe(false);
       pressStop(ctx);
@@ -288,7 +288,7 @@ describe('friandise : n friandises, au bon moment, puis « C\'est bon ! »', () 
     expect(game.peek().state).toBe('wiggle');
     ctx.buttons[0].opts.onTap();
     expect(game.peek()).toMatchObject({ penalties: 1, given: 0 });
-    expect(ctx.hints.at(-1)).toEqual({ text: t('mg_treat_wait', { name: 'Pomme' }), kind: 'warn' });
+    expect(ctx.hints.at(-1)).toEqual({ text: food.nb(t('mg_treat_wait', { name: 'Pomme' })), kind: 'warn' });
     let after = 0;
     run(game, ctx, 600, () => { if (game.peek().state === 'calm') return true; after++; return false; });
     expect(after / 30).toBeGreaterThanOrEqual(0.75);

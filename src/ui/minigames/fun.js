@@ -2,7 +2,7 @@
 
 import { drawAnimal, animalShape, fitAnimal, hitAnimal, rrect, ellipse, circle, label, fillView, sky, clamp, lerp, dist, shade } from './draw.js';
 // emoji toujours opaque (voir food.js : un emoji prend l'opacité du dernier fillStyle)
-import { homeBackground, sizeFor, isBig, drawCountZone, emojiOpaque as emoji, stopLabel } from './food.js';
+import { homeBackground, sizeFor, isBig, drawCountZone, emojiOpaque as emoji, stopLabel, nb, justMsgs, drawAnimalLifted } from './food.js';
 
 // ---------------------------------------------------------------- caresser
 
@@ -11,6 +11,12 @@ const SPEED_LIMIT = { shy: 300, calm: 380, cuddly: 430, playful: 520, curious: 4
 // Combien de câlins « juste ce qu'il faut » (cœur rempli, 0 à 1) selon le caractère :
 // un timide en veut moins, un câlin en veut plus. Au-delà, l'animal en a assez.
 const PET_AMOUNT = { shy: 0.5, calm: 0.62, cuddly: 0.8, playful: 0.66, curious: 0.66, stubborn: 0.56 };
+
+/**
+ * Le grand cœur du jeu « caresser », en haut à droite. Avant (340, 62, r 34), il recouvrait
+ * les oreilles du chien, du lapin, du cheval et de la chèvre (têtes vers x 290, y 50 à 95).
+ */
+export const HEART = { x: 368, y: 42, r: 24 };
 
 /** Tracé d'un cœur centré en (x, y), de rayon r (largeur ≈ 2 r). */
 function heartPath(g, x, y, r) {
@@ -51,6 +57,7 @@ function drawHeartGauge(g, x, y, r, value, lo, hi) {
 
 export function petGame(ctx) {
   const { a, t, fx } = ctx;
+  const hint = (text, kind) => ctx.hint(nb(text), kind); // (« ! » jamais seul à la ligne)
   const floorY = 305;
   const fit = fitAnimal(a, { groundY: floorY, maxW: 330, maxH: 240 });
   const sh = animalShape(a, { x: fit.x, y: floorY, s: fit.s, f: 1 });
@@ -78,7 +85,7 @@ export function petGame(ctx) {
   let lastLove = -9; // dernier « Ronron… » affiché
   let zoneState = 'low'; // 'low' | 'just' | 'high' : pour ne changer la consigne qu'en entrant dans une zone
 
-  ctx.hint(t(shy ? 'mg_pet_hint_shy' : 'mg_pet_hint', { name: a.name }));
+  hint(t(shy ? 'mg_pet_hint_shy' : 'mg_pet_hint', { name: a.name }));
   ctx.zone(lo, hi);
   const stopBtn = ctx.stopButton(() => { if (prog >= 0.03) end(); }, stopLabel(t)); // (un bouton grisé ne finit jamais le jeu)
   stopBtn.disabled = true;
@@ -86,7 +93,7 @@ export function petGame(ctx) {
   /** Fin : la note suit le remplissage du cœur par rapport à la zone verte. */
   function end() {
     if (ctx.done) return;
-    const { verdict: why } = ctx.finishJust(prog, lo, hi, { who: a.name });
+    const { verdict: why } = ctx.finishJust(prog, lo, hi, { who: a.name, msgs: justMsgs(t, a.name) });
     if (why === 'just') fx.burst(sh.head.x, sh.head.y - 20, '💕', 6);
     else if (why === 'high') fx.float(sh.head.x, sh.head.y - sh.hr * 1.6, '😮‍💨', 28);
   }
@@ -109,7 +116,7 @@ export function petGame(ctx) {
         prog = Math.max(0, prog - (shy ? 0.07 : 0.035));
         fx.text(p.x, p.y - 30, t('mg_gentle_short'), '#c07a10', 22);
         fx.float(sh.head.x, sh.head.y - sh.hr * 1.6, '❗', 26);
-        ctx.hint(t('mg_gentle', { name: a.name }), 'warn');
+        hint(t('mg_gentle', { name: a.name }), 'warn');
         zoneState = 'low';
       }
       return;
@@ -135,12 +142,12 @@ export function petGame(ctx) {
     if (prog >= 1 && !ctx.done) {
       end(); // il en a assez : c'est fini, et c'était trop
     } else if (prog > hi) {
-      if (zoneState !== 'high') { zoneState = 'high'; ctx.hint(t('mg_zoneHint'), 'warn'); }
+      if (zoneState !== 'high') { zoneState = 'high'; hint(t('mg_tooMuch', { name: a.name }), 'warn'); }
     } else if (prog >= lo) {
-      if (zoneState !== 'just') { zoneState = 'just'; ctx.hint(`✅ ${t('mg_stopHere')}`, 'good'); }
+      if (zoneState !== 'just') { zoneState = 'just'; hint(`✅ ${t('mg_stopHere')}`, 'good'); }
     } else if (calmStroke > 180) {
       zoneState = 'low';
-      ctx.hint(t(atFav ? 'mg_pet_fav' : 'mg_pet_good', { name: a.name }), 'good');
+      hint(t(atFav ? 'mg_pet_fav' : 'mg_pet_good', { name: a.name }), 'good');
     }
   }
 
@@ -194,8 +201,9 @@ export function petGame(ctx) {
       g.fill();
       emoji(g, '🐢', gx + 4, gy, 18);
       emoji(g, '🐇', gx + gw + 34, gy, 18);
-      // Le grand cœur qui se remplit, avec la zone verte où s'arrêter
-      drawHeartGauge(g, 340, 62, 34, prog, lo, hi);
+      // Le grand cœur qui se remplit, avec la zone verte où s'arrêter (dans le coin : il ne
+      // cache plus les oreilles du chien, du lapin, du cheval ou de la chèvre)
+      drawHeartGauge(g, HEART.x, HEART.y, HEART.r, prog, lo, hi);
       const pp = ctx.pointer;
       if (pp.over || pp.down) emoji(g, '🤚', pp.x + 4, pp.y - 6, 36, -0.3);
     },
@@ -216,6 +224,7 @@ export function playCount(a) {
 
 function ballGame(ctx) {
   const { a, t, fx } = ctx;
+  const hint = (text, kind) => ctx.hint(nb(text), kind); // (« ! » jamais seul à la ligne)
   const horizon = 150;
   const base = sizeFor(a, 0.75);
   const run = { dog: 240, goat: 210, rabbit: 200 }[a.species] ?? 220;
@@ -232,7 +241,7 @@ function ballGame(ctx) {
   let puff = 0;
   const tired = () => rounds > n;
 
-  ctx.hint(`${t('mg_ball_hint', { name: a.name })} ${'⚽'.repeat(n)}`);
+  hint(`${t('mg_ball_hint', { name: a.name })} ${'⚽'.repeat(n)}`);
   ctx.zone((n - 0.5) / max, (n + 0.5) / max);
   const stopBtn = ctx.stopButton(() => { if (rounds >= 1 && ball.state === 'hand') end(); }, stopLabel(t));
   stopBtn.disabled = true;
@@ -247,7 +256,7 @@ function ballGame(ctx) {
   /** Fin : la note suit le nombre de lancers par rapport à n. */
   function end() {
     if (ctx.done) return;
-    const { verdict: why } = ctx.finishJust(rounds, n, n, { who: a.name, slack: 2 });
+    const { verdict: why } = ctx.finishJust(rounds, n, n, { who: a.name, slack: 2, msgs: justMsgs(t, a.name) });
     pet.state = why === 'high' ? 'tired' : 'happy';
   }
 
@@ -322,9 +331,9 @@ function ballGame(ctx) {
           } else {
             pet.state = 'wander';
             wanderT = 0;
-            if (rounds === n) ctx.hint(`✅ ${t('mg_stopHere')}`, 'good');
-            else if (rounds > n) ctx.hint(t('mg_tooMuch', { name: a.name }), 'warn');
-            else ctx.hint(t(rounds === 1 ? 'mg_ball_again' : 'mg_ball_hint', { name: a.name }));
+            if (rounds === n) hint(`✅ ${t('mg_stopHere')}`, 'good');
+            else if (rounds > n) hint(t('mg_tooMuch', { name: a.name }), 'warn');
+            else hint(t(rounds === 1 ? 'mg_ball_again' : 'mg_ball_hint', { name: a.name }));
           }
         }
       } else if (pet.state === 'wander') {
@@ -360,7 +369,7 @@ function ballGame(ctx) {
       }
       const s = scaleAt(pet.y);
       const moving = pet.state === 'chase' || pet.state === 'back' || (pet.state === 'wander' && dist(pet.x, pet.y, pet.tx, pet.ty) > 5);
-      const sh = drawAnimal(g, a, { x: pet.x, y: pet.y, s, f: pet.f, walk: moving && react <= 0 ? pet.walk : null, lift: pet.lift, wag: !tired(), pose: pet.state === 'tired' ? 'sit' : 'stand', happy: (pet.has || ctx.done) && !tired(), earsBack: tired() });
+      const sh = drawAnimalLifted(g, a, { x: pet.x, y: pet.y, s, f: pet.f, walk: moving && react <= 0 ? pet.walk : null, wag: !tired(), pose: pet.state === 'tired' ? 'sit' : 'stand', happy: (pet.has || ctx.done) && !tired(), earsBack: tired() }, pet.lift);
       if (tired() && !moving) emoji(g, '😮‍💨', sh.head.x + pet.f * 18, sh.head.y - 36, 22);
       if (ball.state === 'mouth') {
         ball.x = sh.mouth.x;
@@ -415,6 +424,7 @@ function drawBall(g, x, y, r) {
 
 function featherGame(ctx) {
   const { a, t, fx } = ctx;
+  const hint = (text, kind) => ctx.hint(nb(text), kind); // (« ! » jamais seul à la ligne)
   const floorY = 300;
   const s = sizeFor(a, 0.8);
   // « Juste ce qu'il faut » : n bonds attrapés (cadre vert en haut). Au-delà, le chat se
@@ -430,7 +440,7 @@ function featherGame(ctx) {
   let puff = 0;
   const tired = () => catches > n;
 
-  ctx.hint(`${t('mg_feather_hint', { name: a.name })} ${'🪶'.repeat(n)}`);
+  hint(`${t('mg_feather_hint', { name: a.name })} ${'🪶'.repeat(n)}`);
   ctx.zone((n - 0.5) / max, (n + 0.5) / max);
   const stopBtn = ctx.stopButton(() => { if (catches >= 1) end(); }, stopLabel(t));
   stopBtn.disabled = true;
@@ -438,7 +448,7 @@ function featherGame(ctx) {
   /** Fin : la note suit le nombre de bonds attrapés par rapport à n. */
   function end() {
     if (ctx.done) return;
-    ctx.finishJust(catches, n, n, { who: a.name, slack: 2 });
+    ctx.finishJust(catches, n, n, { who: a.name, slack: 2, msgs: justMsgs(t, a.name) });
   }
 
   const catShape = (lift = 0) => animalShape(a, { x: cat.x, y: floorY, s, f: cat.f, lift });
@@ -466,7 +476,14 @@ function featherGame(ctx) {
       }
       if (held > 0) {
         held -= dt;
-        if (held <= 0) feather = { x: cat.x + cat.f * -140 < 30 ? 330 : cat.x - cat.f * 140, y: 120 };
+        if (held <= 0) {
+          // Le chat lâche la plume, qui revient un peu plus loin. Ce saut n'est pas un mouvement
+          // de l'enfant : sans ça, le chat (« plume très rapide ! ») rebondissait tout seul, et
+          // l'enfant arrêté pile au bon nombre trouvait un bond de trop en appuyant sur « C'est bon ! ».
+          feather = { x: cat.x + cat.f * -140 < 30 ? 330 : cat.x - cat.f * 140, y: 120 };
+          prev = { ...feather };
+          fspeed = 0;
+        }
         return;
       }
       if (ctx.done) return;
@@ -484,8 +501,8 @@ function featherGame(ctx) {
             fx.burst(feather.x, feather.y, catches > n ? '💤' : '💛', 5);
             ctx.progress(catches / max);
             if (catches >= max) end(); // il n'en peut plus : trop, et c'est fini
-            else if (catches === n) ctx.hint(`✅ ${t('mg_stopHere')}`, 'good');
-            else if (catches > n) ctx.hint(t('mg_tooMuch', { name: a.name }), 'warn');
+            else if (catches === n) hint(`✅ ${t('mg_stopHere')}`, 'good');
+            else if (catches > n) hint(t('mg_tooMuch', { name: a.name }), 'warn');
           } else fx.text(cat.x, 80, t('mg_missed'), '#c07a10', 20);
         }
         if (j.k >= 1) { cat.jump = null; cat.cool = tired() ? 1.3 : 0.5; }
@@ -494,7 +511,7 @@ function featherGame(ctx) {
       if (fspeed < 30) cat.bored += dt;
       else cat.bored = Math.max(0, cat.bored - dt * 3);
       if (cat.bored > 1.4) {
-        if (catches < n) ctx.hint(t('mg_feather_move'), 'warn');
+        if (catches < n) hint(t('mg_feather_move'), 'warn');
         return;
       }
       const dx = feather.x - cat.x;
@@ -505,7 +522,7 @@ function featherGame(ctx) {
         // Bond vers la plume
         const off = animalShape(a, { x: 0, y: floorY, s, f: cat.f }).mouth.x;
         cat.jump = { x0: cat.x, x1: clamp(feather.x - off, 40, 360), k: 0, h: clamp(floorY - feather.y - 60, 10, 170), checked: false };
-        if (catches < n) ctx.hint(t('mg_feather_hint', { name: a.name }));
+        if (catches < n) hint(t('mg_feather_hint', { name: a.name }));
       } else if (Math.abs(dx) > 70) {
         const st = Math.min(Math.abs(dx) - 60, (tired() ? 90 : 170) * dt);
         cat.x += Math.sign(dx) * st;
@@ -520,7 +537,7 @@ function featherGame(ctx) {
       g.fill();
       const lift = cat.jump ? cat.jump.h * Math.sin(cat.jump.k * Math.PI) : 0;
       const bored = cat.bored > 1.4 && !cat.jump;
-      const sh = drawAnimal(g, a, { x: cat.x, y: floorY, s, f: cat.f, lift, pose: bored || (ctx.done && tired()) ? 'sit' : 'stand', walk: !cat.jump && !bored && cat.crouch < 1 ? cat.walk : null, happy: (held > 0 || ctx.done) && !tired(), headDip: cat.crouch * 0.15, wag: cat.crouch > 0.5 && !tired(), earsBack: tired() });
+      const sh = drawAnimalLifted(g, a, { x: cat.x, y: floorY, s, f: cat.f, pose: bored || (ctx.done && tired()) ? 'sit' : 'stand', walk: !cat.jump && !bored && cat.crouch < 1 ? cat.walk : null, happy: (held > 0 || ctx.done) && !tired(), headDip: cat.crouch * 0.15, wag: cat.crouch > 0.5 && !tired(), earsBack: tired() }, lift);
       if (bored) emoji(g, '💤', sh.head.x + 20, sh.head.y - 40, 22);
       else if (tired() && !cat.jump) emoji(g, '😮‍💨', sh.head.x + cat.f * 18, sh.head.y - 36, 22);
       // baguette + fil + plume
@@ -549,6 +566,7 @@ function featherGame(ctx) {
 
 export function milkGame(ctx) {
   const { a, t, fx } = ctx;
+  const hint = (text, kind) => ctx.hint(nb(text), kind); // (« ! » jamais seul à la ligne)
   const cow = a.species === 'cow';
   const P = cow ? 0.62 : 0.56;
   const teats = { L: { x: 160, y: 200 }, R: { x: 240, y: 200 } };
@@ -574,7 +592,7 @@ export function milkGame(ctx) {
   let streak = 0;
   let zoneState = 'low';
 
-  ctx.hint(t('mg_milk_hint'));
+  hint(t('mg_milk_hint'));
   ctx.zone(lo, hi);
   ctx.button(`👈 ${t('mg_left')}`, { cls: 'mg-half', onTap: () => press('L') });
   ctx.button(`${t('mg_right')} 👉`, { cls: 'mg-half', onTap: () => press('R') });
@@ -596,7 +614,7 @@ export function milkGame(ctx) {
   /** Fin : la note suit le niveau du seau par rapport au trait vert. */
   function end() {
     if (ctx.done) return;
-    const { verdict: why } = ctx.finishJust(level, lo, hi, { who: a.name });
+    const { verdict: why } = ctx.finishJust(level, lo, hi, { who: a.name, msgs: justMsgs(t, a.name) });
     face = why === 'high' ? 2 : 1;
   }
 
@@ -608,7 +626,7 @@ export function milkGame(ctx) {
       wiggle = 0.4;
       streak = 0;
       fx.text(teats[side].x, teats[side].y - 70, t('mg_alternate'), '#c07a10', 22);
-      ctx.hint(t('mg_milk_alt'), 'warn');
+      hint(t('mg_milk_alt'), 'warn');
       zoneState = 'low';
       return;
     }
@@ -627,12 +645,12 @@ export function milkGame(ctx) {
     if (level >= 1) {
       end(); // ça déborde : trop, et c'est fini
     } else if (level > hi) {
-      if (zoneState !== 'high') { zoneState = 'high'; ctx.hint(t('mg_zoneHint'), 'warn'); }
+      if (zoneState !== 'high') { zoneState = 'high'; hint(t('mg_tooMuch', { name: a.name }), 'warn'); }
     } else if (level >= lo) {
-      if (zoneState !== 'just') { zoneState = 'just'; ctx.hint(`✅ ${t('mg_stopHere')}`, 'good'); }
+      if (zoneState !== 'just') { zoneState = 'just'; hint(`✅ ${t('mg_stopHere')}`, 'good'); }
     } else if (good) {
       zoneState = 'low';
-      ctx.hint(t('mg_milk_good'), 'good');
+      hint(t('mg_milk_good'), 'good');
     }
   }
 

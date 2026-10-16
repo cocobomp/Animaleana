@@ -15,10 +15,45 @@ export function emojiOpaque(g, ...args) {
 const emoji = emojiOpaque;
 
 /**
+ * Typographie française sans « ! » orphelin : l'espace avant « ! ? : ; » et après « « » devient
+ * insécable. Sur un téléphone (390 px), « Oh oui, juste là ! C'est son endroit préféré ! »
+ * laissait sinon le dernier « ! » tout seul sur la deuxième ligne de la consigne.
+ */
+export const nb = (s) => String(s).replace(/ ([!?:;»])/g, '\u00a0$1').replace(/« /g, '«\u00a0');
+
+/**
  * Libellé du bouton « ✅ C'est bon ! » avec une espace insécable avant « ! » : sur un bouton
  * étroit (deux boutons côte à côte en 360 px), le « ! » ne part pas seul à la ligne.
  */
-export const stopLabel = (t) => `✅ ${t('mg_stopHere')}`.replace(/ ([!?:;»])/g, '\u00a0$1');
+export const stopLabel = (t) => nb(`✅ ${t('mg_stopHere')}`);
+
+/** Messages de fin « juste / trop peu / trop » (pour ctx.finishJust), sans « ! » orphelin. */
+export const justMsgs = (t, name) => ({
+  just: nb(t('mg_justRight', { name })),
+  low: nb(t('mg_tooLittle', { name })),
+  high: nb(t('mg_tooMuch', { name })),
+});
+
+/**
+ * Dessine un animal qui saute ou rebondit de `lift` au-dessus du sol. drawAnimal({ lift })
+ * étire les pattes jusqu'au sol (le chat qui bondit sur la plume était monté sur des échasses,
+ * le lapin impatient aussi) : ici l'animal entier monte, pattes comprises, et une ombre reste
+ * au sol, plus petite quand il est haut. Renvoie la forme (animalShape), comme drawAnimal.
+ */
+export function drawAnimalLifted(g, a, o, lift = 0) {
+  if (lift > 0.5) {
+    const sh0 = animalShape(a, { ...o, lift: 0 });
+    const k = 1 / (1 + lift / 60);
+    g.save();
+    g.fillStyle = `rgba(0, 0, 0, ${(0.16 * k).toFixed(3)})`;
+    ellipse(g, sh0.bx, (o.y ?? 300) + 2, sh0.rx * 1.1 * k, 8 * (o.s ?? 1) * k);
+    g.fill();
+    g.restore();
+  }
+  // (shadow: false : drawAnimal dessine encore son ombre sous les pattes, donc en l'air ;
+  // l'option est demandée dans draw.js, fichier partagé, et ne change rien d'ici là.)
+  return drawAnimal(g, a, { ...o, y: (o.y ?? 300) - Math.max(0, lift), lift: 0, ...(lift > 0.5 ? { shadow: false } : {}) });
+}
 
 const BIG = ['horse', 'cow', 'sheep', 'goat'];
 export const isBig = (a) => BIG.includes(a.species);
@@ -79,6 +114,7 @@ const MIN_POUR = 0.05;
 
 function pourGame(ctx, water) {
   const { a, t, fx } = ctx;
+  const hint = (text, kind) => ctx.hint(nb(text), kind);
   const big = isBig(a);
   const food = FOOD[a.species] ?? FOOD.dog;
   const floorY = 300;
@@ -120,7 +156,7 @@ function pourGame(ctx, water) {
   const sourceX = box.x + (water ? 22 : -8);
   const sourceY = water ? 96 : 108;
 
-  ctx.hint(t(water ? 'mg_water_hint' : 'mg_feed_hint'));
+  hint(t(water ? 'mg_water_hint' : 'mg_feed_hint'));
   ctx.zone(lo, hi);
   // (🥣 / 🌾 plutôt que 🫗, trop récent : il ne s'affiche pas sur les tablettes un peu anciennes)
   ctx.button(`${water ? '🚰' : big ? '🌾' : '🥣'} ${t(water ? 'mg_water_btn' : 'mg_feed_btn')}`, {
@@ -153,7 +189,7 @@ function pourGame(ctx, water) {
   function end() {
     if (ctx.done) return;
     const v = value();
-    const { verdict: why } = ctx.finishJust(v, lo, hi, { who: a.name });
+    const { verdict: why } = ctx.finishJust(v, lo, hi, { who: a.name, msgs: justMsgs(t, a.name) });
     if (why === 'just') {
       fx.text(box.x, box.top - 30, t('mg_perfect'), '#2f8a5f', 26);
       fx.burst(box.x, box.top, '✨', 6);
@@ -228,18 +264,18 @@ function pourGame(ctx, water) {
         } else if (finishing) {
           if (drops.length === 0) end();
         } else if (pouring && v > hi) {
-          ctx.hint(t('mg_stop'), 'warn');
+          hint(t('mg_stop'), 'warn');
         } else if (pouring && v >= lo) {
-          ctx.hint(t('mg_nowStop'), 'good');
+          hint(t('mg_nowStop'), 'good');
         } else if (pouring) {
-          ctx.hint(t(water ? 'mg_water_hint' : 'mg_feed_hint'));
+          hint(t(water ? 'mg_water_hint' : 'mg_feed_hint'));
         } else if (released) {
           // On vient de lâcher : on dit où on en est (encore un peu, c'est bon, ou un peu trop) ;
           // ce qui tombe encore est déjà compté.
           released = false;
-          if (v < lo) ctx.hint(t('mg_more'), 'warn');
-          else if (v <= hi) ctx.hint(`✅ ${t('mg_stopHere')}`, 'good');
-          else ctx.hint(t('mg_tooMuch', { name: a.name }), 'warn');
+          if (v < lo) hint(t('mg_more'), 'warn');
+          else if (v <= hi) hint(`✅ ${t('mg_stopHere')}`, 'good');
+          else hint(t('mg_tooMuch', { name: a.name }), 'warn');
         }
       } else {
         // L'animal vient manger / boire.
@@ -533,6 +569,7 @@ export function treatCount(a) {
 
 export function treatGame(ctx) {
   const { a, t, fx } = ctx;
+  const hint = (text, kind) => ctx.hint(nb(text), kind);
   const big = isBig(a);
   const floorY = 300;
   const s = sizeFor(a, big ? 1.12 : 1.1);
@@ -555,7 +592,7 @@ export function treatGame(ctx) {
   let handBack = 0;
   const pose = a.species === 'rabbit' ? 'beg' : a.species === 'dog' || a.species === 'cat' ? 'sit' : 'stand';
 
-  ctx.hint(`${t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint')} ${treat.repeat(n)}`);
+  hint(`${t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint')} ${treat.repeat(n)}`);
   ctx.zone((n - 0.5) / max, (n + 0.5) / max);
   ctx.button(`${treat} ${t('mg_treat_btn')}`, { cls: 'primary', onTap: () => give() });
   // « C'est bon ! » pour s'arrêter là : disponible dès la première friandise (on revérifie au
@@ -590,14 +627,14 @@ export function treatGame(ctx) {
       next = Math.max(next, timer + 0.8);
       const sh = shape();
       fx.text(sh.head.x, sh.head.y - 50, t('mg_wait'), '#c07a10', 22);
-      ctx.hint(t('mg_treat_wait', { name: a.name }), 'warn');
+      hint(t('mg_treat_wait', { name: a.name }), 'warn');
     }
   }
 
   /** Fin : la note suit le nombre donné (juste / un peu trop peu / un peu trop). */
   function end() {
     if (ctx.done) return;
-    ctx.finishJust(given, n, n, { who: a.name, slack: 2 });
+    ctx.finishJust(given, n, n, { who: a.name, slack: 2, msgs: justMsgs(t, a.name) });
   }
 
   return {
@@ -616,12 +653,12 @@ export function treatGame(ctx) {
       if (state === 'wiggle' && timer > next) {
         state = 'calm';
         timer = 0;
-        if (given < n) ctx.hint(t(big ? 'mg_treat_now_flat' : 'mg_treat_now'), 'good');
+        if (given < n) hint(t(big ? 'mg_treat_now_flat' : 'mg_treat_now'), 'good');
       } else if (state === 'calm' && timer > calmTime) {
         state = 'wiggle';
         timer = 0;
         next = 1 + ctx.rng() * 1.6;
-        if (given < n) ctx.hint(waitHint());
+        if (given < n) hint(waitHint());
       } else if (state === 'eat') {
         if (fly) fly.k = Math.min(1, fly.k + dt * 3.2);
         if (Math.random() < dt * 6) {
@@ -638,9 +675,9 @@ export function treatGame(ctx) {
           state = 'wiggle';
           timer = 0;
           next = 1 + ctx.rng() * 1.8;
-          if (given === n) ctx.hint(`✅ ${t('mg_stopHere')}`, 'good');
-          else if (given > n) ctx.hint(t('mg_tooMuch', { name: a.name }), 'warn');
-          else ctx.hint(waitHint());
+          if (given === n) hint(`✅ ${t('mg_stopHere')}`, 'good');
+          else if (given > n) hint(t('mg_tooMuch', { name: a.name }), 'warn');
+          else hint(waitHint());
         }
       }
     },
@@ -650,20 +687,19 @@ export function treatGame(ctx) {
       const calm = state === 'calm' || state === 'eat' || ctx.done;
       const wig = state === 'wiggle' && !ctx.done;
       const lift = wig && !big ? Math.abs(Math.sin(tm * 8)) * 16 * s : 0;
-      const sh = drawAnimal(g, a, {
+      const sh = drawAnimalLifted(g, a, {
         x: ax + (wig ? Math.sin(tm * 4) * 10 : 0),
         y: floorY,
         s,
         f: 1,
         pose: calm ? pose : 'stand',
-        lift,
         walk: wig ? tm * 12 : null,
         wag: given <= n,
         headDip: wig && big ? 0.25 + Math.sin(tm * 7) * 0.2 : 0,
         mouth: state === 'eat' && fly?.k >= 1,
         happy: (state === 'eat' && given <= n) || (ctx.done && given <= n),
         time: tm,
-      });
+      }, lift);
       if (state === 'calm' && !ctx.done) {
         // Halo « il est sage »
         g.save();

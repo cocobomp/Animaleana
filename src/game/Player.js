@@ -91,6 +91,13 @@ export class Player {
   }
 
   update(dt, ctrl, camYaw, firstPerson) {
+    // scripted : déplacé par le jeu (on fait monter un cheval dans le van, src/game/Vehicle.js) ; on anime seulement la marche.
+    if (this.scripted) {
+      this.root.rotation.y = this.heading;
+      this.animateWalk(dt);
+      this.holdPose?.();
+      return;
+    }
     let { run } = ctrl;
     const { move } = ctrl;
     const f = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));
@@ -173,7 +180,16 @@ export class Player {
       this.avatar.torso.rotation.x = Math.sin(mount.phase * 2) * 0.03 * Math.min(1, this.speed / 4);
     } else {
       this.animateWalk(dt);
+      this.holdPose?.();
     }
+  }
+
+  /** Porter une caisse à deux mains (carrying : vrai pendant qu'on la porte, src/game/TripFlow.js). */
+  holdPose() {
+    if (!this.carrying) return;
+    const a = this.avatar;
+    a.arms.forEach((arm, i) => arm.rotation.set(-1.15, 0, (i === 0 ? 1 : -1) * -0.18));
+    a.elbows?.forEach((e) => e.rotation.set(-0.55, 0, 0));
   }
 
   animateWalk(dt) {

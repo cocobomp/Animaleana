@@ -1,6 +1,7 @@
 // Textes du jeu : français (langue principale) et anglais.
 
 import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
+import { VEHICLES_FR, VEHICLES_EN } from './ui/vehiclesTexts.js'; // véhicules du voyage (veh_*, cargo_*)
 
 const fr = {
   title: 'Animadichelle',
@@ -1066,10 +1067,10 @@ const fr = {
   cv_tipOk: 'Compris !',
 
   // ---------- Voyages réalistes avec les animaux (sim/trip.js, ui/trip.js)
-  trip_parked_trailer: '🚐 Le van et sa remorque sont garés dans la cour. Fais monter tes animaux !',
+  trip_parked_trailer: '🚐 Le 4x4 et le van à chevaux sont garés dans la cour, pont baissé. Fais monter tes animaux !',
   trip_parked_car: '🚗 La voiture est garée dans la cour, avec des caisses de transport. Fais monter tes animaux !',
-  trip_parkedHelp: 'Mène les grands animaux à la remorque avec « Me suivre », puis touche la remorque. Touche un petit animal près du véhicule pour le mettre dans sa caisse.',
-  trip_parkedHelpCar: 'Touche un petit animal près de la voiture pour le mettre dans sa caisse, ou utilise « Mettre en caisse ».',
+  trip_parkedHelp: 'Touche le van (ou « 🚐 Véhicule ») : faire monter un cheval par le pont, mettre les petits dans leur caisse, remplir le coffre, puis monter au volant.',
+  trip_parkedHelpCar: 'Touche la voiture (ou « 🚐 Véhicule ») : mettre les animaux dans leur caisse, remplir le coffre de toit, puis monter au volant.',
   trip_loadingChip: 'Chargement {n}/{total}',
   trip_crateBtn: '📦 Mettre en caisse',
   trip_loadHorseHint: '{name} doit te suivre jusqu\'à la remorque : choisis « Me suivre » (avec un licol).',
@@ -1183,7 +1184,7 @@ const fr = {
   trip_longWarn: '⚠️ Long trajet ({t}) : c\'est dur pour les animaux. Et si tu les laissais chez le voisin ?',
   trip_holdNote_plane: '✈️ Pendant le vol, tes animaux seront en soute : tu ne pourras pas t\'occuper d\'eux.',
   trip_holdNote_boat: '⛴️ Pendant la traversée, tes animaux resteront dans le garage du bateau : tu ne pourras pas t\'occuper d\'eux.',
-  trip_vehicleNote_trailer: '🚐 Un van avec une remorque t\'attendra dans la cour.',
+  trip_vehicleNote_trailer: '🚐 Un 4x4 et son van à chevaux t\'attendront dans la cour.',
   trip_vehicleNote_car: '🚗 Une voiture avec des caisses de transport t\'attendra dans la cour.',
   trip_vehicleNote_none: '🐎 Tu pars à cheval : les autres animaux te suivent.',
   trip_stopsNote: '🅿️ {n} pauses prévues en route.',
@@ -2806,10 +2807,10 @@ const en = {
   cv_tipOk: 'Got it!',
 
   // ---------- Realistic trips with animals (sim/trip.js, ui/trip.js)
-  trip_parked_trailer: '🚐 The van and its trailer are parked in the yard. Load your animals!',
+  trip_parked_trailer: '🚐 The 4x4 and the horse trailer are parked in the yard, ramp down. Load your animals!',
   trip_parked_car: '🚗 The car is parked in the yard, with travel crates. Load your animals!',
-  trip_parkedHelp: 'Lead big animals to the trailer with "Follow me", then tap the trailer. Tap a small animal near the vehicle to put it in its crate.',
-  trip_parkedHelpCar: 'Tap a small animal near the car to put it in its crate, or use "Put in crate".',
+  trip_parkedHelp: 'Tap the trailer (or "🚐 Vehicle"): lead a horse up the ramp, put the small ones in their crates, fill the trunk, then get behind the wheel.',
+  trip_parkedHelpCar: 'Tap the car (or "🚐 Vehicle"): put the animals in their crates, fill the roof box, then get behind the wheel.',
   trip_loadingChip: 'Loading {n}/{total}',
   trip_crateBtn: '📦 Put in crate',
   trip_loadHorseHint: '{name} must follow you to the trailer: choose "Follow me" (with a halter).',
@@ -2912,7 +2913,7 @@ const en = {
   trip_longWarn: '⚠️ Long trip ({t}): it\'s hard on animals. What about leaving them with the neighbour?',
   trip_holdNote_plane: '✈️ During the flight your animals are in the hold: you can\'t look after them.',
   trip_holdNote_boat: '⛴️ During the crossing your animals stay on the car deck: you can\'t look after them.',
-  trip_vehicleNote_trailer: '🚐 A van with a trailer will wait for you in the yard.',
+  trip_vehicleNote_trailer: '🚐 A 4x4 and its horse trailer will wait for you in the yard.',
   trip_vehicleNote_car: '🚗 A car with travel crates will wait for you in the yard.',
   trip_vehicleNote_none: '🐎 You leave on horseback: the other animals follow you.',
   trip_stopsNote: '🅿️ {n} stops planned on the way.',
@@ -3517,6 +3518,9 @@ const en = {
 // Clients et métiers : textes ajoutés aux deux dictionnaires.
 Object.assign(fr, CLIENTS_FR);
 Object.assign(en, CLIENTS_EN);
+// Véhicules du voyage : monter dedans, faire entrer les animaux, coffre de transport.
+Object.assign(fr, VEHICLES_FR);
+Object.assign(en, VEHICLES_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

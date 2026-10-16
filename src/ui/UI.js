@@ -13,7 +13,7 @@ import { openHelp } from './help.js';
 import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
 import { tripChips } from './trip.js'; // voyages réalistes
 import { openActivities } from './activities.js';
-import { TOOLS } from '../sim/tools.js';
+import { TOOLS, toolAtHome } from '../sim/tools.js';
 import { isSandbox } from '../sim/profile.js';
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
@@ -584,7 +584,9 @@ export class UI {
       // Il manque l'outil (longe, shampoing…) : on propose de l'acheter maintenant, sans passer par la sellerie.
       const tool = check.tool;
       const label = `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}`;
-      const ok = await this.confirm(t(isSandbox(g.profile) ? 'buyToolAskFree' : 'buyToolAsk', { tool: label, price: TOOLS[tool].price }));
+      // En voyage, l'outil est peut-être resté à la maison (pas dans le coffre de transport, src/sim/cargo.js).
+      const key = toolAtHome(g.profile, tool) ? 'buyToolAskAway' : isSandbox(g.profile) ? 'buyToolAskFree' : 'buyToolAsk';
+      const ok = await this.confirm(t(key, { tool: label, price: TOOLS[tool].price }));
       if (!ok || !g.buyTool(tool)?.ok) return null;
       check = g.canCare(a, action);
     }

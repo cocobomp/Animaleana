@@ -1394,7 +1394,7 @@ const fr = {
   mg_more_short: 'Encore un peu !',
   mg_stop: 'Stop ! Lâche vite !',
   mg_nowStop: 'C\'est bon, lâche maintenant !',
-  mg_tooMuch: 'Un peu trop, mais {name} se régale quand même !',
+  mg_tooMuch: 'Un peu trop ! {name} en avait déjà assez.',
   mg_act_goat_nails: 'Parer les onglons',
   // nourrir, boire
   mg_feed_hint: 'Appuie et garde le doigt pour verser. Lâche sur la ligne 🎯 !',
@@ -1502,6 +1502,14 @@ const fr = {
   mg_chore_kitchen_rack: 'Propre ! Glisse l\'assiette sur l\'égouttoir ➡️.',
   mg_chore_kitchen_next: 'Encore une assiette ! Frotte en faisant des ronds.',
   mg_chore_kitchen_drop: 'Oups ! Pose-la sur l\'égouttoir, à droite ➡️.',
+  // juste ce qu'il faut (ctx.zone / ctx.finishJust / ctx.stopButton de src/ui/minigames.js)
+  mg_justRight: 'Juste ce qu\'il fallait ! {name} est aux anges !',
+  mg_tooLittle: 'Un peu trop peu… {name} en voulait encore un peu.',
+  mg_stopHere: 'C\'est bon !',
+  mg_zoneHint: 'Arrête-toi dans la zone verte 🟩',
+  mg_chore_justRight: 'Juste ce qu\'il fallait ! Tout est nickel !',
+  mg_chore_tooLittle: 'Un peu trop peu… Il en manquait encore un peu.',
+  mg_chore_tooMuch: 'Un peu trop ! Mais c\'est fait quand même.',
   // ---------- activités, concours et spectacles (src/sim/activities.js, src/game/Activities.js, src/ui/activities.js)
   actv_hud: 'Activités',
   actv_title: 'Activités et concours',
@@ -3040,7 +3048,7 @@ const en = {
   mg_more_short: 'A bit more!',
   mg_stop: 'Stop! Let go now!',
   mg_nowStop: 'That\'s it, let go now!',
-  mg_tooMuch: 'A little too much, but {name} is happy anyway!',
+  mg_tooMuch: 'A bit too much! {name} had plenty already.',
   mg_act_goat_nails: 'Trim the hooves',
   // feed, water
   mg_feed_hint: 'Press and hold to pour. Let go on the 🎯 line!',
@@ -3148,6 +3156,14 @@ const en = {
   mg_chore_kitchen_rack: 'Clean! Slide the plate onto the drying rack ➡️.',
   mg_chore_kitchen_next: 'Another plate! Scrub in circles.',
   mg_chore_kitchen_drop: 'Oops! Put it on the drying rack, on the right ➡️.',
+  // just right (ctx.zone / ctx.finishJust / ctx.stopButton in src/ui/minigames.js)
+  mg_justRight: 'Just right! {name} is over the moon!',
+  mg_tooLittle: 'A bit too little… {name} wanted a little more.',
+  mg_stopHere: 'That\'s it!',
+  mg_zoneHint: 'Stop in the green zone 🟩',
+  mg_chore_justRight: 'Just right! Spotless!',
+  mg_chore_tooLittle: 'A bit too little… there was still a little left to do.',
+  mg_chore_tooMuch: 'A bit too much! But it\'s done all the same.',
   // ---------- activities, competitions and shows
   actv_hud: 'Activities',
   actv_title: 'Activities & contests',

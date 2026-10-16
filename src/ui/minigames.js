@@ -18,6 +18,7 @@ import { petGame, playGame, milkGame } from './minigames/fun.js';
 import { lungeGame, libertyGame } from './minigames/horse.js';
 import { audio } from '../game/audio.js'; // petits sons : bien joué / raté / fini
 import { CHORE_GAMES, CHORE_ICONS } from './minigames/chores.js';
+import { justRight, verdict } from './minigames/score.js'; // règle « juste ce qu'il faut »
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -212,7 +213,10 @@ function openMinigame(ui, o) {
     const closeBtn = h('button', { class: 'mg-close', 'aria-label': t('mg_close'), title: t('mg_close') }, '✕');
     const hintEl = h('p', { class: 'mg-hint' });
     const fillEl = h('div', { class: 'mg-progress-fill' });
-    const progressEl = h('div', { class: 'mg-progress', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': 100 }, fillEl, h('span', { class: 'mg-progress-goal' }, '🏁'));
+    // Bande verte « juste ce qu'il faut » sur la jauge, avec son petit repère ✓ (cachée tant
+    // que le jeu n'appelle pas ctx.zone).
+    const zoneEl = h('div', { class: 'mg-progress-zone', hidden: true, 'aria-hidden': 'true' }, h('span', { class: 'mg-progress-zone-mark' }, '✓'));
+    const progressEl = h('div', { class: 'mg-progress', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': 100 }, fillEl, zoneEl, h('span', { class: 'mg-progress-goal' }, '🏁'));
     const canvas = h('canvas', { class: 'mg-canvas' });
     const endEl = h('div', { class: 'mg-end', hidden: true });
     const stage = h('div', { class: 'mg-stage' }, canvas, endEl);
@@ -252,6 +256,7 @@ function openMinigame(ui, o) {
     let ended = false;
     let closed = false;
     let quality = null;
+    let zoneRange = null; // { lo, hi } de la bande verte affichée, ou null
 
     // Pour une corvée, a / sp / col sont null (ou l'animal qui habite là, pour le décor).
     const ctx = {
@@ -324,11 +329,53 @@ function openMinigame(ui, o) {
         controls.querySelectorAll('button').forEach((b) => { b.disabled = true; });
         setTimeout(() => showEnd(msg), 900);
       },
+      /**
+       * Montre la zone « juste ce qu'il faut » sur la jauge : bande verte entre lo et hi
+       * (fractions 0–1 de la jauge) avec un repère ✓. zone(null) la cache.
+       * Renvoie la zone affichée ({ lo, hi }) ou null.
+       */
+      zone(lo, hi) {
+        if (lo === null || lo === undefined || hi === null || hi === undefined || !Number.isFinite(lo) || !Number.isFinite(hi)) {
+          zoneRange = null;
+          zoneEl.hidden = true;
+          return null;
+        }
+        let l = clamp(lo);
+        let r = clamp(hi);
+        if (l > r) [l, r] = [r, l];
+        zoneRange = { lo: l, hi: r };
+        zoneEl.style.left = `${l * 100}%`;
+        zoneEl.style.width = `${Math.max(1.5, (r - l) * 100)}%`;
+        zoneEl.hidden = false;
+        return zoneRange;
+      },
+      /**
+       * Fin « juste ce qu'il faut » : la qualité suit justRight(value, lo, hi) et le message
+       * dit pourquoi (« Juste ce qu'il fallait ! », « Un peu trop peu… », « Un peu trop ! »).
+       * o : { who (prénom, ou animal : par défaut celui du jeu), floor, slack,
+       *       msgs: { just, low, high } (textes déjà traduits, pour remplacer les messages
+       *       standard) }. Sans prénom (corvée), les messages mg_chore_* sont utilisés.
+       * Renvoie { q, verdict }.
+       */
+      finishJust(value, lo, hi, o = {}) {
+        const q = justRight(value, lo, hi, { floor: o.floor, slack: o.slack });
+        const v = verdict(value, lo, hi);
+        const name = typeof o.who === 'string' ? o.who : o.who?.name ?? ctx.name;
+        const key = v === 'just' ? 'justRight' : v === 'low' ? 'tooLittle' : 'tooMuch';
+        const msg = o.msgs?.[v] ?? (name ? t(`mg_${key}`, { name }) : t(`mg_chore_${key}`));
+        ctx.finish(q, msg);
+        return { q, verdict: v };
+      },
+      /** Gros bouton « ✅ C'est bon ! » pour s'arrêter là : raccourci vers button(). */
+      stopButton(onStop, label = t('mg_stopHere')) {
+        const text = label.includes('✅') ? label : `✅ ${label}`;
+        return ctx.button(text, { cls: 'stop primary', onTap: onStop });
+      },
     };
 
     const play = make(ctx);
     // État lisible par les tests automatiques (peek).
-    ui.minigame = { action, chore: o.chore ?? null, ctx, peek: () => play.peek?.() };
+    ui.minigame = { action, chore: o.chore ?? null, ctx, peek: () => play.peek?.(), get zone() { return zoneRange; } };
 
     function showEnd(msg) {
       if (closed) return;

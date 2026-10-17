@@ -288,10 +288,12 @@ describe('vie privée', () => {
     const p = s.profile.createProfile('Léa');
     s.profile.saveProfile(p);
     await login(s, { chooseClaims: async (parties) => parties.map((x) => x.id) });
+    expect(s.sync.loadMeta().accounts).toEqual({ u1: 'u1@x.ch' }); // retenu sur l'appareil seulement
     expect(await s.acc.eraseCloud({ account: true })).toBe(true);
     expect(fb.calls).toEqual(['deleteUser', 'signOut']);
     expect(remoteOf('u1').data.size).toBe(0);
     expect(s.profile.loadProfile(p.id)).toBeTruthy();
+    expect(s.sync.loadMeta().accounts).toEqual({}); // le jeu oublie ce compte
   });
 
   it('suppression qui échoue (réseau) : erreur montrée, on reste connecté pour réessayer', async () => {

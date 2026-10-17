@@ -342,6 +342,11 @@ export async function eraseCloud({ account = false } = {}) {
     if (account) {
       const r = await deleteCloudUser();
       if (r === 'redirect') return 'redirect';
+      // Le jeu oublie ce compte sur cet appareil (son e-mail, retenu pour reconnaître le même Google plus tard :
+      // ici, ses parties sont déjà déliées, il ne sert plus à rien).
+      const m = loadMeta();
+      delete m.accounts[uid];
+      saveMeta(m);
     }
     state.erasing = false;
     await signOut();

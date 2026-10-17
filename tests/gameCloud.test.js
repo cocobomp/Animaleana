@@ -21,7 +21,7 @@ beforeAll(async () => {
   };
   ({ Game } = await import('../src/game/Game.js'));
   profile = await import('../src/sim/profile.js');
-});
+}, 60000); // importer Game.js (Three.js, modèles) peut être lent sur une machine chargée
 beforeEach(() => mem.clear());
 
 /** Un faux jeu avec les vraies méthodes start/stop/save de Game. */

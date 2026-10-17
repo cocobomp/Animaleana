@@ -226,7 +226,7 @@ function accessoryRow(ui, a, now) {
       },
     }, `🎨 ${t('beauty_acc_put', { item: itemName(acc.target), color: t(`col_${acc.want}`).toLowerCase() })}`);
   }
-  return h('li', { class: acc.matches ? 'ok' : 'ko' },
+  return h('li', { class: `beauty-acc ${acc.matches ? 'ok' : 'ko'}` },
     h('span', { class: 'beauty-check' }, acc.matches ? '✅' : '🎨'),
     h('span', { class: 'beauty-item' }, h('b', {}, `${t('beauty_acc_title')} · ${t('beauty_bonus')}`), h('small', {}, text)),
     btn);

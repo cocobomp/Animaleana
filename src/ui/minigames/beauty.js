@@ -14,6 +14,7 @@ import { RIBBON_COLORS, BOW_PATTERNS } from '../../sim/beauty.js';
 
 const COLOR_EMOJI = { red: '🔴', pink: '🩷', blue: '🔵', yellow: '🟡', green: '🟢', purple: '🟣', white: '⚪' };
 const PATTERN_EMOJI = { plain: '⬜', dots: '🔘', stripes: '📏' };
+const BEADS = ['#e0473a', '#ffcf2e', '#2f6fd8']; // élastiques des trois mèches de la tresse
 const isGo = (code) => code === 'Space' || code === 'Enter' || code === 'NumpadEnter';
 
 function ringBackground(g, ctx, floorY = 305) {
@@ -210,11 +211,12 @@ export function braidGame(ctx) {
     sec.done = crossings / CROSS;
     fx.burst(SLOT_X[1], braidEnd(), '✨', 2, { speed: 60, size: 14 });
     if (crossings >= CROSS) {
-      fx.text(LOUPE.x + LOUPE.w / 2, LOUPE.y + 24, t('mg_braid_done'), '#2f8a5f', 20);
+      fx.text(LOUPE.x + LOUPE.w / 2, TOP_Y + CROSS * STEP + 34, t('mg_braid_done'), '#2f8a5f', 20);
       fx.burst(sec.bottom.x, sec.bottom.y, '✨', 3, { speed: 70, size: 14 });
       cur++;
       crossings = 0;
       order = [0, 1, 2];
+      swap = null; // nouvelle tresse : trois mèches bien en place
       if (cur >= sections.length) {
         phase = 'color';
         ctx.hint(t('mg_braid_color'), 'good');
@@ -276,7 +278,8 @@ export function braidGame(ctx) {
       const want = expected();
       for (let pos = 0; pos < 3; pos++) {
         const id = order[pos];
-        const col = shade(mane, [-0.08, 0.1, 0.24][id]);
+        // Nuances bien différentes, même pour une crinière noire (sinon on ne les reconnaît pas).
+        const col = shade(mane, [0.12, 0.32, 0.52][id]);
         let x = SLOT_X[pos];
         if (swap && swap.t < 1 && (pos === swap.from || pos === 1)) x = lerp(pos === 1 ? SLOT_X[swap.from] : SLOT_X[1], x, swap.t);
         const glow = pos === want && !ctx.done;
@@ -300,9 +303,16 @@ export function braidGame(ctx) {
         g.lineWidth = 3;
         strandPath(g, x - 7, endY);
         g.stroke();
+        // Un élastique de couleur au bout de chaque mèche : on la suit quand elle change de place.
+        g.fillStyle = BEADS[id];
+        g.strokeStyle = '#ffffff';
+        g.lineWidth = 2.5;
+        circle(g, x, BOTTOM_Y - 2, 9);
+        g.fill();
+        g.stroke();
       }
       const hx = SLOT_X[want];
-      emoji(g, '👆', hx + 4, BOTTOM_Y - 6 + Math.sin(ctx.time * 5) * 4, 26);
+      emoji(g, '👆', hx + 4, BOTTOM_Y - 34 + Math.sin(ctx.time * 5) * 4, 26);
       // une petite flèche : de ce côté vers le milieu
       label(g, want === 0 ? '➜' : '⬅', SLOT_X[1] + (want === 0 ? -24 : 24), endY + 44, 22, '#ffffff');
     } else {
@@ -456,8 +466,9 @@ export function shineGame(ctx) {
   ctx.hint(t(horse ? 'mg_shine_hintHorse' : 'mg_shine_hint'));
 
   const coverage = () => cells.reduce((acc, c) => acc + Math.min(1, c.v), 0) / Math.max(1, cells.length);
-  // Trop de lustrant : au-delà de 1,4 passage par endroit, ça colle.
-  const over = () => cells.reduce((acc, c) => acc + Math.max(0, c.v - 1.4), 0) / Math.max(1, cells.length) * 0.6;
+  // Trop de lustrant : au-delà de 2,5 (deux bons passages partout, avec ceux des rangées voisines), ça colle.
+  const OVER_AT = 2.5;
+  const over = () => cells.reduce((acc, c) => acc + Math.max(0, c.v - OVER_AT), 0) / Math.max(1, cells.length) * 0.25;
   const hoofPart = () => (hooves.length ? (hooves.filter((h) => h.done).length / hooves.length) * (1 - COAT_SHARE) : 0);
   const value = () => Math.min(MAX, coverage() * COAT_SHARE + hoofPart() + over());
 
@@ -533,8 +544,8 @@ export function shineGame(ctx) {
         g.fillStyle = '#ffffff';
         ellipse(g, c.x, c.y, step * 0.55, step * 0.42, -0.3);
         g.fill();
-        if (c.v > 1.4) {
-          g.globalAlpha = Math.min(0.5, (c.v - 1.4) * 0.6);
+        if (c.v > OVER_AT) {
+          g.globalAlpha = Math.min(0.5, (c.v - OVER_AT) * 0.4);
           g.fillStyle = '#f2d36b';
           ellipse(g, c.x + 3, c.y + 2, step * 0.4, step * 0.28, 0.4);
           g.fill();

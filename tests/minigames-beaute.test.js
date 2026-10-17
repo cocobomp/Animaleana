@@ -183,13 +183,15 @@ describe('lustrer : juste ce qu\'il faut de lustrant', () => {
     const ctx = fakeCtx(animal('dog'));
     const game = B.shineGame(ctx);
     const cells = game.peek().cells;
-    for (let k = 0; k < 6 && !ctx.done; k++) {
+    for (let k = 0; k < 30 && !ctx.done && game.peek().value <= game.peek().hi; k++) {
       for (const c of cells) {
         game.down({ x: c.x - 12, y: c.y });
         for (let i = 0; i <= 8; i++) game.move({ x: c.x - 12 + i * 3, y: c.y }, true);
         game.up({ x: c.x + 12, y: c.y });
       }
     }
+    const passes = game.peek();
+    expect(passes.over).toBeGreaterThan(0);
     if (!ctx.done) ctx.buttons[0].opts.onTap();
     expect(ctx.finished.verdict).toBe('high');
     expect(ctx.finished.q).toBeLessThan(1);

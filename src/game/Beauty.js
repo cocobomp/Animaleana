@@ -18,7 +18,7 @@ import { addCareerXp, isStarted, RANKS } from '../sim/careers.js';
 import { noteClientContest } from '../sim/clients.js';
 import { flagPair } from './models/course.js';
 import { signTexture } from './textures.js';
-import { buildAvatar, updateAvatarLife, startAvatarGesture } from './models/avatarModel.js';
+import { buildAvatar, animateAvatarWalk, updateAvatarLife, startAvatarGesture } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 import { judgeLines } from '../ui/beauty.js';
 import { t, ta } from '../i18n.js';
@@ -217,12 +217,14 @@ export function applyBeautyDecor(e, now) {
   // Nœud ou bandana (autres espèces) : sur le cou, côté dos.
   if (isFresh(a, 'bow', now) && a.species !== 'horse') {
     const color = RIBBON_COLORS[prep.bow?.color] ?? RIBBON_COLORS.red;
-    const bow = bowMesh(color, R * 0.16, prep.bow?.pattern ?? 'plain');
+    // Assez gros pour se voir de loin (un vrai nœud de concours), même sur un petit chat.
+    const size = Math.max(0.028, R * 0.3);
+    const bow = bowMesh(color, size, prep.bow?.pattern ?? 'plain');
     if (model.neck) {
       const { len: nl } = neckFrame(model, look.neckLen ?? R);
       const t = 0.5;
       const hit = surfaceHit(model.neck, new THREE.Vector3(0, t * nl, -R * 2.5), new THREE.Vector3(0, t * nl, 0), hitList());
-      bow.position.copy(hit ?? new THREE.Vector3(0, t * nl, -R * 0.52)).add(new THREE.Vector3(0, 0, -R * 0.05));
+      bow.position.copy(hit ?? new THREE.Vector3(0, t * nl, -R * 0.52)).add(new THREE.Vector3(0, 0, -size * 0.45));
       bow.rotation.x = -0.5;
       add(model.neck, bow);
     } else if (model.body) {
@@ -455,7 +457,7 @@ class BeautySession extends Session {
     this.ringB.position.y += 0.08;
     this.ringB.visible = false;
     const flags = flagPair(4, t('actv_finish'));
-    this.put(flags, this.back.x, this.back.z, 0);
+    this.flags = this.put(flags, this.back.x, this.back.z, 0);
     const tbl = new THREE.Group();
     const top = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 1.0), mat(0xf6f4ee, 0.8));
     top.position.y = this.tableTop;
@@ -475,10 +477,10 @@ class BeautySession extends Session {
     this.judgeNpc.root.rotation.y = Math.PI / 2; // face à la carrière (+x)
     g.scene.add(this.judgeNpc.root);
     this.judgeLife = { speed: 0, busy: false };
-    const judgeSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: signTexture(t('beauty_judgeTag'), '#23395d', '#ffffff', '🧑‍⚖️'), transparent: true, depthWrite: false, depthTest: false }));
-    judgeSprite.scale.set(1.9, 0.48, 1);
-    judgeSprite.renderOrder = 10;
-    judgeSprite.position.set(seat.x, this.y(seat.x, seat.z) + 2.25, seat.z);
+    // Petite étiquette au-dessus de sa tête (cachée par le décor comme le reste : elle ne masque pas la carrière).
+    const judgeSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: signTexture(t('beauty_judgeTag'), '#23395d', '#ffffff', '🧑‍⚖️'), transparent: true, depthWrite: false }));
+    judgeSprite.scale.set(1.0, 0.25, 1);
+    judgeSprite.position.set(seat.x, this.y(seat.x, seat.z) + 2.15, seat.z);
     this.group.add(judgeSprite);
     this.judgeSprite = judgeSprite;
     const pod = new THREE.Group();
@@ -717,12 +719,14 @@ class BeautySession extends Session {
     const pl = g.player;
     const e = this.e;
     this.phaseT += dt;
-    this.judgeSprite.position.y = this.y(this.judgeSprite.position.x, this.judgeSprite.position.z) + 2.25 + Math.sin(this.time * 2) * 0.03;
+    this.judgeSprite.position.y = this.y(this.judgeSprite.position.x, this.judgeSprite.position.z) + 2.15 + Math.sin(this.time * 2) * 0.03;
     if (this.judgeNpc) {
       // Le juge suit l'animal du regard (il tourne doucement sur place).
       const jr = this.judgeNpc.root;
       const want = Math.atan2(e.position.x - jr.position.x, e.position.z - jr.position.z);
       jr.rotation.y += wrap(want - jr.rotation.y) * Math.min(1, dt * 2);
+      // Pose debout remise à zéro à chaque image, puis la vie par-dessus (sinon les gestes s'additionnent).
+      animateAvatarWalk(this.judgeNpc, 0, 0);
       updateAvatarLife(this.judgeNpc, dt, this.judgeLife);
     }
     this.arrow.position.y = this.y(this.arrow.position.x, this.arrow.position.z) + 2.4 + Math.sin(this.time * 4) * 0.2;
@@ -855,6 +859,8 @@ class BeautySession extends Session {
       this.rank = ranking(this.comp, { points }, this.rivals).rank;
       step = this.rank <= 3 ? this.rank - 1 : 2;
     }
+    // La photo du podium : on enlève l'arche d'arrivée, les cercles et la flèche qui la cachaient.
+    for (const o of [this.flags, this.ringA, this.ringB, this.arrow]) if (o) o.visible = false;
     // Le juge tend le ruban (ou la coupe).
     if (this.judgeNpc) startAvatarGesture(this.judgeNpc, 'offer', { duration: 2.4, local: true, x: 0, y: 1.15, z: 0.45 });
     const s = this.podiumSteps[step];

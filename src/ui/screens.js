@@ -4,14 +4,14 @@ import * as THREE from 'three';
 import { h, hexColor } from './dom.js';
 import { focusField } from './viewport.js';
 import { t, getLang, setLang } from '../i18n.js';
-import { listProfiles, loadProfile, createProfile, deleteProfile, saveProfile } from '../sim/profile.js';
+import { listProfiles, loadProfile, createProfile, saveProfile } from '../sim/profile.js';
 import { PLACES, PLACE_IDS } from '../sim/places.js';
 import { L } from '../i18n.js';
 import { buildAvatar, animateAvatarWalk, updateAvatarLife } from '../game/models/avatarModel.js';
 import { disposeModel } from '../game/models/animalModel.js';
 import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
 import { cloudCard, syncMessage } from './cloudAccount.js'; // ☁️ compte Google (facultatif)
-import { onCloudChange } from '../cloud/account.js';
+import { onCloudChange, cloudState, partyLink, linkToAccount, linkNewParty, deleteKind, deleteParty } from '../cloud/account.js';
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x4e2f1e];
 const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xe8d39a, 0xa63a1f, 0x9a9a9a, 0x5b4bb5, 0xe26fa6];
@@ -23,26 +23,37 @@ let stopCloudWatch = null; // un seul abonnement aux changements du compte, mêm
 export function showProfiles(ui) {
   const render = () => {
     const profiles = listProfiles();
-    const list = profiles.map((p) => h('div', { class: 'profile' },
-      h('button', {
-        class: 'profile-play',
-        onClick: () => {
-          const prof = loadProfile(p.id);
-          if (prof) ui.game.start(prof);
-        },
-      }, h('b', {}, p.name), h('small', {}, `${p.mode === 'sandbox' ? t('modeSandbox') : t('modeManage')} · ${t('animalsCount', { n: p.animals })}`),
-      // Copie gardée avant qu'une partie restaurée la remplace (src/sim/saveStore.js) : on peut y rejouer ou la supprimer.
-      p.backup ? h('small', { class: 'sv-badge' }, t('sv_backupBadge')) : null),
-      h('button', {
-        class: 'icon danger',
-        title: t('delete'),
-        onClick: async () => {
-          if (await ui.confirm(t('confirmDelete', { name: p.name }))) {
-            deleteProfile(p.id);
-            render();
-          }
-        },
-      }, '🗑️')));
+    const signedIn = cloudState().status === 'in';
+    const list = profiles.map((p) => {
+      // Compte Google : ☁️ sur les parties liées au compte connecté ; « Mettre dans mon compte » sur les autres
+      // (gardées sur cet appareil). Les copies de secours restent toujours sur l'appareil.
+      const link = signedIn && !p.backup ? partyLink(p.id) : null;
+      return h('div', { class: 'profile' },
+        h('button', {
+          class: 'profile-play',
+          onClick: () => {
+            const prof = loadProfile(p.id);
+            if (prof) ui.game.start(prof);
+          },
+        }, h('b', {}, link === 'mine' ? h('span', { class: 'cloud-mark', title: t('cloud_inAccount'), 'aria-label': t('cloud_inAccount') }, '☁️ ') : null, p.name),
+        h('small', {}, `${p.mode === 'sandbox' ? t('modeSandbox') : t('modeManage')} · ${t('animalsCount', { n: p.animals })}`),
+        // Copie gardée avant qu'une partie restaurée la remplace (src/sim/saveStore.js) : on peut y rejouer ou la supprimer.
+        p.backup ? h('small', { class: 'sv-badge' }, t('sv_backupBadge')) : null),
+        link === 'device' ? h('button', { class: 'small cloud-link', onClick: () => { linkToAccount(p.id); render(); } }, t('cloud_link')) : null,
+        h('button', {
+          class: 'icon danger',
+          title: t('delete'),
+          onClick: async () => {
+            // Liée au compte connecté : effacée partout ; dans un autre compte : seulement ici (elle reviendra).
+            const kind = deleteKind(p.id);
+            const msg = kind === 'everywhere' ? 'cloud_deleteEverywhere' : kind === 'kept' ? 'cloud_deleteKept' : 'confirmDelete';
+            if (await ui.confirm(t(msg, { name: p.name }))) {
+              deleteParty(p.id);
+              render();
+            }
+          },
+        }, '🗑️'));
+    });
 
     ui.screen.replaceChildren(h('div', { class: 'menu' },
       h('div', { class: 'logo' }, '🐴🐶🐱🐰'),
@@ -118,6 +129,7 @@ function newProfile(ui, back) {
     chooseHome(ui, (home) => {
       const p = createProfile(n, mode, home);
       saveProfile(p);
+      linkNewParty(p.id); // créée pendant qu'on est connecté : elle va dans ce compte
       showAvatarEditor(ui, p, () => ui.game.start(p));
     }, () => newProfile(ui, back));
   };
@@ -339,7 +351,9 @@ export function showAvatarEditor(ui, profile, onDone) {
   const done = () => {
     pv.running = false;
     profile.avatar = look;
-    saveProfile(profile);
+    // Partie en cours : c'est elle qui sauvegarde (elle sait quelle version est la sienne sur l'appareil).
+    if (ui.game?.running && ui.game.profile === profile) ui.game.save();
+    else saveProfile(profile);
     ui.game?.player?.setAvatar(look);
     onDone?.();
   };

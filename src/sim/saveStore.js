@@ -5,7 +5,7 @@
 
 import { listProfiles, loadProfile, saveProfile, deleteProfile, dropBackupMark } from './profile.js';
 import { uid } from './rng.js';
-import { uniqueName } from './saveFile.js';
+import { uniqueName, sameContent } from './saveFile.js';
 
 /** Les parties de cet appareil (index des profils + un profil par clé « animaleana.profile.<id> »). */
 export function deviceStore() {
@@ -94,12 +94,8 @@ export function restoreAsNew(store, incoming) {
 export function restoreReplace(store, targetId, incoming, { backupName = (p) => `${p.name} (secours)`, now = Date.now(), afterBackup = null } = {}) {
   const old = store.load(targetId);
   if (!old) return { ok: false, error: 'missing' };
-  const name = uniqueName(backupName(old), store.list().map((e) => e.name));
-  const backup = { ...clone(old), id: uid(), name, backupOf: old.id, backupAt: now };
-  if (!store.save(backup, { touch: false })) {
-    store.remove(backup.id);
-    return { ok: false, error: 'storage' };
-  }
+  const backup = keepBackup(store, old, { backupName, now });
+  if (!backup) return { ok: false, error: 'storage' };
   afterBackup?.();
   const list = store.list().filter((e) => e.id !== targetId && e.id !== backup.id);
   const p = fresh(incoming);
@@ -113,4 +109,44 @@ export function restoreReplace(store, targetId, incoming, { backupName = (p) => 
   }
   if (p.id !== targetId) store.remove(targetId);
   return { ok: true, profile: p, backup };
+}
+
+/**
+ * Garde une copie de secours d'une partie (nouvel id, marquée backupOf : jamais synchronisée), sans toucher à
+ * l'original. Prénom « Léana · secours 17/10 » (opts.backupName), rendu unique. Garde la date de la partie.
+ * Renvoie la copie, ou null si l'appareil est plein (et rien n'est resté d'une copie écrite à moitié).
+ */
+export function keepBackup(store, p, { backupName = (x) => `${x.name} (secours)`, now = Date.now() } = {}) {
+  const name = uniqueName(backupName(p), store.list().map((e) => e.name));
+  const backup = { ...clone(p), id: uid(), name, backupOf: p.id, backupAt: now };
+  if (!store.save(backup, { touch: false })) {
+    store.remove(backup.id);
+    return null;
+  }
+  return backup;
+}
+
+/**
+ * Sauvegarde de la partie en cours (src/game/Game.js), qui ne peut rien écraser en silence : si la version
+ * écrite sur l'appareil n'est plus celle que la partie a chargée ou écrite en dernier (lastAt : autre onglet,
+ * synchro), elle est d'abord gardée en copie de secours (si cette copie est impossible, rien n'est écrit).
+ * Rien à écrire si rien n'a changé depuis la dernière fois (lastKey : contenu déjà écrit).
+ * Renvoie { ok, at (date écrite), key (contenu écrit), backup (copie faite, s'il y en a une) }.
+ */
+export function saveGuarded(store, p, { lastAt, lastKey = null, backupName, now = Date.now() } = {}) {
+  const stored = store.list().find((e) => e.id === p.id);
+  const storedAt = stored ? stored.updatedAt ?? stored.savedAt : undefined;
+  const changedElsewhere = stored && lastAt !== undefined && storedAt !== lastAt;
+  const key = JSON.stringify({ ...p, updatedAt: 0 });
+  if (!changedElsewhere && stored && key === lastKey) return { ok: true, at: storedAt, key, backup: null };
+  let backup = null;
+  if (changedElsewhere) {
+    const other = store.load(p.id);
+    if (other && !sameContent(other, p)) {
+      backup = keepBackup(store, other, { ...(backupName ? { backupName } : {}), now });
+      if (!backup) return { ok: false, at: lastAt, key: lastKey, backup: null };
+    }
+  }
+  if (!store.save(p)) return { ok: false, at: lastAt, key: lastKey, backup };
+  return { ok: true, at: p.updatedAt, key, backup };
 }

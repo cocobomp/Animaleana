@@ -1,131 +1,234 @@
-// Synchro des parties avec un compte (cloud) : décider, partie par partie, quoi envoyer, quoi
-// récupérer et quoi effacer. Module pur (ni réseau, ni stockage, ni DOM) : src/cloud/sync.js
-// l'applique à cet appareil (src/sim/saveStore.js) et à la base en ligne (Firestore).
+// Synchro des parties avec un compte (cloud), version 2 : décider, partie par partie, quoi envoyer, quoi
+// récupérer, quoi effacer. Module pur (ni réseau, ni stockage, ni DOM) : src/cloud/sync.js l'applique à cet
+// appareil (src/sim/saveStore.js) et à la base en ligne (Firestore, src/cloud/firebase.js).
 //
-// Mémoire de la synchro (gardée sur l'appareil) :
-//   meta = { owners: { id: uid }, synced: { id: updatedAt }, deleted: { id: date } }
-//   - owners : à quel compte appartient une partie de l'appareil (sur une tablette partagée, chaque
-//     enfant peut avoir son compte : une partie déjà liée à un autre compte n'est jamais envoyée ici) ;
-//   - synced : la date de la version qui était la même des deux côtés au dernier passage
-//     (pour reconnaître une partie modifiée des deux côtés depuis : on garde alors une copie de secours) ;
-//   - deleted : parties effacées sur l'appareil, à effacer aussi en ligne.
+// Règle d'or : aucune partie n'est jamais perdue ni écrasée en silence. Les horloges des appareils ne décident
+// de rien : on regarde seulement CE QUI A CHANGÉ depuis le dernier accord entre cet appareil et le compte
+// (comparaisons d'égalité). La date de modification (updatedAt) ne sert qu'à choisir, quand les deux côtés ont
+// changé, laquelle des deux versions reste la partie (l'autre est gardée en copie de secours, rien n'est jeté).
 //
-// En ligne, une partie effacée reste une petite « pierre tombale » { deleted: true, updatedAt },
-// pour que les autres appareils l'effacent aussi au lieu de la renvoyer.
+// En ligne : users/{uid}/saves/{id} = { data (profil JSON), updatedAt (informatif), rev (1, 2, 3… : +1 à chaque
+// écriture, vérifié par firestore.rules et par une transaction), name, saveVersion, appVersion, deleted? }.
+// Une partie effacée par son propriétaire reste une petite « pierre tombale » { deleted: true, rev } : les autres
+// appareils l'effacent aussi (s'ils n'y ont pas joué depuis) au lieu de la renvoyer.
+//
+// Mémoire de l'appareil (localStorage 'animaleana.cloud') :
+//   { v: 2,
+//     owners:  { id: uid | 'device' }   à quel compte une partie de l'appareil est liée ; 'device' = gardée
+//                                       seulement sur cet appareil (jamais envoyée). Sans entrée : partie sans
+//                                       compte, la synchro n'y touche JAMAIS d'elle-même (on demande d'abord) ;
+//     base:    { id: { rev, localAt } } rev en ligne et updatedAt LOCAL au dernier accord (même version des deux côtés) ;
+//     deleted: { id: { rev, uid } }     effacée sur cet appareil par son propriétaire connecté : à effacer en ligne. }
+
+export const META_VERSION = 2;
+/** Le propriétaire « gardée seulement sur cet appareil ». */
+export const DEVICE = 'device';
+/** Les ids acceptés en ligne (même règle que firestore.rules). */
+export const validId = (id) => typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id);
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const at = (v) => (isNum(v) ? v : 0);
+const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+/** Rev d'un document en ligne (les documents de la v1 n'en ont pas : 0). */
+export const revOf = (d) => (isNum(d?.rev) && d.rev >= 0 ? Math.floor(d.rev) : 0);
 
-/** Mémoire vide (ou abîmée) → mémoire propre. */
+/**
+ * Mémoire propre (v2). Une mémoire abîmée, absente ou de la v1 ({ owners, synced, deleted } sans v) est remise
+ * à zéro : rien n'est perdu (les parties sont sur l'appareil et en ligne ; la première synchro les compare, garde
+ * les deux versions si elles diffèrent, et demande à nouveau lesquelles mettre dans le compte).
+ */
 export function cleanMeta(meta) {
-  const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
   const m = obj(meta);
-  return { owners: { ...obj(m.owners) }, synced: { ...obj(m.synced) }, deleted: { ...obj(m.deleted) } };
+  const out = { v: META_VERSION, owners: {}, base: {}, deleted: {} };
+  if (m.v !== META_VERSION) return out;
+  for (const [id, o] of Object.entries(obj(m.owners))) if (typeof o === 'string' && o) out.owners[id] = o;
+  for (const [id, b] of Object.entries(obj(m.base))) {
+    if (isNum(b?.rev) && isNum(b?.localAt)) out.base[id] = { rev: b.rev, localAt: b.localAt };
+  }
+  for (const [id, d] of Object.entries(obj(m.deleted))) {
+    if (isNum(d?.rev) && typeof d?.uid === 'string') out.deleted[id] = { rev: d.rev, uid: d.uid };
+  }
+  return out;
 }
 
 /**
  * Le plan de synchro pour le compte uid.
- * local : parties de l'appareil [{ id, updatedAt }] ; remote : documents en ligne [{ id, updatedAt, deleted }].
+ * local : parties de l'appareil, copies de secours exclues [{ id, updatedAt }] ;
+ * remote : documents en ligne [{ id, updatedAt, rev, deleted }] (liste lue sur le serveur, jamais le cache) ;
+ * opts.open : ids des parties ouvertes en ce moment (cet onglet ou un autre) : jamais remplacées ni effacées,
+ * envoyées seulement si la version en ligne n'a pas changé.
  * Renvoie {
- *   upload: [id]          envoyer la version de l'appareil,
- *   download: [{ id, conflict }]  prendre la version en ligne (conflict : l'appareil avait aussi changé
- *                         depuis le dernier passage → garder la version de l'appareil en copie de secours),
- *   removeRemote: [{ id, at }]    écrire la pierre tombale en ligne,
- *   removeLocal: [id]     effacer de l'appareil (effacée sur un autre appareil),
- *   claim: [id]           parties sans compte qui deviennent celles de uid,
- *   forget: [id]          oublier la mémoire de ces parties (traité, ou disparu des deux côtés),
+ *   upload:      [{ id, expect }]  envoyer la version de l'appareil ; expect = rev en ligne attendue (null : absente),
+ *   download:    [{ id, rev, revive? }]  remplacer (ou ajouter) ici par la version en ligne (revive : effacée ici,
+ *                                  mais rejouée ailleurs depuis : elle revient),
+ *   conflict:    [{ id, rev }]     changée des deux côtés (ou jamais comparée) : même contenu → noter l'accord ;
+ *                                  sinon garder les deux (la plus récente reste la partie, l'autre en copie de secours),
+ *   tombstone:   [{ id, expect }]  écrire la pierre tombale en ligne (effacée ici par son propriétaire),
+ *   removeLocal: [{ id, rev }]     effacer ici (effacée ailleurs par son propriétaire, pas changée ici),
+ *   unlink:      [id]              plus en ligne alors qu'elle l'a été (« effacer mes parties en ligne ») : gardée ici,
+ *                                  déliée (owners = 'device'), pas renvoyée,
+ *   forget:      [id]              oublier la mémoire de ces parties (effacement terminé, plus rien nulle part),
+ *   held:        [id]              ouverte ici et changée ailleurs : rien n'est envoyé (prévenir ; au retour au
+ *                                  menu, le conflit garde les deux),
+ *   unowned:     [id]              parties sans compte : la synchro n'y touche pas (il faut demander),
  * }
  */
-export function planSync(local, remote, meta, uid) {
+export function planSync(local, remote, meta, uid, { open = [] } = {}) {
   const m = cleanMeta(meta);
-  const plan = { upload: [], download: [], removeRemote: [], removeLocal: [], claim: [], forget: [] };
-  const mineHere = new Map();
-  for (const p of local ?? []) {
-    if (!p?.id) continue;
-    const owner = m.owners[p.id];
-    if (owner && owner !== uid) continue; // la partie d'un autre compte : on n'y touche pas
-    if (!owner) plan.claim.push(p.id);
-    mineHere.set(p.id, at(p.updatedAt));
-  }
+  const openSet = new Set(open);
+  const plan = { upload: [], download: [], conflict: [], tombstone: [], removeLocal: [], unlink: [], forget: [], held: [], unowned: [] };
+  const here = new Map();
+  for (const p of local ?? []) if (p?.id) here.set(p.id, at(p.updatedAt));
   const online = new Map();
-  for (const d of remote ?? []) if (d?.id) online.set(d.id, { updatedAt: at(d.updatedAt), deleted: d.deleted === true });
+  for (const d of remote ?? []) if (d?.id) online.set(d.id, { rev: revOf(d), deleted: d.deleted === true });
 
-  for (const [id, localAt] of mineHere) {
-    const r = online.get(id);
-    if (!r) {
-      plan.upload.push(id);
-      continue;
-    }
-    if (r.deleted) {
-      // Effacée ailleurs : on l'efface ici, sauf si on a joué avec depuis (alors elle revient en ligne).
-      if (localAt > r.updatedAt) plan.upload.push(id);
-      else plan.removeLocal.push(id);
-      continue;
-    }
-    if (localAt > r.updatedAt) plan.upload.push(id);
-    else if (r.updatedAt > localAt) {
-      const base = m.synced[id];
-      // Modifiée des deux côtés depuis le dernier passage (ou jamais synchronisée) : la plus récente gagne,
-      // l'autre est gardée en copie de secours.
-      const conflict = !isNum(base) ? localAt > 0 : localAt > base;
-      plan.download.push({ id, conflict });
-    }
-  }
-
-  // Effacements : ceux notés (noteDeleted), et les parties déjà synchronisées qui ont disparu de l'appareil
-  // (effacées depuis un écran qui ne prévient pas la synchro) : effacées « à la date du dernier passage »,
-  // donc seulement si personne ne les a modifiées ailleurs depuis (sinon elles reviennent).
-  const gone = { ...m.deleted };
-  for (const [id, owner] of Object.entries(m.owners)) {
-    if (owner === uid && !mineHere.has(id) && !(id in gone) && isNum(m.synced[id])) gone[id] = m.synced[id];
-  }
-  for (const [id, deletedAt] of Object.entries(gone)) {
-    if (mineHere.has(id)) continue; // revenue sur l'appareil (fichier restauré…) : traitée plus haut
+  // 1. Les parties de cet appareil liées à ce compte.
+  for (const [id, localAt] of here) {
     const owner = m.owners[id];
-    if (owner && owner !== uid) continue;
+    if (!owner) {
+      plan.unowned.push(id);
+      continue;
+    }
+    if (owner !== uid || !validId(id)) continue; // gardée sur l'appareil, ou à un autre compte : on n'y touche pas
+    const r = online.get(id);
+    const b = m.base[id];
+    const localChanged = !b || localAt !== b.localAt;
+    if (!r) {
+      if (b) plan.unlink.push(id); // elle était en ligne et n'y est plus : effacée exprès, on la garde ici
+      else plan.upload.push({ id, expect: null });
+      continue;
+    }
+    const remoteChanged = !b || r.rev !== b.rev;
+    const isOpen = openSet.has(id);
+    if (r.deleted) {
+      if (isOpen) continue; // on joue avec : on en reparlera au retour au menu
+      if (localChanged) plan.upload.push({ id, expect: r.rev }); // jouée ici depuis : elle revient
+      else plan.removeLocal.push({ id, rev: r.rev });
+      continue;
+    }
+    if (!localChanged && !remoteChanged) continue;
+    if (isOpen && remoteChanged) plan.held.push(id);
+    else if (!remoteChanged) plan.upload.push({ id, expect: r.rev });
+    else if (!localChanged) plan.download.push({ id, rev: r.rev });
+    else plan.conflict.push({ id, rev: r.rev });
+  }
+
+  // 2. Effacées ici par leur propriétaire connecté : pierre tombale, sauf si quelqu'un y a joué ailleurs depuis.
+  for (const [id, d] of Object.entries(m.deleted)) {
+    if (d.uid !== uid || here.has(id)) continue;
     const r = online.get(id);
     if (!r || r.deleted) plan.forget.push(id);
-    else if (at(deletedAt) >= r.updatedAt) plan.removeRemote.push({ id, at: Math.max(at(deletedAt), r.updatedAt + 1) });
-    else plan.download.push({ id, conflict: false }); // modifiée ailleurs après l'effacement : elle revient
+    else if (r.rev === d.rev) plan.tombstone.push({ id, expect: r.rev });
+    else plan.download.push({ id, rev: r.rev, revive: true }); // changée ailleurs après l'effacement : elle revient
   }
 
+  // 3. Seulement en ligne : récupérer (nouvel appareil, ou effacée ici sans être connecté : elle revient).
   for (const [id, r] of online) {
-    if (mineHere.has(id) || id in gone) continue;
-    const owner = m.owners[id];
-    if (owner && owner !== uid) continue; // même id qu'une partie d'un autre compte : très improbable, on évite
-    if (!r.deleted) plan.download.push({ id, conflict: false });
+    if (here.has(id) || m.deleted[id]?.uid === uid) continue;
+    if (r.deleted) {
+      if (m.owners[id] || m.base[id]) plan.forget.push(id);
+      continue;
+    }
+    if (validId(id)) plan.download.push({ id, rev: r.rev });
+  }
+
+  // 4. Mémoire de parties qui ne sont plus ni ici ni en ligne : oubliée.
+  for (const id of new Set([...Object.keys(m.owners), ...Object.keys(m.base)])) {
+    if (!here.has(id) && !online.has(id) && !m.deleted[id] && !plan.forget.includes(id)) plan.forget.push(id);
   }
   return plan;
 }
 
+/** Rien à faire en ligne ni ici ? */
+export const planIsEmpty = (plan) => ['upload', 'download', 'conflict', 'tombstone', 'removeLocal', 'unlink'].every((k) => !plan[k].length);
+
 /**
- * Après une synchro réussie, la mémoire à jour. done = ce qui a vraiment marché :
- * { uploaded: [{ id, updatedAt }], downloaded: [{ id, updatedAt }], removedRemote: [id], removedLocal: [id], claimed: [id], forgotten: [id] }.
+ * La mémoire après une synchro. done = ce qui a vraiment été fait :
+ * { synced: [{ id, rev, localAt, revive? }] (envoyée, récupérée — revive : revenue après un effacement fait ici —,
+ * ou même version notée), removed: [id] (effacée ici,
+ * pierre tombale écrite, ou oubliée), unlinked: [id] }.
+ * À appliquer sur la mémoire RELUE à la fin de la synchro (des changements ont pu être faits pendant : partie
+ * effacée, liée au compte…) : une partie effacée pendant la synchro reste à effacer, par-dessus ce qu'on vient d'envoyer.
  */
 export function applyDone(meta, uid, done) {
   const m = cleanMeta(meta);
-  for (const id of done.claimed ?? []) m.owners[id] = uid;
-  for (const { id, updatedAt } of [...(done.uploaded ?? []), ...(done.downloaded ?? [])]) {
+  for (const { id, rev, localAt, revive } of done.synced ?? []) {
+    if (revive) delete m.deleted[id]; // effacée ici, mais rejouée ailleurs depuis : elle est revenue
+    if (m.deleted[id]) {
+      if (m.deleted[id].uid === uid) m.deleted[id].rev = rev;
+      continue;
+    }
+    if (m.owners[id] && m.owners[id] !== uid) continue; // déliée ou donnée à un autre compte pendant la synchro
     m.owners[id] = uid;
-    m.synced[id] = at(updatedAt);
-    delete m.deleted[id];
+    m.base[id] = { rev: at(rev), localAt: at(localAt) };
   }
-  for (const id of [...(done.removedRemote ?? []), ...(done.removedLocal ?? []), ...(done.forgotten ?? [])]) {
+  for (const id of done.removed ?? []) {
     delete m.owners[id];
-    delete m.synced[id];
+    delete m.base[id];
+    delete m.deleted[id];
+  }
+  for (const id of done.unlinked ?? []) {
+    m.owners[id] = DEVICE;
+    delete m.base[id];
     delete m.deleted[id];
   }
   return m;
 }
 
-/** Une partie vient d'être effacée sur l'appareil : à effacer aussi en ligne (si elle était à un compte). */
-export function noteDeleted(meta, id, now = Date.now()) {
+// ---------------------------------------------------------------- gestes du joueur (mémoire seulement)
+
+/** Ces parties sans compte vont dans le compte uid (cochées) ; les autres restent sur l'appareil ('device'). */
+export function claimParties(meta, uid, ids, checked) {
   const m = cleanMeta(meta);
-  if (m.owners[id]) m.deleted[id] = now;
-  delete m.synced[id];
+  const yes = new Set(checked);
+  for (const id of ids) {
+    if (m.owners[id]) continue;
+    m.owners[id] = yes.has(id) ? uid : DEVICE;
+    delete m.base[id];
+    delete m.deleted[id];
+  }
   return m;
 }
 
-/** Rien à faire ? (pour ne pas réveiller le réseau pour rien) */
-export const planIsEmpty = (plan) =>
-  !plan.upload.length && !plan.download.length && !plan.removeRemote.length && !plan.removeLocal.length;
+/** « ☁️ Mettre dans mon compte » (ou partie créée pendant qu'on est connecté) : liée à uid, jamais encore comparée. */
+export function linkParty(meta, uid, id) {
+  const m = cleanMeta(meta);
+  m.owners[id] = uid;
+  delete m.base[id];
+  delete m.deleted[id];
+  return m;
+}
+
+/**
+ * Ce que veut dire « effacer cette partie » pour le compte connecté (uid, ou null sans compte) :
+ * 'everywhere' (liée à ce compte : effacée sur tous ses appareils), 'kept' (dans un compte, mais pas celui qui est
+ * connecté : effacée ici seulement, elle reviendra à la connexion), 'here' (seulement sur cet appareil).
+ */
+export function deleteKind(meta, uid, id) {
+  const m = cleanMeta(meta);
+  const owner = m.owners[id];
+  if (uid && owner === uid) return 'everywhere';
+  if (owner && owner !== DEVICE && m.base[id]) return 'kept';
+  return 'here';
+}
+
+/** La partie vient d'être effacée de l'appareil (voir deleteKind) : pierre tombale à écrire, ou simple oubli. */
+export function noteDeleted(meta, uid, id) {
+  const m = cleanMeta(meta);
+  if (deleteKind(m, uid, id) === 'everywhere') m.deleted[id] = { rev: m.base[id]?.rev ?? 0, uid };
+  delete m.owners[id];
+  delete m.base[id];
+  return m;
+}
+
+/** « Effacer mes parties en ligne » : les parties de ce compte restent sur l'appareil, déliées. */
+export function unlinkAccount(meta, uid) {
+  const m = cleanMeta(meta);
+  for (const [id, o] of Object.entries(m.owners)) {
+    if (o !== uid) continue;
+    m.owners[id] = DEVICE;
+    delete m.base[id];
+  }
+  for (const [id, d] of Object.entries(m.deleted)) if (d.uid === uid) delete m.deleted[id];
+  return m;
+}

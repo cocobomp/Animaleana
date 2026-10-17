@@ -66,9 +66,13 @@ hBare = 0.0;
     c = mix(c, c * 0.78, isHead * smoothstep(0.55, 0.95, hl.z) * 0.7);
   }
 
-  // Contre-ombrage : dos un peu plus foncé, ventre et intérieur des membres plus clairs.
-  float belly = smoothstep(0.15, -0.75, up) * isBody;
-  c = mix(c, c * 1.12 + 0.025, belly * 0.55);
+  // Contre-ombrage : dos un peu plus foncé, ventre et intérieur des membres nettement plus clairs (le
+  // ventre reste lisible au soleil, la lumière du sol l'éclaire peu). Le haut des membres suit la même
+  // règle que le corps : pas de changement de teinte là où le membre sort du corps.
+  float under = smoothstep(0.1, -0.8, up) * (isBody + isLeg);
+  float inner = isLeg * smoothstep(0.15, 0.85, -sign(P.x) * normalize(vHNrm).x);
+  float belly = under * isBody;
+  c = mix(c, c * 1.38 + 0.03, clamp(under + inner * 0.55, 0.0, 1.0) * 0.62);
   c *= 1.0 - smoothstep(0.55, 1.0, up) * 0.06 * isBody;
   // Pangaré (Fjord, poneys) : ventre, tour des yeux et bout du nez plus clairs.
   float muzzleZone = isHead * smoothstep(0.82, 0.95, hl.z);
@@ -150,7 +154,8 @@ hBare = 0.0;
 
   // Grain du poil (fin, couché vers l'arrière) et occlusion ambiante cuite.
   c *= 1.0 + (hNoise(P * vec3(320.0, 110.0, 70.0)) - 0.5) * 0.07 * (1.0 - aa) * (1.0 - isHoof);
-  c *= mix(0.42, 1.0, vHAO);
+  // (plancher plus haut dessous : le ventre et l'intérieur des cuisses ne tombent pas au noir)
+  c *= mix(mix(0.42, 0.62, clamp(under + inner, 0.0, 1.0)), 1.0, vHAO);
   diffuseColor.rgb = c;
 }`;
 

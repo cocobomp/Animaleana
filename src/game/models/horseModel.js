@@ -195,16 +195,15 @@ function torsoPrims(A, B) {
   // Bras et triceps au-dessus du coude, puis coude.
   P.push(...both((s) => RC([s * W * 0.7, yB + 0.26, z(0.6)], [s * (xF + 0.01), yB + 0.06, zF - 0.04], 0.09, 0.07, 0.7, 0.07)));
   P.push(...both((s) => E3([s * (xF + 0.005), yB + 0.02, zF - 0.07], [0.035, 0.045, 0.04], 0.05)));
-  // Avant-bras (même surface que le poitrail : pas de pli au coude) ; le membre (loft) prend le relais plus bas.
-  P.push(...both((s) => ({ ...RC([s * xF, yB + 0.03, zF - 0.025], [s * xF, 0.8 * A.E, zF], 0.074 * B.bone ** 0.5, 0.05 * B.bone ** 0.5, 0.86, 0.07), limb: true })));
+  // (l'avant-bras et la jambe ne sont pas dans ce champ : le membre (loft, plus fin et plus juste) sort
+  // du corps par un congé lisse calculé dans sculpt())
   // Poitrail (pectoraux entre les antérieurs).
   P.push(...both((s) => E3([s * 0.075, yB + 0.17, z(0.68)], [0.085, 0.1, 0.08], 0.06)));
   // Arrière-main : cuisse ronde, grasset, muscles de l'arrière de la cuisse jusqu'au jarret.
   P.push(...both((s) => E3([s * W * 0.6, yC - 0.1, z(-0.56)], [W * 0.5 * cr, 0.33 * cr, 0.25 * cr], 0.07)));
   P.push(...both((s) => E3([s * W * 0.74, yB + 0.1, z(-0.34)], [0.05, 0.1, 0.07], 0.07))); // grasset
-  P.push(...both((s) => RC([s * 0.11, yC - 0.02, z(-0.74)], [s * (xH + 0.005), 0.74 * A.E, zH - 0.035], 0.08, 0.04, 0.85, 0.07)));
-  // Jambe (gaskin), même surface que la cuisse ; le jarret et le canon sont dans le loft du membre.
-  P.push(...both((s) => ({ ...RC([s * (xH + 0.03), yB - 0.0, z(-0.47)], [s * xH, 0.75 * A.E, zH + 0.035], 0.08 * B.bone ** 0.5, 0.045 * B.bone ** 0.5, 0.8, 0.07), limb: true })));
+  // (arrêtés au-dessus du jarret, dans le membre : plus de bourrelet au bout)
+  P.push(...both((s) => RC([s * 0.11, yC - 0.02, z(-0.74)], [s * (xH + 0.01), 0.92 * A.E, zH + 0.03], 0.08, 0.045, 0.85, 0.07)));
   P.push(RC([0, yW - 0.1, z(-0.64)], [0, yW - 0.16, z(-0.8)], 0.06, 0.05, 1, 0.05)); // attache de la queue
 
   // Encolure : longue, part sous le garrot (qui reste marqué) et du poitrail ; gorge fine sous la nuque.
@@ -276,20 +275,52 @@ function headPrims(A, B) {
 
 // [y (÷E), z (m, relatif à la colonne), demi-largeur, profondeur avant, profondeur arrière] ; les
 // largeurs sont multipliées par l'os de la race.
+// (le haut, caché dans le corps, est plus étroit : le membre sort du dessous du poitrail, pas du flanc)
 const FRONT_LEG = [
-  [1.2, -0.02, 0.075, 0.08, 0.1], [1.06, -0.015, 0.08, 0.08, 0.1], [0.96, -0.01, 0.072, 0.07, 0.085], [0.82, 0, 0.061, 0.06, 0.066],
+  [1.2, -0.02, 0.05, 0.065, 0.08], [1.1, -0.017, 0.06, 0.072, 0.09], [1.03, -0.014, 0.072, 0.076, 0.094], [0.96, -0.01, 0.072, 0.07, 0.085],
+  [0.89, -0.005, 0.066, 0.065, 0.075], [0.82, 0, 0.061, 0.06, 0.066],
   [0.73, 0.001, 0.052, 0.054, 0.052], [0.66, 0.002, 0.045, 0.048, 0.042], [0.6, 0.004, 0.043, 0.046, 0.04], [0.565, 0.005, 0.049, 0.05, 0.048], [0.53, 0.005, 0.045, 0.045, 0.056],
   [0.49, 0.006, 0.034, 0.034, 0.043], [0.38, 0.007, 0.03, 0.03, 0.046], [0.27, 0.008, 0.031, 0.031, 0.047], [0.215, 0.008, 0.04, 0.04, 0.058],
   [0.17, 0.02, 0.036, 0.034, 0.05], [0.125, 0.04, 0.034, 0.03, 0.036], [0.09, 0.052, 0.041, 0.039, 0.038], [0.065, 0.058, 0.035, 0.033, 0.032],
 ];
 const HIND_LEG = [
-  [1.2, 0.2, 0.11, 0.1, 0.13], [1.02, 0.15, 0.1, 0.09, 0.125], [0.88, 0.1, 0.085, 0.075, 0.115], [0.76, 0.045, 0.066, 0.062, 0.1],
+  [1.2, 0.2, 0.085, 0.09, 0.115], [1.08, 0.168, 0.095, 0.092, 0.122], [1.02, 0.15, 0.1, 0.09, 0.125], [0.95, 0.126, 0.093, 0.083, 0.12],
+  [0.88, 0.1, 0.085, 0.075, 0.115], [0.82, 0.072, 0.075, 0.068, 0.108], [0.76, 0.045, 0.066, 0.062, 0.1],
   [0.68, 0.006, 0.048, 0.048, 0.07], [0.625, 0, 0.05, 0.05, 0.084], [0.575, 0.004, 0.046, 0.048, 0.062], [0.52, 0.008, 0.036, 0.036, 0.046],
   [0.4, 0.01, 0.032, 0.032, 0.048], [0.28, 0.012, 0.032, 0.032, 0.048], [0.215, 0.015, 0.04, 0.04, 0.058], [0.17, 0.027, 0.036, 0.034, 0.05],
   [0.125, 0.045, 0.034, 0.03, 0.036], [0.09, 0.056, 0.04, 0.038, 0.037], [0.065, 0.062, 0.034, 0.032, 0.031],
 ];
 // Sabot : [y (÷E), z, demi-largeur, avant (pince), arrière (talons)].
 const HOOF = [[0.095, 0.05, 0.04, 0.037, 0.037], [0.075, 0.057, 0.045, 0.045, 0.04], [0.04, 0.069, 0.05, 0.056, 0.044], [0.008, 0.079, 0.054, 0.065, 0.046], [0, 0.08, 0.054, 0.065, 0.046]];
+
+/** Sections du loft d'un membre (repère du corps, au repos). */
+function legSections(A, B, front, s) {
+  const prof = front ? FRONT_LEG : HIND_LEG;
+  const zc = front ? A.zF : A.zH;
+  const xc = s * (front ? A.xF : A.xH);
+  const bone = (y) => (y < 0.62 ? B.bone : 1 + (B.bone - 1) * 0.6);
+  return prof.map(([y, z, hw, df, db]) => {
+    // Haut du membre : il rentre dans le corps (la hanche est plus haut et plus en arrière).
+    const top = !front && y > 0.7 ? (y - 0.7) / 0.5 : 0;
+    return { p: [xc + s * top * 0.025, y * A.E, zc + z], rx: hw * bone(y) * (y > 0.7 ? B.girth ** 0.4 : 1), ry: df * bone(y), ryb: db * bone(y) };
+  });
+}
+
+/**
+ * Le même membre en champ de distance (cônes arrondis qui suivent les sections, épaisseur avant/arrière
+ * comprise) : sert à fondre la jonction avec le tronc (mêmes normales, même occlusion des deux côtés).
+ */
+function legPrims(secs) {
+  const c = (q) => [q.p[0], q.p[1], q.p[2] + (q.ry - q.ryb) / 2];
+  const r = (q) => (q.ry + q.ryb) / 2;
+  const out = [];
+  for (let k = 0; k < secs.length - 1; k++) {
+    const a = secs[k];
+    const b = secs[k + 1];
+    out.push(RC(c(a), c(b), r(a), r(b), (a.rx / r(a) + b.rx / r(b)) / 2));
+  }
+  return out;
+}
 
 // ------------------------------------------------------------------ géométrie partagée
 
@@ -308,8 +339,10 @@ class Build {
 
   /**
    * geo : géométrie (repère local) ; m : matrice local → corps ; attr(p, n) → { part, info, ao, w: [[os, poids]…] }.
+   * flip : retourne les faces et les normales (les tubes de loft() sont tournés vers l'intérieur : sans
+   * ça, on verrait la paroi du fond d'un membre, éclairée à l'envers).
    */
-  add(geo, m, attr) {
+  add(geo, m, attr, flip = false) {
     const base = this.pos.length / 3;
     const p = geo.attributes.position;
     const nrm = geo.attributes.normal;
@@ -319,9 +352,11 @@ class Build {
     for (let i = 0; i < p.count; i++) {
       v.fromBufferAttribute(p, i).applyMatrix4(m);
       n.fromBufferAttribute(nrm, i).applyMatrix3(nm).normalize();
+      if (flip) n.negate();
       const a = attr(v, n, i);
+      const nn = a.n ?? n; // normale imposée (jonction tronc / membre fondue)
       this.pos.push(v.x, v.y, v.z);
-      this.nrm.push(n.x, n.y, n.z);
+      this.nrm.push(nn.x, nn.y, nn.z);
       this.part.push(a.part);
       this.info.push(...(a.info ?? [0, 0, 0]));
       this.ao.push(a.ao ?? 1);
@@ -333,8 +368,12 @@ class Build {
       }
     }
     const idx = geo.index;
-    if (idx) for (let i = 0; i < idx.count; i++) this.idx.push(base + idx.getX(i));
-    else for (let i = 0; i < p.count; i++) this.idx.push(base + i);
+    const at = (i) => base + (idx ? idx.getX(i) : i);
+    const count = idx ? idx.count : p.count;
+    for (let i = 0; i < count; i += 3) {
+      if (flip) this.idx.push(at(i), at(i + 2), at(i + 1));
+      else this.idx.push(at(i), at(i + 1), at(i + 2));
+    }
     geo.dispose();
   }
 
@@ -489,16 +528,61 @@ function sculpt(B, high) {
     return w;
   };
 
-  // Occlusion ambiante (plis entre les muscles, sous le ventre, entre les membres).
-  const legCaps = [];
-  for (const [front, s] of LEG_SIDES) {
-    const top = front ? V(s * A.xF, yB - 0.05, A.zF) : V(s * A.xH, yB - 0.12, -0.55 * bk);
-    const kn = front ? A.frontKnee(s) : A.hindKnee(s);
-    const foot = kn.clone().setY(0.05);
-    legCaps.push(RC(top.toArray(), kn.toArray(), 0.04 * B.bone, 0.03 * B.bone), RC(kn.toArray(), foot.toArray(), 0.025 * B.bone, 0.02 * B.bone));
-  }
-  const occ = field([...torsoP, ...legCaps]);
-  const trunkOnly = field(torsoP.filter((q) => !q.limb)); // ombre portée du corps sur le haut des membres
+  // Occlusion ambiante (plis entre les muscles, sous le ventre, entre les membres). Le tronc et les
+  // membres lisent le MÊME champ : pas de bande sombre là où le membre sort du corps.
+  const legSecs = LEG_SIDES.map(([front, s]) => legSections(A, B, front, s));
+  const legF = legSecs.map((secs) => field(legPrims(secs)));
+  const occ = field([...torsoP, ...legSecs.flatMap(legPrims)]);
+  // Jonction tronc / membre : le haut du membre (loft) est posé sur l'union douce U du tronc et du membre,
+  // un congé lisse qui part du corps (l'avant-bras et la jambe sortent du poitrail et de la cuisse sans
+  // arête, sans pointe ni bourrelet). Plus haut, il se glisse sous la peau du tronc. Le tronc prend la
+  // normale de U près du membre : même ombrage des deux côtés.
+  const zMid = (A.zF + A.zH) / 2;
+  const legAt = (p) => (p.z > zMid ? 0 : 2) + (p.x >= 0 ? 0 : 1);
+  const KF = 0.06; // taille du congé
+  const unionOf = legF.map((lf) => (x, y, z) => smin(torso(x, y, z), lf(x, y, z), KF));
+  const seamN = (p, n) => {
+    const i = legAt(p);
+    const w = 1 - smooth(0.004, 0.045, legF[i](p.x, p.y, p.z));
+    if (w <= 0 || p.y > yC) return n;
+    return n.clone().lerp(sdfNormal(unionOf[i], p, 0.004), w).normalize();
+  };
+  /** Pose un sommet du membre sur le congé (ou juste sous la peau du tronc) ; renvoie le poids du tronc. */
+  const fillet = (p, n, i) => {
+    const tc = torso(p.x, p.y, p.z);
+    // Près de la peau du tronc seulement : plus haut (bien dedans), le membre reste caché tel quel.
+    const wp = smooth(KF, KF * 0.5, tc) * smooth(-0.035, -0.012, tc);
+    if (wp <= 0) return 0;
+    const U = unionOf[i];
+    // Le long de la normale du membre (pas de saut de côté) : premier point où l'on sort de U.
+    let a = -0.01;
+    let b = -1;
+    for (let t = a; t <= 0.07; t += 0.004) {
+      if (U(p.x + n.x * t, p.y + n.y * t, p.z + n.z * t) > 0) { b = t; break; }
+      a = t;
+    }
+    if (b < 0) return 0; // (bien à l'intérieur du corps : caché tel quel)
+    for (let k = 0; k < 8; k++) {
+      const m = (a + b) / 2;
+      if (U(p.x + n.x * m, p.y + n.y * m, p.z + n.z * m) > 0) b = m;
+      else a = m;
+    }
+    const q = p.clone().addScaledVector(n, b);
+    const g = sdfNormal(U, q, 0.003);
+    // Là où U n'est plus que le tronc, le membre passe juste sous sa peau (caché, sans marche).
+    const pure = smooth(KF * 0.45, KF, legF[i](q.x, q.y, q.z) - torso(q.x, q.y, q.z));
+    q.addScaledVector(g, -0.009 * pure);
+    p.lerp(q, wp);
+    n.lerp(g, wp).normalize();
+    return wp;
+  };
+  /** Mélange deux listes de poids d'os. */
+  const mixW = (a, b, t) => {
+    const m = new Map();
+    for (const [k, x] of a) m.set(k, (m.get(k) ?? 0) + x * (1 - t));
+    for (const [k, x] of b) m.set(k, (m.get(k) ?? 0) + x * t);
+    return [...m];
+  };
   const aoAt = (f, p, n) => {
     let o = 0;
     for (const [d, w] of [[0.025, 0.4], [0.06, 0.3], [0.11, 0.2], [0.18, 0.1]]) {
@@ -513,7 +597,10 @@ function sculpt(B, high) {
   // --- Tronc + encolure.
   const tb = boundsOf(torsoP, 0.06);
   const torsoGeo = sdfMesh(torso, tb, high ? 0.04 : 0.06);
-  out.add(torsoGeo, new THREE.Matrix4(), (p, n) => ({ part: PART.body, ao: aoAt(occ, p, n), w: bodyWeights(p) }));
+  out.add(torsoGeo, new THREE.Matrix4(), (p, n) => {
+    const nn = p.y < yB + 0.25 ? seamN(p, n) : n;
+    return { part: PART.body, n: nn, ao: aoAt(occ, p, nn), w: bodyWeights(p) };
+  });
   out.mark('torso');
 
   // --- Tête : plus fine, rigide sur l'os de la tête. Peau des naseaux (creux) en peau nue.
@@ -567,46 +654,41 @@ function sculpt(B, high) {
     out.add(outer, M.ear[i], (p) => {
       const pl = tmp.copy(p).applyMatrix4(earInv);
       return { part: PART.ear, info: [pl.y / earLen, 0, 0], ao: 0.95, w: [[BONE.ear0 + i, 1]] };
-    });
+    }, true);
     const inner = loft(earProf.slice(0, -1).map((w, j) => {
       const t = j / (earProf.length - 1);
       return { p: [0, t * earLen * 0.94 + 0.006, 0.006], rx: Math.max(0.001, w * 0.032), ry: 0.003, ryb: 0.003 };
     }), { radial: high ? 10 : 6, sub: 1 });
-    out.add(inner, M.ear[i], () => ({ part: PART.skin, info: [0, 0, 0], ao: 0.6, w: [[BONE.ear0 + i, 1]] }));
+    out.add(inner, M.ear[i], () => ({ part: PART.skin, info: [0, 0, 0], ao: 0.6, w: [[BONE.ear0 + i, 1]] }), true);
   }
 
   // --- Couard (base charnue de la queue).
   const dock = loft([[0, 0, 0, 0.055], [0, -0.06, -0.055, 0.05], [0, -0.16, -0.085, 0.042], [0, -0.28, -0.09, 0.034]]
     .map(([x, y, z, r]) => ({ p: [x, y, z], rx: r * Math.sqrt(B.girth), ry: r })), { radial: high ? 10 : 8, sub: 2, round: [0, 0.8] });
-  out.add(dock, M.tail, (p) => ({ part: PART.body, ao: 0.9, w: [[BONE.tail, 1]] }));
+  out.add(dock, M.tail, () => ({ part: PART.body, ao: 0.9, w: [[BONE.tail, 1]] }), true);
 
   out.mark('ears+dock');
   // --- Membres et sabots.
   const radial = high ? 10 : 8;
   LEG_SIDES.forEach(([front, s], i) => {
-    const prof = front ? FRONT_LEG : HIND_LEG;
     const zc = front ? A.zF : A.zH;
     const xc = s * (front ? A.xF : A.xH);
     const knee = front ? A.frontKnee(s) : A.hindKnee(s);
-    const pivot = front ? A.frontPivot(s) : A.hindPivot(s);
-    const bone = (y) => (y < 0.62 ? B.bone : 1 + (B.bone - 1) * 0.6);
-    const secs = prof.map(([y, z, hw, df, db]) => {
-      const yy = y * E;
-      // Haut du membre : il rentre dans le corps (la hanche est plus haut et plus en arrière).
-      const top = !front && y > 0.7 ? (y - 0.7) / 0.5 : 0;
-      return { p: [xc + s * top * 0.04, yy, zc + z], rx: hw * bone(y) * (front ? 1 : 1) * (y > 0.7 ? B.girth ** 0.4 : 1), ry: df * bone(y), ryb: db * bone(y) };
-    });
-    const legGeo = loft(secs, { radial, sub: high ? 2 : 1, side: [1, 0, 0], capEnd: false });
+    const legGeo = loft(legSecs[i], { radial, sub: high ? 2 : 1, side: [1, 0, 0], capEnd: false });
     const band = 0.035;
     out.add(legGeo, new THREE.Matrix4(), (p, n) => {
       const wk = smooth(knee.y + band, knee.y - band, p.y);
-      const w = [[BONE.pivot(i), 1 - wk], [BONE.knee(i), wk]];
-      void pivot;
-      return { part: PART.leg0 + i, info: [p.y / E, i, 0], ao: aoAt(trunkOnly, p, n) * Math.min(1, 0.8 + p.y * 0.3), w };
-    });
+      let w = [[BONE.pivot(i), 1 - wk], [BONE.knee(i), wk]];
+      const nn = n.clone();
+      // Haut du membre : sur le congé ; sous la peau du tronc, il suit les os du tronc (pas de pointe qui
+      // ressort quand la jambe bouge).
+      const wt = p.y > 0.75 * E ? fillet(p, nn, i) : 0;
+      if (wt > 0) w = mixW(w, bodyWeights(p), wt);
+      return { part: PART.leg0 + i, n: nn, info: [p.y / E, i, 0], ao: aoAt(occ, p, nn) * Math.min(1, 0.8 + p.y * 0.3), w };
+    }, true);
     const hoofGeo = loft(HOOF.map(([y, z, hw, df, db]) => ({ p: [xc, y * E, zc + z + (front ? 0 : 0.004)], rx: hw * B.bone ** 0.8, ry: df * B.bone ** 0.8, ryb: db * B.bone ** 0.8 })),
       { radial, sub: 1, exp: 2.3, side: [1, 0, 0], capStart: false });
-    out.add(hoofGeo, new THREE.Matrix4(), (p) => ({ part: PART.hoof, info: [p.y / E, i, 0], ao: 1, w: [[BONE.knee(i), 1]] }));
+    out.add(hoofGeo, new THREE.Matrix4(), (p) => ({ part: PART.hoof, info: [p.y / E, i, 0], ao: 1, w: [[BONE.knee(i), 1]] }), true);
   });
 
   out.mark('legs');
@@ -625,6 +707,11 @@ function sculpt(B, high) {
 }
 
 const shapeCache = new Map();
+
+/** Géométrie partagée d'un gabarit (sans matière ni os) : pour les tests de la surface. */
+export function horseShape(build, high = false) {
+  return sculpt(build, high);
+}
 
 /**
  * Mesures du cheval au repos (mètres, cheval de taille 1), lues sur la surface sculptée : sert aux

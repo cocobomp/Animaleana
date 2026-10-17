@@ -1,8 +1,7 @@
 # Publie le jeu sur Firebase Hosting (https://lafermeamadichelle.web.app) à chaque mise à jour de main.
 # Aucune clé n'est stockée : GitHub prouve à Google que c'est bien ce dépôt (Workload Identity
 # Federation), et Google ne laisse ce dépôt que mettre en ligne les fichiers du jeu.
-# Interrupteur : il ne fait rien tant que la variable FIREBASE_DEPLOY ne vaut pas « on »
-# (GitHub → Settings → Secrets and variables → Actions → onglet Variables). Voir docs/HEBERGEMENT.md.
+# Mise en place côté Google : voir docs/HEBERGEMENT.md.
 name: Publier le jeu (Firebase)
 
 on:
@@ -26,7 +25,6 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: vars.FIREBASE_DEPLOY == 'on'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -48,7 +48,7 @@ connexion. C'est pour cela que l'hébergement Firebase est prévu.
 | Base des sauvegardes | ✅ créée à **Zurich** (`europe-west6`) | Une partie = un document `users/<compte>/saves/<partie>` |
 | Règles de sécurité | ✅ en ligne (fichier `firestore.rules` du dépôt) | Chaque compte ne lit et n'écrit que ses propres parties ; sans compte, rien ; taille limitée |
 | Hébergement | ✅ en ligne | https://lafermeamadichelle.web.app |
-| Mise en ligne automatique depuis GitHub | ⏸️ prête, à allumer (voir plus bas) | Sans clé : GitHub prouve à Google que c'est ce dépôt (Workload Identity Federation) |
+| Mise en ligne automatique depuis GitHub | ✅ à chaque mise à jour de `main` | Sans clé : GitHub prouve à Google que c'est ce dépôt (Workload Identity Federation) |
 
 ### Comptes de service du projet (https://console.cloud.google.com/iam-admin/serviceaccounts?project=lafermeamadichelle)
 
@@ -61,15 +61,12 @@ connexion. C'est pour cela que l'hébergement Firebase est prévu.
 Le lien GitHub ↔ Google : *IAM → Workload Identity Federation*, groupe `github`, fournisseur `animaleana`
 (https://console.cloud.google.com/iam-admin/workload-identity-pools?project=lafermeamadichelle).
 
-## Allumer la mise en ligne automatique (une fois)
+## Mise en ligne automatique
 
-1. Ouvrir https://github.com/cocobomp/Animaleana/settings/variables/actions
-2. Bouton vert **New repository variable**.
-3. **Name** : `FIREBASE_DEPLOY` · **Value** : `on` → **Add variable**.
-
-Ensuite, à chaque mise à jour de `main`, l'action « Publier le jeu (Firebase) » teste, construit et
-met le jeu en ligne sur https://lafermeamadichelle.web.app. Pour l'arrêter : supprimer la variable ou
-mettre `off`. Suivi des mises en ligne : https://github.com/cocobomp/Animaleana/actions
+À chaque mise à jour de `main`, l'action « Publier le jeu (Firebase) » teste, construit et met le jeu en
+ligne sur https://lafermeamadichelle.web.app (fichier `.github/workflows/firebase.yml`). Suivi :
+https://github.com/cocobomp/Animaleana/actions . Pour l'arrêter : désactiver l'action dans cet onglet
+(bouton « … » → *Disable workflow*).
 
 ## Supprimer la clé temporaire (quand Claude a fini)
 

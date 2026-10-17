@@ -1,0 +1,43 @@
+# Publie le jeu sur Firebase Hosting (https://lafermeamadichelle.web.app) à chaque mise à jour de main.
+# Aucune clé n'est stockée : GitHub prouve à Google que c'est bien ce dépôt (Workload Identity
+# Federation), et Google ne laisse ce dépôt que mettre en ligne les fichiers du jeu.
+# Interrupteur : il ne fait rien tant que la variable FIREBASE_DEPLOY ne vaut pas « on »
+# (GitHub → Settings → Secrets and variables → Actions → onglet Variables). Voir docs/HEBERGEMENT.md.
+name: Publier le jeu (Firebase)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: firebase
+  cancel-in-progress: true
+
+env:
+  PROJECT_ID: lafermeamadichelle
+  WIF_PROVIDER: projects/612724115048/locations/global/workloadIdentityPools/github/providers/animaleana
+  DEPLOY_ACCOUNT: github-deploy@lafermeamadichelle.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: vars.FIREBASE_DEPLOY == 'on'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_ACCOUNT }}
+      - run: npx --yes firebase-tools@15.32.1 deploy --only hosting --project "$PROJECT_ID" --non-interactive

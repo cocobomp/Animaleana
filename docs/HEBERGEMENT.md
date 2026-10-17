@@ -8,10 +8,10 @@ y accéder. À tenir à jour à chaque changement d'hébergement.
 | Quoi | Service | Où (pays / région) | Ce qu'il y a dedans | Adresse |
 |---|---|---|---|---|
 | Code source | GitHub (dépôt `cocobomp/Animaleana`) | États-Unis (GitHub, Microsoft) | Le code du jeu, sans aucune donnée de joueur | https://github.com/cocobomp/Animaleana |
-| Jeu en ligne (actuel) | GitHub Pages | Réseau mondial de serveurs (CDN) : chaque joueur reçoit les fichiers depuis le serveur le plus proche | Les fichiers du jeu seulement (images, code), aucune donnée de joueur | https://cocobomp.github.io/Animaleana/ |
-| Jeu en ligne (prévu) | Firebase Hosting (Google) | Réseau mondial de Google (CDN), pas de choix de pays possible | Les fichiers du jeu seulement, aucune donnée de joueur | https://lafermeamadichelle.web.app |
-| Sauvegardes en ligne (prévu) | Cloud Firestore (Google, projet `lafermeamadichelle`) | **Suisse : région `europe-west6` (Zurich)**, choisie à la création, impossible à changer ensuite | Les parties (profils, animaux, progression) de chaque compte, rien d'autre | Console : https://console.firebase.google.com/project/lafermeamadichelle/firestore |
-| Connexion avec Google (prévu) | Firebase Authentication (Google) | Infrastructure mondiale de Google, pas de choix de pays possible | L'identifiant du compte Google et son adresse e-mail (fournis par Google) ; aucun mot de passe n'est gardé par le jeu | Console : https://console.firebase.google.com/project/lafermeamadichelle/authentication/users |
+| Jeu en ligne (adresse principale) | Firebase Hosting (Google) | Réseau mondial de Google (CDN), pas de choix de pays possible | Les fichiers du jeu seulement, aucune donnée de joueur | https://lafermeamadichelle.web.app |
+| Jeu en ligne (ancienne adresse, gardée tant que le dépôt est public) | GitHub Pages | Réseau mondial de serveurs (CDN) | Les fichiers du jeu seulement, aucune donnée de joueur | https://cocobomp.github.io/Animaleana/ |
+| Sauvegardes en ligne | Cloud Firestore (Google, projet `lafermeamadichelle`) | **Suisse : région `europe-west6` (Zurich)**, créée le 17 octobre 2026, impossible à changer ensuite | Les parties (profils, animaux, progression) de chaque compte, rien d'autre | Console : https://console.firebase.google.com/project/lafermeamadichelle/firestore |
+| Connexion avec Google | Firebase Authentication (Google) | Infrastructure mondiale de Google, pas de choix de pays possible | L'identifiant du compte Google et son adresse e-mail (fournis par Google) ; aucun mot de passe n'est gardé par le jeu | Console : https://console.firebase.google.com/project/lafermeamadichelle/authentication/users |
 | Parties sur l'appareil | Mémoire du navigateur (localStorage) | Sur le téléphone ou l'ordinateur lui-même | La partie, même sans Internet | — |
 
 Ce qui peut être en Suisse l'est : les sauvegardes (la seule donnée de joueur gardée en ligne).
@@ -39,36 +39,57 @@ connexion. C'est pour cela que l'hébergement Firebase est prévu.
 | Comptes de service (Google Cloud) | https://console.cloud.google.com/iam-admin/serviceaccounts?project=lafermeamadichelle |
 | Accès et rôles (Google Cloud) | https://console.cloud.google.com/iam-admin/iam?project=lafermeamadichelle |
 
-## Étapes de mise en place
+## Ce qui est en place (17 octobre 2026)
 
-### 1. Activer la connexion Google (à faire à la main, une seule fois)
+| Élément | État | Détail |
+|---|---|---|
+| Connexion avec Google | ✅ activée | Le nom affiché dans la fenêtre Google (« Continuer vers … ») se règle ici : https://console.cloud.google.com/auth/branding?project=lafermeamadichelle → **App name** : `La ferme à Madichelle` |
+| Adresses autorisées pour la connexion | ✅ | `localhost`, `lafermeamadichelle.web.app`, `lafermeamadichelle.firebaseapp.com`, `cocobomp.github.io` |
+| Base des sauvegardes | ✅ créée à **Zurich** (`europe-west6`) | Une partie = un document `users/<compte>/saves/<partie>` |
+| Règles de sécurité | ✅ en ligne (fichier `firestore.rules` du dépôt) | Chaque compte ne lit et n'écrit que ses propres parties ; sans compte, rien ; taille limitée |
+| Hébergement | ✅ en ligne | https://lafermeamadichelle.web.app |
+| Mise en ligne automatique depuis GitHub | ⏸️ prête, à allumer (voir plus bas) | Sans clé : GitHub prouve à Google que c'est ce dépôt (Workload Identity Federation) |
 
-1. Ouvrir https://console.firebase.google.com/project/lafermeamadichelle/authentication/providers
-2. Si la page affiche « Get started » : cliquer dessus.
-3. Onglet **Sign-in method** → dans la liste, cliquer **Google** → interrupteur **Enable**.
-4. **Project support email** : choisir son adresse → **Save**.
+### Comptes de service du projet (https://console.cloud.google.com/iam-admin/serviceaccounts?project=lafermeamadichelle)
 
-### 2. Clé temporaire pour la mise en place (à supprimer ensuite)
+| Compte | À quoi il sert | Faut-il le garder ? |
+|---|---|---|
+| `firebase-adminsdk-fbsvc@…` | Créé automatiquement par Firebase | Oui, ne pas y toucher |
+| `github-deploy@…` | Mettre le jeu en ligne depuis GitHub. Rôle limité : **Firebase Hosting Admin** (et lecture des services activés). Ne peut ni lire ni modifier les sauvegardes. Seul le dépôt `cocobomp/Animaleana`, branche `main`, peut l'utiliser | Oui |
+| `claude-temporaire@…` | Mise en place faite par Claude (rôle Propriétaire) | **Non : à supprimer** dès que la mise en ligne automatique a marché une fois |
+
+Le lien GitHub ↔ Google : *IAM → Workload Identity Federation*, groupe `github`, fournisseur `animaleana`
+(https://console.cloud.google.com/iam-admin/workload-identity-pools?project=lafermeamadichelle).
+
+## Allumer la mise en ligne automatique (une fois)
+
+1. Ouvrir https://github.com/cocobomp/Animaleana/settings/variables/actions
+2. Bouton vert **New repository variable**.
+3. **Name** : `FIREBASE_DEPLOY` · **Value** : `on` → **Add variable**.
+
+Ensuite, à chaque mise à jour de `main`, l'action « Publier le jeu (Firebase) » teste, construit et
+met le jeu en ligne sur https://lafermeamadichelle.web.app. Pour l'arrêter : supprimer la variable ou
+mettre `off`. Suivi des mises en ligne : https://github.com/cocobomp/Animaleana/actions
+
+## Supprimer la clé temporaire (quand Claude a fini)
 
 1. Ouvrir https://console.cloud.google.com/iam-admin/serviceaccounts?project=lafermeamadichelle
-2. En haut : **+ Créer un compte de service** (en anglais : *+ Create service account*).
-3. Nom : `claude-temporaire` → **Créer et continuer**.
-4. Rôle : menu **Basique** → **Éditeur** (*Basic → Editor*) → **Continuer** → **OK**.
-5. Dans la liste, cliquer sur `claude-temporaire` → onglet **Clés** (*Keys*) →
-   **Ajouter une clé** → **Créer une clé** → **JSON** → **Créer** : un fichier `.json` se
-   télécharge.
-6. Envoyer ce fichier à Claude dans la conversation. Il n'est jamais mis dans le dépôt du jeu.
+2. Cocher `claude-temporaire` → **Delete** (Supprimer, icône corbeille) → confirmer.
+3. Supprimer aussi le fichier `.json` téléchargé (dossier Téléchargements de l'ordinateur).
 
-Avec cette clé, Claude crée la base Firestore à Zurich (`europe-west6`), écrit les règles de
-sécurité, prépare l'hébergement `lafermeamadichelle.web.app` et une clé limitée à la mise en ligne.
+## Passer le dépôt en privé (plus tard)
 
-### 3. Supprimer la clé temporaire (quand Claude a fini)
+Le jeu reste en ligne sur https://lafermeamadichelle.web.app (Firebase ne dépend pas de la visibilité du
+dépôt). GitHub Pages, lui, ne marche plus pour un dépôt privé avec un compte gratuit : l'ancienne adresse
+`cocobomp.github.io/Animaleana` s'arrêtera. Les joueurs qui l'utilisent doivent passer à la nouvelle
+adresse avant (les parties sont propres à chaque adresse : les sauvegarder dans un fichier, ou se connecter
+avec Google, puis les retrouver sur la nouvelle adresse).
 
-1. Ouvrir https://console.cloud.google.com/iam-admin/serviceaccounts?project=lafermeamadichelle
-2. Cocher `claude-temporaire` → **Supprimer** (icône corbeille) → confirmer.
+1. https://github.com/cocobomp/Animaleana/settings → tout en bas, **Danger Zone** → **Change repository
+   visibility** → **Make private** → confirmer.
 
-### 4. Clé de mise en ligne automatique (dans GitHub, jamais dans la conversation)
+## Vérifier les règles de sécurité soi-même
 
-Claude crée un compte de service limité à l'hébergement et donne la marche à suivre pour coller
-sa clé dans **GitHub → dépôt → Settings → Secrets and variables → Actions → New repository
-secret**. GitHub s'en sert ensuite à chaque nouvelle version, et le dépôt peut passer en privé.
+Console → Firestore → onglet **Rules** :
+https://console.firebase.google.com/project/lafermeamadichelle/firestore/rules
+Le texte doit être le même que le fichier `firestore.rules` du dépôt.

@@ -275,14 +275,22 @@ function hairField(style, head, hat, cell = 0.0158) {
   };
   const edge = (x, y, z) => edgeAt(x, z);
   // Distance (approchée) au-dessus de la ligne d'implantation : y - l divisé par la pente de l
-  // autour de la tête, pour un vrai congé de rayon constant (tempes comprises).
+  // autour de la tête (tempes comprises), seulement près de la ligne : loin d'elle (dessus de la
+  // tête, où l'azimut n'a plus de sens près de l'axe vertical), y - l suffit.
+  const A = { l: 0, d: 0 };
   const above = (x, y, z) => {
     const l = edgeAt(x, z);
-    const rho = Math.hypot(x, z) || 1e-3;
-    const e = 0.004;
-    const gx = (edgeAt(x + e, z) - edgeAt(x - e, z)) / (2 * e);
-    const gz = (edgeAt(x, z + e) - edgeAt(x, z - e)) / (2 * e);
-    return { l, d: (y - l) / Math.sqrt(1 + gx * gx + gz * gz), rho };
+    const near = 1 - sstep(0.02, 0.045, y - l);
+    let n = 1;
+    if (near > 0) {
+      const e = 0.004;
+      const gx = (edgeAt(x + e, z) - edgeAt(x - e, z)) / (2 * e);
+      const gz = (edgeAt(x, z + e) - edgeAt(x, z - e)) / (2 * e);
+      n = Math.sqrt(1 + Math.min(16, gx * gx + gz * gz) * near);
+    }
+    A.l = l;
+    A.d = (y - l) / n;
+    return A;
   };
 
   // Calotte : la peau gonflée d'une épaisseur qui s'amincit vers le bord. Pas de « marche » au bord :

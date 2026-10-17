@@ -712,7 +712,7 @@ export class Interiors {
     const lx = -1;
     const lz = -0.12;
     const yaw = Math.atan2(lx * b.c + lz * b.s, -lx * b.s + lz * b.c); // direction (lx, lz) du bâtiment, dans le monde
-    this.camTurn = { yaw, dist: Math.min(rig.dist, 4.3), pitch: 0.4, t: snap ? 0 : 1.2 };
+    this.camTurn = { yaw, dist: Math.min(rig.dist, 4.3), pitch: 0.48, t: snap ? 0 : 1.2 };
     if (snap) {
       this.game.player.heading = yaw; // le personnage regarde les selles, lui aussi
       this.turnCamera(1);

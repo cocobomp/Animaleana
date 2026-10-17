@@ -26,6 +26,7 @@ import { questExtras } from './tutorial.js';
 import { animalActivitySection } from './activities.js';
 import { clientBadge, clientInfo, clientsTab } from './clients.js'; // animaux confiés par des clients
 import { isCareerPatient } from './vet.js'; // animal confié en soins, métier commencé : examen gratuit
+import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -479,6 +480,27 @@ export function openSettings(ui) {
             ui.renderPanel();
           },
         }, name))),
+        // La partie dans un fichier (changer d'appareil, nouvelle adresse du jeu) : src/ui/saveGame.js.
+        h('h3', {}, `💾 ${t('sv_section')}`),
+        h('div', { class: 'save-tools' },
+          h('button', {
+            onClick: () => {
+              const saved = g.save();
+              // Pas pu écrire (stockage plein) : le fichier prend la partie en mémoire, la plus récente.
+              // (En plein trajet, on garde la sauvegarde d'avant le départ, comme Game.save.)
+              const travelling = g.tripFlow?.journey && !g.tripFlow.journey.report;
+              openExport(ui, { ids: [g.profile.id], live: !saved && !travelling ? g.profile : null });
+            },
+          }, `💾 ${t('sv_save')}`),
+          h('button', {
+            onClick: () => {
+              // D'abord écrire la partie : l'aperçu la compare au fichier, et la copie de secours (si on la
+              // remplace) aura son tout dernier état. (Synchrone : le choix du fichier s'ouvre dans le même tap.)
+              g.save();
+              pickRestoreFile(ui);
+            },
+          }, `📂 ${t('sv_restore')}`)),
+        h('p', { class: 'note' }, t('sv_why')),
         h('p', { class: 'note' }, t('controlsHelp')),
         // Revoir le tutoriel guidé (src/ui/tutorial.js).
         ui.tutorial ? h('button', { class: 'big', onClick: () => ui.tutorial.replay() }, `🎓 ${t('tuto_replay')}`) : null,

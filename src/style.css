@@ -109,6 +109,7 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .logo { text-align: center; font-size: 2.6rem; letter-spacing: 6px; }
 .tagline { text-align: center; color: var(--muted); margin-top: 0; }
 .lang { display: flex; gap: 8px; justify-content: center; margin: 10px 0; }
+.lang button.small { min-height: 44px; } /* cible de 44 px, même à la souris */
 .offline { text-align: center; color: var(--muted); font-size: 0.85em; }
 .version { text-align: center; color: var(--muted); font-size: 0.72em; opacity: 0.8; margin-top: -6px; }
 .portable { text-align: center; font-size: 0.85em; display: grid; gap: 2px; margin-top: 4px; }
@@ -118,6 +119,43 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .profile { display: flex; gap: 8px; }
 .profile-play { flex: 1; display: grid; text-align: left; gap: 2px; }
 .profile-play small { color: var(--muted); }
+/* ---------- partie dans un fichier : 💾 sauvegarder / 📂 restaurer (src/ui/saveGame.js) */
+/* Conteneur des étapes de la fenêtre (src/ui/saveGame.js, sheet) : sans boîte à lui, ses enfants se placent
+   comme ceux de .modal-box, et sa rangée OK / Annuler reste collée en bas (comme .modal-box > .row.end:last-child). */
+.sv-sheet { display: contents; }
+.modal-box > .sv-sheet > .row.end:last-child { position: sticky; bottom: -18px; z-index: 1; margin: 8px -20px -18px; padding: 6px 20px 18px; background: var(--bg); }
+@media (max-height: 480px) {
+  .modal-box > .sv-sheet > .row.end:last-child { bottom: -12px; margin: 6px -16px -12px; padding: 6px 16px 12px; }
+}
+/* Deux boutons côte à côte quand il y a la place (ordinateur), l'un sous l'autre sur téléphone. */
+.save-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-top: 10px; }
+.save-tools button { min-height: 50px; font-weight: 600; }
+.save-why { text-align: center; font-size: 0.85em; line-height: 1.35; margin: 8px 0 4px; }
+.profile-play .sv-badge, .sv-badge { color: #8a5a00; font-weight: 600; }
+.sv-title { font-size: 1.3rem; margin: 0.1em 0 0.4em; line-height: 1.25; }
+.sv-meta { margin-top: -4px; }
+.sv-card .card-main b { font-size: 1.1rem; }
+.sv-animals { font-size: 1.05rem; letter-spacing: 0.02em; }
+button.sv-card { min-height: 64px; }
+button.sv-card:hover { border-color: var(--primary); }
+.sv-actions { display: grid; gap: 8px; margin: 6px 0; }
+.sv-actions button.big { margin-top: 0; }
+.sv-pick { display: grid; gap: 6px; margin-bottom: 6px; }
+.sv-check { display: flex; gap: 12px; width: 100%; min-height: 54px; padding: 6px 12px; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+.sv-check:has(input:checked) { border: 2px solid var(--primary); background: #e9f6ee; }
+.sv-check input { width: 24px; height: 24px; flex-shrink: 0; accent-color: var(--primary); }
+.sv-check span { display: grid; gap: 2px; min-width: 0; }
+.sv-check small { color: var(--muted); }
+.sv-help { line-height: 1.4; }
+.sv-same { background: #eef4fb; color: #24456b; padding: 8px 12px; border-radius: 10px; }
+.sv-compare { display: grid; gap: 2px; }
+.sv-compare h3 { margin: 6px 0 2px; }
+.sv-compare .card { margin: 0; }
+.sv-arrow { text-align: center; font-size: 1.4rem; line-height: 1.2; }
+.modal-box .sv-safe { background: #e9f6ee; color: #1f5e3f; padding: 10px 12px; border-radius: 10px; font-size: 0.98rem; }
+.link-btn { background: none; border: none; color: var(--primary); text-decoration: underline; padding: 8px 0; min-height: 44px; font-weight: 600; }
+/* Le champ « fichier » reste dans la page mais invisible : c'est le bouton « 📂 Restaurer » qui l'ouvre. */
+.sv-file { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .mode-card { display: grid; gap: 4px; text-align: left; padding: 14px; }
 .mode-card small { color: var(--muted); }

@@ -1931,6 +1931,27 @@ body.actv-nomove #touch-pad { display: none !important; }
 .beauty-banner { background: #fff3c4; border-radius: 14px; padding: 10px 14px; font-weight: 800; text-align: center; margin: 8px 0; animation: pop 0.35s ease-out; }
 .mg-btn.mg-color { flex: 0 1 auto; min-width: 56px; font-size: 1.5rem; }
 .ribbon.red .rosette { --c: #d8402f; }
+/* Écharpe du plus bel animal : rosette tricolore dorée */
+.ribbon.champion .rosette { --c: #c9a227; background: conic-gradient(#d8402f 0 120deg, #f6f4ee 120deg 240deg, #2f6fd8 240deg 360deg); box-shadow: 0 0 0 3px #c9a227, 0 2px 6px rgba(0, 0, 0, 0.3); }
+.beauty-list li > button:only-of-type { justify-self: end; }
+.beauty-cls { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #f3ecff; color: #5b3a8a; font-size: 0.75em; font-weight: 700; vertical-align: middle; }
+.beauty-real { margin: 4px 0; padding: 6px 10px; border-radius: 12px; font-size: 0.92em; }
+.beauty-real.warn { background: #fde9e4; color: #8b2b22; }
+.beauty-real.ok { background: #e7f6ec; color: #1e5c3e; }
+.beauty-comp { align-items: center; }
+.beauty-comp .card-main small { display: block; }
+.beauty-classes, .beauty-entered { color: var(--muted); }
+.beauty-entered { font-weight: 700; color: #1e5c3e; }
+.beauty-today { background: #2f9a4a; color: #fff; font-weight: 800; border-radius: 999px; padding: 4px 10px; white-space: nowrap; animation: pop 0.35s ease-out; }
+.beauty-go { margin-top: 8px; gap: 8px; }
+.beauty-go button { min-height: 48px; flex: 1 1 160px; }
+.beauty-card .row.wrap button { flex: 1 1 140px; }
+/* Notes du juge dans les résultats : une petite barre par critère, sur 25 */
+.beauty-mark { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(60px, 1fr) auto; align-items: center; gap: 8px; text-align: left; }
+.beauty-mark .bar-track { height: 10px; }
+.beauty-mark b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.beauty-champion { color: #8a5a00; }
+.ca-beauty { margin-top: 6px; min-height: 44px; }
 /* Discuter avec une aide (src/ui/helperChat.js) */
 .hc-head { display: flex; gap: 10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px; }
 .hc-avatar { font-size: 2.2rem; }

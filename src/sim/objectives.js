@@ -58,6 +58,7 @@ export const OBJECTIVES = [
   { id: 'actvPhotos', kind: 'achievement', progress: (p) => [stat(p, 'actvPhotos'), 8] },
   { id: 'actvStar', kind: 'achievement', progress: (p) => [stat(p, 'actvShows'), 10] },
   { id: 'beautyPodium', kind: 'achievement', progress: (p) => [stat(p, 'beautyPodium'), 1] }, // concours de beauté
+  { id: 'beautyChampion', kind: 'achievement', progress: (p) => [stat(p, 'beautyChampion'), 1] }, // écharpe du plus bel animal
 ];
 
 /** Renvoie les objectifs qui viennent d'être terminés (et les marque comme faits). */

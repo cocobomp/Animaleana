@@ -654,13 +654,14 @@ export function activitySkillGain(a, type, quality = 0.5) {
     show: { obedience: 1 },
     hop: { jump: 1 + Math.round(quality * 2), obedience: 1 },
     lesson: { obedience: 1 },
+    beauty: { obedience: 1 }, // concours de beauté : rester calme devant le juge
   }[type] ?? {};
   for (const [k, v] of Object.entries(gains)) a.skills[k] = Math.min(100, (a.skills[k] ?? 0) + v);
   // Équipement (src/sim/gear.js) : la selle de randonnée fatigue moins en balade, le tapis rend le dos confortable.
   const fx = tackEffects(a);
-  const tired = ({ jumping: 14, agility: 12, trail: 18, show: 6, hop: 8, lesson: 12 }[type] ?? 8) * (type === 'trail' ? fx.trailFatigue : 1);
+  const tired = ({ jumping: 14, agility: 12, trail: 18, show: 6, hop: 8, lesson: 12, beauty: 5 }[type] ?? 8) * (type === 'trail' ? fx.trailFatigue : 1);
   a.needs.energy = Math.max(0, a.needs.energy - Math.round(tired));
-  a.needs.exercise = Math.min(100, a.needs.exercise + ({ jumping: 30, agility: 30, trail: 40, show: 10, hop: 25, lesson: 25 }[type] ?? 15));
+  a.needs.exercise = Math.min(100, a.needs.exercise + ({ jumping: 30, agility: 30, trail: 40, show: 10, hop: 25, lesson: 25, beauty: 8 }[type] ?? 15));
   a.needs.affection = Math.min(100, a.needs.affection + 8 + fx.comfort);
   return gains;
 }

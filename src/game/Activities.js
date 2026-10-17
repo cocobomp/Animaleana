@@ -49,12 +49,13 @@ export class Activities {
   /**
    * Lance une activité. type : 'jumping' | 'trail' | 'agility' | 'show'.
    * opts : { animal, animals, acts, comp } (comp = concours, sinon entraînement).
+   * opts.prepaid : frais déjà payés à l'inscription (concours de beauté, src/game/Beauty.js).
    */
   start(type, opts = {}) {
     const g = this.game;
     if (this.session) this.session.end(true);
     const comp = opts.comp ?? null;
-    if (comp) {
+    if (comp && !opts.prepaid) {
       const fee = comp.fee;
       if (!spend(g.profile, fee)) {
         g.ui.toast(t('r_money'));
@@ -411,7 +412,8 @@ export class Session {
     let table = null;
     let money = 0;
     if (this.comp) {
-      ({ rank, table } = ranking(this.comp, { ...result, name: p.name, animal: main.name, species: main.species }));
+      // info.rivals : concurrents particuliers (concours de beauté : ceux de la classe de l'animal).
+      ({ rank, table } = ranking(this.comp, { ...result, name: p.name, animal: main.name, species: main.species }, info.rivals));
       award = placementAward(this.comp, rank);
       money = award.money;
       addStat(p, 'actvCompetitions');

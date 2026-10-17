@@ -23,6 +23,7 @@ import {
   CAREERS, CAREER_IDS, RANKS, startCareer, isStarted, shouldPropose, markProposed, hintOnce, noteAction, nextAction,
 } from '../sim/careers.js';
 import { OBJECTIVES } from '../sim/objectives.js';
+import { SHOWGROUND } from '../sim/activities.js'; // « 👉 Montre-moi » du handler : l'entrée du terrain de concours
 import { addStat } from '../sim/profile.js';
 import { showRequest, showResult } from '../ui/clients.js';
 import { showCareerOffer } from '../ui/careers.js';
@@ -637,6 +638,21 @@ export class Clients {
       }
       return;
     }
+    // Handler : présenter au juge se fait au terrain de concours (avec un animal confié ou à soi).
+    if (def.where === 'showground') {
+      g.marker.show(new THREE.Vector3(SHOWGROUND.x + SHOWGROUND.hw + 2.2, 0, SHOWGROUND.z), { hideNear: 4 });
+      g.ui.toast(t('ca_show_showground'), 6000);
+      return;
+    }
+    // Handler : on peut apprendre à préparer avec ses propres animaux.
+    if (!client && id === 'handler') {
+      const own = g.animalsHere().find((a) => !a.client);
+      if (own) {
+        g.marker.show(g.entities.get(own.id) ?? null, { hideNear: 2.5 });
+        g.ui.toast(ta('ca_show_handlerOwn', own), 6000);
+        return;
+      }
+    }
     if (!client) {
       g.ui.toast(t('ca_show_noAnimal'), 5000);
       g.marker.show(new THREE.Vector3(MEET.x, 0, MEET.z), { hideNear: 3 });
@@ -649,7 +665,7 @@ export class Clients {
 
   // ------------------------------------------------------------ pour tester
 
-  /** Fait venir un visiteur tout de suite ('pension', 'vet', 'autoVet', 'autoPension'). */
+  /** Fait venir un visiteur tout de suite ('pension', 'vet', 'handler', 'autoVet', 'autoPension'). */
   force(kind = 'pension') {
     if (this.visitor) {
       clearVisitor(this.game.profile);

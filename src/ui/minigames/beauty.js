@@ -1,13 +1,20 @@
 // Mini-jeux du concours de beauté : tresser la crinière et la queue (chevaux), lustrer la robe
 // et huiler les sabots, mettre un nœud ou un bandana, « pouffer » la laine ou le poil.
-// Même contrat que les autres mini-jeux (src/ui/minigames.js) : ctx → { update, draw, down, move, up, peek }.
-// Le choix fait dans le jeu (couleur du ruban, motif) est écrit dans ctx.opts.out.
+// Même contrat que les autres mini-jeux (src/ui/minigames.js, cadre commun) :
+// ctx → { update, draw, down, move, up, key, peek }. Le choix fait dans le jeu (couleur du ruban,
+// motif) est écrit dans ctx.opts.out.
+//
+// Règle « juste ce qu'il faut » (score.js, via ctx.zone / ctx.finishJust) là où il y a une
+// quantité : le lustrant (pas assez : terne, trop : ça colle) et le nœud (lâche : il glisse,
+// trop serré : l'animal est gêné). Les tresses sont un geste à apprendre (gauche au milieu,
+// droite au milieu) : la note suit les mèches touchées dans le bon ordre.
 
-import { drawAnimal, animalShape, fitAnimal, sky, fillView, ellipse, circle, emoji, label, clamp, lerp, dist, css, shade } from './draw.js';
+import { drawAnimal, animalShape, fitAnimal, sky, fillView, ellipse, circle, emoji, label, rrect, clamp, lerp, dist, css, shade } from './draw.js';
 import { RIBBON_COLORS, BOW_PATTERNS } from '../../sim/beauty.js';
 
 const COLOR_EMOJI = { red: '🔴', pink: '🩷', blue: '🔵', yellow: '🟡', green: '🟢', purple: '🟣', white: '⚪' };
 const PATTERN_EMOJI = { plain: '⬜', dots: '🔘', stripes: '📏' };
+const isGo = (code) => code === 'Space' || code === 'Enter' || code === 'NumpadEnter';
 
 function ringBackground(g, ctx, floorY = 305) {
   // La cour de l'écurie, un matin de concours : ciel clair, sable, guirlande de fanions.
@@ -78,7 +85,7 @@ export function drawBow(g, x, y, size, color, pattern = 'plain', rot = 0) {
   g.restore();
 }
 
-/** Une tresse : des mèches entrelacées. from → to, largeur w. */
+/** Une tresse : des mèches entrelacées. from → to, largeur w. k : part déjà tressée (0 à 1). */
 function drawBraid(g, from, to, w, color, k = 1) {
   const n = Math.max(2, Math.round(dist(from.x, from.y, to.x, to.y) / (w * 0.75)));
   const shown = Math.ceil(n * k);
@@ -92,7 +99,7 @@ function drawBraid(g, from, to, w, color, k = 1) {
     const y = from.y + dy * (i + 0.5) + ny * s * w * 0.22;
     g.fillStyle = i % 2 ? css(color) : shade(color, -0.18);
     g.strokeStyle = shade(color, -0.45);
-    g.lineWidth = 1.2;
+    g.lineWidth = Math.max(1.2, w * 0.06);
     ellipse(g, x, y, w * 0.55, w * 0.38, Math.atan2(dy, dx) + s * 0.6);
     g.fill();
     g.stroke();
@@ -116,15 +123,22 @@ function colorButtons(ctx, onPick, list = ['red', 'pink', 'blue', 'yellow', 'gre
 
 // ---------------------------------------------------------------- tresser (chevaux)
 
+/**
+ * Tresser : le cheval en petit à gauche, et une loupe sur la tresse en cours à droite, avec trois
+ * grosses mèches. Le vrai geste : la mèche de GAUCHE passe au milieu, puis celle de DROITE, puis
+ * celle de gauche… (3 croisements par tresse). Quatre tresses le long de la crinière, une à la queue.
+ * Puis on choisit la couleur des rubans et on en noue un au bout de chaque tresse.
+ */
 export function braidGame(ctx) {
   const { a, t, fx } = ctx;
   ctx.opts = ctx.opts ?? {};
-  const floorY = 305;
-  const fit = fitAnimal(a, { groundY: floorY, maxW: 330, maxH: 250 });
-  const sh = animalShape(a, { x: fit.x, y: floorY, s: fit.s, f: 1 });
+  const floorY = 300;
+  const fit = fitAnimal(a, { cx: 108, groundY: floorY, maxW: 196, maxH: 190 });
   const s = fit.s;
+  const sh = animalShape(a, { x: fit.x, y: floorY, s, f: 1 });
   const mane = a.look?.mane ?? a.look?.secondary ?? 0x4a2f1d;
-  // Les sections de tresse : le long de la crinière, puis la queue.
+  const coat = a.look?.coat ?? 0x8a5a2b;
+  // Les tresses sur le petit cheval : le long de la crinière, puis la queue.
   const m0 = sh.L(sh.rx * 0.55, -sh.ry * 0.95);
   const m1 = { x: sh.head.x - sh.hr * 0.45, y: sh.head.y - sh.hr * 0.75 };
   const sections = [];
@@ -132,144 +146,285 @@ export function braidGame(ctx) {
   for (let i = 0; i < N; i++) {
     const k = (i + 0.5) / N;
     const top = { x: lerp(m0.x, m1.x, k), y: lerp(m0.y, m1.y, k) - 2 * s };
-    const len = 34 * s;
-    sections.push({ top, bottom: { x: top.x - 10 * s, y: top.y + len }, len, done: 0, taps: 0, ribbon: false, tail: false });
+    sections.push({ top, bottom: { x: top.x - 7 * s, y: top.y + 28 * s }, done: 0, ribbon: false, tail: false });
   }
   const tb = sh.L(-sh.rx * 0.95, -sh.ry * 0.25);
-  sections.push({ top: { x: tb.x - 8 * s, y: tb.y + 10 * s }, bottom: { x: tb.x - 24 * s, y: tb.y + 62 * s }, len: 52 * s, done: 0, taps: 0, ribbon: false, tail: true });
-  // Trois mèches par section : on les prend dans l'ordre gauche → droite → milieu.
-  const ORDER = [0, 2, 1];
-  const gap = Math.max(13, 13 * s);
-  const strands = (sec) => [-1, 0, 1].map((o) => ({ x: sec.top.x + o * gap - 4 * s, y: sec.top.y + sec.len * 0.45 }));
+  sections.push({ top: { x: tb.x - 6 * s, y: tb.y + 8 * s }, bottom: { x: tb.x - 18 * s, y: tb.y + 50 * s }, done: 0, ribbon: false, tail: true });
+
+  // La loupe et ses trois mèches (gauche, milieu, droite), assez grosses pour un doigt.
+  const LOUPE = { x: 212, y: 56, w: 180, h: 244 };
+  const SLOT_X = [LOUPE.x + 42, LOUPE.x + 90, LOUPE.x + 138];
+  const STRAND_W = 32;
+  const TOP_Y = LOUPE.y + 44;
+  const BOTTOM_Y = LOUPE.y + LOUPE.h - 18;
+  const STEP = 34; // la tresse s'allonge à chaque croisement
+  const CROSS = 3;
   let cur = 0;
+  let crossings = 0;
+  let order = [0, 1, 2]; // quelle mèche est à gauche, au milieu, à droite
   let wrong = 0;
   let total = 0;
   let phase = 'braid'; // braid | color | ribbons
   let color = null;
+  let tie = 0; // prochaine tresse où nouer un ruban
   let shake = 0;
   let bounce = 0;
+  let swap = null; // petite animation du croisement { from, t }
 
   ctx.hint(t('mg_braid_hint'));
 
+  const expected = () => (crossings % 2 === 0 ? 0 : 2);
+  const braidEnd = () => TOP_Y + crossings * STEP;
   const progress = () => {
     const braided = sections.reduce((acc, sec) => acc + sec.done, 0) / sections.length;
     const ribbons = sections.filter((x) => x.ribbon).length / sections.length;
-    return braided * 0.6 + (phase === 'braid' ? 0 : 0.1 + ribbons * 0.3);
+    return braided * 0.75 + ribbons * 0.25;
+  };
+  /** La mèche (0, 1, 2) sous le doigt dans la loupe, ou -1. */
+  const strandAt = (p) => {
+    if (p.x < LOUPE.x || p.x > LOUPE.x + LOUPE.w || p.y < braidEnd() - 10 || p.y > LOUPE.y + LOUPE.h) return -1;
+    let best = -1;
+    let bd = STRAND_W * 0.95;
+    SLOT_X.forEach((x, i) => {
+      const d = Math.abs(p.x - x);
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
   };
 
-  function tap(p) {
+  function pick(pos) {
+    if (phase !== 'braid' || pos < 0) return;
+    total++;
+    const want = expected();
+    if (pos !== want) {
+      wrong++;
+      shake = 0.4;
+      ctx.hint(t(want === 0 ? 'mg_braid_wrongLeft' : 'mg_braid_wrongRight'), 'warn');
+      return;
+    }
+    // La mèche de côté passe par-dessus celle du milieu : elles échangent leur place.
+    [order[pos], order[1]] = [order[1], order[pos]];
+    swap = { from: pos, t: 0 };
+    crossings++;
+    const sec = sections[cur];
+    sec.done = crossings / CROSS;
+    fx.burst(SLOT_X[1], braidEnd(), '✨', 2, { speed: 60, size: 14 });
+    if (crossings >= CROSS) {
+      fx.text(LOUPE.x + LOUPE.w / 2, LOUPE.y + 24, t('mg_braid_done'), '#2f8a5f', 20);
+      fx.burst(sec.bottom.x, sec.bottom.y, '✨', 3, { speed: 70, size: 14 });
+      cur++;
+      crossings = 0;
+      order = [0, 1, 2];
+      if (cur >= sections.length) {
+        phase = 'color';
+        ctx.hint(t('mg_braid_color'), 'good');
+        colorButtons(ctx, (key) => {
+          color = key;
+          phase = 'ribbons';
+          ctx.hint(t('mg_braid_ribbons'));
+        });
+      } else ctx.hint(t(cur === sections.length - 1 ? 'mg_braid_tail' : 'mg_braid_next'), 'good');
+    } else ctx.hint(t(expected() === 0 ? 'mg_braid_left' : 'mg_braid_right'));
+    ctx.progress(progress());
+  }
+
+  function tieRibbon() {
+    if (phase !== 'ribbons' || ctx.done) return;
+    const sec = sections[tie];
+    if (!sec) return;
+    sec.ribbon = true;
+    tie++;
+    bounce = 0.5;
+    fx.burst(LOUPE.x + LOUPE.w / 2, TOP_Y + CROSS * STEP + 6, '🎀', 3, { speed: 70, size: 16 });
+    fx.float(sec.bottom.x, sec.bottom.y - 10, '💕', 18);
+    ctx.progress(progress());
+    if (sections.every((x) => x.ribbon)) {
+      const share = 1 - wrong / Math.max(1, total);
+      ctx.finish(0.6 + 0.4 * clamp(share), t('mg_braid_end', { name: a.name, g: a.sex }));
+      fx.text(200, 110, t(wrong ? 'mg_good' : 'mg_perfect'), '#2f8a5f', 28);
+    }
+  }
+
+  /** La loupe : le cou de près, la tresse déjà faite, les trois mèches (celle à toucher brille). */
+  function drawLoupe(g) {
+    const L = LOUPE;
+    g.save();
+    // Cadre
+    g.fillStyle = 'rgba(0,0,0,0.12)';
+    rrect(g, L.x + 3, L.y + 5, L.w, L.h, 22);
+    g.fill();
+    g.fillStyle = css(coat);
+    rrect(g, L.x, L.y, L.w, L.h, 22);
+    g.fill();
+    g.save();
+    rrect(g, L.x, L.y, L.w, L.h, 22);
+    g.clip();
+    // Le dessus de l'encolure et la racine de la crinière
+    g.fillStyle = shade(coat, 0.12);
+    ellipse(g, L.x + L.w / 2, L.y - 30, L.w * 0.9, 70);
+    g.fill();
+    g.fillStyle = css(mane);
+    rrect(g, L.x + 18, L.y + 10, L.w - 36, 34, 14);
+    g.fill();
+    const showSec = phase === 'braid' ? sections[cur] : sections[Math.min(tie, sections.length - 1)];
+    const k = phase === 'braid' ? crossings : CROSS;
+    const endY = TOP_Y + k * STEP;
+    // La partie déjà tressée (au milieu)
+    if (k > 0) drawBraid(g, { x: SLOT_X[1], y: TOP_Y - 8 }, { x: SLOT_X[1], y: endY }, 40, mane, 1);
     if (phase === 'braid') {
-      const sec = sections[cur];
-      if (!sec) return;
-      const pts = strands(sec);
-      const want = ORDER[sec.taps];
-      // La mèche la plus proche du doigt (si on touche assez près).
-      let hit = -1;
-      let best = 18 * Math.max(1, s);
-      pts.forEach((q, i) => {
-        const d = dist(p.x, p.y, q.x, q.y);
-        if (d < best) { best = d; hit = i; }
-      });
-      if (hit < 0) return;
-      total++;
-      if (hit !== want) {
-        wrong++;
-        shake = 0.4;
-        ctx.hint(t('mg_braid_wrong'), 'warn');
-        return;
+      // Les trois mèches qui pendent, chacune d'une nuance (on les reconnaît quand elles changent de place)
+      const want = expected();
+      for (let pos = 0; pos < 3; pos++) {
+        const id = order[pos];
+        const col = shade(mane, [-0.08, 0.1, 0.24][id]);
+        let x = SLOT_X[pos];
+        if (swap && swap.t < 1 && (pos === swap.from || pos === 1)) x = lerp(pos === 1 ? SLOT_X[swap.from] : SLOT_X[1], x, swap.t);
+        const glow = pos === want && !ctx.done;
+        g.lineCap = 'round';
+        if (glow) {
+          g.strokeStyle = `rgba(255, 210, 58, ${0.55 + Math.sin(ctx.time * 6) * 0.3})`;
+          g.lineWidth = STRAND_W + 12;
+          strandPath(g, x, endY);
+          g.stroke();
+        }
+        g.strokeStyle = shade(mane, -0.4);
+        g.lineWidth = STRAND_W + 4;
+        strandPath(g, x, endY);
+        g.stroke();
+        g.strokeStyle = col;
+        g.lineWidth = STRAND_W;
+        strandPath(g, x, endY);
+        g.stroke();
+        // reflets de crins
+        g.strokeStyle = 'rgba(255,255,255,0.18)';
+        g.lineWidth = 3;
+        strandPath(g, x - 7, endY);
+        g.stroke();
       }
-      sec.taps++;
-      sec.done = sec.taps / 3;
-      fx.burst(pts[hit].x, pts[hit].y, '✨', 2, { speed: 60, size: 14 });
-      if (sec.taps >= 3) {
-        cur++;
-        fx.text(sec.top.x, sec.top.y - 24, t('mg_braid_done'), '#2f8a5f', 18);
-        if (cur >= sections.length) {
-          phase = 'color';
-          ctx.hint(t('mg_braid_color'), 'good');
-          colorButtons(ctx, (key) => {
-            color = key;
-            phase = 'ribbons';
-            ctx.hint(t('mg_braid_ribbons'));
-          });
-        } else ctx.hint(t(cur === sections.length - 1 ? 'mg_braid_tail' : 'mg_braid_next'), 'good');
-      }
-      ctx.progress(progress());
-    } else if (phase === 'ribbons') {
-      for (const sec of sections) {
-        if (sec.ribbon) continue;
-        if (dist(p.x, p.y, sec.bottom.x, sec.bottom.y) < 22 * Math.max(1, s)) {
-          sec.ribbon = true;
-          bounce = 0.5;
-          fx.burst(sec.bottom.x, sec.bottom.y, '🎀', 3, { speed: 70, size: 16 });
-          fx.float(sec.bottom.x, sec.bottom.y - 10, '💕', 18);
-          break;
+      const hx = SLOT_X[want];
+      emoji(g, '👆', hx + 4, BOTTOM_Y - 6 + Math.sin(ctx.time * 5) * 4, 26);
+      // une petite flèche : de ce côté vers le milieu
+      label(g, want === 0 ? '➜' : '⬅', SLOT_X[1] + (want === 0 ? -24 : 24), endY + 44, 22, '#ffffff');
+    } else {
+      // Tresse finie, avec son élastique ; le ruban apparaît quand on le noue.
+      const done = showSec?.ribbon;
+      if (done || phase === 'ribbons') {
+        const bx = SLOT_X[1];
+        const by = endY + 6;
+        if (done || tie > 0) drawBow(g, bx, by, 26 * (1 + bounce * 0.4), RIBBON_COLORS[color] ?? RIBBON_COLORS.red, 'plain', -0.15);
+        if (phase === 'ribbons' && !done) {
+          g.globalAlpha = 0.55 + Math.sin(ctx.time * 5) * 0.3;
+          g.strokeStyle = '#fff';
+          g.lineWidth = 4;
+          g.setLineDash([7, 7]);
+          circle(g, bx, by, 34);
+          g.stroke();
+          g.setLineDash([]);
+          g.globalAlpha = 1;
+          emoji(g, '🎀', bx, by, 28, 0, 0.7);
+          emoji(g, '👆', bx + 30, by + 34 + Math.sin(ctx.time * 5) * 4, 26);
         }
       }
-      ctx.progress(progress());
-      if (sections.every((x) => x.ribbon)) {
-        const share = 1 - wrong / Math.max(1, total);
-        ctx.finish(0.6 + 0.4 * clamp(share), t('mg_braid_end', { name: a.name }));
-        fx.text(200, 110, t('mg_perfect'), '#2f8a5f', 28);
-      }
     }
+    g.restore();
+    g.strokeStyle = '#fff';
+    g.lineWidth = 5;
+    rrect(g, L.x, L.y, L.w, L.h, 22);
+    g.stroke();
+    g.strokeStyle = '#e8c86a';
+    g.lineWidth = 2;
+    rrect(g, L.x - 3, L.y - 3, L.w + 6, L.h + 6, 24);
+    g.stroke();
+    emoji(g, '🔍', L.x + L.w - 14, L.y + 12, 22);
+    g.restore();
+  }
+
+  /** Une mèche : de la fin de la tresse (au milieu) vers sa place, puis tout droit jusqu'en bas. */
+  function strandPath(g, x, endY) {
+    g.beginPath();
+    g.moveTo(SLOT_X[1] + (x - SLOT_X[1]) * 0.25, endY);
+    g.quadraticCurveTo(x, endY + 6, x, endY + 40);
+    g.lineTo(x, BOTTOM_Y);
   }
 
   return {
     peek: () => ({
       phase,
       color,
-      next: phase === 'braid' && sections[cur] ? strands(sections[cur])[ORDER[sections[cur].taps]] : null,
-      ribbons: sections.filter((x) => !x.ribbon).map((x) => x.bottom),
+      cur,
+      crossings,
+      sections: sections.length,
+      next: phase === 'braid' ? { x: SLOT_X[expected()], y: (braidEnd() + 40 + BOTTOM_Y) / 2 } : null,
+      wrongPoint: phase === 'braid' ? { x: SLOT_X[1], y: (braidEnd() + 40 + BOTTOM_Y) / 2 } : null,
+      tie: phase === 'ribbons' ? { x: LOUPE.x + LOUPE.w / 2, y: TOP_Y + CROSS * STEP + 6 } : null,
+      ribbonsLeft: sections.filter((x) => !x.ribbon).length,
+      wrong,
+      total,
     }),
-    down(p) { tap(p); },
+    down(p) {
+      if (phase === 'braid') pick(strandAt(p));
+      else if (phase === 'ribbons') {
+        const inLoupe = p.x >= LOUPE.x && p.x <= LOUPE.x + LOUPE.w && p.y >= LOUPE.y && p.y <= LOUPE.y + LOUPE.h;
+        const onHorse = dist(p.x, p.y, sh.bx, sh.by) < sh.rx * 1.6;
+        if (inLoupe || onHorse) tieRibbon();
+      }
+    },
+    key(code, down) {
+      if (!down) return;
+      if (phase === 'braid') {
+        if (code === 'ArrowLeft') pick(0);
+        else if (code === 'ArrowRight') pick(2);
+        else if (code === 'ArrowUp' || code === 'ArrowDown') pick(1);
+        else if (isGo(code)) pick(expected());
+      } else if (phase === 'ribbons' && isGo(code)) tieRibbon();
+    },
     update(dt) {
       shake = Math.max(0, shake - dt);
       bounce = Math.max(0, bounce - dt);
+      if (swap) {
+        swap.t += dt * 5;
+        if (swap.t >= 1) swap = null;
+      }
     },
     draw(g) {
       ringBackground(g, ctx, floorY);
       drawAnimal(g, a, { x: fit.x, y: floorY, s, f: 1, happy: phase !== 'braid' || cur > 0, shake: shake > 0 ? 1 : 0 });
-      // Tresses faites (et en cours)
       sections.forEach((sec, i) => {
-        if (sec.done > 0) drawBraid(g, sec.top, sec.bottom, 11 * s, mane, sec.done);
-        if (sec.ribbon) drawBow(g, sec.bottom.x, sec.bottom.y, 11 * s, RIBBON_COLORS[color] ?? RIBBON_COLORS.red, 'plain', -0.2);
-        else if (phase === 'ribbons') {
-          // Les endroits où nouer un ruban clignotent
+        if (sec.done > 0) drawBraid(g, sec.top, sec.bottom, 9 * s, mane, sec.done);
+        if (sec.ribbon) drawBow(g, sec.bottom.x, sec.bottom.y, 8 * s, RIBBON_COLORS[color] ?? RIBBON_COLORS.red, 'plain', -0.2);
+        const focus = (phase === 'braid' && i === cur) || (phase === 'ribbons' && i === tie);
+        if (focus) {
+          // La partie de la crinière montrée dans la loupe
+          const mx = (sec.top.x + sec.bottom.x) / 2;
+          const my = (sec.top.y + sec.bottom.y) / 2;
           g.save();
-          g.globalAlpha = 0.5 + Math.sin(ctx.time * 5) * 0.3;
-          g.strokeStyle = '#fff';
+          g.globalAlpha = 0.6 + Math.sin(ctx.time * 5) * 0.3;
+          g.strokeStyle = '#ffd23a';
           g.lineWidth = 3;
-          circle(g, sec.bottom.x, sec.bottom.y, 14 * Math.max(1, s));
+          circle(g, mx, my, 16 * Math.max(0.8, s));
+          g.stroke();
+          g.globalAlpha = 0.35;
+          g.setLineDash([5, 6]);
+          g.beginPath();
+          g.moveTo(mx + 16 * s, my);
+          g.lineTo(LOUPE.x, LOUPE.y + LOUPE.h * 0.4);
           g.stroke();
           g.restore();
-          emoji(g, '🎀', sec.bottom.x, sec.bottom.y, 16, 0, 0.6);
-        }
-        // Mèches de la section en cours : numérotées dans l'ordre à suivre
-        if (phase === 'braid' && i === cur) {
-          const pts = strands(sec);
-          pts.forEach((q, j) => {
-            const step = ORDER.indexOf(j);
-            const isNext = ORDER[sec.taps] === j;
-            const taken = step < sec.taps;
-            const r = (taken ? 8 : 11) * Math.max(1, s) * (isNext ? 1 + Math.sin(ctx.time * 6) * 0.12 : 1);
-            g.fillStyle = taken ? shade(mane, -0.2) : isNext ? '#ffd23a' : '#fff7df';
-            g.strokeStyle = shade(mane, -0.45);
-            g.lineWidth = 2;
-            ellipse(g, q.x, q.y, r * 0.7, r * 1.5, 0.2);
-            g.fill();
-            g.stroke();
-            if (!taken) label(g, String(step + 1), q.x, q.y, 14, isNext ? '#6a4a00' : '#8a8273');
-          });
         }
       });
-      if (bounce > 0) emoji(g, '💖', sh.head.x, sh.head.y - sh.hr * 2.2, 26, 0, bounce * 2);
+      if (bounce > 0) emoji(g, '💖', sh.head.x, sh.head.y - sh.hr * 2.2, 22, 0, bounce * 2);
+      drawLoupe(g);
     },
   };
 }
 
 // ---------------------------------------------------------------- lustrer la robe (et huiler les sabots)
 
+/**
+ * Lustrer : passer le chiffon partout (la jauge monte avec la part de la robe qui brille), huiler
+ * les deux sabots (cheval), puis ✅. Juste : 0,9 à 1,08. Frotter encore une robe qui brille déjà
+ * met trop de lustrant (ça colle : la jauge dépasse, jusqu'à 1,4).
+ */
 export function shineGame(ctx) {
   const { a, t, fx } = ctx;
   const floorY = 305;
@@ -284,19 +439,51 @@ export function shineGame(ctx) {
       cells.push({ ...sh.L(lx, ly), v: 0 });
     }
   }
-  const hooves = a.species === 'horse' ? [
+  const horse = a.species === 'horse';
+  const hooves = horse ? [
     { x: sh.bx + sh.rx * 0.62, y: floorY - 7 * s, done: false },
     { x: sh.bx - sh.rx * 0.62, y: floorY - 7 * s, done: false },
   ] : [];
+  const LO = 0.9;
+  const HI = 1.08;
+  const MAX = 1.4;
+  const COAT_SHARE = horse ? 0.85 : 1; // le cheval : 15 % pour les sabots huilés
   let last = null;
-  let over = 0;
-  let strokes = 0;
   let sparkle = 0;
+  let state = 'low';
+  ctx.zone(LO / MAX, HI / MAX);
 
-  ctx.hint(t(a.species === 'horse' ? 'mg_shine_hintHorse' : 'mg_shine_hint'));
+  ctx.hint(t(horse ? 'mg_shine_hintHorse' : 'mg_shine_hint'));
 
   const coverage = () => cells.reduce((acc, c) => acc + Math.min(1, c.v), 0) / Math.max(1, cells.length);
-  const progress = () => coverage() * (hooves.length ? 0.8 : 1) + (hooves.length ? (hooves.filter((h) => h.done).length / hooves.length) * 0.2 : 0);
+  // Trop de lustrant : au-delà de 1,4 passage par endroit, ça colle.
+  const over = () => cells.reduce((acc, c) => acc + Math.max(0, c.v - 1.4), 0) / Math.max(1, cells.length) * 0.6;
+  const hoofPart = () => (hooves.length ? (hooves.filter((h) => h.done).length / hooves.length) * (1 - COAT_SHARE) : 0);
+  const value = () => Math.min(MAX, coverage() * COAT_SHARE + hoofPart() + over());
+
+  const stop = () => {
+    if (ctx.done) return;
+    if (hooves.some((h) => !h.done) && coverage() > 0.6) ctx.hint(t('mg_shine_hooves'), 'warn');
+    ctx.finishJust(value(), LO, HI, {
+      who: a,
+      slack: 0.3,
+      msgs: { just: t('mg_shine_end', { name: a.name }), low: t('mg_shine_low', { name: a.name }), high: t('mg_shine_high', { name: a.name }) },
+    });
+    if (state === 'just') fx.text(200, 110, t('mg_perfect'), '#2f8a5f', 28);
+  };
+  ctx.stopButton(stop);
+
+  function show() {
+    const v = value();
+    ctx.progress(v / MAX);
+    const st = v < LO ? 'low' : v > HI ? 'high' : 'just';
+    if (st !== state) {
+      state = st;
+      if (st === 'just') ctx.hint(t('mg_shine_stop'), 'good');
+      else if (st === 'high') ctx.hint(t('mg_shine_spread'), 'warn');
+    }
+    if (v >= MAX) stop();
+  }
 
   function rub(p) {
     if (!last) { last = p; return; }
@@ -306,47 +493,39 @@ export function shineGame(ctx) {
     for (const c of cells) {
       if (dist(c.x, c.y, p.x, p.y) > step * 0.9) continue;
       touched = true;
-      const before = c.v;
       c.v += d * 0.012;
-      // Trop frotté au même endroit : ça ne brille pas plus, on perd en régularité.
-      if (before > 1.3) over += d * 0.012;
-      strokes += d * 0.012;
     }
     if (touched && Math.random() < 0.4) fx.dot(p.x + (Math.random() - 0.5) * 16, p.y + (Math.random() - 0.5) * 16, 'rgba(255,255,255,0.9)', 2 + Math.random() * 2, { life: 0.5 });
-    if (over > 1.5 && over > strokes * 0.3) ctx.hint(t('mg_shine_spread'), 'warn');
-    else if (coverage() > 0.5) ctx.hint(t('mg_shine_good'), 'good');
+    if (state === 'low' && coverage() > 0.5 && coverage() < 0.85) ctx.hint(t('mg_shine_good'), 'good');
     last = p;
-    check();
-  }
-
-  function check() {
-    ctx.progress(progress());
-    if (coverage() >= 0.97 && hooves.every((h) => h.done) && !ctx.done) {
-      const even = clamp(1 - over / Math.max(1, strokes) * 2);
-      ctx.finish(0.55 + 0.45 * even, t('mg_shine_end', { name: a.name }));
-      fx.text(200, 110, t('mg_perfect'), '#2f8a5f', 28);
-    }
+    show();
   }
 
   return {
-    peek: () => ({ cells: cells.filter((c) => c.v < 1).map((c) => ({ x: c.x, y: c.y })), hooves: hooves.filter((h) => !h.done) }),
+    peek: () => ({
+      value: value(), lo: LO, hi: HI, max: MAX, coverage: coverage(), over: over(),
+      cells: cells.filter((c) => c.v < 1).map((c) => ({ x: c.x, y: c.y })),
+      hooves: hooves.filter((h) => !h.done).map((h) => ({ x: h.x, y: h.y })),
+      body: { x: sh.bx, y: sh.by, rx: sh.rx, ry: sh.ry },
+    }),
     down(p) {
       last = p;
       for (const hv of hooves) {
-        if (!hv.done && dist(p.x, p.y, hv.x, hv.y) < 20 * Math.max(1, s)) {
+        if (!hv.done && dist(p.x, p.y, hv.x, hv.y) < 24 * Math.max(1, s)) {
           hv.done = true;
           fx.burst(hv.x, hv.y - 6, '✨', 4, { speed: 70, size: 14 });
-          check();
+          show();
         }
       }
     },
     move(p, down) { if (down) rub(p); },
     up() { last = null; },
+    key(code, down) { if (down && isGo(code)) stop(); },
     update(dt) { sparkle += dt; },
     draw(g) {
       ringBackground(g, ctx, floorY);
-      drawAnimal(g, a, { x: fit.x, y: floorY, s, f: 1, happy: coverage() > 0.4 });
-      // Le brillant : des taches claires là où on a lustré
+      drawAnimal(g, a, { x: fit.x, y: floorY, s, f: 1, happy: state === 'just' || coverage() > 0.4, earsBack: state === 'high' });
+      // Le brillant : des taches claires là où on a lustré ; trop de lustrant : des traces jaunes qui collent
       for (const c of cells) {
         if (c.v <= 0) continue;
         g.save();
@@ -354,6 +533,12 @@ export function shineGame(ctx) {
         g.fillStyle = '#ffffff';
         ellipse(g, c.x, c.y, step * 0.55, step * 0.42, -0.3);
         g.fill();
+        if (c.v > 1.4) {
+          g.globalAlpha = Math.min(0.5, (c.v - 1.4) * 0.6);
+          g.fillStyle = '#f2d36b';
+          ellipse(g, c.x + 3, c.y + 2, step * 0.4, step * 0.28, 0.4);
+          g.fill();
+        }
         g.restore();
       }
       // Les sabots à huiler
@@ -366,25 +551,30 @@ export function shineGame(ctx) {
         g.globalAlpha = 0.6 + Math.sin(ctx.time * 5) * 0.3;
         g.strokeStyle = '#fff';
         g.lineWidth = 3;
-        circle(g, hv.x, hv.y, 15 * Math.max(1, s));
+        circle(g, hv.x, hv.y, 20 * Math.max(1, s));
         g.stroke();
         g.restore();
-        emoji(g, '🧴', hv.x, hv.y - 26, 20);
+        emoji(g, '🧴', hv.x, hv.y - 30, 22);
       }
-      if (ctx.done) {
+      if (state === 'just' || (ctx.done && state !== 'high')) {
         for (let i = 0; i < 5; i++) {
           const p = sh.L(Math.cos(sparkle * 2 + i * 1.3) * sh.rx * 0.65, Math.sin(sparkle * 3 + i) * sh.ry * 0.5);
           emoji(g, '✨', p.x, p.y, 18, 0, 0.85);
         }
       }
       const pp = ctx.pointer;
-      if (pp.over || pp.down) emoji(g, '🧽', pp.x, pp.y - 8, 34);
+      if ((pp.over || pp.down) && !ctx.done) emoji(g, '🧽', pp.x, pp.y - 8, 34);
     },
   };
 }
 
 // ---------------------------------------------------------------- nœud ou bandana
 
+/**
+ * Le nœud : choisir la couleur, puis le motif, le faire glisser jusqu'au cou, et le serrer en
+ * gardant le doigt posé (ou Espace) : juste ce qu'il faut (bande verte). Lâche : il glisse ;
+ * trop serré : l'animal est gêné.
+ */
 export function bowGame(ctx) {
   const { a, t, fx } = ctx;
   ctx.opts = ctx.opts ?? {};
@@ -393,13 +583,19 @@ export function bowGame(ctx) {
   const sh = animalShape(a, { x: fit.x, y: floorY, s: fit.s, f: 1 });
   const s = fit.s;
   const target = { x: sh.neck.x + (a.species === 'rabbit' || a.species === 'cat' ? 0 : 4 * s), y: sh.neck.y + 6 * s };
+  const LO = 0.7;
+  const HI = 0.95;
+  const MAX = 1.4;
+  const RATE = 0.5; // serrage par seconde
   let color = null;
   let pattern = null;
   let phase = 'color'; // color | pattern | place | tighten
   const bow = { x: 70, y: 110, drag: false, placed: false };
-  let accuracy = 0;
-  let taps = 0;
+  let tension = 0;
+  let pulling = false;
+  let pulled = false; // on a déjà serré une fois (le relâcher finit le jeu)
   let pulse = 0;
+  let state = 'low';
 
   ctx.hint(t('mg_bow_color'));
   colorButtons(ctx, (key) => {
@@ -415,24 +611,49 @@ export function bowGame(ctx) {
           ctx.clearButtons();
           phase = 'place';
           ctx.hint(t('mg_bow_place'));
-          ctx.progress(0.4);
         },
       });
     }
-    ctx.progress(0.2);
   });
 
+  function place(accurate = true) {
+    bow.placed = true;
+    bow.drag = false;
+    bow.x = target.x;
+    bow.y = target.y;
+    phase = 'tighten';
+    ctx.zone(LO / MAX, HI / MAX);
+    ctx.progress(0);
+    ctx.hint(t('mg_bow_tighten'), accurate ? 'good' : '');
+    fx.burst(target.x, target.y, '✨', 4, { speed: 70, size: 14 });
+    // Un gros bouton à tenir, en plus du doigt posé sur l'écran.
+    ctx.button(`🎀 ${t('mg_bow_pull')}`, { cls: 'primary', hold: true, onDown: () => startPull(), onUp: () => endPull() });
+  }
+
+  function startPull() {
+    if (phase !== 'tighten' || ctx.done) return;
+    pulling = true;
+  }
+
+  function endPull() {
+    if (!pulling) return;
+    pulling = false;
+    if (!pulled || ctx.done) return;
+    const r = ctx.finishJust(tension, LO, HI, {
+      who: a,
+      slack: 0.3,
+      msgs: { just: t('mg_bow_end', { name: a.name }), low: t('mg_bow_loose', { name: a.name }), high: t('mg_bow_tight', { name: a.name, g: a.sex }) },
+    });
+    fx.float(target.x, target.y - 10, r.verdict === 'just' ? '💖' : r.verdict === 'high' ? '😣' : '💨', 24);
+  }
+
   return {
-    peek: () => ({ phase, bow: { x: bow.x, y: bow.y }, target }),
+    peek: () => ({ phase, bow: { x: bow.x, y: bow.y }, target, tension, lo: LO, hi: HI, max: MAX, pulling }),
     down(p) {
-      if (phase === 'place' && dist(p.x, p.y, bow.x, bow.y) < 36) bow.drag = true;
-      else if (phase === 'tighten' && dist(p.x, p.y, target.x, target.y) < 40) {
-        taps++;
-        pulse = 0.35;
-        fx.float(target.x, target.y - 10, taps >= 3 ? '💖' : '💕', 20);
-        ctx.progress(0.7 + taps * 0.1);
-        if (taps >= 3 && !ctx.done) ctx.finish(0.7 + 0.3 * accuracy, t('mg_bow_end', { name: a.name }));
-      }
+      if (phase === 'place') {
+        if (dist(p.x, p.y, bow.x, bow.y) < 40) bow.drag = true;
+        else if (dist(p.x, p.y, target.x, target.y) < 34 * Math.max(1, s)) ctx.hint(t('mg_bow_place'), '');
+      } else if (phase === 'tighten') startPull();
     },
     move(p, down) {
       if (bow.drag && down) {
@@ -441,28 +662,42 @@ export function bowGame(ctx) {
       }
     },
     up(p) {
+      if (phase === 'tighten') return endPull();
       if (!bow.drag) return;
       bow.drag = false;
-      const d = dist(p.x, p.y, target.x, target.y);
-      if (d < 34 * Math.max(1, s)) {
-        bow.placed = true;
-        bow.x = target.x;
-        bow.y = target.y;
-        accuracy = clamp(1 - d / (34 * Math.max(1, s)));
-        phase = 'tighten';
-        ctx.hint(t('mg_bow_tighten'), 'good');
-        ctx.progress(0.7);
-        fx.burst(target.x, target.y, '✨', 4, { speed: 70, size: 14 });
-      } else ctx.hint(t('mg_bow_miss'), 'warn');
+      if (dist(p.x, p.y, target.x, target.y) < 38 * Math.max(1, s)) place();
+      else ctx.hint(t('mg_bow_miss'), 'warn');
     },
-    update(dt) { pulse = Math.max(0, pulse - dt); },
+    key(code, down) {
+      if (!isGo(code)) return;
+      if (phase === 'place' && down) place(false);
+      else if (phase === 'tighten') (down ? startPull() : endPull());
+    },
+    update(dt) {
+      pulse = Math.max(0, pulse - dt);
+      if (pulling && phase === 'tighten' && !ctx.done) {
+        tension = Math.min(MAX, tension + RATE * dt);
+        pulled = true;
+        ctx.progress(tension / MAX);
+        const st = tension < LO ? 'low' : tension > HI ? 'high' : 'just';
+        if (st !== state) {
+          state = st;
+          if (st === 'just') ctx.hint(t('mg_bow_letGo'), 'good');
+          else if (st === 'high') ctx.hint(t('mg_bow_tooTight', { name: a.name }), 'warn');
+        }
+        if (Math.random() < dt * 6) pulse = 0.25;
+        if (tension >= MAX) endPull();
+      }
+    },
     draw(g) {
       fillView(g, ctx.view, '#fbeff5', '#f3dde8');
       g.fillStyle = '#e9c9d8';
       g.fillRect(ctx.view.x0, floorY, ctx.view.w, ctx.view.y1 - floorY);
-      drawAnimal(g, a, { x: fit.x, y: floorY, s, f: 1, happy: phase === 'tighten' || ctx.done, wag: ctx.done });
+      const tight = phase === 'tighten' && state === 'high';
+      drawAnimal(g, a, { x: fit.x, y: floorY, s, f: 1, happy: (phase === 'tighten' && state === 'just') || (ctx.done && state === 'just'), wag: ctx.done && state === 'just', earsBack: tight, shake: tight && pulling ? 0.4 : 0 });
       if (phase === 'color' || phase === 'pattern') {
-        emoji(g, '🎀', 200, 120, 64 + Math.sin(ctx.time * 3) * 4);
+        if (color) drawBow(g, 200, 120, 46 + Math.sin(ctx.time * 3) * 3, RIBBON_COLORS[color], pattern ?? 'plain', 0);
+        else emoji(g, '🎀', 200, 120, 64 + Math.sin(ctx.time * 3) * 4);
         return;
       }
       if (phase === 'place') {
@@ -471,19 +706,27 @@ export function bowGame(ctx) {
         g.strokeStyle = '#fff';
         g.lineWidth = 3;
         g.setLineDash([6, 6]);
-        circle(g, target.x, target.y, 24 * Math.max(1, s));
+        circle(g, target.x, target.y, 26 * Math.max(1, s));
         g.stroke();
         g.restore();
       }
-      const size = (phase === 'place' ? 22 : 18 * Math.max(1, s)) * (1 + pulse * 0.6);
+      // Serrer : le nœud rapetisse un peu et les pans se tendent
+      const squeeze = phase === 'tighten' ? 1 - Math.min(0.25, tension * 0.18) : 1;
+      const size = (phase === 'place' ? 24 : 18 * Math.max(1, s)) * squeeze * (1 + pulse * 0.4);
       drawBow(g, bow.x, bow.y, size, RIBBON_COLORS[color] ?? RIBBON_COLORS.red, pattern ?? 'plain', bow.placed ? -0.15 : Math.sin(ctx.time * 2) * 0.15);
-      if (phase === 'place' && !bow.drag) emoji(g, '👆', bow.x + 22, bow.y + 26 + Math.sin(ctx.time * 4) * 3, 22);
+      if (phase === 'place' && !bow.drag) emoji(g, '👆', bow.x + 24, bow.y + 28 + Math.sin(ctx.time * 4) * 3, 24);
+      if (phase === 'tighten' && !ctx.done && !pulling) emoji(g, '👆', target.x + 26, target.y + 30 + Math.sin(ctx.time * 4) * 3, 24);
+      if (phase === 'tighten' && state === 'just' && !ctx.done) label(g, '✓', target.x, target.y - 34 * Math.max(1, s), 26, '#2f8a5f');
     },
   };
 }
 
 // ---------------------------------------------------------------- pouffer la laine / le poil
 
+/**
+ * Gonfler le poil : tapoter en rythme, quand le cercle devient vert (8 fois). La note suit les
+ * tapes bien en rythme. Espace ou Entrée tapotent aussi.
+ */
 export function fluffGame(ctx) {
   const { a, t, fx } = ctx;
   const floorY = 305;
@@ -494,36 +737,38 @@ export function fluffGame(ctx) {
   let taps = 0;
   let beat = 0; // 0 → 1 ; le cercle grossit, il faut taper quand il est grand
   let puff = 0;
-  let last = -1;
   const sh = animalShape(a, { x: fit.x, y: floorY, s, f: 1 });
 
   ctx.hint(t('mg_fluff_hint'));
 
+  function pat(p) {
+    if (ctx.done) return;
+    taps++;
+    const quality = Math.max(0, 1 - Math.abs(beat - 0.8) / 0.35);
+    if (quality > 0.3) {
+      good++;
+      puff = Math.min(1, puff + 0.14);
+      fx.burst(p.x, p.y, quality > 0.8 ? '✨' : '☁️', 3, { speed: 60, size: 16 });
+      fx.text(p.x, p.y - 30, t(quality > 0.8 ? 'mg_perfect' : 'mg_good'), '#2f8a5f', 18);
+    } else {
+      fx.text(p.x, p.y - 30, t('mg_fluff_early'), '#c07a10', 18);
+    }
+    beat = 0;
+    ctx.progress(taps / TOTAL);
+    if (taps >= TOTAL) ctx.finish(0.5 + 0.5 * (good / TOTAL), t('mg_fluff_end', { name: a.name }));
+  }
+
   return {
-    peek: () => ({ beat, taps, good, body: { x: sh.bx, y: sh.by, rx: sh.rx, ry: sh.ry } }),
+    peek: () => ({ beat, taps, good, total: TOTAL, body: { x: sh.bx, y: sh.by, rx: sh.rx, ry: sh.ry } }),
     down(p) {
-      if (ctx.done) return;
       const onBody = dist(p.x, p.y, sh.bx, sh.by) < Math.max(sh.rx, sh.ry) * 1.3;
-      if (!onBody) return;
-      taps++;
-      const quality = Math.max(0, 1 - Math.abs(beat - 0.8) / 0.35);
-      if (quality > 0.3) {
-        good++;
-        puff = Math.min(1, puff + 0.14);
-        fx.burst(p.x, p.y, quality > 0.8 ? '✨' : '☁️', 3, { speed: 60, size: 16 });
-        fx.text(p.x, p.y - 30, t(quality > 0.8 ? 'mg_perfect' : 'mg_good'), '#2f8a5f', 18);
-      } else {
-        fx.text(p.x, p.y - 30, t('mg_fluff_early'), '#8b2b22', 18);
-      }
-      beat = 0;
-      ctx.progress(taps / TOTAL);
-      if (taps >= TOTAL) ctx.finish(0.5 + 0.5 * (good / TOTAL), t('mg_fluff_end', { name: a.name }));
+      if (onBody) pat(p);
     },
+    key(code, down) { if (down && isGo(code)) pat({ x: sh.bx, y: sh.by }); },
     update(dt) {
       if (ctx.done) return;
       beat = Math.min(1, beat + dt * 0.75);
       if (beat >= 1) beat = 0; // trop tard : on repart
-      if (Math.floor(beat * 4) !== last) last = Math.floor(beat * 4);
     },
     draw(g) {
       fillView(g, ctx.view, '#eef6ec', '#dcebd8');

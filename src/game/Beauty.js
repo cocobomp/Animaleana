@@ -6,15 +6,20 @@
 
 import * as THREE from 'three';
 import { Session, EXTRA_SESSIONS } from './Activities.js';
-import { toWorld, eligibility, ranking, activityData } from '../sim/activities.js';
+import { toWorld, eligibility, ranking, activityData, addAward } from '../sim/activities.js';
 import {
   PREP_ITEMS, RIBBON_COLORS, notePrep, isFresh, isReady, weatherWear, nowHours, presentationSteps, ringWindow, gaugeQuality,
-  trotPar, fidgetChance, judgeMarks, beautyData,
+  trotPar, fidgetChance, judgeMarks, beautyData, classOf, classRivals, entryFor, registerBlock, registerEntry, ringBlock,
+  markPresented, missedEntries, todaysEntries, isChampion, handlerXp, lowestNeed,
 } from '../sim/beauty.js';
 import { canLead } from '../sim/gear.js';
-import { addStat } from '../sim/profile.js';
+import { addStat, spend } from '../sim/profile.js';
+import { addCareerXp, isStarted, RANKS } from '../sim/careers.js';
+import { noteClientContest } from '../sim/clients.js';
 import { flagPair } from './models/course.js';
-import { emojiTexture } from './textures.js';
+import { signTexture } from './textures.js';
+import { buildAvatar, updateAvatarLife, startAvatarGesture } from './models/avatarModel.js';
+import { disposeModel } from './models/animalModel.js';
 import { judgeLines } from '../ui/beauty.js';
 import { t, ta } from '../i18n.js';
 
@@ -266,8 +271,71 @@ export class Beauty {
     this.game = game;
     this.lastHours = null;
     this.tick = 0;
+    this.checkedDay = null; // dernier jour où l'on a regardé les inscriptions (oubliées, du jour)
     // Un soin normal (laver, brosser, couper les griffes, ferrer) compte dans la préparation.
     game.on?.('care', ({ a, action }) => { if (PREP_ITEMS[action]?.care) this.prepDone(a, action, 1, {}, true); });
+  }
+
+  /** Une action du carnet du handler (sans effet tant que le métier n'est pas commencé). */
+  noteHandler(action) {
+    const g = this.game;
+    if (g.profile && isStarted(g.profile, 'handler')) g.clients?.noteCareer?.('handler', action);
+  }
+
+  /**
+   * Inscrit un animal à un concours de beauté (frais payés tout de suite). Renvoie l'inscription,
+   * ou null (raison dite par un message).
+   */
+  register(a, comp) {
+    const g = this.game;
+    const p = g.profile;
+    const why = registerBlock(p, comp, a, { day: g.day, hour: g.hour });
+    if (why) {
+      g.ui.toast(ta(`beauty_reg_${why}`, a, { cls: t(`beauty_class_${classOf(a.species)}`) }), 4500);
+      return null;
+    }
+    if (!spend(p, comp.fee)) {
+      g.ui.toast(t('r_money'));
+      return null;
+    }
+    const e = registerEntry(p, comp, a);
+    addStat(p, 'beautyEntries');
+    g.audio?.ui?.('coin');
+    g.ui.toast(ta(comp.day === g.day ? 'beauty_registeredToday' : 'beauty_registered', a, { day: comp.day, cls: t(`beauty_class_${e.cls}`) }), 5000);
+    g.save();
+    g.ui.refresh();
+    return e;
+  }
+
+  /**
+   * Entrer dans la carrière : entraînement (comp null) ou concours (inscrit à l'avance, ou inscription
+   * sur place le jour même). Renvoie la session, ou null.
+   */
+  enterRing(a, comp = null) {
+    const g = this.game;
+    if (!comp) return g.activities.start('beauty', { animal: a, comp: null });
+    const block = ringBlock(g.profile, comp, a, { day: g.day, hour: g.hour });
+    if (block) {
+      g.ui.toast(ta(`beauty_ring_${block}`, a, { from: comp.open, to: comp.close, day: comp.day }), 4500);
+      return null;
+    }
+    if (!entryFor(g.profile, comp.id, a.id) && !this.register(a, comp)) return null;
+    return g.activities.start('beauty', { animal: a, comp, prepaid: true });
+  }
+
+  /** Une fois par jour : inscriptions oubliées (concours passé) et rappel du concours du jour. */
+  checkEntries() {
+    const g = this.game;
+    const p = g.profile;
+    if (this.checkedDay === g.day || g.hour < 7) return;
+    this.checkedDay = g.day;
+    const find = (id) => p.animals.find((x) => x.id === id);
+    for (const e of missedEntries(p, g.day)) {
+      const a = find(e.animalId);
+      if (a) g.ui.toast(ta('beauty_missed', a, { day: e.day }), 6000);
+    }
+    const today = todaysEntries(p, g.day).map((e) => find(e.animalId)).filter(Boolean);
+    if (today.length) g.ui.toast(t('beauty_todayReminder', { names: today.map((a) => a.name).join(', '), n: today.length }), 7000);
   }
 
   /** Un geste de préparation vient d'être fait (mini-jeu fini). quiet : soin normal, sans fanfare. */
@@ -279,18 +347,22 @@ export class Beauty {
     const entry = notePrep(a, item, now, quality, extra);
     const e = g.entities.get(a.id);
     if (!quiet) {
+      // Un moment doux avec l'animal : il aime qu'on s'occupe de lui (lien et câlins réels).
       a.bond = Math.min(100, (a.bond ?? 5) + 1);
       a.needs.affection = Math.min(100, a.needs.affection + 4);
+      if (item === 'shine' || item === 'fluff') a.needs.grooming = Math.min(100, (a.needs.grooming ?? 0) + 10);
       addStat(g.profile, 'beautyPrep');
       if (item === 'braid') addStat(g.profile, 'beautyBraid');
       g.xp('care');
       e?.emit(def.icon === '🧶' ? '☁️' : def.icon, 3);
+      if (item === 'braid' || item === 'bow') this.noteHandler('braid');
     }
     if (isReady(a, now) && beautyData(a).readyDay !== g.day) {
       a.beauty.readyDay = g.day;
       addStat(g.profile, 'beautyReady');
       g.ui.toast(ta('beauty_nowReady', a), 4500);
       e?.emit('🎀', 4);
+      this.noteHandler('prep');
     }
     if (e) applyBeautyDecor(e, now);
     g.save();
@@ -302,6 +374,7 @@ export class Beauty {
   update(dt) {
     const g = this.game;
     if (!g.profile) return;
+    if (!g.ui?.isBlocking?.()) this.checkEntries();
     const now = nowHours(g.profile);
     const dh = this.lastHours === null ? 0 : now - this.lastHours;
     this.lastHours = now;
@@ -350,6 +423,9 @@ class BeautySession extends Session {
     if (g.player.mount) g.dismount();
     this.animal = a;
     this.e = e;
+    // Classe de l'animal (chevaux, chiens, chats…) : ses concurrents sont de la même classe.
+    this.cls = classOf(a.species);
+    this.rivals = this.comp ? classRivals(this.comp, this.cls) : null;
     this.script(e);
     this.carried = CARRIED.includes(a.species);
     this.steps = presentationSteps(a.species);
@@ -393,9 +469,16 @@ class BeautySession extends Session {
       tbl.add(leg);
     }
     this.table = this.put(tbl, table.x, table.z);
-    const judgeSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture('🧑‍⚖️'), transparent: true, depthWrite: false }));
-    judgeSprite.scale.setScalar(1.6);
-    judgeSprite.position.set(seat.x, this.y(seat.x, seat.z) + 1.5, seat.z);
+    // Le juge : une vraie personne (veste bleu marine, chapeau) derrière la table, avec son nom.
+    this.judgeNpc = buildAvatar({ skin: 0xc68a63, hair: 0x9a9a9a, hairStyle: 'short', top: 0x23395d, bottom: 0x2d3a4f, shoes: 0x2b2b2b, hat: true }, 77);
+    this.judgeNpc.root.position.set(seat.x, this.y(seat.x, seat.z), seat.z);
+    this.judgeNpc.root.rotation.y = Math.PI / 2; // face à la carrière (+x)
+    g.scene.add(this.judgeNpc.root);
+    this.judgeLife = { speed: 0, busy: false };
+    const judgeSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: signTexture(t('beauty_judgeTag'), '#23395d', '#ffffff', '🧑‍⚖️'), transparent: true, depthWrite: false, depthTest: false }));
+    judgeSprite.scale.set(1.9, 0.48, 1);
+    judgeSprite.renderOrder = 10;
+    judgeSprite.position.set(seat.x, this.y(seat.x, seat.z) + 2.25, seat.z);
     this.group.add(judgeSprite);
     this.judgeSprite = judgeSprite;
     const pod = new THREE.Group();
@@ -423,6 +506,9 @@ class BeautySession extends Session {
     this.teleportPlayer(this.start.x, this.start.z, RING.start.heading);
     this.placeAnimal(true);
     this.hud.hint(ta(this.carried ? 'beauty_hintCarry' : 'beauty_hintWalk', a));
+    // Humeur réelle : un animal qui a faim, soif ou besoin de câlins sera moins calme devant le juge.
+    const need = lowestNeed(a);
+    if (need) g.ui.toast(ta('beauty_moodWarn', a, { what: ta(`beauty_need_${need}`, a) }), 5000);
     this.refreshHud();
   }
 
@@ -615,8 +701,9 @@ class BeautySession extends Session {
   }
 
   refreshHud() {
-    const i = Math.max(0, Math.min(this.steps.length, this.stepIndex + 1));
-    const stepName = this.steps[this.stepIndex] ? t(`beauty_step_${this.steps[this.stepIndex]}`) : t('beauty_step_podium');
+    const idx = Math.max(0, this.stepIndex); // pendant le compte à rebours : la première étape
+    const i = Math.max(1, Math.min(this.steps.length, idx + 1));
+    const stepName = this.steps[idx] && this.phase !== 'podium' ? t(`beauty_step_${this.steps[idx]}`) : t('beauty_step_podium');
     const stats = [['🎀', `${t('beauty_stepN', { n: i, total: this.steps.length })} · ${stepName}`]];
     if (this.phase === 'stand') stats.push(['🤫', t('beauty_standing', { n: Math.max(0, Math.ceil(STAND_SECONDS - this.phaseT)) })]);
     if (this.phase === 'trot') stats.push(['⏱️', `${(this.time - this.trotStart).toFixed(1)} s / ${this.trotPar} s`]);
@@ -630,7 +717,14 @@ class BeautySession extends Session {
     const pl = g.player;
     const e = this.e;
     this.phaseT += dt;
-    this.judgeSprite.position.y = this.y(this.judgeSprite.position.x, this.judgeSprite.position.z) + 1.5 + Math.sin(this.time * 2) * 0.05;
+    this.judgeSprite.position.y = this.y(this.judgeSprite.position.x, this.judgeSprite.position.z) + 2.25 + Math.sin(this.time * 2) * 0.03;
+    if (this.judgeNpc) {
+      // Le juge suit l'animal du regard (il tourne doucement sur place).
+      const jr = this.judgeNpc.root;
+      const want = Math.atan2(e.position.x - jr.position.x, e.position.z - jr.position.z);
+      jr.rotation.y += wrap(want - jr.rotation.y) * Math.min(1, dt * 2);
+      updateAvatarLife(this.judgeNpc, dt, this.judgeLife);
+    }
     this.arrow.position.y = this.y(this.arrow.position.x, this.arrow.position.z) + 2.4 + Math.sin(this.time * 4) * 0.2;
     this.arrow.rotation.y += dt * 2;
     this.ringA.material.opacity = 0.55 + Math.sin(this.time * 5) * 0.3;
@@ -758,9 +852,11 @@ class BeautySession extends Session {
     let step = this.marks.stars === 3 ? 0 : this.marks.stars === 2 ? 1 : 2;
     this.rank = null;
     if (this.comp) {
-      this.rank = ranking(this.comp, { points }).rank;
+      this.rank = ranking(this.comp, { points }, this.rivals).rank;
       step = this.rank <= 3 ? this.rank - 1 : 2;
     }
+    // Le juge tend le ruban (ou la coupe).
+    if (this.judgeNpc) startAvatarGesture(this.judgeNpc, 'offer', { duration: 2.4, local: true, x: 0, y: 1.15, z: 0.45 });
     const s = this.podiumSteps[step];
     const e = this.e;
     // Le podium est tourné de 180° : les marches sont inversées en x.
@@ -795,10 +891,48 @@ class BeautySession extends Session {
     if (this.phaseT > 3.2 && this.state === 'run') {
       this.state = 'finishing';
       const result = { points: this.marks.points, stars: this.marks.stars, marks: this.marks };
-      setTimeout(() => !this.ended && this.finish(result, {
-        animals: [this.animal], quality: this.marks.points / 100, extra: judgeLines(this.marks, this.animal),
-      }), 300);
+      setTimeout(() => !this.ended && this.finishBeauty(result), 300);
     }
+  }
+
+  /**
+   * Fin de la présentation : on garde le résultat (inscription, animal confié), le métier de handler
+   * progresse, l'animal est content, puis la fenêtre des résultats commune (Session.finish).
+   */
+  finishBeauty(result) {
+    const g = this.game;
+    const p = g.profile;
+    const a = this.animal;
+    const marks = this.marks;
+    const rank = this.rank;
+    const champion = !!this.comp && isChampion(rank, marks.points);
+    if (this.comp) markPresented(p, this.comp, a, { points: marks.points, rank });
+    // Animal confié (métier de handler) : le propriétaire verra la note.
+    noteClientContest(a, { points: marks.points, rank, stars: marks.stars, comp: !!this.comp });
+    // Métier de handler : présenter au juge (carnet) et de l'expérience selon la note.
+    let careerLine = null;
+    if (isStarted(p, 'handler')) {
+      g.beauty?.noteHandler('present');
+      const xp = handlerXp(marks.stars, rank);
+      const up = addCareerXp(p, 'handler', xp);
+      careerLine = `🎀 ${t('ca_xpGain', { n: xp, career: t('career_handler') })}`;
+      if (up && up.rankUp !== null && up.rankUp !== undefined) g.ui.toast(t('ca_rankUpToast', { rank: t(`ca_rank_${RANKS[up.rankUp]}`), career: t('career_handler') }), 7000);
+    }
+    // L'animal est fier et heureux d'avoir été chouchouté : câlins et lien réels.
+    a.needs.affection = Math.min(100, a.needs.affection + 6 + marks.stars * 2);
+    a.bond = Math.min(100, (a.bond ?? 5) + (marks.stars >= 2 ? 2 : 1));
+    if (champion) {
+      addAward(p, { kind: 'ribbon', tier: 'champion', money: 0 }, {
+        type: 'beauty', day: g.day, place: p.place, animal: a.name, animalId: a.id, species: a.species, level: this.comp.levelId, rank: 1,
+      });
+      addStat(p, 'beautyChampion');
+    }
+    this.finish(result, {
+      animals: [a],
+      quality: marks.points / 100,
+      rivals: this.rivals ?? undefined,
+      extra: [...judgeLines(marks, a, { cls: this.cls, comp: !!this.comp, champion }), careerLine].filter(Boolean),
+    });
   }
 
   /** Petite photo de l'écran gardée dans l'album (comme les photos de balade). */
@@ -830,6 +964,11 @@ class BeautySession extends Session {
   }
 
   cleanup() {
+    if (this.judgeNpc) {
+      this.game.scene.remove(this.judgeNpc.root);
+      disposeModel(this.judgeNpc.root);
+      this.judgeNpc = null;
+    }
     const e = this.e;
     if (e) {
       e.scaleGroup.rotation.set(0, 0, 0);

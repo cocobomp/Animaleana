@@ -241,7 +241,10 @@ function calendarTab(ui, state) {
   const list = competitionsAt(p.place, g.isHome, g.day, 8);
   const out = [h('p', { class: 'note' }, t(g.isHome ? 'actv_calendarHome' : 'actv_calendarAway'))];
   out.push(h('div', { class: 'cards' }, list.map((c) => {
-    const block = entryBlock(c, { day: g.day, hour: g.hour, entered: d.entered });
+    let block = entryBlock(c, { day: g.day, hour: g.hour, entered: d.entered });
+    // Concours de beauté : on peut s'inscrire à l'avance (par classe), dans sa propre fenêtre.
+    const beauty = c.type === 'beauty' && block !== 'over';
+    if (beauty) block = null;
     return h('div', { class: `card actv-comp ${block ? '' : 'open'}` },
       h('span', { class: 'card-emoji' }, TYPE_ICON[c.type]),
       h('span', { class: 'card-main' },
@@ -250,7 +253,8 @@ function calendarTab(ui, state) {
         h('small', {}, isSandbox(p) ? t('actv_prizesSandbox') : t('actv_prizes', { fee: c.fee, a: c.prizes[0], b: c.prizes[1], c: c.prizes[2] }))),
       block
         ? h('span', { class: 'lock' }, t(`actv_block_${block}`))
-        : h('button', { class: 'primary', onClick: () => { state.pick = c.type; state.comp = c; ui.renderPanel(); } }, t('actv_enter')));
+        : h('button', { class: 'primary', onClick: () => { if (beauty) return openBeauty(ui, { comp: c }); state.pick = c.type; state.comp = c; ui.renderPanel(); } },
+          beauty && c.day > g.day ? t('beauty_registerBtn') : t('actv_enter')));
   })));
   // Les concours ailleurs dans le monde (pour donner envie de voyager).
   const away = Object.keys(PLACES).filter((id) => id !== p.place).map((id) => {

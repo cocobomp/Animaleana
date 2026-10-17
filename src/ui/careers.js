@@ -7,6 +7,7 @@ import { t } from '../i18n.js';
 import { isSandbox } from '../sim/profile.js';
 import { CAREERS, CAREER_IDS, RANKS, careerSummary, setActiveCareer, nextAction } from '../sim/careers.js';
 import { schoolSummary } from '../sim/vetSchool.js'; // 🎓 école vétérinaire
+import { openBeauty } from './beauty.js'; // 🎀 concours de beauté (métier de handler)
 
 const rankLabel = (rank) => t(`ca_rank_${RANKS[rank]}`);
 
@@ -65,6 +66,10 @@ function careerCard(ui, s) {
     else body.push(h('small', { class: 'ca-following' }, `📌 ${t('ca_following')}`));
   }
   if (s.id === 'vet') body.push(schoolBlock(ui)); // 🎓 apprendre le métier en leçons (src/ui/vetSchool.js)
+  // 🎀 Handler : le concours de beauté (préparer, s'inscrire, présenter) à portée de main.
+  if (s.id === 'handler' && s.state !== 'locked') {
+    body.push(h('button', { class: 'small ca-beauty', onClick: () => openBeauty(ui) }, `🎀 ${t('ca_handler_open')}`));
+  }
   return h('div', { class: `ca-card ${s.state} ${s.active ? 'active' : ''}` }, head, ...body);
 }
 

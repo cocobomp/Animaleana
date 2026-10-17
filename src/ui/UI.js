@@ -16,7 +16,7 @@ import { openHelp } from './help.js';
 import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
 import { tripChips } from './trip.js'; // voyages réalistes
 import { openActivities } from './activities.js';
-import { TOOLS } from '../sim/tools.js';
+import { TOOLS, toolAtHome } from '../sim/tools.js';
 import { isSandbox } from '../sim/profile.js';
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
@@ -369,7 +369,9 @@ export class UI {
       const a = g.player.mount.data;
       chips.push(chip(`🏇 ${t('statusRiding', { name: a.name, g: a.sex })}`, t('dismount'), () => { g.dismount(); this.renderStatus(); }));
     }
-    for (const a of g.animalsHere().filter((x) => x.following)) {
+    // Pendant le chargement du véhicule, les voyageurs sont déjà dans le bandeau « Chargement » (moins de bandeaux sur téléphone).
+    const loadingIds = g.tripFlow?.loading?.vehicle ? g.tripFlow.loading.ids : [];
+    for (const a of g.animalsHere().filter((x) => x.following && !loadingIds.includes(x.id))) {
       const label = a.leashed ? t('statusLeash', { name: a.name, g: a.sex }) : t('statusFollowing', { name: a.name, g: a.sex });
       chips.push(chip(`🦮 ${label}`, t('statusStop'), () => { if (a.leashed) g.toggleLeash(a); else g.toggleFollow(a); this.renderStatus(); }));
     }
@@ -721,7 +723,10 @@ export class UI {
       // Il manque l'outil (longe, shampoing…) : on propose de l'acheter maintenant, sans passer par la sellerie.
       const tool = check.tool;
       const label = `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}`;
-      const ok = await this.confirm(t(isSandbox(g.profile) ? 'buyToolAskFree' : 'buyToolAsk', { tool: label, price: TOOLS[tool].price }));
+      // En voyage, l'outil est peut-être resté à la maison (pas dans le coffre de transport, src/sim/cargo.js).
+      // (en bac à sable c'est gratuit : pas de prix dans la question, même si l'outil est resté à la maison)
+      const key = `${toolAtHome(g.profile, tool) ? 'buyToolAskAway' : 'buyToolAsk'}${isSandbox(g.profile) ? 'Free' : ''}`;
+      const ok = await this.confirm(t(key, { tool: label, price: TOOLS[tool].price }));
       if (!ok || !g.buyTool(tool)?.ok) return null;
       check = g.canCare(a, action);
     }

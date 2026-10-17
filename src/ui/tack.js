@@ -6,7 +6,7 @@ import { h } from './dom.js';
 import { t } from '../i18n.js';
 import {
   GEAR, TACK_CATEGORIES, COLORS, SIZES, gearPrice, sizeOf, fitReason, stockOf, ownedVariant, freeStock,
-  wornBy, defaultSize, riderHelmet, sizeFor, swapSize,
+  wornBy, defaultSize, riderHelmet, sizeFor, swapSize, isAway, atHomeCount,
 } from '../sim/gear.js';
 import { TOOLS, hasTool } from '../sim/tools.js';
 import { SPECIES } from '../sim/species.js';
@@ -46,8 +46,15 @@ function sizeChoice(g, id) {
 
 const priceLabel = (p, id, size) => (isSandbox(p) ? t('tk_free') : `${gearPrice(id, size ?? defaultSize(id))} 🪙`);
 
-/** « Taille Cheval : 2 · 1 rangé au mur » (singulier / pluriel). */
-const stockText = (s) => t('tk_stockLine', { size: t(`tk_size_${s.size}`), n: s.owned }) + (s.free > 0 ? t('tk_stockFree', { n: s.free }) : '');
+/**
+ * « Taille Cheval : 2 · 1 rangé au mur » (singulier / pluriel) ; en voyage, « · 1 dans le coffre »
+ * (stockOf compte alors le coffre et ce que portent les animaux d'ici, src/sim/gear.js).
+ */
+const stockText = (p, s) => t('tk_stockLine', { size: t(`tk_size_${s.size}`), n: s.owned })
+  + (s.free > 0 ? t(isAway(p) ? 'tk_stockFreeAway' : 'tk_stockFree', { n: s.free }) : '');
+
+/** « À toi : 2 » ; en voyage, « Avec toi ici : 1 » (le reste est à la maison). */
+const ownedText = (p, n) => t(isAway(p) ? 'tk_ownedAway' : 'tk_owned', { n });
 
 // ---------------------------------------------------------------- catalogue
 
@@ -68,6 +75,8 @@ function renderShop(ui) {
   const out = [
     canGo ? h('button', { class: 'primary big tk-go', onClick: () => { ui.closePanel(); g.interiors.enter('tackroom'); } }, `🚪 ${t('tk_goInside')}`) : null,
     h('p', { class: 'note' }, inside ? t('tk_welcome') : canGo ? t('tk_shortcut') : t('tackHelp')),
+    // En voyage : seul le coffre est là (src/sim/cargo.js) ; ce qu'on achète y va.
+    isAway(p) ? h('p', { class: 'note tk-away' }, t('tk_awayShop')) : null,
     h('div', { class: 'tk-tabs', role: 'tablist' }, tabs.map(([id, emoji]) => h('button', {
       class: `small ${shop.tab === id ? 'primary' : ''}`,
       role: 'tab',
@@ -96,7 +105,7 @@ function itemCard(ui, id) {
     h('span', { class: 'card-main' },
       h('b', {}, name(id)),
       h('small', {}, `${t(`tk_disc_${def.discipline}`)}${def.sizes ? ` · ${def.sizes.map((s) => t(`tk_size_${s}`)).join(' / ')}` : ''}`),
-      h('small', { class: own ? 'tk-mine' : '' }, own ? t('tk_owned', { n: own }) : t(`tk_d_${id}`))),
+      h('small', { class: own ? 'tk-mine' : '' }, own ? ownedText(p, own) : t(`tk_d_${id}`))),
     h('span', { class: 'card-side' }, h('b', { class: 'tk-price' }, priceLabel(p, id))));
 }
 
@@ -118,13 +127,15 @@ function toolsList(ui) {
 function mineList(ui) {
   const g = ui.game;
   const p = g.profile;
-  const ids = Object.keys(GEAR).filter((id) => ownedVariant(p, id) > 0);
+  // (en voyage : ce qui est dans le coffre, puis ce qui attend à la maison)
+  const ids = Object.keys(GEAR).filter((id) => ownedVariant(p, id) > 0 || atHomeCount(p, id) > 0);
   if (!ids.length) return [h('p', { class: 'note' }, t('tk_mineNothing'))];
-  return [h('p', { class: 'note' }, t('tk_mineHelp')), h('div', { class: 'cards' }, ids.map((id) => {
+  return [h('p', { class: 'note' }, t(isAway(p) ? 'tk_mineHelpAway' : 'tk_mineHelp')), h('div', { class: 'cards' }, ids.map((id) => {
     const def = GEAR[id];
     const lines = def.sizes
-      ? stockOf(p, id).map(stockText)
-      : [t('tk_owned', { n: ownedVariant(p, id) })];
+      ? stockOf(p, id).map((s) => stockText(p, s))
+      : ownedVariant(p, id) ? [ownedText(p, ownedVariant(p, id))] : [];
+    if (atHomeCount(p, id) > 0) lines.push(t('tk_atHome', { n: atHomeCount(p, id) }));
     const who = (def.sizes ?? [null]).flatMap((s) => wornBy(p, id, s ?? defaultSize(id))).map((a) => a.name);
     if (def.type === 'helmet' && riderHelmet(p)?.item === id) who.push(t('tk_you')); // la bombe : sur ta tête
     return h('button', { class: 'card tk-card', onClick: () => openTackItem(ui, id) },
@@ -173,7 +184,9 @@ function renderItem(ui, id) {
     pic,
     h('div', { class: 'chips' },
       h('span', { class: 'chip tk-disc' }, t(`tk_disc_${def.discipline}`)),
-      own ? h('span', { class: 'chip tk-own' }, t('tk_owned', { n: own })) : h('span', { class: 'chip' }, t('tk_ownedNone'))),
+      // (en voyage : ce qui est resté à la maison n'est pas « pas encore à toi »)
+      own ? h('span', { class: 'chip tk-own' }, ownedText(p, own))
+        : h('span', { class: 'chip' }, atHomeCount(p, id) > 0 ? t('gearAtHome') : t('tk_ownedNone'))),
     h('p', { class: 'tk-desc' }, t(`tk_d_${id}`)),
     h('p', { class: 'tk-fx' }, h('b', {}, `🎮 ${t('tk_effect')} : `), t(`geard_${id}`)),
     def.minObedience ? h('p', { class: 'note' }, `🎓 ${t('tk_reqObedience', { n: def.minObedience })}`) : null,
@@ -198,9 +211,9 @@ function renderItem(ui, id) {
       onClick: () => { shop.size[id] = s; ui.renderPanel(); },
     }, `${{ pony: '🐴', horse: '🐎', draft: '🐴💪' }[s]} ${t(`tk_size_${s}`)}${sandbox ? '' : ` · ${gearPrice(id, s)} 🪙`}`))));
     const stock = stockOf(p, id);
-    for (const s of stock) out.push(h('p', { class: 'note' }, stockText(s)));
-    // Échange gratuit : un exemplaire rangé d'une autre taille contre la taille choisie.
-    for (const s of stock.filter((x) => x.free > 0 && x.size !== size)) {
+    for (const s of stock) out.push(h('p', { class: 'note' }, stockText(p, s)));
+    // Échange gratuit : un exemplaire rangé d'une autre taille contre la taille choisie (à la maison seulement).
+    for (const s of stock.filter((x) => x.free > 0 && x.size !== size && !isAway(p))) {
       out.push(h('button', { class: 'small tk-swap', onClick: () => {
         if (swapSize(p, id, s.size, size).ok) ui.toast(t('tk_swapped', { size: t(`tk_size_${size}`) }));
         ui.renderPanel();
@@ -209,6 +222,7 @@ function renderItem(ui, id) {
   }
   const who = (def.sizes ?? [null]).flatMap((s) => wornBy(p, id, s ?? defaultSize(id))).map((a) => a.name);
   if (who.length) out.push(h('p', { class: 'note tk-mine' }, t('tk_onAnimals', { names: who.join(', ') })));
+  if (atHomeCount(p, id) > 0) out.push(h('p', { class: 'note tk-athome' }, t('tk_atHome', { n: atHomeCount(p, id) })));
   if (!helmet && def.species.some((sp) => sp !== 'rider')) {
     out.push(h('p', { class: 'note' }, fits.length
       ? t('tk_fits', { names: fits.map((a) => `${a.name}${sizeOf(a) ? ` (${t(`tk_size_${sizeOf(a)}`)})` : ''}`).join(', ') })
@@ -307,19 +321,25 @@ export function animalGearSection(ui, a) {
   // Rangé à la sellerie et à sa taille (à la maison, une autre taille s'échange toute seule).
   const spareOf = (id) => !fitReason(id, a) && (freeStock(p, id, sizeFor(id, a)) > 0
     || (g.isHome && (GEAR[id].sizes ?? []).some((sz) => freeStock(p, id, sz) > 0)));
+  // En voyage : ce qui lui irait (à sa taille) mais qui n'est pas dans le coffre.
+  const homeOf = (id) => !fitReason(id, a) && !spareOf(id) && atHomeCount(p, id, sizeFor(id, a)) > 0;
   const rows = slots.map((slot) => {
     const worn = a.gear?.[slot];
     const spare = Object.keys(GEAR).filter((id) => GEAR[id].slot === slot && worn?.item !== id && spareOf(id));
-    return { slot, worn, spare };
-  }).filter((r) => r.worn || r.spare.length);
+    const home = Object.keys(GEAR).filter((id) => GEAR[id].slot === slot && worn?.item !== id && homeOf(id));
+    return { slot, worn, spare, home };
+  }).filter((r) => r.worn || r.spare.length || r.home.length);
   const firstCat = catOf(Object.keys(GEAR).find(forMe));
   return h('div', { class: 'gear-list' },
-    rows.length ? rows.map(({ slot, worn, spare }) => h('div', { class: 'gear-row' },
+    rows.length ? rows.map(({ slot, worn, spare, home }) => h('div', { class: 'gear-row' },
       h('span', { class: 'gear-name' }, h('small', { class: 'tk-slot' }, t(`tk_slot_${slot}`)), ' ',
         worn ? h('b', {}, `${GEAR[worn.item].emoji} ${name(worn.item)}`) : h('span', { class: 'note' }, t('tk_none')),
         worn?.color ? h('span', { class: 'swatch-dot tk-dot', style: { background: hex(worn.color) } }) : null),
       worn ? h('button', { class: 'small', onClick: () => { g.unequip(a, slot); ui.renderPanel(); } }, t('gearRemove')) : null,
-      ...spare.slice(0, 3).map((id) => h('button', { class: 'small primary', onClick: () => { g.equip(a, id, colorOf(p, id), { exact: true }); ui.renderPanel(); } }, `${GEAR[id].emoji} ${name(id)}`))))
+      ...spare.slice(0, 3).map((id) => h('button', { class: 'small primary', onClick: () => { g.equip(a, id, colorOf(p, id), { exact: true }); ui.renderPanel(); } }, `${GEAR[id].emoji} ${name(id)}`)),
+      // (toucher : le message explique qu'il est resté à la maison, pas dans le coffre)
+      ...(spare.length ? [] : home.slice(0, 2)).map((id) => h('button', { class: 'small tk-athome', title: t('gearAtHome'), onClick: () => { g.equip(a, id, colorOf(p, id), { exact: true }); ui.renderPanel(); } },
+        `🏠 ${name(id)} · ${t('tk_atHomeRow')}`))))
       : h('p', { class: 'note' }, t('tk_gearNone')),
     h('button', { class: 'small tk-goshop', onClick: () => openTackShop(ui, { tab: firstCat }) }, `🏇 ${t('tk_goShop')}`));
 }

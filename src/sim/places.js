@@ -130,6 +130,9 @@ export const PLACES = {
 
 export const PLACE_IDS = Object.keys(PLACES);
 
+// Le bétail (comme les chevaux) ne rentre pas dans une voiture : même liste que TRAILER_SPECIES (sim/trip.js).
+const LIVESTOCK = ['cow', 'sheep', 'goat'];
+
 export const TRAVEL_MODES = {
   car: { emoji: '🚗', speed: 85, ground: true, horses: false, cost: 0.15 },
   van: { emoji: '🚐', speed: 70, ground: true, horses: true, cost: 0.2 },
@@ -159,6 +162,8 @@ export function checkTravel(fromId, toId, modeId, travelers = [], hasRideableHor
   if (mode.ground && from.landmass !== to.landmass) return { ok: false, reason: 'sea' };
   if (modeId === 'boat' && from.landmass === to.landmass) return { ok: false, reason: 'noPort' };
   if (!mode.horses && travelers.some((a) => a.species === 'horse')) return { ok: false, reason: 'horseNeedsVan' };
+  // Le bétail voyage debout dans la remorque (il monte par le pont), pas dans une caisse au coffre.
+  if (!mode.horses && travelers.some((a) => LIVESTOCK.includes(a.species))) return { ok: false, reason: 'livestockNeedsVan' };
   if (mode.needsHorse && !hasRideableHorse) return { ok: false, reason: 'needHorse' };
   const km = distanceKm(from, to);
   const hours = km / mode.speed + (mode.extraHours ?? 0);

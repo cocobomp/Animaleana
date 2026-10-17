@@ -490,7 +490,8 @@ export class Game {
     if (this.paused) ctrl.move = { x: 0, y: 0 };
     // Vue d'ensemble : le joueur ne bouge pas, la caméra est au-dessus de la ferme.
     const mgmt = this.mgmt.active;
-    const pctrl = mgmt ? { ...ctrl, move: { x: 0, y: 0 }, run: false } : ctrl;
+    // Vue dans le véhicule de voyage (cabine, compartiment, coffre) : on ne marche pas (src/game/TripFlow.js).
+    const pctrl = mgmt || this.tripFlow.view ? { ...ctrl, move: { x: 0, y: 0 }, run: false } : ctrl;
     const entities = [...this.entities.values()];
     const ctx = { playerPos: this.player.position, night, entities, game: this };
     for (let i = 0; i < steps; i++) {
@@ -503,7 +504,7 @@ export class Game {
       this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
     }
     if (mgmt) this.mgmt.update(dt, ctrl);
-    else {
+    else if (!this.tripFlow.viewCamera(dt, ctrl)) { // (vue dans le véhicule : TripFlow place la caméra)
       this.rig.update(dt, ctrl, this.player, this.world);
       this.fadeOccluders();
     }
@@ -1025,7 +1026,7 @@ export class Game {
   /** Bombe du cavalier : on la choisit à la sellerie, on la porte quand on monte. */
   equipHelmet(item, color) {
     const r = equipHelmet(this.profile, item, color);
-    if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`));
+    if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`, { item: t(`gear_${item}`) }), 4500);
     this.ui.toast(t('tk_helmetOn', { item: t(`gear_${item}`) }));
     if (this.player.mount) this.player.setHelmet(riderHelmet(this.profile));
     return r;
@@ -1035,7 +1036,8 @@ export class Game {
     // À la maison, la sellière échange gratuitement la taille si besoin (src/sim/gear.js).
     // opts.exact : CE modèle (boutons des fiches de la sellerie), jamais un autre du même type.
     const r = equip(this.profile, a, item, color, { autoSwap: this.isHome, exact: !!opts.exact });
-    if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`));
+    // (en voyage : resté à la maison, ou pas la bonne taille dans le coffre — on nomme l'objet et la taille)
+    if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`, { item: t(`gear_${r.item ?? item}`), size: r.need ? t(`tk_size_${r.need}`) : '' }), 4500);
     if (r.swapped) this.ui.toast(t('tk_swappedAuto', { item: t(`gear_${r.item}`), size: t(`tk_size_${r.swapped}`) }), 4000);
     this.entities.get(a.id)?.applyGear();
     if (this.player.mount?.data === a) this.player.seat();
@@ -1146,7 +1148,9 @@ export class Game {
   updateFocus() {
     let best = null;
     const pp = this.player.position;
-    if (this.player.mount) {
+    if (this.tripFlow.view) {
+      best = null; // dans le véhicule de voyage : le panneau du bas remplace le bouton d'action
+    } else if (this.player.mount) {
       best = { kind: 'dismount' };
     } else {
       best = this.tripFlow.focusNear(pp) ?? this.clients.focusNear(pp); // véhicule de voyage, ou visiteur (client)
@@ -1186,6 +1190,7 @@ export class Game {
 
   onKey(code) {
     if (!this.running || this.ui.isBlocking()) return;
+    if (code === 'Escape' && this.tripFlow.view && this.tripFlow.view !== 'ramp') this.tripFlow.setView(null); // sortir du véhicule
     if (code === 'KeyE' || code === 'Enter') this.interact();
     if (code === 'KeyC') this.toggleCamera();
   }

@@ -1,6 +1,8 @@
 // Dessin 2D des mini-jeux : couleurs, formes simples, emoji et l'animal vu de profil
 // (avec la vraie robe de l'animal : a.look.coat, a.look.secondary, a.look.mane).
 
+import { catTraits } from '../../sim/catBreeds.js'; // chats : poil long, masque colourpoint, gants blancs…
+
 export const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 export const TEXT_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
@@ -245,7 +247,9 @@ export function drawAnimal(g, a, o = {}) {
   const time = o.time ?? performance.now() / 1000;
   const pts = c.pattern === 'points';
   const legColor = pts || c.pattern === 'tan' ? c.sec : c.coat;
-  const faceColor = pts ? c.sec : c.coat;
+  // Chats : poil (long, nu…), taches blanches (gants, bicolore), oreilles de race. Le masque est dessiné sur la tête.
+  const ct = sp === 'cat' ? catTraits(a.look ?? {}) : null;
+  const faceColor = pts && !ct ? c.sec : c.coat;
   const earColor = pts || c.pattern === 'tan' ? c.sec : sp === 'dog' && c.pattern === 'tricolor' ? c.sec : c.coat;
   const outline = shade(c.coat, -0.45);
   const look = a.look ?? {};
@@ -296,7 +300,16 @@ export function drawAnimal(g, a, o = {}) {
       rrect(g, foot.x - legW * 0.62, foot.y - legW * 0.75, legW * 1.24, legW * 0.8, 3 * s);
       g.fill();
     } else {
-      g.fillStyle = far ? shade(legColor, -0.25) : css(legColor);
+      const glove = ct && (ct.white === 'gloves' || ct.white === 'mitted' || ct.white === 'bicolor');
+      if (ct?.white === 'bicolor') {
+        // Bicolore : pattes blanches presque jusqu'en haut.
+        g.strokeStyle = far ? '#dcd8d0' : '#f6f3ee';
+        g.beginPath();
+        g.moveTo(lerp(top.x, foot.x, 0.25), lerp(top.y, foot.y, 0.25));
+        g.lineTo(foot.x, foot.y - legW * 0.3);
+        g.stroke();
+      }
+      g.fillStyle = glove ? (far ? '#dcd8d0' : '#f6f3ee') : far ? shade(legColor, -0.25) : css(legColor);
       ellipse(g, foot.x + f * legW * 0.25, foot.y - legW * 0.35, legW * 0.75, legW * 0.45);
       g.fill();
     }
@@ -315,7 +328,7 @@ export function drawAnimal(g, a, o = {}) {
   g.translate(tailBase.x, tailBase.y);
   g.scale(f, 1);
   g.rotate(-wag);
-  drawTail(g, tailType, sp, s, c, fluff);
+  drawTail(g, tailType, sp, s, c, ct && (ct.hair === 'long' || ct.hair === 'semi') ? fluff * 1.5 : ct?.hair === 'hairless' ? 0.7 : fluff);
   g.restore();
 
   // ---- corps
@@ -329,12 +342,14 @@ export function drawAnimal(g, a, o = {}) {
     ellipse(g, sh.bx, sh.by, rx, ry, sh.ang);
     g.clip();
     drawPattern(g, sh, c, a);
+    if (ct) drawCatCoat(g, sh, c, ct);
     // Ombre douce sous le ventre
     g.fillStyle = 'rgba(0,0,0,0.08)';
     const b = L(0, ry * 0.95);
     ellipse(g, b.x, b.y, rx * 1.1, ry * 0.45, sh.ang);
     g.fill();
     g.restore();
+    if (ct && (ct.hair === 'long' || ct.hair === 'semi')) drawLongFur(g, sh, c, ct);
   }
   // Pis de la vache / chèvre
   if ((sp === 'cow' || sp === 'goat') && a.sex === 'f' && sh.pose === 'stand') {
@@ -366,7 +381,7 @@ export function drawAnimal(g, a, o = {}) {
     g.moveTo(top.x, top.y);
     g.lineTo(top.x + f * 4 * s, feetY - legW * 0.4);
     g.stroke();
-    g.fillStyle = css(legColor);
+    g.fillStyle = ct && ct.white && ct.white !== 'chest' ? '#f6f3ee' : css(legColor);
     ellipse(g, top.x + f * (4 + legW * 0.3) * s, feetY - legW * 0.35, legW * 0.75, legW * 0.45);
     g.fill();
   } else {
@@ -411,9 +426,107 @@ export function drawAnimal(g, a, o = {}) {
   }
 
   // ---- tête
-  drawHead(g, sh, c, { faceColor, earColor, earType, o, time, outline, fluff });
+  drawHead(g, sh, c, { faceColor, earColor, earType, o, time, outline, fluff, ct });
   g.restore();
   return sh;
+}
+
+// ---------------------------------------------------------------- chats : robes et poils
+
+/** Motifs propres aux chats sur le corps (dans l'ellipse du corps) : marbré, rosettes, agouti, écaille, blanc. */
+function drawCatCoat(g, sh, c, ct) {
+  const { rx, ry, L, s } = sh;
+  const rng = makeRng((sh.a.look?.seed ?? 3) + 11);
+  const p = ct.pattern;
+  if (p === 'classic') {
+    g.strokeStyle = css(c.sec);
+    g.globalAlpha = 0.65;
+    g.lineWidth = 5 * s;
+    const q = L(-rx * 0.15, -ry * 0.05);
+    for (const r of [0.22, 0.45]) {
+      g.beginPath();
+      g.ellipse(q.x, q.y, rx * r, ry * r * 1.3, sh.ang, 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+  } else if (p === 'rosettes') {
+    for (let i = 0; i < 16; i++) {
+      const q = L((rng() - 0.5) * rx * 1.7, (rng() - 0.65) * ry * 1.3);
+      const r = (4 + rng() * 3) * s;
+      g.fillStyle = shade(c.coat, -0.18);
+      ellipse(g, q.x, q.y, r * 1.3, r, sh.ang);
+      g.fill();
+      g.strokeStyle = css(c.sec);
+      g.lineWidth = 2.2 * s;
+      g.beginPath();
+      g.ellipse(q.x, q.y, r * 1.3, r, sh.ang, rng() * 2, rng() * 2 + 4.2);
+      g.stroke();
+    }
+  } else if (p === 'ticked') {
+    g.fillStyle = shade(c.sec, 0.1);
+    g.globalAlpha = 0.25;
+    for (let i = 0; i < 90; i++) {
+      const q = L((rng() - 0.5) * rx * 2, (rng() - 0.7) * ry * 1.6);
+      circle(g, q.x, q.y, 1.4 * s);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+  } else if (p === 'tortie') {
+    g.fillStyle = css(c.sec);
+    for (let i = 0; i < 7; i++) {
+      const q = L((rng() - 0.5) * rx * 1.8, (rng() - 0.5) * ry * 1.6);
+      ellipse(g, q.x, q.y, (8 + rng() * 12) * s, (6 + rng() * 8) * s, rng() * 3);
+      g.fill();
+    }
+  } else if (p === 'points') {
+    // Colourpoint : le dos un peu plus foncé.
+    g.fillStyle = css(c.sec);
+    g.globalAlpha = 0.15;
+    const q = L(-rx * 0.1, -ry * 0.8);
+    ellipse(g, q.x, q.y, rx * 1.1, ry * 0.6, sh.ang);
+    g.fill();
+    g.globalAlpha = 1;
+  }
+  if (ct.white === 'mitted' || ct.white === 'bicolor' || ct.white === 'chest') {
+    g.fillStyle = '#f6f3ee';
+    const q = L(rx * 0.1, ry * 0.95);
+    const k = ct.white === 'bicolor' ? 0.6 : 0.3;
+    ellipse(g, q.x, q.y, rx * (ct.white === 'chest' ? 0.4 : 1.0), ry * k, sh.ang);
+    g.fill();
+  }
+}
+
+/** Poil long : franges sous le ventre et collerette sur le poitrail. */
+function drawLongFur(g, sh, c, ct) {
+  const { rx, ry, L, s } = sh;
+  const long = ct.hair === 'long' ? 1 : 0.6;
+  const belly = ct.white === 'bicolor' || ct.white === 'mitted' ? '#f6f3ee' : css(c.coat);
+  g.fillStyle = belly;
+  // Frange de mèches sous le ventre : une seule forme, festonnée en bas (silhouette duveteuse).
+  const n = 8;
+  const edgeY = (t) => ry * Math.sqrt(Math.max(0.05, 1 - t * t));
+  g.beginPath();
+  const p0 = L(-rx * 0.8, edgeY(-0.8) * 0.4);
+  g.moveTo(p0.x, p0.y);
+  for (let i = 0; i <= n; i++) {
+    const t = -0.8 + (i / n) * 1.6;
+    const a = L(rx * t, edgeY(t) * 0.92);
+    if (i === 0) g.lineTo(a.x, a.y);
+    else {
+      const tm = t - 0.8 / n;
+      const b = L(rx * tm, edgeY(tm) * (1.08 + 0.14 * long) + 2 * s);
+      g.quadraticCurveTo(b.x, b.y, a.x, a.y);
+    }
+  }
+  const p1 = L(rx * 0.8, edgeY(0.8) * 0.4);
+  g.lineTo(p1.x, p1.y);
+  g.closePath();
+  g.fill();
+  // Collerette.
+  g.fillStyle = ct.pattern === 'points' || ct.white ? '#f4f0e8' : shade(c.coat, 0.12);
+  const q = L(rx * 0.78, -ry * 0.05);
+  ellipse(g, q.x, q.y, ry * (0.75 + 0.25 * long), ry * (0.95 + 0.2 * long), sh.ang);
+  g.fill();
 }
 
 function drawTail(g, type, sp, s, c, fluff) {
@@ -556,7 +669,7 @@ function drawPattern(g, sh, c, a) {
   }
 }
 
-function drawHead(g, sh, c, { faceColor, earColor, earType, o, time, outline, fluff }) {
+function drawHead(g, sh, c, { faceColor, earColor, earType, o, time, outline, fluff, ct }) {
   const { s, f, hr } = sh;
   const sp = sh.a.species;
   const { x, y } = sh.head;
@@ -589,9 +702,23 @@ function drawHead(g, sh, c, { faceColor, earColor, earType, o, time, outline, fl
       ellipse(g, -2 * k, -14 * k, 6 * k, 14 * k, -0.2);
       g.fill();
       g.restore();
+    } else if (earType === 'cat_fold') {
+      // Scottish fold : petite oreille pliée vers l'avant.
+      ellipse(g, 0, -6 * k, 9 * k, 6 * k, 0.5);
+      g.fill();
     } else {
-      // pointues (chat, husky…), semi, chauve-souris
-      const big = earType === 'bat' ? 1.35 : 1;
+      // pointues (chat, husky…), semi, chauve-souris ; chats : grandes, petites, à pinceaux
+      const big = { bat: 1.35, cat_big: 1.35, cat_small: 0.72, cat_lynx: 1.15 }[earType] ?? 1;
+      if (earType === 'cat_lynx' && !far) {
+        g.save();
+        g.strokeStyle = shade(earColor, -0.5);
+        g.lineWidth = 1.6 * k;
+        g.beginPath();
+        g.moveTo(-4 * k, -22 * k * big);
+        g.lineTo(-5 * k, -30 * k * big);
+        g.stroke();
+        g.restore();
+      }
       g.beginPath();
       g.moveTo(-12 * k, 4 * k);
       g.lineTo(-4 * k, -22 * k * big);
@@ -675,9 +802,44 @@ function drawHead(g, sh, c, { faceColor, earColor, earType, o, time, outline, fl
     g.fill();
     const sn = sh.P.snout * s * (sh.a.look?.snout ?? 1);
     const muzzle = sp === 'dog' && (c.pattern === 'tan' || c.pattern === 'bicolor' || c.pattern === 'tricolor') ? css(c.sec) : face;
-    g.fillStyle = muzzle;
+    if (ct?.pattern === 'points') {
+      // Masque colourpoint : museau et tour des yeux plus foncés.
+      g.fillStyle = css(c.sec);
+      g.globalAlpha = 0.9;
+      ellipse(g, x + f * hr * 0.42, y + hr * 0.18, hr * 0.72, hr * 0.62);
+      g.fill();
+      g.globalAlpha = 1;
+    }
+    if (ct && (ct.hair === 'long' || ct.hair === 'semi')) {
+      // Joues fournies.
+      g.fillStyle = face;
+      ellipse(g, x - f * hr * 0.15, y + hr * 0.55, hr * 0.8, hr * 0.5);
+      g.fill();
+    }
+    g.fillStyle = ct?.pattern === 'points' ? css(c.sec) : muzzle;
+    if (ct && (ct.white === 'bicolor' || ct.white === 'mitted' || c.pattern === 'bicolor')) g.fillStyle = '#f6f3ee';
     ellipse(g, x + f * (hr * 0.62 + sn * 0.35), y + hr * 0.3, hr * 0.38 + sn * 0.5, hr * 0.42);
     g.fill();
+    if (ct?.white === 'bicolor' && ct.pattern === 'points') {
+      // V blanc entre les yeux (Ragdoll bicolore).
+      g.fillStyle = '#f6f3ee';
+      g.beginPath();
+      g.moveTo(x + f * hr * 0.55, y - hr * 0.55);
+      g.lineTo(x + f * hr * 0.98, y + hr * 0.2);
+      g.lineTo(x + f * hr * 0.3, y + hr * 0.35);
+      g.closePath();
+      g.fill();
+    }
+    if (ct?.hair === 'hairless') {
+      // Sphynx : petits plis sur le front.
+      g.strokeStyle = shade(faceColor, -0.18);
+      g.lineWidth = 1.2 * s;
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.arc(x, y - hr * (0.2 + i * 0.16), hr * 0.45, Math.PI * 1.2, Math.PI * 1.8);
+        g.stroke();
+      }
+    }
     // truffe
     g.fillStyle = sp === 'dog' ? '#1d1715' : '#e58a9a';
     ellipse(g, x + f * (hr * 0.85 + sn * 0.75), y + hr * 0.12, (sp === 'dog' ? 5.5 : 3.6) * s, (sp === 'dog' ? 4.2 : 2.8) * s);

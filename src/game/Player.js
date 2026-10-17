@@ -46,8 +46,10 @@ export class Player {
     // Options de updateAvatarLife, réutilisées à chaque image (pas d'allocation).
     this.lifeOpts = { speed: 0, riding: false, carry: false };
     this.setAvatar(look);
+    // Lanterne du soir, un peu devant le personnage : les visages (le sien, ceux qu'on croise) sont
+    // éclairés de face plutôt que d'en haut (le bas du visage, avec la bouche, restait dans le noir).
     this.torch = new THREE.PointLight(0xffd9a0, 0, 14, 1.6);
-    this.torch.position.set(0, 2.2, 0.4);
+    this.torch.position.set(0, 2.1, 0.75);
     this.root.add(this.torch);
   }
 
@@ -134,9 +136,13 @@ export class Player {
     }
     if (!h) return;
     this.helmet = helmetModel(h.item, h.color);
-    this.helmet.position.set(0, 0.105, -0.01);
-    this.helmet.rotation.x = -0.12;
+    // Portée un peu en arrière : la visière s'arrête au-dessus des sourcils. Plus basse, elle cachait
+    // les yeux vus de la caméra du jeu (au-dessus du personnage).
+    this.helmet.position.set(0, 0.112, -0.012);
+    this.helmet.rotation.x = -0.24;
     this.helmet.scale.setScalar(1.36);
+    // Pas d'ombre portée : la visière mettait les yeux dans le noir à midi.
+    this.helmet.traverse((o) => { o.castShadow = false; });
     this.avatar.head.add(this.helmet);
   }
 

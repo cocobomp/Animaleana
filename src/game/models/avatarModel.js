@@ -279,7 +279,9 @@ export function buildAvatar(look, seed = Math.random() * 1e9) {
     const hs = hatScale(style);
     const [cx, cy, cz] = HAT_SHAPE.c;
     add(head, new THREE.SphereGeometry(HAT_SHAPE.r, R + 6, 10, 0, Math.PI * 2, 0, Math.PI * HAT_SHAPE.open), capMat, [cx, cy, cz], [HAT_SHAPE.tilt, 0, 0], [hs, hs, hs]);
-    add(head, new THREE.CylinderGeometry(0.1, 0.1, 0.012, 20, 1, false, -Math.PI / 2, Math.PI), capMat, [0, cy + (0.135 - cy) * hs, cz + (0.105 - cz) * hs], [0.12, 0, 0], [hs, 1, 1.15 * hs]);
+    // Visière presque à plat (pas penchée vers le bas) et sans ombre portée : vu de la caméra du jeu,
+    // au-dessus du personnage, elle cachait le haut des yeux et les mettait dans l'ombre à midi.
+    add(head, new THREE.CylinderGeometry(0.1, 0.1, 0.012, 20, 1, false, -Math.PI / 2, Math.PI), capMat, [0, cy + (0.135 - cy) * hs, cz + (0.105 - cz) * hs], [0.02, 0, 0], [hs, 1, 1.15 * hs], false);
     add(head, new THREE.SphereGeometry(0.012, 8, 6), capMat, [0, cy + (0.237 - cy) * hs, cz]);
   }
 

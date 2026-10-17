@@ -568,75 +568,119 @@ export function maneTexture() {
   });
 }
 
+/**
+ * Peint un œil (toute la sphère : le devant, +Z, est en u = 0,25, v = 0,5) sur un canevas w × h.
+ * far (0 à 1, œil humain seulement) : version simplifiée et contrastée pour un œil vu tout petit —
+ * iris plus grand et presque noir, pupille plus large, fibres effacées (voir humanEyeTexture).
+ */
+function paintEye(ctx, w, h, color, pupil, far = 0) {
+  const cx = w * 0.25;
+  const cy = h * 0.5;
+  const human = pupil === 'human';
+  ctx.fillStyle = human ? '#f6f3ee' : '#2a1d17';
+  ctx.fillRect(0, 0, w, h);
+  if (human) {
+    // Blanc de l'œil légèrement ombré vers le haut (paupière).
+    const sh = ctx.createLinearGradient(0, 0, 0, h);
+    sh.addColorStop(0, `rgba(120,100,95,${0.35 * (1 - far)})`);
+    sh.addColorStop(0.35, 'rgba(120,100,95,0)');
+    ctx.fillStyle = sh;
+    ctx.fillRect(0, 0, w, h);
+  }
+  // L'iris occupe presque tout l'œil visible (sauf humain) ; de loin, l'iris humain grandit.
+  const iris = (pupil === 'oval' ? 1.05 : human ? 0.72 : 0.92) * (1 + 0.22 * far);
+  // De loin, l'iris fonce vers le brun-noir : l'œil se lit comme un point sombre bien net sur le blanc.
+  const col = far > 0 ? mixHex(color, 0x17110e, 0.8 * far) : color;
+  const rx = w * 0.16 * iris;
+  const ry = h * 0.32 * iris;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(rx, ry);
+  const g = ctx.createRadialGradient(0, 0, 0.1, 0, 0, 1);
+  g.addColorStop(0, shade(col, 1.5 - 0.4 * far));
+  g.addColorStop(0.6, hex(col));
+  g.addColorStop(1, shade(col, 0.45));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, 1, 0, Math.PI * 2);
+  ctx.fill();
+  // Fibres de l'iris (effacées de loin).
+  const rng = mulberry32(color);
+  ctx.lineWidth = 0.04;
+  for (let i = 0; i < 60; i++) {
+    const a = rng() * Math.PI * 2;
+    ctx.strokeStyle = rng() < 0.5 ? shade(color, 1.4) : shade(color, 0.6);
+    ctx.globalAlpha = 0.5 * (1 - far);
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 0.3, Math.sin(a) * 0.3);
+    ctx.lineTo(Math.cos(a) * 0.95, Math.sin(a) * 0.95);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#050505';
+  ctx.beginPath();
+  if (pupil === 'slit') ctx.ellipse(0, 0, 0.16, 0.85, 0, 0, Math.PI * 2);
+  else if (pupil === 'bar') ctx.roundRect(-0.7, -0.22, 1.4, 0.44, 0.2);
+  else if (pupil === 'oval') ctx.ellipse(0, 0, 0.65, 0.4, 0, 0, Math.PI * 2);
+  else ctx.arc(0, 0, human ? 0.5 + 0.2 * far : 0.42, 0, Math.PI * 2);
+  ctx.fill();
+  if (human) {
+    // Bord de l'iris plus sombre et reflet peint (lisible même sans reflets du ciel).
+    ctx.strokeStyle = shade(col, 0.4);
+    ctx.lineWidth = 0.1;
+    ctx.beginPath();
+    ctx.arc(0, 0, 0.95, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(-0.32, -0.35, 0.22 + 0.06 * far, 0.18 + 0.06 * far, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Mélange de deux couleurs 0xRRGGBB (t = 0 : a, t = 1 : b). */
+function mixHex(a, b, t) {
+  const A = rgbOf(a);
+  const B = rgbOf(b);
+  return A.reduce((n, v, i) => (n << 8) | Math.round(v + (B[i] - v) * t), 0);
+}
+
 /** Œil : iris, pupille (ronde, fendue ou horizontale) et reflet, plaqués sur une sphère. */
 export function eyeTexture(color, pupil = 'round') {
   return cached(`eye-${color}-${pupil}`, () => {
-    const w = 128;
-    const h = 64;
-    const c = makeCanvas(w, h);
-    const ctx = c.getContext('2d');
-    // Le devant de la sphère (+Z) correspond à u = 0.25, v = 0.5.
-    const cx = w * 0.25;
-    const cy = h * 0.5;
-    const human = pupil === 'human';
-    ctx.fillStyle = human ? '#f6f3ee' : '#2a1d17';
-    ctx.fillRect(0, 0, w, h);
-    if (human) {
-      // Blanc de l'œil légèrement ombré vers le haut (paupière).
-      const sh = ctx.createLinearGradient(0, 0, 0, h);
-      sh.addColorStop(0, 'rgba(120,100,95,0.35)');
-      sh.addColorStop(0.35, 'rgba(120,100,95,0)');
-      ctx.fillStyle = sh;
-      ctx.fillRect(0, 0, w, h);
-    }
-    const iris = pupil === 'oval' ? 1.05 : human ? 0.72 : 0.92; // l'iris occupe presque tout l'œil visible (sauf humain)
-    const rx = w * 0.16 * iris;
-    const ry = h * 0.32 * iris;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(rx, ry);
-    const g = ctx.createRadialGradient(0, 0, 0.1, 0, 0, 1);
-    g.addColorStop(0, shade(color, 1.5));
-    g.addColorStop(0.6, hex(color));
-    g.addColorStop(1, shade(color, 0.45));
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(0, 0, 1, 0, Math.PI * 2);
-    ctx.fill();
-    // Fibres de l'iris.
-    const rng = mulberry32(color);
-    ctx.lineWidth = 0.04;
-    for (let i = 0; i < 60; i++) {
-      const a = rng() * Math.PI * 2;
-      ctx.strokeStyle = rng() < 0.5 ? shade(color, 1.4) : shade(color, 0.6);
-      ctx.globalAlpha = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * 0.3, Math.sin(a) * 0.3);
-      ctx.lineTo(Math.cos(a) * 0.95, Math.sin(a) * 0.95);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#050505';
-    ctx.beginPath();
-    if (pupil === 'slit') ctx.ellipse(0, 0, 0.16, 0.85, 0, 0, Math.PI * 2);
-    else if (pupil === 'bar') ctx.roundRect(-0.7, -0.22, 1.4, 0.44, 0.2);
-    else if (pupil === 'oval') ctx.ellipse(0, 0, 0.65, 0.4, 0, 0, Math.PI * 2);
-    else ctx.arc(0, 0, human ? 0.5 : 0.42, 0, Math.PI * 2);
-    ctx.fill();
-    if (human) {
-      // Bord de l'iris plus sombre et reflet peint (lisible même sans reflets du ciel).
-      ctx.strokeStyle = shade(color, 0.4);
-      ctx.lineWidth = 0.1;
-      ctx.beginPath();
-      ctx.arc(0, 0, 0.95, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.beginPath();
-      ctx.ellipse(-0.32, -0.35, 0.22, 0.18, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
+    const c = makeCanvas(128, 64);
+    paintEye(c.getContext('2d'), 128, 64, color, pupil);
     return toTexture(c, { repeat: false });
+  });
+}
+
+/** Œil humain : simplification de chaque niveau de mipmap (0 = détaillé, 1 = contrasté). */
+const EYE_FAR = [0, 0, 0.3];
+
+/**
+ * Œil des personnages, avec des niveaux de détail peints à la main (mipmaps) : la carte graphique
+ * choisit elle-même le niveau selon la taille de l'œil à l'écran. De près (niveaux 0 et 1), l'œil
+ * détaillé de l'éditeur ; dès qu'il ne fait plus que quelques pixels (personnage vu en jeu, à
+ * quelques mètres), un œil simplifié au contraste fort (grand iris presque noir, reflet blanc) au
+ * lieu de la bouillie gris-bleu que donne la simple réduction de l'œil détaillé. Aucun calcul par image.
+ */
+export function humanEyeTexture(color) {
+  return cached(`eye-${color}-human-lod`, () => {
+    const levels = [];
+    for (let w = 128, h = 64, L = 0; ; w = Math.max(1, w >> 1), h = Math.max(1, h >> 1), L++) {
+      const c = makeCanvas(w, h);
+      paintEye(c.getContext('2d'), w, h, color, 'human', EYE_FAR[L] ?? 1);
+      levels.push(c);
+      if (w === 1 && h === 1) break;
+    }
+    const tex = toTexture(levels[0], { repeat: false });
+    tex.mipmaps = levels;
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    // Pas de filtrage anisotrope : le niveau suit la plus grande empreinte (œil vu de biais = version nette).
+    tex.anisotropy = 1;
+    return tex;
   });
 }
 

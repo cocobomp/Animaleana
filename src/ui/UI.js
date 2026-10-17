@@ -7,6 +7,7 @@ import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
 import { openVet } from './vet.js';
+import { openVetSchool } from './vetSchool.js'; // 🎓 école vétérinaire
 import { runMinigame, runChoreGame } from './minigames.js';
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
@@ -517,7 +518,8 @@ export class UI {
   }
 
   isBlocking() {
-    return this.modalOpen || !this.screen.hidden || !!this.tripBlocking; // tripBlocking : écran du trajet
+    // tripBlocking : écran du trajet ; vxOpen : examen ou leçon vétérinaire ouverts (src/ui/vetExam.js)
+    return this.modalOpen || !this.screen.hidden || !!this.tripBlocking || this.vxOpen > 0;
   }
 
   showModal(content) {
@@ -528,7 +530,9 @@ export class UI {
     // perdu, l'adoption n'aboutissait jamais), une alerte ou l'annonce d'un orage, et la promesse de la fenêtre
     // remplacée ne se résolvait jamais. Elle attend qu'on ferme celle-ci (hideModal la ressort). Les boutons des
     // fenêtres appellent hideModal avant d'en ouvrir une autre : cette suite-là passe tout de suite.
-    if (this.minigameOpen || this.modalOpen) {
+    // Pas non plus par-dessus l'examen ou une leçon vétérinaire (vxOpen, .vx-overlay sous #modal) : la
+    // fenêtre attend leur fermeture (openOverlay de src/ui/vetExam.js appelle flushModals).
+    if (this.minigameOpen || this.modalOpen || this.vxOpen > 0) {
       this.modalQueue.push(content);
       return;
     }
@@ -582,9 +586,9 @@ export class UI {
     if (this.modalQueue.length) setTimeout(() => this.flushModals(), 0);
   }
 
-  /** Montre la prochaine fenêtre mise en attente pendant un mini-jeu (une à la fois). */
+  /** Montre la prochaine fenêtre mise en attente pendant un mini-jeu ou un examen véto (une à la fois). */
   flushModals() {
-    if (this.minigameOpen || this.modalOpen || !this.modalQueue.length) return;
+    if (this.minigameOpen || this.modalOpen || this.vxOpen > 0 || !this.modalQueue.length) return;
     this.showModal(this.modalQueue.shift());
   }
 
@@ -814,4 +818,5 @@ export class UI {
   }
   openVetClinic() { panels.openVetClinic(this); this.game?.emit('panel', 'vetClinic'); }
   openVet(a, atClinic) { openVet(this, a, atClinic); this.game?.emit('panel', 'vetExam'); }
+  openVetSchool() { openVetSchool(this); } // 🎓 école vétérinaire (src/ui/vetSchool.js)
 }

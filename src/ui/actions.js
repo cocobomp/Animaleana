@@ -102,6 +102,7 @@ export function openBuilding(ui, kind) {
     adopt: () => ui.openAdoption(),
     shop: () => ui.openShop(),
     vet: () => ui.openVetClinic(),
+    vetSchool: () => ui.openVetSchool(), // 🎓 école vétérinaire
     jobs: () => ui.openJobs(),
     // Bâtiments à entretenir (src/ui/facilitiesPanel.js)
     facPaddock: () => { g.sendHorses('paddock'); close(); },
@@ -117,7 +118,7 @@ export function openBuilding(ui, kind) {
     enabled: a.enabled,
     why: a.reason ? t(`why_${a.reason}`, a.params) : '',
     run: run[a.id],
-    queue: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'vet', 'jobs', 'sleep'].includes(a.id) ? null : {
+    queue: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'vet', 'vetSchool', 'jobs', 'sleep'].includes(a.id) ? null : {
       label: `${t(`do_${a.id}`)} (${name})`,
       icon: a.icon,
       target: () => g.buildingSpot(kind),
@@ -125,7 +126,7 @@ export function openBuilding(ui, kind) {
       auto: () => run[a.id](),
       manual: () => { ui.openBuilding(kind); },
     },
-    free: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'checkHorses'].includes(a.id), // possible même en pause
+    free: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'checkHorses', 'vetSchool'].includes(a.id), // possible même en pause
   })), header, kind === 'pethouse');
 }
 

@@ -16,6 +16,7 @@
 //     reputation: { vet: 50 },        // réputation par métier (0 à 100)
 //     proposed: { vet: day },         // dernier jour où on a proposé ce métier (pas trop souvent)
 //     hints: {},                      // petites phrases dites une seule fois
+//     diplomas: { vet: day },         // diplôme d'une école (src/sim/vetSchool.js) : on peut commencer avant le niveau
 //   }
 
 export const RANKS = ['apprentice', 'skilled', 'expert'];
@@ -74,7 +75,7 @@ export const CAREERS = {
 export const CAREER_IDS = Object.keys(CAREERS);
 
 export function defaultCareers() {
-  return { active: null, started: {}, xp: {}, done: {}, earned: {}, reputation: {}, proposed: {}, hints: {} };
+  return { active: null, started: {}, xp: {}, done: {}, earned: {}, reputation: {}, proposed: {}, hints: {}, diplomas: {} };
 }
 
 /** État des métiers dans le profil (complété pour les vieilles sauvegardes). */
@@ -123,12 +124,15 @@ export function rankProgress(profile, id) {
   return { rank, xp, from, to, ratio: to === null ? 1 : Math.min(1, (xp - from) / (to - from)) };
 }
 
-/** Peut-on commencer ce métier ? ctx : { level } */
+/** A-t-on le diplôme de l'école de ce métier ? (école vétérinaire : src/sim/vetSchool.js) */
+export const hasCareerDiploma = (profile, id) => careerState(profile).diplomas?.[id] !== undefined;
+
+/** Peut-on commencer ce métier ? ctx : { level }. Avec le diplôme de l'école, le niveau ne compte pas. */
 export function canStart(profile, id, ctx = {}) {
   const def = CAREERS[id];
   if (!def) return { ok: false, reason: 'unknown' };
   if (isStarted(profile, id)) return { ok: false, reason: 'started' };
-  if ((ctx.level ?? 1) < def.level) return { ok: false, reason: 'level', n: def.level };
+  if ((ctx.level ?? 1) < def.level && !hasCareerDiploma(profile, id)) return { ok: false, reason: 'level', n: def.level };
   return { ok: true };
 }
 
@@ -209,7 +213,7 @@ const questsDone = (profile, objectives) => (objectives ? objectives.filter((o) 
 export function shouldPropose(profile, id, ctx) {
   const def = CAREERS[id];
   if (!def || isStarted(profile, id)) return false;
-  if ((ctx.level ?? 1) < def.level) return false;
+  if ((ctx.level ?? 1) < def.level && !hasCareerDiploma(profile, id)) return false;
   const st = careerState(profile);
   if (st.proposed[id] !== undefined && ctx.day - st.proposed[id] < 1) return false;
   if (ctx.building) return ctx.building === def.building;

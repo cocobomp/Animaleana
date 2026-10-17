@@ -1,6 +1,7 @@
 // Textes du jeu : français (langue principale) et anglais.
 
 import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
+import { VET_FR, VET_EN } from './ui/vetTexts.js'; // examen et école vétérinaires (vx_*, vs_*)
 
 const fr = {
   title: 'Animadichelle',
@@ -3575,6 +3576,8 @@ const en = {
 // Clients et métiers : textes ajoutés aux deux dictionnaires.
 Object.assign(fr, CLIENTS_FR);
 Object.assign(en, CLIENTS_EN);
+Object.assign(fr, VET_FR); // examen et école vétérinaires
+Object.assign(en, VET_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

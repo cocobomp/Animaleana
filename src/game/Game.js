@@ -604,7 +604,8 @@ export class Game {
     this.updateFocus();
     this.events.update(dt); // événements spéciaux
     this.clients.update(dt); // clients et métiers
-    this.renderer.render(this.scene, this.camera);
+    // Examen ou école vétérinaire en plein écran (téléphone, src/ui/vetExam.js) : la 3D est cachée, on ne la dessine pas.
+    if (!this.ui.vxCover) this.renderer.render(this.scene, this.camera);
   }
 
   /** Les murs et toits qui cachent le personnage deviennent transparents. */

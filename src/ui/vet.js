@@ -1,11 +1,17 @@
 // Jouer le vétérinaire : observer les symptômes, choisir ses examens, faire le diagnostic, soigner.
 // Rien n'est imposé : l'enfant cherche lui-même ce qu'a l'animal.
+//
+// openVet ouvre l'examen « comme un vrai véto » (src/ui/vetExam.js : trousse d'outils, l'animal
+// en grand, carnet avec les normes). L'ancien examen en boutons reste ici (openVetClassic), en
+// repli si le dessin n'est pas possible sur l'appareil.
 
 import { h } from './dom.js';
 import { t, ta, L } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { ILLNESSES } from '../sim/animal.js';
 import { canAfford } from '../sim/profile.js';
+import { isStarted } from '../sim/careers.js';
+import { openVetExam } from './vetExam.js';
 
 // Température normale de chaque espèce (°C).
 const NORMAL_TEMP = { horse: 37.8, dog: 38.6, cat: 38.6, rabbit: 39.0, sheep: 39.2, goat: 39.2, cow: 38.6 };
@@ -76,10 +82,36 @@ const DIAGNOSES = ['healthy', 'ear', 'paw', 'belly', 'cold', 'fleas', 'flu'];
 const TREATMENTS = ['drops', 'bandage', 'syrup', 'shampoo', 'injection'];
 const TREAT_EMOJI = { drops: '💧', bandage: '🩹', syrup: '💊', shampoo: '🧴', injection: '💉' };
 
-/** atClinic : true = à la clinique, false = le vétérinaire vient, 'self' = je soigne moi-même (trousse). */
+/** Le dessin 2D marche-t-il ici ? (sinon : ancien examen en boutons) */
+function canDraw() {
+  try {
+    return !!document.createElement('canvas').getContext('2d') && typeof ResizeObserver === 'function';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * atClinic : true = à la clinique, false = le vétérinaire vient, 'self' = je soigne moi-même (trousse).
+ * Un animal confié en soins quand on a appris le métier : c'est nous le docteur (gratuit).
+ */
 export function openVet(ui, a, atClinic) {
+  if (!canDraw() || ui.vetClassic) return openVetClassic(ui, a, atClinic);
+  const career = isCareerPatient(ui.game.profile, a);
+  const mode = atClinic === 'self' ? 'self' : career ? 'career' : atClinic ? 'clinic' : 'home';
+  return openVetExam(ui, a, mode);
+}
+
+/**
+ * Animal confié en soins par un client quand on a commencé le métier de vétérinaire : c'est nous
+ * le docteur, l'examen est gratuit (la fiche de l'animal n'affiche donc pas de prix).
+ */
+export const isCareerPatient = (profile, a) => a?.client?.kind === 'vet' && isStarted(profile, 'vet');
+
+/** L'ancien examen (boutons), gardé en repli. */
+export function openVetClassic(ui, a, atClinic) {
   const g = ui.game;
-  const self = atClinic === 'self';
+  const self = atClinic === 'self' || isCareerPatient(g.profile, a); // métier : gratuit, comme la trousse
   const cost = self ? 0 : g.vetCost(atClinic);
   if (!canAfford(g.profile, cost)) {
     ui.toast(t('r_money'));
@@ -154,7 +186,7 @@ export function openVet(ui, a, atClinic) {
           class: 'act',
           onClick: () => {
             if (x !== ILLNESSES[illness].treatment) st.msg = t('vetWrong');
-            else if (self && x === 'injection') st.msg = t('vetOnlyVet');
+            else if (self && x === 'injection' && !isStarted(g.profile, 'vet')) st.msg = t('vetOnlyVet'); // vétérinaire : piqûre permise
             else {
               finish();
               return;

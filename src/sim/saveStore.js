@@ -3,7 +3,7 @@
 // et de la fusion par profil de src/sim/saveFile.js (mergeProfiles, updatedAt).
 // Ici : restaurer une partie sans jamais rien perdre en silence (copie de secours avant tout remplacement).
 
-import { listProfiles, loadProfile, saveProfile, deleteProfile } from './profile.js';
+import { listProfiles, loadProfile, saveProfile, deleteProfile, dropBackupMark } from './profile.js';
 import { uid } from './rng.js';
 import { uniqueName } from './saveFile.js';
 
@@ -34,6 +34,7 @@ export function memoryStore(profiles = [], { failOn = null } = {}) {
     save: (p, { touch = true } = {}) => {
       if (failOn?.(p)) return false;
       if (touch || typeof p.updatedAt !== 'number') p.updatedAt = Date.now();
+      if (touch) dropBackupMark(p); // comme saveProfile : une copie de secours sur laquelle on joue redevient une partie
       data.set(p.id, clone(p));
       index = index.filter((e) => e.id !== p.id);
       const entry = { id: p.id, name: p.name, mode: p.mode, animals: p.animals.length, savedAt: Date.now(), updatedAt: p.updatedAt };
@@ -84,17 +85,22 @@ export function restoreAsNew(store, incoming) {
 /**
  * Remplace un profil de l'appareil par une partie restaurée. D'abord, l'ancien est copié en « copie de secours »
  * (un profil de plus dans la liste, marqué backupOf) ; si cette copie ne peut pas être écrite, rien ne change.
- * opts.backupName(ancien) : nom de la copie (« Léana · secours 17/10 ») ; opts.now : date de la copie.
+ * opts.backupName(ancien) : nom de la copie (« Léana · secours 17/10 », « Léana · secours 17/10 (2) » si ce nom
+ * est déjà pris) ; opts.now : date de la copie.
+ * opts.afterBackup() : appelé une fois la copie écrite, juste avant d'écrire par-dessus l'ancien (arrêter la
+ * partie en cours : elle réécrirait sinon l'ancienne version en se fermant).
  * Renvoie { ok: true, profile, backup } ou { ok: false, error: 'missing' | 'storage', backup? }.
  */
-export function restoreReplace(store, targetId, incoming, { backupName = (p) => `${p.name} (secours)`, now = Date.now() } = {}) {
+export function restoreReplace(store, targetId, incoming, { backupName = (p) => `${p.name} (secours)`, now = Date.now(), afterBackup = null } = {}) {
   const old = store.load(targetId);
   if (!old) return { ok: false, error: 'missing' };
-  const backup = { ...clone(old), id: uid(), name: backupName(old), backupOf: old.id, backupAt: now };
+  const name = uniqueName(backupName(old), store.list().map((e) => e.name));
+  const backup = { ...clone(old), id: uid(), name, backupOf: old.id, backupAt: now };
   if (!store.save(backup, { touch: false })) {
     store.remove(backup.id);
     return { ok: false, error: 'storage' };
   }
+  afterBackup?.();
   const list = store.list().filter((e) => e.id !== targetId && e.id !== backup.id);
   const p = fresh(incoming);
   // L'id du fichier (même partie d'un appareil à l'autre) s'il est libre ; sinon celui du profil remplacé.

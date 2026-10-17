@@ -149,6 +149,16 @@ export function migrate(p, hint = {}) {
 }
 
 /**
+ * Une copie de secours (gardée avant qu'une partie restaurée la remplace) sur laquelle on joue redevient une
+ * partie comme les autres : plus de pastille « copie de secours », cochée dans « 💾 Sauvegarder mes parties »
+ * et synchronisée avec le compte (les copies restent sinon sur l'appareil où elles ont été faites).
+ */
+export function dropBackupMark(p) {
+  delete p.backupOf;
+  delete p.backupAt;
+}
+
+/**
  * Écrit le profil sur l'appareil. opts.touch (oui par défaut) : c'est une modification, updatedAt prend
  * la date du jour ; non pour une partie restaurée ou une copie de secours (elles gardent leur date).
  */
@@ -157,6 +167,7 @@ export function saveProfile(p, { touch = true } = {}) {
   if (!s) return false;
   try {
     if (touch || typeof p.updatedAt !== 'number') p.updatedAt = Date.now();
+    if (touch) dropBackupMark(p);
     s.setItem(PROFILE_KEY(p.id), JSON.stringify(p));
     const index = listProfiles().filter((e) => e.id !== p.id);
     const entry = { id: p.id, name: p.name, mode: p.mode, animals: p.animals.length, savedAt: Date.now(), updatedAt: p.updatedAt };

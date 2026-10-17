@@ -120,6 +120,13 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .profile-play { flex: 1; display: grid; text-align: left; gap: 2px; }
 .profile-play small { color: var(--muted); }
 /* ---------- partie dans un fichier : 💾 sauvegarder / 📂 restaurer (src/ui/saveGame.js) */
+/* Conteneur des étapes de la fenêtre (src/ui/saveGame.js, sheet) : sans boîte à lui, ses enfants se placent
+   comme ceux de .modal-box, et sa rangée OK / Annuler reste collée en bas (comme .modal-box > .row.end:last-child). */
+.sv-sheet { display: contents; }
+.modal-box > .sv-sheet > .row.end:last-child { position: sticky; bottom: -18px; z-index: 1; margin: 8px -20px -18px; padding: 6px 20px 18px; background: var(--bg); }
+@media (max-height: 480px) {
+  .modal-box > .sv-sheet > .row.end:last-child { bottom: -12px; margin: 6px -16px -12px; padding: 6px 16px 12px; }
+}
 /* Deux boutons côte à côte quand il y a la place (ordinateur), l'un sous l'autre sur téléphone. */
 .save-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-top: 10px; }
 .save-tools button { min-height: 50px; font-weight: 600; }

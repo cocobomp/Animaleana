@@ -492,7 +492,14 @@ export function openSettings(ui) {
               openExport(ui, { ids: [g.profile.id], live: !saved && !travelling ? g.profile : null });
             },
           }, `💾 ${t('sv_save')}`),
-          h('button', { onClick: () => pickRestoreFile(ui) }, `📂 ${t('sv_restore')}`)),
+          h('button', {
+            onClick: () => {
+              // D'abord écrire la partie : l'aperçu la compare au fichier, et la copie de secours (si on la
+              // remplace) aura son tout dernier état. (Synchrone : le choix du fichier s'ouvre dans le même tap.)
+              g.save();
+              pickRestoreFile(ui);
+            },
+          }, `📂 ${t('sv_restore')}`)),
         h('p', { class: 'note' }, t('sv_why')),
         h('p', { class: 'note' }, t('controlsHelp')),
         // Revoir le tutoriel guidé (src/ui/tutorial.js).

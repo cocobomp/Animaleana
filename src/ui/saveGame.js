@@ -5,10 +5,11 @@
 import { h } from './dom.js';
 import { t, getLang } from '../i18n.js';
 import {
-  serializeSave, parseSave, saveFileName, profileSummary, compareProfiles, MAX_FILE_BYTES, FILE_MIME, FILE_EXT,
+  serializeSave, parseSave, saveFileName, profileSummary, compareProfiles, sameContent, uniqueName, MAX_FILE_BYTES, FILE_MIME, FILE_EXT,
 } from '../sim/saveFile.js';
 import { deviceStore, restoreAsNew, restoreReplace } from '../sim/saveStore.js';
 import { loadProfile } from '../sim/profile.js';
+import { checkForUpdate } from './updates.js';
 
 const appVersion = () => (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev');
 const locale = () => (getLang() === 'fr' ? 'fr-FR' : 'en-GB');
@@ -23,24 +24,38 @@ function fmtDate(ts) {
 /** Nom de la copie de secours : « Léana · secours 17/10 ». */
 const backupNameOf = (old) => t('sv_backupName', { name: old.name, date: new Date().toLocaleDateString(locale(), { day: '2-digit', month: '2-digit' }) });
 
+/** Pendant un trajet suivi, Game.save garde la sauvegarde d'avant le départ (pas un voyage à moitié fait). */
+const travelling = (g) => Boolean(g?.tripFlow?.journey && !g.tripFlow.journey.report);
+
 /**
- * Fenêtre en plusieurs étapes : la première s'ouvre avec ui.showModal, les suivantes remplacent son contenu
- * (ui.showModal met en attente une fenêtre demandée pendant qu'une autre est ouverte).
+ * Fenêtre en plusieurs étapes, dans un seul conteneur (.sv-sheet) donné une fois à ui.showModal : chaque
+ * étape remplace son contenu, qu'il soit affiché ou encore en attente (ui.showModal met en attente une
+ * fenêtre demandée pendant qu'une autre est ouverte : naissance, client, orage…). Une fenêtre en attente
+ * montrera ainsi toujours la dernière étape, et chaque étape n'est faite qu'une fois.
  */
 function sheet(ui) {
-  let box = null;
+  const root = h('div', { class: 'sv-sheet' });
   return (content) => {
-    const nodes = [content].flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false);
-    if (box?.isConnected && ui.modalOpen) {
-      box.replaceChildren(...nodes);
+    root.replaceChildren(...[content].flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false));
+    const box = root.parentElement;
+    if (ui.modalOpen && box && ui.modal.contains(box)) {
       box.scrollTop = 0;
       return;
     }
-    ui.showModal(nodes);
-    const b = ui.modal.querySelector('.modal-box');
-    box = b && nodes[0] instanceof Node && b.contains(nodes[0]) ? b : null;
+    if (ui.modalQueue.includes(root)) return; // en attente : elle sortira avec ce contenu
+    ui.showModal(root);
   };
 }
+
+/**
+ * Bouton d'une action qui écrit sur l'appareil (ajouter, remplacer) : au premier tap, tous les boutons de la
+ * fenêtre se grisent, pour qu'un double tap ne fasse pas deux fois la même chose.
+ */
+const once = (fn) => (ev) => {
+  const root = ev?.currentTarget?.closest?.('.sv-sheet');
+  for (const b of root?.querySelectorAll('button') ?? []) b.disabled = true;
+  fn();
+};
 
 /** Carte d'une partie : prénom, niveau, animaux par espèce, date de la dernière sauvegarde. */
 function summaryCard(sum, { onClick = null } = {}) {
@@ -199,18 +214,45 @@ export async function restoreFromFile(ui, file) {
     return showError(show, ui, t('sv_err_read'));
   }
   const parsed = parseSave(text);
-  if (!parsed.ok) return showError(show, ui, t(`sv_err_${parsed.error}`));
+  if (!parsed.ok) {
+    // Version plus récente : on peut chercher la mise à jour d'ici (l'écran des profils n'a pas de Réglages).
+    return showError(show, ui, t(`sv_err_${parsed.error}`), { extra: parsed.error === 'tooNew' ? updateButton(ui) : null });
+  }
   restoreFlow(ui, parsed, show);
 }
 
-function showError(show, ui, msg, nothingChanged = true) {
+/** « 🔄 Rechercher une mise à jour », comme dans les Réglages (src/ui/updates.js : bandeau « Recharger » si prête). */
+function updateButton(ui) {
+  return h('button', {
+    class: 'primary big',
+    onClick: async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      const r = await checkForUpdate();
+      b.disabled = false;
+      if (r === 'ready') ui.hideModal(); // le bandeau « Nouvelle version prête · Recharger » est affiché
+      else ui.toast(t(r === 'none' ? 'sv_updateNone' : 'updateUnavailable'), 7000);
+    },
+  }, `🔄 ${t('updateCheck')}`);
+}
+
+/**
+ * Fenêtre « ça n'a pas marché ». opts : title (clé du titre : fichier qui ne va pas, par défaut, ou appareil
+ * plein), nothingChanged (oui par défaut : on le dit), extra (boutons de plus, au-dessus de OK).
+ */
+function showError(show, ui, msg, { title = 'sv_err_title', nothingChanged = true, extra = null } = {}) {
   show([
-    h('h2', { class: 'sv-title' }, `😕 ${t('sv_err_title')}`),
+    h('h2', { class: 'sv-title' }, `${title === 'sv_full_title' ? '📱' : '😕'} ${t(title)}`),
     h('p', {}, msg),
     nothingChanged ? h('p', { class: 'note' }, t('sv_nothingChanged')) : null,
-    h('div', { class: 'row end' }, h('button', { class: 'primary', onClick: () => ui.hideModal() }, 'OK')),
+    extra ? h('div', { class: 'sv-actions' }, extra) : null,
+    // Avec un bouton de plus (💾, 🔄), c'est lui le bouton principal ; OK ferme seulement.
+    h('div', { class: 'row end' }, h('button', { class: extra ? '' : 'primary', onClick: () => ui.hideModal() }, 'OK')),
   ]);
 }
+
+/** Appareil plein : le titre le dit (le fichier, lui, est bon). */
+const showFull = (show, ui, msg, opts = {}) => showError(show, ui, msg, { ...opts, title: 'sv_full_title' });
 
 /** Aperçu, puis : ajouter comme nouveau profil, ou remplacer un profil (après confirmation, copie de secours d'abord). */
 function restoreFlow(ui, parsed, show) {
@@ -221,6 +263,12 @@ function restoreFlow(ui, parsed, show) {
   const back = (fn) => h('button', { onClick: fn }, `← ${t('sv_back')}`);
   // L'écran des profils (s'il est affiché) montre tout de suite la partie ajoutée.
   const refreshScreen = () => { if (!g?.running) ui.showProfiles(); };
+  // La partie en cours, telle qu'en mémoire : c'est elle qu'on compare au fichier, pas sa dernière sauvegarde
+  // (la sauvegarde automatique ne passe que de temps en temps, et plus du tout quand l'appareil est plein).
+  // Pendant un trajet, la partie écrite (d'avant le départ) est celle qui serait gardée en copie de secours.
+  const playing = () => (g?.running && g.profile && !travelling(g) ? g.profile : null);
+  const loadHere = (id) => (playing()?.id === id ? JSON.parse(JSON.stringify(playing())) : store.load(id));
+  const backupLabel = (old) => uniqueName(backupNameOf(old), store.list().map((e) => e.name));
   const meta = [
     parsed.meta.exportedAt ? t('sv_fileFrom', { date: fmtDate(parsed.meta.exportedAt) }) : null,
     parsed.meta.appVersion ? t('sv_fileVersion', { v: parsed.meta.appVersion }) : null,
@@ -234,28 +282,35 @@ function restoreFlow(ui, parsed, show) {
     header(),
     h('p', {}, t('sv_choose')),
     h('div', { class: 'cards' }, files.map((p) => summaryCard(profileSummary(p), { onClick: () => choose(p) }))),
-    h('button', { class: 'big', onClick: addAll }, `➕ ${t('sv_addAll', { n: files.length })}`),
+    h('button', { class: 'big', onClick: once(addAll) }, `➕ ${t('sv_addAll', { n: files.length })}`),
     h('div', { class: 'row end' }, h('button', { onClick: close }, t('cancel'))),
   ]);
 
   const choose = (p) => {
     const local = store.list();
-    const same = local.find((e) => e.id === p.id);
-    const here = same ? store.load(same.id) : null;
+    const here = local.some((e) => e.id === p.id) ? loadHere(p.id) : null;
     const cmp = here ? compareProfiles(p, here) : null;
+    // Exactement la même partie (même date, même contenu) : rien à faire, c'est le bouton principal.
+    const identical = cmp === 'same' && sameContent(p, here);
     const others = local.filter((e) => e.id !== p.id).length;
+    // Bouton principal : remplacer seulement si le fichier est plus récent ; sinon ajouter (rien n'est écrasé).
+    const main = identical ? 'ok' : cmp === 'newer' ? 'replace' : 'add';
+    const note = identical ? 'sv_identical' : { newer: 'sv_fileNewer', older: 'sv_fileOlder', same: 'sv_fileSameDate' }[cmp];
     show([
       header(),
       summaryCard(profileSummary(p)),
-      here ? h('p', { class: cmp === 'older' ? 'warn' : 'note sv-same' },
-        `${t('sv_sameHere')} ${t({ newer: 'sv_fileNewer', older: 'sv_fileOlder', same: 'sv_fileSame' }[cmp])}`) : null,
-      h('h3', {}, t('sv_what')),
+      here ? h('p', { class: cmp === 'older' ? 'warn' : 'note sv-same' }, `${t('sv_sameHere')} ${t(note)}`) : null,
+      identical ? h('div', { class: 'sv-actions' }, h('button', { class: 'primary big', onClick: close }, `👍 ${t('sv_nothingToDo')}`)) : null,
+      h('h3', {}, t(identical ? 'sv_anyway' : 'sv_what')),
       h('div', { class: 'sv-actions' },
-        here ? h('button', { class: cmp === 'older' ? 'big' : 'primary big', onClick: () => confirmReplace(p, here.id) },
+        here ? h('button', { class: main === 'replace' ? 'primary big' : 'big', onClick: () => confirmReplace(p, here.id) },
           `🔁 ${t('sv_replaceThis', { name: here.name })}`) : null,
-        h('button', { class: here && cmp !== 'older' ? 'big' : 'primary big', onClick: () => addNew(p) }, `➕ ${t('sv_addNew')}`),
+        h('button', { class: main === 'add' ? 'primary big' : 'big', onClick: once(() => addNew(p)) }, `➕ ${t('sv_addNew')}`),
         others ? h('button', { class: 'big', onClick: () => replaceWhich(p) }, `🔁 ${t('sv_replace')}`) : null),
-      h('div', { class: 'row end' }, files.length > 1 ? back(pick) : null, h('button', { onClick: close }, t('cancel'))),
+      // Même partie : « OK, rien à faire » ferme déjà la fenêtre (pas de rangée Annuler vide).
+      files.length > 1 || !identical
+        ? h('div', { class: 'row end' }, files.length > 1 ? back(pick) : null, identical ? null : h('button', { onClick: close }, t('cancel')))
+        : null,
     ]);
   };
 
@@ -263,14 +318,14 @@ function restoreFlow(ui, parsed, show) {
     header(),
     h('p', {}, t('sv_replaceWhich')),
     h('div', { class: 'cards' }, store.list().map((e) => {
-      const lp = store.load(e.id);
+      const lp = loadHere(e.id);
       return lp ? summaryCard(profileSummary(lp), { onClick: () => confirmReplace(p, e.id) }) : null;
     })),
     h('div', { class: 'row end' }, back(() => choose(p))),
   ]);
 
   const confirmReplace = (p, targetId) => {
-    const old = store.load(targetId);
+    const old = loadHere(targetId);
     if (!old) return choose(p);
     const older = compareProfiles(p, old) === 'older';
     show([
@@ -280,31 +335,52 @@ function restoreFlow(ui, parsed, show) {
         h('div', { class: 'sv-arrow', 'aria-hidden': 'true' }, '⬇️'),
         h('h3', {}, t('sv_inFile')), summaryCard(profileSummary(p))),
       older ? h('p', { class: 'warn' }, t('sv_fileOlder')) : null,
-      h('p', { class: 'sv-safe' }, t('sv_backupNote', { backup: backupNameOf(old) })),
+      h('p', { class: 'sv-safe' }, t('sv_backupNote', { backup: backupLabel(old) })),
       h('div', { class: 'row end' },
         back(() => choose(p)),
-        h('button', { class: 'danger', onClick: () => doReplace(p, targetId) }, `🔁 ${t('sv_replaceBtn')}`)),
+        h('button', { class: 'danger', onClick: once(() => doReplace(p, targetId)) }, `🔁 ${t('sv_replaceBtn')}`)),
     ]);
   };
 
   const doReplace = (p, targetId) => {
-    // La partie en cours est remplacée : on la sauvegarde et on l'arrête d'abord (sinon elle réécrirait
-    // par-dessus en quittant) ; la copie de secours a ainsi son tout dernier état.
-    if (g?.running && g.profile?.id === targetId) {
-      g.stop();
-      ui.closePanel();
-      ui.showProfiles();
+    const current = Boolean(g?.running && g.profile?.id === targetId);
+    // La partie en cours est remplacée : on l'écrit d'abord, pour que la copie de secours ait son tout dernier
+    // état. Si l'appareil est plein, on ne touche à rien (la partie continue, rien de ce qui est en mémoire
+    // n'est perdu) et on propose de la mettre dans un fichier.
+    if (current && !travelling(g) && !g.save()) {
+      return showFull(show, ui, t('sv_fullPlaying'), {
+        extra: h('button', {
+          class: 'primary big',
+          onClick: () => {
+            const live = g.running ? g.profile : null;
+            ui.hideModal();
+            if (live) openExport(ui, { ids: [live.id], live });
+          },
+        }, `💾 ${t('sv_save')}`),
+      });
     }
-    const r = restoreReplace(store, targetId, p, { backupName: backupNameOf });
+    const r = restoreReplace(store, targetId, p, {
+      backupName: backupNameOf,
+      // La copie de secours est écrite : la partie en cours s'arrête avant qu'on écrive par-dessus (en se
+      // fermant, elle réécrirait sinon l'ancienne version).
+      afterBackup: current ? () => {
+        g.stop();
+        ui.closePanel();
+        ui.showProfiles();
+      } : null,
+    });
     refreshScreen();
-    if (!r.ok) return showError(show, ui, t('sv_storageFull'), !r.backup);
+    if (!r.ok) {
+      const old = r.backup ? t('sv_backupKept', { backup: r.backup.name }) : '';
+      return showFull(show, ui, `${t('sv_storageFull')} ${old}`.trim(), { nothingChanged: !r.backup });
+    }
     done(r.profile, t('sv_doneReplaced', { name: r.profile.name, backup: r.backup.name }));
   };
 
   const addNew = (p) => {
     const r = restoreAsNew(store, p);
     refreshScreen();
-    if (!r.ok) return showError(show, ui, t('sv_storageFull'));
+    if (!r.ok) return showFull(show, ui, t('sv_storageFull'));
     done(r.profile, t('sv_doneAdded', { name: r.profile.name }));
   };
 
@@ -316,7 +392,7 @@ function restoreFlow(ui, parsed, show) {
       n++;
     }
     refreshScreen();
-    if (n < files.length) return showError(show, ui, n ? t('sv_storagePartial', { done: n, n: files.length }) : t('sv_storageFull'), !n);
+    if (n < files.length) return showFull(show, ui, n ? t('sv_storagePartial', { done: n, n: files.length }) : t('sv_storageFull'), { nothingChanged: !n });
     done(null, t('sv_doneAddedMany', { n }));
   }
 

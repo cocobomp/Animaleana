@@ -9,8 +9,13 @@ import { SPECIES } from './species.js';
 import { PLACES } from './places.js';
 import { levelOf } from './progress.js';
 
-/** Marque du fichier : on reconnaît une sauvegarde du jeu à coup sûr. */
+/**
+ * Marque du fichier : on reconnaît une sauvegarde du jeu à coup sûr. Elle garde l'ancien nom du jeu
+ * (Animadichelle) pour que les fichiers déjà faits restent lisibles : ne pas la changer.
+ */
 export const SAVE_KIND = 'animadichelle-save';
+/** Nom du jeu, en tête des noms de fichier (« La ferme à Madichelle - Léana - 2026-10-17.json »). */
+export const GAME_NAME = 'La ferme à Madichelle';
 /** Format de l'enveloppe du fichier (pas des profils : eux ont SAVE_VERSION et passent par migrate). */
 export const FILE_FORMAT = 1;
 /** Au-delà, ce n'est pas une partie (le stockage de l'appareil ne garde de toute façon que ~5 Mo). */
@@ -38,7 +43,7 @@ export function serializeSave(profiles, { appVersion = 'dev', now = Date.now() }
   return JSON.stringify({
     kind: SAVE_KIND,
     format: FILE_FORMAT,
-    game: 'Animadichelle',
+    game: GAME_NAME,
     appVersion: String(appVersion),
     saveVersion: SAVE_VERSION,
     exportedAt: new Date(now).toISOString(),
@@ -62,14 +67,14 @@ export function safeFilePart(s) {
 }
 
 /**
- * Nom de fichier lisible : « Animadichelle - Léana - 2026-10-17.json » ;
- * plusieurs : « Animadichelle - Léana, Tom - … », au-delà de 3 : « Animadichelle - 4 parties - … ».
+ * Nom de fichier lisible : « La ferme à Madichelle - Léana - 2026-10-17.json » ;
+ * plusieurs : « La ferme à Madichelle - Léana, Tom - … », au-delà de 3 : « … - 4 parties - … ».
  * manyLabel(n) : « 4 parties » / « 4 games » (langue de l'interface).
  */
 export function saveFileName(profiles, { now = Date.now(), manyLabel = (n) => `${n} parties` } = {}) {
   const list = (Array.isArray(profiles) ? profiles : [profiles]).filter(Boolean);
   const who = list.length > 3 ? manyLabel(list.length) : list.map((p) => safeFilePart(p.name)).join(', ') || 'Partie';
-  return `Animadichelle - ${who} - ${localDay(now)}${FILE_EXT}`;
+  return `${GAME_NAME} - ${who} - ${localDay(now)}${FILE_EXT}`;
 }
 
 // ---------------------------------------------------------------- lire et vérifier
@@ -80,6 +85,9 @@ export function saveFileName(profiles, { now = Date.now(), manyLabel = (n) => `$
  */
 export function profileProblem(p) {
   if (!isObj(p)) return 'profile';
+  // D'abord la version : une partie d'une version plus récente a pu changer la forme d'un champ ; le bon
+  // message est alors « mets le jeu à jour », pas « partie abîmée ».
+  if (isNum(p.version) && p.version > SAVE_VERSION) return 'tooNew';
   if (typeof p.name !== 'string' || !p.name.trim()) return 'name';
   const fresh = createProfile('x');
   for (const [k, ref] of Object.entries(fresh)) {
@@ -94,7 +102,6 @@ export function profileProblem(p) {
   for (const a of p.animals ?? []) {
     if (!isObj(a) || typeof a.id !== 'string' || !SPECIES[a.species]) return 'animals';
   }
-  if (isNum(p.version) && p.version > SAVE_VERSION) return 'tooNew';
   return null;
 }
 
@@ -179,12 +186,29 @@ export function compareProfiles(a, b) {
   return da > db ? 'newer' : da < db ? 'older' : 'same';
 }
 
+// Texte d'un profil, clés triées (deux copies d'une même partie n'ont pas forcément leurs champs dans le même
+// ordre), sans la date de modification ni les marques de copie de secours.
+const IGNORED = new Set(['updatedAt', 'backupOf', 'backupAt']);
+function contentKey(v, top = true) {
+  if (Array.isArray(v)) return `[${v.map((x) => contentKey(x, false)).join(',')}]`;
+  if (isObj(v)) {
+    return `{${Object.keys(v).filter((k) => !(top && IGNORED.has(k)) && v[k] !== undefined).sort()
+      .map((k) => `${JSON.stringify(k)}:${contentKey(v[k], false)}`).join(',')}}`;
+  }
+  return JSON.stringify(v ?? null);
+}
+
+/** Les deux profils ont-ils le même contenu (date de modification mise à part) ? */
+export const sameContent = (a, b) => contentKey(a) === contentKey(b);
+
 /**
  * Fusionne deux listes de profils (cet appareil et un fichier, plus tard un compte) profil par profil :
  * même id → le plus récent (updatedAt) gagne ; id inconnu → ajouté. Rien n'est jeté en silence :
  * chaque version écartée est rendue dans `replaced` (à garder en copie de secours).
  * Renvoie { profiles, changes: [{ id, name, action }], replaced } ;
- * action : 'added' (nouveau), 'updated' (remplacé par le plus récent), 'kept' (le local est plus récent), 'same'.
+ * action : 'added' (nouveau), 'updated' (remplacé par le plus récent), 'kept' (le local est plus récent),
+ * 'conflict' (même date mais pas le même contenu : le local est gardé, l'autre rendu dans replaced),
+ * 'same' (la même partie, rien à faire).
  */
 export function mergeProfiles(local, incoming) {
   const out = (local ?? []).slice();
@@ -205,9 +229,11 @@ export function mergeProfiles(local, incoming) {
       out[i] = p;
       changes.push({ id: p.id, name: p.name, action: 'updated' });
     } else {
-      // L'autre version (plus ancienne, ou la même date) n'est pas prise : on la rend aussi, au cas où.
-      if (cmp === 'older') replaced.push(p);
-      changes.push({ id: p.id, name: out[i].name, action: cmp === 'older' ? 'kept' : 'same' });
+      // L'autre version (plus ancienne, ou la même date avec un autre contenu) n'est pas prise : on la rend
+      // aussi, au cas où. Les parties restaurées gardent leur date : même date ne veut pas dire même partie.
+      const action = cmp === 'older' ? 'kept' : sameContent(p, out[i]) ? 'same' : 'conflict';
+      if (action !== 'same') replaced.push(p);
+      changes.push({ id: p.id, name: out[i].name, action });
     }
   }
   return { profiles: out, changes, replaced };

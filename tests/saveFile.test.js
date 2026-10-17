@@ -4,7 +4,7 @@ import { createAnimal } from '../src/sim/animal.js';
 import { xpForLevel } from '../src/sim/progress.js';
 import {
   serializeSave, parseSave, saveFileName, safeFilePart, profileSummary, mergeProfiles, compareProfiles,
-  uniqueName, updatedAtOf, SAVE_KIND, FILE_FORMAT, MAX_FILE_BYTES,
+  uniqueName, updatedAtOf, sameContent, profileProblem, SAVE_KIND, FILE_FORMAT, MAX_FILE_BYTES, GAME_NAME,
 } from '../src/sim/saveFile.js';
 import { memoryStore, deviceStore, restoreAsNew, restoreReplace, collectProfiles } from '../src/sim/saveStore.js';
 
@@ -51,10 +51,13 @@ describe('fichier de sauvegarde : aller-retour', () => {
   });
 
   it('nom de fichier lisible, sans caractères interdits', () => {
-    expect(saveFileName([léana()], { now: OCT17 })).toBe('Animadichelle - Léana - 2026-10-17.json');
-    expect(saveFileName([createProfile('Léa'), createProfile('Tom')], { now: OCT17 })).toBe('Animadichelle - Léa, Tom - 2026-10-17.json');
+    // Le nouveau nom du jeu (La ferme à Madichelle) ; la marque du fichier garde l'ancien, pour les fichiers déjà faits.
+    expect(saveFileName([léana()], { now: OCT17 })).toBe('La ferme à Madichelle - Léana - 2026-10-17.json');
+    expect(saveFileName([createProfile('Léa'), createProfile('Tom')], { now: OCT17 })).toBe('La ferme à Madichelle - Léa, Tom - 2026-10-17.json');
     const four = ['A', 'B', 'C', 'D'].map((n) => createProfile(n));
-    expect(saveFileName(four, { now: OCT17, manyLabel: (n) => `${n} games` })).toBe('Animadichelle - 4 games - 2026-10-17.json');
+    expect(saveFileName(four, { now: OCT17, manyLabel: (n) => `${n} games` })).toBe('La ferme à Madichelle - 4 games - 2026-10-17.json');
+    expect(JSON.parse(serializeSave([léana()])).game).toBe(GAME_NAME);
+    expect(SAVE_KIND).toBe('animadichelle-save');
     expect(safeFilePart('Lé*a?"<>|\n')).toBe('Léa');
     expect(safeFilePart('Léana · secours 17/10')).toBe('Léana · secours 17-10');
     expect(safeFilePart('a\\b:c')).toBe('a-b-c');
@@ -113,6 +116,21 @@ describe('fichier abîmé ou étranger : message clair, jamais d\'erreur levée'
     expect(parseSave(JSON.stringify({ ...f, saveVersion: 99 }))).toMatchObject({ ok: false, error: 'tooNew' });
     f.profiles[0].version = 99;
     expect(parseSave(JSON.stringify(f))).toMatchObject({ ok: false, error: 'tooNew' });
+  });
+
+  it('version plus récente dont un champ a changé de forme : « mets le jeu à jour », pas « partie abîmée »', () => {
+    const f = JSON.parse(good());
+    delete f.saveVersion;
+    f.profiles[0].version = 99;
+    f.profiles[0].stats = 'nouvelle-forme';
+    expect(profileProblem(f.profiles[0])).toBe('tooNew');
+    expect(parseSave(JSON.stringify(f))).toMatchObject({ ok: false, error: 'tooNew' });
+  });
+
+  it('fichier fait avant le nouveau nom du jeu (« game: Animadichelle ») : toujours lisible', () => {
+    const f = JSON.parse(good());
+    f.game = 'Animadichelle';
+    expect(parseSave(JSON.stringify(f)).ok).toBe(true);
   });
 });
 
@@ -204,6 +222,24 @@ describe('fusion par profil (pour la future synchro avec un compte)', () => {
     expect(r.replaced.map((p) => [p.name, p.updatedAt])).toEqual([['A', 100], ['B', 50]]);
   });
 
+  it('même date mais pas le même contenu : le local est gardé et l\'autre version est rendue (rien de perdu)', () => {
+    const a = { ...createProfile('Léana'), updatedAt: 1000, xp: 10 };
+    const incoming = { ...a, xp: 999, animals: [createAnimal({ species: 'horse', name: 'Caramel' })] };
+    const r = mergeProfiles([a], [incoming]);
+    expect(r.changes).toEqual([{ id: a.id, name: 'Léana', action: 'conflict' }]);
+    expect(r.profiles[0].xp).toBe(10);
+    expect(r.replaced).toEqual([incoming]);
+  });
+
+  it('même contenu : l\'ordre des champs, la date et les marques de copie de secours ne comptent pas', () => {
+    const a = léana();
+    const reordered = Object.fromEntries(Object.entries(JSON.parse(JSON.stringify(a))).reverse());
+    expect(sameContent(a, { ...reordered, updatedAt: 1, backupOf: 'x', backupAt: 2 })).toBe(true);
+    expect(sameContent(a, { ...a, money: a.money + 1 })).toBe(false);
+    // Aller-retour par un fichier (migrate compris) : la même partie.
+    expect(sameContent(a, parseSave(serializeSave([a])).profiles[0])).toBe(true);
+  });
+
   it('prénom déjà pris : « Léana (2) »', () => {
     expect(uniqueName('Léana', ['Tom'])).toBe('Léana');
     expect(uniqueName('Léana', ['léana', 'Léana (2)'])).toBe('Léana (3)');
@@ -262,6 +298,57 @@ describe('restaurer sur l\'appareil', () => {
     expect(r).toMatchObject({ ok: false, error: 'storage' });
     expect(store.load(local.id).animals).toHaveLength(3);
     expect(store.load(r.backup.id).backupOf).toBe(local.id);
+  });
+
+  it('deux remplacements le même jour : deux copies de secours aux noms différents', () => {
+    const p = léana();
+    const store = memoryStore([p]);
+    const name = (old) => `${old.name} · secours 17/10`;
+    const r1 = restoreReplace(store, p.id, { ...p, xp: 1 }, { backupName: name });
+    const r2 = restoreReplace(store, p.id, { ...p, xp: 2 }, { backupName: name });
+    expect([r1.backup.name, r2.backup.name]).toEqual(['Léana · secours 17/10', 'Léana · secours 17/10 (2)']);
+    expect(store.list().map((e) => e.name).sort()).toEqual(['Léana', 'Léana · secours 17/10', 'Léana · secours 17/10 (2)']);
+  });
+
+  it('afterBackup (arrêter la partie en cours) : appelé une fois la copie écrite, avant d\'écrire par-dessus', () => {
+    const p = léana();
+    const store = memoryStore([p]);
+    const seen = [];
+    const r = restoreReplace(store, p.id, { ...p, xp: 0 }, {
+      backupName,
+      afterBackup: () => seen.push([store.list().length, store.load(p.id).xp]),
+    });
+    expect(r.ok).toBe(true);
+    expect(seen).toEqual([[2, p.xp]]); // copie là, ancienne version pas encore remplacée
+    // Copie impossible : afterBackup n'est pas appelé (la partie en cours continue).
+    const full = memoryStore([p], { failOn: (x) => Boolean(x.backupOf) });
+    let called = false;
+    expect(restoreReplace(full, p.id, { ...p, xp: 0 }, { backupName, afterBackup: () => { called = true; } }).ok).toBe(false);
+    expect(called).toBe(false);
+  });
+
+  it('une copie de secours sur laquelle on joue redevient une partie normale (sauvegarde avec touch)', () => {
+    fakeStorage();
+    const p = léana();
+    saveProfile(p);
+    const r = restoreReplace(deviceStore(), p.id, { ...p, xp: 0 }, { backupName });
+    expect(listProfiles().find((e) => e.id === r.backup.id).backup).toBe(true);
+    // Une restauration (touch: false) garde la marque…
+    const copy = loadProfile(r.backup.id);
+    expect(copy.backupOf).toBe(p.id);
+    saveProfile(copy, { touch: false });
+    expect(listProfiles().find((e) => e.id === copy.id).backup).toBe(true);
+    // … mais dès qu'on joue dessus (Game.save), c'est une partie comme les autres.
+    saveProfile(copy);
+    expect(copy.backupOf).toBeUndefined();
+    expect(listProfiles().find((e) => e.id === copy.id).backup).toBeUndefined();
+    expect(loadProfile(copy.id).backupOf).toBeUndefined();
+    // Pareil pour le stockage en mémoire.
+    const mem = memoryStore([{ ...createProfile('Ana'), backupOf: 'x', backupAt: 1 }]);
+    const id = mem.list()[0].id;
+    expect(mem.list()[0].backup).toBe(true);
+    mem.save(mem.load(id));
+    expect(mem.list()[0].backup).toBeUndefined();
   });
 
   it('profil à remplacer introuvable', () => {

@@ -20,6 +20,7 @@ import {
 } from './models/course.js';
 import { enclosure, navTarget } from './nav.js';
 import { emojiTexture } from './textures.js';
+import { realLegPose } from './models/horseReal.js'; // poses des membres du cheval réaliste (sauts, tours)
 import { ActivityHud, showActivityResults } from '../ui/activities.js';
 import { t, ta } from '../i18n.js';
 
@@ -846,7 +847,8 @@ class JumpingSession extends Session {
     e.root.rotation.y = pl.heading;
     // Le cheval se cabre à l'appel et plonge à la réception ; jambes repliées.
     e.scaleGroup.rotation.x = -0.32 * Math.cos(Math.PI * j.t) * s * 1.6;
-    for (const l of e.model.legs) l.pivot.rotation.x = l.front ? -1.25 * s : 0.85 * s;
+    // (cheval réaliste : membres repliés, horseReal.js)
+    if (!realLegPose(e.model, 'jump', s)) for (const l of e.model.legs) l.pivot.rotation.x = l.front ? -1.25 * s : 0.85 * s;
     pl.avatar.root.rotation.x = 0.45 * s;
     // Faute : la barre tombe au passage.
     if (!j.clean && !j.knocked && j.t > 0.5) {
@@ -1350,7 +1352,7 @@ class AgilitySession extends Session {
         const s = Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, (c.t - 0.2) / 0.6))));
         y = s * (o.type === 'tyre' ? 0.75 : 0.65) * k;
         pitch = -0.3 * Math.cos(Math.PI * (c.t - 0.2) / 0.6) * s;
-        for (const l of e.model.legs) l.pivot.rotation.x = l.front ? -1.1 * s : 0.8 * s;
+        if (!realLegPose(e.model, 'jump', s * 0.9)) for (const l of e.model.legs) l.pivot.rotation.x = l.front ? -1.1 * s : 0.8 * s;
         if (!c.clean && !c.knocked && c.t > 0.5 && o.model.userData.parts.bar) {
           c.knocked = true;
           o.model.userData.parts.bar.position.y = 0.05;
@@ -1708,7 +1710,7 @@ function animateTrick(e, trick, k, dt) {
       if (trick === 'back') {
         sg.position.z = -1.2 * s;
         e.speed = 1;
-      } else {
+      } else if (!realLegPose(md, 'down', Math.min(1, s * 2), sg)) {
         sg.position.y = -0.22 * Math.min(1, s * 2);
         for (const l of md.legs) l.pivot.rotation.x = (l.front ? -1.3 : 1.3) * Math.min(1, s * 2);
       }
@@ -1716,7 +1718,7 @@ function animateTrick(e, trick, k, dt) {
     case 'paw':
     case 'hoof':
     case 'highfive':
-      if (front[0]) front[0].pivot.rotation.x = -1.3 * Math.min(1, s * 1.8);
+      if (!realLegPose(md, 'hoof', Math.min(1, s * 1.8)) && front[0]) front[0].pivot.rotation.x = -1.3 * Math.min(1, s * 1.8);
       if (trick === 'highfive') sg.rotation.x = -0.25 * s;
       break;
     case 'roll':
@@ -1725,7 +1727,9 @@ function animateTrick(e, trick, k, dt) {
       break;
     case 'jump':
       sg.position.y = Math.max(0, Math.sin(Math.PI * Math.min(1, k * 1.4))) * 0.9;
-      for (const l of md.legs) l.pivot.rotation.x = (l.front ? -1 : 0.8) * Math.max(0, Math.sin(Math.PI * Math.min(1, k * 1.4)));
+      if (!realLegPose(md, 'jump', Math.max(0, Math.sin(Math.PI * Math.min(1, k * 1.4))))) {
+        for (const l of md.legs) l.pivot.rotation.x = (l.front ? -1 : 0.8) * Math.max(0, Math.sin(Math.PI * Math.min(1, k * 1.4)));
+      }
       break;
     case 'spin':
       sg.rotation.y = Math.PI * 2 * k;

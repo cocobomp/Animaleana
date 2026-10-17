@@ -492,6 +492,7 @@ export class TripVehicle {
       p.entity.dispose();
     } else {
       p.model.root.parent?.remove(p.model.root);
+      p.model.dispose?.();
       disposeModel(p.model.root);
     }
     if (p.crate) {

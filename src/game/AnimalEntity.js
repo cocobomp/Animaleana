@@ -13,6 +13,7 @@ import { canLeash, heelSkill } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
 import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
 import { animateCat } from './catAnim.js'; // chats : assis, toilette, en boule, queue levée
+import { animateRealHorse } from './models/horseReal.js'; // cheval réaliste (GLB) : allures du mixeur
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 // Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
@@ -739,6 +740,7 @@ export class AnimalEntity {
     const sp = this.sp;
     if (md.gltf) return this.animateGltf(dt, sad);
     if (md.cat) return animateCat(this, dt, sad); // chats : poses et allures dédiées (catAnim.js)
+    if (md.real) return animateRealHorse(this, dt, sad); // cheval réaliste (horseReal.js)
     const legLen = this.data.look.legLen * (this.data.look.legs ?? 1);
     const v = this.speed / Math.max(0.3, this.scale);
     const moving = this.speed > 0.05;

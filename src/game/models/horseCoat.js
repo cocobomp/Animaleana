@@ -43,6 +43,14 @@ hBare = 0.0;
   float isHoof = step(5.5, part) * step(part, 6.5);
   float isSkin = step(6.5, part) * step(part, 7.5);
   float isEar = step(7.5, part);
+#ifdef H_REAL
+  // Cheval réaliste : la corne commence à une hauteur nette (couronne), pas au bord d'un triangle.
+  {
+    float lh = isLeg + isHoof;
+    isHoof = lh * (1.0 - smoothstep(hHoofY - 0.003, hHoofY + 0.003, P.y));
+    isLeg = lh - isHoof;
+  }
+#endif
   float isBody = 1.0 - isHead - isLeg - isHoof - isSkin - isEar;
   float h = vHInfo.x;          // membres : hauteur relative (0 = sol, 1 = coude) ; oreilles : 0 = base, 1 = pointe
   vec3 hl = vHInfo;            // tête : position dans le repère de la tête (÷ longueur de la tête)
@@ -146,11 +154,17 @@ hBare = 0.0;
   // Bout du nez : peau fine, foncée (rosée sous une marque blanche), lèvres et commissures.
   vec3 skin = mix(hSkin, vec3(0.72, 0.52, 0.5), clamp(face * 1.5, 0.0, 1.0));
   c = mix(c, mix(c, skin, 0.75), muzzleZone * (1.0 - smoothstep(0.0, 0.05, hl.y + 0.02 - (hl.z - 0.9) * 0.6)) );
+#ifndef H_REAL
   c = mix(c, skin * 0.8, isHead * (1.0 - smoothstep(0.004, 0.012, abs(hl.y + 0.148 - (hl.z - 0.8) * 0.12))) * smoothstep(0.76, 0.8, hl.z) * smoothstep(0.03, 0.08, abs(hl.x)));
+#endif
 
   // Naseaux en virgule (peints aussi : ils restent nets même quand le maillage est grossier).
+#ifdef H_REAL
+  float nos = 0.0; // (déjà dans le modelé de la texture)
+#else
   float nos = isHead * (1.0 - smoothstep(0.8, 1.0, length(vec3((abs(hl.x) - 0.064) / 0.016, (hl.y + 0.045 + (abs(hl.x) - 0.064) * 0.8) / 0.036, (hl.z - 0.97) / 0.06))));
   c = mix(c, hSkin * 0.6, nos);
+#endif
   // Peau nue (intérieur des oreilles et des naseaux, paupières) et sabots.
   c = mix(c, hSkin, isSkin);
   hBare = max(isSkin, max(nos, isHoof * 0.7));
@@ -159,7 +173,12 @@ hBare = 0.0;
   c = mix(c, hoof, isHoof);
 
   // Grain du poil (fin, couché vers l'arrière) et occlusion ambiante cuite.
+#ifdef H_REAL
+  // Modelé peint du modèle réaliste (muscles, poil, corne) : gris, 0,5 = moyen.
+  c *= hDetTex.r * 2.0;
+#else
   c *= 1.0 + (hNoise(P * vec3(320.0, 110.0, 70.0)) - 0.5) * 0.07 * (1.0 - aa) * (1.0 - isHoof);
+#endif
   // (plancher plus haut dessous : le ventre et l'intérieur des cuisses ne tombent pas au noir)
   c *= mix(mix(0.42, 0.62, clamp(under + inner, 0.0, 1.0)), 1.0, vHAO);
   diffuseColor.rgb = c;
@@ -172,7 +191,7 @@ const col = (hex) => new THREE.Color(hex);
  * Matière du pelage d'un cheval. Une matière par animal (ses couleurs), un seul programme GPU pour tous.
  * build : gabarit (horseBuild) ; breedFace : marque imposée par la race.
  */
-export function coatMaterial(look, build, breed = null) {
+export function coatMaterial(look, build, breed = null, real = null) {
   const high = gfx.quality === 'high';
   const tr = horseCoatTraits(look);
   const socks = horseSocks(look);
@@ -199,6 +218,7 @@ export function coatMaterial(look, build, breed = null) {
     hSocks: { value: new THREE.Vector4(...socks) },
     hFace: { value: face },
     hSeed: { value: ((look.seed ?? 1) % 997) * 0.731 },
+    hHoofY: { value: real?.hoofY ?? 0 },
   };
   const opts = {
     color: 0xffffff,
@@ -214,6 +234,13 @@ export function coatMaterial(look, build, breed = null) {
       sheenColor: coat.clone().lerp(new THREE.Color(1, 0.95, 0.85), 0.3 + sheen * 0.3),
     })
     : new THREE.MeshStandardMaterial(opts);
+  // Cheval réaliste (horseReal.js) : modelé peint (gris) et relief du modèle, sabots à hauteur fixe.
+  if (real) {
+    m.map = real.detail;
+    m.normalMap = real.normalMap ?? null;
+    m.normalScale.set(0.9, 0.9 * (real.normalSign ?? 1));
+    m.defines = { H_REAL: '' };
+  }
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = sh.vertexShader
@@ -238,7 +265,7 @@ varying vec3 vHInfo;
 varying float vHAO;
 float hBare; // peau nue et sabots : pas de reflet satiné du poil
 ${NOISE}`)
-      .replace('#include <map_fragment>', `#include <map_fragment>
+      .replace('#include <map_fragment>', `${real ? 'vec4 hDetTex = texture2D( map, vMapUv );' : '#include <map_fragment>'}
 ${COAT_FRAGMENT}`)
       // Sabots plus lisses et brillants que le poil.
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
@@ -248,7 +275,7 @@ roughnessFactor *= mix(1.0, 0.55, step(5.5, vHPart) * step(vHPart, 6.5));`)
 material.sheenColor *= 1.0 - hBare;
 #endif`);
   };
-  m.customProgramCacheKey = () => `horsecoat${high ? 'p' : 's'}`;
+  m.customProgramCacheKey = () => `horsecoat${high ? 'p' : 's'}${real ? 'r' : ''}`;
   m.userData.horseUniforms = u;
   return m;
 }

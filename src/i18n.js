@@ -2,6 +2,7 @@
 
 import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
 import { VET_FR, VET_EN } from './ui/vetTexts.js'; // examen et école vétérinaires (vx_*, vs_*)
+import { TACK_FR, TACK_EN } from './ui/tackTexts.js'; // sellerie : catalogue d'équipement (gear_*, tk_*, col_*)
 
 const fr = {
   title: 'Animadichelle',
@@ -600,7 +601,7 @@ const fr = {
   gearRemove: 'Enlever',
   gearNone: 'À acheter',
   gearBought: '🛍️ {name} acheté !',
-  gear_notOwned: 'Il t\'en faut un de plus : achète-le à la sellerie de l\'écurie.',
+  gear_notOwned: 'Il t\'en faut un de plus : achète-le à la sellerie (à côté de l\'écurie).',
   gear_wrongSpecies: 'Ce n\'est pas pour cet animal.',
   buy: 'Acheter',
   gear_bridle: 'Filet',
@@ -1215,7 +1216,7 @@ const fr = {
   ev_stormNow: '⛈️ L\'orage éclate !',
   ev_allIn: '🏠 Tout le monde est à l\'abri !',
   ev_callPets: '🏠 Les petits animaux rentrent à la maison.',
-  ev_noBlanket: 'Il n\'y a plus de couverture, et pas assez d\'argent pour en acheter.',
+  ev_noBlanket: 'Il n\'y a plus de couverture d\'hiver rangée, et pas assez d\'argent pour en acheter une.',
   ev_blanketOn: '🧣 {name} a une couverture bien chaude.',
   ev_found: '❤️ Tu as retrouvé {name} ! Il te suit.',
   ev_found_f: '❤️ Tu as retrouvé {name} ! Elle te suit.',
@@ -2384,7 +2385,7 @@ const en = {
   gearRemove: 'Take off',
   gearNone: 'Buy first',
   gearBought: '🛍️ {name} bought!',
-  gear_notOwned: 'You need one more: buy it at the stable\'s tack room.',
+  gear_notOwned: 'You need one more: buy it at the tack room (next to the stable).',
   gear_wrongSpecies: 'This isn\'t for this animal.',
   buy: 'Buy',
   gear_bridle: 'Bridle',
@@ -2973,7 +2974,7 @@ const en = {
   ev_stormNow: '⛈️ The storm breaks!',
   ev_allIn: '🏠 Everyone is safe inside!',
   ev_callPets: '🏠 The small animals go back to the house.',
-  ev_noBlanket: 'No blanket left, and not enough money to buy one.',
+  ev_noBlanket: 'No spare winter blanket, and not enough money to buy one.',
   ev_blanketOn: '🧣 {name} has a nice warm blanket.',
   ev_found: '❤️ You found {name}! They follow you.',
   ev_strayFollows: '🐾 The little {kind} follows you to the shelter.',
@@ -3578,6 +3579,9 @@ Object.assign(fr, CLIENTS_FR);
 Object.assign(en, CLIENTS_EN);
 Object.assign(fr, VET_FR); // examen et école vétérinaires
 Object.assign(en, VET_EN);
+// Sellerie : noms, phrases et effets de chaque selle, filet, couverture… (remplace les anciens noms courts).
+Object.assign(fr, TACK_FR);
+Object.assign(en, TACK_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

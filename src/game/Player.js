@@ -8,6 +8,8 @@ import {
 import { gaitFromSpeed, gaitWeights, gestureHeight, clipGait, stirrupFor } from './models/avatarMotion.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
+import { tackEffects } from '../sim/gear.js';
+import { helmetModel } from './models/tackModels.js'; // bombe du cavalier
 
 const WALK = 3.2;
 const RUN = 6.2;
@@ -51,11 +53,15 @@ export class Player {
 
   setAvatar(look) {
     if (this.avatar) {
+      this.helmet?.parent?.remove(this.helmet); // la bombe passe sur le nouvel avatar
       this.root.remove(this.avatar.root);
       disposeModel(this.avatar.root);
     }
     this.avatar = buildAvatar(look);
     this.root.add(this.avatar.root);
+    if (this.helmet) {
+      this.avatar.head.add(this.helmet);
+    }
     if (this.mount) this.seat();
     if (this.carried) poseAvatar(this.avatar, 'carry', { size: this.carrySize });
   }
@@ -120,9 +126,24 @@ export class Player {
     poseAvatar(a, 'ride', this.ride0);
   }
 
+  /** Bombe du cavalier sur la tête de l'avatar (null : on l'enlève). */
+  setHelmet(h) {
+    if (this.helmet) {
+      this.helmet.parent?.remove(this.helmet);
+      this.helmet = null;
+    }
+    if (!h) return;
+    this.helmet = helmetModel(h.item, h.color);
+    this.helmet.position.set(0, 0.105, -0.01);
+    this.helmet.rotation.x = -0.12;
+    this.helmet.scale.setScalar(1.36);
+    this.avatar.head.add(this.helmet);
+  }
+
   dismount() {
     const e = this.mount;
     if (!e) return null;
+    this.setHelmet(null);
     e.ridden = false;
     e.speed = 0;
     this.mount = null;
@@ -326,7 +347,8 @@ export class Player {
     let max = run ? RUN : this.carried ? CARRY : WALK;
     if (mount) {
       const skill = 1 + mount.data.skills.speed / 150;
-      max = (run ? 11 : 4.5) * skill * Math.min(1.2, mount.scale + 0.2) * (this.bareback || !mount.data.gear?.saddle ? 0.8 : 1);
+      // À cru : un peu moins vite ; la selle de course fait aller plus vite (src/sim/gear.js).
+      max = (run ? 11 : 4.5) * skill * Math.min(1.2, mount.scale + 0.2) * (this.bareback || !mount.data.gear?.saddle ? 0.8 : tackEffects(mount.data).speed);
       if (mount.data.needs.energy < 10) max = 2;
     }
     const target = amount > 0.05 ? max * Math.min(1, amount) : 0;

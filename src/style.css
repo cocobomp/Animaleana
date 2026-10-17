@@ -2028,3 +2028,34 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
   body.panel-open #ev-banner > .ev-card { left: calc(8px + var(--safe-l)); width: calc(var(--hud-info-right, 348px) - 8px - var(--safe-l)); }
   body.panel-open #joystick { display: none; }
 }
+
+/* ---------- sellerie : catalogue et fiche d'un objet (src/ui/tack.js) */
+.tk-go { width: 100%; margin: 6px 0 4px; }
+.tk-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 6px; margin: 4px 0; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.tk-tabs::-webkit-scrollbar { display: none; }
+.tk-tabs button { flex-shrink: 0; white-space: nowrap; }
+.tk-card { padding: 6px 10px 6px 6px; }
+.tk-thumb { width: 72px; height: 54px; object-fit: cover; border-radius: 10px; flex-shrink: 0; background: #f4ecdc; }
+.tk-price { font-size: 0.95rem; white-space: nowrap; }
+.tk-mine { color: var(--primary) !important; font-weight: 600; }
+.tk-back { margin: 2px 0 6px; }
+.tk-pic { margin: 0; border-radius: 16px; overflow: hidden; background: #f4ecdc; border: 1px solid var(--line); }
+.tk-pic img { display: block; width: 100%; aspect-ratio: 36 / 25; object-fit: cover; }
+.tk-pic.try { background: #dfe9ef; position: relative; }
+.tk-pic img.tk-inset { position: absolute; top: 8px; right: 8px; width: 30%; aspect-ratio: 4 / 3; border-radius: 12px; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); background: #f4ecdc; }
+.tk-pic figcaption { display: grid; gap: 2px; padding: 6px 10px 8px; font-size: 0.9rem; }
+.tk-pic figcaption small { color: var(--muted); }
+.tk-disc { background: #fbf3df; border-color: #e3cfa3; font-weight: 600; }
+.tk-own { background: #e2f5e7; border-color: #b9dfc4; }
+.tk-desc { font-size: 1.02rem; margin: 6px 0; }
+.tk-fx { margin: 6px 0; padding: 8px 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; font-size: 0.92rem; }
+.tk-sizes button { flex: 1 1 auto; }
+.tk-swap { margin: 4px 0; }
+.tk-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 12px 0 6px; }
+.tk-actions .big-action { min-height: 56px; }
+.tk-pick { display: grid; gap: 8px; padding: 10px; background: #fff; border: 1px dashed var(--primary); border-radius: 12px; }
+.tk-slot { display: inline-block; min-width: 74px; color: var(--muted); }
+.tk-dot { display: inline-block; vertical-align: middle; width: 16px; height: 16px; margin-left: 6px; }
+.tk-goshop { justify-self: start; }
+.tk-actions .big-action.tk-short { background: #fbf3df; border-color: #e3cfa3; } /* mode argent : il manque des pièces */
+.tk-actions .big-action.tk-short small { color: #9a4a1a; font-weight: 600; }

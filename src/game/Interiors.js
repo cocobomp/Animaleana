@@ -1,13 +1,17 @@
-// Bâtiments où l'on entre (écurie et maison) : construction dans le monde, murs et navigation
+// Bâtiments où l'on entre (écurie, maison et sellerie) : construction dans le monde, murs et navigation
 // par les portes, toit qui disparaît quand on est dedans, coins où l'on fait les corvées,
 // box des chevaux, et lien avec la propreté / l'usure (src/sim/facilities.js).
 
 import * as THREE from 'three';
 import { stableModel, stableRooms, stableHall, stableWidth, STABLE_D } from './models/stableInterior.js';
 import { stableRect } from '../sim/facilities.js'; // l'écurie se rallonge (vue construction)
-import { setStableExt as placeTackRoom } from './farmLayout.js';
+import { setStableExt as placeTackRoom, TACKROOM } from './farmLayout.js';
 import { houseModel, houseRooms, HOUSE_HALL, HOUSE_W, HOUSE_D } from './models/houseInterior.js';
 import { plateTexture } from './models/interiorKit.js';
+// Sellerie où l'on entre : objets exposés, étiquettes de prix, comptoir (src/game/models/tackRoomInterior.js).
+import { tackRoomModel, TACK_HALL, TACK_W, TACK_D } from './models/tackRoomInterior.js';
+import { GEAR, gearPrice, ownedVariant, wornBy, defaultSize } from '../sim/gear.js';
+import { isSandbox } from '../sim/profile.js';
 import { emojiTexture } from './textures.js';
 import { ENCLOSURES, NAV_HOOKS, pathBlocked } from './nav.js';
 import { HOME } from './AnimalEntity.js'; // paddock (déplaçable en vue d'ensemble)
@@ -118,8 +122,17 @@ const DEFS = {
   // (place et longueur de l'écurie : setStableExt, selon sa taille)
   stable: { kind: 'stable', x: -22, z: -2, rot: Math.PI / 2, w: stableWidth(0), d: STABLE_D, top: 5.5, door: 3.2, aroundSide: 1 },
   house: { kind: 'house', x: 0, z: -16, rot: 0, w: HOUSE_W, d: HOUSE_D, top: 5.2, door: 1.6 },
+  // Sellerie : à côté de l'écurie, la porte regarde vers la cour.
+  tackroom: { kind: 'tackroom', x: TACKROOM.x, z: TACKROOM.z, rot: Math.PI / 2, w: TACK_W, d: TACK_D, top: 4.8, door: 1.6 },
 };
 let stableExtNow = 0;
+const MODELS = {
+  stable: () => stableModel(L({ fr: 'Écurie', en: 'Stable' }), stableExtNow),
+  house: () => houseModel(t('title')),
+  tackroom: () => tackRoomModel(t('bld_tackroom'), t('tk_board')),
+};
+const ROOMS = { stable: () => stableRooms(stableExtNow), house: houseRooms, tackroom: () => [] };
+const HALLS = { stable: () => stableHall(stableExtNow), house: () => HOUSE_HALL, tackroom: () => TACK_HALL };
 
 /**
  * Taille de l'écurie (0 : 8 box, 1 : 12, 2 : 16) : son bout nord reste contre le paddock, elle s'allonge
@@ -130,6 +143,7 @@ export function setStableExt(ext) {
   const r = stableRect(ext);
   Object.assign(DEFS.stable, { x: r.x, z: r.z, w: stableWidth(ext) });
   placeTackRoom(ext);
+  Object.assign(DEFS.tackroom, { x: TACKROOM.x, z: TACKROOM.z }); // la sellerie où l'on entre recule aussi
 }
 
 /**
@@ -144,7 +158,7 @@ export function buildInteriors(world, group, isHome) {
   for (let i = ENCLOSURES.length - 1; i >= 0; i--) if (ENCLOSURES[i].interior) ENCLOSURES.splice(i, 1);
   if (!isHome) return;
   for (const [id, def] of Object.entries(DEFS)) {
-    const model = id === 'stable' ? stableModel(L({ fr: 'Écurie', en: 'Stable' }), stableExtNow) : houseModel(t('title'));
+    const model = MODELS[id]();
     const b = {
       id,
       ...def,
@@ -152,8 +166,8 @@ export function buildInteriors(world, group, isHome) {
       s: Math.sin(def.rot),
       model,
       box: { x0: -def.w / 2, x1: def.w / 2, z0: -def.d / 2, z1: def.d / 2 },
-      rooms: id === 'stable' ? stableRooms(stableExtNow) : houseRooms(),
-      hall: id === 'stable' ? stableHall(stableExtNow) : HOUSE_HALL,
+      rooms: ROOMS[id](),
+      hall: HALLS[id](),
     };
     b.entry = id === 'stable' ? b.rooms.find((r) => r.id === 'passage') : null;
     const y = world.heightAt(def.x, def.z);
@@ -185,7 +199,7 @@ export function buildInteriors(world, group, isHome) {
 
 const STRAW_FRESH = new THREE.Color(0xe6c86e);
 const STRAW_OLD = new THREE.Color(0x8c7448);
-const LIGHT_POS = { stable: [0, 0], house: [1.5, 0.5] };
+const LIGHT_POS = { stable: [0, 0], house: [1.5, 0.5], tackroom: [0, -0.4] };
 
 export class Interiors {
   constructor(game) {
@@ -196,6 +210,7 @@ export class Interiors {
     this.spots = [];
     this.fx = [];
     this.visAcc = 0;
+    this.tmpV = new THREE.Vector3();
   }
 
   get world() {
@@ -255,6 +270,19 @@ export class Interiors {
     spot(hs, 'kitchen', H.kitchen.obj, H.kitchen.lx, H.kitchen.lz, '🍽️', () => t('fac_spot_kitchen'), () => this.chore('kitchen'));
     spot(hs, 'bed', H.bed.obj, H.bed.lx, H.bed.lz, '🛏️', () => t('fac_spot_bed'), () => ui.openBed());
     spot(hs, 'wardrobe', H.wardrobe.obj, H.wardrobe.lx, H.wardrobe.lz, '👕', () => t('fac_spot_wardrobe'), () => ui.showAvatarEditor(g.profile, () => ui.clearScreen()));
+    // Sellerie : chaque objet exposé ouvre sa fiche ; le comptoir, le coffre et le chevalet de nettoyage.
+    const tk = w.interiors.tackroom;
+    if (tk) {
+      for (const d of tk.model.displays.values()) {
+        // Le bouton d'action dit aussi le prix (ou « À toi ») : lisible même sur un petit écran.
+        const label = () => (this.tackLines?.get(d.id) ? `${t(`gear_${d.id}`)} · ${this.tackLines.get(d.id)}` : t(`gear_${d.id}`));
+        spot(tk, `tk_${d.id}`, d.obj, d.stand[0], d.stand[1], GEAR[d.id].emoji, label, () => ui.openTackItem(d.id), 0.6);
+      }
+      const T = tk.model.spots;
+      spot(tk, 'tk_counter', T.counter.obj, T.counter.lx, T.counter.lz, '🛒', () => t('tk_spot_counter'), () => ui.openTack(), 0.7);
+      spot(tk, 'tk_chest', T.chest.obj, T.chest.lx, T.chest.lz, '🧰', () => t('tk_spot_chest'), () => ui.openTack({ tab: 'mine' }), 0.7);
+      spot(tk, 'tk_clean', T.clean.obj, T.clean.lx, T.clean.lz, '🧽', () => t('tk_spot_clean'), () => this.cleanTack(), 0.7);
+    }
     // Les chevaux sans box en reçoivent un (s'il en reste).
     for (const a of this.homeHorses()) assignBox(f, this.homeHorses(), a);
     this.refreshVisuals();
@@ -486,8 +514,10 @@ export class Interiors {
     if (inside !== this.inside) {
       // Le bouton d'action ne propose que les coins du bâtiment où l'on est.
       w.interactables = w.interactables.filter((i) => i.kind !== 'spot').concat(this.spots.filter((s) => s.building === inside));
+      if (inside === 'tackroom') this.faceTackWall(); // comme dans un magasin : on voit tout de suite les selles
     }
     this.inside = inside;
+    this.turnCamera(dt);
     // Vue en coupe : sans toit ni haut des murs quand on est dedans (en 3ᵉ personne).
     const cut = inside && this.game.rig.mode === 'third' ? inside : null;
     if (cut !== w.cutaway) {
@@ -528,6 +558,24 @@ export class Interiors {
     const hd = hs.model.doorHinge;
     const wantH = hold('house', wants(hs, 0, HOUSE_D / 2, 2.2)) ? 1.5 : 0;
     hd.rotation.y += (wantH - hd.rotation.y) * Math.min(1, dt * 5);
+    // Sellerie : porte, la sellière qui regarde le joueur quand il entre.
+    const tk = w.interiors.tackroom;
+    if (tk) {
+      // Mobilier et objets exposés : seulement dedans ou près de la porte (budget de triangles).
+      const near = inside === 'tackroom' || Math.hypot(pp.x - tk.x, pp.z - tk.z) < 16;
+      tk.model.setDetail(near);
+      const td = tk.model.doorHinge;
+      const wantT = hold('tackroom', wants(tk, 0, TACK_D / 2, 2.2)) ? 1.45 : 0;
+      td.rotation.y += (wantT - td.rotation.y) * Math.min(1, dt * 5);
+      const sl = tk.model.seller;
+      let look = 0;
+      if (inside === 'tackroom') {
+        const q = sl.root.worldToLocal(this.tmpV.set(pp.x, pp.y + 1.4, pp.z));
+        look = Math.max(-0.9, Math.min(0.9, Math.atan2(q.x, q.z)));
+      }
+      sl.head.rotation.y += (look - sl.head.rotation.y) * Math.min(1, dt * 3);
+      sl.torso.rotation.x = Math.sin(performance.now() / 900) * 0.012;
+    }
     // Robot aspirateur.
     if (hs.model.robot.visible) {
       const tt = performance.now() / 4000;
@@ -540,7 +588,8 @@ export class Interiors {
     st.model.lampMat.emissiveIntensity = stableLit ? 1.5 : 0;
     st.model.glass.emissiveIntensity = stableLit ? 1.2 : 0;
     hs.model.lampMat.emissiveIntensity = night ? 1.5 : 0.2;
-    const lit = inside && night && (inside === 'house' || stableLit);
+    if (tk) tk.model.lampMat.emissiveIntensity = night ? 1.6 : 0.25;
+    const lit = inside && night && (inside === 'house' || inside === 'tackroom' || stableLit);
     this.light.intensity = lit ? 9 : 0;
     if (lit) {
       const b = w.interiors[inside];
@@ -602,6 +651,7 @@ export class Interiors {
       const dirt = 100 - f.house.rooms[room];
       for (const m of grp.children) m.visible = dirt > m.userData.threshold;
     }
+    this.refreshTack();
     const messy = f.house.rooms.bedroom < 55;
     hs.blanket.rotation.y = messy ? 0.35 : 0;
     hs.blanket.position.x = messy ? -3.2 : -3.4;
@@ -611,6 +661,85 @@ export class Interiors {
     const fancy = hasUpgrade(f, 'house', 'basket');
     hs.cushion.material.color.setHex(fancy ? 0xc2405a : 0x8fb3cf);
     hs.basket.scale.setScalar(fancy ? 1.25 : 1);
+  }
+
+  /**
+   * Sellerie : chaque objet exposé montre son prix, ou « À toi » s'il est rangé là,
+   * ou le nom de l'animal qui le porte (le support est alors vide).
+   */
+  refreshTack() {
+    const tk = this.world.interiors?.tackroom;
+    if (!tk || !this.profile) return;
+    const p = this.profile;
+    const sandbox = isSandbox(p);
+    const list = [];
+    for (const d of tk.model.displays.values()) {
+      const id = d.id;
+      const def = GEAR[id];
+      const own = ownedVariant(p, id);
+      const wearers = def.sizes ? def.sizes.flatMap((sz) => wornBy(p, id, sz)) : wornBy(p, id, defaultSize(id));
+      const onHead = def.type === 'helmet' && p.rider?.helmet?.item === id ? 1 : 0;
+      const free = own - wearers.length - onHead;
+      const pref = p.tackColors?.[id];
+      const st = { id, name: t(`gear_${id}`), color: def.colors?.includes(pref) ? pref : def.colors?.[0], visible: true };
+      if (own <= 0) {
+        st.line = sandbox ? `🎁 ${t('tk_free')}` : `${gearPrice(id)} 🪙`;
+        st.tone = 'price';
+      } else if (free > 0) {
+        st.line = free > 1 ? `${t('tk_tagMine')} ×${free}` : t('tk_tagMine');
+        st.tone = 'mine';
+      } else {
+        // Tout est porté : le support reste vide, l'étiquette dit qui l'a.
+        const who = wearers[0];
+        st.line = onHead ? t('tk_tagHead') : t('tk_tagOn', { name: who?.name ?? '', emoji: SPECIES[who?.species]?.emoji ?? '🐴' });
+        st.tone = 'worn';
+        st.visible = false;
+      }
+      list.push(st);
+    }
+    tk.model.applyDisplays(list);
+    this.tackLines = new Map(list.map((x) => [x.id, x.line]));
+  }
+
+  /**
+   * En entrant dans la sellerie : la caméra se tourne doucement vers le mur des selles (vers -X local,
+   * un peu vers les filets) et se rapproche. snap : tout de suite (arrivée par « Entrer »).
+   */
+  faceTackWall(snap = false) {
+    const b = this.world.interiors?.tackroom;
+    const rig = this.game.rig;
+    if (!b || rig.mode !== 'third') return;
+    const lx = -1;
+    const lz = -0.12;
+    const yaw = Math.atan2(lx * b.c + lz * b.s, -lx * b.s + lz * b.c); // direction (lx, lz) du bâtiment, dans le monde
+    this.camTurn = { yaw, dist: Math.min(rig.dist, 4.3), pitch: 0.48, t: snap ? 0 : 1.2 };
+    if (snap) {
+      this.game.player.heading = yaw; // le personnage regarde les selles, lui aussi
+      this.turnCamera(1);
+    }
+  }
+
+  turnCamera(dt) {
+    const c = this.camTurn;
+    if (!c) return;
+    const rig = this.game.rig;
+    const k = c.t <= 0 ? 1 : Math.min(1, dt * 3);
+    rig.yaw += Math.atan2(Math.sin(c.yaw - rig.yaw), Math.cos(c.yaw - rig.yaw)) * k;
+    rig.dist += (c.dist - rig.dist) * k;
+    rig.pitch += (c.pitch - rig.pitch) * k;
+    c.t -= dt;
+    if (c.t <= 0) this.camTurn = null;
+  }
+
+  /** Nettoyer et graisser le cuir (chevalet de la sellerie) : tous les 2 jours. */
+  async cleanTack() {
+    const g = this.game;
+    if (g.day - (g.profile.tackCleanedDay ?? -99) < 2) return g.ui.toast(t('why_tackClean'));
+    const q = await g.ui.choreWithGame('tack');
+    if (q === null || q === false || !g.profile) return;
+    g.cleanTack();
+    const s = this.spots.find((x) => x.id === 'tk_clean');
+    if (s) this.sparkle(s.x, s.z, '✨');
   }
 
   // ------------------------------------------------------------ toucher l'écran
@@ -651,7 +780,8 @@ export class Interiors {
     if (!b) return;
     const lx = (b.hall.x0 + b.hall.x1) / 2;
     const lz = (b.hall.z0 + b.hall.z1) / 2;
-    const p = toWorld(b, kind === 'stable' ? 0 : lx, lz);
-    this.game.walkTo(new THREE.Vector3(p.x, 0, p.z), 0.6);
+    // (sellerie : on s'arrête au milieu, face au mur des selles)
+    const p = toWorld(b, kind === 'house' ? lx : kind === 'tackroom' ? -0.5 : 0, kind === 'tackroom' ? -0.3 : lz);
+    this.game.walkTo(new THREE.Vector3(p.x, 0, p.z), 0.6, kind === 'tackroom' ? () => this.faceTackWall(true) : undefined);
   }
 }

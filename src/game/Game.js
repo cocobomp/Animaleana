@@ -37,7 +37,7 @@ import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
 import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone } from '../sim/droppings.js';
 import { enclosure } from './nav.js';
 import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
-import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash } from '../sim/gear.js';
+import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash, equipHelmet, riderHelmet } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
 import { t, L } from '../i18n.js';
@@ -234,7 +234,7 @@ export class Game {
   /** Sol sous les pieds du joueur, pour le bruit des pas : grass / dirt / wood / stone / snow / sand. */
   surfaceAt() {
     const inside = this.interiors.inside;
-    if (inside) return inside === 'house' ? 'wood' : 'stone';
+    if (inside) return inside === 'house' || inside === 'tackroom' ? 'wood' : 'stone'; // sellerie : plancher
     const w = this.world;
     const p = this.player.position;
     if (w.snowy) return 'snow';
@@ -1014,16 +1014,29 @@ export class Game {
     return UNLOCKS[key] ?? 1;
   }
 
-  buyGear(item) {
-    const r = buyGear(this.profile, item);
+  buyGear(item, size) {
+    const r = buyGear(this.profile, item, size ?? undefined); // taille poney / cheval / trait (src/sim/gear.js)
     if (!r.ok) return this.ui.toast(t('r_money'));
     this.ui.toast(t('gearBought', { name: t(`gear_${item}`) }));
+    this.audio?.ui?.('coin');
     return r;
   }
 
-  equip(a, item, color) {
-    const r = equip(this.profile, a, item, color);
+  /** Bombe du cavalier : on la choisit à la sellerie, on la porte quand on monte. */
+  equipHelmet(item, color) {
+    const r = equipHelmet(this.profile, item, color);
     if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`));
+    this.ui.toast(t('tk_helmetOn', { item: t(`gear_${item}`) }));
+    if (this.player.mount) this.player.setHelmet(riderHelmet(this.profile));
+    return r;
+  }
+
+  equip(a, item, color, opts = {}) {
+    // À la maison, la sellière échange gratuitement la taille si besoin (src/sim/gear.js).
+    // opts.exact : CE modèle (boutons des fiches de la sellerie), jamais un autre du même type.
+    const r = equip(this.profile, a, item, color, { autoSwap: this.isHome, exact: !!opts.exact });
+    if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`));
+    if (r.swapped) this.ui.toast(t('tk_swappedAuto', { item: t(`gear_${r.item}`), size: t(`tk_size_${r.swapped}`) }), 4000);
     this.entities.get(a.id)?.applyGear();
     if (this.player.mount?.data === a) this.player.seat();
     return r;
@@ -1301,6 +1314,7 @@ export class Game {
     const e = this.entities.get(a.id);
     if (!e) return null;
     this.player.ride(e);
+    this.player.setHelmet(riderHelmet(this.profile)); // on monte toujours avec sa bombe
     addStat(this.profile, 'rides');
     this.xp('ride');
     this.ui.toast(t(gear.bareback ? 'ridingBareback' : 'ridingHint', { name: a.name, g: a.sex }));

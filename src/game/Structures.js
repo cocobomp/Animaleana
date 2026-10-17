@@ -214,7 +214,11 @@ export class Structures {
       core: this.layout,
       structures: this.here(),
       colliders: w.colliders.filter((c) => !c.structure),
-      blocked: w.interactables.filter((d) => d.kind !== 'spot').map((d) => ({ x: d.x, z: d.z, hw: 1.6, hd: 1.6, core: d.core, kind: d.kind })),
+      blocked: [
+        ...w.interactables.filter((d) => d.kind !== 'spot').map((d) => ({ x: d.x, z: d.z, hw: 1.6, hd: 1.6, core: d.core, kind: d.kind })),
+        // La sellerie où l'on entre (src/game/Interiors.js) : on ne construit pas dedans, comme sur l'ancienne sellerie fermée.
+        ...(w.camVolumes ?? []).filter((v) => v.id === 'tackroom').map((v) => ({ x: v.x, z: v.z, hw: v.hw, hd: v.hd, kind: 'tackroom' })),
+      ],
       isWater: (x, z) => w.isWater(x, z),
       heightAt: (x, z) => w.heightAt(x, z),
     };
@@ -433,7 +437,7 @@ export class Structures {
   validateStableExtension() {
     const env = this.env();
     const moving = ['tackroom', 'pethouse', 'stable']; // (ils bougent avec la rallonge)
-    env.colliders = env.colliders.filter((c) => c.room !== 'stable' && !moving.includes(c.kind));
+    env.colliders = env.colliders.filter((c) => !moving.includes(c.room) && !moving.includes(c.kind)); // (murs de l'écurie et de la sellerie)
     env.blocked = env.blocked.filter((c) => !moving.includes(c.kind));
     env.equipment = this.game.equipment.map((q) => ({ x: q.pos.x, z: q.pos.z }));
     return validateStableExtension(this.profile, env);

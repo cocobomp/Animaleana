@@ -19,7 +19,7 @@ import {
   eventWeather, nextStep, minutesLeft, shelterOf,
 } from '../sim/events.js';
 import { STRUCTURES, footprintOf } from '../sim/construction.js';
-import { GEAR, owned, inUse } from '../sim/gear.js';
+import { GEAR, freeStock, sizeFor, gearPrice } from '../sim/gear.js';
 import { canAfford, addStat } from '../sim/profile.js';
 import { XP } from '../sim/progress.js';
 import {
@@ -531,11 +531,15 @@ export class Events {
   putBlanket(a) {
     const g = this.game;
     const p = g.profile;
-    if (owned(p, 'blanket') - inUse(p, 'blanket') <= 0) {
-      if (!canAfford(p, GEAR.blanket.price)) return g.ui.toast(t('ev_noBlanket'), 5000);
-      g.buyGear('blanket');
+    // Il faut la couverture d'hiver (elle protège du froid) : la chemise d'été ou l'imperméable ne suffisent pas.
+    // Une couverture rangée d'une autre taille s'échange à la maison (src/sim/gear.js).
+    const size = sizeFor('blanket', a);
+    const spare = freeStock(p, 'blanket', size) > 0 || (g.isHome && GEAR.blanket.sizes.some((sz) => freeStock(p, 'blanket', sz) > 0));
+    if (!spare) {
+      if (!canAfford(p, gearPrice('blanket', size))) return g.ui.toast(t('ev_noBlanket'), 5000);
+      g.buyGear('blanket', size);
     }
-    const r = g.equip(a, 'blanket', 'navy');
+    const r = g.equip(a, 'blanket', 'navy', { exact: true });
     if (r?.ok) {
       g.entities.get(a.id)?.emit('🧣', 3);
       g.ui.toast(ta('ev_blanketOn', a));

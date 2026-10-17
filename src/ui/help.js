@@ -4,7 +4,7 @@
 import { h } from './dom.js';
 import { t, L, getLang } from '../i18n.js';
 
-// where : bâtiment ('refuge', 'petshop', 'stable', 'pen', 'paddock', 'kennel', 'hutch', 'vet', 'house', 'jobs')
+// where : bâtiment ('refuge', 'petshop', 'stable', 'tackroom', 'pen', 'paddock', 'kennel', 'hutch', 'vet', 'house', 'jobs')
 //         ou bouton de l'écran ('hud:farm', 'hud:travel', 'hud:journal', 'hud:animals', 'hud:time')
 const TOPICS = [
   { id: 'adopt', icon: '🐾', where: 'refuge',
@@ -19,10 +19,14 @@ const TOPICS = [
     title: { fr: 'Nourrir et donner à boire', en: 'Feed and give water' },
     keys: 'nourrir manger faim boire soif eau croquettes foin feed hungry water thirsty',
     steps: { fr: ['Touche ton animal (ou son nom).', 'Choisis « Nourrir » ou « Donner à boire » et fais le petit jeu.', 'Plus tard : installe une mangeoire automatique dans 🚜 Ferme.'], en: ['Tap your animal (or its name).', 'Choose "Feed" or "Give water" and play the mini-game.', 'Later: install an automatic feeder in 🚜 Farm.'] } },
-  { id: 'leash', icon: '🦮', where: 'stable',
+  { id: 'leash', icon: '🦮', where: 'tackroom',
     title: { fr: 'Acheter une laisse et promener son chien', en: 'Buy a leash and walk your dog' },
     keys: 'laisse collier promener promenade chien acheter leash collar walk dog',
-    steps: { fr: ['Va à l\'écurie et ouvre la « Sellerie ».', 'Achète un collier et une laisse.', 'Touche ton chien → « Plus… » → Équipement → Mettre.', 'Touche ton chien → « Promener en laisse ».'], en: ['Go to the stable and open the "Tack room".', 'Buy a collar and a leash.', 'Tap your dog → "More…" → Equipment → Put on.', 'Tap your dog → "Walk on a leash".'] } },
+    steps: { fr: ['Entre dans la sellerie (à côté de l\'écurie) : collier et laisse sont sur le comptoir.', 'Achète un collier et une laisse.', 'Touche ton chien → « Plus… » → Équipement → Mettre.', 'Touche ton chien → « Promener en laisse ».'], en: ['Go into the tack room (next to the stable): collars and leashes are on the counter.', 'Buy a collar and a leash.', 'Tap your dog → "More…" → Equipment → Put on.', 'Tap your dog → "Walk on a leash".'] } },
+  { id: 'tack', icon: '🏇', where: 'tackroom',
+    title: { fr: 'Choisir une selle, un filet, une couverture', en: 'Choose a saddle, a bridle, a blanket' },
+    keys: 'sellerie selle filet mors hackamore bride tapis guêtres cloches couverture licol bombe casque acheter essayer taille poney trait western dressage obstacle randonnée tack saddle bridle bit pad boots blanket halter helmet buy try size pony draft',
+    steps: { fr: ['Entre dans la sellerie, à côté de l\'écurie.', 'Touche une selle, un filet ou une couverture : sa fiche dit à quoi il sert.', '« Essayer sur… » pour le voir sur ton cheval, puis « Acheter » à la bonne taille (poney, cheval ou trait).', '« Équiper… » et choisis ton cheval.'], en: ['Go into the tack room, next to the stable.', 'Tap a saddle, bridle or blanket: its card tells you what it is for.', '"Try it on…" to see it on your horse, then "Buy" in the right size (pony, horse or draft).', '"Put it on…" and choose your horse.'] } },
   { id: 'ride', icon: '🏇', where: 'paddock',
     title: { fr: 'Monter à cheval', en: 'Ride a horse' },
     keys: 'monter cheval équitation selle filet licol cru galoper ride horse saddle bridle gallop',
@@ -71,10 +75,10 @@ const TOPICS = [
     title: { fr: 'Préparer ma liste de tâches', en: 'Plan my task list' },
     keys: 'liste tâches automatique manuel planifier task list auto manual plan',
     steps: { fr: ['Dans un menu d\'actions, appuie sur 📝 à côté d\'une action.', 'Dans « Ma liste » (en bas à droite), choisis 🤖 Auto ou ✋ Moi.', 'Appuie sur ▶ Lancer.'], en: ['In an action menu, tap 📝 next to an action.', 'In "My list" (bottom right), choose 🤖 Auto or ✋ Me.', 'Tap ▶ Start.'] } },
-  { id: 'tools', icon: '🧶', where: 'stable',
+  { id: 'tools', icon: '🧶', where: 'tackroom',
     title: { fr: 'Acheter du matériel (tondeuse, seau…)', en: 'Buy tools (shears, pail…)' },
     keys: 'matériel outil tondeuse seau shampooing coupe-griffes acheter tools shears pail shampoo buy',
-    steps: { fr: ['Va à l\'écurie → « Sellerie ».', 'Dans « Matériel », achète l\'outil qu\'il te faut.', 'Le soin correspondant devient possible.'], en: ['Go to the stable → "Tack room".', 'In "Tools", buy the tool you need.', 'The matching care becomes possible.'] } },
+    steps: { fr: ['Entre dans la sellerie (à côté de l\'écurie) et touche le comptoir.', 'Dans « Outils », achète l\'outil qu\'il te faut.', 'Le soin correspondant devient possible.'], en: ['Go into the tack room (next to the stable) and tap the counter.', 'In "Tools", buy the tool you need.', 'The matching care becomes possible.'] } },
   { id: 'money', icon: '🪙', where: 'jobs',
     title: { fr: 'Gagner de l\'argent', en: 'Earn money' },
     keys: 'argent pièces gagner travail boulot laine lait money coins earn job wool milk',

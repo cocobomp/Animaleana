@@ -15,7 +15,7 @@
 import { SPECIES } from './species.js';
 import { lifeStage, createAnimal } from './animal.js';
 import { PLACES } from './places.js';
-import { wears, canLead } from './gear.js';
+import { wears, canLead, keepsWarm } from './gear.js';
 import { DAYS_PER_YEAR } from './time.js';
 import { earn, addStat } from './profile.js';
 import { pick, uid } from './rng.js';
@@ -43,7 +43,7 @@ export const isSheltered = (a, ctx) => ctx.whereOf(a) === shelterOf(a.species) &
 
 /** Au chaud pendant le grand froid : couverture pour les chevaux, manteau ou maison pour le chien, abri pour les autres. */
 export function isWarm(a, ctx) {
-  if (a.species === 'horse') return wears(a, 'blanket');
+  if (a.species === 'horse') return keepsWarm(a); // la couverture d'hiver (pas la chemise d'été ni l'imperméable)
   if (a.species === 'dog' && wears(a, 'dogCoat')) return true;
   return isSheltered(a, ctx);
 }

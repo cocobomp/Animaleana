@@ -139,7 +139,7 @@ export function stableRect(ext) {
 
 /** Sellerie (à côté de l'écurie, au sud) : position de son centre. */
 export const tackRoomPos = (ext) => ({ x: -24, z: STABLE_PLAN.north - stableLength(ext) - 7 });
-export const TACKROOM_SIZE = { hw: 2.8, hd: 3.8 };
+export const TACKROOM_SIZE = { hw: 3.0, hd: 4.0 }; // la sellerie où l'on entre : 8 m × 6 m (src/game/models/tackRoomInterior.js)
 
 /**
  * Maison des animaux : en face de la sellerie, de l'autre côté de l'allée. Elle recule avec elle quand

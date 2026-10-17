@@ -11,12 +11,13 @@ import { enclosure, fenceColliders } from './nav.js';
 import * as B from './models/buildings.js';
 import { t } from '../i18n.js';
 import { coreAt } from './coreLayout.js'; // installations déplaçables (vue d'ensemble)
-import { tackRoomPos, TACKROOM_SIZE, petHousePos, PETHOUSE_SIZE } from '../sim/facilities.js';
+import { tackRoomPos, petHousePos, PETHOUSE_SIZE } from '../sim/facilities.js';
 import { buildHutchToys } from './showground.js'; // jouets des lapins (activités)
 
 const GATE = 4;
 
-// Sellerie et maison des animaux (à la maison seulement). Elles reculent quand on rallonge l'écurie.
+// Sellerie (bâtiment où l'on entre, construit par src/game/Interiors.js) et maison des animaux
+// (à la maison seulement). Elles reculent quand on rallonge l'écurie.
 export const TACKROOM = { ...tackRoomPos(0) };
 export const PETHOUSE = petHousePos(0);
 
@@ -181,13 +182,7 @@ export function buildFarm(world, group, isHome = false) {
     world.colliders.push({ x: 18, z: -20, hw: 3.8, hd: 4.8, kind: 'petshop' });
     world.interactables.push({ kind: 'petshop', x: 18 - 4.9, z: -20 });
 
-    // Sellerie, à côté de l'écurie : selles, filets, licols et outils.
-    const tk = B.tackRoom(t('bld_tackroom'));
-    tk.group.position.set(TACKROOM.x, world.heightAt(TACKROOM.x, TACKROOM.z), TACKROOM.z);
-    tk.group.rotation.y = Math.PI / 2; // la porte regarde vers la cour
-    group.add(tk.group);
-    world.colliders.push({ x: TACKROOM.x, z: TACKROOM.z, ...TACKROOM_SIZE, kind: 'tackroom' });
-    world.interactables.push({ kind: 'tackroom', x: TACKROOM.x + 3.9, z: TACKROOM.z });
+    // (La sellerie, à côté de l'écurie, est un bâtiment où l'on entre : voir src/game/Interiors.js.)
 
     // Maison des animaux : on y range chiens, chats et lapins pour la nuit.
     const ph = B.petHouse(t('bld_pethouse'));
@@ -196,7 +191,7 @@ export function buildFarm(world, group, isHome = false) {
     world.colliders.push({ x: PETHOUSE.x, z: PETHOUSE.z, ...PETHOUSE_SIZE, kind: 'pethouse' });
     world.interactables.push({ kind: 'pethouse', ...PETHOUSE.door });
     world.petHouse = PETHOUSE;
-    world.clearZones.push({ x: TACKROOM.x, z: TACKROOM.z, r: 5 }, { x: PETHOUSE.x, z: PETHOUSE.z, r: 5.5 });
+    world.clearZones.push({ x: TACKROOM.x, z: TACKROOM.z, r: 6 }, { x: PETHOUSE.x, z: PETHOUSE.z, r: 5.5 });
   } else {
     world.petHouse = null;
   }

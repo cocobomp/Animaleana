@@ -1,11 +1,14 @@
 // Équipement visible sur l'animal en 3D : couverture, selle, filet, licol, guêtres, bonnet, collier.
 // Sur le cheval, les pièces épousent le corps sculpté (champ de distance) : sangle sous le ventre,
-// muserolle autour du nez, couverture posée sur le dos.
+// muserolle autour du nez, couverture posée sur le dos. Chaque modèle du catalogue de la sellerie
+// (src/sim/gear.js) a sa forme et sa couleur : selle d'obstacle aux quartiers en avant, selle western
+// avec sa corne et ses fenders, hackamore sans mors, couverture imperméable brillante…
 
 import * as THREE from 'three';
-import { BLANKET_COLORS } from '../sim/gear.js';
+import { BLANKET_COLORS, COLORS, GEAR } from '../sim/gear.js';
 import { loft } from './models/shapes.js';
 import { rayHit, sdfNormal } from './models/sdf.js';
+import { SADDLE_STYLES, TACK_PARTS, flapOutline } from './models/tackModels.js';
 
 const mat = (color, roughness = 0.7, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
 const LEATHER = 0x2a1a10;
@@ -85,13 +88,27 @@ export function buildGear(model, look, gear = {}) {
     holders.push(m);
     return m;
   };
+  // Un petit groupe tout fait (ex. un étrier du catalogue) : ses pièces sont partagées, on le retire en bloc.
+  add.group = (parent, obj) => {
+    parent.add(obj);
+    holders.push(obj);
+    return obj;
+  };
   if (model.sdf) buildHorseGear(model, look, gear, add);
+  else if (model.gearFit) buildHorseGear(model.gearFit, look, gear, add); // cheval GLB (src/game/models/gltfHorseFit.js)
   else buildGenericGear(model, look, gear, add, L, R, y0);
   group.userData.meshes = holders;
   return group;
 }
 
 // ------------------------------------------------------------------ cheval
+
+/** Couleur (hex) d'un objet porté : sa couleur choisie, sinon la première du modèle. */
+function gearColor(entry, fallback) {
+  const def = GEAR[entry?.item];
+  const key = def?.colors?.includes(entry?.color) ? entry.color : def?.colors?.[0];
+  return COLORS[key] ?? BLANKET_COLORS[entry?.color] ?? fallback;
+}
 
 function buildHorseGear(model, look, gear, add) {
   const { torso, head } = model.sdf;
@@ -100,113 +117,274 @@ function buildHorseGear(model, look, gear, add) {
   const body = model.body;
   const PI = Math.PI;
   const deg = (d) => (d * PI) / 180;
-  const zSeat = -L * 0.05; // là où s'assoit le cavalier (src/game/Player.js)
+  const P = TACK_PARTS;
 
   const blanket = gear.blanket;
   if (blanket) {
-    const color = BLANKET_COLORS[blanket.color] ?? BLANKET_COLORS.red;
-    const cloth = mat(color, 0.9, { side: THREE.DoubleSide });
-    // Couverture : du garrot à la queue, retombant sur les flancs ; liseré clair devant.
-    add(body, shell(torso, y0 - R * 0.2, -L * 0.52, L * 0.3, 12, deg(192), deg(-12), 20, 0.012), cloth);
-    const edge = loop(torso, [0, y0 - R * 0.2, L * 0.3], 20, 0.016, deg(192), deg(-12));
-    add(body, strap(edge, 0.018, 0.005), mat(0xf2ede4, 0.9));
-    // Sangle de poitrail et sous-ventrière.
-    add(body, strap(loop(torso, [0, y0 - R * 0.2, L * 0.02], 16, 0.014, deg(-15), deg(-165)), 0.014, 0.004), mat(0x332a26, 0.6));
+    // Couverture : du garrot à la queue, retombant sur les flancs ; liseré devant.
+    // Hiver : matelassée avec un col en mouton ; imperméable : brillante ; chemise d'été : filet clair.
+    const id = blanket.item;
+    const color = gearColor(blanket, BLANKET_COLORS.red);
+    const cloth = id === 'blanketSummer' ? P.netMat(color) : id === 'blanketRain' ? P.rainMat(color) : P.quiltMat(color);
+    const reach = id === 'blanketSummer' ? 0.34 : 0.3;
+    add(body, shell(torso, y0 - R * 0.2, -L * 0.52, L * reach, 12, deg(192), deg(-12), 20, id === 'blanket' ? 0.016 : 0.011), cloth);
+    const edge = loop(torso, [0, y0 - R * 0.2, L * reach], 20, 0.018, deg(192), deg(-12));
+    add(body, strap(edge, 0.018, 0.006), id === 'blanket' ? P.fleeceMat(0xe8e0d2) : P.clothMat(id === 'blanketSummer' ? 0x3a3a3a : 0xf2ede4));
+    // Galon le long du bas des flancs.
+    for (const sd of [1, -1]) {
+      const hem = [];
+      for (let i = 0; i <= 10; i++) {
+        const z = -L * 0.5 + (i / 10) * L * (reach + 0.48);
+        const p = rayHit(torso, [0, y0 - R * 0.2, z], [sd * Math.cos(deg(-12)), Math.sin(deg(-12)), 0], 1.2);
+        hem.push(p.addScaledVector(sdfNormal(torso, p, 0.004), 0.016));
+      }
+      add(body, strap(hem, 0.014, 0.004), P.clothMat(id === 'blanketSummer' ? 0x3a3a3a : 0xf2ede4));
+    }
+    // Sangle de poitrail et sous-ventrières croisées.
+    add(body, strap(loop(torso, [0, y0 - R * 0.2, L * 0.02], 16, 0.018, deg(-15), deg(-165)), 0.014, 0.004), P.nylonMat(0x2a2a2a));
   }
 
-  if (gear.saddle) {
-    const leather = mat(0x5a3418, 0.45);
-    const dark = mat(0x3b2110, 0.5);
-    // Tapis de selle (blanc cassé) sous la selle, qui dépasse un peu.
-    add(body, shell(torso, y0 - R * 0.2, zSeat - L * 0.2, zSeat + L * 0.22, 8, deg(165), deg(15), 14, 0.01), mat(0xe9e2d4, 0.9, { side: THREE.DoubleSide }));
-    // Siège : profil creusé, pommeau relevé devant, troussequin derrière.
-    const secs = [];
-    const N = 9;
-    for (let i = 0; i <= N; i++) {
-      const f = i / N;
-      const z = zSeat - L * 0.14 + f * L * 0.28;
-      const dip = Math.sin(f * PI);
-      const lift = f < 0.5 ? (0.5 - f) ** 2 * 0.2 : (f - 0.5) ** 2 * 0.28;
-      secs.push({ p: [0, model.backTop(z) + 0.022 - dip * 0.012 + lift, z], rx: R * (0.3 + dip * 0.18), ry: 0.018 + lift * 0.5, ryb: 0.03 + dip * 0.01 });
-    }
-    add(body, loft(secs, { radial: 14, sub: 2, exp: 2.6, round: [0.6, 0.6] }), leather);
-    for (const s of [1, -1]) {
-      // Quartier : grand pan de cuir qui descend le long du flanc, un peu vers l'avant.
-      const flapPts = [];
-      for (let i = 0; i <= 6; i++) {
-        const a = deg(78 - i * 11);
-        const p = rayHit(torso, [0, y0 - R * 0.2, zSeat + L * 0.03 + i * 0.014], [s * Math.cos(a), Math.sin(a), 0], 1.2);
-        flapPts.push(p.addScaledVector(sdfNormal(torso, p, 0.004), 0.016));
-      }
-      add(body, loft(flapPts.map((p, i) => ({ p: [p.x, p.y, p.z], rx: L * (0.12 - i * 0.003), ry: 0.006 })), { radial: 6, sub: 2, side: [0, 0, 1], round: [0, 0.8] }), leather);
-      // Étrivière et étrier qui pend sous le quartier.
-      const top = flapPts[1];
-      const iron = new THREE.Vector3(top.x + s * 0.035, y0 - R * 0.5, top.z + 0.03);
-      add(body, loft([{ p: top.toArray(), rx: 0.014, ry: 0.004 }, { p: iron.toArray(), rx: 0.014, ry: 0.004 }], { radial: 4, sub: 2, side: [0, 0, 1] }), dark);
-      add(body, new THREE.TorusGeometry(0.05, 0.007, 6, 14), mat(STEEL, 0.3, { metalness: 0.6 }), [iron.x, iron.y - 0.04, iron.z], [0, PI / 2, 0]);
-    }
-    // Sangle sous le ventre, juste derrière les coudes.
-    add(body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + L * 0.1], 18, 0.012, deg(-10), deg(-170)), 0.03, 0.005), dark);
-  }
+  if (gear.saddle) horseSaddle(model, gear, add);
 
   const bridle = gear.bridle;
   const halter = gear.halter && !bridle;
   if (bridle || halter) {
-    const color = halter ? (BLANKET_COLORS[gear.halter.color] ?? BLANKET_COLORS.red) : LEATHER;
-    const strapMat = mat(color, halter ? 0.75 : 0.45);
-    const w = halter ? 0.015 : 0.011; // demi-largeur des sangles (le licol est en toile plus large)
-    const th = 0.0045;
+    const hid = halter ? gear.halter.item : null;
+    const bid = bridle ? bridle.item : null;
+    const rope = hid === 'halterRope';
+    const leatherHalter = hid === 'halterLeather';
+    const color = bridle ? gearColor(bridle, LEATHER) : gearColor(gear.halter, BLANKET_COLORS.red);
+    const strapMat = bridle || leatherHalter ? P.leatherMat(color) : P.nylonMat(color);
+    const metal = leatherHalter ? P.brassMat() : P.steelMat();
+    const w = rope ? 0.006 : halter ? 0.015 : 0.011; // demi-largeur des sangles (le licol est en toile plus large)
+    const th = rope ? 0.006 : 0.0045;
+    // Corde ronde (licol éthologique) ou sangle plate ; une boucle fermée ne répète pas son premier point.
+    const band = (pts, closed = false) => (rope ? P.tube(closed ? pts.slice(0, -1).map((v) => v.toArray()) : pts.map((v) => v.toArray()), 0.005, closed, 6) : strap(pts, w, th, closed));
     const yc = -hr * 0.2;
-    // Muserolle : autour du nez, entre les yeux et les naseaux.
-    const zNose = snoutZ - hr * (halter ? 1.45 : 1.3);
-    const nose = loop(head, [0, yc, zNose], 22, 0.006);
-    add(model.head, strap(nose, w, th, true), strapMat);
+    // Muserolle : autour du nez, entre les yeux et les naseaux (en mouton pour le hackamore).
+    const zNose = snoutZ - hr * (halter ? 1.45 : bid === 'hackamore' ? 1.1 : 1.3);
+    const nose = loop(head, [0, yc, zNose], 22, bid === 'hackamore' ? 0.014 : 0.006);
+    if (bid === 'hackamore') add(model.head, strap(nose, 0.02, 0.012, true), P.fleeceMat(0xf2eee6));
+    else add(model.head, band(nose, true), strapMat);
     // Têtière et sous-gorge : boucle derrière les oreilles, qui passe sous la gorge.
     const zCrown = earZ - hr * 0.15;
     const crown = loop(head, [0, hr * 0.05, zCrown], 22, 0.006, 0, PI * 2, 0.38);
-    add(model.head, strap(crown, w, th, true), strapMat);
+    add(model.head, band(crown, true), strapMat);
     // Montants : de la têtière (côté) vers la muserolle ou le mors.
     const sideOf = (pts) => [pts[0], pts[Math.round(pts.length / 2) - 1]];
+    // Montant : il suit la joue (la ligne droite entre ses deux bouts rentrerait dans la tête).
+    const cheek = (a, b) => {
+      const pts = [a];
+      for (const f of [0.25, 0.5, 0.75]) {
+        const m = new THREE.Vector3().lerpVectors(a, b, f);
+        const p = rayHit(head, [0, yc, m.z], [m.x, m.y - yc, 0], hr * 4);
+        pts.push(p.addScaledVector(sdfNormal(head, p, 0.004), rope ? 0.008 : 0.007));
+      }
+      pts.push(b);
+      return pts;
+    };
     const [cR, cL] = sideOf(crown);
     const [nR, nL] = sideOf(nose);
     if (bridle) {
       add(model.head, strap(loop(head, [0, hr * 0.15, earZ + hr * 0.3], 12, 0.006, deg(20), deg(160)), w, th), strapMat); // frontal
+      if (bid === 'doubleBridle' || bid === 'bridleOlive') {
+        // Frontal à strass.
+        for (const p of loop(head, [0, hr * 0.15, earZ + hr * 0.3], 9, 0.012, deg(30), deg(150))) {
+          add(model.head, P.shared('gearGem', () => new THREE.SphereGeometry(0.006, 6, 5)), P.steelMat(), p.toArray());
+        }
+      }
       for (const [c, s] of [[cR, 1], [cL, -1]]) {
-        // Anneau du mors à la commissure des lèvres.
         const m = rayHit(head, [0, -hr * 0.42, snoutZ - hr * 0.8], [s, -0.1, 0], hr * 3);
         const ring = m.clone().add(new THREE.Vector3(s * hr * 0.1, 0, 0));
-        add(model.head, strap([c, new THREE.Vector3().lerpVectors(c, ring, 0.5).add(new THREE.Vector3(s * 0.006, 0, 0)), ring], w * 0.9, th), strapMat);
-        add(model.head, new THREE.TorusGeometry(hr * 0.24, hr * 0.035, 6, 16), mat(STEEL, 0.3, { metalness: 0.6 }), ring.toArray(), [0, PI / 2, 0]);
+        if (bid === 'hackamore') {
+          // Pas de mors : le montant descend à la muserolle, une branche en métal pend sur le côté du nez.
+          const n = s > 0 ? nR : nL;
+          add(model.head, strap(cheek(c, n), w * 0.9, th), strapMat);
+          add(model.head, P.tube([n.toArray(), [n.x + s * 0.01, n.y - hr * 0.35, n.z + hr * 0.15], [n.x + s * 0.008, n.y - hr * 0.7, n.z + hr * 0.1]], 0.005), P.steelMat());
+          continue;
+        }
+        add(model.head, strap(cheek(c, ring), w * 0.9, th), strapMat);
+        add(model.head, new THREE.TorusGeometry(hr * (bid === 'doubleBridle' ? 0.18 : 0.24), hr * 0.035, 6, 16), P.steelMat(), ring.toArray(), [0, PI / 2, 0]);
+        if (bid === 'bridleOlive') add(model.head, new THREE.CylinderGeometry(hr * 0.07, hr * 0.07, hr * 0.22, 8), P.steelMat(), [ring.x - s * hr * 0.06, ring.y, ring.z], [0, 0, PI / 2]);
+        if (bid === 'doubleBridle') {
+          // Mors de bride : branche droite sous l'anneau du filet.
+          add(model.head, new THREE.CylinderGeometry(hr * 0.03, hr * 0.03, hr * 0.7, 6), P.steelMat(), [ring.x + s * hr * 0.05, ring.y - hr * 0.3, ring.z + hr * 0.12]);
+          add(model.head, new THREE.TorusGeometry(hr * 0.1, hr * 0.025, 6, 12), P.steelMat(), [ring.x + s * hr * 0.05, ring.y - hr * 0.68, ring.z + hr * 0.12], [0, PI / 2, 0]);
+        }
       }
     } else {
-      for (const [c, n, s] of [[cR, nR, 1], [cL, nL, -1]]) {
-        add(model.head, strap([c, new THREE.Vector3().lerpVectors(c, n, 0.5).add(new THREE.Vector3(s * 0.006, 0, 0)), n], w, th), strapMat);
+      for (const [c, n] of [[cR, nR], [cL, nL]]) {
+        add(model.head, band(cheek(c, n)), strapMat);
+        if (rope) add(model.head, P.shared('gearKnot', () => new THREE.SphereGeometry(0.011, 8, 6)), strapMat, n.toArray());
       }
-      // Anneau sous le menton, pour la longe.
+      // Anneau (ou gros nœud) sous le menton, pour la longe.
       const chin = nose[Math.round(nose.length * 0.75)];
-      add(model.head, new THREE.TorusGeometry(hr * 0.14, hr * 0.03, 6, 12), mat(STEEL, 0.3, { metalness: 0.6 }), [chin.x, chin.y - hr * 0.1, chin.z], [0, 0, 0]);
+      if (rope) add(model.head, P.shared('gearKnot', () => new THREE.SphereGeometry(0.011, 8, 6)), strapMat, [chin.x, chin.y - hr * 0.08, chin.z]);
+      else add(model.head, new THREE.TorusGeometry(hr * 0.14, hr * 0.03, 6, 12), metal, [chin.x, chin.y - hr * 0.1, chin.z], [0, 0, 0]);
+      if (leatherHalter) for (const p of [cR, cL]) add(model.head, P.shared('gearBuckle', () => new THREE.BoxGeometry(0.02, 0.016, 0.006)), metal, p.toArray());
     }
   }
 
   if (gear.head) {
-    // Bonnet anti-mouches : voile clair qui couvre le front, les yeux et le haut des joues.
+    // Bonnet anti-mouches : voile qui couvre le front, les yeux et le haut des joues.
+    const color = gearColor(gear.head, 0xd8e4ea);
     const g = shell(head, hr * 0.05, earZ - hr * 0.1, snoutZ - hr * 1.45, 8, deg(200), deg(-20), 14, 0.012);
-    add(model.head, g, new THREE.MeshStandardMaterial({ color: 0xd8e4ea, roughness: 0.9, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
+    add(model.head, g, new THREE.MeshStandardMaterial({ color, roughness: 0.9, transparent: true, opacity: 0.78, side: THREE.DoubleSide }));
     add(model.head, strap(loop(head, [0, hr * 0.05, snoutZ - hr * 1.45], 14, 0.014, deg(200), deg(-20)), 0.01, 0.004), mat(0x9fb3bd, 0.8));
   }
 
-  if (gear.legs) {
-    // Guêtres sur les canons, du genou (ou du jarret) au boulet.
+  if (gear.legs || gear.bells) {
+    // Guêtres sur les canons, du genou (ou du jarret) au boulet ; cloches autour des sabots.
     const T = model.legTop;
     const r = model.dims.legR;
+    const bootMat = gear.legs ? P.clothMat(gearColor(gear.legs, 0x22324a), THREE.FrontSide) : null;
+    const bellMat = gear.bells ? P.rubberMat(gearColor(gear.bells, 0x1e1b19)) : null;
     for (const leg of model.legs) {
       const parent = leg.knee ?? leg.pivot;
       const len = (leg.front ? 0.27 : 0.2) * T;
-      const boot = new THREE.CylinderGeometry(r * 1.0, r * 1.08, len, 10);
-      add(parent, boot, mat(0x22324a, 0.8), [0, -0.07 * T - len / 2, 0]);
-      add(parent, new THREE.CylinderGeometry(r * 1.1, r * 1.1, len * 0.18, 10), mat(0x8da0b8, 0.7), [0, -0.07 * T - len * 0.4, 0]);
+      if (bootMat) {
+        add(parent, new THREE.CylinderGeometry(r * 1.0, r * 1.08, len, 10), bootMat, [0, -0.07 * T - len / 2, 0]);
+        for (const k of [0.25, 0.6]) add(parent, new THREE.CylinderGeometry(r * 1.1, r * 1.1, len * 0.12, 10), P.nylonMat(0x2a2a2a), [0, -0.07 * T - len * k, 0]);
+      }
+      if (bellMat) {
+        const yb = -0.07 * T - len - 0.07 * T;
+        add(parent, new THREE.CylinderGeometry(r * 1.05, r * 1.55, 0.06 * T, 12, 1, true), bellMat, [0, yb, 0]);
+      }
     }
   }
+}
+
+/**
+ * Selle sur le cheval : siège creusé (pommeau, troussequin), tapis, quartiers qui épousent le flanc,
+ * étrivières et étriers, sangle. La forme vient du modèle : obstacle, dressage, randonnée, western…
+ */
+function horseSaddle(model, gear, add) {
+  const { torso } = model.sdf;
+  const { L, R } = model.dims;
+  const y0 = model.y0;
+  const body = model.body;
+  const PI = Math.PI;
+  const deg = (d) => (d * PI) / 180;
+  const P = TACK_PARTS;
+  const id = gear.saddle.item;
+  const st = SADDLE_STYLES[id] ?? SADDLE_STYLES.saddle;
+  const color = gearColor(gear.saddle, 0x5a3418);
+  const leather = P.leatherMat(color);
+  const edgeM = P.edgeMat(color);
+  const k = L / 1.5; // les cotes des selles sont pour un cheval de 1,5 m de corps (repère du modèle)
+  const zSeat = -L * 0.05; // là où s'assoit le cavalier (src/game/Player.js)
+  const len = st.len * k;
+  const z0 = zSeat - len * 0.55;
+  const z1 = zSeat + len * 0.45;
+
+  // Tapis (ou amortisseur) sous la selle : celui qu'on a mis, sinon un tapis blanc tout simple.
+  const pad = gear.pad;
+  const padColor = pad ? gearColor(pad, 0xe9e2d4) : st.western ? 0x9a3b2a : 0xe9e2d4;
+  const padMat = pad?.item === 'gelPad' ? P.rubberMat(padColor) : pad ? P.quiltMat(padColor) : P.clothMat(padColor);
+  const padHalf = (st.western ? 0.3 : st.race ? 0.16 : 0.24) * k;
+  const padDrop = st.western ? 15 : st.race ? 40 : 18;
+  const padT = pad?.item === 'gelPad' ? 0.02 : st.western ? 0.016 : 0.01; // épaisseur : la selle se pose dessus
+  add(body, shell(torso, y0 - R * 0.2, zSeat - padHalf * 0.9, zSeat + padHalf, 8, deg(180 - padDrop), deg(padDrop), 14, padT), padMat);
+  if (pad) {
+    const trim = pad.item === 'gelPad' ? padColor : padColor === COLORS.white ? COLORS.navy : 0xf1ede4;
+    add(body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + padHalf], 14, padT + 0.004, deg(180 - padDrop), deg(padDrop)), 0.008, 0.004), P.clothMat(trim));
+  }
+
+  // Siège : le profil du modèle, posé sur le dos du cheval.
+  const secs = P.seatSections(st, 0).map((sec) => {
+    const z = zSeat + (sec.p[2] / st.len) * len;
+    const h = (sec.p[1] - st.dip) * k; // hauteur au-dessus du creux
+    return { p: [0, model.backTop(z) + 0.02 + h, z], rx: sec.rx * k, ry: 0.02 * k, ryb: 0.03 * k + h };
+  });
+  if (st.western) {
+    secs[0].rx = st.seatW * k * 0.95;
+    secs[7].rx = st.seatW * k * 0.62;
+  }
+  add(body, loft(secs, { radial: 14, sub: 2, exp: 2.6, round: [0.6, 0.5] }), leather);
+  const inner = secs.slice(1, 7).map((sec) => ({ ...sec, p: [0, sec.p[1] + 0.012, sec.p[2]], rx: sec.rx * 0.8, ry: 0.01, ryb: 0.01 }));
+  add(body, loft(inner, { radial: 12, sub: 2, round: [0.3, 0.3] }), st.quilted ? P.quiltMat(0x2b2522) : P.suedeMat(color));
+
+  // Quartiers (ou jupes western) posés sur le flanc : grille qui suit le corps sculpté.
+  const th0 = 0.5;
+  const onFlank = (side, out, zc, a0 = th0) => (sv, t) => {
+    const a = a0 + t / R;
+    const p = rayHit(torso, [0, y0 - R * 0.15, zc + sv], [side * Math.sin(a), Math.cos(a), 0], 1.5);
+    const n = sdfNormal(torso, p, 0.004);
+    return [p.x + n.x * out, p.y + n.y * out, p.z + n.z * out];
+  };
+  const zc = zSeat + len * 0.1;
+  for (const side of [1, -1]) {
+    if (st.western) {
+      const out = (v) => {
+        const r = v > 0.75 ? Math.sqrt(Math.max(0.05, 1 - ((v - 0.75) / 0.25) ** 2)) : 1;
+        return [-0.32 * k * r, 0.3 * k * r];
+      };
+      const map = onFlank(side, padT + 0.01, zSeat - 0.02 * k, 0.42);
+      add(body, P.plate(out, 0.3 * k, map, 8, 7), P.tooledMat(color));
+      add(body, P.tube(P.plateEdge(out, 0.3 * k, map), 0.004, true, 4), edgeM);
+      // Fender (large étrivière) et étrier en bois.
+      const fOut = (v) => [0.02 * k - 0.065 * k + v * 0.01 * k, 0.02 * k + 0.065 * k - v * 0.012 * k];
+      const fMap = onFlank(side, padT + 0.024, zSeat - 0.02 * k, 0.42);
+      const flen = 0.46 * k;
+      add(body, P.plate(fOut, flen, fMap, 4, 8), P.tooledMat(color));
+      const end = new THREE.Vector3(...fMap(0.02 * k, flen));
+      add(body, P.shared('gearOxbow', () => new THREE.TorusGeometry(0.055, 0.014, 6, 16, PI)), P.woodMat(), [end.x + side * 0.01, end.y - 0.06, end.z], [0, PI / 2, PI]);
+      // Corne (pommeau).
+      const zH = z1 - 0.02 * k;
+      const yH = model.backTop(zH) + 0.02 + (st.pommel - st.dip) * k;
+      add(body, P.shared('gearHornNeck', () => new THREE.CylinderGeometry(0.018, 0.026, 0.07, 12)), leather, [0, yH + 0.03, zH], [0.25, 0, 0]);
+      add(body, P.shared('gearHornCap', () => new THREE.CylinderGeometry(0.042, 0.036, 0.016, 18)), edgeM, [0, yH + 0.068, zH + 0.01], [0.25, 0, 0]);
+      for (const [sv, t] of [[-0.27 * k, 0.05 * k], [0.25 * k, 0.05 * k]]) {
+        add(body, P.shared('gearConcho', () => new THREE.CylinderGeometry(0.018, 0.018, 0.005, 14)), P.steelMat(), onFlank(side, padT + 0.016, zSeat - 0.02 * k, 0.42)(sv, t), [0, 0, side * (PI / 2 - 0.5)]);
+      }
+      continue;
+    }
+    const outline = flapOutline(st, k);
+    const fl = st.flap[0] * k;
+    const map = onFlank(side, padT + 0.006, zc);
+    add(body, P.plate(outline, fl, map), P.leatherDS(color));
+    add(body, P.tube(P.plateEdge(outline, fl, map), 0.0035, true, 4), edgeM);
+    const mapOut = onFlank(side, padT + 0.018, zc);
+    if (st.knee) {
+      const pts = [];
+      for (let i = 0; i <= 4; i++) {
+        const v = 0.06 + i * 0.13 * (0.6 + st.knee * 0.4);
+        pts.push(mapOut(outline(v)[1] - 0.04 * k, v * fl));
+      }
+      add(body, loft(pts.map((p, i) => ({ p, rx: (0.016 + st.knee * 0.008) * k, ry: (0.01 + st.knee * 0.006 * Math.sin((i / 4) * PI)) * k })), { radial: 8, sub: 2, round: [0.8, 0.8] }), leather);
+    }
+    if (st.blocks) {
+      const pts = [0.05, 0.15, 0.25, 0.32].map((v) => mapOut(outline(v)[0] + 0.045 * k, v * fl));
+      add(body, loft(pts.map((p) => ({ p, rx: 0.02 * k, ry: 0.014 * k })), { radial: 8, sub: 2, round: [0.8, 0.8] }), leather);
+    }
+    // Étrivière le long du quartier, puis l'étrier qui pend.
+    const sl = st.race ? 0.6 : 0.85;
+    const sMap = onFlank(side, padT + 0.022, zc);
+    const spts = [];
+    for (let i = 0; i <= 6; i++) {
+      const v = 0.04 + (i / 6) * (sl - 0.04);
+      spts.push(sMap(outline(v)[0] * 0.3 + outline(v)[1] * 0.7 - 0.02 * k, v * fl));
+    }
+    add(body, loft(spts.map((p) => ({ p, rx: 0.013 * k, ry: 0.0025 })), { radial: 6, sub: 2, side: [0, 0, 1], exp: 4 }), edgeM);
+    const end = spts[spts.length - 1];
+    const ironK = (st.race ? 0.75 : 1) * k;
+    const iron = P.stirrupIron(Math.round(ironK * 100) / 100);
+    iron.position.set(end[0] + side * 0.014, end[1] - 0.055 * ironK, end[2]);
+    iron.rotation.z = side * 0.25;
+    add.group(body, iron);
+  }
+  // Sacoches et paquetage (randonnée).
+  if (st.bags) {
+    for (const s of [1, -1]) {
+      const p = rayHit(torso, [0, y0, z0 - 0.02 * k], [s * 0.75, 0.66, 0], 1.2);
+      add(body, P.shared('gearBag', () => new THREE.BoxGeometry(0.05, 0.12, 0.14)), leather, [p.x + s * 0.022, p.y - 0.045, p.z], [0, 0, s * 0.75]);
+      add(body, P.shared('gearBagLid', () => new THREE.BoxGeometry(0.056, 0.04, 0.145)), edgeM, [p.x + s * 0.008, p.y - 0.005, p.z], [0, 0, s * 0.75]);
+    }
+    add(body, P.shared('gearRoll', () => new THREE.CylinderGeometry(0.045, 0.045, 0.32, 12)), P.clothMat(0x4f6b3a), [0, model.backTop(z0) + 0.02 + (st.cantle - st.dip) * k + 0.03, z0 - 0.05 * k], [0, 0, PI / 2]);
+  }
+  // Sangle sous le ventre (sangle large en mohair pour la western), juste derrière les coudes.
+  const girthMat = st.western ? P.clothMat(0x8a6a48, THREE.FrontSide) : P.leatherMat(0x3b2110);
+  add(body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + L * 0.1], 18, 0.012, deg(-10), deg(-170)), st.western ? 0.045 : 0.03, 0.005), girthMat);
 }
 
 // ------------------------------------------------------------------ autres animaux
@@ -216,7 +394,7 @@ function buildGenericGear(model, look, gear, add, L, R, y0) {
 
   const blanket = gear.blanket;
   if (blanket) {
-    const color = BLANKET_COLORS[blanket.color] ?? BLANKET_COLORS.red;
+    const color = gearColor(blanket, BLANKET_COLORS.red);
     const geo = new THREE.CylinderGeometry(R * 1.12, R * 1.12, L * 0.82, 24, 1, true, -Math.PI * 0.62, Math.PI * 1.24);
     geo.rotateX(Math.PI / 2);
     add(model.body, geo, new THREE.MeshStandardMaterial({ color, roughness: 0.85, side: THREE.DoubleSide }), [0, y0 + R * 0.05, -L * 0.03]);
@@ -228,7 +406,7 @@ function buildGenericGear(model, look, gear, add, L, R, y0) {
     for (const z of [-L * 0.2, L * 0.15]) add(model.body, new THREE.TorusGeometry(R * 1.1, R * 0.025, 6, 20, Math.PI * 0.8), strap, [0, y0 + R * 0.05, z], [0, 0, Math.PI + Math.PI * 0.1]);
   }
   if (gear.saddle) {
-    const leather = mat(0x8a5a2e, 0.5);
+    const leather = mat(gearColor(gear.saddle, 0x8a5a2e), 0.5);
     const dark = mat(0x2a1a10, 0.6);
     const sz = L * 0.08; // centre de la selle
     // Siège : profil creusé, troussequin relevé derrière, pommeau devant.
@@ -244,13 +422,14 @@ function buildGenericGear(model, look, gear, add, L, R, y0) {
       add(model.body, new THREE.BoxGeometry(0.02, 0.012, 0.06), mat(0xc0c4c8, 0.3, METAL), [s * R * 1.02, back - R * 1.4, sz + R * 0.05]);
     }
     add(model.body, new THREE.BoxGeometry(R * 1.95, R * 0.05, R * 1.25), mat(0xe9e2d4, 0.9), [0, back - R * 0.04, sz + R * 0.02]);
-    add(model.body, new THREE.BoxGeometry(R * 2.05, R * 0.045, R * 1.35), mat(0x2f5f9e, 0.9), [0, back - R * 0.06, sz + R * 0.02]);
+    add(model.body, new THREE.BoxGeometry(R * 2.05, R * 0.045, R * 1.35), mat(gear.pad ? gearColor(gear.pad, 0x2f5f9e) : 0x2f5f9e, 0.9), [0, back - R * 0.06, sz + R * 0.02]);
+    if (gear.saddle.item === 'saddleWestern') add(model.body, new THREE.CylinderGeometry(R * 0.06, R * 0.08, R * 0.25, 10), leather, [0, back + R * 0.45, sz + L * 0.22]); // corne
     // Sangle sous le ventre.
     add(model.body, new THREE.TorusGeometry(R * 1.05, R * 0.03, 6, 22, Math.PI * 0.9), dark, [0, y0 + R * 0.05, sz + R * 0.15], [0, 0, Math.PI + Math.PI * 0.05]);
   }
   if (gear.bridle && model.head) {
     const hr = look.headR;
-    const strap = mat(0x2a1a10, 0.5);
+    const strap = mat(gearColor(gear.bridle, 0x2a1a10), 0.5);
     const buckle = mat(0xc0c0c0, 0.3, METAL);
     add(model.head, new THREE.TorusGeometry(hr * 0.95, hr * 0.06, 6, 20), strap, [0, -hr * 0.1, look.headLen * 0.75]);
     add(model.head, new THREE.TorusGeometry(hr * 1.15, hr * 0.06, 6, 20), strap, [0, hr * 0.1, hr * 0.1], [0, 0, 0]);
@@ -262,7 +441,7 @@ function buildGenericGear(model, look, gear, add, L, R, y0) {
   }
   if (gear.halter && !gear.bridle && model.head) {
     const hr = look.headR;
-    const color = BLANKET_COLORS[gear.halter.color] ?? BLANKET_COLORS.red;
+    const color = gearColor(gear.halter, BLANKET_COLORS.red);
     const strap = mat(color, 0.6);
     const nz = look.headLen * 0.7;
     add(model.head, new THREE.TorusGeometry(hr * 0.9, hr * 0.08, 6, 20), strap, [0, -hr * 0.1, nz]); // muserolle
@@ -278,7 +457,7 @@ function buildGenericGear(model, look, gear, add, L, R, y0) {
   if (gear.legs) {
     for (const leg of model.legs) {
       const len = y0 - R * 0.3;
-      const boot = mat(0x22324a, 0.8);
+      const boot = mat(gearColor(gear.legs, 0x22324a), 0.8);
       if (leg.knee) {
         // Guêtre sur le canon (sous le genou), avec ses deux bandes de fermeture.
         const kneeY = leg.knee.position.y;
@@ -292,7 +471,7 @@ function buildGenericGear(model, look, gear, add, L, R, y0) {
     }
   }
   if (gear.neck && model.neck) {
-    const color = BLANKET_COLORS[gear.neck.color] ?? BLANKET_COLORS.red;
+    const color = gearColor(gear.neck, BLANKET_COLORS.red);
     const r = R * 0.6;
     const ny = look.neckLen * 0.6;
     add(model.neck, new THREE.TorusGeometry(r, R * 0.08, 6, 18), mat(color, 0.5), [0, ny, 0], [Math.PI / 2, 0, 0]);
@@ -305,7 +484,8 @@ function buildGenericGear(model, look, gear, add, L, R, y0) {
 export function removeGear(group) {
   for (const m of group.userData.meshes ?? []) {
     m.parent?.remove(m);
-    m.geometry.dispose();
-    m.material.dispose();
+    if (!m.isMesh) continue; // groupe de pièces partagées (étrier…)
+    if (!m.geometry.userData.shared) m.geometry.dispose(); // les pièces partagées (src/game/models/tackModels.js) restent
+    if (!m.material.userData.shared) m.material.dispose();
   }
 }

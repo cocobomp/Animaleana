@@ -1479,6 +1479,49 @@ const _qYaw = new THREE.Quaternion();
 const AXIS_Y = V(0, 1, 0);
 
 /**
+ * Poses des membres imposées par les activités (src/game/Activities.js, écrites après l'animation) :
+ * 'jump' (saut d'obstacle : antérieurs repliés sous le poitrail, postérieurs repliés sous le ventre),
+ * 'down' (couché sur le sternum, membres repliés), 'hoof' (antérieur levé, genou plié : « donner le
+ * sabot »). s : 0 → 1 (amplitude). sg : groupe d'échelle de l'entité (pour se coucher). Renvoie true si
+ * le modèle est le cheval réaliste (sinon l'activité garde sa pose habituelle).
+ */
+export function realLegPose(md, kind, s, sg = null) {
+  if (!md?.real) return false;
+  const front = md.legs.filter((l) => l.front);
+  const hind = md.legs.filter((l) => !l.front);
+  if (kind === 'jump') {
+    for (const l of front) {
+      l.pivot.rotation.x = -1.2 * s;
+      l.knee.rotation.x = 1.9 * s;
+      l.fetlock.rotation.x = 0.5 * s;
+    }
+    for (const l of hind) {
+      l.pivot.rotation.x = -0.75 * s;
+      l.knee.rotation.x = 1.25 * s;
+      l.fetlock.rotation.x = 0.55 * s;
+    }
+  } else if (kind === 'down') {
+    for (const l of front) {
+      l.pivot.rotation.x = 1.15 * s;
+      l.knee.rotation.x = -2.3 * s;
+      l.fetlock.rotation.x = 0.4 * s;
+    }
+    for (const l of hind) {
+      l.pivot.rotation.x = -1.35 * s;
+      l.knee.rotation.x = 2.1 * s;
+      l.fetlock.rotation.x = 0.4 * s;
+    }
+    if (sg) sg.position.y = -0.6 * md.legTop * sg.scale.y * s;
+  } else if (kind === 'hoof') {
+    const l = front[0];
+    l.pivot.rotation.x = -1.1 * s;
+    l.knee.rotation.x = 1.1 * s;
+    l.fetlock.rotation.x = 0.3 * s;
+  } else return false;
+  return true;
+}
+
+/**
  * Animation d'une entité (AnimalEntity) au cheval réaliste : ce qu'il fait (allure selon sa vitesse,
  * broutage, repos, somnolence) ; renseigne e.gait et e.phase (cavalier, bruits de sabots).
  */

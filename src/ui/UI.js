@@ -367,7 +367,9 @@ export class UI {
       const a = g.player.mount.data;
       chips.push(chip(`🏇 ${t('statusRiding', { name: a.name, g: a.sex })}`, t('dismount'), () => { g.dismount(); this.renderStatus(); }));
     }
-    for (const a of g.animalsHere().filter((x) => x.following)) {
+    // Pendant le chargement du véhicule, les voyageurs sont déjà dans le bandeau « Chargement » (moins de bandeaux sur téléphone).
+    const loadingIds = g.tripFlow?.loading?.vehicle ? g.tripFlow.loading.ids : [];
+    for (const a of g.animalsHere().filter((x) => x.following && !loadingIds.includes(x.id))) {
       const label = a.leashed ? t('statusLeash', { name: a.name, g: a.sex }) : t('statusFollowing', { name: a.name, g: a.sex });
       chips.push(chip(`🦮 ${label}`, t('statusStop'), () => { if (a.leashed) g.toggleLeash(a); else g.toggleFollow(a); this.renderStatus(); }));
     }
@@ -717,7 +719,8 @@ export class UI {
       const tool = check.tool;
       const label = `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}`;
       // En voyage, l'outil est peut-être resté à la maison (pas dans le coffre de transport, src/sim/cargo.js).
-      const key = toolAtHome(g.profile, tool) ? 'buyToolAskAway' : isSandbox(g.profile) ? 'buyToolAskFree' : 'buyToolAsk';
+      // (en bac à sable c'est gratuit : pas de prix dans la question, même si l'outil est resté à la maison)
+      const key = `${toolAtHome(g.profile, tool) ? 'buyToolAskAway' : 'buyToolAsk'}${isSandbox(g.profile) ? 'Free' : ''}`;
       const ok = await this.confirm(t(key, { tool: label, price: TOOLS[tool].price }));
       if (!ok || !g.buyTool(tool)?.ok) return null;
       check = g.canCare(a, action);

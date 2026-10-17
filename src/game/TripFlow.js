@@ -9,7 +9,7 @@
 // La logique pure est dans sim/trip.js, sim/loading.js et sim/cargo.js ; l'interface dans ui/trip.js et ui/vehicle.js.
 
 import * as THREE from 'three';
-import { TripVehicle, crateWithAnimal } from './Vehicle.js';
+import { TripVehicle, crateWithAnimal, CAB_PORTRAIT } from './Vehicle.js';
 import { RoadView } from './RoadView.js';
 import { disposeVehicle } from './models/vehicles.js';
 import { disposeModel } from './models/animalModel.js';
@@ -20,7 +20,7 @@ import { hasTool } from '../sim/tools.js';
 import { canAfford, spend, addStat } from '../sim/profile.js';
 import { hourOf } from '../sim/time.js';
 import {
-  planTrip, tickTrip, runToEnd, finishTrip, vehicleFor, placeFor, needsTrailer,
+  planTrip, tickTrip, runToEnd, finishTrip, vehicleFor, placeFor, needsTrailer, nightStopAhead,
 } from '../sim/trip.js';
 import { capacityFor, suggestCargo, arriveWithCargo, inCargo } from '../sim/cargo.js';
 import {
@@ -294,7 +294,7 @@ export class TripFlow {
     const a = w.a;
     const p = this.game.profile;
     if (how === 'treat' && !hasTool(p, 'treats')) {
-      this.ui.toast(t('veh_noTreats'), 4500);
+      this.ui.toast(ta('veh_noTreats', a), 4500);
       return;
     }
     const st = l.conf.get(a.id);
@@ -335,7 +335,7 @@ export class TripFlow {
     l.loaded.add(a.id);
     l.walk = null;
     const st = this.stallState(i);
-    if (enterStall(st) === 'breastOpen') this.ui.toast(t('veh_tipBreastFirst'), 6000);
+    if (enterStall(st) === 'breastOpen') this.ui.toast(ta('veh_tipBreastFirst', a), 6000);
     this.ui.toast(ta('trip_loaded', a));
     addStat(g.profile, 'vanLoads');
     l.vehicle.showStall(i, st);
@@ -370,7 +370,8 @@ export class TripFlow {
   stallStep(i, step) {
     const l = this.loading;
     const v = l.vehicle;
-    const a = v.passengerAt(i) ?? { species: 'horse' };
+    // (place vide : la barre de poitrail se ferme pour le prochain qui montera)
+    const a = v.passengerAt(i) ?? this.nextToStall() ?? { species: 'horse' };
     const st = this.stallState(i);
     const r = doStep(st, a, step);
     if (!r.ok) {
@@ -378,9 +379,19 @@ export class TripFlow {
       return;
     }
     v.showStall(i, st);
-    this.ui.toast(t(`veh_stepDone_${step}`, { name: a.name ?? '' }));
+    this.ui.toast(t(`veh_stepDone_${step}`, { name: a.name ?? '', g: a.sex, who: this.whoText(a) }));
     if (a.id && secured(st, a)) this.ui.toast(ta('veh_secured', a), 4000);
     this.ui.renderStatus();
+  }
+
+  /** Le prochain grand animal qui montera dans le van (pour les textes d'une place encore vide). */
+  nextToStall() {
+    return this.waiting().find((a) => this.placeOf(a) === 'trailer') ?? null;
+  }
+
+  /** « le cheval », « la vache », « le mouton », « la chèvre » (textes du compartiment). */
+  whoText(a) {
+    return t(`veh_who_${['cow', 'sheep', 'goat'].includes(a?.species) ? a.species : 'horse'}`);
   }
 
   // ------------------------------------------------------------ petits animaux : la caisse
@@ -492,8 +503,11 @@ export class TripFlow {
 
   // ------------------------------------------------------------ vues dans le véhicule
 
-  /** Ouvre une vue : 'cab' (au volant), 'stall' (compartiment), 'tack' (coffre), 'ramp' (montée) ; null pour sortir. */
-  setView(kind) {
+  /**
+   * Ouvre une vue : 'cab' (au volant), 'stall' (compartiment), 'tack' (coffre), 'ramp' (montée) ; null pour sortir.
+   * o.stay : on quitte la vue sans descendre du véhicule (au départ, on reste au volant).
+   */
+  setView(kind, o = {}) {
     const g = this.game;
     const l = this.loading;
     if (!l?.vehicle) return;
@@ -507,25 +521,27 @@ export class TripFlow {
       v.setOpen('roof', false);
       v.setOpen('door', false);
     }
-    if (was === 'cab') {
-      // On redescend à côté de la portière.
+    if (was === 'cab' && !o.stay) {
+      // On redescend à côté de la portière (elle se referme derrière nous : ce véhicule-là, même s'il part entre-temps).
       g.player.root.visible = true;
       const p = v.driverPoint;
       g.player.root.position.set(p.x, g.world.heightAt(p.x, p.z), p.z);
       v.setOpen('door', true);
-      setTimeout(() => this.loading?.vehicle?.setOpen('door', false), 900);
-      v.main.screen.material.map = v.main.screenDefault ?? v.main.screen.material.map;
+      setTimeout(() => v.setOpen('door', false), 900);
     }
+    if (was === 'cab') v.main.screen.material.map = v.main.screenDefault ?? v.main.screen.material.map;
     // Le joueur ne se voit pas dans les vues du véhicule (sauf quand il mène le cheval sur le pont).
     g.player.root.visible = !kind || kind === 'ramp';
     v.setCutaway(kind === 'stall' || kind === 'tack', kind === 'tack');
     if (!kind) this.resetCamera();
     if (kind === 'cab') {
       v.setOpen('door', true);
-      setTimeout(() => this.loading?.view === 'cab' && this.loading.vehicle.setOpen('door', false), 1100);
+      setTimeout(() => v.setOpen('door', false), 1100); // on s'installe et on referme la portière
       if (g.player.mount) g.dismount();
-      this.camYaw = 0;
-      this.camPitch = -0.3; // on regarde un peu vers le bas : tableau de bord, volant, écran
+      // On regarde un peu vers le bas : tableau de bord, volant, écran (en portrait : le pare-brise et le rétroviseur).
+      const look = v.cabLook(window.innerWidth < window.innerHeight, -0.3);
+      this.camYaw = look.yaw;
+      this.camPitch = look.pitch;
     } else if (kind === 'tack') {
       v.setOpen('tack', true);
       v.setOpen('trunk', true);
@@ -573,15 +589,15 @@ export class TripFlow {
     if (!l?.view || !l.vehicle) return false;
     const v = l.vehicle;
     const cam = this.game.camera;
+    const portrait = window.innerWidth < window.innerHeight;
     let pose;
     if (l.view === 'ramp') pose = this.rampPose();
-    else pose = v.view(l.view);
-    const portrait = window.innerWidth < window.innerHeight;
+    else pose = v.view(l.view, undefined, portrait);
     if (portrait && (l.view === 'stall' || l.view === 'tack')) {
       // Téléphone en portrait : on recule pour que tout tienne dans l'écran.
       pose.pos.sub(pose.look).multiplyScalar(l.view === 'stall' ? 1.55 : 1.3).add(pose.look);
     }
-    const fov = l.view === 'cab' ? (portrait ? 80 : 68) : 60;
+    const fov = l.view === 'cab' ? (portrait ? CAB_PORTRAIT.fov : 68) : 60;
     // Le panneau du bas cache le bas de l'écran : on remonte l'image d'autant (la scène reste visible au-dessus).
     const H = window.innerHeight;
     const shift = Math.round(H * (this.panelFrac ?? 0));
@@ -677,14 +693,15 @@ export class TripFlow {
     if (!l) return;
     const left = this.waiting();
     if (left.length || l.walk || l.carry) {
-      this.ui.toast(t('veh_stillWaiting', { names: left.map((a) => a.name).join(', ') || l.walk?.a?.name || l.carry?.a?.name || '' }), 5000);
+      const names = left.length ? left.map((a) => a.name) : [l.walk?.a?.name || l.carry?.a?.name || ''];
+      this.ui.toast(t('veh_stillWaiting', { names: names.join(', '), n: names.length }), 5000);
       return;
     }
     const loose = this.unsecured();
     if (loose.length) {
       this.ui.showModal([
         h3(t('veh_looseTitle')),
-        para(t('veh_looseText', { names: loose.map((a) => a.name).join(', ') })),
+        para(t('veh_looseText', { names: loose.map((a) => a.name).join(', '), n: loose.length, g: loose.length === 1 ? loose[0].sex : undefined })),
         btnRow([
           [t('veh_doItForMe'), 'primary', () => {
             const v = l.vehicle;
@@ -714,9 +731,13 @@ export class TripFlow {
       const needHay = animals.some((a) => needsTrailer(a)) && !inCargo(l.cargo, 'hay');
       if ((needWater || needHay) && !l.warnedCargo) {
         l.warnedCargo = true;
+        // Qui est concerné (un seul : « le/la faire boire »), et jusqu'à quand il faudra attendre (étape du soir ou arrivée).
+        const what = needHay && needWater ? 'both' : needHay ? 'hay' : 'water';
+        const who = what === 'hay' ? animals.filter((a) => needsTrailer(a)) : animals;
+        const night = nightStopAhead(planTrip({ mode: l.mode, hours: l.check.hours, animals }));
         this.ui.showModal([
           h3(t('veh_cargoWarnTitle')),
-          para(t(needHay ? 'veh_cargoWarnHay' : 'veh_cargoWarnWater')),
+          para(`${t(`veh_cargoWarn_${what}`, { n: who.length, g: who.length === 1 ? who[0].sex : undefined })} ${t(night ? 'veh_cargoWarnNight' : 'veh_cargoWarnArrival')}`),
           btnRow([
             [t('veh_openTrunk'), 'primary', () => { this.ui.hideModal(); this.setView('tack'); }],
             [t('veh_goAnyway'), '', () => { this.ui.hideModal(); this.departGo(true); }],
@@ -757,8 +778,9 @@ export class TripFlow {
       safety: trailerAnimals.length ? safetyMap(stallsById, trailerAnimals) : null,
     });
     const vehicle = l.vehicle;
-    // On quitte la vue de chargement (la cabine du trajet prend le relais).
-    if (l.view) this.setView(null);
+    // On quitte la vue de chargement sans descendre (la cabine du trajet prend le relais), portière fermée.
+    if (l.view) this.setView(null, { stay: true });
+    vehicle?.closeRamp();
     for (const w of vehicle?.walkers ?? []) vehicle.abortWalk(w);
     this.journey = { trip, watch, speed: 1, vehicle, destId: l.destId, mode: l.mode, ids: l.ids, cargo: l.cargo, startClock: p.clock, camT: 0, report: null };
     this.loading = null;
@@ -877,6 +899,7 @@ export class TripFlow {
     j.road?.dispose();
     j.road = null;
     document.body.classList.remove('trip-road');
+    const byTrailer = j.vehicle?.kind === 'trailer' && j.mode !== 'horse'; // pour le conseil « décharger le van »
     j.vehicle?.dispose();
     j.vehicle = null;
     g.player.root.visible = true;
@@ -891,7 +914,8 @@ export class TripFlow {
     j.report = report;
     this.ui.refresh();
     report.tips = j.trip.ids.length ? ['unload', 'stressHome', 'long'] : ['neighbour'];
-    if (!j.trip.ids.some((id) => g.profile.animals.find((a) => a.id === id && needsTrailer(a)))) report.tips = report.tips.filter((x) => x !== 'unload');
+    // « On détache d'abord le cheval… » : seulement après un trajet en van, avec un grand animal dedans.
+    if (!byTrailer || !j.trip.ids.some((id) => g.profile.animals.find((a) => a.id === id && needsTrailer(a)))) report.tips = report.tips.filter((x) => x !== 'unload');
     showReport(this.ui, this, report);
   }
 

@@ -25,12 +25,15 @@ describe('textes des véhicules', () => {
       ...['empty', 'rearFirst', 'noStep'].map((r) => `veh_stepWhy_${r}`),
       ...['none', 'max', 'full'].map((r) => `veh_pack_${r}`),
       ...['reassure', 'treat', 'wait'].map((h) => `veh_stillHesitates_${h}`),
-      ...['noWater', 'noHay', 'noBowls'].map((r) => `trip_r_${r}`),
+      ...['noWater', 'noHay', 'noBowls'].flatMap((r) => [`trip_r_${r}`, `trip_r_${r}Arrive`]),
+      ...['both', 'hay', 'water'].map((w) => `veh_cargoWarn_${w}`),
+      ...['horse', 'cow', 'sheep', 'goat'].map((s) => `veh_who_${s}`),
       'trip_f_loose',
       ...['tieRule', 'hayNet', 'noHay', 'noWater', 'unload'].map((k) => `trip_tip_${k}`),
       'veh_menuTitleVan', 'veh_menuTitleCar', 'veh_focusVan', 'veh_focusCar', 'veh_trunkTitle', 'veh_roofTitle',
       'veh_bagsTitle', 'veh_luggageTitle', 'veh_crateItSub', 'veh_crateItSubVan', 'veh_tackView', 'veh_roofView',
-      'veh_allAboardVan', 'veh_allAboardCar', 'veh_cargoWarnHay', 'veh_cargoWarnWater', 'veh_watchCab', 'veh_watchCabDesc',
+      'veh_allAboardVan', 'veh_allAboardCar', 'veh_cargoWarnNight', 'veh_cargoWarnArrival', 'veh_watchCab', 'veh_watchCabDesc',
+      'veh_stallOrderNoTie', 'veh_hesitatesHintOther', 'buyToolAskAwayFree', 'tr_livestockNeedsVan',
       'veh_camCab', 'veh_camOutside', 'veh_camTrailer', 'veh_treat', 'veh_treatNone', 'veh_reassure', 'veh_wait',
       'gear_leftAtHome', 'gearAtHome', 'buyToolAskAway',
     ];
@@ -39,5 +42,25 @@ describe('textes des véhicules', () => {
       for (const k of keys) expect(t(k, { name: 'X', n: 2, list: 'Y', place: 'Z', tool: 'T', price: 1 }), `${lang}:${k}`).not.toBe(k);
     }
     setLang('fr');
+  });
+
+  it('les textes s\'accordent avec l\'animal (jument, plusieurs noms, un seul animal)', () => {
+    const { t, ta, setLang } = i18n;
+    setLang('fr');
+    const mare = { name: 'Tornado', sex: 'f' };
+    expect(ta('veh_stepDone_tie', mare)).toContain('attachée');
+    expect(ta('veh_stepDone_tie', mare)).toContain('qu\'elle');
+    expect(ta('veh_walkingInHint', mare)).toContain('d\'elle');
+    expect(ta('veh_leadInNow', mare)).toContain('la tiens');
+    expect(ta('veh_noTreats', mare)).toContain('Rassure-la');
+    expect(t('veh_stillWaiting', { names: 'Rex, Minou', n: 2 })).toContain('ne sont pas');
+    expect(t('veh_stillWaiting', { names: 'Rex', n: 1 })).toContain('n\'est pas');
+    expect(t('veh_looseText', { names: 'Tornado', n: 1, g: 'f' })).toContain('attachée');
+    expect(t('veh_cargoWarn_water', { n: 1, g: 'f' })).toContain('la faire boire');
+    expect(t('veh_cargoWarn_water', { n: 3 })).toContain('les faire boire');
+    expect(ta('trip_r_noWaterArrive', mare)).toContain('l\'arrivée');
+    expect(ta('trip_r_noWaterArrive', mare)).not.toContain('soir');
+    expect(t('veh_stepDone_breastBar', { who: t('veh_who_sheep') })).toContain('le mouton');
+    expect(t('buyToolAskAwayFree', { tool: 'Brosse', price: 5 })).not.toContain('5');
   });
 });

@@ -19,6 +19,10 @@ const CRATE_COLORS = [0x3f8fd0, 0xe07a3a, 0x6b3fa0, 0x2f8a5f, 0xd0a03f];
 const SMALL_LIVESTOCK = ['sheep', 'goat'];
 const UP = new THREE.Vector3(0, 1, 0);
 const CAB_LOOK = new THREE.Vector3(0, -0.05, 3); // le conducteur regarde droit devant
+// Au volant, sur un téléphone en portrait (image étroite) : l'œil un peu plus haut, plus en arrière et vers le milieu
+// (main.eyePortrait), on regarde presque à l'horizontale et un peu vers le milieu (yaw < 0) : le pare-brise et le
+// rétroviseur intérieur remplissent le haut de l'image, le volant et le tableau de bord restent en bas.
+export const CAB_PORTRAIT = { pitch: -0.05, yaw: -0.1, fov: 70 };
 
 /** Une caisse de transport à la taille de l'animal, avec l'animal dedans (on le voit à travers la grille). */
 export function crateWithAnimal(a, colorIndex = 0) {
@@ -142,8 +146,9 @@ export class TripVehicle {
     return !!p && p.target === 1;
   }
 
-  /** Remonte le pont et ferme les portes : on est prêt à partir. */
+  /** Remonte le pont et ferme les portes (portière du conducteur comprise) : on est prêt à partir. */
   closeRamp() {
+    this.setOpen('door', false);
     this.setOpen('ramp', false);
     this.setOpen('upper', false);
     this.setOpen('tack', false);
@@ -604,13 +609,14 @@ export class TripVehicle {
    * Caméra pour une vue : 'cab' (au volant), 'stall' (dans le compartiment), 'tack' (sellerie ou coffre de toit),
    * 'boot' (coffre de la voiture), 'camera' (caméra du van). Renvoie { pos, look } dans le monde.
    */
-  view(kind, out = this.pose ?? (this.pose = { pos: new THREE.Vector3(), look: new THREE.Vector3() })) {
+  view(kind, out = this.pose ?? (this.pose = { pos: new THREE.Vector3(), look: new THREE.Vector3() }), portrait = false) {
     // (renvoie toujours le même objet : rien n'est créé à chaque image)
     if (kind === 'cab') {
       const m = this.main.group;
       m.updateWorldMatrix(true, false);
-      out.pos.copy(this.main.eye).applyMatrix4(m.matrixWorld);
-      out.look.copy(this.main.eye).add(CAB_LOOK).applyMatrix4(m.matrixWorld);
+      const eye = this.cabEye(this.tmp2, portrait);
+      out.pos.copy(eye).applyMatrix4(m.matrixWorld);
+      out.look.copy(eye).add(CAB_LOOK).applyMatrix4(m.matrixWorld);
       return out;
     }
     const src = this.trailer ?? this.main;
@@ -619,6 +625,16 @@ export class TripVehicle {
     out.pos.copy(v.pos).applyMatrix4(src.group.matrixWorld);
     out.look.copy(v.look).applyMatrix4(src.group.matrixWorld);
     return out;
+  }
+
+  /** L'œil du conducteur (repère du véhicule), un peu déplacé en portrait (voir CAB_PORTRAIT). */
+  cabEye(out, portrait = false) {
+    return out.copy((portrait && this.main.eyePortrait) || this.main.eye);
+  }
+
+  /** Regard de départ au volant (yaw, pitch), selon l'écran (portrait ou non) ; pitchWide : celui d'un écran large. */
+  cabLook(portrait, pitchWide) {
+    return portrait ? { yaw: this.main.yawPortrait ?? CAB_PORTRAIT.yaw, pitch: CAB_PORTRAIT.pitch } : { yaw: 0, pitch: pitchWide };
   }
 
   // ------------------------------------------------------------ chaque image

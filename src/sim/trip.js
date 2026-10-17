@@ -310,6 +310,15 @@ export function doStopAction(trip, a, action) {
   return { ok: true, finding };
 }
 
+/**
+ * Reste-t-il une étape du soir plus loin sur la route (après l'arrêt en cours) ? Elle fournit l'eau et le foin ;
+ * sinon, sans bidon ni foin dans le coffre, il faut attendre l'arrivée (textes « à l'étape du soir » / « à l'arrivée »).
+ */
+export function nightStopAhead(trip) {
+  const from = trip.status === 'stop' ? trip.stopIndex + 1 : trip.stopIndex;
+  return trip.stops.slice(from).some((s) => s.kind === 'night');
+}
+
 /** Ce qu'on remarque en vérifiant un animal. */
 export function diagnose(trip, a) {
   if (a.sick) return 'sick';

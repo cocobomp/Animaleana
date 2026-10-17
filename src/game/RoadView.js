@@ -9,10 +9,15 @@ import { PLACES } from '../sim/places.js';
 import { hourOf } from '../sim/time.js';
 import { currentStop, progress } from '../sim/trip.js';
 import { isHigh } from './gfx.js';
+import { CAB_PORTRAIT } from './Vehicle.js';
 
 const SPAN = 420; // longueur de route qui boucle (m)
 const BEHIND = 70; // les objets passent derrière nous jusque-là avant de revenir devant
 const BASE_SPEED = 22; // m/s (80 km/h) à la vitesse ×1
+// On roule à droite (France) : la caméra regarde vers +z, donc la droite de l'écran est du côté des x négatifs.
+const LANE_X = -1.9;
+const SIDE = -1; // côté de l'aire de repos (à droite de la route)
+const portrait = () => window.innerWidth < window.innerHeight;
 
 // Couleurs du paysage selon le pays.
 const BIOMES = {
@@ -83,8 +88,7 @@ export class RoadView {
     this.vehicle = vehicle;
     this.trip = trip;
     this.cameraMode = 'cab';
-    this.yaw = 0;
-    this.pitch = -0.2; // un peu vers le bas : on voit le tableau de bord et la route
+    this.resetLook(); // un peu vers le bas : on voit le tableau de bord et la route
     this.orbit = 0.6;
     this.time = 0;
     this.speed = 0;
@@ -122,7 +126,7 @@ export class RoadView {
       p.t = p.target;
       p.obj.rotation[p.axis] = p.closed + (p.open - p.closed) * p.t;
     }
-    vehicle.root.position.set(1.9, 0, 0); // voie de droite
+    vehicle.root.position.set(LANE_X, 0, 0); // voie de droite
     vehicle.root.rotation.set(0, 0, 0);
     vehicle.heading = 0;
     vehicle.root.visible = true;
@@ -229,9 +233,10 @@ export class RoadView {
   buildRestArea() {
     const g = new THREE.Group();
     const m = (c) => this.track(new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 }));
+    // (les x sont donnés pour le côté +x, puis passés du côté droit de la route : SIDE)
     const add = (geo, mat, x, y, z) => {
       const o = new THREE.Mesh(this.track(geo), mat);
-      o.position.set(x, y, z);
+      o.position.set(x * SIDE, y, z);
       g.add(o);
       return o;
     };
@@ -240,10 +245,12 @@ export class RoadView {
     add(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6), m(0x9aa0a6), 5.6, 1.3, -10);
     const sign = add(new THREE.BoxGeometry(0.06, 0.9, 0.9), m(0x1f5fbf), 5.6, 2.8, -10);
     sign.material.emissive = new THREE.Color(0x0a2050);
-    add(new THREE.BoxGeometry(0.07, 0.5, 0.12), m(0xffffff), 5.56, 2.85, -10.12);
-    add(new THREE.BoxGeometry(0.07, 0.12, 0.3), m(0xffffff), 5.56, 3.05, -9.98);
-    add(new THREE.BoxGeometry(0.07, 0.12, 0.3), m(0xffffff), 5.56, 2.85, -9.98);
-    add(new THREE.BoxGeometry(0.07, 0.3, 0.1), m(0xffffff), 5.56, 2.95, -9.86);
+    // La lettre P, tournée vers la route (dans le bon sens vue de la voie de droite).
+    const pz = (dz) => -10 + dz * SIDE;
+    add(new THREE.BoxGeometry(0.07, 0.5, 0.12), m(0xffffff), 5.56, 2.85, pz(-0.12));
+    add(new THREE.BoxGeometry(0.07, 0.12, 0.3), m(0xffffff), 5.56, 3.05, pz(0.02));
+    add(new THREE.BoxGeometry(0.07, 0.12, 0.3), m(0xffffff), 5.56, 2.85, pz(0.02));
+    add(new THREE.BoxGeometry(0.07, 0.3, 0.1), m(0xffffff), 5.56, 2.95, pz(0.14));
     add(new THREE.BoxGeometry(1.8, 0.06, 0.8), m(0x8a5a32), 15, 0.75, 4);
     for (const z of [-0.6, 0.6]) add(new THREE.BoxGeometry(1.8, 0.05, 0.3), m(0x8a5a32), 15, 0.45, 4 + z);
     add(new THREE.CylinderGeometry(0.25, 0.22, 0.8, 10), m(0x2f7a4a), 14, 0.4, 8);
@@ -255,16 +262,16 @@ export class RoadView {
     const wall = m(0xc9a77a);
     const roof = m(0x8a3a2a);
     const body = new THREE.Mesh(this.track(new THREE.BoxGeometry(8, 3, 5)), wall);
-    body.position.set(16, 1.5, 0);
+    body.position.set(16 * SIDE, 1.5, 0);
     const top = new THREE.Mesh(this.track(new THREE.ConeGeometry(5.6, 2, 4, 1).rotateY(Math.PI / 4)), roof);
     top.scale.set(1.05, 1, 0.68);
-    top.position.set(16, 4, 0);
+    top.position.set(16 * SIDE, 4, 0);
     const light = new THREE.Mesh(this.track(new THREE.BoxGeometry(0.1, 0.4, 0.3)), this.track(new THREE.MeshStandardMaterial({ color: 0xffe2a0, emissive: 0xffc860, emissiveIntensity: 1.5 })));
-    light.position.set(11.95, 2.4, 0);
+    light.position.set(11.95 * SIDE, 2.4, 0);
     stable.add(body, top, light);
     for (const z of [-1.4, 1.4]) {
       const door = new THREE.Mesh(this.track(new THREE.BoxGeometry(0.08, 2, 1.2)), m(0x5a3a22));
-      door.position.set(11.97, 1, z);
+      door.position.set(11.97 * SIDE, 1, z);
       stable.add(door);
     }
     g.add(stable);
@@ -419,11 +426,11 @@ export class RoadView {
       this.yaw = THREE.MathUtils.clamp(this.yaw - dx * 0.006, -1.9, 1.9);
       this.pitch = THREE.MathUtils.clamp(this.pitch - dy * 0.004, -0.6, 0.45);
       const m = v.main.group.matrixWorld;
-      cam.position.copy(v.main.eye).applyMatrix4(m);
+      cam.position.copy(v.cabEye(this.v2, cam.aspect < 1)).applyMatrix4(m);
       cam.position.y += Math.sin(this.time * 9) * 0.004 * Math.min(1, this.speed / 10);
       const dir = this.v1.set(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch) - 0.04, Math.cos(this.yaw) * Math.cos(this.pitch));
       this.lookAt.copy(cam.position).add(dir);
-      cam.fov = cam.aspect < 1 ? 80 : 66;
+      cam.fov = cam.aspect < 1 ? CAB_PORTRAIT.fov : 66;
     } else if (this.cameraMode === 'trailer' && v.trailer) {
       // Le van en coupe (le flanc gauche est caché) : on voit les animaux voyager, le paysage défile derrière.
       const pose = v.view('stall');
@@ -433,10 +440,12 @@ export class RoadView {
       cam.fov = 55;
     } else {
       // Dehors : la caméra tourne doucement autour du véhicule (on peut la faire tourner avec le doigt).
+      // En portrait, l'image est étroite : on recule pour voir tout l'attelage.
       this.orbit += dt * 0.08 - dx * 0.006;
-      const center = this.v2.set(v.root.position.x, 1.4, v.trailer ? -3.5 : 0);
-      const r = v.trailer ? 13 : 9;
-      cam.position.set(center.x + Math.sin(this.orbit) * r, 3.4, center.z + Math.cos(this.orbit) * r);
+      const center = this.v2.set(v.root.position.x, 1.4, v.trailer ? -2.6 : 0);
+      const far = cam.aspect < 1 ? 1.55 : 1;
+      const r = (v.trailer ? 13 : 9) * far;
+      cam.position.set(center.x + Math.sin(this.orbit) * r, 3.4 + (far - 1) * 3, center.z + Math.cos(this.orbit) * r);
       this.lookAt.copy(center);
       cam.fov = 55;
     }
@@ -466,8 +475,14 @@ export class RoadView {
   setCameraMode(mode) {
     this.cameraMode = mode;
     this.vehicle.setCutaway(mode === 'trailer');
-    this.yaw = 0;
-    this.pitch = -0.2;
+    this.resetLook();
+  }
+
+  /** Regard de départ au volant : un peu vers le bas (en portrait : presque droit devant, vers le rétroviseur). */
+  resetLook() {
+    const look = this.vehicle.cabLook(portrait(), -0.15);
+    this.yaw = look.yaw;
+    this.pitch = look.pitch;
   }
 
   render() {

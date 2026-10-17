@@ -1118,11 +1118,36 @@ body.trip-road #pause-banner, body.trip-road #quest-tracker, body.veh-view #ev-b
   #trip-overlay.with-road .trip-sheet { width: min(460px, 40vw); align-self: flex-end; }
 }
 .trip-sheet.compact { max-height: 46vh; }
+/* Pause avec la fiche repliée (téléphone) : caméras + repli sur une ligne, l'aire de repos, les animaux en cartes
+   qui défilent de côté, puis Repartir : environ la moitié de l'écran, le véhicule reste visible au-dessus. */
+.trip-sheet.compact.brief { max-height: 60vh; padding-top: 10px; }
+.trip-sheet.brief .trip-cams { flex-wrap: nowrap; align-items: center; margin: 0 0 6px; }
+.trip-sheet.brief .trip-cams button { flex: 0 1 auto; min-width: 0; padding-left: 8px; padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trip-stop-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.trip-sheet.brief .trip-stop { padding: 8px 10px; margin: 0 0 6px; }
+.trip-sheet.brief .trip-stop h3 { margin: 0 0 6px; }
+.trip-sheet.brief .trip-group button { min-height: 44px; }
+.trip-animals.strip { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px 6px; padding: 0 16px 4px; scroll-padding: 0 16px; -webkit-overflow-scrolling: touch; }
+.trip-animals.strip .trip-animal { flex: 0 0 min(310px, 86%); scroll-snap-align: start; padding: 6px 8px; }
+.trip-animals.strip .trip-animal-head { margin-bottom: 2px; }
+.trip-animals.strip .trip-bars { grid-template-columns: 1fr 1fr; }
+.trip-animals.strip .trip-bar { grid-template-columns: 22px 1fr 22px; }
+.trip-animals.strip .trip-bar-name, .trip-animals.strip .trip-bar.stress, .trip-animals.strip .trip-bar.comfort { display: none; }
+.trip-animals.strip .trip-acts { grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 6px; }
+.trip-animals.strip .trip-act { min-height: 48px; padding: 4px 2px; }
+.trip-sheet.brief .trip-actions-main { grid-template-columns: 1fr 1fr; gap: 8px; }
+.trip-sheet.brief .trip-actions-main .big { margin-top: 0; }
+.trip-sheet.brief .trip-skip { min-height: 52px; }
+/* Coffre de transport : le bouton « Fermer le coffre » reste en bas du panneau pendant qu'on fait défiler la liste. */
+.veh-close { position: sticky; bottom: -14px; margin: 0 -14px -14px; padding: 8px 14px 14px; background: linear-gradient(to bottom, rgba(0, 0, 0, 0), var(--bg) 30%); z-index: 1; }
+.modal-box .veh-close { bottom: 0; margin: 0; padding: 8px 0 0; }
 @media (max-width: 640px) {
   #veh-overlay { width: 100%; left: 0; transform: none; bottom: 0; }
   .veh-sheet { border-radius: 20px 20px 0 0; max-height: 52vh; padding-bottom: calc(14px + var(--safe-b)); }
   .veh-acts { grid-template-columns: repeat(2, 1fr); }
   .trip-sheet.compact { max-height: 44vh; }
+  .trip-sheet.compact.brief { max-height: 58vh; }
+  .veh-sheet .veh-close { bottom: calc(-14px - var(--safe-b)); margin-bottom: calc(-14px - var(--safe-b)); padding-bottom: calc(14px + var(--safe-b)); }
 }
 
 /* ---------- événements spéciaux (src/ui/events.js) */

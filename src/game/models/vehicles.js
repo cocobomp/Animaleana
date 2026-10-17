@@ -586,6 +586,8 @@ export function towCar(color = 0x2f5d4e, accent = 0xd8d2c0) {
     // Caisses des petits animaux : dans le coffre, puis sur la banquette (attachées par la ceinture).
     crateSlots: [new V3(-0.42, 0.53, -1.86), new V3(0.42, 0.53, -1.86), new V3(-0.44, 0.74, -1.12), new V3(0.44, 0.74, -1.12)],
     eye: new V3(0.43, 1.47, -0.3), screen: inside.screen, mirror: inside.mirror, steering: inside.steering,
+    // Téléphone en portrait : plus haut, en arrière, vers le milieu (pare-brise et rétroviseur dans l'image étroite).
+    eyePortrait: new V3(0.29, 1.59, -0.38),
   };
 }
 
@@ -758,7 +760,8 @@ export function horseTrailer(rows = 1, color = 0xf4f1ea, accent = 0x2f6b4f) {
       g.add(rb);
       // Filet à foin (garni ou vide) accroché au-dessus de la mangeoire.
       const net = new THREE.Group();
-      net.position.set(x * 0.52, floorY + 1.68, zb + (r === 0 ? 0.36 : 0.12));
+      // (vers la séparation : vue en coupe, on voit la tête du cheval devant son filet)
+      net.position.set(x * 0.3, floorY + 1.68, zb + (r === 0 ? 0.36 : 0.12));
       const hay = mesh(new THREE.SphereGeometry(0.2, 10, 8), P.hay);
       hay.scale.set(1.05, 1.25, 0.8);
       const mesh2 = mesh(new THREE.SphereGeometry(0.215, 8, 6), new THREE.MeshBasicMaterial({ color: 0x2c4a2a, wireframe: true }));
@@ -907,6 +910,8 @@ export function car(color = 0x2f6fb0, accent = 0x1d1d1f) {
   return {
     group: g, P, length: L, width: W, tailgate, roofLid: lid, crateSlots, door: null,
     eye: new V3(0.42, 1.17, -0.22), screen: inside.screen, mirror: inside.mirror, steering: inside.steering,
+    // (voir le 4x4) : la voiture est plus petite, le rétroviseur plus près : on regarde un peu plus vers le milieu.
+    eyePortrait: new V3(0.28, 1.25, -0.5), yawPortrait: -0.18,
     cargo: { roof: new V3(0, 1.76, -0.9) },
     views: {
       tack: { pos: new V3(1.9, 3.5, -0.9), look: new V3(-0.1, 1.45, -0.9) },

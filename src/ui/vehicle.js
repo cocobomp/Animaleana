@@ -34,7 +34,7 @@ export function openVehicleMenu(ui, flow) {
   const acts = [];
   for (const a of flow.waiting()) {
     if (flow.placeOf(a) === 'trailer') {
-      acts.push(big(SPECIES[a.species].emoji, ta('veh_leadIn', a), a.following ? t('veh_leadInNow') : t('veh_leadInFetch'), () => flow.leadIn(a), 'primary'));
+      acts.push(big(SPECIES[a.species].emoji, ta('veh_leadIn', a), ta(a.following ? 'veh_leadInNow' : 'veh_leadInFetch', a), () => flow.leadIn(a), 'primary'));
     } else {
       acts.push(big('📦', ta('veh_crateIt', a), t(v.trailer ? 'veh_crateItSubVan' : 'veh_crateItSub'), () => flow.crateNow(a), 'primary'));
     }
@@ -92,7 +92,7 @@ function rampBody(ui, flow) {
   const a = w?.a;
   if (!a) return [];
   if (!w.hesitating) {
-    return [h('p', { class: 'veh-title' }, `${SPECIES[a.species].emoji} ${ta('veh_walkingIn', a)}`), h('p', { class: 'veh-hint' }, t('veh_walkingInHint'))];
+    return [h('p', { class: 'veh-title' }, `${SPECIES[a.species].emoji} ${ta('veh_walkingIn', a)}`), h('p', { class: 'veh-hint' }, ta('veh_walkingInHint', a))];
   }
   const conf = flow.loading.conf.get(a.id)?.conf ?? 0;
   const treats = hasTool(flow.game.profile, 'treats');
@@ -100,7 +100,7 @@ function rampBody(ui, flow) {
     h('span', { class: 'veh-act-icon' }, icon), h('small', {}, t(key)));
   return [
     h('p', { class: 'veh-title' }, `${SPECIES[a.species].emoji} ${ta('veh_hesitates', a)}`),
-    h('p', { class: 'veh-hint' }, t('veh_hesitatesHint')),
+    h('p', { class: 'veh-hint' }, t(a.species === 'horse' ? 'veh_hesitatesHint' : 'veh_hesitatesHintOther')),
     h('div', { class: 'veh-meter', title: t('veh_confidence') },
       h('span', {}, `🤝 ${t('veh_confidence')}`),
       h('span', { class: 'bar-track' }, h('span', { class: `bar-fill ${conf >= CONFIDENCE_OK ? 'good' : conf >= 35 ? 'mid' : 'low'}`, style: { width: `${Math.min(100, (conf / CONFIDENCE_OK) * 100)}%` } }))),
@@ -118,6 +118,8 @@ function stallBody(ui, flow, redraw) {
   const v = l.vehicle;
   const rows = [];
   const many = v.stallUse.filter((x) => x.length).length > 2;
+  // Places vides : seulement autant que de grands animaux encore à faire monter (moins de lignes sur téléphone).
+  let freeLeft = flow.waiting().filter((a) => flow.placeOf(a) === 'trailer').length;
   v.trailer.stalls.forEach((st, i) => {
     const ids = v.stallUse[i];
     const animals = ids.map((id) => flow.game.profile.animals.find((x) => x.id === id)).filter(Boolean);
@@ -125,7 +127,7 @@ function stallBody(ui, flow, redraw) {
     const who = animals.length ? animals.map((a) => `${SPECIES[a.species].emoji} ${a.name}`).join(' · ') : t('veh_stallFree');
     // Une place libre : on peut déjà fermer sa barre de poitrail (avant de faire monter le cheval).
     const steps = animals.length ? stallSteps(animals[0]) : ['breastBar'];
-    if (!animals.length && !flow.waiting().some((a) => flow.placeOf(a) === 'trailer')) return;
+    if (!animals.length && freeLeft-- <= 0) return;
     const buttons = steps.map((step) => {
       const done = !!state[step];
       const can = animals.length ? canStep(state, animals[0], step) : { ok: !done, reason: done ? 'done' : null };
@@ -138,9 +140,12 @@ function stallBody(ui, flow, redraw) {
       h('div', { class: 'veh-stall-head' }, h('b', {}, t('veh_place', { n: i + 1 })), h('span', {}, who)),
       h('div', { class: 'veh-steps' }, buttons)));
   });
+  // L'ordre des étapes, pour le premier grand animal du van (ou le prochain qui montera).
+  const first = v.passengerAt(v.stallUse.findIndex((x) => x.length)) ?? flow.nextToStall() ?? { species: 'horse' };
+  const order = stallSteps(first).includes('tie') ? 'veh_stallOrder' : 'veh_stallOrderNoTie';
   return [
     h('p', { class: 'veh-title' }, `🔒 ${t('veh_stallTitle')}`),
-    h('p', { class: 'veh-hint' }, t('veh_stallOrder')),
+    h('p', { class: 'veh-hint' }, t(order, { who: flow.whoText(first) })),
     h('div', { class: `veh-stalls ${many ? 'many' : ''}` }, rows),
     h('p', { class: 'veh-hint small' }, t(inCargo(l.cargo, 'hay') ? 'veh_hayFull' : 'veh_hayEmpty')),
     h('div', { class: 'row end' }, h('button', { class: 'primary', onClick: () => flow.setView(null) }, t('veh_leaveStall'))),
@@ -220,7 +225,8 @@ export function trunkBody(ui, flow, redraw, onClose) {
       h('button', { class: 'small', onClick: () => { l.cargo = suggestCargo(p, travellers, l.capacity, { last: null, mode: l.mode }); flow.cargoChanged(); redraw(); } }, `✨ ${t('veh_suggest')}`),
       h('button', { class: 'small', onClick: () => { l.cargo.items = {}; flow.cargoChanged(); redraw(); } }, `🗑️ ${t('veh_empty')}`)),
     h('div', { class: 'veh-cargo' }, groups),
-    h('div', { class: 'row end' }, h('button', { class: 'primary', onClick: onClose }, `✔ ${t('veh_closeTrunk')}`)),
+    // (toujours visible en bas du panneau : pas besoin de faire défiler toute la liste pour refermer)
+    h('div', { class: 'row end veh-close' }, h('button', { class: 'primary', onClick: onClose }, `✔ ${t('veh_closeTrunk')}`)),
   ];
 }
 

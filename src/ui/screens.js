@@ -57,7 +57,7 @@ export function showProfiles(ui) {
       // Depuis le site : un fichier unique à télécharger puis à passer par AirDrop, clé USB ou mail
       // à un ordinateur sans internet (il s'ouvre en double-cliquant). Pas proposé quand on y joue déjà.
       location.protocol.startsWith('http') && typeof __APP_VERSION__ !== 'undefined'
-        ? h('p', { class: 'portable' }, h('a', { href: './animadichelle.html', download: 'Animadichelle.html' }, `💾 ${t('portableLink')}`), h('small', {}, t('portableHelp')))
+        ? h('p', { class: 'portable' }, h('a', { href: './ferme-madichelle.html', download: 'La ferme à Madichelle.html' }, `💾 ${t('portableLink')}`), h('small', {}, t('portableHelp')))
         : null));
     ui.screen.hidden = false;
   };

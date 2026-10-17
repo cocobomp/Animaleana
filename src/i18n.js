@@ -5,7 +5,7 @@ import { VET_FR, VET_EN } from './ui/vetTexts.js'; // examen et école vétérin
 import { TACK_FR, TACK_EN } from './ui/tackTexts.js'; // sellerie : catalogue d'équipement (gear_*, tk_*, col_*)
 
 const fr = {
-  title: 'Animadichelle',
+  title: 'La ferme à Madichelle',
   tagline: 'Adopte, soigne et voyage avec tes animaux',
   profiles: 'Profils',
   play: 'Jouer',
@@ -1843,7 +1843,7 @@ const fr = {
 };
 
 const en = {
-  title: 'Animadichelle',
+  title: 'Madichelle\'s Farm',
   tagline: 'Adopt, care for and travel with your pets',
   profiles: 'Profiles',
   play: 'Play',

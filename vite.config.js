@@ -94,7 +94,7 @@ function portableFile() {
           .map((f) => [f, `data:model/gltf-binary;base64,${fs.readFileSync(join(modelDir, f)).toString('base64')}`]));
         html = html.replace('<script type="module">', () => `<script>window.__ANIMADICHELLE_MODELS__ = ${JSON.stringify(models)};</script>\n<script type="module">`);
       }
-      writeFileSync(join(outDir, 'animadichelle.html'), html);
+      writeFileSync(join(outDir, 'ferme-madichelle.html'), html);
     },
   };
 }

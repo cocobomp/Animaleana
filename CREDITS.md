@@ -1,6 +1,6 @@
 # Crédits des ressources 3D
 
-Animadichelle est un jeu libre et gratuit. Les modèles 3D ci-dessous sont placés dans le domaine
+La ferme à Madichelle est un jeu libre et gratuit. Les modèles 3D ci-dessous sont placés dans le domaine
 public (CC0 1.0) par leurs auteurs : aucune attribution n'est exigée, mais nous tenons à les remercier.
 Les textes de licence sont dans `public/models/LICENSES/`.
 

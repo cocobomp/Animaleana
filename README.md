@@ -1,4 +1,4 @@
-# Animadichelle 🐴🐶🐱🐰
+# La ferme à Madichelle 🐴🐶🐱🐰
 
 Jeu 3D **gratuit** et **sans réseau** : adopte des animaux, occupe-toi d'eux comme dans la vraie vie et voyage avec eux à travers le monde, même à cheval.
 
@@ -24,11 +24,11 @@ npm run preview    # http://localhost:4173 ; depuis un téléphone du même rés
 ### Jouer sur un ordinateur sans internet
 
 Le site propose, sous le numéro de version de l'écran d'accueil, « 💾 Emporter le jeu sur un ordinateur » :
-un seul fichier `Animadichelle.html` (script et styles inclus). On le télécharge depuis le téléphone, on
+un seul fichier `La ferme à Madichelle.html` (script et styles inclus). On le télécharge depuis le téléphone, on
 l'envoie par AirDrop, clé USB ou mail, puis on l'ouvre en double-cliquant : tout le jeu tourne depuis ce
 fichier, sans serveur ni réseau. Les sauvegardes restent dans le navigateur de chaque appareil ; il faut
 rouvrir le même fichier (au même endroit) pour les retrouver. Ce fichier est produit à chaque build
-(`dist/animadichelle.html`).
+(`dist/ferme-madichelle.html`).
 
 ## Commandes
 

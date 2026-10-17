@@ -2170,7 +2170,7 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 @media (prefers-reduced-motion: reduce) { .thumb.is-wait .thumb-ph, .thumb.is-new > img { animation: none; } }
 .card > .thumb { margin: -2px 0; }
 /* Animalerie : aperçu de l'animal choisi, toujours visible en haut de la liste. */
-.shop-preview { position: sticky; top: -6px; z-index: 3; display: flex; align-items: center; gap: 12px; margin: 4px -4px 8px; padding: 8px; background: rgba(247, 243, 234, 0.96); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); }
+.shop-preview { position: sticky; top: -6px; z-index: 3; display: flex; align-items: center; gap: 12px; margin: 4px -4px 8px; padding: 8px; background: #f7f3ea; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); }
 .shop-preview .thumb { width: 132px; height: 99px; --thumb-bg: #e3eedc; }
 .shop-preview .thumb-ph { font-size: 3rem; }
 .shop-preview-text { display: grid; gap: 2px; min-width: 0; }

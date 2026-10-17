@@ -336,12 +336,13 @@ function structureThumb(spec) {
   const model = buildStructureModel(spec.type, '');
   g.add(model);
   const big = Math.max(def.w, def.d);
-  const tile = groundTile(def.w, def.d, Math.max(0.25, big * 0.08));
+  const tile = groundTile(def.w, def.d, Math.max(0.25, big * 0.04));
   g.add(tile);
   const decor = def.cat === 'decor';
   return {
     object: g,
-    dir: decor ? [1, 0.6, 1.05] : big > 10 ? [1, 0.8, 1.3] : [1, 0.8, 1.15],
+    // (les grands enclos : vus plus bas, les clôtures se voient mieux)
+    dir: decor ? [1, 0.6, 1.05] : big > 10 ? [1, 0.62, 1.35] : [1, 0.8, 1.15],
     ground: -0.06,
     shadowScale: 1.12,
     pad: 1.05,

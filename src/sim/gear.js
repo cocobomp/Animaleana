@@ -206,20 +206,12 @@ const animalsHere = (p) => (isAway(p) ? (p.animals ?? []).filter((a) => a.locati
 /** Un objet (variante) correspond-il à cette clé ? La clé peut être un type : 'bridle' = tous les filets. */
 const matches = (id, key) => id === key || (TYPES.has(key) && GEAR[id]?.type === key);
 
-/** Combien de ces objets dans un stock (toutes tailles, ou une taille précise). */
-function countIn(items, key, size = null) {
-  let n = 0;
-  for (const [k, c] of Object.entries(items ?? {})) {
-    const pk = parseKey(k);
-    if (matches(pk.id, key) && (!size || pk.size === size)) n += c;
-  }
-  return n;
-}
-
 /** Combien on en a ici. key : une variante ('saddleJump') ou un type ('saddle' = toutes les selles). */
 export function owned(profile, key) {
   ensureTack(profile);
-  return countIn(stockHere(profile), key);
+  let n = 0;
+  for (const [k, c] of Object.entries(stockHere(profile))) if (matches(parseKey(k).id, key)) n += c;
+  return n;
 }
 
 /** Combien de ces objets sont déjà portés par des animaux d'ici (même règle de clé que owned). */
@@ -231,18 +223,8 @@ export function inUse(profile, key) {
 }
 
 /**
- * Cet objet est-il resté à la maison ? (en voyage : on en a plus à la maison que dans le coffre)
- * size : une taille précise (sinon toutes les tailles).
- */
-export function leftAtHome(profile, key, size = null) {
-  if (!isAway(profile)) return false;
-  ensureTack(profile);
-  return countIn(profile.items, key, size) > countIn(profile.luggage.items, key, size);
-}
-
-/**
- * Combien d'exemplaires de cette variante (à cette taille, ou toutes tailles si size est null) sont à la maison
- * et pas dans le coffre du voyage. 0 quand on n'est pas en voyage.
+ * Combien d'exemplaires de cette variante (à cette taille, ou toutes tailles si size est null) sont restés à la
+ * maison, pas dans le coffre du voyage (equip répond alors leftAtHome). 0 quand on n'est pas en voyage.
  */
 export function atHomeCount(profile, id, size = null) {
   if (!isAway(profile)) return 0;

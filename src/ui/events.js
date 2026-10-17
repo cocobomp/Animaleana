@@ -21,7 +21,7 @@ export class EventBanner {
     this.ui = ui;
     this.min = false;
     this.key = null;
-    this.el = h('section', { id: 'ev-banner', hidden: true, 'aria-live': 'polite' });
+    this.el = h('section', { id: 'ev-banner', hidden: true });
     this.emoji = h('div', { class: 'ev-emoji', 'aria-hidden': 'true' });
     this.title = h('b', { class: 'ev-title' });
     this.left = h('span', { class: 'ev-left' });
@@ -35,10 +35,13 @@ export class EventBanner {
     this.goBtn = h('button', { class: 'primary ev-go', onClick: () => onGo() },
       h('span', {}, t('ev_go')), h('span', { class: 'ev-compass' }, this.arrow, this.dist));
     this.minBtn = h('button', { class: 'ev-min', title: t('ev_min'), 'aria-label': t('ev_min'), onClick: () => this.collapse() }, '–');
-    this.el.append(
+    // Le contenu est dans une carte (.ev-card) : sur téléphone en paysage, le bandeau lui-même ne prend plus de
+    // place (display: contents) et seule la carte se pose en bas de l'écran, sans repousser hors de l'écran ce
+    // que la bulle du guide empile sous elle (style.css, fin du fichier, « Téléphone en paysage (suite) »).
+    this.el.append(h('div', { class: 'ev-card', 'aria-live': 'polite' },
       h('div', { class: 'ev-head' }, this.emoji, h('div', { class: 'ev-head-text' }, this.title, this.left), this.minBtn),
       this.text, this.prog, this.goBtn,
-    );
+    ));
     ui.root.append(this.el);
   }
 

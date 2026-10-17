@@ -114,14 +114,19 @@ export class UI {
     }
   }
 
-  /** Pose --hud-tools-bottom et --hud-info-right (px) : où finissent la barre d'outils et la carte d'infos. */
+  /**
+   * Pose --hud-tools-bottom, --hud-info-right et --hud-bottom (px) : où finissent la barre d'outils, la carte
+   * d'infos et toute la barre du haut (CSS : panneau, « Ma liste » et bandeau d'événement en paysage).
+   */
   syncHudVars() {
     const root = document.documentElement.style;
     const tools = this.hud.hidden ? null : this.hud.querySelector('.hud-buttons')?.getBoundingClientRect();
     const info = this.hud.hidden ? null : this.hudInfo?.getBoundingClientRect();
+    const hud = this.hud.hidden ? null : this.hud.getBoundingClientRect();
     const set = (k, v) => { if (root.getPropertyValue(k) !== v) root.setProperty(k, v); };
     set('--hud-tools-bottom', tools?.height ? `${Math.round(tools.bottom)}px` : '');
     set('--hud-info-right', info?.width ? `${Math.round(info.right)}px` : '');
+    set('--hud-bottom', hud?.height ? `${Math.round(hud.bottom)}px` : '');
   }
 
   attach(game) {
@@ -493,11 +498,21 @@ export class UI {
     return null;
   }
 
-  /** Les messages ne sortent jamais par le bas de l'écran (paysage : peu de hauteur) : les plus anciens partent. */
+  /**
+   * Les messages ne sortent jamais par le bas de l'écran (paysage : peu de hauteur) et ne descendent pas sur la
+   * carte du bandeau d'événement posée plus bas (paysage) : les plus anciens partent.
+   */
   fitToasts() {
     const box = this.toasts;
     if (box.children.length < 2) return;
-    const limit = window.innerHeight - safeInsets().b - 8;
+    let limit = window.innerHeight - safeInsets().b - 8;
+    const card = document.querySelector('#ev-banner:not([hidden]) > .ev-card');
+    if (card) {
+      const c = card.getBoundingClientRect();
+      const r = box.getBoundingClientRect();
+      // (seulement si la carte est sous le haut des messages et en face d'eux : en portrait, elle est au-dessus)
+      if (c.height && c.top > r.top && c.left < r.right && c.right > r.left) limit = Math.min(limit, c.top - 6);
+    }
     while (box.children.length > 1 && box.getBoundingClientRect().bottom > limit) box.firstChild.remove();
   }
 
@@ -509,9 +524,11 @@ export class UI {
     // Pas par-dessus un mini-jeu en cours (#modal, z-index 50, couvrait .mg-overlay, 45 : « ⭐ Tu
     // passes au niveau 2 ! » en plein milieu des griffes) : la fenêtre attend la fin du mini-jeu,
     // qui appelle flushModals en se fermant. Ses boutons (et ses promesses) marchent pareil.
-    // Ni à la place d'une fenêtre où l'on tape un nom : « ⭐ Niveau 2 » la remplaçait, le nom tapé était
-    // perdu et l'adoption n'aboutissait jamais. Elle attend que le nom soit validé (hideModal la ressort).
-    if (this.minigameOpen || (this.modalOpen && this.modal.querySelector('input[data-autofocus]'))) {
+    // Ni à la place d'une fenêtre déjà ouverte : « ⭐ Niveau 2 » remplaçait la fenêtre du nom (le nom tapé était
+    // perdu, l'adoption n'aboutissait jamais), une alerte ou l'annonce d'un orage, et la promesse de la fenêtre
+    // remplacée ne se résolvait jamais. Elle attend qu'on ferme celle-ci (hideModal la ressort). Les boutons des
+    // fenêtres appellent hideModal avant d'en ouvrir une autre : cette suite-là passe tout de suite.
+    if (this.minigameOpen || this.modalOpen) {
       this.modalQueue.push(content);
       return;
     }

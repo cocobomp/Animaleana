@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { visibleArea, SHORT_VIEW } from '../src/ui/viewport.js';
+import { UI } from '../src/ui/UI.js';
 
 const SRC = new URL('../src/', import.meta.url).pathname;
 const files = (dir) => readdirSync(dir).flatMap((f) => {
@@ -104,6 +105,21 @@ describe('cibles tactiles d\'au moins 44 px', () => {
     expect(minHeight(sel)).toBeGreaterThanOrEqual(44);
   });
 
+  it('« − Réduire » du bandeau d\'événement : plus de règle téléphone qui le ramène à 40 px', () => {
+    expect(minHeight('.ev-min')).toBeGreaterThanOrEqual(44);
+    expect(css).not.toMatch(/\.ev-min \{ width: 40px/);
+  });
+
+  it('« Ma liste » au doigt : en-tête, 🤖 Auto / ✋ Moi, ↑ et ✕ font 44 px', () => {
+    const coarse = css.match(/@media \(pointer: coarse\) \{\s*\.task-toggle, \.task-mode \{ min-height: (\d+)px; \}\s*\.task-icon, \.task-icon-space \{ width: (\d+)px; min-height: (\d+)px; \}/);
+    expect(coarse).not.toBeNull();
+    expect(coarse.slice(1).map(Number).every((n) => n >= 44)).toBe(true);
+  });
+
+  it('le lien « Emporter le jeu sur un ordinateur » fait 44 px de haut', () => {
+    expect(minHeight('.portable a')).toBeGreaterThanOrEqual(44);
+  });
+
   it('au doigt, les petits boutons (button.small) font aussi 44 px', () => {
     expect(css).toMatch(/@media \(pointer: coarse\) \{ button\.small \{ min-height: 44px; \} \}/);
   });
@@ -123,5 +139,47 @@ describe('fenêtres', () => {
     expect(box).toMatch(/max-height:\s*100%/);
     expect(box).toMatch(/overflow-y:\s*auto/);
     expect(css).toMatch(/\.modal-box > \.row\.end:last-child \{ position: sticky;/);
+  });
+});
+
+describe('fenêtres (suite)', () => {
+  it('fenêtres d\'événement : la rangée de boutons reste collée en bas (et .ev-modal n\'est plus une grille, où elle ne pouvait pas bouger)', () => {
+    expect(css).toMatch(/\.modal-box \.ev-buttons \{ position: sticky;/);
+    expect(css.match(/\.ev-modal \{[^}]*\}/)[0]).toMatch(/display:\s*flex/);
+  });
+
+  it('« ⋯ Plus » en paysage : la règle en colonnes est plus précise que « .action-sheet.more-sheet { 1fr } »', () => {
+    expect(css).toMatch(/\.modal-box \.action-sheet\.more-sheet \{ grid-template-columns: repeat\(3/);
+  });
+
+  it('une fenêtre qui arrive pendant qu\'une autre est ouverte attend son tour (au lieu de la remplacer)', () => {
+    const ui = { minigameOpen: false, modalOpen: true, modalQueue: [], modal: { querySelector: () => null } };
+    UI.prototype.showModal.call(ui, ['⭐ Niveau 2']);
+    expect(ui.modalQueue).toEqual([['⭐ Niveau 2']]);
+  });
+
+  it('les fenêtres en attente sortent une par une, quand la précédente est fermée', () => {
+    const shown = [];
+    const ui = { minigameOpen: false, modalOpen: false, modalQueue: ['a', 'b'], showModal(c) { shown.push(c); this.modalOpen = true; } };
+    UI.prototype.flushModals.call(ui);
+    UI.prototype.flushModals.call(ui);
+    expect(shown).toEqual(['a']);
+    ui.modalOpen = false;
+    UI.prototype.flushModals.call(ui);
+    expect(shown).toEqual(['a', 'b']);
+  });
+});
+
+describe('écran « Nouveau profil »', () => {
+  const screens = sources.find((x) => x.p === 'ui/screens.js').text;
+  const newProfile = screens.slice(screens.indexOf('function newProfile'), screens.indexOf('function showScreen'));
+
+  it('Entrée crée le profil, Échap revient en arrière', () => {
+    expect(newProfile).toMatch(/e\.key === 'Enter'[\s\S]*?create\(\)/);
+    expect(newProfile).toMatch(/e\.key === 'Escape'[\s\S]*?back\(\)/);
+  });
+
+  it('le cadre ne bouge pas quand la hauteur de la fenêtre change (pas de marge en vh)', () => {
+    expect(css.match(/\n\.menu \{[^}]*\}/)[0]).not.toMatch(/margin:[^;]*vh/);
   });
 });

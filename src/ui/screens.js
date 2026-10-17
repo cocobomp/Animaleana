@@ -91,10 +91,16 @@ function newProfile(ui, back) {
       showAvatarEditor(ui, p, () => ui.game.start(p));
     }, () => newProfile(ui, back));
   };
+  // Entrée = « Créer », Échap = « Annuler » (comme dans la fenêtre du nom d'un animal).
   name.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || e.isComposing) return;
-    e.preventDefault();
-    create();
+    if (e.isComposing) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      create();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      back();
+    }
   });
   ui.screen.replaceChildren(h('div', { class: 'menu' },
     h('h1', {}, t('newProfile')),

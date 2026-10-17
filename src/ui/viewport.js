@@ -51,8 +51,9 @@ export function revealField(el) {
   const vv = visibleArea(window.visualViewport, window.innerHeight);
   const r = el.getBoundingClientRect();
   const b = box.getBoundingClientRect();
-  const sticky = box.querySelector(':scope > .row.end:last-child');
-  const stickyH = sticky && getComputedStyle(sticky).position === 'sticky' ? sticky.getBoundingClientRect().height : 0;
+  // Rangée OK / Annuler collée en bas (fenêtre : enfant direct ; écran « Nouveau profil » : au bout du cadre .menu).
+  const sticky = [...box.querySelectorAll('.row.end:last-child')].find((x) => getComputedStyle(x).position === 'sticky');
+  const stickyH = sticky ? sticky.getBoundingClientRect().height : 0;
   const top = Math.max(b.top, vv.top) + 8;
   const bottom = Math.min(b.bottom, vv.top + vv.height) - stickyH - 8;
   if (r.bottom > bottom) box.scrollTop += Math.min(r.bottom - bottom, r.top - top);

@@ -1,6 +1,6 @@
 // Textes du jeu : français (langue principale) et anglais.
 
-import { fr as frComp, en as enComp } from './i18n-competitions.js'; // concours à l'extérieur et dressage
+import { COMP_FR, COMP_EN } from './ui/competitionsTexts.js'; // dressage, concours à l'extérieur, métier de cavalière (dr_*, comp_*)
 import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
 import { VET_FR, VET_EN } from './ui/vetTexts.js'; // examen et école vétérinaires (vx_*, vs_*)
 import { TACK_FR, TACK_EN } from './ui/tackTexts.js'; // sellerie : catalogue d'équipement (gear_*, tk_*, col_*)
@@ -1671,7 +1671,7 @@ const fr = {
   actv_block_over: 'Terminé',
   actv_enter: 'S\'inscrire',
   actv_rivals: 'Les autres concurrents',
-  actv_elsewhere: 'Concours ailleurs dans le monde',
+  actv_elsewhere: 'Petits concours dans les autres lieux (sans inscription)',
   actv_shelfEmpty: 'Ton étagère est encore vide. Fais un sans-faute ou monte sur le podium d\'un concours !',
   actv_album: 'Album photo',
   actv_albumEmpty: 'Pas encore de photo. Pendant une balade, arrête-toi aux points de vue 📷.',
@@ -3414,7 +3414,7 @@ const en = {
   actv_block_over: 'Over',
   actv_enter: 'Enter',
   actv_rivals: 'The other competitors',
-  actv_elsewhere: 'Contests elsewhere in the world',
+  actv_elsewhere: 'Small contests in other places (no entry needed)',
   actv_shelfEmpty: 'Your shelf is still empty. Ride a clear round or reach the podium in a contest!',
   actv_album: 'Photo album',
   actv_albumEmpty: 'No photo yet. During a trail ride, stop at the 📷 viewpoints.',
@@ -3582,9 +3582,9 @@ const en = {
   o_actvStar: 'Put on 10 shows',
 };
 
-// Textes des concours à l'extérieur et du dressage (fichier à part : src/i18n-competitions.js)
-Object.assign(fr, frComp);
-Object.assign(en, enComp);
+// Dressage, concours à l'extérieur et métier de cavalière de concours (src/ui/competitionsTexts.js)
+Object.assign(fr, COMP_FR);
+Object.assign(en, COMP_EN);
 // Clients et métiers : textes ajoutés aux deux dictionnaires.
 Object.assign(fr, CLIENTS_FR);
 Object.assign(en, CLIENTS_EN);

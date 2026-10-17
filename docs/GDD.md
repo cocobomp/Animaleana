@@ -129,6 +129,16 @@ réussite au dressage…).
   d'égalité), podium avec photo dans l'album, coupes, flots, argent, XP, titres
   (Champion club / régional / Grand Prix). L'animal doit être en forme (faim,
   soif, énergie ≥ 50, ni malade ni enceinte).
+- Au concours de saut ou de dressage, le cheval est **sellé et bridé** à sa
+  taille : au départ, le coffre du van emporte sa selle et son filet (la selle
+  de dressage pour un concours de dressage, si on l'a ; voir `src/sim/cargo.js`) ;
+  sur place, le bouton « 🏇 Seller » les met. Selle et bride de dressage
+  ajoutent un peu de brillance aux notes du juge.
+- **Métier 💼 Cavalier de concours** (`rider` dans `src/sim/careers.js`) : carnet
+  (séance de plat ou figures, reprise notée, inscription, départ en van, concours,
+  podium), XP de métier, trois rangs, réputation (podium : elle monte ; place
+  vide : elle baisse) et avantages (inscriptions −20 % puis −50 % avec un sponsor,
+  primes +15 % puis +30 %). Pas de visiteurs pour ce métier.
 
 ## 9. Météo, jour et nuit, saisons
 - Cycle jour/nuit.

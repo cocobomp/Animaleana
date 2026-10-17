@@ -3,10 +3,12 @@
 // La logique est dans src/sim/careers.js ; les clients (visiteurs) dans src/game/Clients.js.
 
 import { h } from './dom.js';
-import { t } from '../i18n.js';
+import { t, L } from '../i18n.js';
 import { isSandbox } from '../sim/profile.js';
 import { CAREERS, CAREER_IDS, RANKS, careerSummary, setActiveCareer, nextAction } from '../sim/careers.js';
 import { schoolSummary } from '../sim/vetSchool.js'; // 🎓 école vétérinaire
+import { upcomingEntries, competitionData } from '../sim/competitions.js'; // 🏇 cavalier de concours
+import { PLACES } from '../sim/places.js';
 
 const rankLabel = (rank) => t(`ca_rank_${RANKS[rank]}`);
 
@@ -65,6 +67,7 @@ function careerCard(ui, s) {
     else body.push(h('small', { class: 'ca-following' }, `📌 ${t('ca_following')}`));
   }
   if (s.id === 'vet') body.push(schoolBlock(ui)); // 🎓 apprendre le métier en leçons (src/ui/vetSchool.js)
+  if (s.id === 'rider') body.push(riderBlock(ui)); // 🏇 prochain concours et calendrier (src/ui/competitions.js)
   return h('div', { class: `ca-card ${s.state} ${s.active ? 'active' : ''}` }, head, ...body);
 }
 
@@ -77,6 +80,17 @@ function schoolBlock(ui) {
     h('span', { class: 'ca-school-ticks', 'aria-hidden': 'true' }, sc.lessons.map((l) => (l.done ? '✅' : '⬜')).join('')),
     !started && !sc.diploma ? h('small', {}, t('vs_cardLocked')) : null,
     h('button', { class: 'small primary', onClick: () => ui.openVetSchool() }, t('vs_cardBtn')));
+}
+
+/** Cavalier de concours : la prochaine inscription, les résultats, et le bouton du calendrier des concours. */
+function riderBlock(ui) {
+  const p = ui.game.profile;
+  const next = upcomingEntries(p)[0];
+  const results = competitionData(p).results;
+  return h('div', { class: 'ca-school ca-rider' },
+    h('span', {}, next ? t('ca_rider_next', { name: `${PLACES[next.comp.place]?.flag ?? ''} ${L(next.comp.name)}`, day: next.comp.day }) : t('ca_rider_noEntry')),
+    results.length ? h('small', {}, t('ca_rider_results', { n: results.length, p: results.filter((r) => r.rank <= 3).length })) : null,
+    h('button', { class: 'small primary', onClick: () => ui.openActivities({ tab: 'calendar' }) }, `📅 ${t('actv_tabCalendar')}`));
 }
 
 /** « Tu veux apprendre le métier de vétérinaire ? » */

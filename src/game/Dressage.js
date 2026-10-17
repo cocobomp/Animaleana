@@ -8,7 +8,7 @@ import { Session, SESSION_TYPES } from './Activities.js';
 import { toWorld, eligibility } from '../sim/activities.js';
 import {
   LETTERS, GAITS, GAIT_ORDER, gaitOf, nextGait, repriseFor, figureEnd, pathProgress, figureMark, haltMark, reinBackMark,
-  judgeComment, repriseResult, dressageSkill, applyTraining, trainingBlock, cooldownLeft, learnFactor, flatSequence,
+  judgeComment, repriseResult, dressageSkill, judgedSkill, dressageTackBonus, applyTraining, trainingBlock, cooldownLeft, learnFactor, flatSequence,
   transitionQuality, flatResult, RAIL_LOOP, pathLengths, CUE_WINDOW,
 } from '../sim/dressage.js';
 import { dressageArena, pathDiscs, haltRing } from './models/venue.js';
@@ -221,7 +221,7 @@ class DressageSession extends ArenaSession {
     const now = gaitOf(pl.speed);
     if (tr.lastGait !== null && now !== tr.lastGait && now !== 'halt' && tr.lastGait !== 'halt') tr.changes++;
     tr.lastGait = now;
-    const skill = dressageSkill(this.animal);
+    const skill = judgedSkill(this.animal); // dressage du cheval + selle et bride de dressage
 
     if (f.kind === 'path') {
       const local = { x: p.x - toWorld({ x: 0, z: 0 }).x, z: p.z - toWorld({ x: 0, z: 0 }).z };
@@ -303,16 +303,25 @@ class DressageSession extends ArenaSession {
     const result = repriseResult(this.marks);
     const extra = [];
     if (result.best) extra.push(`✨ ${t('dr_bestFigure', { fig: t(`dr_fig_${result.best.id}`), n: result.best.mark })}`);
-    if (result.worst && result.worst !== result.best) extra.push(`💭 ${t('dr_worstFigure', { fig: t(`dr_fig_${result.worst.id}`), n: result.worst.mark })}`);
+    if (result.worst && result.worst.mark < result.best.mark) extra.push(`💭 ${t('dr_worstFigure', { fig: t(`dr_fig_${result.worst.id}`), n: result.worst.mark })}`);
     if (this.training) {
       const r = applyTraining(a, 'figures', result.percent / 100, g.profile.clock);
       extra.push(t('dr_skillGain', { n: r.gain, v: r.skill }));
       for (const why of r.reasons) extra.push(`⚠️ ${ta(`dr_learn_${why}`, a)}`);
       g.xp('training');
+      // Métier de cavalier de concours (src/sim/careers.js, 'rider') : carnet et un peu d'expérience.
+      g.clients?.noteCareer?.('rider', 'train');
+      g.clients?.careerXp?.('rider', 3);
     } else {
       if (result.percent >= 70) addStat(g.profile, 'actvDressage70');
       a.skills.dressage = Math.min(100, dressageSkill(a) + 1);
+      if (!this.comp) {
+        // Reprise à la maison : le juge du club note, ça compte pour le métier.
+        g.clients?.noteCareer?.('rider', 'reprise');
+        g.clients?.careerXp?.('rider', 4 + result.stars * 3);
+      }
     }
+    if (dressageTackBonus(a) > 0) extra.push(`🎩 ${t('dr_tackBonus', { n: dressageTackBonus(a) })}`);
     this.applause(result.stars / 3);
     this.hud.big(t(result.stars === 3 ? 'actv_bravo' : 'dr_saluteDone'), 1600, result.stars === 3 ? 'good' : '');
     const body = this.marksTable();
@@ -436,6 +445,8 @@ class FlatSession extends ArenaSession {
       extra.push(t('dr_skillGain', { n: r.gain, v: r.skill }));
       for (const why of r.reasons) extra.push(`⚠️ ${ta(`dr_learn_${why}`, a)}`);
       g.xp('training');
+      g.clients?.noteCareer?.('rider', 'train'); // carnet du métier de cavalier de concours
+      g.clients?.careerXp?.('rider', 3);
     }
     this.hud.big(t(result.stars === 3 ? 'actv_bravo' : 'actv_finished'), 1400, result.stars === 3 ? 'good' : '');
     setTimeout(() => !this.ended && this.finish(result, { animals: [a], quality: result.quality, extra }), 1200);

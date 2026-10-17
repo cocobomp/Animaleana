@@ -9,8 +9,10 @@ import { SHOWGROUND, toWorld, addAward, activityData, knownTricks } from '../sim
 import { SESSION_TYPES } from './Activities.js';
 import {
   activeEntry, markMissed, competitionCourse, jumpOffCourse, competitionRivals, tiedLeaders, jumpOffRivals, finalRanking,
-  prizeFor, recordResult, eligibleForCompetition, titleFor, DISCIPLINES,
+  prizeFor, recordResult, eligibleForCompetition, titleFor, DISCIPLINES, tackReady, competitionTack, prizeMoney,
+  riderAfterResult, riderMissed, upcomingEntries,
 } from '../sim/competitions.js';
+import { equip, owned } from '../sim/gear.js'; // seller le cheval avec ce qu'il y a dans le coffre
 import { competitionVenueModel } from './models/venue.js';
 import { spectators } from './models/course.js';
 import { mulberry32 } from '../sim/rng.js';
@@ -29,6 +31,8 @@ export class CompetitionVenue {
     this.time = 0;
     this.particles = [];
     this.busy = false;
+    // « 👉 Montre-moi » du métier de cavalier de concours (carnet du panneau 💼 Métiers).
+    game.clients?.registerGuide?.('rider', (action) => this.showMe(action));
   }
 
   get ui() {
@@ -76,7 +80,10 @@ export class CompetitionVenue {
     const p = g.profile;
     if (!p) return;
     const now = { day: g.day, hour: g.hour, place: p.place };
-    for (const e of markMissed(p, now)) this.ui.toast(t('comp_missed', { name: L(e.comp.name) }), 7000);
+    for (const e of markMissed(p, now)) {
+      this.ui.toast(t('comp_missed', { name: L(e.comp.name) }), 7000);
+      if (riderMissed(p) !== null) this.ui.toast(t('comp_missedRep'), 6000); // métier : la réputation baisse un peu
+    }
     // Le site reste installé jusqu'au soir, même quand l'épreuve est finie.
     const keep = this.entry && this.entry.comp.place === p.place && this.entry.comp.day === g.day && g.hour < this.entry.comp.close + 2;
     const entry = activeEntry(p, now) ?? (keep ? this.entry : null);
@@ -148,8 +155,42 @@ export class CompetitionVenue {
     return (this.entry?.animalIds ?? []).map((id) => g.profile.animals.find((a) => a.id === id)).filter((a) => a && a.location === g.profile.place);
   }
 
+  /** Prêt à concourir ? En forme (src/sim/competitions.js) et, à cheval, sellé et bridé (pas à cru). */
   readiness(a) {
-    return eligibleForCompetition(a, this.event.discipline);
+    return eligibleForCompetition(a, this.event.discipline) ?? tackReady(a, this.event.discipline);
+  }
+
+  /**
+   * « Seller » : met au cheval une selle et un filet à sa taille, pris dans le coffre du voyage (ou à la
+   * sellerie, à la maison) ; la selle de la discipline d'abord (selle de dressage…). Renvoie true si c'est bon.
+   */
+  tackUp(a) {
+    const g = this.game;
+    const p = g.profile;
+    const put = [];
+    for (const { slot, keys } of competitionTack(a, this.event.discipline, (k) => owned(p, k.split('@')[0]))) {
+      let r = null;
+      for (const k of keys) {
+        r = equip(p, a, k.split('@')[0], undefined, { exact: true });
+        if (r.ok) break;
+      }
+      // Sinon n'importe quel modèle à sa taille (à la maison, la sellière échange la taille).
+      if (!r?.ok) r = equip(p, a, slot, undefined, { autoSwap: g.isHome });
+      if (!r.ok) {
+        // (mêmes messages que la sellerie : resté à la maison, pas la bonne taille dans le coffre…)
+        this.ui.toast(t(`gear_${r.reason}`, { item: t(`gear_${r.item ?? slot}`), size: r.need ? t(`tk_size_${r.need}`) : '' }), 7000);
+        g.entities.get(a.id)?.applyGear();
+        g.ui.refresh();
+        return false;
+      }
+      put.push(t(`gear_${r.item}`));
+    }
+    g.entities.get(a.id)?.applyGear();
+    if (g.player.mount?.data === a) g.player.seat();
+    g.save();
+    if (put.length) this.ui.toast(ta('comp_tackedUp', a, { what: put.join(', ') }), 5000);
+    g.ui.refresh();
+    return true;
   }
 
   /** L'épreuve est-elle ouverte maintenant ? (raison si non) */
@@ -252,7 +293,7 @@ export class CompetitionVenue {
     if (!e || e.done) return;
     const comp = e.comp;
     const { table, rank } = finalRanking(comp, { ...result, name: p.name, animal: a.name, species: a.species }, rivalList, jumpOff);
-    const prize = prizeFor(comp, rank);
+    const prize = { ...prizeFor(comp, rank), money: prizeMoney(p, comp, rank) }; // primes du métier (rider)
     const away = comp.place !== p.home;
     const titleBefore = titleFor(p, a.id);
     recordResult(p, e, { rank, animal: a, score: result.total ?? result.points ?? 0 });
@@ -268,11 +309,18 @@ export class CompetitionVenue {
     if (rank <= 3) g.xp(prize.xp);
     const money = isSandbox(p) ? 0 : prize.money;
     if (money) earn(p, money);
+    if (money) g.audio?.ui('coin');
     const award = addAward(p, { kind: prize.kind, tier: prize.tier }, {
-      type: comp.discipline, day: g.day, place: p.place, animal: a.name, species: a.species, level: comp.levelId, rank, event: L(comp.name),
+      type: comp.discipline, day: g.day, place: p.place, animal: a.name, animalId: a.id, species: a.species, level: comp.levelId, rank, event: L(comp.name),
     });
     const title = titleFor(p, a.id);
     const newTitle = title && title !== titleBefore ? title : null;
+    // Métier de cavalier de concours : carnet (concourir, podium), expérience, réputation, argent gagné.
+    const career = riderAfterResult(p, comp, rank, money);
+    if (career) {
+      for (const n of career.notes) if (n.first) g.clients?.noteCareer?.('rider', n.action, true);
+      if (career.rankUp !== null) g.clients?.rankUpToast?.('rider', career.rankUp);
+    }
     g.save();
     g.ui.refresh();
     this.ui.renderStatus();
@@ -281,7 +329,7 @@ export class CompetitionVenue {
     setTimeout(() => {
       const photo = this.takePhoto();
       showCompetitionResults(this.ui, {
-        comp, rank, table, award, money, animal: a, result, title, newTitle, photo, jumpOff,
+        comp, rank, table, award, money, animal: a, result, title, newTitle, photo, jumpOff, career,
         onClose: () => {},
         onTravel: () => this.ui.openTravel(),
       });
@@ -360,6 +408,32 @@ export class CompetitionVenue {
   gate() {
     const w = toWorld({ x: SHOWGROUND.hw + 2.2, z: 0 });
     return new THREE.Vector3(w.x, 0, w.z);
+  }
+
+  /**
+   * « 👉 Montre-moi » du carnet du métier (rider) : le terrain de concours pour s'entraîner, le calendrier
+   * pour s'inscrire ou partir, l'entrée de la carrière le jour du concours.
+   */
+  showMe(action) {
+    const g = this.game;
+    const ui = this.ui;
+    const p = g.profile;
+    const ground = () => {
+      const w = this.gate();
+      g.marker.show(new THREE.Vector3(w.x, 0, w.z), { hideNear: 4 });
+    };
+    if (action === 'train' || action === 'reprise') {
+      ground();
+      return ui.toast(t(p.animals.some((a) => a.species === 'horse' && a.location === p.place) ? `ca_rider_show_${action}` : 'ca_rider_show_noHorse'), 7000);
+    }
+    if ((action === 'compete' || action === 'podium') && this.entry && !this.entry.done) {
+      ground();
+      return ui.toast(t('ca_rider_show_venue', { name: L(this.entry.comp.name) }), 7000);
+    }
+    const mine = upcomingEntries(p);
+    ui.openActivities({ tab: 'calendar' });
+    if (action === 'register' || !mine.length) return ui.toast(t('ca_rider_show_register'), 7000);
+    return ui.toast(t('ca_rider_show_travel', { name: L(mine[0].comp.name), day: mine[0].comp.day }), 7000);
   }
 
   disciplineIcon() {

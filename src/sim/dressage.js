@@ -3,6 +3,7 @@
 // Logique pure, sans 3D : testée dans tests/dressage.test.js. La partie 3D est dans src/game/Dressage.js.
 
 import { seeded } from './rng.js';
+import { tackEffects } from './gear.js'; // selle et bride de dressage : un peu plus de brillance
 
 const clamp = (v, min = 0, max = 1) => Math.max(min, Math.min(max, v));
 
@@ -264,6 +265,15 @@ export function repriseResult(marks) {
 
 /** Compétence de dressage d'un cheval (les anciens chevaux n'en avaient pas encore). */
 export const dressageSkill = (a) => a.skills?.dressage ?? 10;
+
+/**
+ * Bonus de l'équipement aux yeux du juge (en points de compétence) : la selle de dressage (+4) et la bride
+ * de dressage (+5) aident le cheval à se tenir ; le hackamore (sans mors) un peu moins (−2). Voir GEAR.fx.tricks.
+ */
+export const dressageTackBonus = (a) => Math.round(tackEffects(a).tricks * 100);
+
+/** Compétence utilisée pour la brillance des notes : dressage du cheval + équipement. */
+export const judgedSkill = (a) => Math.max(0, Math.min(100, dressageSkill(a) + dressageTackBonus(a)));
 
 // ---------------------------------------------------------------- entraînement
 

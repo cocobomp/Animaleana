@@ -10,7 +10,7 @@ import { PLACES, checkTravel } from '../sim/places.js';
 import { isSandbox, spend, addStat } from '../sim/profile.js';
 import {
   DISCIPLINES, calendar, competitionData, eligibleForCompetition, canRegister, register, entryState, upcomingEntries,
-  bestResults, titleFor, fitsDiscipline, LEVELS,
+  bestResults, titleFor, fitsDiscipline, LEVELS, entryFee, prizeMoney,
 } from '../sim/competitions.js';
 import { cooldownLeft, dressageSkill, learnFactor } from '../sim/dressage.js';
 import { awardEl } from './activities.js';
@@ -39,7 +39,7 @@ const whenText = (g, day) => {
 
 // ---------------------------------------------------------------- calendrier et inscriptions
 
-/** Section « 🚗 Concours ailleurs » du calendrier des activités : inscriptions en cours, puis les prochains concours. */
+/** Section « 🚗 Grands concours ailleurs » du calendrier des activités : inscriptions en cours, puis les prochains concours. */
 export function awayCalendar(ui) {
   const g = ui.game;
   const p = g.profile;
@@ -59,7 +59,8 @@ export function awayCalendar(ui) {
         h('b', {}, eventTitle(c)),
         h('small', {}, `${discName(c.discipline)} · ${levelName(c)}`),
         h('small', {}, `${t('day', { n: c.day })} · ${whenText(g, c.day)} · ${travelText(g, c.place)}`),
-        h('small', {}, isSandbox(p) ? t('actv_prizesSandbox') : t('actv_prizes', { fee: c.fee, a: c.prizes[0], b: c.prizes[1], c: c.prizes[2] }))),
+        // (frais et primes du métier de cavalier de concours : src/sim/competitions.js, riderPerks)
+        h('small', {}, isSandbox(p) ? t('actv_prizesSandbox') : t('actv_prizes', { fee: entryFee(p, c), a: prizeMoney(p, c, 1), b: prizeMoney(p, c, 2), c: prizeMoney(p, c, 3) }))),
       block
         ? h('span', { class: 'lock' }, t(`comp_reg_${block}`))
         : h('button', { class: 'primary', onClick: () => openRegister(ui, c) }, t('comp_register')));
@@ -95,12 +96,15 @@ export function openRegister(ui, comp) {
   const p = g.profile;
   const here = g.animalsHere().filter((a) => fitsDiscipline(a, comp.discipline));
   const picked = new Set(here.filter((a) => !eligibleForCompetition(a, comp.discipline)).slice(0, 1).map((a) => a.id));
+  const fee = entryFee(p, comp); // moins cher pour un cavalier de concours confirmé ou expert
   const render = () => {
     const block = canRegister(p, comp, [...picked], { day: g.day, hour: g.hour });
     ui.modal.querySelector('.modal-box').replaceChildren(h('div', { class: 'comp-register' },
       h('h3', {}, `${DISCIPLINES[comp.discipline].icon} ${eventTitle(comp)}`),
       h('p', { class: 'note' }, `${discName(comp.discipline)} · ${levelName(comp)} · ${t('day', { n: comp.day })} · ${travelText(g, comp.place)}`),
-      h('p', { class: 'note' }, isSandbox(p) ? t('comp_feeSandbox') : t('comp_fee', { fee: comp.fee, a: comp.prizes[0] })),
+      h('p', { class: 'note' }, isSandbox(p) ? t('comp_feeSandbox') : fee < comp.fee
+        ? t('comp_feeCareer', { fee, base: comp.fee, a: prizeMoney(p, comp, 1) })
+        : t('comp_fee', { fee, a: prizeMoney(p, comp, 1) })),
       here.length ? h('div', { class: 'checks' }, here.map((a) => {
         const why = eligibleForCompetition(a, comp.discipline);
         return h('label', { class: 'check' },
@@ -115,9 +119,10 @@ export function openRegister(ui, comp) {
           class: 'primary',
           disabled: !!block,
           onClick: () => {
-            if (!spend(p, comp.fee)) return ui.toast(t('r_money'));
+            if (!spend(p, fee)) return ui.toast(t('r_money'));
             register(p, comp, [...picked]);
             addStat(p, 'compRegistered');
+            g.clients?.noteCareer?.('rider', 'register'); // carnet du métier de cavalier de concours
             g.save();
             ui.hideModal();
             ui.toast(t('comp_registered', { name: L(comp.name), day: comp.day }), 6000);
@@ -178,16 +183,20 @@ export function openVenuePanel(ui, venue) {
       if (!animals.length) out.push(h('p', { class: 'warn' }, t('comp_noAnimalsHere')));
       out.push(h('div', { class: 'cards' }, animals.map((a) => {
         const why = venue.readiness(a);
-        return h('div', { class: `card comp-athlete ${why ? 'locked' : ''}` },
+        const tack = why === 'needSaddle' || why === 'needBridle'; // il suffit de le seller (coffre du voyage)
+        // (pas grisée quand il suffit de le seller : le bouton « Seller » doit avoir l'air actif)
+        return h('div', { class: `card comp-athlete ${why && !tack ? 'locked' : ''}` },
           h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
           h('span', { class: 'card-main' },
             h('b', {}, a.name),
             why ? h('small', { class: 'actv-warn' }, ta(`comp_why_${why}`, a)) : h('small', { class: 'good' }, `✅ ${t('comp_ready')}${a.warmedUp === g.day ? ` · 🔥 ${t('comp_warmedUp')}` : ''}`),
             h('div', { class: 'bars small' }, ['hunger', 'thirst', 'energy'].map((n) => bar(t(`need_${n}`), a.needs[n]))),
             h('div', { class: 'row wrap' },
+              tack ? h('button', { class: 'primary', onClick: () => { if (venue.tackUp(a)) ui.renderPanel(); } }, `🏇 ${t('comp_tackUp')}`) : null,
               a.species === 'horse' ? h('button', { class: 'small', disabled: !!why || !!block, onClick: () => venue.warmUp(a) }, `🔥 ${t('comp_warmup')}`) : null,
               h('button', { class: 'primary', disabled: !!why || !!block, onClick: () => venue.compete(a) }, `🏁 ${t('comp_compete')}`))));
       })));
+      if (c.discipline === 'dressage') out.push(h('p', { class: 'note' }, t('comp_dressageTip')));
       out.push(h('p', { class: 'note' }, t('comp_careTip')));
       return out;
     },
@@ -218,7 +227,8 @@ export function showCompetitionResults(ui, r) {
       h('p', { class: 'actv-who' }, `${SPECIES[r.animal.species].emoji} ${r.animal.name}`),
       r.photo ? h('img', { class: 'comp-photo', src: r.photo, alt: t('actv_sight_podium') }) : null,
       h('ul', { class: 'actv-lines' }, lines.map((x) => h('li', {}, x)),
-        r.newTitle ? h('li', { class: 'good' }, `🏅 ${ta('comp_newTitle', r.animal, { title: t(`comp_title_${r.newTitle}`) })}`) : null),
+        r.newTitle ? h('li', { class: 'good' }, `🏅 ${ta('comp_newTitle', r.animal, { title: t(`comp_title_${r.newTitle}`) })}`) : null,
+        r.career ? h('li', {}, t('comp_careerLine', { xp: r.career.xp, rep: Math.round(r.career.rep) })) : null),
       h('table', { class: 'actv-table' }, h('tbody', {}, r.table.map((x) => h('tr', { class: x.you ? 'you' : '' },
         h('td', {}, x.rank <= 3 ? TIER_ICON[['gold', 'silver', 'bronze'][x.rank - 1]] : String(x.rank)),
         h('td', {}, `${SPECIES[x.species]?.emoji ?? ''} ${x.you ? t('actv_you') : x.name} & ${x.animal}`),

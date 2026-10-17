@@ -488,8 +488,9 @@ export class UI {
   levelUp(level, names) {
     audio.ui('levelUp');
     const msg = names ? t('levelUp', { n: level, names }) : t('levelUpPlain', { n: level });
-    // Une fenêtre est ouverte (résultats d'un concours…) : on ne la remplace pas, on l'annonce en bulle.
-    if (this.modalOpen) return this.toast(`⭐ ${msg}`, 8000);
+    // Une fenêtre est ouverte (résultats d'un concours…) ou une activité est en cours (reprise de dressage,
+    // parcours : la fenêtre cachait la carrière et mettait les résultats en attente) : on l'annonce en bulle.
+    if (this.modalOpen || this.game?.activities?.active) return this.toast(`⭐ ${msg}`, 8000);
     this.alert(msg);
   }
 

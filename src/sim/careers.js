@@ -70,6 +70,30 @@ export const CAREERS = {
       { maxClients: 3, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat', 'cow'], price: 1.25, tips: true },
     ],
   },
+  // Cavalière / cavalier de concours : dressage au manège, puis concours à l'extérieur (calendrier,
+  // inscription, voyage en van, reprise ou parcours notés, podium). Pas de visiteurs (clients: false).
+  // Les avantages sont lus par src/sim/competitions.js (riderPerks) : frais d'inscription et primes.
+  rider: {
+    id: 'rider',
+    emoji: '🏇',
+    level: 3,
+    building: 'showground',
+    clients: false,
+    ranks: [0, 150, 400],
+    actions: [
+      { id: 'train', emoji: '🎠', where: 'showground' },
+      { id: 'reprise', emoji: '🧑‍⚖️', where: 'showground' },
+      { id: 'register', emoji: '📅', where: 'calendar' },
+      { id: 'travel', emoji: '🚐', where: 'calendar' },
+      { id: 'compete', emoji: '🏁', where: 'venue' },
+      { id: 'podium', emoji: '🏆', where: 'venue' },
+    ],
+    perks: [
+      { fee: 1, prize: 1, sponsor: false },
+      { fee: 0.8, prize: 1.15, sponsor: false },
+      { fee: 0.5, prize: 1.3, sponsor: true },
+    ],
+  },
 };
 
 export const CAREER_IDS = Object.keys(CAREERS);

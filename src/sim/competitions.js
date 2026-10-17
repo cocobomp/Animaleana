@@ -10,6 +10,11 @@ import {
 import { lifeStage } from './animal.js';
 import { SPECIES } from './species.js';
 import { seeded, pick, hashString } from './rng.js';
+import { GEAR, wears, sizeFor, stockKey } from './gear.js'; // selle et filet à la taille du cheval
+import { pack, unpack, inCargo, available, cargoItem } from './cargo.js'; // coffre de transport du voyage
+import {
+  CAREERS, isStarted, perksOf, noteAction, addCareerXp, changeReputation, addEarnings,
+} from './careers.js'; // métier de cavalière / cavalier de concours (rider)
 
 const clamp = (v, min = 0, max = 1) => Math.max(min, Math.min(max, v));
 
@@ -38,7 +43,7 @@ export const CIRCUIT = [
   { place: 'kentucky', name: { fr: 'Kentucky Classic', en: 'Kentucky Classic' }, every: 5, offset: 3, bias: 1 },
   { place: 'andalousie', name: { fr: 'Feria d\'Andalousie', en: 'Andalusian Feria' }, every: 4, offset: 0, bias: 0 },
   { place: 'alpes', name: { fr: 'Trophée des Alpes', en: 'Alps Trophy' }, every: 5, offset: 1, bias: 1 },
-  { place: 'bretagne', name: { fr: 'Jumping de la plage', en: 'Beach Jumping' }, every: 6, offset: 4, bias: 0 },
+  { place: 'bretagne', name: { fr: 'Concours de la plage', en: 'Beach Horse Show' }, every: 6, offset: 4, bias: 0 },
 ];
 
 export const LEVELS = ['club', 'regional', 'grand'];
@@ -379,4 +384,152 @@ export function fitsDiscipline(a, discipline) {
   if (DISCIPLINES[discipline]?.horse) return a.species === 'horse';
   if (discipline === 'agility') return SPECIES[a.species].training.includes('agility');
   return true;
+}
+
+// ---------------------------------------------------------------- tenue du cheval au concours
+
+/**
+ * Au concours de saut ou de dressage, le cheval doit être sellé et bridé (pas à cru).
+ * Renvoie null si c'est bon, sinon 'needBridle' ou 'needSaddle'. (Pour s'inscrire, ce n'est pas demandé.)
+ */
+export function tackReady(a, discipline) {
+  if (!DISCIPLINES[discipline]?.horse || a.species !== 'horse') return null;
+  if (!wears(a, 'bridle')) return 'needBridle';
+  if (!wears(a, 'saddle')) return 'needSaddle';
+  return null;
+}
+
+/**
+ * Le matériel à emporter pour un cheval inscrit, à sa taille (clés de la sellerie : 'saddle@pony'…) :
+ * d'abord la selle et le filet de la discipline si on les a (selle de dressage, filet olive…), sinon
+ * les modèles de base. Seulement ce que le cheval ne porte pas déjà (ce qu'il porte voyage avec lui).
+ * owned(key) : combien on en a (pour choisir le modèle). Renvoie [{ slot, keys: [clé préférée, …] }].
+ */
+export function competitionTack(a, discipline, owned = () => 0) {
+  if (a.species !== 'horse') return [];
+  const out = [];
+  for (const type of ['saddle', 'bridle']) {
+    if (wears(a, type)) continue;
+    const variants = Object.keys(GEAR).filter((id) => GEAR[id].type === type && !GEAR[id].minObedience
+      && (!GEAR[id].sizes || GEAR[id].sizes.includes(sizeFor(id, a))));
+    const keys = variants.map((id) => stockKey(id, sizeFor(id, a)));
+    // La discipline du concours d'abord, puis le modèle de base, puis les autres (ceux qu'on a).
+    const rank = (k) => {
+      const id = k.split('@')[0];
+      if (GEAR[id].discipline === discipline) return 0;
+      if (id === type) return 1;
+      return 2;
+    };
+    keys.sort((x, y) => rank(x) - rank(y) || owned(y) - owned(x));
+    out.push({ slot: type, keys });
+  }
+  return out;
+}
+
+/** Ce qu'on peut sortir du coffre pour faire de la place à une selle (le moins utile d'abord). */
+const SPARE = ['ball', 'shampoo', 'lungeLine', 'nailClipper', 'pitchfork', 'treats', 'hoofKit', 'brush'];
+
+/**
+ * Prépare le coffre d'un voyage au concours : pour chaque cheval inscrit qui ne la porte pas, une selle
+ * et un filet À SA TAILLE (la selle de dressage pour un concours de dressage, si on l'a). S'il n'y a plus
+ * de place, on sort d'abord une balle, le shampoing… Renvoie les clés rangées.
+ */
+export function packCompetitionTack(p, cargo, horses, capacity, discipline) {
+  const packed = [];
+  for (const a of horses) {
+    for (const { keys } of competitionTack(a, discipline, (k) => available(p, k))) {
+      const there = keys.find((k) => inCargo(cargo, k) > 0 && cargoFitsHorse(k, a));
+      if (there) {
+        // Déjà une selle à sa taille dans le coffre (la selle mixte du dernier voyage…) : si on a celle de la
+        // discipline (selle de dressage pour un concours de dressage), on l'échange contre elle.
+        const best = keys[0];
+        if (there !== best && GEAR[best.split('@')[0]].discipline === discipline && available(p, best) > inCargo(cargo, best)) {
+          unpack(cargo, there);
+          if (pack(p, cargo, best, capacity).ok) packed.push(best);
+          else pack(p, cargo, there, capacity);
+        }
+        continue;
+      }
+      const want = keys.filter((k) => available(p, k) > inCargo(cargo, k));
+      if (!want.length) continue; // on n'en a pas à sa taille (la sellerie en vend)
+      let ok = pack(p, cargo, want[0], capacity).ok;
+      for (const spare of SPARE) {
+        if (ok) break;
+        if (inCargo(cargo, spare) > 0) {
+          unpack(cargo, spare);
+          ok = pack(p, cargo, want[0], capacity).ok;
+        }
+      }
+      if (ok) packed.push(want[0]);
+    }
+  }
+  return packed;
+}
+
+/** Cette clé du coffre va-t-elle à ce cheval (type selle ou filet, à sa taille) ? */
+function cargoFitsHorse(key, a) {
+  const it = cargoItem(key);
+  return !!it && it.kind === 'gear' && GEAR[it.gear].species.includes('horse') && (it.fit ?? null) === (sizeFor(it.gear, a) ?? null);
+}
+
+/**
+ * Ce qui manque pour concourir, d'après le coffre : [{ a, slot: 'saddle' | 'bridle', size }] pour les
+ * chevaux qui ne portent pas l'objet et n'en ont pas un à leur taille dans le coffre.
+ */
+export function missingCompetitionTack(cargo, horses, discipline) {
+  const out = [];
+  for (const a of horses) {
+    if (a.species !== 'horse' || !DISCIPLINES[discipline]?.horse) continue;
+    for (const { slot, keys } of competitionTack(a, discipline)) {
+      if (!keys.some((k) => inCargo(cargo, k) > 0)) out.push({ a, slot, size: sizeFor(slot, a) });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- métier de cavalière / cavalier de concours
+
+/** Les avantages du métier (rider) : frais d'inscription, primes, sponsor. Sans le métier : rien de spécial. */
+export function riderPerks(p) {
+  return isStarted(p, 'rider') ? perksOf(p, 'rider') : CAREERS.rider.perks[0];
+}
+
+/** Frais d'inscription (moins chers quand on est cavalier confirmé ou expert). */
+export const entryFee = (p, comp) => Math.round((comp.fee * riderPerks(p).fee) / 5) * 5;
+
+/** Prime pour une place (plus grosse avec le métier). */
+export function prizeMoney(p, comp, rank) {
+  const base = prizeFor(comp, rank).money;
+  return base ? Math.round((base * riderPerks(p).prize) / 5) * 5 : 0;
+}
+
+/**
+ * Une action du carnet du métier (rider) vient d'être faite : coche la première fois et donne de l'XP.
+ * Renvoie { first, rankUp } ou null si le métier n'est pas commencé.
+ */
+export const noteRider = (p, action) => noteAction(p, 'rider', action);
+
+/**
+ * Après un concours à l'extérieur : expérience du métier, réputation, argent gagné, carnet.
+ * Renvoie { xp, rep, notes: [{ action, first, rankUp }], rankUp } (rankUp : nouveau rang, ou null).
+ */
+export function riderAfterResult(p, comp, rank, money = 0) {
+  if (!isStarted(p, 'rider')) return null;
+  const notes = [];
+  for (const action of rank <= 3 ? ['compete', 'podium'] : ['compete']) {
+    const r = noteAction(p, 'rider', action);
+    if (r) notes.push({ action, ...r });
+  }
+  const xp = 15 + comp.level * 10 + (rank === 1 ? 25 : rank <= 3 ? 12 : 0);
+  const up = addCareerXp(p, 'rider', xp);
+  const rep = changeReputation(p, 'rider', rank === 1 ? 8 : rank <= 3 ? 5 : rank <= 5 ? 1 : -1);
+  if (money) addEarnings(p, 'rider', money);
+  const rankUp = up?.rankUp ?? notes.map((n) => n.rankUp).find((x) => x !== null && x !== undefined) ?? null;
+  return { xp, rep, notes, rankUp };
+}
+
+/** Une inscription ratée : les organisateurs n'aiment pas les places vides. */
+export function riderMissed(p) {
+  if (!isStarted(p, 'rider')) return null;
+  return changeReputation(p, 'rider', -4);
 }

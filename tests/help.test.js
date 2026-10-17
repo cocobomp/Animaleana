@@ -9,5 +9,9 @@ describe('aide', () => {
     expect(searchHelp('comment agrandir le paddock')[0].id).toBe('grow');
     expect(searchHelp('make the stable bigger')[0].id).toBe('grow');
     expect(searchHelp('').length).toBeGreaterThan(10);
+    // Dressage et concours à l'extérieur
+    expect(searchHelp('faire une reprise de dressage')[0].id).toBe('dressage');
+    expect(searchHelp('partir au concours en van')[0].id).toBe('shows');
+    expect(searchHelp('enter a show elsewhere')[0].id).toBe('shows');
   });
 });

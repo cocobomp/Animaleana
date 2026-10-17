@@ -27,7 +27,7 @@ export const RIG = {
 };
 
 // Paupière supérieure : rotation (rad) ouverte / fermée.
-export const LID_OPEN = -0.46;
+export const LID_OPEN = -0.62;
 export const LID_CLOSED = 0.5;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -207,7 +207,7 @@ function eyes(a, L, dt) {
   for (const b of a.eyeBalls) b.rotation.set(L.gazePitch, L.gazeYaw, 0);
   const close = L.blinkT >= 0 ? blinkAmount(L.blinkT, L.blinkDouble) : 0;
   // La paupière suit un peu le regard (plus basse quand on regarde en bas).
-  const open = LID_OPEN + Math.max(-0.08, L.gazePitch * 0.7);
+  const open = LID_OPEN + Math.max(-0.06, L.gazePitch * 0.45);
   for (const lid of a.lids) lid.rotation.x = open + (LID_CLOSED - open) * close;
 }
 

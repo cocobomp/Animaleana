@@ -61,7 +61,7 @@ export function planGaze(rand) {
   const wide = rand() < 0.25;
   return {
     yaw: (rand() * 2 - 1) * (wide ? 0.32 : 0.12),
-    pitch: (rand() * 2 - 1) * 0.07 - 0.02,
+    pitch: (rand() * 2 - 1) * 0.06,
     delay: 0.6 + rand() * 2.2,
   };
 }

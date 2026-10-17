@@ -106,10 +106,13 @@ function anatomy(B, neckAngle) {
   return {
     g, lg, bk, nk, E, D, W, yB, yW, yC, xF, xH, zF, zH, neckBase, poll,
     na: neckAngle, headRot: 0.92, Hl: 0.63 * B.head,
-    frontPivot: (s) => V(s * xF, yB + 0.2, zF + 0.03),
+    // (pivot de l'antérieur un peu en arrière de l'avant-bras : épaule, genou et sabot presque alignés au
+    // repos, la jambe d'appui reste droite comme une colonne quand on l'anime)
+    frontPivot: (s) => V(s * xF, yB + 0.2, zF - 0.04),
     hindPivot: (s) => V(s * xH, yC - 0.02, -0.5 * bk),
     frontKnee: (s) => V(s * xF, 0.565 * E, zF + 0.005),
     hindKnee: (s) => V(s * xH, 0.62 * E, zH),
+    fetlock: (front, s) => V(s * (front ? xF : xH), FETLOCK_Y * E, (front ? zF : zH) + (front ? 0.01 : 0.017)),
   };
 }
 
@@ -400,7 +403,9 @@ class Build {
 }
 
 // Ordre des os (commun à tous les chevaux : la géométrie partagée s'y réfère).
-const BONE = { body: 0, neck: 1, head: 2, ear0: 3, ear1: 4, tail: 5, tailTip: 6, pivot: (i) => 7 + i * 2, knee: (i) => 8 + i * 2 };
+// (boulet : le sabot reste à plat sur le sol pendant l'appui, quel que soit l'angle du canon)
+const BONE = { body: 0, neck: 1, head: 2, ear0: 3, ear1: 4, tail: 5, tailTip: 6, pivot: (i) => 7 + i * 2, knee: (i) => 8 + i * 2, fetlock: (i) => 15 + i };
+const FETLOCK_Y = 0.215; // hauteur du boulet (÷ E)
 const LEG_SIDES = [[true, 1], [true, -1], [false, 1], [false, -1]];
 
 /**
@@ -443,11 +448,15 @@ function makeRig(A, R) {
     pivot.position.copy(front ? A.frontPivot(side) : A.hindPivot(side));
     body.add(pivot);
     const knee = new THREE.Group();
-    knee.position.copy(front ? A.frontKnee(side) : A.hindKnee(side)).sub(pivot.position);
+    const kneeAt = front ? A.frontKnee(side) : A.hindKnee(side);
+    knee.position.copy(kneeAt).sub(pivot.position);
     pivot.add(knee);
-    return { pivot, knee, front, side };
+    const fetlock = new THREE.Group();
+    fetlock.position.copy(A.fetlock(front, side)).sub(kneeAt);
+    knee.add(fetlock);
+    return { pivot, knee, fetlock, front, side };
   });
-  const groups = [body, neck, head, ears[0], ears[1], tail, tailTip, ...legs.flatMap((l) => [l.pivot, l.knee])];
+  const groups = [body, neck, head, ears[0], ears[1], tail, tailTip, ...legs.flatMap((l) => [l.pivot, l.knee]), ...legs.map((l) => l.fetlock)];
   const bones = groups.map((g) => {
     const b = new THREE.Bone();
     g.add(b);
@@ -455,6 +464,7 @@ function makeRig(A, R) {
   });
   root.updateMatrixWorld(true);
   return { root, body, neck, head, ears, tail, tailTip, legs, bones, groups };
+
 }
 
 /** Matrice repère du groupe → repère du corps (au repos, root à l'identité). */
@@ -678,7 +688,8 @@ function sculpt(B, high) {
     const band = 0.035;
     out.add(legGeo, new THREE.Matrix4(), (p, n) => {
       const wk = smooth(knee.y + band, knee.y - band, p.y);
-      let w = [[BONE.pivot(i), 1 - wk], [BONE.knee(i), wk]];
+      const wf = smooth((FETLOCK_Y + 0.03) * E, (FETLOCK_Y - 0.03) * E, p.y);
+      let w = [[BONE.pivot(i), 1 - wk], [BONE.knee(i), wk * (1 - wf)], [BONE.fetlock(i), wk * wf]];
       const nn = n.clone();
       // Haut du membre : sur le congé ; sous la peau du tronc, il suit les os du tronc (pas de pointe qui
       // ressort quand la jambe bouge).
@@ -688,7 +699,7 @@ function sculpt(B, high) {
     }, true);
     const hoofGeo = loft(HOOF.map(([y, z, hw, df, db]) => ({ p: [xc, y * E, zc + z + (front ? 0 : 0.004)], rx: hw * B.bone ** 0.8, ry: df * B.bone ** 0.8, ryb: db * B.bone ** 0.8 })),
       { radial, sub: 1, exp: 2.3, side: [1, 0, 0], capStart: false });
-    out.add(hoofGeo, new THREE.Matrix4(), (p) => ({ part: PART.hoof, info: [p.y / E, i, 0], ao: 1, w: [[BONE.knee(i), 1]] }), true);
+    out.add(hoofGeo, new THREE.Matrix4(), (p) => ({ part: PART.hoof, info: [p.y / E, i, 0], ao: 1, w: [[BONE.fetlock(i), 1]] }), true);
   });
 
   out.mark('legs');
@@ -699,7 +710,7 @@ function sculpt(B, high) {
   const snout = rayHit(hl, [0, -0.07 * u, 0.6 * u], [0, 0, 1], u);
   const L = 1.5 * bk;
   return {
-    A, R, geometry, torso, head: hl, headDef, eyes, eyeR,
+    A, R, geometry, torso, head: hl, headDef, eyes, eyeR, legPts: horseLegPoints(B),
     dims: { L, R: A.D / 2, hr: 0.105 * Math.sqrt(B.head), legR: 0.036 * B.bone, snoutZ: snout.z, headBack: hb[0][2], earZ: ears[0].pos.z, earY: ears[0].pos.y },
     snoutTip: snout.toArray(),
     bounds: new THREE.Sphere(V(0, yC * 0.8, 0.2), 2.1),
@@ -707,6 +718,19 @@ function sculpt(B, high) {
 }
 
 const shapeCache = new Map();
+
+/** Points de repos des membres (repère du corps) : pivot, genou ou jarret, appui du sabot au sol. */
+export function horseLegPoints(build) {
+  const A = anatomy(build, 0.85);
+  return LEG_SIDES.map(([front, s]) => ({
+    front,
+    side: s,
+    pivot: front ? A.frontPivot(s) : A.hindPivot(s),
+    knee: front ? A.frontKnee(s) : A.hindKnee(s),
+    fetlock: A.fetlock(front, s),
+    hoof: V(s * (front ? A.xF : A.xH), 0, (front ? A.zF : A.zH) + 0.088 + (front ? 0 : 0.004)),
+  }));
+}
 
 /** Géométrie partagée d'un gabarit (sans matière ni os) : pour les tests de la surface. */
 export function horseShape(build, high = false) {
@@ -1022,7 +1046,11 @@ function buildHair(S, B, look, rig, high) {
           const f = k / 4;
           pts.push(p0.clone().addScaledVector(dirA, 0.02 * f + 0.03 * f * f).add(V(0, -ll * f, 0)));
         }
-        hair.strand(pts, 0.04, 0.055, V(-dirA.z, 0, dirA.x), tint(legC, 0.1), () => [[BONE.knee(i), 1]], rng() * 0.5, 0.5 + rng() * 0.5, dirA);
+        const fw = (q) => {
+          const t = smooth((FETLOCK_Y + 0.04) * A.E, (FETLOCK_Y - 0.02) * A.E, q.y);
+          return [[BONE.knee(i), 1 - t], [BONE.fetlock(i), t]].filter(([, x]) => x > 0.001);
+        };
+        hair.strand(pts, 0.04, 0.055, V(-dirA.z, 0, dirA.x), tint(legC, 0.1), fw, rng() * 0.5, 0.5 + rng() * 0.5, dirA);
       }
     });
   }
@@ -1124,7 +1152,7 @@ export function buildHorseModel(look, breedId = null) {
     tail: rig.tail,
     tailTip: rig.tailTip,
     ears: rig.ears,
-    legs: rig.legs.map((l) => ({ pivot: l.pivot, knee: l.knee, front: l.front, side: l.side })),
+    legs: rig.legs.map((l, i) => ({ pivot: l.pivot, knee: l.knee, fetlock: l.fetlock, front: l.front, side: l.side, hoof: S.legPts[i].hoof, fetlockRest: S.legPts[i].fetlock })),
     skeleton,
     hairSway,
     y0: A.yC,

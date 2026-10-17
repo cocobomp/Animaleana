@@ -5,7 +5,7 @@ import {
   buildAvatar, animateAvatarWalk, poseAvatar, updateAvatarLife, startAvatarGesture, careGestureFor,
   animateAvatarRide, avatarBusy, stopAvatarGesture,
 } from './models/avatarModel.js';
-import { gaitFromSpeed, gaitWeights } from './models/avatarMotion.js';
+import { gaitFromSpeed, gaitWeights, gestureHeight } from './models/avatarMotion.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 
@@ -185,7 +185,7 @@ export class Player {
     const p = this.root.position;
     const sc = entity.scale ?? 1;
     const back = (entity.model?.saddleY ?? 0.5) * sc; // hauteur du dos
-    const y = kind === 'pour' ? clamp(back * 0.55, 0.3, 0.9) : kind === 'lead' || kind === 'play' ? 1 : clamp(back * 0.9, 0.3, 1.32);
+    const y = gestureHeight(kind, back);
     // Distance au bord de l'animal dans notre direction (une ellipse : long devant, étroit sur le côté).
     const ep = entity.position;
     const dx = p.x - ep.x;

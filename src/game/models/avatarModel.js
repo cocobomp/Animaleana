@@ -74,8 +74,53 @@ function clothBump() {
   return _cloth;
 }
 
+/**
+ * Faces tournées vers l'extérieur. Un loft décrit de bas en haut (bassin, buste) sortait « à
+ * l'envers » : on voyait l'intérieur du dos à travers le devant, invisible tant que rien n'était
+ * dedans, mais les cheveux longs dans le dos apparaissaient à travers le tee-shirt.
+ */
+function outward(geo) {
+  const p = geo.attributes.position.array;
+  const idx = geo.index.array;
+  let cx = 0;
+  let cy = 0;
+  let cz = 0;
+  const n = p.length / 3;
+  for (let i = 0; i < p.length; i += 3) {
+    cx += p[i];
+    cy += p[i + 1];
+    cz += p[i + 2];
+  }
+  cx /= n;
+  cy /= n;
+  cz /= n;
+  let vol = 0;
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t] * 3;
+    const b = idx[t + 1] * 3;
+    const c = idx[t + 2] * 3;
+    const ax = p[a] - cx; const ay = p[a + 1] - cy; const az = p[a + 2] - cz;
+    const bx = p[b] - cx; const by = p[b + 1] - cy; const bz = p[b + 2] - cz;
+    const qx = p[c] - cx; const qy = p[c + 1] - cy; const qz = p[c + 2] - cz;
+    vol += ax * (by * qz - bz * qy) + ay * (bz * qx - bx * qz) + az * (bx * qy - by * qx);
+  }
+  if (vol >= 0) return geo;
+  for (let t = 0; t < idx.length; t += 3) {
+    const s = idx[t + 1];
+    idx[t + 1] = idx[t + 2];
+    idx[t + 2] = s;
+  }
+  geo.index.needsUpdate = true;
+  const nr = geo.attributes.normal;
+  if (nr) {
+    for (let i = 0; i < nr.array.length; i++) nr.array[i] = -nr.array[i];
+    nr.needsUpdate = true;
+  }
+  return geo;
+}
+
 /** Tube vertical (membre) : sections [y, rayon x, rayon z, décalage z]. round = bouts arrondis. */
-const limbGeo = (secs, radial, round = null) => loft(secs.map(([y, rx, rz, oz = 0]) => ({ p: [0, y, oz], rx, ry: rz })), { radial, sub: 3, side: [1, 0, 0], round });
+const limbGeo = (secs, radial, round = null) => outward(loft(secs.map(([y, rx, rz, oz = 0]) => ({ p: [0, y, oz], rx, ry: rz })), { radial, sub: 3, side: [1, 0, 0], round }));
 
 /** Tête : crâne, mâchoire, joues, nez et oreilles fondus. */
 const HEAD_SHAPES = [

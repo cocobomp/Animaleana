@@ -123,6 +123,19 @@ const CARE_GESTURES = {
 /** Geste qui correspond à un soin (ou à une tâche d'aide). */
 export const careGestureFor = (action) => CARE_GESTURES[action] ?? 'pet';
 
+/**
+ * Hauteur (m, depuis le sol) où va la main pour un geste, selon la hauteur du dos de l'animal :
+ * la gamelle est par terre, la friandise devant la bouche, la brosse sur le dos ou l'encolure,
+ * les sabots en bas. Plus c'est bas, plus on se penche (et on s'accroupit pour les petits).
+ */
+export function gestureHeight(kind, back) {
+  if (kind === 'pour' || kind === 'milk') return clamp(back * 0.55, 0.3, 0.9);
+  if (kind === 'offer') return clamp(back * 0.75, 0.3, 1.15);
+  if (kind === 'tool') return clamp(back * 0.35, 0.3, 0.6);
+  if (kind === 'lead' || kind === 'play') return 1;
+  return clamp(back * 0.82, 0.3, 1.25);
+}
+
 // ------------------------------------------------------------------ outils d'animation
 
 /** Poids d'un geste de durée dur : monte en fadeIn, redescend en fadeOut (0 à 1). */

@@ -219,10 +219,10 @@ function hairField(style, head, hat) {
   };
 
   // Calotte : la peau gonflée d'une épaisseur qui s'amincit vers le bord.
-  const cap = (x, y, z) => {
+  const cap = (x, y, z, h) => {
     const l = edge(x, y, z);
     const t = S.tMin + (S.t0(y) - S.tMin) * sstep(-0.004, 0.035, y - l);
-    const d = head(x, y, z) - t + gAmp * groove(x, y, z);
+    const d = h - t + gAmp * groove(x, y, z);
     return smax(d, l - y, 0.006);
   };
 
@@ -286,7 +286,12 @@ function hairField(style, head, hat) {
       if (base > 0.05 || base < -0.05) return base;
       let d = 1;
       for (const [bx, by, bz, br] of blobs) {
-        const q = Math.hypot(x - bx, y - by, z - bz) - br;
+        // Rejet rapide : seules les boucles voisines comptent.
+        const dx = x - bx;
+        if (dx > 0.06 || dx < -0.06) continue;
+        const dy = y - by;
+        if (dy > 0.06 || dy < -0.06) continue;
+        const q = Math.hypot(dx, dy, z - bz) - br;
         if (q < d) d = q;
       }
       return smin(base, d, 0.016) + 0.0024 * Math.sin(x * 150) * Math.sin(y * 150 + 1.3) * Math.sin(z * 150 + 2.1);
@@ -313,13 +318,28 @@ function hairField(style, head, hat) {
     hatCut = (x, y, z) => n[1] * (y - HAT.c[1]) + n[2] * (z - HAT.c[2]) - h0;
   }
 
+  // Bande utile : loin de la peau (au-delà de l'épaisseur maximale) ou au fond de la tête, inutile
+  // de tout calculer (le maillage ne garde que la surface). Les pièces qui s'éloignent de la tête
+  // (rideau des longs, chignon) ont leur boîte.
+  const reach = S.curls ? 0.085 : 0.05;
+  let box = null;
+  if (curtain) box = [-0.21, 0.21, -0.34, 0.12, -0.25, 0.08];
+  else if (bun) box = [-0.09, 0.09, tie[1] - 0.08, tie[1] + 0.11, tie[2] - 0.12, tie[2] + 0.05];
+  const inBox = (x, y, z) => box && x > box[0] && x < box[1] && y > box[2] && y < box[3] && z > box[4] && z < box[5];
+
   const field = (x, y, z) => {
-    let d = cap(x, y, z);
+    const h = head(x, y, z);
+    // Au fond de la tête : on coupe la masse à 3 cm sous la peau (valeur continue, pour que le
+    // maillage reste propre ; ces triangles cachés sont ensuite retirés).
+    if (h < -0.045) return -h - 0.03;
+    if (h > reach && !inBox(x, y, z)) return h - reach + 0.01;
+    let d = cap(x, y, z, h);
     for (const f of extra) d = smin(d, f(x, y, z), 0.01);
     if (curtain) d = smin(d, curtain(x, y, z), 0.025);
     if (bun) d = smin(d, bun(x, y, z), 0.012);
     if (curls) d = curls(x, y, z, d);
     if (hatCut) d = smax(d, hatCut(x, y, z), 0.004);
+    d = Math.max(d, -h - 0.03);
     return d;
   };
   const grooveAll = curtain
@@ -409,6 +429,20 @@ function trimInside(geo, inside, minPart = 40) {
   return out;
 }
 
+/**
+ * Dans le cou ou le haut du buste (repère de la tête, échelle comprise) : les cheveux qui y
+ * passent (rideau des longs) sont cachés, on ne garde pas ces triangles.
+ */
+function insideBody(x, y, z) {
+  if (y < -0.012 && y > -0.14 && x * x + (z + 0.002) * (z + 0.002) < 0.046 * 0.046) return true;
+  if (y < -0.075) {
+    const ex = x / 0.185;
+    const ez = (z + 0.004) / 0.086;
+    return ex * ex + ez * ez < 1;
+  }
+  return false;
+}
+
 /** Valeur « de mèche » 0..1 par sommet, gardée pour les reflets (sillon, hauteur). */
 function strandData(geo, groove) {
   const pos = geo.attributes.position.array;
@@ -428,13 +462,13 @@ const cache = new Map();
 export function hairGeometry(style, hat, high, head) {
   const key = `${style}|${hat ? 1 : 0}|${high ? 1 : 0}`;
   if (cache.has(key)) return cache.get(key);
-  const cell = high ? 0.0072 : 0.0102;
+  const cell = high ? 0.0112 : 0.0158;
   const { field, groove, tie } = hairField(style, head, hat);
   const lowY = style === 'long' ? -0.33 : style === 'braid' || style === 'ponytail' ? -0.1 : -0.08;
   const wide = style === 'curly' ? 0.235 : 0.2;
   const bounds = [[-wide, lowY, -0.25], [wide, style === 'curly' ? 0.33 : style === 'bun' ? 0.3 : 0.29, 0.21]];
   let main = sdfMesh(field, bounds, cell);
-  main = trimInside(main, (x, y, z) => head(x, y, z) < -0.0025);
+  main = trimInside(main, (x, y, z) => head(x, y, z) < -0.0025 || insideBody(x, y, z));
   strandData(main, groove);
   main.userData.shared = true;
 

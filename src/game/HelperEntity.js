@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { HELPERS, helperTask } from '../sim/farm.js';
 import { helperLevel, helperSpeed, onBreak } from '../sim/helpers.js';
 import { buildAvatar, animateAvatarWalk, updateAvatarLife, startAvatarGesture, stopAvatarGesture, careGestureFor } from './models/avatarModel.js';
+import { gestureHeight } from './models/avatarMotion.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 
@@ -167,7 +168,7 @@ export class HelperEntity {
     let y = task.kind === 'scoop' ? 0.3 : 0.55; // crottin au sol, abreuvoir / mangeoire
     if (e) {
       const back = (e.model?.saddleY ?? 0.5) * (e.scale ?? 1);
-      y = kind === 'pour' ? Math.max(0.3, Math.min(0.9, back * 0.55)) : Math.max(0.3, Math.min(1.32, back * 0.9));
+      y = gestureHeight(kind, back);
     }
     startAvatarGesture(this.avatar, kind, { duration: this.workTimer, loop: true, y, z: Math.max(0.3, Math.min(0.48, dist - 0.9)) });
   }

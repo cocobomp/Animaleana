@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   makeRandom, BLINK, planBlink, blinkAmount, blinkDuration, blinkLength, planGaze, IDLE_GESTURES,
-  pickIdleGesture, nextIdleDelay, nextShiftDelay, careGestureFor, CARE_GESTURE_TIME, envelope,
+  pickIdleGesture, nextIdleDelay, nextShiftDelay, careGestureFor, gestureHeight, CARE_GESTURE_TIME, envelope,
   keyframes, legIK, squatPose, LEG, gaitWeights, gaitFromSpeed, riderPose,
 } from '../src/game/models/avatarMotion.js';
 import { CARE } from '../src/sim/animal.js';
@@ -109,6 +109,21 @@ describe('gestes de soin', () => {
     for (const action of Object.keys(CARE)) expect(kinds.has(careGestureFor(action))).toBe(true);
     // Un soin inconnu : une caresse.
     expect(careGestureFor('???')).toBe('pet');
+  });
+
+  it('la main va à la bonne hauteur : gamelle par terre, brosse sur le dos, jamais hors de portée', () => {
+    const horse = 1.5;
+    const cat = 0.3;
+    expect(gestureHeight('pour', horse)).toBeLessThan(gestureHeight('brush', horse));
+    expect(gestureHeight('offer', horse)).toBeLessThan(gestureHeight('brush', horse));
+    expect(gestureHeight('tool', horse)).toBeLessThanOrEqual(0.6);
+    for (const kind of ['pour', 'offer', 'brush', 'pet', 'scrub', 'tool', 'play', 'lead', 'milk']) {
+      for (const back of [cat, 0.6, horse, 2.2]) {
+        const y = gestureHeight(kind, back);
+        expect(y).toBeGreaterThanOrEqual(0.3);
+        expect(y).toBeLessThanOrEqual(1.25);
+      }
+    }
   });
 
   it('le geste est court et revient en douceur à la pose normale', () => {

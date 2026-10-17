@@ -33,6 +33,9 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     name,
     mode, // 'sandbox' (argent illimité) ou 'manage' (gestion)
     createdAt: Date.now(),
+    // Date de la dernière modification (mise à jour à chaque sauvegarde) : pour savoir, entre deux copies
+    // d'une même partie (téléphone, ordinateur, fichier, plus tard un compte), laquelle est la plus récente.
+    updatedAt: Date.now(),
     money: 500,
     xp: 0,
     items: { ...STARTER_ITEMS },
@@ -104,18 +107,25 @@ export function listProfiles() {
 export function loadProfile(id) {
   try {
     const raw = storage()?.getItem(PROFILE_KEY(id));
-    return raw ? migrate(JSON.parse(raw)) : null;
+    // Ancienne sauvegarde sans updatedAt : la date de la dernière sauvegarde (dans la liste des profils) la remplace.
+    return raw ? migrate(JSON.parse(raw), { savedAt: listProfiles().find((e) => e.id === id)?.savedAt }) : null;
   } catch {
     return null;
   }
 }
 
-/** Complète une sauvegarde ancienne (champs ajoutés depuis) sans rien perdre. */
-export function migrate(p) {
+/**
+ * Complète une sauvegarde ancienne (champs ajoutés depuis) sans rien perdre.
+ * hint.savedAt : date connue de la dernière sauvegarde, pour un profil d'avant updatedAt.
+ */
+export function migrate(p, hint = {}) {
   const fresh = createProfile(p.name, p.mode, p.home ?? 'maison');
+  const known = (v) => typeof v === 'number' && Number.isFinite(v);
   const out = {
     ...fresh,
     ...p,
+    // Anciennes sauvegardes : pas de date de modification (la dernière sauvegarde connue, sinon la création).
+    updatedAt: known(p.updatedAt) ? p.updatedAt : known(hint.savedAt) ? hint.savedAt : known(p.createdAt) ? p.createdAt : 0,
     // Anciennes sauvegardes : enclos de l'ancienne taille (on les agrandit en douceur, voir plus bas).
     coreVersion: p.coreVersion ?? 1,
     coreLayout: p.coreLayout ?? {},
@@ -138,13 +148,20 @@ export function migrate(p) {
   return migrateCoreSizes(out);
 }
 
-export function saveProfile(p) {
+/**
+ * Écrit le profil sur l'appareil. opts.touch (oui par défaut) : c'est une modification, updatedAt prend
+ * la date du jour ; non pour une partie restaurée ou une copie de secours (elles gardent leur date).
+ */
+export function saveProfile(p, { touch = true } = {}) {
   const s = storage();
   if (!s) return false;
   try {
+    if (touch || typeof p.updatedAt !== 'number') p.updatedAt = Date.now();
     s.setItem(PROFILE_KEY(p.id), JSON.stringify(p));
     const index = listProfiles().filter((e) => e.id !== p.id);
-    index.unshift({ id: p.id, name: p.name, mode: p.mode, animals: p.animals.length, savedAt: Date.now() });
+    const entry = { id: p.id, name: p.name, mode: p.mode, animals: p.animals.length, savedAt: Date.now(), updatedAt: p.updatedAt };
+    if (p.backupOf) entry.backup = true; // copie de secours (gardée avant un remplacement) : signalée dans la liste
+    index.unshift(entry);
     s.setItem(INDEX_KEY, JSON.stringify(index));
     return true;
   } catch {

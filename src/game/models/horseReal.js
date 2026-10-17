@@ -48,6 +48,8 @@ const RIG = [
   ['Tail1', 'Spine'], ['Tail2', 'Tail1'],
 ];
 const BONE_INDEX = Object.fromEntries(RIG.map(([n], i) => [n, i]));
+/** Os du squelette, dans l'ordre du jeu (tests : construire des données de repos). */
+export const RIG_BONES = RIG.map(([n]) => n);
 const PARENT = Object.fromEntries(RIG);
 // Membres dans l'ordre de l'interface : antérieur gauche (+x), antérieur droit, postérieur gauche, postérieur droit.
 const LEGS = [['FL', true, 1], ['FR', true, -1], ['HL', false, 1], ['HR', false, -1]];
@@ -362,7 +364,7 @@ function retarget(gltf, toHorse, restW, groupRest, zShift) {
  * profond, dos plus ou moins long, membres plus longs et plus fins, encolure, tête, queue), mélangés
  * selon les poids de la peau ; les articulations suivent. Les sabots restent posés au sol.
  */
-function deformer(base, B) {
+export function deformer(base, B) {
   const N = NATIVE_BUILD;
   const r = (k) => (B[k] ?? 1) / (N[k] ?? 1);
   const rest = base.rest;
@@ -550,13 +552,30 @@ function scaleHair(pos, base, D, B) {
   }
 }
 
+// Géométries par gabarit, partagées par les chevaux de ce gabarit. Celles qui ne servent plus (cheval
+// vendu, vignettes de l'animalerie faites) restent sous la main quelques-unes, puis sont libérées.
 const shapes = new Map();
+const SPARE_SHAPES = 6;
+
+function releaseShape(S) {
+  S.users = Math.max(0, S.users - 1);
+  if (S.users > 0) return;
+  S.idleAt = performance.now?.() ?? Date.now();
+  const idle = [...shapes.values()].filter((x) => x.users === 0).sort((a, b) => a.idleAt - b.idleAt);
+  for (const x of idle.slice(0, Math.max(0, idle.length - SPARE_SHAPES))) {
+    shapes.delete(x.key);
+    for (const g of [x.coatGeo, x.eyeGeo, x.maneGeo]) g.dispose();
+  }
+}
 
 /** Géométries (partagées) d'un gabarit : pelage, yeux, crins, avec les attributs du shader de la robe. */
 function shapeFor(base, B) {
   const key = JSON.stringify(B);
   let S = shapes.get(key);
-  if (S) return S;
+  if (S) {
+    S.users++;
+    return S;
+  }
   const D = deformer(base, B);
   const coat = base.prims.coat;
   const dc = deformPrim(coat, D);
@@ -631,6 +650,8 @@ function shapeFor(base, B) {
     crest: base.hair.crest.map(([t, c]) => [t, D.maps[BONE_INDEX.Neck](c, V())]),
   };
   S.measure = measureShape(S, dc.pos, coat, base);
+  S.key = key;
+  S.users = 1;
   shapes.set(key, S);
   return S;
 }
@@ -1202,7 +1223,13 @@ export function buildRealHorseModel(look, breedId = null) {
   };
   for (const e of model.ears) e.userData.side = e === model.ears[0] ? 1 : -1;
   model.anim = new RealHorseAnim(model, base.clips);
-  model.dispose = () => model.anim.dispose();
+  let disposed = false;
+  model.dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    model.anim.dispose();
+    releaseShape(S);
+  };
   return model;
 }
 
@@ -1255,21 +1282,8 @@ class RealHorseAnim {
     this.t += dt;
     const t = this.t;
     const u = st.moving ? st.v / md.speedScale : 0;
-    // Allure voulue, avec hystérésis (pas de va-et-vient entre deux allures à la limite).
     const g0 = this.gait;
-    const up = { idle: 0.05, walk: 2.15, trot: 3.9, canter: 6.3 };
-    const down = { walk: 0.03, trot: 1.85, canter: 3.55, gallop: 5.8 };
-    let g = g0;
-    if (!st.moving || u < 0.03) g = 'idle';
-    else if (g === 'idle') g = 'walk';
-    for (let k = 0; k < 3; k++) {
-      if (g === 'walk' && u > up.walk) g = 'trot';
-      else if (g === 'trot' && u > up.trot) g = 'canter';
-      else if (g === 'canter' && u > up.canter) g = 'gallop';
-      else if (g === 'gallop' && u < down.gallop) g = 'canter';
-      else if (g === 'canter' && u < down.canter) g = 'trot';
-      else if (g === 'trot' && u < down.trot) g = 'walk';
-    }
+    const g = pickGait(g0, st.moving ? u : 0);
     this.gait = g;
     // Petit galop : à droite dans un virage à droite.
     if (g === 'canter' && g0 !== 'canter') this.lead = (st.turn ?? 0) < -0.2 ? 'canterR' : 'canter';
@@ -1433,6 +1447,26 @@ class RealHorseAnim {
     }
     return Math.max(-0.5, Math.min(0.5, fix));
   }
+}
+
+/**
+ * Allure d'après la vitesse (m/s, ramenée à la taille du modèle d'origine), avec hystérésis : pas de
+ * va-et-vient entre deux allures quand la vitesse est à la limite. prev : allure de l'image précédente.
+ */
+export function pickGait(prev, u) {
+  const up = { walk: 2.15, trot: 3.9, canter: 6.3 };
+  const down = { trot: 1.85, canter: 3.55, gallop: 5.8 };
+  if (!(u >= 0.03)) return 'idle';
+  let g = prev === 'idle' || !prev ? 'walk' : prev;
+  for (let k = 0; k < 3; k++) {
+    if (g === 'walk' && u > up.walk) g = 'trot';
+    else if (g === 'trot' && u > up.trot) g = 'canter';
+    else if (g === 'canter' && u > up.canter) g = 'gallop';
+    else if (g === 'gallop' && u < down.gallop) g = 'canter';
+    else if (g === 'canter' && u < down.canter) g = 'trot';
+    else if (g === 'trot' && u < down.trot) g = 'walk';
+  }
+  return g;
 }
 
 const QNECK_REST = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), NECK_REST);

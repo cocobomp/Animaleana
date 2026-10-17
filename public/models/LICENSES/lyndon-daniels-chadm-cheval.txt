@@ -1,0 +1,17 @@
+Cheval réaliste — modèle et textures de Lyndon Daniels, squelette de ChadM (OpenGameArt)
+Fichier du jeu : horse_real.glb
+                 (squelette complété : os de paturon, de respiration et de crinière ; robe changée en carte
+                 de modelé grise recolorée par le jeu ; allures générées pour le jeu ; compression meshopt et
+                 textures WebP — voir tools/cheval/LISEZMOI.md)
+
+Sources :
+  Modèle et textures 2k : Lyndon Daniels, « Realtime Ranchers 3D model pack »
+    https://opengameart.org/content/realtime-ranchers-3d-model-pack
+  Squelette (le même cheval, riggé) : ChadM, « Rigged horse »
+    https://opengameart.org/content/rigged-horse
+
+Licence (indiquée sur les deux pages OpenGameArt) :
+  CC0 1.0 Universal (CC0 1.0) — Public Domain Dedication
+  https://creativecommons.org/publicdomain/zero/1.0/
+
+Aucune attribution n'est exigée ; nous remercions Lyndon Daniels et ChadM.

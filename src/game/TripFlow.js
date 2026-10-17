@@ -466,6 +466,7 @@ export class TripFlow {
     const { a, mesh, model } = l.carry;
     mesh.parent?.remove(mesh);
     mesh.remove(model.root);
+    model.dispose?.();
     disposeModel(model.root);
     disposeVehicle(mesh);
     l.carry = null;
@@ -947,6 +948,7 @@ export class TripFlow {
     if (l.carry) {
       l.carry.mesh.parent?.remove(l.carry.mesh);
       l.carry.mesh.remove(l.carry.model.root);
+      l.carry.model.dispose?.();
       disposeModel(l.carry.model.root);
       disposeVehicle(l.carry.mesh);
       l.loaded.add(l.carry.a.id);

@@ -1,11 +1,16 @@
 // Textes du jeu : français (langue principale) et anglais.
 
+import { COMP_FR, COMP_EN } from './ui/competitionsTexts.js'; // dressage, concours à l'extérieur, métier de cavalière (dr_*, comp_*)
 import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
 import { VET_FR, VET_EN } from './ui/vetTexts.js'; // examen et école vétérinaires (vx_*, vs_*)
 import { TACK_FR, TACK_EN } from './ui/tackTexts.js'; // sellerie : catalogue d'équipement (gear_*, tk_*, col_*)
 import { VEHICLES_FR, VEHICLES_EN } from './ui/vehiclesTexts.js'; // véhicules du voyage (veh_*, cargo_*)
 import { SAVE_FR, SAVE_EN } from './ui/saveTexts.js'; // sauvegarde dans un fichier (sv_*)
 import { CLOUD_FR, CLOUD_EN } from './ui/cloudTexts.js'; // compte Google et sauvegarde en ligne (cloud_*)
+import { BEAUTY_FR, BEAUTY_EN } from './ui/beautyTexts.js'; // concours de beauté et métier de handler (beauty_*, ca_handler_*)
+import { DOG_TRAINER_FR, DOG_TRAINER_EN } from './ui/dogTrainerTexts.js'; // métier éducateur canin (dt_*, ca_dogTrainer_*)
+import { GROOMER_FR, GROOMER_EN } from './ui/groomerTexts.js'; // métier Toiletteur (grm_*, mg_g*, ca_groomer_*)
+import { TRAIL_FR, TRAIL_EN } from './ui/trailGuideTexts.js'; // 🧭 métier guide de randonnée (tg_*, career_trailGuide)
 
 const fr = {
   title: 'La ferme à Madichelle',
@@ -593,6 +598,8 @@ const fr = {
   statusFollowing: '{name} te suit',
   statusHerding: '{name} conduit le troupeau',
   statusStop: 'Arrêter',
+  statusMore: '➕ {n} de plus',
+  statusLess: '➖ Replier',
   r_needBridle: 'Il faut mettre un filet ou un licol à {name} pour le monter (fiche de l\'animal).',
   r_needBridle_f: 'Il faut mettre un filet ou un licol à {name} pour la monter (fiche de l\'animal).',
   ridingBareback: 'Tu montes {name} à cru (sans selle) : il va moins vite. Maj pour galoper !',
@@ -1676,7 +1683,7 @@ const fr = {
   actv_block_over: 'Terminé',
   actv_enter: 'S\'inscrire',
   actv_rivals: 'Les autres concurrents',
-  actv_elsewhere: 'Concours ailleurs dans le monde',
+  actv_elsewhere: 'Petits concours dans les autres lieux (sans inscription)',
   actv_shelfEmpty: 'Ton étagère est encore vide. Fais un sans-faute ou monte sur le podium d\'un concours !',
   actv_album: 'Album photo',
   actv_albumEmpty: 'Pas encore de photo. Pendant une balade, arrête-toi aux points de vue 📷.',
@@ -1719,6 +1726,7 @@ const fr = {
   actv_sight_windmill: 'le vieux moulin',
   actv_sight_cairn: 'le cairn fleuri',
   actv_sight_oldTree: 'le grand chêne',
+  actv_sight_trailGuide: 'la photo de groupe', // 🧭 balade guidée
   actv_checkpoint: 'Balise {n}/{total}',
   actv_trailHint: 'Suis la flèche orange de balise en balise. Ramasse les trésors et prends des photos aux 📷. L\'arrivée est à l\'écurie 🏠.',
   actv_trailHintFoot: 'Suis la flèche orange de balise en balise avec tes animaux. Ramasse les trésors et prends des photos aux 📷.',
@@ -2386,6 +2394,8 @@ const en = {
   statusFollowing: '{name} is following you',
   statusHerding: '{name} is herding',
   statusStop: 'Stop',
+  statusMore: '➕ {n} more',
+  statusLess: '➖ Show less',
   r_needBridle: '{name} needs a bridle to be ridden (animal card or the stable\'s tack room).',
   ridingBareback: 'You are riding {name} bareback (no saddle): slower. Shift to gallop!',
   do_tack: 'Tack room (saddles, blankets…)',
@@ -3423,7 +3433,7 @@ const en = {
   actv_block_over: 'Over',
   actv_enter: 'Enter',
   actv_rivals: 'The other competitors',
-  actv_elsewhere: 'Contests elsewhere in the world',
+  actv_elsewhere: 'Small contests in other places (no entry needed)',
   actv_shelfEmpty: 'Your shelf is still empty. Ride a clear round or reach the podium in a contest!',
   actv_album: 'Photo album',
   actv_albumEmpty: 'No photo yet. During a trail ride, stop at the 📷 viewpoints.',
@@ -3465,6 +3475,7 @@ const en = {
   actv_sight_windmill: 'the old windmill',
   actv_sight_cairn: 'the flowery cairn',
   actv_sight_oldTree: 'the big oak',
+  actv_sight_trailGuide: 'the group photo', // 🧭 guided ride
   actv_checkpoint: 'Marker {n}/{total}',
   actv_trailHint: 'Follow the orange arrow from marker to marker. Pick up treasures and take photos at the 📷. The finish is at the stable 🏠.',
   actv_trailHintFoot: 'Follow the orange arrow from marker to marker with your animals. Pick up treasures and take photos at the 📷.',
@@ -3591,6 +3602,9 @@ const en = {
   o_actvStar: 'Put on 10 shows',
 };
 
+// Dressage, concours à l'extérieur et métier de cavalière de concours (src/ui/competitionsTexts.js)
+Object.assign(fr, COMP_FR);
+Object.assign(en, COMP_EN);
 // Clients et métiers : textes ajoutés aux deux dictionnaires.
 Object.assign(fr, CLIENTS_FR);
 Object.assign(en, CLIENTS_EN);
@@ -3606,6 +3620,15 @@ Object.assign(fr, SAVE_FR); // sauvegarder / restaurer une partie dans un fichie
 Object.assign(en, SAVE_EN);
 Object.assign(fr, CLOUD_FR); // compte et sauvegarde en ligne
 Object.assign(en, CLOUD_EN);
+// Concours de beauté : préparation, mini-jeux, présentation au juge, et métier de handler.
+Object.assign(fr, BEAUTY_FR);
+Object.assign(en, BEAUTY_EN);
+Object.assign(fr, DOG_TRAINER_FR); // métier éducateur canin
+Object.assign(en, DOG_TRAINER_EN);
+Object.assign(fr, GROOMER_FR); // métier Toiletteur : salon de toilettage
+Object.assign(en, GROOMER_EN);
+Object.assign(fr, TRAIL_FR); // 🧭 guide de randonnée
+Object.assign(en, TRAIL_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

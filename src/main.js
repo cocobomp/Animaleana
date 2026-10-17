@@ -1,6 +1,7 @@
 // Point d'entrée : prépare l'interface, le moteur 3D et le mode hors ligne.
 
 import './style.css';
+import './ui/competitions.css'; // dressage et concours à l'extérieur
 import { t, setLang, getLang } from './i18n.js';
 import { UI } from './ui/UI.js';
 import { Game } from './game/Game.js';

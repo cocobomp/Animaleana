@@ -162,7 +162,11 @@ export function restartTutorial(profile) {
  */
 const hasHorse = (p) => p.animals.some((a) => a.species === 'horse');
 const hasAnimal = (p) => p.animals.length > 0;
+const hasSalon = (p) => (p.structures ?? []).some((s) => s.type === 'salon'); // salon de toilettage
 const hasCareer = (p) => Object.keys(p.careers?.started ?? {}).length > 0;
+const dogTrainerStarted = (p) => p.careers?.started?.dogTrainer !== undefined; // éducateur canin (src/sim/dogTrainer.js)
+const hasTrainingDog = (p) => p.animals.some((a) => a.client?.kind === 'training');
+const coachable = (p) => p.animals.some((a) => !a.client && ['dog', 'cat', 'horse', 'rabbit'].includes(a.species));
 
 const SHOWGROUND = { type: 'building', id: 'showground' };
 
@@ -191,12 +195,38 @@ export const QUEST_GUIDE = {
   actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
   actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
   actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
+  // Dressage et concours à l'extérieur (src/sim/dressage.js, src/sim/competitions.js)
+  drTrain3: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
+  drReprise1: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
+  compRegister1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, ready: hasAnimal },
+  compAway1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, ready: hasAnimal },
+  // Concours de beauté (src/sim/beauty.js) : préparer depuis la fiche, présenter au terrain de concours
+  beautyPrep1: { where: 'sheet', target: { type: 'action', id: 'more' }, animal: true, ready: hasAnimal },
+  beautyBraid1: { where: 'sheet', target: { type: 'action', id: 'more' }, horse: true, ready: hasHorse },
+  beauty1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
+  // Métier éducateur canin (une fois commencé) : les maîtres arrivent près de la niche, les séances se font
+  // depuis le chien (menu rapide ou fiche).
+  dtClient1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, ready: dogTrainerStarted },
+  dtSession3: { where: 'dogSheet', target: { type: 'animal', training: true }, ready: hasTrainingDog },
+  dtDeliver1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, ready: hasTrainingDog },
+  dtCoach1: { where: 'dogSheet', target: { type: 'action', id: 'more' }, ready: (p) => dogTrainerStarted(p) && coachable(p) },
+  // Métier Toiletteur (src/sim/groomer.js) : construire le salon, puis y travailler.
+  grmSalon: { where: 'build', target: { type: 'hud', id: 'hud_build' }, ready: (p) => (p.xp ?? 0) >= 150 }, // 150 XP = niveau 3
+  grmClient1: { where: 'salon', target: { type: 'building', id: 'salon' }, ready: hasSalon },
+  grmOwn1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, ready: (p) => hasSalon(p) && hasAnimal(p) },
+  grmAccessory1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, ready: (p) => hasSalon(p) && hasAnimal(p) },
+  grmFive1: { where: 'salon', target: { type: 'building', id: 'salon' }, ready: hasSalon },
   // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
   career1: { where: 'careers', target: { type: 'hud', id: 'careers' } },
   client1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
   clientVet1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: (p) => !!p.careers?.started?.vet },
   clientHappy5: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
   clientMoney500: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
+  // 🧭 Guide de randonnée (src/sim/trailGuide.js) : les visiteurs arrivent près de l'écurie.
+  tgFirst: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
+  tgStars3: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
+  tgRiders10: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
+  tgAbroad: { where: 'travel', target: { type: 'hud', id: 'travel' }, horse: true, ready: hasHorse },
 };
 
 /** Ordre conseillé des quêtes, de la plus facile à la plus difficile. */
@@ -204,7 +234,11 @@ export const QUEST_ORDER = [
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
-  'career1', 'client1', 'clientVet1', 'clientHappy5', 'clientMoney500',
+  'drTrain3', 'drReprise1', 'compRegister1', 'compAway1',
+  'beautyPrep1', 'beautyBraid1', 'beauty1',
+  'grmSalon', 'grmOwn1', 'grmAccessory1', 'grmClient1', 'grmFive1',
+  'career1', 'client1', 'clientVet1', 'dtClient1', 'dtSession3', 'dtDeliver1', 'dtCoach1', 'clientHappy5', 'clientMoney500',
+  'tgFirst', 'tgStars3', 'tgRiders10', 'tgAbroad', // 🧭 guide de randonnée
 ];
 
 /**
@@ -276,12 +310,30 @@ export const FOLLOW_STEPS = {
   goTravel: { target: travelEl('#panel button.primary.big:not([disabled])'), done: questDone },
   goShowground: { target: SHOWGROUND, done: seenAny('building:showground') },
   goHutch: { target: { type: 'building', id: 'hutch' }, done: seenAny('building:hutch') },
+  openCalendar: { target: { type: 'hud', id: 'actv_hud' }, done: seenAny('panel:activities') }, // calendrier des concours
   doActivity: { target: null, done: questDone, progress: true },
+  // éducateur canin
+  waitClient: { target: { type: 'building', id: 'kennel' }, done: seenAny('panel:dogTrainerChat') },
+  acceptClient: { target: { type: 'el', sel: '#panel .dt-accept', fallback: { type: 'building', id: 'kennel' } }, done: questDone },
+  tapDog: { target: { type: 'animal', training: true }, done: seenAny('animalActions', 'panel:animal') },
+  doSession: { target: { type: 'el', sel: '#panel .big-action.dt-quick', fallback: { type: 'section', h3: 'dt_sectionTitle', fallback: { type: 'animal', training: true } } }, done: questDone, progress: true },
+  waitOwner: { target: { type: 'animal', training: true }, done: (c) => c.dtOwnerBack || c.questDone, progress: true },
+  deliverDog: { target: { type: 'el', sel: '#panel .dt-deliver', fallback: { type: 'building', id: 'kennel' } }, done: questDone },
+  doCoach: { target: { type: 'section', h3: 'dt_sectionTitle', fallback: { type: 'action', id: 'more' } }, done: questDone },
+  // Salon de toilettage (src/ui/groomer.js émet building:salon)
+  openBuild: { target: { type: 'hud', id: 'hud_build' }, done: (c) => c.seen.has('panel:build') || c.questDone }, // 🏗️ Construire
+  buildSalon: { target: null, done: questDone },
+  goSalon: { target: { type: 'building', id: 'salon' }, done: seenAny('building:salon') },
+  doGrooming: { target: null, done: questDone, progress: true },
   // Métiers et clients
   careerStart: { target: { type: 'hud', id: 'careers' }, done: questDone },
   clientWait: { target: null, done: (c) => c.hasClient || c.questDone },
   clientCare: { target: null, done: questDone, progress: true },
   clientVet: { target: null, done: questDone, progress: true },
+  // 🧭 Guide de randonnée : attendre les visiteurs, préparer, partir.
+  tgWait: { target: { type: 'building', id: 'stable' }, done: (c) => (c.profile.trailGuide?.bookings ?? []).some((b) => b.place === c.profile.place) || c.questDone },
+  tgPrepare: { target: null, done: (c) => !!c.profile.trailGuide?.riding || c.questDone },
+  tgRide: { target: null, done: questDone, progress: true },
 };
 
 export const QUEST_STEPS = {
@@ -308,11 +360,33 @@ export const QUEST_STEPS = {
   actvCompete1: ['goShowground', 'doActivity'],
   actvHop1: ['goShowground', 'doActivity'],
   actvHutch5: ['goHutch', 'doActivity'],
+  drTrain3: ['goShowground', 'doActivity'],
+  drReprise1: ['goShowground', 'doActivity'],
+  compRegister1: ['openCalendar', 'doActivity'],
+  compAway1: ['openCalendar', 'doActivity'],
+  // Concours de beauté
+  beautyPrep1: ['tapAnimal', 'openMore', 'doActivity'],
+  beautyBraid1: ['tapHorse', 'openMore', 'doActivity'],
+  beauty1: ['goShowground', 'doActivity'],
+  dtClient1: ['waitClient', 'acceptClient'],
+  dtSession3: ['tapDog', 'doSession'],
+  dtCoach1: ['tapAnimal', 'openMore', 'doCoach'],
+  dtDeliver1: ['waitOwner', 'deliverDog'],
+  grmSalon: ['openBuild', 'buildSalon'],
+  grmClient1: ['goSalon', 'doGrooming'],
+  grmOwn1: ['goSalon', 'doGrooming'],
+  grmAccessory1: ['goSalon', 'doGrooming'],
+  grmFive1: ['goSalon', 'doGrooming'],
   career1: ['careerStart'],
   client1: ['clientWait', 'clientCare'],
   clientVet1: ['clientWait', 'clientVet'],
   clientHappy5: ['clientWait', 'clientCare'],
   clientMoney500: ['clientWait', 'clientCare'],
+  // 🧭 Guide de randonnée
+  tgFirst: ['tgWait', 'tgPrepare', 'tgRide'],
+  tgStars3: ['tgWait', 'tgPrepare', 'tgRide'],
+  tgRiders10: ['tgWait', 'tgPrepare', 'tgRide'],
+  tgAbroad: ['openTravel', 'pickAbroad', 'pickMode', 'tgWait', 'tgPrepare', 'tgRide'],
 };
 
 /** Étapes d'une quête selon la situation : sans animal (ou sans cheval), on va d'abord en adopter un. */

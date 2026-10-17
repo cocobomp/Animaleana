@@ -24,6 +24,9 @@ export const XP = {
   competition: 40,
   podium: 60,
   photo: 5,
+  // dressage et concours à l'extérieur (src/sim/dressage.js, src/sim/competitions.js)
+  training: 20,
+  win: 80,
 };
 
 /** XP totale nécessaire pour atteindre le niveau n (niveau 1 = 0 XP). */
@@ -62,6 +65,7 @@ export const UNLOCKS = {
   barn: 6,
   arena: 7,
   newStable: 8,
+  salon: 3, // salon de toilettage (métier Toiletteur, src/sim/groomer.js)
   ranch: 10,
 };
 

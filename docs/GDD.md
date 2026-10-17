@@ -79,7 +79,25 @@ réussite au dressage…).
 - **Travail à pied** (chevaux) : longe, liberté, désensibilisation.
 - **Équitation** : balade libre, galop, saut d'obstacles, dressage, concours.
 - **Entraînement** : stats qui progressent (vitesse, endurance, obéissance,
-  saut).
+  saut, dressage).
+- **Dressage des chevaux** (`src/sim/dressage.js`, `src/game/Dressage.js`) : un
+  rectangle 18 × 36 m avec les lettres A-K-E-H-C-M-B-F dessiné dans la carrière.
+  Séances à la carrière, une fois par heure de jeu et par cheval (+2 à +6 en
+  dressage ; un cheval fatigué, stressé ou peu attaché apprend moins) :
+  **plat** (prendre l'allure annoncée au bon moment : pas / trot / galop avec un
+  seul bouton d'allure), **figures** (suivre les pastilles au sol et la flèche :
+  cercle, diagonale, serpentine, arrêt, reculer) et la **leçon de saut**.
+  **Reprise de dressage** : 8 à 10 figures notées sur 10 par le juge à C
+  (précision, allure, calme, rythme), total en pourcentage.
+- **Métier éducateur canin** (💼, niveau 3) : des maîtres amènent leur chien
+  qui a un problème (tire en laisse, saute sur les gens, ne revient pas au
+  rappel, aboie, a peur, n'obéit pas). Le chien reste à la ferme ; une séance
+  par jour (mini-jeu « Les ordres » : assis, couché, pas bouger, au pied,
+  rappel — la friandise se donne juste quand il obéit, ni avant ni après ;
+  vraie promenade en laisse pour le chien qui tire). Quand le problème est
+  réglé (ou au jour prévu), le maître revient : démonstration, étoiles,
+  paiement, réputation. Trois rangs : plus de chiens à la fois, nouveaux
+  problèmes, chiens de refuge, coaching troupeau et agility de ses animaux.
 
 ## 6. Adoption et argent
 - Partout : **refuge**, **animalerie**, **élevage**, animaux **trouvés** en
@@ -107,6 +125,29 @@ réussite au dressage…).
 - Destinations (11) : Normandie (maison), plage de Bretagne, Alpes suisses, Islande,
   ranch en Alberta, campagne de Kyoto, Cotswolds, Andalousie, haras du Kentucky,
   Pampa, bush australien. Prévu ensuite : savane africaine…
+- **Concours à l'extérieur** (`src/sim/competitions.js`,
+  `src/game/CompetitionVenue.js`, `src/ui/competitions.js`) : un calendrier sur
+  plusieurs lieux (Normandie, Cotswolds, Kentucky, Andalousie, Alpes, Bretagne)
+  avec date, discipline (saut, dressage, agility, spectacle ; crochet `beauty`),
+  niveau (club / régional / Grand Prix), frais et prix. On s'inscrit à l'avance
+  (Activités → 📅 Calendrier ou Journal), puis on part en van / voiture avec les
+  animaux inscrits (« Mes inscriptions » → 🚐). Le jour J, sur place, un **site de
+  concours** s'installe autour de la carrière (tribunes pleines, paddock
+  d'échauffement, boxes, podium, fanions) : échauffement, épreuve (parcours de
+  saut plus grands avec double, triple, rivière, mur ; **barrage** en cas
+  d'égalité), podium avec photo dans l'album, coupes, flots, argent, XP, titres
+  (Champion club / régional / Grand Prix). L'animal doit être en forme (faim,
+  soif, énergie ≥ 50, ni malade ni enceinte).
+- Au concours de saut ou de dressage, le cheval est **sellé et bridé** à sa
+  taille : au départ, le coffre du van emporte sa selle et son filet (la selle
+  de dressage pour un concours de dressage, si on l'a ; voir `src/sim/cargo.js`) ;
+  sur place, le bouton « 🏇 Seller » les met. Selle et bride de dressage
+  ajoutent un peu de brillance aux notes du juge.
+- **Métier 💼 Cavalier de concours** (`rider` dans `src/sim/careers.js`) : carnet
+  (séance de plat ou figures, reprise notée, inscription, départ en van, concours,
+  podium), XP de métier, trois rangs, réputation (podium : elle monte ; place
+  vide : elle baisse) et avantages (inscriptions −20 % puis −50 % avec un sponsor,
+  primes +15 % puis +30 %). Pas de visiteurs pour ce métier.
 
 ## 9. Météo, jour et nuit, saisons
 - Cycle jour/nuit.

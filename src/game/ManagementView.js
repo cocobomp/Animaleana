@@ -315,6 +315,7 @@ export class ManagementView {
     const size = (r) => ` · ${t('con_size', { w: fmt(r.hw * 2), d: fmt(r.hd * 2) })}`;
     for (const it of w.interactables) {
       if (it.kind === 'spot') continue;
+      if (it.structure) continue; // porte d'une construction du joueur (salon de toilettage) : son étiquette vient plus bas
       const col = w.colliders.find((c) => c.kind === it.kind);
       let pos = col ? { x: col.x, z: col.z } : { x: it.x, z: it.z };
       if (it.kind === 'pen') pos = { x: PEN.x, z: PEN.z - 3 };

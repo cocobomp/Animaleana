@@ -2,6 +2,7 @@
 
 import { happiness } from './animal.js';
 import { PLACE_IDS, PLACES } from './places.js';
+import { CAREERS } from './careers.js'; // paliers du métier Toiletteur
 
 const stat = (p, k) => p.stats[k] ?? 0;
 
@@ -31,6 +32,30 @@ export const OBJECTIVES = [
   { id: 'actvLesson1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvLessons'), 1] },
   { id: 'actvHop1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvHop'), 1] },
   { id: 'actvHutch5', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'actvHutchPlay'), 5] },
+  // dressage et concours à l'extérieur (src/sim/dressage.js, src/sim/competitions.js)
+  { id: 'drTrain3', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvTraining'), 3] },
+  { id: 'drReprise1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'actvDressage'), 1] },
+  { id: 'compRegister1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'compRegistered'), 1] },
+  { id: 'compAway1', kind: 'quest', reward: 150, progress: (p) => [stat(p, 'compAway'), 1] },
+  // concours de beauté (src/sim/beauty.js)
+  { id: 'beautyPrep1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'beautyReady'), 1] },
+  { id: 'beautyBraid1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'beautyBraid'), 1] },
+  { id: 'beauty1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvBeauty'), 1] },
+  // métier éducateur canin (src/sim/dogTrainer.js)
+  { id: 'dtClient1', kind: 'quest', reward: 40, progress: (p) => [(p.dogTrainer?.clients?.length ?? 0) + (p.dogTrainer?.history?.length ?? 0) > 0 ? 1 : 0, 1] },
+  { id: 'dtSession3', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'dtSessions'), 3] },
+  { id: 'dtDeliver1', kind: 'quest', reward: 100, progress: (p) => [stat(p, 'dtSuccess'), 1] },
+  { id: 'dtCoach1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'dtCoach'), 1] },
+  { id: 'dtStars3', kind: 'achievement', progress: (p) => [stat(p, 'dtStars3'), 3] },
+  { id: 'dtDeliver5', kind: 'achievement', progress: (p) => [stat(p, 'dtSuccess'), 5] },
+  // Métier Toiletteur ✂️ (src/sim/groomer.js)
+  { id: 'grmSalon', kind: 'quest', reward: 80, progress: (p) => [(p.structures ?? []).some((s) => s.type === 'salon') ? 1 : 0, 1] },
+  { id: 'grmClient1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'groomClients'), 1] },
+  { id: 'grmOwn1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'groomOwn'), 1] },
+  { id: 'grmAccessory1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'groomAccessories'), 1] },
+  { id: 'grmFive1', kind: 'quest', reward: 100, progress: (p) => [stat(p, 'groomFive'), 1] },
+  { id: 'grmClients10', kind: 'achievement', progress: (p) => [stat(p, 'groomClients'), 10] },
+  { id: 'grmExpert', kind: 'achievement', progress: (p) => [p.careers?.xp?.groomer ?? 0, CAREERS.groomer.ranks[2]] }, // rang expert
   // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
   { id: 'career1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'careersStarted'), 1] },
   { id: 'client1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'clients'), 1] },
@@ -39,6 +64,13 @@ export const OBJECTIVES = [
   { id: 'clientMoney500', kind: 'quest', reward: 200, progress: (p) => [stat(p, 'clientMoney'), 500] },
   { id: 'client5Stars10', kind: 'achievement', progress: (p) => [stat(p, 'clients5Stars'), 10] },
   { id: 'reputation90', kind: 'achievement', progress: (p) => [Math.max(0, ...Object.values(p.careers?.reputation ?? {})) >= 90 ? 1 : 0, 1] },
+  // 🧭 Guide de randonnée (src/sim/trailGuide.js)
+  { id: 'tgFirst', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'tgRides'), 1] },
+  { id: 'tgStars3', kind: 'quest', reward: 120, progress: (p) => [stat(p, 'tgStars3'), 1] },
+  { id: 'tgRiders10', kind: 'quest', reward: 150, progress: (p) => [stat(p, 'tgRiders'), 10] },
+  { id: 'tgAbroad', kind: 'quest', reward: 200, progress: (p) => [stat(p, 'tgAbroad'), 1] },
+  { id: 'tgPhotos10', kind: 'achievement', progress: (p) => [stat(p, 'tgPhotos'), 10] },
+  { id: 'tgExpert', kind: 'achievement', progress: (p) => [Math.min(400, p.careers?.xp?.trailGuide ?? 0), 400] },
   { id: 'zoo10', kind: 'achievement', progress: (p) => [p.animals.length, 10] },
   { id: 'world', kind: 'achievement', progress: (p) => [p.visited.length, PLACE_IDS.length] },
   { id: 'allHappy', kind: 'achievement', progress: (p) => {
@@ -53,6 +85,11 @@ export const OBJECTIVES = [
   { id: 'actvPodium5', kind: 'achievement', progress: (p) => [stat(p, 'actvPodiums'), 5] },
   { id: 'actvPhotos', kind: 'achievement', progress: (p) => [stat(p, 'actvPhotos'), 8] },
   { id: 'actvStar', kind: 'achievement', progress: (p) => [stat(p, 'actvShows'), 10] },
+  { id: 'drGood', kind: 'achievement', progress: (p) => [stat(p, 'actvDressage70'), 1] },
+  { id: 'compPodium3', kind: 'achievement', progress: (p) => [stat(p, 'compAwayPodiums'), 3] },
+  { id: 'compGrand', kind: 'achievement', progress: (p) => [stat(p, 'compGrandWins'), 1] },
+  { id: 'beautyPodium', kind: 'achievement', progress: (p) => [stat(p, 'beautyPodium'), 1] }, // concours de beauté
+  { id: 'beautyChampion', kind: 'achievement', progress: (p) => [stat(p, 'beautyChampion'), 1] }, // écharpe du plus bel animal
 ];
 
 /** Renvoie les objectifs qui viennent d'être terminés (et les marque comme faits). */

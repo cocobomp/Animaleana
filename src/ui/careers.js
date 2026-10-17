@@ -3,10 +3,15 @@
 // La logique est dans src/sim/careers.js ; les clients (visiteurs) dans src/game/Clients.js.
 
 import { h } from './dom.js';
-import { t } from '../i18n.js';
+import { t, L } from '../i18n.js';
 import { isSandbox } from '../sim/profile.js';
 import { CAREERS, CAREER_IDS, RANKS, careerSummary, setActiveCareer, nextAction } from '../sim/careers.js';
 import { schoolSummary } from '../sim/vetSchool.js'; // 🎓 école vétérinaire
+import { upcomingEntries, competitionData } from '../sim/competitions.js'; // 🏇 cavalier de concours
+import { PLACES } from '../sim/places.js';
+import { openBeauty } from './beauty.js'; // 🎀 concours de beauté (métier de handler)
+import { clientDogs } from '../sim/dogTrainer.js'; // 🐕 éducateur canin : chiens en éducation
+import { salonCareerBlock } from './groomer.js'; // ✂️ le salon de toilettage (métier Toiletteur)
 
 const rankLabel = (rank) => t(`ca_rank_${RANKS[rank]}`);
 
@@ -57,15 +62,42 @@ function careerCard(ui, s) {
       isSandbox(p) ? null : h('span', {}, t('ca_earned', { n: s.earned }))));
     body.push(h('h4', {}, `📒 ${t('ca_carnet')}`));
     const next = nextAction(p, s.id);
-    body.push(h('ul', { class: 'ca-carnet' }, s.carnet.map((a) => h('li', { class: `${a.done ? 'done' : ''} ${next?.id === a.id ? 'now' : ''}` },
-      h('span', { class: 'ca-check' }, a.done ? '✅' : '⬜'),
-      h('span', { class: 'ca-step' }, `${a.emoji} ${t(`ca_${s.id}_${a.id}`)}`),
+    body.push(h('ul', { class: 'ca-carnet' }, s.carnet.map((a) => h('li', { class: `${a.done ? 'done' : ''} ${a.locked ? 'locked' : ''} ${next?.id === a.id ? 'now' : ''}` },
+      h('span', { class: 'ca-check' }, a.done ? '✅' : a.locked ? '🔒' : '⬜'),
+      h('span', { class: 'ca-step' }, `${a.emoji} ${t(`ca_${s.id}_${a.id}`)}`,
+        a.locked ? h('small', {}, ` · ${t('ca_actionLocked', { rank: rankLabel(a.rank) })}`) : null),
       !a.done && next?.id === a.id ? h('button', { class: 'small primary', onClick: () => { ui.closePanel(); g.clients.showMe(s.id, a.id); } }, `👉 ${t('ca_showMe')}`) : null))));
     if (!s.active) body.push(h('button', { class: 'small', onClick: () => { setActiveCareer(p, s.id); ui.renderPanel(); ui.renderStatus(); } }, `📌 ${t('ca_follow')}`));
     else body.push(h('small', { class: 'ca-following' }, `📌 ${t('ca_following')}`));
   }
   if (s.id === 'vet') body.push(schoolBlock(ui)); // 🎓 apprendre le métier en leçons (src/ui/vetSchool.js)
+  if (s.id === 'rider') body.push(riderBlock(ui)); // 🏇 prochain concours et calendrier (src/ui/competitions.js)
+  // 🎀 Handler : le concours de beauté (préparer, s'inscrire, présenter) à portée de main.
+  if (s.id === 'handler' && s.state !== 'locked') {
+    body.push(h('button', { class: 'small ca-beauty', onClick: () => openBeauty(ui) }, `🎀 ${t('ca_handler_open')}`));
+  }
+  if (s.id === 'dogTrainer' && s.state === 'started') body.push(dogTrainerBlock(ui)); // 🐶 chiens en éducation (src/ui/dogTrainer.js)
+  if (s.id === 'groomer') body.push(salonCareerBlock(ui)); // ✂️ construire le salon, ou y aller
+  if (s.id === 'trailGuide' && s.state === 'started') body.push(trailBlock(ui)); // 🧭 rendez-vous et balades (src/ui/trailGuide.js)
   return h('div', { class: `ca-card ${s.state} ${s.active ? 'active' : ''}` }, head, ...body);
+}
+
+/** Éducateur canin dans la carte du métier : chiens en éducation et carnet détaillé (historique). */
+function dogTrainerBlock(ui) {
+  const n = clientDogs(ui.game.profile).length;
+  return h('div', { class: 'ca-school' },
+    h('span', {}, n ? t('dt_cardDogs', { n }) : t('dt_cardNoDogs')),
+    h('button', { class: 'small primary', onClick: () => ui.openDogTrainer() }, t('dt_cardBtn')));
+}
+
+/** Le guide de randonnée dans sa carte : rendez-vous, balades faites, et son carnet complet. */
+function trailBlock(ui) {
+  const st = ui.game.profile.trailGuide ?? {};
+  const bookings = st.bookings?.length ?? 0;
+  const rides = st.history?.length ?? 0;
+  return h('div', { class: 'ca-school' },
+    h('span', {}, `${t('tg_caBookings', { n: bookings })} · ${t('tg_caRides', { n: rides })}`),
+    h('button', { class: 'small primary', onClick: () => ui.openTrailGuide() }, `📒 ${t('tg_caBtn')}`));
 }
 
 /** L'école vétérinaire dans la carte du métier : progression et bouton. */
@@ -77,6 +109,17 @@ function schoolBlock(ui) {
     h('span', { class: 'ca-school-ticks', 'aria-hidden': 'true' }, sc.lessons.map((l) => (l.done ? '✅' : '⬜')).join('')),
     !started && !sc.diploma ? h('small', {}, t('vs_cardLocked')) : null,
     h('button', { class: 'small primary', onClick: () => ui.openVetSchool() }, t('vs_cardBtn')));
+}
+
+/** Cavalier de concours : la prochaine inscription, les résultats, et le bouton du calendrier des concours. */
+function riderBlock(ui) {
+  const p = ui.game.profile;
+  const next = upcomingEntries(p)[0];
+  const results = competitionData(p).results;
+  return h('div', { class: 'ca-school ca-rider' },
+    h('span', {}, next ? t('ca_rider_next', { name: `${PLACES[next.comp.place]?.flag ?? ''} ${L(next.comp.name)}`, day: next.comp.day }) : t('ca_rider_noEntry')),
+    results.length ? h('small', {}, t('ca_rider_results', { n: results.length, p: results.filter((r) => r.rank <= 3).length })) : null,
+    h('button', { class: 'small primary', onClick: () => ui.openActivities({ tab: 'calendar' }) }, `📅 ${t('actv_tabCalendar')}`));
 }
 
 /** « Tu veux apprendre le métier de vétérinaire ? » */

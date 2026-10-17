@@ -15,6 +15,7 @@ import { buildingActions } from '../sim/buildings.js';
 import { EQUIPMENT } from '../sim/farm.js';
 import { actionSheet } from './actions.js';
 import { thumb } from '../game/thumbScenes.js'; // vignettes 3D du catalogue
+import { openSalon } from './groomer.js'; // salon de toilettage (métier Toiletteur)
 
 /** Catégories de la vue construction → catégories du catalogue. */
 export const BUILD_TABS = [
@@ -247,6 +248,7 @@ export function openCatalogue(ui, tab = null) {
 
 /** Ce qu'on peut faire avec une construction : soigner ses habitants, ramasser, déplacer, démolir… */
 export function openStructure(ui, s) {
+  if (s.type === 'salon') return openSalon(ui, s); // métier Toiletteur ✂️
   const g = ui.game;
   const st = g.structures;
   const def = STRUCTURES[s.type];

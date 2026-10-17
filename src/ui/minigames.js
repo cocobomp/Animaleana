@@ -20,6 +20,7 @@ import { audio } from '../game/audio.js'; // petits sons : bien joué / raté / 
 import { CHORE_GAMES, CHORE_ICONS } from './minigames/chores.js';
 import { justOutcome, starsFor } from './minigames/score.js'; // règle « juste ce qu'il faut »
 import { fitView, toLocalPoint, nbsp } from './minigames/frame.js'; // échelle, doigt, typographie
+import { braidGame, shineGame, bowGame, fluffGame } from './minigames/beauty.js'; // concours de beauté
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -39,12 +40,25 @@ const GAMES = {
   milk: milkGame,
   lunge: lungeGame,
   liberty: libertyGame,
+  braid: braidGame, shine: shineGame, bow: bowGame, fluff: fluffGame, // concours de beauté (src/ui/beauty.js)
 };
 
 const ICONS = {
   feed: '🍽️', water: '💧', brush: '🪮', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨', pet: '🤚',
   treat: '🍪', play: '⚽', lunge: '🌀', liberty: '💛', shear: '🧶', milk: '🥛',
+  braid: '🎀', shine: '✨', bow: '🎀', fluff: '🧶', // concours de beauté
 };
+
+/** Ajoute un mini-jeu (ex. séances d'éducation canine, src/ui/minigames/dogTraining.js). */
+export function registerMinigame(id, make, icon = '⭐') {
+  GAMES[id] = make;
+  ICONS[id] = icon;
+}
+
+/** Ajoute plusieurs mini-jeux d'un coup (ex. le salon de toilettage, src/ui/minigames/groomer.js). */
+export function registerMinigames(games, icons = {}) {
+  for (const [id, make] of Object.entries(games)) registerMinigame(id, make, icons[id] ?? ICONS[id] ?? '⭐');
+}
 
 /** Texte traduit, ou null s'il n'existe pas. */
 const tt = (key, params) => {
@@ -149,8 +163,9 @@ class Fx {
 /**
  * Lance le mini-jeu d'un soin. action : un soin de CARE, ou 'collect' (tonte / traite).
  * Renvoie une promesse : la qualité (0,4 à 1) si l'enfant a fini, null s'il a fermé.
+ * opts : options passées au jeu (ctx.opts) ; un jeu peut y écrire son choix dans opts.out (concours de beauté).
  */
-export function runMinigame(ui, a, action) {
+export function runMinigame(ui, a, action, opts = {}) {
   if (action === 'collect') action = SPECIES[a.species].product?.action;
   const make = GAMES[action];
   if (!make) return Promise.resolve(1);
@@ -166,7 +181,9 @@ export function runMinigame(ui, a, action) {
     endEmoji: sp.emoji,
     endText: (stars) => t(`mg_end${stars}`, { name: a.name }),
     // L'animal n'est plus là (il est parti, ou mort de vieillesse) : on ferme sans rien appliquer.
-    stillThere: (game) => !game?.profile || game.profile.animals.some((x) => x.id === a.id),
+    // (a.guest : l'animal d'un client du salon de toilettage, qui n'est pas au joueur : il reste là.)
+    stillThere: (game) => !game?.profile || !!a.guest || game.profile.animals.some((x) => x.id === a.id),
+    opts,
   });
 }
 
@@ -279,6 +296,7 @@ function openMinigame(ui, o) {
       sp: a ? SPECIES[a.species] : null,
       action,
       chore: o.chore ?? null,
+      opts: o.opts ?? {}, // options du jeu ; un jeu y écrit son choix dans opts.out (concours de beauté)
       W: MG_W,
       H: MG_H,
       view,

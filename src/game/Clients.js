@@ -20,28 +20,32 @@ import {
   noteClientCare, pickVisitKind,
 } from '../sim/clients.js';
 import {
-  CAREERS, CAREER_IDS, RANKS, startCareer, isStarted, shouldPropose, markProposed, hintOnce, noteAction, nextAction,
+  CAREERS, CAREER_IDS, RANKS, startCareer, isStarted, shouldPropose, markProposed, hintOnce, noteAction, nextAction, addCareerXp,
 } from '../sim/careers.js';
 import { OBJECTIVES } from '../sim/objectives.js';
+import { SHOWGROUND } from '../sim/activities.js'; // « 👉 Montre-moi » du handler : l'entrée du terrain de concours
 import { addStat } from '../sim/profile.js';
 import { showRequest, showResult } from '../ui/clients.js';
 import { showCareerOffer } from '../ui/careers.js';
 import { t, ta } from '../i18n.js';
 
 // Le chemin des visiteurs : ils arrivent par la route à l'est, passent entre le refuge et le
-// vétérinaire, et s'arrêtent dans la cour, près de la maison.
-const GATE = { x: 28, z: 1.2 };
-const WAY = { x: 13, z: 1.2 };
+// vétérinaire, et s'arrêtent dans la cour, près de la maison. (GATE et WAY : aussi la route des
+// clients du salon de toilettage, src/game/Groomer.js.)
+export const GATE = { x: 28, z: 1.2 };
+export const WAY = { x: 13, z: 1.2 };
 const MEET = { x: 5, z: -2.5 };
 const CLINIC = { x: 11.3, z: 9 }; // devant la porte du vétérinaire du village
 const AUTO_VET_HOURS = 1.5; // temps passé chez le vétérinaire du village
+/** Le chemin des visiteurs (réutilisé par les maîtres de l'éducateur canin, src/game/DogTrainer.js). */
+export const VISITOR_PATH = { GATE, WAY, MEET };
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x5a3a24];
 const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xa63a1f, 0x9a9a9a];
 const TOPS = [0xd9643a, 0x3f7cc4, 0x7a4b8f, 0x2f8f6b, 0xc43f6a, 0xe0b030];
 
 /** Un visiteur (propriétaire d'un animal) qui marche vers un endroit. */
-class VisitorEntity {
+export class VisitorEntity { // (réutilisé par src/game/DogTrainer.js et le salon de toilettage, src/game/Groomer.js)
   constructor(game, owner) {
     this.game = game;
     this.owner = owner;
@@ -171,6 +175,15 @@ export class Clients {
     this.pendingResult = null;
     this.asked = false;
     this.unsub = [];
+    // « 👉 Montre-moi » des métiers qui ont leur propre guide : id -> (action, def) => void.
+    // Un module s'y inscrit avec registerGuide : src/game/CompetitionVenue.js ('rider'),
+    // src/game/DogTrainer.js ('dogTrainer'), src/game/Groomer.js ('groomer'), src/game/TrailGuide.js ('trailGuide').
+    this.guides = {};
+  }
+
+  /** Inscrit le guide « 👉 Montre-moi » d'un métier qui ne passe pas par les visiteurs. */
+  registerGuide(id, fn) {
+    this.guides[id] = fn;
   }
 
   // ------------------------------------------------------------ boucle
@@ -266,7 +279,7 @@ export class Clients {
     if (this.visitor) {
       if (!this.visitor.visit.auto && visitorExpired(p, p.clock)) this.visitorLeaves(false);
       else this.proximity();
-    } else if (!st.visitor && shouldVisitorArrive(p, { day, hour: g.hour, isHome: g.isHome }) && !g.ui.isBlocking()) {
+    } else if (!st.visitor && !g.dogTrainer?.visitor && shouldVisitorArrive(p, { day, hour: g.hour, isHome: g.isHome }) && !g.ui.isBlocking()) {
       this.arrive();
     }
     // Les propriétaires reviennent chercher leur animal (seulement quand on est à la maison).
@@ -565,6 +578,9 @@ export class Clients {
     const g = this.game;
     const p = g.profile;
     if (g.ui.isBlocking() || this.visitor?.visit && !this.visitor.visit.auto) return;
+    // Pas au milieu d'une activité (reprise de dressage, parcours, barrage…) : la fenêtre cachait la carrière
+    // et mettait les résultats en attente. Elle reviendra plus tard.
+    if (g.activities?.active) return;
     const ctx = { level: g.level, day: g.day, objectives: OBJECTIVES, building };
     const id = CAREER_IDS.find((k) => shouldPropose(p, k, ctx));
     if (!id) return;
@@ -583,10 +599,14 @@ export class Clients {
       g.ui.toast(r.reason === 'level' ? t('lockedLevel', { n: r.n }) : t('alreadyOwned'));
       return r;
     }
-    // Un premier client arrive vite pour apprendre.
-    const st = clientState(g.profile);
-    st.nextVisitDay = Math.min(st.nextVisitDay || g.day, g.day);
-    st.nextVisitHour = Math.min(st.nextVisitHour, Math.max(8, Math.ceil(g.hour)));
+    // Un premier client arrive vite pour apprendre. Pas pour un métier sans visiteurs (clients: false,
+    // cavalier de concours), ni pour ceux qui ont leurs propres clients (ownClients, comme l'éducateur
+    // canin : il fait venir le sien lui-même, pas deux visiteurs à la fois).
+    if (CAREERS[id].clients !== false && !CAREERS[id].ownClients) {
+      const st = clientState(g.profile);
+      st.nextVisitDay = Math.min(st.nextVisitDay || g.day, g.day);
+      st.nextVisitHour = Math.min(st.nextVisitHour, Math.max(8, Math.ceil(g.hour)));
+    }
     g.ui.toast(t('ca_started', { career: t(`career_${id}`) }), 7000);
     g.ui.renderStatus();
     g.save();
@@ -604,8 +624,21 @@ export class Clients {
     g.ui.renderStatus();
   }
 
+  /** De l'expérience de métier pour un travail réussi (un concours…), avec la bulle du nouveau rang. */
+  careerXp(id, n) {
+    const r = addCareerXp(this.game.profile, id, n);
+    if (r?.rankUp !== undefined && r?.rankUp !== null) this.rankUpToast(id, r.rankUp);
+    return r;
+  }
+
+  rankUpToast(id, rank) {
+    const g = this.game;
+    g.ui.toast(t('ca_rankUpToast', { rank: t(`ca_rank_${RANKS[rank]}`), career: t(`career_${id}`) }), 7000);
+    g.ui.renderStatus();
+  }
+
   onCare(a, action) {
-    if (!a?.client) return;
+    if (!a?.client || a.client.kind === 'training') return; // chien en éducation : src/game/DogTrainer.js
     const step = noteClientCare(this.game.profile, a, action);
     if (step) this.noteCareer(a.client.kind, step, true);
   }
@@ -623,6 +656,9 @@ export class Clients {
     const p = g.profile;
     const def = CAREERS[id].actions.find((x) => x.id === action);
     if (!def) return;
+    // Métier qui a son propre guide (cavalier de concours, éducateur canin, salon de toilettage,
+    // guide de randonnée) : il s'est inscrit avec registerGuide.
+    if (this.guides[id]) return this.guides[id](action, def);
     const client = clientAnimals(p).find((a) => a.client.kind === id);
     if (def.where === 'visitor') {
       if (this.visitor && !this.visitor.visit.auto) {
@@ -637,6 +673,21 @@ export class Clients {
       }
       return;
     }
+    // Handler : présenter au juge se fait au terrain de concours (avec un animal confié ou à soi).
+    if (def.where === 'showground') {
+      g.marker.show(new THREE.Vector3(SHOWGROUND.x + SHOWGROUND.hw + 2.2, 0, SHOWGROUND.z), { hideNear: 4 });
+      g.ui.toast(t('ca_show_showground'), 6000);
+      return;
+    }
+    // Handler : on peut apprendre à préparer avec ses propres animaux.
+    if (!client && id === 'handler') {
+      const own = g.animalsHere().find((a) => !a.client);
+      if (own) {
+        g.marker.show(g.entities.get(own.id) ?? null, { hideNear: 2.5 });
+        g.ui.toast(ta('ca_show_handlerOwn', own), 6000);
+        return;
+      }
+    }
     if (!client) {
       g.ui.toast(t('ca_show_noAnimal'), 5000);
       g.marker.show(new THREE.Vector3(MEET.x, 0, MEET.z), { hideNear: 3 });
@@ -649,7 +700,7 @@ export class Clients {
 
   // ------------------------------------------------------------ pour tester
 
-  /** Fait venir un visiteur tout de suite ('pension', 'vet', 'autoVet', 'autoPension'). */
+  /** Fait venir un visiteur tout de suite ('pension', 'vet', 'handler', 'autoVet', 'autoPension'). */
   force(kind = 'pension') {
     if (this.visitor) {
       clearVisitor(this.game.profile);

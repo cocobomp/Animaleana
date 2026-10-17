@@ -40,6 +40,7 @@ const RULES = {
   kennel: [
     { id: 'feedDogs', icon: '🥣', when: (c) => need(c.count.dog) },
     { id: 'waterDogs', icon: '💧', when: (c) => need(c.count.dog) },
+    { id: 'dogTrainer', icon: '🐕', when: () => null }, // métier éducateur canin (src/ui/dogTrainer.js)
     { id: 'farm', icon: '🔧', when: () => null },
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
@@ -107,6 +108,7 @@ const RULES = {
     { id: 'actvAgility', icon: '🐕', when: (c) => dayOnly(c, 7, 21) },
     { id: 'actvHop', icon: '🐇', when: (c) => need(c.count.rabbit) ?? dayOnly(c, 7, 21) },
     { id: 'actvShow', icon: '🎪', when: (c) => dayOnly(c, 9, 23) },
+    { id: 'actvBeauty', icon: '🎀', when: (c) => dayOnly(c, 8, 20) }, // concours de beauté (src/sim/beauty.js)
     { id: 'actvTrail', icon: '🧭', when: (c) => dayOnly(c, 7, 20) },
     { id: 'actvCalendar', icon: '📅', when: () => null },
     { id: 'actvTrophies', icon: '🏆', when: () => null },

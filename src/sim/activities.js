@@ -7,6 +7,7 @@ import { happiness, lifeStage, canRide } from './animal.js';
 import { wears, rideGear, tackEffects } from './gear.js';
 import { seeded, pick, hashString } from './rng.js';
 import { NAMES } from './species.js';
+import { rivalBeautyPoints } from './beauty.js'; // concours de beauté
 
 const clamp = (v, min = 0, max = 1) => Math.max(min, Math.min(max, v));
 
@@ -452,7 +453,8 @@ export function hutchPlay(a, toyId) {
 
 // ---------------------------------------------------------------- concours
 
-export const COMPETITION_TYPES = ['jumping', 'agility', 'show', 'trail'];
+// 'beauty' : concours de beauté (src/sim/beauty.js) — tous les animaux, toilette et présentation au juge.
+export const COMPETITION_TYPES = ['jumping', 'beauty', 'agility', 'show', 'trail'];
 export const LEVELS = ['club', 'regional', 'grand'];
 
 /** Frais d'inscription et prix (mode gestion), par niveau. */
@@ -507,7 +509,8 @@ export function eligibility(a, type) {
   if (a.sick) return 'sick';
   if (lifeStage(a) === 'baby') return 'baby';
   if (a.needs.energy < 20) return 'tired';
-  if (type === 'jumping' || type === 'trail') {
+  // dressage, plat, figures : mêmes conditions que le saut (src/sim/dressage.js)
+  if (type === 'jumping' || type === 'trail' || type === 'dressage' || type === 'flat' || type === 'figures') {
     if (!SPECIES[a.species].rideable) return 'notRideable';
     const r = canRide(a);
     if (!r.ok) return r.reason;
@@ -524,7 +527,10 @@ export function eligibility(a, type) {
 const RIVAL_NAMES = ['Léa', 'Hugo', 'Emma', 'Lucas', 'Chloé', 'Nathan', 'Inès', 'Jules', 'Manon', 'Louis',
   'Zoé', 'Adam', 'Camille', 'Sacha', 'Lina', 'Tom', 'Alice', 'Noah', 'Rose', 'Gabriel', 'Mia', 'Eliott'];
 
-const RIVAL_SPECIES = { jumping: ['horse'], trail: ['horse'], agility: ['dog', 'dog', 'dog', 'cat', 'rabbit'], show: ['dog', 'horse', 'cat', 'rabbit', 'goat'] };
+const RIVAL_SPECIES = {
+  jumping: ['horse'], trail: ['horse'], agility: ['dog', 'dog', 'dog', 'cat', 'rabbit'], show: ['dog', 'horse', 'cat', 'rabbit', 'goat'],
+  beauty: ['horse', 'horse', 'dog', 'cat', 'rabbit', 'sheep'], // concours de beauté (src/sim/beauty.js)
+};
 
 /**
  * Concurrents générés (toujours les mêmes pour un même concours).
@@ -553,6 +559,8 @@ export function rivals(comp, count = 5) {
       Object.assign(r, agilityResult({ faults, time, par }));
     } else if (comp.type === 'show') {
       r.points = Math.round(14 + skill * 34 + rng() * 6);
+    } else if (comp.type === 'beauty') {
+      r.points = rivalBeautyPoints(skill, rng); // concours de beauté : des points sur 100
     } else {
       r.points = Math.round(60 + skill * 75 + rng() * 15);
     }
@@ -589,7 +597,7 @@ export function placementAward(comp, rank) {
 /** Flot gagné à l'entraînement (sans concours) selon le nombre d'étoiles. */
 export function practiceAward(type, stars, maxStars = 3) {
   if (stars < maxStars - (type === 'show' ? 1 : 0)) return null;
-  const tier = { jumping: 'blue', agility: 'yellow', trail: 'green', show: 'purple', hop: 'pink', lesson: 'white' }[type];
+  const tier = { jumping: 'blue', agility: 'yellow', trail: 'green', show: 'purple', hop: 'pink', lesson: 'white', dressage: 'purple', flat: 'white', figures: 'white', beauty: 'red' }[type];
   return { kind: 'ribbon', tier, money: 0 };
 }
 
@@ -647,13 +655,14 @@ export function activitySkillGain(a, type, quality = 0.5) {
     show: { obedience: 1 },
     hop: { jump: 1 + Math.round(quality * 2), obedience: 1 },
     lesson: { obedience: 1 },
+    beauty: { obedience: 1 }, // concours de beauté : rester calme devant le juge
   }[type] ?? {};
   for (const [k, v] of Object.entries(gains)) a.skills[k] = Math.min(100, (a.skills[k] ?? 0) + v);
   // Équipement (src/sim/gear.js) : la selle de randonnée fatigue moins en balade, le tapis rend le dos confortable.
   const fx = tackEffects(a);
-  const tired = ({ jumping: 14, agility: 12, trail: 18, show: 6, hop: 8, lesson: 12 }[type] ?? 8) * (type === 'trail' ? fx.trailFatigue : 1);
+  const tired = ({ jumping: 14, agility: 12, trail: 18, show: 6, hop: 8, lesson: 12, beauty: 5 }[type] ?? 8) * (type === 'trail' ? fx.trailFatigue : 1);
   a.needs.energy = Math.max(0, a.needs.energy - Math.round(tired));
-  a.needs.exercise = Math.min(100, a.needs.exercise + ({ jumping: 30, agility: 30, trail: 40, show: 10, hop: 25, lesson: 25 }[type] ?? 15));
+  a.needs.exercise = Math.min(100, a.needs.exercise + ({ jumping: 30, agility: 30, trail: 40, show: 10, hop: 25, lesson: 25, beauty: 8 }[type] ?? 15));
   a.needs.affection = Math.min(100, a.needs.affection + 8 + fx.comfort);
   return gains;
 }

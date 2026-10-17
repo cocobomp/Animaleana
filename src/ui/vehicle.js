@@ -7,6 +7,7 @@ import { h } from './dom.js';
 import { t, ta } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { cargoItems, cargoItem, CARGO_KINDS, cargoUsed, canPack, pack, unpack, inCargo, suggestCargo, available, missingSupplies, fitsTraveller } from '../sim/cargo.js';
+import { packCompetitionTack, missingCompetitionTack } from '../sim/competitions.js'; // voyage au concours : selle et filet
 import { GEAR } from '../sim/gear.js';
 import { stallSteps, canStep, CONFIDENCE_OK } from '../sim/loading.js';
 import { hasTool } from '../sim/tools.js';
@@ -166,12 +167,14 @@ function cabBody(ui, flow) {
   const loose = v.trailer ? flow.unsecured().length : 0;
   const missing = missingSupplies(l.cargo, flow.travellers(l.ids));
   const line = (ok, text) => h('li', { class: ok ? 'ok' : 'warn' }, `${ok ? '✅' : '⚠️'} ${text}`);
+  const tack = competitionTackLine(flow);
   return [
     h('p', { class: 'veh-title' }, `${v.trailer ? '🚙' : '🚗'} ${t('veh_cabTitle')}`),
     h('ul', { class: 'veh-checks' },
       line(!left, t('veh_checkAnimals', { n: total - left, total })),
       v.trailer ? line(!loose, loose ? t('veh_checkLoose', { n: loose }) : t('veh_checkSecured')) : null,
-      line(!missing.length, missing.length ? t('veh_checkSupplies', { list: missing.map(cargoName).join(', ') }) : t('veh_checkCargo', { n: cargoUsed(l.cargo), max: l.capacity }))),
+      line(!missing.length, missing.length ? t('veh_checkSupplies', { list: missing.map(cargoName).join(', ') }) : t('veh_checkCargo', { n: cargoUsed(l.cargo), max: l.capacity })),
+      tack ? line(tack.ok, tack.text) : null),
     v.trailer && l.loaded.size ? h('p', { class: 'veh-hint small' }, t('veh_cabCamera')) : h('p', { class: 'veh-hint small' }, t('veh_cabLook')),
     h('div', { class: 'veh-cab-btns' },
       h('button', { class: 'primary big', onClick: () => flow.departCheck() }, `🏁 ${t('veh_go')}`),
@@ -229,13 +232,42 @@ export function trunkBody(ui, flow, redraw, onClose) {
       h('span', {}, t('veh_cargoUsed', { n: used, max: l.capacity })),
       h('span', { class: 'bar-track' }, h('span', { class: `bar-fill ${pct >= 100 ? 'low' : pct > 75 ? 'mid' : 'good'}`, style: { width: `${pct}%` } }))),
     missing.length ? h('p', { class: 'veh-warn' }, t('veh_missingSupplies', { list: missing.map(cargoName).join(', ') })) : null,
+    tackNote(flow),
     h('div', { class: 'row wrap veh-cargo-tools' },
-      h('button', { class: 'small', onClick: () => { l.cargo = suggestCargo(p, travellers, l.capacity, { last: null, mode: l.mode }); flow.cargoChanged(); redraw(); } }, `✨ ${t('veh_suggest')}`),
+      h('button', {
+        class: 'small',
+        onClick: () => {
+          l.cargo = suggestCargo(p, travellers, l.capacity, { last: null, mode: l.mode });
+          // Voyage au concours : la selle et le filet de chaque cheval inscrit, à sa taille.
+          if (l.purpose === 'competition') packCompetitionTack(p, l.cargo, travellers.filter((a) => a.species === 'horse'), l.capacity, l.entry?.comp.discipline);
+          flow.cargoChanged();
+          redraw();
+        },
+      }, `✨ ${t('veh_suggest')}`),
       h('button', { class: 'small', onClick: () => { l.cargo.items = {}; flow.cargoChanged(); redraw(); } }, `🗑️ ${t('veh_empty')}`)),
     h('div', { class: 'veh-cargo' }, groups),
     // (toujours visible en bas du panneau : pas besoin de faire défiler toute la liste pour refermer)
     h('div', { class: 'row end veh-close' }, h('button', { class: 'primary', onClick: onClose }, `✔ ${t(l.vehicle ? 'veh_closeTrunk' : 'veh_bagsReady')}`)),
   ];
+}
+
+/**
+ * Voyage au concours (src/game/TripFlow.js, beginCompetitionTrip) : la selle et le filet de chaque cheval
+ * inscrit sont-ils là, à sa taille (portés ou dans le coffre) ? Renvoie { ok, text } ou null (autre voyage).
+ */
+function competitionTackLine(flow) {
+  const l = flow.loading;
+  if (l?.purpose !== 'competition') return null;
+  const miss = missingCompetitionTack(l.cargo, flow.travellers(l.ids), l.entry?.comp.discipline);
+  if (!miss.length) return { ok: true, text: t('comp_tackOk') };
+  const what = miss.map((m) => t('comp_tackMissingItem', { name: m.a.name, item: t(`comp_slot_${m.slot}`), size: m.size ? t(`tk_size_${m.size}`) : '' })).join(', ');
+  return { ok: false, text: t('comp_tackMissingShort', { what }) };
+}
+
+function tackNote(flow) {
+  const line = competitionTackLine(flow);
+  if (!line) return null;
+  return h('p', { class: line.ok ? 'veh-hint comp-tack-ok' : 'veh-warn' }, `🏆 ${line.text}`);
 }
 
 /** Bagages sans véhicule (à cheval : les sacoches ; seul : un sac) : le coffre dans une fenêtre. */

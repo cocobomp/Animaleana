@@ -11,9 +11,28 @@ import { speciesName } from './names.js';
 import { clientState, clientAnimals, canAccept, daysLeft, dailyCareScore, maxClients } from '../sim/clients.js';
 import { CAREERS, startedCareers, reputationOf, RANKS, rankOf } from '../sim/careers.js';
 import { XP } from '../sim/progress.js';
+import { clientDogs, isTrainingClient, daysLeft as trainingDaysLeft } from '../sim/dogTrainer.js'; // éducateur canin
+
+/** Les chiens en éducation (métier éducateur canin), avec le carnet du métier. */
+function trainingDogs(ui) {
+  const g = ui.game;
+  const p = g.profile;
+  if (p.careers?.started?.dogTrainer === undefined) return [];
+  const dogs = clientDogs(p).filter(isTrainingClient);
+  return [
+    h('h3', {}, `🐕 ${t('dt_clients')} (${dogs.length})`),
+    h('div', { class: 'cards' }, dogs.map((a) => h('button', { class: 'card cl-card training', onClick: () => ui.openAnimal(a) },
+      h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+      h('span', { class: 'card-main' },
+        h('b', {}, a.name),
+        h('small', {}, `${t('cl_owner', { owner: a.client.ownerName })} · ${t('dt_sessionsDone', { n: a.client.sessionsDone, total: a.client.sessionsNeeded })}`),
+        h('small', {}, trainingDaysLeft(a, g.day) === 0 ? t('dt_dueToday') : t('dt_due', { n: trainingDaysLeft(a, g.day) })))))),
+    h('button', { class: 'small', onClick: () => ui.openDogTrainer() }, t('dt_cardBtn')),
+  ];
+}
 
 export const OWNER_EMOJI = (sex) => (sex === 'f' ? '👩' : '👨');
-const KIND_EMOJI = { pension: '🏡', vet: '🩺' };
+const KIND_EMOJI = { pension: '🏡', vet: '🩺', handler: '🎀' }; // handler : concours de beauté (src/sim/beauty.js)
 
 /** Une bulle de dialogue, comme dans une discussion. */
 export function bubble(text, who = 'owner') {
@@ -31,7 +50,7 @@ export function showRequest(ui, visit, { accept, refuse, later }) {
   const a = visit.animal;
   const sandbox = isSandbox(p);
   const career = visit.career;
-  const helloKey = career === 'vet' ? (visit.illness === 'paw' ? 'cl_hello_vet_paw' : 'cl_hello_vet') : 'cl_hello_pension';
+  const helloKey = career === 'vet' ? (visit.illness === 'paw' ? 'cl_hello_vet_paw' : 'cl_hello_vet') : career === 'handler' ? 'cl_hello_handler' : 'cl_hello_pension';
   const check = canAccept(p, visit);
   const kindLabel = `${KIND_EMOJI[career]} ${t(`cl_kind_${career}`)}`;
   ui.showModal(h('div', { class: 'cl-modal' },
@@ -66,6 +85,10 @@ export function showResult(ui, res, onClose) {
     if (res.tip && !sandbox) lines.push(h('li', {}, t('cl_tip', { n: res.tip })));
   }
   if (res.kind === 'vet' && res.cured) lines.push(h('li', {}, ta('cl_cured', res.animal)));
+  // Handler : la note du juge (et la place au concours).
+  if (res.kind === 'handler' && res.contest) {
+    lines.push(h('li', { class: 'good' }, `🧑‍⚖️ ${ta(res.contest.rank ? 'cl_presentedRank' : 'cl_presented', res.animal, { n: res.contest.points, rank: res.contest.rank })}`));
+  }
   if (res.late) lines.push(h('li', {}, t('cl_late', { n: res.late })));
   lines.push(h('li', { class: res.repDelta >= 0 ? '' : 'bad' }, res.repDelta >= 0 ? t('cl_repUp', { n: res.repDelta }) : t('cl_repDown', { n: -res.repDelta })));
   if (!res.upset) lines.push(h('li', {}, `✨ ${t('cl_xp', { n: XP.client })}`));
@@ -86,23 +109,31 @@ export function showResult(ui, res, onClose) {
     h('button', { class: 'primary big', onClick: () => { ui.hideModal(); onClose?.(); } }, t('cl_ok'))));
 }
 
+const badgeKey = (kind) => (kind === 'vet' ? 'cl_badgeVet' : kind === 'handler' ? 'cl_badgeHandler' : 'cl_badge');
+
+/** Handler : où en est la présentation au juge de l'animal confié. */
+const contestLine = (a) => (a.client?.contest
+  ? `✅ ${ta('cl_presentedShort', a, { n: a.client.contest.points })}`
+  : `🎀 ${ta('cl_handlerHint', a)}`);
+
 /** Petit badge pour la liste des animaux (🏡 en pension · Mme Dupont · 2 jours restants). */
 export function clientBadge(a, g) {
-  if (!a.client) return null;
+  if (!a.client || a.client.kind === 'training') return null; // (éducateur canin : voir src/ui/dogTrainer.js)
   const c = a.client;
-  return h('span', { class: `cl-badge ${c.kind}` }, `${KIND_EMOJI[c.kind]} ${t(c.kind === 'vet' ? 'cl_badgeVet' : 'cl_badge')} · ${c.ownerName} · ${t('cl_daysLeft', { n: daysLeft(a, g.day) })}`);
+  return h('span', { class: `cl-badge ${c.kind}` }, `${KIND_EMOJI[c.kind]} ${t(badgeKey(c.kind))} · ${c.ownerName} · ${t('cl_daysLeft', { n: daysLeft(a, g.day) })}`);
 }
 
 /** Bloc dans la fiche de l'animal : propriétaire, jours restants, barre de soin. */
 export function clientInfo(a, g) {
-  if (!a.client) return null;
+  if (!a.client || a.client.kind === 'training') return null;
   const c = a.client;
   const left = daysLeft(a, g.day);
   const when = g.day > c.until ? t('cl_overdue') : left === 0 ? t('cl_today') : t('cl_daysLeft', { n: left });
   return h('div', { class: `cl-info ${c.kind}` },
-    h('b', {}, `${KIND_EMOJI[c.kind]} ${t(c.kind === 'vet' ? 'cl_badgeVet' : 'cl_badge')}`),
+    h('b', {}, `${KIND_EMOJI[c.kind]} ${t(badgeKey(c.kind))}`),
     h('span', {}, `${t('cl_owner', { owner: c.ownerName })} · 📅 ${when}`),
     c.kind === 'vet' && a.sick ? h('span', { class: 'warn' }, ta('cl_vetHint', a)) : null,
+    c.kind === 'handler' ? h('span', { class: c.contest ? '' : 'warn' }, contestLine(a)) : null,
     h('div', { class: 'bars small' }, bar(`💛 ${t('cl_careScore')}`, dailyCareScore(a))));
 }
 
@@ -111,7 +142,8 @@ export function clientsTab(ui) {
   const g = ui.game;
   const p = g.profile;
   const st = clientState(p);
-  const started = startedCareers(p).filter((id) => KIND_EMOJI[id]);
+  // Tous les métiers commencés (réputation) ; l'éducateur canin a ses propres clients (plus bas).
+  const started = startedCareers(p).filter((id) => KIND_EMOJI[id] || CAREERS[id].ownClients);
   const out = [h('p', { class: 'note' }, t('cl_help'))];
   if (!started.length) {
     out.push(h('p', { class: 'note' }, t('cl_needAnyCareer')),
@@ -130,6 +162,7 @@ export function clientsTab(ui) {
       h('span', {}, t('cl_waiting', { owner: visitor.owner.name, name: visitor.animal.name })),
       h('button', { class: 'small primary', onClick: () => { ui.closePanel(); g.clients?.goToVisitor(); } }, t('cl_go'))));
   }
+  out.push(...trainingDogs(ui)); // éducateur canin : chiens en éducation (src/ui/dogTrainer.js)
   const list = clientAnimals(p);
   out.push(h('h3', {}, `${t('cl_title')} (${list.length}/${maxClients(p)})`));
   if (!list.length) out.push(h('p', { class: 'note' }, t('cl_noneNow')));
@@ -142,7 +175,7 @@ export function clientsTab(ui) {
       h('span', { class: 'card-main' },
         h('b', {}, `${a.name} · ${KIND_EMOJI[c.kind]} ${t(`cl_kind_${c.kind}`)}`),
         h('small', {}, `${speciesName(a)} · ${t('cl_owner', { owner: c.ownerName })}`),
-        h('small', {}, `📅 ${g.day > c.until ? t('cl_overdue') : left === 0 ? t('cl_today') : t('cl_daysLeft', { n: left })}${c.kind === 'vet' && a.sick ? ` · ${ta('cl_vetHint', a)}` : ''}`),
+        h('small', {}, `📅 ${g.day > c.until ? t('cl_overdue') : left === 0 ? t('cl_today') : t('cl_daysLeft', { n: left })}${c.kind === 'vet' && a.sick ? ` · ${ta('cl_vetHint', a)}` : ''}${c.kind === 'handler' ? ` · ${contestLine(a)}` : ''}`),
         h('span', { class: 'mini-track' }, h('span', { class: `mini-fill ${score >= 60 ? '' : 'low'}`, style: { width: `${score}%` } }))),
       h('span', { class: 'card-side' }, `💛 ${score}`));
   })));

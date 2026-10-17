@@ -2,13 +2,14 @@
 // d'actions à cocher, de l'expérience de métier et trois rangs (apprenti, confirmé, expert).
 // Logique pure, testée dans tests/careers.test.js. L'interface est dans src/ui/careers.js.
 //
-// Pour ajouter un métier : une entrée dans CAREERS (+ textes career_<id>, careerd_<id>,
-// ca_<id>_<action> dans src/ui/clientsTexts.js), puis appeler noteAction(profile, id, action)
+// Pour ajouter un métier : une entrée dans CAREERS (un seul registre : c'est ici, et nulle part ailleurs)
+// (+ textes career_<id>, careerd_<id>, ca_<id>_<action> dans src/ui/clientsTexts.js ou le module de
+// textes du métier, ex. src/ui/groomerTexts.js), puis appeler noteAction(profile, id, action)
 // quand le joueur fait l'action et addCareerXp(profile, id, n) quand il réussit un travail.
 //
 // Dans le profil :
 //   profile.careers = {
-//     active: 'vet' | null,          // le métier suivi (carnet affiché à l'écran)
+//     active: 'vet' | 'pension' | 'handler' | null,          // le métier suivi (carnet affiché à l'écran)
 //     started: { vet: day },          // jour où chaque métier a été commencé
 //     xp: { vet: 0 },                 // expérience par métier
 //     done: { vet: ['welcome'] },     // actions du carnet déjà faites une fois
@@ -27,9 +28,12 @@ export const QUESTS_FOR_CAREER = 5; // quêtes finies avant qu'on propose un mé
  * Registre des métiers.
  *   level     : niveau du joueur pour pouvoir commencer
  *   ranks     : XP de métier pour chaque rang (apprenti, confirmé, expert)
- *   actions   : le carnet, dans l'ordre d'apprentissage ; `where` = où aller (bâtiment ou 'visitor')
+ *   actions   : le carnet, dans l'ordre d'apprentissage ; `where` = où aller (bâtiment ou 'visitor') ;
+ *               `rank` (facultatif) : l'action s'ouvre à ce rang (🔒 avant)
  *   building  : le bâtiment qui propose le métier quand on le touche
- *   perks     : ce que change chaque rang (lu par src/sim/clients.js)
+ *   perks     : ce que change chaque rang (lu par src/sim/clients.js, ou par le module du métier)
+ *   ownClients: le métier a ses propres clients (pas les visites de src/sim/clients.js)
+ *   clients   : false = aucun visiteur (cavalier de concours : on travaille ses propres chevaux)
  */
 export const CAREERS = {
   vet: {
@@ -68,6 +72,137 @@ export const CAREERS = {
       { maxClients: 1, species: ['dog', 'cat', 'rabbit'], price: 1, tips: false },
       { maxClients: 2, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat'], price: 1.1, tips: false },
       { maxClients: 3, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat', 'cow'], price: 1.25, tips: true },
+    ],
+  },
+  // Cavalière / cavalier de concours : dressage au manège, puis concours à l'extérieur (calendrier,
+  // inscription, voyage en van, reprise ou parcours notés, podium). Pas de visiteurs (clients: false).
+  // Les avantages sont lus par src/sim/competitions.js (riderPerks) : frais d'inscription et primes.
+  rider: {
+    id: 'rider',
+    emoji: '🏇',
+    level: 3,
+    building: 'showground',
+    clients: false,
+    ranks: [0, 150, 400],
+    actions: [
+      { id: 'train', emoji: '🎠', where: 'showground' },
+      { id: 'reprise', emoji: '🧑‍⚖️', where: 'showground' },
+      { id: 'register', emoji: '📅', where: 'calendar' },
+      { id: 'travel', emoji: '🚐', where: 'calendar' },
+      { id: 'compete', emoji: '🏁', where: 'venue' },
+      { id: 'podium', emoji: '🏆', where: 'venue' },
+    ],
+    perks: [
+      { fee: 1, prize: 1, sponsor: false },
+      { fee: 0.8, prize: 1.15, sponsor: false },
+      { fee: 0.5, prize: 1.3, sponsor: true },
+    ],
+  },
+  // Handler de concours de beauté : les gens confient leur animal pour qu'on le prépare (bain, tresses,
+  // nœud…) et qu'on le présente au juge (src/sim/beauty.js, src/game/Beauty.js). La préparation et la
+  // présentation comptent aussi avec ses propres animaux (on apprend le métier en s'entraînant).
+  handler: {
+    id: 'handler',
+    emoji: '🎀',
+    level: 3,
+    building: 'showground',
+    ranks: [0, 120, 350],
+    actions: [
+      { id: 'welcome', emoji: '👋', where: 'visitor' },
+      { id: 'prep', emoji: '🧺', where: 'animal' },
+      { id: 'braid', emoji: '🎀', where: 'animal' },
+      { id: 'present', emoji: '🧑‍⚖️', where: 'showground' },
+      { id: 'return', emoji: '🎁', where: 'visitor' },
+    ],
+    perks: [
+      { maxClients: 1, species: ['dog', 'cat', 'rabbit'], price: 1, tips: false },
+      { maxClients: 2, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat'], price: 1.15, tips: false },
+      { maxClients: 3, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat', 'cow'], price: 1.3, tips: true },
+    ],
+  },
+  // Éducateur canin : des maîtres amènent leur chien qui a un problème (tire en laisse, saute sur
+  // les gens, ne revient pas au rappel…) ; séances (mini-jeux), livraison, paiement et réputation.
+  // Logique : src/sim/dogTrainer.js ; 3D : src/game/DogTrainer.js ; interface : src/ui/dogTrainer.js.
+  // ownClients : ses clients ne passent pas par src/sim/clients.js (pension, soins).
+  dogTrainer: {
+    id: 'dogTrainer',
+    emoji: '🐕',
+    level: 3,
+    building: 'kennel',
+    ownClients: true,
+    ranks: [0, 150, 400],
+    actions: [
+      { id: 'meetClient', emoji: '👋', where: 'visitor' },
+      { id: 'session', emoji: '🎓', where: 'animal' },
+      { id: 'deliver', emoji: '🎬', where: 'visitor' },
+      { id: 'coachOwn', emoji: '🐶', where: 'animal' },
+      { id: 'coachHerd', emoji: '🐑', where: 'animal', rank: 1 },
+      { id: 'coachAgility', emoji: '🎯', where: 'animal', rank: 2 },
+      { id: 'rescue', emoji: '💛', where: 'visitor', rank: 2 },
+    ],
+    // maxClients : chiens en éducation en même temps ; problems : ce que les maîtres demandent ;
+    // price : tarif de la séance ; speed : vitesse de progrès ; tips : pourboires ;
+    // rescue : chiens de refuge avec deux problèmes.
+    perks: [
+      { maxClients: 1, problems: ['obey', 'pull', 'jump', 'recall'], price: 1, speed: 1, tips: false, rescue: false },
+      { maxClients: 2, problems: ['obey', 'pull', 'jump', 'recall', 'bark'], price: 1.25, speed: 1.25, tips: true, rescue: false },
+      { maxClients: 3, problems: ['obey', 'pull', 'jump', 'recall', 'bark', 'shy'], price: 1.5, speed: 1.5, tips: true, rescue: true },
+    ],
+  },
+  // Toiletteur ✂️ : on construit un salon de toilettage (vue construction) ; les clients y viennent à pied
+  // avec leur animal et repartent le jour même, tout beaux (src/sim/groomer.js, src/game/Groomer.js,
+  // src/ui/groomer.js). maxClients 0 : aucun animal en pension grâce à ce métier ; salonClients : combien
+  // de clients peuvent attendre devant le salon ; species : les animaux acceptés à ce rang.
+  // ownClients : ses clients viennent au salon (src/game/Groomer.js), pas par les visites de src/sim/clients.js.
+  groomer: {
+    id: 'groomer',
+    emoji: '✂️',
+    level: 3,
+    building: 'salon',
+    ownClients: true,
+    ranks: [0, 300, 900],
+    actions: [
+      { id: 'welcome', emoji: '👋', where: 'salon' },
+      { id: 'bath', emoji: '🫧', where: 'salon' },
+      { id: 'dry', emoji: '💨', where: 'salon' },
+      { id: 'brush', emoji: '🪮', where: 'salon' },
+      { id: 'cut', emoji: '✂️', where: 'salon' },
+      { id: 'nails', emoji: '💅', where: 'salon' },
+      { id: 'finish', emoji: '🎀', where: 'salon' },
+      { id: 'return', emoji: '🎁', where: 'salon' },
+    ],
+    perks: [
+      { maxClients: 0, salonClients: 2, species: ['dog', 'cat', 'rabbit'], tips: false },
+      { maxClients: 0, salonClients: 2, species: ['dog', 'cat', 'rabbit', 'horse'], tips: true },
+      { maxClients: 0, salonClients: 3, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep'], tips: true },
+    ],
+  },
+  // 🧭 Guide de randonnée : des visiteurs demandent une balade à cheval ; on choisit les chevaux, on selle,
+  // on prépare la sacoche et on les guide (src/sim/trailGuide.js, src/game/TrailGuide.js, src/ui/trailGuide.js).
+  // Pas de clients qui confient leurs animaux (maxClients: 0). Textes : src/ui/trailGuideTexts.js.
+  //   maxRiders : cavaliers par balade ; durations : balades possibles ; abroad : rendez-vous dans d'autres lieux ;
+  //   dogs : nos chiens peuvent venir ; special : itinéraires spéciaux (Islande, Alpes).
+  // ownClients : ses visiteurs arrivent par src/game/TrailGuide.js, pas par les visites de src/sim/clients.js.
+  trailGuide: {
+    id: 'trailGuide',
+    emoji: '🧭',
+    level: 4,
+    building: 'stable',
+    ownClients: true,
+    ranks: [0, 150, 400],
+    actions: [
+      { id: 'accept', emoji: '📋', where: 'visitor' },
+      { id: 'prepare', emoji: '✅', where: 'stable' },
+      { id: 'ride', emoji: '🐎', where: 'trail' },
+      { id: 'photo', emoji: '📷', where: 'trail' },
+      { id: 'break', emoji: '🧃', where: 'trail' },
+      { id: 'firstAid', emoji: '🩹', where: 'trail' },
+      { id: 'return', emoji: '⭐', where: 'stable' },
+    ],
+    perks: [
+      { maxRiders: 2, durations: ['short'], abroad: false, dogs: false, special: false, price: 1, tips: false, maxClients: 0 },
+      { maxRiders: 4, durations: ['short', 'half'], abroad: true, dogs: true, special: false, price: 1.15, tips: true, maxClients: 0 },
+      { maxRiders: 6, durations: ['short', 'half', 'trek'], abroad: true, dogs: true, special: true, price: 1.3, tips: true, maxClients: 0 },
     ],
   },
 };
@@ -191,15 +326,21 @@ export function noteAction(profile, id, action) {
 
 export const isActionDone = (profile, id, action) => (careerState(profile).done[id] ?? []).includes(action);
 
-/** La prochaine action du carnet à faire (dans l'ordre), ou null quand tout est coché. */
+/** Une action du carnet encore fermée (elle s'ouvre à un rang plus haut) ? */
+export const isActionLocked = (profile, id, action) => rankOf(profile, id) < (action.rank ?? 0);
+
+/** La prochaine action du carnet à faire (dans l'ordre, sans celles encore fermées), ou null. */
 export function nextAction(profile, id) {
   if (!isStarted(profile, id)) return null;
-  return CAREERS[id].actions.find((a) => !isActionDone(profile, id, a.id)) ?? null;
+  return CAREERS[id].actions.find((a) => !isActionDone(profile, id, a.id) && !isActionLocked(profile, id, a)) ?? null;
 }
 
-/** Le carnet : [{ id, emoji, where, done }]. */
+/** Le carnet : [{ id, emoji, where, rank?, done, locked }]. */
 export function carnet(profile, id) {
-  return CAREERS[id].actions.map((a) => ({ ...a, done: isActionDone(profile, id, a.id) }));
+  return CAREERS[id].actions.map((a) => {
+    const done = isActionDone(profile, id, a.id);
+    return { ...a, done, locked: !done && isActionLocked(profile, id, a) };
+  });
 }
 
 const questsDone = (profile, objectives) => (objectives ? objectives.filter((o) => o.kind === 'quest' && profile.completed.includes(o.id)).length : profile.completed.length);

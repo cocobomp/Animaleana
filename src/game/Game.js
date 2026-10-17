@@ -9,6 +9,7 @@ import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
 import { Input } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
+import { DogTrainer } from './DogTrainer.js'; // métier éducateur canin : clients, séances, livraison
 import { Herding } from './Herding.js';
 import { TaskQueue } from './TaskQueue.js';
 import { Interiors, setStableExt } from './Interiors.js'; // écurie et maison où l'on entre, box, corvées
@@ -41,6 +42,8 @@ import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash, equipHelmet, riderHelmet } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
+import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
+import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
 import { t, L, getLang } from '../i18n.js';
 // Vue d'ensemble (d'en haut) et constructions du joueur.
 import { Structures } from './Structures.js';
@@ -49,9 +52,12 @@ import { openStructure } from '../ui/construction.js';
 import { doorOf, equipmentPos } from '../sim/construction.js';
 import { applyCoreLayout } from './coreLayout.js';
 import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, trajet, pauses)
+import { CompetitionVenue } from './CompetitionVenue.js'; // concours à l'extérieur : site, épreuve, podium
+import './Dressage.js'; // séances de dressage (s'enregistrent dans Activities)
 import { Marker } from './Marker.js';
 import { Emitter } from './events.js';
 import { audio } from './audio.js'; // sons synthétisés : voix, pas, ambiance, interface
+import { Groomer } from './Groomer.js'; // métier Toiletteur : salon, clients et leurs animaux
 
 // Animaux qu'on range dans la maison des animaux.
 const PET_HOUSED = ['dog', 'cat', 'rabbit'];
@@ -115,6 +121,9 @@ export class Game {
     this.events = new Events(this);
     this.clients = new Clients(this); // visiteurs, animaux confiés, métiers
     this.activities = new Activities(this);
+    this.beauty = new Beauty(this); // concours de beauté (game.beauty)
+    this.dogTrainer = new DogTrainer(this);
+    this.trailGuide = new TrailGuide(this); // 🧭 guide de randonnée
     this.droppingMeshes = new Map();
     this.timeScale = 1; // 0 = pause
     this.profile = null;
@@ -134,6 +143,8 @@ export class Game {
     this.on('adopted', (a) => setTimeout(() => this.entities.get(a.id)?.speak('happy'), 350));
     this.on('skip', (hours) => audio.ui(hours > 0 ? 'skip' : 'cancel'));
     this.on('timeFast', () => audio.ui('fast'));
+    this.venue = new CompetitionVenue(this); // concours à l'extérieur (site, épreuve, podium)
+    this.groomer = new Groomer(this); // salon de toilettage (métier Toiletteur)
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -212,8 +223,11 @@ export class Game {
     this.activities.abort();
     const saved = this.save(); // avant d'annuler un trajet en cours : on ne sauvegarde pas un voyage à moitié fait
     this.tripFlow.reset();
+    this.groomer?.clear(); // salon de toilettage : clients et animaux en visite repartent
     audio.setActive(false); // écran des profils : silence
     this.marker.hide();
+    this.venue?.dispose(); // le site du concours (tribunes, podium) est retiré de la scène
+    this.dogTrainer?.reset(); // éducateur canin : maîtres en visite, promenade-séance
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
@@ -296,6 +310,7 @@ export class Game {
     this.entities.clear();
     for (const h of this.helpers.values()) h.dispose();
     this.helpers.clear();
+    this.dogTrainer.onPlaceLoaded(); // éducateur canin : les maîtres en visite repartent
     applyCoreLayout(this.profile.coreLayout?.[placeId]); // bergerie, paddock… déplacés ou agrandis par le joueur
     setStableExt(stableExt(ensureFacilities(this.profile))); // écurie rallongée (8, 12 ou 16 box)
     this.world.build(placeId, this.season, placeId === this.profile.home);
@@ -306,6 +321,7 @@ export class Game {
     this.structures.rebuild(placeId); // constructions du joueur (avant les animaux : leur maison)
     // Anciennes sauvegardes : paddock, bergerie ou clapier qui attendent d'être agrandis (si la place le permet).
     if (this.structures.growPending()) this.save();
+    this.groomer.onPlaceLoaded(placeId); // clients qui attendent au salon de toilettage
     this.droppingMeshes.clear();
     for (const d of this.profile.droppings ?? []) if (d.place === placeId) this.spawnDropping(d);
     for (const h of this.profile.helpers) {
@@ -319,6 +335,7 @@ export class Game {
     for (const a of this.profile.animals) {
       if (a.location === placeId) this.spawnEntity(a);
     }
+    this.venue.onPlaceLoaded(); // un concours ici aujourd'hui ? on installe le site
   }
 
   spawnEquipment(eq) {
@@ -541,6 +558,7 @@ export class Game {
       for (const e of entities) e.update(wdt, ctx);
       this.player.lateUpdate?.(mgmt ? 0 : wdt); // le cavalier suit le cheval qu'on vient d'animer
       for (const h of this.helpers.values()) h.update(wdt, this);
+      this.dogTrainer.update(wdt); // maîtres en visite, promenade-séance, démonstration
       this.herding.update(wdt);
       this.tasks?.update();
       this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
@@ -553,6 +571,7 @@ export class Game {
     this.ui.updateLabels(entities, this.camera, this.player.position);
     this.updateLeashes(entities);
     this.interiors.update(dt);
+    this.groomer.update(wdt); // salon de toilettage : arrivée et départ des clients
     for (const q of this.equipment) {
       if (q.mesh.userData.spin) q.mesh.userData.spin.rotation.y += dt * 2;
     }
@@ -646,7 +665,9 @@ export class Game {
     this.marker.update(dt);
     this.updateFocus();
     this.events.update(dt); // événements spéciaux
+    this.venue.update(dt); // concours à l'extérieur
     this.clients.update(dt); // clients et métiers
+    this.trailGuide.update(dt); // 🧭 visiteurs qui demandent une balade
     // Examen ou école vétérinaire en plein écran (téléphone, src/ui/vetExam.js) : la 3D est cachée, on ne la dessine pas.
     if (!this.ui.vxCover) this.renderer.render(this.scene, this.camera);
   }
@@ -716,6 +737,7 @@ export class Game {
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
     if (this.tripFlow.onTap(this.raycaster)) return; // chargement du véhicule de voyage
+    if (this.trailGuide.onTap(this.raycaster)) return; // 🧭 des visiteurs : on va leur parler
     // Une aide : on va la voir et on discute (src/ui/helperChat.js).
     const hitH = this.raycaster.intersectObjects([...this.helpers.values()].map((x) => x.root), true)[0];
     if (hitH) {
@@ -726,6 +748,7 @@ export class Game {
         return;
       }
     }
+    if (this.dogTrainer.onTap(this.raycaster, paused)) return; // un maître en visite (éducateur canin)
     if (this.clients.onTap(this.raycaster)) return; // un visiteur (client) : on va lui parler
     const roots = [...this.entities.values()].filter((e) => !e.ridden && !e.inside).map((e) => e.root);
     const hitA = this.raycaster.intersectObjects(roots, true).find((h) => !h.object.isSprite || h.object === h.object.parent?.userData?.entity?.label);
@@ -739,6 +762,7 @@ export class Game {
         return;
       }
     }
+    if (this.groomer.onTap(this.raycaster)) return; // un client du salon de toilettage et son animal
     const poops = [...this.droppingMeshes.values()].filter((m) => m.userData.dropping.kind === 'poop');
     const hitP = this.raycaster.intersectObjects(poops, true)[0];
     if (hitP && !this.player.mount) {
@@ -1195,7 +1219,7 @@ export class Game {
     } else if (this.player.mount) {
       best = { kind: 'dismount' };
     } else {
-      best = this.tripFlow.focusNear(pp) ?? this.clients.focusNear(pp); // véhicule de voyage, ou visiteur (client)
+      best = this.tripFlow.focusNear(pp) ?? this.clients.focusNear(pp) ?? this.trailGuide.focusNear(pp); // véhicule de voyage, visiteur (client) ou 🧭 visiteurs
       let bestD = best ? -1 : Infinity;
       for (const e of this.entities.values()) {
         if (e.inside) continue; // rangé dans la maison des animaux
@@ -1211,6 +1235,11 @@ export class Game {
           bestD = d;
           best = { kind: 'helper', helper: hp, id: hp.data.id };
         }
+      }
+      const visitor = this.dogTrainer.focusNear(pp); // maître en visite (éducateur canin)
+      if (visitor && visitor.d < bestD) {
+        bestD = visitor.d;
+        best = visitor.focus;
       }
       if (!best) {
         for (const it of this.world.interactables) {
@@ -1261,7 +1290,9 @@ export class Game {
       case 'dismount': this.dismount(); break;
       case 'spot': f.run(); break; // un coin de l'écurie ou de la maison
       case 'vehicle': this.tripFlow.interact(); break;
+      case 'salon': this.groomer.open(); break; // salon de toilettage
       case 'client': this.clients.talk(); break; // parler au visiteur (src/game/Clients.js)
+      case 'trailVisitor': this.trailGuide.talk(); break; // 🧭 parler aux visiteurs (src/game/TrailGuide.js)
       default:
     }
   }

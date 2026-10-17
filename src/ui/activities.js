@@ -7,14 +7,18 @@ import { SPECIES } from '../sim/species.js';
 import { PLACES } from '../sim/places.js';
 import { isSandbox } from '../sim/profile.js';
 import { owned, inUse } from '../sim/gear.js';
+import { CAREERS } from '../sim/careers.js'; // 🧭 niveau du métier de guide
 import {
   COMPETITION_TYPES, competitionsAt, entryBlock, eligibility, knownTricks, rivals, activityData, awardCounts, MAX_ACTS,
   JUMP_STAGES, comfortHeight, courseForStage, stageForLevel, stageFor, HUTCH_TOYS, hutchPlayBlock,
 } from '../sim/activities.js';
+import { awayCalendar, venueBanner, trainingCard } from './competitions.js'; // concours à l'extérieur et dressage
+import { openBeauty, beautyPick, beautyAnimalButtons, beautyRuns } from './beauty.js'; // concours de beauté
 
-export const TYPE_ICON = { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', hop: '🐇', show: '🎪' };
+export const TYPE_ICON = { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', hop: '🐇', show: '🎪', flat: '🎠', figures: '🔤', dressage: '🎠', beauty: '🎀' };
 const TIER_ICON = { gold: '🏆', silver: '🥈', bronze: '🥉' };
-const SKILL_OF = { jumping: ['jump', 'obedience'], lesson: ['jump', 'obedience'], trail: ['endurance', 'speed'], agility: ['jump', 'obedience', 'speed'], hop: ['jump', 'obedience'], show: ['obedience'] };
+const SKILL_OF = { jumping: ['jump', 'obedience'], lesson: ['jump', 'obedience'], trail: ['endurance', 'speed'], agility: ['jump', 'obedience', 'speed'], hop: ['jump', 'obedience'], show: ['obedience'], flat: ['dressage', 'obedience'], figures: ['dressage', 'obedience'], dressage: ['dressage', 'obedience'] };
+const DRESSAGE_TYPES = ['flat', 'figures', 'dressage'];
 const STAGE_ICON = ['🟫', '✖️', '🏇', '🏆'];
 
 // ---------------------------------------------------------------- menu principal
@@ -50,15 +54,21 @@ function playTab(ui, state) {
   const g = ui.game;
   const here = g.animalsHere();
   const count = (type) => here.filter((a) => !eligibility(a, type)).length;
-  const cards = ['lesson', 'jumping', 'trail', 'agility', 'hop', 'show'].map((type) => {
+  const cards = ['lesson', 'jumping', 'flat', 'figures', 'dressage', 'trail', 'agility', 'hop', 'show', 'beauty'].map((type) => {
     const n = type === 'trail' ? count('trail') + here.filter((a) => a.following).length : count(type);
-    return h('button', { class: 'card actv-card', onClick: () => { state.pick = type; ui.renderPanel(); } },
+    return h('button', { class: 'card actv-card', onClick: () => { if (type === 'beauty') return openBeauty(ui); state.pick = type; ui.renderPanel(); } },
       h('span', { class: 'card-emoji' }, TYPE_ICON[type]),
       h('span', { class: 'card-main' }, h('b', {}, t(`actv_type_${type}`)), h('small', {}, t(`actv_desc_${type}`))),
       h('span', { class: 'card-side' }, n ? h('small', {}, t('actv_ready', { n })) : h('small', {}, '—')));
   });
   const next = competitionsAt(g.profile.place, g.isHome, g.day, 7)[0];
+  // 🧭 Guide de randonnée : le carnet du métier (src/ui/trailGuide.js)
+  cards.push(h('button', { class: 'card actv-card tg-card', onClick: () => ui.openTrailGuide() },
+    h('span', { class: 'card-emoji' }, '🧭'),
+    h('span', { class: 'card-main' }, h('b', {}, t('tg_title')), h('small', {}, t('tg_cardDesc'))),
+    h('span', { class: 'card-side' }, h('small', {}, g.level >= CAREERS.trailGuide.level ? '📒' : `🔒 ${t('tg_level', { n: CAREERS.trailGuide.level })}`))));
   return [
+    ...venueBanner(ui), // concours du jour sur place (src/ui/competitions.js)
     h('p', { class: 'note' }, t('actv_intro')),
     h('div', { class: 'cards' }, cards),
     next ? h('button', { class: 'card actv-next', onClick: () => { state.tab = 'calendar'; ui.renderPanel(); } },
@@ -82,6 +92,7 @@ function pickAnimal(ui, state) {
   const type = state.pick;
   const back = h('button', { class: 'small', onClick: () => { state.pick = null; state.comp = null; ui.renderPanel(); } }, `← ${t('actv_back')}`);
   const head = [h('div', { class: 'row' }, back, h('b', {}, `${TYPE_ICON[type]} ${state.comp ? compName(state.comp) : t(`actv_type_${type}`)}`))];
+  if (type === 'beauty') return [...head, ...beautyPick(ui, state)]; // concours de beauté (src/ui/beauty.js)
   if (state.comp) {
     head.push(h('p', { class: 'note' }, isSandbox(g.profile) ? t('actv_compHelpSandbox') : t('actv_compHelp', { fee: state.comp.fee, a: state.comp.prizes[0] })));
     head.push(rivalsList(state.comp));
@@ -93,6 +104,9 @@ function pickAnimal(ui, state) {
     jumping: (a) => SPECIES[a.species].rideable,
     lesson: (a) => SPECIES[a.species].rideable,
     trail: (a) => SPECIES[a.species].rideable,
+    flat: (a) => a.species === 'horse',
+    figures: (a) => a.species === 'horse',
+    dressage: (a) => a.species === 'horse',
     agility: (a) => SPECIES[a.species].training.includes('agility'),
     hop: (a) => a.species === 'rabbit',
   }[type] ?? (() => true);
@@ -103,6 +117,7 @@ function pickAnimal(ui, state) {
     const why = eligibility(a, type);
     // Saut d'obstacles à l'entraînement : on choisit le niveau du parcours (débloqué par la compétence de saut).
     if (type === 'jumping' && !state.comp && !why) return stageCard(ui, a);
+    if (DRESSAGE_TYPES.includes(type) && !state.comp && !why) return trainingCard(ui, a, type); // dressage : apprend-il bien ?
     const tooHigh = type === 'jumping' && state.comp && !why && comfortHeight(a.skills.jump) < courseForStage(stageForLevel(state.comp.level)).obstacles.at(-1).height - 0.05;
     return h('button', {
       class: `card ${why ? 'locked' : ''}`,
@@ -239,7 +254,10 @@ function calendarTab(ui, state) {
   const list = competitionsAt(p.place, g.isHome, g.day, 8);
   const out = [h('p', { class: 'note' }, t(g.isHome ? 'actv_calendarHome' : 'actv_calendarAway'))];
   out.push(h('div', { class: 'cards' }, list.map((c) => {
-    const block = entryBlock(c, { day: g.day, hour: g.hour, entered: d.entered });
+    let block = entryBlock(c, { day: g.day, hour: g.hour, entered: d.entered });
+    // Concours de beauté : on peut s'inscrire à l'avance (par classe), dans sa propre fenêtre.
+    const beauty = c.type === 'beauty' && block !== 'over';
+    if (beauty) block = null;
     return h('div', { class: `card actv-comp ${block ? '' : 'open'}` },
       h('span', { class: 'card-emoji' }, TYPE_ICON[c.type]),
       h('span', { class: 'card-main' },
@@ -248,8 +266,10 @@ function calendarTab(ui, state) {
         h('small', {}, isSandbox(p) ? t('actv_prizesSandbox') : t('actv_prizes', { fee: c.fee, a: c.prizes[0], b: c.prizes[1], c: c.prizes[2] }))),
       block
         ? h('span', { class: 'lock' }, t(`actv_block_${block}`))
-        : h('button', { class: 'primary', onClick: () => { state.pick = c.type; state.comp = c; ui.renderPanel(); } }, t('actv_enter')));
+        : h('button', { class: 'primary', onClick: () => { if (beauty) return openBeauty(ui, { comp: c }); state.pick = c.type; state.comp = c; ui.renderPanel(); } },
+          beauty && c.day > g.day ? t('beauty_registerBtn') : t('actv_enter')));
   })));
+  out.push(...awayCalendar(ui)); // concours à l'extérieur : inscriptions et calendrier (src/ui/competitions.js)
   // Les concours ailleurs dans le monde (pour donner envie de voyager).
   const away = Object.keys(PLACES).filter((id) => id !== p.place).map((id) => {
     const c = competitionsAt(id, id === p.home, g.day, 6)[0];
@@ -318,6 +338,7 @@ export function animalActivitySection(ui, a) {
   }
   if (sp.training.includes('agility')) btns.push(btn('agility', t('actv_type_agility')));
   if (knownTricks(a).length) btns.push(btn('show', t('actv_type_show')));
+  btns.push(...beautyAnimalButtons(ui, a)); // « Préparer pour le concours » (concours de beauté)
   // Par identifiant (anciennes sauvegardes : par prénom), pour survivre à un renommage et ne pas confondre deux homonymes.
   const won = activityData(g.profile).awards.filter((x) => (x.animalId ? x.animalId === a.id : x.animal === a.name)).length;
   if (!btns.length && !won) return [];
@@ -339,6 +360,7 @@ export function activityRuns(ui) {
     actvLesson: () => openActivities(ui, { pick: 'lesson' }),
     actvHop: () => openActivities(ui, { pick: 'hop' }),
     actvHutchPlay: () => openHutchPlay(ui),
+    ...beautyRuns(ui), // concours de beauté
   };
 }
 
@@ -495,6 +517,8 @@ export function showActivityResults(ui, r) {
     // Les lignes de la leçon sont dans r.extra.
   } else if (r.type === 'jumping' || r.type === 'agility' || r.type === 'hop') {
     lines.push(`⏱️ ${t('actv_time', { n: res.time })}`, `❌ ${t('actv_faults', { n: res.total })}${res.timePenalty ? ` (${t('actv_timePenalty', { n: res.timePenalty })})` : ''}`);
+  } else if (r.type === 'dressage' || r.type === 'figures') {
+    lines.push(`🎯 ${t('dr_total', { n: res.percent })}`); // reprise de dressage : un pourcentage
   } else {
     lines.push(`⭐ ${t('actv_points', { n: res.points })}`);
     if (r.type === 'trail') lines.push(`⏱️ ${t('actv_duration', { m: Math.floor(res.time / 60), s: String(res.time % 60).padStart(2, '0') })}`);
@@ -512,6 +536,7 @@ export function showActivityResults(ui, r) {
       h('p', { class: 'actv-who' }, `${SPECIES[r.animal.species].emoji} ${r.animal.name}`),
       h('ul', { class: 'actv-lines' }, lines.map((x) => h('li', {}, x)), (r.extra ?? []).map((x) => h('li', {}, x)),
         r.record ? h('li', { class: 'good' }, `🎖️ ${t('actv_record')}`) : null),
+      r.body ?? null, // protocole de dressage (src/game/Dressage.js)
       r.table ? h('table', { class: 'actv-table' }, h('tbody', {}, r.table.map((x) => h('tr', { class: x.you ? 'you' : '' },
         h('td', {}, x.rank <= 3 ? TIER_ICON[['gold', 'silver', 'bronze'][x.rank - 1]] : String(x.rank)),
         h('td', {}, `${SPECIES[x.species]?.emoji ?? ''} ${x.you ? t('actv_you') : x.name} & ${x.animal}`),

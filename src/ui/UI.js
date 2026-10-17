@@ -20,7 +20,11 @@ import { TOOLS, toolAtHome } from '../sim/tools.js';
 import { isSandbox } from '../sim/profile.js';
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
+import { openDogTrainerPanel } from './dogTrainer.js'; // métier éducateur canin
 import { openCareers, careerChips } from './careers.js'; // 💼 métiers
+import { openTrailCarnet } from './trailGuide.js'; // 🧭 guide de randonnée
+
+const STATUS_MAX = 3; // pastilles d'état visibles en même temps (les autres derrière « ➕ N de plus »)
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -381,11 +385,28 @@ export class UI {
     }
     chips.push(...tripChips(this)); // chargement du véhicule de voyage
     chips.push(...(g.events?.statusChips(chip) ?? [])); // événement en cours (bandeau réduit)
-    chips.push(...(g.clients?.statusChips(chip) ?? []), ...careerChips(this, chip)); // visiteur, clients, carnet du métier
-    const key = chips.map((c) => c.textContent).join('|');
+    chips.push(...(g.venue?.statusChips(chip) ?? [])); // concours du jour sur place (src/game/CompetitionVenue.js)
+    chips.push(...(g.clients?.statusChips(chip) ?? [])); // visiteur, clients (pension, soins, beauté)
+    chips.push(...(g.dogTrainer?.statusChips(chip) ?? [])); // un maître attend près de la niche (éducateur canin)
+    chips.push(...(g.groomer?.statusChips(chip) ?? [])); // clients qui attendent au salon de toilettage
+    chips.push(...(g.trailGuide?.statusChips(chip) ?? [])); // 🧭 visiteurs, balade à préparer, rendez-vous ailleurs
+    chips.push(...careerChips(this, chip)); // la prochaine case du carnet du métier suivi (moins pressée : en dernier)
+    // Avec plusieurs métiers, les pastilles s'empilent et cachent le jeu : on en montre STATUS_MAX, les autres
+    // derrière « ➕ N de plus » (on peut tout déplier, puis replier).
+    const all = chips;
+    const extra = all.length - STATUS_MAX;
+    let shown = all;
+    if (extra > 0) {
+      const toggle = () => { this.statusOpen = !this.statusOpen; this.statusKey = null; this.renderStatus(); };
+      const more = h('div', { class: 'status-chip status-more' },
+        h('button', { class: 'small', onClick: toggle, 'aria-expanded': this.statusOpen ? 'true' : 'false' },
+          this.statusOpen ? t('statusLess') : t('statusMore', { n: extra + 1 })));
+      shown = this.statusOpen ? [...all, more] : [...all.slice(0, STATUS_MAX - 1), more];
+    } else this.statusOpen = false;
+    const key = shown.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
     this.statusKey = key;
-    this.statusBar.replaceChildren(...chips);
+    this.statusBar.replaceChildren(...shown);
   }
 
   /** Barre du temps : pause, ▶, ⏩ et 🤖 Auto. Créée une fois ; updateTimeBar() allume le bon bouton. */
@@ -466,10 +487,12 @@ export class UI {
       hutch: () => t('bld_hutch'),
       pen: () => t('bld_pen'),
       showground: () => t('actv_enterShowground'),
+      salon: () => this.game.groomer?.focusLabel() ?? t('grm_enter'), // salon de toilettage (src/game/Groomer.js)
       dismount: () => t('dismount'),
       client: () => t('cl_talk', { owner: f.name }), // visiteur (src/game/Clients.js)
+      trailVisitor: () => t('tg_talk'), // 🧭 visiteurs (src/game/TrailGuide.js)
     };
-    const emoji = { animal: '🤲', helper: '💬', client: '💬', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', helper: '💬', client: '💬', trailVisitor: '🧭', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', salon: '✂️', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }
@@ -486,7 +509,11 @@ export class UI {
 
   levelUp(level, names) {
     audio.ui('levelUp');
-    this.alert(names ? t('levelUp', { n: level, names }) : t('levelUpPlain', { n: level }));
+    const msg = names ? t('levelUp', { n: level, names }) : t('levelUpPlain', { n: level });
+    // Une fenêtre est ouverte (résultats d'un concours…) ou une activité est en cours (reprise de dressage,
+    // parcours : la fenêtre cachait la carrière et mettait les résultats en attente) : on l'annonce en bulle.
+    if (this.modalOpen || this.game?.activities?.active) return this.toast(msg, 8000); // (le texte commence déjà par ⭐)
+    this.alert(msg);
   }
 
   // ------------------------------------------------------------ notifications
@@ -759,7 +786,12 @@ export class UI {
   openTack(opts) { panels.openTack(this, opts); } // sellerie : catalogue (src/ui/tack.js)
   openTackItem(id) { openTackItem(this, id); } // fiche d'un objet de la sellerie
   openShop() { panels.openShop(this); }
-  openBuilding(kind) { openBuilding(this, kind); this.game?.emit('building', kind); }
+  openBuilding(kind) {
+    if (kind === 'salon') return this.game?.groomer?.open(); // salon de toilettage (src/ui/groomer.js)
+    openBuilding(this, kind);
+    this.game?.emit('building', kind);
+    return null;
+  }
   // Bâtiments à entretenir (src/ui/facilitiesPanel.js)
   openFacility(kind) { openFacility(this, kind); }
   openBox(i) { openBox(this, i); }
@@ -788,8 +820,10 @@ export class UI {
     this.game?.emit('animalActions', a);
     return r;
   }
-  openActivities(opts) { openActivities(this, opts); }
+  openActivities(opts) { openActivities(this, opts); this.game?.emit('panel', 'activities'); }
   openHelper(h) { openHelperChat(this, h); this.game?.emit('panel', 'helper'); }
+  openDogTrainer() { openDogTrainerPanel(this); this.game?.emit('panel', 'dogTrainer'); }
+  openTrailGuide() { openTrailCarnet(this); this.game?.emit('panel', 'trailGuide'); } // 🧭 carnet du guide
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {

@@ -207,8 +207,16 @@ describe('clés mg_* des mini-jeux : présentes en français ET en anglais', () 
 
   const src = readFileSync(new URL('../src/i18n.js', import.meta.url), 'utf8');
   const enAt = src.indexOf('\nconst en = {');
-  const FR = src.slice(0, enAt);
-  const EN = src.slice(enAt);
+  // Les modules de textes (src/ui/*Texts.js : concours de beauté, sellerie…) sont fusionnés dans
+  // les dictionnaires : leurs clés comptent aussi (partie *_FR, puis partie *_EN).
+  const uiDir = new URL('../src/ui/', import.meta.url);
+  const mods = readdirSync(uiDir).filter((f) => /Texts\.js$/.test(f)).map((f) => readFileSync(new URL(f, uiDir), 'utf8'));
+  const split = (m) => {
+    const at = m.search(/\nexport const \w+_EN = \{/);
+    return at < 0 ? [m, ''] : [m.slice(0, at), m.slice(at)];
+  };
+  const FR = [src.slice(0, enAt), ...mods.map((m) => split(m)[0])].join('\n');
+  const EN = [src.slice(enAt), ...mods.map((m) => split(m)[1])].join('\n');
   const defined = (dict, key) => new RegExp(`^\\s{2}${key}:`, 'm').test(dict);
 
   const dir = new URL('../src/ui/minigames/', import.meta.url);

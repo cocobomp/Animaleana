@@ -8,6 +8,7 @@ import { buildGltfAnimal } from './models/gltfAnimal.js';
 import { emojiTexture } from './textures.js';
 import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
+import { buildAccessories, removeAccessories } from './models/salon.js'; // accessoires de toilettage
 import { canLeash, heelSkill } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
 import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
@@ -125,6 +126,9 @@ export class AnimalEntity {
   applyGear(override = null) {
     if (this.gearGroup) removeGear(this.gearGroup);
     this.gearGroup = buildGear(this.model, this.data.look, override ?? this.data.gear ?? {});
+    // Accessoires du salon de toilettage (nœud, bandana… : src/game/models/salon.js)
+    removeAccessories(this.accessoryMeshes);
+    this.accessoryMeshes = buildAccessories(this.model, this.data.look, this.data.accessories);
   }
 
   /** Refait le modèle (même place, même parent dans la scène). */
@@ -748,7 +752,9 @@ export class AnimalEntity {
     this.phase += dt * (v / stride) * Math.PI * 2 * 0.5;
     // Les chevaux dorment debout (tête basse) ; les autres se couchent, pattes repliées sous eux.
     const standingSleeper = horse;
-    this.lie += ((this.sleeping && !standingSleeper ? 1 : 0) - this.lie) * Math.min(1, dt * 2);
+    // posing 'down' : « couché ! » sur commande (démonstration de l'éducateur canin, src/game/DogTrainer.js).
+    const lieDown = (this.sleeping && !standingSleeper) || this.posing === 'down';
+    this.lie += ((lieDown ? 1 : 0) - this.lie) * Math.min(1, dt * (this.posing ? 4 : 2));
     this.doze = (this.doze ?? 0) + ((this.sleeping && standingSleeper ? 1 : 0) - (this.doze ?? 0)) * Math.min(1, dt * 1.5);
     const lie = this.lie;
 

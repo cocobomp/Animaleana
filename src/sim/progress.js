@@ -65,6 +65,7 @@ export const UNLOCKS = {
   barn: 6,
   arena: 7,
   newStable: 8,
+  salon: 3, // salon de toilettage (métier Toiletteur, src/sim/groomer.js)
   ranch: 10,
 };
 

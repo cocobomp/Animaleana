@@ -385,6 +385,7 @@ export class UI {
     chips.push(...(g.venue?.statusChips(chip) ?? [])); // concours du jour sur place (src/game/CompetitionVenue.js)
     chips.push(...(g.clients?.statusChips(chip) ?? []), ...careerChips(this, chip)); // visiteur, clients, carnet du métier
     chips.push(...(g.dogTrainer?.statusChips(chip) ?? [])); // un maître attend près de la niche (éducateur canin)
+    chips.push(...(g.groomer?.statusChips(chip) ?? [])); // clients qui attendent au salon de toilettage
     const key = chips.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
     this.statusKey = key;
@@ -469,10 +470,11 @@ export class UI {
       hutch: () => t('bld_hutch'),
       pen: () => t('bld_pen'),
       showground: () => t('actv_enterShowground'),
+      salon: () => this.game.groomer?.focusLabel() ?? t('grm_enter'), // salon de toilettage (src/game/Groomer.js)
       dismount: () => t('dismount'),
       client: () => t('cl_talk', { owner: f.name }), // visiteur (src/game/Clients.js)
     };
-    const emoji = { animal: '🤲', helper: '💬', client: '💬', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', helper: '💬', client: '💬', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', salon: '✂️', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }
@@ -766,7 +768,12 @@ export class UI {
   openTack(opts) { panels.openTack(this, opts); } // sellerie : catalogue (src/ui/tack.js)
   openTackItem(id) { openTackItem(this, id); } // fiche d'un objet de la sellerie
   openShop() { panels.openShop(this); }
-  openBuilding(kind) { openBuilding(this, kind); this.game?.emit('building', kind); }
+  openBuilding(kind) {
+    if (kind === 'salon') return this.game?.groomer?.open(); // salon de toilettage (src/ui/groomer.js)
+    openBuilding(this, kind);
+    this.game?.emit('building', kind);
+    return null;
+  }
   // Bâtiments à entretenir (src/ui/facilitiesPanel.js)
   openFacility(kind) { openFacility(this, kind); }
   openBox(i) { openBox(this, i); }

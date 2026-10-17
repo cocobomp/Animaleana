@@ -9,7 +9,7 @@ import {
   STRUCTURES, structuresAt, findStructure, toWorld, enclosureOf, homeZone, zoneRect, hasResidents,
   validatePlacement, build, moveStructure, demolish, assign, unassign, residents, applyComfort, homeOf, structureAtPoint,
   isEnclosure, canBuild, validateCore, validateEquipment, moveCore, moveEquipment, coreRect, coreSize, equipmentPos,
-  footprintOf, sizeOf, RESIZABLE_CORE, followsCore,
+  footprintOf, sizeOf, RESIZABLE_CORE, followsCore, doorOf,
 } from '../sim/construction.js';
 import {
   validateResize, resizeCore, resizeStructure, coreResizeOpts, structureResizeOpts, growthCandidates,
@@ -70,6 +70,7 @@ export class Structures {
     this.items.clear();
     w.colliders = w.colliders.filter((c) => !c.structure);
     w.fences = (w.fences ?? []).filter((f) => !f.structure);
+    w.interactables = w.interactables.filter((i) => !i.structure); // porte du salon de toilettage
     w.structureHomes = new Map();
     const encl = [];
     const list = structuresAt(this.profile, placeId);
@@ -124,6 +125,7 @@ export class Structures {
     }
     w.colliders.push(...cols);
     if (hasResidents(s.type)) w.structureHomes.set(s.id, homeZone(s));
+    if (s.type === 'salon') w.interactables.push({ kind: 'salon', ...doorOf(s), structure: s.id }); // métier Toiletteur
   }
 
   /**
@@ -215,7 +217,7 @@ export class Structures {
       structures: this.here(),
       colliders: w.colliders.filter((c) => !c.structure),
       blocked: [
-        ...w.interactables.filter((d) => d.kind !== 'spot').map((d) => ({ x: d.x, z: d.z, hw: 1.6, hd: 1.6, core: d.core, kind: d.kind })),
+        ...w.interactables.filter((d) => d.kind !== 'spot' && !(ignore && d.structure === ignore)).map((d) => ({ x: d.x, z: d.z, hw: 1.6, hd: 1.6, core: d.core, kind: d.kind })),
         // La sellerie où l'on entre (src/game/Interiors.js) : on ne construit pas dedans, comme sur l'ancienne sellerie fermée.
         ...(w.camVolumes ?? []).filter((v) => v.id === 'tackroom').map((v) => ({ x: v.x, z: v.z, hw: v.hw, hd: v.hd, kind: 'tackroom' })),
       ],

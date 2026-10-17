@@ -11,6 +11,7 @@ import { upcomingEntries, competitionData } from '../sim/competitions.js'; // �
 import { PLACES } from '../sim/places.js';
 import { openBeauty } from './beauty.js'; // 🎀 concours de beauté (métier de handler)
 import { clientDogs } from '../sim/dogTrainer.js'; // 🐕 éducateur canin : chiens en éducation
+import { salonCareerBlock } from './groomer.js'; // ✂️ le salon de toilettage (métier Toiletteur)
 
 const rankLabel = (rank) => t(`ca_rank_${RANKS[rank]}`);
 
@@ -76,6 +77,7 @@ function careerCard(ui, s) {
     body.push(h('button', { class: 'small ca-beauty', onClick: () => openBeauty(ui) }, `🎀 ${t('ca_handler_open')}`));
   }
   if (s.id === 'dogTrainer' && s.state === 'started') body.push(dogTrainerBlock(ui)); // 🐶 chiens en éducation (src/ui/dogTrainer.js)
+  if (s.id === 'groomer') body.push(salonCareerBlock(ui)); // ✂️ construire le salon, ou y aller
   return h('div', { class: `ca-card ${s.state} ${s.active ? 'active' : ''}` }, head, ...body);
 }
 

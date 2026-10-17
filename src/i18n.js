@@ -9,6 +9,7 @@ import { SAVE_FR, SAVE_EN } from './ui/saveTexts.js'; // sauvegarde dans un fich
 import { CLOUD_FR, CLOUD_EN } from './ui/cloudTexts.js'; // compte Google et sauvegarde en ligne (cloud_*)
 import { BEAUTY_FR, BEAUTY_EN } from './ui/beautyTexts.js'; // concours de beauté et métier de handler (beauty_*, ca_handler_*)
 import { DOG_TRAINER_FR, DOG_TRAINER_EN } from './ui/dogTrainerTexts.js'; // métier éducateur canin (dt_*, ca_dogTrainer_*)
+import { GROOMER_FR, GROOMER_EN } from './ui/groomerTexts.js'; // métier Toiletteur (grm_*, mg_g*, ca_groomer_*)
 
 const fr = {
   title: 'La ferme à Madichelle',
@@ -3613,6 +3614,8 @@ Object.assign(fr, BEAUTY_FR);
 Object.assign(en, BEAUTY_EN);
 Object.assign(fr, DOG_TRAINER_FR); // métier éducateur canin
 Object.assign(en, DOG_TRAINER_EN);
+Object.assign(fr, GROOMER_FR); // métier Toiletteur : salon de toilettage
+Object.assign(en, GROOMER_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

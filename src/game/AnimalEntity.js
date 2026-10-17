@@ -8,6 +8,7 @@ import { buildGltfAnimal } from './models/gltfAnimal.js';
 import { emojiTexture } from './textures.js';
 import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
+import { buildAccessories, removeAccessories } from './models/salon.js'; // accessoires de toilettage
 import { canLeash, heelSkill } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
 import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
@@ -125,6 +126,9 @@ export class AnimalEntity {
   applyGear(override = null) {
     if (this.gearGroup) removeGear(this.gearGroup);
     this.gearGroup = buildGear(this.model, this.data.look, override ?? this.data.gear ?? {});
+    // Accessoires du salon de toilettage (nœud, bandana… : src/game/models/salon.js)
+    removeAccessories(this.accessoryMeshes);
+    this.accessoryMeshes = buildAccessories(this.model, this.data.look, this.data.accessories);
   }
 
   /** Refait le modèle (même place, même parent dans la scène). */

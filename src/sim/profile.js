@@ -12,6 +12,7 @@ import { migrateCoreSizes, CORE_VERSION } from './resize.js'; // tailles des enc
 import { defaultVetSchool } from './vetSchool.js'; // école vétérinaire (leçons)
 import { SPECIES, getBreed } from './species.js'; // anciens chats : look complété depuis la race
 import { upgradeCatLook } from './catBreeds.js';
+import { defaultGroomerState } from './groomer.js'; // métier Toiletteur (salon de toilettage)
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -71,6 +72,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     vetSchool: defaultVetSchool(), // leçons de l'école vétérinaire (src/sim/vetSchool.js)
     competitions: { entries: [], results: [] }, // concours à l'extérieur : inscriptions et résultats (src/sim/competitions.js)
     dogTrainer: defaultDogTrainer(), // éducateur canin : chiens en éducation, historique (src/sim/dogTrainer.js)
+    groomer: defaultGroomerState(), // salon de toilettage : réputation, clients, carnet (src/sim/groomer.js)
   };
 }
 
@@ -144,6 +146,7 @@ export function migrate(p, hint = {}) {
     vetSchool: { ...defaultVetSchool(), ...(p.vetSchool ?? {}) }, // école vétérinaire (ajoutée plus tard)
     competitions: { entries: [], results: [], ...(p.competitions ?? {}) }, // concours à l'extérieur (ajoutés plus tard)
     dogTrainer: { ...defaultDogTrainer(), ...(p.dogTrainer ?? {}) }, // éducateur canin (ajouté plus tard)
+    groomer: { ...defaultGroomerState(), ...(p.groomer ?? {}) }, // salon de toilettage (ajouté plus tard)
   };
   // Chevaux d'avant le dressage : compétence de dressage de départ (src/sim/dressage.js).
   for (const a of out.animals ?? []) {

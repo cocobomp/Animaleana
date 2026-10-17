@@ -56,6 +56,7 @@ import './Dressage.js'; // séances de dressage (s'enregistrent dans Activities)
 import { Marker } from './Marker.js';
 import { Emitter } from './events.js';
 import { audio } from './audio.js'; // sons synthétisés : voix, pas, ambiance, interface
+import { Groomer } from './Groomer.js'; // métier Toiletteur : salon, clients et leurs animaux
 
 // Animaux qu'on range dans la maison des animaux.
 const PET_HOUSED = ['dog', 'cat', 'rabbit'];
@@ -141,6 +142,7 @@ export class Game {
     this.on('skip', (hours) => audio.ui(hours > 0 ? 'skip' : 'cancel'));
     this.on('timeFast', () => audio.ui('fast'));
     this.venue = new CompetitionVenue(this); // concours à l'extérieur (site, épreuve, podium)
+    this.groomer = new Groomer(this); // salon de toilettage (métier Toiletteur)
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -219,6 +221,7 @@ export class Game {
     this.activities.abort();
     const saved = this.save(); // avant d'annuler un trajet en cours : on ne sauvegarde pas un voyage à moitié fait
     this.tripFlow.reset();
+    this.groomer?.clear(); // salon de toilettage : clients et animaux en visite repartent
     audio.setActive(false); // écran des profils : silence
     this.marker.hide();
     this.venue?.dispose(); // le site du concours (tribunes, podium) est retiré de la scène
@@ -316,6 +319,7 @@ export class Game {
     this.structures.rebuild(placeId); // constructions du joueur (avant les animaux : leur maison)
     // Anciennes sauvegardes : paddock, bergerie ou clapier qui attendent d'être agrandis (si la place le permet).
     if (this.structures.growPending()) this.save();
+    this.groomer.onPlaceLoaded(placeId); // clients qui attendent au salon de toilettage
     this.droppingMeshes.clear();
     for (const d of this.profile.droppings ?? []) if (d.place === placeId) this.spawnDropping(d);
     for (const h of this.profile.helpers) {
@@ -565,6 +569,7 @@ export class Game {
     this.ui.updateLabels(entities, this.camera, this.player.position);
     this.updateLeashes(entities);
     this.interiors.update(dt);
+    this.groomer.update(wdt); // salon de toilettage : arrivée et départ des clients
     for (const q of this.equipment) {
       if (q.mesh.userData.spin) q.mesh.userData.spin.rotation.y += dt * 2;
     }
@@ -753,6 +758,7 @@ export class Game {
         return;
       }
     }
+    if (this.groomer.onTap(this.raycaster)) return; // un client du salon de toilettage et son animal
     const poops = [...this.droppingMeshes.values()].filter((m) => m.userData.dropping.kind === 'poop');
     const hitP = this.raycaster.intersectObjects(poops, true)[0];
     if (hitP && !this.player.mount) {
@@ -1280,6 +1286,7 @@ export class Game {
       case 'dismount': this.dismount(); break;
       case 'spot': f.run(); break; // un coin de l'écurie ou de la maison
       case 'vehicle': this.tripFlow.interact(); break;
+      case 'salon': this.groomer.open(); break; // salon de toilettage
       case 'client': this.clients.talk(); break; // parler au visiteur (src/game/Clients.js)
       default:
     }

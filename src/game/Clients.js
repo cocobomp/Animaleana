@@ -30,9 +30,10 @@ import { showCareerOffer } from '../ui/careers.js';
 import { t, ta } from '../i18n.js';
 
 // Le chemin des visiteurs : ils arrivent par la route à l'est, passent entre le refuge et le
-// vétérinaire, et s'arrêtent dans la cour, près de la maison.
-const GATE = { x: 28, z: 1.2 };
-const WAY = { x: 13, z: 1.2 };
+// vétérinaire, et s'arrêtent dans la cour, près de la maison. (GATE et WAY : aussi la route des
+// clients du salon de toilettage, src/game/Groomer.js.)
+export const GATE = { x: 28, z: 1.2 };
+export const WAY = { x: 13, z: 1.2 };
 const MEET = { x: 5, z: -2.5 };
 const CLINIC = { x: 11.3, z: 9 }; // devant la porte du vétérinaire du village
 const AUTO_VET_HOURS = 1.5; // temps passé chez le vétérinaire du village
@@ -44,7 +45,7 @@ const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xa63a1f, 0x9a9a9a];
 const TOPS = [0xd9643a, 0x3f7cc4, 0x7a4b8f, 0x2f8f6b, 0xc43f6a, 0xe0b030];
 
 /** Un visiteur (propriétaire d'un animal) qui marche vers un endroit. */
-export class VisitorEntity { // (réutilisé par src/game/DogTrainer.js)
+export class VisitorEntity { // (réutilisé par src/game/DogTrainer.js et le salon de toilettage, src/game/Groomer.js)
   constructor(game, owner) {
     this.game = game;
     this.owner = owner;
@@ -174,8 +175,9 @@ export class Clients {
     this.pendingResult = null;
     this.asked = false;
     this.unsub = [];
-    // « 👉 Montre-moi » des métiers sans visiteurs (cavalier de concours…) : id -> (action, def) => void.
-    // Un module s'y inscrit avec registerGuide (src/game/CompetitionVenue.js pour 'rider').
+    // « 👉 Montre-moi » des métiers qui ont leur propre guide : id -> (action, def) => void.
+    // Un module s'y inscrit avec registerGuide (src/game/CompetitionVenue.js pour 'rider',
+    // src/game/Groomer.js pour 'groomer').
     this.guides = {};
   }
 
@@ -655,7 +657,8 @@ export class Clients {
     const p = g.profile;
     const def = CAREERS[id].actions.find((x) => x.id === action);
     if (!def) return;
-    if (this.guides[id]) return this.guides[id](action, def); // métier sans visiteurs : son propre guide
+    // Métier qui a son propre guide (cavalier de concours, salon de toilettage…) : registerGuide.
+    if (this.guides[id]) return this.guides[id](action, def);
     const client = clientAnimals(p).find((a) => a.client.kind === id);
     if (def.where === 'visitor') {
       if (this.visitor && !this.visitor.visit.auto) {

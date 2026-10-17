@@ -55,6 +55,11 @@ export function registerMinigame(id, make, icon = '⭐') {
   ICONS[id] = icon;
 }
 
+/** Ajoute plusieurs mini-jeux d'un coup (ex. le salon de toilettage, src/ui/minigames/groomer.js). */
+export function registerMinigames(games, icons = {}) {
+  for (const [id, make] of Object.entries(games)) registerMinigame(id, make, icons[id] ?? ICONS[id] ?? '⭐');
+}
+
 /** Texte traduit, ou null s'il n'existe pas. */
 const tt = (key, params) => {
   const s = t(key, params);
@@ -176,7 +181,8 @@ export function runMinigame(ui, a, action, opts = {}) {
     endEmoji: sp.emoji,
     endText: (stars) => t(`mg_end${stars}`, { name: a.name }),
     // L'animal n'est plus là (il est parti, ou mort de vieillesse) : on ferme sans rien appliquer.
-    stillThere: (game) => !game?.profile || game.profile.animals.some((x) => x.id === a.id),
+    // (a.guest : l'animal d'un client du salon de toilettage, qui n'est pas au joueur : il reste là.)
+    stillThere: (game) => !game?.profile || !!a.guest || game.profile.animals.some((x) => x.id === a.id),
     opts,
   });
 }

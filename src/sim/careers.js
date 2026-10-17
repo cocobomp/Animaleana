@@ -2,8 +2,9 @@
 // d'actions à cocher, de l'expérience de métier et trois rangs (apprenti, confirmé, expert).
 // Logique pure, testée dans tests/careers.test.js. L'interface est dans src/ui/careers.js.
 //
-// Pour ajouter un métier : une entrée dans CAREERS (+ textes career_<id>, careerd_<id>,
-// ca_<id>_<action> dans src/ui/clientsTexts.js), puis appeler noteAction(profile, id, action)
+// Pour ajouter un métier : une entrée dans CAREERS (un seul registre : c'est ici, et nulle part ailleurs)
+// (+ textes career_<id>, careerd_<id>, ca_<id>_<action> dans src/ui/clientsTexts.js ou le module de
+// textes du métier, ex. src/ui/groomerTexts.js), puis appeler noteAction(profile, id, action)
 // quand le joueur fait l'action et addCareerXp(profile, id, n) quand il réussit un travail.
 //
 // Dans le profil :
@@ -146,6 +147,34 @@ export const CAREERS = {
       { maxClients: 1, problems: ['obey', 'pull', 'jump', 'recall'], price: 1, speed: 1, tips: false, rescue: false },
       { maxClients: 2, problems: ['obey', 'pull', 'jump', 'recall', 'bark'], price: 1.25, speed: 1.25, tips: true, rescue: false },
       { maxClients: 3, problems: ['obey', 'pull', 'jump', 'recall', 'bark', 'shy'], price: 1.5, speed: 1.5, tips: true, rescue: true },
+    ],
+  },
+  // Toiletteur ✂️ : on construit un salon de toilettage (vue construction) ; les clients y viennent à pied
+  // avec leur animal et repartent le jour même, tout beaux (src/sim/groomer.js, src/game/Groomer.js,
+  // src/ui/groomer.js). maxClients 0 : aucun animal en pension grâce à ce métier ; salonClients : combien
+  // de clients peuvent attendre devant le salon ; species : les animaux acceptés à ce rang.
+  // ownClients : ses clients viennent au salon (src/game/Groomer.js), pas par les visites de src/sim/clients.js.
+  groomer: {
+    id: 'groomer',
+    emoji: '✂️',
+    level: 3,
+    building: 'salon',
+    ownClients: true,
+    ranks: [0, 300, 900],
+    actions: [
+      { id: 'welcome', emoji: '👋', where: 'salon' },
+      { id: 'bath', emoji: '🫧', where: 'salon' },
+      { id: 'dry', emoji: '💨', where: 'salon' },
+      { id: 'brush', emoji: '🪮', where: 'salon' },
+      { id: 'cut', emoji: '✂️', where: 'salon' },
+      { id: 'nails', emoji: '💅', where: 'salon' },
+      { id: 'finish', emoji: '🎀', where: 'salon' },
+      { id: 'return', emoji: '🎁', where: 'salon' },
+    ],
+    perks: [
+      { maxClients: 0, salonClients: 2, species: ['dog', 'cat', 'rabbit'], tips: false },
+      { maxClients: 0, salonClients: 2, species: ['dog', 'cat', 'rabbit', 'horse'], tips: true },
+      { maxClients: 0, salonClients: 3, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep'], tips: true },
     ],
   },
 };

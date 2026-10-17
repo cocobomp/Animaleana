@@ -162,6 +162,7 @@ export function restartTutorial(profile) {
  */
 const hasHorse = (p) => p.animals.some((a) => a.species === 'horse');
 const hasAnimal = (p) => p.animals.length > 0;
+const hasSalon = (p) => (p.structures ?? []).some((s) => s.type === 'salon'); // salon de toilettage
 const hasCareer = (p) => Object.keys(p.careers?.started ?? {}).length > 0;
 const dogTrainerStarted = (p) => p.careers?.started?.dogTrainer !== undefined; // éducateur canin (src/sim/dogTrainer.js)
 const hasTrainingDog = (p) => p.animals.some((a) => a.client?.kind === 'training');
@@ -209,6 +210,12 @@ export const QUEST_GUIDE = {
   dtSession3: { where: 'dogSheet', target: { type: 'animal', training: true }, ready: hasTrainingDog },
   dtDeliver1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, ready: hasTrainingDog },
   dtCoach1: { where: 'dogSheet', target: { type: 'action', id: 'more' }, ready: (p) => dogTrainerStarted(p) && coachable(p) },
+  // Métier Toiletteur (src/sim/groomer.js) : construire le salon, puis y travailler.
+  grmSalon: { where: 'build', target: { type: 'hud', id: 'hud_build' }, ready: (p) => (p.xp ?? 0) >= 150 }, // 150 XP = niveau 3
+  grmClient1: { where: 'salon', target: { type: 'building', id: 'salon' }, ready: hasSalon },
+  grmOwn1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, ready: (p) => hasSalon(p) && hasAnimal(p) },
+  grmAccessory1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, ready: (p) => hasSalon(p) && hasAnimal(p) },
+  grmFive1: { where: 'salon', target: { type: 'building', id: 'salon' }, ready: hasSalon },
   // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
   career1: { where: 'careers', target: { type: 'hud', id: 'careers' } },
   client1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
@@ -224,6 +231,7 @@ export const QUEST_ORDER = [
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
   'drTrain3', 'drReprise1', 'compRegister1', 'compAway1',
   'beautyPrep1', 'beautyBraid1', 'beauty1',
+  'grmSalon', 'grmOwn1', 'grmAccessory1', 'grmClient1', 'grmFive1',
   'career1', 'client1', 'clientVet1', 'dtClient1', 'dtSession3', 'dtDeliver1', 'dtCoach1', 'clientHappy5', 'clientMoney500',
 ];
 
@@ -306,6 +314,11 @@ export const FOLLOW_STEPS = {
   waitOwner: { target: { type: 'animal', training: true }, done: (c) => c.dtOwnerBack || c.questDone, progress: true },
   deliverDog: { target: { type: 'el', sel: '#panel .dt-deliver', fallback: { type: 'building', id: 'kennel' } }, done: questDone },
   doCoach: { target: { type: 'section', h3: 'dt_sectionTitle', fallback: { type: 'action', id: 'more' } }, done: questDone },
+  // Salon de toilettage (src/ui/groomer.js émet building:salon)
+  openBuild: { target: { type: 'hud', id: 'hud_build' }, done: (c) => c.seen.has('panel:build') || c.questDone }, // 🏗️ Construire
+  buildSalon: { target: null, done: questDone },
+  goSalon: { target: { type: 'building', id: 'salon' }, done: seenAny('building:salon') },
+  doGrooming: { target: null, done: questDone, progress: true },
   // Métiers et clients
   careerStart: { target: { type: 'hud', id: 'careers' }, done: questDone },
   clientWait: { target: null, done: (c) => c.hasClient || c.questDone },
@@ -349,6 +362,11 @@ export const QUEST_STEPS = {
   dtSession3: ['tapDog', 'doSession'],
   dtCoach1: ['tapAnimal', 'openMore', 'doCoach'],
   dtDeliver1: ['waitOwner', 'deliverDog'],
+  grmSalon: ['openBuild', 'buildSalon'],
+  grmClient1: ['goSalon', 'doGrooming'],
+  grmOwn1: ['goSalon', 'doGrooming'],
+  grmAccessory1: ['goSalon', 'doGrooming'],
+  grmFive1: ['goSalon', 'doGrooming'],
   career1: ['careerStart'],
   client1: ['clientWait', 'clientCare'],
   clientVet1: ['clientWait', 'clientVet'],

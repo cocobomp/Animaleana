@@ -311,6 +311,10 @@ export class Groomer {
       if (g.isHome && g.mgmt) {
         g.mgmt.openBuild();
         openCatalogue(g.ui, 'building');
+        // La carte du salon, bien en vue et entourée.
+        const card = [...(g.ui.panelEl?.querySelectorAll('.card') ?? [])].find((c) => c.textContent.includes(t('st_salon')));
+        card?.classList.add('grm-highlight');
+        card?.scrollIntoView?.({ block: 'center' });
       }
       return;
     }

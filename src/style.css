@@ -2040,6 +2040,7 @@ body.actv-nomove #touch-pad { display: none !important; }
 .grm-history { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
 .grm-history td { padding: 4px 6px; border-bottom: 1px solid var(--line); }
 .mg-btn.mg-swatch { border-left: 14px solid var(--sw, #ff7eb6); }
+.card.grm-highlight { box-shadow: 0 0 0 3px #e07b9a, var(--shadow); } /* « Montre-moi » : la carte du salon dans le catalogue */
 @media (max-width: 640px) {
   .grm-photo { width: min(200px, 44vw); }
   .grm-avatar { width: 40px; height: 40px; font-size: 1.6rem; }

@@ -2,8 +2,11 @@
 // d'interrogation quand il marche, et poses de repos qui se fondent l'une dans l'autre : debout,
 // assis, toilette (patte léchée, flanc), couché en sphinx, en boule pour dormir, étirement au
 // réveil, accroupi pour manger. Oreilles qui bougent, paupières qui clignent, respiration.
-// Tout est calculé dans des tableaux réutilisés : aucune allocation par image.
+// La colonne (os du tronc) se courbe pour dormir en boule ; assis ou couché, la queue se pose au
+// sol et fait le tour des pattes. Tout est calculé dans des tableaux et objets réutilisés : aucune
+// allocation par image.
 
+import * as THREE from 'three';
 import { pickIdlePose } from '../sim/catPoses.js';
 
 // Canaux d'une pose.
@@ -30,9 +33,12 @@ const SPLAY = 28; // pattes arrière écartées
 const TWITCH = 29; // le bout de la queue frétille sur le côté
 const REACH = 30; // pattes avant allongées (assis : l'épaule remonte, la patte reste au sol)
 const TOE = 31; // 31 à 34 : la patte reste à plat au sol (assis, couché)
-const N = 35;
+const BEND = 35; // colonne : courbe sur le côté (par os ; positif = les deux bouts vers +x)
+const ARCH = 36; // colonne : dos rond (par os ; positif = les deux bouts vers le ventre)
+const BODY_X = 37; // décalage sur le côté (couché sur le flanc, le corps reste à sa place)
+const N = 38;
 
-const POSES = ['stand', 'move', 'sit', 'groom', 'loaf', 'curl', 'stretch', 'crouch'];
+const POSES = ['stand', 'move', 'sit', 'groom', 'loaf', 'curl', 'stretch', 'crouch', 'highfive'];
 const acc = new Float32Array(N);
 const tmp = new Float32Array(N);
 // Contexte des poses, réutilisé d'une image à l'autre (rempli par animateCat).
@@ -45,6 +51,54 @@ const smooth = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
+
+// ------------------------------------------------------------------ queue posée au sol
+
+// Objets réutilisés (aucune allocation par image).
+const _inv = new THREE.Matrix4();
+const _rel = new THREE.Matrix4();
+const _qw = new THREE.Quaternion();
+const _qi = new THREE.Quaternion();
+const _qt = new THREE.Quaternion();
+const _p = new THREE.Vector3();
+const _sc = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _tg = new THREE.Vector3();
+const NEG_Z = new THREE.Vector3(0, 0, -1);
+const tailArc = { rx: 0, rz: 0, cz: 0, a1: 0 };
+
+/**
+ * Assis, à la toilette ou couché : la queue descend jusqu'au sol puis suit un arc d'ellipse posé
+ * par terre (repère du chat, sol à y = 0) qui fait le tour des pattes, du côté s. Chaque os vise le
+ * point suivant de l'arc ; le résultat est mélangé à la pose des canaux avec le poids w.
+ * g : { rx, rz, cz (centre de l'ellipse, en avant de la racine de la queue), a1 (angle d'arrivée) }.
+ */
+function groundTail(md, C, w, s, g) {
+  const bones = C.tailBones;
+  md.tail.updateWorldMatrix(true, false);
+  _inv.copy(md.root.matrixWorld).invert();
+  _rel.multiplyMatrices(_inv, md.tail.matrixWorld);
+  _rel.decompose(_p, _qw, _sc);
+  const seg = C.tailSeg;
+  const yg = C.tailR * 0.85;
+  const cz = _p.z + g.cz;
+  const at = (a, out) => out.set(-s * g.rx * Math.sin(a), yg, cz - g.rz * Math.cos(a));
+  let a = 0;
+  for (let i = 0; i < bones.length - 1; i++) {
+    // Prochain point de l'arc à une longueur d'os de la jointure.
+    while (a < g.a1 && at(a, _tg).distanceToSquared(_p) < seg * seg) a += 0.04;
+    at(a, _tg);
+    _d.subVectors(_tg, _p).normalize();
+    // Direction voulue dans le repère du parent, puis rotation de l'os (son axe de repos est -z).
+    _qi.copy(_qw).invert();
+    _d.applyQuaternion(_qi);
+    _qt.setFromUnitVectors(NEG_Z, _d);
+    bones[i].quaternion.slerp(_qt, w);
+    _qw.multiply(bones[i].quaternion);
+    _p.addScaledVector(_d.copy(NEG_Z).applyQuaternion(_qw), seg);
+  }
+  bones[bones.length - 1].quaternion.slerp(_qt.identity(), w);
+}
 
 /**
  * Patte i : angles « dans le monde » (0 = verticale, négatif = vers l'avant) des trois segments,
@@ -199,24 +253,35 @@ function loaf(o, c) {
 function curl(o, c) {
   const d = c.d;
   const s = c.side;
-  o[BODY_Y] = -(d.y0 - d.R * 1.0) + d.R * 0.02;
-  o[ROLL] = 0.45 * s;
-  // En boule : pattes repliées, tête posée sur le flanc, queue enroulée devant le museau.
-  leg(o, 0, 0, 0.9, 2.3, 1.8);
-  leg(o, 1, 0, 0.9, 2.3, 1.8);
-  leg(o, 2, 0, -1.4, 1.5, -1.3, 0.8);
-  leg(o, 3, 0, -1.4, 1.5, -1.3, 0.8);
-  o[SPLAY] = 0.1;
-  o[NECK_X] = 0.75;
-  o[NECK_Y] = -s * 0.9;
-  o[HEAD_X] = 0.35;
-  o[HEAD_Y] = -s * 0.55;
-  o[HEAD_Z] = -s * 0.5;
+  // En boule, couché sur le flanc (le ventre tourné vers +x quand s = 1) : la colonne s'enroule vers
+  // le ventre, les pattes repliées au milieu, la tête rentrée vers les pattes arrière, à l'endroit
+  // (oreilles en haut), et la queue fait le tour jusque devant le museau.
+  const roll = 1.15;
+  const cr = Math.cos(roll);
+  const sr = Math.sin(roll);
+  o[ROLL] = roll * s;
+  o[BODY_Y] = d.R * 0.85 - d.y0 * cr; // le flanc posé au sol
+  o[BODY_X] = d.y0 * sr * s; // sans glisser sur le côté
+  // Courbe « à plat » : mélange de courbe sur le côté et de dos rond selon l'inclinaison du corps.
+  const bend = 0.52;
+  o[BEND] = bend * cr * s;
+  o[ARCH] = bend * sr;
+  leg(o, 0, 0, -0.3, 0.5, 0.8);
+  leg(o, 1, 0, -0.3, 0.5, 0.8);
+  leg(o, 2, 0, -0.7, 0.3, -0.4);
+  leg(o, 3, 0, -0.7, 0.3, -0.4);
+  // Corps sur le flanc : baisser le cou ramène la tête vers le ventre, à plat ; la tête tourne
+  // ensuite sur elle-même pour garder les oreilles en l'air.
+  o[NECK_X] = 1.1;
+  o[HEAD_X] = 0.2;
+  o[HEAD_Z] = -1.3 * s;
   o[LIDS] = 1;
   o[EARS_BACK] = 0.15;
-  o[TAIL_UP] = -0.1;
-  o[TAIL_SIDE] = 1.25 * s; // du côté où il est couché, vers le museau
-  o[TAIL_WRAP] = 0.45 * s;
+  // Queue enroulée vers le ventre, à plat sur le sol (même mélange que la colonne).
+  o[TAIL_UP] = -0.6 * sr;
+  o[TAIL_SIDE] = -0.6 * cr * s;
+  o[TAIL_CURL] = -0.35 * sr;
+  o[TAIL_WRAP] = -0.35 * cr * s;
 }
 
 function stretch(o, c) {
@@ -243,21 +308,35 @@ function stretch(o, c) {
 }
 
 function crouch(o, c) {
-  // Accroupi pour manger : coudes pliés, l'avant plus bas.
-  const p = 0.16;
+  // Accroupi pour manger : coudes bien pliés, l'avant plus bas.
+  const p = 0.38;
   pivot(o, p, c.d.legTop, c.d.hipZ, c.d.legTop - 0.006, c.d.hipZ);
-  leg(o, 0, p, 0.35, -0.55, 0.05);
-  leg(o, 1, p, 0.35, -0.55, 0.05);
+  leg(o, 0, p, 0.75, -0.9, 0.1);
+  leg(o, 1, p, 0.75, -0.9, 0.1);
   leg(o, 2, p, -0.15, 0.25, -0.1);
   leg(o, 3, p, -0.15, 0.25, -0.1);
-  o[TAIL_UP] = -0.4;
+  // Le cou s'allonge vers le bas : le museau arrive dans la gamelle et mâchonne ; oreilles en avant.
+  o[NECK_X] = 1.2 + Math.sin(c.t * 4) * 0.05;
+  o[HEAD_X] = Math.sin(c.t * 8) * 0.05;
+  o[EARS_BACK] = -0.1;
+  o[TAIL_UP] = -0.4 - p * 0.8; // la queue reste basse malgré l'arrière relevé
   o[TAIL_CURL] = 0.12;
   o[TAIL_SIDE] = 0.6 * c.side;
   o[TAIL_WRAP] = 0.15 * c.side;
   o[TWITCH] = Math.sin(c.t * 4) * 0.3;
 }
 
-const FN = { stand, move, sit, groom, loaf, curl, stretch, crouch };
+function highfive(o, c) {
+  // Tour du spectacle : assis, une patte avant levée bien haut pour taper dans la main.
+  sit(o, c);
+  const p = c.d.sit.pitch;
+  leg(o, c.side > 0 ? 0 : 1, p, -2.1, -2.7, -2.9);
+  o[HEAD_Y] = 0;
+  o[HEAD_X] -= 0.1;
+  o[EARS_BACK] = -0.1;
+}
+
+const FN = { stand, move, sit, groom, loaf, curl, stretch, crouch, highfive };
 
 // ------------------------------------------------------------------ animation
 
@@ -369,8 +448,16 @@ export function animateCat(e, dt, sad) {
   const girth = 1 + ((w - 50) / 50) * 0.2;
   const breathe = Math.sin(t * (asleep ? 1.3 : 2.6)) * (asleep ? 0.02 : 0.01);
   body.scale.set(girth + breathe, 1 + (girth - 1) * 0.4 + breathe, 1);
-  body.position.set(0, acc[BODY_Y] + (e.legLift ?? 0), acc[BODY_Z]);
+  body.position.set(acc[BODY_X], acc[BODY_Y] + (e.legLift ?? 0), acc[BODY_Z]);
   body.rotation.set(acc[PITCH], 0, acc[ROLL]);
+  // Colonne : les os vers les épaules et vers les hanches tournent en miroir (courbe en C, dos rond).
+  const sp = C.spine;
+  if (sp) {
+    for (let k = 1; k <= 3; k++) {
+      sp[k].rotation.set(acc[ARCH], acc[BEND], 0);
+      sp[k + 3].rotation.set(-acc[ARCH], -acc[BEND], 0);
+    }
+  }
   for (let i = 0; i < 4; i++) {
     const l = md.legs[i];
     l.pivot.rotation.x = acc[LEG + i];
@@ -403,6 +490,19 @@ export function animateCat(e, dt, sad) {
   }
   const tailScale = 1 + fear * 0.45; // queue gonflée quand il a peur
   md.tail.scale.set(tailScale, tailScale, 1);
+  // Assis ou couché : la queue se pose au sol et fait le tour des pattes (arc plus long couché).
+  const wSit = st.w.sit + st.w.groom + st.w.highfive;
+  const wLoaf = st.w.loaf;
+  const wg = Math.min(1, (wSit + wLoaf) / Math.max(1e-3, total));
+  if (wg > 0.01 && C.tailSeg && !C.traits.stubTail) {
+    const k = wLoaf / (wSit + wLoaf);
+    tailArc.rx = d.R * (1.2 + 0.1 * k);
+    tailArc.rz = d.L * (0.32 + 0.18 * k);
+    tailArc.cz = tailArc.rz * 0.9;
+    tailArc.a1 = 3.4 - 0.8 * k;
+    groundTail(md, C, wg, st.side, tailArc);
+    if (acc[TWITCH]) bones[nb - 1].rotation.y += acc[TWITCH] * 0.5; // le bout frétille encore
+  }
   // Oreilles : frémissements, elles pivotent un peu, se couchent quand il a peur ou qu'il est triste.
   const back = Math.min(1, acc[EARS_BACK] + fear * 0.9 + low * 0.45);
   md.ears.forEach((ear, i) => {

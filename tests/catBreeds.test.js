@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { SPECIES, PERSONALITIES, getBreed } from '../src/sim/species.js';
 import {
-  CAT_BREEDS, CAT_HAIR, CAT_HEADS, CAT_BUILDS, CAT_EYES, CAT_EARS, CAT_PATTERNS, CAT_WHITE, catTraits,
+  CAT_BREEDS, CAT_HAIR, CAT_HEADS, CAT_BUILDS, CAT_EYES, CAT_EARS, CAT_PATTERNS, CAT_WHITE, catTraits, upgradeCatLook,
 } from '../src/sim/catBreeds.js';
 import { resolveLook, createAnimal } from '../src/sim/animal.js';
 import { shopPrice, breedsFor } from '../src/sim/adoption.js';
 import { pickIdlePose, CAT_IDLE_POSES } from '../src/sim/catPoses.js';
 import { seeded } from '../src/sim/rng.js';
+import { createProfile, migrate } from '../src/sim/profile.js';
 
 const isBlue = (c) => (c & 255) > ((c >> 16) & 255) + 40;
 
@@ -185,5 +186,62 @@ describe('poses de repos du chat', () => {
     };
     expect(count({ energy: 10 }).loaf).toBeGreaterThan(count({ energy: 95 }).loaf * 1.8);
     expect(count({ energy: 80, prev: 'sit' }).sit).toBeLessThan(count({ energy: 80 }).sit);
+  });
+});
+
+describe('anciennes sauvegardes : chats d\'avant les races détaillées', () => {
+  // Look d'un chat enregistré avant ce chantier (copie de resolveLook au commit 4407bf4).
+  const oldModel = { bodyLen: 0.42, bodyR: 0.095, legLen: 0.2, legR: 0.024, neckLen: 0.07, neckAngle: 0.6, headLen: 0.12, headR: 0.072, earType: 'cat', tailType: 'cat', snout: 0.35 };
+  const oldLook = (extra) => ({ ...oldModel, scale: 1, fluff: 1, legs: 1, eye: 0x2a1a10, seed: 5, ...extra });
+  const oldPersan = () => oldLook({ fluff: 1.35, legs: 0.85, snout: 0.15, pattern: 'solid', coat: 0xf5f3ee, secondary: 0xf5f3ee, third: 0xf5f3ee, mane: 0xf5f3ee, eye: 0xd98b2a, colorName: { fr: 'Blanc', en: 'White' } });
+  const oldEuro = () => oldLook({ pattern: 'tabby', coat: 0x8b8780, secondary: 0x3e3a36, third: 0x3e3a36, mane: 0x3e3a36, colorName: { fr: 'Tigré gris', en: 'Grey tabby' } });
+  const oldSacre = () => oldLook({ fluff: 1.2, pattern: 'points', coat: 0xefe4d0, secondary: 0x4a3426, third: 0x4a3426, mane: 0x4a3426, eye: 0x4d8fd6, colorName: { fr: 'Seal point', en: 'Seal point' } });
+  const oldCat = (breed, look) => ({ ...createAnimal({ species: 'cat', breed, rng: seeded(breed) }), look });
+
+  it('le Persan blanc d\'avant redevient un Persan (poil long, face plate, petites oreilles), pas un Européen', () => {
+    const a = oldCat('persan', oldPersan());
+    expect(upgradeCatLook(a.look, getBreed('cat', 'persan'), SPECIES.cat.model)).toBe(true);
+    const t = catTraits(a.look);
+    expect(t.hair).toBe('long');
+    expect(t.head).toBe('flat');
+    expect(t.build).toBe('cobby');
+    expect(t.earType).toBe('cat_small');
+    expect(t.eye).toBe(0xd98b2a); // ses yeux cuivre sont gardés
+    // Ses proportions suivent le nouveau modèle du chat ; sa robe ne change pas.
+    expect(a.look.legLen).toBe(SPECIES.cat.model.legLen);
+    expect(a.look.coat).toBe(0xf5f3ee);
+    expect(a.look.fluff).toBe(1.35);
+    // Déjà à jour : rien ne bouge la deuxième fois.
+    expect(upgradeCatLook(a.look, getBreed('cat', 'persan'), SPECIES.cat.model)).toBe(false);
+  });
+
+  it('les anciens yeux presque noirs prennent la couleur de la robe ; le Sacré retrouve ses gants', () => {
+    const e = oldCat('europeen', oldEuro());
+    upgradeCatLook(e.look, getBreed('cat', 'europeen'), SPECIES.cat.model);
+    expect(e.look.eye).toBe(getBreed('cat', 'europeen').colors[0].eye);
+    const s = oldCat('sacre_birmanie', oldSacre());
+    upgradeCatLook(s.look, getBreed('cat', 'sacre_birmanie'), SPECIES.cat.model);
+    expect(catTraits(s.look).white).toBe('gloves');
+    expect(s.look.eye).toBe(0x4d8fd6); // ses yeux bleus d'avant sont gardés
+    // Même sans migration, un œil « par défaut » d'avant ne donne pas un œil noir.
+    expect(catTraits(oldEuro()).eye).not.toBe(0x2a1a10);
+  });
+
+  it('migrate met à jour les chats d\'une ancienne sauvegarde, sans toucher aux autres animaux', () => {
+    const p = createProfile('Vieux', 'manage');
+    const dog = createAnimal({ species: 'dog', breed: 'labrador', rng: seeded('chien') });
+    const dogLook = JSON.stringify(dog.look);
+    p.animals = [oldCat('persan', oldPersan()), oldCat('europeen', oldEuro()), dog];
+    const m = migrate(JSON.parse(JSON.stringify(p)));
+    expect(m.animals[0].look.hair).toBe('long');
+    expect(m.animals[0].look.earType).toBe('cat_small');
+    expect(m.animals[1].look.hair).toBe('short');
+    expect(m.animals[1].look.eye).not.toBe(0x2a1a10);
+    expect(JSON.stringify(m.animals[2].look)).toBe(dogLook);
+    // Un nouveau chat n'est pas modifié.
+    const fresh = createAnimal({ species: 'cat', breed: 'ragdoll', rng: seeded('r') });
+    const before = JSON.stringify(fresh.look);
+    const m2 = migrate(JSON.parse(JSON.stringify({ ...p, animals: [fresh] })));
+    expect(JSON.stringify(m2.animals[0].look)).toBe(before);
   });
 });

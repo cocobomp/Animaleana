@@ -253,6 +253,32 @@ function hairFromFluff(fluff = 1) {
   return 'short';
 }
 
+// Œil « par défaut » que resolveLook donnait avant les races détaillées : presque noir avec le nouvel
+// œil (l'iris remplit tout), il est remplacé par la couleur de la robe (ou doré).
+export const OLD_DEFAULT_EYE = 0x2a1a10;
+const realEye = (c) => (c == null || c === OLD_DEFAULT_EYE ? null : c);
+// Proportions du modèle de l'espèce recopiées dans chaque look (voir resolveLook).
+const MODEL_KEYS = ['bodyLen', 'bodyR', 'legLen', 'legR', 'neckLen', 'neckAngle', 'headLen', 'headR'];
+
+/**
+ * Chat d'une ancienne sauvegarde (look sans « hair ») : complète son look depuis sa race, dont l'id
+ * est enregistré dans l'animal (poil, tête, silhouette, yeux, oreilles, taches blanches, yeux vairons)
+ * et reprend les proportions actuelles du modèle (model = SPECIES.cat.model). Sa robe ne change pas.
+ * Renvoie true si le look a été modifié (appelé par profile.migrate).
+ */
+export function upgradeCatLook(look, breed, model = null) {
+  if (!look || !breed || look.hair) return false;
+  const color = breed.colors.find((c) => c.name.fr === look.colorName?.fr)
+    ?? breed.colors.find((c) => c.coat === look.coat && c.secondary === look.secondary) ?? null;
+  Object.assign(look, breed.look);
+  if (breed.earType && (!look.earType || look.earType === 'cat')) look.earType = breed.earType;
+  if (color?.white && !look.white) look.white = color.white;
+  if (color?.eye2 && look.eye2 == null) look.eye2 = color.eye2;
+  if (!realEye(look.eye)) look.eye = color?.eye ?? GOLD;
+  if (model) for (const k of MODEL_KEYS) if (model[k] != null) look[k] = model[k];
+  return true;
+}
+
 /**
  * Traits d'apparence complets d'un chat, même pour un animal créé avant ces champs :
  * ce qui manque vient de la race (breed, si on la connaît) ou est déduit du look.
@@ -273,8 +299,8 @@ export function catTraits(look = {}, breed = null) {
     earType: CAT_EARS.includes(earType) ? earType : 'cat',
     pattern,
     white: CAT_WHITE.includes(look.white) ? look.white : null,
-    eye: look.eye ?? GOLD,
-    eye2: look.eye2 ?? look.eye ?? GOLD,
+    eye: realEye(look.eye) ?? GOLD,
+    eye2: realEye(look.eye2) ?? realEye(look.eye) ?? GOLD,
     stubTail: look.tailType === 'stub',
   };
 }

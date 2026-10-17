@@ -80,10 +80,111 @@ const smooth = (a, b, x) => {
 };
 const sphere = (r, w = 14, h = 10) => new THREE.SphereGeometry(r, w, h);
 
-/** Retrouve la race à partir de la robe (le look ne garde pas l'id de la race). */
+/**
+ * Retrouve la race à partir de la robe (le look ne garde pas l'id de la race). Plusieurs races
+ * peuvent avoir la même robe (« Blanc » : Européen, Persan) : on garde celle dont le poil, le
+ * volume (fluff) et le museau ressemblent le plus à ceux du chat.
+ */
 function catBreedOf(look) {
-  return SPECIES.cat.breeds.find((b) => b.colors.some((c) => c.coat === look.coat && c.secondary === look.secondary
-    && (!look.colorName || c.name?.fr === look.colorName.fr))) ?? null;
+  let best = null;
+  let bestScore = Infinity;
+  for (const b of SPECIES.cat.breeds) {
+    if (!b.colors.some((c) => c.coat === look.coat && c.secondary === look.secondary
+      && (!look.colorName || c.name?.fr === look.colorName.fr))) continue;
+    const score = (look.hair && b.look?.hair !== look.hair ? 1 : 0)
+      + Math.abs((b.fluff ?? 1) - (look.fluff ?? 1)) + Math.abs((b.snout ?? 0.35) - (look.snout ?? 0.35));
+    if (score < bestScore) {
+      best = b;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/**
+ * Les lofts de shapes.js ont leurs triangles tournés vers l'intérieur : on les retourne (ordre des
+ * sommets et normales) pour que le dessus de la queue et des pattes soit éclairé et que la fourrure
+ * en couches pousse vers l'extérieur.
+ */
+function outward(g) {
+  const idx = g.index.array;
+  for (let i = 0; i < idx.length; i += 3) {
+    const t = idx[i + 1];
+    idx[i + 1] = idx[i + 2];
+    idx[i + 2] = t;
+  }
+  const n = g.attributes.normal.array;
+  for (let i = 0; i < n.length; i++) n[i] = -n[i];
+  return g;
+}
+
+/**
+ * Couture des UV « qui font le tour » (u passe de 1 à 0 sous le ventre, sous le menton) : les
+ * triangles à cheval reprenaient toute la texture à l'envers, d'où un trait au milieu du poitrail.
+ * On y duplique les sommets du côté u < 0,5 avec u + 1 (la texture se répète en u).
+ */
+function fixSeam(g) {
+  const uv = g.attributes.uv;
+  const idx = g.index.array;
+  const dup = new Map();
+  const extra = [];
+  const n0 = uv.count;
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = uv.getX(idx[t]);
+    const b = uv.getX(idx[t + 1]);
+    const c = uv.getX(idx[t + 2]);
+    if (Math.max(a, b, c) - Math.min(a, b, c) < 0.5) continue;
+    for (let k = 0; k < 3; k++) {
+      const v = idx[t + k];
+      if (v >= n0 || uv.getX(v) >= 0.5) continue;
+      if (!dup.has(v)) {
+        dup.set(v, n0 + extra.length);
+        extra.push(v);
+      }
+      idx[t + k] = dup.get(v);
+    }
+  }
+  if (!extra.length) return g;
+  const out = new THREE.BufferGeometry();
+  for (const [name, attr] of Object.entries(g.attributes)) {
+    const s = attr.itemSize;
+    const arr = new attr.array.constructor((n0 + extra.length) * s);
+    arr.set(attr.array.subarray(0, n0 * s));
+    extra.forEach((v, i) => {
+      for (let j = 0; j < s; j++) arr[(n0 + i) * s + j] = attr.array[v * s + j];
+    });
+    out.setAttribute(name, new THREE.BufferAttribute(arr, s, attr.normalized));
+  }
+  const ouv = out.attributes.uv;
+  for (let i = 0; i < extra.length; i++) ouv.setX(n0 + i, ouv.getX(n0 + i) + 1);
+  out.setIndex(new THREE.BufferAttribute(n0 + extra.length > 65535 ? new Uint32Array(idx) : new Uint16Array(idx), 1));
+  g.dispose();
+  return out;
+}
+
+// Colonne : un os au milieu du dos, trois vers les épaules, trois vers les hanches (index dans le
+// squelette partagé, après les 12 os des pattes et ceux de la queue). Le tronc se courbe avec eux.
+const SPINE0 = 12 + TAIL_BONES;
+
+/** Poids de la colonne sur le tronc : chaque sommet suit les deux os les plus proches le long de z. */
+function spineSkin(g, J) {
+  const pos = g.attributes.position;
+  const si = new Uint16Array(pos.count * 4);
+  const sw = new Float32Array(pos.count * 4);
+  for (let i = 0; i < pos.count; i++) {
+    const z = pos.getZ(i);
+    const f = Math.min(3 - 1e-4, Math.abs(z) / J);
+    const k = Math.floor(f);
+    const fr = f - k;
+    // Os : 0 = milieu, 1 à 3 = vers l'avant, 4 à 6 = vers l'arrière.
+    si[i * 4] = SPINE0 + (k === 0 ? 0 : z >= 0 ? k : 3 + k);
+    si[i * 4 + 1] = SPINE0 + (z >= 0 ? k + 1 : 4 + k);
+    sw[i * 4] = 1 - fr;
+    sw[i * 4 + 1] = fr;
+  }
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  return g;
 }
 
 /** Formes de la tête selon la race (crâne rond, joues, coussinets des moustaches, menton). */
@@ -129,11 +230,11 @@ function torsoPrims(B, fuzz) {
 /** Oreille : nappe triangulaire bombée derrière, creusée devant. curve(t) → [dy, dz]. */
 function earGeo(len, w, profile, { curve = null, back = 0.3, front = 0.08, high = true } = {}) {
   const n = profile.length;
-  return loft(profile.map((pw, i) => {
+  return outward(loft(profile.map((pw, i) => {
     const t = i / (n - 1);
     const c = curve ? curve(t) : [t * len, 0];
     return { p: [0, c[0], c[1]], rx: Math.max(0.0008, pw * w), ry: Math.max(0.0006, pw * w * back), ryb: Math.max(0.0004, pw * w * front) };
-  }), { radial: high ? 12 : 8, sub: 2 });
+  }), { radial: high ? 12 : 8, sub: 2 }));
 }
 
 /** Points d'une oreille pliée vers l'avant (Scottish fold). */
@@ -233,9 +334,15 @@ export function buildCatModel(look) {
     : tr.hair === 'curly' ? (x, y, z) => (noise3(x * 150, y * 150, z * 150) - 0.5) * R * 0.035
       : hairless ? (x, y, z) => Math.sin(z * 260 + noise3(x * 30, y * 30, z * 30) * 4) * R * 0.007 * smooth(L * 0.12, L * 0.42, z) : null;
   const shapeKey = ['cat', L, R, y0, nl, na, hr, F, tr.build, tr.head, tr.hair, gfx.quality].join('|');
-  const torsoGeo = cachedGeo(`torso|${shapeKey}`, () => sdfMesh(torsoSdf, torsoBounds, L / (high ? 44 : 28), {
-    uv: cylUv(y0, torsoBounds[0][2], torsoBounds[1][2]), displace: furDisp,
-  }));
+  // Écart entre les os de la colonne : le dernier tombe sur les épaules (et sur les hanches derrière).
+  const spineJ = (L / 2 - Rs * 0.75) / 3;
+  // UV du tronc : comme cylUv, mais l'axe remonte vers l'avant pour que le « pôle » (là où tous
+  // les u se rejoignent) sorte à la base du cou, caché par le cou, et pas au milieu du poitrail.
+  const cyl = cylUv(y0, torsoBounds[0][2], torsoBounds[1][2]);
+  const torsoUv = (x, y, z) => cyl(x, y - Math.max(0, z - L * 0.18) * (R * 0.9) / (L * 0.34), z);
+  const torsoGeo = cachedGeo(`torso|${shapeKey}`, () => spineSkin(fixSeam(sdfMesh(torsoSdf, torsoBounds, L / (high ? 44 : 28), {
+    uv: torsoUv, displace: furDisp,
+  })), spineJ));
   const backTop = (z) => rayHit(torsoSdf, [0, y0, z], [0, 1, 0], R * 3).y;
 
   // --- Tête : formes fondues, puis repères du visage (yeux, nez) pour peindre la robe.
@@ -243,7 +350,7 @@ export function buildCatModel(look) {
   neck.position.copy(neckBase);
   neck.rotation.order = 'YXZ'; // tourner la tête sur le côté autour de la verticale, même cou baissé
   neck.rotation.x = na;
-  body.add(neck);
+  body.add(neck); // puis accroché à l'os des épaules (plus bas)
   const head = new THREE.Group();
   head.position.set(0, nl, 0);
   head.rotation.x = 0.1 - na;
@@ -253,7 +360,7 @@ export function buildCatModel(look) {
   const headBounds = [[hb[0][0] - hpad, hb[0][1] - hpad, hb[0][2] - hpad], [hb[1][0] + hpad, hb[1][1] + hpad, hb[1][2] + hpad]];
   const headUv = cylUv(0, headBounds[0][2], headBounds[1][2]);
   const headDisp = fuzz > 0.3 ? (x, y, z, nx, ny, nz) => (noise3(x * 140, y * 140, z * 140) - 0.45) * hr * 0.06 * fuzz * smooth(0.2, -0.6, nz) : null;
-  const headGeo = cachedGeo(`head|${shapeKey}`, () => sdfMesh(headSdf, headBounds, hr / (high ? 7.5 : 5), { uv: headUv, displace: headDisp }));
+  const headGeo = cachedGeo(`head|${shapeKey}`, () => fixSeam(sdfMesh(headSdf, headBounds, hr / (high ? 7.5 : 5), { uv: headUv, displace: headDisp })));
   const H = (v) => v.map((x) => x * hr);
   const tip = rayHit(headSdf, H([0, Hd.noseY, 0]), [0, 0, 1], hr * 8);
   const E = Hd.eye;
@@ -283,8 +390,31 @@ export function buildCatModel(look) {
   };
   tex.legs.forEach((t, i) => { M.legs[i] = i > 0 && t === tex.legs[i - 1] ? M.legs[i - 1] : coatMat(t); });
 
-  const torsoMesh = add(body, torsoGeo, M.body);
-  addShells(torsoMesh, furLen);
+  // Tronc à os : la colonne (7 os) le courbe (en boule, dos rond). Les pattes, le cou et la queue
+  // sont accrochés aux os des épaules et des hanches pour suivre la courbe.
+  const torsoMesh = new THREE.SkinnedMesh(torsoGeo, M.body);
+  torsoMesh.castShadow = true;
+  torsoMesh.receiveShadow = true;
+  body.add(torsoMesh);
+  const spine = [];
+  const spineInv = [];
+  const spineBone = (parent, z, absZ) => {
+    const b = new THREE.Bone();
+    b.position.set(0, parent === torsoMesh ? y0 : 0, z);
+    parent.add(b);
+    spine.push(b);
+    spineInv.push(new THREE.Matrix4().makeTranslation(0, -y0, -absZ));
+    return b;
+  };
+  const spineMid = spineBone(torsoMesh, 0, 0);
+  for (const dir of [1, -1]) {
+    let p = spineMid;
+    for (let k = 1; k <= 3; k++) p = spineBone(p, dir * spineJ, dir * k * spineJ);
+  }
+  const shoulderBone = spine[3];
+  const hipBone = spine[6];
+  neck.position.sub(new THREE.Vector3(0, y0, 3 * spineJ));
+  shoulderBone.add(neck);
 
   // --- Pattes : un tube plié par trois os (épaule/hanche, coude/grasset, poignet/jarret).
   const legX = Rs * 0.45;
@@ -294,8 +424,9 @@ export function buildCatModel(look) {
   const skins = [];
   corners.forEach(([x, z, front], i) => {
     const pivot = new THREE.Group();
-    pivot.position.set(x, legTop, z);
-    body.add(pivot);
+    // Repère de l'os de l'épaule (devant) ou de la hanche (derrière), qui sont à la hauteur y0.
+    pivot.position.set(x, legTop - y0, z - (front ? 3 : -3) * spineJ);
+    (front ? shoulderBone : hipBone).add(pivot);
     const pawMat = M.legs[i].userData.paw ?? (M.legs[i].userData.paw = M.legs[i].clone());
     pawMat.color.setScalar(high ? 0.84 : 0.94);
     const leg = buildCatLeg(pivot, { front, T, r: legR, mat: M.legs[i], pawMat, padMat: M.pad, high, fuzz, index: i, fur: furLen * 0.6 });
@@ -309,10 +440,10 @@ export function buildCatModel(look) {
     const q = neckAt(ns, t);
     neckSecs.push({ p: [0, t * nl, q.zo * R], rx: q.w * R, ry: q.dc * R, ryb: q.dt * R });
   }
-  const neckGeo = loft(neckSecs, {
+  const neckGeo = outward(loft(neckSecs, {
     radial: high ? 20 : 12, sub: high ? 3 : 2, capStart: false,
     displace: fuzz > 0.3 ? (x, y, z) => (noise3(x * 60, y * 60 + 2, z * 60) - 0.45) * R * 0.07 * fuzz : null,
-  });
+  }));
   const neckMesh = add(neck, neckGeo, M.neck);
   addShells(neckMesh, furLen);
   const headMesh = add(head, headGeo, M.head);
@@ -380,7 +511,7 @@ export function buildCatModel(look) {
   const ny0 = tip.y - noseR * 0.75;
   const phil = onFace(0, ny0 - hr * 0.1);
   const mouthParts = [];
-  const tube = (pts, r) => loft(pts.map((p) => ({ p: p.toArray(), rx: r, ry: r })), { radial: 5, sub: 3 });
+  const tube = (pts, r) => outward(loft(pts.map((p) => ({ p: p.toArray(), rx: r, ry: r })), { radial: 5, sub: 3 }));
   mouthParts.push(tube([onFace(0, ny0), phil], hr * 0.016));
   for (const s of [1, -1]) {
     mouthParts.push(tube([phil, onFace(s * hr * 0.1, ny0 - hr * 0.15), onFace(s * hr * 0.2, ny0 - hr * 0.13)], hr * 0.014));
@@ -464,16 +595,18 @@ export function buildCatModel(look) {
   // --- Queue : un tube souple plié par sept os (levée en marchant, enroulée en dormant).
   const tail = new THREE.Group();
   const tailRoot = rayHit(torsoSdf, [0, y0 + R * 0.35, -L * 0.2], [0, 0, -1], L);
-  tail.position.set(0, tailRoot.y, tailRoot.z + R * 0.08);
-  body.add(tail);
+  tail.position.set(0, tailRoot.y - y0, tailRoot.z + R * 0.08 + 3 * spineJ); // repère de l'os des hanches
+  hipBone.add(tail);
   const tailSkin = buildCatTail(tail, { L, R, fuzz, stub: tr.stubTail, mat: M.tail, high, fur: furLen * 1.1, hairless });
   skins.push(tailSkin.skin);
+  // La colonne en dernier (index SPINE0) ; ses couches de fourrure sont partagées entre chats de même gabarit.
+  skins.push({ mesh: torsoMesh, bones: spine, inverses: spineInv, fur: furLen, key: `torso|${shapeKey}` });
 
-  // Un seul squelette pour les pattes et la queue (une seule texture d'os par chat).
+  // Un seul squelette pour les pattes, la queue et la colonne (une seule texture d'os par chat).
   const skeleton = new THREE.Skeleton(skins.flatMap((s) => s.bones), skins.flatMap((s) => s.inverses));
   for (const s of skins) {
     s.mesh.bind(skeleton, new THREE.Matrix4());
-    addShells(s.mesh, s.fur);
+    addShells(s.mesh, s.fur, s.key);
   }
   parts.skeleton = skeleton;
 
@@ -485,6 +618,9 @@ export function buildCatModel(look) {
     cat: {
       traits: tr,
       tailBones: tailSkin.bones,
+      tailSeg: tailSkin.seg, // longueur d'un os de la queue
+      tailR: tailSkin.r, // épaisseur de la queue (posée au sol : catAnim.groundTail)
+      spine, // 0 = milieu, 1 à 3 vers les épaules, 4 à 6 vers les hanches (catAnim : en boule)
       neckRest: na,
       lids, lidOpen: LID_OPEN, lidShut: LID_SHUT,
       dims: { L, R, Rs, y0, legLen, legTop, hr, hipZ: -L / 2 + Rs * 0.75, shoulderZ: L / 2 - Rs * 0.75 },
@@ -510,10 +646,10 @@ function buildCatLeg(pivot, o) {
   const path = front ? FRONT : HIND;
   // Poil long : avant-bras fournis, « culottes » sur les cuisses.
   const puff = (i) => 1 + fuzz * (front ? 0.25 : 0.45) * Math.max(0, 1 - i / 3);
-  const g = loft(path.map(([z, y, w, d], i) => ({ p: [0, y * T, z * T], rx: w * r * puff(i), ry: d * r * puff(i) })), {
-    radial: high ? 14 : 9, sub: high ? 4 : 2,
+  const g = outward(loft(path.map(([z, y, w, d], i) => ({ p: [0, y * T, z * T], rx: w * r * puff(i), ry: d * r * puff(i) })), {
+    radial: high ? 14 : 9, sub: high ? 4 : 2, round: [0.7, 0], // haut de la patte en dôme (pas de disque plat à l'épaule)
     displace: fuzz > 0.3 ? (x, y, z, u, v) => (noise3(x * 120, y * 120, z * 120) - 0.45) * r * 0.5 * fuzz * Math.max(0, 1 - v * 1.6) : null,
-  });
+  }));
   const [j1, j2] = front ? JOINTS.front : JOINTS.hind;
   const zAt = (y) => {
     // Position z du chemin à la hauteur y (pour placer les articulations dans la patte).
@@ -625,10 +761,10 @@ function buildCatTail(tail, o) {
     const t = i / steps;
     secs.push({ p: [0, 0, -t * len], rx: radius(t), ry: radius(t) });
   }
-  const g = loft(secs, {
+  const g = outward(loft(secs, {
     radial: high ? 14 : 9, sub: 1, round: [0, 0.9], side: [1, 0, 0],
     displace: fuzz > 0.3 || stub ? (x, y, z, u, v) => (noise3(x * 90, y * 90, z * 90) - 0.45) * R * 0.12 * (stub ? 1 : fuzz) * Math.min(1, v * 4) : null,
-  });
+  }));
   const pos = g.attributes.position;
   const si = new Uint16Array(pos.count * 4);
   const sw = new Float32Array(pos.count * 4);
@@ -658,5 +794,5 @@ function buildCatTail(tail, o) {
   mesh.receiveShadow = true;
   mesh.add(bones[0]);
   tail.add(mesh);
-  return { bones, skin: { mesh, bones, inverses: bones.map((b, i) => new THREE.Matrix4().makeTranslation(0, 0, i * seg)), fur: o.fur } };
+  return { bones, seg, r: radius(0.5) + o.fur, skin: { mesh, bones, inverses: bones.map((b, i) => new THREE.Matrix4().makeTranslation(0, 0, i * seg)), fur: o.fur } };
 }

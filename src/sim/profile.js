@@ -8,6 +8,8 @@ import { createTutorial } from './tutorial.js';
 import { defaultClients } from './clients.js'; // clients (pension, soins)
 import { defaultCareers } from './careers.js'; // métiers
 import { migrateCoreSizes, CORE_VERSION } from './resize.js'; // tailles des enclos (vue construction)
+import { SPECIES, getBreed } from './species.js'; // anciens chats : look complété depuis la race
+import { upgradeCatLook } from './catBreeds.js';
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -125,6 +127,10 @@ export function migrate(p) {
     clients: { ...defaultClients(), ...(p.clients ?? {}) },
     careers: { ...defaultCareers(), ...(p.careers ?? {}) },
   };
+  // Chats d'avant les races détaillées : poil, tête, oreilles, gants et yeux repris de leur race.
+  for (const a of out.animals ?? []) {
+    if (a?.species === 'cat') upgradeCatLook(a.look, getBreed('cat', a.breed), SPECIES.cat.model);
+  }
   // Paddock, bergerie et enclos des lapins plus grands : on agrandit sans casser les déplacements enregistrés.
   return migrateCoreSizes(out);
 }

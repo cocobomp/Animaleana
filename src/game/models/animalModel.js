@@ -296,7 +296,7 @@ const boxUv = (sdf, tile) => (x, y, z) => {
  */
 const SHELLS = 6;
 const FUR_CELL = 420; // cellules par mètre (≈ 2,4 mm)
-function addShells(mesh, len) {
+function addShells(mesh, len, cacheKey = null) {
   if (gfx.quality !== 'high' || len < 0.002) return;
   const base = mesh.material;
   const m = base.clone();
@@ -336,14 +336,19 @@ diffuseColor.rgb *= mix(0.86, 1.03, vFurH);`);
   m.customProgramCacheKey = () => `fur${SHELLS}${skinned ? 's' : ''}`;
   let shells;
   if (skinned) {
-    const layers = [];
-    for (let i = 0; i < SHELLS; i++) {
-      const g = mesh.geometry.clone();
-      g.setAttribute('furLayer', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill((i + 1) / SHELLS), 1));
-      layers.push(g);
-    }
-    shells = new THREE.SkinnedMesh(mergeGeometries(layers), m);
-    layers.forEach((g) => g.dispose());
+    const layered = () => {
+      const layers = [];
+      for (let i = 0; i < SHELLS; i++) {
+        const g = mesh.geometry.clone();
+        g.setAttribute('furLayer', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill((i + 1) / SHELLS), 1));
+        layers.push(g);
+      }
+      const merged = mergeGeometries(layers);
+      layers.forEach((g) => g.dispose());
+      return merged;
+    };
+    // cacheKey (tronc à os des chats, géométrie partagée) : couches partagées elles aussi.
+    shells = new THREE.SkinnedMesh(cacheKey ? cachedGeo(`shells|${cacheKey}`, layered) : layered(), m);
     shells.bind(mesh.skeleton, mesh.bindMatrix);
   } else {
     shells = new THREE.InstancedMesh(mesh.geometry, m, SHELLS);

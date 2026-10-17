@@ -157,6 +157,49 @@ export function catCoatTextures(look, traits, marks) {
     const g = wrapNoise(u, v, 160, seed) * 0.6 + wrapNoise(u, v + 0.3, 330, seed + 4) * 0.4;
     return smooth(0.35, 0.75, g) * f;
   };
+  // Marbré « huître » (classic tabby) : sur chaque flanc, une tache sombre cernée de bandes qui
+  // s'enroulent en spirale ouverte ; tout est déformé par un bruit doux (rien n'est parfaitement
+  // rond). Trois lignes sur le dos, un « papillon » sur les épaules, de larges bandes qui descendent
+  // vers le ventre. Renvoie la part de couleur sombre (0 à 1) ; bords plus flous sous poil long.
+  const csoft = longHair ? 0.15 : 0.06;
+  const classic = (u, v, n, b) => {
+    const wu = (wrapNoise(u, v, 3, seed + 21) - 0.5) * 0.11 + n * 0.03;
+    const wv = (wrapNoise(u, v + 0.37, 3, seed + 57) - 0.5) * 0.11 + n * 0.02;
+    let dark = 0;
+    let oyster = 0;
+    const e = csoft * 0.12; // flou des bords (en unités de texture)
+    for (const side of [1, -1]) {
+      // Repère du flanc : x vers le dos, y vers la tête (miroir d'un flanc à l'autre).
+      const x = ((((u - (side > 0 ? 0.25 : 0.75)) % 1) + 1.5) % 1 - 0.5) * side * 1.2 + wu;
+      const y = (v - 0.42) * 0.85 + wv;
+      const a = Math.atan2(y, x);
+      // Forme d'huître : le rayon varie avec l'angle (bosses irrégulières, propres à chaque chat).
+      const r = Math.hypot(x, y) * (1 + 0.16 * Math.sin(a * 2 + seed) + 0.09 * Math.sin(a * 3 + seed * 1.7));
+      // Grosse tache pleine au centre, puis un anneau clair, puis un anneau sombre épais, ouvert
+      // vers le bas et l'arrière (là où il rejoint le ventre), puis les grandes volutes.
+      const core = 1 - smooth(0.05 - e, 0.06 + e, r + n * 0.02);
+      const open = 1 - smooth(0.55, 0.9, Math.cos(a + 2.3));
+      const ring = smooth(0.082 - e, 0.09 + e, r) * (1 - smooth(0.125 - e, 0.135 + e, r)) * open;
+      const outer = smooth(0.165 - e, 0.175 + e, r) * (1 - smooth(0.195 - e, 0.21 + e, r)) * (1 - smooth(0.2, 0.7, Math.cos(a + 2.3))) * 0.85;
+      dark = Math.max(dark, core, ring, outer);
+      oyster = Math.max(oyster, smooth(0.24, 0.2, r));
+    }
+    // Larges volutes des épaules et des hanches vers le ventre (au-dessus des huîtres, pas sur le dos).
+    const x2 = v * 6 + (1 - b) * 1.4 + wu * 7;
+    const band2 = 1 - smooth(0.22 - csoft, 0.22 + csoft, Math.abs(x2 - Math.floor(x2) - 0.5));
+    dark = Math.max(dark, band2 * smooth(0.25, 0.5, b) * smooth(0.9, 0.78, b) * (1 - oyster) * 0.9);
+    // Trois lignes sur le dos, de la nuque à la queue.
+    const sp = du(u, 0.5) + wu * 0.12;
+    dark = Math.max(dark, Math.max(1 - edge(sp, 0.013, 0.007), 1 - edge(Math.abs(sp - 0.048), 0.011, 0.007))
+      * smooth(0.05, 0.18, v) * smooth(0.84, 0.7, v));
+    // Papillon sur les épaules : deux taches allongées de part et d'autre du dos, cernées d'un arc.
+    const fx = du(u, 0.5) - 0.08;
+    const fy = v - 0.79 + wv * 0.3;
+    const fr = Math.hypot(fx * 1.5, fy * 0.8);
+    const wing = Math.max(1 - smooth(0.03 - e, 0.042 + e, fr + n * 0.02), (1 - smooth(0.007, 0.015, Math.abs(fr - 0.064))) * smooth(-0.01, 0.02, fx));
+    dark = Math.max(dark, wing * smooth(0.94, 0.86, v));
+    return Math.min(1, dark);
+  };
   const tortie = (u, v) => {
     const t = wrapNoise(u, v, 5, seed + 3) + (wrapNoise(u, v, 17, seed + 9) - 0.5) * 0.45;
     return smooth(0.47, 0.55, t);
@@ -213,19 +256,7 @@ export function catCoatTextures(look, traits, marks) {
           mix(sec, bands(x, 0, 0.26) * smooth(0.18, 0.5, b) * (0.4 + 0.42 * broken));
           mix(sec, (1 - edge(du(u, 0.5), 0.035 + n * 0.012, 0.015)) * 0.85);
         } else {
-          // Marbré : une cible sur chaque flanc, trois lignes sur le dos, un papillon sur les épaules.
-          const k = longHair ? 0.6 : 0.82;
-          for (const uc of [0.25, 0.75]) {
-            const d = Math.hypot(du(u, uc) * 1.15, (v - 0.4) * 0.9) + n * 0.05;
-            const ring = 1 - smooth(0.014 - soft * 0.25, 0.014 + soft * 0.25, Math.abs(d - 0.085));
-            const core = 1 - smooth(0.025, 0.035, d);
-            const ring2 = (1 - smooth(0.018 - soft * 0.25, 0.018 + soft * 0.25, Math.abs(d - 0.15))) * smooth(-0.1, 0.25, n * 2 + 0.1);
-            mix(sec, Math.min(1, ring + core + ring2 * smooth(0.25, 0.08, Math.abs(v - 0.4))) * k);
-          }
-          const sp = du(u, 0.5);
-          mix(sec, Math.max(1 - edge(sp, 0.012, 0.008), 1 - edge(Math.abs(sp - 0.045), 0.01, 0.008)) * smooth(0.05, 0.25, v) * smooth(0.85, 0.7, v) * k);
-          const fly = Math.hypot((sp - 0.08) * 1.4, v - 0.78) + n * 0.03;
-          mix(sec, (1 - smooth(0.03, 0.045, fly)) * k);
+          mix(sec, classic(u, v, n, b) * (longHair ? 0.66 : 0.86));
         }
         return;
       }
@@ -350,6 +381,8 @@ export function catCoatTextures(look, traits, marks) {
     // Sur le corps, le haut et le bas de la texture se resserrent en un point (poitrail, sous la
     // queue) : on y fond le motif dans la couleur du ventre pour éviter une étoile de traits.
     const poleOf = (v) => (part === 'body' ? Math.max(smooth(0.8, 0.985, v), smooth(0.14, 0.015, v)) : 0);
+    // Grain et traits de poil s'effacent plus tôt : le resserrement se voit dès v ≈ 0,8 (poitrail).
+    const poleStroke = (v) => (part === 'body' ? Math.max(smooth(0.7, 0.84, v), smooth(0.24, 0.1, v)) : 0);
     const belly = [0, 0, 0];
     // Bruit qui boucle en u, avec cos/sin précalculés par colonne (le plus gros du temps de calcul).
     const cu = new Float32Array(size);
@@ -443,6 +476,7 @@ export function catCoatTextures(look, traits, marks) {
     for (let py = 0; py < size; py++) {
       const v = 1 - (py + 0.5) / size;
       const pole = poleOf(v);
+      const calm = poleStroke(v);
       const bellyWhite = pole > 0 ? whiteMarks(part, 0.001, v, 0, front) : 0;
       for (let px = 0; px < size; px++) {
         const u = (px + 0.5) / size;
@@ -471,7 +505,8 @@ export function catCoatTextures(look, traits, marks) {
           const ty = fy - gy;
           const m0 = motGrid[gy * gw + gx] * (1 - tx) + motGrid[gy * gw + gx + 1] * tx;
           const m1 = motGrid[(gy + 1) * gw + gx] * (1 - tx) + motGrid[(gy + 1) * gw + gx + 1] * tx;
-          mul(1 + (m0 + (m1 - m0) * ty) * 0.1 + (rng() - 0.5) * 0.08);
+          // Pas de grain près des pôles du corps : il s'y resserrerait en étoile (poitrail).
+          mul(1 + (m0 + (m1 - m0) * ty) * 0.1 + (rng() - 0.5) * 0.08 * (1 - calm));
         }
         e[i] = Math.min(255, Math.max(0, out[0]));
         e[i + 1] = Math.min(255, Math.max(0, out[1]));
@@ -489,7 +524,9 @@ export function catCoatTextures(look, traits, marks) {
         const x = rng() * size;
         const y = rng() * size;
         const l = len * (0.5 + rng());
-        if (part === 'body' && (y < size * 0.09 || y > size * 0.93)) continue;
+        // Corps : pas de traits là où la texture se resserre vers un point (poitrail, sous la queue),
+        // sinon ils dessinent une étoile ; ils s'éclaircissent avant d'y arriver.
+        if (part === 'body' && poleStroke(1 - y / size) > rng()) continue;
         ctx.strokeStyle = rng() < 0.5 ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
         ctx.beginPath();
         if (curly) {

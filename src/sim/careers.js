@@ -31,8 +31,6 @@ export const QUESTS_FOR_CAREER = 5; // quêtes finies avant qu'on propose un mé
  *   building  : le bâtiment qui propose le métier quand on le touche
  *   perks     : ce que change chaque rang (lu par src/sim/clients.js)
  */
-import { TRAIL_GUIDE_CAREER } from './trailGuide.js'; // 🧭 guide de randonnée (son propre jeu : src/game/TrailGuide.js)
-
 export const CAREERS = {
   vet: {
     id: 'vet',
@@ -72,7 +70,32 @@ export const CAREERS = {
       { maxClients: 3, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat', 'cow'], price: 1.25, tips: true },
     ],
   },
-  trailGuide: TRAIL_GUIDE_CAREER, // 🧭 ses perks ont maxClients: 0 (pas de clients qui confient leurs animaux)
+  // 🧭 Guide de randonnée : des visiteurs demandent une balade à cheval ; on choisit les chevaux, on selle,
+  // on prépare la sacoche et on les guide (src/sim/trailGuide.js, src/game/TrailGuide.js, src/ui/trailGuide.js).
+  // Pas de clients qui confient leurs animaux (maxClients: 0). Textes : src/ui/trailGuideTexts.js.
+  //   maxRiders : cavaliers par balade ; durations : balades possibles ; abroad : rendez-vous dans d'autres lieux ;
+  //   dogs : nos chiens peuvent venir ; special : itinéraires spéciaux (Islande, Alpes).
+  trailGuide: {
+    id: 'trailGuide',
+    emoji: '🧭',
+    level: 4,
+    building: 'stable',
+    ranks: [0, 150, 400],
+    actions: [
+      { id: 'accept', emoji: '📋', where: 'visitor' },
+      { id: 'prepare', emoji: '✅', where: 'stable' },
+      { id: 'ride', emoji: '🐎', where: 'trail' },
+      { id: 'photo', emoji: '📷', where: 'trail' },
+      { id: 'break', emoji: '🧃', where: 'trail' },
+      { id: 'firstAid', emoji: '🩹', where: 'trail' },
+      { id: 'return', emoji: '⭐', where: 'stable' },
+    ],
+    perks: [
+      { maxRiders: 2, durations: ['short'], abroad: false, dogs: false, special: false, price: 1, tips: false, maxClients: 0 },
+      { maxRiders: 4, durations: ['short', 'half'], abroad: true, dogs: true, special: false, price: 1.15, tips: true, maxClients: 0 },
+      { maxRiders: 6, durations: ['short', 'half', 'trek'], abroad: true, dogs: true, special: true, price: 1.3, tips: true, maxClients: 0 },
+    ],
+  },
 };
 
 export const CAREER_IDS = Object.keys(CAREERS);

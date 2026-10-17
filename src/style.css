@@ -2072,7 +2072,7 @@ body.actv-nomove #touch-pad { display: none !important; }
 .tg-label small, .tg-why { color: #8b5a00; font-size: 0.85em; }
 .tg-check.ok .tg-label small { color: var(--muted); }
 .tg-tools { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
-.tg-tools button { min-height: 34px; padding: 4px 10px; }
+.tg-tools button { min-height: 44px; padding: 4px 12px; } /* cibles de 44 px au doigt */
 .tg-picker { display: grid; gap: 6px; }
 .tg-horse.locked { opacity: 0.6; }
 .tg-hist { display: flex; gap: 10px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: 0.95em; }
@@ -2083,7 +2083,10 @@ body.actv-nomove #touch-pad { display: none !important; }
 .tg-comments li.great { background: #e9f7ee; }
 .tg-comments li.bad { background: #fdf0d8; }
 button.big.off { opacity: 0.55; }
+/* Pendant une activité (balade guidée…), les messages passent sous la consigne de l'activité au lieu de la cacher. */
+body.actv-running #toasts { top: calc(178px + var(--safe-t)); }
 @media (max-width: 640px) {
+  body.actv-running #toasts { top: calc(240px + var(--safe-t)); }
   .tg-check { flex-wrap: wrap; }
   .tg-tools { width: 100%; justify-content: flex-start; }
 }

@@ -1,6 +1,8 @@
 // 🧭 Guide de randonnée (interface) : la demande des visiteurs en bulles de discussion
-// (comme src/ui/helperChat.js), la liste à cocher avant de partir, le carnet du métier
-// et la fenêtre de résultats. Logique : src/sim/trailGuide.js ; 3D : src/game/TrailGuide.js.
+// (comme src/ui/helperChat.js), la liste à cocher avant de partir (chevaux calmes, selle à la
+// bonne taille, gourde, goûter, trousse de secours, météo), le carnet du métier et la fenêtre de
+// résultats. Logique : src/sim/trailGuide.js ; 3D : src/game/TrailGuide.js. Le métier est aussi
+// dans le panneau 💼 (src/ui/careers.js), qui ouvre ce carnet.
 
 import { h } from './dom.js';
 import { t, L } from '../i18n.js';
@@ -8,8 +10,11 @@ import { PLACES } from '../sim/places.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
 import {
-  TRAIL_GUIDE_CAREER, RANK_IDS, GROUPS, ROUTES, tgState, rankOf, rankProgress, perksOf, horseFit, gearFit, isPony, riderMood,
+  TRAIL_GUIDE_CAREER, RANK_IDS, GROUPS, ROUTES, tgState, rankOf, rankProgress, perksOf, horseFit, gearFit, isPony, riderMood, trailReputation,
 } from '../sim/trailGuide.js';
+import { isActionDone, isStarted } from '../sim/careers.js'; // carnet du registre des métiers (💼)
+import { sizeOf, gearPrice } from '../sim/gear.js';
+import { TOOLS } from '../sim/tools.js';
 
 const placeName = (id) => L(PLACES[id]?.name) || id;
 const LEVEL_EMOJI = { beginner: '🌱', medium: '🌿', confirmed: '🌳' };
@@ -105,6 +110,18 @@ export function openTrailPrep(ui, tg) {
     return d ? { x: d.x, z: d.z } : null;
   };
   const showBtn = (target) => (target ? h('button', { class: 'small tg-show', onClick: () => tg.showMe(target) }, `👉 ${t('quest_showMe')}`) : null);
+  // Seller : filet (ou licol) et selle à la taille du cheval, pris dans la sellerie (ou le coffre en voyage).
+  const saddleBtn = (horse, rider) => {
+    // Il manque un objet à sa taille (pas d'exemplaire libre) : on l'achète ici, puis on selle.
+    const need = tg.needFor(horse.id);
+    if (need) {
+      const price = isSandbox(g.profile) ? t('tg_free') : `${gearPrice(need.item, need.size)} 🪙`;
+      return h('button', { class: 'small primary', onClick: () => { tg.buyAndSaddle(horse, rider); ui.renderPanel(); } },
+        `🛒 ${t('tg_buyGear', { item: t(`gear_${need.item}`), size: t(`tk_size_${need.size}`), price })}`);
+    }
+    return h('button', { class: 'small primary', onClick: () => { tg.saddleUp(horse, rider); ui.renderPanel(); } }, `🏇 ${t('tg_saddle')}`);
+  };
+  const tackBtn = () => h('button', { class: 'small', onClick: () => ui.openTack() }, `🏪 ${t('tg_tackShop')}`);
 
   const horsePicker = () => {
     const forGuide = state.pickFor === 'guide';
@@ -127,7 +144,7 @@ export function openTrailPrep(ui, tg) {
       },
       h('span', { class: 'card-emoji' }, isPony(a) ? '🐴' : '🐎'),
       h('span', { class: 'card-main' }, h('b', {}, a.name),
-        h('small', {}, `${isPony(a) ? t('tg_pony') : L(SPECIES.horse.breeds.find((x) => x.id === a.breed)?.name)} · ${t('p_' + a.personality, { g: a.sex })} · 🎓 ${Math.round(a.skills.obedience)} · ❤️ ${Math.round(a.bond ?? 0)}`),
+        h('small', {}, `${L(SPECIES.horse.breeds.find((x) => x.id === a.breed)?.name) || t('tg_pony')} · 📏 ${t(`tk_size_${sizeOf(a) ?? 'horse'}`)} · ${t('p_' + a.personality, { g: a.sex })} · 🎓 ${Math.round(a.skills.obedience)} · ❤️ ${Math.round(a.bond ?? 0)}`),
         why ? h('small', { class: 'tg-why' }, why) : null),
       h('span', { class: 'card-side' }, fit.ok && !busy ? '✅' : '⚠️'));
     });
@@ -159,21 +176,30 @@ export function openTrailPrep(ui, tg) {
           it?.ok ? `${LEVEL_EMOJI[r.level]} ${t(`tg_level_${r.level}`, { g: r.sex })} · ${t(`tg_weight_${r.weight}`)}` : it?.reason ? t(`tg_reason_${it.reason}`) : null));
         const gi = check.items.find((x) => x.id === 'gear' && x.rider === r);
         if (gi) {
-          rows.push(line(gi.ok, t(gi.led ? 'tg_item_gearLed' : 'tg_item_gear', { horse: horse.name }),
-            [gi.ok ? null : h('button', { class: 'small', onClick: () => { ui.closePanel(); ui.openAnimalActions(horse); } }, '📋'), gi.ok ? null : showBtn(entityOf(horse.id))],
-            gi.ok ? null : t(`tg_reason_${gi.reason}`)));
+          const size = gi.size ? t(`tk_size_${gi.size}`) : '';
+          rows.push(line(gi.ok, t(gi.led ? 'tg_item_gearLed' : 'tg_item_gear', { horse: horse.name, size }),
+            gi.ok ? null : [saddleBtn(horse, r), tackBtn()],
+            gi.ok ? null : t(`tg_reason_${gi.reason}`, { size })));
         }
       }
       const same = check.items.find((x) => x.id === 'sameHorse');
       if (same) rows.push(line(false, t('tg_reason_sameHorse')));
       const gh = check.items.find((x) => x.id === 'guideHorse');
+      const ghSize = gh.size ? t(`tk_size_${gh.size}`) : '';
+      const ghGear = gh.horse && (gh.reason === 'needBridle' || gh.reason === 'wrongSize');
       rows.push(line(gh.ok, gh.horse ? t('tg_item_guideHorse', { horse: gh.horse.name }) : t('tg_item_guideHorseNone'),
-        [h('button', { class: 'small', onClick: () => { state.pickFor = 'guide'; ui.renderPanel(); } }, t('tg_pick')), gh.horse ? showBtn(entityOf(gh.horse.id)) : null],
-        gh.ok ? null : gh.reason && gh.reason !== 'noHorse' ? t(`tg_reason_${gh.reason}`) : null));
+        [ghGear ? saddleBtn(gh.horse, null) : null, h('button', { class: 'small', onClick: () => { state.pickFor = 'guide'; ui.renderPanel(); } }, t('tg_pick')), gh.horse && !ghGear ? showBtn(entityOf(gh.horse.id)) : null],
+        gh.ok ? null : gh.reason && gh.reason !== 'noHorse' ? t(`tg_reason_${gh.reason}`, { size: ghSize }) : null));
+      // La sacoche : gourde, goûter (à la sellerie) et trousse de secours.
       for (const k of ['water', 'snack']) {
         const it = check.items.find((x) => x.id === k);
-        rows.push(line(it.ok, t(`tg_item_${k}`), it.ok ? null : [h('button', { class: 'small', onClick: () => tg.takeSupply(b, k) }, t('tg_takeAtTack')), showBtn(tackSpot())]));
+        rows.push(line(it.ok, t(`tg_item_${k}`), it.ok ? null : [h('button', { class: 'small primary', onClick: () => tg.takeSupply(b, k) }, t('tg_takeAtTack')), showBtn(tackSpot())]));
       }
+      const kit = check.items.find((x) => x.id === 'firstAid');
+      const kitPrice = isSandbox(g.profile) ? t('tg_free') : `${TOOLS.firstAid.price} 🪙`;
+      rows.push(line(kit.ok, t('tg_item_firstAid'),
+        kit.ok ? null : h('button', { class: 'small primary', onClick: async () => { await tg.buyFirstAid(); ui.renderPanel(); } }, `🧰 ${t('tg_kitBuyBtn', { price: kitPrice })}`),
+        kit.ok ? t('tg_kitHelp') : t(`tg_reason_${kit.reason}`)));
       const wi = check.items.find((x) => x.id === 'weather');
       rows.push(line(wi.ok, `${t('tg_item_weather')} · ${t(`w_${g.weather}`)} ${g.temperature} °C`, null, wi.ok ? null : t(`tg_reason_${wi.reason}`)));
       if (perksOf(g.profile).dogs && g.animalsHere().some((a) => a.species === 'dog')) {
@@ -213,11 +239,12 @@ export function openTrailCarnet(ui) {
           h('span', { class: 'hc-avatar' }, '🧭'),
           h('div', { class: 'hc-id' },
             h('b', {}, t(`tg_rank_${RANK_IDS[rank]}`)),
-            h('small', {}, `${t('tg_xp')} ${pr.xp} · ${pr.to === null ? t('tg_maxRank') : t('tg_nextRank', { n: pr.to })} · ⭐ ${t('tg_reputation')} ${st.reputation}`),
+            h('small', {}, `${t('tg_xp')} ${pr.xp} · ${pr.to === null ? t('tg_maxRank') : t('tg_nextRank', { n: pr.to })} · ⭐ ${t('tg_reputation')} ${Math.round(trailReputation(p))}`),
             h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${Math.round(pr.ratio * 100)}%` } })))),
         h('p', { class: 'note' }, t(`tg_rankHelp_${RANK_IDS[rank]}`)),
       ];
       if (g.level < TRAIL_GUIDE_CAREER.level) out.push(h('p', { class: 'note tg-locked' }, `🔒 ${t('tg_level', { n: TRAIL_GUIDE_CAREER.level })}`));
+      else if (!isStarted(p, 'trailGuide')) out.push(h('p', { class: 'note' }, t('tg_notStarted')));
       // Rendez-vous
       out.push(h('h3', {}, `📅 ${t('tg_bookings')}`));
       const here = tg.booking;
@@ -233,8 +260,8 @@ export function openTrailCarnet(ui) {
       if (st.offer && tg.visitorsFor === 'offer') out.push(h('button', { class: 'card', onClick: () => tg.talk() }, h('span', { class: 'card-emoji' }, '💬'), h('span', { class: 'card-main' }, h('b', {}, t('tg_chip_visitor')))));
       // Carnet des actions
       out.push(h('h3', {}, `📒 ${t('tg_carnet')}`));
-      out.push(h('div', { class: 'tg-list' }, TRAIL_GUIDE_CAREER.actions.map((a) => h('div', { class: `tg-check ${st.seen.includes(a.id) ? 'ok' : ''}` },
-        h('span', { class: 'tg-box' }, st.seen.includes(a.id) ? '✅' : '⬜'),
+      out.push(h('div', { class: 'tg-list' }, TRAIL_GUIDE_CAREER.actions.map((a) => h('div', { class: `tg-check ${isActionDone(p, 'trailGuide', a.id) ? 'ok' : ''}` },
+        h('span', { class: 'tg-box' }, isActionDone(p, 'trailGuide', a.id) ? '✅' : '⬜'),
         h('span', { class: 'tg-label' }, h('b', {}, `${a.emoji} ${t(`ca_trailGuide_${a.id}`)}`), h('small', {}, t(`tg_tuto_${a.id}`)))))));
       // Historique
       out.push(h('h3', {}, `🏇 ${t('tg_history')}`));
@@ -256,8 +283,8 @@ const pickComment = (mood, i) => `tg_c_${mood}_${(i % 3) + 1}`;
 /** r : { booking, result, applied, gains, sandbox, rankName, onClose } */
 export function showRideResult(ui, r) {
   const res = r.result;
-  let guard = null;
-  const close = () => { clearInterval(guard); ui.hideModal(); r.onClose?.(); };
+  // (« Niveau supérieur ! » qui arrive en même temps attend son tour : ui.showModal met les fenêtres en file.)
+  const close = () => { ui.hideModal(); r.onClose?.(); };
   const box = h('div', { class: 'actv-result tg-result' },
       h('h2', {}, `🧭 ${t('tg_resultTitle')}`),
       h('div', { class: 'actv-stars', 'aria-label': `${res.stars}/3` }, Array.from({ length: 3 }, (_, i) => h('span', { class: i < res.stars ? 'on' : '' }, '★'))),
@@ -268,15 +295,11 @@ export function showRideResult(ui, r) {
         h('li', {}, `⭐ ${t('tg_result_rep')} : ${res.repDelta >= 0 ? '+' : ''}${res.repDelta} → ${r.applied.reputation}`),
         h('li', {}, `🧭 ${t('tg_result_xp')} : +${res.xp}`),
         res.photos ? h('li', {}, `📷 ${t('tg_result_photos')} : ${res.photos}`) : null,
+        res.helped ? h('li', {}, `🩹 ${t('tg_result_helped')} : ${res.helped}`) : null,
         h('li', {}, t('tg_result_horses', { n: r.gains.endurance })),
         r.applied.rankUp ? h('li', { class: 'good' }, t('tg_rankUp', { rank: r.rankName })) : null),
       h('div', { class: 'row end' }, h('button', { class: 'primary', onClick: close }, t('actv_done'))));
   ui.showModal([box]);
-  // Si une autre fenêtre (« Niveau supérieur ! ») passe par-dessus, on remontre le résultat après.
-  guard = setInterval(() => {
-    if (box.isConnected) return;
-    if (!ui.modalOpen) ui.showModal([box]);
-  }, 500);
 }
 
 export { riderMood, gearFit };

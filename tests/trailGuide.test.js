@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   TRAIL_GUIDE_CAREER, RANK_IDS, GROUPS, DURATIONS, ROUTES, BIOME_ROUTES, defaultTrailGuide, tgState, rankOf, perksOf, rankProgress,
   addTrailXp, makeBooking, makeRiders, offerDue, createOffer, acceptOffer, refuseOffer, bookingHere, expireBookings, routeFor,
-  ridePlan, isPony, horseFit, autoAssign, gearFit, weatherBlock, prepChecklist, rideResult, applyRideResult, horseGains, noteAction,
-  riderMood, changeReputation,
+  ridePlan, isPony, horseFit, autoAssign, gearFit, weatherBlock, prepChecklist, rideResult, applyRideResult, horseGains, explainOnce,
+  riderMood, changeReputation, trailReputation, carriesAdult, firstAidState, helpFallen, FUN, FALL_WAIT, ensureTrailCareer,
 } from '../src/sim/trailGuide.js';
-import { CAREERS, CAREER_IDS, startCareer, noteAction as noteCareerAction, careerSummary } from '../src/sim/careers.js';
+import { CAREERS, CAREER_IDS, startCareer, isStarted, noteAction as noteCareerAction, careerSummary } from '../src/sim/careers.js';
+import { buyTool } from '../src/sim/tools.js';
 import { maxClients } from '../src/sim/clients.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { createProfile } from '../src/sim/profile.js';
@@ -23,6 +24,7 @@ const horse = (over = {}) => {
 const pony = (over = {}) => {
   const a = horse({ breed: 'shetland' });
   a.look.scale = 0.58;
+  a.gear = { bridle: { item: 'bridle', size: 'pony' }, saddle: { item: 'saddle', size: 'pony' } };
   return Object.assign(a, over);
 };
 const profile = (xp = 0) => {
@@ -43,7 +45,8 @@ describe('le métier guide de randonnée', () => {
     expect(TRAIL_GUIDE_CAREER.ranks).toHaveLength(3);
     expect(TRAIL_GUIDE_CAREER.perks).toHaveLength(3);
     expect(TRAIL_GUIDE_CAREER.perks.every((x) => x.maxClients === 0)).toBe(true); // pas de clients vétérinaire / pension
-    expect(TRAIL_GUIDE_CAREER.actions.map((a) => a.id)).toEqual(['accept', 'prepare', 'ride', 'photo', 'break', 'return']);
+    expect(TRAIL_GUIDE_CAREER.actions.map((a) => a.id)).toEqual(['accept', 'prepare', 'ride', 'photo', 'break', 'firstAid', 'return']);
+    expect(TRAIL_GUIDE_CAREER.actions.every((a) => a.emoji && a.where)).toBe(true);
     expect(RANK_IDS).toEqual(['apprentice', 'skilled', 'expert']);
   });
 
@@ -51,9 +54,18 @@ describe('le métier guide de randonnée', () => {
     const p = createProfile('Lou');
     expect(p.trailGuide).toEqual(defaultTrailGuide());
     const old = { name: 'X', animals: [] };
+    tgState(old);
+    expect(old.trailGuide.bookings).toEqual([]);
+    expect(trailReputation(old)).toBe(50); // réputation du registre des métiers
+  });
+
+  it('migration : l\'ancienne réputation du guide passe dans le registre des métiers', () => {
+    const old = { name: 'X', animals: [], trailGuide: { reputation: 72, bookings: [], history: [{ stars: 3 }] } };
     const st = tgState(old);
-    expect(st.reputation).toBe(50);
-    expect(old.careers.xp.trailGuide).toBe(0);
+    expect(st.reputation).toBeUndefined();
+    expect(old.careers.reputation.trailGuide).toBe(72);
+    expect(st.history).toHaveLength(1);
+    expect(st.seen).toEqual([]);
   });
 
   it('les rangs montent avec l\'XP de métier', () => {
@@ -86,9 +98,21 @@ describe('le métier guide de randonnée', () => {
 
   it('la première fois, chaque action du carnet est expliquée', () => {
     const p = profile();
-    expect(noteAction(p, 'accept')).toBe(true);
-    expect(noteAction(p, 'accept')).toBe(false);
+    expect(explainOnce(p, 'accept')).toBe(true);
+    expect(explainOnce(p, 'accept')).toBe(false);
     expect(p.trailGuide.seen).toEqual(['accept']);
+  });
+
+  it('accepter sa première balade commence le métier dans le registre (une seule fois)', () => {
+    const p = createProfile('Lou', 'manage');
+    expect(isStarted(p, 'trailGuide')).toBe(false);
+    createOffer(p, { day: 3, place: 'maison', clock: 600, rng: seq([0.5]) });
+    expect(acceptOffer(p, 3).careerStarted).toBe(true);
+    expect(p.careers.started.trailGuide).toBe(3);
+    expect(p.careers.active).toBe('trailGuide');
+    expect(ensureTrailCareer(p, 4)).toBe(false);
+    createOffer(p, { day: 4, place: 'maison', clock: 600, rng: seq([0.5]) });
+    expect(acceptOffer(p, 4).careerStarted).toBe(false);
   });
 });
 
@@ -153,7 +177,7 @@ describe('visiteurs et demandes', () => {
     expect(expireBookings(p, 3)).toEqual([]);
     expect(expireBookings(p, 4)).toEqual([b]);
     expect(p.trailGuide.bookings).toEqual([]);
-    expect(p.trailGuide.reputation).toBe(46);
+    expect(trailReputation(p)).toBe(46);
   });
 });
 
@@ -168,6 +192,17 @@ describe('itinéraires', () => {
       expect(r.points.length, id).toBe(8);
       expect(r.sight.leg, id).toBeLessThan(8);
     }
+  });
+
+  it('chaque balade a son cavalier qui tombe, sur une étape du chemin', () => {
+    for (const [id, r] of Object.entries(ROUTES)) {
+      expect(r.fall, id).toBeGreaterThan(0);
+      expect(r.fall, id).toBeLessThan(5); // même dans une balade d'une heure (5 balises)
+      expect(r.fall, id).not.toBe(r.scare); // pas en même temps que le cheval qui a peur
+      const plan = ridePlan({ duration: 'short', route: id, place: 'maison' });
+      expect(plan.events.filter((e) => e.type === 'fall'), id).toHaveLength(1);
+    }
+    expect(ridePlan({ duration: 'trek', route: 'meadow', place: 'maison' }).events.filter((e) => e.type === 'fall')).toHaveLength(2);
   });
 
   it('une balade d\'une heure : 5 balises + l\'écurie, avec photo et goûter', () => {
@@ -223,6 +258,15 @@ describe('préparer la balade', () => {
     expect(horseFit(createAnimal({ species: 'dog', rng: () => 0.5 }), pro)).toMatchObject({ ok: false, reason: 'notHorse' });
   });
 
+  it('un adulte peut monter un grand poney (islandais), pas un Shetland ; un cheval de trait, oui', () => {
+    const iceland = horse({ breed: 'islandais' });
+    expect(isPony(iceland)).toBe(true);
+    expect(carriesAdult(iceland)).toBe(true);
+    expect(horseFit(iceland, pro).ok).toBe(true);
+    expect(carriesAdult(pony())).toBe(false);
+    expect(horseFit(horse({ breed: 'percheron' }), pro).ok).toBe(true);
+  });
+
   it('un enfant monte un poney ; un adulte, pas un poney', () => {
     expect(isPony(pony())).toBe(true);
     expect(isPony(horse())).toBe(false);
@@ -246,10 +290,33 @@ describe('préparer la balade', () => {
 
   it('matériel : selle + filet, ou licol seul pour un poney mené', () => {
     expect(gearFit(horse(), beginner).ok).toBe(true);
-    expect(gearFit(horse({ gear: { bridle: { item: 'bridle' } } }), beginner)).toMatchObject({ ok: false, reason: 'needSaddle' });
+    expect(gearFit(horse({ gear: { bridle: { item: 'bridle' } } }), beginner)).toMatchObject({ ok: false, reason: 'needSaddle', size: 'horse' });
     expect(gearFit(horse({ gear: {} }), beginner)).toMatchObject({ ok: false, reason: 'needBridle' });
-    expect(gearFit(pony({ gear: { halter: { item: 'halter' } } }), kid)).toMatchObject({ ok: true, led: true });
-    expect(gearFit(pony({ gear: {} }), kid)).toMatchObject({ ok: false, reason: 'needHalter' });
+    expect(gearFit(pony({ gear: { halter: { item: 'halter', size: 'pony' } } }), kid)).toMatchObject({ ok: true, led: true });
+    expect(gearFit(pony({ gear: {} }), kid)).toMatchObject({ ok: false, reason: 'needHalter', size: 'pony' });
+  });
+
+  it('sellerie par taille : n\'importe quel modèle du type compte, mais à la taille du cheval', () => {
+    // Selle de randonnée et hackamore : c'est bien une selle et un filet.
+    expect(gearFit(horse({ gear: { bridle: { item: 'hackamore' }, saddle: { item: 'saddleTrail' } } }), beginner).ok).toBe(true);
+    // Un licol taille cheval sur un Shetland : trop grand.
+    expect(gearFit(pony({ gear: { halter: { item: 'halter' } } }), kid)).toMatchObject({ ok: false, reason: 'wrongSize', size: 'pony' });
+    // Une selle poney sur un cheval : trop petite.
+    const h = horse({ gear: { bridle: { item: 'bridle' }, saddle: { item: 'saddlePony', size: 'pony' } } });
+    expect(gearFit(h, beginner)).toMatchObject({ ok: false, reason: 'wrongSize', item: 'saddlePony' });
+  });
+
+  it('la trousse de secours : à acheter, dans la sacoche, ou restée à la maison en voyage', () => {
+    const p = createProfile('Lou', 'manage');
+    expect(firstAidState(p)).toBe('none');
+    expect(buyTool(p, 'firstAid').ok).toBe(true);
+    expect(firstAidState(p)).toBe('ok');
+    // En voyage, sans la trousse dans le coffre de transport.
+    p.place = 'alpes';
+    p.luggage = { place: 'alpes', tools: [] };
+    expect(firstAidState(p)).toBe('atHome');
+    p.luggage.tools = ['firstAid'];
+    expect(firstAidState(p)).toBe('ok');
   });
 
   it('orage ou canicule : on reporte', () => {
@@ -265,10 +332,12 @@ describe('préparer la balade', () => {
     const b = { riders: [{ ...beginner, horseId: h1.id }, { ...pro, horseId: h2.id }], guideHorseId: mine.id, prep: { water: false, snack: false } };
     let c = prepChecklist(b, { horses: [h1, h2, mine] });
     expect(c.ok).toBe(false);
-    expect(c.items.filter((i) => !i.ok).map((i) => i.id)).toEqual(['water', 'snack']);
+    expect(c.items.filter((i) => !i.ok).map((i) => i.id)).toEqual(['water', 'snack', 'firstAid']);
+    expect(c.items.find((i) => i.id === 'firstAid').reason).toBe('noKit');
     b.prep.water = true;
     b.prep.snack = true;
-    c = prepChecklist(b, { horses: [h1, h2, mine], weather: 'clear', temperature: 20 });
+    expect(prepChecklist(b, { horses: [h1, h2, mine], firstAid: 'atHome' }).items.find((i) => i.id === 'firstAid').reason).toBe('kitAtHome');
+    c = prepChecklist(b, { horses: [h1, h2, mine], weather: 'clear', temperature: 20, firstAid: 'ok' });
     expect(c.ok).toBe(true);
     // Le même cheval pour deux cavaliers, ou notre cheval prêté : refusé.
     b.riders[1].horseId = h1.id;
@@ -305,6 +374,23 @@ describe('résultat de la balade', () => {
     expect(riderMood(60)).toBe('ok');
   });
 
+  it('le cavalier tombé : vite soigné avec la trousse, il est content ; trop tard ou sans trousse, moins', () => {
+    const a = { fun: 50 };
+    a.fun += FUN.fall;
+    expect(helpFallen(a, { kit: true, waited: 5 })).toEqual({ fun: FUN.firstAid, mood: 'great' });
+    expect(a.fun).toBe(50 + FUN.fall + FUN.firstAid);
+    const late = { fun: 50 };
+    expect(helpFallen(late, { kit: true, waited: FALL_WAIT + 1 }).mood).toBe('ok');
+    expect(late.fun).toBe(50 + FUN.firstAid / 2);
+    const noKit = { fun: 50 };
+    expect(helpFallen(noKit, { kit: false }).fun).toBeLessThan(0);
+    // Aider un cavalier rapporte de l'XP de guide.
+    const base = rideResult({ riders: riders(80), legs: 6, totalLegs: 6, booking, perks });
+    const withHelp = rideResult({ riders: riders(80), legs: 6, totalLegs: 6, booking, perks, falls: 1, helped: 1 });
+    expect(withHelp.xp).toBe(base.xp + 5);
+    expect(withHelp.helped).toBe(1);
+  });
+
   it('une balade abandonnée paie peu et coûte de la réputation', () => {
     const r = rideResult({ riders: riders(60), legs: 2, totalLegs: 6, booking, perks, aborted: true });
     expect(r.stars).toBe(1);
@@ -321,7 +407,9 @@ describe('résultat de la balade', () => {
     expect(earned).toBe(r.pay + r.tip);
     expect(out.money).toBe(earned);
     expect(p.trailGuide.bookings).toEqual([]);
-    expect(p.trailGuide.reputation).toBe(56);
+    expect(trailReputation(p)).toBe(56);
+    expect(p.careers.reputation.trailGuide).toBe(56); // une seule réputation : celle du registre
+    expect(p.careers.earned.trailGuide).toBe(earned);
     expect(p.careers.xp.trailGuide).toBe(r.xp);
     expect(p.trailGuide.history[0]).toMatchObject({ day: 2, group: 'friends', riders: 2, stars: 3 });
     expect(p.stats).toMatchObject({ tgRides: 1, tgRiders: 2, tgStars3: 1, tgAbroad: 1, tgPhotos: 1 });

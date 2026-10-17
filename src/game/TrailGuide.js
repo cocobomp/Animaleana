@@ -1,27 +1,33 @@
 // 🧭 Guide de randonnée (partie 3D) : des visiteurs arrivent près de l'écurie (ou du gîte en
-// voyage) pour demander une balade ; on prépare, puis on les emmène sur un itinéraire de balises
-// avec des petits événements (cavalier à la traîne, cheval qui a peur, ruisseau, photo, goûter).
+// voyage) pour demander une balade ; on prépare (chevaux calmes, selle à la bonne taille, gourde,
+// goûter, trousse de secours), puis on les emmène sur un itinéraire de balises avec des petits
+// événements (cavalier à la traîne, cheval qui a peur, cavalier qui tombe, ruisseau, photo, pause boisson).
 // La logique (règles, résultat) est dans src/sim/trailGuide.js ; l'interface dans src/ui/trailGuide.js.
 
 import * as THREE from 'three';
 import { ActivitySession, fmtActivityTime } from './Activities.js';
-import { buildAvatar } from './models/avatarModel.js';
+import { buildAvatar, animateAvatarWalk, updateAvatarLife, poseAvatar, animateAvatarRide } from './models/avatarModel.js';
+import { stirrupFor } from './models/avatarMotion.js'; // pieds dans les étriers (comme le joueur, src/game/Player.js)
 import { disposeModel } from './models/animalModel.js';
 import { trailMarker, sightModel, guideArrow } from './models/course.js';
 import { emojiTexture } from './textures.js';
 import { navTarget } from './nav.js';
 import { TACKROOM } from './farmLayout.js';
 import { activityData } from '../sim/activities.js';
+import { canRide } from '../sim/animal.js';
 import { addStat, earn, isSandbox } from '../sim/profile.js';
 import { PLACES } from '../sim/places.js';
-import { hashString } from '../sim/rng.js';
+import { hashString, mulberry32 } from '../sim/rng.js';
 import {
   tgState, offerDue, createOffer, acceptOffer, refuseOffer, bookingHere, expireBookings, makeBooking, makeRiders, autoAssign,
-  ridePlan, prepChecklist, weatherBlock, rideResult, applyRideResult, horseGains, noteAction, perksOf, rankOf,
+  ridePlan, prepChecklist, weatherBlock, rideResult, applyRideResult, horseGains, explainOnce, perksOf, rankOf, changeReputation,
+  firstAidState, helpFallen, gearFit, wornOfType, guideHorseFit, carriesAdult, FALL_WAIT,
   FUN, WATER_PER_MIN, addFun, STABLE_DOOR, LODGE_DOOR, RANK_IDS, TRAIL_GUIDE_CAREER, GROUPS, DURATIONS, ROUTES,
 } from '../sim/trailGuide.js';
 import { openBookingChat, openTrailPrep, showRideResult } from '../ui/trailGuide.js';
-import { isStarted, startCareer, CAREERS } from '../sim/careers.js'; // registre des métiers (💼)
+import { isStarted } from '../sim/careers.js'; // registre des métiers (💼)
+import { GEAR, sizeOf } from '../sim/gear.js'; // sellerie (types d'objets : filet, licol, selle ; tailles)
+import { TOOLS } from '../sim/tools.js'; // 🧰 trousse de secours
 import { t, ta, L } from '../i18n.js';
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x5a3a24];
@@ -50,19 +56,20 @@ function bubbleTexture(text, bg = 'rgba(30,60,40,0.7)') {
   return tex;
 }
 
-/** L'apparence d'un cavalier visiteur (toujours la même pour un même prénom). */
+/** L'apparence d'un cavalier visiteur (toujours la même pour un même prénom), bien variée d'un visiteur à l'autre. */
 function riderLook(rider) {
-  const seed = hashString(rider.name);
+  const rnd = mulberry32(hashString(`${rider.name}:${rider.id ?? ''}`));
+  const one = (list) => list[Math.floor(rnd() * list.length)];
   const female = rider.sex === 'f';
   const senior = rider.age === 'senior';
   return {
-    skin: SKINS[seed % SKINS.length],
-    hair: senior ? 0xbfbfbf : HAIRS[(seed * 3) % HAIRS.length],
-    hairStyle: female ? ['ponytail', 'long', 'curly'][seed % 3] : ['short', 'curly', 'short'][seed % 3],
-    top: TOPS[(seed * 7) % TOPS.length],
-    bottom: seed % 2 ? 0x3a3f4a : 0x5a4a6a,
-    shoes: 0x3b2a20,
-    hat: !senior && seed % 4 === 0,
+    skin: one(SKINS),
+    hair: senior ? one([0xbfbfbf, 0xd8d8d8, 0x9a9a9a]) : one(HAIRS),
+    hairStyle: senior ? (female ? 'bun' : one(['short', 'bald'])) : female ? one(['ponytail', 'long', 'curly', 'bun', 'braid']) : one(['short', 'curly', 'short', 'bald']),
+    top: one(TOPS),
+    bottom: one([0x3a3f4a, 0x5a4a6a, 0x2f4f6f, 0x6b5a3a]),
+    shoes: one([0x3b2a20, 0x222222, 0x6b4a2a]),
+    hat: !senior && rnd() < 0.25,
   };
 }
 
@@ -90,6 +97,15 @@ class Visitor {
     this.heading = Math.atan2(to.x - from.x, to.z - from.z);
     this.speed = 0;
     this.phase = Math.random() * 6;
+    this.time = Math.random() * 10;
+    this.lifeOpts = { speed: 0, busy: false }; // options de updateAvatarLife, réutilisées
+    // Bulle 💬 au-dessus du premier visiteur : « viens nous parler » (comme les clients, src/game/Clients.js).
+    this.bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture('💬'), depthTest: false, transparent: true }));
+    this.bubble.position.y = 2.7 * riderScale(rider);
+    this.bubble.scale.setScalar(0.9);
+    this.bubble.renderOrder = 11;
+    this.bubble.visible = false;
+    this.root.add(this.bubble);
     scene.add(this.root);
   }
 
@@ -120,15 +136,23 @@ class Visitor {
     }
     p.y = this.world.heightAt(p.x, p.z);
     this.root.rotation.y = this.heading;
-    this.phase += dt * (this.speed * 2.2 + (this.rider.age === 'child' ? 1.5 : 0.6));
-    const amp = Math.min(0.7, this.speed * 0.16);
+    this.time += dt;
+    // Marche articulée, puis la vie (respiration, regard) ; on fait coucou au joueur qui approche.
+    this.phase += dt * this.speed * 2.2;
     const a = this.avatar;
-    a.legs[0].rotation.x = Math.sin(this.phase) * amp;
-    a.legs[1].rotation.x = -Math.sin(this.phase) * amp;
-    a.arms[0].rotation.x = -Math.sin(this.phase) * amp * 0.8;
-    a.arms[1].rotation.x = Math.sin(this.phase) * amp * 0.8 - (this.speed < 0.1 ? Math.max(0, Math.sin(this.phase * 0.5)) * 0.5 : 0);
+    const near = playerPos && Math.hypot(playerPos.x - p.x, playerPos.z - p.z) < 9;
+    const wave = near && this.speed < 0.3 && this.waves;
+    animateAvatarWalk(a, this.phase, this.speed);
+    this.lifeOpts.speed = this.speed;
+    this.lifeOpts.busy = wave;
+    updateAvatarLife(a, dt, this.lifeOpts);
+    if (wave) {
+      a.arms[0].rotation.set(0, 0, 2.5 + Math.sin(this.time * 6) * 0.35);
+      a.elbows[0].rotation.set(-0.35, 0, 0);
+    }
     // Un enfant qui attend sautille.
-    if (this.rider.age === 'child' && this.speed < 0.1) a.root.position.y = Math.abs(Math.sin(this.phase * 2)) * 0.08;
+    if (this.rider.age === 'child' && this.speed < 0.1) a.root.position.y = Math.abs(Math.sin(this.time * 5)) * 0.08;
+    if (this.bubble.visible) this.bubble.position.y = 2.7 * riderScale(this.rider) + Math.sin(this.time * 3) * 0.08;
   }
 
   dispose() {
@@ -136,6 +160,7 @@ class Visitor {
     disposeModel(this.avatar.root);
     this.tag.material.map.dispose();
     this.tag.material.dispose();
+    this.bubble.material.dispose();
   }
 }
 
@@ -149,6 +174,14 @@ export class TrailGuide {
     this.worldGroup = null;
     this.profileRef = null;
     this.acc = 0;
+    this.soon = false; // le métier vient de commencer : les premiers visiteurs arrivent vite
+    this.needs = new Map(); // chevaux à seller : l'objet qui manque, à acheter ({ item, size })
+    // Métier commencé depuis le panneau 💼 (ou la proposition à l'écurie) : des visiteurs arrivent bientôt.
+    game.on?.('careerStarted', (id) => {
+      if (id !== 'trailGuide' || !game.profile) return;
+      this.st.nextOfferAt = 0;
+      this.soon = true;
+    });
   }
 
   get st() {
@@ -202,7 +235,9 @@ export class TrailGuide {
     if (b && !this.session && this.visitorsFor !== 'booking') this.spawnVisitors(b, 'booking');
     if (!b && this.visitorsFor === 'booking') this.clearVisitors();
     // Une nouvelle demande ?
-    if (!b && !this.session && offerDue(p, { level: g.level, clock: p.clock, hour: g.hour, place: p.place }) && Math.random() < 0.35) {
+    if (!b && !this.session && !g.ui.isBlocking?.() && offerDue(p, { level: g.level, clock: p.clock, hour: g.hour, place: p.place })
+      && (this.soon || Math.random() < 0.35)) {
+      this.soon = false;
       this.newOffer();
     }
   }
@@ -263,7 +298,10 @@ export class TrailGuide {
     booking.riders.forEach((r, i) => {
       const to = { x: spot.x + (i % 3) * 1.3 - 1.3, z: spot.z - Math.floor(i / 3) * 1.2 };
       const from = { x: to.x + 6, z: to.z - 26 };
-      this.visitors.push(new Visitor(r, g.world, g.scene, from, to));
+      const v = new Visitor(r, g.world, g.scene, from, to);
+      v.waves = i === 0; // le premier fait coucou
+      v.bubble.visible = i === 0 && why === 'offer'; // 💬 : ils attendent qu'on vienne leur parler
+      this.visitors.push(v);
     });
   }
 
@@ -314,28 +352,24 @@ export class TrailGuide {
     const g = this.game;
     // Carnet du panneau 💼 : l'action se coche (et donne un peu d'XP de métier la première fois).
     if (isStarted(g.profile, 'trailGuide')) g.clients?.noteCareer?.('trailGuide', actionId);
-    if (!noteAction(g.profile, actionId)) return;
+    if (!explainOnce(g.profile, actionId)) return;
+    // Pendant la balade, les consignes de l'activité expliquent déjà (et le carnet garde l'explication) :
+    // pas de grand message en plus par-dessus.
+    if (this.session) return;
     const text = t(`tg_tuto_${actionId}`);
     g.ui.toast(text, 10000);
     g.ui.tutorial?.speak?.(text);
   }
 
-  /** Le métier commence dans le registre 💼 à la première balade acceptée (s'il ne l'est pas déjà). */
-  ensureCareer() {
-    const g = this.game;
-    const p = g.profile;
-    if (isStarted(p, 'trailGuide')) return;
-    if (!startCareer(p, 'trailGuide', g.day, { level: Math.max(g.level, CAREERS.trailGuide.level) }).ok) return;
-    p.careers.reputation.trailGuide = this.st.reputation;
-    g.ui.toast(t('ca_started', { career: t('career_trailGuide') }), 6000);
-    g.emit('careerStarted', 'trailGuide');
-  }
-
   accept() {
     const g = this.game;
-    this.ensureCareer();
-    const b = acceptOffer(g.profile, g.day);
+    const b = acceptOffer(g.profile, g.day); // la première fois, le métier commence dans le registre 💼
     if (!b) return null;
+    if (b.careerStarted) {
+      delete b.careerStarted;
+      g.ui.toast(t('ca_started', { career: t('career_trailGuide') }), 6000);
+      g.emit('careerStarted', 'trailGuide');
+    }
     g.clients?.noteCareer?.('trailGuide', 'accept');
     if (b.place === g.profile.place && b.day === g.day) {
       this.visitorsFor = 'booking';
@@ -359,7 +393,7 @@ export class TrailGuide {
     const g = this.game;
     const st = this.st;
     st.bookings = st.bookings.filter((x) => x.id !== b.id);
-    st.reputation = Math.max(0, st.reputation - 3);
+    changeReputation(g.profile, -3); // les visiteurs sont déçus
     this.clearVisitors();
     g.ui.closePanel();
     g.ui.refresh();
@@ -374,7 +408,9 @@ export class TrailGuide {
 
   checklist(b) {
     const g = this.game;
-    return prepChecklist(b, { horses: this.horses(), guideHorseId: b.guideHorseId ?? null, weather: g.weather, temperature: g.temperature });
+    return prepChecklist(b, {
+      horses: this.horses(), guideHorseId: b.guideHorseId ?? null, weather: g.weather, temperature: g.temperature, firstAid: firstAidState(g.profile),
+    });
   }
 
   autoAssign(b) {
@@ -382,9 +418,68 @@ export class TrailGuide {
     autoAssign(b, horses, b.guideHorseId ? [b.guideHorseId] : []);
     if (!b.guideHorseId) {
       const taken = new Set(b.riders.map((r) => r.horseId));
-      const mine = horses.filter((h) => !taken.has(h.id)).sort((x, y) => (y.bond ?? 0) - (x.bond ?? 0))[0];
+      const score = (h) => (h.bond ?? 0) + (carriesAdult(h) ? 100 : 0) + (canRide(h).ok ? 200 : 0);
+      const mine = horses.filter((h) => !taken.has(h.id)).sort((x, y) => score(y) - score(x))[0];
       if (mine) b.guideHorseId = mine.id;
     }
+  }
+
+  /**
+   * Seller un cheval pour un cavalier (ou pour nous) : filet (ou licol pour un poney mené) et selle,
+   * à sa taille (src/sim/gear.js : à la maison, la sellière échange la taille ; en voyage, seul le coffre compte).
+   * Renvoie true si le cheval est prêt.
+   */
+  saddleUp(horse, rider = null) {
+    const g = this.game;
+    const led = rider ? gearFit(horse, rider).led : false;
+    // Filet (ou licol pour un poney mené) : on remet seulement ce qui manque ou n'est pas à sa taille.
+    const put = (type) => {
+      const r = g.equip(horse, type);
+      // Pas d'exemplaire libre à sa taille : on propose de l'acheter tout de suite (bouton de la liste).
+      if (!r?.ok) this.needs.set(horse.id, { item: type, size: sizeOf(horse) ?? 'horse', reason: r?.reason });
+      return !!r?.ok;
+    };
+    const head = wornOfType(horse, 'bridle') ?? wornOfType(horse, 'halter');
+    if ((!head || !head.fits) && !put(head ? GEAR[head.item].type : led ? 'halter' : 'bridle')) return false;
+    // La selle (pas pour un poney mené ; notre cheval peut aussi partir à cru).
+    if (rider && !led) {
+      const saddle = wornOfType(horse, 'saddle');
+      if ((!saddle || !saddle.fits) && !put('saddle')) return false;
+    }
+    const ok = rider ? gearFit(horse, rider).ok : guideHorseFit(horse).ok;
+    if (ok) {
+      this.needs.delete(horse.id);
+      g.ui.toast(t('tg_saddled', { horse: horse.name, g: horse.sex }), 2500);
+      g.save();
+    }
+    return ok;
+  }
+
+  /** Ce qu'il faudrait acheter pour seller ce cheval ({ item, size }), ou null. */
+  needFor(horseId) {
+    return this.needs.get(horseId) ?? null;
+  }
+
+  /** Acheter l'objet qui manque (à la taille du cheval), puis seller. */
+  buyAndSaddle(horse, rider) {
+    const g = this.game;
+    const need = this.needFor(horse.id);
+    if (!need) return this.saddleUp(horse, rider);
+    const r = g.buyGear(need.item, need.size);
+    if (!r?.ok) return false;
+    this.needs.delete(horse.id);
+    return this.saddleUp(horse, rider);
+  }
+
+  /** Acheter la trousse de secours 🧰 (outil « firstAid ») : à la sellerie, ou ici (elle va dans la sacoche). */
+  async buyFirstAid() {
+    const g = this.game;
+    const key = isSandbox(g.profile) ? 'tg_kitBuyFree' : firstAidState(g.profile) === 'atHome' ? 'tg_kitBuyAway' : 'tg_kitBuy';
+    const ok = await g.ui.confirm(t(key, { price: TOOLS.firstAid.price }));
+    if (!ok) return false;
+    const r = g.buyTool('firstAid');
+    if (r?.ok) g.save();
+    return !!r?.ok;
   }
 
   /** Gourde ou goûter : on va à la sellerie (si elle existe ici), puis c'est pris. */
@@ -417,7 +512,12 @@ export class TrailGuide {
     if (b && action !== 'accept') return openTrailPrep(g.ui, this);
     const door = g.world.interactables.find((i) => i.kind === 'stable') ?? g.world.interactables.find((i) => i.kind === 'lodge');
     if (door) this.showMe({ x: door.x, z: door.z });
-    g.ui.toast(t(g.level >= CAREERS.trailGuide.level ? 'tg_noBooking' : 'tg_level', { n: CAREERS.trailGuide.level }), 6000);
+    // On attend des visiteurs : ils arrivent bientôt (entre 9 h et 17 h), sans attendre des heures.
+    if (g.level >= TRAIL_GUIDE_CAREER.level && !this.st.offer) {
+      this.st.nextOfferAt = Math.min(this.st.nextOfferAt, g.profile.clock);
+      this.soon = true;
+    }
+    g.ui.toast(t(g.level >= TRAIL_GUIDE_CAREER.level ? 'tg_noBooking' : 'tg_level', { n: TRAIL_GUIDE_CAREER.level }), 6000);
   }
 
   /** Montre où est quelque chose : un cheval, la sellerie, les visiteurs. */
@@ -488,7 +588,10 @@ export class TrailGuide {
   abortRide(session) {
     const g = this.game;
     const p = g.profile;
-    const result = rideResult({ riders: session.booking.riders, legs: session.next, totalLegs: session.points.length, booking: session.booking, perks: perksOf(p), aborted: true });
+    const result = rideResult({
+      riders: session.booking.riders, legs: session.next, totalLegs: session.points.length, booking: session.booking, perks: perksOf(p), aborted: true,
+      falls: session.falls ?? 0, helped: session.helped ?? 0,
+    });
     applyRideResult(p, session.booking, result, { day: g.day, earn: (n) => earn(p, n), home: g.isHome });
     this.st.riding = false;
     g.save();
@@ -555,18 +658,15 @@ class GuidedRideSession extends ActivitySession {
       const e = g.entities.get(animal.id);
       this.script(e);
       const avatar = buildAvatar(riderLook(rider));
-      const s = riderScale(rider);
-      avatar.root.scale.setScalar(s);
-      avatar.root.position.set(0, e.model.saddleY * e.scale - 0.78 * s, -animal.look.bodyLen * e.scale * 0.05);
-      avatar.legs.forEach((l, k) => l.rotation.set(-1.1, 0, (k === 0 ? -1 : 1) * 0.35));
-      avatar.arms.forEach((arm) => arm.rotation.set(-0.7, 0, 0));
-      e.root.add(avatar.root);
+      avatar.root.scale.setScalar(riderScale(rider));
       const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubbleTexture(rider.name), depthTest: false, transparent: true }));
       bubble.position.y = e.label.position.y + 0.5;
       bubble.scale.set(2.2, 0.55, 1);
       bubble.renderOrder = 11;
       e.root.add(bubble);
-      return { rider, animal, e, avatar, bubble, gap: 3.6, lag: null, scared: null, bubbleUntil: 0, lastGood: 0 };
+      const r = { rider, animal, e, avatar, bubble, gap: 3.6, lag: null, scared: null, fallen: null, bubbleUntil: 0, lastGood: 0 };
+      this.seatRider(r);
+      return r;
     });
 
     // Les chiens qui viennent (rang confirmé).
@@ -603,11 +703,22 @@ class GuidedRideSession extends ActivitySession {
       const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
       return { x: (a.x + b.x) / 2 + (-(b.z - a.z) / len) * side, z: (a.z + b.z) / 2 + ((b.x - a.x) / len) * side, dir: Math.atan2(b.x - a.x, b.z - a.z) };
     };
+    const along = (leg, f) => {
+      const a = leg === 0 ? STABLE_DOOR : this.points[leg - 1];
+      const b = this.points[leg];
+      return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, dir: Math.atan2(b.x - a.x, b.z - a.z) };
+    };
     this.events = plan.events.map((ev) => {
-      const e = { ...ev, done: false, active: false, pos: dry(mid(ev.leg, ev.type === 'scare' ? 3 : 0)) };
+      // Le sac qui fait peur est au bord du chemin ; le point de vue (moulin, vieil arbre…) un peu à l'écart, pour
+      // qu'on le voie bien sans passer à travers.
+      const side = ev.type === 'scare' ? 3 : ev.type === 'sight' ? (ev.id === 'windmill' || ev.id === 'oldTree' ? 10 : 6) : 0;
+      const e = { ...ev, done: false, active: false, pos: dry(mid(ev.leg, side)) };
       if (ev.type === 'scare') {
         e.sprite = this.sprite('🛍️', e.pos, 1.1, 0.9);
         e.sprite.visible = false;
+      } else if (ev.type === 'fall') {
+        e.pos = dry(along(ev.leg, 0.4)); // une grosse racine, un peu avant le milieu de l'étape
+        e.sprite = this.sprite('🪨', e.pos, 0.7, 0.8);
       } else if (ev.type === 'stream') {
         const plane = new THREE.Mesh(new THREE.PlaneGeometry(18, 5), new THREE.MeshBasicMaterial({ color: 0x5fb6ff, transparent: true, opacity: 0.55, depthWrite: false }));
         plane.rotation.x = -Math.PI / 2;
@@ -632,6 +743,9 @@ class GuidedRideSession extends ActivitySession {
     this.totalEvents = this.events.length;
     this.handled = 0;
     this.photos = 0;
+    this.falls = 0; // cavaliers tombés…
+    this.helped = 0; // … et aidés à remonter
+    this.kit = firstAidState(g.profile) === 'ok'; // 🧰 trousse de secours dans la sacoche
     this.water = 100;
     this.next = 0;
     this.lostTimer = 0;
@@ -713,6 +827,7 @@ class GuidedRideSession extends ActivitySession {
       reassure: { icon: '🤚', label: t('tg_btn_reassure') },
       break: { icon: '🧃', label: t('tg_btn_break') },
       sleep: { icon: '🛏️', label: t('tg_btn_sleep') },
+      firstAid: { icon: this.kit ? '🩹' : '🤝', label: t(this.kit ? 'tg_btn_firstAid' : 'tg_btn_help') },
     }[mode];
     this.hud.setMain({ ...spec, key: t('actv_key_space'), onClick: () => this.action(), disabled: !enabled });
   }
@@ -721,27 +836,112 @@ class GuidedRideSession extends ActivitySession {
 
   action() {
     if (this.state !== 'run' || !this.mode || !this.mainEnabled) return;
-    const ev = this.current;
+    // L'événement du bouton (plusieurs peuvent être en cours : un retardataire pendant la photo…).
+    const TYPE = { photo: 'sight', reassure: 'scare', break: 'break', firstAid: 'fall' };
+    const ev = this.events.find((x) => x.active && !x.done && x.type === TYPE[this.mode] && (x.type !== 'scare' && x.type !== 'fall' || x.since)) ?? null;
+    if (!ev && this.mode !== 'sleep') return null;
     switch (this.mode) {
       case 'photo': return this.takeGroupPhoto(ev);
       case 'reassure': return this.reassure(ev);
       case 'break': return this.snackBreak(ev);
       case 'sleep': return this.sleepAtLodge();
+      case 'firstAid': return this.tendFallen(ev);
       default: return null;
     }
   }
 
-  /** Toucher un cheval qui a peur (ou le bouton Rassurer). */
+  /** Toucher un cheval qui a peur (ou le bouton Rassurer), ou le cavalier tombé (ou le bouton Soigner). */
   onTap(sx, sy) {
-    const ev = this.events.find((x) => x.type === 'scare' && x.active);
-    if (!ev) return false;
     const g = this.game;
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     g.raycaster.setFromCamera(ndc, g.camera);
+    const fall = this.events.find((x) => x.type === 'fall' && x.active && x.since);
+    if (fall && g.raycaster.intersectObject(fall.rider.avatar.root, true)[0]) {
+      this.tendFallen(fall);
+      return true;
+    }
+    const ev = this.events.find((x) => x.type === 'scare' && x.active);
+    if (!ev) return false;
     const hit = g.raycaster.intersectObject(ev.rider.e.root, true)[0];
     if (!hit) return false;
     this.reassure(ev);
     return true;
+  }
+
+  /** Assied un cavalier sur son cheval : pieds dans les étriers, mains aux rênes (comme le joueur). */
+  seatRider(r) {
+    const { e, animal, avatar } = r;
+    const md = e.model;
+    const sc = e.scale;
+    const s = riderScale(r.rider);
+    const look = animal.look;
+    const seatY = md.saddleY * sc - 0.78 * s;
+    const seatZ = -look.bodyLen * sc * 0.05;
+    const R = ((md.dims?.R ?? look.bodyR * (look.fluff ?? 1)) * sc) / s; // dans le repère de l'avatar (enfant plus petit)
+    const saddle = !!animal.gear?.saddle;
+    const foot = stirrupFor(R, saddle, {});
+    e.root.add(avatar.root);
+    avatar.root.rotation.set(0, 0, 0);
+    r.ride = {
+      gait: 0, phase: Math.random() * 6, bob: 0, posting: saddle,
+      seatY, seatZ, reinsY: 1.02, reinsZ: 0.36, footX: foot.x, footY: foot.y, footZ: foot.z, kneeOut: foot.out,
+    };
+    poseAvatar(avatar, 'ride', r.ride);
+  }
+
+  /** Le cheval trébuche : son cavalier tombe à côté, assis dans l'herbe. */
+  fallOff(ev) {
+    const g = this.game;
+    const r = ev.rider;
+    ev.since = this.time;
+    r.fallen = ev;
+    r.e.speed = 0;
+    this.falls++;
+    const side = FORWARD(r.e.heading + Math.PI / 2).multiplyScalar(1.3);
+    const x = r.e.position.x + side.x;
+    const z = r.e.position.z + side.z;
+    r.e.root.remove(r.avatar.root);
+    poseAvatar(r.avatar, 'stand');
+    // Couché sur le dos, la tête vers le cheval : il a juste eu peur.
+    r.avatar.root.position.set(x, this.y(x, z) + 0.14 * riderScale(r.rider), z);
+    r.avatar.root.rotation.set(-Math.PI / 2, 0, 0);
+    r.avatar.root.rotation.order = 'YXZ';
+    r.avatar.root.rotation.y = r.e.heading + Math.PI / 2;
+    this.group.add(r.avatar.root);
+    ev.sprite.material.map = emojiTexture('🤕');
+    ev.sprite.position.set(x, this.y(x, z) + 1.2, z);
+    ev.sprite.userData.bob = ev.sprite.position.y;
+    addFun(r.rider, FUN.fall);
+    r.e.emit('😮', 2);
+    this.say(r, 'tg_bubble_ouch', 5000);
+    this.hud.big('🤕', 900);
+    this.hud.hint(ta(this.kit ? 'tg_ev_fall' : 'tg_ev_fallNoKit', r.rider), 10000);
+    g.audio?.ui?.('cancel'); // petit son « oh non »
+  }
+
+  /** On aide le cavalier tombé : trousse de secours, pansement, et il remonte en selle. */
+  tendFallen(ev) {
+    const g = this.game;
+    if (!ev || ev.type !== 'fall' || !ev.since || ev.done) return;
+    const r = ev.rider;
+    const d = dist2(g.player.position, r.avatar.root.position);
+    if (d > 4.5) return g.ui.toast(ta('tg_ev_fallFar', r.rider), 3000);
+    ev.done = true;
+    ev.active = false;
+    r.fallen = null;
+    this.handled++;
+    this.helped++;
+    const res = helpFallen(r.rider, { kit: this.kit, waited: this.time - ev.since });
+    this.everyone(FUN.eventGood / 2);
+    this.group.remove(r.avatar.root);
+    this.seatRider(r);
+    ev.sprite.material.map = emojiTexture(this.kit ? '🩹' : '✅');
+    this.burst(this.kit ? '🩹' : '❤️', { x: r.e.position.x, y: r.e.position.y + 2, z: r.e.position.z }, 4, 1.4);
+    r.e.emit('❤️', 3);
+    this.say(r, res.mood === 'great' ? 'tg_bubble_thanks' : 'tg_bubble_hurt', 4000);
+    g.ui.toast(ta(this.kit ? (res.mood === 'great' ? 'tg_ev_fallOk' : 'tg_ev_fallLate') : 'tg_ev_fallNoKitOk', r.rider), 4500);
+    if (this.kit) this.tg.tutorial('firstAid');
+    this.setMode(null);
   }
 
   takeGroupPhoto(ev) {
@@ -752,7 +952,9 @@ class GuidedRideSession extends ActivitySession {
     this.handled++;
     ev.sprite.material.map = emojiTexture('✅');
     for (const r of this.riders) {
+      if (r.fallen) continue;
       r.avatar.arms.forEach((arm) => arm.rotation.set(-2.8, 0, 0)); // bras levés : on pose !
+      r.avatar.elbows?.forEach((el) => el.rotation.set(0, 0, 0));
       r.poseUntil = this.time + 2.5;
       r.e.speed = 0;
     }
@@ -876,10 +1078,7 @@ class GuidedRideSession extends ActivitySession {
     this.updateConvoy(dt);
     for (const r of this.riders) {
       r.bubble.visible = this.time < r.bubbleUntil;
-      if (r.poseUntil && this.time > r.poseUntil) {
-        r.avatar.arms.forEach((arm) => arm.rotation.set(-0.7, 0, 0));
-        r.poseUntil = 0;
-      }
+      if (r.poseUntil && this.time > r.poseUntil) r.poseUntil = 0; // les mains retournent aux rênes
     }
     if (this.state !== 'run') return;
     if (this.lodgeStop) {
@@ -916,7 +1115,7 @@ class GuidedRideSession extends ActivitySession {
       const want = new THREE.Vector3(leader.position.x + back.x, 0, leader.position.z + back.z);
       const d = dist2(want, e.position);
       let max = r.lag ? 2.4 : 11;
-      if (r.scared || r.poseUntil) max = 0;
+      if (r.scared || r.poseUntil || r.fallen) max = 0;
       let speed = 0;
       if (run && d > 0.8 && max > 0) speed = Math.min(max, 0.8 + d * 1.5, Math.max(leader.speed * 1.6, 4));
       if (speed > 0.02) {
@@ -936,9 +1135,15 @@ class GuidedRideSession extends ActivitySession {
         g.world.resolveCollisions(e.position, e.radius * 0.6, { mounted: true });
       }
       e.snap(dt);
+      // Le cavalier suit les allures de son cheval (pas, trot enlevé, galop), sauf pendant la photo.
+      if (!r.fallen && !r.poseUntil && r.ride) {
+        r.ride.gait = e.speed > 7 ? 2 : e.speed > 3.4 ? 1 : 0;
+        r.ride.phase += dt * (1.5 + e.speed * 1.1);
+        animateAvatarRide(r.avatar, r.ride);
+      }
       // Trop loin derrière (bloqué derrière un arbre) : petit saut pour rattraper.
-      // Pas pour le retardataire (c'est le jeu), ni pour un cheval qui a peur ou qui pose (il doit rester là).
-      if (d > 14 && !r.lag && !r.scared && !r.poseUntil) {
+      // Pas pour le retardataire (c'est le jeu), ni pour un cheval qui a peur, qui pose ou dont le cavalier est tombé.
+      if (d > 14 && !r.lag && !r.scared && !r.poseUntil && !r.fallen) {
         e.position.set(want.x, 0, want.z);
         e.snap();
       }
@@ -1006,6 +1211,24 @@ class GuidedRideSession extends ActivitySession {
           const near = dist2(p, r.e.position) < 4.5 && g.player.speed < 0.6;
           want = want ?? ['reassure', near];
           if (dist2(p, r.e.position) > 18) this.everyone(-0.5 * dt);
+          break;
+        }
+        case 'fall': {
+          const r = ev.rider;
+          if (!ev.since) {
+            // Son cheval arrive sur la racine (ou au bout d'un moment) : il trébuche.
+            ev.wait = (ev.wait ?? 0) + dt;
+            if (r.scared || r.lag) break;
+            if (dist2(r.e.position, ev.pos) < 4.5 || ev.wait > 20 || this.next > ev.leg) this.fallOff(ev);
+            break;
+          }
+          const near = dist2(p, r.avatar.root.position) < 4.5 && g.player.speed < 0.6;
+          want = want ?? ['firstAid', near];
+          if (dist2(p, r.avatar.root.position) > 16) this.everyone(FUN.waitPerSec * dt);
+          if (this.time - ev.since > FALL_WAIT && !ev.slowHint) {
+            ev.slowHint = true;
+            this.hud.hint(ta('tg_ev_fallWaiting', r.rider), 6000);
+          }
           break;
         }
         case 'stream': {
@@ -1083,6 +1306,13 @@ class GuidedRideSession extends ActivitySession {
         ev.rider = this.riders.find((r) => r.rider.level !== 'confirmed') ?? this.riders[0];
         ev.sprite.visible = true;
         break;
+      case 'fall': {
+        // Pas le même que celui qui a peur ou qui traîne, si possible : le dernier de la file.
+        const busy = new Set(this.events.filter((x) => x !== ev && x.rider && x.active && !x.done).map((x) => x.rider));
+        ev.rider = [...this.riders].reverse().find((r) => !busy.has(r)) ?? this.riders[this.riders.length - 1];
+        hint(t('tg_ev_rocky'), 6000);
+        break;
+      }
       case 'stream':
         hint(t('tg_ev_stream'), 7000);
         break;
@@ -1117,6 +1347,7 @@ class GuidedRideSession extends ActivitySession {
     const result = rideResult({
       riders: this.booking.riders, water: this.water, photos: this.photos, handled: this.handled, total: this.totalEvents,
       legs: this.next, totalLegs: this.points.length, booking: this.booking, perks: perksOf(g.profile),
+      falls: this.falls, helped: this.helped,
     });
     this.hud.setMain(null);
     setTimeout(() => {
@@ -1129,7 +1360,7 @@ class GuidedRideSession extends ActivitySession {
   cleanup(aborted) {
     const g = this.game;
     for (const r of this.riders ?? []) {
-      r.e.root.remove(r.avatar.root);
+      r.avatar.root.parent?.remove(r.avatar.root); // sur son cheval, ou par terre (tombé)
       disposeModel(r.avatar.root);
       r.e.root.remove(r.bubble);
       r.bubble.material.map.dispose();

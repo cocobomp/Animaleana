@@ -65,7 +65,18 @@ function careerCard(ui, s) {
     else body.push(h('small', { class: 'ca-following' }, `📌 ${t('ca_following')}`));
   }
   if (s.id === 'vet') body.push(schoolBlock(ui)); // 🎓 apprendre le métier en leçons (src/ui/vetSchool.js)
+  if (s.id === 'trailGuide' && s.state === 'started') body.push(trailBlock(ui)); // 🧭 rendez-vous et balades (src/ui/trailGuide.js)
   return h('div', { class: `ca-card ${s.state} ${s.active ? 'active' : ''}` }, head, ...body);
+}
+
+/** Le guide de randonnée dans sa carte : rendez-vous, balades faites, et son carnet complet. */
+function trailBlock(ui) {
+  const st = ui.game.profile.trailGuide ?? {};
+  const bookings = st.bookings?.length ?? 0;
+  const rides = st.history?.length ?? 0;
+  return h('div', { class: 'ca-school' },
+    h('span', {}, `${t('tg_caBookings', { n: bookings })} · ${t('tg_caRides', { n: rides })}`),
+    h('button', { class: 'small primary', onClick: () => ui.openTrailGuide() }, `📒 ${t('tg_caBtn')}`));
 }
 
 /** L'école vétérinaire dans la carte du métier : progression et bouton. */

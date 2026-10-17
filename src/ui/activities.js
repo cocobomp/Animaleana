@@ -7,6 +7,7 @@ import { SPECIES } from '../sim/species.js';
 import { PLACES } from '../sim/places.js';
 import { isSandbox } from '../sim/profile.js';
 import { owned, inUse } from '../sim/gear.js';
+import { CAREERS } from '../sim/careers.js'; // 🧭 niveau du métier de guide
 import {
   COMPETITION_TYPES, competitionsAt, entryBlock, eligibility, knownTricks, rivals, activityData, awardCounts, MAX_ACTS,
   JUMP_STAGES, comfortHeight, courseForStage, stageForLevel, stageFor, HUTCH_TOYS, hutchPlayBlock,
@@ -62,7 +63,7 @@ function playTab(ui, state) {
   cards.push(h('button', { class: 'card actv-card tg-card', onClick: () => ui.openTrailGuide() },
     h('span', { class: 'card-emoji' }, '🧭'),
     h('span', { class: 'card-main' }, h('b', {}, t('tg_title')), h('small', {}, t('tg_cardDesc'))),
-    h('span', { class: 'card-side' }, h('small', {}, g.level >= 4 ? '📒' : `🔒 ${t('tg_level', { n: 4 })}`))));
+    h('span', { class: 'card-side' }, h('small', {}, g.level >= CAREERS.trailGuide.level ? '📒' : `🔒 ${t('tg_level', { n: CAREERS.trailGuide.level })}`))));
   return [
     h('p', { class: 'note' }, t('actv_intro')),
     h('div', { class: 'cards' }, cards),

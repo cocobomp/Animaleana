@@ -1,120 +1,105 @@
 // Métier « Guide de randonnée » 🧭 : des visiteurs demandent une balade à cheval, on leur
-// prête nos chevaux, on prépare le matériel, on les emmène sur un itinéraire et on gère les
-// petits événements du chemin. Logique pure (sans 3D ni DOM), testée dans tests/trailGuide.test.js.
+// prête nos chevaux, on les selle, on prépare la sacoche (gourde, goûter, trousse de secours), on les
+// emmène sur un itinéraire et on gère les petits événements du chemin (retardataire, cheval qui a peur,
+// pause boisson, cavalier qui tombe…). Logique pure (sans 3D ni DOM), testée dans tests/trailGuide.test.js.
 // La partie 3D est dans src/game/TrailGuide.js, l'interface dans src/ui/trailGuide.js.
-// Le métier est inscrit dans le registre des métiers (CAREERS.trailGuide dans src/sim/careers.js) :
-// il apparaît dans le panneau 💼, partage l'XP (profile.careers.xp.trailGuide) et le carnet.
 //
-// Dans le profil :
-//   profile.careers.xp.trailGuide : expérience du métier (rangs apprenti / confirmé / expert)
+// Le métier est inscrit dans le registre unique des métiers (CAREERS.trailGuide, src/sim/careers.js) :
+// rangs, XP, réputation, argent gagné et carnet (actions cochées) sont ceux du registre
+// (profile.careers.xp.trailGuide, .reputation.trailGuide, .earned.trailGuide, .done.trailGuide).
+//
+// Ce qui est propre au guide, dans le profil :
 //   profile.trailGuide = {
-//     reputation: 50,        // 0 à 100
 //     bookings: [],          // réservations acceptées pas encore faites (ici ou ailleurs)
 //     history: [],           // balades faites { day, place, group, riders, stars, pay, tip }
 //     offer: null,           // la demande en cours (les visiteurs attendent la réponse)
-//     seen: [],              // actions du carnet déjà expliquées (petit tutoriel la première fois)
+//     seen: [],              // actions déjà expliquées (petit tutoriel la première fois)
 //     nextOfferAt: 0,        // horloge (minutes) à partir de laquelle une nouvelle demande peut arriver
 //     started: null,         // jour où l'on a accepté sa première balade
 //   }
 
 import { canRide } from './animal.js';
-// (comme wears() de gear.js, recopié ici : gear.js importe profile.js → careers.js → ce fichier, une boucle)
-const wears = (a, item) => Object.values(a.gear ?? {}).some((g) => g.item === item);
-import { seeded, pick, uid } from './rng.js';
+import { GEAR, sizeOf, defaultSize } from './gear.js'; // sellerie par taille : selle, filet, licol (n'importe quel modèle du type)
+import { getBreed } from './species.js';
+import { hasTool, toolAtHome } from './tools.js'; // 🧰 trousse de secours (outil « firstAid »)
+import {
+  CAREERS, isStarted, startCareer, rankOf as careerRank, rankProgress as careerProgress, addCareerXp, reputationOf,
+  changeReputation as changeCareerReputation, addEarnings,
+} from './careers.js';
+import { pick, uid } from './rng.js';
 import { PLACES, PLACE_IDS } from './places.js';
 
 const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
+const ID = 'trailGuide';
 
 // ---------------------------------------------------------------- le métier
 
 export const RANK_IDS = ['apprentice', 'skilled', 'expert'];
 
 /**
- * Définition du métier (inscrite dans CAREERS, src/sim/careers.js).
- * ranks : XP de métier pour chaque rang ; perks : ce que chaque rang permet
- * (maxClients: 0 → ce métier ne fait pas venir de clients qui confient leurs animaux, src/sim/clients.js).
- * building : toucher l'écurie propose le métier (« Tu veux apprendre le métier de… ? »).
+ * Définition du métier : celle du registre (CAREERS.trailGuide, src/sim/careers.js).
+ * ranks : XP de métier pour chaque rang ; perks : ce que chaque rang permet ;
+ * building : toucher l'écurie propose le métier (« Tu veux devenir guide de randonnée ? »).
  */
-export const TRAIL_GUIDE_CAREER = {
-  id: 'trailGuide',
-  emoji: '🧭',
-  level: 4, // niveau du joueur pour que les premiers visiteurs arrivent
-  building: 'stable',
-  name: { fr: 'Guide de randonnée', en: 'Trail guide' },
-  desc: {
-    fr: 'Emmène des visiteurs en balade à cheval : choisis le bon cheval pour chacun, prépare le matériel et veille sur tout le monde en chemin.',
-    en: 'Take visitors on horseback rides: pick the right horse for each one, pack the gear and look after everyone on the way.',
-  },
-  ranks: [0, 150, 400],
-  // Le carnet : chaque action est expliquée la première fois (tutoriel) et cochée quand elle est faite.
-  actions: [
-    { id: 'accept', emoji: '📋', where: 'visitor' },
-    { id: 'prepare', emoji: '✅', where: 'stable' },
-    { id: 'ride', emoji: '🐎', where: 'trail' },
-    { id: 'photo', emoji: '📷', where: 'trail' },
-    { id: 'break', emoji: '🧃', where: 'trail' },
-    { id: 'return', emoji: '⭐', where: 'stable' },
-  ],
-  perks: [
-    { maxRiders: 2, durations: ['short'], abroad: false, dogs: false, special: false, price: 1, tips: false, maxClients: 0 },
-    { maxRiders: 4, durations: ['short', 'half'], abroad: true, dogs: true, special: false, price: 1.15, tips: true, maxClients: 0 },
-    { maxRiders: 6, durations: ['short', 'half', 'trek'], abroad: true, dogs: true, special: true, price: 1.3, tips: true, maxClients: 0 },
-  ],
-};
+export const TRAIL_GUIDE_CAREER = CAREERS[ID];
 
 export function defaultTrailGuide() {
-  return { reputation: 50, bookings: [], history: [], offer: null, seen: [], nextOfferAt: 0, started: null };
+  return { bookings: [], history: [], offer: null, seen: [], nextOfferAt: 0, started: null };
 }
 
-/** État du métier dans le profil (complété pour les vieilles sauvegardes). */
+/**
+ * État du métier dans le profil (complété pour les vieilles sauvegardes).
+ * Migration : l'ancienne réputation du guide (profile.trailGuide.reputation) passe dans le registre.
+ */
 export function tgState(p) {
   if (!p.trailGuide) p.trailGuide = defaultTrailGuide();
   else for (const [k, v] of Object.entries(defaultTrailGuide())) if (p.trailGuide[k] === undefined) p.trailGuide[k] = v;
-  p.careers = p.careers ?? {};
-  p.careers.xp = p.careers.xp ?? {};
-  if (p.careers.xp.trailGuide === undefined) p.careers.xp.trailGuide = 0;
-  return p.trailGuide;
+  const st = p.trailGuide;
+  if (st.reputation !== undefined) {
+    p.careers = p.careers ?? {};
+    p.careers.reputation = p.careers.reputation ?? {};
+    if (p.careers.reputation[ID] === undefined) p.careers.reputation[ID] = st.reputation;
+    delete st.reputation;
+  }
+  return st;
 }
 
-export const trailXp = (p) => p.careers?.xp?.trailGuide ?? 0;
+export const trailXp = (p) => p.careers?.xp?.[ID] ?? 0;
 
-/** Rang : 0 apprenti, 1 confirmé, 2 expert. */
-export function rankOf(p) {
-  const xp = trailXp(p);
-  let r = 0;
-  TRAIL_GUIDE_CAREER.ranks.forEach((need, i) => { if (xp >= need) r = i; });
-  return r;
-}
+/** Rang : 0 apprenti, 1 confirmé, 2 expert (registre des métiers). */
+export const rankOf = (p) => careerRank(p, ID);
 
 export const perksOf = (p) => TRAIL_GUIDE_CAREER.perks[rankOf(p)];
 
 /** Progression vers le rang suivant : { rank, xp, from, to, ratio } (to = null au rang expert). */
-export function rankProgress(p) {
-  const rank = rankOf(p);
-  const xp = trailXp(p);
-  const from = TRAIL_GUIDE_CAREER.ranks[rank];
-  const to = TRAIL_GUIDE_CAREER.ranks[rank + 1] ?? null;
-  return { rank, xp, from, to, ratio: to === null ? 1 : Math.min(1, (xp - from) / (to - from)) };
+export const rankProgress = (p) => careerProgress(p, ID);
+
+/** Réputation du guide (0 à 100, 50 au départ) : celle du registre. */
+export const trailReputation = (p) => reputationOf(p, ID);
+
+/**
+ * Le métier commence dans le registre (s'il ne l'est pas déjà) : à la première balade acceptée,
+ * ou depuis le panneau 💼. Renvoie true s'il vient de commencer.
+ */
+export function ensureTrailCareer(p, day = 1) {
+  if (isStarted(p, ID)) return false;
+  const r = startCareer(p, ID, day, { level: 99 });
+  return !!r.ok;
 }
 
 /** Ajoute de l'XP de métier. Renvoie { xp, rank, rankUp }. */
 export function addTrailXp(p, n) {
-  tgState(p);
-  const before = rankOf(p);
-  p.careers.xp.trailGuide = trailXp(p) + n;
-  const rank = rankOf(p);
-  return { xp: p.careers.xp.trailGuide, rank, rankUp: rank > before };
+  ensureTrailCareer(p);
+  const r = addCareerXp(p, ID, n);
+  return { xp: trailXp(p), rank: rankOf(p), rankUp: !!r };
 }
 
 export function changeReputation(p, delta) {
-  const st = tgState(p);
-  st.reputation = clamp(st.reputation + delta);
-  if (p.careers?.reputation) p.careers.reputation.trailGuide = st.reputation; // carte du panneau 💼
-  return st.reputation;
+  return changeCareerReputation(p, ID, delta);
 }
 
-/** Une action du carnet faite pour la première fois ? (alors on l'explique). */
-export function noteAction(p, actionId) {
+/** Une action expliquée pour la première fois ? (alors on montre le petit tutoriel). */
+export function explainOnce(p, actionId) {
   const st = tgState(p);
   if (st.seen.includes(actionId)) return false;
   st.seen.push(actionId);
@@ -236,6 +221,7 @@ export function acceptOffer(p, day = 1) {
   st.bookings.push(b);
   st.nextOfferAt = 0;
   if (st.started === null) st.started = day;
+  b.careerStarted = ensureTrailCareer(p, day); // première balade acceptée : le métier commence (panneau 💼)
   p.stats = p.stats ?? {};
   p.stats.tgAccepted = (p.stats.tgAccepted ?? 0) + 1;
   return b;
@@ -270,46 +256,47 @@ export function expireBookings(p, day) {
  * va d'une balise à la suivante ; les événements sont placés sur une étape :
  *  - lag : un cavalier reste en arrière (ralentir)
  *  - scare : un sac plastique fait peur (s'arrêter, rassurer)
+ *  - fall : un cheval trébuche, son cavalier tombe (s'arrêter, trousse de secours, l'aider à remonter)
  *  - stream : un ruisseau à passer au pas
  *  - sight : le point de vue à photographier
- *  - break : la pause goûter
+ *  - break : la pause boisson (les chevaux boivent, les cavaliers prennent la gourde et le goûter)
  */
 export const ROUTES = {
   meadow: {
     emoji: '🌾',
     points: [{ x: -38, z: -26 }, { x: -20, z: -56 }, { x: 18, z: -62 }, { x: 46, z: -32 }, { x: 46, z: 18 }, { x: 30, z: 62 }, { x: -6, z: 52 }, { x: -2, z: 12 }],
-    lag: 1, scare: 2, stream: null, sight: { id: 'windmill', leg: 3 }, break: 4,
+    lag: 1, scare: 2, stream: null, sight: { id: 'windmill', leg: 3 }, break: 4, fall: 3,
   },
   forest: {
     emoji: '🌲',
     points: [{ x: -30, z: -30 }, { x: -10, z: -50 }, { x: 20, z: -54 }, { x: 40, z: -40 }, { x: 36, z: -14 }, { x: 14, z: -26 }, { x: -6, z: -34 }, { x: -18, z: -16 }],
-    lag: 1, scare: 3, stream: null, sight: { id: 'oldTree', leg: 2 }, break: 4,
+    lag: 1, scare: 3, stream: null, sight: { id: 'oldTree', leg: 2 }, break: 4, fall: 2,
   },
   river: {
     emoji: '🏞️',
     points: [{ x: -40, z: -12 }, { x: -60, z: -22 }, { x: -70, z: -46 }, { x: -40, z: -62 }, { x: -6, z: -66 }, { x: 26, z: -56 }, { x: 12, z: -30 }, { x: -8, z: -18 }],
-    lag: 1, scare: 2, stream: 3, sight: { id: 'viewpoint', leg: 5 }, break: 4,
+    lag: 1, scare: 2, stream: 3, sight: { id: 'viewpoint', leg: 5 }, break: 4, fall: 3,
   },
   cliffs: {
     emoji: '🌊',
     points: [{ x: -40, z: -30 }, { x: -30, z: -60 }, { x: 10, z: -70 }, { x: 40, z: -58 }, { x: 44, z: -20 }, { x: 40, z: 24 }, { x: 24, z: 56 }, { x: -4, z: 30 }],
-    lag: 2, scare: 1, stream: null, sight: { id: 'viewpoint', leg: 4 }, break: 5,
+    lag: 2, scare: 1, stream: null, sight: { id: 'viewpoint', leg: 4 }, break: 5, fall: 3,
   },
   mountain: {
     emoji: '⛰️',
     points: [{ x: -44, z: -28 }, { x: -66, z: -50 }, { x: -40, z: -70 }, { x: 0, z: -72 }, { x: 40, z: -66 }, { x: 56, z: -30 }, { x: 36, z: 10 }, { x: -4, z: 14 }],
-    lag: 1, scare: 3, stream: 5, sight: { id: 'cairn', leg: 2 }, break: 4,
+    lag: 1, scare: 3, stream: 5, sight: { id: 'cairn', leg: 2 }, break: 4, fall: 2,
   },
   // Itinéraires spéciaux (rang expert) : Islande et Alpes.
   volcano: {
     emoji: '🌋', special: true,
     points: [{ x: -50, z: -40 }, { x: -72, z: -70 }, { x: -20, z: -90 }, { x: 30, z: -82 }, { x: 68, z: -50 }, { x: 72, z: 0 }, { x: 40, z: 42 }, { x: -6, z: 20 }],
-    lag: 1, scare: 2, stream: 3, sight: { id: 'viewpoint', leg: 4 }, break: 5,
+    lag: 1, scare: 2, stream: 3, sight: { id: 'viewpoint', leg: 4 }, break: 5, fall: 3,
   },
   summit: {
     emoji: '🏔️', special: true,
     points: [{ x: -46, z: -36 }, { x: -70, z: -66 }, { x: -36, z: -92 }, { x: 12, z: -94 }, { x: 54, z: -72 }, { x: 70, z: -30 }, { x: 44, z: 20 }, { x: -2, z: 18 }],
-    lag: 2, scare: 3, stream: 1, sight: { id: 'cairn', leg: 4 }, break: 5,
+    lag: 2, scare: 3, stream: 1, sight: { id: 'cairn', leg: 4 }, break: 5, fall: 2,
   },
 };
 
@@ -351,6 +338,7 @@ export function ridePlan(booking) {
   const ev = (type, leg, extra = {}) => { if (leg < points.length) events.push({ type, leg, ...extra }); };
   ev('lag', route.lag);
   ev('scare', route.scare);
+  ev('fall', route.fall);
   if (route.stream !== null) ev('stream', route.stream);
   ev('sight', route.sight.leg, { id: route.sight.id });
   ev('break', Math.min(route.break, points.length - 1));
@@ -363,6 +351,7 @@ export function ridePlan(booking) {
     const off = n0 + 1;
     ev('lag', off + back.lag);
     ev('scare', off + back.scare);
+    ev('fall', off + back.fall);
     if (back.stream !== null) ev('stream', off + back.stream);
     ev('sight', off + back.sight.leg, { id: back.sight.id });
     ev('break', off + Math.min(back.break, back.points.length - 1));
@@ -373,8 +362,15 @@ export function ridePlan(booking) {
 
 // ---------------------------------------------------------------- préparer la balade
 
-/** Un poney : un petit cheval (Shetland, islandais, Kiso…). */
-export const isPony = (a) => a.species === 'horse' && (a.look?.scale ?? 1) <= 0.8;
+/** Un poney (gabarit « poney » de la sellerie : Shetland, Welsh, islandais, Connemara…). */
+export const isPony = (a) => a.species === 'horse' && sizeOf(a) === 'pony';
+
+/** Les grands poneys (islandais, Connemara) portent aussi les adultes ; un Shetland, non. */
+export function carriesAdult(a) {
+  if (!isPony(a)) return true;
+  const scale = getBreed('horse', a.breed)?.scale ?? a.look?.scale ?? 1;
+  return scale >= 0.85;
+}
 
 /**
  * Ce cheval convient-il à ce cavalier ? Règles simples :
@@ -392,7 +388,7 @@ export function horseFit(horse, rider) {
   if (rider.level === 'beginner' && ob < 40) return { ok: false, reason: 'notCalm' };
   if (rider.level === 'beginner' && horse.personality === 'stubborn') return { ok: false, reason: 'stubborn' };
   if (rider.weight === 'child' && !isPony(horse) && ob < 60) return { ok: false, reason: 'needPony' };
-  if (rider.weight === 'adult' && isPony(horse)) return { ok: false, reason: 'tooSmall' };
+  if (rider.weight === 'adult' && !carriesAdult(horse)) return { ok: false, reason: 'tooSmall' };
   const score = (horse.bond ?? 0) + ob * 0.5 + (horse.skills?.endurance ?? 0) * 0.3 + (rider.weight === 'child' && isPony(horse) ? 20 : 0)
     + (horse.personality === 'calm' ? 10 : 0);
   return { ok: true, score: Math.round(score) };
@@ -414,15 +410,38 @@ export function autoAssign(booking, horses, exclude = []) {
 }
 
 /**
- * Matériel : selle + filet, ou licol seul pour un poney mené (enfant).
- * Renvoie { ok, reason: 'needBridle' | 'needSaddle', led }.
+ * Ce que le cheval porte pour ce type d'objet (n'importe quel modèle : selle de rando, selle poney…),
+ * et si c'est à sa taille : { item, size, fits } ou null.
+ */
+export function wornOfType(horse, type) {
+  for (const g of Object.values(horse.gear ?? {})) {
+    if (GEAR[g.item]?.type !== type) continue;
+    const size = g.size ?? defaultSize(g.item);
+    const want = sizeOf(horse);
+    return { item: g.item, size, fits: !want || !GEAR[g.item].sizes || size === want };
+  }
+  return null;
+}
+
+/**
+ * Matériel (sellerie par taille) : selle + filet, ou licol seul pour un poney mené (enfant).
+ * Renvoie { ok, reason: 'needBridle' | 'needSaddle' | 'needHalter' | 'wrongSize', led, size, item }.
  */
 export function gearFit(horse, rider) {
   const led = rider.weight === 'child' && isPony(horse);
-  if (led) return wears(horse, 'halter') || wears(horse, 'bridle') ? { ok: true, led: true } : { ok: false, reason: 'needHalter', led: true };
-  if (!wears(horse, 'bridle') && !wears(horse, 'halter')) return { ok: false, reason: 'needBridle', led: false };
-  if (!wears(horse, 'saddle')) return { ok: false, reason: 'needSaddle', led: false };
-  return { ok: true, led: false };
+  const size = sizeOf(horse);
+  const head = wornOfType(horse, 'bridle') ?? wornOfType(horse, 'halter');
+  if (led) {
+    if (!head) return { ok: false, reason: 'needHalter', led: true, size };
+    if (!head.fits) return { ok: false, reason: 'wrongSize', led: true, size, item: head.item };
+    return { ok: true, led: true, size };
+  }
+  if (!head) return { ok: false, reason: 'needBridle', led: false, size };
+  const saddle = wornOfType(horse, 'saddle');
+  if (!saddle) return { ok: false, reason: 'needSaddle', led: false, size };
+  const bad = [head, saddle].find((x) => !x.fits);
+  if (bad) return { ok: false, reason: 'wrongSize', led: false, size, item: bad.item };
+  return { ok: true, led: false, size };
 }
 
 /** Météo : orage ou canicule = on reporte. */
@@ -432,21 +451,32 @@ export function weatherBlock(weather, temperature) {
   return null;
 }
 
-/** Notre propre cheval pour guider : monté, avec un filet ou un licol. */
+/** Notre propre cheval pour guider : monté, avec un filet ou un licol (à sa taille). */
 export function guideHorseFit(horse) {
   if (horse.species !== 'horse') return { ok: false, reason: 'notHorse' };
   const r = canRide(horse);
   if (!r.ok) return { ok: false, reason: r.reason };
-  if (!wears(horse, 'bridle') && !wears(horse, 'halter')) return { ok: false, reason: 'needBridle' };
+  const head = wornOfType(horse, 'bridle') ?? wornOfType(horse, 'halter');
+  if (!head) return { ok: false, reason: 'needBridle' };
+  if (!head.fits) return { ok: false, reason: 'wrongSize', item: head.item };
   return { ok: true };
 }
 
 /**
- * La liste à cocher avant de partir.
- * ctx : { horses (nos chevaux ici), guideHorseId, weather, temperature }
- * Renvoie { items: [{ id, ok, rider?, horse?, reason?, params? }], ok }.
+ * La trousse de secours 🧰 (l'outil « firstAid ») : 'ok' (dans la sacoche), 'atHome' (en voyage,
+ * restée à la maison : pas dans le coffre de transport) ou 'none' (à acheter).
  */
-export function prepChecklist(booking, { horses = [], guideHorseId = booking.guideHorseId ?? null, weather = 'clear', temperature = 20 } = {}) {
+export function firstAidState(p) {
+  if (hasTool(p, 'firstAid')) return 'ok';
+  return toolAtHome(p, 'firstAid') ? 'atHome' : 'none';
+}
+
+/**
+ * La liste à cocher avant de partir.
+ * ctx : { horses (nos chevaux ici), guideHorseId, weather, temperature, firstAid ('ok' | 'atHome' | 'none') }
+ * Renvoie { items: [{ id, ok, rider?, horse?, reason?, led?, size? }], ok }.
+ */
+export function prepChecklist(booking, { horses = [], guideHorseId = booking.guideHorseId ?? null, weather = 'clear', temperature = 20, firstAid = 'none' } = {}) {
   const items = [];
   const byId = (id) => horses.find((h) => h.id === id) ?? null;
   for (const rider of booking.riders) {
@@ -459,7 +489,7 @@ export function prepChecklist(booking, { horses = [], guideHorseId = booking.gui
       else {
         items.push({ id: 'horse', rider, horse, ok: true });
         const g = gearFit(horse, rider);
-        items.push({ id: 'gear', rider, horse, ok: g.ok, reason: g.reason, led: g.led });
+        items.push({ id: 'gear', rider, horse, ok: g.ok, reason: g.reason, led: g.led, size: g.size });
       }
     }
   }
@@ -467,9 +497,10 @@ export function prepChecklist(booking, { horses = [], guideHorseId = booking.gui
   if (dup.length) items.push({ id: 'sameHorse', ok: false, reason: 'sameHorse' });
   const mine = byId(guideHorseId);
   const gf = mine ? guideHorseFit(mine) : { ok: false, reason: 'noHorse' };
-  items.push({ id: 'guideHorse', horse: mine, ok: gf.ok, reason: gf.ok ? undefined : gf.reason });
+  items.push({ id: 'guideHorse', horse: mine, ok: gf.ok, reason: gf.ok ? undefined : gf.reason, size: mine ? sizeOf(mine) : null });
   items.push({ id: 'water', ok: !!booking.prep?.water });
   items.push({ id: 'snack', ok: !!booking.prep?.snack });
+  items.push({ id: 'firstAid', ok: firstAid === 'ok', reason: firstAid === 'ok' ? undefined : firstAid === 'atHome' ? 'kitAtHome' : 'noKit' });
   const wb = weatherBlock(weather, temperature);
   items.push({ id: 'weather', ok: !wb, reason: wb ?? undefined });
   return { items, ok: items.every((i) => i.ok) };
@@ -485,9 +516,13 @@ export const FUN = {
   lagPerSec: -2, // on laisse un cavalier derrière
   lostPerSec: -1, // mauvaise direction
   thirstyPerSec: -1, // chevaux sans eau (< 30)
+  fall: -10, // le cavalier qui tombe a eu peur…
+  firstAid: 14, // … mais on l'a vite soigné avec la trousse : il remonte en selle, fier de lui
+  waitPerSec: -0.4, // on laisse quelqu'un par terre (ou un cheval qui a peur) trop longtemps
 };
 
 export const WATER_PER_MIN = 14; // l'eau des chevaux baisse de 14 points par minute réelle de balade
+export const FALL_WAIT = 25; // secondes : au-delà, on a été trop long pour aider le cavalier tombé
 
 export const addFun = (rider, n) => { rider.fun = clamp(rider.fun + n); };
 
@@ -495,11 +530,22 @@ export const addFun = (rider, n) => { rider.fun = clamp(rider.fun + n); };
 export const riderMood = (fun) => (fun >= 75 ? 'great' : fun >= 45 ? 'ok' : 'bad');
 
 /**
+ * Le cavalier tombé est aidé : avec la trousse 🧰, pansement et câlin au cheval, il remonte content ;
+ * sans trousse (ou trop tard), il remonte mais il a mal. Renvoie { fun: points gagnés, mood: 'great' | 'ok' }.
+ */
+export function helpFallen(rider, { kit = true, waited = 0 } = {}) {
+  const late = waited > FALL_WAIT;
+  const n = kit ? (late ? FUN.firstAid / 2 : FUN.firstAid) : FUN.eventBad / 2;
+  addFun(rider, n);
+  return { fun: n, mood: kit && !late ? 'great' : 'ok' };
+}
+
+/**
  * Résultat de la balade.
- * { riders, water, photos, handled, total (événements), legs, totalLegs, booking, perks }
+ * { riders, water, photos, handled, total (événements), legs, totalLegs, booking, perks, falls, helped }
  * Renvoie { stars, fun, pay, tip, repDelta, xp, comments: [{ rider, mood }] }.
  */
-export function rideResult({ riders, water = 100, photos = 0, handled = 0, total = 1, legs, totalLegs, booking, perks, aborted = false }) {
+export function rideResult({ riders, water = 100, photos = 0, handled = 0, total = 1, legs, totalLegs, booking, perks, aborted = false, falls = 0, helped = 0 }) {
   const fun = riders.length ? Math.round(riders.reduce((s, r) => s + r.fun, 0) / riders.length) : 0;
   const done = totalLegs ? legs / totalLegs : 1;
   let score = fun * 0.6 + water * 0.15 + done * 100 * 0.15 + (photos ? 10 : 0) + (total ? (handled / total) * 5 : 5);
@@ -510,23 +556,25 @@ export function rideResult({ riders, water = 100, photos = 0, handled = 0, total
   const tip = !aborted && perks?.tips && fun >= 85 ? Math.round(base * 0.2) : 0;
   const repDelta = aborted ? -6 : stars === 3 ? 6 : stars === 2 ? 2 : -3;
   const hours = booking ? DURATIONS[booking.duration]?.hours ?? 1 : 1;
-  const xp = aborted ? 10 : 30 + stars * 15 + riders.length * 5 + Math.min(40, hours * 2) + photos * 3;
-  return { stars, fun, pay, tip, repDelta, xp, photos, comments: riders.map((r) => ({ rider: r, mood: riderMood(r.fun) })), aborted };
+  const xp = aborted ? 10 : 30 + stars * 15 + riders.length * 5 + Math.min(40, hours * 2) + photos * 3 + helped * 5;
+  return { stars, fun, pay, tip, repDelta, xp, photos, falls, helped, comments: riders.map((r) => ({ rider: r, mood: riderMood(r.fun) })), aborted };
 }
 
 /** Gain d'endurance et de lien des chevaux après la balade. */
 export const horseGains = (booking) => ({ endurance: booking.duration === 'trek' ? 8 : booking.duration === 'half' ? 5 : 3, bond: 4 });
 
 /**
- * Applique le résultat au profil : argent (via earn, fourni par le jeu), réputation, XP, historique,
- * statistiques pour les quêtes. Renvoie { rankUp, rank, reputation }.
+ * Applique le résultat au profil : argent (via earn, fourni par le jeu), réputation, XP et gains du
+ * métier (registre des métiers), historique, statistiques pour les quêtes.
+ * Renvoie { rankUp, rank, reputation, money }.
  */
 export function applyRideResult(p, booking, result, { day = 1, earn = null, home = true } = {}) {
   const st = tgState(p);
   st.bookings = st.bookings.filter((b) => b.id !== booking.id);
+  ensureTrailCareer(p, day);
   const money = result.pay + result.tip;
   if (earn && money) earn(money);
-  if (p.careers?.earned) p.careers.earned.trailGuide = (p.careers.earned.trailGuide ?? 0) + money; // panneau 💼
+  addEarnings(p, ID, money); // panneau 💼
   const reputation = changeReputation(p, result.repDelta);
   const x = addTrailXp(p, result.xp);
   st.history.unshift({ day, place: booking.place, group: booking.group, riders: booking.riders.length, stars: result.stars, pay: result.pay, tip: result.tip, duration: booking.duration });
@@ -540,6 +588,7 @@ export function applyRideResult(p, booking, result, { day = 1, earn = null, home
     if (!home) add('tgAbroad');
     if (booking.duration === 'trek') add('tgTreks');
     add('tgPhotos', result.photos ?? 0);
+    add('tgHelped', result.helped ?? 0);
     add('tgMoney', money);
   }
   return { rankUp: x.rankUp, rank: x.rank, reputation, money };

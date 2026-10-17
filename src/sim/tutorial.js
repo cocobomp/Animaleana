@@ -191,6 +191,10 @@ export const QUEST_GUIDE = {
   actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
   actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
   actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
+  // Concours de beauté (src/sim/beauty.js) : préparer depuis la fiche, présenter au terrain de concours
+  beautyPrep1: { where: 'sheet', target: { type: 'action', id: 'more' }, animal: true, ready: hasAnimal },
+  beautyBraid1: { where: 'sheet', target: { type: 'action', id: 'more' }, horse: true, ready: hasHorse },
+  beauty1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
   // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
   career1: { where: 'careers', target: { type: 'hud', id: 'careers' } },
   client1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
@@ -204,6 +208,7 @@ export const QUEST_ORDER = [
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
+  'beautyPrep1', 'beautyBraid1', 'beauty1',
   'career1', 'client1', 'clientVet1', 'clientHappy5', 'clientMoney500',
 ];
 
@@ -308,6 +313,10 @@ export const QUEST_STEPS = {
   actvCompete1: ['goShowground', 'doActivity'],
   actvHop1: ['goShowground', 'doActivity'],
   actvHutch5: ['goHutch', 'doActivity'],
+  // Concours de beauté
+  beautyPrep1: ['tapAnimal', 'openMore', 'doActivity'],
+  beautyBraid1: ['tapHorse', 'openMore', 'doActivity'],
+  beauty1: ['goShowground', 'doActivity'],
   career1: ['careerStart'],
   client1: ['clientWait', 'clientCare'],
   clientVet1: ['clientWait', 'clientVet'],

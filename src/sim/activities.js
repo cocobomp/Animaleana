@@ -7,6 +7,7 @@ import { happiness, lifeStage, canRide } from './animal.js';
 import { wears, rideGear, tackEffects } from './gear.js';
 import { seeded, pick, hashString } from './rng.js';
 import { NAMES } from './species.js';
+import { rivalBeautyPoints } from './beauty.js'; // concours de beauté
 
 const clamp = (v, min = 0, max = 1) => Math.max(min, Math.min(max, v));
 
@@ -452,7 +453,8 @@ export function hutchPlay(a, toyId) {
 
 // ---------------------------------------------------------------- concours
 
-export const COMPETITION_TYPES = ['jumping', 'agility', 'show', 'trail'];
+// 'beauty' : concours de beauté (src/sim/beauty.js) — tous les animaux, toilette et présentation au juge.
+export const COMPETITION_TYPES = ['jumping', 'beauty', 'agility', 'show', 'trail'];
 export const LEVELS = ['club', 'regional', 'grand'];
 
 /** Frais d'inscription et prix (mode gestion), par niveau. */
@@ -524,7 +526,10 @@ export function eligibility(a, type) {
 const RIVAL_NAMES = ['Léa', 'Hugo', 'Emma', 'Lucas', 'Chloé', 'Nathan', 'Inès', 'Jules', 'Manon', 'Louis',
   'Zoé', 'Adam', 'Camille', 'Sacha', 'Lina', 'Tom', 'Alice', 'Noah', 'Rose', 'Gabriel', 'Mia', 'Eliott'];
 
-const RIVAL_SPECIES = { jumping: ['horse'], trail: ['horse'], agility: ['dog', 'dog', 'dog', 'cat', 'rabbit'], show: ['dog', 'horse', 'cat', 'rabbit', 'goat'] };
+const RIVAL_SPECIES = {
+  jumping: ['horse'], trail: ['horse'], agility: ['dog', 'dog', 'dog', 'cat', 'rabbit'], show: ['dog', 'horse', 'cat', 'rabbit', 'goat'],
+  beauty: ['horse', 'horse', 'dog', 'cat', 'rabbit', 'sheep'], // concours de beauté (src/sim/beauty.js)
+};
 
 /**
  * Concurrents générés (toujours les mêmes pour un même concours).
@@ -553,6 +558,8 @@ export function rivals(comp, count = 5) {
       Object.assign(r, agilityResult({ faults, time, par }));
     } else if (comp.type === 'show') {
       r.points = Math.round(14 + skill * 34 + rng() * 6);
+    } else if (comp.type === 'beauty') {
+      r.points = rivalBeautyPoints(skill, rng); // concours de beauté : des points sur 100
     } else {
       r.points = Math.round(60 + skill * 75 + rng() * 15);
     }
@@ -589,7 +596,7 @@ export function placementAward(comp, rank) {
 /** Flot gagné à l'entraînement (sans concours) selon le nombre d'étoiles. */
 export function practiceAward(type, stars, maxStars = 3) {
   if (stars < maxStars - (type === 'show' ? 1 : 0)) return null;
-  const tier = { jumping: 'blue', agility: 'yellow', trail: 'green', show: 'purple', hop: 'pink', lesson: 'white' }[type];
+  const tier = { jumping: 'blue', agility: 'yellow', trail: 'green', show: 'purple', hop: 'pink', lesson: 'white', beauty: 'red' }[type];
   return { kind: 'ribbon', tier, money: 0 };
 }
 

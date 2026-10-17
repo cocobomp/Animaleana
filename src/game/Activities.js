@@ -32,6 +32,9 @@ const LESSON_START = { x: 14, z: -4, heading: -Math.PI / 2 };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const fwd = (h) => new THREE.Vector3(Math.sin(h), 0, Math.cos(h));
 
+/** Disciplines ajoutées par d'autres fichiers (concours de beauté : src/game/Beauty.js). type → classe de session. */
+export const EXTRA_SESSIONS = {};
+
 export class Activities {
   constructor(game) {
     this.game = game;
@@ -60,7 +63,8 @@ export class Activities {
       activityData(g.profile).entered.push(comp.id);
     }
     g.ui.closePanel();
-    const Cls = { jumping: JumpingSession, lesson: JumpingSession, trail: TrailSession, agility: AgilitySession, show: ShowSession, hop: HopSession }[type];
+    const Cls = { jumping: JumpingSession, lesson: JumpingSession, trail: TrailSession, agility: AgilitySession, show: ShowSession, hop: HopSession }[type] ?? EXTRA_SESSIONS[type];
+    if (!Cls) return null;
     this.session = new Cls(this, type, opts);
     if (!this.session.ok) {
       this.session.end(true);
@@ -71,6 +75,7 @@ export class Activities {
 
   update(dt) {
     this.updatePlays(dt);
+    this.game.beauty?.update(dt); // concours de beauté : décor des animaux, pluie (src/game/Beauty.js)
     const s = this.session;
     if (!s) return;
     if (this.game.profile.place !== s.place) {
@@ -256,7 +261,7 @@ export class Activities {
 
 // ---------------------------------------------------------------- base commune
 
-class Session {
+export class Session {
   constructor(mgr, type, opts) {
     this.mgr = mgr;
     this.game = mgr.game;
@@ -277,7 +282,7 @@ class Session {
     this.cheer = 0;
     this.ok = true;
     this.hud = new ActivityHud(this.game.ui, {
-      icon: { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', show: '🎪', hop: '🐇' }[type],
+      icon: { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', show: '🎪', hop: '🐇', beauty: '🎀' }[type],
       title: this.comp ? t('actv_comp_title', { type: t(`actv_type_${type}`) }) : t(`actv_type_${type}`),
       onQuit: () => this.quit(),
     });
@@ -398,7 +403,7 @@ class Session {
     this.state = 'done';
     const animals = info.animals;
     const main = animals[0];
-    addStat(p, { jumping: 'actvJumping', trail: 'actvTrail', agility: 'actvAgility', show: 'actvShows', lesson: 'actvLessons', hop: 'actvHop' }[this.type]);
+    addStat(p, { jumping: 'actvJumping', trail: 'actvTrail', agility: 'actvAgility', show: 'actvShows', lesson: 'actvLessons', hop: 'actvHop', beauty: 'actvBeauty' }[this.type]);
     if (this.type === 'jumping' && result.clear) addStat(p, 'actvClear');
     g.xp(this.type === 'show' ? 'show' : 'activity');
     let award = null;

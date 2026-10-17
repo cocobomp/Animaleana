@@ -1912,6 +1912,25 @@ body.actv-nomove #touch-pad { display: none !important; }
   .actv-hint { top: calc(150px + var(--safe-t)); font-size: 0.9rem; }
 }
 
+/* ==========================================================================
+   Concours de beauté (src/ui/beauty.js, src/game/Beauty.js)
+   ========================================================================== */
+.beauty-card .row.wrap { margin-top: 4px; gap: 6px; }
+.beauty-card .row.wrap button { min-height: 44px; }
+.beauty-ready { color: #1e5c3e; font-weight: 700; }
+.beauty-parts .chip.good { background: #e2f5e7; }
+.beauty-parts .chip.low { background: #fde3df; }
+.beauty-list { gap: 6px; font-size: 1em; }
+.beauty-list li { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 6px 8px 6px 10px; }
+.beauty-list li.ok { background: #eef8f1; border-color: #bfe3cb; }
+.beauty-list li.ko { color: inherit; }
+.beauty-check { font-size: 1.3rem; text-align: center; }
+.beauty-item { display: grid; gap: 2px; min-width: 0; }
+.beauty-item small { color: var(--muted); }
+.beauty-list button { min-height: 44px; white-space: nowrap; }
+.beauty-banner { background: #fff3c4; border-radius: 14px; padding: 10px 14px; font-weight: 800; text-align: center; margin: 8px 0; animation: pop 0.35s ease-out; }
+.mg-btn.mg-color { flex: 0 1 auto; min-width: 56px; font-size: 1.5rem; }
+.ribbon.red .rosette { --c: #d8402f; }
 /* Discuter avec une aide (src/ui/helperChat.js) */
 .hc-head { display: flex; gap: 10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px; }
 .hc-avatar { font-size: 2.2rem; }

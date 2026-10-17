@@ -40,6 +40,7 @@ import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash, equipHelmet, riderHelmet } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
+import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { t, L } from '../i18n.js';
 // Vue d'ensemble (d'en haut) et constructions du joueur.
 import { Structures } from './Structures.js';
@@ -114,6 +115,7 @@ export class Game {
     this.events = new Events(this);
     this.clients = new Clients(this); // visiteurs, animaux confiés, métiers
     this.activities = new Activities(this);
+    this.beauty = new Beauty(this); // concours de beauté (game.beauty)
     this.droppingMeshes = new Map();
     this.timeScale = 1; // 0 = pause
     this.profile = null;

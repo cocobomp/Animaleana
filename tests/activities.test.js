@@ -162,7 +162,7 @@ describe('concours', () => {
   });
 
   it('classement contre des concurrents', () => {
-    const c = competitionsAt('maison', true, 1, 12).find((x) => x.type === 'jumping');
+    const c = competitionsAt('maison', true, 1, 15).find((x) => x.type === 'jumping');
     const rv = rivals(c);
     expect(rv.length).toBe(5);
     expect(rivals(c)).toEqual(rv);

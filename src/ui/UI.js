@@ -381,6 +381,7 @@ export class UI {
     }
     chips.push(...tripChips(this)); // chargement du véhicule de voyage
     chips.push(...(g.events?.statusChips(chip) ?? [])); // événement en cours (bandeau réduit)
+    chips.push(...(g.venue?.statusChips(chip) ?? [])); // concours du jour sur place (src/game/CompetitionVenue.js)
     chips.push(...(g.clients?.statusChips(chip) ?? []), ...careerChips(this, chip)); // visiteur, clients, carnet du métier
     const key = chips.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
@@ -486,7 +487,10 @@ export class UI {
 
   levelUp(level, names) {
     audio.ui('levelUp');
-    this.alert(names ? t('levelUp', { n: level, names }) : t('levelUpPlain', { n: level }));
+    const msg = names ? t('levelUp', { n: level, names }) : t('levelUpPlain', { n: level });
+    // Une fenêtre est ouverte (résultats d'un concours…) : on ne la remplace pas, on l'annonce en bulle.
+    if (this.modalOpen) return this.toast(`⭐ ${msg}`, 8000);
+    this.alert(msg);
   }
 
   // ------------------------------------------------------------ notifications
@@ -788,7 +792,7 @@ export class UI {
     this.game?.emit('animalActions', a);
     return r;
   }
-  openActivities(opts) { openActivities(this, opts); }
+  openActivities(opts) { openActivities(this, opts); this.game?.emit('panel', 'activities'); }
   openHelper(h) { openHelperChat(this, h); this.game?.emit('panel', 'helper'); }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */

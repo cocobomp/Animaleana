@@ -114,6 +114,26 @@ export class TripFlow {
     return true;
   }
 
+  /**
+   * Départ pour un concours à l'extérieur (src/game/CompetitionVenue.js) : on emmène les animaux inscrits
+   * dans le bon véhicule (van s'il y a un cheval, sinon voiture ; avion ou bateau au-delà des mers).
+   */
+  beginCompetitionTrip(entry) {
+    const g = this.game;
+    const ids = entry.animalIds.filter((id) => g.animalsHere().some((a) => a.id === id));
+    if (!ids.length) return this.ui.toast(t('comp_noAnimalsHere'), 5000);
+    const travellers = g.animalsHere().filter((a) => ids.includes(a.id));
+    const opts = g.travelOptions(entry.comp.place, travellers);
+    const mode = ['van', 'car', 'plane', 'boat'].find((m) => opts.find((o) => o.mode === m)?.ok);
+    if (!mode) return this.ui.toast(t('tr_sea'));
+    const ok = this.begin(entry.comp.place, mode, ids);
+    if (ok && this.loading) {
+      this.loading.purpose = 'competition';
+      this.ui.toast(t('comp_tripStarted', { name: L(entry.comp.name) }), 7000);
+    }
+    return ok;
+  }
+
   /** Les voyageurs pas encore montés. */
   waiting() {
     const l = this.loading;

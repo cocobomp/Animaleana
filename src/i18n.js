@@ -1,5 +1,6 @@
 // Textes du jeu : français (langue principale) et anglais.
 
+import { fr as frComp, en as enComp } from './i18n-competitions.js'; // concours à l'extérieur et dressage
 import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
 import { VET_FR, VET_EN } from './ui/vetTexts.js'; // examen et école vétérinaires (vx_*, vs_*)
 import { TACK_FR, TACK_EN } from './ui/tackTexts.js'; // sellerie : catalogue d'équipement (gear_*, tk_*, col_*)
@@ -3581,6 +3582,9 @@ const en = {
   o_actvStar: 'Put on 10 shows',
 };
 
+// Textes des concours à l'extérieur et du dressage (fichier à part : src/i18n-competitions.js)
+Object.assign(fr, frComp);
+Object.assign(en, enComp);
 // Clients et métiers : textes ajoutés aux deux dictionnaires.
 Object.assign(fr, CLIENTS_FR);
 Object.assign(en, CLIENTS_EN);

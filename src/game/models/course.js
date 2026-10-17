@@ -244,6 +244,16 @@ export function jumpObstacle(def, height) {
       }
       break;
     }
+    case 'water': {
+      // Rivière : un bac d'eau bleu bordé de blanc, avec une petite haie devant (concours à l'extérieur).
+      add(g, new THREE.BoxGeometry(w, 0.12, 2.6), mat(0xf4f4f0, 0.7), [0, 0.06, 0.3]);
+      add(g, new THREE.BoxGeometry(w - 0.3, 0.1, 2.3), new THREE.MeshStandardMaterial({ color: 0x3f9bd8, roughness: 0.15, metalness: 0.2 }), [0, 0.11, 0.3]);
+      add(g, new THREE.BoxGeometry(w, Math.max(0.2, height), 0.4), mat(0x3f8f3a, 0.95), [0, Math.max(0.2, height) / 2, -1.1]);
+      standard(g, -w / 2, c1, 1.2);
+      standard(g, w / 2, c1, 1.2);
+      g.children.slice(-10).forEach((m) => { m.position.z -= 1.1; });
+      break;
+    }
     case 'cross': {
       standard(g, -w / 2, c1, 1.4);
       standard(g, w / 2, c1, 1.4);
@@ -260,7 +270,7 @@ export function jumpObstacle(def, height) {
       set(0, height);
   }
   const low = def.type === 'poles' || def.type === 'cavaletti';
-  if (!low) flowerBox(g, w, def.type === 'triple' ? -1.25 : -0.85);
+  if (!low && def.type !== 'water') flowerBox(g, w, def.type === 'triple' ? -1.25 : -0.85);
   else add(g, new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), mat(0xf4f4f0), [w / 2 + 0.33, 0.45, 0]);
   if (def.n) {
     const p = plate(def.n, 0.42, '#ffffff', hex(c1));
@@ -380,7 +390,7 @@ export function agilityObstacle(type, n) {
 // ---------------------------------------------------------------- terrain de concours
 
 /** Guirlande de fanions entre deux points (x, y, z). */
-function bunting(parent, a, b, colors) {
+export function bunting(parent, a, b, colors) {
   const n = Math.max(4, Math.round(Math.hypot(b[0] - a[0], b[2] - a[2]) / 0.7));
   const line = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 13 }, (_, i) => {
     const t = i / 12;

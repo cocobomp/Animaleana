@@ -1,0 +1,26 @@
+/* Concours à l'extérieur et dressage (src/ui/competitions.js, src/game/Dressage.js).
+   Fichier à part pour ne pas toucher style.css ; il réutilise les classes des activités (.card, .actv-*). */
+
+.comp-card.entered { border: 2px solid #8a45d8; background: #f6effd; }
+.comp-card .lock, .comp-entry .lock { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+.comp-entry { background: #fff7df; }
+.comp-entry .comp-state { color: #8b5a00; font-weight: 700; }
+.comp-banner { background: linear-gradient(90deg, #fff1c2, #ffe08a); border: 2px solid #e0a800; }
+.comp-banner .card-main b { font-size: 1.05rem; }
+.comp-register h3 { margin: 0 0 6px; }
+.comp-register .checks { display: grid; gap: 6px; margin: 8px 0; }
+.comp-register .check { min-height: 44px; }
+.comp-why { color: #8b5a00; }
+.comp-athlete .row.wrap { margin-top: 6px; }
+.comp-athlete .row.wrap button { min-height: 44px; }
+.comp-athlete .good { color: #1e7a40; font-weight: 700; }
+.comp-result .comp-photo { display: block; width: min(100%, 260px); margin: 6px auto; border-radius: 10px; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25); }
+.comp-title { font-weight: 800; color: #8a5a00; background: #fff1c2; border-radius: 10px; padding: 6px 10px; margin: 4px 0; }
+.comp-best { margin: 6px 0; padding-left: 18px; color: var(--muted); font-size: 0.92rem; }
+.comp-journal { margin: 6px 0; min-height: 40px; }
+/* Protocole de dressage (note de chaque figure) dans la fenêtre des résultats */
+.dr-protocol td:nth-child(2) { text-align: left; }
+.dr-protocol td:first-child { width: 28px; }
+@media (max-width: 640px) {
+  .comp-result .comp-photo { width: min(100%, 200px); }
+}

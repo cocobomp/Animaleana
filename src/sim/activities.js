@@ -507,7 +507,8 @@ export function eligibility(a, type) {
   if (a.sick) return 'sick';
   if (lifeStage(a) === 'baby') return 'baby';
   if (a.needs.energy < 20) return 'tired';
-  if (type === 'jumping' || type === 'trail') {
+  // dressage, plat, figures : mêmes conditions que le saut (src/sim/dressage.js)
+  if (type === 'jumping' || type === 'trail' || type === 'dressage' || type === 'flat' || type === 'figures') {
     if (!SPECIES[a.species].rideable) return 'notRideable';
     const r = canRide(a);
     if (!r.ok) return r.reason;
@@ -589,7 +590,7 @@ export function placementAward(comp, rank) {
 /** Flot gagné à l'entraînement (sans concours) selon le nombre d'étoiles. */
 export function practiceAward(type, stars, maxStars = 3) {
   if (stars < maxStars - (type === 'show' ? 1 : 0)) return null;
-  const tier = { jumping: 'blue', agility: 'yellow', trail: 'green', show: 'purple', hop: 'pink', lesson: 'white' }[type];
+  const tier = { jumping: 'blue', agility: 'yellow', trail: 'green', show: 'purple', hop: 'pink', lesson: 'white', dressage: 'purple', flat: 'white', figures: 'white' }[type];
   return { kind: 'ribbon', tier, money: 0 };
 }
 

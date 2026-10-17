@@ -361,6 +361,7 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .chip { background: #fff; border: 1px solid var(--line); padding: 4px 10px; border-radius: 999px; font-size: 0.85em; }
 .chip.swatch { color: #fff; text-shadow: 0 0 3px rgba(0, 0, 0, 0.7); }
+.chip.swatch.light { color: #3a2f27; text-shadow: none; box-shadow: inset 0 0 0 1px var(--line); } /* robe claire : texte foncé */
 .chip.mood-happy { background: #e2f5e7; }
 .chip.mood-sad { background: #fdf0d8; }
 .chip.mood-sick { background: #fde3df; }

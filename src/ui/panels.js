@@ -660,7 +660,9 @@ export function openShop(ui) {
         onClick: () => { st.breed = b.id; st.colorIndex = 0; ui.renderPanel(); },
       },
       h('span', { class: 'card-main' }, h('b', {}, `${b.from?.flag ? `${b.from.flag} ` : ''}${L(b.name)}`), h('small', {}, '⭐'.repeat(b.rarity ?? 1)),
-        b.id === st.breed ? breedNote(b) : null), // vague 3 : origine et caractère de la race choisie
+        // Chats : taille et poil de la race (catBreeds.js), sur chaque carte.
+        b.desc ? h('small', { class: 'breed-desc' }, L(b.desc)) : null,
+        b.id === st.breed ? breedNote(b) : null), // vague 3 : origine et caractère de la race choisie (chevaux, chats)
       h('span', { class: 'card-side' }, sandbox ? '' : h('small', {}, `${shopPrice(st.species, b.id, st.stage)} 🪙`))))),
       h('h3', {}, t('coat')),
       h('div', { class: 'row wrap' }, breed.colors.map((c, i) => h('button', {

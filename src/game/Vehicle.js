@@ -29,7 +29,7 @@ export function crateWithAnimal(a, colorIndex = 0) {
   const s = a.look.scale * growthScale(a);
   const len = (a.look.bodyLen + a.look.headLen) * s;
   const c = crate(Math.min(0.85, Math.max(0.5, len * 1.15)), CRATE_COLORS[colorIndex % CRATE_COLORS.length]);
-  const model = buildAnimalModel(a.species, a.look);
+  const model = buildAnimalModel(a.species, a.look, a.breed); // chaque espèce par son modèle (cheval de sa race, chat…)
   model.root.scale.setScalar(s * Math.min(1, (c.size.d * 0.8) / len));
   model.root.position.set(0, 0.03, -0.04);
   c.group.add(model.root);
@@ -474,7 +474,7 @@ export class TripVehicle {
     if (place === 'crate' || !this.trailer) return this.addCrate(a);
     const i = this.freeStall(a);
     if (i < 0) return this.addCrate(a);
-    const model = buildAnimalModel(a.species, a.look);
+    const model = buildAnimalModel(a.species, a.look, a.breed); // chaque espèce par son modèle (cheval de sa race, chat…)
     const s = a.look.scale * growthScale(a);
     model.root.scale.setScalar(s);
     this.stallUse[i].push(a.id);

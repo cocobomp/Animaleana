@@ -1584,6 +1584,7 @@ class ShowSession extends Session {
       case 'face': {
         // Il se tourne vers le public, puis la jauge apparaît.
         e.speed = 0;
+        if (e.model.cat) e.catPoseOverride = 'stand'; // chat : debout en attendant (pas de sieste)
         e.heading += wrap(Math.PI - e.heading) * Math.min(1, dt * 5);
         if (this.phaseT > 0.7) {
           this.phase = 'gauge';
@@ -1622,6 +1623,7 @@ class ShowSession extends Session {
           this.cheered = false;
           e.scaleGroup.position.set(0, 0, 0);
           e.scaleGroup.rotation.set(0, 0, 0);
+          if (e.model.cat) e.catPoseOverride = null; // chat : fin de la pose du tour
           this.phase = 'bow';
           this.phaseT = 0;
           this.refreshHud();
@@ -1661,6 +1663,7 @@ class ShowSession extends Session {
 
   cleanup() {
     this.hud.setGauge(null);
+    for (const e of this.cast ?? []) if (e.model?.cat) e.catPoseOverride = null; // chats : poses libres
   }
 }
 
@@ -1671,6 +1674,12 @@ function animateTrick(e, trick, k, dt) {
   const md = e.model;
   const front = md.legs.filter((l) => l.front);
   e.speed = 0;
+  // Chats : leurs vraies poses (catAnim.js) au lieu de basculer tout le modèle (l'arrière-train
+  // passait sous le sol). Assis et patte levée : rien d'autre à faire.
+  if (md.cat) {
+    e.catPoseOverride = { sit: 'sit', highfive: 'highfive', jump: 'stand' }[trick] ?? null;
+    if (trick === 'sit' || trick === 'highfive') return;
+  }
   switch (trick) {
     case 'sit':
       sg.rotation.x = -0.4 * Math.min(1, s * 2);

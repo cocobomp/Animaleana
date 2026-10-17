@@ -9,7 +9,7 @@ import { CAREERS, CAREER_IDS, startCareer, isStarted, noteAction as noteCareerAc
 import { buyTool } from '../src/sim/tools.js';
 import { maxClients } from '../src/sim/clients.js';
 import { createAnimal } from '../src/sim/animal.js';
-import { createProfile } from '../src/sim/profile.js';
+import { createProfile, migrate } from '../src/sim/profile.js';
 import { PLACE_IDS, PLACES } from '../src/sim/places.js';
 import { OBJECTIVES } from '../src/sim/objectives.js';
 import { QUEST_GUIDE, QUEST_STEPS, FOLLOW_STEPS } from '../src/sim/tutorial.js';
@@ -66,6 +66,17 @@ describe('le métier guide de randonnée', () => {
     expect(old.careers.reputation.trailGuide).toBe(72);
     expect(st.history).toHaveLength(1);
     expect(st.seen).toEqual([]);
+  });
+
+  it('migration au chargement du profil : réputation dans le registre, vétérinaire et guide gardés', () => {
+    const old = JSON.parse(JSON.stringify(createProfile('Lou', 'manage')));
+    old.trailGuide = { reputation: 80, bookings: [{ id: 'b', place: 'maison', day: 3, riders: [] }] };
+    old.careers.reputation = { vet: 70 };
+    const p = migrate(old);
+    expect(p.careers.reputation).toMatchObject({ vet: 70, trailGuide: 80 });
+    expect(p.trailGuide.reputation).toBeUndefined();
+    expect(p.trailGuide.bookings).toHaveLength(1);
+    expect(p.vetSchool).toBeTruthy(); // les migrations des deux côtés s'additionnent
   });
 
   it('les rangs montent avec l\'XP de métier', () => {

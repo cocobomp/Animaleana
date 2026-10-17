@@ -9,5 +9,7 @@ describe('aide', () => {
     expect(searchHelp('comment agrandir le paddock')[0].id).toBe('grow');
     expect(searchHelp('make the stable bigger')[0].id).toBe('grow');
     expect(searchHelp('').length).toBeGreaterThan(10);
+    expect(searchHelp('guide de randonnée')[0].id).toBe('trailGuide'); // 🧭 métier
+    expect(searchHelp('trail guide visitors')[0].id).toBe('trailGuide');
   });
 });

@@ -2083,10 +2083,11 @@ body.actv-nomove #touch-pad { display: none !important; }
 .tg-comments li.great { background: #e9f7ee; }
 .tg-comments li.bad { background: #fdf0d8; }
 button.big.off { opacity: 0.55; }
-/* Pendant une activité (balade guidée…), les messages passent sous la consigne de l'activité au lieu de la cacher. */
-body.actv-running #toasts { top: calc(178px + var(--safe-t)); }
+/* Pendant une activité (balade guidée…), les messages passent sous la consigne de l'activité au lieu de la cacher
+   (!important : sur téléphone, le tutoriel pose leur top sous la barre du haut, cachée pendant l'activité). */
+body.actv-running #toasts { top: calc(178px + var(--safe-t)) !important; bottom: auto !important; }
 @media (max-width: 640px) {
-  body.actv-running #toasts { top: calc(240px + var(--safe-t)); }
+  body.actv-running #toasts { top: calc(240px + var(--safe-t)) !important; }
   .tg-check { flex-wrap: wrap; }
   .tg-tools { width: 100%; justify-content: flex-start; }
 }

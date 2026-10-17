@@ -5,7 +5,7 @@
 // dans le panneau 💼 (src/ui/careers.js), qui ouvre ce carnet.
 
 import { h } from './dom.js';
-import { t, L } from '../i18n.js';
+import { t, L, getLang } from '../i18n.js';
 import { PLACES } from '../sim/places.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
@@ -193,7 +193,7 @@ export function openTrailPrep(ui, tg) {
       // La sacoche : gourde, goûter (à la sellerie) et trousse de secours.
       for (const k of ['water', 'snack']) {
         const it = check.items.find((x) => x.id === k);
-        rows.push(line(it.ok, t(`tg_item_${k}`), it.ok ? null : [h('button', { class: 'small primary', onClick: () => tg.takeSupply(b, k) }, t('tg_takeAtTack')), showBtn(tackSpot())]));
+        rows.push(line(it.ok, t(`tg_item_${k}`), it.ok ? null : [h('button', { class: 'small primary', onClick: () => tg.takeSupply(b, k) }, t(g.world.interactables.some((i) => i.kind === 'tackroom') ? 'tg_takeAtTack' : 'tg_takeAtLodge')), showBtn(tackSpot())]));
       }
       const kit = check.items.find((x) => x.id === 'firstAid');
       const kitPrice = isSandbox(g.profile) ? t('tg_free') : `${TOOLS.firstAid.price} 🪙`;
@@ -283,6 +283,7 @@ const pickComment = (mood, i) => `tg_c_${mood}_${(i % 3) + 1}`;
 /** r : { booking, result, applied, gains, sandbox, rankName, onClose } */
 export function showRideResult(ui, r) {
   const res = r.result;
+  const sep = getLang() === 'fr' ? ' : ' : ': '; // « Paiement : +30 » / "Payment: +30"
   // (« Niveau supérieur ! » qui arrive en même temps attend son tour : ui.showModal met les fenêtres en file.)
   const close = () => { ui.hideModal(); r.onClose?.(); };
   const box = h('div', { class: 'actv-result tg-result' },
@@ -290,12 +291,12 @@ export function showRideResult(ui, r) {
       h('div', { class: 'actv-stars', 'aria-label': `${res.stars}/3` }, Array.from({ length: 3 }, (_, i) => h('span', { class: i < res.stars ? 'on' : '' }, '★'))),
       h('ul', { class: 'tg-comments' }, res.comments.map((c, i) => h('li', { class: c.mood }, `${AGE_EMOJI[c.rider.age]} ${t(pickComment(c.mood, i), { name: c.rider.name })}`))),
       h('ul', { class: 'actv-lines' },
-        h('li', {}, `😊 ${t('tg_result_fun')} : ${res.fun} %`),
-        r.sandbox ? null : h('li', {}, `🪙 ${t('tg_result_pay')} : +${res.pay}${res.tip ? ` · ${t('tg_result_tip')} +${res.tip} 🎁` : ''}`),
-        h('li', {}, `⭐ ${t('tg_result_rep')} : ${res.repDelta >= 0 ? '+' : ''}${res.repDelta} → ${r.applied.reputation}`),
-        h('li', {}, `🧭 ${t('tg_result_xp')} : +${res.xp}`),
-        res.photos ? h('li', {}, `📷 ${t('tg_result_photos')} : ${res.photos}`) : null,
-        res.helped ? h('li', {}, `🩹 ${t('tg_result_helped')} : ${res.helped}`) : null,
+        h('li', {}, `😊 ${t('tg_result_fun')}${sep}${res.fun}${getLang() === 'fr' ? ' %' : '%'}`),
+        r.sandbox ? null : h('li', {}, `🪙 ${t('tg_result_pay')}${sep}+${res.pay}${res.tip ? ` · ${t('tg_result_tip')} +${res.tip} 🎁` : ''}`),
+        h('li', {}, `⭐ ${t('tg_result_rep')}${sep}${res.repDelta >= 0 ? '+' : ''}${res.repDelta} → ${r.applied.reputation}`),
+        h('li', {}, `🧭 ${t('tg_result_xp')}${sep}+${res.xp}`),
+        res.photos ? h('li', {}, `📷 ${t('tg_result_photos')}${sep}${res.photos}`) : null,
+        res.helped ? h('li', {}, `🩹 ${t('tg_result_helped')}${sep}${res.helped}`) : null,
         h('li', {}, t('tg_result_horses', { n: r.gains.endurance })),
         r.applied.rankUp ? h('li', { class: 'good' }, t('tg_rankUp', { rank: r.rankName })) : null),
       h('div', { class: 'row end' }, h('button', { class: 'primary', onClick: close }, t('actv_done'))));

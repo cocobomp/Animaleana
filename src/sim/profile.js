@@ -11,7 +11,7 @@ import { migrateCoreSizes, CORE_VERSION } from './resize.js'; // tailles des enc
 import { defaultVetSchool } from './vetSchool.js'; // école vétérinaire (leçons)
 import { SPECIES, getBreed } from './species.js'; // anciens chats : look complété depuis la race
 import { upgradeCatLook } from './catBreeds.js';
-import { defaultTrailGuide } from './trailGuide.js'; // métier guide de randonnée 🧭
+import { defaultTrailGuide, tgState } from './trailGuide.js'; // métier guide de randonnée 🧭
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -148,6 +148,8 @@ export function migrate(p, hint = {}) {
   for (const a of out.animals ?? []) {
     if (a?.species === 'cat') upgradeCatLook(a.look, getBreed('cat', a.breed), SPECIES.cat.model);
   }
+  // 🧭 Guide de randonnée : l'ancienne réputation du guide passe dans le registre des métiers (src/sim/careers.js).
+  tgState(out);
   // Paddock, bergerie et enclos des lapins plus grands : on agrandit sans casser les déplacements enregistrés.
   return migrateCoreSizes(out);
 }

@@ -365,6 +365,9 @@ export class TrailGuide {
     const g = this.game;
     const b = acceptOffer(g.profile, g.day); // la première fois, le métier commence dans le registre 💼
     if (!b) return null;
+    // Pas de nouveaux visiteurs tout de suite (le temps de préparer, ou de partir au rendez-vous).
+    this.st.nextOfferAt = g.profile.clock + 3 * 60;
+    this.soon = false;
     if (b.careerStarted) {
       delete b.careerStarted;
       g.ui.toast(t('ca_started', { career: t('career_trailGuide') }), 6000);
@@ -495,7 +498,7 @@ export class TrailGuide {
     const spot = tack ?? (g.isHome ? { x: TACKROOM.x + 3.9, z: TACKROOM.z } : LODGE_DOOR);
     const d = Math.hypot(spot.x - g.player.position.x, spot.z - g.player.position.z);
     if (d < 4 || g.paused) return done();
-    g.ui.toast(t('tg_goTack'), 3000);
+    g.ui.toast(t(tack ? 'tg_goTack' : 'tg_goLodge'), 3000); // en voyage : au gîte
     g.ui.closePanel();
     g.walkTo(new THREE.Vector3(spot.x, 0, spot.z), 1.5, () => { done(); openTrailPrep(g.ui, this); });
   }
@@ -542,6 +545,11 @@ export class TrailGuide {
     if (!guide || riders.some((x) => !x.animal || !g.entities.get(x.animal.id))) return g.ui.toast(t('tg_noHorses'), 5000);
     g.ui.closePanel();
     if (g.activities.session) g.activities.session.end(true);
+    // Les chevaux sortent de leur box (écurie, src/game/Interiors.js) et ne suivent plus personne.
+    for (const a of [guide, ...riders.map((x) => x.animal)]) {
+      a.stalled = false;
+      a.following = false;
+    }
     this.tutorial('ride');
     const s = new GuidedRideSession(g.activities, 'trail', { tg: this, booking: b, guide, riders });
     if (!s.ok) {
@@ -897,7 +905,7 @@ class GuidedRideSession extends ActivitySession {
     r.fallen = ev;
     r.e.speed = 0;
     this.falls++;
-    const side = FORWARD(r.e.heading + Math.PI / 2).multiplyScalar(1.3);
+    const side = FORWARD(r.e.heading + Math.PI / 2).multiplyScalar(1.8);
     const x = r.e.position.x + side.x;
     const z = r.e.position.z + side.z;
     r.e.root.remove(r.avatar.root);
@@ -908,9 +916,12 @@ class GuidedRideSession extends ActivitySession {
     r.avatar.root.rotation.order = 'YXZ';
     r.avatar.root.rotation.y = r.e.heading + Math.PI / 2;
     this.group.add(r.avatar.root);
-    ev.sprite.material.map = emojiTexture('🤕');
-    ev.sprite.position.set(x, this.y(x, z) + 1.2, z);
-    ev.sprite.userData.bob = ev.sprite.position.y;
+    // Bien visible de loin : 🤕 au-dessus de lui et un cercle orange par terre (on doit venir là).
+    ev.sprite.visible = false;
+    ev.hurt = this.sprite('🤕', { x, z }, 1.5, 1.2);
+    ev.ring = new THREE.Mesh(new THREE.RingGeometry(1.9, 2.3, 36).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, opacity: 0.7, depthWrite: false }));
+    ev.ring.position.set(x, this.y(x, z) + 0.08, z);
+    this.group.add(ev.ring);
     addFun(r.rider, FUN.fall);
     r.e.emit('😮', 2);
     this.say(r, 'tg_bubble_ouch', 5000);
@@ -935,7 +946,8 @@ class GuidedRideSession extends ActivitySession {
     this.everyone(FUN.eventGood / 2);
     this.group.remove(r.avatar.root);
     this.seatRider(r);
-    ev.sprite.material.map = emojiTexture(this.kit ? '🩹' : '✅');
+    if (ev.hurt) ev.hurt.material.map = emojiTexture(this.kit ? '🩹' : '✅');
+    if (ev.ring) ev.ring.visible = false;
     this.burst(this.kit ? '🩹' : '❤️', { x: r.e.position.x, y: r.e.position.y + 2, z: r.e.position.z }, 4, 1.4);
     r.e.emit('❤️', 3);
     this.say(r, res.mood === 'great' ? 'tg_bubble_thanks' : 'tg_bubble_hurt', 4000);
@@ -1066,10 +1078,13 @@ class GuidedRideSession extends ActivitySession {
       this.mount.position.copy(p);
     }
     const target = this.points[this.next];
-    if (target) {
+    // La flèche orange montre la balise suivante, ou le cavalier tombé / le cheval qui a peur (on doit y aller).
+    const help = this.events.find((x) => (x.type === 'fall' || x.type === 'scare') && x.active && x.since && !x.done);
+    const focus = help ? (help.type === 'fall' ? help.rider.avatar.root.position : help.rider.e.position) : target;
+    if (focus) {
       const lost = this.lostTimer > 2;
-      this.arrow.position.set(target.x, this.y(target.x, target.z) + 3.6 + Math.sin(this.time * 4) * 0.25, target.z);
-      this.arrow.scale.setScalar(lost ? 1.6 : 1);
+      this.arrow.position.set(focus.x, this.y(focus.x, focus.z) + (help ? 3 : 3.6) + Math.sin(this.time * 4) * 0.25, focus.z);
+      this.arrow.scale.setScalar(lost || help ? 1.4 : 1);
     }
     this.markers.forEach((m, i) => {
       m.visible = i >= this.next;
@@ -1126,13 +1141,23 @@ class GuidedRideSession extends ActivitySession {
       }
       e.speed += (speed - e.speed) * Math.min(1, dt * 4);
       if (e.speed > 0.02) {
-        const nx = e.position.x + Math.sin(e.heading) * e.speed * dt;
-        const nz = e.position.z + Math.cos(e.heading) * e.speed * dt;
+        const ox = e.position.x;
+        const oz = e.position.z;
+        const nx = ox + Math.sin(e.heading) * e.speed * dt;
+        const nz = oz + Math.cos(e.heading) * e.speed * dt;
         if (!g.world.isWater(nx, nz) || this.inStream(nx, nz)) {
           e.position.x = nx;
           e.position.z = nz;
         }
         g.world.resolveCollisions(e.position, e.radius * 0.6, { mounted: true });
+        // Coincé contre un mur ou une clôture (même le retardataire) : au bout de 3 s, il nous rejoint.
+        const moved = Math.hypot(e.position.x - ox, e.position.z - oz);
+        r.stuck = e.speed > 1 && moved < e.speed * dt * 0.25 ? (r.stuck ?? 0) + dt : Math.max(0, (r.stuck ?? 0) - dt);
+        if (r.stuck > 3 && !r.scared && !r.fallen) {
+          r.stuck = 0;
+          e.position.set(want.x, 0, want.z);
+          e.snap();
+        }
       }
       e.snap(dt);
       // Le cavalier suit les allures de son cheval (pas, trot enlevé, galop), sauf pendant la photo.

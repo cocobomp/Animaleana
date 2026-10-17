@@ -112,6 +112,10 @@ function portableFile() {
 
 export default defineConfig({
   base: './',
+  // Les copies de travail (.claude/worktrees/…) ne font pas partie du jeu : le serveur de développement ne
+  // doit ni les surveiller (rechargements de page intempestifs) ni y chercher des dépendances.
+  server: { watch: { ignored: ['**/.claude/**'] } },
+  optimizeDeps: { entries: ['index.html'] },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __APP_COMMIT__: JSON.stringify(commit),

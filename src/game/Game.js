@@ -49,6 +49,8 @@ import { openStructure } from '../ui/construction.js';
 import { doorOf, equipmentPos } from '../sim/construction.js';
 import { applyCoreLayout } from './coreLayout.js';
 import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, trajet, pauses)
+import { CompetitionVenue } from './CompetitionVenue.js'; // concours à l'extérieur : site, épreuve, podium
+import './Dressage.js'; // séances de dressage (s'enregistrent dans Activities)
 import { Marker } from './Marker.js';
 import { Emitter } from './events.js';
 import { audio } from './audio.js'; // sons synthétisés : voix, pas, ambiance, interface
@@ -134,6 +136,7 @@ export class Game {
     this.on('adopted', (a) => setTimeout(() => this.entities.get(a.id)?.speak('happy'), 350));
     this.on('skip', (hours) => audio.ui(hours > 0 ? 'skip' : 'cancel'));
     this.on('timeFast', () => audio.ui('fast'));
+    this.venue = new CompetitionVenue(this); // concours à l'extérieur (site, épreuve, podium)
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -214,6 +217,7 @@ export class Game {
     this.tripFlow.reset();
     audio.setActive(false); // écran des profils : silence
     this.marker.hide();
+    this.venue?.dispose(); // le site du concours (tribunes, podium) est retiré de la scène
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
@@ -319,6 +323,7 @@ export class Game {
     for (const a of this.profile.animals) {
       if (a.location === placeId) this.spawnEntity(a);
     }
+    this.venue.onPlaceLoaded(); // un concours ici aujourd'hui ? on installe le site
   }
 
   spawnEquipment(eq) {
@@ -646,6 +651,7 @@ export class Game {
     this.marker.update(dt);
     this.updateFocus();
     this.events.update(dt); // événements spéciaux
+    this.venue.update(dt); // concours à l'extérieur
     this.clients.update(dt); // clients et métiers
     // Examen ou école vétérinaire en plein écran (téléphone, src/ui/vetExam.js) : la 3D est cachée, on ne la dessine pas.
     if (!this.ui.vxCover) this.renderer.render(this.scene, this.camera);

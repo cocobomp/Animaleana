@@ -20,7 +20,7 @@ import {
   noteClientCare, pickVisitKind,
 } from '../sim/clients.js';
 import {
-  CAREERS, CAREER_IDS, RANKS, startCareer, isStarted, shouldPropose, markProposed, hintOnce, noteAction, nextAction,
+  CAREERS, CAREER_IDS, RANKS, startCareer, isStarted, shouldPropose, markProposed, hintOnce, noteAction, nextAction, addCareerXp,
 } from '../sim/careers.js';
 import { OBJECTIVES } from '../sim/objectives.js';
 import { addStat } from '../sim/profile.js';
@@ -171,6 +171,14 @@ export class Clients {
     this.pendingResult = null;
     this.asked = false;
     this.unsub = [];
+    // « 👉 Montre-moi » des métiers sans visiteurs (cavalier de concours…) : id -> (action, def) => void.
+    // Un module s'y inscrit avec registerGuide (src/game/CompetitionVenue.js pour 'rider').
+    this.guides = {};
+  }
+
+  /** Inscrit le guide « 👉 Montre-moi » d'un métier qui ne passe pas par les visiteurs. */
+  registerGuide(id, fn) {
+    this.guides[id] = fn;
   }
 
   // ------------------------------------------------------------ boucle
@@ -565,6 +573,9 @@ export class Clients {
     const g = this.game;
     const p = g.profile;
     if (g.ui.isBlocking() || this.visitor?.visit && !this.visitor.visit.auto) return;
+    // Pas au milieu d'une activité (reprise de dressage, parcours, barrage…) : la fenêtre cachait la carrière
+    // et mettait les résultats en attente. Elle reviendra plus tard.
+    if (g.activities?.active) return;
     const ctx = { level: g.level, day: g.day, objectives: OBJECTIVES, building };
     const id = CAREER_IDS.find((k) => shouldPropose(p, k, ctx));
     if (!id) return;
@@ -583,10 +594,12 @@ export class Clients {
       g.ui.toast(r.reason === 'level' ? t('lockedLevel', { n: r.n }) : t('alreadyOwned'));
       return r;
     }
-    // Un premier client arrive vite pour apprendre.
-    const st = clientState(g.profile);
-    st.nextVisitDay = Math.min(st.nextVisitDay || g.day, g.day);
-    st.nextVisitHour = Math.min(st.nextVisitHour, Math.max(8, Math.ceil(g.hour)));
+    // Un premier client arrive vite pour apprendre (sauf pour un métier sans visiteurs).
+    if (CAREERS[id].clients !== false) {
+      const st = clientState(g.profile);
+      st.nextVisitDay = Math.min(st.nextVisitDay || g.day, g.day);
+      st.nextVisitHour = Math.min(st.nextVisitHour, Math.max(8, Math.ceil(g.hour)));
+    }
     g.ui.toast(t('ca_started', { career: t(`career_${id}`) }), 7000);
     g.ui.renderStatus();
     g.save();
@@ -601,6 +614,19 @@ export class Clients {
     if (!r?.first) return;
     g.ui.toast(t('ca_actionDone', { career: t(`career_${id}`), action: t(`ca_${id}_${action}`) }), 5000);
     if (r.rankUp !== null) g.ui.toast(t('ca_rankUpToast', { rank: t(`ca_rank_${RANKS[r.rankUp]}`), career: t(`career_${id}`) }), 7000);
+    g.ui.renderStatus();
+  }
+
+  /** De l'expérience de métier pour un travail réussi (un concours…), avec la bulle du nouveau rang. */
+  careerXp(id, n) {
+    const r = addCareerXp(this.game.profile, id, n);
+    if (r?.rankUp !== undefined && r?.rankUp !== null) this.rankUpToast(id, r.rankUp);
+    return r;
+  }
+
+  rankUpToast(id, rank) {
+    const g = this.game;
+    g.ui.toast(t('ca_rankUpToast', { rank: t(`ca_rank_${RANKS[rank]}`), career: t(`career_${id}`) }), 7000);
     g.ui.renderStatus();
   }
 
@@ -623,6 +649,7 @@ export class Clients {
     const p = g.profile;
     const def = CAREERS[id].actions.find((x) => x.id === action);
     if (!def) return;
+    if (this.guides[id]) return this.guides[id](action, def); // métier sans visiteurs : son propre guide
     const client = clientAnimals(p).find((a) => a.client.kind === id);
     if (def.where === 'visitor') {
       if (this.visitor && !this.visitor.visit.auto) {

@@ -54,11 +54,14 @@ export function clientState(profile) {
 }
 
 export const isClientAnimal = (a) => !!a?.client;
+
+/** Les métiers commencés qui reçoivent des visiteurs (pas le cavalier de concours : clients: false). */
+const clientCareers = (profile) => startedCareers(profile).filter((id) => CAREERS[id].perks && CAREERS[id].clients !== false);
 export const reputationFactor = (rep = 50) => 0.8 + (clamp(rep) / 100) * 0.4; // 0,8 → 1,2
 
 /** Nombre d'animaux qu'on peut garder en même temps (selon le meilleur rang des métiers commencés). */
 export function maxClients(profile) {
-  const started = startedCareers(profile).filter((id) => CAREERS[id].perks);
+  const started = clientCareers(profile);
   if (!started.length) return 0;
   return Math.max(...started.map((id) => perksOf(profile, id).maxClients));
 }
@@ -79,7 +82,7 @@ export function pricing(species, kind, days, reputation = 50, rankFactor = 1) {
  */
 export function scheduleNextVisit(profile, day, rng = Math.random) {
   const st = clientState(profile);
-  const started = startedCareers(profile);
+  const started = clientCareers(profile);
   const rank = started.length ? Math.max(...started.map((id) => rankOf(profile, id))) : 0;
   const rep = started.length ? Math.max(...started.map((id) => reputationOf(profile, id))) : 50;
   const soon = 0.35 + rank * 0.15 + (rep - 50) / 200;

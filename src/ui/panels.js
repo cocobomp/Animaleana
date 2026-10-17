@@ -24,6 +24,7 @@ import { homeSection } from './construction.js'; // rubrique « Maison » (const
 import { travelAdvice } from './trip.js'; // voyages réalistes
 import { questExtras } from './tutorial.js';
 import { animalActivitySection } from './activities.js';
+import { competitionSection, journalCalendarButton } from './competitions.js'; // concours à l'extérieur, dressage
 import { clientBadge, clientInfo, clientsTab } from './clients.js'; // animaux confiés par des clients
 import { isCareerPatient } from './vet.js'; // animal confié en soins, métier commencé : examen gratuit
 import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
@@ -178,6 +179,7 @@ function renderAnimal(ui, g, a) {
   }
 
   out.push(...animalActivitySection(ui, a)); // activités : saut, balade, agility, spectacle
+  out.push(...competitionSection(ui, a)); // chevaux : carrière sportive (dressage, saut, concours)
 
   if (a.client) return out; // animal confié : ni entraînement, ni tours, ni bébés (il repart bientôt)
   out.push(h('h3', {}, t('training')), h('div', { class: 'grid' },
@@ -397,7 +399,7 @@ export function openJournal(ui, tab = 'quest') {
             questExtras(ui, o, done)), // où faire la quête + « Montre-moi » (src/ui/tutorial.js)
           h('small', {}, `${Math.min(cur, max)}/${max}${o.reward && !isSandbox(p) ? ` · ${o.reward} 🪙` : ''}`));
       });
-      return [tabs, h('div', { class: 'objectives' }, list)];
+      return [tabs, journalCalendarButton(ui), h('div', { class: 'objectives' }, list)]; // + calendrier des concours
     },
   });
 }

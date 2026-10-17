@@ -68,6 +68,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     clients: defaultClients(), // visiteurs et animaux confiés (src/sim/clients.js)
     careers: defaultCareers(), // métiers appris (src/sim/careers.js)
     vetSchool: defaultVetSchool(), // leçons de l'école vétérinaire (src/sim/vetSchool.js)
+    competitions: { entries: [], results: [] }, // concours à l'extérieur : inscriptions et résultats (src/sim/competitions.js)
   };
 }
 
@@ -139,7 +140,12 @@ export function migrate(p, hint = {}) {
     clients: { ...defaultClients(), ...(p.clients ?? {}) },
     careers: { ...defaultCareers(), ...(p.careers ?? {}) },
     vetSchool: { ...defaultVetSchool(), ...(p.vetSchool ?? {}) }, // école vétérinaire (ajoutée plus tard)
+    competitions: { entries: [], results: [], ...(p.competitions ?? {}) }, // concours à l'extérieur (ajoutés plus tard)
   };
+  // Chevaux d'avant le dressage : compétence de dressage de départ (src/sim/dressage.js).
+  for (const a of out.animals ?? []) {
+    if (a?.species === 'horse' && a.skills && a.skills.dressage === undefined) a.skills.dressage = 10;
+  }
   // Chats d'avant les races détaillées : poil, tête, oreilles, gants et yeux repris de leur race.
   for (const a of out.animals ?? []) {
     if (a?.species === 'cat') upgradeCatLook(a.look, getBreed('cat', a.breed), SPECIES.cat.model);

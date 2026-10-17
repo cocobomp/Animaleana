@@ -31,6 +31,11 @@ export const OBJECTIVES = [
   { id: 'actvLesson1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvLessons'), 1] },
   { id: 'actvHop1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvHop'), 1] },
   { id: 'actvHutch5', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'actvHutchPlay'), 5] },
+  // dressage et concours à l'extérieur (src/sim/dressage.js, src/sim/competitions.js)
+  { id: 'drTrain3', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvTraining'), 3] },
+  { id: 'drReprise1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'actvDressage'), 1] },
+  { id: 'compRegister1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'compRegistered'), 1] },
+  { id: 'compAway1', kind: 'quest', reward: 150, progress: (p) => [stat(p, 'compAway'), 1] },
   // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
   { id: 'career1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'careersStarted'), 1] },
   { id: 'client1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'clients'), 1] },
@@ -53,6 +58,9 @@ export const OBJECTIVES = [
   { id: 'actvPodium5', kind: 'achievement', progress: (p) => [stat(p, 'actvPodiums'), 5] },
   { id: 'actvPhotos', kind: 'achievement', progress: (p) => [stat(p, 'actvPhotos'), 8] },
   { id: 'actvStar', kind: 'achievement', progress: (p) => [stat(p, 'actvShows'), 10] },
+  { id: 'drGood', kind: 'achievement', progress: (p) => [stat(p, 'actvDressage70'), 1] },
+  { id: 'compPodium3', kind: 'achievement', progress: (p) => [stat(p, 'compAwayPodiums'), 3] },
+  { id: 'compGrand', kind: 'achievement', progress: (p) => [stat(p, 'compGrandWins'), 1] },
 ];
 
 /** Renvoie les objectifs qui viennent d'être terminés (et les marque comme faits). */

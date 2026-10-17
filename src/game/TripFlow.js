@@ -23,6 +23,7 @@ import {
   planTrip, tickTrip, runToEnd, finishTrip, vehicleFor, placeFor, needsTrailer, nightStopAhead,
 } from '../sim/trip.js';
 import { capacityFor, suggestCargo, arriveWithCargo, inCargo } from '../sim/cargo.js';
+import { packCompetitionTack, missingCompetitionTack } from '../sim/competitions.js'; // selle et filet pour le concours
 import {
   startLoad, willLoad, encourage, newStall, enterStall, doStep, secured, secureAll, safetyMap,
 } from '../sim/loading.js';
@@ -112,6 +113,32 @@ export class TripFlow {
     this.ui.toast(t(vehicle.kind === 'trailer' ? 'trip_parkedHelp' : 'trip_parkedHelpCar'), 9000);
     this.ui.renderStatus();
     return true;
+  }
+
+  /**
+   * Départ pour un concours à l'extérieur (src/game/CompetitionVenue.js) : on emmène les animaux inscrits
+   * dans le bon véhicule (van s'il y a un cheval, sinon voiture ; avion ou bateau au-delà des mers).
+   */
+  beginCompetitionTrip(entry) {
+    const g = this.game;
+    const ids = entry.animalIds.filter((id) => g.animalsHere().some((a) => a.id === id));
+    if (!ids.length) return this.ui.toast(t('comp_noAnimalsHere'), 5000);
+    const travellers = g.animalsHere().filter((a) => ids.includes(a.id));
+    const opts = g.travelOptions(entry.comp.place, travellers);
+    const mode = ['van', 'car', 'plane', 'boat'].find((m) => opts.find((o) => o.mode === m)?.ok);
+    if (!mode) return this.ui.toast(t('tr_sea'));
+    const ok = this.begin(entry.comp.place, mode, ids);
+    const l = this.loading;
+    if (ok && l) {
+      l.purpose = 'competition';
+      l.entry = entry;
+      // Le coffre : la selle et le filet de chaque cheval inscrit, À SA TAILLE (selle de dressage pour un
+      // concours de dressage, si on en a une), en plus du nécessaire du voyage.
+      const horses = travellers.filter((a) => a.species === 'horse');
+      if (packCompetitionTack(g.profile, l.cargo, horses, l.capacity, entry.comp.discipline).length) this.cargoChanged();
+      this.ui.toast(t('comp_tripStarted', { name: L(entry.comp.name) }), 7000);
+    }
+    return ok;
   }
 
   /** Les voyageurs pas encore montés. */
@@ -726,6 +753,23 @@ export class TripFlow {
 
   departGo(skipSafety) {
     const l = this.loading;
+    // Concours : sans selle ou sans filet à sa taille (porté ou dans le coffre), le cheval ne pourra pas concourir.
+    if (!skipSafety && l.purpose === 'competition' && !l.warnedTack) {
+      const miss = missingCompetitionTack(l.cargo, this.travellers(l.ids), l.entry?.comp.discipline);
+      if (miss.length) {
+        l.warnedTack = true;
+        const what = miss.map((m) => t('comp_tackMissingItem', { name: m.a.name, item: t(`comp_slot_${m.slot}`), size: m.size ? t(`tk_size_${m.size}`) : '' })).join(', ');
+        this.ui.showModal([
+          h3(t('comp_tackMissingTitle')),
+          para(t('comp_tackMissing', { what })),
+          btnRow([
+            [t('veh_openTrunk'), 'primary', () => { this.ui.hideModal(); this.setView('tack'); }],
+            [t('veh_goAnyway'), '', () => { this.ui.hideModal(); this.departGo(false); }],
+          ]),
+        ]);
+        return;
+      }
+    }
     if (!skipSafety) {
       const animals = this.travellers(l.ids);
       const needWater = animals.length && !inCargo(l.cargo, 'water');
@@ -783,7 +827,7 @@ export class TripFlow {
     if (l.view) this.setView(null, { stay: true });
     vehicle?.closeRamp();
     for (const w of vehicle?.walkers ?? []) vehicle.abortWalk(w);
-    this.journey = { trip, watch, speed: 1, vehicle, destId: l.destId, mode: l.mode, ids: l.ids, cargo: l.cargo, startClock: p.clock, camT: 0, report: null };
+    this.journey = { trip, watch, speed: 1, vehicle, destId: l.destId, mode: l.mode, ids: l.ids, cargo: l.cargo, startClock: p.clock, camT: 0, report: null, purpose: l.purpose ?? null };
     this.loading = null;
     this.ui.renderStatus();
     g.focusKey = 'trip';
@@ -912,6 +956,11 @@ export class TripFlow {
     report.home = j.destId === g.profile.home;
     g.travel(j.destId, j.mode, ids, { trip: j.trip });
     g.rig.reset?.();
+    if (j.purpose === 'competition') {
+      // Métier de cavalier de concours : « partir au concours en van » est coché.
+      g.clients?.noteCareer?.('rider', 'travel');
+      g.clients?.careerXp?.('rider', 5);
+    }
     j.report = report;
     this.ui.refresh();
     report.tips = j.trip.ids.length ? ['unload', 'stressHome', 'long'] : ['neighbour'];

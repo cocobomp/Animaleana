@@ -94,6 +94,10 @@ export function resolveLook(speciesId, breedId, colorIndex = 0) {
     mane: color.mane ?? color.secondary,
     eye: color.eye ?? 0x2a1a10,
     colorName: color.name,
+    // Chats : poil, tête, silhouette, yeux (breed.look), taches blanches et yeux vairons (catBreeds.js).
+    ...(breed.look ?? {}),
+    ...(color.white ? { white: color.white } : {}),
+    ...(color.eye2 ? { eye2: color.eye2 } : {}),
     seed: Math.floor(Math.random() * 1e6),
     // Chevaux (vague 3) : la race est gardée dans la robe (gabarit du modèle 3D, même pour un poulain
     // croisé) avec les détails de robe : raie de mulet, crins noirs, crinière bicolore du Fjord…
@@ -128,6 +132,7 @@ export function createAnimal({
     sex: sex ?? (rng() < 0.5 ? 'f' : 'm'),
     ageDays: ageDays ?? randRange(sp.adultYears * DAYS_PER_YEAR, sp.lifespanYears * 0.4 * DAYS_PER_YEAR, rng),
     lifespanYears: sp.lifespanYears * randRange(0.85, 1.15, rng),
+    // Tempérament de la race (chevaux et chats) : ses traits sortent plus souvent (toujours un seul tirage).
     personality: personality ?? pickPersonality(breedDef, rng),
     look,
     needs: Object.fromEntries(NEEDS.map((n) => [n, Math.round(randRange(65, 95, rng))])),

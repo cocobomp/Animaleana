@@ -14,6 +14,7 @@ import { gfx } from '../gfx.js';
 import { SPECIES } from '../../sim/species.js';
 import { hairMaterial, buildHorseLeg, buildHorseMane, buildHorseForelock, buildHorseTail } from './horseParts.js';
 import { buildHorseModel } from './horseModel.js';
+import { buildCatModel } from './catModel.js'; // chats : modèle dédié (races, poils, poses)
 
 // ------------------------------------------------------------------ anatomie par espèce
 // torso : formes du tronc. ['e', miroir, centre (x/R, y/R, z/L), rayons (x/R, y/R, z/L), k (fondu, /R)]
@@ -296,7 +297,7 @@ const boxUv = (sdf, tile) => (x, y, z) => {
  */
 const SHELLS = 6;
 const FUR_CELL = 420; // cellules par mètre (≈ 2,4 mm)
-function addShells(mesh, len) {
+function addShells(mesh, len, cacheKey = null) {
   if (gfx.quality !== 'high' || len < 0.002) return;
   const base = mesh.material;
   const m = base.clone();
@@ -336,14 +337,19 @@ diffuseColor.rgb *= mix(0.86, 1.03, vFurH);`);
   m.customProgramCacheKey = () => `fur${SHELLS}${skinned ? 's' : ''}`;
   let shells;
   if (skinned) {
-    const layers = [];
-    for (let i = 0; i < SHELLS; i++) {
-      const g = mesh.geometry.clone();
-      g.setAttribute('furLayer', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill((i + 1) / SHELLS), 1));
-      layers.push(g);
-    }
-    shells = new THREE.SkinnedMesh(mergeGeometries(layers), m);
-    layers.forEach((g) => g.dispose());
+    const layered = () => {
+      const layers = [];
+      for (let i = 0; i < SHELLS; i++) {
+        const g = mesh.geometry.clone();
+        g.setAttribute('furLayer', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill((i + 1) / SHELLS), 1));
+        layers.push(g);
+      }
+      const merged = mergeGeometries(layers);
+      layers.forEach((g) => g.dispose());
+      return merged;
+    };
+    // cacheKey (tronc à os des chats, géométrie partagée) : couches partagées elles aussi.
+    shells = new THREE.SkinnedMesh(cacheKey ? cachedGeo(`shells|${cacheKey}`, layered) : layered(), m);
     shells.bind(mesh.skeleton, mesh.bindMatrix);
   } else {
     shells = new THREE.InstancedMesh(mesh.geometry, m, SHELLS);
@@ -398,8 +404,10 @@ function neckAt(ns, t) {
 // ------------------------------------------------------------------ construction
 
 export function buildAnimalModel(speciesId, look, breedOfAnimal = null) {
-  // Vague 3 : le cheval a son propre modèle réaliste (horseModel.js), une seule surface à os.
+  // Vague 3 : le cheval et le chat ont chacun leur propre modèle (horseModel.js, catModel.js) ;
+  // les autres espèces passent par le modèle commun ci-dessous.
   if (speciesId === 'horse') return buildHorseModel(look, breedOfAnimal);
+  if (speciesId === 'cat') return buildCatModel(look);
   const S = SPEC[speciesId] ?? SPEC.dog;
   const high = gfx.quality === 'high';
   const m = look;
@@ -1152,3 +1160,6 @@ export function disposeModel(object) {
     }
   });
 }
+
+// Outils partagés avec le modèle des chats (catModel.js).
+export { addShells, cachedGeo, buildShapes, cylUv, contactShadowTexture, neckAt, mat, add };

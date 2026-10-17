@@ -308,6 +308,12 @@ export class Player {
   }
 
   update(dt, ctrl, camYaw, firstPerson) {
+    // scripted : déplacé par le jeu (on fait monter un cheval dans le van, src/game/Vehicle.js) ; on anime seulement la marche.
+    if (this.scripted) {
+      this.root.rotation.y = this.heading;
+      this.animateWalk(dt); // (la caisse portée garde la pose « carry », voir holdCrate)
+      return;
+    }
     let { run } = ctrl;
     const { move } = ctrl;
     const f = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));

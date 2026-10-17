@@ -21,6 +21,7 @@ import { isSandbox } from '../sim/profile.js';
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
 import { openCareers, careerChips } from './careers.js'; // 💼 métiers
+import { openTrailCarnet } from './trailGuide.js'; // 🧭 guide de randonnée
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -382,6 +383,7 @@ export class UI {
     chips.push(...tripChips(this)); // chargement du véhicule de voyage
     chips.push(...(g.events?.statusChips(chip) ?? [])); // événement en cours (bandeau réduit)
     chips.push(...(g.clients?.statusChips(chip) ?? []), ...careerChips(this, chip)); // visiteur, clients, carnet du métier
+    chips.push(...(g.trailGuide?.statusChips(chip) ?? [])); // 🧭 visiteurs, balade à préparer, rendez-vous ailleurs
     const key = chips.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
     this.statusKey = key;
@@ -468,8 +470,9 @@ export class UI {
       showground: () => t('actv_enterShowground'),
       dismount: () => t('dismount'),
       client: () => t('cl_talk', { owner: f.name }), // visiteur (src/game/Clients.js)
+      trailVisitor: () => t('tg_talk'), // 🧭 visiteurs (src/game/TrailGuide.js)
     };
-    const emoji = { animal: '🤲', helper: '💬', client: '💬', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', helper: '💬', client: '💬', trailVisitor: '🧭', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }
@@ -790,6 +793,7 @@ export class UI {
   }
   openActivities(opts) { openActivities(this, opts); }
   openHelper(h) { openHelperChat(this, h); this.game?.emit('panel', 'helper'); }
+  openTrailGuide() { openTrailCarnet(this); this.game?.emit('panel', 'trailGuide'); } // 🧭 carnet du guide
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {

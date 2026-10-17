@@ -6,6 +6,7 @@ import { TACK_FR, TACK_EN } from './ui/tackTexts.js'; // sellerie : catalogue d'
 import { VEHICLES_FR, VEHICLES_EN } from './ui/vehiclesTexts.js'; // véhicules du voyage (veh_*, cargo_*)
 import { SAVE_FR, SAVE_EN } from './ui/saveTexts.js'; // sauvegarde dans un fichier (sv_*)
 import { CLOUD_FR, CLOUD_EN } from './ui/cloudTexts.js'; // compte Google et sauvegarde en ligne (cloud_*)
+import { TRAIL_FR, TRAIL_EN } from './ui/trailGuideTexts.js'; // 🧭 métier guide de randonnée (tg_*, career_trailGuide)
 
 const fr = {
   title: 'La ferme à Madichelle',
@@ -1717,6 +1718,7 @@ const fr = {
   actv_sight_windmill: 'le vieux moulin',
   actv_sight_cairn: 'le cairn fleuri',
   actv_sight_oldTree: 'le grand chêne',
+  actv_sight_trailGuide: 'la photo de groupe', // 🧭 balade guidée
   actv_checkpoint: 'Balise {n}/{total}',
   actv_trailHint: 'Suis la flèche orange de balise en balise. Ramasse les trésors et prends des photos aux 📷. L\'arrivée est à l\'écurie 🏠.',
   actv_trailHintFoot: 'Suis la flèche orange de balise en balise avec tes animaux. Ramasse les trésors et prends des photos aux 📷.',
@@ -3461,6 +3463,7 @@ const en = {
   actv_sight_windmill: 'the old windmill',
   actv_sight_cairn: 'the flowery cairn',
   actv_sight_oldTree: 'the big oak',
+  actv_sight_trailGuide: 'the group photo', // 🧭 guided ride
   actv_checkpoint: 'Marker {n}/{total}',
   actv_trailHint: 'Follow the orange arrow from marker to marker. Pick up treasures and take photos at the 📷. The finish is at the stable 🏠.',
   actv_trailHintFoot: 'Follow the orange arrow from marker to marker with your animals. Pick up treasures and take photos at the 📷.',
@@ -3602,6 +3605,8 @@ Object.assign(fr, SAVE_FR); // sauvegarder / restaurer une partie dans un fichie
 Object.assign(en, SAVE_EN);
 Object.assign(fr, CLOUD_FR); // compte et sauvegarde en ligne
 Object.assign(en, CLOUD_EN);
+Object.assign(fr, TRAIL_FR); // 🧭 guide de randonnée
+Object.assign(en, TRAIL_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

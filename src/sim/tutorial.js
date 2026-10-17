@@ -197,6 +197,11 @@ export const QUEST_GUIDE = {
   clientVet1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: (p) => !!p.careers?.started?.vet },
   clientHappy5: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
   clientMoney500: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
+  // 🧭 Guide de randonnée (src/sim/trailGuide.js) : les visiteurs arrivent près de l'écurie.
+  tgFirst: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
+  tgStars3: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
+  tgRiders10: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
+  tgAbroad: { where: 'travel', target: { type: 'hud', id: 'travel' }, horse: true, ready: hasHorse },
 };
 
 /** Ordre conseillé des quêtes, de la plus facile à la plus difficile. */
@@ -205,6 +210,7 @@ export const QUEST_ORDER = [
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
   'career1', 'client1', 'clientVet1', 'clientHappy5', 'clientMoney500',
+  'tgFirst', 'tgStars3', 'tgRiders10', 'tgAbroad', // 🧭 guide de randonnée
 ];
 
 /**
@@ -282,6 +288,10 @@ export const FOLLOW_STEPS = {
   clientWait: { target: null, done: (c) => c.hasClient || c.questDone },
   clientCare: { target: null, done: questDone, progress: true },
   clientVet: { target: null, done: questDone, progress: true },
+  // 🧭 Guide de randonnée : attendre les visiteurs, préparer, partir.
+  tgWait: { target: { type: 'building', id: 'stable' }, done: (c) => (c.profile.trailGuide?.bookings ?? []).some((b) => b.place === c.profile.place) || c.questDone },
+  tgPrepare: { target: null, done: (c) => !!c.profile.trailGuide?.riding || c.questDone },
+  tgRide: { target: null, done: questDone, progress: true },
 };
 
 export const QUEST_STEPS = {
@@ -313,6 +323,11 @@ export const QUEST_STEPS = {
   clientVet1: ['clientWait', 'clientVet'],
   clientHappy5: ['clientWait', 'clientCare'],
   clientMoney500: ['clientWait', 'clientCare'],
+  // 🧭 Guide de randonnée
+  tgFirst: ['tgWait', 'tgPrepare', 'tgRide'],
+  tgStars3: ['tgWait', 'tgPrepare', 'tgRide'],
+  tgRiders10: ['tgWait', 'tgPrepare', 'tgRide'],
+  tgAbroad: ['openTravel', 'pickAbroad', 'pickMode', 'tgWait', 'tgPrepare', 'tgRide'],
 };
 
 /** Étapes d'une quête selon la situation : sans animal (ou sans cheval), on va d'abord en adopter un. */

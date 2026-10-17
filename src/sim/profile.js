@@ -11,6 +11,7 @@ import { migrateCoreSizes, CORE_VERSION } from './resize.js'; // tailles des enc
 import { defaultVetSchool } from './vetSchool.js'; // école vétérinaire (leçons)
 import { SPECIES, getBreed } from './species.js'; // anciens chats : look complété depuis la race
 import { upgradeCatLook } from './catBreeds.js';
+import { defaultTrailGuide } from './trailGuide.js'; // métier guide de randonnée 🧭
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -68,6 +69,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     clients: defaultClients(), // visiteurs et animaux confiés (src/sim/clients.js)
     careers: defaultCareers(), // métiers appris (src/sim/careers.js)
     vetSchool: defaultVetSchool(), // leçons de l'école vétérinaire (src/sim/vetSchool.js)
+    trailGuide: defaultTrailGuide(), // 🧭 guide de randonnée : réservations, réputation (src/sim/trailGuide.js)
   };
 }
 
@@ -139,6 +141,8 @@ export function migrate(p, hint = {}) {
     clients: { ...defaultClients(), ...(p.clients ?? {}) },
     careers: { ...defaultCareers(), ...(p.careers ?? {}) },
     vetSchool: { ...defaultVetSchool(), ...(p.vetSchool ?? {}) }, // école vétérinaire (ajoutée plus tard)
+    // 🧭 Guide de randonnée (ajouté plus tard) : champs manquants complétés.
+    trailGuide: { ...defaultTrailGuide(), ...(p.trailGuide ?? {}) },
   };
   // Chats d'avant les races détaillées : poil, tête, oreilles, gants et yeux repris de leur race.
   for (const a of out.animals ?? []) {

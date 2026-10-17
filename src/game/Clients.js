@@ -621,6 +621,7 @@ export class Clients {
   showMe(id, action) {
     const g = this.game;
     const p = g.profile;
+    if (id === 'trailGuide') return g.trailGuide?.showMeAction(action); // 🧭 guide de randonnée (src/game/TrailGuide.js)
     const def = CAREERS[id].actions.find((x) => x.id === action);
     if (!def) return;
     const client = clientAnimals(p).find((a) => a.client.kind === id);

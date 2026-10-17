@@ -31,6 +31,8 @@ export const QUESTS_FOR_CAREER = 5; // quêtes finies avant qu'on propose un mé
  *   building  : le bâtiment qui propose le métier quand on le touche
  *   perks     : ce que change chaque rang (lu par src/sim/clients.js)
  */
+import { TRAIL_GUIDE_CAREER } from './trailGuide.js'; // 🧭 guide de randonnée (son propre jeu : src/game/TrailGuide.js)
+
 export const CAREERS = {
   vet: {
     id: 'vet',
@@ -70,6 +72,7 @@ export const CAREERS = {
       { maxClients: 3, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat', 'cow'], price: 1.25, tips: true },
     ],
   },
+  trailGuide: TRAIL_GUIDE_CAREER, // 🧭 ses perks ont maxClients: 0 (pas de clients qui confient leurs animaux)
 };
 
 export const CAREER_IDS = Object.keys(CAREERS);

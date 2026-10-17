@@ -58,6 +58,11 @@ function playTab(ui, state) {
       h('span', { class: 'card-side' }, n ? h('small', {}, t('actv_ready', { n })) : h('small', {}, '—')));
   });
   const next = competitionsAt(g.profile.place, g.isHome, g.day, 7)[0];
+  // 🧭 Guide de randonnée : le carnet du métier (src/ui/trailGuide.js)
+  cards.push(h('button', { class: 'card actv-card tg-card', onClick: () => ui.openTrailGuide() },
+    h('span', { class: 'card-emoji' }, '🧭'),
+    h('span', { class: 'card-main' }, h('b', {}, t('tg_title')), h('small', {}, t('tg_cardDesc'))),
+    h('span', { class: 'card-side' }, h('small', {}, g.level >= 4 ? '📒' : `🔒 ${t('tg_level', { n: 4 })}`))));
   return [
     h('p', { class: 'note' }, t('actv_intro')),
     h('div', { class: 'cards' }, cards),

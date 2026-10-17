@@ -2060,6 +2060,34 @@ body.actv-nomove #touch-pad { display: none !important; }
   .cl-stars { font-size: 1.8rem; }
 }
 
+/* ---------------------------------------------------------------- 🧭 Guide de randonnée (src/ui/trailGuide.js) */
+.tg-riders { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.tg-rider { display: grid; gap: 1px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; font-size: 0.92em; }
+.tg-rider small { color: var(--muted); }
+.tg-list { display: grid; gap: 6px; margin: 8px 0; }
+.tg-check { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+.tg-check.ok { background: #e9f7ee; border-color: #bfe3cb; }
+.tg-box { font-size: 1.3rem; flex-shrink: 0; }
+.tg-label { flex: 1 1 170px; display: grid; gap: 2px; min-width: 0; }
+.tg-label small, .tg-why { color: #8b5a00; font-size: 0.85em; }
+.tg-check.ok .tg-label small { color: var(--muted); }
+.tg-tools { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.tg-tools button { min-height: 34px; padding: 4px 10px; }
+.tg-picker { display: grid; gap: 6px; }
+.tg-horse.locked { opacity: 0.6; }
+.tg-hist { display: flex; gap: 10px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: 0.95em; }
+.tg-hist span:first-child { color: #e0a100; letter-spacing: 1px; }
+.tg-locked { font-weight: 600; }
+.tg-comments { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; text-align: left; }
+.tg-comments li { background: #fff; border: 1px solid var(--line); border-radius: 14px; border-bottom-left-radius: 4px; padding: 6px 10px; font-size: 0.95em; }
+.tg-comments li.great { background: #e9f7ee; }
+.tg-comments li.bad { background: #fdf0d8; }
+button.big.off { opacity: 0.55; }
+@media (max-width: 640px) {
+  .tg-check { flex-wrap: wrap; }
+  .tg-tools { width: 100%; justify-content: flex-start; }
+}
+
 /* ==========================================================================
    Écrans de téléphone : clavier à l'écran, recouvrements (audit responsive)
    Règles regroupées ici, après les sections qu'elles complètent (tutoriel, messages, panneau).

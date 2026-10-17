@@ -39,6 +39,13 @@ export const OBJECTIVES = [
   { id: 'clientMoney500', kind: 'quest', reward: 200, progress: (p) => [stat(p, 'clientMoney'), 500] },
   { id: 'client5Stars10', kind: 'achievement', progress: (p) => [stat(p, 'clients5Stars'), 10] },
   { id: 'reputation90', kind: 'achievement', progress: (p) => [Math.max(0, ...Object.values(p.careers?.reputation ?? {})) >= 90 ? 1 : 0, 1] },
+  // 🧭 Guide de randonnée (src/sim/trailGuide.js)
+  { id: 'tgFirst', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'tgRides'), 1] },
+  { id: 'tgStars3', kind: 'quest', reward: 120, progress: (p) => [stat(p, 'tgStars3'), 1] },
+  { id: 'tgRiders10', kind: 'quest', reward: 150, progress: (p) => [stat(p, 'tgRiders'), 10] },
+  { id: 'tgAbroad', kind: 'quest', reward: 200, progress: (p) => [stat(p, 'tgAbroad'), 1] },
+  { id: 'tgPhotos10', kind: 'achievement', progress: (p) => [stat(p, 'tgPhotos'), 10] },
+  { id: 'tgExpert', kind: 'achievement', progress: (p) => [Math.min(400, p.careers?.xp?.trailGuide ?? 0), 400] },
   { id: 'zoo10', kind: 'achievement', progress: (p) => [p.animals.length, 10] },
   { id: 'world', kind: 'achievement', progress: (p) => [p.visited.length, PLACE_IDS.length] },
   { id: 'allHappy', kind: 'achievement', progress: (p) => {

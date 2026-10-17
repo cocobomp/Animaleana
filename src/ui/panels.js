@@ -670,6 +670,14 @@ export function openTack(ui) {
 
 // ---------------------------------------------------------------- animalerie
 
+/** Origine et caractère typique d'une race (fiche de la race choisie à l'animalerie). */
+function breedNote(b) {
+  const parts = [];
+  if (b.from) parts.push(t('breedFrom', { place: L(b.from) }));
+  if (b.temper?.length) parts.push(t('breedTemper', { list: b.temper.map((p) => t(`p_${p}`).toLowerCase()).join(', ') }));
+  return parts.length ? h('small', { class: 'breed-note' }, parts.join(' · ')) : null;
+}
+
 /** Animalerie : on choisit l'espèce, la race, la couleur, le sexe et l'âge. C'est payant. */
 export function openShop(ui) {
   const g = ui.game;
@@ -696,7 +704,8 @@ export function openShop(ui) {
         class: `card ${b.id === st.breed ? 'selected' : ''}`,
         onClick: () => { st.breed = b.id; st.colorIndex = 0; ui.renderPanel(); },
       },
-      h('span', { class: 'card-main' }, h('b', {}, L(b.name)), h('small', {}, '⭐'.repeat(b.rarity ?? 1))),
+      h('span', { class: 'card-main' }, h('b', {}, `${b.from?.flag ? `${b.from.flag} ` : ''}${L(b.name)}`), h('small', {}, '⭐'.repeat(b.rarity ?? 1)),
+        b.id === st.breed ? breedNote(b) : null), // vague 3 : origine et caractère de la race choisie
       h('span', { class: 'card-side' }, sandbox ? '' : h('small', {}, `${shopPrice(st.species, b.id, st.stage)} 🪙`))))),
       h('h3', {}, t('coat')),
       h('div', { class: 'row wrap' }, breed.colors.map((c, i) => h('button', {

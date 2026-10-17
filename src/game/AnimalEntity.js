@@ -96,7 +96,7 @@ export class AnimalEntity {
       disposeModel(this.model.root);
     }
     // Modèle GLB animé si l'espèce en a un (src/game/assets.js), sinon le modèle procédural.
-    this.model = buildGltfAnimal(this.data.species, this.data.look) ?? buildAnimalModel(this.data.species, this.data.look);
+    this.model = buildGltfAnimal(this.data.species, this.data.look) ?? buildAnimalModel(this.data.species, this.data.look, this.data.breed);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
     this.scaleGroup = new THREE.Group();
@@ -885,11 +885,16 @@ export class AnimalEntity {
     md.head.rotation.y = look;
     const baseNeck = this.data.look.neckAngle;
     const grazing = this.state === 'idle' && !this.sleeping && Math.sin(t * 0.3 + this.phase) > 0.2;
-    const eat = this.state === 'eat' || (grazing && !this.herdCtrl) ? 0.92 + Math.sin(t * 4) * 0.05 : 0;
+    // Cheval réaliste (horseModel.js) : l'encolure descend jusqu'à l'herbe et la tête se met d'aplomb.
+    const v3 = !!md.horseV3;
+    // Brouter : le bout du nez touche l'herbe ; manger à la mangeoire : tête moins basse.
+    const reach = !v3 ? 0.92 : this.state === 'eat' ? 1.2 : 1.6;
+    const eat = this.state === 'eat' || (grazing && !this.herdCtrl) ? reach + Math.sin(t * 4) * 0.05 : 0;
     this.headDown = (this.headDown ?? 0) + (eat - (this.headDown ?? 0)) * Math.min(1, dt * 2.5);
     const nod = moving ? Math.sin(ph * 2) * 0.05 * wWalk + Math.sin(ph) * 0.12 * wGallop - 0.1 * wGallop : 0;
-    md.neck.rotation.x = baseNeck + (sad ? 0.3 : 0) + this.headDown + this.doze * 0.6 + nod;
-    md.head.rotation.x = (md.head.userData.baseX ??= md.head.rotation.x) + this.headDown * 0.25 - nod * 0.5;
+    md.neck.rotation.x = baseNeck + (sad ? 0.3 : 0) + this.headDown + this.doze * (v3 ? 0.45 : 0.6) + nod;
+    // (modèle réaliste : quand l'encolure descend, la tête se redresse pour rester d'aplomb, chanfrein vertical.)
+    md.head.rotation.x = (md.head.userData.baseX ??= md.head.rotation.x) + this.headDown * (v3 ? -0.5 : 0.25) - nod * 0.5 + (v3 ? this.doze * 0.15 : 0);
 
     // Oreilles : elles pivotent vers ce que le cheval écoute, tombent sur le côté quand il somnole.
     md.ears.forEach((e, i) => {
@@ -905,7 +910,14 @@ export class AnimalEntity {
     // Queue : balancement, grands coups de fouet de temps en temps, relevée au galop.
     const swish = Math.sin(t * 0.23 + this.phase) > 0.9 ? Math.sin(t * 9) * 0.45 : 0;
     md.tail.rotation.z = Math.sin(t * 0.9) * 0.1 + swish + Math.sin(ph) * 0.06 * wGallop;
-    md.tail.rotation.x = (md.tail.userData.baseX ?? 0) - 0.35 * wGallop - 0.1 * wTrot + Math.sin(ph * 2) * 0.04 * wTrot;
+    // (modèle réaliste : rotation positive = queue relevée vers l'arrière.)
+    const raise = (v3 ? 1 : -1) * (0.35 * wGallop + 0.1 * wTrot);
+    md.tail.rotation.x = (md.tail.userData.baseX ?? 0) + raise + Math.sin(ph * 2) * 0.04 * wTrot;
+    if (md.tailTip) {
+      // Le bas de la queue suit avec un temps de retard (effet de fouet).
+      md.tailTip.rotation.z = Math.sin(t * 0.9 - 0.7) * 0.08 + swish * 0.55;
+      md.tailTip.rotation.x = 0.25 * wGallop + Math.sin(ph * 2 - 0.8) * 0.05 * (wTrot + wGallop);
+    }
     // Les crins volent plus quand il court.
     if (md.hairSway) md.hairSway.value = Math.min(2.5, v * 0.5) + (Math.abs(swish) > 0.2 ? 1 : 0);
   }

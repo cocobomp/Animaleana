@@ -270,10 +270,18 @@ export function animateAvatarWalk(a, phase, speed) {
 }
 
 /** Pose assise (à cheval) ou debout. */
-export function poseAvatar(a, pose) {
+/**
+ * Pose du personnage. 'ride' : à cheval ; fit (facultatif, calculé par Player.seat d'après le flanc du
+ * cheval) : { lift : cuisse vers l'avant, spread : jambes écartées autour du ventre, knee : pli du genou,
+ * kneeZ : le bas de la jambe revient le long du flanc }.
+ */
+export function poseAvatar(a, pose, fit = null) {
   if (pose === 'ride') {
-    a.legs.forEach((l, i) => l.rotation.set(-1.1, 0, (i === 0 ? -1 : 1) * 0.35));
-    a.knees?.forEach((k) => k.rotation.set(1.25, 0, 0));
+    // Les cuisses s'écartent vers l'extérieur (jambe gauche x > 0 : rotation z positive) et entourent
+    // le cheval ; le bas de la jambe descend le long du flanc jusqu'à l'étrier.
+    const { lift = -1.0, spread = 0.6, knee = 1.2, kneeZ = -0.45 } = fit ?? {};
+    a.legs.forEach((l, i) => l.rotation.set(lift, 0, (i === 0 ? 1 : -1) * spread));
+    a.knees?.forEach((k, i) => k.rotation.set(knee, 0, (i === 0 ? 1 : -1) * kneeZ));
     a.arms.forEach((arm) => arm.rotation.set(-0.45, 0, 0));
     a.elbows?.forEach((e) => e.rotation.set(-0.8, 0, 0));
   } else {

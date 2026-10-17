@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { buildAvatar, animateAvatarWalk, poseAvatar } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
+import { rayHit } from './models/sdf.js'; // largeur du flanc sous la selle (jambes du cavalier)
 
 const WALK = 3.2;
 const RUN = 6.2;
@@ -61,7 +62,46 @@ export class Player {
     const a = this.avatar;
     const e = this.mount;
     a.root.position.set(0, e.model.saddleY * e.scale - 0.78, -e.data.look.bodyLen * e.scale * 0.05);
-    poseAvatar(a, 'ride');
+    poseAvatar(a, 'ride', this.rideFit(e));
+  }
+
+  /**
+   * Jambes du cavalier ajustées au cheval (cheval réaliste) : largeur du flanc sous la selle, lue sur le
+   * corps sculpté ; les cuisses s'écartent juste assez pour l'entourer, le genou se pose contre le
+   * quartier de la selle et le bas de la jambe descend le long du flanc, presque vertical.
+   */
+  rideFit(e) {
+    const torso = e.model.sdf?.torso;
+    if (!torso) return null;
+    const s = e.scale;
+    const hipY = e.model.saddleY * s + 0.04; // hanches (avatar : 0,82 m au-dessus de ses pieds)
+    const zSeat = -e.data.look.bodyLen * 0.05; // repère du modèle
+    const kneeY = hipY - 0.24;
+    let flank = 0;
+    for (const y of [kneeY, hipY - 0.12]) flank = Math.max(flank, rayHit(torso, [0, y / s, zSeat], [1, 0, 0], 1.5).x * s);
+    // Genou contre le flanc : épaisseur de la cuisse, du quartier et du tapis.
+    const dx = Math.min(0.92, Math.max(0.2, (flank + 0.075 - 0.095) / 0.4));
+    let dy = -0.62;
+    if (dx * dx + dy * dy > 0.97) dy = -Math.sqrt(0.97 - dx * dx);
+    const dz = Math.sqrt(Math.max(0, 1 - dx * dx - dy * dy));
+    const spread = Math.asin(dx);
+    const lift = Math.atan2(-dz, -dy);
+    // Bas de la jambe : il revient le long du flanc (kneeZ) et descend presque vertical, le talon un peu en
+    // arrière du genou ; on cherche le pli du genou qui donne cette direction (jambe gauche).
+    const kneeZ = -spread * 0.9;
+    const thigh = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(lift, 0, spread));
+    const v = new THREE.Vector3();
+    let knee = 1.2;
+    let best = Infinity;
+    for (let k = 0.4; k <= 2.2; k += 0.02) {
+      v.set(0, -1, 0).applyEuler(new THREE.Euler(k, 0, kneeZ)).applyMatrix4(thigh);
+      const err = Math.abs(v.z + 0.15);
+      if (err < best) {
+        best = err;
+        knee = k;
+      }
+    }
+    return { lift, spread, knee, kneeZ };
   }
 
   dismount() {
@@ -72,6 +112,7 @@ export class Player {
     this.mount = null;
     const a = this.avatar;
     a.root.position.set(0, 0, 0);
+    a.root.rotation.x = 0;
     poseAvatar(a, 'stand');
     // On descend à côté du cheval.
     const side = new THREE.Vector3(Math.cos(this.heading), 0, -Math.sin(this.heading)).multiplyScalar(1.4);
@@ -168,8 +209,9 @@ export class Player {
         if (this.hoofK !== undefined && this.speed > 0.6) this.onStep?.(this.speed > 6, true);
         this.hoofK = k;
       }
-      // Petit balancement de l'avatar avec le pas du cheval.
+      // Petit balancement de l'avatar avec le pas du cheval (il suit aussi le tangage du dos).
       this.avatar.root.position.y = mount.model.saddleY * mount.scale - 0.78 + mount.model.body.position.y * mount.scale;
+      this.avatar.root.rotation.x = mount.model.body.rotation.x * 0.7;
       this.avatar.torso.rotation.x = Math.sin(mount.phase * 2) * 0.03 * Math.min(1, this.speed / 4);
     } else {
       this.animateWalk(dt);

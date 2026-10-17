@@ -29,12 +29,28 @@ function loop(sdf, c, n, out, a0 = 0, a1 = Math.PI * 2, tilt = 0, maxDist = 1.2)
   return pts;
 }
 
+/**
+ * Retourne les faces d'un tube de loft() (ses faces regardent vers l'intérieur) : sans ça, on voit la
+ * paroi du fond (un siège de selle devient deux arcs fins, une sangle paraît creuse).
+ */
+function solid(geo) {
+  const idx = geo.index;
+  for (let i = 0; i < idx.count; i += 3) {
+    const b = idx.getX(i + 1);
+    idx.setX(i + 1, idx.getX(i + 2));
+    idx.setX(i + 2, b);
+  }
+  const n = geo.attributes.normal;
+  for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  return geo;
+}
+
 /** Sangle plate qui suit une liste de points (fermée si closed). */
 function strap(pts, halfWidth, thick, closed = false) {
   const list = closed ? [pts[pts.length - 1], ...pts, pts[0], pts[1]] : pts;
-  return loft(list.map((p) => ({ p: [p.x, p.y, p.z], rx: halfWidth, ry: thick })), {
+  return solid(loft(list.map((p) => ({ p: [p.x, p.y, p.z], rx: halfWidth, ry: thick })), {
     radial: 6, sub: closed ? 1 : 2, side: [0, 0, 1], capStart: !closed, capEnd: !closed,
-  });
+  }));
 }
 
 /**
@@ -117,9 +133,12 @@ function buildHorseGear(model, look, gear, add) {
   if (gear.saddle) {
     const leather = mat(0x5a3418, 0.45);
     const dark = mat(0x3b2110, 0.5);
-    // Tapis de selle (blanc cassé) sous la selle, qui dépasse un peu.
-    add(body, shell(torso, y0 - R * 0.2, zSeat - L * 0.2, zSeat + L * 0.22, 8, deg(165), deg(15), 14, 0.01), mat(0xe9e2d4, 0.9, { side: THREE.DoubleSide }));
-    // Siège : profil creusé, pommeau relevé devant, troussequin derrière.
+    const yc = y0 - R * 0.2;
+    // Tapis de selle (blanc cassé) sous la selle, qui dépasse un peu ; repoussé en profondeur pour que
+    // le quartier, posé dessus, ne le traverse jamais (plus de bande « déchirée »).
+    add(body, shell(torso, yc, zSeat - L * 0.2, zSeat + L * 0.22, 8, deg(165), deg(15), 14, 0.01),
+      mat(0xe9e2d4, 0.9, { side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 }));
+    // Siège plein : profil creusé, pommeau relevé devant, troussequin derrière, assis sur le tapis.
     const secs = [];
     const N = 9;
     for (let i = 0; i <= N; i++) {
@@ -127,26 +146,31 @@ function buildHorseGear(model, look, gear, add) {
       const z = zSeat - L * 0.14 + f * L * 0.28;
       const dip = Math.sin(f * PI);
       const lift = f < 0.5 ? (0.5 - f) ** 2 * 0.2 : (f - 0.5) ** 2 * 0.28;
-      secs.push({ p: [0, model.backTop(z) + 0.022 - dip * 0.012 + lift, z], rx: R * (0.3 + dip * 0.18), ry: 0.018 + lift * 0.5, ryb: 0.03 + dip * 0.01 });
+      const back = model.backTop(z) + 0.012; // dessus du tapis
+      secs.push({ p: [0, back + 0.024 - dip * 0.008 + lift, z], rx: R * (0.3 + dip * 0.2), ry: 0.016 + lift * 0.5, ryb: 0.03 + lift + dip * 0.008 });
     }
-    add(body, loft(secs, { radial: 14, sub: 2, exp: 2.6, round: [0.6, 0.6] }), leather);
+    add(body, solid(loft(secs, { radial: 14, sub: 2, exp: 2.6, round: [0.6, 0.6] })), leather);
+    const flapMat = mat(0x5a3418, 0.5, { side: THREE.DoubleSide });
+    const steel = mat(STEEL, 0.3, { metalness: 0.6 });
     for (const s of [1, -1]) {
-      // Quartier : grand pan de cuir qui descend le long du flanc, un peu vers l'avant.
-      const flapPts = [];
-      for (let i = 0; i <= 6; i++) {
-        const a = deg(78 - i * 11);
-        const p = rayHit(torso, [0, y0 - R * 0.2, zSeat + L * 0.03 + i * 0.014], [s * Math.cos(a), Math.sin(a), 0], 1.2);
-        flapPts.push(p.addScaledVector(sdfNormal(torso, p, 0.004), 0.016));
-      }
-      add(body, loft(flapPts.map((p, i) => ({ p: [p.x, p.y, p.z], rx: L * (0.12 - i * 0.003), ry: 0.006 })), { radial: 6, sub: 2, side: [0, 0, 1], round: [0, 0.8] }), leather);
-      // Étrivière et étrier qui pend sous le quartier.
-      const top = flapPts[1];
-      const iron = new THREE.Vector3(top.x + s * 0.035, y0 - R * 0.5, top.z + 0.03);
-      add(body, loft([{ p: top.toArray(), rx: 0.014, ry: 0.004 }, { p: iron.toArray(), rx: 0.014, ry: 0.004 }], { radial: 4, sub: 2, side: [0, 0, 1] }), dark);
-      add(body, new THREE.TorusGeometry(0.05, 0.007, 6, 14), mat(STEEL, 0.3, { metalness: 0.6 }), [iron.x, iron.y - 0.04, iron.z], [0, PI / 2, 0]);
+      // Quartier : pan de cuir qui épouse le flanc (grille posée sur le corps, au-dessus du tapis).
+      const a0 = s > 0 ? deg(80) : deg(100);
+      const a1 = s > 0 ? deg(8) : deg(172);
+      add(body, shell(torso, yc, zSeat - L * 0.03, zSeat + L * 0.15, 6, a0, a1, 9, 0.02), flapMat);
+      // Étrivière le long du quartier, étrier qui pend sous son bord.
+      const top = rayHit(torso, [0, yc, zSeat + L * 0.07], [s * Math.cos(deg(70)), Math.sin(deg(70)), 0], 1.2);
+      top.addScaledVector(sdfNormal(torso, top, 0.004), 0.026);
+      const low = rayHit(torso, [0, yc, zSeat + L * 0.08], [s * Math.cos(deg(-8)), Math.sin(deg(-8)), 0], 1.2);
+      const iron = low.clone().addScaledVector(sdfNormal(torso, low, 0.004), 0.05).add(new THREE.Vector3(0, -0.04, 0));
+      const mid = rayHit(torso, [0, yc, zSeat + L * 0.075], [s * Math.cos(deg(30)), Math.sin(deg(30)), 0], 1.2);
+      mid.addScaledVector(sdfNormal(torso, mid, 0.004), 0.03);
+      add(body, strap([top, mid, iron], 0.013, 0.003), dark);
+      add(body, new THREE.TorusGeometry(0.05, 0.008, 6, 16), steel, [iron.x, iron.y - 0.045, iron.z], [0, PI / 2, 0]);
+      add(body, new THREE.BoxGeometry(0.012, 0.012, 0.07), steel, [iron.x, iron.y - 0.093, iron.z]); // semelle de l'étrier
     }
-    // Sangle sous le ventre, juste derrière les coudes.
-    add(body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + L * 0.1], 18, 0.012, deg(-10), deg(-170)), 0.03, 0.005), dark);
+    // Sangle : part sous le quartier, passe sous le ventre derrière les coudes (un peu inclinée vers
+    // l'avant, dans le passage de sangle).
+    add(body, strap(loop(torso, [0, yc, zSeat + L * 0.13], 22, 0.014, deg(30), deg(-210), 0.3), 0.03, 0.005), dark);
   }
 
   const bridle = gear.bridle;

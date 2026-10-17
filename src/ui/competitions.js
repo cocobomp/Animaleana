@@ -14,6 +14,7 @@ import {
 } from '../sim/competitions.js';
 import { cooldownLeft, dressageSkill, learnFactor } from '../sim/dressage.js';
 import { awardEl } from './activities.js';
+import { owned } from '../sim/gear.js'; // filet à la sellerie (inscription)
 
 const TIER_ICON = { gold: '🏆', silver: '🥈', bronze: '🥉' };
 const levelName = (c) => t(`actv_level_${c.levelId ?? LEVELS[c.level - 1]}`);
@@ -95,7 +96,15 @@ export function openRegister(ui, comp) {
   const g = ui.game;
   const p = g.profile;
   const here = g.animalsHere().filter((a) => fitsDiscipline(a, comp.discipline));
-  const picked = new Set(here.filter((a) => !eligibleForCompetition(a, comp.discipline)).slice(0, 1).map((a) => a.id));
+  // Pas de filet ou de selle aujourd'hui : ce n'est pas un empêchement pour s'inscrire (on sellera le jour J,
+  // sur place ; pour un concours ailleurs, filet et selle voyagent dans le coffre du voyage).
+  const tackOnly = (why) => why === 'needBridle' || why === 'needSaddle';
+  const blocking = (a) => {
+    const why = eligibleForCompetition(a, comp.discipline);
+    return tackOnly(why) ? null : why;
+  };
+  const tackNote = (a) => ta(!owned(p, 'bridle') ? 'comp_regTack_buy' : comp.place !== p.place ? 'comp_regTack_away' : 'comp_regTack_here', a);
+  const picked = new Set(here.filter((a) => !blocking(a)).slice(0, 1).map((a) => a.id));
   const fee = entryFee(p, comp); // moins cher pour un cavalier de concours confirmé ou expert
   const render = () => {
     const block = canRegister(p, comp, [...picked], { day: g.day, hour: g.hour });
@@ -107,10 +116,11 @@ export function openRegister(ui, comp) {
         : t('comp_fee', { fee, a: prizeMoney(p, comp, 1) })),
       here.length ? h('div', { class: 'checks' }, here.map((a) => {
         const why = eligibleForCompetition(a, comp.discipline);
+        const note = tackOnly(why) ? `🏇 ${tackNote(a)}` : why ? ta(`comp_why_${why}`, a) : null;
         return h('label', { class: 'check' },
           h('input', { type: 'checkbox', checked: picked.has(a.id), onChange: (ev) => { if (ev.target.checked) picked.add(a.id); else picked.delete(a.id); render(); } }),
           ` ${SPECIES[a.species].emoji} ${a.name}`,
-          why ? h('small', { class: 'comp-why' }, ` — ${ta(`comp_why_${why}`, a)}`) : null);
+          note ? h('small', { class: 'comp-why' }, note) : null); // (sur sa propre ligne, sous le nom)
       })) : h('p', { class: 'warn' }, t('comp_noFit')),
       h('p', { class: 'note' }, t('comp_formHelp')),
       h('div', { class: 'row end' },

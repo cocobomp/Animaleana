@@ -8,7 +8,7 @@
 // Le métier est inscrit dans le registre commun (CAREERS.dogTrainer, src/sim/careers.js) : rang, XP,
 // réputation, argent gagné et carnet d'actions sont dans profile.careers comme pour les autres métiers ;
 // ce que change chaque rang est dans CAREERS.dogTrainer.perks.
-// Ce qui est propre à l'éducateur canin est dans profile.dogTrainer = { clients, history, tutored, lastVisitDay }.
+// Ce qui est propre à l'éducateur canin est dans profile.dogTrainer = { clients, history, tutored, lastVisitDay, pending }.
 // Un chien en éducation a a.client = { kind: 'training', problem, problems, start, sessionsDone,
 // sessionsNeeded, ownerName, ownerSex, ownerSeed, price, since, until, rescue, lastDay }.
 
@@ -59,7 +59,7 @@ export const BASE_PRICE = 20; // prix d'une séance (× réputation, × rang)
 export const EXTRA_DAYS = 3; // jours de marge avant que le maître revienne quand même
 export const CAREER_XP = { accept: 10, session: 15, sessionPerfect: 25, deliver: 60, deliverFail: 20, coach: 8 };
 
-export const defaultDogTrainer = () => ({ clients: [], history: [], tutored: {}, lastVisitDay: 0 });
+export const defaultDogTrainer = () => ({ clients: [], history: [], tutored: {}, lastVisitDay: 0, pending: null });
 
 /** profile.dogTrainer existe toujours (vieilles sauvegardes complétées). */
 export function dogTrainerOf(profile) {
@@ -69,6 +69,7 @@ export function dogTrainerOf(profile) {
   d.history = d.history ?? [];
   d.tutored = d.tutored ?? {};
   d.lastVisitDay = d.lastVisitDay ?? 0;
+  d.pending = d.pending ?? null; // le maître qui attend une réponse (setPending)
   return d;
 }
 
@@ -306,6 +307,33 @@ export function shouldClientArrive(profile, { day, hour, rng = Math.random }) {
   // Le tout premier client vient toujours (c'est la découverte du métier).
   if (isFirstClient(profile)) return true;
   return rng() < 0.45 + dogTrainerReputation(profile) / 250;
+}
+
+/**
+ * Le maître qui attend une réponse est gardé dans le profil : profile.dogTrainer.pending = { req, day }.
+ * Après un rechargement (ou un voyage), il revient le même jour au lieu de disparaître : sa visite du jour
+ * est déjà comptée (lastVisitDay), et le tout premier client doit toujours venir. Comme le visiteur de la
+ * pension (profile.clients.visitor). Le lendemain, la demande est oubliée.
+ */
+export function setPending(profile, req, day) {
+  dogTrainerOf(profile).pending = { req, day };
+}
+
+/** La demande du maître qui attendait aujourd'hui (ou null ; une demande d'un autre jour est effacée). */
+export function pendingRequest(profile, day) {
+  const d = dogTrainerOf(profile);
+  const pend = d.pending;
+  if (!pend) return null;
+  const done = !pend.req?.dog || profile.animals.some((a) => a.id === pend.req.dog.id); // (déjà accepté)
+  if (pend.day !== day || done) {
+    d.pending = null;
+    return null;
+  }
+  return pend.req;
+}
+
+export function clearPending(profile) {
+  dogTrainerOf(profile).pending = null;
 }
 
 /** Le carnet du métier (registre commun) : [{ id, emoji, where, rank?, done, locked }]. */

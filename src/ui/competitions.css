@@ -9,7 +9,9 @@
 .comp-banner .card-main b { font-size: 1.05rem; }
 .comp-register h3 { margin: 0 0 6px; }
 .comp-register .checks { display: grid; gap: 6px; margin: 8px 0; }
-.comp-register .check { min-height: 44px; }
+.comp-register .check { min-height: 44px; flex-wrap: wrap; }
+/* (la phrase sous le nom de l'animal, sur sa propre ligne : plus lisible sur téléphone) */
+.comp-register .check .comp-why { flex-basis: 100%; padding-left: 26px; }
 .comp-why { color: #8b5a00; }
 .comp-athlete .row.wrap { margin-top: 6px; }
 .comp-athlete .row.wrap button { min-height: 44px; }

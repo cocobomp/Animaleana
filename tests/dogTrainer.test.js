@@ -5,6 +5,7 @@ import {
   DOG_TRAINER_CAREER, PROBLEMS, PROBLEM_IDS, COACHINGS, coachingsFor, makeClientRequest, acceptClient, canSession,
   applySession, isFixed, readyForDelivery, deliveryResult, finishClient, shouldClientArrive, sessionPrice,
   careerBook, maxClients, dogTrainerRank, FIXED_BELOW, nextProblem, isOverdue, clientDogs,
+  setPending, pendingRequest, clearPending,
 } from '../src/sim/dogTrainer.js';
 import {
   CAREERS, CAREER_IDS, RANKS, startCareer, addCareerXp, careerXp, reputationOf, nextAction, carnet, careerSummary,
@@ -127,6 +128,27 @@ describe('éducateur canin : clients', () => {
     expect(shouldClientArrive(p, { day: 1, hour: 7 })).toBe(false); // trop tôt
     expect(shouldClientArrive(p, { day: 1, hour: 10 })).toBe(true);
     expect(shouldClientArrive(p, { day: 1, hour: 11 })).toBe(false); // une visite par jour
+  });  it('le maître qui attend une réponse survit au rechargement, le même jour seulement', () => {
+    const p = profile();
+    expect(shouldClientArrive(p, { day: 1, hour: 10 })).toBe(true);
+    const req = makeClientRequest(p, { day: 1, rng: rng() });
+    setPending(p, req, 1);
+    // Sauvegarde puis rechargement : la demande est toujours là (et la visite du jour déjà comptée).
+    const back = JSON.parse(JSON.stringify(p));
+    expect(shouldClientArrive(back, { day: 1, hour: 12 })).toBe(false);
+    const again = pendingRequest(back, 1);
+    expect(again).toMatchObject({ ownerName: req.ownerName, main: req.main });
+    expect(again.dog.id).toBe(req.dog.id);
+    // Une fois accepté, il n'attend plus.
+    acceptClient(back, again, 1);
+    expect(pendingRequest(back, 1)).toBe(null);
+    // Le lendemain, la demande d'hier est oubliée ; refuser l'efface aussi.
+    setPending(p, req, 1);
+    expect(pendingRequest(p, 2)).toBe(null);
+    expect(p.dogTrainer.pending).toBe(null);
+    setPending(p, req, 2);
+    clearPending(p);
+    expect(pendingRequest(p, 2)).toBe(null);
   });
 });
 

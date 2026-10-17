@@ -17,7 +17,7 @@ import { RANKS, isStarted } from '../sim/careers.js';
 import {
   CAREER_ID, PROBLEMS, COACHINGS, SESSION_MINUTES, makeClientRequest, acceptClient, canSession, applySession,
   readyForDelivery, finishClient, shouldClientArrive, dogTrainerOf, clientDogs, isFixed, isTrainingClient,
-  coachingsFor, dogTrainerRank,
+  coachingsFor, dogTrainerRank, setPending, pendingRequest, clearPending,
 } from '../sim/dogTrainer.js';
 import {
   openDogTrainerChat, showDogTrainerTutorial, showDelivery, showSessionResult, startLeashWalkOverlay, runSessionGame,
@@ -103,11 +103,18 @@ export class DogTrainer {
     if (this.checkAcc < 3) return;
     this.checkAcc = 0;
     if (!g.isHome || this.visitor || this.walk || this.demo || g.ui.isBlocking() || g.paused) return;
+    if (g.activities?.active) return; // pas en pleine épreuve ou séance : le maître viendra après
     if (g.clients?.visitor && !g.clients.visitor.visit?.auto) return; // un client de la pension ou du vétérinaire attend déjà : chacun son tour
     // Un maître revient chercher son chien (réglé, séances épuisées, ou jour prévu passé).
     const back = clientDogs(g.profile).find((a) => a.location === g.profile.place && readyForDelivery(a, g.day) && g.entities.has(a.id));
     if (back && g.hour >= 8 && g.hour <= 20) {
       this.spawnReturning(back);
+      return;
+    }
+    // Le maître qui attendait une réponse revient (page rechargée, ou retour de voyage le même jour).
+    const pend = pendingRequest(g.profile, g.day);
+    if (pend) {
+      if (g.hour >= 8 && g.hour <= 20) this.spawnClient(pend);
       return;
     }
     if (shouldClientArrive(g.profile, { day: g.day, hour: g.hour })) this.spawnClient(makeClientRequest(g.profile, { day: g.day, rescue: Math.random() < 0.3 }));
@@ -158,6 +165,7 @@ export class DogTrainer {
     npc.place(start.x, start.z);
     const e = this.spawnVisitorDog(req.dog, npc, start);
     this.visitor = { npc, e, req, accepted: false, returning: null };
+    setPending(g.profile, req, g.day); // gardé dans le profil tant qu'on n'a pas répondu
     this.asked = false;
     npc.walk(near ? [spot] : [WAY, MEET, spot], () => this.waitHere(npc));
     g.ui.toast(t('dt_arrives', { name: req.ownerName, dog: req.dog.name }), 6000);
@@ -275,6 +283,7 @@ export class DogTrainer {
     const g = this.game;
     const r = acceptClient(g.profile, v.req, g.day);
     if (!r.ok) return r;
+    clearPending(g.profile);
     v.accepted = true;
     const e = v.e;
     delete e.home; // il retrouve une zone de vie normale (la niche, la cour)
@@ -296,6 +305,7 @@ export class DogTrainer {
   refuse() {
     const v = this.visitor;
     if (!v) return;
+    if (!v.returning) clearPending(this.game.profile);
     this.sendAway(v, v.accepted ? null : v.e);
     this.game.ui.toast(t('dt_refused', { name: v.req.ownerName }), 4000);
   }

@@ -235,8 +235,8 @@ export class TrailGuide {
     const b = this.booking;
     if (b && !this.session && this.visitorsFor !== 'booking') this.spawnVisitors(b, 'booking');
     if (!b && this.visitorsFor === 'booking') this.clearVisitors();
-    // Une nouvelle demande ?
-    if (!b && !this.session && !g.ui.isBlocking?.() && offerDue(p, { level: g.level, clock: p.clock, hour: g.hour, place: p.place })
+    // Une nouvelle demande ? (pas pendant une épreuve ou une séance : les visiteurs viendront après)
+    if (!b && !this.session && !g.activities?.active && !g.ui.isBlocking?.() && offerDue(p, { level: g.level, clock: p.clock, hour: g.hour, place: p.place })
       && (this.soon || Math.random() < 0.35)) {
       this.soon = false;
       this.newOffer();

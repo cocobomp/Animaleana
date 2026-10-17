@@ -168,6 +168,10 @@ export const COMP_FR = {
   comp_why_noAgility: '{name} ne fait pas d\'agility.',
   comp_why_noTricks: '{name} ne connaît aucun tour par cœur.',
   comp_why_notHere: '{name} n\'est pas ici.',
+  // Inscription d'un cheval sans filet ni selle aujourd'hui (src/ui/competitions.js, openRegister)
+  comp_regTack_away: 'Son filet et sa selle partiront dans le coffre du voyage : tu selleras {name} sur place.',
+  comp_regTack_here: 'Tu selleras {name} le jour du concours, avant l\'épreuve.',
+  comp_regTack_buy: 'Il faudra un filet à {name} : achète-le à la sellerie avant le jour du concours.',
 
   // --- quêtes et succès
   o_drTrain3: 'Faire 3 séances de dressage (plat ou figures)',
@@ -378,6 +382,9 @@ export const COMP_EN = {
   comp_why_noAgility: '{name} doesn\'t do agility.',
   comp_why_noTricks: '{name} doesn\'t know any trick by heart.',
   comp_why_notHere: '{name} isn\'t here.',
+  comp_regTack_away: 'Their bridle and saddle will travel in the trunk: you\'ll tack {name} up on site.',
+  comp_regTack_here: 'You\'ll tack {name} up on the day of the show, before the test.',
+  comp_regTack_buy: '{name} will need a bridle: buy one at the tack room before the day of the show.',
 
   o_drTrain3: 'Do 3 dressage sessions (flat work or figures)',
   o_drReprise1: 'Ride a dressage test',

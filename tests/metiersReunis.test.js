@@ -143,3 +143,46 @@ describe('un seul registre des séances et un seul « 👉 Montre-moi »', () =>
     expect(seen).toEqual(Object.keys(fake.guides).map((id) => `${id}:${CAREERS[id].actions[0].id}`));
   });
 });
+
+describe('quêtes du journal : aucun texte brut', () => {
+  it('chaque quête de QUEST_ORDER a son nom, son aide, son lieu et ses étapes, en français et en anglais', async () => {
+    const { t, setLang } = i18n;
+    const { QUEST_ORDER, QUEST_GUIDE, QUEST_STEPS, FOLLOW_STEPS } = await import('../src/sim/tutorial.js');
+    // (sans animal ou sans cheval, la quête commence au refuge : ces textes-là aussi)
+    const keys = new Set(['quest_hint_first_adopt', 'quest_hint_first_horse', 'quest_where_firstAdopt', 'quest_where_firstHorse',
+      'quest_step_goRefuge', 'quest_step_waitOpen', 'quest_step_adoptFirst', 'quest_step_adoptHorse']);
+    for (const id of QUEST_ORDER) {
+      expect(QUEST_GUIDE[id], id).toBeTruthy();
+      keys.add(`o_${id}`).add(`quest_hint_${id}`).add(`quest_where_${QUEST_GUIDE[id].where}`);
+      for (const s of QUEST_STEPS[id] ?? []) {
+        expect(FOLLOW_STEPS[s], `${id} → ${s}`).toBeTruthy();
+        keys.add(`quest_step_${s}`);
+      }
+    }
+    const missing = [];
+    const frText = {};
+    setLang('fr');
+    for (const k of keys) {
+      frText[k] = t(k, { n: 2 });
+      if (frText[k] === k) missing.push(`fr ${k}`);
+    }
+    setLang('en');
+    // (en anglais, t() retombe sur le français : un texte identique au français veut dire qu'il manque)
+    for (const k of keys) {
+      const v = t(k, { n: 2 });
+      if (v === k || v === frText[k]) missing.push(`en ${k}`);
+    }
+    setLang('fr');
+    expect(missing).toEqual([]);
+  });
+
+  it('« Tu as déjà un animal confié » au singulier (handler apprenti : un animal à la fois)', () => {
+    const { t, setLang } = i18n;
+    setLang('fr');
+    expect(t('cl_full', { n: 1 })).toBe('Tu as déjà un animal confié. Finis d\'abord avec lui !');
+    expect(t('cl_full', { n: 2 })).toMatch(/2 animaux/);
+    setLang('en');
+    expect(t('cl_full', { n: 1 })).toMatch(/an animal in your care/);
+    setLang('fr');
+  });
+});

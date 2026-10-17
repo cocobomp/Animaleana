@@ -203,10 +203,12 @@ export class Groomer {
       if (this.session?.client?.id === c.id) this.session = null;
       this.sendAway(c);
     }
-    // Arrivées : aux heures d'ouverture, si on a le niveau et de la place (pas pendant une fenêtre ou un mini-jeu).
+    // Arrivées : aux heures d'ouverture, si on a le niveau et de la place (pas pendant une fenêtre, un mini-jeu,
+    // une épreuve ou une séance : le client viendra juste après).
     if (!st.nextClientAt) st.nextClientAt = p.clock + 20;
     const hour = hourOf(p.clock);
-    if (canGroom(p) && canWelcome(p) && p.clock >= st.nextClientAt && hour >= OPEN_HOURS[0] && hour < OPEN_HOURS[1] && !g.ui.isBlocking?.()) {
+    if (canGroom(p) && canWelcome(p) && p.clock >= st.nextClientAt && hour >= OPEN_HOURS[0] && hour < OPEN_HOURS[1]
+      && !g.ui.isBlocking?.() && !g.activities?.active) {
       st.nextClientAt = p.clock + clientInterval(p) * 60 * (0.7 + Math.random() * 0.6);
       this.arrive(newClient(p, { day }));
     }

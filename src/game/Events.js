@@ -8,7 +8,7 @@
 //   puis .end('success' | 'fail') pour voir l'écran de fin.
 
 import * as THREE from 'three';
-import { buildAvatar } from './models/avatarModel.js';
+import { buildAvatar, animateAvatarWalk, updateAvatarLife } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 import { emojiTexture, signTexture } from './textures.js';
 import { enclosure, inside } from './nav.js';
@@ -690,6 +690,7 @@ export class Events {
     root.rotation.y = Math.atan2(-NEIGHBOUR_SPOT.x, -6 - NEIGHBOUR_SPOT.z);
     root.userData.neighbour = true;
     root.userData.arm = av.arms?.[0];
+    root.userData.avatar = av;
     g.scene.add(root);
     this.props.push(root);
   }
@@ -798,6 +799,12 @@ export class Events {
     });
     // Le voisin fait coucou.
     for (const r of this.props) {
+      const av = r.userData.avatar;
+      if (av) {
+        // Il respire, cligne des yeux, regarde un peu autour de lui.
+        animateAvatarWalk(av, 0, 0);
+        updateAvatarLife(av, dt, { busy: true });
+      }
       if (r.userData.arm) r.userData.arm.rotation.z = 2.5 + Math.sin(now * 6) * 0.35;
     }
     if (s && this.banner && !this.banner.min) this.bannerAcc = (this.bannerAcc ?? 0) + dt;

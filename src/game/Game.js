@@ -128,6 +128,8 @@ export class Game {
     // Sons (src/game/audio.js) : l'animal répond quand on s'occupe de lui, petits sons sur ⏩ et ×2/×4.
     this.audio = audio;
     this.on('care', ({ a, action }) => this.entities.get(a.id)?.speak(['pet', 'treat', 'play', 'feed', 'water'].includes(action) ? 'happy' : null));
+    // Le personnage fait le geste du soin (verser, brosser, caresser…), tourné vers l'animal.
+    this.on('care', ({ a, action }) => this.player?.careGesture?.(action, this.entities.get(a.id)));
     this.on('adopted', (a) => setTimeout(() => this.entities.get(a.id)?.speak('happy'), 350));
     this.on('skip', (hours) => audio.ui(hours > 0 ? 'skip' : 'cancel'));
     this.on('timeFast', () => audio.ui('fast'));
@@ -494,6 +496,7 @@ export class Game {
     for (let i = 0; i < steps; i++) {
       this.player.update(mgmt ? 0 : wdt, pctrl, this.rig.yaw, this.rig.mode === 'first');
       for (const e of entities) e.update(wdt, ctx);
+      this.player.lateUpdate?.(mgmt ? 0 : wdt); // le cavalier suit le cheval qu'on vient d'animer
       for (const h of this.helpers.values()) h.update(wdt, this);
       this.herding.update(wdt);
       this.tasks?.update();

@@ -7,13 +7,13 @@ import { t, getLang, setLang } from '../i18n.js';
 import { listProfiles, loadProfile, createProfile, deleteProfile, saveProfile } from '../sim/profile.js';
 import { PLACES, PLACE_IDS } from '../sim/places.js';
 import { L } from '../i18n.js';
-import { buildAvatar } from '../game/models/avatarModel.js';
+import { buildAvatar, animateAvatarWalk, updateAvatarLife } from '../game/models/avatarModel.js';
 import { disposeModel } from '../game/models/animalModel.js';
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x4e2f1e];
 const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xe8d39a, 0xa63a1f, 0x9a9a9a, 0x5b4bb5, 0xe26fa6];
 const CLOTHES = [0x3f7cc4, 0xd94848, 0x3f9b5b, 0xf0c33c, 0x8b5ac7, 0xf28fb3, 0xf2f2f2, 0x2b2b2b, 0x2d3a4f, 0x7b5a3c];
-const STYLES = ['short', 'long', 'ponytail', 'curly', 'bald'];
+const STYLES = ['short', 'long', 'ponytail', 'curly', 'bun', 'braid', 'bald'];
 
 export function showProfiles(ui) {
   const render = () => {
@@ -181,8 +181,17 @@ export function showAvatarEditor(ui, profile, onDone) {
   };
   rebuild();
   pv.running = true;
+  let last = performance.now();
   const loop = () => {
     if (!pv.running) return;
+    // Le personnage est vivant dans l'aperçu : il respire, cligne des yeux, bouge un peu.
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (pv.avatar) {
+      animateAvatarWalk(pv.avatar, 0, 0);
+      updateAvatarLife(pv.avatar, dt);
+    }
     const w = canvasBox.clientWidth || 240;
     const hh = canvasBox.clientHeight || 300;
     if (pv.renderer.domElement.width !== Math.floor(w * pv.renderer.getPixelRatio())) {

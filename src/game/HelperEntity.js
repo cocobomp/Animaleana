@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { HELPERS, helperTask } from '../sim/farm.js';
 import { helperLevel, helperSpeed, onBreak } from '../sim/helpers.js';
-import { buildAvatar, animateAvatarWalk } from './models/avatarModel.js';
+import { buildAvatar, animateAvatarWalk, updateAvatarLife, startAvatarGesture, stopAvatarGesture, careGestureFor } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 
@@ -39,7 +39,7 @@ export class HelperEntity {
     // Apparence variée : les aides femmes et hommes ont des coiffures, peaux et tenues différentes.
     const seed = [...data.name].reduce((n, c) => n + c.charCodeAt(0), 0);
     const female = data.sex === 'f';
-    const styles = female ? ['ponytail', 'long', 'curly', 'long'] : ['short', 'curly', 'short', 'bald'];
+    const styles = female ? ['ponytail', 'long', 'curly', 'bun', 'braid'] : ['short', 'curly', 'short', 'bald'];
     this.avatar = buildAvatar({
       skin: SKINS[seed % SKINS.length],
       hair: HAIRS[(seed * 3) % HAIRS.length],
@@ -92,18 +92,12 @@ export class HelperEntity {
       targetSpeed = 4.5;
     } else if (this.workTimer > 0) {
       this.workTimer -= dt;
-      // Au travail : les bras s'activent, coudes pliés, le buste se penche un peu.
-      this.avatar.arms.forEach((a, i) => { a.rotation.x = -0.8 + Math.sin(this.workTimer * 8 + i) * 0.4; });
-      this.avatar.elbows?.forEach((e, i) => { e.rotation.x = -0.9 + Math.cos(this.workTimer * 8 + i) * 0.35; });
-      this.avatar.torso.rotation.x = 0.12;
-      this.avatar.legs.forEach((l) => { l.rotation.x *= 0.85; });
-      this.avatar.knees?.forEach((k) => { k.rotation.x = 0.1; });
+      // Au travail : le geste du soin (lancé quand on arrive, voir startWork) se répète.
       if (this.workTimer <= 0) {
         game.helperDone(this, this.task);
         this.task = null;
         this.think = 1.5;
-        this.avatar.arms.forEach((a) => { a.rotation.x = 0; });
-        this.avatar.torso.rotation.x = 0;
+        stopAvatarGesture(this.avatar);
       }
     } else if (onBreak(this.data, game.profile.clock)) {
       // En pause : on rentre à son coin et on souffle un peu.
@@ -128,8 +122,10 @@ export class HelperEntity {
         } else {
           this.target.copy(goal);
           const d = Math.hypot(goal.x - p.x, goal.z - p.z);
-          if (d < 1.6) this.workTimer = 2.5 * helperSpeed(this.data); // plus d'expérience = plus rapide
-          else targetSpeed = d > 12 ? 4 : 2.4;
+          if (d < 1.6) {
+            this.workTimer = 2.5 * helperSpeed(this.data); // plus d'expérience = plus rapide
+            this.startWork(game, d);
+          } else targetSpeed = d > 12 ? 4 : 2.4;
         }
       } else if (Math.hypot(this.target.x - p.x, this.target.z - p.z) > 0.6) {
         targetSpeed = 1.4;
@@ -157,10 +153,23 @@ export class HelperEntity {
     this.root.rotation.y = this.heading;
     this.tag.visible = p.distanceTo(game.player.position) < 14;
 
-    if (this.workTimer <= 0) {
-      this.phase += dt * this.speed * 2.2;
-      animateAvatarWalk(this.avatar, this.phase, this.speed);
+    // Marche, puis la vie par-dessus (respiration, regard, gestes d'attente ou geste du travail).
+    this.phase += dt * this.speed * 2.2;
+    animateAvatarWalk(this.avatar, this.phase, this.speed);
+    updateAvatarLife(this.avatar, dt, { speed: this.speed, busy: this.workTimer > 0 || !!this.forced });
+  }
+
+  /** Arrivé au travail : le geste qui va avec (brosser, verser, frotter…), vers l'animal ou l'objet. */
+  startWork(game, dist) {
+    const task = this.task;
+    const kind = careGestureFor(task.kind === 'care' || task.kind === 'product' ? task.action : task.kind);
+    const e = task.animalId && game.entities?.get(task.animalId);
+    let y = task.kind === 'scoop' ? 0.3 : 0.55; // crottin au sol, abreuvoir / mangeoire
+    if (e) {
+      const back = (e.model?.saddleY ?? 0.5) * (e.scale ?? 1);
+      y = kind === 'pour' ? Math.max(0.3, Math.min(0.9, back * 0.55)) : Math.max(0.3, Math.min(1.32, back * 0.9));
     }
+    startAvatarGesture(this.avatar, kind, { duration: this.workTimer, loop: true, y, z: Math.max(0.3, Math.min(0.48, dist - 0.9)) });
   }
 
   dispose() {

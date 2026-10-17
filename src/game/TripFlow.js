@@ -221,6 +221,8 @@ export class TripFlow {
     const c = crateWithAnimal(a);
     c.crate.group.position.set(0, 0.6, 0.45);
     g.player.root.add(c.crate.group);
+    // Personnages : la caisse est tenue devant, à deux mains (Player.holdCrate ; lâchée quand on la pose).
+    g.player.holdCrate?.(c.crate.group, c.crate.size);
     l.carry = { a, mesh: c.crate.group, model: c.model };
     this.ui.toast(ta('trip_carrying', a));
     g.walkTo(l.vehicle.loadPoint, 1.5, () => this.finishCarry());

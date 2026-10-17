@@ -9,7 +9,7 @@
 //   .startCareer('vet'), puis .forcePickup() pour faire revenir les propriétaires.
 
 import * as THREE from 'three';
-import { buildAvatar } from './models/avatarModel.js';
+import { buildAvatar, animateAvatarWalk, updateAvatarLife } from './models/avatarModel.js';
 import { disposeModel } from './models/animalModel.js';
 import { signTexture, emojiTexture } from './textures.js';
 import { navTarget } from './nav.js';
@@ -47,7 +47,7 @@ class VisitorEntity {
     this.owner = owner;
     const seed = owner.seed ?? 0;
     const female = owner.sex === 'f';
-    const styles = female ? ['ponytail', 'long', 'curly'] : ['short', 'curly', 'bald'];
+    const styles = female ? ['ponytail', 'long', 'curly', 'bun', 'braid'] : ['short', 'curly', 'bald'];
     this.avatar = buildAvatar({
       skin: SKINS[seed % SKINS.length],
       hair: HAIRS[Math.floor(seed / 7) % HAIRS.length],
@@ -132,16 +132,15 @@ class VisitorEntity {
     }
     p.y = this.game.world.heightAt(p.x, p.z);
     this.root.rotation.y = this.heading;
+    // Marche articulée, puis la vie (respiration, regard, gestes d'attente, chacun à son rythme).
     this.phase += dt * this.speed * 2.2;
-    const amp = Math.min(0.7, this.speed * 0.16);
-    const { legs, arms } = this.avatar;
-    legs[0].rotation.x = Math.sin(this.phase) * amp;
-    legs[1].rotation.x = -Math.sin(this.phase) * amp;
-    arms[1].rotation.x = Math.sin(this.phase) * amp * 0.8;
-    if (this.waving && this.speed < 0.3) arms[0].rotation.z = 2.5 + Math.sin(this.time * 6) * 0.35;
-    else {
-      arms[0].rotation.z = 0;
-      arms[0].rotation.x = -Math.sin(this.phase) * amp * 0.8;
+    const wave = this.waving && this.speed < 0.3;
+    animateAvatarWalk(this.avatar, this.phase, this.speed);
+    updateAvatarLife(this.avatar, dt, { speed: this.speed, busy: wave });
+    if (wave) {
+      // Coucou : bras levé, la main se balance.
+      this.avatar.arms[0].rotation.set(0, 0, 2.5 + Math.sin(this.time * 6) * 0.35);
+      this.avatar.elbows[0].rotation.set(-0.35, 0, 0);
     }
     if (this.bubble.visible) this.bubble.position.y = 2.75 + Math.sin(this.time * 3) * 0.08;
     this.tag.visible = p.distanceTo(this.game.player.position) < 18;

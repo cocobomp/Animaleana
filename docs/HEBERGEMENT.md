@@ -46,7 +46,7 @@ connexion. C'est pour cela que l'hébergement Firebase est prévu.
 | Connexion avec Google | ✅ activée | Le nom affiché dans la fenêtre Google (« Continuer vers … ») se règle ici : https://console.cloud.google.com/auth/branding?project=lafermeamadichelle → **App name** : `La ferme à Madichelle` |
 | Adresses autorisées pour la connexion (Firebase) | ✅ | `localhost`, `lafermeamadichelle.web.app`, `lafermeamadichelle.firebaseapp.com`, `cocobomp.github.io` |
 | URI de redirection du client OAuth (Google Cloud) | ⚠️ à compléter | Seule `https://lafermeamadichelle.firebaseapp.com/__/auth/handler` est autorisée. Il manque `https://lafermeamadichelle.web.app/__/auth/handler`, nécessaire pour l'appli ajoutée à l'écran d'accueil (voir « Connexion Google » plus bas) |
-| Règles de sécurité de la synchro v2 (`rev`) | ⚠️ à mettre en ligne **avant** de publier la v2 | Voir « Mettre les règles en ligne » plus bas |
+| Règles de sécurité de la synchro v2 (`rev`, `gen`) | ✅ mises en ligne le 17 octobre 2026, avant la v2 | Voir « Mettre les règles en ligne » plus bas (à refaire à chaque changement de `firestore.rules`) |
 | Base des sauvegardes | ✅ créée à **Zurich** (`europe-west6`) | Une partie = un document `users/<compte>/saves/<partie>` |
 | Règles de sécurité | ✅ en ligne (fichier `firestore.rules` du dépôt) | Chaque compte ne lit et n'écrit que ses propres parties ; sans compte, rien ; taille limitée |
 | Hébergement | ✅ en ligne | https://lafermeamadichelle.web.app |

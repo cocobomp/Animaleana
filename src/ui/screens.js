@@ -9,6 +9,7 @@ import { PLACES, PLACE_IDS } from '../sim/places.js';
 import { L } from '../i18n.js';
 import { buildAvatar, animateAvatarWalk, updateAvatarLife } from '../game/models/avatarModel.js';
 import { disposeModel } from '../game/models/animalModel.js';
+import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x4e2f1e];
 const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xe8d39a, 0xa63a1f, 0x9a9a9a, 0x5b4bb5, 0xe26fa6];
@@ -25,7 +26,9 @@ export function showProfiles(ui) {
           const prof = loadProfile(p.id);
           if (prof) ui.game.start(prof);
         },
-      }, h('b', {}, p.name), h('small', {}, `${p.mode === 'sandbox' ? t('modeSandbox') : t('modeManage')} · ${t('animalsCount', { n: p.animals })}`)),
+      }, h('b', {}, p.name), h('small', {}, `${p.mode === 'sandbox' ? t('modeSandbox') : t('modeManage')} · ${t('animalsCount', { n: p.animals })}`),
+      // Copie gardée avant qu'une partie restaurée la remplace (src/sim/saveStore.js) : on peut y rejouer ou la supprimer.
+      p.backup ? h('small', { class: 'sv-badge' }, t('sv_backupBadge')) : null),
       h('button', {
         class: 'icon danger',
         title: t('delete'),
@@ -48,6 +51,13 @@ export function showProfiles(ui) {
       profiles.length ? h('h2', {}, t('profiles')) : null,
       h('div', { class: 'profiles' }, list),
       h('button', { class: 'primary big', onClick: () => newProfile(ui, render) }, `➕ ${t('newProfile')}`),
+      // La partie dans un fichier : pour changer d'appareil ou d'adresse du jeu (src/ui/saveGame.js).
+      h('div', { class: 'save-tools' },
+        profiles.length ? h('button', {
+          onClick: () => openExport(ui, { ids: profiles.map((p) => p.id), checked: profiles.filter((p) => !p.backup).map((p) => p.id) }),
+        }, `💾 ${t(profiles.length > 1 ? 'sv_saveMany' : 'sv_save')}`) : null,
+        h('button', { onClick: () => pickRestoreFile(ui) }, `📂 ${t('sv_restore')}`)),
+      h('p', { class: 'note save-why' }, t('sv_why')),
       // État du cache hors ligne (src/main.js) : prêt, en préparation, ou impossible en http.
       h('p', { class: 'offline' }, window.offlineState
         ? `${{ ready: '✅', preparing: '⏳', unavailable: 'ℹ️', file: '📁' }[window.offlineState]} ${t({ ready: 'offlineReady', preparing: 'offlinePreparing', unavailable: 'offlineUnavailable', file: 'offlineFile' }[window.offlineState])}`
@@ -57,7 +67,7 @@ export function showProfiles(ui) {
       // Depuis le site : un fichier unique à télécharger puis à passer par AirDrop, clé USB ou mail
       // à un ordinateur sans internet (il s'ouvre en double-cliquant). Pas proposé quand on y joue déjà.
       location.protocol.startsWith('http') && typeof __APP_VERSION__ !== 'undefined'
-        ? h('p', { class: 'portable' }, h('a', { href: './animadichelle.html', download: 'Animadichelle.html' }, `💾 ${t('portableLink')}`), h('small', {}, t('portableHelp')))
+        ? h('p', { class: 'portable' }, h('a', { href: './animadichelle.html', download: 'Animadichelle.html' }, `📦 ${t('portableLink')}`), h('small', {}, t('portableHelp')))
         : null));
     ui.screen.hidden = false;
   };

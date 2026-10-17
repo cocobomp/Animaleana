@@ -3,6 +3,7 @@
 import { CLIENTS_FR, CLIENTS_EN } from './ui/clientsTexts.js'; // clients et métiers (cl_*, ca_*, career_*)
 import { VET_FR, VET_EN } from './ui/vetTexts.js'; // examen et école vétérinaires (vx_*, vs_*)
 import { TACK_FR, TACK_EN } from './ui/tackTexts.js'; // sellerie : catalogue d'équipement (gear_*, tk_*, col_*)
+import { SAVE_FR, SAVE_EN } from './ui/saveTexts.js'; // sauvegarde dans un fichier (sv_*)
 
 const fr = {
   title: 'Animadichelle',
@@ -21,6 +22,7 @@ const fr = {
   modeManageDesc: 'Il faut gagner et gérer son argent.',
   language: 'Langue',
   animalsCount: '{n} animaux',
+  animalsCount_one: '1 animal',
   offlineReady: 'Prêt : le jeu marche maintenant sans Internet',
   offlinePreparing: 'Préparation pour jouer sans Internet… garde Internet quelques secondes',
   offline: 'Fonctionne sans réseau',
@@ -869,7 +871,7 @@ const fr = {
   r_bond_f: '{name} ne te connaît pas encore assez (lien {n} nécessaire) : joue, caresse et brosse-la d\'abord !',
   r_needTool: 'Il te faut : {tool}. Tu peux l\'acheter à la sellerie de l\'écurie.',
   portableLink: 'Emporter le jeu sur un ordinateur (un seul fichier)',
-  portableHelp: 'Télécharge le fichier, envoie-le par AirDrop, clé USB ou mail, puis ouvre-le en double-cliquant : le jeu marche sans internet. Les sauvegardes restent sur chaque appareil.',
+  portableHelp: 'Télécharge le fichier, envoie-le par AirDrop, clé USB ou mail, puis ouvre-le en double-cliquant : le jeu marche sans internet. Pour emporter aussi ta partie : « 💾 Sauvegarder ma partie ».',
   buyToolAsk: 'Il te faut {tool}. L\'acheter maintenant pour {price} 🪙 ?',
   buyToolAskFree: 'Il te faut {tool}. On le prend maintenant ?',
   needToolTap: 'Il faut {tool} ({price} 🪙) · touche pour l\'acheter',
@@ -1859,6 +1861,7 @@ const en = {
   modeManageDesc: 'Earn and manage your money.',
   language: 'Language',
   animalsCount: '{n} animals',
+  animalsCount_one: '1 animal',
   offlineReady: 'Ready: the game now works without Internet',
   offlinePreparing: 'Getting ready to play offline… keep Internet on for a few seconds',
   offline: 'Works offline',
@@ -2647,7 +2650,7 @@ const en = {
   r_bond: '{name} doesn\'t know you well enough yet (bond {n} needed): play, pet and brush them first!',
   r_needTool: 'You need: {tool}. You can buy it in the stable\'s tack room.',
   portableLink: 'Take the game to a computer (a single file)',
-  portableHelp: 'Download the file, send it by AirDrop, USB stick or email, then open it with a double-click: the game works without internet. Saves stay on each device.',
+  portableHelp: 'Download the file, send it by AirDrop, USB stick or email, then open it with a double-click: the game works without internet. To take your game along too: “💾 Save my game”.',
   buyToolAsk: 'You need {tool}. Buy it now for {price} 🪙?',
   buyToolAskFree: 'You need {tool}. Take it now?',
   needToolTap: 'Needs {tool} ({price} 🪙) · tap to buy',
@@ -3588,6 +3591,8 @@ Object.assign(en, VET_EN);
 // Sellerie : noms, phrases et effets de chaque selle, filet, couverture… (remplace les anciens noms courts).
 Object.assign(fr, TACK_FR);
 Object.assign(en, TACK_EN);
+Object.assign(fr, SAVE_FR); // sauvegarder / restaurer une partie dans un fichier
+Object.assign(en, SAVE_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

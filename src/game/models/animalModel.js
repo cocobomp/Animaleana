@@ -13,6 +13,7 @@ import { coatTextures, woolTextures, hairTexture, eyeTexture, lum } from '../tex
 import { gfx } from '../gfx.js';
 import { SPECIES } from '../../sim/species.js';
 import { hairMaterial, buildHorseLeg, buildHorseMane, buildHorseForelock, buildHorseTail } from './horseParts.js';
+import { buildHorseModel } from './horseModel.js';
 
 // ------------------------------------------------------------------ anatomie par espèce
 // torso : formes du tronc. ['e', miroir, centre (x/R, y/R, z/L), rayons (x/R, y/R, z/L), k (fondu, /R)]
@@ -396,7 +397,9 @@ function neckAt(ns, t) {
 
 // ------------------------------------------------------------------ construction
 
-export function buildAnimalModel(speciesId, look) {
+export function buildAnimalModel(speciesId, look, breedOfAnimal = null) {
+  // Vague 3 : le cheval a son propre modèle réaliste (horseModel.js), une seule surface à os.
+  if (speciesId === 'horse') return buildHorseModel(look, breedOfAnimal);
   const S = SPEC[speciesId] ?? SPEC.dog;
   const high = gfx.quality === 'high';
   const m = look;

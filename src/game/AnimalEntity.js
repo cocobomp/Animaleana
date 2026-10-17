@@ -10,6 +10,7 @@ import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
 import { canLeash, heelSkill } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
+import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 // Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
@@ -96,7 +97,10 @@ export class AnimalEntity {
       disposeModel(this.model.root);
     }
     // Modèle GLB animé si l'espèce en a un (src/game/assets.js), sinon le modèle procédural.
-    this.model = buildGltfAnimal(this.data.species, this.data.look) ?? buildAnimalModel(this.data.species, this.data.look);
+    // (le poulain a son propre gabarit : membres longs, grosse tête, brosse de crins, petite queue)
+    const foal = this.data.species === 'horse' && lifeStage(this.data) === 'baby';
+    const look = foal ? { ...this.data.look, foal: true } : this.data.look;
+    this.model = buildGltfAnimal(this.data.species, look) ?? buildAnimalModel(this.data.species, look, this.data.breed);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
     this.scaleGroup = new THREE.Group();
@@ -122,12 +126,32 @@ export class AnimalEntity {
     this.gearGroup = buildGear(this.model, this.data.look, override ?? this.data.gear ?? {});
   }
 
+  /** Refait le modèle (même place, même parent dans la scène). */
+  rebuildModel() {
+    const parent = this.root.parent;
+    const pos = this.root.position.clone();
+    parent?.remove(this.root);
+    this.label.material.map?.dispose();
+    this.label.material.dispose();
+    this.status.material.dispose();
+    this.build();
+    this.root.position.copy(pos);
+    this.root.rotation.y = this.heading;
+    (parent ?? this.scene).add(this.root);
+  }
+
   applyScale() {
     this.scale = this.data.look.scale * growthScale(this.data);
     this.scaleGroup.scale.setScalar(this.scale);
     this.stage = lifeStage(this.data);
+    // Le poulain a grandi : il prend le gabarit de sa race.
+    if (this.model.horseV3 && this.model.foal !== (this.stage === 'baby') && this.label) {
+      this.rebuildModel();
+      return;
+    }
     // Les poulains ont de longues pattes pour leur taille : on les étire et on relève le corps d'autant.
-    const boost = this.data.species === 'horse' ? (this.stage === 'baby' ? 1.22 : this.stage === 'young' ? 1.08 : 1) : 1;
+    // (Cheval réaliste : le poulain a son propre gabarit, et les membres sont posés par l'allure.)
+    const boost = this.data.species === 'horse' && !this.model.horseV3 ? (this.stage === 'baby' ? 1.22 : this.stage === 'young' ? 1.08 : 1) : 1;
     for (const l of this.model.legs) l.pivot.scale.set(1, boost, 1);
     this.legLift = (boost - 1) * (this.model.legTop ?? 0);
   }
@@ -840,7 +864,11 @@ export class AnimalEntity {
     const wGallop = Math.max(0, g - 1);
     const wWalk = Math.max(0, 1 - g);
     // Longueur de foulée par allure : la fréquence suit la vitesse, les sabots ne glissent pas.
-    const stride = legLen * (1.7 * wWalk + 2.5 * wTrot + 3.7 * wGallop);
+    const v3 = !!md.horseV3;
+    const H = v3 ? md.legs[0].pivot.userData.restY ?? md.legTop : 0;
+    const stride = v3
+      ? gaitStride('walk', v, H) * wWalk + gaitStride('trot', v, H) * wTrot + gaitStride('gallop', v, H) * wGallop
+      : legLen * (1.7 * wWalk + 2.5 * wTrot + 3.7 * wGallop);
     if (moving) this.phase += dt * (v / Math.max(0.3, stride)) * Math.PI * 2;
     const ph = this.phase;
     const amp = moving ? 0.34 * wWalk + 0.46 * wTrot + 0.72 * wGallop : 0;
@@ -853,7 +881,23 @@ export class AnimalEntity {
     }
     this.restAmt = (this.restAmt ?? 0) + ((moving || this.sleeping ? 0 : 1) - (this.restAmt ?? 0)) * Math.min(1, dt * 1.5);
     const legs = md.legs;
-    for (let i = 0; i < legs.length; i++) {
+    // Respiration et embonpoint (plus large quand il est gros ; les membres gardent leur longueur).
+    const breathe = Math.sin(t * (this.sleeping ? 1.2 : 2.2)) * 0.012;
+    const w = this.data.weight ?? 50;
+    const girth = 1 + (w - 50) / 50 * 0.22;
+    if (v3 && legs[0].hoof) {
+      const gw = (this.gaitW ??= { walk: 0, trot: 0, gallop: 0 });
+      gw.walk = wWalk;
+      gw.trot = wTrot;
+      gw.gallop = wGallop;
+      this.horseLegs(dt, gw, stride, v, moving, H);
+      md.body.scale.set(girth + breathe, 1 + breathe * 0.4, 1);
+      for (const l of legs) {
+        l.pivot.scale.set(1 / (girth + breathe), 1 / (1 + breathe * 0.4), 1);
+        l.pivot.position.y = (l.pivot.userData.restY ?? l.pivot.position.y) / (1 + breathe * 0.4);
+      }
+    }
+    for (let i = 0; i < legs.length && !(v3 && legs[0].hoof); i++) {
       const l = legs[i];
       const aw = ph + OFF_WALK[i];
       const at = ph + OFF_TROT[i];
@@ -867,17 +911,15 @@ export class AnimalEntity {
       l.pivot.rotation.x = swing * (l.front ? 1 : 1.1) + rest * 0.12;
       if (l.knee) l.knee.rotation.x = (l.front ? fold * 1.1 : -fold * 0.9) - rest * 0.42;
     }
-    const bob = moving ? Math.abs(Math.sin(ph * (1 + wTrot))) * (0.012 * wWalk + 0.03 * wTrot + 0.06 * wGallop) : 0;
-    md.body.position.y = bob + (this.legLift ?? 0);
-    // Au galop, le corps tangue légèrement ; à l'arrêt, le poids passe doucement d'un côté à l'autre.
-    md.body.rotation.x = Math.sin(ph) * 0.05 * wGallop;
+    if (!(v3 && legs[0].hoof)) {
+      const bob = moving ? Math.abs(Math.sin(ph * (1 + wTrot))) * (0.012 * wWalk + 0.03 * wTrot + 0.06 * wGallop) : 0;
+      md.body.position.y = bob + (this.legLift ?? 0);
+      // Au galop, le corps tangue légèrement.
+      md.body.rotation.x = Math.sin(ph) * 0.05 * wGallop;
+      md.body.scale.set(girth + breathe, 1 + (girth - 1) * 0.4 + breathe, 1);
+    }
+    // À l'arrêt, le poids passe doucement d'un côté à l'autre.
     md.body.rotation.z = moving ? 0 : Math.sin(t * 0.5) * 0.012 * this.restAmt;
-
-    // Respiration et embonpoint.
-    const breathe = Math.sin(t * (this.sleeping ? 1.2 : 2.2)) * 0.012;
-    const w = this.data.weight ?? 50;
-    const girth = 1 + (w - 50) / 50 * 0.22;
-    md.body.scale.set(girth + breathe, 1 + (girth - 1) * 0.4 + breathe, 1);
 
     // Tête : regard qui se promène, balancement au pas et au galop, somnolence, broutage.
     this.doze = (this.doze ?? 0) + ((this.sleeping ? 1 : 0) - (this.doze ?? 0)) * Math.min(1, dt * 1.5);
@@ -885,11 +927,15 @@ export class AnimalEntity {
     md.head.rotation.y = look;
     const baseNeck = this.data.look.neckAngle;
     const grazing = this.state === 'idle' && !this.sleeping && Math.sin(t * 0.3 + this.phase) > 0.2;
-    const eat = this.state === 'eat' || (grazing && !this.herdCtrl) ? 0.92 + Math.sin(t * 4) * 0.05 : 0;
+    // Cheval réaliste (horseModel.js) : l'encolure descend jusqu'à l'herbe et la tête se met d'aplomb.
+    // Brouter : le bout du nez touche l'herbe ; manger à la mangeoire : tête moins basse.
+    const reach = !v3 ? 0.92 : this.state === 'eat' ? 1.2 : 1.6;
+    const eat = this.state === 'eat' || (grazing && !this.herdCtrl) ? reach + Math.sin(t * 4) * 0.05 : 0;
     this.headDown = (this.headDown ?? 0) + (eat - (this.headDown ?? 0)) * Math.min(1, dt * 2.5);
     const nod = moving ? Math.sin(ph * 2) * 0.05 * wWalk + Math.sin(ph) * 0.12 * wGallop - 0.1 * wGallop : 0;
-    md.neck.rotation.x = baseNeck + (sad ? 0.3 : 0) + this.headDown + this.doze * 0.6 + nod;
-    md.head.rotation.x = (md.head.userData.baseX ??= md.head.rotation.x) + this.headDown * 0.25 - nod * 0.5;
+    md.neck.rotation.x = baseNeck + (sad ? 0.3 : 0) + this.headDown + this.doze * (v3 ? 0.45 : 0.6) + nod;
+    // (modèle réaliste : quand l'encolure descend, la tête se redresse pour rester d'aplomb, chanfrein vertical.)
+    md.head.rotation.x = (md.head.userData.baseX ??= md.head.rotation.x) + this.headDown * (v3 ? -0.5 : 0.25) - nod * 0.5 + (v3 ? this.doze * 0.15 : 0);
 
     // Oreilles : elles pivotent vers ce que le cheval écoute, tombent sur le côté quand il somnole.
     md.ears.forEach((e, i) => {
@@ -905,9 +951,61 @@ export class AnimalEntity {
     // Queue : balancement, grands coups de fouet de temps en temps, relevée au galop.
     const swish = Math.sin(t * 0.23 + this.phase) > 0.9 ? Math.sin(t * 9) * 0.45 : 0;
     md.tail.rotation.z = Math.sin(t * 0.9) * 0.1 + swish + Math.sin(ph) * 0.06 * wGallop;
-    md.tail.rotation.x = (md.tail.userData.baseX ?? 0) - 0.35 * wGallop - 0.1 * wTrot + Math.sin(ph * 2) * 0.04 * wTrot;
+    // (modèle réaliste : rotation positive = queue relevée vers l'arrière.)
+    const raise = (v3 ? 1 : -1) * (0.35 * wGallop + 0.1 * wTrot);
+    md.tail.rotation.x = (md.tail.userData.baseX ?? 0) + raise + Math.sin(ph * 2) * 0.04 * wTrot;
+    if (md.tailTip) {
+      // Le bas de la queue suit avec un temps de retard (effet de fouet).
+      md.tailTip.rotation.z = Math.sin(t * 0.9 - 0.7) * 0.08 + swish * 0.55;
+      md.tailTip.rotation.x = 0.25 * wGallop + Math.sin(ph * 2 - 0.8) * 0.05 * (wTrot + wGallop);
+    }
     // Les crins volent plus quand il court.
     if (md.hairSway) md.hairSway.value = Math.min(2.5, v * 0.5) + (Math.abs(swish) > 0.2 ? 1 : 0);
+  }
+
+  /**
+   * Membres du cheval réaliste (src/sim/horseGait.js) : en appui, chaque sabot reste posé au sol et
+   * immobile pendant que le corps avance (cinématique inverse épaule/hanche → genou/jarret → sabot) ;
+   * en soutien, il se lève et revient vers l'avant. Le dos monte, descend et tangue pour que les sabots
+   * posés touchent le sol ; l'épaule glisse avec la jambe. À l'arrêt : pose de repos, un postérieur au
+   * repos (pince au sol) de temps en temps.
+   */
+  horseLegs(dt, w, stride, v, moving, H) {
+    const md = this.model;
+    const legs = md.legs;
+    if (this.gaitModel !== md) {
+      this.gaitModel = md;
+      this.gaitRigs = legs.map((l) => {
+        const p = l.pivot.position.clone();
+        l.pivot.userData.restZ = p.z;
+        l.pivot.userData.restY = p.y;
+        // (on vise le boulet : le sabot, articulé dessous, reste à plat au sol pendant l'appui)
+        return legRig(p, p.clone().add(l.knee.position), l.fetlockRest ?? l.hoof, l.front ? -1 : 1);
+      });
+    }
+    this.moveAmt = (this.moveAmt ?? 0) + ((moving ? 1 : 0) - (this.moveAmt ?? 0)) * Math.min(1, dt * 5);
+    const m = this.moveAmt;
+    this.gaitOut ??= makeGaitFrame();
+    const fr = gaitFrame(this.gaitRigs, w, this.phase / (Math.PI * 2), stride, v, H, m, this.gaitOut);
+    for (let i = 0; i < legs.length; i++) {
+      const l = legs[i];
+      const g = fr.legs[i];
+      const rest = i === this.restLeg ? this.restAmt : 0;
+      l.pivot.position.z = l.pivot.userData.restZ + g.slide;
+      l.pivot.rotation.x = rest * 0.12 * (1 - m) + g.a * m;
+      l.knee.rotation.x = -rest * 0.42 * (1 - m) + g.b * m;
+      if (l.fetlock) {
+        // Appui : sabot à plat. Soutien : le boulet se fléchit, le sabot se replie sous le canon.
+        const sw = Math.min(1, Math.max(0, g.lift / (0.05 * H)));
+        const flat = -(fr.pitch + g.a + g.b);
+        const curl = (l.front ? 0.7 : 0.4) * Math.abs(g.b) + 0.15;
+        l.fetlock.rotation.x = rest * 0.3 * (1 - m) + (flat * (1 - sw) + curl * sw) * m;
+      }
+      // Au trot et au galop, les postérieurs passent un peu à l'extérieur des antérieurs.
+      l.pivot.rotation.z = l.front ? 0 : l.side * (0.035 * w.trot + 0.06 * w.gallop) * m;
+    }
+    md.body.position.y = fr.by + (this.legLift ?? 0);
+    md.body.rotation.x = fr.pitch;
   }
 
   /** Animation d'un modèle GLB : clips idle/walk/run pilotés par l'état, tête baissée pour manger. */

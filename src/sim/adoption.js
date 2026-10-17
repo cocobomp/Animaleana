@@ -10,7 +10,8 @@ export function breedsFor(placeId, isHome = false) {
   const list = [];
   for (const sid of SPECIES_IDS) {
     for (const b of SPECIES[sid].breeds) {
-      if (b.origin === placeId || (isHome && b.origin === null)) list.push({ species: sid, breed: b });
+      // homeShop : race d'ailleurs, mais si courante en France qu'on la trouve aussi à la maison.
+      if (b.origin === placeId || (isHome && (b.origin === null || b.homeShop))) list.push({ species: sid, breed: b });
     }
   }
   if (!list.length) return breedsFor(placeId, true);
@@ -42,7 +43,7 @@ export function shopPrice(speciesId, breedId, stage = 'young') {
   const sp = SPECIES[speciesId];
   const breed = sp.breeds.find((b) => b.id === breedId);
   const rarity = breed?.rarity ?? 1;
-  const breedFactor = 0.7 + 0.45 * rarity ** 1.4;
+  const breedFactor = (0.7 + 0.45 * rarity ** 1.4) * (breed?.priceMul ?? 1); // priceMul : race très recherchée
   const big = ['horse', 'cow'].includes(speciesId);
   const ageFactor = { baby: big ? 0.75 : 1.2, young: 1, adult: big ? 1.3 : 0.85 }[stage];
   return Math.round((sp.price * breedFactor * ageFactor) / 5) * 5;

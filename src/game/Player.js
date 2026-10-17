@@ -150,6 +150,7 @@ export class Player {
     this.ridePh = undefined;
     const a = this.avatar;
     a.root.position.set(0, 0, 0);
+    a.root.rotation.x = 0;
     poseAvatar(a, 'stand');
     // On descend à côté du cheval.
     const side = new THREE.Vector3(Math.cos(this.heading), 0, -Math.sin(this.heading)).multiplyScalar(1.4);

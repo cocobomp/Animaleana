@@ -32,12 +32,28 @@ function loop(sdf, c, n, out, a0 = 0, a1 = Math.PI * 2, tilt = 0, maxDist = 1.2)
   return pts;
 }
 
+/**
+ * Retourne les faces d'un tube de loft() (ses faces regardent vers l'intérieur) : sans ça, on voit la
+ * paroi du fond (un siège de selle devient deux arcs fins, une sangle paraît creuse).
+ */
+function solid(geo) {
+  const idx = geo.index;
+  for (let i = 0; i < idx.count; i += 3) {
+    const b = idx.getX(i + 1);
+    idx.setX(i + 1, idx.getX(i + 2));
+    idx.setX(i + 2, b);
+  }
+  const n = geo.attributes.normal;
+  for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  return geo;
+}
+
 /** Sangle plate qui suit une liste de points (fermée si closed). */
 function strap(pts, halfWidth, thick, closed = false) {
   const list = closed ? [pts[pts.length - 1], ...pts, pts[0], pts[1]] : pts;
-  return loft(list.map((p) => ({ p: [p.x, p.y, p.z], rx: halfWidth, ry: thick })), {
+  return solid(loft(list.map((p) => ({ p: [p.x, p.y, p.z], rx: halfWidth, ry: thick })), {
     radial: 6, sub: closed ? 1 : 2, side: [0, 0, 1], capStart: !closed, capEnd: !closed,
-  });
+  }));
 }
 
 /**
@@ -300,9 +316,9 @@ function horseSaddle(model, gear, add) {
     secs[0].rx = st.seatW * k * 0.95;
     secs[7].rx = st.seatW * k * 0.62;
   }
-  add(body, loft(secs, { radial: 14, sub: 2, exp: 2.6, round: [0.6, 0.5] }), leather);
+  add(body, solid(loft(secs, { radial: 14, sub: 2, exp: 2.6, round: [0.6, 0.5] })), leather); // (solid : siège plein, pas deux arcs)
   const inner = secs.slice(1, 7).map((sec) => ({ ...sec, p: [0, sec.p[1] + 0.012, sec.p[2]], rx: sec.rx * 0.8, ry: 0.01, ryb: 0.01 }));
-  add(body, loft(inner, { radial: 12, sub: 2, round: [0.3, 0.3] }), st.quilted ? P.quiltMat(0x2b2522) : P.suedeMat(color));
+  add(body, solid(loft(inner, { radial: 12, sub: 2, round: [0.3, 0.3] })), st.quilted ? P.quiltMat(0x2b2522) : P.suedeMat(color));
 
   // Quartiers (ou jupes western) posés sur le flanc : grille qui suit le corps sculpté.
   const th0 = 0.5;
@@ -384,7 +400,8 @@ function horseSaddle(model, gear, add) {
   }
   // Sangle sous le ventre (sangle large en mohair pour la western), juste derrière les coudes.
   const girthMat = st.western ? P.clothMat(0x8a6a48, THREE.FrontSide) : P.leatherMat(0x3b2110);
-  add(body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + L * 0.1], 18, 0.012, deg(-10), deg(-170)), st.western ? 0.045 : 0.03, 0.005), girthMat);
+  // (la sangle part sous le quartier et passe sous le ventre, un peu inclinée vers l'avant)
+  add(body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + L * 0.13], 22, 0.014, deg(30), deg(-210), 0.3), st.western ? 0.045 : 0.03, 0.005), girthMat);
 }
 
 // ------------------------------------------------------------------ autres animaux

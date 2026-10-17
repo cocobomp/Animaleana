@@ -967,7 +967,23 @@ export class Thumbs {
         if (!(o.isMesh || o.isLine || o.isPoints) || !o.visible) return;
         for (const mm of Array.isArray(o.material) ? o.material : [o.material]) if (mm && !byMat.has(mm)) byMat.set(mm, o);
       });
-      for (const mesh of new Set(byMat.values())) await step(() => r.compile(mesh, this.camera, this.scene));
+      // Le pilote finit souvent d'assembler un shader seulement à sa première utilisation : on la provoque ici
+      // (lecture de ses variables), un shader par étape, plutôt que tous d'un coup au moment du rendu.
+      const link = (mats) => {
+        for (const mm of mats) {
+          try {
+            r.properties.get(mm)?.currentProgram?.getUniforms?.();
+          } catch {
+            /* moteur sans ces détails : le rendu s'en chargera */
+          }
+        }
+      };
+      for (const mesh of new Set(byMat.values())) {
+        await step(() => {
+          r.compile(mesh, this.camera, this.scene);
+          link(Array.isArray(mesh.material) ? mesh.material : [mesh.material]);
+        });
+      }
     }
     if (r.initTexture) {
       const texs = new Set();

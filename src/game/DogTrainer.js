@@ -63,6 +63,18 @@ export class DogTrainer {
 
   // ---------------------------------------------------------------- arrivées
 
+  /** Tout près du joueur, devant la caméra (visiteur appelé pour tester : force). */
+  nearSpot() {
+    const g = this.game;
+    const p = g.player.position;
+    const d = new THREE.Vector3();
+    g.camera.getWorldDirection(d);
+    d.y = 0;
+    if (d.lengthSq() < 1e-4) d.set(0, 0, 1);
+    d.normalize();
+    return { x: p.x + d.x * 3 - d.z * 1.2, z: p.z + d.z * 3 + d.x * 1.2 };
+  }
+
   /** Point de rendez-vous : devant la niche (ou dans la cour, près de la maison). */
   meetingSpot() {
     const k = this.game.world.interactables.find((i) => i.kind === 'kennel');
@@ -138,7 +150,7 @@ export class DogTrainer {
   spawnClient(req, near = false) {
     const g = this.game;
     this.clearVisitor();
-    const spot = near ? { x: g.player.position.x + 2.2, z: g.player.position.z + 1.5 } : this.meetingSpot();
+    const spot = near ? this.nearSpot() : this.meetingSpot();
     const npc = new VisitorEntity(g, this.ownerOf(req));
     const start = near ? { x: spot.x + 1.5, z: spot.z + 1 } : GATE;
     npc.place(start.x, start.z);
@@ -164,7 +176,7 @@ export class DogTrainer {
     const g = this.game;
     this.clearVisitor();
     const req = { ownerName: a.client.ownerName, ownerSex: a.client.ownerSex, ownerSeed: a.client.ownerSeed, dog: a };
-    const spot = near ? { x: g.player.position.x + 2.2, z: g.player.position.z + 1.5 } : this.meetingSpot();
+    const spot = near ? this.nearSpot() : this.meetingSpot();
     const npc = new VisitorEntity(g, this.ownerOf(req));
     const start = near ? { x: spot.x + 1.5, z: spot.z + 1 } : GATE;
     npc.place(start.x, start.z);

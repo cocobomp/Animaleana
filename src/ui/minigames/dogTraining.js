@@ -175,6 +175,9 @@ export function commandsFor(species, action = 'dt_obey') {
 
 export const REWARD_WINDOW = 1.6; // secondes pour récompenser au bon moment
 const HEEL_ZONE = 16; // « au pied » : le chien à moins de 16 px de sa place, à côté de toi
+const HEEL_BACK = 70; // sa place : l'épaule à ta jambe (70 px devant toi, il marche vers la gauche)
+const DOG_X = 200; // le chien face à toi (assis, couché)
+const STAY_X = 170; // « pas bouger » : il attend là pendant que tu recules
 
 /**
  * Note d'une séance d'ordres : la moyenne des récompenses (1 = donnée vite, 0,75 = un peu tard
@@ -215,8 +218,8 @@ export function commandsGame(ctx) {
   let misses = 0;
   const timings = [];
   let pose = 'stand';
-  let dogX = 220;
-  let dogTarget = 220;
+  let dogX = DOG_X;
+  let dogTarget = DOG_X;
   let playerX = PLAYER_X;
   let wrongFlash = 0;
   let distractor = null; // { emoji, x, y, speed, breaks } : écureuil, ballon qui passe
@@ -252,13 +255,13 @@ export function commandsGame(ctx) {
     distractor = null;
     playerX = PLAYER_X;
     pose = 'stand';
-    dogTarget = 220;
+    dogTarget = DOG_X;
     if (wanted === 'stay') {
-      dogTarget = 200;
+      dogTarget = STAY_X;
       playerX = 290;
       pose = sitPose;
     } else if (wanted === 'heel') {
-      dogTarget = PLAYER_X - 40;
+      dogTarget = PLAYER_X - HEEL_BACK;
     } else if (wanted === 'recall') {
       dogTarget = 80;
       sniffing = true;
@@ -398,7 +401,7 @@ export function commandsGame(ctx) {
         }
       } else if (phase === 'broke') {
         if (timer > 1) {
-          dogTarget = 200;
+          dogTarget = STAY_X;
           pose = sitPose;
           playerX = 290;
           attempts = 1; // la deuxième fois, il tiendra
@@ -408,20 +411,20 @@ export function commandsGame(ctx) {
       } else if (phase === 'walk') {
         playerX -= 48 * dt;
         heelPhase += dt * 1.2;
-        dogX = playerX - 40 + heelOffset();
+        dogX = playerX - HEEL_BACK + heelOffset();
         dogTarget = dogX;
         if (playerX < 90) {
           // Au bout de la cour sans récompense : on revient et on recommence.
           misses++;
           ctx.hint(tg('dt_mg_heel_again'), 'warn');
           playerX = PLAYER_X;
-          dogX = PLAYER_X - 40;
+          dogX = PLAYER_X - HEEL_BACK;
           dogTarget = dogX;
           attempts = 1;
           setPhase('ask');
         }
       } else if (phase === 'come') {
-        dogTarget = playerX - 60;
+        dogTarget = playerX - 100; // il s'assoit devant toi
         if (Math.abs(dogTarget - dogX) < 3) {
           pose = sitPose;
           setPhase('window');
@@ -462,10 +465,11 @@ export function commandsGame(ctx) {
       // Au pied : la place du chien, à côté de toi (verte quand il y est).
       if (wanted === 'heel' && (phase === 'walk' || phase === 'ask')) {
         g.fillStyle = heelOk() ? 'rgba(63,174,98,0.75)' : 'rgba(255,255,255,0.55)';
-        rrect(g, playerX - 40 - HEEL_ZONE - 24, FLOOR + 6, HEEL_ZONE * 2 + 48, 10, 5);
+        rrect(g, playerX - HEEL_BACK - HEEL_ZONE - 24, FLOOR + 6, HEEL_ZONE * 2 + 48, 10, 5);
         g.fill();
       }
-      player(g, playerX, phase === 'hold');
+      const heelWalk = wanted === 'heel' && (phase === 'walk' || phase === 'ask');
+      if (!heelWalk) player(g, playerX, phase === 'hold');
       // Cercle vert : c'est le bon moment pour la friandise.
       const now = rewardNow();
       if (now) {
@@ -487,6 +491,7 @@ export function commandsGame(ctx) {
         wag: yay > 0 || phase === 'come' || now,
         earsBack: wrongFlash > 0,
       });
+      if (heelWalk) player(g, playerX, false);
       if (wanted === 'recall' && phase === 'ask') {
         if (sniffing) emoji(g, '🐾', dogX - 34, FLOOR - 24, 22);
         else emoji(g, '👀', dogX, FLOOR - 125 - Math.sin(ctx.time * 8) * 4, 30);
@@ -628,6 +633,7 @@ export function jumpGame(ctx) {
       jump = -1;
       back = 1;
       calm = 0;
+      timer = 3 + Math.random() * 1.5; // il reste au sol : le temps de le récompenser
       fx.text(240, 150, t('mg_bravo'), '#2f8a5f');
       ctx.hint(t('dt_mg_jump_wait', { name: a.name }), 'good');
     } else {

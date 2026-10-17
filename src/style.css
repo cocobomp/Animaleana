@@ -125,14 +125,16 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 
 .avatar-editor { max-width: 760px; }
 .avatar-layout { display: grid; grid-template-columns: minmax(180px, 1fr) 1.4fr; gap: 16px; }
-.avatar-preview { background: radial-gradient(circle at 50% 40%, #fff, #e6efe6); border-radius: 18px; min-height: 320px; overflow: hidden; }
-.avatar-preview canvas { width: 100%; height: 100%; }
+.avatar-preview { position: relative; background: radial-gradient(circle at 50% 40%, #fff, #e6efe6); border-radius: 18px; min-height: 320px; overflow: hidden; }
+.avatar-preview canvas { display: block; width: 100%; height: 100%; }
+/* « Fais-le tourner du doigt » : discret, en bas de l'aperçu, ne gêne pas le glisser. */
+.avatar-spin { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: 0.8rem; color: var(--muted); pointer-events: none; opacity: 0.85; }
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .swatch-btn { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 1px var(--line); }
 .swatch-btn.selected { box-shadow: 0 0 0 3px var(--primary); }
 @media (max-width: 600px) {
   .avatar-layout { grid-template-columns: 1fr; }
-  .avatar-preview { min-height: 240px; height: 240px; }
+  .avatar-preview { min-height: 280px; height: 280px; }
 }
 
 /* ---------- HUD */

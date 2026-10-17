@@ -26,8 +26,9 @@ export const RIG = {
   headScale: 1.1,
 };
 
-// Paupière supérieure : rotation (rad) ouverte / fermée.
-export const LID_OPEN = -0.62;
+// Paupière supérieure : rotation (rad) ouverte / fermée. Ouverte, elle est bien relevée au-dessus de
+// l'iris (à -0,62, elle tombait à moitié sur l'œil : air endormi ou triste).
+export const LID_OPEN = -1.05;
 export const LID_CLOSED = 0.5;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

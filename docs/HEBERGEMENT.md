@@ -44,7 +44,9 @@ connexion. C'est pour cela que l'hébergement Firebase est prévu.
 | Élément | État | Détail |
 |---|---|---|
 | Connexion avec Google | ✅ activée | Le nom affiché dans la fenêtre Google (« Continuer vers … ») se règle ici : https://console.cloud.google.com/auth/branding?project=lafermeamadichelle → **App name** : `La ferme à Madichelle` |
-| Adresses autorisées pour la connexion | ✅ | `localhost`, `lafermeamadichelle.web.app`, `lafermeamadichelle.firebaseapp.com`, `cocobomp.github.io` |
+| Adresses autorisées pour la connexion (Firebase) | ✅ | `localhost`, `lafermeamadichelle.web.app`, `lafermeamadichelle.firebaseapp.com`, `cocobomp.github.io` |
+| URI de redirection du client OAuth (Google Cloud) | ⚠️ à compléter | Seule `https://lafermeamadichelle.firebaseapp.com/__/auth/handler` est autorisée. Il manque `https://lafermeamadichelle.web.app/__/auth/handler`, nécessaire pour l'appli ajoutée à l'écran d'accueil (voir « Connexion Google » plus bas) |
+| Règles de sécurité de la synchro v2 (`rev`) | ⚠️ à mettre en ligne **avant** de publier la v2 | Voir « Mettre les règles en ligne » plus bas |
 | Base des sauvegardes | ✅ créée à **Zurich** (`europe-west6`) | Une partie = un document `users/<compte>/saves/<partie>` |
 | Règles de sécurité | ✅ en ligne (fichier `firestore.rules` du dépôt) | Chaque compte ne lit et n'écrit que ses propres parties ; sans compte, rien ; taille limitée |
 | Hébergement | ✅ en ligne | https://lafermeamadichelle.web.app |
@@ -60,6 +62,73 @@ connexion. C'est pour cela que l'hébergement Firebase est prévu.
 
 Le lien GitHub ↔ Google : *IAM → Workload Identity Federation*, groupe `github`, fournisseur `animaleana`
 (https://console.cloud.google.com/iam-admin/workload-identity-pools?project=lafermeamadichelle).
+
+## Connexion Google : quelle page de connexion, et le réglage qui manque
+
+Le jeu ouvre la page de connexion de Google de deux façons (code : `src/cloud/firebase.js`) :
+
+- **Partout (ordinateur, téléphone dans le navigateur, ancienne adresse github.io)** : une fenêtre (popup)
+  servie par `https://lafermeamadichelle.firebaseapp.com/__/auth/handler`. Cette adresse est déjà autorisée :
+  rien à faire.
+- **Seulement dans l'appli ajoutée à l'écran d'accueil, ouverte sur https://lafermeamadichelle.web.app** :
+  une fenêtre ne peut pas revenir dans l'appli, on passe donc par une redirection servie par le jeu lui-même,
+  `https://lafermeamadichelle.web.app/__/auth/handler`. **Cette adresse doit être ajoutée au client OAuth**,
+  sinon Google répond « Erreur 400 : redirect_uri_mismatch » :
+
+1. Ouvrir https://console.cloud.google.com/apis/credentials?project=lafermeamadichelle
+2. Sous « ID clients OAuth 2.0 », cliquer sur **Web client (auto created by Google Service)**
+   (identifiant `612724115048-0eooua2ho8eeu5spasqeolt5r839q02d.apps.googleusercontent.com`).
+3. Dans **URI de redirection autorisés**, cliquer sur **+ Ajouter un URI** et coller
+   `https://lafermeamadichelle.web.app/__/auth/handler` (garder celui de firebaseapp.com).
+4. Dans **Origines JavaScript autorisées**, vérifier que `https://lafermeamadichelle.web.app` y est (l'ajouter sinon).
+5. **Enregistrer**, attendre quelques minutes, puis vérifier dans un terminal (le résultat ne doit plus contenir
+   `/signin/oauth/error`) :
+   `curl -s -o /dev/null -w '%{redirect_url}\n' 'https://accounts.google.com/o/oauth2/v2/auth?response_type=id_token&client_id=612724115048-0eooua2ho8eeu5spasqeolt5r839q02d.apps.googleusercontent.com&redirect_uri=https://lafermeamadichelle.web.app/__/auth/handler&scope=openid&nonce=x'`
+
+Tant que ce n'est pas fait, la connexion marche partout sauf dans l'appli de l'écran d'accueil (iPhone, iPad).
+
+## Synchro des parties (version 2) : ce qu'il faut savoir
+
+Code : `src/sim/cloudSync.js` (les décisions), `src/cloud/sync.js` (les appliquer), `src/cloud/account.js`
+(quand), `firestore.rules` (ce que la base accepte). Principe : **aucune partie n'est jamais perdue ni écrasée
+en silence**.
+
+- Chaque document en ligne a un numéro de version `rev` (1 à la création, +1 à chaque écriture). Les règles
+  refusent une écriture qui ne fait pas exactement `rev + 1`, et le jeu écrit dans une transaction qui relit
+  la `rev` juste avant : deux appareils qui écrivent en même temps ne s'écrasent pas, le second recommence.
+- Les horloges des appareils ne décident de rien : le jeu regarde seulement ce qui a changé depuis le dernier
+  accord (de chaque côté). Si les deux côtés ont changé, **les deux versions sont gardées** : la plus récente
+  reste la partie, l'autre devient une copie de secours sur l'appareil (« Léa · secours 17/10 »).
+- Une partie ouverte (dans cet onglet ou un autre) n'est jamais remplacée ni effacée pendant qu'on joue.
+- Sur une tablette partagée, la première connexion demande quelles parties mettre dans le compte (les autres
+  restent sur l'appareil). Une petite ☁️ marque les parties du compte connecté.
+- Effacer une partie liée au compte connecté l'efface sur tous ses appareils ; sinon, seulement sur l'appareil.
+- « 🔒 Mes données en ligne » (encart du compte) : « Effacer mes parties en ligne » supprime les documents du
+  compte (les parties restent sur l'appareil) ; « Supprimer mon compte » supprime aussi le compte Google du jeu.
+
+### Mettre les règles en ligne (à faire avant de publier la v2)
+
+La v2 écrit le champ `rev` : avec les anciennes règles, ses écritures seraient refusées. L'action GitHub ne
+publie que les fichiers du jeu (pas les règles). Avant de fusionner la v2 dans `main` :
+
+1. Vérifier le fichier `firestore.rules` du dépôt.
+2. Le mettre en ligne : `npx firebase-tools deploy --only firestore:rules --project lafermeamadichelle`
+   (avec un compte qui a le droit de modifier les règles), ou le coller dans
+   https://console.firebase.google.com/project/lafermeamadichelle/firestore/rules puis **Publier**.
+
+Les anciennes versions du jeu (encore en cache sur un appareil) ne peuvent alors plus écrire : elles affichent
+« Le compte ne répond pas » jusqu'à leur mise à jour, sans rien perdre.
+
+### Tester avec les émulateurs (sur un ordinateur)
+
+1. `npx firebase-tools emulators:start --only auth,firestore` (un `firebase.json` d'émulateurs qui pointe vers
+   `firestore.rules` ; ports par défaut : auth 9099, Firestore 8080).
+2. Règles et synchro avec le vrai SDK :
+   `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx vitest run tests/firestoreRules.test.js tests/cloudEmulator.test.js`
+   (sans cette variable, ces tests sont sautés).
+3. Dans le jeu (`npx vite`, mode développement seulement) : dans la console du navigateur,
+   `localStorage.setItem('animaleana.cloud.emulator', '127.0.0.1:9099:8080')` (« hôte » seul = ports 9099 et 8089),
+   puis recharger : la connexion et la synchro passent par les émulateurs.
 
 ## Mise en ligne automatique
 

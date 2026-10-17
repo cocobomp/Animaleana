@@ -30,7 +30,8 @@ import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.
 import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeason } from '../sim/places.js';
 import { adoptionPrice, shopPrice, stageAgeDays } from '../sim/adoption.js';
 import { checkObjectives } from '../sim/objectives.js';
-import { saveProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
+import { loadProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
+import { deviceStore, saveGuarded } from '../sim/saveStore.js'; // sauvegarde qui n'écrase rien en silence
 import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
 import { addHelperXp, tireHelper, restHelper, updateBreak, onBreak, startBreak } from '../sim/helpers.js'; // les aides progressent
 import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
@@ -40,7 +41,7 @@ import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash, equipHelmet, riderHelmet } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
-import { t, L } from '../i18n.js';
+import { t, L, getLang } from '../i18n.js';
 // Vue d'ensemble (d'en haut) et constructions du joueur.
 import { Structures } from './Structures.js';
 import { ManagementView } from './ManagementView.js';
@@ -154,10 +155,22 @@ export class Game {
 
   start(profile) {
     if (!this.modelsLoaded) {
-      this.modelsReady.then(() => this.start(profile));
+      // Partie « en train de s'ouvrir » (comptée comme ouverte par la synchro, src/main.js). Quand elle démarre
+      // vraiment, on la relit sur l'appareil : une synchro a pu la mettre à jour pendant le chargement des modèles.
+      this.opening = profile;
+      this.emit('opening', profile);
+      this.modelsReady.then(() => {
+        if (this.opening !== profile) return; // une autre partie a été choisie entre-temps
+        this.opening = null;
+        this.start(loadProfile(profile.id) ?? profile);
+      });
       return;
     }
+    this.opening = null;
     this.profile = profile;
+    // Version de départ sur l'appareil : Game.save ne l'écrasera pas en silence si quelqu'un d'autre l'a changée.
+    this.savedAt = profile.updatedAt;
+    this.savedKey = null;
     this.rig.mode = profile.settings.camera ?? 'third';
     this.player = this.player ?? new Player(this.scene, this.world, profile.avatar);
     this.player.setAvatar(profile.avatar);
@@ -189,7 +202,6 @@ export class Game {
     this.activities.abort();
     const saved = this.save(); // avant d'annuler un trajet en cours : on ne sauvegarde pas un voyage à moitié fait
     this.tripFlow.reset();
-    this.emit('stop');
     audio.setActive(false); // écran des profils : silence
     this.marker.hide();
     if (this.player?.mount) this.player.dismount();
@@ -200,6 +212,9 @@ export class Game {
     this.helpers.clear();
     this.running = false;
     this.profile = null;
+    // Prévenu seulement maintenant : la partie est vraiment arrêtée (la synchro du retour au menu ne doit plus
+    // pouvoir sauvegarder un voyage à moitié fait, ni voir la partie comme ouverte).
+    this.emit('stop');
     return saved;
   }
 
@@ -212,7 +227,19 @@ export class Game {
     for (const e of this.entities.values()) {
       e.data.pos = [e.position.x, e.position.z];
     }
-    return saveProfile(this.profile);
+    // Rien n'est écrit si rien n'a changé ; si la partie a été changée ailleurs sur l'appareil (autre onglet,
+    // synchro), cette autre version est d'abord gardée en copie de secours.
+    const r = saveGuarded(deviceStore(), this.profile, {
+      lastAt: this.savedAt,
+      lastKey: this.savedKey,
+      backupName: (p) => t('cloud_backupName', { name: p.name, date: new Date().toLocaleDateString(getLang() === 'fr' ? 'fr-CH' : 'en-GB', { day: '2-digit', month: '2-digit' }) }),
+    });
+    if (r.ok) {
+      this.savedAt = r.at;
+      this.savedKey = r.key;
+    }
+    if (r.backup) this.emit('backupKept', r.backup);
+    return r.ok;
   }
 
   get day() {

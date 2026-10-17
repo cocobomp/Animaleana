@@ -147,6 +147,12 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .cloud-actions button { flex: 1 1 140px; }
 .cloud-error { margin: 0; color: var(--danger); font-size: 0.9em; line-height: 1.35; }
 .profile-play .sv-badge, .sv-badge { color: #8a5a00; font-weight: 600; }
+/* Compte Google : ☁️ sur les parties du compte connecté, « Mettre dans mon compte » sur les autres. */
+.profile .cloud-link { flex: 0 1 8.5em; min-width: 0; padding: 6px 8px; font-size: 0.8em; line-height: 1.2; white-space: normal; }
+.cloud-mark { font-size: 0.9em; }
+.cloud-data summary { cursor: pointer; font-size: 0.9em; color: var(--muted); padding: 4px 0; }
+.cloud-data[open] summary { margin-bottom: 8px; }
+.cloud-claim .sv-pick { max-height: 50vh; overflow: auto; }
 .sv-title { font-size: 1.3rem; margin: 0.1em 0 0.4em; line-height: 1.25; }
 .sv-meta { margin-top: -4px; }
 .sv-card .card-main b { font-size: 1.1rem; }

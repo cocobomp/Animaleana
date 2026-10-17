@@ -47,15 +47,18 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  // Seulement les fichiers du jeu : ni les autres sites (Google, Firebase), ni les pages de connexion
-  // de Firebase servies à la même adresse (/__/auth/…), qui ne doivent jamais remplacer le jeu en cache.
   const url = new URL(e.request.url);
+  const scope = new URL('./', self.location).pathname;
+  // Autres adresses (Google, Firestore…) et pages réservées de Firebase (/__/auth/handler, /__/auth/iframe…) :
+  // le navigateur s'en occupe, jamais le cache (elles prendraient sinon la place du jeu).
   if (url.origin !== self.location.origin || url.pathname.includes('/__/')) return;
   // La page elle-même : d'abord le réseau (un seul rechargement suffit pour avoir la nouvelle version),
-  // le cache seulement hors ligne. Les fichiers du jeu ont un nom unique par version : cache d'abord.
+  // le cache seulement hors ligne. Seule la vraie page du jeu est gardée comme index.html.
+  // Les fichiers du jeu ont un nom unique par version : cache d'abord.
   if (e.request.mode === 'navigate') {
+    const page = url.pathname === scope || url.pathname === scope + 'index.html';
     e.respondWith(fetch(e.request).then((res) => {
-      if (res.ok) {
+      if (page && res.ok) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put('./index.html', copy));
       }
@@ -64,8 +67,10 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   e.respondWith(caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request).then((res) => {
-    const copy = res.clone();
-    caches.open(CACHE).then((c) => c.put(e.request, copy));
+    if (res.ok) {
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put(e.request, copy));
+    }
     return res;
   }).catch(() => caches.match('./index.html'))));
 });

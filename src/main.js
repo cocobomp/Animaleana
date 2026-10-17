@@ -6,7 +6,9 @@ import { UI } from './ui/UI.js';
 import { Game } from './game/Game.js';
 import { Tutorial } from './ui/tutorial.js';
 import { initUpdates } from './ui/updates.js'; // bandeau « nouvelle version prête »
-import { startCloud, syncNow } from './cloud/account.js'; // compte Google facultatif (src/cloud/)
+import { startCloud, syncNow, onCloudChange } from './cloud/account.js'; // compte Google facultatif (src/cloud/)
+import { chooseClaims } from './ui/cloudAccount.js';
+import { markOpen, markClosed, openElsewhere, newTabId, BEAT_MS } from './sim/openGames.js'; // parties ouvertes (onglets)
 
 setLang(getLang());
 
@@ -19,16 +21,53 @@ ui.tutorial = new Tutorial(ui, game);
 ui.showProfiles();
 initUpdates(app, () => game.running && game.save());
 
+// Parties ouvertes : celle de cet onglet (aussi pendant qu'elle s'ouvre), et celles des autres onglets
+// (registre partagé, battement toutes les 10 s). La synchro ne les remplace ni ne les efface jamais.
+const tab = newTabId();
+const mine = () => game.profile?.id ?? game.opening?.id ?? null;
+const beat = () => {
+  const id = mine();
+  if (id) markOpen(tab, id);
+};
+game.on('opening', beat);
+game.on('start', beat);
+setInterval(beat, BEAT_MS);
+addEventListener('pagehide', () => markClosed(tab));
+
 // Compte Google (facultatif) : si ce navigateur était connecté, on se reconnecte et on synchronise
-// les parties (au démarrage, toutes les 5 minutes, en arrière-plan et en revenant au menu).
-// La partie ouverte n'est jamais remplacée pendant qu'on joue : elle est seulement envoyée.
+// les parties (au démarrage, à la connexion, au retour au menu, en arrière-plan, et toutes les 5 minutes
+// pendant une partie, onglet visible). La partie ouverte n'est jamais remplacée pendant qu'on joue.
 startCloud({
-  busy: () => (game.profile ? [game.profile.id] : []),
+  busy: () => [mine(), ...openElsewhere({ except: tab })].filter(Boolean),
+  playing: () => game.running,
   beforeSync: () => game.running && game.save(),
+  // La question « quelles parties mettre dans ton compte ? » : seulement sur l'écran des profils.
+  canAsk: () => !game.running && !game.opening && !ui.screen.hidden && Boolean(ui.screen.querySelector('.profiles')),
+  chooseClaims: (parties) => chooseClaims(ui, parties),
   appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev',
   backupName: (p) => t('cloud_backupName', { name: p.name, date: new Date().toLocaleDateString(getLang() === 'fr' ? 'fr-CH' : 'en-GB', { day: '2-digit', month: '2-digit' }) }),
 });
-game.on('stop', () => syncNow());
+// Retour au menu : la partie est vraiment arrêtée (Game.stop prévient en dernier), puis on synchronise.
+game.on('stop', () => {
+  markClosed(tab);
+  syncNow();
+});
+// Pendant la partie : prévenir (une fois) si elle a été jouée ailleurs, ou si l'appareil est plein.
+const warned = new Set();
+let lastReport = null;
+onCloudChange((s) => {
+  const r = s.report;
+  if (!r || r === lastReport) return;
+  lastReport = r;
+  if (game.running && game.profile && r.heldIds?.includes(game.profile.id) && !warned.has(game.profile.id)) {
+    warned.add(game.profile.id);
+    ui.toast(t('cloud_held'), 9000);
+  }
+  if (r.storageFull && !warned.has('storage')) {
+    warned.add('storage');
+    ui.toast(t('cloud_storageFull'), 9000);
+  }
+});
 
 // Téléphone : pas de zoom à deux doigts ni au double-tap (la mise en page est fixe : zoomée, la fiche
 // d'un animal sort de l'écran et les boutons du haut deviennent inaccessibles). Le CSS met aussi touch-action: manipulation.

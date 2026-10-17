@@ -45,11 +45,36 @@ export function horseBuild(breed, look = {}) {
   return {
     ...b,
     type: breed?.type ?? 'warmblood',
-    profile: breed?.profile ?? 'straight', // 'dish' (tête concave : arabe, welsh), 'convex' (busquée : lusitanien, PRE)
+    profile: breed?.profile ?? 'straight', // 'dish' (tête concave : arabe, welsh), 'convex' (busquée : lusitanien, PRE), 'square' (carrée : camargue)
     maneStyle: breed?.maneStyle ?? 'normal', // 'brush' (Fjord), 'long', 'thick', 'short'
     feathers: breed?.feathers ?? 0, // fanons : 0 (aucun) à 1 (Irish Cob, Frison)
     tailSet: breed?.tailSet ?? 0, // 0 = queue portée bas, 1 = queue relevée (arabe)
     sheen: breed?.sheen ?? 0, // reflet métallique de la robe (Akhal-Teké)
+  };
+}
+
+/**
+ * Gabarit d'un poulain (premiers mois) à partir de celui de sa race : membres longs, corps court et
+ * étroit, grosse tête, encolure courte et fine, crinière courte en brosse, petite queue touffue.
+ */
+export function foalBuild(b) {
+  return {
+    ...b,
+    foal: 1,
+    legs: b.legs * 1.2,
+    girth: b.girth * 0.84,
+    back: b.back * 0.85,
+    head: b.head * 1.16,
+    neck: b.neck * 0.84,
+    neckW: b.neckW * 0.86,
+    crest: Math.min(b.crest, 1) * 0.7,
+    croup: b.croup * 0.93,
+    bone: b.bone * 0.94,
+    mane: 1,
+    maneN: Math.max(0.9, b.maneN * 0.9),
+    maneStyle: 'foal',
+    tail: 0.42,
+    feathers: b.feathers * 0.4,
   };
 }
 
@@ -84,6 +109,7 @@ export function horseCoatTraits(look = {}) {
     blanket: blanket ? 1 : 0,
     socks: pattern === 'socks',
     mealy: look.mealy ?? 0,
+    flea: look.flea ? 1 : 0, // gris truité : petites mouchetures brun-roux sur la robe blanche
   };
 }
 

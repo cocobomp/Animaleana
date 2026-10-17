@@ -33,20 +33,28 @@ export function gaitDuty(gait, v) {
 
 /**
  * Sabot d'un membre pour une allure : décalage z (avance par rapport à sa place au repos), hauteur y,
- * et s'il est en appui. cyc : position dans la foulée (en tours) ; S : longueur de l'appui.
+ * et s'il est en appui. cyc : position dans la foulée (en tours) ; S : longueur de l'appui. out :
+ * objet réutilisé (pas d'allocation à chaque image).
  */
-export function hoofOffset(gait, leg, cyc, S, lift, duty = GAITS[gait].duty) {
+export function hoofOffset(gait, leg, cyc, S, lift, duty = GAITS[gait].duty, out = {}) {
   let psi = cyc - GAITS[gait].touchdown[leg];
   psi -= Math.floor(psi);
-  if (psi < duty) return { z: S / 2 - (psi / duty) * S, y: 0, stance: true };
+  if (psi < duty) {
+    out.z = S / 2 - (psi / duty) * S;
+    out.y = 0;
+    out.stance = true;
+    return out;
+  }
   const s = (psi - duty) / (1 - duty);
   const front = leg < 2;
   // Retour vers l'avant (courbe d'Hermite) : au départ et à l'arrivée, le sabot recule à la vitesse du
   // corps, comme pendant l'appui (il se pose sans glisser) ; l'antérieur monte plus vite (genou replié).
   const k = (1 - duty) / duty;
   const e = (-2 - 2 * k) * s ** 3 + (3 + 3 * k) * s * s - k * s;
-  const y = lift * Math.sin(Math.PI * s ** (front ? 0.78 : 0.9));
-  return { z: -S / 2 + S * e, y, stance: false };
+  out.z = -S / 2 + S * e;
+  out.y = lift * Math.sin(Math.PI * s ** (front ? 0.78 : 0.9));
+  out.stance = false;
+  return out;
 }
 
 /**
@@ -70,9 +78,10 @@ export function legRig(pivot, knee, hoof, bend, reach = 0.9995) {
 
 /**
  * Cinématique inverse à deux os : P (pivot) et T (sabot visé), dans le même repère. Renvoie a (rotation
- * x du pivot dans ce repère), b (rotation x du genou par rapport au pivot) et le sabot atteint.
+ * x du pivot dans ce repère), b (rotation x du genou par rapport au pivot) et le sabot atteint (out :
+ * objet réutilisé).
  */
-export function legIK(rig, P, T) {
+export function legIK(rig, P, T, out = { hoof: {} }) {
   const { L1, L2, bend } = rig;
   const dz = T.z - P.z;
   const dy = T.y - P.y;
@@ -83,11 +92,35 @@ export function legIK(rig, P, T) {
   const fD = Math.atan2(dy, dz);
   const fu = bend > 0 ? fD - alpha : fD + alpha;
   const fl = fu + beta;
-  return {
-    a: rig.fu0 - fu,
-    b: rig.b0 - beta,
-    hoof: { z: P.z + L1 * Math.cos(fu) + L2 * Math.cos(fl), y: P.y + L1 * Math.sin(fu) + L2 * Math.sin(fl) },
-  };
+  out.a = rig.fu0 - fu;
+  out.b = rig.b0 - beta;
+  out.hoof.z = P.z + L1 * Math.cos(fu) + L2 * Math.cos(fl);
+  out.hoof.y = P.y + L1 * Math.sin(fu) + L2 * Math.sin(fl);
+  return out;
+}
+
+/** Position d'un pivot (repère du corps au repos) une fois le corps monté de by et penché de pitch. */
+export function pivotAt(rig, slide, by, pitch, out = {}) {
+  const y = rig.pivot.y;
+  const z = rig.pivot.z + slide;
+  const c = Math.cos(pitch);
+  const s = Math.sin(pitch);
+  out.y = y * c - z * s + by;
+  out.z = y * s + z * c;
+  return out;
+}
+
+const _P = [{}, {}, {}, {}];
+const _room = new Float64Array(4);
+
+/** Marge de chaque membre (de combien le corps peut monter) pour un tangage donné ; renvoie z avant − z arrière. */
+function roomAt(rigs, targets, slide, pitch) {
+  for (let i = 0; i < 4; i++) {
+    const P = pivotAt(rigs[i], slide[i], 0, pitch, _P[i]);
+    const dz = targets[i].z - P.z;
+    _room[i] = targets[i].y + Math.sqrt(Math.max(0, rigs[i].dlim * rigs[i].dlim - dz * dz)) - P.y;
+  }
+  return (_P[0].z + _P[1].z) / 2 - (_P[2].z + _P[3].z) / 2;
 }
 
 /**
@@ -95,68 +128,73 @@ export function legIK(rig, P, T) {
  * visé reste atteignable. targets[i] : { y, z } du sabot ; slide[i] : avance du pivot (épaule qui
  * glisse avec la jambe) ; cap : hauteur maximale au-dessus du repos.
  */
-export function bodyPose(rigs, targets, slide, cap = 0) {
+export function bodyPose(rigs, targets, slide, cap = 0, out = {}) {
   let pitch = 0;
-  // Marge de chaque membre (de combien le corps peut monter) pour un tangage donné.
-  const roomAt = (p) => rigs.map((r, i) => {
-    const P = pivotAt(r, slide[i], 0, p);
-    const dz = targets[i].z - P.z;
-    return { room: targets[i].y + Math.sqrt(Math.max(0, r.dlim * r.dlim - dz * dz)) - P.y, z: P.z };
-  });
   // Quelques passes : le tangage avance ou recule aussi les épaules et les hanches.
   for (let it = 0; it < 3; it++) {
-    const R = roomAt(pitch);
-    const df = Math.min(cap, R[0].room, R[1].room);
-    const dh = Math.min(cap, R[2].room, R[3].room);
-    pitch += Math.max(-0.08, Math.min(0.08, (dh - df) / ((R[0].z + R[1].z) / 2 - (R[2].z + R[3].z) / 2)));
+    const span = roomAt(rigs, targets, slide, pitch);
+    const df = Math.min(cap, _room[0], _room[1]);
+    const dh = Math.min(cap, _room[2], _room[3]);
+    pitch += Math.max(-0.08, Math.min(0.08, (dh - df) / span));
   }
   pitch = Math.max(-0.22, Math.min(0.22, pitch));
   // Hauteur : tous les sabots visés restent atteignables.
-  const R = roomAt(pitch);
-  return { by: Math.min(cap, ...R.map((x) => x.room)), pitch };
+  roomAt(rigs, targets, slide, pitch);
+  out.by = Math.min(cap, _room[0], _room[1], _room[2], _room[3]);
+  out.pitch = pitch;
+  return out;
 }
 
-/** Position d'un pivot (repère du corps au repos) une fois le corps monté de by et penché de pitch. */
-export function pivotAt(rig, slide, by, pitch) {
-  const y = rig.pivot.y;
-  const z = rig.pivot.z + slide;
-  const c = Math.cos(pitch);
-  const s = Math.sin(pitch);
-  return { y: y * c - z * s + by, z: y * s + z * c };
+const GAIT_NAMES = ['walk', 'trot', 'gallop'];
+const _off = {};
+
+/** Résultat réutilisable de gaitFrame (un par cheval : pas d'allocation à chaque image). */
+export function makeGaitFrame() {
+  return {
+    by: 0,
+    pitch: 0,
+    slide: [0, 0, 0, 0],
+    targets: [0, 1, 2, 3].map(() => ({ y: 0, z: 0 })),
+    legs: [0, 1, 2, 3].map(() => ({ a: 0, b: 0, slide: 0, lift: 0, hoof: { y: 0, z: 0 }, target: null, P: {} })),
+  };
 }
 
 /**
  * Une image de la foulée : pour chaque membre, sabot visé (appui au sol, soutien levé), glissement de
  * l'épaule, puis pose du corps et angles. w : poids des allures { walk, trot, gallop } (somme 1) ;
  * cyc : position dans la foulée (tours) ; stride : longueur de foulée ; v : vitesse ; H : hauteur de
- * l'épaule (échelle des levers de sabot) ; move : 0 à l'arrêt, 1 en marche.
+ * l'épaule (échelle des levers de sabot) ; move : 0 à l'arrêt, 1 en marche ; out : makeGaitFrame().
  */
-export function gaitFrame(rigs, w, cyc, stride, v, H, move = 1) {
-  const targets = [];
-  const slide = [];
+export function gaitFrame(rigs, w, cyc, stride, v, H, move = 1, out = makeGaitFrame()) {
+  const { targets, slide } = out;
   // (au grand galop, l'appui ne dépasse pas ce que la jambe peut couvrir : le sabot glisse un peu)
   const Smax = 1.0 * H;
   for (let i = 0; i < 4; i++) {
     let z = 0;
     let y = 0;
-    for (const g of ['walk', 'trot', 'gallop']) {
+    for (const g of GAIT_NAMES) {
       if (!(w[g] > 0)) continue;
       const duty = gaitDuty(g, v);
-      const o = hoofOffset(g, i, cyc, Math.min(Smax, duty * stride), GAITS[g].lift[i] * H, duty);
-      z += o.z * w[g];
-      y += o.y * w[g];
+      hoofOffset(g, i, cyc, Math.min(Smax, duty * stride), GAITS[g].lift[i] * H, duty, _off);
+      z += _off.z * w[g];
+      y += _off.y * w[g];
     }
     z *= move;
     y *= move;
     // L'épaule (et un peu la hanche) suit la jambe : moins d'angle, le dos monte et descend moins.
-    slide.push(z * ((i < 2 ? 0.34 : 0.24) + 0.1 * (w.gallop ?? 0)));
-    targets.push({ z: rigs[i].hoof.z + z, y: rigs[i].hoof.y + y });
+    slide[i] = z * ((i < 2 ? 0.34 : 0.24) + 0.1 * (w.gallop ?? 0));
+    targets[i].z = rigs[i].hoof.z + z;
+    targets[i].y = rigs[i].hoof.y + y;
   }
-  const pose = bodyPose(rigs, targets, slide, 0.015 * move);
-  const legs = rigs.map((r, i) => {
-    const P = pivotAt(r, slide[i], pose.by, pose.pitch);
-    const k = legIK(r, P, targets[i]);
-    return { a: k.a - pose.pitch, b: k.b, slide: slide[i], hoof: k.hoof, target: targets[i] };
-  });
-  return { ...pose, legs };
+  bodyPose(rigs, targets, slide, 0.015 * move, out);
+  for (let i = 0; i < 4; i++) {
+    const l = out.legs[i];
+    const P = pivotAt(rigs[i], slide[i], out.by, out.pitch, l.P);
+    legIK(rigs[i], P, targets[i], l);
+    l.a -= out.pitch;
+    l.slide = slide[i];
+    l.target = targets[i];
+    l.lift = targets[i].y - rigs[i].hoof.y; // hauteur du sabot visé au-dessus du sol
+  }
+  return out;
 }

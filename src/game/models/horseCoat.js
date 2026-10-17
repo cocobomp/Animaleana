@@ -98,6 +98,12 @@ hBare = 0.0;
     c = mix(c, c * 0.72, bars * 0.55 * hDun);
   }
 
+  // Gris truité : petites mouchetures brun-roux, surtout sur la tête, l'encolure et le corps.
+  if (hFlea > 0.0) {
+    float fl = mix(smoothstep(0.78, 0.86, hNoise(P * 95.0 + hSeed)), 0.12, aa) * (1.0 - isHoof - isSkin) * (1.0 - isLeg * (1.0 - smoothstep(0.5, 0.8, h)));
+    c = mix(c, vec3(0.42, 0.27, 0.18), fl * 0.75 * hFlea);
+  }
+
   // Rouan : poils blancs mêlés à la robe (pas sur la tête ni le bas des membres).
   if (hRoan > 0.0) {
     float speck = mix(step(0.55, hNoise(P * 170.0)), 0.45, aa);
@@ -189,6 +195,7 @@ export function coatMaterial(look, build, breed = null) {
     hLeopard: { value: tr.leopard },
     hBlanket: { value: tr.blanket },
     hMealy: { value: tr.mealy },
+    hFlea: { value: tr.flea },
     hSocks: { value: new THREE.Vector4(...socks) },
     hFace: { value: face },
     hSeed: { value: ((look.seed ?? 1) % 997) * 0.731 },
@@ -251,8 +258,10 @@ material.sheenColor *= 1.0 - hBare;
  * mèches plus claires ou plus foncées), qui ondulent au vent et quand le cheval court.
  */
 export function maneMaterial(sway) {
+  // Ordinateur (anticrénelage actif) : bords des mèches adoucis (alphaToCoverage) au lieu de marches.
   const m = new THREE.MeshStandardMaterial({
     color: 0xffffff, vertexColors: true, map: maneTexture(), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.62,
+    alphaToCoverage: gfx.quality === 'high',
   });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.hairTime = gfx.time;

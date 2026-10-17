@@ -103,7 +103,7 @@ export function resolveLook(speciesId, breedId, colorIndex = 0) {
 }
 
 /** Détails de robe facultatifs recopiés de la race vers l'animal (voir src/sim/horseLook.js). */
-const COAT_FLAGS = ['dun', 'points', 'roan', 'grey', 'dapple', 'mealy', 'maneCore'];
+const COAT_FLAGS = ['dun', 'points', 'roan', 'grey', 'dapple', 'mealy', 'maneCore', 'flea']; // flea : gris truité
 
 /** Caractère d'un nouvel animal : souvent l'un des tempéraments typiques de la race (un seul tirage). */
 function pickPersonality(breedDef, rng) {

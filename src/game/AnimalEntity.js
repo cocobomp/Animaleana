@@ -10,7 +10,7 @@ import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
 import { canLeash, heelSkill } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
-import { legRig, gaitStride, gaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
+import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 // Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
@@ -97,7 +97,10 @@ export class AnimalEntity {
       disposeModel(this.model.root);
     }
     // Modèle GLB animé si l'espèce en a un (src/game/assets.js), sinon le modèle procédural.
-    this.model = buildGltfAnimal(this.data.species, this.data.look) ?? buildAnimalModel(this.data.species, this.data.look, this.data.breed);
+    // (le poulain a son propre gabarit : membres longs, grosse tête, brosse de crins, petite queue)
+    const foal = this.data.species === 'horse' && lifeStage(this.data) === 'baby';
+    const look = foal ? { ...this.data.look, foal: true } : this.data.look;
+    this.model = buildGltfAnimal(this.data.species, look) ?? buildAnimalModel(this.data.species, look, this.data.breed);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
     this.scaleGroup = new THREE.Group();
@@ -117,6 +120,20 @@ export class AnimalEntity {
     this.placeLabels();
   }
 
+  /** Refait le modèle (même place, même parent dans la scène). */
+  rebuildModel() {
+    const parent = this.root.parent;
+    const pos = this.root.position.clone();
+    parent?.remove(this.root);
+    this.label.material.map?.dispose();
+    this.label.material.dispose();
+    this.status.material.dispose();
+    this.build();
+    this.root.position.copy(pos);
+    this.root.rotation.y = this.heading;
+    (parent ?? this.scene).add(this.root);
+  }
+
   /** Met à jour l'équipement visible (selle, couverture…). */
   applyGear() {
     if (this.gearGroup) removeGear(this.gearGroup);
@@ -127,6 +144,11 @@ export class AnimalEntity {
     this.scale = this.data.look.scale * growthScale(this.data);
     this.scaleGroup.scale.setScalar(this.scale);
     this.stage = lifeStage(this.data);
+    // Le poulain a grandi : il prend le gabarit de sa race.
+    if (this.model.horseV3 && this.model.foal !== (this.stage === 'baby') && this.label) {
+      this.rebuildModel();
+      return;
+    }
     // Les poulains ont de longues pattes pour leur taille : on les étire et on relève le corps d'autant.
     // (Cheval réaliste : le poulain a son propre gabarit, et les membres sont posés par l'allure.)
     const boost = this.data.species === 'horse' && !this.model.horseV3 ? (this.stage === 'baby' ? 1.22 : this.stage === 'young' ? 1.08 : 1) : 1;
@@ -864,7 +886,11 @@ export class AnimalEntity {
     const w = this.data.weight ?? 50;
     const girth = 1 + (w - 50) / 50 * 0.22;
     if (v3 && legs[0].hoof) {
-      this.horseLegs(dt, { walk: wWalk, trot: wTrot, gallop: wGallop }, stride, v, moving, H);
+      const gw = (this.gaitW ??= { walk: 0, trot: 0, gallop: 0 });
+      gw.walk = wWalk;
+      gw.trot = wTrot;
+      gw.gallop = wGallop;
+      this.horseLegs(dt, gw, stride, v, moving, H);
       md.body.scale.set(girth + breathe, 1 + breathe * 0.4, 1);
       for (const l of legs) {
         l.pivot.scale.set(1 / (girth + breathe), 1 / (1 + breathe * 0.4), 1);
@@ -959,7 +985,8 @@ export class AnimalEntity {
     }
     this.moveAmt = (this.moveAmt ?? 0) + ((moving ? 1 : 0) - (this.moveAmt ?? 0)) * Math.min(1, dt * 5);
     const m = this.moveAmt;
-    const fr = gaitFrame(this.gaitRigs, w, this.phase / (Math.PI * 2), stride, v, H, m);
+    this.gaitOut ??= makeGaitFrame();
+    const fr = gaitFrame(this.gaitRigs, w, this.phase / (Math.PI * 2), stride, v, H, m, this.gaitOut);
     for (let i = 0; i < legs.length; i++) {
       const l = legs[i];
       const g = fr.legs[i];
@@ -969,7 +996,7 @@ export class AnimalEntity {
       l.knee.rotation.x = -rest * 0.42 * (1 - m) + g.b * m;
       if (l.fetlock) {
         // Appui : sabot à plat. Soutien : le boulet se fléchit, le sabot se replie sous le canon.
-        const sw = Math.min(1, Math.max(0, (g.target.y - this.gaitRigs[i].hoof.y) / (0.05 * H)));
+        const sw = Math.min(1, Math.max(0, g.lift / (0.05 * H)));
         const flat = -(fr.pitch + g.a + g.b);
         const curl = (l.front ? 0.7 : 0.4) * Math.abs(g.b) + 0.15;
         l.fetlock.rotation.x = rest * 0.3 * (1 - m) + (flat * (1 - sw) + curl * sw) * m;

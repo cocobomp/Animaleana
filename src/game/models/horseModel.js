@@ -14,7 +14,7 @@ import { ellipsoid, roundCone, smin, sdfMesh, rayHit, sdfNormal } from './sdf.js
 import { loft } from './shapes.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { gfx } from '../gfx.js';
-import { horseBuild, horseBreedOf } from '../../sim/horseLook.js';
+import { horseBuild, horseBreedOf, horseCoatTraits, horseSocks, foalBuild } from '../../sim/horseLook.js';
 import { coatMaterial, maneMaterial, eyeMaterial, PART } from './horseCoat.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -263,10 +263,15 @@ function headPrims(A, B) {
   P.push(...both((k) => E3(s([k * 0.135, 0.065, 0.25]), s([0.05, 0.045, 0.065]), 0.04 * u))); // arcades
   P.push(...both((k) => RC(s([k * 0.12, -0.03, 0.3]), s([k * 0.095, -0.06, 0.5]), 0.035 * u, 0.025 * u, 1, 0.05 * u))); // crête zygomatique
   P.push(...both((k) => E3(s([k * 0.07, -0.045, 0.925]), s([0.045, 0.065, 0.05]), 0.03 * u))); // ailes du nez
-  if (B.profile === 'convex') P.push(E3(s([0, 0.06, 0.52]), s([0.1, 0.06, 0.22]), 0.08 * u)); // tête busquée
+  if (B.profile === 'convex') P.push(E3(s([0, 0.078, 0.56]), s([0.105, 0.078, 0.26]), 0.08 * u)); // tête busquée (bien visible de profil)
   if (B.profile === 'dish') {
-    cuts.push([E3(s([0, 0.13, 0.55]), s([0.12, 0.05, 0.2])), 0.06 * u]); // chanfrein concave
-    P.push(E3(s([0, 0.09, 0.22]), s([0.15, 0.08, 0.12]), 0.06 * u)); // front bombé (jibbah)
+    cuts.push([E3(s([0, 0.128, 0.56]), s([0.13, 0.058, 0.22])), 0.07 * u]); // chanfrein concave
+    P.push(E3(s([0, 0.09, 0.22]), s([0.15, 0.085, 0.12]), 0.06 * u)); // front bombé (jibbah)
+  }
+  if (B.profile === 'square') {
+    // Tête carrée : ganaches larges, bout du nez massif et carré, chanfrein droit et large.
+    P.push(...both((k) => E3(s([k * 0.08, -0.15, 0.22]), s([0.085, 0.17, 0.16]), 0.08 * u)));
+    P.push(E3(s([0, -0.085, 0.82]), s([0.118, 0.125, 0.13]), 0.06 * u));
   }
   // Naseaux : à peine creusés (le dessin en virgule est peint par le shader du pelage).
   const nostril = both((k) => E3(s([k * 0.066, -0.045, 0.985]), s([0.012, 0.03, 0.022])));
@@ -627,7 +632,7 @@ function sculpt(B, high) {
   out.mark('head');
   // --- Yeux en amande : grand globe sombre (maillage à part), paupières supérieure et inférieure
   // couvertes de poil, bordées de peau nue sombre.
-  const eyeR = 0.026 * Math.sqrt(B.head);
+  const eyeR = 0.026 * Math.sqrt(B.head) * (B.foal ? 1.12 : 1); // (le poulain a de grands yeux)
   const eyes = [1, -1].map((k) => {
     const hit = rayHit(headF, [k * 0.05 * u, 0.045 * u, 0.27 * u], [k, 0.12, 0.12], u);
     const n = sdfNormal(headF, hit, 0.003);
@@ -886,9 +891,11 @@ function buildHair(S, B, look, rig, high) {
     return rayHit(torso, c.toArray(), upN.toArray(), 0.6);
   };
   const crestDir = (t) => crestAt(Math.min(1, t + 0.02)).sub(crestAt(Math.max(0, t - 0.02))).normalize();
-  if (style === 'brush') {
+  if (style === 'brush' || style === 'foal') {
     // Fjord : crinière taillée en brosse, droite, bicolore (cœur foncé, bords crème). Rubans croisés
     // (le long de la crête et en travers) pour qu'elle ait du volume sous tous les angles.
+    // Poulain : brosse courte et duveteuse, d'une seule couleur, qui se tient debout.
+    const foal = style === 'foal';
     const n = high ? 64 : 36;
     for (let i = 0; i < n; i++) {
       const t = 0.04 + (i / n) * 0.9;
@@ -896,18 +903,18 @@ function buildHair(S, B, look, rig, high) {
       const dir = crestDir(t);
       const nrm = sdfNormal(torso, c, 0.005);
       for (const lane of [-2, -1, 0, 1, 2]) {
-        const h = (0.075 + 0.03 * Math.sin(t * Math.PI)) * (lane === 0 ? 1.04 : 1 - Math.abs(lane) * 0.06) + rng() * 0.012;
-        const lat = V(lane * 0.011, 0, 0);
+        const h = (foal ? 0.045 + 0.015 * Math.sin(t * Math.PI) : 0.075 + 0.03 * Math.sin(t * Math.PI)) * (lane === 0 ? 1.04 : 1 - Math.abs(lane) * 0.06) + rng() * 0.012;
+        const lat = V(lane * (foal ? 0.013 : 0.011), 0, 0);
         const p0 = c.clone().add(lat).addScaledVector(nrm, -0.012);
-        const tip = p0.clone().addScaledVector(nrm, h).addScaledVector(lat, 0.5 + rng() * 0.3);
+        const tip = p0.clone().addScaledVector(nrm, h).addScaledVector(lat, (foal ? 0.9 : 0.5) + rng() * 0.3);
         const pts = [p0, p0.clone().lerp(tip, 0.5), tip];
-        const color = lane === 0 ? tint(coreC, 0.08) : tint(maneC, 0.06);
+        const color = lane === 0 && !foal ? tint(coreC, 0.08) : tint(maneC, 0.06);
         const side = (i + lane) % 2 === 0 ? dir : V(1, 0, 0);
         hair.strand(pts, 0.028, 0.024, side, color, neckW, rng() * 0.5, 0.5 + rng() * 0.5, nrm.clone().add(V(lane * 0.3, 0, 0)).normalize());
       }
     }
   } else {
-    const lenBase = { normal: 0.27, long: 0.42, thick: 0.32, short: 0.12 }[style] ?? 0.27;
+    const lenBase = { normal: 0.31, long: 0.46, thick: 0.35, short: 0.12, foal: 0.07 }[style] ?? 0.31;
     const len = lenBase * B.mane;
     const n = Math.round((high ? 96 : 66) * B.maneN * (style === 'short' ? 0.7 : 1));
     const layers = style === 'thick' || style === 'long' ? 3 : 2;
@@ -922,7 +929,8 @@ function buildHair(S, B, look, rig, high) {
         const ll = len * (0.75 + rng() * 0.45) * (0.65 + 0.35 * Math.sin(Math.min(1, t * 1.15) * Math.PI * 0.85 + 0.35)) * (L === 0 ? 1 : 0.85);
         const pts = [];
         let p = c.clone().addScaledVector(upN, -0.006);
-        let d = V(sd * 0.85, 0.35, 0).add(upN.clone().multiplyScalar(0.3)).normalize();
+        // (départ presque à plat vers le côté où elle tombe : vue de dessus, la crête reste couverte)
+        let d = V(sd * 0.95, 0.18, 0).add(upN.clone().multiplyScalar(0.16)).normalize();
         const step = ll / K;
         const wave = rng() * 6;
         pts.push(p.clone());
@@ -930,7 +938,8 @@ function buildHair(S, B, look, rig, high) {
           const f = k / K;
           d = d.clone().lerp(down, Math.min(1, 0.32 + f * 0.5)).normalize();
           p = p.clone().addScaledVector(d, step);
-          if (style === 'long' || style === 'thick') p.x += Math.sin(f * 7 + wave) * 0.006 * f;
+          // (ondulée chez les baroques : Lusitanien, PRE, Frison)
+          if (style === 'long' || style === 'thick') p.x += Math.sin(f * (B.type === 'baroque' ? 10 : 7) + wave) * (B.type === 'baroque' ? 0.016 : 0.006) * f;
           pushOut(torso, p, 0.008 + L * 0.006 + f * 0.012);
           pts.push(p);
         }
@@ -939,19 +948,21 @@ function buildHair(S, B, look, rig, high) {
         hair.strand(pts, 0.036 * hw, (0.046 + rng() * 0.016) * hw, dir, tint(maneC), neckW, rng() * 0.5, 0.5 + rng() * 0.5, out);
       }
     }
-    // Racines sur la crête : la ligne du dessus de l'encolure reste fournie, des deux côtés.
-    const nr = high ? 40 : 24;
+    // Bande de base sur la crête : de courtes mèches larges qui se chevauchent, parties un peu de l'autre
+    // côté de la crête et couchées sur elle (vue de dessus, plus de « peigne » avec la robe entre les dents).
+    const nr = Math.round((high ? 64 : 44) * (style === 'short' ? 0.7 : 1));
     for (let i = 0; i < nr; i++) {
-      const t = 0.02 + (i / nr) * 0.95;
+      const t = 0.01 + (i / nr) * 0.97;
       const c = crestAt(t);
       const dir = crestDir(t);
       const nrm = sdfNormal(torso, c, 0.005);
-      const sd = i % 3 === 0 ? -side : side;
-      const h = 0.05 + rng() * 0.03;
-      const p0 = c.clone().addScaledVector(nrm, -0.01);
-      const p1 = p0.clone().addScaledVector(nrm, h * 0.7).add(V(sd * h * 0.4, 0, 0));
-      const p2 = p1.clone().add(V(sd * h * 0.7, -h * 0.5, 0));
-      hair.strand([p0, p1, p2], 0.05, 0.045, dir, tint(maneC), neckW, rng() * 0.5, 0.5 + rng() * 0.5, nrm.clone().add(V(sd * 0.6, 0, 0)).normalize());
+      const sd = i % 4 === 0 ? -side : side;
+      const h = 0.06 + rng() * 0.03;
+      const p0 = c.clone().addScaledVector(nrm, -0.008).add(V(-sd * 0.018, 0, 0));
+      const p1 = c.clone().addScaledVector(nrm, 0.012).add(V(sd * h * 0.35, 0, 0));
+      const p2 = c.clone().addScaledVector(nrm, -0.004).add(V(sd * h * 0.8, -h * 0.45, 0));
+      for (const q of [p1, p2]) pushOut(torso, q, 0.006);
+      hair.strand([p0, p1, p2], 0.062, 0.05, dir, tint(maneC), neckW, rng() * 0.5, 0.5 + rng() * 0.5, nrm.clone().add(V(sd * 0.5, 0, 0)).normalize());
     }
   }
 
@@ -961,7 +972,7 @@ function buildHair(S, B, look, rig, high) {
   const toBody = (p) => p.clone().applyMatrix4(headM);
   if (style !== 'brush' || true) {
     const n = high ? 16 : 9;
-    const flen = (style === 'brush' ? 0.06 : 0.17 * Math.max(0.8, B.mane ** 0.6)) * (style === 'short' ? 0.6 : 1);
+    const flen = (style === 'brush' || style === 'foal' ? 0.06 : 0.17 * Math.max(0.8, B.mane ** 0.6)) * (style === 'short' ? 0.6 : 1);
     const downL = V(0, -Math.cos(A.headRot), Math.sin(A.headRot)); // le bas du monde, dans le repère de la tête
     for (let i = 0; i < n; i++) {
       const x = (i / (n - 1) - 0.5) * 0.11 * u;
@@ -1028,29 +1039,36 @@ function buildHair(S, B, look, rig, high) {
   }
 
   // --- Fanons : longs poils sur l'arrière des canons qui couvrent les sabots (traits, Frison, Irish Cob).
+  // Ils ont la couleur du bas de la jambe : blanc sous une balzane ou sur une jambe blanche de pie,
+  // noir sur les bas noirs d'un bai, sinon la robe.
   if (B.feathers > 0) {
-    const legC = new THREE.Color(look.points || (look.mane && (look.mane & 0xffffff) < 0x303030) ? look.mane : look.coat);
+    const traits = horseCoatTraits(look);
+    const socks = horseSocks(look);
     rig.legs.forEach((leg, i) => {
+      const white = socks[i] > 0.1 || traits.pinto > 0;
+      const legC = new THREE.Color(white ? 0xf1ede6 : traits.points ? (look.maneCore ?? look.mane ?? look.coat) : look.coat);
       const [front, s] = LEG_SIDES[i];
       const kn = front ? A.frontKnee(s) : A.hindKnee(s);
       const zc = front ? A.zF : A.zH;
-      const n = Math.round((high ? 14 : 8) * (0.5 + B.feathers * 0.5));
+      // (plus de mèches, plus fines et moins écartées : des poils souples, pas une jupe raide)
+      const n = Math.round((high ? 22 : 12) * (0.5 + B.feathers * 0.5));
       for (let j = 0; j < n; j++) {
-        const a = -Math.PI * 0.95 + (j / (n - 1)) * Math.PI * 1.9; // surtout derrière et sur les côtés
+        const a = -Math.PI * 0.9 + (j / (n - 1)) * Math.PI * 1.8 + (rng() - 0.5) * 0.2; // surtout derrière et sur les côtés
         const dirA = V(Math.sin(a) * 0.9, 0, -Math.cos(a));
-        const y0 = (0.2 + B.feathers * 0.14 * (0.6 + 0.4 * Math.cos(a))) * A.E;
-        const p0 = V(kn.x, y0, zc + (front ? 0.01 : 0.015)).addScaledVector(dirA, 0.035 * B.bone);
+        const y0 = (0.2 + B.feathers * 0.14 * (0.6 + 0.4 * Math.cos(a))) * A.E * (0.92 + rng() * 0.12);
+        const p0 = V(kn.x, y0, zc + (front ? 0.01 : 0.015)).addScaledVector(dirA, 0.03 * B.bone);
         const pts = [p0];
-        const ll = y0 + 0.02;
+        const ll = y0 + 0.012;
+        const flare = 0.012 + rng() * 0.01;
         for (let k = 1; k <= 4; k++) {
           const f = k / 4;
-          pts.push(p0.clone().addScaledVector(dirA, 0.02 * f + 0.03 * f * f).add(V(0, -ll * f, 0)));
+          pts.push(p0.clone().addScaledVector(dirA, flare * f + 0.012 * f * f).add(V(0, -ll * f, 0)));
         }
         const fw = (q) => {
           const t = smooth((FETLOCK_Y + 0.04) * A.E, (FETLOCK_Y - 0.02) * A.E, q.y);
           return [[BONE.knee(i), 1 - t], [BONE.fetlock(i), t]].filter(([, x]) => x > 0.001);
         };
-        hair.strand(pts, 0.04, 0.055, V(-dirA.z, 0, dirA.x), tint(legC, 0.1), fw, rng() * 0.5, 0.5 + rng() * 0.5, dirA);
+        hair.strand(pts, 0.032, 0.042, V(-dirA.z, 0, dirA.x), tint(legC, 0.1), fw, rng() * 0.5, 0.5 + rng() * 0.5, dirA);
       }
     });
   }
@@ -1092,7 +1110,7 @@ function contactShadow(R, L) {
  */
 export function buildHorseModel(look, breedId = null) {
   const breed = horseBreedOf(look, breedId);
-  const B = horseBuild(breed, look);
+  const B = look.foal ? foalBuild(horseBuild(breed, look)) : horseBuild(breed, look); // poulain : son gabarit
   const high = gfx.quality === 'high';
   const key = JSON.stringify([B, high]);
   let S = shapeCache.get(key);
@@ -1165,6 +1183,7 @@ export function buildHorseModel(look, breedId = null) {
     dims: S.dims,
     backTop,
     build: B,
+    foal: !!look.foal,
     horseV3: true,
   };
 }

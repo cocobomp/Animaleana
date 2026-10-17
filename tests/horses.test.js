@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { SPECIES, PERSONALITIES } from '../src/sim/species.js';
 import { PLACE_IDS } from '../src/sim/places.js';
-import { HORSE_TYPES, horseBuild, horseBreedOf, horseCoatTraits, horseFaceMark, horseSocks } from '../src/sim/horseLook.js';
+import { HORSE_TYPES, horseBuild, horseBreedOf, horseCoatTraits, horseFaceMark, horseSocks, foalBuild } from '../src/sim/horseLook.js';
 import { shopBreeds, shopPrice, adoptionCandidates } from '../src/sim/adoption.js';
 import { createAnimal, resolveLook } from '../src/sim/animal.js';
 import { seeded } from '../src/sim/rng.js';
@@ -140,5 +140,54 @@ describe('proportions du cheval sculpté', () => {
     const teke = horseMeasures(horseBuild(breed('akhal_teke')));
     expect(draft.width).toBeGreaterThan(teke.width * 1.25);
     expect(draft.chestDepth).toBeGreaterThan(teke.chestDepth);
+  });
+});
+
+describe('races qui se distinguent et poulains (corrections)', () => {
+  const ratio = (id) => {
+    const m = horseMeasures(horseBuild(breed(id)));
+    return { head: m.head / m.length, long: m.length / m.withers, neck: horseBuild(breed(id)).neckW };
+  };
+
+  it('les bais ne se ressemblent plus : Trotteur long, Pur-sang fin, Franches-Montagnes compact à encolure épaisse', () => {
+    const trot = ratio('trotteur_francais');
+    const sf = ratio('selle_francais');
+    const fm = ratio('franches_montagnes');
+    const ps = ratio('pur_sang');
+    expect(trot.long).toBeGreaterThan(sf.long + 0.05); // corps plus long
+    expect(fm.long).toBeLessThan(sf.long); // compact
+    expect(fm.neck).toBeGreaterThan(sf.neck + 0.15); // encolure épaisse
+    expect(ps.head).toBeLessThan(fm.head - 0.04);
+    expect(horseSocks(resolveLook('horse', 'franches_montagnes', 0))).toEqual([0, 0, 0, 0]); // peu de blanc
+  });
+
+  it('les gris aussi : Camargue à tête carrée et dos court, Lusitanien busqué et truité, PRE pommelé', () => {
+    expect(horseBuild(breed('camargue')).profile).toBe('square');
+    expect(ratio('camargue').long).toBeLessThan(ratio('lusitanien').long);
+    expect(horseCoatTraits(resolveLook('horse', 'lusitanien', 0)).flea).toBe(1);
+    expect(horseCoatTraits(resolveLook('horse', 'pre', 0)).grey).toBe(1);
+    expect(horseCoatTraits(resolveLook('horse', 'camargue', 0)).flea).toBe(0);
+  });
+
+  it('nouvelles robes : alezan brûlé, bai brun, noir pangaré', () => {
+    const names = (id) => breed(id).colors.map((c) => c.name.fr);
+    expect(names('selle_francais')).toContain('Alezan brûlé');
+    expect(names('pur_sang')).toContain('Bai brun');
+    expect(names('trotteur_francais')).toContain('Noir pangaré');
+    expect(resolveLook('horse', 'trotteur_francais', 3).mealy).toBeGreaterThan(0.3);
+  });
+
+  it('le poulain n\'est pas un adulte en réduction : membres longs, corps court, grosse tête, crins courts', () => {
+    const adult = horseBuild(breed('selle_francais'));
+    const foal = foalBuild(adult);
+    expect(foal.legs).toBeGreaterThan(adult.legs * 1.1);
+    expect(foal.back).toBeLessThan(adult.back);
+    expect(foal.head).toBeGreaterThan(adult.head);
+    expect(foal.maneStyle).toBe('foal');
+    expect(foal.tail).toBeLessThan(adult.tail * 0.6);
+    const ma = horseMeasures(adult);
+    const mf = horseMeasures(foal);
+    expect(mf.belly / mf.withers).toBeGreaterThan(ma.belly / ma.withers + 0.05); // plus haut sur pattes
+    expect(mf.head / mf.length).toBeGreaterThan(ma.head / ma.length + 0.05);
   });
 });

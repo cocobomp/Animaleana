@@ -1,4 +1,4 @@
-// Sellerie : le catalogue (par rayon) et la fiche d'un objet — image 3D, phrase pour enfant,
+// Sellerie : le catalogue (par rayon) et la fiche d'un objet — vignette 3D, phrase pour enfant,
 // effet en jeu, tailles, couleurs et prix — avec « Essayer sur… » (aperçu sur un de nos animaux),
 // « Acheter » et « Équiper ». Aussi l'équipement dans la fiche d'un animal.
 
@@ -11,18 +11,35 @@ import {
 import { TOOLS, hasTool } from '../sim/tools.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
-import { TackThumbs } from '../game/tackThumbs.js';
+import { thumb, thumbsFor } from '../game/thumbScenes.js'; // vignettes 3D (src/game/thumbs.js)
+import * as THREE from 'three';
 
 const hex = (key) => `#${(COLORS[key] ?? 0x888888).toString(16).padStart(6, '0')}`;
 const name = (id) => t(`gear_${id}`);
 const catOf = (id) => TACK_CATEGORIES.find((c) => c.items.includes(id))?.id ?? 'saddle';
 
 // Ce qu'on regardait (on y revient quand on rouvre la sellerie).
-const shop = { tab: 'saddle', id: null, color: {}, size: {}, pick: null, tryUrl: null, tryName: '', tryFor: null };
+const shop = { tab: 'saddle', id: null, color: {}, size: {}, pick: null, tryUrl: null, tryName: '', tryFor: null, trying: false };
 
-function thumbs(g) {
-  g.tackThumbs = g.tackThumbs ?? new TackThumbs(g);
-  return g.tackThumbs;
+/**
+ * Vignette d'un objet : sur son support (porte-selle, pied de bombe) ou porté par un cheval mannequin,
+ * à la couleur et à la taille choisies (l'image change quand on change l'une ou l'autre).
+ */
+function gearThumb(g, id, color, size, opts) {
+  const def = GEAR[id];
+  return thumb(g, { kind: 'gear', id, color, size: def.sizes ? size ?? defaultSize(id) : undefined }, { emoji: def.emoji, alt: name(id), ...opts });
+}
+
+/** Nouvelle photo d'essayage (ou aucune) : l'ancienne image est libérée (elle n'est pas dans le cache des vignettes). */
+function setTryUrl(url) {
+  if (shop.tryUrl && shop.tryUrl !== url) {
+    try {
+      URL.revokeObjectURL(shop.tryUrl);
+    } catch {
+      /* rien à libérer */
+    }
+  }
+  shop.tryUrl = url;
 }
 
 /** Couleur choisie pour ce modèle (dans la fiche), sinon celle déjà choisie avant, sinon la première. */
@@ -70,8 +87,6 @@ function renderShop(ui) {
   const inside = g.interiors?.inside === 'tackroom';
   const canGo = !inside && !!g.world.interiors?.tackroom;
   const tabs = [...TACK_CATEGORIES.map((c) => [c.id, c.emoji]), ['tools', '🧰'], ['mine', '🎒']];
-  const th = thumbs(g);
-  th.begin();
   const out = [
     canGo ? h('button', { class: 'primary big tk-go', onClick: () => { ui.closePanel(); g.interiors.enter('tackroom'); } }, `🚪 ${t('tk_goInside')}`) : null,
     h('p', { class: 'note' }, inside ? t('tk_welcome') : canGo ? t('tk_shortcut') : t('tackHelp')),
@@ -90,7 +105,6 @@ function renderShop(ui) {
     const cat = TACK_CATEGORIES.find((c) => c.id === shop.tab) ?? TACK_CATEGORIES[0];
     out.push(h('div', { class: 'cards' }, cat.items.map((id) => itemCard(ui, id))));
   }
-  th.end();
   return out;
 }
 
@@ -99,9 +113,8 @@ function itemCard(ui, id) {
   const p = g.profile;
   const def = GEAR[id];
   const own = ownedVariant(p, id);
-  const img = thumbs(g).item(id, colorOf(p, id), [192, 144]);
   return h('button', { class: 'card tk-card', onClick: () => openTackItem(ui, id) },
-    img ? h('img', { class: 'tk-thumb', src: img, alt: '' }) : h('span', { class: 'card-emoji' }, def.emoji),
+    gearThumb(g, id, colorOf(p, id), sizeChoice(g, id), { w: 88, h: 66, cls: 'tk-thumb', alt: '' }),
     h('span', { class: 'card-main' },
       h('b', {}, name(id)),
       h('small', {}, `${t(`tk_disc_${def.discipline}`)}${def.sizes ? ` · ${def.sizes.map((s) => t(`tk_size_${s}`)).join(' / ')}` : ''}`),
@@ -139,7 +152,7 @@ function mineList(ui) {
     const who = (def.sizes ?? [null]).flatMap((s) => wornBy(p, id, s ?? defaultSize(id))).map((a) => a.name);
     if (def.type === 'helmet' && riderHelmet(p)?.item === id) who.push(t('tk_you')); // la bombe : sur ta tête
     return h('button', { class: 'card tk-card', onClick: () => openTackItem(ui, id) },
-      h('img', { class: 'tk-thumb', src: thumbs(g).item(id, colorOf(p, id), [192, 144]), alt: '' }),
+      gearThumb(g, id, colorOf(p, id), sizeChoice(g, id), { w: 88, h: 66, cls: 'tk-thumb', alt: '' }),
       h('span', { class: 'card-main' }, h('b', {}, name(id)), ...lines.map((l) => h('small', {}, l)),
         who.length ? h('small', { class: 'tk-mine' }, t('tk_onAnimals', { names: who.join(', ') })) : null));
   }))];
@@ -152,7 +165,7 @@ export function openTackItem(ui, id) {
   if (!GEAR[id]) return;
   if (shop.id !== id) {
     shop.pick = null;
-    shop.tryUrl = null;
+    setTryUrl(null);
   }
   shop.id = id;
   shop.tab = catOf(id);
@@ -169,15 +182,15 @@ function renderItem(ui, id) {
   const helmet = def.type === 'helmet';
   const own = ownedVariant(p, id);
   const fits = fitting(g, id);
-  const th = thumbs(g);
-  th.begin();
+  // La grande vignette (à la couleur et à la taille choisies) ; après un essayage, la photo sur l'animal
+  // avec l'objet seul en médaillon, pour comparer.
   const pic = shop.tryUrl && shop.tryFor === `${id}|${color}`
-    ? h('figure', { class: 'tk-pic try' }, h('img', { src: shop.tryUrl, alt: '' }),
-      // L'objet seul en médaillon, pour comparer avec ce qu'on voit sur l'animal.
-      h('img', { class: 'tk-inset', src: th.item(id, color, [192, 144]), alt: name(id) }),
+    ? h('figure', { class: `tk-pic try ${shop.trying ? 'wait' : ''}` }, h('img', { src: shop.tryUrl, alt: '' }),
+      gearThumb(g, id, color, size, { w: 120, h: 90, cls: 'tk-inset' }),
+      shop.trying ? h('span', { class: 'tk-trying' }, `👀 ${t('tk_tryOn')}…`) : null,
       h('figcaption', {}, h('b', {}, t('tk_tryResult', { name: shop.tryName, item: name(id) })), h('small', {}, t('tk_tryHint'))))
-    : h('figure', { class: 'tk-pic' }, h('img', { src: th.item(id, color, [360, 250]), alt: name(id) }));
-  th.end();
+    : h('figure', { class: 'tk-pic' }, gearThumb(g, id, color, size, { w: 360, h: 250, cls: 'tk-big', urgent: true }),
+      shop.trying ? h('span', { class: 'tk-trying' }, `👀 ${t('tk_tryOn')}…`) : null);
 
   const out = [
     h('button', { class: 'small tk-back', onClick: () => openTackShop(ui) }, `← ${t('tk_back')}`),
@@ -192,9 +205,18 @@ function renderItem(ui, id) {
     def.minObedience ? h('p', { class: 'note' }, `🎓 ${t('tk_reqObedience', { n: def.minObedience })}`) : null,
   ];
 
+  // Petit aperçu à côté du choix de la couleur (ou de la taille) : sur un téléphone, la grande image est
+  // déjà sortie de l'écran quand on touche une couleur ; celui-ci change sous le doigt.
+  let mini = def.colors?.length > 1 || def.sizes ? gearThumb(g, id, color, size, { w: 76, h: 57, cls: 'tk-mini', alt: '' }) : null;
+  const head = (title) => {
+    const el = mini ? h('div', { class: 'tk-choice-head' }, h('h3', {}, title), mini) : h('h3', {}, title);
+    mini = null;
+    return el;
+  };
+
   // Couleurs.
   if (def.colors?.length > 1) {
-    out.push(h('h3', {}, `${t('tk_colors')} : ${t(`col_${color}`)}`), h('div', { class: 'swatches' }, def.colors.map((c) => h('button', {
+    out.push(head(`${t('tk_colors')} : ${t(`col_${color}`)}`), h('div', { class: 'swatches' }, def.colors.map((c) => h('button', {
       class: `swatch-btn ${c === color ? 'selected' : ''}`,
       style: { background: hex(c) },
       'aria-label': t(`col_${c}`),
@@ -205,7 +227,7 @@ function renderItem(ui, id) {
 
   // Tailles (poney / cheval / trait) et ce qu'on a déjà.
   if (def.sizes) {
-    out.push(h('h3', {}, t('tk_sizes')), h('div', { class: 'row wrap tk-sizes' }, SIZES.map((s) => h('button', {
+    out.push(head(t('tk_sizes')), h('div', { class: 'row wrap tk-sizes' }, SIZES.map((s) => h('button', {
       class: `small ${s === size ? 'primary' : ''}`,
       disabled: !def.sizes.includes(s),
       onClick: () => { shop.size[id] = s; ui.renderPanel(); },
@@ -235,7 +257,7 @@ function renderItem(ui, id) {
   const wearing = helmet && riderHelmet(p)?.item === id;
   out.push(h('div', { class: 'tk-actions' },
     !helmet ? h('button', { class: `big-action ${shop.pick === 'try' ? 'primary' : ''}`, onClick: () => { shop.pick = shop.pick === 'try' ? null : 'try'; ui.renderPanel(); } },
-      h('span', { class: 'ba-icon' }, '👀'), h('span', { class: 'ba-text' }, h('b', {}, t('tk_tryOn')))) : null,
+      h('span', { class: 'ba-icon' }, shop.trying ? '⏳' : '👀'), h('span', { class: 'ba-text' }, h('b', {}, t('tk_tryOn')))) : null, // (⏳ : la photo se prépare)
     h('button', {
       class: `big-action ${missing ? 'tk-short' : 'primary'}`,
       onClick: () => {
@@ -281,7 +303,7 @@ function renderItem(ui, id) {
 }
 
 /** Essayage : l'objet sur l'animal choisi, photographié à part (rien n'est acheté ni changé). */
-function tryOn(ui, id, a, color) {
+async function tryOn(ui, id, a, color) {
   const g = ui.game;
   const e = g.entities.get(a.id);
   if (!e) return ui.toast(t('tk_tryNobody'));
@@ -289,11 +311,88 @@ function tryOn(ui, id, a, color) {
   const gear = { ...(a.gear ?? {}), [def.slot]: { item: id, color, size: sizeFor(id, a) } };
   // Un tapis ne se voit que sous une selle : sans selle, on en pose une pour l'essayage.
   if (def.slot === 'pad' && !gear.saddle) gear.saddle = { item: 'saddle', color: 'brown', size: sizeFor('saddle', a) };
-  shop.tryUrl = thumbs(g).onAnimal(e, gear, [360, 250], def.slot); // cadré sur l'objet essayé
-  shop.tryName = a.name;
-  shop.tryFor = `${id}|${color}`;
   shop.pick = null;
+  shop.trying = true;
   ui.renderPanel();
+  const url = await tryPhoto(g, e, gear, def.slot); // cadré sur l'objet essayé
+  shop.trying = false;
+  if (url) {
+    setTryUrl(url);
+    shop.tryName = a.name;
+    shop.tryFor = `${id}|${color}`;
+  }
+  if (ui.panel?.kind === 'tack') {
+    ui.renderPanel();
+    // La photo est en haut de la fiche : on y remonte (sur un téléphone, on était descendu jusqu'aux boutons).
+    if (url) ui.panelBody?.scrollTo?.({ top: 0, behavior: 'smooth' });
+  }
+  return null;
+}
+
+/** D'où l'on regarde l'objet essayé, et la taille minimale du cadre (m, à l'échelle de l'animal). */
+const TRY_VIEW = {
+  saddle: { dir: [1, 0.55, 0.42], grow: 1.6, min: 0.9 },
+  pad: { dir: [1, 0.55, 0.42], grow: 1.6, min: 0.9 },
+  blanket: { dir: [1, 0.4, 0.55], grow: 1.15, min: 1.2 },
+  bridle: { dir: [1, 0.22, 0.62], grow: 1.3, min: 0.5 },
+  halter: { dir: [1, 0.22, 0.62], grow: 1.3, min: 0.5 },
+  head: { dir: [1, 0.22, 0.62], grow: 1.3, min: 0.5 },
+  legs: { dir: [1, 0.25, 0.7], grow: 1.15, min: 0.7 },
+  bells: { dir: [1, 0.25, 0.7], grow: 1.15, min: 0.7 },
+};
+const ANIMAL_VIEW = [1, 0.32, 0.62];
+
+/**
+ * Photo d'un de nos animaux qui essaie un équipement (moteur des vignettes, même studio) :
+ * on lui met l'équipement d'essai, on le photographie à part, puis il retrouve sa place et son vrai équipement.
+ */
+function tryPhoto(g, e, gear, slot) {
+  const th = thumbsFor(g);
+  if (!th?.enabled) return Promise.resolve(null);
+  return th.capture(() => {
+    const root = e.root;
+    const pos = root.position.clone();
+    const rotY = root.rotation.y;
+    const labels = [e.label, e.status].filter(Boolean).map((s) => [s, s.visible]);
+    for (const [l] of labels) l.visible = false;
+    root.position.set(0, 0, 0);
+    root.rotation.y = 0;
+    const view = TRY_VIEW[slot];
+    const box = new THREE.Box3();
+    const add = (list) => {
+      root.updateMatrixWorld(true);
+      for (const m of list) m.traverse((o) => {
+        if (o.isMesh && !o.isSprite && o.material?.depthWrite !== false) box.expandByObject(o);
+      });
+    };
+    if (view && gear[slot]) {
+      // Cadrage sur l'objet essayé (selle et tapis vont ensemble), puis tout l'équipement d'essai.
+      const pair = slot === 'saddle' && gear.pad ? { pad: gear.pad } : slot === 'pad' && gear.saddle ? { saddle: gear.saddle } : {};
+      e.applyGear({ [slot]: gear[slot], ...pair });
+      add(e.gearGroup?.userData.meshes ?? []);
+    }
+    e.applyGear(gear);
+    if (box.isEmpty()) add([e.model.root]); // sans objet à cadrer : l'animal entier
+    const k = e.scale ?? 1;
+    const c = box.getCenter(new THREE.Vector3());
+    const s = box.getSize(new THREE.Vector3()).multiplyScalar(view?.grow ?? 1.05);
+    const min = (view?.min ?? 0) * k;
+    s.set(Math.max(s.x, min), Math.max(s.y, min), Math.max(s.z, min));
+    return {
+      object: root,
+      box: new THREE.Box3().setFromCenterAndSize(c, s),
+      dir: view?.dir ?? ANIMAL_VIEW,
+      ground: 0,
+      restore: true, // il retourne dans la scène du jeu
+      keep: true,
+      dispose: () => {
+        root.position.copy(pos);
+        root.rotation.y = rotY;
+        for (const [l, v] of labels) l.visible = v;
+        e.applyGear();
+      },
+    };
+  }, { w: 360, h: 250 });
 }
 
 function equipOn(ui, id, a, color) {

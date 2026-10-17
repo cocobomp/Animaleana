@@ -2152,20 +2152,60 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
   body.panel-open #joystick { display: none; }
 }
 
+/* ---------- vignettes 3D des cartes (src/game/thumbs.js) : l'emoji attend l'image, l'image arrive en fondu */
+.thumb {
+  --thumb-bg: #f1ece2;
+  position: relative; display: inline-grid; place-items: center; flex-shrink: 0; overflow: hidden;
+  width: 80px; height: 64px; border-radius: 12px;
+  background: var(--thumb-bg);
+  background: radial-gradient(120% 95% at 50% 30%, #ffffff 0%, color-mix(in srgb, var(--thumb-bg) 55%, #fff) 45%, var(--thumb-bg) 100%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+.thumb > img { display: block; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; pointer-events: none; }
+.thumb-ph { font-size: 1.9rem; line-height: 1; }
+.thumb.is-wait .thumb-ph { animation: thumb-wait 1.4s ease-in-out infinite; }
+.thumb.is-new > img { animation: thumb-in 0.32s ease-out; }
+@keyframes thumb-wait { 0%, 100% { opacity: 0.55; transform: scale(0.94); } 50% { opacity: 0.9; transform: scale(1); } }
+@keyframes thumb-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .thumb.is-wait .thumb-ph, .thumb.is-new > img { animation: none; } }
+.card > .thumb { margin: -2px 0; }
+/* Animalerie : aperçu de l'animal choisi, toujours visible en haut de la liste. */
+.shop-preview { position: sticky; top: -6px; z-index: 3; display: flex; align-items: center; gap: 12px; margin: 4px -4px 8px; padding: 8px; background: rgba(247, 243, 234, 0.96); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); }
+.shop-preview .thumb { width: 132px; height: 99px; --thumb-bg: #e3eedc; }
+.shop-preview .thumb-ph { font-size: 3rem; }
+.shop-preview-text { display: grid; gap: 2px; min-width: 0; }
+.shop-preview-text b { font-size: 1.05rem; }
+.shop-preview-text small { color: var(--muted); }
+.breed-thumb { width: 84px; height: 63px; --thumb-bg: #e3eedc; }
+.id-head .thumb { width: 96px; height: 72px; --thumb-bg: #e3eedc; }
+/* Construction et véhicules */
+.con-thumb { width: 92px; height: 69px; --thumb-bg: #dcebd2; }
+.veh-thumb { width: 92px; height: 60px; --thumb-bg: #e2e8ee; }
+.big-action .ba-icon.ba-thumb { display: grid; place-items: center; }
+.big-action .ba-thumb .thumb { width: 76px; height: 50px; --thumb-bg: #e2e8ee; }
+.big-action .ba-thumb .thumb-ph { font-size: 1.7rem; }
+.trip-vehicle { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.trip-vehicle .thumb { width: 110px; height: 66px; }
+.trip-vehicle .note { margin: 0; }
+
 /* ---------- sellerie : catalogue et fiche d'un objet (src/ui/tack.js) */
 .tk-go { width: 100%; margin: 6px 0 4px; }
 .tk-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 6px; margin: 4px 0; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .tk-tabs::-webkit-scrollbar { display: none; }
 .tk-tabs button { flex-shrink: 0; white-space: nowrap; }
 .tk-card { padding: 6px 10px 6px 6px; }
-.tk-thumb { width: 72px; height: 54px; object-fit: cover; border-radius: 10px; flex-shrink: 0; background: #f4ecdc; }
+.tk-thumb { width: 88px; height: 66px; border-radius: 12px; --thumb-bg: #f4ecdc; }
 .tk-price { font-size: 0.95rem; white-space: nowrap; }
 .tk-mine { color: var(--primary) !important; font-weight: 600; }
 .tk-back { margin: 2px 0 6px; }
-.tk-pic { margin: 0; border-radius: 16px; overflow: hidden; background: #f4ecdc; border: 1px solid var(--line); }
-.tk-pic img { display: block; width: 100%; aspect-ratio: 36 / 25; object-fit: cover; }
-.tk-pic.try { background: #dfe9ef; position: relative; }
-.tk-pic img.tk-inset { position: absolute; top: 8px; right: 8px; width: 30%; aspect-ratio: 4 / 3; border-radius: 12px; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); background: #f4ecdc; }
+.tk-pic { margin: 0; border-radius: 16px; overflow: hidden; background: #f4ecdc; border: 1px solid var(--line); position: relative; }
+.tk-pic > img, .tk-pic > .thumb.tk-big { display: grid; width: 100%; height: auto; aspect-ratio: 36 / 25; object-fit: cover; border-radius: 0; }
+.tk-big { --thumb-bg: #f4ecdc; }
+.tk-big .thumb-ph { font-size: 4rem; }
+.tk-pic.try { background: #dfe9ef; }
+.tk-pic .tk-inset { position: absolute; top: 8px; right: 8px; width: 30%; height: auto; aspect-ratio: 4 / 3; border-radius: 12px; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); --thumb-bg: #f4ecdc; }
+.tk-pic.try.wait > img { opacity: 0.45; filter: saturate(0.6); }
+.tk-pic .tk-trying { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); background: rgba(255, 255, 255, 0.92); border-radius: 999px; padding: 6px 14px; font-weight: 600; box-shadow: var(--shadow); }
 .tk-pic figcaption { display: grid; gap: 2px; padding: 6px 10px 8px; font-size: 0.9rem; }
 .tk-pic figcaption small { color: var(--muted); }
 .tk-disc { background: #fbf3df; border-color: #e3cfa3; font-weight: 600; }
@@ -2173,6 +2213,10 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .tk-desc { font-size: 1.02rem; margin: 6px 0; }
 .tk-fx { margin: 6px 0; padding: 8px 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; font-size: 0.92rem; }
 .tk-sizes button { flex: 1 1 auto; }
+.tk-choice-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.tk-choice-head h3 { margin: 0; }
+.tk-mini { width: 76px; height: 57px; --thumb-bg: #f4ecdc; }
+.tk-mini .thumb-ph { font-size: 1.5rem; }
 .tk-swap { margin: 4px 0; }
 /* En voyage : ce qui est resté à la maison (pas dans le coffre du voyage, src/sim/cargo.js). */
 .gear-row button.tk-athome { border-style: dashed; color: var(--muted); }

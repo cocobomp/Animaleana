@@ -12,6 +12,7 @@ import {
 } from '../sim/trip.js';
 import { openVehicleMenu, openPackingModal, cargoSummary, cargoName } from './vehicle.js'; // véhicule, coffre
 import { luggageHere, luggageEmoji } from '../sim/cargo.js';
+import { thumb } from '../game/thumbScenes.js'; // vignette 3D du véhicule du voyage
 
 // ------------------------------------------------------------ outils
 
@@ -431,7 +432,13 @@ export function travelAdvice(ui, { here, travelers, state, option }) {
   if (!option?.ok || !travelers.length) return out;
   const notes = [];
   const vehicle = vehicleFor(option.mode, travelers);
-  notes.push(t(`trip_vehicleNote_${vehicle}`));
+  // Le véhicule qu'on prendra (4x4 et van, ou voiture et caisses), en vignette avec sa phrase.
+  const ride = { trailer: ['rig', '🚐'], car: ['car', '🚗'] }[vehicle];
+  if (ride) {
+    out.push(h('div', { class: 'trip-vehicle' },
+      thumb(ui.game, { kind: 'vehicle', id: ride[0] }, { w: 110, h: 66, emoji: ride[1], cls: 'veh-thumb', alt: '' }),
+      h('p', { class: 'note' }, t(`trip_vehicleNote_${vehicle}`))));
+  } else notes.push(t(`trip_vehicleNote_${vehicle}`));
   const plan = planTrip({ mode: option.mode, hours: option.hours, animals: travelers });
   const stops = plan.stops.filter((s) => s.kind === 'rest' || s.kind === 'night').length;
   if (stops) notes.push(t('trip_stopsNote', { n: stops }));

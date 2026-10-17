@@ -24,6 +24,7 @@ import { travelAdvice } from './trip.js'; // voyages réalistes
 import { questExtras } from './tutorial.js';
 import { animalActivitySection } from './activities.js';
 import { clientBadge, clientInfo, clientsTab } from './clients.js'; // animaux confiés par des clients
+import { isCareerPatient } from './vet.js'; // animal confié en soins, métier commencé : examen gratuit
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -128,7 +129,9 @@ function renderAnimal(ui, g, a) {
   }
   acts.push(btn(a.following ? `✋ ${t('act_stay')}` : `🦮 ${t('act_follow')}`, () => { g.toggleFollow(a); ui.renderPanel(); }));
   acts.push(btn(`📍 ${t('callHere')}`, () => g.callHere(a)));
-  acts.push(btn(`🩺 ${t('act_vet')}${money(ui, g.vetCost(false))}`, () => ui.openVet(a, false), { cls: a.sick ? 'primary' : '' }));
+  // Animal confié en soins et métier de vétérinaire commencé : c'est toi le docteur, sans prix affiché (gratuit).
+  const vetLabel = isCareerPatient(g.profile, a) ? t('vx_examineDoctor') : `${t('act_vet')}${money(ui, g.vetCost(false))}`;
+  acts.push(btn(`🩺 ${vetLabel}`, () => ui.openVet(a, false), { cls: a.sick ? 'primary' : '' }));
   if (hasTool(g.profile, 'firstAid')) acts.push(btn(`🧰 ${t('vetSelfTitle')}`, () => ui.openVet(a, 'self')));
   if (!a.client) acts.push(btn(`✏️ ${t('rename')}`, async () => { // (pas pour un animal confié)
     const name = await ui.prompt(t('newName'), a.name, animalCard(a));

@@ -3,8 +3,9 @@ import { createProfile, loadProfile, saveProfile } from '../src/sim/profile.js';
 import { canStart, startCareer, careerXp, careerSummary, rankOf, careerState, shouldPropose } from '../src/sim/careers.js';
 import {
   LESSONS, LESSON_IDS, BASIC_IDS, LESSON_XP, MASTER_XP, schoolState, completeLesson, isUnlocked, nextLesson, basicsDone, allDone,
-  quizStars, isRightAnswer, schoolSummary, lessonStars, hasDiploma,
+  quizStars, isRightAnswer, schoolSummary, lessonStars, hasDiploma, HEART_SORT,
 } from '../src/sim/vetSchool.js';
+import { typicalHeartOf, VITALS } from '../src/sim/vetExam.js';
 
 const finish = (p, ids, stars = 3) => ids.map((id, i) => completeLesson(p, id, { stars, day: i + 1 }));
 
@@ -21,6 +22,16 @@ describe('les leçons', () => {
     }
     // Les leçons de base sont au début.
     expect(LESSON_IDS.slice(0, BASIC_IDS.length)).toEqual(BASIC_IDS);
+  });
+
+  it('leçon 1 : les cœurs affichés (valeur typique) se rangent du plus lent au plus rapide', () => {
+    // On montre un nombre par animal (pas la plage) : un enfant qui compare les nombres trouve l'ordre attendu.
+    const shown = HEART_SORT.map(typicalHeartOf);
+    for (let i = 1; i < shown.length; i++) expect(shown[i], HEART_SORT[i]).toBeGreaterThan(shown[i - 1]);
+    for (const sp of HEART_SORT) {
+      expect(typicalHeartOf(sp)).toBeGreaterThanOrEqual(VITALS[sp].heart[0]);
+      expect(typicalHeartOf(sp)).toBeLessThanOrEqual(VITALS[sp].heart[1]);
+    }
   });
 
   it('les bonnes réponses et les étoiles', () => {

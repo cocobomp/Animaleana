@@ -97,15 +97,21 @@ function canDraw() {
  */
 export function openVet(ui, a, atClinic) {
   if (!canDraw() || ui.vetClassic) return openVetClassic(ui, a, atClinic);
-  const career = a.client?.kind === 'vet' && isStarted(ui.game.profile, 'vet');
+  const career = isCareerPatient(ui.game.profile, a);
   const mode = atClinic === 'self' ? 'self' : career ? 'career' : atClinic ? 'clinic' : 'home';
   return openVetExam(ui, a, mode);
 }
 
+/**
+ * Animal confié en soins par un client quand on a commencé le métier de vétérinaire : c'est nous
+ * le docteur, l'examen est gratuit (la fiche de l'animal n'affiche donc pas de prix).
+ */
+export const isCareerPatient = (profile, a) => a?.client?.kind === 'vet' && isStarted(profile, 'vet');
+
 /** L'ancien examen (boutons), gardé en repli. */
 export function openVetClassic(ui, a, atClinic) {
   const g = ui.game;
-  const self = atClinic === 'self';
+  const self = atClinic === 'self' || isCareerPatient(g.profile, a); // métier : gratuit, comme la trousse
   const cost = self ? 0 : g.vetCost(atClinic);
   if (!canAfford(g.profile, cost)) {
     ui.toast(t('r_money'));

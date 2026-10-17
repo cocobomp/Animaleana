@@ -10,9 +10,9 @@ import { SPECIES } from '../sim/species.js';
 import { createAnimal } from '../sim/animal.js';
 import { isStarted, canStart, RANKS } from '../sim/careers.js';
 import {
-  LESSONS, LESSON_IDS, BASIC_IDS, lessonDef, schoolSummary, completeLesson, isUnlocked, quizStars, isRightAnswer, MASTER_XP,
+  LESSONS, LESSON_IDS, BASIC_IDS, lessonDef, schoolSummary, completeLesson, isUnlocked, quizStars, isRightAnswer, MASTER_XP, HEART_SORT,
 } from '../sim/vetSchool.js';
-import { VITALS, ILLNESS_IDS, TREATMENTS, makeCase, treatmentFor, classify } from '../sim/vetExam.js';
+import { VITALS, ILLNESS_IDS, TREATMENTS, makeCase, treatmentFor, classify, typicalHeartOf } from '../sim/vetExam.js';
 import { createExamView, openOverlay, num, illName, ILL_EMOJI, TREAT_EMOJI } from './vetExam.js';
 import { VetStage } from './vetStage.js';
 
@@ -26,7 +26,7 @@ const POINT_EMOJI = {
   illness: ['🔎', '🤒', '🤢', '👂'],
   care: ['💊', '⚖️', '📋', '🧼'],
 };
-const SORT_ORDER = ['horse', 'cow', 'sheep', 'dog', 'cat', 'rabbit']; // du cœur le plus lent au plus rapide
+const SORT_ORDER = HEART_SORT; // du cœur le plus lent au plus rapide (cœur typique au repos)
 const MATCH_SIGNS = {
   ear: ['earsRed', 'painEar'],
   paw: ['lame', 'painLeg'],
@@ -426,7 +426,7 @@ function sortHeart(cont) {
           msg.replaceChildren(h('p', { class: 'vx-msg warn' }, t('vs_sort_wrong')));
         }
       },
-    }, SPECIES[sp].emoji, h('small', {}, `${VITALS[sp].heart[0]}–${VITALS[sp].heart[1]} ❤️`));
+    }, SPECIES[sp].emoji, h('small', {}, `≈ ${typicalHeartOf(sp)} ❤️`)); // valeur typique : l'ordre se lit sur les nombres
     grid.append(b);
   }
   drawLine();

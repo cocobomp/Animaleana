@@ -13,7 +13,7 @@ import { isStarted } from '../sim/careers.js';
 import { lessonsDoneCount, LESSONS } from '../sim/vetSchool.js';
 import {
   TOOLS, MEASURES, ILLNESS_IDS, TREATMENTS, BODY_SIGNS, makeCase, evaluate, signsFound, compatibleDiagnoses, isRightDiagnosis,
-  missingExam, treatmentFor, doseFor,
+  missingExam, treatmentFor, doseFor, COUNT_SECONDS,
 } from '../sim/vetExam.js';
 import { VetStage } from './vetStage.js';
 import './vetExam.css';
@@ -40,6 +40,9 @@ function normText(r) {
   return t(key, { lo: num(r.norm[0]), hi: num(r.norm[1]), u });
 }
 
+/** Les signes trouvés, accordés à l'animal (« trop grosse » pour une jument). */
+export const signText = (signs, a) => signs.map((s) => ta(`vx_sign_${s}`, a)).join(', ');
+
 /** Une ligne du carnet à partir d'un résultat de evaluate(). */
 export function noteLine(a, r) {
   const m = MEASURES[r.measure];
@@ -48,22 +51,25 @@ export function noteLine(a, r) {
   switch (r.measure) {
     case 'heart':
       value = `${r.value} /min`;
-      detail = r.assisted ? t('vx_heart_helped') : t(r.slowmo > 1 ? 'vx_heart_calcSlow' : 'vx_heart_calc', { c: r.count, v: r.value });
+      // Au ralenti × k, chaque « boum » compté vaut k battements : × 6 × k pour avoir la minute.
+      detail = r.assisted ? t('vx_heart_helped') : t(r.slowmo > 1 ? 'vx_heart_calcSlow' : 'vx_heart_calc', {
+        c: r.count, v: r.value, k: r.slowmo, m: (60 / COUNT_SECONDS) * (r.slowmo ?? 1),
+      });
       break;
     case 'temp': value = `${num(r.value)} °C`; break;
     case 'lungs':
       value = t(`vx_lungs_${r.state}`);
-      detail = t('vx_resp', { v: r.value });
+      detail = ta('vx_resp', a, { v: r.value }); // « elle respire » pour une femelle
       break;
     case 'crt': value = `${num(r.value)} s`; break;
     case 'weight':
       value = `${num(r.value)} kg`;
-      detail = t(`vx_weight_${r.state}`);
+      detail = ta(`vx_weight_${r.state}`, a);
       break;
     case 'gait': value = ta(`vx_gait_${r.state}`, a, { leg: t(`vx_leg_${r.leg ?? 'front'}`) }); break;
     default: value = ta(`vx_${r.measure}_${r.state}`, a);
   }
-  const verdict = r.status === 'bad' ? r.signs.map((s) => t(`vx_sign_${s}`)).join(', ') : t('vx_normal');
+  const verdict = r.status === 'bad' ? signText(r.signs, a) : t('vx_normal');
   return { icon: m.emoji, label: t(`vx_m_${r.measure}`), value, detail, norm: normText(r), status: r.status, verdict };
 }
 
@@ -230,6 +236,8 @@ export function openOverlay(ui, { title, sub = '', cls = '', onClose }) {
     if (!document.querySelector('.vx-overlay')) document.body.classList.remove('vx-open');
     if (g?.input) g.input.enabled = prevInput;
     onClose?.();
+    // Les fenêtres du jeu arrivées pendant l'examen (montée de niveau, orage…) attendaient : une par une.
+    if (!ui.vxOpen) setTimeout(() => ui.flushModals?.(), 0);
   }
   closeBtn.addEventListener('click', close);
   return {
@@ -327,12 +335,12 @@ export function openVetExam(ui, a, mode = 'clinic') {
     const signs = signsFound([...view.results.values()]);
     const dx = compatibleDiagnoses(signs);
     const chips = signs.length
-      ? h('div', { class: 'vx-chips' }, signs.map((s) => h('span', { class: `vx-chip ${BODY_SIGNS.includes(s) ? 'body' : ''}` }, `⚠️ ${t(`vx_sign_${s}`)}`)))
+      ? h('div', { class: 'vx-chips' }, signs.map((s) => h('span', { class: `vx-chip ${BODY_SIGNS.includes(s) ? 'body' : ''}` }, `⚠️ ${signText([s], a)}`)))
       : h('p', { class: 'note' }, t('vx_dx_noSign'));
     const cards = dx.map((d, i) => h('button', { class: `vx-dx ${i === 0 ? 'best' : ''}`, onClick: () => choose(d.id) },
       h('span', { class: 'vx-dx-emoji' }, ILL_EMOJI[d.id]),
       h('span', { class: 'vx-dx-main' }, h('b', {}, illName(d.id)),
-        d.matched.length ? h('small', {}, t('vx_dx_matches', { list: d.matched.map((s) => t(`vx_sign_${s}`)).join(', ') })) : h('small', {}, t('vx_dx_allNormal'))),
+        d.matched.length ? h('small', {}, t('vx_dx_matches', { list: signText(d.matched, a) })) : h('small', {}, t('vx_dx_allNormal'))),
       i === 0 && dx.length > 1 ? h('span', { class: 'vx-dx-tag' }, t('vx_dx_best')) : null));
     const others = ['healthy', ...ILLNESS_IDS].filter((id) => !dx.some((d) => d.id === id));
     return [

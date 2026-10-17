@@ -33,6 +33,12 @@ export const LESSONS = [
   { id: 'illness', emoji: '🤒', basic: false, exercise: 'match', quiz: [{ answers: 3, correct: 2 }, { answers: 3, correct: 0 }] },
   { id: 'care', emoji: '💊', basic: false, exercise: 'treat', quiz: [{ answers: 3, correct: 1 }, { answers: 3, correct: 0 }, { answers: 3, correct: 2 }] },
 ];
+/**
+ * Leçon 1, exercice « du cœur le plus lent au plus rapide ». Chaque animal montre son cœur typique
+ * au repos (typicalHeartOf : 36, 66, 80, 100, 180, 215) et pas sa plage normale : les plages se
+ * chevauchent (chien 60–140, mouton 70–90) et l'ordre ne se lirait pas sur les nombres affichés.
+ */
+export const HEART_SORT = ['horse', 'cow', 'sheep', 'dog', 'cat', 'rabbit'];
 export const LESSON_IDS = LESSONS.map((l) => l.id);
 export const BASIC_IDS = LESSONS.filter((l) => l.basic).map((l) => l.id);
 export const lessonDef = (id) => LESSONS.find((l) => l.id === id) ?? null;

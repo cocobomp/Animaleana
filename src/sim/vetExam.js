@@ -23,13 +23,27 @@ export const VITAL_SPECIES = Object.keys(VITALS);
 export const CRT_MAX = 2;
 /** On compte les battements pendant 10 secondes, puis × 6 pour avoir la minute. */
 export const COUNT_SECONDS = 10;
-/** Cœurs trop rapides pour taper au rythme : on les écoute au ralenti (× 2). */
-export const SLOWMO = { cat: 2, rabbit: 2 };
+/**
+ * Cœurs trop rapides pour taper au rythme : on les écoute au ralenti. Le ralenti dépend du
+ * rythme (et non de l'espèce) : un chien malade à 190 /min se compte au ralenti × 2, un lapin
+ * malade à 340 /min au ralenti × 3. On ne tape jamais plus de 2 fois par seconde environ.
+ */
+export const SLOWMO_STEPS = [[240, 3], [120, 2]]; // [au-dessus de ce rythme (/min), ralenti]
 /** Écart accepté entre ce que l'enfant a compté et le vrai nombre de battements. */
 export const COUNT_TOLERANCE = 0.15;
 
 export const vitalsOf = (species) => VITALS[species] ?? VITALS.dog;
-export const slowmoOf = (species) => SLOWMO[species] ?? 1;
+/** Le ralenti pour compter un cœur qui bat à bpm battements par minute (1 = vitesse normale). */
+export function slowmoFor(bpm) {
+  for (const [above, k] of SLOWMO_STEPS) if (bpm > above) return k;
+  return 1;
+}
+/** Cœur au repos typique d'une espèce (le milieu de la norme) : cheval ≈ 36, lapin ≈ 215. */
+export const typicalHeartOf = (species) => Math.round((vitalsOf(species).heart[0] + vitalsOf(species).heart[1]) / 2);
+/** Ralenti habituel d'une espèce en bonne santé (chat et lapin : × 2). */
+export const slowmoOf = (species) => slowmoFor(typicalHeartOf(species));
+/** Le ralenti donné en nombre, ou celui d'une espèce (ancienne façon d'appeler). */
+const slowK = (slow) => (typeof slow === 'number' ? slow : slowmoOf(slow));
 const round1 = (n) => Math.round(n * 10) / 10;
 
 /** 'low' | 'normal' | 'high' par rapport à une plage [min, max]. */
@@ -217,6 +231,7 @@ export function makeCase(a, rng = Math.random) {
     illness,
     temp: round1(temp),
     heart: Math.round(heart),
+    slowmo: slowmoFor(Math.round(heart)), // ralenti pour compter ce cœur-là
     resp: Math.round(resp),
     lungs: illness === 'flu' ? 'crackles' : illness === 'cold' ? 'wheeze' : 'normal',
     gut: illness === 'belly' ? (herbivore ? 'silent' : 'loud') : 'normal',
@@ -237,19 +252,21 @@ export function makeCase(a, rng = Math.random) {
 
 // ------------------------------------------------------------------ compter le cœur
 
-/** Battements par minute d'après ce qu'on a compté (10 s × 6, et × 2 au ralenti). */
-export function bpmFromCount(count, species, seconds = COUNT_SECONDS) {
-  return Math.round(count * (60 / seconds) * slowmoOf(species));
+// slow : le ralenti (nombre, par exemple cs.slowmo) ou une espèce (son ralenti habituel).
+
+/** Battements par minute d'après ce qu'on a compté (10 s × 6, et × k au ralenti × k). */
+export function bpmFromCount(count, slow = 1, seconds = COUNT_SECONDS) {
+  return Math.round(count * (60 / seconds) * slowK(slow));
 }
 
 /** Combien de « boum » on entend pendant le comptage (au ralenti pour les cœurs rapides). */
-export function expectedCount(bpm, species, seconds = COUNT_SECONDS) {
-  return (bpm / slowmoOf(species)) * (seconds / 60);
+export function expectedCount(bpm, slow = slowmoFor(bpm), seconds = COUNT_SECONDS) {
+  return (bpm / slowK(slow)) * (seconds / 60);
 }
 
 /** Le compte est-il assez juste ? (± 15 %, et au moins ± 1,5 battement). */
-export function countOk(count, bpm, species, seconds = COUNT_SECONDS) {
-  const exp = expectedCount(bpm, species, seconds);
+export function countOk(count, bpm, slow = slowmoFor(bpm), seconds = COUNT_SECONDS) {
+  const exp = expectedCount(bpm, slow, seconds);
   return Math.abs(count - exp) <= Math.max(1.5, exp * COUNT_TOLERANCE);
 }
 
@@ -276,15 +293,16 @@ export function evaluate(cs, measure, input = {}) {
       const count = input.count ?? 0;
       const seconds = input.seconds ?? COUNT_SECONDS;
       const trueClass = classify(cs.heart, V.heart);
+      const slowmo = cs.slowmo ?? slowmoFor(cs.heart);
       if (!assisted) {
-        const bpm = bpmFromCount(count, cs.species, seconds);
+        const bpm = bpmFromCount(count, slowmo, seconds);
         // Compte trop loin du vrai, ou conclusion différente (tout près d'une limite) : on recompte.
-        if (!countOk(count, cs.heart, cs.species, seconds) || classify(bpm, V.heart) !== trueClass) {
-          return { measure, retry: true, reason: count < expectedCount(cs.heart, cs.species, seconds) ? 'few' : 'many', bpm, count };
+        if (!countOk(count, cs.heart, slowmo, seconds) || classify(bpm, V.heart) !== trueClass) {
+          return { measure, retry: true, reason: count < expectedCount(cs.heart, slowmo, seconds) ? 'few' : 'many', bpm, count };
         }
-        return vitalResult(measure, bpm, V.heart, trueClass, 'heartFast', 'heartSlow', { count, slowmo: slowmoOf(cs.species) });
+        return vitalResult(measure, bpm, V.heart, trueClass, 'heartFast', 'heartSlow', { count, slowmo });
       }
-      return vitalResult(measure, cs.heart, V.heart, trueClass, 'heartFast', 'heartSlow', { assisted: true, slowmo: slowmoOf(cs.species) });
+      return vitalResult(measure, cs.heart, V.heart, trueClass, 'heartFast', 'heartSlow', { assisted: true, slowmo });
     }
     case 'lungs': {
       const rc = classify(cs.resp, V.resp);

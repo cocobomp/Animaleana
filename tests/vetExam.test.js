@@ -4,7 +4,7 @@ import { mulberry32 as makeRng } from '../src/sim/rng.js';
 import {
   VITALS, VITAL_SPECIES, TOOLS, TOOL_IDS, MEASURES, MEASURE_IDS, TOOL_ZONES, ILLNESS_SIGNS, ILLNESS_IDS, KEY_SIGNS, SIGN_MEASURE,
   classify, makeCase, evaluate, signsFound, compatibleDiagnoses, isRightDiagnosis, missingExam, bpmFromCount, expectedCount,
-  countOk, slowmoOf, measureFor, normalKg, typicalKg, bodyScore, treatmentFor, doseFor, TREATMENTS, CRT_MAX,
+  countOk, slowmoOf, slowmoFor, typicalHeartOf, measureFor, normalKg, typicalKg, bodyScore, treatmentFor, doseFor, TREATMENTS, CRT_MAX,
 } from '../src/sim/vetExam.js';
 
 const SPECIES = ['horse', 'dog', 'cat', 'rabbit', 'sheep', 'goat', 'cow'];
@@ -17,7 +17,7 @@ const animal = (species, sick = null, extra = {}) => {
 /** Ce que trouve un examen complet (le cœur bien compté). */
 function fullExam(cs) {
   return MEASURE_IDS.map((m) => {
-    if (m === 'heart') return evaluate(cs, m, { count: Math.round(expectedCount(cs.heart, cs.species)) });
+    if (m === 'heart') return evaluate(cs, m, { count: Math.round(expectedCount(cs.heart, cs.slowmo)) });
     if (m === 'crt') return evaluate(cs, m, { seconds: cs.crt });
     if (m === 'gait') return evaluate(cs, m, { answer: cs.lame ? 'lame' : 'sound' });
     return evaluate(cs, m);
@@ -82,6 +82,34 @@ describe('compter les battements du cœur', () => {
     expect(expectedCount(180, 'cat')).toBeCloseTo(15);
   });
 
+  it('le ralenti dépend du rythme, pas de l\'espèce : jamais plus de ~2 taps par seconde', () => {
+    expect(slowmoFor(36)).toBe(1);
+    expect(slowmoFor(118)).toBe(1);
+    expect(slowmoFor(190)).toBe(2); // chienne grippée : au ralenti × 2 (et pas 3 taps par seconde)
+    expect(slowmoFor(340)).toBe(3); // lapin malade : au ralenti × 3
+    expect(bpmFromCount(16, 2)).toBe(192);
+    expect(bpmFromCount(19, 3)).toBe(342);
+    expect(expectedCount(342, 3)).toBeCloseTo(19);
+    expect(countOk(16, 190, 2)).toBe(true);
+    expect(countOk(31, 190, 2)).toBe(false); // compté sans ralenti : trop
+    for (const sp of SPECIES) {
+      for (const sick of [null, 'flu', 'belly', 'paw', 'cold']) {
+        for (let seed = 1; seed < 30; seed++) {
+          const cs = makeCase(animal(sp, sick), makeRng(seed));
+          expect(cs.slowmo).toBe(slowmoFor(cs.heart));
+          const tapsPerSecond = cs.heart / cs.slowmo / 60;
+          expect(tapsPerSecond, `${sp} ${sick} ${cs.heart}`).toBeLessThanOrEqual(2.05);
+          // Et pas de ralenti inutile : au moins ~1 tap par seconde.
+          expect(tapsPerSecond, `${sp} ${sick} ${cs.heart}`).toBeGreaterThan(0.45);
+        }
+      }
+    }
+    // Un cœur typique d'espèce : cheval ≈ 36, chien ≈ 100, lapin ≈ 215.
+    expect(typicalHeartOf('horse')).toBe(36);
+    expect(typicalHeartOf('dog')).toBe(100);
+    expect(typicalHeartOf('rabbit')).toBe(215);
+  });
+
   it('un compte à peu près juste est accepté, un compte au hasard non', () => {
     expect(countOk(6, 36, 'horse')).toBe(true);
     expect(countOk(7, 36, 'horse')).toBe(true);
@@ -102,7 +130,7 @@ describe('compter les battements du cœur', () => {
       for (const sick of [null, 'flu', 'belly', 'paw']) {
         for (let seed = 1; seed < 25; seed++) {
           const cs = makeCase(animal(sp, sick), makeRng(seed));
-          const exp = expectedCount(cs.heart, sp);
+          const exp = expectedCount(cs.heart, cs.slowmo);
           const want = sick ? 'bad' : 'ok';
           for (const count of [Math.floor(exp), Math.ceil(exp)]) {
             const r = evaluate(cs, 'heart', { count });

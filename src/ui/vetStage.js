@@ -14,7 +14,7 @@ import { audio } from '../game/audio.js';
 import {
   drawAnimal, animalShape, fitAnimal, ellipse, circle, rrect, shade, css, mix, lerp, clamp, dist, EMOJI_FONT, TEXT_FONT, makeRng,
 } from './minigames/draw.js';
-import { TOOL_ZONES, measureFor, slowmoOf, vitalsOf, COUNT_SECONDS } from '../sim/vetExam.js';
+import { TOOL_ZONES, measureFor, slowmoFor, vitalsOf, COUNT_SECONDS } from '../sim/vetExam.js';
 
 export const SW = 400;
 export const SH = 300;
@@ -334,10 +334,10 @@ export class VetStage {
 
   startCount() {
     this.mode = 'count';
-    const slow = slowmoOf(this.a.species);
+    const slow = this.cs.slowmo ?? slowmoFor(this.cs.heart); // ralenti selon le rythme : jamais plus de ~2 taps par seconde
     this.st = { started: null, taps: 0, beatT0: this.time, period: 60 / (this.cs.heart / slow), lastBeat: -1, slow, ended: false };
     this.hint(t(slow > 1 ? 'vx_h_countReadySlow' : 'vx_h_countReady'));
-    this.overlay.replaceChildren(h('div', { class: 'vx-count-badge' }, slow > 1 ? `🐢 ${t('vx_slowmo')}` : `⏱️ ${COUNT_SECONDS} s`));
+    this.overlay.replaceChildren(h('div', { class: 'vx-count-badge' }, slow > 1 ? `🐢 ${t('vx_slowmo', { k: slow })}` : `⏱️ ${COUNT_SECONDS} s`));
   }
 
   beatTap(p) {

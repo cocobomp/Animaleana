@@ -2,9 +2,9 @@
 
 import * as THREE from 'three';
 import { buildAvatar, animateAvatarWalk, poseAvatar } from './models/avatarModel.js';
+import { rayHit } from './models/sdf.js'; // largeur du flanc sous la selle (jambes du cavalier)
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
-import { rayHit } from './models/sdf.js'; // largeur du flanc sous la selle (jambes du cavalier)
 
 const WALK = 3.2;
 const RUN = 6.2;
@@ -58,13 +58,6 @@ export class Player {
     this.seat();
   }
 
-  seat() {
-    const a = this.avatar;
-    const e = this.mount;
-    a.root.position.set(0, e.model.saddleY * e.scale - 0.78, -e.data.look.bodyLen * e.scale * 0.05);
-    poseAvatar(a, 'ride', this.rideFit(e));
-  }
-
   /**
    * Jambes du cavalier ajustées au cheval (cheval réaliste) : largeur du flanc sous la selle, lue sur le
    * corps sculpté ; les cuisses s'écartent juste assez pour l'entourer, le genou se pose contre le
@@ -102,6 +95,13 @@ export class Player {
       }
     }
     return { lift, spread, knee, kneeZ };
+  }
+
+  seat() {
+    const a = this.avatar;
+    const e = this.mount;
+    a.root.position.set(0, e.model.saddleY * e.scale - 0.78, -e.data.look.bodyLen * e.scale * 0.05);
+    poseAvatar(a, 'ride', this.rideFit(e));
   }
 
   dismount() {

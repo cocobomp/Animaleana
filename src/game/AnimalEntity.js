@@ -120,6 +120,12 @@ export class AnimalEntity {
     this.placeLabels();
   }
 
+  /** Met à jour l'équipement visible (selle, couverture…). */
+  applyGear() {
+    if (this.gearGroup) removeGear(this.gearGroup);
+    this.gearGroup = buildGear(this.model, this.data.look, this.data.gear ?? {});
+  }
+
   /** Refait le modèle (même place, même parent dans la scène). */
   rebuildModel() {
     const parent = this.root.parent;
@@ -132,12 +138,6 @@ export class AnimalEntity {
     this.root.position.copy(pos);
     this.root.rotation.y = this.heading;
     (parent ?? this.scene).add(this.root);
-  }
-
-  /** Met à jour l'équipement visible (selle, couverture…). */
-  applyGear() {
-    if (this.gearGroup) removeGear(this.gearGroup);
-    this.gearGroup = buildGear(this.model, this.data.look, this.data.gear ?? {});
   }
 
   applyScale() {

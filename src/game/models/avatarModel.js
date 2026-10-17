@@ -1,7 +1,8 @@
 // Modèle 3D du personnage du joueur (regarde vers +Z, environ 1,6 m).
 // Corps en « lofts » (formes lisses), tête sculptée (champ de distance), mains, chaussures,
-// yeux avec iris, paupières qui clignent et cils, cheveux en volume (avatarHair.js),
-// vêtements avec plis légers (relief peint).
+// visage posé sur la peau (avatarFace.js : yeux avec iris, paupières qui clignent et cils,
+// sourcils, bouche souriante, joues roses), cheveux en volume (avatarHair.js),
+// vêtements avec plis légers (relief peint), tee-shirt à manches courtes.
 // Squelette : hanches → genoux → chevilles (jambes) ; torse (pivot aux hanches) → épaules → coudes
 // → mains (bras), tête → yeux (globe qui regarde, paupière).
 // Les proportions sont un peu enfantines (grosse tête, membres ronds).
@@ -10,12 +11,12 @@
 
 import * as THREE from 'three';
 import { loft } from './shapes.js';
-import { sdfMesh, rayHit, sdfNormal } from './sdf.js';
+import { sdfMesh } from './sdf.js';
 import { headSdf } from './avatarHead.js';
-import { eyeTexture } from '../textures.js';
+import { buildFace } from './avatarFace.js';
 import { gfx } from '../gfx.js';
 import { hairGeometry, tintHair, hatScale, HAT_SHAPE, prepareHair, BRAID_END } from './avatarHair.js';
-import { initLife, carryHold, animateAvatarRide, LID_OPEN } from './avatarRig.js';
+import { initLife, carryHold, animateAvatarRide } from './avatarRig.js';
 
 // Le reste de l'animation (vie, gestes, cheval) est aussi disponible depuis ce module.
 export { updateAvatarLife, startAvatarGesture, stopAvatarGesture, avatarBusy, animateAvatarRide, armIK } from './avatarRig.js';
@@ -174,7 +175,9 @@ export function buildAvatar(look, seed = Math.random() * 1e9) {
     // Chaussure : bout arrondi, semelle claire.
     const shoe = shared(`shoe${R}`, () => loft([[-0.07, 0.042, 0.036], [-0.03, 0.052, 0.052], [0.04, 0.054, 0.046], [0.1, 0.048, 0.036], [0.135, 0.032, 0.026]].map(([z, w, h]) => ({ p: [0, 0, z], rx: w, ry: h, ryb: 0.012 })), { radial: R, sub: 3, round: [0.4, 0.6] }));
     add(ankle, shoe, shoes, [0, -0.775 + KNEE + ANKLE, 0.02]);
-    add(ankle, shared('sole', () => new THREE.BoxGeometry(0.104, 0.018, 0.23)), sole, [0, -0.8 + KNEE + ANKLE, 0.035]);
+    // Semelle qui suit le contour de la chaussure (une planche droite dépassait au talon, comme un ski).
+    const soleGeo = shared(`sole${R}`, () => loft([[-0.084, 0.02], [-0.078, 0.036], [-0.068, 0.045], [-0.03, 0.055], [0.04, 0.057], [0.1, 0.051], [0.135, 0.037], [0.151, 0.022], [0.159, 0.008]].map(([z, w]) => ({ p: [0, 0, z], rx: w, ry: 0.0095 })), { radial: R, sub: 2, round: [0.4, 0.4] }));
+    add(ankle, soleGeo, sole, [0, -0.796 + KNEE + ANKLE, 0.02]);
     legs.push(hip);
     knees.push(knee);
     ankles.push(ankle);
@@ -188,7 +191,9 @@ export function buildAvatar(look, seed = Math.random() * 1e9) {
   const body = new THREE.Group();
   body.position.y = -HIP_Y;
   torso.add(body);
-  const pelvis = shared(`pelvis${R}`, () => limbGeo([[0.74, 0.12, 0.09], [0.8, 0.165, 0.11], [0.9, 0.16, 0.105], [0.96, 0.15, 0.1]], R + 4));
+  // Bassin : le bas est arrondi entre les cuisses, et le devant ne bombe plus devant le haut des
+  // cuisses (coupé net et plus profond, il dessinait une sorte de culotte par-dessus le pantalon).
+  const pelvis = shared(`pelvis${R}`, () => limbGeo([[0.74, 0.115, 0.08, -0.008], [0.8, 0.162, 0.098, -0.01], [0.9, 0.16, 0.103, -0.002], [0.96, 0.15, 0.1]], R + 4, [0.5, 0]));
   add(body, pelvis, bottom);
   const chest = shared(`chest${R}`, () => limbGeo([[0.9, 0.158, 0.105], [1.02, 0.15, 0.1], [1.15, 0.162, 0.108, 0.005], [1.27, 0.19, 0.108], [1.34, 0.215, 0.1], [1.385, 0.17, 0.085], [1.42, 0.085, 0.065], [1.44, 0.06, 0.055]], R + 4));
   add(body, chest, top);
@@ -206,10 +211,13 @@ export function buildAvatar(look, seed = Math.random() * 1e9) {
     shoulder.position.set(s * 0.19, SHOULDER_Y - 0.03 - HIP_Y, 0);
     shoulder.rotation.z = s * 0.08;
     torso.add(shoulder);
-    const upper = shared(`upperArm${R}`, () => limbGeo([[0.04, 0.052, 0.052], [0, 0.058, 0.058], [-0.14, 0.048, 0.051], [-ELBOW, 0.041, 0.043]], R - 2, [0, 0.9]));
-    add(shoulder, upper, top);
-    // Manche courte un peu évasée.
-    const sleeve = shared(`sleeve${R}`, () => limbGeo([[0.025, 0.06, 0.06], [-0.02, 0.065, 0.065], [-0.1, 0.063, 0.065], [-0.13, 0.066, 0.068]], R - 2, [0.3, 0.3]));
+    // Haut du bras nu (la manche courte le couvre jusqu'à mi-hauteur).
+    const upper = shared(`upperArm${R}`, () => limbGeo([[0.015, 0.05, 0.05], [-0.01, 0.056, 0.057], [-0.14, 0.048, 0.051], [-ELBOW, 0.041, 0.043]], R - 2, [0, 0.9]));
+    add(shoulder, upper, skin);
+    // Manche courte un peu évasée. Le haut est un dôme qui rentre dans l'épaule du buste : la manche
+    // fait corps avec le tee-shirt (avant, son bord plat dépassait sous l'épaule comme une épaulette
+    // posée à côté, et le bras restait bleu jusqu'au coude, comme une seconde manche détachée).
+    const sleeve = shared(`sleeve${R}`, () => limbGeo([[0.05, 0.036, 0.038], [0.035, 0.054, 0.056], [0.005, 0.064, 0.065], [-0.05, 0.066, 0.067], [-0.105, 0.069, 0.07], [-0.12, 0.07, 0.071]], R - 2, [0.6, 0.25]));
     add(shoulder, sleeve, top);
     const elbow = new THREE.Group();
     elbow.position.set(0, -ELBOW, 0);
@@ -236,46 +244,8 @@ export function buildAvatar(look, seed = Math.random() * 1e9) {
   add(head, new THREE.CylinderGeometry(0.048, 0.056, 0.12, R), skin, [0, -0.07, 0]);
   const headGeo = shared(`head${high}`, () => sdfMesh(headSdf, [[-0.16, -0.12, -0.16], [0.16, 0.24, 0.17]], high ? 0.008 : 0.013));
   add(head, headGeo, skin, [0, 0.0, 0]);
-  // Yeux : globe (blanc + iris) qui peut regarder ailleurs, paupière qui cligne avec ses cils, sourcils.
-  const eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTexture(look.eyes ?? 0x4a6b8a, 'human'), roughness: 0.08, clearcoat: high ? 1 : 0 });
-  const lidMat = mat(look.skin, 0.6);
-  const lashMat = mat(0x2a1a14, 0.6);
-  const brow = mat(look.hair, 0.7);
-  const eyeBalls = [];
-  const lids = [];
-  const lidGeo = shared('eyelid', () => new THREE.SphereGeometry(0.0178, 16, 7, 0, Math.PI * 2, 0, Math.PI * 0.5));
-  const lashGeo = shared('eyelash', () => new THREE.TorusGeometry(0.0178, 0.0019, 5, 14, Math.PI));
-  for (const s of [1, -1]) {
-    const hit = rayHit(headSdf, [s * 0.042, 0.066, 0], [s * 0.15, 0, 1], 0.3);
-    const n = sdfNormal(headSdf, hit, 0.003);
-    const eye = new THREE.Group();
-    eye.position.copy(hit).addScaledVector(n, -0.01);
-    eye.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(s * 0.05, 0, 1).normalize());
-    head.add(eye);
-    const ball = new THREE.Group();
-    eye.add(ball);
-    add(ball, shared('eyeball', () => new THREE.SphereGeometry(0.0165, 16, 12)), eyeMat, null, null, null, false);
-    // Paupière : demi-sphère un peu plus grande que le globe ; elle pivote vers le bas pour cligner.
-    const lid = new THREE.Group();
-    lid.rotation.x = LID_OPEN;
-    eye.add(lid);
-    add(lid, lidGeo, lidMat, null, null, null, false);
-    add(lid, lashGeo, lashMat, null, [Math.PI / 2, 0, 0], [1.02, 1.02, 1], false);
-    eyeBalls.push(ball);
-    lids.push(lid);
-    // Sourcil posé sur l'arcade (il était presque caché dedans), couché contre le front.
-    const bh = rayHit(headSdf, [s * 0.046, 0.104, 0], [0, 0, 1], 0.3);
-    const bn = sdfNormal(headSdf, bh, 0.003);
-    const b = add(head, shared('brow', () => new THREE.CapsuleGeometry(0.0045, 0.026, 4, 6)), brow, null, null, [1, 1, 0.55], false);
-    b.position.copy(bh).addScaledVector(bn, 0.0012);
-    b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), bn);
-    b.rotateZ(Math.PI / 2 + s * 0.14);
-  }
-  // Bouche (sourire), lèvres et joues roses.
-  const lips = mat(new THREE.Color(look.skin).lerp(new THREE.Color(0xb05a55), 0.45).getHex(), 0.5);
-  add(head, new THREE.TorusGeometry(0.02, 0.0045, 6, 14, Math.PI * 0.9), lips, [0, -0.028, 0.118], [0.2, 0, Math.PI * 1.05], null, false);
-  const blush = mat(new THREE.Color(look.skin).lerp(new THREE.Color(0xe08a80), 0.35).getHex(), 0.7);
-  for (const s of [1, -1]) add(head, new THREE.SphereGeometry(0.018, 10, 8), blush, [s * 0.072, 0.0, 0.082], null, [1.3, 0.8, 0.35], false);
+  // Visage (avatarFace.js) : yeux, sourcils, bouche souriante et joues, posés sur la peau.
+  const { eyeBalls, lids } = buildFace(head, look, high);
 
   // --- Cheveux : une vraie masse qui suit le crâne (avatarHair.js), mèches et reflets doux.
   const style = look.hairStyle ?? 'short';

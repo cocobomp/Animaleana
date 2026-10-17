@@ -42,6 +42,7 @@ const fr = {
   updateUnavailable: 'Mise à jour impossible ici : ouvre le jeu depuis son adresse https',
 
   avatarTitle: 'Ton avatar',
+  avatarSpin: 'Fais-le tourner du doigt',
   skin: 'Peau',
   hair: 'Cheveux',
   hairStyle: 'Coiffure',
@@ -1880,6 +1881,7 @@ const en = {
   updateUnavailable: 'Cannot update here: open the game from its https address',
 
   avatarTitle: 'Your avatar',
+  avatarSpin: 'Swipe to turn around',
   skin: 'Skin',
   hair: 'Hair',
   hairStyle: 'Hairstyle',

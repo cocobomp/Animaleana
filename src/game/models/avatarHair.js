@@ -91,14 +91,17 @@ const STYLE = {
     grooves: 9,
     groove: 0.003,
   },
+  // Longs : raie au milieu, front dégagé (deux mèches partent de la raie et encadrent le visage, voir
+  // hairField). Avant, une frange droite faisait tout le tour à hauteur des sourcils : un casque.
   long: {
-    line: [[0, 0.121], [0.6, 0.123], [0.82, 0.116], [1.0, 0.075], [1.25, 0.04], [1.6, 0.02], [2.2, -0.02], [Math.PI, -0.04]],
-    jag: { n: 16, amp: 0.009, from: 0, to: 0.72 },
-    t0: (y) => 0.012 + 0.014 * sstep(0.04, 0.19, y),
+    line: [[0, 0.15], [0.35, 0.146], [0.7, 0.13], [0.95, 0.104], [1.15, 0.07], [1.35, 0.042], [1.6, 0.02], [2.2, -0.02], [Math.PI, -0.04]],
+    jag: null,
+    t0: (y) => 0.01 + 0.012 * sstep(0.04, 0.19, y),
     tMin: 0.005,
+    part: true,
     whorl: [0, 0.205, -0.04],
-    grooves: 11,
-    groove: 0.0026,
+    grooves: 12,
+    groove: 0.002,
   },
   ponytail: {
     line: [[0, 0.152], [0.5, 0.146], [0.85, 0.126], [1.08, 0.078], [1.3, 0.07], [1.46, 0.096], [1.82, 0.088], [2.2, 0.015], [Math.PI, -0.02]],
@@ -300,12 +303,16 @@ function hairField(style, head, hat, cell = 0.0158) {
   // aux tempes et sur la nuque).
   const w = Math.max(0.008, cell); // largeur du fondu sous la ligne
   const edgeR = Math.max(0.006, cell * 0.8); // congé de la coupe (cachée sous la peau)
+  // Raie au milieu (longs) : un creux le long du dessus de la tête, du front jusqu'à l'épi.
+  const part = S.part
+    ? (x, y, z) => 0.0045 * Math.exp(-(x * x) / (0.013 * 0.013)) * sstep(-0.05, -0.01, z) * sstep(0.13, 0.165, y)
+    : () => 0;
   const cap = (x, y, z, h) => {
     const A = above(x, y, z);
     const full = S.tMin + (S.t0(y) - S.tMin) * sstep(-0.004, 0.035, A.d);
     const k = sstep(-w, w * 0.7, A.d);
     const t = -0.006 + (full + 0.006) * k;
-    const d = h - t + gAmp * groove(x, y, z) * k;
+    const d = h - t + (gAmp * groove(x, y, z) + part(x, y, z)) * k;
     return roundMax(d, -(A.d + 2.4 * w), edgeR);
   };
 
@@ -325,11 +332,17 @@ function hairField(style, head, hat, cell = 0.0158) {
     extra.push(lock([[0.07, 0.2, 0.03], P(0.05, 0.172, 0.014), P(-0.02, 0.142, 0.009)], [0.02, 0.017, 0.009].map(rr)));
     for (const s of [1, -1]) extra.push(lock([P(s * 0.098, 0.128, 0.005), P(s * 0.104, 0.095, 0.006), P(s * 0.1, 0.066, 0.005)], [0.0065, 0.0055, 0.003].map(rr)));
   }
-  // Longs : rideau dans le dos et longues mèches de chaque côté du visage.
+  // Longs : deux mèches partent de la raie, dégagent le front en s'écartant vers les tempes, puis
+  // rejoignent les longues mèches qui encadrent le visage ; rideau dans le dos.
   let curtain = null;
   if (style === 'long') {
+    const P = (x, y, off) => [x, y, skinZ(head, x, y) + off];
+    for (const s of [1, -1]) {
+      extra.push(lock([P(s * 0.009, 0.192, 0.012), P(s * 0.04, 0.166, 0.013), P(s * 0.075, 0.136, 0.013), P(s * 0.1, 0.096, 0.012), P(s * 0.111, 0.05, 0.01)], [0.012, 0.016, 0.017, 0.017, 0.016].map(rr)));
+    }
     const back = lock([[0, 0.06, -0.075], [0, -0.06, -0.112], [0, -0.17, -0.125], [0, -0.265, -0.122]], [0.07, 0.052, 0.036, 0.024], 2.05);
-    const sides = [1, -1].map((s) => lock([[s * 0.108, 0.1, 0.03], [s * 0.118, -0.03, 0.036], [s * 0.112, -0.15, 0.012]], [0.028, 0.025, 0.012], 0.62));
+    // Mèches du visage : elles s'écartent un peu en descendant, pointes arrondies sur les épaules.
+    const sides = [1, -1].map((s) => lock([[s * 0.108, 0.1, 0.03], [s * 0.118, -0.03, 0.036], [s * 0.121, -0.1, 0.026], [s * 0.118, -0.16, 0.012]], [0.028, 0.025, 0.019, 0.011], 0.62));
     curtain = (x, y, z) => {
       let d = back(x, y, z);
       d = smin(d, sides[0](x, y, z), 0.02);

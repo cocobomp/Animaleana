@@ -148,29 +148,88 @@ function chooseHome(ui, onChoose, back) {
 
 let preview = null;
 
+// Aperçu de l'avatar : le personnage regarde la caméra, à peine de trois quarts (tourné vers la
+// lumière), avec un très léger balancement. On le fait tourner du doigt (ou à la souris) pour voir
+// la coiffure de dos ; lâché, il revient doucement de face. (Avant, il tournait sans arrêt sur
+// lui-même : on le voyait surtout de profil ou de dos.)
+const PREVIEW_YAW = 0.32;
+const PREVIEW_FOV = 30;
+// Ce qui doit tenir en entier (m) : du dessous des pieds au haut de la coiffure, et la largeur.
+const PREVIEW_BOTTOM = -0.02;
+const PREVIEW_H = 1.88;
+const PREVIEW_W = 0.82;
+// Marges (px) : en bas, la place de l'indication « Fais-le tourner du doigt ».
+const PREVIEW_PAD_TOP = 8;
+const PREVIEW_PAD_BOTTOM = 30;
+
 function getPreview() {
   if (preview) return preview;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
-  camera.position.set(0, 1.1, 4.4);
-  camera.lookAt(0, 0.85, 0);
+  const camera = new THREE.PerspectiveCamera(PREVIEW_FOV, 1, 0.1, 50);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7a6a, 1.6));
   const sun = new THREE.DirectionalLight(0xffffff, 2);
   sun.position.set(2, 4, 3);
   scene.add(sun);
+  // Petite lumière de face, douce : le visage n'est jamais dans l'ombre.
+  const fill = new THREE.DirectionalLight(0xfff4ea, 0.5);
+  fill.position.set(-1, 1.6, 4);
+  scene.add(fill);
   const holder = new THREE.Group();
   scene.add(holder);
-  preview = { renderer, scene, camera, holder, avatar: null, running: false };
+  preview = { renderer, scene, camera, holder, avatar: null, running: false, yaw: PREVIEW_YAW, drag: null, idle: 99 };
+  // Tourner le personnage en le faisant glisser (le défilement vertical de la page reste possible).
+  const el = renderer.domElement;
+  el.style.touchAction = 'pan-y';
+  el.style.cursor = 'grab';
+  el.addEventListener('pointerdown', (e) => {
+    preview.drag = { x: e.clientX, yaw: preview.yaw, id: e.pointerId };
+    el.setPointerCapture?.(e.pointerId);
+    el.style.cursor = 'grabbing';
+  });
+  el.addEventListener('pointermove', (e) => {
+    const d = preview.drag;
+    if (!d || d.id !== e.pointerId) return;
+    preview.yaw = d.yaw + (e.clientX - d.x) * 0.012;
+    preview.idle = 0;
+  });
+  const release = () => {
+    preview.drag = null;
+    preview.idle = 0;
+    el.style.cursor = 'grab';
+  };
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
   return preview;
 }
+
+/**
+ * Recule la caméra pour que le personnage tienne en entier, quelle que soit la forme de l'aperçu
+ * (large sur téléphone, haut et étroit sur ordinateur), au-dessus de l'indication du bas.
+ */
+function framePreview(camera, w, h) {
+  const t = Math.tan((PREVIEW_FOV / 2) * (Math.PI / 180));
+  const pads = PREVIEW_PAD_TOP + PREVIEW_PAD_BOTTOM;
+  // Hauteur vue à la distance du personnage : il faut y loger sa hauteur et les marges, et sa largeur.
+  const view = Math.max((PREVIEW_H * h) / Math.max(1, h - pads), (PREVIEW_W * h) / w);
+  const k = view / h; // mètres par pixel
+  const spare = view - PREVIEW_H - pads * k; // place en trop : partagée entre le haut et le bas
+  const mid = PREVIEW_BOTTOM - (PREVIEW_PAD_BOTTOM * k + spare / 2) + view / 2;
+  camera.aspect = w / h;
+  camera.position.set(0, mid + 0.22, view / 2 / t);
+  camera.lookAt(0, mid, 0);
+  camera.updateProjectionMatrix();
+}
+
+/** Angle équivalent à a (à un tour près) le plus proche de target : pour revenir de face sans faire un tour. */
+const nearAngle = (a, target) => target + ((((a - target) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
 
 export function showAvatarEditor(ui, profile, onDone) {
   const look = { ...profile.avatar };
   const pv = getPreview();
-  const canvasBox = h('div', { class: 'avatar-preview' }, pv.renderer.domElement);
+  const canvasBox = h('div', { class: 'avatar-preview' }, pv.renderer.domElement, h('span', { class: 'avatar-spin' }, `↔ ${t('avatarSpin')}`));
   const rebuild = () => {
     if (pv.avatar) {
       pv.holder.remove(pv.avatar.root);
@@ -181,25 +240,41 @@ export function showAvatarEditor(ui, profile, onDone) {
   };
   rebuild();
   pv.running = true;
+  pv.yaw = PREVIEW_YAW;
+  pv.idle = 99;
+  pv.drag = null;
   let last = performance.now();
+  let time = 0;
+  // Le personnage est vivant dans l'aperçu : il respire, cligne des yeux, regarde un peu autour de
+  // lui, mais sans geste d'attente (se gratter la tête, s'étirer…) : rien ne cache le visage.
+  const life = { speed: 0, noGestures: true };
   const loop = () => {
     if (!pv.running) return;
-    // Le personnage est vivant dans l'aperçu : il respire, cligne des yeux, bouge un peu.
     const now = performance.now();
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    time += dt;
     if (pv.avatar) {
       animateAvatarWalk(pv.avatar, 0, 0);
-      updateAvatarLife(pv.avatar, dt);
+      updateAvatarLife(pv.avatar, dt, life);
     }
     const w = canvasBox.clientWidth || 240;
     const hh = canvasBox.clientHeight || 300;
-    if (pv.renderer.domElement.width !== Math.floor(w * pv.renderer.getPixelRatio())) {
+    const px = pv.renderer.getPixelRatio();
+    if (pv.renderer.domElement.width !== Math.floor(w * px) || pv.renderer.domElement.height !== Math.floor(hh * px)) {
       pv.renderer.setSize(w, hh, false);
-      pv.camera.aspect = w / hh;
-      pv.camera.updateProjectionMatrix();
+      framePreview(pv.camera, w, hh);
     }
-    pv.holder.rotation.y += 0.01;
+    // Lâché depuis un moment : il revient de face (par le plus court chemin), puis se balance à peine.
+    if (!pv.drag) {
+      pv.idle += dt;
+      if (pv.idle > 1.6) {
+        const target = nearAngle(PREVIEW_YAW, pv.yaw);
+        pv.yaw += (target - pv.yaw) * Math.min(1, dt * 2.2);
+      }
+    }
+    const sway = Math.min(1, Math.max(0, pv.idle - 2.5));
+    pv.holder.rotation.y = pv.yaw + 0.07 * Math.sin(time * 0.5) * sway;
     pv.renderer.render(pv.scene, pv.camera);
     requestAnimationFrame(loop);
   };

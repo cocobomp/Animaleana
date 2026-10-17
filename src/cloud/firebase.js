@@ -20,15 +20,17 @@ const SIGNED_IN_KEY = 'animaleana.cloud.signedIn';
 
 /**
  * La connexion n'est possible que depuis une vraie adresse Internet (pas la version « à emporter »
- * ouverte comme fichier). Sur les adresses Firebase, la page de connexion est servie par le jeu
- * lui-même (même adresse) : c'est ce qui la fait marcher sur iPhone (Safari bloque sinon).
+ * ouverte comme fichier).
  */
 export function cloudSupported(loc = globalThis.location) {
   return Boolean(loc && /^https?:$/.test(loc.protocol));
 }
 
-export function authDomainFor(hostname) {
-  return /(^|\.)lafermeamadichelle\.(web\.app|firebaseapp\.com)$/.test(hostname ?? '') ? hostname : FIREBASE_CONFIG.authDomain;
+export function authDomainFor() {
+  // Le client OAuth de Google n'autorise le retour de connexion que sur lafermeamadichelle.firebaseapp.com :
+  // avec l'adresse du jeu (web.app), Google refuse (redirect_uri_mismatch). La fenêtre de connexion
+  // marche ainsi partout (y compris Safari, qui bloque les cookies d'autres sites).
+  return FIREBASE_CONFIG.authDomain;
 }
 
 /** Vrai si ce navigateur s'est déjà connecté (pour charger Firebase au démarrage seulement dans ce cas). */
@@ -64,7 +66,7 @@ export function loadFirebase() {
   if (!ready) {
     ready = Promise.all([import('firebase/app'), import('firebase/auth'), import('firebase/firestore')])
       .then(([appMod, authMod, fsMod]) => {
-        const app = appMod.initializeApp({ ...FIREBASE_CONFIG, authDomain: authDomainFor(globalThis.location?.hostname) });
+        const app = appMod.initializeApp({ ...FIREBASE_CONFIG, authDomain: authDomainFor() });
         const auth = authMod.getAuth(app);
         auth.languageCode = document.documentElement.lang || 'fr';
         const db = fsMod.getFirestore(app);

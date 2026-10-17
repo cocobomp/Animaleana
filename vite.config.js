@@ -47,12 +47,18 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // Seulement les fichiers du jeu : ni les autres sites (Google, Firebase), ni les pages de connexion
+  // de Firebase servies à la même adresse (/__/auth/…), qui ne doivent jamais remplacer le jeu en cache.
+  const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin || url.pathname.includes('/__/')) return;
   // La page elle-même : d'abord le réseau (un seul rechargement suffit pour avoir la nouvelle version),
   // le cache seulement hors ligne. Les fichiers du jeu ont un nom unique par version : cache d'abord.
   if (e.request.mode === 'navigate') {
     e.respondWith(fetch(e.request).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put('./index.html', copy));
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put('./index.html', copy));
+      }
       return res;
     }).catch(() => caches.match('./index.html')));
     return;

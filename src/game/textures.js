@@ -417,7 +417,7 @@ export function coatTextures(look, speciesId) {
     neck: paint(small, 'neck', neckMarks, { counter: true }),
     head: paint(small, 'head', headMarks),
     tail: paint(small, 'tail', tailMarks),
-    ear: paint(64, 'ear', earMarks),
+    ear: paint(texSize(64), 'ear', earMarks),
     legs,
   };
 }

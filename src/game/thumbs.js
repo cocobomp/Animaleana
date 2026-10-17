@@ -563,6 +563,7 @@ export class Thumbs {
     if (canvas?.addEventListener) {
       canvas.addEventListener('webglcontextlost', () => this.contextLost());
       canvas.addEventListener('webglcontextrestored', () => {
+        this.failed.clear(); // (les vignettes ratées pendant la perte du contexte : on pourra les refaire)
         this.enabled = setting !== 'off' && this.detect();
       });
     }

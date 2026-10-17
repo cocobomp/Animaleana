@@ -550,7 +550,7 @@ export function catCoatTextures(look, traits, marks) {
     neck: paint(SMALL, 'neck', { counter: true }),
     head: paint(MID, 'head'),
     tail: paint(SMALL, 'tail'),
-    ear: paint(64, 'ear', { strokes: false }),
+    ear: paint(texSize(64), 'ear', { strokes: false }),
     legs,
   };
 }

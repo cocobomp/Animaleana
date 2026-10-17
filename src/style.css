@@ -2006,3 +2006,5 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .tk-slot { display: inline-block; min-width: 74px; color: var(--muted); }
 .tk-dot { display: inline-block; vertical-align: middle; width: 16px; height: 16px; margin-left: 6px; }
 .tk-goshop { justify-self: start; }
+.tk-actions .big-action.tk-short { background: #fbf3df; border-color: #e3cfa3; } /* mode argent : il manque des pièces */
+.tk-actions .big-action.tk-short small { color: #9a4a1a; font-weight: 600; }

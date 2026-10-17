@@ -46,6 +46,9 @@ function sizeChoice(g, id) {
 
 const priceLabel = (p, id, size) => (isSandbox(p) ? t('tk_free') : `${gearPrice(id, size ?? defaultSize(id))} 🪙`);
 
+/** « Taille Cheval : 2 · 1 rangé au mur » (singulier / pluriel). */
+const stockText = (s) => t('tk_stockLine', { size: t(`tk_size_${s.size}`), n: s.owned }) + (s.free > 0 ? t('tk_stockFree', { n: s.free }) : '');
+
 // ---------------------------------------------------------------- catalogue
 
 /** Le catalogue : depuis le comptoir, le coffre (« Mon matériel ») ou le raccourci du menu. */
@@ -120,10 +123,10 @@ function mineList(ui) {
   return [h('p', { class: 'note' }, t('tk_mineHelp')), h('div', { class: 'cards' }, ids.map((id) => {
     const def = GEAR[id];
     const lines = def.sizes
-      ? stockOf(p, id).map((s) => t('tk_stockLine', { size: t(`tk_size_${s.size}`), n: s.owned, free: Math.max(0, s.free) }))
+      ? stockOf(p, id).map(stockText)
       : [t('tk_owned', { n: ownedVariant(p, id) })];
     const who = (def.sizes ?? [null]).flatMap((s) => wornBy(p, id, s ?? defaultSize(id))).map((a) => a.name);
-    if (def.type === 'helmet' && riderHelmet(p)?.item === id) who.push('⛑️');
+    if (def.type === 'helmet' && riderHelmet(p)?.item === id) who.push(t('tk_you')); // la bombe : sur ta tête
     return h('button', { class: 'card tk-card', onClick: () => openTackItem(ui, id) },
       h('img', { class: 'tk-thumb', src: thumbs(g).item(id, colorOf(p, id), [192, 144]), alt: '' }),
       h('span', { class: 'card-main' }, h('b', {}, name(id)), ...lines.map((l) => h('small', {}, l)),
@@ -193,7 +196,7 @@ function renderItem(ui, id) {
       onClick: () => { shop.size[id] = s; ui.renderPanel(); },
     }, `${{ pony: '🐴', horse: '🐎', draft: '🐴💪' }[s]} ${t(`tk_size_${s}`)}${sandbox ? '' : ` · ${gearPrice(id, s)} 🪙`}`))));
     const stock = stockOf(p, id);
-    for (const s of stock) out.push(h('p', { class: 'note' }, t('tk_stockLine', { size: t(`tk_size_${s.size}`), n: s.owned, free: Math.max(0, s.free) })));
+    for (const s of stock) out.push(h('p', { class: 'note' }, stockText(s)));
     // Échange gratuit : un exemplaire rangé d'une autre taille contre la taille choisie.
     for (const s of stock.filter((x) => x.free > 0 && x.size !== size)) {
       out.push(h('button', { class: 'small tk-swap', onClick: () => {
@@ -212,16 +215,22 @@ function renderItem(ui, id) {
 
   // Boutons : essayer, acheter, équiper (ou mettre sa bombe).
   const price = gearPrice(id, size ?? defaultSize(id));
+  const missing = canAfford(p, price) ? 0 : price - (p.money ?? 0); // mode argent : il manque des pièces
   const wearing = helmet && riderHelmet(p)?.item === id;
   out.push(h('div', { class: 'tk-actions' },
     !helmet ? h('button', { class: `big-action ${shop.pick === 'try' ? 'primary' : ''}`, onClick: () => { shop.pick = shop.pick === 'try' ? null : 'try'; ui.renderPanel(); } },
       h('span', { class: 'ba-icon' }, '👀'), h('span', { class: 'ba-text' }, h('b', {}, t('tk_tryOn')))) : null,
     h('button', {
-      class: 'big-action primary',
-      disabled: !canAfford(p, price),
+      class: `big-action ${missing ? 'tk-short' : 'primary'}`,
       onClick: () => {
+        if (missing) {
+          shop.pick = 'money';
+          ui.toast(t('tk_missing', { n: missing }));
+          return ui.renderPanel();
+        }
         const r = g.buyGear(id, size);
         if (r?.ok) {
+          if (shop.pick === 'money') shop.pick = null;
           p.tackColors = { ...(p.tackColors ?? {}), [id]: color };
           g.interiors?.refreshTack?.();
         }
@@ -229,15 +238,21 @@ function renderItem(ui, id) {
       },
     }, h('span', { class: 'ba-icon' }, '🛒'), h('span', { class: 'ba-text' },
       h('b', {}, def.sizes && def.sizes.length > 1 ? t('tk_buySize', { size: t(`tk_size_${size}`) }) : t('tk_buy')),
-      h('small', {}, sandbox ? t('tk_free') : `${price} 🪙`))),
+      h('small', {}, sandbox ? t('tk_free') : missing ? t('tk_missing', { n: missing }) : `${price} 🪙`))),
     helmet
       ? h('button', { class: 'big-action', disabled: !own || wearing, onClick: () => { g.equipHelmet(id, color); ui.renderPanel(); } },
         h('span', { class: 'ba-icon' }, '⛑️'), h('span', { class: 'ba-text' }, h('b', {}, wearing ? t('tk_wearing') : t('tk_wear'))))
       : h('button', { class: `big-action ${shop.pick === 'equip' ? 'primary' : ''}`, disabled: !own, onClick: () => { shop.pick = shop.pick === 'equip' ? null : 'equip'; ui.renderPanel(); } },
         h('span', { class: 'ba-icon' }, '✅'), h('span', { class: 'ba-text' }, h('b', {}, t('tk_equip'))))));
 
+  // Pas assez de pièces : combien il manque, et où en gagner.
+  if (shop.pick === 'money') {
+    out.push(h('div', { class: 'tk-pick' },
+      h('b', {}, missing ? t('tk_missing', { n: missing }) : t('tk_buy')),
+      h('button', { class: 'primary', onClick: () => { ui.closePanel(); ui.openJobs(); } }, `📋 ${t('tk_earnMoney')}`)));
+  }
   // Choisir l'animal (essayage ou équipement).
-  if (shop.pick) {
+  if (shop.pick === 'try' || shop.pick === 'equip') {
     const list = fits;
     out.push(h('div', { class: 'tk-pick' },
       h('b', {}, shop.pick === 'try' ? t('tk_tryOn') : t('tk_equipWho')),
@@ -265,9 +280,9 @@ function tryOn(ui, id, a, color) {
 
 function equipOn(ui, id, a, color) {
   const g = ui.game;
-  const r = g.equip(a, id, color);
+  const r = g.equip(a, id, color, { exact: true }); // ce modèle-là, pas un autre du même type
   if (r?.ok) {
-    ui.toast(t('tk_equipped', { item: name(id), name: a.name }));
+    ui.toast(t('tk_equipped', { item: name(r.item), name: a.name }));
     shop.pick = null;
     g.interiors?.refreshTack?.();
   }
@@ -300,7 +315,7 @@ export function animalGearSection(ui, a) {
         worn ? h('b', {}, `${GEAR[worn.item].emoji} ${name(worn.item)}`) : h('span', { class: 'note' }, t('tk_none')),
         worn?.color ? h('span', { class: 'swatch-dot tk-dot', style: { background: hex(worn.color) } }) : null),
       worn ? h('button', { class: 'small', onClick: () => { g.unequip(a, slot); ui.renderPanel(); } }, t('gearRemove')) : null,
-      ...spare.slice(0, 3).map((id) => h('button', { class: 'small primary', onClick: () => { g.equip(a, id, colorOf(p, id)); ui.renderPanel(); } }, `${GEAR[id].emoji} ${name(id)}`))))
+      ...spare.slice(0, 3).map((id) => h('button', { class: 'small primary', onClick: () => { g.equip(a, id, colorOf(p, id), { exact: true }); ui.renderPanel(); } }, `${GEAR[id].emoji} ${name(id)}`))))
       : h('p', { class: 'note' }, t('tk_gearNone')),
     h('button', { class: 'small tk-goshop', onClick: () => openTackShop(ui, { tab: firstCat }) }, `🏇 ${t('tk_goShop')}`));
 }

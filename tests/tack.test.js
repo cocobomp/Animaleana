@@ -4,8 +4,9 @@ import { createAnimal } from '../src/sim/animal.js';
 import {
   GEAR, TACK_CATEGORIES, COLORS, SIZES, sizeOf, defaultSize, stockKey, parseKey, gearPrice, fitReason,
   ensureTack, owned, inUse, ownedStock, freeStock, stockOf, buyGear, equip, swapSize, wears, tackEffects,
-  feltWeather, riderHelmet, equipHelmet, rideGear,
+  feltWeather, riderHelmet, equipHelmet, rideGear, keepsWarm,
 } from '../src/sim/gear.js';
+import { isWarm } from '../src/sim/events.js';
 import { jumpChance, horseJumpStats, trickWindow, trailResult, activitySkillGain } from '../src/sim/activities.js';
 import { TACK_FR, TACK_EN } from '../src/ui/tackTexts.js';
 
@@ -153,6 +154,57 @@ describe('acheter et équiper', () => {
     expect(rideGear(b).ok).toBe(true);
   });
 
+  it('bouton d\'une fiche (exact) : on met CE modèle, jamais un autre du même type', () => {
+    // Poney à la maison : selle mixte taille cheval (offerte) et selle poney achetée.
+    const p = createProfile('A', 'sandbox');
+    const pony = horse('shetland');
+    p.animals.push(pony);
+    buyGear(p, 'saddlePony', 'pony');
+    const r = equip(p, pony, 'saddle', 'brown', { autoSwap: true, exact: true });
+    expect(r).toMatchObject({ ok: true, item: 'saddle', swapped: 'pony' });
+    expect(pony.gear.saddle).toMatchObject({ item: 'saddle', size: 'pony' });
+    expect(freeStock(p, 'saddlePony', 'pony')).toBe(1); // la selle poney reste au mur
+    // Hors de la maison (pas d'échange) : on le dit, on ne prend pas la selle poney à la place.
+    const p2 = createProfile('B', 'sandbox');
+    const pony2 = horse('shetland');
+    p2.animals.push(pony2);
+    buyGear(p2, 'saddlePony', 'pony');
+    expect(equip(p2, pony2, 'saddle', 'brown', { exact: true }).reason).toBe('wrongSize');
+    expect(pony2.gear?.saddle).toBeUndefined();
+  });
+
+  it('exact : couverture d\'hiver ou selle mixte déjà portées → « il t\'en faut une », pas un autre modèle', () => {
+    const p = createProfile('A', 'sandbox');
+    const a = horse();
+    const b = horse();
+    p.animals.push(a, b);
+    buyGear(p, 'blanket');
+    buyGear(p, 'blanketSummer');
+    buyGear(p, 'saddleJump');
+    expect(equip(p, a, 'blanket', 'navy', { exact: true }).ok).toBe(true);
+    expect(equip(p, a, 'saddle', 'brown', { exact: true }).ok).toBe(true);
+    expect(equip(p, b, 'blanket', 'navy', { autoSwap: true, exact: true }).reason).toBe('notOwned');
+    expect(equip(p, b, 'saddle', 'brown', { autoSwap: true, exact: true }).reason).toBe('notOwned');
+    expect(b.gear?.blanket).toBeUndefined();
+    expect(b.gear?.saddle).toBeUndefined();
+    // Les vieux appels par type (« mets-lui une selle ») prennent toujours celle qui est libre.
+    expect(equip(p, b, 'saddle').item).toBe('saddleJump');
+  });
+
+  it('grand froid : seule la couverture d\'hiver tient chaud (pas la chemise d\'été ni l\'imperméable)', () => {
+    const a = horse();
+    expect(keepsWarm(a)).toBe(false);
+    a.gear = { blanket: { item: 'blanketSummer' } };
+    expect(keepsWarm(a)).toBe(false);
+    a.gear = { blanket: { item: 'blanketRain' } };
+    expect(keepsWarm(a)).toBe(false);
+    a.gear = { blanket: { item: 'blanket' } };
+    expect(keepsWarm(a)).toBe(true);
+    expect(isWarm(a, {})).toBe(true);
+    a.gear = { blanket: { item: 'blanketSummer' } };
+    expect(isWarm(a, {})).toBe(false);
+  });
+
   it('la bride est réservée aux chevaux assez dressés', () => {
     const p = createProfile('A', 'sandbox');
     const a = horse();
@@ -275,6 +327,17 @@ describe('effets en jeu', () => {
 });
 
 describe('textes de la sellerie', () => {
+  it('« 1 rangé au mur » au singulier, « 2 rangés » au pluriel ; la bombe est portée par « toi »', async () => {
+    globalThis.document = globalThis.document ?? { documentElement: {} };
+    const i18n = await import('../src/i18n.js');
+    i18n.setLang('fr');
+    expect(i18n.t('tk_stockFree', { n: 1 })).toBe(' · 1 rangé au mur');
+    expect(i18n.t('tk_stockFree', { n: 2 })).toBe(' · 2 rangés au mur');
+    expect(i18n.t('tk_tagOn', { name: 'Rex', emoji: '🐶' })).toBe('🐶 Rex');
+    expect(i18n.t('tk_missing', { n: 200 })).toBe('Il te manque 200 🪙');
+    for (const k of ['tk_stockLine', 'tk_stockFree', 'tk_you', 'tk_missing', 'tk_earnMoney']) expect(TACK_FR[k]).not.toMatch(/·s\b/);
+  });
+
   it('chaque texte utilisé par la sellerie existe en français et en anglais', async () => {
     globalThis.document = globalThis.document ?? { documentElement: {} };
     const { readFileSync } = await import('node:fs');

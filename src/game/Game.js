@@ -1027,9 +1027,10 @@ export class Game {
     return r;
   }
 
-  equip(a, item, color) {
+  equip(a, item, color, opts = {}) {
     // À la maison, la sellière échange gratuitement la taille si besoin (src/sim/gear.js).
-    const r = equip(this.profile, a, item, color, { autoSwap: this.isHome });
+    // opts.exact : CE modèle (boutons des fiches de la sellerie), jamais un autre du même type.
+    const r = equip(this.profile, a, item, color, { autoSwap: this.isHome, exact: !!opts.exact });
     if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`));
     if (r.swapped) this.ui.toast(t('tk_swappedAuto', { item: t(`gear_${r.item}`), size: t(`tk_size_${r.swapped}`) }), 4000);
     this.entities.get(a.id)?.applyGear();

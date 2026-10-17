@@ -683,7 +683,8 @@ export class Interiors {
         st.tone = 'mine';
       } else {
         // Tout est porté : le support reste vide, l'étiquette dit qui l'a.
-        st.line = onHead ? t('tk_tagHead') : t('tk_tagOn', { name: wearers[0]?.name ?? '' });
+        const who = wearers[0];
+        st.line = onHead ? t('tk_tagHead') : t('tk_tagOn', { name: who?.name ?? '', emoji: SPECIES[who?.species]?.emoji ?? '🐴' });
         st.tone = 'worn';
         st.visible = false;
       }

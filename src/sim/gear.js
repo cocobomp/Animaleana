@@ -247,10 +247,14 @@ export function buyGear(profile, item, size = defaultSize(item)) {
 /**
  * Met un objet sur l'animal. color : clé de COLORS (sinon la première couleur du modèle).
  * item peut être un type ('bridle') : on prend alors un filet libre qui lui va.
+ * exact : on veut CE modèle-là (bouton d'une fiche) — jamais un autre modèle du même type, même si
+ * le modèle de base a le nom de son type ('saddle' = la selle mixte) ; sans exemplaire libre, on
+ * échange la taille (autoSwap) ou on répond notOwned / wrongSize.
  * autoSwap : à la maison, la sellière échange gratuitement un exemplaire rangé d'une autre taille
  * (le licol taille cheval offert au début devient un licol poney pour un Shetland).
+ * Renvoie { ok, item } : item est le modèle vraiment mis (à nommer dans le message).
  */
-export function equip(profile, a, item, color, { autoSwap = false } = {}) {
+export function equip(profile, a, item, color, { autoSwap = false, exact = false } = {}) {
   ensureTack(profile);
   let id = item;
   const def0 = GEAR[id];
@@ -260,7 +264,7 @@ export function equip(profile, a, item, color, { autoSwap = false } = {}) {
   const swappable = (v) => !fitReason(v, a) && (GEAR[v].sizes ?? []).some((sz) => freeStock(profile, v, sz) > 0);
   const wearing = (v) => a.gear?.[GEAR[v].slot]?.item === v && (a.gear[GEAR[v].slot].size ?? defaultSize(v)) === sizeFor(v, a);
   // Un type demandé : si le modèle de base n'est pas libre, un autre modèle du même type fera l'affaire.
-  if (TYPES.has(item) && !wearing(id) && !freeFor(id)) {
+  if (!exact && TYPES.has(item) && !wearing(id) && !freeFor(id)) {
     const types = Object.keys(GEAR).filter((v) => GEAR[v].type === item);
     const other = types.find(freeFor) ?? (autoSwap && !swappable(id) ? types.find(swappable) : null);
     if (other) id = other;
@@ -313,6 +317,9 @@ export const wears = (a, key) => Object.values(a.gear ?? {}).some((g) => matches
 
 /** L'objet porté à cet emplacement (sa définition), ou null. */
 export const wornDef = (a, slot) => GEAR[a.gear?.[slot]?.item] ?? null;
+
+/** Bien au chaud par grand froid : une couverture (ou un manteau) qui protège de la neige et du froid. */
+export const keepsWarm = (a) => !!wornDef(a, 'blanket')?.weather?.snow;
 
 // ---------------------------------------------------------------- bombe du cavalier
 

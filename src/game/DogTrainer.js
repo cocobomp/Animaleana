@@ -35,6 +35,7 @@ export class DogTrainer {
     this.walk = null; // promenade en laisse en cours (séance « tire en laisse »)
     this.demo = null; // démonstration devant le maître
     this.asked = false; // on a déjà ouvert la discussion en arrivant tout près
+    game.clients?.registerGuide?.('dogTrainer', (action) => this.showMe(action)); // « 👉 Montre-moi » du carnet
   }
 
   get profile() { return this.game.profile; }

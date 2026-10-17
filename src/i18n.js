@@ -10,6 +10,7 @@ import { CLOUD_FR, CLOUD_EN } from './ui/cloudTexts.js'; // compte Google et sau
 import { BEAUTY_FR, BEAUTY_EN } from './ui/beautyTexts.js'; // concours de beauté et métier de handler (beauty_*, ca_handler_*)
 import { DOG_TRAINER_FR, DOG_TRAINER_EN } from './ui/dogTrainerTexts.js'; // métier éducateur canin (dt_*, ca_dogTrainer_*)
 import { GROOMER_FR, GROOMER_EN } from './ui/groomerTexts.js'; // métier Toiletteur (grm_*, mg_g*, ca_groomer_*)
+import { TRAIL_FR, TRAIL_EN } from './ui/trailGuideTexts.js'; // 🧭 métier guide de randonnée (tg_*, career_trailGuide)
 
 const fr = {
   title: 'La ferme à Madichelle',
@@ -1721,6 +1722,7 @@ const fr = {
   actv_sight_windmill: 'le vieux moulin',
   actv_sight_cairn: 'le cairn fleuri',
   actv_sight_oldTree: 'le grand chêne',
+  actv_sight_trailGuide: 'la photo de groupe', // 🧭 balade guidée
   actv_checkpoint: 'Balise {n}/{total}',
   actv_trailHint: 'Suis la flèche orange de balise en balise. Ramasse les trésors et prends des photos aux 📷. L\'arrivée est à l\'écurie 🏠.',
   actv_trailHintFoot: 'Suis la flèche orange de balise en balise avec tes animaux. Ramasse les trésors et prends des photos aux 📷.',
@@ -3465,6 +3467,7 @@ const en = {
   actv_sight_windmill: 'the old windmill',
   actv_sight_cairn: 'the flowery cairn',
   actv_sight_oldTree: 'the big oak',
+  actv_sight_trailGuide: 'the group photo', // 🧭 guided ride
   actv_checkpoint: 'Marker {n}/{total}',
   actv_trailHint: 'Follow the orange arrow from marker to marker. Pick up treasures and take photos at the 📷. The finish is at the stable 🏠.',
   actv_trailHintFoot: 'Follow the orange arrow from marker to marker with your animals. Pick up treasures and take photos at the 📷.',
@@ -3616,6 +3619,8 @@ Object.assign(fr, DOG_TRAINER_FR); // métier éducateur canin
 Object.assign(en, DOG_TRAINER_EN);
 Object.assign(fr, GROOMER_FR); // métier Toiletteur : salon de toilettage
 Object.assign(en, GROOMER_EN);
+Object.assign(fr, TRAIL_FR); // 🧭 guide de randonnée
+Object.assign(en, TRAIL_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

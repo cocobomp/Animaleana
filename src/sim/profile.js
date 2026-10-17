@@ -13,6 +13,7 @@ import { defaultVetSchool } from './vetSchool.js'; // école vétérinaire (leç
 import { SPECIES, getBreed } from './species.js'; // anciens chats : look complété depuis la race
 import { upgradeCatLook } from './catBreeds.js';
 import { defaultGroomerState } from './groomer.js'; // métier Toiletteur (salon de toilettage)
+import { defaultTrailGuide, tgState } from './trailGuide.js'; // métier guide de randonnée 🧭
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -73,6 +74,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     competitions: { entries: [], results: [] }, // concours à l'extérieur : inscriptions et résultats (src/sim/competitions.js)
     dogTrainer: defaultDogTrainer(), // éducateur canin : chiens en éducation, historique (src/sim/dogTrainer.js)
     groomer: defaultGroomerState(), // salon de toilettage : réputation, clients, carnet (src/sim/groomer.js)
+    trailGuide: defaultTrailGuide(), // 🧭 guide de randonnée : réservations, réputation (src/sim/trailGuide.js)
   };
 }
 
@@ -147,6 +149,8 @@ export function migrate(p, hint = {}) {
     competitions: { entries: [], results: [], ...(p.competitions ?? {}) }, // concours à l'extérieur (ajoutés plus tard)
     dogTrainer: { ...defaultDogTrainer(), ...(p.dogTrainer ?? {}) }, // éducateur canin (ajouté plus tard)
     groomer: { ...defaultGroomerState(), ...(p.groomer ?? {}) }, // salon de toilettage (ajouté plus tard)
+    // 🧭 Guide de randonnée (ajouté plus tard) : champs manquants complétés.
+    trailGuide: { ...defaultTrailGuide(), ...(p.trailGuide ?? {}) },
   };
   // Chevaux d'avant le dressage : compétence de dressage de départ (src/sim/dressage.js).
   for (const a of out.animals ?? []) {
@@ -156,6 +160,8 @@ export function migrate(p, hint = {}) {
   for (const a of out.animals ?? []) {
     if (a?.species === 'cat') upgradeCatLook(a.look, getBreed('cat', a.breed), SPECIES.cat.model);
   }
+  // 🧭 Guide de randonnée : l'ancienne réputation du guide passe dans le registre des métiers (src/sim/careers.js).
+  tgState(out);
   // Paddock, bergerie et enclos des lapins plus grands : on agrandit sans casser les déplacements enregistrés.
   return migrateCoreSizes(out);
 }

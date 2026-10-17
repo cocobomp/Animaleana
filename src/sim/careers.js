@@ -177,6 +177,34 @@ export const CAREERS = {
       { maxClients: 0, salonClients: 3, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep'], tips: true },
     ],
   },
+  // 🧭 Guide de randonnée : des visiteurs demandent une balade à cheval ; on choisit les chevaux, on selle,
+  // on prépare la sacoche et on les guide (src/sim/trailGuide.js, src/game/TrailGuide.js, src/ui/trailGuide.js).
+  // Pas de clients qui confient leurs animaux (maxClients: 0). Textes : src/ui/trailGuideTexts.js.
+  //   maxRiders : cavaliers par balade ; durations : balades possibles ; abroad : rendez-vous dans d'autres lieux ;
+  //   dogs : nos chiens peuvent venir ; special : itinéraires spéciaux (Islande, Alpes).
+  // ownClients : ses visiteurs arrivent par src/game/TrailGuide.js, pas par les visites de src/sim/clients.js.
+  trailGuide: {
+    id: 'trailGuide',
+    emoji: '🧭',
+    level: 4,
+    building: 'stable',
+    ownClients: true,
+    ranks: [0, 150, 400],
+    actions: [
+      { id: 'accept', emoji: '📋', where: 'visitor' },
+      { id: 'prepare', emoji: '✅', where: 'stable' },
+      { id: 'ride', emoji: '🐎', where: 'trail' },
+      { id: 'photo', emoji: '📷', where: 'trail' },
+      { id: 'break', emoji: '🧃', where: 'trail' },
+      { id: 'firstAid', emoji: '🩹', where: 'trail' },
+      { id: 'return', emoji: '⭐', where: 'stable' },
+    ],
+    perks: [
+      { maxRiders: 2, durations: ['short'], abroad: false, dogs: false, special: false, price: 1, tips: false, maxClients: 0 },
+      { maxRiders: 4, durations: ['short', 'half'], abroad: true, dogs: true, special: false, price: 1.15, tips: true, maxClients: 0 },
+      { maxRiders: 6, durations: ['short', 'half', 'trek'], abroad: true, dogs: true, special: true, price: 1.3, tips: true, maxClients: 0 },
+    ],
+  },
 };
 
 export const CAREER_IDS = Object.keys(CAREERS);

@@ -22,6 +22,7 @@ import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
 import { openDogTrainerPanel } from './dogTrainer.js'; // métier éducateur canin
 import { openCareers, careerChips } from './careers.js'; // 💼 métiers
+import { openTrailCarnet } from './trailGuide.js'; // 🧭 guide de randonnée
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -386,6 +387,7 @@ export class UI {
     chips.push(...(g.clients?.statusChips(chip) ?? []), ...careerChips(this, chip)); // visiteur, clients, carnet du métier
     chips.push(...(g.dogTrainer?.statusChips(chip) ?? [])); // un maître attend près de la niche (éducateur canin)
     chips.push(...(g.groomer?.statusChips(chip) ?? [])); // clients qui attendent au salon de toilettage
+    chips.push(...(g.trailGuide?.statusChips(chip) ?? [])); // 🧭 visiteurs, balade à préparer, rendez-vous ailleurs
     const key = chips.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
     this.statusKey = key;
@@ -473,8 +475,9 @@ export class UI {
       salon: () => this.game.groomer?.focusLabel() ?? t('grm_enter'), // salon de toilettage (src/game/Groomer.js)
       dismount: () => t('dismount'),
       client: () => t('cl_talk', { owner: f.name }), // visiteur (src/game/Clients.js)
+      trailVisitor: () => t('tg_talk'), // 🧭 visiteurs (src/game/TrailGuide.js)
     };
-    const emoji = { animal: '🤲', helper: '💬', client: '💬', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', salon: '✂️', dismount: '⬇️' }[f.kind];
+    const emoji = { animal: '🤲', helper: '💬', client: '💬', trailVisitor: '🧭', refuge: '🐾', vet: '🩺', house: '🏠', lodge: '🛏️', jobs: '📋', petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', showground: '🏆', salon: '✂️', dismount: '⬇️' }[f.kind];
     this.actionBtn.replaceChildren(h('span', {}, emoji), ` ${labels[f.kind]()}`, h('kbd', {}, 'E'));
     this.actionBtn.hidden = false;
   }
@@ -805,6 +808,7 @@ export class UI {
   openActivities(opts) { openActivities(this, opts); this.game?.emit('panel', 'activities'); }
   openHelper(h) { openHelperChat(this, h); this.game?.emit('panel', 'helper'); }
   openDogTrainer() { openDogTrainerPanel(this); this.game?.emit('panel', 'dogTrainer'); }
+  openTrailGuide() { openTrailCarnet(this); this.game?.emit('panel', 'trailGuide'); } // 🧭 carnet du guide
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {

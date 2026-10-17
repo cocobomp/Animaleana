@@ -176,8 +176,8 @@ export class Clients {
     this.asked = false;
     this.unsub = [];
     // « 👉 Montre-moi » des métiers qui ont leur propre guide : id -> (action, def) => void.
-    // Un module s'y inscrit avec registerGuide (src/game/CompetitionVenue.js pour 'rider',
-    // src/game/Groomer.js pour 'groomer').
+    // Un module s'y inscrit avec registerGuide : src/game/CompetitionVenue.js ('rider'),
+    // src/game/DogTrainer.js ('dogTrainer'), src/game/Groomer.js ('groomer'), src/game/TrailGuide.js ('trailGuide').
     this.guides = {};
   }
 
@@ -652,12 +652,12 @@ export class Clients {
 
   /** « 👉 Montre-moi » : la flèche jaune sur le visiteur, l'animal confié ou le bâtiment du métier. */
   showMe(id, action) {
-    if (id === 'dogTrainer') return this.game.dogTrainer.showMe(action); // éducateur canin
     const g = this.game;
     const p = g.profile;
     const def = CAREERS[id].actions.find((x) => x.id === action);
     if (!def) return;
-    // Métier qui a son propre guide (cavalier de concours, salon de toilettage…) : registerGuide.
+    // Métier qui a son propre guide (cavalier de concours, éducateur canin, salon de toilettage,
+    // guide de randonnée) : il s'est inscrit avec registerGuide.
     if (this.guides[id]) return this.guides[id](action, def);
     const client = clientAnimals(p).find((a) => a.client.kind === id);
     if (def.where === 'visitor') {

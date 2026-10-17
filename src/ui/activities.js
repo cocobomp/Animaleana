@@ -7,6 +7,7 @@ import { SPECIES } from '../sim/species.js';
 import { PLACES } from '../sim/places.js';
 import { isSandbox } from '../sim/profile.js';
 import { owned, inUse } from '../sim/gear.js';
+import { CAREERS } from '../sim/careers.js'; // 🧭 niveau du métier de guide
 import {
   COMPETITION_TYPES, competitionsAt, entryBlock, eligibility, knownTricks, rivals, activityData, awardCounts, MAX_ACTS,
   JUMP_STAGES, comfortHeight, courseForStage, stageForLevel, stageFor, HUTCH_TOYS, hutchPlayBlock,
@@ -61,6 +62,11 @@ function playTab(ui, state) {
       h('span', { class: 'card-side' }, n ? h('small', {}, t('actv_ready', { n })) : h('small', {}, '—')));
   });
   const next = competitionsAt(g.profile.place, g.isHome, g.day, 7)[0];
+  // 🧭 Guide de randonnée : le carnet du métier (src/ui/trailGuide.js)
+  cards.push(h('button', { class: 'card actv-card tg-card', onClick: () => ui.openTrailGuide() },
+    h('span', { class: 'card-emoji' }, '🧭'),
+    h('span', { class: 'card-main' }, h('b', {}, t('tg_title')), h('small', {}, t('tg_cardDesc'))),
+    h('span', { class: 'card-side' }, h('small', {}, g.level >= CAREERS.trailGuide.level ? '📒' : `🔒 ${t('tg_level', { n: CAREERS.trailGuide.level })}`))));
   return [
     ...venueBanner(ui), // concours du jour sur place (src/ui/competitions.js)
     h('p', { class: 'note' }, t('actv_intro')),

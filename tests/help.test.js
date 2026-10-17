@@ -13,5 +13,7 @@ describe('aide', () => {
     expect(searchHelp('faire une reprise de dressage')[0].id).toBe('dressage');
     expect(searchHelp('partir au concours en van')[0].id).toBe('shows');
     expect(searchHelp('enter a show elsewhere')[0].id).toBe('shows');
+    expect(searchHelp('guide de randonnée')[0].id).toBe('trailGuide'); // 🧭 métier
+    expect(searchHelp('trail guide visitors')[0].id).toBe('trailGuide');
   });
 });

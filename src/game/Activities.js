@@ -512,6 +512,9 @@ export class Session {
   }
 }
 
+// 🧭 Guide de randonnée (src/game/TrailGuide.js) : la balade guidée réutilise la base des activités.
+export { Session as ActivitySession, fmtTime as fmtActivityTime };
+
 /** Remet la monture droite (après un saut). */
 function resetPose(e) {
   e.scaleGroup.rotation.x = 0;

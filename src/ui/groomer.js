@@ -9,7 +9,7 @@ import { SPECIES } from '../sim/species.js';
 import { animalCard } from './panels.js';
 import { runMinigame, registerMinigames } from './minigames.js';
 import { GROOMER_GAMES, GROOMER_ICONS, setFinishOptions, setCutStyle, drawAccessoryOn } from './minigames/groomer.js';
-import { drawAnimal, fitAnimal, animalShape, circle, emoji as drawEmoji, shade, css } from './minigames/draw.js';
+import { drawAnimal, fitAnimal, animalShape, circle, emoji as drawEmoji, shade } from './minigames/draw.js';
 import {
   STEPS, STEP_IDS, STYLES, REQUESTS, ACCESSORIES, ACC_COLORS, ACC_SLOTS, RANKS, GROOMER_LEVEL, CUT_DAYS,
   ensureGroomer, rankOf, rankProgress, careerXp, canGroom, waitingClients, stepAllowed, stylesFor, accessoryAllowed,
@@ -44,7 +44,7 @@ export function openSalon(ui) {
 
 function rankHeader(ui) {
   const p = ui.game.profile;
-  const st = ensureGroomer(p);
+  ensureGroomer(p);
   const pr = rankProgress(p);
   return h('div', { class: 'grm-head' },
     h('div', { class: 'grm-rank' },
@@ -194,11 +194,12 @@ function shopSection(ui, a) {
         const on = worn?.id === id;
         return h('div', { class: `grm-shop-item ${on ? 'on' : ''}` },
           h('button', { class: 'grm-shop-btn', disabled: !ok, onClick: () => wear(ui, a, id, worn?.id === id ? worn.color : 'pink') },
-            h('span', { class: 'grm-shop-emoji' }, ok ? d.emoji : '🔒'), h('small', {}, `${t(`grm_acc_${id}`)}${ok ? coins(ui, d.price) : ` · ${t(`grm_rank_${RANKS[d.rank ?? 0].id}`)}`}`)),
-          on ? h('div', { class: 'color-pick grm-colors' }, Object.entries(ACC_COLORS).map(([cid, hx]) => h('button', {
-            class: `swatch-btn ${worn.color === cid ? 'on' : ''}`, title: t(`grm_col_${cid}`), style: { background: hexColor(hx) }, onClick: () => wear(ui, a, id, cid),
-          }))) : null);
+            h('span', { class: 'grm-shop-emoji' }, ok ? d.emoji : '🔒'), h('small', {}, `${t(`grm_acc_${id}`)}${ok ? coins(ui, d.price) : ` · ${t(`grm_rank_${RANKS[d.rank ?? 0].id}`)}`}`)));
       })),
+      // La couleur de l'accessoire porté : de gros ronds (44 px) sur toute la largeur.
+      worn ? h('div', { class: 'color-pick grm-colors' }, Object.entries(ACC_COLORS).map(([cid, hx]) => h('button', {
+        class: `swatch-btn ${worn.color === cid ? 'on' : ''}`, title: t(`grm_col_${cid}`), 'aria-label': t(`grm_col_${cid}`), style: { background: hexColor(hx) }, onClick: () => wear(ui, a, worn.id, cid),
+      }))) : null,
       worn ? h('button', { class: 'small', onClick: () => { removeAccessory(a, slot); g.entities.get(a.id)?.applyGear(); ui.renderPanel(); } }, `🗑️ ${t('grm_remove')}`) : null));
   }
   return out;
@@ -329,7 +330,7 @@ export function drawPortrait(canvas, a, { before = false, style = null } = {}) {
   drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, happy: !before, time: 1 });
   if (before) {
     // Poils en bataille et poussière
-    g.strokeStyle = css(shade(a.look.coat, -0.4));
+    g.strokeStyle = shade(a.look?.coat ?? 0xc98c43, -0.4); // (shade rend déjà une couleur CSS)
     g.lineWidth = 1.5;
     for (let i = 0; i < 14; i++) {
       const ang = (i / 14) * Math.PI * 2;
@@ -378,9 +379,10 @@ function finishSession(ui, s) {
     noteCareer(g, 'return');
     g.xp('care', r.stars >= 4 ? 2 : 1);
     const lines = [
-      `🪙 ${t('grm_paid', { n: r.pay })}${r.tip ? ` · 🎁 ${t('grm_tip', { n: r.tip })}` : ''}`,
+      // (bac à sable : pas d'argent, donc pas de ligne « gagnés »)
+      isSandbox(p) ? null : `🪙 ${t('grm_paid', { n: r.pay })}${r.tip ? ` · 🎁 ${t('grm_tip', { n: r.tip })}` : ''}`,
       `⭐ ${t('grm_repChange', { n: (r.rep >= 0 ? '+' : '') + r.rep })} · 🎓 +${r.xp} XP`,
-    ];
+    ].filter(Boolean);
     if (r.done < 1) lines.push(`⚠️ ${t('grm_forgot', { n: c.steps.length - stepsDone(c) })}`);
     if (r.calm < 0.7) lines.push(`😨 ${t('grm_scared', { name: a.name, g: a.sex })}`);
     const text = t(`grm_react${r.stars}`, { owner: c.owner.name, name: a.name, g: a.sex });

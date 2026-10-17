@@ -168,6 +168,8 @@ export class Groomer {
     v.npc.bubble.visible = v.state === 'waiting';
     v.npc.waving = v.state === 'waiting';
     if (sp) v.npc.lookAt(sp.look.x, sp.look.z);
+    this.refreshFocus();
+    this.game.ui.renderStatus?.();
   }
 
   clear(all = true) {
@@ -250,6 +252,7 @@ export class Groomer {
       if (k >= 0) this.leaving.splice(k, 1);
       v.dispose();
     });
+    this.refreshFocus();
     this.game.ui.renderStatus?.();
   }
 
@@ -272,6 +275,12 @@ export class Groomer {
   focusLabel() {
     const n = this.profile ? waitingClients(this.profile).filter((c) => this.visitors.get(c.id)?.state === 'waiting').length : 0;
     return n ? t('grm_enterN', { n }) : t('grm_enter');
+  }
+
+  /** Le bouton d'action devant la porte suit le nombre de clients qui attendent. */
+  refreshFocus() {
+    const f = this.game.focus;
+    if (f?.kind === 'salon') this.game.ui.setFocus(f);
   }
 
   /** Puce du bandeau : des clients attendent au salon. */
@@ -324,6 +333,7 @@ export class Groomer {
       v.table(this.spotFor(client));
       v.walk([sp.owner], () => v.npc.lookAt(sp.look.x, sp.look.z));
     }
+    this.refreshFocus();
     noteCareer(this.game, 'welcome'); // carnet de 💼 Métiers
     this.game.ui.renderStatus?.();
     this.game.save();

@@ -1996,12 +1996,13 @@ body.actv-nomove #touch-pad { display: none !important; }
 .grm-step-name { flex: 1; font-weight: 700; }
 .grm-step-name small { font-weight: 500; color: var(--muted); }
 .grm-step-q { color: var(--primary); font-weight: 700; }
-.grm-step button { min-width: 84px; min-height: 40px; }
-.grm-extra summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
-.grm-styles .chip { border: 2px solid transparent; }
+.grm-step button { min-width: 84px; min-height: 44px; }
+.grm-extra summary { cursor: pointer; font-weight: 700; padding: 6px 0; min-height: 44px; display: flex; align-items: center; }
+.grm-styles .chip { border: 2px solid transparent; min-height: 44px; padding: 6px 12px; font-size: 0.95em; }
 .grm-styles .chip.on { border-color: var(--primary); background: #dff3e6; }
 .grm-styles .chip:disabled { opacity: 0.5; }
 .grm-finish { justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.grm-finish button { white-space: nowrap; }
 .grm-finish .big { min-height: 52px; font-size: 1.1rem; }
 .note.good { color: var(--primary); font-weight: 700; }
 .grm-shop-slot { display: grid; gap: 6px; padding: 8px 10px; margin: 6px 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
@@ -2011,8 +2012,8 @@ body.actv-nomove #touch-pad { display: none !important; }
 .grm-shop-btn { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; min-height: 64px; }
 .grm-shop-btn small { font-size: 0.72rem; color: var(--muted); text-align: center; }
 .grm-shop-emoji { font-size: 1.6rem; }
-.grm-colors { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
-.grm-colors .swatch-btn { width: 24px; height: 24px; }
+.grm-colors { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; }
+.grm-colors .swatch-btn.on { box-shadow: 0 0 0 3px var(--primary); }
 .grm-tuto { display: grid; justify-items: center; text-align: center; gap: 6px; }
 .grm-tuto-emoji { font-size: 4rem; line-height: 1.1; animation: ev-pop 0.5s ease-out; }
 .grm-tuto h2 { margin: 0; }
@@ -2042,6 +2043,7 @@ body.actv-nomove #touch-pad { display: none !important; }
 @media (max-width: 640px) {
   .grm-photo { width: min(200px, 44vw); }
   .grm-avatar { width: 40px; height: 40px; font-size: 1.6rem; }
+}
 /* Discuter avec une aide (src/ui/helperChat.js) */
 .hc-head { display: flex; gap: 10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px; }
 .hc-avatar { font-size: 2.2rem; }

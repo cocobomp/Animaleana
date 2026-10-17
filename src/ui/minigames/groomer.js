@@ -3,7 +3,7 @@
 // (accessoire, couleur, parfum). Même format que les autres mini-jeux (voir src/ui/minigames.js).
 // Ces jeux sont inscrits auprès de runMinigame par registerMinigames (fait dans src/ui/groomer.js).
 
-import { drawAnimal, animalShape, fitAnimal, rrect, ellipse, circle, emoji, label, fillView, tiles, clamp, lerp, dist, distToSegment, shade, css } from './draw.js';
+import { drawAnimal, animalShape, fitAnimal, rrect, ellipse, circle, emoji, label, fillView, tiles, clamp, lerp, dist, distToSegment, shade } from './draw.js';
 import { ACCESSORIES, ACC_COLORS } from '../../sim/groomer.js';
 
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
@@ -185,7 +185,7 @@ export function knotsGame(ctx) {
       for (const k of knots) {
         g.save();
         g.globalAlpha = 0.25 + 0.75 * k.left;
-        g.strokeStyle = shade(ctx.col.coat, -0.5);
+        g.strokeStyle = shade(ctx.col.raw.coat, -0.5);
         g.lineWidth = 2.2;
         g.lineCap = 'round';
         for (let i = 0; i < 6; i++) {
@@ -212,7 +212,7 @@ export function knotsGame(ctx) {
 // ---------------------------------------------------------------- ✂️ la coupe au pochoir
 
 /** La zone à garder (en vert) selon la coupe. u, v : position dans le corps (-1…1), k : distance au bord (1 = bord). */
-function keepFor(style, species) {
+function keepFor(style) {
   const heart = (u, v) => {
     const x = (u + 0.45) / 0.33;
     const y = -(v + 0.05) / 0.33;
@@ -242,7 +242,7 @@ export function cutGame(ctx) {
   const floorY = 305;
   const fit = fitAnimal(a, { groundY: floorY, maxW: 330, maxH: 240 });
   const sh = animalShape(a, { x: fit.x, y: floorY, s: fit.s, f: 1 });
-  const keep = keepFor(style, a.species);
+  const keep = keepFor(style);
   const tufts = [];
   const s = fit.s;
   const step = 13 * Math.max(0.75, s);
@@ -284,7 +284,7 @@ export function cutGame(ctx) {
         fx.text(q.x, q.y - 20, t('mg_gcut_oops'), '#c8463c', 18);
         ctx.hint(t('mg_gcut_careful'), 'warn');
       } else {
-        for (let i = 0; i < 3; i++) fx.dot(q.x + (Math.random() - 0.5) * 10, q.y, css(shade(ctx.col.coat, 0.2)), 3, { vx: (Math.random() - 0.5) * 80, vy: -30, grav: 200, life: 0.7 });
+        for (let i = 0; i < 3; i++) fx.dot(q.x + (Math.random() - 0.5) * 10, q.y, shade(ctx.col.raw.coat, 0.2), 3, { vx: (Math.random() - 0.5) * 80, vy: -30, grav: 200, life: 0.7 });
       }
     }
     last = p;
@@ -311,7 +311,7 @@ export function cutGame(ctx) {
       // Touffes : roses à couper, vertes à garder.
       for (const q of tufts) {
         if (q.cut) continue;
-        g.fillStyle = css(shade(ctx.col.coat, 0.18));
+        g.fillStyle = shade(ctx.col.raw.coat, 0.18);
         for (let i = 0; i < 3; i++) {
           const a0 = q.seed + i * 2.1;
           circle(g, q.x + Math.cos(a0) * q.r * 0.45, q.y + Math.sin(a0) * q.r * 0.45, q.r * 0.75);
@@ -434,9 +434,9 @@ export function earsGame(ctx) {
       g.save();
       circle(g, cx, cy, R);
       g.clip();
-      g.fillStyle = css(ctx.col.coat);
+      g.fillStyle = ctx.col.coat;
       g.fillRect(cx - R, cy - R, R * 2, R * 2);
-      g.fillStyle = css(ctx.col.coat);
+      g.fillStyle = ctx.col.coat;
       earPath(g, side === 1);
       g.fill();
       g.fillStyle = '#f3b7c3';
@@ -486,7 +486,6 @@ export function teethGame(ctx) {
   const teeth = Array.from({ length: N }, (_, i) => ({ x: mx - W / 2 + (W / N) * (i + 0.5), y: my, plaque: 1 }));
   const tw = W / N - 6;
   let last = null;
-  let strokes = 0;
   ctx.hint(t('mg_gteeth_hint'));
   const progress = () => 1 - teeth.reduce((s, q) => s + q.plaque, 0) / N;
 
@@ -494,16 +493,13 @@ export function teethGame(ctx) {
     if (!last) { last = p; return; }
     const dx = Math.abs(p.x - last.x);
     const dy = Math.abs(p.y - last.y);
-    let touched = false;
     for (const q of teeth) {
       if (q.plaque <= 0) continue;
       if (Math.abs(p.x - q.x) > tw * 0.8 || Math.abs(p.y - q.y) > 40) continue;
       q.plaque = Math.max(0, q.plaque - (dx * 0.012 + dy * 0.004));
-      touched = true;
       if (Math.random() < 0.35) fx.dot(p.x + (Math.random() - 0.5) * 14, p.y - 6, 'rgba(255,255,255,0.9)', 3 + Math.random() * 3, { vy: -30, life: 0.7, bubble: true });
       if (q.plaque === 0) fx.burst(q.x, q.y - 20, '✨', 2, { speed: 60, size: 14 });
     }
-    if (touched) strokes += dx;
     last = p;
     ctx.progress(progress());
     if (teeth.every((q) => q.plaque <= 0) && !ctx.done) ctx.finish(1, t('mg_gteeth_end', { name: a.name }));
@@ -517,10 +513,10 @@ export function teethGame(ctx) {
     draw(g) {
       salonBackground(g, ctx, 330);
       // Museau de la couleur de l'animal, puis grand sourire
-      g.fillStyle = css(ctx.col.coat);
+      g.fillStyle = ctx.col.coat;
       ellipse(g, mx, my + 10, 215, 150);
       g.fill();
-      g.fillStyle = css(shade(ctx.col.coat, 0.25));
+      g.fillStyle = shade(ctx.col.raw.coat, 0.25);
       ellipse(g, mx, my + 40, 150, 90);
       g.fill();
       g.fillStyle = '#3a1f28';

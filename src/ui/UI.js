@@ -24,6 +24,8 @@ import { openDogTrainerPanel } from './dogTrainer.js'; // métier éducateur can
 import { openCareers, careerChips } from './careers.js'; // 💼 métiers
 import { openTrailCarnet } from './trailGuide.js'; // 🧭 guide de randonnée
 
+const STATUS_MAX = 3; // pastilles d'état visibles en même temps (les autres derrière « ➕ N de plus »)
+
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
 export class UI {
@@ -384,14 +386,27 @@ export class UI {
     chips.push(...tripChips(this)); // chargement du véhicule de voyage
     chips.push(...(g.events?.statusChips(chip) ?? [])); // événement en cours (bandeau réduit)
     chips.push(...(g.venue?.statusChips(chip) ?? [])); // concours du jour sur place (src/game/CompetitionVenue.js)
-    chips.push(...(g.clients?.statusChips(chip) ?? []), ...careerChips(this, chip)); // visiteur, clients, carnet du métier
+    chips.push(...(g.clients?.statusChips(chip) ?? [])); // visiteur, clients (pension, soins, beauté)
     chips.push(...(g.dogTrainer?.statusChips(chip) ?? [])); // un maître attend près de la niche (éducateur canin)
     chips.push(...(g.groomer?.statusChips(chip) ?? [])); // clients qui attendent au salon de toilettage
     chips.push(...(g.trailGuide?.statusChips(chip) ?? [])); // 🧭 visiteurs, balade à préparer, rendez-vous ailleurs
-    const key = chips.map((c) => c.textContent).join('|');
+    chips.push(...careerChips(this, chip)); // la prochaine case du carnet du métier suivi (moins pressée : en dernier)
+    // Avec plusieurs métiers, les pastilles s'empilent et cachent le jeu : on en montre STATUS_MAX, les autres
+    // derrière « ➕ N de plus » (on peut tout déplier, puis replier).
+    const all = chips;
+    const extra = all.length - STATUS_MAX;
+    let shown = all;
+    if (extra > 0) {
+      const toggle = () => { this.statusOpen = !this.statusOpen; this.statusKey = null; this.renderStatus(); };
+      const more = h('div', { class: 'status-chip status-more' },
+        h('button', { class: 'small', onClick: toggle, 'aria-expanded': this.statusOpen ? 'true' : 'false' },
+          this.statusOpen ? t('statusLess') : t('statusMore', { n: extra + 1 })));
+      shown = this.statusOpen ? [...all, more] : [...all.slice(0, STATUS_MAX - 1), more];
+    } else this.statusOpen = false;
+    const key = shown.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
     this.statusKey = key;
-    this.statusBar.replaceChildren(...chips);
+    this.statusBar.replaceChildren(...shown);
   }
 
   /** Barre du temps : pause, ▶, ⏩ et 🤖 Auto. Créée une fois ; updateTimeBar() allume le bon bouton. */
@@ -497,7 +512,7 @@ export class UI {
     const msg = names ? t('levelUp', { n: level, names }) : t('levelUpPlain', { n: level });
     // Une fenêtre est ouverte (résultats d'un concours…) ou une activité est en cours (reprise de dressage,
     // parcours : la fenêtre cachait la carrière et mettait les résultats en attente) : on l'annonce en bulle.
-    if (this.modalOpen || this.game?.activities?.active) return this.toast(`⭐ ${msg}`, 8000);
+    if (this.modalOpen || this.game?.activities?.active) return this.toast(msg, 8000); // (le texte commence déjà par ⭐)
     this.alert(msg);
   }
 

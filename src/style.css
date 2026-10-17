@@ -629,6 +629,8 @@ button.sv-card:hover { border-color: var(--primary); }
   font-weight: 600;
 }
 .status-chip button { min-height: 44px; }
+.status-chip.status-more { padding: 4px; background: transparent; backdrop-filter: none; justify-self: center; }
+.status-chip.status-more button { background: var(--glass); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); padding: 0 16px; }
 @media (pointer: coarse), (max-width: 640px) {
   #status-bar { bottom: auto; top: calc(200px + var(--safe-t)); left: auto; right: calc(10px + var(--safe-r)); transform: none; justify-items: end; }
   .status-chip { font-size: 0.9rem; padding: 3px 4px 3px 12px; }
@@ -1973,7 +1975,8 @@ body.actv-nomove #touch-pad { display: none !important; }
   .actv-hint { top: calc(150px + var(--safe-t)); font-size: 0.9rem; }
 }
 
-/* ===================================================================   Concours de beauté (src/ui/beauty.js, src/game/Beauty.js)
+/* ==========================================================================
+   Concours de beauté (src/ui/beauty.js, src/game/Beauty.js)
    ========================================================================== */
 .beauty-card .row.wrap { margin-top: 4px; gap: 6px; }
 .beauty-card .row.wrap button { min-height: 44px; }
@@ -2015,7 +2018,6 @@ body.actv-nomove #touch-pad { display: none !important; }
 .beauty-mark b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .beauty-champion { color: #8a5a00; }
 .ca-beauty { margin-top: 6px; min-height: 44px; }
-=======
 /* ---------- salon de toilettage (métier Toiletteur ✂️, src/ui/groomer.js) */
 .grm-head { display: grid; gap: 6px; margin: 6px 0 10px; }
 .grm-rank { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

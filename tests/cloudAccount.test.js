@@ -28,7 +28,9 @@ vi.mock('../src/cloud/firebase.js', () => ({
   remoteStore: async (uid) => remoteOf(uid),
   deleteCloudUser: async () => { fb.calls.push('deleteUser'); return fb.deleteImpl ? fb.deleteImpl() : 'deleted'; },
   pendingDelete: () => fb.pending,
-  clearPendingDelete: () => { fb.pending = null; },
+  clearPendingDelete: () => { fb.pending = null; fb.reauth = false; },
+  redirectPending: () => fb.redirect,
+  reauthReturned: () => fb.reauth,
 }));
 
 function fakeStorage() {
@@ -54,7 +56,7 @@ beforeEach(() => {
   vi.stubGlobal('location', { protocol: 'https:', hostname: 'lafermeamadichelle.web.app' });
   vi.stubGlobal('navigator', { onLine: true });
   vi.stubGlobal('localStorage', fakeStorage());
-  Object.assign(fb, { signedIn: false, watchCalls: 0, signInImpl: null, deleteImpl: null, pending: null, calls: [] });
+  Object.assign(fb, { signedIn: false, watchCalls: 0, signInImpl: null, deleteImpl: null, pending: null, calls: [], redirect: false, reauth: false });
   fb.remotes = new Map();
   // Par défaut : Firebase chargé, personne de connecté (comme onAuthStateChanged au démarrage).
   fb.watchImpl = async (cb) => { setTimeout(() => cb(null), 0); return () => {}; };
@@ -483,5 +485,47 @@ describe('relecture de la v2 : effacer sans être connecté, compte supprimé, s
     expect(s.acc.cloudState().error).toBeNull();
     expect(s.acc.cloudState().lastSync).toBeGreaterThan(ok);
     expect(s.sync.loadMeta().base[p.id].localAt).toBe(q.updatedAt);
+  });
+});
+
+describe('appli de l\'écran d\'accueil : retour de redirection et suppression en attente', () => {
+  it('retour d\'une connexion par redirection : Firebase est rechargé même sans marque « connecté »', async () => {
+    const s = await boot();
+    fb.redirect = true;
+    s.start();
+    await flush();
+    expect(fb.watchCalls).toBe(1);
+  });
+
+  it('suppression en attente sans retour de reconnexion dans cette session : rien n\'est supprimé, on prévient', async () => {
+    const s = await boot();
+    fb.pending = 'u1';
+    fb.reauth = false;
+    await login(s);
+    expect(fb.calls).not.toContain('deleteUser');
+    expect(fb.pending).toBeNull();
+    await flush(10); // la synchro qui suit ne fait pas disparaître le message
+    expect(s.acc.cloudState().notice).toBe('delete-unfinished');
+  });
+
+  it('suppression en attente avec retour de reconnexion : la suppression se finit', async () => {
+    const s = await boot();
+    fb.pending = 'u1';
+    fb.reauth = true;
+    await login(s);
+    await flush(10);
+    expect(fb.calls).toContain('deleteUser');
+  });
+
+  it('démarrage déjà connecté : jamais bloqué sur « Connexion… » si Firebase ne répond pas', async () => {
+    vi.useFakeTimers();
+    const s = await boot();
+    fb.signedIn = true;
+    fb.watchImpl = () => new Promise(() => {});
+    s.start();
+    expect(s.acc.cloudState().status).toBe('loading');
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000 + 10);
+    expect(s.acc.cloudState().status).toBe('off');
+    expect(s.acc.cloudState().error).toBe('network');
   });
 });

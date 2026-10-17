@@ -8,6 +8,7 @@
 
 import {
   cloudSupported, wasSignedIn, signInWithGoogle, signOutCloud, watchUser, remoteStore, deleteCloudUser, pendingDelete, clearPendingDelete,
+  redirectPending, reauthReturned,
 } from './firebase.js';
 import { runSync, loadMeta, saveMeta } from './sync.js';
 import { applyDone, claimParties, linkParty, deleteKind as kindOf, noteDeleted, noteAccount, unlinkAccount, DEVICE } from '../sim/cloudSync.js';
@@ -28,6 +29,7 @@ const state = {
   lastSync: 0, // date de la dernière synchro réussie
   report: null, // résultat de la dernière synchro (src/cloud/sync.js)
   error: null, // code de la dernière erreur (connexion ou synchro)
+  notice: null, // message à garder jusqu'au prochain geste (suppression du compte pas terminée…)
 };
 const listeners = new Set();
 let opts = {
@@ -79,9 +81,18 @@ function watch() {
       if (user) saveMeta(noteAccount(loadMeta(), user.uid, user.email).meta);
       emit();
       if (!user) return;
-      // Suppression du compte commencée avant une reconnexion par redirection : on la finit.
-      if (pendingDelete() === user.uid) deleteAccount();
-      else syncNow();
+      // Suppression du compte commencée avant une reconnexion par redirection : on la finit seulement au retour
+      // de cette reconnexion (même session). Sinon (Google fermé, appli relancée plus tard…) on ne supprime rien
+      // tout seul : on prévient, et on pourra recommencer depuis « Mes données en ligne ».
+      if (pendingDelete() === user.uid && reauthReturned()) deleteAccount();
+      else {
+        if (pendingDelete()) {
+          clearPendingDelete();
+          state.notice = 'delete-unfinished'; // message gardé (une synchro ne l'efface pas)
+          emit();
+        }
+        syncNow();
+      }
     }, (err) => {
       state.error = err?.code ?? 'network';
       emit();
@@ -107,11 +118,7 @@ export function startCloud(o = {}) {
   addEventListener('online', () => {
     emit(); // l'encart se redessine (bouton de connexion de nouveau actif…)
     // Firebase n'avait pas pu se charger (réseau absent au démarrage) : on réessaie.
-    if (wasSignedIn() && !state.user && !watching) {
-      state.status = 'loading';
-      emit();
-      watch().catch(() => {});
-    }
+    if ((wasSignedIn() || redirectPending()) && !state.user && !watching) reconnect();
     syncNow();
   });
   addEventListener('offline', () => emit());
@@ -121,11 +128,23 @@ export function startCloud(o = {}) {
   timer ??= setInterval(() => {
     if (!document.hidden && opts.playing?.()) syncNow();
   }, PERIOD_MS);
-  if (wasSignedIn()) {
-    state.status = 'loading';
-    emit();
-    watch().catch(() => {});
-  }
+  // Déjà connecté avant, ou retour d'une connexion par redirection (appli de l'écran d'accueil).
+  if (wasSignedIn() || redirectPending()) reconnect();
+}
+
+/** Reconnexion automatique, jamais bloquée sur « Connexion… » si Firebase ne répond pas. */
+function reconnect() {
+  state.status = 'loading';
+  emit();
+  const safety = setTimeout(() => {
+    if (state.status === 'loading' && !state.user && !signingIn) {
+      state.status = 'off';
+      state.error = 'network';
+      watching = null; // on pourra réessayer (retour du réseau, bouton)
+      emit();
+    }
+  }, SIGN_IN_TIMEOUT_MS);
+  watch().catch(() => {}).finally(() => clearTimeout(safety));
 }
 
 const quietError = (code) => ['auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/user-cancelled'].includes(code);
@@ -133,6 +152,7 @@ const quietError = (code) => ['auth/popup-closed-by-user', 'auth/cancelled-popup
 /** Bouton « Se connecter avec Google ». Renvoie vrai si connecté. */
 export async function signIn() {
   state.error = null;
+  state.notice = null;
   state.status = 'loading';
   signingIn = true;
   emit();
@@ -333,6 +353,7 @@ export async function eraseCloud({ account = false } = {}) {
   const uid = state.user.uid;
   state.erasing = true;
   state.error = null;
+  state.notice = null;
   emit();
   try {
     if (running) await running.catch(() => {}); // laisser finir la synchro en cours (plus aucune ne démarre)

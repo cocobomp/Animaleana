@@ -11,6 +11,7 @@ const ERRORS = {
   'auth/unauthorized-domain': 'cloud_err_domain',
   'auth/requires-recent-login': 'cloud_err_recentLogin',
   'redirect-failed': 'cloud_err_redirect',
+  'delete-unfinished': 'cloud_err_deleteUnfinished',
   'too-big': 'cloud_err_tooBig',
   'permission-denied': 'cloud_err_denied',
   conflict: 'cloud_err_conflict',
@@ -72,6 +73,7 @@ export function cloudCard(ui) {
     if (!online) rows.push(h('small', {}, t('cloud_offline')));
   }
   if (s.error) rows.push(h('p', { class: 'cloud-error', role: 'alert' }, cloudErrorText(s.error)));
+  if (s.notice) rows.push(h('p', { class: 'cloud-error', role: 'status' }, cloudErrorText(s.notice)));
   return h('section', { class: 'cloud' }, rows);
 }
 

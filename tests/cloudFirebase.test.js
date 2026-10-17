@@ -254,3 +254,54 @@ describe('supprimer le compte', () => {
     void p;
   });
 });
+
+describe('connexion par redirection (appli de l\'écran d\'accueil)', () => {
+  it('un « personne » annoncé par Firebase avant le départ ne fait pas oublier la connexion en cours', async () => {
+    const f = await load({ standalone: true });
+    sdk.currentUser = null;
+    const seen = [];
+    await f.watchUser((u) => seen.push(u));
+    void f.signInWithGoogle(); // la page part vers Google (la promesse ne revient pas)
+    await vi.waitFor(() => expect(sdk.calls).toContain('redirect'));
+    await new Promise((r) => setTimeout(r, 5));
+    expect(seen).toContain(null);
+    expect(f.wasSignedIn()).toBe(true);
+    expect(f.redirectPending()).toBe(true);
+  });
+
+  it('au retour : la marque de redirection est retirée une fois le résultat connu, la connexion est retenue', async () => {
+    const f = await load({ standalone: true });
+    sessionStorage.setItem('animaleana.cloud.redirect', '1');
+    sdk.currentUser = { uid: 'u1' };
+    sdk.redirectResult = { user: { uid: 'u1' } };
+    const errors = [];
+    await f.watchUser(() => {}, (e) => errors.push(e));
+    await vi.waitFor(() => expect(f.redirectPending()).toBe(false));
+    expect(f.wasSignedIn()).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  it('au retour sans compte : erreur montrée, plus de marque, pas « connecté »', async () => {
+    const f = await load({ standalone: true });
+    sessionStorage.setItem('animaleana.cloud.redirect', '1');
+    localStorage.setItem('animaleana.cloud.signedIn', '1');
+    sdk.currentUser = null;
+    sdk.redirectResult = null;
+    const errors = [];
+    await f.watchUser(() => {}, (e) => errors.push(e.code));
+    await vi.waitFor(() => expect(f.redirectPending()).toBe(false));
+    expect(errors).toEqual(['redirect-failed']);
+    expect(f.wasSignedIn()).toBe(false);
+  });
+
+  it('suppression : la reconnexion partie de cette session est reconnue (reauthReturned), puis effacée', async () => {
+    const f = await load({ standalone: true });
+    sdk.deleteUser = async () => { throw Object.assign(new Error('old'), { code: 'auth/requires-recent-login' }); };
+    void f.deleteCloudUser();
+    await vi.waitFor(() => expect(sdk.calls).toContain('reauthRedirect'));
+    expect(f.reauthReturned()).toBe(true);
+    f.clearPendingDelete();
+    expect(f.reauthReturned()).toBe(false);
+    expect(f.pendingDelete()).toBeNull();
+  });
+});

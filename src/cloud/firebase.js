@@ -24,6 +24,7 @@ const WRITE_TIMEOUT_MS = 20000;
 const SIGNED_IN_KEY = 'animaleana.cloud.signedIn';
 const REDIRECT_KEY = 'animaleana.cloud.redirect'; // une connexion par redirection est en cours (sessionStorage)
 const PENDING_DELETE_KEY = 'animaleana.cloud.pendingDelete'; // suppression du compte à finir après reconnexion
+const REAUTH_KEY = 'animaleana.cloud.reauth'; // la reconnexion pour supprimer le compte part de CETTE session (sessionStorage)
 
 /**
  * La connexion n'est possible que depuis une vraie adresse Internet (pas la version « à emporter »
@@ -168,22 +169,37 @@ export async function signOutCloud() {
  */
 export async function watchUser(cb, onError = () => {}) {
   const { auth, fb } = await loadFirebase();
-  const pending = flag('sessionStorage', REDIRECT_KEY) === '1';
-  flag('sessionStorage', REDIRECT_KEY, null);
+  const pending = redirectPending();
+  // La marque de redirection n'est retirée qu'une fois le résultat connu : avant, Firebase annonce souvent
+  // « personne » (null), et il ne faut pas oublier pour autant qu'une connexion est en cours.
   fb.getRedirectResult(auth)
     .then((res) => {
       if (pending && !res?.user && !auth.currentUser) onError({ code: 'redirect-failed' });
     })
-    .catch((err) => onError(err));
+    .catch((err) => onError(err))
+    .finally(() => {
+      if (!pending) return;
+      flag('sessionStorage', REDIRECT_KEY, null);
+      if (!auth.currentUser) rememberSignedIn(false);
+    });
   return fb.onAuthStateChanged(auth, (user) => {
-    rememberSignedIn(Boolean(user));
+    if (user) rememberSignedIn(true);
+    else if (!redirectPending()) rememberSignedIn(false);
     cb(user);
   });
 }
 
+/** Une connexion par redirection est partie de cet onglet et n'est pas encore revenue. */
+export const redirectPending = () => flag('sessionStorage', REDIRECT_KEY) === '1';
+
 /** La suppression du compte attend une reconnexion par redirection (appli de l'écran d'accueil) : uid, ou null. */
 export const pendingDelete = () => flag('localStorage', PENDING_DELETE_KEY);
-export const clearPendingDelete = () => flag('localStorage', PENDING_DELETE_KEY, null);
+/** La reconnexion de suppression vient de cette session (retour de Google) : on peut finir sans redemander. */
+export const reauthReturned = () => flag('sessionStorage', REAUTH_KEY) === '1';
+export const clearPendingDelete = () => {
+  flag('localStorage', PENDING_DELETE_KEY, null);
+  flag('sessionStorage', REAUTH_KEY, null);
+};
 
 /**
  * Supprime le compte Google du jeu (Firebase Authentication). Si Google demande une connexion récente
@@ -202,6 +218,7 @@ export async function deleteCloudUser() {
     const { host, standalone } = here();
     if (useRedirect(host, { standalone })) {
       flag('localStorage', PENDING_DELETE_KEY, user.uid);
+      flag('sessionStorage', REAUTH_KEY, '1');
       await fb.reauthenticateWithRedirect(user, provider);
       return 'redirect';
     }

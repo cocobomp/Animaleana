@@ -4,7 +4,8 @@
 export const CLOUD_FR = {
   cloud_title: '☁️ Sauvegarde en ligne',
   cloud_guestHelp: 'Facultatif. Sans compte, tu joues en invité : tes parties restent sur cet appareil. Avec un compte Google, tu les retrouves sur tous tes appareils.',
-  cloud_privacy: '🔒 Ce qui part en ligne : seulement tes parties (prénom du profil, animaux, progrès), rien d\'autre. Elles sont gardées en Suisse, à Zurich. La connexion elle-même est faite par Google.',
+  cloud_privacy: '🔒 Ce qui part en ligne : tes parties (prénom du profil, animaux, progrès), gardées en Suisse, à Zurich. Pour la connexion, Google garde aussi l\'adresse e-mail, le nom et la photo du compte Google. Rien d\'autre.',
+  cloud_err_deleteUnfinished: '⚠️ La suppression du compte n\'est pas allée au bout. Rien n\'a été supprimé : recommence depuis « Mes données en ligne » si tu veux.',
   cloud_signIn: 'Se connecter avec Google',
   cloud_loading: 'Connexion…',
   cloud_signedIn: 'Connecté : {name}',
@@ -61,7 +62,8 @@ export const CLOUD_FR = {
 export const CLOUD_EN = {
   cloud_title: '☁️ Online save',
   cloud_guestHelp: 'Optional. Without an account, you play as a guest: your games stay on this device. With a Google account, you get them back on all your devices.',
-  cloud_privacy: '🔒 What goes online: only your games (profile first name, animals, progress), nothing else. They are kept in Switzerland, in Zurich. Signing in itself is done by Google.',
+  cloud_privacy: '🔒 What goes online: your games (profile first name, animals, progress), kept in Switzerland, in Zurich. For signing in, Google also keeps the Google account\'s email, name and photo. Nothing else.',
+  cloud_err_deleteUnfinished: '⚠️ Deleting the account didn\'t finish. Nothing was deleted: start again from “My online data” if you like.',
   cloud_signIn: 'Sign in with Google',
   cloud_loading: 'Signing in…',
   cloud_signedIn: 'Signed in: {name}',

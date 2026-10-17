@@ -18,6 +18,10 @@ const CARRY = 2.3; // on marche moins vite avec une caisse dans les bras
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const _v = new THREE.Vector3();
 const _head = new THREE.Vector3();
+const _rA = new THREE.Vector3();
+const _rB = new THREE.Vector3();
+const _rC = new THREE.Vector3();
+const _rD = new THREE.Vector3();
 const _gw = {};
 
 /**
@@ -147,9 +151,80 @@ export class Player {
     this.avatar.head.add(this.helmet);
   }
 
+  /**
+   * Rênes : des anneaux du mors (filet en place, voir gearModels.js) aux mains du cavalier, un peu
+   * détendues. Deux rubans croisés par rêne (visibles sous tous les angles), recalculés à chaque image.
+   */
+  updateReins(m) {
+    const R = m.gearGroup?.userData.reins;
+    if (!R) {
+      if (this.reins) this.reins.visible = false;
+      return;
+    }
+    if (!this.reins) {
+      const N = 10;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(2 * N * 4 * 3), 3));
+      const idx = [];
+      for (let r = 0; r < 2; r++) {
+        for (let k = 0; k < 2; k++) {
+          const b = (r * 2 + k) * N * 2;
+          for (let i = 0; i < N - 1; i++) {
+            const a0 = b + i * 2;
+            idx.push(a0, a0 + 1, a0 + 2, a0 + 1, a0 + 3, a0 + 2);
+          }
+        }
+      }
+      g.setIndex(idx);
+      this.reins = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x2a1a10, roughness: 0.6, side: THREE.DoubleSide }));
+      this.reins.frustumCulled = false;
+      this.reins.castShadow = false;
+      this.reins.userData.N = N;
+      this.scene.add(this.reins);
+    }
+    const mesh = this.reins;
+    mesh.visible = true;
+    if (mesh.userData.color !== R.color) {
+      mesh.userData.color = R.color;
+      mesh.material.color.setHex(R.color ?? 0x2a1a10);
+    }
+    const N = mesh.userData.N;
+    const pos = mesh.geometry.attributes.position;
+    R.parent.updateWorldMatrix(true, false);
+    const a = this.avatar;
+    const w = 0.009;
+    for (let r = 0; r < 2; r++) {
+      _rA.copy(R.points[r]).applyMatrix4(R.parent.matrixWorld);
+      // (main du même côté que l'anneau : anneau droit -> main droite)
+      const hand = a.hands[R.points[r].x > 0 ? 0 : 1];
+      hand.getWorldPosition(_rB);
+      const d = _rA.distanceTo(_rB);
+      _rC.lerpVectors(_rA, _rB, 0.5);
+      _rC.y -= Math.min(0.12, d * 0.18);
+      for (let i = 0; i < N; i++) {
+        const t = i / (N - 1);
+        // courbe de Bézier (anneau, milieu détendu, main)
+        _rD.copy(_rA).multiplyScalar((1 - t) * (1 - t)).addScaledVector(_rC, 2 * t * (1 - t)).addScaledVector(_rB, t * t);
+        for (let k = 0; k < 2; k++) {
+          const o = ((r * 2 + k) * N + i) * 2;
+          if (k === 0) {
+            pos.setXYZ(o, _rD.x, _rD.y + w, _rD.z);
+            pos.setXYZ(o + 1, _rD.x, _rD.y - w, _rD.z);
+          } else {
+            pos.setXYZ(o, _rD.x + w, _rD.y, _rD.z);
+            pos.setXYZ(o + 1, _rD.x - w, _rD.y, _rD.z);
+          }
+        }
+      }
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+  }
+
   dismount() {
     const e = this.mount;
     if (!e) return null;
+    if (this.reins) this.reins.visible = false;
     this.setHelmet(null);
     e.ridden = false;
     e.speed = 0;
@@ -466,6 +541,7 @@ export class Player {
     st.phase = phase;
     st.bob = bob;
     animateAvatarRide(a, st);
+    this.updateReins(m);
     const o = this.lifeOpts;
     o.riding = true;
     o.carry = false;

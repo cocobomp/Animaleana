@@ -114,6 +114,9 @@ export function buildGear(model, look, gear = {}) {
   else if (model.gearFit) buildHorseGear(model.gearFit, look, gear, add); // cheval GLB (src/game/models/gltfHorseFit.js)
   else buildGenericGear(model, look, gear, add, L, R, y0);
   group.userData.meshes = holders;
+  // Où s'attachent les rênes (anneaux du mors, ou côtés de la muserolle du hackamore) : Player les tend
+  // jusqu'aux mains du cavalier. { parent, points (repère du parent), color }.
+  if (add.reins) group.userData.reins = add.reins;
   return group;
 }
 
@@ -212,12 +215,16 @@ function buildHorseGear(model, look, gear, add) {
           add(model.head, P.shared('gearGem', () => new THREE.SphereGeometry(0.006, 6, 5)), P.steelMat(), p.toArray());
         }
       }
+      const reinPts = [];
+      add.reins = { parent: model.head, points: reinPts, color };
       for (const [c, s] of [[cR, 1], [cL, -1]]) {
         const m = rayHit(head, [0, -hr * 0.42, snoutZ - hr * 0.8], [s, -0.1, 0], hr * 3);
         const ring = m.clone().add(new THREE.Vector3(s * hr * 0.1, 0, 0));
+        reinPts.push(ring.clone());
         if (bid === 'hackamore') {
           // Pas de mors : le montant descend à la muserolle, une branche en métal pend sur le côté du nez.
           const n = s > 0 ? nR : nL;
+          reinPts[reinPts.length - 1] = n.clone().add(new THREE.Vector3(s * 0.01, -hr * 0.6, hr * 0.12));
           add(model.head, strap(cheek(c, n), w * 0.9, th), strapMat);
           add(model.head, P.tube([n.toArray(), [n.x + s * 0.01, n.y - hr * 0.35, n.z + hr * 0.15], [n.x + s * 0.008, n.y - hr * 0.7, n.z + hr * 0.1]], 0.005), P.steelMat());
           continue;

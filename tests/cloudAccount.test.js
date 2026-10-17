@@ -234,7 +234,7 @@ describe('effacer une partie', () => {
     expect(s.acc.deleteKind(p.id)).toBe('everywhere');
     s.acc.deleteParty(p.id);
     await flush(10);
-    expect(remoteOf('u1').data.get(p.id)).toMatchObject({ deleted: true, rev: 2 });
+    expect(remoteOf('u1').data.get(p.id)).toMatchObject({ gone: true, rev: 2 });
     expect(s.profile.loadProfile(p.id)).toBeNull();
   });
 
@@ -247,7 +247,7 @@ describe('effacer une partie', () => {
     expect(s.acc.deleteKind(p.id)).toBe('kept');
     s.acc.deleteParty(p.id);
     await flush();
-    expect(remoteOf('u1').data.get(p.id).deleted).toBeUndefined();
+    expect(remoteOf('u1').data.get(p.id).gone).toBeUndefined();
     fb.cb(user()); // reconnexion
     await flush(10);
     expect(s.profile.loadProfile(p.id)?.name).toBe('Léa');
@@ -375,5 +375,111 @@ describe('quand synchroniser', () => {
     await login(s, { chooseClaims: async (parties) => parties.map((x) => x.id) });
     expect(s.acc.cloudState().error).toBe('unavailable');
     expect(s.sync.loadMeta().base[p.id]).toBeUndefined();
+  });
+});
+
+describe('relecture de la v2 : effacer sans être connecté, compte supprimé, synchro incomplète', () => {
+  const choose = { chooseClaims: async (parties) => parties.map((x) => x.id) };
+  const google = (uid, email = 'lea@x.ch') => ({ uid, displayName: 'Léa', email, photoURL: '' });
+
+  it('jouée pendant la déconnexion puis effacée : la confirmation dit que ces progrès seront perdus (pas « elle reviendra »)', async () => {
+    const { CLOUD_FR } = await import('../src/ui/cloudTexts.js');
+    const s = await boot();
+    const p = s.profile.createProfile('Léa');
+    p.money = 100;
+    s.profile.saveProfile(p);
+    await login(s, choose);
+    await s.acc.signOut();
+    expect(s.acc.deleteKind(p.id)).toBe('kept'); // pas jouée depuis la synchro : la version en ligne reviendra
+    await new Promise((r) => setTimeout(r, 2));
+    const q = s.profile.loadProfile(p.id);
+    q.money = 9999; // une heure de jeu sans compte connecté (rien n'est envoyé)
+    s.profile.saveProfile(q);
+    expect(s.acc.deleteKind(p.id)).toBe('keptOld');
+    expect(CLOUD_FR.cloud_deleteKeptOld).toMatch(/progrès seront perdus/);
+    s.acc.deleteParty(p.id);
+    fb.cb(user()); // reconnexion : c'est bien la version envoyée qui revient (le texte l'a dit)
+    await flush(10);
+    expect(s.profile.loadProfile(p.id)?.money).toBe(100);
+  });
+
+  it('compte vidé ailleurs (« Effacer mes parties en ligne » sur le téléphone) : le texte ne promet rien qu\'il ne sait pas', async () => {
+    const { CLOUD_FR, CLOUD_EN } = await import('../src/ui/cloudTexts.js');
+    expect(CLOUD_FR.cloud_deleteKept).toMatch(/sauf si elle en a été effacée/);
+    expect(CLOUD_EN.cloud_deleteKept).toMatch(/unless it was erased/);
+    expect(CLOUD_FR.cloud_deleteKeptOld).toMatch(/sauf si elle en a été effacée/);
+  });
+
+  it('« Supprimer mon compte » sur le téléphone, puis le même Google sur la tablette (nouvel uid) : la question est reposée, la partie revient dans le compte', async () => {
+    const s = await boot();
+    const p = s.profile.createProfile('Léa');
+    p.money = 777;
+    s.profile.saveProfile(p);
+    const asked = [];
+    fb.signedIn = true;
+    s.start({ chooseClaims: async (parties) => { asked.push(parties.map((x) => x.name)); return parties.map((x) => x.id); } });
+    await flush();
+    fb.cb(google('U1'));
+    await flush(20);
+    expect(remoteOf('U1').data.has(p.id)).toBe(true);
+    // Sur le téléphone : compte supprimé (documents effacés). La tablette, fermée ce jour-là, est déconnectée au réveil.
+    remoteOf('U1').data.clear();
+    fb.cb(null);
+    await flush();
+    expect(s.acc.deleteKind(p.id)).toBe('kept'); // le texte de cette confirmation dit « sauf si elle en a été effacée »
+    // Léa se reconnecte avec le même compte Google : Firebase lui donne un NOUVEL uid.
+    fb.cb(google('U2'));
+    await flush(30);
+    expect(asked).toEqual([['Léa'], ['Léa']]);
+    expect(s.acc.partyLink(p.id)).toBe('mine');
+    expect(JSON.parse(remoteOf('U2').data.get(p.id).data).money).toBe(777);
+    expect(s.acc.deleteKind(p.id)).toBe('everywhere');
+  });
+
+  it('partie liée à un autre compte Google (pas le même e-mail) : « Mettre dans mon compte » la débloque', async () => {
+    const s = await boot();
+    const p = s.profile.createProfile('Léa');
+    s.profile.saveProfile(p);
+    fb.signedIn = true;
+    s.start(choose);
+    await flush();
+    fb.cb(google('U1', 'lea@x.ch'));
+    await flush(20);
+    fb.cb(null);
+    fb.cb(google('T1', 'tom@x.ch'));
+    await flush(20);
+    expect(s.acc.partyLink(p.id)).toBe('other'); // l'écran des profils propose le bouton, avec une confirmation
+    s.acc.linkToAccount(p.id);
+    await flush(20);
+    expect(s.acc.partyLink(p.id)).toBe('mine');
+    expect(remoteOf('T1').data.has(p.id)).toBe(true);
+    expect(remoteOf('U1').data.has(p.id)).toBe(true); // rien n'est retiré de l'autre compte
+  });
+
+  it('synchro pas entièrement passée (réponse perdue) : pas de « Sauvegardé à… », l\'erreur est montrée', async () => {
+    const s = await boot();
+    const p = s.profile.createProfile('Léa');
+    s.profile.saveProfile(p);
+    await login(s, choose);
+    const ok = s.acc.cloudState().lastSync;
+    expect(ok).toBeGreaterThan(0);
+    const remote = remoteOf('u1');
+    const put = remote.put;
+    // L'écriture arrive sur le serveur, mais la réponse se perd.
+    remote.put = async (...a) => { await put(...a); throw Object.assign(new Error('timeout'), { code: 'unavailable' }); };
+    await new Promise((r) => setTimeout(r, 2));
+    const q = s.profile.loadProfile(p.id);
+    q.money = 42;
+    s.profile.saveProfile(q);
+    await s.acc.syncNow();
+    expect(s.acc.cloudState().error).toBe('unavailable');
+    expect(s.acc.cloudState().lastSync).toBe(ok); // l'encart dit « dernière synchronisation complète à… », pas « Sauvegardé »
+    // La synchro suivante voit que la version en ligne est la même : accord noté, plus d'erreur.
+    remote.put = put;
+    await new Promise((r) => setTimeout(r, 2));
+    await s.acc.syncNow();
+    expect(s.acc.cloudState().error).toBeNull();
+    expect(s.acc.cloudState().lastSync).toBeGreaterThan(ok);
+    expect(s.sync.loadMeta().base[p.id].localAt).toBe(q.updatedAt);
   });
 });

@@ -93,22 +93,36 @@ Code : `src/sim/cloudSync.js` (les décisions), `src/cloud/sync.js` (les appliqu
 (quand), `firestore.rules` (ce que la base accepte). Principe : **aucune partie n'est jamais perdue ni écrasée
 en silence**.
 
-- Chaque document en ligne a un numéro de version `rev` (1 à la création, +1 à chaque écriture). Les règles
-  refusent une écriture qui ne fait pas exactement `rev + 1`, et le jeu écrit dans une transaction qui relit
-  la `rev` juste avant : deux appareils qui écrivent en même temps ne s'écrasent pas, le second recommence.
+- Chaque document en ligne a un numéro de version `rev` (1 à la création, +1 à chaque écriture) et une
+  identité `gen` (tirée au hasard à la création, jamais changée ensuite). Les règles refusent une écriture qui
+  ne fait pas exactement `rev + 1` ou qui change `gen`, et le jeu écrit dans une transaction qui relit `rev` et
+  `gen` juste avant : deux appareils qui écrivent en même temps ne s'écrasent pas, le second recommence. Une
+  partie effacée en ligne puis remise dans le compte repart en `rev` 1, mais avec un autre `gen` : un appareil
+  qui avait noté « rev 1 » voit qu'elle a changé.
 - Les horloges des appareils ne décident de rien : le jeu regarde seulement ce qui a changé depuis le dernier
   accord (de chaque côté). Si les deux côtés ont changé, **les deux versions sont gardées** : la plus récente
   reste la partie, l'autre devient une copie de secours sur l'appareil (« Léa · secours 17/10 »).
-- Une partie ouverte (dans cet onglet ou un autre) n'est jamais remplacée ni effacée pendant qu'on joue.
+- Écriture sans réponse (réseau très lent, coupure juste après l'envoi) : elle a peut-être eu lieu. Le jeu garde
+  alors la copie de secours qu'il venait de faire (au pire un doublon, jamais une perte) et ne dit pas
+  « Sauvegardé » ; la synchro suivante reconnaît sa propre version.
+- Une partie ouverte (dans cet onglet ou un autre) n'est jamais remplacée ni effacée pendant qu'on joue, et ne
+  s'ouvre pas dans un deuxième onglet.
 - Sur une tablette partagée, la première connexion demande quelles parties mettre dans le compte (les autres
-  restent sur l'appareil). Une petite ☁️ marque les parties du compte connecté.
-- Effacer une partie liée au compte connecté l'efface sur tous ses appareils ; sinon, seulement sur l'appareil.
+  restent sur l'appareil). Une petite ☁️ marque les parties du compte connecté. Une partie liée à un autre
+  compte (par exemple un compte supprimé) peut aussi être mise dans le sien (« ☁️ Mettre dans mon compte »,
+  avec confirmation). Si le même compte Google revient avec un autre identifiant (compte du jeu supprimé depuis
+  un autre appareil), ses parties de l'appareil sont reproposées à la question.
+- Effacer une partie liée au compte connecté l'efface sur tous ses appareils ; sinon, seulement sur l'appareil
+  (la confirmation dit si des progrès faits depuis la dernière synchro seront perdus).
+- Pierre tombale (partie effacée par son propriétaire) : `{ data: '', gone: true }`. Pas `deleted` : c'est le
+  champ que la v1 lisait pour effacer sans regarder ; un appareil resté en v1 ne voit dans une pierre tombale v2
+  qu'une partie illisible et n'efface rien.
 - « 🔒 Mes données en ligne » (encart du compte) : « Effacer mes parties en ligne » supprime les documents du
   compte (les parties restent sur l'appareil) ; « Supprimer mon compte » supprime aussi le compte Google du jeu.
 
 ### Mettre les règles en ligne (à faire avant de publier la v2)
 
-La v2 écrit le champ `rev` : avec les anciennes règles, ses écritures seraient refusées. L'action GitHub ne
+La v2 écrit les champs `rev` et `gen` : avec les anciennes règles, ses écritures seraient refusées. L'action GitHub ne
 publie que les fichiers du jeu (pas les règles). Avant de fusionner la v2 dans `main` :
 
 1. Vérifier le fichier `firestore.rules` du dépôt.

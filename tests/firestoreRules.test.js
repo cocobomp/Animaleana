@@ -1,5 +1,6 @@
 // Les règles de firestore.rules, testées dans l'émulateur Firestore (vrai moteur de règles) : rev + 1
-// obligatoire, rev 1 à la création, un compte ne touche jamais aux parties d'un autre, champs et tailles contrôlés.
+// obligatoire, rev 1 à la création, gen (identité du document) fixé à la création, pierre tombale « gone », un
+// compte ne touche jamais aux parties d'un autre, champs et tailles contrôlés.
 // Sans émulateur, ces tests sont sautés. Pour les lancer (voir docs/HEBERGEMENT.md) :
 //   npx firebase-tools emulators:start --only firestore   (avec firebase.json → firestore.rules)
 //   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx vitest run tests/firestoreRules.test.js
@@ -15,7 +16,7 @@ describe.skipIf(!HOST)('firestore.rules (émulateur)', () => {
   let anon;
   const apps = [];
   const base = () => `http://${HOST}/v1/projects/${PROJECT}/databases/(default)/documents`;
-  const save = (rev, extra = {}) => ({ data: JSON.stringify({ id: 'p1', name: 'Léa' }), updatedAt: 1760000000000, rev, name: 'Léa', saveVersion: 1, appVersion: '0.4.0', ...extra });
+  const save = (rev, extra = {}) => ({ data: JSON.stringify({ id: 'p1', name: 'Léa' }), updatedAt: 1760000000000, rev, gen: 'g1', name: 'Léa', saveVersion: 1, appVersion: '0.4.0', ...extra });
   const ok = async (p) => { await p; return true; };
   const denied = async (p) => {
     try {
@@ -55,14 +56,22 @@ describe.skipIf(!HOST)('firestore.rules (émulateur)', () => {
     const { rev, ...noRev } = save(1);
     expect(rev).toBe(1);
     expect(await denied(fs.setDoc(ref(lea, 'lea', 'a'), noRev))).toBe(true);
+    const { gen, ...noGen } = save(1);
+    expect(gen).toBe('g1');
+    expect(await denied(fs.setDoc(ref(lea, 'lea', 'a'), noGen))).toBe(true); // identité obligatoire
+    expect(await denied(fs.setDoc(ref(lea, 'lea', 'a'), save(1, { gen: '' })))).toBe(true);
+    expect(await denied(fs.setDoc(ref(lea, 'lea', 'a'), save(1, { gen: 'x'.repeat(41) })))).toBe(true);
     expect(await ok(fs.setDoc(ref(lea, 'lea', 'a'), save(1)))).toBe(true);
   });
 
   it('mise à jour : seulement la rev suivante (une écriture faite sur une version dépassée est refusée)', async () => {
     expect(await denied(fs.setDoc(ref(lea, 'lea', 'a'), save(1)))).toBe(true); // même rev
     expect(await denied(fs.setDoc(ref(lea, 'lea', 'a'), save(3)))).toBe(true); // saute une rev
+    expect(await denied(fs.setDoc(ref(lea, 'lea', 'a'), save(2, { gen: 'g2' })))).toBe(true); // gen ne change jamais
     expect(await ok(fs.setDoc(ref(lea, 'lea', 'a'), save(2)))).toBe(true);
-    expect(await ok(fs.setDoc(ref(lea, 'lea', 'a'), { data: '', updatedAt: 5, rev: 3, deleted: true }))).toBe(true); // pierre tombale
+    // Pierre tombale : « gone ». « deleted » (le champ que la v1 lisait comme « effacée ») est refusé.
+    expect(await denied(fs.setDoc(ref(lea, 'lea', 'a'), { data: '', updatedAt: 5, rev: 3, gen: 'g1', deleted: true }))).toBe(true);
+    expect(await ok(fs.setDoc(ref(lea, 'lea', 'a'), { data: '', updatedAt: 5, rev: 3, gen: 'g1', gone: true }))).toBe(true);
   });
 
   it('transaction (comme le jeu) : relit puis écrit rev + 1', async () => {
@@ -108,7 +117,16 @@ describe.skipIf(!HOST)('firestore.rules (émulateur)', () => {
     });
     expect(r.ok).toBe(true);
     expect(await denied(fs.setDoc(ref(lea, 'lea', 'old'), save(2)))).toBe(true);
-    expect(await ok(fs.setDoc(ref(lea, 'lea', 'old'), save(1)))).toBe(true);
+    // Une écriture de la v1 (ni rev ni gen) est refusée ; la v2 lui donne rev 1 et son identité.
+    expect(await denied(fs.setDoc(ref(lea, 'lea', 'old'), { data: '{}', updatedAt: 2, name: 'Léa' }))).toBe(true);
+    expect(await ok(fs.setDoc(ref(lea, 'lea', 'old'), save(1, { gen: 'neuf' })))).toBe(true);
+  });
+
+  it('effacée puis recréée : rev 1 de nouveau, mais l\'identité (gen) est nouvelle', async () => {
+    expect(await ok(fs.setDoc(ref(lea, 'lea', 'r'), save(1, { gen: 'premier' })))).toBe(true);
+    expect(await ok(fs.deleteDoc(ref(lea, 'lea', 'r')))).toBe(true);
+    expect(await ok(fs.setDoc(ref(lea, 'lea', 'r'), save(1, { gen: 'second' })))).toBe(true);
+    expect((await fs.getDoc(ref(lea, 'lea', 'r'))).data()).toMatchObject({ rev: 1, gen: 'second' });
   });
 
   it('le propriétaire peut tout effacer (« effacer mes parties en ligne »)', async () => {

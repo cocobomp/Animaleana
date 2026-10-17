@@ -40,14 +40,23 @@ export function showProfiles(ui) {
         h('small', {}, `${p.mode === 'sandbox' ? t('modeSandbox') : t('modeManage')} · ${t('animalsCount', { n: p.animals })}`),
         // Copie gardée avant qu'une partie restaurée la remplace (src/sim/saveStore.js) : on peut y rejouer ou la supprimer.
         p.backup ? h('small', { class: 'sv-badge' }, t('sv_backupBadge')) : null),
-        link === 'device' ? h('button', { class: 'small cloud-link', onClick: () => { linkToAccount(p.id); render(); } }, t('cloud_link')) : null,
+        // Liée à un autre compte (peut-être supprimé depuis) : on peut aussi la mettre dans le sien, après confirmation.
+        link === 'device' || link === 'other' ? h('button', {
+          class: 'small cloud-link',
+          onClick: async () => {
+            if (link === 'other' && !(await ui.confirm(t('cloud_linkOther', { name: p.name })))) return;
+            linkToAccount(p.id);
+            render();
+          },
+        }, t('cloud_link')) : null,
         h('button', {
           class: 'icon danger',
           title: t('delete'),
           onClick: async () => {
-            // Liée au compte connecté : effacée partout ; dans un autre compte : seulement ici (elle reviendra).
+            // Liée au compte connecté : effacée partout ; dans un autre compte : seulement ici (« elle reviendra »
+            // seulement si elle n'a pas été jouée ici depuis la dernière synchro) ; sinon : perdue.
             const kind = deleteKind(p.id);
-            const msg = kind === 'everywhere' ? 'cloud_deleteEverywhere' : kind === 'kept' ? 'cloud_deleteKept' : 'confirmDelete';
+            const msg = { everywhere: 'cloud_deleteEverywhere', kept: 'cloud_deleteKept', keptOld: 'cloud_deleteKeptOld' }[kind] ?? 'confirmDelete';
             if (await ui.confirm(t(msg, { name: p.name }))) {
               deleteParty(p.id);
               render();

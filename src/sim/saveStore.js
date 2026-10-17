@@ -89,6 +89,10 @@ export function restoreAsNew(store, incoming) {
  * est déjà pris) ; opts.now : date de la copie.
  * opts.afterBackup() : appelé une fois la copie écrite, juste avant d'écrire par-dessus l'ancien (arrêter la
  * partie en cours : elle réécrirait sinon l'ancienne version en se fermant).
+ * Une restauration confirmée est une modification voulue : la partie écrite reçoit une nouvelle date (plus récente
+ * que le fichier et que la version remplacée). Sinon, un fichier exporté au moment de la dernière synchro aurait
+ * la date de l'accord, et la synchro suivante le prendrait pour « pas changé ici » et le déferait en silence. La
+ * date du fichier ne sert qu'à dire, avant de confirmer, s'il est plus ancien ou plus récent (src/ui/saveGame.js).
  * Renvoie { ok: true, profile, backup } ou { ok: false, error: 'missing' | 'storage', backup? }.
  */
 export function restoreReplace(store, targetId, incoming, { backupName = (p) => `${p.name} (secours)`, now = Date.now(), afterBackup = null } = {}) {
@@ -102,6 +106,8 @@ export function restoreReplace(store, targetId, incoming, { backupName = (p) => 
   // L'id du fichier (même partie d'un appareil à l'autre) s'il est libre ; sinon celui du profil remplacé.
   if (!p.id || (p.id !== targetId && list.some((e) => e.id === p.id))) p.id = targetId;
   p.name = uniqueName(p.name, list.map((e) => e.name));
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  p.updatedAt = Math.max(Date.now(), num(incoming.updatedAt) + 1, num(old.updatedAt) + 1);
   if (!store.save(p, { touch: false })) {
     // La copie de secours reste (rien n'est perdu, même si l'écriture s'est arrêtée au milieu).
     if (p.id !== targetId) store.remove(p.id);
@@ -114,9 +120,16 @@ export function restoreReplace(store, targetId, incoming, { backupName = (p) => 
 /**
  * Garde une copie de secours d'une partie (nouvel id, marquée backupOf : jamais synchronisée), sans toucher à
  * l'original. Prénom « Léana · secours 17/10 » (opts.backupName), rendu unique. Garde la date de la partie.
- * Renvoie la copie, ou null si l'appareil est plein (et rien n'est resté d'une copie écrite à moitié).
+ * opts.reuse : id d'une copie de secours de cette même partie à mettre à jour au lieu d'en ajouter une (même nom).
+ * Renvoie la copie, ou null si l'appareil est plein (et rien n'est resté d'une copie écrite à moitié ; une copie
+ * mise à jour garde alors son ancien contenu).
  */
-export function keepBackup(store, p, { backupName = (x) => `${x.name} (secours)`, now = Date.now() } = {}) {
+export function keepBackup(store, p, { backupName = (x) => `${x.name} (secours)`, now = Date.now(), reuse = null } = {}) {
+  const old = reuse ? store.load(reuse) : null;
+  if (old && old.backupOf === p.id) {
+    const backup = { ...clone(p), id: old.id, name: old.name, backupOf: p.id, backupAt: now };
+    return store.save(backup, { touch: false }) ? backup : null;
+  }
   const name = uniqueName(backupName(p), store.list().map((e) => e.name));
   const backup = { ...clone(p), id: uid(), name, backupOf: p.id, backupAt: now };
   if (!store.save(backup, { touch: false })) {
@@ -126,14 +139,26 @@ export function keepBackup(store, p, { backupName = (x) => `${x.name} (secours)`
   return backup;
 }
 
+/** Une copie de secours de cette partie qui a déjà exactement ce contenu (ou null) : pas besoin d'en refaire une. */
+export function findBackup(store, p) {
+  for (const e of store.list()) {
+    if (!e.backup) continue;
+    const copy = store.load(e.id);
+    if (copy?.backupOf === p.id && sameContent({ ...copy, id: p.id, name: p.name }, p)) return copy;
+  }
+  return null;
+}
+
 /**
  * Sauvegarde de la partie en cours (src/game/Game.js), qui ne peut rien écraser en silence : si la version
  * écrite sur l'appareil n'est plus celle que la partie a chargée ou écrite en dernier (lastAt : autre onglet,
  * synchro), elle est d'abord gardée en copie de secours (si cette copie est impossible, rien n'est écrit).
  * Rien à écrire si rien n'a changé depuis la dernière fois (lastKey : contenu déjà écrit).
+ * opts.reuse : la copie déjà faite pendant cette partie (même onglet) : mise à jour au lieu d'en ajouter une à
+ * chaque sauvegarde (deux onglets sur la même partie rempliraient sinon l'appareil de copies).
  * Renvoie { ok, at (date écrite), key (contenu écrit), backup (copie faite, s'il y en a une) }.
  */
-export function saveGuarded(store, p, { lastAt, lastKey = null, backupName, now = Date.now() } = {}) {
+export function saveGuarded(store, p, { lastAt, lastKey = null, backupName, now = Date.now(), reuse = null } = {}) {
   const stored = store.list().find((e) => e.id === p.id);
   const storedAt = stored ? stored.updatedAt ?? stored.savedAt : undefined;
   const changedElsewhere = stored && lastAt !== undefined && storedAt !== lastAt;
@@ -143,7 +168,7 @@ export function saveGuarded(store, p, { lastAt, lastKey = null, backupName, now 
   if (changedElsewhere) {
     const other = store.load(p.id);
     if (other && !sameContent(other, p)) {
-      backup = keepBackup(store, other, { ...(backupName ? { backupName } : {}), now });
+      backup = keepBackup(store, other, { ...(backupName ? { backupName } : {}), now, reuse });
       if (!backup) return { ok: false, at: lastAt, key: lastKey, backup: null };
     }
   }

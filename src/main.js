@@ -31,6 +31,8 @@ const beat = () => {
 };
 game.on('opening', beat);
 game.on('start', beat);
+// Une partie déjà ouverte dans un autre onglet (ou une autre fenêtre) ne s'ouvre pas une deuxième fois.
+game.openElsewhere = (id) => openElsewhere({ except: tab }).includes(id);
 setInterval(beat, BEAT_MS);
 addEventListener('pagehide', () => markClosed(tab));
 

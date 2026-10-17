@@ -3,16 +3,17 @@
 // Testable sans réseau : remote peut être un faux compte en mémoire (memoryRemote, plus bas).
 //
 // Le compte en ligne (remote) : {
-//   list()                                   [{ id, data, updatedAt, rev, deleted, name }] lus sur le serveur
+//   list()                                   [{ id, data, updatedAt, rev, gen, gone, name }] lus sur le serveur
 //                                            (jamais le cache : hors ligne, list échoue et rien n'est décidé) ;
-//   put(profile, { expect, appVersion, saveVersion })  écrit la partie si sa rev en ligne vaut encore expect
-//                                            (null : absente) ; renvoie la nouvelle rev ; sinon échoue { code: 'conflict' } ;
-//   tombstone(id, { expect, at })            pareil pour la pierre tombale ;
+//   put(profile, { expect, gen, appVersion, saveVersion })  écrit la partie si le document en ligne est encore
+//                                            celui attendu (rev = expect, null : absent ; même gen) ; renvoie
+//                                            { rev, gen } écrits ; sinon échoue { code: 'conflict' } ;
+//   tombstone(id, { expect, gen, at })       pareil pour la pierre tombale ;
 //   removeAll()                              efface tous les documents du compte (« effacer mes parties en ligne »).
 // }
 
-import { planSync, applyDone, cleanMeta, META_VERSION } from '../sim/cloudSync.js';
-import { keepBackup } from '../sim/saveStore.js';
+import { planSync, applyDone, cleanMeta, newGen, revOf, docGen, META_VERSION } from '../sim/cloudSync.js';
+import { keepBackup, findBackup } from '../sim/saveStore.js';
 import { migrate, SAVE_VERSION } from '../sim/profile.js';
 import { profileProblem, sameContent } from '../sim/saveFile.js';
 
@@ -34,6 +35,14 @@ export function saveMeta(meta, storage = globalThis.localStorage) {
     return false; /* stockage plein : la prochaine synchro refera le travail, sans rien perdre */
   }
 }
+
+/**
+ * Erreurs d'écriture SÛRES : le serveur a refusé, ou on n'a rien envoyé (rien n'a été écrit en ligne). Toutes les
+ * autres sont ambiguës (délai dépassé, réseau coupé juste après l'envoi, serveur qui ne répond pas…) : l'écriture a
+ * peut-être eu lieu quand même. Dans le doute, on garde tout (au pire un doublon, jamais une perte).
+ */
+const SURE = new Set(['conflict', 'too-big', 'permission-denied', 'invalid-argument', 'unauthenticated', 'resource-exhausted', 'bad-data']);
+export const surelyNotWritten = (err) => SURE.has(err?.code);
 
 /** Le profil contenu dans un document en ligne (ou null s'il est abîmé). */
 function profileOf(d) {
@@ -79,16 +88,23 @@ export async function runSync({ store, remote, uid, meta, busy = () => [], skip 
   const report = { uploaded: 0, downloaded: 0, removed: 0, removedNames: [], backups: [], held: [], heldIds: [], unlinked: [], unowned: plan.unowned, storageFull: false, errors: [] };
   const fail = (id, err) => report.errors.push({ id, code: err?.code ?? 'network' });
   const nameOf = (id) => store.list().find((e) => e.id === id)?.name ?? byId.get(id)?.name ?? id;
-  const putOpts = (expect) => ({ expect, appVersion, saveVersion: SAVE_VERSION });
+  const putOpts = (expect, gen) => ({ expect, gen, appVersion, saveVersion: SAVE_VERSION });
   const backupOpts = { ...(backupName ? { backupName } : {}), now: now() };
+  /** Copie de secours de p : une copie identique déjà là (synchro précédente interrompue) sert à nouveau. */
+  const backupOf = (p) => {
+    const old = findBackup(store, p);
+    if (old) return { backup: old, created: false };
+    const backup = keepBackup(store, p, backupOpts);
+    return backup ? { backup, created: true } : null;
+  };
 
   // Envoyer la version de l'appareil (seulement si la version en ligne est encore celle attendue).
-  for (const { id, expect } of plan.upload) {
+  for (const { id, expect, gen } of plan.upload) {
     const p = store.load(id);
     if (!p) continue;
     try {
-      const rev = await remote.put(p, putOpts(expect));
-      done.synced.push({ id, rev, localAt: p.updatedAt });
+      const w = await remote.put(p, putOpts(expect, gen));
+      done.synced.push({ id, rev: w.rev, gen: w.gen, localAt: p.updatedAt });
       report.uploaded++;
     } catch (err) {
       fail(id, err);
@@ -96,7 +112,7 @@ export async function runSync({ store, remote, uid, meta, busy = () => [], skip 
   }
 
   // Changée des deux côtés : même contenu → accord noté ; sinon on garde les deux versions.
-  for (const { id, rev } of plan.conflict) {
+  for (const { id, rev, gen } of plan.conflict) {
     if (blocked(id)) continue;
     const d = byId.get(id);
     const theirs = profileOf(d);
@@ -107,51 +123,56 @@ export async function runSync({ store, remote, uid, meta, busy = () => [], skip 
     }
     if (!mine) continue;
     if (sameContent(mine, theirs)) {
-      done.synced.push({ id, rev, localAt: entryAt(localList().find((e) => e.id === id)) ?? mine.updatedAt });
+      done.synced.push({ id, rev, gen, localAt: entryAt(localList().find((e) => e.id === id)) ?? mine.updatedAt });
       continue;
     }
     if ((theirs.updatedAt ?? 0) > (mine.updatedAt ?? 0)) {
       // La version en ligne reste la partie : celle de l'appareil devient une copie de secours.
-      const backup = keepBackup(store, mine, backupOpts);
-      if (!backup) {
+      const kept = backupOf(mine);
+      if (!kept) {
         report.storageFull = true;
         fail(id, { code: 'storage' });
         continue;
       }
       if (blocked(id) || !store.save(theirs, { touch: false })) {
-        // Rien n'a été remplacé (l'original est intact) : la copie ne sert à rien, on la retire.
-        if (store.load(id)?.updatedAt === mine.updatedAt) store.remove(backup.id);
+        // Rien n'a été remplacé (l'original est intact) : une copie faite à l'instant ne sert à rien, on la retire.
+        if (kept.created && store.load(id)?.updatedAt === mine.updatedAt) store.remove(kept.backup.id);
         if (!blocked(id)) {
           report.storageFull = true;
           fail(id, { code: 'storage' });
         }
         continue;
       }
-      done.synced.push({ id, rev, localAt: theirs.updatedAt });
+      done.synced.push({ id, rev, gen, localAt: theirs.updatedAt });
       report.downloaded++;
-      report.backups.push(backup.name);
+      if (kept.created) report.backups.push(kept.backup.name);
     } else {
       // La version de l'appareil reste la partie : celle en ligne est gardée ici en copie de secours, puis on envoie.
-      const backup = keepBackup(store, theirs, backupOpts);
-      if (!backup) {
+      const kept = backupOf(theirs);
+      if (!kept) {
         report.storageFull = true;
         fail(id, { code: 'storage' });
         continue;
       }
       try {
-        const newRev = await remote.put(mine, putOpts(rev));
-        done.synced.push({ id, rev: newRev, localAt: mine.updatedAt });
+        const w = await remote.put(mine, putOpts(rev, gen));
+        done.synced.push({ id, rev: w.rev, gen: w.gen, localAt: mine.updatedAt });
         report.uploaded++;
-        report.backups.push(backup.name);
+        if (kept.created) report.backups.push(kept.backup.name);
       } catch (err) {
-        store.remove(backup.id); // pas envoyée : la version en ligne y est toujours, la copie ne sert à rien
+        // Sûrement pas écrite (refusée, conflit) : la version en ligne y est toujours, une copie faite à l'instant
+        // ne sert à rien. Réponse perdue (délai, réseau coupé) : l'écriture a peut-être eu lieu, et la copie est
+        // alors le seul exemplaire de la version en ligne remplacée : on la garde.
+        if (!surelyNotWritten(err)) {
+          if (kept.created) report.backups.push(kept.backup.name);
+        } else if (kept.created) store.remove(kept.backup.id);
         fail(id, err);
       }
     }
   }
 
   // Seulement changée en ligne (ou seulement en ligne) : récupérée ici.
-  for (const { id, rev, revive } of plan.download) {
+  for (const { id, rev, gen, revive } of plan.download) {
     if (blocked(id) || movedHere(id)) continue;
     const p = profileOf(byId.get(id));
     if (!p) {
@@ -163,7 +184,7 @@ export async function runSync({ store, remote, uid, meta, busy = () => [], skip 
       fail(id, { code: 'storage' });
       continue;
     }
-    done.synced.push({ id, rev, localAt: p.updatedAt, ...(revive ? { revive } : {}) });
+    done.synced.push({ id, rev, gen, localAt: p.updatedAt, ...(revive ? { revive } : {}) });
     report.downloaded++;
   }
 
@@ -178,9 +199,9 @@ export async function runSync({ store, remote, uid, meta, busy = () => [], skip 
   }
 
   // Effacée ici par son propriétaire : pierre tombale en ligne.
-  for (const { id, expect } of plan.tombstone) {
+  for (const { id, expect, gen } of plan.tombstone) {
     try {
-      await remote.tombstone(id, { expect, at: now() });
+      await remote.tombstone(id, { expect, gen, at: now() });
       done.removed.push(id);
     } catch (err) {
       fail(id, err);
@@ -193,8 +214,17 @@ export async function runSync({ store, remote, uid, meta, busy = () => [], skip 
     report.unlinked.push(nameOf(id));
   }
 
-  // Ouvertes ici et changées ailleurs : rien n'est envoyé, on prévient.
+  // Ouvertes ici et changées ailleurs : rien n'est envoyé, on prévient. Sauf si la version en ligne est exactement
+  // celle de l'appareil (notre propre envoi, dont la réponse s'était perdue) : c'est un accord, rien à signaler.
   for (const id of plan.held) {
+    const d = byId.get(id);
+    const theirs = profileOf(d);
+    const mine = store.load(id);
+    const at = entryAt(localList().find((e) => e.id === id));
+    if (theirs && mine && at === planned.get(id) && sameContent(mine, theirs)) {
+      done.synced.push({ id, rev: revOf(d), gen: docGen(d), localAt: at });
+      continue;
+    }
     report.held.push(nameOf(id));
     report.heldIds.push(id);
   }
@@ -202,27 +232,35 @@ export async function runSync({ store, remote, uid, meta, busy = () => [], skip 
   return { done, meta: applyDone(meta, uid, done), report };
 }
 
-/** Faux compte en ligne, en mémoire (tests) : mêmes règles que Firestore (rev + 1 à chaque écriture, vérifiée). */
-export function memoryRemote(docs = []) {
+/**
+ * Faux compte en ligne, en mémoire (tests) : mêmes règles que Firestore (rev + 1 à chaque écriture, gen gardé,
+ * document attendu vérifié). opts.afterWrite(id) : appelé après chaque écriture (pour simuler une réponse perdue).
+ */
+export function memoryRemote(docs = [], { afterWrite = null } = {}) {
   const data = new Map(docs.map((d) => [d.id, { ...d }]));
-  const check = (id, expect) => {
+  const check = (id, expect, gen) => {
     const cur = data.get(id);
     const curRev = cur ? (typeof cur.rev === 'number' ? cur.rev : 0) : null;
-    if (curRev !== (expect ?? null)) throw Object.assign(new Error('conflict'), { code: 'conflict' });
-    return (curRev ?? 0) + 1;
+    const curGen = cur && typeof cur.gen === 'string' ? cur.gen : null;
+    if (curRev !== (expect ?? null) || (cur && curGen !== (gen ?? null))) throw Object.assign(new Error('conflict'), { code: 'conflict' });
+    return { rev: (curRev ?? 0) + 1, gen: curGen ?? newGen() };
+  };
+  const done = async (id, w) => {
+    await afterWrite?.(id);
+    return w;
   };
   const remote = {
     data,
     list: async () => [...data.values()].map((d) => ({ ...d })),
-    put: async (p, { expect = null, appVersion = 'dev', saveVersion = 1 } = {}) => {
-      const rev = check(p.id, expect);
-      data.set(p.id, { id: p.id, data: JSON.stringify(p), updatedAt: p.updatedAt, rev, name: p.name, appVersion, saveVersion });
-      return rev;
+    put: async (p, { expect = null, gen = null, appVersion = 'dev', saveVersion = 1 } = {}) => {
+      const w = check(p.id, expect, gen);
+      data.set(p.id, { id: p.id, data: JSON.stringify(p), updatedAt: p.updatedAt, ...w, name: p.name, appVersion, saveVersion });
+      return done(p.id, w);
     },
-    tombstone: async (id, { expect = null, at = Date.now() } = {}) => {
-      const rev = check(id, expect);
-      data.set(id, { id, data: '', updatedAt: at, rev, deleted: true });
-      return rev;
+    tombstone: async (id, { expect = null, gen = null, at = Date.now() } = {}) => {
+      const w = check(id, expect, gen);
+      data.set(id, { id, data: '', updatedAt: at, ...w, gone: true });
+      return done(id, w);
     },
     removeAll: async () => {
       data.clear();

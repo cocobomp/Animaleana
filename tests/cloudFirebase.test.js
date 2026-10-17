@@ -175,25 +175,30 @@ describe('base en ligne', () => {
     await expect(r.list()).rejects.toMatchObject({ code: 'unavailable' });
   });
 
-  it('écriture : rev 1 à la création, +1 ensuite ; rev en ligne différente de celle attendue → conflit, rien d\'écrit', async () => {
+  it('écriture : rev 1 à la création (avec une identité gen), +1 ensuite ; document différent de celui attendu → conflit, rien d\'écrit', async () => {
     const f = await load();
     const r = await f.remoteStore('u1');
     const p = { id: 'a', name: 'Léa', updatedAt: 10.4, money: 1 };
-    expect(await r.put(p, { expect: null })).toBe(1);
-    expect(sdk.docs.get('users/u1/saves/a')).toMatchObject({ rev: 1, updatedAt: 10, name: 'Léa' });
-    expect(await r.put({ ...p, money: 2 }, { expect: 1 })).toBe(2);
-    await expect(r.put({ ...p, money: 3 }, { expect: 1 })).rejects.toMatchObject({ code: 'conflict' });
+    const w1 = await r.put(p, { expect: null });
+    expect(w1).toEqual({ rev: 1, gen: expect.any(String) });
+    const gen = w1.gen;
+    expect(sdk.docs.get('users/u1/saves/a')).toMatchObject({ rev: 1, gen, updatedAt: 10, name: 'Léa' });
+    expect(await r.put({ ...p, money: 2 }, { expect: 1, gen })).toEqual({ rev: 2, gen });
+    await expect(r.put({ ...p, money: 3 }, { expect: 1, gen })).rejects.toMatchObject({ code: 'conflict' });
     await expect(r.put({ ...p, money: 3 }, { expect: null })).rejects.toMatchObject({ code: 'conflict' });
+    // Bonne rev mais autre identité (document effacé puis recréé entre-temps) : conflit aussi.
+    await expect(r.put({ ...p, money: 3 }, { expect: 2, gen: 'autre' })).rejects.toMatchObject({ code: 'conflict' });
     expect(JSON.parse(sdk.docs.get('users/u1/saves/a').data).money).toBe(2);
-    expect(await r.tombstone('a', { expect: 2, at: 99 })).toBe(3);
-    expect(sdk.docs.get('users/u1/saves/a')).toEqual({ data: '', updatedAt: 99, deleted: true, rev: 3 });
+    // Pierre tombale : gone (jamais « deleted », que la v1 effaçait sans regarder), même identité.
+    expect(await r.tombstone('a', { expect: 2, gen, at: 99 })).toEqual({ rev: 3, gen });
+    expect(sdk.docs.get('users/u1/saves/a')).toEqual({ data: '', updatedAt: 99, gone: true, rev: 3, gen });
   });
 
-  it('document de la v1 (sans rev) : compté comme rev 0', async () => {
+  it('document de la v1 (sans rev ni gen) : compté comme rev 0, reçoit son identité', async () => {
     const f = await load();
     const r = await f.remoteStore('u1');
     sdk.docs.set('users/u1/saves/a', { data: '{}', updatedAt: 1 });
-    expect(await r.put({ id: 'a', name: 'L', updatedAt: 2 }, { expect: 0 })).toBe(1);
+    expect(await r.put({ id: 'a', name: 'L', updatedAt: 2 }, { expect: 0 })).toEqual({ rev: 1, gen: expect.any(String) });
   });
 
   it('partie trop grande : refusée avant d\'écrire', async () => {

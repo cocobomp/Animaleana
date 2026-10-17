@@ -32,8 +32,9 @@ export function cloudCard(ui) {
 
   if (s.status === 'in' && s.user) {
     const busy = s.syncing || s.erasing;
-    const status = !online ? t('cloud_offline') : s.erasing ? `🧹 ${t('cloud_erasing')}` : s.syncing ? `🔄 ${t('cloud_syncing')}`
-      : s.lastSync ? t('cloud_synced', { time: clock(s.lastSync) }) : t('cloud_notYet');
+    // Après une synchro qui n'est pas entièrement passée (erreur montrée plus bas) : jamais « ✅ Sauvegardé ».
+    const done = s.lastSync ? t(s.error ? 'cloud_lastOk' : 'cloud_synced', { time: clock(s.lastSync) }) : t('cloud_notYet');
+    const status = !online ? t('cloud_offline') : s.erasing ? `🧹 ${t('cloud_erasing')}` : s.syncing ? `🔄 ${t('cloud_syncing')}` : done;
     rows.push(h('div', { class: 'cloud-user' },
       s.user.photo ? h('img', { src: s.user.photo, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { class: 'cloud-avatar' }, '👤'),
       h('div', {},

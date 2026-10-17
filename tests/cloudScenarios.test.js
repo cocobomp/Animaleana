@@ -165,7 +165,7 @@ describe('2. horloges décalées (dans les deux sens)', () => {
     pc.store.remove('L');
     pc.meta = noteDeleted(pc.meta, LEA, 'L');
     await pc.sync(T + 2 * 60e3);
-    expect(remote.data.get('L').deleted).toBe(true);
+    expect(remote.data.get('L').gone).toBe(true);
     tab.play('L', 777, T + 30 * 60e3);
     const r = await tab.sync(T + 31 * 60e3);
     expect(r.removed).toBe(0);
@@ -312,7 +312,7 @@ describe('6. restauration d\'un fichier', () => {
     tablet.store.remove('L');
     tablet.meta = noteDeleted(tablet.meta, LEA, 'L');
     await tablet.sync(2000);
-    expect(remote.data.get('L').deleted).toBe(true);
+    expect(remote.data.get('L').gone).toBe(true);
     expect(restoreAsNew(tablet.store, file).ok).toBe(true);
     tablet.claim(['L']); // « Quelles parties mettre dans ton compte ? »
     const r = await tablet.sync(3000);
@@ -448,7 +448,7 @@ describe('10. effacement fait sans être connecté', () => {
     const r = await tablet.sync(5000);
     expect(r.downloaded).toBe(1);
     expect(tablet.store.load('L').money).toBe(33);
-    expect(remote.data.get('L').deleted).toBeUndefined();
+    expect(remote.data.get('L').gone).toBeUndefined();
     const rp = await phone.sync(6000);
     expect(rp.removed).toBe(0);
     expect(phone.store.load('L').money).toBe(33);
@@ -463,7 +463,7 @@ describe('10. effacement fait sans être connecté', () => {
     tablet.store.remove('L');
     tablet.meta = noteDeleted(tablet.meta, TOM, 'L'); // Tom connecté efface la ferme de Léa
     await tablet.sync(2000, { remote: memoryRemote(), uid: TOM });
-    expect(remote.data.get('L').deleted).toBeUndefined();
+    expect(remote.data.get('L').gone).toBeUndefined();
     await tablet.sync(3000);
     expect(tablet.store.load('L').money).toBe(33);
   });
@@ -479,7 +479,7 @@ describe('10. effacement fait sans être connecté', () => {
     tablet.store.remove('L');
     tablet.meta = noteDeleted(tablet.meta, LEA, 'L');
     await tablet.sync(2000);
-    expect(remote.data.get('L').deleted).toBe(true);
+    expect(remote.data.get('L').gone).toBe(true);
     const r = await phone.sync(3000);
     expect(r.removedNames).toEqual(['Léa']);
     expect(phone.store.load('L')).toBeNull();
@@ -496,6 +496,6 @@ describe('11. mémoire de la v1', () => {
     tablet.claim(['L']);
     r = await tablet.sync();
     expect(r.backups).toEqual([]);
-    expect(tablet.meta.base.L).toEqual({ rev: 0, localAt: 10 });
+    expect(tablet.meta.base.L).toEqual({ rev: 0, gen: null, localAt: 10 });
   });
 });

@@ -10,7 +10,7 @@ import {
   cloudSupported, wasSignedIn, signInWithGoogle, signOutCloud, watchUser, remoteStore, deleteCloudUser, pendingDelete, clearPendingDelete,
 } from './firebase.js';
 import { runSync, loadMeta, saveMeta } from './sync.js';
-import { applyDone, claimParties, linkParty, deleteKind as kindOf, noteDeleted, unlinkAccount, DEVICE } from '../sim/cloudSync.js';
+import { applyDone, claimParties, linkParty, deleteKind as kindOf, noteDeleted, noteAccount, unlinkAccount, DEVICE } from '../sim/cloudSync.js';
 import { deviceStore } from '../sim/saveStore.js';
 import { deleteProfile } from '../sim/profile.js';
 
@@ -74,6 +74,9 @@ function watch() {
     watching = watchUser((user) => {
       state.user = user ? { uid: user.uid, name: user.displayName ?? '', email: user.email ?? '', photo: user.photoURL ?? '' } : null;
       state.status = user ? 'in' : signingIn ? 'loading' : 'off';
+      // Le même compte Google revenu avec un autre uid (l'ancien compte du jeu a été supprimé, par exemple depuis
+      // un autre appareil) : ses parties de cet appareil redeviennent sans compte, la question est reposée.
+      if (user) saveMeta(noteAccount(loadMeta(), user.uid, user.email).meta);
       emit();
       if (!user) return;
       // Suppression du compte commencée avant une reconnexion par redirection : on la finit.
@@ -245,7 +248,8 @@ export function syncNow() {
       });
       state.report = result;
       state.error = result.errors.length ? result.errors[0].code : null;
-      state.lastSync = Date.now();
+      // « Sauvegardé à… » seulement quand tout est passé (sinon l'encart dirait en même temps l'inverse).
+      if (!result.errors.length) state.lastSync = Date.now();
       // Un autre appareil a écrit entre notre lecture et notre écriture : on recommence bientôt.
       if (result.errors.some((e) => e.code === 'conflict') && !retry) {
         retry = setTimeout(() => {
@@ -287,7 +291,10 @@ export function linkNewParty(id) {
   saveMeta(linkParty(loadMeta(), state.user.uid, id));
 }
 
-/** « ☁️ Mettre dans mon compte » (partie gardée sur l'appareil). */
+/**
+ * « ☁️ Mettre dans mon compte » : partie gardée sur l'appareil, ou liée à un autre compte (l'écran des profils
+ * demande d'abord confirmation : ce compte a pu être supprimé, et sans ce bouton la partie resterait bloquée).
+ */
 export function linkToAccount(id) {
   if (!state.user) return;
   saveMeta(linkParty(loadMeta(), state.user.uid, id));
@@ -295,12 +302,18 @@ export function linkToAccount(id) {
   syncNow();
 }
 
-/** Ce qu'effacer cette partie veut dire (pour le texte de la confirmation) : 'everywhere' | 'kept' | 'here'. */
-export const deleteKind = (id) => kindOf(loadMeta(), state.user?.uid ?? null, id);
+/**
+ * Ce qu'effacer cette partie veut dire (pour le texte de la confirmation) : 'everywhere' | 'kept' | 'keptOld' |
+ * 'here' (src/sim/cloudSync.js deleteKind : « reviendra » seulement si elle n'a pas changé depuis la dernière synchro).
+ */
+export const deleteKind = (id) => {
+  const e = deviceStore().list().find((x) => x.id === id);
+  return kindOf(loadMeta(), state.user?.uid ?? null, id, e?.updatedAt ?? e?.savedAt);
+};
 
 /**
  * Efface la partie de l'appareil. Liée au compte connecté : effacée aussi en ligne et sur ses autres appareils.
- * Sinon : seulement ici (elle reste dans son compte Google, et reviendra à la connexion).
+ * Sinon : seulement ici (la dernière version envoyée reste dans son compte Google, s'il y en a une).
  */
 export function deleteParty(id) {
   const kind = deleteKind(id);

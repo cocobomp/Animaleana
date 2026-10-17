@@ -97,6 +97,46 @@ describe('sauvegarde de la partie en cours', () => {
   });
 });
 
+describe('la même partie dans deux onglets', () => {
+  it('déjà ouverte dans un autre onglet : elle ne s\'ouvre pas une deuxième fois (message)', () => {
+    const p = profile.createProfile('Léa');
+    profile.saveProfile(p);
+    const g = fakeGame(null);
+    g.running = false;
+    const toasts = [];
+    g.ui = { toast: (m) => toasts.push(m) };
+    g.openElsewhere = (id) => id === p.id; // registre partagé (src/sim/openGames.js), branché par src/main.js
+    const opening = [];
+    g.on('opening', (x) => opening.push(x.id));
+    expect(g.start(profile.loadProfile(p.id))).toBe(false);
+    expect(g.profile).toBeNull();
+    expect(g.opening ?? null).toBeNull();
+    expect(opening).toEqual([]);
+    expect(toasts.length).toBe(1);
+  });
+
+  it('si deux onglets y jouent quand même (registre en retard) : une seule copie de secours par onglet, mise à jour ensuite', () => {
+    const p = profile.createProfile('Léa');
+    profile.saveProfile(p);
+    const g = fakeGame(profile.loadProfile(p.id));
+    g.savedAt = p.updatedAt;
+    g.otherCopy = null;
+    let t = Date.now();
+    for (let i = 0; i < 6; i++) {
+      // L'autre onglet sauvegarde sa version…
+      const other = { ...profile.loadProfile(p.id), money: 1000 + i, updatedAt: (t += 1000) };
+      profile.saveProfile(other, { touch: false });
+      // … puis celui-ci la sienne.
+      g.profile.money = i;
+      expect(g.save()).toBe(true);
+    }
+    const copies = profile.listProfiles().filter((e) => e.backup);
+    expect(copies.length).toBe(1);
+    expect(profile.loadProfile(copies[0].id).money).toBe(1005); // la dernière version de l'autre onglet
+    expect(profile.loadProfile(p.id).money).toBe(5);
+  });
+});
+
 describe('partie qui s\'ouvre pendant le chargement des modèles', () => {
   it('comptée comme ouverte tout de suite, et relue sur l\'appareil quand elle démarre vraiment', async () => {
     const p = profile.createProfile('Léa');

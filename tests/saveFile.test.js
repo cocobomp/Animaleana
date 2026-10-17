@@ -259,11 +259,14 @@ describe('restaurer sur l\'appareil', () => {
     expect(r.ok).toBe(true);
     const list = store.list();
     expect(list.map((e) => e.name)).toEqual(['Léana', 'Léana · secours', 'Tom']);
-    // La partie restaurée garde l'id du fichier (libre ici) et sa date ; l'ancienne a disparu de la liste…
+    // La partie restaurée garde l'id du fichier (libre ici) ; c'est une modification voulue, elle reçoit une
+    // nouvelle date (plus récente que le fichier : la synchro ne la prendra pas pour « pas changée ») ; l'ancienne
+    // a disparu de la liste…
     expect(r.profile.id).toBe('autre-id');
     expect(store.load(local.id)).toBeNull();
     expect(store.load('autre-id').animals).toHaveLength(1);
-    expect(store.load('autre-id').updatedAt).toBe(OCT17 + 1000);
+    expect(store.load('autre-id').updatedAt).toBeGreaterThan(OCT17 + 1000);
+    expect(store.load('autre-id').updatedAt).toBeGreaterThan(local.updatedAt);
     // … mais rien n'est perdu : la copie de secours a tout (4 animaux) et dit d'où elle vient.
     const backup = store.load(r.backup.id);
     expect(backup.animals.map((a) => a.name)).toEqual(['Caramel', 'Pilou', 'Étoile', 'Minou']);

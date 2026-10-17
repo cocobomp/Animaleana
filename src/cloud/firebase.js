@@ -3,7 +3,7 @@
 // démarrage si on est déjà connecté) : le jeu reste léger et marche toujours sans Internet.
 // Où est quoi : docs/HEBERGEMENT.md.
 
-import { revOf } from '../sim/cloudSync.js';
+import { revOf, docGen, newGen } from '../sim/cloudSync.js';
 
 /** Réglages publics du projet Firebase (ce ne sont pas des secrets : les règles protègent les données). */
 export const FIREBASE_CONFIG = {
@@ -223,36 +223,41 @@ const timeout = (p, ms) => {
   ]).finally(() => clearTimeout(id));
 };
 
-/** La base en ligne d'un compte (voir src/cloud/sync.js pour la forme attendue). */
-export async function remoteStore(uid) {
+/** La base en ligne d'un compte (voir src/cloud/sync.js pour la forme attendue). opts.writeTimeoutMs : tests seulement. */
+export async function remoteStore(uid, { writeTimeoutMs = WRITE_TIMEOUT_MS } = {}) {
   const { db, fb } = await loadFirebase();
   const saves = fb.collection(db, 'users', uid, 'saves');
 
   /**
-   * Écrit le document seulement si sa rev en ligne vaut encore expect (null : absent), avec rev + 1. Dans une
-   * transaction : refusée hors ligne (jamais mise en file pour plus tard), relue sur le serveur juste avant.
+   * Écrit le document seulement s'il est encore celui attendu : rev = expect (null : absent) et même gen (identité
+   * du document, null pour un document de la v1). Écrit rev + 1, en gardant gen (nouveau gen à la création).
+   * Dans une transaction : refusée hors ligne (jamais mise en file pour plus tard), relue sur le serveur juste avant.
+   * Renvoie { rev, gen } écrits. Attention : un délai dépassé ou un réseau coupé ne veut pas dire « pas écrit »
+   * (la transaction a pu aboutir quand même, src/cloud/sync.js en tient compte).
    */
-  const write = (id, fields, expect) => timeout(fb.runTransaction(db, async (tx) => {
+  const write = (id, fields, expect, gen) => timeout(fb.runTransaction(db, async (tx) => {
     const ref = fb.doc(saves, id);
     const snap = await tx.get(ref);
-    const cur = snap.exists() ? revOf(snap.data()) : null;
-    if (cur !== (expect ?? null)) throw Object.assign(new Error('conflict'), { code: 'conflict' });
-    const rev = (cur ?? 0) + 1;
-    tx.set(ref, { ...fields, rev });
-    return rev;
-  }, { maxAttempts: 1 }), WRITE_TIMEOUT_MS).catch((err) => {
+    const cur = snap.exists() ? snap.data() : null;
+    const curRev = cur ? revOf(cur) : null;
+    const curGen = cur ? docGen(cur) : null;
+    if (curRev !== (expect ?? null) || (cur && curGen !== (gen ?? null))) throw Object.assign(new Error('conflict'), { code: 'conflict' });
+    const w = { rev: (curRev ?? 0) + 1, gen: curGen ?? newGen() };
+    tx.set(ref, { ...fields, ...w });
+    return w;
+  }, { maxAttempts: 1 }), writeTimeoutMs).catch((err) => {
     // Document changé entre la lecture et l'écriture : c'est aussi un conflit (nouvelle synchro bientôt).
     if (['aborted', 'failed-precondition'].includes(err?.code)) throw Object.assign(new Error('conflict'), { code: 'conflict' });
     throw err;
   });
 
   return {
-    /** [{ id, data, updatedAt, rev, deleted, name }], lus sur le serveur (hors ligne : erreur, jamais le cache). */
+    /** [{ id, data, updatedAt, rev, gen, gone, name }], lus sur le serveur (hors ligne : erreur, jamais le cache). */
     async list() {
       const snap = await timeout(fb.getDocsFromServer(saves), LIST_TIMEOUT_MS);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     },
-    async put(profile, { expect = null, appVersion = 'dev', saveVersion = 1 } = {}) {
+    async put(profile, { expect = null, gen = null, appVersion = 'dev', saveVersion = 1 } = {}) {
       const data = JSON.stringify(profile);
       if (new TextEncoder().encode(data).length > MAX_SAVE_BYTES) throw Object.assign(new Error('save too big'), { code: 'too-big' });
       return write(profile.id, {
@@ -261,10 +266,11 @@ export async function remoteStore(uid) {
         name: String(profile.name ?? '').slice(0, 60),
         saveVersion: Math.round(saveVersion),
         appVersion: String(appVersion).slice(0, 40),
-      }, expect);
+      }, expect, gen);
     },
-    async tombstone(id, { expect = null, at = Date.now() } = {}) {
-      return write(id, { data: '', updatedAt: Math.round(at), deleted: true }, expect);
+    /** Pierre tombale : gone (et non deleted, que la v1 effaçait sans regarder : voir src/sim/cloudSync.js). */
+    async tombstone(id, { expect = null, gen = null, at = Date.now() } = {}) {
+      return write(id, { data: '', updatedAt: Math.round(at), gone: true }, expect, gen);
     },
     /** « Effacer mes parties en ligne » : tous les documents du compte, pierres tombales comprises. */
     async removeAll() {
@@ -272,7 +278,7 @@ export async function remoteStore(uid) {
       for (let i = 0; i < snap.docs.length; i += 400) {
         const batch = fb.writeBatch(db);
         for (const d of snap.docs.slice(i, i + 400)) batch.delete(d.ref);
-        await timeout(batch.commit(), WRITE_TIMEOUT_MS);
+        await timeout(batch.commit(), writeTimeoutMs);
       }
       return snap.docs.length;
     },

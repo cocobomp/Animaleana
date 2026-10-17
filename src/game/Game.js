@@ -153,7 +153,16 @@ export class Game {
 
   // ---------------------------------------------------------------- partie
 
+  /**
+   * Ouvre la partie. Renvoie false si elle est déjà ouverte dans un autre onglet ou une autre fenêtre (registre
+   * des parties ouvertes, branché par src/main.js sur this.openElsewhere) : deux onglets sur la même partie se
+   * remplaceraient l'un l'autre à chaque sauvegarde.
+   */
   start(profile) {
+    if (this.openElsewhere?.(profile.id)) {
+      this.ui.toast(t('cloud_openElsewhere'), 8000);
+      return false;
+    }
     if (!this.modelsLoaded) {
       // Partie « en train de s'ouvrir » (comptée comme ouverte par la synchro, src/main.js). Quand elle démarre
       // vraiment, on la relit sur l'appareil : une synchro a pu la mettre à jour pendant le chargement des modèles.
@@ -171,6 +180,7 @@ export class Game {
     // Version de départ sur l'appareil : Game.save ne l'écrasera pas en silence si quelqu'un d'autre l'a changée.
     this.savedAt = profile.updatedAt;
     this.savedKey = null;
+    this.otherCopy = null; // la copie de secours faite pendant cette partie (une seule, mise à jour ensuite)
     this.rig.mode = profile.settings.camera ?? 'third';
     this.player = this.player ?? new Player(this.scene, this.world, profile.avatar);
     this.player.setAvatar(profile.avatar);
@@ -228,17 +238,22 @@ export class Game {
       e.data.pos = [e.position.x, e.position.z];
     }
     // Rien n'est écrit si rien n'a changé ; si la partie a été changée ailleurs sur l'appareil (autre onglet,
-    // synchro), cette autre version est d'abord gardée en copie de secours.
+    // synchro), cette autre version est d'abord gardée en copie de secours (une seule par partie jouée : mise à
+    // jour ensuite, pour ne pas remplir l'appareil si un autre onglet continue d'y jouer).
     const r = saveGuarded(deviceStore(), this.profile, {
       lastAt: this.savedAt,
       lastKey: this.savedKey,
+      reuse: this.otherCopy,
       backupName: (p) => t('cloud_backupName', { name: p.name, date: new Date().toLocaleDateString(getLang() === 'fr' ? 'fr-CH' : 'en-GB', { day: '2-digit', month: '2-digit' }) }),
     });
     if (r.ok) {
       this.savedAt = r.at;
       this.savedKey = r.key;
     }
-    if (r.backup) this.emit('backupKept', r.backup);
+    if (r.backup) {
+      this.otherCopy = r.backup.id;
+      this.emit('backupKept', r.backup);
+    }
     return r.ok;
   }
 

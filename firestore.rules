@@ -12,19 +12,22 @@ service cloud.firestore {
     }
 
     // Une partie : le profil en texte JSON (data), sa date de modification (ms, pour information), son numéro
-    // de version (rev : 1 à la création, +1 à chaque écriture) et quelques informations pour la liste
-    // (prénom, version). Taille limitée (un document fait 1 Mo au plus). Pierre tombale : data vide, deleted.
+    // de version (rev : 1 à la création, +1 à chaque écriture), son identité (gen : tirée au hasard à la création,
+    // jamais changée ensuite ; une partie effacée puis remise dans le compte a un autre gen) et quelques
+    // informations pour la liste (prénom, version). Taille limitée (un document fait 1 Mo au plus).
+    // Pierre tombale : data vide, gone (pas « deleted » : les appareils restés en v1 effaçaient sans regarder).
     function validSave() {
       let d = request.resource.data;
-      return d.keys().hasAll(['data', 'updatedAt', 'rev'])
-        && d.keys().hasOnly(['data', 'updatedAt', 'rev', 'name', 'saveVersion', 'appVersion', 'deleted'])
+      return d.keys().hasAll(['data', 'updatedAt', 'rev', 'gen'])
+        && d.keys().hasOnly(['data', 'updatedAt', 'rev', 'gen', 'name', 'saveVersion', 'appVersion', 'gone'])
         && d.data is string && d.data.size() <= 900000
         && d.updatedAt is int
         && d.rev is int && d.rev >= 1
+        && d.gen is string && d.gen.size() >= 1 && d.gen.size() <= 40
         && (!('name' in d) || (d.name is string && d.name.size() <= 60))
         && (!('saveVersion' in d) || d.saveVersion is int)
         && (!('appVersion' in d) || (d.appVersion is string && d.appVersion.size() <= 40))
-        && (!('deleted' in d) || d.deleted is bool);
+        && (!('gone' in d) || d.gone is bool);
     }
 
     // Identifiant d'une partie : lettres, chiffres, - et _ (64 au plus).
@@ -37,12 +40,13 @@ service cloud.firestore {
       // « Effacer mes parties en ligne » / « Supprimer mon compte ».
       allow delete: if isOwner(uid);
       // Création : rev 1. Mise à jour : exactement la rev suivante (une écriture faite à partir d'une version
-      // déjà dépassée est refusée : aucune partie n'est écrasée en silence). Les documents d'avant les rev
-      // (première version de la synchro) comptent comme rev 0.
+      // déjà dépassée est refusée : aucune partie n'est écrasée en silence), et le même gen. Les documents d'avant
+      // les rev (première version de la synchro) comptent comme rev 0 et reçoivent leur gen à la mise à jour.
       allow create: if isOwner(uid) && validId(profileId) && validSave()
         && request.resource.data.rev == 1;
       allow update: if isOwner(uid) && validId(profileId) && validSave()
-        && request.resource.data.rev == resource.data.get('rev', 0) + 1;
+        && request.resource.data.rev == resource.data.get('rev', 0) + 1
+        && (!('gen' in resource.data) || request.resource.data.gen == resource.data.gen);
     }
 
     match /{document=**} {

@@ -5,7 +5,7 @@ import {
   buildAvatar, animateAvatarWalk, poseAvatar, updateAvatarLife, startAvatarGesture, careGestureFor,
   animateAvatarRide, avatarBusy, stopAvatarGesture,
 } from './models/avatarModel.js';
-import { gaitFromSpeed, gaitWeights, gestureHeight } from './models/avatarMotion.js';
+import { gaitFromSpeed, gaitWeights, gestureHeight, clipGait, stirrupFor } from './models/avatarMotion.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 
@@ -15,7 +15,21 @@ const CARRY = 2.3; // on marche moins vite avec une caisse dans les bras
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const _v = new THREE.Vector3();
+const _head = new THREE.Vector3();
 const _gw = {};
+
+/**
+ * Bouche d'un animal (repère du monde), un peu sous le bout du nez : le long de la tête pour un
+ * modèle procédural ; pour un GLB (repère de la tête aligné sur le corps), en avant et en bas.
+ */
+function mouthOf(entity, out) {
+  const md = entity.model;
+  const look = entity.data?.look ?? {};
+  const hl = look.headLen ?? 0.3;
+  if (md.gltf) out.set(0, -0.5 * hl, 0.82 * hl);
+  else out.set(0, -0.25 * (look.headR ?? 0.1), 0.72 * hl);
+  return md.head.localToWorld(out);
+}
 
 export class Player {
   constructor(scene, world, look) {
@@ -27,6 +41,8 @@ export class Player {
     this.speed = 0;
     this.phase = 0;
     this.mount = null; // AnimalEntity monté
+    // Options de updateAvatarLife, réutilisées à chaque image (pas d'allocation).
+    this.lifeOpts = { speed: 0, riding: false, carry: false };
     this.setAvatar(look);
     this.torch = new THREE.PointLight(0xffd9a0, 0, 14, 1.6);
     this.torch.position.set(0, 2.2, 0.4);
@@ -68,8 +84,9 @@ export class Player {
   }
 
   /**
-   * Installe l'avatar en selle (cheval GLB ou procédural) : hauteur de la selle, écart des cuisses
-   * selon la largeur du ventre, mains aux rênes au-dessus du garrot (base de l'encolure).
+   * Installe l'avatar en selle (cheval GLB ou procédural) : hauteur de la selle, pieds dans les
+   * étriers contre le flanc selon la largeur du ventre (genou plié), mains aux rênes au-dessus du
+   * garrot (base de l'encolure).
    */
   seat() {
     const a = this.avatar;
@@ -81,7 +98,8 @@ export class Player {
     a.root.position.set(0, seatY, seatZ);
     const look = e.data.look;
     const R = (md.dims?.R ?? look.bodyR * (look.fluff ?? 1)) * sc;
-    const spread = Math.asin(clamp((R * 0.92 - 0.07) / 0.4, 0.3, 0.82));
+    const saddle = !this.bareback && !!e.data.gear?.saddle;
+    const foot = stirrupFor(R, saddle, {});
     // Garrot : la base de l'encolure, dans le repère du cheval (le joueur est à la même place).
     let reinsY = 1.0;
     let reinsZ = 0.36;
@@ -93,8 +111,8 @@ export class Player {
       reinsZ = clamp(_v.z - seatZ - 0.18, 0.26, 0.4);
     }
     this.ride0 = {
-      gait: 0, phase: 0, bob: 0, posting: !this.bareback && !!e.data.gear?.saddle,
-      seatY, seatZ, spread, reinsY, reinsZ, ankleZ: 0.07, ankleDrop: clamp(0.5 + R * 0.25, 0.55, 0.64),
+      gait: 0, phase: 0, bob: 0, posting: saddle,
+      seatY, seatZ, reinsY, reinsZ, footX: foot.x, footY: foot.y, footZ: foot.z, kneeOut: foot.out,
     };
     this.rideGait = 0;
     this.ridePhase = 0;
@@ -185,6 +203,8 @@ export class Player {
     const p = this.root.position;
     const sc = entity.scale ?? 1;
     const back = (entity.model?.saddleY ?? 0.5) * sc; // hauteur du dos
+    this.faceHead = false;
+    if (kind === 'offer' && entity.model?.head && this.offerToHead(entity, kind)) return;
     const y = gestureHeight(kind, back);
     // Distance au bord de l'animal dans notre direction (une ellipse : long devant, étroit sur le côté).
     const ep = entity.position;
@@ -207,8 +227,57 @@ export class Player {
     go(d);
   }
 
+  /**
+   * Friandise, remède : la main va à la bouche de l'animal (devant sa tête), pas au flanc. Petit
+   * pas jusqu'à côté de la tête si besoin (en longeant l'animal). Renvoie faux si la tête est trop
+   * loin : on garde alors le geste vers le corps.
+   */
+  offerToHead(entity, kind) {
+    const a = this.avatar;
+    const p = this.root.position;
+    const sc = entity.scale ?? 1;
+    entity.root?.updateMatrixWorld(true); // l'animal a pu bouger depuis la dernière image
+    mouthOf(entity, _head);
+    const groundY = this.world.heightAt(_head.x, _head.z);
+    const y = clamp(_head.y - groundY - 0.03 * sc, 0.3, 1.45);
+    const rHead = clamp((entity.data?.look?.headR ?? 0.12) * sc * 0.6, 0.04, 0.12);
+    const reach = 0.4;
+    const d = Math.hypot(p.x - _head.x, p.z - _head.z);
+    if (d - rHead > reach + 2.6) return false;
+    this.faceTo = entity;
+    this.faceHead = true;
+    const go = () => {
+      mouthOf(entity, _head);
+      const dd = Math.hypot(this.root.position.x - _head.x, this.root.position.z - _head.z);
+      startAvatarGesture(a, kind, { y, z: clamp(dd - rHead, 0.3, 0.48) });
+    };
+    if (d - rHead > reach + 0.15 && !this.auto) {
+      // À côté de la bouche, de notre côté de l'animal, à portée de main : on longe le flanc au
+      // lieu de traverser l'animal.
+      const h = entity.heading ?? 0;
+      const rx = Math.cos(h);
+      const rz = -Math.sin(h);
+      const side = (p.x - entity.position.x) * rx + (p.z - entity.position.z) * rz >= 0 ? 1 : -1;
+      const off = rHead + reach * 0.85;
+      const target = new THREE.Vector3(_head.x + rx * side * off, 0, _head.z + rz * side * off);
+      this.goTo(target, 0.2, go, { slow: true, budget: 3.2 });
+      return true;
+    }
+    go();
+    return true;
+  }
+
+  /**
+   * Vrai pendant un geste de soin (ou le petit pas qui le précède) : la liste de tâches attend
+   * qu'il soit fini avant de partir vers la suivante (TaskQueue.update).
+   */
+  careBusy() {
+    return !!this.auto?.slow || avatarBusy(this.avatar);
+  }
+
   cancelGesture() {
     this.faceTo = null;
+    this.faceHead = false;
     if (this.avatar.life) this.avatar.life.act.kind = null;
   }
 
@@ -271,8 +340,8 @@ export class Player {
       this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * turn);
       if (!this.auto?.slow) this.faceTo = null;
     } else if (this.faceTo && !mount) {
-      // Pendant un geste de soin : on se tourne vers l'animal.
-      const f = this.faceTo.position;
+      // Pendant un geste de soin : on se tourne vers l'animal (vers sa bouche pour une friandise).
+      const f = this.faceHead && this.faceTo.model?.head ? mouthOf(this.faceTo, _head) : this.faceTo.position;
       const p0 = this.root.position;
       let diff = Math.atan2(f.x - p0.x, f.z - p0.z) - this.heading;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -331,8 +400,11 @@ export class Player {
     const sc = Math.max(0.3, m.scale);
     const v = this.speed / sc;
     const sp = m.sp ?? { walkSpeed: 1.6, runSpeed: 5 };
-    // Allure : celle du cheval procédural, sinon d'après la vitesse (GLB).
-    const want = md.gltf || m.gait === undefined ? gaitFromSpeed(v, sp.walkSpeed, sp.runSpeed) : m.gait;
+    // Allure : celle du cheval procédural ; pour un GLB, celle du clip qu'il joue (pas ou galop :
+    // il n'a pas de clip de trot, donc pas de trot enlevé sur un cheval qui marche).
+    let want;
+    if (md.gltf) want = this.speed > 0.05 ? clipGait(this.speed, sp.runSpeed) : 0;
+    else want = m.gait === undefined ? gaitFromSpeed(v, sp.walkSpeed, sp.runSpeed) : m.gait;
     this.rideGait += (want - this.rideGait) * Math.min(1, dt * 4);
     let phase;
     if (m.gait !== undefined && !md.gltf) phase = m.phase;
@@ -358,13 +430,21 @@ export class Player {
     st.phase = phase;
     st.bob = bob;
     animateAvatarRide(a, st);
-    updateAvatarLife(a, dt, { riding: true, speed: this.speed });
+    const o = this.lifeOpts;
+    o.riding = true;
+    o.carry = false;
+    o.speed = this.speed;
+    updateAvatarLife(a, dt, o);
   }
 
   animateWalk(dt) {
     this.phase += dt * this.speed * 2.2;
     animateAvatarWalk(this.avatar, this.phase, this.speed);
-    updateAvatarLife(this.avatar, dt, { speed: this.speed, carry: !!this.carried });
+    const o = this.lifeOpts;
+    o.riding = false;
+    o.carry = !!this.carried;
+    o.speed = this.speed;
+    updateAvatarLife(this.avatar, dt, o);
     this.placeCrate();
     // Un pied se pose à chaque demi-tour de la marche : bruit de pas (onStep est branché par Game).
     const k = Math.floor(this.phase / Math.PI);

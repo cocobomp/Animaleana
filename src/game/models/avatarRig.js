@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import {
   makeRandom, planBlink, blinkAmount, blinkDuration, planGaze, IDLE_GESTURES, pickIdleGesture,
-  nextIdleDelay, nextShiftDelay, envelope, keyframes, squatPose, legIK, riderPose, CARE_GESTURE_TIME,
+  nextIdleDelay, nextShiftDelay, envelope, keyframes, squatPose, riderPose, stirrupFor, CARE_GESTURE_TIME, LEG,
 } from './avatarMotion.js';
 
 /** Proportions du squelette (doivent correspondre à buildAvatar). */
@@ -60,7 +60,6 @@ const THROW_Y = [[0, 0.15], [0.4, 0.5], [0.75, 0.35], [1.15, 0.05]];
 const THROW_Z = [[0, -0.15], [0.4, -0.55], [0.75, 0.1], [1.15, 0]];
 const THROW_TWIST = [[0, 0], [0.4, 0.25], [0.75, -0.2], [1.15, 0]];
 const _sq = {};
-const _leg = {};
 const _rp = {};
 
 // ------------------------------------------------------------------ état
@@ -155,6 +154,41 @@ export function armIK(a, i, target, pole, weight = 1) {
   _q.setFromRotationMatrix(_mT);
   sh.quaternion.slerp(_q, weight);
   el.rotation.x += (-bend - el.rotation.x) * weight;
+}
+
+/**
+ * Jambe i à deux os, en 3D : la cheville va sur target (repère de a.root), le genou du côté de
+ * pole (direction, repère de a.root). Le genou se plie vers l'avant (rotation.x > 0), comme armIK
+ * pour le coude. Remplace la pose actuelle de la cuisse et du genou.
+ */
+export function legReach(a, i, target, pole) {
+  const hip = a.legs[i];
+  const L1 = LEG.thigh;
+  const L2 = LEG.shin;
+  _D.subVectors(target, hip.position);
+  const d = clamp(_D.length(), 0.08, L1 + L2 - 0.004);
+  const cosG = clamp((L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2), -1, 1);
+  const bend = Math.PI - Math.acos(cosG);
+  // Cheville dans le repère de la hanche pour ce pli : le tibia part vers l'arrière.
+  _h.set(0, -L1 - L2 * Math.cos(bend), -L2 * Math.sin(bend)).normalize();
+  _w.set(0, _h.z, -_h.y); // le genou est du côté +w
+  _mL.makeBasis(_x, _h, _w);
+  _U.copy(_D).normalize();
+  _P.copy(pole).addScaledVector(_U, -pole.dot(_U));
+  if (_P.lengthSq() < 1e-8) _P.set(0, 0, 1).addScaledVector(_U, -_U.z);
+  _W.copy(_P).normalize();
+  _X.crossVectors(_W, _U);
+  _mT.makeBasis(_X, _U, _W);
+  _mT.multiply(_mL.transpose());
+  hip.quaternion.setFromRotationMatrix(_mT);
+  a.knees[i].rotation.set(bend, 0, 0);
+}
+
+/** Oriente le pied i dans le repère de a.root (quaternion q), quelle que soit la pose de la jambe. */
+function footTo(a, i, q) {
+  if (!a.ankles) return;
+  _qi.copy(a.legs[i].quaternion).multiply(a.knees[i].quaternion).invert();
+  a.ankles[i].quaternion.copy(_qi.multiply(q));
 }
 
 /** Les deux jambes accroupies (depth 0 à 1), mélangées à la pose actuelle ; le bassin descend. */
@@ -288,10 +322,22 @@ function idleGesture(a, L, g, w) {
   switch (g.kind) {
     case 'scratch': {
       // Main droite sur le haut de la tête, petits allers-retours ; la tête se penche vers la main.
+      // Avec un chapeau, la main se pose dessus (on l'ajuste) au lieu d'entrer dedans ; sinon elle
+      // reste à la surface de la coiffure (bouclés plus loin que rasés).
       a.head.rotation.z += 0.13 * gw;
       a.head.rotation.x += 0.07 * gw;
       const sc = Math.min(1, Math.max(0, (u - 0.5) * 3)) * Math.min(1, Math.max(0, (g.dur - u - 0.5) * 3));
-      _t0.set(-0.122 + 0.006 * Math.sin(u * 15) * sc, 0.168 + 0.012 * Math.sin(u * 15 + 1) * sc, 0.005 + 0.014 * Math.sin(u * 7.5) * sc);
+      if (a.hat) {
+        const [cx, cy, cz] = a.hat.c;
+        const r = a.hat.r + 0.024;
+        _t0.set(cx - 0.86 * r, cy + 0.42 * r, cz + 0.06 * r);
+      } else {
+        const k = 1 + Math.max(0, (a.hairBulk ?? 0.03) - 0.03) * 4.5; // le long du rayon depuis le centre du crâne
+        _t0.set(-0.122 * k, 0.075 + 0.093 * k, -0.005 + 0.01 * k);
+      }
+      _t0.x += 0.006 * Math.sin(u * 15) * sc;
+      _t0.y += 0.012 * Math.sin(u * 15 + 1) * sc;
+      _t0.z += 0.014 * Math.sin(u * 7.5) * sc;
       headToTorso(a, _t0);
       _pole0.set(-1, 0.25, 0.45);
       armIK(a, 1, _t0, _pole0, gw);
@@ -322,12 +368,14 @@ function idleGesture(a, L, g, w) {
       break;
     }
     case 'stretch': {
-      // Les bras au-dessus de la tête, le buste un peu en arrière, on regarde en l'air.
+      // Les bras au-dessus de la tête, le buste un peu en arrière, on regarde en l'air. Les mains
+      // s'écartent selon le volume de la coiffure (les avant-bras ne traversent pas les boucles).
       a.torso.rotation.x -= 0.07 * gw;
       a.head.rotation.x -= 0.2 * gw;
+      const wide = (a.hairBulk ?? 0.03) * 1.25;
       for (let i = 0; i < 2; i++) {
         const s = i === 0 ? 1 : -1;
-        _t0.set(s * 0.11, 1.0, 0.03);
+        _t0.set(s * (0.11 + wide), 1.0 - wide * 0.5, 0.03);
         _pole0.set(s, 0.1, -0.2);
         armIK(a, i, _t0, _pole0, gw);
       }
@@ -573,25 +621,36 @@ export function carryHold(a, size, out) {
 
 // ------------------------------------------------------------------ à cheval
 
+const _foot = new THREE.Euler();
+const _qf = new THREE.Quaternion();
+const _stir = {};
+
 /**
  * Pose du cavalier, à chaque image (remplace la pose précédente) :
  * st = { gait (0 pas, 1 trot, 2 galop), phase, posting (trot enlevé), seatY, seatZ, bob,
- *        spread (écart des cuisses, rad), reinsY, reinsZ (mains, repère de l'avatar), ankleZ, ankleDrop }.
+ *        footX, footY, footZ (cheville dans l'étrier, repère de l'avatar assis, voir stirrupFor),
+ *        kneeOut (genou vers l'extérieur, rad), reinsY, reinsZ (mains, repère de l'avatar) }.
+ * Sans footX/footY/footZ, les pieds vont dans les étriers d'un cheval moyen.
  */
 export function animateAvatarRide(a, st) {
   const P = riderPose(st.gait, st.phase, st.posting !== false, _rp);
-  a.root.position.set(0, st.seatY + st.bob + P.lift, st.seatZ);
-  const spread = st.spread ?? 0.5;
-  // Jambes : la cheville reste dans l'étrier pendant que le bassin se lève (trot enlevé).
-  const c = Math.cos(spread);
-  const { hip, knee } = legIK((st.ankleZ ?? 0.07) - P.lift * 0.4, -((st.ankleDrop ?? 0.6) + P.lift) / c, undefined, undefined, _leg);
+  a.root.position.set(0, st.seatY + st.bob + P.lift, st.seatZ + P.fwd);
+  // Jambes : la cheville est fixée dans l'étrier (repère du cheval) ; quand le bassin se lève
+  // (trot enlevé, galop en suspension), c'est le genou qui s'ouvre.
+  if (st.footY === undefined) stirrupFor(0.34, st.posting !== false, _stir);
+  const fx = st.footX ?? _stir.x;
+  const fy = (st.footY ?? _stir.y) - P.lift;
+  const fz = (st.footZ ?? _stir.z) - P.fwd;
+  const out = st.kneeOut ?? _stir.out;
   for (let i = 0; i < 2; i++) {
     const s = i === 0 ? 1 : -1;
-    a.legs[i].rotation.set(hip, 0, s * spread);
-    // Le bas de la jambe revient contre le flanc.
-    a.knees[i].rotation.set(knee, 0, -s * spread * 0.45);
-    // Talons bas.
-    if (a.ankles) a.ankles[i].rotation.set(-(hip + knee) - 0.22, 0, 0);
+    _t0.set(s * fx, fy, fz);
+    // Genou vers l'avant, écarté pour longer le flanc.
+    _pole0.set(s * Math.sin(out), -0.1, Math.cos(out));
+    legReach(a, i, _t0, _pole0);
+    // Pied à plat dans l'étrier, talon un peu bas, pointe légèrement vers l'extérieur.
+    _foot.set(-0.22, s * 0.28, 0);
+    footTo(a, i, _qf.setFromEuler(_foot));
   }
   // Buste : suit l'allure ; la tête reste droite et regarde devant.
   a.torso.rotation.set(P.lean + P.pitch, 0, P.sway);

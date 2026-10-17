@@ -57,6 +57,7 @@ class VisitorEntity {
       shoes: 0x3b2a20,
       hat: !female && seed % 3 === 0,
     });
+    this.lifeOpts = { speed: 0, busy: false }; // options de updateAvatarLife, réutilisées
     this.root = new THREE.Group();
     this.root.userData.visitor = this;
     this.root.add(this.avatar.root);
@@ -136,7 +137,10 @@ class VisitorEntity {
     this.phase += dt * this.speed * 2.2;
     const wave = this.waving && this.speed < 0.3;
     animateAvatarWalk(this.avatar, this.phase, this.speed);
-    updateAvatarLife(this.avatar, dt, { speed: this.speed, busy: wave });
+    const o = this.lifeOpts;
+    o.speed = this.speed;
+    o.busy = wave;
+    updateAvatarLife(this.avatar, dt, o);
     if (wave) {
       // Coucou : bras levé, la main se balance.
       this.avatar.arms[0].rotation.set(0, 0, 2.5 + Math.sin(this.time * 6) * 0.35);

@@ -220,9 +220,51 @@ export function gaitFromSpeed(v, walk, run) {
 }
 
 /**
+ * Allure d'un cheval GLB : celle du clip qu'il joue vraiment (mêmes seuils que
+ * AnimalEntity.animateGltf : « run » au-dessus de runSpeed × 0,65, sinon « walk »). Le modèle n'a
+ * pas de clip de trot : le cavalier ne doit pas faire le trot enlevé sur un cheval qui marche.
+ * speed : vitesse du cheval (m/s, échelle comprise, comme dans animateGltf).
+ */
+export const clipGait = (speed, runSpeed) => (speed > runSpeed * 0.65 ? 2 : 0);
+
+/**
+ * Où vont les pieds à cheval (repère de l'avatar assis, hanche en (±0,095 ; 0,82 ; 0)) :
+ * dans l'étrier, contre le flanc, sous la selle, genou plié (70-80° avec une selle). Sans selle,
+ * les jambes pendent plus bas, genou moins plié. R : demi-largeur du ventre du cheval (m, échelle
+ * comprise). Les étriers des selles sont à environ 1,4 R sous le dos (gearModels.js) ; la cheville
+ * est 5 cm au-dessus de la semelle.
+ * Renvoie { x (écart de la cheville depuis l'axe), y (hauteur), z (vers l'avant), out (genou vers
+ * l'extérieur, rad) } ; la distance hanche → cheville reste toujours atteignable.
+ */
+export function stirrupFor(R, saddle = true, out = {}) {
+  const hipX = 0.095;
+  const hipY = 0.82;
+  const x = clamp(R + 0.03, 0.22, 0.46);
+  const dx = x - hipX;
+  // Hanche → cheville : distance voulue pour le pli du genou (loi des cosinus).
+  const bend = saddle ? 1.3 : 0.8; // ≈ 75° avec des étriers, 45° jambes pendantes
+  const L1 = LEG.thigh;
+  const L2 = LEG.shin;
+  const d = Math.sqrt(L1 * L1 + L2 * L2 + 2 * L1 * L2 * Math.cos(bend));
+  let dy = saddle ? clamp(-1.4 * R + 0.01, -0.56, -0.4) : -0.62;
+  // Le pied un peu en avant de la hanche (assiette « sur une chaise » d'un enfant), selon ce qui reste.
+  let dz = Math.sqrt(Math.max(0, d * d - dx * dx - dy * dy));
+  dz = clamp(dz, saddle ? 0.05 : 0.03, 0.22);
+  // Après les bornes de dz : le pied monte ou descend pour garder ce pli du genou.
+  const reach = Math.hypot(dx, dz);
+  if (reach < d) dy = -Math.sqrt(d * d - reach * reach);
+  out.x = x;
+  out.y = hipY + dy;
+  out.z = dz;
+  // Le genou s'écarte assez pour passer le long du quartier de la selle (plus pour un ventre large).
+  out.out = clamp(0.35 + (R - 0.2) * 2.2, 0.35, 0.95);
+  return out;
+}
+
+/**
  * Posture du cavalier pour une allure : lift = hauteur du bassin au-dessus de la selle (m),
  * lean = buste penché vers l'avant (rad), pitch = petit balancement du buste, sway = roulis,
- * reach = mains plus en avant (m), low = mains plus basses (m).
+ * reach = mains plus en avant (m), low = mains plus basses (m), fwd = bassin vers l'avant (m).
  * posting : trot enlevé (sinon trot assis, par exemple sans selle). out : objet réutilisé.
  */
 const _gw = {};
@@ -238,6 +280,8 @@ export function riderPose(gait, phase, posting = true, out = {}) {
   const sway = w.walk * 0.03 * Math.sin(phase) + sit * 0.015 * Math.sin(phase);
   const reach = w.walk * 0.02 * Math.sin(phase * 2) + w.gallop * (0.09 + 0.04 * Math.sin(phase));
   const low = w.gallop * 0.07;
+  // En s'enlevant, le bassin passe aussi un peu vers l'avant (au-dessus du pommeau).
+  out.fwd = post * 0.04 * rise;
   out.lift = lift;
   out.lean = lean;
   out.pitch = pitch;

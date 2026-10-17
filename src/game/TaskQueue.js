@@ -120,6 +120,10 @@ export class TaskQueue {
       g.ui.renderTasks();
     }
     if (!this.running || g.paused || this.current) return;
+    // Personnages : le geste de soin (petit pas vers l'animal, puis verser, brosser…) se joue avant
+    // de partir vers la tâche suivante, sinon son goTo l'écrasait (au plus 4 s d'attente).
+    if (g.player.careBusy?.() && (this.careWait = (this.careWait ?? 0) + 1 / 60) < 4) return;
+    this.careWait = 0;
     const task = this.tasks[0];
     if (!task) return;
     const target = task.target?.();

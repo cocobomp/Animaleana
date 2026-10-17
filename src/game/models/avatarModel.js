@@ -10,10 +10,11 @@
 
 import * as THREE from 'three';
 import { loft } from './shapes.js';
-import { ellipsoid, blend, sdfMesh, rayHit, sdfNormal } from './sdf.js';
+import { sdfMesh, rayHit, sdfNormal } from './sdf.js';
+import { headSdf } from './avatarHead.js';
 import { eyeTexture } from '../textures.js';
 import { gfx } from '../gfx.js';
-import { hairGeometry, tintHair, hatScale, HAT_SHAPE } from './avatarHair.js';
+import { hairGeometry, tintHair, hatScale, HAT_SHAPE, prepareHair, BRAID_END } from './avatarHair.js';
 import { initLife, carryHold, animateAvatarRide, LID_OPEN } from './avatarRig.js';
 
 // Le reste de l'animation (vie, gestes, cheval) est aussi disponible depuis ce module.
@@ -21,6 +22,9 @@ export { updateAvatarLife, startAvatarGesture, stopAvatarGesture, avatarBusy, an
 export { careGestureFor, CARE_GESTURE_TIME } from './avatarMotion.js';
 
 const mat = (color, roughness = 0.8, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
+
+/** Épaisseur de chaque coiffure sur les côtés de la tête (m, repère de la tête). */
+const HAIR_BULK = { short: 0.03, long: 0.035, ponytail: 0.016, curly: 0.075, bald: 0.006, bun: 0.016, braid: 0.016 };
 
 function add(parent, geo, material, pos, rot, scale, shadow = true) {
   const m = new THREE.Mesh(geo, material);
@@ -122,21 +126,7 @@ function outward(geo) {
 /** Tube vertical (membre) : sections [y, rayon x, rayon z, décalage z]. round = bouts arrondis. */
 const limbGeo = (secs, radial, round = null) => outward(loft(secs.map(([y, rx, rz, oz = 0]) => ({ p: [0, y, oz], rx, ry: rz })), { radial, sub: 3, side: [1, 0, 0], round }));
 
-/** Tête : crâne, mâchoire, joues, nez et oreilles fondus. */
-const HEAD_SHAPES = [
-  [ellipsoid([0, 0.075, -0.005], [0.122, 0.135, 0.13]), 0],
-  [ellipsoid([0, -0.015, 0.03], [0.1, 0.095, 0.1]), 0.05],
-  [ellipsoid([0, -0.06, 0.05], [0.055, 0.04, 0.06]), 0.04],
-  [ellipsoid([0.06, 0.0, 0.07], [0.04, 0.035, 0.035]), 0.03],
-  [ellipsoid([-0.06, 0.0, 0.07], [0.04, 0.035, 0.035]), 0.03],
-  [ellipsoid([0, 0.035, 0.122], [0.016, 0.03, 0.022]), 0.02],
-  [ellipsoid([0, 0.012, 0.13], [0.02, 0.014, 0.016]), 0.012],
-  [ellipsoid([0.122, 0.05, -0.005], [0.014, 0.032, 0.022]), 0.012],
-  [ellipsoid([-0.122, 0.05, -0.005], [0.014, 0.032, 0.022]), 0.012],
-  [ellipsoid([0.045, 0.1, 0.105], [0.035, 0.012, 0.02]), 0.02],
-  [ellipsoid([-0.045, 0.1, 0.105], [0.035, 0.012, 0.02]), 0.02],
-];
-const headSdf = blend(HEAD_SHAPES);
+// La tête (champ de distance) est dans avatarHead.js : le worker des coiffures s'en sert aussi.
 
 /** Hauteur de la hanche, du genou (sous la hanche), de l'épaule et du coude (sous l'épaule). */
 const HIP_Y = 0.82;
@@ -290,6 +280,8 @@ export function buildAvatar(look, seed = Math.random() * 1e9) {
   // --- Cheveux : une vraie masse qui suit le crâne (avatarHair.js), mèches et reflets doux.
   const style = look.hairStyle ?? 'short';
   const hairShapes = hairGeometry(style, !!look.hat, high, headSdf);
+  // Les autres coiffures se préparent dans un worker (une seule fois par qualité).
+  prepareHair(high);
   const buzz = style === 'bald';
   const hairHex = buzz ? new THREE.Color(look.hair).lerp(new THREE.Color(look.skin), 0.42).getHex() : look.hair;
   const hairMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: buzz ? 0.85 : 0.52 });
@@ -297,17 +289,19 @@ export function buildAvatar(look, seed = Math.random() * 1e9) {
   let hairTail = null;
   if (hairShapes.tie) {
     const [tx, ty, tz] = hairShapes.tie;
-    // Élastique (chouchou) de la couleur du haut, posé à plat sur la tête.
+    // Élastique (chouchou) de la couleur du haut, posé à plat sur la tête ; pour la tresse, il
+    // l'entoure (axe le long de la tresse, qui descend dans le dos).
     const tieMat = mat(look.top, 0.7);
     const ring = add(head, shared('hairTie', () => new THREE.TorusGeometry(0.02, 0.0095, 6, 14)), tieMat, [tx, ty, tz], null, null, false);
-    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(tx, ty - 0.075, tz + 0.005).normalize());
+    const axis = style === 'braid' ? new THREE.Vector3(0, -1, -0.18) : new THREE.Vector3(tx, ty - 0.075, tz + 0.005);
+    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis.normalize());
     if (hairShapes.tail) {
       // Queue de cheval / tresse : sur un pivot, elle se balance quand on bouge.
       hairTail = new THREE.Group();
       hairTail.position.set(tx, ty, tz);
       head.add(hairTail);
       add(hairTail, tintHair(hairShapes.tail, look.hair, { center: [0, -0.12, -0.06] }), hairMat);
-      if (style === 'braid') add(hairTail, shared('braidTie', () => new THREE.TorusGeometry(0.011, 0.005, 5, 10)), tieMat, [0, -0.252, -0.026], [Math.PI / 2, 0, 0], null, false);
+      if (style === 'braid') add(hairTail, shared('braidTie', () => new THREE.TorusGeometry(0.0115, 0.005, 5, 10)), tieMat, [0, BRAID_END, -0.03], [Math.PI / 2, 0, 0], null, false);
     }
   }
   if (look.hat) {
@@ -319,7 +313,11 @@ export function buildAvatar(look, seed = Math.random() * 1e9) {
     add(head, new THREE.SphereGeometry(0.012, 8, 6), capMat, [0, cy + (0.237 - cy) * hs, cz]);
   }
 
-  const a = { root, legs, knees, ankles, arms, elbows, hands, head, torso, chest: body, eyeBalls, lids, hairTail, carry: null };
+  // Volume de la coiffure autour de la tête (et du chapeau) : les gestes (se gratter la tête,
+  // s'étirer) placent les mains autour, sans entrer dedans.
+  const hairBulk = look.hat ? Math.max(HAIR_BULK[style] ?? 0.03, HAT_SHAPE.r * hatScale(style) - 0.12) : HAIR_BULK[style] ?? 0.03;
+  const hat = look.hat ? { r: HAT_SHAPE.r * hatScale(style), c: HAT_SHAPE.c } : null;
+  const a = { root, legs, knees, ankles, arms, elbows, hands, head, torso, chest: body, eyeBalls, lids, hairTail, carry: null, hairStyle: style, hairBulk, hat };
   initLife(a, seed);
   return a;
 }
@@ -368,8 +366,9 @@ export function animateAvatarWalk(a, phase, speed) {
   if (a.chest) a.chest.scale.set(1, 1, 1);
 }
 
-// Réglages par défaut d'une pose à cheval sans cheval connu (aperçus).
-const RIDE_DEFAULT = { gait: 0, phase: 0, posting: true, seatY: 0, seatZ: 0, bob: 0, spread: 0.55, reinsY: 1.02, reinsZ: 0.36 };
+// Réglages par défaut d'une pose à cheval sans cheval connu (aperçus) : pieds dans les étriers
+// d'un cheval moyen (voir stirrupFor).
+const RIDE_DEFAULT = { gait: 0, phase: 0, posting: true, seatY: 0, seatZ: 0, bob: 0, reinsY: 1.02, reinsZ: 0.36 };
 
 /**
  * Pose fixe : 'ride' (assis à cheval ; opts = réglages de animateAvatarRide), 'carry' (porter une

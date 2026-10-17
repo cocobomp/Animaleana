@@ -6,13 +6,16 @@
 //
 // Les formes sont partagées par coiffure (et par qualité, avec ou sans chapeau) : chaque
 // personnage n'a que sa propre couleur. Repère : celui de la tête (avant +Z, haut +Y), avant
-// l'échelle de la tête.
+// l'échelle de la tête. Le maillage d'une coiffure coûte de 60 ms à plus d'une seconde : elles sont
+// préparées dans un worker (hairWorker.js) dès le premier personnage, pour qu'un visiteur ou une aide
+// qui arrive ne fasse pas d'à-coup ; à défaut, chacune est calculée à sa première apparition.
 //
 // Coiffures : short (courts), long (longs), ponytail (queue de cheval), curly (bouclés),
 // bald (rasés : tondus très court), bun (chignon), braid (tresse).
 
 import * as THREE from 'three';
 import { ellipsoid, roundCone, smin, sdfMesh } from './sdf.js';
+import { headSdf } from './avatarHead.js';
 
 export const HAIR_STYLES = ['short', 'long', 'ponytail', 'curly', 'bald', 'bun', 'braid'];
 
@@ -50,15 +53,33 @@ function hairline(table) {
   };
 }
 
-/** Pointes de mèches : creux ronds, pointes fines (n pointes sur un tour). */
-const tips = (a, n) => 1 - Math.abs(Math.sin(a * n * 0.5));
+/**
+ * Pointes de mèches : creux ronds, pointes arrondies (n pointes sur un tour). Des pointes trop
+ * fines (plus petites qu'une case du maillage) sortaient en dents irrégulières.
+ */
+const tips = (a, n) => {
+  const q = Math.sin(a * n * 0.5);
+  return (1.02 - Math.sqrt(q * q + 0.0404)) / 0.819;
+};
+
+/**
+ * Intersection arrondie de deux champs de distance (congé de rayon r, d'Inigo Quilez) : un bord
+ * de cheveux bien rond, que le maillage suit sans dents.
+ */
+function roundMax(a, b, r) {
+  const ua = Math.max(r + a, 0);
+  const ub = Math.max(r + b, 0);
+  return Math.min(-r, Math.max(a, b)) + Math.sqrt(ua * ua + ub * ub);
+}
 
 // ------------------------------------------------------------------ réglages des coiffures
 
 /**
  * line : implantation ; jag : pointes { n, amp, from (azimut à partir duquel elles apparaissent), to } ;
- * t0(y) : épaisseur ; tMin : épaisseur au bord ; whorl : épi (centre des sillons) ;
- * grooves : nombre de sillons sur un tour ; groove : profondeur.
+ * t0(y) : épaisseur ; tMin : épaisseur au bord (au moins 0,6 case du maillage, voir hairField) ;
+ * whorl : épi (centre des sillons) ; grooves : nombre de sillons sur un tour ; groove : profondeur.
+ * Les sillons restent larges (au moins 4 cases par sillon derrière la tête) : plus serrés, le
+ * maillage ne pouvait pas les suivre et dessinait un quadrillage.
  */
 const STYLE = {
   short: {
@@ -67,17 +88,17 @@ const STYLE = {
     t0: (y) => 0.011 + 0.018 * sstep(0.04, 0.19, y),
     tMin: 0.004,
     whorl: [0.03, 0.2, -0.06],
-    grooves: 15,
-    groove: 0.0028,
+    grooves: 9,
+    groove: 0.003,
   },
   long: {
     line: [[0, 0.121], [0.6, 0.123], [0.82, 0.116], [1.0, 0.075], [1.25, 0.04], [1.6, 0.02], [2.2, -0.02], [Math.PI, -0.04]],
-    jag: { n: 26, amp: 0.008, from: 0, to: 0.72 },
+    jag: { n: 16, amp: 0.009, from: 0, to: 0.72 },
     t0: (y) => 0.012 + 0.014 * sstep(0.04, 0.19, y),
     tMin: 0.005,
     whorl: [0, 0.205, -0.04],
-    grooves: 20,
-    groove: 0.0024,
+    grooves: 11,
+    groove: 0.0026,
   },
   ponytail: {
     line: [[0, 0.152], [0.5, 0.146], [0.85, 0.126], [1.08, 0.078], [1.3, 0.07], [1.46, 0.096], [1.82, 0.088], [2.2, 0.015], [Math.PI, -0.02]],
@@ -85,8 +106,8 @@ const STYLE = {
     t0: (y) => 0.0085 + 0.006 * sstep(0.08, 0.2, y),
     tMin: 0.003,
     tie: true,
-    grooves: 22,
-    groove: 0.0017,
+    grooves: 10,
+    groove: 0.0022,
   },
   curly: {
     line: [[0, 0.152], [0.5, 0.144], [0.85, 0.12], [1.1, 0.065], [1.35, 0.06], [1.5, 0.072], [1.85, 0.06], [2.3, 0.0], [Math.PI, -0.025]],
@@ -98,8 +119,8 @@ const STYLE = {
   bald: {
     line: [[0, 0.155], [0.45, 0.146], [0.85, 0.122], [1.1, 0.085], [1.3, 0.072], [1.46, 0.088], [1.82, 0.084], [2.1, 0.03], [2.6, -0.012], [Math.PI, -0.025]],
     jag: null,
-    t0: () => 0.0034,
-    tMin: 0.0028,
+    t0: () => 0.0042,
+    tMin: 0.0034,
   },
   bun: {
     line: [[0, 0.152], [0.5, 0.146], [0.85, 0.126], [1.08, 0.078], [1.3, 0.07], [1.46, 0.096], [1.82, 0.088], [2.2, 0.02], [Math.PI, -0.015]],
@@ -107,8 +128,8 @@ const STYLE = {
     t0: (y) => 0.0085 + 0.006 * sstep(0.08, 0.2, y),
     tMin: 0.003,
     tie: true,
-    grooves: 22,
-    groove: 0.0017,
+    grooves: 10,
+    groove: 0.0022,
   },
   braid: {
     line: [[0, 0.152], [0.5, 0.146], [0.85, 0.125], [1.08, 0.078], [1.3, 0.07], [1.46, 0.096], [1.82, 0.088], [2.2, 0.015], [Math.PI, -0.03]],
@@ -116,8 +137,8 @@ const STYLE = {
     t0: (y) => 0.009 + 0.006 * sstep(0.08, 0.2, y),
     tMin: 0.003,
     tie: true,
-    grooves: 22,
-    groove: 0.0017,
+    grooves: 10,
+    groove: 0.0022,
   },
 };
 
@@ -165,11 +186,46 @@ function basisAround(a) {
 
 // ------------------------------------------------------------------ champs de distance
 
+// Cou, haut du buste et épaules dans le repère de la tête (échelle de la tête comprise), d'après
+// les formes de buildAvatar : [hauteur, demi-largeur, demi-profondeur] du buste.
+const CHEST = [[-0.055, 0.05, 0.048], [-0.073, 0.077, 0.059], [-0.105, 0.155, 0.077], [-0.145, 0.195, 0.091], [-0.21, 0.175, 0.098]];
+
+/** Distance (approchée) au cou, au haut du buste et aux épaules. */
+function bodyField(x, y, z) {
+  // Cou : cylindre vertical.
+  const neck = Math.max(Math.hypot(x, z + 0.002) - 0.046, -0.16 - y, y + 0.01);
+  // Buste : section elliptique qui s'élargit vers les épaules.
+  let a = CHEST[CHEST.length - 1][1];
+  let b = CHEST[CHEST.length - 1][2];
+  if (y > CHEST[0][0]) {
+    a = CHEST[0][1];
+    b = CHEST[0][2];
+  } else {
+    for (let i = 1; i < CHEST.length; i++) {
+      if (y >= CHEST[i][0]) {
+        const [y0, a0, b0] = CHEST[i - 1];
+        const [y1, a1, b1] = CHEST[i];
+        const t = (y - y0) / (y1 - y0);
+        a = a0 + (a1 - a0) * t;
+        b = b0 + (b1 - b0) * t;
+        break;
+      }
+    }
+  }
+  const ex = x / a;
+  const ez = (z + 0.004) / b;
+  const chest = Math.max((Math.sqrt(ex * ex + ez * ez) - 1) * Math.min(a, b), y - CHEST[0][0]);
+  // Épaules (haut des bras).
+  const sh = Math.hypot(Math.abs(x) - 0.168, y + 0.165, z) - 0.056;
+  return Math.min(neck, smin(chest, sh, 0.03));
+}
+
 /**
  * SDF de la masse principale d'une coiffure (calotte + frange + pièces propres au style).
  * Renvoie aussi groove(x, y, z) → -1..1 (sillon), utilisé pour les reflets.
+ * cell : taille de case du maillage (les bords et les sillons s'y adaptent).
  */
-function hairField(style, head, hat) {
+function hairField(style, head, hat, cell = 0.0158) {
   const S = STYLE[style] ?? STYLE.short;
   const line = hairline(S.line);
   const jag = S.jag;
@@ -183,7 +239,7 @@ function hairField(style, head, hat) {
     groove = (x, y, z) => {
       const r = Math.hypot(x - wx, z - wz);
       const th = Math.atan2(x - wx, z - wz);
-      return Math.sin(th * n + 0.7 * Math.sin(th * 3)) * sstep(0.012, 0.06, r);
+      return Math.sin(th * n + 0.7 * Math.sin(th * 3)) * sstep(0.03, 0.1, r);
     };
   } else if (S.grooves && tie) {
     const ax = [tie[0] - SKULL_C[0], tie[1] - SKULL_C[1], tie[2] - SKULL_C[2]];
@@ -207,7 +263,7 @@ function hairField(style, head, hat) {
   const gAmp = S.groove ?? 0;
 
   // Bord : ligne d'implantation + pointes.
-  const edge = (x, y, z) => {
+  const edgeAt = (x, z) => {
     const a = Math.abs(Math.atan2(x, z));
     let l = line(a);
     if (jag && a >= jag.from && a <= jag.to) {
@@ -217,28 +273,49 @@ function hairField(style, head, hat) {
     }
     return l;
   };
+  const edge = (x, y, z) => edgeAt(x, z);
+  // Distance (approchée) au-dessus de la ligne d'implantation : y - l divisé par la pente de l
+  // autour de la tête, pour un vrai congé de rayon constant (tempes comprises).
+  const above = (x, y, z) => {
+    const l = edgeAt(x, z);
+    const rho = Math.hypot(x, z) || 1e-3;
+    const e = 0.004;
+    const gx = (edgeAt(x + e, z) - edgeAt(x - e, z)) / (2 * e);
+    const gz = (edgeAt(x, z + e) - edgeAt(x, z - e)) / (2 * e);
+    return { l, d: (y - l) / Math.sqrt(1 + gx * gx + gz * gz), rho };
+  };
 
-  // Calotte : la peau gonflée d'une épaisseur qui s'amincit vers le bord.
+  // Calotte : la peau gonflée d'une épaisseur qui s'amincit vers le bord. Pas de « marche » au bord :
+  // sous la ligne d'implantation, la masse s'affine et plonge doucement sous la peau (sur environ
+  // une case du maillage), puis elle est coupée bien en dessous, là où on ne la voit pas. Un bord en
+  // marche, plus fin qu'une case, sortait du maillage en dents irrégulières (escalier à la frange,
+  // aux tempes et sur la nuque).
+  const w = Math.max(0.008, cell); // largeur du fondu sous la ligne
+  const edgeR = Math.max(0.006, cell * 0.8); // congé de la coupe (cachée sous la peau)
   const cap = (x, y, z, h) => {
-    const l = edge(x, y, z);
-    const t = S.tMin + (S.t0(y) - S.tMin) * sstep(-0.004, 0.035, y - l);
-    const d = h - t + gAmp * groove(x, y, z);
-    return smax(d, l - y, 0.006);
+    const A = above(x, y, z);
+    const full = S.tMin + (S.t0(y) - S.tMin) * sstep(-0.004, 0.035, A.d);
+    const k = sstep(-w, w * 0.7, A.d);
+    const t = -0.006 + (full + 0.006) * k;
+    const d = h - t + gAmp * groove(x, y, z) * k;
+    return roundMax(d, -(A.d + 2.4 * w), edgeR);
   };
 
   const extra = [];
+  // Les pointes des mèches gardent au moins ~une demi-case de rayon (sinon elles s'effilochent).
+  const rr = (r) => Math.max(r, cell * 0.45);
   // Frange balayée sur le côté (courts).
   if (style === 'short') {
     const P = (x, y, off) => [x, y, skinZ(head, x, y) + off];
-    extra.push(lock([[0.06, 0.2, 0.03], P(0.04, 0.168, 0.02), P(-0.028, 0.133, 0.009)], [0.022, 0.017, 0.0075]));
-    extra.push(lock([[0.08, 0.195, 0.02], P(0.075, 0.16, 0.018), P(0.024, 0.13, 0.008)], [0.02, 0.016, 0.007]));
-    extra.push(lock([[0.02, 0.205, 0.03], P(-0.008, 0.172, 0.018), P(-0.074, 0.136, 0.008)], [0.02, 0.016, 0.007]));
+    extra.push(lock([[0.06, 0.2, 0.03], P(0.04, 0.168, 0.02), P(-0.028, 0.133, 0.009)], [0.022, 0.017, 0.0075].map(rr)));
+    extra.push(lock([[0.08, 0.195, 0.02], P(0.075, 0.16, 0.018), P(0.024, 0.13, 0.008)], [0.02, 0.016, 0.007].map(rr)));
+    extra.push(lock([[0.02, 0.205, 0.03], P(-0.008, 0.172, 0.018), P(-0.074, 0.136, 0.008)], [0.02, 0.016, 0.007].map(rr)));
   }
   // Mèche sur le front et petites mèches aux tempes (queue de cheval, chignon, tresse).
   if (style === 'ponytail' || style === 'bun' || style === 'braid') {
     const P = (x, y, off) => [x, y, skinZ(head, x, y) + off];
-    extra.push(lock([[0.07, 0.2, 0.03], P(0.05, 0.172, 0.014), P(-0.02, 0.142, 0.009)], [0.02, 0.017, 0.009]));
-    for (const s of [1, -1]) extra.push(lock([P(s * 0.098, 0.128, 0.005), P(s * 0.104, 0.095, 0.006), P(s * 0.1, 0.066, 0.005)], [0.0065, 0.0055, 0.003]));
+    extra.push(lock([[0.07, 0.2, 0.03], P(0.05, 0.172, 0.014), P(-0.02, 0.142, 0.009)], [0.02, 0.017, 0.009].map(rr)));
+    for (const s of [1, -1]) extra.push(lock([P(s * 0.098, 0.128, 0.005), P(s * 0.104, 0.095, 0.006), P(s * 0.1, 0.066, 0.005)], [0.0065, 0.0055, 0.003].map(rr)));
   }
   // Longs : rideau dans le dos et longues mèches de chaque côté du visage.
   let curtain = null;
@@ -339,6 +416,9 @@ function hairField(style, head, hat) {
     if (bun) d = smin(d, bun(x, y, z), 0.012);
     if (curls) d = curls(x, y, z, d);
     if (hatCut) d = smax(d, hatCut(x, y, z), 0.004);
+    // Les longs : le rideau s'arrête contre le cou et les épaules (forme fermée : quand la tête
+    // tourne, on voit une surface de cheveux, pas un trou).
+    if (curtain && y < 0.04) d = smax(d, 0.006 - bodyField(x, y, z), 0.014); // sans effet au-dessus de y = 0,04
     d = Math.max(d, -h - 0.03);
     return d;
   };
@@ -348,34 +428,63 @@ function hairField(style, head, hat) {
   return { field, groove: grooveAll, tie };
 }
 
+// Tresse : des grains en biais, un coup venant de la gauche, un coup de la droite, qui passent par
+// dessus le milieu (ils ressortent vers l'arrière en descendant) : de dos, une colonne de chevrons
+// bien séparés par des creux, aux bords festonnés. Le premier grain part de l'élastique (y = 0).
+const BRAID_N = 11;
+const BRAID_STEP = 0.0225;
+const braidLobe = (i) => {
+  const s = i % 2 ? 1 : -1;
+  const f = i / (BRAID_N - 1);
+  const y = -0.006 - i * BRAID_STEP;
+  const wd = 0.021 * (1 - 0.3 * f); // demi-largeur de la tresse (elle s'affine en bas)
+  const r = 0.0125 * (1 - 0.28 * f) * (i === 0 ? 0.85 : 1);
+  const z = -0.012 - i * 0.0018;
+  return roundCone([s * wd, y + 0.012, z + 0.007], [-s * wd * 0.15, y - 0.014, z - 0.008], r, r * 0.85);
+};
 /** Queue de cheval ou tresse, dans le repère de son pivot (l'élastique), pour qu'elle se balance. */
 function tailField(style) {
   if (style === 'braid') {
-    // Tresse : des « grains » en biais, un coup dans un sens, un coup dans l'autre (chevrons),
-    // qui descendent dans le dos en s'affinant.
     const lobes = [];
-    for (let i = 0; i < 9; i++) {
-      const s = i % 2 ? 1 : -1;
-      const y = -0.03 - i * 0.026;
-      const r = 0.0185 - i * 0.001;
-      const z = -0.014 - i * 0.0015;
-      lobes.push(roundCone([-s * 0.017, y + 0.011, z], [s * 0.017, y - 0.011, z], r, r * 0.88));
-    }
-    const tuft = lock([[0, -0.255, -0.026], [0, -0.3, -0.02]], [0.012, 0.004]);
-    return (x, y, z) => {
+    for (let i = 0; i < BRAID_N; i++) lobes.push(braidLobe(i));
+    const yEnd = -0.006 - BRAID_N * BRAID_STEP;
+    const tuft = lock([[0, yEnd + 0.01, -0.034], [0, yEnd - 0.025, -0.03], [0, yEnd - 0.05, -0.028]], [0.009, 0.011, 0.004]);
+    const field = (x, y, z) => {
+      // Petit fondu : les grains se touchent mais gardent un creux entre eux.
       let d = lobes[0](x, y, z);
-      for (let i = 1; i < lobes.length; i++) d = smin(d, lobes[i](x, y, z), 0.006);
-      d = smin(d, tuft(x, y, z), 0.008);
-      return d;
+      for (let i = 1; i < lobes.length; i++) d = smin(d, lobes[i](x, y, z), 0.003);
+      return smin(d, tuft(x, y, z), 0.006);
     };
+    // Creux entre deux grains (-1) ou milieu d'un grain (+1) : pour les ombres des couleurs.
+    field.groove = (x, y, z) => {
+      let d1 = 1;
+      let d2 = 1;
+      for (const f of lobes) {
+        const d = f(x, y, z);
+        if (d < d1) {
+          d2 = d1;
+          d1 = d;
+        } else if (d < d2) d2 = d;
+      }
+      return clamp((d2 - d1) / 0.006, 0, 1) * 2 - 1;
+    };
+    return field;
   }
   const tail = lock([[0, 0, 0.004], [0, -0.012, -0.045], [0, -0.075, -0.074], [0, -0.165, -0.078], [0, -0.25, -0.058], [0, -0.305, -0.044]], [0.028, 0.042, 0.045, 0.039, 0.026, 0.007]);
-  return (x, y, z) => tail(x, y, z) + 0.0018 * Math.sin(Math.atan2(x, z + 0.07) * 14 + y * 10);
+  const field = (x, y, z) => tail(x, y, z) + 0.002 * Math.sin(Math.atan2(x, z + 0.07) * 7 + y * 8);
+  field.groove = (x, y, z) => Math.sin(Math.atan2(x, z + 0.07) * 7 + y * 8);
+  return field;
 }
+
+/** Hauteur (repère du pivot) de l'élastique du bas de la tresse. */
+export const BRAID_END = -0.006 - BRAID_N * BRAID_STEP + 0.006;
 
 // ------------------------------------------------------------------ maillage
 
-/** Retire les triangles cachés dans la tête, les petits morceaux isolés, puis les sommets inutilisés. */
+/**
+ * Retire les triangles cachés dans la tête, les petits morceaux isolés, puis les sommets inutilisés.
+ * Renvoie des tableaux { position, normal, index } (transférables depuis le worker).
+ */
 function trimInside(geo, inside, minPart = 40) {
   const pos = geo.attributes.position.array;
   const nrm = geo.attributes.normal.array;
@@ -420,69 +529,113 @@ function trimInside(geo, inside, minPart = 40) {
     }
     keep[i] = remap[v];
   }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.Float32BufferAttribute(p2, 3));
-  out.setAttribute('normal', new THREE.Float32BufferAttribute(n2, 3));
-  out.setIndex(keep);
-  out.computeBoundingSphere();
   geo.dispose();
-  return out;
+  const count = p2.length / 3;
+  return {
+    position: new Float32Array(p2),
+    normal: new Float32Array(n2),
+    index: count > 65535 ? new Uint32Array(keep) : new Uint16Array(keep),
+  };
 }
 
-/**
- * Dans le cou ou le haut du buste (repère de la tête, échelle comprise) : les cheveux qui y
- * passent (rideau des longs) sont cachés, on ne garde pas ces triangles.
- */
-function insideBody(x, y, z) {
-  if (y < -0.012 && y > -0.14 && x * x + (z + 0.002) * (z + 0.002) < 0.046 * 0.046) return true;
-  if (y < -0.075) {
-    const ex = x / 0.185;
-    const ez = (z + 0.004) / 0.086;
-    return ex * ex + ez * ez < 1;
-  }
-  return false;
-}
-
-/** Valeur « de mèche » 0..1 par sommet, gardée pour les reflets (sillon, hauteur). */
-function strandData(geo, groove) {
-  const pos = geo.attributes.position.array;
+/** Valeur « de mèche » -1..1 par sommet, gardée pour les reflets (sillon, hauteur). */
+function strandData(arrays, groove) {
+  const pos = arrays.position;
   const n = pos.length / 3;
   const g = new Float32Array(n);
   for (let v = 0; v < n; v++) g[v] = groove(pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]);
-  geo.userData.groove = g;
+  arrays.groove = g;
+  return arrays;
+}
+
+/** Clé du cache des formes. */
+export const hairKey = (style, hat, high) => `${style}|${hat ? 1 : 0}|${high ? 1 : 0}`;
+
+/**
+ * Calcule les formes d'une coiffure, en tableaux simples (utilisable dans un worker) :
+ * { key, main: { position, normal, index, groove }, tail (queue / tresse, repère du pivot) | null, tie }.
+ */
+export function hairArrays(style, hat, high, head = headSdf) {
+  const cell = high ? 0.0112 : 0.0158;
+  const { field, groove, tie } = hairField(style, head, hat, cell);
+  const lowY = style === 'long' ? -0.33 : style === 'braid' || style === 'ponytail' ? -0.1 : -0.08;
+  const wide = style === 'curly' ? 0.235 : 0.2;
+  const bounds = [[-wide, lowY, -0.25], [wide, style === 'curly' ? 0.33 : style === 'bun' ? 0.3 : 0.29, 0.21]];
+  // Seuls les triangles cachés dans la tête sont retirés (elle bouge avec les cheveux) ; le cou et
+  // les épaules sont découpés dans la SDF (bodyField), pour garder une forme fermée.
+  const main = strandData(trimInside(sdfMesh(field, bounds, cell), (x, y, z) => head(x, y, z) < -0.0025), groove);
+  let tail = null;
+  if (style === 'ponytail' || style === 'braid') {
+    const f = tailField(style);
+    // La tresse a des grains fins : cases plus petites (elle est petite, ça reste peu de triangles).
+    tail = strandData(trimInside(sdfMesh(f, [[-0.07, -0.34, -0.14], [0.07, 0.05, 0.05]], cell * (style === 'braid' ? 0.55 : 0.85)), () => false), f.groove);
+    if (style === 'braid') tail.grooveAmp = 0.22; // creux bien marqués entre les grains
+  }
+  return { key: hairKey(style, hat, high), main, tail, tie };
 }
 
 const cache = new Map();
 
+/** BufferGeometry partagée à partir des tableaux de hairArrays. */
+function toGeometry(arr) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(arr.position, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(arr.normal, 3));
+  geo.setIndex(new THREE.BufferAttribute(arr.index, 1));
+  geo.computeBoundingSphere();
+  geo.userData.groove = arr.groove;
+  if (arr.grooveAmp) geo.userData.grooveAmp = arr.grooveAmp;
+  geo.userData.shared = true;
+  return geo;
+}
+
+/** Range dans le cache des formes calculées ailleurs (worker) ; ignorées si déjà là. */
+export function adoptHair(data) {
+  if (!data?.key || cache.has(data.key)) return;
+  cache.set(data.key, { main: toGeometry(data.main), tail: data.tail ? toGeometry(data.tail) : null, tie: data.tie });
+}
+
+/** Vrai si la coiffure est déjà prête (pas de calcul au prochain buildAvatar). */
+export const hairReady = (style, hat, high) => cache.has(hairKey(style, hat, high));
+
 /**
  * Formes partagées d'une coiffure : { main, tail?, tie? } (BufferGeometry sans couleur).
  * main : la masse sur la tête ; tail : queue de cheval / tresse (repère du pivot) ; tie : position de
- * l'élastique. high : qualité haute (cases plus fines).
+ * l'élastique. high : qualité haute (cases plus fines). Calculée ici si le worker ne l'a pas déjà faite.
  */
-export function hairGeometry(style, hat, high, head) {
-  const key = `${style}|${hat ? 1 : 0}|${high ? 1 : 0}`;
-  if (cache.has(key)) return cache.get(key);
-  const cell = high ? 0.0112 : 0.0158;
-  const { field, groove, tie } = hairField(style, head, hat);
-  const lowY = style === 'long' ? -0.33 : style === 'braid' || style === 'ponytail' ? -0.1 : -0.08;
-  const wide = style === 'curly' ? 0.235 : 0.2;
-  const bounds = [[-wide, lowY, -0.25], [wide, style === 'curly' ? 0.33 : style === 'bun' ? 0.3 : 0.29, 0.21]];
-  let main = sdfMesh(field, bounds, cell);
-  main = trimInside(main, (x, y, z) => head(x, y, z) < -0.0025 || insideBody(x, y, z));
-  strandData(main, groove);
-  main.userData.shared = true;
+export function hairGeometry(style, hat, high, head = headSdf) {
+  const key = hairKey(style, hat, high);
+  if (!cache.has(key)) adoptHair(hairArrays(style, hat, high, head));
+  return cache.get(key);
+}
 
-  const out = { main, tail: null, tie };
-  if (style === 'ponytail' || style === 'braid') {
-    const f = tailField(style);
-    let tail = sdfMesh(f, [[-0.07, -0.33, -0.14], [0.07, 0.05, 0.05]], cell * 0.85);
-    tail = trimInside(tail, () => false);
-    strandData(tail, (x, y, z) => Math.sin(Math.atan2(x, z + 0.07) * 14 + y * 10));
-    tail.userData.shared = true;
-    out.tail = tail;
+let prepared = null;
+
+/**
+ * Prépare toutes les coiffures (avec et sans chapeau) d'une qualité dans un worker, une seule fois.
+ * Sans worker possible (version à emporter ouverte depuis le disque, tests), on ne fait rien : chaque
+ * coiffure sera calculée à sa première apparition, comme avant.
+ */
+export function prepareHair(high) {
+  if (prepared === high || typeof Worker === 'undefined' || typeof window === 'undefined') return;
+  prepared = high;
+  const keys = [];
+  for (const hat of [false, true]) for (const style of HAIR_STYLES) if (!hairReady(style, hat, high)) keys.push([style, hat]);
+  if (!keys.length) return;
+  try {
+    const w = new Worker(new URL('./hairWorker.js', import.meta.url), { type: 'module' });
+    w.onmessage = (e) => {
+      if (e.data?.done) w.terminate();
+      else adoptHair(e.data);
+    };
+    w.onerror = (e) => {
+      e.preventDefault?.();
+      w.terminate();
+    };
+    w.postMessage({ high, keys });
+  } catch {
+    /* pas de worker : calcul à la demande */
   }
-  cache.set(key, out);
-  return out;
 }
 
 /**
@@ -496,6 +649,10 @@ export function tintHair(shared, hairHex, { buzz = false, center = SKULL_C } = {
   geo.setAttribute('normal', shared.attributes.normal);
   geo.setIndex(shared.index);
   geo.boundingSphere = shared.boundingSphere;
+  // Libérer ce personnage (disposeModel) ne doit libérer que SA couleur : three supprime les tampons
+  // GPU de tous les attributs de la géométrie libérée, y compris ceux partagés avec les autres
+  // personnages qui ont la même coiffure (ils devaient alors tout renvoyer au GPU).
+  geo.dispose = disposeOwnColor;
   const base = new THREE.Color(hairHex);
   const lum = 0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b;
   // Le reflet : discret sur les cheveux sombres, plus doré sur les clairs.
@@ -503,6 +660,7 @@ export function tintHair(shared, hairHex, { buzz = false, center = SKULL_C } = {
   const pos = shared.attributes.position.array;
   const nrm = shared.attributes.normal.array;
   const groove = shared.userData.groove;
+  const gAmp = shared.userData.grooveAmp ?? 0.07;
   const n = pos.length / 3;
   const col = new Float32Array(n * 3);
   for (let v = 0; v < n; v++) {
@@ -521,7 +679,7 @@ export function tintHair(shared, hairHex, { buzz = false, center = SKULL_C } = {
     const ao = 0.62 + 0.38 * sstep(-0.35, 0.7, facing);
     const under = 1 - 0.2 * Math.max(0, -ny);
     const g = groove ? groove[v] : 0;
-    let k = ao * under * (1 + 0.07 * g);
+    let k = ao * under * (1 + gAmp * g);
     if (buzz) {
       // Tondus : petit grain irrégulier.
       const h = Math.sin(x * 1712.3 + y * 931.7 + z * 517.1) * 43758.5453;
@@ -537,6 +695,17 @@ export function tintHair(shared, hairHex, { buzz = false, center = SKULL_C } = {
   return geo;
 }
 
+/** dispose() d'une géométrie de tintHair : on détache d'abord les attributs partagés. */
+function disposeOwnColor() {
+  this.deleteAttribute('position');
+  this.deleteAttribute('normal');
+  this.setIndex(null);
+  THREE.BufferGeometry.prototype.dispose.call(this);
+}
+
 /** Calotte et visière du chapeau (formes de buildAvatar), à l'échelle de la coiffure. */
 export const HAT_SHAPE = HAT;
 export { TAU };
+
+/** Pour les tests et la mise au point : le champ d'une coiffure. */
+export const __hairFieldForTest = hairField;

@@ -30,6 +30,8 @@ import { t, ta } from '../i18n.js';
 const PETS = ['dog', 'cat', 'rabbit'];
 // Où se tiennent le voisin et le stand de la fête (dans la cour, faciles à trouver).
 const NEIGHBOUR_SPOT = { x: -7, z: -7 };
+// Le voisin respire et cligne des yeux, sans geste d'attente (il fait coucou) : options réutilisées.
+const NEIGHBOUR_LIFE = { busy: true };
 const FAIR_SPOT = { x: 5, z: 15 };
 // Zones vivantes (déplacées par la vue d'ensemble, src/game/coreLayout.js) : lues au moment de l'usage.
 const areaOf = (group) => (group === 'paddock' ? HOME.horse : PEN);
@@ -803,7 +805,7 @@ export class Events {
       if (av) {
         // Il respire, cligne des yeux, regarde un peu autour de lui.
         animateAvatarWalk(av, 0, 0);
-        updateAvatarLife(av, dt, { busy: true });
+        updateAvatarLife(av, dt, NEIGHBOUR_LIFE);
       }
       if (r.userData.arm) r.userData.arm.rotation.z = 2.5 + Math.sin(now * 6) * 0.35;
     }

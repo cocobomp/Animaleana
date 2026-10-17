@@ -68,6 +68,7 @@ export class HelperEntity {
     this.think = 1 + Math.random() * 2;
     this.workTimer = 0;
     this.forced = null; // cible imposée (conduite du troupeau)
+    this.lifeOpts = { speed: 0, busy: false }; // réutilisé à chaque image
   }
 
   /** Nom affiché au-dessus de la tête, avec son niveau (⭐2). */
@@ -157,7 +158,10 @@ export class HelperEntity {
     // Marche, puis la vie par-dessus (respiration, regard, gestes d'attente ou geste du travail).
     this.phase += dt * this.speed * 2.2;
     animateAvatarWalk(this.avatar, this.phase, this.speed);
-    updateAvatarLife(this.avatar, dt, { speed: this.speed, busy: this.workTimer > 0 || !!this.forced });
+    const o = this.lifeOpts;
+    o.speed = this.speed;
+    o.busy = this.workTimer > 0 || !!this.forced;
+    updateAvatarLife(this.avatar, dt, o);
   }
 
   /** Arrivé au travail : le geste qui va avec (brosser, verser, frotter…), vers l'animal ou l'objet. */

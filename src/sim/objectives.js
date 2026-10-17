@@ -2,6 +2,7 @@
 
 import { happiness } from './animal.js';
 import { PLACE_IDS, PLACES } from './places.js';
+import { CAREERS } from './careers.js'; // paliers du métier Toiletteur
 
 const stat = (p, k) => p.stats[k] ?? 0;
 
@@ -31,6 +32,14 @@ export const OBJECTIVES = [
   { id: 'actvLesson1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvLessons'), 1] },
   { id: 'actvHop1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvHop'), 1] },
   { id: 'actvHutch5', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'actvHutchPlay'), 5] },
+  // Métier Toiletteur ✂️ (src/sim/groomer.js)
+  { id: 'grmSalon', kind: 'quest', reward: 80, progress: (p) => [(p.structures ?? []).some((s) => s.type === 'salon') ? 1 : 0, 1] },
+  { id: 'grmClient1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'groomClients'), 1] },
+  { id: 'grmOwn1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'groomOwn'), 1] },
+  { id: 'grmAccessory1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'groomAccessories'), 1] },
+  { id: 'grmFive1', kind: 'quest', reward: 100, progress: (p) => [stat(p, 'groomFive'), 1] },
+  { id: 'grmClients10', kind: 'achievement', progress: (p) => [stat(p, 'groomClients'), 10] },
+  { id: 'grmExpert', kind: 'achievement', progress: (p) => [p.careers?.xp?.groomer ?? 0, CAREERS.groomer.ranks[2]] }, // rang expert
   // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
   { id: 'career1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'careersStarted'), 1] },
   { id: 'client1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'clients'), 1] },

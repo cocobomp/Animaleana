@@ -131,6 +131,7 @@ export class ConstructionView {
     this.refresh();
     this.view.refreshLabels();
     this.view.refreshBar();
+    this.game.emit?.('panel', 'build'); // pour les quêtes guidées (ex. construire le salon de toilettage)
     if (!this.profile.tips?.build) {
       // La première fois : le paddock bien en vue (dans la partie libre de l'écran), avec la bulle « touche le paddock ».
       this.showTip('start');

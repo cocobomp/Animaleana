@@ -7,6 +7,7 @@ import { t } from '../i18n.js';
 import { isSandbox } from '../sim/profile.js';
 import { CAREERS, CAREER_IDS, RANKS, careerSummary, setActiveCareer, nextAction } from '../sim/careers.js';
 import { schoolSummary } from '../sim/vetSchool.js'; // 🎓 école vétérinaire
+import { salonCareerBlock } from './groomer.js'; // ✂️ le salon de toilettage (métier Toiletteur)
 
 const rankLabel = (rank) => t(`ca_rank_${RANKS[rank]}`);
 
@@ -65,6 +66,7 @@ function careerCard(ui, s) {
     else body.push(h('small', { class: 'ca-following' }, `📌 ${t('ca_following')}`));
   }
   if (s.id === 'vet') body.push(schoolBlock(ui)); // 🎓 apprendre le métier en leçons (src/ui/vetSchool.js)
+  if (s.id === 'groomer') body.push(salonCareerBlock(ui)); // ✂️ construire le salon, ou y aller
   return h('div', { class: `ca-card ${s.state} ${s.active ? 'active' : ''}` }, head, ...body);
 }
 

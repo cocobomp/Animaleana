@@ -11,6 +11,7 @@ import { migrateCoreSizes, CORE_VERSION } from './resize.js'; // tailles des enc
 import { defaultVetSchool } from './vetSchool.js'; // école vétérinaire (leçons)
 import { SPECIES, getBreed } from './species.js'; // anciens chats : look complété depuis la race
 import { upgradeCatLook } from './catBreeds.js';
+import { defaultGroomerState } from './groomer.js'; // métier Toiletteur (salon de toilettage)
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -68,6 +69,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     clients: defaultClients(), // visiteurs et animaux confiés (src/sim/clients.js)
     careers: defaultCareers(), // métiers appris (src/sim/careers.js)
     vetSchool: defaultVetSchool(), // leçons de l'école vétérinaire (src/sim/vetSchool.js)
+    groomer: defaultGroomerState(), // salon de toilettage : réputation, clients, carnet (src/sim/groomer.js)
   };
 }
 
@@ -139,6 +141,7 @@ export function migrate(p, hint = {}) {
     clients: { ...defaultClients(), ...(p.clients ?? {}) },
     careers: { ...defaultCareers(), ...(p.careers ?? {}) },
     vetSchool: { ...defaultVetSchool(), ...(p.vetSchool ?? {}) }, // école vétérinaire (ajoutée plus tard)
+    groomer: { ...defaultGroomerState(), ...(p.groomer ?? {}) }, // salon de toilettage (ajouté plus tard)
   };
   // Chats d'avant les races détaillées : poil, tête, oreilles, gants et yeux repris de leur race.
   for (const a of out.animals ?? []) {

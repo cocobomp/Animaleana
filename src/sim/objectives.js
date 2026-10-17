@@ -40,6 +40,13 @@ export const OBJECTIVES = [
   { id: 'beautyPrep1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'beautyReady'), 1] },
   { id: 'beautyBraid1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'beautyBraid'), 1] },
   { id: 'beauty1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvBeauty'), 1] },
+  // métier éducateur canin (src/sim/dogTrainer.js)
+  { id: 'dtClient1', kind: 'quest', reward: 40, progress: (p) => [(p.dogTrainer?.clients?.length ?? 0) + (p.dogTrainer?.history?.length ?? 0) > 0 ? 1 : 0, 1] },
+  { id: 'dtSession3', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'dtSessions'), 3] },
+  { id: 'dtDeliver1', kind: 'quest', reward: 100, progress: (p) => [stat(p, 'dtSuccess'), 1] },
+  { id: 'dtCoach1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'dtCoach'), 1] },
+  { id: 'dtStars3', kind: 'achievement', progress: (p) => [stat(p, 'dtStars3'), 3] },
+  { id: 'dtDeliver5', kind: 'achievement', progress: (p) => [stat(p, 'dtSuccess'), 5] },
   // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
   { id: 'career1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'careersStarted'), 1] },
   { id: 'client1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'clients'), 1] },

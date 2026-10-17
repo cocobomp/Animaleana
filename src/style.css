@@ -2031,6 +2031,57 @@ body.actv-nomove #touch-pad { display: none !important; }
 .hc-prio { display: flex; flex-wrap: wrap; gap: 6px; }
 .hc-prio button { min-height: 44px; border-radius: 999px; padding: 0 14px; }
 .hc-prio button.on { background: var(--primary); color: #fff; border-color: transparent; }
+
+/* ==========================================================================
+   Éducateur canin (métier) — src/ui/dogTrainer.js, src/game/DogTrainer.js
+   ========================================================================== */
+.dt-tuto { display: grid; gap: 10px; text-align: center; }
+.dt-tuto-emoji { font-size: 3rem; line-height: 1; }
+.dt-tuto h3 { margin: 0; }
+.dt-tuto p { margin: 0; font-size: 1.05rem; line-height: 1.35; }
+.dt-tuto .dt-how { background: #f3f7f1; border-radius: 12px; padding: 8px 10px; }
+.dt-tuto .dt-go { min-height: 52px; font-size: 1.1rem; }
+.dt-dogcard { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; margin: 8px 0; display: grid; gap: 6px; }
+.dt-probs { display: grid; gap: 6px; margin: 6px 0 10px; }
+.dt-prob { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; }
+.dt-prob .mini-track { grid-column: 1 / -1; }
+.dt-prob.fixed { border-color: var(--good); }
+.dt-prob b { font-size: 0.95rem; }
+.act.dt-session.done { opacity: 0.6; }
+#panel .checklist li.locked { color: var(--muted); }
+.dt-client { display: flex; gap: 10px; align-items: center; }
+.dt-client .card-body { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.dt-client small { color: var(--muted); }
+.dt-result .dt-pay { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 4px; font-size: 1rem; }
+.dt-result .dt-quote { font-style: italic; }
+.dt-result .row { justify-content: center; gap: 8px; }
+/* Bandeau de la promenade-séance « tire en laisse » */
+#dt-walk { position: fixed; left: 50%; bottom: calc(140px + var(--safe-b, 0px)); transform: translateX(-50%); width: min(420px, calc(100vw - 32px)); background: rgba(255,255,255,0.94); border: 1px solid var(--line); border-radius: 16px; padding: 8px 12px; display: grid; gap: 6px; z-index: 30; box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
+#dt-walk .dt-walk-head { display: flex; justify-content: space-between; font-weight: 700; }
+#dt-walk .dt-pull-track { display: block; height: 14px; background: #e4ebe6; border-radius: 7px; overflow: hidden; }
+#dt-walk .dt-pull-fill { display: block; height: 100%; width: 0; background: #3fae62; border-radius: 7px; transition: width 0.15s; }
+#dt-walk .dt-pull-fill[data-level="high"] { background: #e0574a; }
+#dt-walk .dt-walk-hint { margin: 0; min-height: 1.3em; font-size: 1rem; }
+#dt-walk .dt-walk-hint[data-kind="good"] { color: var(--good); font-weight: 700; }
+#dt-walk .dt-walk-hint[data-kind="warn"] { color: #c0392b; font-weight: 700; }
+#dt-walk .row { display: flex; gap: 8px; }
+#dt-walk .row button { flex: 1; min-height: 46px; }
+#dt-walk .dt-reward.glow { animation: dt-glow 0.8s ease-in-out infinite alternate; }
+@keyframes dt-glow { from { box-shadow: 0 0 0 0 rgba(63,174,98,0.4); } to { box-shadow: 0 0 0 8px rgba(63,174,98,0); } }
+/* Mini-jeu « Les ordres » : 5 ordres + la friandise, sur deux rangées de trois (doigts : 54 px de haut). */
+.mg-controls .mg-btn.dt-cmd, .mg-controls .mg-btn.dt-treat { flex: 1 1 30%; min-height: 54px; font-size: 1.05rem; }
+.mg-controls .mg-btn.dt-treat { background: #ffe9a8; border-color: #e3b23c; color: #6b4a00; }
+.mg-controls .mg-btn.glow { animation: dt-glow 0.7s ease-in-out infinite alternate; border-color: var(--good); }
+.mg-controls .mg-btn.dt-treat.glow { background: #ffd65a; }
+/* Fiche : séances, badge de la liste, séance du jour dans le menu rapide */
+.dt-sessions .act.locked { opacity: 0.7; }
+.dt-sessions .act { display: grid; gap: 2px; min-height: 52px; }
+.cl-badge.training { background: #fff1d6; color: #7a4a00; }
+@media (max-width: 720px) {
+  /* au-dessus du joystick (il faut marcher pendant la séance) */
+  #dt-walk { bottom: calc(176px + var(--safe-b, 0px)); width: calc(100vw - 24px); padding: 6px 10px; }
+}
+
 /* ==========================================================================
    Clients (pension, soins) et métiers — src/ui/clients.js, src/ui/careers.js
    ========================================================================== */
@@ -2097,6 +2148,8 @@ body.actv-nomove #touch-pad { display: none !important; }
 .ca-carnet li { display: flex; align-items: center; gap: 8px; background: #f7f3ea; border-radius: 10px; padding: 6px 8px; }
 .ca-carnet li.done { opacity: 0.75; }
 .ca-carnet li.now { background: #fff3c4; }
+.ca-carnet li.locked { color: var(--muted, #6b6b6b); }
+.ca-carnet li small { color: var(--muted, #6b6b6b); }
 .ca-carnet .ca-step { flex: 1; }
 .ca-check { font-size: 1.1rem; }
 .ca-following { color: #8a6a00; font-weight: 700; }

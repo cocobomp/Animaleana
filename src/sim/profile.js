@@ -5,6 +5,7 @@ import { STARTER_ITEMS } from './gear.js';
 import { STARTER_TOOLS } from './tools.js';
 import { defaultFacilities } from './facilities.js'; // bâtiments à entretenir (écurie, maison, bergerie)
 import { createTutorial } from './tutorial.js';
+import { defaultDogTrainer } from './dogTrainer.js'; // métier éducateur canin
 import { defaultClients } from './clients.js'; // clients (pension, soins)
 import { defaultCareers } from './careers.js'; // métiers
 import { migrateCoreSizes, CORE_VERSION } from './resize.js'; // tailles des enclos (vue construction)
@@ -69,6 +70,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     careers: defaultCareers(), // métiers appris (src/sim/careers.js)
     vetSchool: defaultVetSchool(), // leçons de l'école vétérinaire (src/sim/vetSchool.js)
     competitions: { entries: [], results: [] }, // concours à l'extérieur : inscriptions et résultats (src/sim/competitions.js)
+    dogTrainer: defaultDogTrainer(), // éducateur canin : chiens en éducation, historique (src/sim/dogTrainer.js)
   };
 }
 
@@ -141,6 +143,7 @@ export function migrate(p, hint = {}) {
     careers: { ...defaultCareers(), ...(p.careers ?? {}) },
     vetSchool: { ...defaultVetSchool(), ...(p.vetSchool ?? {}) }, // école vétérinaire (ajoutée plus tard)
     competitions: { entries: [], results: [], ...(p.competitions ?? {}) }, // concours à l'extérieur (ajoutés plus tard)
+    dogTrainer: { ...defaultDogTrainer(), ...(p.dogTrainer ?? {}) }, // éducateur canin (ajouté plus tard)
   };
   // Chevaux d'avant le dressage : compétence de dressage de départ (src/sim/dressage.js).
   for (const a of out.animals ?? []) {

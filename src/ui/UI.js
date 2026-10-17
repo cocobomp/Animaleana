@@ -20,6 +20,7 @@ import { TOOLS, toolAtHome } from '../sim/tools.js';
 import { isSandbox } from '../sim/profile.js';
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
+import { openDogTrainerPanel } from './dogTrainer.js'; // métier éducateur canin
 import { openCareers, careerChips } from './careers.js'; // 💼 métiers
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
@@ -383,6 +384,7 @@ export class UI {
     chips.push(...(g.events?.statusChips(chip) ?? [])); // événement en cours (bandeau réduit)
     chips.push(...(g.venue?.statusChips(chip) ?? [])); // concours du jour sur place (src/game/CompetitionVenue.js)
     chips.push(...(g.clients?.statusChips(chip) ?? []), ...careerChips(this, chip)); // visiteur, clients, carnet du métier
+    chips.push(...(g.dogTrainer?.statusChips(chip) ?? [])); // un maître attend près de la niche (éducateur canin)
     const key = chips.map((c) => c.textContent).join('|');
     if (key === this.statusKey) return;
     this.statusKey = key;
@@ -795,6 +797,7 @@ export class UI {
   }
   openActivities(opts) { openActivities(this, opts); this.game?.emit('panel', 'activities'); }
   openHelper(h) { openHelperChat(this, h); this.game?.emit('panel', 'helper'); }
+  openDogTrainer() { openDogTrainerPanel(this); this.game?.emit('panel', 'dogTrainer'); }
 
   /** Un soin pour un groupe (foin pour tous les chevaux…) : un mini-jeu, appliqué à tout le groupe. */
   async groupCareWithGame(filter, action) {

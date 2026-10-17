@@ -144,7 +144,7 @@ const BODY = {
 
 /**
  * Calcule où se trouvent les parties de l'animal (sans dessiner).
- * o : { x, y (sol), s (taille), f (1 = regarde à droite, -1 = à gauche), pose: 'stand' | 'sit' | 'beg', lift }
+ * o : { x, y (sol), s (taille), f (1 = regarde à droite, -1 = à gauche), pose: 'stand' | 'sit' | 'beg' | 'down' (couché), lift }
  */
 export function animalShape(a, o = {}) {
   const P = BODY[a.species] ?? BODY.dog;
@@ -166,6 +166,9 @@ export function animalShape(a, o = {}) {
   } else if (pose === 'beg') {
     bx -= f * rx * 0.3;
     by = groundY - rx * 0.78 - lift;
+  } else if (pose === 'down') {
+    // Couché : le ventre presque au sol, la tête levée.
+    by = groundY - ry * 0.98 - lift;
   }
   const ux = [Math.cos(ang) * f, Math.sin(ang) * f];
   const uy = [-Math.sin(ang), Math.cos(ang)];
@@ -383,6 +386,20 @@ export function drawAnimal(g, a, o = {}) {
     g.stroke();
     g.fillStyle = ct && ct.white && ct.white !== 'chest' ? '#f6f3ee' : css(legColor);
     ellipse(g, top.x + f * (4 + legW * 0.3) * s, feetY - legW * 0.35, legW * 0.75, legW * 0.45);
+    g.fill();
+  } else if (sh.pose === 'down') {
+    // Couché : les pattes avant allongées devant, à plat sur le sol.
+    const top = L(rx * 0.5, ry * 0.45);
+    const y = feetY - legW * 0.45;
+    const tip = top.x + f * rx * 0.7;
+    g.strokeStyle = css(legColor);
+    g.lineWidth = legW;
+    g.beginPath();
+    g.moveTo(top.x, Math.min(top.y, y));
+    g.lineTo(tip, y);
+    g.stroke();
+    g.fillStyle = ct && ct.white && ct.white !== 'chest' ? '#f6f3ee' : css(legColor);
+    ellipse(g, tip + f * legW * 0.35, y + legW * 0.05, legW * 0.8, legW * 0.45);
     g.fill();
   } else {
     // Debout sur les pattes arrière : petites pattes devant le ventre

@@ -49,6 +49,12 @@ const ICONS = {
   braid: '🎀', shine: '✨', bow: '🎀', fluff: '🧶', // concours de beauté
 };
 
+/** Ajoute un mini-jeu (ex. séances d'éducation canine, src/ui/minigames/dogTraining.js). */
+export function registerMinigame(id, make, icon = '⭐') {
+  GAMES[id] = make;
+  ICONS[id] = icon;
+}
+
 /** Texte traduit, ou null s'il n'existe pas. */
 const tt = (key, params) => {
   const s = t(key, params);

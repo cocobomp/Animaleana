@@ -9,6 +9,7 @@ import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
 import { Input } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
+import { DogTrainer } from './DogTrainer.js'; // métier éducateur canin : clients, séances, livraison
 import { Herding } from './Herding.js';
 import { TaskQueue } from './TaskQueue.js';
 import { Interiors, setStableExt } from './Interiors.js'; // écurie et maison où l'on entre, box, corvées
@@ -119,6 +120,7 @@ export class Game {
     this.clients = new Clients(this); // visiteurs, animaux confiés, métiers
     this.activities = new Activities(this);
     this.beauty = new Beauty(this); // concours de beauté (game.beauty)
+    this.dogTrainer = new DogTrainer(this);
     this.droppingMeshes = new Map();
     this.timeScale = 1; // 0 = pause
     this.profile = null;
@@ -220,6 +222,7 @@ export class Game {
     audio.setActive(false); // écran des profils : silence
     this.marker.hide();
     this.venue?.dispose(); // le site du concours (tribunes, podium) est retiré de la scène
+    this.dogTrainer?.reset(); // éducateur canin : maîtres en visite, promenade-séance
     if (this.player?.mount) this.player.dismount();
     this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
@@ -302,6 +305,7 @@ export class Game {
     this.entities.clear();
     for (const h of this.helpers.values()) h.dispose();
     this.helpers.clear();
+    this.dogTrainer.onPlaceLoaded(); // éducateur canin : les maîtres en visite repartent
     applyCoreLayout(this.profile.coreLayout?.[placeId]); // bergerie, paddock… déplacés ou agrandis par le joueur
     setStableExt(stableExt(ensureFacilities(this.profile))); // écurie rallongée (8, 12 ou 16 box)
     this.world.build(placeId, this.season, placeId === this.profile.home);
@@ -548,6 +552,7 @@ export class Game {
       for (const e of entities) e.update(wdt, ctx);
       this.player.lateUpdate?.(mgmt ? 0 : wdt); // le cavalier suit le cheval qu'on vient d'animer
       for (const h of this.helpers.values()) h.update(wdt, this);
+      this.dogTrainer.update(wdt); // maîtres en visite, promenade-séance, démonstration
       this.herding.update(wdt);
       this.tasks?.update();
       this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
@@ -734,6 +739,7 @@ export class Game {
         return;
       }
     }
+    if (this.dogTrainer.onTap(this.raycaster, paused)) return; // un maître en visite (éducateur canin)
     if (this.clients.onTap(this.raycaster)) return; // un visiteur (client) : on va lui parler
     const roots = [...this.entities.values()].filter((e) => !e.ridden && !e.inside).map((e) => e.root);
     const hitA = this.raycaster.intersectObjects(roots, true).find((h) => !h.object.isSprite || h.object === h.object.parent?.userData?.entity?.label);
@@ -1219,6 +1225,11 @@ export class Game {
           bestD = d;
           best = { kind: 'helper', helper: hp, id: hp.data.id };
         }
+      }
+      const visitor = this.dogTrainer.focusNear(pp); // maître en visite (éducateur canin)
+      if (visitor && visitor.d < bestD) {
+        bestD = visitor.d;
+        best = visitor.focus;
       }
       if (!best) {
         for (const it of this.world.interactables) {

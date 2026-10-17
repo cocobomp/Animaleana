@@ -10,6 +10,7 @@ import { schoolSummary } from '../sim/vetSchool.js'; // 🎓 école vétérinair
 import { upcomingEntries, competitionData } from '../sim/competitions.js'; // 🏇 cavalier de concours
 import { PLACES } from '../sim/places.js';
 import { openBeauty } from './beauty.js'; // 🎀 concours de beauté (métier de handler)
+import { clientDogs } from '../sim/dogTrainer.js'; // 🐕 éducateur canin : chiens en éducation
 
 const rankLabel = (rank) => t(`ca_rank_${RANKS[rank]}`);
 
@@ -60,9 +61,10 @@ function careerCard(ui, s) {
       isSandbox(p) ? null : h('span', {}, t('ca_earned', { n: s.earned }))));
     body.push(h('h4', {}, `📒 ${t('ca_carnet')}`));
     const next = nextAction(p, s.id);
-    body.push(h('ul', { class: 'ca-carnet' }, s.carnet.map((a) => h('li', { class: `${a.done ? 'done' : ''} ${next?.id === a.id ? 'now' : ''}` },
-      h('span', { class: 'ca-check' }, a.done ? '✅' : '⬜'),
-      h('span', { class: 'ca-step' }, `${a.emoji} ${t(`ca_${s.id}_${a.id}`)}`),
+    body.push(h('ul', { class: 'ca-carnet' }, s.carnet.map((a) => h('li', { class: `${a.done ? 'done' : ''} ${a.locked ? 'locked' : ''} ${next?.id === a.id ? 'now' : ''}` },
+      h('span', { class: 'ca-check' }, a.done ? '✅' : a.locked ? '🔒' : '⬜'),
+      h('span', { class: 'ca-step' }, `${a.emoji} ${t(`ca_${s.id}_${a.id}`)}`,
+        a.locked ? h('small', {}, ` · ${t('ca_actionLocked', { rank: rankLabel(a.rank) })}`) : null),
       !a.done && next?.id === a.id ? h('button', { class: 'small primary', onClick: () => { ui.closePanel(); g.clients.showMe(s.id, a.id); } }, `👉 ${t('ca_showMe')}`) : null))));
     if (!s.active) body.push(h('button', { class: 'small', onClick: () => { setActiveCareer(p, s.id); ui.renderPanel(); ui.renderStatus(); } }, `📌 ${t('ca_follow')}`));
     else body.push(h('small', { class: 'ca-following' }, `📌 ${t('ca_following')}`));
@@ -73,7 +75,16 @@ function careerCard(ui, s) {
   if (s.id === 'handler' && s.state !== 'locked') {
     body.push(h('button', { class: 'small ca-beauty', onClick: () => openBeauty(ui) }, `🎀 ${t('ca_handler_open')}`));
   }
+  if (s.id === 'dogTrainer' && s.state === 'started') body.push(dogTrainerBlock(ui)); // 🐶 chiens en éducation (src/ui/dogTrainer.js)
   return h('div', { class: `ca-card ${s.state} ${s.active ? 'active' : ''}` }, head, ...body);
+}
+
+/** Éducateur canin dans la carte du métier : chiens en éducation et carnet détaillé (historique). */
+function dogTrainerBlock(ui) {
+  const n = clientDogs(ui.game.profile).length;
+  return h('div', { class: 'ca-school' },
+    h('span', {}, n ? t('dt_cardDogs', { n }) : t('dt_cardNoDogs')),
+    h('button', { class: 'small primary', onClick: () => ui.openDogTrainer() }, t('dt_cardBtn')));
 }
 
 /** L'école vétérinaire dans la carte du métier : progression et bouton. */

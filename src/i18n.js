@@ -8,6 +8,7 @@ import { VEHICLES_FR, VEHICLES_EN } from './ui/vehiclesTexts.js'; // véhicules 
 import { SAVE_FR, SAVE_EN } from './ui/saveTexts.js'; // sauvegarde dans un fichier (sv_*)
 import { CLOUD_FR, CLOUD_EN } from './ui/cloudTexts.js'; // compte Google et sauvegarde en ligne (cloud_*)
 import { BEAUTY_FR, BEAUTY_EN } from './ui/beautyTexts.js'; // concours de beauté et métier de handler (beauty_*, ca_handler_*)
+import { DOG_TRAINER_FR, DOG_TRAINER_EN } from './ui/dogTrainerTexts.js'; // métier éducateur canin (dt_*, ca_dogTrainer_*)
 
 const fr = {
   title: 'La ferme à Madichelle',
@@ -3610,6 +3611,8 @@ Object.assign(en, CLOUD_EN);
 // Concours de beauté : préparation, mini-jeux, présentation au juge, et métier de handler.
 Object.assign(fr, BEAUTY_FR);
 Object.assign(en, BEAUTY_EN);
+Object.assign(fr, DOG_TRAINER_FR); // métier éducateur canin
+Object.assign(en, DOG_TRAINER_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

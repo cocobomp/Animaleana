@@ -6,6 +6,7 @@ import { t, L } from '../i18n.js';
 import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
+import { openTackItem } from './tack.js'; // sellerie : fiche d'un objet
 import { openVet } from './vet.js';
 import { runMinigame, runChoreGame } from './minigames.js';
 import { showProfiles, showAvatarEditor } from './screens.js';
@@ -746,7 +747,8 @@ export class UI {
   openJobs() { panels.openJobs(this); }
   openSettings() { panels.openSettings(this); this.game?.emit('panel', 'settings'); }
   openFarm() { panels.openFarm(this); this.game?.emit('panel', 'farm'); }
-  openTack() { panels.openTack(this); }
+  openTack(opts) { panels.openTack(this, opts); } // sellerie : catalogue (src/ui/tack.js)
+  openTackItem(id) { openTackItem(this, id); } // fiche d'un objet de la sellerie
   openShop() { panels.openShop(this); }
   openBuilding(kind) { openBuilding(this, kind); this.game?.emit('building', kind); }
   // Bâtiments à entretenir (src/ui/facilitiesPanel.js)

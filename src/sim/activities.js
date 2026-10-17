@@ -4,7 +4,7 @@
 
 import { SPECIES } from './species.js';
 import { happiness, lifeStage, canRide } from './animal.js';
-import { wears, rideGear } from './gear.js';
+import { wears, rideGear, tackEffects } from './gear.js';
 import { seeded, pick, hashString } from './rng.js';
 import { NAMES } from './species.js';
 
@@ -104,13 +104,14 @@ export const takeoffQuality = (u) => clamp(1 - Math.abs(-u - TAKEOFF) / 1.6);
  * Chance de franchir l'obstacle sans faire tomber de barre.
  * skill : saut (0–100), height (m), align et timing (0–1), boots : guêtres, energy (0–100).
  */
-export function jumpChance({ skill = 10, height = 0.8, align = 1, timing = 0.7, boots = false, energy = 80, obedience = 10 }) {
+export function jumpChance({ skill = 10, height = 0.8, align = 1, timing = 0.7, boots = false, energy = 80, obedience = 10, tack = 0 }) {
   // Ce qui compte, c'est la hauteur par rapport à ce que le cheval a appris à sauter.
   const over = Math.max(0, height - comfortHeight(skill));
   let p = 0.62 + (skill / 100) * 0.26 + (obedience / 100) * 0.07 - over * 1.1 - Math.max(0, height - 0.7) * 0.1;
   p *= 0.55 + 0.45 * align;
   p += (timing - 0.5) * 0.24;
   if (boots) p += 0.06;
+  p += tack; // selle d'obstacle, filet à olive, cloches… (src/sim/gear.js)
   if (energy < 30) p -= 0.12;
   return clamp(p, 0.12, 0.97);
 }
@@ -197,9 +198,9 @@ export function lessonResult({ success, jumps, gained, step }) {
   return { points: success, success, jumps, gained, step, stars, max: jumps };
 }
 
-/** Paramètres de saut d'un cheval (avec ses guêtres). */
+/** Paramètres de saut d'un cheval (avec ses guêtres et le bonus de sa selle, de son filet…). */
 export function horseJumpStats(a) {
-  return { skill: a.skills.jump, obedience: a.skills.obedience, boots: wears(a, 'boots'), energy: a.needs.energy };
+  return { skill: a.skills.jump, obedience: a.skills.obedience, boots: wears(a, 'boots'), energy: a.needs.energy, tack: tackEffects(a).jump };
 }
 
 /** Le cheval refuse si on arrive de travers ou trop lentement. */
@@ -274,10 +275,11 @@ export function trailCollectibles(points, seed = 'trail', perLeg = 2) {
  * Points d'une balade : chaque balise 10, objet 4, photo 8, et un bonus si l'on a pris son temps
  * sans traîner (ni trop vite pour le cheval, ni trop lent).
  */
-export function trailResult({ checkpoints, totalCheckpoints, collected, totalCollectibles, photos, time }) {
+export function trailResult({ checkpoints, totalCheckpoints, collected, totalCollectibles, photos, time, longRide = false }) {
   const base = checkpoints * 10 + collected * 4 + photos * 8;
   const max = totalCheckpoints * 10 + totalCollectibles * 4 + TRAIL.sights.length * 8;
-  const pace = time < 60 ? 0.85 : time > 420 ? 0.9 : 1; // au galop tout le long, le cheval s'épuise
+  // Au galop tout le long, le cheval s'épuise ; trop longue, la balade fatigue (sauf selle de randonnée ou western).
+  const pace = time < 60 ? 0.85 : time > 420 && !longRide ? 0.9 : 1;
   const points = Math.round(base * pace);
   const ratio = points / max;
   const stars = ratio >= 0.8 ? 3 : ratio >= 0.5 ? 2 : 1;
@@ -349,7 +351,8 @@ export const knownTricks = (a) => Object.entries(a.tricks ?? {}).filter(([, v]) 
 
 /** Taille de la zone verte du mini-jeu de timing (0 à 1 de la jauge) : un animal obéissant et heureux aide. */
 export function trickWindow(a) {
-  return clamp(0.14 + (a.skills.obedience / 100) * 0.16 + (happiness(a) / 100) * 0.08, 0.12, 0.4);
+  // Selle de dressage, bride, licol éthologique… : figures mieux réussies (src/sim/gear.js).
+  return clamp(0.14 + (a.skills.obedience / 100) * 0.16 + (happiness(a) / 100) * 0.08 + tackEffects(a).tricks, 0.12, 0.45);
 }
 
 /** Note d'un tour (0 à 10) selon la qualité du timing (0 à 1). */
@@ -646,9 +649,11 @@ export function activitySkillGain(a, type, quality = 0.5) {
     lesson: { obedience: 1 },
   }[type] ?? {};
   for (const [k, v] of Object.entries(gains)) a.skills[k] = Math.min(100, (a.skills[k] ?? 0) + v);
-  const tired = { jumping: 14, agility: 12, trail: 18, show: 6, hop: 8, lesson: 12 }[type] ?? 8;
-  a.needs.energy = Math.max(0, a.needs.energy - tired);
+  // Équipement (src/sim/gear.js) : la selle de randonnée fatigue moins en balade, le tapis rend le dos confortable.
+  const fx = tackEffects(a);
+  const tired = ({ jumping: 14, agility: 12, trail: 18, show: 6, hop: 8, lesson: 12 }[type] ?? 8) * (type === 'trail' ? fx.trailFatigue : 1);
+  a.needs.energy = Math.max(0, a.needs.energy - Math.round(tired));
   a.needs.exercise = Math.min(100, a.needs.exercise + ({ jumping: 30, agility: 30, trail: 40, show: 10, hop: 25, lesson: 25 }[type] ?? 15));
-  a.needs.affection = Math.min(100, a.needs.affection + 8);
+  a.needs.affection = Math.min(100, a.needs.affection + 8 + fx.comfort);
   return gains;
 }

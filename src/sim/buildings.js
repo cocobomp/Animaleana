@@ -89,6 +89,7 @@ const RULES = {
   ],
   // Sellerie : on y achète et range le matériel, et on entretient le cuir.
   tackroom: [
+    { id: 'facEnter', icon: '🚪', when: () => null }, // entrer dans la sellerie (src/game/Interiors.js)
     { id: 'tack', icon: '🏇', when: () => null },
     { id: 'cleanTack', icon: '🧽', when: (c) => (c.count.tackDirty ? null : { reason: 'tackClean' }) },
   ],

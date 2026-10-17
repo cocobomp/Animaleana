@@ -193,14 +193,31 @@ const rainMat = (c) => cached(`rain:${hexOf(c)}`, () => new THREE.MeshStandardMa
 
 // ---------------------------------------------------------------- géométries
 
+// Version allégée (objets exposés aux murs de la sellerie) : mêmes formes, moins de facettes.
+// Les géométries allégées ont leur propre entrée dans le cache.
+let LITE = false;
+const q = (full, lite) => (LITE ? lite : full);
+
+/** Construit des modèles allégés pendant fn() (murs de la sellerie : budget de triangles du téléphone). */
+export function withLite(fn) {
+  const was = LITE;
+  LITE = true;
+  try {
+    return fn();
+  } finally {
+    LITE = was;
+  }
+}
+
 const geoCache = new Map();
 function shared(key, make) {
-  if (!geoCache.has(key)) {
+  const k = LITE ? `${key}|lite` : key;
+  if (!geoCache.has(k)) {
     const g = make();
     g.userData.shared = true;
-    geoCache.set(key, g);
+    geoCache.set(k, g);
   }
-  return geoCache.get(key);
+  return geoCache.get(k);
 }
 
 function mesh(parent, geo, material, pos = null, rot = null, scale = null) {
@@ -219,6 +236,10 @@ function mesh(parent, geo, material, pos = null, rot = null, scale = null) {
  * outline(v) → [sGauche, sDroite] pour v de 0 (haut) à 1 (bas), t = v × len.
  */
 function plate(outline, len, map, nu = 7, nv = 9) {
+  if (LITE) {
+    nu = Math.max(3, Math.ceil(nu / 2));
+    nv = Math.max(3, Math.ceil(nv / 2));
+  }
   const pos = [];
   const uv = [];
   const idx = [];
@@ -249,6 +270,7 @@ function plate(outline, len, map, nu = 7, nv = 9) {
 
 /** Points du bord d'une plaque (pour la surpiqûre / la bordure). */
 function plateEdge(outline, len, map, n = 10) {
+  if (LITE) n = Math.max(4, Math.ceil(n / 2));
   const pts = [];
   for (let i = 0; i <= n; i++) pts.push(map(outline(0)[0] + (outline(0)[1] - outline(0)[0]) * (i / n), 0));
   for (let i = 1; i <= n; i++) {
@@ -266,12 +288,12 @@ function plateEdge(outline, len, map, n = 10) {
 /** Fine tresse le long de points (bordure, surpiqûre, corde). */
 function tube(pts, r, closed = false, radial = 5) {
   const list = closed ? [...pts, pts[0], pts[1]] : pts;
-  return loft(list.map((p) => ({ p, rx: r, ry: r })), { radial, sub: 2, capStart: !closed, capEnd: !closed });
+  return loft(list.map((p) => ({ p, rx: r, ry: r })), { radial: q(radial, 4), sub: q(2, 1), capStart: !closed, capEnd: !closed });
 }
 
 /** Sangle plate dans le plan x-y (filets, licols suspendus) : largeur dans le plan, épaisseur vers Z. */
 function flatStrap(pts, halfW, thick = 0.0025) {
-  return loft(pts.map((p) => ({ p, rx: thick, ry: halfW })), { radial: 6, sub: 3, side: [0, 0, 1], exp: 4 });
+  return loft(pts.map((p) => ({ p, rx: thick, ry: halfW })), { radial: q(6, 4), sub: q(3, 1), side: [0, 0, 1], exp: 4 });
 }
 
 // ---------------------------------------------------------------- selles
@@ -327,18 +349,18 @@ function englishSaddle(g, st, color) {
   const edge = edgeMat(color);
   const y0 = 0.05; // dessous des panneaux : posés sur le porte-selle
   const key = `seat:${st.len}:${st.seatW}:${st.dip}:${st.pommel}:${st.cantle}`;
-  const seatGeo = shared(key, () => loft(seatSections(st, y0), { radial: 18, sub: 3, exp: 2.6, round: [0.5, 0.5] }));
+  const seatGeo = shared(key, () => loft(seatSections(st, y0), { radial: q(18, 10), sub: q(3, 1), exp: 2.6, round: [0.5, 0.5] }));
   mesh(g, seatGeo, leather);
   // Siège en daim plus foncé (une couche juste au-dessus du creux) et cuir piqué sur la randonnée.
   const inner = shared(`${key}:inner`, () => {
     const secs = seatSections(st, y0).slice(1, 7).map((s) => ({ ...s, p: [0, s.p[1] + 0.012, s.p[2]], rx: s.rx * 0.8, ry: 0.012, ryb: 0.012 }));
-    return loft(secs, { radial: 14, sub: 3, exp: 2.4, round: [0.3, 0.3] });
+    return loft(secs, { radial: q(14, 8), sub: q(3, 1), exp: 2.4, round: [0.3, 0.3] });
   });
   mesh(g, inner, st.quilted ? quiltMat(0x2b2522) : suedeMat(color));
   // Panneaux (coussins sous le siège) et gouttière.
   const panel = shared(`${key}:panel`, () => loft([0.08, 0.3, 0.55, 0.82].map((f, i) => ({
     p: [0, y0 + 0.025 + (i === 3 ? 0.02 : 0), -st.len * 0.55 + st.len * f], rx: 0.05, ry: 0.03, ryb: 0.025,
-  })), { radial: 10, sub: 2, round: [0.6, 0.6] }));
+  })), { radial: q(10, 6), sub: q(2, 1), round: [0.6, 0.6] }));
   for (const s of [1, -1]) mesh(g, panel, leather, [s * st.seatW * 0.55, 0, 0]);
   // Clous du pommeau.
   const zP = st.len * 0.45;
@@ -370,14 +392,14 @@ function englishSaddle(g, st, color) {
           const v = 0.06 + i * 0.13 * (0.6 + st.knee * 0.4);
           pts.push(mapOut(outline(v)[1] - 0.04, v * L));
         }
-        return loft(pts.map((p, i) => ({ p, rx: 0.018 + st.knee * 0.008, ry: 0.012 + st.knee * 0.006 * Math.sin((i / 4) * Math.PI) })), { radial: 8, sub: 2, round: [0.8, 0.8] });
+        return loft(pts.map((p, i) => ({ p, rx: 0.018 + st.knee * 0.008, ry: 0.012 + st.knee * 0.006 * Math.sin((i / 4) * Math.PI) })), { radial: q(8, 5), sub: q(2, 1), round: [0.8, 0.8] });
       });
       mesh(g, kGeo, leather);
     }
     if (st.blocks) {
       const bGeo = shared(`block:${L}:${W}:${side}`, () => {
         const pts = [0.05, 0.15, 0.25, 0.32].map((v) => mapOut(outline(v)[0] + 0.045, v * L));
-        return loft(pts.map((p) => ({ p, rx: 0.022, ry: 0.016 })), { radial: 8, sub: 2, round: [0.8, 0.8] });
+        return loft(pts.map((p) => ({ p, rx: 0.022, ry: 0.016 })), { radial: q(8, 5), sub: q(2, 1), round: [0.8, 0.8] });
       });
       mesh(g, bGeo, leather);
     }
@@ -394,7 +416,7 @@ function englishSaddle(g, st, color) {
         const v = 0.04 + (i / 6) * (sl - 0.04);
         pts.push(strapOut(outline(v)[0] * 0.3 + outline(v)[1] * 0.7 - 0.02, v * L));
       }
-      return loft(pts.map((p) => ({ p, rx: 0.013, ry: 0.0025 })), { radial: 6, sub: 2, side: [0, 0, 1], exp: 4 });
+      return loft(pts.map((p) => ({ p, rx: 0.013, ry: 0.0025 })), { radial: q(6, 4), sub: q(2, 1), side: [0, 0, 1], exp: 4 });
     });
     mesh(g, sGeo, edge);
     const end = strapOut(outline(sl)[0] * 0.3 + outline(sl)[1] * 0.7 - 0.02, sl * L);
@@ -407,12 +429,12 @@ function englishSaddle(g, st, color) {
   if (st.bags) {
     const z0 = -st.len * 0.55;
     for (const s of [1, -1]) {
-      const bag = mesh(g, shared('bag', () => new RoundedBoxGeometry(0.07, 0.15, 0.17, 3, 0.025)), leather, [s * 0.17, y0 - 0.02, z0 + 0.02], [0, 0, s * 0.18]);
-      mesh(bag, shared('bagLid', () => new RoundedBoxGeometry(0.075, 0.05, 0.175, 2, 0.015)), edge, [0, 0.06, 0]);
+      const bag = mesh(g, shared('bag', () => new RoundedBoxGeometry(0.07, 0.15, 0.17, q(3, 1), 0.025)), leather, [s * 0.17, y0 - 0.02, z0 + 0.02], [0, 0, s * 0.18]);
+      mesh(bag, shared('bagLid', () => new RoundedBoxGeometry(0.075, 0.05, 0.175, q(2, 1), 0.015)), edge, [0, 0.06, 0]);
       mesh(bag, shared('bagBuckle', () => new THREE.BoxGeometry(0.01, 0.02, 0.025)), brassMat(), [s * 0.04, 0.035, 0]);
     }
     const roll = mesh(g, shared('roll', () => new THREE.CylinderGeometry(0.05, 0.05, 0.36, 14)), clothMat(0x4f6b3a), [0, y0 + st.cantle + 0.06, z0 - 0.04], [0, 0, Math.PI / 2]);
-    for (const x of [-0.1, 0.1]) mesh(roll, shared('rollStrap', () => new THREE.TorusGeometry(0.052, 0.005, 5, 18)), edge, [0, x, 0], [Math.PI / 2, 0, 0]);
+    for (const x of [-0.1, 0.1]) mesh(roll, shared('rollStrap', () => new THREE.TorusGeometry(0.052, 0.005, 5, q(18, 10))), edge, [0, x, 0], [Math.PI / 2, 0, 0]);
   }
 }
 
@@ -420,7 +442,7 @@ function englishSaddle(g, st, color) {
 function stirrupIron(k = 1) {
   const g = new THREE.Group();
   const steel = steelMat();
-  mesh(g, shared(`ironArch:${k}`, () => new THREE.TorusGeometry(0.052 * k, 0.0065 * k, 6, 18, Math.PI)), steel, [0, 0.015 * k, 0], [0, Math.PI / 2, 0]);
+  mesh(g, shared(`ironArch:${k}`, () => new THREE.TorusGeometry(0.052 * k, 0.0065 * k, q(6, 4), q(18, 8), Math.PI)), steel, [0, 0.015 * k, 0], [0, Math.PI / 2, 0]);
   for (const s of [1, -1]) mesh(g, shared(`ironLeg:${k}`, () => new THREE.CylinderGeometry(0.0065 * k, 0.0065 * k, 0.03 * k, 6)), steel, [0, 0, s * 0.052 * k]);
   mesh(g, shared(`ironTread:${k}`, () => new THREE.BoxGeometry(0.04 * k, 0.008 * k, 0.11 * k)), steel, [0, -0.016 * k, 0]);
   mesh(g, shared(`ironPad:${k}`, () => new THREE.BoxGeometry(0.036 * k, 0.006 * k, 0.1 * k)), rubberMat(0x1c1c1c), [0, -0.01 * k, 0]);
@@ -442,12 +464,12 @@ function westernSaddle(g, st, color) {
     secs[0].rx = st.seatW * 0.95; // troussequin large et arrondi
     secs[7].rx = st.seatW * 0.62; // fourche bombée
     secs[6].rx = st.seatW * 0.8;
-    return loft(secs, { radial: 18, sub: 3, exp: 2.4, round: [0.7, 0.4] });
+    return loft(secs, { radial: q(18, 10), sub: q(3, 1), exp: 2.4, round: [0.7, 0.4] });
   });
   mesh(g, seatGeo, leather);
   mesh(g, shared(`${key}:inner`, () => {
     const secs = seatSections(st, y0).slice(1, 6).map((s) => ({ ...s, p: [0, s.p[1] + 0.012, s.p[2]], rx: s.rx * 0.82, ry: 0.012, ryb: 0.012 }));
-    return loft(secs, { radial: 14, sub: 3, round: [0.3, 0.3] });
+    return loft(secs, { radial: q(14, 8), sub: q(3, 1), round: [0.3, 0.3] });
   }), suedeMat(color));
   // Corne (pommeau) : col et chapeau.
   const zH = st.len * 0.45 - 0.02;
@@ -477,7 +499,7 @@ function westernSaddle(g, st, color) {
     st2.position.set(end[0] + side * 0.01, end[1] - 0.06, end[2]);
     st2.rotation.z = side * 0.35;
     g.add(st2);
-    mesh(st2, shared('oxbow', () => new THREE.TorusGeometry(0.06, 0.016, 6, 16, Math.PI)), woodMat(), [0, 0, 0], [0, Math.PI / 2, Math.PI]);
+    mesh(st2, shared('oxbow', () => new THREE.TorusGeometry(0.06, 0.016, q(6, 4), q(16, 8), Math.PI)), woodMat(), [0, 0, 0], [0, Math.PI / 2, Math.PI]);
     mesh(st2, shared('oxbowTop', () => new THREE.BoxGeometry(0.03, 0.03, 0.05)), edge, [0, 0.01, 0]);
     // Conchos (rosaces argentées) et lacets aux coins de la jupe.
     for (const [s, t] of [[-0.28, 0.05], [0.26, 0.05], [-0.28, 0.27], [0.26, 0.27]]) {
@@ -504,7 +526,7 @@ export function saddleModel(id, color) {
 // ---------------------------------------------------------------- filets et licols suspendus
 
 /** Courbe lisse de points [x, y, z]. */
-const curve = (pts, n = 16) => new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))).getPoints(n).map((v) => [v.x, v.y, v.z]);
+const curve = (pts, n = 16) => new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))).getPoints(q(n, Math.max(6, Math.ceil(n / 2)))).map((v) => [v.x, v.y, v.z]);
 
 function bitRing(parent, x, y, r, olive = false) {
   mesh(parent, shared(`ring:${r}`, () => new THREE.TorusGeometry(r, 0.0045, 6, 18)), steelMat(), [x, y, 0.004]);
@@ -538,14 +560,14 @@ export function bridleModel(id, color) {
   const yN = -D * 0.68;
   if (id === 'hackamore') {
     // Muserolle doublée de mouton et branches en métal.
-    mesh(g, shared('hackNose', () => new THREE.TorusGeometry(0.075, 0.016, 8, 24)), fleeceMat(0xf2eee6), [0, yN, 0.03], [Math.PI / 2 - 0.25, 0, 0], [1, 0.75, 1]);
+    mesh(g, shared('hackNose', () => new THREE.TorusGeometry(0.075, 0.016, q(8, 5), q(24, 12))), fleeceMat(0xf2eee6), [0, yN, 0.03], [Math.PI / 2 - 0.25, 0, 0], [1, 0.75, 1]);
     for (const s of [1, -1]) {
       mesh(g, shared('shank', () => tube(curve([[0, 0.03, 0], [0.008, -0.04, 0.01], [0, -0.11, 0.02]], 10), 0.005)), steelMat(), [s * 0.075, yN, 0.03]);
       mesh(g, shared('shankRing', () => new THREE.TorusGeometry(0.014, 0.004, 6, 12)), steelMat(), [s * 0.075, yN - 0.115, 0.05]);
     }
     mesh(g, shared('curbChain', () => tube(curve([[-0.075, -0.035, 0.03], [0, -0.06, -0.01], [0.075, -0.035, 0.03]], 10), 0.003)), steelMat(), [0, yN, 0]);
   } else {
-    mesh(g, shared('nose', () => new THREE.TorusGeometry(0.07, 0.007, 6, 24)), leather, [0, yN, 0.025], [Math.PI / 2 - 0.2, 0, 0], [1, 0.72, 1]);
+    mesh(g, shared('nose', () => new THREE.TorusGeometry(0.07, 0.007, q(6, 4), q(24, 12))), leather, [0, yN, 0.025], [Math.PI / 2 - 0.2, 0, 0], [1, 0.72, 1]);
     // Mors.
     const yB = -D;
     const r = id === 'doubleBridle' ? 0.024 : 0.03;
@@ -586,7 +608,7 @@ export function halterModel(id, color) {
     if (!rope) mesh(g, shared('hbuckle', () => new THREE.BoxGeometry(0.026, 0.02, 0.006)), metal, [s * W, -0.08, 0.006]);
   }
   // Muserolle (boucle) et sous-gorge.
-  mesh(g, shared(`hnose:${id}`, () => (rope ? new THREE.TorusGeometry(0.08, 0.0045, 6, 26) : new THREE.TorusGeometry(0.08, 0.008, 6, 26))), strapMat, [0, -0.3, 0.035], [Math.PI / 2 - 0.25, 0, 0], [1, 0.75, rope ? 1 : 1]);
+  mesh(g, shared(`hnose:${id}`, () => (rope ? new THREE.TorusGeometry(0.08, 0.0045, q(6, 4), q(26, 12)) : new THREE.TorusGeometry(0.08, 0.008, q(6, 4), q(26, 12)))), strapMat, [0, -0.3, 0.035], [Math.PI / 2 - 0.25, 0, 0], [1, 0.75, rope ? 1 : 1]);
   mesh(g, shared(`hthroat:${id}`, () => strap(curve([[-W, -0.26, 0.004], [-0.02, -0.33, -0.03], [0.02, -0.33, -0.03], [W, -0.26, 0.004]], 10), 0.01)), strapMat);
   // Anneau sous le menton, puis la longe enroulée qui pend.
   const yC = -0.36;
@@ -597,9 +619,10 @@ export function halterModel(id, color) {
   mesh(g, shared('snap', () => new THREE.CylinderGeometry(0.006, 0.006, 0.04, 8)), steelMat(), [0, yC - 0.03, -0.02]);
   mesh(g, shared('leadCoil', () => {
     const pts = [];
-    for (let i = 0; i <= 60; i++) {
-      const a = (i / 60) * Math.PI * 2 * 2.6;
-      pts.push([Math.sin(a) * 0.07, -0.05 - (1 - Math.cos(a)) * 0.07 - i * 0.0012, Math.cos(a) * 0.015 - 0.02]);
+    const N = q(60, 28);
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2 * 2.6;
+      pts.push([Math.sin(a) * 0.07, -0.05 - (1 - Math.cos(a)) * 0.07 - (i / N) * 0.072, Math.cos(a) * 0.015 - 0.02]);
     }
     return tube([[0, 0, -0.02], ...pts], 0.0065, false, 6);
   }), lead, [0, yC - 0.04, 0]);
@@ -614,14 +637,14 @@ export function padModel(id, color) {
   const c = color ?? GEAR[id]?.colors?.[0] ?? 'white';
   if (id === 'gelPad') {
     // Amortisseur : mousse épaisse, bords arrondis, dessus lisse et passepoil.
-    mesh(g, shared('gel', () => new RoundedBoxGeometry(0.34, 0.05, 0.46, 4, 0.022)), cached(`gel:${hexOf(c)}`, () => new THREE.MeshStandardMaterial({ color: hexOf(c), roughness: 0.55 })), [0, 0.025, 0]);
-    mesh(g, shared('gelTop', () => new RoundedBoxGeometry(0.28, 0.012, 0.4, 2, 0.005)), cached(`gelTop:${hexOf(c)}`, () => new THREE.MeshStandardMaterial({ color: new THREE.Color(hexOf(c)).lerp(new THREE.Color(0x888888), 0.25), roughness: 0.35 })), [0, 0.052, 0]);
+    mesh(g, shared('gel', () => new RoundedBoxGeometry(0.34, 0.05, 0.46, q(4, 1), 0.022)), cached(`gel:${hexOf(c)}`, () => new THREE.MeshStandardMaterial({ color: hexOf(c), roughness: 0.55 })), [0, 0.025, 0]);
+    mesh(g, shared('gelTop', () => new RoundedBoxGeometry(0.28, 0.012, 0.4, q(2, 1), 0.005)), cached(`gelTop:${hexOf(c)}`, () => new THREE.MeshStandardMaterial({ color: new THREE.Color(hexOf(c)).lerp(new THREE.Color(0x888888), 0.25), roughness: 0.35 })), [0, 0.052, 0]);
     return g;
   }
   // Tapis matelassé plié en deux, avec son galon de couleur.
-  mesh(g, shared('padFold', () => new RoundedBoxGeometry(0.34, 0.035, 0.5, 3, 0.015)), quiltMat(c), [0, 0.018, 0]);
+  mesh(g, shared('padFold', () => new RoundedBoxGeometry(0.34, 0.035, 0.5, q(3, 1), 0.015)), quiltMat(c), [0, 0.018, 0]);
   const trim = c === 'white' ? 0x23395d : 0xf1ede4;
-  mesh(g, shared('padTrim', () => new RoundedBoxGeometry(0.352, 0.012, 0.512, 2, 0.005)), clothMat(trim), [0, 0.012, 0]);
+  mesh(g, shared('padTrim', () => new RoundedBoxGeometry(0.352, 0.012, 0.512, q(2, 1), 0.005)), clothMat(trim), [0, 0.012, 0]);
   mesh(g, shared('padLogo', () => new THREE.CircleGeometry(0.03, 14)), clothMat(trim), [0.09, 0.0365, 0.15], [-Math.PI / 2, 0, 0]);
   return g;
 }
@@ -673,8 +696,8 @@ export function blanketModel(id, color) {
   const drop = (u) => 0.4 + 0.2 * Math.sin(Math.PI * Math.min(1, u * 1.15));
   const pleat = (u, a) => Math.sin(u * Math.PI * 9 + a * 0.5) * 0.02 * Math.sin(Math.PI * u);
   const geo = shared(`drape2:${id}`, () => {
-    const nu = 30;
-    const nv = 18;
+    const nu = q(30, 16);
+    const nv = q(18, 10);
     const pos = [];
     const uv = [];
     const idx = [];
@@ -712,8 +735,9 @@ export function blanketModel(id, color) {
   for (const sd of [1, -1]) {
     mesh(g, shared(`hem2:${sd}`, () => {
       const pts = [];
-      for (let i = 0; i <= 30; i++) {
-        const u = i / 30;
+      const N = q(30, 16);
+      for (let i = 0; i <= N; i++) {
+        const u = i / N;
         pts.push([(u - 0.5) * len, -drop(u) - 0.004, sd * (0.03 + 0.05 + pleat(u, sd * Math.PI / 2) + 0.004)]);
       }
       return tube(pts, 0.011, false, 6);
@@ -748,7 +772,7 @@ export function helmetModel(id, color) {
   const g = new THREE.Group();
   const c = color ?? GEAR[id]?.colors?.[0] ?? 'black';
   const shell = id === 'helmetSparkle' ? glitterMat(c) : velvetMat(c);
-  mesh(g, shared('helmShell', () => new THREE.SphereGeometry(0.115, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.52)), shell, [0, 0, 0], null, [1, 0.95, 1.12]);
+  mesh(g, shared('helmShell', () => new THREE.SphereGeometry(0.115, q(24, 14), q(14, 7), 0, Math.PI * 2, 0, Math.PI * 0.52)), shell, [0, 0, 0], null, [1, 0.95, 1.12]);
   // Visière.
   mesh(g, shared('helmPeak', () => {
     const geo = new THREE.CylinderGeometry(0.118, 0.13, 0.012, 24, 1, false, -0.85, 1.7);
@@ -775,9 +799,11 @@ export function leashModel() {
   const g = new THREE.Group();
   mesh(g, shared('leashCoil', () => {
     const pts = [];
-    for (let i = 0; i <= 50; i++) {
-      const a = (i / 50) * Math.PI * 2 * 2.2;
-      pts.push([Math.cos(a) * (0.08 - i * 0.0004), 0.012 + i * 0.0006, Math.sin(a) * (0.08 - i * 0.0004)]);
+    const N = q(50, 24);
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2 * 2.2;
+      const k = (i / N) * 50;
+      pts.push([Math.cos(a) * (0.08 - k * 0.0004), 0.012 + k * 0.0006, Math.sin(a) * (0.08 - k * 0.0004)]);
     }
     return tube(pts, 0.007, false, 6);
   }), nylonMat(0x2e6fb0));
@@ -795,8 +821,12 @@ export function dogCoatModel(color) {
 
 // ---------------------------------------------------------------- point d'entrée
 
-/** Le modèle 3D posé d'un objet du catalogue, dans la couleur demandée. */
-export function tackModel(id, color) {
+/**
+ * Le modèle 3D posé d'un objet du catalogue, dans la couleur demandée.
+ * opts.lite : version allégée (exposée au mur) ; la fiche garde le modèle détaillé.
+ */
+export function tackModel(id, color, opts = {}) {
+  if (opts.lite && !LITE) return withLite(() => tackModel(id, color));
   const def = GEAR[id];
   const c = def?.colors?.includes(color) ? color : def?.colors?.[0];
   switch (def?.type) {

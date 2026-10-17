@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { instantiate, hasModel } from '../assets.js';
 import { noise3 } from './shapes.js';
 import { gfx } from '../gfx.js';
+import { horseGearFit } from './gltfHorseFit.js'; // selle, filet, couverture du catalogue sur le cheval GLB
 
 // Réglages par espèce : hauteur totale (m, tête levée), matériaux de robe / crins, noms d'os.
 const SPEC = {
@@ -292,5 +293,7 @@ export function buildGltfAnimal(speciesId, look) {
       mixer.uncacheRoot(scene);
     },
   };
+  // Cheval : surfaces approchées pour poser l'équipement du catalogue (src/game/gearModels.js).
+  if (speciesId === 'horse') model.gearFit = horseGearFit(model, anchor, (name) => findBone(scene, name), root);
   return model;
 }

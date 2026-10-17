@@ -95,6 +95,7 @@ export function buildGear(model, look, gear = {}) {
     return obj;
   };
   if (model.sdf) buildHorseGear(model, look, gear, add);
+  else if (model.gearFit) buildHorseGear(model.gearFit, look, gear, add); // cheval GLB (src/game/models/gltfHorseFit.js)
   else buildGenericGear(model, look, gear, add, L, R, y0);
   group.userData.meshes = holders;
   return group;
@@ -171,6 +172,17 @@ function buildHorseGear(model, look, gear, add) {
     add(model.head, band(crown, true), strapMat);
     // Montants : de la têtière (côté) vers la muserolle ou le mors.
     const sideOf = (pts) => [pts[0], pts[Math.round(pts.length / 2) - 1]];
+    // Montant : il suit la joue (la ligne droite entre ses deux bouts rentrerait dans la tête).
+    const cheek = (a, b) => {
+      const pts = [a];
+      for (const f of [0.25, 0.5, 0.75]) {
+        const m = new THREE.Vector3().lerpVectors(a, b, f);
+        const p = rayHit(head, [0, yc, m.z], [m.x, m.y - yc, 0], hr * 4);
+        pts.push(p.addScaledVector(sdfNormal(head, p, 0.004), rope ? 0.008 : 0.007));
+      }
+      pts.push(b);
+      return pts;
+    };
     const [cR, cL] = sideOf(crown);
     const [nR, nL] = sideOf(nose);
     if (bridle) {
@@ -187,11 +199,11 @@ function buildHorseGear(model, look, gear, add) {
         if (bid === 'hackamore') {
           // Pas de mors : le montant descend à la muserolle, une branche en métal pend sur le côté du nez.
           const n = s > 0 ? nR : nL;
-          add(model.head, strap([c, new THREE.Vector3().lerpVectors(c, n, 0.5).add(new THREE.Vector3(s * 0.006, 0, 0)), n], w * 0.9, th), strapMat);
+          add(model.head, strap(cheek(c, n), w * 0.9, th), strapMat);
           add(model.head, P.tube([n.toArray(), [n.x + s * 0.01, n.y - hr * 0.35, n.z + hr * 0.15], [n.x + s * 0.008, n.y - hr * 0.7, n.z + hr * 0.1]], 0.005), P.steelMat());
           continue;
         }
-        add(model.head, strap([c, new THREE.Vector3().lerpVectors(c, ring, 0.5).add(new THREE.Vector3(s * 0.006, 0, 0)), ring], w * 0.9, th), strapMat);
+        add(model.head, strap(cheek(c, ring), w * 0.9, th), strapMat);
         add(model.head, new THREE.TorusGeometry(hr * (bid === 'doubleBridle' ? 0.18 : 0.24), hr * 0.035, 6, 16), P.steelMat(), ring.toArray(), [0, PI / 2, 0]);
         if (bid === 'bridleOlive') add(model.head, new THREE.CylinderGeometry(hr * 0.07, hr * 0.07, hr * 0.22, 8), P.steelMat(), [ring.x - s * hr * 0.06, ring.y, ring.z], [0, 0, PI / 2]);
         if (bid === 'doubleBridle') {
@@ -201,8 +213,8 @@ function buildHorseGear(model, look, gear, add) {
         }
       }
     } else {
-      for (const [c, n, s] of [[cR, nR, 1], [cL, nL, -1]]) {
-        add(model.head, band([c, new THREE.Vector3().lerpVectors(c, n, 0.5).add(new THREE.Vector3(s * 0.006, 0, 0)), n]), strapMat);
+      for (const [c, n] of [[cR, nR], [cL, nL]]) {
+        add(model.head, band(cheek(c, n)), strapMat);
         if (rope) add(model.head, P.shared('gearKnot', () => new THREE.SphereGeometry(0.011, 8, 6)), strapMat, n.toArray());
       }
       // Anneau (ou gros nœud) sous le menton, pour la longe.

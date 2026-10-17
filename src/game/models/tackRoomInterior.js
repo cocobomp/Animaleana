@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { mat as kitMat, add, WallKit, gableRoof, gables, plankTexture, texturedMat, plateTexture } from './interiorKit.js';
 import { windowMaterials } from './buildings.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { tackModel, padModel, saddleModel, bakeMeshes } from './tackModels.js';
+import { tackModel, padModel, saddleModel, bakeMeshes, withLite } from './tackModels.js';
 import { buildAvatar, poseAvatar } from './avatarModel.js';
 import { GEAR } from '../../sim/gear.js';
 
@@ -40,7 +40,7 @@ const COUNTER = [{ id: 'collar', z: 0.95 }, { id: 'leash', z: 1.38 }, { id: 'dog
 export function displaySlots() {
   const out = [];
   SADDLES.forEach((id, i) => out.push({ id, mount: 'rack', pos: [-3.9, 1.0, -2.5 + i * 0.73], rotY: -0.32, stand: [-2.75, -2.3 + i * 0.73] }));
-  HOOKS.forEach((id, i) => out.push({ id, mount: 'hook', pos: [-2.9 + i * 0.43 + (i >= 4 ? 0.1 : 0), 1.64, -2.86], stand: [-2.9 + i * 0.43, -2.05] }));
+  HOOKS.forEach((id, i) => out.push({ id, mount: 'hook', row: i % 2, pos: [-2.9 + i * 0.43 + (i >= 4 ? 0.1 : 0), 1.64, -2.86], stand: [-2.9 + i * 0.43, -2.05] }));
   BLANKETS.forEach((id, i) => out.push({ id, mount: 'bar', pos: [3.76, 1.28, -2.05 + i * 0.97], stand: [2.85, -2.05 + i * 0.97] }));
   for (const s of SHELVES) out.push({ id: s.id, mount: 'shelf', pos: [s.x, SHELF_Y[s.row] + 0.025, -2.68], stand: [s.x, -2.05] });
   for (const c of COUNTER) out.push({ id: c.id, mount: 'counter', pos: [2.72, 0.97, c.z], stand: [1.75, c.z] });
@@ -70,9 +70,9 @@ function drawTag(ctx, x0, y0, name, line, tone = 'price') {
     }
     ctx.fillText(text, x0 + 128, y0 + y);
   };
-  fit(name, 26, 600, 32);
+  fit(name, 24, 600, 27);
   ctx.fillStyle = fg;
-  fit(line, 34, 'bold', 72);
+  fit(line, 46, 'bold', 70); // le prix (ou « À toi ») en très gros : lisible de loin sur un téléphone
 }
 
 /**
@@ -95,9 +95,9 @@ class TagAtlas {
     this.tex.needsUpdate = true;
   }
 
-  /** Géométrie d'une étiquette (plan 0,34 × 0,14 m) dont les UV pointent sur la case i. */
-  plane(i) {
-    const geo = new THREE.PlaneGeometry(0.34, 0.14);
+  /** Géométrie d'une étiquette (plan w × w/2,46 m) dont les UV pointent sur la case i. */
+  plane(i, w = 0.5) {
+    const geo = new THREE.PlaneGeometry(w, w / 2.46);
     const uv = geo.attributes.uv;
     const cx = (i % 4) * 256;
     const cy = Math.floor(i / 4) * 128;
@@ -184,11 +184,16 @@ export function tackRoomModel(label, boardLabel = 'Filets, licols') {
   add(doorHinge, new THREE.BoxGeometry(1.4, 0.07, 0.03), trim, [0.78, 1.18, 0.05], [0, 0, 0.9]);
   add(doorHinge, new THREE.SphereGeometry(0.045, 8, 6), mat(0xd9b44a, 0.3, { metalness: 0.8 }), [1.4, 1.1, 0.07]);
   add(g, new THREE.BoxGeometry(2.0, 0.12, 0.9), stone, [0, 0.06, D / 2 + 0.45], null, false);
-  const shoe = add(upper, new THREE.TorusGeometry(0.09, 0.02, 6, 18, Math.PI * 1.35), mat(0x9aa0a6, 0.35, { metalness: 0.8 }), [0, 2.36, D / 2 + 0.16]);
+  const shoe = add(doorHinge, new THREE.TorusGeometry(0.09, 0.02, 6, 18, Math.PI * 1.35), mat(0x9aa0a6, 0.35, { metalness: 0.8 }), [0.78, 1.82, 0.05]);
   shoe.rotation.z = -Math.PI * 0.175 - Math.PI / 2 + Math.PI;
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), new THREE.MeshStandardMaterial({ map: plateTexture(`🏇 ${label}`, '#4a2c18', '#fff8e8'), roughness: 0.7, emissive: 0x2a1a10, emissiveIntensity: 0.25 }));
-  sign.position.set(0, 2.68, D / 2 + 0.15);
+  // Enseigne suspendue juste devant l'avant-toit : le toit déborde de 0,5 m et descend jusqu'à 2,72 m,
+  // une enseigne posée au mur dessous était coupée par lui dès qu'on la regardait d'un peu haut.
+  const signZ = D / 2 + 0.64;
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.46), new THREE.MeshStandardMaterial({ map: plateTexture(`🏇 ${label}`, '#4a2c18', '#fff8e8'), roughness: 0.7, emissive: 0x2a1a10, emissiveIntensity: 0.25 }));
+  sign.position.set(0, 2.43, signZ);
   upper.add(sign);
+  add(upper, new THREE.BoxGeometry(2.1, 0.56, 0.05), mat(0x3a2414, 0.8), [0, 2.43, signZ - 0.03]); // cadre
+  for (const x of [-0.85, 0.85]) add(upper, new THREE.CylinderGeometry(0.012, 0.012, 0.2, 6), mat(0x2b2b2b, 0.5, { metalness: 0.5 }), [x, 2.79, signZ - 0.03]); // tiges
 
   // Fenêtres (s'allument la nuit), lanterne de la porte.
   const glass = mat(0x9fc4d8, 0.2, { emissive: 0xffc66b, emissiveIntensity: 0 });
@@ -247,7 +252,7 @@ export function tackRoomModel(label, boardLabel = 'Filets, licols') {
   add(shelf, new THREE.BoxGeometry(3.46, 2.0, 0.02), wood, [2.05, 1.0, -2.9], null, false);
   // Pile de tapis pliés (stock) et petites boîtes de soins.
   ['white', 'navy', 'red', 'green', 'pink'].forEach((c, i) => {
-    const p = padModel('saddlePad', c);
+    const p = withLite(() => padModel('saddlePad', c));
     p.position.set(3.05, SHELF_Y[0] + 0.02 + i * 0.038, -2.68);
     p.rotation.y = (i % 2 ? 0.06 : -0.04) + Math.PI / 2;
     p.scale.set(0.9, 1, 0.9);
@@ -309,7 +314,7 @@ export function tackRoomModel(label, boardLabel = 'Filets, licols') {
     add(clean, new THREE.BoxGeometry(0.05, 0.85, 0.05), wood, [s * 0.25, 0.4, -0.2], [-0.25, 0, 0]);
   }
   add(clean, new THREE.CylinderGeometry(0.07, 0.07, 0.62, 12), lightWood, [0, 0.82, 0], [0, 0, Math.PI / 2]);
-  const cleanSaddle = saddleModel('saddle', 'havana');
+  const cleanSaddle = withLite(() => saddleModel('saddle', 'havana'));
   cleanSaddle.position.set(0, 0.84, 0);
   cleanSaddle.rotation.y = Math.PI / 2;
   clean.add(cleanSaddle);
@@ -341,13 +346,16 @@ export function tackRoomModel(label, boardLabel = 'Filets, licols') {
   const atlas = new TagAtlas();
   const tagGeos = [];
   const hitMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+  // Zones qu'on touche du doigt : l'objet ET son étiquette, aussi larges que l'écart entre deux supports.
   const HIT = {
-    rack: [[0.72, 0.7, 0.62], [0.38, -0.08, 0]],
-    hook: [[0.34, 0.72, 0.22], [0, -0.3, 0.08]],
-    bar: [[0.3, 0.72, 0.9], [-0.05, -0.3, 0]],
-    shelf: [[0.52, 0.32, 0.42], [0, 0.12, 0]],
-    counter: [[0.3, 0.26, 0.42], [0, 0.1, 0]],
+    rack: [[0.74, 1.02, 0.7], [0.38, -0.2, 0]],
+    hook: [[0.42, 1.26, 0.26], [0, -0.55, 0.08]],
+    bar: [[0.32, 0.96, 0.94], [-0.05, -0.4, 0]],
+    shelf: [[0.62, 0.38, 0.46], [0, 0.1, 0.02]],
+    counter: [[0.34, 0.32, 0.44], [0, 0.08, 0]],
   };
+  // Largeur des étiquettes (m) : grandes au mur, plus petites sur les étagères et le comptoir.
+  const TAG_W = { rack: 0.58, hook: 0.5, bar: 0.56, shelf: 0.42, counter: 0.38 };
   const displays = new Map();
   const m4 = new THREE.Matrix4();
   displaySlots().forEach((slot, index) => {
@@ -373,7 +381,7 @@ export function tackRoomModel(label, boardLabel = 'Filets, licols') {
     } else if (slot.mount === 'hook') {
       bridleHook(fix, lightWood);
       hold.pos = [0, -0.02, 0.06];
-      tagPos = [0, -0.78, 0.02];
+      tagPos = [0, slot.row ? -1.04 : -0.8, 0.02]; // en quinconce : les crochets sont serrés
       tagRot = [0, 0, 0];
     } else if (slot.mount === 'bar') {
       // Barre à couverture le long du mur : la couverture montre sa face à la pièce.
@@ -395,7 +403,7 @@ export function tackRoomModel(label, boardLabel = 'Filets, licols') {
       tagPos = [0, -0.065, 0.225];
       tagRot = [0, 0, 0];
     }
-    const tg = atlas.plane(index);
+    const tg = atlas.plane(index, TAG_W[slot.mount]);
     tg.applyMatrix4(m4.compose(new THREE.Vector3(...tagPos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...tagRot)), new THREE.Vector3(1, 1, 1)));
     obj.updateMatrix();
     if (flatTag) tg.translate(...slot.pos);
@@ -432,7 +440,7 @@ export function tackRoomModel(label, boardLabel = 'Filets, licols') {
       holder.position.set(...d.hold.pos);
       holder.rotation.y = d.hold.rotY;
       holder.scale.setScalar(d.hold.scale);
-      holder.add(tackModel(d.id, d.color));
+      holder.add(tackModel(d.id, d.color, { lite: true })); // modèle allégé au mur (la fiche montre le détaillé)
       base.add(holder);
       tmp.add(base);
     }
@@ -478,9 +486,20 @@ export function tackRoomModel(label, boardLabel = 'Filets, licols') {
   bakeMeshes(lower, null, { occluder: true });
   bakeMeshes(upper, null, { occluder: true });
 
+  // Mobilier et objets exposés : dessinés seulement quand on est près de la sellerie (dedans ou devant
+  // la porte). De loin, les murs et le toit les cachent : inutile de les envoyer à la carte graphique.
+  const detail = [items, tags, fixtures, shelf, counter, chest, clean];
+  let detailOn = true;
+  const setDetail = (on) => {
+    if (on === detailOn) return;
+    detailOn = on;
+    for (const o of detail) o.visible = on;
+  };
+
   return {
     group: g,
     upper,
+    setDetail,
     lampMat,
     glass,
     doorHinge,

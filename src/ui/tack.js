@@ -162,6 +162,8 @@ function renderItem(ui, id) {
   th.begin();
   const pic = shop.tryUrl && shop.tryFor === `${id}|${color}`
     ? h('figure', { class: 'tk-pic try' }, h('img', { src: shop.tryUrl, alt: '' }),
+      // L'objet seul en médaillon, pour comparer avec ce qu'on voit sur l'animal.
+      h('img', { class: 'tk-inset', src: th.item(id, color, [192, 144]), alt: name(id) }),
       h('figcaption', {}, h('b', {}, t('tk_tryResult', { name: shop.tryName, item: name(id) })), h('small', {}, t('tk_tryHint'))))
     : h('figure', { class: 'tk-pic' }, h('img', { src: th.item(id, color, [360, 250]), alt: name(id) }));
   th.end();
@@ -271,7 +273,9 @@ function tryOn(ui, id, a, color) {
   if (!e) return ui.toast(t('tk_tryNobody'));
   const def = GEAR[id];
   const gear = { ...(a.gear ?? {}), [def.slot]: { item: id, color, size: sizeFor(id, a) } };
-  shop.tryUrl = thumbs(g).onAnimal(e, gear);
+  // Un tapis ne se voit que sous une selle : sans selle, on en pose une pour l'essayage.
+  if (def.slot === 'pad' && !gear.saddle) gear.saddle = { item: 'saddle', color: 'brown', size: sizeFor('saddle', a) };
+  shop.tryUrl = thumbs(g).onAnimal(e, gear, [360, 250], def.slot); // cadré sur l'objet essayé
   shop.tryName = a.name;
   shop.tryFor = `${id}|${color}`;
   shop.pick = null;

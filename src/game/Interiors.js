@@ -274,7 +274,9 @@ export class Interiors {
     const tk = w.interiors.tackroom;
     if (tk) {
       for (const d of tk.model.displays.values()) {
-        spot(tk, `tk_${d.id}`, d.obj, d.stand[0], d.stand[1], GEAR[d.id].emoji, () => t(`gear_${d.id}`), () => ui.openTackItem(d.id), 0.6);
+        // Le bouton d'action dit aussi le prix (ou « À toi ») : lisible même sur un petit écran.
+        const label = () => (this.tackLines?.get(d.id) ? `${t(`gear_${d.id}`)} · ${this.tackLines.get(d.id)}` : t(`gear_${d.id}`));
+        spot(tk, `tk_${d.id}`, d.obj, d.stand[0], d.stand[1], GEAR[d.id].emoji, label, () => ui.openTackItem(d.id), 0.6);
       }
       const T = tk.model.spots;
       spot(tk, 'tk_counter', T.counter.obj, T.counter.lx, T.counter.lz, '🛒', () => t('tk_spot_counter'), () => ui.openTack(), 0.7);
@@ -512,8 +514,10 @@ export class Interiors {
     if (inside !== this.inside) {
       // Le bouton d'action ne propose que les coins du bâtiment où l'on est.
       w.interactables = w.interactables.filter((i) => i.kind !== 'spot').concat(this.spots.filter((s) => s.building === inside));
+      if (inside === 'tackroom') this.faceTackWall(); // comme dans un magasin : on voit tout de suite les selles
     }
     this.inside = inside;
+    this.turnCamera(dt);
     // Vue en coupe : sans toit ni haut des murs quand on est dedans (en 3ᵉ personne).
     const cut = inside && this.game.rig.mode === 'third' ? inside : null;
     if (cut !== w.cutaway) {
@@ -557,6 +561,9 @@ export class Interiors {
     // Sellerie : porte, la sellière qui regarde le joueur quand il entre.
     const tk = w.interiors.tackroom;
     if (tk) {
+      // Mobilier et objets exposés : seulement dedans ou près de la porte (budget de triangles).
+      const near = inside === 'tackroom' || Math.hypot(pp.x - tk.x, pp.z - tk.z) < 16;
+      tk.model.setDetail(near);
       const td = tk.model.doorHinge;
       const wantT = hold('tackroom', wants(tk, 0, TACK_D / 2, 2.2)) ? 1.45 : 0;
       td.rotation.y += (wantT - td.rotation.y) * Math.min(1, dt * 5);
@@ -691,6 +698,37 @@ export class Interiors {
       list.push(st);
     }
     tk.model.applyDisplays(list);
+    this.tackLines = new Map(list.map((x) => [x.id, x.line]));
+  }
+
+  /**
+   * En entrant dans la sellerie : la caméra se tourne doucement vers le mur des selles (vers -X local,
+   * un peu vers les filets) et se rapproche. snap : tout de suite (arrivée par « Entrer »).
+   */
+  faceTackWall(snap = false) {
+    const b = this.world.interiors?.tackroom;
+    const rig = this.game.rig;
+    if (!b || rig.mode !== 'third') return;
+    const lx = -1;
+    const lz = -0.12;
+    const yaw = Math.atan2(lx * b.c + lz * b.s, -lx * b.s + lz * b.c); // direction (lx, lz) du bâtiment, dans le monde
+    this.camTurn = { yaw, dist: Math.min(rig.dist, 4.3), pitch: 0.4, t: snap ? 0 : 1.2 };
+    if (snap) {
+      this.game.player.heading = yaw; // le personnage regarde les selles, lui aussi
+      this.turnCamera(1);
+    }
+  }
+
+  turnCamera(dt) {
+    const c = this.camTurn;
+    if (!c) return;
+    const rig = this.game.rig;
+    const k = c.t <= 0 ? 1 : Math.min(1, dt * 3);
+    rig.yaw += Math.atan2(Math.sin(c.yaw - rig.yaw), Math.cos(c.yaw - rig.yaw)) * k;
+    rig.dist += (c.dist - rig.dist) * k;
+    rig.pitch += (c.pitch - rig.pitch) * k;
+    c.t -= dt;
+    if (c.t <= 0) this.camTurn = null;
   }
 
   /** Nettoyer et graisser le cuir (chevalet de la sellerie) : tous les 2 jours. */
@@ -742,7 +780,8 @@ export class Interiors {
     if (!b) return;
     const lx = (b.hall.x0 + b.hall.x1) / 2;
     const lz = (b.hall.z0 + b.hall.z1) / 2;
-    const p = toWorld(b, kind === 'house' ? lx : 0, kind === 'tackroom' ? 0.6 : lz);
-    this.game.walkTo(new THREE.Vector3(p.x, 0, p.z), 0.6);
+    // (sellerie : on s'arrête au milieu, face au mur des selles)
+    const p = toWorld(b, kind === 'house' ? lx : kind === 'tackroom' ? -0.5 : 0, kind === 'tackroom' ? -0.3 : lz);
+    this.game.walkTo(new THREE.Vector3(p.x, 0, p.z), 0.6, kind === 'tackroom' ? () => this.faceTackWall(true) : undefined);
   }
 }

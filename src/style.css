@@ -1991,7 +1991,8 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .tk-back { margin: 2px 0 6px; }
 .tk-pic { margin: 0; border-radius: 16px; overflow: hidden; background: #f4ecdc; border: 1px solid var(--line); }
 .tk-pic img { display: block; width: 100%; aspect-ratio: 36 / 25; object-fit: cover; }
-.tk-pic.try { background: #dfe9ef; }
+.tk-pic.try { background: #dfe9ef; position: relative; }
+.tk-pic img.tk-inset { position: absolute; top: 8px; right: 8px; width: 30%; aspect-ratio: 4 / 3; border-radius: 12px; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); background: #f4ecdc; }
 .tk-pic figcaption { display: grid; gap: 2px; padding: 6px 10px 8px; font-size: 0.9rem; }
 .tk-pic figcaption small { color: var(--muted); }
 .tk-disc { background: #fbf3df; border-color: #e3cfa3; font-weight: 600; }

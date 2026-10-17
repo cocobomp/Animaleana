@@ -73,7 +73,7 @@ const _m = new THREE.Matrix4();
  * du fichier sont quantifiées, c'est le squelette qui les remet à l'échelle), et allures reciblées
  * sur les groupes du jeu. Gardé dans gltf.userData.
  */
-function prepareBase(gltf) {
+export function realHorseBase(gltf) {
   if (gltf.userData.horseBase) return gltf.userData.horseBase;
   const scene = gltf.scene;
   scene.updateMatrixWorld(true);
@@ -449,7 +449,10 @@ export function deformer(base, B) {
   const poll = J('Head');
   const poll2 = neckLin(poll, V());
   const rh = r('head');
-  maps[BONE_INDEX.Head] = affine(poll, poll2, new THREE.Matrix3().multiplyScalar(rh));
+  const headLin = affine(poll, poll2, new THREE.Matrix3().multiplyScalar(rh));
+  const prof = headProfile(base, B.profile);
+  const tmpP = V();
+  maps[BONE_INDEX.Head] = prof ? (p, o) => headLin(prof(p, tmpP), o) : headLin;
   for (const e of ['EarL', 'EarR']) {
     const h = J(e);
     const h2 = maps[BONE_INDEX.Head](h, V());
@@ -469,6 +472,47 @@ export function deformer(base, B) {
   heads[BONE_INDEX.Tail1] = trunk(J('Tail1'), V());
   heads[BONE_INDEX.Tail2] = d1;
   return { maps, heads, scale: { gx, gy, rb, rl, bone, hoof, head: rh, yA2 } };
+}
+
+/**
+ * Profil de tête de la race, sculpté dans le repère de la tête du GLB (x en travers, y vers le front,
+ * z de la nuque au bout du nez ; unités : longueur de la tête). Le modèle d'origine a le chanfrein
+ * droit (ligne du dessus à y ≈ 0,2) : 'convex' (busqué : PRE, lusitanien) bosse sur le chanfrein ;
+ * 'dish' (arabe, welsh) creux entre les yeux et les naseaux, front bombé, bout du nez plus fin ;
+ * 'square' (camargue) ganaches plus larges, bout du nez massif. Renvoie null pour une tête droite.
+ */
+function headProfile(base, kind) {
+  if (!kind || kind === 'straight' || !base.snout) return null;
+  const poll = base.rest[BONE_INDEX.Head];
+  const L = base.snout.distanceTo(poll);
+  const q = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), base.headTilt);
+  const qi = q.clone().invert();
+  const h = V();
+  const bump = (z, a, b) => {
+    const t = Math.min(1, Math.max(0, (z - a) / (b - a)));
+    return Math.sin(Math.PI * t) ** 2;
+  };
+  const ridge = (x, w) => Math.exp(-((x / w) ** 2));
+  return (p, o) => {
+    h.copy(p).sub(poll).applyQuaternion(qi).multiplyScalar(1 / L);
+    const { x, y, z } = h;
+    const top = smooth(0.0, 0.15, y); // dessus de la tête (chanfrein, front)
+    if (kind === 'convex') {
+      h.y += 0.045 * bump(z, 0.3, 0.92) * top * ridge(x, 0.2);
+    } else if (kind === 'dish') {
+      h.y += -0.07 * bump(z, 0.32, 0.9) * top * ridge(x, 0.22) + 0.025 * bump(z, 0.06, 0.4) * smooth(0.05, 0.17, y) * ridge(x, 0.18);
+      const m = smooth(0.7, 0.98, z);
+      h.x *= 1 - 0.1 * m;
+      h.y = 0.02 + (h.y - 0.02) * (1 - 0.07 * m);
+    } else if (kind === 'square') {
+      h.y -= 0.012 * bump(z, 0.4, 0.86) * top * ridge(x, 0.2);
+      h.x *= 1 + 0.15 * bump(z, 0.05, 0.6) * smooth(0.02, -0.2, y);
+      const m = smooth(0.68, 0.95, z);
+      h.x *= 1 + 0.1 * m;
+      h.y = 0.02 + (h.y - 0.02) * (1 + 0.07 * m);
+    }
+    return o.copy(h).multiplyScalar(L).applyQuaternion(q).add(poll);
+  };
 }
 
 /** Applique le déformeur à une primitive : positions et normales mélangées selon les poids de la peau. */
@@ -514,6 +558,9 @@ function deformPrim(p, D) {
   return { pos, nrm };
 }
 
+/** Hauteur minimale du bout de la queue au repos (cheval de taille 1). */
+export const TAIL_CLEAR = 0.1;
+
 /** Allonge (f > 1) ou raccourcit les mèches à partir de leur racine. */
 function scaleHair(pos, base, D, B) {
   const H = base.hair;
@@ -523,12 +570,31 @@ function scaleHair(pos, base, D, B) {
   // Longueur de crinière : le gabarit, et le style (brosse : rasée, la brosse est ajoutée à part).
   const maneF = style === 'brush' || style === 'foal' ? 0.12
     : (B.mane / N.mane) * ({ long: 1.25, thick: 1.05, short: 0.5 }[style] ?? 1);
-  const tailF = (B.tail ?? 1) / N.tail;
   const crest = H.crest.map(([t, c]) => [t, D.maps[BONE_INDEX.Neck](c, V())]);
   const neckAxis = H.axis;
   const o = H.origin;
   const dock = D.heads[BONE_INDEX.Tail2];
+  const tailRoot = V(0, dock.y, dock.z);
   const P = V();
+  // Queue : allongée dans sa longueur seulement (le long de son axe moyen, pas en largeur), et jamais
+  // jusqu'au sol : le bout reste à TAIL_CLEAR au moins, même pour une race basse sur jambes à longue queue.
+  const tAxis = V();
+  for (let i = 0; i < m.count; i++) {
+    if (!H.tail[i] || H.g[i] <= 0 || pos[i * 3 + 1] > dock.y) continue;
+    tAxis.add(P.fromArray(pos, i * 3).sub(tailRoot).multiplyScalar(H.g[i]));
+  }
+  tAxis.normalize();
+  let tailF = (B.tail ?? 1) / N.tail;
+  // (limite plus haute pour une queue de longueur moyenne : elle s'arrête vers les boulets, seules les
+  // longues queues des baroques et des poneys descendent presque au sol)
+  const clear = TAIL_CLEAR + Math.max(0, 1.25 - (B.tail ?? 1)) * 0.5;
+  for (let i = 0; i < m.count; i++) {
+    if (!H.tail[i] || H.g[i] <= 0 || pos[i * 3 + 1] > dock.y) continue;
+    // y(F) = y + (F - 1) · g · (d·axe) · axe.y : F le plus grand qui garde ce sommet au-dessus de la limite
+    const drop = -H.g[i] * P.fromArray(pos, i * 3).sub(tailRoot).dot(tAxis) * tAxis.y;
+    if (drop > 1e-6) tailF = Math.min(tailF, 1 + (pos[i * 3 + 1] - clear) / drop);
+  }
+  tailF = Math.max(0.3, tailF);
   for (let i = 0; i < m.count; i++) {
     const g = H.g[i];
     if (g <= 0) continue;
@@ -537,8 +603,10 @@ function scaleHair(pos, base, D, B) {
     let f;
     if (H.tail[i]) {
       if (P.y > dock.y) continue;
-      root = V(0, dock.y, dock.z);
-      f = 1 + (tailF - 1) * g;
+      const along = P.clone().sub(tailRoot).dot(tAxis);
+      P.addScaledVector(tAxis, along * (tailF - 1) * g);
+      pos.set([P.x, P.y, P.z], i * 3);
+      continue;
     } else {
       const t = Math.min(1, Math.max(0, _v.fromArray(m.pos, i * 3).sub(o).dot(neckAxis) / H.len));
       const k = Math.min(crest.length - 2, Math.max(0, Math.floor(t * (crest.length - 1))));
@@ -617,6 +685,15 @@ function shapeFor(base, B) {
       info.set([P.y / elbowY, li >= 0 ? li : near, 0], i * 3);
     }
   }
+  // Poids de la tête (os de la tête et des oreilles), continu d'un sommet à l'autre et adouci : la robe
+  // pie le prend pour sa tête foncée (un numéro de partie, constant par triangle, ferait des dents de scie
+  // à la jonction avec l'encolure).
+  const headW = new Float32Array(n);
+  const hb = [BONE_INDEX.Head, BONE_INDEX.EarL, BONE_INDEX.EarR];
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < 4; k++) if (hb.includes(coat.si[i * 4 + k])) headW[i] += coat.sw[i * 4 + k];
+  }
+  smoothOnMesh(headW, coat.index, 3);
   const geo = (d, prim, extra) => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(d.pos, 3));
@@ -640,6 +717,7 @@ function shapeFor(base, B) {
       hPart: new THREE.BufferAttribute(part, 1),
       hInfo: new THREE.BufferAttribute(info, 3),
       hAO: new THREE.BufferAttribute(ao, 1),
+      hHead: new THREE.BufferAttribute(headW, 1),
     }),
     eyeGeo: geo(de, base.prims.eye),
     maneGeo: geo(dm, base.prims.mane, { hairG: new THREE.BufferAttribute(base.hair.g, 1) }),
@@ -654,6 +732,28 @@ function shapeFor(base, B) {
   S.users = 1;
   shapes.set(key, S);
   return S;
+}
+
+/** Adoucit une valeur par sommet (moyenne avec les voisins du maillage, passes fois). */
+function smoothOnMesh(val, index, passes) {
+  const n = val.length;
+  const sum = new Float32Array(n);
+  const cnt = new Uint16Array(n);
+  for (let p = 0; p < passes; p++) {
+    sum.fill(0);
+    cnt.fill(0);
+    for (let t = 0; t < index.length; t += 3) {
+      for (let e = 0; e < 3; e++) {
+        const a = index[t + e];
+        const b = index[t + (e + 1) % 3];
+        sum[a] += val[b];
+        cnt[a]++;
+        sum[b] += val[a];
+        cnt[b]++;
+      }
+    }
+    for (let i = 0; i < n; i++) if (cnt[i]) val[i] = 0.5 * val[i] + 0.5 * (sum[i] / cnt[i]);
+  }
 }
 
 // ------------------------------------------------------------------ mesures (selle, équipement)
@@ -859,11 +959,13 @@ function sections(pos, tris, toFrame, z0, z1, dz) {
  */
 function maneMaterial(base, color, sway) {
   const src = base.prims.mane.material;
+  // (cartes ajoutées : sans relief, normales « de volume » données par sommet, pas retournées au dos)
+  const cards = color === null;
   const m = new THREE.MeshStandardMaterial({
-    map: src.map, normalMap: src.normalMap, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.62,
-    alphaToCoverage: gfx.quality === 'high', vertexColors: color === null,
+    map: src.map, normalMap: cards ? null : src.normalMap, alphaTest: 0.42, side: THREE.DoubleSide, roughness: cards ? 0.8 : 0.62,
+    alphaToCoverage: gfx.quality === 'high', vertexColors: cards,
   });
-  if (src.normalScale) m.normalScale.copy(src.normalScale);
+  if (src.normalScale && !cards) m.normalScale.copy(src.normalScale);
   // (modelé médian = 0,5 dans la texture : ×2)
   const c = new THREE.Color(color ?? 0xffffff);
   const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
@@ -887,15 +989,19 @@ uniform float hairSway;`)
   transformed.x += sin(ph) * 0.012 * hw;
   transformed.z += cos(ph * 0.7 + 1.3) * 0.009 * hw;
 }`);
+    if (cards) {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+normal = normalize( vNormal );`);
+    }
   };
-  m.customProgramCacheKey = () => 'horsereal-mane';
+  m.customProgramCacheKey = () => (cards ? 'horsereal-cards' : 'horsereal-mane');
   return m;
 }
 
 /**
  * Cartes de crins ajoutées (brosse, fanons) : rubans de quelques points, texture des crins du GLB
  * (une bande de mèches droites : racine vers le centre de la texture, pointe vers le bord), couleur et
- * os par sommet. cards : [{ pts, w0, w1, side, color, uv: [u0, u1, v, dv], weights(p, f) }].
+ * os par sommet. cards : [{ pts, w0, w1, side, color, uv: [u0, u1, v, dv], weights(p, f), normal? }].
  */
 function hairCards(cards) {
   const pos = [];
@@ -916,7 +1022,9 @@ function hairCards(cards) {
       const f = i / (n - 1);
       const p = c.pts[i];
       tan.subVectors(c.pts[Math.min(n - 1, i + 1)], c.pts[Math.max(0, i - 1)]).normalize();
-      n0.crossVectors(c.side, tan).normalize();
+      // (normale « de volume » si la carte en donne une : la même des deux côtés du ruban)
+      if (c.normal) n0.copy(c.normal);
+      else n0.crossVectors(c.side, tan).normalize();
       const w = (c.w0 + (c.w1 - c.w0) * f) / 2;
       const ww = c.weights(p, f);
       for (const k of [-1, 1]) {
@@ -985,25 +1093,45 @@ function brushCards(S, B, look) {
     return [[BONE_INDEX.Neck, 1 - wh], [BONE_INDEX.Head, wh]].filter(([, w]) => w > 0.001);
   };
   const cards = [];
-  const n = foal ? 34 : 48;
+  const n = foal ? 34 : 64;
+  // Hauteur de la brosse le long de la crête (plus haute au milieu, taillée en arc). Les rubans vont
+  // jusqu'aux pointes des mèches de la texture (alpha) : le haut de la brosse est effilé et irrégulier.
+  const height = (t) => (foal ? 0.05 + 0.012 * Math.sin(t * Math.PI) : 0.085 + 0.03 * Math.sin(t * Math.PI)) * 1.12;
+  const tipUV = () => [0.6 + rng() * 0.04, 0.995, 0.44 + rng() * 0.16, 0.018];
+  // Bords crème (ou toute la brosse du poulain) : rubans debout, le long de la crête ou en travers.
   for (let i = 0; i < n; i++) {
     const t = 0.03 + (i / (n - 1)) * 0.93;
     const c = at(t).addScaledVector(up, -0.012);
     const dir = at(Math.min(1, t + 0.02)).sub(at(Math.max(0, t - 0.02))).normalize();
-    for (const lane of [-1, 0, 1]) {
-      // (le cœur foncé du Fjord : rubans le long de la crête, un peu plus hauts ; les rubans en travers
-      // et les bords sont crème, sinon on verrait des rayures)
+    for (const lane of foal ? [-1, 0, 1] : [-1, 1]) {
       const along = lane === 0 || (i + lane) % 2 === 0;
-      const h = (foal ? 0.05 + 0.012 * Math.sin(t * Math.PI) : 0.085 + 0.03 * Math.sin(t * Math.PI)) * (1 - Math.abs(lane) * 0.12) * (lane === 0 ? 0.97 : 1) + rng() * 0.01;
+      const h = height(t) * (1 - Math.abs(lane) * 0.12) * (0.93 + rng() * 0.14);
       const lat = V(lane * (foal ? 0.014 : 0.013), 0, 0);
       const p0 = c.clone().add(lat);
       const tip = p0.clone().addScaledVector(up, h).addScaledVector(lat, foal ? 0.8 : 0.4);
-      const color = lane === 0 && along && !foal ? tint(coreC.clone().lerp(maneC, 0.2), 0.06) : tint(maneC, 0.06);
       cards.push({
-        pts: [p0, p0.clone().lerp(tip, 0.5), tip], w0: 0.032, w1: 0.03, side: along ? dir : V(1, 0, 0), color,
-        uv: [0.56, 0.84, 0.47 + rng() * 0.06, 0.02], weights: weights(t), sway: 0.25,
+        // (rubans effilés : la pointe est trois fois plus étroite que la racine)
+        pts: [p0, p0.clone().lerp(tip, 0.5), tip], w0: 0.03, w1: 0.01,
+        side: along ? dir.clone().applyAxisAngle(up, (rng() - 0.5) * 0.7) : V(1, 0, 0), color: tint(maneC, 0.06),
+        uv: tipUV(), weights: weights(t), sway: 0.25, normal: up.clone().multiplyScalar(0.55).add(V(lane * 0.85, 0, 0)).normalize(),
       });
     }
+  }
+  if (foal) return cards;
+  // Cœur foncé du Fjord : rubans fins et nombreux, pas plus hauts que les bords, chacun un peu tourné et
+  // incliné au hasard (pas une palissade de plaques alignées), de la couleur des crins foncés (pas grisée).
+  const nc = 110;
+  for (let i = 0; i < nc; i++) {
+    const t = 0.03 + ((i + rng() * 0.8) / nc) * 0.93;
+    const c = at(t).addScaledVector(up, -0.012).add(V((rng() - 0.5) * 0.01, 0, 0));
+    const dir = at(Math.min(1, t + 0.02)).sub(at(Math.max(0, t - 0.02))).normalize();
+    const side = dir.clone().applyAxisAngle(up, (rng() - 0.5) * 0.9);
+    const h = height(t) * 0.88 * (0.94 + rng() * 0.1);
+    const tip = c.clone().addScaledVector(up, h).addScaledVector(dir, (rng() - 0.5) * 0.04);
+    cards.push({
+      pts: [c, c.clone().lerp(tip, 0.5), tip], w0: 0.02, w1: 0.006, side, color: tint(coreC.clone().lerp(maneC, 0.03), 0.1),
+      uv: tipUV(), weights: weights(t), sway: 0.25, normal: up.clone(),
+    });
   }
   return cards;
 }
@@ -1040,7 +1168,7 @@ function featherCards(S, B, look) {
       const end = V(p0.x, 0.01, sole.z + (p0.z - F.z) * 0.7).addScaledVector(d, 0.04 + rng() * 0.03);
       const pts = [0, 0.33, 0.66, 1].map((f) => p0.clone().lerp(end, f).addScaledVector(d, 0.012 * Math.sin(f * Math.PI)));
       cards.push({
-        pts, w0: 0.045, w1: 0.065, side: V(-d.z, 0, d.x), color: legC.clone().multiplyScalar(0.92 + rng() * 0.16),
+        pts, w0: 0.045, w1: 0.065, side: V(-d.z, 0, d.x), normal: d.clone(), color: legC.clone().multiplyScalar(0.92 + rng() * 0.16),
         uv: [0.42, 0.1, 0.45 + rng() * 0.1, 0.03], sway: 0.35,
         weights: (p) => {
           const w = smooth(fy + 0.03, fy - 0.03, p.y);
@@ -1090,12 +1218,11 @@ function contactShadow(R, L) {
 
 /**
  * Construit le cheval réaliste (ou null si le GLB n'est pas chargé : on prend alors le cheval sculpté).
- * look : la robe de l'animal (look.foal : poulain) ; breedId : sa race.
+ * look : la robe de l'animal (look.foal : poulain) ; breedId : sa race ; gltf : le GLB chargé (tests).
  */
-export function buildRealHorseModel(look, breedId = null) {
-  const gltf = getModel(REAL_HORSE_KEY);
+export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_HORSE_KEY)) {
   if (!gltf) return null;
-  const base = prepareBase(gltf);
+  const base = realHorseBase(gltf);
   const breed = horseBreedOf(look, breedId);
   const B = look.foal ? foalBuild(horseBuild(breed, look)) : horseBuild(breed, look);
   const S = shapeFor(base, B);
@@ -1198,6 +1325,7 @@ export function buildRealHorseModel(look, breedId = null) {
     ears: [G('EarL'), G('EarR')],
     ribs: G('Ribs'),
     mane: [1, 2, 3, 4].map((i) => G('Mane' + i)),
+    groups,
     legs,
     skeleton,
     hairSway,
@@ -1222,6 +1350,7 @@ export function buildRealHorseModel(look, breedId = null) {
     speedScale: heads[BONE_INDEX.FL1].y / base.rest[BONE_INDEX.FL1].y,
   };
   for (const e of model.ears) e.userData.side = e === model.ears[0] ? 1 : -1;
+  model.skinGear = (mesh) => skinGear(model, S, mesh);
   model.anim = new RealHorseAnim(model, base.clips);
   let disposed = false;
   model.dispose = () => {
@@ -1231,6 +1360,130 @@ export function buildRealHorseModel(look, breedId = null) {
     releaseShape(S);
   };
   return model;
+}
+
+/**
+ * Pièce d'équipement posée sur le corps (couverture : coque mesurée au repos, dans le repère du groupe
+ * body) changée en maillage lié au squelette : chaque sommet prend les poids de la peau la plus proche
+ * (tronc, épaules, hanches, côtes). Elle suit alors les hanches, les épaules et la respiration au lieu
+ * de rester rigide sur le dos (le pelage la traversait sur la croupe et les flancs).
+ * Renvoie le nouveau maillage (à la place de l'ancien, retiré de son parent).
+ */
+function skinGear(model, S, mesh) {
+  const coat = S.coatGeo;
+  const cp = coat.attributes.position;
+  const csi = coat.attributes.skinIndex;
+  const csw = coat.attributes.skinWeight;
+  // Peau du tronc seulement (pas la tête, les membres sous le coude ni la queue).
+  if (!S.trunkSkin) {
+    const keep = new Set(['Spine', 'Ribs', 'Neck', 'FL1', 'FR1', 'HL1', 'HR1', 'FL2', 'FR2', 'HL2', 'HR2']);
+    const list = [];
+    for (let i = 0; i < cp.count; i++) {
+      let b = csi.getX(i);
+      let w = csw.getX(i);
+      for (let k = 1; k < 4; k++) if (csw.getComponent(i, k) > w) { w = csw.getComponent(i, k); b = csi.getComponent(i, k); }
+      if (keep.has(RIG[b][0]) && cp.getY(i) > S.elbowY - 0.08) list.push(i);
+    }
+    S.trunkSkin = Uint32Array.from(list);
+  }
+  const geo = mesh.geometry;
+  const pos = geo.attributes.position;
+  const n = pos.count;
+  // Les coupes mesurées sont approchées (un rayon par secteur de 15°, une coupe tous les 4 cm) : une bosse
+  // de la peau entre deux coupes passerait à travers le tissu. Chaque sommet est repoussé vers l'extérieur
+  // (axe du tronc) jusqu'à laisser 6 mm au-dessus de la peau voisine (1,5 cm au plus), puis les poussées
+  // sont adoucies.
+  const rings = model.sdf.torso.rings;
+  const ycAt = (z) => {
+    const f = Math.min(rings.length - 1.001, Math.max(0, (z - rings[0][0]) / (rings[1][0] - rings[0][0])));
+    const k = Math.floor(f);
+    return rings[k][1] + (rings[k + 1][1] - rings[k][1]) * (f - k);
+  };
+  const push = new Float32Array(n);
+  const dirs = new Float32Array(n * 3);
+  const q = V();
+  const nrm = V();
+  for (let i = 0; i < n; i++) {
+    q.fromBufferAttribute(pos, i);
+    nrm.set(q.x, q.y - ycAt(q.z), 0).normalize();
+    dirs.set([nrm.x, nrm.y, nrm.z], i * 3);
+    for (const j of S.trunkSkin) {
+      // (peau de la même tranche : à moins de 2,5 cm en z, à moins de 6 cm de côté dans la tranche)
+      const dz = cp.getZ(j) - q.z;
+      if (dz * dz > 0.025 * 0.025) continue;
+      const dx = cp.getX(j) - q.x;
+      const dy = cp.getY(j) - q.y;
+      const along = dx * nrm.x + dy * nrm.y;
+      if (along < -0.03) continue;
+      if (dx * dx + dy * dy - along * along > 0.06 * 0.06) continue;
+      push[i] = Math.max(push[i], along + 0.006);
+    }
+    // (au plus 1,5 cm : au bout de la couverture, la croupe s'arrondit et une forte poussée ferait un bourrelet)
+    push[i] = Math.min(push[i], 0.015);
+  }
+  if (geo.index) {
+    const nb = new Float32Array(n);
+    for (let pass = 0; pass < 2; pass++) {
+      nb.set(push);
+      const idx = geo.index.array;
+      for (let t = 0; t < idx.length; t += 3) {
+        for (let e = 0; e < 3; e++) {
+          const a = idx[t + e];
+          const b = idx[t + (e + 1) % 3];
+          nb[a] = Math.max(nb[a], push[b] * 0.6);
+          nb[b] = Math.max(nb[b], push[a] * 0.6);
+        }
+      }
+      push.set(nb);
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    if (push[i] <= 0) continue;
+    pos.setXYZ(i, pos.getX(i) + dirs[i * 3] * push[i], pos.getY(i) + dirs[i * 3 + 1] * push[i], pos.getZ(i));
+  }
+  pos.needsUpdate = true;
+  geo.computeBoundingSphere();
+  const si = new Uint16Array(n * 4);
+  const sw = new Float32Array(n * 4);
+  const p = V();
+  const near = [];
+  for (let i = 0; i < n; i++) {
+    p.fromBufferAttribute(pos, i);
+    // les 4 sommets de peau les plus proches, pondérés par l'inverse de la distance
+    near.length = 0;
+    for (const j of S.trunkSkin) {
+      const d = (cp.getX(j) - p.x) ** 2 + (cp.getY(j) - p.y) ** 2 + (cp.getZ(j) - p.z) ** 2;
+      if (near.length < 4 || d < near[3][0]) {
+        near.push([d, j]);
+        near.sort((a, b) => a[0] - b[0]);
+        if (near.length > 4) near.pop();
+      }
+    }
+    const acc = new Map();
+    for (const [d, j] of near) {
+      const f = 1 / (Math.sqrt(d) + 0.005);
+      for (let k = 0; k < 4; k++) {
+        const w = csw.getComponent(j, k);
+        if (w > 0) acc.set(csi.getComponent(j, k), (acc.get(csi.getComponent(j, k)) ?? 0) + w * f);
+      }
+    }
+    const top = [...acc].sort((a, b) => b[1] - a[1]).slice(0, 4);
+    const tot = top.reduce((x, [, w]) => x + w, 0) || 1;
+    top.forEach(([b, w], k) => {
+      si[i * 4 + k] = b;
+      sw[i * 4 + k] = w / tot;
+    });
+  }
+  geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  const sk = new THREE.SkinnedMesh(geo, mesh.material);
+  sk.castShadow = mesh.castShadow;
+  sk.receiveShadow = true;
+  sk.frustumCulled = false;
+  mesh.parent?.remove(mesh);
+  model.root.add(sk);
+  sk.bind(model.skeleton, new THREE.Matrix4());
+  return sk;
 }
 
 // ------------------------------------------------------------------ animation
@@ -1264,6 +1517,32 @@ class RealHorseAnim {
     this.maneV = model.mane.map(() => 0);
     this.t = Math.random() * 100;
     this.lead = 'canter';
+    // Pose des groupes écrite par le mixeur (voir update) : position, rotation, échelle.
+    this.pose = model.groups.map((g) => [g.position.clone(), g.quaternion.clone(), g.scale.clone()]);
+  }
+
+  /**
+   * Le mixeur n'écrit une valeur que si elle a changé depuis l'image précédente (THREE.PropertyMixer) :
+   * sur une piste constante (queue au repos, au trot…), ce que le procédural ou une activité ajoute
+   * par-dessus resterait et s'additionnerait d'une image à l'autre (queue qui tourne et reste de
+   * travers). Avant chaque mise à jour du mixeur, on remet donc la pose qu'il a écrite la dernière fois.
+   */
+  restorePose() {
+    this.model.groups.forEach((g, i) => {
+      const [p, q, s] = this.pose[i];
+      g.position.copy(p);
+      g.quaternion.copy(q);
+      g.scale.copy(s);
+    });
+  }
+
+  savePose() {
+    this.model.groups.forEach((g, i) => {
+      const [p, q, s] = this.pose[i];
+      p.copy(g.position);
+      q.copy(g.quaternion);
+      s.copy(g.scale);
+    });
   }
 
   dispose() {
@@ -1278,6 +1557,7 @@ class RealHorseAnim {
    */
   update(dt, st, out = {}) {
     const md = this.model;
+    this.restorePose();
     if (this.reachFix === undefined) this.reachFix = this.computeReach();
     this.t += dt;
     const t = this.t;
@@ -1327,6 +1607,7 @@ class RealHorseAnim {
     }
     if (lead && leadW > 0.3) this.leadName = lead;
     this.mixer.update(dt);
+    this.savePose();
     this.overlay(dt, st, graze);
     // Pour le cavalier : allure (moyenne pondérée) et phase du clip qui mène.
     let gs = 0;
@@ -1376,8 +1657,14 @@ class RealHorseAnim {
       e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.12));
       e.rotateY(s * Math.sin(t * 0.7 + i * 3) * 0.3 * (1 - this.doze));
     });
+    // Port de queue de la race (arabe, saddlebred, welsh) : couard relevé, crins qui retombent en arc.
+    const set = md.build.tailSet ?? 0;
+    if (set) {
+      md.tail.rotateX(set * 0.75);
+      md.tailTip.rotateX(-set * 0.4);
+    }
     // Queue : de temps en temps un coup de fouet contre les mouches.
-    const swish = Math.sin(t * 0.23 + (md.root.id % 7)) > 0.9 ? Math.sin(t * 9) * 0.35 : 0;
+    const swish = tailSwish(t, md.root.id % 7);
     if (swish) {
       md.tail.rotateZ(swish * 0.6);
       md.tailTip.rotateZ(swish);
@@ -1447,6 +1734,14 @@ class RealHorseAnim {
     }
     return Math.max(-0.5, Math.min(0.5, fix));
   }
+}
+
+/**
+ * Coup de queue contre les mouches à l'instant t (rad, 0 la plupart du temps) : par salves de 4 s
+ * environ toutes les 27 s, décalées d'un cheval à l'autre (k).
+ */
+export function tailSwish(t, k = 0) {
+  return Math.sin(t * 0.23 + k) > 0.9 ? Math.sin(t * 9) * 0.35 : 0;
 }
 
 /**

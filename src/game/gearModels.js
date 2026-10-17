@@ -104,6 +104,14 @@ export function buildGear(model, look, gear = {}) {
     holders.push(m);
     return m;
   };
+  // Cheval réaliste : pièce liée au squelette (elle suit hanches, épaules, respiration) à la place de la
+  // pièce rigide posée sur le groupe body.
+  add.skin = (mesh) => {
+    if (!model.skinGear) return mesh;
+    const sk = model.skinGear(mesh);
+    holders[holders.indexOf(mesh)] = sk;
+    return sk;
+  };
   // Un petit groupe tout fait (ex. un étrier du catalogue) : ses pièces sont partagées, on le retire en bloc.
   add.group = (parent, obj) => {
     parent.add(obj);
@@ -148,21 +156,24 @@ function buildHorseGear(model, look, gear, add) {
     // (cheval réaliste : étendue mesurée sur son corps, du garrot à la pointe des fesses)
     const [bz0, bz1] = model.dims.blanket ?? [-L * 0.52, L * (id === 'blanketSummer' ? 0.34 : 0.3)];
     const front = bz1 + (model.dims.blanket && id === 'blanketSummer' ? 0.04 : 0);
-    add(body, shell(torso, y0 - R * 0.2, bz0, front, 12, deg(192), deg(-12), 20, id === 'blanket' ? 0.016 : 0.011), cloth);
-    const edge = loop(torso, [0, y0 - R * 0.2, front], 20, 0.018, deg(192), deg(-12));
-    add(body, strap(edge, 0.018, 0.006), id === 'blanket' ? P.fleeceMat(0xe8e0d2) : P.clothMat(id === 'blanketSummer' ? 0x3a3a3a : 0xf2ede4));
+    // (cheval réaliste : liée au squelette, add.skin ; un peu plus écartée sur la croupe et les flancs)
+    const gap = model.skinGear ? 0.006 : 0;
+    const dense = model.skinGear ? 1.5 : 1; // (grille plus fine : moins de cordes sous les bosses de la peau)
+    add.skin(add(body, shell(torso, y0 - R * 0.2, bz0, front, Math.round(12 * dense), deg(192), deg(-12), Math.round(20 * dense), (id === 'blanket' ? 0.016 : 0.011) + gap), cloth));
+    const edge = loop(torso, [0, y0 - R * 0.2, front], 20, 0.018 + gap, deg(192), deg(-12));
+    add.skin(add(body, strap(edge, 0.018, 0.006), id === 'blanket' ? P.fleeceMat(0xe8e0d2) : P.clothMat(id === 'blanketSummer' ? 0x3a3a3a : 0xf2ede4)));
     // Galon le long du bas des flancs.
     for (const sd of [1, -1]) {
       const hem = [];
       for (let i = 0; i <= 10; i++) {
         const z = bz0 + 0.02 + (i / 10) * (front - bz0 - 0.04);
         const p = rayHit(torso, [0, y0 - R * 0.2, z], [sd * Math.cos(deg(-12)), Math.sin(deg(-12)), 0], 1.2);
-        hem.push(p.addScaledVector(sdfNormal(torso, p, 0.004), 0.016));
+        hem.push(p.addScaledVector(sdfNormal(torso, p, 0.004), 0.016 + gap));
       }
-      add(body, strap(hem, 0.014, 0.004), P.clothMat(id === 'blanketSummer' ? 0x3a3a3a : 0xf2ede4));
+      add.skin(add(body, strap(hem, 0.014, 0.004), P.clothMat(id === 'blanketSummer' ? 0x3a3a3a : 0xf2ede4)));
     }
     // Sangle de poitrail et sous-ventrières croisées.
-    add(body, strap(loop(torso, [0, y0 - R * 0.2, model.dims.zGirth ?? L * 0.02], 16, 0.018, deg(-15), deg(-165)), 0.014, 0.004), P.nylonMat(0x2a2a2a));
+    add.skin(add(body, strap(loop(torso, [0, y0 - R * 0.2, model.dims.zGirth ?? L * 0.02], 16, 0.018 + gap, deg(-15), deg(-165)), 0.014, 0.004), P.nylonMat(0x2a2a2a)));
   }
 
   if (gear.saddle) horseSaddle(model, gear, add);

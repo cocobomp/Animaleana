@@ -52,6 +52,11 @@ hBare = 0.0;
   }
 #endif
   float isBody = 1.0 - isHead - isLeg - isHoof - isSkin - isEar;
+#ifdef H_REAL
+  float headW = vHHead; // poids de la tête, continu (pas de dents de scie à la jonction avec l'encolure)
+#else
+  float headW = isHead;
+#endif
   float h = vHInfo.x;          // membres : hauteur relative (0 = sol, 1 = coude) ; oreilles : 0 = base, 1 = pointe
   vec3 hl = vHInfo;            // tête : position dans le repère de la tête (÷ longueur de la tête)
   float legI = vHInfo.y;
@@ -94,7 +99,7 @@ hBare = 0.0;
   // Pie (tobiano) : grandes plaques blanches qui coupent le dos, membres blancs, tête foncée.
   if (hPinto > 0.0) {
     float pn = hFbm(P * vec3(1.7, 1.4, 1.7) + hSeed * 3.1) + (hNoise(P * 9.0) - 0.5) * 0.06;
-    float t = pn + isLeg * (1.0 - smoothstep(0.1, 0.7, h)) * 0.45 - isHead * 0.5 + isBody * smoothstep(0.35, 0.9, up) * smoothstep(-0.6, -0.2, -abs(P.z + 0.1)) * 0.12;
+    float t = pn + isLeg * (1.0 - smoothstep(0.1, 0.7, h)) * 0.45 - headW * 0.5 + isBody * smoothstep(0.35, 0.9, up) * smoothstep(-0.6, -0.2, -abs(P.z + 0.1)) * 0.12;
     c = mix(c, hSec, smoothstep(0.49, 0.51, t) * hPinto * (1.0 - isHoof - isSkin));
   }
 
@@ -248,13 +253,20 @@ export function coatMaterial(look, build, breed = null, real = null) {
 attribute float hPart;
 attribute vec3 hInfo;
 attribute float hAO;
+#ifdef H_REAL
+attribute float hHead;
+varying float vHHead;
+#endif
 varying vec3 vHPos;
 varying vec3 vHNrm;
 flat varying float vHPart; // pas d'interpolation entre deux parties (sinon : fausses balzanes aux bords)
 varying vec3 vHInfo;
 varying float vHAO;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-vHPos = position; vHNrm = normal; vHPart = hPart; vHInfo = hInfo; vHAO = hAO;`);
+vHPos = position; vHNrm = normal; vHPart = hPart; vHInfo = hInfo; vHAO = hAO;
+#ifdef H_REAL
+vHHead = hHead;
+#endif`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 ${Object.keys(u).map((k) => `uniform ${k === 'hSocks' ? 'vec4' : u[k].value.isColor ? 'vec3' : 'float'} ${k};`).join('\n')}
@@ -263,6 +275,9 @@ varying vec3 vHNrm;
 flat varying float vHPart; // pas d'interpolation entre deux parties (sinon : fausses balzanes aux bords)
 varying vec3 vHInfo;
 varying float vHAO;
+#ifdef H_REAL
+varying float vHHead;
+#endif
 float hBare; // peau nue et sabots : pas de reflet satiné du poil
 ${NOISE}`)
       .replace('#include <map_fragment>', `${real ? 'vec4 hDetTex = texture2D( map, vMapUv );' : '#include <map_fragment>'}

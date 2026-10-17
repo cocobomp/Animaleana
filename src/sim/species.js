@@ -1,6 +1,8 @@
 // Espèces et races. Chaque race décrit son apparence (look) et sa robe.
 // origin : lieu où la race est proposée en élevage local (null = refuge de la maison).
 
+import { CAT_BREEDS } from './catBreeds.js';
+
 const C = (fr, en, coat, secondary, extra = {}) => ({ name: { fr, en }, coat, secondary, ...extra });
 
 export const SPECIES = {
@@ -173,29 +175,11 @@ export const SPECIES = {
     training: ['agility'],
     tricks: ['sit', 'highfive', 'jump', 'come'],
     model: {
-      bodyLen: 0.42, bodyR: 0.095, legLen: 0.2, legR: 0.024, neckLen: 0.07, neckAngle: 0.6,
-      headLen: 0.12, headR: 0.072, earType: 'cat', tailType: 'cat', snout: 0.35,
+      // Proportions d'un vrai chat (≈ 25 cm au garrot) ; le modèle 3D (catModel.js) part de ces valeurs.
+      bodyLen: 0.38, bodyR: 0.07, legLen: 0.132, legR: 0.0195, neckLen: 0.065, neckAngle: 0.72,
+      headLen: 0.09, headR: 0.05, earType: 'cat', tailType: 'cat', snout: 0.35,
     },
-    breeds: [
-      { id: 'europeen', name: { fr: 'Européen', en: 'European shorthair' }, origin: null, rarity: 1, scale: 1,
-        pattern: 'tabby', colors: [C('Tigré gris', 'Grey tabby', 0x8b8780, 0x3e3a36), C('Roux tigré', 'Ginger tabby', 0xd9873e, 0xa3561e), C('Noir', 'Black', 0x161414, 0x161414, { pattern: 'solid', eye: 0xd6b23a }), C('Tricolore', 'Calico', 0xf3efe7, 0xd28940, { pattern: 'tricolor', third: 0x231e1b }), C('Smoking', 'Tuxedo', 0x171515, 0xf3f0ea, { pattern: 'bicolor' })] },
-      { id: 'siamois', name: { fr: 'Siamois', en: 'Siamese' }, origin: null, rarity: 2, scale: 0.95, legs: 1.1,
-        pattern: 'points', colors: [C('Seal point', 'Seal point', 0xe9dcc6, 0x3b2a20, { eye: 0x4d8fd6 })] },
-      { id: 'persan', name: { fr: 'Persan', en: 'Persian' }, origin: null, rarity: 2, scale: 1, fluff: 1.35, snout: 0.15, legs: 0.85,
-        pattern: 'solid', colors: [C('Blanc', 'White', 0xf5f3ee, 0xf5f3ee, { eye: 0xd98b2a }), C('Crème', 'Cream', 0xe8d2a8, 0xe8d2a8)] },
-      { id: 'chartreux', name: { fr: 'Chartreux', en: 'Chartreux' }, origin: null, rarity: 2, scale: 1.05, fluff: 1.1,
-        pattern: 'solid', colors: [C('Gris bleu', 'Blue grey', 0x7d848c, 0x7d848c, { eye: 0xd9902a })] },
-      { id: 'sacre_birmanie', name: { fr: 'Sacré de Birmanie', en: 'Birman' }, origin: null, rarity: 2, scale: 1, fluff: 1.2,
-        pattern: 'points', colors: [C('Seal point', 'Seal point', 0xefe4d0, 0x4a3426, { eye: 0x4d8fd6 })] },
-      { id: 'maine_coon', name: { fr: 'Maine coon', en: 'Maine coon' }, origin: 'canada', rarity: 2, scale: 1.3, fluff: 1.3,
-        pattern: 'tabby', colors: [C('Brun tigré', 'Brown tabby', 0x8a6640, 0x33241a), C('Roux', 'Red', 0xc9763a, 0x8f4a1d)] },
-      { id: 'norvegien', name: { fr: 'Norvégien', en: 'Norwegian forest cat' }, origin: 'islande', rarity: 2, scale: 1.2, fluff: 1.35,
-        pattern: 'tabby', colors: [C('Gris et blanc', 'Grey and white', 0x9a958d, 0x4b4741)] },
-      { id: 'bobtail', name: { fr: 'Bobtail japonais', en: 'Japanese bobtail' }, origin: 'japon', rarity: 3, scale: 0.95, tailType: 'stub',
-        pattern: 'tricolor', colors: [C('Mi-ke', 'Mi-ke', 0xf5f2ec, 0xd3893f, { third: 0x1e1a18 })] },
-      { id: 'british', name: { fr: 'British shorthair', en: 'British shorthair' }, origin: 'angleterre', rarity: 2, scale: 1.1, fluff: 1.15, snout: 0.25,
-        pattern: 'solid', colors: [C('Bleu', 'Blue', 0x7f8790, 0x7f8790, { eye: 0xd9902a })] },
-    ],
+    breeds: CAT_BREEDS, // races de chats : src/sim/catBreeds.js (Ragdoll, Maine coon, Sphynx…)
   },
   rabbit: {
     id: 'rabbit',

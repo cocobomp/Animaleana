@@ -13,6 +13,7 @@ import { coatTextures, woolTextures, hairTexture, eyeTexture, lum } from '../tex
 import { gfx } from '../gfx.js';
 import { SPECIES } from '../../sim/species.js';
 import { hairMaterial, buildHorseLeg, buildHorseMane, buildHorseForelock, buildHorseTail } from './horseParts.js';
+import { buildCatModel } from './catModel.js'; // chats : modèle dédié (races, poils, poses)
 
 // ------------------------------------------------------------------ anatomie par espèce
 // torso : formes du tronc. ['e', miroir, centre (x/R, y/R, z/L), rayons (x/R, y/R, z/L), k (fondu, /R)]
@@ -397,6 +398,7 @@ function neckAt(ns, t) {
 // ------------------------------------------------------------------ construction
 
 export function buildAnimalModel(speciesId, look) {
+  if (speciesId === 'cat') return buildCatModel(look);
   const S = SPEC[speciesId] ?? SPEC.dog;
   const high = gfx.quality === 'high';
   const m = look;
@@ -1149,3 +1151,6 @@ export function disposeModel(object) {
     }
   });
 }
+
+// Outils partagés avec le modèle des chats (catModel.js).
+export { addShells, cachedGeo, buildShapes, cylUv, contactShadowTexture, neckAt, mat, add };

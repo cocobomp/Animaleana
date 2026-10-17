@@ -10,6 +10,8 @@ import {
   currentStop, nextStop, remainingHours, progress, stressLevel, tipsFor, phaseAt, runToEnd, planTrip, vehicleFor,
   isLongTrip,
 } from '../sim/trip.js';
+import { openVehicleMenu, openPackingModal, cargoSummary, cargoName } from './vehicle.js'; // véhicule, coffre
+import { luggageHere, cargoItem } from '../sim/cargo.js';
 
 // ------------------------------------------------------------ outils
 
@@ -66,10 +68,10 @@ export function tripChips(ui) {
   const emojiOf = (a) => SPECIES[a.species].emoji;
   const animals = flow.travellers(l.ids);
   const names = animals.map((a) => `${l.loaded.has(a.id) ? '✅' : emojiOf(a)}`).join(' ');
-  const hasSmall = flow.waiting().some((a) => flow.placeOf(a) === 'crate');
+  const loose = flow.unsecured().length;
   return [h('div', { class: 'status-chip trip-chip' },
-    h('span', {}, `${l.vehicle.kind === 'trailer' ? '🚐' : '🚗'} ${t('trip_loadingChip', { n: l.loaded.size, total })} · ${names}`),
-    hasSmall && !l.carry ? h('button', { class: 'small', onClick: () => flow.crateNearest() }, t('trip_crateBtn')) : null,
+    h('span', {}, `${l.vehicle.kind === 'trailer' ? '🚐' : '🚗'} ${t('trip_loadingChip', { n: l.loaded.size, total })} · ${names}${loose ? ` · ⚠️ ${loose}` : ''}`),
+    h('button', { class: 'small primary', onClick: () => openVehicleMenu(ui, flow) }, t('veh_menuBtn')),
     h('button', { class: 'small', onClick: () => flow.cancel() }, t('cancel')))];
 }
 
@@ -78,17 +80,33 @@ export function tripChips(ui) {
 export function showDepartChoice(ui, flow) {
   const l = flow.loading;
   const animals = flow.travellers(l.ids);
-  const tips = tipsFor(planTrip({ mode: l.mode, hours: l.check.hours, animals }), animals);
+  const tips = tipsFor(planTrip({ mode: l.mode, hours: l.check.hours, animals, cargo: l.cargo?.items }), animals);
   const choose = (watch) => { ui.hideModal(); flow.depart(watch); };
+  // Sans véhicule (à cheval, ou seul) : les bagages se préparent ici (sacoches, sac).
+  const bags = !l.vehicle && l.cargo ? h('div', { class: 'trip-bags' },
+    h('span', {}, `${l.mode === 'horse' ? '🎒' : '🧳'} ${cargoSummary(flow)}`),
+    h('button', { class: 'small', onClick: () => { ui.hideModal(); openPackingModal(ui, flow, () => showDepartChoice(ui, flow)); } }, t('veh_editBags'))) : null;
+  const title = l.vehicle ? t('trip_watchTitle') : l.mode === 'horse' ? t('trip_horseGo') : animals.length ? t('trip_watchTitle') : t('veh_aloneTitle');
   ui.showModal([
-    h('p', { class: 'trip-modal-title' }, l.mode === 'horse' ? t('trip_horseGo') : t('trip_watchTitle')),
-    h('div', { class: 'trip-choice' },
+    h('p', { class: 'trip-modal-title' }, title),
+    bags,
+    animals.length ? h('div', { class: 'trip-choice' },
       h('button', { class: 'big-action primary', onClick: () => choose(true) },
-        h('span', { class: 'ba-text' }, h('b', {}, t('trip_watch')), h('small', {}, t('trip_watchDesc')))),
+        h('span', { class: 'ba-text' }, h('b', {}, t(l.vehicle ? 'veh_watchCab' : 'trip_watch')), h('small', {}, t(l.vehicle ? 'veh_watchCabDesc' : 'trip_watchDesc')))),
       h('button', { class: 'big-action', onClick: () => choose(false) },
-        h('span', { class: 'ba-text' }, h('b', {}, t('trip_skip')), h('small', {}, t('trip_skipDesc'))))),
+        h('span', { class: 'ba-text' }, h('b', {}, t('trip_skip')), h('small', {}, t('trip_skipDesc')))))
+      : h('div', { class: 'trip-choice' }, h('button', { class: 'big-action primary', onClick: () => choose(false) },
+        h('span', { class: 'ba-text' }, h('b', {}, `${t('trip_goAlone')} ${flow.destName()}`)))),
     tipBox(tips[0]),
-    h('div', { class: 'row end' }, h('button', { onClick: () => { ui.hideModal(); flow.cancel(); } }, t('cancel'))),
+    h('div', { class: 'row end' }, h('button', {
+      onClick: () => {
+        ui.hideModal();
+        // Avec le véhicule : on n'annule pas tout, on redescend juste (le pont se rabaisse).
+        if (l.vehicle) {
+          if (l.vehicle.trailer) { l.vehicle.setOpen('ramp', true); l.vehicle.setOpen('upper', true); }
+        } else flow.cancel();
+      },
+    }, l.vehicle ? t('veh_notYet') : t('cancel'))),
   ]);
 }
 
@@ -169,10 +187,19 @@ export function renderJourney(ui, flow) {
   const phaseText = phase.kind === 'hold' ? t(`trip_phase_hold_${trip.mode}`) : trip.mode === 'horse' ? t('trip_phase_ride') : t('trip_phase_road');
 
   const cards = flow.animals.map((a) => animalCard(ui, flow, a, stop, refs));
+  // Vue 3D du trajet (game/RoadView.js) : de la cabine, de dehors, ou dans le van.
+  const rv = j.road;
+  const camBtns = rv ? h('div', { class: 'trip-cams' },
+    [['cab', '🚙', 'veh_camCab'], ['outside', '🎥', 'veh_camOutside'], ...(j.vehicle?.trailer ? [['trailer', '🐴', 'veh_camTrailer']] : [])]
+      .map(([mode, icon, key]) => h('button', { class: `small ${rv.cameraMode === mode ? 'active' : ''}`, onClick: () => { rv.setCameraMode(mode); renderJourney(ui, flow); } }, `${icon} ${t(key)}`))) : null;
+  // Pendant qu'on roule, on peut replier la fiche pour regarder la route.
+  const compact = !stop && rv && j.compact !== false;
 
   const body = [
     h('header', { class: 'trip-head' },
-      h('div', { class: 'trip-title' }, h('span', { class: 'trip-mode' }, modeDef.emoji), h('b', {}, t('trip_title', { from: flow.fromName(), to: flow.destName() })))),
+      h('div', { class: 'trip-title' }, h('span', { class: 'trip-mode' }, modeDef.emoji), h('b', {}, t('trip_title', { from: flow.fromName(), to: flow.destName() }))),
+      rv && !stop ? h('button', { class: 'small trip-fold', 'aria-label': compact ? '▴' : '▾', onClick: () => { j.compact = !compact; renderJourney(ui, flow); } }, compact ? `▴ ${t('veh_more')}` : `▾ ${t('veh_less')}`) : null),
+    camBtns,
     svg,
     h('div', { class: 'trip-times' },
       h('div', {}, h('small', {}, t('trip_elapsed')), refs.elapsed),
@@ -190,7 +217,7 @@ export function renderJourney(ui, flow) {
   } else {
     body.push(h('p', { class: 'trip-phase' }, phaseText, ' ', refs.next));
   }
-  body.push(h('div', { class: 'trip-animals' }, cards));
+  if (!compact) body.push(h('div', { class: 'trip-animals' }, cards));
   if (stop) {
     const night = stop.kind === 'night' && !stop.slept;
     body.push(h('div', { class: 'trip-actions-main' },
@@ -202,13 +229,15 @@ export function renderJourney(ui, flow) {
         : null));
   } else {
     refs.tip = h('div', { class: 'trip-tip' }, h('b', {}, t('trip_tipLabel')), h('span', {}, t(`trip_tip_${j.tips[j.tipIndex % j.tips.length]}`)));
-    body.push(refs.tip);
+    if (!compact) body.push(refs.tip);
+    else refs.tip = null;
     body.push(h('div', { class: 'trip-controls' },
       h('span', {}, t('trip_speed')),
       [1, 3, 8].map((s) => h('button', { class: `small ${j.speed === s ? 'active' : ''}`, onClick: () => { j.speed = s; renderJourney(ui, flow); } }, `×${s}`)),
       h('button', { class: 'small trip-ff', onClick: () => fastForward(ui, flow) }, t('trip_fastForward'))));
   }
-  el.replaceChildren(h('div', { class: `trip-sheet ${stop ? 'at-stop' : 'moving'}` }, body));
+  el.replaceChildren(h('div', { class: `trip-sheet ${stop ? 'at-stop' : 'moving'} ${compact ? 'compact' : ''} ${rv ? 'with-road' : ''}` }, body));
+  el.classList.toggle('with-road', !!rv);
   ui.tripRefs = refs;
   placeRoute(flow, refs);
   updateJourney(ui, flow);
@@ -335,6 +364,7 @@ export function updateJourney(ui, flow) {
 export function showReport(ui, flow, report) {
   const el = overlay(ui);
   el.hidden = false;
+  el.classList.remove('with-road'); // le bilan se lit au milieu de l'écran
   ui.tripRefs = null;
   const j = flow.journey;
   const stopsMade = j.trip.stops.filter((s) => s.done).length;
@@ -347,8 +377,20 @@ export function showReport(ui, flow, report) {
       j.trip.stops.length ? h('span', { class: 'chip' }, t('trip_reportStops', { n: stopsMade, s: report.skipped })) : null,
       report.animals.length ? h('span', { class: 'chip' }, t('trip_reportCare', { n: report.cares })) : null),
     report.animals.length ? h('ul', { class: 'trip-rep-list' }, lines) : h('p', {}, t('trip_rep_none')),
+    luggageLine(report),
     (report.tips ?? []).map((k) => tipBox(k)),
     h('button', { class: 'primary big', onClick: () => flow.close() }, 'OK')));
+}
+
+/** Le coffre est arrivé avec nous : ce qu'on a emporté (utilisable ici), le reste est à la maison. */
+function luggageLine(report) {
+  if (!report.cargo) return null;
+  const ids = Object.keys(report.cargo);
+  if (report.home) return h('p', { class: 'trip-luggage' }, t('veh_repHome'));
+  return h('div', { class: 'trip-luggage' },
+    h('b', {}, t('veh_repLuggage')),
+    h('span', {}, ids.length ? ids.map((id) => `${cargoItem(id)?.emoji ?? ''} ${cargoName(id)}`).join(' · ') : t('veh_nothingPacked')),
+    h('small', {}, t('veh_repLeftHome')));
 }
 
 // ------------------------------------------------------------ panneau Voyager
@@ -364,6 +406,11 @@ export function travelAdvice(ui, { here, travelers, state, option }) {
     out.push(h('div', { class: `trip-stayhome ${stay ? 'yes' : ''}` },
       h('span', {}, stay ? t('trip_stayHome', { n: stay }) : t('trip_stayHomeNone')),
       travelers.length ? h('button', { class: 'small', onClick: () => { state.bring.clear(); ui.renderPanel(); } }, t('trip_leaveAll')) : null));
+  }
+  // En voyage : le matériel qu'on a avec soi ici (sim/cargo.js).
+  const here2 = luggageHere(ui.game.profile);
+  if (here2) {
+    out.push(h('p', { class: 'note trip-luggage' }, t('veh_withYouHere', { list: here2.map((x) => cargoItem(x.id)?.emoji ?? '').join(' ') || t('veh_nothingPacked') })));
   }
   if (!option?.ok || !travelers.length) return out;
   const notes = [];

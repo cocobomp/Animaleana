@@ -53,9 +53,11 @@ export const placeFor = (vehicle, a) => (vehicle === 'trailer' && needsTrailer(a
 
 /**
  * Prépare un voyage.
- * opts : { mode, km, hours (temps de trajet sans les pauses, donné par checkTravel), animals, from, to, riderId, heat }
+ * opts : { mode, km, hours (temps de trajet sans les pauses, donné par checkTravel), animals, from, to, riderId, heat,
+ *          cargo (contenu du coffre de transport { hay: 1, water: 1, … }, src/sim/cargo.js ; absent = tout est là),
+ *          safety ({ [id]: true | false } : bien attaché dans la remorque ? src/sim/loading.js) }
  */
-export function planTrip({ mode, km = 0, hours, animals = [], from = null, to = null, riderId = null, heat = false }) {
+export function planTrip({ mode, km = 0, hours, animals = [], from = null, to = null, riderId = null, heat = false, cargo = null, safety = null }) {
   const phases = [];
   if (mode === 'plane' || mode === 'boat') {
     const hold = Math.max(1, hours - 2 * TRANSFER_HOURS);
@@ -135,8 +137,20 @@ export function planTrip({ mode, km = 0, hours, animals = [], from = null, to = 
     startStress,
     skipped: 0,
     cares: 0,
+    cargo: cargo ? { ...cargo } : null,
+    safety: safety ? { ...safety } : null,
   };
 }
+
+/** A-t-on emporté cette provision (foin, eau, gamelles, trousse) ? Sans coffre (ancien voyage) : oui. */
+export const hasSupply = (trip, id) => !trip.cargo || (trip.cargo[id] ?? 0) > 0;
+
+// Pendant la route, les chevaux (et le bétail) mangent au filet à foin : ça les occupe et les calme.
+const HAY_EATERS = ['horse', 'cow', 'sheep', 'goat'];
+const eatsHayNet = (trip, a, phaseKind) => phaseKind === 'road' && trip.mode !== 'horse' && HAY_EATERS.includes(a.species)
+  && !!trip.cargo && (trip.cargo.hay ?? 0) > 0;
+// Ce que chacun mange pendant une pause : du foin, ou des croquettes dans sa gamelle.
+const FOOD_OF = { horse: 'hay', cow: 'hay', sheep: 'hay', goat: 'hay', dog: 'bowls', cat: 'bowls', rabbit: 'bowls' };
 
 function newStop(at, kind) {
   return { at, kind, done: false, skipped: false, slept: false, actions: {} };
@@ -173,6 +187,9 @@ export function stressRate(trip, a, phaseKind) {
   if (a.needs.hunger < 25) rate += 1.5;
   if ((trip.comfort[a.id] ?? 80) < 40) rate += 1.5;
   if (trip.heat && phaseKind === 'road' && trip.mode !== 'horse') rate += 1.5;
+  // Mal attaché, barre ouverte : il bouge, se cogne et a peur à chaque virage.
+  if (trip.safety?.[a.id] === false && phaseKind === 'road') rate += 2.5;
+  if (eatsHayNet(trip, a, phaseKind)) rate = Math.max(0.5, rate - 1);
   return rate;
 }
 
@@ -207,6 +224,8 @@ export function tickTrip(trip, animals, hours, { rng = Math.random } = {}) {
     }
     // À cheval, on est ensemble toute la journée.
     if (trip.mode === 'horse') a.needs.affection = clamp(a.needs.affection + 3 * step);
+    // Le filet à foin : il grignote en route.
+    if (eatsHayNet(trip, a, phase.kind)) a.needs.hunger = clamp(a.needs.hunger + 2.5 * step);
     trip.comfort[a.id] = clamp((trip.comfort[a.id] ?? 80) - (phase.kind === 'hold' ? 6 : trip.mode === 'horse' ? 2 : 4) * step);
     if (events.length) out.events.push({ a, events });
   }
@@ -230,6 +249,12 @@ export function canStopAction(trip, a, action) {
   if (stop.actions[a.id]?.[action]) return { ok: false, reason: 'done' };
   if (action === 'water' && a.needs.thirst >= 96) return { ok: false, reason: 'full' };
   if (action === 'feed' && a.needs.hunger >= 96) return { ok: false, reason: 'full' };
+  // Sans bidon d'eau ni foin dans le coffre, on attend l'étape du soir (l'écurie d'étape a tout ce qu'il faut).
+  const served = stop.kind === 'night' || stop.kind === 'landing';
+  if (action === 'water' && !served && !hasSupply(trip, 'water')) return { ok: false, reason: 'noWater' };
+  if (action === 'feed' && !served && trip.mode !== 'horse' && !hasSupply(trip, FOOD_OF[a.species] ?? 'bowls')) {
+    return { ok: false, reason: FOOD_OF[a.species] === 'hay' ? 'noHay' : 'noBowls' };
+  }
   if (action === 'walk') {
     // Un chat ou un lapin pourrait s'enfuir : il reste dans sa caisse.
     if (a.species === 'cat' || a.species === 'rabbit') return { ok: false, reason: 'walkCrate' };
@@ -274,6 +299,7 @@ export function doStopAction(trip, a, action) {
       a.needs.affection = clamp(a.needs.affection + 5);
       a.stress = clamp((a.stress ?? 0) - 3);
       finding = diagnose(trip, a);
+      if (finding === 'loose') trip.safety[a.id] = true; // on le rattache et on referme la barre
       break;
     default:
       return { ok: false, reason: 'unknown' };
@@ -287,6 +313,7 @@ export function doStopAction(trip, a, action) {
 /** Ce qu'on remarque en vérifiant un animal. */
 export function diagnose(trip, a) {
   if (a.sick) return 'sick';
+  if (trip.safety?.[a.id] === false) return 'loose';
   if (a.needs.thirst < 40) return 'thirsty';
   if ((a.stress ?? 0) >= 60) return 'stressed';
   if (a.needs.hunger < 35) return 'hungry';
@@ -407,12 +434,15 @@ export function stressLevel(stress = 0) {
  */
 export function finishTrip(trip, animals, { rng = Math.random } = {}) {
   const report = { hours: trip.elapsed, skipped: trip.skipped, cares: trip.cares, animals: [] };
+  // Avec la trousse de secours, on soigne tout de suite les petits bobos du voyage.
+  const kit = !!trip.cargo && (trip.cargo.firstAid ?? 0) > 0;
   for (const a of animals.filter((x) => trip.ids.includes(x.id))) {
     const stress = Math.round(a.stress ?? 0);
     a.needs.energy = clamp(a.needs.energy - stress * 0.3);
+    a.trips = (a.trips ?? 0) + 1; // il a l'habitude : la prochaine fois, il montera plus facilement
     let sick = false;
     if (!a.sick && stress >= SICK_STRESS) {
-      const chance = stress >= 95 ? 1 : 0.5;
+      const chance = (stress >= 95 ? 1 : 0.5) * (kit ? 0.5 : 1);
       if (rng() < chance) {
         // Le stress du transport donne souvent mal au ventre (coliques chez le cheval).
         a.sick = 'belly';
@@ -433,7 +463,9 @@ export function tipsFor(trip, animals) {
   const mine = animals.filter((a) => trip.ids.includes(a.id));
   const tips = [];
   if (trip.moveHours >= 6 || trip.mode === 'plane' || trip.mode === 'boat') tips.push('long');
-  if (mine.some((a) => a.species === 'horse') && trip.mode !== 'horse') tips.push('horseStand', 'horseRule');
+  if (mine.some((a) => a.species === 'horse') && trip.mode !== 'horse') tips.push('horseStand', 'horseRule', 'tieRule');
+  if (trip.cargo && mine.some((a) => HAY_EATERS.includes(a.species)) && trip.mode !== 'horse') tips.push(hasSupply(trip, 'hay') ? 'hayNet' : 'noHay');
+  if (trip.cargo && !hasSupply(trip, 'water') && mine.length) tips.push('noWater');
   if (trip.mode === 'plane' || trip.mode === 'boat') tips.push('hold');
   if (trip.vehicle !== 'none') tips.push('carSun');
   if (mine.some((a) => a.species === 'cat' || a.species === 'rabbit')) tips.push('crate');

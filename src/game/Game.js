@@ -488,7 +488,8 @@ export class Game {
     if (this.paused) ctrl.move = { x: 0, y: 0 };
     // Vue d'ensemble : le joueur ne bouge pas, la caméra est au-dessus de la ferme.
     const mgmt = this.mgmt.active;
-    const pctrl = mgmt ? { ...ctrl, move: { x: 0, y: 0 }, run: false } : ctrl;
+    // Vue dans le véhicule de voyage (cabine, compartiment, coffre) : on ne marche pas (src/game/TripFlow.js).
+    const pctrl = mgmt || this.tripFlow.view ? { ...ctrl, move: { x: 0, y: 0 }, run: false } : ctrl;
     const entities = [...this.entities.values()];
     const ctx = { playerPos: this.player.position, night, entities, game: this };
     for (let i = 0; i < steps; i++) {
@@ -500,7 +501,7 @@ export class Game {
       this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
     }
     if (mgmt) this.mgmt.update(dt, ctrl);
-    else {
+    else if (!this.tripFlow.viewCamera(dt, ctrl)) { // (vue dans le véhicule : TripFlow place la caméra)
       this.rig.update(dt, ctrl, this.player, this.world);
       this.fadeOccluders();
     }
@@ -1129,7 +1130,9 @@ export class Game {
   updateFocus() {
     let best = null;
     const pp = this.player.position;
-    if (this.player.mount) {
+    if (this.tripFlow.view) {
+      best = null; // dans le véhicule de voyage : le panneau du bas remplace le bouton d'action
+    } else if (this.player.mount) {
       best = { kind: 'dismount' };
     } else {
       best = this.tripFlow.focusNear(pp) ?? this.clients.focusNear(pp); // véhicule de voyage, ou visiteur (client)
@@ -1169,6 +1172,7 @@ export class Game {
 
   onKey(code) {
     if (!this.running || this.ui.isBlocking()) return;
+    if (code === 'Escape' && this.tripFlow.view && this.tripFlow.view !== 'ramp') this.tripFlow.setView(null); // sortir du véhicule
     if (code === 'KeyE' || code === 'Enter') this.interact();
     if (code === 'KeyC') this.toggleCamera();
   }

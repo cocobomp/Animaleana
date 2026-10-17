@@ -197,3 +197,62 @@ describe('arrivée', () => {
     expect(tips).toContain('horseRule');
   });
 });
+
+describe('le coffre pendant le trajet', () => {
+  it('sans bidon d\'eau ni foin, on ne peut pas les faire boire ou manger sur l\'aire de repos', () => {
+    const horse = adult('horse');
+    const trip = planTrip({ mode: 'van', hours: 6, animals: [horse], cargo: {} });
+    drive(trip, [horse]);
+    expect(currentStop(trip).kind).toBe('rest');
+    expect(canStopAction(trip, horse, 'water').reason).toBe('noWater');
+    expect(canStopAction(trip, horse, 'feed').reason).toBe('noHay');
+    const other = adult('horse');
+    const ok = planTrip({ mode: 'van', hours: 6, animals: [other], cargo: { water: 1, hay: 1 } });
+    drive(ok, [other]);
+    expect(canStopAction(ok, other, 'water').ok).toBe(true);
+  });
+
+  it('les gamelles pour le chien et le chat', () => {
+    const dog = adult('dog');
+    dog.needs.hunger = 50;
+    const trip = planTrip({ mode: 'car', hours: 5, animals: [dog], cargo: { water: 1 } });
+    drive(trip, [dog]);
+    expect(canStopAction(trip, dog, 'feed').reason).toBe('noBowls');
+  });
+
+  it('le filet à foin occupe les chevaux : moins de stress et moins faim', () => {
+    const a = adult('horse');
+    const b = adult('horse');
+    const withHay = planTrip({ mode: 'van', hours: 4, animals: [a], cargo: { hay: 1, water: 1 } });
+    const without = planTrip({ mode: 'van', hours: 4, animals: [b], cargo: { water: 1 } });
+    drive(withHay, [a]);
+    drive(without, [b]);
+    expect(a.stress).toBeLessThan(b.stress);
+    expect(a.needs.hunger).toBeGreaterThan(b.needs.hunger);
+  });
+
+  it('l\'étape du soir fournit l\'eau même sans bidon', () => {
+    const dog = adult('dog');
+    const trip = planTrip({ mode: 'car', hours: 12, animals: [dog], cargo: {} });
+    while (!(trip.status === 'stop' && currentStop(trip).kind === 'night')) {
+      if (trip.status === 'stop') continueTrip(trip, [dog]);
+      else tickTrip(trip, [dog], 0.5, { rng: rng() });
+    }
+    dog.needs.thirst = 50;
+    expect(canStopAction(trip, dog, 'water').ok).toBe(true);
+  });
+
+  it('passer le trajet marche aussi avec un coffre vide', () => {
+    const horse = adult('horse');
+    const trip = planTrip({ mode: 'van', hours: 9, animals: [horse], cargo: {} });
+    runToEnd(trip, [horse], { rng: rng() });
+    expect(trip.status).toBe('arrived');
+  });
+
+  it('chaque voyage donne l\'habitude du van', () => {
+    const horse = adult('horse');
+    const trip = planTrip({ mode: 'van', hours: 2, animals: [horse] });
+    finishTrip(trip, [horse], { rng: rng() });
+    expect(horse.trips).toBe(1);
+  });
+});

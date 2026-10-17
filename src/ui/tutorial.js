@@ -2,8 +2,8 @@
 // - une bulle avec le guide Biscuit 🐶, des phrases très courtes et de gros emojis ;
 // - le repère 3D (game.marker) au-dessus de ce qu'il faut toucher dans le monde ;
 // - un cercle qui clignote autour du bouton à presser (barre du haut, menus) ;
-// - un « objectif » épinglé à l'écran : la quête conseillée, ou la quête suivie
-//   (« Suivre la quête ») avec ses petites étapes qui se cochent toutes seules.
+// - un petit suivi de quête discret sur le côté : la quête conseillée, ou la quête suivie
+//   (« Suivre la quête ») avec ses petites étapes qui se cochent toutes seules ; il se range en pastille.
 // La logique (étapes, réussite) est dans src/sim/tutorial.js.
 
 import { h, isPhone } from './dom.js';
@@ -13,12 +13,29 @@ import { earn } from '../sim/profile.js';
 import {
   tutorialStep, stepNumber, noteEvent, updateTutorial, skipTutorial, restartTutorial,
   suggestedQuest, questGuide, TUTORIAL_REWARD,
-  followQuest, stopFollow, noteFollowEvent, updateFollow, followView,
+  followQuest, stopFollow, noteFollowEvent, updateFollow, followView, stepWindow,
 } from '../sim/tutorial.js';
 
 const GUIDE = '🐶';
 const isTouch = () => matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const isNarrow = isPhone;
+
+// Suivi de quête rangé en pastille ou non : un confort mémorisé sur cet appareil (pas dans la sauvegarde).
+const FOLD_KEY = 'animaleana.questFold';
+function readFold() {
+  try {
+    return localStorage.getItem(FOLD_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function writeFold(on) {
+  try {
+    localStorage.setItem(FOLD_KEY, on ? '1' : '0');
+  } catch {
+    /* pas de stockage (navigation privée…) : le réglage dure jusqu'au rechargement */
+  }
+}
 
 export class Tutorial {
   constructor(ui, game) {
@@ -29,6 +46,8 @@ export class Tutorial {
     this.highlight = null; // élément HTML à montrer
     this.markerKey = '';
     this.questFocus = null; // « Montre-moi » : { id, spec, until }
+    this.folded = readFold(); // suivi de quête rangé en pastille
+    this.trackerBox = null; // où est le suivi à l'écran (lu par la flèche du repère, src/game/Marker.js)
 
     this.bubble = h('div', { id: 'tuto-bubble', hidden: true, role: 'status', 'aria-live': 'polite' });
     this.ring = h('div', { id: 'tuto-ring', hidden: true }, h('span', { class: 'tuto-finger' }, '👆'));
@@ -468,15 +487,14 @@ export class Tutorial {
   // ------------------------------------------------------------ quêtes claires
 
   /**
-   * L'objectif épinglé à l'écran.
-   * - quête suivie : son nom, ses étapes (✅ faite, 👉 en cours, ⬜ à faire), « Arrêter » ;
-   * - sinon : la quête conseillée et un bouton « Suivre ».
-   * Sur téléphone, c'est une pastille d'une ligne (la quête, ou l'étape en cours quand on la suit)
-   * avec un petit bouton 🧭 / ⏹ ; on la touche pour la déplier.
+   * Le suivi de quête, discret sur le côté : à gauche sous la carte d'infos (ordinateur), à droite sous les
+   * boutons du haut (téléphone, loin du joystick). Une seule ligne : la quête (la toucher = « Montre-moi »),
+   * sa progression (0/3), 🧭 pour la suivre (✋ pour arrêter) et « – » pour le ranger en pastille (mémorisé).
+   * Quête suivie : ses étapes en petit dessous (✅ faite, 👉 en cours, ⬜ à faire), quelques lignes au plus.
    */
   renderTracker() {
     const p = this.profile;
-    // Téléphone : une fenêtre ouverte prend presque tout l'écran ; on range la pastille pour laisser la place aux messages.
+    // Téléphone : une fenêtre ouverte prend presque tout l'écran ; on range le suivi pour laisser la place aux messages.
     if (!p || this.active || this.ui.isBlocking() || (isNarrow() && this.ui.panel)) {
       this.tracker.hidden = true;
       this.layoutTop();
@@ -490,85 +508,152 @@ export class Tutorial {
       return;
     }
     const [cur, max] = q.progress(p);
+    const count = `${Math.min(cur, max)}/${max}`;
     const where = this.whereText(q.id);
+    const right = isNarrow(); // téléphone : contre le bord droit ; ordinateur : contre le bord gauche
+    const lines = right ? 2 : 4; // lignes d'étapes sur le côté (téléphone : l'étape en cours et la suivante)
     const stepsKey = view ? view.steps.map((s) => s.state[0]).join('') : '';
-    const compact = isNarrow();
-    const open = !compact || !!this.trackerOpen;
-    const key = `${q.id}|${cur}|${where}|${getLang()}|${stepsKey}|${this.questFocus?.id === q.id}|${compact}|${open}`;
+    const key = `${q.id}|${count}|${where}|${getLang()}|${stepsKey}|${this.folded}|${right}|${lines}`;
     if (key !== this.trackerKey) {
+      // La même quête a avancé : petit rebond (surtout utile quand le suivi est rangé en pastille).
+      const moved = !!this.trackerKey && this.trackerWas?.id === q.id && (this.trackerWas.count !== count || this.trackerWas.steps !== stepsKey);
       this.trackerKey = key;
-      const count = `${Math.min(cur, max)}/${max}`;
-      const show = () => (view ? this.reshow() : this.showQuest(q.id));
-      // Repliée et suivie : on ne lit que l'étape en cours.
-      const title = compact && !open && view?.current ? `👉 ${t(`quest_step_${view.current.id}`)}` : t(`o_${q.id}`);
-      const head = h('button', {
-        class: 'qt-head',
-        title: t('quest_trackerTitle'),
-        'aria-expanded': compact ? String(open) : null,
-        onClick: () => {
-          if (!compact) return show();
-          this.trackerOpen = !open;
-          this.trackerKey = '';
-          this.renderTracker();
-        },
-      },
-      h('span', { class: 'qt-icon' }, view ? '🧭' : '🎯'),
-      h('span', { class: 'qt-main' }, h('b', {}, title), open ? h('small', {}, `📍 ${where}`) : null),
-      h('span', { class: 'qt-side' }, count),
-      compact ? h('span', { class: 'qt-chevron', 'aria-hidden': 'true' }, open ? '▴' : '▾') : null);
-      // Petit bouton de la pastille : suivre la quête, ou arrêter de la suivre.
-      const quick = compact && !open
-        ? (view
-          ? h('button', { class: 'qt-quick', title: t('quest_stop'), 'aria-label': t('quest_stop'), onClick: () => this.stopFollowing() }, '⏹')
-          : h('button', { class: 'qt-quick primary', title: t('quest_follow'), 'aria-label': t('quest_follow'), onClick: () => this.startFollow(q.id) }, '🧭'))
-        : null;
-      const items = open && view
-        ? h('ol', { class: 'qt-steps' }, view.steps.map((s) => h('li', { class: `qt-step ${s.state}` },
-          h('span', { class: 'qt-check' }, s.state === 'done' ? '✅' : s.state === 'now' ? '👉' : '⬜'),
-          h('span', {}, t(`quest_step_${s.id}`), s.progress && s.state === 'now' ? ` (${count})` : ''))))
-        : null;
-      const actions = open
-        ? h('div', { class: 'qt-actions' },
-          compact ? h('button', { class: 'qt-show', onClick: show }, `👉 ${t('quest_showMe')}`) : null,
-          view
-            ? h('button', { class: 'qt-stop', onClick: () => this.stopFollowing() }, `✋ ${t('quest_stop')}`)
-            : h('button', { class: 'primary qt-follow', onClick: () => this.startFollow(q.id) }, `🧭 ${t('quest_follow')}`))
-        : null;
-      this.tracker.replaceChildren(...[h('div', { class: 'qt-row' }, head, quick), items, actions].filter(Boolean));
+      this.trackerWas = { id: q.id, count, steps: stepsKey };
+      this.tracker.replaceChildren(...this.trackerContent(q, view, { count, where, right, lines }));
       this.tracker.classList.toggle('following', !!view);
-      this.tracker.classList.toggle('compact', compact && !open);
+      this.tracker.classList.toggle('folded', this.folded);
+      this.tracker.classList.toggle('side-right', right);
+      if (moved) this.bumpTracker();
     }
     this.tracker.hidden = false;
     this.layoutTop();
   }
 
+  /** Ce qu'il y a dans le suivi : la pastille rangée, ou la ligne de la quête (+ ses étapes si on la suit). */
+  trackerContent(q, view, { count, where, right, lines }) { // right : contre le bord droit (téléphone)
+    const icon = view ? '🧭' : '🎯';
+    const title = t(`o_${q.id}`);
+    if (this.folded) {
+      // La flèche montre de quel côté la carte va s'ouvrir.
+      const chev = (s) => h('span', { class: 'qt-chev', 'aria-hidden': 'true' }, s);
+      return [h('button', {
+        class: 'qt-pill',
+        title: `${title} — ${t('quest_unfold')}`,
+        'aria-label': `${t('quest_unfold')} : ${title} (${count})`,
+        'aria-expanded': 'false',
+        onClick: () => this.setFolded(false),
+      }, right ? chev('‹') : null, h('span', { class: 'qt-icon' }, icon), h('b', { class: 'qt-count' }, count), right ? null : chev('›'))];
+    }
+    const show = () => (view ? this.reshow() : this.showQuest(q.id));
+    // Pas d'icône devant le nom : toute la place pour lire (la bordure verte et 🧭 / ✋ disent si on la suit).
+    const head = h('button', { class: 'qt-head', title: `📍 ${where} — ${t('quest_trackerTitle')}`, onClick: show },
+      h('b', { class: 'qt-title' }, title),
+      h('span', { class: 'qt-count' }, count));
+    const quick = view
+      ? h('button', { class: 'qt-quick', title: t('quest_stop'), 'aria-label': t('quest_stop'), onClick: () => this.stopFollowing() }, '✋')
+      : h('button', { class: 'qt-quick primary', title: t('quest_follow'), 'aria-label': t('quest_follow'), onClick: () => this.startFollow(q.id) }, '🧭');
+    // Ranger en pastille : « – » comme pour réduire le bandeau d'un événement (src/ui/events.js).
+    const fold = h('button', { class: 'qt-fold', title: t('quest_fold'), 'aria-label': t('quest_fold'), 'aria-expanded': 'true', onClick: () => this.setFolded(true) }, '–');
+    const out = [h('div', { class: 'qt-row' }, head, quick, fold)];
+    if (view) {
+      const w = stepWindow(view.steps, lines);
+      if (w.before || w.after) {
+        // Longue quête : des petits points disent où on en est (comme dans la bulle du guide).
+        const n = view.steps.findIndex((s) => s.state === 'now') + 1;
+        out.push(h('div', { class: 'qt-dots', role: 'img', 'aria-label': t('quest_stepOf', { n, total: view.steps.length }) },
+          view.steps.map((s) => h('i', { class: s.state }))));
+      }
+      out.push(h('ol', { class: 'qt-steps' }, w.steps.map((s) => h('li', { class: `qt-step ${s.state}` },
+        h('span', { class: 'qt-check', 'aria-hidden': 'true' }, s.state === 'done' ? '✅' : s.state === 'now' ? '👉' : '⬜'),
+        h('span', { class: 'qt-label' }, t(`quest_step_${s.id}`), s.progress && s.state === 'now' ? ` (${count})` : '')))));
+    }
+    return out;
+  }
+
+  /** Ranger le suivi en pastille (ou le rouvrir) ; c'est mémorisé sur l'appareil. */
+  setFolded(on) {
+    this.folded = !!on;
+    writeFold(this.folded);
+    this.trackerKey = '';
+    this.renderTracker();
+  }
+
+  bumpTracker() {
+    const el = this.tracker;
+    el.classList.remove('bump');
+    void el.offsetWidth; // relance l'animation
+    el.classList.add('bump');
+    clearTimeout(this.bumpTimer);
+    this.bumpTimer = setTimeout(() => el.classList.remove('bump'), 700);
+  }
+
+  /**
+   * Pose le suivi contre son bord, juste sous le haut de l'écran, et garde sa boîte (trackerBox) :
+   * les messages et la flèche du repère passent en dessous au lieu de le recouvrir.
+   */
+  placeTracker() {
+    const el = this.tracker;
+    this.trackerBox = null;
+    if (el.hidden) return null;
+    const hud = this.ui.hud;
+    let top;
+    if (!isNarrow()) {
+      // Ordinateur : à gauche, sous la carte d'infos.
+      top = (hud.querySelector('.hud-info')?.getBoundingClientRect().bottom || 148) + 8;
+    } else {
+      // Téléphone : à droite, sous les boutons du haut (en paysage, ils ne prennent que la droite de la barre).
+      top = (hud.querySelector('.hud-buttons')?.getBoundingClientRect().bottom || hud.getBoundingClientRect().bottom || 100) + 6;
+      if (!this.bubble.hidden) {
+        const b = this.bubble.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        if (b.height && b.left < r.right && b.right > r.left && b.bottom + 6 > top) top = b.bottom + 6;
+      }
+    }
+    const px = `${Math.round(top)}px`;
+    if (el.style.top !== px) el.style.top = px;
+    const r = el.getBoundingClientRect();
+    if (r.height > 0) this.trackerBox = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    return this.trackerBox;
+  }
+
   /**
    * Place ce qui s'affiche en haut de l'écran.
-   * - Ordinateur : la bulle et l'objectif sous la carte d'infos (en haut à gauche), le reste via le CSS.
+   * - Le suivi de quête se pose contre son bord (placeTracker) ; ce qui passerait dessus va juste en dessous.
+   * - Ordinateur : la bulle sous la carte d'infos (en haut à gauche), le reste via le CSS.
    * - Téléphone : rien ne doit recouvrir la barre du haut ni ses boutons. Sous le bloc HUD + outils, on empile
-   *   la bulle du guide, l'objectif, le bandeau d'événement, les pastilles d'état, l'aide puis les messages.
-   *   Quand une fenêtre (fiche) est ouverte, elle commence sous la bulle (renderTracker range la pastille).
+   *   la bulle du guide, le bandeau d'événement, les pastilles d'état, l'aide puis les messages.
+   *   Quand une fenêtre (fiche) est ouverte, elle commence sous la bulle (renderTracker range le suivi).
    */
   layoutTop() {
     const ui = this.ui;
     const hud = ui.hud;
     const panel = ui.panelEl;
     const ev = document.getElementById('ev-banner');
-    const stacked = [this.tracker, ev, ui.statusBar, ui.help, ui.toasts];
+    const stacked = [ev, ui.statusBar, ui.help, ui.toasts];
     // Remet un élément à sa place CSS (top ET bottom : #help a un `bottom` dans le CSS).
     const reset = (el) => { if (el && (el.style.top || el.style.bottom)) { el.style.top = ''; el.style.bottom = ''; } };
+    // Un élément dans la même colonne que le suivi de quête ?
+    const besideSide = (side, r) => !!side && r.width > 0 && r.left < side.right && r.right > side.left;
     if (!isNarrow() || hud.hidden) {
       const info = hud.querySelector('.hud-info');
       const base = info ? info.getBoundingClientRect().bottom : 148;
       this.bubble.style.top = `${Math.round(base + 12)}px`;
-      this.tracker.style.top = `${Math.round(base + 8)}px`;
-      for (const el of stacked.slice(1)) reset(el);
+      const side = this.placeTracker();
+      for (const el of stacked.slice(0, -1)) reset(el);
+      // Les messages (au milieu, en haut) passent sous le suivi si la fenêtre est trop étroite pour les deux.
+      const toasts = ui.toasts;
+      const top = besideSide(side, toasts.getBoundingClientRect()) ? `${Math.round(side.bottom + 8)}px` : '';
+      if (toasts.style.top !== top) toasts.style.top = top;
+      if (toasts.style.bottom) toasts.style.bottom = '';
       if (panel.style.maxHeight) panel.style.maxHeight = '';
       return;
     }
     let y = hud.getBoundingClientRect().bottom + 6;
+    let side = null;
     const place = (el, gap = 6) => {
       if (!el || el.hidden) return;
+      // Dans la colonne du suivi de quête : on commence juste sous lui.
+      if (besideSide(side, el.getBoundingClientRect()) && y < side.bottom + gap) y = side.bottom + gap;
       const top = `${Math.round(y)}px`;
       if (el.style.top !== top) el.style.top = top;
       // Posé par le haut seulement : un `bottom` venu du CSS l'étirerait jusqu'en bas de l'écran.
@@ -577,6 +662,7 @@ export class Tutorial {
       if (r.height > 0) y = r.bottom + gap;
     };
     place(this.bubble);
+    side = this.placeTracker();
     // La fiche ouverte commence sous la bulle (sinon elle cacherait le bouton ✕ que le guide montre).
     const panelOpen = !!ui.panel && !panel.hidden;
     const maxH = panelOpen && !this.bubble.hidden ? `${Math.max(Math.round(window.innerHeight * 0.4), Math.round(window.innerHeight - y))}px` : '';
@@ -607,7 +693,6 @@ export class Tutorial {
     this.questFocus = null;
     this.ui.closePanel();
     this.trackerKey = '';
-    this.trackerOpen = false; // téléphone : la pastille se replie sur l'étape en cours
     const v = followView(p, OBJECTIVES);
     this.ui.toast(`🧭 ${t(`o_${id}`)} — ${t(`quest_step_${v.current.id}`)}`, 5000);
     this.tick();
@@ -620,7 +705,6 @@ export class Tutorial {
     this.highlight = null;
     this.releaseMarker();
     this.trackerKey = '';
-    this.trackerOpen = false;
     this.tick();
   }
 
@@ -668,7 +752,6 @@ export class Tutorial {
     if (p.questFollow?.id === id) return this.reshow();
     if (p.questFollow) stopFollow(p); // une seule quête guidée à la fois
     this.ui.closePanel();
-    this.trackerOpen = false;
     this.questFocus = { id, spec: g.target, until: performance.now() + 45000 };
     this.markerKey = '';
     this.ui.toast(`${t(`o_${id}`)} — ${t(g.first ? `quest_hint_first_${g.first}` : `quest_hint_${id}`)}`, 6000);

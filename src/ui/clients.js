@@ -11,6 +11,25 @@ import { speciesName } from './names.js';
 import { clientState, clientAnimals, canAccept, daysLeft, dailyCareScore, maxClients } from '../sim/clients.js';
 import { CAREERS, startedCareers, reputationOf, RANKS, rankOf } from '../sim/careers.js';
 import { XP } from '../sim/progress.js';
+import { clientDogs, isTrainingClient, daysLeft as trainingDaysLeft } from '../sim/dogTrainer.js'; // éducateur canin
+
+/** Les chiens en éducation (métier éducateur canin), avec le carnet du métier. */
+function trainingDogs(ui) {
+  const g = ui.game;
+  const p = g.profile;
+  if (p.careers?.started?.dogTrainer === undefined) return [];
+  const dogs = clientDogs(p).filter(isTrainingClient);
+  return [
+    h('h3', {}, `🐕 ${t('dt_clients')} (${dogs.length})`),
+    h('div', { class: 'cards' }, dogs.map((a) => h('button', { class: 'card cl-card training', onClick: () => ui.openAnimal(a) },
+      h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+      h('span', { class: 'card-main' },
+        h('b', {}, a.name),
+        h('small', {}, `${t('cl_owner', { owner: a.client.ownerName })} · ${t('dt_sessionsDone', { n: a.client.sessionsDone, total: a.client.sessionsNeeded })}`),
+        h('small', {}, trainingDaysLeft(a, g.day) === 0 ? t('dt_dueToday') : t('dt_due', { n: trainingDaysLeft(a, g.day) })))))),
+    h('button', { class: 'small', onClick: () => ui.openDogTrainer() }, t('dt_cardBtn')),
+  ];
+}
 
 export const OWNER_EMOJI = (sex) => (sex === 'f' ? '👩' : '👨');
 const KIND_EMOJI = { pension: '🏡', vet: '🩺' };
@@ -111,7 +130,8 @@ export function clientsTab(ui) {
   const g = ui.game;
   const p = g.profile;
   const st = clientState(p);
-  const started = startedCareers(p).filter((id) => KIND_EMOJI[id]);
+  // Tous les métiers commencés (réputation) ; l'éducateur canin a ses propres clients (plus bas).
+  const started = startedCareers(p).filter((id) => KIND_EMOJI[id] || CAREERS[id].ownClients);
   const out = [h('p', { class: 'note' }, t('cl_help'))];
   if (!started.length) {
     out.push(h('p', { class: 'note' }, t('cl_needAnyCareer')),
@@ -130,6 +150,7 @@ export function clientsTab(ui) {
       h('span', {}, t('cl_waiting', { owner: visitor.owner.name, name: visitor.animal.name })),
       h('button', { class: 'small primary', onClick: () => { ui.closePanel(); g.clients?.goToVisitor(); } }, t('cl_go'))));
   }
+  out.push(...trainingDogs(ui)); // éducateur canin : chiens en éducation (src/ui/dogTrainer.js)
   const list = clientAnimals(p);
   out.push(h('h3', {}, `${t('cl_title')} (${list.length}/${maxClients(p)})`));
   if (!list.length) out.push(h('p', { class: 'note' }, t('cl_noneNow')));

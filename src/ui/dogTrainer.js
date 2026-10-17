@@ -130,7 +130,8 @@ function problemRow(id, start, now) {
   const fixed = now < FIXED_BELOW;
   return h('div', { class: `dt-prob ${fixed ? 'fixed' : ''}` },
     h('span', { class: 'dt-prob-name' }, `${PROBLEMS[id].emoji} ${problemName(id)}`),
-    h('b', {}, `${Math.round(start)} % → ${Math.round(now)} %${fixed ? ' ✅' : ''}`),
+    // Avant la première séance : juste le niveau ; ensuite, d'où il part et où il en est.
+    h('b', {}, `${Math.round(start) === Math.round(now) ? '' : `${Math.round(start)} % → `}${Math.round(now)} %${fixed ? ' ✅' : ''}`),
     h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${Math.round(100 - now)}%` } })));
 }
 

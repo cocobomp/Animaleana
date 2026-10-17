@@ -230,14 +230,14 @@ function hairField(style, head, hat) {
   // Frange balayée sur le côté (courts).
   if (style === 'short') {
     const P = (x, y, off) => [x, y, skinZ(head, x, y) + off];
-    extra.push(lock([[0.06, 0.2, 0.03], P(0.04, 0.168, 0.02), P(-0.028, 0.133, 0.009)], [0.022, 0.017, 0.006]));
-    extra.push(lock([[0.08, 0.195, 0.02], P(0.075, 0.16, 0.018), P(0.024, 0.13, 0.008)], [0.02, 0.015, 0.005]));
-    extra.push(lock([[0.02, 0.205, 0.03], P(-0.008, 0.172, 0.018), P(-0.074, 0.136, 0.008)], [0.02, 0.015, 0.005]));
+    extra.push(lock([[0.06, 0.2, 0.03], P(0.04, 0.168, 0.02), P(-0.028, 0.133, 0.009)], [0.022, 0.017, 0.0075]));
+    extra.push(lock([[0.08, 0.195, 0.02], P(0.075, 0.16, 0.018), P(0.024, 0.13, 0.008)], [0.02, 0.016, 0.007]));
+    extra.push(lock([[0.02, 0.205, 0.03], P(-0.008, 0.172, 0.018), P(-0.074, 0.136, 0.008)], [0.02, 0.016, 0.007]));
   }
   // Mèche sur le front et petites mèches aux tempes (queue de cheval, chignon, tresse).
   if (style === 'ponytail' || style === 'bun' || style === 'braid') {
     const P = (x, y, off) => [x, y, skinZ(head, x, y) + off];
-    extra.push(lock([[0.07, 0.2, 0.03], P(0.05, 0.172, 0.013), P(-0.022, 0.141, 0.007)], [0.018, 0.014, 0.005]));
+    extra.push(lock([[0.07, 0.2, 0.03], P(0.05, 0.172, 0.014), P(-0.02, 0.142, 0.009)], [0.02, 0.017, 0.009]));
     for (const s of [1, -1]) extra.push(lock([P(s * 0.098, 0.128, 0.005), P(s * 0.104, 0.095, 0.006), P(s * 0.1, 0.066, 0.005)], [0.0065, 0.0055, 0.003]));
   }
   // Longs : rideau dans le dos et longues mèches de chaque côté du visage.

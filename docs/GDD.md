@@ -127,6 +127,10 @@ réussite au dressage…).
 - Sauvegardes dans le `localStorage` de l'appareil, une par profil.
 - Modèles 3D : générés par le code dans la v0.1 ; remplacés ensuite par des
   modèles glTF gratuits sous licence libre (CC0) pour gagner en réalisme.
+- Vignettes des cartes (sellerie, animalerie, construction, véhicules) : les
+  modèles 3D du jeu photographiés hors écran (`src/game/thumbs.js`), une à la fois,
+  quand la carte devient visible, puis gardées en mémoire ; un emoji en attendant
+  (et à la place, si WebGL manque). Mesures dans ⚙️ Réglages.
 
 ## 12. Feuille de route
 
@@ -135,5 +139,5 @@ réussite au dressage…).
 | **0.1** (prototype, fait) | Profils, avatar, maison + écurie + carrière, 4 espèces et 39 races, besoins, personnalités, vieillissement et mort de vieillesse, bébés, refuge et élevages locaux, vétérinaire (mini-jeu), dressage des tours, entraînement, longe et liberté, monter à cheval, caméra 1ʳᵉ/3ᵉ personne, jour/nuit, météo par lieu et saison, voyage dans 6 lieux (voiture, van, cheval, bateau, avion), quêtes et succès, petits boulots, modes bac à sable et gestion, FR/EN, hors ligne |
 | **0.2** (fait) | Concours et spectacles sur le terrain de concours, apprentissage du saut, parcours d'obstacles, agility, balade, lapin-hop ; mini-jeux pour chaque soin (brosser, laver, ferrer, tonte, traite…) ; vétérinaire à jouer soi-même |
 | **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison |
-| **0.4** (en cours) | Fait : graphismes plus beaux (sol, végétation, lumière, bâtiments, animaux, animations), sons synthétisés (ambiance, voix des animaux, pas, interface), mini-jeux des corvées (curer, pailler, balayer, ranger, vaisselle). À venir : notation « juste ce qu'il faut » dans tous les mini-jeux, voyage à cheval en temps réel, nouvelles espèces |
+| **0.4** (en cours) | Fait : graphismes plus beaux (sol, végétation, lumière, bâtiments, animaux, animations), sons synthétisés (ambiance, voix des animaux, pas, interface), mini-jeux des corvées (curer, pailler, balayer, ranger, vaisselle), vignettes 3D des cartes (sellerie, animalerie, construction, véhicules). À venir : notation « juste ce qu'il faut » dans tous les mini-jeux, voyage à cheval en temps réel, nouvelles espèces |
 | 1.0 | Publication |

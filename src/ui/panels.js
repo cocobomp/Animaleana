@@ -27,6 +27,7 @@ import { animalActivitySection } from './activities.js';
 import { clientBadge, clientInfo, clientsTab } from './clients.js'; // animaux confiés par des clients
 import { isCareerPatient } from './vet.js'; // animal confié en soins, métier commencé : examen gratuit
 import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
+import { thumb } from '../game/thumbScenes.js'; // vignettes 3D (animalerie, voyage)
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -55,12 +56,12 @@ function money(ui, n) {
   return isSandbox(ui.game.profile) || !n ? '' : ` · ${n} 🪙`;
 }
 
-/** Petite fiche d'identité : espèce, race, âge, sexe, caractère, robe. */
-export function animalCard(a) {
+/** Petite fiche d'identité : espèce, race, âge, sexe, caractère, robe. pic : vignette 3D (sinon l'emoji). */
+export function animalCard(a, pic = null) {
   const row = (k, v) => h('div', { class: 'id-row' }, h('span', {}, k), h('b', {}, v));
   return h('div', { class: 'id-card' },
     h('div', { class: 'id-head' },
-      h('span', { class: 'id-emoji' }, SPECIES[a.species].emoji),
+      pic ?? h('span', { class: 'id-emoji' }, SPECIES[a.species].emoji),
       h('span', { class: 'swatch-dot', style: { background: hexColor(a.look.coat) } })),
     row(t('species'), speciesName(a)),
     row(t('breed'), breedName(a)),
@@ -303,6 +304,15 @@ export function openVetClinic(ui) {
 
 // ---------------------------------------------------------------- voyage
 
+/** Véhicule de chaque façon de voyager (vignette 3D) ; le bateau et l'avion gardent leur emoji. */
+const MODE_VEHICLE = { car: 'car', van: 'rig', horse: 'horse' };
+
+function modePic(g, mode, emoji) {
+  const id = MODE_VEHICLE[mode];
+  if (!id) return h('span', { class: 'card-emoji' }, emoji);
+  return thumb(g, { kind: 'vehicle', id }, { w: 92, h: 60, emoji, cls: 'veh-thumb', alt: '' });
+}
+
 export function openTravel(ui) {
   const g = ui.game;
   const state = { dest: null, mode: null, bring: new Set(g.animalsHere().filter((a) => !a.client).map((a) => a.id)) };
@@ -353,7 +363,7 @@ export function openTravel(ui) {
         class: `card mode ${state.mode === o.mode ? 'selected' : ''}`,
         disabled: !o.ok,
         onClick: () => { state.mode = o.mode; ui.renderPanel(); },
-      }, h('span', { class: 'card-emoji' }, mode.emoji), h('span', { class: 'card-main' }, h('b', {}, t(`mode_${o.mode}`)), h('small', {}, detail)));
+      }, modePic(g, o.mode, mode.emoji), h('span', { class: 'card-main' }, h('b', {}, t(`mode_${o.mode}`)), h('small', {}, detail)));
     })));
     // Voyage réaliste (ui/trip.js) : qui reste chez le voisin, véhicule, pauses, alerte long trajet.
     out.push(...travelAdvice(ui, { here, travelers, state, option: opts.find((o) => o.mode === state.mode) }));
@@ -420,6 +430,21 @@ export function openJobs(ui) {
 
 // ---------------------------------------------------------------- réglages
 
+/**
+ * Réglages : mesures des vignettes 3D (combien, place en mémoire, temps de fabrication) — pour vérifier
+ * sur le téléphone que rien ne pèse sur le jeu (src/game/thumbs.js).
+ */
+function thumbsLine(g) {
+  const th = g.thumbs;
+  if (!th) return null;
+  if (!th.enabled) return h('p', { class: 'note' }, t('thumbsOff'));
+  const s = th.stats();
+  if (!s.made) return null;
+  return h('p', { class: 'note' }, t('thumbsStats', {
+    n: s.cacheCount, kb: Math.round(s.cacheBytes / 1024), ms: Math.round(s.avgCpuMs), max: Math.round(s.maxCpuMs),
+  }));
+}
+
 export function openSettings(ui) {
   const g = ui.game;
   // Sons : s'applique tout de suite (src/game/audio.js) ; sauvegardé avec le profil.
@@ -448,6 +473,7 @@ export function openSettings(ui) {
           class: quality === q ? 'primary' : '',
           onClick: () => { g.setQuality(q); location.reload(); },
         }, t(q === 'high' ? 'qualityHigh' : 'qualityLow')))),
+        thumbsLine(g),
         h('h3', {}, t('timeSpeed')),
         h('div', { class: 'row wrap' }, ['slow', 'normal', 'fast'].map((sp) => h('button', {
           class: (g.profile.settings.timeSpeed ?? 'normal') === sp ? 'primary' : '',
@@ -677,15 +703,27 @@ export function openShop(ui) {
     const sandbox = isSandbox(g.profile);
     const preview = createAnimal({ species: st.species, breed: st.breed, colorIndex: st.colorIndex, sex: st.sex, ageDays: stageAgeDays(st.species, st.stage), name: '' });
     const chip = (label, on, fn) => h('button', { class: `small ${on ? 'primary' : ''}`, onClick: () => { fn(); ui.renderPanel(); } }, label);
+    // Vignettes 3D : l'animal tel qu'il sera (race, robe, sexe, âge), et chaque race de la liste (adulte, première robe).
+    const emoji = SPECIES[st.species].emoji;
+    const spec = { kind: 'animal', species: st.species, breed: st.breed, colorIndex: st.colorIndex, sex: st.sex, stage: st.stage };
+    const pic = (w, hh, cls) => thumb(g, spec, { w, h: hh, emoji, cls, urgent: true, alt: L(breed.name) });
+    const coatName = L(breed.colors[st.colorIndex % breed.colors.length]?.name) || '';
     return [
       h('p', { class: 'note' }, g.isHome ? t('shopHelp') : t('breederHelp')),
       h('h3', {}, t('species')),
       h('div', { class: 'row wrap' }, speciesList.map((sid) => chip(`${SPECIES[sid].emoji} ${L(SPECIES[sid].name)}`, st.species === sid, () => { st.species = sid; }))),
+      // Aperçu toujours visible en haut (il suit la liste quand on la fait défiler).
+      h('div', { class: 'shop-preview', 'aria-live': 'polite' }, pic(132, 99, ''),
+        h('div', { class: 'shop-preview-text' },
+          h('b', {}, `${breed.from?.flag ? `${breed.from.flag} ` : ''}${L(breed.name)}`),
+          h('small', {}, [coatName, `${st.sex === 'f' ? '♀' : '♂'} ${t(st.sex === 'f' ? 'female' : 'male')}`, t(`stage_${st.stage}`)].filter(Boolean).join(' · ')),
+          sandbox ? null : h('small', {}, `${price} 🪙`))),
       h('h3', {}, t('breed')),
       h('div', { class: 'cards' }, breeds.map((b) => h('button', {
         class: `card ${b.id === st.breed ? 'selected' : ''}`,
         onClick: () => { st.breed = b.id; st.colorIndex = 0; ui.renderPanel(); },
       },
+      thumb(g, { kind: 'animal', species: st.species, breed: b.id, colorIndex: 0, sex: 'f', stage: 'adult' }, { w: 84, h: 63, emoji, cls: 'breed-thumb', alt: '' }),
       h('span', { class: 'card-main' }, h('b', {}, `${b.from?.flag ? `${b.from.flag} ` : ''}${L(b.name)}`), h('small', {}, '⭐'.repeat(b.rarity ?? 1)),
         // Chats : taille et poil de la race (catBreeds.js), sur chaque carte.
         b.desc ? h('small', { class: 'breed-desc' }, L(b.desc)) : null,
@@ -701,12 +739,12 @@ export function openShop(ui) {
       h('h3', {}, t('age')),
       h('div', { class: 'row wrap' }, AGE_STAGES.map((sg) => chip(t(`stage_${sg}`), st.stage === sg, () => { st.stage = sg; }))),
       h('h3', {}, t('shopSummary')),
-      animalCard(preview),
+      animalCard(preview, pic(96, 72, '')),
       h('button', {
         class: 'primary big',
         disabled: !canAfford(g.profile, price),
         onClick: async () => {
-          const name = await ui.prompt(t('chooseName'), pick(NAMES), animalCard(preview));
+          const name = await ui.prompt(t('chooseName'), pick(NAMES), animalCard(preview, pic(96, 72, '')));
           if (name === null) return;
           if (g.buyAnimal({ ...st }, name)) ui.closePanel();
         },

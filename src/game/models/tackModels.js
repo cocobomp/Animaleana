@@ -1,7 +1,7 @@
 // Équipement en 3D « posé » (hors du cheval) : selles sur leur porte-selle, filets et licols
 // suspendus, tapis pliés, guêtres et cloches, couvertures sur leur barre, bombes.
 // Sert aux murs de la sellerie (src/game/models/tackRoomInterior.js) et aux images des fiches
-// (src/game/tackThumbs.js). Les géométries sont partagées (cache), les matériaux aussi (par couleur).
+// (src/game/thumbScenes.js). Les géométries sont partagées (cache), les matériaux aussi (par couleur).
 //
 // Repères (en mètres) :
 //   selle : posée sur un porte-selle en (0, 0, 0), le pommeau vers +Z, les quartiers vers ±X ;

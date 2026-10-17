@@ -14,6 +14,7 @@ import { localSize, canResize } from '../sim/resize.js';
 import { buildingActions } from '../sim/buildings.js';
 import { EQUIPMENT } from '../sim/farm.js';
 import { actionSheet } from './actions.js';
+import { thumb } from '../game/thumbScenes.js'; // vignettes 3D du catalogue
 
 /** Catégories de la vue construction → catégories du catalogue. */
 export const BUILD_TABS = [
@@ -204,7 +205,7 @@ export function openCatalogue(ui, tab = null) {
               },
             }, sandbox ? t('con_place') : `${t('con_place')} · ${def.price} 🪙`);
           return h('div', { class: `card ${locked ? 'locked' : ''}` },
-            h('span', { class: 'card-emoji' }, def.emoji),
+            thumb(g, { kind: 'equipment', type }, { w: 92, h: 69, emoji: def.emoji, cls: 'con-thumb', alt: '' }),
             h('span', { class: 'card-main' }, h('b', {}, t(`eq_${type}`)), h('small', {}, `${who} · ${t(`eqd_${type}`)}`)),
             side);
         })));
@@ -232,7 +233,7 @@ export function openCatalogue(ui, tab = null) {
               },
             }, sandbox ? t('con_place') : `${t('con_place')} · ${def.price} 🪙`);
           return h('div', { class: `card ${locked ? 'locked' : ''}` },
-            h('span', { class: 'card-emoji' }, def.emoji),
+            thumb(g, { kind: 'structure', type }, { w: 92, h: 69, emoji: def.emoji, cls: 'con-thumb', alt: '' }),
             h('span', { class: 'card-main' }, h('b', {}, structureName(type)), h('small', {}, t(`con_d_${type}`)), h('small', {}, info)),
             side);
         })));

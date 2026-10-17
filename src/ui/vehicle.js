@@ -10,6 +10,7 @@ import { cargoItems, cargoItem, CARGO_KINDS, cargoUsed, canPack, pack, unpack, i
 import { GEAR } from '../sim/gear.js';
 import { stallSteps, canStep, CONFIDENCE_OK } from '../sim/loading.js';
 import { hasTool } from '../sim/tools.js';
+import { thumb } from '../game/thumbScenes.js'; // vignettes 3D du van, de la voiture, du coffre
 
 /** Nom d'un objet du coffre (provision, équipement ou outil) ; l'équipement avec sa taille (« Selle mixte (Poney) »). */
 export function cargoName(id) {
@@ -30,8 +31,10 @@ export function openVehicleMenu(ui, flow) {
   if (!l?.vehicle) return;
   const v = l.vehicle;
   const go = (fn) => () => { ui.hideModal(); fn(); };
+  // icon : un emoji, ou une vignette 3D (le van, le coffre, la voiture).
   const big = (icon, title, sub, fn, cls = '') => h('button', { class: `big-action ${cls}`, onClick: go(fn) },
-    h('span', { class: 'ba-icon' }, icon), h('span', { class: 'ba-text' }, h('b', {}, title), sub ? h('small', {}, sub) : null));
+    h('span', { class: `ba-icon ${typeof icon === 'string' ? '' : 'ba-thumb'}` }, icon), h('span', { class: 'ba-text' }, h('b', {}, title), sub ? h('small', {}, sub) : null));
+  const pic = (id, emoji) => thumb(ui.game, { kind: 'vehicle', id }, { w: 76, h: 50, emoji, alt: '' });
   const acts = [];
   for (const a of flow.waiting()) {
     if (flow.placeOf(a) === 'trailer') {
@@ -42,11 +45,11 @@ export function openVehicleMenu(ui, flow) {
   }
   if (v.trailer) {
     const loose = flow.unsecured().length;
-    acts.push(big('🔒', t('veh_stallView'), loose ? t('veh_stallLoose', { n: loose }) : t('veh_stallSub'), () => flow.setView('stall')));
+    acts.push(big(pic('trailer', '🔒'), t('veh_stallView'), loose ? t('veh_stallLoose', { n: loose }) : t('veh_stallSub'), () => flow.setView('stall')));
   }
-  acts.push(big('🧳', t(v.trailer ? 'veh_tackView' : 'veh_roofView'), t('veh_cargoUsed', { n: cargoUsed(l.cargo), max: l.capacity }), () => flow.setView('tack')));
+  acts.push(big(pic(v.trailer ? 'trunk' : 'car', '🧳'), t(v.trailer ? 'veh_tackView' : 'veh_roofView'), t('veh_cargoUsed', { n: cargoUsed(l.cargo), max: l.capacity }), () => flow.setView('tack')));
   const left = flow.waiting().length;
-  acts.push(big(v.trailer ? '🚙' : '🚗', t('veh_cabView'), left ? t('veh_cabWaiting', { n: left }) : t('veh_cabReady'), () => flow.setView('cab'), left ? '' : 'primary'));
+  acts.push(big(pic(v.trailer ? 'towCar' : 'car', v.trailer ? '🚙' : '🚗'), t('veh_cabView'), left ? t('veh_cabWaiting', { n: left }) : t('veh_cabReady'), () => flow.setView('cab'), left ? '' : 'primary'));
   ui.showModal([
     h('p', { class: 'trip-modal-title' }, t(v.trailer ? 'veh_menuTitleVan' : 'veh_menuTitleCar', { place: flow.destName() })),
     h('div', { class: 'action-sheet veh-menu' }, acts),

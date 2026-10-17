@@ -5,6 +5,7 @@ import { VET_FR, VET_EN } from './ui/vetTexts.js'; // examen et école vétérin
 import { TACK_FR, TACK_EN } from './ui/tackTexts.js'; // sellerie : catalogue d'équipement (gear_*, tk_*, col_*)
 import { VEHICLES_FR, VEHICLES_EN } from './ui/vehiclesTexts.js'; // véhicules du voyage (veh_*, cargo_*)
 import { SAVE_FR, SAVE_EN } from './ui/saveTexts.js'; // sauvegarde dans un fichier (sv_*)
+import { CLOUD_FR, CLOUD_EN } from './ui/cloudTexts.js'; // compte Google et sauvegarde en ligne (cloud_*)
 
 const fr = {
   title: 'La ferme à Madichelle',
@@ -3597,6 +3598,8 @@ Object.assign(fr, VEHICLES_FR);
 Object.assign(en, VEHICLES_EN);
 Object.assign(fr, SAVE_FR); // sauvegarder / restaurer une partie dans un fichier
 Object.assign(en, SAVE_EN);
+Object.assign(fr, CLOUD_FR); // compte et sauvegarde en ligne
+Object.assign(en, CLOUD_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

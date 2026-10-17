@@ -10,11 +10,15 @@ import { L } from '../i18n.js';
 import { buildAvatar, animateAvatarWalk, updateAvatarLife } from '../game/models/avatarModel.js';
 import { disposeModel } from '../game/models/animalModel.js';
 import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
+import { cloudCard, syncMessage } from './cloudAccount.js'; // ☁️ compte Google (facultatif)
+import { onCloudChange } from '../cloud/account.js';
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x4e2f1e];
 const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xe8d39a, 0xa63a1f, 0x9a9a9a, 0x5b4bb5, 0xe26fa6];
 const CLOTHES = [0x3f7cc4, 0xd94848, 0x3f9b5b, 0xf0c33c, 0x8b5ac7, 0xf28fb3, 0xf2f2f2, 0x2b2b2b, 0x2d3a4f, 0x7b5a3c];
 const STYLES = ['short', 'long', 'ponytail', 'curly', 'bun', 'braid', 'bald'];
+
+let stopCloudWatch = null; // un seul abonnement aux changements du compte, même si l'écran est rouvert
 
 export function showProfiles(ui) {
   const render = () => {
@@ -51,6 +55,8 @@ export function showProfiles(ui) {
       profiles.length ? h('h2', {}, t('profiles')) : null,
       h('div', { class: 'profiles' }, list),
       h('button', { class: 'primary big', onClick: () => newProfile(ui, render) }, `➕ ${t('newProfile')}`),
+      // Compte Google facultatif : sans compte on joue en invité (parties sur l'appareil).
+      cloudCard(ui),
       // La partie dans un fichier : pour changer d'appareil ou d'adresse du jeu (src/ui/saveGame.js).
       h('div', { class: 'save-tools' },
         profiles.length ? h('button', {
@@ -73,6 +79,20 @@ export function showProfiles(ui) {
   };
   render();
   ui.screen.scrollTop = 0;
+  // Connexion, synchro : l'écran se redessine tant qu'il est affiché (parties récupérées comprises).
+  let lastReport = null;
+  stopCloudWatch?.();
+  stopCloudWatch = onCloudChange((state) => {
+    if (ui.game.running || ui.screen.hidden || !ui.screen.querySelector('.profiles')) return;
+    const y = ui.screen.scrollTop;
+    render();
+    ui.screen.scrollTop = y;
+    if (state.report && state.report !== lastReport) {
+      lastReport = state.report;
+      const msg = syncMessage(state.report);
+      if (msg) ui.toast(msg, 6000);
+    }
+  });
 }
 
 function newProfile(ui, back) {

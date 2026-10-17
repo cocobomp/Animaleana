@@ -14,6 +14,7 @@ import { gfx } from '../gfx.js';
 import { SPECIES } from '../../sim/species.js';
 import { hairMaterial, buildHorseLeg, buildHorseMane, buildHorseForelock, buildHorseTail } from './horseParts.js';
 import { buildHorseModel } from './horseModel.js';
+import { buildRealHorseModel } from './horseReal.js';
 import { buildCatModel } from './catModel.js'; // chats : modèle dédié (races, poils, poses)
 
 // ------------------------------------------------------------------ anatomie par espèce
@@ -406,7 +407,8 @@ function neckAt(ns, t) {
 export function buildAnimalModel(speciesId, look, breedOfAnimal = null) {
   // Vague 3 : le cheval et le chat ont chacun leur propre modèle (horseModel.js, catModel.js) ;
   // les autres espèces passent par le modèle commun ci-dessous.
-  if (speciesId === 'horse') return buildHorseModel(look, breedOfAnimal);
+  // (cheval réaliste du GLB ; s'il n'est pas chargé, le cheval sculpté)
+  if (speciesId === 'horse') return buildRealHorseModel(look, breedOfAnimal) ?? buildHorseModel(look, breedOfAnimal);
   if (speciesId === 'cat') return buildCatModel(look);
   const S = SPEC[speciesId] ?? SPEC.dog;
   const high = gfx.quality === 'high';

@@ -28,7 +28,8 @@ function mouthOf(entity, out) {
   const md = entity.model;
   const look = entity.data?.look ?? {};
   const hl = look.headLen ?? 0.3;
-  if (md.gltf) out.set(0, -0.5 * hl, 0.82 * hl);
+  if (md.mouth) out.copy(md.mouth); // (cheval réaliste : mesurée sur le modèle)
+  else if (md.gltf) out.set(0, -0.5 * hl, 0.82 * hl);
   else out.set(0, -0.25 * (look.headR ?? 0.1), 0.72 * hl);
   return md.head.localToWorld(out);
 }

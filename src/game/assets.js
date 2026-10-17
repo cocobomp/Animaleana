@@ -12,8 +12,11 @@ import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 export const USE_GLTF = true;
 
 // Clé -> fichier dans public/models/. Les espèces absentes restent procédurales.
-// (Le cheval low-poly « horse.glb » a été remplacé par le cheval réaliste procédural, horseModel.js.)
+// horse_real : le cheval réaliste (Lyndon Daniels, CC0), construit par horseReal.js. Clé à part (pas
+// « horse ») : gltfAnimal.js ne doit pas le prendre pour un animal GLB générique. S'il manque, le
+// cheval sculpté par le code (horseModel.js) le remplace.
 export const MODELS = {
+  horse_real: 'horse_real.glb',
   tree_common: 'tree_common.glb',
   tree_common2: 'tree_common2.glb',
   tree_birch: 'tree_birch.glb',

@@ -13,7 +13,7 @@
 // 'saddle' = la selle mixte taille cheval, 'saddle@pony' = la même en poney. Une selle poney dans le
 // coffre ne va qu'à un poney, sur place.
 
-import { GEAR, SIZES, freeStock, stockKey, defaultSize, fitReason, sizeFor, ensureTack, isAway as isAwayGear } from './gear.js';
+import { GEAR, SIZES, freeStock, stockKey, parseKey, defaultSize, fitReason, sizeFor, ensureTack, isAway as isAwayGear } from './gear.js';
 import { TOOLS, hasTool } from './tools.js';
 
 /** Provisions : on en trouve partout (on n'a pas besoin de les acheter). */
@@ -263,13 +263,22 @@ export function arriveWithCargo(profile, cargo, travellers, destId) {
   return l;
 }
 
-/** Ce qu'on a avec soi ici (pour l'afficher) : [{ id, n }] ; null si on est à la maison (ou sans coffre). */
+/**
+ * L'emoji d'un objet qu'on a avec soi : ce qui est dans le coffre, mais aussi la bombe du cavalier,
+ * qui voyage sur sa tête (elle n'est pas dans cargoItems, voir luggageOnArrival).
+ */
+export function luggageEmoji(id) {
+  return cargoItem(id)?.emoji ?? GEAR[parseKey(id).id]?.emoji ?? TOOLS[id]?.emoji ?? '📦';
+}
+
+/** Ce qu'on a avec soi ici (pour l'afficher) : [{ id, n, emoji }] ; null si on est à la maison (ou sans coffre). */
 export function luggageHere(profile) {
   if (!isAway(profile)) return null;
   const l = profile.luggage;
   const out = [];
-  for (const [id, n] of Object.entries(l.supplies ?? {})) if (n) out.push({ id, n });
-  for (const [id, n] of Object.entries(l.items ?? {})) if (n) out.push({ id, n });
-  for (const id of l.tools ?? []) out.push({ id, n: 1 });
+  const add = (id, n) => out.push({ id, n, emoji: luggageEmoji(id) });
+  for (const [id, n] of Object.entries(l.supplies ?? {})) if (n) add(id, n);
+  for (const [id, n] of Object.entries(l.items ?? {})) if (n) add(id, n);
+  for (const id of l.tools ?? []) add(id, 1);
   return out;
 }

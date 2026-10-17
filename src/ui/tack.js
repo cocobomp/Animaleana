@@ -46,8 +46,15 @@ function sizeChoice(g, id) {
 
 const priceLabel = (p, id, size) => (isSandbox(p) ? t('tk_free') : `${gearPrice(id, size ?? defaultSize(id))} 🪙`);
 
-/** « Taille Cheval : 2 · 1 rangé au mur » (singulier / pluriel). */
-const stockText = (s) => t('tk_stockLine', { size: t(`tk_size_${s.size}`), n: s.owned }) + (s.free > 0 ? t('tk_stockFree', { n: s.free }) : '');
+/**
+ * « Taille Cheval : 2 · 1 rangé au mur » (singulier / pluriel) ; en voyage, « · 1 dans le coffre »
+ * (stockOf compte alors le coffre et ce que portent les animaux d'ici, src/sim/gear.js).
+ */
+const stockText = (p, s) => t('tk_stockLine', { size: t(`tk_size_${s.size}`), n: s.owned })
+  + (s.free > 0 ? t(isAway(p) ? 'tk_stockFreeAway' : 'tk_stockFree', { n: s.free }) : '');
+
+/** « À toi : 2 » ; en voyage, « Avec toi ici : 1 » (le reste est à la maison). */
+const ownedText = (p, n) => t(isAway(p) ? 'tk_ownedAway' : 'tk_owned', { n });
 
 // ---------------------------------------------------------------- catalogue
 
@@ -98,7 +105,7 @@ function itemCard(ui, id) {
     h('span', { class: 'card-main' },
       h('b', {}, name(id)),
       h('small', {}, `${t(`tk_disc_${def.discipline}`)}${def.sizes ? ` · ${def.sizes.map((s) => t(`tk_size_${s}`)).join(' / ')}` : ''}`),
-      h('small', { class: own ? 'tk-mine' : '' }, own ? t('tk_owned', { n: own }) : t(`tk_d_${id}`))),
+      h('small', { class: own ? 'tk-mine' : '' }, own ? ownedText(p, own) : t(`tk_d_${id}`))),
     h('span', { class: 'card-side' }, h('b', { class: 'tk-price' }, priceLabel(p, id))));
 }
 
@@ -123,11 +130,11 @@ function mineList(ui) {
   // (en voyage : ce qui est dans le coffre, puis ce qui attend à la maison)
   const ids = Object.keys(GEAR).filter((id) => ownedVariant(p, id) > 0 || atHomeCount(p, id) > 0);
   if (!ids.length) return [h('p', { class: 'note' }, t('tk_mineNothing'))];
-  return [h('p', { class: 'note' }, t('tk_mineHelp')), h('div', { class: 'cards' }, ids.map((id) => {
+  return [h('p', { class: 'note' }, t(isAway(p) ? 'tk_mineHelpAway' : 'tk_mineHelp')), h('div', { class: 'cards' }, ids.map((id) => {
     const def = GEAR[id];
     const lines = def.sizes
-      ? stockOf(p, id).map(stockText)
-      : ownedVariant(p, id) ? [t('tk_owned', { n: ownedVariant(p, id) })] : [];
+      ? stockOf(p, id).map((s) => stockText(p, s))
+      : ownedVariant(p, id) ? [ownedText(p, ownedVariant(p, id))] : [];
     if (atHomeCount(p, id) > 0) lines.push(t('tk_atHome', { n: atHomeCount(p, id) }));
     const who = (def.sizes ?? [null]).flatMap((s) => wornBy(p, id, s ?? defaultSize(id))).map((a) => a.name);
     if (def.type === 'helmet' && riderHelmet(p)?.item === id) who.push(t('tk_you')); // la bombe : sur ta tête
@@ -178,7 +185,7 @@ function renderItem(ui, id) {
     h('div', { class: 'chips' },
       h('span', { class: 'chip tk-disc' }, t(`tk_disc_${def.discipline}`)),
       // (en voyage : ce qui est resté à la maison n'est pas « pas encore à toi »)
-      own ? h('span', { class: 'chip tk-own' }, t('tk_owned', { n: own }))
+      own ? h('span', { class: 'chip tk-own' }, ownedText(p, own))
         : h('span', { class: 'chip' }, atHomeCount(p, id) > 0 ? t('gearAtHome') : t('tk_ownedNone'))),
     h('p', { class: 'tk-desc' }, t(`tk_d_${id}`)),
     h('p', { class: 'tk-fx' }, h('b', {}, `🎮 ${t('tk_effect')} : `), t(`geard_${id}`)),
@@ -204,7 +211,7 @@ function renderItem(ui, id) {
       onClick: () => { shop.size[id] = s; ui.renderPanel(); },
     }, `${{ pony: '🐴', horse: '🐎', draft: '🐴💪' }[s]} ${t(`tk_size_${s}`)}${sandbox ? '' : ` · ${gearPrice(id, s)} 🪙`}`))));
     const stock = stockOf(p, id);
-    for (const s of stock) out.push(h('p', { class: 'note' }, stockText(s)));
+    for (const s of stock) out.push(h('p', { class: 'note' }, stockText(p, s)));
     // Échange gratuit : un exemplaire rangé d'une autre taille contre la taille choisie (à la maison seulement).
     for (const s of stock.filter((x) => x.free > 0 && x.size !== size && !isAway(p))) {
       out.push(h('button', { class: 'small tk-swap', onClick: () => {

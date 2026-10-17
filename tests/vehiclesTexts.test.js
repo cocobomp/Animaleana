@@ -38,11 +38,25 @@ describe('textes des véhicules', () => {
       'gear_leftAtHome', 'gearAtHome', 'buyToolAskAway',
       // coffre rangé par taille, comme la sellerie (sim/gear.js, ui/tack.js)
       'gear_wrongSizeAway', 'gear_away', 'veh_fitsFor', 'tk_atHome', 'tk_awayShop', 'tk_atHomeRow',
+      'tk_mineHelpAway', 'tk_stockFreeAway', 'tk_ownedAway',
     ];
     for (const lang of ['fr', 'en']) {
       setLang(lang);
       for (const k of keys) expect(t(k, { name: 'X', n: 2, list: 'Y', place: 'Z', tool: 'T', price: 1 }), `${lang}:${k}`).not.toBe(k);
     }
+    setLang('fr');
+  });
+
+  it('en voyage, la sellerie parle du coffre, pas du mur de la sellerie (singulier / pluriel)', () => {
+    const { t, setLang } = i18n;
+    setLang('fr');
+    expect(t('tk_stockFreeAway', { n: 1 })).toBe(' · 1 dans le coffre');
+    expect(t('tk_stockFreeAway', { n: 2 })).toBe(' · 2 dans le coffre');
+    for (const k of ['tk_stockFreeAway', 'tk_mineHelpAway', 'tk_ownedAway']) expect(t(k, { n: 2 })).not.toMatch(/mur/);
+    expect(t('tk_mineHelpAway')).toContain('coffre');
+    setLang('en');
+    expect(t('tk_stockFreeAway', { n: 1 })).toBe(' · 1 in the trunk');
+    for (const k of ['tk_stockFreeAway', 'tk_mineHelpAway', 'tk_ownedAway']) expect(t(k, { n: 2 })).not.toMatch(/wall/);
     setLang('fr');
   });
 

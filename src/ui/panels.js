@@ -625,12 +625,12 @@ export function openTack(ui, opts = {}) {
 
 // ---------------------------------------------------------------- animalerie
 
-/** Origine et caractère typique d'une race (fiche de la race choisie à l'animalerie). */
 /** Robe claire (chat blanc, Ragdoll, Sacré de Birmanie…) : texte foncé sur la pastille de la robe. */
 function lightCoat(c = 0) {
   return (0.299 * ((c >> 16) & 255) + 0.587 * ((c >> 8) & 255) + 0.114 * (c & 255)) / 255 > 0.62;
 }
 
+/** Origine et caractère typique d'une race (fiche de la race choisie à l'animalerie). */
 function breedNote(b) {
   const parts = [];
   if (b.from) parts.push(t('breedFrom', { place: L(b.from) }));

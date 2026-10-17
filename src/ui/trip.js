@@ -11,7 +11,7 @@ import {
   isLongTrip, nightStopAhead,
 } from '../sim/trip.js';
 import { openVehicleMenu, openPackingModal, cargoSummary, cargoName } from './vehicle.js'; // véhicule, coffre
-import { luggageHere, cargoItem } from '../sim/cargo.js';
+import { luggageHere, luggageEmoji } from '../sim/cargo.js';
 
 // ------------------------------------------------------------ outils
 
@@ -405,7 +405,7 @@ function luggageLine(report) {
   if (report.home) return h('p', { class: 'trip-luggage' }, t('veh_repHome'));
   return h('div', { class: 'trip-luggage' },
     h('b', {}, t('veh_repLuggage')),
-    h('span', {}, ids.length ? ids.map((id) => `${cargoItem(id)?.emoji ?? ''} ${cargoName(id)}`).join(' · ') : t('veh_nothingPacked')),
+    h('span', {}, ids.length ? ids.map((id) => `${luggageEmoji(id)} ${cargoName(id)}`).join(' · ') : t('veh_nothingPacked')),
     h('small', {}, t('veh_repLeftHome')));
 }
 
@@ -426,7 +426,7 @@ export function travelAdvice(ui, { here, travelers, state, option }) {
   // En voyage : le matériel qu'on a avec soi ici (sim/cargo.js).
   const here2 = luggageHere(ui.game.profile);
   if (here2) {
-    out.push(h('p', { class: 'note trip-luggage' }, t('veh_withYouHere', { list: here2.map((x) => cargoItem(x.id)?.emoji ?? '').join(' ') || t('veh_nothingPacked') })));
+    out.push(h('p', { class: 'note trip-luggage' }, t('veh_withYouHere', { list: here2.map((x) => x.emoji).join(' ') || t('veh_nothingPacked') })));
   }
   if (!option?.ok || !travelers.length) return out;
   const notes = [];

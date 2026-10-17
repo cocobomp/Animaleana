@@ -200,6 +200,11 @@ export const VEHICLES_FR = {
   tk_atHome: '🏠 {n} à la maison (pas dans le coffre du voyage)',
   tk_awayShop: '🧳 En voyage : tu peux équiper tes animaux avec ce qui est dans ton coffre. Ce que tu achètes ici va dans le coffre.',
   tk_atHomeRow: 'à la maison',
+  // « Mon matériel » et fiches en voyage : ce qui est rangé dans le coffre, pas au mur de la sellerie.
+  tk_mineHelpAway: '🧳 Ce que tu as avec toi : dans ton coffre de voyage, ou porté par tes animaux d\'ici. Le reste attend à la maison.',
+  tk_stockFreeAway: ' · {n} dans le coffre',
+  tk_stockFreeAway_one: ' · 1 dans le coffre',
+  tk_ownedAway: 'Avec toi ici : {n}',
   buyToolAskAway: '🏠 Tu as laissé {tool} à la maison (pas dans le coffre du voyage). En acheter ici pour {price} 🪙 ?',
   buyToolAskAwayFree: '🏠 Tu as laissé {tool} à la maison (pas dans le coffre du voyage). En prendre ici, gratuitement ?',
 
@@ -371,6 +376,10 @@ export const VEHICLES_EN = {
   tk_atHome: '🏠 {n} at home (not in the travel trunk)',
   tk_awayShop: '🧳 On a trip: you can tack up your animals with what is in your trunk. What you buy here goes in the trunk.',
   tk_atHomeRow: 'at home',
+  tk_mineHelpAway: '🧳 What you have with you: in your travel trunk, or worn by your animals here. The rest is waiting at home.',
+  tk_stockFreeAway: ' · {n} in the trunk',
+  tk_stockFreeAway_one: ' · 1 in the trunk',
+  tk_ownedAway: 'With you here: {n}',
   buyToolAskAway: '🏠 You left {tool} at home (not in the travel trunk). Buy one here for {price} 🪙?',
   buyToolAskAwayFree: '🏠 You left {tool} at home (not in the travel trunk). Take one here for free?',
 

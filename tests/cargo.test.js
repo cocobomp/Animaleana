@@ -4,7 +4,7 @@ import { createAnimal } from '../src/sim/animal.js';
 import { mulberry32 } from '../src/sim/rng.js';
 import { DAYS_PER_YEAR } from '../src/sim/time.js';
 import {
-  equip, owned, inUse, buyGear, freeStock, ownedStock, stockOf, swapSize, atHomeCount, ensureTack, riderHelmet,
+  GEAR, equip, owned, inUse, buyGear, freeStock, ownedStock, stockOf, swapSize, atHomeCount, ensureTack, riderHelmet,
 } from '../src/sim/gear.js';
 import { hasTool, missingTool, buyTool, toolAtHome } from '../src/sim/tools.js';
 import {
@@ -307,6 +307,22 @@ describe('coffre de transport et tailles de la sellerie', () => {
     expect(freeStock(p, 'halter', 'pony')).toBe(0);
     expect(freeStock(p, 'halter', 'horse')).toBe(0);
     expect(riderHelmet(p)?.item).toBe('helmet');
+  });
+
+  it('« Avec toi ici » montre aussi la bombe du cavalier (pas de case vide), et la taille de l\'équipement', () => {
+    const p = profile();
+    p.place = 'bretagne';
+    p.items = { collar: 1, leash: 1, helmet: 1, 'saddle@pony': 1 };
+    p.luggage = { place: 'bretagne', items: { collar: 1, leash: 1, helmet: 1, 'saddle@pony': 1 }, tools: ['brush', 'treats', 'ball'], supplies: { water: 1, bowls: 1 } };
+    const here = luggageHere(p);
+    expect(here.every((x) => x.emoji)).toBe(true);
+    expect(here.find((x) => x.id === 'helmet').emoji).toBe(GEAR.helmet.emoji);
+    expect(here.find((x) => x.id === 'saddle@pony').emoji).toBe(GEAR.saddle.emoji);
+    // La ligne affichée dans le panneau Voyager (src/ui/trip.js travelAdvice).
+    const line = here.map((x) => x.emoji).join(' ');
+    expect(line).not.toMatch(/ {2}/);
+    expect(line.split(' ')).toHaveLength(here.length);
+    expect(line).toContain('⛑️');
   });
 
   it('une sauvegarde de voyage d\'avant les tailles : le coffre suit la mise à jour de la sellerie', () => {

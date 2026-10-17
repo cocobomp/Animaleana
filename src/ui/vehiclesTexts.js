@@ -151,6 +151,7 @@ export const VEHICLES_FR = {
   veh_suggest: 'Préparer le nécessaire',
   veh_empty: 'Tout vider',
   veh_closeTrunk: 'Fermer le coffre',
+  veh_bagsReady: 'Bagages prêts', // (sacoches de selle, ou sac quand on part seul)
   veh_nothingPacked: 'rien',
   veh_editBags: 'Modifier',
 
@@ -327,6 +328,7 @@ export const VEHICLES_EN = {
   veh_suggest: 'Pack the essentials',
   veh_empty: 'Empty it',
   veh_closeTrunk: 'Close the trunk',
+  veh_bagsReady: 'Bags ready',
   veh_nothingPacked: 'nothing',
   veh_editBags: 'Change',
 

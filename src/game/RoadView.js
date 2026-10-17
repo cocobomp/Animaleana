@@ -449,19 +449,20 @@ export class RoadView {
       this.lookAt.copy(center);
       cam.fov = 55;
     }
-    // La fiche du trajet cache une partie de l'écran : à droite sur un écran large, en bas sur un téléphone.
-    // On décale l'image pour que la route et le véhicule restent visibles à côté.
+    // La fiche du trajet cache une partie de l'écran : à droite sur un écran large ou un téléphone couché,
+    // en bas sur un téléphone debout. On décale l'image pour que la route et le véhicule restent visibles à côté.
+    const W = window.innerWidth;
+    const H = window.innerHeight;
     this.sheetAcc = (this.sheetAcc ?? 1) + dt;
     if (this.sheetAcc > 0.5) {
       this.sheetAcc = 0;
-      const sheet = this.game.ui.tripEl?.firstChild;
-      this.sheetH = sheet ? sheet.getBoundingClientRect().height : 0;
+      const r = this.game.ui.tripEl?.firstChild?.getBoundingClientRect();
+      this.sheetSide = !!r && r.left > W * 0.35;
+      this.sheetW = r ? W - r.left : 0;
+      this.sheetH = r ? r.height : 0;
     }
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-    const wide = W >= 900 && cam.aspect > 1.25;
-    const ox = wide ? W * 0.2 : 0;
-    const oy = wide ? 0 : Math.round(H * Math.min(0.24, (this.sheetH ?? 0) / H / 2));
+    const ox = this.sheetSide ? Math.round(Math.min(W * 0.25, this.sheetW / 2)) : 0;
+    const oy = this.sheetSide ? 0 : Math.round(H * Math.min(0.24, (this.sheetH ?? 0) / H / 2));
     const key = `${ox}|${oy}|${W}x${H}|${cam.fov}`;
     if (key !== this.offsetKey) {
       this.offsetKey = key;

@@ -226,7 +226,7 @@ export function trunkBody(ui, flow, redraw, onClose) {
       h('button', { class: 'small', onClick: () => { l.cargo.items = {}; flow.cargoChanged(); redraw(); } }, `🗑️ ${t('veh_empty')}`)),
     h('div', { class: 'veh-cargo' }, groups),
     // (toujours visible en bas du panneau : pas besoin de faire défiler toute la liste pour refermer)
-    h('div', { class: 'row end veh-close' }, h('button', { class: 'primary', onClick: onClose }, `✔ ${t('veh_closeTrunk')}`)),
+    h('div', { class: 'row end veh-close' }, h('button', { class: 'primary', onClick: onClose }, `✔ ${t(l.vehicle ? 'veh_closeTrunk' : 'veh_bagsReady')}`)),
   ];
 }
 

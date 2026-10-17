@@ -1138,6 +1138,11 @@ body.trip-road #pause-banner, body.trip-road #quest-tracker, body.veh-view #ev-b
 .trip-sheet.brief .trip-actions-main { grid-template-columns: 1fr 1fr; gap: 8px; }
 .trip-sheet.brief .trip-actions-main .big { margin-top: 0; }
 .trip-sheet.brief .trip-skip { min-height: 52px; }
+/* Téléphone couché : la fiche du trajet se range à droite (comme sur un grand écran), la route reste visible à gauche. */
+@media (orientation: landscape) and (max-height: 520px) {
+  #trip-overlay.with-road { justify-content: flex-end; align-items: stretch; padding: calc(8px + var(--safe-t)) calc(8px + var(--safe-r)) calc(8px + var(--safe-b)) 8px; }
+  #trip-overlay.with-road .trip-sheet, #trip-overlay.with-road .trip-sheet.compact { width: min(400px, 48vw); max-height: 100%; align-self: flex-end; }
+}
 /* Coffre de transport : le bouton « Fermer le coffre » reste en bas du panneau pendant qu'on fait défiler la liste. */
 .veh-close { position: sticky; bottom: -14px; margin: 0 -14px -14px; padding: 8px 14px 14px; background: linear-gradient(to bottom, rgba(0, 0, 0, 0), var(--bg) 30%); z-index: 1; }
 .modal-box .veh-close { bottom: 0; margin: 0; padding: 8px 0 0; }

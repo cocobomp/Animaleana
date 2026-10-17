@@ -186,7 +186,7 @@ export function openVetClassic(ui, a, atClinic) {
           class: 'act',
           onClick: () => {
             if (x !== ILLNESSES[illness].treatment) st.msg = t('vetWrong');
-            else if (self && x === 'injection') st.msg = t('vetOnlyVet');
+            else if (self && x === 'injection' && !isStarted(g.profile, 'vet')) st.msg = t('vetOnlyVet'); // vétérinaire : piqûre permise
             else {
               finish();
               return;

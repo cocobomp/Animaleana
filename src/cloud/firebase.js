@@ -51,6 +51,14 @@ function rememberSignedIn(on) {
 
 let ready = null;
 
+function emulatorHost() {
+  try {
+    return globalThis.localStorage?.getItem('animaleana.cloud.emulator') || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Charge Firebase (une seule fois). Renvoie { app, auth, db, fb } où fb rassemble les fonctions utilisées. */
 export function loadFirebase() {
   if (!ready) {
@@ -60,6 +68,12 @@ export function loadFirebase() {
         const auth = authMod.getAuth(app);
         auth.languageCode = document.documentElement.lang || 'fr';
         const db = fsMod.getFirestore(app);
+        // Tests en local (mode développement seulement) : faux serveurs Firebase sur cet ordinateur.
+        const emu = import.meta.env?.DEV ? emulatorHost() : null;
+        if (emu) {
+          authMod.connectAuthEmulator(auth, `http://${emu}:9099`, { disableWarnings: true });
+          fsMod.connectFirestoreEmulator(db, emu, 8089);
+        }
         return { app, auth, db, fb: { ...authMod, ...fsMod } };
       })
       .catch((err) => {

@@ -19,6 +19,7 @@ const CLOTHES = [0x3f7cc4, 0xd94848, 0x3f9b5b, 0xf0c33c, 0x8b5ac7, 0xf28fb3, 0xf
 const STYLES = ['short', 'long', 'ponytail', 'curly', 'bun', 'braid', 'bald'];
 
 let stopCloudWatch = null; // un seul abonnement aux changements du compte, même si l'écran est rouvert
+let lastReport = null; // dernier résultat de synchro déjà annoncé (pas répété quand l'écran est rouvert)
 
 export function showProfiles(ui) {
   const render = () => {
@@ -91,7 +92,6 @@ export function showProfiles(ui) {
   render();
   ui.screen.scrollTop = 0;
   // Connexion, synchro : l'écran se redessine tant qu'il est affiché (parties récupérées comprises).
-  let lastReport = null;
   stopCloudWatch?.();
   stopCloudWatch = onCloudChange((state) => {
     if (ui.game.running || ui.screen.hidden || !ui.screen.querySelector('.profiles')) return;

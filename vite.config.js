@@ -51,7 +51,7 @@ self.addEventListener('fetch', (e) => {
   const scope = new URL('./', self.location).pathname;
   // Autres adresses (Google, Firestore…) et pages réservées de Firebase (/__/auth/handler, /__/auth/iframe…) :
   // le navigateur s'en occupe, jamais le cache (elles prendraient sinon la place du jeu).
-  if (url.origin !== self.location.origin || url.pathname.startsWith(scope + '__/') || url.pathname.includes('/__/')) return;
+  if (url.origin !== self.location.origin || url.pathname.includes('/__/')) return;
   // La page elle-même : d'abord le réseau (un seul rechargement suffit pour avoir la nouvelle version),
   // le cache seulement hors ligne. Seule la vraie page du jeu est gardée comme index.html.
   // Les fichiers du jeu ont un nom unique par version : cache d'abord.

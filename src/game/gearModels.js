@@ -142,22 +142,24 @@ function buildHorseGear(model, look, gear, add) {
     const id = blanket.item;
     const color = gearColor(blanket, BLANKET_COLORS.red);
     const cloth = id === 'blanketSummer' ? P.netMat(color) : id === 'blanketRain' ? P.rainMat(color) : P.quiltMat(color);
-    const reach = id === 'blanketSummer' ? 0.34 : 0.3;
-    add(body, shell(torso, y0 - R * 0.2, -L * 0.52, L * reach, 12, deg(192), deg(-12), 20, id === 'blanket' ? 0.016 : 0.011), cloth);
-    const edge = loop(torso, [0, y0 - R * 0.2, L * reach], 20, 0.018, deg(192), deg(-12));
+    // (cheval réaliste : étendue mesurée sur son corps, du garrot à la pointe des fesses)
+    const [bz0, bz1] = model.dims.blanket ?? [-L * 0.52, L * (id === 'blanketSummer' ? 0.34 : 0.3)];
+    const front = bz1 + (model.dims.blanket && id === 'blanketSummer' ? 0.04 : 0);
+    add(body, shell(torso, y0 - R * 0.2, bz0, front, 12, deg(192), deg(-12), 20, id === 'blanket' ? 0.016 : 0.011), cloth);
+    const edge = loop(torso, [0, y0 - R * 0.2, front], 20, 0.018, deg(192), deg(-12));
     add(body, strap(edge, 0.018, 0.006), id === 'blanket' ? P.fleeceMat(0xe8e0d2) : P.clothMat(id === 'blanketSummer' ? 0x3a3a3a : 0xf2ede4));
     // Galon le long du bas des flancs.
     for (const sd of [1, -1]) {
       const hem = [];
       for (let i = 0; i <= 10; i++) {
-        const z = -L * 0.5 + (i / 10) * L * (reach + 0.48);
+        const z = bz0 + 0.02 + (i / 10) * (front - bz0 - 0.04);
         const p = rayHit(torso, [0, y0 - R * 0.2, z], [sd * Math.cos(deg(-12)), Math.sin(deg(-12)), 0], 1.2);
         hem.push(p.addScaledVector(sdfNormal(torso, p, 0.004), 0.016));
       }
       add(body, strap(hem, 0.014, 0.004), P.clothMat(id === 'blanketSummer' ? 0x3a3a3a : 0xf2ede4));
     }
     // Sangle de poitrail et sous-ventrières croisées.
-    add(body, strap(loop(torso, [0, y0 - R * 0.2, L * 0.02], 16, 0.018, deg(-15), deg(-165)), 0.014, 0.004), P.nylonMat(0x2a2a2a));
+    add(body, strap(loop(torso, [0, y0 - R * 0.2, model.dims.zGirth ?? L * 0.02], 16, 0.018, deg(-15), deg(-165)), 0.014, 0.004), P.nylonMat(0x2a2a2a));
   }
 
   if (gear.saddle) horseSaddle(model, gear, add);
@@ -432,7 +434,7 @@ function horseSaddle(model, gear, add) {
   // Sangle sous le ventre (sangle large en mohair pour la western), juste derrière les coudes.
   const girthMat = st.western ? P.clothMat(0x8a6a48, THREE.FrontSide) : P.leatherMat(0x3b2110);
   // (la sangle part sous le quartier et passe sous le ventre, un peu inclinée vers l'avant)
-  add(body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + L * 0.13], 22, 0.014, deg(30), deg(-210), 0.3), st.western ? 0.045 : 0.03, 0.005), girthMat);
+  add(body, strap(loop(torso, [0, y0 - R * 0.2, model.dims.zGirth ?? zSeat + L * 0.13], 22, 0.014, deg(30), deg(-210), 0.3), st.western ? 0.045 : 0.03, 0.005), girthMat);
 }
 
 // ------------------------------------------------------------------ autres animaux

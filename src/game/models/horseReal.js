@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import { getModel } from '../assets.js';
 import { gfx } from '../gfx.js';
-import { horseBuild, horseBreedOf, foalBuild } from '../../sim/horseLook.js';
+import { horseBuild, horseBreedOf, foalBuild, horseCoatTraits, horseSocks } from '../../sim/horseLook.js';
 import { coatMaterial, PART } from './horseCoat.js';
 
 export const REAL_HORSE_KEY = 'horse_real';
@@ -628,6 +628,7 @@ function shapeFor(base, B) {
     elbowY,
     headLen,
     soles,
+    crest: base.hair.crest.map(([t, c]) => [t, D.maps[BONE_INDEX.Neck](c, V())]),
   };
   S.measure = measureShape(S, dc.pos, coat, base);
   shapes.set(key, S);
@@ -648,9 +649,12 @@ function measureShape(S, pos, coat, base) {
   const idx = coat.index;
   const isTrunk = new Uint8Array(n);
   const isHead = new Uint8Array(n);
+  const upper = new Set(['FL2', 'FR2', 'HL2', 'HR2']);
   for (let i = 0; i < n; i++) {
     const nm = RIG[dominant(coat, i)][0];
-    isTrunk[i] = TRUNK.has(nm) || nm === 'Neck' ? 1 : 0;
+    // (haut de la cuisse et de l'avant-bras compris : la coupe de la croupe reste fermée)
+    // (sans l'attache de la queue : la couverture ne monte pas en pointe par-dessus)
+    isTrunk[i] = (TRUNK.has(nm) && nm !== 'Tail1') || nm === 'Neck' || (upper.has(nm) && pos[i * 3 + 1] > S.elbowY - 0.04) ? 1 : 0;
     isHead[i] = nm === 'Head' ? 1 : 0;
   }
   for (let t = 0; t < idx.length; t += 3) {
@@ -660,41 +664,29 @@ function measureShape(S, pos, coat, base) {
     if (isTrunk[a] && isTrunk[b] && isTrunk[c]) trunkTri.push(a, b, c);
     if (isHead[a] + isHead[b] + isHead[c] >= 2) headTri.push(a, b, c);
   }
-  // Tronc : coupes en z (repère du corps). Centre à mi-hauteur, rayons tous les 15° de -90° à +90° (côté +x).
+  // Tronc : coupes en z (repère du corps), centre à mi-hauteur, rayons tous les 15° de -90° à +90° (côté +x).
   const zH = heads[BONE_INDEX.Spine].z;
   const zN = heads[BONE_INDEX.Neck].z;
-  const z0 = zH - 0.3;
-  const z1 = zN + 0.42;
-  const torso = sections(pos, trunkTri, (p) => p, z0, z1, 0.04);
+  const torso = sections(pos, trunkTri, (p) => p, zH - 0.3, zN + 0.42, 0.04);
   // Tête : repère du groupe head (origine à la nuque, z le long du chanfrein).
   const poll = heads[BONE_INDEX.Head];
   const hq = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), base.headTilt).invert();
   const toHead = (p) => p.clone().sub(poll).applyQuaternion(hq);
-  const head = sections(pos, headTri, toHead, -0.16, S.headLen + 0.02, 0.025, true);
-  // Ligne du dos : point le plus haut au milieu, tous les 2 cm.
-  const back = new Map();
-  for (let i = 0; i < n; i++) {
-    if (!isTrunk[i] || Math.abs(pos[i * 3]) > 0.09) continue;
-    const k = Math.round(pos[i * 3 + 2] / 0.02);
-    back.set(k, Math.max(back.get(k) ?? -1, pos[i * 3 + 1]));
-  }
-  const keys = [...back.keys()].sort((a, b) => a - b);
+  const head = sections(pos, headTri, toHead, -0.16, S.headLen + 0.02, 0.025);
+  // Ligne du dos : le haut de chaque coupe du tronc (interpolé).
+  const rings = torso.rings;
+  const dz = rings[1][0] - rings[0][0];
   const backTop = (z) => {
-    // interpolation entre les cases voisines, lissée sur ±2 cases
-    const k = z / 0.02;
-    let s = 0;
-    let wsum = 0;
-    for (let d = -3; d <= 3; d++) {
-      const kk = Math.round(k) + d;
-      if (!back.has(kk)) continue;
-      const w = 1 / (1 + Math.abs(kk - k));
-      s += back.get(kk) * w;
-      wsum += w;
-    }
-    return wsum ? s / wsum : heads[BONE_INDEX.Spine].y;
+    const f = Math.min(rings.length - 1.001, Math.max(0, (z - rings[0][0]) / dz));
+    const i = Math.floor(f);
+    return rings[i][3] + (rings[i + 1][3] - rings[i][3]) * (f - i);
   };
-  void keys;
-  return { torso, head, backTop };
+  const bellyAt = (z) => {
+    const f = Math.min(rings.length - 1.001, Math.max(0, (z - rings[0][0]) / dz));
+    const i = Math.floor(f);
+    return rings[i][4] + (rings[i + 1][4] - rings[i][4]) * (f - i);
+  };
+  return { torso, head, backTop, bellyAt };
 }
 
 /**
@@ -702,10 +694,9 @@ function measureShape(S, pos, coat, base) {
  * les points où les arêtes la traversent, puis le centre et le rayon par secteur de 15°.
  * Renvoie un champ de distance approché f(x, y, z) et ses coupes.
  */
-function sections(pos, tris, toFrame, z0, z1, dz, centerAxis = false) {
+function sections(pos, tris, toFrame, z0, z1, dz) {
   const STEP = Math.PI / 12;
   const rings = [];
-  const pts = [];
   const nv = pos.length / 3;
   const fp = new Float32Array(nv * 3);
   for (let i = 0; i < nv; i++) {
@@ -714,8 +705,10 @@ function sections(pos, tris, toFrame, z0, z1, dz, centerAxis = false) {
     fp[i * 3 + 1] = q.y;
     fp[i * 3 + 2] = q.z;
   }
+  // 1) Points de chaque coupe (arêtes qui traversent le plan z), haut et bas près du milieu.
+  const raw = [];
   for (let z = z0; z <= z1 + 1e-6; z += dz) {
-    pts.length = 0;
+    const pts = [];
     for (let t = 0; t < tris.length; t += 3) {
       for (let e = 0; e < 3; e++) {
         const a = tris[t + e];
@@ -728,58 +721,87 @@ function sections(pos, tris, toFrame, z0, z1, dz, centerAxis = false) {
       }
     }
     if (pts.length < 6) {
-      rings.push(null);
+      raw.push(null);
       continue;
     }
-    let ymin = Infinity;
-    let ymax = -Infinity;
+    let top = -Infinity;
+    let bot = Infinity;
     for (const [x, y] of pts) {
-      if (x < 0.06) {
-        ymin = Math.min(ymin, y);
-        ymax = Math.max(ymax, y);
+      if (x < 0.1) {
+        top = Math.max(top, y);
+        bot = Math.min(bot, y);
       }
     }
-    if (!Number.isFinite(ymin)) for (const [, y] of pts) {
-      ymin = Math.min(ymin, y);
-      ymax = Math.max(ymax, y);
+    if (!Number.isFinite(top)) for (const [, y] of pts) {
+      top = Math.max(top, y);
+      bot = Math.min(bot, y);
     }
-    const yc = centerAxis ? (ymin + ymax) / 2 : (ymin + ymax) / 2;
-    const r = new Array(13).fill(0);
-    for (const [x, y] of pts) {
+    raw.push({ z, pts, top, bot });
+  }
+  // 2) Coupe ouverte en bas (entre les cuisses, l'intérieur des membres n'est pas compté) : le bas
+  // est repris des coupes voisines bien fermées.
+  const hs = raw.filter(Boolean).map((r) => r.top - r.bot).sort((a, b) => a - b);
+  const med = hs.length ? hs[Math.floor(hs.length / 2)] : 0;
+  const good = raw.map((r) => !!r && r.top - r.bot > med * 0.45);
+  raw.forEach((r, i) => {
+    if (!r || good[i]) return;
+    let a = i - 1;
+    while (a >= 0 && !good[a]) a--;
+    let b = i + 1;
+    while (b < raw.length && !good[b]) b++;
+    if (a < 0 && b >= raw.length) return;
+    const ba = a >= 0 ? raw[a].bot : raw[b].bot;
+    const bb = b < raw.length ? raw[b].bot : raw[a].bot;
+    const u = a >= 0 && b < raw.length ? (i - a) / (b - a) : 0;
+    r.bot = Math.min(r.bot, ba + (bb - ba) * u);
+  });
+  // 3) Centre (lissé d'une coupe à l'autre), puis rayon par secteur.
+  const yc0 = raw.map((r) => (r ? (r.top + r.bot) / 2 : null));
+  raw.forEach((r, i) => {
+    if (!r) {
+      rings.push(null);
+      return;
+    }
+    const nb = [yc0[i - 1], yc0[i], yc0[i], yc0[i + 1]].filter((v) => v !== null && v !== undefined);
+    const yc = nb.reduce((x, y) => x + y, 0) / nb.length;
+    const rr = new Array(13).fill(0);
+    for (const [x, y] of r.pts) {
       const a = Math.atan2(y - yc, x);
       const k = Math.round((a + Math.PI / 2) / STEP);
       if (k < 0 || k > 12) continue;
-      r[k] = Math.max(r[k], Math.hypot(x, y - yc));
+      rr[k] = Math.max(rr[k], Math.hypot(x, y - yc));
     }
-    // secteurs vides : voisins
+    // secteurs vides (ou coupe ouverte en bas) : voisins, et au moins jusqu'au bas retenu
+    rr[0] = Math.max(rr[0], yc - r.bot);
     for (let pass = 0; pass < 3; pass++) {
       for (let k = 0; k <= 12; k++) {
-        if (r[k] > 0) continue;
-        const a = r[k - 1] ?? 0;
-        const b = r[k + 1] ?? 0;
-        r[k] = a && b ? (a + b) / 2 : a || b;
+        if (rr[k] > 0) continue;
+        const a = rr[k - 1] ?? 0;
+        const b = rr[k + 1] ?? 0;
+        rr[k] = a && b ? (a + b) / 2 : a || b;
       }
     }
-    rings.push([z, yc, r]);
-  }
+    rings.push([r.z, yc, rr, r.top, r.bot]);
+  });
   // coupes manquantes aux bouts : la plus proche
   const first = rings.findIndex(Boolean);
   if (first < 0) {
     // (rien de mesuré : une forme ronde par défaut, pour ne jamais bloquer)
-    for (let i = 0; i < rings.length; i++) rings[i] = [z0 + i * dz, 0, new Array(13).fill(0.1)];
+    for (let i = 0; i < rings.length; i++) rings[i] = [z0 + i * dz, 0, new Array(13).fill(0.1), 0.1, -0.1];
   }
   const last = rings.length - 1 - [...rings].reverse().findIndex(Boolean);
   for (let i = 0; i < rings.length; i++) {
     if (rings[i]) continue;
     const j = i < first ? first : i > last ? last : null;
-    if (j !== null) rings[i] = [z0 + i * dz, rings[j][1], rings[j][2].map((x) => x * 0.6)];
+    if (j !== null) rings[i] = [z0 + i * dz, rings[j][1], rings[j][2].map((x) => x * 0.6), rings[j][1] + (rings[j][3] - rings[j][1]) * 0.6, rings[j][1] + (rings[j][4] - rings[j][1]) * 0.6];
     else {
       let a = i - 1;
       while (!rings[a]) a--;
       let b = i + 1;
       while (!rings[b]) b++;
       const u = (i - a) / (b - a);
-      rings[i] = [z0 + i * dz, rings[a][1] * (1 - u) + rings[b][1] * u, rings[a][2].map((x, k) => x * (1 - u) + rings[b][2][k] * u)];
+      const mix = (k) => rings[a][k] * (1 - u) + rings[b][k] * u;
+      rings[i] = [z0 + i * dz, mix(1), rings[a][2].map((x, k) => x * (1 - u) + rings[b][2][k] * u), mix(3), mix(4)];
     }
   }
   const nR = rings.length;
@@ -810,16 +832,19 @@ function sections(pos, tris, toFrame, z0, z1, dz, centerAxis = false) {
 
 // ------------------------------------------------------------------ matières
 
-/** Crins : modelé gris de la texture du GLB × couleur des crins (une matière par cheval). */
+/**
+ * Crins : modelé gris de la texture du GLB × couleur des crins (une matière par cheval). color null :
+ * couleur par sommet (brosse bicolore du Fjord, fanons de la couleur du bas de chaque membre).
+ */
 function maneMaterial(base, color, sway) {
   const src = base.prims.mane.material;
   const m = new THREE.MeshStandardMaterial({
     map: src.map, normalMap: src.normalMap, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.62,
-    alphaToCoverage: gfx.quality === 'high',
+    alphaToCoverage: gfx.quality === 'high', vertexColors: color === null,
   });
   if (src.normalScale) m.normalScale.copy(src.normalScale);
   // (modelé médian = 0,5 dans la texture : ×2)
-  const c = new THREE.Color(color);
+  const c = new THREE.Color(color ?? 0xffffff);
   const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
   if (l < 0.02) c.lerp(new THREE.Color(0x4a4442), 0.1); // crins noirs : on voit encore les mèches
   m.color.copy(c).multiplyScalar(2);
@@ -844,6 +869,166 @@ uniform float hairSway;`)
   };
   m.customProgramCacheKey = () => 'horsereal-mane';
   return m;
+}
+
+/**
+ * Cartes de crins ajoutées (brosse, fanons) : rubans de quelques points, texture des crins du GLB
+ * (une bande de mèches droites : racine vers le centre de la texture, pointe vers le bord), couleur et
+ * os par sommet. cards : [{ pts, w0, w1, side, color, uv: [u0, u1, v, dv], weights(p, f) }].
+ */
+function hairCards(cards) {
+  const pos = [];
+  const nrm = [];
+  const uv = [];
+  const col = [];
+  const si = [];
+  const sw = [];
+  const hg = [];
+  const idx = [];
+  const tan = V();
+  const n0 = V();
+  for (const c of cards) {
+    const base0 = pos.length / 3;
+    const n = c.pts.length;
+    const [u0, u1, v, dv] = c.uv;
+    for (let i = 0; i < n; i++) {
+      const f = i / (n - 1);
+      const p = c.pts[i];
+      tan.subVectors(c.pts[Math.min(n - 1, i + 1)], c.pts[Math.max(0, i - 1)]).normalize();
+      n0.crossVectors(c.side, tan).normalize();
+      const w = (c.w0 + (c.w1 - c.w0) * f) / 2;
+      const ww = c.weights(p, f);
+      for (const k of [-1, 1]) {
+        pos.push(p.x + c.side.x * w * k, p.y + c.side.y * w * k, p.z + c.side.z * w * k);
+        nrm.push(n0.x, n0.y, n0.z);
+        uv.push(u0 + (u1 - u0) * f, v + dv * k);
+        col.push(c.color.r, c.color.g, c.color.b);
+        for (let q = 0; q < 4; q++) {
+          si.push(ww[q]?.[0] ?? 0);
+          sw.push(ww[q]?.[1] ?? 0);
+        }
+        hg.push(f * (c.sway ?? 1));
+      }
+      if (i < n - 1) {
+        const a = base0 + i * 2;
+        idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+  g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+  g.setAttribute('hairG', new THREE.Float32BufferAttribute(hg, 1));
+  g.setIndex(idx);
+  g.computeBoundingSphere();
+  return g;
+}
+
+function mulberry(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Crinière en brosse le long de la crête : Fjord (bicolore, cœur foncé, bords crème) ou poulain
+ * (courte, duveteuse, d'une couleur). Rubans debout dans les deux sens : du volume sous tous les angles.
+ */
+function brushCards(S, B, look) {
+  const foal = B.maneStyle === 'foal';
+  const rng = mulberry((look.seed ?? 1) + 9);
+  const nk = S.heads[BONE_INDEX.Neck];
+  const hd = S.heads[BONE_INDEX.Head];
+  const axis = hd.clone().sub(nk).normalize();
+  const up = V(0, axis.z, -axis.y);
+  if (up.y < 0) up.negate();
+  const crest = S.crest;
+  const at = (t) => {
+    const k = Math.min(crest.length - 2, Math.max(0, Math.floor(t * (crest.length - 1))));
+    return crest[k][1].clone().lerp(crest[k + 1][1], t * (crest.length - 1) - k);
+  };
+  const maneC = new THREE.Color(look.mane ?? 0x1b1410);
+  const coreC = new THREE.Color(look.maneCore ?? look.mane ?? 0x1b1410);
+  const tint = (c, a) => c.clone().multiplyScalar(1 - a + rng() * a * 2);
+  const weights = (t) => () => {
+    const wh = smooth(0.86, 0.98, t);
+    return [[BONE_INDEX.Neck, 1 - wh], [BONE_INDEX.Head, wh]].filter(([, w]) => w > 0.001);
+  };
+  const cards = [];
+  const n = foal ? 34 : 48;
+  for (let i = 0; i < n; i++) {
+    const t = 0.03 + (i / (n - 1)) * 0.93;
+    const c = at(t).addScaledVector(up, -0.012);
+    const dir = at(Math.min(1, t + 0.02)).sub(at(Math.max(0, t - 0.02))).normalize();
+    for (const lane of [-1, 0, 1]) {
+      // (le cœur foncé du Fjord : rubans le long de la crête, un peu plus hauts ; les rubans en travers
+      // et les bords sont crème, sinon on verrait des rayures)
+      const along = lane === 0 || (i + lane) % 2 === 0;
+      const h = (foal ? 0.05 + 0.012 * Math.sin(t * Math.PI) : 0.085 + 0.03 * Math.sin(t * Math.PI)) * (1 - Math.abs(lane) * 0.12) * (lane === 0 ? 0.97 : 1) + rng() * 0.01;
+      const lat = V(lane * (foal ? 0.014 : 0.013), 0, 0);
+      const p0 = c.clone().add(lat);
+      const tip = p0.clone().addScaledVector(up, h).addScaledVector(lat, foal ? 0.8 : 0.4);
+      const color = lane === 0 && along && !foal ? tint(coreC.clone().lerp(maneC, 0.2), 0.06) : tint(maneC, 0.06);
+      cards.push({
+        pts: [p0, p0.clone().lerp(tip, 0.5), tip], w0: 0.032, w1: 0.03, side: along ? dir : V(1, 0, 0), color,
+        uv: [0.56, 0.84, 0.47 + rng() * 0.06, 0.02], weights: weights(t), sway: 0.25,
+      });
+    }
+  }
+  return cards;
+}
+
+/**
+ * Fanons : longs poils derrière et sur les côtés du bas des membres, qui couvrent les sabots (traits,
+ * Frison, Irish Cob). Couleur du bas de la jambe : blanc sous une balzane ou sur une jambe de pie,
+ * noir sur les bas noirs d'un bai, sinon la robe.
+ */
+function featherCards(S, B, look) {
+  const rng = mulberry((look.seed ?? 1) + 21);
+  const traits = horseCoatTraits(look);
+  const socks = horseSocks(look);
+  const cards = [];
+  const r = 0.05 * S.D.scale.bone;
+  LEGS.forEach(([k, front], i) => {
+    const F = S.heads[BONE_INDEX[k + '4']];
+    const K = S.heads[BONE_INDEX[k + '3']];
+    const sole = F.clone().add(S.soles[i][1]);
+    const white = socks[i] > 0.1 || traits.pinto > 0;
+    const legC = new THREE.Color(white ? 0xf1ede6 : traits.points ? (look.maneCore ?? look.mane ?? look.coat) : look.coat);
+    const n = Math.round(12 + 14 * B.feathers);
+    const b3 = BONE_INDEX[k + '3'];
+    const b4 = BONE_INDEX[k + '4'];
+    const fy = F.y;
+    for (let j = 0; j < n; j++) {
+      const a = -Math.PI * 0.92 + (j / (n - 1)) * Math.PI * 1.84 + (rng() - 0.5) * 0.15;
+      const d = V(Math.sin(a) * (k.endsWith('L') ? 1 : -1) * 0.95, 0, -Math.cos(a));
+      // (sur l'axe du canon, un peu au-dessus du boulet, plus haut derrière)
+      const y0 = fy + (0.05 + 0.13 * B.feathers * (0.55 + 0.45 * Math.cos(a))) * (0.9 + rng() * 0.2);
+      const u = (K.y - y0) / Math.max(0.01, K.y - fy);
+      const axisP = K.clone().lerp(F, Math.min(1.2, Math.max(0, u)));
+      const p0 = V(axisP.x, y0, axisP.z).addScaledVector(d, r);
+      const end = V(p0.x, 0.01, sole.z + (p0.z - F.z) * 0.7).addScaledVector(d, 0.04 + rng() * 0.03);
+      const pts = [0, 0.33, 0.66, 1].map((f) => p0.clone().lerp(end, f).addScaledVector(d, 0.012 * Math.sin(f * Math.PI)));
+      cards.push({
+        pts, w0: 0.045, w1: 0.065, side: V(-d.z, 0, d.x), color: legC.clone().multiplyScalar(0.92 + rng() * 0.16),
+        uv: [0.42, 0.1, 0.45 + rng() * 0.1, 0.03], sway: 0.35,
+        weights: (p) => {
+          const w = smooth(fy + 0.03, fy - 0.03, p.y);
+          return [[b3, 1 - w], [b4, w]].filter(([, x]) => x > 0.001);
+        },
+      });
+    }
+  });
+  return cards;
 }
 
 function eyeMaterial() {
@@ -937,7 +1122,13 @@ export function buildRealHorseModel(look, breedId = null) {
   const eyes = new THREE.SkinnedMesh(S.eyeGeo, eyeMaterial());
   const hairSway = { value: 0 };
   const mane = new THREE.SkinnedMesh(S.maneGeo, maneMaterial(base, look.mane ?? 0x1b1410, hairSway));
-  for (const m of [coat, eyes, mane]) {
+  const meshes = [coat, eyes, mane];
+  // Brosse (Fjord, poulain) et fanons : cartes de crins à la couleur de chaque cheval.
+  const extra = [];
+  if (B.maneStyle === 'brush' || B.maneStyle === 'foal') extra.push(...brushCards(S, B, look));
+  if ((B.feathers ?? 0) > 0.05) extra.push(...featherCards(S, B, look));
+  if (extra.length) meshes.push(new THREE.SkinnedMesh(hairCards(extra), maneMaterial(base, null, hairSway)));
+  for (const m of meshes) {
     m.bind(skeleton, new THREE.Matrix4());
     m.castShadow = m !== eyes;
     m.receiveShadow = true;
@@ -951,9 +1142,14 @@ export function buildRealHorseModel(look, breedId = null) {
   const L = 1.5 * (B.back ?? 1);
   const elbow = heads[BONE_INDEX.FL2];
   const torsoTop = back(zSeat);
-  const belly = S.D.scale.yA2 - 0.17 * S.D.scale.gy;
+  const belly = S.measure.bellyAt(zSeat);
   const R = (torsoTop - belly) / 2;
   root.add(contactShadow(0.3 * gx + 0.05, L * 0.95));
+  // Couverture : du garrot jusqu'où le centre de ses coupes (y0 - 0,2 R) est encore dans le corps
+  // (plus loin, la croupe remonte : la nappe se refermerait en pointe).
+  const ty = (belly + torsoTop) / 2 - 0.2 * R;
+  let bz0 = heads[BONE_INDEX.Spine].z - 0.17;
+  while (bz0 < zSeat && S.measure.torso(0, ty, bz0) > -0.06) bz0 += 0.01;
 
   const legs = LEGS.map(([k, front, side], i) => {
     const fet = heads[BONE_INDEX[k + '4']];
@@ -995,7 +1191,7 @@ export function buildRealHorseModel(look, breedId = null) {
     sdf: { torso: S.measure.torso, head: S.measure.head },
     dims: {
       L, R, hr, legR, snoutZ: S.headLen, headBack: -0.12, earZ: earLocal.z, earY: earLocal.y,
-      zGirth: elbow.z - 0.14, blanket: [heads[BONE_INDEX.Spine].z - 0.24, heads[BONE_INDEX.Neck].z + 0.1],
+      zGirth: elbow.z - 0.14, blanket: [bz0, heads[BONE_INDEX.Neck].z + 0.1],
     },
     backTop: back,
     build: B,

@@ -15,6 +15,7 @@ import {
   drawAnimal, animalShape, fitAnimal, ellipse, circle, rrect, shade, css, mix, lerp, clamp, dist, EMOJI_FONT, TEXT_FONT, makeRng,
 } from './minigames/draw.js';
 import { TOOL_ZONES, measureFor, slowmoFor, vitalsOf, COUNT_SECONDS } from '../sim/vetExam.js';
+import { drawHorseVet, horseLegZone } from './vetHorse.js'; // le cheval dessiné « comme un vrai »
 
 export const SW = 400;
 export const SH = 300;
@@ -90,8 +91,9 @@ export function zonePoints(sh, a) {
     rump: Z(L(-rx * 0.92, -ry * 0.06), ry * 0.3),
     back: Z(L(-rx * 0.15, -ry * 0.6), ry * 0.36),
     belly: Z(L(-rx * 0.05, ry * 0.62), ry * 0.36),
-    legFront: Z(legMid(rx * 0.58), sh.P.legW * s * 1.5),
-    legHind: Z(legMid(-rx * 0.58), sh.P.legW * s * 1.5),
+    // Cheval : sur l'avant-bras et la jambe du dessin réaliste (src/ui/vetHorse.js).
+    legFront: Z(sp === 'horse' ? horseLegZone(sh, 'front') : legMid(rx * 0.58), sh.P.legW * s * 1.5),
+    legHind: Z(sp === 'horse' ? horseLegZone(sh, 'hind') : legMid(-rx * 0.58), sh.P.legW * s * 1.5),
     eye: Z({ x: head.x + f * hr * 0.28, y: head.y - hr * 0.15 }, hr * 0.38),
     ear: Z(ear, hr * 0.45),
     nose: Z(nose, hr * 0.36),
@@ -844,7 +846,8 @@ export class VetStage {
     const an = this.anim;
     const tired = this.cs.illness === 'flu' && this.time % 3.4 < 1.3;
     const plate = this.onScale ? (this.small ? 7 : 9) : 0;
-    return drawAnimal(g, this.a, {
+    const paint = this.a.species === 'horse' ? drawHorseVet : drawAnimal; // même géométrie, dessin réaliste
+    return paint(g, this.a, {
       x: an.x,
       y: this.groundY - plate,
       s: this.base.s,

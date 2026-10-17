@@ -303,21 +303,6 @@ export function openVetClinic(ui) {
 
 // ---------------------------------------------------------------- voyage
 
-/**
- * Réglages : mesures des vignettes 3D (combien, place en mémoire, temps de fabrication) — pour vérifier
- * sur le téléphone que rien ne pèse sur le jeu (src/game/thumbs.js).
- */
-function thumbsLine(g) {
-  const th = g.thumbs;
-  if (!th) return null;
-  if (!th.enabled) return h('p', { class: 'note' }, t('thumbsOff'));
-  const s = th.stats();
-  if (!s.made) return null;
-  return h('p', { class: 'note' }, t('thumbsStats', {
-    n: s.cacheCount, kb: Math.round(s.cacheBytes / 1024), ms: Math.round(s.avgCpuMs), max: Math.round(s.maxCpuMs),
-  }));
-}
-
 /** Véhicule de chaque façon de voyager (vignette 3D) ; le bateau et l'avion gardent leur emoji. */
 const MODE_VEHICLE = { car: 'car', van: 'rig', horse: 'horse' };
 
@@ -443,6 +428,21 @@ export function openJobs(ui) {
 }
 
 // ---------------------------------------------------------------- réglages
+
+/**
+ * Réglages : mesures des vignettes 3D (combien, place en mémoire, temps de fabrication) — pour vérifier
+ * sur le téléphone que rien ne pèse sur le jeu (src/game/thumbs.js).
+ */
+function thumbsLine(g) {
+  const th = g.thumbs;
+  if (!th) return null;
+  if (!th.enabled) return h('p', { class: 'note' }, t('thumbsOff'));
+  const s = th.stats();
+  if (!s.made) return null;
+  return h('p', { class: 'note' }, t('thumbsStats', {
+    n: s.cacheCount, kb: Math.round(s.cacheBytes / 1024), ms: Math.round(s.avgCpuMs), max: Math.round(s.maxCpuMs),
+  }));
+}
 
 export function openSettings(ui) {
   const g = ui.game;

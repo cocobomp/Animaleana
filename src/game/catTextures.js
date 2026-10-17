@@ -349,8 +349,19 @@ export function catCoatTextures(look, traits, marks) {
     const d = img.data;
     // Sur le corps, le haut et le bas de la texture se resserrent en un point (poitrail, sous la
     // queue) : on y fond le motif dans la couleur du ventre pour éviter une étoile de traits.
-    const poleOf = (v) => (part === 'body' ? Math.max(smooth(0.9, 0.985, v), smooth(0.08, 0.015, v)) : 0);
+    const poleOf = (v) => (part === 'body' ? Math.max(smooth(0.8, 0.985, v), smooth(0.14, 0.015, v)) : 0);
     const belly = [0, 0, 0];
+    // Bruit qui boucle en u, avec cos/sin précalculés par colonne (le plus gros du temps de calcul).
+    const cu = new Float32Array(size);
+    const su = new Float32Array(size);
+    for (let px = 0; px < size; px++) {
+      const a = ((px + 0.5) / size) * Math.PI * 2;
+      cu[px] = Math.cos(a);
+      su[px] = Math.sin(a);
+    }
+    const R9 = 9 / (Math.PI * 2);
+    const sd = seed + part.length;
+    const nbuf = new Float32Array(size * size); // le même bruit sert aux deux passes
     for (let py = 0; py < size; py++) {
       const v = 1 - (py + 0.5) / size;
       const pole = poleOf(v);
@@ -362,7 +373,8 @@ export function catCoatTextures(look, traits, marks) {
       }
       for (let px = 0; px < size; px++) {
         const u = (px + 0.5) / size;
-        const n = wrapNoise(u, v, 9, seed + part.length) - 0.5;
+        const n = noise3(cu[px] * R9 + sd, su[px] * R9, v * 9) - 0.5;
+        nbuf[py * size + px] = n;
         pattern(part, u, v, n);
         if (part === 'head') faceMarks(u, v, n);
         if (pole > 0) mix(belly, pole);
@@ -421,6 +433,13 @@ export function catCoatTextures(look, traits, marks) {
     // Deuxième passe : taches blanches, contre-ombrage, variations, grain, plis de la peau nue.
     const img2 = ctx.getImageData(0, 0, size, size);
     const e = img2.data;
+    // Grandes variations de teinte (bruit très doux) : calculées sur une grille grossière puis interpolées.
+    const step = 4;
+    const gw = Math.ceil(size / step) + 1;
+    const motGrid = new Float32Array(gw * gw);
+    for (let gy = 0; gy < gw; gy++) {
+      for (let gx = 0; gx < gw; gx++) motGrid[gy * gw + gx] = wrapNoise((gx * step) / size, 1 - (gy * step) / size, 3, seed * 1.7 + 11) - 0.5;
+    }
     for (let py = 0; py < size; py++) {
       const v = 1 - (py + 0.5) / size;
       const pole = poleOf(v);
@@ -431,7 +450,7 @@ export function catCoatTextures(look, traits, marks) {
         out[0] = e[i];
         out[1] = e[i + 1];
         out[2] = e[i + 2];
-        const n = wrapNoise(u, v, 11, seed + 5 + part.length) - 0.5;
+        const n = nbuf[py * size + px];
         const wm = whiteMarks(part, u, v, n, front);
         mix(whiteCol, wm + (bellyWhite - wm) * pole);
         if (counter) mul(1.06 - Math.min(u, 1 - u) * 2 * 0.12);
@@ -444,8 +463,15 @@ export function catCoatTextures(look, traits, marks) {
           mul(1 + (wrapNoise(u, v, 4, seed + 2) - 0.5) * 0.1);
           if (part === 'leg') mix([224, 150, 140], smooth(0.35, 0.6, v) * smooth(0.85, 0.6, v) * 0.15);
         } else {
-          const mot = wrapNoise(u, v, 3, seed * 1.7 + 11) - 0.5;
-          mul(1 + mot * 0.1 + (rng() - 0.5) * 0.08);
+          const fx = px / step;
+          const fy = py / step;
+          const gx = fx | 0;
+          const gy = fy | 0;
+          const tx = fx - gx;
+          const ty = fy - gy;
+          const m0 = motGrid[gy * gw + gx] * (1 - tx) + motGrid[gy * gw + gx + 1] * tx;
+          const m1 = motGrid[(gy + 1) * gw + gx] * (1 - tx) + motGrid[(gy + 1) * gw + gx + 1] * tx;
+          mul(1 + (m0 + (m1 - m0) * ty) * 0.1 + (rng() - 0.5) * 0.08);
         }
         e[i] = Math.min(255, Math.max(0, out[0]));
         e[i + 1] = Math.min(255, Math.max(0, out[1]));

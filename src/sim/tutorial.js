@@ -323,9 +323,18 @@ export function questSteps(id, profile) {
   return steps;
 }
 
-/** Commence à suivre une quête (une seule à la fois). Les étapes sont figées au départ. */
-export function followQuest(profile, id) {
-  profile.questFollow = { id, step: 0, seen: [], steps: questSteps(id, profile) };
+/**
+ * Commence à suivre une quête (une seule à la fois). Les étapes sont figées au départ.
+ * `resume` : le suivi arrêté juste avant (✋ touché par erreur, puis 🧭 de nouveau) ; même quête et mêmes étapes,
+ * on reprend à l'étape où l'on était au lieu de tout recommencer.
+ */
+export function followQuest(profile, id, resume = null) {
+  const steps = questSteps(id, profile);
+  const same = resume?.id === id && Array.isArray(resume.steps) && resume.steps.length === steps.length
+    && resume.steps.every((s, i) => s === steps[i]);
+  profile.questFollow = same
+    ? { id, step: Math.max(0, Math.min(resume.step | 0, steps.length - 1)), seen: [...(resume.seen ?? [])], steps }
+    : { id, step: 0, seen: [], steps };
   return profile.questFollow;
 }
 

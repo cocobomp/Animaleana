@@ -261,3 +261,58 @@ describe('suivi de quête sur le côté : quelques lignes seulement', () => {
     expect(w.before + w.steps.length + w.after).toBe(7);
   });
 });
+
+describe('✋ touché par erreur, puis 🧭 : on reprend où on en était', () => {
+  /** Suit la quête du vétérinaire (avec un animal) jusqu'à « choisir l'animal », puis l'arrête. */
+  const pausedVet = () => {
+    const p = createProfile('Lou');
+    p.animals.push(fakeAnimal());
+    followQuest(p, 'vet1');
+    noteFollowEvent(p, 'building:vet');
+    noteFollowEvent(p, 'panel:vetClinic');
+    updateFollow(p, OBJECTIVES);
+    const saved = { ...p.questFollow, seen: [...p.questFollow.seen] };
+    stopFollow(p);
+    return { p, saved };
+  };
+
+  it('même quête : la même étape, et les événements déjà vus', () => {
+    const { p, saved } = pausedVet();
+    expect(saved.step).toBe(2);
+    followQuest(p, 'vet1', saved);
+    expect(followView(p, OBJECTIVES).current.id).toBe('vetChoose');
+    expect(p.questFollow.seen).toEqual(['building:vet', 'panel:vetClinic']);
+    expect(p.questFollow.seen).not.toBe(saved.seen); // une copie : la reprise ne touche pas la sauvegarde
+    noteFollowEvent(p, 'panel:vetExam');
+    updateFollow(p, OBJECTIVES);
+    expect(followView(p, OBJECTIVES).current.id).toBe('vetExam');
+  });
+
+  it('une autre quête repart du début', () => {
+    const { p, saved } = pausedVet();
+    followQuest(p, 'feed5', saved);
+    expect(p.questFollow.step).toBe(0);
+    expect(p.questFollow.seen).toEqual([]);
+  });
+
+  it('les étapes ont changé entre-temps (un animal adopté) : on repart du début', () => {
+    const p = createProfile('Lou');
+    followQuest(p, 'feed5');
+    noteFollowEvent(p, 'building:refuge');
+    updateFollow(p, OBJECTIVES, { refugeOpen: true });
+    const saved = { ...p.questFollow, seen: [...p.questFollow.seen] };
+    stopFollow(p);
+    p.animals.push(fakeAnimal());
+    followQuest(p, 'feed5', saved);
+    expect(p.questFollow.steps).toEqual(QUEST_STEPS.feed5);
+    expect(followView(p, OBJECTIVES).current.id).toBe('tapAnimal');
+  });
+
+  it('sans suivi à reprendre (ou un suivi abîmé), on commence normalement', () => {
+    const p = createProfile('Lou');
+    expect(followQuest(p, 'vet1', null).step).toBe(0);
+    expect(followQuest(p, 'vet1', { id: 'vet1' }).step).toBe(0);
+    const steps = p.questFollow.steps;
+    expect(followQuest(p, 'vet1', { id: 'vet1', steps, step: 99, seen: [] }).step).toBe(steps.length - 1);
+  });
+});

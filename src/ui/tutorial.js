@@ -19,6 +19,11 @@ import {
 const GUIDE = '🐶';
 const isTouch = () => matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const isNarrow = isPhone;
+// Taille du suivi de quête : téléphone en portrait (comme le CSS @media (max-width: 640px)), téléphone en paysage,
+// ou ordinateur / tablette.
+const trackerMode = () => (!isNarrow() ? 'desk' : window.innerWidth <= 640 ? 'compact' : 'side');
+// Pas de mot (ou d'emoji 🐾) tout seul sur la dernière ligne : espace insécable avant le dernier.
+const keepLast = (s) => s.replace(/\s+(\S+)\s*$/u, '\u00a0$1');
 
 // Suivi de quête rangé en pastille ou non : un confort mémorisé sur cet appareil (pas dans la sauvegarde).
 const FOLD_KEY = 'animaleana.questFold';
@@ -91,6 +96,7 @@ export class Tutorial {
     this.questFocus = null;
     this.animalId = null;
     this.trackerKey = '';
+    this.recent = null; // la dernière quête choisie (arrêtée avec ✋, ou montrée depuis le journal)
     if (this.active) this.ui.hideHelp();
     this.tick();
   }
@@ -488,9 +494,15 @@ export class Tutorial {
 
   /**
    * Le suivi de quête, discret sur le côté : à gauche sous la carte d'infos (ordinateur), à droite sous les
-   * boutons du haut (téléphone, loin du joystick). Une seule ligne : la quête (la toucher = « Montre-moi »),
-   * sa progression (0/3), 🧭 pour la suivre (✋ pour arrêter) et « – » pour le ranger en pastille (mémorisé).
-   * Quête suivie : ses étapes en petit dessous (✅ faite, 👉 en cours, ⬜ à faire), quelques lignes au plus.
+   * boutons du haut (téléphone, loin du joystick). Une poignée ‹ / › à gauche pour le ranger en pastille (mémorisé),
+   * puis 🎯 le nom de la quête (le toucher = « Montre-moi ») avec sa progression (0/3), et 🧭 pour la suivre
+   * (✋ pour arrêter) contre l'autre bord : le nom sépare toujours « ranger » de « arrêter ».
+   * Sous le nom : « 0/3 📍 où aller ». Quête suivie :
+   * - téléphone (portrait et paysage) : le nom en petit et, dessous, l'étape en cours « 0/3 👉 … » (48 px de haut en
+   *   portrait, comme l'ancienne pastille) ; les étapes suivantes s'annoncent par un message quand une étape se coche ;
+   * - ordinateur, tablette : « 0/3 ●●○○ » et 4 étapes en petit dessous (✅ faite, 👉 en cours, ⬜ à faire).
+   * Tailles (trackerMode) : « compact » (téléphone en portrait, 48 px de haut), « side » (téléphone en paysage, nom
+   * sur 3 lignes au plus) et « desk » (ordinateur, tablette).
    */
   renderTracker() {
     const p = this.profile;
@@ -501,7 +513,9 @@ export class Tutorial {
       return;
     }
     const view = followView(p, OBJECTIVES);
-    const q = view ? OBJECTIVES.find((o) => o.id === view.id) : suggestedQuest(p, OBJECTIVES);
+    // Sans quête suivie : la dernière choisie (arrêtée avec ✋ : 🧭 la reprend là où on en était), sinon la conseillée.
+    const recent = this.recent && !p.completed.includes(this.recent.id) ? OBJECTIVES.find((o) => o.id === this.recent.id) : null;
+    const q = view ? OBJECTIVES.find((o) => o.id === view.id) : recent ?? suggestedQuest(p, OBJECTIVES);
     if (!q) {
       this.tracker.hidden = true;
       this.layoutTop();
@@ -510,32 +524,48 @@ export class Tutorial {
     const [cur, max] = q.progress(p);
     const count = `${Math.min(cur, max)}/${max}`;
     const where = this.whereText(q.id);
-    const right = isNarrow(); // téléphone : contre le bord droit ; ordinateur : contre le bord gauche
-    const lines = right ? 2 : 4; // lignes d'étapes sur le côté (téléphone : l'étape en cours et la suivante)
+    const mode = trackerMode();
     const stepsKey = view ? view.steps.map((s) => s.state[0]).join('') : '';
-    const key = `${q.id}|${count}|${where}|${getLang()}|${stepsKey}|${this.folded}|${right}|${lines}`;
+    const key = `${q.id}|${count}|${where}|${getLang()}|${stepsKey}|${this.folded}|${mode}`;
     if (key !== this.trackerKey) {
       // La même quête a avancé : petit rebond (surtout utile quand le suivi est rangé en pastille).
       const moved = !!this.trackerKey && this.trackerWas?.id === q.id && (this.trackerWas.count !== count || this.trackerWas.steps !== stepsKey);
       this.trackerKey = key;
       this.trackerWas = { id: q.id, count, steps: stepsKey };
-      this.tracker.replaceChildren(...this.trackerContent(q, view, { count, where, right, lines }));
-      this.tracker.classList.toggle('following', !!view);
-      this.tracker.classList.toggle('folded', this.folded);
-      this.tracker.classList.toggle('side-right', right);
+      this.tracker.replaceChildren(...this.trackerContent(q, view, { count, where, mode }));
+      const cl = this.tracker.classList;
+      cl.toggle('following', !!view);
+      cl.toggle('folded', this.folded);
+      cl.toggle('side-right', mode !== 'desk');
+      cl.toggle('compact', mode === 'compact');
+      cl.toggle('step-only', mode !== 'desk' && !!view); // téléphone, quête suivie : l'étape en cours sous le nom
+      cl.remove('title2', 'step3');
       if (moved) this.bumpTracker();
+      this.trackerFit = mode !== 'desk' && !!view && !this.folded; // à mesurer une fois affiché
     }
     this.tracker.hidden = false;
+    if (this.trackerFit) {
+      // Téléphone, quête suivie : l'étape en cours ne tient pas sur deux lignes → elle prend la place du nom (qui reste
+      // sur la pastille et au journal) ; en portrait (44 px), elle tient sur une ligne → le nom peut en prendre deux.
+      const sub = this.tracker.querySelector('.qt-sub');
+      if (sub?.offsetHeight) {
+        this.trackerFit = false;
+        const cl = this.tracker.classList;
+        cl.toggle('title2', sub.offsetHeight < parseFloat(getComputedStyle(sub).lineHeight) * 1.5);
+        cl.toggle('step3', sub.scrollHeight > sub.clientHeight + 1);
+      }
+    }
     this.layoutTop();
   }
 
-  /** Ce qu'il y a dans le suivi : la pastille rangée, ou la ligne de la quête (+ ses étapes si on la suit). */
-  trackerContent(q, view, { count, where, right, lines }) { // right : contre le bord droit (téléphone)
+  /** Ce qu'il y a dans le suivi : la pastille rangée, ou la poignée, le nom de la quête et 🧭 / ✋ (+ ses étapes). */
+  trackerContent(q, view, { count, where, mode }) {
+    const right = mode !== 'desk'; // téléphone : contre le bord droit ; ordinateur : contre le bord gauche
     const icon = view ? '🧭' : '🎯';
     const title = t(`o_${q.id}`);
+    const chev = (s, cls = 'qt-chev') => h('span', { class: cls, 'aria-hidden': 'true' }, s);
     if (this.folded) {
       // La flèche montre de quel côté la carte va s'ouvrir.
-      const chev = (s) => h('span', { class: 'qt-chev', 'aria-hidden': 'true' }, s);
       return [h('button', {
         class: 'qt-pill',
         title: `${title} — ${t('quest_unfold')}`,
@@ -545,27 +575,35 @@ export class Tutorial {
       }, right ? chev('‹') : null, h('span', { class: 'qt-icon' }, icon), h('b', { class: 'qt-count' }, count), right ? null : chev('›'))];
     }
     const show = () => (view ? this.reshow() : this.showQuest(q.id));
-    // Pas d'icône devant le nom : toute la place pour lire (la bordure verte et 🧭 / ✋ disent si on la suit).
+    const countEl = h('b', { class: 'qt-count' }, count);
+    // Ordinateur : 4 étapes sous le nom ; téléphone : seulement l'étape en cours, dans la ligne sous le nom.
+    const w = view && mode === 'desk' ? stepWindow(view.steps, 4) : null;
+    // Sous le nom : « 0/3 📍 où aller » ; quête suivie : « 0/3 👉 l'étape en cours » (téléphone) ou « 0/3 ●●○○ ».
+    let sub;
+    if (!view) sub = [countEl, where ? h('span', { class: 'qt-where' }, `📍 ${where}`) : null];
+    else if (!w) sub = [countEl, view.current ? h('span', { class: 'qt-now' }, `👉 ${keepLast(t(`quest_step_${view.current.id}`))}`) : null];
+    else {
+      // Longue quête : des petits points disent où on en est (comme dans la bulle du guide).
+      const n = view.steps.findIndex((s) => s.state === 'now') + 1;
+      sub = [countEl, w.before || w.after
+        ? h('span', { class: 'qt-dots', role: 'img', 'aria-label': t('quest_stepOf', { n, total: view.steps.length }) },
+          view.steps.map((s) => h('i', { class: s.state })))
+        : null];
+    }
     const head = h('button', { class: 'qt-head', title: `📍 ${where} — ${t('quest_trackerTitle')}`, onClick: show },
-      h('b', { class: 'qt-title' }, title),
-      h('span', { class: 'qt-count' }, count));
+      h('b', { class: 'qt-title' }, h('span', { class: 'qt-icon', 'aria-hidden': 'true' }, icon), ' ', keepLast(title)),
+      h('span', { class: 'qt-sub' }, sub));
     const quick = view
       ? h('button', { class: 'qt-quick', title: t('quest_stop'), 'aria-label': t('quest_stop'), onClick: () => this.stopFollowing() }, '✋')
       : h('button', { class: 'qt-quick primary', title: t('quest_follow'), 'aria-label': t('quest_follow'), onClick: () => this.startFollow(q.id) }, '🧭');
-    // Ranger en pastille : « – » comme pour réduire le bandeau d'un événement (src/ui/events.js).
-    const fold = h('button', { class: 'qt-fold', title: t('quest_fold'), 'aria-label': t('quest_fold'), 'aria-expanded': 'true', onClick: () => this.setFolded(true) }, '–');
-    const out = [h('div', { class: 'qt-row' }, head, quick, fold)];
-    if (view) {
-      const w = stepWindow(view.steps, lines);
-      if (w.before || w.after) {
-        // Longue quête : des petits points disent où on en est (comme dans la bulle du guide).
-        const n = view.steps.findIndex((s) => s.state === 'now') + 1;
-        out.push(h('div', { class: 'qt-dots', role: 'img', 'aria-label': t('quest_stepOf', { n, total: view.steps.length }) },
-          view.steps.map((s) => h('i', { class: s.state }))));
-      }
+    // Ranger : une poignée sur le bord gauche de la carte (la flèche montre le bord où elle se range), loin de ✋.
+    const fold = h('button', { class: 'qt-fold', title: t('quest_fold'), 'aria-label': t('quest_fold'), 'aria-expanded': 'true', onClick: () => this.setFolded(true) },
+      chev(right ? '›' : '‹', 'qt-grip'));
+    const out = [fold, h('div', { class: 'qt-row' }, head, quick)];
+    if (w) {
       out.push(h('ol', { class: 'qt-steps' }, w.steps.map((s) => h('li', { class: `qt-step ${s.state}` },
         h('span', { class: 'qt-check', 'aria-hidden': 'true' }, s.state === 'done' ? '✅' : s.state === 'now' ? '👉' : '⬜'),
-        h('span', { class: 'qt-label' }, t(`quest_step_${s.id}`), s.progress && s.state === 'now' ? ` (${count})` : '')))));
+        h('span', { class: 'qt-label' }, t(`quest_step_${s.id}`))))));
     }
     return out;
   }
@@ -619,7 +657,9 @@ export class Tutorial {
   /**
    * Place ce qui s'affiche en haut de l'écran.
    * - Le suivi de quête se pose contre son bord (placeTracker) ; ce qui passerait dessus va juste en dessous.
-   * - Ordinateur : la bulle sous la carte d'infos (en haut à gauche), le reste via le CSS.
+   * - Ordinateur : la bulle sous la carte d'infos (en haut à gauche), le reste via le CSS. Tablette (au doigt) :
+   *   le CSS met aussi en haut le bandeau d'événement et les pastilles d'état ; dans la colonne du suivi, ils
+   *   passent sous lui (et les messages sous eux).
    * - Téléphone : rien ne doit recouvrir la barre du haut ni ses boutons. Sous le bloc HUD + outils, on empile
    *   la bulle du guide, le bandeau d'événement, les pastilles d'état, l'aide puis les messages.
    *   Quand une fenêtre (fiche) est ouverte, elle commence sous la bulle (renderTracker range le suivi).
@@ -639,10 +679,22 @@ export class Tutorial {
       const base = info ? info.getBoundingClientRect().bottom : 148;
       this.bubble.style.top = `${Math.round(base + 12)}px`;
       const side = this.placeTracker();
-      for (const el of stacked.slice(0, -1)) reset(el);
-      // Les messages (au milieu, en haut) passent sous le suivi si la fenêtre est trop étroite pour les deux.
+      reset(ui.help);
+      // Au doigt (tablette), le bandeau d'événement et les pastilles d'état sont en haut (CSS, `top`) : dans la colonne
+      // du suivi, ils se posent sous lui. À la souris, ils sont en bas de l'écran : rien à faire.
+      const topped = matchMedia('(pointer: coarse)').matches;
+      let low = side; // le bas de ce qui est déjà posé dans la colonne du suivi
+      for (const el of [ev, ui.statusBar]) {
+        if (!el) continue;
+        const top = topped && !el.hidden && besideSide(low, el.getBoundingClientRect()) ? `${Math.round(low.bottom + 8)}px` : '';
+        if (el.style.top !== top) el.style.top = top;
+        if (el.style.bottom) el.style.bottom = '';
+        const b = top ? el.getBoundingClientRect() : null;
+        if (b?.height > 0) low = { left: Math.min(low.left, b.left), right: Math.max(low.right, b.right), top: low.top, bottom: b.bottom };
+      }
+      // Les messages (au milieu, en haut) passent dessous si la fenêtre est trop étroite pour les deux.
       const toasts = ui.toasts;
-      const top = besideSide(side, toasts.getBoundingClientRect()) ? `${Math.round(side.bottom + 8)}px` : '';
+      const top = besideSide(low, toasts.getBoundingClientRect()) ? `${Math.round(low.bottom + 8)}px` : '';
       if (toasts.style.top !== top) toasts.style.top = top;
       if (toasts.style.bottom) toasts.style.bottom = '';
       if (panel.style.maxHeight) panel.style.maxHeight = '';
@@ -689,9 +741,16 @@ export class Tutorial {
   startFollow(id) {
     const p = this.profile;
     if (!p) return;
-    followQuest(p, id);
+    // Même quête que celle qu'on vient d'arrêter (✋ par erreur) : on reprend à la même étape.
+    followQuest(p, id, this.recent);
+    this.recent = null;
     this.questFocus = null;
     this.ui.closePanel();
+    // L'enfant choisit lui-même de suivre une quête : le suivi rangé en pastille se rouvre (il pourra le ranger).
+    if (this.folded) {
+      this.folded = false;
+      writeFold(false);
+    }
     this.trackerKey = '';
     const v = followView(p, OBJECTIVES);
     this.ui.toast(`🧭 ${t(`o_${id}`)} — ${t(`quest_step_${v.current.id}`)}`, 5000);
@@ -701,6 +760,8 @@ export class Tutorial {
   stopFollowing() {
     const p = this.profile;
     if (!p) return;
+    // Le suivi garde cette quête (avec 🧭 pour la reprendre là où on en était) au lieu de passer à une autre.
+    if (p.questFollow) this.recent = { ...p.questFollow, seen: [...p.questFollow.seen] };
     stopFollow(p);
     this.highlight = null;
     this.releaseMarker();
@@ -751,6 +812,8 @@ export class Tutorial {
     if (!g) return;
     if (p.questFollow?.id === id) return this.reshow();
     if (p.questFollow) stopFollow(p); // une seule quête guidée à la fois
+    this.recent = { id }; // le suivi montre cette quête (🧭 pour la suivre)
+    this.trackerKey = '';
     this.ui.closePanel();
     this.questFocus = { id, spec: g.target, until: performance.now() + 45000 };
     this.markerKey = '';

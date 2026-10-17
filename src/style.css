@@ -1212,19 +1212,21 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
 .marker-edge[hidden] { display: none; }
 .marker-edge-arrow { display: inline-block; line-height: 1; }
 
-/* Suivi de quête discret, sur le côté (src/ui/tutorial.js : renderTracker, placeTracker qui pose son `top`).
-   Une ligne « titre 0/3 🧭 – » ; les étapes en petit dessous quand on suit la quête ; rangé, une pastille
-   « 🎯 0/3 › » contre le bord. Ordinateur : à gauche sous la carte d'infos ; téléphone : à droite (plus bas). */
+/* Suivi de quête discret, sur le côté (src/ui/tutorial.js : renderTracker ; placeTracker pose son `top`).
+   [‹ poignée « ranger »][🎯 nom de la quête, dessous « 0/3 📍 où aller »][🧭] ; quête suivie : ✋ et ses étapes en
+   petit dessous ; rangé : une pastille « 🎯 0/3 » contre le bord. Ordinateur : à gauche sous la carte d'infos ;
+   téléphone : à droite sous les boutons du haut (.side-right), 48 px de haut en portrait (.compact) et pour une quête
+   suivie (.step-only : l'étape en cours sous le nom, sans la liste des étapes). */
 #quest-tracker {
   position: fixed;
   left: calc(10px + var(--safe-l));
   top: calc(180px + var(--safe-t));
   z-index: 11;
   width: max-content;
-  min-width: 190px;
-  max-width: min(288px, calc(100vw - 20px));
-  padding: 2px 3px 3px;
-  background: rgba(255, 253, 245, 0.94);
+  min-width: 200px;
+  max-width: min(300px, calc(100vw - 20px));
+  padding: 2px 3px 2px 31px; /* à gauche : la place de la poignée (.qt-fold) */
+  background: rgba(255, 253, 245, 0.95);
   border: 2px solid #ffd23f;
   border-radius: 14px;
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
@@ -1237,30 +1239,61 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
 #quest-tracker.bump { animation: qt-bump 0.6s ease-out; }
 @keyframes qt-bump { 35% { transform: scale(1.07); } }
 body.actv-running #quest-tracker { display: none !important; } /* pendant une activité, l'écran est à elle */
-.qt-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
-.qt-head { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; min-height: 38px; padding: 2px 2px 2px 7px; text-align: left; background: transparent; border: none; border-radius: 10px; color: inherit; }
-.qt-icon { font-size: 1.1rem; line-height: 1; flex-shrink: 0; }
-/* Le nom de la quête : deux lignes au plus (coupé avec « … » au-delà ; le nom entier est dans le journal). */
-.qt-title { flex: 1; min-width: 0; font-size: 0.84rem; line-height: 1.18; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: break-word; }
-.qt-count { flex-shrink: 0; font-weight: 800; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.qt-quick { width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 50%; font-size: 1rem; flex-shrink: 0; }
-.qt-fold { width: 26px; min-width: 26px; min-height: 38px; padding: 0 0 2px; border: none; background: transparent; color: var(--muted); font-size: 1.3rem; font-weight: 800; line-height: 1; flex-shrink: 0; }
-.qt-dots { display: flex; gap: 3px; padding: 1px 8px 2px; }
+.qt-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+/* Le nom (le toucher = « Montre-moi ») et, dessous, la progression avec où aller (ou l'étape en cours). */
+.qt-head { display: grid; align-content: center; gap: 1px; flex: 1; min-width: 0; min-height: 44px; padding: 3px 4px; text-align: left; background: transparent; border: none; border-radius: 10px; color: inherit; }
+@media (hover: hover) { .qt-head:hover { background: rgba(255, 210, 63, 0.22); } }
+/* Le nom de la quête : deux lignes au plus (trois en paysage), coupé avec « … » au-delà (il est en entier dans le journal). */
+.qt-title { min-width: 0; font-size: 0.86rem; line-height: 1.18; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: break-word; }
+.qt-icon { line-height: 1; }
+.qt-sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 0.76rem; line-height: 1.25; color: var(--muted); }
+.qt-count { flex-shrink: 0; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.qt-where { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qt-now { min-width: 0; color: var(--ink); font-weight: 800; }
+/* 🧭 suivre / ✋ arrêter : 44 px au doigt, un rond de 38 px à l'œil (bord transparent). */
+.qt-quick { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; border: 3px solid transparent; background-clip: padding-box; border-radius: 50%; font-size: 1.05rem; line-height: 1; flex-shrink: 0; }
+.qt-quick:not(.primary) { background-color: #fff; box-shadow: inset 0 0 0 1px var(--line); }
+/* Ranger : une poignée sur toute la hauteur du bord gauche, loin de ✋ ; on peut la toucher un peu au-delà de la
+   carte (::after) : 28 + 16 px au doigt. La flèche montre le bord où la carte se range. */
+.qt-fold { position: absolute; left: 0; top: 0; bottom: 0; width: 28px; min-width: 0; min-height: 44px; padding: 0; border: none; border-right: 1px solid rgba(240, 165, 0, 0.3); border-radius: 12px 0 0 12px; background: rgba(255, 210, 63, 0.3); color: #8a5a00; display: grid; place-items: center; }
+.qt-fold::after { content: ''; position: absolute; top: -2px; bottom: -2px; right: 100%; width: 16px; }
+#quest-tracker.following .qt-fold { background: rgba(47, 138, 95, 0.13); border-right-color: rgba(47, 138, 95, 0.25); color: var(--primary); }
+.qt-grip { font-size: 1.4rem; font-weight: 800; line-height: 1; margin-top: -2px; }
+/* Longue quête : des petits points (faite, en cours, à faire) à côté de la progression. */
+.qt-dots { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; min-width: 0; }
 .qt-dots i { width: 6px; height: 6px; border-radius: 50%; background: #e7dfcb; }
 .qt-dots i.done { background: var(--good); }
 .qt-dots i.now { background: #f0a500; transform: scale(1.3); }
-.qt-steps { list-style: none; margin: 0; padding: 0 6px 2px 7px; display: grid; gap: 1px; }
+.qt-steps { list-style: none; margin: 0; padding: 0 4px 2px; display: grid; gap: 1px; }
 .qt-step { display: flex; gap: 4px; align-items: baseline; min-width: 0; font-size: 0.76rem; line-height: 1.3; color: var(--muted); }
 .qt-check { width: 1.35em; text-align: center; flex-shrink: 0; font-size: 0.9em; }
 .qt-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .qt-step.done .qt-label { text-decoration: line-through; }
 .qt-step.now { color: var(--ink); font-weight: 700; font-size: 0.8rem; }
 .qt-step.now .qt-label { white-space: normal; } /* l'étape à faire se lit en entier */
+/* Téléphone en portrait : une seule rangée de 44 px (48 px avec le bord) ; le nom (2 lignes) et « 0/3 📍 où aller ». */
+#quest-tracker.compact { min-width: 0; max-width: min(290px, calc(100vw - 96px)); padding-block: 0; }
+#quest-tracker.compact .qt-head { gap: 0; padding-block: 0; }
+#quest-tracker.compact .qt-title { font-size: 0.8rem; line-height: 1.15; }
+#quest-tracker.compact .qt-sub { font-size: 0.72rem; line-height: 1.2; }
+/* Téléphone (portrait et paysage), quête suivie : le nom en petit et, dessous, l'étape en cours (pas de liste).
+   tutorial.js mesure l'étape : trop longue pour deux lignes, elle prend la place du nom (qui reste sur la pastille et
+   au journal) ; en portrait (48 px en tout), le nom tient sur une ligne, ou deux si l'étape n'en prend qu'une. */
+#quest-tracker.step-only .qt-title { font-size: 0.7rem; line-height: 1.2; color: var(--muted); }
+#quest-tracker.step-only.step3 .qt-title { display: none; }
+/* « 0/3 👉 l'étape » : un seul texte qui passe à la ligne (la progression en tête, comme un premier mot). */
+#quest-tracker.step-only .qt-sub { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; font-size: 0.8rem; line-height: 1.15; }
+#quest-tracker.step-only .qt-sub .qt-count { font-size: 0.9em; margin-right: 5px; }
+#quest-tracker.step-only.step3 .qt-sub { -webkit-line-clamp: 4; line-clamp: 4; }
+#quest-tracker.compact.step-only .qt-title { -webkit-line-clamp: 1; line-clamp: 1; }
+#quest-tracker.compact.step-only.title2 .qt-title { -webkit-line-clamp: 2; line-clamp: 2; }
+#quest-tracker.compact.step-only.step3 .qt-sub { line-height: 1.12; -webkit-line-clamp: 3; line-clamp: 3; }
 /* Rangé : une petite pastille contre le bord ; on la touche pour rouvrir. */
 #quest-tracker.folded { min-width: 0; padding: 1px; border-radius: 999px; }
-.qt-pill { display: flex; align-items: center; gap: 5px; min-height: 38px; padding: 0 8px 2px 10px; border: none; border-radius: 999px; background: transparent; color: inherit; }
-#quest-tracker.side-right .qt-pill { padding: 0 10px 2px 8px; }
-.qt-pill .qt-count { color: var(--ink); font-size: 0.85rem; }
+.qt-pill { display: flex; align-items: center; gap: 5px; min-height: 44px; padding: 0 9px 1px 11px; border: none; border-radius: 999px; background: transparent; color: inherit; }
+#quest-tracker.side-right .qt-pill { padding: 0 11px 1px 9px; }
+.qt-pill .qt-count { font-size: 0.88rem; }
+.qt-pill .qt-icon { font-size: 1.15rem; }
 .qt-chev { color: var(--muted); font-size: 1.35rem; font-weight: 700; line-height: 1; }
 
 /* Journal : où faire la quête et « Montre-moi ». */
@@ -1279,15 +1312,23 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
   .tuto-hint { font-size: 0.88rem; }
   .tuto-ok { min-height: 48px; font-size: 1.05rem; }
   .tuto-icon { min-height: 44px; min-width: 44px; font-size: 1.1rem; }
-  /* Suivi de quête : contre le bord droit, sous la barre d'outils (le joystick est en bas à gauche). */
-  #quest-tracker { left: auto; right: calc(8px + var(--safe-r)); min-width: 168px; max-width: min(250px, 66vw); }
+  /* Suivi de quête : contre le bord droit, sous la barre d'outils (le joystick est en bas à gauche) ; sa taille en
+     portrait : #quest-tracker.compact. */
+  #quest-tracker { left: auto; right: calc(8px + var(--safe-r)); }
 }
 /* Paysage : la bulle au milieu, entre le joystick (à gauche) et les boutons de vue (à droite) ;
    le suivi de quête à droite sous les boutons du haut, sans toucher les messages du milieu. */
 @media (max-height: 480px) and (min-width: 641px) {
   /* Centrée avec left (pas transform) : l'animation d'entrée de la bulle remplace transform pendant qu'elle joue. */
   #tuto-bubble { left: max(190px, calc(50% - 200px)); right: auto; width: min(400px, calc(100vw - 380px)); transform: none; }
-  #quest-tracker { min-width: 150px; max-width: max(150px, min(240px, calc(50vw - 216px))); }
+  /* Suivi de quête : toute la largeur entre la colonne du milieu (bulle, messages : --col-w, plus bas) et le bord
+     droit, moins 6 px d'écart ; le nom de la quête peut y prendre 3 lignes. */
+  #quest-tracker {
+    --col-w: min(400px, calc(100vw - var(--safe-l) - var(--safe-r) - 406px));
+    min-width: 176px;
+    max-width: max(176px, calc(50vw - (var(--safe-l) + var(--safe-r)) / 2 + 7px - var(--col-w) / 2));
+  }
+  #quest-tracker .qt-title { font-size: 0.82rem; -webkit-line-clamp: 3; line-clamp: 3; }
   #toasts { width: min(400px, calc(100vw - 380px)); }
   #status-bar { left: max(190px, calc(50% - 200px)); right: auto; width: min(400px, calc(100vw - 380px)); transform: none; justify-items: center; }
 }

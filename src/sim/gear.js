@@ -171,6 +171,13 @@ export function ensureTack(p) {
         if (!p.items[from]) delete p.items[from];
       }
       p.items[to] = (p.items[to] ?? 0) + 1;
+      // En voyage : l'objet porté est aussi dans le coffre (sauvegarde d'avant les tailles).
+      const l = p.luggage?.items;
+      if (l && a.location === p.luggage.place && (l[from] ?? 0) > 0) {
+        l[from] -= 1;
+        if (!l[from]) delete l[from];
+        l[to] = (l[to] ?? 0) + 1;
+      }
       g.size = s;
     }
   }
@@ -181,39 +188,87 @@ export function ensureTack(p) {
   return p;
 }
 
+// ---------------------------------------------------------------- en voyage (coffre de transport)
+// En voyage, seul le matériel emporté dans le coffre de transport est là (profile.luggage, src/sim/cargo.js),
+// rangé par taille avec les mêmes clés que la sellerie (stockKey : 'saddle', 'saddle@pony'…).
+// profile.items reste TOUT ce qu'on possède (la maison + le coffre) ; profile.luggage.items en est une partie.
+// Sans coffre (anciennes sauvegardes) ou à la maison : tout le matériel acheté est disponible, comme avant.
+
+/** Est-on en voyage avec un coffre ? */
+export const isAway = (p) => !!(p?.luggage && p.place !== p.home && p.luggage.place === p.place);
+
+/** Le stock d'ici : le coffre du voyage, ou tout le matériel (à la maison). */
+const stockHere = (p) => (isAway(p) ? p.luggage.items ?? {} : p.items ?? {});
+
+/** Les animaux d'ici : en voyage, ceux qui sont là ; à la maison, tous (comme avant). */
+const animalsHere = (p) => (isAway(p) ? (p.animals ?? []).filter((a) => a.location === p.place) : p.animals ?? []);
+
 /** Un objet (variante) correspond-il à cette clé ? La clé peut être un type : 'bridle' = tous les filets. */
 const matches = (id, key) => id === key || (TYPES.has(key) && GEAR[id]?.type === key);
 
-/** Combien on en possède. key : une variante ('saddleJump') ou un type ('saddle' = toutes les selles). */
-export function owned(profile, key) {
-  ensureTack(profile);
+/** Combien de ces objets dans un stock (toutes tailles, ou une taille précise). */
+function countIn(items, key, size = null) {
   let n = 0;
-  for (const [k, c] of Object.entries(profile.items ?? {})) if (matches(parseKey(k).id, key)) n += c;
+  for (const [k, c] of Object.entries(items ?? {})) {
+    const pk = parseKey(k);
+    if (matches(pk.id, key) && (!size || pk.size === size)) n += c;
+  }
   return n;
 }
 
-/** Combien de ces objets sont déjà portés par des animaux (même règle de clé que owned). */
+/** Combien on en a ici. key : une variante ('saddleJump') ou un type ('saddle' = toutes les selles). */
+export function owned(profile, key) {
+  ensureTack(profile);
+  return countIn(stockHere(profile), key);
+}
+
+/** Combien de ces objets sont déjà portés par des animaux d'ici (même règle de clé que owned). */
 export function inUse(profile, key) {
   ensureTack(profile);
   let n = 0;
-  for (const a of profile.animals ?? []) for (const g of Object.values(a.gear ?? {})) if (matches(g.item, key)) n++;
+  for (const a of animalsHere(profile)) for (const g of Object.values(a.gear ?? {})) if (matches(g.item, key)) n++;
   return n;
 }
+
+/**
+ * Cet objet est-il resté à la maison ? (en voyage : on en a plus à la maison que dans le coffre)
+ * size : une taille précise (sinon toutes les tailles).
+ */
+export function leftAtHome(profile, key, size = null) {
+  if (!isAway(profile)) return false;
+  ensureTack(profile);
+  return countIn(profile.items, key, size) > countIn(profile.luggage.items, key, size);
+}
+
+/**
+ * Combien d'exemplaires de cette variante (à cette taille, ou toutes tailles si size est null) sont à la maison
+ * et pas dans le coffre du voyage. 0 quand on n'est pas en voyage.
+ */
+export function atHomeCount(profile, id, size = null) {
+  if (!isAway(profile)) return 0;
+  const left = (sz) => {
+    const k = stockKey(id, sz);
+    return Math.max(0, (profile.items?.[k] ?? 0) - (profile.luggage.items?.[k] ?? 0));
+  };
+  return size !== null ? left(size) : (GEAR[id]?.sizes ?? [null]).reduce((n, sz) => n + left(sz), 0);
+}
+
+const atHome = (profile, id, size = null) => atHomeCount(profile, id, size) > 0;
 
 /** Nombre d'exemplaires d'une variante précise (toutes tailles) : ownedVariant(p, 'saddle') = les selles mixtes. */
 export function ownedVariant(profile, id) {
   ensureTack(profile);
   let n = 0;
-  for (const [k, c] of Object.entries(profile.items ?? {})) if (parseKey(k).id === id) n += c;
+  for (const [k, c] of Object.entries(stockHere(profile))) if (parseKey(k).id === id) n += c;
   return n;
 }
 
-/** Nombre d'exemplaires d'une variante dans une taille précise. */
-export const ownedStock = (profile, id, size = defaultSize(id)) => profile.items?.[stockKey(id, size)] ?? 0;
+/** Nombre d'exemplaires d'une variante dans une taille précise (ici : à la maison, ou dans le coffre en voyage). */
+export const ownedStock = (profile, id, size = defaultSize(id)) => stockHere(profile)[stockKey(id, size)] ?? 0;
 
-/** Animaux qui portent cette variante dans cette taille. */
+/** Animaux d'ici qui portent cette variante dans cette taille. */
 export function wornBy(profile, id, size = defaultSize(id)) {
-  return (profile.animals ?? []).filter((a) => Object.values(a.gear ?? {}).some((g) => g.item === id && (g.size ?? defaultSize(id)) === size));
+  return animalsHere(profile).filter((a) => Object.values(a.gear ?? {}).some((g) => g.item === id && (g.size ?? defaultSize(id)) === size));
 }
 
 /** Exemplaires libres (rangés à la sellerie) d'une variante dans une taille. */
@@ -225,13 +280,13 @@ export function stockOf(profile, id) {
   const sizes = GEAR[id]?.sizes ?? [null];
   return sizes.map((s) => {
     const size = s ?? null;
-    const own = profile.items?.[stockKey(id, size)] ?? 0;
-    const used = (profile.animals ?? []).filter((a) => Object.values(a.gear ?? {}).some((g) => g.item === id && (g.size ?? defaultSize(id)) === size)).length;
+    const own = stockHere(profile)[stockKey(id, size)] ?? 0;
+    const used = wornBy(profile, id, size ?? defaultSize(id)).length;
     return { size, owned: own, free: own - used };
   }).filter((x) => x.owned > 0);
 }
 
-/** Acheter un objet (dans une taille). Gratuit en bac à sable. */
+/** Acheter un objet (dans une taille). Gratuit en bac à sable. En voyage, il va dans le coffre : il est là. */
 export function buyGear(profile, item, size = defaultSize(item)) {
   ensureTack(profile);
   const def = GEAR[item];
@@ -241,6 +296,10 @@ export function buyGear(profile, item, size = defaultSize(item)) {
   profile.items = profile.items ?? {};
   const key = stockKey(item, def.sizes ? size : null);
   profile.items[key] = (profile.items[key] ?? 0) + 1;
+  if (isAway(profile)) {
+    const l = (profile.luggage.items = profile.luggage.items ?? {});
+    l[key] = (l[key] ?? 0) + 1; // acheté ici : on le rapportera à la maison
+  }
   return { ok: true, size };
 }
 
@@ -252,6 +311,8 @@ export function buyGear(profile, item, size = defaultSize(item)) {
  * échange la taille (autoSwap) ou on répond notOwned / wrongSize.
  * autoSwap : à la maison, la sellière échange gratuitement un exemplaire rangé d'une autre taille
  * (le licol taille cheval offert au début devient un licol poney pour un Shetland).
+ * En voyage, seul ce qui est dans le coffre compte (à la bonne taille) : sinon leftAtHome (resté à la
+ * maison) ou wrongSizeAway (celui du coffre n'est pas à sa taille, et la sellière est loin).
  * Renvoie { ok, item } : item est le modèle vraiment mis (à nommer dans le message).
  */
 export function equip(profile, a, item, color, { autoSwap = false, exact = false } = {}) {
@@ -263,9 +324,10 @@ export function equip(profile, a, item, color, { autoSwap = false, exact = false
   const freeFor = (v) => freeStock(profile, v, sizeFor(v, a)) > 0 && !fitReason(v, a);
   const swappable = (v) => !fitReason(v, a) && (GEAR[v].sizes ?? []).some((sz) => freeStock(profile, v, sz) > 0);
   const wearing = (v) => a.gear?.[GEAR[v].slot]?.item === v && (a.gear[GEAR[v].slot].size ?? defaultSize(v)) === sizeFor(v, a);
+  const typeAsked = !exact && TYPES.has(item);
+  const types = typeAsked ? Object.keys(GEAR).filter((v) => GEAR[v].type === item) : [];
   // Un type demandé : si le modèle de base n'est pas libre, un autre modèle du même type fera l'affaire.
-  if (!exact && TYPES.has(item) && !wearing(id) && !freeFor(id)) {
-    const types = Object.keys(GEAR).filter((v) => GEAR[v].type === item);
+  if (typeAsked && !wearing(id) && !freeFor(id)) {
     const other = types.find(freeFor) ?? (autoSwap && !swappable(id) ? types.find(swappable) : null);
     if (other) id = other;
   }
@@ -275,9 +337,16 @@ export function equip(profile, a, item, color, { autoSwap = false, exact = false
   if (def.minObedience && (a.skills?.obedience ?? 0) < def.minObedience) return { ok: false, reason: 'tooAdvanced', need: def.minObedience };
   let swapped = null;
   if (!wearing(id) && freeStock(profile, id, size()) <= 0) {
+    const away = isAway(profile);
+    // En voyage : celui qui lui va (à sa taille) est resté à la maison, pas dans le coffre.
+    if (away && (atHome(profile, id, size()) || types.some((v) => !fitReason(v, a) && atHome(profile, v, sizeFor(v, a))))) {
+      return { ok: false, reason: 'leftAtHome', item: id, need: size() };
+    }
     // On en a un, mais pas à la bonne taille : échange gratuit à la sellerie.
     const other = (def.sizes ?? []).find((s) => s !== size() && freeStock(profile, id, s) > 0);
-    if (!other) return { ok: false, reason: 'notOwned' };
+    if (!other) return { ok: false, reason: away && atHome(profile, id) ? 'leftAtHome' : 'notOwned', item: id, need: size() };
+    // (en voyage, la sellière est loin : pas d'échange de taille)
+    if (away) return { ok: false, reason: 'wrongSizeAway', have: other, need: size() };
     if (!autoSwap) return { ok: false, reason: 'wrongSize', have: other, need: size() };
     swapSize(profile, id, other, size());
     swapped = size();
@@ -297,6 +366,7 @@ export function equip(profile, a, item, color, { autoSwap = false, exact = false
  */
 export function swapSize(profile, id, from, to) {
   ensureTack(profile);
+  if (isAway(profile)) return { ok: false, reason: 'away' }; // en voyage : la sellière est restée à la maison
   const def = GEAR[id];
   if (!def?.sizes?.includes(to) || from === to) return { ok: false, reason: 'noSize' };
   if (freeStock(profile, id, from) <= 0) return { ok: false, reason: 'notOwned' };
@@ -335,7 +405,7 @@ export function equipHelmet(profile, item, color) {
   ensureTack(profile);
   const def = GEAR[item];
   if (def?.type !== 'helmet') return { ok: false, reason: 'wrongSpecies' };
-  if (owned(profile, item) <= 0) return { ok: false, reason: 'notOwned' };
+  if (owned(profile, item) <= 0) return { ok: false, reason: atHome(profile, item) ? 'leftAtHome' : 'notOwned' };
   profile.rider.helmet = { item, color: def.colors.includes(color) ? color : def.colors[0] };
   return { ok: true };
 }

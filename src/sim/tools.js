@@ -20,7 +20,13 @@ export const TOOLS = {
 
 export const STARTER_TOOLS = ['brush', 'pitchfork', 'ball', 'treats'];
 
-export const hasTool = (profile, tool) => (profile.tools ?? STARTER_TOOLS).includes(tool);
+// En voyage, seul le matériel emporté dans le coffre de transport est là (profile.luggage, src/sim/cargo.js).
+const away = (p) => !!(p.luggage && p.place !== p.home && p.luggage.place === p.place);
+
+export const hasTool = (profile, tool) => (away(profile) ? profile.luggage.tools ?? [] : profile.tools ?? STARTER_TOOLS).includes(tool);
+
+/** Cet outil est-il resté à la maison ? (on l'a, mais pas dans le coffre du voyage) */
+export const toolAtHome = (profile, tool) => away(profile) && (profile.tools ?? STARTER_TOOLS).includes(tool) && !hasTool(profile, tool);
 
 /** Outil nécessaire pour une action (soin) ou un entraînement, ou null. */
 export function toolFor(actionOrTraining) {
@@ -39,6 +45,8 @@ export function missingTool(profile, actionOrTraining) {
 export function buyTool(profile, tool) {
   if (hasTool(profile, tool)) return { ok: false, reason: 'owned' };
   if (!spend(profile, TOOLS[tool].price)) return { ok: false, reason: 'money' };
-  profile.tools = [...(profile.tools ?? STARTER_TOOLS), tool];
+  const all = profile.tools ?? STARTER_TOOLS;
+  if (!all.includes(tool)) profile.tools = [...all, tool];
+  if (away(profile)) profile.luggage.tools = [...(profile.luggage.tools ?? []), tool]; // acheté ici : il est là
   return { ok: true };
 }

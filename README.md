@@ -52,7 +52,7 @@ rouvrir le même fichier (au même endroit) pour les retrouver. Ce fichier est p
 - **Activités** : apprendre à sauter pas à pas, saut d'obstacles, agility, balade, lapin-hop, spectacles et concours sur le terrain de concours
 - **Événements spéciaux** : orage, canicule, grand froid, animal blessé, cheval échappé, chiot perdu, voisin, naissance, fête du village
 - **Aides** à embaucher (palefrenier, berger, ouvrier agricole, vétérinaire) : on discute avec elles, on donne des consignes, elles font des pauses, gagnent de l'expérience et se forment
-- 11 lieux : Normandie, Bretagne, Alpes suisses, Islande, Alberta, Kyoto, Cotswolds, Andalousie, Kentucky, Pampa, bush australien. Voyage réaliste en voiture, en van (chargement, pauses, stress), à cheval, en bateau ou en avion
+- 11 lieux : Normandie, Bretagne, Alpes suisses, Islande, Alberta, Kyoto, Cotswolds, Andalousie, Kentucky, Pampa, bush australien. Voyage réaliste en voiture, en van (chargement, pauses, stress), à cheval, en bateau ou en avion ; on monte dans le 4x4 et le van à chevaux (le cheval monte le pont au licol, barres et filet à foin, coffre de transport, trajet suivi depuis la cabine)
 - Jour et nuit, météo selon le lieu et la vraie saison (saisons inversées dans l'hémisphère sud)
 - **Sons** doux, tous fabriqués par le code : voix des animaux (hennissement, aboiement, miaulement, bêlement, meuglement…), pas selon le sol, oiseaux le jour, grillons la nuit, vent, pluie et tonnerre ; réglables dans ⚙️ Réglages
 - Tutoriel guidé pour les enfants, quêtes facultatives et succès, mode Auto (le personnage prévoit et fait ses prochaines tâches simples)

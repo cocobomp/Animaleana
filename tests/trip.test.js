@@ -6,7 +6,7 @@ import { DAYS_PER_YEAR } from '../src/sim/time.js';
 import {
   planTrip, tickTrip, doStopAction, canStopAction, continueTrip, skipStop, sleepAtStop, canContinue,
   runToEnd, finishTrip, vehicleFor, placeFor, tipsFor, currentStop, remainingHours, stressLevel,
-  MAX_DRIVE_HORSES, SICK_STRESS,
+  MAX_DRIVE_HORSES, SICK_STRESS, TRAILER_SPECIES, nightStopAhead,
 } from '../src/sim/trip.js';
 
 const rng = () => mulberry32(7);
@@ -195,5 +195,102 @@ describe('arrivée', () => {
     expect(tips[0]).toBe('long');
     expect(tips).toContain('neighbour');
     expect(tips).toContain('horseRule');
+  });
+});
+
+describe('le coffre pendant le trajet', () => {
+  it('sans bidon d\'eau ni foin, on ne peut pas les faire boire ou manger sur l\'aire de repos', () => {
+    const horse = adult('horse');
+    const trip = planTrip({ mode: 'van', hours: 6, animals: [horse], cargo: {} });
+    drive(trip, [horse]);
+    expect(currentStop(trip).kind).toBe('rest');
+    expect(canStopAction(trip, horse, 'water').reason).toBe('noWater');
+    expect(canStopAction(trip, horse, 'feed').reason).toBe('noHay');
+    const other = adult('horse');
+    const ok = planTrip({ mode: 'van', hours: 6, animals: [other], cargo: { water: 1, hay: 1 } });
+    drive(ok, [other]);
+    expect(canStopAction(ok, other, 'water').ok).toBe(true);
+  });
+
+  it('les gamelles pour le chien et le chat', () => {
+    const dog = adult('dog');
+    dog.needs.hunger = 50;
+    const trip = planTrip({ mode: 'car', hours: 5, animals: [dog], cargo: { water: 1 } });
+    drive(trip, [dog]);
+    expect(canStopAction(trip, dog, 'feed').reason).toBe('noBowls');
+  });
+
+  it('le filet à foin occupe les chevaux : moins de stress et moins faim', () => {
+    const a = adult('horse');
+    const b = adult('horse');
+    const withHay = planTrip({ mode: 'van', hours: 4, animals: [a], cargo: { hay: 1, water: 1 } });
+    const without = planTrip({ mode: 'van', hours: 4, animals: [b], cargo: { water: 1 } });
+    drive(withHay, [a]);
+    drive(without, [b]);
+    expect(a.stress).toBeLessThan(b.stress);
+    expect(a.needs.hunger).toBeGreaterThan(b.needs.hunger);
+  });
+
+  it('l\'étape du soir fournit l\'eau même sans bidon', () => {
+    const dog = adult('dog');
+    const trip = planTrip({ mode: 'car', hours: 12, animals: [dog], cargo: {} });
+    while (!(trip.status === 'stop' && currentStop(trip).kind === 'night')) {
+      if (trip.status === 'stop') continueTrip(trip, [dog]);
+      else tickTrip(trip, [dog], 0.5, { rng: rng() });
+    }
+    dog.needs.thirst = 50;
+    expect(canStopAction(trip, dog, 'water').ok).toBe(true);
+  });
+
+  it('passer le trajet marche aussi avec un coffre vide', () => {
+    const horse = adult('horse');
+    const trip = planTrip({ mode: 'van', hours: 9, animals: [horse], cargo: {} });
+    runToEnd(trip, [horse], { rng: rng() });
+    expect(trip.status).toBe('arrived');
+  });
+
+  it('chaque voyage donne l\'habitude du van', () => {
+    const horse = adult('horse');
+    const trip = planTrip({ mode: 'van', hours: 2, animals: [horse] });
+    finishTrip(trip, [horse], { rng: rng() });
+    expect(horse.trips).toBe(1);
+  });
+});
+
+describe('véhicules : bétail et étapes du soir', () => {
+  it('le bétail (comme le cheval) ne voyage pas en voiture : il monte dans le van par le pont', () => {
+    for (const species of TRAILER_SPECIES) {
+      const r = checkTravel('maison', 'bretagne', 'car', [{ species }]);
+      expect(r.ok, species).toBe(false);
+      expect(r.reason, species).toBe(species === 'horse' ? 'horseNeedsVan' : 'livestockNeedsVan');
+      expect(checkTravel('maison', 'bretagne', 'van', [{ species }]).ok, species).toBe(true);
+    }
+    // Les petits animaux vont toujours en voiture, dans leur caisse.
+    expect(checkTravel('maison', 'bretagne', 'car', [{ species: 'dog' }, { species: 'cat' }]).ok).toBe(true);
+  });
+
+  it('un trajet court n\'a pas d\'étape du soir : sans eau, on attend l\'arrivée', () => {
+    const horse = adult('horse');
+    const short = planTrip({ mode: 'van', hours: 5.3, animals: [horse], cargo: { hay: 1 } });
+    expect(short.stops.some((s) => s.kind === 'night')).toBe(false);
+    expect(nightStopAhead(short)).toBe(false);
+    drive(short, [horse]);
+    expect(currentStop(short).kind).toBe('rest');
+    expect(canStopAction(short, horse, 'water').reason).toBe('noWater');
+    expect(nightStopAhead(short)).toBe(false);
+  });
+
+  it('un long trajet a une étape du soir devant soi, puis plus après l\'avoir passée', () => {
+    const horse = adult('horse');
+    const trip = planTrip({ mode: 'van', hours: 14, animals: [horse], cargo: { hay: 1 } });
+    expect(nightStopAhead(trip)).toBe(true);
+    drive(trip, [horse]);
+    expect(currentStop(trip).kind).toBe('rest'); // première pause : l'étape du soir est encore devant
+    expect(nightStopAhead(trip)).toBe(true);
+    while (currentStop(trip)?.kind !== 'night') {
+      continueTrip(trip, [horse]);
+      drive(trip, [horse]);
+    }
+    expect(nightStopAhead(trip)).toBe(false); // on y est : il n'y en a pas d'autre après
   });
 });

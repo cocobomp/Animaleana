@@ -1034,6 +1034,128 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
   .trip-act { min-height: 56px; }
 }
 
+/* ===================================================================
+   Véhicules du voyage (ui/vehicle.js) : vues dans le van, montée, compartiment, cabine, coffre
+   ========================================================================== */
+body.veh-view #hud, body.veh-view #action, body.veh-view #status-bar, body.veh-view #help,
+body.veh-view #labels, body.veh-view #task-list, body.veh-view #joystick, body.veh-view #touch-pad,
+body.veh-view #cam-btn, body.veh-view #pause-banner, body.veh-view #quest-tracker,
+body.trip-road #hud, body.trip-road #action, body.trip-road #status-bar, body.trip-road #help, body.trip-road #labels,
+body.trip-road #task-list, body.trip-road #joystick, body.trip-road #touch-pad, body.trip-road #cam-btn,
+body.trip-road #pause-banner, body.trip-road #quest-tracker, body.veh-view #ev-banner, body.trip-road #ev-banner { display: none !important; }
+#veh-overlay {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(12px + var(--safe-b));
+  z-index: 30;
+  width: min(560px, calc(100vw - 24px));
+}
+#veh-overlay[hidden] { display: none; }
+.veh-sheet { background: var(--bg); border-radius: 20px; box-shadow: var(--shadow); padding: 12px 14px 14px; max-height: 58vh; overflow-y: auto; -webkit-overflow-scrolling: touch; animation: pop 0.2s ease-out; }
+.veh-title { margin: 0 0 4px; font-weight: 700; font-size: 1.08rem; line-height: 1.3; }
+.veh-hint { margin: 0 0 8px; color: var(--muted); line-height: 1.35; font-size: 0.92rem; }
+.veh-hint.small { font-size: 0.85rem; }
+.veh-warn { background: #fff4e0; border-left: 4px solid #e6a23a; border-radius: 10px; padding: 6px 10px; margin: 6px 0; font-size: 0.92rem; line-height: 1.35; }
+.veh-meter { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; margin: 6px 0 10px; font-weight: 600; font-size: 0.9rem; }
+.veh-acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.veh-act { display: grid; justify-items: center; gap: 3px; padding: 8px 4px; min-height: 66px; border-radius: 14px; }
+.veh-act-icon { font-size: 1.6rem; line-height: 1; }
+.veh-act small { font-size: 0.76rem; text-align: center; line-height: 1.15; }
+.veh-act.off { opacity: 0.55; }
+.veh-act.ghost { background: transparent; border-style: dashed; }
+.veh-stalls { display: grid; gap: 8px; margin-bottom: 6px; }
+.veh-stall { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; }
+.veh-stall-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; min-width: 0; }
+.veh-stall-head span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.veh-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.veh-step { display: grid; justify-items: center; gap: 2px; padding: 6px 4px; min-height: 58px; border-radius: 12px; }
+.veh-step span { font-size: 1.35rem; line-height: 1; }
+.veh-step small { font-size: 0.76rem; text-align: center; line-height: 1.1; }
+.veh-step.next { background: var(--primary); color: #fff; border-color: transparent; animation: veh-pulse 1.6s ease-in-out infinite; }
+.veh-step.done { background: #e2f5e7; }
+.veh-step.off { opacity: 0.55; background: #f1ede4; }
+/* Beaucoup de places (camion, grande remorque) : des lignes plus serrées. */
+.veh-stalls.many .veh-stall { padding: 5px 8px; }
+.veh-stalls.many .veh-stall-head { margin-bottom: 3px; }
+.veh-stalls.many .veh-step { min-height: 44px; padding: 3px; }
+.veh-stalls.many .veh-step span { font-size: 1.05rem; }
+@keyframes veh-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(47, 138, 95, 0.45); } 50% { box-shadow: 0 0 0 7px rgba(47, 138, 95, 0); } }
+.veh-checks { list-style: none; padding: 0; margin: 6px 0 8px; display: grid; gap: 4px; }
+.veh-checks li { background: #fff; border-radius: 10px; padding: 6px 10px; font-size: 0.95rem; line-height: 1.3; }
+.veh-checks li.warn { background: #fff4e0; }
+.veh-cab-btns { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
+.veh-cab-btns .big { min-height: 54px; font-size: 1.05rem; }
+.veh-cargo-tools { gap: 6px; margin: 4px 0 8px; }
+.veh-cargo { display: grid; gap: 10px; margin-bottom: 8px; }
+.veh-cargo-group h4 { margin: 2px 0 6px; font-size: 0.95rem; }
+.veh-cargo-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto 42px 42px; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 4px 6px; margin-bottom: 4px; }
+.veh-cargo-row.in { background: #eef8f0; border-color: #b9e0c4; }
+.veh-cargo-emoji { font-size: 1.4rem; text-align: center; }
+.veh-cargo-name { display: grid; min-width: 0; }
+.veh-cargo-name b { font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.veh-cargo-name small { color: var(--muted); font-size: 0.75rem; }
+.veh-cargo-name small.veh-fits { color: var(--primary); font-weight: 600; } /* la bonne taille pour ce voyageur */
+.veh-cargo-count { font-weight: 700; color: var(--primary); min-width: 24px; text-align: right; }
+.veh-cargo-row button { min-height: 42px; min-width: 42px; padding: 0; font-size: 1.2rem; }
+.modal-box:has(.veh-cargo), .modal-box:has(.veh-menu) { max-height: 88vh; overflow-y: auto; }
+/* Menu du véhicule : une colonne, des boutons larges et lisibles. */
+.action-sheet.veh-menu { grid-template-columns: 1fr; gap: 8px; }
+.action-sheet.veh-menu .big-action { min-height: 58px; }
+.trip-bags { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: #f3efe5; border-radius: 12px; padding: 8px 10px; margin: 0 0 10px; line-height: 1.35; }
+.trip-bags span { flex: 1; min-width: 160px; }
+.trip-cams { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 2px; }
+.trip-cams button { min-height: 40px; }
+.trip-cams button.active { background: var(--primary); color: #fff; border-color: transparent; }
+.trip-fold { margin-left: auto; flex-shrink: 0; }
+.trip-luggage { display: grid; gap: 2px; background: #eef4fb; border-radius: 12px; padding: 8px 12px; margin: 8px 0; line-height: 1.35; }
+.trip-luggage small { color: var(--muted); }
+/* Trajet suivi depuis la cabine : la fiche se range en bas pour laisser voir la route. */
+#trip-overlay.with-road { background: none; align-items: flex-end; pointer-events: none; } /* on peut regarder autour de soi */
+#trip-overlay.with-road .trip-sheet { pointer-events: auto; }
+@media (min-width: 900px) {
+  /* Écran large : la fiche du trajet se range à droite, la route reste visible. */
+  #trip-overlay.with-road { justify-content: flex-end; align-items: stretch; }
+  #trip-overlay.with-road .trip-sheet { width: min(460px, 40vw); align-self: flex-end; }
+}
+.trip-sheet.compact { max-height: 46vh; }
+/* Pause avec la fiche repliée (téléphone) : caméras + repli sur une ligne, l'aire de repos, les animaux en cartes
+   qui défilent de côté, puis Repartir : environ la moitié de l'écran, le véhicule reste visible au-dessus. */
+.trip-sheet.compact.brief { max-height: 60vh; padding-top: 10px; }
+.trip-sheet.brief .trip-cams { flex-wrap: nowrap; align-items: center; margin: 0 0 6px; }
+.trip-sheet.brief .trip-cams button { flex: 0 1 auto; min-width: 0; padding-left: 8px; padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trip-stop-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.trip-sheet.brief .trip-stop { padding: 8px 10px; margin: 0 0 6px; }
+.trip-sheet.brief .trip-stop h3 { margin: 0 0 6px; }
+.trip-sheet.brief .trip-group button { min-height: 44px; }
+.trip-animals.strip { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px 6px; padding: 0 16px 4px; scroll-padding: 0 16px; -webkit-overflow-scrolling: touch; }
+.trip-animals.strip .trip-animal { flex: 0 0 min(310px, 86%); scroll-snap-align: start; padding: 6px 8px; }
+.trip-animals.strip .trip-animal-head { margin-bottom: 2px; }
+.trip-animals.strip .trip-bars { grid-template-columns: 1fr 1fr; }
+.trip-animals.strip .trip-bar { grid-template-columns: 22px 1fr 22px; }
+.trip-animals.strip .trip-bar-name, .trip-animals.strip .trip-bar.stress, .trip-animals.strip .trip-bar.comfort { display: none; }
+.trip-animals.strip .trip-acts { grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 6px; }
+.trip-animals.strip .trip-act { min-height: 48px; padding: 4px 2px; }
+.trip-sheet.brief .trip-actions-main { grid-template-columns: 1fr 1fr; gap: 8px; }
+.trip-sheet.brief .trip-actions-main .big { margin-top: 0; }
+.trip-sheet.brief .trip-skip { min-height: 52px; }
+/* Téléphone couché : la fiche du trajet se range à droite (comme sur un grand écran), la route reste visible à gauche. */
+@media (orientation: landscape) and (max-height: 520px) {
+  #trip-overlay.with-road { justify-content: flex-end; align-items: stretch; padding: calc(8px + var(--safe-t)) calc(8px + var(--safe-r)) calc(8px + var(--safe-b)) 8px; }
+  #trip-overlay.with-road .trip-sheet, #trip-overlay.with-road .trip-sheet.compact { width: min(400px, 48vw); max-height: 100%; align-self: flex-end; }
+}
+/* Coffre de transport : le bouton « Fermer le coffre » reste en bas du panneau pendant qu'on fait défiler la liste. */
+.veh-close { position: sticky; bottom: -14px; margin: 0 -14px -14px; padding: 8px 14px 14px; background: linear-gradient(to bottom, rgba(0, 0, 0, 0), var(--bg) 30%); z-index: 1; }
+.modal-box .veh-close { bottom: 0; margin: 0; padding: 8px 0 0; }
+@media (max-width: 640px) {
+  #veh-overlay { width: 100%; left: 0; transform: none; bottom: 0; }
+  .veh-sheet { border-radius: 20px 20px 0 0; max-height: 52vh; padding-bottom: calc(14px + var(--safe-b)); }
+  .veh-acts { grid-template-columns: repeat(2, 1fr); }
+  .trip-sheet.compact { max-height: 44vh; }
+  .trip-sheet.compact.brief { max-height: 58vh; }
+  .veh-sheet .veh-close { bottom: calc(-14px - var(--safe-b)); margin-bottom: calc(-14px - var(--safe-b)); padding-bottom: calc(14px + var(--safe-b)); }
+}
+
 /* ---------- événements spéciaux (src/ui/events.js) */
 #ev-banner {
   position: fixed;
@@ -2051,6 +2173,9 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .tk-fx { margin: 6px 0; padding: 8px 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; font-size: 0.92rem; }
 .tk-sizes button { flex: 1 1 auto; }
 .tk-swap { margin: 4px 0; }
+/* En voyage : ce qui est resté à la maison (pas dans le coffre du voyage, src/sim/cargo.js). */
+.gear-row button.tk-athome { border-style: dashed; color: var(--muted); }
+.tk-away, .tk-athome { color: var(--muted); }
 .tk-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 12px 0 6px; }
 .tk-actions .big-action { min-height: 56px; }
 .tk-pick { display: grid; gap: 8px; padding: 10px; background: #fff; border: 1px dashed var(--primary); border-radius: 12px; }

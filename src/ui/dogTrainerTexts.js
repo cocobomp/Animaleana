@@ -290,6 +290,11 @@ export const DOG_TRAINER_FR = {
   quest_step_doCoach: 'Fais une séance dans 🐕 Éducation',
   dt_maxClients_one: '1 chien à la fois',
   dt_full_one: 'Tu as déjà un chien en éducation. Finis d\'abord avec lui !',
+  dt_deliverTitle_f: '{dog} rentre chez elle !',
+  dt_mg_jump_turnNow_f: 'Elle saute ! Tourne-toi !',
+  dt_mg_jump_wait_f: 'Bien ! Attends qu\'elle reste calme…',
+  dt_mg_jump_bad_f: 'Pas de friandise quand elle saute !',
+  dt_mg_jump_missed_f: 'Trop tard, elle a sauté. Plus vite la prochaine fois !',
 };
 
 export const DOG_TRAINER_EN = {

@@ -451,8 +451,15 @@ export class DogTrainer {
     a.housed = false;
     e.scripted = true;
     v.npc.bubble.visible = false;
+    v.npc.waving = false;
+    v.npc.walk([]); // il s'arrête là où il est (et ne rouvre pas sa bulle en arrivant)
     v.npc.lookAt(e.position.x, e.position.z);
     const owner = v.npc.position;
+    // Le chien est loin (au bout de la ferme) : il arrive en courant, déjà tout près, pour qu'on voie la démonstration.
+    if (Math.hypot(e.position.x - owner.x, e.position.z - owner.z) > 10) {
+      e.position.set(owner.x + 4, 0, owner.z + 3);
+      e.snap();
+    }
     const fixed = isFixed(a);
     const steps = this.demoSteps(a.client.problem, fixed);
     let i = 0;
@@ -503,6 +510,7 @@ export class DogTrainer {
     };
     this.demo = {
       abort: () => { e.scripted = false; e.posing = null; },
+      peek: () => ({ step: i, steps: steps.length, tm, dog: { x: e.position.x, z: e.position.z }, front: front() }), // (tests)
       update: (dt) => {
         if (shown) return;
         tm += dt;

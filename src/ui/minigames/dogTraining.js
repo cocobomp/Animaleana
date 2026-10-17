@@ -75,7 +75,8 @@ function dog(g, a, fit, cx, { lift = 0, ...o } = {}) {
 // ---------------------------------------------------------------- rappel 📣
 
 export function recallGame(ctx) {
-  const { a, t, fx } = ctx;
+  const { a, fx } = ctx;
+  const t = (k, p = {}) => ctx.t(k, { name: a.name, g: a.sex, ...p }); // prénom et accord au féminin partout
   const fit = dogFit(a);
   const NEED = 4;
   let phase = 'wander';
@@ -513,7 +514,8 @@ const TIMING_THEMES = {
 };
 
 export function timingGame(ctx) {
-  const { a, t, fx } = ctx;
+  const { a, fx } = ctx;
+  const t = (k, p = {}) => ctx.t(k, { name: a.name, g: a.sex, ...p }); // prénom et accord au féminin partout
   const theme = TIMING_THEMES[ctx.action] ?? TIMING_THEMES.dt_herd;
   const key = ctx.action.replace('dt_', '');
   const fit = dogFit(a);
@@ -617,7 +619,8 @@ export function timingGame(ctx) {
 // ---------------------------------------------------------------- ne saute pas 🙅
 
 export function jumpGame(ctx) {
-  const { a, t, fx } = ctx;
+  const { a, fx } = ctx;
+  const t = (k, p = {}) => ctx.t(k, { name: a.name, g: a.sex, ...p }); // prénom et accord au féminin partout
   const fit = dogFit(a);
   const NEED = 4;
   let jump = -1; // > 0 : en train de sauter (0 → 1)
@@ -705,7 +708,8 @@ export function jumpGame(ctx) {
 const TRIGGERS = ['🚲', '📦', '🐈', '🛵', '🐦'];
 
 export function barkGame(ctx) {
-  const { a, t, fx } = ctx;
+  const { a, fx } = ctx;
+  const t = (k, p = {}) => ctx.t(k, { name: a.name, g: a.sex, ...p }); // prénom et accord au féminin partout
   const fit = dogFit(a);
   const NEED = 4;
   let trig = null; // { emoji, x }
@@ -783,7 +787,8 @@ export function barkGame(ctx) {
 // ---------------------------------------------------------------- peur 🫣
 
 export function shyGame(ctx) {
-  const { a, t, fx } = ctx;
+  const { a, fx } = ctx;
+  const t = (k, p = {}) => ctx.t(k, { name: a.name, g: a.sex, ...p }); // prénom et accord au féminin partout
   const fit = dogFit(a);
   const NEED = 3;
   let px = 40;

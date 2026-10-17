@@ -218,7 +218,8 @@ export function owned(profile, key) {
 export function inUse(profile, key) {
   ensureTack(profile);
   let n = 0;
-  for (const a of animalsHere(profile)) for (const g of Object.values(a.gear ?? {})) if (matches(g.item, key)) n++;
+  // (own : le matériel d'un client, venu avec son animal — pas celui de la sellerie)
+  for (const a of animalsHere(profile)) for (const g of Object.values(a.gear ?? {})) if (!g.own && matches(g.item, key)) n++;
   return n;
 }
 
@@ -250,7 +251,7 @@ export const ownedStock = (profile, id, size = defaultSize(id)) => stockHere(pro
 
 /** Animaux d'ici qui portent cette variante dans cette taille. */
 export function wornBy(profile, id, size = defaultSize(id)) {
-  return animalsHere(profile).filter((a) => Object.values(a.gear ?? {}).some((g) => g.item === id && (g.size ?? defaultSize(id)) === size));
+  return animalsHere(profile).filter((a) => Object.values(a.gear ?? {}).some((g) => !g.own && g.item === id && (g.size ?? defaultSize(id)) === size));
 }
 
 /** Exemplaires libres (rangés à la sellerie) d'une variante dans une taille. */

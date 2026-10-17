@@ -40,6 +40,7 @@ const RULES = {
   kennel: [
     { id: 'feedDogs', icon: '🥣', when: (c) => need(c.count.dog) },
     { id: 'waterDogs', icon: '💧', when: (c) => need(c.count.dog) },
+    { id: 'dogTrainer', icon: '🐕', when: () => null }, // métier éducateur canin (src/ui/dogTrainer.js)
     { id: 'farm', icon: '🔧', when: () => null },
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],

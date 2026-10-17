@@ -202,7 +202,8 @@ export class Tutorial {
       hasDropping: [...g.droppingMeshes.values()].some((m) => m.userData.dropping.kind === 'poop'),
       travelDest: !!panel.querySelector('.card.place.selected'),
       travelMode: !!panel.querySelector('.card.mode.selected'),
-      hasClient: g.profile.animals.some((a) => a.client), // un animal confié par un client
+      hasClient: g.profile.animals.some((a) => a.client && a.client.kind !== 'training'), // un animal confié par un client
+      dtOwnerBack: !!g.dogTrainer?.visitor?.returning, // éducateur canin : le maître revient chercher son chien
     };
   }
 
@@ -425,6 +426,7 @@ export class Tutorial {
     const ui = this.ui;
     let a = this.animal();
     if (spec.species && a?.species !== spec.species) a = g.animalsHere().find((x) => x.species === spec.species) ?? null;
+    if (spec.training) a = g.animalsHere().find((x) => x.client?.kind === 'training') ?? null; // chien en éducation
     const e = a && g.entities.get(a.id);
     if (!e) return {};
     if (ui.panel) return { el: this.closeBtn(), why: 'close', world: e, key: `a-${a.id}` };

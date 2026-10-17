@@ -46,6 +46,12 @@ const ICONS = {
   treat: '🍪', play: '⚽', lunge: '🌀', liberty: '💛', shear: '🧶', milk: '🥛',
 };
 
+/** Ajoute un mini-jeu (ex. séances d'éducation canine, src/ui/minigames/dogTraining.js). */
+export function registerMinigame(id, make, icon = '⭐') {
+  GAMES[id] = make;
+  ICONS[id] = icon;
+}
+
 /** Texte traduit, ou null s'il n'existe pas. */
 const tt = (key, params) => {
   const s = t(key, params);

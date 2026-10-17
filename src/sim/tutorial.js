@@ -163,6 +163,9 @@ export function restartTutorial(profile) {
 const hasHorse = (p) => p.animals.some((a) => a.species === 'horse');
 const hasAnimal = (p) => p.animals.length > 0;
 const hasCareer = (p) => Object.keys(p.careers?.started ?? {}).length > 0;
+const dogTrainerStarted = (p) => p.careers?.started?.dogTrainer !== undefined; // éducateur canin (src/sim/dogTrainer.js)
+const hasTrainingDog = (p) => p.animals.some((a) => a.client?.kind === 'training');
+const coachable = (p) => p.animals.some((a) => !a.client && ['dog', 'cat', 'horse', 'rabbit'].includes(a.species));
 
 const SHOWGROUND = { type: 'building', id: 'showground' };
 
@@ -191,6 +194,12 @@ export const QUEST_GUIDE = {
   actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
   actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
   actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
+  // Métier éducateur canin (une fois commencé) : les maîtres arrivent près de la niche, les séances se font
+  // depuis le chien (menu rapide ou fiche).
+  dtClient1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, ready: dogTrainerStarted },
+  dtSession3: { where: 'dogSheet', target: { type: 'animal', training: true }, ready: hasTrainingDog },
+  dtDeliver1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, ready: hasTrainingDog },
+  dtCoach1: { where: 'dogSheet', target: { type: 'action', id: 'more' }, ready: (p) => dogTrainerStarted(p) && coachable(p) },
   // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
   career1: { where: 'careers', target: { type: 'hud', id: 'careers' } },
   client1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
@@ -204,7 +213,7 @@ export const QUEST_ORDER = [
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
-  'career1', 'client1', 'clientVet1', 'clientHappy5', 'clientMoney500',
+  'career1', 'client1', 'clientVet1', 'dtClient1', 'dtSession3', 'dtDeliver1', 'dtCoach1', 'clientHappy5', 'clientMoney500',
 ];
 
 /**
@@ -277,6 +286,14 @@ export const FOLLOW_STEPS = {
   goShowground: { target: SHOWGROUND, done: seenAny('building:showground') },
   goHutch: { target: { type: 'building', id: 'hutch' }, done: seenAny('building:hutch') },
   doActivity: { target: null, done: questDone, progress: true },
+  // éducateur canin
+  waitClient: { target: { type: 'building', id: 'kennel' }, done: seenAny('panel:dogTrainerChat') },
+  acceptClient: { target: { type: 'el', sel: '#panel .dt-accept', fallback: { type: 'building', id: 'kennel' } }, done: questDone },
+  tapDog: { target: { type: 'animal', training: true }, done: seenAny('animalActions', 'panel:animal') },
+  doSession: { target: { type: 'el', sel: '#panel .big-action.dt-quick', fallback: { type: 'section', h3: 'dt_sectionTitle', fallback: { type: 'animal', training: true } } }, done: questDone, progress: true },
+  waitOwner: { target: { type: 'animal', training: true }, done: (c) => c.dtOwnerBack || c.questDone, progress: true },
+  deliverDog: { target: { type: 'el', sel: '#panel .dt-deliver', fallback: { type: 'building', id: 'kennel' } }, done: questDone },
+  doCoach: { target: { type: 'section', h3: 'dt_sectionTitle', fallback: { type: 'action', id: 'more' } }, done: questDone },
   // Métiers et clients
   careerStart: { target: { type: 'hud', id: 'careers' }, done: questDone },
   clientWait: { target: null, done: (c) => c.hasClient || c.questDone },
@@ -308,6 +325,10 @@ export const QUEST_STEPS = {
   actvCompete1: ['goShowground', 'doActivity'],
   actvHop1: ['goShowground', 'doActivity'],
   actvHutch5: ['goHutch', 'doActivity'],
+  dtClient1: ['waitClient', 'acceptClient'],
+  dtSession3: ['tapDog', 'doSession'],
+  dtCoach1: ['tapAnimal', 'openMore', 'doCoach'],
+  dtDeliver1: ['waitOwner', 'deliverDog'],
   career1: ['careerStart'],
   client1: ['clientWait', 'clientCare'],
   clientVet1: ['clientWait', 'clientVet'],

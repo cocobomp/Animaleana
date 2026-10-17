@@ -1,6 +1,8 @@
 // Fenêtres du jeu : fiche d'un animal, liste, adoption, voyage, journal, petits boulots, réglages.
 
 import { checkForUpdate } from './updates.js';
+import { dogTrainerSection, trainingBadge } from './dogTrainer.js'; // éducateur canin : séances dans la fiche, badge
+import { isTrainingClient } from '../sim/dogTrainer.js';
 import { h, bar, hexColor } from './dom.js';
 import { t, L, getLang, setLang } from '../i18n.js';
 import { SPECIES, getBreed, NAMES } from '../sim/species.js';
@@ -115,6 +117,8 @@ function renderAnimal(ui, g, a) {
 
   const out = [info, bars];
   if (!here) return out;
+  const training = isTrainingClient(a); // chien en éducation (métier éducateur canin) : ses séances d'abord
+  if (training) out.push(...dogTrainerSection(ui, a));
 
   const careActions = sp.actions.filter((x) => !['play', 'lunge', 'liberty', 'ride', 'follow', 'shear', 'milk'].includes(x));
   out.push(h('h3', {}, t('care')), h('div', { class: 'grid' },
@@ -179,6 +183,8 @@ function renderAnimal(ui, g, a) {
 
   out.push(...animalActivitySection(ui, a)); // activités : saut, balade, agility, spectacle
 
+  if (!training) out.push(...dogTrainerSection(ui, a)); // éducateur canin : coaching de ses propres animaux
+
   if (a.client) return out; // animal confié : ni entraînement, ni tours, ni bébés (il repart bientôt)
   out.push(h('h3', {}, t('training')), h('div', { class: 'grid' },
     sp.training.map((x) => btn(t(`tr_${x}`), () => g.train(a, x), { disabled: stage === 'baby' })),
@@ -232,7 +238,7 @@ export function openAnimals(ui) {
           h('span', { class: 'card-main' },
             h('b', {}, `${a.name} ${sexIcon(a)}`),
             h('small', {}, `${speciesName(a)} · ${breedName(a)} · ${ageText(a)}`),
-            clientBadge(a, g), // 🏡 en pension / 🩺 en soins
+            clientBadge(a, g) ?? trainingBadge(a), // 🏡 en pension / 🩺 en soins / 🐕 en éducation
             h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${happiness(a)}%` } }))),
           h('span', { class: 'card-side' }, MOOD_EMOJI[m], h('small', {}, here ? '' : PLACES[a.location].flag)));
       });

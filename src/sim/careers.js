@@ -27,9 +27,11 @@ export const QUESTS_FOR_CAREER = 5; // quêtes finies avant qu'on propose un mé
  * Registre des métiers.
  *   level     : niveau du joueur pour pouvoir commencer
  *   ranks     : XP de métier pour chaque rang (apprenti, confirmé, expert)
- *   actions   : le carnet, dans l'ordre d'apprentissage ; `where` = où aller (bâtiment ou 'visitor')
+ *   actions   : le carnet, dans l'ordre d'apprentissage ; `where` = où aller (bâtiment ou 'visitor') ;
+ *               `rank` (facultatif) : l'action s'ouvre à ce rang (🔒 avant)
  *   building  : le bâtiment qui propose le métier quand on le touche
- *   perks     : ce que change chaque rang (lu par src/sim/clients.js)
+ *   perks     : ce que change chaque rang (lu par src/sim/clients.js, ou par le module du métier)
+ *   ownClients: le métier a ses propres clients (pas les visites de src/sim/clients.js)
  */
 export const CAREERS = {
   vet: {
@@ -68,6 +70,35 @@ export const CAREERS = {
       { maxClients: 1, species: ['dog', 'cat', 'rabbit'], price: 1, tips: false },
       { maxClients: 2, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat'], price: 1.1, tips: false },
       { maxClients: 3, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat', 'cow'], price: 1.25, tips: true },
+    ],
+  },
+  // Éducateur canin : des maîtres amènent leur chien qui a un problème (tire en laisse, saute sur
+  // les gens, ne revient pas au rappel…) ; séances (mini-jeux), livraison, paiement et réputation.
+  // Logique : src/sim/dogTrainer.js ; 3D : src/game/DogTrainer.js ; interface : src/ui/dogTrainer.js.
+  // ownClients : ses clients ne passent pas par src/sim/clients.js (pension, soins).
+  dogTrainer: {
+    id: 'dogTrainer',
+    emoji: '🐕',
+    level: 3,
+    building: 'kennel',
+    ownClients: true,
+    ranks: [0, 150, 400],
+    actions: [
+      { id: 'meetClient', emoji: '👋', where: 'visitor' },
+      { id: 'session', emoji: '🎓', where: 'animal' },
+      { id: 'deliver', emoji: '🎬', where: 'visitor' },
+      { id: 'coachOwn', emoji: '🐶', where: 'animal' },
+      { id: 'coachHerd', emoji: '🐑', where: 'animal', rank: 1 },
+      { id: 'coachAgility', emoji: '🎯', where: 'animal', rank: 2 },
+      { id: 'rescue', emoji: '💛', where: 'visitor', rank: 2 },
+    ],
+    // maxClients : chiens en éducation en même temps ; problems : ce que les maîtres demandent ;
+    // price : tarif de la séance ; speed : vitesse de progrès ; tips : pourboires ;
+    // rescue : chiens de refuge avec deux problèmes.
+    perks: [
+      { maxClients: 1, problems: ['obey', 'pull', 'jump', 'recall'], price: 1, speed: 1, tips: false, rescue: false },
+      { maxClients: 2, problems: ['obey', 'pull', 'jump', 'recall', 'bark'], price: 1.25, speed: 1.25, tips: true, rescue: false },
+      { maxClients: 3, problems: ['obey', 'pull', 'jump', 'recall', 'bark', 'shy'], price: 1.5, speed: 1.5, tips: true, rescue: true },
     ],
   },
 };
@@ -191,15 +222,21 @@ export function noteAction(profile, id, action) {
 
 export const isActionDone = (profile, id, action) => (careerState(profile).done[id] ?? []).includes(action);
 
-/** La prochaine action du carnet à faire (dans l'ordre), ou null quand tout est coché. */
+/** Une action du carnet encore fermée (elle s'ouvre à un rang plus haut) ? */
+export const isActionLocked = (profile, id, action) => rankOf(profile, id) < (action.rank ?? 0);
+
+/** La prochaine action du carnet à faire (dans l'ordre, sans celles encore fermées), ou null. */
 export function nextAction(profile, id) {
   if (!isStarted(profile, id)) return null;
-  return CAREERS[id].actions.find((a) => !isActionDone(profile, id, a.id)) ?? null;
+  return CAREERS[id].actions.find((a) => !isActionDone(profile, id, a.id) && !isActionLocked(profile, id, a)) ?? null;
 }
 
-/** Le carnet : [{ id, emoji, where, done }]. */
+/** Le carnet : [{ id, emoji, where, rank?, done, locked }]. */
 export function carnet(profile, id) {
-  return CAREERS[id].actions.map((a) => ({ ...a, done: isActionDone(profile, id, a.id) }));
+  return CAREERS[id].actions.map((a) => {
+    const done = isActionDone(profile, id, a.id);
+    return { ...a, done, locked: !done && isActionLocked(profile, id, a) };
+  });
 }
 
 const questsDone = (profile, objectives) => (objectives ? objectives.filter((o) => o.kind === 'quest' && profile.completed.includes(o.id)).length : profile.completed.length);

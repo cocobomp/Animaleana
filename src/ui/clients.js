@@ -88,14 +88,14 @@ export function showResult(ui, res, onClose) {
 
 /** Petit badge pour la liste des animaux (🏡 en pension · Mme Dupont · 2 jours restants). */
 export function clientBadge(a, g) {
-  if (!a.client) return null;
+  if (!a.client || a.client.kind === 'training') return null; // (éducateur canin : voir src/ui/dogTrainer.js)
   const c = a.client;
   return h('span', { class: `cl-badge ${c.kind}` }, `${KIND_EMOJI[c.kind]} ${t(c.kind === 'vet' ? 'cl_badgeVet' : 'cl_badge')} · ${c.ownerName} · ${t('cl_daysLeft', { n: daysLeft(a, g.day) })}`);
 }
 
 /** Bloc dans la fiche de l'animal : propriétaire, jours restants, barre de soin. */
 export function clientInfo(a, g) {
-  if (!a.client) return null;
+  if (!a.client || a.client.kind === 'training') return null;
   const c = a.client;
   const left = daysLeft(a, g.day);
   const when = g.day > c.until ? t('cl_overdue') : left === 0 ? t('cl_today') : t('cl_daysLeft', { n: left });

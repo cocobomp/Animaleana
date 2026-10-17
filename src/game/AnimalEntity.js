@@ -748,7 +748,9 @@ export class AnimalEntity {
     this.phase += dt * (v / stride) * Math.PI * 2 * 0.5;
     // Les chevaux dorment debout (tête basse) ; les autres se couchent, pattes repliées sous eux.
     const standingSleeper = horse;
-    this.lie += ((this.sleeping && !standingSleeper ? 1 : 0) - this.lie) * Math.min(1, dt * 2);
+    // posing 'down' : « couché ! » sur commande (démonstration de l'éducateur canin, src/game/DogTrainer.js).
+    const lieDown = (this.sleeping && !standingSleeper) || this.posing === 'down';
+    this.lie += ((lieDown ? 1 : 0) - this.lie) * Math.min(1, dt * (this.posing ? 4 : 2));
     this.doze = (this.doze ?? 0) + ((this.sleeping && standingSleeper ? 1 : 0) - (this.doze ?? 0)) * Math.min(1, dt * 1.5);
     const lie = this.lie;
 

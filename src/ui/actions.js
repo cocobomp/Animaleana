@@ -18,6 +18,7 @@ import { NEED_ICON } from './UI.js';
 import { bar } from './dom.js';
 import { horseBoxItems } from './facilitiesPanel.js';
 import { activityRuns, openActivities } from './activities.js';
+import { isTrainingClient, nextProblem, canSession, PROBLEMS } from '../sim/dogTrainer.js'; // éducateur canin
 
 const BUILDING_ICON = { petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋', showground: '🏆' };
 
@@ -30,7 +31,7 @@ export function sheet(ui, title, subtitle, items, header = null, live = false) {
       subtitle ? h('p', { class: 'note' }, subtitle) : null,
       header ? header() : null,
       h('div', { class: 'action-sheet' }, items().map((it) => h('div', { class: 'ba-wrap' }, h('button', {
-        class: `big-action ${it.enabled === false ? 'off' : ''} ${it.primary ? 'primary' : ''}`,
+        class: `big-action ${it.enabled === false ? 'off' : ''} ${it.primary ? 'primary' : ''} ${it.cls ?? ''}`,
         onClick: () => {
           if (it.enabled === false) {
             ui.toast(it.why);
@@ -108,6 +109,7 @@ export function openBuilding(ui, kind) {
     facPaddock: () => { g.sendHorses('paddock'); close(); },
     facEnter: () => { close(); g.interiors.enter(kind); },
     facManage: () => ui.openFacility(kind),
+    dogTrainer: () => ui.openDogTrainer(), // carnet de l'éducateur canin (niche)
     ...activityRuns(ui), // activités : terrain de concours
   };
   // Maison des animaux : qui dort dans quel coin.
@@ -118,7 +120,7 @@ export function openBuilding(ui, kind) {
     enabled: a.enabled,
     why: a.reason ? t(`why_${a.reason}`, a.params) : '',
     run: run[a.id],
-    queue: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'vet', 'vetSchool', 'jobs', 'sleep'].includes(a.id) ? null : {
+    queue: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'vet', 'vetSchool', 'jobs', 'sleep', 'dogTrainer'].includes(a.id) ? null : {
       label: `${t(`do_${a.id}`)} (${name})`,
       icon: a.icon,
       target: () => g.buildingSpot(kind),
@@ -126,7 +128,7 @@ export function openBuilding(ui, kind) {
       auto: () => run[a.id](),
       manual: () => { ui.openBuilding(kind); },
     },
-    free: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'checkHorses', 'vetSchool'].includes(a.id), // possible même en pause
+    free: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'checkHorses', 'vetSchool', 'dogTrainer'].includes(a.id), // possible même en pause
   })), header, kind === 'pethouse');
 }
 
@@ -229,6 +231,21 @@ export function openAnimalActions(ui, a) {
         effect: acts.map((it) => it.label).join(' · '),
         free: true,
         run: () => openAnimalActivities(ui, a),
+      });
+    }
+    // Chien en éducation (métier éducateur canin) : la séance du jour, en un geste.
+    const lesson = isTrainingClient(a) ? nextProblem(a) : null;
+    if (lesson) {
+      const can = canSession(a, g.day);
+      items.unshift({
+        icon: PROBLEMS[lesson].emoji,
+        label: t('dt_quickSession', { what: t(`dt_session_${lesson}`) }),
+        enabled: can.ok,
+        why: can.ok ? '' : t(`dt_cant_${can.reason}`, { name: a.name, g: a.sex }),
+        effect: t('dt_sessionsDone', { n: a.client.sessionsDone, total: a.client.sessionsNeeded }),
+        primary: true,
+        cls: 'dt-quick',
+        run: () => g.dogTrainer.session(a, lesson),
       });
     }
     items.push({ icon: '📋', label: t('more'), free: true, run: () => ui.openAnimal(a) });

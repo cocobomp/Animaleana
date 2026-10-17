@@ -53,12 +53,13 @@ export function clientState(profile) {
   return profile.clients;
 }
 
-export const isClientAnimal = (a) => !!a?.client;
+export const isClientAnimal = (a) => !!a?.client && a.client.kind !== 'training'; // 'training' : éducateur canin (src/sim/dogTrainer.js)
 export const reputationFactor = (rep = 50) => 0.8 + (clamp(rep) / 100) * 0.4; // 0,8 → 1,2
 
 /** Nombre d'animaux qu'on peut garder en même temps (selon le meilleur rang des métiers commencés). */
 export function maxClients(profile) {
-  const started = startedCareers(profile).filter((id) => CAREERS[id].perks);
+  // Les métiers qui ont leurs propres clients (éducateur canin…) ne comptent pas ici.
+  const started = startedCareers(profile).filter((id) => CAREERS[id].perks && !CAREERS[id].ownClients);
   if (!started.length) return 0;
   return Math.max(...started.map((id) => perksOf(profile, id).maxClients));
 }
@@ -240,7 +241,7 @@ export function clearVisitor(profile) {
 // ------------------------------------------------------------------ score de soin
 
 /** Les animaux confiés. */
-export const clientAnimals = (profile) => profile.animals.filter((a) => a.client);
+export const clientAnimals = (profile) => profile.animals.filter(isClientAnimal);
 
 export const daysLeft = (a, day) => Math.max(0, (a.client?.until ?? day) - day);
 
@@ -337,7 +338,7 @@ export function payout(price, score, rng = Math.random, tips = true) {
 }
 
 /** Un client est-il attendu par son propriétaire (séjour terminé) ? */
-export const isPickupDue = (a, day) => !!a.client && day >= a.client.until;
+export const isPickupDue = (a, day) => isClientAnimal(a) && day >= a.client.until;
 
 /**
  * Le propriétaire revient : note, paiement, réputation et XP du métier, et l'animal quitte le profil.

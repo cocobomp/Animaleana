@@ -35,13 +35,15 @@ const WAY = { x: 13, z: 1.2 };
 const MEET = { x: 5, z: -2.5 };
 const CLINIC = { x: 11.3, z: 9 }; // devant la porte du vétérinaire du village
 const AUTO_VET_HOURS = 1.5; // temps passé chez le vétérinaire du village
+/** Le chemin des visiteurs (réutilisé par les maîtres de l'éducateur canin, src/game/DogTrainer.js). */
+export const VISITOR_PATH = { GATE, WAY, MEET };
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x5a3a24];
 const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xa63a1f, 0x9a9a9a];
 const TOPS = [0xd9643a, 0x3f7cc4, 0x7a4b8f, 0x2f8f6b, 0xc43f6a, 0xe0b030];
 
 /** Un visiteur (propriétaire d'un animal) qui marche vers un endroit. */
-class VisitorEntity {
+export class VisitorEntity { // (réutilisé par src/game/DogTrainer.js)
   constructor(game, owner) {
     this.game = game;
     this.owner = owner;
@@ -605,7 +607,7 @@ export class Clients {
   }
 
   onCare(a, action) {
-    if (!a?.client) return;
+    if (!a?.client || a.client.kind === 'training') return; // chien en éducation : src/game/DogTrainer.js
     const step = noteClientCare(this.game.profile, a, action);
     if (step) this.noteCareer(a.client.kind, step, true);
   }
@@ -619,6 +621,7 @@ export class Clients {
 
   /** « 👉 Montre-moi » : la flèche jaune sur le visiteur, l'animal confié ou le bâtiment du métier. */
   showMe(id, action) {
+    if (id === 'dogTrainer') return this.game.dogTrainer.showMe(action); // éducateur canin
     const g = this.game;
     const p = g.profile;
     const def = CAREERS[id].actions.find((x) => x.id === action);

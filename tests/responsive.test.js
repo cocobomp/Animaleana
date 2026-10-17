@@ -94,7 +94,9 @@ const minHeight = (sel) => {
 describe('cibles tactiles d\'au moins 44 px', () => {
   it.each([
     '.time-btn', // ⏸ ▶ ⏩ 🤖
-    '.qt-quick', // 🧭 / ⏹ de la pastille de quête
+    '.qt-quick', // 🧭 / ✋ du suivi de quête
+    '.qt-fold', // poignée « ranger » du suivi de quête (src/ui/tutorial.js)
+    '.qt-pill', // le suivi rangé en pastille
     '.status-chip button', // « Arrêter »
     '.ba-queue', // 📝 Ajouter à ma liste
     '.swatch-btn', // couleurs de l'avatar

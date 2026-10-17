@@ -323,9 +323,18 @@ export function questSteps(id, profile) {
   return steps;
 }
 
-/** Commence à suivre une quête (une seule à la fois). Les étapes sont figées au départ. */
-export function followQuest(profile, id) {
-  profile.questFollow = { id, step: 0, seen: [], steps: questSteps(id, profile) };
+/**
+ * Commence à suivre une quête (une seule à la fois). Les étapes sont figées au départ.
+ * `resume` : le suivi arrêté juste avant (✋ touché par erreur, puis 🧭 de nouveau) ; même quête et mêmes étapes,
+ * on reprend à l'étape où l'on était au lieu de tout recommencer.
+ */
+export function followQuest(profile, id, resume = null) {
+  const steps = questSteps(id, profile);
+  const same = resume?.id === id && Array.isArray(resume.steps) && resume.steps.length === steps.length
+    && resume.steps.every((s, i) => s === steps[i]);
+  profile.questFollow = same
+    ? { id, step: Math.max(0, Math.min(resume.step | 0, steps.length - 1)), seen: [...(resume.seen ?? [])], steps }
+    : { id, step: 0, seen: [], steps };
   return profile.questFollow;
 }
 
@@ -385,4 +394,19 @@ export function followView(profile, objectives) {
     current: id ? { id, ...FOLLOW_STEPS[id] } : null,
     steps: f.steps.map((s, i) => ({ id: s, progress: !!FOLLOW_STEPS[s]?.progress, state: i < f.step ? 'done' : i === f.step ? 'now' : 'todo' })),
   };
+}
+
+/**
+ * Le petit suivi sur le côté n'a la place que pour quelques lignes : on montre l'étape en cours,
+ * les suivantes et (s'il y a la place pour 3 lignes ou plus) la dernière faite.
+ * Renvoie { steps, before, after } : before / after = nombre d'étapes cachées avant / après.
+ */
+export function stepWindow(steps, max = 3) {
+  const n = steps.length;
+  const size = Math.max(1, max);
+  if (n <= size) return { steps, before: 0, after: 0 };
+  let now = steps.findIndex((s) => s.state === 'now');
+  if (now < 0) now = n - 1;
+  const start = Math.max(0, Math.min(now - (size >= 3 ? 1 : 0), n - size));
+  return { steps: steps.slice(start, start + size), before: start, after: n - start - size };
 }

@@ -691,7 +691,8 @@ export function openShop(ui) {
   const g = ui.game;
   const pool = shopBreeds(g.profile.place, g.isHome);
   const speciesList = [...new Set(pool.map((p) => p.species))];
-  const st = { species: speciesList[0], breed: null, colorIndex: 0, sex: 'f', stage: 'young' };
+  // seed : la graine de l'animal qu'on achètera (marques blanches, taches) — la même dans l'aperçu 3D.
+  const st = { species: speciesList[0], breed: null, colorIndex: 0, sex: 'f', stage: 'young', seed: Math.floor(Math.random() * 1e6) };
   const render = () => {
     const breeds = pool.filter((p) => p.species === st.species).map((p) => p.breed);
     if (!breeds.find((b) => b.id === st.breed)) {
@@ -701,12 +702,14 @@ export function openShop(ui) {
     const breed = breeds.find((b) => b.id === st.breed);
     const price = shopPrice(st.species, st.breed, st.stage);
     const sandbox = isSandbox(g.profile);
-    const preview = createAnimal({ species: st.species, breed: st.breed, colorIndex: st.colorIndex, sex: st.sex, ageDays: stageAgeDays(st.species, st.stage), name: '' });
+    const preview = createAnimal({ species: st.species, breed: st.breed, colorIndex: st.colorIndex, sex: st.sex, ageDays: stageAgeDays(st.species, st.stage), name: '', seed: st.seed });
     const chip = (label, on, fn) => h('button', { class: `small ${on ? 'primary' : ''}`, onClick: () => { fn(); ui.renderPanel(); } }, label);
     // Vignettes 3D : l'animal tel qu'il sera (race, robe, sexe, âge), et chaque race de la liste (adulte, première robe).
     const emoji = SPECIES[st.species].emoji;
-    const spec = { kind: 'animal', species: st.species, breed: st.breed, colorIndex: st.colorIndex, sex: st.sex, stage: st.stage };
-    const pic = (w, hh, cls) => thumb(g, spec, { w, h: hh, emoji, cls, urgent: true, alt: L(breed.name) });
+    const spec = { kind: 'animal', species: st.species, breed: st.breed, colorIndex: st.colorIndex, sex: st.sex, stage: st.stage, seed: st.seed };
+    // (une seule image pour l'aperçu et la fiche : la grande sert aussi à la petite ; pendant qu'une nouvelle se
+    // fait, l'ancienne reste sous un voile au lieu de redevenir un emoji)
+    const pic = (w, hh, cls) => thumb(g, spec, { w, h: hh, emoji, cls, urgent: true, alt: L(breed.name), hold: `shop:${st.species}` });
     const coatName = L(breed.colors[st.colorIndex % breed.colors.length]?.name) || '';
     return [
       h('p', { class: 'note' }, g.isHome ? t('shopHelp') : t('breederHelp')),

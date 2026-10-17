@@ -6,11 +6,16 @@
 //   image suréchantillonnée ×2 puis réduite (bords lisses), fond transparent, éclairage studio doux ;
 // - caméra de trois quarts cadrée sur la boîte englobante de l'objet (fitView) ;
 // - image 2× la taille affichée, gardée en cache par clé (thumbKey : type, modèle, taille, couleur…) ;
+//   le même objet demandé à plusieurs tailles (aperçu, fiche, petite vue) n'est fabriqué qu'une fois, à la
+//   plus grande : elle sert aussi aux petites (covers) ;
 // - fabriquée seulement quand la carte devient visible (IntersectionObserver), une à la fois et en
 //   plusieurs étapes, chacune dans sa propre image d'animation (fabrication du modèle, compilation des
-//   shaders, rendu, lecture des pixels, encodage) : le jeu ne saccade pas ;
-// - un emoji en attendant, et pour toujours si WebGL manque ;
-// - les géométries, matériaux et textures de chaque photo sont libérés juste après le rendu.
+//   shaders, rendu, lecture des pixels, encodage), lancée juste après une image « calme » (pas en retard)
+//   pour ne pas retarder celle du jeu ; les pelages sont peints plus petits (gfx.withTexScale) ;
+// - un emoji en attendant (ou, pour un aperçu qui change, l'image d'avant sous un voile : hold), et pour
+//   toujours si WebGL manque ;
+// - les géométries, matériaux et textures de chaque photo sont libérés juste après le rendu ; l'éclairage
+//   studio est gardé, les mannequins deux minutes, les cibles de rendu quinze secondes.
 //
 // La partie « logique pure » (clés, file d'attente, rythme, cadrage, cache) est testée dans tests/thumbs.test.js.
 
@@ -51,6 +56,50 @@ export function outputSize(w, h, { scale = 2, max = 512, min = 16 } = {}) {
   return [W, H];
 }
 
+/**
+ * Une image déjà faite de have = [W, H] pixels peut-elle servir à une vue qui en demande want = [W, H] ?
+ * Oui si elle est assez grande (slack : 10 % plus petite au plus) et de même forme (rapport largeur/hauteur
+ * à tol près : l'image est affichée « contain », une petite différence ne laisse qu'un mince bord vide).
+ * Ainsi le même animal, le même objet n'est fabriqué qu'une fois pour l'aperçu, la fiche et les petites vues.
+ */
+export function covers(have, want, { tol = 0.12, slack = 0.9 } = {}) {
+  const [hw, hh] = have;
+  const [ww, wh] = want;
+  if (!(hw > 0 && hh > 0 && ww > 0 && wh > 0)) return false;
+  if (hw < ww * slack || hh < wh * slack) return false;
+  const a = hw / hh;
+  const b = ww / wh;
+  return Math.abs(a - b) / b <= tol;
+}
+
+/** Parmi des images [{ size: [W, H], … }], la plus petite qui couvre want (voir covers), ou null. */
+export function bestCover(list, want, opts) {
+  let best = null;
+  for (const it of list) {
+    if (!covers(it.size, want, opts)) continue;
+    if (!best || it.size[0] * it.size[1] < best.size[0] * best.size[1]) best = it;
+  }
+  return best;
+}
+
+/** Parmi des demandes [{ size: [W, H], … }], la plus grande que l'image de cette demande-là couvrirait aussi. */
+export function largestCovering(list, want, opts) {
+  let best = null;
+  for (const it of list) {
+    if (!covers(it.size, want, opts)) continue;
+    if (!best || it.size[0] * it.size[1] > best.size[0] * best.size[1]) best = it;
+  }
+  return best;
+}
+
+/**
+ * Image d'animation « calme » ? gap : temps écoulé depuis l'image précédente (ms) ; usual : temps habituel
+ * entre deux images sur cet appareil. Une image en retard (le jeu a déjà dépassé son budget) : on attend.
+ */
+export function calmFrame(gap, usual = 16.7, { min = 40, factor = 1.6 } = {}) {
+  return gap <= Math.max(min, usual * factor);
+}
+
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -77,6 +126,21 @@ export function boxCorners(min, max) {
   const out = [];
   for (const x of [min[0], max[0]]) for (const y of [min[1], max[1]]) for (const z of [min[2], max[2]]) out.push([x, y, z]);
   return out;
+}
+
+/**
+ * Remonte une boîte { min, max } ([x, y, z]) qui passe sous le sol (min.y < ground) : agrandie autour d'un
+ * objet posé au sol (guêtres, cloches), elle ferait cadrer une moitié d'image vide, sous le sol.
+ */
+export function aboveGround(min, max, ground = 0) {
+  const dy = Math.max(0, ground - min[1]);
+  return { min: [min[0], min[1] + dy, min[2]], max: [max[0], max[1] + dy, max[2]] };
+}
+
+/** Points agrandis k fois autour de origin (cadrer « comme si » l'objet était plus grand : il paraît plus petit). */
+export function scaleAbout(points, k, origin) {
+  if (k === 1) return points;
+  return points.map((p) => [origin[0] + (p[0] - origin[0]) * k, origin[1] + (p[1] - origin[1]) * k, origin[2] + (p[2] - origin[2]) * k]);
 }
 
 /**
@@ -407,11 +471,32 @@ void main() {
 }`;
 
 const nextFrame = () => new Promise((resolve) => {
-  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
-  else setTimeout(resolve, 16);
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame((ts) => resolve(ts));
+  else setTimeout(() => resolve(now()), 16);
 });
+
+// Tâche « juste après l'image » : le navigateur vient d'afficher l'image, le jeu a devant lui tout le temps
+// jusqu'à la suivante ; un travail lancé là ne retarde pas l'image en cours (dans un rappel d'animation, si).
+let postChannel = null;
+const postQueue = [];
+function postTask(fn) {
+  if (typeof MessageChannel !== 'function') {
+    setTimeout(fn, 0);
+    return;
+  }
+  if (!postChannel) {
+    postChannel = new MessageChannel();
+    postChannel.port1.onmessage = () => postQueue.shift()?.();
+  }
+  postQueue.push(fn);
+  postChannel.port2.postMessage(0);
+}
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+/** Repos : les cibles de rendu sont rendues après REST_MS sans travail, les mannequins après REST_LONG_MS. */
+const REST_MS = 15000;
+const REST_LONG_MS = 120000;
 
 /** Réglage par l'adresse ou le stockage local : ?thumbs=off (emoji seulement, pour tester le repli) ou ?thumbs=debug. */
 function thumbsSetting() {
@@ -433,17 +518,32 @@ export class Thumbs {
     const setting = thumbsSetting();
     this.debug = debug ?? setting === 'debug';
     this.kinds = new Map(); // genre → fabrique(spec) → { object, box?, dir?, pad?, fov?, ground?, dispose?, keep? }
-    this.cache = new ThumbCache(240, (url) => {
+    // Les images d'un même objet (même spec, tailles différentes) : une grande sert aussi aux petites vues.
+    this.family = new Map(); // famille (clé sans la taille) → Map(clé → { key, size: [W, H], url })
+    this.familyOf = new Map(); // clé → famille
+    this.live = new Set(); // URL des images encore en cache (les autres sont libérées)
+    this.cache = new ThumbCache(240, (url, key) => {
+      this.live.delete(url);
+      const fam = this.familyOf.get(key);
+      this.familyOf.delete(key);
+      this.family.get(fam)?.delete(key);
+      if (fam && !this.family.get(fam)?.size) this.family.delete(fam);
       try {
         URL.revokeObjectURL(url);
       } catch {
         /* rien à libérer */
       }
     });
+    this.held = new Map(); // emplacement (hold) → dernière image montrée (gardée sous un voile pendant la suivante)
     this.queue = new ThumbQueue();
     this.pacer = new Pacer({ rest: 1, min: 0, max: 300 });
-    this.waiting = new Map(); // clé → { spec, els: Set<élément>, resolvers: [] }
-    this.info = new WeakMap(); // élément → { key, cls, alt, priority }
+    this.waiting = new Map(); // clé → { key, spec, fam, size: [W, H], els: Set<élément>, resolvers: [] }
+    this.info = new WeakMap(); // élément → { key, cls, alt, priority, hold }
+    // Rythme des images du jeu (mesuré pendant qu'on travaille) : on ne lance rien sur une image en retard.
+    this.frameGap = 16.7;
+    this.usualGap = 16.7;
+    this.lastFrameTs = 0;
+    this.ticking = false;
     this.observed = new Set();
     this.failed = new Set();
     this.anchored = new Set(); // programmes de shaders gardés (pas recompilés à chaque vignette)
@@ -451,6 +551,7 @@ export class Thumbs {
     this.busy = false;
     this.raf = 0;
     this.idleTimer = 0;
+    this.longIdleTimer = 0;
     this.lastSweep = 0;
     this.log = []; // dernières mesures (temps, taille)
     this.totals = { made: 0, failed: 0, cpuMs: 0, maxCpuMs: 0, wallMs: 0 };
@@ -484,33 +585,73 @@ export class Thumbs {
     return this;
   }
 
-  /** Appelé quand le moteur se repose (rien à faire depuis un moment) : on libère ce qu'on gardait sous la main. */
+  /**
+   * Appelé quand le moteur se repose depuis longtemps (REST_LONG_MS : rien à faire depuis deux minutes) :
+   * on libère ce qu'on gardait sous la main (les mannequins). Pas après chaque pause courte : les refaire
+   * coûterait plus cher que de les garder (un cheval mannequin : quelques centaines de Ko).
+   */
   onRelease(fn) {
     this.releasers.push(fn);
   }
 
-  /** L'image déjà faite pour cette vignette (URL), ou null. */
+  /** L'image déjà faite pour cette vignette (URL), ou une plus grande du même objet, ou null. */
   get(spec, w, h) {
-    return this.cache.get(thumbKey({ ...spec, w, h }));
+    return this.lookup(thumbKey(spec), thumbKey({ ...spec, w, h }), outputSize(w, h));
+  }
+
+  /** L'image de cette clé, sinon une image plus grande de la même famille qui la couvre (voir covers). */
+  lookup(fam, key, size) {
+    const url = this.cache.get(key);
+    if (url) return url;
+    const imgs = this.family.get(fam);
+    if (!imgs?.size) return null;
+    const best = bestCover([...imgs.values()], size);
+    if (!best) return null;
+    this.cache.get(best.key); // (elle devient la plus récente du cache)
+    return best.url;
+  }
+
+  /** Demande en attente pour cette clé (créée au besoin). */
+  waitFor(key, fam, full, size) {
+    let w8 = this.waiting.get(key);
+    if (!w8) {
+      w8 = { key, spec: full, fam, size, els: new Set(), resolvers: [] };
+      this.waiting.set(key, w8);
+    }
+    return w8;
   }
 
   /**
    * Élément de vignette pour une carte : l'image si elle est prête, sinon l'emoji en attendant
    * (l'image arrive quand la carte devient visible). w × h : taille affichée (px CSS).
    * urgent : passe devant les autres (aperçu de ce qu'on est en train de choisir).
+   * hold : nom d'emplacement (ex. « tk-big:saddle ») ; tant que la nouvelle image n'est pas prête, on y laisse
+   * la précédente sous un léger voile, au lieu de repasser à l'emoji (pas de clignotement à chaque choix).
    */
-  view(spec, { w = 80, h = 64, emoji = '', cls = '', alt = '', urgent = false } = {}) {
+  view(spec, { w = 80, h = 64, emoji = '', cls = '', alt = '', urgent = false, hold = '' } = {}) {
     const full = { ...spec, w, h };
     const key = thumbKey(full);
+    const fam = thumbKey(spec);
+    const size = outputSize(w, h);
     const el = document.createElement('span');
-    const info = { key, cls, alt, priority: urgent ? 3 : 2 };
+    const info = { key, cls, alt, priority: urgent ? 3 : 2, hold };
     this.info.set(el, info);
-    const url = this.cache.get(key);
+    const url = this.lookup(fam, key, size);
     if (url) {
       this.fill(el, url);
       return el;
     }
-    el.className = `thumb ${cls} ${this.enabled && !this.failed.has(key) ? 'is-wait' : 'is-emoji'}`.replace(/\s+/g, ' ').trim();
+    const prev = hold && this.enabled ? this.held.get(hold) : null;
+    const keepPrev = !!prev && this.live.has(prev);
+    el.className = `thumb ${cls} ${this.enabled && !this.failed.has(key) ? 'is-wait' : 'is-emoji'}${keepPrev ? ' is-hold' : ''}`.replace(/\s+/g, ' ').trim();
+    if (keepPrev) {
+      const img = document.createElement('img');
+      img.src = prev;
+      img.alt = '';
+      img.draggable = false;
+      img.className = 'thumb-prev';
+      el.append(img);
+    }
     const ph = document.createElement('span');
     ph.className = 'thumb-ph';
     ph.setAttribute('aria-hidden', 'true');
@@ -518,12 +659,7 @@ export class Thumbs {
     el.append(ph);
     if (alt) el.setAttribute('aria-label', alt);
     if (!this.enabled || this.failed.has(key)) return el; // repli : l'emoji reste
-    let w8 = this.waiting.get(key);
-    if (!w8) {
-      w8 = { spec: full, els: new Set(), resolvers: [] };
-      this.waiting.set(key, w8);
-    }
-    w8.els.add(el);
+    this.waitFor(key, fam, full, size).els.add(el);
     this.observed.add(el);
     if (this.io) this.io.observe(el);
     else this.enqueue(key, info.priority);
@@ -534,15 +670,12 @@ export class Thumbs {
   want(spec, { w = 80, h = 64, priority = 1 } = {}) {
     const full = { ...spec, w, h };
     const key = thumbKey(full);
-    const url = this.cache.get(key);
+    const fam = thumbKey(spec);
+    const size = outputSize(w, h);
+    const url = this.lookup(fam, key, size);
     if (url || !this.enabled || this.failed.has(key)) return Promise.resolve(url ?? null);
     return new Promise((resolve) => {
-      let w8 = this.waiting.get(key);
-      if (!w8) {
-        w8 = { spec: full, els: new Set(), resolvers: [] };
-        this.waiting.set(key, w8);
-      }
-      w8.resolvers.push(resolve);
+      this.waitFor(key, fam, full, size).resolvers.push(resolve);
       this.enqueue(key, Math.max(priority, this.queue.get(key)?.priority ?? 0));
     });
   }
@@ -557,6 +690,7 @@ export class Thumbs {
     img.alt = info.alt ?? '';
     img.draggable = false;
     el.replaceChildren(img);
+    if (info.hold) this.held.set(info.hold, url);
     if (fresh) {
       // (la classe « is-new » ne sert qu'au fondu d'arrivée : on la retire ensuite)
       setTimeout(() => el.classList.remove('is-new'), 400);
@@ -598,14 +732,19 @@ export class Thumbs {
     for (const el of [...this.observed]) if (!el.isConnected) this.forget(el);
   }
 
+  /** Quelqu'un attend-il encore cette demande (un élément à l'écran, ou une promesse) ? */
+  wanted(w8) {
+    return !!w8 && (w8.resolvers.length > 0 || [...w8.els].some((el) => el.isConnected));
+  }
+
   enqueue(key, priority) {
-    const url = this.cache.get(key);
+    const w8 = this.waiting.get(key);
+    if (!w8) return;
+    const url = this.lookup(w8.fam, key, w8.size);
     if (url) {
       this.deliver(key, url);
       return;
     }
-    const w8 = this.waiting.get(key);
-    if (!w8) return;
     const old = this.queue.get(key);
     this.queue.push(key, w8.spec, Math.max(priority, old?.priority ?? 0));
     this.schedule();
@@ -614,6 +753,8 @@ export class Thumbs {
   schedule(delay = 0) {
     if (this.raf || this.busy) return;
     clearTimeout(this.idleTimer);
+    clearTimeout(this.longIdleTimer);
+    this.startTicker();
     const go = () => {
       this.raf = typeof requestAnimationFrame === 'function'
         ? requestAnimationFrame(() => {
@@ -633,6 +774,31 @@ export class Thumbs {
     } else go();
   }
 
+  /**
+   * Mesure le rythme des images tant qu'on a du travail (un rappel d'animation qui ne fait que noter l'heure) :
+   * frameGap = temps depuis l'image précédente, usualGap = temps habituel sur cet appareil.
+   */
+  startTicker() {
+    if (this.ticking || typeof requestAnimationFrame !== 'function') return;
+    this.ticking = true;
+    this.lastFrameTs = 0;
+    const tick = (ts) => {
+      if (this.lastFrameTs) {
+        const gap = ts - this.lastFrameTs;
+        this.frameGap = gap;
+        // Temps habituel : suit vite les images rapides, lentement les lentes (une saccade ne le gonfle pas).
+        this.usualGap += (Math.min(gap, 250) - this.usualGap) * (gap < this.usualGap ? 0.3 : 0.05);
+      }
+      this.lastFrameTs = ts;
+      if (this.ticking) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  stopTicker() {
+    this.ticking = false;
+  }
+
   /** Une étape de travail (appelée au plus une fois par image d'animation). */
   async pump() {
     if (this.busy || !this.enabled) return;
@@ -646,28 +812,44 @@ export class Thumbs {
       return;
     }
     // (une vignette que plus personne n'attend est jetée)
-    const job = this.queue.next((j) => {
-      const w8 = this.waiting.get(j.key);
-      return !!w8 && (w8.resolvers.length > 0 || [...w8.els].some((el) => el.isConnected));
-    });
+    const job = this.queue.next((j) => this.wanted(this.waiting.get(j.key)));
     if (!job) {
       this.restSoon();
       return;
     }
+    // Le même objet est aussi demandé en plus grand (aperçu et fiche) : on fait la grande, elle sert aux deux.
+    const asked = this.waiting.get(job.key);
+    const same = [...this.waiting.values()].filter((w8) => w8.fam === asked.fam && w8.key !== job.key && this.wanted(w8));
+    const big = largestCovering(same, asked.size);
+    const target = big && big.size[0] * big.size[1] > asked.size[0] * asked.size[1] ? big : asked;
+    if (target !== asked) this.queue.delete(target.key);
     this.busy = true;
     let url = null;
     try {
-      url = await this.run(job.key, job.data);
+      url = await this.run(target.key, target.spec);
     } catch (err) {
-      if (this.debug) console.warn('[thumbs] échec', job.key, err);
+      if (this.debug) console.warn('[thumbs] échec', target.key, err);
       url = null;
     }
     this.busy = false;
-    if (url) this.deliver(job.key, url, true);
-    else {
-      this.failed.add(job.key);
+    if (url) {
+      this.deliver(target.key, url, true);
+      // Toutes les vues du même objet que cette image couvre (plus petites) : servies aussi.
+      for (const w8 of [...this.waiting.values()]) {
+        if (w8.fam === target.fam && covers(target.size, w8.size)) {
+          this.queue.delete(w8.key);
+          this.deliver(w8.key, url, true);
+        }
+      }
+    } else {
+      this.failed.add(target.key);
       this.totals.failed += 1;
-      this.deliver(job.key, null);
+      this.deliver(target.key, null);
+    }
+    // (la demande d'origine, si l'image faite ne lui va pas : elle reprend sa place dans la file)
+    if (this.waiting.has(job.key) && !this.queue.has(job.key)) {
+      if (url) this.queue.push(job.key, asked.spec, job.priority);
+      else this.deliver(job.key, null);
     }
     if (this.queue.size) this.schedule();
     else this.restSoon();
@@ -683,22 +865,39 @@ export class Thumbs {
       this.observed.delete(el);
       if (url) this.fill(el, url, fresh && el.isConnected);
       else {
-        el.classList.remove('is-wait');
+        el.classList.remove('is-wait', 'is-hold');
+        el.querySelector('.thumb-prev')?.remove();
         el.classList.add('is-emoji');
       }
     }
     for (const r of w8.resolvers) r(url);
   }
 
-  /** Plus rien à faire depuis un moment : on rend la mémoire (cibles de rendu, modèles gardés). */
+  /**
+   * Plus rien à faire : après REST_MS on rend les cibles de rendu (mémoire de la carte graphique, vite refaites) ;
+   * après REST_LONG_MS les mannequins aussi. L'éclairage studio (petit) est gardé : le refaire coûte une image.
+   */
   restSoon() {
+    this.stopTicker();
     clearTimeout(this.idleTimer);
+    clearTimeout(this.longIdleTimer);
+    const idle = () => !this.busy && !this.queue.size;
     this.idleTimer = setTimeout(() => {
-      if (!this.busy && !this.queue.size) this.release();
-    }, 15000);
+      if (idle()) this.releaseTargets();
+    }, REST_MS);
+    this.longIdleTimer = setTimeout(() => {
+      if (idle()) this.releaseKept();
+    }, REST_LONG_MS);
   }
 
-  release() {
+  releaseTargets() {
+    this.sceneRT?.dispose();
+    this.outRT?.dispose();
+    this.sceneRT = null;
+    this.outRT = null;
+  }
+
+  releaseKept() {
     for (const fn of this.releasers) {
       try {
         fn();
@@ -706,10 +905,12 @@ export class Thumbs {
         /* rien */
       }
     }
-    this.sceneRT?.dispose();
-    this.outRT?.dispose();
-    this.sceneRT = null;
-    this.outRT = null;
+  }
+
+  /** Libère tout (cibles, mannequins, éclairage studio) : rien n'est perdu, tout se refait à la demande. */
+  release() {
+    this.releaseKept();
+    this.releaseTargets();
     this.envRT?.dispose();
     this.envRT = null;
     if (this.scene) this.scene.environment = null;
@@ -717,6 +918,7 @@ export class Thumbs {
 
   contextLost() {
     this.enabled = false;
+    this.stopTicker();
     this.queue.clear();
     for (const key of [...this.waiting.keys()]) this.deliver(key, null);
     this.sceneRT = null;
@@ -871,15 +1073,23 @@ export class Thumbs {
     }
   }
 
-  /** Attend son tour (rythme) puis la prochaine image d'animation. */
+  /**
+   * Attend son tour : le rythme (Pacer), puis une image d'animation « calme » (la précédente n'était pas en
+   * retard : le jeu n'a pas déjà dépassé son budget), et l'on travaille juste après cette image (postTask),
+   * pas dedans : le jeu a devant lui tout le temps jusqu'à l'image suivante. Au plus 6 images d'attente.
+   */
   async slot() {
-    await nextFrame();
     let t = now();
     while (!this.pacer.ready(t)) {
       await sleep(Math.min(100, this.pacer.wait(t)));
-      await nextFrame();
       t = now();
     }
+    this.startTicker();
+    for (let i = 0; i < 6; i++) {
+      await nextFrame();
+      if (calmFrame(this.frameGap, this.usualGap)) break;
+    }
+    await new Promise((resolve) => postTask(resolve));
   }
 
   /** Fabrique la vignette d'une demande de la file (genre enregistré), la met en cache. */
@@ -887,16 +1097,34 @@ export class Thumbs {
     const make = this.kinds.get(spec.kind);
     if (!make) throw new Error(`genre inconnu : ${spec.kind}`);
     const [W, H] = outputSize(spec.w, spec.h);
+    // Le studio (la toute première fois : l'éclairage) a son image d'animation, la fabrication du modèle la sienne.
+    if (!this.scene || !this.envRT) {
+      await this.slot();
+      const t0 = now();
+      this.setup();
+      this.pacer.done(now(), now() - t0);
+    }
+    await this.slot();
+    if (!this.enabled) throw new Error('contexte perdu');
     const t = now();
     this.setup();
     const built = make(spec, { W, H });
     if (!built?.object) throw new Error('rien à photographier');
     const out = await this.shoot(built, W, H, now() - t);
     if (!out) return null;
-    this.cache.set(key, out.url, out.bytes);
+    this.store(key, thumbKey({ ...spec, w: undefined, h: undefined }), out.url, out.bytes, [W, H]);
     out.m.key = key;
     this.record(out.m);
     return out.url;
+  }
+
+  /** Garde l'image en cache, rangée dans sa famille (le même objet à d'autres tailles). */
+  store(key, fam, url, bytes, size) {
+    this.cache.set(key, url, bytes);
+    this.live.add(url);
+    this.familyOf.set(key, fam);
+    if (!this.family.has(fam)) this.family.set(fam, new Map());
+    this.family.get(fam).set(key, { key, size, url });
   }
 
   /**
@@ -926,6 +1154,7 @@ export class Thumbs {
     } finally {
       this.busy = false;
       if (this.queue.size) this.schedule();
+      else this.restSoon();
     }
   }
 

@@ -161,6 +161,7 @@ function buildHorseGear(model, look, gear, add) {
   }
 
   if (gear.saddle) horseSaddle(model, gear, add);
+  else if (gear.pad) horsePad(model, gear, add, SADDLE_STYLES.saddle); // tapis seul (sans selle) : il se voit
 
   const bridle = gear.bridle;
   const halter = gear.halter && !bridle;
@@ -221,7 +222,12 @@ function buildHorseGear(model, look, gear, add) {
         }
         add(model.head, strap(cheek(c, ring), w * 0.9, th), strapMat);
         add(model.head, new THREE.TorusGeometry(hr * (bid === 'doubleBridle' ? 0.18 : 0.24), hr * 0.035, 6, 16), P.steelMat(), ring.toArray(), [0, PI / 2, 0]);
-        if (bid === 'bridleOlive') add(model.head, new THREE.CylinderGeometry(hr * 0.07, hr * 0.07, hr * 0.22, 8), P.steelMat(), [ring.x - s * hr * 0.06, ring.y, ring.z], [0, 0, PI / 2]);
+        if (bid === 'bridleOlive') {
+          // Mors à olives : la barrette en olive où passe l'anneau, debout dans l'anneau, côté extérieur
+          // (avant, elle était dans la bouche : on ne la voyait pas, le filet ressemblait au filet simple).
+          add(model.head, P.shared('gearOlive', () => new THREE.SphereGeometry(1, 10, 8)), P.steelMat(), [ring.x + s * hr * 0.04, ring.y, ring.z], null, [hr * 0.11, hr * 0.24, hr * 0.13]);
+          add(model.head, new THREE.CylinderGeometry(hr * 0.045, hr * 0.045, hr * 0.2, 8), P.steelMat(), [ring.x - s * hr * 0.06, ring.y, ring.z], [0, 0, PI / 2]);
+        }
         if (bid === 'doubleBridle') {
           // Mors de bride : branche droite sous l'anneau du filet.
           add(model.head, new THREE.CylinderGeometry(hr * 0.03, hr * 0.03, hr * 0.7, 6), P.steelMat(), [ring.x + s * hr * 0.05, ring.y - hr * 0.3, ring.z + hr * 0.12]);
@@ -262,12 +268,48 @@ function buildHorseGear(model, look, gear, add) {
         add(parent, new THREE.CylinderGeometry(r * 1.0, r * 1.08, len, 10), bootMat, [0, -0.07 * T - len / 2, 0]);
         for (const k of [0.25, 0.6]) add(parent, new THREE.CylinderGeometry(r * 1.1, r * 1.1, len * 0.12, 10), P.nylonMat(0x2a2a2a), [0, -0.07 * T - len * k, 0]);
       }
-      if (bellMat) {
+      if (bellMat && leg.fetlock && leg.hoof && leg.fetlockRest) {
+        // Cloche autour du sabot : du paturon jusque par-dessus la couronne, centrée sur le sabot (le paturon
+        // et le sabot sont en avant de l'axe du canon). Repère du boulet : elle suit le pied qui bouge.
+        const E = leg.fetlockRest.y / 0.215; // (hauteur du boulet ÷ E, voir horseModel.js)
+        const yc = 0.085 * E;
+        const h = 0.09 * E;
+        const c = new THREE.Vector3(leg.hoof.x, yc, leg.hoof.z - 0.04).sub(leg.fetlockRest);
+        add(leg.fetlock, new THREE.CylinderGeometry(r * 1.32, r * 1.78, h, 16, 1, true), bellMat, c.toArray(), [0.12, 0, 0], [1, 1, 1.08]);
+        // Bourrelet en bas (le bord roulé de la cloche) : on voit mieux sa forme.
+        add(leg.fetlock, new THREE.TorusGeometry(r * 1.76, r * 0.12, 6, 18), bellMat, [c.x, c.y - h * 0.48, c.z - h * 0.06], [Math.PI / 2 + 0.12, 0, 0], [1, 1.08, 1]);
+      } else if (bellMat) {
         const yb = -0.07 * T - len - 0.07 * T;
         add(parent, new THREE.CylinderGeometry(r * 1.05, r * 1.55, 0.06 * T, 12, 1, true), bellMat, [0, yb, 0]);
       }
     }
   }
+}
+
+/**
+ * Tapis (ou amortisseur) sous la selle de style st : celui qu'on a mis, sinon un tapis blanc tout simple.
+ * Aussi seul (sans selle). Renvoie son épaisseur (la selle se pose dessus).
+ */
+function horsePad(model, gear, add, st) {
+  const { torso } = model.sdf;
+  const { L, R } = model.dims;
+  const y0 = model.y0;
+  const deg = (d) => (d * Math.PI) / 180;
+  const P = TACK_PARTS;
+  const k = L / 1.5;
+  const zSeat = -L * 0.05;
+  const pad = gear.pad;
+  const padColor = pad ? gearColor(pad, 0xe9e2d4) : st.western ? 0x9a3b2a : 0xe9e2d4;
+  const padMat = pad?.item === 'gelPad' ? P.rubberMat(padColor) : pad ? P.quiltMat(padColor) : P.clothMat(padColor);
+  const padHalf = (st.western ? 0.3 : st.race ? 0.16 : 0.24) * k;
+  const padDrop = st.western ? 15 : st.race ? 40 : 18;
+  const padT = pad?.item === 'gelPad' ? 0.02 : st.western ? 0.016 : 0.01; // épaisseur : la selle se pose dessus
+  add(model.body, shell(torso, y0 - R * 0.2, zSeat - padHalf * 0.9, zSeat + padHalf, 8, deg(180 - padDrop), deg(padDrop), 14, padT), padMat);
+  if (pad) {
+    const trim = pad.item === 'gelPad' ? padColor : padColor === COLORS.white ? COLORS.navy : 0xf1ede4;
+    add(model.body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + padHalf], 14, padT + 0.004, deg(180 - padDrop), deg(padDrop)), 0.008, 0.004), P.clothMat(trim));
+  }
+  return padT;
 }
 
 /**
@@ -293,18 +335,7 @@ function horseSaddle(model, gear, add) {
   const z0 = zSeat - len * 0.55;
   const z1 = zSeat + len * 0.45;
 
-  // Tapis (ou amortisseur) sous la selle : celui qu'on a mis, sinon un tapis blanc tout simple.
-  const pad = gear.pad;
-  const padColor = pad ? gearColor(pad, 0xe9e2d4) : st.western ? 0x9a3b2a : 0xe9e2d4;
-  const padMat = pad?.item === 'gelPad' ? P.rubberMat(padColor) : pad ? P.quiltMat(padColor) : P.clothMat(padColor);
-  const padHalf = (st.western ? 0.3 : st.race ? 0.16 : 0.24) * k;
-  const padDrop = st.western ? 15 : st.race ? 40 : 18;
-  const padT = pad?.item === 'gelPad' ? 0.02 : st.western ? 0.016 : 0.01; // épaisseur : la selle se pose dessus
-  add(body, shell(torso, y0 - R * 0.2, zSeat - padHalf * 0.9, zSeat + padHalf, 8, deg(180 - padDrop), deg(padDrop), 14, padT), padMat);
-  if (pad) {
-    const trim = pad.item === 'gelPad' ? padColor : padColor === COLORS.white ? COLORS.navy : 0xf1ede4;
-    add(body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + padHalf], 14, padT + 0.004, deg(180 - padDrop), deg(padDrop)), 0.008, 0.004), P.clothMat(trim));
-  }
+  const padT = horsePad(model, gear, add, st);
 
   // Siège : le profil du modèle, posé sur le dos du cheval.
   const secs = P.seatSections(st, 0).map((sec) => {

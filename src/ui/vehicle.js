@@ -47,7 +47,8 @@ export function openVehicleMenu(ui, flow) {
     const loose = flow.unsecured().length;
     acts.push(big(pic('trailer', '🔒'), t('veh_stallView'), loose ? t('veh_stallLoose', { n: loose }) : t('veh_stallSub'), () => flow.setView('stall')));
   }
-  acts.push(big(pic(v.trailer ? 'trunk' : 'car', '🧳'), t(v.trailer ? 'veh_tackView' : 'veh_roofView'), t('veh_cargoUsed', { n: cargoUsed(l.cargo), max: l.capacity }), () => flow.setView('tack')));
+  // (en voiture : le coffre de toit, pas une deuxième fois la voiture du bouton « Monter au volant »)
+  acts.push(big(pic(v.trailer ? 'trunk' : 'roofBox', '🧳'), t(v.trailer ? 'veh_tackView' : 'veh_roofView'), t('veh_cargoUsed', { n: cargoUsed(l.cargo), max: l.capacity }), () => flow.setView('tack')));
   const left = flow.waiting().length;
   acts.push(big(pic(v.trailer ? 'towCar' : 'car', v.trailer ? '🚙' : '🚗'), t('veh_cabView'), left ? t('veh_cabWaiting', { n: left }) : t('veh_cabReady'), () => flow.setView('cab'), left ? '' : 'primary'));
   ui.showModal([

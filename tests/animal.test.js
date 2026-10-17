@@ -138,3 +138,12 @@ describe('poids', () => {
     expect(a.weight).toBeLessThanOrEqual(50);
   });
 });
+
+describe('animalerie : graine choisie d’avance', () => {
+  it('l’animal acheté garde la graine de son aperçu 3D (mêmes balzanes, même liste)', () => {
+    const a = createAnimal({ species: 'horse', breed: 'selle_francais', colorIndex: 0, sex: 'f', ageDays: 900, seed: 123456 });
+    expect(a.look.seed).toBe(123456);
+    const b = createAnimal({ species: 'horse', breed: 'selle_francais', colorIndex: 0, sex: 'f', ageDays: 900 });
+    expect(Number.isFinite(b.look.seed)).toBe(true); // sans graine : tirée au hasard, comme avant
+  });
+});

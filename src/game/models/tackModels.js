@@ -780,8 +780,21 @@ export function helmetModel(id, color) {
   }), shell, [0, -0.004, 0.012], [0.12, 0, 0], [1, 1, 1.12]);
   // Liseré, aérations et harnais.
   mesh(g, shared('helmRim', () => new THREE.TorusGeometry(0.115, 0.006, 6, 30)), velvetMat(0x1a1a1a), [0, -0.003, 0], [Math.PI / 2, 0, 0], [1, 1.12, 1]);
-  if (id === 'helmetSparkle') for (const s of [-1, 0, 1]) mesh(g, shared('vent', () => new THREE.BoxGeometry(0.012, 0.004, 0.05)), cached('ventMat', () => new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3, metalness: 0.8 })), [s * 0.035, 0.108, -0.01], [0.15, 0, 0]);
-  else mesh(g, shared('button', () => new THREE.SphereGeometry(0.012, 8, 6)), velvetMat(c), [0, 0.108, 0]);
+  if (id === 'helmetSparkle') {
+    // Aérations posées sur la coque : chaque barrette suit la pente du dessus (corde entre ses deux bouts,
+    // un peu enfoncée), sinon les côtés flottent au-dessus de la coque arrondie.
+    const surf = (x, z) => 0.95 * Math.sqrt(Math.max(0, 0.115 ** 2 - x * x - (z / 1.12) ** 2)); // dessus de la coque
+    const len = 0.04;
+    const zc = -0.01;
+    for (const s of [-1, 0, 1]) {
+      const x = s * 0.035;
+      const y0 = surf(x, zc - len / 2);
+      const y1 = surf(x, zc + len / 2);
+      const slopeX = (surf(x + 0.001, zc) - surf(x - 0.001, zc)) / 0.002;
+      mesh(g, shared('vent2', () => new THREE.BoxGeometry(0.012, 0.004, len)), cached('ventMat', () => new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3, metalness: 0.8 })),
+        [x, (y0 + y1) / 2 + 0.0012, zc], [-Math.atan2(y1 - y0, len), 0, Math.atan(slopeX)]);
+    }
+  } else mesh(g, shared('button', () => new THREE.SphereGeometry(0.012, 8, 6)), velvetMat(c), [0, 0.108, 0]);
   for (const s of [1, -1]) mesh(g, shared('harness', () => new THREE.TorusGeometry(0.06, 0.004, 4, 14, Math.PI * 0.8)), nylonMat(0x1a1a1a), [s * 0.1, -0.05, 0.0], [0, Math.PI / 2, Math.PI * 1.1]);
   return g;
 }

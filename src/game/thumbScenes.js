@@ -1,24 +1,26 @@
 // Ce qu'on photographie pour les vignettes (moteur : src/game/thumbs.js) :
 //   gear      : un objet de la sellerie, à la couleur et à la taille choisies — la selle sur son porte-selle,
 //               la bombe sur son pied, la laisse sur un socle, et le reste porté par un cheval « mannequin »
-//               (filet, licol, bonnet sur la tête ; tapis sous une selle ; couverture ; guêtres, cloches)
-//               ou par un chien (collier, manteau) ;
+//               (filet, licol, bonnet sur la tête ; tapis seul sur le dos ; couverture ; guêtres, cloches)
+//               ou par un chien (collier, manteau) — robe du mannequin choisie pour que l'objet ressorte ;
 //   animal    : un animal de l'animalerie tel qu'il sera (espèce, race, robe, sexe, âge) ;
 //   structure : une construction du catalogue, posée sur un carré d'herbe ;
 //   equipment : un équipement de la ferme (mangeoire, abreuvoir…) ;
-//   vehicle   : la voiture, le 4x4 et son van, le van seul, le coffre de sellerie, le cheval sellé.
+//   vehicle   : la voiture, le 4x4 et son van, le van seul, le coffre de sellerie, le coffre de toit, le cheval sellé.
 // Les mannequins (chevaux, chien) sont fabriqués une fois, gardés pendant qu'on fait des vignettes,
-// puis libérés quand le moteur se repose.
+// puis libérés quand le moteur se repose longtemps (deux minutes sans vignette).
 
 import * as THREE from 'three';
-import { Thumbs, disposeDeep, thumbKey, samplePoints } from './thumbs.js';
-import { GEAR } from '../sim/gear.js';
+import { Thumbs, disposeDeep, thumbKey, samplePoints, aboveGround, scaleAbout } from './thumbs.js';
+import { GEAR, COLORS, BLANKET_COLORS } from '../sim/gear.js';
+import { withTexScale } from './gfx.js';
 import { tackModel } from './models/tackModels.js';
 import { buildGear, removeGear } from './gearModels.js';
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { resolveLook, growthScale } from '../sim/animal.js';
 import { stageAgeDays } from '../sim/adoption.js';
 import { STRUCTURES } from '../sim/construction.js';
+import { SPECIES } from '../sim/species.js';
 import { buildStructureModel } from './models/structures.js';
 import { EQUIPMENT_MODELS } from './models/equipment.js';
 import { car, towCar, horseTrailer, trunk } from './models/vehicles.js';
@@ -153,19 +155,40 @@ function plinth() {
 
 // ---------------------------------------------------------------- mannequins (gardés entre deux vignettes)
 
-/** Cheval mannequin de chaque taille : robe grise neutre (le cuir, les couleurs se voient bien dessus). */
+/**
+ * Cheval mannequin de chaque taille, en robes unies (sans balzanes ni liste : les sabots restent foncés).
+ * « light » (gris) porte les objets foncés (cuir, marine, rouge…), « dark » (bai, crins et bas des membres noirs)
+ * les objets clairs (blanc, ciel, rose, argent…) : l'objet se détache toujours de la robe. « mid » (alezan,
+ * isabelle pour le poney) : pour les filets, le cuir foncé ET le métal clair du mors s'y voient.
+ */
 const HORSE_FOR_SIZE = {
-  pony: { breed: 'connemara', color: 0 },
-  horse: { breed: 'selle_francais', color: 2 },
-  draft: { breed: 'trait_breton', color: 1 },
+  pony: { light: { breed: 'connemara', color: 0 }, dark: { breed: 'connemara', color: 2 }, mid: { breed: 'connemara', color: 1 } },
+  horse: { light: { breed: 'selle_francais', color: 2 }, dark: { breed: 'selle_francais', color: 0 }, mid: { breed: 'selle_francais', color: 1 } },
+  draft: { light: { breed: 'trait_breton', color: 1 }, dark: { breed: 'trait_breton', color: 0 }, mid: { breed: 'trait_breton', color: 0 } },
 };
+/** Chien mannequin (labrador) : sable sous les objets foncés, chocolat sous les clairs. */
+const DOG_FOR_TONE = { light: 0, dark: 1, mid: 4 };
+
+/** Robe du mannequin qui fait ressortir un objet de cette couleur (hex) : 'dark' sous un objet clair, sinon 'light'. */
+export function mannequinTone(hex) {
+  const l = (((hex >> 16) & 255) * 0.2126 + ((hex >> 8) & 255) * 0.7152 + (hex & 255) * 0.0722) / 255;
+  return l >= 0.5 ? 'dark' : 'light';
+}
+
+/** Pelages peints à moitié de leur taille de jeu pour les vignettes (voir gfx.withTexScale). */
+const THUMB_TEX = 0.5;
+
 const mannequins = new Map();
 
-function mannequin(kind) {
-  if (mannequins.has(kind)) return mannequins.get(kind);
-  const pick = kind === 'dog' ? { species: 'dog', breed: 'labrador', color: 0 } : { species: 'horse', ...(HORSE_FOR_SIZE[kind] ?? HORSE_FOR_SIZE.horse) };
-  const look = { ...resolveLook(pick.species, pick.breed, pick.color), seed: 4242 };
-  const model = buildAnimalModel(pick.species, look, pick.breed);
+function mannequin(kind, tone = 'light') {
+  const id = `${kind}:${tone}`;
+  if (mannequins.has(id)) return mannequins.get(id);
+  const pick = kind === 'dog'
+    ? { species: 'dog', breed: 'labrador', color: DOG_FOR_TONE[tone] ?? 0 }
+    : { species: 'horse', ...((HORSE_FOR_SIZE[kind] ?? HORSE_FOR_SIZE.horse)[tone] ?? HORSE_FOR_SIZE.horse.light) };
+  // Robe unie et graine fixe : le même mannequin à chaque fois.
+  const look = { ...resolveLook(pick.species, pick.breed, pick.color), pattern: 'solid', seed: 4242 };
+  const model = withTexScale(THUMB_TEX, () => buildAnimalModel(pick.species, look, pick.breed));
   const holder = new THREE.Group();
   holder.add(model.root);
   holder.scale.setScalar(look.scale ?? 1);
@@ -173,7 +196,7 @@ function mannequin(kind) {
     if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false; // (notre ombre suffit)
   });
   const m = { model, look, holder };
-  mannequins.set(kind, m);
+  mannequins.set(id, m);
   return m;
 }
 
@@ -186,30 +209,55 @@ function releaseMannequins() {
   mannequins.clear();
 }
 
-/** D'où l'on regarde l'objet porté et la taille minimale du cadre (m, à l'échelle de l'animal). */
+/** Hauteur relative de chaque taille : une vignette « poney » montre un poney (et son objet) plus petit. */
+const SIZE_SCALE = { pony: 0.86, horse: 1, draft: 1.14 };
+
+/**
+ * Agrandissement du cadre d'un objet porté pour cette taille : le cadre est celui de la taille « cheval »,
+ * l'objet d'un poney y paraît donc plus petit, celui d'un trait plus grand. whole (le cheval entier) :
+ * jamais moins de 1 (le trait remplit déjà l'image).
+ */
+export function sizeFrame(size, { whole = false } = {}) {
+  const k = SIZE_SCALE.horse / (SIZE_SCALE[size] ?? 1);
+  return whole ? Math.max(1, k) : k;
+}
+
+/**
+ * D'où l'on regarde l'objet porté et la taille minimale du cadre (m, taille « cheval »).
+ * mouth : [avant, bas] — on ne garde que cette part de la tête (vers les naseaux, vers le bas) : le mors et la
+ * muserolle pour les filets (c'est là qu'ils se distinguent), sans la têtière pour les licols (sangles plus grosses).
+ */
 const WORN_VIEW = {
-  saddle: { dir: [1, 0.6, 0.45], grow: 1.5, min: 0.7, shadow: false },
-  pad: { dir: [1, 0.6, 0.45], grow: 1.4, min: 0.7, shadow: false },
+  pad: { dir: [1, 0.85, 0.4], grow: 1.3, min: 0.62, shadow: false }, // le tapis seul, vu d'en haut : sa forme et son galon
   blanket: { dir: [1, 0.36, 0.62], whole: true }, // le cheval entier : la couverture le couvre presque tout
-  bridle: { dir: [1, 0.2, 0.8], grow: 1.15, min: 0.32, shadow: false },
-  halter: { dir: [1, 0.2, 0.8], grow: 1.15, min: 0.32, shadow: false },
+  // (filets : cadrés sur le mors et la muserolle, sur un alezan — sauf le havane, trop proche : sur le gris)
+  bridle: { dir: [1, 0.12, 0.62], grow: 1.08, min: 0.15, shadow: false, mouth: [0.4, 0.5], tone: (c) => (c === 'havana' ? 'light' : 'mid') },
+  halter: { dir: [1, 0.16, 0.7], grow: 1.1, min: 0.26, shadow: false, mouth: [0.8, 0.82] },
   head: { dir: [1, 0.2, 0.8], grow: 1.15, min: 0.32, shadow: false },
   legs: { dir: [1, 0.3, 0.8], grow: 1.12, min: 0.5 },
-  bells: { dir: [1, 0.35, 0.8], grow: 1.1, min: 0.35, front: true },
+  bells: { dir: [1, 0.3, 0.75], grow: 1.25, min: 0.3, front: true },
   neck: { dir: [1, 0.3, 0.9], grow: 2.1, min: 0.28, shadow: false },
 };
 /** Le chien est petit : un cadre minimal plus petit que pour un cheval. */
 const DOG_MIN = 0.4;
 
+/** Partie avant et basse d'une boîte de tête (vers les naseaux : +z, vers le bas) : front et low en fractions. */
+function mouthPart(box, [front, low]) {
+  const out = box.clone();
+  out.min.z = box.max.z - (box.max.z - box.min.z) * front;
+  out.max.y = box.min.y + (box.max.y - box.min.y) * low;
+  return out;
+}
+
 /** L'objet porté par le mannequin (tête, dos, jambes…), cadré sur l'objet. */
 function wornThumb(def, id, color, size) {
-  const kind = def.species.includes('horse') ? (def.sizes?.includes(size) ? size : 'horse') : 'dog';
-  const m = mannequin(kind);
-  const gear = { [def.slot]: { item: id, color, size } };
-  // Un tapis ne se voit que sous une selle : une selle marron toute simple par-dessus.
-  if (def.slot === 'pad') gear.saddle = { item: 'saddle', color: 'brown', size };
-  const worn = buildGear(m.model, m.look, gear);
+  const horse = def.species.includes('horse');
+  const kind = horse ? (def.sizes?.includes(size) ? size : 'horse') : 'dog';
   const view = WORN_VIEW[def.slot] ?? WORN_VIEW.blanket;
+  const tone = view.tone?.(color) ?? mannequinTone(COLORS[color] ?? BLANKET_COLORS[color] ?? 0x5a3418);
+  const m = mannequin(kind, tone);
+  const gear = { [def.slot]: { item: id, color, size } };
+  const worn = buildGear(m.model, m.look, gear);
   let meshes = worn.userData.meshes ?? [];
   if (view.front) {
     // Cloches : les deux antérieurs suffisent (plus gros dans l'image).
@@ -217,13 +265,27 @@ function wornThumb(def, id, color, size) {
     const front = meshes.filter((x) => x.getWorldPosition(new V3()).z > 0);
     if (front.length) meshes = front;
   }
-  const dog = kind === 'dog';
-  const min = dog ? Math.min(view.min ?? 0, DOG_MIN) : view.min ?? 0;
-  // Cadre : l'objet porté (agrandi), ou l'animal entier (couverture, manteau du chien).
-  const box = view.whole ? null : grown(boxOf(m.holder, { meshes }), view.grow, min * (m.look.scale ?? 1));
+  const k = horse ? sizeFrame(kind, { whole: !!view.whole }) : 1;
+  let box = null;
+  let points = null;
+  if (view.whole) {
+    // L'animal entier (couverture, manteau du chien), cadré sur ses sommets, « grandi » pour un poney.
+    // (box : la vraie boîte, pour l'ombre au sol ; points : ceux du cadrage)
+    points = samplePoints(m.holder);
+    box = new THREE.Box3().setFromArray(points.flat());
+    points = scaleAbout(points, k, [(box.min.x + box.max.x) / 2, 0, (box.min.z + box.max.z) / 2]);
+  } else {
+    const min = kind === 'dog' ? Math.min(view.min ?? 0, DOG_MIN) : view.min ?? 0;
+    let b = boxOf(m.holder, { meshes });
+    if (view.mouth) b = mouthPart(b, view.mouth);
+    const g = grown(b, (view.grow ?? 1) * k, min);
+    const up = aboveGround(g.min.toArray(), g.max.toArray(), 0);
+    box = new THREE.Box3(new V3(...up.min), new V3(...up.max));
+  }
   return {
     object: m.holder,
     box,
+    points,
     dir: view.dir,
     ground: 0,
     shadow: view.shadow,
@@ -235,8 +297,6 @@ function wornThumb(def, id, color, size) {
     },
   };
 }
-
-const SIZE_SCALE = { pony: 0.86, horse: 1, draft: 1.14 };
 
 /** Un objet de la sellerie, à sa couleur (et à sa taille). */
 function gearThumb(spec) {
@@ -280,13 +340,17 @@ function gearThumb(spec) {
 
 // ---------------------------------------------------------------- animaux
 
-/** Un animal tel qu'il sera : espèce, race, robe, sexe, âge (le bébé est plus petit dans le même cadre). */
+/**
+ * Un animal tel qu'il sera : espèce, race, robe, sexe, âge (le bébé est plus petit dans le même cadre).
+ * seed : la graine de l'animal (marques blanches, taches) ; sans elle, une graine tirée de la clé.
+ */
 function animalThumb(spec) {
   const { species, breed, colorIndex = 0, sex = 'f', stage = 'adult' } = spec;
-  const look = { ...resolveLook(species, breed, colorIndex), seed: seedOf(thumbKey({ species, breed, colorIndex, sex })) };
+  const seed = Number.isFinite(spec.seed) ? spec.seed : seedOf(thumbKey({ species, breed, colorIndex, sex }));
+  const look = { ...resolveLook(species, breed, colorIndex), seed };
   const data = { species, breed, sex, ageDays: stageAgeDays(species, stage), look };
   const foal = species === 'horse' && stage === 'baby';
-  const model = buildAnimalModel(species, foal ? { ...look, foal: true } : look, breed);
+  const model = withTexScale(THUMB_TEX, () => buildAnimalModel(species, foal ? { ...look, foal: true } : look, breed));
   model.root.traverse((o) => {
     if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false;
   });
@@ -316,18 +380,34 @@ function animalThumb(spec) {
 
 const grass = () => keep('grass', () => new THREE.MeshStandardMaterial({ color: 0x8fbf5a, roughness: 1 }));
 const grassEdge = () => keep('grassEdge', () => new THREE.MeshStandardMaterial({ color: 0x6f9a44, roughness: 1 }));
+// Sol des enclos : un paddock en terre battue (la clôture blanche s'y détache), un pré à herbe haute (vert franc).
+const paddockGround = () => keep('paddockGround', () => new THREE.MeshStandardMaterial({ color: 0x8f7a4e, roughness: 1 }));
+const meadow = () => keep('meadow', () => new THREE.MeshStandardMaterial({ color: 0x5f9e3c, roughness: 1 }));
 
 /** Carré d'herbe sous la construction (les enclos ne sont que des clôtures : on voit mieux le terrain). */
-function groundTile(w, d, margin) {
+function groundTile(w, d, margin, top = grass()) {
   const g = new THREE.Group();
-  const top = new THREE.Mesh(new THREE.BoxGeometry(w + margin * 2, 0.06, d + margin * 2), grass());
-  top.position.y = -0.03;
-  g.add(top);
+  const t = new THREE.Mesh(new THREE.BoxGeometry(w + margin * 2, 0.06, d + margin * 2), top);
+  t.position.y = -0.03;
+  g.add(t);
   const edge = new THREE.Mesh(new THREE.BoxGeometry(w + margin * 2 + 0.02, 0.05, d + margin * 2 + 0.02), grassEdge());
   edge.position.y = -0.075;
   g.add(edge);
   return g;
 }
+
+/**
+ * Habitants des enclos (repère de taille et d'usage) : le même cheval dans le petit et le grand paddock
+ * (il paraît plus petit dans le grand), deux moutons dans le pré. [espèce, x, z (÷ largeur, profondeur), cap].
+ * Ils sont grossis (ANIMAL_ZOOM, comme sur une icône) : à leur vraie taille, ce ne serait qu'un point.
+ */
+const ANIMAL_ZOOM = { horse: 1.5, sheep: 1.9 };
+const ENCLOSURE_LIFE = {
+  paddockSmall: [['horse', 0.12, 0.08, 0.7]],
+  paddockLarge: [['horse', 0.12, 0.08, 0.7]],
+  pasture: [['sheep', 0.1, 0.1, 0.9], ['sheep', -0.12, -0.02, -0.5]],
+};
+const ENCLOSURE_GROUND = { paddockSmall: paddockGround, paddockLarge: paddockGround, pasture: meadow };
 
 function structureThumb(spec) {
   const def = STRUCTURES[spec.type];
@@ -336,16 +416,59 @@ function structureThumb(spec) {
   const model = buildStructureModel(spec.type, '');
   g.add(model);
   const big = Math.max(def.w, def.d);
-  const tile = groundTile(def.w, def.d, Math.max(0.25, big * 0.04));
+  const tile = groundTile(def.w, def.d, Math.max(0.25, big * 0.04), (ENCLOSURE_GROUND[spec.type] ?? grass)());
   g.add(tile);
   const decor = def.cat === 'decor';
+  // Animaux : le cheval mannequin (gardé, remis à sa place après la photo), des moutons fabriqués pour l'occasion.
+  const borrowed = [];
+  const made = [];
+  let sheep = null;
+  for (const [sp, fx, fz, rot] of ENCLOSURE_LIFE[spec.type] ?? []) {
+    let obj;
+    if (sp === 'horse') {
+      const m = mannequin('horse', 'dark'); // (bai : il se détache de l'herbe)
+      obj = m.holder;
+      borrowed.push([obj, obj.position.clone(), obj.rotation.y, obj.scale.x]);
+      obj.scale.setScalar(obj.scale.x * ANIMAL_ZOOM.horse);
+    } else if (!sheep) {
+      const look = { ...resolveLook('sheep', SPECIES.sheep.breeds[0].id, 0), seed: 77 };
+      sheep = withTexScale(THUMB_TEX, () => buildAnimalModel('sheep', look, SPECIES.sheep.breeds[0].id));
+      sheep.root.traverse((o) => {
+        if (o.isMesh && o.parent === sheep.root && o.material?.depthWrite === false) o.visible = false;
+      });
+      made.push(sheep);
+      obj = sheep.root;
+    } else obj = sheep.root.clone(); // (même géométrie, mêmes matières : libérées une seule fois)
+    if (sp !== 'horse') borrowed.push([obj, null, 0, 1]);
+    obj.position.set(fx * def.w, 0, fz * def.d);
+    obj.rotation.y = rot;
+    if (sp !== 'horse') obj.scale.setScalar(ANIMAL_ZOOM[sp] ?? 1);
+    g.add(obj);
+  }
   return {
     object: g,
-    // (les grands enclos : vus plus bas, les clôtures se voient mieux)
-    dir: decor ? [1, 0.6, 1.05] : big > 10 ? [1, 0.62, 1.35] : [1, 0.8, 1.15],
+    // (les enclos : d'assez haut pour voir le rectangle de clôture, le sol et qui y vit)
+    dir: decor ? [1, 0.6, 1.05] : ENCLOSURE_LIFE[spec.type] ? [1, 0.9, 1.25] : big > 10 ? [1, 0.62, 1.35] : [1, 0.8, 1.15],
     ground: -0.06,
     shadowScale: 1.12,
     pad: 1.05,
+    dispose: (onMat) => {
+      // (les animaux sortent du groupe avant de libérer l'enclos : le mannequin est gardé, les moutons à part)
+      for (const [obj, pos, ry, sc] of borrowed) {
+        g.remove(obj);
+        if (pos) {
+          obj.position.copy(pos);
+          obj.rotation.y = ry;
+          obj.scale.setScalar(sc);
+        }
+      }
+      disposeDeep(g, onMat);
+      for (const m of made) {
+        eachMaterial(m.root, onMat);
+        m.dispose?.();
+        disposeModel(m.root);
+      }
+    },
   };
 }
 
@@ -366,6 +489,8 @@ function equipmentThumb(spec) {
 function vehicleThumb(spec) {
   const g = new THREE.Group();
   let dir = [1, 0.45, 0.85];
+  let box = null;
+  let shadow = true;
   switch (spec.id) {
     case 'car':
       g.add(car().group);
@@ -391,6 +516,17 @@ function vehicleThumb(spec) {
       g.add(trunk().group);
       dir = [1, 0.8, 1.1];
       break;
+    case 'roofBox': {
+      // Le coffre de toit de la voiture, couvercle ouvert, vu d'en haut (pas la voiture entière : elle a sa vignette).
+      const c = car();
+      c.roofLid.rotation.z = 1.1;
+      g.add(c.group);
+      const at = c.cargo.roof;
+      box = new THREE.Box3().setFromCenterAndSize(new V3(at.x + 0.1, at.y + 0.08, at.z), new V3(1.5, 0.95, 2.05));
+      dir = [1, 1.05, 0.5];
+      shadow = false;
+      break;
+    }
     case 'horse': {
       // À cheval : le cheval mannequin sellé.
       const m = mannequin('horse');
@@ -412,8 +548,10 @@ function vehicleThumb(spec) {
   // Les textures dessinées des véhicules sont partagées (gardées) : on ne libère que géométries et matériaux.
   return {
     object: g,
+    box,
     dir,
     ground: 0,
+    shadow,
     pad: 1.05,
     dispose: (onMat) => disposeDeep(g, onMat, { textures: false }),
   };

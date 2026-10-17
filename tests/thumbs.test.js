@@ -1,7 +1,11 @@
 // Vignettes 3D : la logique pure du moteur (src/game/thumbs.js) — clés de cache, taille des images,
-// file d'attente, rythme, cache LRU et cadrage automatique de la caméra.
+// file d'attente, rythme, cache LRU, cadrage automatique de la caméra, une image pour plusieurs tailles,
+// images d'animation « calmes ».
 import { describe, it, expect } from 'vitest';
-import { thumbKey, outputSize, viewBasis, boxCorners, fitView, ThumbQueue, Pacer, ThumbCache } from '../src/game/thumbs.js';
+import {
+  thumbKey, outputSize, viewBasis, boxCorners, fitView, ThumbQueue, Pacer, ThumbCache,
+  covers, bestCover, largestCovering, calmFrame, aboveGround, scaleAbout, Thumbs,
+} from '../src/game/thumbs.js';
 
 describe('vignettes : clés de cache', () => {
   it('ne dépend pas de l’ordre des propriétés', () => {
@@ -210,5 +214,99 @@ describe('vignettes : cadrage automatique', () => {
     const small = fitView(boxCorners([-0.5, 0, -0.5], [0.5, 1, 0.5]), { dir: [1, 0.6, 1] });
     const big = fitView(boxCorners([-5, 0, -5], [5, 10, 5]), { dir: [1, 0.6, 1] });
     expect(big.distance).toBeCloseTo(small.distance * 10, 3);
+  });
+});
+
+describe('vignettes : une seule image pour plusieurs tailles du même objet', () => {
+  it('une image plus grande et de même forme couvre une vue plus petite', () => {
+    expect(covers([264, 198], [192, 144])).toBe(true); // aperçu de l'animalerie → fiche « Ton futur compagnon »
+    expect(covers([720, 500], [176, 132])).toBe(true); // grande image de la fiche → carte du rayon (36:25 ≈ 4:3)
+    expect(covers([720, 500], [152, 114])).toBe(true); // → petit aperçu à côté des couleurs
+  });
+
+  it('pas une image trop petite, ni d’une autre forme', () => {
+    expect(covers([192, 144], [264, 198])).toBe(false);
+    expect(covers([256, 128], [160, 160])).toBe(false); // 2:1 contre carré
+    expect(covers([160, 128], [160, 128])).toBe(true); // la même
+    expect(covers([150, 120], [160, 128])).toBe(true); // à 10 % près
+    expect(covers([0, 0], [10, 10])).toBe(false);
+  });
+
+  it('prend la plus petite image qui suffit, et la plus grande demande à fabriquer', () => {
+    const imgs = [{ id: 'a', size: [720, 500] }, { id: 'b', size: [240, 180] }, { id: 'c', size: [100, 75] }];
+    expect(bestCover(imgs, [176, 132]).id).toBe('b');
+    expect(bestCover(imgs, [800, 600])).toBe(null);
+    const asks = [{ id: 'mini', size: [152, 114] }, { id: 'big', size: [720, 500] }, { id: 'carre', size: [200, 200] }];
+    expect(largestCovering(asks, [176, 132]).id).toBe('big');
+    expect(largestCovering(asks, [900, 700])).toBe(null);
+  });
+
+  it('le moteur fabrique une fois et sert toutes les tailles (et rend l’image la plus petite qui suffit)', async () => {
+    const th = new Thumbs(null);
+    expect(th.enabled).toBe(false); // (pas de WebGL dans les tests)
+    th.enabled = true;
+    const made = [];
+    th.run = async (key, spec) => {
+      made.push(key);
+      const [W, H] = outputSize(spec.w, spec.h);
+      th.store(key, thumbKey({ ...spec, w: undefined, h: undefined }), `blob:${key}`, 100, [W, H]);
+      return `blob:${key}`;
+    };
+    const spec = { kind: 'animal', species: 'cat', breed: 'persan', colorIndex: 0, sex: 'f', stage: 'young' };
+    const [small, big] = await Promise.all([th.want(spec, { w: 96, h: 72, priority: 3 }), th.want(spec, { w: 132, h: 99, priority: 3 })]);
+    expect(made).toHaveLength(1);
+    expect(made[0]).toContain('w=132');
+    expect(small).toBe(big);
+    // Déjà prête : une vue plus petite la reprend sans rien fabriquer.
+    expect(th.get(spec, 84, 63)).toBe(big);
+    expect(await th.want(spec, { w: 60, h: 45 })).toBe(big);
+    expect(made).toHaveLength(1);
+    // Une autre robe : une autre image.
+    await th.want({ ...spec, colorIndex: 1 }, { w: 96, h: 72 });
+    expect(made).toHaveLength(2);
+    clearTimeout(th.idleTimer);
+    clearTimeout(th.longIdleTimer);
+  });
+
+  it('une image sortie du cache ne sert plus aux autres tailles', () => {
+    const th = new Thumbs(null);
+    th.cache.max = 1;
+    const spec = { kind: 'gear', id: 'saddle', color: 'brown', size: 'horse' };
+    th.store(thumbKey({ ...spec, w: 360, h: 250 }), thumbKey(spec), 'blob:a', 10, [720, 500]);
+    expect(th.get(spec, 88, 66)).toBe('blob:a');
+    th.store('autre', 'autre-famille', 'blob:b', 10, [100, 100]);
+    expect(th.get(spec, 88, 66)).toBe(null);
+    expect(th.live.has('blob:a')).toBe(false);
+    expect(th.family.has(thumbKey(spec))).toBe(false);
+  });
+});
+
+describe('vignettes : rien sur une image en retard', () => {
+  it('une image à l’heure est calme, une image en retard ne l’est pas', () => {
+    expect(calmFrame(16.7, 16.7)).toBe(true);
+    expect(calmFrame(33, 16.7)).toBe(true); // (une image sautée de temps en temps : toléré)
+    expect(calmFrame(80, 16.7)).toBe(false);
+  });
+
+  it('s’adapte à un appareil lent (sinon on n’avancerait jamais)', () => {
+    expect(calmFrame(80, 60)).toBe(true);
+    expect(calmFrame(200, 60)).toBe(false);
+  });
+});
+
+describe('vignettes : cadre au-dessus du sol, cadre « grandi »', () => {
+  it('remonte une boîte qui passe sous le sol, sans changer sa taille', () => {
+    const b = aboveGround([-0.35, -0.3, -0.35], [0.35, 0.4, 0.35], 0);
+    expect(b.min[1]).toBeCloseTo(0);
+    expect(b.max[1]).toBeCloseTo(0.7);
+    expect(b.min[0]).toBe(-0.35);
+    expect(aboveGround([0, 0.2, 0], [1, 1, 1], 0).min[1]).toBe(0.2); // déjà au-dessus : inchangée
+  });
+
+  it('agrandit des points autour d’une origine (le poney paraît plus petit dans le même cadre)', () => {
+    const pts = scaleAbout([[1, 1, 0], [-1, 0, 2]], 2, [0, 0, 0]);
+    expect(pts).toEqual([[2, 2, 0], [-2, 0, 4]]);
+    const same = [[1, 2, 3]];
+    expect(scaleAbout(same, 1, [0, 0, 0])).toBe(same);
   });
 });

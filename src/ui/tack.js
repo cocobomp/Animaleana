@@ -12,6 +12,7 @@ import { TOOLS, hasTool } from '../sim/tools.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import { thumb, thumbsFor } from '../game/thumbScenes.js'; // vignettes 3D (src/game/thumbs.js)
+import { aboveGround } from '../game/thumbs.js';
 import * as THREE from 'three';
 
 const hex = (key) => `#${(COLORS[key] ?? 0x888888).toString(16).padStart(6, '0')}`;
@@ -186,10 +187,10 @@ function renderItem(ui, id) {
   // avec l'objet seul en médaillon, pour comparer.
   const pic = shop.tryUrl && shop.tryFor === `${id}|${color}`
     ? h('figure', { class: `tk-pic try ${shop.trying ? 'wait' : ''}` }, h('img', { src: shop.tryUrl, alt: '' }),
-      gearThumb(g, id, color, size, { w: 120, h: 90, cls: 'tk-inset' }),
+      gearThumb(g, id, color, size, { w: 120, h: 90, cls: 'tk-inset', hold: `tk-inset:${id}` }),
       shop.trying ? h('span', { class: 'tk-trying' }, `👀 ${t('tk_tryOn')}…`) : null,
       h('figcaption', {}, h('b', {}, t('tk_tryResult', { name: shop.tryName, item: name(id) })), h('small', {}, t('tk_tryHint'))))
-    : h('figure', { class: 'tk-pic' }, gearThumb(g, id, color, size, { w: 360, h: 250, cls: 'tk-big', urgent: true }),
+    : h('figure', { class: 'tk-pic' }, gearThumb(g, id, color, size, { w: 360, h: 250, cls: 'tk-big', urgent: true, hold: `tk-big:${id}` }),
       shop.trying ? h('span', { class: 'tk-trying' }, `👀 ${t('tk_tryOn')}…`) : null);
 
   const out = [
@@ -207,7 +208,7 @@ function renderItem(ui, id) {
 
   // Petit aperçu à côté du choix de la couleur (ou de la taille) : sur un téléphone, la grande image est
   // déjà sortie de l'écran quand on touche une couleur ; celui-ci change sous le doigt.
-  let mini = def.colors?.length > 1 || def.sizes ? gearThumb(g, id, color, size, { w: 76, h: 57, cls: 'tk-mini', alt: '' }) : null;
+  let mini = def.colors?.length > 1 || def.sizes ? gearThumb(g, id, color, size, { w: 76, h: 57, cls: 'tk-mini', alt: '', urgent: true, hold: `tk-mini:${id}` }) : null;
   const head = (title) => {
     const el = mini ? h('div', { class: 'tk-choice-head' }, h('h3', {}, title), mini) : h('h3', {}, title);
     mini = null;
@@ -255,8 +256,10 @@ function renderItem(ui, id) {
   const price = gearPrice(id, size ?? defaultSize(id));
   const missing = canAfford(p, price) ? 0 : price - (p.money ?? 0); // mode argent : il manque des pièces
   const wearing = helmet && riderHelmet(p)?.item === id;
+  // Essayer : une photo de l'animal (moteur des vignettes) ; sans WebGL (repli emoji), pas de bouton.
+  const canTry = !!thumbsFor(g)?.enabled;
   out.push(h('div', { class: 'tk-actions' },
-    !helmet ? h('button', { class: `big-action ${shop.pick === 'try' ? 'primary' : ''}`, onClick: () => { shop.pick = shop.pick === 'try' ? null : 'try'; ui.renderPanel(); } },
+    !helmet && canTry ? h('button', { class: `big-action ${shop.pick === 'try' ? 'primary' : ''}`, onClick: () => { shop.pick = shop.pick === 'try' ? null : 'try'; ui.renderPanel(); } },
       h('span', { class: 'ba-icon' }, shop.trying ? '⏳' : '👀'), h('span', { class: 'ba-text' }, h('b', {}, t('tk_tryOn')))) : null, // (⏳ : la photo se prépare)
     h('button', {
       class: `big-action ${missing ? 'tk-short' : 'primary'}`,
@@ -309,8 +312,7 @@ async function tryOn(ui, id, a, color) {
   if (!e) return ui.toast(t('tk_tryNobody'));
   const def = GEAR[id];
   const gear = { ...(a.gear ?? {}), [def.slot]: { item: id, color, size: sizeFor(id, a) } };
-  // Un tapis ne se voit que sous une selle : sans selle, on en pose une pour l'essayage.
-  if (def.slot === 'pad' && !gear.saddle) gear.saddle = { item: 'saddle', color: 'brown', size: sizeFor('saddle', a) };
+  // (un tapis se voit aussi seul, sur le dos : pas besoin de lui ajouter une selle)
   shop.pick = null;
   shop.trying = true;
   ui.renderPanel();
@@ -320,7 +322,7 @@ async function tryOn(ui, id, a, color) {
     setTryUrl(url);
     shop.tryName = a.name;
     shop.tryFor = `${id}|${color}`;
-  }
+  } else ui.toast(t('tk_tryUnavailable')); // (contexte WebGL perdu pendant la photo, vignettes coupées)
   if (ui.panel?.kind === 'tack') {
     ui.renderPanel();
     // La photo est en haut de la fiche : on y remonte (sur un téléphone, on était descendu jusqu'aux boutons).
@@ -378,9 +380,12 @@ function tryPhoto(g, e, gear, slot) {
     const s = box.getSize(new THREE.Vector3()).multiplyScalar(view?.grow ?? 1.05);
     const min = (view?.min ?? 0) * k;
     s.set(Math.max(s.x, min), Math.max(s.y, min), Math.max(s.z, min));
+    // Agrandie autour d'objets au ras du sol (guêtres, cloches), la boîte passerait sous le sol : on la remonte.
+    const b = new THREE.Box3().setFromCenterAndSize(c, s);
+    const up = aboveGround(b.min.toArray(), b.max.toArray(), 0);
     return {
       object: root,
-      box: new THREE.Box3().setFromCenterAndSize(c, s),
+      box: new THREE.Box3(new THREE.Vector3(...up.min), new THREE.Vector3(...up.max)),
       dir: view?.dir ?? ANIMAL_VIEW,
       ground: 0,
       restore: true, // il retourne dans la scène du jeu

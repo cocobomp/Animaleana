@@ -1486,6 +1486,7 @@ export class Game {
     const a = createAnimal({
       species: cfg.species, breed: cfg.breed, colorIndex: cfg.colorIndex, sex: cfg.sex,
       ageDays: stageAgeDays(cfg.species, cfg.stage), name: name?.trim() || undefined, location: this.profile.place, day: this.day,
+      seed: cfg.seed, // (la graine de l'aperçu de l'animalerie : mêmes marques blanches)
     });
     return this.adopt(a, name, price, this.isHome ? 'petshop' : 'refuge');
   }

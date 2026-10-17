@@ -2228,7 +2228,14 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .thumb.is-new > img { animation: thumb-in 0.32s ease-out; }
 @keyframes thumb-wait { 0%, 100% { opacity: 0.55; transform: scale(0.94); } 50% { opacity: 0.9; transform: scale(1); } }
 @keyframes thumb-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .thumb.is-wait .thumb-ph, .thumb.is-new > img { animation: none; } }
+/* Aperçu qui change (option touchée) : l'image d'avant reste, voilée, avec une petite roue, jusqu'à la nouvelle. */
+.thumb.is-hold > .thumb-prev { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.5; filter: saturate(0.6); }
+.thumb.is-hold > .thumb-ph { display: none; }
+.thumb.is-hold::after { content: ''; position: absolute; right: 7px; bottom: 7px; width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(0, 0, 0, 0.15); border-top-color: rgba(0, 0, 0, 0.55); animation: thumb-spin 0.9s linear infinite; }
+@keyframes thumb-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .thumb.is-wait .thumb-ph, .thumb.is-new > img, .thumb.is-hold::after { animation: none; } }
+/* Carte verrouillée (construction) : la carte pâlit, mais la vignette reste lisible. */
+.card.locked > .thumb { opacity: 0.85; }
 .card > .thumb { margin: -2px 0; }
 /* Animalerie : aperçu de l'animal choisi, toujours visible en haut de la liste. */
 .shop-preview { position: sticky; top: -6px; z-index: 3; display: flex; align-items: center; gap: 12px; margin: 4px -4px 8px; padding: 8px; background: #f7f3ea; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); }

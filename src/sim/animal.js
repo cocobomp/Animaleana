@@ -119,11 +119,13 @@ function pickPersonality(breedDef, rng) {
 }
 
 export function createAnimal({
-  species, breed, sex, ageDays, name, colorIndex, personality, location = 'maison', rng = Math.random, day = 1,
+  species, breed, sex, ageDays, name, colorIndex, personality, location = 'maison', rng = Math.random, day = 1, seed,
 }) {
   const sp = SPECIES[species];
   const breedDef = getBreed(species, breed) ?? sp.breeds[0];
   const look = resolveLook(species, breedDef.id, colorIndex ?? Math.floor(rng() * breedDef.colors.length));
+  // seed : graine de la robe choisie d'avance (animalerie : l'animal acheté a les marques de son aperçu 3D).
+  if (Number.isFinite(seed)) look.seed = seed;
   return {
     id: uid(),
     name: name ?? pick(NAMES, rng),

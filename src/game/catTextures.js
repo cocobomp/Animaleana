@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../sim/rng.js';
 import { noise3 } from './models/shapes.js';
-import { gfx } from './gfx.js';
+import { gfx, texSize } from './gfx.js';
 import { lum } from './textures.js';
 
 const rgb = (c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
@@ -109,9 +109,9 @@ export function catSkinColors(look, traits) {
  */
 export function catCoatTextures(look, traits, marks) {
   const high = gfx.quality === 'high';
-  const BIG = high ? 256 : 128;
-  const MID = high ? 256 : 128;
-  const SMALL = high ? 128 : 64;
+  const BIG = texSize(high ? 256 : 128); // (plus petites pour les vignettes 3D : gfx.texScale)
+  const MID = texSize(high ? 256 : 128);
+  const SMALL = texSize(high ? 128 : 64);
   const seed = ((look.seed ?? 1) % 1000) * 0.37;
   const coat = rgb(look.coat);
   const sec = rgb(look.secondary);

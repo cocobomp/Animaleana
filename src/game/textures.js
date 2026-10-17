@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../sim/rng.js';
 import { noise3 } from './models/shapes.js';
-import { gfx } from './gfx.js';
+import { gfx, texSize } from './gfx.js';
 
 const cache = new Map();
 
@@ -145,8 +145,8 @@ function blob(ctx, x, y, r, rng, w, squash = 0.8) {
  */
 export function coatTextures(look, speciesId) {
   const high = gfx.quality === 'high';
-  const big = high ? 256 : 128;
-  const small = high ? 128 : 64;
+  const big = texSize(high ? 256 : 128); // (plus petites pour les vignettes 3D : gfx.texScale)
+  const small = texSize(high ? 128 : 64);
   const rng = mulberry32(look.seed || 1);
   const pattern = look.pattern;
   const seed = (look.seed % 1000) * 0.37;

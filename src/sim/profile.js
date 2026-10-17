@@ -8,6 +8,7 @@ import { createTutorial } from './tutorial.js';
 import { defaultClients } from './clients.js'; // clients (pension, soins)
 import { defaultCareers } from './careers.js'; // métiers
 import { migrateCoreSizes, CORE_VERSION } from './resize.js'; // tailles des enclos (vue construction)
+import { defaultVetSchool } from './vetSchool.js'; // école vétérinaire (leçons)
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -61,6 +62,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     tutorial: createTutorial(), // tutoriel guidé (src/sim/tutorial.js)
     clients: defaultClients(), // visiteurs et animaux confiés (src/sim/clients.js)
     careers: defaultCareers(), // métiers appris (src/sim/careers.js)
+    vetSchool: defaultVetSchool(), // leçons de l'école vétérinaire (src/sim/vetSchool.js)
   };
 }
 
@@ -124,6 +126,7 @@ export function migrate(p) {
     // Clients et métiers (ajoutés plus tard) : champs manquants complétés.
     clients: { ...defaultClients(), ...(p.clients ?? {}) },
     careers: { ...defaultCareers(), ...(p.careers ?? {}) },
+    vetSchool: { ...defaultVetSchool(), ...(p.vetSchool ?? {}) }, // école vétérinaire (ajoutée plus tard)
   };
   // Paddock, bergerie et enclos des lapins plus grands : on agrandit sans casser les déplacements enregistrés.
   return migrateCoreSizes(out);

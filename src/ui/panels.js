@@ -283,14 +283,16 @@ export function openVetClinic(ui) {
     title: `🩺 ${t('vetTitle')}`,
     render: () => {
       const here = g.animalsHere();
-      if (!here.length) return [h('p', { class: 'note' }, t('noAnimals'))];
+      // 🎓 École vétérinaire : apprendre le métier (src/ui/vetSchool.js)
+      const school = h('button', { class: 'small vs-open', onClick: () => ui.openVetSchool() }, `🎓 ${t('vs_open')}`);
+      if (!here.length) return [h('p', { class: 'note' }, t('noAnimals')), school];
       return [h('p', {}, t('vetChoose')), h('div', { class: 'cards' }, here.map((a) => h('button', {
         class: `card ${a.sick ? 'sick' : ''}`,
         onClick: () => ui.openVet(a, true),
       },
       h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
       h('span', { class: 'card-main' }, h('b', {}, a.name), h('small', {}, `${t('health')} : ${Math.round(a.health)}`)),
-      h('span', { class: 'card-side' }, a.sick ? '🤒' : '💚'))))];
+      h('span', { class: 'card-side' }, a.sick ? '🤒' : '💚')))), school];
     },
   });
 }

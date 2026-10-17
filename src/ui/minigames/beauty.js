@@ -134,7 +134,7 @@ export function braidGame(ctx) {
   const { a, t, fx } = ctx;
   ctx.opts = ctx.opts ?? {};
   const floorY = 300;
-  const fit = fitAnimal(a, { cx: 108, groundY: floorY, maxW: 196, maxH: 190 });
+  const fit = fitAnimal(a, { cx: 104, groundY: floorY, maxW: 190, maxH: 186 });
   const s = fit.s;
   const sh = animalShape(a, { x: fit.x, y: floorY, s, f: 1 });
   const mane = a.look?.mane ?? a.look?.secondary ?? 0x4a2f1d;
@@ -153,9 +153,10 @@ export function braidGame(ctx) {
   sections.push({ top: { x: tb.x - 6 * s, y: tb.y + 8 * s }, bottom: { x: tb.x - 18 * s, y: tb.y + 50 * s }, done: 0, ribbon: false, tail: true });
 
   // La loupe et ses trois mèches (gauche, milieu, droite), assez grosses pour un doigt.
-  const LOUPE = { x: 212, y: 56, w: 180, h: 244 };
-  const SLOT_X = [LOUPE.x + 42, LOUPE.x + 90, LOUPE.x + 138];
-  const STRAND_W = 32;
+  // (sur un téléphone de 390 px, ≈ 0,9 px par unité : 52 unités entre deux mèches ≈ 47 px sous le doigt)
+  const LOUPE = { x: 204, y: 56, w: 190, h: 244 };
+  const SLOT_X = [LOUPE.x + 43, LOUPE.x + 95, LOUPE.x + 147];
+  const STRAND_W = 34;
   const TOP_Y = LOUPE.y + 44;
   const BOTTOM_Y = LOUPE.y + LOUPE.h - 18;
   const STEP = 34; // la tresse s'allonge à chaque croisement

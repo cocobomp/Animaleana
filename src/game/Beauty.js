@@ -873,8 +873,10 @@ class BeautySession extends Session {
     e.heading = Math.PI; // face au joueur (côté −z)
     e.speed = 0;
     e.root.rotation.y = e.heading;
-    this.hold = { x: this.back.x, z: this.back.z, heading: 0 };
+    // Le joueur se met sur le côté : la photo montre l'animal sur sa marche, pas le dos du joueur.
+    this.hold = { x: this.back.x - 1.1, z: this.back.z, heading: 0 };
     this.holdPlayer(this.hold.x, this.hold.z, 0);
+    this.hud.hint(ta(this.rank && this.rank <= 3 ? 'beauty_hintPodium' : 'beauty_hintPhoto', this.animal));
     g.rig.yaw = 0;
     g.rig.pitch = 0.22;
     g.rig.dist = 6.5;

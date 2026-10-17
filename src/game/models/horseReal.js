@@ -26,7 +26,8 @@ export const REAL_HORSE_KEY = 'horse_real';
 export const NECK_REST = 0.85;
 
 // Vitesse « naturelle » de chaque allure du GLB (m/s, cheval de taille 1, voir tools/cheval/gait2.py) :
-// à cette vitesse, les sabots posés ne glissent pas. Le clip est accéléré ou ralenti d'autant.
+// à cette vitesse, les sabots posés du modèle d'origine ne glissent pas. Pour une race, elle est mesurée
+// sur ses sabots (RealHorseAnim.measureGaits) ; le clip est accéléré ou ralenti d'autant.
 export const NATURAL_SPEED = { walk: 1.6, trot: 3.0, canter: 4.6, canterR: 4.6, gallop: 8.5 };
 const MOVING = ['walk', 'trot', 'canter', 'gallop'];
 const STILL = ['idle', 'rest', 'eat'];
@@ -1146,30 +1147,36 @@ function featherCards(S, B, look) {
   const traits = horseCoatTraits(look);
   const socks = horseSocks(look);
   const cards = [];
-  const r = 0.05 * S.D.scale.bone;
+  const r = 0.06 * S.D.scale.bone;
   LEGS.forEach(([k, front], i) => {
     const F = S.heads[BONE_INDEX[k + '4']];
     const K = S.heads[BONE_INDEX[k + '3']];
     const sole = F.clone().add(S.soles[i][1]);
     const white = socks[i] > 0.1 || traits.pinto > 0;
+    // (poils longs plus clairs que la robe au soleil : un peu éclaircis, jamais plus foncés)
     const legC = new THREE.Color(white ? 0xf1ede6 : traits.points ? (look.maneCore ?? look.mane ?? look.coat) : look.coat);
+    if (!white && !traits.points) legC.multiplyScalar(1.2).lerp(new THREE.Color(0xd9c3a5), 0.1);
     const n = Math.round(12 + 14 * B.feathers);
     const b3 = BONE_INDEX[k + '3'];
     const b4 = BONE_INDEX[k + '4'];
     const fy = F.y;
+    const sx = k.endsWith('L') ? 1 : -1;
     for (let j = 0; j < n; j++) {
-      const a = -Math.PI * 0.92 + (j / (n - 1)) * Math.PI * 1.84 + (rng() - 0.5) * 0.15;
-      const d = V(Math.sin(a) * (k.endsWith('L') ? 1 : -1) * 0.95, 0, -Math.cos(a));
+      // derrière et sur les côtés du membre (pas devant le canon), en éventail vers l'arrière
+      const a = -Math.PI * 0.72 + (j / (n - 1)) * Math.PI * 1.44 + (rng() - 0.5) * 0.15;
+      const d = V(Math.sin(a) * sx * 0.95, 0, -Math.cos(a));
+      const fan = d.clone().add(V(0, 0, -0.45)).normalize();
       // (sur l'axe du canon, un peu au-dessus du boulet, plus haut derrière)
       const y0 = fy + (0.05 + 0.13 * B.feathers * (0.55 + 0.45 * Math.cos(a))) * (0.9 + rng() * 0.2);
       const u = (K.y - y0) / Math.max(0.01, K.y - fy);
       const axisP = K.clone().lerp(F, Math.min(1.2, Math.max(0, u)));
       const p0 = V(axisP.x, y0, axisP.z).addScaledVector(d, r);
-      const end = V(p0.x, 0.01, sole.z + (p0.z - F.z) * 0.7).addScaledVector(d, 0.04 + rng() * 0.03);
-      const pts = [0, 0.33, 0.66, 1].map((f) => p0.clone().lerp(end, f).addScaledVector(d, 0.012 * Math.sin(f * Math.PI)));
+      const end = V(p0.x, 0.012, sole.z + (p0.z - F.z) * 0.7).addScaledVector(fan, 0.06 + rng() * 0.04);
+      const pts = [0, 0.33, 0.66, 1].map((f) => p0.clone().lerp(end, f).addScaledVector(fan, 0.016 * Math.sin(f * Math.PI)));
       cards.push({
-        pts, w0: 0.045, w1: 0.065, side: V(-d.z, 0, d.x), normal: d.clone(), color: legC.clone().multiplyScalar(0.92 + rng() * 0.16),
-        uv: [0.42, 0.1, 0.45 + rng() * 0.1, 0.03], sway: 0.35,
+        // (racine étroite : pas de bord horizontal net en haut ; pointes des mèches au bas, effilées)
+        pts, w0: 0.014, w1: 0.06, side: V(-d.z, 0, d.x), normal: fan.clone(), color: legC.clone().multiplyScalar(0.92 + rng() * 0.16),
+        uv: [0.6 + rng() * 0.04, 0.99, 0.44 + rng() * 0.16, 0.022], sway: 0.35,
         weights: (p) => {
           const w = smooth(fy + 0.03, fy - 0.03, p.y);
           return [[b3, 1 - w], [b4, w]].filter(([, x]) => x > 0.001);
@@ -1559,6 +1566,11 @@ class RealHorseAnim {
     const md = this.model;
     this.restorePose();
     if (this.reachFix === undefined) this.reachFix = this.computeReach();
+    if (!this.natural) {
+      this.natural = this.measureGaits();
+      // (échelle des limites entre allures : la foulée mesurée au trot plutôt que la hauteur de l'épaule)
+      if (this.natural.trot) md.speedScale = this.natural.trot / NATURAL_SPEED.trot;
+    }
     this.t += dt;
     const t = this.t;
     const u = st.moving ? st.v / md.speedScale : 0;
@@ -1598,7 +1610,9 @@ class RealHorseAnim {
       }
       a.setEffectiveWeight(w);
       if (NATURAL_SPEED[name]) {
-        a.timeScale = Math.min(1.8, Math.max(0.3, (u || NATURAL_SPEED[name]) / NATURAL_SPEED[name]));
+        // (vitesse naturelle de CE cheval : mesurée sur ses sabots, ses membres n'ont pas la longueur du modèle)
+        const nat = this.natural[name] ?? NATURAL_SPEED[name] * md.speedScale;
+        a.timeScale = Math.min(1.8, Math.max(0.3, (st.moving ? st.v : nat) / nat));
         if (w > leadW) {
           lead = name;
           leadW = w;
@@ -1700,6 +1714,65 @@ class RealHorseAnim {
     if (low < 0) md.body.position.y -= low;
   }
 
+  /**
+   * Vitesse naturelle de chaque allure pour ce cheval (m/s, cheval de taille 1) : vitesse à laquelle ses
+   * sabots posés reculent sous lui quand le clip est joué tel quel. Les proportions de la race changent la
+   * longueur des membres et donc la foulée : jouer le clip à vitesse réelle ÷ cette vitesse garde les
+   * sabots posés immobiles au sol. Mesurée une fois par gabarit (pose seule de chaque allure, 120 images).
+   */
+  measureGaits() {
+    const md = this.model;
+    const key = JSON.stringify(md.build);
+    if (GAIT_SPEED.has(key)) return GAIT_SPEED.get(key);
+    const saved = Object.values(this.actions).map((x) => [x, x.getEffectiveWeight(), x.time]);
+    const out = {};
+    const N = 120;
+    for (const name of Object.keys(NATURAL_SPEED)) {
+      const a = this.actions[name];
+      if (!a) continue;
+      for (const [x] of saved) x.setEffectiveWeight(0);
+      a.setEffectiveWeight(1);
+      const D = a.getClip().duration;
+      // sole (centre) de chaque membre, dans le repère du cheval, sur un cycle
+      const track = md.legs.map(() => []);
+      for (let s = 0; s <= N; s++) {
+        a.time = (s / N) * D;
+        this.mixer.update(0);
+        md.root.updateMatrixWorld(true);
+        md.legs.forEach((l, i) => {
+          let hi = -Infinity;
+          let z = 0;
+          for (const p of l.solePts) {
+            _v.copy(p).applyMatrix4(l.fetlock.matrixWorld);
+            md.root.worldToLocal(_v);
+            hi = Math.max(hi, _v.y);
+            z += _v.z / l.solePts.length;
+          }
+          track[i].push([hi, z]);
+        });
+      }
+      let sum = 0;
+      let n = 0;
+      for (const tr of track) {
+        const ground = Math.min(...tr.map(([y]) => y));
+        for (let s = 1; s <= N; s++) {
+          // sabot à plat au sol aux deux images : il recule de dz pendant D / N
+          if (tr[s][0] > ground + 0.012 || tr[s - 1][0] > ground + 0.012) continue;
+          sum += -(tr[s][1] - tr[s - 1][1]) / (D / N);
+          n++;
+        }
+      }
+      if (n > 3 && sum / n > 0.2) out[name] = sum / n;
+    }
+    for (const [x, w, time] of saved) {
+      x.setEffectiveWeight(w);
+      x.time = time;
+    }
+    this.mixer.update(0);
+    GAIT_SPEED.set(key, out);
+    return out;
+  }
+
   /** Correction d'angle de l'encolure pour que le bout du nez touche l'herbe (pose « eat » de cette race). */
   computeReach() {
     const md = this.model;
@@ -1764,6 +1837,8 @@ export function pickGait(prev, u) {
   return g;
 }
 
+// Vitesses naturelles mesurées, par gabarit (RealHorseAnim.measureGaits).
+const GAIT_SPEED = new Map();
 const QNECK_REST = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), NECK_REST);
 const QNECK_REST_INV = QNECK_REST.clone().invert();
 const _qa = new THREE.Quaternion();

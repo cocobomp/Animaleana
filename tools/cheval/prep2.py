@@ -360,6 +360,32 @@ def push_pull(val, known):
     return fill
 
 
+def synth_grain(det, coat, white):
+    # Grain du poil (hautes fréquences du modelé de la robe) pour les blancs : chaque texel blanc prend
+    # celui d'un texel de robe voisin, au premier décalage (rayon croissant) qui tombe dans la robe ;
+    # les texels voisins prennent le même décalage : le grain reste continu par plaques.
+    hfc = np.ones_like(det)
+    base = blur(np.where(coat, det, 0), 3) / np.maximum(blur(coat.astype(np.float32), 3), 1e-4)
+    hfc[coat] = np.clip(1 + (det[coat] / np.maximum(base[coat], 1e-4) - 1) * 0.8, 0.78, 1.28)
+    out = np.ones_like(det)
+    todo = white.copy()
+    H, W = det.shape
+    for r in (12, 20, 32, 48, 72, 104, 150):
+        for k in range(16):
+            if not todo.any():
+                return out
+            a = 2 * math.pi * (k + (r % 7) * 0.13) / 16
+            dx, dy = int(round(r * math.cos(a))), int(round(r * math.sin(a)))
+            ys, xs = np.nonzero(todo)
+            sy, sx = ys + dy, xs + dx
+            ok = (sy >= 0) & (sy < H) & (sx >= 0) & (sx < W)
+            ys, xs, sy, sx = ys[ok], xs[ok], sy[ok], sx[ok]
+            src = coat[sy, sx]
+            out[ys[src], xs[src]] = hfc[sy[src], sx[src]]
+            todo[ys[src], xs[src]] = False
+    return out
+
+
 SIZE = 1024
 col, _ = load_np('HorseMain2k00.png', SIZE)
 srgb = col[..., :3]  # (pixels d'une image 8 bits : valeurs stockées, donc sRGB)
@@ -418,11 +444,16 @@ Lhoof = float(np.median(L[hoof])) if hoof.any() else Lref
 print('TEX coat median L', Lref, 'hoof', Lhoof, 'white texels', int(white.sum()), 'hoof texels', int(hoof.sum()), 'inside', int(inside.sum()))
 det = np.zeros_like(L)
 det[coat] = L[coat] / Lref
-# blancs (balzanes, liste, mouchetures) : modelé de la robe voisine + grain du poil des blancs
-fill = push_pull(np.where(coat, det, 0), coat.astype(np.float32))
-Lb = blur(L, 3)
-hf = np.clip(L / np.maximum(Lb, 1e-5), 0.75, 1.3) ** 0.6
-det = np.where(coat, det, fill * np.where(white, hf, 1.0))
+# blancs (balzanes, liste, mouchetures) : modelé de la robe voisine, lissé (la diffusion pyramidale laisse
+# des carrés), × grain du poil recopié de la robe voisine (sinon une « liste fantôme » lisse et plus claire
+# reste visible sur le chanfrein d'un cheval sans marque).
+# Le liseré peint autour des blancs (robe éclaircie, pas assez blanche pour le masque) est bouché aussi :
+# sinon la zone comblée prend sa luminance, plus claire que la robe.
+halo = (blur(white.astype(np.float32), 2) > 0.04) & inside & ~hoof
+coatK = coat & ~halo
+fill = blur(push_pull(np.where(coatK, det, 0), coatK.astype(np.float32)), 6)
+grain = synth_grain(det, coatK, halo)
+det = np.where(coatK | hoof, det, fill * np.where(halo, grain, 1.0))
 # sabots : leur propre modelé (corne)
 det = np.where(hoof, L / Lhoof, det)
 # hors des îlots : valeur voisine (pas de bord noir au filtrage)

@@ -172,3 +172,51 @@ describe('signes de race du cheval réaliste', () => {
     expect(tailAngle('saddlebred')).toBeGreaterThan(sf + 15);
   });
 });
+
+describe('sabots posés du cheval réaliste', () => {
+  /** Glissement (m) du centre de la sole pendant chaque appui à plat, cheval qui avance à v (taille 1). */
+  const slips = (id, v) => {
+    const md = horse(id);
+    const st = { v, moving: true, graze: 0, feeder: 0, turn: 0, fat: 1 };
+    const dt = 1 / 60;
+    const p = new THREE.Vector3();
+    for (let f = 0; f < 240; f++) {
+      md.root.position.z += v * dt;
+      md.anim.update(dt, st, {});
+    }
+    const stance = md.legs.map(() => null);
+    const out = [];
+    for (let f = 0; f < 600; f++) {
+      md.root.position.z += v * dt;
+      md.anim.update(dt, st, {});
+      md.root.updateMatrixWorld(true);
+      md.legs.forEach((l, i) => {
+        let hi = -Infinity;
+        let z = 0;
+        for (const s of l.solePts) {
+          p.copy(s).applyMatrix4(l.fetlock.matrixWorld);
+          hi = Math.max(hi, p.y);
+          z += p.z / l.solePts.length;
+        }
+        if (hi < 0.015) {
+          stance[i] ??= { z0: z, n: 0 };
+          stance[i].z1 = z;
+          stance[i].n++;
+        } else if (stance[i]) {
+          if (stance[i].n > 3) out.push(Math.abs(stance[i].z1 - stance[i].z0));
+          stance[i] = null;
+        }
+      });
+    }
+    md.dispose();
+    return out;
+  };
+
+  it.each([['pur_sang', 3.0], ['percheron', 3.0], ['shetland', 3.0], ['pur_sang', 4.6], ['percheron', 1.6]])('%s à %s m/s : les sabots posés ne glissent presque pas', (id, v) => {
+    const s = slips(id, v);
+    expect(s.length).toBeGreaterThan(6);
+    const mean = s.reduce((a, b) => a + b, 0) / s.length;
+    expect(mean).toBeLessThan(0.018);
+    expect(Math.max(...s)).toBeLessThan(0.035);
+  });
+});

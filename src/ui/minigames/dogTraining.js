@@ -231,7 +231,8 @@ export function commandsGame(ctx) {
 
   const glow = (b, on) => b?.classList.toggle('glow', !!on);
   const cmdBtns = {};
-  for (const id of list) cmdBtns[id] = ctx.button(cmdLabel(id), { cls: 'dt-cmd', onTap: () => command(id) });
+  const buttons = [...new Set(list)]; // un bouton par ordre (« au pied » revient deux fois pour le chien qui tire)
+  for (const id of buttons) cmdBtns[id] = ctx.button(cmdLabel(id), { cls: 'dt-cmd', onTap: () => command(id) });
   const treatBtn = ctx.button(`🍪 ${t('dt_mg_btn_treat')}`, { cls: 'dt-treat', onTap: () => treat() });
 
   /** Au pied : où est le chien par rapport à sa place (0 = parfait, négatif = devant toi). */
@@ -347,7 +348,7 @@ export function commandsGame(ctx) {
     key(code, pressed) {
       if (!pressed) return;
       const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(code);
-      if (i >= 0 && list[i]) command(list[i]);
+      if (i >= 0 && buttons[i]) command(buttons[i]);
       if (code === 'Space' || code === 'Enter') treat();
     },
     update(dt) {
@@ -482,7 +483,8 @@ export function commandsGame(ctx) {
         emoji(g, '🍪', dogX, FLOOR - 150 - k * 6, 30);
       }
       const walking = phase === 'walk' || Math.abs(dogTarget - dogX) > 2;
-      const f = phase === 'walk' ? -1 : dogX < playerX ? 1 : -1;
+      // Il regarde où il va ; à l'arrêt, vers toi (sauf « au pied » : vers où vous allez marcher).
+      const f = phase === 'walk' ? -1 : Math.abs(dogTarget - dogX) > 2 ? Math.sign(dogTarget - dogX) : heelWalk ? -1 : dogX < playerX ? 1 : -1;
       dog(g, a, fit, dogX, {
         f,
         pose: walking ? 'stand' : pose,
@@ -690,8 +692,8 @@ export function jumpGame(ctx) {
       scene(g, ctx);
       player(g, PLAYER_X, back > 0);
       const lift = jump >= 0 ? Math.sin(jump * Math.PI) * 70 : 0;
-      dog(g, a, fit, 250, { lift, pose: jump >= 0 ? 'beg' : celebrate > 0 ? 'sit' : 'stand', happy: celebrate > 0, wag: celebrate > 0 });
-      if (jump >= 0) emoji(g, '❗', 250, FLOOR - 140 - lift, 32);
+      dog(g, a, fit, 225, { lift, pose: jump >= 0 ? 'beg' : celebrate > 0 ? 'sit' : 'stand', happy: celebrate > 0, wag: celebrate > 0 });
+      if (jump >= 0) emoji(g, '❗', 225, FLOOR - 140 - lift, 32);
       if (jump < 0) meter(g, 70, 50, 200, calm / 1.5, '#3fae62', t('dt_mg_jump_meter'));
       label(g, `${success} / ${NEED}`, 360, 30, 20);
     },

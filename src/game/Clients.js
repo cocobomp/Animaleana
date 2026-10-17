@@ -268,7 +268,7 @@ export class Clients {
     if (this.visitor) {
       if (!this.visitor.visit.auto && visitorExpired(p, p.clock)) this.visitorLeaves(false);
       else this.proximity();
-    } else if (!st.visitor && shouldVisitorArrive(p, { day, hour: g.hour, isHome: g.isHome }) && !g.ui.isBlocking()) {
+    } else if (!st.visitor && !g.dogTrainer?.visitor && shouldVisitorArrive(p, { day, hour: g.hour, isHome: g.isHome }) && !g.ui.isBlocking()) {
       this.arrive();
     }
     // Les propriétaires reviennent chercher leur animal (seulement quand on est à la maison).
@@ -585,10 +585,13 @@ export class Clients {
       g.ui.toast(r.reason === 'level' ? t('lockedLevel', { n: r.n }) : t('alreadyOwned'));
       return r;
     }
-    // Un premier client arrive vite pour apprendre.
-    const st = clientState(g.profile);
-    st.nextVisitDay = Math.min(st.nextVisitDay || g.day, g.day);
-    st.nextVisitHour = Math.min(st.nextVisitHour, Math.max(8, Math.ceil(g.hour)));
+    // Un premier client arrive vite pour apprendre (les métiers qui ont leurs propres clients, comme
+    // l'éducateur canin, font venir le leur eux-mêmes : pas deux visiteurs à la fois).
+    if (!CAREERS[id].ownClients) {
+      const st = clientState(g.profile);
+      st.nextVisitDay = Math.min(st.nextVisitDay || g.day, g.day);
+      st.nextVisitHour = Math.min(st.nextVisitHour, Math.max(8, Math.ceil(g.hour)));
+    }
     g.ui.toast(t('ca_started', { career: t(`career_${id}`) }), 7000);
     g.ui.renderStatus();
     g.save();

@@ -78,7 +78,7 @@ export function openDogTrainerChat(ui, dt, v) {
     h('div', { class: 'chips' }, Object.entries(problems).map(([id, v2]) => h('span', { class: `chip ${v2 < FIXED_BELOW ? 'mood-happy' : 'mood-sad'}` }, `${PROBLEMS[id].emoji} ${problemName(id)} · ${Math.round(v2)} %`))),
     returning
       ? h('p', { class: 'note' }, t('dt_sessionsDone', { n: dog.client.sessionsDone, total: dog.client.sessionsNeeded }))
-      : h('p', { class: 'note' }, `📅 ${t('dt_sessionsNeeded', { n: req.sessionsNeeded })} · ${isSandbox(p) ? '' : t('dt_pricePer', { n: req.price })}`),
+      : h('p', { class: 'note' }, `📅 ${t('dt_sessionsNeeded', { n: req.sessionsNeeded })}${isSandbox(p) ? '' : ` · ${t('dt_pricePer', { n: req.price })}`}`),
   );
 
   const actions = () => {

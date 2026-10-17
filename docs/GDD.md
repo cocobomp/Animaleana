@@ -80,6 +80,15 @@ réussite au dressage…).
 - **Équitation** : balade libre, galop, saut d'obstacles, dressage, concours.
 - **Entraînement** : stats qui progressent (vitesse, endurance, obéissance,
   saut).
+- **Métier éducateur canin** (💼, niveau 3) : des maîtres amènent leur chien
+  qui a un problème (tire en laisse, saute sur les gens, ne revient pas au
+  rappel, aboie, a peur, n'obéit pas). Le chien reste à la ferme ; une séance
+  par jour (mini-jeu « Les ordres » : assis, couché, pas bouger, au pied,
+  rappel — la friandise se donne juste quand il obéit, ni avant ni après ;
+  vraie promenade en laisse pour le chien qui tire). Quand le problème est
+  réglé (ou au jour prévu), le maître revient : démonstration, étoiles,
+  paiement, réputation. Trois rangs : plus de chiens à la fois, nouveaux
+  problèmes, chiens de refuge, coaching troupeau et agility de ses animaux.
 
 ## 6. Adoption et argent
 - Partout : **refuge**, **animalerie**, **élevage**, animaux **trouvés** en

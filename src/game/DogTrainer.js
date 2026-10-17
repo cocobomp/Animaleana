@@ -102,6 +102,7 @@ export class DogTrainer {
     if (this.checkAcc < 3) return;
     this.checkAcc = 0;
     if (!g.isHome || this.visitor || this.walk || this.demo || g.ui.isBlocking() || g.paused) return;
+    if (g.clients?.visitor && !g.clients.visitor.visit?.auto) return; // un client de la pension ou du vétérinaire attend déjà : chacun son tour
     // Un maître revient chercher son chien (réglé, séances épuisées, ou jour prévu passé).
     const back = clientDogs(g.profile).find((a) => a.location === g.profile.place && readyForDelivery(a, g.day) && g.entities.has(a.id));
     if (back && g.hour >= 8 && g.hour <= 20) {

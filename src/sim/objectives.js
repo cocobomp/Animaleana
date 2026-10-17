@@ -36,6 +36,10 @@ export const OBJECTIVES = [
   { id: 'drReprise1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'actvDressage'), 1] },
   { id: 'compRegister1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'compRegistered'), 1] },
   { id: 'compAway1', kind: 'quest', reward: 150, progress: (p) => [stat(p, 'compAway'), 1] },
+  // concours de beauté (src/sim/beauty.js)
+  { id: 'beautyPrep1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'beautyReady'), 1] },
+  { id: 'beautyBraid1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'beautyBraid'), 1] },
+  { id: 'beauty1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvBeauty'), 1] },
   // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
   { id: 'career1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'careersStarted'), 1] },
   { id: 'client1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'clients'), 1] },
@@ -61,6 +65,8 @@ export const OBJECTIVES = [
   { id: 'drGood', kind: 'achievement', progress: (p) => [stat(p, 'actvDressage70'), 1] },
   { id: 'compPodium3', kind: 'achievement', progress: (p) => [stat(p, 'compAwayPodiums'), 3] },
   { id: 'compGrand', kind: 'achievement', progress: (p) => [stat(p, 'compGrandWins'), 1] },
+  { id: 'beautyPodium', kind: 'achievement', progress: (p) => [stat(p, 'beautyPodium'), 1] }, // concours de beauté
+  { id: 'beautyChampion', kind: 'achievement', progress: (p) => [stat(p, 'beautyChampion'), 1] }, // écharpe du plus bel animal
 ];
 
 /** Renvoie les objectifs qui viennent d'être terminés (et les marque comme faits). */

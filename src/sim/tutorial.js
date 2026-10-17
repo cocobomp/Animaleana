@@ -196,6 +196,10 @@ export const QUEST_GUIDE = {
   drReprise1: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
   compRegister1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, ready: hasAnimal },
   compAway1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, ready: hasAnimal },
+  // Concours de beauté (src/sim/beauty.js) : préparer depuis la fiche, présenter au terrain de concours
+  beautyPrep1: { where: 'sheet', target: { type: 'action', id: 'more' }, animal: true, ready: hasAnimal },
+  beautyBraid1: { where: 'sheet', target: { type: 'action', id: 'more' }, horse: true, ready: hasHorse },
+  beauty1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
   // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
   career1: { where: 'careers', target: { type: 'hud', id: 'careers' } },
   client1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
@@ -210,6 +214,7 @@ export const QUEST_ORDER = [
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
   'drTrain3', 'drReprise1', 'compRegister1', 'compAway1',
+  'beautyPrep1', 'beautyBraid1', 'beauty1',
   'career1', 'client1', 'clientVet1', 'clientHappy5', 'clientMoney500',
 ];
 
@@ -319,6 +324,10 @@ export const QUEST_STEPS = {
   drReprise1: ['goShowground', 'doActivity'],
   compRegister1: ['openCalendar', 'doActivity'],
   compAway1: ['openCalendar', 'doActivity'],
+  // Concours de beauté
+  beautyPrep1: ['tapAnimal', 'openMore', 'doActivity'],
+  beautyBraid1: ['tapHorse', 'openMore', 'doActivity'],
+  beauty1: ['goShowground', 'doActivity'],
   career1: ['careerStart'],
   client1: ['clientWait', 'clientCare'],
   clientVet1: ['clientWait', 'clientVet'],

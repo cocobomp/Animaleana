@@ -8,7 +8,7 @@
 //
 // Dans le profil :
 //   profile.careers = {
-//     active: 'vet' | null,          // le métier suivi (carnet affiché à l'écran)
+//     active: 'vet' | 'pension' | 'handler' | null,          // le métier suivi (carnet affiché à l'écran)
 //     started: { vet: day },          // jour où chaque métier a été commencé
 //     xp: { vet: 0 },                 // expérience par métier
 //     done: { vet: ['welcome'] },     // actions du carnet déjà faites une fois
@@ -92,6 +92,28 @@ export const CAREERS = {
       { fee: 1, prize: 1, sponsor: false },
       { fee: 0.8, prize: 1.15, sponsor: false },
       { fee: 0.5, prize: 1.3, sponsor: true },
+    ],
+  },
+  // Handler de concours de beauté : les gens confient leur animal pour qu'on le prépare (bain, tresses,
+  // nœud…) et qu'on le présente au juge (src/sim/beauty.js, src/game/Beauty.js). La préparation et la
+  // présentation comptent aussi avec ses propres animaux (on apprend le métier en s'entraînant).
+  handler: {
+    id: 'handler',
+    emoji: '🎀',
+    level: 3,
+    building: 'showground',
+    ranks: [0, 120, 350],
+    actions: [
+      { id: 'welcome', emoji: '👋', where: 'visitor' },
+      { id: 'prep', emoji: '🧺', where: 'animal' },
+      { id: 'braid', emoji: '🎀', where: 'animal' },
+      { id: 'present', emoji: '🧑‍⚖️', where: 'showground' },
+      { id: 'return', emoji: '🎁', where: 'visitor' },
+    ],
+    perks: [
+      { maxClients: 1, species: ['dog', 'cat', 'rabbit'], price: 1, tips: false },
+      { maxClients: 2, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat'], price: 1.15, tips: false },
+      { maxClients: 3, species: ['dog', 'cat', 'rabbit', 'horse', 'sheep', 'goat', 'cow'], price: 1.3, tips: true },
     ],
   },
 };

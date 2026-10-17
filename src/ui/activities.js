@@ -12,8 +12,9 @@ import {
   JUMP_STAGES, comfortHeight, courseForStage, stageForLevel, stageFor, HUTCH_TOYS, hutchPlayBlock,
 } from '../sim/activities.js';
 import { awayCalendar, venueBanner, trainingCard } from './competitions.js'; // concours à l'extérieur et dressage
+import { openBeauty, beautyPick, beautyAnimalButtons, beautyRuns } from './beauty.js'; // concours de beauté
 
-export const TYPE_ICON = { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', hop: '🐇', show: '🎪', flat: '🎠', figures: '🔤', dressage: '🎠' };
+export const TYPE_ICON = { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', hop: '🐇', show: '🎪', flat: '🎠', figures: '🔤', dressage: '🎠', beauty: '🎀' };
 const TIER_ICON = { gold: '🏆', silver: '🥈', bronze: '🥉' };
 const SKILL_OF = { jumping: ['jump', 'obedience'], lesson: ['jump', 'obedience'], trail: ['endurance', 'speed'], agility: ['jump', 'obedience', 'speed'], hop: ['jump', 'obedience'], show: ['obedience'], flat: ['dressage', 'obedience'], figures: ['dressage', 'obedience'], dressage: ['dressage', 'obedience'] };
 const DRESSAGE_TYPES = ['flat', 'figures', 'dressage'];
@@ -52,9 +53,9 @@ function playTab(ui, state) {
   const g = ui.game;
   const here = g.animalsHere();
   const count = (type) => here.filter((a) => !eligibility(a, type)).length;
-  const cards = ['lesson', 'jumping', 'flat', 'figures', 'dressage', 'trail', 'agility', 'hop', 'show'].map((type) => {
+  const cards = ['lesson', 'jumping', 'flat', 'figures', 'dressage', 'trail', 'agility', 'hop', 'show', 'beauty'].map((type) => {
     const n = type === 'trail' ? count('trail') + here.filter((a) => a.following).length : count(type);
-    return h('button', { class: 'card actv-card', onClick: () => { state.pick = type; ui.renderPanel(); } },
+    return h('button', { class: 'card actv-card', onClick: () => { if (type === 'beauty') return openBeauty(ui); state.pick = type; ui.renderPanel(); } },
       h('span', { class: 'card-emoji' }, TYPE_ICON[type]),
       h('span', { class: 'card-main' }, h('b', {}, t(`actv_type_${type}`)), h('small', {}, t(`actv_desc_${type}`))),
       h('span', { class: 'card-side' }, n ? h('small', {}, t('actv_ready', { n })) : h('small', {}, '—')));
@@ -85,6 +86,7 @@ function pickAnimal(ui, state) {
   const type = state.pick;
   const back = h('button', { class: 'small', onClick: () => { state.pick = null; state.comp = null; ui.renderPanel(); } }, `← ${t('actv_back')}`);
   const head = [h('div', { class: 'row' }, back, h('b', {}, `${TYPE_ICON[type]} ${state.comp ? compName(state.comp) : t(`actv_type_${type}`)}`))];
+  if (type === 'beauty') return [...head, ...beautyPick(ui, state)]; // concours de beauté (src/ui/beauty.js)
   if (state.comp) {
     head.push(h('p', { class: 'note' }, isSandbox(g.profile) ? t('actv_compHelpSandbox') : t('actv_compHelp', { fee: state.comp.fee, a: state.comp.prizes[0] })));
     head.push(rivalsList(state.comp));
@@ -246,7 +248,10 @@ function calendarTab(ui, state) {
   const list = competitionsAt(p.place, g.isHome, g.day, 8);
   const out = [h('p', { class: 'note' }, t(g.isHome ? 'actv_calendarHome' : 'actv_calendarAway'))];
   out.push(h('div', { class: 'cards' }, list.map((c) => {
-    const block = entryBlock(c, { day: g.day, hour: g.hour, entered: d.entered });
+    let block = entryBlock(c, { day: g.day, hour: g.hour, entered: d.entered });
+    // Concours de beauté : on peut s'inscrire à l'avance (par classe), dans sa propre fenêtre.
+    const beauty = c.type === 'beauty' && block !== 'over';
+    if (beauty) block = null;
     return h('div', { class: `card actv-comp ${block ? '' : 'open'}` },
       h('span', { class: 'card-emoji' }, TYPE_ICON[c.type]),
       h('span', { class: 'card-main' },
@@ -255,7 +260,8 @@ function calendarTab(ui, state) {
         h('small', {}, isSandbox(p) ? t('actv_prizesSandbox') : t('actv_prizes', { fee: c.fee, a: c.prizes[0], b: c.prizes[1], c: c.prizes[2] }))),
       block
         ? h('span', { class: 'lock' }, t(`actv_block_${block}`))
-        : h('button', { class: 'primary', onClick: () => { state.pick = c.type; state.comp = c; ui.renderPanel(); } }, t('actv_enter')));
+        : h('button', { class: 'primary', onClick: () => { if (beauty) return openBeauty(ui, { comp: c }); state.pick = c.type; state.comp = c; ui.renderPanel(); } },
+          beauty && c.day > g.day ? t('beauty_registerBtn') : t('actv_enter')));
   })));
   out.push(...awayCalendar(ui)); // concours à l'extérieur : inscriptions et calendrier (src/ui/competitions.js)
   // Les concours ailleurs dans le monde (pour donner envie de voyager).
@@ -326,6 +332,7 @@ export function animalActivitySection(ui, a) {
   }
   if (sp.training.includes('agility')) btns.push(btn('agility', t('actv_type_agility')));
   if (knownTricks(a).length) btns.push(btn('show', t('actv_type_show')));
+  btns.push(...beautyAnimalButtons(ui, a)); // « Préparer pour le concours » (concours de beauté)
   // Par identifiant (anciennes sauvegardes : par prénom), pour survivre à un renommage et ne pas confondre deux homonymes.
   const won = activityData(g.profile).awards.filter((x) => (x.animalId ? x.animalId === a.id : x.animal === a.name)).length;
   if (!btns.length && !won) return [];
@@ -347,6 +354,7 @@ export function activityRuns(ui) {
     actvLesson: () => openActivities(ui, { pick: 'lesson' }),
     actvHop: () => openActivities(ui, { pick: 'hop' }),
     actvHutchPlay: () => openHutchPlay(ui),
+    ...beautyRuns(ui), // concours de beauté
   };
 }
 

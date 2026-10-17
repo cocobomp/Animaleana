@@ -12,7 +12,8 @@
 // Dans le profil :
 //   profile.clients = { active: [...], history: [...], nextVisitDay, nextVisitHour, refusedStreak, visitor, lastDay }
 //   l'animal confié est dans profile.animals avec a.client = { ownerName, ownerSex, kind, startDay, until, ... }
-//   kind = 'vet' (soins) ou 'pension' : c'est aussi l'identifiant du métier concerné.
+//   kind = 'vet' (soins), 'pension' ou 'handler' (préparer et présenter l'animal au concours de
+//   beauté, src/sim/beauty.js) : c'est aussi l'identifiant du métier concerné.
 
 import { SPECIES } from './species.js';
 import { createAnimal, NEEDS, happiness, ILLNESSES } from './animal.js';
@@ -27,6 +28,7 @@ export const REFUSALS_BEFORE_DIP = 3; // 3 refus de suite : la réputation baiss
 export const UPSET_SCORE = 30; // en dessous, le propriétaire est fâché : pas de paiement
 export const PENSION_DAYS = [2, 5];
 export const VET_DAYS = [3, 4]; // soins + convalescence
+export const HANDLER_DAYS = [2, 3]; // concours de beauté : le temps de préparer et de présenter l'animal
 export const CLIENT_XP = { base: 20, perStar: 10 }; // XP de métier gagnée par client
 
 export const OWNER_NAMES = {
@@ -38,6 +40,8 @@ export const OWNER_NAMES = {
 export const DAY_PRICE = { dog: 20, cat: 15, rabbit: 10, horse: 45, sheep: 18, goat: 18, cow: 35 };
 export const VET_FEE = 40; // en plus, pour soigner
 const VET_FACTOR = 1.6;
+export const HANDLER_FEE = 25; // en plus, pour la présentation au juge
+const HANDLER_FACTOR = 1.3;
 
 const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 const round5 = (n) => Math.max(5, Math.round(n / 5) * 5);
@@ -69,8 +73,9 @@ export function maxClients(profile) {
 /** Prix total proposé par le propriétaire (et par jour). */
 export function pricing(species, kind, days, reputation = 50, rankFactor = 1) {
   const base = DAY_PRICE[species] ?? 15;
-  const perDay = round5(base * (kind === 'vet' ? VET_FACTOR : 1) * reputationFactor(reputation) * rankFactor);
-  const total = perDay * days + (kind === 'vet' ? VET_FEE : 0);
+  const factor = kind === 'vet' ? VET_FACTOR : kind === 'handler' ? HANDLER_FACTOR : 1;
+  const perDay = round5(base * factor * reputationFactor(reputation) * rankFactor);
+  const total = perDay * days + (kind === 'vet' ? VET_FEE : kind === 'handler' ? HANDLER_FEE : 0);
   return { perDay, total };
 }
 
@@ -110,6 +115,11 @@ export function shouldVisitorArrive(profile, ctx) {
 
 /** Quel genre de visite : 'vet' / 'pension' si le métier est appris, sinon 'autoVet' ou 'autoPension' (indice). */
 export function pickVisitKind(profile, rng = Math.random) {
+  // Handler de concours de beauté : une visite sur deux ou trois, selon les autres métiers commencés.
+  if (isStarted(profile, 'handler')) {
+    const others = ['vet', 'pension'].filter((id) => isStarted(profile, id)).length;
+    if (rng() < 1 / (others + 1)) return 'handler';
+  }
   const started = startedCareers(profile).filter((id) => id === 'vet' || id === 'pension');
   const wantVet = rng() < 0.45;
   if (started.includes('vet') && started.includes('pension')) return wantVet ? 'vet' : 'pension';
@@ -143,7 +153,7 @@ export function createVisit(profile, ctx, rng = Math.random, forcedKind = null) 
     day: ctx.day ?? 1,
   });
   animal.bond = 2;
-  const [min, max] = career === 'vet' ? VET_DAYS : PENSION_DAYS;
+  const [min, max] = career === 'vet' ? VET_DAYS : career === 'handler' ? HANDLER_DAYS : PENSION_DAYS;
   const days = min + Math.floor(rng() * (max - min + 1));
   let illness = null;
   if (career === 'vet') {
@@ -206,6 +216,7 @@ export function acceptVisit(profile, visit, day) {
     daily: [], // un score par jour passé chez nous
     gotSick: false, // tombé malade (ou blessé) chez nous
     curedDay: null, // soins : jour où il a été guéri
+    contest: null, // handler : meilleure présentation au juge { points, rank, stars, comp } (src/game/Beauty.js)
   };
   a.location = profile.place;
   profile.animals.push(a);
@@ -297,6 +308,12 @@ export function finalScore(a, day) {
     else if (c.curedDay !== null && c.curedDay - c.startDay > 2) score -= 10; // soigné tard
     else if (c.curedDay !== null) score += 5;
   }
+  if (c.kind === 'handler') {
+    // Handler : la présentation au juge compte plus que tout (sans présentation, pas content).
+    const contest = c.contest;
+    if (!contest) score = Math.min(score, 25);
+    else score = score * 0.4 + contest.points * 0.6 + (contest.rank && contest.rank <= 3 ? 6 : 0);
+  }
   // Le propriétaire a dû attendre (on était en voyage).
   const late = Math.max(0, day - c.until);
   score -= late * 5;
@@ -315,6 +332,7 @@ export function stars(score) {
 export function worstPoint(a) {
   const c = a.client ?? {};
   if (c.kind === 'vet' && c.curedDay === null && a.sick) return 'notCured';
+  if (c.kind === 'handler' && !c.contest) return 'notPresented';
   if (c.gotSick) return 'sick';
   let worst = null;
   for (const n of NEEDS) {
@@ -362,6 +380,7 @@ export function completeClient(profile, a, day, rng = Math.random) {
   if (pay.stars >= 4) stat('clientsHappy');
   if (pay.stars === 5) stat('clients5Stars');
   if (career === 'vet' && c.curedDay !== null) stat('clientsVet');
+  if (career === 'handler' && c.contest) stat('clientsHandler');
   if (pay.money) stat('clientMoney', pay.money);
   const careerXp = pay.upset ? 5 : CLIENT_XP.base + CLIENT_XP.perStar * pay.stars;
   const action = noteAction(profile, career, 'return');
@@ -388,6 +407,7 @@ export function completeClient(profile, a, day, rng = Math.random) {
     rankUp: up?.rankUp ?? action?.rankUp ?? null,
     worst: worstPoint(a),
     cured: career === 'vet' && c.curedDay !== null,
+    contest: career === 'handler' ? c.contest ?? null : null,
     late: Math.max(0, day - c.until),
     day,
   };
@@ -407,6 +427,18 @@ export function advanceClientDays(profile, day) {
     for (const a of clientAnimals(profile)) if (a.client.startDay < st.lastDay) tickClientDay(a, st.lastDay);
   }
   return missed;
+}
+
+/**
+ * Handler : garde la meilleure présentation au juge de l'animal confié.
+ * result : { points, rank, stars, comp }. Renvoie vrai si c'est la première présentation.
+ */
+export function noteClientContest(a, result) {
+  const c = a?.client;
+  if (!c || c.kind !== 'handler') return false;
+  const first = !c.contest;
+  if (first || result.points > c.contest.points) c.contest = { points: result.points, rank: result.rank ?? null, stars: result.stars ?? 1, comp: !!result.comp };
+  return first;
 }
 
 /**

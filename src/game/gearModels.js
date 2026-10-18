@@ -193,7 +193,7 @@ function buildHorseGear(model, look, gear, add) {
       add.skin(add(body, strap(hem, 0.014, 0.004), P.clothMat(id === 'blanketSummer' ? 0x3a3a3a : 0xf2ede4)));
     }
     // Sangle de poitrail et sous-ventrières croisées.
-    add.skin(add(body, strap(loop(torso, [0, y0 - R * 0.2, model.dims.zGirth ?? L * 0.02], 16, 0.018 + gap, deg(-15), deg(-165)), 0.014, 0.004), P.nylonMat(0x2a2a2a)));
+    add.skin(add(body, strap(loop(torso, [0, y0 - R * 0.2, model.dims.zGirth ?? L * 0.02], 16, (model.skinGear ? 0.03 : 0.018) + gap, deg(-15), deg(-165)), 0.014, 0.004), P.nylonMat(0x2a2a2a)));
   }
 
   if (gear.saddle) horseSaddle(model, gear, add);

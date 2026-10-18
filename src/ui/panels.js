@@ -5,12 +5,11 @@ import { dogTrainerSection, trainingBadge } from './dogTrainer.js'; // éducateu
 import { isTrainingClient } from '../sim/dogTrainer.js';
 import { h, bar, hexColor } from './dom.js';
 import { t, L, getLang, setLang } from '../i18n.js';
-import { SPECIES, getBreed, NAMES } from '../sim/species.js';
-import { pick } from '../sim/rng.js';
+import { SPECIES, getBreed } from '../sim/species.js';
 import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass } from '../sim/animal.js';
 import { DAYS_PER_YEAR } from '../sim/time.js';
 import { adoptionCandidates, adoptionPrice, shopPrice, shopBreeds, AGE_STAGES, stageAgeDays } from '../sim/adoption.js';
-import { createAnimal } from '../sim/animal.js';
+import { createAnimal, freeName, namesInUse } from '../sim/animal.js';
 import { PLACES, PLACE_IDS, distanceKm, TRAVEL_MODES } from '../sim/places.js';
 import { OBJECTIVES } from '../sim/objectives.js';
 import { canAfford, isSandbox } from '../sim/profile.js';
@@ -41,6 +40,13 @@ const CARE_ICONS = {
 export function breedName(a) {
   if (a.breed === 'mix') return t('mixBreed');
   return L(getBreed(a.species, a.breed)?.name);
+}
+
+/** Prénom proposé à l'adoption : celui du refuge, sauf si un de nos animaux le porte déjà. */
+function suggestedName(profile, name) {
+  const taken = namesInUse(profile);
+  const key = (n) => n.trim().toLocaleLowerCase('fr');
+  return taken.some((n) => key(n) === key(name)) ? freeName(taken) : name;
 }
 
 export function ageText(a) {
@@ -279,7 +285,7 @@ export function openAdoption(ui) {
           class: 'primary',
           disabled: !afford,
           onClick: async () => {
-            const name = await ui.prompt(t('chooseName'), a.name, animalCard(a));
+            const name = await ui.prompt(t('chooseName'), suggestedName(g.profile, a.name), animalCard(a));
             if (name === null) return;
             g.adopt(a, name);
             ui.renderPanel();
@@ -757,7 +763,7 @@ export function openShop(ui) {
         class: 'primary big',
         disabled: !canAfford(g.profile, price),
         onClick: async () => {
-          const name = await ui.prompt(t('chooseName'), pick(NAMES), animalCard(preview, pic(96, 72, '')));
+          const name = await ui.prompt(t('chooseName'), freeName(namesInUse(g.profile)), animalCard(preview, pic(96, 72, '')));
           if (name === null) return;
           if (g.buyAnimal({ ...st }, name)) ui.closePanel();
         },

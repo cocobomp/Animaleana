@@ -118,8 +118,40 @@ function pickPersonality(breedDef, rng) {
   return PERSONALITIES[Math.min(PERSONALITIES.length - 1, Math.floor(((r - 0.6) / 0.4) * PERSONALITIES.length))];
 }
 
+const nameKey = (n) => String(n).trim().toLocaleLowerCase('fr');
+
+/**
+ * Un prénom de la liste que personne ne porte encore (taken : les prénoms déjà pris, voir namesInUse).
+ * Un seul tirage, comme pick(NAMES) : sans prénom pris, le résultat est le même qu'avant.
+ * Si tous sont pris : « Caramel 2 », « Caramel 3 »…
+ */
+export function freeName(taken = [], rng = Math.random) {
+  const used = new Set([...taken].filter(Boolean).map(nameKey));
+  const free = NAMES.filter((n) => !used.has(nameKey(n)));
+  if (free.length) return pick(free, rng);
+  const base = pick(NAMES, rng);
+  for (let i = 2; ; i++) if (!used.has(nameKey(`${base} ${i}`))) return `${base} ${i}`;
+}
+
+/**
+ * Tous les prénoms d'animaux déjà portés dans ce profil : nos animaux (dans tous les lieux, en pension,
+ * en éducation), le visiteur qui attend une réponse, les clients du salon de toilettage, le maître du
+ * chien qui attend. Un nouvel animal de client ne porte pas le même prénom qu'un des nôtres.
+ */
+export function namesInUse(profile) {
+  const out = [];
+  const add = (a) => { if (a?.name) out.push(a.name); };
+  for (const a of profile?.animals ?? []) add(a);
+  add(profile?.clients?.visitor?.animal);
+  for (const c of profile?.groomer?.clients ?? []) add(c?.animal);
+  add(profile?.dogTrainer?.pending?.req?.dog);
+  return out;
+}
+
+/** avoidNames : prénoms déjà pris (namesInUse) ; le prénom tiré au hasard en sera un autre. */
 export function createAnimal({
   species, breed, sex, ageDays, name, colorIndex, personality, location = 'maison', rng = Math.random, day = 1, seed,
+  avoidNames,
 }) {
   const sp = SPECIES[species];
   const breedDef = getBreed(species, breed) ?? sp.breeds[0];
@@ -128,7 +160,7 @@ export function createAnimal({
   if (Number.isFinite(seed)) look.seed = seed;
   return {
     id: uid(),
-    name: name ?? pick(NAMES, rng),
+    name: name ?? freeName(avoidNames, rng),
     species,
     breed: breedDef.id,
     sex: sex ?? (rng() < 0.5 ? 'f' : 'm'),

@@ -12,7 +12,7 @@
 // Un chien en éducation a a.client = { kind: 'training', problem, problems, start, sessionsDone,
 // sessionsNeeded, ownerName, ownerSex, ownerSeed, price, since, until, rescue, lastDay }.
 
-import { createAnimal } from './animal.js';
+import { createAnimal, namesInUse } from './animal.js';
 import { DAYS_PER_YEAR } from './time.js';
 import { earn } from './profile.js';
 import { pick, randRange } from './rng.js';
@@ -128,7 +128,7 @@ export function makeClientRequest(profile, { day = 1, rng = Math.random, problem
     problems[other] = Math.round(randRange(50, 75, rng));
   }
   // Un chien adulte (1,5 à 7 ans ; une année de jeu = DAYS_PER_YEAR jours).
-  const dog = createAnimal({ species: 'dog', location: profile.place, day, rng, ageDays: Math.round(randRange(1.5 * DAYS_PER_YEAR, 7 * DAYS_PER_YEAR, rng)) });
+  const dog = createAnimal({ species: 'dog', location: profile.place, day, rng, ageDays: Math.round(randRange(1.5 * DAYS_PER_YEAR, 7 * DAYS_PER_YEAR, rng)), avoidNames: namesInUse(profile) });
   // Un chien pas encore éduqué : peu d'obéissance, peu de tours ; il vient avec SON collier et SA laisse
   // (own : ce n'est pas le matériel de ta sellerie, src/sim/gear.js ne le compte pas).
   dog.skills.obedience = Math.round(randRange(5, 20, rng));

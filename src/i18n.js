@@ -723,6 +723,10 @@ const fr = {
   leashOn: '🦮 Tu promènes {name} en laisse. Plus il est dressé, moins il tire !',
   leashOn_f: '🦮 Tu promènes {name} en laisse. Plus elle est dressée, moins elle tire !',
   leashOff: '{name} n\'est plus en laisse.',
+  leashDropped: '🦮 Tu lâches la laisse de {name} : il t\'attend ici.', // en commençant une activité
+  leashDropped_f: '🦮 Tu lâches la laisse de {name} : elle t\'attend ici.',
+  leashRide: '🐎 À cheval, pas de laisse : {name} te suit librement.', // (la laisse traversait les barrières)
+  followersWait: '🐾 {names} t\'attendent ici.',
   r_needLeash: 'Mets d\'abord un collier et une laisse à {name} (dans sa fiche).',
   statusLeash: 'Tu promènes {name}',
 
@@ -2509,6 +2513,9 @@ const en = {
   leashStop: 'Take off the leash',
   leashOn: '🦮 You are walking {name} on a leash. The better trained, the less they pull!',
   leashOff: '{name} is off the leash.',
+  leashDropped: '🦮 You let go of {name}\'s leash: they will wait for you here.',
+  leashRide: '🐎 No leash on horseback: {name} follows you freely.',
+  followersWait: '🐾 {names} wait for you here.',
   r_needLeash: 'Put a collar and a leash on {name} first (in their card).',
   statusLeash: 'Walking {name}',
 

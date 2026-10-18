@@ -64,6 +64,9 @@ export class Activities {
     g.ui.closePanel();
     const Cls = SESSION_TYPES[type]?.cls; // registre des séances (dressage : src/game/Dressage.js ; beauté : src/game/Beauty.js)
     if (!Cls) return null;
+    // Les animaux qui nous suivent attendent ici (pas ceux de l'activité ou du spectacle de tours : la séance
+    // s'occupe d'eux ; ni pour une balade, où ils viennent avec nous : TrailSession, walkers).
+    if (type !== 'trail') g.stopFollowers([opts.animal?.id, ...(opts.acts ?? []).map((x) => x.animalId)]);
     this.session = new Cls(this, type, opts);
     if (!this.session.ok) {
       this.session.end(true);

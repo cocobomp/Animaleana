@@ -1468,6 +1468,13 @@ export class Game {
     this.player.bareback = gear.bareback;
     const e = this.entities.get(a.id);
     if (!e) return null;
+    // Pas de laisse à cheval (elle traversait les barrières) : le chien promené suit librement, comme un animal
+    // qu'on emmène (il vient aussi en balade : Activities, walkers).
+    for (const d of this.profile.animals) {
+      if (!d.following || !d.leashed || d.location !== this.profile.place) continue;
+      d.leashed = false;
+      this.ui.toast(t('leashRide', { name: d.name, g: d.sex }), 5000);
+    }
     this.player.ride(e);
     this.player.setHelmet(riderHelmet(this.profile)); // on monte toujours avec sa bombe
     addStat(this.profile, 'rides');
@@ -1520,6 +1527,23 @@ export class Game {
       }
     }
     this.player.pull = pull;
+  }
+
+  /**
+   * Une activité commence (parcours, dressage, agility…) : les animaux qui nous suivent (sauf ceux de l'activité,
+   * keep : leurs identifiants) restent là où ils sont. Le chien promené restait au bout de sa laisse, dehors,
+   * la laisse à travers la barrière de la carrière.
+   */
+  stopFollowers(keep = []) {
+    const list = this.profile.animals.filter((a) => !keep.includes(a.id) && a.following && a.location === this.profile.place);
+    if (list.length === 1) {
+      const a = list[0];
+      this.ui.toast(t(a.leashed ? 'leashDropped' : 'staying', { name: a.name, g: a.sex }), 5000);
+    } else if (list.length) this.ui.toast(t('followersWait', { names: list.map((a) => a.name).join(', ') }), 5000);
+    for (const a of list) {
+      a.following = false;
+      a.leashed = false;
+    }
   }
 
   /** Promener un chien en laisse (collier + laisse). */

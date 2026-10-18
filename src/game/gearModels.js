@@ -60,15 +60,34 @@ function strap(pts, halfWidth, thick, closed = false) {
  * Nappe posée sur une forme : grille (z, angle) de points pris sur la surface, décalés de out.
  * Sert à la couverture, au tapis de selle et au bonnet anti-mouches.
  */
-function shell(sdf, yc, z0, z1, nz, a0, a1, na, out, tilt = 0) {
+function shell(sdf, yc, z0, z1, nz, a0, a1, na, out, tilt = 0, drape = 0) {
   const pos = [];
   const uv = [];
   const idx = [];
+  const rows = [];
   for (let i = 0; i < nz; i++) {
     const z = z0 + ((z1 - z0) * i) / (nz - 1);
-    const pts = loop(sdf, [0, yc, z], na, out, a0, a1, tilt);
+    rows.push(loop(sdf, [0, yc, z], na, out, a0, a1, tilt));
+  }
+  // Bord arrière qui tombe (drape : nombre de rangées) : il ne se referme pas sur la pointe des fesses,
+  // chaque rangée reste au moins aussi loin de l'axe que la suivante, moins une pente douce. Sans ça, le
+  // bord rentrait dans la croupe et la peau de la hanche passait par-dessus le tissu.
+  for (let i = drape - 1; i >= 0; i--) {
+    const dz = Math.abs(rows[i + 1][0].z - rows[i][0].z);
     for (let j = 0; j < na; j++) {
-      pos.push(pts[j].x, pts[j].y, pts[j].z);
+      const p = rows[i][j];
+      const q = rows[i + 1][j];
+      const r = Math.hypot(p.x, p.y - yc);
+      const want = Math.hypot(q.x, q.y - yc) - 0.35 * dz;
+      if (r >= want || r < 1e-6) continue;
+      const k = want / r;
+      p.x *= k;
+      p.y = yc + (p.y - yc) * k;
+    }
+  }
+  for (let i = 0; i < nz; i++) {
+    for (let j = 0; j < na; j++) {
+      pos.push(rows[i][j].x, rows[i][j].y, rows[i][j].z);
       uv.push(j / (na - 1), i / (nz - 1));
     }
   }
@@ -160,7 +179,7 @@ function buildHorseGear(model, look, gear, add) {
     // (9 mm : au galop d'un petit poney, la hanche passait encore à travers par endroits avec 6 mm)
     const gap = model.skinGear ? 0.009 : 0;
     const dense = model.skinGear ? 1.5 : 1; // (grille plus fine : moins de cordes sous les bosses de la peau)
-    add.skin(add(body, shell(torso, y0 - R * 0.2, bz0, front, Math.round(12 * dense), deg(192), deg(-12), Math.round(20 * dense), (id === 'blanket' ? 0.016 : 0.011) + gap), cloth));
+    add.skin(add(body, shell(torso, y0 - R * 0.2, bz0, front, Math.round(12 * dense), deg(192), deg(-12), Math.round(20 * dense), (id === 'blanket' ? 0.016 : 0.011) + gap, 0, model.skinGear ? 3 : 0), cloth));
     const edge = loop(torso, [0, y0 - R * 0.2, front], 20, 0.018 + gap, deg(192), deg(-12));
     add.skin(add(body, strap(edge, 0.018, 0.006), id === 'blanket' ? P.fleeceMat(0xe8e0d2) : P.clothMat(id === 'blanketSummer' ? 0x3a3a3a : 0xf2ede4)));
     // Galon le long du bas des flancs.

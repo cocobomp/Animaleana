@@ -1997,14 +1997,25 @@ function skinGear(model, S, mesh, hb) {
   const dirs = new Float32Array(n * 3);
   const q = V();
   const nrm = V();
+  // Tranche de peau mesurée autour de chaque sommet : au moins la moitié de l'écart entre deux rangées de la
+  // pièce, plus 1 cm (sur un petit poney, les rangées de la couverture sont à 6 ou 7 cm : la peau du milieu
+  // d'une bande échappait à la mesure et passait par-dessus le tissu près du bord arrière, à la hanche).
+  let dzWin = 0.025;
+  if (geo.index) {
+    const idx = geo.index.array;
+    for (let t = 0; t < idx.length; t += 3) {
+      for (let e = 0; e < 3; e++) dzWin = Math.max(dzWin, Math.abs(pos.getZ(idx[t + e]) - pos.getZ(idx[t + (e + 1) % 3])) / 2 + 0.01);
+    }
+  }
+  dzWin = Math.min(dzWin, 0.06);
   for (let i = 0; i < n; i++) {
     q.fromBufferAttribute(pos, i);
     nrm.set(q.x, q.y - ycAt(q.z), 0).normalize();
     dirs.set([nrm.x, nrm.y, nrm.z], i * 3);
     for (const j of S.trunkSkin) {
-      // (peau de la même tranche : à moins de 2,5 cm en z, à moins de 6 cm de côté dans la tranche)
+      // (peau de la même tranche : à moins de dzWin en z, à moins de 6 cm de côté dans la tranche)
       const dz = cp.getZ(j) - q.z;
-      if (dz * dz > 0.025 * 0.025) continue;
+      if (dz * dz > dzWin * dzWin) continue;
       const dx = cp.getX(j) - q.x;
       const dy = cp.getY(j) - q.y;
       const along = dx * nrm.x + dy * nrm.y;
@@ -2829,10 +2840,32 @@ export function realLegPose(md, kind, s, sg = null, t = null) {
     }
     if (sg) sg.position.y = -0.6 * md.legTop * sg.scale.y * s;
   } else if (kind === 'hoof') {
+    // Donner le sabot : fondu depuis la pose de l'allure (remplacer d'un coup ses angles faisait piquer la
+    // pince de 1 à 1,4 cm dans le sol au début du geste) ; coude et genou se plient d'abord, le sabot quitte
+    // le sol à plat, le boulet ne se plie qu'ensuite ; et la pince ne passe jamais sous le sol.
     const l = front[0];
-    l.pivot.rotation.x = -1.1 * s;
-    l.knee.rotation.x = 1.1 * s;
-    l.fetlock.rotation.x = 0.3 * s;
+    const b0 = l.pivot.rotation.x;
+    const b1 = l.knee.rotation.x;
+    const b2 = l.fetlock.rotation.x;
+    const pose = (a) => {
+      const w = smooth(0, 0.3, a);
+      l.pivot.rotation.x = b0 + (-1.1 * a - b0) * w;
+      l.knee.rotation.x = b1 + (1.1 * a - b1) * w;
+      l.fetlock.rotation.x = b2 + (0.3 * smooth(0.35, 1, a) - b2) * w;
+    };
+    pose(s);
+    // (pince ou talons sous le sol au début du geste : il est pris un peu plus loin, sabot plus haut)
+    if (s > 0 && legLow(md, l) < SOLE_GROUND - 1e-4) {
+      let lo = s;
+      let hi = 1;
+      for (let i = 0; i < 10; i++) {
+        const a = (lo + hi) / 2;
+        pose(a);
+        if (legLow(md, l) < SOLE_GROUND) lo = a;
+        else hi = a;
+      }
+      pose(hi);
+    }
   } else if (kind === 'bow') {
     bowPose(md, front, hind, s, sg);
   } else return false;
@@ -2866,6 +2899,23 @@ function jumpLegs(front, hind, t) {
     mix(l.knee, -0.2 * hp + 1.3 * hf);
     mix(l.fetlock, -0.25 * hp + 0.55 * hf);
   }
+}
+
+/**
+ * Point le plus bas de la sole d'un membre, dans le repère du cheval (origine au sol), par le produit des
+ * matrices locales (tronc, épaule ou hanche, coude ou grasset, genou ou jarret, boulet), comme le calage de
+ * RealHorseAnim.overlay : ni matrice du monde ni inversion.
+ */
+function legLow(md, l) {
+  md.body.updateMatrix();
+  l.top.updateMatrix();
+  l.pivot.updateMatrix();
+  l.knee.updateMatrix();
+  l.fetlock.updateMatrix();
+  _m.multiplyMatrices(md.body.matrix, l.top.matrix).multiply(l.pivot.matrix).multiply(l.knee.matrix).multiply(l.fetlock.matrix);
+  let low = Infinity;
+  for (const p of l.solePts) low = Math.min(low, _v.copy(p).applyMatrix4(_m).y);
+  return low;
 }
 
 const _mInv = new THREE.Matrix4();

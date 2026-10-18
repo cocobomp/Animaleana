@@ -119,6 +119,81 @@ describe('révérence du cheval réaliste (spectacle)', () => {
   });
 });
 
+describe('couverture du cheval réaliste', () => {
+  it('Shetland au galop : la peau de la croupe et des hanches ne passe pas par-dessus la couverture', async () => {
+    const { buildGear } = await import('../src/game/gearModels.js');
+    const a = animal('shetland', { seed: 1234 });
+    const md = horse(a);
+    const own = new Set(md.bounds.meshes);
+    buildGear(md, a.look, { blanket: { item: 'blanketRain', color: 'navy' } });
+    // (la nappe : la plus grande des pièces ajoutées, liées au squelette)
+    const shell = md.bounds.meshes.filter((m) => !own.has(m))
+      .sort((x, y) => y.geometry.attributes.position.count - x.geometry.attributes.position.count)[0];
+    const coat = md.coatMesh;
+    const g = coat.geometry;
+    // Peau de la moitié arrière du tronc (hanches, dos, côtes) : rayon vers l'intérieur, le long de la normale
+    // déformée ; s'il touche la couverture à moins de 5 cm, la peau est passée par-dessus le tissu.
+    const rear = [];
+    for (let i = 0; i < g.attributes.position.count; i++) if (g.attributes.position.getZ(i) < -0.2 && g.attributes.position.getY(i) > md.legTop) rear.push(i);
+    const gallop = { v: 8.5 * md.speedScale, moving: true, graze: 0, feeder: 0, turn: 0, fat: 1 };
+    for (let f = 0; f < 60; f++) md.anim.update(1 / 60, gallop, {});
+    const p = new THREE.Vector3();
+    const q = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    const tri = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    const ray = new THREE.Ray();
+    const hit = new THREE.Vector3();
+    let through = 0;
+    for (let f = 0; f < 6; f++) {
+      md.anim.update(0.075, gallop, {});
+      md.root.updateMatrixWorld(true);
+      const sp = shell.geometry.attributes.position;
+      const S = new Float32Array(sp.count * 3);
+      for (let i = 0; i < sp.count; i++) shell.getVertexPosition(i, p).applyMatrix4(shell.matrixWorld).toArray(S, i * 3);
+      const idx = shell.geometry.index.array;
+      for (const i of rear) {
+        coat.getVertexPosition(i, p);
+        q.fromBufferAttribute(g.attributes.position, i).addScaledVector(n.fromBufferAttribute(g.attributes.normal, i), 0.01);
+        coat.applyBoneTransform(i, q);
+        n.subVectors(q, p).normalize();
+        p.applyMatrix4(coat.matrixWorld);
+        ray.set(p, n.negate());
+        for (let t = 0; t < idx.length; t += 3) {
+          for (let k = 0; k < 3; k++) tri[k].fromArray(S, idx[t + k] * 3);
+          if (ray.intersectTriangle(tri[0], tri[1], tri[2], false, hit) && hit.distanceTo(p) < 0.05) {
+            through++;
+            break;
+          }
+        }
+      }
+    }
+    // (avant : un ou deux points à chaque image, au bord arrière, sur la hanche droite et la gauche)
+    expect(through).toBe(0);
+    md.dispose();
+  }, 30000);
+});
+
+describe('« donner le sabot » (tour du spectacle)', () => {
+  it.each(['selle_francais', 'shetland', 'percheron', 'pur_sang'])('%s : le sabot levé ne passe jamais sous le sol', (breed) => {
+    const md = horse(animal(breed));
+    const l = md.legs[0];
+    const p = new THREE.Vector3();
+    let low = Infinity;
+    for (let f = 1; f < 120; f++) {
+      // (amplitude du tour : min(1, 1,8 sin(πk)), Activities.animateTrick)
+      const s = Math.min(1, Math.sin((Math.PI * f) / 120) * 1.8);
+      md.anim.update(1 / 60, still(), {});
+      realLegPose(md, 'hoof', s);
+      md.root.updateMatrixWorld(true);
+      // (points de la sole, 3 mm au-dessus de la vraie sole : celle-ci au sol ou au-dessus)
+      for (const q of l.solePts) low = Math.min(low, p.copy(q).applyMatrix4(l.fetlock.matrixWorld).y - 0.003);
+    }
+    // (avant : la pince ou les talons piquaient de 1,2 à 1,5 cm au début du geste)
+    expect(low).toBeGreaterThan(-0.001);
+    md.dispose();
+  });
+});
+
 describe('saut d\'obstacle du cheval réaliste', () => {
   it('le cheval bascule autour de son centre et le cavalier reste en selle (il bascule avec lui)', async () => {
     const { pitchAbout } = await import('../src/game/Activities.js');

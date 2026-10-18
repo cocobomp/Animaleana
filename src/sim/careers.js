@@ -16,6 +16,7 @@
 //     earned: { vet: 0 },             // argent gagné grâce au métier
 //     reputation: { vet: 50 },        // réputation par métier (0 à 100)
 //     proposed: { vet: day },         // dernier jour où on a proposé ce métier (pas trop souvent)
+//     proposedDay: day,               // dernier jour où on a proposé un métier, n'importe lequel (une fenêtre par jour)
 //     hints: {},                      // petites phrases dites une seule fois
 //     diplomas: { vet: day },         // diplôme d'une école (src/sim/vetSchool.js) : on peut commencer avant le niveau
 //   }
@@ -282,6 +283,7 @@ export function startCareer(profile, id, day = 1, ctx = {}) {
   st.earned[id] = st.earned[id] ?? 0;
   reputationOf(profile, id);
   st.active = id;
+  st.proposedDay = day; // on vient de choisir un métier : pas d'autre proposition aujourd'hui
   profile.stats = profile.stats ?? {};
   profile.stats.careersStarted = (profile.stats.careersStarted ?? 0) + 1;
   return { ok: true };
@@ -349,7 +351,8 @@ const questsDone = (profile, objectives) => (objectives ? objectives.filter((o) 
  * Faut-il proposer ce métier maintenant ?
  * ctx : { level, day, objectives?, building? (le joueur vient de toucher ce bâtiment) }
  * On propose quand on est prêt (niveau et quêtes), ou quand on touche le bâtiment du métier,
- * et pas plus d'une fois par jour.
+ * et pas plus d'une fois par jour, tous métiers confondus : sinon, dès qu'un métier était commencé (ou refusé),
+ * le suivant se proposait au tick d'après, et l'enfant voyait six fenêtres « Un nouveau métier ? » d'affilée.
  */
 export function shouldPropose(profile, id, ctx) {
   const def = CAREERS[id];
@@ -357,12 +360,15 @@ export function shouldPropose(profile, id, ctx) {
   if ((ctx.level ?? 1) < def.level && !hasCareerDiploma(profile, id)) return false;
   const st = careerState(profile);
   if (st.proposed[id] !== undefined && ctx.day - st.proposed[id] < 1) return false;
+  if (st.proposedDay !== undefined && ctx.day - st.proposedDay < 1) return false;
   if (ctx.building) return ctx.building === def.building;
   return questsDone(profile, ctx.objectives) >= QUESTS_FOR_CAREER;
 }
 
 export function markProposed(profile, id, day) {
-  careerState(profile).proposed[id] = day;
+  const st = careerState(profile);
+  st.proposed[id] = day;
+  st.proposedDay = day;
 }
 
 /** Une petite phrase dite une seule fois (ex. « tu pourrais ouvrir une pension un jour »). */

@@ -547,6 +547,12 @@ export class UI {
     while (box.children.length > 1 && box.getBoundingClientRect().bottom > limit) box.firstChild.remove();
   }
 
+  /** Millisecondes depuis la fermeture de la dernière fenêtre (0 si une fenêtre est ouverte ou attend). */
+  sinceModal() {
+    if (this.modalOpen || this.modalQueue.length) return 0;
+    return this.modalClosedAt === undefined ? Infinity : performance.now() - this.modalClosedAt;
+  }
+
   isBlocking() {
     // tripBlocking : écran du trajet ; vxOpen : examen ou leçon vétérinaire ouverts (src/ui/vetExam.js)
     return this.modalOpen || !this.screen.hidden || !!this.tripBlocking || this.vxOpen > 0;
@@ -607,6 +613,7 @@ export class UI {
 
   hideModal() {
     this.modalOpen = false;
+    this.modalClosedAt = performance.now();
     this.modal.hidden = true;
     document.body.classList.remove('modal-open');
     this.syncModalTop();

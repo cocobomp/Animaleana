@@ -37,6 +37,7 @@ export const WAY = { x: 13, z: 1.2 };
 const MEET = { x: 5, z: -2.5 };
 const CLINIC = { x: 11.3, z: 9 }; // devant la porte du vétérinaire du village
 const AUTO_VET_HOURS = 1.5; // temps passé chez le vétérinaire du village
+const CAREER_OFFER_PAUSE = 20000; // ms sans fenêtre avant de proposer un métier
 /** Le chemin des visiteurs (réutilisé par les maîtres de l'éducateur canin, src/game/DogTrainer.js). */
 export const VISITOR_PATH = { GATE, WAY, MEET };
 
@@ -573,7 +574,7 @@ export class Clients {
 
   // ------------------------------------------------------------ métiers
 
-  /** On propose un métier quand on est prêt (niveau, quêtes) — au plus une proposition par jour. */
+  /** On propose un métier quand on est prêt (niveau, quêtes) — au plus une proposition par jour, tous métiers confondus. */
   maybeProposeCareer(building = null) {
     const g = this.game;
     const p = g.profile;
@@ -581,6 +582,10 @@ export class Clients {
     // Pas au milieu d'une activité (reprise de dressage, parcours, barrage…) : la fenêtre cachait la carrière
     // et mettait les résultats en attente. Elle reviendra plus tard.
     if (g.activities?.active) return;
+    // Ni à cheval (la fenêtre arrivait pile quand on montait et bloquait le cheval), ni pendant qu'on charge
+    // un voyage, ni tout de suite après une autre fenêtre (on vient d'en fermer une : on souffle un peu).
+    if (g.player?.mount || g.tripFlow?.loading || g.tripFlow?.journey) return;
+    if (g.ui.sinceModal?.() < CAREER_OFFER_PAUSE) return;
     const ctx = { level: g.level, day: g.day, objectives: OBJECTIVES, building };
     const id = CAREER_IDS.find((k) => shouldPropose(p, k, ctx));
     if (!id) return;

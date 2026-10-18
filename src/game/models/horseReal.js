@@ -26,8 +26,9 @@ export const REAL_HORSE_KEY = 'horse_real';
 export const NECK_REST = 0.85;
 
 // Vitesse « naturelle » de chaque allure du GLB (m/s, cheval de taille 1, voir tools/cheval/gait2.py) :
-// à cette vitesse, les sabots posés du modèle d'origine ne glissent pas. Pour une race, elle est mesurée
-// sur ses sabots (RealHorseAnim.measureGaits) ; le clip est accéléré ou ralenti d'autant.
+// à cette vitesse, les sabots posés du modèle d'origine ne glissent pas. Pour une race, les allures sont
+// recalées sur ses membres et la vitesse mesurée sur ses sabots (lockedGaits) ; le clip est accéléré ou
+// ralenti d'autant.
 export const NATURAL_SPEED = { walk: 1.6, trot: 3.0, canter: 4.6, canterR: 4.6, gallop: 8.5 };
 const MOVING = ['walk', 'trot', 'canter', 'gallop'];
 const STILL = ['idle', 'rest', 'eat'];
@@ -179,6 +180,7 @@ export function realHorseBase(gltf) {
   });
   const base = { prims, rest, rot, groupRest, headTilt, zShift, snout };
   base.eyes = openEyelids(prims, chanfrein);
+  mapEyes(prims, base.eyes, chanfrein);
   base.hair = hairInfo(prims, rest);
   base.clips = retarget(gltf, toHorse, restW, groupRest, zShift);
   base.sole = solesOf(prims.coat, rest);
@@ -285,6 +287,119 @@ function openEyelids(prims, chanfrein) {
   }
   eyes.flips = flips;
   return eyes;
+}
+
+/**
+ * Œil vivant (voir eyeMaterial) : pour chaque globe, la partie que les paupières laissent voir (sommets du côté
+ * extérieur dont le rayon, le long de la normale, sort sans toucher le pelage), son centre (axe du regard) et
+ * son étendue ; puis des UV projetées sur le plan du regard (iris peint centré sur l'ouverture, pupille
+ * horizontale le long du chanfrein) et l'axe du regard par sommet (attribut eyeAxis : le reflet du soleil y
+ * reste dans l'ouverture). Ajoute à chaque œil { axis, cap } (cap : angle de l'ouverture, rad).
+ */
+function mapEyes(prims, eyes, chanfrein) {
+  const eye = prims.eye;
+  const coat = prims.coat;
+  if (!eye || !coat || !eyes.length) return;
+  const f = V(0, chanfrein.y, chanfrein.z).normalize();
+  const up = V().crossVectors(f, V(1, 0, 0)).normalize();
+  if (up.y < 0) up.negate();
+  const uv = new Float32Array(eye.count * 2);
+  const axis = new Float32Array(eye.count * 3);
+  const P = coat.pos;
+  const d = V();
+  const e1 = V();
+  const e2 = V();
+  const pv = V();
+  const tv = V();
+  const qv = V();
+  for (const E of eyes) {
+    const reach = 8 * E.r;
+    // Triangles du pelage autour de l'œil (sommets en coordonnées absolues, à plat).
+    const tri = [];
+    for (let t = 0; t < coat.index.length; t += 3) {
+      let near = true;
+      for (let k = 0; k < 3 && near; k++) {
+        const o = coat.index[t + k] * 3;
+        near = (P[o] - E.c.x) ** 2 + (P[o + 1] - E.c.y) ** 2 + (P[o + 2] - E.c.z) ** 2 < reach * reach;
+      }
+      if (near) for (let k = 0; k < 3; k++) tri.push(coat.index[t + k] * 3);
+    }
+    // Rayon (Möller-Trumbore) depuis le sommet, le long de la normale du globe : touche-t-il le pelage ?
+    const blocked = (ox, oy, oz) => {
+      for (let t = 0; t < tri.length; t += 3) {
+        const a = tri[t];
+        const b = tri[t + 1];
+        const c = tri[t + 2];
+        e1.set(P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]);
+        e2.set(P[c] - P[a], P[c + 1] - P[a + 1], P[c + 2] - P[a + 2]);
+        pv.crossVectors(d, e2);
+        const det = e1.dot(pv);
+        if (Math.abs(det) < 1e-12) continue;
+        const inv = 1 / det;
+        tv.set(ox - P[a], oy - P[a + 1], oz - P[a + 2]);
+        const u = tv.dot(pv) * inv;
+        if (u < 0 || u > 1) continue;
+        qv.crossVectors(tv, e1);
+        const v = d.dot(qv) * inv;
+        if (v < 0 || u + v > 1) continue;
+        const s = e2.dot(qv) * inv;
+        if (s > 1e-5 && s < reach) return true;
+      }
+      return false;
+    };
+    const G = V();
+    const seen = [];
+    for (let i = 0; i < eye.count; i++) {
+      if (Math.sign(eye.pos[i * 3]) !== E.side) continue;
+      d.fromArray(eye.pos, i * 3).sub(E.c).normalize();
+      if (d.x * E.side < 0.2) continue; // (côté extérieur seulement : vers l'intérieur, le rayon traverse la tête)
+      if (blocked(eye.pos[i * 3], eye.pos[i * 3 + 1], eye.pos[i * 3 + 2])) continue;
+      G.add(d);
+      seen.push(d.clone());
+    }
+    if (!seen.length) G.set(E.side, 0, 0);
+    G.normalize();
+    const ang = seen.map((x) => Math.acos(Math.min(1, x.dot(G)))).sort((a, b) => a - b);
+    const cap = Math.min(0.9, Math.max(0.35, ang[Math.floor(ang.length * 0.85)] ?? 0.5));
+    E.axis = G.clone();
+    E.cap = cap;
+    // Repère du regard : F le long de la fente des paupières (grand axe de la partie visible : la pupille
+    // horizontale lui est parallèle), U en travers, vers le haut de la tête.
+    const U0 = up.clone().addScaledVector(G, -up.dot(G)).normalize();
+    const F0 = V().crossVectors(U0, G);
+    let sxx = 0;
+    let sxy = 0;
+    let syy = 0;
+    for (const x of seen) {
+      const a = x.dot(F0);
+      const b = x.dot(U0);
+      sxx += a * a;
+      sxy += a * b;
+      syy += b * b;
+    }
+    const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+    const F = F0.clone().multiplyScalar(Math.cos(th)).addScaledVector(U0, Math.sin(th));
+    const U = V().crossVectors(G, F);
+    if (U.dot(up) < 0) U.negate();
+    const R = Math.sin(Math.min(1.2, cap * 1.15));
+    for (let i = 0; i < eye.count; i++) {
+      if (Math.sign(eye.pos[i * 3]) !== E.side) continue;
+      d.fromArray(eye.pos, i * 3).sub(E.c).normalize();
+      let x = d.dot(F) / R;
+      let y = d.dot(U) / R;
+      const l = Math.hypot(x, y);
+      // (derrière le bord de l'iris, et sur la moitié cachée du globe : couleur du bord)
+      if (d.dot(G) < 0 || l > 1) {
+        x /= Math.max(l, 1e-6);
+        y /= Math.max(l, 1e-6);
+      }
+      uv[i * 2] = 0.5 + 0.5 * x * E.side;
+      uv[i * 2 + 1] = 0.5 + 0.5 * y;
+      axis.set([G.x, G.y, G.z], i * 3);
+    }
+  }
+  eye.uv = uv;
+  eye.axis = axis;
 }
 
 /** z du creux du dos (ligne du dessus entre garrot et hanches). */
@@ -884,7 +999,8 @@ function shapeFor(base, B) {
       hAO: new THREE.BufferAttribute(ao, 1),
       hHead: new THREE.BufferAttribute(headW, 1),
     }),
-    eyeGeo: geo(de, base.prims.eye),
+    // (axe du regard par sommet : le reflet reste dans l'ouverture des paupières, eyeMaterial)
+    eyeGeo: geo(de, base.prims.eye, base.prims.eye.axis ? { eyeAxis: new THREE.BufferAttribute(base.prims.eye.axis, 3) } : null),
     maneGeo: geo(dm, base.prims.mane, { hairG: new THREE.BufferAttribute(base.hair.g, 1) }),
     // Boîtes par os (culling, voir horseBounds), sur les trois primitives de la race.
     boneBox: emptyBoneBoxes(),
@@ -1481,11 +1597,144 @@ function featherCards(S, B, look) {
   return cards;
 }
 
+/**
+ * Iris du cheval (toile 256², partagée) : brun foncé, fibres rayonnantes et petites taches claires, bord plus
+ * sombre ; pupille horizontale presque noire, grains de suie (corpora nigra) sur son bord supérieur. UV
+ * projetées sur l'ouverture des paupières (mapEyes) : le centre de la toile est le centre du regard.
+ */
+let eyeTex = null;
+function eyeTexture() {
+  if (eyeTex) return eyeTex;
+  const S = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  if (!ctx) {
+    // (sans toile 2D : un brun uni)
+    eyeTex = new THREE.DataTexture(new Uint8Array([74, 45, 24, 255]), 1, 1);
+    eyeTex.colorSpace = THREE.SRGBColorSpace;
+    eyeTex.needsUpdate = true;
+    eyeTex.userData.shared = true;
+    return eyeTex;
+  }
+  const h = S / 2;
+  const rng = mulberry(77);
+  ctx.fillStyle = '#140c07';
+  ctx.fillRect(0, 0, S, S);
+  const R = S * 0.47;
+  const g = ctx.createRadialGradient(h, h, 0, h, h, R);
+  g.addColorStop(0, '#6e4727');
+  g.addColorStop(0.35, '#5c391d');
+  g.addColorStop(0.72, '#432814');
+  g.addColorStop(0.9, '#2a180c');
+  g.addColorStop(1, '#170e07');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(h, h, R, 0, Math.PI * 2);
+  ctx.fill();
+  // fibres et taches de l'iris
+  for (let i = 0; i < 170; i++) {
+    const a = rng() * Math.PI * 2;
+    const r0 = R * (0.2 + rng() * 0.15);
+    const r1 = R * (0.7 + rng() * 0.28);
+    ctx.strokeStyle = rng() < 0.5 ? 'rgba(150,98,52,0.16)' : 'rgba(24,13,6,0.22)';
+    ctx.lineWidth = 1 + rng() * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(h + Math.cos(a) * r0, h + Math.sin(a) * r0);
+    ctx.lineTo(h + Math.cos(a) * r1, h + Math.sin(a) * r1);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 26; i++) {
+    const a = rng() * Math.PI * 2;
+    const r = R * (0.35 + rng() * 0.4);
+    ctx.fillStyle = 'rgba(176,122,66,0.22)';
+    ctx.beginPath();
+    ctx.arc(h + Math.cos(a) * r, h + Math.sin(a) * r, 1.5 + rng() * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // pupille horizontale (bord adouci), un peu au-dessus du centre de la partie visible, et grains de suie
+  // au-dessus
+  const pw = S * 0.2;
+  const ph = S * 0.085;
+  const py = h - S * 0.035;
+  for (const [k, col] of [[1.2, 'rgba(10,6,4,0.55)'], [1, '#040302']]) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.ellipse(h, py, pw * k, ph * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const [dx, r] of [[-0.09, 0.034], [-0.03, 0.044], [0.035, 0.04], [0.09, 0.03]]) {
+    ctx.fillStyle = '#21140b';
+    ctx.beginPath();
+    ctx.arc(h + dx * S, py - ph * 0.85, r * S, Math.PI, Math.PI * 2);
+    ctx.fill();
+  }
+  eyeTex = new THREE.CanvasTexture(c);
+  eyeTex.colorSpace = THREE.SRGBColorSpace;
+  eyeTex.userData.shared = true;
+  return eyeTex;
+}
+
+/**
+ * Œil vivant : iris brun foncé visible (eyeTexture) sous une cornée brillante (reflet du ciel par la carte
+ * d'environnement) et un reflet net du soleil qui suit la lumière : là où la normale du globe est la
+ * bissectrice de la lumière et du regard de la caméra, ramené dans l'ouverture des paupières si ce point est
+ * caché (axe du regard eyeAxis, mapEyes). De loin, le reflet tient dans un pixel, assombri d'autant
+ * (fwidth) : jamais un œil blanc. Quelques instructions sur les seuls pixels des yeux.
+ */
+const EYE_CAP = 0.24; // (le reflet reste à moins de 0,24 rad du centre de l'ouverture)
 function eyeMaterial() {
   const high = gfx.quality === 'high';
-  return high
-    ? new THREE.MeshPhysicalMaterial({ color: 0x120a06, roughness: 0.12, clearcoat: 0.8, clearcoatRoughness: 0.08 })
-    : new THREE.MeshStandardMaterial({ color: 0x140c08, roughness: 0.15 });
+  const map = eyeTexture();
+  const m = high
+    ? new THREE.MeshPhysicalMaterial({ map, roughness: 0.34, clearcoat: 1, clearcoatRoughness: 0.05 })
+    : new THREE.MeshStandardMaterial({ map, roughness: 0.16 });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute vec3 eyeAxis;
+varying vec3 vEyeAxis;`)
+      .replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
+{
+  vec3 eyeA = eyeAxis;
+  #ifdef USE_SKINNING
+    eyeA = ( skinMatrix * vec4( eyeA, 0.0 ) ).xyz;
+  #endif
+  vEyeAxis = normalMatrix * eyeA;
+}`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vEyeAxis;
+// Reflet d'une lumière de direction L (repère de la vue) sur le globe : disque de rayon angulaire a1 (bord
+// net à partir de a0), centré sur la bissectrice ramenée dans l'ouverture.
+float eyeGlint( vec3 L, vec3 V, vec3 G, vec3 N, float a0, float a1 ) {
+  vec3 H = normalize( L + V );
+  float c = dot( H, G );
+  if ( c < ${Math.cos(EYE_CAP).toFixed(5)} ) {
+    vec3 s = H - G * c;
+    float l = length( s );
+    H = l > 1e-4 ? G * ${Math.cos(EYE_CAP).toFixed(5)} + s / l * ${Math.sin(EYE_CAP).toFixed(5)} : G;
+  }
+  float a = acos( clamp( dot( N, H ), -1.0, 1.0 ) );
+  // (de loin, le disque est élargi à un demi-pixel et assombri d'autant : la même lumière, pas un œil gris)
+  float b = max( a1, a0 + 0.5 * fwidth( a ) );
+  return ( 1.0 - smoothstep( a0, b, a ) ) * ( a1 * a1 ) / ( b * b );
+}`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+{
+  vec3 eyeG = normalize( vEyeAxis );
+  vec3 eyeV = normalize( vViewPosition );
+  vec3 glint = vec3( 0.0 );
+  #if NUM_DIR_LIGHTS > 0
+    vec3 eyeL = directionalLights[ 0 ].direction;
+    // (soleil derrière la tête : reflet plus faible, jamais éteint)
+    glint += directionalLights[ 0 ].color * eyeGlint( eyeL, eyeV, eyeG, normal, 0.07, 0.12 ) * ( 0.3 + 0.7 * smoothstep( -0.5, 0.3, dot( eyeL, eyeG ) ) ) * 1.6;
+  #endif
+  reflectedLight.directSpecular += glint;
+}`);
+  };
+  m.customProgramCacheKey = () => 'horsereal-eye';
+  return m;
 }
 
 /** Ombre de contact douce, partagée (comme horseModel.js). */
@@ -1680,7 +1929,10 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   };
   for (const e of model.ears) e.userData.side = e === model.ears[0] ? 1 : -1;
   model.skinGear = (mesh) => skinGear(model, S, mesh, hb);
-  model.anim = new RealHorseAnim(model, base.clips);
+  // Allures de la race aux appuis calés au sol (lockedGaits) : faites une fois par gabarit, au premier pas
+  // d'un cheval de ce gabarit (les vignettes et les chevaux à l'arrêt n'en ont pas besoin).
+  model.lockGaits = () => (S.gaits ??= lockedGaits(model, base.clips));
+  model.anim = new RealHorseAnim(model, S.gaits ?? base.clips);
   hb.anim = model.anim;
   model.bounds = hb;
   // Version réduite (LOD) : 0 complète, 1 réduite (index simplifié du GLB, ≈ 6 300 triangles au lieu de
@@ -1923,6 +2175,261 @@ class HorseMesh extends THREE.SkinnedMesh {
   }
 }
 
+// ------------------------------------------------------------------ appuis calés au sol (par race)
+
+/** Échantillons par seconde des allures recalées (le GLB en a 25 : au galop, trois clés seulement par appui). */
+const LOCK_RATE = 100;
+/** Hauteur des points de la sole posée (legs.solePts sont 3 mm au-dessus de la vraie sole : celle-ci est au sol). */
+const SOLE_GROUND = 0.003;
+
+/**
+ * Allures de la race aux appuis calés. Les clips du GLB ont 25 clés par seconde (au galop : trois par
+ * appui) et des membres à la longueur du modèle d'origine : entre deux clés, la rotation interpolée des
+ * articulations fait flotter ou glisser le sabot posé, et une autre longueur de membre change la foulée ;
+ * en fin de soutien, le sabot arrivait au sol en avançant encore avec le corps (pas de rétraction).
+ * Pour chaque allure, sur ce gabarit : clip échantillonné à LOCK_RATE ; pour chaque membre, l'appui (sole
+ * à moins d'un centimètre du sol) ; la pince y suit une droite à la vitesse de l'allure (moindres
+ * carrés, même vitesse pour les quatre membres), sole posée au sol, et le sabot y est tenu un peu avant
+ * de se poser et un peu après s'être levé, d'autant plus qu'il est près du sol (fondu) : il descend sur sa
+ * place et se lève sans traîner. Cinématique inverse (solveLeg), sabot gardant l'orientation du clip.
+ * Renvoie { clips, natural } (natural : vitesse de chaque allure, m/s, cheval de taille 1 : jouée à
+ * v ÷ natural, la pince posée reste immobile). Une fois par gabarit (≈ 25 ms, au premier pas).
+ * Mesuré sur les 33 races (60 im/s, pince posée) : glissement moyen par appui au galop 2,1 → 0,13 cm, pire
+ * appui 5,8 → 0,8 cm ; petit galop 1,4 → 0,1 cm ; pas et trot 0,8 et 0,7 → 0,2 et 0,1 cm.
+ */
+function lockedGaits(model, clips) {
+  const root = model.root;
+  const groups = model.groups;
+  const legs = model.legs;
+  const saved = groups.map((g) => [g.position.clone(), g.quaternion.clone(), g.scale.clone()]);
+  // (sans embonpoint ni respiration : les allures calées servent à tous les chevaux du gabarit)
+  for (const g of groups) g.scale.set(1, 1, 1);
+  const mixer = new THREE.AnimationMixer(root);
+  const out = { ...clips };
+  const natural = {};
+  const qIdx = [];
+  RIG.forEach(([n], j) => {
+    if (!n.startsWith('Mane') && n !== 'Ribs') qIdx.push(j);
+  });
+  const legQ = legs.map((l) => [l.top, l.pivot, l.knee, l.fetlock].map((g) => qIdx.indexOf(groups.indexOf(g))));
+  const toRoot = new THREE.Matrix4();
+  const P4 = V();
+  const T = V();
+  const Qf = new THREE.Quaternion();
+  const Qk = new THREE.Quaternion();
+  for (const name of RIDER_KEYS) {
+    const clip = clips[name];
+    if (!clip) continue;
+    const D = clip.duration;
+    const N = Math.max(12, Math.round(D * LOCK_RATE));
+    const dt = D / N;
+    mixer.stopAllAction();
+    const action = mixer.clipAction(clip);
+    action.play();
+    action.setEffectiveWeight(1);
+    // 1) Pose du clip à chaque échantillon : rotations des groupes, position du tronc, pince et sole.
+    const Q = qIdx.map(() => new Float32Array((N + 1) * 4));
+    const bodyP = new Float32Array((N + 1) * 3);
+    const toe = legs.map(() => new Float32Array(N * 3));
+    const low = legs.map(() => new Float32Array(N));
+    const pose = (s) => {
+      for (let k = 0; k < qIdx.length; k++) groups[qIdx[k]].quaternion.fromArray(Q[k], s * 4);
+      groups[0].position.fromArray(bodyP, s * 3);
+      root.updateMatrixWorld(true);
+      toRoot.copy(root.matrixWorld).invert();
+    };
+    for (let s = 0; s < N; s++) {
+      action.time = s * dt;
+      mixer.update(0);
+      for (let k = 0; k < qIdx.length; k++) groups[qIdx[k]].quaternion.toArray(Q[k], s * 4);
+      groups[0].position.toArray(bodyP, s * 3);
+      pose(s);
+      legs.forEach((l, i) => {
+        let lo = Infinity;
+        for (const p of l.solePts) lo = Math.min(lo, _v.copy(p).applyMatrix4(l.fetlock.matrixWorld).applyMatrix4(toRoot).y);
+        low[i][s] = lo;
+        _v.copy(l.solePts[0]).applyMatrix4(l.fetlock.matrixWorld).applyMatrix4(toRoot).toArray(toe[i], s * 3);
+      });
+    }
+    // 2) Appui de chaque membre : la plus longue suite (circulaire) d'échantillons sole à moins de 1 cm, et
+    // la droite de la pince (pente commune aux quatre membres).
+    const stances = legs.map((l, i) => {
+      const on = Array.from(low[i], (y) => y < SOLE_GROUND + 0.01);
+      if (on.every(Boolean) || !on.some(Boolean)) return null;
+      // Trous comblés : un sabot qui flotte à moins de 2,5 cm au milieu ou au bout de l'appui puis revient au
+      // sol pour basculer sur la pince (membres d'une autre longueur que le modèle d'origine : le clip l'y
+      // laissait flotter) fait partie de l'appui ; un sabot qui se lève pour de bon ne revient pas.
+      const runOf = () => {
+        let best = null;
+        for (let s = 0; s < N; s++) {
+          if (!on[s] || on[(s - 1 + N) % N]) continue;
+          let n = 0;
+          while (n < N && on[(s + n) % N]) n++;
+          if (!best || n > best[1]) best = [s, n];
+        }
+        return best;
+      };
+      const longest = runOf()[1];
+      const maxGap = Math.max(2, Math.round(N * 0.25));
+      for (let s = 0; s < N; s++) {
+        if (on[s] || !on[(s - 1 + N) % N]) continue;
+        let g = 0;
+        while (g <= maxGap && !on[(s + g) % N] && low[i][(s + g) % N] < SOLE_GROUND + 0.025) g++;
+        if (g <= maxGap && on[(s + g) % N] && (g <= 2 || g < N - longest - g)) for (let k = 0; k < g; k++) on[(s + k) % N] = true;
+      }
+      if (on.every(Boolean)) return null;
+      const [s0, n] = runOf();
+      let st = 0;
+      let sz = 0;
+      let stt = 0;
+      let stz = 0;
+      let sx = 0;
+      for (let k = 0; k < n; k++) {
+        const s = (s0 + k) % N;
+        const tau = (s0 + k) * dt;
+        const z = toe[i][s * 3 + 2];
+        st += tau;
+        sz += z;
+        stt += tau * tau;
+        stz += tau * z;
+        sx += toe[i][s * 3];
+      }
+      const tb = st / n;
+      const zb = sz / n;
+      const slope = n > 2 ? (stz / n - tb * zb) / Math.max(1e-9, stt / n - tb * tb) : 0;
+      return { s0, n, tb, zb, xb: sx / n, slope };
+    });
+    const fit = stances.filter(Boolean);
+    if (!fit.length) continue;
+    const v = -fit.reduce((a, b) => a + b.slope * b.n, 0) / fit.reduce((a, b) => a + b.n, 0);
+    if (v > 0.2) natural[name] = v;
+    // 3) Correction de chaque échantillon : sabot déplacé (sans tourner) vers sa place, cinématique inverse.
+    for (let s = 0; s < N; s++) {
+      pose(s);
+      legs.forEach((l, i) => {
+        const A = stances[i];
+        if (!A) return;
+        const swing = (N - A.n) * dt;
+        const ramp = Math.max(dt, Math.min(0.4 * A.n * dt, 0.3 * swing));
+        // (avant la pose : dIn échantillons ; après le lever : dOut)
+        const k = (s - A.s0 + N) % N;
+        const inside = k < A.n;
+        const dIn = (A.s0 - s + N) % N;
+        const dOut = k - (A.n - 1);
+        let w = 1;
+        let tau = (A.s0 + k) * dt;
+        const h = low[i][s] - SOLE_GROUND;
+        if (!inside) {
+          // Près de l'appui (temps) et près du sol (hauteur) : de plus en plus tenu à sa place au sol.
+          const before = dIn <= dOut;
+          const d = (before ? dIn : dOut) * dt;
+          w = (1 - smooth(0, ramp, d)) * (1 - smooth(0.03, 0.07, h));
+          tau = before ? (A.s0 - dIn) * dt : (A.s0 + A.n - 1 + dOut) * dt;
+        }
+        const tz = toe[i][s * 3 + 2];
+        const tx = toe[i][s * 3];
+        const dz = w * (A.zb - v * (tau - A.tb) - tz);
+        const dx = w * (A.xb - tx);
+        // (sole posée au sol pendant l'appui ; jamais dessous)
+        const dy = inside ? -h : Math.max(0, -h);
+        if (Math.abs(dz) + Math.abs(dx) + Math.abs(dy) < 1e-5) return;
+        // Boulet visé, orientation du sabot gardée (repère du cheval).
+        l.fetlock.getWorldPosition(P4).applyMatrix4(toRoot);
+        T.copy(P4).add(_w.set(dx, dy, dz));
+        l.fetlock.getWorldQuaternion(Qf);
+        solveLeg(l, T, toRoot);
+        l.knee.updateMatrixWorld(true);
+        l.fetlock.quaternion.copy(l.knee.getWorldQuaternion(Qk).invert().multiply(Qf));
+        const [kt, kp, kk, kf] = legQ[i];
+        l.top.quaternion.toArray(Q[kt], s * 4);
+        l.pivot.quaternion.toArray(Q[kp], s * 4);
+        l.knee.quaternion.toArray(Q[kk], s * 4);
+        l.fetlock.quaternion.toArray(Q[kf], s * 4);
+      });
+    }
+    // 4) Clip : boucle fermée (dernière clé = première), quaternions continus.
+    const times = new Float32Array(N + 1);
+    for (let s = 0; s <= N; s++) times[s] = s * dt;
+    bodyP.copyWithin(N * 3, 0, 3);
+    for (const q of Q) {
+      q.copyWithin(N * 4, 0, 4);
+      for (let s = 1; s <= N; s++) {
+        const o = s * 4;
+        if (q[o] * q[o - 4] + q[o + 1] * q[o - 3] + q[o + 2] * q[o - 2] + q[o + 3] * q[o - 1] < 0) {
+          for (let c = 0; c < 4; c++) q[o + c] = -q[o + c];
+        }
+      }
+    }
+    const tracks = [new THREE.VectorKeyframeTrack('gSpine.position', times, bodyP)];
+    qIdx.forEach((j, k) => tracks.push(new THREE.QuaternionKeyframeTrack(`g${RIG[j][0]}.quaternion`, times, Q[k])));
+    out[name] = new THREE.AnimationClip(name, D, tracks);
+  }
+  mixer.stopAllAction();
+  mixer.uncacheRoot(root);
+  groups.forEach((g, i) => {
+    g.position.copy(saved[i][0]);
+    g.quaternion.copy(saved[i][1]);
+    g.scale.copy(saved[i][2]);
+  });
+  root.updateMatrixWorld(true);
+  return { clips: out, natural };
+}
+
+const _ik = { p: [V(), V(), V()], j: [V(), V(), V()], e: V(), a: V(), m: new THREE.Matrix3(), best: [0, 1, 2].map(() => new THREE.Quaternion()) };
+/** Poids de l'épaule ou de la hanche dans la cinématique inverse (elle bouge peu : surtout coude et genou). */
+const IK_TOP = 0.35;
+
+/**
+ * Cinématique inverse d'un membre : rotations autour de l'axe x local de l'épaule (ou de la hanche, peu),
+ * du coude (ou du grasset) et du genou (ou du jarret) pour amener le boulet en T (repère toRoot). Moindres
+ * carrés amortis : le plus petit changement de pose, sans à-coup près du membre tendu ; un pas qui
+ * éloigne le boulet est annulé (pas suivant deux fois plus court). Hors d'atteinte : la pose la plus
+ * proche. Renvoie la distance restante.
+ */
+function solveLeg(l, T, toRoot) {
+  const J = [l.top, l.pivot, l.knee];
+  const { p, j, e, a, m, best } = _ik;
+  const wt = [IK_TOP, 1, 1];
+  let bestErr = Infinity;
+  let gain = 1;
+  for (let it = 0; it < 16; it++) {
+    l.top.updateMatrixWorld(true);
+    for (let k = 0; k < 3; k++) p[k].setFromMatrixPosition(J[k].matrixWorld).applyMatrix4(toRoot);
+    const P4 = _v.setFromMatrixPosition(l.fetlock.matrixWorld).applyMatrix4(toRoot);
+    e.subVectors(T, P4);
+    const err = e.lengthSq();
+    if (err < bestErr) {
+      bestErr = err;
+      for (let k = 0; k < 3; k++) best[k].copy(J[k].quaternion);
+    } else {
+      // (le pas a éloigné le boulet : retour à la meilleure pose, pas plus court)
+      for (let k = 0; k < 3; k++) J[k].quaternion.copy(best[k]);
+      gain *= 0.5;
+      continue;
+    }
+    if (err < 1e-8) break;
+    // dP4/dθ = axe × (P4 - articulation), axe x local de l'os dans le repère du cheval
+    for (let k = 0; k < 3; k++) {
+      j[k].crossVectors(a.setFromMatrixColumn(J[k].matrixWorld, 0).transformDirection(toRoot), _w.subVectors(P4, p[k])).multiplyScalar(wt[k]);
+    }
+    // (JᵀJ + λ) dθ = Jᵀ e
+    const lam = 0.005;
+    const el = m.elements;
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) el[c * 3 + r] = j[r].dot(j[c]) + (r === c ? lam : 0);
+    m.invert();
+    const b0 = j[0].dot(e);
+    const b1 = j[1].dot(e);
+    const b2 = j[2].dot(e);
+    for (let k = 0; k < 3; k++) {
+      const d = el[k] * b0 + el[3 + k] * b1 + el[6 + k] * b2;
+      J[k].rotateX(Math.max(-0.2, Math.min(0.2, d * gain)) * wt[k]);
+    }
+  }
+  for (let k = 0; k < 3; k++) J[k].quaternion.copy(best[k]);
+  l.top.updateMatrixWorld(true);
+  return Math.sqrt(bestErr);
+}
+
 // ------------------------------------------------------------------ animation
 
 /**
@@ -1932,8 +2439,11 @@ class HorseMesh extends THREE.SkinnedMesh {
  * crinière qui pend (souple), tête jusqu'à l'herbe quelle que soit la race.
  */
 class RealHorseAnim {
-  constructor(model, clips) {
+  /** gaits : allures déjà calées pour ce gabarit ({ clips, natural }), ou les clips du GLB (calés au premier pas). */
+  constructor(model, gaits) {
     this.model = model;
+    const clips = gaits.clips ?? gaits;
+    this.natural = null;
     this.mixer = new THREE.AnimationMixer(model.root);
     this.actions = {};
     this.w = {};
@@ -1974,6 +2484,34 @@ class RealHorseAnim {
     this.skipN = 0;
     this.doze = 0;
     this.sadAmt = 0;
+    if (gaits.natural) this.useGaits(gaits);
+  }
+
+  /**
+   * Allures calées de ce gabarit (lockedGaits) à la place des clips du GLB, au premier pas : même poids, même
+   * temps ; vitesse naturelle de chaque allure (le clip est joué à v ÷ celle-ci) et échelle des limites entre
+   * allures (la foulée mesurée au trot plutôt que la hauteur de l'épaule).
+   */
+  useGaits(gaits = this.model.lockGaits?.()) {
+    this.locked = true;
+    if (!gaits) return;
+    this.natural = gaits.natural;
+    if (gaits.natural.trot) this.model.speedScale = gaits.natural.trot / NATURAL_SPEED.trot;
+    for (let j = 0; j < this.names.length; j++) {
+      const name = this.names[j];
+      const clip = gaits.clips[name];
+      const old = this.list[j];
+      if (!NATURAL_SPEED[name] || !clip || clip === old.getClip()) continue;
+      const a = this.mixer.clipAction(clip);
+      a.play();
+      a.setEffectiveWeight(old.getEffectiveWeight());
+      a.time = old.time;
+      a.timeScale = old.timeScale;
+      old.stop();
+      this.mixer.uncacheAction(old.getClip());
+      this.actions[name] = a;
+      this.list[j] = a;
+    }
   }
 
   /**
@@ -2018,11 +2556,7 @@ class RealHorseAnim {
     const md = this.model;
     this.restorePose();
     if (this.reachFix === undefined) this.reachFix = this.computeReach();
-    if (!this.natural) {
-      this.natural = this.measureGaits();
-      // (échelle des limites entre allures : la foulée mesurée au trot plutôt que la hauteur de l'épaule)
-      if (this.natural.trot) md.speedScale = this.natural.trot / NATURAL_SPEED.trot;
-    }
+    if (st.moving && !this.locked) this.useGaits();
     this.t += dt;
     const t = this.t;
     const u = st.moving ? st.v / md.speedScale : 0;
@@ -2066,7 +2600,7 @@ class RealHorseAnim {
       a.setEffectiveWeight(w);
       if (NATURAL_SPEED[name]) {
         // (vitesse naturelle de CE cheval : mesurée sur ses sabots, ses membres n'ont pas la longueur du modèle)
-        const nat = this.natural[name] ?? NATURAL_SPEED[name] * md.speedScale;
+        const nat = this.natural?.[name] ?? NATURAL_SPEED[name] * md.speedScale;
         a.timeScale = Math.min(1.8, Math.max(0.3, (st.moving ? st.v : nat) / nat));
         if (w > leadW) {
           lead = name;
@@ -2181,65 +2715,6 @@ class RealHorseAnim {
     if (low < 0) md.body.position.y -= low;
   }
 
-  /**
-   * Vitesse naturelle de chaque allure pour ce cheval (m/s, cheval de taille 1) : vitesse à laquelle ses
-   * sabots posés reculent sous lui quand le clip est joué tel quel. Les proportions de la race changent la
-   * longueur des membres et donc la foulée : jouer le clip à vitesse réelle ÷ cette vitesse garde les
-   * sabots posés immobiles au sol. Mesurée une fois par gabarit (pose seule de chaque allure, 120 images).
-   */
-  measureGaits() {
-    const md = this.model;
-    const key = JSON.stringify(md.build);
-    if (GAIT_SPEED.has(key)) return GAIT_SPEED.get(key);
-    const saved = Object.values(this.actions).map((x) => [x, x.getEffectiveWeight(), x.time]);
-    const out = {};
-    const N = 120;
-    for (const name of Object.keys(NATURAL_SPEED)) {
-      const a = this.actions[name];
-      if (!a) continue;
-      for (const [x] of saved) x.setEffectiveWeight(0);
-      a.setEffectiveWeight(1);
-      const D = a.getClip().duration;
-      // sole (centre) de chaque membre, dans le repère du cheval, sur un cycle
-      const track = md.legs.map(() => []);
-      for (let s = 0; s <= N; s++) {
-        a.time = (s / N) * D;
-        this.mixer.update(0);
-        md.root.updateMatrixWorld(true);
-        md.legs.forEach((l, i) => {
-          let hi = -Infinity;
-          let z = 0;
-          for (const p of l.solePts) {
-            _v.copy(p).applyMatrix4(l.fetlock.matrixWorld);
-            md.root.worldToLocal(_v);
-            hi = Math.max(hi, _v.y);
-            z += _v.z / l.solePts.length;
-          }
-          track[i].push([hi, z]);
-        });
-      }
-      let sum = 0;
-      let n = 0;
-      for (const tr of track) {
-        const ground = Math.min(...tr.map(([y]) => y));
-        for (let s = 1; s <= N; s++) {
-          // sabot à plat au sol aux deux images : il recule de dz pendant D / N
-          if (tr[s][0] > ground + 0.012 || tr[s - 1][0] > ground + 0.012) continue;
-          sum += -(tr[s][1] - tr[s - 1][1]) / (D / N);
-          n++;
-        }
-      }
-      if (n > 3 && sum / n > 0.2) out[name] = sum / n;
-    }
-    for (const [x, w, time] of saved) {
-      x.setEffectiveWeight(w);
-      x.time = time;
-    }
-    this.mixer.update(0);
-    GAIT_SPEED.set(key, out);
-    return out;
-  }
-
   /** Correction d'angle de l'encolure pour que le bout du nez touche l'herbe (pose « eat » de cette race). */
   computeReach() {
     const md = this.model;
@@ -2306,8 +2781,6 @@ export function pickGait(prev, u) {
   return g;
 }
 
-// Vitesses naturelles mesurées, par gabarit (RealHorseAnim.measureGaits).
-const GAIT_SPEED = new Map();
 const QNECK_REST = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), NECK_REST);
 const QNECK_REST_INV = QNECK_REST.clone().invert();
 const _qa = new THREE.Quaternion();

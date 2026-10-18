@@ -252,4 +252,34 @@ describe('yeux du cheval réaliste', () => {
     expect(base.eyes.flips).toBe(0);
     expect(Math.abs(open[0] - open[1])).toBeLessThan(0.05);
   });
+
+  it('œil vivant : iris centré sur l\'ouverture des paupières, axe du regard vers l\'extérieur, reflet dans le shader', () => {
+    const base = realHorseBase(gltf);
+    for (const { side, axis, cap } of base.eyes) {
+      // (la partie visible regarde de côté : le reflet du soleil y est ramené)
+      expect(axis.x * side).toBeGreaterThan(0.6);
+      expect(cap).toBeGreaterThan(0.3);
+      expect(cap).toBeLessThan(0.95);
+    }
+    const md = horse(animal('arabe'));
+    const eyes = md.root.children.find((m) => m.isSkinnedMesh && m.geometry.attributes.eyeAxis);
+    expect(eyes).toBeTruthy();
+    const uv = eyes.geometry.attributes.uv;
+    const ax = eyes.geometry.attributes.eyeAxis;
+    let center = 0;
+    for (let i = 0; i < uv.count; i++) {
+      expect(uv.getX(i)).toBeGreaterThanOrEqual(0);
+      expect(uv.getX(i)).toBeLessThanOrEqual(1);
+      expect(Math.abs(ax.getX(i))).toBeGreaterThan(0.6);
+      if (Math.hypot(uv.getX(i) - 0.5, uv.getY(i) - 0.5) < 0.15) center++;
+    }
+    // (des sommets au centre de l'iris : la pupille est bien sur le globe, pas derrière)
+    expect(center).toBeGreaterThan(10);
+    expect(eyes.material.map).toBeTruthy();
+    const sh = { vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader, uniforms: {} };
+    eyes.material.onBeforeCompile(sh);
+    expect(sh.vertexShader).toContain('vEyeAxis');
+    expect(sh.fragmentShader).toContain('eyeGlint');
+    md.dispose();
+  });
 });

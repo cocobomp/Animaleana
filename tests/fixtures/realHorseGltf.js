@@ -44,7 +44,11 @@ let cached = null;
 /** Le GLB chargé (une fois). */
 export function loadRealHorseGltf() {
   if (!globalThis.document) {
-    const ctx = { createRadialGradient: () => ({ addColorStop() {} }), fillRect() {}, fillStyle: '' };
+    // (toile 2D muette : toute méthode existe et ne fait rien ; les dégradés acceptent leurs couleurs)
+    const ctx = new Proxy({}, {
+      get: (o, k) => (k in o ? o[k] : String(k).startsWith('create') ? () => ({ addColorStop() {} }) : () => {}),
+      set: (o, k, v) => { o[k] = v; return true; },
+    });
     globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) };
   }
   if (cached) return cached;

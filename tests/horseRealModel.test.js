@@ -212,11 +212,16 @@ describe('sabots posés du cheval réaliste', () => {
     return out;
   };
 
-  it.each([['pur_sang', 3.0], ['percheron', 3.0], ['shetland', 3.0], ['pur_sang', 4.6], ['percheron', 1.6]])('%s à %s m/s : les sabots posés ne glissent presque pas', (id, v) => {
+  // (allures calées par race, horseReal.js lockedGaits : au galop, le GLB n'a que trois clés par appui et
+  // le sabot glissait de 2 à 5 cm ; il arrivait au sol en avançant encore avec le corps)
+  it.each([
+    ['pur_sang', 3.0], ['percheron', 3.0], ['shetland', 3.0], ['pur_sang', 4.6], ['percheron', 1.6],
+    ['selle_francais', 1.6], ['shetland', 4.1], ['pur_sang', 8.7], ['shetland', 7.3], ['percheron', 7.5], ['fjord', 7.3],
+  ])('%s à %s m/s : les sabots posés ne glissent presque pas', (id, v) => {
     const s = slips(id, v);
     expect(s.length).toBeGreaterThan(6);
     const mean = s.reduce((a, b) => a + b, 0) / s.length;
-    expect(mean).toBeLessThan(0.018);
-    expect(Math.max(...s)).toBeLessThan(0.035);
+    expect(mean).toBeLessThan(0.006);
+    expect(Math.max(...s)).toBeLessThan(0.02);
   });
 });

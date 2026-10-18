@@ -213,6 +213,7 @@ function openEyelids(prims, chanfrein) {
   const u = V().crossVectors(f, V(1, 0, 0)).normalize();
   if (u.y < 0) u.negate();
   const eyes = [];
+  const before = new Map(); // sommet déplacé -> position d'origine (contrôle des triangles retournés)
   for (const side of [1, -1]) {
     const c = V();
     let n = 0;
@@ -260,12 +261,29 @@ function openEyelids(prims, chanfrein) {
       const ang = (upper ? EYE_OPEN.up : -EYE_OPEN.low) * w * side;
       // (autour de f, de l vers u : f × (+x) = u, la paupière gauche s'ouvre ; à droite, l = -x, le sens s'inverse)
       q.setFromAxisAngle(f, ang);
+      before.set(i, coat.pos.slice(i * 3, i * 3 + 3));
       _v.applyQuaternion(q).add(c);
       coat.pos.set([_v.x, _v.y, _v.z], i * 3);
       _w.fromArray(coat.nrm, i * 3).applyQuaternion(q);
       coat.nrm.set([_w.x, _w.y, _w.z], i * 3);
     }
   }
+  // Triangles retournés (repli de la paupière : un trou dans le pelage) : comptés pour les tests.
+  let flips = 0;
+  const A = V(), B = V(), C = V(), n0 = V(), n1 = V();
+  const at = (k, old) => (old && before.has(k) ? _v.fromArray(before.get(k)) : _v.fromArray(coat.pos, k * 3));
+  for (let t = 0; t < coat.index.length; t += 3) {
+    const [a, b, c] = [coat.index[t], coat.index[t + 1], coat.index[t + 2]];
+    if (!before.has(a) && !before.has(b) && !before.has(c)) continue;
+    for (const old of [true, false]) {
+      A.copy(at(a, old));
+      B.copy(at(b, old)).sub(A);
+      C.copy(at(c, old)).sub(A);
+      (old ? n0 : n1).crossVectors(B, C);
+    }
+    if (n0.dot(n1) <= 0) flips++;
+  }
+  eyes.flips = flips;
   return eyes;
 }
 

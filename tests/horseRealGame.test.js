@@ -248,6 +248,8 @@ describe('yeux du cheval réaliste', () => {
     }
     // (0,09 rad au départ : une fente ; ≈ 0,63 rad ouvert)
     for (const o of open) expect(o).toBeGreaterThan(0.45);
+    // (aucun triangle de la paupière retourné : il ferait un trou noir dans le pelage)
+    expect(base.eyes.flips).toBe(0);
     expect(Math.abs(open[0] - open[1])).toBeLessThan(0.05);
   });
 });

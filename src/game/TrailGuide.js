@@ -236,7 +236,8 @@ export class TrailGuide {
     if (b && !this.session && this.visitorsFor !== 'booking') this.spawnVisitors(b, 'booking');
     if (!b && this.visitorsFor === 'booking') this.clearVisitors();
     // Une nouvelle demande ? (pas pendant une épreuve ou une séance : les visiteurs viendront après)
-    if (!b && !this.session && !g.activities?.active && !g.ui.isBlocking?.() && offerDue(p, { level: g.level, clock: p.clock, hour: g.hour, place: p.place })
+    if (!b && !this.session && !g.activities?.active && !g.ui.isBlocking?.() && g.arrivals?.free() !== false // (chacun son tour : src/game/arrivals.js)
+      && offerDue(p, { level: g.level, clock: p.clock, hour: g.hour, place: p.place })
       && (this.soon || Math.random() < 0.35)) {
       this.soon = false;
       this.newOffer();
@@ -265,7 +266,8 @@ export class TrailGuide {
     offer.askedPlace = g.profile.place;
     offer.askedDay = g.day;
     this.spawnVisitors(offer, 'offer');
-    g.ui.toast(t(g.isHome ? 'tg_arrived' : 'tg_arrivedAway'), 6000);
+    g.arrivals?.note();
+    g.ui.toast(t(g.isHome ? 'tg_arrived' : 'tg_arrivedAway'), 6000, { group: 'visitors' });
     g.ui.refresh();
     return offer;
   }

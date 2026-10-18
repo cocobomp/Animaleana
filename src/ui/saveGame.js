@@ -392,7 +392,7 @@ function restoreFlow(ui, parsed, show) {
       n++;
     }
     refreshScreen();
-    if (n < files.length) return showFull(show, ui, n ? t('sv_storagePartial', { done: n, n: files.length }) : t('sv_storageFull'), { nothingChanged: !n });
+    if (n < files.length) return showFull(show, ui, n ? t('sv_storagePartial', { n, total: files.length }) : t('sv_storageFull'), { nothingChanged: !n });
     done(null, t('sv_doneAddedMany', { n }));
   }
 

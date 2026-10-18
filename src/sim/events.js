@@ -13,7 +13,7 @@
 //     strayAtRefuge }     // le petit animal perdu est arrivé au refuge
 
 import { SPECIES } from './species.js';
-import { lifeStage, createAnimal } from './animal.js';
+import { lifeStage, createAnimal, namesInUse } from './animal.js';
 import { PLACES } from './places.js';
 import { wears, canLead, keepsWarm } from './gear.js';
 import { DAYS_PER_YEAR } from './time.js';
@@ -206,7 +206,7 @@ export function startEvent(profile, type, ctx, rng = Math.random, force = false)
     case 'lostPet': {
       const species = rng() < 0.5 ? 'dog' : 'cat';
       const sp = SPECIES[species];
-      const stray = createAnimal({ species, ageDays: sp.adultYears * DAYS_PER_YEAR * 0.25, location: ctx.place, rng, day: ctx.day });
+      const stray = createAnimal({ species, ageDays: sp.adultYears * DAYS_PER_YEAR * 0.25, location: ctx.place, rng, day: ctx.day, avoidNames: namesInUse(profile) });
       stray.stray = true;
       stray.needs.hunger = 35;
       stray.needs.affection = 30;

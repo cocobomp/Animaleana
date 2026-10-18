@@ -3,7 +3,7 @@
 // la réputation, l'expérience du métier et ses rangs, les accessoires (nœuds, bandanas…)
 // et la coupe de ses propres animaux. Logique pure, testée dans tests/groomer.test.js.
 
-import { createAnimal } from './animal.js';
+import { createAnimal, namesInUse } from './animal.js';
 import { SPECIES } from './species.js';
 import { uid, pick } from './rng.js';
 import { levelOf } from './progress.js';
@@ -207,7 +207,7 @@ export function newClient(profile, opts = {}) {
   const sp = SPECIES[species];
   const breedPool = req.breeds ? sp.breeds.filter((b) => req.breeds.includes(b.id)) : sp.breeds.filter((b) => b.rarity <= (rankOf(profile) >= 2 ? 3 : 2));
   const breed = pick(breedPool.length ? breedPool : sp.breeds, rng);
-  const animal = createAnimal({ species, breed: breed.id, location: 'salon', rng, day });
+  const animal = createAnimal({ species, breed: breed.id, location: 'salon', rng, day, avoidNames: namesInUse(profile) });
   animal.guest = true; // n'appartient pas au joueur : repart avec son maître
   animal.needs.hygiene = Math.round(20 + rng() * 30);
   animal.needs.grooming = Math.round(15 + rng() * 30);

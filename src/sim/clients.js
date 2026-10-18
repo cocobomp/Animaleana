@@ -16,7 +16,7 @@
 //   beauté, src/sim/beauty.js) : c'est aussi l'identifiant du métier concerné.
 
 import { SPECIES } from './species.js';
-import { createAnimal, NEEDS, happiness, ILLNESSES } from './animal.js';
+import { createAnimal, NEEDS, happiness, ILLNESSES, namesInUse } from './animal.js';
 import { pick, uid } from './rng.js';
 import {
   CAREERS, startedCareers, isStarted, perksOf, rankOf, reputationOf, changeReputation, addCareerXp, addEarnings, noteAction,
@@ -155,6 +155,7 @@ export function createVisit(profile, ctx, rng = Math.random, forcedKind = null) 
     rng,
     location: ctx.place ?? profile.place ?? 'maison',
     day: ctx.day ?? 1,
+    avoidNames: namesInUse(profile), // jamais le prénom d'un de nos animaux (ni d'un autre client)
   });
   animal.bond = 2;
   const [min, max] = career === 'vet' ? VET_DAYS : career === 'handler' ? HANDLER_DAYS : PENSION_DAYS;

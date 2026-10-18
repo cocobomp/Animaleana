@@ -391,7 +391,7 @@ export function showReport(ui, flow, report) {
     h('header', { class: 'trip-head' }, h('div', { class: 'trip-title' }, h('span', { class: 'trip-mode' }, '🏁'), h('b', {}, t('trip_arrivedTitle', { place: flow.destName() })))),
     h('div', { class: 'trip-report-facts' },
       h('span', { class: 'chip' }, t('trip_reportTime', { t: fmtHours(report.hours) })),
-      j.trip.stops.length ? h('span', { class: 'chip' }, t('trip_reportStops', { n: stopsMade, s: report.skipped })) : null,
+      j.trip.stops.length ? h('span', { class: 'chip' }, t('trip_reportStops', { made: t('trip_stopsMade', { n: stopsMade }), skipped: t('trip_stopsSkipped', { n: report.skipped }) })) : null,
       report.animals.length ? h('span', { class: 'chip' }, t('trip_reportCare', { n: report.cares })) : null),
     report.animals.length ? h('ul', { class: 'trip-rep-list' }, lines) : h('p', {}, t('trip_rep_none')),
     luggageLine(report),

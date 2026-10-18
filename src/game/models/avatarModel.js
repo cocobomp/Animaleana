@@ -137,7 +137,8 @@ const SHOULDER_Y = 1.33;
 const ELBOW = 0.27;
 
 /**
- * Construit le personnage. look : { skin, hair, hairStyle, top, bottom, shoes, eyes?, hat }.
+ * Construit le personnage. look : { skin, hair, hairStyle, top, bottom, shoes, eyes?, hat, helmet? }
+ * (helmet : coiffure rentrée pour la bombe, posée ensuite par Player.setHelmet).
  * Renvoie { root, legs, knees, ankles, arms, elbows, hands, head, torso, chest, eyeBalls, lids,
  * hairTail, life } ; seed (facultatif) rend ses petits mouvements reproductibles.
  */
@@ -249,7 +250,9 @@ export function buildAvatar(look, seed = Math.random() * 1e9) {
 
   // --- Cheveux : une vraie masse qui suit le crâne (avatarHair.js), mèches et reflets doux.
   const style = look.hairStyle ?? 'short';
-  const hairShapes = hairGeometry(style, !!look.hat, high, headSdf);
+  // look.helmet : la bombe du cavalier sera posée par-dessus (Player.setHelmet) : les mèches sont rentrées
+  // dessous, comme sous un chapeau (sinon les boucles traversaient la coque).
+  const hairShapes = hairGeometry(style, !!(look.hat || look.helmet), high, headSdf);
   // Les autres coiffures se préparent dans un worker (une seule fois par qualité).
   prepareHair(high);
   const buzz = style === 'bald';

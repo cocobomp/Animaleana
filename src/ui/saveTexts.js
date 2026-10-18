@@ -68,7 +68,8 @@ export const SAVE_FR = {
   sv_storageFull: 'Pas assez de place sur cet appareil pour restaurer cette partie. Supprime une vieille partie, puis réessaie.',
   sv_fullPlaying: 'Ta partie n\'a pas pu être enregistrée : il n\'y a plus de place sur cet appareil. Pour ne rien perdre, rien n\'est remplacé et tu peux continuer à jouer. Mets d\'abord ta partie dans un fichier avec « 💾 Sauvegarder ma partie ».',
   sv_backupKept: 'La copie de secours « {backup} » a été faite, mais la partie du fichier n\'a pas pu être écrite.',
-  sv_storagePartial: '{done} parties sur {n} ajoutées : plus assez de place sur cet appareil.',
+  sv_storagePartial: '{n} parties sur {total} ajoutées : plus assez de place sur cet appareil.',
+  sv_storagePartial_one: '1 partie sur {total} ajoutée : plus assez de place sur cet appareil.',
 };
 
 export const SAVE_EN = {
@@ -138,5 +139,5 @@ export const SAVE_EN = {
   sv_storageFull: 'Not enough space on this device to restore this game. Delete an old game, then try again.',
   sv_fullPlaying: 'Your game couldn\'t be saved: there is no more space on this device. So that nothing is lost, nothing is replaced and you can keep playing. First keep your game in a file with “💾 Save my game”.',
   sv_backupKept: 'The backup copy “{backup}” was made, but the game from the file couldn\'t be written.',
-  sv_storagePartial: '{done} of {n} games added: not enough space left on this device.',
+  sv_storagePartial: '{n} of {total} games added: not enough space left on this device.',
 };

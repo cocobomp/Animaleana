@@ -200,6 +200,9 @@ export function buildInteriors(world, group, isHome) {
 const STRAW_FRESH = new THREE.Color(0xe6c86e);
 const STRAW_OLD = new THREE.Color(0x8c7448);
 const LIGHT_POS = { stable: [0, 0], house: [1.5, 0.5], tackroom: [0, -0.4] };
+// De jour, la sellerie n'est éclairée que par la lumière ambiante (le soleil ne passe pas le toit) : le visage
+// de la sellière était grisâtre. Une petite lampe douce devant le comptoir, plus faible que celle du soir.
+const TACK_DAY_LIGHT = { pos: [1.7, 1.1], y: 2.5, intensity: 3.2 };
 
 export class Interiors {
   constructor(game) {
@@ -590,12 +593,13 @@ export class Interiors {
     hs.model.lampMat.emissiveIntensity = night ? 1.5 : 0.2;
     if (tk) tk.model.lampMat.emissiveIntensity = night ? 1.6 : 0.25;
     const lit = inside && night && (inside === 'house' || inside === 'tackroom' || stableLit);
-    this.light.intensity = lit ? 9 : 0;
-    if (lit) {
+    const dayLit = inside === 'tackroom' && !night && !!tk; // petite lumière de jour (TACK_DAY_LIGHT)
+    this.light.intensity = lit ? 9 : dayLit ? TACK_DAY_LIGHT.intensity : 0;
+    if (lit || dayLit) {
       const b = w.interiors[inside];
-      const [lx, lz] = LIGHT_POS[inside];
+      const [lx, lz] = dayLit ? TACK_DAY_LIGHT.pos : LIGHT_POS[inside];
       const p = toWorld(b, lx, lz);
-      this.light.position.set(p.x, w.heightAt(p.x, p.z) + 2.6, p.z);
+      this.light.position.set(p.x, w.heightAt(p.x, p.z) + (dayLit ? TACK_DAY_LIGHT.y : 2.6), p.z);
     }
 
     this.visAcc += dt;

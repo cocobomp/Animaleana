@@ -44,9 +44,11 @@ export const LOD_DIST = { low: 7, high: 22 };
 export const OFFSCREEN_STEP = 3;
 /**
  * Point de vue du jeu (Game.frame : position de la caméra à l'image précédente), pour le choix de la version
- * réduite. Sans lui (tests, vignettes), toujours la version complète.
+ * réduite. Sans lui (tests, vignettes), toujours la version complète. frame : numéro de l'image du jeu
+ * (Game.frame l'avance une fois par image, avant les pas de simulation) ; « vu ou pas » se décide une fois
+ * par image, même quand l'avance rapide (⏩) simule plusieurs pas dans la même image.
  */
-export const horseView = { eye: new THREE.Vector3(), on: false };
+export const horseView = { eye: new THREE.Vector3(), on: false, frame: 0 };
 
 // Gabarit natif du modèle (cheval de trait, en unités de horseLook.js) : les races s'obtiennent en
 // divisant leur gabarit par celui-ci (pur-sang : tronc plus étroit, membres plus fins et plus longs…).
@@ -1832,7 +1834,10 @@ class RealHorseAnim {
     // Pose des groupes écrite par le mixeur (voir update) : position, rotation, échelle.
     this.pose = model.groups.map((g) => [g.position.clone(), g.quaternion.clone(), g.scale.clone()]);
     // Dessiné depuis la dernière image (HorseMesh : caméra ou ombre) ; sinon l'animation est ralentie.
+    // seenNow : vu pour l'image en cours (frame : son numéro, horseView.frame), gardé pour tous ses pas.
     this.seen = false;
+    this.seenNow = false;
+    this.frame = -1;
     this.skipDt = 0;
     this.skipN = 0;
     this.doze = 0;
@@ -2316,12 +2321,23 @@ export function animateRealHorse(e, dt, sad) {
   // Hors du champ (ni dessiné ni dans l'ombre à la dernière image) et livré à lui-même : animé une image sur
   // OFFSCREEN_STEP avec le temps cumulé (allure, broutage, sabots au sol identiques ; on ne le voit pas).
   // Jamais monté, guidé, en séance ou mené en main : sa pose sert au cavalier, à l'activité ou à la longe.
-  const seen = anim.seen;
-  anim.seen = false;
-  if (!seen && !e.ridden && !e.scripted && !e.herdCtrl && !e.posing && !e.data.following && !e.data.leashed) {
+  // « Vu » se décide une fois par image : en avance rapide (⏩ : 3 pas de simulation par image, Game.frame),
+  // un cheval dessiné à l'image d'avant reste vu pour tous les pas de l'image (sinon les pas 2 et 3 le
+  // croyaient caché et ses membres tournaient trois fois moins vite que son corps : sabots qui patinent).
+  if (anim.frame !== horseView.frame) {
+    anim.frame = horseView.frame;
+    anim.seenNow = false;
+  }
+  if (anim.seen) {
+    anim.seenNow = true;
+    anim.seen = false;
+  }
+  if (!anim.seenNow && !e.ridden && !e.scripted && !e.herdCtrl && !e.posing && !e.data.following && !e.data.leashed) {
     anim.skipDt += dt;
     if (++anim.skipN < OFFSCREEN_STEP) return;
     dt = anim.skipDt;
+  } else {
+    dt += anim.skipDt; // (le temps mis de côté n'est jamais perdu : l'animation reçoit tout le temps simulé)
   }
   anim.skipDt = 0;
   anim.skipN = 0;

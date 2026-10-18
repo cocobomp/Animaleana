@@ -563,9 +563,10 @@ export function registerThumbKinds(thumbs) {
   thumbs
     .register('gear', gearThumb)
     .register('animal', animalThumb)
-    .register('structure', structureThumb)
+    // (le cheval mannequin des paddocks et de « À cheval » : refaits quand le cheval réaliste arrive)
+    .register('structure', structureThumb, { horse: (s) => !!ENCLOSURE_LIFE[s.type]?.some(([sp]) => sp === 'horse') })
     .register('equipment', equipmentThumb)
-    .register('vehicle', vehicleThumb);
+    .register('vehicle', vehicleThumb, { horse: (s) => s.id === 'horse' });
   thumbs.onRelease(releaseMannequins);
   return thumbs;
 }

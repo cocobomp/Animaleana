@@ -218,6 +218,35 @@ describe('animation hors du champ', () => {
     md.dispose();
   });
 
+  it('avance rapide (⏩, 3 pas par image) : un cheval à l\'écran reçoit tout le temps simulé', () => {
+    const md = horse('selle_francais');
+    const e = fakeEntity(md, { speed: 1.5 });
+    const spy = vi.spyOn(md.anim, 'update');
+    const t0 = md.anim.t;
+    const frame0 = horseView.frame;
+    // Game.frame : une image = horseView.frame + 1, 3 pas de simulation, puis le rendu (seen = vrai une fois).
+    for (let f = 0; f < 10; f++) {
+      horseView.frame++;
+      for (let s = 0; s < 3; s++) animateRealHorse(e, 0.02, false);
+      md.coatMesh.onBeforeRender();
+    }
+    // (la première image : pas encore dessiné, ses pas sont mis de côté puis rendus à l'image suivante)
+    expect(md.anim.t - t0).toBeCloseTo(30 * 0.02, 6);
+    expect(spy.mock.calls.length).toBeGreaterThanOrEqual(28);
+    // Caché quelques images, puis de nouveau à l'écran : le temps mis de côté n'est pas perdu.
+    const t1 = md.anim.t;
+    for (let f = 0; f < 4; f++) {
+      horseView.frame++;
+      for (let s = 0; s < 3; s++) animateRealHorse(e, 0.02, false);
+      if (f === 3) md.coatMesh.onBeforeRender();
+    }
+    horseView.frame++;
+    for (let s = 0; s < 3; s++) animateRealHorse(e, 0.02, false);
+    expect(md.anim.t - t1).toBeCloseTo(15 * 0.02, 6);
+    horseView.frame = frame0;
+    md.dispose();
+  });
+
   it('dessiné (caméra ou ombre) : noté pour l\'animation', () => {
     const md = horse('quarter');
     md.anim.seen = false;
@@ -258,6 +287,21 @@ describe('cheval réaliste arrivé en cours de partie', () => {
     expect(gone.rebuildModel).not.toHaveBeenCalled();
   }, 60000);
 
+  it('le cheval d\'un client (vétérinaire, pension), qui attend ou repart, est compté parmi les animaux de la scène', async () => {
+    const { Game } = await import('../src/game/Game.js');
+    const mine = { data: { id: 'a' } };
+    const client = { data: { id: 'c' } };
+    const leaving = { data: { id: 'l' } };
+    const groomed = { data: { id: 'g' } };
+    const g = {
+      entities: new Map([['a', mine]]),
+      groomer: { visitors: new Map([['x', { e: groomed }]]), leaving: [] },
+      clients: { visitor: { e: client }, leaving: [{ e: leaving }, { e: null }] },
+      dogTrainer: { visitor: null },
+    };
+    expect(Game.prototype.allEntities.call(g)).toEqual([mine, groomed, client, leaving]);
+  }, 60000);
+
   it('les vignettes d\'animaux et d\'équipement prennent une autre clé (refaites), pas les autres', () => {
     const th = new Thumbs(null);
     const released = [];
@@ -271,4 +315,20 @@ describe('cheval réaliste arrivé en cours de partie', () => {
     expect(th.vary({ kind: 'gear', id: 'saddle' }).mv).toBe(1);
     expect(th.vary(structSpec)).toBe(structSpec);
   });
+
+  it('les vignettes « À cheval » des véhicules et des paddocks (cheval mannequin) sont refaites aussi', async () => {
+    const { registerThumbKinds } = await import('../src/game/thumbScenes.js');
+    const th = registerThumbKinds(new Thumbs(null));
+    const ride = { kind: 'vehicle', id: 'horse' };
+    const car = { kind: 'vehicle', id: 'car' };
+    const paddock = { kind: 'structure', type: 'paddockSmall' };
+    const pasture = { kind: 'structure', type: 'pasture' };
+    expect(th.vary(ride)).toBe(ride);
+    th.modelsChanged();
+    expect(th.vary(ride).mv).toBe(1);
+    expect(th.vary(paddock).mv).toBe(1);
+    expect(th.vary({ kind: 'structure', type: 'paddockLarge' }).mv).toBe(1);
+    expect(th.vary(car)).toBe(car);
+    expect(th.vary(pasture)).toBe(pasture);
+  }, 60000);
 });

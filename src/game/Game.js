@@ -197,12 +197,18 @@ export class Game {
     }, 30);
   }
 
-  /** Tous les animaux de la scène : ceux de la partie, ceux en visite au salon de toilettage. */
+  /**
+   * Tous les animaux de la scène : ceux de la partie, ceux en visite au salon de toilettage, l'animal du client
+   * qui attend (vétérinaire, pension : src/game/Clients.js) ou qui repart, le chien du maître en visite.
+   */
   allEntities() {
     const out = [...this.entities.values()];
     for (const v of this.groomer?.visitors?.values() ?? []) if (v.e) out.push(v.e);
     for (const v of this.groomer?.leaving ?? []) if (v.e) out.push(v.e);
-    return out;
+    if (this.clients?.visitor?.e) out.push(this.clients.visitor.e);
+    for (const l of this.clients?.leaving ?? []) if (l.e) out.push(l.e);
+    if (this.dogTrainer?.visitor?.e) out.push(this.dogTrainer.visitor.e);
+    return [...new Set(out)];
   }
 
   /**
@@ -592,6 +598,7 @@ export class Game {
 
   frame() {
     const dt = Math.min(0.1, this.clock.getDelta());
+    horseView.frame++; // (une image : les chevaux dessinés à la précédente sont vus pour tous ses pas)
     if (!this.running) {
       this.renderer.render(this.scene, this.camera);
       return;

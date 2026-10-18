@@ -518,6 +518,8 @@ export class Thumbs {
     const setting = thumbsSetting();
     this.debug = debug ?? setting === 'debug';
     this.kinds = new Map(); // genre → fabrique(spec) → { object, box?, dir?, pad?, fov?, ground?, dispose?, keep? }
+    // Genres de vignettes qui peuvent montrer un cheval (true, ou spec → oui / non) : voir modelsChanged.
+    this.horseKinds = new Map([['animal', true], ['gear', true]]);
     // Les images d'un même objet (même spec, tailles différentes) : une grande sert aussi aux petites vues.
     this.family = new Map(); // famille (clé sans la taille) → Map(clé → { key, size: [W, H], url })
     this.familyOf = new Map(); // clé → famille
@@ -580,9 +582,13 @@ export class Thumbs {
     }
   }
 
-  /** Enregistre un genre de vignette : fabrique(spec) → { object, … } (voir run()). */
-  register(kind, make) {
+  /**
+   * Enregistre un genre de vignette : fabrique(spec) → { object, … } (voir run()). horse : la vignette peut
+   * montrer un cheval (true, ou spec → oui / non) ; elle sera refaite quand le cheval réaliste arrive.
+   */
+  register(kind, make, { horse } = {}) {
     this.kinds.set(kind, make);
+    if (horse) this.horseKinds.set(kind, horse);
     return this;
   }
 
@@ -597,9 +603,10 @@ export class Thumbs {
 
   /**
    * Les modèles des chevaux ont changé (le cheval réaliste est arrivé après l'ouverture de la partie, voir
-   * Game.onRealHorse) : les vignettes d'animaux et d'équipement (posé sur des chevaux mannequins) prennent
-   * d'autres clés et sont refaites à la prochaine demande ; les mannequins gardés sont libérés entre deux
-   * vignettes (jamais pendant qu'on en photographie une).
+   * Game.onRealHorse) : les vignettes qui peuvent montrer un cheval (animaux, équipement posé sur des chevaux
+   * mannequins, « À cheval » des véhicules, paddocks : voir register) prennent d'autres clés et sont refaites à
+   * la prochaine demande ; les mannequins gardés sont libérés entre deux vignettes (jamais pendant qu'on en
+   * photographie une).
    */
   modelsChanged() {
     this.variant = (this.variant ?? 0) + 1;
@@ -612,7 +619,13 @@ export class Thumbs {
 
   /** La demande, marquée de la version des modèles si elle peut montrer un cheval (voir modelsChanged). */
   vary(spec) {
-    return this.variant && (spec.kind === 'animal' || spec.kind === 'gear') ? { ...spec, mv: this.variant } : spec;
+    return this.variant && this.showsHorse(spec) ? { ...spec, mv: this.variant } : spec;
+  }
+
+  /** Cette vignette peut-elle montrer un cheval (voir register) ? */
+  showsHorse(spec) {
+    const h = this.horseKinds.get(spec.kind);
+    return typeof h === 'function' ? !!h(spec) : !!h;
   }
 
   /** L'image déjà faite pour cette vignette (URL), ou une plus grande du même objet, ou null. */

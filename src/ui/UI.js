@@ -10,6 +10,7 @@ import { openTackItem } from './tack.js'; // sellerie : fiche d'un objet
 import { openVet } from './vet.js';
 import { openVetSchool } from './vetSchool.js'; // 🎓 école vétérinaire
 import { runMinigame, runChoreGame } from './minigames.js';
+import { nbsp } from './minigames/frame.js'; // typographie française des messages
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
 import { openHelp } from './help.js';
@@ -552,7 +553,8 @@ export class UI {
 
   toast(msg, ms = 3200) {
     audio.ui('toast');
-    const el = h('div', { class: 'toast' }, msg);
+    // (typographie française : « balade / ! Lis leur demande » se coupait avant le point d'exclamation)
+    const el = h('div', { class: 'toast' }, typeof msg === 'string' ? nbsp(msg) : msg);
     this.toasts.append(el);
     while (this.toasts.children.length > 4) this.toasts.firstChild.remove();
     this.fitToasts();

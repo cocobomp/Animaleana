@@ -2,7 +2,7 @@
 // de gros boutons faciles pour les enfants, avec la raison quand une action est impossible.
 
 import { h } from './dom.js';
-import { t, ta } from '../i18n.js';
+import { t, ta, hourParams } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { canRide } from '../sim/animal.js';
 import { canProduce } from '../sim/farm.js';
@@ -118,7 +118,7 @@ export function openBuilding(ui, kind) {
     icon: a.icon,
     label: t(`do_${a.id}`),
     enabled: a.enabled,
-    why: a.reason ? t(`why_${a.reason}`, a.params) : '',
+    why: a.reason ? t(`why_${a.reason}`, hourParams(a.params)) : '',
     run: run[a.id],
     queue: ['farm', 'tack', 'avatar', 'adopt', 'shop', 'vet', 'vetSchool', 'jobs', 'sleep', 'dogTrainer'].includes(a.id) ? null : {
       label: `${t(`do_${a.id}`)} (${name})`,

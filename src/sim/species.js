@@ -3,6 +3,9 @@
 
 import { CAT_BREEDS } from './catBreeds.js';
 
+// extra.m : forme masculine du nom français quand il est écrit au féminin (« Blanche » → « Blanc » pour un bouc ;
+// coatName de src/ui/names.js). Le nom lui-même ne change pas : il est gardé dans les sauvegardes (look.colorName)
+// et sert à retrouver la robe (modèles 3D, textures).
 const C = (fr, en, coat, secondary, extra = {}) => ({ name: { fr, en }, coat, secondary, ...extra });
 
 export const SPECIES = {
@@ -358,11 +361,11 @@ export const SPECIES = {
     },
     breeds: [
       { id: 'alpine', name: { fr: 'Alpine chamoisée', en: 'French Alpine' }, origin: null, rarity: 1, scale: 1,
-        pattern: 'tan', colors: [C('Chamoisée', 'Chamois', 0x9a6232, 0x1d1714)] },
+        pattern: 'tan', colors: [C('Chamoisée', 'Chamois', 0x9a6232, 0x1d1714, { m: 'Chamoisé' })] },
       { id: 'saanen', name: { fr: 'Saanen', en: 'Saanen' }, origin: null, rarity: 1, scale: 1.05, horns: 'none',
-        pattern: 'solid', colors: [C('Blanche', 'White', 0xf3efe6, 0xf3efe6)] },
+        pattern: 'solid', colors: [C('Blanche', 'White', 0xf3efe6, 0xf3efe6, { m: 'Blanc' })] },
       { id: 'poitevine', name: { fr: 'Poitevine', en: 'Poitou goat' }, origin: null, rarity: 2, scale: 1, fluff: 1.15,
-        pattern: 'bicolor', colors: [C('Brune et blanche', 'Brown and white', 0x3a2a20, 0xf1ece2)] },
+        pattern: 'bicolor', colors: [C('Brune et blanche', 'Brown and white', 0x3a2a20, 0xf1ece2, { m: 'Brun et blanc' })] },
       { id: 'col_noir', name: { fr: 'Col noir du Valais', en: 'Valais Blackneck' }, origin: 'alpes', rarity: 3, scale: 1.05, fluff: 1.2,
         pattern: 'points', colors: [C('Col noir', 'Black neck', 0xf2eee6, 0x151312)] },
     ],
@@ -391,25 +394,25 @@ export const SPECIES = {
     },
     breeds: [
       { id: 'normande', name: { fr: 'Normande', en: 'Normande' }, origin: null, rarity: 1, scale: 1,
-        pattern: 'patches', colors: [C('Blanche et brune', 'White and brown', 0xf1ece2, 0x6b3f25)] },
+        pattern: 'patches', colors: [C('Blanche et brune', 'White and brown', 0xf1ece2, 0x6b3f25, { m: 'Blanc et brun' })] },
       { id: 'holstein', name: { fr: 'Prim\'Holstein', en: 'Holstein' }, origin: null, rarity: 1, scale: 1.05,
-        pattern: 'patches', colors: [C('Pie noire', 'Black and white', 0xf4f2ee, 0x161414)] },
+        pattern: 'patches', colors: [C('Pie noire', 'Black and white', 0xf4f2ee, 0x161414, { m: 'Pie noir' })] },
       { id: 'charolaise', name: { fr: 'Charolaise', en: 'Charolais' }, origin: null, rarity: 1, scale: 1.1, horns: 'none',
         pattern: 'solid', colors: [C('Crème', 'Cream', 0xeee3cc, 0xeee3cc)] },
       { id: 'highland', name: { fr: 'Highland', en: 'Highland cattle' }, origin: null, rarity: 3, scale: 0.85, fluff: 1.35, legs: 0.8, horns: 'long',
-        pattern: 'solid', colors: [C('Rousse', 'Red', 0xb0602b, 0xb0602b)] },
+        pattern: 'solid', colors: [C('Rousse', 'Red', 0xb0602b, 0xb0602b, { m: 'Roux' })] },
       { id: 'bretonne_pie_noire', name: { fr: 'Bretonne pie noire', en: 'Breton black pied' }, origin: 'bretagne', rarity: 3, scale: 0.75,
-        pattern: 'patches', colors: [C('Pie noire', 'Black pied', 0x1a1716, 0xf2efe9)] },
+        pattern: 'patches', colors: [C('Pie noire', 'Black pied', 0x1a1716, 0xf2efe9, { m: 'Pie noir' })] },
       { id: 'herens', name: { fr: 'Hérens', en: 'Hérens' }, origin: 'alpes', rarity: 3, scale: 0.85,
-        pattern: 'solid', colors: [C('Noire', 'Black', 0x231c18, 0x231c18)] },
+        pattern: 'solid', colors: [C('Noire', 'Black', 0x231c18, 0x231c18, { m: 'Noir' })] },
       { id: 'wagyu', name: { fr: 'Wagyu', en: 'Wagyu' }, origin: 'japon', rarity: 3, scale: 0.95,
-        pattern: 'solid', colors: [C('Noire', 'Black', 0x1c1816, 0x1c1816)] },
+        pattern: 'solid', colors: [C('Noire', 'Black', 0x1c1816, 0x1c1816, { m: 'Noir' })] },
       { id: 'canadienne', name: { fr: 'Canadienne', en: 'Canadienne' }, origin: 'canada', rarity: 3, scale: 0.85,
-        pattern: 'solid', colors: [C('Brune', 'Brown', 0x5a3a26, 0x5a3a26)] },
+        pattern: 'solid', colors: [C('Brune', 'Brown', 0x5a3a26, 0x5a3a26, { m: 'Brun' })] },
       { id: 'hereford', name: { fr: 'Hereford', en: 'Hereford' }, origin: 'kentucky', rarity: 2, scale: 1,
         pattern: 'bicolor', colors: [C('Rouge face blanche', 'Red white-face', 0x8a3b1f, 0xf2ede4)] },
       { id: 'angus', name: { fr: 'Aberdeen Angus', en: 'Aberdeen Angus' }, origin: 'pampa', rarity: 2, scale: 1, horns: 'none',
-        pattern: 'solid', colors: [C('Noire', 'Black', 0x161312, 0x161312)] },
+        pattern: 'solid', colors: [C('Noire', 'Black', 0x161312, 0x161312, { m: 'Noir' })] },
       { id: 'retinta', name: { fr: 'Retinta', en: 'Retinta' }, origin: 'andalousie', rarity: 3, scale: 0.95, horns: 'long',
         pattern: 'solid', colors: [C('Rouge', 'Red', 0x8a3c1e, 0x8a3c1e)] },
     ],

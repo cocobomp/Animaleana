@@ -3,7 +3,9 @@
 // si elle est impossible, une raison expliquée au joueur.
 
 const inHours = (h, from, to) => (from <= to ? h >= from && h < to : h >= from || h < to);
-const fmtHour = (h) => `${Math.floor(h)} h`;
+// Les heures des raisons restent des nombres ({ h: 19 }, { from: 9, to: 18 }) : l'interface les écrit dans la
+// langue du joueur (hourParams de src/i18n.js : « 9 h » en français, « 9 am » en anglais).
+const fmtHour = (h) => Math.floor(h);
 
 /**
  * Règles par bâtiment. when(ctx) renvoie null si c'est possible, sinon { reason, params }.

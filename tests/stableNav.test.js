@@ -18,7 +18,9 @@ let interiors;
 let coreLayout;
 let facilities;
 let buildings;
+let activities;
 beforeAll(async () => {
+  activities = await import('../src/sim/activities.js');
   nav = await import('../src/game/nav.js');
   buildings = await import('../src/game/models/buildings.js');
   interiors = await import('../src/game/Interiors.js');
@@ -30,10 +32,13 @@ beforeAll(async () => {
 function farm(layout = null, ext = 0) {
   coreLayout.applyCoreLayout(layout);
   interiors.setStableExt(ext);
+  // Le terrain de concours, à l'ouest de l'écurie (enclos de base, comme src/game/showground.js).
+  const S = activities.SHOWGROUND;
+  nav.addBaseEnclosure({ id: 'showground', x: S.x, z: S.z, hw: S.hw, hd: S.hd, gate: S.gate });
   nav.setBuiltEnclosures([], []);
   const world = { heightAt: () => 0, colliders: [], interactables: [], camVolumes: [] };
   interiors.buildInteriors(world, { add() {} }, true);
-  for (const id of ['paddock', 'pen', 'hutch']) world.colliders.push(...nav.fenceColliders(nav.enclosure(id)));
+  for (const id of ['paddock', 'pen', 'hutch', 'showground']) world.colliders.push(...nav.fenceColliders(nav.enclosure(id)));
   // L'obstacle de saut du paddock (les chevaux en liberté s'y cognent ; à cheval, on le saute).
   const pd = nav.enclosure('paddock');
   world.colliders.push({ x: pd.x, z: pd.z - buildings.jumpOffset(pd.hd * 2), hw: 0.15, hd: 1.7, jump: true });
@@ -53,10 +58,9 @@ function roomCenter(world, id) {
   return { x: b.x + lx * b.c + lz * b.s, z: b.z - lx * b.s + lz * b.c };
 }
 
-/** Fait marcher un cheval de start vers goal ; renvoie où il finit et en combien de temps (s). */
-function walk(world, start, goal, secs = 200) {
+/** Fait marcher un cheval (ou l'avatar : R = 0.35) de start vers goal ; renvoie où il finit et en combien de temps (s). */
+function walk(world, start, goal, secs = 200, R = 0.69) {
   const pos = { x: start.x, z: start.z };
-  const R = 0.69;
   for (let t = 0; t < secs; t += 0.1) {
     if (Math.hypot(goal.x - pos.x, goal.z - pos.z) < 0.6) return { pos, t };
     const w = nav.navTarget(pos, goal, false);
@@ -120,5 +124,18 @@ describe('paddock réduit contre l\'écurie', () => {
     // Coin sud-ouest du paddock (−23,2 ; 4,8) : dans l'écurie. Le cheval part par le nord-ouest.
     const w = nav.navTarget({ x: -25, z: 10 }, { x: -13, z: 20 }, false);
     expect(w.z).toBeGreaterThan(10);
+  });
+});
+
+describe('du terrain de concours à l\'écurie', () => {
+  it('l\'avatar touche l\'écurie depuis le bord de la carrière : il fait le tour par le sud jusqu\'à la porte', () => {
+    const world = farm();
+    const door = world.interactables.find((i) => i.kind === 'stable');
+    // (−33,3 ; 6,4) : où l'on se retrouve après un parcours ; les autres : entre la carrière et l'écurie, où
+    // l'avatar tournait en rond (le coin nord-ouest de l'écurie est un cul-de-sac : le paddock touche son côté nord).
+    for (const start of [{ x: -33.3, z: 6.4 }, { x: -29.6, z: 8.2 }, { x: -29.2, z: 7.3 }, { x: -28.7, z: 6.7 }, { x: -30.5, z: 7.7 }]) {
+      const r = walk(world, start, door, 60, 0.35);
+      expect(r.t, `depuis ${start.x},${start.z} : bloqué en ${r.pos.x.toFixed(1)},${r.pos.z.toFixed(1)}`).toBeLessThan(30);
+    }
   });
 });

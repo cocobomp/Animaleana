@@ -113,6 +113,28 @@ describe('proposer un métier', () => {
     expect(shouldPropose(q, 'vet', { level: 3, day: 1, building: 'vet' })).toBe(false);
   });
 
+  it('une seule proposition par jour, tous métiers confondus (pas six fenêtres d\'affilée)', () => {
+    const p = createProfile('Lou');
+    p.completed.push(...OBJECTIVES.filter((o) => o.kind === 'quest').slice(0, QUESTS_FOR_CAREER).map((o) => o.id));
+    const ctx = { level: 20, day: 4, objectives: OBJECTIVES };
+    const first = CAREER_IDS.find((k) => shouldPropose(p, k, ctx));
+    expect(first).toBeTruthy();
+    markProposed(p, first, 4);
+    expect(CAREER_IDS.filter((k) => shouldPropose(p, k, ctx))).toEqual([]);
+    // Toucher le bâtiment d'un autre métier le même jour n'en ouvre pas une deuxième.
+    const other = CAREER_IDS.find((k) => k !== first && CAREERS[k].building);
+    expect(shouldPropose(p, other, { ...ctx, building: CAREERS[other].building })).toBe(false);
+    // Le lendemain, on peut en proposer un (un seul).
+    const next = CAREER_IDS.find((k) => shouldPropose(p, k, { ...ctx, day: 5 }));
+    expect(next).toBeTruthy();
+    // Commencer un métier (depuis le panneau Métiers) compte aussi pour la journée.
+    const q = createProfile('Max');
+    q.completed.push(...p.completed);
+    startCareer(q, 'vet', 7, { level: 20 });
+    expect(CAREER_IDS.filter((k) => shouldPropose(q, k, { ...ctx, day: 7 }))).toEqual([]);
+    expect(CAREER_IDS.some((k) => shouldPropose(q, k, { ...ctx, day: 8 }))).toBe(true);
+  });
+
   it('les indices ne sont dits qu\'une fois', () => {
     const p = createProfile('Lou');
     expect(hintOnce(p, 'autoPension')).toBe(true);

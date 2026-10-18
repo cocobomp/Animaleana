@@ -4,7 +4,7 @@
 // et la rubrique « Maison » de la fiche d'un animal.
 
 import { h } from './dom.js';
-import { t, getLang } from '../i18n.js';
+import { t, getLang, hourParams } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import {
@@ -30,7 +30,7 @@ export const BUILD_TABS = [
 export const structureName = (type) => (STRUCTURES[type].cat === 'decor' ? t(`con_n_${type}`) : t(`st_${type}`));
 
 const has = (key) => t(key) !== key;
-const why = (reason, params) => (has(`con_why_${reason}`) ? t(`con_why_${reason}`, params) : t(`why_${reason}`, params));
+const why = (reason, params) => (has(`con_why_${reason}`) ? t(`con_why_${reason}`, hourParams(params)) : t(`why_${reason}`, hourParams(params)));
 const speciesEmojis = (type) => [...new Set((STRUCTURES[type].species ?? []).map((s) => SPECIES[s]?.emoji).filter(Boolean))].join(' ');
 
 // ---------------------------------------------------------------- barre d'outils

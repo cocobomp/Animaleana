@@ -21,6 +21,15 @@ const MIN_H = 16;
 const MAX_H = 150;
 const smoothstep = (x) => x * x * (3 - 2 * x);
 
+/** L'étiquette déjà posée (parmi les n premières) que celle-ci (centre x, y ; largeur w) chevaucherait, ou null. */
+function overlapAt(placed, n, x, y, w) {
+  for (let i = 0; i < n; i++) {
+    const q = placed[i];
+    if (Math.abs(q.x - x) < (q.w + w) / 2 && Math.abs(q.y - y) < 30) return q;
+  }
+  return null;
+}
+
 export class ManagementView {
   constructor(game) {
     this.game = game;
@@ -51,7 +60,17 @@ export class ManagementView {
 
   /** Bouton 🏗️ Construire : la vue construction (depuis le jeu ou depuis la vue d'ensemble). */
   openBuild() {
-    if (this.leaving) return;
+    if (this.leaving) {
+      // On quitte la vue d'ensemble (⬅️ Retour) et on touche 🏗️ tout de suite après : demi-tour vers la vue
+      // construction (avant, le tap était perdu : on retombait dans le jeu normal).
+      const cam = this.game.camera;
+      this.leaving = false;
+      this.trans = { t: 0, dur: 0.6, from: cam.position.clone(), fromQ: cam.quaternion.clone(), out: false };
+      this.construct.open('hud');
+      this.refreshBar();
+      this.refreshLabels();
+      return;
+    }
     if (!this.active) this.enter('build');
     else if (!this.construct.active) {
       if (this.build.active) this.build.cancel();
@@ -420,6 +439,9 @@ export class ManagementView {
     const placed = this.placedPool ?? (this.placedPool = []);
     let n = 0;
     const dim = this.build.active || !!this.construct.sel;
+    // Pas sous la barre du haut (boutons Animaux…Plus, --hud-bottom posé par UI.syncHudVars) : sur téléphone,
+    // « Sellerie » et « Maison » étaient coupées par les boutons dans la vue construction.
+    const top = (parseFloat(document.documentElement.style.getPropertyValue('--hud-bottom')) || 0) + 24;
     for (const it of this.items) {
       const el = this.labelEls.get(it.key);
       if (!el) continue;
@@ -431,20 +453,23 @@ export class ManagementView {
         continue;
       }
       if (el.style.display) el.style.display = '';
-      const x = ((v.x + 1) / 2) * W;
-      let y = ((1 - v.y) / 2) * H;
       const wpx = el.labelW || 120;
+      // (dans l'écran : « Maison », en haut à droite, dépassait du bord)
+      const x = THREE.MathUtils.clamp(((v.x + 1) / 2) * W, wpx / 2 + 4, Math.max(wpx / 2 + 4, W - wpx / 2 - 4));
+      let y = ((1 - v.y) / 2) * H;
+      // Une étiquette déjà posée là : on monte d'un cran (sous la barre du haut : on descend à la place).
       for (let k = 0; k < 5; k++) {
-        let hit = null;
-        for (let i = 0; i < n; i++) {
-          const q = placed[i];
-          if (Math.abs(q.x - x) < (q.w + wpx) / 2 && Math.abs(q.y - y) < 30) {
-            hit = q;
-            break;
-          }
-        }
+        const hit = overlapAt(placed, n, x, y, wpx);
         if (!hit) break;
         y = hit.y - 32;
+      }
+      if (y < top) {
+        y = top;
+        for (let k = 0; k < 5; k++) {
+          const hit = overlapAt(placed, n, x, y, wpx);
+          if (!hit) break;
+          y = hit.y + 32;
+        }
       }
       const slot = placed[n] ?? (placed[n] = { x: 0, y: 0, w: 0 });
       slot.x = x;

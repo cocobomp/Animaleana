@@ -2,7 +2,7 @@
 
 import { h, isPhone, safeInsets } from './dom.js';
 import { watchViewport, focusField } from './viewport.js'; // clavier à l'écran
-import { t, L } from '../i18n.js';
+import { t, L, fmtHour } from '../i18n.js';
 import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
@@ -10,6 +10,7 @@ import { openTackItem } from './tack.js'; // sellerie : fiche d'un objet
 import { openVet } from './vet.js';
 import { openVetSchool } from './vetSchool.js'; // 🎓 école vétérinaire
 import { runMinigame, runChoreGame } from './minigames.js';
+import { nbsp } from './minigames/frame.js'; // typographie française des messages
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
 import { openHelp } from './help.js';
@@ -110,6 +111,9 @@ export class UI {
     this.hudObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.syncHudVars()) : null;
     this.hudObserver?.observe(this.hud);
     window.addEventListener('resize', () => this.syncHudVars());
+    // Hauteur du panneau depuis le bas de l'écran (CSS : messages juste au-dessus du panneau, sur téléphone).
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => this.syncPanelSpace()).observe(this.panelEl);
+    window.addEventListener('resize', () => this.syncPanelSpace());
     // Messages : quand on les déplace (tutorial.layoutTop pose leur top) ou qu'on en ajoute, ils restent dans l'écran.
     if (typeof MutationObserver === 'function') {
       new MutationObserver(() => this.fitToasts()).observe(this.toasts, { attributes: true, attributeFilter: ['style'], childList: true });
@@ -133,6 +137,15 @@ export class UI {
     set('--hud-tools-bottom', tools?.height ? `${Math.round(tools.bottom)}px` : '');
     set('--hud-info-right', info?.width ? `${Math.round(info.right)}px` : '');
     set('--hud-bottom', hud?.height ? `${Math.round(hud.bottom)}px` : '');
+  }
+
+  /** Pose --panel-space (px) : la place prise par le panneau depuis le bas de l'écran (vide s'il est fermé). */
+  syncPanelSpace() {
+    // (offsetTop, pas getBoundingClientRect : sans l'animation d'entrée, qui décale le panneau de 24 px)
+    const el = this.panelEl;
+    const v = !el.hidden && el.offsetHeight ? `${Math.max(0, Math.round(window.innerHeight - el.offsetTop))}px` : '';
+    const root = document.documentElement.style;
+    if (root.getPropertyValue('--panel-space') !== v) root.setProperty('--panel-space', v);
   }
 
   attach(game) {
@@ -269,6 +282,15 @@ export class UI {
     if (this.hudInfo.title !== tip) this.hudInfo.title = tip;
     this.updateTimeBar();
     if (this.panel?.live && !this.holding) this.refreshPanel();
+    // Une nouvelle heure : les panneaux qui en dépendent (refuge, animalerie ou vétérinaire qui ouvrent, petits
+    // boulots, maison où l'on peut enfin dormir…) se redessinent aussi, même s'ils ne sont pas « vivants » : au ⏩,
+    // le refuge restait affiché « Fermé » après 9 h tant qu'on ne le refermait pas.
+    const hourNow = Math.floor(s.clock / 60);
+    if (hourNow !== this.panelHour && !this.holding && performance.now() >= this.panelBusyUntil) {
+      const changed = this.panelHour !== undefined;
+      this.panelHour = hourNow;
+      if (changed && this.panel && !this.panel.live) this.renderPanel();
+    }
     this.renderStatus();
     this.pauseBanner.hidden = !g.paused;
     this.fitToasts();
@@ -442,8 +464,19 @@ export class UI {
       this.hideModal();
       fn();
     };
-    const hour = (hh, label) => h('button', { class: 'big-action', onClick: go(() => g.skipTo(hh)) },
-      h('span', { class: 'ba-icon' }, label), h('span', { class: 'ba-text' }, h('b', {}, t('skipToHour', { h: hh }))));
+    // Une heure déjà passée : c'est demain (le bouton le dit) ; plus de 12 h d'attente : on demande d'abord
+    // (« Jusqu'à 21 h » choisi à 22 h 24 sautait presque une journée entière sans prévenir).
+    const hour = (hh, label) => {
+      const tomorrow = hh - g.hour <= 0.05;
+      const wait = tomorrow ? hh - g.hour + 24 : hh - g.hour;
+      const skip = () => {
+        this.hideModal();
+        if (wait <= 12) return g.skipTo(hh);
+        return this.confirm(t('skipLongAsk', { h: Math.round(wait) })).then((ok) => ok && g.skipTo(hh));
+      };
+      return h('button', { class: 'big-action', onClick: skip },
+        h('span', { class: 'ba-icon' }, label), h('span', { class: 'ba-text' }, h('b', {}, t(tomorrow ? 'skipToHourTomorrow' : 'skipToHour', { h: fmtHour(hh) }))));
+    };
     this.showModal([
       h('h3', {}, `⏭ ${t('skipTitle')}`),
       busy.length ? h('p', { class: 'warn' }, t('skipBusy', { name: busy[0].a.name, g: busy[0].a.sex, what: t(`attn_${busy[0].what}`, { g: busy[0].a.sex }) })) : null,
@@ -504,7 +537,7 @@ export class UI {
       const d = Math.round(v - before[n]);
       if (Math.abs(d) >= 1) parts.push(`${NEED_ICON[n]} ${t(`need_${n}`)} ${Math.round(before[n])} → ${Math.round(v)}`);
     }
-    if (parts.length) this.toast(`${a.name} : ${parts.join(' · ')}`, 3500);
+    if (parts.length) this.toast(t('careDeltas', { name: a.name, parts: parts.join(' · ') }), 3500);
   }
 
   levelUp(level, names) {
@@ -524,18 +557,20 @@ export class UI {
    */
   toast(msg, ms = 3200, opts = null) {
     audio.ui('toast');
+    // (typographie française : « balade / ! Lis leur demande » se coupait avant le point d'exclamation)
+    const text = typeof msg === 'string' ? nbsp(msg) : msg;
     const group = opts?.group;
     const same = group && [...this.toasts.children].find((x) => x.dataset.group === group && !x.classList.contains('out'));
     if (same) {
       if (!same.querySelector('.toast-line')) same.replaceChildren(h('div', { class: 'toast-line' }, ...same.childNodes));
       same.classList.add('grouped');
-      same.append(h('div', { class: 'toast-line' }, msg));
+      same.append(h('div', { class: 'toast-line' }, text));
       this.toasts.append(same); // (le plus récent en bas, comme un nouveau message)
       this.fitToasts();
       this.toastTimers(same, ms);
       return null;
     }
-    const el = h('div', { class: 'toast' }, msg);
+    const el = h('div', { class: 'toast' }, text);
     if (group) el.dataset.group = group;
     this.toasts.append(el);
     while (this.toasts.children.length > 4) this.toasts.firstChild.remove();
@@ -568,6 +603,12 @@ export class UI {
       if (c.height && c.top > r.top && c.left < r.right && c.right > r.left) limit = Math.min(limit, c.top - 6);
     }
     while (box.children.length > 1 && box.getBoundingClientRect().bottom > limit) box.firstChild.remove();
+  }
+
+  /** Millisecondes depuis la fermeture de la dernière fenêtre (0 si une fenêtre est ouverte ou attend). */
+  sinceModal() {
+    if (this.modalOpen || this.modalQueue.length) return 0;
+    return this.modalClosedAt === undefined ? Infinity : performance.now() - this.modalClosedAt;
   }
 
   isBlocking() {
@@ -630,6 +671,7 @@ export class UI {
 
   hideModal() {
     this.modalOpen = false;
+    this.modalClosedAt = performance.now();
     this.modal.hidden = true;
     document.body.classList.remove('modal-open');
     this.syncModalTop();

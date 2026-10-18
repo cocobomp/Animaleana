@@ -155,6 +155,7 @@ export const BEAUTY_FR = {
   beauty_openNow: 'Ouvert !',
   beauty_noComp: 'Pas de concours de beauté prévu ici ces jours-ci : entraîne-toi en attendant !',
   beauty_registerBtn: 'S\'inscrire',
+  beauty_calendarBtn: '🎀 Préparer et inscrire', // calendrier : ouvre la fenêtre du concours (on y inscrit chaque animal)
   beauty_registerEnterBtn: 'S\'inscrire et entrer',
   beauty_enteredBtn: 'Inscrit',
   beauty_enteredBtn_f: 'Inscrite',
@@ -397,6 +398,7 @@ export const BEAUTY_EN = {
   beauty_openNow: 'Open!',
   beauty_noComp: 'No beauty contest here in the next few days: practise in the meantime!',
   beauty_registerBtn: 'Enter',
+  beauty_calendarBtn: '🎀 Prepare & enter',
   beauty_registerEnterBtn: 'Enter and go in',
   beauty_enteredBtn: 'Entered',
   beauty_presentedBtn: 'Already shown',

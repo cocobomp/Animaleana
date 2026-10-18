@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 
 const YELLOW = 0xffd23f;
+const NEAR_RING_ONLY = 2.5; // m : l'avatar est à côté de la cible, le cercle au sol suffit
 
 export class Marker {
   constructor(game) {
@@ -18,6 +19,7 @@ export class Marker {
     this.opts = {};
     this.time = 0;
     this.pos = new THREE.Vector3();
+    this._tip = new THREE.Vector3();
 
     const mat = (color, opacity = 1) => new THREE.MeshBasicMaterial({
       color, transparent: true, opacity, depthTest: false, depthWrite: false,
@@ -122,10 +124,21 @@ export class Marker {
     this.ring.position.y = 0.06;
 
     const player = this.game.player?.position;
-    if (player && this.opts.hideNear && Math.hypot(player.x - this.pos.x, player.z - this.pos.z) < this.opts.hideNear) {
+    const near = player ? Math.hypot(player.x - this.pos.x, player.z - this.pos.z) : Infinity;
+    if (this.opts.hideNear && near < this.opts.hideNear) {
       this.hide();
       return;
     }
+    // La flèche est toujours dessinée par-dessus tout (depthTest: false) : une cible entre la caméra et l'avatar
+    // (l'animal à caresser, le matin devant la maison) la mettait en grand sur la moitié de l'écran, l'avatar
+    // caché dessous. Seul le cercle au sol reste quand la cible est à côté de l'avatar ou plus près de la caméra
+    // que lui (au premier plan, on la voit bien) ; ailleurs, près de la caméra, la flèche rapetisse.
+    const cam = this.game.camera;
+    const dCam = cam ? cam.position.distanceTo(this._tip.copy(this.pos).setY(this.pos.y + this.arrow.position.y)) : Infinity;
+    const front = cam && player && !this.game.mgmt?.active // (vue d'ensemble : la caméra est en l'air, pas derrière l'avatar)
+      && Math.hypot(cam.position.x - this.pos.x, cam.position.z - this.pos.z) < Math.hypot(cam.position.x - player.x, cam.position.z - player.z) - 0.5;
+    this.arrow.scale.setScalar(THREE.MathUtils.clamp(dCam / 9, 0.3, 1));
+    this.arrow.visible = near > NEAR_RING_ONLY && !front;
     this.updateEdge(r);
   }
 

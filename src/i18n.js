@@ -617,7 +617,8 @@ const fr = {
   gearPut: 'Mettre',
   gearRemove: 'Enlever',
   gearNone: 'À acheter',
-  gearBought: '🛍️ {name} acheté !',
+  careDeltas: '{name} : {parts}', // après un soin : « Biscotte : 🍖 Faim 63 → 92 »
+  gearBought: '🛍️ C\'est acheté : {name} !', // (tournure neutre : selle, bombe, guêtres… n'ont pas tous le même genre)
   gear_notOwned: 'Il t\'en faut un de plus : achète-le à la sellerie (à côté de l\'écurie).',
   gear_wrongSpecies: 'Ce n\'est pas pour cet animal.',
   buy: 'Acheter',
@@ -663,7 +664,10 @@ const fr = {
   paused: 'en pause',
   skipTitle: 'Avancer le temps',
   skipNext: 'Jusqu\'au prochain moment intéressant',
-  skipToHour: 'Jusqu\'à {h} h',
+  skipToHour: 'Jusqu\'à {h}',
+  skipToHourTomorrow: 'Demain, {h}',
+  skipLongAsk: '⏭ Avancer le temps de {h} heures ? Tes animaux attendront tout ce temps-là.',
+  hourFmt: '{h} h', // une heure ronde (9 h, 18 h) : fmtHour()
   skippedTo: '⏭ Il est maintenant {h}.',
 
   sexLabel: 'Sexe',
@@ -727,6 +731,10 @@ const fr = {
   leashOn: '🦮 Tu promènes {name} en laisse. Plus il est dressé, moins il tire !',
   leashOn_f: '🦮 Tu promènes {name} en laisse. Plus elle est dressée, moins elle tire !',
   leashOff: '{name} n\'est plus en laisse.',
+  leashDropped: '🦮 Tu lâches la laisse de {name} : il t\'attend ici.', // en commençant une activité
+  leashDropped_f: '🦮 Tu lâches la laisse de {name} : elle t\'attend ici.',
+  leashRide: '🐎 À cheval, pas de laisse : {name} te suit librement.', // (la laisse traversait les barrières)
+  followersWait: '🐾 {names} t\'attendent ici.',
   r_needLeash: 'Mets d\'abord un collier et une laisse à {name} (dans sa fiche).',
   statusLeash: 'Tu promènes {name}',
 
@@ -1681,8 +1689,8 @@ const fr = {
   actv_today: 'Aujourd\'hui, de {from} h à {to} h',
   actv_tomorrow: 'Demain',
   actv_inDays: 'Dans {n} jours (jour {day})',
-  actv_calendarHome: 'Un concours a lieu tous les 3 jours au terrain de concours. Les inscriptions sont ouvertes le jour même, de 9 h à 18 h.',
-  actv_calendarAway: 'En voyage, il y a un concours tous les 2 jours. Les inscriptions sont ouvertes le jour même, de 9 h à 18 h.',
+  actv_calendarHome: 'Un concours a lieu tous les 3 jours au terrain de concours. Les inscriptions sont ouvertes le jour même, de 9 h à 18 h (concours de beauté : dès maintenant, animal par animal).',
+  actv_calendarAway: 'En voyage, il y a un concours tous les 2 jours. Les inscriptions sont ouvertes le jour même, de 9 h à 18 h (concours de beauté : dès maintenant, animal par animal).',
   actv_prizes: 'Inscription {fee} 🪙 · prix : {a} / {b} / {c} 🪙',
   actv_prizesSandbox: 'Coupes pour le podium, flots pour les suivants',
   actv_compHelp: 'Inscription : {fee} 🪙. Le gagnant reçoit {a} 🪙 et une coupe d\'or !',
@@ -2422,6 +2430,7 @@ const en = {
   gearPut: 'Put on',
   gearRemove: 'Take off',
   gearNone: 'Buy first',
+  careDeltas: '{name}: {parts}',
   gearBought: '🛍️ {name} bought!',
   gear_notOwned: 'You need one more: buy it at the tack room (next to the stable).',
   gear_wrongSpecies: 'This isn\'t for this animal.',
@@ -2464,7 +2473,10 @@ const en = {
   paused: 'paused',
   skipTitle: 'Skip time',
   skipNext: 'Until the next interesting moment',
-  skipToHour: 'Until {h}:00',
+  skipToHour: 'Until {h}',
+  skipToHourTomorrow: 'Tomorrow, {h}',
+  skipLongAsk: '⏭ Skip {h} hours ahead? Your animals will wait all that time.',
+  hourFmt: '{h12} {ampm}', // 9 am, 6 pm
   skippedTo: '⏭ It is now {h}.',
 
   sexLabel: 'Sex',
@@ -2524,6 +2536,9 @@ const en = {
   leashStop: 'Take off the leash',
   leashOn: '🦮 You are walking {name} on a leash. The better trained, the less they pull!',
   leashOff: '{name} is off the leash.',
+  leashDropped: '🦮 You let go of {name}\'s leash: they will wait for you here.',
+  leashRide: '🐎 No leash on horseback: {name} follows you freely.',
+  followersWait: '🐾 {names} wait for you here.',
   r_needLeash: 'Put a collar and a leash on {name} first (in their card).',
   statusLeash: 'Walking {name}',
 
@@ -3439,8 +3454,8 @@ const en = {
   actv_today: 'Today, {from}:00 – {to}:00',
   actv_tomorrow: 'Tomorrow',
   actv_inDays: 'In {n} days (day {day})',
-  actv_calendarHome: 'There is a contest every 3 days at the showground. Entries open on the day, 9 am – 6 pm.',
-  actv_calendarAway: 'While travelling, there is a contest every 2 days. Entries open on the day, 9 am – 6 pm.',
+  actv_calendarHome: 'There is a contest every 3 days at the showground. Entries open on the day, 9 am – 6 pm (beauty contests: right now, one animal at a time).',
+  actv_calendarAway: 'While travelling, there is a contest every 2 days. Entries open on the day, 9 am – 6 pm (beauty contests: right now, one animal at a time).',
   actv_prizes: 'Entry {fee} 🪙 · prizes: {a} / {b} / {c} 🪙',
   actv_prizesSandbox: 'Cups for the podium, rosettes for the next places',
   actv_compHelp: 'Entry: {fee} 🪙. The winner gets {a} 🪙 and a gold cup!',
@@ -3684,6 +3699,22 @@ export function t(key, params = {}) {
   if (params.g === 'f' && (dict[`${k}_f`] ?? (lang === 'fr' ? fr[`${k}_f`] : undefined))) k = `${k}_f`;
   const s = dict[k] ?? fr[k] ?? key;
   return s.replace(/\{(\w+)\}/g, (_, k) => (params[k] ?? `{${k}}`));
+}
+
+/** Une heure ronde dans la langue du joueur : « 9 h », « 18 h » en français ; « 9 am », « 6 pm » en anglais. */
+export function fmtHour(hour) {
+  const h = ((Math.floor(hour) % 24) + 24) % 24;
+  return t('hourFmt', { h, h12: h % 12 || 12, ampm: h < 12 ? 'am' : 'pm' });
+}
+
+/**
+ * Paramètres d'une raison (src/sim/buildings.js : heures { h, from, to } en nombres) prêts pour t() : les
+ * heures sont écrites dans la langue du joueur (« Ouvert de 9 h à 18 h », « Open 9 am – 6 pm »).
+ */
+export function hourParams(params = {}) {
+  const out = { ...params };
+  for (const k of ['h', 'from', 'to']) if (typeof out[k] === 'number') out[k] = fmtHour(out[k]);
+  return out;
 }
 
 /** Texte qui parle d'un animal (ou d'une aide) : prénom et accord au féminin automatiques. */

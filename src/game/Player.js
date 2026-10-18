@@ -259,7 +259,9 @@ export class Player {
    * opts.slow : à petits pas ; opts.budget : distance maximale (m) avant de s'arrêter là.
    */
   goTo(point, radius = 0.6, onArrive = null, opts = null) {
-    this.auto = { target: point.clone().setY(0), radius, onArrive, stuck: 0, last: this.root.position.clone(), slow: !!opts?.slow, budget: opts?.budget ?? Infinity };
+    const here = this.root.position.clone();
+    // anchor / still : point où l'on piétine et depuis combien de temps (voir update : on tourne en rond ?)
+    this.auto = { target: point.clone().setY(0), radius, onArrive, stuck: 0, last: here, anchor: here.clone(), still: 0, slow: !!opts?.slow, budget: opts?.budget ?? Infinity };
   }
 
   /**
@@ -433,7 +435,13 @@ export class Player {
       a.stuck = moved < dt * 0.5 ? a.stuck + dt : 0;
       a.budget -= moved;
       a.last.copy(pos);
-      if (d < a.radius || a.stuck > 1.2 || a.budget <= 0) {
+      // On marche, mais sans aller nulle part (aller-retour entre deux points de passage, que la détection
+      // « bloqué » ne voit pas : on bouge à chaque image) : après 4 s dans un rond de 2 m, on s'arrête aussi.
+      if (pos.distanceTo(a.anchor) > 2) {
+        a.anchor.copy(pos);
+        a.still = 0;
+      } else a.still += dt;
+      if (d < a.radius || a.stuck > 1.2 || a.still > 4 || a.budget <= 0) {
         const cb = a.onArrive;
         this.auto = null;
         cb?.();

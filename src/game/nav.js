@@ -150,6 +150,9 @@ function cornerBlocked(c, best, list, pos) {
   return BLOCKERS.some((b) => walled(b, 0.3)); // (bâtiments fixes : seulement dedans ou contre le mur)
 }
 
+// Coins d'un rectangle dans l'ordre du tour : deux coins qui se suivent partagent un côté.
+const CYCLE = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+
 function detour(pos, wp, depth, list) {
   let best = null;
   let bestD = Infinity;
@@ -161,25 +164,48 @@ function detour(pos, wp, depth, list) {
     best = e;
   }
   if (!best) return wp;
-  // Le coin (un peu à l'extérieur) qui fait le moins de détour.
-  let corner = null;
-  let cost = Infinity;
-  for (const sx of [-1, 1]) {
-    for (const sz of [-1, 1]) {
-      const c = { x: best.x + sx * (best.hw + 2.2), z: best.z + sz * (best.hd + 2.2) };
-      if (Math.hypot(c.x - pos.x, c.z - pos.z) < 1 || crosses(pos, c, best, -0.3)) continue;
-      if (cornerBlocked(c, best, list, pos)) continue; // (pas dans un mur, ni par une fente)
-      // Un coin d'où l'on voit déjà le but vaut mieux qu'un coin d'où il faudra encore tourner.
-      // Sinon, le coin le plus proche du but (pour ne pas hésiter entre deux coins).
-      const toC = Math.hypot(c.x - pos.x, c.z - pos.z);
-      const toW = Math.hypot(wp.x - c.x, wp.z - c.z);
-      const k = crosses(c, wp, best, -0.3) ? 1000 + toW + toC * 0.1 : toC + toW;
-      if (k < cost) {
-        cost = k;
-        corner = c;
+  // Le coin (un peu à l'extérieur) qui fait le moins de détour. Coins dans l'ordre du tour (deux voisins
+  // se suivent) : pour un coin d'où l'on ne voit pas encore le but, on compte le vrai chemin, de coin en coin
+  // le long du rectangle jusqu'à un coin d'où on le voit. Avant, on prenait « le coin le plus proche du but » :
+  // contre l'écurie, côté terrain de concours, c'était un cul-de-sac (le coin suivant est dans le paddock) ;
+  // arrivé à moins d'1 m, on visait l'autre coin, on s'en éloignait, et le cul-de-sac redevenait le meilleur :
+  // l'avatar tournait en rond au coin de l'écurie, sans fin.
+  const pts = CYCLE.map(([sx, sz]) => ({ x: best.x + sx * (best.hw + 2.2), z: best.z + sz * (best.hd + 2.2) }));
+  const blocked = pts.map((c) => cornerBlocked(c, best, list, pos)); // (pas dans un mur, ni par une fente)
+  const sees = pts.map((c) => !crosses(c, wp, best, -0.3));
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+  const around = (i) => {
+    if (sees[i]) return dist(pts[i], wp);
+    let length = Infinity;
+    for (const dir of [1, 3]) {
+      let acc = 0;
+      for (let j = i, n = 0; n < 3; n++) {
+        const k = (j + dir) % 4;
+        if (blocked[k]) break;
+        acc += dist(pts[j], pts[k]);
+        j = k;
+        if (sees[j]) {
+          length = Math.min(length, acc + dist(pts[j], wp));
+          break;
+        }
       }
     }
-  }
+    return length;
+  };
+  let corner = null;
+  let cost = Infinity;
+  pts.forEach((c, i) => {
+    const toC = dist(c, pos);
+    if (toC < 1 || blocked[i] || crosses(pos, c, best, -0.3)) return;
+    // Un coin d'où l'on voit déjà le but vaut mieux qu'un coin d'où il faudra encore tourner. Sans chemin
+    // connu (tous les coins suivants pris), le coin le plus proche du but (pour ne pas hésiter entre deux coins).
+    const rest = around(i);
+    const k = rest < Infinity ? toC + rest : 1e6 + dist(wp, c) + toC * 0.1;
+    if (k < cost) {
+      cost = k;
+      corner = c;
+    }
+  });
   if (!corner) return wp;
   // Le chemin vers ce coin peut lui-même passer par un autre enclos.
   if (depth < 2) {

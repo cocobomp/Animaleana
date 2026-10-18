@@ -37,6 +37,13 @@ Le modèle d'origine n'a aucune animation : toutes les allures sont générées 
      jamais sous le sol (la cible est relevée), vérifié ensuite sur le maillage déformé (rapport JSON) ;
    - `idle`, `rest` (repos d'un postérieur, sabot sur la pince), `eat` (bout du nez à 3 cm de l'herbe, un
      antérieur un peu en avant).
+   **`normfix.mjs`** (après `anim2.py`, sur le GLB brut) : la carte de relief de la robe de la source
+   (`HorseMain2k00Norm00`) porte une vingtaine de petites taches de normales extrêmes, tournées vers l'intérieur
+   de la peau (bleu < 128) : une fente sombre, bleutée de près, en haut de la croupe des deux côtés (pixels
+   (832, 473) et (833, 547) en 1024²), des points sous les coudes, aux grassets et aux jarrets. Chaque tache
+   (écart au médian 11×11 et cœur « impossible », hors de la tête : u > 0,4) est remplie par diffusion depuis la
+   peau voisine, puis les normales sont renormalisées. `node normfix.mjs brut.glb sortie.glb --liste` les liste
+   sans rien écrire.
 4. **`pack.mjs`** (glTF-Transform 4, meshoptimizer, sharp) : animations ré-échantillonnées, textures en WebP
    (modelé 1024, relief 1024 / 512), maillage quantifié et compressé (meshopt).
 5. **`lod.mjs`** (meshoptimizer) : version allégée, sans toucher à la géométrie ni aux allures (encodage
@@ -49,13 +56,16 @@ Le modèle d'origine n'a aucune animation : toutes les allures sont générées 
    - la **carte des crins** (`horse_hair_detail`) ramenée à **512²** comme sa carte de relief (354 → 103 Kio) :
      elle pesait plus que celle de la robe.
 
-   Fichier final : **752 288 octets** (735 Kio, dont 377 Kio d'images WebP), contre 994 432 avant l'étape 5.
+   Fichier final : **751 048 octets** (733 Kio, dont 376 Kio d'images WebP), contre 994 432 avant l'étape 5.
+   (Le fichier du jeu a reçu la carte de relief corrigée sans refaire la chaîne : `normfix.mjs` sur l'image du
+   GLB brut, encodée en WebP comme `pack.mjs` — qualité 82, effort maximal, qui redonne l'ancienne image au
+   bit près sans la correction — puis remise dans le GLB ; géométrie, allures et autres images identiques.)
    `lod.mjs` peut être relancé sur sa propre sortie (il refait les index).
 
 Pour ne changer qu'une texture sans refaire les allures : relancer `lyndon_prep.py` et `prep2.py`, puis
 **`retex.mjs`** remplace l'image dans le GLB brut d'origine (`node retex.mjs horse_raw.glb horse_body_detail
-work/tex/horse_body_detail.png horse_raw_retex.glb`), `pack.mjs` le compresse et `lod.mjs` ajoute la version
-allégée (géométrie et allures identiques).
+work/tex/horse_body_detail.png horse_raw_retex.glb`), `normfix.mjs` bouche les taches du relief, `pack.mjs` le
+compresse et `lod.mjs` ajoute la version allégée (géométrie et allures identiques).
 
 ## Dans le jeu
 

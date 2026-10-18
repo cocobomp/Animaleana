@@ -42,7 +42,7 @@ describe('fichier du cheval réaliste', () => {
   const json = glbJson(buf);
 
   it('est léger et compressé (meshopt, WebP), avec sa version réduite', () => {
-    // (752 288 octets : crins en 512², index simplifiés de tools/cheval/lod.mjs)
+    // (751 048 octets : crins en 512², index simplifiés de tools/cheval/lod.mjs, relief de la robe sans taches)
     expect(buf.length).toBeLessThan(800 * 1024);
     const lod = json.meshes.find((m) => m.extras?.lod);
     expect(lod?.primitives).toHaveLength(3);

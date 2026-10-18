@@ -17,9 +17,12 @@ $B "$HERE/lyndon_prep.py" -- "$SRC/riggedHorse.blend" "$SRC/horse" "$WORK/lyndon
 $B "$HERE/prep2.py" -- "$WORK/lyndon_prep.blend" "$SRC/horse" "$WORK/prep2.blend" "$WORK/tex"
 # 3. Allures, vérification des sabots, export brut.
 $B "$HERE/anim2.py" -- "$WORK/prep2.blend" "$WORK/horse_raw.glb" "$WORK/rapport.json"
+# 3 bis. Carte de relief de la robe : taches isolées de la texture source bouchées (fente de la croupe…).
+cp "$HERE/normfix.mjs" "$GT/normfix.mjs"
+node "$GT/normfix.mjs" "$WORK/horse_raw.glb" "$WORK/horse_raw_fix.glb"
 # 4. Compression (meshopt, WebP).
 cp "$HERE/pack.mjs" "$GT/pack.mjs"
-node "$GT/pack.mjs" "$WORK/horse_raw.glb" "$WORK/horse_packed.glb"
+node "$GT/pack.mjs" "$WORK/horse_raw_fix.glb" "$WORK/horse_packed.glb"
 # 5. Version allégée : index simplifiés (LOD) et carte des crins en 512².
 cp "$HERE/lod.mjs" "$GT/lod.mjs"
 node "$GT/lod.mjs" "$WORK/horse_packed.glb" "$HERE/../../public/models/horse_real.glb"

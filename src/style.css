@@ -2185,6 +2185,9 @@ body.actv-nomove #touch-pad { display: none !important; }
 .cl-deal-item.price { background: #fff3c4; color: #8a6a00; font-size: 1.1rem; }
 .cl-deal small { color: var(--muted, #6b6b6b); font-weight: 500; }
 .cl-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* Demande longue (téléphone : prix par jour + « Tu as déjà un animal confié ») : la fiche défile, mais
+   « ✅ Accepter / ❌ Refuser » restent collés en bas au lieu d'être coupés sous le bord de la fenêtre. */
+.cl-modal > .cl-buttons { position: sticky; bottom: 0; z-index: 1; background: var(--bg); padding-top: 6px; }
 .cl-btn { min-height: 60px; font-size: 1.15rem; font-weight: 800; border-radius: 16px; border: 0; cursor: pointer; }
 .cl-btn.yes { background: #3a9d5d; color: #fff; }
 .cl-btn.yes:disabled { background: #b9c9bf; cursor: not-allowed; }

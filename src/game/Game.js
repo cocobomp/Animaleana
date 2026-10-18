@@ -1553,6 +1553,11 @@ export class Game {
     if (!a.following || !a.leashed) {
       if (!canLeash(a)) return this.ui.toast(t('r_needLeash', { name: a.name, g: a.sex }), 5000);
       a.following = true;
+      // Déjà à cheval : pas de laisse non plus (comme en montant, ride) ; le chien suit librement.
+      if (this.player.mount) {
+        a.leashed = false;
+        return this.ui.toast(t('leashRide', { name: a.name, g: a.sex }), 5000);
+      }
       a.leashed = true;
       this.ui.toast(t('leashOn', { name: a.name, g: a.sex }));
     } else {

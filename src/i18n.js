@@ -351,7 +351,7 @@ const fr = {
   hours: '{n} h',
 
   welcome: 'Bienvenue {name} ! Va au refuge (à droite) pour adopter ton premier animal.',
-  ridingHint: 'Tu montes {name}. Maj pour galoper !',
+  ridingHint: 'Tu montes {name}. 🏃 ou Maj pour galoper !',
   following: '{name} te suit.',
   staying: '{name} reste ici.',
 
@@ -605,8 +605,8 @@ const fr = {
   statusLess: '➖ Replier',
   r_needBridle: 'Il faut mettre un filet ou un licol à {name} pour le monter (fiche de l\'animal).',
   r_needBridle_f: 'Il faut mettre un filet ou un licol à {name} pour la monter (fiche de l\'animal).',
-  ridingBareback: 'Tu montes {name} à cru (sans selle) : il va moins vite. Maj pour galoper !',
-  ridingBareback_f: 'Tu montes {name} à cru (sans selle) : elle va moins vite. Maj pour galoper !',
+  ridingBareback: 'Tu montes {name} à cru (sans selle) : il va moins vite. 🏃 ou Maj pour galoper !',
+  ridingBareback_f: 'Tu montes {name} à cru (sans selle) : elle va moins vite. 🏃 ou Maj pour galoper !',
   do_tack: 'Sellerie (selles, couvertures…)',
   tackRoom: 'Sellerie',
   tackHelp: 'Achète l\'équipement ici, puis mets-le sur tes animaux depuis leur fiche.',
@@ -2209,7 +2209,7 @@ const en = {
   hours: '{n} h',
 
   welcome: 'Welcome {name}! Go to the shelter (on the right) to adopt your first animal.',
-  ridingHint: 'You are riding {name}. Shift to gallop!',
+  ridingHint: 'You are riding {name}. 🏃 or Shift to gallop!',
   following: '{name} is following you.',
   staying: '{name} stays here.',
 
@@ -2419,7 +2419,7 @@ const en = {
   statusMore: '➕ {n} more',
   statusLess: '➖ Show less',
   r_needBridle: '{name} needs a bridle to be ridden (animal card or the stable\'s tack room).',
-  ridingBareback: 'You are riding {name} bareback (no saddle): slower. Shift to gallop!',
+  ridingBareback: 'You are riding {name} bareback (no saddle): slower. 🏃 or Shift to gallop!',
   do_tack: 'Tack room (saddles, blankets…)',
   tackRoom: 'Tack room',
   tackHelp: 'Buy equipment here, then put it on your animals from their card.',

@@ -73,6 +73,10 @@ compresse et `lod.mjs` ajoute la version allégée (géométrie et allures ident
 (`horseModel.js`, gardé comme modèle de repli si le GLB ne charge pas) : proportions de chaque race par
 déformation du maillage et du squelette (le gabarit natif est un cheval de trait : `NATIVE_BUILD`),
 brosse du Fjord et des poulains, fanons, robe, mixeur d'allures, équipement posé sur des coupes mesurées.
+Le modèle source a les paupières à demi fermées (regard somnolent en permanence) : au chargement,
+`openEyelids` fait tourner les sommets autour de chaque œil sur la sphère du globe (paupière supérieure
+relevée de 0,42 rad, inférieure abaissée de 0,12, coins en place), ce qui ouvre l'œil sans rien faire passer
+dedans ; au-delà de ≈ 0,5 rad, des triangles de la paupière se replient.
 `tests/horseReal.test.js` vérifie le fichier (os, clips, compression) et que chaque race garde ses sabots au sol.
 
 Ce qu'il coûte, et comment on le garde bas :

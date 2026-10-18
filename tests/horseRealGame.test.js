@@ -3,7 +3,7 @@
 // (posées sur les crins, hors du corps) et robe lustrée qui garde son modelé peint.
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-import { buildRealHorseModel, realLegPose } from '../src/game/models/horseReal.js';
+import { buildRealHorseModel, realLegPose, realHorseBase } from '../src/game/models/horseReal.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { notePrep } from '../src/sim/beauty.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
@@ -217,5 +217,37 @@ describe('concours de beauté sur le cheval réaliste', () => {
     Beauty.removeBeautyDecor(e);
     expect(md.coatMesh.material).toBe(coat);
     md.dispose();
+  });
+});
+
+describe('yeux du cheval réaliste', () => {
+  it('paupières ouvertes (le modèle source avait l\'œil à demi fermé), pareil des deux côtés', () => {
+    const base = realHorseBase(gltf);
+    const coat = base.prims.coat;
+    const ch = base.snout.clone().sub(base.rest[3]); // (os de la tête : RIG[3])
+    const f = new THREE.Vector3(0, ch.y, ch.z).normalize();
+    const u = new THREE.Vector3().crossVectors(f, new THREE.Vector3(1, 0, 0)).normalize();
+    expect(base.eyes).toHaveLength(2);
+    const open = [];
+    for (const { side, c, r } of base.eyes) {
+      const l = new THREE.Vector3(side, 0, 0);
+      let up = Infinity;
+      let low = -Infinity;
+      const v = new THREE.Vector3();
+      for (let i = 0; i < coat.count; i++) {
+        v.fromArray(coat.pos, i * 3).sub(c);
+        const d = v.length() / r;
+        const pl = v.dot(l) / r;
+        if (d < 0.9 || d > 1.15 || pl < 0.5 || Math.abs(v.dot(f) / r - 0.2) > 0.35) continue;
+        // bord des paupières au milieu de la fente : hauteur sur le globe depuis l'axe du regard
+        const phi = Math.atan2(v.dot(u) / r, pl);
+        if (phi > 0.05) up = Math.min(up, phi);
+        else low = Math.max(low, phi);
+      }
+      open.push(up - low);
+    }
+    // (0,09 rad au départ : une fente ; ≈ 0,63 rad ouvert)
+    for (const o of open) expect(o).toBeGreaterThan(0.45);
+    expect(Math.abs(open[0] - open[1])).toBeLessThan(0.05);
   });
 });

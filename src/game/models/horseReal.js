@@ -178,6 +178,7 @@ export function realHorseBase(gltf) {
     return new THREE.Quaternion();
   });
   const base = { prims, rest, rot, groupRest, headTilt, zShift, snout };
+  base.eyes = openEyelids(prims, chanfrein);
   base.hair = hairInfo(prims, rest);
   base.clips = retarget(gltf, toHorse, restW, groupRest, zShift);
   base.sole = solesOf(prims.coat, rest);
@@ -192,6 +193,80 @@ export function realHorseBase(gltf) {
     }
   }
   return base;
+}
+
+/**
+ * Paupières du modèle source à demi fermées (regard somnolent en permanence, qu'on ne distinguait plus de la
+ * somnolence ni de la tristesse) : on ouvre l'œil. Pour chaque œil (sphère de la primitive des yeux), les
+ * sommets du pelage autour, du côté de l'œil, tournent sur la sphère autour de l'axe du chanfrein passant par
+ * son centre : la paupière supérieure remonte de EYE_OPEN.up, l'inférieure descend de EYE_OPEN.low. Tourner
+ * sur la sphère garde chaque sommet à sa distance du centre (rien ne passe dans le globe) ; l'angle décroît
+ * vers le sourcil et la joue (sans repli : jamais plus vite que l'angle lui-même) et vers les coins de l'œil,
+ * qui restent en place (forme en amande). Renvoie les yeux (centre, rayon) pour les tests.
+ */
+const EYE_OPEN = { up: 0.42, low: 0.12 };
+function openEyelids(prims, chanfrein) {
+  const eye = prims.eye;
+  const coat = prims.coat;
+  if (!eye || !coat) return [];
+  const f = V(0, chanfrein.y, chanfrein.z).normalize();
+  const u = V().crossVectors(f, V(1, 0, 0)).normalize();
+  if (u.y < 0) u.negate();
+  const eyes = [];
+  for (const side of [1, -1]) {
+    const c = V();
+    let n = 0;
+    for (let i = 0; i < eye.count; i++) {
+      if (Math.sign(eye.pos[i * 3]) !== side) continue;
+      c.add(_v.fromArray(eye.pos, i * 3));
+      n++;
+    }
+    if (!n) continue;
+    c.multiplyScalar(1 / n);
+    let r = 0;
+    for (let i = 0; i < eye.count; i++) {
+      if (Math.sign(eye.pos[i * 3]) === side) r = Math.max(r, _v.fromArray(eye.pos, i * 3).distanceTo(c));
+    }
+    eyes.push({ side, c: c.clone(), r });
+    const l = V(side, 0, 0);
+    // Milieu de la fente le long du chanfrein (entre les deux coins) : sommets du bord, juste hors du globe.
+    let f0 = Infinity;
+    let f1 = -Infinity;
+    for (let i = 0; i < coat.count; i++) {
+      _v.fromArray(coat.pos, i * 3).sub(c);
+      const d = _v.length() / r;
+      if (d < 0.95 || d > 1.12 || _v.dot(l) < 0.3 * r) continue;
+      const a = _v.dot(f) / r;
+      f0 = Math.min(f0, a);
+      f1 = Math.max(f1, a);
+    }
+    if (!Number.isFinite(f0)) continue;
+    const fm = (f0 + f1) / 2;
+    const half = Math.max(0.3, (f1 - f0) / 2);
+    const q = new THREE.Quaternion();
+    for (let i = 0; i < coat.count; i++) {
+      _v.fromArray(coat.pos, i * 3).sub(c);
+      const d = _v.length() / r;
+      const pl = _v.dot(l) / r;
+      if (d > 2 || pl < 0.15) continue;
+      const pu = _v.dot(u) / r;
+      const pf = _v.dot(f) / r;
+      const phi = Math.atan2(pu, pl); // hauteur sur le globe, depuis l'axe du regard (vers l'extérieur)
+      // (la fente est un peu au-dessus de l'axe : paupière supérieure au-dessus de 0,05 rad)
+      const upper = phi > 0.05;
+      const top = upper ? 1 - smooth(0.6, 1.5, phi) : 1 - smooth(-0.35, -1.2, phi);
+      const w = top * (1 - smooth(1.3, 2, d)) * (1 - smooth(0.6, 1.05, Math.abs(pf - fm) / half));
+      if (w <= 0) continue;
+      const ang = (upper ? EYE_OPEN.up : -EYE_OPEN.low) * w * side;
+      // (autour de f, de l vers u : f × (+x) = u, la paupière gauche s'ouvre ; à droite, l = -x, le sens s'inverse)
+      q.setFromAxisAngle(f, ang);
+      _v.applyQuaternion(q).add(c);
+      coat.pos.set([_v.x, _v.y, _v.z], i * 3);
+      _w.fromArray(coat.nrm, i * 3).applyQuaternion(q);
+      coat.nrm.set([_w.x, _w.y, _w.z], i * 3);
+    }
+  }
+  return eyes;
 }
 
 /** z du creux du dos (ligne du dessus entre garrot et hanches). */

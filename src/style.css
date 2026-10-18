@@ -377,6 +377,9 @@ button.sv-card:hover { border-color: var(--primary); }
   transition: opacity 0.4s, transform 0.4s;
 }
 .toast.out { opacity: 0; transform: translateY(-8px); }
+/* Arrivées réunies dans une seule bulle (ui.toast(msg, ms, { group })) : une ligne par visiteur. */
+.toast-line + .toast-line { margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(0, 0, 0, 0.08); }
+.toast.grouped { font-size: 0.9em; padding: 8px 14px; }
 @keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 /* ---------- panneau */

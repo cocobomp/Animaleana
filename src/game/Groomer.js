@@ -208,7 +208,7 @@ export class Groomer {
     if (!st.nextClientAt) st.nextClientAt = p.clock + 20;
     const hour = hourOf(p.clock);
     if (canGroom(p) && canWelcome(p) && p.clock >= st.nextClientAt && hour >= OPEN_HOURS[0] && hour < OPEN_HOURS[1]
-      && !g.ui.isBlocking?.() && !g.activities?.active) {
+      && !g.ui.isBlocking?.() && !g.activities?.active && g.arrivals?.free() !== false) { // (chacun son tour : src/game/arrivals.js)
       st.nextClientAt = p.clock + clientInterval(p) * 60 * (0.7 + Math.random() * 0.6);
       this.arrive(newClient(p, { day }));
     }
@@ -225,7 +225,8 @@ export class Groomer {
     this.visitors.set(client.id, v);
     if (instant) this.settle(v);
     else v.walk([...sp.road.slice(1), wait], () => this.settle(v));
-    this.game.ui.toast(t('grm_arrives', { owner: client.owner.name, name: client.animal.name }), 6000);
+    this.game.arrivals?.note();
+    this.game.ui.toast(t('grm_arrives', { owner: client.owner.name, name: client.animal.name }), 6000, { group: 'visitors' });
     this.game.emit('groomerClient', client);
     this.game.ui.renderStatus?.();
     return client;

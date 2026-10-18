@@ -279,13 +279,15 @@ export class Clients {
     if (this.visitor) {
       if (!this.visitor.visit.auto && visitorExpired(p, p.clock)) this.visitorLeaves(false);
       else this.proximity();
-    } else if (!st.visitor && !g.dogTrainer?.visitor && shouldVisitorArrive(p, { day, hour: g.hour, isHome: g.isHome }) && !g.ui.isBlocking()) {
+    } else if (!st.visitor && !g.dogTrainer?.visitor && shouldVisitorArrive(p, { day, hour: g.hour, isHome: g.isHome }) && !g.ui.isBlocking()
+      && g.arrivals?.free() !== false) { // (un autre visiteur vient d'arriver : chacun son tour, src/game/arrivals.js)
       this.arrive();
     }
     // Les propriétaires reviennent chercher leur animal (seulement quand on est à la maison).
     if (g.isHome) {
       for (const a of clientAnimals(p)) {
-        if (isPickupDue(a, day) && a.location === p.place && !this.pickups.has(a.id)) this.startPickup(a);
+        // (un propriétaire à la fois : ceux qui reviennent le même jour arrivent l'un après l'autre)
+        if (isPickupDue(a, day) && a.location === p.place && !this.pickups.has(a.id) && g.arrivals?.free() !== false) this.startPickup(a);
       }
       for (const [id, x] of this.pickups) {
         if (x.ready && !x.done && !g.ui.isBlocking()) {
@@ -323,11 +325,12 @@ export class Clients {
     const visit = createVisit(p, { day: g.day, clock: p.clock, place: p.place, species: this.speciesHere() }, Math.random, kind);
     setVisitor(p, visit);
     scheduleNextVisit(p, g.day);
+    g.arrivals?.note();
     this.spawnVisitor(visit, instant);
     if (visit.auto) {
-      g.ui.toast(visit.kind === 'autoVet' ? t('cl_autoVet', { owner: visit.owner.name, name: visit.animal.name }) : t('cl_autoPension', { owner: visit.owner.name, name: visit.animal.name }), 7000);
+      g.ui.toast(visit.kind === 'autoVet' ? t('cl_autoVet', { owner: visit.owner.name, name: visit.animal.name }) : t('cl_autoPension', { owner: visit.owner.name, name: visit.animal.name }), 7000, { group: 'visitors' });
     } else {
-      g.ui.toast(t('cl_arrive', { owner: visit.owner.name, name: visit.animal.name, kind: t(`cl_kind_${visit.career}`) }), 7000);
+      g.ui.toast(t('cl_arrive', { owner: visit.owner.name, name: visit.animal.name, kind: t(`cl_kind_${visit.career}`) }), 7000, { group: 'visitors' });
     }
     g.emit('clientArrived', visit);
     return visit;
@@ -506,7 +509,8 @@ export class Clients {
     npc.place(GATE.x, GATE.z);
     const entry = { npc, ready: false, done: false };
     this.pickups.set(a.id, entry);
-    g.ui.toast(t('cl_pickupSoon', { owner: c.ownerName, name: a.name }), 5000);
+    g.arrivals?.note();
+    g.ui.toast(t('cl_pickupSoon', { owner: c.ownerName, name: a.name }), 5000, { group: 'visitors' });
     npc.walk([WAY, MEET], () => {
       entry.ready = true;
       npc.waving = true;

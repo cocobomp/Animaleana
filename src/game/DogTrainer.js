@@ -105,6 +105,7 @@ export class DogTrainer {
     if (!g.isHome || this.visitor || this.walk || this.demo || g.ui.isBlocking() || g.paused) return;
     if (g.activities?.active) return; // pas en pleine épreuve ou séance : le maître viendra après
     if (g.clients?.visitor && !g.clients.visitor.visit?.auto) return; // un client de la pension ou du vétérinaire attend déjà : chacun son tour
+    if (g.arrivals?.free() === false) return; // un autre visiteur vient d'arriver (src/game/arrivals.js)
     // Un maître revient chercher son chien (réglé, séances épuisées, ou jour prévu passé).
     const back = clientDogs(g.profile).find((a) => a.location === g.profile.place && readyForDelivery(a, g.day) && g.entities.has(a.id));
     if (back && g.hour >= 8 && g.hour <= 20) {
@@ -168,7 +169,8 @@ export class DogTrainer {
     setPending(g.profile, req, g.day); // gardé dans le profil tant qu'on n'a pas répondu
     this.asked = false;
     npc.walk(near ? [spot] : [WAY, MEET, spot], () => this.waitHere(npc));
-    g.ui.toast(t('dt_arrives', { name: req.ownerName, dog: req.dog.name }), 6000);
+    g.arrivals?.note();
+    g.ui.toast(t('dt_arrives', { name: req.ownerName, dog: req.dog.name }), 6000, { group: 'visitors' });
     g.ui.renderStatus();
     return this.visitor;
   }
@@ -193,7 +195,8 @@ export class DogTrainer {
     this.visitor = { npc, e: null, req, accepted: true, returning: a.id };
     this.asked = false;
     npc.walk(near ? [spot] : [WAY, MEET, spot], () => this.waitHere(npc));
-    g.ui.toast(t('dt_ownerBack', { name: req.ownerName, dog: a.name }), 6000);
+    g.arrivals?.note();
+    g.ui.toast(t('dt_ownerBack', { name: req.ownerName, dog: a.name }), 6000, { group: 'visitors' });
     g.ui.renderStatus();
     return this.visitor;
   }

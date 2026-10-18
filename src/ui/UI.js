@@ -518,15 +518,38 @@ export class UI {
 
   // ------------------------------------------------------------ notifications
 
-  toast(msg, ms = 3200) {
+  /**
+   * Petit message. opts.group : les messages d'un même groupe encore affichés sont réunis dans une seule
+   * bulle (une ligne chacun) au lieu de s'empiler, par ex. 'visitors' pour les arrivées des métiers.
+   */
+  toast(msg, ms = 3200, opts = null) {
     audio.ui('toast');
+    const group = opts?.group;
+    const same = group && [...this.toasts.children].find((x) => x.dataset.group === group && !x.classList.contains('out'));
+    if (same) {
+      if (!same.querySelector('.toast-line')) same.replaceChildren(h('div', { class: 'toast-line' }, ...same.childNodes));
+      same.classList.add('grouped');
+      same.append(h('div', { class: 'toast-line' }, msg));
+      this.toasts.append(same); // (le plus récent en bas, comme un nouveau message)
+      this.fitToasts();
+      this.toastTimers(same, ms);
+      return null;
+    }
     const el = h('div', { class: 'toast' }, msg);
+    if (group) el.dataset.group = group;
     this.toasts.append(el);
     while (this.toasts.children.length > 4) this.toasts.firstChild.remove();
     this.fitToasts();
-    setTimeout(() => el.classList.add('out'), ms);
-    setTimeout(() => el.remove(), ms + 400);
+    this.toastTimers(el, ms);
     return null;
+  }
+
+  /** Le message s'efface après ms (une bulle de groupe qui reçoit une ligne repart pour ms de plus). */
+  toastTimers(el, ms) {
+    clearTimeout(el._outT);
+    clearTimeout(el._rmT);
+    el._outT = setTimeout(() => el.classList.add('out'), ms);
+    el._rmT = setTimeout(() => el.remove(), ms + 400);
   }
 
   /**

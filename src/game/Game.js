@@ -56,6 +56,7 @@ import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, traj
 import { CompetitionVenue } from './CompetitionVenue.js'; // concours à l'extérieur : site, épreuve, podium
 import './Dressage.js'; // séances de dressage (s'enregistrent dans Activities)
 import { Marker } from './Marker.js';
+import { Arrivals } from './arrivals.js'; // les visiteurs des métiers arrivent chacun leur tour
 import { Emitter } from './emitter.js'; // petit système d'événements (on / emit)
 import { audio } from './audio.js'; // sons synthétisés : voix, pas, ambiance, interface
 import { Groomer } from './Groomer.js'; // métier Toiletteur : salon, clients et leurs animaux
@@ -123,6 +124,7 @@ export class Game {
     this.tasks = new TaskQueue(this);
     this.interiors = new Interiors(this);
     this.events = new Events(this);
+    this.arrivals = new Arrivals({ clock: () => this.profile?.clock ?? 0 }); // (avant les métiers qui l'utilisent)
     this.clients = new Clients(this); // visiteurs, animaux confiés, métiers
     this.activities = new Activities(this);
     this.beauty = new Beauty(this); // concours de beauté (game.beauty)

@@ -2795,14 +2795,17 @@ const AXIS_Y = V(0, 1, 0);
  * 'jump' (saut d'obstacle : antérieurs repliés sous le poitrail, postérieurs repliés sous le ventre),
  * 'down' (couché sur le sternum, membres repliés), 'hoof' (antérieur levé, genou plié : « donner le
  * sabot »), 'bow' (révérence, voir bowPose). s : 0 → 1 (amplitude). sg : groupe d'échelle de l'entité
- * (pour se coucher, pour la révérence : il bascule et se pose au sol). Renvoie true si
- * le modèle est le cheval réaliste (sinon l'activité garde sa pose habituelle).
+ * (pour se coucher, pour la révérence : il bascule et se pose au sol). t : phase d'un saut d'obstacle
+ * (0 → 1, voir jumpLegs ; sans elle, 'jump' replie tout selon s). Renvoie true si le modèle est le cheval
+ * réaliste (sinon l'activité garde sa pose habituelle).
  */
-export function realLegPose(md, kind, s, sg = null) {
+export function realLegPose(md, kind, s, sg = null, t = null) {
   if (!md?.real) return false;
   const front = md.legs.filter((l) => l.front);
   const hind = md.legs.filter((l) => !l.front);
-  if (kind === 'jump') {
+  if (kind === 'jump' && t !== null) {
+    jumpLegs(front, hind, t);
+  } else if (kind === 'jump') {
     for (const l of front) {
       l.pivot.rotation.x = -1.2 * s;
       l.knee.rotation.x = 1.9 * s;
@@ -2834,6 +2837,35 @@ export function realLegPose(md, kind, s, sg = null) {
     bowPose(md, front, hind, s, sg);
   } else return false;
   return true;
+}
+
+/**
+ * Membres pendant un saut d'obstacle, selon sa phase t (0 → 1, de l'appel à la réception), fondus avec
+ * l'allure (pose du clip) au début et à la fin : à l'appel, les postérieurs poussent (tendus vers
+ * l'arrière) pendant que les antérieurs se replient haut sous le poitrail ; au-dessus de la barre, tout est
+ * replié ; à la réception, les antérieurs se tendent vers le sol, un peu en avant, les postérieurs suivent.
+ */
+function jumpLegs(front, hind, t) {
+  const w = smooth(0, 0.15, t) * (1 - smooth(0.85, 1, t));
+  if (w <= 0) return;
+  const mix = (g, a) => {
+    g.rotation.x += (a - g.rotation.x) * w;
+  };
+  const ff = smooth(0.04, 0.24, t) * (1 - smooth(0.5, 0.72, t));
+  const fr = smooth(0.5, 0.72, t);
+  for (const l of front) {
+    mix(l.top, -0.22 * ff);
+    mix(l.pivot, -1.2 * ff - 0.3 * fr);
+    mix(l.knee, 1.9 * ff + 0.05 * fr);
+    mix(l.fetlock, 0.5 * ff - 0.1 * fr);
+  }
+  const hp = 1 - smooth(0.05, 0.28, t);
+  const hf = smooth(0.1, 0.36, t) * (1 - smooth(0.7, 0.95, t));
+  for (const l of hind) {
+    mix(l.pivot, 0.3 * hp - 0.8 * hf);
+    mix(l.knee, -0.2 * hp + 1.3 * hf);
+    mix(l.fetlock, -0.25 * hp + 0.55 * hf);
+  }
 }
 
 const _mInv = new THREE.Matrix4();

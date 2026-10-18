@@ -630,11 +630,21 @@ const _stir = {};
  * Pose du cavalier, à chaque image (remplace la pose précédente) :
  * st = { gait (0 pas, 1 trot, 2 galop), phase, posting (trot enlevé), seatY, seatZ, bob,
  *        footX, footY, footZ (cheville dans l'étrier, repère de l'avatar assis, voir stirrupFor),
- *        kneeOut (genou vers l'extérieur, rad), reinsY, reinsZ (mains, repère de l'avatar) }.
+ *        kneeOut (genou vers l'extérieur, rad), reinsY, reinsZ (mains, repère de l'avatar),
+ *        jump (0-1 : position en suspension au saut d'obstacle) }.
  * Sans footX/footY/footZ, les pieds vont dans les étriers d'un cheval moyen.
  */
 export function animateAvatarRide(a, st) {
   const P = riderPose(st.gait, st.phase, st.posting !== false, _rp);
+  // Saut : le cavalier se met en suspension, bassin un peu levé et avancé au-dessus de la selle, buste
+  // penché, mains avancées le long de l'encolure (elle s'étire au-dessus de la barre).
+  const J = st.jump ?? 0;
+  if (J > 0) {
+    P.lean += 0.38 * J;
+    P.lift += 0.05 * J;
+    P.fwd += 0.05 * J;
+    P.reach += 0.1 * J;
+  }
   a.root.position.set(0, st.seatY + st.bob + P.lift, st.seatZ + P.fwd);
   // Jambes : la cheville est fixée dans l'étrier (repère du cheval) ; quand le bassin se lève
   // (trot enlevé, galop en suspension), c'est le genou qui s'ouvre.

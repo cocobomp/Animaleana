@@ -523,6 +523,37 @@ export { Session as ActivitySession, fmtTime as fmtActivityTime };
 function resetPose(e) {
   e.scaleGroup.rotation.x = 0;
   e.scaleGroup.position.y = 0;
+  e.scaleGroup.position.z = 0;
+}
+
+const smooth01 = (a, b, x) => {
+  const u = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+};
+/** Tangage du cheval au saut (rad) : il lève l'avant-main à l'appel, passe à plat au sommet, plonge un peu à la réception. */
+const JUMP_PITCH = 0.16;
+
+/**
+ * Bascule de la monture (et du cavalier) autour de son centre au saut : le groupe d'échelle tourne de pitch
+ * (x, négatif = avant-main levée) autour du point (0, hc, zc) du repère de l'entité, au lieu du sol sous le
+ * ventre (le dos reculait de 35 cm, le cavalier se retrouvait sur l'encolure). Le cavalier (racine de
+ * l'avatar, même repère : le joueur est à la place du cheval) tourne autour du même point.
+ */
+export function pitchAbout(e, pitch, hc, zc, avatarRoot) {
+  const c = Math.cos(pitch);
+  const s = Math.sin(pitch);
+  const sg = e.scaleGroup;
+  sg.rotation.x = pitch;
+  sg.position.y = hc - (hc * c - zc * s);
+  sg.position.z = zc - (hc * s + zc * c);
+  if (avatarRoot) {
+    const p = avatarRoot.position;
+    const y = p.y - hc;
+    const z = p.z - zc;
+    p.y = hc + y * c - z * s;
+    p.z = zc + y * s + z * c;
+    avatarRoot.rotation.x = pitch;
+  }
 }
 
 // ---------------------------------------------------------------- saut d'obstacles
@@ -848,11 +879,19 @@ class JumpingSession extends Session {
     e.position.copy(pl.root.position);
     e.heading = pl.heading;
     e.root.rotation.y = pl.heading;
-    // Le cheval se cabre à l'appel et plonge à la réception ; jambes repliées.
-    e.scaleGroup.rotation.x = -0.32 * Math.cos(Math.PI * j.t) * s * 1.6;
-    // (cheval réaliste : membres repliés, horseReal.js)
-    if (!realLegPose(e.model, 'jump', s)) for (const l of e.model.legs) l.pivot.rotation.x = l.front ? -1.25 * s : 0.85 * s;
-    pl.avatar.root.rotation.x = 0.45 * s;
+    // Un vrai saut : appel (avant-main levée, postérieurs qui poussent), bascule (à plat au sommet, encolure
+    // étirée vers l'avant et le bas au-dessus de la barre, membres repliés), réception (antérieurs tendus
+    // vers le sol, un peu le nez en bas, puis l'encolure se relève). Le cheval tourne autour de son centre,
+    // le cavalier avec lui, en suspension (Player.jumpPose, avatarRig.animateAvatarRide).
+    const md = e.model;
+    const sc = e.scaleGroup.scale.y;
+    const pitch = -JUMP_PITCH * Math.sin(2 * Math.PI * j.t);
+    pitchAbout(e, pitch, (md.y0 ?? (md.saddleY ?? 1.2) * 0.75) * sc, -0.075 * sc, pl.avatar?.root);
+    const bump = (a, b) => (j.t > a && j.t < b ? Math.sin((Math.PI * (j.t - a)) / (b - a)) ** 2 : 0);
+    if (md.neck) md.neck.rotateX(0.3 * bump(0.12, 0.85) - 0.08 * bump(0, 0.22) - 0.12 * bump(0.75, 1));
+    // (cheval réaliste : membres selon la phase du saut, horseReal.js)
+    if (!realLegPose(md, 'jump', s, null, j.t)) for (const l of md.legs) l.pivot.rotation.x = l.front ? -1.25 * s : 0.85 * s;
+    pl.jumpPose = smooth01(0, 0.18, j.t) * (1 - smooth01(0.75, 0.98, j.t));
     // Faute : la barre tombe au passage.
     if (!j.clean && !j.knocked && j.t > 0.5) {
       j.knocked = true;
@@ -868,6 +907,7 @@ class JumpingSession extends Session {
       this.jump = null;
       resetPose(e);
       pl.avatar.root.rotation.x = 0;
+      pl.jumpPose = 0;
       if (j.counts && this.lesson) {
         this.prev[0] = null;
         this.lessonJumped(j.clean);
@@ -897,6 +937,7 @@ class JumpingSession extends Session {
     const e = this.mount;
     if (e) resetPose(e);
     if (this.game.player.avatar) this.game.player.avatar.root.rotation.x = 0;
+    this.game.player.jumpPose = 0;
   }
 }
 

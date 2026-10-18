@@ -576,6 +576,8 @@ export class Player {
     st.gait = this.rideGait;
     st.phase = phase;
     st.bob = bob;
+    // (saut d'obstacle : position en suspension, réglée par la séance, src/game/Activities.js)
+    st.jump = this.jumpPose ?? 0;
     animateAvatarRide(a, st);
     this.updateReins(m);
     const o = this.lifeOpts;

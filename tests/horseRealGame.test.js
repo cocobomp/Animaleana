@@ -119,6 +119,54 @@ describe('révérence du cheval réaliste (spectacle)', () => {
   });
 });
 
+describe('saut d\'obstacle du cheval réaliste', () => {
+  it('le cheval bascule autour de son centre et le cavalier reste en selle (il bascule avec lui)', async () => {
+    const { pitchAbout } = await import('../src/game/Activities.js');
+    const md = horse(animal('selle_francais'));
+    const root = new THREE.Group();
+    const sg = new THREE.Group();
+    root.add(sg);
+    sg.add(md.root);
+    const sc = 1.1;
+    sg.scale.setScalar(sc);
+    md.anim.update(1 / 30, still(), {});
+    const rider = new THREE.Group();
+    root.add(rider);
+    const seat = new THREE.Vector3(0, md.saddleY * sc, -0.075 * sc);
+    const saddle = () => {
+      root.updateMatrixWorld(true);
+      return md.body.localToWorld(new THREE.Vector3(0, md.saddleY, -0.075));
+    };
+    const rest = saddle();
+    for (const pitch of [-0.16, 0.16]) {
+      rider.position.copy(seat);
+      pitchAbout({ scaleGroup: sg }, pitch, md.y0 * sc, -0.075 * sc, rider);
+      const s = saddle();
+      // (autour du sol sous le ventre, la selle reculait ou avançait de ≈ 25 cm)
+      expect(Math.abs(s.z - rest.z)).toBeLessThan(0.06);
+      expect(rider.position.distanceTo(s)).toBeLessThan(0.002 + seat.distanceTo(rest));
+      expect(rider.rotation.x).toBe(pitch);
+    }
+    md.dispose();
+  });
+
+  it('membres selon la phase du saut, fondus avec l\'allure au début et à la fin (pas d\'à-coup)', () => {
+    const md = horse(animal('selle_francais'));
+    const gallop = { v: 8.5, moving: true, graze: 0, feeder: 0, turn: 0, fat: 1 };
+    const pose = () => md.legs.map((l) => [l.top, l.pivot, l.knee, l.fetlock].map((g) => g.rotation.x));
+    for (let f = 0; f < 30; f++) md.anim.update(1 / 60, gallop, {});
+    const clip = pose();
+    for (const t of [0, 1]) {
+      expect(realLegPose(md, 'jump', 0, null, t)).toBe(true);
+      expect(pose()).toEqual(clip);
+    }
+    realLegPose(md, 'jump', 1, null, 0.45);
+    // (au-dessus de la barre : antérieurs repliés haut, postérieurs repliés sous le ventre)
+    for (const l of md.legs) expect(l.knee.rotation.x, l.front ? 'antérieur' : 'postérieur').toBeGreaterThan(l.front ? 1.5 : 0.9);
+    md.dispose();
+  });
+});
+
 describe('concours de beauté sur le cheval réaliste', () => {
   const dressed = (breed) => {
     const a = animal(breed);

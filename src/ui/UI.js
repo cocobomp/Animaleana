@@ -269,6 +269,15 @@ export class UI {
     if (this.hudInfo.title !== tip) this.hudInfo.title = tip;
     this.updateTimeBar();
     if (this.panel?.live && !this.holding) this.refreshPanel();
+    // Une nouvelle heure : les panneaux qui en dépendent (refuge, animalerie ou vétérinaire qui ouvrent, petits
+    // boulots, maison où l'on peut enfin dormir…) se redessinent aussi, même s'ils ne sont pas « vivants » : au ⏩,
+    // le refuge restait affiché « Fermé » après 9 h tant qu'on ne le refermait pas.
+    const hourNow = Math.floor(s.clock / 60);
+    if (hourNow !== this.panelHour && !this.holding && performance.now() >= this.panelBusyUntil) {
+      const changed = this.panelHour !== undefined;
+      this.panelHour = hourNow;
+      if (changed && this.panel && !this.panel.live) this.renderPanel();
+    }
     this.renderStatus();
     this.pauseBanner.hidden = !g.paused;
     this.fitToasts();

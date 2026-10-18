@@ -110,6 +110,9 @@ export class UI {
     this.hudObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.syncHudVars()) : null;
     this.hudObserver?.observe(this.hud);
     window.addEventListener('resize', () => this.syncHudVars());
+    // Hauteur du panneau depuis le bas de l'écran (CSS : messages juste au-dessus du panneau, sur téléphone).
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => this.syncPanelSpace()).observe(this.panelEl);
+    window.addEventListener('resize', () => this.syncPanelSpace());
     // Messages : quand on les déplace (tutorial.layoutTop pose leur top) ou qu'on en ajoute, ils restent dans l'écran.
     if (typeof MutationObserver === 'function') {
       new MutationObserver(() => this.fitToasts()).observe(this.toasts, { attributes: true, attributeFilter: ['style'], childList: true });
@@ -133,6 +136,15 @@ export class UI {
     set('--hud-tools-bottom', tools?.height ? `${Math.round(tools.bottom)}px` : '');
     set('--hud-info-right', info?.width ? `${Math.round(info.right)}px` : '');
     set('--hud-bottom', hud?.height ? `${Math.round(hud.bottom)}px` : '');
+  }
+
+  /** Pose --panel-space (px) : la place prise par le panneau depuis le bas de l'écran (vide s'il est fermé). */
+  syncPanelSpace() {
+    // (offsetTop, pas getBoundingClientRect : sans l'animation d'entrée, qui décale le panneau de 24 px)
+    const el = this.panelEl;
+    const v = !el.hidden && el.offsetHeight ? `${Math.max(0, Math.round(window.innerHeight - el.offsetTop))}px` : '';
+    const root = document.documentElement.style;
+    if (root.getPropertyValue('--panel-space') !== v) root.setProperty('--panel-space', v);
   }
 
   attach(game) {

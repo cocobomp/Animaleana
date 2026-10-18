@@ -2308,17 +2308,23 @@ body.vv-short:has(input[type='text']:focus, input[type='search']:focus) #tuto-bu
    montaient sur la barre d'outils). */
 body:has(input[type='text']:focus, input[type='search']:focus) :is(#joystick, #touch-pad) { display: none !important; }
 
-/* Téléphone en portrait, fenêtre ouverte : les messages passent en bas de l'écran (sur le bas du panneau, qui
-   défile) au lieu de cacher son titre, sa croix ✕ et ses onglets ; deux au plus. */
+/* Téléphone en portrait, fenêtre ouverte : les messages se posent juste au-dessus du panneau (--panel-space, sa
+   hauteur depuis le bas de l'écran, posée par UI.syncPanelSpace) : ni sur son titre, sa croix ✕ et ses onglets, ni
+   sur ses boutons du bas (« ✅ Accepter / ❌ Refuser » des visiteurs restaient cachés 5 s) ; deux au plus.
+   Le gros bouton vert d'action, lui, passait sous le panneau (une bande verte de 13 px dépassait) : on le cache. */
 @media (max-width: 640px) {
-  body.panel-open #toasts { top: auto !important; bottom: calc(12px + var(--safe-b)) !important; }
+  body.panel-open #toasts { top: auto !important; bottom: calc(var(--panel-space, 0px) + 8px) !important; }
   body.panel-open #toasts .toast:nth-last-child(n + 3) { display: none; }
+  body.panel-open #action { display: none; }
 }
 
 /* Ordinateur, fenêtre ouverte : les messages se calent contre le panneau (440 px + marges), à droite de la colonne
    de gauche (carte d'infos, 🤖 Auto, bulle du guide et suivi de quête : 400 px) au lieu de les recouvrir. */
 @media (min-width: 641px) and (min-height: 481px) {
   body.panel-open #toasts { left: auto; right: calc(470px + var(--safe-r)); transform: none; width: clamp(260px, calc(100vw - 880px - var(--safe-r)), 440px); }
+  /* Les pastilles d'état aussi (centrées, elles passaient de 11 px sous le panneau : « Parler aux visiteurs » coupé). */
+  body.panel-open #status-bar { left: auto; right: calc(470px + var(--safe-r)); transform: none; justify-items: end; max-width: calc(100vw - 490px - var(--safe-r)); }
+  body.panel-open #help { left: auto; right: calc(470px + var(--safe-r)); transform: none; max-width: calc(100vw - 490px - var(--safe-r)); }
 }
 
 /* Téléphone en paysage : la colonne du milieu (bulle, messages, pastilles d'état) s'arrête avant le joystick

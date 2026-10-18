@@ -10,6 +10,7 @@ import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 import { tackEffects } from '../sim/gear.js';
 import { helmetModel } from './models/tackModels.js'; // bombe du cavalier
+import { helmetFit } from './models/avatarHair.js'; // la bombe à la taille de la coiffure
 
 const WALK = 3.2;
 const RUN = 6.2;
@@ -59,16 +60,17 @@ export class Player {
   }
 
   setAvatar(look) {
+    this.look = look;
     if (this.avatar) {
       this.helmet?.parent?.remove(this.helmet); // la bombe passe sur le nouvel avatar
       this.root.remove(this.avatar.root);
       disposeModel(this.avatar.root);
     }
-    this.avatar = buildAvatar(look);
+    // Avec la bombe, les mèches sont rentrées dessous (coiffure « sous un chapeau ») : les boucles ne
+    // traversent plus la coque.
+    this.avatar = buildAvatar(this.helmet ? { ...look, helmet: true } : look);
     this.root.add(this.avatar.root);
-    if (this.helmet) {
-      this.avatar.head.add(this.helmet);
-    }
+    if (this.helmet) this.wearHelmet();
     if (this.mount) this.seat();
     if (this.carried) poseAvatar(this.avatar, 'carry', { size: this.carrySize });
   }
@@ -134,21 +136,35 @@ export class Player {
     poseAvatar(a, 'ride', this.ride0);
   }
 
-  /** Bombe du cavalier sur la tête de l'avatar (null : on l'enlève). */
+  /**
+   * Bombe du cavalier sur la tête de l'avatar (null : on l'enlève). En la mettant (ou en l'enlevant),
+   * l'avatar est reconstruit avec les mèches rentrées dessous (ou qui ressortent).
+   */
   setHelmet(h) {
+    const had = !!this.helmet;
     if (this.helmet) {
       this.helmet.parent?.remove(this.helmet);
       this.helmet = null;
     }
-    if (!h) return;
-    this.helmet = helmetModel(h.item, h.color);
-    // Portée un peu en arrière : la visière s'arrête au-dessus des sourcils. Plus basse, elle cachait
-    // les yeux vus de la caméra du jeu (au-dessus du personnage).
-    this.helmet.position.set(0, 0.112, -0.012);
-    this.helmet.rotation.x = -0.24;
-    this.helmet.scale.setScalar(1.36);
-    // Pas d'ombre portée : la visière mettait les yeux dans le noir à midi.
-    this.helmet.traverse((o) => { o.castShadow = false; });
+    if (h) {
+      this.helmet = helmetModel(h.item, h.color);
+      // Pas d'ombre portée : la visière mettait les yeux dans le noir à midi.
+      this.helmet.traverse((o) => { o.castShadow = false; });
+    }
+    if (had !== !!h && this.look) this.setAvatar(this.look); // (pose la bombe : wearHelmet)
+    else if (this.helmet) this.wearHelmet();
+  }
+
+  /**
+   * Pose la bombe sur la tête, à la taille de la coiffure (helmetFit : plus grande sur les cheveux
+   * bouclés, qui ont beaucoup de volume). Portée un peu en arrière : la visière s'arrête au-dessus des
+   * sourcils (plus basse, elle cachait les yeux vus de la caméra, au-dessus du personnage).
+   */
+  wearHelmet() {
+    const f = helmetFit(this.look?.hairStyle ?? 'short');
+    this.helmet.position.set(0, f.y, f.z);
+    this.helmet.rotation.x = f.tilt;
+    this.helmet.scale.setScalar(f.scale);
     this.avatar.head.add(this.helmet);
   }
 

@@ -37,6 +37,17 @@ const HAT_SCALE = { short: 1.06, long: 1.06, ponytail: 1.03, curly: 1.26, bald: 
 /** Échelle du chapeau pour qu'il couvre le volume de la coiffure. */
 export const hatScale = (style) => HAT_SCALE[style] ?? 1.05;
 
+/**
+ * Bombe du cavalier (tackModels.helmetModel) posée sur la tête, repère de la tête : { y, z, tilt, scale }.
+ * Portée un peu en arrière (la visière s'arrête au-dessus des sourcils) ; un peu plus grande sur une
+ * coiffure volumineuse (bouclés), comme les casquettes, et les mèches sont rentrées dessous (variante
+ * « chapeau » de la coiffure, voir buildAvatar look.helmet).
+ */
+export function helmetFit(style) {
+  const fit = 1 + Math.max(0, hatScale(style) / hatScale('short') - 1) * 0.65;
+  return { y: 0.112 + (fit - 1) * 0.05, z: -0.012 - (fit - 1) * 0.03, tilt: -0.24, scale: 1.36 * fit };
+}
+
 /** Ligne d'implantation : table [azimut |α|, hauteur] (α = 0 devant, π derrière), interpolée en douceur. */
 function hairline(table) {
   return (a) => {

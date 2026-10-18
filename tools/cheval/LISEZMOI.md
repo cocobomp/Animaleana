@@ -89,7 +89,9 @@ Ce qu'il coûte, et comment on le garde bas :
 - **version réduite** (index de `lod.mjs`) au-delà de 7 m en qualité basse et de 22 m en qualité haute
   (distance divisée par la taille du cheval, hystérésis de 10 %) ; en qualité basse, crins sans carte de relief ;
 - **animation** : un cheval qui n'est ni dessiné ni dans une ombre n'est animé qu'une image sur trois (temps
-  cumulé), jamais quand on le monte, le mène ou qu'une séance le guide ; plus de matrices du monde refaites
+  cumulé, jamais perdu), jamais quand on le monte, le mène ou qu'une séance le guide ; « vu ou pas » se décide
+  une fois par image (`horseView.frame`), pas à chaque pas de simulation : en avance rapide (⏩, trois pas par
+  image), un cheval à l'écran reçoit tout le temps simulé (ses sabots ne patinent pas) ; plus de matrices du monde refaites
   ni d'allocation dans la mise à jour (calage des sabots dans le repère du cheval, listes figées) ;
 - **chargement** : la partie ne l'attend plus. Les petits modèles sont attendus, le cheval au plus 1,5 s après
   l'ouverture de la page (un fichier en cache arrive avant) ; sinon on joue avec le cheval sculpté et chaque

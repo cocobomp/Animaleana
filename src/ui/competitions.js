@@ -4,7 +4,7 @@
 // Logique : src/sim/competitions.js, src/sim/dressage.js ; 3D : src/game/CompetitionVenue.js, src/game/Dressage.js.
 
 import { h, bar } from './dom.js';
-import { t, ta, L } from '../i18n.js';
+import { t, ta, L, fmtHour } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { PLACES, checkTravel } from '../sim/places.js';
 import { isSandbox, spend, addStat } from '../sim/profile.js';
@@ -176,7 +176,7 @@ export function openVenuePanel(ui, venue) {
         h('div', { class: 'chips' },
           h('span', { class: 'chip' }, `${DISCIPLINES[c.discipline].icon} ${discName(c.discipline)}`),
           h('span', { class: 'chip' }, levelName(c)),
-          h('span', { class: 'chip' }, `🕙 ${c.open} h – ${c.close} h`),
+          h('span', { class: 'chip' }, `🕙 ${fmtHour(c.open)} – ${fmtHour(c.close)}`),
           isSandbox(g.profile) ? null : h('span', { class: 'chip' }, `🪙 ${c.prizes.join(' / ')}`)),
       ];
       if (e.done) {

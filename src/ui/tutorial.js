@@ -8,6 +8,7 @@
 
 import { h, isPhone } from './dom.js';
 import { t, getLang } from '../i18n.js';
+import { nbsp } from './minigames/frame.js'; // typographie française (« Adopter » ! ne se coupe pas)
 import { OBJECTIVES } from '../sim/objectives.js';
 import { earn } from '../sim/profile.js';
 import {
@@ -24,6 +25,9 @@ const isNarrow = isPhone;
 const trackerMode = () => (!isNarrow() ? 'desk' : window.innerWidth <= 640 ? 'compact' : 'side');
 // Pas de mot (ou d'emoji 🐾) tout seul sur la dernière ligne : espace insécable avant le dernier.
 const keepLast = (s) => s.replace(/\s+(\S+)\s*$/u, '\u00a0$1');
+// Texte de la bulle : en plus, « » ! ? : ; restent collés à leur mot (« touche « / Adopter » ! » se coupait
+// après le guillemet ouvrant, sur téléphone).
+const bubbleText = (s) => keepLast(nbsp(s));
 
 // Suivi de quête rangé en pastille ou non : un confort mémorisé sur cet appareil (pas dans la sauvegarde).
 const FOLD_KEY = 'animaleana.questFold';
@@ -237,7 +241,7 @@ export class Tutorial {
     this.bubble.replaceChildren(
       h('div', { class: 'tuto-guide' }, GUIDE),
       h('div', { class: 'tuto-main' }, h('div', { class: 'tuto-emoji big pop' }, '⭐'),
-        h('p', { class: 'tuto-text' }, t(cheers[Math.floor(Math.random() * cheers.length)]))),
+        h('p', { class: 'tuto-text' }, bubbleText(t(cheers[Math.floor(Math.random() * cheers.length)])))),
     );
     this.bubble.hidden = false;
     this.bubble.classList.add('cheer');
@@ -301,8 +305,8 @@ export class Tutorial {
             step.id !== 'end'
               ? h('button', { class: 'tuto-skip', onClick: () => this.askSkip() }, step.id === 'welcome' ? t('tuto_skipAll') : t('tuto_skip'))
               : null),
-          h('p', { class: 'tuto-text' }, text),
-          hint ? h('p', { class: 'tuto-hint' }, hint) : null,
+          h('p', { class: 'tuto-text' }, bubbleText(text)),
+          hint ? h('p', { class: 'tuto-hint' }, bubbleText(hint)) : null,
           step.manual ? h('button', { class: 'primary tuto-ok', onClick: () => this.event('next') }, okLabel) : null),
       );
     }

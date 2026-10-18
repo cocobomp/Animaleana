@@ -1,7 +1,8 @@
 // Noms d'espèce accordés au sexe et à l'âge (jument, chienne, agneau…).
 
-import { getLang } from '../i18n.js';
+import { getLang, L } from '../i18n.js';
 import { lifeStage } from '../sim/animal.js';
+import { SPECIES } from '../sim/species.js';
 
 const NAMES = {
   fr: {
@@ -29,4 +30,25 @@ export function speciesName(a) {
   const stage = lifeStage(a);
   const young = stage === 'baby' || stage === 'young';
   return n[(young ? 'b' : '') + (a.sex === 'f' ? 'f' : 'm')];
+}
+
+/**
+ * Nom d'une robe (couleur d'une race, src/sim/species.js) accordé au sexe : « Blanche » pour une chèvre,
+ * « Blanc » pour un bouc (forme masculine c.m, en français seulement).
+ */
+export function coatLabel(color, sex) {
+  if (!color) return '';
+  return sex === 'm' && color.m && getLang() === 'fr' ? color.m : L(color.name);
+}
+
+/** Robe d'un animal, accordée à son sexe (« Bouc · Saanen · Blanc »). */
+export function coatName(a) {
+  const name = a.look?.colorName;
+  if (!name) return '';
+  if (a.sex !== 'm' || getLang() !== 'fr') return L(name);
+  // La robe de sa race, sinon celle d'une autre race de l'espèce (croisé : race « mix »).
+  const breeds = SPECIES[a.species]?.breeds ?? [];
+  const own = breeds.find((b) => b.id === a.breed);
+  const color = [own, ...breeds].flatMap((b) => b?.colors ?? []).find((c) => c.name.fr === name.fr);
+  return color?.m ?? L(name);
 }

@@ -2,7 +2,7 @@
 // Et les petits menus des coins de l'écurie et de la maison (box, lit).
 
 import { h, bar } from './dom.js';
-import { t } from '../i18n.js';
+import { t, hourParams } from '../i18n.js';
 import { sheet } from './actions.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
@@ -189,7 +189,7 @@ export function openBed(ui) {
   sheet(ui, `🛏️ ${t('fac_room_bedroom')}`, '', () => {
     const sleep = g.buildingActions('house').find((x) => x.id === 'sleep');
     return [
-      { icon: '🛏️', label: t('do_sleep'), primary: true, enabled: sleep.enabled, why: sleep.reason ? t(`why_${sleep.reason}`, sleep.params) : '', run: () => { ui.closePanel(); g.sleep(); } },
+      { icon: '🛏️', label: t('do_sleep'), primary: true, enabled: sleep.enabled, why: sleep.reason ? t(`why_${sleep.reason}`, hourParams(sleep.params)) : '', run: () => { ui.closePanel(); g.sleep(); } },
       { icon: '🧺', label: t('fac_do_bedroom'), enabled: f.house.rooms.bedroom < 97, why: t('fac_r_alreadyClean'), effect: `✨ ${Math.round(f.house.rooms.bedroom)} → 100`, run: () => g.interiors.chore('bedroom') },
     ];
   }, null, true);

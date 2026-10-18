@@ -45,7 +45,7 @@ import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
-import { t, L, getLang } from '../i18n.js';
+import { t, L, getLang, fmtHour } from '../i18n.js';
 // Vue d'ensemble (d'en haut) et constructions du joueur.
 import { Structures } from './Structures.js';
 import { ManagementView } from './ManagementView.js';
@@ -1102,7 +1102,7 @@ export class Game {
       this.advanceTime(step);
       done += step;
     }
-    this.ui.toast(t('skippedTo', { h: `${hour} h` }), 3500);
+    this.ui.toast(t('skippedTo', { h: fmtHour(hour) }), 3500);
     this.ui.refresh();
     return done;
   }
@@ -1695,7 +1695,7 @@ export class Game {
 
   sleep() {
     const h = this.hour;
-    if (h >= 7 && h < 19) return this.ui.toast(t('why_notTired', { h: '19 h' })); // on dort de 19 h à 7 h
+    if (h >= 7 && h < 19) return this.ui.toast(t('why_notTired', { h: fmtHour(19) })); // on dort de 19 h à 7 h
     const hours = h < 7 ? 7 - h : 31 - h;
     this.advanceTime(hours, { sleeping: true });
     for (const a of this.animalsHere()) a.needs.energy = Math.max(a.needs.energy, 90);

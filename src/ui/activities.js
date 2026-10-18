@@ -267,7 +267,8 @@ function calendarTab(ui, state) {
       block
         ? h('span', { class: 'lock' }, t(`actv_block_${block}`))
         : h('button', { class: 'primary', onClick: () => { if (beauty) return openBeauty(ui, { comp: c }); state.pick = c.type; state.comp = c; ui.renderPanel(); } },
-          beauty && c.day > g.day ? t('beauty_registerBtn') : t('actv_enter')));
+          // (le bouton ouvre la fenêtre du concours : on y prépare et on y inscrit chaque animal, il n'inscrit rien lui-même)
+          beauty && c.day > g.day ? t('beauty_calendarBtn') : t('actv_enter')));
   })));
   out.push(...awayCalendar(ui)); // concours à l'extérieur : inscriptions et calendrier (src/ui/competitions.js)
   // Les concours ailleurs dans le monde (pour donner envie de voyager).

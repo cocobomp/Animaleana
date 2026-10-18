@@ -16,7 +16,7 @@ import { OBJECTIVES } from '../sim/objectives.js';
 import { canAfford, isSandbox } from '../sim/profile.js';
 import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
-import { speciesName } from './names.js';
+import { speciesName, coatName, coatLabel } from './names.js';
 import { GEAR } from '../sim/gear.js';
 import { openTackShop, animalGearSection } from './tack.js'; // sellerie : catalogue, fiches, équipement
 import { hasTool } from '../sim/tools.js';
@@ -72,7 +72,7 @@ export function animalCard(a, pic = null) {
     row(t('age'), `${ageText(a)} · ${t(`stage_${lifeStage(a)}`)}`),
     row(t('sexLabel'), `${sexIcon(a)} ${t(a.sex === 'f' ? 'female' : 'male')}`),
     row(t('personality'), t(`p_${a.personality}`, { g: a.sex })),
-    row(t('coat'), L(a.look.colorName) || '—'));
+    row(t('coat'), coatName(a) || '—'));
 }
 
 // ---------------------------------------------------------------- fiche animal
@@ -104,7 +104,7 @@ function renderAnimal(ui, g, a) {
       a.pregnant ? h('span', { class: 'chip' }, `🤰 ${t('pregnantChip')}`) : null,
       h('span', { class: `chip weight-${weightClass(a)}` }, `⚖️ ${t(`weight_${weightClass(a)}`, { g: a.sex })}`),
       h('span', { class: `chip mood-${m}` }, `${MOOD_EMOJI[m]} ${t(`mood_${m}`, { g: a.sex })}`),
-      h('span', { class: `chip swatch${lightCoat(a.look.coat) ? ' light' : ''}`, style: { background: hexColor(a.look.coat) } }, L(a.look.colorName) || ''),
+      h('span', { class: `chip swatch${lightCoat(a.look.coat) ? ' light' : ''}`, style: { background: hexColor(a.look.coat) } }, coatName(a)),
     ),
     a.sick ? h('p', { class: 'warn' }, `🤒 ${t('r_sick', { name: a.name, g: a.sex })}`) : null,
     clientInfo(a, g), // animal confié : propriétaire, jours restants, soin
@@ -272,7 +272,7 @@ export function openAdoption(ui) {
         h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
         h('span', { class: 'card-main' },
           h('b', {}, `${a.name} ${sexIcon(a)}`),
-          h('small', {}, `${speciesName(a)} · ${breedName(a)} · ${L(a.look.colorName)}`),
+          h('small', {}, `${speciesName(a)} · ${breedName(a)} · ${coatName(a)}`),
           h('small', {}, `${ageText(a)} · ${t(`p_${a.personality}`, { g: a.sex })}`)),
         h('span', { class: 'swatch-dot', style: { background: hexColor(a.look.coat) } }),
         h('button', {
@@ -466,7 +466,7 @@ export function openSettings(ui) {
   };
   const VOLUMES = [[0.4, 'volLow'], [0.7, 'volMid'], [1, 'volHigh']];
   ui.openPanel({
-    title: `⚙️ ${t('settings')}`,
+    title: () => `⚙️ ${t('settings')}`, // (une fonction : le titre suit la langue choisie dans le panneau)
     render: () => {
       const quality = (() => {
         try { return localStorage.getItem('animaleana.quality') ?? g.quality; } catch { return g.quality; }
@@ -720,7 +720,7 @@ export function openShop(ui) {
     // (une seule image pour l'aperçu et la fiche : la grande sert aussi à la petite ; pendant qu'une nouvelle se
     // fait, l'ancienne reste sous un voile au lieu de redevenir un emoji)
     const pic = (w, hh, cls) => thumb(g, spec, { w, h: hh, emoji, cls, urgent: true, alt: L(breed.name), hold: `shop:${st.species}` });
-    const coatName = L(breed.colors[st.colorIndex % breed.colors.length]?.name) || '';
+    const coat = coatLabel(breed.colors[st.colorIndex % breed.colors.length], st.sex);
     return [
       h('p', { class: 'note' }, g.isHome ? t('shopHelp') : t('breederHelp')),
       h('h3', {}, t('species')),
@@ -729,7 +729,7 @@ export function openShop(ui) {
       h('div', { class: 'shop-preview', 'aria-live': 'polite' }, pic(132, 99, ''),
         h('div', { class: 'shop-preview-text' },
           h('b', {}, `${breed.from?.flag ? `${breed.from.flag} ` : ''}${L(breed.name)}`),
-          h('small', {}, [coatName, `${st.sex === 'f' ? '♀' : '♂'} ${t(st.sex === 'f' ? 'female' : 'male')}`, t(`stage_${st.stage}`)].filter(Boolean).join(' · ')),
+          h('small', {}, [coat, `${st.sex === 'f' ? '♀' : '♂'} ${t(st.sex === 'f' ? 'female' : 'male')}`, t(`stage_${st.stage}`)].filter(Boolean).join(' · ')),
           sandbox ? null : h('small', {}, `${price} 🪙`))),
       h('h3', {}, t('breed')),
       h('div', { class: 'cards' }, breeds.map((b) => h('button', {
@@ -746,7 +746,7 @@ export function openShop(ui) {
       h('div', { class: 'row wrap' }, breed.colors.map((c, i) => h('button', {
         class: `small color-pick ${st.colorIndex === i ? 'primary' : ''}`,
         onClick: () => { st.colorIndex = i; ui.renderPanel(); },
-      }, h('span', { class: 'swatch-dot', style: { background: hexColor(c.coat) } }), ` ${L(c.name)}`))),
+      }, h('span', { class: 'swatch-dot', style: { background: hexColor(c.coat) } }), ` ${coatLabel(c, st.sex)}`))),
       h('h3', {}, t('sexLabel')),
       h('div', { class: 'row' }, chip(`♀ ${t('female')}`, st.sex === 'f', () => { st.sex = 'f'; }), chip(`♂ ${t('male')}`, st.sex === 'm', () => { st.sex = 'm'; })),
       h('h3', {}, t('age')),

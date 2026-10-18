@@ -2,7 +2,7 @@
 
 import { h, isPhone, safeInsets } from './dom.js';
 import { watchViewport, focusField } from './viewport.js'; // clavier à l'écran
-import { t, L } from '../i18n.js';
+import { t, L, fmtHour } from '../i18n.js';
 import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
@@ -463,8 +463,19 @@ export class UI {
       this.hideModal();
       fn();
     };
-    const hour = (hh, label) => h('button', { class: 'big-action', onClick: go(() => g.skipTo(hh)) },
-      h('span', { class: 'ba-icon' }, label), h('span', { class: 'ba-text' }, h('b', {}, t('skipToHour', { h: hh }))));
+    // Une heure déjà passée : c'est demain (le bouton le dit) ; plus de 12 h d'attente : on demande d'abord
+    // (« Jusqu'à 21 h » choisi à 22 h 24 sautait presque une journée entière sans prévenir).
+    const hour = (hh, label) => {
+      const tomorrow = hh - g.hour <= 0.05;
+      const wait = tomorrow ? hh - g.hour + 24 : hh - g.hour;
+      const skip = () => {
+        this.hideModal();
+        if (wait <= 12) return g.skipTo(hh);
+        return this.confirm(t('skipLongAsk', { h: Math.round(wait) })).then((ok) => ok && g.skipTo(hh));
+      };
+      return h('button', { class: 'big-action', onClick: skip },
+        h('span', { class: 'ba-icon' }, label), h('span', { class: 'ba-text' }, h('b', {}, t(tomorrow ? 'skipToHourTomorrow' : 'skipToHour', { h: fmtHour(hh) }))));
+    };
     this.showModal([
       h('h3', {}, `⏭ ${t('skipTitle')}`),
       busy.length ? h('p', { class: 'warn' }, t('skipBusy', { name: busy[0].a.name, g: busy[0].a.sex, what: t(`attn_${busy[0].what}`, { g: busy[0].a.sex }) })) : null,
@@ -525,7 +536,7 @@ export class UI {
       const d = Math.round(v - before[n]);
       if (Math.abs(d) >= 1) parts.push(`${NEED_ICON[n]} ${t(`need_${n}`)} ${Math.round(before[n])} → ${Math.round(v)}`);
     }
-    if (parts.length) this.toast(`${a.name} : ${parts.join(' · ')}`, 3500);
+    if (parts.length) this.toast(t('careDeltas', { name: a.name, parts: parts.join(' · ') }), 3500);
   }
 
   levelUp(level, names) {

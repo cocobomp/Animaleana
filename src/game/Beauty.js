@@ -34,7 +34,9 @@ const WET = { rain: 1, storm: 1, snow: 1 };
 function decorKey(a, now) {
   const p = a.beauty?.prep ?? {};
   const f = (k) => (isFresh(a, k, now) ? `${k}:${p[k]?.color ?? ''}${p[k]?.pattern ?? ''}` : '');
-  return [f('braid'), f('bow'), f('shine'), f('fluff')].join('|');
+  // (tresses du cheval réaliste : placées autrement sous une couverture)
+  const covered = a.species === 'horse' && a.gear?.blanket && f('braid') ? '+c' : '';
+  return [f('braid') + covered, f('bow'), f('shine'), f('fluff')].join('|');
 }
 
 const mat = (color, roughness = 0.6) => new THREE.MeshStandardMaterial({ color, roughness });
@@ -155,14 +157,16 @@ const _zAxis = new THREE.Vector3(0, 0, 1);
  * tresses « boutons » de concours sur la crête (une boule de crins, un ruban noué autour, un pompon),
  * tresse de queue le long du dessus des crins depuis la croupe, nœud en haut.
  */
-function realHorseBraids(model, ribbon, mane, add) {
+function realHorseBraids(model, ribbon, mane, add, covered = false) {
   const S = model.braidSpots;
   const r = (model.dims?.R ?? 0.32) * 0.085;
   const hairMat = mat(mane, 0.7);
   const ribbonMat = mat(ribbon, 0.5);
-  if (S.crest.length && model.neck) {
+  // (sous une couverture, les boutons commencent devant son bord avant : sinon le premier s'y enfonçait)
+  const crest = (covered && S.crestCovered) || S.crest;
+  if (crest.length && model.neck) {
     const group = new THREE.Group();
-    for (const [p, up] of S.crest) {
+    for (const [p, up] of crest) {
       const knob = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 9), hairMat);
       knob.position.copy(p).addScaledVector(up, r * 0.6);
       knob.quaternion.setFromUnitVectors(_zAxis, up);
@@ -228,7 +232,7 @@ export function applyBeautyDecor(e, now) {
       // Cheval réaliste : places mesurées sur ses crins (horseReal.js). Les rayons de surfaceHit s'arrêtaient
       // sur la partie transparente des cartes de crins (tresses dressées au-dessus de la crinière) et la
       // racine du groupe de la queue est l'articulation, dans la croupe (tresse enfouie).
-      realHorseBraids(model, ribbon, mane, add);
+      realHorseBraids(model, ribbon, mane, add, !!a.gear?.blanket);
     } else if (model.neck) {
       const { len: nl, down } = neckFrame(model, look.neckLen ?? R);
       const group = new THREE.Group();

@@ -159,6 +159,50 @@ describe('concours de beauté sur le cheval réaliste', () => {
     md.dispose();
   });
 
+  it.each(['selle_francais', 'percheron', 'shetland'])('%s : premier bouton sur les crins (pas sur le garrot nu), devant le bord d\'une couverture', (breed) => {
+    const a = animal(breed);
+    const md = horse(a);
+    md.root.updateMatrixWorld(true);
+    const hair = md.root.children.filter((m) => m.isSkinnedMesh && m !== md.coatMesh && m.material?.alphaTest > 0);
+    const rc = new THREE.Raycaster();
+    // Rayon vers le bas sous chaque bouton (repère du cheval : root = monde, au repos) : il touche des crins.
+    const onHair = (spots) => spots.map(([p, up]) => {
+      const w = md.neck.localToWorld(p.clone());
+      const u = up.clone().transformDirection(md.neck.matrixWorld);
+      rc.set(w.clone().addScaledVector(u, 0.3), u.clone().negate());
+      rc.far = 0.4;
+      return rc.intersectObjects(hair, false).length > 0;
+    });
+    expect(onHair(md.braidSpots.crest), breed).toEqual(new Array(7).fill(true));
+    // Sous une couverture, les boutons commencent devant son bord avant (dims.blanket[1] + 4 cm : celle d'été).
+    const front = md.dims.blanket[1] + 0.04;
+    const first = md.neck.localToWorld(md.braidSpots.crestCovered[0][0].clone());
+    expect(first.z).toBeGreaterThan(front);
+    expect(onHair(md.braidSpots.crestCovered)).toEqual(new Array(7).fill(true));
+    // Le décor suit la couverture (autre clé : refait quand on la met ou l'enlève).
+    notePrep(a, 'braid', 10, 1, { color: 'blue' });
+    const e = { data: a, model: md };
+    Beauty.applyBeautyDecor(e, 10);
+    const bare = e.beautyDecor.key;
+    a.gear = { blanket: { item: 'blanket', color: 'red' } };
+    Beauty.applyBeautyDecor(e, 10);
+    expect(e.beautyDecor.key).not.toBe(bare);
+    const knob = e.beautyDecor.groups.find((g) => g.parent === md.neck).children[0];
+    expect(knob.getWorldPosition(new THREE.Vector3()).z).toBeGreaterThan(front);
+    Beauty.removeBeautyDecor(e);
+    md.dispose();
+  });
+
+  it('tresse de queue : la dernière perle prolonge la tresse (pas seule, loin derrière les crins)', () => {
+    const md = horse(animal('selle_francais'));
+    md.root.updateMatrixWorld(true);
+    const z = md.braidSpots.tail.map(([g, p]) => g.localToWorld(p.clone()).z);
+    const n = z.length - 1;
+    // (pas plus en arrière que le prolongement des deux perles d'avant)
+    expect(z[n]).toBeGreaterThanOrEqual(2 * z[n - 1] - z[n - 2] - 1e-6);
+    md.dispose();
+  });
+
   it('robe lustrée : brillante mais satinée, et le shader garde le modelé peint (H_REAL)', () => {
     const { md, e, coat } = dressed('selle_francais');
     const shiny = md.coatMesh.material;

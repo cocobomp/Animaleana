@@ -845,9 +845,10 @@ function smoothOnMesh(val, index, passes) {
 
 /**
  * Places des tresses du concours de beauté (Beauty.js), mesurées sur les crins de la race (repère du
- * cheval, au repos) : sur la crête, au-dessus des racines de la crinière (7 tresses de t = 0,14 à 0,86
- * entre le garrot et la nuque) ; sur la queue, le long du dessus des crins depuis leur sortie de la
- * croupe (la tresse suit la face arrière des crins du milieu, pas l'articulation cachée dans la croupe).
+ * cheval, au repos) : sur la crête, au-dessus des racines de la crinière (7 tresses de la première racine
+ * de crins, pas la peau nue du garrot, jusqu'à t = 0,86 vers la nuque) ; crestCovered : les mêmes, mais
+ * devant le bord avant d'une couverture (dims.blanket, couverture d'été comprise) ; sur la queue, le long de
+ * la face arrière des crins du milieu depuis leur sortie de la croupe (pas l'articulation cachée dedans).
  */
 function measureBraids(S, mpos, cpos, base) {
   const H = base.hair;
@@ -862,19 +863,49 @@ function measureBraids(S, mpos, cpos, base) {
     return c[k][1].clone().lerp(c[k + 1][1], t * (c.length - 1) - k);
   };
   const P = V();
-  const crest = [];
-  for (let i = 0; i < 7 && S.crest.length > 1; i++) {
-    const c = crestAt(0.14 + (i / 6) * 0.72);
-    // épaisseur des crins sur la crête : racines de la crinière (pas les pointes, qui pendent sur le côté)
+  // Racines de la crinière (pas les pointes, qui pendent sur le côté) autour d'un point de la crête, à
+  // moins de `along` le long de l'encolure : [nombre, épaisseur des crins au-dessus de la crête].
+  const rootsAt = (c, along) => {
+    let n = 0;
     let top = 0;
     for (let k = 0; k < H.g.length; k++) {
       if (H.tail[k] || H.g[k] > 0.3) continue;
       P.fromArray(mpos, k * 3).sub(c);
-      if (Math.abs(P.dot(axis)) > 0.04 || Math.abs(P.x) > 0.05) continue;
+      if (Math.abs(P.dot(axis)) > along || Math.abs(P.x) > 0.05) continue;
+      n++;
       top = Math.max(top, P.dot(up));
     }
-    crest.push([c.addScaledVector(up, Math.min(0.05, top)), up.clone()]);
+    return [n, top];
+  };
+  const T1 = 0.86;
+  // Début de la crinière, depuis le garrot (le premier bouton était sur la peau nue du garrot, qui suit le
+  // tronc : il flottait quand le cheval broute et s'enfonçait dans la couverture).
+  const neckLen = heads[BONE_INDEX.Head].distanceTo(heads[BONE_INDEX.Neck]);
+  const knobR = 0.085 * 0.32; // (rayon d'un bouton, Beauty.js : R × 0,085, cheval de taille 1)
+  let tMane = 0.14;
+  if (S.crest.length > 1) {
+    for (let t = 0; t <= 0.5; t += 0.01) {
+      if (rootsAt(crestAt(t), 0.012)[0] >= 2) {
+        tMane = Math.min(0.4, t + (0.4 * knobR) / Math.max(0.2, neckLen));
+        break;
+      }
+    }
   }
+  // Bord avant d'une couverture (gearModels.js : dims.blanket[1], + 4 cm pour celle d'été) : rien derrière.
+  const front = heads[BONE_INDEX.Neck].z + 0.1 + 0.04 + knobR;
+  let tFront = tMane;
+  while (tFront < 0.6 && S.crest.length > 1 && crestAt(tFront).z < front) tFront += 0.01;
+  const knobs = (t0) => {
+    const out = [];
+    for (let i = 0; i < 7 && S.crest.length > 1; i++) {
+      const c = crestAt(t0 + (i / 6) * (T1 - t0));
+      const [, top] = rootsAt(c, 0.04);
+      out.push([c.addScaledVector(up, Math.min(0.05, top)), up.clone()]);
+    }
+    return out;
+  };
+  const crest = knobs(tMane);
+  const crestCovered = tFront > tMane ? knobs(tFront) : crest;
   // Queue : la racine des crins la plus haute (au milieu), puis la face arrière des crins du milieu.
   let top = null;
   for (let k = 0; k < H.g.length; k++) {
@@ -914,9 +945,15 @@ function measureBraids(S, mpos, cpos, base) {
     for (let pass = 0; pass < 2; pass++) {
       for (let j = 1; j < tail.length - 1; j++) tail[j].z = (tail[j - 1].z + tail[j].z * 2 + tail[j + 1].z) / 4;
     }
+    // La dernière perle prolonge la tresse lissée (le lissage rentre les perles du milieu dans les crins :
+    // seule, sur la face arrière brute, la dernière pendait dans le vide derrière la queue).
+    if (tail.length > 2) {
+      const n = tail.length - 1;
+      tail[n].z = Math.max(tail[n].z, 2 * tail[n - 1].z - tail[n - 2].z);
+    }
     for (const p of tail) p.add(V(0, 0.006, -0.02));
   }
-  return { crest, tail };
+  return { crest, crestCovered, tail };
 }
 
 // ------------------------------------------------------------------ mesures (selle, équipement)
@@ -1438,6 +1475,8 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   const dockY = heads[BONE_INDEX.Tail2].y;
   const braidSpots = {
     crest: S.braids.crest.map(([p, up]) => [G('Neck').worldToLocal(p.clone()), up.clone().applyQuaternion(neckQi)]),
+    // (sous une couverture : les boutons commencent devant son bord avant)
+    crestCovered: S.braids.crestCovered.map(([p, up]) => [G('Neck').worldToLocal(p.clone()), up.clone().applyQuaternion(neckQi)]),
     tail: S.braids.tail.map((p) => {
       const g = G(p.y > dockY ? 'Tail1' : 'Tail2');
       return [g, g.worldToLocal(p.clone())];

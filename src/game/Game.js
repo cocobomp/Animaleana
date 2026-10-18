@@ -56,7 +56,7 @@ import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, traj
 import { CompetitionVenue } from './CompetitionVenue.js'; // concours à l'extérieur : site, épreuve, podium
 import './Dressage.js'; // séances de dressage (s'enregistrent dans Activities)
 import { Marker } from './Marker.js';
-import { Emitter } from './events.js';
+import { Emitter } from './emitter.js'; // petit système d'événements (on / emit)
 import { audio } from './audio.js'; // sons synthétisés : voix, pas, ambiance, interface
 import { Groomer } from './Groomer.js'; // métier Toiletteur : salon, clients et leurs animaux
 

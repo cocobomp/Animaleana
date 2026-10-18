@@ -563,6 +563,7 @@ export class Game {
       this.tasks?.update();
       this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
     }
+    this.player.afterSessions?.(); // rênes : à la place finale du cheval et du cavalier (saut soulevé)
     if (mgmt) this.mgmt.update(dt, ctrl);
     else if (!this.tripFlow.viewCamera(dt, ctrl)) { // (vue dans le véhicule : TripFlow place la caméra)
       this.rig.update(dt, ctrl, this.player, this.world);

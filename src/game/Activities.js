@@ -1650,15 +1650,20 @@ class ShowSession extends Session {
         }
         break;
       }
-      case 'bow':
+      case 'bow': {
         e.speed = 0;
-        e.scaleGroup.rotation.x = Math.sin(Math.min(1, this.phaseT / 0.8) * Math.PI) * 0.25;
+        // Le salut après le tour : le cheval réaliste fait une petite révérence (ses antérieurs se tendent :
+        // basculé tout d'une pièce, ses sabots avant passaient sous la scène).
+        const b = Math.sin(Math.min(1, this.phaseT / 0.8) * Math.PI);
+        if (!realLegPose(e.model, 'bow', b * 0.85, e.scaleGroup)) e.scaleGroup.rotation.x = b * 0.25;
         if (this.phaseT > 0.8) {
           e.scaleGroup.rotation.x = 0;
+          e.scaleGroup.position.y = 0;
           this.phase = 'leave';
           this.phaseT = 0;
         }
         break;
+      }
       default:
     }
     const onStage = Math.hypot(e.position.x - this.center.x, e.position.z - this.center.z) < 3.3;
@@ -1736,8 +1741,11 @@ function animateTrick(e, trick, k, dt) {
       e.speed = 1.2;
       break;
     case 'bow':
-      sg.rotation.x = 0.35 * Math.min(1, s * 2);
-      for (const l of front) l.pivot.rotation.x = -0.8 * Math.min(1, s * 2);
+      // (cheval réaliste : sa pose de révérence, antérieurs tendus et sabots sur la scène)
+      if (!realLegPose(md, 'bow', Math.min(1, s * 2), sg)) {
+        sg.rotation.x = 0.35 * Math.min(1, s * 2);
+        for (const l of front) l.pivot.rotation.x = -0.8 * Math.min(1, s * 2);
+      }
       break;
     case 'smile':
       md.neck.rotation.x = e.data.look.neckAngle - 0.6 * Math.min(1, s * 2);

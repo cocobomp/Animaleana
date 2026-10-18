@@ -148,6 +148,53 @@ function surfaceHit(parent, outside, inside, meshes) {
   return hit ? parent.worldToLocal(hit.point.clone()) : null;
 }
 
+const _zAxis = new THREE.Vector3(0, 0, 1);
+
+/**
+ * Tresses du cheval réaliste, aux places mesurées sur ses crins (model.braidSpots, horseReal.js) :
+ * tresses « boutons » de concours sur la crête (une boule de crins, un ruban noué autour, un pompon),
+ * tresse de queue le long du dessus des crins depuis la croupe, nœud en haut.
+ */
+function realHorseBraids(model, ribbon, mane, add) {
+  const S = model.braidSpots;
+  const r = (model.dims?.R ?? 0.32) * 0.085;
+  const hairMat = mat(mane, 0.7);
+  const ribbonMat = mat(ribbon, 0.5);
+  if (S.crest.length && model.neck) {
+    const group = new THREE.Group();
+    for (const [p, up] of S.crest) {
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 9), hairMat);
+      knob.position.copy(p).addScaledVector(up, r * 0.6);
+      knob.quaternion.setFromUnitVectors(_zAxis, up);
+      knob.scale.set(1, 1, 0.85); // (un peu aplatie sur la crête)
+      group.add(knob);
+      const band = new THREE.Mesh(new THREE.TorusGeometry(r * 0.82, r * 0.2, 6, 14), ribbonMat);
+      band.position.copy(knob.position).addScaledVector(up, -r * 0.15);
+      band.quaternion.copy(knob.quaternion);
+      group.add(band);
+      const pom = new THREE.Mesh(new THREE.SphereGeometry(r * 0.5, 10, 8), ribbonMat);
+      pom.position.copy(knob.position).addScaledVector(up, r * 0.8);
+      group.add(pom);
+    }
+    add(model.neck, group);
+  }
+  if (S.tail.length) {
+    S.tail.forEach(([parent, p], j) => {
+      // perles de crins entrelacées, un peu plus fines vers le bas
+      const b = new THREE.Mesh(new THREE.SphereGeometry(r * (1 - j * 0.045), 10, 8), hairMat);
+      b.position.copy(p);
+      b.position.x += (j % 2 ? 1 : -1) * r * 0.3;
+      add(parent, b);
+    });
+    const [parent, p] = S.tail[0];
+    const bow = bowMesh(ribbon, r * 1.25, 'plain');
+    bow.position.copy(p);
+    bow.quaternion.copy(S.tailBowQ ?? bow.quaternion);
+    bow.translateZ(r * 0.9); // (devant la tresse, vu de derrière)
+    add(parent, bow);
+  }
+}
+
 /** Construit (ou enlève) les tresses, nœuds et le brillant de l'animal selon sa préparation. */
 export function applyBeautyDecor(e, now) {
   const a = e.data;
@@ -177,7 +224,12 @@ export function applyBeautyDecor(e, now) {
   if (isFresh(a, 'braid', now) && a.species === 'horse') {
     const ribbon = RIBBON_COLORS[prep.braid?.color] ?? RIBBON_COLORS.red;
     const mane = look.mane ?? look.secondary ?? 0x4a2f1d;
-    if (model.neck) {
+    if (model.braidSpots) {
+      // Cheval réaliste : places mesurées sur ses crins (horseReal.js). Les rayons de surfaceHit s'arrêtaient
+      // sur la partie transparente des cartes de crins (tresses dressées au-dessus de la crinière) et la
+      // racine du groupe de la queue est l'articulation, dans la croupe (tresse enfouie).
+      realHorseBraids(model, ribbon, mane, add);
+    } else if (model.neck) {
       const { len: nl, down } = neckFrame(model, look.neckLen ?? R);
       const group = new THREE.Group();
       const count = 7;
@@ -202,7 +254,7 @@ export function applyBeautyDecor(e, now) {
       }
       add(model.neck, group);
     }
-    if (model.tail) {
+    if (model.tail && !model.braidSpots) {
       // La queue : modèle procédural (groupe « tail » à la racine) ou ancre GLB (même repère que l'animal).
       const tg = new THREE.Group();
       tg.add(braidMesh(new THREE.Vector3(0, -R * 0.08, -R * 0.14), new THREE.Vector3(0, -R * 0.7, -R * 0.26), R * 0.1, mane));
@@ -241,11 +293,16 @@ export function applyBeautyDecor(e, now) {
       const m = o.material;
       if (!o.isMesh || own.has(o) || !m?.isMeshStandardMaterial || m.transparent || m.alphaTest > 0) return;
       const shiny = m.clone();
-      // Les matériaux à shader maison (fourrure, crins) gardent leur shader.
+      // Les matériaux à shader maison (fourrure, crins) gardent leur shader, et leurs defines
+      // (material.copy() les remet à ceux de MeshStandardMaterial).
       shiny.onBeforeCompile = m.onBeforeCompile;
       shiny.customProgramCacheKey = m.customProgramCacheKey;
-      shiny.roughness = Math.max(0.12, (m.roughness ?? 0.8) - 0.4);
-      shiny.metalness = Math.min(0.3, (m.metalness ?? 0) + 0.08);
+      shiny.defines = { ...m.defines };
+      // Robe peinte du cheval (horseCoat.js) : un brillant satiné ; plus lisse, le relief peint disparaît
+      // sous les reflets (robe de plastique).
+      const coat = !!m.userData?.horseUniforms;
+      shiny.roughness = Math.max(coat ? 0.3 : 0.12, (m.roughness ?? 0.8) - (coat ? 0.24 : 0.4));
+      shiny.metalness = Math.max(m.metalness ?? 0, Math.min(coat ? 0.2 : 0.3, (m.metalness ?? 0) + (coat ? 0.05 : 0.08)));
       o.material = shiny;
       decor.mats.push({ mesh: o, orig: m, shiny });
     });

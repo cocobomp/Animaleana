@@ -729,6 +729,7 @@ function shapeFor(base, B) {
     crest: base.hair.crest.map(([t, c]) => [t, D.maps[BONE_INDEX.Neck](c, V())]),
   };
   S.measure = measureShape(S, dc.pos, coat, base);
+  S.braids = measureBraids(S, dm.pos, dc.pos, base);
   S.key = key;
   S.users = 1;
   shapes.set(key, S);
@@ -755,6 +756,82 @@ function smoothOnMesh(val, index, passes) {
     }
     for (let i = 0; i < n; i++) if (cnt[i]) val[i] = 0.5 * val[i] + 0.5 * (sum[i] / cnt[i]);
   }
+}
+
+/**
+ * Places des tresses du concours de beauté (Beauty.js), mesurées sur les crins de la race (repère du
+ * cheval, au repos) : sur la crête, au-dessus des racines de la crinière (7 tresses de t = 0,14 à 0,86
+ * entre le garrot et la nuque) ; sur la queue, le long du dessus des crins depuis leur sortie de la
+ * croupe (la tresse suit la face arrière des crins du milieu, pas l'articulation cachée dans la croupe).
+ */
+function measureBraids(S, mpos, cpos, base) {
+  const H = base.hair;
+  const coat = base.prims.coat;
+  const heads = S.heads;
+  const axis = heads[BONE_INDEX.Head].clone().sub(heads[BONE_INDEX.Neck]).normalize();
+  const up = V(0, axis.z, -axis.y);
+  if (up.y < 0) up.negate();
+  const crestAt = (t) => {
+    const c = S.crest;
+    const k = Math.min(c.length - 2, Math.max(0, Math.floor(t * (c.length - 1))));
+    return c[k][1].clone().lerp(c[k + 1][1], t * (c.length - 1) - k);
+  };
+  const P = V();
+  const crest = [];
+  for (let i = 0; i < 7 && S.crest.length > 1; i++) {
+    const c = crestAt(0.14 + (i / 6) * 0.72);
+    // épaisseur des crins sur la crête : racines de la crinière (pas les pointes, qui pendent sur le côté)
+    let top = 0;
+    for (let k = 0; k < H.g.length; k++) {
+      if (H.tail[k] || H.g[k] > 0.3) continue;
+      P.fromArray(mpos, k * 3).sub(c);
+      if (Math.abs(P.dot(axis)) > 0.04 || Math.abs(P.x) > 0.05) continue;
+      top = Math.max(top, P.dot(up));
+    }
+    crest.push([c.addScaledVector(up, Math.min(0.05, top)), up.clone()]);
+  }
+  // Queue : la racine des crins la plus haute (au milieu), puis la face arrière des crins du milieu.
+  let top = null;
+  for (let k = 0; k < H.g.length; k++) {
+    if (!H.tail[k] || H.g[k] > 0.3) continue;
+    P.fromArray(mpos, k * 3);
+    if (Math.abs(P.x) < 0.05 && (!top || P.y > top.y)) top = P.clone();
+  }
+  const tail = [];
+  if (top) {
+    // Peau du tronçon de queue (sommets liés aux os de la queue) : la tresse passe derrière elle aussi.
+    const dock = [];
+    for (let i = 0; i < coat.count; i++) {
+      const b = dominant(coat, i);
+      if ((b === BONE_INDEX.Tail1 || b === BONE_INDEX.Tail2) && Math.abs(cpos[i * 3]) < 0.04) dock.push(i);
+    }
+    // (un peu sous la racine la plus haute : à la jonction avec la croupe, la peau ne suit qu'à moitié
+    // les os de la queue, la première perle y entrait quand la queue est relevée ou chasse les mouches)
+    const L = 0.25;
+    const N = 8;
+    const y0 = top.y - 0.02;
+    let z = top.z;
+    for (let j = 0; j <= N; j++) {
+      const y = y0 - (L * j) / N;
+      let zb = Infinity;
+      for (let k = 0; k < H.g.length; k++) {
+        if (!H.tail[k]) continue;
+        const py = mpos[k * 3 + 1];
+        if (Math.abs(py - y) > 0.025 || Math.abs(mpos[k * 3]) > 0.04) continue;
+        zb = Math.min(zb, mpos[k * 3 + 2]);
+      }
+      for (const i of dock) if (Math.abs(cpos[i * 3 + 1] - y) < 0.03) zb = Math.min(zb, cpos[i * 3 + 2]);
+      // (jamais plus en avant que le point d'au-dessus : la queue descend vers l'arrière)
+      z = Math.min(z, Number.isFinite(zb) ? zb : z);
+      tail.push(V(0, y, z));
+    }
+    // Lissé (les crins sont des cartes : la face arrière fait des marches) et décollé des crins.
+    for (let pass = 0; pass < 2; pass++) {
+      for (let j = 1; j < tail.length - 1; j++) tail[j].z = (tail[j - 1].z + tail[j].z * 2 + tail[j + 1].z) / 4;
+    }
+    for (const p of tail) p.add(V(0, 0.006, -0.02));
+  }
+  return { crest, tail };
 }
 
 // ------------------------------------------------------------------ mesures (selle, équipement)
@@ -1268,6 +1345,23 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   root.updateMatrixWorld(true);
   const skeleton = new THREE.Skeleton(bones);
   const G = (n) => groups[BONE_INDEX[n]];
+  // Places des tresses (Beauty.js) dans le repère des groupes qui les portent, pris au repos (root = monde
+  // ici) : elles suivent l'encolure et la queue comme la peau et les crins liés à ces os.
+  const neckQi = G('Neck').getWorldQuaternion(new THREE.Quaternion()).invert();
+  const dockY = heads[BONE_INDEX.Tail2].y;
+  const braidSpots = {
+    crest: S.braids.crest.map(([p, up]) => [G('Neck').worldToLocal(p.clone()), up.clone().applyQuaternion(neckQi)]),
+    tail: S.braids.tail.map((p) => {
+      const g = G(p.y > dockY ? 'Tail1' : 'Tail2');
+      return [g, g.worldToLocal(p.clone())];
+    }),
+    // (nœud de la queue tourné vers l'arrière du cheval, dans le repère du premier groupe de la tresse)
+    tailBowQ: null,
+  };
+  if (braidSpots.tail.length) {
+    braidSpots.tailBowQ = braidSpots.tail[0][0].getWorldQuaternion(new THREE.Quaternion()).invert()
+      .multiply(new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.PI));
+  }
 
   const coatSrc = base.prims.coat.material;
   const coatMat = coatMaterial(look, B, breed, {
@@ -1345,6 +1439,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
     snoutTip: V(0, 0, S.headLen).toArray(),
     mouth: V(0, -0.2 * S.headLen, 0.86 * S.headLen),
     sdf: { torso: S.measure.torso, head: S.measure.head },
+    braidSpots,
     dims: {
       L, R, hr, legR, snoutZ: S.headLen, headBack: -0.12, earZ: earLocal.z, earY: earLocal.y,
       zGirth: elbow.z - 0.14, blanket: [bz0, heads[BONE_INDEX.Neck].z + 0.1],
@@ -1643,12 +1738,15 @@ class RealHorseAnim {
     const md = this.model;
     const t = this.t;
     // Respiration (côtes) et embonpoint (tronc plus large, membres et encolure gardent leur forme).
+    // L'embonpoint n'élargit qu'en x, comme le cheval sculpté : l'origine du tronc est au sol, une échelle
+    // en y y remonterait les épaules et les hanches (sabots en l'air, dos au-dessus de la selle du cavalier).
     const breathe = Math.sin(t * (st.sleeping ? 1.3 : 2.1)) * (st.moving ? 0.006 : 0.014);
     md.ribs.scale.set(1 + breathe, 1 + breathe * 0.7, 1 + breathe * 0.2);
     const fat = st.fat ?? 1;
-    md.body.scale.set(fat, 1 + (fat - 1) * 0.3, 1);
+    md.body.scale.set(fat, 1, 1);
+    md.fat = fat;
     if (fat !== 1) {
-      for (const c of [md.neck, md.tail, ...md.legs.map((l) => l.top)]) c.scale.set(1 / fat, 1 / (1 + (fat - 1) * 0.3), 1);
+      for (const c of [md.neck, md.tail, ...md.legs.map((l) => l.top)]) c.scale.set(1 / fat, 1, 1);
     }
     // Somnolence : encolure basse, oreilles sur le côté ; tristesse : tête un peu basse.
     this.doze = (this.doze ?? 0) + ((st.sleeping ? 1 : 0) - (this.doze ?? 0)) * Math.min(1, dt * 1.5);
@@ -1852,7 +1950,8 @@ const AXIS_Y = V(0, 1, 0);
  * Poses des membres imposées par les activités (src/game/Activities.js, écrites après l'animation) :
  * 'jump' (saut d'obstacle : antérieurs repliés sous le poitrail, postérieurs repliés sous le ventre),
  * 'down' (couché sur le sternum, membres repliés), 'hoof' (antérieur levé, genou plié : « donner le
- * sabot »). s : 0 → 1 (amplitude). sg : groupe d'échelle de l'entité (pour se coucher). Renvoie true si
+ * sabot »), 'bow' (révérence, voir bowPose). s : 0 → 1 (amplitude). sg : groupe d'échelle de l'entité
+ * (pour se coucher, pour la révérence : il bascule et se pose au sol). Renvoie true si
  * le modèle est le cheval réaliste (sinon l'activité garde sa pose habituelle).
  */
 export function realLegPose(md, kind, s, sg = null) {
@@ -1887,8 +1986,84 @@ export function realLegPose(md, kind, s, sg = null) {
     l.pivot.rotation.x = -1.1 * s;
     l.knee.rotation.x = 1.1 * s;
     l.fetlock.rotation.x = 0.3 * s;
+  } else if (kind === 'bow') {
+    bowPose(md, front, hind, s, sg);
   } else return false;
   return true;
+}
+
+const _mInv = new THREE.Matrix4();
+
+/** Semelle la plus basse de ces membres, dans le repère m (matrices du monde à jour). */
+function lowestSole(legs, m) {
+  let low = Infinity;
+  for (const l of legs) {
+    for (const p of l.solePts) low = Math.min(low, _v.copy(p).applyMatrix4(l.fetlock.matrixWorld).applyMatrix4(m).y);
+  }
+  return low;
+}
+
+/**
+ * Révérence (spectacle) : l'avant-main bascule vers le sol, les antérieurs se tendent vers l'avant
+ * (épaule et coude, genou droit, sabot à plat), les postérieurs restent sous la masse. L'angle des
+ * antérieurs est cherché pour que leurs sabots touchent le sol en même temps que les postérieurs, puis
+ * le groupe d'échelle (sg) est posé pour que la semelle la plus basse soit au sol : rien ne passe sous la
+ * scène, et le bout du nez reste au-dessus (encolure relevée s'il broutait encore).
+ */
+function bowPose(md, front, hind, s, sg) {
+  const A = 1.3; // (antérieurs tendus au plus : au-delà, l'avant-main bascule moins)
+  let th = 0.28 * s;
+  const pose = (a) => {
+    for (const l of front) {
+      l.top.rotation.x = -0.35 * a;
+      l.pivot.rotation.x = -0.65 * a;
+      l.knee.rotation.x = 0;
+      l.fetlock.rotation.x = Math.max(0, a - th) * 0.7;
+    }
+  };
+  const top = sg ?? md.root;
+  const frame = top.parent ?? top;
+  let yHind = 0;
+  let hi = A;
+  for (let tries = 0; tries < 4; tries++) {
+    if (sg) {
+      sg.rotation.x = th;
+      sg.position.y = 0;
+    }
+    // (postérieurs : le basculement les met sous la masse ; sabots remis à plat)
+    for (const l of hind) l.fetlock.rotation.x = -th;
+    pose(0);
+    top.updateMatrixWorld(true);
+    _mInv.copy(frame.matrixWorld).invert();
+    yHind = lowestSole(hind, _mInv);
+    // Angle des antérieurs : dichotomie (les sabots montent quand les membres se tendent vers l'avant).
+    let lo = 0;
+    hi = A;
+    for (let i = 0; i < 10; i++) {
+      const a = (lo + hi) / 2;
+      pose(a);
+      for (const l of front) l.top.updateMatrixWorld(true);
+      if (lowestSole(front, _mInv) < yHind) lo = a;
+      else hi = a;
+    }
+    pose(hi);
+    for (const l of front) l.top.updateMatrixWorld(true);
+    // Membres trop courts pour ce tronc (trait, poney) : l'avant-main descend moins.
+    if (hi < A - 0.01 || lowestSole(front, _mInv) > yHind - 0.003) break;
+    th *= 0.8;
+  }
+  const low = Math.min(yHind, lowestSole(front, _mInv));
+  if (sg) sg.position.y = -low;
+  // Bout du nez au-dessus du sol (6 cm, cheval de taille 1) : on relève l'encolure tant qu'il manque.
+  if (sg) top.updateMatrixWorld(true);
+  const sc = sg?.scale.y ?? 1;
+  for (let i = 0; i < 6; i++) {
+    _w.copy(md.mouth).applyMatrix4(md.head.matrixWorld).applyMatrix4(_mInv);
+    const short = 0.06 * sc - (sg ? _w.y : _w.y - low);
+    if (short <= 0.002) break;
+    md.neck.rotateX(-Math.min(0.5, short / Math.max(0.3, md.dims.snoutZ * sc)));
+    md.neck.updateMatrixWorld(true);
+  }
 }
 
 /**
@@ -1901,7 +2076,8 @@ export function animateRealHorse(e, dt, sad) {
   const moving = e.speed > 0.05 && !e.sleeping;
   const t = e.time;
   e.grazeSeed ??= Math.random() * 10;
-  const grazing = e.state === 'idle' && !e.sleeping && !e.herdCtrl && !e.ridden && Math.sin(t * 0.3 + e.grazeSeed) > 0.2;
+  // (pas pendant une séance qui le guide, spectacle, toilettage… : il attend tête haute)
+  const grazing = e.state === 'idle' && !e.sleeping && !e.herdCtrl && !e.ridden && !e.scripted && Math.sin(t * 0.3 + e.grazeSeed) > 0.2;
   // (tête à l'herbe ou à la mangeoire : lissé, elle descend et remonte en douceur)
   e.grazeAmt = (e.grazeAmt ?? 0) + ((grazing ? 1 : 0) - (e.grazeAmt ?? 0)) * Math.min(1, dt * 1.2);
   e.feedAmt = (e.feedAmt ?? 0) + ((e.state === 'eat' ? 1 : 0) - (e.feedAmt ?? 0)) * Math.min(1, dt * 1.5);

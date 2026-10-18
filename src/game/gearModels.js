@@ -157,7 +157,8 @@ function buildHorseGear(model, look, gear, add) {
     const [bz0, bz1] = model.dims.blanket ?? [-L * 0.52, L * (id === 'blanketSummer' ? 0.34 : 0.3)];
     const front = bz1 + (model.dims.blanket && id === 'blanketSummer' ? 0.04 : 0);
     // (cheval réaliste : liée au squelette, add.skin ; un peu plus écartée sur la croupe et les flancs)
-    const gap = model.skinGear ? 0.006 : 0;
+    // (9 mm : au galop d'un petit poney, la hanche passait encore à travers par endroits avec 6 mm)
+    const gap = model.skinGear ? 0.009 : 0;
     const dense = model.skinGear ? 1.5 : 1; // (grille plus fine : moins de cordes sous les bosses de la peau)
     add.skin(add(body, shell(torso, y0 - R * 0.2, bz0, front, Math.round(12 * dense), deg(192), deg(-12), Math.round(20 * dense), (id === 'blanket' ? 0.016 : 0.011) + gap), cloth));
     const edge = loop(torso, [0, y0 - R * 0.2, front], 20, 0.018 + gap, deg(192), deg(-12));

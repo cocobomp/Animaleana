@@ -110,7 +110,8 @@ export class Player {
     const seatZ = -e.data.look.bodyLen * sc * 0.05;
     a.root.position.set(0, seatY, seatZ);
     const look = e.data.look;
-    const R = (md.dims?.R ?? look.bodyR * (look.fluff ?? 1)) * sc;
+    // (md.fat : embonpoint du cheval réaliste, son tronc s'élargit : les pieds restent contre le flanc)
+    const R = (md.dims?.R ?? look.bodyR * (look.fluff ?? 1)) * sc * (md.fat ?? 1);
     const saddle = !this.bareback && !!e.data.gear?.saddle;
     const foot = stirrupFor(R, saddle, {});
     // Garrot : la base de l'encolure, dans le repère du cheval (le joueur est à la même place).
@@ -153,7 +154,9 @@ export class Player {
 
   /**
    * Rênes : des anneaux du mors (filet en place, voir gearModels.js) aux mains du cavalier, un peu
-   * détendues. Deux rubans croisés par rêne (visibles sous tous les angles), recalculés à chaque image.
+   * détendues. Deux rubans croisés par rêne (visibles sous tous les angles), recalculés à chaque image :
+   * dans lateUpdate, puis par Game.frame après les séances (afterSessions), qui peuvent encore soulever
+   * et basculer le cheval et le cavalier (saut d'obstacle, src/game/Activities.js).
    */
   updateReins(m) {
     const R = m.gearGroup?.userData.reins;
@@ -219,6 +222,15 @@ export class Player {
     }
     pos.needsUpdate = true;
     mesh.geometry.computeVertexNormals();
+  }
+
+  /**
+   * Après les séances de l'image (Game.frame) : les rênes suivent la dernière place du cheval et du
+   * cavalier. (Pas dans onBeforeRender : three.js envoie les sommets à la carte graphique avant cet
+   * appel, les rênes dessinées seraient restées celles de lateUpdate, un mètre plus bas pendant un saut.)
+   */
+  afterSessions() {
+    if (this.mount && this.reins?.visible) this.updateReins(this.mount);
   }
 
   dismount() {

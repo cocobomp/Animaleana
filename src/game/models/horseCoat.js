@@ -244,11 +244,14 @@ export function coatMaterial(look, build, breed = null, real = null) {
     m.map = real.detail;
     m.normalMap = real.normalMap ?? null;
     m.normalScale.set(0.9, 0.9 * (real.normalSign ?? 1));
-    m.defines = { H_REAL: '' };
   }
+  // H_REAL écrit dans le shader lui-même, pas dans m.defines : une copie de la matière (robe lustrée du
+  // concours de beauté, Beauty.js) garde son onBeforeCompile mais material.copy() remet defines à zéro,
+  // et le cheval réaliste perdait son modelé peint (robe de plastique).
+  const def = real ? '#ifndef H_REAL\n#define H_REAL\n#endif\n' : '';
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.vertexShader = sh.vertexShader
+    sh.vertexShader = def + sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute float hPart;
 attribute vec3 hInfo;
@@ -267,7 +270,7 @@ vHPos = position; vHNrm = normal; vHPart = hPart; vHInfo = hInfo; vHAO = hAO;
 #ifdef H_REAL
 vHHead = hHead;
 #endif`);
-    sh.fragmentShader = sh.fragmentShader
+    sh.fragmentShader = def + sh.fragmentShader
       .replace('#include <common>', `#include <common>
 ${Object.keys(u).map((k) => `uniform ${k === 'hSocks' ? 'vec4' : u[k].value.isColor ? 'vec3' : 'float'} ${k};`).join('\n')}
 varying vec3 vHPos;

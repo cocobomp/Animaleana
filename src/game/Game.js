@@ -1284,7 +1284,7 @@ export class Game {
   checkHorses() {
     const horses = this.animalsHere().filter((a) => a.species === 'horse');
     const sick = horses.filter((a) => a.sick || mood(a) === 'sad');
-    this.ui.toast(sick.length ? t('checkBad', { names: sick.map((a) => a.name).join(', ') }) : t('checkGood', { n: horses.length }), 5000);
+    this.ui.toast(sick.length ? t('checkBad', { names: sick.map((a) => a.name).join(', '), n: sick.length }) : t('checkGood', { n: horses.length }), 5000);
   }
 
   /** Cherche ce qui est à portée de main (animal, porte…) pour le bouton d'action. */

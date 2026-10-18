@@ -26,7 +26,7 @@ function capacityText(g, kind) {
   const n = residents(g, kind).length;
   if (kind === 'stable') {
     const used = boxOccupants(f, g.interiors.homeHorses()).filter(Boolean).length;
-    return t('fac_capBoxes', { used, n: boxCount(f), max: stableSlots(f) });
+    return t('fac_capBoxes', { n: used, total: boxCount(f), max: stableSlots(f) });
   }
   return t(kind === 'house' ? 'fac_capPets' : 'fac_capFlock', { n });
 }

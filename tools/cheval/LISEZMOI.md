@@ -31,8 +31,9 @@ Le modèle d'origine n'a aucune animation : toutes les allures sont générées 
    (membres à 4 os : sabot visé, angle du sabot, boulet, canon, avant-bras, épaule) :
    - `walk` (1,6 m/s), `trot` (3,0), `canter` petit galop à gauche et `canterR` à droite (4,6), `gallop` (8,5) :
      ce sont les vitesses « naturelles » (`NATURAL_SPEED` dans `horseReal.js`), celles où les sabots posés ne
-     glissent pas ; le jeu joue chaque clip à vitesse réelle ÷ vitesse naturelle (pour une race, mesurée au
-     chargement sur ses propres sabots : ses membres n'ont pas la longueur du modèle) ;
+     glissent pas ; le jeu joue chaque clip à vitesse réelle ÷ vitesse naturelle. Pour une race, les allures
+     sont **recalées dans le jeu** (`lockedGaits`, voir plus bas) : ses membres n'ont pas la longueur du
+     modèle, et 25 clés par seconde ne suffisent pas au galop (trois clés par appui) ;
    - en fin d'appui le sabot bascule sur la pince, en soutien il se replie ; les points de la sole ne passent
      jamais sous le sol (la cible est relevée), vérifié ensuite sur le maillage déformé (rapport JSON) ;
    - `idle`, `rest` (repos d'un postérieur, sabot sur la pince), `eat` (bout du nez à 3 cm de l'herbe, un
@@ -77,6 +78,29 @@ Le modèle source a les paupières à demi fermées (regard somnolent en permane
 `openEyelids` fait tourner les sommets autour de chaque œil sur la sphère du globe (paupière supérieure
 relevée de 0,42 rad, inférieure abaissée de 0,12, coins en place), ce qui ouvre l'œil sans rien faire passer
 dedans ; au-delà de ≈ 0,5 rad, des triangles de la paupière se replient.
+**Œil vivant** : `mapEyes` cherche la partie du globe que les paupières laissent voir (rayons depuis chaque
+sommet, le long de la normale, contre le pelage), son centre (axe du regard) et le grand axe de la fente, puis
+projette des UV sur le plan du regard ; `eyeTexture` peint l'iris (brun foncé, fibres, pupille horizontale,
+grains de suie) sur une toile 256² partagée ; `eyeMaterial` ajoute dans le shader un reflet net du soleil là où
+la normale du globe est la bissectrice de la lumière et du regard, ramené dans l'ouverture quand ce point est
+caché, et réduit à un pixel assombri d'autant quand l'œil est petit à l'écran (ni œil blanc ni œil gris de loin).
+≈ 20 ms de plus à la préparation du GLB, quelques instructions sur les seuls pixels des yeux.
+
+**Appuis calés** (`lockedGaits`, une fois par gabarit, au premier pas d'un cheval de ce gabarit, ≈ 25 ms) :
+chaque allure est rééchantillonnée à 100 images/s sur les membres de la race ; pendant l'appui (sole à
+moins de 1 cm du sol, sabot qui flotte un peu au bout de l'appui compris), la pince suit une droite à la vitesse
+de l'allure (moindres carrés, même pente pour les quatre membres) et la sole est au sol ; un peu avant la pose et
+après le lever, le sabot est tenu à sa place d'autant plus qu'il est près du sol (il descend sur sa place au
+lieu d'arriver en avançant encore avec le corps). Cinématique inverse amortie (`solveLeg` : coude ou grasset,
+genou ou jarret, un peu l'épaule ou la hanche), sabot gardant l'orientation du clip. Mesuré sur les 33 races à
+60 im/s (glissement de la pince posée par appui) : galop 2,06 → 0,13 cm en moyenne (pire appui 5,8 → 0,8 cm),
+petit galop 1,38 → 0,10, trot 0,66 → 0,09, pas 0,84 → 0,22 cm ; aucune sole sous le sol.
+
+Poses imposées par les activités (`realLegPose`) : saut d'obstacle selon sa phase (`jumpLegs` : appel,
+bascule, réception, fondus avec l'allure ; le cheval et le cavalier basculent autour du centre du cheval,
+`Activities.pitchAbout`), « donner le sabot » fondu depuis l'allure, sole jamais sous le sol (`legLow`).
+Couverture : les trois dernières rangées de la nappe tombent droit (`gearModels.shell`, `drape`) au lieu de se
+refermer sur la pointe des fesses (la peau de la hanche passait par-dessus le bord).
 `tests/horseReal.test.js` vérifie le fichier (os, clips, compression) et que chaque race garde ses sabots au sol.
 
 Ce qu'il coûte, et comment on le garde bas :

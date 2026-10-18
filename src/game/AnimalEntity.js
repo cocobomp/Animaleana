@@ -1032,6 +1032,7 @@ export class AnimalEntity {
   }
 
   dispose() {
+    this.disposed = true; // (Game.swapRealHorses : plus la peine de lui donner le cheval réaliste)
     this.scene.remove(this.root);
     this.model.dispose?.();
     disposeModel(this.model.root);

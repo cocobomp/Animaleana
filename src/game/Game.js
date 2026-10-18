@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { World } from './World.js';
 import { gfx } from './gfx.js';
-import { preloadModels } from './assets.js';
+import { preloadModels, loadModel, MODELS } from './assets.js';
+import { REAL_HORSE_KEY, horseView, realHorseBase } from './models/horseReal.js'; // cheval réaliste : chargé à part
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
@@ -61,6 +62,9 @@ import { Groomer } from './Groomer.js'; // métier Toiletteur : salon, clients e
 
 // Animaux qu'on range dans la maison des animaux.
 const PET_HOUSED = ['dog', 'cat', 'rabbit'];
+// Attente du cheval réaliste au plus (ms après l'ouverture de la page) avant d'ouvrir une partie : un fichier en
+// cache arrive avant ; sur un réseau lent, on joue avec le cheval sculpté en attendant (voir onRealHorse).
+const HORSE_GRACE_MS = 1500;
 
 const CARE_EMOJI = {
   feed: '🍖', water: '💧', brush: '✨', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨',
@@ -157,9 +161,69 @@ export class Game {
     window.addEventListener('pagehide', () => this.save());
     this.clock = new THREE.Clock();
     renderer.setAnimationLoop(() => this.frame());
-    // Modèles 3D (GLB) : chargés pendant l'écran des profils ; start() attend qu'ils soient prêts.
+    // Modèles 3D (GLB) : chargés pendant l'écran des profils ; start() attend les petits (arbres, rochers…).
+    // Le cheval réaliste (≈ 0,75 Mo) n'est attendu qu'un court instant après l'ouverture de la page (assez pour
+    // un fichier déjà en cache) : sur un réseau lent, la partie s'ouvre avec le cheval sculpté (horseModel.js)
+    // et les chevaux prennent le réaliste dès qu'il arrive (onRealHorse).
+    // (le cheval est demandé après les petits : sur un réseau lent, il ne leur prend pas la bande passante)
     this.modelsLoaded = false;
-    this.modelsReady = preloadModels().then((n) => { this.modelsLoaded = true; return n; });
+    this.horseSwap = [];
+    const grace = new Promise((r) => setTimeout(r, HORSE_GRACE_MS));
+    const others = preloadModels(Object.keys(MODELS).filter((k) => k !== REAL_HORSE_KEY));
+    const horse = others.then(() => loadModel(REAL_HORSE_KEY));
+    this.modelsReady = Promise.all([others, Promise.race([horse, grace])])
+      .then(([n]) => { this.modelsLoaded = true; return n; });
+    this.realHorseReady = horse.then((gltf) => {
+      if (gltf) this.onRealHorse(gltf);
+      return !!gltf;
+    });
+  }
+
+  /**
+   * Le cheval réaliste est chargé. Ses données de repos (≈ 0,3 s de calcul, une fois) sont tirées du GLB
+   * juste après, hors de l'image en cours ; puis les chevaux déjà là avec le modèle de repli prennent le
+   * réaliste, un par image (Game.frame : swapRealHorses), et les vignettes de chevaux sont refaites.
+   */
+  onRealHorse(gltf) {
+    setTimeout(() => {
+      try {
+        realHorseBase(gltf);
+      } catch (err) {
+        console.warn('Cheval réaliste : préparation impossible', err);
+        return;
+      }
+      for (const e of this.allEntities()) if (e.data.species === 'horse' && !e.model?.real) this.horseSwap.push(e);
+      this.thumbs?.modelsChanged?.();
+    }, 30);
+  }
+
+  /** Tous les animaux de la scène : ceux de la partie, ceux en visite au salon de toilettage. */
+  allEntities() {
+    const out = [...this.entities.values()];
+    for (const v of this.groomer?.visitors?.values() ?? []) if (v.e) out.push(v.e);
+    for (const v of this.groomer?.leaving ?? []) if (v.e) out.push(v.e);
+    return out;
+  }
+
+  /**
+   * Un cheval au modèle de repli prend le cheval réaliste (un par image : la première construction d'une race
+   * coûte quelques dizaines de ms). Pas pendant qu'on le monte, qu'une séance le guide ou qu'on le mène :
+   * il attend son tour.
+   */
+  swapRealHorses() {
+    const list = this.horseSwap;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      const here = e.root?.parent && !e.disposed;
+      if (!here || e.model?.real) {
+        list.splice(i--, 1);
+        continue;
+      }
+      if (e.ridden || e.scripted || e.herdCtrl || e.posing || this.player?.mount === e) continue;
+      list.splice(i, 1);
+      e.rebuildModel();
+      return;
+    }
   }
 
   // ---------------------------------------------------------------- partie
@@ -551,6 +615,11 @@ export class Game {
     const mgmt = this.mgmt.active;
     // Vue dans le véhicule de voyage (cabine, compartiment, coffre) : on ne marche pas (src/game/TripFlow.js).
     const pctrl = mgmt || this.tripFlow.view ? { ...ctrl, move: { x: 0, y: 0 }, run: false } : ctrl;
+    // Cheval réaliste arrivé en cours de partie : un cheval de plus prend le vrai modèle.
+    if (this.horseSwap.length) this.swapRealHorses();
+    // Point de vue pour la version réduite des chevaux au loin (horseReal.js) : la caméra de l'image d'avant.
+    horseView.eye.setFromMatrixPosition(this.camera.matrixWorld);
+    horseView.on = true;
     const entities = [...this.entities.values()];
     const ctx = { playerPos: this.player.position, night, entities, game: this };
     for (let i = 0; i < steps; i++) {

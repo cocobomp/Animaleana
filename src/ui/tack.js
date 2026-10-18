@@ -354,6 +354,9 @@ function tryPhoto(g, e, gear, slot) {
   return th.capture(() => {
     const root = e.root;
     const pos = root.position.clone();
+    // (cheval réaliste au loin : version complète pour la photo, gardée jusqu'à la fin du rendu)
+    e.model.lodHold = true;
+    e.model.setLod?.(0);
     const rotY = root.rotation.y;
     const labels = [e.label, e.status].filter(Boolean).map((s) => [s, s.visible]);
     for (const [l] of labels) l.visible = false;
@@ -394,6 +397,7 @@ function tryPhoto(g, e, gear, slot) {
         root.position.copy(pos);
         root.rotation.y = rotY;
         for (const [l, v] of labels) l.visible = v;
+        e.model.lodHold = false;
         e.applyGear();
       },
     };

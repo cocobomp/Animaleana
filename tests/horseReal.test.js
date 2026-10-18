@@ -41,8 +41,11 @@ describe('fichier du cheval réaliste', () => {
   const buf = fs.readFileSync(FILE);
   const json = glbJson(buf);
 
-  it('est léger et compressé (meshopt, WebP)', () => {
-    expect(buf.length).toBeLessThan(1.3 * 1024 * 1024);
+  it('est léger et compressé (meshopt, WebP), avec sa version réduite', () => {
+    // (752 288 octets : crins en 512², index simplifiés de tools/cheval/lod.mjs)
+    expect(buf.length).toBeLessThan(800 * 1024);
+    const lod = json.meshes.find((m) => m.extras?.lod);
+    expect(lod?.primitives).toHaveLength(3);
     expect(json.extensionsUsed).toEqual(expect.arrayContaining(['EXT_meshopt_compression', 'EXT_texture_webp']));
   });
 

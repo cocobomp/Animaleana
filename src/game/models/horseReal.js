@@ -33,6 +33,20 @@ const MOVING = ['walk', 'trot', 'canter', 'gallop'];
 const STILL = ['idle', 'rest', 'eat'];
 // Allure du cavalier (src/game/models/avatarRig.js) : 0 pas, 1 trot, 2 galop.
 const RIDER_GAIT = { walk: 0, trot: 1, canter: 2, gallop: 2 };
+const RIDER_KEYS = [...MOVING, 'canterR'];
+
+/**
+ * Version réduite (LOD) au-delà de cette distance à la caméra (m, divisée par la taille du cheval) : de
+ * près en qualité basse (téléphone), plus loin en qualité haute. Hystérésis de 10 % (pas de va-et-vient).
+ */
+export const LOD_DIST = { low: 7, high: 22 };
+/** Cheval hors du champ (ni dessiné ni dans l'ombre) : animé une image sur OFFSCREEN_STEP, avec le temps cumulé. */
+export const OFFSCREEN_STEP = 3;
+/**
+ * Point de vue du jeu (Game.frame : position de la caméra à l'image précédente), pour le choix de la version
+ * réduite. Sans lui (tests, vignettes), toujours la version complète.
+ */
+export const horseView = { eye: new THREE.Vector3(), on: false };
 
 // Gabarit natif du modèle (cheval de trait, en unités de horseLook.js) : les races s'obtiennent en
 // divisant leur gabarit par celui-ci (pur-sang : tronc plus étroit, membres plus fins et plus longs…).
@@ -80,8 +94,9 @@ export function realHorseBase(gltf) {
   scene.updateMatrixWorld(true);
   const toHorse = scene.matrixWorld.clone().invert();
   const meshes = [];
+  const lods = []; // version réduite (tools/cheval/lod.mjs) : un autre index sur les mêmes sommets
   scene.traverse((o) => {
-    if (o.isSkinnedMesh) meshes.push(o);
+    if (o.isSkinnedMesh) (o.userData.lod ? lods : meshes).push(o);
   });
   const skel = meshes[0].skeleton;
   const glbIndex = new Map(skel.bones.map((b, i) => [b.name, i]));
@@ -134,6 +149,13 @@ export function realHorseBase(gltf) {
       ao[i] = col ? col.getX(i) : 1;
     }
     prims[name] = { pos, nrm, si, sw, uv, ao, index: Uint32Array.from(g.index.array), count: n, material: mesh.material };
+  }
+  for (const mesh of lods) {
+    const name = mesh.material.name.replace('horse_', '');
+    const src = meshes.find((m) => m.material.name === mesh.material.name);
+    // (index pris seulement s'il porte sur les mêmes sommets que la primitive d'origine)
+    const same = src && mesh.geometry.attributes.position.count === src.geometry.attributes.position.count;
+    if (prims[name] && same && mesh.geometry.index) prims[name].lodIndex = Uint32Array.from(mesh.geometry.index.array);
   }
   // Recalage en z : le creux du dos (là où se pose la selle) à z = -0,075, comme le cheval sculpté
   // (Player.seat, gearModels.js). Le GLB est centré sur sa boîte, qui comprend la tête et la queue.
@@ -633,9 +655,56 @@ function releaseShape(S) {
   const idle = [...shapes.values()].filter((x) => x.users === 0).sort((a, b) => a.idleAt - b.idleAt);
   for (const x of idle.slice(0, Math.max(0, idle.length - SPARE_SHAPES))) {
     shapes.delete(x.key);
-    for (const g of [x.coatGeo, x.eyeGeo, x.maneGeo]) g.dispose();
+    for (const g of [x.coatGeo, x.eyeGeo, x.maneGeo, ...Object.values(x.lod ?? {})]) g?.dispose();
   }
 }
+
+/**
+ * Version réduite d'une géométrie de race : l'index simplifié du GLB (tools/cheval/lod.mjs) sur les mêmes
+ * attributs (positions déformées, poids de la peau, attributs de la robe), partagés avec la géométrie
+ * complète : rien de plus en mémoire que l'index, sur la carte graphique comme ici.
+ */
+function lodGeometry(full, index) {
+  if (!index) return null;
+  const g = new THREE.BufferGeometry();
+  for (const [k, a] of Object.entries(full.attributes)) g.setAttribute(k, a);
+  g.setIndex(new THREE.BufferAttribute(index, 1));
+  g.boundingSphere = full.boundingSphere?.clone() ?? null;
+  g.userData.shared = true;
+  return g;
+}
+
+/**
+ * Boîtes englobantes par os (repère du cheval, au repos) : chaque sommet compte dans la boîte de chacun des os
+ * qui le déplacent (poids > 0). Une fois chaque boîte emmenée par la matrice de peau de son os, leur réunion
+ * contient le maillage déformé (un sommet mélangé est entre les positions que lui donnent ses os). Voir
+ * horseBounds. box : Float32Array(6 × os) (min x y z, max x y z) ; pos : tableau (x, y, z) ou attribut.
+ */
+function growBoneBoxes(box, pos, si, sw, count) {
+  const attr = !!pos.isBufferAttribute || !!pos.isInterleavedBufferAttribute;
+  for (let i = 0; i < count; i++) {
+    const x = attr ? pos.getX(i) : pos[i * 3];
+    const y = attr ? pos.getY(i) : pos[i * 3 + 1];
+    const z = attr ? pos.getZ(i) : pos[i * 3 + 2];
+    for (let k = 0; k < 4; k++) {
+      if (!(sw[i * 4 + k] > 0)) continue;
+      const o = si[i * 4 + k] * 6;
+      if (x < box[o]) box[o] = x;
+      if (y < box[o + 1]) box[o + 1] = y;
+      if (z < box[o + 2]) box[o + 2] = z;
+      if (x > box[o + 3]) box[o + 3] = x;
+      if (y > box[o + 4]) box[o + 4] = y;
+      if (z > box[o + 5]) box[o + 5] = z;
+    }
+  }
+  return box;
+}
+
+const emptyBoneBoxes = () => {
+  const b = new Float32Array(RIG.length * 6);
+  for (let k = 0; k < RIG.length; k++) b.set([Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity], k * 6);
+  return b;
+};
 
 /** Géométries (partagées) d'un gabarit : pelage, yeux, crins, avec les attributs du shader de la robe. */
 function shapeFor(base, B) {
@@ -722,12 +791,26 @@ function shapeFor(base, B) {
     }),
     eyeGeo: geo(de, base.prims.eye),
     maneGeo: geo(dm, base.prims.mane, { hairG: new THREE.BufferAttribute(base.hair.g, 1) }),
+    // Boîtes par os (culling, voir horseBounds), sur les trois primitives de la race.
+    boneBox: emptyBoneBoxes(),
     hoofY,
     elbowY,
     headLen,
     soles,
     crest: base.hair.crest.map(([t, c]) => [t, D.maps[BONE_INDEX.Neck](c, V())]),
   };
+  growBoneBoxes(S.boneBox, dc.pos, coat.si, coat.sw, coat.count);
+  growBoneBoxes(S.boneBox, de.pos, base.prims.eye.si, base.prims.eye.sw, base.prims.eye.count);
+  growBoneBoxes(S.boneBox, dm.pos, base.prims.mane.si, base.prims.mane.sw, base.prims.mane.count);
+  // Version réduite (si le GLB en a une) : mêmes sommets, index simplifié.
+  const lc = lodGeometry(S.coatGeo, coat.lodIndex);
+  if (lc) {
+    S.lod = {
+      coat: lc,
+      eye: lodGeometry(S.eyeGeo, base.prims.eye.lodIndex) ?? S.eyeGeo,
+      mane: lodGeometry(S.maneGeo, base.prims.mane.lodIndex) ?? S.maneGeo,
+    };
+  }
   S.measure = measureShape(S, dc.pos, coat, base);
   S.braids = measureBraids(S, dm.pos, dc.pos, base);
   S.key = key;
@@ -1039,11 +1122,13 @@ function maneMaterial(base, color, sway) {
   const src = base.prims.mane.material;
   // (cartes ajoutées : sans relief, normales « de volume » données par sommet, pas retournées au dos)
   const cards = color === null;
+  // (qualité basse : sans la carte de relief des crins, une lecture de texture de moins par pixel)
+  const relief = !cards && gfx.quality === 'high' ? src.normalMap : null;
   const m = new THREE.MeshStandardMaterial({
-    map: src.map, normalMap: cards ? null : src.normalMap, alphaTest: 0.42, side: THREE.DoubleSide, roughness: cards ? 0.8 : 0.62,
+    map: src.map, normalMap: relief, alphaTest: 0.42, side: THREE.DoubleSide, roughness: cards ? 0.8 : 0.62,
     alphaToCoverage: gfx.quality === 'high', vertexColors: cards,
   });
-  if (src.normalScale && !cards) m.normalScale.copy(src.normalScale);
+  if (src.normalScale && relief) m.normalScale.copy(src.normalScale);
   // (modelé médian = 0,5 dans la texture : ×2)
   const c = new THREE.Color(color ?? 0xffffff);
   const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
@@ -1367,22 +1452,30 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   const coatMat = coatMaterial(look, B, breed, {
     detail: coatSrc.map, normalMap: coatSrc.normalMap, normalSign: Math.sign(coatSrc.normalScale?.y ?? 1), hoofY: S.hoofY,
   });
-  const coat = new THREE.SkinnedMesh(S.coatGeo, coatMat);
-  const eyes = new THREE.SkinnedMesh(S.eyeGeo, eyeMaterial());
+  // Boîte englobante du cheval, commune à ses maillages : recalculée sur la pose des os à chaque image où il
+  // passe le test du champ de la caméra (voir HorseMesh, horseBounds). Les boîtes par os viennent de la race,
+  // plus les cartes de crins de ce cheval et l'équipement lié au squelette (skinGear).
+  const hb = { box: new THREE.Box3(), sphere: new THREE.Sphere(), boneBox: S.boneBox.slice(), skeleton, meshes: [], anim: null };
+  const coat = new HorseMesh(S.coatGeo, coatMat, hb);
+  const eyes = new HorseMesh(S.eyeGeo, eyeMaterial(), hb);
   const hairSway = { value: 0 };
-  const mane = new THREE.SkinnedMesh(S.maneGeo, maneMaterial(base, look.mane ?? 0x1b1410, hairSway));
+  const mane = new HorseMesh(S.maneGeo, maneMaterial(base, look.mane ?? 0x1b1410, hairSway), hb);
   const meshes = [coat, eyes, mane];
   // Brosse (Fjord, poulain) et fanons : cartes de crins à la couleur de chaque cheval.
   const extra = [];
   if (B.maneStyle === 'brush' || B.maneStyle === 'foal') extra.push(...brushCards(S, B, look));
   if ((B.feathers ?? 0) > 0.05) extra.push(...featherCards(S, B, look));
-  if (extra.length) meshes.push(new THREE.SkinnedMesh(hairCards(extra), maneMaterial(base, null, hairSway)));
+  if (extra.length) {
+    const cg = hairCards(extra);
+    growBoneBoxes(hb.boneBox, cg.attributes.position, cg.attributes.skinIndex.array, cg.attributes.skinWeight.array, cg.attributes.position.count);
+    meshes.push(new HorseMesh(cg, maneMaterial(base, null, hairSway), hb));
+  }
   for (const m of meshes) {
     m.bind(skeleton, new THREE.Matrix4());
     m.castShadow = m !== eyes;
     m.receiveShadow = true;
-    m.frustumCulled = false; // (sphère de la géométrie au repos : fausse quand il broute ou galope)
     root.add(m);
+    hb.meshes.push(m);
   }
 
   const gx = S.D.scale.gx;
@@ -1452,8 +1545,21 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
     speedScale: heads[BONE_INDEX.FL1].y / base.rest[BONE_INDEX.FL1].y,
   };
   for (const e of model.ears) e.userData.side = e === model.ears[0] ? 1 : -1;
-  model.skinGear = (mesh) => skinGear(model, S, mesh);
+  model.skinGear = (mesh) => skinGear(model, S, mesh, hb);
   model.anim = new RealHorseAnim(model, base.clips);
+  hb.anim = model.anim;
+  model.bounds = hb;
+  // Version réduite (LOD) : 0 complète, 1 réduite (index simplifié du GLB, ≈ 6 300 triangles au lieu de
+  // 15 000). Choisie d'après la distance à la caméra du jeu (animateRealHorse) ; les photos la remettent à 0.
+  model.lodLevel = 0;
+  model.setLod = (level) => {
+    const l = S.lod && level ? 1 : 0;
+    if (l === model.lodLevel) return;
+    model.lodLevel = l;
+    coat.geometry = l ? S.lod.coat : S.coatGeo;
+    eyes.geometry = l ? S.lod.eye : S.eyeGeo;
+    mane.geometry = l ? S.lod.mane : S.maneGeo;
+  };
   let disposed = false;
   model.dispose = () => {
     if (disposed) return;
@@ -1471,7 +1577,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
  * de rester rigide sur le dos (le pelage la traversait sur la croupe et les flancs).
  * Renvoie le nouveau maillage (à la place de l'ancien, retiré de son parent).
  */
-function skinGear(model, S, mesh) {
+function skinGear(model, S, mesh, hb) {
   const coat = S.coatGeo;
   const cp = coat.attributes.position;
   const csi = coat.attributes.skinIndex;
@@ -1578,14 +1684,109 @@ function skinGear(model, S, mesh) {
   }
   geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
   geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
-  const sk = new THREE.SkinnedMesh(geo, mesh.material);
+  // (la boîte du cheval la contient : elle est éliminée hors champ avec lui ; une pièce retirée laisse sa
+  // trace dans les boîtes des os, un peu plus larges, jamais trop petites)
+  growBoneBoxes(hb.boneBox, pos, si, sw, n);
+  const sk = new HorseMesh(geo, mesh.material, hb);
   sk.castShadow = mesh.castShadow;
   sk.receiveShadow = true;
-  sk.frustumCulled = false;
   mesh.parent?.remove(mesh);
   model.root.add(sk);
   sk.bind(model.skeleton, new THREE.Matrix4());
+  hb.meshes = hb.meshes.filter((m) => m.parent);
+  hb.meshes.push(sk);
   return sk;
+}
+
+// ------------------------------------------------------------------ élimination hors champ
+
+const _bm = new THREE.Matrix4();
+// Marge autour des os : les pointes des crins ondulent dans le shader (maneMaterial : ±1,2 cm × 4,8 au plus).
+const HAIR_MARGIN = 0.06;
+
+/**
+ * Boîte englobante du cheval dans le repère de ses maillages (tous enfants directs de model.root, sans
+ * décalage), d'après la pose : la boîte de repos de chaque os, emmenée par sa matrice de peau (os dans le
+ * monde × inverse de repos, ramenée au repère du maillage par bindMatrixInverse), puis réunie aux autres.
+ * Tient compte de la race (boîtes mesurées sur sa géométrie), de l'allure, du broutage, des sauts, de
+ * l'embonpoint (échelle du tronc dans les matrices). Environ 3 µs ; partagée par les maillages du cheval.
+ */
+function horseBounds(hb, mesh) {
+  const box = hb.box.makeEmpty();
+  const bones = hb.skeleton.bones;
+  const inv = hb.skeleton.boneInverses;
+  const bb = hb.boneBox;
+  const mn = box.min;
+  const mx = box.max;
+  for (let k = 0; k < bones.length; k++) {
+    const o = k * 6;
+    if (!(bb[o] <= bb[o + 3])) continue; // (os sans sommet)
+    const e = _bm.multiplyMatrices(mesh.bindMatrixInverse, bones[k].matrixWorld).multiply(inv[k]).elements;
+    const cx = (bb[o] + bb[o + 3]) * 0.5;
+    const cy = (bb[o + 1] + bb[o + 4]) * 0.5;
+    const cz = (bb[o + 2] + bb[o + 5]) * 0.5;
+    const ex = (bb[o + 3] - bb[o]) * 0.5;
+    const ey = (bb[o + 4] - bb[o + 1]) * 0.5;
+    const ez = (bb[o + 5] - bb[o + 2]) * 0.5;
+    const X = e[0] * cx + e[4] * cy + e[8] * cz + e[12];
+    const Y = e[1] * cx + e[5] * cy + e[9] * cz + e[13];
+    const Z = e[2] * cx + e[6] * cy + e[10] * cz + e[14];
+    const EX = Math.abs(e[0]) * ex + Math.abs(e[4]) * ey + Math.abs(e[8]) * ez;
+    const EY = Math.abs(e[1]) * ex + Math.abs(e[5]) * ey + Math.abs(e[9]) * ez;
+    const EZ = Math.abs(e[2]) * ex + Math.abs(e[6]) * ey + Math.abs(e[10]) * ez;
+    if (X - EX < mn.x) mn.x = X - EX;
+    if (Y - EY < mn.y) mn.y = Y - EY;
+    if (Z - EZ < mn.z) mn.z = Z - EZ;
+    if (X + EX > mx.x) mx.x = X + EX;
+    if (Y + EY > mx.y) mx.y = Y + EY;
+    if (Z + EZ > mx.z) mx.z = Z + EZ;
+  }
+  if (box.isEmpty()) box.set(V(-1, 0, -1.2), V(1, 2.2, 1.2));
+  box.expandByScalar(HAIR_MARGIN);
+  box.getBoundingSphere(hb.sphere);
+  for (const m of hb.meshes) {
+    m.boundingBox = box;
+    m.boundingSphere = hb.sphere;
+  }
+}
+
+/**
+ * Maillage du cheval réaliste (lié au squelette) : éliminé hors du champ de la caméra et de la lumière des
+ * ombres comme les autres objets, avec une boîte qui suit la pose (horseBounds) au lieu de la sphère de repos
+ * de la géométrie (fausse quand il broute, galope ou saute) ou du calcul de three.js (chaque sommet déformé
+ * sur le processeur, une fois, puis jamais remis à jour). La boîte est oubliée à chaque mise à jour des
+ * matrices (une fois par rendu) et refaite au premier test qui la demande (champ de la caméra, ombres,
+ * lancer de rayon, cadrage d'une photo). Dessiné (caméra ou ombre) : noté pour l'animation (anim.seen).
+ */
+class HorseMesh extends THREE.SkinnedMesh {
+  constructor(geometry, material, hb) {
+    super(geometry, material);
+    this.horse = hb;
+  }
+
+  updateMatrixWorld(force) {
+    super.updateMatrixWorld(force);
+    this.boundingBox = null;
+    this.boundingSphere = null;
+  }
+
+  computeBoundingBox() {
+    if (this.horse) horseBounds(this.horse, this);
+    else super.computeBoundingBox();
+  }
+
+  computeBoundingSphere() {
+    if (this.horse) horseBounds(this.horse, this);
+    else super.computeBoundingSphere();
+  }
+
+  onBeforeRender() {
+    if (this.horse?.anim) this.horse.anim.seen = true;
+  }
+
+  onBeforeShadow() {
+    if (this.horse?.anim) this.horse.anim.seen = true;
+  }
 }
 
 // ------------------------------------------------------------------ animation
@@ -1602,6 +1803,10 @@ class RealHorseAnim {
     this.mixer = new THREE.AnimationMixer(model.root);
     this.actions = {};
     this.w = {};
+    // (listes figées : rien n'est alloué à chaque image)
+    this.names = [];
+    this.list = [];
+    this.target = {};
     for (const name of [...MOVING, 'canterR', ...STILL]) {
       const clip = clips[name];
       if (!clip) continue;
@@ -1611,6 +1816,9 @@ class RealHorseAnim {
       a.time = Math.random() * clip.duration;
       this.actions[name] = a;
       this.w[name] = name === 'idle' ? 1 : 0;
+      this.names.push(name);
+      this.list.push(a);
+      this.target[name] = 0;
     }
     this.gait = 'idle';
     this.restAmt = 0;
@@ -1619,8 +1827,16 @@ class RealHorseAnim {
     this.maneV = model.mane.map(() => 0);
     this.t = Math.random() * 100;
     this.lead = 'canter';
+    // Groupes que l'embonpoint ne doit pas élargir (enfants du tronc élargi).
+    this.fatParts = [model.neck, model.tail, ...model.legs.map((l) => l.top)];
     // Pose des groupes écrite par le mixeur (voir update) : position, rotation, échelle.
     this.pose = model.groups.map((g) => [g.position.clone(), g.quaternion.clone(), g.scale.clone()]);
+    // Dessiné depuis la dernière image (HorseMesh : caméra ou ombre) ; sinon l'animation est ralentie.
+    this.seen = false;
+    this.skipDt = 0;
+    this.skipN = 0;
+    this.doze = 0;
+    this.sadAmt = 0;
   }
 
   /**
@@ -1630,21 +1846,25 @@ class RealHorseAnim {
    * travers). Avant chaque mise à jour du mixeur, on remet donc la pose qu'il a écrite la dernière fois.
    */
   restorePose() {
-    this.model.groups.forEach((g, i) => {
-      const [p, q, s] = this.pose[i];
-      g.position.copy(p);
-      g.quaternion.copy(q);
-      g.scale.copy(s);
-    });
+    const gs = this.model.groups;
+    for (let i = 0; i < gs.length; i++) {
+      const g = gs[i];
+      const P = this.pose[i];
+      g.position.copy(P[0]);
+      g.quaternion.copy(P[1]);
+      g.scale.copy(P[2]);
+    }
   }
 
   savePose() {
-    this.model.groups.forEach((g, i) => {
-      const [p, q, s] = this.pose[i];
-      p.copy(g.position);
-      q.copy(g.quaternion);
-      s.copy(g.scale);
-    });
+    const gs = this.model.groups;
+    for (let i = 0; i < gs.length; i++) {
+      const g = gs[i];
+      const P = this.pose[i];
+      P[0].copy(g.position);
+      P[1].copy(g.quaternion);
+      P[2].copy(g.scale);
+    }
   }
 
   dispose() {
@@ -1682,7 +1902,8 @@ class RealHorseAnim {
     }
     const still = g === 'idle';
     const graze = still ? Math.max(st.graze ?? 0, st.feeder ?? 0) : 0;
-    const target = { idle: 0, rest: 0, eat: 0, walk: 0, trot: 0, canter: 0, canterR: 0, gallop: 0 };
+    const target = this.target;
+    for (let j = 0; j < this.names.length; j++) target[this.names[j]] = 0;
     if (still) {
       target.eat = graze;
       const r = this.resting && !st.sleeping ? 1 : 0;
@@ -1694,7 +1915,9 @@ class RealHorseAnim {
     const k = 1 - Math.exp(-dt * (still ? 3 : 5));
     let lead = null;
     let leadW = 0;
-    for (const [name, a] of Object.entries(this.actions)) {
+    for (let j = 0; j < this.list.length; j++) {
+      const name = this.names[j];
+      const a = this.list[j];
       const was = this.w[name];
       const w = was + (target[name] - was) * k;
       this.w[name] = w;
@@ -1721,7 +1944,8 @@ class RealHorseAnim {
     // Pour le cavalier : allure (moyenne pondérée) et phase du clip qui mène.
     let gs = 0;
     let ws = 0;
-    for (const name of [...MOVING, 'canterR']) {
+    for (let j = 0; j < RIDER_KEYS.length; j++) {
+      const name = RIDER_KEYS[j];
       const w = this.w[name] ?? 0;
       gs += (RIDER_GAIT[name] ?? 2) * w;
       ws += w;
@@ -1746,7 +1970,7 @@ class RealHorseAnim {
     md.body.scale.set(fat, 1, 1);
     md.fat = fat;
     if (fat !== 1) {
-      for (const c of [md.neck, md.tail, ...md.legs.map((l) => l.top)]) c.scale.set(1 / fat, 1, 1);
+      for (let j = 0; j < this.fatParts.length; j++) this.fatParts[j].scale.set(1 / fat, 1, 1);
     }
     // Somnolence : encolure basse, oreilles sur le côté ; tristesse : tête un peu basse.
     this.doze = (this.doze ?? 0) + ((st.sleeping ? 1 : 0) - (this.doze ?? 0)) * Math.min(1, dt * 1.5);
@@ -1762,13 +1986,14 @@ class RealHorseAnim {
     const look = (Math.sin(t * 0.37) * 0.5 + Math.sin(t * 0.13 + 1.7) * 0.5) * 0.32 * (st.moving ? 0.15 : 1) * (1 - graze * 0.7);
     md.neck.quaternion.premultiply(_qYaw.setFromAxisAngle(AXIS_Y, look));
     // Oreilles : elles pivotent vers ce qu'il écoute ; sur le côté quand il somnole.
-    md.ears.forEach((e, i) => {
+    for (let i = 0; i < md.ears.length; i++) {
+      const e = md.ears[i];
       const s = i === 0 ? 1 : -1;
       const n1 = Math.sin(t * 1.3 + i * 2.1) + Math.sin(t * 0.47 + i);
       e.rotateX(n1 * 0.06 + this.doze * 0.2);
       e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.12));
       e.rotateY(s * Math.sin(t * 0.7 + i * 3) * 0.3 * (1 - this.doze));
-    });
+    }
     // Port de queue de la race (arabe, saddlebred, welsh) : couard relevé, crins qui retombent en arc.
     const set = md.build.tailSet ?? 0;
     if (set) {
@@ -1782,31 +2007,38 @@ class RealHorseAnim {
       md.tailTip.rotateZ(swish);
     }
     // Crinière : elle pend (pesanteur) au lieu de suivre l'encolure, avec un peu de retard (souple).
-    // relN : rotation de l'encolure dans le repère du cheval ; rel : depuis son repos.
-    md.root.updateMatrixWorld(false);
-    md.neck.updateWorldMatrix(true, false);
-    const relN = _q.setFromRotationMatrix(md.root.matrixWorld).invert().multiply(_q2.setFromRotationMatrix(md.neck.matrixWorld));
+    // relN : rotation de l'encolure dans le repère du cheval (tronc × encolure, rotations locales : aucune
+    // matrice du monde à refaire, le rendu s'en charge) ; rel : depuis son repos.
+    const relN = _q.copy(md.body.quaternion).multiply(md.neck.quaternion);
     const rel = _qa.copy(relN).multiply(QNECK_REST_INV);
     const relNinv = _qc.copy(relN).invert();
     const kk = 1 - Math.exp(-dt * 9);
     const flutter = Math.min(1, (st.v ?? 0) / 6) * 0.08 + 0.01;
-    md.mane.forEach((m, i) => {
+    for (let i = 0; i < md.mane.length; i++) {
+      const m = md.mane[i];
       // monde voulu : entre « suit l'encolure » (rel) et « pend comme au repos » (identité)
       const want = _qb.copy(rel).slerp(QI, 0.55 + i * 0.08);
       const local = want.premultiply(relNinv);
       this.maneQ[i].slerp(local, kk);
       m.quaternion.copy(this.maneQ[i]);
       m.rotateZ(Math.sin(t * 5 + i * 0.8) * flutter);
-    });
+    }
     md.hairSway.value = Math.min(2.5, (st.v ?? 0) * 0.45) + (Math.abs(swish) > 0.2 ? 1 : 0);
     // Sabots jamais sous le sol (fondu entre deux clips, proportions de la race) : on relève le corps.
+    // Dans le repère du cheval, par le produit des matrices locales (tronc, épaule ou hanche, coude ou
+    // grasset, genou ou jarret, boulet) : ni matrice du monde ni inversion.
     let low = 0;
-    for (const l of md.legs) {
-      l.fetlock.updateWorldMatrix(true, false);
-      for (const p of l.solePts) {
-        _v.copy(p).applyMatrix4(l.fetlock.matrixWorld);
-        md.root.worldToLocal(_v);
-        low = Math.min(low, _v.y);
+    md.body.updateMatrix();
+    for (let j = 0; j < md.legs.length; j++) {
+      const l = md.legs[j];
+      l.top.updateMatrix();
+      l.pivot.updateMatrix();
+      l.knee.updateMatrix();
+      l.fetlock.updateMatrix();
+      _m.multiplyMatrices(md.body.matrix, l.top.matrix).multiply(l.pivot.matrix).multiply(l.knee.matrix).multiply(l.fetlock.matrix);
+      for (let q = 0; q < l.solePts.length; q++) {
+        const y = _v.copy(l.solePts[q]).applyMatrix4(_m).y;
+        if (y < low) low = y;
       }
     }
     if (low < 0) md.body.position.y -= low;
@@ -1919,9 +2151,11 @@ export function tailSwish(t, k = 0) {
  * Allure d'après la vitesse (m/s, ramenée à la taille du modèle d'origine), avec hystérésis : pas de
  * va-et-vient entre deux allures quand la vitesse est à la limite. prev : allure de l'image précédente.
  */
+const GAIT_UP = { walk: 2.15, trot: 3.9, canter: 6.3 };
+const GAIT_DOWN = { trot: 1.85, canter: 3.55, gallop: 5.8 };
 export function pickGait(prev, u) {
-  const up = { walk: 2.15, trot: 3.9, canter: 6.3 };
-  const down = { trot: 1.85, canter: 3.55, gallop: 5.8 };
+  const up = GAIT_UP;
+  const down = GAIT_DOWN;
   if (!(u >= 0.03)) return 'idle';
   let g = prev === 'idle' || !prev ? 'walk' : prev;
   for (let k = 0; k < 3; k++) {
@@ -2072,6 +2306,25 @@ function bowPose(md, front, hind, s, sg) {
  */
 export function animateRealHorse(e, dt, sad) {
   const md = e.model;
+  const anim = md.anim;
+  // Version réduite au loin (distance à la caméra du jeu, ramenée à la taille du cheval).
+  if (horseView.on && md.setLod && !md.lodHold) {
+    const far = gfx.quality === 'high' ? LOD_DIST.high : LOD_DIST.low;
+    const d = _w.setFromMatrixPosition(e.root.matrixWorld).distanceTo(horseView.eye) / Math.max(0.3, e.scale);
+    md.setLod(d > far * (md.lodLevel ? 0.9 : 1) ? 1 : 0);
+  }
+  // Hors du champ (ni dessiné ni dans l'ombre à la dernière image) et livré à lui-même : animé une image sur
+  // OFFSCREEN_STEP avec le temps cumulé (allure, broutage, sabots au sol identiques ; on ne le voit pas).
+  // Jamais monté, guidé, en séance ou mené en main : sa pose sert au cavalier, à l'activité ou à la longe.
+  const seen = anim.seen;
+  anim.seen = false;
+  if (!seen && !e.ridden && !e.scripted && !e.herdCtrl && !e.posing && !e.data.following && !e.data.leashed) {
+    anim.skipDt += dt;
+    if (++anim.skipN < OFFSCREEN_STEP) return;
+    dt = anim.skipDt;
+  }
+  anim.skipDt = 0;
+  anim.skipN = 0;
   const v = e.speed / Math.max(0.3, e.scale);
   const moving = e.speed > 0.05 && !e.sleeping;
   const t = e.time;

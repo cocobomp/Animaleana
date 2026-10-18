@@ -595,8 +595,29 @@ export class Thumbs {
     this.releasers.push(fn);
   }
 
+  /**
+   * Les modèles des chevaux ont changé (le cheval réaliste est arrivé après l'ouverture de la partie, voir
+   * Game.onRealHorse) : les vignettes d'animaux et d'équipement (posé sur des chevaux mannequins) prennent
+   * d'autres clés et sont refaites à la prochaine demande ; les mannequins gardés sont libérés entre deux
+   * vignettes (jamais pendant qu'on en photographie une).
+   */
+  modelsChanged() {
+    this.variant = (this.variant ?? 0) + 1;
+    const release = () => {
+      if (this.busy) setTimeout(release, 100);
+      else this.releaseKept();
+    };
+    release();
+  }
+
+  /** La demande, marquée de la version des modèles si elle peut montrer un cheval (voir modelsChanged). */
+  vary(spec) {
+    return this.variant && (spec.kind === 'animal' || spec.kind === 'gear') ? { ...spec, mv: this.variant } : spec;
+  }
+
   /** L'image déjà faite pour cette vignette (URL), ou une plus grande du même objet, ou null. */
   get(spec, w, h) {
+    spec = this.vary(spec);
     return this.lookup(thumbKey(spec), thumbKey({ ...spec, w, h }), outputSize(w, h));
   }
 
@@ -630,6 +651,7 @@ export class Thumbs {
    * la précédente sous un léger voile, au lieu de repasser à l'emoji (pas de clignotement à chaque choix).
    */
   view(spec, { w = 80, h = 64, emoji = '', cls = '', alt = '', urgent = false, hold = '' } = {}) {
+    spec = this.vary(spec);
     const full = { ...spec, w, h };
     const key = thumbKey(full);
     const fam = thumbKey(spec);

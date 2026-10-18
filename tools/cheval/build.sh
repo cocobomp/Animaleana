@@ -1,7 +1,8 @@
 #!/bin/sh
 # Refait public/models/horse_real.glb à partir des sources (voir LISEZMOI.md).
 # Variables : BLENDER (exécutable Blender 4.2), SRC (dossier des sources téléchargées), WORK (dossier de travail),
-# GT (dossier où @gltf-transform, meshoptimizer et sharp sont installés : node_modules/).
+# GT (dossier où @gltf-transform, meshoptimizer et sharp sont installés : node_modules/ ; par exemple
+# « npx @gltf-transform/cli » en laisse un dans le cache de npm).
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 : "${BLENDER:?chemin de Blender 4.2}"
@@ -18,4 +19,7 @@ $B "$HERE/prep2.py" -- "$WORK/lyndon_prep.blend" "$SRC/horse" "$WORK/prep2.blend
 $B "$HERE/anim2.py" -- "$WORK/prep2.blend" "$WORK/horse_raw.glb" "$WORK/rapport.json"
 # 4. Compression (meshopt, WebP).
 cp "$HERE/pack.mjs" "$GT/pack.mjs"
-node "$GT/pack.mjs" "$WORK/horse_raw.glb" "$HERE/../../public/models/horse_real.glb"
+node "$GT/pack.mjs" "$WORK/horse_raw.glb" "$WORK/horse_packed.glb"
+# 5. Version allégée : index simplifiés (LOD) et carte des crins en 512².
+cp "$HERE/lod.mjs" "$GT/lod.mjs"
+node "$GT/lod.mjs" "$WORK/horse_packed.glb" "$HERE/../../public/models/horse_real.glb"

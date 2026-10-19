@@ -740,7 +740,14 @@ export class UI {
       this.modalReturn = null;
       const a = document.activeElement;
       if (a && a !== document.body && !this.modal.contains(a)) return;
-      if (back?.isConnected && back.getClientRects().length && !['INPUT', 'TEXTAREA'].includes(back.tagName)) back.focus({ preventScroll: true });
+      const visible = (el) => el?.isConnected && el.getClientRects().length > 0 && !['INPUT', 'TEXTAREA'].includes(el.tagName);
+      // Le bouton a été redessiné pendant que la fenêtre était ouverte (bulle du guide, panneau vivant) :
+      // on reprend son remplaçant, le bouton visible qui porte le même texte.
+      const same = back && !visible(back) && back.textContent
+        ? [...document.querySelectorAll('button, a[href]')].find((el) => el.textContent === back.textContent && visible(el) && !this.modal.contains(el))
+        : null;
+      const target = visible(back) ? back : same;
+      if (target) target.focus({ preventScroll: true });
       else if (this.panel) this.focusPanel();
       else a?.blur?.();
     }, 0);

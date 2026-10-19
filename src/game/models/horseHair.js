@@ -278,7 +278,8 @@ export function hairMaterial(color, sway) {
     alphaToCoverage: gfx.msaa || high, vertexColors: true,
   });
   // (force du reflet : plus discret sur les crins clairs, qui ont déjà de la lumière)
-  const spec = { value: 0.08 * (1 - 0.5 * Math.min(1, l * 2)) };
+  // (qualité basse : pas d'ombre du soleil, le reflet brillerait aussi du côté à l'ombre : plus discret)
+  const spec = { value: (high ? 0.08 : 0.05) * (1 - 0.5 * Math.min(1, l * 2)) };
   // (crins foncés : les crins clairs de la texture un peu éclaircis, comme la lumière du ciel prise par chaque
   // crin — on lit les mèches même sans reflet, en qualité basse aussi)
   const lift = { value: 0.05 * (1 - smooth(0, 0.12, l)) };

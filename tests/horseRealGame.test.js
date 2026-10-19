@@ -234,6 +234,72 @@ describe('couverture du cheval réaliste', () => {
     md.dispose();
   }, 30000);
 
+  // Queue portée haut (arabe, saddlebred), attache de la queue (pur-sang, trotteur), pointe de la cuisse
+  // (akhal-teke) : la peau passait par-dessus la couverture, jusqu'à 5 cm chez l'arabe, même à l'arrêt. Le
+  // mixeur tire au hasard l'instant de départ des clips (Math.random) : instants FIXÉS.
+  it.each([
+    ['arabe', 'blanketRain'], ['saddlebred', 'blanketRain'], ['akhal_teke', 'blanketRain'], ['pur_sang', 'blanketRain'],
+    ['trotteur_francais', 'blanketRain'], ['arabe', 'blanket'], ['saddlebred', 'blanketSummer'],
+  ])('%s (%s) : la peau de la croupe, de l\'attache de la queue et des hanches reste sous la couverture', async (breed, item) => {
+    const { buildGear } = await import('../src/game/gearModels.js');
+    const random = Math.random;
+    let n = 0;
+    Math.random = () => (0.37 + 0.618 * n++) % 1;
+    try {
+      const a = animal(breed, { seed: 1234 });
+      const md = horse(a);
+      const own = new Set(md.bounds.meshes);
+      buildGear(md, a.look, { blanket: { item, color: 'navy' } });
+      const shell = md.bounds.meshes.filter((m) => !own.has(m))
+        .sort((x, y) => y.geometry.attributes.position.count - x.geometry.attributes.position.count)[0];
+      const coat = md.coatMesh;
+      const g = coat.geometry;
+      const rear = [];
+      for (let i = 0; i < g.attributes.position.count; i++) if (g.attributes.position.getZ(i) < -0.2 && g.attributes.position.getY(i) > md.legTop) rear.push(i);
+      const p = new THREE.Vector3();
+      const q = new THREE.Vector3();
+      const nr = new THREE.Vector3();
+      const ray = new THREE.Ray();
+      const hit = new THREE.Vector3();
+      const tri = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+      const res = {};
+      for (const [gait, u] of [['arrêt', 0], ['pas', 1.6], ['galop', 8.5]]) {
+        const st = { v: u * md.speedScale, moving: u > 0, graze: 0, feeder: 0, turn: 0, fat: 1 };
+        for (let f = 0; f < 60; f++) md.anim.update(1 / 60, st, {});
+        let through = 0;
+        for (let f = 0; f < 4; f++) {
+          md.anim.update(0.13, st, {});
+          md.root.updateMatrixWorld(true);
+          const sp = shell.geometry.attributes.position;
+          const S = new Float32Array(sp.count * 3);
+          for (let i = 0; i < sp.count; i++) shell.getVertexPosition(i, p).applyMatrix4(shell.matrixWorld).toArray(S, i * 3);
+          const idx = shell.geometry.index.array;
+          for (const i of rear) {
+            coat.getVertexPosition(i, p);
+            q.fromBufferAttribute(g.attributes.position, i).addScaledVector(nr.fromBufferAttribute(g.attributes.normal, i), 0.01);
+            coat.applyBoneTransform(i, q);
+            nr.subVectors(q, p).normalize();
+            p.applyMatrix4(coat.matrixWorld);
+            ray.set(p, nr.negate());
+            for (let t = 0; t < idx.length; t += 3) {
+              for (let k = 0; k < 3; k++) tri[k].fromArray(S, idx[t + k] * 3);
+              if (ray.intersectTriangle(tri[0], tri[1], tri[2], false, hit) && hit.distanceTo(p) < 0.05) {
+                through++;
+                break;
+              }
+            }
+          }
+        }
+        res[gait] = through;
+      }
+      // (avant : à chaque image, une dizaine de sommets de l'attache de la queue chez l'arabe, jusqu'à 5 cm)
+      expect(res).toEqual({ arrêt: 0, pas: 0, galop: 0 });
+      md.dispose();
+    } finally {
+      Math.random = random;
+    }
+  }, 60000);
+
   it.each(['shetland', 'falabella'])('%s : la sous-ventrière reste sous le ventre, à toutes les allures (cycle entier)', async (breed) => {
     const { buildGear } = await import('../src/game/gearModels.js');
     const a = animal(breed, { seed: 1234 });

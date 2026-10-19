@@ -1989,30 +1989,43 @@ function skinGear(model, S, mesh, hb) {
   const cp = coat.attributes.position;
   const csi = coat.attributes.skinIndex;
   const csw = coat.attributes.skinWeight;
-  // Peau du tronc seulement (pas la tête, les membres sous le coude ni la queue).
+  // Peau du tronc seulement (pas la tête, les membres sous le coude ni la queue, sauf son attache).
   if (!S.trunkSkin) {
     // (tronc et épaules à toute hauteur : chez un petit poney, le bas du ventre est 15 cm sous le coude ;
     // sans lui, la sangle se liait à l'avant-bras voisin et le ventre passait à travers en marchant ;
-    // cuisses, haut des avant-bras et des jambes seulement au-dessus du coude)
-    const trunk = new Set(['Spine', 'Ribs', 'Neck', 'FL1', 'FR1']);
+    // cuisses, haut des avant-bras et des jambes seulement au-dessus du coude ; attache de la queue : le bout
+    // de la couverture la suit quand elle se lève, sinon elle passait par-dessus, jusqu'à 5 cm chez l'arabe
+    // et le saddlebred à la queue portée haut, ≈ 1 cm au pur-sang et au trotteur)
+    const trunk = new Set(['Spine', 'Ribs', 'Neck', 'FL1', 'FR1', 'Tail1']);
     const upper = new Set(['HL1', 'HR1', 'FL2', 'FR2', 'HL2', 'HR2']);
     const list = [];
+    const thigh = [];
+    const tail = [];
     for (let i = 0; i < cp.count; i++) {
       let b = csi.getX(i);
       let w = csw.getX(i);
       for (let k = 1; k < 4; k++) if (csw.getComponent(i, k) > w) { w = csw.getComponent(i, k); b = csi.getComponent(i, k); }
       const nm = RIG[b][0];
-      if (trunk.has(nm) || (upper.has(nm) && cp.getY(i) > S.elbowY - 0.08)) list.push(i);
+      if (trunk.has(nm) || (upper.has(nm) && cp.getY(i) > S.elbowY - 0.08)) {
+        list.push(i);
+        thigh.push(nm === 'HL2' || nm === 'HR2' ? 1 : 0);
+        tail.push(nm === 'Tail1' ? 1 : 0);
+      }
     }
     S.trunkSkin = Uint32Array.from(list);
+    S.trunkThigh = Uint8Array.from(thigh);
+    S.trunkTail = Uint8Array.from(tail);
   }
   const geo = mesh.geometry;
   const pos = geo.attributes.position;
   const n = pos.count;
   // Les coupes mesurées sont approchées (un rayon par secteur de 15°, une coupe tous les 4 cm) : une bosse
   // de la peau entre deux coupes passerait à travers le tissu. Chaque sommet est repoussé vers l'extérieur
-  // (axe du tronc) jusqu'à laisser 6 mm au-dessus de la peau voisine (1,5 cm au plus), puis les poussées
-  // sont adoucies.
+  // (axe du tronc) jusqu'à laisser 6 mm au-dessus de la peau voisine (1,5 cm au plus ; 3 cm sur la pointe de la
+  // cuisse, à moins de 10 cm du bord arrière de la pièce), puis les poussées sont adoucies.
+  const thigh = new Float32Array(n);
+  let zEnd = Infinity;
+  for (let i = 0; i < n; i++) zEnd = Math.min(zEnd, pos.getZ(i));
   const rings = model.sdf.torso.rings;
   const ycAt = (z) => {
     const f = Math.min(rings.length - 1.001, Math.max(0, (z - rings[0][0]) / (rings[1][0] - rings[0][0])));
@@ -2038,7 +2051,8 @@ function skinGear(model, S, mesh, hb) {
     q.fromBufferAttribute(pos, i);
     nrm.set(q.x, q.y - ycAt(q.z), 0).normalize();
     dirs.set([nrm.x, nrm.y, nrm.z], i * 3);
-    for (const j of S.trunkSkin) {
+    for (let t = 0; t < S.trunkSkin.length; t++) {
+      const j = S.trunkSkin[t];
       // (peau de la même tranche : à moins de dzWin en z, à moins de 6 cm de côté dans la tranche)
       const dz = cp.getZ(j) - q.z;
       if (dz * dz > dzWin * dzWin) continue;
@@ -2047,10 +2061,13 @@ function skinGear(model, S, mesh, hb) {
       const along = dx * nrm.x + dy * nrm.y;
       if (along < -0.03) continue;
       if (dx * dx + dy * dy - along * along > 0.06 * 0.06) continue;
-      push[i] = Math.max(push[i], along + 0.006);
+      if (S.trunkThigh[t] && q.z < zEnd + 0.1) thigh[i] = Math.max(thigh[i], along + 0.006);
+      else push[i] = Math.max(push[i], along + 0.006);
     }
-    // (au plus 1,5 cm : au bout de la couverture, la croupe s'arrondit et une forte poussée ferait un bourrelet)
-    push[i] = Math.min(push[i], 0.015);
+    // (au plus 1,5 cm : au bout de la couverture, la croupe s'arrondit et une forte poussée ferait un bourrelet ;
+    // la pointe de la cuisse, sous le bord arrière de la nappe, en demande jusqu'à 2,6 cm chez l'akhal-teke : la
+    // peau de la hanche passait par-dessus, de 1,2 cm avec la couverture imperméable)
+    push[i] = Math.max(Math.min(push[i], 0.015), Math.min(thigh[i], 0.03));
   }
   if (geo.index) {
     const nb = new Float32Array(n);
@@ -2080,9 +2097,13 @@ function skinGear(model, S, mesh, hb) {
   const near = [];
   for (let i = 0; i < n; i++) {
     p.fromBufferAttribute(pos, i);
-    // les 4 sommets de peau les plus proches, pondérés par l'inverse de la distance
+    // les 4 sommets de peau les plus proches, pondérés par l'inverse de la distance (l'attache de la queue ne
+    // porte que la bande du milieu de la pièce, à moins de 12 cm de l'échine : un coup de queue ne fait pas onduler
+    // tout le bout de la couverture)
     near.length = 0;
-    for (const j of S.trunkSkin) {
+    for (let t = 0; t < S.trunkSkin.length; t++) {
+      if (S.trunkTail[t] && Math.abs(p.x) > 0.12) continue;
+      const j = S.trunkSkin[t];
       const d = (cp.getX(j) - p.x) ** 2 + (cp.getY(j) - p.y) ** 2 + (cp.getZ(j) - p.z) ** 2;
       if (near.length < 4 || d < near[3][0]) {
         near.push([d, j]);

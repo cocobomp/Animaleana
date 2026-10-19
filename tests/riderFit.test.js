@@ -88,6 +88,21 @@ function riderParts(av) {
   return parts;
 }
 
+/** Semelle au-dessus du point T (m, monde ; négatif : dedans) : sommets du pied i à moins de 3 cm de T à l'horizontale. */
+function soleGap(av, i, T) {
+  let gap = Infinity;
+  const v = new THREE.Vector3();
+  av.ankles[i].traverse((o) => {
+    if (!o.isMesh) return;
+    const pos = o.geometry.attributes.position;
+    for (let k = 0; k < pos.count; k++) {
+      v.fromBufferAttribute(pos, k).applyMatrix4(o.matrixWorld);
+      if (Math.hypot(v.x - T.x, v.z - T.z) < 0.03) gap = Math.min(gap, v.y - T.y);
+    }
+  });
+  return gap;
+}
+
 /** Profondeur (m) du point le plus enfoncé de chaque partie dans le pelage déformé (parité verticale). */
 function depths(coat, parts) {
   const n = coat.geometry.attributes.position.count;
@@ -159,8 +174,6 @@ describe('cavalier sur le cheval réaliste', () => {
     try {
       const { md, sc, e, pl, gearGroup } = mounted(breed);
       const parts = riderParts(pl.avatar);
-      // (étriers : les groupes de pièces posés sur le tronc)
-      const irons = gearGroup.userData.meshes.filter((o) => !o.isMesh && o.isObject3D);
       const seat = (() => {
         let best = null;
         for (const o of gearGroup.userData.meshes) {
@@ -181,11 +194,13 @@ describe('cavalier sur le cheval réaliste', () => {
         pl.scene.updateMatrixWorld(true);
         const d = depths(md.coatMesh, parts);
         for (const [k, x] of Object.entries(d)) worst[`${gait} ${k}`] = Math.max(worst[`${gait} ${k}`] ?? 0, x);
-        // plante du pied contre la grille de l'étrier (pas au saut : le cavalier se lève, la jambe peut se tendre)
+        // plante du pied contre la grille de l'étrier (pas au saut : le cavalier se lève, la jambe peut se tendre) :
+        // la vraie semelle (sommets de la chaussure à moins de 3 cm de la grille à l'horizontale), pas un point
+        // fixe sous la cheville (le pied est incliné talon bas : elle flottait 1,8 cm au-dessus)
         if (!jump) {
           for (let i = 0; i < 2; i++) {
-            const ball = pl.avatar.root.localToWorld(pl.avatar.root.worldToLocal(pl.avatar.ankles[i].getWorldPosition(new THREE.Vector3())).add(new THREE.Vector3(0, -0.05, 0.07)));
-            feet = Math.max(feet, Math.min(...irons.map((ir) => ir.localToWorld(new THREE.Vector3(0, -0.012, 0)).distanceTo(ball))));
+            const gaps = gearGroup.userData.saddle.stirrups.map((x) => soleGap(pl.avatar, i, x.iron.localToWorld(x.tread.clone())));
+            feet = Math.max(feet, Math.min(...gaps.map((x) => Math.abs(x))));
           }
         }
         // bas du bassin et dessus du siège à sa verticale (à l'arrêt et au pas : assis ; au saut : en suspension)
@@ -246,7 +261,7 @@ describe('cavalier sur le cheval réaliste', () => {
       }
       // (2 mm de marge pour le maillage)
       for (const [k, x] of Object.entries(worst)) expect(x, `${breed}, ${k} dans le cheval`).toBeLessThan(0.002);
-      expect(feet, `${breed} : plante du pied à l'étrier`).toBeLessThan(0.02);
+      expect(feet, `${breed} : semelle sur la grille de l'étrier`).toBeLessThan(0.006);
       // (assis sur le siège : ni dedans, ni à plus de 3 cm au-dessus)
       expect(seatGap[0], `${breed} : bassin dans le siège`).toBeGreaterThan(-0.002);
       expect(seatGap[1], `${breed} : bassin au-dessus du siège`).toBeLessThan(0.03);
@@ -284,9 +299,8 @@ describe('cavalier sur le cheval réaliste', () => {
       for (const [k, x] of Object.entries(d)) expect(x, `${k} dans le cheval`).toBeLessThan(0.002);
       // plante du pied sur le fond de l'étrier en bois (avant : 11 cm au-dessus, puis 30 cm à côté, poussée)
       for (let i = 0; i < 2; i++) {
-        const ball = pl.avatar.root.localToWorld(pl.avatar.root.worldToLocal(pl.avatar.ankles[i].getWorldPosition(new THREE.Vector3())).add(new THREE.Vector3(0, -0.05, 0.07)));
         const s = pl.fit.stirrups[i];
-        expect(s.iron.localToWorld(s.tread.clone()).distanceTo(ball), 'pied dans l\'étrier western').toBeLessThan(0.02);
+        expect(Math.abs(soleGap(pl.avatar, i, s.iron.localToWorld(s.tread.clone()))), 'semelle sur le fond de l\'étrier western').toBeLessThan(0.006);
       }
       // pied à terre puis de nouveau en selle anglaise : étrivières à la longueur, puis remises
       M.removeGear(e.gearGroup);
@@ -295,10 +309,18 @@ describe('cavalier sur le cheval réaliste', () => {
       const strap2 = e.gearGroup.userData.saddle.stirrups.find((x) => x.leather).leather;
       const home = strap2.userData.homeGeo;
       expect(home).toBeDefined();
+      // (dans le jeu, on monte toujours avec sa bombe : Game.ride → setHelmet ; l'ôter au pied à terre refait
+      // l'avatar, qui était remis en selle tant que mount restait posé : étriers de nouveau à la jambe)
+      pl.look = { ...M.DEFAULT_AVATAR };
+      pl.setHelmet({ item: 'helmet', color: 'navy' });
+      expect(pl.fit.stirrups.every((x) => x && x.iron.position.distanceTo(x.home.pos) > 0.01), 'étriers à la jambe, bombe sur la tête').toBe(true);
+      const irons = pl.fit.stirrups;
       pl.world = { resolveCollisions() {}, heightAt: () => 0 };
       pl.dismount();
       expect(strap2.geometry, 'étrivière remise à sa longueur').toBe(home);
+      for (const x of irons) expect(x.iron.position.distanceTo(x.home.pos), 'étrier remis à sa place').toBeLessThan(1e-6);
       expect(pl.fit).toBe(null);
+      expect(pl.helmet).toBe(null);
       md.dispose();
     } finally {
       Math.random = random;

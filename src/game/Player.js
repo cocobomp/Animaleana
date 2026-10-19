@@ -446,11 +446,13 @@ export class Player {
     if (this.reins) this.reins.visible = false;
     releaseRiderFit(this.fit); // (étriers remis à leur longueur)
     this.fit = null;
-    this.setHelmet(null);
     e.ridden = false;
     e.speed = 0;
     this.mount = null;
     this.ridePh = undefined;
+    // Bombe ôtée une fois descendu : setHelmet refait l'avatar (mèches qui ressortent), et encore en selle il
+    // était remis en selle (seat) : les étriers revenaient à la longueur des jambes, et le cheval les gardait.
+    this.setHelmet(null);
     const a = this.avatar;
     a.root.position.set(0, 0, 0);
     a.root.rotation.x = 0;

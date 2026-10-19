@@ -18,8 +18,12 @@ import { fitStirrup } from '../gearModels.js';
 const CELL = 0.02;
 /** Écart laissé entre la jambe (ou le bassin) et le cheval (m). */
 const GAP = 0.008;
-/** Pied dans l'étrier : la cheville au-dessus de la grille et en arrière (repère de l'avatar). */
-const FOOT = new THREE.Vector3(0, 0.05, -0.07);
+/**
+ * Pied dans l'étrier : la cheville au-dessus de la grille et en arrière (repère de l'avatar). Le pied est incliné
+ * talon bas (footTo, -0,22 rad) : sous la plante, la semelle est 3 cm sous la cheville, 7,5 cm devant (avec 5 cm,
+ * la semelle flottait 1,8 cm au-dessus de la grille).
+ */
+const FOOT = new THREE.Vector3(0, 0.031, -0.07);
 /** Pli du genou voulu, étriers réglés (rad, ≈ 65°) ; à cru et en western, jambes plus tombantes. */
 const BEND = 1.1;
 const BEND_BARE = 0.8;

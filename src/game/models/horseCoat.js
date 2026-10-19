@@ -306,7 +306,7 @@ export function maneMaterial(sway) {
   // Ordinateur (anticrénelage actif) : bords des mèches adoucis (alphaToCoverage) au lieu de marches.
   const m = new THREE.MeshStandardMaterial({
     color: 0xffffff, vertexColors: true, map: maneTexture(), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.62,
-    alphaToCoverage: gfx.quality === 'high',
+    alphaToCoverage: gfx.msaa || gfx.quality === 'high',
   });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.hairTime = gfx.time;

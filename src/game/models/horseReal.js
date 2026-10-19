@@ -37,10 +37,12 @@ const RIDER_GAIT = { walk: 0, trot: 1, canter: 2, gallop: 2 };
 const RIDER_KEYS = [...MOVING, 'canterR'];
 
 /**
- * Version réduite (LOD) au-delà de cette distance à la caméra (m, divisée par la taille du cheval) : de
+ * Version réduite (LOD) au-delà de cette distance à la caméra (m, divisée par la taille du cheval) : plus
  * près en qualité basse (téléphone), plus loin en qualité haute. Hystérésis de 10 % (pas de va-et-vient).
+ * (Basse : 13 m et non plus 7 — la caméra du jeu est à 7 m du joueur, 9 m quand il monte, et son cheval à 9 à
+ * 12 m de la caméra : on voyait toujours la version réduite, crinière en dents de peigne.)
  */
-export const LOD_DIST = { low: 7, high: 22 };
+export const LOD_DIST = { low: 13, high: 22 };
 /** Cheval hors du champ (ni dessiné ni dans l'ombre) : animé une image sur OFFSCREEN_STEP, avec le temps cumulé. */
 export const OFFSCREEN_STEP = 3;
 /**
@@ -1374,7 +1376,7 @@ function maneMaterial(base, color, sway) {
   const relief = !cards && gfx.quality === 'high' ? src.normalMap : null;
   const m = new THREE.MeshStandardMaterial({
     map: src.map, normalMap: relief, alphaTest: 0.42, side: THREE.DoubleSide, roughness: cards ? 0.8 : 0.62,
-    alphaToCoverage: gfx.quality === 'high', vertexColors: cards,
+    alphaToCoverage: gfx.msaa || gfx.quality === 'high', vertexColors: cards,
   });
   if (src.normalScale && relief) m.normalScale.copy(src.normalScale);
   // (modelé médian = 0,5 dans la texture : ×2)
@@ -1755,12 +1757,98 @@ function contactShadow(R, L) {
   }
   const geo = new THREE.PlaneGeometry(1, 1);
   geo.rotateX(-Math.PI / 2);
+  // (qualité basse : le soleil n'y projette pas d'ombre, c'est le seul signe que le cheval touche le sol ;
+  // décalage de profondeur : elle passe devant un sol posé juste au-dessus du terrain, sable, litière)
   const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-    map: contactTex, transparent: true, depthWrite: false, opacity: gfx.quality === 'high' ? 0.5 : 0.65, toneMapped: false,
+    map: contactTex, transparent: true, depthWrite: false, opacity: gfx.quality === 'high' ? 0.5 : 0.75, toneMapped: false,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
   }));
   m.scale.set(R * 3.0, 1, L * 1.45);
   m.position.y = 0.015;
   m.renderOrder = -1;
+  return m;
+}
+
+const SOLE_SHADOW_LIFT = 0.25; // (m, cheval de taille 1 : sabot levé de plus, plus d'ombre sous lui)
+
+/**
+ * Petites ombres sous les sabots (qualité basse, où le soleil ne projette pas d'ombre : sans elles, le cheval
+ * flotte). Un seul maillage par cheval, quatre carrés : le shader place chacun sous son sabot (uniform hSole :
+ * centre de la sole dans le repère du cheval, et opacité), recalculé juste avant son dessin (onBeforeRender),
+ * après l'animation et les poses des activités (sabot donné, saut, révérence). Sabot posé : ombre pleine ; levé
+ * de SOLE_SHADOW_LIFT : plus rien. 8 triangles et 16 nombres par image ; rien si le cheval n'est pas dans le champ.
+ */
+function soleShadows(model, size) {
+  const pos = [];
+  const uv = [];
+  const ids = [];
+  const index = [];
+  for (let i = 0; i < 4; i++) {
+    for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      pos.push(x * size * 0.5, 0, z * size * 0.62);
+      uv.push((x + 1) / 2, (1 - z) / 2);
+      ids.push(i);
+    }
+    const o = i * 4;
+    index.push(o, o + 2, o + 1, o, o + 3, o + 2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setAttribute('hIdx', new THREE.Float32BufferAttribute(ids, 1));
+  geo.setIndex(index);
+  // (les carrés sont déplacés dans le shader : la sphère englobante couvre tout le dessous du cheval)
+  geo.boundingSphere = new THREE.Sphere(V(0, 0, 0), 1.6);
+  geo.boundingBox = new THREE.Box3(V(-1.6, -0.1, -1.6), V(1.6, 0.1, 1.6));
+  const sole = { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) };
+  const mat = new THREE.MeshBasicMaterial({
+    map: contactTex, transparent: true, depthWrite: false, opacity: 0.6, toneMapped: false,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
+  });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.hSole = sole;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute float hIdx;
+uniform vec4 hSole[4];
+varying float vHSole;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+{
+  vec4 hs = hSole[int(hIdx + 0.5)];
+  transformed = vec3(hs.x + position.x, hs.y, hs.z + position.z);
+  vHSole = hs.w;
+}`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying float vHSole;`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+diffuseColor.a *= vHSole;`);
+  };
+  mat.customProgramCacheKey = () => 'horsereal-soles';
+  const m = new THREE.Mesh(geo, mat);
+  m.renderOrder = -1;
+  m.name = 'soleShadows';
+  m.onBeforeRender = () => {
+    const md = model;
+    md.body.updateMatrix();
+    for (let j = 0; j < md.legs.length; j++) {
+      const l = md.legs[j];
+      _m.multiplyMatrices(md.body.matrix, l.top.matrix).multiply(l.pivot.matrix).multiply(l.knee.matrix).multiply(l.fetlock.matrix);
+      let x = 0;
+      let z = 0;
+      let low = Infinity;
+      for (let q = 0; q < l.solePts.length; q++) {
+        _v.copy(l.solePts[q]).applyMatrix4(_m);
+        x += _v.x;
+        z += _v.z;
+        if (_v.y < low) low = _v.y;
+      }
+      const n = l.solePts.length;
+      const h = Math.max(0, low - 0.003);
+      const t = Math.min(1, h / SOLE_SHADOW_LIFT);
+      sole.value[j].set(x / n, 0.004, z / n, 1 - t * t * (3 - 2 * t));
+    }
+  };
   return m;
 }
 
@@ -1929,6 +2017,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   };
   for (const e of model.ears) e.userData.side = e === model.ears[0] ? 1 : -1;
   model.skinGear = (mesh) => skinGear(model, S, mesh, hb);
+  if (gfx.quality !== 'high') root.add(soleShadows(model, legR * 6.5));
   // Allures de la race aux appuis calés au sol (lockedGaits) : faites une fois par gabarit, une allure à la
   // fois (lockGaitStep : 6 à 15 ms chacune), pendant les temps morts du navigateur après la construction
   // (voir plus bas) ; ce qui reste est fait au premier pas (lockGaits). Avant, les cinq allures étaient

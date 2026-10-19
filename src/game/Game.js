@@ -5,6 +5,7 @@ import { World } from './World.js';
 import { gfx } from './gfx.js';
 import { preloadModels, loadModel, MODELS } from './assets.js';
 import { REAL_HORSE_KEY, horseView, realHorseBase } from './models/horseReal.js'; // cheval réaliste : chargé à part
+import { renderSetup, PixelBudget } from './pixelBudget.js'; // définition et anticrénelage selon la qualité
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
@@ -87,8 +88,13 @@ export class Game {
     this.ui = ui;
     this.quality = readQuality();
     gfx.quality = this.quality;
-    const renderer = new THREE.WebGLRenderer({ antialias: this.quality === 'high', powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality === 'high' ? 2 : 1.25));
+    // Définition et anticrénelage (src/game/pixelBudget.js) : en qualité basse sur un écran fin, 1,5 pixel par
+    // point et MSAA, avec repli à 1,25 si les premières secondes de jeu sont trop lentes.
+    const setup = renderSetup(this.quality, window.devicePixelRatio);
+    const renderer = new THREE.WebGLRenderer({ antialias: setup.msaa, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(setup.ratio);
+    gfx.msaa = setup.msaa && renderer.getContextAttributes?.()?.antialias !== false;
+    this.pixelBudget = setup.budget ? new PixelBudget() : null;
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = this.quality === 'high';
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -605,6 +611,12 @@ export class Game {
     if (!this.running) {
       this.renderer.render(this.scene, this.camera);
       return;
+    }
+    // Premières secondes de jeu en qualité basse : trop lentes à 1,5 pixel par point, on redescend.
+    if (this.pixelBudget) {
+      const r = this.pixelBudget.frame(dt, this.renderer.getPixelRatio());
+      if (r) this.renderer.setPixelRatio(r);
+      if (this.pixelBudget.done) this.pixelBudget = null;
     }
     // Pendant le trajet (écran du voyage), la ferme est en pause : TripFlow fait avancer le voyage et dessine la 3D.
     if (this.tripFlow.frame(dt)) return;

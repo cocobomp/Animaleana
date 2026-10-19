@@ -3,6 +3,8 @@
 // time : horloge commune des shaders animés (herbe, eau, fourrure) ; wind : force du vent ;
 // wet : sol mouillé après la pluie (0 à 1).
 // texScale : taille des textures peintes du pelage (1 en jeu ; 0,5 pour les vignettes 3D, voir withTexScale).
+// msaa : le rendu du jeu a l'anticrénelage (Game : qualité haute, ou basse sur un écran fin) — les crins
+// adoucissent alors leurs bords (alphaToCoverage) au lieu de marches d'escalier.
 
 export const gfx = {
   quality: 'high',
@@ -10,6 +12,7 @@ export const gfx = {
   wind: { value: 1 },
   wet: { value: 0 },
   texScale: 1,
+  msaa: false,
 };
 
 /**

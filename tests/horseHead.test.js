@@ -2,7 +2,7 @@
 // l'arrêt, la même à chaque fois). GLB chargé dans node, sans textures ; rien ne dépend du hasard.
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import * as THREE from 'three';
-import { buildRealHorseModel, HEAD_UP } from '../src/game/models/horseReal.js';
+import { realHorseBase, buildRealHorseModel, HEAD_UP } from '../src/game/models/horseReal.js';
 import { gfx } from '../src/game/gfx.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { SPECIES } from '../src/sim/species.js';
@@ -11,6 +11,7 @@ import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
 let gltf;
 beforeAll(async () => {
   gltf = await loadRealHorseGltf();
+  realHorseBase(gltf); // (données de repos tirées une fois ici : le premier test ne dépasse pas son temps)
 }, 60000);
 
 const quality = gfx.quality;

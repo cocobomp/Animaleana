@@ -3,7 +3,7 @@
 // anticrénelage de l'image (repli si le téléphone est trop lent). GLB chargé dans node, sans textures ; rien ne
 // dépend du hasard (instants des clips fixés).
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
-import { buildRealHorseModel, LOD_DIST, realLegPose } from '../src/game/models/horseReal.js';
+import { realHorseBase, buildRealHorseModel, LOD_DIST, realLegPose } from '../src/game/models/horseReal.js';
 import { sandGeometry, SAND_LIFT, SAND_OFFSET } from '../src/game/models/buildings.js';
 import { renderSetup, PixelBudget, SHARP_RATIO, SAFE_RATIO } from '../src/game/pixelBudget.js';
 import { gfx } from '../src/game/gfx.js';
@@ -13,6 +13,7 @@ import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
 let gltf;
 beforeAll(async () => {
   gltf = await loadRealHorseGltf();
+  realHorseBase(gltf); // (données de repos tirées une fois ici : le premier test ne dépasse pas son temps)
 }, 60000);
 
 const quality = gfx.quality;

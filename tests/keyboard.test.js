@@ -182,3 +182,55 @@ describe('fenêtres au clavier (src/ui/UI.js)', () => {
     expect(confirmSrc).toMatch(/'data-default': true, onClick: \(\) => done\(true\)/);
   });
 });
+
+describe('Échap qui ferme une fenêtre pendant la construction (src/game/BuildMode.js)', () => {
+  let savedWindow;
+  const listeners = {};
+  beforeAll(() => {
+    savedWindow = globalThis.window;
+    globalThis.window = { addEventListener: (type, fn) => { (listeners[type] ??= []).push(fn); } };
+  });
+  afterAll(() => { globalThis.window = savedWindow; });
+
+  it('la pose n\'est pas annulée en plus (l\'écouteur de l\'UI passe avant : modalOpen est déjà faux)', async () => {
+    const { BuildMode } = await import('../src/game/BuildMode.js');
+    const ui = { modalOpen: false };
+    const bm = new BuildMode({ ui, renderer: { domElement: { addEventListener() {} } } }, {});
+    let cancelled = 0;
+    bm.active = true;
+    bm.cancel = () => { cancelled++; };
+    const key = listeners.keydown.at(-1);
+    // Échap que la fenêtre vient d'utiliser (UI.escapeModal : preventDefault, fenêtre déjà fermée)
+    key({ code: 'Escape', target: {}, defaultPrevented: true });
+    expect(cancelled).toBe(0);
+    // Échap sans fenêtre : la pose est annulée comme avant
+    key({ code: 'Escape', target: {}, defaultPrevented: false });
+    expect(cancelled).toBe(1);
+  });
+});
+
+describe('retour du focus après un mini-jeu (UI.focusPanel)', () => {
+  let savedDocument;
+  beforeAll(() => { savedDocument = globalThis.document; });
+  afterAll(() => { globalThis.document = savedDocument; });
+
+  const pbtn = (label, effect) => ({
+    textContent: `${label}${effect}`,
+    querySelector: (sel) => (sel === 'b' ? { textContent: label } : null),
+    focus() { globalThis.document.activeElement = this; },
+  });
+
+  it('le panneau redessiné pendant la partie : « Caresser » reprend le focus, même si son effet a changé', () => {
+    globalThis.document = { body: {}, activeElement: null };
+    const feed = pbtn('Nourrir', '🍖 Faim +45');
+    const pet = pbtn('Caresser', '❤️ Affection +5');
+    const ui = { panelBody: { querySelectorAll: () => [feed, pet], querySelector: () => feed }, panelEl: { querySelector: () => null } };
+    UI.prototype.focusPanel.call(ui, { text: 'Caresser❤️ Affection +28', label: 'Caresser' });
+    expect(globalThis.document.activeElement).toBe(pet);
+    // sans bouton à retrouver : le premier du panneau (panneau ouvert avec E)
+    UI.prototype.focusPanel.call(ui);
+    expect(globalThis.document.activeElement).toBe(feed);
+    UI.prototype.focusPanel.call(ui, { text: 'Monter', label: 'Monter' });
+    expect(globalThis.document.activeElement).toBe(feed);
+  });
+});

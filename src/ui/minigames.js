@@ -229,6 +229,9 @@ function openMinigame(ui, o) {
     // Le bouton du panneau garde le focus : on l'enlève pour qu'Espace / Entrée ne le reclique pas
     // (il le retrouve à la fin de la partie, voir close).
     const prevFocus = document.activeElement;
+    // (le panneau peut se redessiner pendant la partie : on retrouvera le bouton à son texte)
+    const prevLike = prevFocus && prevFocus !== document.body
+      ? { text: prevFocus.textContent, label: prevFocus.querySelector?.('b')?.textContent ?? null } : null;
     document.activeElement?.blur?.();
 
     const closeBtn = h('button', { class: 'mg-close', 'aria-label': t('mg_close'), title: t('mg_close') }, '✕');
@@ -599,12 +602,12 @@ function openMinigame(ui, o) {
       // Les fenêtres arrivées pendant la partie (« ⭐ niveau supérieur »…) attendaient la fin :
       // juste après (le temps que le soin s'applique), une par une (UI.flushModals).
       setTimeout(() => {
-        // Au clavier, le focus revient au bouton qui a lancé la partie (ou au premier bouton du panneau,
-        // s'il a été redessiné entre-temps) au lieu de tomber sur la page.
+        // Au clavier, le focus revient au bouton qui a lancé la partie (ou à son remplaçant, si le panneau a
+        // été redessiné entre-temps ; sinon au premier bouton du panneau) au lieu de tomber sur la page.
         const a = document.activeElement;
         if (!ui.modalOpen && (!a || a === document.body)) {
           if (prevFocus?.isConnected && prevFocus !== document.body && prevFocus.getClientRects().length) prevFocus.focus({ preventScroll: true });
-          else if (ui.panel) ui.focusPanel?.();
+          else if (ui.panel) ui.focusPanel?.(prevLike);
         }
         ui.flushModals?.();
       }, 0);

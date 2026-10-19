@@ -740,6 +740,9 @@ export class UI {
       this.modalReturn = null;
       const a = document.activeElement;
       if (a && a !== document.body && !this.modal.contains(a)) return;
+      // Le suivi de quête est rangé tant qu'une fenêtre est ouverte (renderTracker) : on le ressort d'abord,
+      // sinon son bouton (‹ ranger, 🧭) choisi au clavier avant la fenêtre serait encore caché.
+      this.tutorial?.renderTracker?.();
       const visible = (el) => el?.isConnected && el.getClientRects().length > 0 && !['INPUT', 'TEXTAREA'].includes(el.tagName);
       // Le bouton a été redessiné pendant que la fenêtre était ouverte (bulle du guide, panneau vivant) :
       // on reprend son remplaçant, le bouton visible qui porte le même texte.
@@ -866,9 +869,16 @@ export class UI {
     }
   }
 
-  /** Donne le focus au premier bouton du panneau (panneau ouvert au clavier). */
-  focusPanel() {
-    const el = this.panelBody?.querySelector(FOCUSABLE) ?? this.panelEl.querySelector(FOCUSABLE);
+  /**
+   * Donne le focus au premier bouton du panneau (panneau ouvert au clavier). like : { text, label } d'un bouton
+   * disparu dans un redessin (« Caresser » après le mini-jeu) : son remplaçant (même texte, ou même intitulé
+   * en gras quand l'effet affiché a changé, « Affection +28 » → « +5 ») le reprend.
+   */
+  focusPanel(like = null) {
+    const list = this.panelBody ? [...this.panelBody.querySelectorAll(FOCUSABLE)] : [];
+    const label = (el) => el.querySelector('b')?.textContent ?? null;
+    const same = like ? list.find((x) => x.textContent === like.text) ?? (like.label ? list.find((x) => label(x) === like.label) : null) : null;
+    const el = same ?? list[0] ?? this.panelEl.querySelector(FOCUSABLE);
     el?.focus({ preventScroll: true });
   }
 

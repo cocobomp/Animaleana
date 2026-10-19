@@ -65,8 +65,10 @@ export class BuildMode {
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', up);
     window.addEventListener('keydown', (e) => {
-      // (fenêtre ouverte : Entrée et Échap sont pour ses boutons)
+      // (fenêtre ouverte : Entrée et Échap sont pour ses boutons ; Échap déjà utilisé : il vient de fermer
+      // une fenêtre, l'écouteur de l'UI passe avant celui-ci et modalOpen est déjà faux, voir UI.escapeModal)
       if (!this.active || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName) || this.ui.modalOpen) return;
+      if (e.code === 'Escape' && e.defaultPrevented) return;
       if (e.code === 'KeyR') this.rotate();
       if (e.code === 'Enter') this.confirm();
       if (e.code === 'Escape') this.cancel();

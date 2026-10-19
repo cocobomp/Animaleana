@@ -905,7 +905,8 @@ export class ConstructionView {
   onKey(e) {
     // (fenêtre ouverte : Entrée et Échap sont pour ses boutons)
     if (!this.active || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName) || this.view.build.active || this.game.ui.modalOpen) return;
-    if (e.code === 'Escape') {
+    // (Échap qui vient de fermer une fenêtre : déjà utilisé, on ne désélectionne pas en plus)
+    if (e.code === 'Escape' && !e.defaultPrevented) {
       if (this.pending) this.cancelPending();
       else if (this.sel) this.deselect();
     }

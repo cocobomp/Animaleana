@@ -383,6 +383,8 @@ export function buildFace(head, look, high) {
   const R = FACE.eyeR;
   const lidGeo = shared('eyelid', () => new THREE.SphereGeometry(R * 1.07, 16, 7, 0, Math.PI * 2, 0, Math.PI * 0.5));
   const lashGeo = shared('eyelash', () => new THREE.TorusGeometry(R * 1.07, 0.0021, 5, 16, Math.PI));
+  // look.lashes : cils plus marqués, avec une petite pointe au coin extérieur (la vendeuse de la sellerie).
+  const boldLash = look.lashes ? shared('eyelashBold', () => new THREE.TorusGeometry(R * 1.07, 0.0034, 5, 16, Math.PI)) : null;
   for (const s of [1, -1]) {
     const hit = rayHit(headSdf, [s * 0.042, 0.064, 0], [s * 0.15, 0, 1], 0.3);
     const n = sdfNormal(headSdf, hit, 0.003);
@@ -399,7 +401,12 @@ export function buildFace(head, look, high) {
     eye.add(lid);
     add(lid, lidGeo, lidMat);
     // Cils : un trait sombre le long du bord de la paupière (ils dessinent le haut de l'œil).
-    add(lid, lashGeo, lashMat, null, [Math.PI / 2, 0, 0], [1.01, 1.01, 1]);
+    add(lid, boldLash ?? lashGeo, lashMat, null, [Math.PI / 2, 0, 0], [1.01, 1.01, 1]);
+    if (boldLash) {
+      // Pointe du coin extérieur (côté tempe : +X pour l'œil gauche du personnage, s = 1), relevée.
+      const tip = add(lid, shared('lashTip', () => new THREE.ConeGeometry(0.0032, 0.011, 5)), lashMat, [s * R * 1.06, 0.0005, 0.002], [0, 0, -s * 1.1]);
+      tip.castShadow = false;
+    }
     eyeBalls.push(ball);
     lids.push(lid);
   }
@@ -421,7 +428,8 @@ export function buildFace(head, look, high) {
 
   // --- Bouche : un sourire fermé, lèvres de la couleur de la peau tirée vers le rose, avec le pli
   // sombre entre les deux lèvres (lisible sur toutes les peaux) et des coins qui remontent.
-  const lipC = skinC.clone().multiplyScalar(0.92).lerp(new THREE.Color(0xc0605a), 0.42);
+  // look.lips : couleur de rouge à lèvres (léger, tiré vers la peau).
+  const lipC = skinC.clone().multiplyScalar(0.92).lerp(new THREE.Color(look.lips ?? 0xc0605a), look.lips != null ? 0.62 : 0.42);
   const lips = mat(lipC.getHex(), 0.45);
   const lineC = skinC.clone().multiplyScalar(0.3).lerp(new THREE.Color(0x3a1214), 0.6);
   const line = mat(lineC.getHex(), 0.6);

@@ -86,21 +86,35 @@ la normale du globe est la bissectrice de la lumière et du regard, ramené dans
 caché, et réduit à un pixel assombri d'autant quand l'œil est petit à l'écran (ni œil blanc ni œil gris de loin).
 ≈ 20 ms de plus à la préparation du GLB, quelques instructions sur les seuls pixels des yeux.
 
-**Appuis calés** (`lockedGaits`, une fois par gabarit, au premier pas d'un cheval de ce gabarit, ≈ 25 ms) :
+**Appuis calés** (`lockedGaits`, une fois par gabarit, une allure à la fois : `model.lockGaitStep`) :
 chaque allure est rééchantillonnée à 100 images/s sur les membres de la race ; pendant l'appui (sole à
 moins de 1 cm du sol, sabot qui flotte un peu au bout de l'appui compris), la pince suit une droite à la vitesse
 de l'allure (moindres carrés, même pente pour les quatre membres) et la sole est au sol ; un peu avant la pose et
-après le lever, le sabot est tenu à sa place d'autant plus qu'il est près du sol (il descend sur sa place au
-lieu d'arriver en avançant encore avec le corps). Cinématique inverse amortie (`solveLeg` : coude ou grasset,
-genou ou jarret, un peu l'épaule ou la hanche), sabot gardant l'orientation du clip. Mesuré sur les 33 races à
-60 im/s (glissement de la pince posée par appui) : galop 2,06 → 0,13 cm en moyenne (pire appui 5,8 → 0,8 cm),
-petit galop 1,38 → 0,10, trot 0,66 → 0,09, pas 0,84 → 0,22 cm ; aucune sole sous le sol.
+après le lever, le sabot est tenu à sa place d'autant plus qu'il est près du sol (fondu de 2 à 14 cm : il
+descend sur sa place au lieu d'arriver en avançant encore avec le corps, et le genou ne rejoint pas le clip
+d'un coup au lever). Cinématique inverse amortie dans le plan du membre (`solveLeg` : coude ou grasset,
+genou ou jarret, un peu l'épaule ou la hanche ; hauteur et avancée seulement), sabot gardant l'orientation
+du clip ; le côté est rattrapé par un petit écart du membre au coude ou au grasset (viser le côté avec des
+rotations autour des seuls axes x faisait trembler le sabot). Mesuré sur les 33 races à 60 im/s, étendue de
+chaque point de la sole pendant qu'il touche le sol (< 4 mm), vers l'avant / de côté, en cm, clips du GLB →
+allures calées : pas 0,51 / 0,76 → 0,01 / 0,01 ; trot 0,27 / 0,10 → 0,02 / 0,02 ; petit galop 0,59 / 0,24 →
+0,03 / 0,03 ; galop 0,76 / 0,59 → 0,05 / 0,06 (pire 0,28 / 0,19) ; aucune sole sous le sol.
+Coût, navigateur (machine lente, logiciel) : 4,5 à 14 ms par allure, calées pendant les temps morts après la
+construction du cheval (`requestIdleCallback`, au plus tard 1 s chacune) ; au premier pas, 0,3 à 0,5 ms
+s'il ne reste rien à caler, 22 à 62 ms si le cheval part dès sa construction (tout est calé d'un coup).
+Avant (tout au premier pas) : 27 à 64 ms par nouveau gabarit. Node : 28 ms en moyenne, d'un coup.
 
 Poses imposées par les activités (`realLegPose`) : saut d'obstacle selon sa phase (`jumpLegs` : appel,
 bascule, réception, fondus avec l'allure ; le cheval et le cavalier basculent autour du centre du cheval,
-`Activities.pitchAbout`), « donner le sabot » fondu depuis l'allure, sole jamais sous le sol (`legLow`).
+`Activities.pitchAbout`, pose complète dans `Activities.poseJump`), « donner le sabot » depuis l'allure, le
+genou mène (sabot qui quitte le sol à plat), sole jamais sous sa hauteur de départ et au sol dès le premier
+quart du geste (surplus de genou continu, `legLow`) : au plus 2,4 cm par image (33 races, debout et au repos).
+Au saut, les mains du cavalier restent au-dessus de l'encolure (`Player.handsOverNeck`, après les séances :
+dessus du pelage déformé lu sous chaque main, les bras relevés d'autant).
 Couverture : les trois dernières rangées de la nappe tombent droit (`gearModels.shell`, `drape`) au lieu de se
-refermer sur la pointe des fesses (la peau de la hanche passait par-dessus le bord).
+refermer sur la pointe des fesses (la peau de la hanche passait par-dessus le bord). Les pièces liées au
+squelette prennent les poids de la peau du tronc et des épaules à toute hauteur (`skinGear`) : chez un petit
+poney, le bas du ventre est 15 cm sous le coude, et la sous-ventrière se liait sinon à l'avant-bras voisin.
 `tests/horseReal.test.js` vérifie le fichier (os, clips, compression) et que chaque race garde ses sabots au sol.
 
 Ce qu'il coûte, et comment on le garde bas :

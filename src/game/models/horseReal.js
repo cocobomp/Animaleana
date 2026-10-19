@@ -1929,9 +1929,23 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   };
   for (const e of model.ears) e.userData.side = e === model.ears[0] ? 1 : -1;
   model.skinGear = (mesh) => skinGear(model, S, mesh, hb);
-  // Allures de la race aux appuis calés au sol (lockedGaits) : faites une fois par gabarit, au premier pas
-  // d'un cheval de ce gabarit (les vignettes et les chevaux à l'arrêt n'en ont pas besoin).
-  model.lockGaits = () => (S.gaits ??= lockedGaits(model, base.clips));
+  // Allures de la race aux appuis calés au sol (lockedGaits) : faites une fois par gabarit, une allure à la
+  // fois (lockGaitStep : 6 à 15 ms chacune), pendant les temps morts du navigateur après la construction
+  // (voir plus bas) ; ce qui reste est fait au premier pas (lockGaits). Avant, les cinq allures étaient
+  // calées d'un coup au premier pas : 27 à 64 ms par nouveau gabarit dans le navigateur.
+  model.lockGaitStep = () => {
+    if (S.gaits) return true;
+    const acc = (S.gaitAcc ??= { clips: { ...base.clips }, natural: {}, next: 0 });
+    if (acc.next < RIDER_KEYS.length) lockedGaits(model, base.clips, [RIDER_KEYS[acc.next++]], acc);
+    if (acc.next < RIDER_KEYS.length) return false;
+    S.gaits = { clips: acc.clips, natural: acc.natural };
+    S.gaitAcc = null;
+    return true;
+  };
+  model.lockGaits = () => {
+    while (!model.lockGaitStep());
+    return S.gaits;
+  };
   model.anim = new RealHorseAnim(model, S.gaits ?? base.clips);
   hb.anim = model.anim;
   model.bounds = hb;
@@ -1953,6 +1967,13 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
     model.anim.dispose();
     releaseShape(S);
   };
+  // (navigateur : une allure calée par temps mort, au plus tard 1 s après ; plus rien si le cheval est parti)
+  if (!S.gaits && typeof requestIdleCallback === 'function') {
+    const step = () => {
+      if (!disposed && !model.lockGaitStep()) requestIdleCallback(step, { timeout: 1000 });
+    };
+    requestIdleCallback(step, { timeout: 1000 });
+  }
   return model;
 }
 
@@ -2207,13 +2228,16 @@ const SOLE_GROUND = 0.003;
  * à moins d'un centimètre du sol) ; la pince y suit une droite à la vitesse de l'allure (moindres
  * carrés, même vitesse pour les quatre membres), sole posée au sol, et le sabot y est tenu un peu avant
  * de se poser et un peu après s'être levé, d'autant plus qu'il est près du sol (fondu) : il descend sur sa
- * place et se lève sans traîner. Cinématique inverse (solveLeg), sabot gardant l'orientation du clip.
- * Renvoie { clips, natural } (natural : vitesse de chaque allure, m/s, cheval de taille 1 : jouée à
- * v ÷ natural, la pince posée reste immobile). Une fois par gabarit (≈ 25 ms, au premier pas).
- * Mesuré sur les 33 races (60 im/s, pince posée) : glissement moyen par appui au galop 2,1 → 0,13 cm, pire
- * appui 5,8 → 0,8 cm ; petit galop 1,4 → 0,1 cm ; pas et trot 0,8 et 0,7 → 0,2 et 0,1 cm.
+ * place et se lève sans traîner. Cinématique inverse (solveLeg) dans le plan du membre, sabot gardant
+ * l'orientation du clip ; le côté rattrapé au coude ou au grasset.
+ * names : les allures à caler (toutes par défaut) ; acc : ce qui est déjà calé, complété et renvoyé :
+ * { clips, natural } (natural : vitesse de chaque allure, m/s, cheval de taille 1 : jouée à v ÷ natural,
+ * la pince posée reste immobile). Une fois par gabarit, une allure à la fois (model.lockGaitStep).
+ * Mesuré sur les 33 races (60 im/s, étendue de chaque point de la sole posée, vers l'avant / de côté) : galop
+ * 0,76 / 0,59 → 0,05 / 0,06 cm ; petit galop 0,59 / 0,24 → 0,03 / 0,03 ; trot 0,27 / 0,10 → 0,02 / 0,02 ;
+ * pas 0,51 / 0,76 → 0,01 / 0,01 cm.
  */
-function lockedGaits(model, clips) {
+function lockedGaits(model, clips, names = RIDER_KEYS, acc = { clips: { ...clips }, natural: {} }) {
   const root = model.root;
   const groups = model.groups;
   const legs = model.legs;
@@ -2221,8 +2245,8 @@ function lockedGaits(model, clips) {
   // (sans embonpoint ni respiration : les allures calées servent à tous les chevaux du gabarit)
   for (const g of groups) g.scale.set(1, 1, 1);
   const mixer = new THREE.AnimationMixer(root);
-  const out = { ...clips };
-  const natural = {};
+  const out = acc.clips;
+  const natural = acc.natural;
   const qIdx = [];
   RIG.forEach(([n], j) => {
     if (!n.startsWith('Mane') && n !== 'Ribs') qIdx.push(j);
@@ -2236,7 +2260,7 @@ function lockedGaits(model, clips) {
   const Qa = new THREE.Quaternion();
   const Pv = V();
   const Zp = V();
-  for (const name of RIDER_KEYS) {
+  for (const name of names) {
     const clip = clips[name];
     if (!clip) continue;
     const D = clip.duration;
@@ -2340,9 +2364,11 @@ function lockedGaits(model, clips) {
         const h = low[i][s] - SOLE_GROUND;
         if (!inside) {
           // Près de l'appui (temps) et près du sol (hauteur) : de plus en plus tenu à sa place au sol.
+          // (fondu en hauteur de 2 à 14 cm : de 3 à 7 cm, le genou rejoignait le clip d'un coup au lever,
+          // 0,7 rad en une image au petit galop)
           const before = dIn <= dOut;
           const d = (before ? dIn : dOut) * dt;
-          w = (1 - smooth(0, ramp, d)) * (1 - smooth(0.03, 0.07, h));
+          w = (1 - smooth(0, ramp, d)) * (1 - smooth(0.02, 0.14, h));
           tau = before ? (A.s0 - dIn) * dt : (A.s0 + A.n - 1 + dOut) * dt;
         }
         const tz = toe[i][s * 3 + 2];
@@ -2405,7 +2431,7 @@ function lockedGaits(model, clips) {
     g.scale.copy(saved[i][2]);
   });
   root.updateMatrixWorld(true);
-  return { clips: out, natural };
+  return acc;
 }
 
 const _ik = { p: [V(), V(), V()], j: [V(), V(), V()], e: V(), a: V(), m: new THREE.Matrix3(), best: [0, 1, 2].map(() => new THREE.Quaternion()) };

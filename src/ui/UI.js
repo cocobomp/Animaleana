@@ -26,6 +26,8 @@ import { openCareers, careerChips } from './careers.js'; // 💼 métiers
 import { openTrailCarnet } from './trailGuide.js'; // 🧭 guide de randonnée
 
 const STATUS_MAX = 3; // pastilles d'état visibles en même temps (les autres derrière « ➕ N de plus »)
+// Le passage de niveau est annoncé ce temps (ms) après ce qui l'a fait gagner (UI.levelUp).
+export const LEVEL_UP_DELAY = 1200;
 // Ce qui peut prendre le focus au clavier (boutons, liens, champs).
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -552,13 +554,33 @@ export class UI {
     if (parts.length) this.toast(t('careDeltas', { name: a.name, parts: parts.join(' · ') }), 3500);
   }
 
+  /**
+   * « ⭐ Tu passes au niveau 2 ! » : annoncé un instant après ce qui l'a fait gagner (LEVEL_UP_DELAY), pour
+   * qu'on voie d'abord l'achat ou le soin (l'animal acheté qui arrive, « Tu as adopté Pompon ! ») au lieu
+   * d'une fenêtre qui le cache. Plusieurs niveaux d'un coup : une fenêtre par niveau, à la suite.
+   */
   levelUp(level, names) {
-    audio.ui('levelUp');
     const msg = names ? t('levelUp', { n: level, names }) : t('levelUpPlain', { n: level });
-    // Une fenêtre est ouverte (résultats d'un concours…) ou une activité est en cours (reprise de dressage,
-    // parcours : la fenêtre cachait la carrière et mettait les résultats en attente) : on l'annonce en bulle.
-    if (this.modalOpen || this.game?.activities?.active) return this.toast(msg, 8000); // (le texte commence déjà par ⭐)
-    this.alert(msg);
+    (this.levelQueue ??= []).push(msg);
+    clearTimeout(this.levelTimer);
+    this.levelTimer = setTimeout(() => this.flushLevelUps(), LEVEL_UP_DELAY);
+  }
+
+  /** Montre les passages de niveau en attente (voir levelUp). */
+  flushLevelUps() {
+    clearTimeout(this.levelTimer);
+    this.levelTimer = null;
+    const list = (this.levelQueue ?? []).splice(0);
+    if (!list.length || !this.game?.running) return;
+    audio.ui('levelUp');
+    // Une fenêtre est ouverte (résultats d'un concours…), une activité est en cours (reprise de dressage,
+    // parcours : la fenêtre cachait la carrière et mettait les résultats en attente) ou un panneau est ouvert
+    // (on est retourné à l'animalerie juste après un achat : la fenêtre arrivait par-dessus) : en bulle.
+    const quiet = this.modalOpen || !!this.panel || !!this.game.activities?.active;
+    for (const msg of list) {
+      if (quiet) this.toast(msg, 8000); // (le texte commence déjà par ⭐)
+      else this.alert(msg); // (la deuxième attend que l'on ferme la première, voir showModal)
+    }
   }
 
   // ------------------------------------------------------------ notifications

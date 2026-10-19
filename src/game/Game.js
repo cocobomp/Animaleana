@@ -1138,6 +1138,10 @@ export class Game {
   /** Gagne de l'expérience ; annonce le nouveau niveau et ce qu'il débloque. */
   xp(kind, times = 1) {
     const up = addXp(this.profile, kind, times);
+    // Les quêtes et succès sont vérifiés dès l'image suivante (pas jusqu'à 2 s plus tard) : « Adopte ton
+    // premier animal » et son passage de niveau arrivent avec l'achat, et non plus quand on est déjà
+    // retourné à l'animalerie.
+    this.checkAcc = Infinity;
     if (!up) return;
     const names = up.unlocked.map((k) => this.unlockName(k)).join(', ');
     this.ui.levelUp(up.level, names);

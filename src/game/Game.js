@@ -1488,8 +1488,10 @@ export class Game {
       d.leashed = false;
       this.ui.toast(t('leashRide', { name: d.name, g: d.sex }), 5000);
     }
+    // On monte toujours avec sa bombe, mise avant de monter : setHelmet refait l'avatar (mèches rentrées), qui
+    // n'est ainsi posé en selle (et ajusté au cheval, riderFit) qu'une fois.
+    this.player.setHelmet(riderHelmet(this.profile));
     this.player.ride(e);
-    this.player.setHelmet(riderHelmet(this.profile)); // on monte toujours avec sa bombe
     addStat(this.profile, 'rides');
     this.xp('ride');
     this.ui.toast(t(gear.bareback ? 'ridingBareback' : 'ridingHint', { name: a.name, g: a.sex }));

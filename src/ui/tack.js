@@ -367,8 +367,9 @@ function tryPhoto(g, e, gear, slot) {
         if (o.isMesh && !o.isSprite && o.material?.depthWrite !== false) box.expandByObject(o);
       });
     };
-    if (view && gear[slot]) {
-      // Cadrage sur l'objet essayé (selle et tapis vont ensemble), puis tout l'équipement d'essai.
+    if (view && gear[slot] && !view.whole) {
+      // Cadrage sur l'objet essayé (selle et tapis vont ensemble), puis tout l'équipement d'essai. (Animal entier :
+      // inutile, la boîte le contient déjà — et une couverture, longue à habiller, n'est construite qu'une fois.)
       const pair = slot === 'saddle' && gear.pad ? { pad: gear.pad } : slot === 'pad' && gear.saddle ? { saddle: gear.saddle } : {};
       add(d.wear({ [slot]: gear[slot], ...pair }));
     }

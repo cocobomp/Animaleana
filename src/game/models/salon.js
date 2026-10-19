@@ -202,7 +202,7 @@ export function buildAccessories(model, look, accessories = {}) {
       const ry = ring.ry + 0.008;
       const band = Math.max(0.006, (rx + ry) * 0.1);
       const torus = new THREE.Mesh(new THREE.TorusGeometry(1, band / Math.max(rx, ry), 6, 28), mat(worn.id === 'bandana' ? color : 0x3a2a20, 0.6));
-      torus.scale.set(rx + band * 0.5, ry + band * 0.5, 0.9);
+      torus.scale.set(rx + band * 0.5, ry + band * 0.5, Math.max(rx, ry) * 0.9); // (z : largeur de la bande)
       frame.add(torus);
       const throat = -(ry + band);
       if (worn.id === 'bow') put(frame, bowMesh((rx + ry) * 0.45, color), [0, throat - band * 0.5, band * 0.5], [0.3, 0, 0]);

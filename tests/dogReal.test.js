@@ -230,6 +230,15 @@ describe('équipement ajusté', () => {
       const lp = md.leashPoint.getWorldPosition(new THREE.Vector3());
       const neck = md.neck.getWorldPosition(new THREE.Vector3());
       expect(lp.y).toBeGreaterThan(neck.y - 0.02);
+      // une bande autour du cou, pas un manchon : sa largeur (le long du cou) reste petite devant son tour
+      // (repère de l'anneau : z le long du cou)
+      const torus = ring.bone.children.find((o) => o.children?.[0]?.geometry?.type === 'TorusGeometry').children[0];
+      torus.geometry.computeBoundingBox();
+      torus.updateMatrix();
+      const size = torus.geometry.boundingBox.clone().applyMatrix4(torus.matrix).getSize(new THREE.Vector3());
+      expect(size.x, b).toBeLessThan(0.6);
+      expect(size.z, b).toBeLessThan(0.08);
+      expect(size.z, b).toBeLessThan(size.x * 0.3);
       const acc = buildAccessories(md, look, { neck: { id: 'bandana', color: 'pink' }, head: { id: 'ribbon', color: 'blue' } });
       expect(acc.length).toBeGreaterThan(0);
       removeGear(g);

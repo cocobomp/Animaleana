@@ -84,7 +84,10 @@ window.planche = {
         a.savePose();
         for (const [b, d] of a.shift) b.position.add(d);
         a.overlay(0, { moving: false, v: 0, sleeping: c.clip === 'sleep', happy: c.happy ?? 0.3, sad: false }, true);
-        a.ground({});
+        // (allures et saut : seulement relevé, comme en jeu ; les temps de suspension restent)
+        const moving = ['walk', 'trot', 'run', 'jump'].includes(c.clip);
+        a.gait = c.clip === 'walk' || c.clip === 'trot' ? c.clip : 'run';
+        a.ground({ moving });
       }
       md.root.updateMatrixWorld(true);
       const col = i % cols;

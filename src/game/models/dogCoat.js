@@ -565,10 +565,14 @@ if (cOn > 0.5) {
     float dh = abs(fract(hsv.x - 0.985 + 0.5) - 0.5);
     keep = max(keep, vCmpPart.z * (1.0 - smoothstep(0.04, 0.075, dh)) * smoothstep(0.28, 0.42, hsv.y) * smoothstep(0.18, 0.3, hsv.z));
   }
+  float eyeK = 0.0;
   #ifdef USE_MAP
   for (int i = 0; i < ${MAX_UV}; i++) {
     vec4 r = cKeepUv[i];
-    if (r.z > r.x && vMapUv.x >= r.x && vMapUv.x <= r.z && vMapUv.y >= r.y && vMapUv.y <= r.w) keep = 1.0;
+    if (r.z > r.x && vMapUv.x >= r.x && vMapUv.x <= r.z && vMapUv.y >= r.y && vMapUv.y <= r.w) {
+      keep = 1.0;
+      if (i == 0) eyeK = 1.0; // (le premier rectangle : les yeux)
+    }
   }
   #endif
   float detail = 1.0;
@@ -586,6 +590,8 @@ if (cOn > 0.5) {
   if (cCurl.x > 0.0) nc *= mix(1.0, 0.66 + 0.46 * smoothstep(0.25, 0.75, cmpCurlH(vCmpPos)), cCurl.x);
   if (cCurl.y > 0.0) nc *= mix(1.0, 0.82 + 0.26 * cmpSilkH(vCmpPos), cCurl.y);
   diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0));
+  // Blanc de l'œil du shiba : foncé (il se voyait autour de l'iris dès que la tête grandit : chiots aux yeux ronds)
+  if (eyeK > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.038, 0.03), smoothstep(0.22, 0.45, lum0) * (1.0 - smoothstep(0.12, 0.3, hsv.y)));
 }`;
 
 // Relief du poil frisé ou soyeux : la normale penche selon la pente de la hauteur (comme une bumpMap), effacé de loin

@@ -497,7 +497,7 @@ function buildDogGear(model, gear, add) {
     // (bande plate : un tore aplati, ellipse de la coupe de l'encolure)
     const geo = new THREE.TorusGeometry(1, band / Math.max(c.rx, c.ry), 6, 28);
     const torus = new THREE.Mesh(geo, mat(color, 0.55));
-    torus.scale.set(c.rx + gap + band * 0.5, c.ry + gap + band * 0.5, 0.9);
+    torus.scale.set(c.rx + gap + band * 0.5, c.ry + gap + band * 0.5, Math.max(c.rx, c.ry) * 0.9); // (z : largeur de la bande)
     torus.castShadow = true;
     ring.add(torus);
     // Boucle, anneau (laisse) et médaille sous la gorge.

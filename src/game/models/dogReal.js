@@ -1026,6 +1026,8 @@ function measureDog(base, D, B) {
       const dd = _v.clone().sub(c).dot(axis);
       if (Math.abs(dd) > 0.012) continue;
       if (W.ear[i * 2] + W.ear[i * 2 + 1] > 0.1) continue;
+      // (pas les joues d'une grosse tête qui débordent sur le cou : chihuahua, carlin)
+      if (W.head[i] > 0.7) continue;
       pts.push(_v.clone());
       sx += _v.x;
       sy += _v.y;
@@ -1034,11 +1036,15 @@ function measureDog(base, D, B) {
     }
     if (!cnt) return { center: c, r: 0.05, rx: 0.05, ry: 0.05 };
     const center = V(sx / cnt, sy / cnt, sz / cnt);
+    // (demi-axes dans le plan de la coupe : x sur le côté, y vers le dessus du cou ; mesurés en y du monde, le cou
+    // dressé d'un petit chien donnait un collier aplati)
+    const ly = V(0, 1, 0).addScaledVector(axis, -axis.y).normalize();
     let rx = 0;
     let ry = 0;
     for (const q of pts) {
-      rx = Math.max(rx, Math.abs(q.x - center.x));
-      ry = Math.max(ry, Math.abs(q.y - center.y));
+      _w.copy(q).sub(center);
+      rx = Math.max(rx, Math.abs(_w.x));
+      ry = Math.max(ry, Math.abs(_w.dot(ly)));
     }
     return { center, r: Math.max(rx, ry), rx, ry };
   };
@@ -1761,7 +1767,8 @@ class RealDogAnim {
         a.timeScale = 0;
         a.time = trick.time * a.getClip().duration;
       } else {
-        a.timeScale = 1;
+        // (sur commande, « assis ! », « couché ! » : les transitions plus vives)
+        a.timeScale = st.quick && this.trans?.name === name ? 1.8 : 1;
       }
     }
     if (lead && leadW > 0.3) this.lead = lead;
@@ -2050,6 +2057,7 @@ export function animateRealDog(e, dt, sad) {
   st.moving = e.speed > 0.06 && !e.sleeping && e.perch?.phase !== 'on';
   st.sleeping = !!e.sleeping;
   st.sad = sad;
+  st.quick = !!e.posing;
   // Posture : endormi, couché sur commande, assis (au pied quand le maître s'arrête, sur la table du salon, au repos).
   e.restSeed ??= (e.data.id?.charCodeAt?.(0) ?? 7) * 1.37;
   const t = e.time;

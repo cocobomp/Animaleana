@@ -274,6 +274,14 @@ def lie_gp():
         else:
             hi = mid_
     th = -(lo + hi) / 2
+    if th < 0:
+        # Hanches déjà sous la cible une fois le poitrail posé (jack : le bas du poitrail est pesé sur les
+        # membres, le point du tronc le plus bas est haut et le corps descendait trop) : on ne relève pas
+        # l'arrière-train (il restait debout, croupe en l'air) ; le corps descend juste ce qu'il faut.
+        th = 0.0
+        drop = hp.z - target
+        print('LIE : arrière-train non relevé, descente', round(drop, 4))
+    print('LIE th', round(th, 4), 'drop', round(drop, 4), 'cible hanches', round(target, 4))
     gp = dict(still, drop=drop, pivot=piv, pitch_base=-th, neck_base=0.05 + th * 0.6, head_base=0.05 + th * 0.4)
     def rot(p):
         return Vector((p.x, piv.y + (p.y - piv.y) * math.cos(-th) - (p.z - piv.z) * math.sin(-th),

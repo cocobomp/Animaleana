@@ -714,7 +714,7 @@ export function nailsGame(ctx) {
       phase += dt / period;
       const tri = 1 - Math.abs(((phase % 1) * 2) - 1); // 0 → 1 → 0
       u = lerp(1, 0.2, tri);
-      ctx.progress(1 - u); // la jauge suit les ciseaux : longueur qui serait coupée
+      ctx.progress(1 - u, { live: true }); // la jauge suit les ciseaux sans retard : longueur qui serait coupée
     },
     draw(g) {
       fillView(g, ctx.view, '#dff1fb', '#c4e3f4');

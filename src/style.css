@@ -1593,6 +1593,8 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 @keyframes mg-flash { from { transform: scale(0.96); } to { transform: none; } }
 .mg-progress { position: relative; height: 18px; background: #e9e3d6; border-radius: 999px; overflow: visible; margin-right: 22px; }
 .mg-progress-fill { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #3fae62, #8fd36a); transition: width 0.25s; }
+/* Jauge « en direct » (ciseaux des griffes, nœud…) : pas de transition, elle suit le jeu sans retard. */
+.mg-progress-fill.live { transition: none; }
 .mg-progress-goal { position: absolute; right: -24px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; }
 /* Zone « juste ce qu'il faut » : bande verte translucide, bord foncé pour rester visible quand
    le remplissage passe dessous, et un petit ✓ au milieu. left / width sont posés par ctx.zone(). */

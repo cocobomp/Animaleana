@@ -286,6 +286,7 @@ function openMinigame(ui, o) {
     box.addEventListener('animationend', (e) => { if (e.target === box) resize(); });
 
     let progress = 0;
+    let progressAt = -Infinity; // dernière mise à jour de la jauge (performance.now)
     let ended = false;
     let closed = false;
     let quality = null;
@@ -331,9 +332,20 @@ function openMinigame(ui, o) {
         }
         hintEl.dataset.kind = kind;
       },
-      progress(v) {
+      /**
+       * Remplit la jauge du haut (0 à 1). Jauge « en direct » (mise à jour à chaque image : ciseaux des griffes,
+       * nœud, versement…) : elle suit sans retard, sans la transition CSS de 0,25 s qui la faisait traîner
+       * derrière les ciseaux (« dans le vert » à l'écran, « un peu trop court » en vrai). Une jauge qui
+       * avance par à-coups (un nœud défait, une tache lavée) glisse toujours en douceur. opts.live force l'un
+       * ou l'autre.
+       */
+      progress(v, opts = {}) {
+        const now = performance.now();
+        const live = opts.live ?? now - progressAt < 150;
+        progressAt = now;
+        if (fillEl.classList.contains('live') !== live) fillEl.classList.toggle('live', live);
         progress = clamp(v);
-        fillEl.style.width = `${Math.round(progress * 100)}%`;
+        fillEl.style.width = `${Math.round(progress * 1000) / 10}%`;
         progressEl.setAttribute('aria-valuenow', Math.round(progress * 100));
       },
       /** Ajoute un gros bouton sous le jeu. hold : appelle onDown / onUp (on garde appuyé). */

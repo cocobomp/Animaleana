@@ -832,7 +832,7 @@ export const TAIL_CLEAR = 0.1;
  */
 const MANE_LEN = 0.24;
 const MANE_STYLE = {
-  normal: { len: 1, n: 1, lift: 0.3, other: 0 },
+  normal: { len: 1, n: 1, lift: 0.4, other: 0 },
   long: { len: 1.3, n: 1.1, lift: 0.3, other: 0.22 },
   thick: { len: 0.85, n: 1.2, lift: 0.5, other: 0.25 },
   short: { len: 0.45, n: 0.85, lift: 0.7, other: 0 },
@@ -1298,7 +1298,7 @@ function tailCards(S, B, body, pos, coat, base) {
       const f = k / (pts.length - 1);
       const bell = smooth(0, 0.35, f) * (1 - 0.7 * smooth(0.45, 1, f));
       p.x += Math.sin(phi) * W * bell;
-      p.z -= (Math.cos(phi) - 0.2) * 0.06 * bell;
+      p.z -= (Math.cos(phi) - 0.2) * 0.11 * bell;
       const dist = tb(p);
       if (dist < 0.006) p.addScaledVector(tb.grad(p, gr, dist), 0.006 - dist);
       keep(p, 0.006);

@@ -777,10 +777,15 @@ class BeautySession extends Session {
 
   update(dt) {
     this.updateCommon(dt);
-    if (this.state === 'done') return;
+    if (this.state === 'done') {
+      this.game.rig.frameWith = null;
+      return;
+    }
     const g = this.game;
     const pl = g.player;
     const e = this.e;
+    // La caméra cadre l'animal mené avec l'enfant (pas quand il est porté, sur la table ou au podium).
+    g.rig.frameWith = this.carried || this.onTable || this.phase === 'podium' ? null : e;
     this.phaseT += dt;
     this.judgeSprite.position.y = this.y(this.judgeSprite.position.x, this.judgeSprite.position.z) + 2.15 + Math.sin(this.time * 2) * 0.03;
     if (this.judgeNpc) {
@@ -1035,6 +1040,7 @@ class BeautySession extends Session {
   }
 
   cleanup() {
+    this.game.rig.frameWith = null;
     if (this.judgeNpc) {
       this.game.scene.remove(this.judgeNpc.root);
       disposeModel(this.judgeNpc.root);

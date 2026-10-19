@@ -451,10 +451,11 @@ export function grandstand(len) {
 export function showgroundModel(hw, hd, label) {
   const g = new THREE.Group();
   const white = mat(0xf6f4ee, 0.6);
-  // Sable
-  const sand = new THREE.Mesh(new THREE.PlaneGeometry(hw * 2 - 0.2, hd * 2 - 0.2), mat(0xd8c08f, 1));
+  // Sable : au ras du terrain (bien plat ici), là où marchent cavaliers et chevaux ; décalage de profondeur pour
+  // passer devant le terrain. (À 3,5 cm, il cachait l'ombre de contact des chevaux et les sabots s'y enfonçaient.)
+  const sand = new THREE.Mesh(new THREE.PlaneGeometry(hw * 2 - 0.2, hd * 2 - 0.2), mat(0xd8c08f, 1, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
   sand.rotation.x = -Math.PI / 2;
-  sand.position.y = 0.035;
+  sand.position.y = 0.004;
   sand.receiveShadow = true;
   g.add(sand);
   // Lices blanches (avec l'ouverture côté +X)

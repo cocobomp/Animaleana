@@ -685,6 +685,20 @@ export class AnimalEntity {
         }
       }
 
+      // Au box, le cheval vient voir le joueur qui s'approche : il s'arrête, se tourne vers lui et lève la tête
+      // (avant, on ne voyait que sa croupe depuis l'allée).
+      this.attending = !!stall && !this.sleeping && !this.herdCtrl && !d.following && this.state !== 'eat' && distPlayer < 4.5;
+      if (this.attending) {
+        this.targetSpeed = 0;
+        if (this.state === 'walk') {
+          this.state = 'idle';
+          this.timer = Math.max(this.timer, 4);
+        }
+        let diff = Math.atan2(ctx.playerPos.x - p.x, ctx.playerPos.z - p.z) - this.heading;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 1.6);
+      }
+
       // Se tourner vers la cible puis avancer.
       if (this.targetSpeed > 0) {
         const t = this.herdCtrl && !this.herdCtrl.pusher ? this.target : this.navTarget(this.target);

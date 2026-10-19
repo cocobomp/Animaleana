@@ -805,6 +805,9 @@ export class Player {
   }
 }
 
+/** Décalage de la caméra sur le côté quand on monte sur un écran en hauteur (m, voir CameraRig.update). */
+export const MOUNT_SIDE = 1.8;
+
 export class CameraRig {
   constructor(camera) {
     this.camera = camera;
@@ -824,6 +827,13 @@ export class CameraRig {
     look.dy += keyLook.y * dt * 300;
     // Quand on marche sans toucher la vue, la caméra revient doucement derrière le personnage.
     this.idleLook = look.dx || look.dy || keyLook.x || keyLook.y ? 0 : (this.idleLook ?? 0) + dt;
+    // À cheval sur un écran en hauteur (champ étroit : environ 30° de large) : la caméra se décale sur le côté
+    // (MOUNT_SIDE, côté montoir), se rapproche et vise l'encolure, pour qu'on voie la tête et l'encolure de son
+    // cheval au lieu d'une croupe (le cavalier cachait la tête). Un décalage, pas une rotation : le lacet (yaw), qui
+    // oriente le joystick, reste derrière le cheval — tourner la caméra faisait tourner le cheval en rond.
+    // Lissé (ride : 0 → 1).
+    const portraitRide = player.mount && this.mode === 'third' && this.camera.aspect < 0.8 ? 1 : 0;
+    this.ride = (this.ride ?? 0) + (portraitRide - (this.ride ?? 0)) * Math.min(1, dt * 2);
     if (this.mode === 'third' && player.speed > 1 && this.idleLook > 1.5 && !player.auto) {
       let diff = player.heading - this.yaw;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -848,10 +858,36 @@ export class CameraRig {
     }
     player.avatar.root.visible = true;
     const target = eye.clone().add(new THREE.Vector3(0, -0.2, 0));
+    const ride = this.ride ?? 0;
+    // (décalage de côté, à gauche de la caméra : MOUNT_SIDE pour elle, 15 % pour sa cible — le cheval reste près du
+    // milieu de l'écran, loin des boutons du bas à droite)
+    const sideX = Math.cos(this.yaw) * MOUNT_SIDE * ride * (player.mount?.scale ?? 1);
+    const sideZ = -Math.sin(this.yaw) * MOUNT_SIDE * ride * (player.mount?.scale ?? 1);
+    if (ride > 0.001) {
+      // (visée vers l'avant et plus bas : entre les mains du cavalier et la tête du cheval)
+      const k = ride * (player.mount?.scale ?? 1);
+      target.x += Math.sin(player.heading) * 0.9 * k + sideX * 0.15;
+      target.z += Math.cos(player.heading) * 0.9 * k + sideZ * 0.15;
+      target.y -= 0.35 * k;
+    }
     const back = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
     // Si un mur se trouve entre la caméra et le joueur, la caméra monte pour regarder
     // par-dessus (au lieu de se coller au mur) ; en dernier recours, elle se rapproche.
-    let dist = this.dist + (player.mount ? 2 : 0);
+    let dist = this.dist + (player.mount ? 2 - 2.5 * ride : 0);
+    // Animal mené à cadrer avec le joueur (concours de beauté : rig.frameWith) : on vise entre eux deux, un peu
+    // plus loin, plus encore sur un écran en hauteur (avant, le cheval était coupé au bord de l'écran).
+    const w = this.frameWith;
+    this.frameAmt = (this.frameAmt ?? 0) + ((w ? 1 : 0) - (this.frameAmt ?? 0)) * Math.min(1, dt * 3);
+    if (w) this.framePos = (this.framePos ?? new THREE.Vector3()).set(w.position.x, w.position.y + 0.9 * (w.scale ?? 1), w.position.z);
+    if (this.frameAmt > 0.001 && this.framePos) {
+      const k = this.frameAmt * 0.5;
+      const q = this.framePos;
+      const gap = Math.hypot(q.x - target.x, q.z - target.z);
+      target.x += (q.x - target.x) * k;
+      target.z += (q.z - target.z) * k;
+      target.y += (Math.min(target.y, q.y) - target.y) * this.frameAmt;
+      dist += this.frameAmt * (gap * 0.8 + (this.camera.aspect < 0.8 ? 1.6 : 0.4));
+    }
     const blocked = (pitch, d) => {
       const b = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(this.yaw) * Math.cos(pitch));
       for (let i = 1; i <= 12; i++) {
@@ -877,9 +913,11 @@ export class CameraRig {
     } else {
       this.autoPitch = this.pitch;
     }
-    this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
+    this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch + 0.1 * ride - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
     back.set(-Math.sin(this.yaw) * Math.cos(this.curPitch), Math.sin(this.curPitch), -Math.cos(this.yaw) * Math.cos(this.curPitch));
     const want = target.clone().addScaledVector(back, dist);
+    want.x += sideX * 0.85;
+    want.z += sideZ * 0.85;
     const ground = world.heightAt(want.x, want.z) + 0.4;
     if (want.y < ground) want.y = ground;
     this.pos.lerp(want, this.pos.lengthSq() === 0 ? 1 : Math.min(1, dt * 10));

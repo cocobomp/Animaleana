@@ -179,8 +179,14 @@ hBare = 0.0;
 
   // Grain du poil (fin, couché vers l'arrière) et occlusion ambiante cuite.
 #ifdef H_REAL
-  // Modelé peint du modèle réaliste (muscles, poil, corne) : gris, 0,5 = moyen.
-  c *= hDetTex.r * 2.0;
+  // Modelé peint du modèle réaliste (muscles, poil, corne) : gris, 0,5 = moyen. C'est une photo : elle porte
+  // aussi l'éclairage de la prise de vue (côtes, creux des muscles), qui doublait celui du jeu (robe « sale »,
+  // « on voit les côtes »). Adouci (hDetail : 0,5, 0,35 sur les robes claires), un peu moins sur la corne
+  // (stries), beaucoup sur les balzanes (l'ombre peinte de la balzane d'origine les coupait en deux) ; le
+  // relief reste porté par la carte de normales.
+  float hDet = mix(hDetail, 0.6, isHoof);
+  hDet = mix(hDet, 0.2, sock * (1.0 - isHoof));
+  c *= mix(1.0, hDetTex.r * 2.0, hDet);
 #else
   c *= 1.0 + (hNoise(P * vec3(320.0, 110.0, 70.0)) - 0.5) * 0.07 * (1.0 - aa) * (1.0 - isHoof);
 #endif
@@ -188,6 +194,56 @@ hBare = 0.0;
   c *= mix(mix(0.42, 0.62, clamp(under + inner, 0.0, 1.0)), 1.0, vHAO);
   diffuseColor.rgb = c;
 }`;
+
+/**
+ * Satiné du poil ras et liseré de lumière, en qualité basse comme en haute (la robe en MeshStandard n'a pas de
+ * sheen : elle était mate, « en plastique ») : un terme de bord (Fresnel) teinté par la robe, éclairé par le
+ * ciel (gfx.skyRim) et par le soleil — fort en contre-jour, doré le soir puisque le soleil l'est. Pas sur la
+ * peau nue ni sur la corne. Plus un petit appoint du soir et de la nuit (hFill) pour que la silhouette du
+ * cheval reste lisible quand le soleil est couché. Quelques instructions par pixel.
+ */
+const RIM_FRAGMENT = /* glsl */ `
+{
+  vec3 hV = normalize( vViewPosition ); // (vers la caméra)
+  float hF = pow( 1.0 - saturate( dot( normal, hV ) ), 4.0 );
+  float hMax = max( max( diffuseColor.r, diffuseColor.g ), max( diffuseColor.b, 0.02 ) );
+  vec3 hTint = mix( vec3( 1.0 ), diffuseColor.rgb / hMax, 0.7 ) * hRimTint;
+  vec3 hRimL = hSkyRim;
+#if NUM_HEMI_LIGHTS > 0
+  // (le ciel éclaire le dos et les flancs, pas le dessous du ventre)
+  hRimL *= saturate( dot( normal, hemisphereLights[ 0 ].direction ) * 0.5 + 0.6 );
+#endif
+#if NUM_DIR_LIGHTS > 0
+  vec3 hL = directionalLights[ 0 ].direction;
+  float hBack = saturate( dot( hL, -hV ) );
+  float hWrap = saturate( dot( normal, hL ) * 0.6 + 0.4 );
+  hRimL += directionalLights[ 0 ].color * hWrap * ( 0.04 + 0.24 * hBack * hBack );
+#endif
+  reflectedLight.indirectSpecular += hRimL * hTint * hF * ( 1.0 - hBare ) * hRim;
+  reflectedLight.indirectDiffuse += diffuseColor.rgb * hSkyRim * hFill;
+}`;
+
+/**
+ * Carte de relief du modèle réaliste : les marges de ses îlots sont noires (0, 0, 0), et le filtrage (bord d'un
+ * îlot, mipmaps au loin) les mêle aux vraies normales : des normales renversées, d'où des coutures noires en
+ * zigzag sur la ganache et l'encolure. Une vraie normale a z > 0 (bleu ≥ 0,5) : un texel plus sombre est en
+ * partie « vide » ; on le divise par sa part de vrai texel (lue dans le bleu, comme une couleur prémultipliée),
+ * et un texel presque tout vide devient plat.
+ */
+const NORMAL_MAP_FIX = /* glsl */ `
+#ifdef USE_NORMALMAP_TANGENTSPACE
+  vec3 hNt = texture2D( normalMap, vNormalMapUv ).xyz;
+  float hCov = clamp( hNt.b / 0.9, 0.0, 1.0 );
+  hNt = mix( hNt, hNt / max( hCov, 0.05 ), 1.0 - smoothstep( 0.55, 0.65, hNt.b ) );
+  vec3 mapN = mix( vec3( 0.0, 0.0, 1.0 ), hNt * 2.0 - 1.0, smoothstep( 0.03, 0.15, hCov ) );
+  mapN.xy *= normalScale;
+  normal = normalize( tbn * mapN );
+#else
+#include <normal_fragment_maps>
+#endif`;
+
+/** Luminance (0-1) d'une couleur sRGB entière. */
+const srgbLum = (hex) => (((hex >> 16) & 255) * 0.2126 + ((hex >> 8) & 255) * 0.7152 + (hex & 255) * 0.0722) / 255;
 
 /** Couleur three.js (linéaire) depuis un entier sRGB. */
 const col = (hex) => new THREE.Color(hex);
@@ -203,6 +259,12 @@ export function coatMaterial(look, build, breed = null, real = null) {
   const face = horseFaceMark(look, breed);
   const sheen = build.sheen ?? 0;
   const coat = col(look.coat);
+  // Robe claire (gris, blanc, crème…) : modelé peint plus doux encore (voir COAT_FRAGMENT).
+  const coatL = srgbLum(look.coat ?? 0x7a4528);
+  const light = tr.grey > 0 || coatL > 0.55;
+  // Teinte du reflet de bord : celle de la robe (dans le shader) × ce ton : doré (Akhal-Teké), brun chaud pour
+  // les robes presque noires (sinon un liseré gris de latex), blanc sinon.
+  const rimTint = sheen ? new THREE.Color(1, 0.86, 0.55) : coatL < 0.09 ? new THREE.Color(1, 0.78, 0.6) : new THREE.Color(1, 1, 1);
   const u = {
     hCoat: { value: coat },
     hSec: { value: col(look.secondary ?? look.coat) },
@@ -224,26 +286,39 @@ export function coatMaterial(look, build, breed = null, real = null) {
     hFace: { value: face },
     hSeed: { value: ((look.seed ?? 1) % 997) * 0.731 },
     hHoofY: { value: real?.hoofY ?? 0 },
+    hDetail: { value: light ? 0.35 : 0.5 },
+    // Satiné et liseré (voir RIM_FRAGMENT) : force, teinte (dorée pour l'Akhal-Teké, brun chaud pour le noir),
+    // lumière du ciel et appoint du soir (partagés, mis à jour par World.updateSky).
+    hRim: { value: high ? 0.75 : 1 },
+    hRimTint: { value: rimTint },
+    hSkyRim: gfx.skyRim,
+    hFill: gfx.horseFill,
   };
+  // (Akhal-Teké : l'éclat passe par le satiné doré, pas par le métal — à 0,32, la robe reflétait l'herbe et
+  // sortait kaki ou olive ; robes presque noires un peu moins lisses : le ciel y dessine les muscles.)
   const opts = {
     color: 0xffffff,
-    roughness: sheen ? 0.34 : 0.56,
-    metalness: sheen ? 0.32 : 0.02,
+    roughness: sheen ? (high ? 0.34 : 0.38) : coatL < 0.09 ? 0.45 : 0.56,
+    metalness: sheen ? 0.05 : 0.02,
   };
-  // Ordinateur : reflet satiné du poil ras (sheen), très marqué et doré pour l'Akhal-Teké.
+  // Ordinateur : reflet satiné du poil ras (sheen), très marqué et doré pour l'Akhal-Teké, brun chaud sur le noir.
+  const sheenColor = sheen
+    ? coat.clone().lerp(new THREE.Color(1, 0.82, 0.48), 0.55)
+    : coatL < 0.09 ? new THREE.Color(0x5a4030) : coat.clone().lerp(new THREE.Color(1, 0.95, 0.85), 0.3);
   const m = high
     ? new THREE.MeshPhysicalMaterial({
       ...opts,
-      sheen: 0.32 + sheen * 0.6,
+      sheen: coatL < 0.09 && !sheen ? 0.5 : 0.32 + sheen * 0.6,
       sheenRoughness: sheen ? 0.3 : 0.55,
-      sheenColor: coat.clone().lerp(new THREE.Color(1, 0.95, 0.85), 0.3 + sheen * 0.3),
+      sheenColor,
     })
     : new THREE.MeshStandardMaterial(opts);
   // Cheval réaliste (horseReal.js) : modelé peint (gris) et relief du modèle, sabots à hauteur fixe.
   if (real) {
     m.map = real.detail;
     m.normalMap = real.normalMap ?? null;
-    m.normalScale.set(0.9, 0.9 * (real.normalSign ?? 1));
+    // (relief un peu moins creusé qu'avant, 0,7 au lieu de 0,9 : les côtes se voyaient encore de profil)
+    m.normalScale.set(0.7, 0.7 * (real.normalSign ?? 1));
   }
   // H_REAL écrit dans le shader lui-même, pas dans m.defines : une copie de la matière (robe lustrée du
   // concours de beauté, Beauty.js) garde son onBeforeCompile mais material.copy() remet defines à zéro,
@@ -272,7 +347,7 @@ vHHead = hHead;
 #endif`);
     sh.fragmentShader = def + sh.fragmentShader
       .replace('#include <common>', `#include <common>
-${Object.keys(u).map((k) => `uniform ${k === 'hSocks' ? 'vec4' : u[k].value.isColor ? 'vec3' : 'float'} ${k};`).join('\n')}
+${Object.keys(u).map((k) => `uniform ${k === 'hSocks' ? 'vec4' : u[k].value.isColor || Array.isArray(u[k].value) ? 'vec3' : 'float'} ${k};`).join('\n')}
 varying vec3 vHPos;
 varying vec3 vHNrm;
 flat varying float vHPart; // pas d'interpolation entre deux parties (sinon : fausses balzanes aux bords)
@@ -291,7 +366,10 @@ roughnessFactor *= mix(1.0, 0.55, step(5.5, vHPart) * step(vHPart, 6.5));`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
 #ifdef USE_SHEEN
 material.sheenColor *= 1.0 - hBare;
-#endif`);
+#endif`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+${RIM_FRAGMENT}`);
+    if (real) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', NORMAL_MAP_FIX);
   };
   m.customProgramCacheKey = () => `horsecoat${high ? 'p' : 's'}${real ? 'r' : ''}`;
   m.userData.horseUniforms = u;
@@ -306,7 +384,7 @@ export function maneMaterial(sway) {
   // Ordinateur (anticrénelage actif) : bords des mèches adoucis (alphaToCoverage) au lieu de marches.
   const m = new THREE.MeshStandardMaterial({
     color: 0xffffff, vertexColors: true, map: maneTexture(), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.62,
-    alphaToCoverage: gfx.quality === 'high',
+    alphaToCoverage: gfx.msaa || gfx.quality === 'high',
   });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.hairTime = gfx.time;

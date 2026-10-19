@@ -11,7 +11,7 @@ import {
 import { TOOLS, hasTool } from '../sim/tools.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
-import { thumb, thumbsFor } from '../game/thumbScenes.js'; // vignettes 3D (src/game/thumbs.js)
+import { thumb, thumbsFor, photoDouble } from '../game/thumbScenes.js'; // vignettes 3D (src/game/thumbs.js)
 import { aboveGround } from '../game/thumbs.js';
 import * as THREE from 'three';
 
@@ -331,37 +331,34 @@ async function tryOn(ui, id, a, color) {
   return null;
 }
 
-/** D'où l'on regarde l'objet essayé, et la taille minimale du cadre (m, à l'échelle de l'animal). */
+/**
+ * D'où l'on regarde l'objet essayé, et la taille minimale du cadre (m, à l'échelle de l'animal). whole : l'animal
+ * entier, tête et sabots compris (selle, tapis, couverture, guêtres : on voit l'objet sur SON cheval, de trois
+ * quarts côté montoir, à hauteur d'épaule ; avant, le cadre serré sur la selle coupait la tête et les pieds).
+ */
 const TRY_VIEW = {
-  saddle: { dir: [1, 0.55, 0.42], grow: 1.6, min: 0.9 },
-  pad: { dir: [1, 0.55, 0.42], grow: 1.6, min: 0.9 },
-  blanket: { dir: [1, 0.4, 0.55], grow: 1.15, min: 1.2 },
-  bridle: { dir: [1, 0.22, 0.62], grow: 1.3, min: 0.5 },
-  halter: { dir: [1, 0.22, 0.62], grow: 1.3, min: 0.5 },
-  head: { dir: [1, 0.22, 0.62], grow: 1.3, min: 0.5 },
-  legs: { dir: [1, 0.25, 0.7], grow: 1.15, min: 0.7 },
+  saddle: { dir: [1, 0.36, 0.5], whole: true, grow: 1.04 },
+  pad: { dir: [1, 0.36, 0.5], whole: true, grow: 1.04 },
+  blanket: { dir: [1, 0.32, 0.58], whole: true, grow: 1.04 },
+  bridle: { dir: [1, 0.2, 0.62], grow: 1.55, min: 0.6 },
+  halter: { dir: [1, 0.2, 0.62], grow: 1.55, min: 0.6 },
+  head: { dir: [1, 0.22, 0.62], grow: 1.5, min: 0.6 },
+  legs: { dir: [1, 0.25, 0.7], whole: true, grow: 1.04 },
   bells: { dir: [1, 0.25, 0.7], grow: 1.15, min: 0.7 },
 };
 const ANIMAL_VIEW = [1, 0.32, 0.62];
 
 /**
- * Photo d'un de nos animaux qui essaie un équipement (moteur des vignettes, même studio) :
- * on lui met l'équipement d'essai, on le photographie à part, puis il retrouve sa place et son vrai équipement.
+ * Photo d'un de nos animaux qui essaie un équipement (moteur des vignettes, même studio) : un double neuf de
+ * l'animal (thumbScenes.photoDouble), en pose de photo, porte l'équipement d'essai ; l'animal vivant ne bouge
+ * pas (le déplacer dans le studio laissait, en qualité haute, l'équipement flotter sans le cheval).
  */
 function tryPhoto(g, e, gear, slot) {
   const th = thumbsFor(g);
   if (!th?.enabled) return Promise.resolve(null);
   return th.capture(() => {
-    const root = e.root;
-    const pos = root.position.clone();
-    // (cheval réaliste au loin : version complète pour la photo, gardée jusqu'à la fin du rendu)
-    e.model.lodHold = true;
-    e.model.setLod?.(0);
-    const rotY = root.rotation.y;
-    const labels = [e.label, e.status].filter(Boolean).map((s) => [s, s.visible]);
-    for (const [l] of labels) l.visible = false;
-    root.position.set(0, 0, 0);
-    root.rotation.y = 0;
+    const d = photoDouble(e);
+    const root = d.holder;
     const view = TRY_VIEW[slot];
     const box = new THREE.Box3();
     const add = (list) => {
@@ -370,14 +367,15 @@ function tryPhoto(g, e, gear, slot) {
         if (o.isMesh && !o.isSprite && o.material?.depthWrite !== false) box.expandByObject(o);
       });
     };
-    if (view && gear[slot]) {
-      // Cadrage sur l'objet essayé (selle et tapis vont ensemble), puis tout l'équipement d'essai.
+    if (view && gear[slot] && !view.whole) {
+      // Cadrage sur l'objet essayé (selle et tapis vont ensemble), puis tout l'équipement d'essai. (Animal entier :
+      // inutile, la boîte le contient déjà — et une couverture, longue à habiller, n'est construite qu'une fois.)
       const pair = slot === 'saddle' && gear.pad ? { pad: gear.pad } : slot === 'pad' && gear.saddle ? { saddle: gear.saddle } : {};
-      e.applyGear({ [slot]: gear[slot], ...pair });
-      add(e.gearGroup?.userData.meshes ?? []);
+      add(d.wear({ [slot]: gear[slot], ...pair }));
     }
-    e.applyGear(gear);
-    if (box.isEmpty()) add([e.model.root]); // sans objet à cadrer : l'animal entier
+    const all = d.wear(gear);
+    if (view?.whole) add([d.model.root, ...all]);
+    if (box.isEmpty()) add([d.model.root]); // sans objet à cadrer : l'animal entier
     const k = e.scale ?? 1;
     const c = box.getCenter(new THREE.Vector3());
     const s = box.getSize(new THREE.Vector3()).multiplyScalar(view?.grow ?? 1.05);
@@ -385,21 +383,15 @@ function tryPhoto(g, e, gear, slot) {
     s.set(Math.max(s.x, min), Math.max(s.y, min), Math.max(s.z, min));
     // Agrandie autour d'objets au ras du sol (guêtres, cloches), la boîte passerait sous le sol : on la remonte.
     const b = new THREE.Box3().setFromCenterAndSize(c, s);
+    // (cheval entier : un peu de ciel au-dessus, la vignette de l'objet, en haut à droite, ne couvre plus le dos)
+    if (view?.whole) b.max.y += (b.max.y - b.min.y) * 0.25;
     const up = aboveGround(b.min.toArray(), b.max.toArray(), 0);
     return {
       object: root,
       box: new THREE.Box3(new THREE.Vector3(...up.min), new THREE.Vector3(...up.max)),
       dir: view?.dir ?? ANIMAL_VIEW,
       ground: 0,
-      restore: true, // il retourne dans la scène du jeu
-      keep: true,
-      dispose: () => {
-        root.position.copy(pos);
-        root.rotation.y = rotY;
-        for (const [l, v] of labels) l.visible = v;
-        e.model.lodHold = false;
-        e.applyGear();
-      },
+      dispose: d.dispose,
     };
   }, { w: 360, h: 250 });
 }

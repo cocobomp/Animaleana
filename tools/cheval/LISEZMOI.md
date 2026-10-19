@@ -158,6 +158,39 @@ de l'étrier en bois. À cru : jambes 12 à 24 cm dans le cheval → 0 à l'arr�
 20 ms. `tests/riderFit.test.js`.
 `tests/horseReal.test.js` vérifie le fichier (os, clips, compression) et que chaque race garde ses sabots au sol.
 
+**Beauté** (plan « cheval beau », étapes 1, 3, 4 et 5 ; `tests/horseGround.test.js`, `horseHead.test.js`,
+`horseCoatShine.test.js`, `horsePortrait.test.js`, `cameraFraming.test.js`) :
+
+- *posé au sol* : le sable des carrières (paddock, concours, carrières construites) est au ras du terrain
+  (`buildings.sandGeometry`, 0,4 cm, maille de 1,25 m, décalage de profondeur) ; il était 3 à 5 cm plus haut et
+  cachait l'ombre de contact, les sabots et les pieds s'y enfonçaient. Ombre de contact à 0,75 en qualité basse.
+  En basse (pas d'ombre du soleil), quatre petites ombres sous les sabots (`soleShadows` : un maillage de
+  8 triangles par cheval, placé dans le shader juste avant le dessin d'après les matrices locales des membres :
+  pleine sabot posé, nulle levé de 25 cm, poses des activités comprises) ;
+- *net sur téléphone* : en qualité basse sur un écran fin, 1,5 pixel par point et MSAA au lieu de 1,25 sans
+  anticrénelage, repli à 1,25 si les premières secondes dépassent 22 ms par image (`src/game/pixelBudget.js`),
+  retenu (`animaleana.pixelSlow`) : aux parties suivantes, un téléphone lent reprend l'ancien réglage ;
+  crins en alphaToCoverage dès que l'anticrénelage est là ; version réduite au-delà de 15 m (et non 7) ;
+- *port de tête* : `HEAD_UP` (encolure 0,12 rad, nuque 0,18 rad) ajouté par `overlay` à l'arrêt et au pas, rien au
+  broutage ni en somnolence : chanfrein 68° → 48 à 50° sous l'horizontale, nuque 12 cm plus haut ; oreilles
+  calmes (±0,06 rad, ensemble, un peu vers l'avant). `model.photoPose()` : la même pose attentive pour les photos ;
+- *robe* : modelé peint du GLB adouci (`hDetail`) ; marges noires de la carte de relief traitées dans le shader
+  (texel peu bleu = en partie vide, divisé par sa part de vraie normale) ; relief à 0,7 ; terme de bord satiné en
+  basse comme en haute, éclairé par le ciel (`gfx.skyRim`) et le soleil (doré le soir, fort en contre-jour), petit
+  appoint du soir (`gfx.horseFill`) ; Akhal-Teké sans métal ; robes noires à reflet brun chaud ;
+- *bien le montrer* : essayage de la sellerie sur un double neuf de l'animal (`thumbScenes.photoDouble`), cheval
+  entier pour la selle et la couverture ; vignettes en pose de photo, cadrées sur le maillage dans sa pose ;
+  vignettes des races deux fois plus grandes ; portrait en tête de la fiche ; au box, le cheval se tourne vers le
+  joueur ; caméra du concours de beauté cadrant l'animal mené ; à cheval sur un écran en hauteur, caméra décalée de 1,8 m
+  de côté, plus près ; « Saut automatique » dans la barre du haut.
+
+  Mesuré (téléphone 390×844 DPR 3, 10 chevaux au paddock, Chromium SwiftShader sur une machine chargée : les
+  temps d'image ne valent qu'en comparaison de mesures faites l'une après l'autre) : en basse, 297 k → 315 k
+  triangles (les deux chevaux les plus proches en version complète), 99 → 106 appels de dessin (ombres des
+  sabots), mémoire inchangée (≈ 112 Mo), 26 → 27 programmes ; temps d'image + 14 à 21 % à 1,5 pixel par point
+  avec MSAA (SwiftShader dessine sur le processeur : 1,44 fois plus de pixels, MSAA payé en entier), comme
+  avant au réglage de repli. En haute : + 0,6 k triangles, mêmes appels, même temps d'image.
+
 Ce qu'il coûte, et comment on le garde bas :
 
 - **élimination hors du champ** : chaque maillage du cheval (`HorseMesh`) a une boîte englobante refaite sur
@@ -165,7 +198,7 @@ Ce qu'il coûte, et comment on le garde bas :
   peau de son os : ≈ 3 µs), valable pour la caméra, les ombres, le lancer de rayon et le cadrage des photos.
   Elle contient toujours le maillage déformé (galop, broutage, saut, embonpoint, cartes de crins, couverture
   liée au squelette : `tests/horseRealPerf.test.js`) sans le dépasser de plus de quelques dizaines de cm ;
-- **version réduite** (index de `lod.mjs`) au-delà de 7 m en qualité basse et de 22 m en qualité haute
+- **version réduite** (index de `lod.mjs`) au-delà de 15 m en qualité basse et de 22 m en qualité haute
   (distance divisée par la taille du cheval, hystérésis de 10 %) ; en qualité basse, crins sans carte de relief ;
 - **animation** : un cheval qui n'est ni dessiné ni dans une ombre n'est animé qu'une image sur trois (temps
   cumulé, jamais perdu), jamais quand on le monte, le mène ou qu'une séance le guide ; « vu ou pas » se décide

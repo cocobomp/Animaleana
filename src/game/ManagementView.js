@@ -21,13 +21,42 @@ const MIN_H = 16;
 const MAX_H = 150;
 const smoothstep = (x) => x * x * (3 - 2 * x);
 
-/** L'étiquette déjà posée (parmi les n premières) que celle-ci (centre x, y ; largeur w) chevaucherait, ou null. */
-function overlapAt(placed, n, x, y, w) {
+/** Écart minimum entre deux étiquettes (px). */
+const LABEL_GAP = 4;
+
+/**
+ * L'étiquette déjà posée (parmi les n premières) que celle-ci (centre x, haut top ; largeur w, hauteur hh)
+ * chevaucherait, ou null. Avec la vraie hauteur des étiquettes (44 px, cibles au doigt) : avant, on comptait
+ * 30 px et on décalait de 32, et « Petits boulots » mordait encore sur « Maison » sur téléphone.
+ */
+export function overlapAt(placed, n, x, top, w, hh) {
   for (let i = 0; i < n; i++) {
     const q = placed[i];
-    if (Math.abs(q.x - x) < (q.w + w) / 2 && Math.abs(q.y - y) < 30) return q;
+    if (Math.abs(q.x - x) < (q.w + w) / 2 + LABEL_GAP && top < q.top + q.h + LABEL_GAP && q.top < top + hh + LABEL_GAP) return q;
   }
   return null;
+}
+
+/**
+ * Hauteur (haut de l'étiquette, px) où poser une étiquette sans chevaucher les n déjà posées : on monte
+ * au-dessus de celle qui gêne, et si l'on passe sous la barre du haut (minTop), on repart vers le bas.
+ */
+export function freeTop(placed, n, x, top, w, hh, minTop) {
+  let y = top;
+  for (let k = 0; k < 10; k++) {
+    const hit = overlapAt(placed, n, x, y, w, hh);
+    if (!hit) break;
+    y = hit.top - hh - LABEL_GAP;
+  }
+  if (y < minTop) {
+    y = minTop;
+    for (let k = 0; k < 10; k++) {
+      const hit = overlapAt(placed, n, x, y, w, hh);
+      if (!hit) break;
+      y = hit.top + hit.h + LABEL_GAP;
+    }
+  }
+  return y;
 }
 
 export class ManagementView {
@@ -419,6 +448,7 @@ export class ManagementView {
       if (el.textContent !== it.text) el.textContent = it.text;
       if (el.className !== it.cls) el.className = it.cls;
       if (el.offsetWidth) el.labelW = el.offsetWidth;
+      if (el.offsetHeight) el.labelH = el.offsetHeight;
     }
     for (const [k, el] of this.labelEls) {
       if (!seen.has(k)) {
@@ -441,7 +471,7 @@ export class ManagementView {
     const dim = this.build.active || !!this.construct.sel;
     // Pas sous la barre du haut (boutons Animaux…Plus, --hud-bottom posé par UI.syncHudVars) : sur téléphone,
     // « Sellerie » et « Maison » étaient coupées par les boutons dans la vue construction.
-    const top = (parseFloat(document.documentElement.style.getPropertyValue('--hud-bottom')) || 0) + 24;
+    const minTop = (parseFloat(document.documentElement.style.getPropertyValue('--hud-bottom')) || 0) + 4;
     for (const it of this.items) {
       const el = this.labelEls.get(it.key);
       if (!el) continue;
@@ -454,29 +484,18 @@ export class ManagementView {
       }
       if (el.style.display) el.style.display = '';
       const wpx = el.labelW || 120;
+      const hpx = el.labelH || 44;
       // (dans l'écran : « Maison », en haut à droite, dépassait du bord)
       const x = THREE.MathUtils.clamp(((v.x + 1) / 2) * W, wpx / 2 + 4, Math.max(wpx / 2 + 4, W - wpx / 2 - 4));
-      let y = ((1 - v.y) / 2) * H;
-      // Une étiquette déjà posée là : on monte d'un cran (sous la barre du haut : on descend à la place).
-      for (let k = 0; k < 5; k++) {
-        const hit = overlapAt(placed, n, x, y, wpx);
-        if (!hit) break;
-        y = hit.y - 32;
-      }
-      if (y < top) {
-        y = top;
-        for (let k = 0; k < 5; k++) {
-          const hit = overlapAt(placed, n, x, y, wpx);
-          if (!hit) break;
-          y = hit.y + 32;
-        }
-      }
-      const slot = placed[n] ?? (placed[n] = { x: 0, y: 0, w: 0 });
+      // Une étiquette déjà posée là : on monte juste au-dessus d'elle (sous la barre du haut : on descend à la place).
+      const y = freeTop(placed, n, x, ((1 - v.y) / 2) * H - 20, wpx, hpx, minTop);
+      const slot = placed[n] ?? (placed[n] = { x: 0, top: 0, w: 0, h: 0 });
       slot.x = x;
-      slot.y = y;
+      slot.top = y;
       slot.w = wpx;
+      slot.h = hpx;
       n++;
-      el.style.transform = `translate(${Math.round(x - wpx / 2)}px, ${Math.round(y - 20)}px)`;
+      el.style.transform = `translate(${Math.round(x - wpx / 2)}px, ${Math.round(y)}px)`;
       const op = dim ? '0.45' : '1';
       if (el.style.opacity !== op) el.style.opacity = op;
     }

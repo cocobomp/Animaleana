@@ -186,7 +186,7 @@ export function legReach(a, i, target, pole) {
 }
 
 /** Oriente le pied i dans le repère de a.root (quaternion q), quelle que soit la pose de la jambe. */
-function footTo(a, i, q) {
+export function footTo(a, i, q) {
   if (!a.ankles) return;
   _qi.copy(a.legs[i].quaternion).multiply(a.knees[i].quaternion).invert();
   a.ankles[i].quaternion.copy(_qi.multiply(q));

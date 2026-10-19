@@ -1989,30 +1989,43 @@ function skinGear(model, S, mesh, hb) {
   const cp = coat.attributes.position;
   const csi = coat.attributes.skinIndex;
   const csw = coat.attributes.skinWeight;
-  // Peau du tronc seulement (pas la tête, les membres sous le coude ni la queue).
+  // Peau du tronc seulement (pas la tête, les membres sous le coude ni la queue, sauf son attache).
   if (!S.trunkSkin) {
     // (tronc et épaules à toute hauteur : chez un petit poney, le bas du ventre est 15 cm sous le coude ;
     // sans lui, la sangle se liait à l'avant-bras voisin et le ventre passait à travers en marchant ;
-    // cuisses, haut des avant-bras et des jambes seulement au-dessus du coude)
-    const trunk = new Set(['Spine', 'Ribs', 'Neck', 'FL1', 'FR1']);
+    // cuisses, haut des avant-bras et des jambes seulement au-dessus du coude ; attache de la queue : le bout
+    // de la couverture la suit quand elle se lève, sinon elle passait par-dessus, jusqu'à 5 cm chez l'arabe
+    // et le saddlebred à la queue portée haut, ≈ 1 cm au pur-sang et au trotteur)
+    const trunk = new Set(['Spine', 'Ribs', 'Neck', 'FL1', 'FR1', 'Tail1']);
     const upper = new Set(['HL1', 'HR1', 'FL2', 'FR2', 'HL2', 'HR2']);
     const list = [];
+    const thigh = [];
+    const tail = [];
     for (let i = 0; i < cp.count; i++) {
       let b = csi.getX(i);
       let w = csw.getX(i);
       for (let k = 1; k < 4; k++) if (csw.getComponent(i, k) > w) { w = csw.getComponent(i, k); b = csi.getComponent(i, k); }
       const nm = RIG[b][0];
-      if (trunk.has(nm) || (upper.has(nm) && cp.getY(i) > S.elbowY - 0.08)) list.push(i);
+      if (trunk.has(nm) || (upper.has(nm) && cp.getY(i) > S.elbowY - 0.08)) {
+        list.push(i);
+        thigh.push(nm === 'HL2' || nm === 'HR2' ? 1 : 0);
+        tail.push(nm === 'Tail1' ? 1 : 0);
+      }
     }
     S.trunkSkin = Uint32Array.from(list);
+    S.trunkThigh = Uint8Array.from(thigh);
+    S.trunkTail = Uint8Array.from(tail);
   }
   const geo = mesh.geometry;
   const pos = geo.attributes.position;
   const n = pos.count;
   // Les coupes mesurées sont approchées (un rayon par secteur de 15°, une coupe tous les 4 cm) : une bosse
   // de la peau entre deux coupes passerait à travers le tissu. Chaque sommet est repoussé vers l'extérieur
-  // (axe du tronc) jusqu'à laisser 6 mm au-dessus de la peau voisine (1,5 cm au plus), puis les poussées
-  // sont adoucies.
+  // (axe du tronc) jusqu'à laisser 6 mm au-dessus de la peau voisine (1,5 cm au plus ; 3 cm sur la pointe de la
+  // cuisse, à moins de 10 cm du bord arrière de la pièce), puis les poussées sont adoucies.
+  const thigh = new Float32Array(n);
+  let zEnd = Infinity;
+  for (let i = 0; i < n; i++) zEnd = Math.min(zEnd, pos.getZ(i));
   const rings = model.sdf.torso.rings;
   const ycAt = (z) => {
     const f = Math.min(rings.length - 1.001, Math.max(0, (z - rings[0][0]) / (rings[1][0] - rings[0][0])));
@@ -2038,7 +2051,8 @@ function skinGear(model, S, mesh, hb) {
     q.fromBufferAttribute(pos, i);
     nrm.set(q.x, q.y - ycAt(q.z), 0).normalize();
     dirs.set([nrm.x, nrm.y, nrm.z], i * 3);
-    for (const j of S.trunkSkin) {
+    for (let t = 0; t < S.trunkSkin.length; t++) {
+      const j = S.trunkSkin[t];
       // (peau de la même tranche : à moins de dzWin en z, à moins de 6 cm de côté dans la tranche)
       const dz = cp.getZ(j) - q.z;
       if (dz * dz > dzWin * dzWin) continue;
@@ -2047,10 +2061,13 @@ function skinGear(model, S, mesh, hb) {
       const along = dx * nrm.x + dy * nrm.y;
       if (along < -0.03) continue;
       if (dx * dx + dy * dy - along * along > 0.06 * 0.06) continue;
-      push[i] = Math.max(push[i], along + 0.006);
+      if (S.trunkThigh[t] && q.z < zEnd + 0.1) thigh[i] = Math.max(thigh[i], along + 0.006);
+      else push[i] = Math.max(push[i], along + 0.006);
     }
-    // (au plus 1,5 cm : au bout de la couverture, la croupe s'arrondit et une forte poussée ferait un bourrelet)
-    push[i] = Math.min(push[i], 0.015);
+    // (au plus 1,5 cm : au bout de la couverture, la croupe s'arrondit et une forte poussée ferait un bourrelet ;
+    // la pointe de la cuisse, sous le bord arrière de la nappe, en demande jusqu'à 2,6 cm chez l'akhal-teke : la
+    // peau de la hanche passait par-dessus, de 1,2 cm avec la couverture imperméable)
+    push[i] = Math.max(Math.min(push[i], 0.015), Math.min(thigh[i], 0.03));
   }
   if (geo.index) {
     const nb = new Float32Array(n);
@@ -2080,9 +2097,13 @@ function skinGear(model, S, mesh, hb) {
   const near = [];
   for (let i = 0; i < n; i++) {
     p.fromBufferAttribute(pos, i);
-    // les 4 sommets de peau les plus proches, pondérés par l'inverse de la distance
+    // les 4 sommets de peau les plus proches, pondérés par l'inverse de la distance (l'attache de la queue ne
+    // porte que la bande du milieu de la pièce, à moins de 12 cm de l'échine : un coup de queue ne fait pas onduler
+    // tout le bout de la couverture)
     near.length = 0;
-    for (const j of S.trunkSkin) {
+    for (let t = 0; t < S.trunkSkin.length; t++) {
+      if (S.trunkTail[t] && Math.abs(p.x) > 0.12) continue;
+      const j = S.trunkSkin[t];
       const d = (cp.getX(j) - p.x) ** 2 + (cp.getY(j) - p.y) ** 2 + (cp.getZ(j) - p.z) ** 2;
       if (near.length < 4 || d < near[3][0]) {
         near.push([d, j]);
@@ -2218,6 +2239,10 @@ class HorseMesh extends THREE.SkinnedMesh {
 const LOCK_RATE = 100;
 /** Hauteur des points de la sole posée (legs.solePts sont 3 mm au-dessus de la vraie sole : celle-ci est au sol). */
 const SOLE_GROUND = 0.003;
+/** Sabot tenu à sa place au moins ce temps (s) avant la pose et après le lever, lâché peu à peu. */
+const LIFT_RELEASE = 0.1;
+/** Boulet visé au plus à cette part de la longueur du bas du membre (coude ou grasset → boulet) : jamais tendu. */
+const REACH = 0.97;
 
 /**
  * Allures de la race aux appuis calés. Les clips du GLB ont 25 clés par seconde (au galop : trois par
@@ -2229,7 +2254,12 @@ const SOLE_GROUND = 0.003;
  * carrés, même vitesse pour les quatre membres), sole posée au sol, et le sabot y est tenu un peu avant
  * de se poser et un peu après s'être levé, d'autant plus qu'il est près du sol (fondu) : il descend sur sa
  * place et se lève sans traîner. Cinématique inverse (solveLeg) dans le plan du membre, sabot gardant
- * l'orientation du clip ; le côté rattrapé au coude ou au grasset.
+ * l'orientation du clip ; le côté rattrapé au coude ou au grasset. Sans à-coup : boulet visé à portée du membre
+ * (jamais tendu), appui raccourci aux allures rapides là où la pince n'est plus à portée, sabot tenu puis lâché
+ * en 0,1 s au moins, après le lever par un mélange des poses (articulation par articulation) partant de la
+ * fin de l'appui. Plus grand changement d'angle d'une articulation d'une image à l'autre (60 im/s, 33 races) :
+ * galop 0,77 → 0,45 rad (au lever du sabot 0,77 → 0,42), petit galop 0,54 → 0,41, trot 0,33 → 0,32, pas
+ * 0,34 → 0,28 (le clip du GLB seul : 0,37 au galop).
  * names : les allures à caler (toutes par défaut) ; acc : ce qui est déjà calé, complété et renvoyé :
  * { clips, natural } (natural : vitesse de chaque allure, m/s, cheval de taille 1 : jouée à v ÷ natural,
  * la pince posée reste immobile). Une fois par gabarit, une allure à la fois (model.lockGaitStep).
@@ -2260,6 +2290,10 @@ function lockedGaits(model, clips, names = RIDER_KEYS, acc = { clips: { ...clips
   const Qa = new THREE.Quaternion();
   const Pv = V();
   const Zp = V();
+  const Qc = [0, 1, 2].map(() => new THREE.Quaternion());
+  const J3 = [(l) => l.top, (l) => l.pivot, (l) => l.knee];
+  const Rk = V();
+  const Rf = V();
   for (const name of names) {
     const clip = clips[name];
     if (!clip) continue;
@@ -2347,29 +2381,86 @@ function lockedGaits(model, clips, names = RIDER_KEYS, acc = { clips: { ...clips
     const v = -fit.reduce((a, b) => a + b.slope * b.n, 0) / fit.reduce((a, b) => a + b.n, 0);
     if (v > 0.2) natural[name] = v;
     // 3) Correction de chaque échantillon : sabot déplacé (sans tourner) vers sa place, cinématique inverse.
-    for (let s = 0; s < N; s++) {
-      pose(s);
+    // Portée du bas du membre : REACH de la longueur coude (ou grasset) → genou (ou jarret) → boulet, depuis le
+    // coude du clip (Pv). Près du membre tendu, la cinématique inverse passe d'une pose à l'autre d'un
+    // échantillon au suivant.
+    const reachOf = (l) => {
+      Pv.setFromMatrixPosition(l.pivot.matrixWorld).applyMatrix4(toRoot);
+      Rk.setFromMatrixPosition(l.knee.matrixWorld).applyMatrix4(toRoot);
+      return REACH * (Pv.distanceTo(Rk) + Rk.distanceTo(Rf.setFromMatrixPosition(l.fetlock.matrixWorld).applyMatrix4(toRoot)));
+    };
+    // Allures rapides (le corps avance de plus de 3 cm par échantillon) : l'appui finit au dernier échantillon
+    // où la pince est encore à portée (au plus un quart de l'appui en moins). Le membre d'une race n'a pas la
+    // longueur de celui du modèle : tenir la pince jusqu'au bout tendait le genou de 0,4 rad en un échantillon
+    // (et l'épaule prenait le relais d'un coup) ; au pas, la pince glisserait sur le sol.
+    const kept = stances.map((A, i) => {
+      if (!A) return 0;
+      let n = A.n;
+      if (v * dt <= 0.03) return n;
+      const l = legs[i];
+      while (n > A.n * 0.75) {
+        const s = (A.s0 + n - 1) % N;
+        pose(s);
+        const lim = reachOf(l);
+        l.fetlock.getWorldPosition(P4).applyMatrix4(toRoot);
+        P4.y += SOLE_GROUND - low[i][s];
+        P4.z += A.zb - v * ((A.s0 + n - 1) * dt - A.tb) - toe[i][s * 3 + 2];
+        if (P4.distanceTo(Pv) <= lim) break;
+        n--;
+      }
+      return n;
+    });
+    // Après le lever, le membre part de la correction de l'échantillon d'avant (appliquée à la pose du clip) :
+    // trois articulations pour deux cibles (hauteur, avancée) ; en partant de la pose du clip seule (genou
+    // tendu au lever), la cinématique inverse choisissait une autre pose que celle de la fin de l'appui pour
+    // une place voisine du sabot (0,4 rad au genou en un échantillon). Une zone corrigée qui passe la fin du
+    // cycle est refaite au début d'un second tour, à la suite de la fin du premier.
+    const Q0 = Q.map((q) => q.slice());
+    const plan = stances.map((A, i) => {
+      if (!A) return null;
+      const ramp = Math.max(dt, Math.min(0.4 * A.n * dt, 0.3 * (N - A.n) * dt));
+      const nb = Math.ceil(ramp / dt) + 1;
+      const len = Math.min(N, nb + kept[i] + Math.ceil(Math.max(ramp, LIFT_RELEASE) / dt) + 1);
+      return { ramp, again: (A.s0 - nb + N) % N + len - 1 - N, last: -2, dq: [0, 1, 2].map(() => new THREE.Quaternion()) };
+    });
+    const extra = Math.max(-1, ...plan.map((P) => P?.again ?? -1)) + 1;
+    for (let u = 0; u < N + extra; u++) {
+      const s = u % N;
+      for (let k = 0; k < qIdx.length; k++) groups[qIdx[k]].quaternion.fromArray(Q0[k], s * 4);
+      groups[0].position.fromArray(bodyP, s * 3);
+      root.updateMatrixWorld(true);
+      toRoot.copy(root.matrixWorld).invert();
       legs.forEach((l, i) => {
         const A = stances[i];
-        if (!A) return;
-        const swing = (N - A.n) * dt;
-        const ramp = Math.max(dt, Math.min(0.4 * A.n * dt, 0.3 * swing));
+        const P = plan[i];
+        if (!A || (u >= N && u - N > P.again)) return;
+        const n = kept[i];
+        const { ramp } = P;
         // (avant la pose : dIn échantillons ; après le lever : dOut)
         const k = (s - A.s0 + N) % N;
-        const inside = k < A.n;
+        const inside = k < n;
         const dIn = (A.s0 - s + N) % N;
-        const dOut = k - (A.n - 1);
+        const dOut = k - (n - 1);
         let w = 1;
+        // (après le lever : poids de la pose du sabot tenu, mélangée avec celle du clip plus bas)
+        let mix = 1;
         let tau = (A.s0 + k) * dt;
         const h = low[i][s] - SOLE_GROUND;
         if (!inside) {
-          // Près de l'appui (temps) et près du sol (hauteur) : de plus en plus tenu à sa place au sol.
-          // (fondu en hauteur de 2 à 14 cm : de 3 à 7 cm, le genou rejoignait le clip d'un coup au lever,
-          // 0,7 rad en une image au petit galop)
+          // Près de l'appui (temps) et près du sol (hauteur) : de plus en plus tenu à sa place au sol (fondu en
+          // hauteur de 2 à 14 cm), et sur LIFT_RELEASE au moins : le sabot du clip monte ou descend de 12 cm en
+          // 4 images au galop, et le fondu en hauteur seul le tenait ou le lâchait en deux images (le genou
+          // rejoignait le clip d'un coup, 0,78 rad en une image au lever). Avant la pose, la place visée glisse
+          // de celle du clip à celle de l'appui ; après le lever, le sabot est visé à sa place et la pose obtenue
+          // est mélangée avec celle du clip (mix, plus bas).
           const before = dIn <= dOut;
           const d = (before ? dIn : dOut) * dt;
-          w = (1 - smooth(0, ramp, d)) * (1 - smooth(0.02, 0.14, h));
-          tau = before ? (A.s0 - dIn) * dt : (A.s0 + A.n - 1 + dOut) * dt;
+          w = Math.max((1 - smooth(0, ramp, d)) * (1 - smooth(0.02, 0.14, h)), 1 - d / LIFT_RELEASE);
+          if (!before) {
+            mix = w;
+            w = mix > 1e-4 ? 1 : 0;
+          }
+          tau = before ? (A.s0 - dIn) * dt : (A.s0 + n - 1 + dOut) * dt;
         }
         const tz = toe[i][s * 3 + 2];
         const tx = toe[i][s * 3];
@@ -2377,16 +2468,30 @@ function lockedGaits(model, clips, names = RIDER_KEYS, acc = { clips: { ...clips
         const dx = w * (A.xb - tx);
         // (sole posée au sol pendant l'appui ; jamais dessous)
         const dy = inside ? -h : Math.max(0, -h);
-        if (Math.abs(dz) + Math.abs(dx) + Math.abs(dy) < 1e-5) return;
+        if (Math.abs(dz) + Math.abs(dx) + Math.abs(dy) < 1e-5) {
+          P.last = -2;
+          return;
+        }
         // Boulet visé, orientation du sabot gardée (repère du cheval). La cinématique inverse ne tourne
         // qu'autour des axes x : elle vise la hauteur et l'avancée (viser aussi le côté, hors d'atteinte,
         // faisait trembler le sabot de ±2 mm d'une image à l'autre, et glisser de côté trois fois plus au
         // trot) ; le côté est rattrapé ensuite par un petit écart du membre au coude (ou au grasset), autour
         // de l'axe avant-arrière : le boulet, juste dessous, se déplace de côté sans monter.
+        for (let j = 0; j < 3; j++) Qc[j].copy(J3[j](l).quaternion);
         l.fetlock.getWorldPosition(P4).applyMatrix4(toRoot);
         const wantX = P4.x + dx;
         T.copy(P4).add(_w.set(0, dy, dz)); // (x : sans effet, solveLeg reste dans le plan du membre)
         l.fetlock.getWorldQuaternion(Qf);
+        // Boulet visé à portée (reachOf) : en fin d'appui et après le lever, la pince avance un peu plutôt que
+        // de tendre le membre ; avant la pose et au début de l'appui, jamais plus près que le boulet du clip.
+        const late = mix < 1 || (inside && k >= n / 2);
+        const lim = late ? reachOf(l) : Math.max(reachOf(l), P4.distanceTo(Pv));
+        const dist = T.distanceTo(Pv);
+        if (dist > lim) T.sub(Pv).multiplyScalar(lim / dist).add(Pv);
+        if (mix < 1 && P.last === u - 1) {
+          for (let j = 0; j < 3; j++) J3[j](l).quaternion.multiply(P.dq[j]);
+          l.top.updateMatrixWorld(true);
+        }
         solveLeg(l, T, toRoot);
         Pv.setFromMatrixPosition(l.pivot.matrixWorld).applyMatrix4(toRoot);
         P4.setFromMatrixPosition(l.fetlock.matrixWorld).applyMatrix4(toRoot);
@@ -2396,6 +2501,30 @@ function lockedGaits(model, clips, names = RIDER_KEYS, acc = { clips: { ...clips
           Zp.set(0, 0, 1).transformDirection(root.matrixWorld).applyQuaternion(l.pivot.parent.getWorldQuaternion(Qk).invert());
           l.pivot.quaternion.premultiply(Qa.setFromAxisAngle(Zp, ab));
           l.top.updateMatrixWorld(true);
+        }
+        for (let j = 0; j < 3; j++) P.dq[j].copy(Qc[j]).invert().multiply(J3[j](l).quaternion);
+        P.last = u;
+        if (mix < 1) {
+          // Après le lever : la pose du sabot tenu et celle du clip mélangées articulation par articulation
+          // (et non la place visée : quand le corps est passé loin devant le sabot tenu, la cible est hors
+          // d'atteinte et le membre se tend vers elle ; en la lâchant, le genou rejoignait le clip d'un coup,
+          // 0,78 rad en une image au galop). Puis la sole relevée si le mélange la met plus bas que dans le
+          // clip (entre deux poses où elle est à la même hauteur, le sabot passe en arc, plus bas).
+          for (let j = 0; j < 3; j++) {
+            const q = J3[j](l).quaternion;
+            q.copy(Qa.copy(Qc[j]).slerp(q, mix));
+          }
+          l.top.updateMatrixWorld(true);
+          l.knee.updateMatrixWorld(true);
+          l.fetlock.quaternion.copy(l.knee.getWorldQuaternion(Qk).invert().multiply(Qf));
+          l.fetlock.updateMatrixWorld(true);
+          let y = Infinity;
+          for (const p of l.solePts) y = Math.min(y, _v.copy(p).applyMatrix4(l.fetlock.matrixWorld).applyMatrix4(toRoot).y);
+          const yWant = Math.max(SOLE_GROUND, low[i][s]);
+          if (y < yWant) {
+            l.fetlock.getWorldPosition(P4).applyMatrix4(toRoot);
+            solveLeg(l, T.copy(P4).add(_w.set(0, yWant - y, 0)), toRoot);
+          }
         }
         l.knee.updateMatrixWorld(true);
         l.fetlock.quaternion.copy(l.knee.getWorldQuaternion(Qk).invert().multiply(Qf));

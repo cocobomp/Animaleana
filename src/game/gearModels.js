@@ -144,6 +144,7 @@ export function buildGear(model, look, gear = {}) {
   // Où s'attachent les rênes (anneaux du mors, ou côtés de la muserolle du hackamore) : Player les tend
   // jusqu'aux mains du cavalier. { parent, points (repère du parent), color }.
   if (add.reins) group.userData.reins = add.reins;
+  if (add.saddle) group.userData.saddle = add.saddle;
   return group;
 }
 
@@ -326,6 +327,54 @@ function buildHorseGear(model, look, gear, add) {
   }
 }
 
+/** Étrivière : bande de cuir mince le long des points (repère de body). */
+function stirrupLeather(pts, k) {
+  return loft(pts.map((p) => ({ p: Array.isArray(p) ? p : p.toArray(), rx: 0.013 * k, ry: 0.0025 })), { radial: 6, sub: 2, side: [0, 0, 1], exp: 4 });
+}
+
+/**
+ * Étrier (userData.saddle.stirrups) mis à la longueur de jambe du cavalier : l'étrier (son origine, repère de
+ * body) va en `at`. Selle anglaise : l'étrivière suit le quartier puis descend jusqu'à lui ; western : le
+ * fender, refait le long du flanc, s'arrête juste au-dessus de lui. Sans `at`, l'étrier et l'étrivière (ou le
+ * fender) reviennent à leur place d'origine. light : l'étrier suit le pied d'une image à l'autre, le fender
+ * n'est pas refait (l'étrivière, elle, l'est : peu de sommets).
+ */
+export function fitStirrup(s, at = null, light = false) {
+  s.home ??= { pos: s.iron.position.clone(), geo: s.leather.geometry };
+  if (!at) {
+    s.iron.position.copy(s.home.pos);
+    if (s.leather.geometry !== s.home.geo) {
+      s.leather.geometry.dispose();
+      s.leather.geometry = s.home.geo;
+    }
+    delete s.leather.userData.homeGeo;
+    return;
+  }
+  s.iron.position.copy(at);
+  if (light && s.fender) return;
+  let geo;
+  if (s.fender) {
+    // (la longueur dont le bas est 6 cm au-dessus du centre de l'étrier : le flanc descend avec la longueur)
+    let lo = 0.3 * s.flen;
+    let hi = 1.6 * s.flen;
+    for (let it = 0; it < 14; it++) {
+      const m = (lo + hi) / 2;
+      if (s.fenderEnd(m).y - 0.06 > at.y) lo = m;
+      else hi = m;
+    }
+    geo = s.fender((lo + hi) / 2);
+  } else {
+    const end = at.clone().add(s.hang);
+    // (le long du quartier tant qu'il est au-dessus du bout, puis droit jusqu'à lui)
+    const pts = s.pts.filter((p, i) => i === 0 || p.y > end.y + 0.02);
+    pts.push(end);
+    geo = stirrupLeather(pts, s.k);
+  }
+  if (s.leather.geometry !== s.home.geo) s.leather.geometry.dispose();
+  s.leather.geometry = geo;
+  s.leather.userData.homeGeo = s.home.geo; // (libérée avec le harnachement : removeGear)
+}
+
 /**
  * Tapis (ou amortisseur) sous la selle de style st : celui qu'on a mis, sinon un tapis blanc tout simple.
  * Aussi seul (sans selle). Renvoie son épaisseur (la selle se pose dessus).
@@ -387,6 +436,9 @@ function horseSaddle(model, gear, add) {
     secs[0].rx = st.seatW * k * 0.95;
     secs[7].rx = st.seatW * k * 0.62;
   }
+  // Pour le cavalier (src/game/models/riderFit.js) : dessus du siège le long de z (repère de body) et étriers.
+  // (siège : coupes de centre y, de demi-largeur rx, le dessus ry au-dessus du centre, en superellipse d'exposant 2,6)
+  add.saddle = { parent: body, seat: secs.map((sec) => ({ z: sec.p[2], y: sec.p[1], ry: sec.ry, rx: sec.rx })), stirrups: [] };
   add(body, solid(loft(secs, { radial: 14, sub: 2, exp: 2.6, round: [0.6, 0.5] })), leather); // (solid : siège plein, pas deux arcs)
   const inner = secs.slice(1, 7).map((sec) => ({ ...sec, p: [0, sec.p[1] + 0.012, sec.p[2]], rx: sec.rx * 0.8, ry: 0.01, ryb: 0.01 }));
   add(body, solid(loft(inner, { radial: 12, sub: 2, round: [0.3, 0.3] })), st.quilted ? P.quiltMat(0x2b2522) : P.suedeMat(color));
@@ -413,9 +465,16 @@ function horseSaddle(model, gear, add) {
       const fOut = (v) => [0.02 * k - 0.065 * k + v * 0.01 * k, 0.02 * k + 0.065 * k - v * 0.012 * k];
       const fMap = onFlank(side, padT + 0.024, zSeat - 0.02 * k, 0.42);
       const flen = 0.46 * k;
-      add(body, P.plate(fOut, flen, fMap, 4, 8), P.tooledMat(color));
+      const fender = add(body, P.plate(fOut, flen, fMap, 4, 8), P.tooledMat(color));
       const end = new THREE.Vector3(...fMap(0.02 * k, flen));
-      add(body, P.shared('gearOxbow', () => new THREE.TorusGeometry(0.055, 0.014, 6, 16, PI)), P.woodMat(), [end.x + side * 0.01, end.y - 0.06, end.z], [0, PI / 2, PI]);
+      const oxbow = add(body, P.shared('gearOxbow', () => new THREE.TorusGeometry(0.055, 0.014, 6, 16, PI)), P.woodMat(), [end.x + side * 0.01, end.y - 0.06, end.z], [0, PI / 2, PI]);
+      // Pour le cavalier : l'étrier en bois va au pied, le fender (refait le long du flanc) s'arrête au-dessus de
+      // lui. (Le pied pose sur le dessus du fond de l'arc, 5,5 - 1,4 cm sous son centre : repère de l'arc
+      // retourné, d'où le +y.)
+      add.saddle.stirrups.push({
+        side, iron: oxbow, leather: fender, k, tread: new THREE.Vector3(0, 0.055 - 0.014, 0),
+        fender: (len) => P.plate(fOut, len, fMap, 4, 8), fenderEnd: (len) => new THREE.Vector3(...fMap(0.02 * k, len)), flen,
+      });
       // Corne (pommeau).
       const zH = z1 - 0.02 * k;
       const yH = model.backTop(zH) + 0.02 + (st.pommel - st.dip) * k;
@@ -452,13 +511,18 @@ function horseSaddle(model, gear, add) {
       const v = 0.04 + (i / 6) * (sl - 0.04);
       spts.push(sMap(outline(v)[0] * 0.3 + outline(v)[1] * 0.7 - 0.02 * k, v * fl));
     }
-    add(body, loft(spts.map((p) => ({ p, rx: 0.013 * k, ry: 0.0025 })), { radial: 6, sub: 2, side: [0, 0, 1], exp: 4 }), edgeM);
+    const strap = add(body, stirrupLeather(spts, k), edgeM);
     const end = spts[spts.length - 1];
     const ironK = (st.race ? 0.75 : 1) * k;
     const iron = P.stirrupIron(Math.round(ironK * 100) / 100);
     iron.position.set(end[0] + side * 0.014, end[1] - 0.055 * ironK, end[2]);
     iron.rotation.z = side * 0.25;
     add.group(body, iron);
+    add.saddle.stirrups.push({
+      side, iron, leather: strap, pts: spts.map((p) => new THREE.Vector3(...p)), k, ironK,
+      // (dessus de la grille de l'étrier, repère de l'étrier ; bout de l'étrivière, depuis l'étrier)
+      tread: new THREE.Vector3(0, -0.012 * ironK, 0), hang: new THREE.Vector3(-side * 0.014, 0.055 * ironK, 0),
+    });
   }
   // Sacoches et paquetage (randonnée).
   if (st.bags) {
@@ -574,6 +638,7 @@ export function removeGear(group) {
     m.parent?.remove(m);
     if (!m.isMesh) continue; // groupe de pièces partagées (étrier…)
     if (!m.geometry.userData.shared) m.geometry.dispose(); // les pièces partagées (src/game/models/tackModels.js) restent
+    m.userData.homeGeo?.dispose(); // (étrivière mise à la longueur du cavalier : sa forme d'origine)
     if (!m.material.userData.shared) m.material.dispose();
   }
 }

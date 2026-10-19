@@ -174,23 +174,44 @@ describe('couverture du cheval réaliste', () => {
 });
 
 describe('« donner le sabot » (tour du spectacle)', () => {
-  it.each(['selle_francais', 'shetland', 'percheron', 'pur_sang'])('%s : le sabot levé ne passe jamais sous le sol', (breed) => {
-    const md = horse(animal(breed));
-    const l = md.legs[0];
-    const p = new THREE.Vector3();
-    let low = Infinity;
-    for (let f = 1; f < 120; f++) {
-      // (amplitude du tour : min(1, 1,8 sin(πk)), Activities.animateTrick)
-      const s = Math.min(1, Math.sin((Math.PI * f) / 120) * 1.8);
-      md.anim.update(1 / 60, still(), {});
-      realLegPose(md, 'hoof', s);
-      md.root.updateMatrixWorld(true);
-      // (points de la sole, 3 mm au-dessus de la vraie sole : celle-ci au sol ou au-dessus)
-      for (const q of l.solePts) low = Math.min(low, p.copy(q).applyMatrix4(l.fetlock.matrixWorld).y - 0.003);
+  it.each(['selle_francais', 'shetland', 'percheron', 'pur_sang', 'falabella'])('%s : le sabot levé ne passe jamais sous le sol et ne saute pas d\'une image à l\'autre', (breed) => {
+    for (const resting of [false, true]) {
+      const md = horse(animal(breed));
+      const l = md.legs[0];
+      const p = new THREE.Vector3();
+      md.anim.restTimer = 1e9;
+      md.anim.resting = resting;
+      for (let f = 0; f < 60; f++) md.anim.update(1 / 60, still(), {});
+      let low = Infinity;
+      let start = null;
+      let step = 0;
+      let prev = null;
+      // (tour de 2,6 s à 60 images/s, amplitude min(1, 1,8 sin(πk)) : Activities, animateTrick)
+      const N = 156;
+      for (let f = 0; f <= N; f++) {
+        const s = Math.min(1, Math.sin((Math.PI * f) / N) * 1.8);
+        md.anim.update(1 / 60, still(), {});
+        realLegPose(md, 'hoof', s);
+        md.root.updateMatrixWorld(true);
+        // (points de la sole, 3 mm au-dessus de la vraie sole : celle-ci au sol ou au-dessus)
+        const c = new THREE.Vector3();
+        let y = Infinity;
+        for (const q of l.solePts) {
+          p.copy(q).applyMatrix4(l.fetlock.matrixWorld);
+          y = Math.min(y, p.y - 0.003);
+          c.addScaledVector(p, 1 / l.solePts.length);
+        }
+        start ??= y;
+        low = Math.min(low, y);
+        if (prev) step = Math.max(step, c.distanceTo(prev));
+        prev = c;
+      }
+      // (avant : la pince ou les talons piquaient de 1,2 à 1,5 cm au début du geste ; puis, corrigé par un
+      // saut dans le geste, le sabot se téléportait de 10 à 20 cm en une image au début et à la fin)
+      expect(low, `${breed} ${resting ? 'au repos' : 'debout'}`).toBeGreaterThan(Math.min(0, start) - 0.001);
+      expect(step, `${breed} ${resting ? 'au repos' : 'debout'} : pas d'une image`).toBeLessThan(0.03);
+      md.dispose();
     }
-    // (avant : la pince ou les talons piquaient de 1,2 à 1,5 cm au début du geste)
-    expect(low).toBeGreaterThan(-0.001);
-    md.dispose();
   });
 });
 

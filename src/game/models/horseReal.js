@@ -2840,31 +2840,40 @@ export function realLegPose(md, kind, s, sg = null, t = null) {
     }
     if (sg) sg.position.y = -0.6 * md.legTop * sg.scale.y * s;
   } else if (kind === 'hoof') {
-    // Donner le sabot : fondu depuis la pose de l'allure (remplacer d'un coup ses angles faisait piquer la
-    // pince de 1 à 1,4 cm dans le sol au début du geste) ; coude et genou se plient d'abord, le sabot quitte
-    // le sol à plat, le boulet ne se plie qu'ensuite ; et la pince ne passe jamais sous le sol.
+    // Donner le sabot : depuis la pose de l'allure, dont l'écart s'efface pendant le premier tiers du geste
+    // (remplacer d'un coup ses angles faisait piquer la pince de 1 à 1,4 cm dans le sol au début) ; le
+    // genou mène (le sabot quitte le sol à plat, talons et pince ensemble, avant de partir en avant), le
+    // boulet ne se plie qu'ensuite ; et la sole ne passe jamais sous le sol.
     const l = front[0];
     const b0 = l.pivot.rotation.x;
     const b1 = l.knee.rotation.x;
     const b2 = l.fetlock.rotation.x;
-    const pose = (a) => {
-      const w = smooth(0, 0.3, a);
-      l.pivot.rotation.x = b0 + (-1.1 * a - b0) * w;
-      l.knee.rotation.x = b1 + (1.1 * a - b1) * w;
-      l.fetlock.rotation.x = b2 + (0.3 * smooth(0.35, 1, a) - b2) * w;
+    // (up : genou plus plié, boulet d'autant moins : le sabot garde son angle et monte, en reculant un peu,
+    // car en appui le canon penche vers l'arrière ; d : le surplus qui garde la sole sur son plancher)
+    const pose = (a, d = 0) => {
+      const w = 1 - smooth(0, 0.3, a);
+      const up = 0.25 * smooth(0, 0.3, a) * (1 - smooth(0.3, 0.9, a)) + d;
+      l.pivot.rotation.x = -1.1 * a + b0 * w;
+      l.knee.rotation.x = 1.1 * a + b1 * w + up;
+      l.fetlock.rotation.x = 0.3 * smooth(0.35, 1, a) + b2 * w - up;
     };
+    // Plancher de la sole : jamais sous sa hauteur de départ, et au sol dès le premier quart du geste.
+    // (Avant, dès que la pince piquait, la pose était prise plus loin dans le geste, dès s ≈ 0,03 puisque la
+    // pose d'arrêt est au sol ou juste dessous : le sabot sautait de 10 à 20 cm en une image, au début et à
+    // la fin du tour.) Le surplus d, lui, est nul au départ puis continu avec s : la sole monte avec d.
+    const h0 = legLow(md, l);
+    const floor = SOLE_GROUND - Math.max(0, SOLE_GROUND - h0) * (1 - smooth(0, 0.25, s)) - 1e-5;
     pose(s);
-    // (pince ou talons sous le sol au début du geste : il est pris un peu plus loin, sabot plus haut)
-    if (s > 0 && legLow(md, l) < SOLE_GROUND - 1e-4) {
-      let lo = s;
-      let hi = 1;
-      for (let i = 0; i < 10; i++) {
-        const a = (lo + hi) / 2;
-        pose(a);
-        if (legLow(md, l) < SOLE_GROUND) lo = a;
-        else hi = a;
+    if (s > 0 && legLow(md, l) < floor) {
+      let lo = 0;
+      let hi = 0.4;
+      for (let i = 0; i < 14; i++) {
+        const d = (lo + hi) / 2;
+        pose(s, d);
+        if (legLow(md, l) < floor) lo = d;
+        else hi = d;
       }
-      pose(hi);
+      pose(s, hi);
     }
   } else if (kind === 'bow') {
     bowPose(md, front, hind, s, sg);

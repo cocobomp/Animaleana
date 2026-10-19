@@ -294,8 +294,11 @@ export function eventProgress(ev, ctx, hours = 0) {
     case 'injury':
       return one(!target || !target.sick);
     case 'escape':
-      if (target && !ev.data.found && ((ctx.playerDist !== undefined && ctx.playerDist < 4) || target.following)) ev.data.found = true;
-      return one(!target || (ev.data.found && ctx.whereOf(target) === shelterOf(target.species)));
+      // Rejoint (à moins de 4 m), déjà en train de suivre, ou monté : il est retrouvé et l'événement est
+      // réussi tout de suite. (Avant, il fallait encore le ramener à l'abri : à cheval sur l'animal
+      // échappé, le bandeau disait toujours « Trouve Éclair : suis la flèche ! 0 m ».)
+      if (target && !ev.data.found && ((ctx.playerDist !== undefined && ctx.playerDist < 4) || target.following || ctx.ridingId === target.id)) ev.data.found = true;
+      return one(!target || !!ev.data.found);
     case 'lostPet':
       return one(ev.data.choice === 'adopt' || (ev.data.choice === 'refuge' && !!ctx.strayAtRefuge));
     case 'neighbour':
@@ -342,12 +345,8 @@ export function nextStep(ev, ctx, progress = eventProgress(ev, ctx)) {
       return first ? { step: 'water', animalId: first.id } : null;
     case 'injury':
       return progress.complete ? null : { step: 'vet', animalId: ev.targetId };
-    case 'escape': {
-      if (progress.complete) return null;
-      const a = ctx.animals.find((x) => x.id === ev.targetId);
-      if (!ev.data.found || !a?.following) return { step: 'find', animalId: ev.targetId };
-      return { step: 'lead', animalId: ev.targetId, group: shelterOf(a.species) };
-    }
+    case 'escape':
+      return progress.complete ? null : { step: 'find', animalId: ev.targetId };
     case 'lostPet':
       if (progress.complete) return null;
       return ev.data.choice === 'refuge' ? { step: 'refuge', animalId: ev.targetId } : { step: 'decide', animalId: ev.targetId };

@@ -40,8 +40,8 @@ describe('caméra du jeu', () => {
     expect(Math.abs(wrap(rig.yaw - (p.heading + MOUNT_SIDE)))).toBeLessThan(0.03);
     // plus près qu'avant (dist + 2) : la caméra n'est plus à 9 m
     const d = cam.position.distanceTo(new THREE.Vector3(0, p.eyeHeight, 0));
-    expect(d).toBeLessThan(rig.dist + 1.2);
-    expect(d).toBeGreaterThan(rig.dist - 0.5);
+    expect(d).toBeLessThan(rig.dist + 0.5);
+    expect(d).toBeGreaterThan(rig.dist - 1.5);
   });
 
   it('du côté où la caméra est déjà (le joueur l\'a tournée à droite : elle y reste)', () => {

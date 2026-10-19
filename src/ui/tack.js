@@ -382,6 +382,8 @@ function tryPhoto(g, e, gear, slot) {
     s.set(Math.max(s.x, min), Math.max(s.y, min), Math.max(s.z, min));
     // Agrandie autour d'objets au ras du sol (guêtres, cloches), la boîte passerait sous le sol : on la remonte.
     const b = new THREE.Box3().setFromCenterAndSize(c, s);
+    // (cheval entier : un peu de ciel au-dessus, la vignette de l'objet, en haut à droite, ne couvre plus le dos)
+    if (view?.whole) b.max.y += (b.max.y - b.min.y) * 0.25;
     const up = aboveGround(b.min.toArray(), b.max.toArray(), 0);
     return {
       object: root,

@@ -804,7 +804,7 @@ export class Player {
 }
 
 /** Décalage de la caméra sur le côté quand on monte sur un écran en hauteur (rad, voir CameraRig.update). */
-export const MOUNT_SIDE = 0.36;
+export const MOUNT_SIDE = 0.45;
 
 export class CameraRig {
   constructor(camera) {
@@ -865,14 +865,14 @@ export class CameraRig {
     if (ride > 0.001) {
       // (visée vers l'avant et plus bas : entre les mains du cavalier et la tête du cheval)
       const k = ride * (player.mount?.scale ?? 1);
-      target.x += Math.sin(player.heading) * 0.7 * k;
-      target.z += Math.cos(player.heading) * 0.7 * k;
+      target.x += Math.sin(player.heading) * 0.9 * k;
+      target.z += Math.cos(player.heading) * 0.9 * k;
       target.y -= 0.35 * k;
     }
     const back = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
     // Si un mur se trouve entre la caméra et le joueur, la caméra monte pour regarder
     // par-dessus (au lieu de se coller au mur) ; en dernier recours, elle se rapproche.
-    let dist = this.dist + (player.mount ? 2 - 1.2 * ride : 0);
+    let dist = this.dist + (player.mount ? 2 - 2.5 * ride : 0);
     // Animal mené à cadrer avec le joueur (concours de beauté : rig.frameWith) : on vise entre eux deux, un peu
     // plus loin, plus encore sur un écran en hauteur (avant, le cheval était coupé au bord de l'écran).
     const w = this.frameWith;
@@ -912,7 +912,7 @@ export class CameraRig {
     } else {
       this.autoPitch = this.pitch;
     }
-    this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch + 0.06 * ride - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
+    this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch + 0.1 * ride - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
     back.set(-Math.sin(this.yaw) * Math.cos(this.curPitch), Math.sin(this.curPitch), -Math.cos(this.yaw) * Math.cos(this.curPitch));
     const want = target.clone().addScaledVector(back, dist);
     const ground = world.heightAt(want.x, want.z) + 0.4;

@@ -59,6 +59,44 @@ export function freeTop(placed, n, x, top, w, hh, minTop) {
   return y;
 }
 
+/**
+ * Pose les m premières étiquettes de cand ({ x, top, w, h } : centre x et haut voulus, en px) dans un écran de
+ * W × H, sous la barre du haut (minTop), sans chevauchement. Écrit c.y (haut posé) ou c.hidden. Le centre de
+ * l'écran d'abord : ce que la caméra regarde (le paddock que montre le tutoriel) garde sa place, ce qui est au
+ * bord se pousse (posées dans l'ordre de la liste, les dernières descendaient en cascade : en paysage sur
+ * téléphone, « Paddock » sortait de l'écran et « Niche » prenait sa place sous la flèche du tutoriel). Une
+ * étiquette tout en bas part du bas de l'écran (au lieu d'être coupée) ; sans place dans l'écran, elle est cachée
+ * plutôt que poussée dehors. placed : cases réutilisées (renvoie leur nombre). Trie cand sur place.
+ */
+export function layoutLabels(cand, m, W, H, minTop, placed = []) {
+  for (let i = 0; i < m; i++) cand[i].d = Math.hypot(cand[i].x - W / 2, cand[i].top + cand[i].h / 2 - H / 2);
+  // (tri par insertion : une trentaine d'étiquettes au plus, et pas de nouvel objet à chaque image)
+  for (let i = 1; i < m; i++) {
+    const c = cand[i];
+    let j = i - 1;
+    while (j >= 0 && cand[j].d > c.d) {
+      cand[j + 1] = cand[j];
+      j--;
+    }
+    cand[j + 1] = c;
+  }
+  let n = 0;
+  for (let i = 0; i < m; i++) {
+    const c = cand[i];
+    const y = freeTop(placed, n, c.x, Math.min(c.top, H - c.h - LABEL_GAP), c.w, c.h, minTop);
+    c.hidden = y + c.h > H - 2;
+    if (c.hidden) continue;
+    c.y = y;
+    const slot = placed[n] ?? (placed[n] = { x: 0, top: 0, w: 0, h: 0 });
+    slot.x = c.x;
+    slot.top = y;
+    slot.w = c.w;
+    slot.h = c.h;
+    n++;
+  }
+  return n;
+}
+
 export class ManagementView {
   constructor(game) {
     this.game = game;
@@ -467,7 +505,8 @@ export class ManagementView {
     const w = this.game.world;
     // (cases réutilisées d'une image à l'autre : pas de nouvel objet à chaque image)
     const placed = this.placedPool ?? (this.placedPool = []);
-    let n = 0;
+    const cand = this.labelCand ?? (this.labelCand = []);
+    let m = 0;
     const dim = this.build.active || !!this.construct.sel;
     // Pas sous la barre du haut (boutons Animaux…Plus, --hud-bottom posé par UI.syncHudVars) : sur téléphone,
     // « Sellerie » et « Maison » étaient coupées par les boutons dans la vue construction.
@@ -482,21 +521,30 @@ export class ManagementView {
         if (el.style.display !== 'none') el.style.display = 'none';
         continue;
       }
-      if (el.style.display) el.style.display = '';
       const wpx = el.labelW || 120;
       const hpx = el.labelH || 44;
       // (dans l'écran : « Maison », en haut à droite, dépassait du bord)
       const x = THREE.MathUtils.clamp(((v.x + 1) / 2) * W, wpx / 2 + 4, Math.max(wpx / 2 + 4, W - wpx / 2 - 4));
-      // Une étiquette déjà posée là : on monte juste au-dessus d'elle (sous la barre du haut : on descend à la place).
-      const y = freeTop(placed, n, x, ((1 - v.y) / 2) * H - 20, wpx, hpx, minTop);
-      const slot = placed[n] ?? (placed[n] = { x: 0, top: 0, w: 0, h: 0 });
-      slot.x = x;
-      slot.top = y;
-      slot.w = wpx;
-      slot.h = hpx;
-      n++;
-      el.style.transform = `translate(${Math.round(x - wpx / 2)}px, ${Math.round(y)}px)`;
-      const op = dim ? '0.45' : '1';
+      const c = cand[m] ?? (cand[m] = { el: null, x: 0, top: 0, w: 0, h: 0, y: 0, d: 0, hidden: false });
+      c.el = el;
+      c.x = x;
+      c.top = ((1 - v.y) / 2) * H - 20;
+      c.w = wpx;
+      c.h = hpx;
+      m++;
+    }
+    // Une étiquette déjà posée là : on monte juste au-dessus d'elle (sous la barre du haut : on descend à la place),
+    // le centre de l'écran d'abord (layoutLabels).
+    layoutLabels(cand, m, W, H, minTop, placed);
+    const op = dim ? '0.45' : '1';
+    for (let i = 0; i < m; i++) {
+      const { el, x, y, w, hidden } = cand[i];
+      if (hidden) {
+        if (el.style.display !== 'none') el.style.display = 'none';
+        continue;
+      }
+      if (el.style.display) el.style.display = '';
+      el.style.transform = `translate(${Math.round(x - w / 2)}px, ${Math.round(y)}px)`;
       if (el.style.opacity !== op) el.style.opacity = op;
     }
   }

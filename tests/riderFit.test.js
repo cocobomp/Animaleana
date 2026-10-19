@@ -45,9 +45,9 @@ beforeAll(async () => {
 }, 120000);
 
 /** Cheval sellé et cavalier en selle (Player sans son constructeur : pas de rendu). */
-function mounted(breed) {
+function mounted(breed, saddle = 'saddle') {
   const a = M.createAnimal({ species: 'horse', breed, colorIndex: 0, ageDays: 900, seed: 77 });
-  a.gear = { saddle: { item: 'saddle', color: 'brown' }, bridle: { item: 'bridle', color: 'brown' } };
+  a.gear = { saddle: { item: saddle, color: 'brown' }, bridle: { item: 'bridle', color: 'brown' } };
   const md = M.buildRealHorseModel(a.look, a.breed, gltf);
   md.lockGaits();
   const sc = a.look.scale * M.growthScale(a);
@@ -167,12 +167,16 @@ function depths(coat, parts) {
 }
 
 describe('cavalier sur le cheval réaliste', () => {
-  it.each(['shetland', 'selle_francais', 'frison', 'percheron'])('%s : bassin sur la selle, jambes hors des flancs, pieds aux étriers (arrêt, pas, trot, galop, saut)', (breed) => {
+  // (Falabella en selle poney : au saut, cuisses 4,6 cm et tibias 3,9 cm dans le cheval quand le pied ne pouvait
+  // s'écarter que de 5 cm ; il reste au plus 4 mm, la pointe du pied contre l'avant-bras à un instant du galop, dont
+  // la peau n'est pas relue à chaque image. Shetland en western : semelle à 1,8 cm du fond de l'étrier en bois,
+  // décalé en x seulement.) tol : enfoncement toléré (m).
+  it.each([['shetland', 'saddle', 0.002], ['selle_francais', 'saddle', 0.002], ['frison', 'saddle', 0.002], ['percheron', 'saddle', 0.002], ['falabella', 'saddlePony', 0.005], ['shetland', 'saddleWestern', 0.002]])('%s (%s) : bassin sur la selle, jambes hors des flancs, pieds aux étriers (arrêt, pas, trot, galop, saut)', (breed, saddle, tol) => {
     const random = Math.random;
     let s = 4242;
     Math.random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
     try {
-      const { md, sc, e, pl, gearGroup } = mounted(breed);
+      const { md, sc, e, pl, gearGroup } = mounted(breed, saddle);
       const parts = riderParts(pl.avatar);
       const seat = (() => {
         let best = null;
@@ -260,7 +264,7 @@ describe('cavalier sur le cheval réaliste', () => {
         e.root.position.y = 0;
       }
       // (2 mm de marge pour le maillage)
-      for (const [k, x] of Object.entries(worst)) expect(x, `${breed}, ${k} dans le cheval`).toBeLessThan(0.002);
+      for (const [k, x] of Object.entries(worst)) expect(x, `${breed}, ${k} dans le cheval`).toBeLessThan(tol);
       expect(feet, `${breed} : semelle sur la grille de l'étrier`).toBeLessThan(0.006);
       // (assis sur le siège : ni dedans, ni à plus de 3 cm au-dessus)
       expect(seatGap[0], `${breed} : bassin dans le siège`).toBeGreaterThan(-0.002);

@@ -59,8 +59,11 @@ const PHI_MIN = 0;
 const PHI_MAX = 1.45;
 /** Pied écarté du flanc au plus tant de fois quand le genou, même très écarté, touche encore. */
 const PUSH_TRIES = 4;
-/** De combien au plus (m) : pied à l'étrier, à cru. */
-const PUSH_STIRRUP = 0.05;
+/**
+ * De combien au plus (m) : pied à l'étrier (l'étrier le suit), à cru. (Avec 5 cm, au saut d'un Falabella en selle
+ * poney, cuisses et tibias entraient de 4 à 5 cm dans le cheval.)
+ */
+const PUSH_STIRRUP = 0.15;
 const PUSH_BARE = 0.3;
 
 /** Os qui porte le plus le sommet i du pelage. */
@@ -403,7 +406,6 @@ function placeFeet(fit, a) {
       const at = _v.copy(_a).sub(FOOT).applyMatrix4(toBody).sub(_w.copy(st.tread).applyQuaternion(st.iron.quaternion));
       fitStirrup(st, at);
       st.fitAt = at.clone();
-      st.shift = 0;
       fit.stirrups[i] = st;
     }
   }
@@ -485,24 +487,26 @@ export function fitRider(fit, a) {
     if (_u.length() > reach) _a.copy(H).addScaledVector(_u.normalize(), reach);
     // genou : le moins écarté possible, hors des flancs (même très écarté, si la jambe touche encore, le pied
     // s'écarte du flanc, du double de ce qui dépasse : le genou, entre hanche et pied, ne s'écarte que de la
-    // moitié ; à cru au galop, la cuisse descend sur le haut du ventre, le plus large). Le pied ne quitte pas
-    // l'étrier de plus de PUSH_STIRRUP : ce qui touche alors encore, c'est la jupe de la selle (western sur un
-    // poney), pas le cheval.
+    // moitié ; à cru au galop, la cuisse descend sur le haut du ventre, le plus large). Le pied s'écarte de
+    // PUSH_STIRRUP au plus, et l'étrier le suit.
     kneeSearch(fit, H, _a, side, toBody, fat, _ks);
     let room = st ? PUSH_STIRRUP : PUSH_BARE;
     for (let k = 0; k < PUSH_TRIES && _ks.over > 0 && room > 0; k++) {
       const dx = Math.min(room, _ks.over * 2);
       _a.x += side * dx;
       room -= dx;
+      // (ramené à portée de la jambe : tendue, elle ne l'atteignait pas et le pied montait au-dessus de l'étrier)
+      _u.subVectors(_a, H);
+      if (_u.length() > reach) _a.copy(H).addScaledVector(_u.normalize(), reach);
       kneeSearch(fit, H, _a, side, toBody, fat, _ks);
     }
-    // (l'étrier suit le pied écarté ; refait à 4 mm près)
+    // Pied écarté : l'étrier posé sous lui, refait à 4 mm près. (Avant, l'étrier n'était décalé qu'en x : en
+    // western, la semelle quittait le fond de l'étrier en bois de 1,8 cm.)
+    const pushed = room < (st ? PUSH_STIRRUP : PUSH_BARE);
     if (st?.fitAt) {
-      const shift = PUSH_STIRRUP - room;
-      if (Math.abs(shift - st.shift) > 0.004) {
-        st.shift = shift;
-        fitStirrup(st, _c.copy(st.fitAt).setX(st.fitAt.x + (side * shift) / (sc * fat)), true);
-      }
+      if (pushed) _c.copy(_a).sub(FOOT).applyMatrix4(toBody).sub(_w.copy(st.tread).applyQuaternion(st.iron.quaternion));
+      else _c.copy(st.fitAt);
+      if (_c.distanceToSquared(st.iron.position) > (0.004 / (sc * fat)) ** 2) fitStirrup(st, _c, true);
     }
     const phi = _ks.phi;
     fit.phi[i] = phi;

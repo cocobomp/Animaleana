@@ -20,6 +20,7 @@ import { getModel } from '../assets.js';
 import { gfx } from '../gfx.js';
 import { horseBuild, horseBreedOf, foalBuild, horseCoatTraits, horseSocks } from '../../sim/horseLook.js';
 import { coatMaterial, PART } from './horseCoat.js';
+import { hairMaterial, hairColor } from './horseHair.js';
 
 export const REAL_HORSE_KEY = 'horse_real';
 /** Rotation x de repos de l'encolure (interface : look.neckAngle ; plus grand = encolure plus basse). */
@@ -511,7 +512,26 @@ function hairInfo(prims, rest) {
     }
     if (best) crest.push([t, best[1].setX(0)]);
   }
-  return { g, tail, crest, axis, len, origin: w.clone() };
+  // Tronçon de la queue (couard) d'où partent les crins : de la racine la plus haute des crins de la queue du
+  // GLB (au milieu) jusqu'au bas de la peau du tronçon (sommets du pelage liés à Tail2).
+  let dockTop = null;
+  for (let i = 0; i < m.count; i++) {
+    if (!tail[i] || g[i] > 0.1 || Math.abs(m.pos[i * 3]) > 0.04) continue;
+    if (!dockTop || m.pos[i * 3 + 1] > dockTop.y) dockTop = V().fromArray(m.pos, i * 3);
+  }
+  let dockEnd = null;
+  for (let i = 0; i < c.count; i++) {
+    if (dominant(c, i) !== BONE_INDEX.Tail2 || Math.abs(c.pos[i * 3]) > 0.06) continue;
+    if (!dockEnd || c.pos[i * 3 + 1] < dockEnd.y) dockEnd = V().fromArray(c.pos, i * 3);
+  }
+  const t2 = rest[BONE_INDEX.Tail2];
+  dockTop = (dockTop ?? t2.clone().add(V(0, 0.1, 0.09))).setX(0);
+  dockEnd = (dockEnd ?? t2.clone().add(V(0, -0.08, -0.04))).setX(0);
+  // (pointe de la queue du GLB : sa longueur, que chaque race allonge ou raccourcit)
+  let tailTipY = Infinity;
+  for (let i = 0; i < m.count; i++) if (tail[i]) tailTipY = Math.min(tailTipY, m.pos[i * 3 + 1]);
+  if (!Number.isFinite(tailTipY)) tailTipY = 0.24;
+  return { g, tail, crest, axis, len, origin: w.clone(), dockTop, dockEnd, tailTipY };
 }
 
 // ------------------------------------------------------------------ allures reciblées
@@ -797,63 +817,531 @@ function deformPrim(p, D) {
 /** Hauteur minimale du bout de la queue au repos (cheval de taille 1). */
 export const TAIL_CLEAR = 0.1;
 
-/** Allonge (f > 1) ou raccourcit les mèches à partir de leur racine. */
-function scaleHair(pos, base, D, B) {
-  const H = base.hair;
-  const m = base.prims.mane;
-  const N = NATIVE_BUILD;
-  const style = B.maneStyle;
-  // Longueur de crinière : le gabarit, et le style (brosse : rasée, la brosse est ajoutée à part).
-  const maneF = style === 'brush' || style === 'foal' ? 0.12
-    : (B.mane / N.mane) * ({ long: 1.25, thick: 1.05, short: 0.5 }[style] ?? 1);
-  const crest = H.crest.map(([t, c]) => [t, D.maps[BONE_INDEX.Neck](c, V())]);
-  const neckAxis = H.axis;
-  const o = H.origin;
-  const dock = D.heads[BONE_INDEX.Tail2];
-  const tailRoot = V(0, dock.y, dock.z);
-  const P = V();
-  // Queue : allongée dans sa longueur seulement (le long de son axe moyen, pas en largeur), et jamais
-  // jusqu'au sol : le bout reste à TAIL_CLEAR au moins, même pour une race basse sur jambes à longue queue.
-  const tAxis = V();
-  for (let i = 0; i < m.count; i++) {
-    if (!H.tail[i] || H.g[i] <= 0 || pos[i * 3 + 1] > dock.y) continue;
-    tAxis.add(P.fromArray(pos, i * 3).sub(tailRoot).multiplyScalar(H.g[i]));
-  }
-  tAxis.normalize();
-  let tailF = (B.tail ?? 1) / N.tail;
-  // (limite plus haute pour une queue de longueur moyenne : elle s'arrête vers les boulets, seules les
-  // longues queues des baroques et des poneys descendent presque au sol)
-  const clear = TAIL_CLEAR + Math.max(0, 1.25 - (B.tail ?? 1)) * 0.5;
-  for (let i = 0; i < m.count; i++) {
-    if (!H.tail[i] || H.g[i] <= 0 || pos[i * 3 + 1] > dock.y) continue;
-    // y(F) = y + (F - 1) · g · (d·axe) · axe.y : F le plus grand qui garde ce sommet au-dessus de la limite
-    const drop = -H.g[i] * P.fromArray(pos, i * 3).sub(tailRoot).dot(tAxis) * tAxis.y;
-    if (drop > 1e-6) tailF = Math.min(tailF, 1 + (pos[i * 3 + 1] - clear) / drop);
-  }
-  tailF = Math.max(0.3, tailF);
-  for (let i = 0; i < m.count; i++) {
-    const g = H.g[i];
-    if (g <= 0) continue;
-    P.fromArray(pos, i * 3);
-    let root;
-    let f;
-    if (H.tail[i]) {
-      if (P.y > dock.y) continue;
-      const along = P.clone().sub(tailRoot).dot(tAxis);
-      P.addScaledVector(tAxis, along * (tailF - 1) * g);
-      pos.set([P.x, P.y, P.z], i * 3);
-      continue;
-    } else {
-      const t = Math.min(1, Math.max(0, _v.fromArray(m.pos, i * 3).sub(o).dot(neckAxis) / H.len));
-      const k = Math.min(crest.length - 2, Math.max(0, Math.floor(t * (crest.length - 1))));
-      root = crest[k][1].clone().lerp(crest[k + 1][1], t * (crest.length - 1) - k);
-      // (le toupet, sur la tête, garde sa longueur sauf pour la brosse)
-      if (dominant(m, i) === BONE_INDEX.Head && maneF > 0.5) continue;
-      f = 1 + (maneF - 1) * g;
+// ------------------------------------------------------------------ crins en cartes (crinière, toupet, queue)
+//
+// Les crins du GLB (volumes pleins : plaque de caoutchouc sur l'encolure, perruque sur le front, queue en
+// sac) sont remplacés par des cartes de crins : des rubans de quelques points, posés par la pesanteur sur la
+// peau de la race (sans y entrer), texture de crins droits (horseHair.js). Géométrie partagée par les chevaux
+// d'un même gabarit (ton gris par sommet, couleur dans la matière de chaque cheval) ; mèches « principales »
+// d'abord, seules gardées par la version réduite (un ruban sur deux).
+
+/**
+ * Longueur de la crinière (cheval de taille 1) d'un cheval de selle au style normal, et par style : facteur de
+ * longueur et de nombre de mèches ('long' : rideau ondulé des baroques ; 'thick' : épaisse, plus courte, en
+ * partie de l'autre côté ; 'short' : courte et dressée, Akhal-Teké). Toupet : part de la longueur de la tête.
+ */
+const MANE_LEN = 0.24;
+const MANE_STYLE = {
+  normal: { len: 1, n: 1, lift: 0.3, other: 0 },
+  long: { len: 1.3, n: 1.1, lift: 0.3, other: 0.22 },
+  thick: { len: 0.85, n: 1.2, lift: 0.5, other: 0.25 },
+  short: { len: 0.45, n: 0.85, lift: 0.7, other: 0 },
+};
+const FORELOCK = { normal: 0.4, long: 0.52, thick: 0.44, short: 0.24, brush: 0.26, foal: 0.18 };
+/** Rangées de la texture des crins (une mèche différente par quart de la hauteur) : [v du milieu, demi-hauteur]. */
+const HAIR_ROWS = [0, 1, 2, 3].map((k) => [(k + 0.5) / 4, 0.117]);
+
+/** Poids de peau [[os, poids]…] : les quatre plus forts, de somme 1. */
+function topWeights(map) {
+  const list = [...map.entries()].filter(([, w]) => w > 1e-4).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const s = list.reduce((a, [, w]) => a + w, 0) || 1;
+  return list.map(([b, w]) => [b, w / s]);
+}
+
+/** Mélange de deux listes de poids (t : part de b). */
+function blendWeights(a, b, t) {
+  const m = new Map();
+  for (const [k, w] of a) m.set(k, (m.get(k) ?? 0) + w * (1 - t));
+  for (const [k, w] of b) m.set(k, (m.get(k) ?? 0) + w * t);
+  return topWeights(m);
+}
+
+/** Poids de peau du sommet du pelage le plus proche de p parmi ceux de la liste. */
+function skinNear(pos, prim, list, p) {
+  let best = list[0] ?? 0;
+  let bd = Infinity;
+  for (const i of list) {
+    const dx = pos[i * 3] - p.x;
+    const dy = pos[i * 3 + 1] - p.y;
+    const dz = pos[i * 3 + 2] - p.z;
+    const d = dx * dx + dy * dy + dz * dz;
+    if (d < bd) {
+      bd = d;
+      best = i;
     }
-    P.sub(root).multiplyScalar(f).add(root);
-    pos.set([P.x, P.y, P.z], i * 3);
   }
+  const m = new Map();
+  for (let k = 0; k < 4; k++) {
+    const w = prim.sw[best * 4 + k];
+    if (w > 0) m.set(prim.si[best * 4 + k], (m.get(prim.si[best * 4 + k]) ?? 0) + w);
+  }
+  return topWeights(m);
+}
+
+/**
+ * Corps du cheval pour poser les crins (repère du cheval, au repos) : distance approchée à la peau, négative
+ * dedans — réunion du tronc (S.measure.torso), de l'encolure (coupes perpendiculaires à son axe, du garrot à
+ * la nuque) et de la tête (S.measure.head). body.grad(p, out) : direction vers l'extérieur (différences finies).
+ */
+function hairBody(S, pos, coat, base) {
+  const heads = S.heads;
+  const O = heads[BONE_INDEX.Neck];
+  const ez = heads[BONE_INDEX.Head].clone().sub(O);
+  const len = ez.length();
+  ez.normalize();
+  const ey = V(0, ez.z, -ez.y);
+  if (ey.y < 0) ey.negate();
+  const neckB = new Set(['Neck', 'Mane1', 'Mane2', 'Mane3', 'Mane4'].map((n) => BONE_INDEX[n]));
+  const isN = new Uint8Array(coat.count);
+  for (let i = 0; i < coat.count; i++) isN[i] = neckB.has(dominant(coat, i)) ? 1 : 0;
+  const tris = [];
+  const idx = coat.index;
+  for (let t = 0; t < idx.length; t += 3) {
+    if (isN[idx[t]] + isN[idx[t + 1]] + isN[idx[t + 2]] >= 2) tris.push(idx[t], idx[t + 1], idx[t + 2]);
+  }
+  const toNeck = (p) => {
+    const dy = p.y - O.y;
+    const dz = p.z - O.z;
+    return V(p.x, dy * ey.y + dz * ey.z, dy * ez.y + dz * ez.z);
+  };
+  // (jusqu'un peu avant la nuque : au-delà, les dernières coupes, larges de la ganache, couvraient le front et
+  // le toupet s'y décollait de la tête ; la tête a sa propre forme)
+  const neck = sections(pos, tris, toNeck, 0.02, len - 0.05, 0.03);
+  const poll = heads[BONE_INDEX.Head];
+  const hq = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), base.headTilt).invert();
+  const torso = S.measure.torso;
+  const head = S.measure.head;
+  const h = V();
+  const f = (p) => {
+    const dy = p.y - O.y;
+    const dz = p.z - O.z;
+    h.copy(p).sub(poll).applyQuaternion(hq);
+    return Math.min(torso(p.x, p.y, p.z), neck(p.x, dy * ey.y + dz * ey.z, dy * ez.y + dz * ez.z), head(h.x, h.y, h.z));
+  };
+  f.grad = gradOf(f, V(0, 1, 0));
+  return f;
+}
+
+/** Direction vers l'extérieur d'une distance approchée f (différences finies avant : 3 évaluations de plus). */
+function gradOf(f, fallback) {
+  const q = V();
+  return (p, out, f0 = f(p)) => {
+    const e = 0.004;
+    out.set(f(q.copy(p).setX(p.x + e)) - f0, f(q.copy(p).setY(p.y + e)) - f0, f(q.copy(p).setZ(p.z + e)) - f0);
+    if (out.lengthSq() < 1e-12) out.copy(fallback);
+    return out.normalize();
+  };
+}
+
+/**
+ * Arrière du cheval vu de côté : pour chaque hauteur, le z le plus en arrière du pelage (fesses, cuisses,
+ * jarrets ; sans le tronçon de la queue) à moins de 25 cm du milieu. La queue pend derrière.
+ */
+function rearProfile(pos, coat) {
+  const dy = 0.02;
+  const n = Math.ceil(2.4 / dy);
+  const zmin = new Float32Array(n).fill(Infinity);
+  const skip = new Uint8Array(coat.count);
+  for (let i = 0; i < coat.count; i++) {
+    const b = dominant(coat, i);
+    skip[i] = b === BONE_INDEX.Tail1 || b === BONE_INDEX.Tail2 ? 1 : 0;
+  }
+  const idx = coat.index;
+  for (let t = 0; t < idx.length; t += 3) {
+    if (skip[idx[t]] || skip[idx[t + 1]] || skip[idx[t + 2]]) continue;
+    for (let e = 0; e < 3; e++) {
+      const a = idx[t + e];
+      const b = idx[t + (e + 1) % 3];
+      const ya = pos[a * 3 + 1];
+      const yb = pos[b * 3 + 1];
+      const k0 = Math.max(0, Math.ceil(Math.min(ya, yb) / dy));
+      const k1 = Math.min(n - 1, Math.floor(Math.max(ya, yb) / dy));
+      for (let k = k0; k <= k1; k++) {
+        const u = ya === yb ? 0 : (k * dy - ya) / (yb - ya);
+        const x = pos[a * 3] + (pos[b * 3] - pos[a * 3]) * u;
+        if (Math.abs(x) > 0.25) continue;
+        const z = pos[a * 3 + 2] + (pos[b * 3 + 2] - pos[a * 3 + 2]) * u;
+        if (z < zmin[k]) zmin[k] = z;
+      }
+    }
+  }
+  return (y) => {
+    const f = Math.min(n - 1.001, Math.max(0, y / dy));
+    const k = Math.floor(f);
+    return Math.min(zmin[k], zmin[k + 1]);
+  };
+}
+
+/** Points d'une ligne brisée, régulièrement espacés le long d'elle (n points, bouts compris). */
+function resample(pts, n) {
+  const acc = [0];
+  for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + pts[i].distanceTo(pts[i - 1]));
+  const total = acc[acc.length - 1];
+  const out = [];
+  let j = 0;
+  for (let k = 0; k < n; k++) {
+    const s = (total * k) / (n - 1);
+    while (j < pts.length - 2 && acc[j + 1] < s) j++;
+    const seg = acc[j + 1] - acc[j];
+    const u = seg > 1e-9 ? Math.min(1, Math.max(0, (s - acc[j]) / seg)) : 0;
+    out.push(pts[j].clone().lerp(pts[j + 1], u));
+  }
+  return out;
+}
+
+/**
+ * Une mèche posée par la pesanteur : partie de root dans la direction d0, elle se courbe vers le bas (rayon
+ * ≈ bend) et glisse sur la peau sans y entrer (au moins h de la peau, distance body) ; posée sur une peau
+ * tournée vers le haut (front, côté de l'encolure), elle y reste couchée (à moins de stick au-dessus, elle y
+ * est ramenée d'autant plus que la peau regarde vers le haut), et pend librement sous une peau tournée vers le
+ * bas. keep(p) : contrainte de plus après chaque pas (arrière-main pour la queue). floor : la mèche s'arrête à
+ * cette hauteur. Renvoie np points régulièrement espacés de la racine à la pointe.
+ */
+function drape(body, root, d0, L, { h = 0.006, bend = 0.06, np = 5, steps = 12, keep = null, floor = -Infinity, stick = 0, grav = null } = {}) {
+  const ds = L / steps;
+  const g = grav ?? V(0, -1, 0);
+  const d = d0.clone().normalize();
+  const p = root.clone();
+  const prev = V();
+  const gr = V();
+  const pts = [root.clone()];
+  for (let k = 0; k < steps; k++) {
+    d.addScaledVector(g, ds / bend).normalize();
+    prev.copy(p);
+    p.addScaledVector(d, ds);
+    for (let it = 0; it < 4; it++) {
+      const dist = body(p);
+      if (dist >= h) {
+        if (stick && it === 0 && dist < h + stick) {
+          body.grad(p, gr, dist);
+          if (gr.y > 0.1) p.addScaledVector(gr, -(dist - h) * Math.min(1, gr.y * 1.5));
+        }
+        break;
+      }
+      p.addScaledVector(body.grad(p, gr, dist), h - dist + 1e-4);
+    }
+    keep?.(p, h);
+    if (p.y < floor) {
+      // (pointe à la hauteur limite : le dernier pas coupé là)
+      const u = (prev.y - floor) / Math.max(1e-6, prev.y - p.y);
+      pts.push(prev.clone().lerp(p, Math.min(1, Math.max(0, u))));
+      break;
+    }
+    d.subVectors(p, prev);
+    if (d.lengthSq() < 1e-12) d.set(0, -1, 0);
+    d.normalize();
+    pts.push(p.clone());
+  }
+  return resample(pts, np);
+}
+
+/** Direction le long d'une mèche au point i (différence des voisins). */
+const alongAt = (pts, i) => pts[Math.min(pts.length - 1, i + 1)].clone().sub(pts[Math.max(0, i - 1)]).normalize();
+
+/** Ruban à plat sur la peau : en travers de la mèche, tangent à la surface (tourné un peu au hasard). */
+function cardSide(n, along, twist) {
+  const s = V().crossVectors(n, along);
+  if (s.lengthSq() < 1e-8) s.set(0, 0, 1);
+  return s.normalize().applyAxisAngle(n, twist);
+}
+
+/**
+ * Crinière : rubans le long de la crête (du garrot à la nuque), qui en partent un peu vers le haut puis
+ * retombent du côté droit (−x) avec la pesanteur, posés sur l'encolure en tuiles, quelques-uns de l'autre côté
+ * pour une crinière épaisse ; longueur selon le gabarit (B.mane) et le style, plus courte au garrot et vers la
+ * nuque ; ondulée si longue. Racine liée à la peau de la crête, pointe aux os de la crinière (Mane1-4 : elle
+ * pend quand l'encolure descend). Rien pour une brosse (Fjord, poulain : brushCards).
+ */
+function maneCards(S, B, body, pos, coat) {
+  const style = B.maneStyle;
+  if (style === 'brush' || style === 'foal') return { main: [], fill: [] };
+  const st = MANE_STYLE[style] ?? MANE_STYLE.normal;
+  const rng = mulberry(4111);
+  const heads = S.heads;
+  const O = heads[BONE_INDEX.Neck];
+  const ez = heads[BONE_INDEX.Head].clone().sub(O).normalize();
+  const crest = S.crest;
+  const at = (t) => {
+    const k = Math.min(crest.length - 2, Math.max(0, Math.floor(t * (crest.length - 1))));
+    return crest[k][1].clone().lerp(crest[k + 1][1], t * (crest.length - 1) - k);
+  };
+  // Racines : poids de la peau de la crête (encolure, garrot, nuque).
+  const crestB = new Set(['Neck', 'Mane1', 'Mane2', 'Mane3', 'Mane4', 'Spine', 'Head'].map((n) => BONE_INDEX[n]));
+  const near = [];
+  for (let i = 0; i < coat.count; i++) if (Math.abs(pos[i * 3]) < 0.07 && crestB.has(dominant(coat, i))) near.push(i);
+  // Pointes : les deux os de la crinière les plus proches le long de l'encolure.
+  const mb = [1, 2, 3, 4].map((k) => BONE_INDEX['Mane' + k]);
+  const ms = mb.map((b) => heads[b].clone().sub(O).dot(ez));
+  const tipW = (s) => {
+    if (s <= ms[0]) return [[mb[0], 1]];
+    for (let k = 0; k < 3; k++) {
+      if (s <= ms[k + 1]) {
+        const u = (s - ms[k]) / (ms[k + 1] - ms[k]);
+        return topWeights(new Map([[mb[k], 1 - u], [mb[k + 1], u]]));
+      }
+    }
+    return [[mb[3], 1]];
+  };
+  const n = Math.round(Math.min(120, Math.max(72, 96 * (B.maneN ?? 1) * st.n)));
+  const len0 = MANE_LEN * (B.mane ?? 1) * st.len;
+  const main = [];
+  const fill = [];
+  for (let i = 0; i < n; i++) {
+    const primary = i % 2 === 0;
+    // (jusqu'un peu avant la nuque : derrière les oreilles passe la têtière, les dernières mèches s'y retournaient)
+    const t = 0.03 + ((i + rng() * 0.9) / n) * 0.89;
+    const c = at(t);
+    const dir = at(Math.min(1, t + 0.03)).sub(at(Math.max(0, t - 0.03))).normalize();
+    const up = V(0, dir.z, -dir.y).normalize();
+    if (up.y < 0) up.negate();
+    // (crinière longue ou épaisse : une partie des mèches tombe de l'autre côté, la crinière se voit des deux côtés)
+    const sx = rng() < st.other ? 1 : -1;
+    // (racines des deux côtés de la ligne du dessus : celles de l'autre côté passent par-dessus la crête et la
+    // couvrent, vue de dessus, au lieu d'une raie de peau entre les mèches)
+    // (une mèche sur deux de l'autre côté de la ligne du dessus : la crête est toujours couverte)
+    const across = i % 2 === 0 ? -(0.002 + rng() * 0.012) : rng() * 0.012;
+    const root = c.clone().addScaledVector(up, -0.005).add(V(sx * across, 0, 0));
+    // (plus courte au garrot et à la nuque, où passe la têtière)
+    const prof = 0.45 + 0.55 * smooth(0, 0.2, t) * (1 - 0.4 * smooth(0.84, 1, t));
+    // (les mèches de l'autre côté, plus courtes : le volume de la crinière qui déborde, pas un second rideau)
+    const L = len0 * prof * (0.82 + 0.36 * rng()) * (sx > 0 ? 0.6 : 1);
+    // (vers la nuque, les mèches ne se dressent plus : elles passent sous la têtière)
+    const lift = st.lift * (1 - 0.8 * smooth(0.8, 0.95, t));
+    const d0 = up.clone().multiplyScalar(lift).add(V(sx * (1 - lift * 0.4), 0, 0)).addScaledVector(dir, (rng() - 0.5) * 0.3);
+    const h = 0.005 + rng() * (primary ? 0.008 : 0.016);
+    // (pesanteur à demi « peignée » : la mèche tombe en travers de la crête, puis droit vers le bas)
+    const grav = V(0, -1, 0).addScaledVector(dir, dir.y).normalize().lerp(V(0, -1, 0), 0.35).normalize();
+    const pts = drape(body, root, d0, L, { h, bend: 0.045 + rng() * 0.03, np: L > 0.28 ? 6 : 5, stick: 0.02, grav });
+    const normals = pts.map((p) => body.grad(p, V()));
+    if (style === 'long') {
+      // Rideau ondulé : la mèche ondule en s'écartant de l'encolure (jamais vers elle) et un peu d'avant en arrière.
+      const ph = rng() * 6.28;
+      pts.forEach((p, k) => {
+        const f = k / (pts.length - 1);
+        const w = smooth(0.15, 0.5, f);
+        p.addScaledVector(normals[k], 0.014 * w * (0.5 + 0.5 * Math.sin(f * 9 + ph)));
+        p.addScaledVector(ez, 0.012 * w * Math.sin(f * 7 + ph * 1.3));
+      });
+    }
+    const m = Math.floor(pts.length / 2);
+    const side = cardSide(normals[m], alongAt(pts, m), (rng() - 0.5) * 0.5);
+    const wR = skinNear(pos, coat, near, root);
+    const wT = blendWeights(tipW(root.clone().sub(O).dot(ez)), wR, 0.15);
+    const tone = 0.93 + rng() * 0.14;
+    const [v, dv] = HAIR_ROWS[Math.floor(rng() * 4)];
+    (primary ? main : fill).push({
+      pts, normals, side, w0: primary ? 0.062 + rng() * 0.016 : 0.044 + rng() * 0.012, w1: primary ? 0.04 : 0.026,
+      color: new THREE.Color(tone, tone, tone), uv: [0, 1, v, dv], kind: 0,
+      weights: (p, f) => blendWeights(wR, wT, smooth(0, 0.3, f)),
+      meta: { t, root, primary },
+    });
+  }
+  return { main, fill };
+}
+
+/**
+ * Toupet : rubans partis du sommet de la tête entre les oreilles, qui tombent vers l'avant sur le front
+ * (pesanteur, posés sur la peau), un peu en éventail ; plus long au milieu. Liés à la tête.
+ */
+function forelockCards(S, B, body, base) {
+  const rng = mulberry(4127);
+  const heads = S.heads;
+  const poll = heads[BONE_INDEX.Head];
+  const q = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), base.headTilt);
+  const qi = q.clone().invert();
+  const toH = (p) => p.clone().sub(poll).applyQuaternion(qi);
+  const fromH = (p) => p.clone().applyQuaternion(q).add(poll);
+  const style = B.maneStyle;
+  const L0 = S.headLen * (FORELOCK[style] ?? FORELOCK.normal) * Math.min(1.25, Math.sqrt(B.mane ?? 1));
+  const n = Math.round(Math.min(25, Math.max(15, 20 * Math.sqrt(B.maneN ?? 1) * (style === 'thick' ? 1.15 : 1))));
+  const eL = toH(heads[BONE_INDEX.EarL]);
+  const eR = toH(heads[BONE_INDEX.EarR]);
+  const ez0 = (eL.z + eR.z) / 2;
+  const halfX = Math.abs(eL.x - eR.x) * 0.31;
+  const head = S.measure.head;
+  const main = [];
+  const fill = [];
+  for (let i = 0; i < n; i++) {
+    const primary = i % 2 === 0;
+    const r = rng() * 2 - 1;
+    const x = Math.sign(r) * Math.abs(r) ** 1.5 * halfX * 0.8;
+    // (juste devant la base des oreilles, sur le haut du front : derrière, entre les oreilles, le creux de la
+    // nuque remonte en marche vers le front et les mèches s'y retournaient)
+    const z = ez0 + 0.035 + rng() * 0.035;
+    let y = 0.3;
+    while (y > -0.1 && head(x, y, z) > 0) y -= 0.003;
+    const root = fromH(V(x, y - 0.004, z));
+    const d0 = V(x * 2, 0.25, 1).normalize().applyQuaternion(q);
+    const L = L0 * (0.78 + 0.4 * rng()) * (1 - 0.3 * Math.abs(x) / halfX);
+    const pts = drape(body, root, d0, L, { h: 0.005 + rng() * 0.008, bend: 0.06, np: 5, steps: 12, stick: 0.05 });
+    // (éventail : les mèches s'écartent un peu du milieu vers le bas)
+    const spread = x * 0.5 + (rng() - 0.5) * 0.016;
+    const gr = V();
+    pts.forEach((p, k) => {
+      if (!k) return;
+      p.x += spread * (k / (pts.length - 1));
+      const dist = body(p);
+      if (dist < 0.004) p.addScaledVector(body.grad(p, gr, dist), 0.004 - dist);
+    });
+    const normals = pts.map((p) => body.grad(p, V()));
+    const m = Math.floor(pts.length / 2);
+    const side = cardSide(normals[m], alongAt(pts, m), (rng() - 0.5) * 0.4);
+    const tone = 0.93 + rng() * 0.14;
+    const [v, dv] = HAIR_ROWS[Math.floor(rng() * 4)];
+    (primary ? main : fill).push({
+      pts, normals, side, w0: primary ? 0.05 : 0.036, w1: primary ? 0.024 : 0.016,
+      color: new THREE.Color(tone, tone, tone), uv: [0, 1, v, dv], kind: 1,
+      weights: () => [[BONE_INDEX.Head, 1]], meta: { root, primary },
+    });
+  }
+  return { main, fill };
+}
+
+/**
+ * Queue : rubans effilés partis du tronçon de la queue (couard, sur le dessus et les côtés, plus serrés au
+ * milieu), qui suivent le tronçon puis pendent ; la queue s'élargit un peu puis s'affine vers le bas, longueurs
+ * inégales (plus longues au milieu), derrière les fesses et les jarrets. Longueur selon le gabarit (B.tail),
+ * jamais jusqu'au sol (TAIL_CLEAR, plus haut pour une queue moyenne). Racines liées à la peau du tronçon,
+ * le reste à Tail2 (coups de queue, port de queue).
+ */
+function tailCards(S, B, body, pos, coat, base) {
+  const rng = mulberry(4133);
+  const D = S.D;
+  const H = base.hair;
+  const dockList = [];
+  for (let i = 0; i < coat.count; i++) {
+    const b = dominant(coat, i);
+    if (b === BONE_INDEX.Tail1 || b === BONE_INDEX.Tail2) dockList.push(i);
+  }
+  // Tronçon de la queue : coupes horizontales de sa peau (centre, rayon), du haut des racines du GLB (4 cm
+  // au-dessus : pas de bosse de peau nue au-dessus des crins) jusqu'au bas du tronçon.
+  const Bd = D.maps[BONE_INDEX.Tail2](H.dockEnd, V()).setX(0);
+  const A = D.maps[BONE_INDEX.Tail1](H.dockTop, V()).setX(0);
+  const NS = 6;
+  const yTop = A.y + 0.04;
+  const ring = [];
+  for (let k = 0; k < NS; k++) {
+    const y = yTop + ((Bd.y - yTop) * k) / (NS - 1);
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    let xm = 0;
+    for (const i of dockList) {
+      if (Math.abs(pos[i * 3 + 1] - y) > 0.03 || Math.abs(pos[i * 3]) > 0.08) continue;
+      z0 = Math.min(z0, pos[i * 3 + 2]);
+      z1 = Math.max(z1, pos[i * 3 + 2]);
+      xm = Math.max(xm, Math.abs(pos[i * 3]));
+    }
+    ring.push(Number.isFinite(z0) ? [V(0, y, (z0 + z1) / 2), Math.max(0.02, Math.min(0.07, Math.max(xm, (z1 - z0) / 2)))] : null);
+  }
+  for (let k = 0; k < NS; k++) {
+    if (ring[k]) continue;
+    const j = ring.findIndex(Boolean);
+    ring[k] = j >= 0 ? [ring[j][0].clone().setY(yTop + ((Bd.y - yTop) * k) / (NS - 1)), ring[j][1]] : [A.clone().lerp(Bd, k / (NS - 1)), 0.035];
+  }
+  const dockAt = (u) => {
+    const f = Math.min(NS - 1.001, Math.max(0, u * (NS - 1)));
+    const k = Math.floor(f);
+    const c = ring[k][0].clone().lerp(ring[k + 1][0], f - k);
+    const r = ring[k][1] + (ring[k + 1][1] - ring[k][1]) * (f - k);
+    const d = ring[k + 1][0].clone().sub(ring[k][0]).normalize();
+    return [c, r, d];
+  };
+  // Corps + tronçon (les mèches restent hors de sa peau) ; arrière-main (fesses, cuisses, jarrets) devant elles.
+  const dockSdf = (p) => {
+    let best = Infinity;
+    for (let k = 0; k < NS - 1; k++) {
+      const a0 = ring[k][0];
+      const ab = _w.subVectors(ring[k + 1][0], a0);
+      const t = Math.min(1, Math.max(0, _v.subVectors(p, a0).dot(ab) / ab.lengthSq()));
+      const r = ring[k][1] + (ring[k + 1][1] - ring[k][1]) * t;
+      best = Math.min(best, _v.subVectors(p, a0).addScaledVector(ab, -t).length() - r);
+    }
+    return best;
+  };
+  const tb = (p) => Math.min(body(p), dockSdf(p));
+  tb.grad = gradOf(tb, V(0, 0, -1));
+  const rear = rearProfile(pos, coat);
+  // (2,5 cm derrière les fesses et les cuisses au repos : au trot, les postérieurs reculent sous la queue)
+  const keep = (p, h) => {
+    const zb = rear(p.y);
+    if (Number.isFinite(zb) && p.z > zb - h - 0.025) p.z = zb - h - 0.025;
+  };
+  const gx = D.scale.gx;
+  const foal = !!B.foal;
+  const n = foal ? 44 : Math.round(Math.min(64, Math.max(48, 58 * Math.sqrt((B.tail ?? 1) * (B.maneN ?? 1)))));
+  // (longueur : celle de la queue du GLB, de la fin du tronçon à sa pointe, × le gabarit de la race)
+  const Lt = Math.max(0.15, (H.dockEnd.y - H.tailTipY) * ((B.tail ?? 1) / NATIVE_BUILD.tail));
+  const dockLen = yTop - Bd.y;
+  const clear = TAIL_CLEAR + Math.max(0, 1.25 - (B.tail ?? 1)) * 0.5;
+  const W = (foal ? 0.055 : 0.065) * Math.sqrt(gx);
+  const main = [];
+  const fill = [];
+  for (let i = 0; i < n; i++) {
+    const primary = i % 2 === 0;
+    const u = rng() ** 1.3;
+    const s = rng() * 2 - 1;
+    const phi = Math.sign(s) * Math.abs(s) ** 1.35 * 1.9;
+    const cw = Math.max(0, Math.cos(phi));
+    const [c, r, a] = dockAt(u);
+    const eBack = V(1, 0, 0).cross(a).normalize();
+    const radial = eBack.multiplyScalar(Math.cos(phi)).add(V(Math.sin(phi), 0, 0)).normalize();
+    const root = c.clone().addScaledVector(radial, r + 0.002);
+    const d0 = a.clone().addScaledVector(radial, 0.5);
+    const Ls = (Lt + dockLen * (1 - u)) * (0.8 + 0.2 * cw) * (0.9 + 0.2 * rng());
+    const floor = clear + (1 - cw) * 0.07 + rng() * 0.04;
+    const pts = drape(tb, root, d0, Ls, { h: 0.006, bend: 0.06, np: 7, steps: 18, keep, floor });
+    // (plus large au milieu de la longueur, plus fine au bout ; les mèches du milieu en arrière, celles des
+    // côtés un peu en avant : une queue pleine, pas un rideau plat)
+    const gr = V();
+    pts.forEach((p, k) => {
+      if (!k) return;
+      const f = k / (pts.length - 1);
+      const bell = smooth(0, 0.35, f) * (1 - 0.7 * smooth(0.45, 1, f));
+      p.x += Math.sin(phi) * W * bell;
+      p.z -= (Math.cos(phi) - 0.2) * 0.06 * bell;
+      const dist = tb(p);
+      if (dist < 0.006) p.addScaledVector(tb.grad(p, gr, dist), 0.006 - dist);
+      keep(p, 0.006);
+    });
+    const out = V(Math.sin(phi), 0.1, -Math.cos(phi)).normalize();
+    const normals = pts.map((p, k) => (k < 2 ? radial.clone().lerp(out, k * 0.5).normalize() : out.clone()));
+    const m = Math.floor(pts.length / 2);
+    const side = cardSide(normals[m], alongAt(pts, m), (rng() - 0.5) * 0.5);
+    // (racine : poids de la peau du tronçon, sans ceux des hanches — la queue ne suit pas la cuisse qui recule)
+    const wR = topWeights(new Map(skinNear(pos, coat, dockList, root)
+      .filter(([bn]) => bn === BONE_INDEX.Tail1 || bn === BONE_INDEX.Tail2 || bn === BONE_INDEX.Spine)));
+    if (!wR.length) wR.push([BONE_INDEX.Tail1, 1]);
+    const wT = [[BONE_INDEX.Tail2, 1]];
+    const tone = 0.93 + rng() * 0.14;
+    const [v, dv] = HAIR_ROWS[Math.floor(rng() * 4)];
+    (primary ? main : fill).push({
+      pts, normals, side, w0: primary ? 0.065 : 0.045, w1: primary ? 0.03 : 0.02,
+      color: new THREE.Color(tone, tone, tone), uv: [0, 1, v, dv], kind: 2,
+      // (du tronçon vers Tail2 sur la première moitié : une queue portée haut (arabe) retombe en arc)
+      weights: (p, f) => blendWeights(wR, wT, smooth(0, 0.45, f)),
+      meta: { root, primary },
+    });
+  }
+  return { main, fill };
+}
+
+/**
+ * Crins en cartes d'un gabarit (crinière, toupet, queue), partagés par ses chevaux : géométrie (ton gris par
+ * sommet) et index réduit (mèches principales seulement), plus les racines (tresses du concours de beauté).
+ */
+function hairShape(S, B, pos, coat, base) {
+  const body = hairBody(S, pos, coat, base);
+  const mane = maneCards(S, B, body, pos, coat);
+  const fore = forelockCards(S, B, body, base);
+  const tail = tailCards(S, B, body, pos, coat, base);
+  const main = [...mane.main, ...fore.main, ...tail.main];
+  const fill = [...mane.fill, ...fore.fill, ...tail.fill];
+  const geo = hairCards([...main, ...fill]);
+  geo.userData.shared = true;
+  // (index réduit : les mèches principales, rangées d'abord)
+  const nMain = main.reduce((s, c) => s + (c.pts.length - 1) * 6, 0);
+  const lod = lodGeometry(geo, geo.index.array.slice(0, nMain));
+  return { geo, lod, mane: [...mane.main, ...mane.fill], tail: [...tail.main, ...tail.fill], body };
 }
 
 // Géométries par gabarit, partagées par les chevaux de ce gabarit. Celles qui ne servent plus (cheval
@@ -868,7 +1356,7 @@ function releaseShape(S) {
   const idle = [...shapes.values()].filter((x) => x.users === 0).sort((a, b) => a.idleAt - b.idleAt);
   for (const x of idle.slice(0, Math.max(0, idle.length - SPARE_SHAPES))) {
     shapes.delete(x.key);
-    for (const g of [x.coatGeo, x.eyeGeo, x.maneGeo, ...Object.values(x.lod ?? {})]) g?.dispose();
+    for (const g of [x.coatGeo, x.eyeGeo, x.hairGeo, x.hairLod, ...Object.values(x.lod ?? {})]) g?.dispose();
   }
 }
 
@@ -931,8 +1419,6 @@ function shapeFor(base, B) {
   const coat = base.prims.coat;
   const dc = deformPrim(coat, D);
   const de = deformPrim(base.prims.eye, D);
-  const dm = deformPrim(base.prims.mane, D);
-  scaleHair(dm.pos, base, D, B);
   const heads = D.heads;
   const elbowY = (heads[BONE_INDEX.FL2].y + heads[BONE_INDEX.FR2].y) / 2;
   // Attributs du shader de la robe (horseCoat.js) : partie du corps, repère de la tête, hauteur sur le membre.
@@ -1004,8 +1490,7 @@ function shapeFor(base, B) {
     }),
     // (axe du regard par sommet : le reflet reste dans l'ouverture des paupières, eyeMaterial)
     eyeGeo: geo(de, base.prims.eye, base.prims.eye.axis ? { eyeAxis: new THREE.BufferAttribute(base.prims.eye.axis, 3) } : null),
-    maneGeo: geo(dm, base.prims.mane, { hairG: new THREE.BufferAttribute(base.hair.g, 1) }),
-    // Boîtes par os (culling, voir horseBounds), sur les trois primitives de la race.
+    // Boîtes par os (culling, voir horseBounds), sur le pelage, les yeux et les crins de la race.
     boneBox: emptyBoneBoxes(),
     hoofY,
     elbowY,
@@ -1015,18 +1500,22 @@ function shapeFor(base, B) {
   };
   growBoneBoxes(S.boneBox, dc.pos, coat.si, coat.sw, coat.count);
   growBoneBoxes(S.boneBox, de.pos, base.prims.eye.si, base.prims.eye.sw, base.prims.eye.count);
-  growBoneBoxes(S.boneBox, dm.pos, base.prims.mane.si, base.prims.mane.sw, base.prims.mane.count);
   // Version réduite (si le GLB en a une) : mêmes sommets, index simplifié.
   const lc = lodGeometry(S.coatGeo, coat.lodIndex);
   if (lc) {
     S.lod = {
       coat: lc,
       eye: lodGeometry(S.eyeGeo, base.prims.eye.lodIndex) ?? S.eyeGeo,
-      mane: lodGeometry(S.maneGeo, base.prims.mane.lodIndex) ?? S.maneGeo,
     };
   }
   S.measure = measureShape(S, dc.pos, coat, base);
-  S.braids = measureBraids(S, dm.pos, dc.pos, base);
+  // Crins en cartes (crinière, toupet, queue) posés sur la peau de la race (les crins du GLB ne servent plus).
+  const hair = hairShape(S, B, dc.pos, coat, base);
+  S.hairGeo = hair.geo;
+  S.hairLod = hair.lod;
+  const hg = hair.geo.attributes;
+  growBoneBoxes(S.boneBox, hg.position, hg.skinIndex.array, hg.skinWeight.array, hg.position.count);
+  S.braids = measureBraids(S, hair, dc.pos, base);
   S.key = key;
   S.users = 1;
   shapes.set(key, S);
@@ -1062,8 +1551,7 @@ function smoothOnMesh(val, index, passes) {
  * devant le bord avant d'une couverture (dims.blanket, couverture d'été comprise) ; sur la queue, le long de
  * la face arrière des crins du milieu depuis leur sortie de la croupe (pas l'articulation cachée dedans).
  */
-function measureBraids(S, mpos, cpos, base) {
-  const H = base.hair;
+function measureBraids(S, hair, cpos, base) {
   const coat = base.prims.coat;
   const heads = S.heads;
   const axis = heads[BONE_INDEX.Head].clone().sub(heads[BONE_INDEX.Neck]).normalize();
@@ -1075,17 +1563,21 @@ function measureBraids(S, mpos, cpos, base) {
     return c[k][1].clone().lerp(c[k + 1][1], t * (c.length - 1) - k);
   };
   const P = V();
-  // Racines de la crinière (pas les pointes, qui pendent sur le côté) autour d'un point de la crête, à
-  // moins de `along` le long de l'encolure : [nombre, épaisseur des crins au-dessus de la crête].
+  // Racines des mèches de la crinière (cartes de crins) autour d'un point de la crête, à moins de `along` le
+  // long de l'encolure : [nombre, épaisseur des crins au-dessus de la crête (début des mèches, qui en partent
+  // un peu vers le haut avant de retomber)].
+  const roots = hair.mane.map((c) => c.meta.root);
+  const starts = hair.mane.flatMap((c) => c.pts.slice(0, 2));
   const rootsAt = (c, along) => {
     let n = 0;
     let top = 0;
-    for (let k = 0; k < H.g.length; k++) {
-      if (H.tail[k] || H.g[k] > 0.3) continue;
-      P.fromArray(mpos, k * 3).sub(c);
-      if (Math.abs(P.dot(axis)) > along || Math.abs(P.x) > 0.05) continue;
-      n++;
-      top = Math.max(top, P.dot(up));
+    for (const p of roots) {
+      P.copy(p).sub(c);
+      if (Math.abs(P.dot(axis)) <= along && Math.abs(P.x) <= 0.05) n++;
+    }
+    for (const p of starts) {
+      P.copy(p).sub(c);
+      if (Math.abs(P.dot(axis)) <= along && Math.abs(P.x) <= 0.05) top = Math.max(top, P.dot(up));
     }
     return [n, top];
   };
@@ -1097,7 +1589,7 @@ function measureBraids(S, mpos, cpos, base) {
   let tMane = 0.14;
   if (S.crest.length > 1) {
     for (let t = 0; t <= 0.5; t += 0.01) {
-      if (rootsAt(crestAt(t), 0.012)[0] >= 2) {
+      if (rootsAt(crestAt(t), 0.02)[0] >= 2) {
         tMane = Math.min(0.4, t + (0.4 * knobR) / Math.max(0.2, neckLen));
         break;
       }
@@ -1118,13 +1610,23 @@ function measureBraids(S, mpos, cpos, base) {
   };
   const crest = knobs(tMane);
   const crestCovered = tFront > tMane ? knobs(tFront) : crest;
-  // Queue : la racine des crins la plus haute (au milieu), puis la face arrière des crins du milieu.
+  // Queue : la racine la plus haute des mèches (au milieu), puis la face arrière des mèches du milieu.
   let top = null;
-  for (let k = 0; k < H.g.length; k++) {
-    if (!H.tail[k] || H.g[k] > 0.3) continue;
-    P.fromArray(mpos, k * 3);
-    if (Math.abs(P.x) < 0.05 && (!top || P.y > top.y)) top = P.clone();
+  for (const c of hair.tail) {
+    const p = c.meta.root;
+    if (Math.abs(p.x) < 0.05 && (!top || p.y > top.y)) top = p.clone();
   }
+  // (point d'une mèche à la hauteur y, entre ses points : [x, z] ou null)
+  const atY = (pts, y) => {
+    for (let k = 0; k < pts.length - 1; k++) {
+      const a = pts[k];
+      const b = pts[k + 1];
+      if ((a.y - y) * (b.y - y) > 0 || a.y === b.y) continue;
+      const u = (y - a.y) / (b.y - a.y);
+      return [a.x + (b.x - a.x) * u, a.z + (b.z - a.z) * u];
+    }
+    return null;
+  };
   const tail = [];
   if (top) {
     // Peau du tronçon de queue (sommets liés aux os de la queue) : la tresse passe derrière elle aussi.
@@ -1142,18 +1644,16 @@ function measureBraids(S, mpos, cpos, base) {
     for (let j = 0; j <= N; j++) {
       const y = y0 - (L * j) / N;
       let zb = Infinity;
-      for (let k = 0; k < H.g.length; k++) {
-        if (!H.tail[k]) continue;
-        const py = mpos[k * 3 + 1];
-        if (Math.abs(py - y) > 0.025 || Math.abs(mpos[k * 3]) > 0.04) continue;
-        zb = Math.min(zb, mpos[k * 3 + 2]);
+      for (const c of hair.tail) {
+        const q = atY(c.pts, y);
+        if (q && Math.abs(q[0]) <= 0.04) zb = Math.min(zb, q[1]);
       }
       for (const i of dock) if (Math.abs(cpos[i * 3 + 1] - y) < 0.03) zb = Math.min(zb, cpos[i * 3 + 2]);
       // (jamais plus en avant que le point d'au-dessus : la queue descend vers l'arrière)
       z = Math.min(z, Number.isFinite(zb) ? zb : z);
       tail.push(V(0, y, z));
     }
-    // Lissé (les crins sont des cartes : la face arrière fait des marches) et décollé des crins.
+    // Lissé (la face arrière des mèches fait des marches) et décollé des crins.
     for (let pass = 0; pass < 2; pass++) {
       for (let j = 1; j < tail.length - 1; j++) tail[j].z = (tail[j - 1].z + tail[j].z * 2 + tail[j + 1].z) / 4;
     }
@@ -1366,56 +1866,13 @@ function sections(pos, tris, toFrame, z0, z1, dz) {
 // ------------------------------------------------------------------ matières
 
 /**
- * Crins : modelé gris de la texture du GLB × couleur des crins (une matière par cheval). color null :
- * couleur par sommet (brosse bicolore du Fjord, fanons de la couleur du bas de chaque membre).
- */
-function maneMaterial(base, color, sway) {
-  const src = base.prims.mane.material;
-  // (cartes ajoutées : sans relief, normales « de volume » données par sommet, pas retournées au dos)
-  const cards = color === null;
-  // (qualité basse : sans la carte de relief des crins, une lecture de texture de moins par pixel)
-  const relief = !cards && gfx.quality === 'high' ? src.normalMap : null;
-  const m = new THREE.MeshStandardMaterial({
-    map: src.map, normalMap: relief, alphaTest: 0.42, side: THREE.DoubleSide, roughness: cards ? 0.8 : 0.62,
-    alphaToCoverage: gfx.msaa || gfx.quality === 'high', vertexColors: cards,
-  });
-  if (src.normalScale && relief) m.normalScale.copy(src.normalScale);
-  // (modelé médian = 0,5 dans la texture : ×2)
-  const c = new THREE.Color(color ?? 0xffffff);
-  const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-  if (l < 0.02) c.lerp(new THREE.Color(0x4a4442), 0.1); // crins noirs : on voit encore les mèches
-  m.color.copy(c).multiplyScalar(2);
-  m.onBeforeCompile = (sh) => {
-    sh.uniforms.hairTime = gfx.time;
-    sh.uniforms.hairWind = gfx.wind;
-    sh.uniforms.hairSway = sway;
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', `#include <common>
-attribute float hairG;
-uniform float hairTime;
-uniform float hairWind;
-uniform float hairSway;`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
-{
-  // Pointes des mèches qui ondulent au vent et quand le cheval court (racines immobiles).
-  float hw = hairG * hairG * (0.4 + hairWind * 0.45 + hairSway);
-  float ph = hairTime * 2.1 + position.y * 6.0 + position.z * 4.0;
-  transformed.x += sin(ph) * 0.012 * hw;
-  transformed.z += cos(ph * 0.7 + 1.3) * 0.009 * hw;
-}`);
-    if (cards) {
-      sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
-normal = normalize( vNormal );`);
-    }
-  };
-  m.customProgramCacheKey = () => (cards ? 'horsereal-cards' : 'horsereal-mane');
-  return m;
-}
-
-/**
- * Cartes de crins ajoutées (brosse, fanons) : rubans de quelques points, texture des crins du GLB
- * (une bande de mèches droites : racine vers le centre de la texture, pointe vers le bord), couleur et
- * os par sommet. cards : [{ pts, w0, w1, side, color, uv: [u0, u1, v, dv], weights(p, f), normal? }].
+ * Cartes de crins (crinière, toupet, queue, brosse, fanons) : rubans de quelques points, texture de crins
+ * droits (horseHair.js : u le long de la mèche, de la racine à la pointe ; v en travers), ton ou couleur et os
+ * par sommet. cards : [{ pts, w0, w1, side, normal | normals, color, uv: [u0, u1, v, dv], weights(p, f),
+ * sway?, kind? }] — normal(s) : normale « de volume » (vers l'extérieur de la crinière), la même des deux
+ * côtés du ruban ; kind : 0 crinière, 1 toupet, 2 queue, 3 fanons (la queue et les fanons ondulent aussi de
+ * côté). Attributs pour la matière des crins : hairG (0 racine → 1 pointe), hairT (direction de la mèche, pour
+ * le reflet), hairRoot (racine de la mèche et kind : elle ondule d'un bloc).
  */
 function hairCards(cards) {
   const pos = [];
@@ -1425,6 +1882,8 @@ function hairCards(cards) {
   const si = [];
   const sw = [];
   const hg = [];
+  const ht = [];
+  const hr = [];
   const idx = [];
   const tan = V();
   const n0 = V();
@@ -1432,25 +1891,36 @@ function hairCards(cards) {
     const base0 = pos.length / 3;
     const n = c.pts.length;
     const [u0, u1, v, dv] = c.uv;
+    const r = c.pts[0];
+    const kind = c.kind ?? 0;
     for (let i = 0; i < n; i++) {
       const f = i / (n - 1);
       const p = c.pts[i];
       tan.subVectors(c.pts[Math.min(n - 1, i + 1)], c.pts[Math.max(0, i - 1)]).normalize();
       // (normale « de volume » si la carte en donne une : la même des deux côtés du ruban)
-      if (c.normal) n0.copy(c.normal);
+      if (c.normals) n0.copy(c.normals[i]);
+      else if (c.normal) n0.copy(c.normal);
       else n0.crossVectors(c.side, tan).normalize();
       const w = (c.w0 + (c.w1 - c.w0) * f) / 2;
       const ww = c.weights(p, f);
+      // (somme 1 : un poids négligeable écarté par une carte ne doit pas rétrécir le sommet vers l'origine)
+      let wsum = 0;
+      for (let q = 0; q < 4; q++) wsum += ww[q]?.[1] ?? 0;
+      wsum = wsum || 1;
+      // (racine plus sombre, pointe un peu plus claire)
+      const shade = 0.72 + 0.28 * smooth(0, 0.3, f) + 0.1 * f;
       for (const k of [-1, 1]) {
         pos.push(p.x + c.side.x * w * k, p.y + c.side.y * w * k, p.z + c.side.z * w * k);
         nrm.push(n0.x, n0.y, n0.z);
         uv.push(u0 + (u1 - u0) * f, v + dv * k);
-        col.push(c.color.r, c.color.g, c.color.b);
+        col.push(c.color.r * shade, c.color.g * shade, c.color.b * shade);
         for (let q = 0; q < 4; q++) {
           si.push(ww[q]?.[0] ?? 0);
-          sw.push(ww[q]?.[1] ?? 0);
+          sw.push((ww[q]?.[1] ?? 0) / wsum);
         }
         hg.push(f * (c.sway ?? 1));
+        ht.push(tan.x, tan.y, tan.z);
+        hr.push(r.x, r.y, r.z, kind);
       }
       if (i < n - 1) {
         const a = base0 + i * 2;
@@ -1466,6 +1936,8 @@ function hairCards(cards) {
   g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
   g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
   g.setAttribute('hairG', new THREE.Float32BufferAttribute(hg, 1));
+  g.setAttribute('hairT', new THREE.Float32BufferAttribute(ht, 3));
+  g.setAttribute('hairRoot', new THREE.Float32BufferAttribute(hr, 4));
   g.setIndex(idx);
   g.computeBoundingSphere();
   return g;
@@ -1499,8 +1971,9 @@ function brushCards(S, B, look) {
     const k = Math.min(crest.length - 2, Math.max(0, Math.floor(t * (crest.length - 1))));
     return crest[k][1].clone().lerp(crest[k + 1][1], t * (crest.length - 1) - k);
   };
-  const maneC = new THREE.Color(look.mane ?? 0x1b1410);
-  const coreC = new THREE.Color(look.maneCore ?? look.mane ?? 0x1b1410);
+  // (couleurs des crins plafonnées : la brosse crème du Fjord n'est pas un blanc brûlé)
+  const maneC = hairColor(look.mane ?? 0x1b1410);
+  const coreC = hairColor(look.maneCore ?? look.mane ?? 0x1b1410);
   const tint = (c, a) => c.clone().multiplyScalar(1 - a + rng() * a * 2);
   const weights = (t) => () => {
     const wh = smooth(0.86, 0.98, t);
@@ -1511,7 +1984,12 @@ function brushCards(S, B, look) {
   // Hauteur de la brosse le long de la crête (plus haute au milieu, taillée en arc). Les rubans vont
   // jusqu'aux pointes des mèches de la texture (alpha) : le haut de la brosse est effilé et irrégulier.
   const height = (t) => (foal ? 0.05 + 0.012 * Math.sin(t * Math.PI) : 0.085 + 0.03 * Math.sin(t * Math.PI)) * 1.12;
-  const tipUV = () => [0.6 + rng() * 0.04, 0.995, 0.44 + rng() * 0.16, 0.018];
+  // (une bande étroite d'une mèche de la texture des crins, de près de la racine aux trois quarts : des crins
+  // serrés, coupés presque droit en haut comme une brosse taillée)
+  const tipUV = () => {
+    const [v] = HAIR_ROWS[Math.floor(rng() * 4)];
+    return [0.12 + rng() * 0.06, 0.8 + rng() * 0.1, v + (rng() - 0.5) * 0.1, 0.05];
+  };
   // Bords crème (ou toute la brosse du poulain) : rubans debout, le long de la crête ou en travers.
   for (let i = 0; i < n; i++) {
     const t = 0.03 + (i / (n - 1)) * 0.93;
@@ -1528,6 +2006,25 @@ function brushCards(S, B, look) {
         pts: [p0, p0.clone().lerp(tip, 0.5), tip], w0: 0.03, w1: 0.01,
         side: along ? dir.clone().applyAxisAngle(up, (rng() - 0.5) * 0.7) : V(1, 0, 0), color: tint(maneC, 0.06),
         uv: tipUV(), weights: weights(t), sway: 0.25, normal: up.clone().multiplyScalar(0.55).add(V(lane * 0.85, 0, 0)).normalize(),
+      });
+    }
+  }
+  // Pied de la brosse : rubans bas et pleins le long de la crête, des deux côtés, couchés un peu vers l'extérieur
+  // (le bas d'une brosse taillée est dense : sans eux, on voyait le cœur foncé et la peau entre les rubans)
+  const nb = foal ? 24 : 40;
+  for (let i = 0; i < nb; i++) {
+    const t = 0.04 + ((i + rng() * 0.5) / nb) * 0.9;
+    const c = at(t).addScaledVector(up, -0.016);
+    const dir = at(Math.min(1, t + 0.02)).sub(at(Math.max(0, t - 0.02))).normalize();
+    for (const lane of [-1, 1]) {
+      const lat = V(lane * 0.018, 0, 0);
+      const p0 = c.clone().add(lat);
+      const tip = p0.clone().addScaledVector(up, height(t) * 0.6).addScaledVector(lat, 0.6);
+      const [v] = HAIR_ROWS[Math.floor(rng() * 4)];
+      cards.push({
+        pts: [p0, p0.clone().lerp(tip, 0.5), tip], w0: 0.05, w1: 0.042, side: dir.clone(), color: tint(maneC, 0.05),
+        uv: [0.08, 0.62 + rng() * 0.1, v, 0.1], weights: weights(t), sway: 0.2,
+        normal: up.clone().multiplyScalar(0.45).add(V(lane, 0, 0)).normalize(),
       });
     }
   }
@@ -1569,7 +2066,9 @@ function featherCards(S, B, look) {
     // (poils longs plus clairs que la robe au soleil : un peu éclaircis, jamais plus foncés)
     const legC = new THREE.Color(white ? 0xf1ede6 : traits.points ? (look.maneCore ?? look.mane ?? look.coat) : look.coat);
     if (!white && !traits.points) legC.multiplyScalar(1.2).lerp(new THREE.Color(0xd9c3a5), 0.1);
-    const n = Math.round(12 + 14 * B.feathers);
+    legC.copy(hairColor(legC));
+    // (rubans fins et nombreux : des poils, pas des bottes pleines)
+    const n = Math.round(18 + 22 * B.feathers);
     const b3 = BONE_INDEX[k + '3'];
     const b4 = BONE_INDEX[k + '4'];
     const fy = F.y;
@@ -1588,8 +2087,8 @@ function featherCards(S, B, look) {
       const pts = [0, 0.33, 0.66, 1].map((f) => p0.clone().lerp(end, f).addScaledVector(fan, 0.016 * Math.sin(f * Math.PI)));
       cards.push({
         // (racine étroite : pas de bord horizontal net en haut ; pointes des mèches au bas, effilées)
-        pts, w0: 0.014, w1: 0.06, side: V(-d.z, 0, d.x), normal: fan.clone(), color: legC.clone().multiplyScalar(0.92 + rng() * 0.16),
-        uv: [0.6 + rng() * 0.04, 0.99, 0.44 + rng() * 0.16, 0.022], sway: 0.35,
+        pts, w0: 0.012, w1: 0.03, side: V(-d.z, 0, d.x), normal: fan.clone(), color: legC.clone().multiplyScalar(0.92 + rng() * 0.16),
+        uv: [0.3 + rng() * 0.05, 1, HAIR_ROWS[j % 4][0] + (rng() - 0.5) * 0.08, 0.07], sway: 0.35, kind: 3,
         weights: (p) => {
           const w = smooth(fy + 0.03, fy - 0.03, p.y);
           return [[b3, 1 - w], [b4, w]].filter(([, x]) => x > 0.001);
@@ -1931,7 +2430,8 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   const coat = new HorseMesh(S.coatGeo, coatMat, hb);
   const eyes = new HorseMesh(S.eyeGeo, eyeMaterial(), hb);
   const hairSway = { value: 0 };
-  const mane = new HorseMesh(S.maneGeo, maneMaterial(base, look.mane ?? 0x1b1410, hairSway), hb);
+  // Crinière, toupet et queue : cartes de crins de la race (partagées), à la couleur des crins de ce cheval.
+  const mane = new HorseMesh(S.hairGeo, hairMaterial(look.mane ?? 0x1b1410, hairSway), hb);
   const meshes = [coat, eyes, mane];
   // Brosse (Fjord, poulain) et fanons : cartes de crins à la couleur de chaque cheval.
   const extra = [];
@@ -1940,7 +2440,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   if (extra.length) {
     const cg = hairCards(extra);
     growBoneBoxes(hb.boneBox, cg.attributes.position, cg.attributes.skinIndex.array, cg.attributes.skinWeight.array, cg.attributes.position.count);
-    meshes.push(new HorseMesh(cg, maneMaterial(base, null, hairSway), hb));
+    meshes.push(new HorseMesh(cg, hairMaterial(null, hairSway), hb));
   }
   for (const m of meshes) {
     m.bind(skeleton, new THREE.Matrix4());
@@ -1996,6 +2496,8 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
     skeleton,
     hairSway,
     coatMesh: coat,
+    // (crinière, toupet et queue en cartes de crins)
+    hairMesh: mane,
     y0: belly + R,
     legTop: elbow.y,
     saddleY: torsoTop,
@@ -2018,6 +2520,11 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   };
   for (const e of model.ears) e.userData.side = e === model.ears[0] ? 1 : -1;
   model.skinGear = (mesh) => skinGear(model, S, mesh, hb);
+  // Crinière tressée (concours de beauté, Beauty.js) : les mèches de la crinière rentrent dans les boutons.
+  model.setBraided = (on) => {
+    const u = mane.material.userData.hairBraid;
+    if (u) u.value = on ? 1 : 0;
+  };
   if (gfx.quality !== 'high') root.add(soleShadows(model, legR * 6.5));
   // Allures de la race aux appuis calés au sol (lockedGaits) : faites une fois par gabarit, une allure à la
   // fois (lockGaitStep : 6 à 15 ms chacune), pendant les temps morts du navigateur après la construction
@@ -2049,7 +2556,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
     model.lodLevel = l;
     coat.geometry = l ? S.lod.coat : S.coatGeo;
     eyes.geometry = l ? S.lod.eye : S.eyeGeo;
-    mane.geometry = l ? S.lod.mane : S.maneGeo;
+    mane.geometry = l ? S.hairLod : S.hairGeo;
   };
   let disposed = false;
   model.dispose = () => {
@@ -2236,8 +2743,9 @@ function skinGear(model, S, mesh, hb) {
 // ------------------------------------------------------------------ élimination hors champ
 
 const _bm = new THREE.Matrix4();
-// Marge autour des os : les pointes des crins ondulent dans le shader (maneMaterial : ±1,2 cm × 4,8 au plus).
-const HAIR_MARGIN = 0.06;
+// Marge autour des os : les pointes des crins ondulent dans le shader (hairMaterial : vers l'extérieur et, pour la
+// queue, de côté, 1,2 cm chacun × 4,8 au plus).
+const HAIR_MARGIN = 0.08;
 
 /**
  * Boîte englobante du cheval dans le repère de ses maillages (tous enfants directs de model.root, sans

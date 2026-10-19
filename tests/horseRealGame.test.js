@@ -580,7 +580,10 @@ describe('concours de beauté sur le cheval réaliste', () => {
     // Les tresses de la crête sont sur l'encolure, pas loin au-dessus (rayons arrêtés par les cartes de crins).
     const top = md.coatMesh.geometry.boundingBox ?? (md.coatMesh.geometry.computeBoundingBox(), md.coatMesh.geometry.boundingBox);
     expect(crest.y).toBeLessThan(top.max.y + 0.1);
+    // Crinière tressée : les mèches des cartes de crins rentrent dans les boutons, et ressortent sans les tresses.
+    expect(md.hairMesh.material.userData.hairBraid.value).toBe(1);
     Beauty.removeBeautyDecor(e);
+    expect(md.hairMesh.material.userData.hairBraid.value).toBe(0);
     md.dispose();
   });
 

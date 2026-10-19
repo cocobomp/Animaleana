@@ -159,6 +159,8 @@ const _zAxis = new THREE.Vector3(0, 0, 1);
  */
 function realHorseBraids(model, ribbon, mane, add, covered = false) {
   const S = model.braidSpots;
+  // (les mèches de la crinière en cartes de crins rentrent dans les boutons : plus de crinière qui pend dessous)
+  model.setBraided?.(true);
   const r = (model.dims?.R ?? 0.32) * 0.085;
   const hairMat = mat(mane, 0.7);
   const ribbonMat = mat(ribbon, 0.5);
@@ -316,6 +318,7 @@ export function applyBeautyDecor(e, now) {
 export function removeBeautyDecor(e) {
   const cur = e.beautyDecor;
   if (!cur) return;
+  cur.model?.setBraided?.(false);
   for (const g of cur.groups) {
     g.parent?.remove(g);
     g.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });

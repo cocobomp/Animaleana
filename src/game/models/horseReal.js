@@ -3360,7 +3360,8 @@ export function animateRealHorse(e, dt, sad) {
   const t = e.time;
   e.grazeSeed ??= Math.random() * 10;
   // (pas pendant une séance qui le guide, spectacle, toilettage… : il attend tête haute)
-  const grazing = e.state === 'idle' && !e.sleeping && !e.herdCtrl && !e.ridden && !e.scripted && Math.sin(t * 0.3 + e.grazeSeed) > 0.2;
+  // (ni quand il regarde le joueur depuis son box : AnimalEntity.attending)
+  const grazing = e.state === 'idle' && !e.sleeping && !e.herdCtrl && !e.ridden && !e.scripted && !e.attending && Math.sin(t * 0.3 + e.grazeSeed) > 0.2;
   // (tête à l'herbe ou à la mangeoire : lissé, elle descend et remonte en douceur)
   e.grazeAmt = (e.grazeAmt ?? 0) + ((grazing ? 1 : 0) - (e.grazeAmt ?? 0)) * Math.min(1, dt * 1.2);
   e.feedAmt = (e.feedAmt ?? 0) + ((e.state === 'eat' ? 1 : 0) - (e.feedAmt ?? 0)) * Math.min(1, dt * 1.5);

@@ -17,7 +17,8 @@ import { withTexScale } from './gfx.js';
 import { tackModel } from './models/tackModels.js';
 import { buildGear, removeGear } from './gearModels.js';
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
-import { resolveLook, growthScale } from '../sim/animal.js';
+import { buildGltfAnimal } from './models/gltfAnimal.js';
+import { resolveLook, growthScale, lifeStage } from '../sim/animal.js';
 import { stageAgeDays } from '../sim/adoption.js';
 import { STRUCTURES } from '../sim/construction.js';
 import { SPECIES } from '../sim/species.js';
@@ -189,6 +190,7 @@ function mannequin(kind, tone = 'light') {
   // Robe unie et graine fixe : le même mannequin à chaque fois.
   const look = { ...resolveLook(pick.species, pick.breed, pick.color), pattern: 'solid', seed: 4242 };
   const model = withTexScale(THUMB_TEX, () => buildAnimalModel(pick.species, look, pick.breed));
+  model.photoPose?.(); // (cheval réaliste : à l'arrêt, tête relevée, oreilles en avant)
   const holder = new THREE.Group();
   holder.add(model.root);
   holder.scale.setScalar(look.scale ?? 1);
@@ -347,10 +349,12 @@ function gearThumb(spec) {
 function animalThumb(spec) {
   const { species, breed, colorIndex = 0, sex = 'f', stage = 'adult' } = spec;
   const seed = Number.isFinite(spec.seed) ? spec.seed : seedOf(thumbKey({ species, breed, colorIndex, sex }));
-  const look = { ...resolveLook(species, breed, colorIndex), seed };
+  // (portrait de la fiche : la vraie robe de l'animal, spec.look — sa signature spec.sig fait partie de la clé)
+  const look = spec.look ? { ...spec.look } : { ...resolveLook(species, breed, colorIndex), seed };
   const data = { species, breed, sex, ageDays: stageAgeDays(species, stage), look };
   const foal = species === 'horse' && stage === 'baby';
   const model = withTexScale(THUMB_TEX, () => buildAnimalModel(species, foal ? { ...look, foal: true } : look, breed));
+  model.photoPose?.(); // (cheval réaliste : à l'arrêt, tête relevée, oreilles en avant — jamais en train de brouter)
   model.root.traverse((o) => {
     if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false;
   });
@@ -362,13 +366,77 @@ function animalThumb(spec) {
   holder.scale.setScalar(adult * Math.max(g, (1 + g) / 2));
   const points = samplePoints(holder);
   holder.scale.setScalar(adult * g);
+  // Portrait (fiche) : de trois quarts avant, à hauteur d'épaule — la tête et l'encolure en valeur.
+  const portrait = spec.view === 'portrait';
   return {
     object: holder,
     points,
-    dir: species === 'horse' || species === 'cow' ? [1, 0.38, 0.72] : [1, 0.5, 0.95],
+    dir: portrait ? [0.95, 0.24, 1] : species === 'horse' || species === 'cow' ? [1, 0.38, 0.72] : [1, 0.5, 0.95],
     ground: 0,
-    pad: 1.06,
+    pad: portrait ? 1.04 : 1.06,
     dispose: (onMat) => {
+      eachMaterial(holder, onMat);
+      model.dispose?.();
+      disposeModel(model.root);
+    },
+  };
+}
+
+/** Signature courte d'une robe (clé de vignette du portrait : une autre robe, une autre image). */
+export function lookSig(look) {
+  const txt = JSON.stringify(look ?? {});
+  let h = 0x811c9dc5;
+  for (let i = 0; i < txt.length; i++) {
+    h ^= txt.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
+
+/**
+ * Vignette « portrait » d'un de nos animaux (fiche) : sa vraie robe, son âge, de trois quarts avant.
+ * À passer à thumb(game, spec, { w, h, … }).
+ */
+export function portraitSpec(a, stage) {
+  return { kind: 'animal', view: 'portrait', species: a.species, breed: a.breed, sex: a.sex, stage, seed: a.look?.seed, sig: lookSig(a.look), look: a.look };
+}
+
+/**
+ * Un double d'un de nos animaux (entité du jeu), fabriqué neuf pour une photo à part (essayage de la sellerie,
+ * portrait de la fiche) : même espèce, race, robe, âge et taille que lui, en pose de photo (cheval réaliste : à
+ * l'arrêt, tête relevée, oreilles en avant), sans ombre de contact (le studio a la sienne). On ne déplace plus
+ * l'animal vivant dans le studio : en qualité haute, la photo d'essayage montrait l'équipement sans le cheval.
+ * Renvoie { holder, model, wear(gear) (met cet équipement, renvoie ses maillages), dispose(onMat) }.
+ */
+export function photoDouble(e) {
+  const data = e.data;
+  const foal = data.species === 'horse' && lifeStage(data) === 'baby';
+  const look = foal ? { ...data.look, foal: true } : data.look;
+  const model = withTexScale(THUMB_TEX, () => buildGltfAnimal(data.species, look) ?? buildAnimalModel(data.species, look, data.breed));
+  model.photoPose?.();
+  model.root.traverse((o) => {
+    if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false;
+  });
+  const holder = new THREE.Group();
+  holder.add(model.root);
+  holder.scale.setScalar(e.scale ?? data.look.scale ?? 1);
+  let worn = null;
+  const wear = (gear) => {
+    if (worn) removeGear(worn);
+    worn = buildGear(model, data.look, gear ?? {});
+    holder.updateMatrixWorld(true);
+    return worn.userData.meshes ?? [];
+  };
+  return {
+    holder,
+    model,
+    wear,
+    dispose: (onMat) => {
+      if (worn) {
+        for (const mesh of worn.userData.meshes ?? []) eachMaterial(mesh, onMat);
+        removeGear(worn);
+        worn = null;
+      }
       eachMaterial(holder, onMat);
       model.dispose?.();
       disposeModel(model.root);

@@ -408,7 +408,13 @@ export function samplePoints(object, max = 3000) {
         for (const p of boxCorners(b.min.toArray(), b.max.toArray())) out.push(tmpV.fromArray(p).applyMatrix4(m4).toArray());
         continue;
       }
-      for (let i = 0; i < pos.count; i += step) out.push(tmpV.fromBufferAttribute(pos, i).applyMatrix4(m4).toArray());
+      // (maillage lié à un squelette : le sommet tel qu'il est dans la pose, pas au repos — tête relevée…)
+      const skin = o.isSkinnedMesh && o.skeleton && o.geometry.attributes.skinIndex;
+      for (let i = 0; i < pos.count; i += step) {
+        tmpV.fromBufferAttribute(pos, i);
+        if (skin) o.applyBoneTransform(i, tmpV);
+        out.push(tmpV.applyMatrix4(m4).toArray());
+      }
     }
   }
   return out;

@@ -30,7 +30,7 @@ import { competitionSection, journalCalendarButton } from './competitions.js'; /
 import { clientBadge, clientInfo, clientsTab } from './clients.js'; // animaux confiés par des clients
 import { isCareerPatient } from './vet.js'; // animal confié en soins, métier commencé : examen gratuit
 import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
-import { thumb } from '../game/thumbScenes.js'; // vignettes 3D (animalerie, voyage)
+import { thumb, portraitSpec } from '../game/thumbScenes.js'; // vignettes 3D (animalerie, voyage, portrait de la fiche)
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -124,7 +124,10 @@ function renderAnimal(ui, g, a) {
     NEEDS.map((n) => bar(t(`need_${n}`), a.needs[n])),
   );
 
-  const out = [info, bars];
+  // Portrait de l'animal en tête de sa fiche (vignette 3D : sa robe, son âge, de trois quarts avant).
+  const portrait = h('div', { class: 'animal-portrait' },
+    thumb(g, portraitSpec(a, stage), { w: 320, h: 180, emoji: sp.emoji, cls: 'portrait-thumb', alt: a.name, hold: `portrait:${a.id}` }));
+  const out = [portrait, info, bars];
   if (!here) return out;
   const training = isTrainingClient(a); // chien en éducation (métier éducateur canin) : ses séances d'abord
   if (training) out.push(...dogTrainerSection(ui, a));
@@ -742,7 +745,7 @@ export function openShop(ui) {
         class: `card ${b.id === st.breed ? 'selected' : ''}`,
         onClick: () => { st.breed = b.id; st.colorIndex = 0; ui.renderPanel(); },
       },
-      thumb(g, { kind: 'animal', species: st.species, breed: b.id, colorIndex: 0, sex: 'f', stage: 'adult' }, { w: 84, h: 63, emoji, cls: 'breed-thumb', alt: '' }),
+      thumb(g, { kind: 'animal', species: st.species, breed: b.id, colorIndex: 0, sex: 'f', stage: 'adult' }, { w: 168, h: 126, emoji, cls: 'breed-thumb', alt: '' }),
       h('span', { class: 'card-main' }, h('b', {}, `${b.from?.flag ? `${b.from.flag} ` : ''}${L(b.name)}`), h('small', {}, '⭐'.repeat(b.rarity ?? 1)),
         // Chats : taille et poil de la race (catBreeds.js), sur chaque carte.
         b.desc ? h('small', { class: 'breed-desc' }, L(b.desc)) : null,

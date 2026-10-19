@@ -31,7 +31,7 @@ export const DOG_BUILDS = {
   chihuahua: { legs: 0.92, back: 0.9, girth: 0.95, head: 1.45, snout: 0.5, muzzleW: 0.9, neck: 0.85, ears: 'bat', earSize: 1.55, tail: 'sickle', tailLen: 0.9 },
   spitz_nain: { legs: 0.8, back: 0.8, girth: 1.05, head: 1.12, snout: 0.6, ears: 'pointed', earSize: 0.75, tail: 'curl', fur: 0.039, ruff: 1, tailLen: 0.9 },
   yorkshire: { legs: 0.85, back: 0.9, girth: 0.92, head: 1.05, snout: 0.75, ears: 'pointed', earSize: 0.85, tail: 'carrot', fur: 0.022, feather: 0.6, silky: 1 },
-  carlin: { legs: 0.72, legW: 1.15, back: 0.85, girth: 1.28, head: 1.3, snout: 0.28, muzzleW: 1.3, neck: 0.8, ears: 'rose', earSize: 0.8, tail: 'curl', tailLen: 0.7 },
+  carlin: { legs: 0.72, legW: 1.15, back: 0.85, girth: 1.28, head: 1.3, snout: 0.28, muzzleW: 1.3, neck: 0.8, ears: 'button', earSize: 0.6, tail: 'curl', tailLen: 0.7 },
   jack_russell: { tail: 'carrot', tailLen: 0.85 },
   corgi: { legs: 0.55, legW: 1.15, back: 1.25, girth: 1.18, head: 1.08, snout: 0.95, ears: 'pointed', earSize: 1.35, tail: 'stub', fur: 0.007 },
   cavalier: { legs: 0.9, back: 0.95, girth: 1.05, head: 1.05, snout: 0.62, ears: 'long', earSize: 1.45, tail: 'plume', fur: 0.011, feather: 1 },
@@ -39,39 +39,39 @@ export const DOG_BUILDS = {
   bouledogue: { legs: 0.75, legW: 1.2, back: 0.88, girth: 1.3, head: 1.35, snout: 0.33, muzzleW: 1.35, neck: 0.8, ears: 'bat', earSize: 1.45, tail: 'stub' },
   cocker: { legs: 0.92, back: 0.92, girth: 1.08, head: 1.08, snout: 0.95, ears: 'long', earSize: 1.6, tail: 'stub', fur: 0.014, feather: 1 },
   // ---- moyens et grands (shiba) ; fur < 0 : le double poil du shiba est raccourci (races à poil ras)
-  labrador: { legs: 0.97, legW: 1.08, back: 1.08, girth: 1.16, head: 1.08, snout: 1.15, muzzleW: 1.15, neck: 0.95, ears: 'floppy', earSize: 1.1, tail: 'otter', tailThick: 0.7, fur: -0.012 },
-  berger_allemand: { legs: 1.02, back: 1.12, girth: 1.0, head: 1.05, snout: 1.38, ears: 'pointed', earSize: 1.25, tail: 'sabre', tailLen: 1.15, fur: 0.004, slope: 1 },
-  golden: { legs: 0.98, legW: 1.06, back: 1.06, girth: 1.1, head: 1.05, snout: 1.15, muzzleW: 1.08, ears: 'floppy', earSize: 1.1, tail: 'plume', tailThick: 0.9, fur: 0.012, feather: 1, ruff: 0.4 },
+  labrador: { legs: 0.97, legW: 1.08, back: 1.08, girth: 1.16, headW: 0.88, head: 1.08, snout: 1.15, muzzleW: 1.15, neck: 0.95, ears: 'floppy', earSize: 1.1, tail: 'otter', tailThick: 0.7, fur: -0.012 },
+  berger_allemand: { legs: 1.02, back: 1.12, girth: 1.0, headW: 0.86, head: 1.05, snout: 1.38, ears: 'pointed', earSize: 1.25, tail: 'sabre', tailLen: 1.15, fur: 0.004, slope: 1 },
+  golden: { legs: 0.98, legW: 1.06, back: 1.06, girth: 1.1, headW: 0.86, head: 1.05, snout: 1.15, muzzleW: 1.08, ears: 'floppy', earSize: 1.1, tail: 'plume', tailThick: 0.9, fur: 0.012, feather: 1, ruff: 0.4 },
   beagle: { legs: 0.88, legW: 1.06, back: 1.0, girth: 1.08, head: 1.1, snout: 1.1, ears: 'long', earSize: 1.3, tail: 'sickle', tailLen: 0.9, tailThick: 0.55, fur: -0.012 },
-  border_collie: { legs: 1.0, back: 1.05, girth: 0.98, head: 0.98, snout: 1.12, ears: 'semi', tail: 'sabre', tailLen: 1.1, fur: 0.01, feather: 0.8, ruff: 0.6 },
-  dalmatien: { legs: 1.05, back: 1.05, girth: 0.98, head: 1.0, snout: 1.25, ears: 'floppy', tail: 'sabre', tailLen: 1.1, tailThick: 0.5, fur: -0.016 },
-  bouvier_bernois: { legs: 0.98, legW: 1.12, back: 1.08, girth: 1.2, head: 1.12, snout: 0.95, muzzleW: 1.12, ears: 'floppy', tail: 'plume', fur: 0.016, feather: 1, ruff: 0.8 },
+  border_collie: { legs: 1.0, back: 1.05, girth: 0.98, headW: 0.86, head: 0.98, snout: 1.12, ears: 'semi', tail: 'sabre', tailLen: 1.1, fur: 0.01, feather: 0.8, ruff: 0.6 },
+  dalmatien: { legs: 1.05, back: 1.05, girth: 0.98, headW: 0.86, head: 1.0, snout: 1.25, ears: 'floppy', tail: 'sabre', tailLen: 1.1, tailThick: 0.5, fur: -0.016 },
+  bouvier_bernois: { legs: 0.98, legW: 1.12, back: 1.08, girth: 1.2, headW: 0.95, head: 1.12, snout: 0.95, muzzleW: 1.12, ears: 'floppy', tail: 'plume', fur: 0.016, feather: 1, ruff: 0.8 },
   saint_bernard: { legs: 0.98, legW: 1.18, back: 1.1, girth: 1.28, head: 1.3, snout: 0.85, muzzleW: 1.35, neck: 0.95, ears: 'floppy', earSize: 1.1, tail: 'plume', fur: 0.012, ruff: 0.5 },
-  epagneul_breton: { legs: 1.0, back: 0.95, girth: 1.0, head: 1.0, snout: 1.12, ears: 'floppy', earSize: 0.95, tail: 'stub', fur: 0.004, feather: 0.6 },
+  epagneul_breton: { legs: 1.0, back: 0.95, girth: 1.0, headW: 0.88, head: 1.0, snout: 1.12, ears: 'floppy', earSize: 0.95, tail: 'stub', fur: 0.004, feather: 0.6 },
   husky: { legs: 1.0, back: 1.02, girth: 1.02, head: 1.0, snout: 1.1, ears: 'pointed', earSize: 1.05, tail: 'sickle', tailThick: 1.15, fur: 0.008, ruff: 0.5 },
   berger_islandais: { legs: 0.98, back: 0.98, girth: 1.02, head: 1.0, snout: 0.98, ears: 'pointed', tail: 'curl', fur: 0.01, ruff: 0.7 },
   shiba: {},
   akita: { legs: 1.0, legW: 1.1, back: 1.05, girth: 1.15, head: 1.15, snout: 0.95, muzzleW: 1.2, ears: 'pointed', earSize: 0.85, tail: 'curl', tailThick: 1.15, fur: 0.006 },
-  galgo: { legs: 1.28, legW: 0.82, back: 1.08, girth: 0.78, head: 0.92, snout: 1.6, muzzleW: 0.8, neck: 1.2, ears: 'rose', earSize: 0.9, tail: 'whip', tailLen: 1.25, tailThick: 0.35, fur: -0.02, tuck: 1 },
-  coonhound: { legs: 1.02, back: 1.05, girth: 1.04, head: 1.05, snout: 1.35, ears: 'long', earSize: 1.5, tail: 'sickle', tailThick: 0.55, fur: -0.014 },
-  dogo: { legs: 1.0, legW: 1.12, back: 1.0, girth: 1.16, head: 1.18, snout: 1.05, muzzleW: 1.3, neck: 1.05, ears: 'floppy', earSize: 0.85, tail: 'sabre', tailThick: 0.5, fur: -0.016 },
-  kelpie: { legs: 1.0, back: 1.0, girth: 0.98, head: 0.98, snout: 1.22, ears: 'pointed', earSize: 1.1, tail: 'sabre', tailThick: 0.85, fur: -0.006 },
-  berger_australien: { legs: 0.98, back: 1.0, girth: 1.02, head: 1.0, snout: 1.1, ears: 'semi', tail: 'stub', fur: 0.012, feather: 0.8, ruff: 0.6 },
-  caniche: { legs: 1.08, legW: 0.92, back: 0.95, girth: 0.95, head: 0.95, snout: 1.42, muzzleW: 0.9, neck: 1.1, ears: 'long', earSize: 1.25, tail: 'carrot', tailLen: 0.6, fur: 0.018, curly: 1 },
-  boxer: { legs: 1.02, back: 0.95, girth: 1.08, head: 1.1, snout: 0.45, muzzleW: 1.25, ears: 'semi', tail: 'stub', tailThick: 0.5, fur: -0.016 },
-  rottweiler: { legs: 0.98, legW: 1.15, back: 1.0, girth: 1.22, head: 1.18, snout: 0.95, muzzleW: 1.25, ears: 'floppy', earSize: 0.85, tail: 'sabre', tailThick: 0.55, fur: -0.012 },
-  malinois: { legs: 1.02, back: 1.0, girth: 0.95, head: 0.98, snout: 1.38, ears: 'pointed', earSize: 1.15, tail: 'sabre', tailThick: 0.75, fur: -0.008 },
+  galgo: { legs: 1.28, legW: 0.82, back: 1.08, girth: 0.78, headW: 0.76, head: 0.92, snout: 1.6, muzzleW: 0.8, neck: 1.2, ears: 'rose', earSize: 0.9, tail: 'whip', tailLen: 1.25, tailThick: 0.35, fur: -0.02, tuck: 1 },
+  coonhound: { legs: 1.02, back: 1.05, girth: 1.04, headW: 0.84, head: 1.05, snout: 1.35, ears: 'long', earSize: 1.5, tail: 'sickle', tailThick: 0.55, fur: -0.014 },
+  dogo: { legs: 1.0, legW: 1.12, back: 1.0, girth: 1.16, headW: 0.95, head: 1.18, snout: 1.05, muzzleW: 1.3, neck: 1.05, ears: 'floppy', earSize: 0.85, tail: 'sabre', tailThick: 0.5, fur: -0.016 },
+  kelpie: { legs: 1.0, back: 1.0, girth: 0.98, headW: 0.86, head: 0.98, snout: 1.22, ears: 'pointed', earSize: 1.1, tail: 'sabre', tailThick: 0.85, fur: -0.006 },
+  berger_australien: { legs: 0.98, back: 1.0, girth: 1.02, headW: 0.9, head: 1.0, snout: 1.1, ears: 'semi', tail: 'stub', fur: 0.012, feather: 0.8, ruff: 0.6 },
+  caniche: { legs: 1.08, legW: 0.92, back: 0.95, girth: 0.95, headW: 0.8, head: 0.95, snout: 1.42, muzzleW: 0.9, neck: 1.1, ears: 'long', earSize: 1.1, tail: 'carrot', tailLen: 0.6, fur: 0.018, curly: 1 },
+  boxer: { legs: 1.02, back: 0.95, girth: 1.08, headW: 0.95, head: 1.1, snout: 0.45, muzzleW: 1.25, ears: 'semi', tail: 'stub', tailThick: 0.5, fur: -0.016 },
+  rottweiler: { legs: 0.98, legW: 1.15, back: 1.0, girth: 1.22, headW: 0.95, head: 1.18, snout: 0.95, muzzleW: 1.25, ears: 'floppy', earSize: 0.85, tail: 'sabre', tailThick: 0.55, fur: -0.012 },
+  malinois: { legs: 1.02, back: 1.0, girth: 0.95, headW: 0.84, head: 0.98, snout: 1.38, ears: 'pointed', earSize: 1.15, tail: 'sabre', tailThick: 0.75, fur: -0.008 },
   samoyede: { legs: 1.0, back: 1.0, girth: 1.05, head: 1.0, snout: 1.0, ears: 'pointed', earSize: 0.9, tail: 'curl', fur: 0.028, ruff: 1, feather: 0.6 },
-  whippet: { legs: 1.22, legW: 0.82, back: 1.02, girth: 0.82, head: 0.92, snout: 1.5, muzzleW: 0.8, neck: 1.15, ears: 'rose', earSize: 0.9, tail: 'whip', tailLen: 1.15, tailThick: 0.35, fur: -0.02, tuck: 1 },
-  setter: { legs: 1.05, back: 1.05, girth: 0.95, head: 1.0, snout: 1.42, muzzleW: 0.9, neck: 1.08, ears: 'long', earSize: 1.35, tail: 'sabre', tailLen: 1.1, tailThick: 0.7, fur: 0.012, feather: 1 },
+  whippet: { legs: 1.22, legW: 0.82, back: 1.02, girth: 0.82, headW: 0.78, head: 0.92, snout: 1.5, muzzleW: 0.8, neck: 1.15, ears: 'rose', earSize: 0.9, tail: 'whip', tailLen: 1.15, tailThick: 0.35, fur: -0.02, tuck: 1 },
+  setter: { legs: 1.05, back: 1.05, girth: 0.95, headW: 0.8, head: 1.0, snout: 1.42, muzzleW: 0.9, neck: 1.08, ears: 'long', earSize: 1.15, tail: 'sabre', tailLen: 1.1, tailThick: 0.7, fur: 0.012, feather: 1 },
   terre_neuve: { legs: 0.95, legW: 1.25, back: 1.08, girth: 1.34, head: 1.25, snout: 0.85, muzzleW: 1.3, neck: 0.95, ears: 'floppy', earSize: 0.85, tail: 'plume', fur: 0.025, ruff: 0.8, feather: 1 },
-  labradoodle: { legs: 1.0, back: 1.0, girth: 1.04, head: 1.0, snout: 1.1, ears: 'floppy', earSize: 1.15, tail: 'plume', fur: 0.02, curly: 1 },
-  berger_blanc: { legs: 1.02, back: 1.1, girth: 1.0, head: 1.02, snout: 1.35, ears: 'pointed', earSize: 1.2, tail: 'sabre', tailLen: 1.1, fur: 0.008 },
+  labradoodle: { legs: 1.0, back: 1.0, girth: 1.04, headW: 0.9, head: 1.0, snout: 1.1, ears: 'floppy', earSize: 1.15, tail: 'plume', fur: 0.02, curly: 1 },
+  berger_blanc: { legs: 1.02, back: 1.1, girth: 1.0, headW: 0.86, head: 1.02, snout: 1.35, ears: 'pointed', earSize: 1.2, tail: 'sabre', tailLen: 1.1, fur: 0.008 },
 };
 
 const ONE = {
   legs: 1, legW: 1, back: 1, girth: 1, head: 1, snout: 1, muzzleW: 1, neck: 1,
-  earSize: 1, tailLen: 1, tailThick: 1, fur: 0, ruff: 0, feather: 0, curly: 0, silky: 0, slope: 0, tuck: 0,
+  earSize: 1, headW: 1, tailLen: 1, tailThick: 1, fur: 0, ruff: 0, feather: 0, curly: 0, silky: 0, slope: 0, tuck: 0,
 };
 
 /** Modèle 3D d'un chien : 'jack' pour les petits, 'shiba' pour les autres (d'après la taille de sa race). */
@@ -102,6 +102,8 @@ export function dogBuild(look = {}, puppy = false) {
     B.ears = EAR_OF[look.earType] ?? B.ears;
     B.tail = TAIL_OF[look.tailType] ?? B.tail;
   }
+  // Queue écourtée : courte, sauf longueur donnée par la race.
+  if (B.tail === 'stub' && !(breed && DOG_BUILDS[breed].tailLen)) B.tailLen = 0.28;
   B.puppy = !!puppy;
   if (puppy) {
     B.head *= 1.22;

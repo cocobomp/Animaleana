@@ -510,8 +510,13 @@ function buildDogGear(model, gear, add) {
     medal.rotation.x = Math.PI / 2;
     medal.position.set(0, yb - band * 1.6, band * 0.4);
     ring.add(medal);
+    // Anneau de la laisse sur le dessus de l'encolure (là où dogReal.js place leashPoint).
+    const dRing = new THREE.Mesh(new THREE.TorusGeometry(band * 0.8, band * 0.2, 6, 12), metal);
+    dRing.position.set(0, c.ry + gap + band * 1.3, 0);
+    dRing.rotation.y = Math.PI / 2;
+    ring.add(dRing);
     add.group(c.bone, ring);
-    ring.userData.dispose = [geo, torus.material, buckle.geometry, medal.geometry, metal];
+    ring.userData.dispose = [geo, torus.material, buckle.geometry, medal.geometry, dRing.geometry, metal];
   }
   if (gear.blanket && fit.rings?.length) {
     const color = gearColor(gear.blanket, BLANKET_COLORS.red);

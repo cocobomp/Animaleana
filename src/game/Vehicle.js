@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { towCar, horseTrailer, car, crate, trunk, cargoMesh, disposeVehicle } from './models/vehicles.js';
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
-import { growthScale } from '../sim/animal.js';
+import { growthScale, lifeStage } from '../sim/animal.js';
 import { needsTrailer } from '../sim/trip.js';
 import { cargoItem, cargoShape } from '../sim/cargo.js';
 
@@ -29,11 +29,17 @@ export function crateWithAnimal(a, colorIndex = 0) {
   const s = a.look.scale * growthScale(a);
   const len = (a.look.bodyLen + a.look.headLen) * s;
   const c = crate(Math.min(0.85, Math.max(0.5, len * 1.15)), CRATE_COLORS[colorIndex % CRATE_COLORS.length]);
-  const model = buildAnimalModel(a.species, a.look, a.breed); // chaque espèce par son modèle (cheval de sa race, chat…)
+  const model = buildAnimalModel(a.species, travelLook(a), a.breed); // chaque espèce par son modèle (cheval de sa race, chat…)
+  model.staticPose?.('lie'); // (chien réaliste : couché dans sa caisse)
   model.root.scale.setScalar(s * Math.min(1, (c.size.d * 0.8) / len));
   model.root.position.set(0, 0.03, -0.04);
   c.group.add(model.root);
   return { crate: c, model };
+}
+
+/** Gabarit d'un voyageur : le chiot du chien réaliste a le sien (grosse tête, pattes courtes), comme en jeu. */
+function travelLook(a) {
+  return a.species === 'dog' && lifeStage(a) === 'baby' ? { ...a.look, puppy: true } : a.look;
 }
 
 /** Nombre de places de remorque pour ces animaux (deux moutons ou deux chèvres partagent une place). */
@@ -474,7 +480,7 @@ export class TripVehicle {
     if (place === 'crate' || !this.trailer) return this.addCrate(a);
     const i = this.freeStall(a);
     if (i < 0) return this.addCrate(a);
-    const model = buildAnimalModel(a.species, a.look, a.breed); // chaque espèce par son modèle (cheval de sa race, chat…)
+    const model = buildAnimalModel(a.species, travelLook(a), a.breed); // chaque espèce par son modèle (cheval de sa race, chat…)
     const s = a.look.scale * growthScale(a);
     model.root.scale.setScalar(s);
     this.stallUse[i].push(a.id);

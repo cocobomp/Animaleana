@@ -1568,7 +1568,9 @@ export class Game {
       const h = this.player.heading;
       const hand = new THREE.Vector3(pl.x + Math.cos(h) * 0.3, pl.y + 0.85, pl.z - Math.sin(h) * 0.3);
       const neck = e.position.clone();
-      neck.y += (e.model.y0 + e.data.look.bodyR) * e.scale;
+      // (chien réaliste : l'anneau de son collier, qui suit l'encolure)
+      if (e.model.leashPoint) e.model.leashPoint.getWorldPosition(neck);
+      else neck.y += (e.model.y0 + e.data.look.bodyR) * e.scale;
       const dist = hand.distanceTo(neck);
       const slack = Math.max(0, 2.8 - dist) * 0.35;
       const pos = line.geometry.attributes.position;

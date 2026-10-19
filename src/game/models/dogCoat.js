@@ -58,8 +58,8 @@ export function coatPlan(look = {}, breedId = null) {
   if (/Bring|Brindle/.test(name)) {
     // Bringé : rayures sombres sur un fond fauve.
     P.brindle = 1;
-    P.brindleColor = scaleHex(coat, lum(coat) < 0.2 ? 0.75 : 0.45);
-    P.base = mixHex(coat, 0xb5895a, lum(coat) < 0.2 ? 0.62 : 0.35);
+    P.brindleColor = scaleHex(coat, lum(coat) < 0.2 ? 0.75 : 0.5);
+    P.base = mixHex(coat, 0xb98c5c, lum(coat) < 0.2 ? 0.66 : 0.5);
   }
   // (charbonné : nom anglais « Sable », pas le « sable » français qui veut dire jaune chez le labrador)
   const en = look.colorName?.en ?? '';
@@ -206,7 +206,7 @@ export function coatPlan(look = {}, breedId = null) {
   // Noirs très sombres : un peu relevés (sinon plus aucun modelé ni reflet du poil à l'écran).
   for (const k of ['base', 'saddleColor', 'patchColor', 'blobColor', 'merleColor', 'brindleColor']) {
     const l = lum(P[k]);
-    if (l < 0.06) P[k] = mixHex(P[k], 0x3b3532, 0.32 * (1 - l / 0.06));
+    if (l < 0.06) P[k] = mixHex(P[k], 0x423b37, 0.42 * (1 - l / 0.06));
   }
   P.dark = lum(P.base) < 0.08;
   return P;
@@ -246,6 +246,8 @@ export function makeCoatUniforms() {
     // Coupe du salon de toilettage (m, le long de la normale) : tronc, collerette (cou et poitrail), pompons (bas des
     // pattes), bout de la queue et dessus du crâne.
     cCut: { value: new THREE.Vector4(0, 0, 0, 0) },
+    // Relief du poil : frisé (x : bouclettes) et soyeux (y : mèches qui tombent), 0 à 1.
+    cCurl: { value: new THREE.Vector2(0, 0) },
   };
 }
 
@@ -355,6 +357,7 @@ uniform vec3 cSableC;
 uniform float cTick;
 uniform vec3 cTickC;
 uniform float cWet;
+uniform vec2 cCurl;
 uniform vec4 cLand;
 uniform vec4 cHead;
 uniform vec4 cEye;
@@ -382,6 +385,14 @@ float cmpNoise(vec3 x) {
                  mix(cmpHash(i + vec3(0.0, 1.0, 0.0)), cmpHash(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
              mix(mix(cmpHash(i + vec3(0.0, 0.0, 1.0)), cmpHash(i + vec3(1.0, 0.0, 1.0)), f.x),
                  mix(cmpHash(i + vec3(0.0, 1.0, 1.0)), cmpHash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
+}
+// Relief du poil : bouclettes (frisé) et mèches verticales (soyeux), hauteur 0 à 1 sur la position de repos.
+float cmpCurlH(vec3 p) {
+  vec3 q = p * 140.0;
+  return cmpNoise(q) * 0.6 + cmpNoise(q * 2.3 + 7.0) * 0.4;
+}
+float cmpSilkH(vec3 p) {
+  return cmpNoise(vec3(p.x * 260.0, p.y * 22.0, p.z * 260.0)) * 0.7 + cmpNoise(vec3(p.x * 520.0, p.y * 40.0, p.z * 520.0)) * 0.3;
 }
 // Taches rondes (dalmatien) : la plus proche, rayon propre à chaque tache.
 float cmpSpots(vec3 p) {
@@ -463,10 +474,10 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   if (cBrindle > 0.0) {
     float warp = cmpNoise(sp * vec3(6.0, 2.5, 6.0)) * 1.6 + n2 * 0.5;
     float along = mix(p.z, p.y * 0.9 + p.z * 0.25, legs);
-    float st = sin(along * 330.0 + warp * 7.0 + cmpNoise(sp * 11.0) * 4.0);
-    float stripe = smoothstep(0.3, 0.8, st * (0.45 + 0.75 * cmpNoise(sp * 8.0 + 3.0))) * (0.55 + 0.45 * n1);
-    stripe *= 1.0 - 0.7 * head;
-    c = mix(c, cBrindleC, cBrindle * stripe * 0.85);
+    float st = sin(along * 210.0 + warp * 6.0 + cmpNoise(sp * 9.0) * 3.5);
+    float stripe = smoothstep(0.35, 0.85, st * (0.35 + 0.8 * cmpNoise(sp * 7.0 + 3.0))) * (0.5 + 0.5 * n1);
+    stripe *= (1.0 - 0.85 * head) * (1.0 - 0.5 * legs);
+    c = mix(c, cBrindleC, cBrindle * stripe * 0.75);
   }
   // ---- charbonné / sable : pointes sombres sur le dessus, la tête, les oreilles, le bout de la queue
   if (cSable > 0.0) {
@@ -526,6 +537,8 @@ vec3 cmpCoat(vec3 p, vec4 part) {
     float m = max(muzzle * smoothstep(0.55, 0.7, hz + edge * 0.4), eyeRing * 0.8) * (1.0 - ear);
     c = mix(c, cMaskC, clamp(cMask.x * m + cMask.y * ear, 0.0, 1.0));
   }
+  // (oreilles un peu plus sombres que la tête : elles s'en détachent, surtout tombantes)
+  c *= 1.0 - 0.12 * ear;
   return c;
 }`;
 
@@ -570,7 +583,25 @@ if (cOn > 0.5) {
   detail = mix(detail, sqrt(detail), smoothstep(0.3, 0.8, l));
   vec3 nc = min(coat * detail, vec3(1.0));
   nc *= 1.0 - 0.35 * cWet;
+  if (cCurl.x > 0.0) nc *= mix(1.0, 0.66 + 0.46 * smoothstep(0.25, 0.75, cmpCurlH(vCmpPos)), cCurl.x);
+  if (cCurl.y > 0.0) nc *= mix(1.0, 0.82 + 0.26 * cmpSilkH(vCmpPos), cCurl.y);
   diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0));
+}`;
+
+// Relief du poil frisé ou soyeux : la normale penche selon la pente de la hauteur (comme une bumpMap), effacé de loin
+// (moins d'un pixel par bouclette : scintillement).
+const CURL_F = /* glsl */ `
+if (cOn > 0.5 && cRole > 0.5 && (cCurl.x > 0.0 || cCurl.y > 0.0)) {
+  float fade = 1.0 - smoothstep(0.25, 0.9, length(fwidth(vCmpPos)) * 140.0);
+  float hh = (cCurl.x * 0.004 * cmpCurlH(vCmpPos) + cCurl.y * 0.0015 * cmpSilkH(vCmpPos)) * fade;
+  vec2 dH = vec2(dFdx(hh), dFdy(hh));
+  vec3 sx = dFdx(-vViewPosition);
+  vec3 sy = dFdy(-vViewPosition);
+  vec3 r1 = cross(sy, normal);
+  vec3 r2 = cross(normal, sx);
+  float det = dot(sx, r1);
+  vec3 grad = sign(det) * (dH.x * r1 + dH.y * r2);
+  normal = normalize(abs(det) * normal - grad);
 }`;
 
 const _v = new THREE.Vector3();
@@ -712,6 +743,7 @@ export function coatMaterial(src, shared, opts) {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${COMMON_F}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${CURL_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, cWet);');
   };
   mat.customProgramCacheKey = () => 'dog-coat-v1';

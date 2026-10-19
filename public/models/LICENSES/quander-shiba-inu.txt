@@ -1,0 +1,22 @@
+Chiens moyens et grands — « Animated Dog Shiba Inu » par quander (Sketchfab)
+Fichier du jeu : dog_shiba.glb
+
+Source :
+  https://sketchfab.com/3d-models/animated-dog-shiba-inu-9abfce885a834399b2c3ccaed51cd474
+
+Licence :
+  Creative Commons Attribution 4.0 International (CC BY 4.0)
+  https://creativecommons.org/licenses/by/4.0/
+
+Attribution : « Animated Dog Shiba Inu » by quander, licensed under CC BY 4.0.
+
+Modifications faites pour La ferme à Madichelle (scripts de tools/chien/, voir tools/chien/LISEZMOI.md) :
+  - os de détail (doigts, lèvres, sourcils, moustaches, bouts de chaîne) fusionnés dans leurs parents, os renommés ;
+  - paupières rattachées aux yeux, moustaches retirées du maillage ;
+  - animations d'origine reprises (immobile, assis, donner la patte, roulade) ; animations ajoutées : pas, trot,
+    galop, couché, endormi, renifler, manger, boire, révérence, saut, transitions (s'asseoir, se lever, se coucher) ;
+  - pieds recalés au sol sur chaque image, canaux inutiles retirés ;
+  - texture rendue neutre (la robe est recolorée par le jeu), textures WebP, compression meshopt, version allégée
+    (moins de triangles) pour les chiens lointains ;
+  - en jeu : proportions des 38 races par déformation du squelette (src/game/models/dogReal.js).
+Le modèle d'origine n'est pas cautionné par son auteur pour cet usage ; aucune garantie.

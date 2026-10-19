@@ -522,13 +522,19 @@ export function deformDog(base, B) {
     }
   }
   // 4. Tête plus grosse ou plus petite (oreilles, mâchoire, yeux compris), autour de l'os de la tête.
-  if (B.head !== 1) {
+  //    Crâne plus étroit (headW) : le shiba a la tête large d'un spitz, les chiens de chasse et les lévriers l'ont
+  //    fine ; moins vers le bout du museau (réglé à part : muzzleW).
+  if (B.head !== 1 || B.headW !== 1) {
     const HJ = H[headI].clone();
+    const noseLen = Math.max(0.05, (L.noseZ - base.heads[headI].z) * B.head);
     for (let j = 0; j < total; j++) {
       const wh = wHead(j);
       if (!(wh > 0)) continue;
       get(j, p);
-      p.sub(HJ).multiplyScalar(1 + wh * (B.head - 1)).add(HJ);
+      p.sub(HJ).multiplyScalar(1 + wh * (B.head - 1));
+      const fz = 1 - 0.6 * smooth(0.45, 0.9, p.z / noseLen);
+      p.x *= 1 + wh * fz * (B.headW - 1);
+      p.add(HJ);
       set(j, p);
     }
   }
@@ -579,6 +585,7 @@ export function deformDog(base, B) {
         p.addScaledVector(op.normal, t * (op.flat - 1) * we);
       }
       if (op.turn) rot(p, _q.identity().slerp(op.turn, we), op.base);
+      if (op.shift) p.addScaledVector(op.shift, we);
       set(j, p);
       if (j < n && (op.turn || op.fold)) {
         _w.fromArray(N, j * 3);
@@ -683,15 +690,23 @@ export function deformDog(base, B) {
       const h = (y0 - L.bellyY) / Math.max(0.05, L.topY - L.bellyY);
       const front = smooth(L.shZ - 0.06, L.shZ + 0.06, z0);
       let k = (1 - legSum) * (1 - head) * (1 - tail) * (1 - ear) * (0.7 + 0.4 * front * (1 - smooth(0.2, 0.8, h)) * B.ruff);
-      k += neck * (0.3 + 0.5 * B.ruff);
+      k += neck * (0.3 + 0.5 * B.ruff - 0.6 * (1 - B.ruff));
       k += head * 0.12 * smooth(L.eyeY - 0.02, L.eyeY + 0.06, y0) * (1 - smooth(0.3, 0.6, (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z)));
       const paw = 1 - smooth(0.04, L.elbowY * 0.55, y0);
       k += legSum * (1 - paw) * (0.3 + B.feather * 0.8 * smooth(-0.1, -0.7, _w.z) * smooth(L.elbowY * 0.3, L.elbowY, y0));
       k += (1 - legSum) * (1 - head) * (1 - tail) * B.feather * 0.7 * smooth(-0.3, -0.9, _w.y);
-      k += ear * (0.2 + 0.9 * B.feather);
+      k += ear * (0.1 + 0.4 * B.feather);
       k += tail * (0.9 + 0.9 * B.feather);
       const nz = B.curly ? 0.45 + 1.1 * fbm(p.x * 55, p.y * 55, p.z * 55) : 0.75 + 0.5 * fbm(p.x * 30, p.y * 30, p.z * 30);
-      p.addScaledVector(_w, B.fur * k * nz);
+      // Sans collerette (setter, caniche, golden) : celle du shiba et ses joues de spitz d'abord raccourcies (sinon
+      // une crinière de lion autour de la tête).
+      let shave = 0;
+      if (base.kind === 'shiba' && B.ruff < 0.5) {
+        const x0 = r0[i * 3] - L.midX;
+        shave = (1 - 2 * B.ruff) * 0.015 * (neck * 1.1 + head * 0.8 * (1 - smooth(L.eyeY - 0.06, L.eyeY - 0.01, y0))
+          * smooth(L.eyeX * 0.8, L.eyeX * 1.6, Math.abs(x0)) * (1 - smooth(0.45, 0.65, (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z))));
+      }
+      p.addScaledVector(_w, B.fur * k * nz - shave);
       P.set([p.x, p.y, p.z], i * 3);
     }
   }
@@ -751,8 +766,11 @@ function earPlan(base, B, H) {
     op.normal = V(0, 0, 1).addScaledVector(dir, -dir.z).normalize();
     if (kind === 'shiba') {
       if (want === 'floppy' || want === 'long') {
-        op.turn = qTo(V(side * 0.42, -1, 0.3));
-        op.flat = 0.55;
+        // (pendante le long de la joue, pas écartée : sinon la tête paraît ronde comme celle d'un chow-chow)
+        op.turn = qTo(V(side * 0.24, -1, 0.18));
+        op.flat = 0.45;
+        // (attachée plus bas et plus en arrière que l'oreille dressée du shiba : au niveau de l'œil)
+        op.shift = V(-side * 0.008, -0.022, -0.012).multiplyScalar(B.head);
         if (want === 'long') op.size *= 1.25;
       } else if (want === 'semi') {
         op.fold = axisRot(V(1, 0, 0), 1.6);
@@ -1168,7 +1186,9 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   // Matières : robe du chien (uniformes propres) ; yeux du jack.
   const uniforms = { ...makeCoatUniforms(), ...base.landUniforms };
   const plan = coatPlan(look, lk.breed);
-  setCoat(uniforms.cBase ? uniforms : uniforms, plan);
+  setCoat(uniforms, plan);
+  // Poil frisé (caniche, labradoodle) ou soyeux et frangé (yorkshire, setter, cavalier) : relief dans le shader.
+  uniforms.cCurl.value.set(B.curly ? 1 : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : 0);
   const keepCfg = base.cfg.keep;
   const nose = S.measure.noseTip;
   const spheres = keepCfg.nose ? [{ s: new THREE.Vector4(base.land.nose.x, base.land.nose.y, base.land.nose.z - keepCfg.nose[0] * 0.4, keepCfg.nose[0]), l: keepCfg.nose[1] }] : [];
@@ -1233,8 +1253,8 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   const leashPoint = new THREE.Object3D();
   leashPoint.name = 'leashPoint';
   neckB.add(leashPoint);
-  // (anneau du collier sous la gorge : le bas de l'anneau, un peu devant)
-  leashPoint.position.copy(toLocal(neckB, M.collar.center.clone().add(V(0, -M.collar.ry - 0.012, 0.01))));
+  // (anneau du collier où s'accroche la laisse : sur le dessus de l'encolure, la laisse ne traverse pas le cou)
+  leashPoint.position.copy(toLocal(neckB, M.collar.center.clone().add(V(0, M.collar.ry + 0.008, -0.004))));
   const lastTail = tailB[tailB.length - 1] ?? null;
   const model = {
     root,
@@ -1525,8 +1545,15 @@ class RealDogAnim {
     this.bones = model.bones;
     this.pose = this.bones.map((b) => [b.position.clone(), b.quaternion.clone()]);
     // Décalage des articulations de la race pour les os dont un clip anime la translation (racine…).
-    this.shift = base.transBones.map((i) => [this.bones[i], S.heads[i].clone().sub(base.heads[i]).applyQuaternion(
-      base.parent[i] >= 0 ? base.rotW[base.parent[i]].clone().invert() : new THREE.Quaternion())]);
+    //    (écart de la position locale : déplacement de l'os moins celui de son parent, dans le repère de repos du
+    //    parent ; sans retirer celui du parent, il comptait deux fois le long des membres : le galgo volait au galop
+    //    et le chiot s'enfonçait dans le sol)
+    this.shift = base.transBones.map((i) => {
+      const p = base.parent[i];
+      const d = S.heads[i].clone().sub(base.heads[i]);
+      if (p >= 0) d.sub(_u.copy(S.heads[p]).sub(base.heads[p]));
+      return [this.bones[i], d.applyQuaternion(p >= 0 ? base.rotW[p].clone().invert() : new THREE.Quaternion())];
+    });
     // Port de la queue de la race (rotations locales des os de la queue) et des oreilles.
     this.tailRest = tailCarriage(model, base, B);
     this.t = (model.root.id * 7.31) % 100;
@@ -1554,6 +1581,38 @@ class RealDogAnim {
       const p = V().fromArray(S.D.pos, i * 3);
       return l.paw.worldToLocal(p);
     }));
+    // Points du corps (dessous du tronc, cuisses, coudes), chacun lié à son os principal : assis, couché, endormi ou
+    // pendant la roulade, le chien repose sur le sol sans s'y enfoncer (les races aux pattes courtes s'enfonçaient
+    // de 7 cm couchées) ; le poil s'écrase un peu (bodyAllow).
+    const coat = base.prims.coat;
+    const W = base.W;
+    const M = S.measure;
+    const midY = (M.topY + M.bellyY) / 2;
+    const cand = [];
+    for (let i = 0; i < coat.count; i++) {
+      const y = S.D.pos[i * 3 + 1];
+      const legSum = W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3];
+      if (W.tail[i] > 0.2 || W.head[i] > 0.3 || W.ear[i * 2] + W.ear[i * 2 + 1] > 0) continue;
+      if (legSum > 0.5 ? y > M.elbowY * 0.5 : y < midY) cand.push(i);
+    }
+    const stride = Math.max(1, Math.ceil(cand.length / 240));
+    this.bodyPts = [];
+    for (let k = 0; k < cand.length; k += stride) {
+      // (peau entière : chaque point suit ses os avec leurs poids, comme le shader ; lié à un seul os, un point de
+      // la cuisse assise passait sous le sol et le chien s'asseyait en l'air)
+      const i = cand[k];
+      const inf = [];
+      for (let c = 0; c < 4; c++) {
+        const w = coat.sw[i * 4 + c];
+        if (w > 0.02) inf.push([this.bones[coat.si[i * 4 + c]], w]);
+      }
+      const tot = inf.reduce((a, x) => a + x[1], 0) || 1;
+      this.bodyPts.push(inf.map(([b, w]) => [b, b.worldToLocal(V().fromArray(S.D.pos, i * 3)), w / tot]));
+    }
+    this.bodyAllow = 0.012 + Math.max(0, B.fur) * 0.8;
+    this.gOff = 0;
+    // (bout de la queue gardé au-dessus du sol : plus haut pour une queue épaissie de poil, panache du terre-neuve)
+    this.tailClear = 0.03 + Math.max(0, B.fur) * (0.9 + 0.9 * B.feather) * Math.max(0.5, B.tailThick);
   }
 
   /** Tourne un os de ang autour d'un axe du chien (axe vu par son parent au repos ; il suit le parent animé). */
@@ -1597,7 +1656,11 @@ class RealDogAnim {
     this.restorePose();
     this.mixer.update(0);
     this.savePose();
-    this.overlay(0, { moving: false, v: 0, sleeping: kind === 'sleep', happy: 0, sad: false }, true);
+    // (comme update : articulations de la race sous les translations des clips, puis pieds posés au sol)
+    for (const [b, d] of this.shift) b.position.add(d);
+    const st = { moving: false, v: 0, sleeping: kind === 'sleep', happy: 0, sad: false };
+    this.overlay(0, st, true);
+    this.ground(st);
     this.model.root.updateMatrixWorld(true);
   }
 
@@ -1706,7 +1769,7 @@ class RealDogAnim {
     this.savePose();
     for (const [b, d] of this.shift) b.position.add(d);
     this.overlay(dt, st, false);
-    this.ground(st);
+    this.ground(st, dt);
   }
 
   /** Procédural par-dessus les clips. */
@@ -1724,7 +1787,9 @@ class RealDogAnim {
     u.cWet.value = st.wet ?? 0;
     // Gueule entrouverte et langue qui pend quand il halète ou qu'il est content.
     const open = Math.max(this.pant * 0.9, (st.happy ?? 0) * 0.35) * (sleeping ? 0 : 1);
-    if (this.jaw && open > 0.01) this.turn(this.jaw, AX, open * 0.22 + Math.sin(t * rate) * 0.03 * this.pant);
+    // (au calme, la gueule du shiba, ouverte dans ses animations, est refermée : sinon il montre les dents)
+    const shut = B.model === 'shiba' ? JAW_SHUT * (1 - Math.min(1, open * 2.5)) : 0;
+    if (this.jaw && (open > 0.01 || shut > 0)) this.turn(this.jaw, AX, open * 0.22 + Math.sin(t * rate) * 0.03 * this.pant - shut);
     if (this.tongue.length && this.pant > 0.05) {
       for (let i = 0; i < this.tongue.length; i++) this.turn(this.tongue[i], AX, this.pant * 0.12 * (i + 1) / this.tongue.length);
     }
@@ -1813,7 +1878,13 @@ class RealDogAnim {
    * relevé de ce qui dépasse, la queue relevée autour de sa base. Positions des points d'appui par les matrices des os
    * (une mise à jour des matrices du squelette par image, faite ici plutôt qu'au rendu).
    */
-  ground() {
+  /**
+   * Pieds au sol. Au pas et au trot, la sole la plus basse est posée sur le sol (relevée tout de suite, descendue
+   * en douceur) ; au galop et pendant le saut, le chien est seulement relevé (il a des temps de suspension) ; à
+   * l'arrêt (debout, assis, couché, tours), les soles sont posées et le corps ne s'enfonce pas sous le sol.
+   * dt : 0 pour une pose fixe (vignettes, caisse de transport) : sans transition.
+   */
+  ground(st, dt = 0) {
     const md = this.model;
     md.root.updateMatrixWorld(true);
     _m.copy(md.root.matrixWorld).invert();
@@ -1825,8 +1896,28 @@ class RealDogAnim {
         if (y < low) low = y;
       }
     }
-    if (low < -0.002 && Number.isFinite(low)) {
-      md.body.position.y -= low;
+    if (!Number.isFinite(low)) low = 0;
+    const air = this.trick?.clip === 'jump' && this.trick.age < 0.25;
+    let target;
+    let floor = -low;
+    if (st.moving || air) {
+      target = !air && this.gait !== 'run' ? -low : Math.max(0, -low);
+    } else {
+      let lowB = Infinity;
+      for (const pt of this.bodyPts) {
+        _w.set(0, 0, 0);
+        for (const [b, p, w] of pt) _w.addScaledVector(_v.copy(p).applyMatrix4(b.matrixWorld), w);
+        const y = _w.applyMatrix4(_m).y;
+        if (y < lowB) lowB = y;
+      }
+      target = Math.max(-low, Number.isFinite(lowB) ? -(lowB + this.bodyAllow) : -Infinity);
+      floor = target;
+    }
+    let off = dt > 0 ? this.gOff + (target - this.gOff) * Math.min(1, dt * 6) : target;
+    off = Math.max(off, floor);
+    this.gOff = off;
+    if (Math.abs(off) > 0.0003) {
+      md.body.position.y += off;
       md.root.updateMatrixWorld(true);
     }
     // Queue : bout au-dessus du sol (assis, couché).
@@ -1837,10 +1928,10 @@ class RealDogAnim {
         const next = tb[i + 1];
         const tipW = next ? _v.setFromMatrixPosition(next.matrixWorld) : _v.set(0, 0.06, 0).applyMatrix4(b.matrixWorld);
         const y = _w.copy(tipW).applyMatrix4(_m).y;
-        if (y < 0.03) {
+        if (y < this.tailClear) {
           const base = _u.setFromMatrixPosition(b.matrixWorld).applyMatrix4(_m);
           const len = Math.max(0.02, Math.hypot(_w.x - base.x, _w.y - base.y, _w.z - base.z));
-          const need = Math.min(1.2, Math.asin(clamp((0.03 - y) / len, 0, 1)));
+          const need = Math.min(1.2, Math.asin(clamp((this.tailClear - y) / len, 0, 1)));
           this.turn(b, AX, need);
           b.updateMatrixWorld(true);
         }
@@ -1851,6 +1942,7 @@ class RealDogAnim {
 
 const AXIS_Y = V(0, 1, 0);
 const AX = V(1, 0, 0); // (tourner autour de x du chien, positif : vers le bas pour une tête qui regarde devant)
+const JAW_SHUT = 0.1; // (refermer la gueule du shiba au calme, rad)
 const AZ = V(0, 0, 1);
 const _ax = V();
 
@@ -1979,6 +2071,8 @@ export function animateRealDog(e, dt, sad) {
   else if (idle && Math.sin(t * 0.19 + e.restSeed * 0.7) > 0.8) action = 'sniff';
   else if (e.state === 'play') action = 'wag';
   st.action = action;
+  // (happyFor : secondes de contentement données par un tour réussi, le « sourire » du spectacle)
+  if (e.happyFor > 0) e.happyFor = Math.max(0, e.happyFor - dt);
   st.happy = e.state === 'play' ? 1 : sad ? 0 : (e.happyFor ?? 0) > 0 ? 1 : 0.25;
   st.pull = e.leashPull ?? 0;
   // (chien de troupeau au travail : seulement lui, pas le chien d'un client qui rejoint son maître)

@@ -1423,8 +1423,8 @@ export class Game {
     this.xp('care');
     this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
     this.ui.refresh();
-    this.emit('care', { a, action });
-    return res;
+    this.emit('care', { a, action, quality });
+    return { ...res, quality }; // (la qualité du mini-jeu : le bain du concours en a besoin, src/ui/beauty.js)
   }
 
   trick(a, trickId) {

@@ -44,6 +44,12 @@ export const PREP_ITEMS = {
 
 /** Le bain et le brossage ne comptent que si l'animal est encore propre (vrais besoins). */
 export const CLEAN_MIN = 60;
+/**
+ * Un bain (brossage) qui a rendu l'animal propre compte encore tant que la propreté réelle n'est pas
+ * descendue de plus de DIRTY_DROP sous CLEAN_MIN : la petite baisse naturelle des heures suivantes ne
+ * l'efface pas, une roulade dans la boue si (dirtiedSince).
+ */
+export const DIRTY_DROP = 15;
 /** Un animal tout propre (soin normal juste fait) : le geste compte même sans le mini-jeu. */
 export const SPOTLESS = 90;
 
@@ -96,6 +102,9 @@ export function notePrep(a, item, now, quality = 1, extra = {}) {
   if (!def) return null;
   const b = beautyData(a);
   const entry = { t: now, q: Math.round(clamp(quality) * 100) / 100 };
+  // Bain, brossage : la propreté réelle juste après le geste (pour savoir s'il s'est sali depuis).
+  const need = REAL_NEED[item];
+  if (need && Number.isFinite(a.needs?.[need])) entry.n = Math.floor(a.needs[need] * 10) / 10;
   if (def.color) {
     entry.color = RIBBON_COLORS[extra.color] !== undefined ? extra.color : 'red';
     if (extra.pattern) entry.pattern = extra.pattern;
@@ -116,22 +125,70 @@ export function freshness(a, item, now) {
 export const isFresh = (a, item, now) => freshness(a, item, now) > 0;
 
 /** Le besoin réel qui dit si un geste « tient » encore (bain → hygiène, brossage → toilette). */
-const REAL_NEED = { wash: 'hygiene', brush: 'grooming' };
+export const REAL_NEED = { wash: 'hygiene', brush: 'grooming' };
 
-/** Le bain ou le brossage a été défait (boue, roulade, poussière) : la propreté réelle a trop baissé. */
+/** L'animal n'est pas assez propre (bain) ou démêlé (brossage) : propreté réelle sous CLEAN_MIN. */
 export function undone(a, item) {
   const need = REAL_NEED[item];
   return !!need && (a.needs?.[need] ?? 100) < CLEAN_MIN;
 }
 
 /**
- * Le geste compte-t-il ? Frais ET (pour le bain et le brossage) l'animal est encore propre.
+ * Le bain (brossage) avait rendu l'animal propre, mais il s'est sali (emmêlé) depuis : la propreté réelle est
+ * passée sous CLEAN_MIN − DIRTY_DROP. Faux si le geste n'a jamais été fait, ou s'il n'avait pas suffi (encore
+ * sale juste après : c'est « refais un bain », pas « il s'est sali depuis »).
+ */
+export function dirtiedSince(a, item) {
+  const need = REAL_NEED[item];
+  const e = a.beauty?.prep?.[item];
+  if (!need || !e) return false;
+  const v = a.needs?.[need] ?? 100;
+  if (e.n == null) return v < CLEAN_MIN; // (geste noté par une ancienne version : comme avant)
+  return e.n >= CLEAN_MIN && v < CLEAN_MIN - DIRTY_DROP;
+}
+
+/**
+ * Le geste compte-t-il ? Frais ET (pour le bain et le brossage) l'animal est encore propre : propreté réelle
+ * d'au moins CLEAN_MIN, ou geste qui l'avait rendu propre et pas sali depuis (dirtiedSince).
  * Il compte aussi s'il vient d'être fait par le soin normal : hygiène ou toilette presque au maximum.
  */
 export function itemDone(a, item, now) {
   const need = REAL_NEED[item];
-  if (need && (a.needs?.[need] ?? 0) >= SPOTLESS) return true;
-  return isFresh(a, item, now) && !undone(a, item);
+  const v = need ? a.needs?.[need] ?? 0 : 0;
+  if (need && v >= SPOTLESS) return true;
+  if (!isFresh(a, item, now)) return false;
+  if (!need || v >= CLEAN_MIN) return true;
+  const n = a.beauty?.prep?.[item]?.n;
+  return n != null && n >= CLEAN_MIN && !dirtiedSince(a, item);
+}
+
+/** Qualité du mini-jeu (0 à 1) à partir de laquelle un bain ou un brossage de concours compte (★★). */
+export const SHOW_CARE_MIN = 0.5;
+
+/**
+ * Toilette de concours : un bain (brossage) réussi depuis la liste de préparation rend l'animal assez propre
+ * pour le juge, même s'il était tout sale : propreté réelle remontée à au moins CLEAN_MIN + 20 × qualité.
+ * (Avant, un bain ★★★ sur un chien à 0 laissait 59,98 < 60 : « à refaire : elle s'est salie depuis ».)
+ * Renvoie vrai si la propreté a été remontée.
+ */
+export function showCare(a, item, quality) {
+  const need = REAL_NEED[item];
+  if (!need || !a.needs || !(quality >= SHOW_CARE_MIN)) return false;
+  const target = CLEAN_MIN + Math.round(20 * clamp(quality));
+  if ((a.needs[need] ?? 0) >= target) return false;
+  a.needs[need] = target;
+  return true;
+}
+
+/**
+ * Pourquoi le bain ou le brossage ne compte pas, côté saleté : 'dirtied' (il s'est sali depuis le geste),
+ * 'tooDirty' (pas encore fait, ou pas suffi : encore trop sale) ou null (il compte, ou ce n'est pas une
+ * question de saleté).
+ */
+export function dirtState(a, item, now) {
+  if (!REAL_NEED[item] || itemDone(a, item, now)) return null;
+  if (isFresh(a, item, now) && dirtiedSince(a, item)) return 'dirtied';
+  return undone(a, item) ? 'tooDirty' : null;
 }
 
 /**
@@ -161,9 +218,11 @@ export function checklist(a, now) {
     const def = PREP_ITEMS[item];
     const left = freshness(a, item, now);
     const done = itemDone(a, item, now);
-    const dirty = !done && left > 0 && undone(a, item);
-    const old = !done && !dirty && !!a.beauty?.prep?.[item];
-    return { item, icon: def.icon, required, done, old, dirty, left: Math.round(left), color: a.beauty?.prep?.[item]?.color ?? null, pattern: a.beauty?.prep?.[item]?.pattern ?? null };
+    const dirt = dirtState(a, item, now);
+    const dirty = dirt === 'dirtied'; // fait, mais sali depuis : à refaire
+    const tooDirty = dirt === 'tooDirty'; // encore trop sale (jamais lavé, ou bain trop léger)
+    const old = !done && !dirty && !tooDirty && !!a.beauty?.prep?.[item];
+    return { item, icon: def.icon, required, done, old, dirty, tooDirty, left: Math.round(left), color: a.beauty?.prep?.[item]?.color ?? null, pattern: a.beauty?.prep?.[item]?.pattern ?? null };
   };
   return [...c.required.map((i) => line(i, true)), ...c.bonus.map((i) => line(i, false))];
 }

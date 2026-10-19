@@ -291,7 +291,8 @@ export class Session {
     document.body.classList.add('actv-running');
     // Agility et spectacle : on ne se déplace pas soi-même (pas de joystick).
     document.body.classList.toggle('actv-nomove', type === 'agility' || type === 'show');
-    this.keyHandler = (e) => this.onKeyDown?.(e);
+    // (fenêtre ouverte, « Arrêter ? » : Espace et Entrée sont pour ses boutons, pas pour l'activité)
+    this.keyHandler = (e) => { if (!this.game.ui.modalOpen) this.onKeyDown?.(e); };
     window.addEventListener('keydown', this.keyHandler);
   }
 

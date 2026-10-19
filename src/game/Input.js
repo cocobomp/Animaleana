@@ -1,5 +1,14 @@
 // Contrôles : clavier + souris sur ordinateur, joystick virtuel + glisser sur téléphone.
 
+/** Touches qui « appuient » sur le bouton qui a le focus. */
+export const isPress = (code) => code === 'Enter' || code === 'NumpadEnter' || code === 'Space';
+
+/** L'élément qui reçoit la touche est un bouton, ou se trouve dans un panneau, une fenêtre ou un mini-jeu. */
+export function onControl(el) {
+  if (!el?.closest || el === document.body || el === document.documentElement) return false;
+  return !!el.closest('button, a[href], [role="button"], summary, #panel, #modal, .mg-overlay, .vx-overlay');
+}
+
 export class Input {
   constructor(canvas, joystickEl) {
     this.keys = new Set();
@@ -18,6 +27,12 @@ export class Input {
     const isTyping = (e) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName);
     window.addEventListener('keydown', (e) => {
       if (isTyping(e)) return;
+      // Entrée ou Espace sur un bouton (choisi avec Tab) ou dans un panneau, une fenêtre, un mini-jeu :
+      // c'est le bouton qui la reçoit (clic natif). Avant, Entrée relançait « s'occuper de l'animal » à
+      // portée, qui redessinait le panneau sous le bouton : « Caresser », « Monter »… ne faisaient rien.
+      if (isPress(e.code) && onControl(e.target)) return;
+      // Échap déjà utilisé (il vient de fermer une fenêtre) : le jeu ne le reçoit pas en plus.
+      if (e.code === 'Escape' && e.defaultPrevented) return;
       this.keys.add(e.code);
       if (!e.repeat) this.onKey?.(e.code);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();

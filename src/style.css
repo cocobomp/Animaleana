@@ -515,6 +515,7 @@ button.sv-card:hover { border-color: var(--primary); }
   -webkit-overflow-scrolling: touch;
 }
 .modal-box > .row.end:last-child { position: sticky; bottom: -18px; z-index: 1; margin: 8px -20px -18px; padding: 6px 20px 18px; background: var(--bg); }
+.modal-box:focus { outline: none; } /* (focus de repli quand la fenêtre n'a pas de bouton : pas de cadre autour) */
 /* Écran peu haut (paysage, clavier ouvert) : marges réduites ; la fiche de l'animal à gauche du champ du nom. */
 @media (max-height: 480px) {
   #modal { padding-top: max(8px, var(--safe-t), var(--modal-top, 0px)); padding-bottom: max(8px, var(--safe-b)); }

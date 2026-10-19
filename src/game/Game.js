@@ -1341,7 +1341,13 @@ export class Game {
   onKey(code) {
     if (!this.running || this.ui.isBlocking()) return;
     if (code === 'Escape' && this.tripFlow.view && this.tripFlow.view !== 'ramp') this.tripFlow.setView(null); // sortir du véhicule
-    if (code === 'KeyE' || code === 'Enter') this.interact();
+    if (code === 'KeyE' || code === 'Enter' || code === 'NumpadEnter') {
+      const before = this.ui.panel;
+      this.interact();
+      // Panneau ouvert au clavier : le focus va sur son premier bouton (Tab parcourt le panneau, Entrée
+      // l'active) au lieu de rester derrière, dans la barre du haut.
+      if (this.ui.panel && this.ui.panel !== before) this.ui.focusPanel();
+    }
     if (code === 'KeyC') this.toggleCamera();
   }
 

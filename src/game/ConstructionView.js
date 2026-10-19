@@ -903,7 +903,8 @@ export class ConstructionView {
   }
 
   onKey(e) {
-    if (!this.active || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName) || this.view.build.active) return;
+    // (fenêtre ouverte : Entrée et Échap sont pour ses boutons)
+    if (!this.active || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName) || this.view.build.active || this.game.ui.modalOpen) return;
     if (e.code === 'Escape') {
       if (this.pending) this.cancelPending();
       else if (this.sel) this.deselect();

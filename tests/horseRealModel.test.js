@@ -174,7 +174,8 @@ describe('signes de race du cheval réaliste', () => {
 });
 
 describe('sabots posés du cheval réaliste', () => {
-  /** Glissement (m) du centre de la sole pendant chaque appui à plat, cheval qui avance à v (taille 1). */
+  /** Glissement (m) du centre de la sole pendant chaque appui à plat, vers l'avant (z, du début à la fin) et
+   * de côté (x, étendue), cheval qui avance à v (taille 1). */
   const slips = (id, v) => {
     const md = horse(id);
     const st = { v, moving: true, graze: 0, feeder: 0, turn: 0, fat: 1 };
@@ -193,17 +194,21 @@ describe('sabots posés du cheval réaliste', () => {
       md.legs.forEach((l, i) => {
         let hi = -Infinity;
         let z = 0;
+        let x = 0;
         for (const s of l.solePts) {
           p.copy(s).applyMatrix4(l.fetlock.matrixWorld);
           hi = Math.max(hi, p.y);
           z += p.z / l.solePts.length;
+          x += p.x / l.solePts.length;
         }
         if (hi < 0.015) {
-          stance[i] ??= { z0: z, n: 0 };
+          stance[i] ??= { z0: z, x0: x, x1: x, n: 0 };
           stance[i].z1 = z;
+          stance[i].x0 = Math.min(stance[i].x0, x);
+          stance[i].x1 = Math.max(stance[i].x1, x);
           stance[i].n++;
         } else if (stance[i]) {
-          if (stance[i].n > 3) out.push(Math.abs(stance[i].z1 - stance[i].z0));
+          if (stance[i].n > 3) out.push({ z: Math.abs(stance[i].z1 - stance[i].z0), x: stance[i].x1 - stance[i].x0 });
           stance[i] = null;
         }
       });
@@ -217,11 +222,17 @@ describe('sabots posés du cheval réaliste', () => {
   it.each([
     ['pur_sang', 3.0], ['percheron', 3.0], ['shetland', 3.0], ['pur_sang', 4.6], ['percheron', 1.6],
     ['selle_francais', 1.6], ['shetland', 4.1], ['pur_sang', 8.7], ['shetland', 7.3], ['percheron', 7.5], ['fjord', 7.3],
-  ])('%s à %s m/s : les sabots posés ne glissent presque pas', (id, v) => {
+  ])('%s à %s m/s : les sabots posés ne glissent presque pas, ni vers l\'avant ni de côté', (id, v) => {
     const s = slips(id, v);
     expect(s.length).toBeGreaterThan(6);
-    const mean = s.reduce((a, b) => a + b, 0) / s.length;
-    expect(mean).toBeLessThan(0.006);
-    expect(Math.max(...s)).toBeLessThan(0.02);
+    const mean = (k) => s.reduce((a, b) => a + b[k], 0) / s.length;
+    const max = (k) => Math.max(...s.map((b) => b[k]));
+    if (process.env.SLIP_LOG) console.log(id, v, 'z', (mean('z') * 100).toFixed(2), (max('z') * 100).toFixed(2), 'x', (mean('x') * 100).toFixed(2), (max('x') * 100).toFixed(2));
+    expect(mean('z')).toBeLessThan(0.006);
+    expect(max('z')).toBeLessThan(0.02);
+    // (de côté : la cinématique inverse visait aussi x, hors d'atteinte ; le sabot glissait de 3 à 7 mm et
+    // tremblait d'une image à l'autre ; désormais rattrapé par un écart du membre au coude ou au grasset)
+    expect(mean('x')).toBeLessThan(0.002);
+    expect(max('x')).toBeLessThan(0.005);
   });
 });

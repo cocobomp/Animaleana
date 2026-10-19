@@ -2233,6 +2233,9 @@ function lockedGaits(model, clips) {
   const T = V();
   const Qf = new THREE.Quaternion();
   const Qk = new THREE.Quaternion();
+  const Qa = new THREE.Quaternion();
+  const Pv = V();
+  const Zp = V();
   for (const name of RIDER_KEYS) {
     const clip = clips[name];
     if (!clip) continue;
@@ -2349,11 +2352,25 @@ function lockedGaits(model, clips) {
         // (sole posée au sol pendant l'appui ; jamais dessous)
         const dy = inside ? -h : Math.max(0, -h);
         if (Math.abs(dz) + Math.abs(dx) + Math.abs(dy) < 1e-5) return;
-        // Boulet visé, orientation du sabot gardée (repère du cheval).
+        // Boulet visé, orientation du sabot gardée (repère du cheval). La cinématique inverse ne tourne
+        // qu'autour des axes x : elle vise la hauteur et l'avancée (viser aussi le côté, hors d'atteinte,
+        // faisait trembler le sabot de ±2 mm d'une image à l'autre, et glisser de côté trois fois plus au
+        // trot) ; le côté est rattrapé ensuite par un petit écart du membre au coude (ou au grasset), autour
+        // de l'axe avant-arrière : le boulet, juste dessous, se déplace de côté sans monter.
         l.fetlock.getWorldPosition(P4).applyMatrix4(toRoot);
-        T.copy(P4).add(_w.set(dx, dy, dz));
+        const wantX = P4.x + dx;
+        T.copy(P4).add(_w.set(0, dy, dz)); // (x : sans effet, solveLeg reste dans le plan du membre)
         l.fetlock.getWorldQuaternion(Qf);
         solveLeg(l, T, toRoot);
+        Pv.setFromMatrixPosition(l.pivot.matrixWorld).applyMatrix4(toRoot);
+        P4.setFromMatrixPosition(l.fetlock.matrixWorld).applyMatrix4(toRoot);
+        const hgt = Pv.y - P4.y;
+        if (hgt > 0.05 && Math.abs(wantX - P4.x) > 1e-5) {
+          const ab = Math.asin(Math.max(-0.1, Math.min(0.1, (wantX - P4.x) / hgt)));
+          Zp.set(0, 0, 1).transformDirection(root.matrixWorld).applyQuaternion(l.pivot.parent.getWorldQuaternion(Qk).invert());
+          l.pivot.quaternion.premultiply(Qa.setFromAxisAngle(Zp, ab));
+          l.top.updateMatrixWorld(true);
+        }
         l.knee.updateMatrixWorld(true);
         l.fetlock.quaternion.copy(l.knee.getWorldQuaternion(Qk).invert().multiply(Qf));
         const [kt, kp, kk, kf] = legQ[i];
@@ -2397,10 +2414,11 @@ const IK_TOP = 0.35;
 
 /**
  * Cinématique inverse d'un membre : rotations autour de l'axe x local de l'épaule (ou de la hanche, peu),
- * du coude (ou du grasset) et du genou (ou du jarret) pour amener le boulet en T (repère toRoot). Moindres
- * carrés amortis : le plus petit changement de pose, sans à-coup près du membre tendu ; un pas qui
- * éloigne le boulet est annulé (pas suivant deux fois plus court). Hors d'atteinte : la pose la plus
- * proche. Renvoie la distance restante.
+ * du coude (ou du grasset) et du genou (ou du jarret) pour amener le boulet en T (repère toRoot), dans le
+ * plan du membre : hauteur et avancée seulement (le côté, hors d'atteinte de ces axes, est rattrapé par
+ * lockedGaits). Moindres carrés amortis : le plus petit changement de pose, sans à-coup près du membre
+ * tendu ; un pas qui éloigne le boulet est annulé (pas suivant deux fois plus court). Hors d'atteinte :
+ * la pose la plus proche. Renvoie la distance restante (hauteur et avancée).
  */
 function solveLeg(l, T, toRoot) {
   const J = [l.top, l.pivot, l.knee];
@@ -2413,6 +2431,7 @@ function solveLeg(l, T, toRoot) {
     for (let k = 0; k < 3; k++) p[k].setFromMatrixPosition(J[k].matrixWorld).applyMatrix4(toRoot);
     const P4 = _v.setFromMatrixPosition(l.fetlock.matrixWorld).applyMatrix4(toRoot);
     e.subVectors(T, P4);
+    e.x = 0;
     const err = e.lengthSq();
     if (err < bestErr) {
       bestErr = err;

@@ -90,14 +90,15 @@ describe('races et chiots', () => {
     expect(keys.size).toBe(BREEDS.length);
   });
 
-  it('chiot : tête plus grosse, pattes et museau plus courts, oreilles pas encore dressées', () => {
+  it('chiot : tête plus grosse, pattes et museau plus courts, oreilles pas encore dressées (ou plus petites)', () => {
     for (const b of BREEDS) {
       const A = dogBuild(lookOf(b));
       const P = dogBuild(lookOf(b), true);
       expect(P.head).toBeGreaterThan(A.head);
       expect(P.legs).toBeLessThan(A.legs);
       expect(P.snout).toBeLessThan(A.snout);
-      expect(['pointed', 'bat']).not.toContain(P.ears);
+      if (P.model === 'shiba') expect(['pointed', 'bat']).not.toContain(P.ears);
+      else if (['pointed', 'bat'].includes(A.ears)) expect(P.earSize).toBeLessThan(A.earSize);
     }
     const md = dog('labrador', { puppy: true });
     expect(md.puppy).toBe(true);

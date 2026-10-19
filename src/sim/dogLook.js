@@ -119,7 +119,12 @@ export function dogBuild(look = {}, puppy = false) {
     B.feather *= 0.3;
     B.slope = 0;
     // (oreilles droites : pas encore dressées chez le chiot)
-    if (B.ears === 'pointed' || B.ears === 'bat') B.ears = 'semi';
+    // (petits chiens : les coques des oreilles droites restent, plus petites ; le lambeau à demi déplié du jack
+    // faisait deux ailes de chaque côté de la tête)
+    if (B.ears === 'pointed' || B.ears === 'bat') {
+      if (model === 'shiba') B.ears = 'semi';
+      else B.earSize *= 0.8;
+    }
   }
   const r = (x) => Math.round(x * 1000) / 1000;
   B.key = [model, ...Object.keys(ONE).map((k) => r(B[k])), B.ears, B.tail, B.puppy ? 1 : 0].join('|');

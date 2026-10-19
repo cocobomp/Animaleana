@@ -262,6 +262,7 @@ export class Events {
     const who = ev.data.who ?? {};
     const a = p.animals.find((x) => x.id === ev.targetId);
     let extra = null;
+    let caught = false; // l'animal échappé a été rattrapé à cheval (monté)
     if (ev.type === 'escape' && a) {
       const e = g.entities.get(a.id);
       if (e) unpin(e);
@@ -272,7 +273,12 @@ export class Events {
         e.position.set(area.x, 0, area.z);
         e.snap();
       }
-      if (outcome === 'success') a.following = false;
+      if (outcome === 'success') {
+        // Retrouvé : à pied, il te suit (on le ramène à l'abri quand on veut) ; monté, on est déjà dessus.
+        caught = g.player.mount === e;
+        if (!caught && !a.following && e) g.toggleFollow(a);
+        e?.emit('❤️', 3);
+      }
     }
     if (ev.type === 'birth' && outcome !== 'cancel') {
       const father = p.animals.find((x) => x.id === ev.data.fatherId);
@@ -302,10 +308,12 @@ export class Events {
     const names = res.affected.join(', ');
     let key = `ev_${ev.type}_${win ? 'win' : 'fail'}`;
     if (ev.type === 'lostPet' && win) key += `_${ev.data.choice}`;
+    if (caught && win) key += '_ride';
     const params = {
       name: ev.type === 'neighbour' ? ev.data.neighbour.name : ev.type === 'lostPet' && ev.data.choice === 'adopt' ? (a?.name ?? who.name) : who.name,
       g: ev.type === 'neighbour' ? ev.data.neighbour.sex : who.sex,
       names, kind: t(`ev_kind_${who.species}`), babies: extra ?? '',
+      shelter: t(`ev_shelter_${who.species === 'horse' ? 'paddock' : 'pen'}`),
     };
     if (ev.type === 'fair' && win) {
       const w = p.animals.find((x) => x.id === ev.data.winnerId);
@@ -389,13 +397,8 @@ export class Events {
         return { text: ta('ev_step_vet', a ?? ev.data.who), dotOn: e, ...atDoor('vet', () => g.ui.openVetClinic()) };
       case 'find':
         return { text: ta('ev_step_find', a), ...onAnimal(() => this.found(ev, a)) };
-      case 'lead':
-        if (ev.type === 'fair') return { text: ta('ev_step_fetch', a), ...onAnimal(() => { if (!a.following) g.toggleFollow(a); }) };
-        {
-          const area = areaOf(step.group);
-          const pos = new THREE.Vector3(area.x, 0, area.z);
-          return { text: ta(`ev_step_lead_${step.group}`, a), pos, go: () => g.walkTo(pos, 2) };
-        }
+      case 'lead': // (fête du village : aller chercher l'animal tout propre)
+        return { text: ta('ev_step_fetch', a), ...onAnimal(() => { if (!a.following) g.toggleFollow(a); }) };
       case 'meet': {
         const pos = new THREE.Vector3(NEIGHBOUR_SPOT.x, 0, NEIGHBOUR_SPOT.z);
         const n = ev.data.neighbour;
@@ -547,14 +550,15 @@ export class Events {
     return r;
   }
 
+  /** « Y aller » jusqu'à l'animal échappé : il est retrouvé, l'événement se termine (écran de fin) tout de suite. */
   found(ev, a) {
     const g = this.game;
+    if (eventState(g.profile).active !== ev) return;
     ev.data.found = true;
     const e = g.entities.get(a.id);
     if (e) unpin(e);
-    if (!a.following) g.toggleFollow(a);
-    e?.emit('❤️', 3);
-    g.ui.toast(ta('ev_found', a), 5000);
+    if (!a.following && g.player.mount !== e) g.toggleFollow(a);
+    this.tick(0);
   }
 
   /** L'animal saute la barrière et part se promener loin dans les prés. */

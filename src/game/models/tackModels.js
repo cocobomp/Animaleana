@@ -14,6 +14,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { loft } from './shapes.js';
 import { GEAR, COLORS } from '../../sim/gear.js';
+import { helmetFit, helmetStraps, STRAP_R } from './avatarHair.js'; // sangles de la bombe portée
 
 // ---------------------------------------------------------------- textures et matériaux
 
@@ -795,7 +796,34 @@ export function helmetModel(id, color) {
         [x, (y0 + y1) / 2 + 0.0012, zc], [-Math.atan2(y1 - y0, len), 0, Math.atan(slopeX)]);
     }
   } else mesh(g, shared('button', () => new THREE.SphereGeometry(0.012, 8, 6)), velvetMat(c), [0, 0.108, 0]);
-  for (const s of [1, -1]) mesh(g, shared('harness', () => new THREE.TorusGeometry(0.06, 0.004, 4, 14, Math.PI * 0.8)), nylonMat(0x1a1a1a), [s * 0.1, -0.05, 0.0], [0, Math.PI / 2, Math.PI * 1.1]);
+  // Harnais « au repos » (bombe exposée, vignette) ; sur une tête, Player.wearHelmet le cache et pose à la
+  // place les sangles collées aux joues (helmetStrapsModel).
+  g.userData.harness = [1, -1].map((s) => mesh(g, shared('harness', () => new THREE.TorusGeometry(0.06, 0.004, 4, 14, Math.PI * 0.8)), nylonMat(0x1a1a1a), [s * 0.1, -0.05, 0.0], [0, Math.PI / 2, Math.PI * 1.1]));
+  return g;
+}
+
+const strapCache = new Map(); // chemins des sangles, par coiffure et taille de bombe
+
+/**
+ * Sangles de la bombe portée, dans le repère de la tête de l'avatar (chemins de avatarHair.helmetStraps :
+ * devant et derrière l'oreille, boucle sous le lobe, jugulaire sous le menton), à la taille de la coiffure.
+ */
+export function helmetStrapsModel(style, fit = helmetFit(style)) {
+  const g = new THREE.Group();
+  const key = `${style}:${fit.scale.toFixed(3)}`;
+  const strap = nylonMat(0x1a1a1a);
+  if (!strapCache.has(key)) strapCache.set(key, helmetStraps(style, fit));
+  const data = strapCache.get(key);
+  data.paths.forEach((pts, i) => {
+    const m = mesh(g, shared(`helmStrap:${key}:${i}`, () => tube(pts, STRAP_R)), strap);
+    m.castShadow = false;
+  });
+  // Boucles : un petit cadre de métal posé à plat sur la sangle, sous chaque oreille.
+  for (const { p, n } of data.buckles) {
+    const b = mesh(g, shared('helmBuckle', () => new THREE.TorusGeometry(0.0062, 0.0016, 4, 10)), steelMat(), p);
+    b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...n));
+    b.castShadow = false;
+  }
   return g;
 }
 

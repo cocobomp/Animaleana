@@ -185,7 +185,7 @@ describe('événements spéciaux', () => {
     expect(eventOutcome(ev, w.ctx, eventProgress(ev, w.ctx))).toBe('success');
   });
 
-  it('animal échappé : le retrouver puis le ramener', () => {
+  it('animal échappé : le rejoindre termine l\'événement', () => {
     const p = createProfile('A');
     const horse = adult('horse');
     const w = world(p, [horse]);
@@ -194,12 +194,27 @@ describe('événements spéciaux', () => {
     expect(ev.targetId).toBe(horse.id);
     w.where.set(horse.id, 'out'); // il a sauté la barrière
     expect(nextStep(ev, { ...w.ctx, playerDist: 50 }).step).toBe('find');
-    eventProgress(ev, { ...w.ctx, playerDist: 2 });
+    expect(eventProgress(ev, { ...w.ctx, playerDist: 50 }).complete).toBe(false);
+    const ctx = { ...w.ctx, playerDist: 2 };
+    const pr = eventProgress(ev, ctx);
     expect(ev.data.found).toBe(true);
-    horse.following = true;
-    expect(nextStep(ev, w.ctx)).toMatchObject({ step: 'lead', group: 'paddock' });
+    expect(pr.complete).toBe(true); // plus besoin de le ramener à l'abri pour finir
+    expect(nextStep(ev, ctx, pr)).toBeNull();
+    expect(eventOutcome(ev, ctx, pr)).toBe('success');
+  });
+
+  it('animal échappé : le monter le retrouve aussi (plus de « Trouve-le : 0 m » à cheval dessus)', () => {
+    const p = createProfile('A');
+    const horse = adult('horse');
+    const w = world(p, [horse]);
     w.where.set(horse.id, 'paddock');
-    expect(eventProgress(ev, w.ctx).complete).toBe(true);
+    const ev = startEvent(p, 'escape', w.ctx);
+    w.where.set(horse.id, 'out');
+    // Monté (le contexte ne donne pas de distance utile : le joueur est sur la cible).
+    const ctx = { ...w.ctx, ridingId: horse.id };
+    const pr = eventProgress(ev, ctx);
+    expect(pr.complete).toBe(true);
+    expect(eventOutcome(ev, ctx, pr)).toBe('success');
   });
 
   it('un cheval sans licol ne s\'échappe pas (on ne pourrait pas le ramener)', () => {

@@ -284,7 +284,12 @@ export function tackRoomModel(label, boardLabel = 'Filets, licols') {
   add(counter, new THREE.BoxGeometry(0.26, 0.12, 0.02), mat(0x9fd6a0, 0.3, { emissive: 0x3a6a3a, emissiveIntensity: 0.6 }), [2.78, 1.2, 2.3], [0, Math.PI / 2, -0.4]);
   add(counter, new THREE.SphereGeometry(0.04, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(0xd8b24a, 0.25, { metalness: 0.85 }), [2.6, 0.98, 2.42]);
   bakeMeshes(counter);
-  const seller = buildAvatar({ skin: 0xd9a37f, hair: 0x7a3f1d, hairStyle: 'ponytail', top: 0x2f6b45, bottom: 0x3a3a4a, shoes: 0x5a3418, hat: false });
+  // La sellière : cheveux longs qui encadrent le visage (avec la queue de cheval, de face, on aurait dit un
+  // garçon : elle ne se voyait que de dos), cils marqués et un peu de rouge à lèvres.
+  const seller = buildAvatar({
+    skin: 0xd9a37f, hair: 0x7a3f1d, hairStyle: 'long', top: 0x2f6b45, bottom: 0x3a3a4a, shoes: 0x5a3418, hat: false,
+    lashes: true, lips: 0xc8505a,
+  });
   poseAvatar(seller, 'stand');
   seller.root.position.set(3.35, 0.11, 1.6);
   seller.root.rotation.y = -Math.PI / 2;

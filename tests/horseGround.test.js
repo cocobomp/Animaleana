@@ -90,7 +90,8 @@ describe('posé au sol (étape 1)', () => {
   });
 
   it('version réduite plus loin en qualité basse (la caméra du jeu voit la version complète)', () => {
-    expect(LOD_DIST.low).toBeGreaterThanOrEqual(12);
+    // (cheval de 0,9 à 13 m de la caméra : 14,4 m une fois divisé par sa taille)
+    expect(LOD_DIST.low).toBeGreaterThanOrEqual(15);
     expect(LOD_DIST.high).toBeGreaterThan(LOD_DIST.low);
   });
 });

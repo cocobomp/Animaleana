@@ -204,16 +204,20 @@ hBare = 0.0;
  */
 const RIM_FRAGMENT = /* glsl */ `
 {
-  vec3 hV = normalize( -vViewPosition );
-  float hF = pow( 1.0 - saturate( dot( normal, hV ) ), 3.0 );
+  vec3 hV = normalize( vViewPosition ); // (vers la caméra)
+  float hF = pow( 1.0 - saturate( dot( normal, hV ) ), 4.0 );
   float hMax = max( max( diffuseColor.r, diffuseColor.g ), max( diffuseColor.b, 0.02 ) );
-  vec3 hTint = mix( vec3( 1.0 ), diffuseColor.rgb / hMax, 0.55 ) * hRimTint;
+  vec3 hTint = mix( vec3( 1.0 ), diffuseColor.rgb / hMax, 0.7 ) * hRimTint;
   vec3 hRimL = hSkyRim;
+#if NUM_HEMI_LIGHTS > 0
+  // (le ciel éclaire le dos et les flancs, pas le dessous du ventre)
+  hRimL *= saturate( dot( normal, hemisphereLights[ 0 ].direction ) * 0.5 + 0.6 );
+#endif
 #if NUM_DIR_LIGHTS > 0
   vec3 hL = directionalLights[ 0 ].direction;
   float hBack = saturate( dot( hL, -hV ) );
   float hWrap = saturate( dot( normal, hL ) * 0.6 + 0.4 );
-  hRimL += directionalLights[ 0 ].color * hWrap * ( 0.05 + 0.32 * hBack * hBack );
+  hRimL += directionalLights[ 0 ].color * hWrap * ( 0.04 + 0.24 * hBack * hBack );
 #endif
   reflectedLight.indirectSpecular += hRimL * hTint * hF * ( 1.0 - hBare ) * hRim;
   reflectedLight.indirectDiffuse += diffuseColor.rgb * hSkyRim * hFill;
@@ -231,7 +235,7 @@ const NORMAL_MAP_FIX = /* glsl */ `
   vec3 hNt = texture2D( normalMap, vNormalMapUv ).xyz;
   float hCov = clamp( hNt.b / 0.9, 0.0, 1.0 );
   hNt = mix( hNt, hNt / max( hCov, 0.05 ), 1.0 - smoothstep( 0.55, 0.65, hNt.b ) );
-  vec3 mapN = mix( vec3( 0.0, 0.0, 1.0 ), hNt * 2.0 - 1.0, smoothstep( 0.06, 0.3, hCov ) );
+  vec3 mapN = mix( vec3( 0.0, 0.0, 1.0 ), hNt * 2.0 - 1.0, smoothstep( 0.03, 0.15, hCov ) );
   mapN.xy *= normalScale;
   normal = normalize( tbn * mapN );
 #else
@@ -313,7 +317,8 @@ export function coatMaterial(look, build, breed = null, real = null) {
   if (real) {
     m.map = real.detail;
     m.normalMap = real.normalMap ?? null;
-    m.normalScale.set(0.9, 0.9 * (real.normalSign ?? 1));
+    // (relief un peu moins creusé qu'avant, 0,7 au lieu de 0,9 : les côtes se voyaient encore de profil)
+    m.normalScale.set(0.7, 0.7 * (real.normalSign ?? 1));
   }
   // H_REAL écrit dans le shader lui-même, pas dans m.defines : une copie de la matière (robe lustrée du
   // concours de beauté, Beauty.js) garde son onBeforeCompile mais material.copy() remet defines à zéro,

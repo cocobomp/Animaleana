@@ -37,6 +37,8 @@ describe('robe propre et satinée (étape 4)', () => {
     expect(sh.fragmentShader).not.toContain('c *= hDetTex.r * 2.0;');
     expect(sh.fragmentShader).toContain('hCov'); // texels vides des marges remis à plat
     expect(sh.fragmentShader).toContain('reflectedLight.indirectSpecular += hRimL');
+    // (direction vers la caméra : vViewPosition va du point vers elle — à l'envers, toute la robe brillait)
+    expect(sh.fragmentShader).toContain('vec3 hV = normalize( vViewPosition )');
   });
 
   it('satiné et liseré aussi en qualité basse (MeshStandard), lumière du ciel partagée', () => {

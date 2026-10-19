@@ -39,10 +39,11 @@ const RIDER_KEYS = [...MOVING, 'canterR'];
 /**
  * Version réduite (LOD) au-delà de cette distance à la caméra (m, divisée par la taille du cheval) : plus
  * près en qualité basse (téléphone), plus loin en qualité haute. Hystérésis de 10 % (pas de va-et-vient).
- * (Basse : 13 m et non plus 7 — la caméra du jeu est à 7 m du joueur, 9 m quand il monte, et son cheval à 9 à
- * 12 m de la caméra : on voyait toujours la version réduite, crinière en dents de peigne.)
+ * (Basse : 15 m et non plus 7 — la caméra du jeu est à 7 m du joueur, 9 m quand il monte, et le cheval d'à
+ * côté à 9 à 13 m de la caméra, 10 à 14,5 m une fois divisé par sa taille : on voyait toujours la version
+ * réduite, crinière en dents de peigne. Un poney à cette distance, plus petit à l'écran, reste en version réduite.)
  */
-export const LOD_DIST = { low: 13, high: 22 };
+export const LOD_DIST = { low: 15, high: 22 };
 /** Cheval hors du champ (ni dessiné ni dans l'ombre) : animé une image sur OFFSCREEN_STEP, avec le temps cumulé. */
 export const OFFSCREEN_STEP = 3;
 /**

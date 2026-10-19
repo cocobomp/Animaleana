@@ -2037,6 +2037,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   };
   model.anim = new RealHorseAnim(model, S.gaits ?? base.clips);
   hb.anim = model.anim;
+  model.photoPose = () => model.anim.photoPose();
   model.bounds = hb;
   // Version réduite (LOD) : 0 complète, 1 réduite (index simplifié du GLB, ≈ 6 300 triangles au lieu de
   // 15 000). Choisie d'après la distance à la caméra du jeu (animateRealHorse) ; les photos la remettent à 0.
@@ -2763,6 +2764,7 @@ class RealHorseAnim {
     this.skipN = 0;
     this.doze = 0;
     this.sadAmt = 0;
+    this.proud = 1; // (port de tête relevé : voir overlay)
     if (gaits.natural) this.useGaits(gaits);
   }
 
@@ -2928,21 +2930,34 @@ class RealHorseAnim {
     const neckDrop = this.doze * 0.42 + this.sadAmt * 0.25 * (1 - graze);
     // Broutage : le clip pose le bout du nez à l'herbe pour le modèle d'origine ; pour une autre race
     // (membres, encolure, tête différents) on corrige l'angle de l'encolure.
-    const reach = this.reachFix * (this.w.eat ?? 0);
-    const feeder = (st.feeder ?? 0) * (this.w.eat ?? 0) * -0.42;
-    if (neckDrop || reach || feeder) md.neck.rotateX(neckDrop + reach + feeder);
-    if (this.doze) md.head.rotateX(this.doze * 0.12);
+    const eat = this.w.eat ?? 0;
+    const reach = (this.reachFix ?? 0) * eat;
+    const feeder = (st.feeder ?? 0) * eat * -0.42;
+    // Port de tête : les clips portent la tête « encapuchonnée » (à l'arrêt, chanfrein à 68° sous l'horizontale,
+    // menton rentré : air triste). Encolure et nuque relevées (HEAD_UP : 50° environ), partagées entre les deux
+    // pour ne pas étirer la gorge ; rien quand il broute ou somnole, moins quand il est triste et aux allures
+    // rapides (le galop tend l'encolure vers l'avant). Lissé : la tête monte et descend en douceur.
+    const fast = Math.min(1, (this.w.canter ?? 0) + (this.w.canterR ?? 0) + (this.w.gallop ?? 0));
+    const proud = (1 - eat) * (1 - this.doze) * (1 - 0.6 * fast) * (1 - 0.6 * this.sadAmt);
+    this.proud += (proud - this.proud) * Math.min(1, dt * 4);
+    const up = this.proud;
+    if (neckDrop || reach || feeder || up) md.neck.rotateX(neckDrop + reach + feeder - HEAD_UP.neck * up);
+    if (this.doze || up) md.head.rotateX(this.doze * 0.12 - HEAD_UP.head * up);
     // Regard qui se promène (moins en marche).
-    const look = (Math.sin(t * 0.37) * 0.5 + Math.sin(t * 0.13 + 1.7) * 0.5) * 0.32 * (st.moving ? 0.15 : 1) * (1 - graze * 0.7);
-    md.neck.quaternion.premultiply(_qYaw.setFromAxisAngle(AXIS_Y, look));
-    // Oreilles : elles pivotent vers ce qu'il écoute ; sur le côté quand il somnole.
+    const look = this.photo ? 0 : (Math.sin(t * 0.37) * 0.5 + Math.sin(t * 0.13 + 1.7) * 0.5) * 0.32 * (st.moving ? 0.15 : 1) * (1 - graze * 0.7);
+    if (look) md.neck.quaternion.premultiply(_qYaw.setFromAxisAngle(AXIS_Y, look));
+    // Oreilles : elles pivotent un peu vers ce qu'il écoute, ensemble la plupart du temps, pointées vers l'avant
+    // quand il est attentif ; sur le côté quand il somnole. (Avant : ±0,3 rad chacune de son côté, une oreille
+    // se couchait parfois à l'horizontale.)
+    const alert = 1 - this.doze;
+    const both = Math.sin(t * 0.31 + 0.6) * 0.09;
     for (let i = 0; i < md.ears.length; i++) {
       const e = md.ears[i];
       const s = i === 0 ? 1 : -1;
       const n1 = Math.sin(t * 1.3 + i * 2.1) + Math.sin(t * 0.47 + i);
-      e.rotateX(n1 * 0.06 + this.doze * 0.2);
-      e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.12));
-      e.rotateY(s * Math.sin(t * 0.7 + i * 3) * 0.3 * (1 - this.doze));
+      e.rotateX(n1 * 0.04 + this.doze * 0.2 - 0.08 * alert * this.proud);
+      e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.06));
+      e.rotateY((s * Math.sin(t * 0.7 + i * 3) * 0.06 + both) * alert);
     }
     // Port de queue de la race (arabe, saddlebred, welsh) : couard relevé, crins qui retombent en arc.
     const set = md.build.tailSet ?? 0;
@@ -2951,7 +2966,7 @@ class RealHorseAnim {
       md.tailTip.rotateX(-set * 0.4);
     }
     // Queue : de temps en temps un coup de fouet contre les mouches.
-    const swish = tailSwish(t, md.root.id % 7);
+    const swish = this.photo ? 0 : tailSwish(t, md.root.id % 7);
     if (swish) {
       md.tail.rotateZ(swish * 0.6);
       md.tailTip.rotateZ(swish);
@@ -2992,6 +3007,35 @@ class RealHorseAnim {
       }
     }
     if (low < 0) md.body.position.y -= low;
+  }
+
+  /**
+   * Pose de photo (vignettes, essayage de la sellerie, portrait de la fiche) : à l'arrêt, attentif — clip
+   * d'arrêt seul à un instant fixe, tête relevée (HEAD_UP), oreilles en avant, regard droit devant, sans
+   * broutage, somnolence, coup de queue ni hasard : la même photo à chaque fois.
+   */
+  photoPose() {
+    this.restorePose();
+    for (let j = 0; j < this.list.length; j++) {
+      const name = this.names[j];
+      const on = name === 'idle' || (!this.actions.idle && j === 0);
+      this.list[j].setEffectiveWeight(on ? 1 : 0);
+      this.list[j].time = 0;
+      this.w[name] = on ? 1 : 0;
+    }
+    this.mixer.update(0);
+    this.savePose();
+    this.doze = 0;
+    this.sadAmt = 0;
+    this.proud = 1;
+    this.photo = true;
+    const t = this.t;
+    this.t = 0;
+    // (dt = 1 : la crinière a fini de retomber)
+    this.overlay(1, { v: 0, moving: false, sleeping: false, sad: false, graze: 0, feeder: 0, turn: 0, fat: 1 }, 0);
+    this.t = t;
+    this.photo = false;
+    this.model.root.updateMatrixWorld(true);
   }
 
   /** Correction d'angle de l'encolure pour que le bout du nez touche l'herbe (pose « eat » de cette race). */
@@ -3059,6 +3103,12 @@ export function pickGait(prev, u) {
   }
   return g;
 }
+
+/**
+ * Port de tête relevé à l'arrêt et au pas (rad, rotation x : encolure à sa base, tête à la nuque ; voir
+ * RealHorseAnim.overlay). Chanfrein mesuré à 68° sous l'horizontale avec les clips seuls, 50° environ avec.
+ */
+export const HEAD_UP = { neck: 0.12, head: 0.18 };
 
 const QNECK_REST = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), NECK_REST);
 const QNECK_REST_INV = QNECK_REST.clone().invert();

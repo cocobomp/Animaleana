@@ -27,6 +27,7 @@ import {
 import { SPECIES } from '../sim/species.js';
 import {
   NEEDS, createAnimal, tickAnimal, applyCare, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
+  namesInUse,
 } from '../sim/animal.js';
 import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
 import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeason } from '../sim/places.js';
@@ -1666,7 +1667,8 @@ export class Game {
     for (const mother of [...this.profile.animals]) {
       if (!mother.pregnant || this.day < mother.pregnant.due) continue;
       const father = this.profile.animals.find((x) => x.id === mother.pregnant.father) ?? mother;
-      const babies = breed(mother, father, this.day);
+      // (prénoms : pas un de ceux déjà portés à la ferme, en pension, au salon…, ni deux fois dans la portée)
+      const babies = breed(mother, father, this.day, Math.random, namesInUse(this.profile));
       for (const baby of babies) {
         baby.location = mother.location;
         this.profile.animals.push(baby);

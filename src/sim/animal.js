@@ -466,13 +466,18 @@ const mixColor = (c1, c2, t) => {
   return (r << 16) | (g << 8) | b;
 };
 
-/** Fait naître une portée. Renvoie les bébés (il faut les ajouter au profil). */
-export function breed(a, b, day, rng = Math.random) {
+/**
+ * Fait naître une portée. Renvoie les bébés (il faut les ajouter au profil).
+ * avoidNames : prénoms déjà pris (namesInUse du profil) ; chaque bébé en reçoit un autre, différent aussi de
+ * ses parents et de ses frères et sœurs (avant : deux lapins « Mistral », le père et son petit).
+ */
+export function breed(a, b, day, rng = Math.random, avoidNames = []) {
   const sp = SPECIES[a.species];
   const [min, max] = sp.litter;
   const count = min + Math.floor(rng() * (max - min + 1));
   const mother = a.sex === 'f' ? a : b;
   const babies = [];
+  const taken = [...avoidNames, a.name, b.name];
   for (let i = 0; i < count; i++) {
     const main = rng() < 0.5 ? a : b;
     const other = main === a ? b : a;
@@ -487,8 +492,10 @@ export function breed(a, b, day, rng = Math.random) {
       secondary: mixColor(main.look.secondary, other.look.secondary, t),
       seed: Math.floor(rng() * 1e6),
     };
+    const baby = createAnimal({ species: a.species, breed: main.breed, ageDays: 0, location: mother.location, rng, day, avoidNames: taken });
+    taken.push(baby.name);
     babies.push({
-      ...createAnimal({ species: a.species, breed: main.breed, ageDays: 0, location: mother.location, rng, day }),
+      ...baby,
       breed: a.breed === b.breed ? a.breed : 'mix',
       look,
       parents: [a.id, b.id],

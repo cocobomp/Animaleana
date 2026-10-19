@@ -2,7 +2,7 @@
 // animal perdu ne porte jamais le prénom d'un de nos animaux (vu : chien de client « Tornade »).
 import { describe, it, expect } from 'vitest';
 import { createProfile } from '../src/sim/profile.js';
-import { createAnimal, freeName, namesInUse } from '../src/sim/animal.js';
+import { createAnimal, freeName, namesInUse, breed } from '../src/sim/animal.js';
 import { NAMES } from '../src/sim/species.js';
 import { seeded } from '../src/sim/rng.js';
 import { createVisit, setVisitor } from '../src/sim/clients.js';
@@ -65,5 +65,23 @@ describe('prénoms libres', () => {
       animals: p.animals, whereOf: () => 'house', ridingId: null,
     };
     expect(startEvent(p, 'lostPet', ctx, seeded('lost'), true).data.stray.name).toBe(LAST);
+  });
+
+  it('les bébés d’une portée : ni le prénom d’un animal de la ferme (ni des parents), ni deux fois le même', () => {
+    // (vu : « Bienvenue Mistral, Orion, Félix ! » alors que le père s’appelait déjà Mistral)
+    const first = freeName([], () => 0); // le prénom que tire un hasard « toujours 0 »
+    const dad = createAnimal({ species: 'rabbit', sex: 'm', name: first, ageDays: 80, rng: seeded('d') });
+    const mum = createAnimal({ species: 'rabbit', sex: 'f', name: 'Neige', ageDays: 80, rng: seeded('m') });
+    const p = createProfile('Lou');
+    const other = createAnimal({ species: 'dog', name: freeName([first, 'Neige'], () => 0), rng: seeded('o') });
+    p.animals = [dad, mum, other];
+    mum.pregnant = { due: 1, father: dad.id };
+    let n = 0;
+    const rng = () => ((n++ % 7) === 0 ? 0.99 : 0); // (la portée la plus grande, puis « toujours 0 »)
+    const babies = breed(mum, dad, 1, rng, namesInUse(p));
+    expect(babies.length).toBeGreaterThanOrEqual(2);
+    const names = babies.map((b) => b.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const nm of names) expect([first, 'Neige', other.name]).not.toContain(nm);
   });
 });

@@ -151,10 +151,79 @@ export function buildAccessories(model, look, accessories = {}) {
     out.push(obj);
     return obj;
   };
+  // Chien réaliste (dogReal.js) : places mesurées sur sa race (dessus du crâne, anneau de l'encolure, bout de la
+  // queue) dans le repère de ses os.
+  const fit = model.accessoryFit;
+  const ring = model.dogFit?.collar;
   for (const [slot, worn] of Object.entries(accessories)) {
     const def = ACCESSORIES[worn?.id];
     if (!def || def.slot !== slot) continue;
     const color = ACC_COLORS[worn.color] ?? ACC_COLORS.pink;
+    if (fit && slot === 'head') {
+      const frame = new THREE.Group();
+      frame.position.copy(fit.skull);
+      frame.quaternion.copy(fit.headQ);
+      const h = fit.headR;
+      if (worn.id === 'ribbon') put(frame, bowMesh(h * 0.6, color), [0, h * 0.12, -h * 0.1], [-0.3, 0, 0]);
+      else if (worn.id === 'flower') {
+        const f = new THREE.Group();
+        for (let i = 0; i < 5; i++) {
+          const p = new THREE.Mesh(new THREE.SphereGeometry(h * 0.22, 8, 6), mat(color, 0.6));
+          const a = (i / 5) * Math.PI * 2;
+          p.position.set(Math.cos(a) * h * 0.28, 0, Math.sin(a) * h * 0.28);
+          p.scale.y = 0.5;
+          f.add(p);
+        }
+        f.add(new THREE.Mesh(new THREE.SphereGeometry(h * 0.16, 8, 6), mat(0xf2c94c, 0.6)));
+        put(frame, f, [h * 0.45, h * 0.05, -h * 0.1], [0, 0, -0.5]);
+      } else if (worn.id === 'hat') {
+        const hat = new THREE.Group();
+        const brim = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.75, h * 0.75, h * 0.08, 16), mat(color, 0.6));
+        const topM = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.42, h * 0.46, h * 0.7, 16), mat(color, 0.6));
+        topM.position.y = h * 0.38;
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.47, h * 0.47, h * 0.12, 16), mat(0x2a2a2a, 0.6));
+        band.position.y = h * 0.1;
+        brim.castShadow = topM.castShadow = true;
+        hat.add(brim, topM, band);
+        put(frame, hat, [0, h * 0.05, -h * 0.15], [-0.2, 0, 0.12]);
+      }
+      if (frame.children.length) {
+        model.head.add(frame);
+        out.push(frame);
+      }
+      continue;
+    }
+    if (ring && slot === 'neck') {
+      // Anneau de l'encolure mesuré (repère : z le long du cou, -y vers la gorge).
+      const frame = new THREE.Group();
+      frame.position.copy(ring.center);
+      frame.quaternion.copy(ring.q);
+      const rx = ring.rx + 0.008;
+      const ry = ring.ry + 0.008;
+      const band = Math.max(0.006, (rx + ry) * 0.1);
+      const torus = new THREE.Mesh(new THREE.TorusGeometry(1, band / Math.max(rx, ry), 6, 28), mat(worn.id === 'bandana' ? color : 0x3a2a20, 0.6));
+      torus.scale.set(rx + band * 0.5, ry + band * 0.5, 0.9);
+      frame.add(torus);
+      const throat = -(ry + band);
+      if (worn.id === 'bow') put(frame, bowMesh((rx + ry) * 0.45, color), [0, throat - band * 0.5, band * 0.5], [0.3, 0, 0]);
+      else if (worn.id === 'bell') {
+        const bell = new THREE.Mesh(new THREE.SphereGeometry((rx + ry) * 0.14, 10, 8), mat(0xf2c94c, 0.3, { metalness: 0.6 }));
+        put(frame, bell, [0, throat - (rx + ry) * 0.14, band]);
+      } else if (worn.id === 'bandana') {
+        // foulard : triangle plié qui pend sous la gorge, un peu bombé sur le poitrail
+        const w = (rx + ry) * 1.1;
+        const tri = new THREE.Mesh(new THREE.ConeGeometry(w * 0.55, w * 0.75, 3, 1), mat(color, 0.75, { side: THREE.DoubleSide }));
+        tri.scale.z = 0.22;
+        put(frame, tri, [0, throat - w * 0.32, band * 1.2], [Math.PI + 0.25, 0, 0]);
+      }
+      model.neck.add(frame);
+      out.push(frame);
+      continue;
+    }
+    if (fit && slot === 'tail' && worn.id === 'tailBow') {
+      if (fit.tailTip) put(fit.tailTip, bowMesh(fit.headR * 0.45, color), [0, 0, 0], [0.6, 0, 0]);
+      continue;
+    }
     if (slot === 'head') {
       // Sur le dessus de la tête, entre les oreilles.
       const top = [0, hr * 1.0, hr * 0.15];

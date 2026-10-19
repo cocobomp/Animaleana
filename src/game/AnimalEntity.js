@@ -14,6 +14,7 @@ import { audio } from './audio.js'; // voix des animaux
 import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
 import { animateCat } from './catAnim.js'; // chats : assis, toilette, en boule, queue levée
 import { animateRealHorse } from './models/horseReal.js'; // cheval réaliste (GLB) : allures du mixeur
+import { animateRealDog } from './models/dogReal.js'; // chien réaliste (GLB) : allures, postures, actions
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 // Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
@@ -102,7 +103,9 @@ export class AnimalEntity {
     // Modèle GLB animé si l'espèce en a un (src/game/assets.js), sinon le modèle procédural.
     // (le poulain a son propre gabarit : membres longs, grosse tête, brosse de crins, petite queue)
     const foal = this.data.species === 'horse' && lifeStage(this.data) === 'baby';
-    const look = foal ? { ...this.data.look, foal: true } : this.data.look;
+    // (le chiot du chien réaliste a son propre gabarit : grosse tête, pattes et museau courts, voir dogLook.js)
+    const puppy = this.data.species === 'dog' && lifeStage(this.data) === 'baby';
+    const look = foal ? { ...this.data.look, foal: true } : puppy ? { ...this.data.look, puppy: true } : this.data.look;
     this.model = buildGltfAnimal(this.data.species, look) ?? buildAnimalModel(this.data.species, look, this.data.breed);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
@@ -150,8 +153,8 @@ export class AnimalEntity {
     this.scale = this.data.look.scale * growthScale(this.data);
     this.scaleGroup.scale.setScalar(this.scale);
     this.stage = lifeStage(this.data);
-    // Le poulain a grandi : il prend le gabarit de sa race.
-    if (this.model.horseV3 && this.model.foal !== (this.stage === 'baby') && this.label) {
+    // Le poulain (ou le chiot du chien réaliste) a grandi : il prend le gabarit de sa race.
+    if (((this.model.horseV3 && this.model.foal !== (this.stage === 'baby')) || (this.model.realDog && this.model.puppy !== (this.stage === 'baby'))) && this.label) {
       this.rebuildModel();
       return;
     }
@@ -741,6 +744,7 @@ export class AnimalEntity {
     if (md.gltf) return this.animateGltf(dt, sad);
     if (md.cat) return animateCat(this, dt, sad); // chats : poses et allures dédiées (catAnim.js)
     if (md.real) return animateRealHorse(this, dt, sad); // cheval réaliste (horseReal.js)
+    if (md.realDog) return animateRealDog(this, dt, sad); // chien réaliste (dogReal.js)
     const legLen = this.data.look.legLen * (this.data.look.legs ?? 1);
     const v = this.speed / Math.max(0.3, this.scale);
     const moving = this.speed > 0.05;
@@ -1032,7 +1036,7 @@ export class AnimalEntity {
   }
 
   dispose() {
-    this.disposed = true; // (Game.swapRealHorses : plus la peine de lui donner le cheval réaliste)
+    this.disposed = true; // (Game.swapRealHorses / swapRealDogs : plus la peine de lui donner le modèle réaliste)
     this.scene.remove(this.root);
     this.model.dispose?.();
     disposeModel(this.model.root);

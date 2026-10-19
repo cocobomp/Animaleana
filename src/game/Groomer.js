@@ -52,6 +52,7 @@ class SalonVisitor {
     const e = this.e;
     this.onTable = spot;
     e.scripted = !!spot;
+    e.onTable = !!spot; // (chien réaliste : assis sur la table, pas de changement de modèle pendant ce temps)
     e.herdCtrl = null;
     if (spot) {
       e.position.set(spot.x, spot.y, spot.z);
@@ -406,6 +407,13 @@ export class Groomer {
       if ((cur?.style ?? null) === style && cur?.model === e.model) continue;
       if (cur && cur.model === e.model) for (const [o, s] of cur.saved) o.scale.copy(s);
       this.cutVisuals.delete(e);
+      // Chien réaliste (dogReal.js) : la coupe est faite par le shader du pelage (agrandir le cou ou la queue,
+      // parents des os, déformerait toute la chaîne, tête comprise).
+      if (e.model?.setCut) {
+        e.model.setCut(style);
+        if (style) this.cutVisuals.set(e, { style, saved: [], model: e.model });
+        continue;
+      }
       if (!style) continue;
       const saved = [];
       const sc = (o, x, y, z) => {

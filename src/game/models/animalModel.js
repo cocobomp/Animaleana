@@ -15,6 +15,7 @@ import { SPECIES } from '../../sim/species.js';
 import { hairMaterial, buildHorseLeg, buildHorseMane, buildHorseForelock, buildHorseTail } from './horseParts.js';
 import { buildHorseModel } from './horseModel.js';
 import { buildRealHorseModel } from './horseReal.js';
+import { buildRealDogModel } from './dogReal.js'; // chiens réalistes (shiba et jack russell, GLB)
 import { buildCatModel } from './catModel.js'; // chats : modèle dédié (races, poils, poses)
 
 // ------------------------------------------------------------------ anatomie par espèce
@@ -410,6 +411,13 @@ export function buildAnimalModel(speciesId, look, breedOfAnimal = null) {
   // (cheval réaliste du GLB ; s'il n'est pas chargé, le cheval sculpté)
   if (speciesId === 'horse') return buildRealHorseModel(look, breedOfAnimal) ?? buildHorseModel(look, breedOfAnimal);
   if (speciesId === 'cat') return buildCatModel(look);
+  // Chien réaliste (GLB : shiba pour les moyens et grands, jack russell pour les petits) ; s'il n'est pas encore
+  // chargé (ou dans les tests), le chien procédural ci-dessous. (Ancienne sauvegarde : la race retrouvée par la robe.)
+  if (speciesId === 'dog') {
+    const lk = look.breed ? look : { ...look, breed: breedOf('dog', look)?.id ?? breedOfAnimal };
+    const real = buildRealDogModel(lk, breedOfAnimal);
+    if (real) return real;
+  }
   const S = SPEC[speciesId] ?? SPEC.dog;
   const high = gfx.quality === 'high';
   const m = look;

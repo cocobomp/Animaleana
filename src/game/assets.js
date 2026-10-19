@@ -17,6 +17,10 @@ export const USE_GLTF = true;
 // cheval sculpté par le code (horseModel.js) le remplace.
 export const MODELS = {
   horse_real: 'horse_real.glb',
+  // Chiens réalistes (dogReal.js) : le shiba (quander, CC-BY 4.0) pour les moyens et grands, le jack russell
+  // (FainoDS, CC-BY 4.0) pour les petits. Clés à part (pas « dog ») ; s'ils manquent, le chien procédural reste.
+  dog_shiba: 'dog_shiba.glb',
+  dog_jack: 'dog_jack.glb',
   tree_common: 'tree_common.glb',
   tree_common2: 'tree_common2.glb',
   tree_birch: 'tree_birch.glb',

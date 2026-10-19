@@ -139,6 +139,7 @@ export function buildGear(model, look, gear = {}) {
   };
   if (model.sdf) buildHorseGear(model, look, gear, add);
   else if (model.gearFit) buildHorseGear(model.gearFit, look, gear, add); // cheval GLB (src/game/models/gltfHorseFit.js)
+  else if (model.dogFit) buildDogGear(model, gear, add); // chien réaliste (src/game/models/dogReal.js)
   else buildGenericGear(model, look, gear, add, L, R, y0);
   group.userData.meshes = holders;
   // Où s'attachent les rênes (anneaux du mors, ou côtés de la muserolle du hackamore) : Player les tend
@@ -475,6 +476,106 @@ function horseSaddle(model, gear, add) {
   add(body, strap(loop(torso, [0, y0 - R * 0.2, model.dims.zGirth ?? zSeat + L * 0.13], 22, 0.014, deg(30), deg(-210), 0.3), st.western ? 0.045 : 0.03, 0.005), girthMat);
 }
 
+// ------------------------------------------------------------------ chien réaliste
+
+/**
+ * Équipement du chien réaliste (dogReal.js), ajusté sur les mesures de sa race (model.dogFit) : collier autour de
+ * l'encolure (anneau mesuré à 40 % du cou, ellipse de la coupe, avec boucle, anneau de laisse et médaille, porté
+ * par l'os du cou), manteau taillé dans les coupes du tronc (du garrot aux hanches, sur le dos et les flancs) et lié
+ * au squelette (il suit la respiration, les épaules et les hanches), avec sa bordure et ses sangles sous le ventre.
+ */
+function buildDogGear(model, gear, add) {
+  const fit = model.dogFit;
+  if (gear.neck && fit.collar?.bone) {
+    const c = fit.collar;
+    const color = gearColor(gear.neck, BLANKET_COLORS.red);
+    const gap = 0.006;
+    const band = Math.max(0.006, (c.rx + c.ry) * 0.12);
+    const ring = new THREE.Group();
+    ring.position.copy(c.center);
+    ring.quaternion.copy(c.q);
+    // (bande plate : un tore aplati, ellipse de la coupe de l'encolure)
+    const geo = new THREE.TorusGeometry(1, band / Math.max(c.rx, c.ry), 6, 28);
+    const torus = new THREE.Mesh(geo, mat(color, 0.55));
+    torus.scale.set(c.rx + gap + band * 0.5, c.ry + gap + band * 0.5, 0.9);
+    torus.castShadow = true;
+    ring.add(torus);
+    // Boucle, anneau (laisse) et médaille sous la gorge.
+    const metal = mat(0xd2ab4e, 0.3, METAL);
+    const yb = -(c.ry + gap + band * 0.9);
+    const buckle = new THREE.Mesh(new THREE.TorusGeometry(band * 0.9, band * 0.22, 6, 12), metal);
+    buckle.position.set(0, yb, 0);
+    ring.add(buckle);
+    const medal = new THREE.Mesh(new THREE.CylinderGeometry(band * 1.2, band * 1.2, band * 0.3, 14), metal);
+    medal.rotation.x = Math.PI / 2;
+    medal.position.set(0, yb - band * 1.6, band * 0.4);
+    ring.add(medal);
+    add.group(c.bone, ring);
+    ring.userData.dispose = [geo, torus.material, buckle.geometry, medal.geometry, metal];
+  }
+  if (gear.blanket && fit.rings?.length) {
+    const color = gearColor(gear.blanket, BLANKET_COLORS.red);
+    const rings = fit.rings.filter(([z]) => z > fit.hipZ - 0.01 && z < fit.shZ + 0.035);
+    const A = 1.95; // demi-ouverture (rad) depuis le dos : jusque sous les flancs
+    const NA = 18;
+    const SECT = rings[0]?.[1].length ?? 24;
+    const radiusAt = (r, a) => {
+      const f = ((a / (Math.PI * 2)) * SECT % SECT + SECT) % SECT;
+      const k = Math.floor(f);
+      return r[k] + (r[(k + 1) % SECT] - r[k]) * (f - k);
+    };
+    const pos = [];
+    const uv = [];
+    const idx = [];
+    rings.forEach(([z, r], i) => {
+      for (let j = 0; j <= NA; j++) {
+        const a = -A + (2 * A * j) / NA;
+        const rr = radiusAt(r, a) + 0.012;
+        pos.push(fit.midX + Math.sin(a) * rr, fit.ycAt + Math.cos(a) * rr, z);
+        uv.push(j / NA, i / Math.max(1, rings.length - 1));
+      }
+    });
+    const row = NA + 1;
+    for (let i = 0; i < rings.length - 1; i++) {
+      for (let j = 0; j < NA; j++) {
+        const a = i * row + j;
+        idx.push(a, a + 1, a + row, a + 1, a + row + 1, a + row);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const cloth = new THREE.MeshStandardMaterial({ color, roughness: 0.85, side: THREE.DoubleSide });
+    add.skin(add(model.root, geo, cloth));
+    // Bordure claire tout autour, sangles sous le ventre (à l'avant et à l'arrière).
+    const trim = [];
+    const ends = [rings[0], rings[rings.length - 1]];
+    for (const [z, r] of ends) {
+      const pts = [];
+      for (let j = 0; j <= NA; j++) {
+        const a = -A + (2 * A * j) / NA;
+        const rr = radiusAt(r, a) + 0.016;
+        pts.push(new THREE.Vector3(fit.midX + Math.sin(a) * rr, fit.ycAt + Math.cos(a) * rr, z));
+      }
+      trim.push(pts);
+    }
+    for (const pts of trim) add.skin(add(model.root, strap(pts, 0.007, 0.004), mat(0xf2ede4, 0.8)));
+    const belt = mat(0x2a2a2a, 0.6);
+    for (const t of [0.22, 0.8]) {
+      const [z, r] = rings[Math.min(rings.length - 1, Math.round(t * (rings.length - 1)))];
+      const pts = [];
+      for (let j = 0; j <= 24; j++) {
+        const a = A + ((Math.PI * 2 - 2 * A) * j) / 24;
+        const rr = radiusAt(r, a) + 0.01;
+        pts.push(new THREE.Vector3(fit.midX + Math.sin(a) * rr, fit.ycAt + Math.cos(a) * rr, z));
+      }
+      add.skin(add(model.root, strap(pts, 0.008, 0.003), belt));
+    }
+  }
+}
+
 // ------------------------------------------------------------------ autres animaux
 
 function buildGenericGear(model, look, gear, add, L, R, y0) {
@@ -572,6 +673,8 @@ function buildGenericGear(model, look, gear, add, L, R, y0) {
 export function removeGear(group) {
   for (const m of group.userData.meshes ?? []) {
     m.parent?.remove(m);
+    // (collier du chien réaliste : groupe à lui, ses pièces sont libérées avec lui)
+    for (const x of m.userData?.dispose ?? []) x.dispose?.();
     if (!m.isMesh) continue; // groupe de pièces partagées (étrier…)
     if (!m.geometry.userData.shared) m.geometry.dispose(); // les pièces partagées (src/game/models/tackModels.js) restent
     if (!m.material.userData.shared) m.material.dispose();

@@ -803,8 +803,8 @@ export class Player {
   }
 }
 
-/** Décalage de la caméra sur le côté quand on monte sur un écran en hauteur (rad, voir CameraRig.update). */
-export const MOUNT_SIDE = 0.45;
+/** Décalage de la caméra sur le côté quand on monte sur un écran en hauteur (m, voir CameraRig.update). */
+export const MOUNT_SIDE = 1.5;
 
 export class CameraRig {
   constructor(camera) {
@@ -825,20 +825,15 @@ export class CameraRig {
     look.dy += keyLook.y * dt * 300;
     // Quand on marche sans toucher la vue, la caméra revient doucement derrière le personnage.
     this.idleLook = look.dx || look.dy || keyLook.x || keyLook.y ? 0 : (this.idleLook ?? 0) + dt;
-    // À cheval sur un écran en hauteur (champ étroit : environ 30° de large) : la caméra reste un peu de côté
-    // (MOUNT_SIDE), plus près et visant l'encolure, pour qu'on voie la tête et l'encolure de son cheval au lieu
-    // d'une croupe (le cavalier cachait la tête). Lissé (portraitRide : 0 → 1).
+    // À cheval sur un écran en hauteur (champ étroit : environ 30° de large) : la caméra se décale sur le côté
+    // (MOUNT_SIDE, côté montoir), se rapproche et vise l'encolure, pour qu'on voie la tête et l'encolure de son
+    // cheval au lieu d'une croupe (le cavalier cachait la tête). Un décalage, pas une rotation : le lacet (yaw), qui
+    // oriente le joystick, reste derrière le cheval — tourner la caméra faisait tourner le cheval en rond.
+    // Lissé (ride : 0 → 1).
     const portraitRide = player.mount && this.mode === 'third' && this.camera.aspect < 0.8 ? 1 : 0;
     this.ride = (this.ride ?? 0) + (portraitRide - (this.ride ?? 0)) * Math.min(1, dt * 2);
     if (this.mode === 'third' && player.speed > 1 && this.idleLook > 1.5 && !player.auto) {
-      let aim = player.heading;
-      if (portraitRide) {
-        // (du côté où la caméra est déjà ; à gauche, côté montoir, si elle est juste derrière)
-        const rel = Math.atan2(Math.sin(this.yaw - player.heading), Math.cos(this.yaw - player.heading));
-        if (Math.abs(rel) > 0.08) this.mountSide = Math.sign(rel);
-        aim += (this.mountSide ?? 1) * MOUNT_SIDE;
-      }
-      let diff = aim - this.yaw;
+      let diff = player.heading - this.yaw;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       this.yaw += diff * Math.min(1, dt * 0.8);
     }
@@ -862,11 +857,14 @@ export class CameraRig {
     player.avatar.root.visible = true;
     const target = eye.clone().add(new THREE.Vector3(0, -0.2, 0));
     const ride = this.ride ?? 0;
+    // (décalage de côté, à gauche de la caméra : MOUNT_SIDE pour elle, la moitié pour sa cible)
+    const sideX = Math.cos(this.yaw) * MOUNT_SIDE * ride * (player.mount?.scale ?? 1);
+    const sideZ = -Math.sin(this.yaw) * MOUNT_SIDE * ride * (player.mount?.scale ?? 1);
     if (ride > 0.001) {
       // (visée vers l'avant et plus bas : entre les mains du cavalier et la tête du cheval)
       const k = ride * (player.mount?.scale ?? 1);
-      target.x += Math.sin(player.heading) * 0.9 * k;
-      target.z += Math.cos(player.heading) * 0.9 * k;
+      target.x += Math.sin(player.heading) * 0.9 * k + sideX * 0.5;
+      target.z += Math.cos(player.heading) * 0.9 * k + sideZ * 0.5;
       target.y -= 0.35 * k;
     }
     const back = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
@@ -915,6 +913,8 @@ export class CameraRig {
     this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch + 0.1 * ride - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
     back.set(-Math.sin(this.yaw) * Math.cos(this.curPitch), Math.sin(this.curPitch), -Math.cos(this.yaw) * Math.cos(this.curPitch));
     const want = target.clone().addScaledVector(back, dist);
+    want.x += sideX * 0.5;
+    want.z += sideZ * 0.5;
     const ground = world.heightAt(want.x, want.z) + 0.4;
     if (want.y < ground) want.y = ground;
     this.pos.lerp(want, this.pos.lengthSq() === 0 ? 1 : Math.min(1, dt * 10));

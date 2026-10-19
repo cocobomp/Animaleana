@@ -31,26 +31,24 @@ const rider = (mount) => ({
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 describe('caméra du jeu', () => {
-  it('à cheval sur un téléphone en hauteur : un peu de côté, plus près, la tête du cheval dans le cadre', () => {
+  it('à cheval sur un téléphone en hauteur : décalée sur le côté (côté montoir), plus près, la tête du cheval dans le cadre', () => {
     const cam = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
     const rig = new CameraRig(cam);
     rig.yaw = 0.4;
     const p = rider({ scale: 1, position: new THREE.Vector3() });
     for (let i = 0; i < 900; i++) rig.update(1 / 30, still(), p, world);
-    expect(Math.abs(wrap(rig.yaw - (p.heading + MOUNT_SIDE)))).toBeLessThan(0.03);
-    // plus près qu'avant (dist + 2) : la caméra n'est plus à 9 m
+    // (le lacet, qui oriente le joystick, reste derrière le cheval : sinon il tournerait en rond)
+    expect(Math.abs(wrap(rig.yaw - p.heading))).toBeLessThan(0.03);
+    // caméra à gauche de la ligne du cheval (repère : avant = cap, gauche = (cos, -sin))
+    const fwd = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
+    const left = new THREE.Vector3(Math.cos(p.heading), 0, -Math.sin(p.heading));
+    const c = cam.position.clone().setY(0);
+    expect(c.dot(left)).toBeGreaterThan(MOUNT_SIDE * 0.9);
+    expect(c.dot(fwd)).toBeLessThan(-4);
+    // plus près qu'avant (dist + 2 = 9 m) : vers 6,5 m
     const d = cam.position.distanceTo(new THREE.Vector3(0, p.eyeHeight, 0));
     expect(d).toBeLessThan(rig.dist + 0.5);
     expect(d).toBeGreaterThan(rig.dist - 1.5);
-  });
-
-  it('du côté où la caméra est déjà (le joueur l\'a tournée à droite : elle y reste)', () => {
-    const cam = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
-    const rig = new CameraRig(cam);
-    rig.yaw = 0.4 - 0.5;
-    const p = rider({ scale: 1, position: new THREE.Vector3() });
-    for (let i = 0; i < 900; i++) rig.update(1 / 30, still(), p, world);
-    expect(Math.abs(wrap(rig.yaw - (p.heading - MOUNT_SIDE)))).toBeLessThan(0.03);
   });
 
   it('écran en largeur, ou à pied : la caméra revient derrière, comme avant', () => {

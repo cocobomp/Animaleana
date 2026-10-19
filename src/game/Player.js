@@ -10,7 +10,7 @@ import { rootToTorso, armIK } from './models/avatarRig.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 import { tackEffects } from '../sim/gear.js';
-import { helmetModel } from './models/tackModels.js'; // bombe du cavalier
+import { helmetModel, helmetStrapsModel } from './models/tackModels.js'; // bombe du cavalier et ses sangles
 import { helmetFit } from './models/avatarHair.js'; // la bombe à la taille de la coiffure
 
 const WALK = 3.2;
@@ -139,6 +139,7 @@ export class Player {
     this.look = look;
     if (this.avatar) {
       this.helmet?.parent?.remove(this.helmet); // la bombe passe sur le nouvel avatar
+      this.helmetStraps?.parent?.remove(this.helmetStraps);
       this.root.remove(this.avatar.root);
       disposeModel(this.avatar.root);
     }
@@ -223,6 +224,8 @@ export class Player {
       this.helmet.parent?.remove(this.helmet);
       this.helmet = null;
     }
+    this.helmetStraps?.parent?.remove(this.helmetStraps);
+    this.helmetStraps = null;
     if (h) {
       this.helmet = helmetModel(h.item, h.color);
       // Pas d'ombre portée : la visière mettait les yeux dans le noir à midi.
@@ -238,11 +241,18 @@ export class Player {
    * sourcils (plus basse, elle cachait les yeux vus de la caméra, au-dessus du personnage).
    */
   wearHelmet() {
-    const f = helmetFit(this.look?.hairStyle ?? 'short');
+    const style = this.look?.hairStyle ?? 'short';
+    const f = helmetFit(style);
     this.helmet.position.set(0, f.y, f.z);
     this.helmet.rotation.x = f.tilt;
     this.helmet.scale.setScalar(f.scale);
     this.avatar.head.add(this.helmet);
+    // Sangles collées aux joues (devant et derrière l'oreille, jugulaire sous le menton), dans le repère
+    // de la tête : le harnais de la bombe exposée (deux anneaux fixes) flottait à côté du visage.
+    for (const m of this.helmet.userData.harness ?? []) m.visible = false;
+    this.helmetStraps?.parent?.remove(this.helmetStraps);
+    this.helmetStraps = helmetStrapsModel(style, f);
+    this.avatar.head.add(this.helmetStraps);
   }
 
   /**

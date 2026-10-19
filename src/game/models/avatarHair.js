@@ -741,3 +741,96 @@ export { TAU };
 
 /** Pour les tests et la mise au point : le champ d'une coiffure. */
 export const __hairFieldForTest = hairField;
+
+// ------------------------------------------------------------------ sangles de la bombe
+
+/** Rayon des sangles de la bombe et leur écart à la peau (ou aux cheveux), repère de la tête (m). */
+export const STRAP_R = 0.0026;
+export const STRAP_GAP = STRAP_R + 0.0012;
+
+/** Cou (cylindre de buildAvatar, sous la tête) : la jugulaire passe devant, pas dedans. */
+const neckSdf = (x, y, z) => (y > -0.004 ? 1 : Math.hypot(x, z) - (0.048 + 0.008 * Math.min(1, (-0.01 - y) / 0.12)));
+
+/** Bord de la coque de la bombe (helmetModel) à l'azimut φ, dans le repère de la tête (fit : helmetFit). */
+export function helmetRim(fit, phi) {
+  // Coque : sphère r 0,115 étirée [1 ; 0,95 ; 1,12], ouverte jusqu'à 0,52 π depuis le haut.
+  const r = 0.115 * Math.sin(Math.PI * 0.52) * fit.scale;
+  const x = r * Math.cos(phi);
+  const y = 0.115 * Math.cos(Math.PI * 0.52) * 0.95 * fit.scale;
+  const z = r * 1.12 * Math.sin(phi);
+  const c = Math.cos(fit.tilt);
+  const s = Math.sin(fit.tilt);
+  return [x, fit.y + y * c - z * s, fit.z + y * s + z * c];
+}
+
+/**
+ * Sangles de la bombe collées à la tête (repère de la tête) : de chaque côté, une sangle devant l'oreille
+ * et une derrière, qui partent de dessous la coque et se rejoignent sous le lobe (boucle), puis la jugulaire
+ * qui suit la mâchoire et passe sous le menton, devant le cou. Chaque point est posé sur ce qui est le plus
+ * à l'extérieur (peau, cou, ou cheveux rentrés sous la bombe), à STRAP_GAP : les sangles ne flottent plus
+ * à côté des joues (l'ancien harnais était deux anneaux fixes de la coque, à 1 à 2 cm du visage).
+ * Renvoie { paths: [[x, y, z], …][], buckles: [{ p, n }] } (n : normale de la peau à la boucle).
+ */
+export function helmetStraps(style, fit = helmetFit(style)) {
+  const hair = style === 'bald' ? () => 1 : hairField(style, headSdf, true).field;
+  const outer = (x, y, z) => Math.min(headSdf(x, y, z), hair(x, y, z), neckSdf(x, y, z));
+  const e = 0.0015;
+  const normal = (p) => {
+    const n = [
+      outer(p[0] + e, p[1], p[2]) - outer(p[0] - e, p[1], p[2]),
+      outer(p[0], p[1] + e, p[2]) - outer(p[0], p[1] - e, p[2]),
+      outer(p[0], p[1], p[2] + e) - outer(p[0], p[1], p[2] - e),
+    ];
+    const l = Math.hypot(...n) || 1;
+    return [n[0] / l, n[1] / l, n[2] / l];
+  };
+  // Pose le point à STRAP_GAP de la surface (quelques pas de Newton le long de la normale).
+  const settle = (p) => {
+    const q = [...p];
+    for (let i = 0; i < 6; i++) {
+      const d = outer(...q) - STRAP_GAP;
+      if (Math.abs(d) < 0.0002) break;
+      const n = normal(q);
+      for (let k = 0; k < 3; k++) q[k] -= n[k] * d;
+    }
+    return q;
+  };
+  // Suite de points guides → courbe douce, échantillonnée puis posée sur la tête.
+  const along = (guide, n) => {
+    const curve = new THREE.CatmullRomCurve3(guide.map((p) => new THREE.Vector3(...p)), false, 'centripetal');
+    const pts = curve.getPoints(n).map((v) => settle([v.x, v.y, v.z]));
+    // Un lissage léger (les cheveux font de petites bosses), puis de nouveau à la bonne distance.
+    for (let it = 0; it < 2; it++) {
+      for (let i = 1; i < pts.length - 1; i++) {
+        for (let k = 0; k < 3; k++) pts[i][k] = pts[i][k] * 0.5 + (pts[i - 1][k] + pts[i + 1][k]) * 0.25;
+      }
+      for (let i = 1; i < pts.length - 1; i++) pts[i] = settle(pts[i]);
+    }
+    return pts;
+  };
+  // Point du bord de la coque le plus proche de la profondeur z voulue (côté s), un peu au-dessus et vers
+  // l'intérieur : la sangle part de sous la coque.
+  const rimAt = (s, z) => {
+    let best = null;
+    for (let i = 0; i <= 180; i++) {
+      const p = helmetRim(fit, (i / 180) * Math.PI - Math.PI / 2); // côté +X
+      if (!best || Math.abs(p[2] - z) < Math.abs(best[2] - z)) best = p;
+    }
+    return [s * best[0] * 0.8, best[1] + 0.01, best[2]];
+  };
+  const paths = [];
+  const buckles = [];
+  const chin = [];
+  for (const s of [1, -1]) {
+    const B = settle([s * 0.104, -0.012, 0.004]); // boucle, sous le lobe de l'oreille
+    const front = rimAt(s, 0.045);
+    const rear = rimAt(s, -0.07);
+    paths.push(along([front, [s * 0.118, 0.07, 0.044], [s * 0.114, 0.035, 0.036], [s * 0.108, 0.008, 0.018], B], 20));
+    paths.push(along([rear, [s * 0.124, 0.06, -0.058], [s * 0.12, 0.025, -0.04], [s * 0.11, 0.0, -0.016], B], 20));
+    buckles.push({ p: B, n: normal(B) });
+    chin.push([B, [s * 0.09, -0.045, 0.022], [s * 0.066, -0.075, 0.04], [s * 0.034, -0.09, 0.056]]);
+  }
+  // Jugulaire : d'une boucle à l'autre, sous le menton.
+  paths.push(along([...chin[0], [0, -0.094, 0.062], ...[...chin[1]].reverse()], 36));
+  return { paths, buckles, outer };
+}

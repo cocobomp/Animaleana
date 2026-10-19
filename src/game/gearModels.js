@@ -333,12 +333,13 @@ function stirrupLeather(pts, k) {
 }
 
 /**
- * Étrier d'une selle anglaise (userData.saddle.stirrups) mis à la longueur de jambe du cavalier : l'étrier
- * (son origine, repère de body) va en `at`, l'étrivière suit le quartier puis descend jusqu'à lui. Sans `at`,
- * l'étrier et l'étrivière reviennent à leur place d'origine. Rien pour un étrier fixe (western).
+ * Étrier (userData.saddle.stirrups) mis à la longueur de jambe du cavalier : l'étrier (son origine, repère de
+ * body) va en `at`. Selle anglaise : l'étrivière suit le quartier puis descend jusqu'à lui ; western : le
+ * fender, refait le long du flanc, s'arrête juste au-dessus de lui. Sans `at`, l'étrier et l'étrivière (ou le
+ * fender) reviennent à leur place d'origine. light : l'étrier suit le pied d'une image à l'autre, le fender
+ * n'est pas refait (l'étrivière, elle, l'est : peu de sommets).
  */
-export function fitStirrup(s, at = null) {
-  if (s.fixed) return;
+export function fitStirrup(s, at = null, light = false) {
   s.home ??= { pos: s.iron.position.clone(), geo: s.leather.geometry };
   if (!at) {
     s.iron.position.copy(s.home.pos);
@@ -350,12 +351,27 @@ export function fitStirrup(s, at = null) {
     return;
   }
   s.iron.position.copy(at);
-  const end = at.clone().add(s.hang);
-  // (le long du quartier tant qu'il est au-dessus du bout, puis droit jusqu'à lui)
-  const pts = s.pts.filter((p, i) => i === 0 || p.y > end.y + 0.02);
-  pts.push(end);
+  if (light && s.fender) return;
+  let geo;
+  if (s.fender) {
+    // (la longueur dont le bas est 6 cm au-dessus du centre de l'étrier : le flanc descend avec la longueur)
+    let lo = 0.3 * s.flen;
+    let hi = 1.6 * s.flen;
+    for (let it = 0; it < 14; it++) {
+      const m = (lo + hi) / 2;
+      if (s.fenderEnd(m).y - 0.06 > at.y) lo = m;
+      else hi = m;
+    }
+    geo = s.fender((lo + hi) / 2);
+  } else {
+    const end = at.clone().add(s.hang);
+    // (le long du quartier tant qu'il est au-dessus du bout, puis droit jusqu'à lui)
+    const pts = s.pts.filter((p, i) => i === 0 || p.y > end.y + 0.02);
+    pts.push(end);
+    geo = stirrupLeather(pts, s.k);
+  }
   if (s.leather.geometry !== s.home.geo) s.leather.geometry.dispose();
-  s.leather.geometry = stirrupLeather(pts, s.k);
+  s.leather.geometry = geo;
   s.leather.userData.homeGeo = s.home.geo; // (libérée avec le harnachement : removeGear)
 }
 
@@ -449,12 +465,16 @@ function horseSaddle(model, gear, add) {
       const fOut = (v) => [0.02 * k - 0.065 * k + v * 0.01 * k, 0.02 * k + 0.065 * k - v * 0.012 * k];
       const fMap = onFlank(side, padT + 0.024, zSeat - 0.02 * k, 0.42);
       const flen = 0.46 * k;
-      add(body, P.plate(fOut, flen, fMap, 4, 8), P.tooledMat(color));
+      const fender = add(body, P.plate(fOut, flen, fMap, 4, 8), P.tooledMat(color));
       const end = new THREE.Vector3(...fMap(0.02 * k, flen));
       const oxbow = add(body, P.shared('gearOxbow', () => new THREE.TorusGeometry(0.055, 0.014, 6, 16, PI)), P.woodMat(), [end.x + side * 0.01, end.y - 0.06, end.z], [0, PI / 2, PI]);
-      // (étrier en bois au bout du fender : pas d'étrivière à rallonger, le pied y va tel quel ; le fond de l'arc
-      // est 5,5 cm sous son centre)
-      add.saddle.stirrups.push({ side, iron: oxbow, fixed: true, tread: new THREE.Vector3(0, -0.055, 0) });
+      // Pour le cavalier : l'étrier en bois va au pied, le fender (refait le long du flanc) s'arrête au-dessus de
+      // lui. (Le pied pose sur le dessus du fond de l'arc, 5,5 - 1,4 cm sous son centre : repère de l'arc
+      // retourné, d'où le +y.)
+      add.saddle.stirrups.push({
+        side, iron: oxbow, leather: fender, k, tread: new THREE.Vector3(0, 0.055 - 0.014, 0),
+        fender: (len) => P.plate(fOut, len, fMap, 4, 8), fenderEnd: (len) => new THREE.Vector3(...fMap(0.02 * k, len)), flen,
+      });
       // Corne (pommeau).
       const zH = z1 - 0.02 * k;
       const yH = model.backTop(zH) + 0.02 + (st.pommel - st.dip) * k;

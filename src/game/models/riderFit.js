@@ -20,9 +20,10 @@ const CELL = 0.02;
 const GAP = 0.008;
 /** Pied dans l'étrier : la cheville au-dessus de la grille et en arrière (repère de l'avatar). */
 const FOOT = new THREE.Vector3(0, 0.05, -0.07);
-/** Pli du genou voulu, étriers réglés (rad, ≈ 65°) ; à cru, jambes plus tombantes. */
+/** Pli du genou voulu, étriers réglés (rad, ≈ 65°) ; à cru et en western, jambes plus tombantes. */
 const BEND = 1.1;
 const BEND_BARE = 0.8;
+const BEND_WESTERN = 0.85; // (étriers longs)
 /** Points des jambes contrôlés : [segment (0 cuisse, 1 tibia), t le long du segment, rayon (m)]. */
 const SAMPLES = [
   [0, 0.25, 0.08], [0, 0.5, 0.072], [0, 0.75, 0.064], [0, 1, 0.058],
@@ -54,6 +55,9 @@ const PHI_MIN = 0;
 const PHI_MAX = 1.45;
 /** Pied écarté du flanc au plus tant de fois quand le genou, même très écarté, touche encore. */
 const PUSH_TRIES = 4;
+/** De combien au plus (m) : pied à l'étrier, à cru. */
+const PUSH_STIRRUP = 0.05;
+const PUSH_BARE = 0.3;
 
 /** Os qui porte le plus le sommet i du pelage. */
 function dominant(geo, i) {
@@ -341,8 +345,8 @@ function widthAt(fit, y, z) {
 /**
  * À la mise en selle : où vont les pieds (repère de body). Genou plié de BEND, pied un peu en avant de la hanche,
  * contre le flanc (la plus grande largeur du cheval sur 25 cm au-dessus du pied, plus la demi-largeur de la
- * chaussure). Avec une selle anglaise, l'étrier y est mis (étrivière rallongée ou raccourcie : gearModels.fitStirrup) ;
- * étrier western : le pied va à l'étrier tel qu'il est.
+ * chaussure). L'étrier y est mis (gearModels.fitStirrup : étrivière rallongée ou raccourcie ; western, fender
+ * refait au-dessus de l'étrier en bois, jambe plus tombante).
  */
 function placeFeet(fit, a) {
   const { md, sc } = fit;
@@ -353,15 +357,8 @@ function placeFeet(fit, a) {
   for (let i = 0; i < 2; i++) {
     const side = i === 0 ? 1 : -1; // (jambe 0 : gauche de l'avatar, côté +x, comme la gauche du cheval)
     const st = fit.seat?.stirrups.find((s) => s.side === side);
-    if (st?.fixed) {
-      st.iron.updateWorldMatrix(true, false);
-      fit.feet[i].copy(st.tread).applyMatrix4(st.iron.matrixWorld).applyMatrix4(inv);
-      fit.stirrups[i] = st;
-      fit.feet[i].add(_v.copy(FOOT).multiplyScalar(1 / sc));
-      continue;
-    }
     const H = a.legs[i].position;
-    const bend = fit.bareback ? BEND_BARE : BEND;
+    const bend = fit.bareback ? BEND_BARE : st?.fender ? BEND_WESTERN : BEND;
     const d = Math.sqrt(LEG.thigh ** 2 + LEG.shin ** 2 + 2 * LEG.thigh * LEG.shin * Math.cos(bend));
     // (pied 6 cm devant la hanche ; à cru, sous elle)
     const dz = fit.bareback ? 0.02 : 0.06;
@@ -399,8 +396,10 @@ function placeFeet(fit, a) {
     fit.feet[i].copy(_a).applyMatrix4(toBody);
     if (st) {
       // l'étrier sous la cheville : grille sous la plante du pied
-      const at = _v.copy(_a).sub(FOOT).applyMatrix4(toBody).sub(_w.copy(st.tread));
+      const at = _v.copy(_a).sub(FOOT).applyMatrix4(toBody).sub(_w.copy(st.tread).applyQuaternion(st.iron.quaternion));
       fitStirrup(st, at);
+      st.fitAt = at.clone();
+      st.shift = 0;
       fit.stirrups[i] = st;
     }
   }
@@ -409,7 +408,7 @@ function placeFeet(fit, a) {
 /** Remet les étriers à leur place d'origine (pied à terre). */
 export function releaseRiderFit(fit) {
   if (!fit || fit.gear !== (fit.entity.gearGroup ?? null)) return; // (harnachement déjà remplacé, et libéré)
-  for (const s of fit.stirrups) if (s && !s.fixed) fitStirrup(s, null);
+  for (const s of fit.stirrups) if (s) fitStirrup(s, null);
 }
 
 /**
@@ -467,28 +466,39 @@ export function fitRider(fit, a) {
   // 2) Jambes.
   const toBody = _m.multiplyMatrices(inv, a.root.matrixWorld);
   const toAvatar = _mi.copy(toBody).invert();
-  const rootInv = _ri.copy(a.root.matrixWorld).invert();
   const L1 = LEG.thigh;
   const L2 = LEG.shin;
   for (let i = 0; i < 2; i++) {
     const side = i === 0 ? 1 : -1;
     const H = _h.copy(a.legs[i].position);
-    // cheville : à l'étrier (il suit le tronc du cheval), ramenée à portée si le bassin s'est levé
+    // cheville : à l'étrier réglé à la mise en selle (repère du tronc, qu'il suit), ramenée à portée si le bassin
+    // s'est levé
     const st = fit.stirrups[i];
-    if (st && !st.fixed) {
-      st.iron.updateWorldMatrix(true, false);
-      _a.copy(st.tread).applyMatrix4(st.iron.matrixWorld).applyMatrix4(rootInv).add(FOOT);
-    } else _a.copy(fit.feet[i]).applyMatrix4(toAvatar);
+    if (st?.fitAt) _a.copy(st.tread).applyQuaternion(st.iron.quaternion).add(st.fitAt).applyMatrix4(toAvatar).add(FOOT);
+    else _a.copy(fit.feet[i]).applyMatrix4(toAvatar);
     const reach = L1 + L2 - 0.01;
     _u.subVectors(_a, H);
     if (_u.length() > reach) _a.copy(H).addScaledVector(_u.normalize(), reach);
     // genou : le moins écarté possible, hors des flancs (même très écarté, si la jambe touche encore, le pied
     // s'écarte du flanc, du double de ce qui dépasse : le genou, entre hanche et pied, ne s'écarte que de la
-    // moitié ; à cru au galop, la cuisse descend sur le haut du ventre, le plus large)
+    // moitié ; à cru au galop, la cuisse descend sur le haut du ventre, le plus large). Le pied ne quitte pas
+    // l'étrier de plus de PUSH_STIRRUP : ce qui touche alors encore, c'est la jupe de la selle (western sur un
+    // poney), pas le cheval.
     kneeSearch(fit, H, _a, side, toBody, fat, _ks);
-    for (let k = 0; k < PUSH_TRIES && _ks.over > 0; k++) {
-      _a.x += side * _ks.over * 2;
+    let room = st ? PUSH_STIRRUP : PUSH_BARE;
+    for (let k = 0; k < PUSH_TRIES && _ks.over > 0 && room > 0; k++) {
+      const dx = Math.min(room, _ks.over * 2);
+      _a.x += side * dx;
+      room -= dx;
       kneeSearch(fit, H, _a, side, toBody, fat, _ks);
+    }
+    // (l'étrier suit le pied écarté ; refait à 4 mm près)
+    if (st?.fitAt) {
+      const shift = PUSH_STIRRUP - room;
+      if (Math.abs(shift - st.shift) > 0.004) {
+        st.shift = shift;
+        fitStirrup(st, _c.copy(st.fitAt).setX(st.fitAt.x + (side * shift) / (sc * fat)), true);
+      }
     }
     const phi = _ks.phi;
     fit.phi[i] = phi;

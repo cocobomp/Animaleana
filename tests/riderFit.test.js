@@ -276,12 +276,18 @@ describe('cavalier sur le cheval réaliste', () => {
         pl.afterSessions();
       }
       expect(pl.fit.gear, 'cavalier remis sur la nouvelle selle').toBe(e.gearGroup);
-      expect(pl.fit.stirrups.every((x) => x?.fixed), 'étriers western').toBe(true);
+      expect(pl.fit.stirrups.every((x) => x?.fender), 'étriers western').toBe(true);
       // (l'ancienne étrivière, retirée avec sa selle, n'est pas remise en place)
       expect(strap.geometry).toBe(fitted);
       pl.scene.updateMatrixWorld(true);
       const d = depths(md.coatMesh, riderParts(pl.avatar));
       for (const [k, x] of Object.entries(d)) expect(x, `${k} dans le cheval`).toBeLessThan(0.002);
+      // plante du pied sur le fond de l'étrier en bois (avant : 11 cm au-dessus, puis 30 cm à côté, poussée)
+      for (let i = 0; i < 2; i++) {
+        const ball = pl.avatar.root.localToWorld(pl.avatar.root.worldToLocal(pl.avatar.ankles[i].getWorldPosition(new THREE.Vector3())).add(new THREE.Vector3(0, -0.05, 0.07)));
+        const s = pl.fit.stirrups[i];
+        expect(s.iron.localToWorld(s.tread.clone()).distanceTo(ball), 'pied dans l\'étrier western').toBeLessThan(0.02);
+      }
       // pied à terre puis de nouveau en selle anglaise : étrivières à la longueur, puis remises
       M.removeGear(e.gearGroup);
       e.gearGroup = M.buildGear(md, e.data.look, { saddle: { item: 'saddle', color: 'brown' } });

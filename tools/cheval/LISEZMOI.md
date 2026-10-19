@@ -184,6 +184,13 @@ de l'étrier en bois. À cru : jambes 12 à 24 cm dans le cheval → 0 à l'arr�
   joueur ; caméra du concours de beauté cadrant l'animal mené ; à cheval sur un écran en hauteur, caméra décalée de 1,8 m
   de côté, plus près ; « Saut automatique » dans la barre du haut.
 
+  Mesuré (téléphone 390×844 DPR 3, 10 chevaux au paddock, Chromium SwiftShader sur une machine chargée : les
+  temps d'image ne valent qu'en comparaison de mesures faites l'une après l'autre) : en basse, 297 k → 315 k
+  triangles (les deux chevaux les plus proches en version complète), 99 → 106 appels de dessin (ombres des
+  sabots), mémoire inchangée (≈ 112 Mo), 26 → 27 programmes ; temps d'image + 14 à 21 % à 1,5 pixel par point
+  avec MSAA (SwiftShader dessine sur le processeur : 1,44 fois plus de pixels, MSAA payé en entier), comme
+  avant au réglage de repli. En haute : + 0,6 k triangles, mêmes appels, même temps d'image.
+
 Ce qu'il coûte, et comment on le garde bas :
 
 - **élimination hors du champ** : chaque maillage du cheval (`HorseMesh`) a une boîte englobante refaite sur

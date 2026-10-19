@@ -6,6 +6,7 @@ import {
   animateAvatarRide, avatarBusy, stopAvatarGesture,
 } from './models/avatarModel.js';
 import { gaitFromSpeed, gaitWeights, gestureHeight, clipGait, stirrupFor } from './models/avatarMotion.js';
+import { rootToTorso, armIK } from './models/avatarRig.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 import { tackEffects } from '../sim/gear.js';
@@ -24,6 +25,81 @@ const _rB = new THREE.Vector3();
 const _rC = new THREE.Vector3();
 const _rD = new THREE.Vector3();
 const _gw = {};
+const _hp = new THREE.Vector3();
+const _hq = new THREE.Vector3();
+const _hm = new THREE.Matrix4();
+
+/** Quelques points des mains de l'avatar (repère de chaque main) : les sommets de leurs pièces. */
+function handPoints(a) {
+  if (a.handPts) return a.handPts;
+  a.handPts = a.hands.map((h) => {
+    h.updateWorldMatrix(true, true);
+    const inv = _hm.copy(h.matrixWorld).invert();
+    const pts = [];
+    h.traverse((o) => {
+      if (!o.isMesh) return;
+      const pos = o.geometry.attributes.position;
+      const m = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld);
+      const step = Math.max(1, Math.floor(pos.count / 12));
+      for (let i = 0; i < pos.count; i += step) pts.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(m));
+    });
+    return pts;
+  });
+  return a.handPts;
+}
+
+/**
+ * Dessus de l'encolure et du garrot autour des mains (pelage du cheval réaliste) : les triangles tournés
+ * vers le haut dans une boîte autour des mains (repère du cheval), choisis une fois par monture dans la
+ * pose où on la monte ; leurs sommets déformés sont relus à chaque image (getVertexPosition).
+ */
+function crestMesh(entity, a) {
+  const md = entity.model;
+  const coat = md.coatMesh;
+  const geo = coat.geometry;
+  if (md.crest?.pos === geo.attributes.position) return md.crest;
+  entity.root.updateMatrixWorld(true);
+  const inv = _hm.copy(entity.root.matrixWorld).invert();
+  const hz = [];
+  const hy = [];
+  for (const h of a.hands) {
+    h.getWorldPosition(_hp).applyMatrix4(inv);
+    hz.push(_hp.z);
+    hy.push(_hp.y);
+  }
+  const z0 = Math.min(...hz) - 0.3;
+  const z1 = Math.max(...hz) + 0.5;
+  const y0 = Math.min(...hy) - 0.35;
+  const pos = geo.attributes.position;
+  const P = new Float32Array(pos.count * 3);
+  const keep = new Uint8Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    coat.getVertexPosition(i, _hp).applyMatrix4(coat.matrixWorld).applyMatrix4(inv).toArray(P, i * 3);
+    keep[i] = Math.abs(_hp.x) < 0.25 && _hp.z > z0 && _hp.z < z1 && _hp.y > y0 ? 1 : 0;
+  }
+  const I = geo.index.array;
+  const tris = [];
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  for (let t = 0; t < I.length; t += 3) {
+    const [i0, i1, i2] = [I[t], I[t + 1], I[t + 2]];
+    if (!keep[i0] || !keep[i1] || !keep[i2]) continue;
+    ab.set(P[i1 * 3] - P[i0 * 3], P[i1 * 3 + 1] - P[i0 * 3 + 1], P[i1 * 3 + 2] - P[i0 * 3 + 2]);
+    ac.set(P[i2 * 3] - P[i0 * 3], P[i2 * 3 + 1] - P[i0 * 3 + 1], P[i2 * 3 + 2] - P[i0 * 3 + 2]);
+    // (tourné vers le haut, quel que soit le sens des faces)
+    const n = ab.cross(ac);
+    if (Math.abs(n.y) > 0.25 * n.length()) tris.push(i0, i1, i2);
+  }
+  const verts = [...new Set(tris)];
+  const slot = new Map(verts.map((v, k) => [v, k]));
+  md.crest = {
+    pos,
+    verts: Uint32Array.from(verts),
+    tris: Uint32Array.from(tris.map((v) => slot.get(v))),
+    w: new Float32Array(verts.length * 3),
+  };
+  return md.crest;
+}
 
 /**
  * Bouche d'un animal (repère du monde), un peu sous le bout du nez : le long de la tête pour un
@@ -133,6 +209,7 @@ export class Player {
     this.rideGait = 0;
     this.ridePhase = 0;
     this.rideRest = undefined;
+    this.handLift = 0;
     poseAvatar(a, 'ride', this.ride0);
   }
 
@@ -246,7 +323,89 @@ export class Player {
    * appel, les rênes dessinées seraient restées celles de lateUpdate, un mètre plus bas pendant un saut.)
    */
   afterSessions() {
+    if (this.mount && this.ride0) this.handsOverNeck(this.mount);
     if (this.mount && this.reins?.visible) this.updateReins(this.mount);
+  }
+
+  /**
+   * Les mains restent au-dessus de l'encolure (cheval réaliste) : après les séances (le saut d'obstacle
+   * bascule le cheval et le cavalier, étire puis relève l'encolure, les mains avancent le long de la
+   * crinière), le dessus du pelage est lu sous chaque main et, si une main y entre, les deux mains montent
+   * d'autant (bras refaits). Avant, elles entraient jusqu'à 11 cm dans l'encolure à la réception, et
+   * jusqu'à 6 cm au galop. La hausse retombe en quelques images (pas d'à-coup quand l'encolure se baisse).
+   */
+  handsOverNeck(m) {
+    const md = m.model;
+    const a = this.avatar;
+    const coat = md.coatMesh;
+    if (!coat?.isSkinnedMesh || !a?.hands) {
+      this.handLift = 0;
+      return;
+    }
+    m.root.updateMatrixWorld(true);
+    a.root.updateWorldMatrix(true, true);
+    const C = crestMesh(m, a);
+    const W = C.w;
+    for (let k = 0; k < C.verts.length; k++) coat.getVertexPosition(C.verts[k], _hp).applyMatrix4(coat.matrixWorld).toArray(W, k * 3);
+    const pts = handPoints(a);
+    const H = (this.handW ??= []);
+    H.length = 0;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    for (let i = 0; i < 2; i++) {
+      for (const p of pts[i]) {
+        _hq.copy(p).applyMatrix4(a.hands[i].matrixWorld);
+        H.push(_hq.x, _hq.y, _hq.z);
+        x0 = Math.min(x0, _hq.x);
+        x1 = Math.max(x1, _hq.x);
+        z0 = Math.min(z0, _hq.z);
+        z1 = Math.max(z1, _hq.z);
+      }
+    }
+    // Pour chaque point des mains, le pelage à sa verticale (le plus haut des triangles qui le couvrent).
+    let need = 0;
+    const T = C.tris;
+    for (let t = 0; t < T.length; t += 3) {
+      const a0 = T[t] * 3;
+      const b0 = T[t + 1] * 3;
+      const c0 = T[t + 2] * 3;
+      const ax = W[a0];
+      const az = W[a0 + 2];
+      const bx = W[b0];
+      const bz = W[b0 + 2];
+      const cx = W[c0];
+      const cz = W[c0 + 2];
+      if (Math.max(ax, bx, cx) < x0 || Math.min(ax, bx, cx) > x1 || Math.max(az, bz, cz) < z0 || Math.min(az, bz, cz) > z1) continue;
+      const det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+      if (Math.abs(det) < 1e-12) continue;
+      for (let k = 0; k < H.length; k += 3) {
+        const px = H[k];
+        const pz = H[k + 2];
+        const l1 = ((bz - cz) * (px - cx) + (cx - bx) * (pz - cz)) / det;
+        const l2 = ((cz - az) * (px - cx) + (ax - cx) * (pz - cz)) / det;
+        const l3 = 1 - l1 - l2;
+        if (l1 < 0 || l2 < 0 || l3 < 0) continue;
+        const y = l1 * W[a0 + 1] + l2 * W[b0 + 1] + l3 * W[c0 + 1];
+        need = Math.max(need, y + 0.005 - H[k + 1]);
+      }
+    }
+    need = Math.min(0.2, need);
+    this.handLift = Math.max(need, (this.handLift ?? 0) * 0.85 - 0.002);
+    if (this.handLift <= 0.0005) {
+      this.handLift = 0;
+      return;
+    }
+    for (let i = 0; i < 2; i++) {
+      a.hands[i].getWorldPosition(_hp);
+      _hp.y += this.handLift;
+      a.root.worldToLocal(_hp);
+      rootToTorso(a, _hp);
+      _hq.set(i === 0 ? 0.45 : -0.45, -1, -0.7);
+      armIK(a, i, _hp, _hq, 1);
+    }
+    a.root.updateMatrixWorld(true);
   }
 
   dismount() {

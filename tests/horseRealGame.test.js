@@ -7,6 +7,8 @@ import { buildRealHorseModel, realLegPose, realHorseBase } from '../src/game/mod
 import { createAnimal } from '../src/sim/animal.js';
 import { notePrep } from '../src/sim/beauty.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
+import { LEG } from '../src/game/models/avatarMotion.js';
+import { initLife } from '../src/game/models/avatarRig.js';
 
 const mem = new Map();
 let gltf;
@@ -55,6 +57,66 @@ function insideCoat(md, p) {
   }
   coat.material.side = side;
   return odd >= 4;
+}
+
+/** Avatar au squelette de buildAvatar (mêmes articulations, mêmes longueurs), avec des mains en volume. */
+function riderMock() {
+  const root = new THREE.Group();
+  const legs = [];
+  const knees = [];
+  const ankles = [];
+  for (const s of [1, -1]) {
+    const hip = new THREE.Group();
+    hip.position.set(s * 0.095, 0.82, 0);
+    root.add(hip);
+    const knee = new THREE.Group();
+    knee.position.set(0, -LEG.thigh, 0);
+    hip.add(knee);
+    const ankle = new THREE.Group();
+    ankle.position.set(0, -LEG.shin, 0);
+    knee.add(ankle);
+    legs.push(hip);
+    knees.push(knee);
+    ankles.push(ankle);
+  }
+  const torso = new THREE.Group();
+  torso.position.y = 0.82;
+  root.add(torso);
+  const arms = [];
+  const elbows = [];
+  const hands = [];
+  const skin = new THREE.MeshBasicMaterial();
+  for (const s of [1, -1]) {
+    const sh = new THREE.Group();
+    sh.position.set(s * 0.19, 1.33 - 0.03 - 0.82, 0);
+    sh.rotation.z = s * 0.08;
+    torso.add(sh);
+    const el = new THREE.Group();
+    el.position.set(0, -0.27, 0);
+    sh.add(el);
+    const hand = new THREE.Group();
+    hand.position.set(0, -0.26, 0.005);
+    el.add(hand);
+    const palm = new THREE.Mesh(new THREE.SphereGeometry(0.038, 12, 10), skin);
+    palm.scale.set(0.64, 1.05, 1);
+    const fingers = new THREE.Mesh(new THREE.CapsuleGeometry(0.021, 0.03, 4, 8), skin);
+    fingers.position.set(0, -0.046, 0.004);
+    fingers.scale.set(0.95, 1, 1.2);
+    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.011, 0.025, 4, 6), skin);
+    thumb.position.set(-s * 0.012, -0.012, 0.03);
+    thumb.rotation.set(0.5, 0, s * 0.3);
+    hand.add(palm, fingers, thumb);
+    arms.push(sh);
+    elbows.push(el);
+    hands.push(hand);
+  }
+  const head = new THREE.Group();
+  head.position.set(0, 1.5 - 0.82, 0);
+  head.scale.setScalar(1.1);
+  torso.add(head);
+  const a = { root, legs, knees, ankles, arms, elbows, hands, head, torso, chest: new THREE.Group(), eyeBalls: null, lids: [], hairTail: null, carry: null, hat: null, hairBulk: 0.03 };
+  initLife(a, 3);
+  return a;
 }
 
 describe('embonpoint du cheval réaliste', () => {
@@ -245,6 +307,94 @@ describe('saut d\'obstacle du cheval réaliste', () => {
     }
     md.dispose();
   });
+
+  it.each(['shetland', 'percheron', 'selle_francais'])('%s : les mains du cavalier restent au-dessus de l\'encolure, au galop et pendant tout le saut', async (breed) => {
+    const { poseJump } = await import('../src/game/Activities.js');
+    const { Player } = await import('../src/game/Player.js');
+    const { growthScale } = await import('../src/sim/animal.js');
+    const { SPECIES } = await import('../src/sim/species.js');
+    const a = animal(breed);
+    a.gear = { saddle: { item: 'saddle', color: 'brown' } };
+    const md = horse(a);
+    const sc = a.look.scale * growthScale(a);
+    const scene = new THREE.Scene();
+    const root = new THREE.Group();
+    const sg = new THREE.Group();
+    scene.add(root);
+    root.add(sg);
+    sg.add(md.root);
+    sg.scale.setScalar(sc);
+    const e = { model: md, root, scaleGroup: sg, scale: sc, data: a, position: root.position, heading: 0, sp: SPECIES.horse };
+    // Cavalier : le joueur sans son constructeur (pas de rendu), un avatar au squelette de buildAvatar avec
+    // ses mains (paume, doigts, pouce : mêmes formes, avatarModel.js).
+    const pl = Object.create(Player.prototype);
+    Object.assign(pl, { scene, root: new THREE.Group(), heading: 0, speed: 0, phase: 0, mount: null, lifeOpts: { speed: 0, riding: false, carry: false } });
+    scene.add(pl.root);
+    pl.avatar = riderMock();
+    pl.root.add(pl.avatar.root);
+    pl.ride(e);
+    const gallop = { v: 6.5 / sc, moving: true, graze: 0, feeder: 0, turn: 0, fat: 1 };
+    // Mains dans le pelage déformé : test de parité vertical (nombre impair de traversées au-dessus et
+    // au-dessous), profondeur = plus courte traversée.
+    const coat = md.coatMesh;
+    const C = new Float32Array(coat.geometry.attributes.position.count * 3);
+    const I = coat.geometry.index.array;
+    const depth = () => {
+      scene.updateMatrixWorld(true);
+      const v = new THREE.Vector3();
+      for (let i = 0; i < C.length / 3; i++) coat.getVertexPosition(i, v).applyMatrix4(coat.matrixWorld).toArray(C, i * 3);
+      const P = [];
+      for (const h of pl.avatar.hands) {
+        h.traverse((o) => {
+          if (!o.isMesh) return;
+          const pos = o.geometry.attributes.position;
+          for (let i = 0; i < pos.count; i++) P.push(v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).clone());
+        });
+      }
+      const up = P.map(() => []);
+      const dn = P.map(() => []);
+      for (let t = 0; t < I.length; t += 3) {
+        const [a0, b0, c0] = [I[t] * 3, I[t + 1] * 3, I[t + 2] * 3];
+        const [ax, az, bx, bz, cx, cz] = [C[a0], C[a0 + 2], C[b0], C[b0 + 2], C[c0], C[c0 + 2]];
+        const det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+        if (Math.abs(det) < 1e-12) continue;
+        P.forEach((p, k) => {
+          const l1 = ((bz - cz) * (p.x - cx) + (cx - bx) * (p.z - cz)) / det;
+          const l2 = ((cz - az) * (p.x - cx) + (ax - cx) * (p.z - cz)) / det;
+          if (l1 < 0 || l2 < 0 || l1 + l2 > 1) return;
+          const y = l1 * C[a0 + 1] + l2 * C[b0 + 1] + (1 - l1 - l2) * C[c0 + 1];
+          (y > p.y ? up : dn)[k].push(Math.abs(y - p.y));
+        });
+      }
+      let worst = 0;
+      P.forEach((p, k) => {
+        if (up[k].length % 2 === 1 && dn[k].length % 2 === 1) worst = Math.max(worst, Math.min(...up[k], ...dn[k]));
+      });
+      return worst;
+    };
+    let gal = 0;
+    let jump = 0;
+    pl.speed = 6.5;
+    for (let f = 0; f < 40; f++) {
+      md.anim.update(1 / 60, gallop, {});
+      pl.lateUpdate(1 / 60);
+      pl.afterSessions();
+      if (f >= 20 && f % 4 === 0) gal = Math.max(gal, depth());
+    }
+    // (saut de 0,7 m : 0,77 s ; une image sur deux mesurée)
+    const N = 46;
+    for (let f = 0; f <= N; f++) {
+      md.anim.update(1 / 60, gallop, {});
+      pl.lateUpdate(1 / 60);
+      poseJump(e, pl, f / N);
+      pl.afterSessions();
+      if (f % 2 === 0) jump = Math.max(jump, depth());
+    }
+    // (avant : jusqu'à 6 cm au galop, et 7 à 11 cm à la réception ; 2 mm de marge pour le maillage)
+    expect(gal, `${breed} au galop`).toBeLessThan(0.002);
+    expect(jump, `${breed} au saut`).toBeLessThan(0.002);
+    md.dispose();
+  }, 60000);
 
   it('membres selon la phase du saut, fondus avec l\'allure au début et à la fin (pas d\'à-coup)', () => {
     const md = horse(animal('selle_francais'));

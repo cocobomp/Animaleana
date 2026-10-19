@@ -556,6 +556,27 @@ export function pitchAbout(e, pitch, hc, zc, avatarRoot) {
   }
 }
 
+/**
+ * Pose d'un saut d'obstacle à sa phase t (0 → 1, de l'appel à la réception), écrite après l'animation.
+ * Un vrai saut : appel (avant-main levée, postérieurs qui poussent), bascule (à plat au sommet, encolure
+ * étirée vers l'avant et le bas au-dessus de la barre, membres repliés), réception (antérieurs tendus
+ * vers le sol, un peu le nez en bas, puis l'encolure se relève). Le cheval tourne autour de son centre,
+ * le cavalier avec lui, en suspension (pl.jumpPose, lue par Player.lateUpdate et animateAvatarRide) ;
+ * ses mains restent au-dessus de l'encolure (Player.handsOverNeck, après les séances).
+ */
+export function poseJump(e, pl, t) {
+  const md = e.model;
+  const s = Math.sin(Math.PI * t);
+  const sc = e.scaleGroup.scale.y;
+  const pitch = -JUMP_PITCH * Math.sin(2 * Math.PI * t);
+  pitchAbout(e, pitch, (md.y0 ?? (md.saddleY ?? 1.2) * 0.75) * sc, -0.075 * sc, pl.avatar?.root);
+  const bump = (a, b) => (t > a && t < b ? Math.sin((Math.PI * (t - a)) / (b - a)) ** 2 : 0);
+  if (md.neck) md.neck.rotateX(0.3 * bump(0.12, 0.85) - 0.08 * bump(0, 0.22) - 0.12 * bump(0.75, 1));
+  // (cheval réaliste : membres selon la phase du saut, horseReal.js)
+  if (!realLegPose(md, 'jump', s, null, t)) for (const l of md.legs) l.pivot.rotation.x = l.front ? -1.25 * s : 0.85 * s;
+  pl.jumpPose = smooth01(0, 0.18, t) * (1 - smooth01(0.75, 0.98, t));
+}
+
 // ---------------------------------------------------------------- saut d'obstacles
 
 class JumpingSession extends Session {
@@ -879,19 +900,7 @@ class JumpingSession extends Session {
     e.position.copy(pl.root.position);
     e.heading = pl.heading;
     e.root.rotation.y = pl.heading;
-    // Un vrai saut : appel (avant-main levée, postérieurs qui poussent), bascule (à plat au sommet, encolure
-    // étirée vers l'avant et le bas au-dessus de la barre, membres repliés), réception (antérieurs tendus
-    // vers le sol, un peu le nez en bas, puis l'encolure se relève). Le cheval tourne autour de son centre,
-    // le cavalier avec lui, en suspension (Player.jumpPose, avatarRig.animateAvatarRide).
-    const md = e.model;
-    const sc = e.scaleGroup.scale.y;
-    const pitch = -JUMP_PITCH * Math.sin(2 * Math.PI * j.t);
-    pitchAbout(e, pitch, (md.y0 ?? (md.saddleY ?? 1.2) * 0.75) * sc, -0.075 * sc, pl.avatar?.root);
-    const bump = (a, b) => (j.t > a && j.t < b ? Math.sin((Math.PI * (j.t - a)) / (b - a)) ** 2 : 0);
-    if (md.neck) md.neck.rotateX(0.3 * bump(0.12, 0.85) - 0.08 * bump(0, 0.22) - 0.12 * bump(0.75, 1));
-    // (cheval réaliste : membres selon la phase du saut, horseReal.js)
-    if (!realLegPose(md, 'jump', s, null, j.t)) for (const l of md.legs) l.pivot.rotation.x = l.front ? -1.25 * s : 0.85 * s;
-    pl.jumpPose = smooth01(0, 0.18, j.t) * (1 - smooth01(0.75, 0.98, j.t));
+    poseJump(e, pl, j.t);
     // Faute : la barre tombe au passage.
     if (!j.clean && !j.knocked && j.t > 0.5) {
       j.knocked = true;

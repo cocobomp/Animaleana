@@ -5,7 +5,7 @@ import { World } from './World.js';
 import { gfx } from './gfx.js';
 import { preloadModels, loadModel, MODELS } from './assets.js';
 import { REAL_HORSE_KEY, horseView, realHorseBase } from './models/horseReal.js'; // cheval réaliste : chargé à part
-import { renderSetup, PixelBudget } from './pixelBudget.js'; // définition et anticrénelage selon la qualité
+import { renderSetup, PixelBudget, SLOW_KEY } from './pixelBudget.js'; // définition et anticrénelage selon la qualité
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
@@ -89,8 +89,8 @@ export class Game {
     this.quality = readQuality();
     gfx.quality = this.quality;
     // Définition et anticrénelage (src/game/pixelBudget.js) : en qualité basse sur un écran fin, 1,5 pixel par
-    // point et MSAA, avec repli à 1,25 si les premières secondes de jeu sont trop lentes.
-    const setup = renderSetup(this.quality, window.devicePixelRatio);
+    // point et MSAA, avec repli à 1,25 si les premières secondes de jeu sont trop lentes (retenu pour la suite).
+    const setup = renderSetup(this.quality, window.devicePixelRatio, readFlag(SLOW_KEY));
     const renderer = new THREE.WebGLRenderer({ antialias: setup.msaa, powerPreference: 'high-performance' });
     renderer.setPixelRatio(setup.ratio);
     gfx.msaa = setup.msaa && renderer.getContextAttributes?.()?.antialias !== false;
@@ -615,7 +615,15 @@ export class Game {
     // Premières secondes de jeu en qualité basse : trop lentes à 1,5 pixel par point, on redescend.
     if (this.pixelBudget) {
       const r = this.pixelBudget.frame(dt, this.renderer.getPixelRatio());
-      if (r) this.renderer.setPixelRatio(r);
+      if (r) {
+        this.renderer.setPixelRatio(r);
+        // (retenu : aux parties suivantes, l'ancien réglage, 1,25 sans anticrénelage)
+        try {
+          localStorage.setItem(SLOW_KEY, '1');
+        } catch {
+          /* rien */
+        }
+      }
       if (this.pixelBudget.done) this.pixelBudget = null;
     }
     // Pendant le trajet (écran du voyage), la ferme est en pause : TripFlow fait avancer le voyage et dessine la 3D.
@@ -1967,6 +1975,15 @@ export class Game {
         return (xp - a) / (b - a);
       })(),
     };
+  }
+}
+
+/** Drapeau du stockage local ('1'), faux si le stockage est indisponible. */
+function readFlag(key) {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
   }
 }
 

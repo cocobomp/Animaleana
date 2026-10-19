@@ -5,20 +5,25 @@
 // escalier, qui scintillent d'une image à l'autre. On vise 1,5 pixel par point avec l'anticrénelage MSAA (peu
 // coûteux sur les processeurs graphiques de téléphone, qui dessinent par tuiles). Si les premières secondes de
 // jeu sont trop lentes, on redescend à 1,25 (l'anticrénelage, lui, ne peut plus changer : il est choisi à la
-// création du contexte WebGL). Logique pure (testée dans tests/pixelBudget.test.js).
+// création du contexte WebGL) et l'appareil est noté lent (SLOW_KEY) : aux parties suivantes, on reprend
+// l'ancien réglage, 1,25 sans anticrénelage — un téléphone lent ne paie jamais plus que quelques secondes.
+// Logique pure (testée dans tests/horseGround.test.js).
 
 /** Définition visée en qualité basse sur un écran fin, et celle de repli. */
 export const SHARP_RATIO = 1.5;
 export const SAFE_RATIO = 1.25;
+/** Clé du stockage local : cet appareil a été trop lent à 1,5 pixel par point (voir Game). */
+export const SLOW_KEY = 'animaleana.pixelSlow';
 
 /**
  * Réglage de départ : { ratio (pixels par point), msaa (anticrénelage), budget (surveiller les premières
- * secondes et redescendre si besoin) }. dpr : pixels par point de l'écran (window.devicePixelRatio).
+ * secondes et redescendre si besoin) }. dpr : pixels par point de l'écran (window.devicePixelRatio) ; slow :
+ * appareil déjà trouvé trop lent (SLOW_KEY).
  */
-export function renderSetup(quality, dpr = 1) {
+export function renderSetup(quality, dpr = 1, slow = false) {
   const d = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
   if (quality === 'high') return { ratio: Math.min(d, 2), msaa: true, budget: false };
-  if (d >= 2) return { ratio: SHARP_RATIO, msaa: true, budget: true };
+  if (d >= 2 && !slow) return { ratio: SHARP_RATIO, msaa: true, budget: true };
   return { ratio: Math.min(d, SAFE_RATIO), msaa: false, budget: false };
 }
 

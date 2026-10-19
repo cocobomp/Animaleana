@@ -168,7 +168,8 @@ de l'étrier en bois. À cru : jambes 12 à 24 cm dans le cheval → 0 à l'arr�
   8 triangles par cheval, placé dans le shader juste avant le dessin d'après les matrices locales des membres :
   pleine sabot posé, nulle levé de 25 cm, poses des activités comprises) ;
 - *net sur téléphone* : en qualité basse sur un écran fin, 1,5 pixel par point et MSAA au lieu de 1,25 sans
-  anticrénelage, repli à 1,25 si les premières secondes dépassent 22 ms par image (`src/game/pixelBudget.js`) ;
+  anticrénelage, repli à 1,25 si les premières secondes dépassent 22 ms par image (`src/game/pixelBudget.js`),
+  retenu (`animaleana.pixelSlow`) : aux parties suivantes, un téléphone lent reprend l'ancien réglage ;
   crins en alphaToCoverage dès que l'anticrénelage est là ; version réduite au-delà de 15 m (et non 7) ;
 - *port de tête* : `HEAD_UP` (encolure 0,12 rad, nuque 0,18 rad) ajouté par `overlay` à l'arrêt et au pas, rien au
   broutage ni en somnolence : chanfrein 68° → 48 à 50° sous l'horizontale, nuque 12 cm plus haut ; oreilles

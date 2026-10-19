@@ -106,6 +106,9 @@ describe('définition de l\'image sur téléphone (étape 1)', () => {
     expect(renderSetup('high', 3)).toEqual({ ratio: 2, msaa: true, budget: false });
     expect(renderSetup('high', 1)).toEqual({ ratio: 1, msaa: true, budget: false });
     expect(renderSetup('low', NaN).ratio).toBe(1);
+    // appareil déjà trouvé trop lent : l'ancien réglage (1,25 sans anticrénelage), plus de surveillance
+    expect(renderSetup('low', 3, true)).toEqual({ ratio: SAFE_RATIO, msaa: false, budget: false });
+    expect(renderSetup('high', 3, true)).toEqual({ ratio: 2, msaa: true, budget: false });
   });
 
   it('repli à 1,25 si les premières secondes sont trop lentes, une seule fois', () => {

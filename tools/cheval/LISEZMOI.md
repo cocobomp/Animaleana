@@ -128,6 +128,32 @@ Couverture : les trois dernières rangées de la nappe tombent droit (`gearModel
 refermer sur la pointe des fesses (la peau de la hanche passait par-dessus le bord). Les pièces liées au
 squelette prennent les poids de la peau du tronc et des épaules à toute hauteur (`skinGear`) : chez un petit
 poney, le bas du ventre est 15 cm sous le coude, et la sous-ventrière se liait sinon à l'avant-bras voisin.
+La peau ne passe plus par-dessus la couverture : l'attache de la queue (os `Tail1`) compte dans la peau du tronc
+dont la couverture prend les poids, mais seulement sur une bande de 12 cm au milieu du dos (sinon la queue,
+portée haut chez l'arabe, soulevait le bas de la peau de la croupe au-dessus de la couverture, jusqu'à 5 cm,
+même à l'arrêt) ; sur l'arrière de la cuisse, la couverture peut s'écarter jusqu'à 3 cm (1,5 cm ailleurs).
+Sommets du pelage dehors (33 races × 3 couvertures × arrêt, pas, trot, petit galop, galop) : 3 661 (pire
+5,0 cm, arabe ; saddlebred 4,7 ; akhal-teke 1,2 ; trotteur 1,1 ; pur-sang 0,9 ; welsh 0,5) → 0
+(`tests/horseRealGame.test.js`).
+
+Le cavalier (`src/game/models/riderFit.js`, appelé par `Player.seat` et `Player.afterSessions`) : à la mise
+en selle, une carte des flancs (demi-largeur du pelage et de la selle pour chaque hauteur et chaque z, dans le
+repère du tronc qui porte la selle, triangles remplis) et une carte du dessus ; le bassin posé au creux du
+siège (un peu en avant ou en arrière si le bassin y descend plus bas : sur un poney la selle est courte pour le
+cavalier), les étriers raccourcis à sa jambe (genou plié de 65°, pied contre le flanc). À chaque image, après
+les séances (le saut soulève et fait basculer cheval et cavalier) : bassin relevé s'il entre dans le siège,
+pied à l'étrier, genou écarté juste ce qu'il faut (cuisse, genou, tibia et pied, avec leur rayon, hors de la
+carte et de la peau des épaules, des hanches et de l'encolure relue à cette image), le pied écarté du flanc si
+même très écarté le genou touche encore. Le siège se lit sur les transformations locales du moment (les
+matrices du monde datent de l'image d'avant : au saut, le cavalier s'envolait de la hauteur du saut).
+Enfoncement dans le pelage (cm, distance vraie, banc node sur le vrai avatar, avec selle, avant → après) :
+bassin 4,4 à 8,1 → 0 ; cuisses jusqu'à 5,8 → 0 ; tibias jusqu'à 5,4 → 0 (Shetland, Selle Français, Frison,
+Percheron × arrêt, pas, trot, petit galop, galop, saut de 0,7 et 1,2 m) ; bassin 1,1 à 2,3 cm au-dessus du
+creux à l'arrêt (il était 5,6 à 7,5 cm dans le siège) ; plante du pied à moins de 2 mm de la grille de l'étrier
+(elle était à 7 à 29 cm). À cru : jambes 12 à 24 cm dans le cheval → 0 à l'arrêt, au pas et au trot, au plus
+1,2 cm une ou deux images sur cinquante au petit galop et au saut (Shetland, Selle Français). Coût :
+`afterSessions` 0,08 → 0,16 à 0,19 ms par image (Shetland 0,5 → 0,64 ms, machine lente), mise en selle 3 à
+20 ms. `tests/riderFit.test.js`.
 `tests/horseReal.test.js` vérifie le fichier (os, clips, compression) et que chaque race garde ses sabots au sol.
 
 Ce qu'il coûte, et comment on le garde bas :

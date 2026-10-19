@@ -12,6 +12,7 @@ import { navTarget } from './nav.js';
 import { tackEffects } from '../sim/gear.js';
 import { helmetModel } from './models/tackModels.js'; // bombe du cavalier
 import { helmetFit } from './models/avatarHair.js'; // la bombe à la taille de la coiffure
+import { prepareRiderFit, fitRider, seatOnSaddle, releaseRiderFit } from './models/riderFit.js'; // cavalier sur le cheval réaliste
 
 const WALK = 3.2;
 const RUN = 6.2;
@@ -28,6 +29,7 @@ const _gw = {};
 const _hp = new THREE.Vector3();
 const _hq = new THREE.Vector3();
 const _hm = new THREE.Matrix4();
+const _seat = { y: 0, z: 0 };
 
 /** Quelques points des mains de l'avatar (repère de chaque main) : les sommets de leurs pièces. */
 function handPoints(a) {
@@ -171,6 +173,10 @@ export class Player {
     entity.data.following = false;
     this.root.position.copy(entity.position);
     this.heading = entity.heading;
+    // (tournés tous les deux comme le cheval tout de suite : seat mesure le cheval dans le repère du cavalier ;
+    // un cheval qu'on vient de faire venir n'a pas encore été animé)
+    this.root.rotation.y = this.heading;
+    if (entity.root) entity.root.rotation.y = this.heading;
     this.seat();
   }
 
@@ -192,25 +198,36 @@ export class Player {
     const R = (md.dims?.R ?? look.bodyR * (look.fluff ?? 1)) * sc * (md.fat ?? 1);
     const saddle = !this.bareback && !!e.data.gear?.saddle;
     const foot = stirrupFor(R, saddle, {});
-    // Garrot : la base de l'encolure, dans le repère du cheval (le joueur est à la même place).
-    let reinsY = 1.0;
-    let reinsZ = 0.36;
-    if (md.neck) {
-      e.root.updateMatrixWorld(true);
-      md.neck.getWorldPosition(_v);
-      e.root.worldToLocal(_v);
-      reinsY = clamp(_v.y - seatY + 0.1, 0.95, 1.12);
-      reinsZ = clamp(_v.z - seatZ - 0.18, 0.26, 0.4);
-    }
     this.ride0 = {
       gait: 0, phase: 0, bob: 0, posting: saddle,
-      seatY, seatZ, reinsY, reinsZ, footX: foot.x, footY: foot.y, footZ: foot.z, kneeOut: foot.out,
+      seatY, seatZ, reinsY: 1.0, reinsZ: 0.36, footX: foot.x, footY: foot.y, footZ: foot.z, kneeOut: foot.out,
     };
     this.rideGait = 0;
     this.ridePhase = 0;
     this.rideRest = undefined;
     this.handLift = 0;
     poseAvatar(a, 'ride', this.ride0);
+    // Cheval réaliste : le bassin posé sur le siège, les étriers à la longueur des jambes, les jambes hors des
+    // flancs à chaque image (src/game/models/riderFit.js). Avant, le bassin entrait de 6 à 8 cm dans le dos et
+    // les jambes de 5 à 13 cm dans les flancs (au saut).
+    releaseRiderFit(this.fit);
+    this.fit = prepareRiderFit(e, a, !saddle);
+    const st = this.ride0;
+    if (this.fit) {
+      seatOnSaddle(this.fit, _seat);
+      st.seatY = _seat.y;
+      st.seatZ = _seat.z;
+    }
+    // Garrot : la base de l'encolure, dans le repère du cheval (le joueur est à la même place).
+    if (md.neck) {
+      e.root.updateMatrixWorld(true);
+      md.neck.getWorldPosition(_v);
+      e.root.worldToLocal(_v);
+      st.reinsY = clamp(_v.y - st.seatY + 0.1, 0.95, 1.12);
+      st.reinsZ = clamp(_v.z - st.seatZ - 0.18, 0.26, 0.4);
+    }
+    poseAvatar(a, 'ride', st);
+    if (this.fit) fitRider(this.fit, a);
   }
 
   /**
@@ -323,6 +340,11 @@ export class Player {
    * appel, les rênes dessinées seraient restées celles de lateUpdate, un mètre plus bas pendant un saut.)
    */
   afterSessions() {
+    if (this.mount && this.fit) {
+      // (harnachement changé en selle, à la sellerie : selle, étriers et cartes refaits)
+      if (this.fit.gear !== (this.mount.gearGroup ?? null)) this.seat();
+      if (this.fit) fitRider(this.fit, this.avatar);
+    }
     if (this.mount && this.ride0) this.handsOverNeck(this.mount);
     if (this.mount && this.reins?.visible) this.updateReins(this.mount);
   }
@@ -412,6 +434,8 @@ export class Player {
     const e = this.mount;
     if (!e) return null;
     if (this.reins) this.reins.visible = false;
+    releaseRiderFit(this.fit); // (étriers remis à leur longueur)
+    this.fit = null;
     this.setHelmet(null);
     e.ridden = false;
     e.speed = 0;
@@ -722,9 +746,14 @@ export class Player {
       phase = this.ridePhase;
     }
     this.ridePh = phase;
-    // Rebond du dos : la position de l'os du corps (GLB) ou du corps procédural.
+    // Rebond du dos : la position de l'os du corps (GLB) ou du corps procédural. Cheval réaliste : le bassin
+    // suit le siège de la selle (posée sur le tronc) à chaque image.
     let bob = 0;
-    if (md.gltf && md.body) {
+    if (this.fit) {
+      seatOnSaddle(this.fit, _seat);
+      this.ride0.seatY = _seat.y;
+      this.ride0.seatZ = _seat.z;
+    } else if (md.gltf && md.body) {
       md.body.getWorldPosition(_v);
       m.root.worldToLocal(_v);
       if (this.rideRest === undefined) this.rideRest = _v.y;

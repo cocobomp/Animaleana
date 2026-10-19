@@ -157,7 +157,7 @@ export function dogTrainerSection(ui, a) {
   const out = [h('h3', {}, t('dt_sectionTitle'))];
   if (client) {
     const c = a.client;
-    out.push(h('p', { class: 'note' }, `${OWNER_EMOJI[c.ownerSex] ?? '🧑'} ${t('dt_clientOf', { owner: c.ownerName })} · ${t('dt_sessionsDone', { n: c.sessionsDone, total: c.sessionsNeeded })}${isSandbox(p) ? '' : ` · 🪙 ${c.price}/${t('dt_session')}`}`));
+    out.push(h('p', { class: 'note' }, `${OWNER_EMOJI[c.ownerSex] ?? '🧑'} ${t('dt_clientOf', { owner: c.ownerName })} · ${t('dt_sessionsDone', { n: c.sessionsDone, total: c.sessionsNeeded })}${isSandbox(p) ? '' : ` · 🪙 ${c.price}/${t('dt_session').toLowerCase()}`}`));
     out.push(h('div', { class: 'dt-probs' }, ids.map((id) => problemRow(id, c.start[id], c.problems[id]))));
     // Affamé, assoiffé, sale ou malade : on prévient avant que le maître revienne (il paierait moins).
     const neglect = neglectReason(a);

@@ -515,6 +515,7 @@ button.sv-card:hover { border-color: var(--primary); }
   -webkit-overflow-scrolling: touch;
 }
 .modal-box > .row.end:last-child { position: sticky; bottom: -18px; z-index: 1; margin: 8px -20px -18px; padding: 6px 20px 18px; background: var(--bg); }
+.modal-box:focus { outline: none; } /* (focus de repli quand la fenêtre n'a pas de bouton : pas de cadre autour) */
 /* Écran peu haut (paysage, clavier ouvert) : marges réduites ; la fiche de l'animal à gauche du champ du nom. */
 @media (max-height: 480px) {
   #modal { padding-top: max(8px, var(--safe-t), var(--modal-top, 0px)); padding-bottom: max(8px, var(--safe-b)); }
@@ -1592,6 +1593,8 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 @keyframes mg-flash { from { transform: scale(0.96); } to { transform: none; } }
 .mg-progress { position: relative; height: 18px; background: #e9e3d6; border-radius: 999px; overflow: visible; margin-right: 22px; }
 .mg-progress-fill { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #3fae62, #8fd36a); transition: width 0.25s; }
+/* Jauge « en direct » (ciseaux des griffes, nœud…) : pas de transition, elle suit le jeu sans retard. */
+.mg-progress-fill.live { transition: none; }
 .mg-progress-goal { position: absolute; right: -24px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; }
 /* Zone « juste ce qu'il faut » : bande verte translucide, bord foncé pour rester visible quand
    le remplissage passe dessous, et un petit ✓ au milieu. left / width sont posés par ctx.zone(). */
@@ -2135,6 +2138,7 @@ body.actv-nomove #touch-pad { display: none !important; }
 .dt-client { display: flex; gap: 10px; align-items: center; }
 .dt-client .card-body { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .dt-client small { color: var(--muted); }
+.dt-client small.dt-care-warn { color: #8b2b22; padding: 4px 8px; } /* « 🍖 Pompon a faim » (chien en éducation mal soigné) */
 .dt-result .dt-pay { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 4px; font-size: 1rem; }
 .dt-result .dt-quote { font-style: italic; }
 .dt-result .row { justify-content: center; gap: 8px; }

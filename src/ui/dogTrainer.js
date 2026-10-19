@@ -16,7 +16,7 @@ import { RANKS, rankProgress, careerState, isStarted } from '../sim/careers.js';
 import {
   CAREER_ID, DOG_TRAINER_CAREER, PROBLEMS, COACHINGS, coachingsFor, canSession, readyForDelivery, isFixed, clientDogs,
   maxClients, dogTrainerOf, dogTrainerRank, dogTrainerReputation, careerBook, FIXED_BELOW, sessionPrice, isTrainingClient,
-  daysLeft,
+  daysLeft, neglectReason,
 } from '../sim/dogTrainer.js';
 
 const OWNER_EMOJI = { f: '👩', m: '👨' };
@@ -159,6 +159,9 @@ export function dogTrainerSection(ui, a) {
     const c = a.client;
     out.push(h('p', { class: 'note' }, `${OWNER_EMOJI[c.ownerSex] ?? '🧑'} ${t('dt_clientOf', { owner: c.ownerName })} · ${t('dt_sessionsDone', { n: c.sessionsDone, total: c.sessionsNeeded })}${isSandbox(p) ? '' : ` · 🪙 ${c.price}/${t('dt_session')}`}`));
     out.push(h('div', { class: 'dt-probs' }, ids.map((id) => problemRow(id, c.start[id], c.problems[id]))));
+    // Affamé, assoiffé, sale ou malade : on prévient avant que le maître revienne (il paierait moins).
+    const neglect = neglectReason(a);
+    if (neglect) out.push(h('p', { class: 'warn dt-care-warn' }, t(`dt_careWarn_${neglect}`, { name: a.name, g: a.sex, owner: c.ownerName })));
     if (readyForDelivery(a, g.day)) out.push(h('p', { class: isFixed(a) ? 'good' : 'warn' }, t(isFixed(a) ? 'dt_readyGood' : 'dt_readyFail', { name: a.name, g: a.sex, owner: c.ownerName })));
     else out.push(h('p', { class: 'note' }, dueText(a, g.day)));
   } else {
@@ -209,20 +212,23 @@ export function showDelivery(ui, a, r, onClose) {
   const sandbox = isSandbox(g.profile);
   const c = a.client;
   let photo = false;
+  const neglected = r.care && r.care !== 'good' && !!r.neglect;
   const close = () => { ui.hideModal(); onClose?.(); };
   const render = () => [
     h('div', { class: 'mg-end-card dt-result' },
-      h('div', { class: 'mg-end-emoji' }, r.success ? '🏅' : '💛'),
+      h('div', { class: 'mg-end-emoji' }, neglected ? '😟' : r.success ? '🏅' : '💛'),
       h('h2', {}, t(r.success ? 'dt_deliverTitle' : 'dt_deliverTitle_fail', { dog: a.name, g: a.sex })),
       h('div', { class: 'mg-stars', 'aria-label': `${r.stars}/3` }, [1, 2, 3].map((i) => h('span', { class: i <= r.stars ? 'on' : 'off' }, '★'))),
-      h('p', { class: 'dt-quote' }, `${OWNER_EMOJI[c.ownerSex] ?? '🧑'} « ${t(r.success ? (r.stars === 3 ? 'dt_owner_3' : 'dt_owner_2') : 'dt_owner_fail', { dog: a.name, g: a.sex })} »`),
+      // Chien rendu mal soigné : le maître le dit (affamé, assoiffé, sale, malade) au lieu de « Incroyable ! ».
+      h('p', { class: 'dt-quote' }, `${OWNER_EMOJI[c.ownerSex] ?? '🧑'} « ${t(neglected ? `dt_owner_neglect_${r.neglect}` : r.success ? (r.stars === 3 ? 'dt_owner_3' : 'dt_owner_2') : 'dt_owner_fail', { dog: a.name, g: a.sex })} »`),
       h('ul', { class: 'dt-pay' },
         sandbox ? null : h('li', {}, `🪙 ${t('dt_payment')} : ${r.pay}`),
         r.tip && !sandbox ? h('li', {}, `💝 ${t('dt_tip')} : +${r.tip}`) : null,
         h('li', { class: r.repDelta >= 0 ? 'good' : 'bad' }, `⭐ ${t('dt_reputation')} : ${r.repDelta > 0 ? '+' : ''}${r.repDelta}`),
         h('li', {}, `🎓 +${r.xp} ${t('dt_xp')}`),
         r.rankUp ? h('li', { class: 'good' }, t('dt_rankUp', { rank: rankName(r.rank) })) : null),
-      !r.success ? h('p', { class: 'note' }, t('dt_fail_explain', { dog: a.name, g: a.sex })) : null,
+      neglected ? h('p', { class: 'note' }, t('dt_neglect_explain', { dog: a.name, g: a.sex }))
+        : !r.success ? h('p', { class: 'note' }, t('dt_fail_explain', { dog: a.name, g: a.sex })) : null,
       h('div', { class: 'row end' },
         h('button', { class: photo ? 'done' : '', disabled: photo, onClick: () => { photo = true; addStat(g.profile, 'dtPhotos'); addStat(g.profile, 'actvPhotos'); ui.toast(t('dt_photoTaken', { dog: a.name })); ui.modal.replaceChildren(h('div', { class: 'modal-box' }, render())); } }, `📸 ${t('dt_photo')}`),
         h('button', { class: 'primary', onClick: close }, `👋 ${t('dt_bye')}`))),
@@ -315,7 +321,8 @@ export function openDogTrainerPanel(ui) {
         h('div', { class: 'card-body' },
           h('b', {}, `${a.name} · ${c.ownerName}`),
           h('small', {}, `${Object.entries(c.problems).map(([id, v]) => `${PROBLEMS[id].emoji} ${problemName(id)} ${Math.round(v)} %`).join(' · ')} · ${t('dt_sessionsDone', { n: c.sessionsDone, total: c.sessionsNeeded })}`),
-          readyForDelivery(a, g.day) ? h('small', { class: 'good' }, t('dt_waitOwner')) : h('small', {}, dueText(a, g.day))),
+          readyForDelivery(a, g.day) ? h('small', { class: 'good' }, t('dt_waitOwner')) : h('small', {}, dueText(a, g.day)),
+          neglectReason(a) ? h('small', { class: 'warn dt-care-warn' }, t(`dt_careWarn_${neglectReason(a)}`, { name: a.name, g: a.sex, owner: c.ownerName })) : null),
         h('button', { onClick: () => ui.openAnimal(a) }, `📋 ${t('more')}`)));
     }
 

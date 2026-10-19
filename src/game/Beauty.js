@@ -10,7 +10,7 @@ import { toWorld, eligibility, ranking, activityData, addAward } from '../sim/ac
 import {
   PREP_ITEMS, RIBBON_COLORS, notePrep, isFresh, isReady, weatherWear, nowHours, presentationSteps, ringWindow, gaugeQuality,
   trotPar, fidgetChance, judgeMarks, beautyData, classOf, classRivals, entryFor, registerBlock, registerEntry, ringBlock,
-  markPresented, missedEntries, todaysEntries, isChampion, handlerXp, lowestNeed,
+  markPresented, missedEntries, todaysEntries, isChampion, handlerXp, lowestNeed, showCare,
 } from '../sim/beauty.js';
 import { canLead } from '../sim/gear.js';
 import { addStat, spend } from '../sim/profile.js';
@@ -407,6 +407,8 @@ export class Beauty {
     const now = nowHours(g.profile);
     const def = PREP_ITEMS[item];
     if (!def) return null;
+    // Bain ou brossage fait depuis la liste du concours (pas un soin ordinaire) : toilette de concours.
+    if (!quiet && def.care) showCare(a, item, quality);
     const entry = notePrep(a, item, now, quality, extra);
     const e = g.entities.get(a.id);
     if (!quiet) {

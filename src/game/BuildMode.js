@@ -65,7 +65,8 @@ export class BuildMode {
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', up);
     window.addEventListener('keydown', (e) => {
-      if (!this.active || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName)) return;
+      // (fenêtre ouverte : Entrée et Échap sont pour ses boutons)
+      if (!this.active || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName) || this.ui.modalOpen) return;
       if (e.code === 'KeyR') this.rotate();
       if (e.code === 'Enter') this.confirm();
       if (e.code === 'Escape') this.cancel();

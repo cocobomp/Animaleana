@@ -10,7 +10,7 @@ import { isSandbox } from '../sim/profile.js';
 import { competitionsAt, eligibility } from '../sim/activities.js';
 import {
   PREP_ITEMS, RIBBON_COLORS, checklist, isReady, beautyScore, nowHours, classOf, BEAUTY_CLASSES, classRivals, entryFor, entriesOf,
-  registerBlock, ringBlock, accessoryInfo, lowestNeed, undone, JUDGE_CRITERIA,
+  registerBlock, ringBlock, accessoryInfo, lowestNeed, JUDGE_CRITERIA, dirtState, prepItems,
 } from '../sim/beauty.js';
 import { canLead } from '../sim/gear.js';
 import { runMinigame } from './minigames.js';
@@ -61,12 +61,19 @@ function partsChips(a, now) {
  * Ce que le juge verra de l'animal VRAI : propreté (le bain ou le brossage défaits par la saleté)
  * et humeur (le besoin le plus bas). Renvoie des petites lignes (vides si tout va bien).
  */
-export function realStateLines(a) {
+export function realStateLines(a, now) {
   const out = [];
-  if (undone(a, 'wash')) out.push(h('p', { class: 'beauty-real warn' }, ta('beauty_real_dirty', a)));
-  else if (undone(a, 'brush')) out.push(h('p', { class: 'beauty-real warn' }, ta('beauty_real_messy', a)));
+  // « S'est sali depuis son bain » seulement s'il a vraiment été lavé (et propre) avant ; jamais lavé ou bain
+  // trop léger : « encore trop sale, fais-lui un bain ». Pas de bain dans la liste (chat, lapin…) : rien à dire.
+  const items = prepItems(a);
+  const wash = items.includes('wash') ? dirtState(a, 'wash', now) : null;
+  const brush = items.includes('brush') ? dirtState(a, 'brush', now) : null;
+  if (wash) out.push(h('p', { class: 'beauty-real warn' }, ta(wash === 'dirtied' ? 'beauty_real_dirty' : 'beauty_real_tooDirty', a)));
+  else if (brush) out.push(h('p', { class: 'beauty-real warn' }, ta(brush === 'dirtied' ? 'beauty_real_messy' : 'beauty_real_tangled', a)));
   const need = lowestNeed(a);
-  if (need) out.push(h('p', { class: 'beauty-real warn' }, ta('beauty_real_need', a, { what: ta(`beauty_need_${need}`, a) })));
+  // (« Soleil est sale » juste sous « Soleil est encore trop sale » : une seule fois suffit)
+  const said = (need === 'hygiene' && wash) || (need === 'grooming' && (wash || brush));
+  if (need && !said) out.push(h('p', { class: 'beauty-real warn' }, ta('beauty_real_need', a, { what: ta(`beauty_need_${need}`, a) })));
   if (!out.length) out.push(h('p', { class: 'beauty-real ok' }, ta('beauty_real_ok', a)));
   return out;
 }
@@ -77,7 +84,7 @@ function readyLine(a, now) {
   const missing = checklist(a, now).filter((l) => l.required && !l.done).length;
   const need = lowestNeed(a);
   const parts = [ready ? `✅ ${t('beauty_ready')}` : `🧺 ${t('beauty_missing', { n: missing })}`];
-  if (undone(a, 'wash') || undone(a, 'brush')) parts.push(`🧼 ${t('beauty_dirtyShort')}`);
+  if (dirtState(a, 'wash', now) || dirtState(a, 'brush', now)) parts.push(`🧼 ${t('beauty_dirtyShort')}`);
   if (need) parts.push(`😟 ${t(`need_${need}`)}`);
   return h('small', { class: ready ? 'beauty-ready' : '' }, parts.join(' · '));
 }
@@ -248,7 +255,7 @@ export function openBeautyPrep(ui, a, opts = {}) {
       const out = [
         h('div', { class: 'bars' }, scoreBar(a, now)),
         partsChips(a, now),
-        ...realStateLines(a),
+        ...realStateLines(a, now),
         h('p', { class: 'note' }, ta('beauty_prepHelp', a)),
       ];
       if (a.location !== g.profile.place) return [...out, h('p', { class: 'warn' }, ta('actv_why_notHere', a))];
@@ -256,6 +263,7 @@ export function openBeautyPrep(ui, a, opts = {}) {
         let when = t('beauty_todo');
         if (l.done) when = l.left >= 24 ? t('beauty_freshDays', { n: Math.round(l.left / 24) }) : l.left > 0 ? t('beauty_fresh', { n: l.left }) : t('beauty_doneNow');
         else if (l.dirty) when = ta('beauty_dirty', a);
+        else if (l.tooDirty) when = ta(`beauty_tooDirty_${l.item}`, a);
         else if (l.old) when = t('beauty_old');
         const color = l.color ? `${COLOR_EMOJI[l.color] ?? ''}` : '';
         return h('li', { class: l.done ? 'ok' : 'ko' },
@@ -298,7 +306,8 @@ export async function doPrep(ui, a, item) {
       return 1;
     }
     const r = await ui.careWithGame(a, item);
-    if (r?.ok) g.beauty?.prepDone(a, item, 1, {});
+    // (la qualité du mini-jeu : un bain ★★★ rend l'animal propre pour le juge, voir showCare)
+    if (r?.ok) g.beauty?.prepDone(a, item, r.quality ?? 1, {});
     ui.renderPanel();
     return r;
   }

@@ -4,8 +4,10 @@ import {
   weatherWear, clearPrep, checklist, isReady, beautyScore, presentationSteps, ringWindow, gaugeQuality, trotPar,
   fidgetChance, judgeMarks, rivalBeautyPoints, nowHours, undone, lowestNeed, accessoryInfo, colorFamily, ribbonColor,
   BEAUTY_CLASSES, classOf, classRivals, beautyEntries, entryFor, registerBlock, registerEntry, ringBlock, markPresented,
-  missedEntries, todaysEntries, isChampion, handlerXp, CHAMPION_POINTS, JUDGE_CRITERIA,
+  missedEntries, todaysEntries, isChampion, handlerXp, CHAMPION_POINTS, JUDGE_CRITERIA, dirtiedSince, dirtState, showCare,
+  CLEAN_MIN, DIRTY_DROP,
 } from '../src/sim/beauty.js';
+import { applyCare } from '../src/sim/animal.js';
 import { competitionsAt, rivals, ranking, placementAward, practiceAward, eligibility, COMPETITION_TYPES } from '../src/sim/activities.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { OBJECTIVES } from '../src/sim/objectives.js';
@@ -230,6 +232,71 @@ describe("l'animal vrai : propreté et humeur", () => {
     const line = checklist(a, 1).find((l) => l.item === 'wash');
     expect(line.dirty).toBe(true);
     expect(line.old).toBe(false);
+  });
+
+  it('jamais lavé : « encore trop sale, fais-lui un bain », pas « il s\'est sali depuis son bain »', () => {
+    const a = make('dog');
+    a.needs.hygiene = 0;
+    expect(dirtiedSince(a, 'wash')).toBe(false);
+    expect(dirtState(a, 'wash', 0)).toBe('tooDirty');
+    const line = checklist(a, 0).find((l) => l.item === 'wash');
+    expect(line).toMatchObject({ done: false, dirty: false, tooDirty: true, old: false });
+  });
+
+  it('un bain ★★★ de concours sur un chien tout sale compte (avant : 59,98 < 60, « à refaire »)', () => {
+    const a = make('dog');
+    a.needs.hygiene = 0;
+    applyCare(a, 'wash', 1); // le soin du mini-jeu (+60)
+    a.needs.hygiene -= 0.02; // (le temps du mini-jeu)
+    notePrep(a, 'wash', 0, 1); // noté par le soin ordinaire (événement 'care')
+    expect(itemDone(a, 'wash', 0)).toBe(false); // un bain ordinaire ne suffit pas à un chien tout sale…
+    expect(dirtState(a, 'wash', 0)).toBe('tooDirty'); // …et la liste dit « refais un bain », pas « sali depuis »
+    expect(showCare(a, 'wash', 1)).toBe(true); // …mais le bain fait depuis la liste du concours, si
+    notePrep(a, 'wash', 0, 1);
+    expect(a.needs.hygiene).toBeGreaterThanOrEqual(CLEAN_MIN + 20);
+    expect(itemDone(a, 'wash', 0)).toBe(true);
+    expect(dirtState(a, 'wash', 0)).toBeNull();
+  });
+
+  it('même chose pour le brossage ★★★ (toilette 0,6 → 40,6 avant)', () => {
+    const a = make('dog');
+    a.needs.grooming = 0.6;
+    applyCare(a, 'brush', 1);
+    expect(a.needs.grooming).toBeLessThan(CLEAN_MIN);
+    showCare(a, 'brush', 1);
+    notePrep(a, 'brush', 0, 1);
+    expect(itemDone(a, 'brush', 0)).toBe(true);
+  });
+
+  it('un bain raté (★) ne fait pas la toilette de concours : encore un peu sale', () => {
+    const a = make('dog');
+    a.needs.hygiene = 0;
+    applyCare(a, 'wash', 0.3);
+    expect(showCare(a, 'wash', 0.3)).toBe(false);
+    notePrep(a, 'wash', 0, 0.3);
+    expect(dirtState(a, 'wash', 0)).toBe('tooDirty');
+  });
+
+  it('après un bon bain, la petite baisse naturelle ne l\'efface pas ; la boue, si', () => {
+    const a = make('dog');
+    a.needs.hygiene = 80;
+    notePrep(a, 'wash', 0, 1);
+    a.needs.hygiene = CLEAN_MIN - DIRTY_DROP + 2; // quelques heures plus tard
+    expect(itemDone(a, 'wash', 6)).toBe(true);
+    expect(dirtState(a, 'wash', 6)).toBeNull();
+    a.needs.hygiene = 20; // roulade dans la boue
+    expect(dirtiedSince(a, 'wash')).toBe(true);
+    expect(dirtState(a, 'wash', 6)).toBe('dirtied');
+    expect(checklist(a, 6).find((l) => l.item === 'wash')).toMatchObject({ dirty: true, tooDirty: false });
+  });
+
+  it('les nouveaux textes existent en français et en anglais', async () => {
+    const texts = await import('../src/ui/beautyTexts.js');
+    const [fr, en] = [Object.values(texts)[0], Object.values(texts)[1]];
+    for (const k of ['beauty_real_tooDirty', 'beauty_real_tangled', 'beauty_tooDirty_wash', 'beauty_tooDirty_brush']) {
+      expect(fr[k], k).toBeTruthy();
+      expect(en[k], k).toBeTruthy();
+    }
   });
 
   it("l'humeur compte : un animal affamé est moins beau et le juge le dit", () => {

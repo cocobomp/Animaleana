@@ -134,7 +134,10 @@ export function knotsGame(ctx) {
   let shake = 0;
   const NEED = Math.PI * 3.5;
   ctx.hint(t('mg_gknots_hint'));
-  const progress = () => 1 - knots.reduce((s, k) => s + k.left, 0) / knots.length;
+  // Les nœuds défaits sont retirés du tableau : on compte sur le nombre du départ (avant, la jauge retombait
+  // à 0 à chaque nœud défait, et 0 / 0 à la fin).
+  const total = knots.length;
+  const progress = () => 1 - knots.reduce((s, k) => s + k.left, 0) / Math.max(1, total);
 
   function work(p) {
     if (!cur) return;
@@ -619,7 +622,7 @@ export function dryGame(ctx) {
         fx.dot(q.x, q.y, 'rgba(90,160,230,0.8)', 3, { vy: 60, grav: 200, life: 0.6 });
       }
       ctx.progress(1 - wet);
-      if (wet <= 0 && !ctx.done) ctx.finish(1 - peak * 0.6, peak < 0.25 ? t('mg_gdry_end', { name: a.name }) : undefined);
+      if (wet <= 0 && !ctx.done) ctx.finish(1 - peak * 0.6, peak < 0.25 ? t('mg_gdry_end', { name: a.name, g: a.sex }) : undefined);
     },
     draw(g) {
       salonBackground(g, ctx, floorY);

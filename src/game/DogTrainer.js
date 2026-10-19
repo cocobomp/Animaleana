@@ -17,7 +17,7 @@ import { RANKS, isStarted } from '../sim/careers.js';
 import {
   CAREER_ID, PROBLEMS, COACHINGS, SESSION_MINUTES, makeClientRequest, acceptClient, canSession, applySession,
   readyForDelivery, finishClient, shouldClientArrive, dogTrainerOf, clientDogs, isFixed, isTrainingClient,
-  coachingsFor, dogTrainerRank, setPending, pendingRequest, clearPending,
+  coachingsFor, dogTrainerRank, setPending, pendingRequest, clearPending, pendingExpired,
 } from '../sim/dogTrainer.js';
 import {
   openDogTrainerChat, showDogTrainerTutorial, showDelivery, showSessionResult, startLeashWalkOverlay, runSessionGame,
@@ -102,6 +102,12 @@ export class DogTrainer {
     this.checkAcc += dt;
     if (this.checkAcc < 3) return;
     this.checkAcc = 0;
+    // Un maître à qui on ne répond pas repart au bout de 2 h de jeu (comme les visiteurs de la pension) :
+    // avant, il attendait des jours et des nuits et aucun autre client ne venait.
+    if (v && !v.accepted && !v.returning && v.npc.bubble.visible && !g.ui.isBlocking() && pendingExpired(g.profile, g.profile.clock)) {
+      this.ownerGivesUp(v);
+      return;
+    }
     if (!g.isHome || this.visitor || this.walk || this.demo || g.ui.isBlocking() || g.paused) return;
     if (g.activities?.active) return; // pas en pleine épreuve ou séance : le maître viendra après
     if (g.clients?.visitor && !g.clients.visitor.visit?.auto) return; // un client de la pension ou du vétérinaire attend déjà : chacun son tour
@@ -113,7 +119,7 @@ export class DogTrainer {
       return;
     }
     // Le maître qui attendait une réponse revient (page rechargée, ou retour de voyage le même jour).
-    const pend = pendingRequest(g.profile, g.day);
+    const pend = pendingRequest(g.profile, g.day, g.profile.clock);
     if (pend) {
       if (g.hour >= 8 && g.hour <= 20) this.spawnClient(pend);
       return;
@@ -166,7 +172,7 @@ export class DogTrainer {
     npc.place(start.x, start.z);
     const e = this.spawnVisitorDog(req.dog, npc, start);
     this.visitor = { npc, e, req, accepted: false, returning: null };
-    setPending(g.profile, req, g.day); // gardé dans le profil tant qu'on n'a pas répondu
+    setPending(g.profile, req, g.day, g.profile.clock); // gardé dans le profil tant qu'on n'a pas répondu (2 h au plus)
     this.asked = false;
     npc.walk(near ? [spot] : [WAY, MEET, spot], () => this.waitHere(npc));
     g.arrivals?.note();
@@ -303,6 +309,15 @@ export class DogTrainer {
     g.save();
     g.emit('dogTrainerAccepted', r.a);
     return r;
+  }
+
+  /** Le maître a attendu 2 h sans réponse : il repart avec son chien (il en viendra d'autres, un autre jour). */
+  ownerGivesUp(v) {
+    const g = this.game;
+    clearPending(g.profile);
+    this.sendAway(v, v.e);
+    g.ui.toast(t('cl_left', { owner: v.req.ownerName, g: v.req.ownerSex }), 5000, { group: 'visitors' });
+    g.save();
   }
 
   refuse() {

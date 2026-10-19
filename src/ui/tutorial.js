@@ -294,6 +294,17 @@ export class Tutorial {
       this.bubbleKey = key;
       const { n, total } = stepNumber(this.profile.tutorial);
       const okLabel = step.id === 'welcome' ? t('tuto_go') : step.id === 'end' ? t('tuto_thanks') : 'OK';
+      // Au clavier : le bouton de la bulle choisi avec Tab (« Passer le tutoriel », 🔊, OK) garde le focus
+      // quand la bulle est redessinée (avant, il retombait sur la page, par exemple après « Annuler »).
+      const active = globalThis.document?.activeElement;
+      const keepCls = active && active !== this.bubble && this.bubble.contains?.(active) ? active.className : null;
+      if (keepCls !== null) {
+        queueMicrotask(() => {
+          if (this.bubble.contains(document.activeElement)) return;
+          const sel = keepCls.split(/\s+/).filter(Boolean).map((c) => `.${CSS.escape(c)}`).join('');
+          (sel ? this.bubble.querySelector(`button${sel}`) : null)?.focus({ preventScroll: true });
+        });
+      }
       this.bubble.replaceChildren(
         h('div', { class: 'tuto-guide', 'aria-hidden': 'true' }, GUIDE),
         h('div', { class: 'tuto-main' },

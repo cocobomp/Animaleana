@@ -226,7 +226,9 @@ function openMinigame(ui, o) {
     const game = ui.game;
     const prevInput = game?.input?.enabled ?? true;
     if (game?.input) game.input.enabled = false;
-    // Le bouton du panneau garde le focus : on l'enlève pour qu'Espace / Entrée ne le reclique pas.
+    // Le bouton du panneau garde le focus : on l'enlève pour qu'Espace / Entrée ne le reclique pas
+    // (il le retrouve à la fin de la partie, voir close).
+    const prevFocus = document.activeElement;
     document.activeElement?.blur?.();
 
     const closeBtn = h('button', { class: 'mg-close', 'aria-label': t('mg_close'), title: t('mg_close') }, '✕');
@@ -284,6 +286,7 @@ function openMinigame(ui, o) {
     box.addEventListener('animationend', (e) => { if (e.target === box) resize(); });
 
     let progress = 0;
+    let progressAt = -Infinity; // dernière mise à jour de la jauge (performance.now)
     let ended = false;
     let closed = false;
     let quality = null;
@@ -329,9 +332,20 @@ function openMinigame(ui, o) {
         }
         hintEl.dataset.kind = kind;
       },
-      progress(v) {
+      /**
+       * Remplit la jauge du haut (0 à 1). Jauge « en direct » (mise à jour à chaque image : ciseaux des griffes,
+       * nœud, versement…) : elle suit sans retard, sans la transition CSS de 0,25 s qui la faisait traîner
+       * derrière les ciseaux (« dans le vert » à l'écran, « un peu trop court » en vrai). Une jauge qui
+       * avance par à-coups (un nœud défait, une tache lavée) glisse toujours en douceur. opts.live force l'un
+       * ou l'autre.
+       */
+      progress(v, opts = {}) {
+        const now = performance.now();
+        const live = opts.live ?? now - progressAt < 150;
+        progressAt = now;
+        if (fillEl.classList.contains('live') !== live) fillEl.classList.toggle('live', live);
         progress = clamp(v);
-        fillEl.style.width = `${Math.round(progress * 100)}%`;
+        fillEl.style.width = `${Math.round(progress * 1000) / 10}%`;
         progressEl.setAttribute('aria-valuenow', Math.round(progress * 100));
       },
       /** Ajoute un gros bouton sous le jeu. hold : appelle onDown / onUp (on garde appuyé). */
@@ -584,7 +598,16 @@ function openMinigame(ui, o) {
       resolve(result);
       // Les fenêtres arrivées pendant la partie (« ⭐ niveau supérieur »…) attendaient la fin :
       // juste après (le temps que le soin s'applique), une par une (UI.flushModals).
-      setTimeout(() => ui.flushModals?.(), 0);
+      setTimeout(() => {
+        // Au clavier, le focus revient au bouton qui a lancé la partie (ou au premier bouton du panneau,
+        // s'il a été redessiné entre-temps) au lieu de tomber sur la page.
+        const a = document.activeElement;
+        if (!ui.modalOpen && (!a || a === document.body)) {
+          if (prevFocus?.isConnected && prevFocus !== document.body && prevFocus.getClientRects().length) prevFocus.focus({ preventScroll: true });
+          else if (ui.panel) ui.focusPanel?.();
+        }
+        ui.flushModals?.();
+      }, 0);
     }
   });
 }

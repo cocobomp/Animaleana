@@ -690,7 +690,7 @@ export function bowGame(ctx) {
       if (pulling && phase === 'tighten' && !ctx.done) {
         tension = Math.min(MAX, tension + RATE * dt);
         pulled = true;
-        ctx.progress(tension / MAX);
+        ctx.progress(tension / MAX, { live: true }); // (en direct : on lâche quand la jauge est dans le vert)
         const st = tension < LO ? 'low' : tension > HI ? 'high' : 'just';
         if (st !== state) {
           state = st;

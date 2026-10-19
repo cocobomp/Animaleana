@@ -27,6 +27,7 @@ import {
 import { SPECIES } from '../sim/species.js';
 import {
   NEEDS, createAnimal, tickAnimal, applyCare, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
+  namesInUse,
 } from '../sim/animal.js';
 import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
 import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeason } from '../sim/places.js';
@@ -1341,7 +1342,13 @@ export class Game {
   onKey(code) {
     if (!this.running || this.ui.isBlocking()) return;
     if (code === 'Escape' && this.tripFlow.view && this.tripFlow.view !== 'ramp') this.tripFlow.setView(null); // sortir du véhicule
-    if (code === 'KeyE' || code === 'Enter') this.interact();
+    if (code === 'KeyE' || code === 'Enter' || code === 'NumpadEnter') {
+      const before = this.ui.panel;
+      this.interact();
+      // Panneau ouvert au clavier : le focus va sur son premier bouton (Tab parcourt le panneau, Entrée
+      // l'active) au lieu de rester derrière, dans la barre du haut.
+      if (this.ui.panel && this.ui.panel !== before) this.ui.focusPanel();
+    }
     if (code === 'KeyC') this.toggleCamera();
   }
 
@@ -1417,8 +1424,8 @@ export class Game {
     this.xp('care');
     this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
     this.ui.refresh();
-    this.emit('care', { a, action });
-    return res;
+    this.emit('care', { a, action, quality });
+    return { ...res, quality }; // (la qualité du mini-jeu : le bain du concours en a besoin, src/ui/beauty.js)
   }
 
   trick(a, trickId) {
@@ -1660,7 +1667,8 @@ export class Game {
     for (const mother of [...this.profile.animals]) {
       if (!mother.pregnant || this.day < mother.pregnant.due) continue;
       const father = this.profile.animals.find((x) => x.id === mother.pregnant.father) ?? mother;
-      const babies = breed(mother, father, this.day);
+      // (prénoms : pas un de ceux déjà portés à la ferme, en pension, au salon…, ni deux fois dans la portée)
+      const babies = breed(mother, father, this.day, Math.random, namesInUse(this.profile));
       for (const baby of babies) {
         baby.location = mother.location;
         this.profile.animals.push(baby);

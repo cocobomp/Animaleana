@@ -26,6 +26,8 @@ import { openCareers, careerChips } from './careers.js'; // 💼 métiers
 import { openTrailCarnet } from './trailGuide.js'; // 🧭 guide de randonnée
 
 const STATUS_MAX = 3; // pastilles d'état visibles en même temps (les autres derrière « ➕ N de plus »)
+// Ce qui peut prendre le focus au clavier (boutons, liens, champs).
+const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
@@ -98,12 +100,22 @@ export class UI {
     }
 
     window.addEventListener('keydown', (e) => {
+      // Fenêtre ouverte : Tab et Maj+Tab tournent dans ses boutons (avant, ils parcouraient tout le jeu derrière).
+      if (this.modalOpen && e.key === 'Tab') return this.trapModalTab(e);
       // defaultPrevented : touche déjà traitée (Échap dans la fenêtre du nom ne ferme pas aussi le panneau dessous).
       if (e.code === 'Escape' && !e.defaultPrevented) {
-        if (this.modalOpen) return;
+        if (this.modalOpen) return this.escapeModal(e);
         if (this.panel) this.closePanel();
       }
     });
+    // Une fenêtre qui se redessine elle-même (📸 photo, inscription…) : le bouton qui avait le focus disparaît,
+    // le focus revient dans la fenêtre au lieu de tomber sur la page.
+    if (typeof MutationObserver === 'function') {
+      new MutationObserver(() => {
+        const a = document.activeElement;
+        if (this.modalOpen && (!a || a === document.body)) this.focusModal();
+      }).observe(this.modal, { childList: true, subtree: true });
+    }
 
     // Clavier à l'écran (iPhone) : fenêtres et panneaux restent dans la partie visible (src/ui/viewport.js).
     watchViewport();
@@ -630,9 +642,12 @@ export class UI {
       this.modalQueue.push(content);
       return;
     }
+    // Ce qui avait le focus avant (un bouton du panneau…) le retrouve à la fermeture (hideModal).
+    const prev = document.activeElement;
+    if (prev && prev !== document.body && !this.modal.contains(prev)) this.modalReturn = prev;
     this.modalOpen = true;
     this.game && (this.game.input.enabled = false);
-    this.modal.replaceChildren(h('div', { class: 'modal-box' }, content));
+    this.modal.replaceChildren(h('div', { class: 'modal-box', tabindex: '-1' }, content));
     this.modal.hidden = false;
     document.body.classList.add('modal-open');
     this.watchTutoBubble();
@@ -643,7 +658,49 @@ export class UI {
       focusField(field, true);
       // Repli (fenêtre sortie de la file d'attente, navigateur qui refuse) : un peu plus tard, hors du geste.
       if (document.activeElement !== field) setTimeout(() => { if (field.isConnected) focusField(field, true); }, 30);
+    } else {
+      // Sinon le bouton principal prend le focus : Entrée le choisit, Tab passe aux autres boutons de la fenêtre.
+      this.focusModal();
     }
+  }
+
+  /** Boutons et champs de la fenêtre ouverte que l'on peut atteindre au clavier (dans l'ordre). */
+  modalFocusables() {
+    const box = this.modal.querySelector('.modal-box');
+    if (!box) return [];
+    return [...box.querySelectorAll(FOCUSABLE)].filter((el) => el.getClientRects().length > 0);
+  }
+
+  /** Focus sur le bouton par défaut de la fenêtre : data-default, sinon le bouton principal, sinon le dernier. */
+  focusModal() {
+    const box = this.modal.querySelector('.modal-box');
+    if (!box) return;
+    const list = this.modalFocusables();
+    const buttons = list.filter((el) => el.tagName === 'BUTTON');
+    const el = list.find((x) => x.hasAttribute('data-default')) ?? buttons.find((b) => b.classList.contains('primary')) ?? buttons.at(-1) ?? list[0] ?? box;
+    el.focus({ preventScroll: true });
+  }
+
+  /** Tab / Maj+Tab dans une fenêtre : on reste dans ses boutons (du dernier, on revient au premier). */
+  trapModalTab(e) {
+    const list = this.modalFocusables();
+    e.preventDefault();
+    if (!list.length) return;
+    const i = list.indexOf(document.activeElement);
+    const next = i < 0 ? (e.shiftKey ? list.at(-1) : list[0]) : list[(i + (e.shiftKey ? -1 : 1) + list.length) % list.length];
+    next.focus();
+  }
+
+  /**
+   * Échap dans une fenêtre : le bouton marqué data-escape (Annuler, OK d'une alerte) ; une fenêtre à un seul
+   * bouton se ferme avec lui. Une fenêtre à plusieurs choix sans data-escape attend qu'on choisisse.
+   */
+  escapeModal(e) {
+    const buttons = this.modalFocusables().filter((el) => el.tagName === 'BUTTON');
+    const btn = buttons.find((b) => b.hasAttribute('data-escape')) ?? (buttons.length === 1 ? buttons[0] : null);
+    if (!btn) return;
+    e.preventDefault(); // (le jeu ne reçoit pas aussi Échap : on ne sort pas du véhicule en fermant une fenêtre)
+    btn.click();
   }
 
   /**
@@ -676,6 +733,24 @@ export class UI {
     document.body.classList.remove('modal-open');
     this.syncModalTop();
     if (this.game) this.game.input.enabled = !this.panel || !this.panel.blocking;
+    // Le focus revient où il était avant la fenêtre (sauf si une autre fenêtre, un mini-jeu… l'a pris entre-temps).
+    setTimeout(() => {
+      if (this.modalOpen) return; // une autre fenêtre a pris la suite : elle le rendra en se fermant
+      const back = this.modalReturn;
+      this.modalReturn = null;
+      const a = document.activeElement;
+      if (a && a !== document.body && !this.modal.contains(a)) return;
+      const visible = (el) => el?.isConnected && el.getClientRects().length > 0 && !['INPUT', 'TEXTAREA'].includes(el.tagName);
+      // Le bouton a été redessiné pendant que la fenêtre était ouverte (bulle du guide, panneau vivant) :
+      // on reprend son remplaçant, le bouton visible qui porte le même texte.
+      const same = back && !visible(back) && back.textContent
+        ? [...document.querySelectorAll('button, a[href]')].find((el) => el.textContent === back.textContent && visible(el) && !this.modal.contains(el))
+        : null;
+      const target = visible(back) ? back : same;
+      if (target) target.focus({ preventScroll: true });
+      else if (this.panel) this.focusPanel();
+      else a?.blur?.();
+    }, 0);
     // La suivante en attente, s'il y en a : après coup, pour laisser la suite de celle-ci
     // (une autre fenêtre qu'elle ouvre tout de suite) passer d'abord.
     if (this.modalQueue.length) setTimeout(() => this.flushModals(), 0);
@@ -689,7 +764,7 @@ export class UI {
 
   alert(msg) {
     return new Promise((resolve) => {
-      this.showModal([h('p', {}, msg), h('div', { class: 'row end' }, h('button', { class: 'primary', onClick: () => { this.hideModal(); resolve(); } }, 'OK'))]);
+      this.showModal([h('p', {}, msg), h('div', { class: 'row end' }, h('button', { class: 'primary', 'data-escape': true, onClick: () => { this.hideModal(); resolve(); } }, 'OK'))]);
     });
   }
 
@@ -699,8 +774,8 @@ export class UI {
       this.showModal([
         h('p', {}, msg),
         h('div', { class: 'row end' },
-          h('button', { onClick: () => done(false) }, t('cancel')),
-          h('button', { class: 'danger', onClick: () => done(true) }, 'OK')),
+          h('button', { 'data-escape': true, onClick: () => done(false) }, t('cancel')),
+          h('button', { class: 'danger', 'data-default': true, onClick: () => done(true) }, 'OK')),
       ]);
     });
   }
@@ -774,8 +849,27 @@ export class UI {
     const fresh = h('div', {}, p.render());
     // Rien n'a changé à l'écran : on garde les boutons existants (moins de redessins = moins de taps perdus).
     if (!first && fresh.innerHTML === this.panelBody.innerHTML) return;
+    // Au clavier, le bouton choisi avec Tab garde le focus après le redessin (même texte, sinon même place) :
+    // sans ça, chaque mise à jour des barres renvoyait le focus tout en haut de la page.
+    const active = document.activeElement;
+    let keep = null;
+    if (!first && active && active !== this.panelBody && this.panelBody.contains(active)) {
+      const list = [...this.panelBody.querySelectorAll(FOCUSABLE)];
+      keep = { i: list.indexOf(active), text: active.textContent };
+    }
     this.panelBody.replaceChildren(...fresh.childNodes);
     this.panelBody.scrollTop = scroll;
+    if (keep) {
+      const list = [...this.panelBody.querySelectorAll(FOCUSABLE)];
+      const el = list.find((x) => x.textContent === keep.text) ?? list[Math.min(Math.max(keep.i, 0), list.length - 1)];
+      el?.focus({ preventScroll: true });
+    }
+  }
+
+  /** Donne le focus au premier bouton du panneau (panneau ouvert au clavier). */
+  focusPanel() {
+    const el = this.panelBody?.querySelector(FOCUSABLE) ?? this.panelEl.querySelector(FOCUSABLE);
+    el?.focus({ preventScroll: true });
   }
 
   /** Redessin automatique (panneau « vivant ») : reporté tant qu'un doigt vient de toucher le panneau. */

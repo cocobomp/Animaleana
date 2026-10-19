@@ -804,7 +804,7 @@ export class Player {
 }
 
 /** Décalage de la caméra sur le côté quand on monte sur un écran en hauteur (m, voir CameraRig.update). */
-export const MOUNT_SIDE = 1.5;
+export const MOUNT_SIDE = 1.8;
 
 export class CameraRig {
   constructor(camera) {
@@ -857,14 +857,15 @@ export class CameraRig {
     player.avatar.root.visible = true;
     const target = eye.clone().add(new THREE.Vector3(0, -0.2, 0));
     const ride = this.ride ?? 0;
-    // (décalage de côté, à gauche de la caméra : MOUNT_SIDE pour elle, la moitié pour sa cible)
+    // (décalage de côté, à gauche de la caméra : MOUNT_SIDE pour elle, 15 % pour sa cible — le cheval reste près du
+    // milieu de l'écran, loin des boutons du bas à droite)
     const sideX = Math.cos(this.yaw) * MOUNT_SIDE * ride * (player.mount?.scale ?? 1);
     const sideZ = -Math.sin(this.yaw) * MOUNT_SIDE * ride * (player.mount?.scale ?? 1);
     if (ride > 0.001) {
       // (visée vers l'avant et plus bas : entre les mains du cavalier et la tête du cheval)
       const k = ride * (player.mount?.scale ?? 1);
-      target.x += Math.sin(player.heading) * 0.9 * k + sideX * 0.5;
-      target.z += Math.cos(player.heading) * 0.9 * k + sideZ * 0.5;
+      target.x += Math.sin(player.heading) * 0.9 * k + sideX * 0.15;
+      target.z += Math.cos(player.heading) * 0.9 * k + sideZ * 0.15;
       target.y -= 0.35 * k;
     }
     const back = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
@@ -913,8 +914,8 @@ export class CameraRig {
     this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch + 0.1 * ride - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
     back.set(-Math.sin(this.yaw) * Math.cos(this.curPitch), Math.sin(this.curPitch), -Math.cos(this.yaw) * Math.cos(this.curPitch));
     const want = target.clone().addScaledVector(back, dist);
-    want.x += sideX * 0.5;
-    want.z += sideZ * 0.5;
+    want.x += sideX * 0.85;
+    want.z += sideZ * 0.85;
     const ground = world.heightAt(want.x, want.z) + 0.4;
     if (want.y < ground) want.y = ground;
     this.pos.lerp(want, this.pos.lengthSq() === 0 ? 1 : Math.min(1, dt * 10));

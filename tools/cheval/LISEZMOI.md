@@ -180,7 +180,7 @@ de l'étrier en bois. À cru : jambes 12 à 24 cm dans le cheval → 0 à l'arr�
 - *bien le montrer* : essayage de la sellerie sur un double neuf de l'animal (`thumbScenes.photoDouble`), cheval
   entier pour la selle et la couverture ; vignettes en pose de photo, cadrées sur le maillage dans sa pose ;
   vignettes des races deux fois plus grandes ; portrait en tête de la fiche ; au box, le cheval se tourne vers le
-  joueur ; caméra du concours de beauté cadrant l'animal mené ; à cheval sur un écran en hauteur, caméra décalée de 1,5 m
+  joueur ; caméra du concours de beauté cadrant l'animal mené ; à cheval sur un écran en hauteur, caméra décalée de 1,8 m
   de côté, plus près ; « Saut automatique » dans la barre du haut.
 
 Ce qu'il coûte, et comment on le garde bas :

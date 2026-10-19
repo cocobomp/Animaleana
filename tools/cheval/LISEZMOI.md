@@ -99,6 +99,19 @@ rotations autour des seuls axes x faisait trembler le sabot). Mesuré sur les 33
 chaque point de la sole pendant qu'il touche le sol (< 4 mm), vers l'avant / de côté, en cm, clips du GLB →
 allures calées : pas 0,51 / 0,76 → 0,01 / 0,01 ; trot 0,27 / 0,10 → 0,02 / 0,02 ; petit galop 0,59 / 0,24 →
 0,03 / 0,03 ; galop 0,76 / 0,59 → 0,05 / 0,06 (pire 0,28 / 0,19) ; aucune sole sous le sol.
+**Sans coup de genou** : au galop, le genou (ou le jarret) rejoignait le clip d'un coup au lever du sabot (0,78 rad
+en une image au trait breton : le sabot tenu à sa place, hors d'atteinte quand le corps est passé devant, tendait
+le membre, puis le fondu en hauteur le lâchait en deux images). Désormais : boulet visé à portée du membre (au
+plus 97 % de la longueur coude → boulet, jamais tendu : la pince avance un peu en fin d'appui), appui raccourci
+aux allures rapides là où la pince n'est plus à portée (au plus un quart), sabot tenu puis lâché en 0,1 s au
+moins avant la pose et après le lever, et après le lever un mélange des poses articulation par articulation (pose
+du sabot tenu, partie de la correction de l'échantillon d'avant, et pose du clip) au lieu d'un mélange des places
+visées ; la sole n'y descend jamais plus bas que dans le clip. Plus grand changement d'angle d'une articulation en
+une image, 33 races, 60 im/s : galop 0,77 → 0,45 rad (au lever 0,77 → 0,42, à la pose 0,57 → 0,45), petit galop
+0,54 → 0,41, trot 0,33 → 0,32, pas 0,34 → 0,28 (clip du GLB seul : 0,37 au galop) ; glissement, même mesure
+qu'au-dessus refaite avant → après : galop 0,07 / 0,06 → 0,06 / 0,05 cm (pire 0,39 / 0,25 → 0,49 / 0,16), petit
+galop 0,04 / 0,03 → 0,06 / 0,03, trot 0,03 / 0,02 → 0,04 / 0,01, pas 0,07 / 0,01 → 0,05 / 0,00. Calage : ≈ 30 %
+de temps en plus.
 Coût, navigateur (machine lente, logiciel) : 4,5 à 14 ms par allure, calées pendant les temps morts après la
 construction du cheval (`requestIdleCallback`, au plus tard 1 s chacune) ; au premier pas, 0,3 à 0,5 ms
 s'il ne reste rien à caler, 22 à 62 ms si le cheval part dès sa construction (tout est calé d'un coup).

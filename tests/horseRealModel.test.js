@@ -235,4 +235,65 @@ describe('sabots posés du cheval réaliste', () => {
     expect(mean('x')).toBeLessThan(0.002);
     expect(max('x')).toBeLessThan(0.005);
   });
+
+  // Coup de genou au galop : au lever du sabot, le genou (ou le jarret) rejoignait le clip d'un coup, 0,78 rad en
+  // une image (trait breton) ; le clip du GLB seul ne dépasse pas 0,37 rad. Le mixeur tire au hasard l'instant
+  // de départ de chaque clip (Math.random) : plusieurs instants FIXÉS, pour que le test ne dépende pas du hasard.
+  it.each(['trait_breton', 'percheron', 'shetland', 'selle_francais', 'arabe'])('%s au galop : pas de coup de genou d\'une image à l\'autre, sabots posés calés', (id) => {
+    const random = Math.random;
+    try {
+      for (const phase of [0.13, 0.58]) {
+        let n = 0;
+        Math.random = () => (phase + 0.377 * n++) % 1;
+        const md = horse(id);
+        md.anim.update(1 / 60, { v: 0.5, moving: true, fat: 1 }, {});
+        const v = md.anim.natural.gallop;
+        const st = { v, moving: true, graze: 0, feeder: 0, turn: 0, fat: 1 };
+        const dt = 1 / 60;
+        for (let f = 0; f < 120; f++) {
+          md.root.position.z += v * dt;
+          md.anim.update(dt, st, {});
+        }
+        const p = new THREE.Vector3();
+        const prev = md.legs.map((l) => [l.top, l.pivot, l.knee, l.fetlock].map((g) => g.quaternion.clone()));
+        const touch = new Map();
+        const slips = [];
+        let jump = 0;
+        for (let f = 0; f < 240; f++) {
+          md.root.position.z += v * dt;
+          md.anim.update(dt, st, {});
+          md.root.updateMatrixWorld(true);
+          md.legs.forEach((l, i) => {
+            [l.top, l.pivot, l.knee, l.fetlock].forEach((g, k) => {
+              jump = Math.max(jump, g.quaternion.angleTo(prev[i][k]));
+              prev[i][k].copy(g.quaternion);
+            });
+            // (étendue de chaque point de la sole pendant qu'il touche le sol, à moins de 4 mm)
+            l.solePts.forEach((q, k) => {
+              p.copy(q).applyMatrix4(l.fetlock.matrixWorld);
+              const key = i * 100 + k;
+              const S = touch.get(key);
+              if (p.y - 0.003 < 0.004) {
+                if (!S) touch.set(key, { z0: p.z, z1: p.z, n: 1 });
+                else {
+                  S.z0 = Math.min(S.z0, p.z);
+                  S.z1 = Math.max(S.z1, p.z);
+                  S.n++;
+                }
+              } else if (S) {
+                if (S.n > 1) slips.push(S.z1 - S.z0);
+                touch.delete(key);
+              }
+            });
+          });
+        }
+        md.dispose();
+        expect(jump, `${id} (instant ${phase}) : plus grand changement d'angle en une image`).toBeLessThan(0.5);
+        expect(slips.length).toBeGreaterThan(20);
+        expect(slips.reduce((a, b) => a + b, 0) / slips.length, `${id} (instant ${phase}) : glissement moyen`).toBeLessThan(0.002);
+      }
+    } finally {
+      Math.random = random;
+    }
+  });
 });

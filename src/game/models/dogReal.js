@@ -537,6 +537,31 @@ export function deformDog(base, B) {
       p.add(HJ);
       set(j, p);
     }
+    // Yeux du jack (maillage à part) : moins grossis que la tête et un peu rentrés dans l'orbite (sinon des yeux
+    // globuleux de dessin animé sur le chihuahua ou le chiot).
+    if (EP && B.head > 1.02) {
+      const k = (1 + (B.head - 1) * 0.5) / B.head;
+      for (const side of [1, -1]) {
+        const c = V();
+        let cnt = 0;
+        for (let i = 0; i < ne; i++) {
+          if (Math.sign(EP[i * 3] - L.midX) !== side) continue;
+          c.x += EP[i * 3];
+          c.y += EP[i * 3 + 1];
+          c.z += EP[i * 3 + 2];
+          cnt++;
+        }
+        if (!cnt) continue;
+        c.multiplyScalar(1 / cnt);
+        // (rentré vers le centre de la tête de ce que l'œil a perdu)
+        const inward = HJ.clone().sub(c).multiplyScalar((1 - k) * 0.35);
+        for (let i = 0; i < ne; i++) {
+          if (Math.sign(EP[i * 3] - L.midX) !== side) continue;
+          p.fromArray(EP, i * 3).sub(c).multiplyScalar(k).add(c).add(inward);
+          EP.set([p.x, p.y, p.z], i * 3);
+        }
+      }
+    }
   }
   // 5. Museau plus court ou plus long, plus large ou plus fin, devant les yeux.
   if (B.snout !== 1 || B.muzzleW !== 1) {

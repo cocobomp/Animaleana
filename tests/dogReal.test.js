@@ -108,6 +108,20 @@ describe('races et chiots', () => {
     ad.dispose();
   });
 
+  it('grosse tête (chihuahua, chiot) : les yeux grossissent moins que la tête (pas d\'yeux globuleux)', () => {
+    const eyeOverHead = (md) => {
+      const g = md.eyeMesh.geometry;
+      g.computeBoundingBox();
+      return g.boundingBox.getSize(new THREE.Vector3()).y / md.accessoryFit.headR;
+    };
+    const jack = dog('jack_russell');
+    const chi = dog('chihuahua');
+    const pup = dog('jack_russell', { puppy: true });
+    expect(eyeOverHead(chi)).toBeLessThan(eyeOverHead(jack) * 0.92);
+    expect(eyeOverHead(pup)).toBeLessThan(eyeOverHead(jack) * 0.95);
+    for (const md of [jack, chi, pup]) md.dispose();
+  });
+
   it('écourtée : la queue des races « stub » est courte', () => {
     for (const b of ['bouledogue', 'boxer', 'corgi', 'cocker']) expect(dogBuild(lookOf(b)).tailLen, b).toBeLessThan(0.5);
   });

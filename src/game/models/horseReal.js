@@ -1970,13 +1970,18 @@ function skinGear(model, S, mesh, hb) {
   const csw = coat.attributes.skinWeight;
   // Peau du tronc seulement (pas la tête, les membres sous le coude ni la queue).
   if (!S.trunkSkin) {
-    const keep = new Set(['Spine', 'Ribs', 'Neck', 'FL1', 'FR1', 'HL1', 'HR1', 'FL2', 'FR2', 'HL2', 'HR2']);
+    // (tronc et épaules à toute hauteur : chez un petit poney, le bas du ventre est 15 cm sous le coude ;
+    // sans lui, la sangle se liait à l'avant-bras voisin et le ventre passait à travers en marchant ;
+    // cuisses, haut des avant-bras et des jambes seulement au-dessus du coude)
+    const trunk = new Set(['Spine', 'Ribs', 'Neck', 'FL1', 'FR1']);
+    const upper = new Set(['HL1', 'HR1', 'FL2', 'FR2', 'HL2', 'HR2']);
     const list = [];
     for (let i = 0; i < cp.count; i++) {
       let b = csi.getX(i);
       let w = csw.getX(i);
       for (let k = 1; k < 4; k++) if (csw.getComponent(i, k) > w) { w = csw.getComponent(i, k); b = csi.getComponent(i, k); }
-      if (keep.has(RIG[b][0]) && cp.getY(i) > S.elbowY - 0.08) list.push(i);
+      const nm = RIG[b][0];
+      if (trunk.has(nm) || (upper.has(nm) && cp.getY(i) > S.elbowY - 0.08)) list.push(i);
     }
     S.trunkSkin = Uint32Array.from(list);
   }

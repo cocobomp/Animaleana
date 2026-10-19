@@ -233,6 +233,60 @@ describe('couverture du cheval réaliste', () => {
     expect(through).toBe(0);
     md.dispose();
   }, 30000);
+
+  it.each(['shetland', 'falabella'])('%s : la sous-ventrière reste sous le ventre, à toutes les allures (cycle entier)', async (breed) => {
+    const { buildGear } = await import('../src/game/gearModels.js');
+    const a = animal(breed, { seed: 1234 });
+    const md = horse(a);
+    const own = new Set(md.bounds.meshes);
+    buildGear(md, a.look, { blanket: { item: 'blanketRain', color: 'navy' } });
+    // (la sangle : la dernière pièce ajoutée)
+    const added = md.bounds.meshes.filter((m) => !own.has(m));
+    const girth = added[added.length - 1];
+    const coat = md.coatMesh;
+    const I = coat.geometry.index.array;
+    const C = new Float32Array(coat.geometry.attributes.position.count * 3);
+    const gp = girth.geometry.attributes.position;
+    const p = new THREE.Vector3();
+    const res = {};
+    for (const [gait, u] of [['pas', 1.6], ['trot', 3], ['petit galop', 4.6], ['galop', 8.5]]) {
+      const st = { v: u * md.speedScale, moving: true, graze: 0, feeder: 0, turn: 0, fat: 1 };
+      for (let f = 0; f < 90; f++) md.anim.update(1 / 60, st, {});
+      let inside = 0;
+      for (let f = 0; f < 16; f++) {
+        md.anim.update(1 / 16, st, {});
+        md.root.updateMatrixWorld(true);
+        for (let i = 0; i < C.length / 3; i++) coat.getVertexPosition(i, p).applyMatrix4(coat.matrixWorld).toArray(C, i * 3);
+        const G = [];
+        for (let i = 0; i < gp.count; i++) G.push(girth.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(girth.matrixWorld));
+        const z0 = Math.min(...G.map((g) => g.z)) - 0.02;
+        const z1 = Math.max(...G.map((g) => g.z)) + 0.02;
+        // Dans le ventre : verticale qui traverse le pelage un nombre impair de fois au-dessus et au-dessous.
+        const up = new Uint16Array(G.length);
+        const dn = new Uint16Array(G.length);
+        for (let t = 0; t < I.length; t += 3) {
+          const [a0, b0, c0] = [I[t] * 3, I[t + 1] * 3, I[t + 2] * 3];
+          const [ax, az, bx, bz, cx, cz] = [C[a0], C[a0 + 2], C[b0], C[b0 + 2], C[c0], C[c0 + 2]];
+          if (Math.max(az, bz, cz) < z0 || Math.min(az, bz, cz) > z1) continue;
+          const det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+          if (Math.abs(det) < 1e-12) continue;
+          G.forEach((g, k) => {
+            const l1 = ((bz - cz) * (g.x - cx) + (cx - bx) * (g.z - cz)) / det;
+            const l2 = ((cz - az) * (g.x - cx) + (ax - cx) * (g.z - cz)) / det;
+            if (l1 < 0 || l2 < 0 || l1 + l2 > 1) return;
+            if (l1 * C[a0 + 1] + l2 * C[b0 + 1] + (1 - l1 - l2) * C[c0 + 1] > g.y) up[k]++;
+            else dn[k]++;
+          });
+        }
+        for (let k = 0; k < G.length; k++) if (up[k] % 2 === 1 && dn[k] % 2 === 1) inside++;
+      }
+      res[gait] = inside;
+    }
+    // (avant : le bas du ventre, 15 cm sous le coude d'un petit poney, n'était pas compté dans la peau du
+    // tronc ; la sangle suivait l'avant-bras et le ventre la traversait de 1 à 3,5 cm, surtout au pas)
+    expect(res).toEqual({ pas: 0, trot: 0, 'petit galop': 0, galop: 0 });
+    md.dispose();
+  }, 60000);
 });
 
 describe('« donner le sabot » (tour du spectacle)', () => {

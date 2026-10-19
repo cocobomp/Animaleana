@@ -13,6 +13,7 @@
 // sessionsNeeded, ownerName, ownerSex, ownerSeed, price, since, until, rescue, lastDay }.
 
 import { createAnimal, namesInUse } from './animal.js';
+import { dailyCareScore, VISITOR_WAIT_HOURS } from './clients.js';
 import { DAYS_PER_YEAR } from './time.js';
 import { earn } from './profile.js';
 import { pick, randRange } from './rng.js';
@@ -252,9 +253,41 @@ export function applySession(profile, a, id, quality, day) {
   return { before, after, fixed: isFixed(a), perfect, xp, ...r };
 }
 
+// ---------------------------------------------------------------- bien-être du chien confié
+
+export const CARE_GOOD = 50; // note de soin (0 à 100, comme la pension) en dessous de laquelle le maître le remarque
+export const CARE_BAD = 30; // en dessous : il est fâché (une étoile, moitié de la paye, réputation en baisse)
+export const NEED_LOW = 30; // faim, soif ou propreté sous ce niveau : on prévient sur la fiche du chien
+const CARE_PAY = { good: 1, poor: 0.75, bad: 0.5 };
+
+/**
+ * Ce qui ne va pas chez le chien confié : 'sick', 'hunger', 'thirst', 'hygiene' (le besoin le plus bas sous
+ * NEED_LOW), 'other' (note de soin trop basse) ou null s'il va bien.
+ */
+export function neglectReason(a, score = dailyCareScore(a)) {
+  if (a.sick) return 'sick';
+  const low = ['hunger', 'thirst', 'hygiene'].filter((n) => (a.needs?.[n] ?? 100) < NEED_LOW)
+    .sort((x, y) => a.needs[x] - a.needs[y])[0];
+  return low ?? (score < CARE_GOOD ? 'other' : null);
+}
+
+/**
+ * Le chien est chez nous pendant son éducation : comment va-t-il ? { score, level, reason } ;
+ * level 'good', 'poor' (quelque chose ne va pas : note sous CARE_GOOD, malade, affamé, assoiffé ou sale ;
+ * c'est aussi ce qui fait apparaître l'alerte sur sa fiche) ou 'bad' (note sous CARE_BAD).
+ */
+export function careCheck(a) {
+  const score = dailyCareScore(a);
+  const reason = neglectReason(a, score);
+  const level = score < CARE_BAD ? 'bad' : reason ? 'poor' : 'good';
+  return { score, level, reason };
+}
+
 /**
  * Le maître récupère son chien. Renvoie ce qu'il se passe : étoiles, paiement, pourboire,
- * réputation gagnée ou perdue. success = problème réglé.
+ * réputation gagnée ou perdue. success = problème réglé. Le chien rentré mal soigné (affamé, assoiffé,
+ * sale ou malade : careCheck) donne moins d'étoiles, une paye réduite et de la réputation en moins, même
+ * si son problème est réglé (avant, un chien malade et affamé valait ★★★ « Incroyable ! »).
  */
 export function deliveryResult(profile, a) {
   const c = a.client;
@@ -264,14 +297,19 @@ export function deliveryResult(profile, a) {
   const now = avg(c.problems);
   const progress = Math.max(0, Math.min(1, (start - now) / Math.max(1, start)));
   const quick = c.sessionsDone <= Math.max(2, c.sessionsNeeded - 1);
-  const stars = !success ? (progress > 0.5 ? 2 : 1) : quick || now < 5 ? 3 : 2;
+  const care = careCheck(a);
+  let stars = !success ? (progress > 0.5 ? 2 : 1) : quick || now < 5 ? 3 : 2;
+  if (care.level === 'poor') stars = Math.min(stars, 2);
+  if (care.level === 'bad') stars = 1;
   const base = c.price * c.sessionsDone;
-  const pay = success ? base : Math.round(base * 0.5);
+  const pay = Math.round(base * (success ? 1 : 0.5) * CARE_PAY[care.level]);
   const tips = dogTrainerStarted(profile) ? dogTrainerPerks(profile).tips : false;
   const tip = success && stars === 3 && tips ? Math.round(c.price * (c.rescue ? 2 : 1)) : 0;
-  const repDelta = success ? (stars === 3 ? 8 : 5) : -4;
-  const xp = success ? CAREER_XP.deliver * (c.rescue ? 2 : 1) : CAREER_XP.deliverFail;
-  return { success, stars, pay, tip, repDelta, xp, progress };
+  const repDelta = care.level === 'bad' ? (success ? -6 : -8)
+    : !success ? -4
+      : care.level === 'poor' ? 2 : stars === 3 ? 8 : 5;
+  const xp = success && care.level !== 'bad' ? CAREER_XP.deliver * (c.rescue ? 2 : 1) : CAREER_XP.deliverFail;
+  return { success, stars, pay, tip, repDelta, xp, progress, care: care.level, careScore: care.score, neglect: care.reason };
 }
 
 /** Clôture : paiement, réputation, XP, historique ; le chien repart avec son maître. */
@@ -310,22 +348,37 @@ export function shouldClientArrive(profile, { day, hour, rng = Math.random }) {
 }
 
 /**
- * Le maître qui attend une réponse est gardé dans le profil : profile.dogTrainer.pending = { req, day }.
+ * Le maître qui attend une réponse est gardé dans le profil : profile.dogTrainer.pending = { req, day, expires }.
  * Après un rechargement (ou un voyage), il revient le même jour au lieu de disparaître : sa visite du jour
  * est déjà comptée (lastVisitDay), et le tout premier client doit toujours venir. Comme le visiteur de la
- * pension (profile.clients.visitor). Le lendemain, la demande est oubliée.
+ * pension (profile.clients.visitor), il n'attend pas plus de VISITOR_WAIT_HOURS (2 h de jeu) : expires
+ * (minutes, comme profile.clock) ; ensuite il repart (src/game/DogTrainer.js) et la demande est oubliée.
+ * Le même maître qui revient (rechargement) garde son heure de départ. Le lendemain, la demande est oubliée.
  */
-export function setPending(profile, req, day) {
-  dogTrainerOf(profile).pending = { req, day };
+export function setPending(profile, req, day, clock = null) {
+  const d = dogTrainerOf(profile);
+  const old = d.pending;
+  const same = old && old.day === day && (old.req === req || (old.req?.dog?.id && old.req.dog.id === req?.dog?.id));
+  const expires = same && old.expires != null ? old.expires : clock === null ? null : clock + VISITOR_WAIT_HOURS * 60;
+  d.pending = { req, day, expires };
 }
 
-/** La demande du maître qui attendait aujourd'hui (ou null ; une demande d'un autre jour est effacée). */
-export function pendingRequest(profile, day) {
+/** Le maître attend depuis plus de 2 h (clock : profile.clock, en minutes). */
+export function pendingExpired(profile, clock) {
+  const pend = dogTrainerOf(profile).pending;
+  return !!pend && pend.expires != null && clock >= pend.expires;
+}
+
+/**
+ * La demande du maître qui attendait aujourd'hui (ou null ; une demande d'un autre jour, ou plus vieille
+ * que 2 h si clock est donné, est effacée).
+ */
+export function pendingRequest(profile, day, clock = null) {
   const d = dogTrainerOf(profile);
   const pend = d.pending;
   if (!pend) return null;
   const done = !pend.req?.dog || profile.animals.some((a) => a.id === pend.req.dog.id); // (déjà accepté)
-  if (pend.day !== day || done) {
+  if (pend.day !== day || done || (clock !== null && pendingExpired(profile, clock))) {
     d.pending = null;
     return null;
   }

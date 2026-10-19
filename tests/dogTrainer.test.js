@@ -5,7 +5,7 @@ import {
   DOG_TRAINER_CAREER, PROBLEMS, PROBLEM_IDS, COACHINGS, coachingsFor, makeClientRequest, acceptClient, canSession,
   applySession, isFixed, readyForDelivery, deliveryResult, finishClient, shouldClientArrive, sessionPrice,
   careerBook, maxClients, dogTrainerRank, FIXED_BELOW, nextProblem, isOverdue, clientDogs,
-  setPending, pendingRequest, clearPending,
+  setPending, pendingRequest, clearPending, pendingExpired, careCheck, neglectReason,
 } from '../src/sim/dogTrainer.js';
 import {
   CAREERS, CAREER_IDS, RANKS, startCareer, addCareerXp, careerXp, reputationOf, nextAction, carnet, careerSummary,
@@ -150,6 +150,32 @@ describe('éducateur canin : clients', () => {
     clearPending(p);
     expect(pendingRequest(p, 2)).toBe(null);
   });
+  it('un maître à qui on ne répond pas repart au bout de 2 h (et garde son heure s\'il revient après un rechargement)', () => {
+    const p = profile();
+    const req = makeClientRequest(p, { day: 1, rng: rng() });
+    const clock = 24 * 60 + 9 * 60; // jour 1, 9 h
+    setPending(p, req, 1, clock);
+    expect(pendingExpired(p, clock + 60)).toBe(false);
+    expect(pendingRequest(p, 1, clock + 60)).toBe(req);
+    // Rechargé à 10 h : le même maître revient, sans repartir à zéro.
+    const back = JSON.parse(JSON.stringify(p));
+    const again = pendingRequest(back, 1, clock + 60);
+    setPending(back, again, 1, clock + 60);
+    expect(back.dogTrainer.pending.expires).toBe(clock + 120);
+    // À 11 h, il est reparti : la demande est oubliée, aucun maître ne revient ce jour-là.
+    expect(pendingExpired(back, clock + 120)).toBe(true);
+    expect(pendingRequest(back, 1, clock + 120)).toBe(null);
+    expect(back.dogTrainer.pending).toBe(null);
+    // Le lendemain, un autre client peut venir.
+    expect(shouldClientArrive(back, { day: 2, hour: 10, rng: () => 0 })).toBe(true);
+  });
+  it('le maître ignoré repart vraiment dans le jeu (src/game/DogTrainer.js)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../src/game/DogTrainer.js', import.meta.url), 'utf8');
+    expect(src).toMatch(/pendingExpired\(g\.profile, g\.profile\.clock\)\) \{\s*this\.ownerGivesUp\(v\)/);
+    expect(src).toMatch(/setPending\(g\.profile, req, g\.day, g\.profile\.clock\)/);
+    expect(src).toMatch(/ownerGivesUp\(v\) \{[\s\S]*?clearPending[\s\S]*?sendAway\(v, v\.e\)[\s\S]*?cl_left/);
+  });
 });
 
 describe('éducateur canin : séances et livraison', () => {
@@ -239,6 +265,65 @@ describe('éducateur canin : séances et livraison', () => {
     expect(r.success).toBe(false);
     expect(r.pay).toBe(Math.round(a.client.price * 2 * 0.5));
     expect(r.repDelta).toBeLessThan(0);
+  });
+  it('chien rendu malade, affamé et assoiffé : plus de ★★★ « Incroyable ! », paye réduite et réputation en baisse', () => {
+    const { p, a } = setup('pull', 40);
+    applySession(p, a, 'pull', 1, 1);
+    expect(isFixed(a)).toBe(true);
+    const good = deliveryResult(p, a);
+    expect(good).toMatchObject({ stars: 3, care: 'good', neglect: null, repDelta: 8 });
+    for (const k of Object.keys(a.needs)) a.needs[k] = 0;
+    a.sick = 'flu';
+    a.health = 40;
+    const bad = deliveryResult(p, a);
+    expect(bad.success).toBe(true); // (le problème est réglé…)
+    expect(bad).toMatchObject({ stars: 1, care: 'bad', neglect: 'sick' }); // (…mais le chien rentre en mauvais état)
+    expect(bad.pay).toBe(Math.round(good.pay * 0.5));
+    expect(bad.repDelta).toBeLessThan(0);
+    expect(bad.tip).toBe(0);
+    expect(bad.xp).toBeLessThan(good.xp);
+  });
+  it('un peu négligé (faim) : deux étoiles au plus, la phrase du maître dit pourquoi, et la fiche prévient avant', () => {
+    const { p, a } = setup('pull', 40);
+    applySession(p, a, 'pull', 1, 1);
+    for (const k of Object.keys(a.needs)) a.needs[k] = 55;
+    a.needs.hunger = 5;
+    expect(neglectReason(a)).toBe('hunger');
+    expect(careCheck(a).level).toBe('poor');
+    const r = deliveryResult(p, a);
+    expect(r).toMatchObject({ success: true, stars: 2, care: 'poor', neglect: 'hunger', repDelta: 2 });
+    expect(r.pay).toBe(Math.round(a.client.price * a.client.sessionsDone * 0.75));
+    // Bien nourri juste avant le retour du maître : tout va bien.
+    a.needs.hunger = 90;
+    for (const k of Object.keys(a.needs)) a.needs[k] = Math.max(a.needs[k], 80);
+    expect(neglectReason(a)).toBeNull();
+    expect(deliveryResult(p, a)).toMatchObject({ stars: 3, care: 'good' });
+  });
+  it('chien malade mais bien soigné par ailleurs : au plus deux étoiles (« il fallait appeler le vétérinaire »)', () => {
+    const { p, a } = setup('pull', 40);
+    applySession(p, a, 'pull', 1, 1);
+    for (const k of Object.keys(a.needs)) a.needs[k] = 95;
+    a.sick = 'cold';
+    expect(careCheck(a).level).not.toBe('good');
+    const r = deliveryResult(p, a);
+    expect(r.stars).toBeLessThanOrEqual(2);
+    expect(r.neglect).toBe('sick');
+  });
+  it('les textes du maître mécontent existent en français et en anglais, avec le féminin', () => {
+    const hadDoc = 'document' in globalThis;
+    if (!hadDoc) globalThis.document = { documentElement: {} }; // setLang touche <html lang>
+    for (const lang of ['fr', 'en']) {
+      setLang(lang);
+      for (const k of ['sick', 'hunger', 'thirst', 'hygiene', 'other']) {
+        expect(t(`dt_owner_neglect_${k}`, { dog: 'Pompon' })).not.toMatch(/dt_|\{/);
+        expect(t(`dt_careWarn_${k}`, { name: 'Pompon', owner: 'Tom' })).not.toMatch(/dt_|\{/);
+      }
+      expect(t('dt_neglect_explain', { dog: 'Pompon' })).not.toMatch(/dt_|\{/);
+    }
+    setLang('fr');
+    expect(t('dt_owner_neglect_hunger', { dog: 'Réglisse', g: 'f' })).toMatch(/affamée/);
+    expect(t('dt_careWarn_hygiene', { name: 'Réglisse', owner: 'Tom', g: 'f' })).toMatch(/la retrouver/);
+    if (!hadDoc) delete globalThis.document;
   });
   it('le jour prévu passé, le maître revient quand même', () => {
     const { a } = setup('jump', 80);

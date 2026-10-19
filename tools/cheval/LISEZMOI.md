@@ -150,12 +150,26 @@ matrices du monde datent de l'image d'avant : au saut, le cavalier s'envolait de
 Enfoncement dans le pelage (cm, distance vraie, banc node sur le vrai avatar, avec selle, avant → après) :
 bassin 4,4 à 8,1 → 0 ; cuisses jusqu'à 5,8 → 0 ; tibias jusqu'à 5,4 → 0 (Shetland, Selle Français, Frison,
 Percheron × arrêt, pas, trot, petit galop, galop, saut de 0,7 et 1,2 m) ; bassin 1,1 à 2,3 cm au-dessus du
-creux à l'arrêt (il était 5,6 à 7,5 cm dans le siège) ; plante du pied à moins de 2 mm de la grille de l'étrier
-(elle était à 7 à 29 cm), 5 mm au plus au saut. Selle western : 0 dans le pelage, pied à moins d'1 cm du fond
-de l'étrier en bois. À cru : jambes 12 à 24 cm dans le cheval → 0 à l'arrêt, au pas et au trot, au plus
-1,2 cm une ou deux images sur cinquante au petit galop et au saut (Shetland, Selle Français). Coût :
-`afterSessions` 0,08 → 0,16 à 0,19 ms par image (Shetland 0,5 → 0,64 ms, machine lente), mise en selle 3 à
-20 ms. `tests/riderFit.test.js`.
+creux à l'arrêt (il était 5,6 à 7,5 cm dans le siège) ; semelle (la vraie : le pied est incliné talon bas,
+-0,22 rad) sur la grille de l'étrier, à -1 à 0 mm (elle était à 7 à 29 cm, puis 1,8 cm au-dessus tant que la
+cheville était posée 5 cm au-dessus de la grille sans compter l'inclinaison du pied). Pied écarté du flanc de
+15 cm au plus, ramené à portée de la jambe, l'étrier posé sous lui (avec 5 cm, au saut d'un Falabella en selle
+poney, cuisses et tibias entraient de 4 à 5 cm). Selle western : 0 dans le pelage, semelle à 2 à 4 mm du fond de
+l'étrier en bois (1,8 cm quand l'étrier n'était décalé qu'en x). Au pied à terre, étriers et étrivières à leur
+place (la bombe est ôtée une fois descendu : ôtée encore en selle, elle refaisait l'avatar, remis en selle, et
+les étriers restaient à la jambe). À cru : jambes 12 à 24 cm dans le cheval → 0 à l'arrêt, au pas et au trot,
+au plus 1,2 cm une ou deux images sur cinquante au petit galop et au saut (Shetland, Selle Français).
+Vérifié dans le jeu (mesure indépendante : tous les sommets des jambes et du bassin, parité latérale et
+verticale contre le pelage déformé, à chaque image dessinée) : 20 couples race × selle (Selle Français, Shetland,
+Percheron, Frison, arabe, akhal-teke, Falabella, trait breton, islandais, welsh, boulonnais, quarter, haflinger,
+fjord ; selles mixte, dressage, saut, randonnée, western, poney, course, à cru, couverture ou tapis sous la
+selle) × arrêt, pas, trot, petit galop, galop : 0, sauf pied du Falabella ≤ 3 mm et cuisse à cru (Shetland,
+Falabella) ≤ 0,9 cm, une ou deux images sur 16 ; en western sur Shetland et Falabella, la cuisse touche la jupe
+de la selle (≤ 1,2 cm). Coût :
+`afterSessions` 0,08 → 0,16 à 0,19 ms par image (Shetland 0,5 → 0,64 ms, machine lente ; dans le jeu sur une
+machine surchargée, médiane 0,2 → 0,4 ms, Shetland 0,5 → 0,9 ms), mise en selle 3 à 20 ms. La bombe est mise
+avant de monter (`Game.ride`) : l'avatar refait par `setHelmet` n'est ajusté au cheval qu'une fois (il l'était
+deux fois, la première pour un avatar aussitôt jeté). `tests/riderFit.test.js`.
 `tests/horseReal.test.js` vérifie le fichier (os, clips, compression) et que chaque race garde ses sabots au sol.
 
 **Beauté** (plan « cheval beau », étapes 1, 3, 4 et 5 ; `tests/horseGround.test.js`, `horseHead.test.js`,

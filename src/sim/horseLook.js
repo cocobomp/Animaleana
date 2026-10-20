@@ -8,16 +8,20 @@ import { SPECIES, getBreed } from './species.js';
 // girth : largeur et profondeur du tronc ; legs : longueur des membres ; bone : épaisseur des canons ;
 // neck : longueur de l'encolure ; neckW : épaisseur de l'encolure ; crest : bombé du dessus de l'encolure ;
 // head : taille de la tête ; croup : volume de l'arrière-main ; back : longueur du dos ;
-// mane / tail : longueur des crins ; maneN : quantité de mèches.
+// mane / tail : longueur des crins ; maneN : quantité de mèches ; depth : profondeur du tronc en plus de celle que
+// donne girth (1 par défaut) ; ears : taille des oreilles (1 par défaut).
 export const HORSE_TYPES = {
-  hotblood: { girth: 0.9, legs: 1.05, bone: 0.86, neck: 1.08, neckW: 0.88, crest: 0.85, head: 0.92, croup: 0.94, back: 0.98, mane: 0.8, tail: 1, maneN: 0.8 },
+  // (sang chaud : membres de la longueur d'un cheval de selle, 1,05 avant — avec un tronc peu profond, un pur-sang
+  // ou un arabe avait l'air d'un poulain maigre, vide sous la poitrine 0,57 du garrot au lieu de 0,50 à 0,52)
+  hotblood: { girth: 0.9, legs: 1, bone: 0.86, neck: 1.08, neckW: 0.88, crest: 0.85, head: 0.92, croup: 0.94, back: 0.98, mane: 0.8, tail: 1, maneN: 0.8 },
   warmblood: { girth: 1, legs: 1, bone: 1, neck: 1, neckW: 1, crest: 1, head: 1, croup: 1, back: 1, mane: 1, tail: 1, maneN: 1 },
   baroque: { girth: 1.05, legs: 0.97, bone: 1.04, neck: 0.98, neckW: 1.14, crest: 1.35, head: 1, croup: 1.08, back: 0.94, mane: 1.9, tail: 1.3, maneN: 1.4 },
   stock: { girth: 1.07, legs: 0.94, bone: 1.05, neck: 0.9, neckW: 1.06, crest: 1, head: 0.95, croup: 1.18, back: 0.93, mane: 0.85, tail: 1, maneN: 1 },
   cob: { girth: 1.13, legs: 0.9, bone: 1.2, neck: 0.9, neckW: 1.16, crest: 1.2, head: 1.04, croup: 1.1, back: 0.95, mane: 1.25, tail: 1.15, maneN: 1.3 },
   draft: { girth: 1.27, legs: 0.9, bone: 1.42, neck: 0.9, neckW: 1.32, crest: 1.4, head: 1.1, croup: 1.22, back: 1, mane: 1.1, tail: 1.1, maneN: 1.3 },
-  pony: { girth: 1.09, legs: 0.88, bone: 1.1, neck: 0.9, neckW: 1.08, crest: 1.1, head: 1.07, croup: 1.06, back: 0.96, mane: 1.3, tail: 1.2, maneN: 1.3 },
-  mini: { girth: 1.1, legs: 0.86, bone: 1.12, neck: 0.86, neckW: 1.1, crest: 1.1, head: 1.12, croup: 1.05, back: 0.95, mane: 1.5, tail: 1.25, maneN: 1.4 },
+  // (poneys : ronds, ventre plus profond, membres courts ; Shetland et Falabella plus encore)
+  pony: { girth: 1.12, legs: 0.86, bone: 1.1, neck: 0.9, neckW: 1.08, crest: 1.1, head: 1.07, croup: 1.06, back: 0.96, mane: 1.3, tail: 1.2, maneN: 1.3, depth: 1.03, ears: 0.85 },
+  mini: { girth: 1.15, legs: 0.82, bone: 1.12, neck: 0.86, neckW: 1.1, crest: 1.1, head: 1.12, croup: 1.05, back: 0.95, mane: 1.5, tail: 1.25, maneN: 1.4, depth: 1.04, ears: 0.78 },
 };
 
 /** Race d'un cheval : celle de l'animal, sinon celle gardée dans la robe, sinon devinée d'après la robe. */
@@ -61,10 +65,14 @@ export function foalBuild(b) {
   return {
     ...b,
     foal: 1,
-    legs: b.legs * 1.2,
+    // (membres longs, tronc court, étroit et peu profond : vide sous la poitrine plus de 0,6 du garrot)
+    legs: b.legs * 1.22,
     girth: b.girth * 0.84,
-    back: b.back * 0.85,
-    head: b.head * 1.16,
+    depth: (b.depth ?? 1) * 0.86,
+    back: b.back * 0.94,
+    head: b.head * 1.32,
+    // (tête de poulain : chanfrein court, front bombé — horseReal.js, headProfile)
+    foalHead: 1,
     neck: b.neck * 0.84,
     neckW: b.neckW * 0.86,
     crest: Math.min(b.crest, 1) * 0.7,

@@ -159,6 +159,8 @@ const _zAxis = new THREE.Vector3(0, 0, 1);
  */
 function realHorseBraids(model, ribbon, mane, add, covered = false) {
   const S = model.braidSpots;
+  // (les mèches de la crinière en cartes de crins rentrent dans les boutons : plus de crinière qui pend dessous)
+  model.setBraided?.(true);
   const r = (model.dims?.R ?? 0.32) * 0.085;
   const hairMat = mat(mane, 0.7);
   const ribbonMat = mat(ribbon, 0.5);
@@ -328,6 +330,7 @@ export function applyBeautyDecor(e, now) {
 export function removeBeautyDecor(e) {
   const cur = e.beautyDecor;
   if (!cur) return;
+  cur.model?.setBraided?.(false);
   for (const g of cur.groups) {
     g.parent?.remove(g);
     g.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
@@ -791,10 +794,15 @@ class BeautySession extends Session {
 
   update(dt) {
     this.updateCommon(dt);
-    if (this.state === 'done') return;
+    if (this.state === 'done') {
+      this.game.rig.frameWith = null;
+      return;
+    }
     const g = this.game;
     const pl = g.player;
     const e = this.e;
+    // La caméra cadre l'animal mené avec l'enfant (pas quand il est porté, sur la table ou au podium).
+    g.rig.frameWith = this.carried || this.onTable || this.phase === 'podium' ? null : e;
     this.phaseT += dt;
     this.judgeSprite.position.y = this.y(this.judgeSprite.position.x, this.judgeSprite.position.z) + 2.15 + Math.sin(this.time * 2) * 0.03;
     if (this.judgeNpc) {
@@ -1049,6 +1057,7 @@ class BeautySession extends Session {
   }
 
   cleanup() {
+    this.game.rig.frameWith = null;
     if (this.judgeNpc) {
       this.game.scene.remove(this.judgeNpc.root);
       disposeModel(this.judgeNpc.root);

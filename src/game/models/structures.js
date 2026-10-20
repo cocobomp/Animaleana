@@ -9,6 +9,7 @@ import { signTexture, planksTexture, roofTexture, stoneTexture, strawTexture, bu
 import { MeshBatch } from './shapes.js';
 import { STRUCTURES } from '../../sim/construction.js';
 import { salonModel } from './salon.js'; // salon de toilettage (métier Toiletteur)
+import { sandGeometry, SAND_OFFSET } from './buildings.js'; // sable des carrières au ras du terrain
 
 const mat = (color, roughness = 0.85, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
 const FLAT = () => 0;
@@ -306,12 +307,8 @@ function arenaModel(def, label, ground) {
   const g = new THREE.Group();
   const { w, d } = def;
   fenceRect(g, w, d, def.gate, ground, 'white');
-  const sandGeo = new THREE.PlaneGeometry(w - 0.3, d - 0.3, Math.ceil(w / 2), Math.ceil(d / 2));
-  sandGeo.rotateX(-Math.PI / 2);
-  const pos = sandGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) pos.setY(i, ground(pos.getX(i), pos.getZ(i)) + 0.05);
-  sandGeo.computeVertexNormals();
-  const sand = new THREE.Mesh(sandGeo, mat(0xd2bb8e, 1));
+  // (sable au ras du terrain, maille fine et décalage de profondeur, comme le paddock : buildings.js)
+  const sand = new THREE.Mesh(sandGeometry(w - 0.3, d - 0.3, ground), mat(0xd2bb8e, 1, SAND_OFFSET));
   sand.receiveShadow = true;
   g.add(sand);
   const red = mat(0xc8463c, 0.6);

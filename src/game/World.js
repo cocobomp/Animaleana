@@ -961,6 +961,13 @@ roughnessFactor = mix(roughnessFactor, 0.8, wFoam);`);
       : 0.3 + 0.9 * day * (1 - overcast * 0.3) + 0.5 * night;
     this.updateEnvironment(day, overcast, groundCol);
     this.scene.environmentIntensity = 0.45 + 0.4 * overcast;
+    // Robe des chevaux (horseCoat.js) : lumière du ciel pour son satiné et son liseré, et petit appoint quand
+    // le soleil est bas ou couché (la silhouette reste lisible au crépuscule).
+    const rim = 0.12 + 0.3 * day;
+    gfx.skyRim.value[0] = this.hemi.color.r * rim;
+    gfx.skyRim.value[1] = this.hemi.color.g * rim;
+    gfx.skyRim.value[2] = this.hemi.color.b * rim;
+    gfx.horseFill.value = 0.9 * smooth(28, -2, elev) + 0.6 * night;
 
     // Lumière principale : le soleil (ou la lune) suit le joueur pour garder des ombres nettes autour de lui.
     const lightDir = elev > 0 ? this.sunDir : this.moonDir;

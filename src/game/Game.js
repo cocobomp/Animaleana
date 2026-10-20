@@ -6,6 +6,8 @@ import { gfx } from './gfx.js';
 import { preloadModels, loadModel, MODELS } from './assets.js';
 import { REAL_HORSE_KEY, horseView, realHorseBase } from './models/horseReal.js'; // cheval réaliste : chargé à part
 import { REAL_DOG_KEYS, realDogBase } from './models/dogReal.js'; // chiens réalistes : chargés après le cheval
+import { hairTexture } from './models/horseHair.js';
+import { renderSetup, PixelBudget, SLOW_KEY } from './pixelBudget.js'; // définition et anticrénelage selon la qualité
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
@@ -88,8 +90,13 @@ export class Game {
     this.ui = ui;
     this.quality = readQuality();
     gfx.quality = this.quality;
-    const renderer = new THREE.WebGLRenderer({ antialias: this.quality === 'high', powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality === 'high' ? 2 : 1.25));
+    // Définition et anticrénelage (src/game/pixelBudget.js) : en qualité basse sur un écran fin, 1,5 pixel par
+    // point et MSAA, avec repli à 1,25 si les premières secondes de jeu sont trop lentes (retenu pour la suite).
+    const setup = renderSetup(this.quality, window.devicePixelRatio, readFlag(SLOW_KEY));
+    const renderer = new THREE.WebGLRenderer({ antialias: setup.msaa, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(setup.ratio);
+    gfx.msaa = setup.msaa && renderer.getContextAttributes?.()?.antialias !== false;
+    this.pixelBudget = setup.budget ? new PixelBudget() : null;
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = this.quality === 'high';
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -192,11 +199,13 @@ export class Game {
   }
 
   /**
-   * Le cheval réaliste est chargé. Ses données de repos (≈ 0,3 s de calcul, une fois) sont tirées du GLB
-   * juste après, hors de l'image en cours ; puis les chevaux déjà là avec le modèle de repli prennent le
+   * Le cheval réaliste est chargé. La texture des crins puis ses données de repos (≈ 0,3 s de calcul, une fois)
+   * sont faites juste après, hors de l'image en cours ; puis les chevaux déjà là avec le modèle de repli prennent le
    * réaliste, un par image (Game.frame : swapRealHorses), et les vignettes de chevaux sont refaites.
    */
   onRealHorse(gltf) {
+    // (texture des crins, faite en code une fois : ≈ 30 ms, dans sa propre tâche plutôt qu'au premier cheval)
+    setTimeout(() => hairTexture(), 0);
     setTimeout(() => {
       try {
         realHorseBase(gltf);
@@ -655,6 +664,20 @@ export class Game {
     if (!this.running) {
       this.renderer.render(this.scene, this.camera);
       return;
+    }
+    // Premières secondes de jeu en qualité basse : trop lentes à 1,5 pixel par point, on redescend.
+    if (this.pixelBudget) {
+      const r = this.pixelBudget.frame(dt, this.renderer.getPixelRatio());
+      if (r) {
+        this.renderer.setPixelRatio(r);
+        // (retenu : aux parties suivantes, l'ancien réglage, 1,25 sans anticrénelage)
+        try {
+          localStorage.setItem(SLOW_KEY, '1');
+        } catch {
+          /* rien */
+        }
+      }
+      if (this.pixelBudget.done) this.pixelBudget = null;
     }
     // Pendant le trajet (écran du voyage), la ferme est en pause : TripFlow fait avancer le voyage et dessine la 3D.
     if (this.tripFlow.frame(dt)) return;
@@ -2011,6 +2034,15 @@ export class Game {
         return (xp - a) / (b - a);
       })(),
     };
+  }
+}
+
+/** Drapeau du stockage local ('1'), faux si le stockage est indisponible. */
+function readFlag(key) {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
   }
 }
 

@@ -431,8 +431,9 @@ describe('saut d\'obstacle du cheval réaliste', () => {
       rider.position.copy(seat);
       pitchAbout({ scaleGroup: sg }, pitch, md.y0 * sc, -0.075 * sc, rider);
       const s = saddle();
-      // (autour du sol sous le ventre, la selle reculait ou avançait de ≈ 25 cm)
-      expect(Math.abs(s.z - rest.z)).toBeLessThan(0.06);
+      // (autour du sol sous le ventre, la selle reculait ou avançait de ≈ 25 cm ; autour du centre du tronc, de son
+      // demi-rayon × sin 0,16 — un peu plus avec la poitrine plus profonde de l'étape 7 : 6 cm)
+      expect(Math.abs(s.z - rest.z)).toBeLessThan(0.065);
       expect(rider.position.distanceTo(s)).toBeLessThan(0.002 + seat.distanceTo(rest));
       expect(rider.rotation.x).toBe(pitch);
     }
@@ -580,7 +581,41 @@ describe('concours de beauté sur le cheval réaliste', () => {
     // Les tresses de la crête sont sur l'encolure, pas loin au-dessus (rayons arrêtés par les cartes de crins).
     const top = md.coatMesh.geometry.boundingBox ?? (md.coatMesh.geometry.computeBoundingBox(), md.coatMesh.geometry.boundingBox);
     expect(crest.y).toBeLessThan(top.max.y + 0.1);
+    // Crinière tressée : les mèches des cartes de crins rentrent dans les boutons, et ressortent sans les tresses.
+    expect(md.hairMesh.material.userData.hairBraid.value).toBe(1);
     Beauty.removeBeautyDecor(e);
+    expect(md.hairMesh.material.userData.hairBraid.value).toBe(0);
+    md.dispose();
+  });
+
+  it.each(['selle_francais', 'arabe'])('%s : la tresse de queue suit les crins pendant un coup de queue', (breed) => {
+    const { md, e } = dressed(breed);
+    // (instants des allures fixés : le mixeur part sinon d'un instant tiré au sort)
+    md.anim.t = 10;
+    for (const act of Object.values(md.anim.actions)) act.time = act.getClip().duration * 0.3;
+    md.anim.mixer.update(0);
+    // (coup de queue le plus fort de tailSwish : 0,35 rad, Tail1 à 0,6 × comme dans overlay)
+    md.tail.rotateZ(0.35 * 0.6);
+    md.tailTip.rotateZ(0.35);
+    md.root.updateMatrixWorld(true);
+    md.hairMesh.skeleton.update();
+    const g = md.hairMesh.geometry.attributes;
+    const pts = [];
+    const v = new THREE.Vector3();
+    for (let i = 0; i < g.position.count; i++) if (g.hairRoot.getW(i) === 2) pts.push(md.hairMesh.getVertexPosition(i, v).clone());
+    const beads = [];
+    for (const grp of e.beautyDecor.groups) if ((grp.parent === md.tail || grp.parent === md.tailTip) && grp.isMesh) beads.push(grp.getWorldPosition(new THREE.Vector3()));
+    expect(beads.length).toBeGreaterThan(5);
+    for (const b of beads) {
+      // crins de la queue à la hauteur de la perle : la perle est dans leur largeur (sans les 10 % des bords)
+      const near = pts.filter((p) => Math.abs(p.y - b.y) < 0.025);
+      expect(near.length, `${breed} y ${b.y.toFixed(2)}`).toBeGreaterThan(4);
+      const xs = near.map((p) => p.x).sort((x, y) => x - y);
+      const lo = xs[Math.floor(xs.length * 0.1)];
+      const hi = xs[Math.floor(xs.length * 0.9)];
+      expect(b.x, `${breed} y ${b.y.toFixed(2)} : perle sur la queue`).toBeGreaterThan(lo - 0.01);
+      expect(b.x, `${breed} y ${b.y.toFixed(2)} : perle sur la queue`).toBeLessThan(hi + 0.01);
+    }
     md.dispose();
   });
 

@@ -21,20 +21,45 @@ float hNoise(vec3 x) {
              mix(mix(hHash(i + vec3(0, 0, 1)), hHash(i + vec3(1, 0, 1)), f.x), mix(hHash(i + vec3(0, 1, 1)), hHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
 }
 float hFbm(vec3 p) { return hNoise(p) * 0.55 + hNoise(p * 2.03 + 7.1) * 0.3 + hNoise(p * 4.1 + 3.3) * 0.15; }
-// Bruit cellulaire : distance au centre de cellule le plus proche, et une valeur propre à la cellule.
-vec2 hCell(vec3 p) {
-  vec3 i = floor(p); vec3 f = fract(p); float d = 8.0; float id = 0.0;
+// Bruit cellulaire : distances aux deux centres de cellule les plus proches (F1, F2 : F2 - F1 est nul sur la
+// frontière entre deux cellules, un réseau de lignes de largeur égale) et une valeur propre à la cellule.
+vec3 hCell(vec3 p) {
+  vec3 i = floor(p); vec3 f = fract(p); float d = 8.0; float d2 = 8.0; float id = 0.0;
   for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
     vec3 g = vec3(float(x), float(y), float(z));
     vec3 o = vec3(hHash(i + g), hHash(i + g + 19.1), hHash(i + g + 47.7));
     vec3 r = g + o - f; float dd = dot(r, r);
-    if (dd < d) { d = dd; id = hHash(i + g + 5.3); }
+    if (dd < d) { d2 = d; d = dd; id = hHash(i + g + 5.3); } else if (dd < d2) { d2 = dd; }
   }
-  return vec2(sqrt(d), id);
+  return vec3(sqrt(d), sqrt(d2), id);
 }`;
+
+/**
+ * Réglages des robes (étape 8 du plan « cheval beau ») : lus par le shader (constantes écrites dans son texte) et
+ * par les tests. Gris pommelé : fond foncé entre les pommelures (dark), centres éclaircis (light), cellules par
+ * mètre (cell) et rayon d'une pommelure (r, en cellules). Pie : bruit déformé (warp, m), bord net mais déchiqueté
+ * (jag). Léopard : rayon des taches (en cellules de 15 cm environ), halo marbré autour. Isabelle : largeur de la
+ * raie de mulet (m).
+ */
+export const COAT_LOOKS = {
+  dapple: { dark: 0.45, light: 0.1, cell: 7.5, r: 0.4 },
+  pinto: { warp: 0.15, jag: 0.06 },
+  spots: { rMin: 0.13, rMax: 0.38, halo: 0.08 },
+  dun: { stripe: 0.03 },
+  // robes dorées : pommelures de santé (fond × 1 - dark), plus marquées sur le palomino
+  bloom: { dark: 0.16 },
+};
+
+const glf = (x) => Number(x).toFixed(4);
+const { dapple: DAP, pinto: PIN, spots: SPOT, dun: DUN } = COAT_LOOKS;
 
 const COAT_FRAGMENT = /* glsl */ `
 hBare = 0.0;
+hMuz = 0.0;
+hHoofV = 0.0;
+hGrainV = 0.5;
+hDarkV = 0.0;
+hEarIn = 0.0;
 {
   vec3 P = vHPos;
   float part = vHPart;
@@ -43,11 +68,19 @@ hBare = 0.0;
   float isHoof = step(5.5, part) * step(part, 6.5);
   float isSkin = step(6.5, part) * step(part, 7.5);
   float isEar = step(7.5, part);
+  float h = vHInfo.x;          // membres : hauteur relative (0 = sol, 1 = coude) ; oreilles : 0 = base, 1 = pointe
+  vec3 hl = vHInfo;            // tête : position dans le repère de la tête (÷ longueur de la tête)
+  float legI = vHInfo.y;
+  vec2 hc = vec2(0.0);
 #ifdef H_REAL
-  // Cheval réaliste : la corne commence à une hauteur nette (couronne), pas au bord d'un triangle.
+  // Cheval réaliste : la corne commence à la couronne, une hauteur nette (pas le bord d'un triangle) qui descend de
+  // la pince vers les talons ; les glomes, au-dessus de la couronne des talons, restent de peau et de poil (ils
+  // étaient peints en corne : des « ergots » gris derrière le paturon).
   {
     float lh = isLeg + isHoof;
-    isHoof = lh * (1.0 - smoothstep(hHoofY - 0.003, hHoofY + 0.003, P.y));
+    hc = legI < 0.5 ? hHoofA.xy : legI < 1.5 ? hHoofA.zw : legI < 2.5 ? hHoofB.xy : hHoofB.zw;
+    float cor = hHoofY * mix(0.55, 1.0, smoothstep(-0.045, 0.03, P.z - hc.y));
+    isHoof = lh * (1.0 - smoothstep(cor - 0.003, cor + 0.003, P.y));
     isLeg = lh - isHoof;
   }
 #endif
@@ -57,35 +90,60 @@ hBare = 0.0;
 #else
   float headW = isHead;
 #endif
-  float h = vHInfo.x;          // membres : hauteur relative (0 = sol, 1 = coude) ; oreilles : 0 = base, 1 = pointe
-  vec3 hl = vHInfo;            // tête : position dans le repère de la tête (÷ longueur de la tête)
-  float legI = vHInfo.y;
   float up = normalize(vHNrm).y;
   float aa = clamp(length(fwidth(P)) * 140.0, 0.0, 1.0); // atténue les détails fins au loin (pas de scintillement)
+  // (motifs larges — pommelures, taches — fondus en leur moyenne seulement quand un pixel couvre plusieurs cm)
+  float aaW = clamp(length(fwidth(P)) * 22.0 - 0.15, 0.0, 1.0);
   vec3 c = hCoat * 0.9;
 
+  // (grain du poil, en traînées le long du corps : casse le reflet)
+  hGrainV = mix(hNoise(P * vec3(240.0, 120.0, 45.0)), 0.5, aa);
   // Reflets doux : zones un peu plus chaudes ou plus froides, jamais un aplat.
   float n1 = hFbm(P * 2.3 + hSeed);
   c *= 0.93 + n1 * 0.14;
 
-  // Gris : pommelures sur le corps, tête et bas des membres plus sombres.
+  // Gris pommelé : pommelures rondes aux bords doux, plus claires au centre, sur un fond gris plus foncé qui les
+  // sépare, un peu déformées et de tailles inégales (8 à 12 cm) ; nettes sur le corps, la croupe et l'épaule,
+  // fondues vers le ventre et le bas des membres ; tête et bas des membres plus foncés. (Avant : le fond
+  // n'assombrissait que de 20 % au plus, sous le grain du modelé : on ne voyait aucune pommelure.)
   if (hGrey > 0.0) {
-    vec2 cl = hCell(P * 8.5 + hSeed);
-    float net = smoothstep(0.32, 0.62, cl.x + (hNoise(P * 30.0) - 0.5) * 0.12);
-    float zone = (isBody + isLeg * smoothstep(0.55, 0.9, h)) * smoothstep(-0.6, 0.2, up);
-    c *= 1.0 - net * 0.2 * zone * hGrey * (0.55 + 0.45 * hFbm(P * 1.2 + 3.0));
-    c *= 1.0 + (1.0 - net) * 0.05 * zone * hGrey;
-    c = mix(c, c * 0.62, isLeg * (1.0 - smoothstep(0.12, 0.5, h)) * 0.8);
-    c = mix(c, c * 0.78, isHead * smoothstep(0.55, 0.95, hl.z) * 0.7);
+    vec3 Pd = P + (vec3(hNoise(P * 3.1 + hSeed), hNoise(P * 3.1 + hSeed + 11.0), hNoise(P * 3.1 + hSeed + 23.0)) - 0.5) * 0.09;
+    vec3 cl = hCell(Pd * ${glf(DAP.cell)} + hSeed);
+    float rD = ${glf(DAP.r)} + cl.z * 0.12;
+    float dd = cl.x + (hNoise(P * 26.0) - 0.5) * 0.1;
+    float net = smoothstep(rD - 0.16, rD + 0.05, dd);
+    float ctr = 1.0 - smoothstep(0.0, rD, dd);
+    net = mix(net, 0.45, aaW);
+    ctr = mix(ctr, 0.25, aaW);
+    float zone = min(1.0, (isBody + isLeg * smoothstep(0.55, 0.9, h)) * smoothstep(-0.7, 0.1, up) * hGrey * (0.6 + 0.55 * hFbm(P * 1.3 + 3.0)));
+    c *= 1.0 - net * ${glf(DAP.dark)} * zone;
+    c *= 1.0 + ctr * ${glf(DAP.light)} * zone;
+    c = mix(c, c * 0.55, isLeg * (1.0 - smoothstep(0.12, 0.55, h)) * 0.85);
+    c = mix(c, c * 0.74, isHead * smoothstep(0.5, 0.95, hl.z) * 0.8);
   }
+
+  // Robes dorées (palomino surtout, un peu l'alezan et le bai) : pommelures de santé, discrètes, et un ton plus chaud
+  // et plus saturé dans la lumière (avant : un jaune plat, en plastique beige en basse).
+  // (les pommelures, le seul calcul coûteux, ne sont faites que là où elles se voient : pas sur le bai, la robe la
+  // plus courante, où elles ne faisaient que 4 %)
+  if (hGold * hGoldDap > 0.3 && hGrey <= 0.0) {
+    vec3 Pd = P + (vec3(hNoise(P * 3.1 + hSeed), hNoise(P * 3.1 + hSeed + 11.0), 0.5) - 0.5) * 0.08;
+    vec3 cl = hCell(Pd * ${glf(DAP.cell * 0.9)} + hSeed * 1.7);
+    float net = mix(smoothstep(0.3, 0.55, cl.x + (hNoise(P * 26.0) - 0.5) * 0.1), 0.45, aaW);
+    float zone = isBody * smoothstep(-0.3, 0.4, up) * (0.4 + 0.7 * hFbm(P * 1.3 + 9.0)) * hGold * hGoldDap;
+    c *= 1.0 - net * ${glf(COAT_LOOKS.bloom.dark)} * zone;
+  }
+  c = mix(c, c * vec3(1.06, 0.98, 0.84), hGold * hGoldDap * isBody * 0.7);
 
   // Contre-ombrage : dos un peu plus foncé, ventre et intérieur des membres nettement plus clairs (le
   // ventre reste lisible au soleil, la lumière du sol l'éclaire peu). Le haut des membres suit la même
-  // règle que le corps : pas de changement de teinte là où le membre sort du corps.
+  // règle que le corps : pas de changement de teinte là où le membre sort du corps. (Robes presque noires :
+  // presque rien d'ajouté, sinon un voile gris de latex sous le ventre.)
   float under = smoothstep(0.1, -0.8, up) * (isBody + isLeg);
   float inner = isLeg * smoothstep(0.15, 0.85, -sign(P.x) * normalize(vHNrm).x);
   float belly = under * isBody;
-  c = mix(c, c * 1.38 + 0.03, clamp(under + inner * 0.55, 0.0, 1.0) * 0.62);
+  float lift = 0.03 * clamp(dot(hCoat, vec3(0.2126, 0.7152, 0.0722)) * 8.0 + 0.3, 0.0, 1.0);
+  c = mix(c, c * 1.38 + lift, clamp(under + inner * 0.55, 0.0, 1.0) * 0.62);
   c *= 1.0 - smoothstep(0.55, 1.0, up) * 0.06 * isBody;
   // Pangaré (Fjord, poneys) : ventre, tour des yeux et bout du nez plus clairs.
   float muzzleZone = isHead * smoothstep(0.82, 0.95, hl.z);
@@ -96,19 +154,31 @@ hBare = 0.0;
   c = mix(c, hPointC * 0.95 + c * 0.05, pts * hPoints);
   c = mix(c, hPointC, isEar * smoothstep(0.65, 0.95, h) * max(hPoints, 0.6));
 
-  // Pie (tobiano) : grandes plaques blanches qui coupent le dos, membres blancs, tête foncée.
+  // Pie (tobiano) : grandes plaques blanches plus hautes que larges, qui descendent du dos (elles le coupent entre
+  // le garrot et la croupe) et montent des membres, aux bords nets mais déchiquetés (bruit déformé : plus les taches
+  // rondes d'une vache) ; tête foncée (sa marque en tête à part).
   if (hPinto > 0.0) {
-    float pn = hFbm(P * vec3(1.7, 1.4, 1.7) + hSeed * 3.1) + (hNoise(P * 9.0) - 0.5) * 0.06;
-    float t = pn + isLeg * (1.0 - smoothstep(0.1, 0.7, h)) * 0.45 - headW * 0.5 + isBody * smoothstep(0.35, 0.9, up) * smoothstep(-0.6, -0.2, -abs(P.z + 0.1)) * 0.12;
-    c = mix(c, hSec, smoothstep(0.49, 0.51, t) * hPinto * (1.0 - isHoof - isSkin));
+    // (bruit étiré en hauteur : des plaques verticales)
+    vec3 q = P * vec3(1.3, 0.6, 2.0) + hSeed * 3.1;
+    vec3 w = vec3(hFbm(q * 1.6 + 1.7), hFbm(q * 1.6 + 9.2), hFbm(q * 1.6 + 4.4)) - 0.5;
+    vec3 qw = q + w * ${glf(PIN.warp * 3.0)};
+    // (deux octaves seulement : les fines feraient des îlots, des taches de vache)
+    float pn = hNoise(qw) * 0.68 + hNoise(qw * 2.03 + 7.1) * 0.32;
+    float jag = (hNoise(P * 20.0 + hSeed) - 0.5) * ${glf(PIN.jag)};
+    float back = isBody * smoothstep(0.2, 0.85, up) * (1.0 - smoothstep(0.25, 0.55, abs(P.z + 0.12)));
+    float t = pn + jag + isLeg * (1.0 - smoothstep(0.1, 0.75, h)) * 0.45 - headW * 0.55 + back * 0.12;
+    float wdt = max(fwidth(t) * 0.75, 0.002);
+    c = mix(c, hSec, smoothstep(0.56 - wdt, 0.56 + wdt, t) * hPinto * (1.0 - isHoof - isSkin));
   }
 
-  // Isabelle / souris : raie de mulet le long du dos, zébrures sur les membres.
+  // Isabelle / souris : raie de mulet nette et assez large le long du dos (du garrot à la queue), zébrures sur les
+  // membres, tête un peu plus foncée.
   if (hDun > 0.0) {
-    float stripe = (1.0 - smoothstep(0.01, 0.028, abs(P.x) + (hNoise(P * 28.0) - 0.5) * 0.012)) * smoothstep(0.7, 0.95, up) * isBody;
-    c = mix(c, hPointC * 0.75 + hCoat * 0.25, stripe * hDun);
-    float bars = isLeg * smoothstep(0.5, 0.62, h) * (1.0 - smoothstep(0.8, 0.95, h)) * smoothstep(0.35, 0.95, sin(P.y * 75.0 + hSeed));
-    c = mix(c, c * 0.72, bars * 0.55 * hDun);
+    float stripe = (1.0 - smoothstep(${glf(DUN.stripe * 0.55)}, ${glf(DUN.stripe)}, abs(P.x) + (hNoise(P * 28.0) - 0.5) * 0.012)) * smoothstep(0.62, 0.9, up) * isBody;
+    c = mix(c, hPointC * 0.85 + hCoat * 0.15, stripe * hDun * 0.9);
+    float bars = isLeg * smoothstep(0.48, 0.6, h) * (1.0 - smoothstep(0.82, 0.97, h)) * smoothstep(0.3, 0.9, sin(P.y * 70.0 + hSeed + hNoise(P * 9.0) * 2.0));
+    c = mix(c, mix(c, hPointC, 0.45), bars * 0.75 * hDun);
+    c = mix(c, c * 0.8, isHead * smoothstep(0.35, 0.8, hl.z) * 0.6 * hDun);
   }
 
   // Gris truité : petites mouchetures brun-roux, surtout sur la tête, l'encolure et le corps.
@@ -117,23 +187,41 @@ hBare = 0.0;
     c = mix(c, vec3(0.42, 0.27, 0.18), fl * 0.75 * hFlea);
   }
 
-  // Rouan : poils blancs mêlés à la robe (pas sur la tête ni le bas des membres).
+  // Rouan : poils blancs mêlés à la robe ; la tête et le bas des membres gardent la couleur de base, plus foncée.
   if (hRoan > 0.0) {
     float speck = mix(step(0.55, hNoise(P * 170.0)), 0.45, aa);
     float zone = isBody + isLeg * smoothstep(0.5, 0.75, h);
-    c = mix(c, hWhite, speck * 0.55 * hRoan * zone);
+    c = mix(c, hWhite, speck * 0.6 * hRoan * zone);
+    c = mix(c, c * 0.82, (isHead + isLeg * (1.0 - smoothstep(0.35, 0.6, h))) * hRoan * 0.7);
   }
 
-  // Léopard (robe blanche à taches) et couverture (croupe blanche tachetée).
+  // Léopard (robe blanche à taches) et couverture (croupe blanche tachetée) : taches de tailles inégales, un peu
+  // allongées, plus nombreuses vers l'arrière, cernées d'un halo marbré (la peau foncée sous le poil blanc) ; plus
+  // petites sur la tête et le bas des membres ; bord de la couverture givré. (Avant : des pois ronds tous pareils.)
   if (hLeopard + hBlanket > 0.0) {
-    vec2 cl = hCell(P * vec3(8.5, 8.5, 7.5) + hSeed);
-    float r = 0.16 + cl.y * 0.24;
-    float spot = (1.0 - smoothstep(r - 0.03, r + 0.03, cl.x + (hNoise(P * 45.0) - 0.5) * 0.07)) * step(0.22, cl.y);
+    vec3 cl = hCell(P * vec3(7.6, 8.6, 6.0) + hSeed);
+    float small = clamp(isHead + isLeg * (1.0 - smoothstep(0.3, 0.85, h)), 0.0, 1.0);
+    float r = mix(${glf(SPOT.rMin)}, ${glf(SPOT.rMax)}, fract(cl.z * 3.7)) * mix(1.15, 0.7, small);
+    float dd = cl.x + (hNoise(P * 45.0) - 0.5) * 0.06;
+    float rear = smoothstep(0.35, -0.55, P.z);
+    float present = step(mix(0.2, 0.03, rear) - hBlanket * 0.1, fract(cl.z * 7.31));
+    float spot = (1.0 - smoothstep(r - 0.025, r + 0.025, dd)) * present;
+    float halo = (1.0 - smoothstep(r + 0.02, r + ${glf(SPOT.halo + 0.04)}, dd)) * present * (1.0 - spot) * (0.45 + 0.55 * hNoise(P * 90.0));
     if (hBlanket > 0.0) {
-      float bl = smoothstep(-0.05, 0.05, -(P.z + 0.15) + (hFbm(P * 3.0) - 0.5) * 0.25) * smoothstep(-0.35, 0.1, up) * isBody;
-      c = mix(c, mix(hSec, hCoat, spot), bl * hBlanket);
+      float edge = -(P.z + 0.15) + (hFbm(P * 3.0) - 0.5) * 0.25 + (hNoise(P * 14.0) - 0.5) * 0.08;
+      // (bas de la couverture d'après la hauteur, pas d'après l'orientation de la peau ni la partie du corps,
+      // constante par triangle : elle découpait des dents de scie sur la cuisse)
+      float onBody = smoothstep(1.02, 1.22, h + (hFbm(P * 4.0 + 5.0) - 0.5) * 0.25) * (isBody + isLeg);
+      float bl = smoothstep(-0.04, 0.04, edge) * onBody;
+      float frost = (1.0 - smoothstep(0.0, 0.12, abs(edge + 0.06))) * mix(step(0.5, hNoise(P * 150.0)), 0.5, aa) * onBody;
+      vec3 inside = mix(hSec, hCoat, spot);
+      inside = mix(inside, mix(hSec, hCoat, 0.3), halo * 0.5);
+      c = mix(c, hSec, frost * 0.6 * hBlanket);
+      c = mix(c, inside, bl * hBlanket);
     } else {
-      c = mix(c, hSec, spot * hLeopard * (1.0 - isHoof - isSkin));
+      float k = hLeopard * (1.0 - isHoof - isSkin);
+      c = mix(c, mix(hCoat, hSec, 0.45), halo * 0.7 * k);
+      c = mix(c, hSec, spot * k);
     }
   }
 
@@ -142,14 +230,19 @@ hBare = 0.0;
   float sock = isLeg * step(0.01, sockH) * (1.0 - smoothstep(sockH - 0.015, sockH + 0.015, h + (hNoise(P * 35.0) - 0.5) * 0.07));
   c = mix(c, hWhite, sock);
 
-  // Marques en tête : étoile, liste, large liste, ladre (repère de la tête : z = 0 nuque, 1 bout du nez).
+  // Marques en tête : étoile, liste, large liste, ladre (repère de la tête : z = 0 nuque, 1 bout du nez). Bords
+  // irréguliers : la largeur de la liste ondule le long du chanfrein, pas pareil des deux côtés, avec une dentelure
+  // fine (avant : un ruban adhésif aux bords parallèles).
   float face = 0.0;
   if (hFace > 0.5 && isHead > 0.5) {
     float fn = (hNoise(P * 40.0) - 0.5) * 0.06;
+    float wob = (hNoise(vec3(hl.z * 9.0, hSeed, 1.7)) - 0.5) * 0.024 + (hNoise(vec3(hl.z * 31.0, hl.x * 18.0, hSeed)) - 0.5) * 0.01
+      + (hNoise(vec3(hl.z * 6.0 + sign(hl.x) * 3.1, hSeed, 4.2)) - 0.5) * 0.014;
+    float ax = abs(hl.x) + wob;
     float front = smoothstep(-0.02, 0.06, hl.y + 0.1 * smoothstep(0.75, 1.0, hl.z));
     float star = 1.0 - smoothstep(0.8, 1.0, length(vec2(hl.x / 0.045, (hl.z - 0.31) / 0.05)) + fn * 6.0 + (hNoise(P * 90.0) - 0.5) * 0.35);
-    float stripe = (1.0 - smoothstep(0.018, 0.03, abs(hl.x) + fn * 0.4)) * smoothstep(0.3, 0.34, hl.z) * (1.0 - smoothstep(0.9, 0.95, hl.z));
-    float blaze = (1.0 - smoothstep(0.045, 0.06, abs(hl.x) - hl.z * 0.035 + fn)) * smoothstep(0.24, 0.28, hl.z);
+    float stripe = (1.0 - smoothstep(0.016, 0.027, ax + fn * 0.4)) * smoothstep(0.3, 0.34, hl.z) * (1.0 - smoothstep(0.9, 0.95, hl.z));
+    float blaze = (1.0 - smoothstep(0.042, 0.054, ax - hl.z * 0.035 + fn)) * smoothstep(0.24, 0.28, hl.z);
     float snip = 1.0 - smoothstep(0.85, 1.05, length(vec2(hl.x / 0.05, (hl.z - 0.93) / 0.05)) + fn * 4.0);
     face = hFace < 1.5 ? star : hFace < 2.5 ? max(star * 0.9, stripe) : hFace < 3.5 ? max(star, blaze) : snip;
     face *= front;
@@ -165,32 +258,152 @@ hBare = 0.0;
 
   // Naseaux en virgule (peints aussi : ils restent nets même quand le maillage est grossier).
 #ifdef H_REAL
-  float nos = 0.0; // (déjà dans le modelé de la texture)
+  // Cheval réaliste : le bout du nez a un poil ras et clairsemé (plus foncé, plus lisse, hMuz) ; naseau ouvert,
+  // une virgule sombre autour de la fente du modèle (hNos : centre et taille, repère de la tête), à peine
+  // visible depuis que le modelé peint est adouci.
+  hMuz = isHead * smoothstep(0.84, 0.97, hl.z);
+  c *= 1.0 - 0.16 * hMuz * (1.0 - face);
+  vec3 nq = vec3(abs(hl.x) - hNos.x, hl.y - hNos.y, hl.z - hNos.z);
+  float nd = length(vec3((nq.x - nq.z * 0.35) / hNos.w, (nq.y + nq.x * 0.5) / (hNos.w * 0.8), nq.z / (hNos.w * 1.25)));
+  float nos = isHead * step(0.001, hNos.w) * (1.0 - smoothstep(0.62, 1.0, nd));
+  float nosRim = isHead * step(0.001, hNos.w) * (1.0 - smoothstep(1.0, 1.7, nd)) * (1.0 - nos);
+  c = mix(c, c * 0.72, nosRim * 0.6);
+  c = mix(c, hSkin * 0.32, nos * 0.92);
+  // Yeux : bord des paupières foncé (l'œil se lit plus grand, même de loin) ; gris et appaloosas : peau noire
+  // marbrée (de rose chez l'appaloosa) autour des yeux et au bout du nez, sous un poil clair et ras.
+  float eyeD = hEye.w > 0.0 ? length(vec3(abs(hl.x) - hEye.x, hl.y - hEye.y, hl.z - hEye.z)) / hEye.w : 99.0;
+  if (hSkinMot > 0.0) {
+    float mot = hNoise(P * 60.0 + hSeed) * 0.65 + hNoise(P * 150.0) * 0.35;
+    vec3 mottled = mix(hSkin, vec3(0.55, 0.4, 0.38), smoothstep(0.56, 0.7, mot) * hSkinPink);
+    float spect = 1.0 - smoothstep(1.3, 2.5, eyeD + (hNoise(P * 40.0) - 0.5) * 0.6);
+    float snout = smoothstep(0.74, 0.88, hl.z + (hNoise(P * 30.0) - 0.5) * 0.05);
+    c = mix(c, mottled, isHead * clamp(spect * 0.6 + snout * 0.9, 0.0, 1.0) * hSkinMot * (1.0 - face * 0.6));
+  }
+  // (plus épais au-dessus : le bord de la paupière supérieure et ses cils)
+  float lidR = hl.y > hEye.y ? 1.24 : 1.14;
+  float lidD = isHead * (1.0 - smoothstep(1.03, lidR, eyeD));
+  c = mix(c, hSkin * 0.5, lidD * 0.88);
+  // Intérieur des oreilles (face avant creusée, hors du bord) : peau foncée au fond, poils clairs vers les bords.
+  {
+    float inEar = isEar * clamp(vHInfo.z, 0.0, 1.0) * (1.0 - smoothstep(0.78, 0.98, abs(vHInfo.y))) * (1.0 - smoothstep(0.8, 0.95, h));
+    // (poils clairs en mèches, plus nombreux le long des bords et en bas de l'oreille, sur un fond plus foncé que la
+    // robe ; mat : pas le reflet d'un creux de plastique noir)
+    float hairs = clamp(smoothstep(0.2, 0.65, abs(vHInfo.y)) + 1.0 - smoothstep(0.25, 0.5, h), 0.0, 1.0) * 0.75 + 0.25;
+    float streak = 0.45 + 0.55 * hNoise(vec3(vHInfo.y * 18.0, h * 5.0, hSeed));
+    vec3 inC = mix(c * 0.45 + hSkin * 0.25, vec3(0.66, 0.62, 0.56), hairs * streak);
+    c = mix(c, inC, inEar * 0.85);
+    hEarIn = inEar;
+  }
+  float nosB = nos;
 #else
   float nos = isHead * (1.0 - smoothstep(0.8, 1.0, length(vec3((abs(hl.x) - 0.064) / 0.016, (hl.y + 0.045 + (abs(hl.x) - 0.064) * 0.8) / 0.036, (hl.z - 0.97) / 0.06))));
   c = mix(c, hSkin * 0.6, nos);
+  float nosB = nos;
 #endif
   // Peau nue (intérieur des oreilles et des naseaux, paupières) et sabots.
   c = mix(c, hSkin, isSkin);
-  hBare = max(isSkin, max(nos, isHoof * 0.7));
+  hBare = max(isSkin, max(nosB, isHoof * 0.7));
+#ifdef H_REAL
+  hBare = max(hBare, lidD);
+#endif
+  // Sabots : corne foncée, ou claire et propre sous une balzane, stries verticales de pousse bien marquées ;
+  // appaloosa : corne rayée de bandes claires et foncées.
   vec3 hoof = mix(hHoof, hHoofLight, step(0.01, sockH));
-  hoof *= 0.9 + 0.12 * hNoise(vec3(P.x * 260.0, P.y * 8.0, P.z * 260.0));
+  hoof *= 0.84 + 0.22 * hNoise(vec3(P.x * 260.0, P.y * 6.0, P.z * 260.0));
+  if (hHoofStripe > 0.0) {
+    // (bandes verticales : angle autour du centre du sabot)
+    float band = smoothstep(0.4, 0.6, hNoise(vec3(atan(P.x - hc.x, P.z - hc.y) * 4.5, P.y * 3.0, hSeed)));
+    hoof = mix(hoof, mix(hHoof, hHoofLight, band), hHoofStripe);
+  }
   c = mix(c, hoof, isHoof);
+  hHoofV = isHoof;
 
   // Grain du poil (fin, couché vers l'arrière) et occlusion ambiante cuite.
 #ifdef H_REAL
-  // Modelé peint du modèle réaliste (muscles, poil, corne) : gris, 0,5 = moyen.
-  c *= hDetTex.r * 2.0;
+  // Modelé peint du modèle réaliste (muscles, poil, corne) : gris, 0,5 = moyen. C'est une photo : elle porte
+  // aussi l'éclairage de la prise de vue (côtes, creux des muscles), qui doublait celui du jeu (robe « sale »,
+  // « on voit les côtes »). Adouci (hDetail : 0,5, 0,35 sur les robes claires), sur la corne un peu (stries),
+  // beaucoup sur la corne claire (le modelé d'origine la salissait de gris-vert) et sur les balzanes (l'ombre
+  // peinte de la balzane d'origine les coupait en deux) ; le relief reste porté par la carte de normales.
+  float hDet = mix(hDetail, mix(0.55, 0.3, step(0.01, sockH)), isHoof);
+  hDet = mix(hDet, 0.2, sock * (1.0 - isHoof));
+  c *= mix(1.0, hDetTex.r * 2.0, hDet);
 #else
   c *= 1.0 + (hNoise(P * vec3(320.0, 110.0, 70.0)) - 0.5) * 0.07 * (1.0 - aa) * (1.0 - isHoof);
 #endif
   // (plancher plus haut dessous : le ventre et l'intérieur des cuisses ne tombent pas au noir)
   c *= mix(mix(0.42, 0.62, clamp(under + inner, 0.0, 1.0)), 1.0, vHAO);
+  hDarkV = 1.0 - smoothstep(0.012, 0.05, dot(c, vec3(0.2126, 0.7152, 0.0722)));
   diffuseColor.rgb = c;
 }`;
 
+/**
+ * Satiné du poil ras et liseré de lumière, en qualité basse comme en haute (la robe en MeshStandard n'a pas de
+ * sheen : elle était mate, « en plastique ») : un terme de bord (Fresnel) teinté par la robe, éclairé par le
+ * ciel (gfx.skyRim) et par le soleil — fort en contre-jour, doré le soir puisque le soleil l'est. Pas sur la
+ * peau nue ni sur la corne. Plus un petit appoint du soir et de la nuit (hFill) pour que la silhouette du
+ * cheval reste lisible quand le soleil est couché. Quelques instructions par pixel.
+ */
+const RIM_FRAGMENT = /* glsl */ `
+{
+  vec3 hV = normalize( vViewPosition ); // (vers la caméra)
+  float hF = pow( 1.0 - saturate( dot( normal, hV ) ), 4.0 );
+  float hMax = max( max( diffuseColor.r, diffuseColor.g ), max( diffuseColor.b, 0.02 ) );
+  // (robe dorée : le reflet de ses parties noires — bas des membres du bai — reste neutre)
+  vec3 hTint = mix( vec3( 1.0 ), diffuseColor.rgb / hMax, 0.7 ) * mix( hRimTint, vec3( 1.0 ), hDarkV * hGold );
+  vec3 hRimL = hSkyRim;
+#if NUM_HEMI_LIGHTS > 0
+  // (le ciel éclaire le dos et les flancs, pas le dessous du ventre)
+  hRimL *= saturate( dot( normal, hemisphereLights[ 0 ].direction ) * 0.5 + 0.6 );
+#endif
+#if NUM_DIR_LIGHTS > 0
+  vec3 hL = directionalLights[ 0 ].direction;
+  float hBack = saturate( dot( hL, -hV ) );
+  float hWrap = saturate( dot( normal, hL ) * 0.6 + 0.4 );
+  hRimL += directionalLights[ 0 ].color * hWrap * ( 0.04 + 0.24 * hBack * hBack );
+#endif
+  reflectedLight.indirectSpecular += hRimL * hTint * hF * ( 1.0 - hBare ) * hRim;
+  reflectedLight.indirectDiffuse += diffuseColor.rgb * hSkyRim * hFill;
+}`;
+
+/**
+ * Carte de relief du modèle réaliste : les marges de ses îlots sont noires (0, 0, 0), et le filtrage (bord d'un
+ * îlot, mipmaps au loin) les mêle aux vraies normales : des normales renversées, d'où des coutures noires en
+ * zigzag sur la ganache et l'encolure. Une vraie normale a z > 0 (bleu ≥ 0,5) : un texel plus sombre est en
+ * partie « vide » ; on le divise par sa part de vrai texel (lue dans le bleu, comme une couleur prémultipliée),
+ * et un texel presque tout vide devient plat.
+ */
+const NORMAL_MAP_FIX = /* glsl */ `
+#ifdef USE_NORMALMAP_TANGENTSPACE
+  vec3 hNt = texture2D( normalMap, vNormalMapUv ).xyz;
+  float hCov = clamp( hNt.b / 0.9, 0.0, 1.0 );
+  hNt = mix( hNt, hNt / max( hCov, 0.05 ), 1.0 - smoothstep( 0.55, 0.65, hNt.b ) );
+  vec3 mapN = mix( vec3( 0.0, 0.0, 1.0 ), hNt * 2.0 - 1.0, smoothstep( 0.03, 0.15, hCov ) );
+  mapN.xy *= normalScale;
+  normal = normalize( tbn * mapN );
+#else
+#include <normal_fragment_maps>
+#endif`;
+
+/** Luminance (0-1) d'une couleur sRGB entière. */
+const srgbLum = (hex) => (((hex >> 16) & 255) * 0.2126 + ((hex >> 8) & 255) * 0.7152 + (hex & 255) * 0.0722) / 255;
+
 /** Couleur three.js (linéaire) depuis un entier sRGB. */
 const col = (hex) => new THREE.Color(hex);
+
+/**
+ * Part dorée d'une robe (0 à 1) : teinte orangée à jaune (16 à 55°), assez saturée, ni grise, ni blanche, ni presque
+ * noire, ni Akhal-Teké (son éclat a son propre réglage). Alezan, palomino, isabelle, crins lavés ; un peu le bai.
+ */
+export function coatGold(look, tr = horseCoatTraits(look), sheen = 0) {
+  if (sheen || tr.grey > 0) return 0;
+  const c = col(look.coat ?? 0x7a4528);
+  const hsl = c.getHSL({}, THREE.SRGBColorSpace);
+  const hue = hsl.h * 360;
+  if (srgbLum(look.coat ?? 0x7a4528) < 0.09 || hue < 12 || hue > 60) return 0;
+  const t = Math.min(1, Math.max(0, (hsl.s - 0.25) / 0.25)) * Math.min(1, Math.max(0, (0.88 - hsl.l) / 0.08));
+  return t * Math.min(1, (hue - 12) / 6) * Math.min(1, (60 - hue) / 6);
+}
 
 /**
  * Matière du pelage d'un cheval. Une matière par animal (ses couleurs), un seul programme GPU pour tous.
@@ -203,6 +416,17 @@ export function coatMaterial(look, build, breed = null, real = null) {
   const face = horseFaceMark(look, breed);
   const sheen = build.sheen ?? 0;
   const coat = col(look.coat);
+  // Robe claire (gris, blanc, crème…) : modelé peint plus doux encore (voir COAT_FRAGMENT).
+  const coatL = srgbLum(look.coat ?? 0x7a4528);
+  const light = tr.grey > 0 || coatL > 0.55;
+  // Robes dorées (alezan, palomino, isabelle, crins lavés, bai) : teinte orangée à jaune assez saturée. Leur reflet
+  // est doré (avant : un reflet blanc, le palomino était un jaune plat).
+  const gold = coatGold(look, tr, sheen);
+  // Teinte du reflet de bord : celle de la robe (dans le shader) × ce ton : doré (Akhal-Teké, robes dorées), brun
+  // chaud pour les robes presque noires (sinon un liseré gris de latex), blanc sinon.
+  const rimTint = sheen ? new THREE.Color(1, 0.86, 0.55) : coatL < 0.09 ? new THREE.Color(1, 0.78, 0.6)
+    : new THREE.Color(1, 1, 1).lerp(new THREE.Color(1, 0.86, 0.6), 0.75 * gold);
+  const spots = tr.leopard > 0 || tr.blanket > 0;
   const u = {
     hCoat: { value: coat },
     hSec: { value: col(look.secondary ?? look.coat) },
@@ -210,7 +434,7 @@ export function coatMaterial(look, build, breed = null, real = null) {
     hWhite: { value: col(0xf4f1ec) },
     hSkin: { value: col(0x2b2523) },
     hHoof: { value: col(0x3a332d) },
-    hHoofLight: { value: col(0xb9a88c) },
+    hHoofLight: { value: col(0xc2b090) },
     hGrey: { value: tr.grey },
     hDun: { value: tr.dun },
     hRoan: { value: tr.roan },
@@ -224,26 +448,62 @@ export function coatMaterial(look, build, breed = null, real = null) {
     hFace: { value: face },
     hSeed: { value: ((look.seed ?? 1) % 997) * 0.731 },
     hHoofY: { value: real?.hoofY ?? 0 },
+    // Cheval réaliste : centre de la sole de chaque sabot (x, z ; couronne qui descend vers les talons), œil (centre
+    // dans le repère de la tête, rayon) et naseau (centre, taille), mesurés sur le gabarit de la race.
+    hHoofA: { value: new THREE.Vector4(...(real?.hooves?.slice(0, 2).flat() ?? [0, 0, 0, 0])) },
+    hHoofB: { value: new THREE.Vector4(...(real?.hooves?.slice(2, 4).flat() ?? [0, 0, 0, 0])) },
+    hEye: { value: new THREE.Vector4(...(real?.eye ?? [0, 0, 0, 0])) },
+    hNos: { value: new THREE.Vector4(...(real?.nostril ?? [0, 0, 0, 0])) },
+    // Gris et appaloosas : peau noire marbrée (de rose chez l'appaloosa) autour des yeux et au bout du nez ;
+    // sabots rayés de l'appaloosa.
+    hSkinMot: { value: spots ? 1 : tr.grey > 0 ? 0.85 : 0 },
+    hSkinPink: { value: spots ? 1 : 0.25 },
+    hHoofStripe: { value: spots ? 1 : 0 },
+    hGold: { value: gold },
+    // (pommelures de santé : marquées sur une robe dorée claire — palomino —, à peine sur l'alezan et le bai)
+    hGoldDap: { value: gold > 0 ? Math.min(1, Math.max(0.25, (coatL - 0.2) / 0.45)) : 0 },
+    // (poulain : modelé presque effacé, il n'a pas encore les muscles d'un adulte)
+    // (robes dorées claires — palomino — un peu moins effacées : sinon un jaune plat)
+    hDetail: { value: build.foal ? 0.25 : light ? 0.35 + 0.1 * gold : 0.5 },
+    // Satiné et liseré (voir RIM_FRAGMENT) : force, teinte (dorée pour l'Akhal-Teké, brun chaud pour le noir),
+    // lumière du ciel et appoint du soir (partagés, mis à jour par World.updateSky).
+    // (robes dorées : satiné un peu plus fort, le reflet doré se voit aussi sur téléphone)
+    hRim: { value: (high ? 0.75 : 1) * (1 + 0.3 * gold) },
+    hRimTint: { value: rimTint },
+    hSkyRim: gfx.skyRim,
+    hFill: gfx.horseFill,
   };
+  // (Akhal-Teké : l'éclat passe par le satiné doré, pas par le métal — à 0,32, la robe reflétait l'herbe et
+  // sortait kaki ou olive ; robes presque noires un peu moins lisses : le ciel y dessine les muscles.)
+  // (noir profond : poil plus lisse, des reflets nets et cassés par le grain du poil, mais moins de voile
+  // gris-bleu du ciel sur tout le corps — specularIntensity en qualité haute, satiné plus discret)
+  const black = coatL < 0.09 && !sheen;
   const opts = {
     color: 0xffffff,
-    roughness: sheen ? 0.34 : 0.56,
-    metalness: sheen ? 0.32 : 0.02,
+    roughness: sheen ? (high ? 0.34 : 0.38) : black ? (high ? 0.36 : 0.4) : 0.56,
+    metalness: sheen ? 0.05 : 0.02,
   };
-  // Ordinateur : reflet satiné du poil ras (sheen), très marqué et doré pour l'Akhal-Teké.
+  // Ordinateur : reflet satiné du poil ras (sheen), très marqué et doré pour l'Akhal-Teké, brun chaud sur le noir.
+  // Robes dorées : la robe × 1,4 tirée vers l'or (0xffd27a), au lieu d'un mélange de blanc.
+  const sheenColor = sheen
+    ? coat.clone().lerp(new THREE.Color(1, 0.82, 0.48), 0.55)
+    : coatL < 0.09 ? new THREE.Color(0x5a4030)
+      : coat.clone().lerp(new THREE.Color(1, 0.95, 0.85), 0.3).lerp(coat.clone().multiplyScalar(1.4).lerp(new THREE.Color(0xffd27a), 0.5), gold);
   const m = high
     ? new THREE.MeshPhysicalMaterial({
       ...opts,
-      sheen: 0.32 + sheen * 0.6,
+      sheen: black ? 0.36 : 0.32 + sheen * 0.6 + 0.18 * gold,
       sheenRoughness: sheen ? 0.3 : 0.55,
-      sheenColor: coat.clone().lerp(new THREE.Color(1, 0.95, 0.85), 0.3 + sheen * 0.3),
+      sheenColor,
+      specularIntensity: black ? 0.72 : 1,
     })
     : new THREE.MeshStandardMaterial(opts);
   // Cheval réaliste (horseReal.js) : modelé peint (gris) et relief du modèle, sabots à hauteur fixe.
   if (real) {
     m.map = real.detail;
     m.normalMap = real.normalMap ?? null;
-    m.normalScale.set(0.9, 0.9 * (real.normalSign ?? 1));
+    // (relief un peu moins creusé qu'avant, 0,7 au lieu de 0,9 : les côtes se voyaient encore de profil)
+    m.normalScale.set(0.7, 0.7 * (real.normalSign ?? 1));
   }
   // H_REAL écrit dans le shader lui-même, pas dans m.defines : une copie de la matière (robe lustrée du
   // concours de beauté, Beauty.js) garde son onBeforeCompile mais material.copy() remet defines à zéro,
@@ -272,7 +532,7 @@ vHHead = hHead;
 #endif`);
     sh.fragmentShader = def + sh.fragmentShader
       .replace('#include <common>', `#include <common>
-${Object.keys(u).map((k) => `uniform ${k === 'hSocks' ? 'vec4' : u[k].value.isColor ? 'vec3' : 'float'} ${k};`).join('\n')}
+${Object.keys(u).map((k) => `uniform ${u[k].value.isVector4 ? 'vec4' : u[k].value.isColor || Array.isArray(u[k].value) ? 'vec3' : 'float'} ${k};`).join('\n')}
 varying vec3 vHPos;
 varying vec3 vHNrm;
 flat varying float vHPart; // pas d'interpolation entre deux parties (sinon : fausses balzanes aux bords)
@@ -282,16 +542,27 @@ varying float vHAO;
 varying float vHHead;
 #endif
 float hBare; // peau nue et sabots : pas de reflet satiné du poil
+float hMuz; // bout du nez : poil ras et clairsemé, plus lisse
+float hHoofV; // corne des sabots (plus lisse que le poil)
+float hGrainV; // grain du poil couché vers l'arrière (0-1, 0,5 de loin) : le reflet se casse au lieu d'un latex lisse
+float hDarkV; // poil presque noir (bas des membres et crins d'un bai…) : pas de reflet doré dessus
+float hEarIn; // intérieur des oreilles (poils mats)
 ${NOISE}`)
       .replace('#include <map_fragment>', `${real ? 'vec4 hDetTex = texture2D( map, vMapUv );' : '#include <map_fragment>'}
 ${COAT_FRAGMENT}`)
-      // Sabots plus lisses et brillants que le poil.
+      // Sabots plus lisses et brillants que le poil (corne : 0,45 environ), bout du nez aussi (0,35 environ).
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-roughnessFactor *= mix(1.0, 0.55, step(5.5, vHPart) * step(vHPart, 6.5));`)
+roughnessFactor *= mix(1.0, 0.55, step(5.5, vHPart) * step(vHPart, 6.5));
+roughnessFactor *= mix(1.0, 0.8, hHoofV) * mix(1.0, 0.62, hMuz);
+roughnessFactor = clamp(roughnessFactor * (0.78 + 0.44 * hGrainV), 0.04, 1.0);
+roughnessFactor = mix(roughnessFactor, 0.9, hEarIn);`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
 #ifdef USE_SHEEN
-material.sheenColor *= 1.0 - hBare;
-#endif`);
+material.sheenColor = mix( material.sheenColor, vec3( 0.3, 0.28, 0.26 ), hDarkV * hGold ) * ( 1.0 - hBare );
+#endif`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+${RIM_FRAGMENT}`);
+    if (real) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', NORMAL_MAP_FIX);
   };
   m.customProgramCacheKey = () => `horsecoat${high ? 'p' : 's'}${real ? 'r' : ''}`;
   m.userData.horseUniforms = u;
@@ -306,7 +577,7 @@ export function maneMaterial(sway) {
   // Ordinateur (anticrénelage actif) : bords des mèches adoucis (alphaToCoverage) au lieu de marches.
   const m = new THREE.MeshStandardMaterial({
     color: 0xffffff, vertexColors: true, map: maneTexture(), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.62,
-    alphaToCoverage: gfx.quality === 'high',
+    alphaToCoverage: gfx.msaa || gfx.quality === 'high',
   });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.hairTime = gfx.time;

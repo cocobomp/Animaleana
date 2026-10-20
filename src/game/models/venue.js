@@ -65,8 +65,8 @@ export function dressageArena() {
   }
   // Croix au sol à X
   const sandLine = mat(0xf0e6cc, 0.9);
-  add(g, new THREE.BoxGeometry(1.4, 0.02, 0.12), sandLine, [0, 0.05, 0], [0, Math.PI / 4, 0]);
-  add(g, new THREE.BoxGeometry(1.4, 0.02, 0.12), sandLine, [0, 0.05, 0], [0, -Math.PI / 4, 0]);
+  add(g, new THREE.BoxGeometry(1.4, 0.02, 0.12), sandLine, [0, 0.015, 0], [0, Math.PI / 4, 0]);
+  add(g, new THREE.BoxGeometry(1.4, 0.02, 0.12), sandLine, [0, 0.015, 0], [0, -Math.PI / 4, 0]);
   mergeStatic(g);
   return g;
 }

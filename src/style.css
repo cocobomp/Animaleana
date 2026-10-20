@@ -1847,7 +1847,8 @@ body.actv-nomove #touch-pad { display: none !important; }
 .actv-btn .ico { font-size: 1.6rem; }
 .actv-btn kbd, .actv-choice kbd { background: rgba(255, 255, 255, 0.25); padding: 2px 7px; border-radius: 6px; font-size: 0.7em; }
 .actv-btn:disabled { opacity: 0.5; }
-.actv-toggle { background: var(--glass); color: #fff; border-radius: 999px; padding: 2px 14px; }
+.actv-toggle { display: flex; margin-top: 4px; }
+.actv-toggle .actv-check { background: rgba(255, 255, 255, 0.16); color: #fff; border-radius: 999px; padding: 0 12px; }
 .actv-check { min-height: 44px; font-weight: 600; }
 .actv-choices, .actv-gauge {
   background: rgba(255, 255, 255, 0.95);
@@ -2474,7 +2475,13 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .shop-preview-text { display: grid; gap: 2px; min-width: 0; }
 .shop-preview-text b { font-size: 1.05rem; }
 .shop-preview-text small { color: var(--muted); }
-.breed-thumb { width: 84px; height: 63px; --thumb-bg: #e3eedc; }
+/* (deux fois plus grandes qu'avant : on voit la race, la tête et les membres, pas un timbre-poste) */
+.breed-thumb { width: 168px; height: 126px; --thumb-bg: #e3eedc; }
+@media (max-width: 360px) { .breed-thumb { width: 136px; height: 102px; } }
+/* Fiche d'un animal : son portrait en tête. */
+.animal-portrait { display: flex; justify-content: center; margin: 2px 0 8px; }
+.portrait-thumb { width: 100%; max-width: 420px; height: auto; aspect-ratio: 16 / 9; border-radius: 16px; --thumb-bg: #e6efe0; }
+.portrait-thumb .thumb-ph { font-size: 3.2rem; }
 .id-head .thumb { width: 96px; height: 72px; --thumb-bg: #e3eedc; }
 /* Construction et véhicules */
 .con-thumb { width: 92px; height: 69px; --thumb-bg: #dcebd2; }

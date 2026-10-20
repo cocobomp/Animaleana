@@ -19,6 +19,7 @@
 // Chaque case montre le lapin réaliste (rabbitReal.js) ou, avec proc: true, le lapin sculpté par le code
 // (animalModel.js et AnimalEntity.animate : l'AVANT des comparaisons), dans la même lumière et au même cadrage.
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { loadModel } from '/src/game/assets.js';
 import { buildRealRabbitModel, REAL_RABBIT_KEYS } from '/src/game/models/rabbitReal.js';
 import { buildAnimalModel } from '/src/game/models/animalModel.js';
@@ -39,6 +40,10 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.setScissorTest(true);
 grid.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
+// (reflets du ciel comme en jeu, World.js : sans eux, les yeux restent des trous noirs sans éclat)
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.3;
 scene.add(new THREE.HemisphereLight(0xdfefff, 0x6b7d4a, 1.25));
 const sun = new THREE.DirectionalLight(0xfff4e0, 2.6);
 sun.position.set(2.5, 5, 3.5);

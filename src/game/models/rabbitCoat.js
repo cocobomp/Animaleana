@@ -308,7 +308,8 @@ export function rabbitCoatMaterial(src, shared, opts) {
   const role = opts.role ?? 'fur';
   const card = role === 'card';
   const mat = new THREE.MeshStandardMaterial({
-    map: card ? null : src?.map ?? null,
+    // (cartes : la texture des brins sert aussi d'ombrage, racines plus sombres, brins mêlés)
+    map: card ? opts.alphaMap ?? null : src?.map ?? null,
     normalMap: role === 'fur' ? src?.normalMap ?? null : null,
     aoMap: role === 'fur' ? src?.aoMap ?? null : null,
     aoMapIntensity: 0.8,
@@ -356,11 +357,15 @@ export function rabbitCoatMaterial(src, shared, opts) {
       .replace('#include <skinning_vertex>', `#include <skinning_vertex>\n${PUSH_V}`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${COMMON_F}`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}${card ? '\ndiffuseColor.rgb *= 0.9 + 0.2 * vCmpLow;' : ''}`)
+      .replace('#include <color_fragment>', card
+        ? `#include <color_fragment>\nvec3 cardC0 = diffuseColor.rgb;\n${COLOR_F}\ndiffuseColor.rgb *= (0.9 + 0.2 * vCmpLow) * (0.66 + 0.4 * dot(cardC0, vec3(0.3333)));`
+        : `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.62, cHair.x), 0.45, cWet);');
     // (cartes : éclairées comme la peau où elles poussent, des deux côtés ; sinon le revers d'une carte est noir)
-    if (card) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);');
+    // (et à moitié tournées vers la caméra, comme un poil que la lumière traverse : la crinière vue de face, éclairée
+    // par-devant, ne montre plus le revers sombre de ses mèches)
+    if (card) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(mix(normalize(vNormal), vec3(0.0, 0.0, 1.0), 0.45));');
   };
-  mat.customProgramCacheKey = () => (card ? 'rabbit-card-v1' : 'rabbit-coat-v1');
+  mat.customProgramCacheKey = () => (card ? 'rabbit-card-v2' : 'rabbit-coat-v1');
   return mat;
 }

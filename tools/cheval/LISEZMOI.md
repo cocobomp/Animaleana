@@ -274,8 +274,11 @@ ton gris par sommet, couleur dans la matière de chaque cheval) :
   basse) ; mèches de l'autre côté seulement pour les styles qui en ont ;
 - *toupet* (`forelockCards`) : 20 à 34 rubans larges partis entre les oreilles, posés sur la tête seule (la distance
   de l'encolure, qui couvre la nuque, les dressait à la verticale ; racines devant le sommet de la nuque), couchés
-  sur le chanfrein, plus longs au milieu et qui se rejoignent un peu vers le bas, racine pleine et sombre (plus de
-  bande grise translucide en dents de scie en basse, plus de mèches vues par la tranche au pied des oreilles) ;
+  sur le chanfrein, plus longs au milieu (bords − 60 %) et resserrés vers le bas en une pointe aux rubans plus fins,
+  racine pleine et sombre (plus de bande grise translucide en dents de scie en basse, plus de mèches vues par la
+  tranche au pied des oreilles) ; couché face au ciel et au regard, ses crins parallèles s'allumaient en traits gris :
+  sur le toupet seul (sorte 1, `vHairK`), reflet de Kajiya-Kay × 0,35 et éclaircissement des crins foncés × 0,4, tons
+  proches d'un ruban à l'autre (il reste noir sur des crins noirs) ;
   sous un bonnet anti-mouches (`gearModels.js`, emplacement `head` : `model.setForelockTucked`), ses mèches se
   replient vers leur racine (uniform `hairTuck`, comme la crinière tressée) au lieu de traverser le voile ;
 - *queue* (`tailCards`) : 60 à 80 rubans plus larges (44 pour un poulain), groupés par quatre (ondulation et

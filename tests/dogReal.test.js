@@ -355,6 +355,27 @@ describe('robes', () => {
   });
 });
 
+describe('gueule au calme', () => {
+  it('shiba et ses races : la mâchoire refermée au même angle, que le clip l\'ouvre (debout, assis) ou non (couché)', () => {
+    for (const b of ['saint_bernard', 'boxer', 'terre_neuve', 'labrador', 'shiba']) {
+      for (const puppy of [false, true]) {
+        const md = dog(b, { puppy });
+        const jaw = md.bone('jaw');
+        expect(jaw, b).toBeTruthy();
+        for (const pose of ['stand', 'sit', 'lie']) {
+          md.staticPose(pose);
+          const q = jaw.userData.restQ.clone().invert().multiply(jaw.quaternion);
+          const a = 2 * Math.atan2(q.x, q.w);
+          // (gueule fermée : environ -0,12 rad depuis la pose de repos, entrouverte, du GLB)
+          expect(a, `${b}${puppy ? ' chiot' : ''} ${pose}`).toBeLessThan(-0.1);
+          expect(a, `${b}${puppy ? ' chiot' : ''} ${pose}`).toBeGreaterThan(-0.14);
+        }
+        md.dispose();
+      }
+    }
+  });
+});
+
 describe('queues fines', () => {
   /** Section de la queue autour de chaque os : rapport petit axe / grand axe (1 = ronde) et rayon moyen. */
   const sections = (base, P, H) => {

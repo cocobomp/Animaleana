@@ -2221,8 +2221,16 @@ class RealDogAnim {
     u.cWet.value = st.wet ?? 0;
     // Gueule entrouverte et langue qui pend quand il halète ou qu'il est content.
     const open = Math.max(this.pant * 0.9, (st.happy ?? 0) * 0.35) * (sleeping ? 0 : 1);
-    // (au calme, la gueule du shiba, ouverte dans ses animations, est refermée : sinon il montre les dents)
-    const shut = B.model === 'shiba' ? JAW_SHUT * (1 - Math.min(1, open * 2.5)) : 0;
+    // (au calme, la gueule du shiba, ouverte dans ses animations, est refermée : sinon il montre les dents. Jusqu'à
+    // l'angle de la gueule fermée, mesuré depuis la pose de repos du GLB (elle-même entrouverte) — pas d'un angle
+    // fixe : fermée de 0,1 rad, l'idle montrait encore une rangée de dents ; de 0,2, la marche, sans piste de
+    // mâchoire, la refermait trop et les dents du bas passaient à travers la lèvre)
+    let shut = 0;
+    if (B.model === 'shiba' && this.jaw) {
+      _q.copy(this.jaw.userData.restQ).invert().multiply(this.jaw.quaternion);
+      const a = 2 * Math.atan2(_q.x, _q.w);
+      shut = Math.max(0, a - JAW_CLOSED) * (1 - Math.min(1, open * 2.5));
+    }
     if (this.jaw && (open > 0.01 || shut > 0)) this.turn(this.jaw, AX, open * 0.22 + Math.sin(t * rate) * 0.03 * this.pant - shut);
     if (this.tongue.length && this.pant > 0.05) {
       for (let i = 0; i < this.tongue.length; i++) this.turn(this.tongue[i], AX, this.pant * 0.12 * (i + 1) / this.tongue.length);
@@ -2490,7 +2498,7 @@ function raiseAngle(c, q, y, max) {
 
 const AXIS_Y = V(0, 1, 0);
 const AX = V(1, 0, 0); // (tourner autour de x du chien, positif : vers le bas pour une tête qui regarde devant)
-const JAW_SHUT = 0.1; // (refermer la gueule du shiba au calme, rad)
+const JAW_CLOSED = -0.12; // (gueule du shiba fermée : angle de la mâchoire depuis la pose de repos du GLB, rad)
 const AZ = V(0, 0, 1);
 const _ax = V();
 const _q2v = V();

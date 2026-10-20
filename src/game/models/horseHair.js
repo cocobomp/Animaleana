@@ -10,7 +10,7 @@
 // cela, la moyenne de l'alpha passe sous le seuil de découpe et les crins fondent au loin.
 
 import * as THREE from 'three';
-import { gfx } from '../gfx.js';
+import { gfx, keepFrameAlpha } from '../gfx.js';
 
 /** Taille de la bande de crins (u le long des crins, v en travers) et nombre de mèches rangées en hauteur. */
 export const HAIR_TEX = { w: 512, h: 128, rows: 4, strands: 64 };
@@ -487,18 +487,8 @@ export function hairMaterial(color, sway, drag = NO_DRAG) {
     color: c, map: hairTexture(), alphaTest: HAIR_CUT, side: THREE.DoubleSide, roughness: 0.75, metalness: 0,
     alphaToCoverage: a2c, vertexColors: true,
   });
-  if (a2c) {
-    // (couverture par l'alpha : l'alpha de la carte décide quels échantillons elle couvre, mais il ne doit pas être
-    // écrit dans l'image — au bord des crins, un alpha < 1 rendait la toile transparente et le fond de la page
-    // passait au travers en points clairs le long de chaque mèche ; mélange sans effet sur la couleur, alpha
-    // d'avant gardé)
-    m.blending = THREE.CustomBlending;
-    m.blendEquation = THREE.AddEquation;
-    m.blendSrc = THREE.OneFactor;
-    m.blendDst = THREE.ZeroFactor;
-    m.blendSrcAlpha = THREE.ZeroFactor;
-    m.blendDstAlpha = THREE.OneFactor;
-  }
+  // (sinon, au bord des crins, le fond de la page passait au travers en points clairs le long de chaque mèche)
+  if (a2c) keepFrameAlpha(m);
   // (force du reflet : plus discret sur les crins clairs, qui ont déjà de la lumière)
   // (qualité basse : pas d'ombre du soleil, le reflet brillerait aussi du côté à l'ombre : plus discret)
   // (0,06 × soleil de 2,8 à 3,5, sur un crin sur cinq : des crins qui brillent sur du noir, pas un aplat gris)

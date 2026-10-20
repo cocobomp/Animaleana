@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 // Réglages graphiques partagés par tous les modèles 3D.
 // quality : 'high' (ordinateur) ou 'low' (téléphone) — fixé par Game au démarrage.
 // time : horloge commune des shaders animés (herbe, eau, fourrure) ; wind : force du vent ;
@@ -37,3 +39,19 @@ export function withTexScale(s, fn) {
 export const texSize = (base) => Math.max(32, Math.round(base * gfx.texScale));
 
 export const isHigh = () => gfx.quality === 'high';
+
+/**
+ * Matière à couverture par l'alpha (alphaToCoverage) qui n'écrit pas son alpha dans l'image : l'alpha décide quels
+ * échantillons elle couvre, mais la toile du jeu a un canal alpha — au bord des mèches, un alpha < 1 la rendait
+ * transparente et le fond de la page passait au travers en points clairs. Mélange sans effet sur la couleur, alpha
+ * d'avant gardé. Renvoie m.
+ */
+export function keepFrameAlpha(m) {
+  m.blending = THREE.CustomBlending;
+  m.blendEquation = THREE.AddEquation;
+  m.blendSrc = THREE.OneFactor;
+  m.blendDst = THREE.ZeroFactor;
+  m.blendSrcAlpha = THREE.ZeroFactor;
+  m.blendDstAlpha = THREE.OneFactor;
+  return m;
+}

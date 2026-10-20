@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { maneTexture, eyeTexture } from '../textures.js';
-import { gfx } from '../gfx.js';
+import { gfx, keepFrameAlpha } from '../gfx.js';
 import { horseCoatTraits, horseFaceMark, horseSocks } from '../../sim/horseLook.js';
 
 // Parties du maillage (attribut hPart) : le shader choisit la couleur selon la partie.
@@ -622,6 +622,7 @@ export function maneMaterial(sway) {
     color: 0xffffff, vertexColors: true, map: maneTexture(), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.62,
     alphaToCoverage: gfx.msaa || gfx.quality === 'high',
   });
+  if (m.alphaToCoverage) keepFrameAlpha(m);
   m.onBeforeCompile = (sh) => {
     sh.uniforms.hairTime = gfx.time;
     sh.uniforms.hairWind = gfx.wind;

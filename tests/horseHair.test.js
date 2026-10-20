@@ -565,6 +565,26 @@ describe('toupet sous le bonnet anti-mouches', () => {
 });
 
 describe('matière des crins', () => {
+  it('couverture par l\'alpha sans écrire l\'alpha dans l\'image (pas de points clairs au bord des mèches)', () => {
+    const was = [gfx.quality, gfx.msaa];
+    try {
+      for (const [q, msaa] of [['low', true], ['high', false], ['low', false]]) {
+        gfx.quality = q;
+        gfx.msaa = msaa;
+        const m = hairMaterial(0x1b1410, { value: 0 });
+        expect(m.alphaToCoverage).toBe(msaa || q === 'high');
+        if (!m.alphaToCoverage) continue;
+        // (couleur écrite telle quelle, alpha de l'image gardé : la toile ne devient jamais transparente)
+        expect(m.blending).toBe(THREE.CustomBlending);
+        expect([m.blendSrc, m.blendDst]).toEqual([THREE.OneFactor, THREE.ZeroFactor]);
+        expect([m.blendSrcAlpha, m.blendDstAlpha]).toEqual([THREE.ZeroFactor, THREE.OneFactor]);
+        expect(m.transparent).toBe(false);
+      }
+    } finally {
+      [gfx.quality, gfx.msaa] = was;
+    }
+  });
+
   it('reflet le long des mèches (Kajiya-Kay), second reflet en qualité haute seulement, normales de volume', () => {
     const was = gfx.quality;
     try {

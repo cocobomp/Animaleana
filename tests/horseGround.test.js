@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { realHorseBase, buildRealHorseModel, LOD_DIST, realLegPose } from '../src/game/models/horseReal.js';
 import { sandGeometry, SAND_LIFT, SAND_OFFSET } from '../src/game/models/buildings.js';
-import { renderSetup, PixelBudget, SHARP_RATIO, SAFE_RATIO } from '../src/game/pixelBudget.js';
+import { renderSetup, PixelBudget, SHARP_RATIO, SAFE_RATIO, FALLBACK_RATIO } from '../src/game/pixelBudget.js';
 import { gfx } from '../src/game/gfx.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
@@ -101,7 +101,10 @@ describe('posé au sol (étape 1)', () => {
 });
 
 describe('définition de l\'image sur téléphone (étape 1)', () => {
-  it('qualité basse sur un écran fin : 1,5 pixel par point avec l\'anticrénelage, et surveillance', () => {
+  it('qualité basse sur un écran fin : 1,25 pixel par point avec l\'anticrénelage, et surveillance', () => {
+    // (pas plus de pixels qu'avant en basse : 1,5 pixel par point coûtait 2 fois l'ancien temps d'image)
+    expect(SHARP_RATIO).toBe(1.25);
+    expect(FALLBACK_RATIO).toBeLessThan(SHARP_RATIO);
     expect(renderSetup('low', 3)).toEqual({ ratio: SHARP_RATIO, msaa: true, budget: true });
     expect(renderSetup('low', 2)).toEqual({ ratio: SHARP_RATIO, msaa: true, budget: true });
     expect(renderSetup('low', 1)).toEqual({ ratio: 1, msaa: false, budget: false });
@@ -114,12 +117,12 @@ describe('définition de l\'image sur téléphone (étape 1)', () => {
     expect(renderSetup('high', 3, true)).toEqual({ ratio: 2, msaa: true, budget: false });
   });
 
-  it('repli à 1,25 si les premières secondes sont trop lentes, une seule fois', () => {
+  it('repli à 1 pixel par point si les premières secondes sont trop lentes, une seule fois', () => {
     const b = new PixelBudget();
     const out = [];
     for (let i = 0; i < 400 && !b.done; i++) out.push(b.frame(0.03, SHARP_RATIO));
     expect(b.done).toBe(true);
-    expect(out.filter((r) => r !== null)).toEqual([SAFE_RATIO]);
+    expect(out.filter((r) => r !== null)).toEqual([FALLBACK_RATIO]);
     expect(b.frame(0.03, SHARP_RATIO)).toBeNull();
   });
 

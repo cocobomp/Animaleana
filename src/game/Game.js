@@ -90,8 +90,9 @@ export class Game {
     this.ui = ui;
     this.quality = readQuality();
     gfx.quality = this.quality;
-    // Définition et anticrénelage (src/game/pixelBudget.js) : en qualité basse sur un écran fin, 1,5 pixel par
-    // point et MSAA, avec repli à 1,25 si les premières secondes de jeu sont trop lentes (retenu pour la suite).
+    // Définition et anticrénelage (src/game/pixelBudget.js) : en qualité basse sur un écran fin, 1,25 pixel par
+    // point et MSAA, avec repli à 1 si les premières secondes de jeu sont trop lentes (retenu pour la suite : 1,25
+    // sans MSAA aux parties suivantes).
     const setup = renderSetup(this.quality, window.devicePixelRatio, readFlag(SLOW_KEY));
     const renderer = new THREE.WebGLRenderer({ antialias: setup.msaa, powerPreference: 'high-performance' });
     renderer.setPixelRatio(setup.ratio);
@@ -665,7 +666,7 @@ export class Game {
       this.renderer.render(this.scene, this.camera);
       return;
     }
-    // Premières secondes de jeu en qualité basse : trop lentes à 1,5 pixel par point, on redescend.
+    // Premières secondes de jeu en qualité basse : trop lentes avec l'anticrénelage, on redescend.
     if (this.pixelBudget) {
       const r = this.pixelBudget.frame(dt, this.renderer.getPixelRatio());
       if (r) {

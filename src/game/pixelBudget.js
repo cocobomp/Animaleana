@@ -2,16 +2,22 @@
 //
 // Qualité basse (réglage par défaut des téléphones) : sur un écran fin (2 ou 3 pixels par point), l'image était
 // rendue à 1,25 pixel par point sans anticrénelage, puis agrandie : contours du cheval, membres et crins en
-// escalier, qui scintillent d'une image à l'autre. On vise 1,5 pixel par point avec l'anticrénelage MSAA (peu
-// coûteux sur les processeurs graphiques de téléphone, qui dessinent par tuiles). Si les premières secondes de
-// jeu sont trop lentes, on redescend à 1,25 (l'anticrénelage, lui, ne peut plus changer : il est choisi à la
-// création du contexte WebGL) et l'appareil est noté lent (SLOW_KEY) : aux parties suivantes, on reprend
-// l'ancien réglage, 1,25 sans anticrénelage — un téléphone lent ne paie jamais plus que quelques secondes.
+// escalier, qui scintillent d'une image à l'autre. On garde 1,25 pixel par point, avec l'anticrénelage MSAA (peu
+// coûteux sur les processeurs graphiques de téléphone, qui dessinent par tuiles : la netteté vient surtout de lui).
+// 1,5 pixel par point avec MSAA, essayé d'abord, coûtait 2 fois l'ancien temps d'image sur SwiftShader (rendu sur
+// le processeur, 10 chevaux), 1,25 avec MSAA 1,6 fois : trop pour un téléphone milieu de gamme qu'on n'a pas pu
+// mesurer (le reste des changements du cheval : dans le bruit). Si les premières secondes de jeu sont trop lentes,
+// on redescend à FALLBACK_RATIO pour la partie en cours (l'anticrénelage, lui, ne peut plus changer : il est
+// choisi à la création du contexte WebGL ; à 1 pixel par point avec MSAA, le coût revient à celui de l'ancien
+// réglage) et l'appareil est noté lent (SLOW_KEY) : aux parties suivantes, on reprend l'ancien réglage, 1,25
+// sans anticrénelage — un téléphone lent ne paie jamais plus que quelques secondes.
 // Logique pure (testée dans tests/horseGround.test.js).
 
-/** Définition visée en qualité basse sur un écran fin, et celle de repli. */
-export const SHARP_RATIO = 1.5;
+/** Définition visée en qualité basse sur un écran fin (avec MSAA), celle d'un appareil lent (sans MSAA, parties
+ * suivantes) et celle du repli dans la partie en cours (le contexte garde son MSAA). */
+export const SHARP_RATIO = 1.25;
 export const SAFE_RATIO = 1.25;
+export const FALLBACK_RATIO = 1;
 /** Clé du stockage local : cet appareil a été trop lent à 1,5 pixel par point (voir Game). */
 export const SLOW_KEY = 'animaleana.pixelSlow';
 
@@ -33,7 +39,7 @@ export function renderSetup(quality, dpr = 1, slow = false) {
  * limitMs, frame() renvoie la définition de repli (une seule fois) ; ensuite, plus rien (done).
  */
 export class PixelBudget {
-  constructor({ warmup = 2, span = 4, limitMs = 22, fallback = SAFE_RATIO } = {}) {
+  constructor({ warmup = 2, span = 4, limitMs = 22, fallback = FALLBACK_RATIO } = {}) {
     this.warmup = warmup;
     this.span = span;
     this.limitMs = limitMs;

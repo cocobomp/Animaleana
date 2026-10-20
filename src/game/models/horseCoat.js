@@ -87,8 +87,14 @@ hEarIn = 0.0;
   float isBody = 1.0 - isHead - isLeg - isHoof - isSkin - isEar;
 #ifdef H_REAL
   float headW = vHHead; // poids de la tête, continu (pas de dents de scie à la jonction avec l'encolure)
+  // Poids du corps, continu lui aussi à la jonction de la tête : le numéro de partie (constant par triangle,
+  // isBody) découpait en dents de scie, derrière l'œil, sous l'oreille et le long de la ganache, tout ce qui
+  // ne vaut que pour le corps — réseau des pommelures d'un gris, ventre éclairci (contre-ombrage), robes dorées,
+  // raie de mulet, rouan : des plaques grises nettes sur la joue des chevaux gris.
+  float bodyS = clamp(isBody + isHead + isEar, 0.0, 1.0) * (1.0 - headW);
 #else
   float headW = isHead;
+  float bodyS = isBody;
 #endif
   float up = normalize(vHNrm).y;
   float aa = clamp(length(fwidth(P)) * 140.0, 0.0, 1.0); // atténue les détails fins au loin (pas de scintillement)
@@ -121,7 +127,7 @@ hEarIn = 0.0;
     float ctr = 1.0 - smoothstep(0.15, 0.7, ratio);
     net = mix(net, 0.45, aaW);
     ctr = mix(ctr, 0.25, aaW);
-    float zone = min(1.0, (isBody + isLeg * smoothstep(0.55, 0.9, h)) * smoothstep(-0.7, 0.1, up) * hGrey * (0.6 + 0.55 * hFbm(P * 1.3 + 3.0)));
+    float zone = min(1.0, (bodyS + isLeg * smoothstep(0.55, 0.9, h)) * smoothstep(-0.7, 0.1, up) * hGrey * (0.6 + 0.55 * hFbm(P * 1.3 + 3.0)));
     c *= 1.0 - net * ${glf(DAP.dark)} * zone;
     c *= 1.0 + ctr * ${glf(DAP.light)} * zone;
     c = mix(c, c * 0.55, isLeg * (1.0 - smoothstep(0.12, 0.55, h)) * 0.85);
@@ -136,21 +142,21 @@ hEarIn = 0.0;
     vec3 Pd = P + (vec3(hNoise(P * 3.1 + hSeed), hNoise(P * 3.1 + hSeed + 11.0), 0.5) - 0.5) * 0.08;
     vec3 cl = hCell(Pd * ${glf(DAP.cell * 0.9)} + hSeed * 1.7);
     float net = mix(smoothstep(0.3, 0.55, cl.x + (hNoise(P * 26.0) - 0.5) * 0.1), 0.45, aaW);
-    float zone = isBody * smoothstep(-0.3, 0.4, up) * (0.4 + 0.7 * hFbm(P * 1.3 + 9.0)) * hGold * hGoldDap;
+    float zone = bodyS * smoothstep(-0.3, 0.4, up) * (0.4 + 0.7 * hFbm(P * 1.3 + 9.0)) * hGold * hGoldDap;
     c *= 1.0 - net * ${glf(COAT_LOOKS.bloom.dark)} * zone;
   }
-  c = mix(c, c * vec3(1.06, 0.98, 0.84), hGold * hGoldDap * isBody * 0.7);
+  c = mix(c, c * vec3(1.06, 0.98, 0.84), hGold * hGoldDap * bodyS * 0.7);
 
   // Contre-ombrage : dos un peu plus foncé, ventre et intérieur des membres nettement plus clairs (le
   // ventre reste lisible au soleil, la lumière du sol l'éclaire peu). Le haut des membres suit la même
   // règle que le corps : pas de changement de teinte là où le membre sort du corps. (Robes presque noires :
   // presque rien d'ajouté, sinon un voile gris de latex sous le ventre.)
-  float under = smoothstep(0.1, -0.8, up) * (isBody + isLeg);
+  float under = smoothstep(0.1, -0.8, up) * (bodyS + isLeg);
   float inner = isLeg * smoothstep(0.15, 0.85, -sign(P.x) * normalize(vHNrm).x);
-  float belly = under * isBody;
+  float belly = under * bodyS;
   float lift = 0.03 * clamp(dot(hCoat, vec3(0.2126, 0.7152, 0.0722)) * 8.0 + 0.3, 0.0, 1.0);
   c = mix(c, c * 1.38 + lift, clamp(under + inner * 0.55, 0.0, 1.0) * 0.62);
-  c *= 1.0 - smoothstep(0.55, 1.0, up) * 0.06 * isBody;
+  c *= 1.0 - smoothstep(0.55, 1.0, up) * 0.06 * bodyS;
   // Pangaré (Fjord, poneys) : ventre, tour des yeux et bout du nez plus clairs.
   float muzzleZone = isHead * smoothstep(0.82, 0.95, hl.z);
   c = mix(c, mix(c, vec3(0.94, 0.86, 0.72), 0.55), hMealy * clamp(belly * 1.4 + muzzleZone, 0.0, 1.0));
@@ -170,7 +176,7 @@ hEarIn = 0.0;
     vec3 w = vec3(hNoise(P * 4.0 + 1.7), hNoise(P * 4.0 + 9.2), hNoise(P * 4.0 + 4.4)) - 0.5;
     float pn = hFbm(q + w * ${glf(PIN.warp)}) + (hNoise(P * 9.0) - 0.5) * 0.06;
     float jag = (hNoise(P * 20.0 + hSeed) - 0.5) * ${glf(PIN.jag)};
-    float back = isBody * smoothstep(0.35, 0.9, up) * smoothstep(-0.6, -0.2, -abs(P.z + 0.1));
+    float back = bodyS * smoothstep(0.35, 0.9, up) * smoothstep(-0.6, -0.2, -abs(P.z + 0.1));
     float t = pn + jag + isLeg * (1.0 - smoothstep(0.1, 0.7, h)) * 0.45 - headW * 0.5 + back * 0.12;
     float wdt = max(fwidth(t) * 0.75, 0.002);
     c = mix(c, hSec, smoothstep(0.5 - wdt, 0.5 + wdt, t) * hPinto * (1.0 - isHoof - isSkin));
@@ -179,7 +185,7 @@ hEarIn = 0.0;
   // Isabelle / souris : raie de mulet nette et assez large le long du dos (du garrot à la queue), zébrures sur les
   // membres, tête un peu plus foncée.
   if (hDun > 0.0) {
-    float stripe = (1.0 - smoothstep(${glf(DUN.stripe * 0.55)}, ${glf(DUN.stripe)}, abs(P.x) + (hNoise(P * 28.0) - 0.5) * 0.012)) * smoothstep(0.62, 0.9, up) * isBody;
+    float stripe = (1.0 - smoothstep(${glf(DUN.stripe * 0.55)}, ${glf(DUN.stripe)}, abs(P.x) + (hNoise(P * 28.0) - 0.5) * 0.012)) * smoothstep(0.62, 0.9, up) * bodyS;
     c = mix(c, hPointC * 0.85 + hCoat * 0.15, stripe * hDun * 0.9);
     float bars = isLeg * smoothstep(0.48, 0.6, h) * (1.0 - smoothstep(0.82, 0.97, h)) * smoothstep(0.3, 0.9, sin(P.y * 70.0 + hSeed + hNoise(P * 9.0) * 2.0));
     c = mix(c, mix(c, hPointC, 0.45), bars * 0.75 * hDun);
@@ -195,9 +201,9 @@ hEarIn = 0.0;
   // Rouan : poils blancs mêlés à la robe ; la tête et le bas des membres gardent la couleur de base, plus foncée.
   if (hRoan > 0.0) {
     float speck = mix(step(0.55, hNoise(P * 170.0)), 0.45, aa);
-    float zone = isBody + isLeg * smoothstep(0.5, 0.75, h);
+    float zone = bodyS + isLeg * smoothstep(0.5, 0.75, h);
     c = mix(c, hWhite, speck * 0.6 * hRoan * zone);
-    c = mix(c, c * 0.82, (isHead + isLeg * (1.0 - smoothstep(0.35, 0.6, h))) * hRoan * 0.7);
+    c = mix(c, c * 0.82, (headW + isLeg * (1.0 - smoothstep(0.35, 0.6, h))) * hRoan * 0.7);
   }
 
   // Léopard (robe blanche à taches) et couverture (croupe blanche tachetée) : taches de tailles inégales, un peu
@@ -206,7 +212,7 @@ hEarIn = 0.0;
   if (hLeopard + hBlanket > 0.0) {
     // (cellules d'avant l'étape 8 : mêmes taches, aux mêmes places, pour un cheval déjà là)
     vec3 cl = hCell(P * vec3(8.5, 8.5, 7.5) + hSeed);
-    float small = clamp(isHead + isLeg * (1.0 - smoothstep(0.3, 0.85, h)), 0.0, 1.0);
+    float small = clamp(headW + isLeg * (1.0 - smoothstep(0.3, 0.85, h)), 0.0, 1.0);
     float r = mix(${glf(SPOT.rMin)}, ${glf(SPOT.rMax)}, fract(cl.z * 3.7)) * mix(1.15, 0.7, small);
     float dd = cl.x + (hNoise(P * 45.0) - 0.5) * 0.06;
     float rear = smoothstep(0.35, -0.55, P.z);
@@ -218,7 +224,7 @@ hEarIn = 0.0;
       float edge = -(P.z + 0.15) + (hFbm(P * 3.0) - 0.5) * 0.25 + (hNoise(P * 14.0) - 0.5) * 0.08;
       // (bas de la couverture d'après la hauteur, pas d'après l'orientation de la peau ni la partie du corps,
       // constante par triangle : elle découpait des dents de scie sur la cuisse)
-      float onBody = smoothstep(1.02, 1.22, h + (hFbm(P * 4.0 + 5.0) - 0.5) * 0.25) * (isBody + isLeg);
+      float onBody = smoothstep(1.02, 1.22, h + (hFbm(P * 4.0 + 5.0) - 0.5) * 0.25) * (bodyS + isLeg);
       float bl = smoothstep(-0.04, 0.04, edge) * onBody;
       float frost = (1.0 - smoothstep(0.0, 0.12, abs(edge + 0.06))) * mix(step(0.5, hNoise(P * 150.0)), 0.5, aa) * onBody;
       vec3 inside = mix(hSec, hCoat, spot);

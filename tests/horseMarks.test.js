@@ -168,4 +168,20 @@ describe('marques d\'un cheval déjà là (pie, léopard)', () => {
     expect(fs).toContain('hCell(P * vec3(8.5, 8.5, 7.5) + hSeed)');
     expect(fs).toContain('max(step(0.22, cl.z), step(mix(0.22, 0.04, rear) - hBlanket * 0.08, cl.z))');
   });
+
+  it('jonction tête-encolure : aucun effet « corps seulement » d\'après le numéro de partie (dents de scie sur la joue des gris)', () => {
+    const a = createAnimal({ species: 'horse', breed: 'percheron', colorIndex: 0, ageDays: 80, seed: 3 });
+    const m = coatMaterial(a.look, horseBuild(null, a.look), null, { detail: null, normalMap: null, normalSign: 1, hoofY: 0.12 });
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader };
+    m.onBeforeCompile(sh);
+    const fs = sh.fragmentShader;
+    // (cheval réaliste : poids du corps tiré du poids de la tête, continu d'un sommet à l'autre)
+    expect(fs).toContain('float bodyS = clamp(isBody + isHead + isEar, 0.0, 1.0) * (1.0 - headW);');
+    // isBody (constant par triangle) ne sert plus qu'à définir bodyS ; isHead seul ne porte plus d'effet qui
+    // s'arrête à la jonction (rouan, taches plus petites : headW).
+    const uses = fs.split('\n').filter((l) => /\bisBody\b/.test(l.replace(/\/\/.*$/, '')) && !/float isBody =|float bodyS =/.test(l));
+    expect(uses).toEqual([]);
+    expect(fs).not.toMatch(/\(isHead \+ isLeg/);
+    expect(fs).not.toMatch(/clamp\(isHead \+ isLeg/);
+  });
 });

@@ -276,7 +276,19 @@ export function applyBeautyDecor(e, now) {
     // Assez gros pour se voir de loin (un vrai nœud de concours), même sur un petit chat.
     const size = Math.max(0.028, R * 0.3);
     const bow = bowMesh(color, size, prep.bow?.pattern ?? 'plain');
-    if (model.neck) {
+    const ring = model.dogFit?.collar;
+    if (ring) {
+      // Chien réaliste (dogReal.js) : sur l'anneau mesuré de l'encolure (z le long du cou, y vers le dessus), côté dos.
+      const frame = new THREE.Group();
+      frame.position.copy(ring.center);
+      frame.quaternion.copy(ring.q);
+      const dogSize = Math.max(0.03, (ring.rx + ring.ry) * 0.42);
+      bow.scale.setScalar(dogSize / size);
+      bow.position.set(0, ring.ry + dogSize * 0.35, 0);
+      bow.rotation.x = Math.PI / 2 - 0.35; // (à plat sur le dessus du cou, les pans vers le dos)
+      frame.add(bow);
+      add(model.neck, frame);
+    } else if (model.neck) {
       const { len: nl } = neckFrame(model, look.neckLen ?? R);
       const t = 0.5;
       const hit = surfaceHit(model.neck, new THREE.Vector3(0, t * nl, -R * 2.5), new THREE.Vector3(0, t * nl, 0), hitList());
@@ -630,7 +642,9 @@ class BeautySession extends Session {
     const hand = new THREE.Vector3(p.x + Math.cos(h) * 0.3, p.y + 0.85, p.z - Math.sin(h) * 0.3);
     const e = this.e;
     const head = e.position.clone();
-    head.y += (e.model.headHeight ?? (e.model.y0 + e.data.look.bodyR)) * e.scale * 0.9;
+    // (chien réaliste : l'anneau de son collier)
+    if (e.model.leashPoint) e.model.leashPoint.getWorldPosition(head);
+    else head.y += (e.model.headHeight ?? (e.model.y0 + e.data.look.bodyR)) * e.scale * 0.9;
     const dist = hand.distanceTo(head);
     const slack = Math.max(0, 2.2 - dist) * 0.3;
     const pos = this.rope.geometry.attributes.position;

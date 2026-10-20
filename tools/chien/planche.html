@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planche des chiens</title>
+<style>
+  html, body { margin: 0; background: #dfe9ef; font: 13px system-ui, sans-serif; color: #223; }
+  #grid { position: relative; }
+  canvas { display: block; }
+  .lab { position: absolute; transform: translateX(-50%); background: rgba(255,255,255,.82); border-radius: 6px; padding: 1px 6px; white-space: nowrap; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="grid"></div>
+<script type="module">
+// Planche des races et des robes des chiens réalistes (outil de mise au point, hors du jeu) :
+// npx vite, puis http://localhost:5173/tools/chien/planche.html ; window.planche.show({ ... }) (voir plus bas).
+import * as THREE from 'three';
+import { loadModel } from '/src/game/assets.js';
+import { buildRealDogModel, REAL_DOG_KEYS } from '/src/game/models/dogReal.js';
+import { SPECIES } from '/src/sim/species.js';
+import { resolveLook } from '/src/sim/animal.js';
+
+const grid = document.getElementById('grid');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setScissorTest(true);
+grid.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xdfefff, 0x6b7d4a, 1.25));
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.6);
+sun.position.set(2.5, 5, 3.5);
+sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2 });
+sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x8fb46a, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+const camera = new THREE.PerspectiveCamera(28, 1, 0.02, 60);
+
+const breeds = SPECIES.dog.breeds;
+window.planche = {
+  breeds: breeds.map((b) => b.id),
+  /**
+   * cells : [{ breed, color (indice de robe), puppy, clip, t (s), view ('side' | 'three' | 'front' | 'head' | 'back'),
+   * label, lod }] ; cols ; cw, ch (taille d'une case).
+   */
+  async show({ cells, cols = 6, cw = 300, ch = 240 }) {
+    await Promise.all(Object.values(REAL_DOG_KEYS).map((k) => loadModel(k)));
+    const rows = Math.ceil(cells.length / cols);
+    renderer.setSize(cols * cw, rows * ch);
+    grid.querySelectorAll('.lab').forEach((e) => e.remove());
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i];
+      const look = resolveLook('dog', c.breed, c.color ?? 0);
+      look.seed = 1234 + i * 17;
+      if (c.puppy) look.puppy = true;
+      const t0 = performance.now();
+      const md = buildRealDogModel(look, c.breed);
+      const ms = performance.now() - t0;
+      const sg = new THREE.Group();
+      const s = (look.scale ?? 1) * (c.puppy ? 0.55 : 1);
+      sg.scale.setScalar(s);
+      sg.add(md.root);
+      scene.add(sg);
+      if (c.lod) md.setLod(1);
+      if (c.clip) {
+        const a = md.anim;
+        for (const nm of a.names) {
+          a.w[nm] = nm === c.clip ? 1 : 0;
+          a.actions[nm].setEffectiveWeight(a.w[nm]);
+          a.actions[nm].time = c.t ?? 0;
+          a.actions[nm].timeScale = 1;
+        }
+        a.restorePose();
+        a.mixer.update(0);
+        a.savePose();
+        for (const [b, d] of a.shift) b.position.add(d);
+        a.overlay(0, { moving: false, v: 0, sleeping: c.clip === 'sleep', happy: c.happy ?? 0.3, sad: false }, true);
+        // (allures et saut : seulement relevé, comme en jeu ; les temps de suspension restent)
+        const moving = ['walk', 'trot', 'run', 'jump'].includes(c.clip);
+        a.gait = c.clip === 'walk' || c.clip === 'trot' ? c.clip : 'run';
+        a.ground({ moving });
+      }
+      md.root.updateMatrixWorld(true);
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const y = (rows - 1 - row) * ch;
+      renderer.setViewport(col * cw, y, cw, ch);
+      renderer.setScissor(col * cw, y, cw, ch);
+      camera.aspect = cw / ch;
+      const H = 0.62 * s;
+      const view = c.view ?? 'three';
+      const dist = 1.95 * s * (c.zoom ?? 1);
+      const tgt = new THREE.Vector3(0, H * 0.55, 0);
+      if (view === 'side') camera.position.set(dist, H * 0.6, 0.02);
+      else if (view === 'front') camera.position.set(dist * 0.35, H * 0.75, dist * 0.95);
+      else if (view === 'back') camera.position.set(-dist * 0.55, H * 0.8, -dist * 0.85);
+      else if (view === 'head') {
+        const hp = md.head.getWorldPosition(new THREE.Vector3());
+        tgt.copy(hp).add(new THREE.Vector3(0, 0.02 * s, 0.06 * s));
+        camera.position.copy(tgt).add(new THREE.Vector3(0.28 * s, 0.06 * s, 0.42 * s));
+      } else camera.position.set(dist * 0.85, H * 0.85, dist * 0.6);
+      camera.fov = c.fov ?? 28;
+      camera.updateProjectionMatrix();
+      camera.lookAt(tgt);
+      scene.background = new THREE.Color(0xdfe9ef);
+      renderer.render(scene, camera);
+      scene.remove(sg);
+      md.dispose();
+      const lab = document.createElement('div');
+      lab.className = 'lab';
+      const b = breeds.find((x) => x.id === c.breed);
+      lab.textContent = c.label ?? `${b?.name.fr ?? c.breed}${c.puppy ? ' (chiot)' : ''}`;
+      lab.style.left = `${col * cw + cw / 2}px`;
+      lab.style.top = `${row * ch + 4}px`;
+      grid.appendChild(lab);
+      window.lastBuildMs = ms;
+    }
+    return true;
+  },
+};
+window.ready = true;
+</script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { World } from './World.js';
 import { gfx } from './gfx.js';
 import { preloadModels, loadModel, MODELS } from './assets.js';
 import { REAL_HORSE_KEY, horseView, realHorseBase } from './models/horseReal.js'; // cheval réaliste : chargé à part
+import { REAL_DOG_KEYS, realDogBase } from './models/dogReal.js'; // chiens réalistes : chargés après le cheval
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
@@ -171,9 +172,17 @@ export class Game {
     // (le cheval est demandé après les petits : sur un réseau lent, il ne leur prend pas la bande passante)
     this.modelsLoaded = false;
     this.horseSwap = [];
+    this.dogSwap = [];
     const grace = new Promise((r) => setTimeout(r, HORSE_GRACE_MS));
-    const others = preloadModels(Object.keys(MODELS).filter((k) => k !== REAL_HORSE_KEY));
+    const dogKeys = Object.values(REAL_DOG_KEYS);
+    const others = preloadModels(Object.keys(MODELS).filter((k) => k !== REAL_HORSE_KEY && !dogKeys.includes(k)));
     const horse = others.then(() => loadModel(REAL_HORSE_KEY));
+    // Chiens réalistes (shiba ≈ 0,85 Mo, jack ≈ 0,5 Mo) : demandés après le cheval, jamais attendus à l'ouverture ;
+    // les chiens prennent le modèle réaliste dès qu'il arrive (onRealDogs), le procédural en attendant.
+    this.realDogsReady = horse.then(() => Promise.all(dogKeys.map((k) => loadModel(k)))).then((list) => {
+      if (list.some(Boolean)) this.onRealDogs(list);
+      return list.filter(Boolean).length;
+    });
     this.modelsReady = Promise.all([others, Promise.race([horse, grace])])
       .then(([n]) => { this.modelsLoaded = true; return n; });
     this.realHorseReady = horse.then((gltf) => {
@@ -198,6 +207,47 @@ export class Game {
       for (const e of this.allEntities()) if (e.data.species === 'horse' && !e.model?.real) this.horseSwap.push(e);
       this.thumbs?.modelsChanged?.();
     }, 30);
+  }
+
+  /**
+   * Les chiens réalistes sont chargés (l'un, l'autre ou les deux). Leurs données de repos sont tirées des GLB juste
+   * après, hors de l'image en cours ; puis les chiens au modèle de repli prennent le réaliste, un par image
+   * (swapRealDogs), et les vignettes d'animaux et d'équipement sont refaites.
+   */
+  onRealDogs(list) {
+    setTimeout(() => {
+      const kinds = Object.keys(REAL_DOG_KEYS);
+      list.forEach((gltf, i) => {
+        if (!gltf) return;
+        try {
+          realDogBase(gltf, kinds[i]);
+        } catch (err) {
+          console.warn('Chien réaliste : préparation impossible', kinds[i], err);
+        }
+      });
+      for (const e of this.allEntities()) if (e.data.species === 'dog' && !e.model?.realDog) this.dogSwap.push(e);
+      this.thumbs?.modelsChanged?.();
+    }, 60);
+  }
+
+  /**
+   * Un chien au modèle de repli prend le chien réaliste (un par image). Pas pendant une séance qui le guide, une
+   * démonstration de l'éducateur, sur la table du salon ni quand il conduit le troupeau : il attend son tour.
+   */
+  swapRealDogs() {
+    const list = this.dogSwap;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      const here = e.root?.parent && !e.disposed;
+      if (!here || e.model?.realDog) {
+        list.splice(i--, 1);
+        continue;
+      }
+      if (e.scripted || e.herdCtrl || e.posing || e.onTable) continue;
+      list.splice(i, 1);
+      e.rebuildModel();
+      if (e.model?.realDog) return;
+    }
   }
 
   /**
@@ -627,6 +677,8 @@ export class Game {
     const pctrl = mgmt || this.tripFlow.view ? { ...ctrl, move: { x: 0, y: 0 }, run: false } : ctrl;
     // Cheval réaliste arrivé en cours de partie : un cheval de plus prend le vrai modèle.
     if (this.horseSwap.length) this.swapRealHorses();
+    // Chiens réalistes arrivés en cours de partie : un chien de plus prend le vrai modèle.
+    if (this.dogSwap.length) this.swapRealDogs();
     // Point de vue pour la version réduite des chevaux au loin (horseReal.js) : la caméra de l'image d'avant.
     horseView.eye.setFromMatrixPosition(this.camera.matrixWorld);
     horseView.on = true;
@@ -1522,7 +1574,9 @@ export class Game {
       const h = this.player.heading;
       const hand = new THREE.Vector3(pl.x + Math.cos(h) * 0.3, pl.y + 0.85, pl.z - Math.sin(h) * 0.3);
       const neck = e.position.clone();
-      neck.y += (e.model.y0 + e.data.look.bodyR) * e.scale;
+      // (chien réaliste : l'anneau de son collier, qui suit l'encolure)
+      if (e.model.leashPoint) e.model.leashPoint.getWorldPosition(neck);
+      else neck.y += (e.model.y0 + e.data.look.bodyR) * e.scale;
       const dist = hand.distanceTo(neck);
       const slack = Math.max(0, 2.8 - dist) * 0.35;
       const pos = line.geometry.attributes.position;

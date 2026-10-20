@@ -1,0 +1,22 @@
+Petits chiens — « Jack Russell » par FainoDS (doinspire) (Sketchfab)
+Fichier du jeu : dog_jack.glb
+
+Source :
+  https://sketchfab.com/3d-models/jack-russell-45f1bbf15b67488fba6bea6822d8a7c3
+
+Licence :
+  Creative Commons Attribution 4.0 International (CC BY 4.0)
+  https://creativecommons.org/licenses/by/4.0/
+
+Attribution : « Jack Russell » by FainoDS (doinspire), licensed under CC BY 4.0.
+
+Modifications faites pour La ferme à Madichelle (scripts de tools/chien/, voir tools/chien/LISEZMOI.md) :
+  - les pièces du maillage réunies et soudées (trous et déchirures du museau refermés) ;
+  - squelette et poids refaits (os des oreilles et des yeux ajoutés) ;
+  - animations d'origine reprises et retargetées ; animations ajoutées : pas, trot, galop, assis, donner la patte,
+    couché, endormi, renifler, manger, boire, révérence, saut, transitions ;
+  - pieds recalés au sol sur chaque image, canaux inutiles retirés ;
+  - texture rendue neutre (la robe est recolorée par le jeu), textures WebP, compression meshopt, version allégée
+    (moins de triangles) pour les chiens lointains ;
+  - en jeu : proportions des petites races par déformation du squelette (src/game/models/dogReal.js).
+Le modèle d'origine n'est pas cautionné par son auteur pour cet usage ; aucune garantie.

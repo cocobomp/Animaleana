@@ -603,7 +603,7 @@ export class Thumbs {
 
   /**
    * Les modèles des chevaux ont changé (le cheval réaliste est arrivé après l'ouverture de la partie, voir
-   * Game.onRealHorse) : les vignettes qui peuvent montrer un cheval (animaux, équipement posé sur des chevaux
+   * Game.onRealHorse ; de même les chiens réalistes, Game.onRealDogs : vignettes « animal » et « gear ») : les vignettes qui peuvent montrer un cheval (animaux, équipement posé sur des chevaux
    * mannequins, « À cheval » des véhicules, paddocks : voir register) prennent d'autres clés et sont refaites à
    * la prochaine demande ; les mannequins gardés sont libérés entre deux vignettes (jamais pendant qu'on en
    * photographie une).

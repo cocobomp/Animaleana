@@ -799,6 +799,10 @@ button.sv-card:hover { border-color: var(--primary); }
 .help-topic { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 4px 6px 8px; display: grid; gap: 6px; }
 .help-topic.open { border-color: var(--primary); }
 .help-title { border: none; background: none; text-align: left; font-weight: 700; font-size: 1rem; }
+.credits { margin-top: 12px; }
+.credits summary { cursor: pointer; padding: 6px 2px; }
+.credits-list { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 0.92rem; line-height: 1.35; overflow-wrap: anywhere; }
+.credits-list small { color: var(--muted, #666); }
 .help-steps { margin: 0; padding-left: 26px; display: grid; gap: 4px; line-height: 1.4; }
 .pulse { animation: pulse 0.8s ease-in-out infinite; box-shadow: 0 0 0 4px #ffd35a; }
 @keyframes pulse { 50% { transform: scale(1.12); } }

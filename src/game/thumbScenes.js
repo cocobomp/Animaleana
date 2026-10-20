@@ -350,7 +350,9 @@ function animalThumb(spec) {
   const look = { ...resolveLook(species, breed, colorIndex), seed };
   const data = { species, breed, sex, ageDays: stageAgeDays(species, stage), look };
   const foal = species === 'horse' && stage === 'baby';
-  const model = withTexScale(THUMB_TEX, () => buildAnimalModel(species, foal ? { ...look, foal: true } : look, breed));
+  // (le chiot du chien réaliste : son gabarit, grosse tête et pattes courtes, comme en jeu)
+  const puppy = species === 'dog' && stage === 'baby';
+  const model = withTexScale(THUMB_TEX, () => buildAnimalModel(species, foal ? { ...look, foal: true } : puppy ? { ...look, puppy: true } : look, breed));
   model.root.traverse((o) => {
     if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false;
   });

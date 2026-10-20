@@ -2811,7 +2811,9 @@ function tailCarriage(model, base, B) {
     // l'horizontale : setter ; droite dans l'axe du dos : cocker)
     screw: [-1.9, 4.6], flat: [-2.25, -0.7], flag: [0.25, -0.15], level: [0.1, 0.05],
   };
-  const [a0, curve] = shapes[want] ?? shapes.sabre;
+  const [a0, c0] = shapes[want] ?? shapes.sabre;
+  // (jack : sa queue d'origine est recourbée vers l'avant — sans contre-courbure, la queue du cocker faisait un crochet)
+  const curve = base.kind === 'jack' && want === 'level' ? 1.2 : c0;
   // Le premier os : on le tourne pour que la queue parte à a0 sous l'horizontale vers l'arrière ; les suivants se
   // courbent de curve / n chacun, autour de l'axe x du chien (dans le repère de leur parent).
   const out = rest.map((q) => q.clone());

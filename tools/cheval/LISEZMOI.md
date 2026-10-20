@@ -253,8 +253,25 @@ ton gris par sommet, couleur dans la matière de chaque cheval) :
   traverse les pointes ; reflet du ciel atténué (la crinière noire était un aplat gris) ; crins foncés éclaircis crin
   par crin (on lit les mèches en basse, sans reflet), crins clairs plafonnés (plus de blanc brûlé) ;
 - *tresses du concours de beauté* : places mesurées sur les cartes (racines de la crinière, face arrière des mèches
-  de la queue) ; tant que le cheval est tressé, les mèches de la crinière rentrent dans les boutons
-  (`model.setBraided`).
+  de la queue) ; tant que le cheval est tressé, les mèches de la crinière et de la crête rentrent dans les boutons
+  (`model.setBraided`) ; la tresse de queue suit les crins pendant un coup de queue (`tests/horseRealGame.test.js`).
+
+  Mesuré (avant : juste avant l'étape 2 ; après : crins en cartes ; mêmes graines) :
+  - *triangles par cheval* (33 races, moyenne, `node` sur le GLB) : 15 098 → 11 745 en version complète (crins
+    5 676 → 2 274, au plus 2 700), 6 436 → 4 786 en version réduite ; mêmes appels de dessin (5 en basse avec les
+    ombres des sabots, 4 en haute) ;
+  - *10 chevaux au paddock, caméra normale* (Chromium SwiftShader, 390×844 DPR 3 en basse, 1280×800 en haute) :
+    triangles à l'écran 315 k → 300 k (basse), 573 k → 542 k (haute) ; appels 106 et 158, inchangés ; un
+    programme de moins (une seule matière de crins) ; une texture de moins en haute (les deux cartes du GLB ne
+    sont plus envoyées au processeur graphique : environ − 2,8 Mo en haute, − 1,4 Mo en basse, + 0,33 Mo pour
+    la bande générée et ses niveaux réduits) ; temps de rendu seul de la même vue (médiane de 40 rendus, trois
+    tours en alternance, machine très chargée : seule la comparaison vaut) 1 288 → 1 236 ms en basse, et au tour
+    le moins chargé 1 444 → 1 412 ms en haute : inchangé à la précision de la mesure (le recouvrement des cartes
+    alpha est compensé par les 3 400 triangles de moins) ;
+  - *processeur* : la bande de crins est faite une fois par partie, en ≈ 30 ms de code froid (250 ms avant de
+    sortir le tracé d'un crin dans sa propre fonction), dans sa propre tâche dès l'arrivée du modèle
+    (`Game.onRealHorse`) ; les crins d'un gabarit neuf (premier cheval d'une race) se posent en ≈ 25 ms de plus
+    (médiane, ≈ 35 → 59 ms pour le gabarit entier sur cette machine chargée ; en cache, rien : ≈ 1 ms).
 
 
 Ce qu'il coûte, et comment on le garde bas :

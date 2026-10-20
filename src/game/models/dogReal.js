@@ -18,6 +18,7 @@ import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
 import { dogBuild } from '../../sim/dogLook.js';
 import { coatPlan, makeCoatUniforms, makeLandUniforms, setCoat, coatMaterial, furLow, furDetail } from './dogCoat.js';
+import { pendantEars, shibaEarHide, buildPendantEars, faceShape } from './dogParts.js';
 
 /** Clés des deux GLB (assets.js) : jamais « dog » (gltfAnimal.js le prendrait pour un animal GLB générique). */
 export const REAL_DOG_KEYS = { shiba: 'dog_shiba', jack: 'dog_jack' };
@@ -39,7 +40,7 @@ const MODEL = {
     grain: 1,
   },
   jack: {
-    keep: { dark: 0.02, pink: true, nose: [0.032, 0.25] },
+    keep: { dark: 0.02, pink: true, nose: [0.032, 0.25], darkLips: true },
     grain: 0.55,
     // (grain tiré de la texture sans ses plaques blanc et feu : voir furDetail)
     detail: true,
@@ -397,6 +398,8 @@ export function realDogBase(gltf, kind) {
     natural: { ...NATURAL_SPEED, ...(ext.naturalSpeeds ?? {}) },
     cfg: MODEL[kind],
   };
+  // Oreilles droites du shiba rentrées sous la peau du crâne pour les races aux oreilles modelées (dogParts.js).
+  base.earHide = kind === 'shiba' ? shibaEarHide(base) : null;
   // Attributs communs à toutes les races (robe) : position de repos d'origine, appartenance, grain du poil.
   const low = furLow(coat.material.map?.image, coat.uv, coat.pos, coat.index, n);
   base.means = low.none ? null : { lo: low.lo, hi: low.hi };
@@ -579,6 +582,8 @@ function tailShape(base, B, P, H, n, wTail) {
       Sm[2] * o.x + Sm[5] * o.y + Sm[8] * o.z,
     );
     o2.lerpVectors(o, o2, on);
+    // (effilée : le rayon décroît jusqu'à la pointe — un panache ou une queue de loutre, pas une massue)
+    if (B.tailTaper > 0) o2.multiplyScalar(1 - B.tailTaper * Math.pow(clamp(s / tot, 0, 1), 1.15));
     rad[i] = o2.length();
     _w.copy(q).sub(C0).multiplyScalar(kl).add(C0).add(o2);
     x.lerp(_w, w);
@@ -692,14 +697,16 @@ export function deformDog(base, B) {
   //    restait visible, froissé, devant ou sous la coque.)
   // (le poil long ne les ressort pas : voir 9)
   const hidden = new Float32Array(n);
-  if (base.earFlap && (B.ears === 'pointed' || B.ears === 'bat')) {
-    for (const F of base.earFlap) {
+  // (oreilles modelées — pendantes, en rose — : l'oreille d'origine des deux modèles est cachée de même, voir dogParts.js)
+  const hideSet = base.earFlap && (B.ears === 'pointed' || B.ears === 'bat' || pendantEars(B)) ? base.earFlap : base.earHide && pendantEars(B) ? base.earHide : null;
+  if (hideSet) {
+    for (const F of hideSet) {
       if (!F) continue;
       for (let k = 0; k < F.ids.length; k++) {
         const i = F.ids[k];
         p.fromArray(P, i * 3).lerp(_w.fromArray(F.hide, k * 3), F.c[k]);
         P.set([p.x, p.y, p.z], i * 3);
-        hidden[i] = F.c[k];
+        hidden[i] = F.e ? F.e[k] : F.c[k];
       }
     }
   }
@@ -838,8 +845,10 @@ export function deformDog(base, B) {
       set(j, p);
     }
   }
+  // 5b. Visage (modèle du shiba) : joues, bouche neutre, babines, crâne, stop, museau carré, paupières (dogParts.js).
+  faceShape(base, B, P);
   // 6. Oreilles : taille, puis port (dressées, pliées, tombantes) par rotation autour de la base et du pli.
-  const earOps = earPlan(base, B, H);
+  const earOps = pendantEars(B) ? [null, null] : earPlan(base, B, H);
   for (let s = 0; s < 2; s++) {
     const op = earOps[s];
     if (!op) continue;
@@ -981,7 +990,7 @@ export function deformDog(base, B) {
     _w.fromArray(N, i * 3).add(_v.fromArray(nDef, i * 3)).sub(_u.fromArray(coat.nrmCalc, i * 3)).normalize();
     N.set([_w.x, _w.y, _w.z], i * 3);
   }
-  return { pos: P, nrm: N, heads: H, eyePos: EP, eyeNrm: EN };
+  return { pos: P, nrm: N, heads: H, eyePos: EP, eyeNrm: EN, hidden };
 }
 
 /** Bruit lisse simple (déterministe) pour les touffes de poil. */
@@ -1237,18 +1246,83 @@ function shapeFor(base, B) {
     return g;
   };
   S = { key, B, D, heads: D.heads, users: 1 };
-  S.coatGeo = geo(D.pos, D.nrm, coat, base.attrs);
+  // Pièces modelées (oreilles pendantes : dogParts.js) ajoutées au pelage ; peau de l'oreille d'origine cachée rendue
+  // à la tête (elle ne ressort plus quand l'oreille bouge).
+  const extra = buildPendantEars(base, D, B);
+  S.coatGeo = extra ? mergedCoatGeo(base, D, extra) : geo(D.pos, D.nrm, coat, base.attrs);
   S.eyeGeo = base.prims.eye ? geo(D.eyePos, D.eyeNrm, base.prims.eye, base.eyeAttrs) : null;
   S.earGeo = erectEars(base, D, B);
-  S.lodCoat = lodGeo(S.coatGeo, coat.lodIndex);
+  S.lodCoat = lodGeo(S.coatGeo, coat.lodIndex && extra ? Uint32Array.from([...coat.lodIndex, ...extra.index.map((i) => i + coat.count)]) : coat.lodIndex);
   S.lodEye = S.eyeGeo ? lodGeo(S.eyeGeo, base.prims.eye.lodIndex) : null;
   S.boneBox = emptyBoneBoxes(base.names.length);
-  growBoneBoxes(S.boneBox, D.pos, coat.si, coat.sw, coat.count);
+  {
+    const ga = S.coatGeo.attributes;
+    growBoneBoxes(S.boneBox, ga.position.array, ga.skinIndex.array, ga.skinWeight.array, ga.position.count);
+  }
   if (S.eyeGeo) growBoneBoxes(S.boneBox, D.eyePos, base.prims.eye.si, base.prims.eye.sw, base.prims.eye.count);
   if (S.earGeo) growBoneBoxes(S.boneBox, S.earGeo.attributes.position.array, S.earGeo.attributes.skinIndex.array, S.earGeo.attributes.skinWeight.array, S.earGeo.attributes.position.count);
   S.measure = measureDog(base, D, B);
   shapes.set(key, S);
   return S;
+}
+
+/**
+ * Géométrie du pelage d'une race avec des pièces modelées en plus (extra : buildPendantEars) : attributs mis bout à
+ * bout ; les sommets cachés (oreille d'origine rentrée dans le crâne) passent de l'os de l'oreille à celui de la tête.
+ */
+function mergedCoatGeo(base, D, extra) {
+  const coat = base.prims.coat;
+  const n = coat.count;
+  const m = extra.count;
+  const cat = (a, b, k, T) => {
+    const out = new T((n + m) * k);
+    out.set(a.subarray(0, n * k));
+    out.set(b, n * k);
+    return out;
+  };
+  const si = cat(coat.si, extra.si, 4, Uint16Array);
+  const sw = cat(coat.sw, extra.sw, 4, Float32Array);
+  if (D.hidden) {
+    const headI = base.index.get('head');
+    const ears = new Set(['ear1L', 'ear2L', 'ear1R', 'ear2R'].map((nm) => base.index.get(nm)));
+    const acc = new Map();
+    for (let i = 0; i < n; i++) {
+      const c = D.hidden[i];
+      if (!(c > 0)) continue;
+      acc.clear();
+      for (let k = 0; k < 4; k++) {
+        const w = sw[i * 4 + k];
+        if (!(w > 0)) continue;
+        const b = si[i * 4 + k];
+        if (ears.has(b)) {
+          acc.set(b, (acc.get(b) ?? 0) + w * (1 - c));
+          acc.set(headI, (acc.get(headI) ?? 0) + w * c);
+        } else acc.set(b, (acc.get(b) ?? 0) + w);
+      }
+      const top = [...acc].sort((a, b) => b[1] - a[1]).slice(0, 4);
+      const tot = top.reduce((x, [, w]) => x + w, 0) || 1;
+      for (let k = 0; k < 4; k++) {
+        si[i * 4 + k] = top[k] ? top[k][0] : 0;
+        sw[i * 4 + k] = top[k] ? top[k][1] / tot : 0;
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(cat(D.pos, extra.pos, 3, Float32Array), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(cat(D.nrm, extra.nrm, 3, Float32Array), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(cat(coat.uv, extra.uv, 2, Float32Array), 2));
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  g.setAttribute('cmpRest', new THREE.BufferAttribute(cat(base.attrs.cmpRest.array, extra.rest, 3, Float32Array), 3));
+  g.setAttribute('cmpPart', new THREE.BufferAttribute(cat(base.attrs.cmpPart.array, extra.part, 4, Float32Array), 4));
+  g.setAttribute('cmpLow', new THREE.BufferAttribute(cat(base.attrs.cmpLow.array, extra.low, 1, Float32Array), 1));
+  const idx = new Uint32Array(coat.index.length + extra.index.length);
+  idx.set(coat.index);
+  for (let i = 0; i < extra.index.length; i++) idx[coat.index.length + i] = extra.index[i] + n;
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  g.computeBoundingSphere();
+  g.userData.shared = true;
+  return g;
 }
 
 /**
@@ -1471,8 +1545,8 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   const coatMat = coatMaterial(base.prims.coat.material, uniforms, {
     role: 'fur', means: base.means, detail: base.detail, contrast: base.cfg.grain, keep: { ...keepCfg, spheres },
   });
-  // (robe noire : un peu de lustre, sinon le poil n'a plus de modelé)
-  coatMat.roughness = plan.dark ? 0.6 : 0.82;
+  // (robe noire : du lustre, sinon le poil n'a plus de modelé ; brune ou bringée foncée : un peu)
+  coatMat.roughness = plan.dark ? 0.48 : plan.sheen ? 0.66 : 0.82;
   const hb = { box: new THREE.Box3(), sphere: new THREE.Sphere(), boneBox: S.boneBox.slice(), skeleton, meshes: [], anim: null };
   const coatMesh = new DogMesh(S.coatGeo, coatMat, hb);
   const meshes = [coatMesh];

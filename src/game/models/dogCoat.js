@@ -51,6 +51,8 @@ export function coatPlan(look = {}, breedId = null) {
     headPatch: 0, patchColor: sec, blobs: 0, blobSize: 1, blobColor: sec,
     spots: 0, spotsColor: sec, merle: 0, merleColor: third, brindle: 0, brindleColor: 0x2a1d15,
     sable: 0, sableColor: 0x2a1f18, tick: 0, tickColor: coat,
+    // iris (couleur des yeux de la robe : bleus du husky, du berger australien merle) ; null : celui du modèle
+    iris: look.eye ?? null,
   };
   const white = (c) => lum(c) > 0.62;
   const hound = ['beagle', 'coonhound'].includes(breed);
@@ -205,12 +207,15 @@ export function coatPlan(look = {}, breedId = null) {
     P.maskEars = 1;
   }
   if (hound && pattern === 'patches' && !white(coat)) P.headPatch = 0;
-  // Noirs très sombres : un peu relevés (sinon plus aucun modelé ni reflet du poil à l'écran).
-  for (const k of ['base', 'saddleColor', 'patchColor', 'blobColor', 'merleColor', 'brindleColor']) {
+  // Noirs très sombres : relevés et réchauffés (brun-noir), sinon plus aucun modelé ni reflet du poil à l'écran — le
+  // terre-neuve, le labrador ou le caniche noirs n'étaient plus qu'une silhouette avec une truffe.
+  for (const k of ['base', 'saddleColor', 'patchColor', 'blobColor', 'merleColor', 'brindleColor', 'maskColor']) {
     const l = lum(P[k]);
-    if (l < 0.06) P[k] = mixHex(P[k], 0x423b37, 0.42 * (1 - l / 0.06));
+    if (l < 0.13) P[k] = mixHex(P[k], 0x4d3f35, 0.75 * (1 - l / 0.13));
   }
-  P.dark = lum(P.base) < 0.08;
+  P.dark = lum(P.base) < 0.16;
+  // (lustre et lisière claire des robes sombres : voir cSheen)
+  P.sheen = P.dark ? 1 : lum(P.base) < 0.26 ? 0.5 : 0;
   return P;
 }
 
@@ -250,6 +255,9 @@ export function makeCoatUniforms() {
     cCut: { value: new THREE.Vector4(0, 0, 0, 0) },
     // Relief du poil : frisé (x : bouclettes) et soyeux (y : mèches qui tombent), 0 à 1.
     cCurl: { value: new THREE.Vector2(0, 0) },
+    // Iris (rgb, w : 1 si la robe en donne un) ; lustre des robes sombres (lisière claire, tour des yeux éclairci).
+    cIris: { value: new THREE.Vector4(0, 0, 0, 0) },
+    cSheen: { value: 0 },
   };
 }
 
@@ -279,6 +287,14 @@ export function setCoat(u, P) {
   u.cSableC.value.setHex(P.sableColor);
   u.cTick.value = P.tick;
   u.cTickC.value.setHex(P.tickColor);
+  if (P.iris !== null && P.iris !== undefined) {
+    // (iris très sombre — le brun foncé par défaut des robes — éclairci : un œil brun chaud, pas un trou noir)
+    const c = new THREE.Color(P.iris);
+    const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    if (l < 0.05 && l > 1e-4) c.multiplyScalar(Math.min(6, 0.05 / l));
+    u.cIris.value.set(c.r, c.g, c.b, 1);
+  } else u.cIris.value.set(0, 0, 0, 0);
+  u.cSheen.value = P.sheen ?? 0;
 }
 
 /** Repères du corps au repos (modèle d'origine), communs à tous les chiens d'un modèle. */
@@ -360,6 +376,8 @@ uniform float cTick;
 uniform vec3 cTickC;
 uniform float cWet;
 uniform vec2 cCurl;
+uniform vec4 cIris;
+uniform float cSheen;
 uniform vec4 cLand;
 uniform vec4 cHead;
 uniform vec4 cEye;
@@ -553,10 +571,20 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   }
   // (oreilles un peu plus sombres que la tête : elles s'en détachent, surtout tombantes)
   c *= 1.0 - 0.12 * ear;
+  // Robes sombres : tour des yeux et arête du museau un peu éclaircis (le visage se lit au lieu d'un masque noir).
+  if (cSheen > 0.0) {
+    float ring = 1.0 - smoothstep(0.014, 0.034, length(vec2(ax - cEye.x, (p.y - cEye.y) * 1.25)));
+    float bridge = (1.0 - smoothstep(0.006, 0.02, ax)) * smoothstep(0.42, 0.55, hz) * (1.0 - smoothstep(0.82, 0.95, hz))
+      * smoothstep(cEye.y - 0.03, cEye.y - 0.005, p.y);
+    float lift = head * (1.0 - ear) * clamp(ring * 0.8 + bridge * 0.6, 0.0, 1.0) * cSheen;
+    c = mix(c, c * 1.8 + vec3(0.012, 0.009, 0.007), lift * 0.6);
+  }
   return c;
 }`;
 
 const COLOR_F = /* glsl */ `
+float cmpEyeK = 0.0;
+float cmpCatch = 0.0;
 if (cOn > 0.5) {
   vec3 c0 = diffuseColor.rgb;
   vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
@@ -613,9 +641,28 @@ if (cOn > 0.5) {
   if (cCurl.x > 0.0) nc *= mix(1.0, 0.66 + 0.46 * smoothstep(0.25, 0.75, cmpCurlH(vCmpPos)), cCurl.x * (1.0 - smoothstep(0.25, 0.9, fwC * 110.0)));
   // (soyeux : les mèches sur le corps, pas sur la face au poil court, où elles faisaient des stries)
   if (cCurl.y > 0.0) nc *= mix(1.0, 0.82 + 0.26 * cmpSilkH(vCmpPos), cCurl.y * (1.0 - smoothstep(0.25, 0.9, fwC * 170.0)) * (1.0 - 0.8 * vCmpPart.z));
+  // Lèvres et gencives (jack) : brun-noir comme chez le vrai chien, pas rouge vif (« rouge à lèvres »).
+  if (cKeepOpt.z > 0.0 && cKeepOpt.y > 0.0) {
+    float dh2 = abs(fract(hsv.x - 0.985 + 0.5) - 0.5);
+    float lip = vCmpPart.z * (1.0 - smoothstep(0.05, 0.09, dh2)) * smoothstep(0.25, 0.4, hsv.y) * smoothstep(0.12, 0.25, hsv.z);
+    keep = keep * (1.0 - lip);
+    nc = mix(nc, vec3(0.035, 0.026, 0.022), lip);
+  }
   diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0));
   // Blanc de l'œil du shiba : foncé (il se voyait autour de l'iris dès que la tête grandit : chiots aux yeux ronds)
-  if (eyeK > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.038, 0.03), smoothstep(0.22, 0.45, lum0) * (1.0 - smoothstep(0.12, 0.3, hsv.y)));
+  if (eyeK > 0.5) {
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.038, 0.03), smoothstep(0.22, 0.45, lum0) * (1.0 - smoothstep(0.12, 0.3, hsv.y)));
+    // iris de la robe (yeux bleus) : teinte remplacée, grain gardé
+    float iris = smoothstep(0.22, 0.4, hsv.y) * smoothstep(0.012, 0.03, lum0) * (1.0 - smoothstep(0.35, 0.5, lum0));
+    if (cIris.w > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, cIris.rgb * clamp(lum0 / 0.11, 0.35, 1.5), iris);
+    // reflet : un point de lumière en haut et en avant du globe (le regard vit, même dans l'ombre)
+    float side = sign(vCmpPos.x - cMisc.x);
+    vec3 eo = vec3(cMisc.x + side * cEye.x, cEye.y, cEye.z);
+    vec3 cp = eo + vec3(side * 0.004, 0.0085, 0.0175);
+    cmpCatch = 1.0 - smoothstep(0.0018, 0.0032, distance(vCmpPos, cp));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), cmpCatch);
+    cmpEyeK = 1.0;
+  }
 }`;
 
 // Relief du poil frisé ou soyeux : la normale penche selon la pente de la hauteur (comme une bumpMap), effacé de loin
@@ -632,6 +679,15 @@ if (cOn > 0.5 && cRole > 0.5 && (cCurl.x > 0.0 || cCurl.y > 0.0)) {
   float det = dot(sx, r1);
   vec3 grad = sign(det) * (dH.x * r1 + dH.y * r2);
   normal = normalize(abs(det) * normal - grad);
+}`;
+
+// Lisière claire des robes sombres (lumière rasante sur le poil lustré : le modelé de la tête et du corps se lit) et
+// reflet de l'œil toujours visible.
+const SHEEN_F = /* glsl */ `
+if (cOn > 0.5 && cRole > 0.5) {
+  float fr = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 2.2);
+  totalEmissiveRadiance += cSheen * vec3(0.075, 0.062, 0.052) * fr * (1.0 - cmpEyeK);
+  totalEmissiveRadiance += vec3(0.55) * cmpCatch;
 }`;
 
 const _v = new THREE.Vector3();
@@ -853,7 +909,7 @@ export function coatMaterial(src, shared, opts) {
     cKeepS: { value: spheres.slice(0, MAX_KEEP).map((x) => x.s) },
     cKeepL: { value: spheres.slice(0, MAX_KEEP).map((x) => x.l) },
     cKeepUv: { value: uvs.slice(0, MAX_UV) },
-    cKeepOpt: { value: new THREE.Vector4(keep.dark ?? 0, keep.pink ? 1 : 0, 0, keep.pads ?? 0) },
+    cKeepOpt: { value: new THREE.Vector4(keep.dark ?? 0, keep.pink ? 1 : 0, keep.darkLips ? 1 : 0, keep.pads ?? 0) },
   };
   const uniforms = { ...shared, ...own };
   const mat = new THREE.MeshStandardMaterial({
@@ -873,8 +929,9 @@ export function coatMaterial(src, shared, opts) {
       .replace('#include <common>', `#include <common>\n${COMMON_F}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${CURL_F}`)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, cWet);');
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, cWet);\nroughnessFactor = mix(roughnessFactor, 0.12, cmpEyeK);')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${SHEEN_F}`);
   };
-  mat.customProgramCacheKey = () => 'dog-coat-v2';
+  mat.customProgramCacheKey = () => 'dog-coat-v3';
   return mat;
 }

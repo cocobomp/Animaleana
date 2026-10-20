@@ -1,0 +1,479 @@
+// Pièces modelées par le code pour les chiens réalistes (dogReal.js) : ce que les deux modèles d'artistes n'ont pas.
+//
+// - Oreilles pendantes (labrador, golden, chiens courants, épagneuls, caniche, lévriers aux oreilles en rose…) : les
+//   oreilles d'origine (droites du shiba, en bouton du jack) sont rentrées sous la peau du crâne et une vraie oreille
+//   prend leur place : une feuille de cuir épaisse aux bords arrondis (section en lentille), attachée au niveau de
+//   l'œil, qui retombe contre la joue comme un rideau (elle suit la surface de la tête sans y entrer, puis pend
+//   droit sous la mâchoire), frangée (setter, golden, épagneuls) ou frisée (caniche). Liée aux os de la tête et des
+//   oreilles : elle bouge avec l'oreille (frémissements, oreilles basses).
+//
+// Les pièces sont ajoutées à la géométrie du pelage de la race (même matière, même dessin : pas d'appel de dessin en
+// plus). Pures fonctions des données de repos, de la géométrie de la race et du gabarit : utilisées par les tests.
+
+import * as THREE from 'three';
+
+const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const smooth = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+
+/** Port d'oreille remplacé par une oreille modelée (pendante ou en rose). */
+export function pendantEars(B) {
+  return B.ears === 'floppy' || B.ears === 'long' || B.ears === 'rose' || B.ears === 'drop';
+}
+
+/**
+ * Oreilles droites du shiba effacées du crâne (une fois par GLB) pour les races aux oreilles modelées : autour de la
+ * racine de chaque oreille, la peau est ramenée sur une surface de crâne interpolée depuis le crâne alentour (rayon
+ * depuis le centre de la tête, moyenne pondérée des sommets du crâne à plus de 4 cm de la racine, dans un cône autour
+ * de la direction du sommet) ; l'oreille elle-même passe 4 mm dessous. Seulement abaissés, jamais relevés ; part c
+ * (0 → 1) qui s'efface vers le bord de la zone. (Rentrer seulement les sommets de l'oreille laissait sa base bombée
+ * et des lames de peau tendues entre les deux, en cornes sur le crâne.)
+ */
+export function shibaEarHide(base) {
+  const coat = base.prims.coat;
+  const n = coat.count;
+  const W = base.W;
+  const L = base.land;
+  const I = (nm) => base.index.get(nm) ?? -1;
+  const headP = base.heads[I('head')];
+  const hc = headP.clone().lerp(V(L.midX, L.eyeY, L.eyeZ), 0.35);
+  const roots = ['ear1L', 'ear1R'].map((nm) => base.heads[I(nm)]);
+  const p = V();
+  // crâne de référence (tête, hors oreilles, à plus de 4,2 cm des racines)
+  const skull = [];
+  for (let i = 0; i < n; i++) {
+    if (W.head[i] < 0.5 || W.ear[i * 2] + W.ear[i * 2 + 1] > 0.01) continue;
+    p.fromArray(coat.pos, i * 3);
+    if (Math.min(p.distanceTo(roots[0]), p.distanceTo(roots[1])) < 0.042) continue;
+    p.sub(hc);
+    const r = p.length();
+    skull.push([p.x / r, p.y / r, p.z / r, r]);
+  }
+  // (cône élargi tant qu'il ne contient aucun sommet du crâne : le bout de l'oreille pointe loin de tout crâne)
+  const skullR = (d) => {
+    for (const lim of [0.8, 0.65, 0.45, 0.2]) {
+      let sw = 0;
+      let sr = 0;
+      for (const q of skull) {
+        const c = d.x * q[0] + d.y * q[1] + d.z * q[2];
+        if (c < lim) continue;
+        const w = (c - lim) ** 2 + 1e-6;
+        sw += w;
+        sr += w * q[3];
+      }
+      if (sw > 1e-4) return sr / sw;
+    }
+    return null;
+  };
+  return [0, 1].map((s) => {
+    const ids = [];
+    const cs = [];
+    const es = [];
+    const hide = [];
+    const side = s === 0 ? 1 : -1;
+    for (let i = 0; i < n; i++) {
+      p.fromArray(coat.pos, i * 3);
+      if (Math.sign(p.x - L.midX) !== side) continue;
+      const we = W.ear[i * 2 + s];
+      const dr = p.distanceTo(roots[s]);
+      // (toute la peau que les os de l'oreille portent un peu : chez le shiba, une bosse de poil derrière l'oreille)
+      const c = Math.max(1 - smooth(0.03, 0.05, dr), smooth(0.0, 0.08, we));
+      if (!(c > 0.001) || W.head[i] < 0.3) continue;
+      p.sub(hc);
+      const r = p.length();
+      p.multiplyScalar(1 / r);
+      const rs = skullR(p);
+      if (rs === null) continue;
+      const rt = Math.min(r, rs - 0.0015 - 0.0045 * smooth(0.02, 0.5, we));
+      if (rt >= r - 1e-5) continue;
+      ids.push(i);
+      cs.push(c);
+      es.push(smooth(0.01, 0.25, we));
+      hide.push(hc.x + p.x * rt, hc.y + p.y * rt, hc.z + p.z * rt);
+    }
+    // (e : part de l'oreille elle-même — sans poil, rendue à la tête —, c : part du déplacement)
+    return { ids: Uint32Array.from(ids), c: Float32Array.from(cs), e: Float32Array.from(es), hide: Float32Array.from(hide) };
+  });
+}
+
+/** Bruit lisse 2D déterministe (franges, frisure). */
+function noise2(x, y) {
+  const h = (a, b) => {
+    const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const xf = x - xi;
+  const yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = yf * yf * (3 - 2 * yf);
+  const a = h(xi, yi) + (h(xi + 1, yi) - h(xi, yi)) * u;
+  const b = h(xi, yi + 1) + (h(xi + 1, yi + 1) - h(xi, yi + 1)) * u;
+  return a + (b - a) * v;
+}
+
+/**
+ * Forme de l'oreille d'une race (repère « taille de tête 1 ») : longueur, largeur, attache (au-dessus et en arrière
+ * de l'œil), direction de chute (vers l'avant : boxer ; vers l'arrière : rose), épaisseur, frange, frisure.
+ */
+export function earShape(B) {
+  const kind = B.model;
+  const long = B.ears === 'long';
+  const rose = B.ears === 'rose';
+  const S = {
+    len: 0.115, width: 0.08, up: 0.058, back: 0.074, fwd: 0.14, thick: 0.0048, fringe: 0, curl: 0, round: 2.2, fold: 0.013,
+    rose, set: 0,
+  };
+  if (long) Object.assign(S, { len: 0.15, width: 0.074, up: 0.05, back: 0.07, fwd: 0.1, round: 4, fold: 0.008 });
+  if (rose) Object.assign(S, { len: 0.06, width: 0.036, up: 0.05, back: 0.07, fwd: -1, thick: 0.0028, round: 1.6, fold: 0.006 });
+  if (kind === 'jack') {
+    // (jack : tête plus petite que celle du shiba dans le repère du chien, œil plus bas sur le crâne)
+    Object.assign(S, { len: S.len * 0.95, width: S.width * 0.92, back: S.back * 0.85 });
+  }
+  if (B.ears === 'drop') Object.assign(S, { len: 0.072, width: 0.06, up: 0.052, back: 0.058, fwd: 0.55, thick: 0.0032, round: 2, fold: 0.012 });
+  S.len *= B.earLen ?? 1;
+  S.width *= B.earW ?? 1;
+  S.up += B.earSet ?? 0;
+  S.fringe = clamp((B.feather - 0.6) / 0.5, 0, 1) * (B.earFringe ?? 1);
+  S.curl = B.curly ? 1 : 0;
+  if (B.puppy) {
+    S.len *= 0.85;
+    S.fringe *= 0.4;
+  }
+  return S;
+}
+
+/**
+ * Oreilles modelées d'une race (voir en tête) dans le repère du chien, après la déformation de la race (D : sortie de
+ * deformDog). Place aussi les os des oreilles (base à l'attache, bout au milieu de l'oreille) dans D.heads. Renvoie les
+ * attributs à ajouter au pelage ({ pos, nrm, uv, si, sw, rest, part, low, index }) ou null.
+ */
+export function buildPendantEars(base, D, B) {
+  if (!pendantEars(B)) return null;
+  const I = (nm) => base.index.get(nm) ?? -1;
+  const coat = base.prims.coat;
+  const n = coat.count;
+  const W = base.W;
+  const P = D.pos;
+  const L = base.land;
+  const headI = I('head');
+  const HJ = D.heads[headI];
+  const hs = B.head;
+  const S = earShape(B);
+  const mid = L.midX;
+  // Surface de la tête (crâne, joues, encolure ; sans les oreilles cachées) par côté : grille en (y, z).
+  const cell = 0.006 * hs;
+  const surf = [new Map(), new Map()];
+  const key = (y, z) => `${Math.round(y / cell)},${Math.round(z / cell)}`;
+  // (tous les sommets du tronc et de la tête : la collerette des joues du shiba est portée par l'encolure et le
+  // poitrail — prise seulement sur la tête, l'oreille entrait dans la joue)
+  for (let i = 0; i < n; i++) {
+    if (W.tail[i] > 0.3 || W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] > 0.5) continue;
+    if (D.hidden ? D.hidden[i] > 0.3 : W.ear[i * 2] + W.ear[i * 2 + 1] > 0.3) continue;
+    const x = P[i * 3] - mid;
+    const s = x >= 0 ? 0 : 1;
+    const k = key(P[i * 3 + 1], P[i * 3 + 2]);
+    const m = surf[s];
+    const ax = Math.abs(x);
+    if (!(m.get(k) >= ax)) m.set(k, ax);
+  }
+  const surfX = (s, y, z, r = 2) => {
+    const m = surf[s];
+    const yi = Math.round(y / cell);
+    const zi = Math.round(z / cell);
+    let best = -1;
+    for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) {
+      const v = m.get(`${yi + a},${zi + b}`);
+      if (v > best) best = v;
+    }
+    return best;
+  };
+  // Grain : un coin de poil du dessus du crâne dans la texture.
+  let uv0 = [0.5, 0.5];
+  let low0 = 0;
+  {
+    let by = -Infinity;
+    for (let i = 0; i < n; i++) {
+      if (W.head[i] < 0.95 || W.ear[i * 2] + W.ear[i * 2 + 1] > 0.01 || Math.abs(coat.pos[i * 3] - mid) > 0.012) continue;
+      if (coat.pos[i * 3 + 2] > L.eyeZ - 0.02) continue;
+      if (coat.pos[i * 3 + 1] > by) {
+        by = coat.pos[i * 3 + 1];
+        uv0 = [coat.uv[i * 2], coat.uv[i * 2 + 1]];
+        low0 = base.attrs?.cmpLow?.array[i] ?? 0;
+      }
+    }
+  }
+  const eyeD = D.heads[I('eyeL')].clone().add(D.heads[I('eyeR')]).multiplyScalar(0.5);
+  const NU = 14; // points autour de la section (lentille)
+  const NV = 13; // rangées de l'attache au bout
+  const pos = [];
+  const rest = [];
+  const uv = [];
+  const si = [];
+  const sw = [];
+  const part = [];
+  const index = [];
+  const seed = (B.key.length % 7) * 1.7;
+  for (let s = 0; s < 2; s++) {
+    const side = s === 0 ? 1 : -1;
+    const e1 = I(s === 0 ? 'ear1L' : 'ear1R');
+    const e2 = I(s === 0 ? 'ear2L' : 'ear2R');
+    if (e1 < 0) continue;
+    // Attache (centre du haut de l'oreille), dans le plan du côté de la tête.
+    const Ay = eyeD.y + S.up * hs;
+    const Az = eyeD.z - S.back * hs;
+    const len = S.len * hs;
+    const wid = S.width * hs;
+    // Direction de chute dans le plan (y, z) : vers le bas, un peu vers l'avant (rose : vers l'arrière et le bas).
+    const dir = S.rose ? V(0, -0.45, -1).normalize() : V(0, -1, S.fwd).normalize();
+    const across = V(0, -dir.z, dir.y); // (vers l'avant pour une oreille pendante)
+    if (across.z < 0) across.negate();
+    const start = pos.length / 3;
+    // 1. Grille de l'oreille dans le plan du côté de la tête, et surface sur laquelle elle tombe (enveloppe lissée de la
+    //    tête : elle ne recopie pas les petites bosses du crâne).
+    const Q = [];
+    const SX = [];
+    for (let r = 0; r <= NV; r++) {
+      const v = r / NV;
+      const w = wid * 0.5 * Math.pow(Math.max(0, 1 - Math.pow(v, S.round)), 0.5) * (1 - 0.18 * v) + 0.0012;
+      const rowQ = [];
+      const rowX = [];
+      for (let k = 0; k < NU; k++) {
+        const th = (k / NU) * Math.PI * 2;
+        const u = 0.5 - 0.5 * Math.cos(th); // 0 : bord avant, 1 : bord arrière
+        // frange : bord bas ondulé et plus long
+        let lv = v;
+        if (S.fringe > 0) lv = v * (1 + S.fringe * (0.18 + 0.08 * Math.sin(u * 9 + seed)) * smooth(0.5, 1, v));
+        const q = V(0, Ay, Az).addScaledVector(dir, lv * len).addScaledVector(across, (0.5 - u) * 2 * w);
+        if (S.rose) q.y += 0.012 * hs * Math.sin(Math.PI * v);
+        rowQ.push(q);
+        let sx = surfX(s, q.y, q.z, 4);
+        if (sx < 0 && r > 0) sx = SX[r - 1][k];
+        if (sx < 0) sx = surfX(s, q.y, q.z, 8);
+        if (sx < 0) sx = 0.04 * hs;
+        rowX.push(sx);
+      }
+      Q.push(rowQ);
+      SX.push(rowX);
+    }
+    // lissage (voisins sur la section et entre rangées), puis rideau : sous la mâchoire, l'oreille pend droit
+    for (let it = 0; it < 3; it++) {
+      const prev = SX.map((row) => row.slice());
+      for (let r = 0; r <= NV; r++) {
+        for (let k = 0; k < NU; k++) {
+          const a = prev[r][(k + 1) % NU];
+          const b = prev[r][(k + NU - 1) % NU];
+          const c = prev[Math.max(0, r - 1)][k];
+          const d = prev[Math.min(NV, r + 1)][k];
+          SX[r][k] = Math.max(prev[r][k] * 0.4 + (a + b + c + d) * 0.15, prev[r][k] - 0.002 * hs);
+        }
+      }
+    }
+    for (let r = 1; r <= NV; r++) for (let k = 0; k < NU; k++) SX[r][k] = Math.max(SX[r][k], SX[r - 1][k] - 0.0035 * hs);
+    // 2. Sommets : section en lentille (bords arrondis) posée sur la surface, pli de l'attache, frisure.
+    const ring = SX;
+    for (let r = 0; r <= NV; r++) {
+      const v = r / NV;
+      const T = (S.thick + S.fringe * 0.006 * v + S.curl * 0.004) * hs;
+      for (let k = 0; k < NU; k++) {
+        const th = (k / NU) * Math.PI * 2;
+        const u = 0.5 - 0.5 * Math.cos(th);
+        const t = Math.sin(th); // + : face externe
+        const q = Q[r][k];
+        const sx = SX[r][k];
+        const lift = S.fold * hs * (1 - smooth(0, 0.4, v)) * (S.rose ? 1 : 1.2);
+        // (le haut de l'oreille part de sous la peau : l'attache n'a pas de bord ouvert)
+        const tuck = 0.026 * hs * (1 - smooth(0, 0.16, v));
+        const bump = S.curl ? (noise2(u * 5 + seed, v * 7) - 0.5) * 0.008 * hs : 0;
+        const x = sx + 0.0025 * hs + T + t * T + lift - tuck + bump;
+        const pX = mid + side * x;
+        pos.push(pX, q.y, q.z);
+        // repos (modèle d'origine) : ramené autour de l'os de la tête d'origine
+        const rp = V(pX, q.y, q.z).sub(HJ).multiplyScalar(1 / hs).add(base.heads[headI]);
+        rest.push(rp.x, rp.y, rp.z);
+        uv.push(uv0[0] + (u - 0.5) * 0.02, uv0[1] + (v - 0.5) * 0.03);
+        // os : tête à l'attache, puis oreille (base), puis bout
+        const wh = 1 - smooth(0.0, 0.22, v);
+        const w2 = smooth(0.35, 0.85, v) * (1 - wh);
+        const w1 = 1 - wh - w2;
+        si.push(headI, e1, e2 >= 0 ? e2 : e1, 0);
+        sw.push(wh, w1, e2 >= 0 ? w2 : 0, 0);
+        if (e2 < 0) sw[sw.length - 3] += w2;
+        part.push(1, 0, 1, 0);
+      }
+    }
+    // faces : bandes entre rangées, bout fermé par un éventail
+    for (let r = 0; r < NV; r++) {
+      for (let k = 0; k < NU; k++) {
+        const a = start + r * NU + k;
+        const b = start + r * NU + ((k + 1) % NU);
+        const c = a + NU;
+        const d = b + NU;
+        if (side > 0) index.push(a, c, b, b, c, d);
+        else index.push(a, b, c, b, d, c);
+      }
+    }
+    // (le haut est dans le crâne ; le bout est fermé)
+    const last = start + NV * NU;
+    const tipC = pos.length / 3;
+    {
+      let cx = 0;
+      let cy = 0;
+      let cz = 0;
+      for (let k = 0; k < NU; k++) {
+        cx += pos[(last + k) * 3];
+        cy += pos[(last + k) * 3 + 1];
+        cz += pos[(last + k) * 3 + 2];
+      }
+      pos.push(cx / NU, cy / NU, cz / NU);
+      for (let c = 0; c < 3; c++) rest.push(rest[(last) * 3 + c]);
+      uv.push(uv0[0], uv0[1] + 0.015);
+      si.push(headI, e1, e2 >= 0 ? e2 : e1, 0);
+      sw.push(0, e2 >= 0 ? 0 : 1, e2 >= 0 ? 1 : 0, 0);
+      part.push(1, 0, 1, 0);
+      for (let k = 0; k < NU; k++) {
+        const a = last + k;
+        const b = last + ((k + 1) % NU);
+        if (side > 0) index.push(a, tipC, b);
+        else index.push(a, b, tipC);
+      }
+    }
+    // Os de l'oreille : base à l'attache (contre le crâne), bout au milieu de l'oreille.
+    const baseX = ring[0][0];
+    D.heads[e1].set(mid + side * baseX, Ay, Az);
+    if (e2 >= 0) {
+      const m = Math.round(NV * 0.55);
+      const q = V(0, Ay, Az).addScaledVector(dir, (m / NV) * len);
+      D.heads[e2].set(mid + side * (ring[m][Math.floor(NU / 4)] + 0.006 * hs), q.y, q.z);
+    }
+  }
+  if (!pos.length) return null;
+  const count = pos.length / 3;
+  // normales lissées
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(index);
+  g.computeVertexNormals();
+  const nrm = g.attributes.normal.array;
+  g.dispose();
+  return {
+    count,
+    pos: Float32Array.from(pos), nrm: Float32Array.from(nrm), uv: Float32Array.from(uv), rest: Float32Array.from(rest),
+    si: Uint16Array.from(si), sw: Float32Array.from(sw), part: Float32Array.from(part), low: new Float32Array(count).fill(low0),
+    index: Uint32Array.from(index),
+  };
+}
+
+/**
+ * Visage d'une race sur le modèle du shiba (avant les oreilles) : la tête de spitz du modèle — joues en collerette,
+ * yeux en amande plissés, commissure relevée en sourire, museau pointu de renard — devient celle d'un chien à
+ * oreilles tombantes, d'un lévrier ou d'un chiot. Champs du gabarit (0 → 1) : cheek (joues amincies : la collerette
+ * des joues rentrée vers le crâne), mouth (bouche neutre : commissure abaissée), flews (babines : la lèvre du haut
+ * retombe par-dessus celle du bas), jowl (bajoues du saint-bernard), skullFlat (crâne plat et large), stop (front
+ * marqué au-dessus des yeux), square (museau haut et carré), eyeOpen (paupières ouvertes : œil rond, regard droit).
+ * Les zones sont repérées sur la position de repos du modèle d'origine (base.prims.coat.pos, repère du shiba) ; les
+ * déplacements sont à l'échelle de la tête de la race. Modifie P (sommets du pelage) ; les os ne bougent pas.
+ */
+export function faceShape(base, B, P) {
+  if (base.kind !== 'shiba') return;
+  const cheek = B.cheek ?? 0;
+  const mouth = B.mouth ?? 0;
+  const flews = B.flews ?? 0;
+  const jowl = B.jowl ?? 0;
+  const flat = B.skullFlat ?? 0;
+  const stop = B.stop ?? 0;
+  const square = B.square ?? 0;
+  const open = B.eyeOpen ?? 0;
+  const coat = base.prims.coat;
+  const n = coat.count;
+  const R = coat.pos;
+  const W = base.W;
+  const L = base.land;
+  const I = (nm) => base.index.get(nm) ?? -1;
+  const jawI = I('jaw');
+  const eyes = new Set([I('eyeL'), I('eyeR')]);
+  const hs = B.head;
+  const mid = L.midX;
+  // dents (bande du haut de la texture) : rentrées derrière la lèvre (une incisive pointait sous la truffe)
+  const teeth = (i) => coat.uv[i * 2 + 1] < 0.1 && coat.uv[i * 2] > 0.42 && coat.uv[i * 2] < 0.9;
+  const g = (d, r) => Math.exp(-(d * d) / (r * r));
+  for (let i = 0; i < n; i++) {
+    const wh = W.head[i];
+    const x0 = R[i * 3] - mid;
+    const y0 = R[i * 3 + 1];
+    const z0 = R[i * 3 + 2];
+    const ax = Math.abs(x0);
+    const sx = x0 >= 0 ? 1 : -1;
+    let wj = 0;
+    let we = 0;
+    for (let k = 0; k < 4; k++) {
+      const b = coat.si[i * 4 + k];
+      if (b === jawI) wj += coat.sw[i * 4 + k];
+      if (eyes.has(b)) we += coat.sw[i * 4 + k];
+    }
+    let dx = 0;
+    let dy = 0;
+    let dz = 0;
+    // joues : la collerette rentrée vers un crâne de 7 cm de demi-largeur (devant, la face reste)
+    if (cheek > 0 && ax > 0.07 && W.ear[i * 2] + W.ear[i * 2 + 1] < 0.05) {
+      const zone = smooth(0.2, 0.27, z0) * (1 - smooth(0.36, 0.4, z0)) * smooth(0.44, 0.5, y0) * (1 - smooth(0.64, 0.69, y0));
+      dx -= sx * cheek * 0.7 * (ax - 0.07) * zone;
+    }
+    // crâne plat (et un peu plus large)
+    if (flat > 0 && wh > 0.5) {
+      const zone = smooth(0.22, 0.27, z0) * (1 - smooth(0.37, 0.4, z0)) * smooth(0.62, 0.66, y0);
+      dy -= flat * 0.35 * Math.max(0, y0 - 0.63) * zone;
+      dx += sx * flat * 0.08 * ax * zone;
+    }
+    // front marqué au-dessus des yeux (stop)
+    if (stop > 0 && wh > 0.5 && we < 0.05) {
+      const d = Math.hypot((ax - 0.022) * 1.2, y0 - 0.612, z0 - 0.383);
+      dy += stop * 0.006 * g(d, 0.018);
+      dz += stop * 0.004 * g(d, 0.018);
+    }
+    // paupières ouvertes : le tour de l'œil s'écarte verticalement du centre de l'œil (pas le globe)
+    if (open > 0 && we < 0.3 && wh > 0.5) {
+      const dyE = y0 - L.eyeY;
+      const d = Math.hypot(ax - L.eyeX, dyE * 0.9, z0 - L.eyeZ);
+      if (d < 0.035) {
+        const f = g(Math.max(0, d - 0.012), 0.012) * (1 - we / 0.3);
+        dy += open * 0.0032 * Math.sign(dyE) * Math.min(1, Math.abs(dyE) / 0.006) * f;
+      }
+    }
+    // bouche neutre : la commissure (au bout du sourire, sous l'œil) abaissée et un peu avancée
+    if (mouth > 0 && wh > 0.5) {
+      const d = Math.hypot((ax - 0.042) * 1.4, y0 - 0.532, (z0 - 0.398) * 0.9);
+      const f = g(d, 0.018);
+      dy -= mouth * 0.009 * f;
+      dz += mouth * 0.003 * f;
+    }
+    // babines : la lèvre du haut (pas la mâchoire) descend et s'écarte au-dessus de la lèvre du bas ; bajoues
+    if ((flews > 0 || jowl > 0) && wh > 0.5 && wj < 0.5 && ax > 0.012 && we < 0.05) {
+      const zf = smooth(0.375, 0.4, z0) * (1 - smooth(0.455, 0.475, z0));
+      const yf = smooth(0.505, 0.52, y0) * (1 - smooth(0.545, 0.575, y0));
+      const f = zf * yf * smooth(0.012, 0.025, ax) * (1 - wj * 2);
+      dy -= (flews * 0.011 + jowl * 0.008) * f;
+      dx += sx * (flews * 0.004 + jowl * 0.007) * f;
+    }
+    // museau haut et carré : les côtés du bas du museau élargis, l'arête un peu relevée
+    if (square > 0 && wh > 0.5 && we < 0.05) {
+      const zf = smooth(0.39, 0.42, z0) * (1 - smooth(0.47, 0.49, z0));
+      const yf = 1 - smooth(0.54, 0.575, y0);
+      dx += sx * square * 0.18 * Math.min(ax, 0.04) * zf * yf;
+      dy += square * 0.003 * zf * smooth(0.55, 0.58, y0) * (1 - smooth(0.015, 0.03, ax));
+    }
+    if (teeth(i)) {
+      dy += 0.0015;
+      dz -= 0.004;
+    }
+    if (dx || dy || dz) {
+      P[i * 3] += dx * hs;
+      P[i * 3 + 1] += dy * hs;
+      P[i * 3 + 2] += dz * hs;
+    }
+  }
+}

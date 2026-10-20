@@ -407,6 +407,38 @@ describe('robes', () => {
     // chaque robe de chaque race donne un plan (les yeux, la truffe et la langue gardent leur texture)
     for (const b of SPECIES.dog.breeds) for (let i = 0; i < b.colors.length; i++) expect(plan(b.id, i).base).toBeTypeOf('number');
   });
+
+  it('yeux de la robe : un husky gris et blanc a l\'iris bleu (le berger australien bleu merle aussi), un labrador garde le sien', () => {
+    const blue = new THREE.Color(0x6fb6e8);
+    for (const [b, i] of [['husky', 0], ['berger_australien', 0]]) {
+      const md = dog(b, { colorIndex: i });
+      const iris = md.uniforms.cIris.value;
+      expect(iris.w, b).toBe(1);
+      expect(iris.z, b).toBeGreaterThan(iris.x);
+      expect(Math.abs(iris.x - blue.r) + Math.abs(iris.y - blue.g) + Math.abs(iris.z - blue.b), b).toBeLessThan(1e-3);
+      md.dispose();
+    }
+    // (les autres : iris brun chaud, éclairci depuis le brun très foncé par défaut des robes)
+    const lab = dog('labrador');
+    const li = lab.uniforms.cIris.value;
+    expect(li.x).toBeGreaterThan(li.z * 2);
+    expect(0.2126 * li.x + 0.7152 * li.y + 0.0722 * li.z).toBeGreaterThan(0.03);
+    lab.dispose();
+  });
+
+  it('robes noires : relevées en brun-noir lustré (visage lisible), pas un noir absolu mat', () => {
+    for (const [b, i] of [['terre_neuve', 0], ['labrador', 2], ['caniche', 1]]) {
+      const P = coatPlan(resolveLook('dog', b, i), b);
+      const c = new THREE.Color(P.base);
+      const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+      expect(l, b).toBeGreaterThan(0.012);
+      expect(c.r, b).toBeGreaterThan(c.b); // (brun chaud, pas gris bleuté)
+      expect(P.sheen, b).toBe(1);
+      const md = dog(b, { colorIndex: i });
+      expect(md.coatMesh.material.roughness, b).toBeLessThan(0.55);
+      md.dispose();
+    }
+  });
 });
 
 describe('gueule au calme', () => {
@@ -472,9 +504,20 @@ describe('queues fines', () => {
       // (le premier os, soudé à la croupe, garde sa forme)
       for (let k = 1; k < s.length; k++) {
         expect(s[k].ratio, `${b} os ${k}`).toBeGreaterThan(0.6);
-        expect(s[k].r, `${b} os ${k}`).toBeGreaterThan(0.005);
+        // (effilée : le dernier os, à la pointe, peut être plus fin)
+        expect(s[k].r, `${b} os ${k}`).toBeGreaterThan(k === s.length - 1 ? 0.0035 : 0.005);
         expect(s[k].r, `${b} os ${k}`).toBeLessThan(0.03);
       }
+    }
+  });
+  it('panache et queue de loutre effilés : le rayon décroît jusqu\'à la pointe (pas une massue)', () => {
+    const base = realDogBase(G.shiba, 'shiba');
+    for (const b of ['golden', 'setter', 'labrador', 'bouvier_bernois', 'saint_bernard', 'terre_neuve']) {
+      const B = dogBuild(lookOf(b), false);
+      expect(B.tailTaper, b).toBeGreaterThan(0.3);
+      const D = deformDog(base, B);
+      const s = sections(base, D.pos, D.heads);
+      expect(s[s.length - 1].r, b).toBeLessThan(s[1].r * 0.8);
     }
   });
 });

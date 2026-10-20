@@ -339,6 +339,69 @@ d'animation à chaud (µs, node) : arrêt 14,6 → 18,2, pas 21 → 27, trot 38 
 allongé mêlé) : ≈ 0,05 ms de plus par image pour 10 chevaux. Une allure de plus à caler par gabarit (galop
 allongé, ≈ 6 à 15 ms pendant les temps morts) ; proportions faites au chargement du gabarit (mises en cache).
 
+**Robes et finitions de près** (plan « cheval beau », étapes 8 et 9 ; `COAT_FRAGMENT` et `coatMaterial` dans
+`src/game/models/horseCoat.js`, `earCup`, `openNostrils`, `openEyelids` dans `horseReal.js` ;
+`tests/horseFinish.test.js`) :
+
+- *gris pommelé* : pommelures rondes aux bords doux (cellules de 13 cm, rayon 0,40 à 0,52 cellule, un peu déformées),
+  plus claires au centre (+ 10 %), sur un fond gris plus foncé qui les sépare (× 0,55) ; nettes sur le corps, la
+  croupe et l'épaule, fondues vers le ventre et le bas des membres, en leur moyenne quand un pixel couvre plusieurs
+  centimètres (pas de scintillement). Avant : le réseau n'assombrissait que de 20 % au plus, sous le grain du modelé.
+  Contraste mesuré sur les captures (flanc, 90e contre 10e centile de la luminance rapportée à l'éclairage
+  d'ensemble) : 25 → 49 % en qualité haute, 22 → 45 % à la caméra du jeu rapprochée sur téléphone ;
+- *pie* : bruit déformé à deux octaves seulement (les fines faisaient des îlots), étiré en hauteur :
+  des plaques verticales qui coupent le dos, au bord net (antialiasé par `fwidth`) mais déchiqueté (± 8 % à 5 cm) ;
+- *léopard et couverture* : taches de 2 à 6 cm de rayon, un peu allongées, plus nombreuses vers l'arrière, cernées
+  d'un halo marbré ; plus petites sur la tête et le bas des membres ; bas de la couverture d'après la hauteur (et non
+  plus l'orientation de la peau ni la partie du corps, constante par triangle : des dents de scie sur la cuisse),
+  bord givré ;
+- *noir* : poil plus lisse (rugosité 0,36 en haute, 0,40 en basse) mais moins de voile gris-bleu du ciel
+  (`specularIntensity` 0,72 en haute), ventre sans voile gris (l'éclaircissement du dessous suit la luminance de la
+  robe) ; *grain du poil* dans la rugosité de toutes les robes (traînées le long du corps, ± 22 %) : le reflet se casse
+  au lieu d'un latex lisse ;
+- *robes dorées* (`coatGold` : teinte de 16 à 55°, saturée, ni grise, ni blanche, ni presque noire : alezan, palomino,
+  isabelle, crins lavés, bai) : reflet de bord doré, satiné (haute) = robe × 1,4 tirée vers l'or, plus marqué ;
+  les parties presque noires (bas des membres d'un bai, `hDarkV`) gardent un reflet neutre ; terme de bord 30 % plus
+  fort (le reflet doré se voit aussi sur téléphone en basse) ; ton plus chaud et pommelures de santé discrètes (fond
+  × 0,84 au plus), marqués sur le palomino (robe dorée claire, `hGoldDap`), moins sur l'isabelle, les crins lavés et
+  l'alezan, pas sur le bai ; palomino un peu moins effacé (modelé 0,45) ;
+- *isabelle* : raie de mulet nette de 3 à 5 cm, zébrures plus marquées, tête plus foncée ; *rouan* : tête et bas des
+  membres de la couleur de base, plus foncés ;
+- *peau des gris et des appaloosas* : noire marbrée (de rose chez l'appaloosa) au bout du nez et autour des yeux ;
+  *sabots rayés* de l'appaloosa (bandes verticales autour du centre du sabot) ;
+- *œil* : globe × 1,12 (`EYE_SCALE`) autour de son centre, pelage autour écarté d'autant au bord des paupières, de moins
+  en moins jusqu'à 2,4 rayons (rien n'entre dans le globe, aucune paupière retournée) ; bord des paupières foncé, plus
+  épais au-dessus (paupière et cils) ; reflet du soleil deux fois plus petit (fini le gros point blanc de dessin animé) ;
+- *naseau ouvert* : la fente du modèle (repérée sur la photo d'origine : x ± 0,072, y 0,112, z 0,882 en longueurs de
+  tête, replacée sur le profil de chaque race) creusée de 9 mm au centre et peinte en virgule sombre (le modelé adouci
+  à l'étape 4 l'avait effacée) ; bout du nez plus foncé et plus lisse (rugosité × 0,62) ;
+- *oreilles creusées* : la feuille pliée en gouttière, milieu de la face avant reculé de 8 mm (× la taille de
+  l'oreille), seulement là où l'oreille est libre (la peau de sa base, à demi liée à la tête, ne bouge pas) ;
+  intérieur plus foncé que la robe, poils clairs en mèches (plus nombreux vers les bords et en bas), mat ;
+- *liste et marques* : la largeur ondule le long du chanfrein, pas pareil des deux côtés, avec une dentelure fine ;
+- *sabots* : couronne qui descend de la pince vers les talons (0,55 de la hauteur aux talons : les glomes ne sont plus
+  peints en corne, fini les « ergots » gris derrière le paturon) ; corne claire propre (modelé 0,3 au lieu de 0,6, qui
+  la salissait de gris-vert), stries verticales plus marquées, corne plus lisse (rugosité × 0,8).
+
+Aucun triangle, appel de dessin, texture ni programme de plus (les cils en cartes ont été essayés puis retirés : sur
+un globe de 4 cm, au bord d'une paupière de quelques sommets, ils se lisaient comme des taches). Les motifs coûteux
+(pommelé, pie, taches, peau marbrée, corne rayée) ne sont calculés que pour les robes qui les ont (branche sur une
+uniform, la même pour tout le dessin). Pas fait : sabots à 16 côtés et 3 rangées, pointe du jarret, tendons du canon
+et relief du genou — le GLB n'a que 8 sommets par tour de membre (sabot octogonal à une rangée, jarret de 8 sommets
+tous les 4 cm) : à sculpter et retopologiser dans Blender (`lyndon_prep.py` ou `prep2.py`), puis toute la chaîne
+(`anim2.py`, `gait2.py`, `normfix.mjs`, `pack.mjs`, `lod.mjs`) et revérifier les appuis calés, les couvertures et le
+cavalier.
+
+  Mesuré (téléphone 390×844 DPR 3 en basse, 1280×800 en haute, 10 chevaux au paddock, caméra normale du jeu, avant /
+  après en alternance ×2, Chromium SwiftShader sur une machine très chargée — charge 7 à 9 sur 4 cœurs : seule la
+  comparaison vaut) : triangles (299 720 en basse, 541 842 en haute), appels de dessin (106 et 158), programmes (26 et
+  43) et textures (30 et 46) identiques ; mémoire 117 → 118 Mo en basse, 121-122 → 122-131 Mo en haute ; temps d'image
+  996 et 1 549 → 1 363 et 1 517 ms en basse (images/s 1,0 et 0,6 → 0,7 et 0,7), 2 664 et 2 611 → 2 693 et 2 467 ms en
+  haute (0,4 → 0,4) : dans le bruit de la machine (la même vue sans cheval varie de 10 % d'un tour à l'autre). Par
+  cheval (node, 10 races) : mêmes géométries, mêmes triangles (11 368 pour un selle français, 3 103 pour le pelage
+  réduit). Ajouté au pixel : un bruit pour le grain du poil (toutes les robes), quelques opérations pour l'œil, le
+  naseau et l'oreille ; le bruit cellulaire des pommelures de santé seulement sur les robes dorées claires.
+
 Ce qu'il coûte, et comment on le garde bas :
 
 - **élimination hors du champ** : chaque maillage du cheval (`HorseMesh`) a une boîte englobante refaite sur

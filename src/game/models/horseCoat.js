@@ -124,14 +124,16 @@ hEarIn = 0.0;
 
   // Robes dorées (palomino surtout, un peu l'alezan et le bai) : pommelures de santé, discrètes, et un ton plus chaud
   // et plus saturé dans la lumière (avant : un jaune plat, en plastique beige en basse).
-  if (hGold > 0.0 && hGrey <= 0.0) {
+  // (les pommelures, le seul calcul coûteux, ne sont faites que là où elles se voient : pas sur le bai, la robe la
+  // plus courante, où elles ne faisaient que 4 %)
+  if (hGold * hGoldDap > 0.3 && hGrey <= 0.0) {
     vec3 Pd = P + (vec3(hNoise(P * 3.1 + hSeed), hNoise(P * 3.1 + hSeed + 11.0), 0.5) - 0.5) * 0.08;
     vec3 cl = hCell(Pd * ${glf(DAP.cell * 0.9)} + hSeed * 1.7);
     float net = mix(smoothstep(0.3, 0.55, cl.x + (hNoise(P * 26.0) - 0.5) * 0.1), 0.45, aaW);
     float zone = isBody * smoothstep(-0.3, 0.4, up) * (0.4 + 0.7 * hFbm(P * 1.3 + 9.0)) * hGold * hGoldDap;
     c *= 1.0 - net * ${glf(COAT_LOOKS.bloom.dark)} * zone;
-    c = mix(c, c * vec3(1.06, 0.98, 0.84), hGold * hGoldDap * isBody * 0.7);
   }
+  c = mix(c, c * vec3(1.06, 0.98, 0.84), hGold * hGoldDap * isBody * 0.7);
 
   // Contre-ombrage : dos un peu plus foncé, ventre et intérieur des membres nettement plus clairs (le
   // ventre reste lisible au soleil, la lumière du sol l'éclaire peu). Le haut des membres suit la même

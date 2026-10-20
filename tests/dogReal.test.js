@@ -236,15 +236,36 @@ describe('pieds au sol', () => {
 
   it.each(['labrador', 'corgi', 'galgo', 'carlin', 'chihuahua', 'terre_neuve', 'saint_bernard', 'berger_allemand'])('%s : assis, couché, endormi : posé sur le sol (ni en l\'air, ni enfoncé), queue comprise', (b) => {
     const md = dog(b);
+    // (le poil s'écrase : 1,5 cm au plus, 80 % de sa longueur pour un poil long — terre-neuve : 2 cm)
+    const crush = Math.max(0.015, 0.8 * dogBuild(lookOf(b)).fur);
     for (const p of ['sit', 'lie', 'sleep']) {
       md.staticPose(p);
       const lo = lowest(md, { noTail: true, step: 2 });
-      // (le poil s'écrase : 1,5 cm au plus ; la croupe du terre-neuve assis entrait de 4 cm, sa queue de 8 cm)
-      expect(lo, `${b} ${p}`).toBeGreaterThan(-0.015);
+      // (la croupe du terre-neuve assis entrait de 4 cm, sa queue de 8 cm)
+      expect(lo, `${b} ${p}`).toBeGreaterThan(-crush);
       expect(lo, `${b} ${p}`).toBeLessThan(0.012);
-      expect(lowest(md, { step: 1 }), `${b} ${p} (queue)`).toBeGreaterThan(-0.015);
+      expect(lowest(md, { step: 1 }), `${b} ${p} (queue)`).toBeGreaterThan(-crush);
     }
     md.dispose();
+  }, 120000);
+
+  it.each(['teckel', 'corgi', 'jack_russell', 'cavalier', 'carlin', 'chihuahua', 'bouledogue', 'yorkshire', 'terre_neuve'])('%s : assis, les pieds avant posés (le dos long ou les pattes courtes basculent le corps)', (b) => {
+    const m = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    for (const puppy of [false, true]) {
+      const md = dog(b, { puppy });
+      md.staticPose('sit');
+      md.root.updateMatrixWorld(true);
+      m.copy(md.root.matrixWorld).invert();
+      const soles = md.legs.map((leg, l) => Math.min(...md.anim.solePts[l].map((p) => v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(m).y)));
+      const name = `${b}${puppy ? ' (chiot)' : ''}`;
+      // (avant : 30 cm en l'air pour le teckel, 22 pour le corgi, 4 à 6 pour le jack, le cavalier ou le carlin)
+      expect(Math.min(soles[0], soles[1]), name).toBeLessThan(0.01);
+      expect(Math.min(soles[0], soles[1]), name).toBeGreaterThan(-0.01);
+      expect(Math.min(soles[2], soles[3]), name).toBeLessThan(0.045);
+      expect(lowest(md, { noTail: true, step: 2 }), name).toBeGreaterThan(-0.02);
+      md.dispose();
+    }
   }, 120000);
 
   it.each(['teckel', 'corgi', 'basset_like_puppy'])('%s : la tête reste au-dessus du sol en reniflant, mangeant, buvant', (b) => {

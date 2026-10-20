@@ -2379,6 +2379,9 @@ class RealDogAnim {
       }
     } else this.plant.fill(null);
     if (st.moving || air) return;
+    // Assis (et en s'asseyant, en se relevant) : voir settleSit.
+    const sitW = (this.w.sit ?? 0) + (this.w.sit_down ?? 0) + (this.w.stand_up ?? 0);
+    if (sitW > 0.3 && this.trick?.clip !== 'rollover') this.settleSit();
     // Queue : sa peau (poil compris) au-dessus du sol, assis, couché, endormi — chaque os relevé, de la base au bout, de
     // ce qui passe encore sous le sol au-delà de lui. (Tenue par ses articulations seulement, la queue épaisse entrait
     // de 6 à 9 cm dans le sol, sur la table du salon ou la scène.)
@@ -2464,6 +2467,71 @@ class RealDogAnim {
       leg.pivot.updateMatrixWorld(true);
       // (trop loin de sa place, le pied repart : nouvelle prise d'appui)
       if (Math.abs(ez) > 0.45 * Lg) this.plant[l] = null;
+    }
+  }
+
+  /**
+   * Chien assis, posé sur sa croupe : le dos d'une race longue aux pattes avant courtes (teckel, corgi, petits chiens)
+   * n'a pas la pente de celui du shiba du clip, et ses pieds avant restaient en l'air (30 cm pour le teckel, 22 pour
+   * le corgi, 4 à 6 pour le jack ou le carlin). Le corps bascule vers l'avant autour de l'os racine, de l'écart entre
+   * les pieds avant et le reste de l'appui (pieds arrière, croupe), puis est reposé au sol ; les pieds arrière qui
+   * flottent encore (croupe au poil épais : terre-neuve) sont descendus en tournant le membre à la hanche.
+   */
+  settleSit() {
+    const md = this.model;
+    const lowSole = (l, out) => {
+      out.y = Infinity;
+      for (const p of this.solePts[l]) {
+        _v.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld).applyMatrix4(_m);
+        if (_v.y < out.y) out.copy(_v);
+      }
+      return out;
+    };
+    const f = V();
+    const o = V();
+    const t = V();
+    // appui hors pieds avant : pieds arrière et peau du corps (croupe), avec la marge du poil
+    const lowRest = () => {
+      o.y = Infinity;
+      for (const l of [2, 3]) if (lowSole(l, t).y < o.y) o.copy(t);
+      for (const pt of this.bodyPts) {
+        const y = this.skinY(pt) + this.bodyAllow;
+        if (y < o.y) o.set(_w.x, y, _w.z);
+      }
+      return o;
+    };
+    const lowFront = () => {
+      lowSole(0, f);
+      if (lowSole(1, t).y < f.y) f.copy(t);
+      return f;
+    };
+    let total = 0;
+    for (let pass = 0; pass < 4; pass++) {
+      lowFront();
+      lowRest();
+      const gap = f.y - o.y;
+      if (!(gap > 0.004)) break;
+      const th = Math.min(0.7 - total, gap / Math.max(0.05, f.z - o.z));
+      if (!(th > 0.001)) break;
+      const floor = o.y;
+      this.turn(md.body, AX, th);
+      total += th;
+      md.root.updateMatrixWorld(true);
+      // (reposé au sol : le plus bas de l'appui revient à la hauteur d'avant)
+      const m = Math.min(lowFront().y, lowRest().y);
+      md.body.position.y -= m - floor;
+      md.root.updateMatrixWorld(true);
+    }
+    // Pieds arrière encore en l'air au-dessus de la croupe posée.
+    lowRest();
+    const base = Math.max(0, o.y);
+    for (const l of [2, 3]) {
+      const s = lowSole(l, t);
+      if (!(s.y > base + 0.006)) continue;
+      const pv = md.legs[l].pivot;
+      const c = _u.setFromMatrixPosition(pv.matrixWorld).applyMatrix4(_m);
+      this.turn(pv, AX, raiseAngle(c, s, base + 0.002, 0.35));
+      pv.updateMatrixWorld(true);
     }
   }
 

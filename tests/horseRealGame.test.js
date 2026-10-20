@@ -5,6 +5,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { buildRealHorseModel, realLegPose, realHorseBase } from '../src/game/models/horseReal.js';
 import { createAnimal } from '../src/sim/animal.js';
+import { SPECIES } from '../src/sim/species.js';
 import { notePrep } from '../src/sim/beauty.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
 import { LEG } from '../src/game/models/avatarMotion.js';
@@ -651,6 +652,35 @@ describe('concours de beauté sur le cheval réaliste', () => {
     expect(knob.getWorldPosition(new THREE.Vector3()).z).toBeGreaterThan(front);
     Beauty.removeBeautyDecor(e);
     md.dispose();
+  });
+
+  it('33 races : les boutons de la crinière tressée sont posés sur la peau de la crête (aucun jour dessous)', () => {
+    const rc = new THREE.Raycaster();
+    for (const b of SPECIES.horse.breeds) {
+      const md = horse(animal(b.id));
+      if (!md.braidSpots.crest.length) {
+        md.dispose();
+        continue;
+      }
+      md.root.updateMatrixWorld(true);
+      const coat = md.coatMesh;
+      const side = coat.material.side;
+      coat.material.side = THREE.DoubleSide;
+      const r = (md.dims?.R ?? 0.32) * 0.085;
+      for (const [p, up] of md.braidSpots.crest) {
+        // Centre du bouton (Beauty.js : point + up × 0,6 r), rayon vers la peau sous lui.
+        const u = up.clone().transformDirection(md.neck.matrixWorld);
+        const c = md.neck.localToWorld(p.clone().addScaledVector(up, r * 0.6));
+        rc.set(c, u.clone().negate());
+        rc.far = 0.2;
+        const hit = rc.intersectObject(coat, false)[0];
+        expect(hit, b.id).toBeTruthy();
+        // (la peau est à moins d'un rayon du centre : le bouton, aplati à 0,85, la touche)
+        expect(hit.distance, b.id).toBeLessThan(r);
+      }
+      coat.material.side = side;
+      md.dispose();
+    }
   });
 
   it('tresse de queue : la dernière perle prolonge la tresse (pas seule, loin derrière les crins)', () => {

@@ -94,7 +94,7 @@ export function hairStrandPixels() {
   const cw = new Float64Array(W);
   for (let x = 0; x < W; x++) {
     const u = (x + 0.5) / W;
-    conv[x] = smooth(0.25, 1, u);
+    conv[x] = smooth(0.45, 1, u);
     wave[x] = smooth(0.1, 0.5, u);
   }
   for (let k = 0; k < ROWS; k++) {
@@ -109,10 +109,10 @@ export function hairStrandPixels() {
       const chw = step * (0.55 + 0.2 * rng());
       const e = Math.abs(cy - yc) / half; // 0 au milieu de la rangée, 1 au bord
       // (petites mèches de tons et de reflets différents : elles restent lisibles une fois les crins fondus)
-      const ctone = 0.55 + 0.45 * rng();
+      const ctone = 0.6 + 0.4 * rng();
       const cshift = rng();
       const clen = Math.min(1, (0.8 + 0.2 * rng()) * (1 - 0.12 * e * e));
-      const cconv = 0.4 + 0.25 * rng();
+      const cconv = 0.18 + 0.17 * rng();
       const cwf = 0.7 + rng() * 1.5;
       const cwp = rng() * 6.28;
       const cwa = 0.3 + rng() * 0.6;
@@ -124,7 +124,7 @@ export function hairStrandPixels() {
         const sv = rng() * 2 - 1;
         const o = Math.sign(sv) * Math.abs(sv) ** 1.3 * chw;
         const f = Math.abs(o) / chw;
-        const len = Math.min(1, clen * (0.88 + 0.12 * rng()) * (1 - 0.14 * f * f));
+        const len = Math.min(1, clen * (0.72 + 0.28 * rng()) * (1 - 0.14 * f * f));
         const hw = 0.5 + rng() * 0.6;
         const tone = Math.min(1, ctone * (0.86 + rng() * 0.28));
         const shift = Math.min(1, Math.max(0, cshift + (rng() - 0.5) * 0.24));
@@ -291,7 +291,7 @@ void RE_Direct_Hair( const in IncidentLight directLight, const in vec3 geometryP
 #endif
   reflectedLight.directSpecular += directLight.color * spec * lit;
   float back = pow( saturate( dot( geometryViewDir, - L ) ), 5.0 );
-  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * back * ( 0.2 + 0.7 * vHairF );
+  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * back * ( 0.2 + 0.7 * vHairF ) * hHairBack;
 }
 #undef RE_Direct
 #define RE_Direct RE_Direct_Hair
@@ -335,14 +335,25 @@ export function hairMaterial(color, sway, drag = NO_DRAG) {
   // (force du reflet : plus discret sur les crins clairs, qui ont déjà de la lumière)
   // (qualité basse : pas d'ombre du soleil, le reflet brillerait aussi du côté à l'ombre : plus discret)
   // (0,06 × soleil de 2,8 à 3,5, sur un crin sur cinq : des crins qui brillent sur du noir, pas un aplat gris)
-  const spec = { value: (high ? 0.06 : 0.045) * (1 - 0.5 * Math.min(1, l * 2)) };
+  // (qualité basse : plus discret encore sur les crins foncés, qui restent noirs au lieu de griser)
+  const spec = { value: (high ? 0.06 : 0.032) * (1 - 0.5 * Math.min(1, l * 2)) };
   // (crins foncés : les crins clairs de la texture un peu éclaircis, comme la lumière du ciel prise par chaque
   // crin — on lit les mèches même sans reflet, en qualité basse aussi)
-  const lift = { value: 0.05 * (1 - smooth(0, 0.12, l)) };
+  const lift = { value: (high ? 0.05 : 0.025) * (1 - smooth(0, 0.12, l)) };
+  // (crins clairs : pas de lumière qui traverse les pointes en contre-jour — des « glaçons » translucides sur
+  // une crinière blanche — et racines un peu plus sombres, sous les autres crins)
+  const light = smooth(0.12, 0.4, l);
+  const back = { value: 1 - 0.85 * light };
+  const rootDark = { value: 0.06 + 0.16 * light };
+  // (toupet rentré sous un bonnet ou un masque : ses mèches se replient vers leur racine, entre les oreilles)
+  const tuck = { value: 0 };
   // (crinière tressée pour le concours de beauté : ses mèches rentrent dans les boutons de la crête, Beauty.js)
   const braid = { value: 0 };
   m.onBeforeCompile = (sh) => {
     sh.uniforms.hairBraid = braid;
+    sh.uniforms.hairTuck = tuck;
+    sh.uniforms.hHairBack = back;
+    sh.uniforms.hHairRoot = rootDark;
     sh.uniforms.hairTime = gfx.time;
     sh.uniforms.hairWind = gfx.wind;
     sh.uniforms.hairSway = sway;
@@ -361,6 +372,7 @@ uniform float hairTime;
 uniform float hairWind;
 uniform float hairSway;
 uniform float hairBraid;
+uniform float hairTuck;
 uniform vec3 hairDragT;
 uniform vec3 hairDragM;
 uniform vec3 hairUpT;
@@ -378,6 +390,8 @@ varying float vHairF;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 // (crinière et crête de la crinière : sortes 0 et 4)
 if ( hairRoot.w < 0.5 || hairRoot.w > 3.5 ) transformed = mix( transformed, hairRoot.xyz + ( transformed - hairRoot.xyz ) * 0.12, hairBraid );
+// (toupet : sorte 1, rentré sous un bonnet anti-mouches ou un masque)
+if ( hairRoot.w > 0.5 && hairRoot.w < 1.5 ) transformed = mix( transformed, hairRoot.xyz + ( transformed - hairRoot.xyz ) * 0.05, hairTuck );
 {
   // Pointes qui ondulent au vent et quand le cheval court (racines immobiles) : une mèche bouge d'un bloc
   // (phase de sa racine), vers l'extérieur et d'avant en arrière ; la queue (hairRoot.w = 2) de côté aussi.
@@ -404,6 +418,8 @@ if ( hairRoot.w < 0.5 || hairRoot.w > 3.5 ) transformed = mix( transformed, hair
       .replace('#include <common>', `#include <common>
 uniform float hHairSpec;
 uniform float hHairLift;
+uniform float hHairBack;
+uniform float hHairRoot;
 varying vec3 vHairT;
 varying float vHairF;`)
       .replace('#include <lights_physical_pars_fragment>', `#include <lights_physical_pars_fragment>
@@ -416,6 +432,7 @@ reflectedLight.indirectSpecular *= 0.3;`)
       .replace('#include <map_fragment>', `
 vec4 hTex = texture2D( map, vMapUv );
 diffuseColor.rgb = diffuseColor.rgb * hTex.r + hHairLift * max( 0.0, hTex.r - 0.62 );
+diffuseColor.rgb *= 1.0 - hHairRoot * ( 1.0 - smoothstep( 0.0, 0.35, vHairF ) );
 diffuseColor.a *= hTex.a;`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
 normal = normalize( vNormal );
@@ -429,5 +446,6 @@ normal = normalize( normal + cross( normal, hHairT ) * ( hTex.b - 0.5 ) * 0.7 );
   m.customProgramCacheKey = () => `horsehair${high ? 'h' : 'l'}`;
   m.userData.hairSpec = spec;
   m.userData.hairBraid = braid;
+  m.userData.hairTuck = tuck;
   return m;
 }

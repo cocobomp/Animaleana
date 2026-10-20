@@ -166,6 +166,8 @@ function buildHorseGear(model, look, gear, add) {
   const PI = Math.PI;
   const deg = (d) => (d * PI) / 180;
   const P = TACK_PARTS;
+  // (cheval réaliste : toupet rentré sous le bonnet anti-mouches, sorti quand on l'enlève — horseReal.js)
+  model.setForelockTucked?.(!!gear.head);
 
   const blanket = gear.blanket;
   if (blanket) {

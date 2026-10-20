@@ -674,6 +674,9 @@ button.sv-card:hover { border-color: var(--primary); }
   will-change: transform;
   transition: opacity 0.2s;
 }
+/* Bébés : pastille plus petite (la zone à toucher garde ses 44 px), groupée quand ils sont serrés (UI.updateLabels). */
+.animal-label.baby { padding: 2px 8px; font-size: 0.74rem; }
+.animal-label[hidden] { display: none; }
 .big-action small.effect { color: var(--primary); font-weight: 600; }
 .big-action.primary small.effect { color: #e9fff2; }
 .bars.compact { gap: 3px; margin: 4px 0 10px; }
@@ -2476,6 +2479,11 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .shop-preview-text small { color: var(--muted); }
 .breed-thumb { width: 84px; height: 63px; --thumb-bg: #e3eedc; }
 .id-head .thumb { width: 96px; height: 72px; --thumb-bg: #e3eedc; }
+/* Refuge et fiche : la vignette 3D de l'animal (même fabrique que l'animalerie) au lieu de l'emoji. */
+.adopt-thumb { width: 72px; height: 54px; --thumb-bg: #e3eedc; }
+.animal-head { display: flex; align-items: flex-start; gap: 10px; }
+.animal-head > .chips { flex: 1; min-width: 0; }
+.animal-thumb { width: 96px; height: 72px; margin-top: 8px; --thumb-bg: #e3eedc; }
 /* Construction et véhicules */
 .con-thumb { width: 92px; height: 69px; --thumb-bg: #dcebd2; }
 .veh-thumb { width: 92px; height: 60px; --thumb-bg: #e2e8ee; }

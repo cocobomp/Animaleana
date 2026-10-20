@@ -9,7 +9,7 @@ import { emojiTexture } from './textures.js';
 import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
 import { buildAccessories, removeAccessories } from './models/salon.js'; // accessoires de toilettage
-import { canLeash, heelSkill } from '../sim/gear.js';
+import { canLeash, heelSkill, LEASH_LEN } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
 import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
 import { animateCat } from './catAnim.js'; // chats : assis, toilette, en boule, queue levée
@@ -421,7 +421,13 @@ export class AnimalEntity {
     if (this.sniff <= 0) {
       // Plus il est dressé, moins il est distrait.
       this.sniffing = Math.random() > skill;
-      this.sniffSpot = { x: pl.position.x + (Math.random() - 0.5) * 10, z: pl.position.z + (Math.random() - 0.5) * 10 };
+      if (leashed) {
+        // (en laisse : il renifle devant la joueuse, de son côté gauche — dans un carré de 10 m autour d'elle, le
+        // teckel partait renifler hors de l'écran, à droite)
+        const fwd = 0.4 + Math.random() * 1.4;
+        const left = 0.2 + Math.random() * 1.2;
+        this.sniffSpot = { x: pl.position.x + Math.sin(h) * fwd + Math.cos(h) * left, z: pl.position.z + Math.cos(h) * fwd - Math.sin(h) * left };
+      } else this.sniffSpot = { x: pl.position.x + (Math.random() - 0.5) * 10, z: pl.position.z + (Math.random() - 0.5) * 10 };
       this.sniff = 1.5 + Math.random() * 3;
     }
     const goal = this.sniffing ? this.sniffSpot : heel;
@@ -433,7 +439,7 @@ export class AnimalEntity {
     this.leashPull = 0;
     if (leashed) {
       // (laisse courte : le chien reste près de la joueuse, visible)
-      const LEASH = 1.6;
+      const LEASH = LEASH_LEN;
       const p = this.root.position;
       const dx = p.x - pl.position.x;
       const dz = p.z - pl.position.z;

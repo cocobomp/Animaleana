@@ -1724,6 +1724,12 @@ class ShowSession extends Session {
       }
       default:
     }
+    // Pendant le tour (face au public, jauge, tour, salut) : la caméra se rapproche de l'artiste, de trois quarts à
+    // environ 3 m, puis revient à la vue normale (au fond de la scène, le chien faisait une quarantaine de pixels).
+    if (this.phase === 'face' || this.phase === 'gauge' || this.phase === 'trick' || this.phase === 'bow') {
+      const sc = e.scale ?? 1;
+      this.game.rig.focus = { shot: { at: (this.shotAt ??= new THREE.Vector3()).set(e.position.x, e.position.y + 0.45 * sc, e.position.z), heading: e.heading, dist: 1.4 + 1.6 * sc, yaw: 0.75, pitch: 0.2 } };
+    }
     const onStage = Math.hypot(e.position.x - this.center.x, e.position.z - this.center.z) < 3.3;
     e.position.y = this.y(e.position.x, e.position.z) + (onStage ? this.stageTop : 0) + (e.scaleGroup.position.y > 0 ? 0 : 0);
     e.root.rotation.y = e.heading;

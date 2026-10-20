@@ -42,7 +42,7 @@ import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
 import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone } from '../sim/droppings.js';
 import { enclosure } from './nav.js';
 import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
-import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash, equipHelmet, riderHelmet } from '../sim/gear.js';
+import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
@@ -697,6 +697,15 @@ export class Game {
     this.player.afterSessions?.(); // rênes : à la place finale du cheval et du cavalier (saut soulevé)
     if (mgmt) this.mgmt.update(dt, ctrl);
     else if (!this.tripFlow.viewCamera(dt, ctrl)) { // (vue dans le véhicule : TripFlow place la caméra)
+      // (chien en laisse : la caméra cadre la joueuse et le chien ensemble — le teckel sortait de l'écran en courant)
+      if (!this.rig.focus) {
+        for (const e of entities) {
+          if (e.data.following && e.data.leashed && canLeash(e.data) && !e.inside) {
+            this.rig.focus = { pair: e.position };
+            break;
+          }
+        }
+      }
       this.rig.update(dt, ctrl, this.player, this.world);
       this.fadeOccluders();
     }
@@ -1578,7 +1587,9 @@ export class Game {
       if (e.model.leashPoint) e.model.leashPoint.getWorldPosition(neck);
       else neck.y += (e.model.y0 + e.data.look.bodyR) * e.scale;
       const dist = hand.distanceTo(neck);
-      const slack = Math.max(0, 2.8 - dist) * 0.35;
+      // (mou d'après la longueur réelle de la laisse : tendue quand le chien tire au bout — calculé pour 2,8 m, elle
+      // pendait en U jusqu'au sol)
+      const slack = Math.max(0, LEASH_LEN + 0.2 - dist) * 0.35;
       const pos = line.geometry.attributes.position;
       for (let i = 0; i < 10; i++) {
         const tt = i / 9;

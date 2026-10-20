@@ -19,6 +19,7 @@ import { tripChips } from './trip.js'; // voyages réalistes
 import { openActivities } from './activities.js';
 import { TOOLS, toolAtHome } from '../sim/tools.js';
 import { isSandbox } from '../sim/profile.js';
+import { lifeStage } from '../sim/animal.js'; // étiquettes groupées des bébés
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
 import { openDogTrainerPanel } from './dogTrainer.js'; // métier éducateur canin
@@ -315,6 +316,12 @@ export class UI {
    * Quand plusieurs animaux sont serrés, les étiquettes s'écartent pour rester lisibles.
    */
   updateLabels(entities, camera, playerPos) {
+    // Plan rapproché (tour du spectacle, photo du podium : CameraRig.focus) : pas d'étiquettes, elles flotteraient
+    // loin au-dessus de l'animal filmé de près.
+    if ((this.game?.rig?.shotK ?? 0) > 0.3) {
+      this.clearLabels();
+      return;
+    }
     const W = window.innerWidth;
     const H = window.innerHeight;
     const seen = new Set();
@@ -346,19 +353,33 @@ export class UI {
       }
       const m = this.game.moodOf(a);
       const text = `${{ happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' }[m]} ${a.name}${it.e.sleeping ? ' 💤' : ''}`;
-      if (el.textContent !== text) el.textContent = text;
+      // Bébés serrés (portée, chiots achetés ensemble) : une seule étiquette « 😄 Oscar +2 » pour le groupe (celle
+      // du plus proche), au lieu d'une pile de bulles qui cache les petits ; et une pastille plus petite.
+      const baby = lifeStage(a) === 'baby';
+      el.classList.toggle('baby', baby);
+      const grp = baby ? placed.find((q) => q.baby && Math.abs(q.ax - it.x) < 80 && Math.abs(q.ay - it.y) < 60) : null;
+      if (grp) {
+        grp.extra++;
+        el.hidden = true;
+        continue;
+      }
+      el.hidden = false;
       // Écarte l'étiquette vers le haut tant qu'elle chevauche une autre. La zone qu'on touche fait 44 px de
       // haut (la pastille visible 28 px, au milieu, cf. .animal-label) : on les espace donc de 46 px.
-      const w = 14 + text.length * 8;
+      const w = (baby ? 12 : 14) + (text.length + (baby ? 3 : 0)) * (baby ? 7 : 8);
       let y = it.y;
       for (let k = 0; k < 6; k++) {
         const hit = placed.find((q) => Math.abs(q.x - it.x) < (q.w + w) / 2 && Math.abs(q.y - y) < 44);
         if (!hit) break;
         y = hit.y - 46;
       }
-      placed.push({ x: it.x, y, w });
+      placed.push({ x: it.x, y, w, ax: it.x, ay: it.y, baby, extra: 0, el, text });
       el.style.transform = `translate(${it.x - w / 2}px, ${y - 38}px)`;
       el.style.opacity = it.d > 10 ? 0.6 : 1;
+    }
+    for (const q of placed) {
+      const text = q.extra ? `${q.text} +${q.extra}` : q.text;
+      if (q.el.textContent !== text) q.el.textContent = text;
     }
     for (const [id, el] of this.labelEls) {
       if (!seen.has(id)) {

@@ -1,0 +1,25 @@
+Chatons — « Kitten » par FainoDS (doinspire) (Sketchfab, 2018)
+Fichier du jeu : cat_kitten.glb
+
+Source :
+  https://sketchfab.com/3d-models/kitten-4ae3704cd65b423ab994545988d4db1a
+  (fichier obtenu par l'instantané Objaverse de Sketchfab ; licence vérifiée par l'API publique de Sketchfab
+  le 20/10/2026, voir public/compare-chats-lapins/LICENSES/)
+
+Licence :
+  Creative Commons Attribution 4.0 International (CC BY 4.0)
+  https://creativecommons.org/licenses/by/4.0/
+
+Attribution : « Kitten » by FainoDS (doinspire), licensed under CC BY 4.0.
+
+Modifications faites pour La ferme à Madichelle (scripts de tools/chat/, voir tools/chat/LISEZMOI.md) :
+  - mis à l'échelle, pièces réunies ;
+  - squelette et poids faits pour le jeu (oreilles, yeux, queue, os correcteurs des hanches pour que la cuisse ne
+    se déchire pas en position assise) ;
+  - animations calculées et ajoutées : pas, trot, galop, équilibre, assis, couché, en boule endormi, toilette,
+    étirement, manger, queue dressée, oreilles, « tape-m'en cinq », saut, transitions ;
+  - pieds recalés au sol sur chaque image, canaux inutiles retirés ;
+  - textures WebP, compression meshopt, version allégée pour les chatons lointains ;
+  - en jeu : robes recolorées par shader en gardant le grain, traits des races adoucis pour les chatons
+    (src/game/models/catReal.js, catCoat.js).
+Le modèle d'origine n'est pas cautionné par son auteur pour cet usage ; aucune garantie.

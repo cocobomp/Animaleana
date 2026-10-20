@@ -1,0 +1,27 @@
+{
+ "uid": "fc6e597a81ce4dc291dcca6a9e6888ba",
+ "name": "cat Walk",
+ "viewerUrl": "https://sketchfab.com/3d-models/cat-walk-fc6e597a81ce4dc291dcca6a9e6888ba",
+ "publishedAt": "2020-01-07T07:30:26.011947",
+ "createdAt": "2020-01-07T07:22:29.686125",
+ "isDownloadable": true,
+ "description": "",
+ "animationCount": 1,
+ "faceCount": 3914,
+ "vertexCount": 2223,
+ "user": {
+  "username": "syaharanichan",
+  "displayName": "Erina eka syaharani",
+  "profileUrl": "https://sketchfab.com/syaharanichan",
+  "uid": "ef5c1a52354f4f9ba8662e447f72d9d3"
+ },
+ "license": {
+  "uri": "https://api.sketchfab.com/v3/licenses/322a749bcfa841b29dff1e8a1bb74b0b",
+  "label": "CC Attribution",
+  "fullName": "Creative Commons Attribution",
+  "requirements": "Author must be credited. Commercial use is allowed.",
+  "url": "http://creativecommons.org/licenses/by/4.0/",
+  "slug": "by"
+ },
+ "_consulté": "2026-10-20, https://api.sketchfab.com/v3/models/fc6e597a81ce4dc291dcca6a9e6888ba (API publique, sans connexion)"
+}

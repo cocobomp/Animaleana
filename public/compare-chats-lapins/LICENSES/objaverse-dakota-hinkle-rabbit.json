@@ -1,0 +1,29 @@
+{
+ "name": "Rabbit",
+ "license": "by",
+ "animationCount": 0,
+ "faceCount": 8896,
+ "vertexCount": 4455,
+ "viewerUrl": "https://sketchfab.com/3d-models/073eef14ae3c4d06808498c3ba895e67",
+ "likeCount": 17,
+ "viewCount": 856,
+ "publishedAt": "2022-05-24T15:08:18.043096",
+ "isAgeRestricted": false,
+ "user": {
+  "username": "Dakota.Hinkle",
+  "displayName": "Dakota.Hinkle",
+  "profileUrl": "https://sketchfab.com/Dakota.Hinkle"
+ },
+ "tags": [
+  "rabbit",
+  "bunny",
+  "rigged-character"
+ ],
+ "categories": [
+  "animals-pets",
+  "characters-creatures"
+ ],
+ "description": "**Blender** **Fbx** **Rabbit**\nRabbit model fully rigged and ready for animation. Ready to be used for games or other 3D projects.",
+ "thumb": "https://media.sketchfab.com/models/073eef14ae3c4d06808498c3ba895e67/thumbnails/9ed6722a41ed409cadc85e2f760506d5/37d5edc404794224bb6e641e7c61183d.jpeg",
+ "shard": "000-081.json.gz"
+}

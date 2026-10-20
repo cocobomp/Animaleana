@@ -1,5 +1,5 @@
 // ℹ️ À propos : les crédits des modèles 3D, visibles dans le jeu (en bas de l'aide ❓).
-// Les deux chiens sont sous licence CC-BY 4.0 : l'attribution (auteur, titre, lien, licence, modifications) est
+// Les chiens et les chats sont sous licence CC-BY 4.0 : l'attribution (auteur, titre, lien, licence, modifications) est
 // obligatoire, ici comme dans CREDITS.md et public/models/LICENSES/. Rien ici ne dépend du DOM (tests en node).
 
 import { h } from './dom.js';
@@ -30,6 +30,28 @@ export const MODEL_CREDITS = [
     changes: {
       fr: 'Pièces du maillage réunies et trous refermés, squelette et poids refaits (oreilles, yeux), allures, positions et gestes ajoutés, robes recolorées par le jeu, proportions des races, textures WebP et compression meshopt.',
       en: 'Mesh parts joined and holes closed, skeleton and weights redone (ears, eyes), gaits, postures and gestures added, coats recoloured by the game, breed proportions, WebP textures and meshopt compression.',
+    },
+  },
+  {
+    id: 'cat_adult', file: 'cat_adult.glb',
+    what: { fr: 'Chats adultes', en: 'Adult cats' },
+    title: 'Cat game asset', author: 'Claire (claireanne3d)',
+    url: 'https://sketchfab.com/3d-models/cat-game-asset-7a0c1a65e18747799af9fe9481f1bdb2',
+    license: CC_BY,
+    changes: {
+      fr: 'Mis à l\'échelle, squelette et poids faits pour le jeu (hanches corrigées en position assise), allures, positions et gestes ajoutés, robes recolorées par le jeu, proportions et pelages des 15 races, textures WebP et compression meshopt.',
+      en: 'Rescaled, skeleton and weights made for the game (hips corrected when sitting), gaits, postures and gestures added, coats recoloured by the game, proportions and fur of the 15 breeds, WebP textures and meshopt compression.',
+    },
+  },
+  {
+    id: 'cat_kitten', file: 'cat_kitten.glb',
+    what: { fr: 'Chatons', en: 'Kittens' },
+    title: 'Kitten', author: 'FainoDS (doinspire)',
+    url: 'https://sketchfab.com/3d-models/kitten-4ae3704cd65b423ab994545988d4db1a',
+    license: CC_BY,
+    changes: {
+      fr: 'Pièces réunies, squelette et poids faits pour le jeu (hanches corrigées en position assise), allures, positions et gestes ajoutés, robes recolorées par le jeu, traits des races, textures WebP et compression meshopt.',
+      en: 'Parts joined, skeleton and weights made for the game (hips corrected when sitting), gaits, postures and gestures added, coats recoloured by the game, breed features, WebP textures and meshopt compression.',
     },
   },
   {

@@ -639,6 +639,7 @@ class BeautySession extends Session {
       e.heading = pl.heading;
       e.speed = 0;
       e.scaleGroup.rotation.x = 0;
+      e.carried = true; // (chat réaliste : couché dans les bras, voir catReal.js animateRealCat)
     } else if (snap) {
       e.position.set(goal.x, this.y(goal.x, goal.z), goal.z);
       e.heading = pl.heading;
@@ -763,6 +764,8 @@ class BeautySession extends Session {
     e.root.rotation.y = e.heading;
     e.speed = 0;
     this.onTable = true;
+    e.carried = false;
+    e.onTable = true; // (chat réaliste : assis sur la table)
   }
 
   /** Le gros bouton (ou Espace, ou un toucher) : on s'arrête / on tourne / on pose au bon moment. */
@@ -985,6 +988,8 @@ class BeautySession extends Session {
     const px = this.podium.x - s.x;
     const pz = this.podium.z;
     this.onTable = false;
+    e.onTable = false;
+    e.carried = false;
     e.position.set(px, this.y(px, pz) + s.h, pz);
     e.heading = Math.PI; // face au joueur (côté −z)
     e.speed = 0;

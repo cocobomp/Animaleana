@@ -1,0 +1,329 @@
+/* Page « Choisis ton chat et ton lapin » (chats-lapins.html), reprise de la page des chiens. Couleurs du jeu
+   (src/style.css). Le canevas 3D couvre la fenêtre, derrière la page : les zones de vue des cartes sont
+   transparentes et le laissent voir. */
+
+:root {
+  --bg: #f7f3ea;
+  --card: #ffffff;
+  --ink: #23302a;
+  --muted: #5f6d65;
+  --line: #e2dccd;
+  --primary: #2f8a5f;
+  --primary-soft: #e3f1e9;
+  --heart: #d2475a;
+  --radius: 16px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; background: var(--bg); }
+body { -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+body.fs-open { overflow: hidden; }
+
+#stage {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+}
+body.fs-open #stage { z-index: 31; }
+
+#page {
+  position: relative;
+  z-index: 1;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
+}
+
+.top h1 { margin: 6px 0 4px; font-size: clamp(1.6rem, 4.5vw, 2.3rem); letter-spacing: -0.01em; }
+.top .lead { margin: 0 0 10px; color: var(--muted); line-height: 1.4; max-width: 46em; }
+
+/* Réglages : collés en haut pendant qu'on fait défiler les cartes. */
+.controls {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0 -16px 14px;
+  padding: 8px 16px 6px;
+  background: rgba(247, 243, 234, 0.94);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+/* Onglets Chats / Lapins : en tête de la barre des réglages (elle reste en haut quand on fait défiler). */
+.tabs { display: flex; gap: 6px; margin: 0 0 8px; }
+.tabs [role='tab'] {
+  flex: 1 1 0;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  min-height: 42px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.tabs [role='tab'][aria-selected='true'] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.tabs [role='tab']:focus-visible { outline: 3px solid #f0b43c; outline-offset: 2px; }
+.group { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; min-width: 0; }
+.group > .label {
+  flex: 0 0 auto;
+  width: 3.6em;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 2px 3px;
+  min-width: 0;
+}
+.chips::-webkit-scrollbar { display: none; }
+/* Il y a d'autres choix à faire défiler : le bord s'estompe de ce côté. */
+.chips.more-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent); }
+.chips.more-l { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 34px), transparent); }
+.chips.more-l.more-r {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 34px, #000 calc(100% - 34px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 34px, #000 calc(100% - 34px), transparent);
+}
+.chip {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.92rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.15s, border-color 0.15s, transform 0.08s;
+}
+.chip:active { transform: scale(0.96); }
+.chip[aria-pressed='true'] { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.chip .sw { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.18); flex: 0 0 auto; }
+.chip:focus-visible, .view:focus-visible, .fav:focus-visible, .fs-close:focus-visible, .fs-nav:focus-visible { outline: 3px solid #f0b43c; outline-offset: 2px; }
+
+/* Cartes : une par ligne au téléphone, en grille sur un grand écran. */
+#cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 18px;
+}
+.card { display: flex; flex-direction: column; min-width: 0; }
+.card[hidden] { display: none; }
+.view {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius) var(--radius) 0 0;
+  /* (le fond de page masque les coins du rendu 3D, qui est rectangulaire) */
+  box-shadow: 0 0 0 9px var(--bg);
+  cursor: zoom-in;
+  outline: none;
+}
+.view .loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.95rem;
+  background: linear-gradient(180deg, #cfe2ef, #e9efe2 62%, #b9cf9a 62%);
+  border-radius: inherit;
+}
+.view .loading[hidden] { display: none; }
+.badge {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  max-width: calc(100% - 20px);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(20, 28, 24, 0.66);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  pointer-events: none;
+}
+.badge[hidden] { display: none; }
+.view .grow {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  font-size: 1rem;
+  pointer-events: none;
+}
+.info {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: 12px 14px 14px;
+  box-shadow: 0 8px 18px rgba(35, 48, 42, 0.07);
+}
+.card.fav-on .info { border-color: var(--heart); box-shadow: 0 0 0 2px var(--heart), 0 8px 18px rgba(35, 48, 42, 0.07); }
+.card.fav-on .view { box-shadow: 0 0 0 9px var(--bg), 0 0 0 2px var(--heart); }
+.info h2 { margin: 0 0 4px; font-size: 1.08rem; line-height: 1.25; }
+.info .style { margin: 0 0 8px; color: var(--muted); font-size: 0.92rem; line-height: 1.35; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; padding: 0; list-style: none; }
+.facts li {
+  font-size: 0.8rem;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: #1f5c40;
+  font-variant-numeric: tabular-nums;
+}
+.info p.meta { margin: 0 0 4px; font-size: 0.86rem; line-height: 1.4; }
+.info p.meta b { font-weight: 600; }
+.info p.warn {
+  margin: 6px 0 4px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #fff4dc;
+  color: #6b4a0e;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+.info a { color: #1f6f4a; }
+.fav {
+  margin-top: 8px;
+  font: inherit;
+  font-size: 0.92rem;
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+.fav[aria-pressed='true'] { background: var(--heart); border-color: var(--heart); color: #fff; font-weight: 600; }
+
+.foot { margin-top: 26px; color: var(--muted); font-size: 0.86rem; line-height: 1.45; }
+.foot p { margin: 0 0 6px; max-width: 52em; }
+
+/* Plein écran : le canevas passe au-dessus du fond, sous les barres. */
+#fs {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: #1b2620;
+}
+#fs[hidden] { display: none; }
+.fs-top, .fs-controls { position: relative; z-index: 32; background: rgba(247, 243, 234, 0.97); }
+.fs-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.fs-nav { font-size: 1.5rem; line-height: 1; padding-bottom: 3px; color: var(--ink); }
+.fs-close { margin-left: 6px; color: var(--ink); }
+.fs-top h2 { flex: 1; margin: 0; text-align: center; font-size: 1.05rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-close, .fs-nav {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 1.1rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+}
+.fs-view { position: relative; z-index: 32; flex: 1; min-height: 0; cursor: grab; touch-action: none; }
+.fs-view:active { cursor: grabbing; }
+.fs-view .hint {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(20, 28, 24, 0.55);
+  color: #fff;
+  font-size: 0.82rem;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.fs-controls { padding: 8px 16px calc(env(safe-area-inset-bottom, 0px) + 6px); border-top: 1px solid var(--line); }
+
+@media (min-width: 900px) {
+  #page { padding-left: 24px; padding-right: 24px; }
+  .controls { margin: 0 -24px 16px; padding: 10px 24px 6px; }
+  .tabs { max-width: 420px; }
+  #chips { display: flex; flex-wrap: wrap; column-gap: 26px; }
+  .controls .group { margin-bottom: 6px; min-width: 0; max-width: 100%; }
+  .group > .label { width: auto; }
+  .fs-controls { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 26px; }
+}
+
+/* Planches de comparaison (captures automatiques, chats-lapins.html?capture=1) : une grille de cases par-dessus tout. */
+#sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: #f7f3ea;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+#sheet-fg { position: fixed; inset: 0; z-index: 42; pointer-events: none; }
+#sheet[hidden], #sheet-fg[hidden] { display: none; }
+body.sheet-open #stage { z-index: 41; }
+#sheet-fg .tag {
+  position: absolute;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(20, 28, 24, 0.66);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+#sheet-fg .rowlabel, #sheet-fg .collabel {
+  position: absolute;
+  color: #23302a;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+#sheet-fg .collabel { text-align: center; }
+#sheet-fg .rowlabel { font-size: 14px; }
+#sheet-fg .sheettitle { position: absolute; color: #23302a; font-size: 18px; font-weight: 800; }
+#sheet-fg .tag { overflow: hidden; text-overflow: ellipsis; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chip, .chip:active { transition: none; transform: none; }
+}

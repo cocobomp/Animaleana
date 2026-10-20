@@ -110,18 +110,59 @@ function portableFile() {
   };
 }
 
+const define = {
+  __APP_VERSION__: JSON.stringify(pkg.version),
+  __APP_COMMIT__: JSON.stringify(commit),
+  __APP_BUILT__: JSON.stringify(built),
+};
+
+// Pages de comparaison (hors du jeu) : « Choisis ton chat et ton lapin » (chats-lapins.html,
+// src/compare/chatsLapins.js) et, quand elle est là, « Choisis ton chien » (chiens.html).
+// Elles sont construites par un second build, lancé après celui du jeu, dans le même dossier. Dans le même
+// build que le jeu, three.js et le code des animaux partiraient dans un morceau commun : le jeu changerait
+// de forme et la version « à emporter » (un seul script inclus) casserait. Elles ne sont ni dans le service
+// worker ni dans la version à emporter (générés avant elles) ; leurs modèles sont dans public/compare-*/.
+const COMPARE_PAGES = { chiens: 'chiens.html', 'chats-lapins': 'chats-lapins.html' };
+function comparePages() {
+  let config = null;
+  return {
+    name: 'animaleana-compare',
+    apply: 'build',
+    configResolved(c) {
+      config = c;
+    },
+    async closeBundle() {
+      const input = Object.fromEntries(Object.entries(COMPARE_PAGES)
+        .map(([k, f]) => [k, path.resolve(config.root, f)]).filter(([, f]) => fs.existsSync(f)));
+      if (!Object.keys(input).length) return;
+      const { build } = await import('vite');
+      await build({
+        configFile: false,
+        root: config.root,
+        base: config.base,
+        mode: config.mode,
+        logLevel: 'warn',
+        publicDir: false,
+        define,
+        build: {
+          outDir: config.build.outDir,
+          emptyOutDir: false,
+          chunkSizeWarningLimit: 2000,
+          rollupOptions: { input },
+        },
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: './',
   // Les copies de travail (.claude/worktrees/…) ne font pas partie du jeu : le serveur de développement ne
   // doit ni les surveiller (rechargements de page intempestifs) ni y chercher des dépendances.
   server: { watch: { ignored: ['**/.claude/**'] } },
   optimizeDeps: { entries: ['index.html'] },
-  define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
-    __APP_COMMIT__: JSON.stringify(commit),
-    __APP_BUILT__: JSON.stringify(built),
-  },
-  plugins: [offlineServiceWorker(), portableFile()],
+  define,
+  plugins: [offlineServiceWorker(), portableFile(), comparePages()],
   build: { chunkSizeWarningLimit: 1200 },
   test: { exclude: ['**/node_modules/**', '.claude/**'] },
 });

@@ -22,6 +22,7 @@ import { enclosure, navTarget } from './nav.js';
 import { emojiTexture } from './textures.js';
 import { realLegPose } from './models/horseReal.js'; // poses des membres du cheval réaliste (sauts, tours)
 import { realDogPose } from './models/dogReal.js'; // poses du chien réaliste (ses clips : assis, couché, saut…)
+import { realCatPose } from './models/catReal.js'; // poses du chat réaliste (ses clips : assis, patte levée, saut…)
 import { ActivityHud, showActivityResults } from '../ui/activities.js';
 import { t, ta } from '../i18n.js';
 
@@ -226,7 +227,7 @@ export class Activities {
           default: // foin : il mange, la tête en bas
             p.set(toy.x, ground(toy.x, toy.z), toy.z + 0.38);
             e.heading = Math.PI;
-            if (!e.model.realDog) e.model.neck.rotation.x = e.data.look.neckAngle + 0.9 + Math.sin(k * 7) * 0.06;
+            if (!e.model.realDog && !e.model.realCat) e.model.neck.rotation.x = e.data.look.neckAngle + 0.9 + Math.sin(k * 7) * 0.06;
         }
         if (k > 1 && Math.floor(k) !== Math.floor(k - dt) && Math.floor(k) % 2 === 0) e.emit(toyId === 'hay' ? '🌾' : '💕', 1);
         if (k >= T) this.endPlay(pl, true);
@@ -471,6 +472,8 @@ export class Session {
     window.removeEventListener('keydown', this.keyHandler);
     for (const e of this.scripted) {
       e.scripted = false;
+      e.carried = false; // (porté dans les bras : concours de beauté des chats et lapins)
+      if (this.onTable !== undefined) e.onTable = false; // (et posé sur sa table)
       e.scaleGroup.position.set(0, 0, 0);
       e.scaleGroup.rotation.set(0, 0, 0);
       e.scaleGroup.visible = true;
@@ -1410,7 +1413,8 @@ class AgilitySession extends Session {
         // (chien réaliste : son clip de saut, à la phase du saut)
         // (le clip plie les pattes pour l'appel jusqu'à 22 % et se reçoit à 78 % : il suit la course, pas l'envol)
         const jt = c.t;
-        if (!realLegPose(e.model, 'jump', s * 0.9) && !realDogPose(e.model, 'jump', s, null, jt)) for (const l of e.model.legs) l.pivot.rotation.x = l.front ? -1.1 * s : 0.8 * s;
+        const jtCat = Math.min(1, Math.max(0, (c.t - 0.2) / 0.6)); // (chat réaliste : son clip suit l'envol)
+        if (!realLegPose(e.model, 'jump', s * 0.9) && !realDogPose(e.model, 'jump', s, null, jt) && !realCatPose(e.model, 'jump', s, null, jtCat)) for (const l of e.model.legs) l.pivot.rotation.x = l.front ? -1.1 * s : 0.8 * s;
         if (!c.clean && !c.knocked && c.t > 0.5 && o.model.userData.parts.bar) {
           c.knocked = true;
           o.model.userData.parts.bar.position.y = 0.05;
@@ -1662,7 +1666,7 @@ class ShowSession extends Session {
       case 'face': {
         // Il se tourne vers le public, puis la jauge apparaît.
         e.speed = 0;
-        if (e.model.cat) e.catPoseOverride = 'stand'; // chat : debout en attendant (pas de sieste)
+        if (e.model.cat || e.model.realCat) e.catPoseOverride = 'stand'; // chat : debout en attendant (pas de sieste)
         e.heading += wrap(Math.PI - e.heading) * Math.min(1, dt * 5);
         if (this.phaseT > 0.7) {
           this.phase = 'gauge';
@@ -1701,7 +1705,7 @@ class ShowSession extends Session {
           this.cheered = false;
           e.scaleGroup.position.set(0, 0, 0);
           e.scaleGroup.rotation.set(0, 0, 0);
-          if (e.model.cat) e.catPoseOverride = null; // chat : fin de la pose du tour
+          if (e.model.cat || e.model.realCat) e.catPoseOverride = null; // chat : fin de la pose du tour
           this.phase = 'bow';
           this.phaseT = 0;
           this.refreshHud();
@@ -1713,7 +1717,7 @@ class ShowSession extends Session {
         // Le salut après le tour : le cheval réaliste fait une petite révérence (ses antérieurs se tendent :
         // basculé tout d'une pièce, ses sabots avant passaient sous la scène).
         const b = Math.sin(Math.min(1, this.phaseT / 0.8) * Math.PI);
-        if (!realLegPose(e.model, 'bow', b * 0.85, e.scaleGroup) && !realDogPose(e.model, 'bow', b, e.scaleGroup)) e.scaleGroup.rotation.x = b * 0.25;
+        if (!realLegPose(e.model, 'bow', b * 0.85, e.scaleGroup) && !realDogPose(e.model, 'bow', b, e.scaleGroup) && !realCatPose(e.model, 'bow', b, e.scaleGroup)) e.scaleGroup.rotation.x = b * 0.25;
         if (this.phaseT > 0.8) {
           e.scaleGroup.rotation.x = 0;
           e.scaleGroup.position.y = 0;
@@ -1752,7 +1756,7 @@ class ShowSession extends Session {
 
   cleanup() {
     this.hud.setGauge(null);
-    for (const e of this.cast ?? []) if (e.model?.cat) e.catPoseOverride = null; // chats : poses libres
+    for (const e of this.cast ?? []) if (e.model?.cat || e.model?.realCat) e.catPoseOverride = null; // chats : poses libres
   }
 }
 
@@ -1768,6 +1772,24 @@ function animateTrick(e, trick, k, dt) {
   if (md.cat) {
     e.catPoseOverride = { sit: 'sit', highfive: 'highfive', jump: 'stand' }[trick] ?? null;
     if (trick === 'sit' || trick === 'highfive') return;
+  }
+  // Chat réaliste : ses clips (assis, patte levée, saut tenu à sa phase, étirement pour le salut) au lieu de basculer le
+  // modèle ou de tourner ses os à la main (catReal.js).
+  if (md.realCat) {
+    const up = Math.min(1, s * 2);
+    const real = { sit: ['sit', up], down: ['down', up], highfive: ['highfive', Math.min(1, s * 1.8)], paw: ['highfive', Math.min(1, s * 1.8)], bow: ['bow', up], smile: ['sit', up] }[trick];
+    if (real) {
+      realCatPose(md, real[0], real[1], sg);
+      if (trick === 'smile') e.happyFor = Math.max(e.happyFor ?? 0, 0.4);
+      return;
+    }
+    if (trick === 'jump') {
+      const j = Math.max(0, Math.sin(Math.PI * Math.min(1, k * 1.4)));
+      sg.position.y = j * 0.6;
+      realCatPose(md, 'jump', j, null, Math.min(1, k * 1.4));
+      return;
+    }
+    if (trick === 'come') return;
   }
   // Chien réaliste : ses clips (assis, couché, donner la patte, roulade, saut, révérence) au lieu de basculer tout le
   // modèle ou de tourner ses os à la main (dogReal.js) ; le sourire : content, la tête penchée.

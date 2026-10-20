@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#2f5a46" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <title>Choisis ton chat et ton lapin</title>
+  </head>
+  <body>
+    <canvas id="stage" aria-hidden="true"></canvas>
+    <div id="page">
+      <header class="top">
+        <h1>Choisis ton chat et ton lapin</h1>
+        <p class="lead">Compare le chat et le lapin actuels du jeu avec des modèles 3D faits par des artistes. Touche une carte pour la voir en grand et la faire tourner du doigt.</p>
+      </header>
+      <section class="controls" id="controls" aria-label="Réglages communs à toutes les cartes">
+        <div class="tabs" role="tablist" aria-label="Espèce">
+          <button type="button" role="tab" id="tab-cat" data-species="cat" aria-controls="cards" aria-selected="true">🐱 Chats</button>
+          <button type="button" role="tab" id="tab-rabbit" data-species="rabbit" aria-controls="cards" aria-selected="false" tabindex="-1">🐰 Lapins</button>
+        </div>
+        <div id="chips"></div>
+      </section>
+      <main id="cards" role="tabpanel" aria-labelledby="tab-cat"></main>
+      <footer class="foot">
+        <p>Les modèles sont sous licence CC0 1.0 (domaine public) ou CC-BY 4.0 : on peut les utiliser dans le jeu, même vendu. Pour les CC-BY, le nom de l’auteur, le titre, le lien et la licence doivent figurer dans les crédits du jeu (voir CREDITS.md).</p>
+        <p>Les squelettes, allures, poses et transitions marqués « faits pour le jeu » ont été calculés pour La ferme à Madichelle (pattes posées qui ne glissent pas, jamais sous le sol). Robes et races des modèles : retouche des couleurs et des proportions dans le navigateur, le fichier reste le même.</p>
+      </footer>
+    </div>
+    <div id="fs" hidden role="dialog" aria-modal="true" aria-labelledby="fs-title">
+      <div class="fs-top">
+        <button type="button" class="fs-nav" data-dir="-1" aria-label="Rendu précédent">‹</button>
+        <h2 id="fs-title"></h2>
+        <button type="button" class="fs-nav" data-dir="1" aria-label="Rendu suivant">›</button>
+        <button type="button" class="fs-close" aria-label="Fermer">✕</button>
+      </div>
+      <div class="fs-view" id="fs-view">
+        <span class="badge" hidden></span>
+        <span class="hint">↔ Fais-le tourner du doigt</span>
+      </div>
+      <div class="fs-controls" id="fs-controls"></div>
+    </div>
+    <div id="sheet" hidden aria-hidden="true"></div>
+    <div id="sheet-fg" hidden aria-hidden="true"></div>
+    <noscript>Cette page a besoin de JavaScript.</noscript>
+    <script type="module" src="./src/compare/chatsLapins.js"></script>
+  </body>
+</html>

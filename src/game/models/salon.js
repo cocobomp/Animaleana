@@ -216,6 +216,17 @@ export function buildAccessories(model, look, accessories = {}) {
         const tri = new THREE.Mesh(new THREE.ConeGeometry(w * 0.55, w * 0.75, 3, 1), mat(color, 0.75, { side: THREE.DoubleSide }));
         tri.scale.z = 0.22;
         put(frame, tri, [0, throat - w * 0.32, band * 1.2], [Math.PI + 0.25, 0, 0]);
+        // Chat réaliste (catReal.js) : son cou se redresse beaucoup (assis, tête levée) ; le foulard pend vers le sol
+        // dans la pose où on le lui met, au lieu de pointer devant lui.
+        if (model.realCat) {
+          model.neck.updateWorldMatrix(true, false);
+          const q = model.neck.getWorldQuaternion(new THREE.Quaternion()).multiply(frame.quaternion).invert();
+          const down = new THREE.Vector3(0, -1, 0).applyQuaternion(q);
+          // (pointe du cône tournée de π + a autour de x : vers (0, -cos a, -sin a) ; a = 0 : vers la gorge)
+          const a = Math.atan2(-down.z, -down.y) + 0.15;
+          tri.rotation.x = Math.PI + a;
+          tri.position.set(0, throat - w * 0.32 * Math.cos(a), band * 1.2 - w * 0.32 * Math.sin(a));
+        }
       }
       model.neck.add(frame);
       out.push(frame);

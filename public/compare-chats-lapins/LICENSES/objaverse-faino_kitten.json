@@ -1,0 +1,29 @@
+{
+ "name": "Kitten",
+ "license": "by",
+ "animationCount": 0,
+ "faceCount": 15530,
+ "vertexCount": 8456,
+ "viewerUrl": "https://sketchfab.com/3d-models/4ae3704cd65b423ab994545988d4db1a",
+ "likeCount": 12,
+ "viewCount": 762,
+ "publishedAt": "2018-08-26T12:54:07.266934",
+ "isAgeRestricted": false,
+ "user": {
+  "username": "doinspire",
+  "displayName": "FainoDS",
+  "profileUrl": "https://sketchfab.com/doinspire"
+ },
+ "tags": [
+  "cat",
+  "kitten"
+ ],
+ "categories": [
+  "animals-pets",
+  "characters-creatures"
+ ],
+ "description": "",
+ "thumb": "https://media.sketchfab.com/models/4ae3704cd65b423ab994545988d4db1a/thumbnails/86e498b9252a4bac8142c5ab2a5476fe/cf27fa1fcd394fca938091f5acc5c784.jpeg",
+ "shard": "000-137.json.gz",
+ "_source": "Objaverse 1.0 (allenai/objaverse, Hugging Face), metadata/000-137.json.gz ; instantané Sketchfab de 2022"
+}

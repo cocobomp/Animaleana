@@ -1,0 +1,27 @@
+{
+ "uid": "7a0c1a65e18747799af9fe9481f1bdb2",
+ "name": "Cat game asset",
+ "viewerUrl": "https://sketchfab.com/3d-models/cat-game-asset-7a0c1a65e18747799af9fe9481f1bdb2",
+ "publishedAt": "2019-10-26T17:15:28.609102",
+ "createdAt": "2019-10-26T17:11:14.488323",
+ "isDownloadable": true,
+ "description": "",
+ "animationCount": 0,
+ "faceCount": 19988,
+ "vertexCount": 10015,
+ "user": {
+  "username": "claireanne3d",
+  "displayName": "Claire",
+  "profileUrl": "https://sketchfab.com/claireanne3d",
+  "uid": "d24631bbfa3c435da413f81303f9e4d1"
+ },
+ "license": {
+  "uri": "https://api.sketchfab.com/v3/licenses/322a749bcfa841b29dff1e8a1bb74b0b",
+  "label": "CC Attribution",
+  "fullName": "Creative Commons Attribution",
+  "requirements": "Author must be credited. Commercial use is allowed.",
+  "url": "http://creativecommons.org/licenses/by/4.0/",
+  "slug": "by"
+ },
+ "_consulté": "2026-10-20, https://api.sketchfab.com/v3/models/7a0c1a65e18747799af9fe9481f1bdb2 (API publique, sans connexion)"
+}

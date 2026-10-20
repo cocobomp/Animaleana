@@ -16,7 +16,9 @@ import { hairMaterial, buildHorseLeg, buildHorseMane, buildHorseForelock, buildH
 import { buildHorseModel } from './horseModel.js';
 import { buildRealHorseModel } from './horseReal.js';
 import { buildRealDogModel } from './dogReal.js'; // chiens réalistes (shiba et jack russell, GLB)
-import { buildCatModel } from './catModel.js'; // chats : modèle dédié (races, poils, poses)
+import { buildCatModel } from './catModel.js'; // chats : modèle dédié (races, poils, poses) — repli du chat réaliste
+import { buildRealCatModel } from './catReal.js'; // chats réalistes (Claire pour les adultes, FainoDS pour les chatons, GLB)
+import { catLookWithBreed } from '../../sim/catLook.js';
 
 // ------------------------------------------------------------------ anatomie par espèce
 // torso : formes du tronc. ['e', miroir, centre (x/R, y/R, z/L), rayons (x/R, y/R, z/L), k (fondu, /R)]
@@ -413,12 +415,18 @@ export function dogLookWithBreed(look, breedOfAnimal = null) {
   return look.breed ? look : { ...look, breed: breedOfAnimal ?? breedOf('dog', look)?.id };
 }
 
-export function buildAnimalModel(speciesId, look, breedOfAnimal = null) {
+export function buildAnimalModel(speciesId, look, breedOfAnimal = null, stage = null) {
   // Vague 3 : le cheval et le chat ont chacun leur propre modèle (horseModel.js, catModel.js) ;
   // les autres espèces passent par le modèle commun ci-dessous.
   // (cheval réaliste du GLB ; s'il n'est pas chargé, le cheval sculpté)
   if (speciesId === 'horse') return buildRealHorseModel(look, breedOfAnimal) ?? buildHorseModel(look, breedOfAnimal);
-  if (speciesId === 'cat') return buildCatModel(look);
+  // Chat réaliste (GLB : chaton de FainoDS pour les bébés, chat de Claire sinon) ; s'il n'est pas encore chargé (ou dans
+  // les tests), le chat procédural. (Race : look.breed, sinon celle de l'animal — anciennes sauvegardes —, sinon
+  // devinée par la robe ; stade : look.kitten pour le chaton, look.young pour le jeune, voir AnimalEntity.build.)
+  if (speciesId === 'cat') {
+    const st = stage ?? (look.kitten ? 'baby' : look.young ? 'young' : 'adult');
+    return buildRealCatModel(catLookWithBreed(look, breedOfAnimal), st) ?? buildCatModel(look);
+  }
   // Chien réaliste (GLB : shiba pour les moyens et grands, jack russell pour les petits) ; s'il n'est pas encore
   // chargé (ou dans les tests), le chien procédural ci-dessous. (Ancienne sauvegarde sans look.breed : la race de
   // l'animal d'abord, et seulement à défaut la race devinée par la robe — un labradoodle noir n'est pas un jack.)

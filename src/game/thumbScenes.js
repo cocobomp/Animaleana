@@ -355,7 +355,9 @@ function animalThumb(spec) {
   const foal = species === 'horse' && stage === 'baby';
   // (le chiot du chien réaliste : son gabarit, grosse tête et pattes courtes, comme en jeu)
   const puppy = species === 'dog' && stage === 'baby';
-  const model = withTexScale(THUMB_TEX, () => buildAnimalModel(species, foal ? { ...look, foal: true } : puppy ? { ...look, puppy: true } : look, breed));
+  // (le chat réaliste : chaton de FainoDS pour le bébé, tête un peu plus grosse pour le jeune, comme en jeu)
+  const cat = species === 'cat' ? (stage === 'baby' ? { kitten: true } : stage === 'young' ? { young: true } : null) : null;
+  const model = withTexScale(THUMB_TEX, () => buildAnimalModel(species, foal ? { ...look, foal: true } : puppy ? { ...look, puppy: true } : cat ? { ...look, ...cat } : look, breed));
   model.photoPose?.(); // (cheval réaliste : à l'arrêt, tête relevée, oreilles en avant — jamais en train de brouter)
   model.root.traverse((o) => {
     if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false;

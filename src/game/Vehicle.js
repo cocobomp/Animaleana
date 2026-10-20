@@ -30,16 +30,21 @@ export function crateWithAnimal(a, colorIndex = 0) {
   const len = (a.look.bodyLen + a.look.headLen) * s;
   const c = crate(Math.min(0.85, Math.max(0.5, len * 1.15)), CRATE_COLORS[colorIndex % CRATE_COLORS.length]);
   const model = buildAnimalModel(a.species, travelLook(a), a.breed); // chaque espèce par son modèle (cheval de sa race, chat…)
-  model.staticPose?.('lie'); // (chien réaliste : couché dans sa caisse)
+  model.staticPose?.('lie'); // (chien et chat réalistes : couchés dans leur caisse)
   model.root.scale.setScalar(s * Math.min(1, (c.size.d * 0.8) / len));
   model.root.position.set(0, 0.03, -0.04);
   c.group.add(model.root);
   return { crate: c, model };
 }
 
-/** Gabarit d'un voyageur : le chiot du chien réaliste a le sien (grosse tête, pattes courtes), comme en jeu. */
+/**
+ * Gabarit d'un voyageur : le chiot du chien réaliste a le sien (grosse tête, pattes courtes), comme en jeu ; le chat
+ * réaliste aussi (chaton : modèle du chaton ; jeune : tête un peu plus grosse).
+ */
 function travelLook(a) {
-  return a.species === 'dog' && lifeStage(a) === 'baby' ? { ...a.look, puppy: true } : a.look;
+  const stage = lifeStage(a);
+  if (a.species === 'cat') return stage === 'baby' ? { ...a.look, kitten: true } : stage === 'young' ? { ...a.look, young: true } : a.look;
+  return a.species === 'dog' && stage === 'baby' ? { ...a.look, puppy: true } : a.look;
 }
 
 /** Nombre de places de remorque pour ces animaux (deux moutons ou deux chèvres partagent une place). */

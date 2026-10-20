@@ -1376,7 +1376,7 @@ function maneCards(S, B, body, pos, coat) {
     // (demi-largeur 5 à 8 cm le long de la crête ; longueur sous le bord du rouleau : 25 à 50 % de la crinière)
     lefts.push({ t: 0.14 + ((k + 0.15 + 0.7 * lrng()) / nLeft) * 0.68, w: (0.05 + 0.03 * lrng()) / crestSpan, L: (0.25 + 0.25 * lrng()) * len0 });
   }
-  // (part d'une mèche de gauche à la place t : plus de cartes y passent à gauche)
+  // (part d'une mèche de gauche à la place t : les cartes courtes de gauche n'y vont pas, la mèche a les siennes)
   const leftLock = (t) => {
     let e = 0;
     for (const m of lefts) e = Math.max(e, 1 - smooth(m.w * 0.45, m.w, Math.abs(t - m.t)));
@@ -1443,7 +1443,7 @@ function maneCards(S, B, body, pos, coat) {
     const root = Fm.c.addScaledVector(Fm.up, -0.006);
     const w = lockWeights(root, 0, 0.6);
     return {
-      m, rows: lr,
+      m, rows: lr, root,
       mass: {
         // (texture prise dès le bord en pointes : la mèche commence sur le rouleau en crins épars, pas en bord droit)
         P: lr.map((row) => row.pts), kind: 0, strip: LR - 1, u0: 0,
@@ -1478,8 +1478,8 @@ function maneCards(S, B, body, pos, coat) {
     // (jusqu'un peu avant la nuque : derrière les oreilles passe la têtière, les dernières mèches s'y retournaient)
     const t = 0.03 + ((i + rng() * 0.9) / n) * 0.87;
     const { c, dir, up } = frameAt(t);
-    // (quelques mèches passent à gauche, plus pour une crinière longue ou épaisse ; sur une mèche de gauche de la
-    // masse, elles sont posées sur elle, plus bas)
+    // (quelques cartes courtes passent à gauche, plus pour une crinière longue ou épaisse, à côté des mèches de
+    // gauche de la masse)
     const ll = leftLock(t);
     const sx = rng() < Math.max(st.other * 0.5, MANE_LEFT * (1 - ll)) ? 1 : -1;
     const across = -sx * (0.002 + rng() * 0.008);
@@ -1558,15 +1558,16 @@ function maneCards(S, B, body, pos, coat) {
         pts.push(p.addScaledVector(nn, h + (k ? 0.002 : 0)));
         normals.push(nn);
       }
-      const root = pts[0].clone();
       const m = Math.floor(LP / 2);
-      const w = lockWeights(root, 0, 0.6);
+      const w = lockWeights(lk.root, 0, 0.6);
       const card = {
-        pts, normals, side: cardSide(normals[m], alongAt(pts, m), (lrng() - 0.5) * 0.3), w0: 0.045, w1: 0.008,
+        // (racine celle de la mèche, sur la peau de la crête : tressée, la carte s'y replie sous le bouton — repliée
+        // vers son premier point, au-dessus du rouleau, elle dépassait des boutons)
+        pts, normals, root: lk.root, side: cardSide(normals[m], alongAt(pts, m), (lrng() - 0.5) * 0.3), w0: 0.045, w1: 0.008,
         // (même part le long des crins que la mèche dessous — hairG — : elles bougent avec elle au vent et au galop, et
         // leurs racines ne sont pas assombries sur toute leur longueur)
         color: grey(0.95 + lrng() * 0.1), uv: [0.055, 1, ...HAIR_ROWS[(li + q) % 4]], kind: 0,
-        weights: (p, f) => w(f), meta: { t: lk.m.t, root, primary: q === 0 },
+        weights: (p, f) => w(f), meta: { t: lk.m.t, root: lk.root, primary: q === 0 },
       };
       pushCardOut(card, body, 0.002);
       (q === 0 ? main : fill).push(card);

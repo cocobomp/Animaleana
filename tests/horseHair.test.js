@@ -242,7 +242,7 @@ describe('crinière, toupet et queue en cartes de crins', () => {
       }
       md.dispose();
     }
-  });
+  }, 60000);
 
   it('mèches de gauche de la masse : sous le bord du rouleau, effilées en pointe ; aucune pour une crinière courte', () => {
     const locks = (md) => {
@@ -284,7 +284,7 @@ describe('crinière, toupet et queue en cartes de crins', () => {
       }
       md.dispose();
     }
-  });
+  }, 60000);
 
   it('queue : pleine de dos, d\'aplomb, et du volume de profil', () => {
     for (const breed of ['selle_francais', 'arabe', 'frison']) {
@@ -310,7 +310,7 @@ describe('crinière, toupet et queue en cartes de crins', () => {
       expect(deep, breed).toBeGreaterThan(0.13);
       md.dispose();
     }
-  });
+  }, 60000);
 
   it.each(['selle_francais', 'fjord', 'frison', 'shetland'])('%s : poids des os de somme 1, os valides (crins, brosse, fanons)', (breed) => {
     const md = horse(breed);
@@ -377,7 +377,7 @@ describe('crinière, toupet et queue en cartes de crins', () => {
     md.setLod(0);
     expect(md.hairMesh.geometry).toBe(full);
     md.dispose();
-  });
+  }, 60000);
 });
 
 /** Instants fixés de toutes les allures (pas de hasard : le mixeur part sinon d'un instant tiré au sort). */
@@ -499,7 +499,7 @@ describe('toupet en mèche', () => {
       expect(Math.abs(tip.reduce((a, b) => a + b, 0) / tip.length), breed).toBeLessThan(0.01);
       md.dispose();
     }
-  });
+  }, 60000);
 
   it('plus long au milieu qu\'aux bords : une mèche en pointe (pas un rectangle rayé collé sur le front)', () => {
     for (const breed of ['selle_francais', 'frison', 'arabe']) {

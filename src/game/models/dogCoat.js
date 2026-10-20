@@ -611,7 +611,10 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   if (cPoints > 0.0) {
     float brow = head * (1.0 - ear) * (1.0 - smoothstep(0.006, 0.016, length(vec2(ax - cEye.x * 0.9, (p.y - cEye.y - 0.025) * 1.3)) - 0.006 + edge * 0.02))
       * smoothstep(0.1, 0.3, hz) * (1.0 - smoothstep(0.42, 0.52, hz));
-    float cheekT = head * (1.0 - ear) * belowEye * smoothstep(0.3, 0.5, hz) * smoothstep(0.015, 0.03, ax + edge * 0.02);
+    // (joues : sur les côtés du museau, devant l'œil — prises depuis l'arrière de la tête, elles faisaient un pavé
+    // cuivre sur la joue du berger australien)
+    float hzEp = (cEye.z - cHead.z) / headLen;
+    float cheekT = head * (1.0 - ear) * belowEye * smoothstep(hzEp - 0.14, hzEp + 0.0, hz + edge * 0.2) * smoothstep(0.015, 0.03, ax + edge * 0.02);
     float chestT = body * (1.0 - legs) * smoothstep(shZ, shZ + 0.05, p.z) * (1.0 - smoothstep(0.35, 0.5, h + edge))
       * smoothstep(0.01, 0.03, ax);
     float legT = legs * (1.0 - smoothstep(elbowY * 0.55, elbowY * 0.75, p.y + edge * 0.1));
@@ -721,7 +724,11 @@ if (cOn > 0.5) {
   // Lèvres et gencives (jack) : brun-noir comme chez le vrai chien, pas rouge vif (« rouge à lèvres »).
   if (cKeepOpt.z > 0.0 && cKeepOpt.y > 0.0) {
     float dh2 = abs(fract(hsv.x - 0.985 + 0.5) - 0.5);
-    float lip = vCmpPart.z * (1.0 - smoothstep(0.05, 0.09, dh2)) * smoothstep(0.25, 0.4, hsv.y) * smoothstep(0.12, 0.25, hsv.z);
+    // (seulement le long de la fente de la gueule, devant les yeux : les plaques brun-roux de la tête du jack ont la
+    // même teinte et faisaient des taches sales sur le front et autour des yeux)
+    float yM = cEye.y - 0.066 + (vCmpPos.z - cHead.w + 0.041) * 0.25;
+    float mouthZone = (1.0 - smoothstep(0.016, 0.026, abs(vCmpPos.y - yM))) * smoothstep(cEye.z, cEye.z + 0.025, vCmpPos.z);
+    float lip = vCmpPart.z * mouthZone * (1.0 - smoothstep(0.05, 0.09, dh2)) * smoothstep(0.25, 0.4, hsv.y) * smoothstep(0.12, 0.25, hsv.z);
     keep = keep * (1.0 - lip);
     nc = mix(nc, vec3(0.035, 0.026, 0.022), lip);
   }

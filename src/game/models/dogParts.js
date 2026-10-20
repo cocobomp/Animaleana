@@ -145,7 +145,7 @@ export function earShape(B) {
     len: 0.115, width: 0.08, up: 0.058, back: 0.074, fwd: 0.14, thick: 0.0048, fringe: 0, curl: 0, round: 2.2, fold: 0.013,
     rose, set: 0,
   };
-  if (long) Object.assign(S, { len: 0.15, width: 0.074, up: 0.05, back: 0.07, fwd: 0.1, round: 4, fold: 0.008 });
+  if (long) Object.assign(S, { len: 0.15, width: 0.074, up: 0.05, back: 0.07, fwd: 0.1, round: 4, fold: 0.008, thick: 0.0065 });
   if (rose) Object.assign(S, { len: 0.06, width: 0.036, up: 0.05, back: 0.07, fwd: -1, thick: 0.0028, round: 1.6, fold: 0.006 });
   if (kind === 'jack') {
     // (jack : tête plus petite que celle du shiba dans le repère du chien, œil plus bas sur le crâne)
@@ -299,7 +299,7 @@ export function buildPendantEars(base, D, B) {
     const ring = SX;
     for (let r = 0; r <= NV; r++) {
       const v = r / NV;
-      const T = (S.thick + S.fringe * 0.006 * v + S.curl * 0.004) * hs;
+      const T = (S.thick + S.fringe * 0.01 * v + S.curl * 0.004) * hs;
       for (let k = 0; k < NU; k++) {
         const th = (k / NU) * Math.PI * 2;
         const u = 0.5 - 0.5 * Math.cos(th);

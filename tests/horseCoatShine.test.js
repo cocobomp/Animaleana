@@ -50,9 +50,11 @@ describe('robe propre et satinée (étape 4)', () => {
     expect(sh.fragmentShader).toContain('hSkyRim');
     expect(sh.uniforms.hSkyRim).toBe(gfx.skyRim);
     expect(sh.uniforms.hFill).toBe(gfx.horseFill);
-    // robe noire : reflet brun chaud, un peu moins lisse
+    // robe noire : reflet brun chaud ; poil plus lisse que les autres robes (reflets nets, cassés par le grain
+    // du poil : étape 8, noir profond)
     expect(m.userData.horseUniforms.hRimTint.value.r).toBeGreaterThan(m.userData.horseUniforms.hRimTint.value.b);
-    expect(m.roughness).toBeCloseTo(0.45, 5);
+    expect(m.roughness).toBeGreaterThanOrEqual(0.35);
+    expect(m.roughness).toBeLessThan(0.45);
   });
 
   it('Akhal-Teké : éclat doré par le satiné, plus par le métal (la robe ne reflète plus l\'herbe)', () => {

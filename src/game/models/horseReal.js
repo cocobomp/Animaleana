@@ -234,6 +234,7 @@ export function realHorseBase(gltf) {
  * qui restent en place (forme en amande). Renvoie les yeux (centre, rayon) pour les tests.
  */
 const EYE_OPEN = { up: 0.42, low: 0.12 };
+export const EYE_SCALE = 1.12;
 function openEyelids(prims, chanfrein) {
   const eye = prims.eye;
   const coat = prims.coat;
@@ -257,6 +258,24 @@ function openEyelids(prims, chanfrein) {
     for (let i = 0; i < eye.count; i++) {
       if (Math.sign(eye.pos[i * 3]) === side) r = Math.max(r, _v.fromArray(eye.pos, i * 3).distanceTo(c));
     }
+    // Œil plus grand (EYE_SCALE, finitions de près) : le globe grossit autour de son centre ; le pelage autour,
+    // du côté de l'œil, s'écarte d'autant au bord des paupières, moins en s'éloignant (rien n'entre dans le globe :
+    // un œil un peu plus saillant, comme celui d'un cheval, au lieu d'un œil petit et enfoncé).
+    const r1 = r * EYE_SCALE;
+    for (let i = 0; i < eye.count; i++) {
+      if (Math.sign(eye.pos[i * 3]) !== side) continue;
+      _v.fromArray(eye.pos, i * 3).sub(c).multiplyScalar(EYE_SCALE).add(c);
+      eye.pos.set([_v.x, _v.y, _v.z], i * 3);
+    }
+    for (let i = 0; i < coat.count; i++) {
+      _v.fromArray(coat.pos, i * 3).sub(c);
+      const dl = _v.length();
+      if (dl / r > 2.4 || _v.x * side < 0.1 * r || dl < 1e-6) continue;
+      const k = (r1 - r) * (1 - smooth(1.0, 2.4, dl / r)) * smooth(0.1, 0.5, (_v.x * side) / dl);
+      _v.multiplyScalar((dl + k) / dl).add(c);
+      coat.pos.set([_v.x, _v.y, _v.z], i * 3);
+    }
+    r = r1;
     eyes.push({ side, c: c.clone(), r });
     const l = V(side, 0, 0);
     // Milieu de la fente le long du chanfrein (entre les deux coins) : sommets du bord, juste hors du globe.
@@ -1502,6 +1521,181 @@ const emptyBoneBoxes = () => {
   return b;
 };
 
+/**
+ * Oreille creusée (le modèle d'origine a des oreilles en feuilles minces) : la feuille est pliée en gouttière, le
+ * milieu de sa face avant reculé de EAR_CUP (× la taille de l'oreille), les bords en place, ni la base (raccord
+ * avec la tête) ni la pointe. Les deux faces bougent ensemble : l'épaisseur ne change pas, rien ne se retourne.
+ * Repère de l'oreille : axe de la base à la pointe (sommet le plus loin de l'articulation), largeur (plus grand
+ * étalement en travers), face avant (vers l'avant du cheval). Écrit dans info (attribut hInfo) : y = position en
+ * travers (-1 à 1 d'un bord à l'autre), z = face avant (0 à 1 : 1 là où l'oreille est libre, 0 sur la peau de sa
+ * base posée sur la tête) ou arrière (-1), pour le shader (intérieur foncé, poils clairs vers les bords).
+ */
+export const EAR_CUP = 0.008;
+function earCup(d, coat, b, joint, scale, info) {
+  const ids = [];
+  for (let i = 0; i < coat.count; i++) if (dominant(coat, i) === b) ids.push(i);
+  if (ids.length < 8) return;
+  const P = V();
+  let tip = null;
+  let far = -1;
+  for (const i of ids) {
+    const dd = P.fromArray(d.pos, i * 3).distanceTo(joint);
+    if (dd > far) {
+      far = dd;
+      tip = P.clone();
+    }
+  }
+  const a1 = tip.clone().sub(joint).normalize();
+  // largeur : plus grand étalement en travers de l'axe (analyse en composantes dans le plan perpendiculaire)
+  const t1 = Math.abs(a1.x) < 0.9 ? V(1, 0, 0) : V(0, 0, 1);
+  const e1 = t1.addScaledVector(a1, -t1.dot(a1)).normalize();
+  const e2 = V().crossVectors(a1, e1);
+  let sxx = 0;
+  let sxy = 0;
+  let syy = 0;
+  const c = V();
+  for (const i of ids) c.add(P.fromArray(d.pos, i * 3));
+  c.multiplyScalar(1 / ids.length);
+  for (const i of ids) {
+    P.fromArray(d.pos, i * 3).sub(c);
+    const x = P.dot(e1);
+    const y = P.dot(e2);
+    sxx += x * x;
+    sxy += x * y;
+    syy += y * y;
+  }
+  const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const a2 = e1.clone().multiplyScalar(Math.cos(th)).addScaledVector(e2, Math.sin(th));
+  const a3 = V().crossVectors(a1, a2);
+  if (a3.z < 0) a3.negate();
+  // milieu et demi-largeur par tranche de hauteur
+  const BINS = 8;
+  const lo = new Float32Array(BINS).fill(Infinity);
+  const hi = new Float32Array(BINS).fill(-Infinity);
+  const hOf = (p) => Math.min(1, Math.max(0, p.clone().sub(joint).dot(a1) / far));
+  for (const i of ids) {
+    P.fromArray(d.pos, i * 3);
+    const k = Math.min(BINS - 1, Math.floor(hOf(P) * BINS));
+    const x = P.clone().sub(c).dot(a2);
+    lo[k] = Math.min(lo[k], x);
+    hi[k] = Math.max(hi[k], x);
+  }
+  const N = V();
+  const moved = new Set();
+  for (const i of ids) {
+    P.fromArray(d.pos, i * 3);
+    const h = hOf(P);
+    const k = Math.min(BINS - 1, Math.floor(h * BINS));
+    const w = Math.max(-1, Math.min(1, (P.clone().sub(c).dot(a2) - (lo[k] + hi[k]) / 2) / Math.max(1e-4, (hi[k] - lo[k]) / 2)));
+    const front = N.fromArray(d.nrm, i * 3).dot(a3) >= 0;
+    let ew = 0;
+    for (let q = 0; q < 4; q++) if (coat.si[i * 4 + q] === b) ew += coat.sw[i * 4 + q];
+    const free = smooth(0.97, 1, ew) * smooth(0.18, 0.36, h);
+    info[i * 3 + 1] = w;
+    info[i * 3 + 2] = front ? free : -1;
+    // (seulement là où l'oreille est libre : la peau de sa base, à demi liée à la tête, ne bouge pas)
+    const amt = EAR_CUP * scale * (1 - w * w) * smooth(0.22, 0.42, h) * (1 - smooth(0.75, 1, h)) * smooth(0.97, 1, ew);
+    if (amt <= 1e-5) continue;
+    P.addScaledVector(a3, -amt);
+    d.pos.set([P.x, P.y, P.z], i * 3);
+    moved.add(i);
+  }
+  // (normales refaites sur les seuls sommets déplacés : celles du GLB, lissées, restent ailleurs)
+  recomputeNormals(d, coat, moved);
+}
+
+/** Normales des sommets choisis refaites sur les triangles qui les touchent (pondérées par l'aire). */
+function recomputeNormals(d, coat, set) {
+  const acc = new Map();
+  const A = V();
+  const B2 = V();
+  const C = V();
+  const n = V();
+  for (let t = 0; t < coat.index.length; t += 3) {
+    const a = coat.index[t];
+    const b = coat.index[t + 1];
+    const c = coat.index[t + 2];
+    if (!set.has(a) && !set.has(b) && !set.has(c)) continue;
+    A.fromArray(d.pos, a * 3);
+    B2.fromArray(d.pos, b * 3).sub(A);
+    C.fromArray(d.pos, c * 3).sub(A);
+    n.crossVectors(B2, C);
+    for (const k of [a, b, c]) {
+      if (!set.has(k)) continue;
+      const s = acc.get(k) ?? V();
+      s.add(n);
+      acc.set(k, s);
+    }
+  }
+  for (const [k, s] of acc) {
+    if (s.lengthSq() < 1e-20) continue;
+    // (même côté que l'ancienne normale : un triangle de sens inverse dans le GLB ne la retourne pas)
+    if (s.dot(n.fromArray(d.nrm, k * 3)) < 0) s.negate();
+    s.normalize();
+    d.nrm.set([s.x, s.y, s.z], k * 3);
+  }
+}
+
+/**
+ * Naseau du modèle (une fente, mesurée sur la photo d'origine : x ±0,072, y 0,112, z 0,882 dans le repère de la
+ * tête du GLB, en longueurs de tête ; r : taille de la virgule peinte) ; nostrilAt le replace sur la tête de la
+ * race (profil busqué ou camus, tête de poulain). NOSTRIL.depth : creux du naseau ouvert (m, cheval de taille 1).
+ */
+export const NOSTRIL = { x: 0.072, y: 0.112, z: 0.882, r: 0.03, depth: 0.009 };
+function nostrilAt(base, D, toHead) {
+  const poll = base.rest[BONE_INDEX.Head];
+  const L = base.snout.distanceTo(poll);
+  const q = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), base.headTilt);
+  const restP = V(NOSTRIL.x, NOSTRIL.y, NOSTRIL.z).multiplyScalar(L).applyQuaternion(q).add(poll);
+  const out = toHead(D.maps[BONE_INDEX.Head](restP, V()));
+  out.x = Math.abs(out.x);
+  return out;
+}
+
+/**
+ * Naseaux ouverts : les sommets du pelage autour de chaque fente reculent dans la tête (jusqu'à NOSTRIL.depth au
+ * centre, en cloche serrée), le long de leur normale ; la virgule sombre est peinte par le shader de la robe (hNos).
+ */
+function openNostrils(d, coat, nos, toHead, headLen) {
+  const moved = new Set();
+  const P = V();
+  const N = V();
+  const r = NOSTRIL.r * 1.1;
+  for (let i = 0; i < coat.count; i++) {
+    const b = dominant(coat, i);
+    if (b !== BONE_INDEX.Head) continue;
+    P.fromArray(d.pos, i * 3);
+    const h = toHead(P);
+    const dx = Math.abs(h.x) - nos.x;
+    const dy = h.y - nos.y;
+    const dz = h.z - nos.z;
+    const q = (dx * dx + dy * dy * 1.4 + dz * dz * 0.65) / (r * r);
+    if (q >= 1) continue;
+    const amt = NOSTRIL.depth * (headLen / 0.54) * (1 - q) ** 3;
+    N.fromArray(d.nrm, i * 3);
+    P.addScaledVector(N, -amt);
+    d.pos.set([P.x, P.y, P.z], i * 3);
+    moved.add(i);
+  }
+  if (moved.size) recomputeNormals(d, coat, moved);
+}
+
+/** Œil gauche dans le repère de la tête (centre |x|, y, z et rayon, en longueurs de tête). */
+function eyeInHead(de, base, toHead, rScale) {
+  const eye = base.prims.eye;
+  const c = V();
+  let n = 0;
+  for (let i = 0; i < eye.count; i++) {
+    if (de.pos[i * 3] <= 0) continue;
+    c.add(_v.fromArray(de.pos, i * 3));
+    n++;
+  }
+  if (!n || !base.eyes?.length) return [0, 0, 0, 0];
+  c.multiplyScalar(1 / n);
+  const h = toHead(c);
+  return [Math.abs(h.x), h.y, h.z, base.eyes[0].r * rScale];
+}
+
 /** Géométries (partagées) d'un gabarit : pelage, yeux, crins, avec les attributs du shader de la robe. */
 function shapeFor(base, B) {
   const key = JSON.stringify(B);
@@ -1558,6 +1752,13 @@ function shapeFor(base, B) {
     for (let k = 0; k < 4; k++) if (hb.includes(coat.si[i * 4 + k])) headW[i] += coat.sw[i * 4 + k];
   }
   smoothOnMesh(headW, coat.index, 3);
+  // Finitions de près (étape 9) : oreilles creusées (et leur face avant repérée pour le shader : poils clairs à
+  // l'intérieur), naseau ouvert, œil et sabots repérés pour le shader de la robe.
+  const earScale = D.scale.head ** 0.6 * (B.ears ?? 1);
+  for (const e of ['EarL', 'EarR']) earCup(dc, coat, BONE_INDEX[e], heads[BONE_INDEX[e]], earScale, info);
+  const toHead = (p) => p.clone().sub(poll).applyQuaternion(headQ).multiplyScalar(1 / headLen);
+  const nostril = nostrilAt(base, D, toHead);
+  openNostrils(dc, coat, nostril, toHead, headLen);
   const geo = (d, prim, extra) => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(d.pos, 3));
@@ -1573,6 +1774,13 @@ function shapeFor(base, B) {
   };
   const hoofY = 0.128 * D.scale.hoof;
   const soles = base.sole.map((pts) => pts.map((p) => p.clone().multiplyScalar(D.scale.hoof)));
+  // (centre de la sole de chaque sabot, x et z, au repos : la couronne descend de la pince vers les talons)
+  const hooves = LEGS.map(([k], i) => {
+    const c = heads[BONE_INDEX[k + '4']].clone().add(soles[i][1]);
+    return [c.x, c.z];
+  });
+  // (centre de l'œil gauche dans le repère de la tête, |x|, et son rayon, en longueurs de tête)
+  const eyeHL = eyeInHead(de, base, toHead, D.scale.head / headLen);
   S = {
     B,
     D,
@@ -1588,6 +1796,9 @@ function shapeFor(base, B) {
     // Boîtes par os (culling, voir horseBounds), sur le pelage, les yeux et les crins de la race.
     boneBox: emptyBoneBoxes(),
     hoofY,
+    hooves,
+    eyeHL,
+    nostril: [nostril.x, nostril.y, nostril.z, NOSTRIL.r],
     elbowY,
     headLen,
     soles,
@@ -2331,7 +2542,8 @@ float eyeGlint( vec3 L, vec3 V, vec3 G, vec3 N, float a0, float a1 ) {
   #if NUM_DIR_LIGHTS > 0
     vec3 eyeL = directionalLights[ 0 ].direction;
     // (soleil derrière la tête : reflet plus faible, jamais éteint)
-    glint += directionalLights[ 0 ].color * eyeGlint( eyeL, eyeV, eyeG, normal, 0.07, 0.12 ) * ( 0.3 + 0.7 * smoothstep( -0.5, 0.3, dot( eyeL, eyeG ) ) ) * 1.6;
+    // (reflet petit et net, pas un gros point blanc de dessin animé)
+    glint += directionalLights[ 0 ].color * eyeGlint( eyeL, eyeV, eyeG, normal, 0.035, 0.07 ) * ( 0.3 + 0.7 * smoothstep( -0.5, 0.3, dot( eyeL, eyeG ) ) ) * 1.35;
   #endif
   reflectedLight.directSpecular += glint;
 }`);
@@ -2523,6 +2735,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   const coatSrc = base.prims.coat.material;
   const coatMat = coatMaterial(look, B, breed, {
     detail: coatSrc.map, normalMap: coatSrc.normalMap, normalSign: Math.sign(coatSrc.normalScale?.y ?? 1), hoofY: S.hoofY,
+    hooves: S.hooves, eye: S.eyeHL, nostril: S.nostril,
   });
   // Boîte englobante du cheval, commune à ses maillages : recalculée sur la pose des os à chaque image où il
   // passe le test du champ de la caméra (voir HorseMesh, horseBounds). Les boîtes par os viennent de la race,

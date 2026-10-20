@@ -33,7 +33,7 @@ export const DOG_BUILDS = {
   // pattes courtes sous la fourrure, petites oreilles droites)
   spitz_nain: { legs: 0.75, back: 0.8, girth: 1.05, head: 1.1, snout: 0.55, ears: 'pointed', earSize: 0.7, tail: 'curl', fur: 0.052, ruff: 1.25, feather: 0.4, tailLen: 0.8 },
   // (yorkshire : robe longue et soyeuse qui tombe en jupe, petite queue)
-  yorkshire: { legs: 0.85, back: 0.9, girth: 0.92, head: 1.05, snout: 0.75, ears: 'pointed', earSize: 0.85, tail: 'carrot', tailLen: 0.6, tailThick: 0.6, tailFur: 0.3, fur: 0.03, feather: 1.2, silky: 1 },
+  yorkshire: { legs: 0.85, back: 0.9, girth: 0.92, head: 1.05, snout: 0.75, ears: 'pointed', earSize: 0.85, tail: 'carrot', tailLen: 0.6, tailThick: 0.5, tailFur: 0.1, fur: 0.03, feather: 1.2, silky: 1 },
   carlin: { legs: 0.72, legW: 1.15, back: 0.85, girth: 1.28, head: 1.3, snout: 0.28, muzzleW: 1.3, neck: 0.8, ears: 'button', earSize: 0.6, tail: 'curl', tailLen: 0.7 },
   jack_russell: { tail: 'carrot', tailLen: 0.85 },
   corgi: { legs: 0.55, legW: 1.15, back: 1.25, girth: 1.18, head: 1.08, snout: 0.95, ears: 'pointed', earSize: 1.35, tail: 'stub', fur: 0.007 },

@@ -439,6 +439,159 @@ function weldGroups(pos, n) {
   return grp;
 }
 
+/**
+ * Queue plus courte ou plus longue (B.tailLen), plus fine ou plus épaisse (B.tailThick), pour deformDog : autour de
+ * la chaîne de ses os. Chaque sommet est projeté sur les segments des os de la queue qui le portent (moyenne pondérée
+ * par la peau : pas de saut d'un os à l'autre) ; la ligne médiane est mise à l'échelle depuis la base (longueur, la
+ * courbe garde sa forme), l'écart à la ligne médiane par une matrice de section propre à chaque os, interpolée le long
+ * de la queue (épaisseur ; amincie, la section aplatie du panache est ramenée vers un cercle de même aire). Les deux
+ * s'installent sur le premier tiers (la base reste soudée à la croupe). Modifie P (pelage) et H (articulations) ;
+ * renvoie la distance de chaque sommet de la queue à sa ligne médiane (0 hors de la queue).
+ */
+function tailShape(base, B, P, H, n, wTail) {
+  const rad = new Float32Array(n);
+  const tb = base.tailBones;
+  const m = tb.length;
+  const coat = base.prims.coat;
+  const last = tb[m - 1];
+  const C = tb.map((i) => H[i].clone());
+  C.push(base.tailTip.clone().add(H[last]).sub(base.heads[last]));
+  const C0 = C[0];
+  const seg = [];
+  let tot = 0;
+  for (let k = 0; k < m; k++) {
+    const e = C[k + 1].clone().sub(C[k]);
+    const len = Math.max(1e-6, e.length());
+    e.divideScalar(len);
+    const u = Math.abs(e.y) < 0.9 ? V(0, 1, 0).cross(e).normalize() : V(1, 0, 0).cross(e).normalize();
+    seg.push({ e, u, v: e.clone().cross(u), len, s0: tot });
+    tot += len;
+  }
+  const slot = new Map(tb.map((b, k) => [b, k]));
+  const wk = new Float32Array(m);
+  const tk = new Float32Array(m);
+  const x = V();
+  const q = V();
+  const o = V();
+  // Projection du sommet i : q (ligne médiane), o (écart), wk/tk (part et position sur chaque os) ; renvoie
+  // l'abscisse curviligne depuis la base (-1 : pas porté par la queue).
+  const project = (i) => {
+    wk.fill(0);
+    let sw = 0;
+    for (let c = 0; c < 4; c++) {
+      const k = slot.get(coat.si[i * 4 + c]);
+      if (k === undefined) continue;
+      wk[k] += coat.sw[i * 4 + c];
+      sw += coat.sw[i * 4 + c];
+    }
+    if (!(sw > 0)) return -1;
+    x.fromArray(P, i * 3);
+    q.set(0, 0, 0);
+    let s = 0;
+    for (let k = 0; k < m; k++) {
+      if (!wk[k]) continue;
+      wk[k] /= sw;
+      const S = seg[k];
+      const t = clamp(_u.copy(x).sub(C[k]).dot(S.e) / S.len, 0, 1);
+      tk[k] = t;
+      q.addScaledVector(_u.copy(C[k]).addScaledVector(S.e, t * S.len), wk[k]);
+      s += wk[k] * (S.s0 + t * S.len);
+    }
+    o.copy(x).sub(q);
+    return s;
+  };
+  // Section de chaque os : axes principaux de l'écart (dans le plan perpendiculaire à l'os).
+  const cov = Array.from({ length: m }, () => [0, 0, 0, 0]);
+  for (let i = 0; i < n; i++) {
+    if (wTail(i) < 0.9 || project(i) < 0) continue;
+    for (let k = 0; k < m; k++) {
+      if (wk[k] < 0.6) continue;
+      const a = o.dot(seg[k].u);
+      const b = o.dot(seg[k].v);
+      const c = cov[k];
+      c[0] += a * a;
+      c[1] += a * b;
+      c[2] += b * b;
+      c[3]++;
+    }
+  }
+  const th = B.tailThick;
+  const ro = clamp((1 - th) / 0.4, 0, 1); // (arrondi : complet à tailThick 0,6 et moins)
+  const Sk = seg.map((S, k) => {
+    const [a0, b0, c0, cnt] = cov[k];
+    const M = new THREE.Matrix3();
+    const E = S.e;
+    let fM = th;
+    let fN = th;
+    let Ma = S.u;
+    if (cnt >= 8) {
+      const a = a0 / cnt;
+      const b = b0 / cnt;
+      const c = c0 / cnt;
+      const ang = 0.5 * Math.atan2(2 * b, a - c);
+      const r = Math.sqrt(((a - c) / 2) ** 2 + b * b);
+      const l1 = (a + c) / 2 + r;
+      const l2 = Math.max(1e-12, (a + c) / 2 - r);
+      Ma = S.u.clone().multiplyScalar(Math.cos(ang)).addScaledVector(S.v, Math.sin(ang));
+      const ratio = clamp(Math.sqrt(l2 / Math.max(l1, 1e-12)), 0.15, 1);
+      fM = th * ratio ** (0.5 * ro);
+      fN = th * ratio ** (-0.5 * ro);
+    }
+    const Na = E.clone().cross(Ma);
+    // S = e eᵀ + fM M Mᵀ + fN N Nᵀ (le long de l'os : inchangé)
+    const el = [];
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        const er = E.getComponent(r);
+        const mr = Ma.getComponent(r);
+        const nr = Na.getComponent(r);
+        el.push(er * E.getComponent(c) + fM * mr * Ma.getComponent(c) + fN * nr * Na.getComponent(c));
+      }
+    }
+    M.set(...el);
+    return M.elements;
+  });
+  // Aux articulations : moyenne des deux os voisins.
+  const J = [];
+  for (let k = 0; k <= m; k++) {
+    const A = Sk[Math.max(0, k - 1)];
+    const Bm = Sk[Math.min(m - 1, k)];
+    J.push(A.map((v, i) => (v + Bm[i]) / 2));
+  }
+  const Sm = new Float32Array(9);
+  const o2 = V();
+  for (let i = 0; i < n; i++) {
+    const w = wTail(i);
+    if (!(w > 0)) continue;
+    const s = project(i);
+    if (s < 0) continue;
+    const on = smooth(0, 0.3 * tot, s);
+    const kl = 1 + (B.tailLen - 1) * on;
+    Sm.fill(0);
+    for (let k = 0; k < m; k++) {
+      if (!wk[k]) continue;
+      for (let e = 0; e < 9; e++) Sm[e] += wk[k] * (J[k][e] + (J[k + 1][e] - J[k][e]) * tk[k]);
+    }
+    // (Matrix3.elements : colonnes)
+    o2.set(
+      Sm[0] * o.x + Sm[3] * o.y + Sm[6] * o.z,
+      Sm[1] * o.x + Sm[4] * o.y + Sm[7] * o.z,
+      Sm[2] * o.x + Sm[5] * o.y + Sm[8] * o.z,
+    );
+    o2.lerpVectors(o, o2, on);
+    rad[i] = o2.length();
+    _w.copy(q).sub(C0).multiplyScalar(kl).add(C0).add(o2);
+    x.lerp(_w, w);
+    P.set([x.x, x.y, x.z], i * 3);
+  }
+  for (let k = 1; k < m; k++) {
+    const on = smooth(0, 0.3 * tot, seg[k].s0);
+    const kl = 1 + (B.tailLen - 1) * on;
+    H[tb[k]].copy(C[k]).sub(C0).multiplyScalar(kl).add(C0);
+  }
+  return rad;
+}
+
 /** Normales lissées (somme des normales des faces, par groupe de sommets confondus : pas d'arête aux coutures). */
 function weldedNormals(pos, index, grp, n) {
   let G = 0;
@@ -717,28 +870,12 @@ export function deformDog(base, B) {
       }
     }
   }
-  // 7. Queue : plus courte (écourtée) ou plus longue, plus fine ou plus épaisse, le long de son axe au repos.
-  const tb = base.tailBones;
-  if (tb.length && (B.tailLen !== 1 || B.tailThick !== 1)) {
-    const T1 = H[tb[0]].clone();
-    const tip = base.tailTip.clone().add(H[tb[0]]).sub(base.heads[tb[0]]);
-    const a = tip.clone().sub(T1);
-    const len = a.length();
-    a.normalize();
-    for (let j = 0; j < total; j++) {
-      const w = wTail(j);
-      if (!(w > 0)) continue;
-      get(j, p);
-      d.copy(p).sub(T1);
-      const al = d.dot(a);
-      const perp = _u.copy(d).addScaledVector(a, -al);
-      const on = smooth(0, 0.3 * len, al);
-      const k = 1 + (B.tailLen - 1) * on;
-      const th = 1 + (B.tailThick - 1) * on;
-      p.copy(T1).addScaledVector(a, al * (1 + w * (k - 1))).addScaledVector(perp, 1 + w * (th - 1));
-      set(j, p);
-    }
-  }
+  // 7. Queue : plus courte (écourtée) ou plus longue, plus fine ou plus épaisse. Autour de sa ligne médiane (la
+  //    chaîne de ses os, projection lissée par les poids de la peau) et pas d'une droite : le panache du shiba est
+  //    courbe, et l'aminci autour de sa corde devenait une lame plate et vrillée. Amincie (tailThick < 1), sa
+  //    section aplatie de panache s'arrondit (vers un cercle de même aire).
+  // (rayon de chaque sommet de la queue autour de sa ligne médiane : le poil ras ne la rase pas au-delà, voir 9)
+  const tailR = base.tailBones.length ? tailShape(base, B, P, H, n, wTail) : null;
   // 8. Pieds au sol : le chien descend (ou monte) de ce que ses membres ont perdu (avant et arrière séparément).
   let minF = Infinity;
   let minH = Infinity;
@@ -792,8 +929,10 @@ export function deformDog(base, B) {
       k += head * 0.8 * (1 - smooth(L.eyeY - 0.06, L.eyeY - 0.01, y0)) * smooth(L.eyeX * 0.8, L.eyeX * 1.6, Math.abs(x0))
         * (1 - smooth(0.45, 0.65, (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z)));
       k += legSum * 0.3 * smooth(L.elbowY * 0.6, L.elbowY * 1.3, y0);
-      k += tail * 1.4;
-      p.addScaledVector(_w, B.fur * k * (1 - hidden[i]));
+      // (queue : au plus 30 % de son rayon — amincie, la brosse du shiba rasée de 2 cm passait à travers elle-même
+      // et devenait une lame plate)
+      const tr = tailR?.[i] || 0.05;
+      p.addScaledVector(_w, (B.fur * k - Math.min(-B.fur * 1.4, 0.3 * tr) * tail) * (1 - hidden[i]));
       P.set([p.x, p.y, p.z], i * 3);
     }
   } else if (B.fur > 0.0005) {

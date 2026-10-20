@@ -355,6 +355,55 @@ describe('robes', () => {
   });
 });
 
+describe('queues fines', () => {
+  /** Section de la queue autour de chaque os : rapport petit axe / grand axe (1 = ronde) et rayon moyen. */
+  const sections = (base, P, H) => {
+    const tb = base.tailBones;
+    const coat = base.prims.coat;
+    const C = tb.map((i) => H[i].clone());
+    const last = tb[tb.length - 1];
+    C.push(base.tailTip.clone().add(H[last]).sub(base.heads[last]));
+    return tb.map((bi, k) => {
+      const e = C[k + 1].clone().sub(C[k]);
+      const len = e.length();
+      e.normalize();
+      const u = new THREE.Vector3(0, 1, 0).cross(e).normalize();
+      const v = e.clone().cross(u);
+      let a = 0, b = 0, c = 0, cnt = 0;
+      for (let i = 0; i < coat.count; i++) {
+        let w = 0;
+        for (let q = 0; q < 4; q++) if (coat.si[i * 4 + q] === bi) w += coat.sw[i * 4 + q];
+        if (w < 0.6) continue;
+        const x = new THREE.Vector3().fromArray(P, i * 3).sub(C[k]);
+        const t = Math.min(1, Math.max(0, x.dot(e) / len));
+        x.addScaledVector(e, -t * len);
+        a += x.dot(u) ** 2;
+        b += x.dot(u) * x.dot(v);
+        c += x.dot(v) ** 2;
+        cnt++;
+      }
+      a /= cnt; b /= cnt; c /= cnt;
+      const r = Math.sqrt(((a - c) / 2) ** 2 + b * b);
+      return { ratio: Math.sqrt(((a + c) / 2 - r) / ((a + c) / 2 + r)), r: Math.sqrt((a + c) / 2 + r) };
+    });
+  };
+  it('amincie (dalmatien, dogue argentin, beagle, rottweiler, galgo), la queue reste un cylindre, pas une lame plate', () => {
+    const base = realDogBase(G.shiba, 'shiba');
+    for (const b of ['dalmatien', 'dogo', 'beagle', 'rottweiler', 'galgo', 'coonhound']) {
+      const B = dogBuild(lookOf(b), false);
+      expect(B.tailThick, b).toBeLessThan(0.6);
+      const D = deformDog(base, B);
+      const s = sections(base, D.pos, D.heads);
+      // (le premier os, soudé à la croupe, garde sa forme)
+      for (let k = 1; k < s.length; k++) {
+        expect(s[k].ratio, `${b} os ${k}`).toBeGreaterThan(0.6);
+        expect(s[k].r, `${b} os ${k}`).toBeGreaterThan(0.005);
+        expect(s[k].r, `${b} os ${k}`).toBeLessThan(0.03);
+      }
+    }
+  });
+});
+
 describe('anciennes sauvegardes', () => {
   it('sans look.breed : la race de l\'animal passe avant la race devinée par la robe (labradoodle noir ≠ jack)', () => {
     for (const [breed, colorIndex] of [['labradoodle', 3], ['spitz_nain', 0], ['carlin', 0], ['whippet', 0]]) {

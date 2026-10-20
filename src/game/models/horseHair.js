@@ -319,7 +319,10 @@ export function hairColor(hex) {
  * (vitesse du cheval, coup de queue). Normales « de volume » (vers l'extérieur de la crinière, de la queue),
  * pas retournées au dos d'un ruban ; ondulation des pointes au vent, vers l'extérieur (jamais dans le cou).
  */
-export function hairMaterial(color, sway) {
+/** Crins sans courbure (cartes sans ressorts : vignettes, autres modèles). */
+const NO_DRAG = { tail: { value: new THREE.Vector3() }, mane: { value: new THREE.Vector3() }, up: { value: new THREE.Vector3(0, 1, 0) } };
+
+export function hairMaterial(color, sway, drag = NO_DRAG) {
   const high = gfx.quality === 'high';
   // (cartes colorées par sommet : couleurs déjà plafonnées par hairColor ; la matière ne fait que compenser le
   // ton moyen de la texture)
@@ -343,6 +346,9 @@ export function hairMaterial(color, sway) {
     sh.uniforms.hairTime = gfx.time;
     sh.uniforms.hairWind = gfx.wind;
     sh.uniforms.hairSway = sway;
+    sh.uniforms.hairDragT = drag.tail;
+    sh.uniforms.hairDragM = drag.mane;
+    sh.uniforms.hairUpT = drag.up;
     sh.uniforms.hHairSpec = spec;
     sh.uniforms.hHairLift = lift;
     const def = high ? '#define HAIR_HQ\n' : '';
@@ -355,6 +361,9 @@ uniform float hairTime;
 uniform float hairWind;
 uniform float hairSway;
 uniform float hairBraid;
+uniform vec3 hairDragT;
+uniform vec3 hairDragM;
+uniform vec3 hairUpT;
 varying vec3 vHairT;
 varying float vHairF;`)
       .replace('#include <skinnormal_vertex>', `#include <skinnormal_vertex>
@@ -377,6 +386,19 @@ if ( hairRoot.w < 0.5 || hairRoot.w > 3.5 ) transformed = mix( transformed, hair
   transformed += normal * ( 0.5 + 0.5 * sin( ph ) ) * 0.012 * hw;
   transformed.z += cos( ph * 0.7 + 1.3 ) * 0.008 * hw;
   transformed.x += sin( ph ) * 0.012 * hw * step( 1.5, hairRoot.w ) * step( hairRoot.w, 3.5 );
+}
+{
+  // Courbure des mèches (horseReal.js, hairSprings) : queue (sorte 2) et crinière (0) traînées par la vitesse,
+  // pointes de la queue en retard quand elle fouette. Écart en travers de la mèche (sa longueur ne change
+  // presque pas), croissant de la racine à la pointe (hairG × distance à la racine : une courbe, pas un pli).
+  // Jamais vers le bas (la queue ne traverse pas le sol) : hairUpT, le haut dans le repère de repos de la queue.
+  bool tl = hairRoot.w > 1.5 && hairRoot.w < 2.5;
+  vec3 dd = tl ? hairDragT : ( hairRoot.w < 0.5 ? hairDragM * ( 1.0 - hairBraid ) : vec3( 0.0 ) );
+  vec3 tt = hairT / max( length( hairT ), 1e-4 );
+  vec3 dp = dd - tt * dot( dd, tt );
+  vec3 up = tl ? hairUpT : vec3( 0.0, 1.0, 0.0 );
+  dp -= up * min( 0.0, dot( dp, up ) );
+  transformed += dp * hairG * length( transformed - hairRoot.xyz );
 }`);
     sh.fragmentShader = def + sh.fragmentShader
       .replace('#include <common>', `#include <common>

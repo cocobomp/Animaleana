@@ -26,14 +26,44 @@ const skinned = (md) => {
   return out;
 };
 
-/** Boîte exacte du maillage déformé (chaque sommet passé par la peau, sur le processeur), repère du maillage. */
-function exactBox(meshes) {
+/**
+ * Boîte exacte du maillage déformé (chaque sommet passé par la peau, sur le processeur), repère du maillage. Cartes
+ * de crins : avec la courbure du shader (horseHair.js : queue et crinière traînées par la vitesse, md.hairDrag),
+ * refaite ici sur le processeur avant la peau.
+ */
+function exactBox(meshes, md = null) {
   const box = new THREE.Box3();
   const v = new THREE.Vector3();
+  const r = new THREE.Vector3();
+  const tt = new THREE.Vector3();
+  const d = new THREE.Vector3();
+  const up = new THREE.Vector3();
   for (const m of meshes) {
     m.skeleton.update();
-    const n = m.geometry.attributes.position.count;
+    const g = m.geometry;
+    const n = g.attributes.position.count;
+    const pos = g.attributes.position;
+    const bent = md?.hairDrag && g.attributes.hairRoot ? pos.clone() : null;
+    if (bent) {
+      for (let i = 0; i < n; i++) {
+        const kind = g.attributes.hairRoot.getW(i);
+        const tail = kind > 1.5 && kind < 2.5;
+        if (tail) d.copy(md.hairDrag.tail.value);
+        else if (kind < 0.5) d.copy(md.hairDrag.mane.value);
+        else continue;
+        v.fromBufferAttribute(pos, i);
+        r.fromBufferAttribute(g.attributes.hairRoot, i);
+        tt.fromBufferAttribute(g.attributes.hairT, i).normalize();
+        d.addScaledVector(tt, -d.dot(tt));
+        // (jamais vers le bas)
+        up.copy(tail ? md.hairDrag.up.value : up.set(0, 1, 0));
+        d.addScaledVector(up, -Math.min(0, d.dot(up))).multiplyScalar(g.attributes.hairG.getX(i) * v.distanceTo(r));
+        bent.setXYZ(i, v.x + d.x, v.y + d.y, v.z + d.z);
+      }
+      g.attributes.position = bent;
+    }
     for (let i = 0; i < n; i++) box.expandByPoint(m.getVertexPosition(i, v));
+    if (bent) g.attributes.position = pos;
   }
   return box;
 }
@@ -117,7 +147,7 @@ describe('boîte englobante du cheval réaliste (élimination hors du champ)', (
         expect(m.boundingBox).toBe(box);
         expect(m.boundingSphere.center.distanceTo(box.max)).toBeLessThanOrEqual(m.boundingSphere.radius + 1e-5);
       }
-      const exact = exactBox(meshes);
+      const exact = exactBox(meshes, md);
       const eps = 1e-4;
       expect(box.min.x, name).toBeLessThanOrEqual(exact.min.x + eps);
       expect(box.min.y, name).toBeLessThanOrEqual(exact.min.y + eps);
@@ -149,7 +179,7 @@ describe('boîte englobante du cheval réaliste (élimination hors du champ)', (
     md.root.updateMatrixWorld(true);
     meshes[0].computeBoundingBox();
     const box = meshes[0].boundingBox.clone().expandByScalar(1e-4);
-    const exact = exactBox(meshes);
+    const exact = exactBox(meshes, md);
     expect(box.containsBox(exact)).toBe(true);
     md.dispose();
   });

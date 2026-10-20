@@ -2,7 +2,7 @@
 // l'arrêt, la même à chaque fois). GLB chargé dans node, sans textures ; rien ne dépend du hasard.
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import * as THREE from 'three';
-import { realHorseBase, buildRealHorseModel, HEAD_UP } from '../src/game/models/horseReal.js';
+import { realHorseBase, buildRealHorseModel, HEAD_UP, earFlick } from '../src/game/models/horseReal.js';
 import { gfx } from '../src/game/gfx.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { SPECIES } from '../src/sim/species.js';
@@ -94,20 +94,58 @@ describe('port de tête (étape 3)', () => {
     md.dispose();
   });
 
-  it('oreilles calmes : jamais couchées de plus de 25° à l\'arrêt (10 min)', () => {
+  it('oreilles calmes : jamais couchées de plus de 25° à l\'arrêt (10 min), coups d\'oreille contre les mouches compris', () => {
     const md = horse('pur_sang');
     fixClips(md);
     let worst = 0;
+    let tilt = 0;
+    let flicks = 0;
     const qRel = new THREE.Quaternion();
+    const axis = new THREE.Vector3();
+    const kid = md.root.id % 7;
     for (let f = 0; f < 6000; f++) {
       md.anim.update(0.1, still, {});
-      for (const e of md.ears) {
+      md.ears.forEach((e, i) => {
         qRel.copy(e.userData.restQ).invert().multiply(e.quaternion);
+        // (couchée : l'axe de l'oreille s'écarte de son repos ; un coup d'oreille fait pivoter le pavillon autour
+        // de cet axe, sans la coucher)
+        axis.set(0, 1, 0).applyQuaternion(qRel);
+        tilt = Math.max(tilt, (Math.acos(Math.min(1, axis.y)) * 180) / Math.PI);
+        if (earFlick(md.anim.t, kid + i * 2.9) > 0) {
+          flicks++;
+          return;
+        }
         worst = Math.max(worst, (2 * Math.acos(Math.min(1, Math.abs(qRel.w))) * 180) / Math.PI);
-      }
+      });
     }
+    expect(flicks).toBeGreaterThan(10); // (il chasse bien les mouches)
+    expect(tilt).toBeLessThan(25);
     expect(worst).toBeLessThan(25);
     md.dispose();
+  });
+
+  it('coup d\'oreille : bref (moins de 0,4 s), toutes les quelques secondes par moments, jamais au hasard', () => {
+    let on = 0;
+    let runs = 0;
+    let longest = 0;
+    let run = 0;
+    for (let t = 0; t < 600; t += 0.01) {
+      const f = earFlick(t, 3);
+      expect(f).toBeGreaterThanOrEqual(0);
+      expect(f).toBeLessThanOrEqual(1);
+      if (f > 0) {
+        on++;
+        run++;
+      } else if (run) {
+        runs++;
+        longest = Math.max(longest, run);
+        run = 0;
+      }
+    }
+    expect(runs).toBeGreaterThan(30); // (≈ 60 en 10 min)
+    expect(longest * 0.01).toBeLessThan(0.4);
+    expect(on / 60000).toBeLessThan(0.05); // (oreilles tranquilles l'essentiel du temps)
+    expect(earFlick(123.45, 2)).toBe(earFlick(123.45, 2));
   });
 
   it('pose de photo : la même à chaque fois, sans broutage ni regard de côté', () => {

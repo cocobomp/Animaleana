@@ -36,6 +36,19 @@ const STILL = ['idle', 'rest', 'eat'];
 // Allure du cavalier (src/game/models/avatarRig.js) : 0 pas, 1 trot, 2 galop.
 const RIDER_GAIT = { walk: 0, trot: 1, canter: 2, gallop: 2 };
 const RIDER_KEYS = [...MOVING, 'canterR'];
+/**
+ * Galop allongé (gallopX) : le galop du GLB recalé par race (lockedGaits) avec une foulée GALLOP_REACH fois plus
+ * longue pour la même cadence — antérieurs posés plus loin devant, postérieurs levés plus loin derrière. Au-dessus
+ * de la vitesse naturelle du galop, le cheval allonge sa foulée (mélange du galop et du galop allongé) plutôt que
+ * d'accélérer ses membres : cadence (v ÷ naturelle)^GALLOP_CADENCE, au plus GALLOP_CADENCE_MAX. Avant : clip
+ * joué à v ÷ naturelle, 1,67 fois trop vite à 14 m/s (moulinet de dessin animé accéléré).
+ */
+export const GALLOP_REACH = 1.45;
+export const GALLOP_CADENCE = 0.35;
+export const GALLOP_CADENCE_MAX = 1.22;
+const LOCK_KEYS = [...RIDER_KEYS, 'gallopX'];
+/** Allures recalées à partir d'une autre (nom du clip source, facteur de foulée). */
+const LOCK_FROM = { gallopX: ['gallop', GALLOP_REACH] };
 
 /**
  * Version réduite (LOD) au-delà de cette distance à la caméra (m, divisée par la taille du cheval) : plus
@@ -2469,8 +2482,10 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   const coat = new HorseMesh(S.coatGeo, coatMat, hb);
   const eyes = new HorseMesh(S.eyeGeo, eyeMaterial(), hb);
   const hairSway = { value: 0 };
+  // (courbure des crins par la vitesse et le fouet de la queue : RealHorseAnim.hairSprings)
+  const hairDrag = { tail: { value: V() }, mane: { value: V() }, up: { value: V(0, 1, 0) } };
   // Crinière, toupet et queue : cartes de crins de la race (partagées), à la couleur des crins de ce cheval.
-  const mane = new HorseMesh(S.hairGeo, hairMaterial(look.mane ?? 0x1b1410, hairSway), hb);
+  const mane = new HorseMesh(S.hairGeo, hairMaterial(look.mane ?? 0x1b1410, hairSway, hairDrag), hb);
   const meshes = [coat, eyes, mane];
   // Brosse (Fjord, poulain) et fanons : cartes de crins à la couleur de chaque cheval.
   const extra = [];
@@ -2479,7 +2494,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   if (extra.length) {
     const cg = hairCards(extra);
     growBoneBoxes(hb.boneBox, cg.attributes.position, cg.attributes.skinIndex.array, cg.attributes.skinWeight.array, cg.attributes.position.count);
-    meshes.push(new HorseMesh(cg, hairMaterial(null, hairSway), hb));
+    meshes.push(new HorseMesh(cg, hairMaterial(null, hairSway, hairDrag), hb));
   }
   for (const m of meshes) {
     m.bind(skeleton, new THREE.Matrix4());
@@ -2534,6 +2549,9 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
     legs,
     skeleton,
     hairSway,
+    hairDrag,
+    // (plus longue mèche de la queue, de la racine à la pointe : jusqu'où sa courbure l'écarte)
+    tailLen: S.tailLen ??= tailLength(S.hairGeo),
     coatMesh: coat,
     // (crinière, toupet et queue en cartes de crins)
     hairMesh: mane,
@@ -2572,8 +2590,8 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   model.lockGaitStep = () => {
     if (S.gaits) return true;
     const acc = (S.gaitAcc ??= { clips: { ...base.clips }, natural: {}, next: 0 });
-    if (acc.next < RIDER_KEYS.length) lockedGaits(model, base.clips, [RIDER_KEYS[acc.next++]], acc);
-    if (acc.next < RIDER_KEYS.length) return false;
+    if (acc.next < LOCK_KEYS.length) lockedGaits(model, base.clips, [LOCK_KEYS[acc.next++]], acc);
+    if (acc.next < LOCK_KEYS.length) return false;
     S.gaits = { clips: acc.clips, natural: acc.natural };
     S.gaitAcc = null;
     return true;
@@ -2612,6 +2630,18 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
     requestIdleCallback(step, { timeout: 1000 });
   }
   return model;
+}
+
+/** Plus grande distance d'un sommet des cartes de la queue (sorte 2) à la racine de sa mèche (m). */
+function tailLength(geo) {
+  const p = geo.attributes.position;
+  const r = geo.attributes.hairRoot;
+  let L = 0;
+  for (let i = 0; i < p.count; i++) {
+    if (Math.abs(r.getW(i) - 2) > 0.5) continue;
+    L = Math.max(L, Math.hypot(p.getX(i) - r.getX(i), p.getY(i) - r.getY(i), p.getZ(i) - r.getZ(i)));
+  }
+  return L || 1;
 }
 
 /**
@@ -2785,6 +2815,7 @@ const _bm = new THREE.Matrix4();
 // Marge autour des os : les pointes des crins ondulent dans le shader (hairMaterial : vers l'extérieur et, pour la
 // queue, de côté, 1,2 cm chacun × 4,8 au plus).
 const HAIR_MARGIN = 0.08;
+const TAIL_BOXES = [[BONE_INDEX.Tail2, 0.5], [BONE_INDEX.Tail1, 0.25]];
 
 /**
  * Boîte englobante du cheval dans le repère de ses maillages (tous enfants directs de model.root, sans
@@ -2822,6 +2853,31 @@ function horseBounds(hb, mesh) {
     if (X + EX > mx.x) mx.x = X + EX;
     if (Y + EY > mx.y) mx.y = Y + EY;
     if (Z + EZ > mx.z) mx.z = Z + EZ;
+  }
+  // (plus la courbure des crins de la queue par la vitesse et son fouet, hairSprings : chaque sommet s'écarte de
+  // s × D⊥, la part de D en travers de sa mèche, s ≤ longueur de la mèche L ; ces écarts sont tous dans la
+  // sphère de diamètre [0, L × D] — boîte de Tail2 déplacée de L × D / 2 et grossie de L × |D| / 2 ; celle de
+  // Tail1, où les mèches commencent, de moitié)
+  const sh = hb.tailShift;
+  if (sh && sh.lengthSq() > 1e-6) {
+    // (jamais plus bas que les sabots : la queue est portée au-dessus du sol, sa courbure la soulève)
+    const floor = mn.y;
+    for (const [k, f] of TAIL_BOXES) {
+      const o = k * 6;
+      if (!(bb[o] <= bb[o + 3])) continue;
+      const e = _bm.multiplyMatrices(mesh.bindMatrixInverse, bones[k].matrixWorld).multiply(inv[k]).elements;
+      const r = sh.length() * f;
+      for (let c = 0; c < 8; c++) {
+        const x = bb[o + (c & 1 ? 3 : 0)];
+        const y = bb[o + 1 + (c & 2 ? 3 : 0)];
+        const z = bb[o + 2 + (c & 4 ? 3 : 0)];
+        _v.set(e[0] * x + e[4] * y + e[8] * z + e[12], e[1] * x + e[5] * y + e[9] * z + e[13], e[2] * x + e[6] * y + e[10] * z + e[14]);
+        _v.addScaledVector(sh, f);
+        box.expandByPoint(_w.set(_v.x - r, _v.y - r, _v.z - r));
+        box.expandByPoint(_w.set(_v.x + r, _v.y + r, _v.z + r));
+      }
+    }
+    if (mn.y < floor) mn.y = floor;
   }
   if (box.isEmpty()) box.set(V(-1, 0, -1.2), V(1, 2.2, 1.2));
   box.expandByScalar(HAIR_MARGIN);
@@ -2905,7 +2961,7 @@ const REACH = 0.97;
  * 0,76 / 0,59 → 0,05 / 0,06 cm ; petit galop 0,59 / 0,24 → 0,03 / 0,03 ; trot 0,27 / 0,10 → 0,02 / 0,02 ;
  * pas 0,51 / 0,76 → 0,01 / 0,01 cm.
  */
-function lockedGaits(model, clips, names = RIDER_KEYS, acc = { clips: { ...clips }, natural: {} }) {
+function lockedGaits(model, clips, names = LOCK_KEYS, acc = { clips: { ...clips }, natural: {} }) {
   const root = model.root;
   const groups = model.groups;
   const legs = model.legs;
@@ -2933,7 +2989,9 @@ function lockedGaits(model, clips, names = RIDER_KEYS, acc = { clips: { ...clips
   const Rk = V();
   const Rf = V();
   for (const name of names) {
-    const clip = clips[name];
+    // (galop allongé : le clip du galop, la pince posée suivant une droite plus rapide, voir GALLOP_REACH)
+    const [src, stretch] = LOCK_FROM[name] ?? [name, 1];
+    const clip = clips[src];
     if (!clip) continue;
     const D = clip.duration;
     const N = Math.max(12, Math.round(D * LOCK_RATE));
@@ -3016,7 +3074,7 @@ function lockedGaits(model, clips, names = RIDER_KEYS, acc = { clips: { ...clips
     });
     const fit = stances.filter(Boolean);
     if (!fit.length) continue;
-    const v = -fit.reduce((a, b) => a + b.slope * b.n, 0) / fit.reduce((a, b) => a + b.n, 0);
+    const v = (stretch * -fit.reduce((a, b) => a + b.slope * b.n, 0)) / fit.reduce((a, b) => a + b.n, 0);
     if (v > 0.2) natural[name] = v;
     // 3) Correction de chaque échantillon : sabot déplacé (sans tourner) vers sa place, cinématique inverse.
     // Portée du bas du membre : REACH de la longueur coude (ou grasset) → genou (ou jarret) → boulet, depuis le
@@ -3295,8 +3353,17 @@ class RealHorseAnim {
     this.gait = 'idle';
     this.restAmt = 0;
     this.restTimer = 8 + Math.random() * 20;
-    this.maneQ = model.mane.map((m) => m.quaternion.clone());
-    this.maneV = model.mane.map(() => 0);
+    // Ressorts (springTo) de la crinière et de la queue, dans le repère du cheval ; rebond (accélération vers le
+    // haut ressentie par les crins, m/s²) et virage (accélération de côté) qui les secouent.
+    const spring = () => ({ q: new THREE.Quaternion(), w: V(), on: false });
+    this.maneS = model.mane.map(spring);
+    this.tailS = [spring(), spring()];
+    this.bounce = 0;
+    this.lat = 0;
+    this.bodyY = undefined;
+    this.bodyVy = 0;
+    this.effort = 0;
+    this.breathPh = Math.random() * Math.PI * 2;
     this.t = Math.random() * 100;
     this.lead = 'canter';
     // Groupes que l'embonpoint ne doit pas élargir (enfants du tronc élargi).
@@ -3340,6 +3407,17 @@ class RealHorseAnim {
       this.mixer.uncacheAction(old.getClip());
       this.actions[name] = a;
       this.list[j] = a;
+    }
+    // Galop allongé (GALLOP_REACH) : même durée que le galop, joué au même instant ; son poids est pris sur celui
+    // du galop (update), il n'a pas de poids à lui dans this.w.
+    const cx = gaits.clips.gallopX;
+    if (cx && !this.actX && this.actions.gallop) {
+      const a = this.mixer.clipAction(cx);
+      a.play();
+      a.setEffectiveWeight(0);
+      a.time = this.actions.gallop.time;
+      this.actX = a;
+      this.actions.gallopX = a;
     }
   }
 
@@ -3438,6 +3516,7 @@ class RealHorseAnim {
       }
     }
     if (lead && leadW > 0.3) this.leadName = lead;
+    this.stretchGallop(st);
     this.mixer.update(dt);
     this.savePose();
     this.overlay(dt, st, graze);
@@ -3457,14 +3536,115 @@ class RealHorseAnim {
     return out;
   }
 
+  /**
+   * Galop plus rapide que sa vitesse naturelle : foulée allongée plutôt que cadence accélérée. Le poids du galop
+   * (this.w.gallop) est partagé entre le galop et le galop allongé (part x, même instant du clip), joués à la
+   * cadence (v ÷ naturelle)^GALLOP_CADENCE ; la foulée du mélange (naturelle du galop → du galop allongé) fait
+   * le reste : les sabots posés ne glissent pas. Au-delà du galop allongé, la cadence reprend le relais.
+   */
+  stretchGallop(st) {
+    const ag = this.actions.gallop;
+    const ax = this.actX;
+    if (!ag || !ax) return;
+    const natG = this.natural?.gallop;
+    const natX = this.natural?.gallopX;
+    let x = 0;
+    if (st.moving && natG && natX > natG && st.v > natG) {
+      let ts = Math.min(GALLOP_CADENCE_MAX, (st.v / natG) ** GALLOP_CADENCE);
+      x = (st.v / ts - natG) / (natX - natG);
+      if (x > 1) {
+        x = 1;
+        ts = st.v / natX;
+      }
+      ts = Math.min(1.8, ts);
+      ag.timeScale = ts;
+    }
+    this.stretch = x;
+    const wg = this.w.gallop ?? 0;
+    ag.setEffectiveWeight(wg * (1 - x));
+    ax.setEffectiveWeight(wg * x);
+    ax.timeScale = ag.timeScale;
+    ax.time = ag.time;
+  }
+
+  /**
+   * Queue souple : ressorts amortis sur Tail1 et Tail2 (repère du cheval), qui suivent la pose voulue (clip, port
+   * de queue de la race, coup de queue, arc du galop) avec du retard — Tail2 plus souple, elle fouette après le
+   * couard. Secoués par le rebond de l'allure (le corps qui retombe allège les crins : ils se soulèvent) et par
+   * les virages (la queue part vers l'extérieur). Jamais vers les fesses (springLimit). Puis la courbure des
+   * cartes de crins (hairDrag, horseHair.js) : mèches de la queue et de la crinière traînées en arrière par la
+   * vitesse, pointes de la queue en retard quand elle fouette.
+   */
+  hairSprings(dt, st, photo) {
+    const md = this.model;
+    const y = md.body.position.y;
+    if (photo || this.bodyY === undefined || dt > 0.25 || dt <= 0) {
+      this.bodyVy = 0;
+      this.bounce = 0;
+      this.lat = 0;
+    } else {
+      const vy = (y - this.bodyY) / dt;
+      const ay = (vy - this.bodyVy) / dt;
+      this.bodyVy = vy;
+      this.bounce += (Math.max(-15, Math.min(15, -ay)) - this.bounce) * (1 - Math.exp(-dt * 25));
+      const v = st.moving ? (st.v ?? 0) : 0;
+      this.lat += (Math.max(-12, Math.min(12, v * (st.turn ?? 0))) - this.lat) * (1 - Math.exp(-dt * 6));
+    }
+    this.bodyY = y;
+    const T = TAIL_SPRING;
+    const q1t = _qt1.copy(md.tail.quaternion);
+    const q2t = _qt2.copy(q1t).multiply(md.tailTip.quaternion);
+    // (le rebond ne soulève la queue que lorsqu'il l'allège : poussée vers les fesses, elle ne bougerait pas)
+    _w.set(Math.max(0, this.bounce) * T.lift, 0, -this.lat * T.side);
+    const ddt = photo ? 1 : dt;
+    springTo(this.tailS[0], q1t, _w, ddt, T.k1, T.c1);
+    springLimit(this.tailS[0], q1t, 0, -0.03, 0.6);
+    _w.multiplyScalar(1.6);
+    springTo(this.tailS[1], q2t, _w, ddt, T.k2, T.c2);
+    springLimit(this.tailS[1], q2t, 0, -0.05, 0.8);
+    md.tail.quaternion.copy(this.tailS[0].q);
+    md.tailTip.quaternion.copy(_qs2.copy(this.tailS[0].q).invert().multiply(this.tailS[1].q));
+    // Courbure des crins (repère de repos des cartes) : vent de la course vers l'arrière (un peu vers le haut),
+    // retard des pointes de la queue qui fouette (vitesse du bout : vitesse angulaire × longueur pendante).
+    const drag = md.hairDrag;
+    if (!drag) return;
+    const v = photo || !st.moving ? 0 : (st.v ?? 0);
+    const run = smooth(1.5, 11, v);
+    const wq = this.tailS[1].w;
+    const lag = photo ? 0 : T.lag;
+    // (bout de la queue à 0,7 m sous le couard : sa vitesse w × (0, -0,7, 0) ; les pointes restent en arrière)
+    _w.set(-lag * 0.7 * wq.z, 0.25 * run * T.bend, -run * T.bend + lag * 0.7 * wq.x);
+    // (vers le repère de repos de Tail2 : les crins de la queue y sont liés)
+    _qs2.copy(this.tailS[1].q).invert();
+    drag.tail.value.copy(_w).applyQuaternion(_qs2);
+    drag.up.value.set(0, 1, 0).applyQuaternion(_qs2);
+    drag.mane.value.set(0, 0.3 * run * MANE_SPRING.bend, -run * MANE_SPRING.bend);
+    // (boîte du cheval élargie d'autant du côté de la queue : la pointe d'une queue de 1 m s'écarte de la
+    // courbure × 1 m)
+    if (md.bounds) (md.bounds.tailShift ??= V()).copy(_w).multiplyScalar(md.tailLen ?? 1);
+  }
+
   /** Procédural par-dessus les clips. */
   overlay(dt, st, graze) {
     const md = this.model;
     const t = this.t;
+    const photo = !!this.photo;
+    // Essoufflement : l'effort monte au galop (moins au petit galop et au trot) en 12 s environ et retombe en
+    // 40 s : après une galopade, le cheval souffle (respiration plus ample et plus rapide, encolure qui suit).
+    const run = Math.min(1, (this.w.gallop ?? 0) + 0.55 * ((this.w.canter ?? 0) + (this.w.canterR ?? 0)) + 0.2 * (this.w.trot ?? 0));
+    if (!photo) this.effort += (run - this.effort) * (1 - Math.exp(-dt / (run > this.effort ? 12 : 40)));
+    const effort = photo ? 0 : this.effort;
     // Respiration (côtes) et embonpoint (tronc plus large, membres et encolure gardent leur forme).
     // L'embonpoint n'élargit qu'en x, comme le cheval sculpté : l'origine du tronc est au sol, une échelle
     // en y y remonterait les épaules et les hanches (sabots en l'air, dos au-dessus de la selle du cavalier).
-    const breathe = Math.sin(t * (st.sleeping ? 1.3 : 2.1)) * (st.moving ? 0.006 : 0.014);
+    // Au repos : 12 respirations par minute (8 en dormant), jusqu'à 60 essoufflé ; le flanc se soulève de 2 %
+    // (4 % essoufflé). (Avant : 20 par minute, 1,4 %, la même après un galop.)
+    const rate = st.sleeping ? 0.14 : BREATH.rest + (BREATH.blown - BREATH.rest) * effort;
+    this.breathPh = photo ? 0 : (this.breathPh + dt * rate * Math.PI * 2) % (Math.PI * 2);
+    // (inspiration plus courte que l'expiration)
+    const bs = Math.sin(this.breathPh + 0.35 * Math.sin(this.breathPh));
+    const amp = (st.moving ? 0.006 : BREATH.amp) + BREATH.ampBlown * effort;
+    const breathe = bs * amp;
     md.ribs.scale.set(1 + breathe, 1 + breathe * 0.7, 1 + breathe * 0.2);
     const fat = st.fat ?? 1;
     md.body.scale.set(fat, 1, 1);
@@ -3489,23 +3669,47 @@ class RealHorseAnim {
     const proud = (1 - eat) * (1 - this.doze) * (1 - 0.6 * fast) * (1 - 0.6 * this.sadAmt);
     this.proud += (proud - this.proud) * Math.min(1, dt * 4);
     const up = this.proud;
-    if (neckDrop || reach || feeder || up) md.neck.rotateX(neckDrop + reach + feeder - HEAD_UP.neck * up);
-    if (this.doze || up) md.head.rotateX(this.doze * 0.12 - HEAD_UP.head * up);
+    // Hochement de tête au pas : deux fois par foulée, en phase avec le clip (tête au plus bas juste après la pose
+    // de chaque antérieur) ; le clip seul ne hochait que de 0,05 rad, à peine visible. Au galop, la pompe de
+    // l'encolure du clip (0,13 rad, coup de tête en l'air vu de 3/4) ramenée à 0,09, nez un peu plus en avant
+    // (encolure tendue), d'autant plus que la foulée s'allonge.
+    let nodN = 0;
+    let nodH = 0;
+    const ww = this.w.walk ?? 0;
+    if (ww > 0.01 && this.actions.walk) {
+      const p = this.actions.walk.time / this.actions.walk.getClip().duration;
+      nodN += WALK_NOD.neck * ww * Math.cos(Math.PI * 4 * (p - 0.3));
+      nodH += WALK_NOD.head * ww * Math.cos(Math.PI * 4 * (p - 0.3) + 0.6);
+    }
+    const wgal = this.w.gallop ?? 0;
+    if (wgal > 0.01 && this.actions.gallop) {
+      const p = this.actions.gallop.time / this.actions.gallop.getClip().duration;
+      nodN -= GALLOP_PUMP.calm * wgal * Math.cos(Math.PI * 2 * (p - 0.55));
+      nodH -= wgal * (GALLOP_PUMP.reach + GALLOP_PUMP.stretch * (this.stretch ?? 0));
+    }
+    // (essoufflé, à l'arrêt : l'encolure suit le souffle)
+    if (!st.moving) nodN += 0.025 * effort * bs;
+    if (neckDrop || reach || feeder || up || nodN) md.neck.rotateX(neckDrop + reach + feeder - HEAD_UP.neck * up + nodN);
+    if (this.doze || up || nodH) md.head.rotateX(this.doze * 0.12 - HEAD_UP.head * up + nodH);
     // Regard qui se promène (moins en marche).
-    const look = this.photo ? 0 : (Math.sin(t * 0.37) * 0.5 + Math.sin(t * 0.13 + 1.7) * 0.5) * 0.32 * (st.moving ? 0.15 : 1) * (1 - graze * 0.7);
+    const look = photo ? 0 : (Math.sin(t * 0.37) * 0.5 + Math.sin(t * 0.13 + 1.7) * 0.5) * 0.32 * (st.moving ? 0.15 : 1) * (1 - graze * 0.7);
     if (look) md.neck.quaternion.premultiply(_qYaw.setFromAxisAngle(AXIS_Y, look));
     // Oreilles : elles pivotent un peu vers ce qu'il écoute, ensemble la plupart du temps, pointées vers l'avant
     // quand il est attentif ; sur le côté quand il somnole. (Avant : ±0,3 rad chacune de son côté, une oreille
-    // se couchait parfois à l'horizontale.)
+    // se couchait parfois à l'horizontale.) Contre les mouches (à l'arrêt, éveillé) : par moments, une oreille
+    // chasse d'un petit coup sec en arrière et revient (earFlick).
     const alert = 1 - this.doze;
     const both = Math.sin(t * 0.31 + 0.6) * 0.09;
+    const kid = md.root.id % 7;
     for (let i = 0; i < md.ears.length; i++) {
       const e = md.ears[i];
       const s = i === 0 ? 1 : -1;
       const n1 = Math.sin(t * 1.3 + i * 2.1) + Math.sin(t * 0.47 + i);
-      e.rotateX(n1 * 0.04 + this.doze * 0.2 - 0.08 * alert * this.proud);
-      e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.06));
-      e.rotateY((s * Math.sin(t * 0.7 + i * 3) * 0.06 + both) * alert);
+      // (coup d'oreille : le pavillon pivote vers l'arrière autour de l'axe de l'oreille, la pointe un peu en arrière)
+      const fl = photo || st.moving ? 0 : earFlick(t, kid + i * 2.9) * alert;
+      e.rotateX(n1 * 0.04 + this.doze * 0.2 - 0.08 * alert * this.proud - 0.12 * fl);
+      e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.06 + 0.04 * fl));
+      e.rotateY((s * Math.sin(t * 0.7 + i * 3) * 0.06 + both) * alert + s * 0.38 * fl);
     }
     // Port de queue de la race (arabe, saddlebred, welsh) : couard relevé, crins qui retombent en arc.
     const set = md.build.tailSet ?? 0;
@@ -3514,26 +3718,40 @@ class RealHorseAnim {
       md.tailTip.rotateX(-set * 0.4);
     }
     // Queue : de temps en temps un coup de fouet contre les mouches.
-    const swish = this.photo ? 0 : tailSwish(t, md.root.id % 7);
+    const swish = photo ? 0 : tailSwish(t, kid);
     if (swish) {
       md.tail.rotateZ(swish * 0.6);
       md.tailTip.rotateZ(swish);
     }
-    // Crinière : elle pend (pesanteur) au lieu de suivre l'encolure, avec un peu de retard (souple).
-    // relN : rotation de l'encolure dans le repère du cheval (tronc × encolure, rotations locales : aucune
-    // matrice du monde à refaire, le rendu s'en charge) ; rel : depuis son repos.
+    // Au galop, le bout de la queue retombe en arc (couard relevé par le clip, crins qui flottent derrière) au
+    // lieu d'une planche levée d'un bloc.
+    const arc = Math.min(1, wgal + 0.6 * ((this.w.canter ?? 0) + (this.w.canterR ?? 0)));
+    if (arc > 0.01) md.tailTip.rotateX(-TAIL_ARC * arc);
+    // Mouvement de la queue et de la crinière : ressorts amortis (hairSprings), secoués par le rebond du corps et
+    // par les virages, traînés par la vitesse.
+    this.hairSprings(dt, st, photo);
+    // Crinière : elle pend (pesanteur) au lieu de suivre l'encolure, et flotte (ressorts : retard, rebond de
+    // l'allure, vent de la course). relN : rotation de l'encolure dans le repère du cheval (tronc × encolure,
+    // rotations locales : aucune matrice du monde à refaire, le rendu s'en charge) ; rel : depuis son repos.
     const relN = _q.copy(md.body.quaternion).multiply(md.neck.quaternion);
     const rel = _qa.copy(relN).multiply(QNECK_REST_INV);
     const relNinv = _qc.copy(relN).invert();
-    const kk = 1 - Math.exp(-dt * 9);
-    const flutter = Math.min(1, (st.v ?? 0) / 6) * 0.08 + 0.01;
+    const v = st.moving ? (st.v ?? 0) : 0;
+    const drag = MANE_SPRING.drag * smooth(1.5, 10, v);
+    const flutter = Math.min(1, v / 6) * 0.05 + 0.01;
     for (let i = 0; i < md.mane.length; i++) {
       const m = md.mane[i];
-      // monde voulu : entre « suit l'encolure » (rel) et « pend comme au repos » (identité)
+      // monde voulu : entre « suit l'encolure » (rel) et « pend comme au repos » (identité), mèches poussées
+      // en arrière par le vent de la course (rotation x)
       const want = _qb.copy(rel).slerp(QI, 0.55 + i * 0.08);
-      const local = want.premultiply(relNinv);
-      this.maneQ[i].slerp(local, kk);
-      m.quaternion.copy(this.maneQ[i]);
+      if (drag) want.multiply(_qd.setFromAxisAngle(AXIS_X, drag * (0.7 + 0.1 * i)));
+      // (rebond de l'allure : les mèches se soulèvent du côté de la crinière, plus vers le garrot où elles sont
+      // longues ; un retard par os, la crinière ondule du garrot à la nuque)
+      _w.set(0, 0, -this.bounce * MANE_SPRING.lift * (1.15 - 0.1 * i));
+      springTo(this.maneS[i], want, _w, dt, MANE_SPRING.k - 4 * i, MANE_SPRING.c);
+      // (les mèches, du côté droit, ne rentrent pas dans l'encolure : rotation z vers +x tenue près de la cible)
+      springLimit(this.maneS[i], want, 2, -0.6, 0.02);
+      m.quaternion.copy(this.maneS[i].q).premultiply(relNinv);
       m.rotateZ(Math.sin(t * 5 + i * 0.8) * flutter);
     }
     md.hairSway.value = Math.min(2.5, (st.v ?? 0) * 0.45) + (Math.abs(swish) > 0.2 ? 1 : 0);
@@ -3571,6 +3789,7 @@ class RealHorseAnim {
       this.list[j].time = 0;
       this.w[name] = on ? 1 : 0;
     }
+    this.actX?.setEffectiveWeight(0);
     this.mixer.update(0);
     this.savePose();
     this.doze = 0;
@@ -3657,6 +3876,102 @@ export function pickGait(prev, u) {
  * RealHorseAnim.overlay). Chanfrein mesuré à 68° sous l'horizontale avec les clips seuls, 50° environ avec.
  */
 export const HEAD_UP = { neck: 0.12, head: 0.18 };
+
+/** Hochement de tête ajouté au pas (rad, rotation x de l'encolure et de la nuque ; le clip en a déjà 0,05 et 0,03). */
+export const WALK_NOD = { neck: 0.04, head: 0.015 };
+/**
+ * Galop : pompe de l'encolure du clip réduite de calm (0,13 → 0,09 rad), nez en avant de reach, plus stretch au
+ * galop allongé (rad, rotation x de la nuque).
+ */
+const GALLOP_PUMP = { calm: 0.04, reach: 0.05, stretch: 0.05 };
+/** Bout de la queue qui retombe en arc au galop (rad, rotation x de Tail2 par rapport à Tail1). */
+const TAIL_ARC = 0.35;
+/**
+ * Respiration (Hz, part du flanc) : au repos, essoufflé (BREATH.blown, après une galopade), amplitude au repos et
+ * en plus essoufflé.
+ */
+export const BREATH = { rest: 0.2, blown: 1.0, amp: 0.02, ampBlown: 0.022 };
+/**
+ * Ressorts amortis de la queue (Tail1, Tail2 plus souple : elle fouette après le couard) et de la crinière :
+ * raideur k (s⁻²), amortissement c (s⁻¹) ; lift : secousse du rebond de l'allure (rad/s² par m/s²) ; side :
+ * balancement dans les virages (rad/s² par m/s²) ; drag : mèches de la crinière poussées en arrière à la course
+ * (rad) ; bend : courbure des crins par la vitesse (cartes de crins, hairDrag) ; lag : retard des crins de la queue
+ * qui fouette (s).
+ */
+export const TAIL_SPRING = { k1: 70, c1: 10, k2: 38, c2: 6.5, lift: 5, side: 0.5, bend: 0.45, lag: 0.07 };
+export const MANE_SPRING = { k: 60, c: 11, lift: 3.2, drag: 0.22, bend: 0.3 };
+
+/**
+ * Ressort amorti d'une rotation (repère du cheval) : S = { q, w (vitesse angulaire, rad/s), on } suit target
+ * (raideur k, amortissement c), poussé par l'accélération angulaire alpha (rad/s²). Pas de 1/60 s au plus (stable
+ * en avance rapide) ; au premier appel, ou après une longue pause, il part de la cible sans vitesse.
+ */
+function springTo(S, target, alpha, dt, k, c) {
+  if (!S.on || dt > 0.5) {
+    S.q.copy(target);
+    S.w.set(0, 0, 0);
+    S.on = true;
+    return S.q;
+  }
+  const n = Math.min(8, Math.ceil(dt * 60 - 1e-6));
+  const h = dt / n;
+  for (let s = 0; s < n; s++) {
+    // erreur : rotation qui amène S.q sur la cible (vecteur rotation)
+    _qs.copy(S.q).invert().premultiply(target);
+    if (_qs.w < 0) _qs.set(-_qs.x, -_qs.y, -_qs.z, -_qs.w);
+    const sn = Math.hypot(_qs.x, _qs.y, _qs.z);
+    const ang = 2 * Math.atan2(sn, _qs.w);
+    const f = sn > 1e-9 ? ang / sn : 2;
+    S.w.x += (k * _qs.x * f - c * S.w.x + alpha.x) * h;
+    S.w.y += (k * _qs.y * f - c * S.w.y + alpha.y) * h;
+    S.w.z += (k * _qs.z * f - c * S.w.z + alpha.z) * h;
+    const wl = S.w.length();
+    if (wl > 1e-9) S.q.premultiply(_qs.setFromAxisAngle(_ws.copy(S.w).multiplyScalar(1 / wl), wl * h));
+  }
+  return S.q;
+}
+
+/**
+ * Tient la rotation S.q du côté permis d'un axe par rapport à target : composante axis (0 x, 2 z) de l'écart
+ * (vecteur rotation) au moins lo, au plus hi ; la vitesse qui pousse au-delà est annulée (la queue ne passe
+ * pas dans les fesses, la crinière pas dans l'encolure).
+ */
+function springLimit(S, target, axis, lo, hi) {
+  _qs.copy(S.q).multiply(_qs2.copy(target).invert());
+  if (_qs.w < 0) _qs.set(-_qs.x, -_qs.y, -_qs.z, -_qs.w);
+  const sn = Math.hypot(_qs.x, _qs.y, _qs.z);
+  const f = sn > 1e-9 ? (2 * Math.atan2(sn, _qs.w)) / sn : 2;
+  _ws.set(_qs.x * f, _qs.y * f, _qs.z * f);
+  const e = _ws.getComponent(axis);
+  const ec = Math.min(hi, Math.max(lo, e));
+  if (ec === e) return;
+  _ws.setComponent(axis, ec);
+  const wv = S.w.getComponent(axis);
+  if ((e < lo && wv < 0) || (e > hi && wv > 0)) S.w.setComponent(axis, 0);
+  const a = _ws.length();
+  if (a > 1e-9) _qs.setFromAxisAngle(_ws.multiplyScalar(1 / a), a);
+  else _qs.identity();
+  S.q.copy(_qs).multiply(target);
+}
+
+/**
+ * Coup d'oreille contre les mouches à l'instant t (0 → 1 → 0 en 0,3 s environ), 0 la plupart du temps : par
+ * moments (une période sur deux de 30 s environ), toutes les 5 s environ, décalé d'une oreille et d'un cheval à
+ * l'autre (k). Aucun hasard : la même animation à chaque fois.
+ */
+export function earFlick(t, k = 0) {
+  if (Math.sin(t * 0.21 + k * 1.3) < 0.2) return 0;
+  const s = Math.sin(t * 1.27 + k * 2.17);
+  return s > 0.985 ? Math.sin(((s - 0.985) / 0.015) * Math.PI * 0.5) : 0;
+}
+
+const _qs = new THREE.Quaternion();
+const _qs2 = new THREE.Quaternion();
+const _ws = V();
+const _qd = new THREE.Quaternion();
+const _qt1 = new THREE.Quaternion();
+const _qt2 = new THREE.Quaternion();
+const AXIS_X = V(1, 0, 0);
 
 const QNECK_REST = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), NECK_REST);
 const QNECK_REST_INV = QNECK_REST.clone().invert();

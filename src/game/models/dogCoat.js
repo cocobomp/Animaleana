@@ -565,15 +565,20 @@ vec3 cmpCoat(vec3 p, vec4 part) {
     float sB = 0.5 + 0.5 * sin(sp.y * 360.0 + warp);
     float sT = 0.5 + 0.5 * sin((p.x - midX) * 460.0 + warp * 0.5);
     float st = mix(mix(sA, sB, smoothstep(0.3, 0.7, legs)), sT, smoothstep(0.3, 0.7, tail));
-    st = smoothstep(0.58, 0.9, st);
+    // (épaisseur variable : seuil modulé par un bruit — des stries qui naissent, s'épaississent et meurent, pas des
+    // courbes de niveau régulières)
+    float thr = 0.5 + 0.32 * cmpNoise(sp * vec3(38.0, 16.0, 38.0));
+    st = smoothstep(thr, thr + 0.25, st);
     // (de loin, moins d'un pixel par strie : le motif se fond en teinte moyenne au lieu de scintiller)
     // (phase par pixel : effacé au-delà d'environ deux pixels par strie, pas avant — le galgo de la planche des
     // races, à quatre ou cinq pixels par strie, paraissait uni)
     float fw = length(fwidth(sp)) * 320.0;
     st = mix(st, 0.25, smoothstep(1.4, 2.8, fw));
-    float brk = 0.35 + 0.65 * smoothstep(0.25, 0.65, cmpNoise(sp * vec3(14.0, 6.0, 10.0)));
-    float stripe = st * brk * (1.0 - 0.4 * head);
-    c = mix(c, cBrindleC, cBrindle * stripe * 0.7);
+    float brk = 0.2 + 0.8 * smoothstep(0.3, 0.7, cmpNoise(sp * vec3(14.0, 6.0, 10.0)));
+    // (mèches : stries de poil fines qui brouillent le bord des bandes ; effacées de loin)
+    float hair = mix(0.75 + 0.5 * cmpNoise(sp * vec3(90.0, 220.0, 90.0)), 1.0, smoothstep(0.6, 1.4, fw));
+    float stripe = clamp(st * brk * hair, 0.0, 1.0) * (1.0 - 0.6 * head);
+    c = mix(c, cBrindleC, cBrindle * stripe * 0.65);
   }
   // ---- charbonné / sable : pointes sombres sur le dessus, la tête, les oreilles, le bout de la queue
   if (cSable > 0.0) {

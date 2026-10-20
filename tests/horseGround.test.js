@@ -60,11 +60,11 @@ describe('posé au sol (étape 1)', () => {
     const md = horse('selle_francais');
     const soles = md.root.getObjectByName('soleShadows');
     expect(soles).toBeTruthy();
-    expect(soles.geometry.index.count).toBe(24); // 4 carrés, 8 triangles
-    // (l'ombre de contact passe devant un sol posé juste au-dessus du terrain)
-    const contact = md.root.children.find((o) => o.isMesh && o !== soles && o.material?.depthWrite === false);
-    expect(contact.material.polygonOffset).toBe(true);
-    expect(contact.material.opacity).toBeGreaterThanOrEqual(0.7);
+    // 4 carrés des sabots + l'ombre de contact sous le corps, dans le même maillage : un seul appel de dessin
+    expect(soles.geometry.index.count).toBe(30);
+    expect(md.root.children.filter((o) => o.isMesh && o.material?.depthWrite === false)).toEqual([soles]);
+    // (l'ombre de contact passe devant un sol posé juste au-dessus du terrain ; aussi foncée qu'avant, 0,75)
+    expect(soles.material.polygonOffset).toBe(true);
     // (à l'arrêt, clip d'arrêt à un instant fixe)
     fixClips(md);
     for (let f = 0; f < 30; f++) md.anim.update(1 / 30, still, {});
@@ -76,14 +76,17 @@ describe('posé au sol (étape 1)', () => {
       soles.material.onBeforeCompile(sh);
       return sh.uniforms.hSole.value;
     };
-    for (const v of read()) expect(v.w).toBeGreaterThan(0.9);
+    const before = read();
+    for (const v of before.slice(0, 4)) expect(v.w).toBeGreaterThan(0.9);
+    expect(soles.material.opacity * before[4].w).toBeGreaterThanOrEqual(0.7);
+    expect(before[4].y).toBeGreaterThan(0.01);
     // antérieur gauche levé (« donner le sabot ») : son ombre s'efface, celle des autres reste
     realLegPose(md, 'hoof', 1);
     md.root.updateMatrixWorld(true);
     soles.onBeforeRender();
     const after = read();
     expect(after[0].w).toBeLessThan(0.35);
-    for (const v of after.slice(1)) expect(v.w).toBeGreaterThan(0.9);
+    for (const v of after.slice(1, 4)) expect(v.w).toBeGreaterThan(0.9);
     // chaque ombre est sous son sabot (repère du cheval)
     const fl = md.legs[0];
     expect(Math.sign(after[0].x)).toBe(Math.sign(fl.side));

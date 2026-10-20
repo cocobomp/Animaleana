@@ -148,7 +148,7 @@ describe('races et chiots', () => {
       }
       r.dispose();
     }
-  });
+  }, 60000); // (une vingtaine de modèles : plus de 5 s quand toute la suite tourne)
 
   it('oreilles dressées des petits chiens : le lambeau replié du jack est caché sous la peau du crâne (pas d\'oreilles en double)', () => {
     const base = realDogBase(G.jack, 'jack');

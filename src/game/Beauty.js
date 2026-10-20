@@ -151,6 +151,10 @@ function surfaceHit(parent, outside, inside, meshes) {
 }
 
 const _zAxis = new THREE.Vector3(0, 0, 1);
+const _d = new THREE.Vector3();
+const _s = new THREE.Vector3();
+const _n = new THREE.Vector3();
+const _m = new THREE.Matrix4();
 
 /**
  * Tresses du cheval réaliste, aux places mesurées sur ses crins (model.braidSpots, horseReal.js) :
@@ -170,7 +174,8 @@ function realHorseBraids(model, ribbon, mane, add, covered = false) {
     const group = new THREE.Group();
     for (const [p, up] of crest) {
       const knob = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 9), hairMat);
-      knob.position.copy(p).addScaledVector(up, r * 0.6);
+      // (enfoncé d'un tiers dans la crête : posé dessus, il n'y touchait qu'en un point)
+      knob.position.copy(p).addScaledVector(up, r * 0.45);
       knob.quaternion.setFromUnitVectors(_zAxis, up);
       knob.scale.set(1, 1, 0.85); // (un peu aplatie sur la crête)
       group.add(knob);
@@ -181,6 +186,29 @@ function realHorseBraids(model, ribbon, mane, add, covered = false) {
       const pom = new THREE.Mesh(new THREE.SphereGeometry(r * 0.5, 10, 8), ribbonMat);
       pom.position.copy(knob.position).addScaledVector(up, r * 0.8);
       group.add(pom);
+    }
+    // Entre deux boutons, la crinière tressée tendue : un bourrelet bas de crins le long de la crête. Sans lui,
+    // des boules posées sur une crête ronde ne la touchaient qu'en un point, avec le ciel tout autour (« des perles
+    // qui flottent ») ; de vraies tresses de concours sont reliées par les crins rentrés. Centré sur la peau de la
+    // crête à mi-chemin (braidSpots : 3e élément), à 0,2 r au-dessus, enfoncé de 0,25 r.
+    const ridge = new THREE.SphereGeometry(1, 12, 6);
+    for (let i = 0; i + 1 < crest.length; i++) {
+      const [a, up, mid] = crest[i];
+      const b = crest[i + 1][0];
+      const d = _d.copy(b).sub(a);
+      const len = d.length();
+      if (len < 1e-4) continue;
+      d.divideScalar(len);
+      const side = _s.crossVectors(d, up).normalize();
+      const n = _n.crossVectors(side, d);
+      const seg = new THREE.Mesh(ridge, hairMat);
+      seg.quaternion.setFromRotationMatrix(_m.makeBasis(side, d, n));
+      if (mid) seg.position.copy(mid);
+      else seg.position.copy(a).add(b).multiplyScalar(0.5);
+      seg.position.addScaledVector(n, r * 0.2);
+      seg.scale.set(r * 0.62, len * 0.6, r * 0.45);
+      seg.userData.braidRidge = true;
+      group.add(seg);
     }
     add(model.neck, group);
   }
@@ -796,6 +824,7 @@ class BeautySession extends Session {
     this.updateCommon(dt);
     if (this.state === 'done') {
       this.game.rig.frameWith = null;
+      this.game.rig.occluders = null;
       return;
     }
     const g = this.game;
@@ -803,6 +832,8 @@ class BeautySession extends Session {
     const e = this.e;
     // La caméra cadre l'animal mené avec l'enfant (pas quand il est porté, sur la table ou au podium).
     g.rig.frameWith = this.carried || this.onTable || this.phase === 'podium' ? null : e;
+    // (décor du terrain et arche d'arrivée : la caméra qui recule pour cadrer se place devant eux — Player.js)
+    g.rig.occluders = g.rig.frameWith ? [this.flags, g.world.showground].filter(Boolean) : null;
     this.phaseT += dt;
     this.judgeSprite.position.y = this.y(this.judgeSprite.position.x, this.judgeSprite.position.z) + 2.15 + Math.sin(this.time * 2) * 0.03;
     if (this.judgeNpc) {
@@ -1058,6 +1089,7 @@ class BeautySession extends Session {
 
   cleanup() {
     this.game.rig.frameWith = null;
+    this.game.rig.occluders = null;
     if (this.judgeNpc) {
       this.game.scene.remove(this.judgeNpc.root);
       disposeModel(this.judgeNpc.root);

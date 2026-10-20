@@ -668,9 +668,9 @@ describe('concours de beauté sur le cheval réaliste', () => {
       coat.material.side = THREE.DoubleSide;
       const r = (md.dims?.R ?? 0.32) * 0.085;
       for (const [p, up] of md.braidSpots.crest) {
-        // Centre du bouton (Beauty.js : point + up × 0,6 r), rayon vers la peau sous lui.
+        // Centre du bouton (Beauty.js : point + up × 0,45 r), rayon vers la peau sous lui.
         const u = up.clone().transformDirection(md.neck.matrixWorld);
-        const c = md.neck.localToWorld(p.clone().addScaledVector(up, r * 0.6));
+        const c = md.neck.localToWorld(p.clone().addScaledVector(up, r * 0.45));
         rc.set(c, u.clone().negate());
         rc.far = 0.2;
         const hit = rc.intersectObject(coat, false)[0];
@@ -678,10 +678,27 @@ describe('concours de beauté sur le cheval réaliste', () => {
         // (la peau est à moins d'un rayon du centre : le bouton, aplati à 0,85, la touche)
         expect(hit.distance, b.id).toBeLessThan(r);
       }
+      // Bourrelet de crins tressés entre deux boutons (Beauty.js : crête à mi-chemin + n × 0,2 r, demi-hauteur
+      // 0,45 r) : il touche la peau sous son milieu (pas de jour entre les boutons) sans y être enfoui.
+      const S = md.braidSpots.crest;
+      for (let i = 0; i + 1 < S.length; i++) {
+        const a = md.neck.localToWorld(S[i][0].clone());
+        const c = md.neck.localToWorld(S[i + 1][0].clone());
+        const d = c.clone().sub(a).normalize();
+        const u = S[i][1].clone().transformDirection(md.neck.matrixWorld);
+        const n = d.clone().cross(u).normalize().cross(d);
+        const m = md.neck.localToWorld(S[i][2].clone()).addScaledVector(n, r * 0.2);
+        rc.set(m, n.clone().negate());
+        rc.far = 0.2;
+        const hit = rc.intersectObject(coat, false)[0];
+        expect(hit, `${b.id} bourrelet ${i}`).toBeTruthy();
+        expect(hit.distance, `${b.id} bourrelet ${i}`).toBeLessThan(r * 0.45);
+        expect(hit.distance, `${b.id} bourrelet ${i}`).toBeGreaterThan(r * 0.05);
+      }
       coat.material.side = side;
       md.dispose();
     }
-  });
+  }, 120000); // (33 modèles construits : long sur une machine chargée)
 
   it('tresse de queue : la dernière perle prolonge la tresse (pas seule, loin derrière les crins)', () => {
     const md = horse(animal('selle_francais'));

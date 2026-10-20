@@ -1939,7 +1939,10 @@ function measureBraids(S, hair, cpos, base) {
       const c = crestAt(t0 + (i / 6) * (T1 - t0));
       // (sur la peau de la crête : tressée, la crinière rentre dans les boutons — hairBraid — et ne laisse dessous
       // que ses racines ; posés au-dessus du début des mèches, les boutons flottaient avec un jour dessous)
-      out.push([c.addScaledVector(up, 0.004), up.clone()]);
+      // 3e élément : la peau de la crête à mi-chemin du bouton suivant (bourrelet de crins tressés, Beauty.js),
+      // prise sur la crête et pas sur la corde entre les boutons (l'encolure creuse devant le garrot du Frison).
+      const mid = i < 6 ? crestAt(t0 + ((i + 0.5) / 6) * (T1 - t0)).addScaledVector(up, 0.004) : null;
+      out.push([c.addScaledVector(up, 0.004), up.clone(), mid]);
     }
     return out;
   };
@@ -2583,7 +2586,11 @@ float eyeGlint( vec3 L, vec3 V, vec3 G, vec3 N, float a0, float a1 ) {
 
 /** Ombre de contact douce, partagée (comme horseModel.js). */
 let contactTex = null;
-function contactShadow(R, L) {
+/** Opacité des ombres des sabots, et de l'ombre de contact en qualité basse. */
+const SOLE_ALPHA = 0.6;
+const CONTACT_ALPHA_LOW = 0.75;
+/** Tache d'ombre ronde dégradée (partagée : ombre de contact, ombres des sabots). */
+function contactTexture() {
   if (!contactTex) {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
@@ -2597,12 +2604,16 @@ function contactShadow(R, L) {
     contactTex = new THREE.CanvasTexture(c);
     contactTex.userData.shared = true;
   }
+  return contactTex;
+}
+
+function contactShadow(R, L) {
   const geo = new THREE.PlaneGeometry(1, 1);
   geo.rotateX(-Math.PI / 2);
   // (qualité basse : le soleil n'y projette pas d'ombre, c'est le seul signe que le cheval touche le sol ;
   // décalage de profondeur : elle passe devant un sol posé juste au-dessus du terrain, sable, litière)
   const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-    map: contactTex, transparent: true, depthWrite: false, opacity: gfx.quality === 'high' ? 0.5 : 0.75, toneMapped: false,
+    map: contactTexture(), transparent: true, depthWrite: false, opacity: gfx.quality === 'high' ? 0.5 : CONTACT_ALPHA_LOW, toneMapped: false,
     polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
   }));
   m.scale.set(R * 3.0, 1, L * 1.45);
@@ -2615,12 +2626,14 @@ const SOLE_SHADOW_LIFT = 0.25; // (m, cheval de taille 1 : sabot levé de plus, 
 
 /**
  * Petites ombres sous les sabots (qualité basse, où le soleil ne projette pas d'ombre : sans elles, le cheval
- * flotte). Un seul maillage par cheval, quatre carrés : le shader place chacun sous son sabot (uniform hSole :
- * centre de la sole dans le repère du cheval, et opacité), recalculé juste avant son dessin (onBeforeRender),
- * après l'animation et les poses des activités (sabot donné, saut, révérence). Sabot posé : ombre pleine ; levé
- * de SOLE_SHADOW_LIFT : plus rien. 8 triangles et 16 nombres par image ; rien si le cheval n'est pas dans le champ.
+ * flotte), avec l'ombre de contact sous le corps dans le même maillage (un seul appel de dessin par cheval, comme
+ * avant les ombres de sabots : elles en coûtaient un de plus). Cinq carrés : le shader place chacun des quatre
+ * premiers sous son sabot (uniform hSole : centre de la sole dans le repère du cheval, et opacité), recalculé juste
+ * avant son dessin (onBeforeRender), après l'animation et les poses des activités (sabot donné, saut, révérence) ;
+ * le cinquième, l'ombre de contact (contact : { w, d } en m), reste sous le corps. Sabot posé : ombre pleine ; levé
+ * de SOLE_SHADOW_LIFT : plus rien. 10 triangles et 20 nombres par image ; rien si le cheval n'est pas dans le champ.
  */
-function soleShadows(model, size) {
+function soleShadows(model, size, contact = null) {
   const pos = [];
   const uv = [];
   const ids = [];
@@ -2634,6 +2647,15 @@ function soleShadows(model, size) {
     const o = i * 4;
     index.push(o, o + 2, o + 1, o, o + 3, o + 2);
   }
+  if (contact) {
+    // (ombre de contact : carré fixe, à sa taille, centré sous le corps)
+    for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      pos.push(x * contact.w * 0.5, 0, z * contact.d * 0.5);
+      uv.push((x + 1) / 2, (1 - z) / 2);
+      ids.push(4);
+    }
+    index.push(16, 18, 17, 16, 19, 18);
+  }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
@@ -2642,9 +2664,11 @@ function soleShadows(model, size) {
   // (les carrés sont déplacés dans le shader : la sphère englobante couvre tout le dessous du cheval)
   geo.boundingSphere = new THREE.Sphere(V(0, 0, 0), 1.6);
   geo.boundingBox = new THREE.Box3(V(-1.6, -0.1, -1.6), V(1.6, 0.1, 1.6));
-  const sole = { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) };
+  const sole = { value: [0, 1, 2, 3, 4].map(() => new THREE.Vector4()) };
+  // (ombre de contact : 1,5 cm au-dessus du sol, plus foncée que celles des sabots)
+  sole.value[4].set(0, 0.015, 0, contact ? CONTACT_ALPHA_LOW / SOLE_ALPHA : 0);
   const mat = new THREE.MeshBasicMaterial({
-    map: contactTex, transparent: true, depthWrite: false, opacity: 0.6, toneMapped: false,
+    map: contactTexture(), transparent: true, depthWrite: false, opacity: SOLE_ALPHA, toneMapped: false,
     polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
   });
   mat.onBeforeCompile = (sh) => {
@@ -2652,7 +2676,7 @@ function soleShadows(model, size) {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute float hIdx;
-uniform vec4 hSole[4];
+uniform vec4 hSole[5];
 varying float vHSole;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 {
@@ -2746,9 +2770,9 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   const neckQi = G('Neck').getWorldQuaternion(new THREE.Quaternion()).invert();
   const dockY = heads[BONE_INDEX.Tail2].y;
   const braidSpots = {
-    crest: S.braids.crest.map(([p, up]) => [G('Neck').worldToLocal(p.clone()), up.clone().applyQuaternion(neckQi)]),
+    crest: S.braids.crest.map(([p, up, mid]) => [G('Neck').worldToLocal(p.clone()), up.clone().applyQuaternion(neckQi), mid && G('Neck').worldToLocal(mid.clone())]),
     // (sous une couverture : les boutons commencent devant son bord avant)
-    crestCovered: S.braids.crestCovered.map(([p, up]) => [G('Neck').worldToLocal(p.clone()), up.clone().applyQuaternion(neckQi)]),
+    crestCovered: S.braids.crestCovered.map(([p, up, mid]) => [G('Neck').worldToLocal(p.clone()), up.clone().applyQuaternion(neckQi), mid && G('Neck').worldToLocal(mid.clone())]),
     tail: S.braids.tail.map((p) => {
       const g = G(p.y > dockY ? 'Tail1' : 'Tail2');
       return [g, g.worldToLocal(p.clone())];
@@ -2803,7 +2827,9 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   const torsoTop = back(zSeat);
   const belly = S.measure.bellyAt(zSeat);
   const R = (torsoTop - belly) / 2;
-  root.add(contactShadow(0.3 * gx + 0.05, L * 0.95));
+  // (qualité basse : l'ombre de contact est dans le maillage des ombres de sabots, voir soleShadows)
+  const contactSize = { w: (0.3 * gx + 0.05) * 3.0, d: L * 0.95 * 1.45 };
+  if (gfx.quality === 'high') root.add(contactShadow(0.3 * gx + 0.05, L * 0.95));
   // Couverture : du garrot jusqu'où le centre de ses coupes (y0 - 0,2 R) est encore dans le corps
   // (plus loin, la croupe remonte : la nappe se refermerait en pointe).
   const ty = (belly + torsoTop) / 2 - 0.2 * R;
@@ -2872,6 +2898,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   model.setBraided = (on) => {
     const u = mane.material.userData.hairBraid;
     if (u) u.value = on ? 1 : 0;
+    model.braided = !!on;
   };
   // Toupet rentré sous un bonnet anti-mouches (gearModels.js, emplacement head) : ses mèches se replient entre les
   // oreilles au lieu de traverser le voile (taches noires sur le front, jusque dans les photos de la sellerie).
@@ -2879,7 +2906,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
     const u = mane.material.userData.hairTuck;
     if (u) u.value = on ? 1 : 0;
   };
-  if (gfx.quality !== 'high') root.add(soleShadows(model, legR * 6.5));
+  if (gfx.quality !== 'high') root.add(soleShadows(model, legR * 6.5, contactSize));
   // Allures de la race aux appuis calés au sol (lockedGaits) : faites une fois par gabarit, une allure à la
   // fois (lockGaitStep : 6 à 15 ms chacune), pendant les temps morts du navigateur après la construction
   // (voir plus bas) ; ce qui reste est fait au premier pas (lockGaits). Avant, les cinq allures étaient
@@ -4040,8 +4067,10 @@ class RealHorseAnim {
       const m = md.mane[i];
       // monde voulu : entre « suit l'encolure » (rel) et « pend comme au repos » (identité), mèches poussées
       // en arrière par le vent de la course (rotation x)
-      const want = _qb.copy(rel).slerp(QI, 0.55 + i * 0.08);
-      if (drag) want.multiply(_qd.setFromAxisAngle(AXIS_X, drag * (0.7 + 0.1 * i)));
+      // (crinière tressée, concours de beauté : elle suit l'encolure, sans pendre ni flotter — les boutons, portés par
+      // l'encolure, restaient sinon en l'air au-dessus de la crête quand le cheval levait ou baissait la tête)
+      const want = md.braided ? _qb.copy(rel) : _qb.copy(rel).slerp(QI, 0.55 + i * 0.08);
+      if (drag && !md.braided) want.multiply(_qd.setFromAxisAngle(AXIS_X, drag * (0.7 + 0.1 * i)));
       // (rebond de l'allure : les mèches se soulèvent du côté de la crinière, plus vers le garrot où elles sont
       // longues ; un retard par os, la crinière ondule du garrot à la nuque)
       _w.set(0, 0, -this.bounce * MANE_SPRING.lift * (1.15 - 0.1 * i));
@@ -4049,7 +4078,7 @@ class RealHorseAnim {
       // (les mèches, du côté droit, ne rentrent pas dans l'encolure : rotation z vers +x tenue près de la cible)
       springLimit(this.maneS[i], want, 2, -0.6, 0.02);
       m.quaternion.copy(this.maneS[i].q).premultiply(relNinv);
-      m.rotateZ(Math.sin(t * 5 + i * 0.8) * flutter);
+      if (!md.braided) m.rotateZ(Math.sin(t * 5 + i * 0.8) * flutter);
     }
     md.hairSway.value = Math.min(2.5, (st.v ?? 0) * 0.45) + (Math.abs(swish) > 0.2 ? 1 : 0);
     // Sabots jamais sous le sol (fondu entre deux clips, proportions de la race) : on relève le corps.

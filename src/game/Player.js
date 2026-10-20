@@ -26,6 +26,19 @@ const _rB = new THREE.Vector3();
 const _rC = new THREE.Vector3();
 const _rD = new THREE.Vector3();
 const _gw = {};
+const _ray = new THREE.Vector3();
+
+/** Pièce de décor visible (toute sa chaîne de parents) et assez grande pour cacher la vue (rayon ≥ 0,45 m). */
+function bigVisible(o) {
+  const g = o.geometry;
+  if (!g) return false;
+  if (!g.boundingSphere) g.computeBoundingSphere();
+  const s = o.getWorldScale(_ray2);
+  if (g.boundingSphere.radius * Math.max(s.x, s.y, s.z) < 0.45) return false;
+  for (let p = o; p; p = p.parent) if (!p.visible) return false;
+  return true;
+}
+const _ray2 = new THREE.Vector3();
 const _hp = new THREE.Vector3();
 const _hq = new THREE.Vector3();
 const _hm = new THREE.Matrix4();
@@ -807,6 +820,10 @@ export class Player {
 
 /** Décalage de la caméra sur le côté quand on monte sur un écran en hauteur (m, voir CameraRig.update). */
 export const MOUNT_SIDE = 1.8;
+/** Part du décalage reprise par la cible (cheval au milieu de l'écran) et visée abaissée (m), monté en portrait. */
+export const MOUNT_AIM = 0;
+export const MOUNT_DROP = 1.1;
+export const MOUNT_AHEAD = 0.1;
 
 export class CameraRig {
   constructor(camera) {
@@ -859,16 +876,18 @@ export class CameraRig {
     player.avatar.root.visible = true;
     const target = eye.clone().add(new THREE.Vector3(0, -0.2, 0));
     const ride = this.ride ?? 0;
-    // (décalage de côté, à gauche de la caméra : MOUNT_SIDE pour elle, 15 % pour sa cible — le cheval reste près du
-    // milieu de l'écran, loin des boutons du bas à droite)
+    // (décalage de côté, à gauche de la caméra : MOUNT_SIDE pour elle, la moitié pour sa cible — le cheval reste au
+    // milieu de l'écran ; avec 15 %, il était à droite et sa croupe, sa queue et ses postérieurs passaient sous
+    // « Descendre » et les boutons ronds du bas)
     const sideX = Math.cos(this.yaw) * MOUNT_SIDE * ride * (player.mount?.scale ?? 1);
     const sideZ = -Math.sin(this.yaw) * MOUNT_SIDE * ride * (player.mount?.scale ?? 1);
     if (ride > 0.001) {
       // (visée vers l'avant et plus bas : entre les mains du cavalier et la tête du cheval)
       const k = ride * (player.mount?.scale ?? 1);
-      target.x += Math.sin(player.heading) * 0.9 * k + sideX * 0.15;
-      target.z += Math.cos(player.heading) * 0.9 * k + sideZ * 0.15;
-      target.y -= 0.35 * k;
+      target.x += Math.sin(player.heading) * MOUNT_AHEAD * k + sideX * MOUNT_AIM;
+      target.z += Math.cos(player.heading) * MOUNT_AHEAD * k + sideZ * MOUNT_AIM;
+      // (visée plus basse : le cheval entier, sabots compris, au-dessus de la rangée de boutons du bas)
+      target.y -= MOUNT_DROP * k;
     }
     const back = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
     // Si un mur se trouve entre la caméra et le joueur, la caméra monte pour regarder
@@ -913,11 +932,44 @@ export class CameraRig {
     } else {
       this.autoPitch = this.pitch;
     }
-    this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch + 0.1 * ride - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
+    this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch + 0.2 * ride - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
     back.set(-Math.sin(this.yaw) * Math.cos(this.curPitch), Math.sin(this.curPitch), -Math.cos(this.yaw) * Math.cos(this.curPitch));
     const want = target.clone().addScaledVector(back, dist);
-    want.x += sideX * 0.85;
-    want.z += sideZ * 0.85;
+    // Décalage de côté (monté en portrait) testé lui aussi contre les murs : il était ajouté après le test, et la
+    // caméra entrait dans l'écurie quand on longeait son mur côté montoir. Réduit jusqu'au premier mur, sur le
+    // chemin du décalage comme sur la ligne de vue vers la cible ; lissé.
+    let sideF = 1;
+    if (ride > 0.001) {
+      for (let i = 1; i <= 8 && sideF === 1; i++) {
+        const f = i / 8;
+        const cx = want.x + sideX * 0.85 * f;
+        const cz = want.z + sideZ * 0.85 * f;
+        let hit = world.insideBuilding(cx, want.y, cz);
+        for (let j = 1; j < 6 && !hit; j++) {
+          const u = j / 6;
+          hit = world.insideBuilding(cx + (target.x - cx) * u, want.y + (target.y - want.y) * u, cz + (target.z - cz) * u);
+        }
+        if (hit) sideF = (i - 1) / 8;
+      }
+    }
+    this.sideF = (this.sideF ?? sideF) + (sideF - (this.sideF ?? sideF)) * Math.min(1, dt * 6);
+    want.x += sideX * 0.85 * Math.min(sideF, this.sideF);
+    want.z += sideZ * 0.85 * Math.min(sideF, this.sideF);
+    // Décor qui coupe la vue (concours de beauté : arche d'arrivée, panneau du terrain, cabane du jury, barrières —
+    // rig.occluders, posé par Beauty.js) : la caméra se place devant lui au lieu de reculer derrière (avant, l'arche
+    // et ses lettres géantes, puis un panneau, cachaient l'enfant et son cheval). Les petites pièces (fanions)
+    // ne comptent pas.
+    if (this.occluders?.length) {
+      _ray.subVectors(want, target);
+      const L = _ray.length();
+      if (L > 0.5) {
+        this.raycaster ??= new THREE.Raycaster();
+        this.raycaster.set(target, _ray.normalize());
+        this.raycaster.far = L;
+        const hit = this.raycaster.intersectObjects(this.occluders, true).find((h) => bigVisible(h.object));
+        if (hit) want.copy(target).addScaledVector(_ray, Math.max(2.4, hit.distance - 0.4));
+      }
+    }
     const ground = world.heightAt(want.x, want.z) + 0.4;
     if (want.y < ground) want.y = ground;
     this.pos.lerp(want, this.pos.lengthSq() === 0 ? 1 : Math.min(1, dt * 10));

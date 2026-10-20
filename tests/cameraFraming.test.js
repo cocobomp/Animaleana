@@ -43,7 +43,8 @@ describe('caméra du jeu', () => {
     const fwd = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
     const left = new THREE.Vector3(Math.cos(p.heading), 0, -Math.sin(p.heading));
     const c = cam.position.clone().setY(0);
-    expect(c.dot(left)).toBeGreaterThan(MOUNT_SIDE * 0.9);
+    // (caméra décalée de 0,85 × MOUNT_SIDE ; sa cible reste sur le cheval : il est au milieu de l'écran)
+    expect(c.dot(left)).toBeGreaterThan(MOUNT_SIDE * 0.8);
     expect(c.dot(fwd)).toBeLessThan(-4);
     // plus près qu'avant (dist + 2 = 9 m) : vers 6,5 m
     const d = cam.position.distanceTo(new THREE.Vector3(0, p.eyeHeight, 0));
@@ -85,5 +86,68 @@ describe('caméra du jeu', () => {
     rig.frameWith = null;
     for (let i = 0; i < 300; i++) rig.update(1 / 30, still(), p, world);
     expect(cam.position.distanceTo(alone)).toBeLessThan(0.05);
+  });
+
+  it('à cheval en portrait : le cheval entier au milieu de l\'écran (croupe et queue loin des boutons du bas à droite)', () => {
+    const cam = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
+    const rig = new CameraRig(cam);
+    rig.yaw = 0.4;
+    const p = rider({ scale: 1, position: new THREE.Vector3() });
+    for (let i = 0; i < 900; i++) rig.update(1 / 30, still(), p, world);
+    cam.updateMatrixWorld(true);
+    const fwd = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
+    const at = (back, y) => new THREE.Vector3(0, y, 0).addScaledVector(fwd, -back).project(cam);
+    // croupe (1 m derrière le cavalier), bout de la queue, sabots arrière, tête (1,6 m devant)
+    const rump = at(1.0, 1.5);
+    const tail = at(1.3, 0.9);
+    const hoof = at(1.0, 0);
+    const head = at(-1.6, 1.9);
+    for (const q of [rump, tail, head]) expect(Math.abs(q.x)).toBeLessThan(0.6);
+    // (rangée des boutons ronds et de « Descendre » : le bas de l'écran, ndc y < −0,72 environ)
+    expect(hoof.y).toBeGreaterThan(-0.72);
+    expect(tail.x).toBeLessThan(0.45);
+  });
+
+  it('à cheval en portrait le long d\'un mur côté montoir : le décalage de côté ne fait pas entrer la caméra dans le bâtiment', () => {
+    const cam = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
+    const rig = new CameraRig(cam);
+    rig.yaw = 0;
+    const p = { ...rider({ scale: 1, position: new THREE.Vector3() }), heading: 0 };
+    // mur à 1,2 m à gauche du cheval (gauche = +x pour un cap 0) : un bâtiment au-delà
+    const walled = { insideBuilding: (x) => x > 1.2, heightAt: () => 0 };
+    for (let i = 0; i < 900; i++) rig.update(1 / 30, still(), p, walled);
+    expect(walled.insideBuilding(cam.position.x, cam.position.y, cam.position.z)).toBe(false);
+    // et sans mur, il est bien là (au-delà de 1,2 m)
+    const rig2 = new CameraRig(new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500));
+    rig2.yaw = 0;
+    for (let i = 0; i < 900; i++) rig2.update(1 / 30, still(), p, world);
+    expect(rig2.camera.position.x).toBeGreaterThan(1.2);
+  });
+
+  it('concours de beauté : un grand décor entre la caméra et l\'enfant (arche, panneau) la fait passer devant, pas derrière', () => {
+    const cam = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
+    const rig = new CameraRig(cam);
+    const p = { ...rider(null), speed: 0, heading: 0 };
+    rig.yaw = 0;
+    rig.frameWith = { position: new THREE.Vector3(1.6, 0, -0.5), scale: 1 };
+    for (let i = 0; i < 300; i++) rig.update(1 / 30, still(), p, world);
+    const free = cam.position.clone();
+    // panneau de 4 × 3 m, à mi-chemin entre l'enfant et la caméra
+    const mid = free.clone().lerp(p.position, 0.5);
+    const board = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 0.2));
+    board.position.copy(mid);
+    board.lookAt(free);
+    const scene = new THREE.Scene();
+    scene.add(board);
+    scene.updateMatrixWorld(true);
+    rig.occluders = [board];
+    for (let i = 0; i < 300; i++) rig.update(1 / 30, still(), p, world);
+    const dCam = cam.position.distanceTo(p.position);
+    expect(dCam).toBeLessThan(mid.distanceTo(p.position));
+    // un fanion (petite pièce) ne compte pas
+    board.scale.setScalar(0.1);
+    scene.updateMatrixWorld(true);
+    for (let i = 0; i < 300; i++) rig.update(1 / 30, still(), p, world);
+    expect(cam.position.distanceTo(free)).toBeLessThan(0.1);
   });
 });

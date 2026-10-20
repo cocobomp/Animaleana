@@ -87,7 +87,7 @@ describe('robes crédibles (étape 8)', () => {
   it('noir profond : poil plus lisse, moins de voile du ciel, reflet brun chaud ; grain du poil dans la rugosité', () => {
     gfx.quality = 'high';
     const m = material('frison', 0);
-    expect(m.roughness).toBeLessThan(0.45);
+    expect(m.roughness).toBeLessThanOrEqual(0.5);
     expect(m.specularIntensity).toBeLessThan(1);
     expect(m.sheenColor.r).toBeGreaterThan(m.sheenColor.b);
     const bay = material('selle_francais', 0);
@@ -118,7 +118,7 @@ describe('robes crédibles (étape 8)', () => {
     expect(material('quarter', 1).userData.horseUniforms.hGoldDap.value).toBe(1);
     expect(material('selle_francais', 0).userData.horseUniforms.hGoldDap.value).toBeLessThan(0.4);
     expect(material('pre', 0).userData.horseUniforms.hGoldDap.value).toBe(0);
-    expect(COAT_LOOKS.bloom.dark).toBeLessThan(COAT_LOOKS.dapple.dark / 2);
+    expect(COAT_LOOKS.bloom.dark).toBeLessThan(COAT_LOOKS.dapple.dark * 0.6);
     const fs = compile(material('selle_francais', 0)).fragmentShader;
     expect(fs).toContain('mix( hRimTint, vec3( 1.0 ), hDarkV * hGold )');
     expect(fs).toContain('hDarkV * hGold ) * ( 1.0 - hBare )');

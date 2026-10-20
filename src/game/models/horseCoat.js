@@ -37,12 +37,12 @@ vec3 hCell(vec3 p) {
 /**
  * Réglages des robes (étape 8 du plan « cheval beau ») : lus par le shader (constantes écrites dans son texte) et
  * par les tests. Gris pommelé : fond foncé entre les pommelures (dark), centres éclaircis (light), cellules par
- * mètre (cell) et rayon d'une pommelure (r, en cellules). Pie : champ d'avant l'étape 8 un peu déformé (warp, en
+ * mètre (cell) et largeur des lignes de fond entre pommelures (line, part du rapport F1 / F2). Pie : champ d'avant l'étape 8 un peu déformé (warp, en
  * unités du bruit), bord déchiqueté (jag). Léopard : rayon des taches (en cellules de 12 cm environ), halo marbré
  * autour. Isabelle : largeur de la raie de mulet (m).
  */
 export const COAT_LOOKS = {
-  dapple: { dark: 0.45, light: 0.1, cell: 7.5, r: 0.4 },
+  dapple: { dark: 0.3, light: 0.12, cell: 7.5, line: 0.2 },
   pinto: { warp: 0.12, jag: 0.06 },
   spots: { rMin: 0.13, rMax: 0.38, halo: 0.08 },
   dun: { stripe: 0.03 },
@@ -102,17 +102,23 @@ hEarIn = 0.0;
   float n1 = hFbm(P * 2.3 + hSeed);
   c *= 0.93 + n1 * 0.14;
 
-  // Gris pommelé : pommelures rondes aux bords doux, plus claires au centre, sur un fond gris plus foncé qui les
-  // sépare, un peu déformées et de tailles inégales (8 à 12 cm) ; nettes sur le corps, la croupe et l'épaule,
-  // fondues vers le ventre et le bas des membres ; tête et bas des membres plus foncés. (Avant : le fond
-  // n'assombrissait que de 20 % au plus, sous le grain du modelé : on ne voyait aucune pommelure.)
+  // Gris pommelé : pommelures claires et rondes qui se touchent, séparées par un réseau de fond gris plus foncé aux
+  // lignes fines et irrégulières (rapport F1 / F2 des distances aux deux centres de cellule les plus proches : rond
+  // près du centre, frontière entre voisines au bord), plus claires au centre, un peu déformées ; deux tailles
+  // mêlées en qualité haute (une cellule sur deux redivisée en pommelures plus petites) ; nettes sur le corps, la
+  // croupe et l'épaule, fondues vers le ventre et le bas des membres ; tête et bas des membres plus foncés.
+  // (Avant : des pois ronds, réguliers et très contrastés, isolés sur un fond foncé.)
   if (hGrey > 0.0) {
     vec3 Pd = P + (vec3(hNoise(P * 3.1 + hSeed), hNoise(P * 3.1 + hSeed + 11.0), hNoise(P * 3.1 + hSeed + 23.0)) - 0.5) * 0.09;
     vec3 cl = hCell(Pd * ${glf(DAP.cell)} + hSeed);
-    float rD = ${glf(DAP.r)} + cl.z * 0.12;
-    float dd = cl.x + (hNoise(P * 26.0) - 0.5) * 0.1;
-    float net = smoothstep(rD - 0.16, rD + 0.05, dd);
-    float ctr = 1.0 - smoothstep(0.0, rD, dd);
+    float ratio = cl.x / max(cl.y, 1e-3);
+#ifdef H_HQ
+    vec3 cs = hCell(Pd * ${glf(DAP.cell * 1.9)} + hSeed * 1.3 + 5.0);
+    ratio = mix(ratio, max(ratio, cs.x / max(cs.y, 1e-3)), step(0.5, cl.z));
+#endif
+    ratio += (hNoise(P * 26.0) - 0.5) * 0.1 + (hNoise(P * 7.0 + hSeed) - 0.5) * 0.12;
+    float net = smoothstep(1.0 - ${glf(DAP.line)} - 0.18, 1.0 - ${glf(DAP.line)} * 0.3, ratio);
+    float ctr = 1.0 - smoothstep(0.15, 0.7, ratio);
     net = mix(net, 0.45, aaW);
     ctr = mix(ctr, 0.25, aaW);
     float zone = min(1.0, (isBody + isLeg * smoothstep(0.55, 0.9, h)) * smoothstep(-0.7, 0.1, up) * hGrey * (0.6 + 0.55 * hFbm(P * 1.3 + 3.0)));
@@ -273,12 +279,14 @@ hEarIn = 0.0;
   // Yeux : bord des paupières foncé (l'œil se lit plus grand, même de loin) ; gris et appaloosas : peau noire
   // marbrée (de rose chez l'appaloosa) autour des yeux et au bout du nez, sous un poil clair et ras.
   float eyeD = hEye.w > 0.0 ? length(vec3(abs(hl.x) - hEye.x, hl.y - hEye.y, hl.z - hEye.z)) / hEye.w : 99.0;
+  // (marbrures petites et serrées, rose foncé et gris — pas des plaques blanches, qui se lisaient comme une maladie
+  // de peau —, seulement au bord des naseaux, sur les lèvres et en un fin cercle autour de l'œil)
   if (hSkinMot > 0.0) {
-    float mot = hNoise(P * 60.0 + hSeed) * 0.65 + hNoise(P * 150.0) * 0.35;
-    vec3 mottled = mix(hSkin, vec3(0.55, 0.4, 0.38), smoothstep(0.56, 0.7, mot) * hSkinPink);
-    float spect = 1.0 - smoothstep(1.3, 2.5, eyeD + (hNoise(P * 40.0) - 0.5) * 0.6);
-    float snout = smoothstep(0.74, 0.88, hl.z + (hNoise(P * 30.0) - 0.5) * 0.05);
-    c = mix(c, mottled, isHead * clamp(spect * 0.6 + snout * 0.9, 0.0, 1.0) * hSkinMot * (1.0 - face * 0.6));
+    float mot = hNoise(P * 110.0 + hSeed) * 0.6 + hNoise(P * 260.0) * 0.4;
+    vec3 mottled = mix(hSkin, mix(vec3(0.32, 0.2, 0.19), vec3(0.16, 0.14, 0.14), step(0.62, hNoise(P * 45.0 + hSeed))), smoothstep(0.5, 0.62, mot) * hSkinPink);
+    float spect = 1.0 - smoothstep(1.12, 1.55, eyeD + (hNoise(P * 40.0) - 0.5) * 0.25);
+    float snout = smoothstep(0.86, 0.94, hl.z + (hNoise(P * 30.0) - 0.5) * 0.03);
+    c = mix(c, mottled, isHead * clamp(spect * 0.5 + snout * 0.85, 0.0, 1.0) * hSkinMot * (1.0 - face * 0.6));
   }
   // (plus épais au-dessus : le bord de la paupière supérieure et ses cils)
   float lidR = hl.y > hEye.y ? 1.24 : 1.14;
@@ -339,6 +347,23 @@ hEarIn = 0.0;
 }`;
 
 /**
+ * Lumière d'ambiance sur la robe : le reflet du sol (herbe verte du pré, hémisphère et environnement) garde sa
+ * force mais perd l'excès de vert. Du côté à l'ombre, il tournait les robes claires et dorées au kaki (Akhal-Teké
+ * palomino olive au pré, teinte du flanc 66° au lieu de 40-50°). Le vert est ramené à celui du rouge ou du bleu
+ * (le plus fort des deux, + 8 %), la luminance gardée ; le ciel bleu n'est pas touché. Quelques instructions.
+ */
+const AMBIENT_FIX = /* glsl */ `
+{
+  vec3 hLw = vec3( 0.2126, 0.7152, 0.0722 );
+  vec3 hIr = irradiance;
+  hIr.g = min( hIr.g, max( hIr.r, hIr.b ) * 1.08 );
+  irradiance = mix( irradiance, hIr * ( dot( irradiance, hLw ) / max( dot( hIr, hLw ), 1e-4 ) ), 0.85 );
+  vec3 hIb = iblIrradiance;
+  hIb.g = min( hIb.g, max( hIb.r, hIb.b ) * 1.08 );
+  iblIrradiance = mix( iblIrradiance, hIb * ( dot( iblIrradiance, hLw ) / max( dot( hIb, hLw ), 1e-4 ) ), 0.85 );
+}`;
+
+/**
  * Satiné du poil ras et liseré de lumière, en qualité basse comme en haute (la robe en MeshStandard n'a pas de
  * sheen : elle était mate, « en plastique ») : un terme de bord (Fresnel) teinté par la robe, éclairé par le
  * ciel (gfx.skyRim) et par le soleil — fort en contre-jour, doré le soir puisque le soleil l'est. Pas sur la
@@ -392,6 +417,11 @@ const srgbLum = (hex) => (((hex >> 16) & 255) * 0.2126 + ((hex >> 8) & 255) * 0.
 /** Couleur three.js (linéaire) depuis un entier sRGB. */
 const col = (hex) => new THREE.Color(hex);
 
+/** Réchauffement de la base des robes métallisées (Akhal-Teké), linéaire : moins de vert, nettement moins de bleu. */
+export const SHEEN_WARM = new THREE.Color(1, 0.82, 0.55);
+/** Noir brun vers lequel la base des robes presque noires est relevée à moitié (contre les reflets « latex »). */
+export const BLACK_FLOOR = new THREE.Color(0x26211f);
+
 /**
  * Part dorée d'une robe (0 à 1) : teinte orangée à jaune (16 à 55°), assez saturée, ni grise, ni blanche, ni presque
  * noire, ni Akhal-Teké (son éclat a son propre réglage). Alezan, palomino, isabelle, crins lavés ; un peu le bai.
@@ -416,7 +446,10 @@ export function coatMaterial(look, build, breed = null, real = null) {
   const socks = horseSocks(look);
   const face = horseFaceMark(look, breed);
   const sheen = build.sheen ?? 0;
-  const coat = col(look.coat);
+  // (robe métallisée de l'Akhal-Teké : base réchauffée vers l'or orangé — un palomino « crème » sortait kaki au pré,
+  // teinte du flanc 66° au lieu de 40-50°)
+  const coat = sheen ? col(look.coat).multiply(SHEEN_WARM) : col(look.coat);
+  const black0 = srgbLum(look.coat ?? 0x7a4528) < 0.09 && !sheen;
   // Robe claire (gris, blanc, crème…) : modelé peint plus doux encore (voir COAT_FRAGMENT).
   const coatL = srgbLum(look.coat ?? 0x7a4528);
   const light = tr.grey > 0 || coatL > 0.55;
@@ -429,7 +462,7 @@ export function coatMaterial(look, build, breed = null, real = null) {
     : new THREE.Color(1, 1, 1).lerp(new THREE.Color(1, 0.86, 0.6), 0.75 * gold);
   const spots = tr.leopard > 0 || tr.blanket > 0;
   const u = {
-    hCoat: { value: coat },
+    hCoat: { value: black0 ? coat.clone().lerp(BLACK_FLOOR, 0.5) : coat },
     hSec: { value: col(look.secondary ?? look.coat) },
     hPointC: { value: col(look.maneCore ?? look.mane ?? 0x1b1410) },
     hWhite: { value: col(0xf4f1ec) },
@@ -476,12 +509,14 @@ export function coatMaterial(look, build, breed = null, real = null) {
   };
   // (Akhal-Teké : l'éclat passe par le satiné doré, pas par le métal — à 0,32, la robe reflétait l'herbe et
   // sortait kaki ou olive ; robes presque noires un peu moins lisses : le ciel y dessine les muscles.)
-  // (noir profond : poil plus lisse, des reflets nets et cassés par le grain du poil, mais moins de voile
-  // gris-bleu du ciel sur tout le corps — specularIntensity en qualité haute, satiné plus discret)
+  // (noir profond : poil satiné, des reflets cassés par le grain du poil, moins de voile gris-bleu du ciel sur tout
+  // le corps — specularIntensity en qualité haute, satiné brun discret. À 0,36 de rugosité, les reflets restaient
+  // des taches blanches dures, « latex », sur un noir encore plus noir : 0,46 à 0,48, et la base relevée vers un
+  // noir brun, BLACK_FLOOR, pour lire les muscles sans tache blanche.)
   const black = coatL < 0.09 && !sheen;
   const opts = {
     color: 0xffffff,
-    roughness: sheen ? (high ? 0.34 : 0.38) : black ? (high ? 0.36 : 0.4) : 0.56,
+    roughness: sheen ? (high ? 0.34 : 0.38) : black ? (high ? 0.46 : 0.48) : 0.56,
     metalness: sheen ? 0.05 : 0.02,
   };
   // Ordinateur : reflet satiné du poil ras (sheen), très marqué et doré pour l'Akhal-Teké, brun chaud sur le noir.
@@ -496,7 +531,7 @@ export function coatMaterial(look, build, breed = null, real = null) {
       sheen: black ? 0.36 : 0.32 + sheen * 0.6 + 0.18 * gold,
       sheenRoughness: sheen ? 0.3 : 0.55,
       sheenColor,
-      specularIntensity: black ? 0.72 : 1,
+      specularIntensity: black ? 0.6 : 1,
     })
     : new THREE.MeshStandardMaterial(opts);
   // Cheval réaliste (horseReal.js) : modelé peint (gris) et relief du modèle, sabots à hauteur fixe.
@@ -509,7 +544,7 @@ export function coatMaterial(look, build, breed = null, real = null) {
   // H_REAL écrit dans le shader lui-même, pas dans m.defines : une copie de la matière (robe lustrée du
   // concours de beauté, Beauty.js) garde son onBeforeCompile mais material.copy() remet defines à zéro,
   // et le cheval réaliste perdait son modelé peint (robe de plastique).
-  const def = real ? '#ifndef H_REAL\n#define H_REAL\n#endif\n' : '';
+  const def = (real ? '#ifndef H_REAL\n#define H_REAL\n#endif\n' : '') + (high ? '#ifndef H_HQ\n#define H_HQ\n#endif\n' : '');
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = def + sh.vertexShader
@@ -561,7 +596,8 @@ roughnessFactor = mix(roughnessFactor, 0.9, hEarIn);`)
 #ifdef USE_SHEEN
 material.sheenColor = mix( material.sheenColor, vec3( 0.3, 0.28, 0.26 ), hDarkV * hGold ) * ( 1.0 - hBare );
 #endif`)
-      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+      .replace('#include <lights_fragment_end>', `${AMBIENT_FIX}
+#include <lights_fragment_end>
 ${RIM_FRAGMENT}`);
     if (real) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', NORMAL_MAP_FIX);
   };

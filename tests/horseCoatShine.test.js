@@ -50,11 +50,14 @@ describe('robe propre et satinée (étape 4)', () => {
     expect(sh.fragmentShader).toContain('hSkyRim');
     expect(sh.uniforms.hSkyRim).toBe(gfx.skyRim);
     expect(sh.uniforms.hFill).toBe(gfx.horseFill);
-    // robe noire : reflet brun chaud ; poil plus lisse que les autres robes (reflets nets, cassés par le grain
-    // du poil : étape 8, noir profond)
+    // robe noire : reflet brun chaud ; poil satiné (0,45 à 0,5 : plus de taches blanches « latex »), un peu plus
+    // lisse que les autres robes ; base relevée vers un noir brun
     expect(m.userData.horseUniforms.hRimTint.value.r).toBeGreaterThan(m.userData.horseUniforms.hRimTint.value.b);
-    expect(m.roughness).toBeGreaterThanOrEqual(0.35);
-    expect(m.roughness).toBeLessThan(0.45);
+    expect(m.roughness).toBeGreaterThanOrEqual(0.45);
+    expect(m.roughness).toBeLessThanOrEqual(0.5);
+    const base = m.userData.horseUniforms.hCoat.value;
+    expect(base.r).toBeGreaterThanOrEqual(new THREE.Color(l.coat).r);
+    expect(base.r).toBeGreaterThan(base.b);
   });
 
   it('Akhal-Teké : éclat doré par le satiné, plus par le métal (la robe ne reflète plus l\'herbe)', () => {
@@ -66,6 +69,29 @@ describe('robe propre et satinée (étape 4)', () => {
     expect(m.sheen).toBeGreaterThan(0.8);
     const sc = m.sheenColor;
     expect(sc.r).toBeGreaterThan(sc.b * 1.3); // doré, pas olive ni gris
+    // Base réchauffée vers l'or orangé (au pré, la robe crème sortait kaki : teinte du flanc 66°) : teinte de la base
+    // entre 30 et 42°, nettement plus orangée que la couleur de la race.
+    for (const ci of [0, 1]) {
+      const lc = look('akhal_teke', ci);
+      const mc = coatMaterial(lc, { ...horseBuild(null, lc), sheen: 1 }, null, realOpts);
+      const h = mc.userData.horseUniforms.hCoat.value.getHSL({}, THREE.SRGBColorSpace).h * 360;
+      const h0 = new THREE.Color(lc.coat).getHSL({}, THREE.SRGBColorSpace).h * 360;
+      expect(h, `couleur ${ci}`).toBeGreaterThan(30);
+      expect(h, `couleur ${ci}`).toBeLessThan(42);
+      expect(h).toBeLessThan(h0 - 2);
+    }
+  });
+
+  it('lumière d\'ambiance sans l\'excès de vert du pré sur la robe (vert ramené au rouge ou au bleu, luminance gardée)', () => {
+    const l = look('akhal_teke', 1);
+    const m = coatMaterial(l, horseBuild(null, l), null, realOpts);
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader };
+    m.onBeforeCompile(sh);
+    const fs = sh.fragmentShader;
+    expect(fs).toContain('hIr.g = min( hIr.g, max( hIr.r, hIr.b ) * 1.08 );');
+    expect(fs).toContain('hIb.g = min( hIb.g, max( hIb.r, hIb.b ) * 1.08 );');
+    // (avant les lumières indirectes : elles en tiennent compte)
+    expect(fs.indexOf('hIr.g = min')).toBeLessThan(fs.indexOf('#include <lights_fragment_end>'));
   });
 });
 

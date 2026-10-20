@@ -396,6 +396,8 @@ export function realDogBase(gltf, kind) {
     kind, names, index, parent, heads, rotW, restW, prims, W, part, boneW, land, earTip, earUv, earFlap, tailTip, tailBones, clips,
     tailPose, transBones: [...transBones].map((nm_) => index.get(nm_)).filter((i) => i !== undefined),
     natural: { ...NATURAL_SPEED, ...(ext.naturalSpeeds ?? {}) },
+    // (gabarits du GLB : clips refaits pour des membres raccourcis ou allongés — « walk_court », « sit_long »…)
+    gabarits: ext.gabarits ?? {},
     cfg: MODEL[kind],
   };
   // Oreilles d'origine effacées du crâne : droites du shiba pour les races aux oreilles modelées, lambeau du jack
@@ -1894,6 +1896,41 @@ class DogMesh extends THREE.SkinnedMesh {
 // ------------------------------------------------------------------ animation
 
 /**
+ * Gabarit d'une race : celui dont la longueur des membres et la taille des pieds sont les plus proches des siennes (en
+ * rapport : 0,5 est aussi loin de 1 que 2), ou null pour les clips du modèle d'origine (longueur 1, pieds 1).
+ * (Sur la seule longueur, le beagle — 0,88 — prenait le gabarit court des chiots du shiba, aux gros pieds : au trot,
+ * ses pieds avant ne touchaient plus le sol et les arrière patinaient de 6 à 10 %.)
+ */
+export function pickGabarit(gabarits, legs, paws = 1) {
+  const L = Math.max(0.05, legs);
+  const P = Math.max(0.05, paws);
+  let best = null;
+  let bd = Math.abs(Math.log(L)) + Math.abs(Math.log(P));
+  for (const [name, g] of Object.entries(gabarits ?? {})) {
+    const d = Math.abs(Math.log(L / g.legs)) + Math.abs(Math.log(P / (g.paws ?? 1)));
+    if (d < bd - 1e-6) {
+      best = name;
+      bd = d;
+    }
+  }
+  return best;
+}
+
+/** Clips d'un chien : ceux du modèle d'origine, remplacés par ceux de son gabarit (« sit_court » joue « sit »). */
+export function dogClips(base, gabarit) {
+  const names = Object.keys(base.gabarits ?? {});
+  const out = {};
+  const own = {};
+  for (const [name, clip] of Object.entries(base.clips)) {
+    const m = name.match(/^(.+)_([a-z]+)$/);
+    if (m && names.includes(m[2])) {
+      if (m[2] === gabarit) own[m[1]] = clip;
+    } else out[name] = clip;
+  }
+  return { ...out, ...own };
+}
+
+/**
  * Allure d'après la vitesse (m/s, ramenée à la taille et aux membres du modèle d'origine), avec hystérésis.
  * prev : allure de l'image précédente ('idle', 'walk', 'trot', 'run').
  */
@@ -1932,12 +1969,32 @@ class RealDogAnim {
     this.base = base;
     this.S = S;
     const B = model.build;
+    this.bones = model.bones;
+    // Décalage des articulations de la race pour les os dont un clip anime la translation (racine, membres, yeux…).
+    //    (écart de la position locale : déplacement de l'os moins celui de son parent, dans le repère de repos du
+    //    parent ; sans retirer celui du parent, il comptait deux fois le long des membres : le galgo volait au galop
+    //    et le chiot s'enfonçait dans le sol)
+    this.shift = base.transBones.map((i) => {
+      const p = base.parent[i];
+      const d = S.heads[i].clone().sub(base.heads[i]);
+      if (p >= 0) d.sub(_u.copy(S.heads[p]).sub(base.heads[p]));
+      return [this.bones[i], d.applyQuaternion(p >= 0 ? base.rotW[p].clone().invert() : new THREE.Quaternion())];
+    });
+    // Le mixeur note la position de chaque os au premier clip qui l'anime et la rend, telle quelle, quand aucun clip
+    // actif ne l'anime : ce doit être celle du modèle d'origine (le décalage de la race est ajouté après chaque
+    // mise à jour). Notée sur le squelette de la race, le décalage comptait deux fois dès qu'un clip de transition
+    // (s'asseoir, se coucher, sauter) avait animé l'os puis s'était effacé : yeux sortis de la tête (saint-bernard,
+    // chiots), membres des lévriers allongés de 4 à 5 cm, chien qui flottait.
+    for (const [b, d] of this.shift) b.position.sub(d);
     this.mixer = new THREE.AnimationMixer(model.root);
     this.actions = {};
     this.w = {};
     this.names = [];
     this.list = [];
-    for (const [name, clip] of Object.entries(base.clips)) {
+    // Clips du gabarit le plus proche de la longueur des membres de la race (pattes courtes du teckel, longues des
+    // lévriers…) à la place de ceux du modèle d'origine.
+    this.gabarit = pickGabarit(base.gabarits, B.legs, B.paws);
+    for (const [name, clip] of Object.entries(dogClips(base, this.gabarit))) {
       const a = this.mixer.clipAction(clip);
       const once = ['sit_down', 'stand_up', 'lie_down', 'get_up', 'jump', 'paw', 'rollover'].includes(name);
       if (once) {
@@ -1951,9 +2008,35 @@ class RealDogAnim {
       this.names.push(name);
       this.list.push(a);
     }
+    // (repères ci-dessous pris sur le squelette de la race)
+    for (const [b, d] of this.shift) b.position.add(d);
+    // Ancrage des hanches (voir anchorHips) : chaîne des os de la racine au bassin, écart de la race entre les hanches
+    // et la racine.
+    {
+      const pel = base.index.get('pelvis');
+      const chain = [];
+      for (let i = pel; i >= 0; i = base.parent[i]) chain.unshift(i);
+      const top = chain[0];
+      const hips = ['femurL', 'femurR'].map((n) => base.index.get(n));
+      const mid = (H) => H[hips[0]].clone().add(H[hips[1]]).multiplyScalar(0.5);
+      this.hipE = mid(S.heads).sub(mid(base.heads)).sub(_u.copy(S.heads[top]).sub(base.heads[top]));
+      this.hipChain = chain.map((i) => this.bones[i]);
+      this.pelRestInv = base.rotW[pel].clone().invert();
+      // (inclinaison de la tête, pour les oreilles : chaîne de la racine à la tête, direction « devant » dans son os)
+      const hi = base.index.get('head');
+      const hc = [];
+      for (let i = hi; i >= 0; i = base.parent[i]) hc.unshift(i);
+      this.headChain = hc.map((i) => this.bones[i]);
+      this.headFwd = V(0, 0, 1).applyQuaternion(base.rotW[hi].clone().invert());
+      this.pendant = pendantEars(B);
+    }
     // Vitesse naturelle de chaque allure pour cette race : celle du modèle × longueur des membres.
+    // (clips d'un gabarit : ses vitesses, pour la longueur de ses membres)
     const k = 0.35 + 0.65 * B.legs;
-    this.natural = Object.fromEntries(MOVING.map((g) => [g, (base.natural[g] ?? NATURAL_SPEED[g]) * k]));
+    const gab = this.gabarit ? base.gabarits[this.gabarit] : null;
+    const natSrc = gab?.naturalSpeeds ?? base.natural;
+    const kNat = k / (gab ? 0.35 + 0.65 * gab.legs : 1);
+    this.natural = Object.fromEntries(MOVING.map((g) => [g, (natSrc[g] ?? NATURAL_SPEED[g]) * kNat]));
     this.speedScale = k;
     this.gait = 'idle';
     this.posture = 'stand';
@@ -1961,17 +2044,6 @@ class RealDogAnim {
     this.target = {};
     for (const nm of this.names) this.target[nm] = 0;
     // Os : pose écrite par le mixeur (rétablie avant chaque mise à jour, voir horseReal.js restorePose).
-    this.bones = model.bones;
-    // Décalage des articulations de la race pour les os dont un clip anime la translation (racine…).
-    //    (écart de la position locale : déplacement de l'os moins celui de son parent, dans le repère de repos du
-    //    parent ; sans retirer celui du parent, il comptait deux fois le long des membres : le galgo volait au galop
-    //    et le chiot s'enfonçait dans le sol)
-    this.shift = base.transBones.map((i) => {
-      const p = base.parent[i];
-      const d = S.heads[i].clone().sub(base.heads[i]);
-      if (p >= 0) d.sub(_u.copy(S.heads[p]).sub(base.heads[p]));
-      return [this.bones[i], d.applyQuaternion(p >= 0 ? base.rotW[p].clone().invert() : new THREE.Quaternion())];
-    });
     this.pose = this.bones.map((b) => [b.position.clone(), b.quaternion.clone()]);
     // Port de la queue de la race (rotations locales des os de la queue) et des oreilles.
     this.tailRest = tailCarriage(model, base, B);
@@ -2000,6 +2072,17 @@ class RealDogAnim {
       const p = V().fromArray(S.D.pos, i * 3);
       return l.paw.worldToLocal(p);
     }));
+    // Bout des doigts (le point de la sole le plus en avant au repos) : le point qui reste posé pendant l'appui, la
+    // patte roule autour de lui en fin d'appui. (Suivie par l'os du pied, l'articulation qui monte et avance quand le
+    // talon se lève, la prise d'appui faisait glisser les doigts vers l'arrière : 8 à 11 % aux postérieurs du teckel.)
+    this.toePts = model.legs.map((l, k) => {
+      let best = null;
+      for (let i = 0; i < l.soles.length; i++) {
+        const z = S.D.pos[l.soles[i] * 3 + 2];
+        if (!best || z > best[1]) best = [this.solePts[k][i], z];
+      }
+      return best ? best[0] : V();
+    });
     // Points de la peau qui touchent le sol à l'arrêt (corps, queue, tête : voir contactPoints), chacun suit ses os avec
     // leurs poids, comme le shader (lié à un seul os, un point de la cuisse assise passait sous le sol et le chien
     // s'asseyait en l'air).
@@ -2010,11 +2093,15 @@ class RealDogAnim {
     this.bodyAllow = 0.004 + Math.max(0, B.fur) * 0.3;
     this.gOff = 0;
     this.plant = [null, null, null, null];
-    // Les os à translation animée partent de leur position du modèle d'origine : le mixeur la garde comme valeur de
-    // repos, et c'est elle qu'il rend quand aucun clip actif n'anime leur translation ; le décalage de la race est
-    // ajouté après. (Partis de la position de la race, le décalage comptait deux fois dès qu'un clip n'animait pas
-    // l'os : les yeux du shiba sortaient de la tête des races à grosse tête — l'œil à 1,6 fois sa distance pour une
-    // tête 1,3 fois plus grosse.) Fait en dernier : les repères ci-dessus sont pris sur le squelette de la race.
+    // (correction de chaque membre tenu en appui, relâchée en fondu ; bascule d'assise fondue ; relèvement de chaque os
+    // de la queue à l'image d'avant)
+    this.lockAng = [0, 0, 0, 0];
+    this.lockSide = [0, 0, 0, 0];
+    this.sitTilt = 0;
+    this.tailRaise = [];
+    // Les os à translation animée repartent de leur position du modèle d'origine (celle que le mixeur a notée, voir
+    // plus haut) ; le décalage de la race est ajouté après chaque mise à jour. Fait en dernier : les repères
+    // ci-dessus sont pris sur le squelette de la race.
     for (const [b, d] of this.shift) b.position.sub(d);
     this.savePose();
     this.contactPoints();
@@ -2046,9 +2133,10 @@ class RealDogAnim {
           }
           this.restorePose();
           this.mixer.update(0);
-          for (const [b, d] of this.shift) b.position.add(d);
+          this.applyShift();
           md.root.updateMatrixWorld(true);
-          feet.forEach((f, j) => tracks[j].push(f.getWorldPosition(V())));
+          // (bout des doigts, voir toePts)
+          feet.forEach((f, j) => tracks[j].push(this.toePts[j].clone().applyMatrix4(md.legs[j].paw.matrixWorld)));
         }
         // vitesse de recul des doigts en appui (au plus 4 mm au-dessus de leur plus bas)
         const speed = tracks.map((tr) => {
@@ -2185,11 +2273,29 @@ class RealDogAnim {
     this.restorePose();
     this.mixer.update(0);
     this.savePose();
-    for (const [b, d] of this.shift) b.position.add(d);
+    this.applyShift();
     const st = { moving: false, v: 0, sleeping: false, happy: 0, sad: false };
     this.overlay(0, st, true);
     this.ground(st);
     this.model.root.updateMatrixWorld(true);
+  }
+
+  /**
+   * Décalages de la race ajoutés aux positions des clips (après le mixeur), hanches ancrées : les clips tournent le
+   * corps autour de la racine du modèle d'origine ; une race dont les hanches ne sont pas au même endroit par rapport
+   * à elle (dos du teckel 1,45 fois plus long, arrière-train plus bas) voyait ses hanches tourner sur un autre cercle —
+   * assis, le corps basculé de 60°, la hanche du teckel entrait de 10 cm dans le sol et le chien était soulevé, croupe
+   * en l'air. La racine est déplacée pour que les hanches restent où le clip met celles du modèle (plus l'écart de la
+   * race, sans rotation).
+   */
+  applyShift() {
+    for (const [b, d] of this.shift) b.position.add(d);
+    const e = this.hipE;
+    if (!e || e.lengthSq() < 1e-8) return;
+    _q.identity();
+    for (const b of this.hipChain) _q.multiply(b.quaternion);
+    _q.multiply(this.pelRestInv);
+    this.hipChain[0].position.add(_w.copy(e).sub(_v.copy(e).applyQuaternion(_q)));
   }
 
   /** Tourne un os de ang autour d'un axe du chien (axe vu par son parent au repos ; il suit le parent animé). */
@@ -2234,7 +2340,7 @@ class RealDogAnim {
     this.mixer.update(0);
     this.savePose();
     // (comme update : articulations de la race sous les translations des clips, puis pieds posés au sol)
-    for (const [b, d] of this.shift) b.position.add(d);
+    this.applyShift();
     const st = { moving: false, v: 0, sleeping: kind === 'sleep', happy: 0, sad: false };
     this.overlay(0, st, true);
     this.ground(st);
@@ -2250,11 +2356,34 @@ class RealDogAnim {
     const md = this.model;
     this.restorePose();
     this.t += dt;
-    const u = st.moving ? st.v / this.speedScale : 0;
+    // (allure au même nombre de Froude que le modèle : vitesse réelle rapportée à la racine de la hauteur des membres
+    // — rapportée à la taille, un chihuahua galopait déjà à la vitesse où le labrador marche)
+    const size = Math.min(1.6, Math.max(0.15, st.size ?? 1));
+    const u = st.moving ? (st.v * Math.sqrt(size)) / Math.sqrt(this.speedScale) : 0;
     const g = pickDogGait(this.gait, u);
     this.gait = g;
+    // Tours assis et couché (spectacle, éducation) : par les transitions s'asseoir / se coucher / se relever, comme sur
+    // commande (en fondu direct, le labrador passait accroupi, antérieurs en l'air).
+    const trickNow = this.trick && this.trick.age < 0.25 ? this.trick : null;
+    const postureTrick = trickNow && (trickNow.clip === 'sit' || trickNow.clip === 'lie') && this.actions[trickNow.clip] ? trickNow : null;
+    // Fin d'une roulade : le chien se relève (« se lever ») avant ce qui suit (le salut le remettait debout en 0,2 s).
+    if (trickNow?.clip === 'rollover') this.rolled = true;
+    else if (this.rolled) {
+      this.rolled = false;
+      if (this.actions.get_up && !st.moving) {
+        const a = this.actions.get_up;
+        a.reset();
+        a.play();
+        this.trans = { name: 'get_up', to: 'stand', roll: true };
+        this.posture = 'stand';
+      }
+    }
+    // (donner la patte : depuis l'assis, après « s'asseoir »)
+    const pawTrick = trickNow?.clip === 'paw' && this.actions.paw && this.actions.sit_down ? trickNow : null;
     // Posture voulue (debout dès qu'il bouge) ; transitions jouées une fois.
-    const want = st.moving ? 'stand' : st.posture ?? 'stand';
+    const want = st.moving ? 'stand'
+      : postureTrick ? (postureTrick.w > 0.35 ? postureTrick.clip : 'stand')
+        : pawTrick ? (pawTrick.w > 0.2 ? 'sit' : 'stand') : st.posture ?? 'stand';
     if (this.trans) {
       const a = this.actions[this.trans.name];
       if (!a || a.time >= a.getClip().duration - 0.05 || (st.moving && this.trans.to !== 'stand')) {
@@ -2288,10 +2417,13 @@ class RealDogAnim {
     // Poids voulus.
     const target = this.target;
     for (let j = 0; j < this.names.length; j++) target[this.names[j]] = 0;
-    const trick = this.trick && this.trick.age < 0.25 ? this.trick : null;
+    const trick = trickNow && !postureTrick && !(pawTrick && (this.trans || this.posture !== 'sit')) ? trickNow : null;
     if (this.trick) this.trick.age += dt;
     let fadeK = 5;
-    if (trick && this.actions[trick.clip]) {
+    if (this.trans && (this.trans.roll || !trick)) {
+      target[this.trans.name] = 1;
+      fadeK = 12;
+    } else if (trick && this.actions[trick.clip]) {
       target[trick.clip] = trick.w;
       const rest = 1 - trick.w;
       if (rest > 0.01) target[this.posture === 'stand' ? 'idle' : POSTURE[this.posture].clip] = rest;
@@ -2329,7 +2461,8 @@ class RealDogAnim {
       a.setEffectiveWeight(w);
       if (MOVING.includes(name)) {
         const nat = this.natural[name];
-        a.timeScale = Math.min(2.2, Math.max(0.45, (st.moving ? st.v : nat) / nat)) * (st.pull ? 1 - 0.3 * st.pull : 1);
+        // (petits chiens : pas plus rapides — la cadence monte comme 1 / racine de la taille)
+        a.timeScale = Math.min(2.2 / Math.sqrt(Math.min(1, size)), Math.max(0.45, (st.moving ? st.v : nat) / nat));
         if (w > leadW) {
           lead = name;
           leadW = w;
@@ -2339,13 +2472,14 @@ class RealDogAnim {
         a.time = trick.time * a.getClip().duration;
       } else {
         // (sur commande, « assis ! », « couché ! » : les transitions plus vives)
-        a.timeScale = st.quick && this.trans?.name === name ? 1.8 : 1;
+        // (après la roulade, le salut attend que le chien soit relevé : il se relève d'un bond)
+        a.timeScale = this.trans?.name !== name ? 1 : this.trans.roll && trick ? 3 : st.quick || postureTrick || pawTrick || this.trans.roll ? 1.8 : 1;
       }
     }
     if (lead && leadW > 0.3) this.lead = lead;
     this.mixer.update(dt);
     this.savePose();
-    for (const [b, d] of this.shift) b.position.add(d);
+    this.applyShift();
     this.overlay(dt, st, false);
     this.ground(st, dt);
   }
@@ -2402,10 +2536,11 @@ class RealDogAnim {
       this.turn(head, AX, this.look.y * 0.5);
     }
     if (st.sad && !moving) this.turn(neck, AX, 0.18);
-    // Tirer en laisse : corps penché en avant, tête en avant et un peu basse.
+    // Tirer en laisse : l'encolure se tend en avant, la tête regarde devant (portée par le garrot et l'encolure : le corps
+    // entier basculé soulevait les postérieurs de 4 à 15 cm, le chien pédalait dans le vide).
     if (st.pull) {
-      this.turn(md.body, AX, 0.12 * st.pull);
-      this.turn(neck, AX, -0.15 * st.pull);
+      this.turn(neck, AX, 0.16 * st.pull);
+      this.turn(head, AX, -0.12 * st.pull);
     }
     // Chien de troupeau : tête basse, encolure tendue (« l'œil »).
     if (st.herd && moving) this.turn(neck, AX, 0.3);
@@ -2425,14 +2560,25 @@ class RealDogAnim {
     }
     if (md.kind === 'jack') for (const e of this.eyes) e.scale.set(1, 1 - 0.85 * closed, 1);
     // Oreilles : elles bougent vers ce qu'il écoute, se couchent quand il est triste ou endormi, se dressent au jeu.
+    // Tête basse (renifler, manger, boire, dormir) : l'oreille tombante continue de pendre vers le sol au lieu de se
+    // rabattre sur l'œil avec la tête ; l'oreille droite ne pointe plus à l'horizontale vers l'avant (moins redressée).
     const ears = md.ears;
+    let hang = 0;
+    if (ears.length && this.headChain) {
+      _q.identity();
+      for (const b of this.headChain) _q.multiply(b.quaternion);
+      _v.copy(this.headFwd).applyQuaternion(_q);
+      const nose = Math.atan2(-_v.y, Math.hypot(_v.x, _v.z));
+      hang = Math.max(0, nose - 0.12) * (this.pendant ? 0.7 : 0.45);
+    }
     for (let i = 0; i < ears.length; i++) {
       const e = ears[i];
       const s = e.userData.side;
       const n1 = Math.sin(t * 1.3 + i * 2.1) + Math.sin(t * 0.47 + i);
       const flick = Math.max(0, Math.sin(t * 1.7 + i * 2.6) - 0.93) * 12;
       const down = (st.sad ? 0.35 : 0) + (sleeping ? 0.25 : 0);
-      this.turn(e, AX, n1 * 0.04 - flick * 0.2 - down * 0.5); // (négatif : oreille couchée en arrière)
+      // (négatif : oreille couchée en arrière — ou, tombante, ramenée vers le bout du nez)
+      this.turn(e, AX, n1 * 0.04 - flick * 0.2 - down * 0.5 - hang);
       this.turn(e, AZ, -s * (down * 0.35 + flick * 0.1));
     }
     // Queue : port de la race, plus haut au trot et au jeu, frétille quand il est content, basse s'il est triste.
@@ -2499,15 +2645,18 @@ class RealDogAnim {
       target = Math.max(-low, Number.isFinite(lowB) ? -(lowB + this.bodyAllow) : -Infinity);
       floor = target;
     }
-    let off = dt > 0 ? this.gOff + (target - this.gOff) * Math.min(1, dt * 6) : target;
+    // (relevé tout de suite, redescendu en douceur — sauf au pas, où un pied est toujours posé : le chien qui tire en
+    // laisse ne flotte plus ; plus vite au trot, à la réception d'un saut et pendant les tours, un salut dure 0,8 s)
+    const rate = st.moving && !air && this.gait === 'walk' ? Infinity : st.moving && !air && this.gait === 'trot' ? 12 : air ? 25 : this.trick?.age < 0.5 ? 20 : 6;
+    let off = dt > 0 ? this.gOff + (target - this.gOff) * Math.min(1, dt * rate) : target;
     off = Math.max(off, floor);
     this.gOff = off;
     if (Math.abs(off) > 0.0003) {
       md.body.position.y += off;
       md.root.updateMatrixWorld(true);
     }
-    if (st.moving && !air && dt > 0 && this.gait !== 'run') {
-      this.footLock();
+    if (st.moving && !air && dt > 0) {
+      this.footLock(dt);
       // (un membre tourné peut descendre un peu : le corps est relevé de ce qui passerait sous le sol)
       let low2 = Infinity;
       for (let l = 0; l < md.legs.length; l++) {
@@ -2521,22 +2670,42 @@ class RealDogAnim {
         this.gOff -= low2;
         md.root.updateMatrixWorld(true);
       }
-    } else this.plant.fill(null);
+    } else {
+      this.plant.fill(null);
+      this.lockAng.fill(0);
+      this.lockSide.fill(0);
+    }
     if (st.moving || air) return;
-    // Assis (et en s'asseyant, en se relevant) : voir settleSit.
-    const sitW = (this.w.sit ?? 0) + (this.w.sit_down ?? 0) + (this.w.stand_up ?? 0);
+    // Assis (et en s'asseyant, en se relevant, en donnant la patte, au début de « se coucher ») : voir settleSit. La
+    // bascule suit le poids de ces clips et se fond dans le temps (coupée net quand le poids des clips d'assise
+    // passait sous 0,3, elle faisait se cabrer le teckel de 18 cm en une image au début de « se coucher »).
+    const sitW = (this.w.sit ?? 0) + (this.w.sit_down ?? 0) + (this.w.stand_up ?? 0) + (this.w.paw ?? 0);
     const lieW = (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.lie_down ?? 0) + (this.w.get_up ?? 0);
-    if (sitW > 0.3 && this.trick?.clip !== 'rollover') this.settleSit();
+    // (pendant une transition, selon son avancement : la bascule vient en fin de « s'asseoir », part au début de « se
+    // relever », et reste au début de « se coucher » jusqu'à ce que le corps touche)
+    const prog = (nm) => (this.actions[nm] ? this.actions[nm].time / this.actions[nm].getClip().duration : 0);
+    const settleW = this.trick?.clip === 'rollover' ? 0 : Math.min(1, (this.w.sit ?? 0) + (this.w.paw ?? 0)
+      + (this.w.sit_down ?? 0) * smooth(0.5, 1, prog('sit_down'))
+      + (this.w.stand_up ?? 0) * (1 - smooth(0, 0.45, prog('stand_up')))
+      + (this.w.lie_down ?? 0) * (1 - smooth(0.25, 0.85, prog('lie_down'))));
+    if (settleW > 0.002 || Math.abs(this.sitTilt) > 0.001) this.settleSit(settleW, dt);
     // (aussi au début d'un tour assis ou patte, quand le chien reniflait encore)
-    else if (sitW < 0.1 && lieW < 0.1 && (!this.trick || this.trick.clip === 'sit' || this.trick.clip === 'paw')) this.settleStand();
+    if (sitW < 0.1 && lieW < 0.1 && (!this.trick || this.trick.clip === 'sit' || this.trick.clip === 'paw')) this.settleStand();
     // Queue : sa peau (poil compris) au-dessus du sol, assis, couché, endormi — chaque os relevé, de la base au bout, de
     // ce qui passe encore sous le sol au-delà de lui. (Tenue par ses articulations seulement, la queue épaisse entrait
     // de 6 à 9 cm dans le sol, sur la table du salon ou la scène.)
     const tb = md.tailBones;
     const floorT = 0.004;
     if (tb.length && this.tailPts.length) {
-      // (deux passes : une queue pendante qui plonge dans le sol — teckel assis — demande plus d'un os par passe)
-      tail: for (let pass = 0; pass < 2; pass++) {
+      // (deux passes : une queue pendante qui plonge dans le sol — teckel assis — demande plus d'un os par passe.
+      // Chaque os garde le sens de relèvement de l'image d'avant et ne retombe qu'en douceur : en choisissant à chaque
+      // image le plus petit angle, la queue basculait d'une solution à l'autre — elle passait sous le corps et
+      // disparaissait, 40 à 65 cm en une image)
+      const fadeT = dt > 0 ? Math.exp(-dt * 5) : 0;
+      const prev = this.tailRaise;
+      const now = new Array(tb.length).fill(0);
+      for (let pass = 0; pass < 2; pass++) {
+        let any = false;
         for (let i = 0; i < tb.length; i++) {
           let lowY = Infinity;
           for (const pt of this.tailPts) {
@@ -2547,14 +2716,22 @@ class RealDogAnim {
               _u.copy(_w);
             }
           }
-          if (!(lowY < floorT)) {
-            if (i === 0) break tail; // (rien sous le sol)
-            continue;
+          let th = 0;
+          const max = i === 0 ? 1.4 : 1.0;
+          if (lowY < floorT) th = raiseAngle(_v.setFromMatrixPosition(tb[i].matrixWorld).applyMatrix4(_m), _u, floorT + 0.004, max, now[i] || prev[i] || 0);
+          if (pass === 0) {
+            const held = (prev[i] ?? 0) * fadeT;
+            if (held && (!th || Math.sign(th) === Math.sign(held)) && Math.abs(held) > Math.abs(th)) th = held;
           }
-          this.turn(tb[i], AX, raiseAngle(_v.setFromMatrixPosition(tb[i].matrixWorld).applyMatrix4(_m), _u, floorT + 0.004, i === 0 ? 1.4 : 1.0));
+          if (Math.abs(th) < 1e-5) continue;
+          any = true;
+          now[i] += th;
+          this.turn(tb[i], AX, th);
           tb[i].updateMatrixWorld(true);
         }
+        if (!any) break;
       }
+      this.tailRaise = now;
     }
     // Tête : jamais sous le sol (races aux pattes courtes qui reniflent, mangent ou boivent, roulade) — l'encolure la
     // relève de ce qui dépasse.
@@ -2588,14 +2765,18 @@ class RealDogAnim {
   }
 
   /**
-   * Pieds en appui tenus sur place (pas et trot) : quand une patte se pose, la place de ses doigts dans le monde est
-   * notée ; tant qu'elle reste posée, le membre est tourné à l'épaule ou à la hanche pour y ramener les doigts (de
-   * l'avant à l'arrière). Les membres raccourcis ou allongés d'une race changent la longueur de la foulée des clips
-   * (teckel : antérieurs 30 % plus courts que les postérieurs) : sans cela, les pieds patinaient en appui.
+   * Pieds en appui tenus sur place (pas, trot, galop) : quand une patte se pose, la place de ses doigts dans le monde
+   * est notée ; tant qu'elle reste posée, le membre est tourné à l'épaule ou à la hanche pour y ramener les doigts (de
+   * l'avant à l'arrière et sur le côté). Les membres raccourcis ou allongés d'une race changent la longueur de la
+   * foulée des clips (teckel : antérieurs 30 % plus courts que les postérieurs) : sans cela, les pieds patinaient en
+   * appui (au galop aussi : 3 à 6 % de la course, 1,7 cm par appui pour le galgo).
    */
-  footLock() {
+  footLock(dt = 1 / 60) {
     const md = this.model;
     const inv = _m; // (inverse de la racine, voir ground)
+    // (correction relâchée en fondu quand le pied se lève ou repart : remise à zéro d'un coup, le pied sautait de 20 à
+    // 28 cm en une image au départ du pas)
+    const fade = Math.exp(-dt * 12);
     for (let l = 0; l < md.legs.length; l++) {
       const leg = md.legs[l];
       let low = Infinity;
@@ -2603,28 +2784,58 @@ class RealDogAnim {
         const y = _v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(inv).y;
         if (y < low) low = y;
       }
-      if (!(low < 0.012)) {
-        this.plant[l] = null;
+      // (prise d'appui à 7 mm du sol, lâchée à 12 : notée plus haut, le pied qui finissait sa course en l'air était
+      // tenu en avant de sa place)
+      const down = low < (this.plant[l] ? 0.012 : 0.007);
+      if (!down || !this.plant[l]) {
+        // pied levé ou nouvelle prise : la correction d'avant s'efface, l'appui est noté là où le pied est alors
+        const held = this.lockAng[l] * fade;
+        const side = this.lockSide[l] * fade;
+        this.lockAng[l] = Math.abs(held) > 1e-4 ? held : 0;
+        this.lockSide[l] = Math.abs(side) > 1e-4 ? side : 0;
+        if (this.lockAng[l] || this.lockSide[l]) {
+          this.turn(leg.pivot, AX, this.lockAng[l]);
+          this.turn(leg.pivot, AZ, this.lockSide[l]);
+          leg.pivot.updateMatrixWorld(true);
+        }
+        this.plant[l] = down ? this.toePts[l].clone().applyMatrix4(leg.paw.matrixWorld) : null;
         continue;
       }
-      const toe = _u.setFromMatrixPosition(leg.paw.matrixWorld);
-      if (!this.plant[l]) {
-        this.plant[l] = toe.clone();
-        continue;
+      // (en long et sur le côté : les membres d'un gabarit allongés ou raccourcis pour la race balancent le pied posé
+      // de quelques millimètres avec le roulis du corps, 0,6 mm par image chez le teckel ; deux passes, le pied n'étant
+      // pas à l'aplomb de l'articulation)
+      let th = 0;
+      let ph = 0;
+      for (let pass = 0; pass < 2; pass++) {
+        // (bout des doigts : le point posé, voir toePts)
+        const toe = _u.copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld);
+        // écart dans le repère du chien (avant : +z), à corriger en tournant le membre autour de son articulation haute
+        // (_q : turn s'en sert, repris à chaque passe)
+        _q.setFromRotationMatrix(md.root.matrixWorld).invert();
+        const err = _v.copy(toe).sub(this.plant[l]).applyQuaternion(_q);
+        const ez = err.z;
+        const ex = err.x;
+        const top = _w.setFromMatrixPosition(leg.pivot.matrixWorld);
+        const Lg = Math.max(0.05, top.distanceTo(toe));
+        // (trop loin de sa place, le pied repart : nouvelle prise d'appui, la correction s'efface en fondu)
+        const off = !pass && Math.abs(ez) > 0.45 * Lg;
+        // (rotation +θ autour de x : le pied, sous l'articulation, recule de L sin θ ; +φ autour de z : il part vers +x
+        // de L sin φ ; bornées)
+        const dth = clamp(Math.asin(clamp(ez / Lg, -0.5, 0.5)), -0.52 - th, 0.52 - th);
+        const dph = clamp(-Math.asin(clamp(ex / Lg, -0.2, 0.2)), -0.2 - ph, 0.2 - ph);
+        const moved = Math.abs(dth) >= 1e-4 || Math.abs(dph) >= 1e-4;
+        if (moved) {
+          th += dth;
+          ph += dph;
+          this.turn(leg.pivot, AX, dth);
+          this.turn(leg.pivot, AZ, dph);
+          leg.pivot.updateMatrixWorld(true);
+        }
+        if (off) this.plant[l] = null;
+        if (off || !moved) break;
       }
-      // écart dans le repère du chien (avant : +z), à corriger en tournant le membre autour de son articulation haute
-      const errW = _v.copy(toe).sub(this.plant[l]);
-      _q.setFromRotationMatrix(md.root.matrixWorld).invert();
-      const ez = errW.applyQuaternion(_q).z;
-      const top = _w.setFromMatrixPosition(leg.pivot.matrixWorld);
-      const Lg = Math.max(0.05, top.distanceTo(toe));
-      // (rotation +θ autour de x : le pied, sous l'articulation, recule de L sin θ)
-      const th = Math.asin(clamp(ez / Lg, -0.5, 0.5));
-      if (Math.abs(th) < 1e-4) continue;
-      this.turn(leg.pivot, AX, th);
-      leg.pivot.updateMatrixWorld(true);
-      // (trop loin de sa place, le pied repart : nouvelle prise d'appui)
-      if (Math.abs(ez) > 0.45 * Lg) this.plant[l] = null;
+      this.lockAng[l] = th;
+      this.lockSide[l] = ph;
     }
   }
 
@@ -2635,7 +2846,7 @@ class RealDogAnim {
    * les pieds avant et le reste de l'appui (pieds arrière, croupe), puis est reposé au sol ; les pieds arrière qui
    * flottent encore (croupe au poil épais : terre-neuve) sont descendus en tournant le membre à la hanche.
    */
-  settleSit() {
+  settleSit(k = 1, dt = 0) {
     const md = this.model;
     const lowSole = (l, out) => {
       out.y = Infinity;
@@ -2664,22 +2875,39 @@ class RealDogAnim {
       return f;
     };
     let total = 0;
+    const settled = !this.trans && (this.w.sit ?? 0) + (this.w.paw ?? 0) > 0.7;
     for (let pass = 0; pass < 4; pass++) {
       lowFront();
       lowRest();
+      // (positif : les pieds avant sont en l'air ; négatif : c'est la croupe qui flotte, l'avant posé — corrigé
+      // seulement une fois assis : en s'asseyant, la croupe est encore en l'air)
       const gap = f.y - o.y;
-      if (!(gap > 0.004)) break;
-      const th = Math.min(0.7 - total, gap / Math.max(0.05, f.z - o.z));
-      if (!(th > 0.001)) break;
-      const floor = o.y;
+      if (!(Math.abs(gap) > 0.004) || (gap < 0 && !settled)) break;
+      const th = clamp(gap / Math.max(0.05, f.z - o.z), -0.4 - total, 0.7 - total);
+      if (!(Math.abs(th) > 0.001)) break;
+      const front = gap < 0;
+      const floor = front ? f.y : o.y;
       this.turn(md.body, AX, th);
       total += th;
       md.root.updateMatrixWorld(true);
-      // (reposé au sol : le plus bas de l'appui revient à la hauteur d'avant)
-      const m = Math.min(lowFront().y, lowRest().y);
-      md.body.position.y -= m - floor;
+      // (la bascule se fait autour de l'appui qui touche : la croupe et les pieds arrière reviennent à leur hauteur
+      // d'avant quand l'avant descend, les pieds avant quand l'arrière descend. Reposé sur le plus bas des appuis,
+      // l'arrière-train montait — teckel et corgi assis croupe en l'air, pieds arrière à 10 cm du sol.)
+      md.body.position.y -= (front ? lowFront().y : lowRest().y) - floor;
       md.root.updateMatrixWorld(true);
     }
+    // Bascule pondérée (poids des clips d'assise) et fondue dans le temps : on corrige celle qu'on vient de trouver.
+    const want = total * k;
+    const tilt = dt > 0 ? this.sitTilt + (want - this.sitTilt) * Math.min(1, dt * 10) : want;
+    this.sitTilt = tilt;
+    if (Math.abs(tilt - total) > 1e-4) {
+      const floor = lowRest().y;
+      this.turn(md.body, AX, tilt - total);
+      md.root.updateMatrixWorld(true);
+      md.body.position.y -= lowRest().y - floor;
+      md.root.updateMatrixWorld(true);
+    }
+    if (k < 0.05) return;
     // Pieds arrière encore en l'air au-dessus de la croupe posée.
     lowRest();
     const base = Math.max(0, o.y);
@@ -2764,7 +2992,7 @@ class RealDogAnim {
  * (repère du chien) : le plus petit en valeur absolue, borné à max. (Le sens dépend de la place du point : derrière
  * l'articulation, tourner vers le haut le relève ; devant elle — queue rabattue sous le chien assis —, il l'enfonce.)
  */
-function raiseAngle(c, q, y, max) {
+function raiseAngle(c, q, y, max, prefer = 0) {
   const dy = q.y - c.y;
   const dz = q.z - c.z;
   const R = Math.hypot(dy, dz);
@@ -2776,7 +3004,12 @@ function raiseAngle(c, q, y, max) {
   const wrap = (x) => Math.atan2(Math.sin(x), Math.cos(x));
   const t1 = wrap(a - phi);
   const t2 = wrap(-a - phi);
-  const th = Math.abs(t1) < Math.abs(t2) ? t1 : t2;
+  let th = Math.abs(t1) < Math.abs(t2) ? t1 : t2;
+  // (prefer : sens de relèvement à garder — celui de l'image d'avant —, s'il reste à portée)
+  if (prefer) {
+    const same = [t1, t2].filter((x) => Math.sign(x) === Math.sign(prefer) && Math.abs(x) <= max);
+    if (same.length) th = Math.abs(same[0]) < Math.abs(same[same.length - 1]) ? same[0] : same[same.length - 1];
+  }
   return clamp(th, -max, max);
 }
 
@@ -2811,25 +3044,37 @@ function tailCarriage(model, base, B) {
     // l'horizontale : setter ; droite dans l'axe du dos : cocker)
     screw: [-1.9, 4.6], flat: [-2.25, -0.7], flag: [0.25, -0.15], level: [0.1, 0.05],
   };
-  const [a0, c0] = shapes[want] ?? shapes.sabre;
-  // (jack : sa queue d'origine est recourbée vers l'avant — sans contre-courbure, la queue du cocker faisait un crochet)
-  const curve = base.kind === 'jack' && want === 'level' ? 1.2 : c0;
-  // Le premier os : on le tourne pour que la queue parte à a0 sous l'horizontale vers l'arrière ; les suivants se
-  // courbent de curve / n chacun, autour de l'axe x du chien (dans le repère de leur parent).
+  const [a0, curve] = shapes[want] ?? shapes.sabre;
+  // Chaque os est orienté sur la courbe voulue : le premier part à a0 sous l'horizontale vers l'arrière, l'angle varie
+  // ensuite régulièrement jusqu'au bout. (En ajoutant la courbure aux rotations de repos du GLB, les plis de la queue
+  // d'origine restaient : bout de la queue des lévriers relevé en crochet, queue du cocker recourbée.)
   const out = rest.map((q) => q.clone());
   model.root.updateMatrixWorld(true);
-  const w0 = tb[0].getWorldPosition(V());
-  const wEnd = (tb[n - 1].children.find((c) => c.isBone) ?? tb[n - 1]).getWorldPosition(V());
-  const dir = (n > 1 ? tb[1].getWorldPosition(V()) : wEnd).sub(w0).normalize();
-  const cur = Math.atan2(-dir.y, -dir.z); // angle sous l'horizontale (vers l'arrière)
-  const pq = tb[0].parent.getWorldQuaternion(new THREE.Quaternion());
-  const axisLocal = V(1, 0, 0).applyQuaternion(pq.clone().invert());
-  out[0] = new THREE.Quaternion().setFromAxisAngle(axisLocal, -(a0 - cur)).multiply(rest[0]);
-  for (let i = 1; i < n; i++) {
-    const pw = tb[i].parent.getWorldQuaternion(new THREE.Quaternion());
-    const ax = V(1, 0, 0).applyQuaternion(pw.invert());
-    out[i] = new THREE.Quaternion().setFromAxisAngle(ax, -curve / Math.max(1, n - 1) * (base.kind === 'shiba' ? 1.6 : 1)).multiply(rest[i]);
+  const total = curve * (base.kind === 'shiba' ? 1.6 : 1);
+  const localDir = tb.map((b, i) => {
+    const bi = base.index.get(b.name);
+    const next = i + 1 < n ? base.heads[base.index.get(tb[i + 1].name)] : base.tailTip;
+    const d = next.clone().sub(base.heads[bi]);
+    if (d.lengthSq() < 1e-10) d.set(0, 0, -1);
+    return d.applyQuaternion(base.rotW[bi].clone().invert()).normalize();
+  });
+  const wq = new THREE.Quaternion();
+  const pq = new THREE.Quaternion();
+  const q = new THREE.Quaternion();
+  for (let i = 0; i < n; i++) {
+    tb[i].quaternion.copy(rest[i]);
+    tb[i].updateWorldMatrix(true, false);
+    tb[i].getWorldQuaternion(wq);
+    const cur = localDir[i].clone().applyQuaternion(wq);
+    const th = a0 - total * (i / Math.max(1, n - 1));
+    const want = V(cur.x * 0.3, -Math.sin(th), -Math.cos(th)).normalize();
+    q.setFromUnitVectors(cur, want);
+    tb[i].parent.getWorldQuaternion(pq);
+    out[i] = pq.clone().invert().multiply(q).multiply(wq);
+    tb[i].quaternion.copy(out[i]);
   }
+  for (let i = 0; i < n; i++) tb[i].quaternion.copy(rest[i]);
+  model.root.updateMatrixWorld(true);
   return out;
 }
 
@@ -2899,6 +3144,8 @@ export function animateRealDog(e, dt, sad) {
   st.sleeping = !!e.sleeping;
   st.sad = sad;
   st.quick = !!e.posing;
+  // (taille du chien : allures au même nombre de Froude, voir RealDogAnim.update)
+  st.size = e.scale ?? 1;
   // Posture : endormi, couché sur commande, assis (au pied quand le maître s'arrête, sur la table du salon, au repos).
   e.restSeed ??= (e.data.id?.charCodeAt?.(0) ?? 7) * 1.37;
   const t = e.time;

@@ -74,10 +74,13 @@ class Rig:
             h0 = math.atan2(Jn[3].y - Jn[0].y, Jn[0].z - Jn[3].z)
             paw0 = J[4] - J[3]
             seg = [J[i + 1] - J[i] for i in range(4)]
+            # (ground : hauteur du sol sous ce membre — gabarits : membres raccourcis ou allongés autour de leur
+            # articulation haute, le sol monte ou descend d'autant sous le pied, voir make_dog.py gabarit_rig)
+            g = L.get('ground', 0.0)
             self.legs[lab] = dict(drive=drive, anchor=drive[0][0], J=J, lens=lens, dxs=dxs, l2d=l2d, a0=a0, h0=h0, paw0=paw0, seg=seg,
                                   kind=L['kind'], gain=L.get('gain', 0.6), scap=L.get('scap'), scap_gain=L.get('scap_gain', 0.0),
-                                  heel=Vector((0, L['heel_y'] - J[4].y, 0)),
-                                  neutral=Vector((Jn[4].x, Jn[4].y + L.get('neutral_dy', 0.0), 0.0)))  # appui au sol (z = 0)
+                                  heel=Vector((0, L['heel_y'] - J[4].y, 0)), ground=g,
+                                  neutral=Vector((Jn[4].x, Jn[4].y + L.get('neutral_dy', 0.0), g)))  # appui au sol (z = ground)
             for n, k in drive:
                 self.drive_of[n] = (lab, k)
         self.scap_of = {L['scap']: lab for lab, L in cfg['legs'].items() if L.get('scap')}
@@ -124,16 +127,18 @@ class Rig:
         """Bout des doigts visé en P, patte tournée de phi (0 = comme au repos, > 0 = talon levé)."""
         L = self.legs[lab]
         h = rx(phi, L['paw0'])
+        g = L['ground']
         for _ in range(4):
             F = P - h
             J = self.solve_chain(lab, J0, F)
             J4 = J[3] + h
             pts = [J4, J4 + rx(phi, L['heel'])]
-            low = min(p.z for p in pts)
+            low = min(p.z for p in pts) - g
             if low >= -1e-4:
                 break
             P = P + Vector((0, 0, -low + 0.0005))
-        return J + [J4], pts
+        # (hauteurs des soles rendues au-dessus du sol de ce membre)
+        return J + [J4], [p - Vector((0, 0, g)) for p in pts]
 
     def solve_fold(self, lab, J0, J3, a3, phi, splay=0.0, bend=None):
         """Pose repliée : métapode posé (J3 visé, angle a3 dans le plan (y, z) de J3 vers J2), IK à 2 os
@@ -172,7 +177,8 @@ class Rig:
             sgn = 1.0 if J0.x >= 0 else -1.0
             R = rot_axis_about(sgn * -splay, (0, 1, 0), J0)  # écarte vers l'extérieur
             J = [J[0]] + [R @ p for p in J[1:]]
-        pts = [J[4], J[4] + rx(phi, L['heel'])]
+        g = Vector((0, 0, L['ground']))
+        pts = [J[4] - g, J[4] + rx(phi, L['heel']) - g]
         return J, pts
 
     def bone_matrix(self, name, seg_rest, j_rest, head, tail):
@@ -444,6 +450,30 @@ def blend_poses(rig, pa, pb, u):
         M.translation = la.lerp(lb, u)
         out[name] = M
     out['__body__'] = pa['__body__']
+    return out
+
+
+def blend_local(rig, pa, pb, u):
+    """Mélange de deux poses os par os dans le repère de chaque os (rotations sphériques, translations linéaires),
+    puis remise en espace armature. (Mélangées en espace armature, les têtes des os s'écartaient de leur place le long
+    de la corde : chaque os gardait une translation animée — yeux poussés hors de la tête dans le jeu, clips plus
+    lourds.)"""
+    ba = rig.to_basis(pa)
+    bb = rig.to_basis(pb)
+    out = {'__body__': pa['__body__']}
+    for name in rig.order:
+        la, qa, _ = ba[name].decompose()
+        lb, qb, _ = bb[name].decompose()
+        if qa.dot(qb) < 0:
+            qb = -qb
+        Bm = qa.slerp(qb, u).to_matrix().to_4x4()
+        Bm.translation = la.lerp(lb, u)
+        b = rig.bones[name]
+        if b.parent is None:
+            out[name] = rig.rest[name] @ Bm
+        else:
+            p = b.parent.name
+            out[name] = out[p] @ rig.rest[p].inverted() @ rig.rest[name] @ Bm
     return out
 
 

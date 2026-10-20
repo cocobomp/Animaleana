@@ -27,7 +27,10 @@ const root = doc.getRoot();
 // vitesses naturelles des allures (m/s, chien de taille 1), hauteur des hanches.
 if (opt.report) {
   const rep = JSON.parse(fs.readFileSync(opt.report, 'utf8'));
-  root.listScenes()[0].setExtras({ dog: { naturalSpeeds: rep.naturalSpeeds, hipHeight: rep.hipHeight, shoulder: rep.shoulderJoint } });
+  // (gabarits : longueur des membres de chacun, taille de ses pieds et vitesses naturelles de ses allures, voir
+  // make_dog.py)
+  const gab = Object.fromEntries(Object.entries(rep.gabarits ?? {}).map(([k, g]) => [k, { legs: g.legs, paws: g.paws ?? 1, naturalSpeeds: g.naturalSpeeds }]));
+  root.listScenes()[0].setExtras({ dog: { naturalSpeeds: rep.naturalSpeeds, hipHeight: rep.hipHeight, shoulder: rep.shoulderJoint, gabarits: gab } });
 }
 
 // ---- canaux inutiles
@@ -78,7 +81,8 @@ for (const m of root.listMaterials()) {
   m.setRoughnessFactor(/eye/i.test(n) ? 0.15 : 0.8);
 }
 
-const steps = [dedup(), prune({ keepAttributes: false, keepLeaves: true }), resample({ tolerance: 1e-4 })];
+// (clés ré-échantillonnées : 0,03° près sur les rotations — les poses au sol des gabarits doublaient les clips)
+const steps = [dedup(), prune({ keepAttributes: false, keepLeaves: true }), resample({ tolerance: Number(opt.animTol ?? 5e-4) })];
 if (opt.simplify) {
   steps.push(weld(), simplify({ simplifier: MeshoptSimplifier, ratio: Number(opt.simplify), error: Number(opt.error ?? 0.0008), lockBorder: true }));
 }

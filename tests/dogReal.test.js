@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import * as THREE from 'three';
-import { buildRealDogModel, pickDogGait, realDogPose, REAL_DOG_KEYS, realDogBase, deformDog } from '../src/game/models/dogReal.js';
+import { buildRealDogModel, pickDogGait, realDogPose, REAL_DOG_KEYS, realDogBase, deformDog, pickGabarit, dogClips } from '../src/game/models/dogReal.js';
 import { coatPlan } from '../src/game/models/dogCoat.js';
 import { buildGear, removeGear } from '../src/game/gearModels.js';
 import { buildAccessories } from '../src/game/models/salon.js';
@@ -53,7 +53,8 @@ function lowest(md, { noTail = false, step = 2 } = {}) {
 }
 
 describe('fichiers des chiens réalistes', () => {
-  it.each([['shiba', 57, 900_000], ['jack', 36, 560_000]])('%s : os, clips, compression, vitesses naturelles, poids', (kind, joints, maxBytes) => {
+  // (jack : 0,51 → 0,59 Mo avec les clips de ses gabarits court et trapu, shiba : 0,86 → 0,88 Mo)
+  it.each([['shiba', 57, 900_000], ['jack', 36, 600_000]])('%s : os, clips, compression, vitesses naturelles, poids', (kind, joints, maxBytes) => {
     const buf = fs.readFileSync(DOG_FILES[kind]);
     expect(buf.length).toBeLessThan(maxBytes);
     const json = glbJson(buf);
@@ -148,7 +149,7 @@ describe('races et chiots', () => {
       }
       r.dispose();
     }
-  });
+  }, 60000);
 
   it('oreilles dressées des petits chiens : le lambeau replié du jack est caché sous la peau du crâne (pas d\'oreilles en double)', () => {
     const base = realDogBase(G.jack, 'jack');
@@ -306,7 +307,8 @@ describe('pieds au sol', () => {
       expect(Math.min(soles[0], soles[1]), name).toBeLessThan(0.01);
       expect(Math.min(soles[0], soles[1]), name).toBeGreaterThan(-0.01);
       expect(Math.min(soles[2], soles[3]), name).toBeLessThan(0.045);
-      expect(lowest(md, { noTail: true, step: 2 }), name).toBeGreaterThan(-0.02);
+      // (le poil s'écrase : 2 cm, 80 % de sa longueur pour un poil long — yorkshire)
+      expect(lowest(md, { noTail: true, step: 2 }), name).toBeGreaterThan(-Math.max(0.02, 0.8 * md.build.fur));
       md.dispose();
     }
   }, 120000);
@@ -375,14 +377,149 @@ describe('pieds en appui', () => {
     }
     return worst;
   };
-  it.each(['teckel', 'corgi', 'galgo', 'bouledogue', 'labrador'])('%s : les pieds posés ne patinent pas au pas ni au trot', (b) => {
+  it.each(['teckel', 'corgi', 'galgo', 'bouledogue', 'labrador', 'beagle', 'jack_russell'])('%s : les pieds posés ne patinent pas au pas, au trot ni au galop', (b) => {
+    // (pieds tenus en long et sur le côté, aussi au galop : 0 à 3 % au pas, 8 % au plus au trot ; le galgo patinait de
+    // 32 % au galop, le beagle de 6 à 10 % au trot sur le gabarit des chiots)
+    for (const [v, max, nom] of [[1.0, 0.05, 'pas'], [2.4, 0.1, 'trot'], [5.0, 0.06, 'galop']]) {
+      const md = dog(b);
+      md.staticPose('stand');
+      expect(slip(md, v), `${b} ${nom}`).toBeLessThan(max);
+      md.dispose();
+    }
+  }, 120000);
+});
+
+describe('poses et allures par gabarit', () => {
+  const st = (o = {}) => ({ v: 0, moving: false, posture: 'stand', action: null, sleeping: false, happy: 0.25, sad: false, pull: 0, ...o });
+  const W = (md, b) => md.bone(b).getWorldPosition(new THREE.Vector3());
+
+  it('chaque race prend le gabarit le plus proche de ses membres (pattes courtes, longues) et ses clips', () => {
+    const want = { teckel: 'court', corgi: 'court', carlin: 'trapu', bouledogue: 'trapu', galgo: 'long', whippet: 'long', caniche: 'long', labrador: null, jack_russell: null, husky: null, beagle: null };
+    for (const [b, g] of Object.entries(want)) {
+      const md = dog(b);
+      expect(md.anim.gabarit, b).toBe(g);
+      // (le clip « walk » du teckel est celui de son gabarit)
+      expect(md.anim.actions.walk.getClip().name, b).toBe(g ? `walk_${g}` : 'walk');
+      md.dispose();
+    }
+    expect(pickGabarit({ court: { legs: 0.52 }, trapu: { legs: 0.74 } }, 1)).toBe(null);
+    expect(pickGabarit({ court: { legs: 0.52 }, trapu: { legs: 0.74 } }, 0.66)).toBe('trapu');
+    expect(pickGabarit({ court: { legs: 0.52 }, trapu: { legs: 0.74 } }, 0.55)).toBe('court');
+    expect(pickGabarit({ long: { legs: 1.25 } }, 1.15)).toBe('long');
+    // (le gabarit court des chiots du shiba a leurs gros pieds : pas pour le beagle, oui pour un chiot labrador)
+    const shibaGab = { long: { legs: 1.25, paws: 1 }, court: { legs: 0.82, paws: 1.2 } };
+    expect(pickGabarit(shibaGab, 0.88, 1)).toBe(null);
+    expect(pickGabarit(shibaGab, 0.97 * 0.83, 1.2)).toBe('court');
+    expect(pickGabarit(shibaGab, 1.28 * 0.83, 1.2)).toBe(null);
+    const chiot = dog('labrador', { puppy: true });
+    expect(chiot.anim.gabarit).toBe('court');
+    chiot.dispose();
+    expect(dogClips({ clips: { walk: 'a', walk_long: 'b', sit_down: 'c', sit_down_long: 'd' }, gabarits: { long: {} } }, 'long')).toEqual({ walk: 'b', sit_down: 'd' });
+  });
+
+  it('yeux dans les orbites après s\'asseoir, se coucher, sauter (38 races et leurs chiots)', async () => {
+    // (le mixeur rendait aux os à translation animée leur position notée sur le squelette de la race : le décalage
+    // comptait deux fois dès qu'une transition avait animé les yeux — globes 4 cm devant le visage du saint-bernard)
+    for (const b of BREEDS) {
+      for (const puppy of [false, true]) {
+        const md = dog(b, { puppy });
+        const ed = () => {
+          md.root.updateMatrixWorld(true);
+          return W(md, 'eyeL').distanceTo(W(md, 'head'));
+        };
+        md.anim.update(1 / 30, st());
+        const d0 = ed();
+        const name = `${b}${puppy ? ' (chiot)' : ''}`;
+        for (let f = 0; f < 45; f++) md.anim.update(1 / 30, st({ posture: 'sit' }));
+        expect(Math.abs(ed() - d0), `${name} assis`).toBeLessThan(0.004);
+        for (let f = 0; f < 60; f++) md.anim.update(1 / 30, st({ posture: 'lie' }));
+        expect(Math.abs(ed() - d0), `${name} couché`).toBeLessThan(0.004);
+        for (let f = 0; f < 45; f++) md.anim.update(1 / 30, st());
+        for (let f = 0; f <= 30; f++) {
+          realDogPose(md, 'jump', 1, null, f / 30);
+          md.anim.update(1 / 30, st());
+        }
+        for (let f = 0; f < 30; f++) md.anim.update(1 / 30, st());
+        expect(Math.abs(ed() - d0), `${name} après le saut`).toBeLessThan(0.004);
+        md.dispose();
+        // (rend la main entre deux chiens : d'un bloc, le test retenait le fil plus d'une minute sur une machine
+        // chargée et vitest perdait son échange avec le processus de test)
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    }
+  }, 300000);
+
+  it.each(['teckel', 'corgi', 'galgo', 'jack_russell', 'labrador'])('%s : debout → assis → couché → debout sans à-coup (la tête bouge de moins de 3 cm par image)', (b) => {
     const md = dog(b);
-    md.staticPose('stand');
-    // (au pas, il reste un peu de glissement aux antérieurs des races aux pattes courtes : 15 à 25 %, contre 30 à 50 %)
-    expect(slip(md, 1.0), `${b} pas`).toBeLessThan(0.25);
-    expect(slip(md, 2.4), `${b} trot`).toBeLessThan(0.12);
+    let prev = null;
+    let worst = 0;
+    const seq = [[30, 'stand'], [90, 'sit'], [120, 'lie'], [90, 'stand']];
+    for (const [n, posture] of seq) {
+      for (let f = 0; f < n; f++) {
+        md.anim.update(1 / 60, st({ posture }));
+        md.root.updateMatrixWorld(true);
+        const h = W(md, 'head');
+        if (prev) worst = Math.max(worst, h.distanceTo(prev));
+        prev = h;
+      }
+    }
+    // (le teckel se cabrait de 18 cm en une image au début de « se coucher », le galgo de 19 cm ; chien de taille 1)
+    expect(worst, b).toBeLessThan(0.03);
     md.dispose();
   }, 120000);
+
+  it.each(['jack_russell', 'chihuahua', 'carlin', 'bouledogue', 'cavalier'])('%s : couché, la croupe reste sous le garrot (pas de révérence) et le bassin est posé', (b) => {
+    const md = dog(b);
+    md.staticPose('lie');
+    md.root.updateMatrixWorld(true);
+    const hips = W(md, 'femurL').add(W(md, 'femurR')).multiplyScalar(0.5);
+    const withers = W(md, 'scapL').add(W(md, 'scapR')).multiplyScalar(0.5);
+    expect(hips.y, b).toBeLessThan(withers.y);
+    // (hanches à moins de 0,4 fois leur hauteur debout : avant, postérieurs à demi dépliés, croupe en l'air)
+    md.staticPose('stand');
+    md.root.updateMatrixWorld(true);
+    const standHip = (W(md, 'femurL').y + W(md, 'femurR').y) / 2;
+    expect(hips.y / standHip, b).toBeLessThan(0.45);
+    md.dispose();
+  }, 60000);
+
+  it.each(['jack_russell', 'chihuahua', 'teckel', 'corgi', 'galgo'])('%s : assis, la croupe posée entre les jarrets (hanches basses), les pieds arrière à plat', (b) => {
+    const m = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    const md = dog(b);
+    md.staticPose('stand');
+    md.root.updateMatrixWorld(true);
+    const standHip = (W(md, 'femurL').y + W(md, 'femurR').y) / 2;
+    md.staticPose('sit');
+    md.root.updateMatrixWorld(true);
+    m.copy(md.root.matrixWorld).invert();
+    const hip = (W(md, 'femurL').y + W(md, 'femurR').y) / 2;
+    // (avant : cuisse qui pendait, hanches à mi-hauteur au-dessus de postérieurs étalés)
+    expect(hip / standHip, b).toBeLessThan(0.45);
+    const soles = md.legs.map((leg, l) => Math.min(...md.anim.solePts[l].map((p) => v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(m).y)));
+    expect(Math.max(soles[2], soles[3]), b).toBeLessThan(0.03);
+    md.dispose();
+  }, 60000);
+
+  it.each(['labrador', 'galgo', 'husky', 'beagle', 'jack_russell', 'teckel'])('%s : en reniflant, mangeant, buvant, le carpe ne se plie pas vers l\'avant (antérieurs tendus)', (b) => {
+    const md = dog(b);
+    for (const action of ['sniff', 'eat', 'drink']) {
+      md.staticPose('stand');
+      for (let f = 0; f < 60; f++) md.anim.update(1 / 30, st({ action }));
+      md.root.updateMatrixWorld(true);
+      for (const s of ['L', 'R']) {
+        // métacarpe presque vertical, le pied devant le carpe ou à son aplomb (plié à l'envers, le pied passait en
+        // arrière sous le corps, pattes croisées), le carpe au-dessus du pied ; le coude derrière le carpe
+        const elbow = W(md, 'radius' + s);
+        const wrist = W(md, 'metacarpus' + s);
+        const toe = W(md, 'toes' + s);
+        expect(toe.z - wrist.z, `${b} ${action} ${s} pied derrière le carpe`).toBeGreaterThan(-0.015);
+        expect(wrist.y - toe.y, `${b} ${action} ${s} carpe au-dessus du pied`).toBeGreaterThan(0.02);
+        expect(elbow.z - wrist.z, `${b} ${action} ${s} coude devant le carpe`).toBeLessThan(0.02);
+      }
+    }
+    md.dispose();
+  }, 60000);
 });
 
 describe('allures et tours', () => {

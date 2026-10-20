@@ -33,35 +33,62 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
    rendu au bassin derrière la hanche et au-dessus du grasset — assise, la croupe ne se déchire plus).
 3. **`make_dog.py`** + **`dog_gait.py`** : animations.
    - orientation (le chien regarde +z), garrot à 0,57 m, courbes d'échelle retirées ;
-   - le shiba écrit ses **poses faites main** (repos, roulade) en rotations du monde ; le jack les reprend
-     (retarget) sur son squelette ;
+   - le shiba écrit ses **poses faites main** (repos, assis, patte, roulade) et ses **poses couchées générées**
+     (couché, endormi), une fois au sol, en rotations du monde (`--dump-retarget`, à la fin de sa fabrication) ; le
+     jack les reprend (retarget) sur son squelette : repos, roulade, **assis, couché, endormi**. Les poses au sol
+     (`ground_poses` dans `models.py`) sont **reposées** : le corps descend jusqu'à ce que la croupe, le ventre ou les
+     avant-bras touchent le sol, puis chaque membre est replié par cinématique inverse, pied à plat (`ground_leg` :
+     angle du métapode, grasset vers l'avant). (Les assis et couché du jack générés jusqu'ici n'en étaient pas :
+     croupe en V, cuisse qui pendait, couché croupe en l'air.) « Donner la patte » part de cet assis : l'antérieur
+     droit reste posé, le gauche se lève devant le poitrail (`paw_lift`) ;
+   - **mélanges en repère local** (`dog_gait.blend_local` : transitions, saut, patte) : chaque os garde sa place au
+     bout de son parent (mélangées en espace armature, les têtes d'os s'écartaient le long de la corde et gardaient
+     une translation animée — yeux sortis de la tête dans le jeu, clips plus lourds) ;
    - **allures générées** par trajectoires de pieds et cinématique inverse : `walk`, `trot`, `run` (galop) ;
      leurs **vitesses naturelles** (pieds posés immobiles) vont dans le GLB (`extras.dog.naturalSpeeds`) :
      shiba 0,95 / 2,40 / 5,72 m/s, jack 0,83 / 2,10 / 5,02 m/s ; le jeu joue chaque clip à vitesse réelle ÷
      vitesse naturelle (÷ longueur des membres de la race) ;
-   - **positions et gestes** : `sit` (assis, croupe cherchée par dichotomie), `paw` (donner la patte), `lie`
-     (couché), `sleep` (endormi, tête posée), `sniff` (renifler, truffe à 2,5 cm du sol), `eat`, `drink`
-     (langue), `wag`, `bow` (révérence), `jump`, transitions `sit_down`, `stand_up`, `lie_down`, `get_up` ;
-   - réglages des poses par modèle (`MODELS` dans `models.py`, ceux du jack) : assis `sit_flex`, `sit_tuck`,
-     `sit_femur`, `sit_hip` (postérieurs repliés vers le haut, bassin et dos basculés, hanche fixée au lieu de la
-     dichotomie : une assise de grenouille, pied à plat, sinon), couché `lie_pitch_max`, `lie_elbow`, `lie_wrist`,
-     `lie_fold` (avant-bras posés, postérieurs repliés vers l'avant : plus de croupe en l'air), saut `jump_tuck`
-     (postérieurs ramenés sous le corps à la réception : le maillage ne se déchire plus) ;
+   - **positions et gestes** : `sit` (assis), `paw` (donner la patte), `lie` (couché), `sleep` (endormi, tête
+     posée), `sniff` (renifler), `eat`, `drink` (langue), `wag`, `bow` (révérence), `jump`, transitions `sit_down`,
+     `stand_up`, `lie_down`, `get_up`. Renifler, manger, boire : l'encolure descend, le corps bascule un peu
+     (`sniff_pitch`), les **antérieurs restent tendus** (`front_planted` : métacarpe à son angle de repos, seuls
+     l'épaule et le coude se plient — visés comme une allure à l'arrêt, le carpe se pliait vers l'avant, pattes
+     croisées sous le museau) ;
+   - **gabarits** (`gabarits` dans `models.py`) : le jeu raccourcit ou allonge les membres des races (teckel 0,5,
+     corgi 0,55, carlin 0,72, lévriers 1,22 à 1,28, chiots 0,8 environ) en gardant les rotations des clips ; la foulée
+     des antérieurs ne correspondait plus à celle des postérieurs (pieds qui patinent, antérieurs qui ne touchaient
+     jamais le sol, galop disloqué des lévriers), les poses au sol non plus. Pour chaque gabarit, des clips sont
+     refaits sur un squelette « virtuel » (`gabarit_rig`) aux membres déformés comme dans le jeu (`deformDog`,
+     étape 1 : longueur le long de l'axe épaule → poignet, épaisseur `legW`/`paws` autour de lui), le sol de chaque
+     membre à la hauteur où son pied est alors monté ou descendu (`ground` dans `dog_gait.Rig`) ; seules leurs
+     rotations sont gardées (le jeu place les os de la race). Shiba : `long` (1,25 : allures, assis, patte, couché,
+     endormi, renifler, manger, boire et leurs transitions) et `court` (0,82, chiots : allures) ; jack : `court`
+     (0,52 : allures, assis, patte, renifler, manger, boire, transitions) et `trapu` (0,74 : allures). Clips nommés
+     `walk_long`, `sit_court`… ; longueur et vitesses naturelles de chaque gabarit dans `extras.dog.gabarits` ;
+   - réglages des poses générées (`MODELS` dans `models.py`, utilisés seulement quand la pose n'est pas reprise du
+     shiba) : assis `sit_flex`, `sit_tuck`, `sit_femur`, `sit_hip`, couché `lie_pitch_max`, `lie_elbow`, `lie_wrist`,
+     `lie_fold` ; saut `jump_tuck` (postérieurs ramenés sous le corps à la réception : le maillage ne se déchire
+     plus) ;
    - mise au point : `--hook script.py` exécute un script dans le contexte de `make_dog.py` (après le squelette,
      avant les poses) puis s'arrête ;
    - **pieds au sol** : sur chaque image, le chien est relevé de ce qui passe sous le sol (sommets des pieds et du
      corps), rapport JSON (`pawMin`, `bodyMin`, `muzzleMin` par clip) ;
    - les os que le jeu anime lui-même (queue, oreilles, paupières) n'ont plus de courbes ; `pose_tail` garde le port
-     de queue enroulée du shiba.
+     de queue enroulée du shiba ;
+   - poses tenues longtemps (repos, assis, couché, endormi, patte, roulade, et celles des gabarits) : une clé sur 2
+     ou 3 (`DECIMATE`), la respiration et le regard seuls y bougent.
 4. **`pack.mjs`** : canaux constants ou d'échelle retirés, matières renommées (`dog_coat`, `dog_eye`), texture
-   métal/rugosité retirée, ré-échantillonnage, simplification (shiba : 55 % des triangles, bords gardés), textures
+   métal/rugosité retirée, ré-échantillonnage (`--animTol`, 5e-4 : 0,03° près), simplification (shiba : 55 % des
+   triangles, bords gardés), textures
    **WebP** 1024, compression **meshopt** (volume de quantification commun : la peau partagée gardait sinon des
    yeux géants).
 5. **`lod.mjs`** : version allégée dans le même fichier (`extras.lod` : index simplifiés à 30 %) pour les chiens
    lointains (`DOG_LOD_DIST` dans `dogReal.js`).
 
-Fichiers obtenus : `dog_shiba.glb` 0,86 Mo (17 800 triangles, 5 300 au loin, 57 os), `dog_jack.glb` 0,51 Mo
-(14 900 triangles, 36 os), 19 clips chacun.
+Fichiers obtenus : `dog_shiba.glb` 0,88 Mo (17 800 triangles, 5 300 au loin, 57 os, 19 clips + 17 de ses
+gabarits), `dog_jack.glb` 0,59 Mo (14 900 triangles, 36 os, 19 clips + 14 de ses gabarits). (Avant les gabarits et
+les poses reprises du shiba : 0,86 et 0,51 Mo ; les clips des gabarits sont allégés par `DECIMATE` et le
+ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été faits.)
 
 ## Dans le jeu (`src/game/models/dogReal.js`, `dogCoat.js`, `src/sim/dogLook.js`)
 
@@ -97,16 +124,36 @@ Fichiers obtenus : `dog_shiba.glb` 0,86 Mo (17 800 triangles, 5 300 au loin, 57 
   moyenne de loin), charbonné, masque du carlin ; liste qui suit le chanfrein (`cmpBlaze`) ; iris de la couleur
   des yeux de la race (bleu du husky), reflet dans l'œil ; robes noires lustrées (reflet en bord, `cSheen`) avec
   le tour des yeux éclairci ; les yeux, la truffe, la langue et les coussinets gardent la texture d'origine.
-- **Animation** : mélangeur three.js avec fondus, allure choisie avec hystérésis (`pickDogGait`), postures
-  (assis, couché, endormi), actions (manger, boire, renifler, frétiller), regard, paupières, oreilles et queue
-  vivantes, halètement, traction en laisse, chien de troupeau ; modèle de repli (chien sculpté par le code)
-  pendant le chargement puis échange (`Game.onRealDogs` / `swapRealDogs`). Gueule fermée au calme (angle
-  `JAW_CLOSED` depuis la pose de repos du GLB).
+- **Animation** : mélangeur three.js avec fondus, allure choisie avec hystérésis (`pickDogGait`) au même nombre
+  de Froude pour toutes les tailles (vitesse rapportée à la racine de la hauteur des membres : un chihuahua ne
+  galope plus à la vitesse de flânerie), postures (assis, couché, endormi), actions (manger, boire, renifler,
+  frétiller), regard, paupières, oreilles et queue vivantes, halètement, traction en laisse (encolure tendue, sans
+  ralentir les pattes), chien de troupeau ; modèle de repli (chien sculpté par le code) pendant le chargement puis
+  échange (`Game.onRealDogs` / `swapRealDogs`). Gueule fermée au calme (angle `JAW_CLOSED` depuis la pose de repos
+  du GLB).
+  - **gabarit** de la race (`pickGabarit` : longueur des membres et taille des pieds les plus proches, sinon le
+    modèle d'origine) : ses clips remplacent ceux du modèle (`dogClips` : `walk_court` joue `walk`), ses vitesses
+    naturelles donnent celles de la race ;
+  - os à translation animée : le décalage de la race est retiré avant que le mixeur note la pose d'origine, puis
+    ajouté après chaque mise à jour (`applyShift`, sinon il comptait deux fois dès qu'une transition animait les
+    yeux) ; hanches ancrées (`hipE` : les clips tournent le corps autour de la racine du modèle, une race aux
+    hanches déplacées décollait la croupe) ;
+  - tours du spectacle et de l'éducateur : assis et couché par les transitions (`sit_down`, `lie_down`, plus vives
+    sur commande), « donner la patte » depuis l'assis, fin de roulade par « se lever » (d'un bond si le salut suit).
 - **Au sol** (`RealDogAnim.ground`) : points d'appui de la peau mesurés une fois par race sur les poses (pieds,
-  corps, queue, tête : `contactPoints`) ; au pas et au trot, pieds en appui tenus sur place (`footLock`) ; assis,
-  le corps bascule pour poser les pieds avant (`settleSit` : dos longs, pattes courtes) ; debout sur place
-  (renifler, manger, boire), il se redresse pour garder les pieds arrière posés (`settleStand`) ; queue et tête
-  relevées au-dessus du sol ; roulade : peau entière mesurée (`skinLow`).
+  corps, queue, tête : `contactPoints`) ; au pas, le corps suit le pied le plus bas sans lissage (un pied est
+  toujours posé : le chien qui tire en laisse ne flotte plus), au trot et au galop il est relevé tout de suite et
+  redescend en douceur ; au pas, au trot et au galop, **pieds en appui tenus sur place** (`footLock`) : le bout des
+  doigts (`toePts`, le point de la sole le plus en avant) est noté quand le pied se pose, le membre est tourné à
+  l'épaule ou à la hanche pour l'y ramener, en long et sur le côté (deux passes), la correction s'efface en fondu
+  quand le pied repart ; les vitesses naturelles sont mesurées sur le squelette de la race au même point
+  (`measureNatural`). Glissement des pieds posés (banc de `planche.html`, 15 races et 2 chiots, 240 images) : 0 à
+  3 % de la course au pas, 0 à 4 % au trot, 0 à 2 % au galop (avant : jusqu'à 22 % au pas pour le corgi, 32 % au
+  galop pour le galgo). Assis, le corps bascule pour poser les pieds avant (`settleSit` : écart signé, pivot sur
+  l'appui arrière, fondu selon l'avancement de la transition — le teckel se cabrait de 18 cm en une image) ; debout
+  sur place (renifler, manger, boire), il se redresse pour garder les pieds arrière posés (`settleStand`) ; queue
+  (port de la race aligné sur la courbe, relevée sans à-coup d'une image à l'autre) et tête relevées au-dessus du
+  sol ; oreilles pendantes compensées quand la tête plonge ; roulade : peau entière mesurée (`skinLow`).
 - **Équipement** ajusté au cou et au corps mesurés de chaque race (collier : bande plate `flatBand` dans
   `gearModels.js` ; manteau, accessoires du salon, nœud du concours de beauté, laisse accrochée à l'anneau du
   collier).

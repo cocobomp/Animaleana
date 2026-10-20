@@ -28,7 +28,9 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
      **troué et déchiré**) sont réunies et **soudées** ; mise à l'échelle.
 2. **`autorig.py`** (jack) : squelette du même plan que celui du shiba, poids par chaleur (heat weights) ; os des
    **yeux** (sommets des yeux, séparés par côté) et des **oreilles** (base → pli → bout, poids géométriques sur le
-   lambeau mince repéré par épaisseur et remplissage limité).
+   lambeau mince repéré par épaisseur et remplissage limité). Réglages du jack dans `models.py` (`JACK_RIG`) :
+   hauteur du coude, du jarret, de la hanche et du grasset, et `buttock` (le poids du fémur débordait sur la croupe :
+   rendu au bassin derrière la hanche et au-dessus du grasset — assise, la croupe ne se déchire plus).
 3. **`make_dog.py`** + **`dog_gait.py`** : animations.
    - orientation (le chien regarde +z), garrot à 0,57 m, courbes d'échelle retirées ;
    - le shiba écrit ses **poses faites main** (repos, roulade) en rotations du monde ; le jack les reprend
@@ -40,6 +42,13 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
    - **positions et gestes** : `sit` (assis, croupe cherchée par dichotomie), `paw` (donner la patte), `lie`
      (couché), `sleep` (endormi, tête posée), `sniff` (renifler, truffe à 2,5 cm du sol), `eat`, `drink`
      (langue), `wag`, `bow` (révérence), `jump`, transitions `sit_down`, `stand_up`, `lie_down`, `get_up` ;
+   - réglages des poses par modèle (`MODELS` dans `models.py`, ceux du jack) : assis `sit_flex`, `sit_tuck`,
+     `sit_femur`, `sit_hip` (postérieurs repliés vers le haut, bassin et dos basculés, hanche fixée au lieu de la
+     dichotomie : une assise de grenouille, pied à plat, sinon), couché `lie_pitch_max`, `lie_elbow`, `lie_wrist`,
+     `lie_fold` (avant-bras posés, postérieurs repliés vers l'avant : plus de croupe en l'air), saut `jump_tuck`
+     (postérieurs ramenés sous le corps à la réception : le maillage ne se déchire plus) ;
+   - mise au point : `--hook script.py` exécute un script dans le contexte de `make_dog.py` (après le squelette,
+     avant les poses) puis s'arrête ;
    - **pieds au sol** : sur chaque image, le chien est relevé de ce qui passe sous le sol (sommets des pieds et du
      corps), rapport JSON (`pawMin`, `bodyMin`, `muzzleMin` par clip) ;
    - les os que le jeu anime lui-même (queue, oreilles, paupières) n'ont plus de courbes ; `pose_tail` garde le port
@@ -62,7 +71,10 @@ Fichiers obtenus : `dog_shiba.glb` 0,86 Mo (17 800 triangles, 5 300 au loin, 57 
   fouet, carotte, écourtée), poil (épaissi : collerette, franges ; ou raccourci pour les races à poil ras),
   frisé ou soyeux (relief du shader). Les sommets et les têtes d'os sont déplacés ensemble : le squelette de chaque
   race garde les noms et les rotations de repos du GLB, les clips s'y appliquent tels quels. Les pieds restent au
-  sol (le chien descend de ce que ses membres ont perdu).
+  sol (le chien descend de ce que ses membres ont perdu). La queue est amincie ou allongée autour de la chaîne de
+  ses os (`tailShape`, section ramenée vers un cercle : plus de lame plate). Oreilles dressées du jack : le
+  lambeau replié d'origine est caché sous la peau du crâne, des coques prennent sa place. Les yeux suivent la
+  tête de la race (os des yeux déplacés une seule fois avec la peau).
 - **Chiots** : tête plus grosse, pattes, museau et dos plus courts, oreilles pas encore dressées.
 - **Robes par shader** (`coatPlan`) : unie, dessous clair, feu (noir et feu, selle du berger allemand), bicolore
   (urajiro du shiba, masque du husky, plastron du boxer, collier du colley), tricolore, merle, pie (plaques, tête
@@ -71,9 +83,16 @@ Fichiers obtenus : `dog_shiba.glb` 0,86 Mo (17 800 triangles, 5 300 au loin, 57 
 - **Animation** : mélangeur three.js avec fondus, allure choisie avec hystérésis (`pickDogGait`), postures
   (assis, couché, endormi), actions (manger, boire, renifler, frétiller), regard, paupières, oreilles et queue
   vivantes, halètement, traction en laisse, chien de troupeau ; modèle de repli (chien sculpté par le code)
-  pendant le chargement puis échange (`Game.onRealDogs` / `swapRealDogs`).
-- **Équipement** ajusté au cou et au corps mesurés de chaque race (collier, manteau, accessoires du salon,
-  nœud du concours de beauté, laisse accrochée à l'anneau du collier).
+  pendant le chargement puis échange (`Game.onRealDogs` / `swapRealDogs`). Gueule fermée au calme (angle
+  `JAW_CLOSED` depuis la pose de repos du GLB).
+- **Au sol** (`RealDogAnim.ground`) : points d'appui de la peau mesurés une fois par race sur les poses (pieds,
+  corps, queue, tête : `contactPoints`) ; au pas et au trot, pieds en appui tenus sur place (`footLock`) ; assis,
+  le corps bascule pour poser les pieds avant (`settleSit` : dos longs, pattes courtes) ; debout sur place
+  (renifler, manger, boire), il se redresse pour garder les pieds arrière posés (`settleStand`) ; queue et tête
+  relevées au-dessus du sol ; roulade : peau entière mesurée (`skinLow`).
+- **Équipement** ajusté au cou et au corps mesurés de chaque race (collier : bande plate `flatBand` dans
+  `gearModels.js` ; manteau, accessoires du salon, nœud du concours de beauté, laisse accrochée à l'anneau du
+  collier).
 
 La planche de contrôle `planche.html` (servie par vite : `/tools/chien/planche.html`) montre n'importe quelle
 liste de races, robes, chiots, clips et points de vue (`window.planche.show({ cells: [...] })`).

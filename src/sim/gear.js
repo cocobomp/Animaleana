@@ -32,6 +32,9 @@ export const COLORS = {
   silver: 0xbfc5cc,
 };
 
+/** Longueur de la laisse d'un chien (m) : retenue du chien (AnimalEntity) et mou du trait dessiné (Game). */
+export const LEASH_LEN = 1.6;
+
 export const SIZES = ['pony', 'horse', 'draft'];
 const ALL = SIZES;
 const HORSE_UP = ['horse', 'draft'];

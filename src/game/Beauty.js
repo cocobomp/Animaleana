@@ -1005,6 +1005,13 @@ class BeautySession extends Session {
   updatePodium(dt) {
     const pl = this.game.player;
     this.holdPlayer(this.hold.x, this.hold.z, 0);
+    // (photo : la caméra cadre l'animal sur sa marche, de face, à 2,5 m environ — il restait petit et loin, derrière la
+    // joueuse)
+    const e = this.e;
+    if (e && this.phaseT < 3.2) {
+      const sc = e.scale ?? 1;
+      this.game.rig.focus = { shot: { at: (this.shotAt ??= new THREE.Vector3()).set(e.position.x, e.position.y + 0.4 * sc, e.position.z), heading: e.heading, dist: 1.1 + 1.4 * sc, yaw: 0.12, pitch: 0.16 } };
+    }
     pl.heading = 0;
     this.game.rig.yaw += wrap(0 - this.game.rig.yaw) * Math.min(1, dt * 4);
     if (this.phaseT > 1.6 && !this.photoDone) {

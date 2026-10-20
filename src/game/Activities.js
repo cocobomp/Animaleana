@@ -1408,7 +1408,8 @@ class AgilitySession extends Session {
         y = s * (o.type === 'tyre' ? 0.75 : 0.65) * k;
         pitch = -0.3 * Math.cos(Math.PI * (c.t - 0.2) / 0.6) * s;
         // (chien réaliste : son clip de saut, à la phase du saut)
-        const jt = Math.min(1, Math.max(0, (c.t - 0.2) / 0.6));
+        // (le clip plie les pattes pour l'appel jusqu'à 22 % et se reçoit à 78 % : il suit la course, pas l'envol)
+        const jt = c.t;
         if (!realLegPose(e.model, 'jump', s * 0.9) && !realDogPose(e.model, 'jump', s, null, jt)) for (const l of e.model.legs) l.pivot.rotation.x = l.front ? -1.1 * s : 0.8 * s;
         if (!c.clean && !c.knocked && c.t > 0.5 && o.model.userData.parts.bar) {
           c.knocked = true;
@@ -1723,6 +1724,12 @@ class ShowSession extends Session {
       }
       default:
     }
+    // Pendant le tour (face au public, jauge, tour, salut) : la caméra se rapproche de l'artiste, de trois quarts à
+    // environ 3 m, puis revient à la vue normale (au fond de la scène, le chien faisait une quarantaine de pixels).
+    if (this.phase === 'face' || this.phase === 'gauge' || this.phase === 'trick' || this.phase === 'bow') {
+      const sc = e.scale ?? 1;
+      this.game.rig.focus = { shot: { at: (this.shotAt ??= new THREE.Vector3()).set(e.position.x, e.position.y + 0.45 * sc, e.position.z), heading: e.heading, dist: 1.4 + 1.6 * sc, yaw: 0.75, pitch: 0.2 } };
+    }
     const onStage = Math.hypot(e.position.x - this.center.x, e.position.z - this.center.z) < 3.3;
     e.position.y = this.y(e.position.x, e.position.z) + (onStage ? this.stageTop : 0) + (e.scaleGroup.position.y > 0 ? 0 : 0);
     e.root.rotation.y = e.heading;
@@ -1777,9 +1784,12 @@ function animateTrick(e, trick, k, dt) {
       return;
     }
     if (trick === 'jump') {
-      const j = Math.max(0, Math.sin(Math.PI * Math.min(1, k * 1.4)));
-      sg.position.y = j * 0.9;
-      realDogPose(md, 'jump', j, null, Math.min(1, k * 1.4));
+      // (appel : le clip plie les pattes jusqu'à 22 % de sa durée, l'envol suit, réception à 78 % ; hauteur à la
+      // taille du chien — 0,9 m pour tous, le jack et le teckel sautaient trois fois leur hauteur)
+      const jt = Math.min(1, k * 1.4);
+      const j = Math.sin(Math.PI * Math.min(1, Math.max(0, (jt - 0.2) / 0.6)));
+      sg.position.y = j * 0.9 * Math.min(1.2, e.scale ?? 1);
+      realDogPose(md, 'jump', j, null, jt);
       return;
     }
   }

@@ -51,10 +51,13 @@ export function coatPlan(look = {}, breedId = null) {
     headPatch: 0, patchColor: sec, blobs: 0, blobSize: 1, blobColor: sec,
     spots: 0, spotsColor: sec, merle: 0, merleColor: third, brindle: 0, brindleColor: 0x2a1d15,
     sable: 0, sableColor: 0x2a1f18, tick: 0, tickColor: coat,
+    // iris (couleur des yeux de la robe : bleus du husky, du berger australien merle) ; null : celui du modèle
+    iris: look.eye ?? null,
   };
   const white = (c) => lum(c) > 0.62;
   const hound = ['beagle', 'coonhound'].includes(breed);
-  const urajiro = ['shiba', 'akita', 'berger_islandais'].includes(breed);
+  // (berger islandais : pas l'urajiro du shiba — collier, liste, poitrail et pattes blancs comme un colley)
+  const urajiro = ['shiba', 'akita'].includes(breed);
   if (/Bring|Brindle/.test(name)) {
     // Bringé : rayures sombres sur un fond fauve.
     P.brindle = 1;
@@ -77,8 +80,8 @@ export function coatPlan(look = {}, breedId = null) {
       P.legLevel = 0.15;
     }
     if (/Fauve|Fawn/.test(name) && ['bouledogue', 'malinois', 'carlin', 'boxer'].includes(breed)) {
-      P.mask = 0.9;
-      P.maskEars = breed === 'malinois' ? 0.8 : 0.3;
+      P.mask = breed === 'malinois' ? 1 : 0.9;
+      P.maskEars = breed === 'malinois' ? 1 : 0.3;
     }
     if (breed === 'malinois') P.sable = Math.max(P.sable, 0.5);
   } else if (pattern === 'tan') {
@@ -94,8 +97,11 @@ export function coatPlan(look = {}, breedId = null) {
           P.sable = 1;
           P.sableColor = scaleHex(coat, 0.45);
         }
-        P.mask = 0.85;
+        // (masque noir franc sur le museau et autour des yeux, crâne et oreilles charbonnés)
+        P.mask = 1;
         P.maskColor = scaleHex(coat, 0.9);
+        P.sable = Math.max(P.sable, 0.55);
+        P.sableColor = scaleHex(coat, 0.95);
       }
     } else {
       // Noir et feu (rottweiler, coonhound, kelpie…) : feux aux sourcils, joues, poitrail, pattes.
@@ -116,11 +122,14 @@ export function coatPlan(look = {}, breedId = null) {
       Object.assign(P, { reach: 0.45, legLevel: 0.8, face: 1, cheek: 1, blaze: 0.7, tailTip: 0 });
       P.sable = Math.max(P.sable, 0.35);
     } else if (breed === 'boxer') {
-      Object.assign(P, { reach: 0.22, legLevel: 0.22, face: 0, blaze: 0.6, tailTip: 0 });
+      Object.assign(P, { reach: 0.22, legLevel: 0.22, face: 0, blaze: 0.25, tailTip: 0 });
       P.mask = 0.95;
     } else {
-      // Border collie, corgi, berger islandais… : collier, liste, poitrail, pattes, bout de la queue.
+      // Border collie, corgi, berger islandais… : collier, liste, poitrail, pattes, bout de la queue. (Colley : liste
+      // étroite, yeux dans le noir ; islandais : plus de blanc, collier.)
       Object.assign(P, { reach: 0.42, legLevel: 0.55, face: 0.7, blaze: 1, tailTip: 1, collar: breed === 'border_collie' ? 1 : breed === 'corgi' ? 0.6 : 0 });
+      if (breed === 'border_collie') Object.assign(P, { blaze: 0.45 });
+      if (breed === 'berger_islandais') Object.assign(P, { face: 0.5, blaze: 0.6, collar: 0.8, reach: 0.5, legLevel: 0.7 });
     }
   } else if (pattern === 'tricolor') {
     if (/merle/i.test(name)) {
@@ -130,6 +139,11 @@ export function coatPlan(look = {}, breedId = null) {
       P.under = 1;
       P.underColor = sec;
       Object.assign(P, { reach: 0.4, legLevel: 0.45, face: 0.6, blaze: 1, tailTip: 0, collar: 0.8 });
+      // (marques cuivre sur les joues, les sourcils et les pattes : berger australien)
+      if (breed === 'berger_australien') {
+        P.points = 0.75;
+        P.pointsColor = 0xb0672f;
+      }
     } else if (lum(coat) < 0.13) {
       // Tricolore foncé (bouvier bernois, berger australien, border) : noir, blanc, feux.
       P.under = 1;
@@ -138,20 +152,23 @@ export function coatPlan(look = {}, breedId = null) {
       P.points = 1;
       P.pointsColor = third;
     } else if (white(coat)) {
-      // Fond blanc (jack russell, cavalier, épagneul breton) : tête colorée, plaque noire sur le dos, feux.
+      // Fond blanc (jack russell, cavalier, épagneul breton) : tête colorée, plaque noire sur le dos, feux sur la tête
+      // (sourcils, joues) — jamais aux pattes.
       P.headPatch = 1;
       P.patchColor = third;
       P.blobs = 0.7;
       P.blobColor = third;
       P.points = 0.8;
       P.pointsColor = sec;
+      P.pointsHead = 1;
     } else {
-      // Tricolore clair (beagle) : fond feu, selle noire, blanc au poitrail, aux pattes, au museau.
+      // Tricolore clair (beagle) : fond feu, selle noire, blanc au poitrail, aux pattes, au museau et en liste
+      // étroite (joues et tour des yeux feu).
       P.saddle = 1;
       P.saddleColor = third;
       P.under = 1;
       P.underColor = sec;
-      Object.assign(P, { reach: 0.45, legLevel: 0.5, face: 0.65, blaze: 1, tailTip: 1 });
+      Object.assign(P, { reach: 0.45, legLevel: 0.5, face: 0.65, blaze: 0.5, tailTip: 1 });
     }
   } else if (pattern === 'patches') {
     if (white(coat)) {
@@ -205,12 +222,15 @@ export function coatPlan(look = {}, breedId = null) {
     P.maskEars = 1;
   }
   if (hound && pattern === 'patches' && !white(coat)) P.headPatch = 0;
-  // Noirs très sombres : un peu relevés (sinon plus aucun modelé ni reflet du poil à l'écran).
-  for (const k of ['base', 'saddleColor', 'patchColor', 'blobColor', 'merleColor', 'brindleColor']) {
+  // Noirs très sombres : relevés et réchauffés (brun-noir), sinon plus aucun modelé ni reflet du poil à l'écran — le
+  // terre-neuve, le labrador ou le caniche noirs n'étaient plus qu'une silhouette avec une truffe.
+  for (const k of ['base', 'saddleColor', 'patchColor', 'blobColor', 'merleColor', 'brindleColor', 'maskColor']) {
     const l = lum(P[k]);
-    if (l < 0.06) P[k] = mixHex(P[k], 0x423b37, 0.42 * (1 - l / 0.06));
+    if (l < 0.13) P[k] = mixHex(P[k], 0x4d3f35, 0.75 * (1 - l / 0.13));
   }
-  P.dark = lum(P.base) < 0.08;
+  P.dark = lum(P.base) < 0.16;
+  // (lustre et lisière claire des robes sombres : voir cSheen)
+  P.sheen = P.dark ? 1 : lum(P.base) < 0.26 ? 0.5 : 0;
   return P;
 }
 
@@ -224,6 +244,7 @@ export function makeCoatUniforms() {
     cUnder2: { value: new THREE.Vector4() }, // liste, bout de la queue, collier, joues
     cUnderC: { value: new THREE.Color() },
     cPoints: { value: 0 },
+    cPointsHead: { value: 0 },
     cPointsC: { value: new THREE.Color() },
     cSaddle: { value: new THREE.Vector2() }, // force, hauteur
     cSaddleC: { value: new THREE.Color() },
@@ -250,6 +271,13 @@ export function makeCoatUniforms() {
     cCut: { value: new THREE.Vector4(0, 0, 0, 0) },
     // Relief du poil : frisé (x : bouclettes) et soyeux (y : mèches qui tombent), 0 à 1.
     cCurl: { value: new THREE.Vector2(0, 0) },
+    // Iris (rgb, w : 1 si la robe en donne un) ; lustre des robes sombres (lisière claire, tour des yeux éclairci).
+    cIris: { value: new THREE.Vector4(0, 0, 0, 0) },
+    cSheen: { value: 0 },
+    // Pompons modelés du caniche montrés (coupe « caniche ») ou ramenés à leur centre.
+    cPom: { value: 0 },
+    // Rides du front (carlin), 0 à 1 : relief du shader.
+    cWrinkle: { value: 0 },
   };
 }
 
@@ -261,6 +289,7 @@ export function setCoat(u, P) {
   u.cUnder2.value.set(P.blaze, P.tailTip, P.collar, P.cheek);
   u.cUnderC.value.setHex(P.underColor);
   u.cPoints.value = P.points;
+  u.cPointsHead.value = P.pointsHead ?? 0;
   u.cPointsC.value.setHex(P.pointsColor);
   u.cSaddle.value.set(P.saddle, P.saddleLevel);
   u.cSaddleC.value.setHex(P.saddleColor);
@@ -279,6 +308,14 @@ export function setCoat(u, P) {
   u.cSableC.value.setHex(P.sableColor);
   u.cTick.value = P.tick;
   u.cTickC.value.setHex(P.tickColor);
+  if (P.iris !== null && P.iris !== undefined) {
+    // (iris très sombre — le brun foncé par défaut des robes — éclairci : un œil brun chaud, pas un trou noir)
+    const c = new THREE.Color(P.iris);
+    const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    if (l < 0.05 && l > 1e-4) c.multiplyScalar(Math.min(6, 0.05 / l));
+    u.cIris.value.set(c.r, c.g, c.b, 1);
+  } else u.cIris.value.set(0, 0, 0, 0);
+  u.cSheen.value = P.sheen ?? 0;
 }
 
 /** Repères du corps au repos (modèle d'origine), communs à tous les chiens d'un modèle. */
@@ -288,6 +325,8 @@ export function makeLandUniforms(L) {
     cHead: { value: new THREE.Vector4(L.head.x, L.head.y, L.head.z, L.noseZ) },
     cEye: { value: new THREE.Vector4(L.eyeX, L.eyeY, L.eyeZ, L.elbowY) },
     cMisc: { value: new THREE.Vector4(L.midX, L.tailTipZ, L.neckZ, L.tailBaseZ) },
+    // (hauteur de la truffe : le dessus du museau descend des yeux jusqu'à elle — la liste le suit)
+    cNoseY: { value: L.nose?.y ?? L.eyeY - 0.03 },
   };
 }
 
@@ -295,6 +334,8 @@ const COMMON_V = /* glsl */ `
 attribute vec3 cmpRest;
 attribute vec4 cmpPart;
 attribute float cmpLow;
+attribute float cmpPom;
+uniform float cPom;
 uniform vec4 cLand;
 uniform vec4 cEye;
 uniform vec4 cMisc;
@@ -329,6 +370,8 @@ const PUSH_V = /* glsl */ `
     float top = cmpPart.z * (1.0 - cmpPart.x) * smoothstep(cEye.y + 0.01, cEye.y + 0.05, cmpRest.y) * (1.0 - smoothstep(cEye.z - 0.02, cEye.z + 0.02, cmpRest.z));
     push += cCut.x * tr + cCut.y * ruff + cCut.z * pom + cCut.w * max(tip, top);
   }
+  // (pompon modelé : ni embonpoint ni coupe, seulement montré ou ramené à son centre)
+  if (cmpPom > 0.0) push = -cmpPom * (1.0 - cPom);
   transformed += normalize(objectNormal) * push;
 }`;
 
@@ -340,6 +383,7 @@ uniform vec4 cUnder;
 uniform vec4 cUnder2;
 uniform vec3 cUnderC;
 uniform float cPoints;
+uniform float cPointsHead;
 uniform vec3 cPointsC;
 uniform vec2 cSaddle;
 uniform vec3 cSaddleC;
@@ -360,10 +404,14 @@ uniform float cTick;
 uniform vec3 cTickC;
 uniform float cWet;
 uniform vec2 cCurl;
+uniform vec4 cIris;
+uniform float cSheen;
+uniform float cWrinkle;
 uniform vec4 cLand;
 uniform vec4 cHead;
 uniform vec4 cEye;
 uniform vec4 cMisc;
+uniform float cNoseY;
 uniform float cRole;
 uniform float cTexMode;
 uniform vec3 cMeans;
@@ -393,12 +441,36 @@ float cmpNoise(vec3 x) {
 // (axes tournés : le bruit à valeurs suit sinon la grille, en blocs carrés ou en marches d'escalier)
 const mat3 CMP_ROT = mat3(0.788, 0.441, -0.43, -0.39, 0.896, 0.215, 0.476, -0.054, 0.878);
 float cmpCurlH(vec3 p) {
-  vec3 q = CMP_ROT * p * 110.0;
+  vec3 q = CMP_ROT * p * 80.0;
   return cmpNoise(q) * 0.6 + cmpNoise(q * 2.1 + 7.0) * 0.4;
 }
 float cmpSilkH(vec3 p) {
   vec3 r = CMP_ROT * vec3(p.x, 0.0, p.z);
   return cmpNoise(vec3(r.x * 170.0, p.y * 18.0, r.z * 170.0)) * 0.7 + cmpNoise(vec3(r.x * 340.0, p.y * 34.0, r.z * 340.0)) * 0.3;
+}
+// Rides du front (carlin) : plis horizontaux au-dessus des yeux, 0 à 1 (creux à 0).
+float cmpWrinkleH(vec3 p, vec4 part) {
+  float ax = abs(p.x - cMisc.x);
+  float m = part.z * (1.0 - part.x) * smoothstep(cEye.y + 0.003, cEye.y + 0.012, p.y) * (1.0 - smoothstep(cEye.y + 0.032, cEye.y + 0.048, p.y))
+    * (1.0 - smoothstep(cEye.x * 0.9, cEye.x * 1.5, ax)) * smoothstep(cEye.z - 0.06, cEye.z - 0.025, p.z);
+  // (plis larges et doux : à 700 rad/m, des bandes d'aliasing rayaient le front du carlin)
+  float w = 0.5 + 0.5 * sin((p.y - cEye.y) * 390.0 + sin(ax * 70.0) * 1.1);
+  w = w * w * (3.0 - 2.0 * w);
+  return mix(1.0, w, m);
+}
+// Liste (0 à 1) : bande au milieu du front, étroite entre les yeux, qui descend sur le chanfrein et s'élargit sur le
+// museau. bw règle sa largeur, bs son départ sur le crâne. (Elle suit le dessus du museau, qui descend des yeux à la
+// truffe, au lieu de s'arrêter net à hauteur des yeux : une coupure horizontale en travers de la face.)
+float cmpBlaze(vec3 p, float hz, float ax, float edge, float bw, float bs) {
+  float hzE = (cEye.z - cHead.z) / max(0.05, cHead.w - cHead.z);
+  float fore = 1.0 - smoothstep(hzE - 0.25, hzE - 0.05, hz);
+  float snout = max(0.0, hz - hzE - 0.06);
+  float w = bw * (0.011 + 0.008 * fore) + snout * 0.3 * bw * bw;
+  float across = 1.0 - smoothstep(w * 0.6, w * 1.4, ax + edge * 0.03 * bw);
+  float t = clamp((hz - hzE - 0.13) / max(0.05, 0.87 - hzE), 0.0, 1.0);
+  float yLim = mix(cEye.y, cNoseY, t) - 0.012 - 0.008 * t;
+  float down = smoothstep(yLim - 0.008, yLim + 0.004, p.y);
+  return across * down * smoothstep(0.05 + bs, 0.25 + bs, hz);
 }
 // Taches rondes (dalmatien) : la plus proche, rayon propre à chaque tache.
 float cmpSpots(vec3 p) {
@@ -463,8 +535,8 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   }
   // ---- tête colorée (sauf la liste et le museau) et plaques (pie)
   if (cPatch.x > 0.0) {
-    float blazeOut = 1.0 - smoothstep(0.012, 0.026, ax - max(0.0, hz - 0.35) * 0.08 + edge * 0.05);
-    float hp = max(head * (1.0 - blazeOut * step(cEye.y - 0.03, p.y)) * (1.0 - muzzle * 0.85), ear);
+    float blazeOut = cmpBlaze(p, hz, ax, edge, 1.0, 0.0);
+    float hp = max(head * (1.0 - blazeOut) * (1.0 - muzzle * 0.85), ear);
     hp = max(hp, neckZone * smoothstep(0.55, 0.75, h + edge) * smoothstep(cMisc.z - 0.05, cMisc.z + 0.02, p.z));
     c = mix(c, cPatchC, cPatch.x * hp);
   }
@@ -473,21 +545,42 @@ vec3 cmpCoat(vec3 p, vec4 part) {
     float blob = smoothstep(1.0 - 0.38 * cPatch.y, 1.04 - 0.38 * cPatch.y, bn) * (1.0 - legLow) * (1.0 - smoothstep(0.5, 0.2, h) * trunk);
     c = mix(c, cBlobC, blob * (1.0 - muzzle));
   }
-  // ---- merle (taches sombres irrégulières)
+  // ---- merle : fond marbré, plaques sombres irrégulières de toutes tailles aux bords déchirés (pas des ronds de vache)
   if (cMerle > 0.0) {
-    float m = cmpNoise(sp * 9.0) * 0.6 + cmpNoise(sp * 23.0) * 0.4;
-    c = mix(c, cMerleC, cMerle * smoothstep(0.62, 0.68, m));
+    vec3 wq = sp + vec3(cmpNoise(sp * 6.0 + 3.0), cmpNoise(sp * 6.0 + 9.0), cmpNoise(sp * 6.0 + 17.0)) * 0.06;
+    float big = cmpNoise(wq * 13.0);
+    float small = cmpNoise(wq * 31.0 + 5.0);
+    float tear = (cmpNoise(sp * 75.0) - 0.5) * 0.1;
+    float m = max(smoothstep(0.75, 0.78, big + tear), smoothstep(0.72, 0.75, small + tear * 1.3));
+    c *= 0.9 + 0.2 * cmpNoise(sp * 4.0 + 1.3);
+    c = mix(c, cMerleC, cMerle * m);
   }
   // ---- bringé : rayures presque verticales sur le corps, en travers sur les pattes ; plus discrètes sur la tête
   if (cBrindle > 0.0) {
-    // (bruit étiré le long de la verticale : rayures irrégulières, interrompues ; les isolignes d'un bruit 3D
-    // faisaient des cernes de bois)
-    float wz = cmpNoise(sp * vec3(4.0, 3.0, 4.0)) * 0.04;
-    vec3 q = mix(vec3(sp.x * 16.0, sp.y * 2.6, (sp.z + wz) * 95.0), vec3(sp.x * 16.0, (sp.y + wz) * 95.0, sp.z * 16.0), legs);
-    float bn = cmpNoise(q) * 0.65 + cmpNoise(q * vec3(1.9, 1.6, 1.9) + 11.0) * 0.35;
-    float stripe = smoothstep(0.52, 0.66, bn) * (0.6 + 0.4 * n1);
-    stripe *= (1.0 - 0.85 * head) * (1.0 - 0.5 * legs);
-    c = mix(c, cBrindleC, cBrindle * stripe * 0.75);
+    // (stries fines et ondulées, déformées par du bruit, en chevrons sur les côtes ; en travers sur les pattes, en long
+    // sur la queue ; aussi sur la tête ; faible contraste et interrompues — pas des bandes de tigre, pas de poivre)
+    vec3 wp = sp * 9.0;
+    float warp = (cmpNoise(wp) - 0.5) * 7.0 + (cmpNoise(wp * 2.7 + 4.0) - 0.5) * 2.5;
+    float chev = abs(p.y - (bellyY + topY) * 0.5) * 120.0;
+    // (trois champs de stries fondus entre eux — fondre leurs phases faisait un labyrinthe)
+    float sA = 0.5 + 0.5 * sin(sp.z * 320.0 + chev * 0.8 + warp);
+    float sB = 0.5 + 0.5 * sin(sp.y * 360.0 + warp);
+    float sT = 0.5 + 0.5 * sin((p.x - midX) * 460.0 + warp * 0.5);
+    float st = mix(mix(sA, sB, smoothstep(0.3, 0.7, legs)), sT, smoothstep(0.3, 0.7, tail));
+    // (épaisseur variable : seuil modulé par un bruit — des stries qui naissent, s'épaississent et meurent, pas des
+    // courbes de niveau régulières)
+    float thr = 0.5 + 0.32 * cmpNoise(sp * vec3(38.0, 16.0, 38.0));
+    st = smoothstep(thr, thr + 0.25, st);
+    // (de loin, moins d'un pixel par strie : le motif se fond en teinte moyenne au lieu de scintiller)
+    // (phase par pixel : effacé au-delà d'environ deux pixels par strie, pas avant — le galgo de la planche des
+    // races, à quatre ou cinq pixels par strie, paraissait uni)
+    float fw = length(fwidth(sp)) * 320.0;
+    st = mix(st, 0.25, smoothstep(1.4, 2.8, fw));
+    float brk = 0.2 + 0.8 * smoothstep(0.3, 0.7, cmpNoise(sp * vec3(14.0, 6.0, 10.0)));
+    // (mèches : stries de poil fines qui brouillent le bord des bandes ; effacées de loin)
+    float hair = mix(0.75 + 0.5 * cmpNoise(sp * vec3(90.0, 220.0, 90.0)), 1.0, smoothstep(0.6, 1.4, fw));
+    float stripe = clamp(st * brk * hair, 0.0, 1.0) * (1.0 - 0.6 * head);
+    c = mix(c, cBrindleC, cBrindle * stripe * 0.65);
   }
   // ---- charbonné / sable : pointes sombres sur le dessus, la tête, les oreilles, le bout de la queue
   if (cSable > 0.0) {
@@ -497,6 +590,7 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   }
   // ---- blanc ou crème du dessous
   float white = 0.0;
+  float blazeW = 0.0;
   if (cUnder.x > 0.0) {
     float reach = cUnder.y;
     float chest = body * (1.0 - legs * 0.6) * smoothstep(shZ - 0.06, shZ + 0.02, p.z + edge * 0.3)
@@ -504,11 +598,15 @@ vec3 cmpCoat(vec3 p, vec4 part) {
     float bel = trunk * (1.0 - smoothstep(reach - 0.12, reach + 0.04, h + edge));
     float lg = legs * (1.0 - smoothstep(elbowY * cUnder.z * 1.25 - 0.02, elbowY * cUnder.z * 1.25 + 0.02, p.y + edge * 0.15));
     lg *= step(0.01, cUnder.z);
-    float mz = muzzle * belowEye * cUnder.w + muzzle * smoothstep(0.75, 0.9, hz) * cUnder.w * 0.6;
+    // (museau blanc : devant les yeux, pas autour — l'œil du shiba est dans la zone du museau)
+    float hzE = (cEye.z - cHead.z) / headLen;
+    float mz = (muzzle * belowEye * smoothstep(hzE + 0.02, hzE + 0.12, hz + edge * 0.3) + muzzle * smoothstep(0.75, 0.9, hz) * 0.6) * cUnder.w;
     float cheek = head * (1.0 - ear) * cUnder2.w * belowEye * smoothstep(0.15, 0.4, hz) * smoothstep(0.02, 0.05, ax);
     float throat = neckZone * (1.0 - head) * (1.0 - smoothstep(0.35, 0.55, h + edge)) * step(0.01, cUnder.w + cUnder2.w);
-    float blaze = head * (1.0 - ear) * cUnder2.x * (1.0 - smoothstep(0.008, 0.02, ax - max(0.0, hz - 0.45) * 0.3 + edge * 0.03))
-      * step(cEye.y - 0.01, p.y) * smoothstep(0.05, 0.25, hz);
+    // (liste : sa force règle aussi sa largeur — étroite chez le boxer, large chez le colley — et sa longueur :
+    // étroite, elle part du front et non de l'arrière du crâne)
+    float blaze = head * (1.0 - ear) * step(0.01, cUnder2.x) * cmpBlaze(p, hz, ax, edge, mix(0.3, 1.0, cUnder2.x), 0.32 * (1.0 - cUnder2.x));
+    blazeW = blaze;
     float tipT = tail * cUnder2.y * (1.0 - smoothstep(0.02, 0.06, p.z - cMisc.y + (n1 - 0.5) * 0.02));
     float collar = neckZone * (1.0 - head) * cUnder2.z * smoothstep(cMisc.z - 0.07, cMisc.z - 0.04, p.z + edge * 0.2)
       * (1.0 - smoothstep(cMisc.z + 0.03, cMisc.z + 0.06, p.z + edge * 0.2));
@@ -520,18 +618,23 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   if (cPoints > 0.0) {
     float brow = head * (1.0 - ear) * (1.0 - smoothstep(0.006, 0.016, length(vec2(ax - cEye.x * 0.9, (p.y - cEye.y - 0.025) * 1.3)) - 0.006 + edge * 0.02))
       * smoothstep(0.1, 0.3, hz) * (1.0 - smoothstep(0.42, 0.52, hz));
-    float cheekT = head * (1.0 - ear) * belowEye * smoothstep(0.3, 0.5, hz) * smoothstep(0.015, 0.03, ax + edge * 0.02);
+    // (joues : sur les côtés du museau, devant l'œil — prises depuis l'arrière de la tête, elles faisaient un pavé
+    // cuivre sur la joue du berger australien)
+    float hzEp = (cEye.z - cHead.z) / headLen;
+    float cheekT = head * (1.0 - ear) * belowEye * smoothstep(hzEp - 0.14, hzEp + 0.0, hz + edge * 0.2) * smoothstep(0.015, 0.03, ax + edge * 0.02);
     float chestT = body * (1.0 - legs) * smoothstep(shZ, shZ + 0.05, p.z) * (1.0 - smoothstep(0.35, 0.5, h + edge))
       * smoothstep(0.01, 0.03, ax);
     float legT = legs * (1.0 - smoothstep(elbowY * 0.55, elbowY * 0.75, p.y + edge * 0.1));
     float under = tail * (1.0 - smoothstep(-0.02, 0.02, p.y - (cLand.w * 0.85))) * 0.8;
-    float pt = max(max(brow, cheekT), max(chestT, max(legT, under)));
+    // (tricolore sur fond blanc — jack, cavalier, épagneul — : le feu seulement sur la tête, les pattes restent blanches)
+    float body2 = 1.0 - cPointsHead;
+    float pt = max(max(brow, cheekT), max(chestT * body2, max(legT * body2, under * body2)));
     c = mix(c, cPointsC, cPoints * smoothstep(0.35, 0.65, pt) * (1.0 - white));
   }
   // ---- moucheture (rouan, épagneul breton) dans le blanc
   if (cTick > 0.0) {
-    float tk = smoothstep(0.72, 0.8, cmpNoise(sp * 70.0)) * (1.0 - head * 0.5);
-    c = mix(c, cTickC, cTick * tk * 0.8);
+    float tk = smoothstep(0.74, 0.79, cmpNoise(sp * 115.0) + (cmpNoise(sp * 30.0) - 0.5) * 0.15) * (1.0 - head * 0.5);
+    c = mix(c, cTickC, cTick * tk);
   }
   // ---- taches du dalmatien : plus petites sur la tête et les pattes, oreilles foncées
   if (cSpots > 0.0) {
@@ -548,15 +651,25 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   if (cMask.x > 0.0 || cMask.y > 0.0) {
     float eyeRing = head * (1.0 - smoothstep(0.012, 0.03, length(vec2(ax - cEye.x, (p.y - cEye.y) * 1.2)) + edge * 0.02))
       * smoothstep(0.15, 0.3, hz) * (1.0 - smoothstep(0.5, 0.6, hz));
-    float m = max(muzzle * smoothstep(0.55, 0.7, hz + edge * 0.4), eyeRing * 0.8) * (1.0 - ear);
+    float m = max(muzzle * smoothstep(0.55, 0.7, hz + edge * 0.4), eyeRing * 0.8) * (1.0 - ear) * (1.0 - smoothstep(0.3, 0.6, blazeW) * cUnder.x);
     c = mix(c, cMaskC, clamp(cMask.x * m + cMask.y * ear, 0.0, 1.0));
   }
   // (oreilles un peu plus sombres que la tête : elles s'en détachent, surtout tombantes)
   c *= 1.0 - 0.12 * ear;
+  // Robes sombres : tour des yeux et arête du museau un peu éclaircis (le visage se lit au lieu d'un masque noir).
+  if (cSheen > 0.0) {
+    float ring = 1.0 - smoothstep(0.014, 0.034, length(vec2(ax - cEye.x, (p.y - cEye.y) * 1.25)));
+    float bridge = (1.0 - smoothstep(0.006, 0.02, ax)) * smoothstep(0.42, 0.55, hz) * (1.0 - smoothstep(0.82, 0.95, hz))
+      * smoothstep(cEye.y - 0.03, cEye.y - 0.005, p.y);
+    float lift = head * (1.0 - ear) * clamp(ring * 0.8 + bridge * 0.6, 0.0, 1.0) * cSheen;
+    c = mix(c, c * 1.8 + vec3(0.012, 0.009, 0.007), lift * 0.6);
+  }
   return c;
 }`;
 
 const COLOR_F = /* glsl */ `
+float cmpEyeK = 0.0;
+float cmpCatch = 0.0;
 if (cOn > 0.5) {
   vec3 c0 = diffuseColor.rgb;
   vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
@@ -610,20 +723,46 @@ if (cOn > 0.5) {
   nc *= 1.0 - 0.35 * cWet;
   // (effacé de loin, comme le relief : sinon des pixels qui scintillent)
   float fwC = length(fwidth(vCmpPos));
-  if (cCurl.x > 0.0) nc *= mix(1.0, 0.66 + 0.46 * smoothstep(0.25, 0.75, cmpCurlH(vCmpPos)), cCurl.x * (1.0 - smoothstep(0.25, 0.9, fwC * 110.0)));
+  // (frisure : un relief doux, presque pas de gris dans la couleur — elle faisait du crépi sale sur le caniche blanc)
+  if (cCurl.x > 0.0) nc *= mix(1.0, 0.88 + 0.16 * smoothstep(0.25, 0.75, cmpCurlH(vCmpPos)), cCurl.x * (1.0 - smoothstep(0.25, 0.9, fwC * 80.0)));
   // (soyeux : les mèches sur le corps, pas sur la face au poil court, où elles faisaient des stries)
   if (cCurl.y > 0.0) nc *= mix(1.0, 0.82 + 0.26 * cmpSilkH(vCmpPos), cCurl.y * (1.0 - smoothstep(0.25, 0.9, fwC * 170.0)) * (1.0 - 0.8 * vCmpPart.z));
+  if (cWrinkle > 0.0) nc *= mix(1.0, 0.8 + 0.2 * cmpWrinkleH(vCmpPos, vCmpPart), cWrinkle * (1.0 - smoothstep(0.3, 1.0, fwC * 160.0)));
+  // Lèvres et gencives (jack) : brun-noir comme chez le vrai chien, pas rouge vif (« rouge à lèvres »).
+  if (cKeepOpt.z > 0.0 && cKeepOpt.y > 0.0) {
+    float dh2 = abs(fract(hsv.x - 0.985 + 0.5) - 0.5);
+    // (seulement le long de la fente de la gueule, devant les yeux : les plaques brun-roux de la tête du jack ont la
+    // même teinte et faisaient des taches sales sur le front et autour des yeux)
+    float yM = cEye.y - 0.066 + (vCmpPos.z - cHead.w + 0.041) * 0.25;
+    float mouthZone = (1.0 - smoothstep(0.016, 0.026, abs(vCmpPos.y - yM))) * smoothstep(cEye.z, cEye.z + 0.025, vCmpPos.z);
+    float lip = vCmpPart.z * mouthZone * (1.0 - smoothstep(0.05, 0.09, dh2)) * smoothstep(0.25, 0.4, hsv.y) * smoothstep(0.12, 0.25, hsv.z);
+    keep = keep * (1.0 - lip);
+    nc = mix(nc, vec3(0.035, 0.026, 0.022), lip);
+  }
   diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0));
   // Blanc de l'œil du shiba : foncé (il se voyait autour de l'iris dès que la tête grandit : chiots aux yeux ronds)
-  if (eyeK > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.038, 0.03), smoothstep(0.22, 0.45, lum0) * (1.0 - smoothstep(0.12, 0.3, hsv.y)));
+  if (eyeK > 0.5) {
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.038, 0.03), smoothstep(0.22, 0.45, lum0) * (1.0 - smoothstep(0.12, 0.3, hsv.y)));
+    // iris de la robe (yeux bleus) : teinte remplacée, grain gardé
+    float iris = smoothstep(0.22, 0.4, hsv.y) * smoothstep(0.012, 0.03, lum0) * (1.0 - smoothstep(0.35, 0.5, lum0));
+    if (cIris.w > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, cIris.rgb * clamp(lum0 / 0.11, 0.35, 1.5), iris);
+    // reflet : un point de lumière en haut et en avant du globe (le regard vit, même dans l'ombre)
+    float side = sign(vCmpPos.x - cMisc.x);
+    vec3 eo = vec3(cMisc.x + side * cEye.x, cEye.y, cEye.z);
+    vec3 cp = eo + vec3(side * 0.004, 0.0085, 0.0175);
+    cmpCatch = 1.0 - smoothstep(0.0018, 0.0032, distance(vCmpPos, cp));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), cmpCatch);
+    cmpEyeK = 1.0;
+  }
 }`;
 
 // Relief du poil frisé ou soyeux : la normale penche selon la pente de la hauteur (comme une bumpMap), effacé de loin
 // (moins d'un pixel par bouclette : scintillement).
 const CURL_F = /* glsl */ `
-if (cOn > 0.5 && cRole > 0.5 && (cCurl.x > 0.0 || cCurl.y > 0.0)) {
+if (cOn > 0.5 && cRole > 0.5 && (cCurl.x > 0.0 || cCurl.y > 0.0 || cWrinkle > 0.0)) {
   float fade = 1.0 - smoothstep(0.25, 0.9, length(fwidth(vCmpPos)) * 140.0);
-  float hh = (cCurl.x * 0.004 * cmpCurlH(vCmpPos) + cCurl.y * 0.0015 * cmpSilkH(vCmpPos) * (1.0 - 0.8 * vCmpPart.z)) * fade;
+  float hh = (cCurl.x * 0.004 * cmpCurlH(vCmpPos) + cCurl.y * 0.0015 * cmpSilkH(vCmpPos) * (1.0 - 0.8 * vCmpPart.z)) * fade
+    + cWrinkle * 0.0022 * cmpWrinkleH(vCmpPos, vCmpPart) * (1.0 - smoothstep(0.3, 1.0, length(fwidth(vCmpPos)) * 160.0));
   vec2 dH = vec2(dFdx(hh), dFdy(hh));
   vec3 sx = dFdx(-vViewPosition);
   vec3 sy = dFdy(-vViewPosition);
@@ -632,6 +771,15 @@ if (cOn > 0.5 && cRole > 0.5 && (cCurl.x > 0.0 || cCurl.y > 0.0)) {
   float det = dot(sx, r1);
   vec3 grad = sign(det) * (dH.x * r1 + dH.y * r2);
   normal = normalize(abs(det) * normal - grad);
+}`;
+
+// Lisière claire des robes sombres (lumière rasante sur le poil lustré : le modelé de la tête et du corps se lit) et
+// reflet de l'œil toujours visible.
+const SHEEN_F = /* glsl */ `
+if (cOn > 0.5 && cRole > 0.5) {
+  float fr = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 2.2);
+  totalEmissiveRadiance += cSheen * vec3(0.075, 0.062, 0.052) * fr * (1.0 - cmpEyeK);
+  totalEmissiveRadiance += vec3(0.55) * cmpCatch;
 }`;
 
 const _v = new THREE.Vector3();
@@ -853,7 +1001,7 @@ export function coatMaterial(src, shared, opts) {
     cKeepS: { value: spheres.slice(0, MAX_KEEP).map((x) => x.s) },
     cKeepL: { value: spheres.slice(0, MAX_KEEP).map((x) => x.l) },
     cKeepUv: { value: uvs.slice(0, MAX_UV) },
-    cKeepOpt: { value: new THREE.Vector4(keep.dark ?? 0, keep.pink ? 1 : 0, 0, keep.pads ?? 0) },
+    cKeepOpt: { value: new THREE.Vector4(keep.dark ?? 0, keep.pink ? 1 : 0, keep.darkLips ? 1 : 0, keep.pads ?? 0) },
   };
   const uniforms = { ...shared, ...own };
   const mat = new THREE.MeshStandardMaterial({
@@ -873,8 +1021,9 @@ export function coatMaterial(src, shared, opts) {
       .replace('#include <common>', `#include <common>\n${COMMON_F}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${CURL_F}`)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, cWet);');
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, cWet);\nroughnessFactor = mix(roughnessFactor, 0.12, cmpEyeK);')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${SHEEN_F}`);
   };
-  mat.customProgramCacheKey = () => 'dog-coat-v2';
+  mat.customProgramCacheKey = () => 'dog-coat-v3';
   return mat;
 }

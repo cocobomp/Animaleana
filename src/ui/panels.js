@@ -67,6 +67,30 @@ function money(ui, n) {
 }
 
 /** Petite fiche d'identité : espèce, race, âge, sexe, caractère, robe. pic : vignette 3D (sinon l'emoji). */
+/**
+ * Vignette 3D d'un animal du jeu (refuge, fiche) : la même fabrique que l'animalerie (src/game/thumbScenes.js),
+ * avec sa race, sa robe, son sexe, son âge et sa graine de marques. null si sa robe n'est pas au catalogue de
+ * la race (croisement) : on garde alors l'emoji.
+ */
+export function animalThumbSpec(a) {
+  const breed = getBreed(a.species, a.breed);
+  if (!breed?.colors?.length || !a.look) return null;
+  const same = (c) => c.coat === a.look.coat && (c.pattern ?? breed.pattern) === a.look.pattern;
+  let ci = breed.colors.findIndex((c) => same(c) && (c.secondary ?? null) === (a.look.secondary ?? null));
+  if (ci < 0) ci = breed.colors.findIndex(same);
+  if (ci < 0) return null;
+  const st = lifeStage(a);
+  return { kind: 'animal', species: a.species, breed: breed.id, colorIndex: ci, sex: a.sex, stage: st === 'senior' ? 'adult' : st, seed: a.look.seed };
+}
+
+/** Élément vignette (ou emoji) d'un animal du jeu, w × h pixels affichés. */
+function animalPic(g, a, w, hh, cls = '') {
+  const emoji = SPECIES[a.species].emoji;
+  const spec = animalThumbSpec(a);
+  if (!spec || !g) return h('span', { class: cls ? `card-emoji ${cls}` : 'card-emoji' }, emoji);
+  return thumb(g, spec, { w, h: hh, emoji, cls, alt: a.name ?? '' });
+}
+
 export function animalCard(a, pic = null) {
   const row = (k, v) => h('div', { class: 'id-row' }, h('span', {}, k), h('b', {}, v));
   return h('div', { class: 'id-card' },
@@ -101,8 +125,10 @@ function renderAnimal(ui, g, a) {
   const stage = lifeStage(a);
   const btn = (label, fn, opts = {}) => h('button', { class: `act ${opts.cls ?? ''}`, onClick: fn, disabled: opts.disabled }, label);
 
+  // En-tête : la vignette 3D de l'animal (même fabrique que l'animalerie) à côté de ses étiquettes.
+  const pic = animalThumbSpec(a) ? animalPic(g, a, 96, 72, 'animal-thumb') : null;
   const info = h('div', { class: 'animal-info' },
-    h('div', { class: 'chips' },
+    h('div', { class: pic ? 'animal-head' : '' }, pic, h('div', { class: 'chips' },
       h('span', { class: 'chip' }, `${speciesName(a)} · ${breedName(a)}`),
       h('span', { class: 'chip' }, `${sexIcon(a)} ${t(a.sex === 'f' ? 'female' : 'male')}`),
       h('span', { class: 'chip' }, `${ageText(a)} · ${t(`stage_${stage}`)}`),
@@ -111,7 +137,7 @@ function renderAnimal(ui, g, a) {
       h('span', { class: `chip weight-${weightClass(a)}` }, `⚖️ ${t(`weight_${weightClass(a)}`, { g: a.sex })}`),
       h('span', { class: `chip mood-${m}` }, `${MOOD_EMOJI[m]} ${t(`mood_${m}`, { g: a.sex })}`),
       h('span', { class: `chip swatch${lightCoat(a.look.coat) ? ' light' : ''}`, style: { background: hexColor(a.look.coat) } }, coatName(a)),
-    ),
+    )),
     a.sick ? h('p', { class: 'warn' }, `🤒 ${t('r_sick', { name: a.name, g: a.sex })}`) : null,
     clientInfo(a, g), // animal confié : propriétaire, jours restants, soin
     !here ? h('p', { class: 'note' }, t('isAt', { place: `${PLACES[a.location].flag} ${L(PLACES[a.location].name)}` })) : null,
@@ -280,7 +306,7 @@ export function openAdoption(ui) {
       const price = adoptionPrice(a);
       const afford = canAfford(g.profile, price);
       return h('div', { class: 'card adopt' },
-        h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+        animalPic(g, a, 72, 54, 'adopt-thumb'), // (vignette 3D de l'animal, comme à l'animalerie)
         h('span', { class: 'card-main' },
           h('b', {}, `${a.name} ${sexIcon(a)}`),
           h('small', {}, `${speciesName(a)} · ${breedName(a)} · ${coatName(a)}`),
@@ -290,7 +316,7 @@ export function openAdoption(ui) {
           class: 'primary',
           disabled: !afford,
           onClick: async () => {
-            const name = await ui.prompt(t('chooseName'), suggestedName(g.profile, a.name), animalCard(a));
+            const name = await ui.prompt(t('chooseName'), suggestedName(g.profile, a.name), animalCard(a, animalThumbSpec(a) ? animalPic(g, a, 96, 72) : null));
             if (name === null) return;
             g.adopt(a, name);
             ui.renderPanel();
@@ -729,8 +755,9 @@ export function openShop(ui) {
     const emoji = SPECIES[st.species].emoji;
     const spec = { kind: 'animal', species: st.species, breed: st.breed, colorIndex: st.colorIndex, sex: st.sex, stage: st.stage, seed: st.seed };
     // (une seule image pour l'aperçu et la fiche : la grande sert aussi à la petite ; pendant qu'une nouvelle se
-    // fait, l'ancienne reste sous un voile au lieu de redevenir un emoji)
-    const pic = (w, hh, cls) => thumb(g, spec, { w, h: hh, emoji, cls, urgent: true, alt: L(breed.name), hold: `shop:${st.species}` });
+    // fait, l'ancienne reste sous un voile au lieu de redevenir un emoji — pour la même race seulement : une
+    // autre race repart de l'emoji, sinon l'image de la race d'avant restait sous le nom de la nouvelle)
+    const pic = (w, hh, cls) => thumb(g, spec, { w, h: hh, emoji, cls, urgent: true, alt: L(breed.name), hold: `shop:${st.species}:${st.breed}` });
     const coat = coatLabel(breed.colors[st.colorIndex % breed.colors.length], st.sex);
     return [
       h('p', { class: 'note' }, g.isHome ? t('shopHelp') : t('breederHelp')),

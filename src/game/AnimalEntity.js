@@ -9,7 +9,7 @@ import { emojiTexture } from './textures.js';
 import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
 import { buildAccessories, removeAccessories } from './models/salon.js'; // accessoires de toilettage
-import { canLeash, heelSkill } from '../sim/gear.js';
+import { canLeash, heelSkill, LEASH_LEN } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
 import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
 import { animateCat } from './catAnim.js'; // chats : assis, toilette, en boule, queue levée
@@ -417,13 +417,20 @@ export class AnimalEntity {
     const leashed = canLeash(d) && d.leashed;
     const pl = ctx.game.player;
     const h = pl.heading;
-    // Place « au pied » : à gauche, un peu en arrière.
-    const heel = { x: pl.position.x + Math.cos(h) * 0.9 - Math.sin(h) * 0.3, z: pl.position.z - Math.sin(h) * 0.9 - Math.cos(h) * 0.3 };
+    // Place « au pied » : à gauche, un peu devant (il prend du retard en marchant : il reste à côté de la joueuse, dans
+    // le champ de la caméra, au lieu de traîner derrière elle).
+    const heel = { x: pl.position.x + Math.cos(h) * 0.75 + Math.sin(h) * 0.35, z: pl.position.z - Math.sin(h) * 0.75 + Math.cos(h) * 0.35 };
     this.sniff = (this.sniff ?? 0) - dt;
     if (this.sniff <= 0) {
       // Plus il est dressé, moins il est distrait.
       this.sniffing = Math.random() > skill;
-      this.sniffSpot = { x: pl.position.x + (Math.random() - 0.5) * 10, z: pl.position.z + (Math.random() - 0.5) * 10 };
+      if (leashed) {
+        // (en laisse : il renifle devant la joueuse, de son côté gauche — dans un carré de 10 m autour d'elle, le
+        // teckel partait renifler hors de l'écran, à droite)
+        const fwd = 0.4 + Math.random() * 1.4;
+        const left = 0.2 + Math.random() * 1.2;
+        this.sniffSpot = { x: pl.position.x + Math.sin(h) * fwd + Math.cos(h) * left, z: pl.position.z + Math.cos(h) * fwd - Math.sin(h) * left };
+      } else this.sniffSpot = { x: pl.position.x + (Math.random() - 0.5) * 10, z: pl.position.z + (Math.random() - 0.5) * 10 };
       this.sniff = 1.5 + Math.random() * 3;
     }
     const goal = this.sniffing ? this.sniffSpot : heel;
@@ -434,7 +441,8 @@ export class AnimalEntity {
     if (!leashed && distPlayer > 14 && Math.random() < dt) this.sniffing = false;
     this.leashPull = 0;
     if (leashed) {
-      const LEASH = 2.6;
+      // (laisse courte : le chien reste près de la joueuse, visible)
+      const LEASH = LEASH_LEN;
       const p = this.root.position;
       const dx = p.x - pl.position.x;
       const dz = p.z - pl.position.z;

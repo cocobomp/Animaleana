@@ -141,18 +141,80 @@ print('RUMP', len(rump), 'sommets')
 RETARGET_BONES = ['root', 'pelvis', 'spine1', 'spine2', 'chest', 'neck1', 'neck2', 'head'] + \
     [f'{b}{s_}' for s_ in 'LR' for b in ('scap', 'humerus', 'radius', 'metacarpus', 'toes', 'femur', 'tibia', 'metatarsus', 'htoes')]
 
-if opt.get('--dump-retarget'):
+
+def dump_retarget(path):
+    """Poses du shiba (matrices des os, espace armature, image par image) pour les reprendre sur le jack : ses clips
+    faits main (repos, assis, patte, roulade) et ses poses couchées générées (couché, endormi), une fois au sol."""
     dump = {'hip': hipz, 'rest': {b: [list(r) for r in B[b].matrix_local] for b in RETARGET_BONES}, 'clips': {}}
-    for name in ('idle', 'sit', 'paw', 'rollover'):
-        act = bpy.data.actions[name]
+    for name in ('idle', 'sit', 'paw', 'rollover', 'lie', 'sleep'):
+        act = bpy.data.actions.get(name)
+        if act is None:
+            continue
         f0, f1 = int(act.frame_range[0]), int(act.frame_range[1])
         frames = []
         for fr in range(f0, f1 + 1):
             P, _ = action_pose(act, fr)
             frames.append({b: [list(r) for r in P[b]] for b in RETARGET_BONES})
         dump['clips'][name] = frames
-    json.dump(dump, open(opt['--dump-retarget'], 'w'))
-    print('DUMP RETARGET', opt['--dump-retarget'])
+    json.dump(dump, open(path, 'w'))
+    print('DUMP RETARGET', path)
+
+
+# Poses au sol reprises du shiba (assis, couché, endormi) : les proportions du jack (membres plus courts, tronc
+# plus long, croupe plus basse) ne posent plus les mêmes points au sol. Le corps est descendu (ou relevé) pour
+# que la croupe, le ventre ou les avant-bras touchent le sol, puis les membres sont repliés par cinématique
+# inverse, pieds posés à plat à l'aplomb de leur place dans la pose du shiba. (Les poses du jack générées
+# jusqu'ici n'étaient pas des assises : croupe en V, cuisse qui pendait, couché croupe en l'air.)
+pawset = {(m, i) for ids in paws.values() for m, i in ids}
+body_items = [it for it in solid if it not in pawset][::2]
+
+
+def pose_lowest(pose, items):
+    act = dg.bake(rig, '_low', None, 1, cyclic=False, pose_fn=lambda t: (pose, {}))
+    arm.animation_data.action = act
+    bpy.context.scene.frame_set(0)
+    z = min(K.Probe(None).z_of(items))
+    arm.animation_data.action = None
+    bpy.data.actions.remove(act)
+    return z
+
+
+def lifted(pose, dz):
+    out = {'__body__': pose['__body__']}
+    for k_, Mx in pose.items():
+        if k_ != '__body__':
+            M2 = Mx.copy()
+            M2.translation = Mx.translation + Vector((0, 0, dz))
+            out[k_] = M2
+    return out
+
+
+def leg_joints(pose, lab, rg=None):
+    L = (rg or rig).legs[lab]
+    return [pose[n].translation.copy() for n, _k in L['drive']]
+
+
+def a3_rest(lab, rg=None):
+    J = (rg or rig).legs[lab]['J']
+    return math.atan2(J[2].z - J[3].z, J[2].y - J[3].y)
+
+
+def ground_leg(pose, lab, a3=None, bend=None, dy=0.0, splay=0.0, dz=0.0, rg=None, yabs=None):
+    """Membre replié, métapode posé (articulation métapodo-phalangienne à sa hauteur de repos, à l'aplomb de sa
+    place actuelle, avancée de dy, ou en yabs), angle a3 du métapode (None : celui du repos). rg : squelette (celui
+    d'un gabarit : le sol du membre et ses articulations y sont déjà déplacés)."""
+    rg = rg or rig
+    L = rg.legs[lab]
+    J = leg_joints(pose, lab, rg)
+    # (squelette d'un gabarit : l'articulation haute de l'os est celle du squelette réel, les suivantes viennent du
+    # gabarit — on repart de la tête de l'os ancre)
+    J3 = Vector((L['J'][3].x, (J[3].y if yabs is None else yabs) + dy, L['J'][3].z + dz))
+    Js, _pts = rg.solve_fold(lab, J[0], J3, a3_rest(lab, rg) if a3 is None else a3, 0.0, splay, bend)
+    out = dict(pose)
+    for n, k_ in L['drive']:
+        out[n] = rg.bone_matrix(n, L['seg'][k_], L['J'][k_], Js[k_], Js[k_ + 1])
+    return out
+
 
 if opt.get('--retarget'):
     src = json.load(open(opt['--retarget']))
@@ -180,12 +242,28 @@ if opt.get('--retarget'):
             else:
                 pose[name] = M0
         return pose
+
+    GROUND_POSES = M.get('ground_poses', {})
+
+    def settle_pose(name, pose, dz):
+        p = lifted(pose, dz)
+        for lab, spec in GROUND_POSES.get(name, {}).items():
+            p = ground_leg(p, lab, **spec)
+        return p
+
     for name, frames in src['clips'].items():
         if name not in M.get('retarget_clips', src['clips']):
             continue
         n = len(frames) - 1
-        dg.bake(rig, name, None, n, cyclic=name in ('idle', 'sit'),
-                pose_fn=lambda t, frames=frames, n=n: (retarget_pose(frames[min(n, round(t * n))]), {}))
+        fix = None
+        if name in GROUND_POSES:
+            # (même descente pour toutes les images : celle qui pose le corps à la première)
+            fix = -pose_lowest(retarget_pose(frames[0]), body_items) + 0.001
+            print('RETARGET', name, 'corps descendu de', round(-fix, 4))
+        dg.bake(rig, name, None, n, cyclic=name in ('idle', 'sit', 'lie', 'sleep'),
+                pose_fn=lambda t, frames=frames, n=n, name=name, fix=fix: (
+                    (settle_pose(name, retarget_pose(frames[min(n, round(t * n))]), fix) if fix is not None
+                     else retarget_pose(frames[min(n, round(t * n))])), {}))
         kept.append(name)
     print('RETARGET', list(src['clips']), 'échelle', round(kS, 3))
 
@@ -284,20 +362,31 @@ if 'sit' not in kept:
 
 # ---- donner la patte (généré) : assis, antérieur gauche levé en avant, petites secousses ---------------------------
 if 'paw' not in kept:
-    base_sit = sit_gp(report.get('sitHip', 0.25))
     R = rig.legs['FL']
     l1, l2, l3 = R['l2d'][:3]
-    J0 = R['J'][0]
-    up = dict(base_sit)
-    up['legs'] = dict(base_sit['legs'])
-    up['legs']['FL'] = {'J3': (J0.y - 0.75 * (l1 + l2), J0.z - 0.35 * (l1 + l2)), 'a3': 2.4, 'phi': 0.6, 'bend': 1}
-    up['head_base'] = base_sit.get('head_base', 0.0) - 0.1
-    p_sit = dg.pose_at(rig, 0.0, base_sit)[0]
-    p_up = dg.pose_at(rig, 0.0, up)[0]
+    if 'sit' in kept and not M.get('paw_from_gp'):
+        # (sur l'assis repris du shiba : l'antérieur droit reste posé, le gauche se lève devant le poitrail)
+        p_sit = action_pose(bpy.data.actions['sit'], int(bpy.data.actions['sit'].frame_range[0]))[0]
+        J = leg_joints(p_sit, 'FL')
+        lift_k = M.get('paw_lift', (0.62, 0.42))
+        J3t = Vector((R['J'][3].x, J[0].y - lift_k[0] * (l1 + l2), J[0].z - lift_k[1] * (l1 + l2)))
+        Js, _pts = rig.solve_fold('FL', J[0], J3t, 2.3, 0.7, 0.0, 1)
+        p_up = dict(p_sit)
+        for n_, k_ in R['drive']:
+            p_up[n_] = rig.bone_matrix(n_, R['seg'][k_], R['J'][k_], Js[k_], Js[k_ + 1])
+    else:
+        base_sit = sit_gp(report.get('sitHip', 0.25))
+        J0 = R['J'][0]
+        up = dict(base_sit)
+        up['legs'] = dict(base_sit['legs'])
+        up['legs']['FL'] = {'J3': (J0.y - 0.75 * (l1 + l2), J0.z - 0.35 * (l1 + l2)), 'a3': 2.4, 'phi': 0.6, 'bend': 1}
+        up['head_base'] = base_sit.get('head_base', 0.0) - 0.1
+        p_sit = dg.pose_at(rig, 0.0, base_sit)[0]
+        p_up = dg.pose_at(rig, 0.0, up)[0]
 
     def paw_pose(t):
         k = dg.smooth(t / 0.25) * (1 - dg.smooth((t - 0.8) / 0.2))
-        pose = dg.blend_poses(rig, p_sit, p_up, k)
+        pose = dg.blend_local(rig, p_sit, p_up, k)
         return pose, {}
     dg.bake(rig, 'paw', None, 120, cyclic=False, pose_fn=paw_pose)
 
@@ -371,17 +460,19 @@ def lie_gp():
     return gp
 
 
-lie = lie_gp()
-dg.bake(rig, 'lie', lie, 120, lambda t: dict(breathe(t, 0.7, 2), head_yaw=0.15 * math.sin(math.tau * t + 0.5)))
+if 'lie' not in kept:
+    lie = lie_gp()
+    dg.bake(rig, 'lie', lie, 120, lambda t: dict(breathe(t, 0.7, 2), head_yaw=0.15 * math.sin(math.tau * t + 0.5)))
 
 # ---- museau : recherche d'une pose (encolure, tête, bascule) qui met le bout du nez à une hauteur donnée -----------
 mz_pts = [(dom[m][i], m.matrix_world @ m.data.vertices[i].co) for m, i in muzzle]
 
 
-def muzzle_eval(gp):
+def muzzle_eval(gp, rg=None):
     """Plus bas point du museau, et angles sous l'horizontale de la tête et de l'encolure (rad)."""
-    pose, _ = dg.pose_at(rig, 0.0, gp)
-    P = [(pose[b] @ rig.rest[b].inverted() @ p) for b, p in mz_pts]
+    rg = rg or rig
+    pose, _ = dg.pose_at(rg, 0.0, gp)
+    P = [(pose[b] @ rg.rest[b].inverted() @ p) for b, p in mz_pts]
     zmin = min(p.z for p in P)
     c = sum(P, Vector()) / len(P)
     hj = pose[cfg['head'][0]].translation
@@ -392,9 +483,9 @@ def muzzle_eval(gp):
     return zmin, below(hj, c), below(nj, hj)
 
 
-def head_search(base, zt, nb_max, ha_max, ha_min=0.9, pitch=True, w_pt=2.0, nb_min=0.0, hb_min=-1.0):
+def head_search(base, zt, nb_max, ha_max, ha_min=0.9, pitch=True, w_pt=2.0, nb_min=0.0, hb_min=-1.0, pitch_max=0.36, rg=None):
     best = None
-    for k in range(0, 13 if pitch else 1):
+    for k in range(0, int(pitch_max / 0.03 + 1e-6) + 1 if pitch else 1):
         pt = 0.03 * k
         for i in range(int(nb_min / 0.1), int(nb_max / 0.1) + 1):
             nb = i * 0.1
@@ -402,7 +493,7 @@ def head_search(base, zt, nb_max, ha_max, ha_min=0.9, pitch=True, w_pt=2.0, nb_m
                 hb = hb_min + j * 0.1
                 gp = dict(base, neck_base=base.get('neck_base', 0.0) + nb, head_base=base.get('head_base', 0.0) + hb,
                           pitch_base=base.get('pitch_base', 0.0) + pt)
-                z, ha, na = muzzle_eval(gp)
+                z, ha, na = muzzle_eval(gp, rg)
                 cost = abs(z - zt) * 8 + w_pt * pt + 0.02 * nb + 0.05 * abs(hb)
                 cost += 4.0 * max(0.0, ha - ha_max) + 4.0 * max(0.0, ha_min - ha)
                 if best is None or cost < best[0]:
@@ -411,22 +502,42 @@ def head_search(base, zt, nb_max, ha_max, ha_min=0.9, pitch=True, w_pt=2.0, nb_m
     return best[1]
 
 
-# renifler : bout du nez à 2 cm du sol, petits coups de nez, un antérieur un peu en avant
-sniff = head_search(dict(still, leg_dy={'FL': -0.06 * s}, pivot=hp.copy(), drop=0.01 * s), 0.025 * s, 2.6, 1.6)
+def front_planted(base, dy=None, splay=0.07, rg=None):
+    """Antérieurs tendus et posés pendant que la tête descend (renifler, manger, boire) : pied à l'aplomb de l'épaule
+    (là où il est debout par rapport à elle, un peu en avant), métacarpe à son angle de repos, seul le coude se plie
+    de ce que l'épaule est descendue. (Visés à leur place du repos alors que le corps basculait de 0,3 rad, la
+    cinématique inverse repliait l'avant-bras et le carpe : pied retourné sous le poitrail.)"""
+    rg = rg or rig
+    gp = dict(base)
+    gp['legs'] = dict(base.get('legs', {}))
+    for lab in ('FL', 'FR'):
+        R = rg.legs[lab]
+        d_ = (dy or {}).get(lab, 0.0)
+        under = R['J'][3].y - R['J'][0].y
+        gp['legs'][lab] = {'under': under + d_, 'a3': a3_rest(lab, rg), 'phi': 0.0, 'bend': 1, 'splay': splay}
+    return gp
+
+
+# renifler : bout du nez près du sol, petits coups de nez ; l'encolure et les épaules descendent (le corps bascule
+# autour des hanches), les antérieurs restent sous les épaules, un peu en avant, seul le coude se plie (gabarit court :
+# il bascule à peine, voir gabarits)
+SNIFF_PITCH = M.get('sniff_pitch', 0.3)
+sniff = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.01 * s), {'FL': -0.02 * s, 'FR': 0.0}), 0.025 * s, 3.4, 1.7, pitch_max=SNIFF_PITCH)
 dg.bake(rig, 'sniff', sniff, 90, lambda t: {'head': 0.05 * max(0.0, math.sin(math.tau * 6 * t)) ** 2,
                                              'neck_yaw': 0.25 * math.sin(math.tau * t), 'head_yaw': 0.1 * math.sin(math.tau * t + 0.4)})
 # manger : museau dans la gamelle (≈ 10 cm du sol), mâchoire qui mâche
-eat = head_search(dict(still, pivot=hp.copy(), drop=0.008 * s), 0.10 * s, 1.8, 1.3, ha_min=0.7)
+eat = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s), {'FL': -0.015 * s, 'FR': -0.015 * s}), 0.10 * s, 2.0, 1.3, ha_min=0.7, pitch_max=SNIFF_PITCH)
 dg.bake(rig, 'eat', eat, 60, lambda t: {'head': 0.04 * math.sin(math.tau * 3 * t), 'jaw': 0.12 + 0.12 * math.sin(math.tau * 3 * t),
                                          'neck_yaw': 0.05 * math.sin(math.tau * t)})
 # boire : un peu plus haut, gueule entrouverte, langue qui lape (shiba), petits coups de tête rapides
-drink = head_search(dict(still, pivot=hp.copy(), drop=0.008 * s), 0.12 * s, 1.8, 1.3, ha_min=0.7)
+drink = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s), {'FL': -0.015 * s, 'FR': -0.015 * s}), 0.12 * s, 2.0, 1.3, ha_min=0.7, pitch_max=SNIFF_PITCH)
 dg.bake(rig, 'drink', drink, 60, lambda t: {'head': 0.03 * math.sin(math.tau * 6 * t), 'jaw': 0.16 + 0.06 * math.sin(math.tau * 6 * t),
                                              'tongue': 0.35 * math.sin(math.tau * 6 * t)})
 
 # ---- dormir : couché, tête posée au sol entre les pattes, respiration lente ---------------------------------------
-sleep = head_search(dict(lie), 0.02 * s, 2.8, 0.7, ha_min=-0.35, pitch=False, hb_min=-2.2)
-dg.bake(rig, 'sleep', sleep, 120, lambda t: dict(breathe(t, 1.2, 1)))
+if 'sleep' not in kept:
+    sleep = head_search(dict(lie), 0.02 * s, 2.8, 0.7, ha_min=-0.35, pitch=False, hb_min=-2.2)
+    dg.bake(rig, 'sleep', sleep, 120, lambda t: dict(breathe(t, 1.2, 1)))
 
 # ---- queue qui remue (content) : corps qui ondule, gueule entrouverte -----------------------------------------------
 dg.bake(rig, 'wag', dict(still, neck_base=-0.05), 30, lambda t: dict(
@@ -506,7 +617,7 @@ def jump_pose(t):
         t0, p0 = jposes[k]
         t1, p1 = jposes[k + 1]
         if t <= t1:
-            return dg.blend_poses(rig, p0, p1, dg.smooth((t - t0) / (t1 - t0))), {}
+            return dg.blend_local(rig, p0, p1, dg.smooth((t - t0) / (t1 - t0))), {}
     return jposes[-1][1], {}
 
 
@@ -520,17 +631,306 @@ if 'idle' not in kept:
 # ---- transitions (s'asseoir / se relever / se coucher / se lever) -------------------------------------------------
 stand_p, _ = dg.pose_at(rig, 0.0, dict(still))
 sit_p = action_pose(bpy.data.actions['sit'], int(bpy.data.actions['sit'].frame_range[0]))[0]
-lie_p = dg.pose_at(rig, 0.0, lie)[0]
+lie_p = action_pose(bpy.data.actions['lie'], 0)[0] if 'lie' in kept else dg.pose_at(rig, 0.0, lie)[0]
 
 
 def trans(name, pa, pb, frames):
-    dg.bake(rig, name, None, frames, cyclic=False, pose_fn=lambda t: (dg.blend_poses(rig, pa, pb, dg.smooth(t)), {}))
+    dg.bake(rig, name, None, frames, cyclic=False, pose_fn=lambda t: (dg.blend_local(rig, pa, pb, dg.smooth(t)), {}))
 
 
 trans('sit_down', stand_p, sit_p, 24)
 trans('stand_up', sit_p, stand_p, 20)
 trans('lie_down', sit_p, lie_p, 30)
 trans('get_up', lie_p, stand_p, 30)
+
+# ---- gabarits : allures et poses des membres raccourcis ou allongés -----------------------------------------------
+# Le jeu raccourcit ou allonge les membres d'une race (teckel, corgi : 0,5 ; lévriers : 1,28) en gardant les rotations
+# des clips : la foulée des antérieurs ne correspondait plus à celle des postérieurs (pieds qui patinent, antérieurs
+# qui ne touchent jamais le sol, galop disloqué des lévriers), les poses au sol non plus (teckel assis froissé, poitrail
+# en l'air en donnant la patte, lévriers couchés debout). Pour chaque gabarit (MODELS : gabarits), ces clips sont
+# refaits sur un squelette « virtuel » aux membres déformés comme dans le jeu (dogReal.js deformDog, étape 1), sol de
+# chaque membre à la hauteur où son pied est alors monté ou descendu ; seules leurs rotations sont gardées (le jeu
+# place lui-même les os de la race). Le jeu prend le gabarit le plus proche de la longueur des membres de la race.
+GABARITS = M.get('gabarits', {})
+report['gabarits'] = {}
+gab_actions = set()
+trunk_items = [(m, i) for m, i in solid if dom[m][i] not in legset and dom[m][i] not in headset][::2]
+neck_desc = K.descendants(arm, cfg['neck'][0])
+
+
+def gabarit_rig(k, legW=1.0, paws=1.0):
+    def sm(e0, e1, x):
+        t_ = min(1.0, max(0.0, (x - e0) / (e1 - e0)))
+        return t_ * t_ * (3 - 2 * t_)
+    legs2 = {}
+    for lab, L in cfg['legs'].items():
+        P = [p.copy() for p in L['points']]
+        T = P[0]
+        a = P[2] - T
+        ln = a.length
+        a.normalize()
+        out = [T.copy()]
+        for p in P[1:]:
+            # (comme deformDog : longueur le long de l'axe épaule → poignet, épaisseur — legW, paws — autour de lui ;
+            # l'épaisseur déplace aussi le coude et le grasset vers l'axe : 4° de différence sur le fémur du galgo)
+            al = (p - T).dot(a)
+            perp = (p - T) - a * al
+            a2 = al if al <= 0 else (al * k if al < ln else ln * k + (al - ln))
+            out.append(p + a * (a2 - al) + perp * ((legW - 1) * sm(0, 0.05, al) + (paws - 1) * sm(ln * 0.85, ln * 1.05, al)))
+        legs2[lab] = dict(L, points=out, ground=out[4].z - P[4].z, heel_y=L['heel_y'] + (out[4].y - P[4].y))
+    return dg.Rig(arm, dict(cfg, legs=legs2))
+
+
+def only_rotations(act, rg):
+    """Clip d'un gabarit : plus de translation des os des membres (celles du squelette virtuel)."""
+    for fc in list(act.fcurves):
+        mm = re.match(r'pose\.bones\["(.+)"\]\.location', fc.data_path)
+        if mm and mm.group(1) in rg.drive_of:
+            act.fcurves.remove(fc)
+
+
+def gab_bake(rg, name, frames, pose_fn=None, gp=None, extra=None, cyclic=True):
+    act = dg.bake(rg, name, gp, frames, extra, cyclic=cyclic, pose_fn=pose_fn)
+    only_rotations(act, rg)
+    gab_actions.add(act.name)
+    return act
+
+
+def transformed(pose, Mx):
+    out = {'__body__': pose['__body__']}
+    for k_, P_ in pose.items():
+        if k_ != '__body__':
+            out[k_] = Mx @ P_
+    return out
+
+
+def pose_points(pose, items):
+    act = dg.bake(rig, '_pts', None, 1, cyclic=False, pose_fn=lambda t: (pose, {}))
+    arm.animation_data.action = act
+    bpy.context.scene.frame_set(0)
+    dgp = bpy.context.evaluated_depsgraph_get()
+    dgp.update()
+    byobj = {}
+    for m, i in items:
+        byobj.setdefault(m, []).append(i)
+    pts = []
+    for m, ids in byobj.items():
+        ev = m.evaluated_get(dgp)
+        me = ev.to_mesh()
+        mw = ev.matrix_world
+        pts += [mw @ me.vertices[i].co for i in ids]
+        ev.to_mesh_clear()
+    arm.animation_data.action = None
+    bpy.data.actions.remove(act)
+    return pts
+
+
+def action_frames(name):
+    act0 = bpy.data.actions[name]
+    f0, f1 = int(act0.frame_range[0]), int(act0.frame_range[1])
+    return [action_pose(act0, fr)[0] for fr in range(f0, f1 + 1)]
+
+
+def hind_folded(p, rg, k, a3, bend='fwd'):
+    # (pied arrière visé à la même place relative à la hanche, ramenée à la longueur du membre ; assis : grasset vers
+    # le haut, contre le ventre — vers l'avant, le grasset des pattes courtes passait sous la hanche et sous le sol)
+    for lab in ('HL', 'HR'):
+        J = leg_joints(p, lab, rg)
+        p = ground_leg(p, lab, a3=a3, bend=bend, rg=rg, yabs=J[0].y + (J[3].y - J[0].y) * min(1.0, k))
+    return p
+
+
+def gab_sit(gname, rg, k, gH, gF):
+    """Assis du gabarit : croupe posée sur son sol, corps basculé pour que les antérieurs presque tendus touchent le
+    leur, tête gardée à son inclinaison, postérieurs repliés pieds à plat."""
+    frames = action_frames('sit')
+    p0 = frames[0]
+    c = min(pose_points(p0, trunk_items), key=lambda p: p.z)
+    J0 = sum((p0[rg.legs[l]['anchor']].translation for l in ('FL', 'FR')), Vector()) / 2
+    hF = sum(rg.legs[l]['J'][0].z for l in ('FL', 'FR')) / 2 - gF
+    want = gF + 0.93 * hF
+    dz = gH - c.z + 0.001
+    lo, hi = -0.9, 0.9
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        if (dg.rot_x_about(mid, c) @ J0).z + dz > want:
+            lo = mid
+        else:
+            hi = mid
+    phi = (lo + hi) / 2
+    print('GABARIT', gname, 'assis : bascule', round(phi, 3), 'descente', round(dz, 4))
+    Mx = Matrix.Translation(Vector((0, 0, dz))) @ dg.rot_x_about(phi, c)
+
+    def one(p_):
+        p = transformed(p_, Mx)
+        Rn = dg.rot_x_about(-0.8 * phi, p[cfg['neck'][0]].translation)
+        for n_ in neck_desc:
+            p[n_] = Rn @ p[n_]
+        p = hind_folded(p, rg, k, 0.08, 'up')
+        for lab in ('FL', 'FR'):
+            j0 = p[rg.legs[lab]['anchor']].translation
+            p = ground_leg(p, lab, rg=rg, yabs=j0.y - 0.05 * hipz)
+        return p
+    poses = [one(p_) for p_ in frames]
+    n = len(poses) - 1
+    gab_bake(rg, 'sit_' + gname, n, pose_fn=lambda t: (poses[min(n, round(t * n))], {}))
+    return poses[0]
+
+
+def gab_sit_gen(gname, rg, gH, gF, gcfg):
+    """Assis généré d'un gabarit aux pattes courtes (teckel, corgi) : le corps bascule autour de l'épaule (antérieurs
+    tendus, posés sur leur sol) jusqu'à poser la croupe sur le sien ; reins creusés, bassin rentré ; postérieurs
+    repliés sous le corps — fémur vers l'avant le long du ventre, jarret et métatarse à plat au sol. (L'assis du jack
+    reporté sur ces membres gardait un dos presque à plat et des postérieurs en paquet derrière la croupe.)"""
+    hip_frac = gcfg.get('sit_hip', 0.16)
+    femur = gcfg.get('sit_femur', SIT_FEMUR)
+    flex = gcfg.get('sit_flex', M.get('sit_flex', 0.0))
+    tuck = gcfg.get('sit_tuck', M.get('sit_tuck', 0.0))
+    a3 = gcfg.get('sit_a3', 0.06)
+    target = gH + hip_frac * hipz
+    dy, dz = hp.y - sh.y, hp.z - sh.z
+    th = 0.0
+    for _ in range(60):
+        z = sh.z + dy * math.sin(th) + dz * math.cos(th)
+        th -= (z - target) / (dy * math.cos(th) - dz * math.sin(th) + 1e-9) * 0.7
+    hipn_y = sh.y + dy * math.cos(th) - dz * math.sin(th)
+    print('GABARIT', gname, 'assis généré : bascule', round(th, 3), 'rad, hanche à', round(target, 4))
+    gp = dict(still, pivot=sh.copy(), pitch_base=th, neck_base=-th * 0.6 - flex * 0.3, head_base=-th * 0.35 - flex * 0.2, flex_base=flex)
+    if tuck:
+        gp['tilt'] = {'pelvis': tuck, 'spine1': -tuck}
+    legsd = {}
+    for lab in ('HL', 'HR'):
+        R = rg.legs[lab]
+        l1, l2, l3 = R['l2d'][:3]
+        z3 = R['J'][3].z
+        zh = z3 + l3 * math.sin(a3)
+        sy = hipn_y - l1 * math.cos(femur)
+        sz = target + l1 * math.sin(femur)
+        hy = sy + math.sqrt(max(0.0, l2 * l2 - (sz - zh) ** 2)) * 0.97
+        legsd[lab] = {'J3': (hy - l3 * math.cos(a3), z3), 'a3': a3, 'phi': 0.0, 'splay': gcfg.get('sit_splay', 0.18), 'bend': 'up'}
+    # (antérieurs tendus à l'aplomb des épaules, un peu en avant)
+    for lab in ('FL', 'FR'):
+        R = rg.legs[lab]
+        legsd[lab] = {'under': R['J'][3].y - R['J'][0].y - 0.02 * hipz, 'a3': a3_rest(lab, rg), 'phi': 0.0, 'bend': 1, 'splay': 0.04}
+    gp['legs'] = legsd
+    gab_bake(rg, 'sit_' + gname, 90, gp=gp, extra=lambda t: dict(breathe(t), head_yaw=0.12 * math.sin(math.tau * t)))
+    return dg.pose_at(rg, 0.0, gp)[0]
+
+
+def gab_bow(gname, rg, gH, gF):
+    """Révérence d'un gabarit : postérieurs tendus debout sur leur sol, coudes au sol devant, corps basculé autour
+    des hanches. (La révérence du modèle d'origine sur des pattes raccourcies laissait les pieds arrière à 6 cm du
+    sol.)"""
+    s2 = (hipz - gH) / 0.42
+    midy = (sh.y + hp.y) / 2
+    chest = [p for _, _, p in torso if p.y < midy]
+    cpt = min(chest, key=lambda p: p.z)
+    th = math.atan2(cpt.z - (gF + 0.025), hp.y - cpt.y)
+    print('GABARIT', gname, 'révérence : bascule', round(th, 3))
+    gp = dict(still, pivot=hp.copy(), pitch_base=th, neck_base=-th * 0.9 - 0.15, head_base=-0.1)
+    piv = hp
+
+    def rot(p):
+        return Vector((p.x, piv.y + (p.y - piv.y) * math.cos(th) - (p.z - piv.z) * math.sin(th),
+                       piv.z + (p.y - piv.y) * math.sin(th) + (p.z - piv.z) * math.cos(th)))
+    legsd = {}
+    for lab in ('FL', 'FR'):
+        R = rg.legs[lab]
+        l1, l2, l3 = R['l2d'][:3]
+        J0 = rot(R['J'][0])
+        zE = gF + 0.05 * hipz
+        hz = max(0.0, J0.z - zE)
+        ey = J0.y + math.sqrt(max(0.0, l1 * l1 - hz * hz)) * 0.6 if hz < l1 else J0.y
+        legsd[lab] = {'J3': (ey - l2 * 0.97 - l3 * 0.9, R['J'][3].z), 'a3': 0.0, 'phi': 0.0, 'bend': 1}
+    # (postérieurs : posés debout sur leur sol par la cinématique inverse des allures, foulée nulle)
+    gp['legs'] = legsd
+    gab_bake(rg, 'bow_' + gname, 60, gp=gp, extra=lambda t: {'yaw': 0.04 * math.sin(math.tau * 2 * t), 'bob': 0.004 * s2 * math.sin(math.tau * 4 * t)})
+
+
+def gab_paw(gname, rg, p_sit):
+    R = rg.legs['FL']
+    l1, l2, l3 = R['l2d'][:3]
+    J = leg_joints(p_sit, 'FL', rg)
+    lift_k = M.get('paw_lift', (0.62, 0.42))
+    J3t = Vector((R['J'][3].x, J[0].y - lift_k[0] * (l1 + l2), J[0].z - lift_k[1] * (l1 + l2)))
+    Js, _pts = rg.solve_fold('FL', J[0], J3t, 2.3, 0.7, 0.0, 1)
+    p_up = dict(p_sit)
+    for n_, k_ in R['drive']:
+        p_up[n_] = rg.bone_matrix(n_, R['seg'][k_], R['J'][k_], Js[k_], Js[k_ + 1])
+    gab_bake(rg, 'paw_' + gname, 120, cyclic=False, pose_fn=lambda t: (dg.blend_local(
+        rg, p_sit, p_up, dg.smooth(t / 0.25) * (1 - dg.smooth((t - 0.8) / 0.2))), {}))
+
+
+def gab_lie(name, gname, rg, k, gH, gF):
+    """Couché ou endormi du gabarit : corps descendu (ou relevé) jusqu'à son sol, membres repliés."""
+    frames = action_frames(name)
+
+    def g(y):
+        return gH + (gF - gH) * min(1.0, max(0.0, (y - hp.y) / (sh.y - hp.y)))
+    dz = max(g(p.y) - p.z for p in pose_points(frames[0], trunk_items)) + 0.001
+    print('GABARIT', gname, name, 'descente', round(dz, 4))
+    Mx = Matrix.Translation(Vector((0, 0, dz)))
+
+    def one(p_):
+        p = hind_folded(transformed(p_, Mx), rg, k, 0.06)
+        for lab in ('FL', 'FR'):
+            p = ground_leg(p, lab, a3=0.15, dz=0.008, rg=rg)
+        return p
+    poses = [one(p_) for p_ in frames]
+    n = len(poses) - 1
+    gab_bake(rg, f'{name}_{gname}', n, pose_fn=lambda t: (poses[min(n, round(t * n))], {}))
+    return poses[0]
+
+
+for gname, gcfg in GABARITS.items():
+    k = gcfg['legs']
+    r2 = gabarit_rig(k, gcfg.get('legW', 1.0), gcfg.get('paws', 1.0))
+    gH = sum(r2.legs[l]['ground'] for l in ('HL', 'HR')) / 2
+    gF = sum(r2.legs[l]['ground'] for l in ('FL', 'FR')) / 2
+    s2 = (hipz - gH) / 0.42
+    clips = gcfg.get('clips', ['walk', 'trot', 'run'])
+    rep = {'legs': k, 'legW': gcfg.get('legW', 1.0), 'paws': gcfg.get('paws', 1.0), 'groundH': round(gH, 4), 'groundF': round(gF, 4), 'clips': clips}
+    G2 = dg.gaits(s2, K.FPS)
+    sp = {}
+    for name in ('walk', 'trot', 'run'):
+        if name in clips:
+            gp = dict(G2[name])
+            gab_bake(r2, f'{name}_{gname}', gp['frames'], gp=gp)
+            sp[name] = round(gp['speed'], 3)
+    rep['naturalSpeeds'] = sp
+    stand2 = dg.pose_at(r2, 0.0, dict(still))[0]
+    sit2 = lie2 = None
+    if 'sit' in clips:
+        sit2 = gab_sit_gen(gname, r2, gH, gF, gcfg) if gcfg.get('sit_gen') else gab_sit(gname, r2, k, gH, gF)
+        gab_bake(r2, 'sit_down_' + gname, 24, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, stand2, sit2, dg.smooth(t)), {}))
+        gab_bake(r2, 'stand_up_' + gname, 20, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, sit2, stand2, dg.smooth(t)), {}))
+    if 'paw' in clips and sit2 is not None:
+        gab_paw(gname, r2, sit2)
+    if 'bow' in clips:
+        gab_bow(gname, r2, gH, gF)
+    if 'lie' in clips:
+        lie2 = gab_lie('lie', gname, r2, k, gH, gF)
+        if sit2 is not None:
+            gab_bake(r2, 'lie_down_' + gname, 30, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, sit2, lie2, dg.smooth(t)), {}))
+        gab_bake(r2, 'get_up_' + gname, 30, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, lie2, stand2, dg.smooth(t)), {}))
+    elif sit2 is not None:
+        # (couché du modèle d'origine : seulement la transition depuis l'assis du gabarit)
+        gab_bake(r2, 'lie_down_' + gname, 30, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, sit2, lie_p, dg.smooth(t)), {}))
+    if 'sleep' in clips:
+        gab_lie('sleep', gname, r2, k, gH, gF)
+    if 'sniff' in clips:
+        pm = gcfg.get('sniff_pitch', SNIFF_PITCH)
+        sn2 = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.01 * s2), {'FL': -0.02 * s2, 'FR': 0.0}, rg=r2), gF + 0.025 * s, 3.4, 1.7, pitch_max=pm, rg=r2)
+        gab_bake(r2, 'sniff_' + gname, 90, gp=sn2, extra=lambda t: {'head': 0.05 * max(0.0, math.sin(math.tau * 6 * t)) ** 2,
+                                                                    'neck_yaw': 0.25 * math.sin(math.tau * t), 'head_yaw': 0.1 * math.sin(math.tau * t + 0.4)})
+        e2 = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s2), {'FL': -0.015 * s2, 'FR': -0.015 * s2}, rg=r2), gF + 0.10 * s, 2.0, 1.3, ha_min=0.7, pitch_max=pm, rg=r2)
+        gab_bake(r2, 'eat_' + gname, 60, gp=e2, extra=lambda t: {'head': 0.04 * math.sin(math.tau * 3 * t), 'jaw': 0.12 + 0.12 * math.sin(math.tau * 3 * t),
+                                                                  'neck_yaw': 0.05 * math.sin(math.tau * t)})
+        d2 = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s2), {'FL': -0.015 * s2, 'FR': -0.015 * s2}, rg=r2), gF + 0.12 * s, 2.0, 1.3, ha_min=0.7, pitch_max=pm, rg=r2)
+        gab_bake(r2, 'drink_' + gname, 60, gp=d2, extra=lambda t: {'head': 0.03 * math.sin(math.tau * 6 * t), 'jaw': 0.16 + 0.06 * math.sin(math.tau * 6 * t),
+                                                                    'tongue': 0.35 * math.sin(math.tau * 6 * t)})
+    report['gabarits'][gname] = rep
+    print('GABARIT', gname, rep)
 
 # ---- os animés par le jeu (queue, oreilles, paupières) : plus aucune clé ; pose de la queue au repos ---------------
 for act in bpy.data.actions:
@@ -597,14 +997,38 @@ def ground_fix(act):
 
 report['groundFix'] = {}
 for act in bpy.data.actions:
-    if act.name.startswith('_') or act.name == 'pose_tail':
+    if act.name.startswith('_') or act.name == 'pose_tail' or act.name in gab_actions:
         continue
     fix = ground_fix(act)
     if fix:
         report['groundFix'][act.name] = round(fix, 4)
         print('GROUND', act.name, 'relevé de', round(fix, 4))
 
-report['clips'] = K.check_clips(arm, meshes, paws, muzzle, skip=('pose_tail',))
+if opt.get('--dump-retarget'):
+    dump_retarget(opt['--dump-retarget'])
+
+
+def decimate(act, step):
+    """Une clé sur step (et la dernière) : poses tenues longtemps, où seuls la respiration et le regard bougent. (Les
+    poses au sol des gabarits doublaient le poids des fichiers.)"""
+    f0, f1 = int(act.frame_range[0]), int(act.frame_range[1])
+    for fc in act.fcurves:
+        pts = fc.keyframe_points
+        for i in range(len(pts) - 1, -1, -1):
+            fr = int(round(pts[i].co[0]))
+            if fr != f1 and (fr - f0) % step:
+                pts.remove(pts[i])
+        for kp in pts:
+            kp.interpolation = 'LINEAR'
+
+
+DECIMATE = {'idle': 3, 'sit': 3, 'lie': 3, 'sleep': 3, 'paw': 2, 'rollover': 2}
+for act in bpy.data.actions:
+    nm_ = act.name.rsplit('_', 1)
+    st_ = DECIMATE.get(nm_[0] if len(nm_) == 2 and nm_[1] in GABARITS else act.name)
+    if st_ and not act.name.startswith('_'):
+        decimate(act, st_)
+report['clips'] = K.check_clips(arm, meshes, paws, muzzle, skip=('pose_tail', *gab_actions))
 report['speedsNote'] = 'vitesses naturelles (m/s) : action.timeScale = vitesse / vitesse naturelle'
 bpy.ops.wm.save_as_mainfile(filepath=out.replace('.glb', '.blend'), compress=True)
 K.export_glb(out, arm)

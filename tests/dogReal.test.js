@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import * as THREE from 'three';
-import { buildRealDogModel, pickDogGait, realDogPose, REAL_DOG_KEYS, realDogBase, deformDog } from '../src/game/models/dogReal.js';
+import { buildRealDogModel, pickDogGait, realDogPose, REAL_DOG_KEYS, realDogBase, deformDog, pickGabarit, dogClips } from '../src/game/models/dogReal.js';
 import { coatPlan } from '../src/game/models/dogCoat.js';
 import { buildGear, removeGear } from '../src/game/gearModels.js';
 import { buildAccessories } from '../src/game/models/salon.js';
@@ -53,7 +53,9 @@ function lowest(md, { noTail = false, step = 2 } = {}) {
 }
 
 describe('fichiers des chiens réalistes', () => {
-  it.each([['shiba', 57, 900_000], ['jack', 36, 560_000]])('%s : os, clips, compression, vitesses naturelles, poids', (kind, joints, maxBytes) => {
+  // (jack : 0,51 → 0,59 Mo avec les clips de ses gabarits court et trapu, 0,60 Mo avec la révérence du court ; shiba :
+  // 0,86 → 0,88 Mo)
+  it.each([['shiba', 57, 900_000], ['jack', 36, 620_000]])('%s : os, clips, compression, vitesses naturelles, poids', (kind, joints, maxBytes) => {
     const buf = fs.readFileSync(DOG_FILES[kind]);
     expect(buf.length).toBeLessThan(maxBytes);
     const json = glbJson(buf);
@@ -161,9 +163,11 @@ describe('races et chiots', () => {
         const eyes = D.heads[base.index.get('eyeL')].clone().add(D.heads[base.index.get('eyeR')]).multiplyScalar(0.5);
         const hc = D.heads[base.index.get('head')].clone().lerp(eyes, 0.5);
         for (const F of base.earFlap) {
-          // (le lambeau entier, pas seulement ce que le squelette automatique a pesé sur l'oreille)
-          expect(F.ids.length).toBeGreaterThan(400);
-          const flap = new Set(F.ids);
+          // (le lambeau entier, pas seulement ce que le squelette automatique a pesé sur l'oreille ; e : part du
+          // lambeau lui-même — la zone autour de la racine, ramenée sur le crâne interpolé, n'en est pas)
+          const ear = F.e ?? F.c;
+          expect(ear.filter((x) => x > 0.5).length).toBeGreaterThan(400);
+          const flap = new Set([...F.ids].filter((_, k) => ear[k] > 0.5));
           const skull = [];
           for (let i = 0; i < base.prims.coat.count; i++) {
             if (flap.has(i) || base.W.head[i] < 0.5) continue;
@@ -172,7 +176,7 @@ describe('races et chiots', () => {
           }
           let out = 0;
           for (let k = 0; k < F.ids.length; k++) {
-            if (F.c[k] < 0.95) continue;
+            if (ear[k] < 0.95) continue;
             const v = new THREE.Vector3().fromArray(D.pos, F.ids[k] * 3).sub(hc);
             const r = v.length();
             v.normalize();
@@ -185,6 +189,47 @@ describe('races et chiots', () => {
         }
       }
     }
+  });
+
+  it('oreilles tombantes modelées : l\'oreille droite du shiba est effacée du crâne, une vraie oreille pend le long de la joue', () => {
+    const base = realDogBase(G.shiba, 'shiba');
+    const n = base.prims.coat.count;
+    for (const b of ['labrador', 'golden', 'coonhound', 'setter', 'caniche', 'saint_bernard', 'terre_neuve']) {
+      const md = dog(b);
+      const P = md.coatMesh.geometry.attributes.position;
+      expect(P.count, b).toBeGreaterThan(n);
+      const eyeY = md.bone('eyeL').getWorldPosition(new THREE.Vector3()).y;
+      const skullY = md.skull.clone().applyMatrix4(md.head.matrixWorld).y;
+      // l'oreille modelée descend sous l'œil (jusqu'à la commissure ou plus bas : chiens courants)
+      let low = Infinity;
+      for (let i = n; i < P.count; i++) low = Math.min(low, md.coatMesh.getVertexPosition(i, _v).applyMatrix4(md.coatMesh.matrixWorld).y);
+      expect(low, b).toBeLessThan(eyeY - 0.03 * md.build.head);
+      // l'oreille droite d'origine ne dépasse plus du crâne (plus de cornes)
+      let earTop = -Infinity;
+      for (let i = 0; i < n; i++) {
+        if (base.W.ear[i * 2] + base.W.ear[i * 2 + 1] < 0.5) continue;
+        earTop = Math.max(earTop, md.coatMesh.getVertexPosition(i, _v).applyMatrix4(md.coatMesh.matrixWorld).y);
+      }
+      expect(earTop, b).toBeLessThan(skullY + 0.004);
+      md.dispose();
+    }
+  });
+
+  it('caniche : coupe « caniche » par défaut (pompons modelés montrés), cachés par une autre coupe du salon', () => {
+    const md = dog('caniche');
+    expect(md.coatMesh.geometry.attributes.cmpPom).toBeTruthy();
+    expect(md.uniforms.cPom.value).toBe(1);
+    md.setCut('court');
+    expect(md.uniforms.cPom.value).toBe(0);
+    md.setCut(null);
+    expect(md.uniforms.cPom.value).toBe(1);
+    md.dispose();
+    // (les autres races n'ont pas de pompons modelés : la coupe « caniche » reste celle du shader)
+    const doodle = dog('labradoodle');
+    expect(doodle.coatMesh.geometry.attributes.cmpPom).toBeUndefined();
+    doodle.setCut('caniche');
+    expect(doodle.uniforms.cCut.value.z).toBeGreaterThan(0.01);
+    doodle.dispose();
   });
 
   it('écourtée : la queue des races « stub » est courte', () => {
@@ -263,7 +308,8 @@ describe('pieds au sol', () => {
       expect(Math.min(soles[0], soles[1]), name).toBeLessThan(0.01);
       expect(Math.min(soles[0], soles[1]), name).toBeGreaterThan(-0.01);
       expect(Math.min(soles[2], soles[3]), name).toBeLessThan(0.045);
-      expect(lowest(md, { noTail: true, step: 2 }), name).toBeGreaterThan(-0.02);
+      // (le poil s'écrase : 2 cm, 80 % de sa longueur pour un poil long — yorkshire)
+      expect(lowest(md, { noTail: true, step: 2 }), name).toBeGreaterThan(-Math.max(0.02, 0.8 * md.build.fur));
       md.dispose();
     }
   }, 120000);
@@ -332,14 +378,184 @@ describe('pieds en appui', () => {
     }
     return worst;
   };
-  it.each(['teckel', 'corgi', 'galgo', 'bouledogue', 'labrador'])('%s : les pieds posés ne patinent pas au pas ni au trot', (b) => {
+  // Saut d'un pied posé d'une image à l'autre (60 i/s) : quand l'appui était pris ou lâché, la correction du membre
+  // changeait d'un coup et le pied encore au sol sautait de 2 à 5 cm au trot (berger allemand, golden, labrador).
+  it.each(['berger_allemand', 'golden', 'labrador', 'caniche', 'beagle', 'jack_russell', 'corgi', 'teckel'])('%s : un pied posé ne bouge pas de plus de 5 mm d\'une image à l\'autre (pas, trot, galop)', (b) => {
+    for (const v0 of [1.2, 2.8, 6]) {
+      const md = dog(b);
+      md.staticPose('stand');
+      const v = v0 * md.anim.speedScale;
+      let prev = null;
+      let worst = 0;
+      for (let i = 0; i < 300; i++) {
+        md.anim.update(1 / 60, { v, moving: true, happy: 0.25 });
+        md.root.position.z += v / 60;
+        md.root.updateMatrixWorld(true);
+        const feet = md.legs.map((leg, l) => {
+          let lo = Infinity;
+          const c = new THREE.Vector3();
+          for (const p of md.anim.solePts[l]) {
+            const q = p.clone().applyMatrix4(leg.paw.matrixWorld);
+            c.add(q);
+            lo = Math.min(lo, q.y);
+          }
+          return { c: c.multiplyScalar(1 / md.anim.solePts[l].length), lo };
+        });
+        if (prev && i > 60) {
+          for (let l = 0; l < 4; l++) {
+            if (prev[l].lo < 0.008 && feet[l].lo < 0.008) worst = Math.max(worst, Math.hypot(feet[l].c.x - prev[l].c.x, feet[l].c.z - prev[l].c.z));
+          }
+        }
+        prev = feet;
+      }
+      expect(worst, `${b} ${v0}`).toBeLessThan(0.005);
+      md.dispose();
+    }
+  }, 120000);
+
+  it.each(['teckel', 'corgi', 'galgo', 'bouledogue', 'labrador', 'beagle', 'jack_russell'])('%s : les pieds posés ne patinent pas au pas, au trot ni au galop', (b) => {
+    // (pieds tenus en long et sur le côté, aussi au galop : 0 à 3 % au pas, 8 % au plus au trot ; le galgo patinait de
+    // 32 % au galop, le beagle de 6 à 10 % au trot sur le gabarit des chiots)
+    for (const [v, max, nom] of [[1.0, 0.05, 'pas'], [2.4, 0.1, 'trot'], [5.0, 0.06, 'galop']]) {
+      const md = dog(b);
+      md.staticPose('stand');
+      expect(slip(md, v), `${b} ${nom}`).toBeLessThan(max);
+      md.dispose();
+    }
+  }, 120000);
+});
+
+describe('poses et allures par gabarit', () => {
+  const st = (o = {}) => ({ v: 0, moving: false, posture: 'stand', action: null, sleeping: false, happy: 0.25, sad: false, pull: 0, ...o });
+  const W = (md, b) => md.bone(b).getWorldPosition(new THREE.Vector3());
+
+  it('chaque race prend le gabarit le plus proche de ses membres (pattes courtes, longues) et ses clips', () => {
+    const want = { teckel: 'court', corgi: 'court', carlin: 'trapu', bouledogue: 'trapu', galgo: 'long', whippet: 'long', caniche: 'long', labrador: null, jack_russell: null, husky: null, beagle: null };
+    for (const [b, g] of Object.entries(want)) {
+      const md = dog(b);
+      expect(md.anim.gabarit, b).toBe(g);
+      // (le clip « walk » du teckel est celui de son gabarit)
+      expect(md.anim.actions.walk.getClip().name, b).toBe(g ? `walk_${g}` : 'walk');
+      md.dispose();
+    }
+    expect(pickGabarit({ court: { legs: 0.52 }, trapu: { legs: 0.74 } }, 1)).toBe(null);
+    expect(pickGabarit({ court: { legs: 0.52 }, trapu: { legs: 0.74 } }, 0.66)).toBe('trapu');
+    expect(pickGabarit({ court: { legs: 0.52 }, trapu: { legs: 0.74 } }, 0.55)).toBe('court');
+    expect(pickGabarit({ long: { legs: 1.25 } }, 1.15)).toBe('long');
+    // (le gabarit court des chiots du shiba a leurs gros pieds : pas pour le beagle, oui pour un chiot labrador)
+    const shibaGab = { long: { legs: 1.25, paws: 1 }, court: { legs: 0.82, paws: 1.2 } };
+    expect(pickGabarit(shibaGab, 0.88, 1)).toBe(null);
+    expect(pickGabarit(shibaGab, 0.97 * 0.83, 1.2)).toBe('court');
+    expect(pickGabarit(shibaGab, 1.28 * 0.83, 1.2)).toBe(null);
+    const chiot = dog('labrador', { puppy: true });
+    expect(chiot.anim.gabarit).toBe('court');
+    chiot.dispose();
+    expect(dogClips({ clips: { walk: 'a', walk_long: 'b', sit_down: 'c', sit_down_long: 'd' }, gabarits: { long: {} } }, 'long')).toEqual({ walk: 'b', sit_down: 'd' });
+  });
+
+  it('yeux dans les orbites après s\'asseoir, se coucher, sauter (38 races et leurs chiots)', async () => {
+    // (le mixeur rendait aux os à translation animée leur position notée sur le squelette de la race : le décalage
+    // comptait deux fois dès qu'une transition avait animé les yeux — globes 4 cm devant le visage du saint-bernard)
+    for (const b of BREEDS) {
+      for (const puppy of [false, true]) {
+        const md = dog(b, { puppy });
+        const ed = () => {
+          md.root.updateMatrixWorld(true);
+          return W(md, 'eyeL').distanceTo(W(md, 'head'));
+        };
+        md.anim.update(1 / 30, st());
+        const d0 = ed();
+        const name = `${b}${puppy ? ' (chiot)' : ''}`;
+        for (let f = 0; f < 45; f++) md.anim.update(1 / 30, st({ posture: 'sit' }));
+        expect(Math.abs(ed() - d0), `${name} assis`).toBeLessThan(0.004);
+        for (let f = 0; f < 60; f++) md.anim.update(1 / 30, st({ posture: 'lie' }));
+        expect(Math.abs(ed() - d0), `${name} couché`).toBeLessThan(0.004);
+        for (let f = 0; f < 45; f++) md.anim.update(1 / 30, st());
+        for (let f = 0; f <= 30; f++) {
+          realDogPose(md, 'jump', 1, null, f / 30);
+          md.anim.update(1 / 30, st());
+        }
+        for (let f = 0; f < 30; f++) md.anim.update(1 / 30, st());
+        expect(Math.abs(ed() - d0), `${name} après le saut`).toBeLessThan(0.004);
+        md.dispose();
+        // (rend la main entre deux chiens : d'un bloc, le test retenait le fil plus d'une minute sur une machine
+        // chargée et vitest perdait son échange avec le processus de test)
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    }
+  }, 300000);
+
+  it.each(['teckel', 'corgi', 'galgo', 'jack_russell', 'labrador'])('%s : debout → assis → couché → debout sans à-coup (la tête bouge de moins de 3 cm par image)', (b) => {
     const md = dog(b);
-    md.staticPose('stand');
-    // (au pas, il reste un peu de glissement aux antérieurs des races aux pattes courtes : 15 à 25 %, contre 30 à 50 %)
-    expect(slip(md, 1.0), `${b} pas`).toBeLessThan(0.25);
-    expect(slip(md, 2.4), `${b} trot`).toBeLessThan(0.12);
+    let prev = null;
+    let worst = 0;
+    const seq = [[30, 'stand'], [90, 'sit'], [120, 'lie'], [90, 'stand']];
+    for (const [n, posture] of seq) {
+      for (let f = 0; f < n; f++) {
+        md.anim.update(1 / 60, st({ posture }));
+        md.root.updateMatrixWorld(true);
+        const h = W(md, 'head');
+        if (prev) worst = Math.max(worst, h.distanceTo(prev));
+        prev = h;
+      }
+    }
+    // (le teckel se cabrait de 18 cm en une image au début de « se coucher », le galgo de 19 cm ; chien de taille 1)
+    expect(worst, b).toBeLessThan(0.03);
     md.dispose();
   }, 120000);
+
+  it.each(['jack_russell', 'chihuahua', 'carlin', 'bouledogue', 'cavalier'])('%s : couché, la croupe reste sous le garrot (pas de révérence) et le bassin est posé', (b) => {
+    const md = dog(b);
+    md.staticPose('lie');
+    md.root.updateMatrixWorld(true);
+    const hips = W(md, 'femurL').add(W(md, 'femurR')).multiplyScalar(0.5);
+    const withers = W(md, 'scapL').add(W(md, 'scapR')).multiplyScalar(0.5);
+    expect(hips.y, b).toBeLessThan(withers.y);
+    // (hanches à moins de 0,4 fois leur hauteur debout : avant, postérieurs à demi dépliés, croupe en l'air)
+    md.staticPose('stand');
+    md.root.updateMatrixWorld(true);
+    const standHip = (W(md, 'femurL').y + W(md, 'femurR').y) / 2;
+    expect(hips.y / standHip, b).toBeLessThan(0.45);
+    md.dispose();
+  }, 60000);
+
+  it.each(['jack_russell', 'chihuahua', 'teckel', 'corgi', 'galgo'])('%s : assis, la croupe posée entre les jarrets (hanches basses), les pieds arrière à plat', (b) => {
+    const m = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    const md = dog(b);
+    md.staticPose('stand');
+    md.root.updateMatrixWorld(true);
+    const standHip = (W(md, 'femurL').y + W(md, 'femurR').y) / 2;
+    md.staticPose('sit');
+    md.root.updateMatrixWorld(true);
+    m.copy(md.root.matrixWorld).invert();
+    const hip = (W(md, 'femurL').y + W(md, 'femurR').y) / 2;
+    // (avant : cuisse qui pendait, hanches à mi-hauteur au-dessus de postérieurs étalés)
+    expect(hip / standHip, b).toBeLessThan(0.45);
+    const soles = md.legs.map((leg, l) => Math.min(...md.anim.solePts[l].map((p) => v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(m).y)));
+    expect(Math.max(soles[2], soles[3]), b).toBeLessThan(0.03);
+    md.dispose();
+  }, 60000);
+
+  it.each(['labrador', 'galgo', 'husky', 'beagle', 'jack_russell', 'teckel'])('%s : en reniflant, mangeant, buvant, le carpe ne se plie pas vers l\'avant (antérieurs tendus)', (b) => {
+    const md = dog(b);
+    for (const action of ['sniff', 'eat', 'drink']) {
+      md.staticPose('stand');
+      for (let f = 0; f < 60; f++) md.anim.update(1 / 30, st({ action }));
+      md.root.updateMatrixWorld(true);
+      for (const s of ['L', 'R']) {
+        // métacarpe presque vertical, le pied devant le carpe ou à son aplomb (plié à l'envers, le pied passait en
+        // arrière sous le corps, pattes croisées), le carpe au-dessus du pied ; le coude derrière le carpe
+        const elbow = W(md, 'radius' + s);
+        const wrist = W(md, 'metacarpus' + s);
+        const toe = W(md, 'toes' + s);
+        expect(toe.z - wrist.z, `${b} ${action} ${s} pied derrière le carpe`).toBeGreaterThan(-0.015);
+        expect(wrist.y - toe.y, `${b} ${action} ${s} carpe au-dessus du pied`).toBeGreaterThan(0.02);
+        expect(elbow.z - wrist.z, `${b} ${action} ${s} coude devant le carpe`).toBeLessThan(0.02);
+      }
+    }
+    md.dispose();
+  }, 60000);
 });
 
 describe('allures et tours', () => {
@@ -407,6 +623,38 @@ describe('robes', () => {
     // chaque robe de chaque race donne un plan (les yeux, la truffe et la langue gardent leur texture)
     for (const b of SPECIES.dog.breeds) for (let i = 0; i < b.colors.length; i++) expect(plan(b.id, i).base).toBeTypeOf('number');
   });
+
+  it('yeux de la robe : un husky gris et blanc a l\'iris bleu (le berger australien bleu merle aussi), un labrador garde le sien', () => {
+    const blue = new THREE.Color(0x6fb6e8);
+    for (const [b, i] of [['husky', 0], ['berger_australien', 0]]) {
+      const md = dog(b, { colorIndex: i });
+      const iris = md.uniforms.cIris.value;
+      expect(iris.w, b).toBe(1);
+      expect(iris.z, b).toBeGreaterThan(iris.x);
+      expect(Math.abs(iris.x - blue.r) + Math.abs(iris.y - blue.g) + Math.abs(iris.z - blue.b), b).toBeLessThan(1e-3);
+      md.dispose();
+    }
+    // (les autres : iris brun chaud, éclairci depuis le brun très foncé par défaut des robes)
+    const lab = dog('labrador');
+    const li = lab.uniforms.cIris.value;
+    expect(li.x).toBeGreaterThan(li.z * 2);
+    expect(0.2126 * li.x + 0.7152 * li.y + 0.0722 * li.z).toBeGreaterThan(0.03);
+    lab.dispose();
+  });
+
+  it('robes noires : relevées en brun-noir lustré (visage lisible), pas un noir absolu mat', () => {
+    for (const [b, i] of [['terre_neuve', 0], ['labrador', 2], ['caniche', 1]]) {
+      const P = coatPlan(resolveLook('dog', b, i), b);
+      const c = new THREE.Color(P.base);
+      const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+      expect(l, b).toBeGreaterThan(0.012);
+      expect(c.r, b).toBeGreaterThan(c.b); // (brun chaud, pas gris bleuté)
+      expect(P.sheen, b).toBe(1);
+      const md = dog(b, { colorIndex: i });
+      expect(md.coatMesh.material.roughness, b).toBeLessThan(0.55);
+      md.dispose();
+    }
+  });
 });
 
 describe('gueule au calme', () => {
@@ -472,9 +720,20 @@ describe('queues fines', () => {
       // (le premier os, soudé à la croupe, garde sa forme)
       for (let k = 1; k < s.length; k++) {
         expect(s[k].ratio, `${b} os ${k}`).toBeGreaterThan(0.6);
-        expect(s[k].r, `${b} os ${k}`).toBeGreaterThan(0.005);
+        // (effilée : le dernier os, à la pointe, peut être plus fin)
+        expect(s[k].r, `${b} os ${k}`).toBeGreaterThan(k === s.length - 1 ? 0.0035 : 0.005);
         expect(s[k].r, `${b} os ${k}`).toBeLessThan(0.03);
       }
+    }
+  });
+  it('panache et queue de loutre effilés : le rayon décroît jusqu\'à la pointe (pas une massue)', () => {
+    const base = realDogBase(G.shiba, 'shiba');
+    for (const b of ['golden', 'setter', 'labrador', 'bouvier_bernois', 'saint_bernard', 'terre_neuve']) {
+      const B = dogBuild(lookOf(b), false);
+      expect(B.tailTaper, b).toBeGreaterThan(0.3);
+      const D = deformDog(base, B);
+      const s = sections(base, D.pos, D.heads);
+      expect(s[s.length - 1].r, b).toBeLessThan(s[1].r * 0.8);
     }
   });
 });

@@ -186,6 +186,12 @@ MODELS['shiba'] = dict(
     base_from=('idle', 0, ['tail']),
     # os animés par le jeu seulement (leurs clés sont retirées de tous les clips) : queue, oreilles, paupières
     game_bones=r'^(tail\d|ear[12][LR]|lid)',
+    # gabarits (make_dog.py) : membres allongés des lévriers et du caniche (galgo 1,28, whippet 1,22, caniche 1,15),
+    # courts des chiots (0,8 environ) — allures et poses refaites pour eux (clips « walk_long »…)
+    gabarits={
+        'long': dict(legs=1.25, legW=0.82, clips=['walk', 'trot', 'run', 'sit', 'paw', 'lie', 'sleep', 'sniff']),
+        'court': dict(legs=0.82, legW=1.06, paws=1.2, clips=['walk', 'trot', 'run']),
+    },
 )
 
 
@@ -261,12 +267,33 @@ MODELS['jack'] = dict(
     tail=['tail1', 'tail2', 'tail3', 'tail4'], ears=['ear1L', 'ear1R'], ear_tips=['ear2L', 'ear2R'],
     flex=[('spine2', 0.3), ('chest', 0.3)],
     game_bones=r'^(tail\d|ear[12][LR])',
-    # (repos et roulade : clips faits main du shiba repris sur ce squelette ; assis et patte : générés pour lui)
-    retarget_clips=['idle', 'rollover'],
+    # (repos, roulade, assis : clips faits main du shiba repris sur ce squelette ; couché et endormi : poses du shiba
+    # reprises ; patte : générée sur l'assis repris)
+    retarget_clips=['idle', 'rollover', 'sit', 'lie', 'sleep'],
+    # poses reprises reposées au sol : corps descendu jusqu'au sol, puis membres repliés pieds à plat (a3 : angle du
+    # métapode, rad ; bend 'fwd' : grasset vers l'avant ; dz : articulation du pied relevée, m)
+    ground_poses={
+        'sit': {'HL': dict(a3=0.08, bend='fwd'), 'HR': dict(a3=0.08, bend='fwd'), 'FL': {}, 'FR': {}},
+        'lie': {'HL': dict(a3=0.06, bend='fwd'), 'HR': dict(a3=0.06, bend='fwd'), 'FL': dict(a3=0.15, dz=0.008), 'FR': dict(a3=0.15, dz=0.008)},
+        'sleep': {'HL': dict(a3=0.06, bend='fwd'), 'HR': dict(a3=0.06, bend='fwd'), 'FL': dict(a3=0.15, dz=0.008), 'FR': dict(a3=0.15, dz=0.008)},
+    },
     # couché à plat (bascule bornée), postérieurs repliés sous le corps à la réception du saut
     lie_pitch_max=0.2, lie_fold=0.35, lie_elbow=0.17, lie_wrist=0.07, jump_tuck=True,
     # assis : reins creusés, poitrail redressé (corps long : sinon assis très incliné), bassin rentré, fémur vers
     # l'avant et le haut (grasset relevé) ; hauteur des hanches donnée (la croupe courte du jack ne touche le sol qu'en
     # écrasant la cuisse)
     sit_flex=-0.6, sit_tuck=-0.4, sit_femur=0.6, sit_hip=0.16,
+    # renifler, manger, boire : l'encolure et les épaules descendent, le corps bascule à peine, antérieurs tendus
+    sniff_pitch=0.25,
+    # gabarits (make_dog.py) : pattes courtes du teckel et du corgi (0,5 et 0,55), trapues du carlin, du bouledogue,
+    # du spitz, du yorkshire et des chiots (0,7 à 0,85) — allures et poses refaites pour eux (clips « walk_court »…)
+    gabarits={
+        # (court : révérence refaite, postérieurs tendus au sol — gab_bow. L'assis généré (sit_gen=True, gab_sit_gen)
+        # a été essayé : postérieurs bien repliés, mais hanches plus hautes (13 cm au lieu de 6) et dos plus plat
+        # (8–11° au lieu de 14–18°), le ventre profond du teckel touchant le sol avant la croupe — pas retenu)
+        'court': dict(legs=0.52, legW=1.13, clips=['walk', 'trot', 'run', 'sit', 'paw', 'sniff', 'bow'], sniff_pitch=0.08),
+        # (trapu : l'assis du jack reste ; ses pieds arrière en l'air — carlin, bouledogue — sont reposés en jeu par
+        # settleSit. L'assis généré cassait celui du yorkshire, du même gabarit : dos à 6°, pieds arrière à 5 cm)
+        'trapu': dict(legs=0.74, legW=1.12, clips=['walk', 'trot', 'run']),
+    },
 )

@@ -824,6 +824,10 @@ export const MOUNT_SIDE = 1.8;
 export const MOUNT_AIM = 0;
 export const MOUNT_DROP = 1.1;
 export const MOUNT_AHEAD = 0.1;
+// (vecteurs de travail du cadrage, voir CameraRig.focus)
+const _pv = new THREE.Vector3();
+const _sv = new THREE.Vector3();
+const _lv = new THREE.Vector3();
 
 export class CameraRig {
   constructor(camera) {
@@ -934,6 +938,18 @@ export class CameraRig {
     }
     this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch + 0.2 * ride - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
     back.set(-Math.sin(this.yaw) * Math.cos(this.curPitch), Math.sin(this.curPitch), -Math.cos(this.yaw) * Math.cos(this.curPitch));
+    // Cadrage demandé pour cette image (this.focus, remis à zéro après usage) : « pair » — la joueuse et son chien en
+    // laisse ensemble (viser entre les deux, reculer selon l'écart) ; « shot » — plan rapproché sur un animal (tour du
+    // spectacle, photo du podium : de trois quarts ou de face, à quelques mètres), en fondu à l'aller et au retour.
+    const f = this.focus;
+    this.focus = null;
+    this.pairK = (this.pairK ?? 0) + ((f?.pair ? 1 : 0) - (this.pairK ?? 0)) * Math.min(1, dt * 2.5);
+    if (f?.pair) (this.pairAt ??= new THREE.Vector3()).copy(f.pair);
+    if (this.pairK > 0.001 && this.pairAt) {
+      const sep = Math.hypot(this.pairAt.x - target.x, this.pairAt.z - target.z);
+      target.lerp(_pv.set(this.pairAt.x, target.y - 0.25, this.pairAt.z), 0.45 * this.pairK);
+      dist += Math.min(2.4, sep * 0.9) * this.pairK;
+    }
     const want = target.clone().addScaledVector(back, dist);
     // Décalage de côté (monté en portrait) testé lui aussi contre les murs : il était ajouté après le test, et la
     // caméra entrait dans l'écurie quand on longeait son mur côté montoir. Réduit jusqu'au premier mur, sur le
@@ -972,9 +988,23 @@ export class CameraRig {
     }
     const ground = world.heightAt(want.x, want.z) + 0.4;
     if (want.y < ground) want.y = ground;
+    this.shotK = (this.shotK ?? 0) + ((f?.shot ? 1 : 0) - (this.shotK ?? 0)) * Math.min(1, dt * 2.5);
+    if (f?.shot) this.shot = f.shot;
+    let aim = target;
+    if (this.shotK > 0.001 && this.shot) {
+      const s = this.shot;
+      // (de face : yaw 0 ; trois quarts : ± 0,7 rad depuis le devant de l'animal)
+      const a = s.heading + (s.yaw ?? 0.7);
+      const pt = s.pitch ?? 0.22;
+      const shotPos = _sv.set(s.at.x + Math.sin(a) * Math.cos(pt) * s.dist, s.at.y + Math.sin(pt) * s.dist, s.at.z + Math.cos(a) * Math.cos(pt) * s.dist);
+      const g2 = world.heightAt(shotPos.x, shotPos.z) + 0.3;
+      if (shotPos.y < g2) shotPos.y = g2;
+      want.lerp(shotPos, this.shotK);
+      aim = _lv.copy(target).lerp(s.at, this.shotK);
+    }
     this.pos.lerp(want, this.pos.lengthSq() === 0 ? 1 : Math.min(1, dt * 10));
     cam.position.copy(this.pos);
-    cam.lookAt(target);
+    cam.lookAt(aim);
   }
 
   /** Après un voyage : la caméra se replace sans glisser à travers la carte. */

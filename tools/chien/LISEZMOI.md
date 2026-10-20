@@ -75,11 +75,28 @@ Fichiers obtenus : `dog_shiba.glb` 0,86 Mo (17 800 triangles, 5 300 au loin, 57 
   ses os (`tailShape`, section ramenée vers un cercle : plus de lame plate). Oreilles dressées du jack : le
   lambeau replié d'origine est caché sous la peau du crâne, des coques prennent sa place. Les yeux suivent la
   tête de la race (os des yeux déplacés une seule fois avec la peau).
-- **Chiots** : tête plus grosse, pattes, museau et dos plus courts, oreilles pas encore dressées.
+- **Pièces modelées** (`dogParts.js`, fondues dans la géométrie de la robe : aucun appel de dessin en plus) :
+  - *oreilles pendantes* (`buildPendantEars`, types `floppy`, `long`, `drop`, `rose` ; `earShape` : longueur,
+    largeur, attache, pli, rideau qui tombe le long de la joue, frange du setter/golden, frisure du caniche) ;
+    l'oreille dressée d'origine est effacée du crâne (`earSkullHide` : ramenée sur la surface du crâne interpolée,
+    poids reportés sur l'os de la tête) ;
+  - *visage* (`faceShape`, modèle du shiba) : joues, bouche neutre (plus de sourire de shiba), babines, bajoues,
+    crâne plat, stop, museau carré, paupières ouvertes ; gueule du jack fermée (`jackMouthClose`) ;
+  - *pompons et toupet* (`buildPompons`) : toupet, bracelets et bout de la queue du caniche, repliés par le shader
+    selon la coupe du salon (`setCut`, attribut `cmpPom`) ; toupet seul du yorkshire.
+- **Nouveaux réglages de race** (`DOG_BUILDS`, valeurs neutres dans `ONE`) : `earLen`, `earW`, `earSet`, `cheek`,
+  `mouth`, `flews`, `jowl`, `skullFlat`, `stop`, `square`, `eyeOpen`, `tailTaper` (effilement de la queue selon
+  son port, `TAPER`), `pompons`, `beard`, `pear` (tronc en poire du bouledogue), `earTilt`, `underbite`, `fluffy`
+  (relief touffu des spitz), `wrinkle` (rides du carlin), `chest` (poitrine profonde et ventre levretté des
+  lévriers), `paws`, `neckSlim` (encolure lisse des poils ras, sans collerette), `topknot`.
+- **Chiots** : tête plus grosse, museau court et rond, yeux ronds grands ouverts, pattes courtes aux gros pieds,
+  ventre rond, oreilles pas encore dressées.
 - **Robes par shader** (`coatPlan`) : unie, dessous clair, feu (noir et feu, selle du berger allemand), bicolore
-  (urajiro du shiba, masque du husky, plastron du boxer, collier du colley), tricolore, merle, pie (plaques, tête
-  colorée), dalmatien, moucheté, bringé, charbonné, masque du carlin ; les yeux, la truffe, la langue et les
-  coussinets gardent la texture d'origine.
+  (urajiro du shiba, masque du husky, plastron du boxer, collier du colley), tricolore, merle (plaques déchirées
+  de toutes tailles), pie (plaques, tête colorée), dalmatien, moucheté, bringé (stries fines, effacées en teinte
+  moyenne de loin), charbonné, masque du carlin ; liste qui suit le chanfrein (`cmpBlaze`) ; iris de la couleur
+  des yeux de la race (bleu du husky), reflet dans l'œil ; robes noires lustrées (reflet en bord, `cSheen`) avec
+  le tour des yeux éclairci ; les yeux, la truffe, la langue et les coussinets gardent la texture d'origine.
 - **Animation** : mélangeur three.js avec fondus, allure choisie avec hystérésis (`pickDogGait`), postures
   (assis, couché, endormi), actions (manger, boire, renifler, frétiller), regard, paupières, oreilles et queue
   vivantes, halètement, traction en laisse, chien de troupeau ; modèle de repli (chien sculpté par le code)

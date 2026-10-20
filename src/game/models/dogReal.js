@@ -779,20 +779,24 @@ export function deformDog(base, B) {
     }
     set(j, p);
   }
-  // 3. Encolure plus longue ou plus courte : la tête suit d'un bloc.
+  // 3. Encolure plus longue ou plus courte : la tête suit d'un bloc. (Plus longue : vers l'avant autant que vers le
+  //    haut — le cou du shiba monte presque droit, un lévrier au long cou portait la tête d'un lama.)
   if (B.neck !== 1) {
     const N0 = H[I('neck1')].clone();
     const HJ = H[headI].clone();
     const a = HJ.clone().sub(N0);
     const len = a.length();
     a.normalize();
+    // (part de chaque sommet mesurée le long du cou d'origine ; déplacement le long du cou allongé)
+    const d = a.clone();
+    if (B.neck > 1) d.lerp(_u.set(0, 0, 1), 0.55).normalize();
     for (let j = 0; j < total; j++) {
       const wh = wHead(j);
       const wn = wNeck(j);
       if (!(wh > 0 || wn > 0)) continue;
       get(j, p);
       const s = clamp(_u.copy(p).sub(N0).dot(a) / len, 0, 1);
-      p.addScaledVector(a, (B.neck - 1) * len * (wh + wn * s));
+      p.addScaledVector(d, (B.neck - 1) * len * (wh + wn * s));
       set(j, p);
     }
   }

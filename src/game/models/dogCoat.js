@@ -561,14 +561,16 @@ vec3 cmpCoat(vec3 p, vec4 part) {
     float warp = (cmpNoise(wp) - 0.5) * 7.0 + (cmpNoise(wp * 2.7 + 4.0) - 0.5) * 2.5;
     float chev = abs(p.y - (bellyY + topY) * 0.5) * 120.0;
     // (trois champs de stries fondus entre eux — fondre leurs phases faisait un labyrinthe)
-    float sA = 0.5 + 0.5 * sin(sp.z * 230.0 + chev * 0.6 + warp);
-    float sB = 0.5 + 0.5 * sin(sp.y * 260.0 + warp);
-    float sT = 0.5 + 0.5 * sin((p.x - midX) * 330.0 + warp * 0.5);
+    float sA = 0.5 + 0.5 * sin(sp.z * 320.0 + chev * 0.8 + warp);
+    float sB = 0.5 + 0.5 * sin(sp.y * 360.0 + warp);
+    float sT = 0.5 + 0.5 * sin((p.x - midX) * 460.0 + warp * 0.5);
     float st = mix(mix(sA, sB, smoothstep(0.3, 0.7, legs)), sT, smoothstep(0.3, 0.7, tail));
-    st = smoothstep(0.62, 0.92, st);
+    st = smoothstep(0.58, 0.9, st);
     // (de loin, moins d'un pixel par strie : le motif se fond en teinte moyenne au lieu de scintiller)
-    float fw = length(fwidth(sp)) * 260.0;
-    st = mix(st, 0.25, smoothstep(0.7, 1.6, fw));
+    // (phase par pixel : effacé au-delà d'environ deux pixels par strie, pas avant — le galgo de la planche des
+    // races, à quatre ou cinq pixels par strie, paraissait uni)
+    float fw = length(fwidth(sp)) * 320.0;
+    st = mix(st, 0.25, smoothstep(1.4, 2.8, fw));
     float brk = 0.35 + 0.65 * smoothstep(0.25, 0.65, cmpNoise(sp * vec3(14.0, 6.0, 10.0)));
     float stripe = st * brk * (1.0 - 0.4 * head);
     c = mix(c, cBrindleC, cBrindle * stripe * 0.7);

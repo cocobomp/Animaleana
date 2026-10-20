@@ -289,7 +289,7 @@ void RE_Direct_Hair( const in IncidentLight directLight, const in vec3 geometryP
   float t2 = dot( T2, H );
   spec += material.diffuseColor * pow( max( 0.0, 1.0 - t2 * t2 ), 8.0 ) * hHairSpec * 2.2;
 #endif
-  reflectedLight.directSpecular += directLight.color * spec * lit;
+  reflectedLight.directSpecular += directLight.color * spec * lit * ( 1.0 - 0.65 * hHairFore() );
   float back = pow( saturate( dot( geometryViewDir, - L ) ), 5.0 );
   reflectedLight.directDiffuse += directLight.color * material.diffuseColor * back * ( 0.2 + 0.7 * vHairF ) * hHairBack;
 }
@@ -377,7 +377,8 @@ uniform vec3 hairDragT;
 uniform vec3 hairDragM;
 uniform vec3 hairUpT;
 varying vec3 vHairT;
-varying float vHairF;`)
+varying float vHairF;
+varying float vHairK;`)
       .replace('#include <skinnormal_vertex>', `#include <skinnormal_vertex>
 {
   vec3 hT = hairT;
@@ -386,6 +387,7 @@ varying float vHairF;`)
 #endif
   vHairT = normalize( mat3( modelViewMatrix ) * hT );
   vHairF = hairG;
+  vHairK = hairRoot.w;
 }`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 // (crinière et crête de la crinière : sortes 0 et 4)
@@ -421,7 +423,11 @@ uniform float hHairLift;
 uniform float hHairBack;
 uniform float hHairRoot;
 varying vec3 vHairT;
-varying float vHairF;`)
+varying float vHairF;
+varying float vHairK;
+// (toupet, sorte 1 : couché sur le front, face au ciel et au regard, ses crins tous parallèles s'allumaient en
+// traits gris — reflet et éclaircissement des crins foncés réduits, il reste noir sur un cheval aux crins noirs)
+float hHairFore() { return step( 0.5, vHairK ) * step( vHairK, 1.5 ); }`)
       .replace('#include <lights_physical_pars_fragment>', `#include <lights_physical_pars_fragment>
 ${HAIR_LIGHT}`)
       // (reflet du ciel atténué : sur des normales « de volume » toutes tournées du même côté, les 4 % de
@@ -431,7 +437,7 @@ ${HAIR_LIGHT}`)
 reflectedLight.indirectSpecular *= 0.3;`)
       .replace('#include <map_fragment>', `
 vec4 hTex = texture2D( map, vMapUv );
-diffuseColor.rgb = diffuseColor.rgb * hTex.r + hHairLift * max( 0.0, hTex.r - 0.62 );
+diffuseColor.rgb = diffuseColor.rgb * hTex.r + hHairLift * ( 1.0 - 0.6 * hHairFore() ) * max( 0.0, hTex.r - 0.62 );
 diffuseColor.rgb *= 1.0 - hHairRoot * ( 1.0 - smoothstep( 0.0, 0.35, vHairF ) );
 diffuseColor.a *= hTex.a;`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>

@@ -315,6 +315,34 @@ describe('crins hors du corps, dans toutes les poses', () => {
   });
 });
 
+describe('toupet en mèche', () => {
+  it('plus long au milieu qu\'aux bords : une mèche en pointe (pas un rectangle rayé collé sur le front)', () => {
+    for (const breed of ['selle_francais', 'frison', 'arabe']) {
+      const md = horse(breed);
+      md.root.updateMatrixWorld(true);
+      // (position en travers du chanfrein, repère de la tête : x de la racine)
+      const t = cards(md)[1].map((m) => ({ x: Math.abs(md.head.worldToLocal(m.root.clone()).x), len: m.len }));
+      const w = Math.max(...t.map((m) => m.x));
+      const mean = (l) => l.reduce((u, m) => u + m.len, 0) / l.length;
+      const mid = t.filter((m) => m.x < w * 0.4);
+      const edge = t.filter((m) => m.x > w * 0.75);
+      expect(mid.length, breed).toBeGreaterThan(3);
+      expect(edge.length, breed).toBeGreaterThan(3);
+      expect(mean(mid), breed).toBeGreaterThan(mean(edge) * 1.25);
+      md.dispose();
+    }
+  });
+
+  it('reflet et éclaircissement des crins foncés réduits sur le toupet (il reste noir)', () => {
+    const m = hairMaterial(0x1b1410, { value: 0 });
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+    m.onBeforeCompile(sh);
+    expect(sh.vertexShader).toContain('vHairK = hairRoot.w;');
+    expect(sh.fragmentShader).toContain('spec * lit * ( 1.0 - 0.65 * hHairFore() )');
+    expect(sh.fragmentShader).toContain('hHairLift * ( 1.0 - 0.6 * hHairFore() )');
+  });
+});
+
 describe('toupet sous le bonnet anti-mouches', () => {
   it.each(['selle_francais', 'frison', 'shetland'])('%s : rentré sous le voile (aucune mèche ne le traverse), ressorti sans le bonnet', async (breed) => {
     const { buildGear } = await import('../src/game/gearModels.js');

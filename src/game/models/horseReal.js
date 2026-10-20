@@ -1308,10 +1308,11 @@ function forelockCards(S, B, body, base) {
     const root = fromH(V(x, y - 0.004, z));
     const d0 = V(x * 1.5, 0.25, 1).normalize().applyQuaternion(q);
     // (plus long au milieu : un toupet en pointe, pas une frange coupée droit)
-    const L = L0 * (0.8 + 0.35 * rng()) * (1 - 0.55 * (Math.abs(x) / halfX) ** 2);
+    const L = L0 * (0.8 + 0.35 * rng()) * (1 - 0.6 * (Math.abs(x) / halfX) ** 2);
     const pts = drape(hd, root, d0, L, { h: 0.004 + rng() * 0.006, bend: 0.06, np: 5, steps: 12, stick: 0.05 });
-    // (les mèches se rejoignent un peu vers le bas, au milieu du front, comme un toupet qui pend)
-    const spread = -x * 0.35 + (rng() - 0.5) * 0.012;
+    // (les mèches se rejoignent vers le bas, au milieu du front, en une mèche qui pend en pointe — moins resserrées,
+    // vues de face, elles faisaient un rectangle rayé collé sur le front)
+    const spread = -x * 0.6 + (rng() - 0.5) * 0.012;
     const gr = V();
     pts.forEach((p, k) => {
       if (!k) return;
@@ -1322,11 +1323,14 @@ function forelockCards(S, B, body, base) {
     const normals = pts.map((p) => hd.grad(p, V()));
     const m = Math.floor(pts.length / 2);
     const side = cardSide(normals[m], alongAt(pts, m), (rng() - 0.5) * 0.25);
-    const tone = 0.93 + rng() * 0.14;
+    // (tons peu écartés d'un ruban à l'autre : couchés côte à côte sur le front, des rubans de tons différents
+    // se lisaient comme des rayures)
+    const tone = 0.96 + rng() * 0.08;
     const [v, dv] = HAIR_ROWS[Math.floor(rng() * 4)];
     (primary ? main : fill).push({
-      // (larges et qui se recouvrent : une mèche pleine, pas des traits collés sur le front)
-      pts, normals, side, w0: primary ? 0.062 : 0.048, w1: primary ? 0.036 : 0.028,
+      // (larges et qui se recouvrent : une mèche pleine, pas des traits collés sur le front ; plus fins au bout :
+      // la pointe)
+      pts, normals, side, w0: primary ? 0.062 : 0.048, w1: primary ? 0.026 : 0.02,
       // (texture prise après les dents de la racine : racine pleine, pas une bande translucide sur le front)
       color: new THREE.Color(tone, tone, tone), uv: [0.055, 1, v, dv], kind: 1,
       weights: () => [[BONE_INDEX.Head, 1]], meta: { root, primary },

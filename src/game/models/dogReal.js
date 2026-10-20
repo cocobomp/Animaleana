@@ -17,7 +17,7 @@ import { getModel } from '../assets.js';
 import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
 import { dogBuild } from '../../sim/dogLook.js';
-import { coatPlan, makeCoatUniforms, makeLandUniforms, setCoat, coatMaterial, furLow } from './dogCoat.js';
+import { coatPlan, makeCoatUniforms, makeLandUniforms, setCoat, coatMaterial, furLow, furDetail } from './dogCoat.js';
 
 /** Clés des deux GLB (assets.js) : jamais « dog » (gltfAnimal.js le prendrait pour un animal GLB générique). */
 export const REAL_DOG_KEYS = { shiba: 'dog_shiba', jack: 'dog_jack' };
@@ -40,7 +40,9 @@ const MODEL = {
   },
   jack: {
     keep: { dark: 0.02, pink: true, nose: [0.032, 0.25] },
-    grain: 0.45,
+    grain: 0.55,
+    // (grain tiré de la texture sans ses plaques blanc et feu : voir furDetail)
+    detail: true,
   },
 };
 
@@ -182,7 +184,11 @@ export function realDogBase(gltf, kind) {
       if (headSet.has(b) && !noseOut.has(b)) W.nose[i] += w;
     }
     const legSum = Math.min(1, W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3]);
-    part.set([Math.min(1, W.ear[i * 2] + W.ear[i * 2 + 1]), W.tail[i], W.head[i], legSum], i * 4);
+    // (jack : les poids par diffusion de chaleur débordent des membres sur les flancs et le ventre ; pris tels quels,
+    // le tronc des masques de la robe suivait ces débords — plaques claires et foncées à bords dentelés sur les
+    // robes unies — et le ventre mesuré remontait sur le dos)
+    const legPart = kind === 'jack' ? smooth(0.3, 0.75, legSum) : legSum;
+    part.set([Math.min(1, W.ear[i * 2] + W.ear[i * 2 + 1]), W.tail[i], W.head[i], legPart], i * 4);
   }
   // (robe : la tête comprend tout ce qui est devant l'os de la tête et au-dessus de la mâchoire, même porté par
   // l'encolure — chez le jack, le crâne l'est en partie)
@@ -229,6 +235,15 @@ export function realDogBase(gltf, kind) {
       topY = Math.max(topY, y);
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
+    }
+  }
+  // (ventre : aussi le plus bas de la ligne médiane, quels que soient les poids — ceux du jack débordent des membres)
+  {
+    const mx = (minX + maxX) / 2;
+    for (let i = 0; i < n; i++) {
+      const z = coat.pos[i * 3 + 2];
+      if (z <= z0 || z >= z1 || W.head[i] > 0.05 || W.tail[i] > 0.05) continue;
+      if (Math.abs(coat.pos[i * 3] - mx) < 0.035) bellyY = Math.min(bellyY, coat.pos[i * 3 + 1]);
     }
   }
   const eyeL = heads[B('eyeL')];
@@ -385,6 +400,7 @@ export function realDogBase(gltf, kind) {
   // Attributs communs à toutes les races (robe) : position de repos d'origine, appartenance, grain du poil.
   const low = furLow(coat.material.map?.image, coat.uv, coat.pos, coat.index, n);
   base.means = low.none ? null : { lo: low.lo, hi: low.hi };
+  base.detail = MODEL[kind].detail ? furDetail(coat.material.map?.image) : null;
   base.attrs = {
     cmpRest: new THREE.BufferAttribute(coat.pos.slice(), 3),
     cmpPart: new THREE.BufferAttribute(part, 4),
@@ -802,7 +818,8 @@ export function deformDog(base, B) {
       k += legSum * (1 - paw) * (0.3 + B.feather * 0.8 * smooth(-0.1, -0.7, _w.z) * smooth(L.elbowY * 0.3, L.elbowY, y0));
       k += (1 - legSum) * (1 - head) * (1 - tail) * B.feather * 0.7 * smooth(-0.3, -0.9, _w.y);
       k += ear * (0.1 + 0.4 * B.feather);
-      k += tail * (0.9 + 0.9 * B.feather) * B.tailFur;
+      // (racine de la queue épaissie aussi : le panache du saint-bernard faisait un bulbe sur une tige fine)
+      k += Math.sqrt(tail) * (0.9 + 0.9 * B.feather) * B.tailFur;
       const nz = B.curly ? 0.45 + 1.1 * fbm(p.x * 55, p.y * 55, p.z * 55) : 0.75 + 0.5 * fbm(p.x * 30, p.y * 30, p.z * 30);
       // Sans collerette (setter, caniche, golden) : celle du shiba et ses joues de spitz d'abord raccourcies (sinon
       // une crinière de lion autour de la tête).
@@ -1313,7 +1330,7 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   const spheres = keepCfg.nose ? [{ s: new THREE.Vector4(base.land.nose.x, base.land.nose.y, base.land.nose.z - keepCfg.nose[0] * 0.4, keepCfg.nose[0]), l: keepCfg.nose[1] }] : [];
   void nose;
   const coatMat = coatMaterial(base.prims.coat.material, uniforms, {
-    role: 'fur', means: base.means, contrast: base.cfg.grain, keep: { ...keepCfg, spheres },
+    role: 'fur', means: base.means, detail: base.detail, contrast: base.cfg.grain, keep: { ...keepCfg, spheres },
   });
   // (robe noire : un peu de lustre, sinon le poil n'a plus de modelé)
   coatMat.roughness = plan.dark ? 0.6 : 0.82;

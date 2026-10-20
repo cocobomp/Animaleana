@@ -172,6 +172,8 @@ export function coatPlan(look = {}, breedId = null) {
         if (breed === 'saint_bernard') {
           P.mask = 0.5;
           P.maskColor = scaleHex(sec, 0.45);
+          // (bout de la queue, liste et pattes blancs : la queue rousse se termine en blanc)
+          Object.assign(P, { under: 1, underColor: coat, reach: 0.3, legLevel: 0.6, face: 0.6, blaze: 1, tailTip: 1 });
         }
       }
     } else {
@@ -369,6 +371,7 @@ uniform vec4 cKeepS[${MAX_KEEP}];
 uniform float cKeepL[${MAX_KEEP}];
 uniform vec4 cKeepUv[${MAX_UV}];
 uniform vec4 cKeepOpt;
+uniform sampler2D cDetail;
 varying vec3 vCmpPos;
 varying vec4 vCmpPart;
 varying float vCmpLow;
@@ -387,25 +390,29 @@ float cmpNoise(vec3 x) {
                  mix(cmpHash(i + vec3(0.0, 1.0, 1.0)), cmpHash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
 }
 // Relief du poil : bouclettes (frisé) et mèches verticales (soyeux), hauteur 0 à 1 sur la position de repos.
+// (axes tournés : le bruit à valeurs suit sinon la grille, en blocs carrés ou en marches d'escalier)
+const mat3 CMP_ROT = mat3(0.788, 0.441, -0.43, -0.39, 0.896, 0.215, 0.476, -0.054, 0.878);
 float cmpCurlH(vec3 p) {
-  vec3 q = p * 140.0;
-  return cmpNoise(q) * 0.6 + cmpNoise(q * 2.3 + 7.0) * 0.4;
+  vec3 q = CMP_ROT * p * 110.0;
+  return cmpNoise(q) * 0.6 + cmpNoise(q * 2.1 + 7.0) * 0.4;
 }
 float cmpSilkH(vec3 p) {
-  return cmpNoise(vec3(p.x * 260.0, p.y * 22.0, p.z * 260.0)) * 0.7 + cmpNoise(vec3(p.x * 520.0, p.y * 40.0, p.z * 520.0)) * 0.3;
+  vec3 r = CMP_ROT * vec3(p.x, 0.0, p.z);
+  return cmpNoise(vec3(r.x * 170.0, p.y * 18.0, r.z * 170.0)) * 0.7 + cmpNoise(vec3(r.x * 340.0, p.y * 34.0, r.z * 340.0)) * 0.3;
 }
 // Taches rondes (dalmatien) : la plus proche, rayon propre à chaque tache.
 float cmpSpots(vec3 p) {
   vec3 i = floor(p);
   vec3 f = fract(p);
   float best = 0.0;
+  float aa = max(0.03, length(fwidth(p)) * 0.7);
   for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
     vec3 g = vec3(float(x), float(y), float(z));
     vec3 c = i + g;
     vec3 o = vec3(cmpHash(c), cmpHash(c + 17.31), cmpHash(c + 41.7));
     float r = 0.22 + 0.2 * cmpHash(c + 7.7);
     float d = length(g + o - f);
-    best = max(best, 1.0 - smoothstep(r - 0.05, r + 0.03, d));
+    best = max(best, 1.0 - smoothstep(r - aa, r + aa, d));
   }
   return best;
 }
@@ -450,7 +457,8 @@ vec3 cmpCoat(vec3 p, vec4 part) {
     float s = trunk * smoothstep(cSaddle.y, cSaddle.y + 0.12, h + edge) * smoothstep(-0.35, -0.12, u + edge)
       * (1.0 - smoothstep(0.82, 1.0, u + edge));
     s = max(s, neckZone * (1.0 - head) * smoothstep(0.62, 0.8, h + edge) * (1.0 - smoothstep(cMisc.z - 0.06, cMisc.z, p.z)));
-    s = max(s, tail * smoothstep(-0.3, 0.2, p.y - cLand.w * 0.8 + edge));
+    // (toute la queue : prise selon sa hauteur au repos, la queue enroulée du shiba était à moitié blanche, délavée)
+    s = max(s, tail * 0.95);
     c = mix(c, cSaddleC, cSaddle.x * s);
   }
   // ---- tête colorée (sauf la liste et le museau) et plaques (pie)
@@ -472,10 +480,12 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   }
   // ---- bringé : rayures presque verticales sur le corps, en travers sur les pattes ; plus discrètes sur la tête
   if (cBrindle > 0.0) {
-    float warp = cmpNoise(sp * vec3(6.0, 2.5, 6.0)) * 1.6 + n2 * 0.5;
-    float along = mix(p.z, p.y * 0.9 + p.z * 0.25, legs);
-    float st = sin(along * 210.0 + warp * 6.0 + cmpNoise(sp * 9.0) * 3.5);
-    float stripe = smoothstep(0.35, 0.85, st * (0.35 + 0.8 * cmpNoise(sp * 7.0 + 3.0))) * (0.5 + 0.5 * n1);
+    // (bruit étiré le long de la verticale : rayures irrégulières, interrompues ; les isolignes d'un bruit 3D
+    // faisaient des cernes de bois)
+    float wz = cmpNoise(sp * vec3(4.0, 3.0, 4.0)) * 0.04;
+    vec3 q = mix(vec3(sp.x * 16.0, sp.y * 2.6, (sp.z + wz) * 95.0), vec3(sp.x * 16.0, (sp.y + wz) * 95.0, sp.z * 16.0), legs);
+    float bn = cmpNoise(q) * 0.65 + cmpNoise(q * vec3(1.9, 1.6, 1.9) + 11.0) * 0.35;
+    float stripe = smoothstep(0.52, 0.66, bn) * (0.6 + 0.4 * n1);
     stripe *= (1.0 - 0.85 * head) * (1.0 - 0.5 * legs);
     c = mix(c, cBrindleC, cBrindle * stripe * 0.75);
   }
@@ -525,8 +535,12 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   }
   // ---- taches du dalmatien : plus petites sur la tête et les pattes, oreilles foncées
   if (cSpots > 0.0) {
-    float small = max(head, legs);
-    float s = cmpSpots(sp * mix(24.0, 40.0, small) + vec3(3.1, 1.7, 0.0));
+    // (deux tailles calculées à part puis fondues : une seule échelle variant avec l'appartenance aux pattes ou à
+    // la tête comprimait le motif là où elle change — épaules, cuisses, cou — en une poussière de points noirs)
+    float small = smoothstep(0.35, 0.65, max(head, legs));
+    float sA = small < 0.999 ? cmpSpots(sp * 24.0 + vec3(3.1, 1.7, 0.0)) : 0.0;
+    float sB = small > 0.001 ? cmpSpots(sp * 40.0 + vec3(1.3, 4.1, 2.0)) : 0.0;
+    float s = mix(sA, sB, small);
     s = max(s, ear * smoothstep(0.35, 0.65, n1 + 0.25));
     c = mix(c, cSpotsC, cSpots * s);
   }
@@ -557,7 +571,9 @@ if (cOn > 0.5) {
     vec4 s = cKeepS[i];
     if (s.w > 0.0) {
       float inS = 1.0 - smoothstep(s.w * 0.65, s.w, distance(vCmpPos, s.xyz));
-      keep = max(keep, inS * (1.0 - smoothstep(cKeepL[i] * 0.5, cKeepL[i], lum0)));
+      // (truffe : texels sombres et peu saturés ; le poil feu autour du nez du jack, sombre lui aussi, faisait un
+      // anneau orange sur les robes noires ou grises)
+      keep = max(keep, inS * (1.0 - smoothstep(cKeepL[i] * 0.5, cKeepL[i], lum0)) * (1.0 - smoothstep(0.3, 0.5, hsv.y)));
     }
   }
   // Langue, lèvres et gencives roses (dans la tête seulement).
@@ -576,7 +592,12 @@ if (cOn > 0.5) {
   }
   #endif
   float detail = 1.0;
-  if (cTexMode > 0.5) {
+  if (cTexMode > 1.5) {
+    // grain de la texture sans ses plaques (furDetail : rapport à la moyenne locale de la même couleur)
+    #ifdef USE_MAP
+    detail = exp((texture2D(cDetail, vMapUv).r * 1.35 - 0.9) * cMeans.z);
+    #endif
+  } else if (cTexMode > 0.5) {
     float ll = log(max(lum0, 1e-3));
     float w = smoothstep(cMeans.x + 0.15 * (cMeans.y - cMeans.x), cMeans.x + 0.85 * (cMeans.y - cMeans.x), ll);
     float nl = ll - mix(cMeans.x, cMeans.y, w);
@@ -587,8 +608,11 @@ if (cOn > 0.5) {
   detail = mix(detail, sqrt(detail), smoothstep(0.3, 0.8, l));
   vec3 nc = min(coat * detail, vec3(1.0));
   nc *= 1.0 - 0.35 * cWet;
-  if (cCurl.x > 0.0) nc *= mix(1.0, 0.66 + 0.46 * smoothstep(0.25, 0.75, cmpCurlH(vCmpPos)), cCurl.x);
-  if (cCurl.y > 0.0) nc *= mix(1.0, 0.82 + 0.26 * cmpSilkH(vCmpPos), cCurl.y);
+  // (effacé de loin, comme le relief : sinon des pixels qui scintillent)
+  float fwC = length(fwidth(vCmpPos));
+  if (cCurl.x > 0.0) nc *= mix(1.0, 0.66 + 0.46 * smoothstep(0.25, 0.75, cmpCurlH(vCmpPos)), cCurl.x * (1.0 - smoothstep(0.25, 0.9, fwC * 110.0)));
+  // (soyeux : les mèches sur le corps, pas sur la face au poil court, où elles faisaient des stries)
+  if (cCurl.y > 0.0) nc *= mix(1.0, 0.82 + 0.26 * cmpSilkH(vCmpPos), cCurl.y * (1.0 - smoothstep(0.25, 0.9, fwC * 170.0)) * (1.0 - 0.8 * vCmpPart.z));
   diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0));
   // Blanc de l'œil du shiba : foncé (il se voyait autour de l'iris dès que la tête grandit : chiots aux yeux ronds)
   if (eyeK > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.038, 0.03), smoothstep(0.22, 0.45, lum0) * (1.0 - smoothstep(0.12, 0.3, hsv.y)));
@@ -599,7 +623,7 @@ if (cOn > 0.5) {
 const CURL_F = /* glsl */ `
 if (cOn > 0.5 && cRole > 0.5 && (cCurl.x > 0.0 || cCurl.y > 0.0)) {
   float fade = 1.0 - smoothstep(0.25, 0.9, length(fwidth(vCmpPos)) * 140.0);
-  float hh = (cCurl.x * 0.004 * cmpCurlH(vCmpPos) + cCurl.y * 0.0015 * cmpSilkH(vCmpPos)) * fade;
+  float hh = (cCurl.x * 0.004 * cmpCurlH(vCmpPos) + cCurl.y * 0.0015 * cmpSilkH(vCmpPos) * (1.0 - 0.8 * vCmpPart.z)) * fade;
   vec2 dH = vec2(dFdx(hh), dFdy(hh));
   vec3 sx = dFdx(-vViewPosition);
   vec3 sy = dFdy(-vViewPosition);
@@ -712,6 +736,104 @@ export function furLow(img, uv, rest, index, count, opts = {}) {
 }
 
 /**
+ * Grain du poil d'une texture peinte à grandes plaques (jack russell : blanc et feu), sans ses plaques : chaque texel
+ * est rapporté à la moyenne locale de SA couleur (feu ou blanc, séparés par la saturation : moyennes floues masquées,
+ * rayon R texels). Rapportée à une moyenne commune, ou à une moyenne par sommet interpolée, la limite des plaques
+ * d'origine restait visible sur les robes unies (contours dentelés, clairs et foncés). Renvoie une texture (rouge :
+ * log du rapport, de -0,9 à 0,45, sur 0 à 1) ou null.
+ */
+export function furDetail(img, R = 10) {
+  if (!img || typeof document === 'undefined') return null;
+  const S = 512;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  try {
+    ctx.drawImage(img, 0, 0, S, S);
+  } catch {
+    return null;
+  }
+  const px = ctx.getImageData(0, 0, S, S).data;
+  const N = S * S;
+  const L = new Float32Array(N);
+  const Mt = new Float32Array(N); // feu (saturé)
+  const Mv = new Float32Array(N); // texel utile (pas le fond noir)
+  const sm = (a, b, x) => {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  for (let i = 0; i < N; i++) {
+    const r = px[i * 4] / 255;
+    const g = px[i * 4 + 1] / 255;
+    const b = px[i * 4 + 2] / 255;
+    const mx = Math.max(r, g, b);
+    const mn = Math.min(r, g, b);
+    const sat = mx > 1e-3 ? (mx - mn) / mx : 0;
+    // (luminance linéaire)
+    const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+    L[i] = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    Mt[i] = sm(0.2, 0.34, sat);
+    Mv[i] = L[i] > 0.01 ? 1 : 0;
+  }
+  // moyennes floues (boîte séparable) de l·m, m, l·(1-m), (1-m), pour les texels utiles
+  const blur = (src) => {
+    const tmp = new Float32Array(N);
+    const out = new Float32Array(N);
+    for (let y = 0; y < S; y++) {
+      let acc = 0;
+      for (let x = -R; x <= R; x++) acc += src[y * S + Math.min(S - 1, Math.max(0, x))];
+      for (let x = 0; x < S; x++) {
+        tmp[y * S + x] = acc;
+        acc += src[y * S + Math.min(S - 1, x + R + 1)] - src[y * S + Math.max(0, x - R)];
+      }
+    }
+    for (let x = 0; x < S; x++) {
+      let acc = 0;
+      for (let y = -R; y <= R; y++) acc += tmp[Math.min(S - 1, Math.max(0, y)) * S + x];
+      for (let y = 0; y < S; y++) {
+        out[y * S + x] = acc;
+        acc += tmp[Math.min(S - 1, y + R + 1) * S + x] - tmp[Math.max(0, y - R) * S + x];
+      }
+    }
+    return out;
+  };
+  const a1 = new Float32Array(N);
+  const a2 = new Float32Array(N);
+  const a3 = new Float32Array(N);
+  const a4 = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    a1[i] = L[i] * Mt[i] * Mv[i];
+    a2[i] = Mt[i] * Mv[i];
+    a3[i] = L[i] * (1 - Mt[i]) * Mv[i];
+    a4[i] = (1 - Mt[i]) * Mv[i];
+  }
+  const b1 = blur(a1);
+  const b2 = blur(a2);
+  const b3 = blur(a3);
+  const b4 = blur(a4);
+  const data = new Uint8Array(N * 4);
+  for (let i = 0; i < N; i++) {
+    const mt = b2[i] > 1e-3 ? b1[i] / b2[i] : 0;
+    const mw = b4[i] > 1e-3 ? b3[i] / b4[i] : 0;
+    const m = Mt[i];
+    const mean = m * (mt || mw) + (1 - m) * (mw || mt);
+    const d = mean > 1e-4 && Mv[i] ? Math.log(Math.max(1e-4, L[i]) / mean) : 0;
+    const v = Math.round(((Math.min(0.45, Math.max(-0.9, d)) + 0.9) / 1.35) * 255);
+    data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = v;
+    data[i * 4 + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(data, S, S, THREE.RGBAFormat);
+  tex.flipY = false;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.needsUpdate = true;
+  tex.userData.shared = true;
+  return tex;
+}
+
+/**
  * Matériau du pelage d'un chien : MeshStandardMaterial du modèle, recoloré par le shader. shared : uniformes du
  * chien (makeCoatUniforms) et du modèle (makeLandUniforms) ; opts : { role 'fur' | 'keep', means ({ lo, hi } ou
  * null), contrast (grain gardé), keep (réglages du modèle : spheres, uv, pads, pink, dark) }.
@@ -725,7 +847,8 @@ export function coatMaterial(src, shared, opts) {
   while (uvs.length < MAX_UV) uvs.push(new THREE.Vector4(0, 0, 0, 0));
   const own = {
     cRole: { value: opts.role === 'keep' ? 0 : 1 },
-    cTexMode: { value: opts.means ? 1 : 0 },
+    cTexMode: { value: opts.detail ? 2 : opts.means ? 1 : 0 },
+    cDetail: { value: opts.detail ?? null },
     cMeans: { value: new THREE.Vector3(opts.means?.lo ?? -3, opts.means?.hi ?? -1, opts.contrast ?? 1) },
     cKeepS: { value: spheres.slice(0, MAX_KEEP).map((x) => x.s) },
     cKeepL: { value: spheres.slice(0, MAX_KEEP).map((x) => x.l) },
@@ -752,6 +875,6 @@ export function coatMaterial(src, shared, opts) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${CURL_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, cWet);');
   };
-  mat.customProgramCacheKey = () => 'dog-coat-v1';
+  mat.customProgramCacheKey = () => 'dog-coat-v2';
   return mat;
 }

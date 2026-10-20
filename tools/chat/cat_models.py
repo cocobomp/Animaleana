@@ -14,9 +14,11 @@ MODELS = {
     'adult': dict(file='claire_cat.glb', rig=dict(buttock=0.45, haunch=0.8),
                   pose_opts=dict(sit_flex=-0.2, sit_tuck=-0.2, sit_femur=0.35)),
     # Chatons : « Kitten », FainoDS (doinspire, Sketchfab, CC-BY 4.0) — chaton tigré gris réaliste, grosse tête.
+    # (arm_clip : la peau du poitrail entre les pattes avant suit le poitrail, plus le bras : sinon un voile, pattes
+    # tendues devant)
     # (cuisse assise : l'arrière du haut de la cuisse suit le bassin (buttock), le grasset est plus haut et plus en
     # avant ; sans cela, la peau du fémur sortait du flanc, déchirée, quand le chaton s'asseyait)
-    'kitten': dict(file='faino_kitten.glb', rig=dict(elbow=0.42, hock=0.28, stifle=0.46, hip=0.70, buttock=0.5, haunch=0.9),
+    'kitten': dict(file='faino_kitten.glb', rig=dict(elbow=0.42, hock=0.28, stifle=0.46, hip=0.70, buttock=0.5, haunch=0.9, arm_clip=(0.10, 0.18, 4.0)),
                    eye_mats=('material',),
                    gait_over={'run': {'stride': 0.42, 'drop': 0.008, 'lift': 0.09}, 'trot': {'stride': 0.28}, 'walk': {'stride': 0.24}},
                    pose_opts=dict(groom_dz=0.06, groom_dy=0.02, groom_head=0.35, groom_a3=1.8, groom_wipe_dy=0.02, groom_wipe_dz=-0.055,

@@ -26,6 +26,8 @@ import { animateCat } from '/src/game/catAnim.js';
 import { catLookWithBreed } from '/src/sim/catLook.js';
 import { SPECIES } from '/src/sim/species.js';
 import { resolveLook } from '/src/sim/animal.js';
+import { buildGear } from '/src/game/gearModels.js';
+import { buildAccessories } from '/src/game/models/salon.js';
 
 const grid = document.getElementById('grid');
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -74,7 +76,7 @@ function realPose(md, cell) {
   const a = md.anim;
   const clip = cell.clip ?? 'stand';
   const posture = { stand: 'stand', sit: 'sit', lie: 'lie', curl: 'curl' }[clip];
-  if (posture && cell.t === undefined) {
+  if (posture && cell.t === undefined && !cell.following && !cell.fear) {
     md.staticPose(posture);
     return;
   }
@@ -106,7 +108,8 @@ window.planche = {
   /**
    * cells : [{ breed, color (indice de robe), stage ('adult' | 'baby' | 'young'), proc (chat procédural), clip ('stand',
    * 'sit', 'groom', 'lie', 'curl', 'eat', 'highfive', 'jump', 'stretch', 'walk', 'trot', 'run', 'balance'), t (fraction),
-   * view ('side' | 'three' | 'front' | 'head' | 'back' | 'top' | 'face'), label, lod, zoom, following, fear }] ; cols ;
+   * view ('side' | 'three' | 'front' | 'head' | 'back' | 'top' | 'face'), label, lod, zoom, following, fear, gear
+   * (buildGear : { neck: { item: 'collar', color } }), acc (buildAccessories) }] ; cols ;
    * cw, ch (taille d'une case).
    */
   async show({ cells, cols = 6, cw = 300, ch = 240 }) {
@@ -136,8 +139,18 @@ window.planche = {
         if (m) m.visible = false;
         if (k === 'shells') for (const sm of md.shells ?? []) sm.visible = false;
       }
+      // (mise au point : uniformes de la robe imposés, ex. { cPoint: [1, 1] })
+      for (const [k, v] of Object.entries(c.uniforms ?? {})) {
+        const u = md.uniforms?.[k];
+        if (u && Array.isArray(v)) u.value.fromArray(v);
+        else if (u) u.value = v;
+      }
       if (c.proc) procPose(md, c, stage);
       else realPose(md, c);
+      // équipement (collier, accessoires du salon : { neck: { id: 'bandana', color } }) une fois posé
+      if (c.gear) buildGear(md, look, c.gear);
+      if (c.acc) buildAccessories(md, look, c.acc);
+      md.root.updateMatrixWorld(true);
       if (c.proc && stage === 'baby') md.head.scale.setScalar(1.3);
       const col = i % cols;
       const row = Math.floor(i / cols);

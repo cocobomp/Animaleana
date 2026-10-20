@@ -36,6 +36,8 @@ export const CAT_LOD_DIST = { low: 5, high: 12 };
 export const CAT_SHELL_DIST = 6;
 /** Chat hors du champ : animé une image sur OFFSCREEN_STEP, avec le temps cumulé (comme le cheval et le chien). */
 export const OFFSCREEN_STEP = 3;
+/** Chat au loin (version réduite) : animé une image sur FAR_STEP. */
+export const FAR_STEP = 2;
 /** Vitesses « naturelles » des allures (m/s, chat de taille 1) si le GLB ne les donne pas. */
 export const NATURAL_SPEED = { walk: 0.54, trot: 1.62, run: 5.7, balance: 0.42 };
 
@@ -617,7 +619,7 @@ export function deformCat(base, B) {
         + head * smooth(L.eyeX * 0.9, L.eyeX * 1.8, Math.abs(x0)) * (1 - smooth(L.eyeY - 0.005, L.eyeY + 0.01, y0)) * (1 - smooth(0.25, 0.55, hz)));
       // culottes : arrière du haut des cuisses
       const br = legSum * smooth(-0.2, -0.7, _w.z) * smooth(L.elbowY * 0.5, L.elbowY * 1.4, y0) * (1 - smooth(0.0, 0.35, u)) + (1 - legSum) * (1 - tail) * smooth(0.0, -0.35, u) * (1 - smooth(0.55, 0.9, h)) * 0.5;
-      const nz = B.fur > 0.004 ? 0.7 + 0.6 * fbm(p.x * 160, p.y * 160, p.z * 160) : 1;
+      const nz = B.fur > 0.004 ? 0.85 + 0.3 * fbm(p.x * 160, p.y * 160, p.z * 160) : 1;
       let push = B.fur * k * nz * (1 - ear * 0.8) + B.ruff * ruff * (0.75 + 0.5 * nz) + B.breeches * 0.012 * br * nz;
       // poil ras : jamais plus que le tiers du rayon de la queue
       if (B.fur < 0) push = B.fur * k - Math.min(-B.fur, 0.3 * (tailR?.[i] || 0.01)) * tail;
@@ -759,6 +761,7 @@ function measureCat(base, D, B) {
     }
     return { center, r: Math.max(rx, ry), rx, ry };
   };
+  // (repli : l'anneau du collier est remesuré sur le chat debout, voir fitCollar)
   const collar = ringAt(0.45);
   // Dessus du crâne entre les oreilles, bout du nez.
   let skullTop = HJ.clone();
@@ -1042,13 +1045,13 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
   const shells = [];
   if (gfx.quality === 'high' && B.shells > 0) {
     const sg = S.lodCoat ?? S.coatGeo;
-    const furMap = new THREE.Vector4(Math.max(0.004, B.fur * 0.7), B.ruff * 0.6, B.breeches * 0.008, B.tailFur * 0.006);
+    const furMap = new THREE.Vector4(Math.max(0.003, B.fur * 0.45), B.ruff * 0.35, B.breeches * 0.005, B.tailFur * 0.004);
     for (let k = 1; k <= B.shells; k++) {
       const sm = new PetMesh(sg, catShellMaterial(coatMat, uniforms, k / B.shells, furMap), hb);
       sm.bind(skeleton, new THREE.Matrix4());
       sm.castShadow = false;
       sm.receiveShadow = true;
-      sm.renderOrder = 1;
+      sm.renderOrder = 1 + k; // (de la peau vers le bout des poils)
       root.add(sm);
       hb.meshes.push(sm);
       shells.push(sm);
@@ -1164,8 +1167,98 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     for (const m of [coatMat, eyeMesh?.material, tuftMesh?.material, ...shells.map((x) => x.material)]) m?.dispose?.();
     releaseShape(S);
   };
+  fitCollar(model, base, S);
   model.anim.staticPose('stand');
   return model;
+}
+
+/**
+ * Anneau du collier mesuré sur la peau du chat debout (clip idle, sans le regard) et non au repos du modèle : le cou
+ * du chat est presque horizontal au repos et se redresse debout ; un anneau mesuré au repos et porté par l'os du cou
+ * tournait de tout le redressement de la tête alors que la peau, partagée entre les os, en suivait la moitié (cerceau
+ * penché derrière la tête). Une fois par gabarit (S.collarFit), dans le repère de l'os neck2 posé.
+ */
+function fitCollar(model, base, S) {
+  const fit = model.dogFit.collar;
+  if (!S.collarFit) {
+    const a = model.anim;
+    a.staticPose('stand');
+    a.restorePose();
+    for (const [b, d] of a.shift) b.position.add(d);
+    model.root.updateMatrixWorld(true);
+    const W = base.W;
+    const mesh = model.coatMesh;
+    const n = base.prims.coat.count;
+    const n0 = model.bone('neck1').getWorldPosition(V());
+    const hp = model.head.getWorldPosition(V());
+    const axis = hp.clone().sub(n0);
+    const nlen = axis.length();
+    axis.normalize();
+    // Coupes perpendiculaires à l'axe cou → tête : le collier glisse là où le cou est le plus fin (le chaton n'a
+    // presque pas de cou : une coupe à mi-chemin passait par les joues et donnait un cerceau autour de la tête).
+    const lx = V(1, 0, 0).addScaledVector(axis, -axis.x).normalize();
+    const ly = axis.clone().cross(lx);
+    const mid = n0.clone().addScaledVector(axis, nlen * 0.5);
+    const cand = [];
+    const p = V();
+    for (let i = 0; i < n; i++) {
+      if (W.ear[i * 2] + W.ear[i * 2 + 1] > 0.1) continue;
+      if (W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] > 0.5) continue;
+      mesh.getVertexPosition(i, p);
+      if (p.distanceTo(mid) > 0.11) continue;
+      _w.copy(p).sub(n0);
+      cand.push([_w.dot(axis), _w.dot(lx), _w.dot(ly)]);
+    }
+    let best = null;
+    for (let t = 0.15; t <= 0.86; t += 0.1) {
+      const d0 = nlen * t;
+      let x0 = Infinity;
+      let x1 = -Infinity;
+      let y0 = Infinity;
+      let y1 = -Infinity;
+      let cnt = 0;
+      for (const [d, x, y] of cand) {
+        if (Math.abs(d - d0) > 0.005) continue;
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+        cnt++;
+      }
+      if (cnt < 12) continue;
+      const area = (x1 - x0) * (y1 - y0);
+      if (!best || area < best.area) best = { area, d0, x0, x1, y0, y1 };
+    }
+    const B = model.build;
+    let center = n0.clone().addScaledVector(axis, nlen * 0.45);
+    let rx = fit.rx;
+    let ry = fit.ry;
+    if (best) {
+      // ellipse de la boîte de la coupe (le centre des sommets, plus nombreux sous la gorge, décollait le dessus)
+      center = n0.clone().addScaledVector(axis, best.d0).addScaledVector(lx, (best.x0 + best.x1) / 2).addScaledVector(ly, (best.y0 + best.y1) / 2);
+      rx = (best.x1 - best.x0) / 2;
+      ry = (best.y1 - best.y0) / 2;
+      // (le collier s'enfonce dans le poil long et la collerette : sinon un cerceau autour du maine coon)
+      // (à moitié seulement : le collier doit rester visible)
+      const sink = 0.45 * (Math.max(0, B.fur) + 1.2 * Math.max(0, B.ruff));
+      rx = Math.max(rx * 0.7, rx - sink);
+      ry = Math.max(ry * 0.7, ry - sink);
+    }
+    const neckB = model.neck;
+    const nq = neckB.getWorldQuaternion(new THREE.Quaternion()).invert();
+    S.collarFit = {
+      center: neckB.worldToLocal(center.clone()),
+      normal: axis.clone().applyQuaternion(nq),
+      q: nq.clone().multiply(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(lx, ly, axis))),
+      rx, ry,
+    };
+  }
+  const F = S.collarFit;
+  fit.center = F.center.clone();
+  fit.normal = F.normal.clone();
+  fit.q = F.q.clone();
+  fit.rx = F.rx;
+  fit.ry = F.ry;
 }
 
 // ------------------------------------------------------------------ animation
@@ -2009,9 +2102,11 @@ export function animateRealCat(e, dt, sad) {
     anim.seenNow = true;
     anim.seen = false;
   }
-  if (!anim.seenNow && !e.scripted && !e.herdCtrl && !e.posing && !e.onTable && !e.carried && !e.perch && !d.following && horseView.on) {
+  // (au loin, dans la version réduite : une image sur FAR_STEP, le mixeur coûte 3 à 4 fois le chat procédural)
+  const step = !anim.seenNow ? OFFSCREEN_STEP : md.lodLevel ? FAR_STEP : 1;
+  if (step > 1 && !e.scripted && !e.herdCtrl && !e.posing && !e.onTable && !e.carried && !e.perch && !d.following && horseView.on) {
     anim.skipDt += dt;
-    if (++anim.skipN < OFFSCREEN_STEP) return;
+    if (++anim.skipN < step) return;
     dt = anim.skipDt;
   } else {
     dt += anim.skipDt;
@@ -2034,7 +2129,8 @@ export function animateRealCat(e, dt, sad) {
   else if (e.carried) posture = 'lie';
   else if (e.onTable || e.posing === 'sit') posture = 'sit';
   else if (e.posing === 'down') posture = 'lie';
-  else if (e.state === 'eat' || (e.headDown ?? 0) > 0.5) posture = 'crouch';
+  // (e.headDown est écrit plus bas à partir de la posture : le relire ici le garderait accroupi pour toujours)
+  else if (e.state === 'eat') posture = 'crouch';
   else if (e.state === 'mother' && !moving && d.needs?.hunger < 60) posture = 'crouch';
   else if (rs.still < 1.2 || e.perch || e.state === 'flee') posture = 'stand';
   else if (!e.scripted && !d.following) {

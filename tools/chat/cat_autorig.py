@@ -360,6 +360,38 @@ def build(body, others=(), eyes=(), opts=None):
                     wt = next((e.weight for e in v.groups if e.group == gt.index), 0.0)
                     g.add([v.index], w * keep, 'REPLACE')
                     gt.add([v.index], wt + w * (1 - keep), 'REPLACE')
+    # haut des pattes avant (chaton : arm_clip = (r0, r1, poids du côté intérieur), en hauteurs au garrot) : la chaleur
+    # donnait au bras la peau du poitrail, entre les pattes ; patte tendue devant (couché, étirement, saut, en boule), le
+    # poitrail partait en voile jusqu'aux pieds. Loin de l'os du bras, et surtout vers l'intérieur, sa part revient au
+    # poitrail.
+    ac = o.get('arm_clip')
+    gch = body.vertex_groups.get('chest')
+    if ac and gch is not None:
+        for side in ('L', 'R'):
+            g = body.vertex_groups.get('humerus' + side)
+            if g is None or 'humerus' + side not in segs:
+                continue
+            h, t = segs['humerus' + side]
+            d = t - h
+            sx = 1.0 if (h.x + t.x) > 0 else -1.0
+            n_moved = 0
+            for v in body.data.vertices:
+                w = next((e.weight for e in v.groups if e.group == g.index), 0.0)
+                if w <= 0:
+                    continue
+                p = body.matrix_world @ v.co
+                u = max(0.0, min(1.0, (p - h).dot(d) / d.length_squared))
+                off = p - (h + d * u)
+                inner = max(0.0, -off.x * sx)
+                dist = math.sqrt(off.length_squared + (ac[2] - 1.0) * inner * inner)
+                keep = 1 - _smooth(ac[0] * W, ac[1] * W, dist)
+                if keep >= 0.999:
+                    continue
+                wc = next((e.weight for e in v.groups if e.group == gch.index), 0.0)
+                g.add([v.index], w * keep, 'REPLACE')
+                gch.add([v.index], wc + w * (1 - keep), 'REPLACE')
+                n_moved += 1
+            print('AUTORIG bras', side, 'sommets rendus au poitrail', n_moved)
     # tête rigide : au-delà de l'articulation crâne-encolure, la peau suit la seule tête (la chaleur la partageait avec
     # l'encolure : oreilles écrasées et visage déformé dès que la tête s'inclinait sur l'encolure)
     hd = (skull - neck1).normalized()

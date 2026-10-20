@@ -53,8 +53,9 @@ export function catCoatPlan(look = {}, breed = null, kitten = false) {
   const P = {
     pattern, white, base: coat, sec, third, whiteC,
     eye: tr.eye, eye2: tr.eye2,
-    points: pattern === 'points' ? (kitten ? 0.45 : 1) : 0,
-    maskScale: kitten ? 0.62 : 1,
+    // (chaton : points un peu plus pâles et masque plus petit ; à 0,6 ils ne se voyaient presque plus)
+    points: pattern === 'points' ? (kitten ? 0.88 : 1) : 0,
+    maskScale: kitten ? 0.8 : 1,
     hairless, curly: tr.hair === 'curly' ? 1 : 0, plush: tr.hair === 'plush' ? 1 : 0, wrinkles: hairless,
     dark: hexLum(coat) < 0.06 && pattern !== 'tricolor',
     seed: ((look.seed ?? 7) % 997) * 0.731,
@@ -374,26 +375,27 @@ vec3 catCoat(vec3 p, vec4 part) {
   } else if (cPat < 3.5) {
     // tacheté (bengal) : fond doré, rosettes (contour sombre, cœur roux), petites taches aux pattes et à la tête
     float small = max(r.face, r.legs);
-    vec2 sp = catSpots(r.q * mix(5.5, 11.0, small) + vec3(3.1, 1.7, 0.0) + sd, 0.3, 0.12);
+    vec2 sp = catSpots(r.q * mix(5.5, mix(11.0, 20.0, r.face), small) + vec3(3.1, 1.7, 0.0) + sd, 0.3 - 0.08 * r.face, 0.12);
     float tring = smoothstep(0.55, 0.85, sin(r.tt * 6.0 * 6.2832) * 0.5 + 0.5) * smoothstep(0.3, 0.6, r.tt);
     vec3 ground = mix(cBase, vec3(0.95, 0.9, 0.8), max(r.belly * 0.85, max(r.chin, r.muzzle * 0.7)));
     vec3 core = mix(cBase, cSec, 0.4);
     c = mix(ground, core, sp.x * (1.0 - small) * (1.0 - r.tail));
-    float dark = max(sp.y * (1.0 - small), sp.x * small * (1.0 - r.muzzle));
+    float dark = max(sp.y * (1.0 - small), sp.x * small * (1.0 - r.muzzle) * (1.0 - r.face * smoothstep(0.35, 0.55, r.hz)));
     dark = mix(dark, max(tring, smoothstep(0.85, 0.97, r.tt)), r.tail);
     dark = max(dark, catFaceStripes(p, r, n2) * 0.8);
     c = mix(c, cSec, dark * 0.92);
   } else if (cPat < 4.5) {
     // tiqueté (abyssin) : chaque poil rayé (grain fin), raie du dos, barres légères aux pattes, bout de queue foncé
-    float tick = cmpNoise(p * 520.0 + sd) * 0.6 + cmpNoise(p * 1100.0) * 0.4;
-    c = mix(cBase, cSec, smoothstep(0.5, 0.9, tick) * 0.45 + smoothstep(0.8, 1.0, r.h) * r.trunk * 0.3);
+    float tick = cmpNoise(CMP_ROT * p * 380.0 + sd) * 0.65 + cmpNoise(CMP_ROT * p * 900.0) * 0.35;
+    c = mix(cBase, cSec, smoothstep(0.45, 0.8, tick) * 0.6 + smoothstep(0.82, 1.0, r.h) * r.trunk * 0.45);
+    c = mix(c, mix(cBase, vec3(1.0, 0.92, 0.8), 0.3), smoothstep(0.1, 0.35, 1.0 - tick) * 0.25);
     float bars = r.legs * smoothstep(0.6, 0.9, sin(p.y / max(0.02, cEye.w) * 4.0 * 6.2832) * 0.5 + 0.5) * smoothstep(cEye.w * 0.5, cEye.w, p.y) * 0.35;
     c = mix(c, cSec, max(bars, max(r.tail * smoothstep(0.85, 0.97, r.tt), catFaceStripes(p, r, n2) * 0.5)));
     c = mix(c, mix(cBase, vec3(0.97, 0.92, 0.82), 0.6), max(light, r.throat * 0.4));
   } else if (cPat < 5.5) {
     // colourpoint : corps crème (un peu plus foncé sur le dos), masque autour du nez, oreilles, pattes et queue
     float ms = cPoint.y;
-    float mask = r.face * (1.0 - smoothstep(0.42 * ms, 0.95 * ms, r.dn + (n2 - 0.5) * 0.12));
+    float mask = r.face * (1.0 - smoothstep(0.55 * ms, 1.2 * ms, r.dn + (n2 - 0.5) * 0.12));
     float pts = max(r.ear, mask);
     pts = max(pts, r.legs * (1.0 - smoothstep(cEye.w * 0.35, cEye.w * 1.15, p.y)));
     pts = max(pts, r.tail * smoothstep(0.05, 0.5, r.tt));
@@ -589,11 +591,20 @@ float shHash(vec3 p) {
 
 const SHELL_DISCARD_F = /* glsl */ `
 {
-  // mèches : un brin par cellule (2 mm), plus fin vers le bout ; pas de poil là où il est court
-  vec3 cell = floor(vCmpPos * 520.0);
-  float strand = shHash(cell);
-  if (vShellLen < 0.0015 || strand < cShellK * 0.95 + 0.05) discard;
-  diffuseColor.rgb *= 0.78 + 0.32 * cShellK;
+  // brins ronds (un par cellule de 1,9 mm, centre au hasard), plus fins vers le bout, bord flou ; couches mélangées
+  // (transparence, de la peau vers le bout) et plus pâles vers le bout : un halo doux, pas une neige de points durs ;
+  // rien là où le poil est court
+  vec3 g = vCmpPos * 520.0;
+  vec3 cell = floor(g);
+  vec3 f = fract(g) - 0.5 - (vec3(shHash(cell), shHash(cell + 7.1), shHash(cell + 3.3)) - 0.5) * 0.4;
+  float h = shHash(cell + 11.0);
+  float r = 0.52 * pow(max(0.0, 1.0 - cShellK), 0.5) * (0.6 + 0.4 * h);
+  float aa = max(0.12, length(fwidth(g)) * 0.9);
+  float cov = (1.0 - smoothstep(r - aa, r + aa, length(f))) * smoothstep(cShellK * 0.5 - 0.1, cShellK * 0.5 + 0.1, h);
+  cov *= smoothstep(0.0012, 0.003, vShellLen) * (0.95 - 0.45 * cShellK);
+  if (cov < 0.02) discard;
+  diffuseColor.a = cov;
+  diffuseColor.rgb *= 0.82 + 0.24 * cShellK;
 }`;
 
 /**
@@ -624,13 +635,18 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
     len += cFurMap.y * ruff + cFurMap.z * br + cFurMap.w * cmpPart.y * smoothstep(0.05, 0.2, distance(cmpRest, cTailB.xyz) / cTailB.w);
     vShellLen = len;
     transformed += objectNormal * (len * cShellK / max(1e-6, length(objectNormal)));
+    // (le poil long retombe un peu : les couches extérieures descendent)
+    transformed.y -= len * cShellK * cShellK * 0.35;
   }`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${SHELL_F}`)
       .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${SHELL_DISCARD_F}`);
   };
-  mat.customProgramCacheKey = () => 'cat-shell-v1';
+  mat.customProgramCacheKey = () => 'cat-shell-v3';
   mat.side = THREE.FrontSide;
+  // (couches dessinées après les objets opaques, dans l'ordre : renderOrder croissant, voir catReal.js)
+  mat.transparent = true;
+  mat.depthWrite = false;
   return mat;
 }
 

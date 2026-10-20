@@ -1298,6 +1298,9 @@ const AZ = V(0, 0, 1);
 const _ax = V();
 const _q2v = V();
 const _p0 = V();
+const _ev = V();
+const _qe = new THREE.Quaternion();
+const _qe2 = new THREE.Quaternion();
 
 /**
  * Mixeur d'un lapin : allures fondues selon la vitesse (chaque clip joué à vitesse réelle ÷ vitesse naturelle de cette
@@ -1376,6 +1379,14 @@ class RealRabbitAnim {
     this.savePose();
     this.contactPoints();
     this.measureNatural();
+    // Oreilles tombantes (bélier) : leur direction au repos (accroupi), repère du lapin, pour la pesanteur (overlay).
+    this.earHang = null;
+    if (model.build.model === 'lop' && model.ears.length && this.actions.idle) {
+      this.clipPose('idle', 0, false);
+      model.root.updateMatrixWorld(true);
+      this.earHang = model.ears.map((_, i) => this.earPitch(i));
+      this.restorePose();
+    }
   }
 
   /**
@@ -1570,6 +1581,19 @@ class RealRabbitAnim {
       this.ground(st);
     }
     this.model.root.updateMatrixWorld(true);
+  }
+
+  /**
+   * Inclinaison d'une oreille dans le repère du lapin : angle de sa direction (de la base au bout) depuis la verticale
+   * descendante, positif vers l'avant (pose en cours ; les parents sont mis à jour).
+   */
+  earPitch(i) {
+    const e = this.model.ears[i];
+    e.parent.getWorldQuaternion(_qe);
+    _ev.copy(this.earAxes[i]).applyQuaternion(_qe2.copy(e.userData.restQ).invert()).applyQuaternion(e.quaternion).applyQuaternion(_qe);
+    this.model.root.getWorldQuaternion(_qe).invert();
+    _ev.applyQuaternion(_qe);
+    return Math.atan2(_ev.z, -_ev.y);
   }
 
   /** Tourne un os de ang autour d'un axe du lapin (axe vu par son parent au repos ; il suit le parent animé). */
@@ -1778,6 +1802,13 @@ class RealRabbitAnim {
       if (lop) {
         const sw = Math.sin(t * 2.2 + i) * 0.04 + (moving ? Math.sin(t * 11) * 0.06 : 0);
         this.turn(e, AZ, s * sw);
+        // Pesanteur : l'oreille tombante pend vers le sol quand la tête se baisse ou se relève (renifler, manger,
+        // debout) ; sinon elle suivait la tête et pointait devant le nez comme une corne.
+        if (this.earHang) {
+          const d = this.earPitch(i) - this.earHang[i];
+          // (pas pendant la toilette : les pattes tirent alors l'oreille pour la laver)
+          this.turn(e, AX, clamp(d, -1.1, 1.1) * (moving ? 0.5 : 0.85) * (1 - Math.min(1, this.w.groom ?? 0)));
+        }
         continue;
       }
       // pivot de la conque (vers le côté qui écoute), puis vers l'arrière

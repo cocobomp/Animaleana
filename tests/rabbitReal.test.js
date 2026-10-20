@@ -433,6 +433,18 @@ describe('allures, postures et gestes', () => {
     md.dispose();
   });
 
+  it('oreilles du bélier : elles pendent vers le sol quand il renifle, mange, se dresse ou se couche (pas devant le nez)', () => {
+    const md = rabbit('belier');
+    const a = md.anim;
+    expect(a.earHang).toHaveLength(2);
+    for (const p of ['sniff', 'eat', 'rear', 'lie']) {
+      for (let f = 0; f < 90; f++) a.update(1 / 30, { v: 0, moving: false, posture: p });
+      md.root.updateMatrixWorld(true);
+      for (let i = 0; i < 2; i++) expect(Math.abs(a.earPitch(i) - a.earHang[i]), `${p} oreille ${i}`).toBeLessThan(0.35);
+    }
+    md.dispose();
+  });
+
   it('poses imposées des activités : saut tenu à sa phase, salut debout ; false pour un autre animal', () => {
     const md = rabbit('nain');
     expect(realRabbitPose({ realDog: true }, 'jump', 1)).toBe(false);

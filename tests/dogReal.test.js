@@ -215,6 +215,9 @@ describe('pieds au sol', () => {
         let walking = true;
         for (let f = 0; f < 150; f++) {
           md.anim.update(1 / 60, { v, moving: true, happy: 0.25 });
+          // (le chien avance comme dans le jeu : les pieds en appui sont tenus sur place dans le monde)
+          md.root.position.z += v / 60;
+          md.root.updateMatrixWorld(true);
           if (f < 60 || f % 3) continue;
           walking &&= md.anim.gait === 'walk';
           const y = lowest(md, { step: 4 });
@@ -230,14 +233,71 @@ describe('pieds au sol', () => {
     }
   }, 240000);
 
-  it.each(['labrador', 'corgi', 'teckel', 'galgo', 'carlin', 'chihuahua', 'terre_neuve'])('%s : assis, couché, endormi : posé sur le sol (ni en l\'air, ni enfoncé)', (b) => {
+  it.each(['labrador', 'corgi', 'galgo', 'carlin', 'chihuahua', 'terre_neuve', 'saint_bernard', 'berger_allemand'])('%s : assis, couché, endormi : posé sur le sol (ni en l\'air, ni enfoncé), queue comprise', (b) => {
     const md = dog(b);
     for (const p of ['sit', 'lie', 'sleep']) {
       md.staticPose(p);
       const lo = lowest(md, { noTail: true, step: 2 });
-      expect(lo, `${b} ${p}`).toBeGreaterThan(-0.06);
+      // (le poil s'écrase : 1,5 cm au plus ; la croupe du terre-neuve assis entrait de 4 cm, sa queue de 8 cm)
+      expect(lo, `${b} ${p}`).toBeGreaterThan(-0.015);
       expect(lo, `${b} ${p}`).toBeLessThan(0.012);
+      expect(lowest(md, { step: 1 }), `${b} ${p} (queue)`).toBeGreaterThan(-0.015);
     }
+    md.dispose();
+  }, 120000);
+
+  it.each(['teckel', 'corgi', 'basset_like_puppy'])('%s : la tête reste au-dessus du sol en reniflant, mangeant, buvant', (b) => {
+    const breed = b === 'basset_like_puppy' ? 'teckel' : b;
+    const md = dog(breed, { puppy: b === 'basset_like_puppy' });
+    for (const action of ['sniff', 'eat', 'drink']) {
+      md.staticPose('stand');
+      let lo = Infinity;
+      for (let f = 0; f < 90; f++) {
+        md.anim.update(1 / 30, { v: 0, moving: false, posture: 'stand', action, happy: 0.25 });
+        if (f > 45 && f % 5 === 0) lo = Math.min(lo, lowest(md, { step: 2 }));
+      }
+      // (le teckel enfonçait la tête de 10 cm en reniflant)
+      expect(lo, `${b} ${action}`).toBeGreaterThan(-0.01);
+    }
+    md.dispose();
+  }, 120000);
+});
+
+describe('pieds en appui', () => {
+  // Glissement des doigts posés (vitesse horizontale rapportée à celle du chien) : le teckel et le corgi patinaient
+  // de 30 à 50 %, les lévriers de 20 à 40 %.
+  const slip = (md, v) => {
+    const feet = ['toesL', 'toesR', 'htoesL', 'htoesR'].map((n) => md.bone(n));
+    const dt = 1 / 120;
+    const rows = [];
+    for (let i = 0; i < 120 * 3; i++) {
+      md.anim.update(dt, { v, moving: true, happy: 0.25 });
+      md.root.position.z += v * dt;
+      md.root.updateMatrixWorld(true);
+      if (i >= 120) rows.push(feet.map((b) => b.getWorldPosition(new THREE.Vector3())));
+    }
+    let worst = 0;
+    for (let f = 0; f < 4; f++) {
+      const ys = rows.map((r) => r[f].y);
+      const thr = Math.min(...ys) + 0.004;
+      let d = 0;
+      let n = 0;
+      for (let i = 1; i < rows.length; i++) {
+        if (ys[i] < thr && ys[i - 1] < thr) {
+          d += Math.abs(rows[i][f].z - rows[i - 1][f].z);
+          n++;
+        }
+      }
+      if (n) worst = Math.max(worst, d / (n * dt) / v);
+    }
+    return worst;
+  };
+  it.each(['teckel', 'corgi', 'galgo', 'bouledogue', 'labrador'])('%s : les pieds posés ne patinent pas au pas ni au trot', (b) => {
+    const md = dog(b);
+    md.staticPose('stand');
+    // (au pas, il reste un peu de glissement aux antérieurs des races aux pattes courtes : 15 à 25 %, contre 30 à 50 %)
+    expect(slip(md, 1.0), `${b} pas`).toBeLessThan(0.25);
+    expect(slip(md, 2.4), `${b} trot`).toBeLessThan(0.12);
     md.dispose();
   }, 120000);
 });

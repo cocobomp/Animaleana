@@ -1700,38 +1700,16 @@ class RealDogAnim {
       const p = V().fromArray(S.D.pos, i * 3);
       return l.paw.worldToLocal(p);
     }));
-    // Points du corps (dessous du tronc, cuisses, coudes), chacun lié à son os principal : assis, couché, endormi ou
-    // pendant la roulade, le chien repose sur le sol sans s'y enfoncer (les races aux pattes courtes s'enfonçaient
-    // de 7 cm couchées) ; le poil s'écrase un peu (bodyAllow).
-    const coat = base.prims.coat;
-    const W = base.W;
-    const M = S.measure;
-    const midY = (M.topY + M.bellyY) / 2;
-    const cand = [];
-    for (let i = 0; i < coat.count; i++) {
-      const y = S.D.pos[i * 3 + 1];
-      const legSum = W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3];
-      if (W.tail[i] > 0.2 || W.head[i] > 0.3 || W.ear[i * 2] + W.ear[i * 2 + 1] > 0) continue;
-      if (legSum > 0.5 ? y > M.elbowY * 0.5 : y < midY) cand.push(i);
-    }
-    const stride = Math.max(1, Math.ceil(cand.length / 240));
+    // Points de la peau qui touchent le sol à l'arrêt (corps, queue, tête : voir contactPoints), chacun suit ses os avec
+    // leurs poids, comme le shader (lié à un seul os, un point de la cuisse assise passait sous le sol et le chien
+    // s'asseyait en l'air).
     this.bodyPts = [];
-    for (let k = 0; k < cand.length; k += stride) {
-      // (peau entière : chaque point suit ses os avec leurs poids, comme le shader ; lié à un seul os, un point de
-      // la cuisse assise passait sous le sol et le chien s'asseyait en l'air)
-      const i = cand[k];
-      const inf = [];
-      for (let c = 0; c < 4; c++) {
-        const w = coat.sw[i * 4 + c];
-        if (w > 0.02) inf.push([this.bones[coat.si[i * 4 + c]], w]);
-      }
-      const tot = inf.reduce((a, x) => a + x[1], 0) || 1;
-      this.bodyPts.push(inf.map(([b, w]) => [b, b.worldToLocal(V().fromArray(S.D.pos, i * 3)), w / tot]));
-    }
-    this.bodyAllow = 0.012 + Math.max(0, B.fur) * 0.8;
+    this.tailPts = [];
+    this.headPts = [];
+    // (le poil s'écrase un peu, pas de plusieurs centimètres : la croupe du terre-neuve assis entrait de 4 cm)
+    this.bodyAllow = 0.004 + Math.max(0, B.fur) * 0.3;
     this.gOff = 0;
-    // (bout de la queue gardé au-dessus du sol : plus haut pour une queue épaissie de poil, panache du terre-neuve)
-    this.tailClear = 0.03 + Math.max(0, B.fur) * (0.9 + 0.9 * B.feather) * Math.max(0.5, B.tailThick);
+    this.plant = [null, null, null, null];
     // Les os à translation animée partent de leur position du modèle d'origine : le mixeur la garde comme valeur de
     // repos, et c'est elle qu'il rend quand aucun clip actif n'anime leur translation ; le décalage de la race est
     // ajouté après. (Partis de la position de la race, le décalage comptait deux fois dès qu'un clip n'animait pas
@@ -1739,6 +1717,179 @@ class RealDogAnim {
     // tête 1,3 fois plus grosse.) Fait en dernier : les repères ci-dessus sont pris sur le squelette de la race.
     for (const [b, d] of this.shift) b.position.sub(d);
     this.savePose();
+    this.contactPoints();
+    this.measureNatural();
+  }
+
+  /**
+   * Vitesse naturelle de chaque allure pour cette race, mesurée sur son squelette : vitesse à laquelle les doigts en
+   * appui reculent sous le corps quand le clip est joué à sa vitesse (moyenne des antérieurs et des postérieurs).
+   * (Déduite de la seule longueur des membres, elle laissait patiner les races aux membres changés : 30 à 50 % de la
+   * vitesse pour le teckel et le corgi, 20 à 40 % pour les lévriers.) Une fois par race.
+   */
+  measureNatural() {
+    const S = this.S;
+    if (!S.natural) {
+      const md = this.model;
+      const feet = ['toesL', 'toesR', 'htoesL', 'htoesR'].map((nm) => md.bone(nm));
+      const nat = {};
+      const N = 48;
+      for (const g of MOVING) {
+        const a = this.actions[g];
+        if (!a || feet.some((f) => !f)) continue;
+        const T = a.getClip().duration;
+        const tracks = feet.map(() => []);
+        for (let k = 0; k <= N; k++) {
+          for (const nm of this.names) {
+            this.actions[nm].setEffectiveWeight(nm === g ? 1 : 0);
+            this.actions[nm].time = nm === g ? (k / N) * T : 0;
+          }
+          this.restorePose();
+          this.mixer.update(0);
+          for (const [b, d] of this.shift) b.position.add(d);
+          md.root.updateMatrixWorld(true);
+          feet.forEach((f, j) => tracks[j].push(f.getWorldPosition(V())));
+        }
+        // vitesse de recul des doigts en appui (au plus 4 mm au-dessus de leur plus bas)
+        const speed = tracks.map((tr) => {
+          const ymin = Math.min(...tr.map((p) => p.y));
+          let d = 0;
+          let n = 0;
+          for (let k = 1; k <= N; k++) {
+            if (tr[k].y < ymin + 0.004 && tr[k - 1].y < ymin + 0.004) {
+              d += tr[k - 1].z - tr[k].z;
+              n++;
+            }
+          }
+          return n ? d / ((n * T) / N) : null;
+        });
+        const ok = (x) => x !== null && x > 0.05;
+        const fr = [speed[0], speed[1]].filter(ok);
+        const hi = [speed[2], speed[3]].filter(ok);
+        if (!fr.length || !hi.length) continue;
+        const avg = (xs) => xs.reduce((s, x) => s + x, 0) / xs.length;
+        nat[g] = (avg(fr) + avg(hi)) / 2;
+      }
+      S.natural = nat;
+      for (const nm of this.names) this.actions[nm].setEffectiveWeight(this.w[nm]);
+      this.restorePose();
+    }
+    for (const g of MOVING) if (S.natural[g] > 0.1) this.natural[g] = S.natural[g];
+  }
+
+  /**
+   * Points de contact avec le sol des poses à l'arrêt (assis, couché, endormi, patte, roulade, renifler, manger, boire,
+   * révérence) : pour chaque pose, les
+   * sommets les plus bas du corps, de la queue et de la tête, plus un échantillon régulier ; calculés une fois par race
+   * (géométrie partagée). Le corps repose dessus (bodyPts), la queue se relève (tailPts), l'encolure relève la tête
+   * (headPts) : un échantillon fixe de 240 points manquait la croupe, la queue n'était tenue que par ses articulations
+   * (sa peau épaisse entrait de 6 à 9 cm dans le sol), et rien ne tenait la tête (teckel qui renifle : -10 cm).
+   */
+  contactPoints() {
+    const S = this.S;
+    const base = this.base;
+    const md = this.model;
+    const coat = base.prims.coat;
+    const W = base.W;
+    const n = coat.count;
+    if (!S.contact) {
+      const cls = new Int8Array(n); // 0 corps, 1 queue, 2 tête, -1 ignoré (oreilles)
+      for (let i = 0; i < n; i++) {
+        const ear = W.ear[i * 2] + W.ear[i * 2 + 1];
+        cls[i] = W.tail[i] > 0.3 ? 1 : ear > 0.3 ? -1 : W.head[i] > 0.6 ? 2 : 0;
+      }
+      const pick = [new Set(), new Set(), new Set()];
+      const stride = [Math.ceil(n / 100), 9, 14];
+      for (let i = 0; i < n; i++) if (cls[i] >= 0 && i % stride[cls[i]] === 0) pick[cls[i]].add(i);
+      const P = S.D.pos;
+      const inv = md.skeleton.boneInverses;
+      const ys = new Float32Array(n);
+      const bm = new THREE.Matrix4();
+      const poses = [['sit'], ['lie'], ['sleep'], ['paw', 0.3], ['rollover', 0.05], ['rollover', 0.12], ['rollover', 0.2], ['sniff', 0.1], ['sniff', 0.6], ['eat', 0.3], ['drink', 0.3], ['bow', 0.3]];
+      for (const [clip, t] of poses) {
+        if (!this.actions[clip]) continue;
+        if (t === undefined) this.staticPose(clip);
+        else this.clipPose(clip, t);
+        md.root.updateMatrixWorld(true);
+        const mats = md.bones.map((b, k) => bm.multiplyMatrices(b.matrixWorld, inv[k]).elements.slice());
+        for (let i = 0; i < n; i++) {
+          let y = 0;
+          const x0 = P[i * 3];
+          const y0 = P[i * 3 + 1];
+          const z0 = P[i * 3 + 2];
+          for (let c = 0; c < 4; c++) {
+            const w = coat.sw[i * 4 + c];
+            if (!(w > 0)) continue;
+            const e = mats[coat.si[i * 4 + c]];
+            y += w * (e[1] * x0 + e[5] * y0 + e[9] * z0 + e[13]);
+          }
+          ys[i] = y;
+        }
+        for (let k = 0; k < 3; k++) {
+          const ids = [];
+          for (let i = 0; i < n; i++) if (cls[i] === k) ids.push(i);
+          ids.sort((a, b) => ys[a] - ys[b]);
+          for (const i of ids.slice(0, 20)) pick[k].add(i);
+        }
+      }
+      S.contact = pick.map((s) => Uint32Array.from(s));
+      this.restorePose();
+    }
+    const infl = (i) => {
+      const inf = [];
+      for (let c = 0; c < 4; c++) {
+        const w = coat.sw[i * 4 + c];
+        if (w > 0.02) inf.push([this.bones[coat.si[i * 4 + c]], w]);
+      }
+      const tot = inf.reduce((a, x) => a + x[1], 0) || 1;
+      return inf.map(([b, w]) => [b, b.worldToLocal(V().fromArray(S.D.pos, i * 3)), w / tot]);
+    };
+    // (repères pris sur le squelette de la race au repos)
+    md.root.updateMatrixWorld(true);
+    const hold = this.bones.map((b) => [b.position.clone(), b.quaternion.clone()]);
+    for (let i = 0; i < this.bones.length; i++) {
+      this.bones[i].position.copy(this.bones[i].userData.restP);
+      this.bones[i].quaternion.copy(this.bones[i].userData.restQ);
+    }
+    md.root.updateMatrixWorld(true);
+    this.bodyPts = [...S.contact[0]].map(infl);
+    const tb = md.tailBones;
+    this.tailPts = [...S.contact[1]].map((i) => {
+      let best = 0;
+      let bw = -1;
+      for (let c = 0; c < 4; c++) {
+        const k = tb.indexOf(this.bones[coat.si[i * 4 + c]]);
+        if (k >= 0 && coat.sw[i * 4 + c] > bw) {
+          bw = coat.sw[i * 4 + c];
+          best = k;
+        }
+      }
+      return { inf: infl(i), bone: best };
+    });
+    this.headPts = [...S.contact[2]].map(infl);
+    for (let i = 0; i < this.bones.length; i++) {
+      this.bones[i].position.copy(hold[i][0]);
+      this.bones[i].quaternion.copy(hold[i][1]);
+    }
+    md.root.updateMatrixWorld(true);
+  }
+
+  /** Pose d'un clip tenu à une fraction t de sa durée (comme les tours du spectacle), pieds et corps posés. */
+  clipPose(clip, t) {
+    for (const nm of this.names) {
+      this.w[nm] = nm === clip ? 1 : 0;
+      this.actions[nm].setEffectiveWeight(this.w[nm]);
+      this.actions[nm].time = nm === clip ? t * this.actions[nm].getClip().duration : 0;
+    }
+    this.trans = null;
+    this.restorePose();
+    this.mixer.update(0);
+    this.savePose();
+    for (const [b, d] of this.shift) b.position.add(d);
+    const st = { moving: false, v: 0, sleeping: false, happy: 0, sad: false };
+    this.overlay(0, st, true);
+    this.ground(st);
+    this.model.root.updateMatrixWorld(true);
   }
 
   /** Tourne un os de ang autour d'un axe du chien (axe vu par son parent au repos ; il suit le parent animé). */
@@ -2047,24 +2198,138 @@ class RealDogAnim {
       md.body.position.y += off;
       md.root.updateMatrixWorld(true);
     }
-    // Queue : bout au-dessus du sol (assis, couché).
+    if (st.moving && !air && dt > 0 && this.gait !== 'run') {
+      this.footLock();
+      // (un membre tourné peut descendre un peu : le corps est relevé de ce qui passerait sous le sol)
+      let low2 = Infinity;
+      for (let l = 0; l < md.legs.length; l++) {
+        for (const p of this.solePts[l]) {
+          const y = _v.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld).applyMatrix4(_m).y;
+          if (y < low2) low2 = y;
+        }
+      }
+      if (low2 < -0.0005) {
+        md.body.position.y -= low2;
+        this.gOff -= low2;
+        md.root.updateMatrixWorld(true);
+      }
+    } else this.plant.fill(null);
+    if (st.moving || air) return;
+    // Queue : sa peau (poil compris) au-dessus du sol, assis, couché, endormi — chaque os relevé, de la base au bout, de
+    // ce qui passe encore sous le sol au-delà de lui. (Tenue par ses articulations seulement, la queue épaisse entrait
+    // de 6 à 9 cm dans le sol, sur la table du salon ou la scène.)
     const tb = md.tailBones;
-    if (tb.length) {
-      for (let i = 0; i < tb.length; i++) {
-        const b = tb[i];
-        const next = tb[i + 1];
-        const tipW = next ? _v.setFromMatrixPosition(next.matrixWorld) : _v.set(0, 0.06, 0).applyMatrix4(b.matrixWorld);
-        const y = _w.copy(tipW).applyMatrix4(_m).y;
-        if (y < this.tailClear) {
-          const base = _u.setFromMatrixPosition(b.matrixWorld).applyMatrix4(_m);
-          const len = Math.max(0.02, Math.hypot(_w.x - base.x, _w.y - base.y, _w.z - base.z));
-          const need = Math.min(1.2, Math.asin(clamp((this.tailClear - y) / len, 0, 1)));
-          this.turn(b, AX, need);
-          b.updateMatrixWorld(true);
+    const floorT = 0.004;
+    if (tb.length && this.tailPts.length) {
+      // (deux passes : une queue pendante qui plonge dans le sol — teckel assis — demande plus d'un os par passe)
+      tail: for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < tb.length; i++) {
+          let lowY = Infinity;
+          for (const pt of this.tailPts) {
+            if (pt.bone < i) continue;
+            const y = this.skinY(pt.inf);
+            if (y < lowY) {
+              lowY = y;
+              _u.copy(_w);
+            }
+          }
+          if (!(lowY < floorT)) {
+            if (i === 0) break tail; // (rien sous le sol)
+            continue;
+          }
+          this.turn(tb[i], AX, raiseAngle(_v.setFromMatrixPosition(tb[i].matrixWorld).applyMatrix4(_m), _u, floorT + 0.004, i === 0 ? 1.4 : 1.0));
+          tb[i].updateMatrixWorld(true);
         }
       }
     }
+    // Tête : jamais sous le sol (races aux pattes courtes qui reniflent, mangent ou boivent, roulade) — l'encolure la
+    // relève de ce qui dépasse.
+    if (this.headPts.length && md.neck) {
+      for (let pass = 0; pass < 2; pass++) {
+        let lowY = Infinity;
+        for (const inf of this.headPts) {
+          const y = this.skinY(inf);
+          if (y < lowY) {
+            lowY = y;
+            _u.copy(_w);
+          }
+        }
+        const floorH = 0.008;
+        if (!(lowY < floorH)) break;
+        this.turn(md.neck, AX, raiseAngle(_v.setFromMatrixPosition(md.neck.matrixWorld).applyMatrix4(_m), _u, floorH + 0.004, 0.8));
+        md.neck.updateMatrixWorld(true);
+      }
+    }
   }
+
+  /**
+   * Pieds en appui tenus sur place (pas et trot) : quand une patte se pose, la place de ses doigts dans le monde est
+   * notée ; tant qu'elle reste posée, le membre est tourné à l'épaule ou à la hanche pour y ramener les doigts (de
+   * l'avant à l'arrière). Les membres raccourcis ou allongés d'une race changent la longueur de la foulée des clips
+   * (teckel : antérieurs 30 % plus courts que les postérieurs) : sans cela, les pieds patinaient en appui.
+   */
+  footLock() {
+    const md = this.model;
+    const inv = _m; // (inverse de la racine, voir ground)
+    for (let l = 0; l < md.legs.length; l++) {
+      const leg = md.legs[l];
+      let low = Infinity;
+      for (const p of this.solePts[l]) {
+        const y = _v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(inv).y;
+        if (y < low) low = y;
+      }
+      if (!(low < 0.012)) {
+        this.plant[l] = null;
+        continue;
+      }
+      const toe = _u.setFromMatrixPosition(leg.paw.matrixWorld);
+      if (!this.plant[l]) {
+        this.plant[l] = toe.clone();
+        continue;
+      }
+      // écart dans le repère du chien (avant : +z), à corriger en tournant le membre autour de son articulation haute
+      const errW = _v.copy(toe).sub(this.plant[l]);
+      _q.setFromRotationMatrix(md.root.matrixWorld).invert();
+      const ez = errW.applyQuaternion(_q).z;
+      const top = _w.setFromMatrixPosition(leg.pivot.matrixWorld);
+      const Lg = Math.max(0.05, top.distanceTo(toe));
+      // (rotation +θ autour de x : le pied, sous l'articulation, recule de L sin θ)
+      const th = Math.asin(clamp(ez / Lg, -0.5, 0.5));
+      if (Math.abs(th) < 1e-4) continue;
+      this.turn(leg.pivot, AX, th);
+      leg.pivot.updateMatrixWorld(true);
+      // (trop loin de sa place, le pied repart : nouvelle prise d'appui)
+      if (Math.abs(ez) > 0.45 * Lg) this.plant[l] = null;
+    }
+  }
+
+  /** Hauteur (repère du chien, _m : inverse de la racine) d'un point de peau ; sa position dans _w. */
+  skinY(inf) {
+    _w.set(0, 0, 0);
+    for (const [b, p, w] of inf) _w.addScaledVector(_q2v.copy(p).applyMatrix4(b.matrixWorld), w);
+    return _w.applyMatrix4(_m).y;
+  }
+}
+
+/**
+ * Angle (autour de l'axe x du chien, sens de turn) dont tourner un os de tête c pour amener le point q à la hauteur y
+ * (repère du chien) : le plus petit en valeur absolue, borné à max. (Le sens dépend de la place du point : derrière
+ * l'articulation, tourner vers le haut le relève ; devant elle — queue rabattue sous le chien assis —, il l'enfonce.)
+ */
+function raiseAngle(c, q, y, max) {
+  const dy = q.y - c.y;
+  const dz = q.z - c.z;
+  const R = Math.hypot(dy, dz);
+  if (R < 1e-4) return 0;
+  const phi = Math.atan2(dz, dy);
+  const t = clamp((y - c.y) / R, -1, 1);
+  const a = Math.acos(t);
+  // y(θ) = R cos(φ + θ) : θ = ±a − φ, ramené dans ]−π, π]
+  const wrap = (x) => Math.atan2(Math.sin(x), Math.cos(x));
+  const t1 = wrap(a - phi);
+  const t2 = wrap(-a - phi);
+  const th = Math.abs(t1) < Math.abs(t2) ? t1 : t2;
+  return clamp(th, -max, max);
 }
 
 const AXIS_Y = V(0, 1, 0);
@@ -2072,6 +2337,7 @@ const AX = V(1, 0, 0); // (tourner autour de x du chien, positif : vers le bas p
 const JAW_SHUT = 0.1; // (refermer la gueule du shiba au calme, rad)
 const AZ = V(0, 0, 1);
 const _ax = V();
+const _q2v = V();
 
 /**
  * Port de la queue de la race : rotation locale de chaque os de la queue. Shiba : la queue enroulée de son clip

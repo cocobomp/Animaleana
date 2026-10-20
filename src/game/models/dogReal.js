@@ -16,9 +16,9 @@ import * as THREE from 'three';
 import { getModel } from '../assets.js';
 import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
-import { dogBuild } from '../../sim/dogLook.js';
+import { dogBuild, DOG_BUILDS, dogModelOf } from '../../sim/dogLook.js';
 import { coatPlan, makeCoatUniforms, makeLandUniforms, setCoat, coatMaterial, furLow, furDetail } from './dogCoat.js';
-import { pendantEars, earSkullHide, buildPendantEars, faceShape, buildPompons, joinParts, jackMouthClose } from './dogParts.js';
+import { pendantEars, earSkullHide, buildPendantEars, faceShape, buildPompons, jackMouthClose } from './dogParts.js';
 
 /** Clés des deux GLB (assets.js) : jamais « dog » (gltfAnimal.js le prendrait pour un animal GLB générique). */
 export const REAL_DOG_KEYS = { shiba: 'dog_shiba', jack: 'dog_jack' };
@@ -1309,13 +1309,23 @@ function shapeFor(base, B) {
     return g;
   };
   S = { key, B, D, heads: D.heads, users: 1 };
-  // Pièces modelées (oreilles pendantes : dogParts.js) ajoutées au pelage ; peau de l'oreille d'origine cachée rendue
-  // à la tête (elle ne ressort plus quand l'oreille bouge).
-  const extra = joinParts([buildPendantEars(base, D, B), buildPompons(base, D, B)]);
-  S.coatGeo = extra ? mergedCoatGeo(base, D, extra) : geo(D.pos, D.nrm, coat, base.attrs);
+  // Pièces modelées (oreilles pendantes, pompons : dogParts.js) ajoutées au pelage ; peau de l'oreille d'origine cachée
+  // rendue à la tête (elle ne ressort plus quand l'oreille bouge).
+  const ears = buildPendantEars(base, D, B);
+  const pom = buildPompons(base, D, B);
+  const parts = ears || pom ? partLayout(base, D, B, ears, pom) : null;
+  S.coatGeo = parts ? mergedCoatGeo(base, D, parts, ears, pom) : geo(D.pos, D.nrm, coat, base.attrs);
   S.eyeGeo = base.prims.eye ? geo(D.eyePos, D.eyeNrm, base.prims.eye, base.eyeAttrs) : null;
   S.earGeo = erectEars(base, D, B);
-  S.lodCoat = lodGeo(S.coatGeo, coat.lodIndex && extra ? Uint32Array.from([...coat.lodIndex, ...extra.index.map((i) => i + coat.count)]) : coat.lodIndex);
+  S.lodCoat = lodGeo(S.coatGeo, parts ? parts.lodIndex : coat.lodIndex);
+  if (parts) {
+    // (sans oreilles modelées, la fin des indices — leurs triangles — n'est pas dessinée)
+    if (!ears) S.lodCoat?.setDrawRange(0, parts.lodIndex.length - parts.earTris);
+    // (positions et normales de la race : celles de la géométrie fusionnée, les n premiers sommets sont ceux du pelage —
+    // gardées en double, elles doublaient la mémoire des races aux oreilles modelées)
+    D.pos = S.coatGeo.attributes.position.array;
+    D.nrm = S.coatGeo.attributes.normal.array;
+  }
   S.lodEye = S.eyeGeo ? lodGeo(S.eyeGeo, base.prims.eye.lodIndex) : null;
   S.boneBox = emptyBoneBoxes(base.names.length);
   {
@@ -1325,29 +1335,57 @@ function shapeFor(base, B) {
   if (S.eyeGeo) growBoneBoxes(S.boneBox, D.eyePos, base.prims.eye.si, base.prims.eye.sw, base.prims.eye.count);
   if (S.earGeo) growBoneBoxes(S.boneBox, S.earGeo.attributes.position.array, S.earGeo.attributes.skinIndex.array, S.earGeo.attributes.skinWeight.array, S.earGeo.attributes.position.count);
   S.measure = measureDog(base, D, B);
+  // (part cachée de chaque sommet : seulement pour fabriquer les pièces)
+  D.hidden = null;
   shapes.set(key, S);
   return S;
 }
 
 /**
- * Géométrie du pelage d'une race avec des pièces modelées en plus (extra : buildPendantEars) : attributs mis bout à
- * bout ; les sommets cachés (oreille d'origine rentrée dans le crâne) passent de l'os de l'oreille à celui de la tête.
+ * Disposition commune des pièces modelées d'un modèle (une fois par GLB) : [pelage | pompons | oreilles pendantes]. Les
+ * coordonnées de texture, les poids (os des oreilles d'origine cachées rendus à la tête), le repos, l'appartenance, le
+ * grain et les indices y sont les mêmes pour toutes les races (pièces de référence, sans rien de la race) : chaque race
+ * ne garde que ses positions et ses normales. (Fusionnés pour chaque race, ces tableaux doublaient la mémoire des
+ * chiens : +28 Mo pour 20 races au lieu de +14.) Sorte de pompons du modèle : celle de ses races (toupet et bracelets du
+ * caniche pour le shiba, toupet seul du yorkshire pour le jack). Une race sans pompons les garde repliés en un point (pas
+ * dessinés : triangles nuls, chaque boule suit un seul os) ; sans oreilles, la fin des indices n'est pas dessinée.
+ * Renvoie null si la race ne peut pas la partager (pièces d'une autre sorte) : ses pièces sont alors laissées de côté.
  */
-function mergedCoatGeo(base, D, extra) {
+function partLayout(base, D, B, ears, pom) {
   const coat = base.prims.coat;
   const n = coat.count;
-  const m = extra.count;
-  const cat = (a, b, k, T) => {
+  const kindOf = (b) => (b.pompons ? 'pom' : b.topknot ? 'top' : '');
+  if (!base.partKind) {
+    const kinds = new Set(Object.entries(DOG_BUILDS).filter(([id]) => dogModelOf({ breed: id }) === base.kind).map(([, b]) => kindOf(b)).filter(Boolean));
+    base.partKind = kinds.has('pom') ? 'pom' : kinds.has('top') ? 'top' : 'none';
+  }
+  const kind = base.partKind;
+  if (pom && kindOf(B) !== kind) return null;
+  if (base.parts) return base.parts;
+  // Pièces de référence (repos du modèle d'origine, gabarit neutre) : seuls leurs attributs sans position sont gardés.
+  const Dref = { pos: coat.pos, heads: base.heads, hidden: null };
+  const pomT = kind === 'none' ? null : buildPompons(base, Dref, { pompons: kind === 'pom' ? 1 : 0, topknot: kind === 'top' ? 1 : 0, head: 1, legW: 1 });
+  // (oreille de référence fabriquée sur une copie des articulations : buildPendantEars place les os des oreilles)
+  const earsT = ears ?? buildPendantEars(base, { ...D, heads: D.heads.map((h) => h.clone()) }, { ...B, ears: 'floppy', earLen: 1, earW: 1, earSet: 0, feather: 0, curly: 0, puppy: false });
+  const list = [pomT, earsT].filter(Boolean);
+  const m = list.reduce((x, q) => x + q.count, 0);
+  const cat = (key, k, T, first) => {
     const out = new T((n + m) * k);
-    out.set(a.subarray(0, n * k));
-    out.set(b, n * k);
+    out.set(first.subarray(0, n * k));
+    let o = n;
+    for (const q of list) {
+      out.set(q[key], o * k);
+      o += q.count;
+    }
     return out;
   };
-  const si = cat(coat.si, extra.si, 4, Uint16Array);
-  const sw = cat(coat.sw, extra.sw, 4, Float32Array);
+  const si = cat('si', 4, Uint16Array, coat.si);
+  const sw = cat('sw', 4, Float32Array, coat.sw);
+  // (peau de l'oreille d'origine cachée dans le crâne : de l'os de l'oreille à celui de la tête — mêmes sommets pour
+  // toutes les races du modèle aux pièces modelées)
   if (D.hidden) {
     const headI = base.index.get('head');
-    const ears = new Set(['ear1L', 'ear2L', 'ear1R', 'ear2R'].map((nm) => base.index.get(nm)));
+    const earB = new Set(['ear1L', 'ear2L', 'ear1R', 'ear2R'].map((nm) => base.index.get(nm)));
     const acc = new Map();
     for (let i = 0; i < n; i++) {
       const c = D.hidden[i];
@@ -1357,12 +1395,12 @@ function mergedCoatGeo(base, D, extra) {
         const w = sw[i * 4 + k];
         if (!(w > 0)) continue;
         const b = si[i * 4 + k];
-        if (ears.has(b)) {
+        if (earB.has(b)) {
           acc.set(b, (acc.get(b) ?? 0) + w * (1 - c));
           acc.set(headI, (acc.get(headI) ?? 0) + w * c);
         } else acc.set(b, (acc.get(b) ?? 0) + w);
       }
-      const top = [...acc].sort((a, b) => b[1] - a[1]).slice(0, 4);
+      const top = [...acc].sort((x, y) => y[1] - x[1]).slice(0, 4);
       const tot = top.reduce((x, [, w]) => x + w, 0) || 1;
       for (let k = 0; k < 4; k++) {
         si[i * 4 + k] = top[k] ? top[k][0] : 0;
@@ -1370,21 +1408,98 @@ function mergedCoatGeo(base, D, extra) {
       }
     }
   }
+  // (indices sur 16 bits quand ils tiennent ; poids, os et appartenance sur un octet, comme dans les GLB)
+  const IT = n + m < 65535 ? Uint16Array : Uint32Array;
+  const joinIndex = (first) => {
+    const len = first.length + list.reduce((x, q) => x + q.index.length, 0);
+    const out = new IT(len);
+    out.set(first);
+    let o = first.length;
+    let v = n;
+    for (const q of list) {
+      for (let i = 0; i < q.index.length; i++) out[o + i] = q.index[i] + v;
+      o += q.index.length;
+      v += q.count;
+    }
+    return out;
+  };
+  const sw8 = new Uint8Array(sw.length);
+  for (let i = 0; i < sw.length; i += 4) {
+    let tot = 0;
+    let big = i;
+    for (let k = 0; k < 4; k++) {
+      sw8[i + k] = Math.round(sw[i + k] * 255);
+      tot += sw8[i + k];
+      if (sw[i + k] > sw[big]) big = i + k;
+    }
+    sw8[big] += 255 - tot;
+  }
+  const part = cat('part', 4, Float32Array, base.attrs.cmpPart.array);
+  const part8 = new Uint8Array(part.length);
+  for (let i = 0; i < part.length; i++) part8[i] = Math.round(Math.min(1, Math.max(0, part[i])) * 255);
+  base.parts = {
+    n, m, pomStart: n, pomCount: pomT?.count ?? 0, earStart: n + (pomT?.count ?? 0), earCount: earsT.count,
+    earTris: earsT.index.length,
+    uv: new THREE.BufferAttribute(cat('uv', 2, Float32Array, coat.uv), 2),
+    skinIndex: new THREE.BufferAttribute(Uint8Array.from(si), 4),
+    skinWeight: new THREE.BufferAttribute(sw8, 4, true),
+    cmpRest: new THREE.BufferAttribute(cat('rest', 3, Float32Array, base.attrs.cmpRest.array), 3),
+    cmpPart: new THREE.BufferAttribute(part8, 4, true),
+    cmpLow: new THREE.BufferAttribute(cat('low', 1, Float32Array, base.attrs.cmpLow.array), 1),
+    index: new THREE.BufferAttribute(joinIndex(coat.index), 1),
+    lodIndex: coat.lodIndex ? joinIndex(coat.lodIndex) : null,
+  };
+  return base.parts;
+}
+
+/**
+ * Géométrie du pelage d'une race avec ses pièces modelées (L : partLayout) : ses positions et ses normales, les autres
+ * attributs et les indices partagés. Pompons absents : repliés sur l'articulation de leur os ; oreilles absentes : sur
+ * celle de la tête, pas dessinées.
+ */
+function mergedCoatGeo(base, D, L, ears, pom) {
+  const n = L.n;
+  const N = n + L.m;
+  const pos = new Float32Array(N * 3);
+  const nrm = new Float32Array(N * 3);
+  pos.set(D.pos.subarray(0, n * 3));
+  nrm.set(D.nrm.subarray(0, n * 3));
+  const headP = D.heads[base.index.get('head')];
+  if (L.pomCount) {
+    if (pom) {
+      pos.set(pom.pos, L.pomStart * 3);
+      nrm.set(pom.nrm, L.pomStart * 3);
+    } else {
+      // (chaque boule repliée sur l'articulation de son os : elle le suit sans sortir du corps)
+      const si = L.skinIndex.array;
+      for (let i = L.pomStart; i < L.pomStart + L.pomCount; i++) {
+        const h = D.heads[si[i * 4]];
+        pos.set([h.x, h.y, h.z], i * 3);
+        nrm.set([0, 1, 0], i * 3);
+      }
+    }
+  }
+  if (ears) {
+    pos.set(ears.pos, L.earStart * 3);
+    nrm.set(ears.nrm, L.earStart * 3);
+  } else {
+    for (let i = L.earStart; i < L.earStart + L.earCount; i++) {
+      pos.set([headP.x, headP.y, headP.z], i * 3);
+      nrm.set([0, 1, 0], i * 3);
+    }
+  }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(cat(D.pos, extra.pos, 3, Float32Array), 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(cat(D.nrm, extra.nrm, 3, Float32Array), 3));
-  g.setAttribute('uv', new THREE.BufferAttribute(cat(coat.uv, extra.uv, 2, Float32Array), 2));
-  g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
-  g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
-  g.setAttribute('cmpRest', new THREE.BufferAttribute(cat(base.attrs.cmpRest.array, extra.rest, 3, Float32Array), 3));
-  g.setAttribute('cmpPart', new THREE.BufferAttribute(cat(base.attrs.cmpPart.array, extra.part, 4, Float32Array), 4));
-  g.setAttribute('cmpLow', new THREE.BufferAttribute(cat(base.attrs.cmpLow.array, extra.low, 1, Float32Array), 1));
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  for (const k of ['uv', 'skinIndex', 'skinWeight', 'cmpRest', 'cmpPart', 'cmpLow']) g.setAttribute(k, L[k]);
   // (pompons du caniche : rayon de chaque boule, ramenée à son centre par le shader hors de la coupe « caniche »)
-  if (extra.pom) g.setAttribute('cmpPom', new THREE.BufferAttribute(cat(new Float32Array(n), extra.pom, 1, Float32Array), 1));
-  const idx = new Uint32Array(coat.index.length + extra.index.length);
-  idx.set(coat.index);
-  for (let i = 0; i < extra.index.length; i++) idx[coat.index.length + i] = extra.index[i] + n;
-  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  if (pom?.pom) {
+    const pr = new Float32Array(N);
+    pr.set(pom.pom, L.pomStart);
+    g.setAttribute('cmpPom', new THREE.BufferAttribute(pr, 1));
+  }
+  g.setIndex(L.index);
+  if (!ears) g.setDrawRange(0, L.index.count - L.earTris);
   g.computeBoundingSphere();
   g.userData.shared = true;
   return g;
@@ -2215,12 +2330,23 @@ class RealDogAnim {
           }
           ys[i] = y;
         }
-        for (let k = 0; k < 3; k++) {
-          const ids = [];
-          for (let i = 0; i < n; i++) if (cls[i] === k) ids.push(i);
-          ids.sort((a, b) => ys[a] - ys[b]);
-          for (const i of ids.slice(0, 20)) pick[k].add(i);
+        // (les 20 plus bas de chaque classe, par insertion : trier tous les sommets à chaque pose coûtait le quart de
+        // la fabrication d'une race)
+        const best = [[], [], []];
+        for (let i = 0; i < n; i++) {
+          const k = cls[i];
+          if (k < 0) continue;
+          const b = best[k];
+          const y = ys[i];
+          if (b.length === 20 && y >= ys[b[19]]) continue;
+          let j = b.length < 20 ? b.length : 19;
+          while (j > 0 && ys[b[j - 1]] > y) {
+            b[j] = b[j - 1];
+            j--;
+          }
+          b[j] = i;
         }
+        for (let k = 0; k < 3; k++) for (const i of best[k]) pick[k].add(i);
       }
       S.contact = pick.map((s) => Uint32Array.from(s));
       this.restorePose();

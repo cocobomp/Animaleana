@@ -188,14 +188,14 @@ export function buildPendantEars(base, D, B) {
   const P = D.pos;
   const L = base.land;
   const headI = I('head');
-  const HJ = D.heads[headI];
   const hs = B.head;
   const S = earShape(B);
   const mid = L.midX;
   // Surface de la tête (crâne, joues, encolure ; sans les oreilles cachées) par côté : grille en (y, z).
   const cell = 0.006 * hs;
   const surf = [new Map(), new Map()];
-  const key = (y, z) => `${Math.round(y / cell)},${Math.round(z / cell)}`;
+  // (clé numérique de la case : les clés en texte coûtaient le tiers de la fabrication des oreilles)
+  const key = (y, z) => Math.round(y / cell) * 4096 + Math.round(z / cell);
   // (tous les sommets du tronc et de la tête : la collerette des joues du shiba est portée par l'encolure et le
   // poitrail — prise seulement sur la tête, l'oreille entrait dans la joue)
   for (let i = 0; i < n; i++) {
@@ -214,7 +214,7 @@ export function buildPendantEars(base, D, B) {
     const zi = Math.round(z / cell);
     let best = -1;
     for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) {
-      const v = m.get(`${yi + a},${zi + b}`);
+      const v = m.get((yi + a) * 4096 + zi + b);
       if (v > best) best = v;
     }
     return best;
@@ -235,6 +235,10 @@ export function buildPendantEars(base, D, B) {
     }
   }
   const eyeD = D.heads[I('eyeL')].clone().add(D.heads[I('eyeR')]).multiplyScalar(0.5);
+  // (oreille de référence, au repos du modèle d'origine : voir plus bas)
+  const eye0 = base.heads[I('eyeL')].clone().add(base.heads[I('eyeR')]).multiplyScalar(0.5);
+  const dir0 = V(0, -1, 0.14).normalize();
+  const across0 = V(0, -dir0.z, dir0.y);
   const NU = 18; // points autour de la section (plaque aux bords roulés)
   // Section : super-ellipse (faces presque plates, bords arrondis et épais comme un cuir roulé — en lentille, le bord
   // s'amincissait en lame et l'oreille se lisait comme une plaque de carton)
@@ -329,11 +333,12 @@ export function buildPendantEars(base, D, B) {
         const xc = sx + 0.0015 * hs + T + lift - tuck + bump;
         const pX = mid + side * (xc + t * T);
         pos.push(pX, q.y, q.z);
-        // repos (modèle d'origine) : ramené autour de l'os de la tête d'origine ; le même pour les deux faces (milieu de
-        // l'épaisseur) — sinon la robe peinte d'après le repos (taches du dalmatien) donnait une face noire et l'autre
-        // blanche, et un liseré noir tout autour
-        const rp = V(mid + side * xc, q.y, q.z).sub(HJ).multiplyScalar(1 / hs).add(base.heads[headI]);
-        rest.push(rp.x, rp.y, rp.z);
+        // repos (modèle d'origine) : une oreille de référence, la même pour toutes les races (ces coordonnées, où la robe
+        // est peinte, sont partagées par les races aux oreilles modelées : voir dogReal.js mergedCoatGeo) ; la même
+        // pour les deux faces (milieu de l'épaisseur) — sinon la robe peinte d'après le repos (taches du dalmatien)
+        // donnait une face noire et l'autre blanche, et un liseré noir tout autour
+        const rq = V(0, eye0.y + 0.058, eye0.z - 0.074).addScaledVector(dir0, v * 0.115).addScaledVector(across0, (0.5 - u) * 0.08 * (1 - 0.4 * v));
+        rest.push(mid + side * (L.eyeX + 0.035), rq.y, rq.z);
         uv.push(uv0[0] + (u - 0.5) * 0.02, uv0[1] + (v - 0.5) * 0.03);
         // os : tête à l'attache, puis oreille (base), puis bout
         const wh = 1 - smooth(0.0, 0.22, v);

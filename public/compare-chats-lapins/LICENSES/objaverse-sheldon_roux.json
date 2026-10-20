@@ -1,0 +1,28 @@
+{
+ "name": "Sheldon The Cat",
+ "license": "by",
+ "animationCount": 0,
+ "faceCount": 41840,
+ "vertexCount": 21047,
+ "viewerUrl": "https://sketchfab.com/3d-models/b1cccd4b743b469dac8527480584f9fb",
+ "likeCount": 0,
+ "viewCount": 67,
+ "publishedAt": "2018-12-09T15:54:12.997984",
+ "isAgeRestricted": false,
+ "user": {
+  "username": "luketmcfarlane",
+  "displayName": "luketmcfarlane",
+  "profileUrl": "https://sketchfab.com/luketmcfarlane"
+ },
+ "tags": [
+  "cat"
+ ],
+ "categories": [
+  "animals-pets",
+  "nature-plants"
+ ],
+ "description": "A 3D model I created for my creative and technical modelling project with the sole intention of showing that I can bake normal maps.",
+ "thumb": "https://media.sketchfab.com/models/b1cccd4b743b469dac8527480584f9fb/thumbnails/ed2d66156de0415b9e3d41760b08c92d/80c8222f62bb408a903668422d550757.jpeg",
+ "shard": "000-093.json.gz",
+ "_source": "Objaverse 1.0 (allenai/objaverse, Hugging Face), metadata/000-093.json.gz ; instantané Sketchfab de 2022"
+}

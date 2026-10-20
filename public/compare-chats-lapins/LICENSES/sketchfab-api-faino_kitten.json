@@ -1,0 +1,27 @@
+{
+ "uid": "4ae3704cd65b423ab994545988d4db1a",
+ "name": "Kitten",
+ "viewerUrl": "https://sketchfab.com/3d-models/kitten-4ae3704cd65b423ab994545988d4db1a",
+ "publishedAt": "2018-08-26T12:54:07.266934",
+ "createdAt": "2018-08-26T12:41:32.919964",
+ "isDownloadable": true,
+ "description": "",
+ "animationCount": 0,
+ "faceCount": 15530,
+ "vertexCount": 8456,
+ "user": {
+  "username": "doinspire",
+  "displayName": "FainoDS",
+  "profileUrl": "https://sketchfab.com/doinspire",
+  "uid": "7927b57569b04b598ac5b128e872842b"
+ },
+ "license": {
+  "uri": "https://api.sketchfab.com/v3/licenses/322a749bcfa841b29dff1e8a1bb74b0b",
+  "label": "CC Attribution",
+  "fullName": "Creative Commons Attribution",
+  "requirements": "Author must be credited. Commercial use is allowed.",
+  "url": "http://creativecommons.org/licenses/by/4.0/",
+  "slug": "by"
+ },
+ "_consulté": "2026-10-20, https://api.sketchfab.com/v3/models/4ae3704cd65b423ab994545988d4db1a (API publique, sans connexion)"
+}

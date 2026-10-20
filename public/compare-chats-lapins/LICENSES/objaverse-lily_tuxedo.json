@@ -1,0 +1,28 @@
+{
+ "name": "My Cat Modeled",
+ "license": "by",
+ "animationCount": 0,
+ "faceCount": 11328,
+ "vertexCount": 5975,
+ "viewerUrl": "https://sketchfab.com/3d-models/28d33c1592e14d8b895d36a1e0dfaa5d",
+ "likeCount": 11,
+ "viewCount": 429,
+ "publishedAt": "2020-07-30T20:18:35.184139",
+ "isAgeRestricted": false,
+ "user": {
+  "username": "lilyjoyhanna",
+  "displayName": "lilyjoyhanna",
+  "profileUrl": "https://sketchfab.com/lilyjoyhanna"
+ },
+ "tags": [
+  "substancepainter",
+  "substance"
+ ],
+ "categories": [
+  "animals-pets"
+ ],
+ "description": "Model referenced from my cat, Textured and Polished",
+ "thumb": "https://media.sketchfab.com/models/28d33c1592e14d8b895d36a1e0dfaa5d/thumbnails/f4d8f0b4e2204937a6b118f42daae067/b2076a2844fa40a9bac6cf550f095710.jpeg",
+ "shard": "000-053.json.gz",
+ "_source": "Objaverse 1.0 (allenai/objaverse, Hugging Face), metadata/000-053.json.gz ; instantané Sketchfab de 2022"
+}

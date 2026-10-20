@@ -1,0 +1,30 @@
+{
+ "name": "Rabbit Rigged",
+ "license": "by",
+ "animationCount": 1,
+ "faceCount": 2578,
+ "vertexCount": 1322,
+ "viewerUrl": "https://sketchfab.com/3d-models/e7213589744d436b9d96e2dbb31198a5",
+ "likeCount": 150,
+ "viewCount": 8642,
+ "publishedAt": "2020-09-20T15:55:32.540338",
+ "isAgeRestricted": false,
+ "user": {
+  "username": "FourthGreen",
+  "displayName": "FourthGreen",
+  "profileUrl": "https://sketchfab.com/FourthGreen"
+ },
+ "tags": [
+  "rabbit",
+  "bunny",
+  "rabbits",
+  "lowpoly"
+ ],
+ "categories": [
+  "animals-pets",
+  "characters-creatures"
+ ],
+ "description": "",
+ "thumb": "https://media.sketchfab.com/models/e7213589744d436b9d96e2dbb31198a5/thumbnails/3bb56830d134411ea395d993003ebe17/20b75c679344478e9ccb21668b2b2f33.jpeg",
+ "shard": "000-052.json.gz"
+}

@@ -1,0 +1,26 @@
+{
+ "name": "Cat game asset",
+ "license": "by",
+ "animationCount": 0,
+ "faceCount": 19988,
+ "vertexCount": 10015,
+ "viewerUrl": "https://sketchfab.com/3d-models/7a0c1a65e18747799af9fe9481f1bdb2",
+ "likeCount": 1,
+ "viewCount": 11,
+ "publishedAt": "2019-10-26T17:15:28.609102",
+ "isAgeRestricted": false,
+ "user": {
+  "username": "claireanne3d",
+  "displayName": "ClaireAnne",
+  "profileUrl": "https://sketchfab.com/claireanne3d"
+ },
+ "tags": [
+  "substancepainter",
+  "substance"
+ ],
+ "categories": [],
+ "description": "",
+ "thumb": "https://media.sketchfab.com/models/7a0c1a65e18747799af9fe9481f1bdb2/thumbnails/941c6a1f14734f129e2769a17cf7ddaf/2e140719b81c4c53a3f65a825a6c1cfd.jpeg",
+ "shard": "000-035.json.gz",
+ "_source": "Objaverse 1.0 (allenai/objaverse, Hugging Face), metadata/000-035.json.gz ; instantané Sketchfab de 2022"
+}

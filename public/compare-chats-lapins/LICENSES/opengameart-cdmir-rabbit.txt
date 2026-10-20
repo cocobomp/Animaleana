@@ -1,0 +1,11 @@
+« Rabbit » — CDmir (Čestmír Dammer), collaborateur TinyWorlds, OpenGameArt.org, 14/11/2015
+Page : https://opengameart.org/content/rabbit-0
+Fichiers : rabbit.blend (6 Mo), rabbit-FBX.7z (4,4 Mo) — téléchargés sans compte le 20/10/2026.
+Licence affichée sur la page : CC0 (https://creativecommons.org/publicdomain/zero/1.0/)
+Réponse de l'auteur sur la page (26/09/2018) : « This model and animations are free for commercial use. (CC0 license) »
+Texte « License » contenu dans le .blend :
+  Model: Rabbit
+  Author: Čestmír Dammer
+  Project: www.kelgar.org
+  Idea by Rick Hoppmann & Keppu
+Crédit de courtoisie (non obligatoire) : « Lapin : “Rabbit” par CDmir (Čestmír Dammer), CC0, OpenGameArt ».

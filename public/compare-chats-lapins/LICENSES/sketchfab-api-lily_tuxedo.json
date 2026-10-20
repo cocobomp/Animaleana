@@ -1,0 +1,27 @@
+{
+ "uid": "28d33c1592e14d8b895d36a1e0dfaa5d",
+ "name": "My Cat Modeled",
+ "viewerUrl": "https://sketchfab.com/3d-models/my-cat-modeled-28d33c1592e14d8b895d36a1e0dfaa5d",
+ "publishedAt": "2020-07-30T20:18:35.184139",
+ "createdAt": "2020-07-30T20:05:55.651710",
+ "isDownloadable": true,
+ "description": "Model referenced from my cat, Textured and Polished",
+ "animationCount": 0,
+ "faceCount": 11328,
+ "vertexCount": 5975,
+ "user": {
+  "username": "lilyjoyhanna",
+  "displayName": "lilyjoyhanna",
+  "profileUrl": "https://sketchfab.com/lilyjoyhanna",
+  "uid": "663db2ecb804485aae8c3fbfc5f58178"
+ },
+ "license": {
+  "uri": "https://api.sketchfab.com/v3/licenses/322a749bcfa841b29dff1e8a1bb74b0b",
+  "label": "CC Attribution",
+  "fullName": "Creative Commons Attribution",
+  "requirements": "Author must be credited. Commercial use is allowed.",
+  "url": "http://creativecommons.org/licenses/by/4.0/",
+  "slug": "by"
+ },
+ "_consulté": "2026-10-20, https://api.sketchfab.com/v3/models/28d33c1592e14d8b895d36a1e0dfaa5d (API publique, sans connexion)"
+}

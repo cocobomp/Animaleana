@@ -41,4 +41,58 @@ Ces modifications sont faites par les scripts de `tools/chien/` (voir `tools/chi
 `src/game/models/dogReal.js` (races, robes, animations). Le chien sculpté par le code reste le modèle de repli
 pendant le chargement ou si les fichiers ne se chargent pas.
 
+## Page « Choisis ton chat et ton lapin » (`chats-lapins.html`, hors du jeu)
+
+Page de comparaison des chats et des lapins (`src/compare/chatsLapins.js`). Ses modèles sont dans
+`public/compare-chats-lapins/` : ils ne font pas partie du jeu (ni du service worker, ni de la version à
+emporter). Textes de licence, réponses de l'API publique de Sketchfab (licence vérifiée le 20/10/2026) et
+métadonnées d'origine (instantané Objaverse, pages OpenGameArt) dans `public/compare-chats-lapins/LICENSES/`.
+Les modèles sous **CC-BY 4.0** demandent la mention ci-dessous s'ils entrent dans le jeu (écran des crédits).
+
+| Fichier | Modèle d'origine | Auteur | Source | Licence | Modifications |
+| --- | --- | --- | --- | --- | --- |
+| `claire_grey.glb` | « Cat game asset » (2019) | Claire (claireanne3d) | [Sketchfab](https://sketchfab.com/3d-models/cat-game-asset-7a0c1a65e18747799af9fe9481f1bdb2) (fichier : Objaverse) | CC-BY 4.0 | mis à l'échelle, squelette, poids et animations ajoutés |
+| `lily_tuxedo.glb` | « My Cat Modeled » (2020) | lilyjoyhanna | [Sketchfab](https://sketchfab.com/3d-models/my-cat-modeled-28d33c1592e14d8b895d36a1e0dfaa5d) (fichier : Objaverse) | CC-BY 4.0 | pièces réunies, squelette, poids et animations ajoutés |
+| `faino_kitten.glb` | « Kitten » (2018) | FainoDS (doinspire) | [Sketchfab](https://sketchfab.com/3d-models/kitten-4ae3704cd65b423ab994545988d4db1a) (fichier : Objaverse) | CC-BY 4.0 | pièces réunies, squelette, poids et animations ajoutés |
+| `syaharani_roux.glb` | « cat Walk » (2020) | Erina eka syaharani (syaharanichan) | [Sketchfab](https://sketchfab.com/3d-models/cat-walk-fc6e597a81ce4dc291dcca6a9e6888ba) (fichier : Objaverse) | CC-BY 4.0 | squelette et marche d'origine remplacés, animations ajoutées |
+| `sheldon_roux.glb` | « Sheldon The Cat » (2018) | luketmcfarlane | [Sketchfab](https://sketchfab.com/3d-models/sheldon-the-cat-b1cccd4b743b469dac8527480584f9fb) (fichier : Objaverse) | CC-BY 4.0 | maillage allégé, squelette, poids et animations ajoutés |
+| `cdmir_garenne.glb` | « Rabbit » (2015) | CDmir (Čestmír Dammer), avec TinyWorlds, projet Kelgar | [OpenGameArt](https://opengameart.org/content/rabbit-0) | CC0 1.0 | clips d'artiste gardés (course, saut, assis, guetteur), autres animations ajoutées |
+| `dakota_gris.glb` | « Rabbit » | Dakota.Hinkle | [Sketchfab](https://sketchfab.com/3d-models/rabbit-073eef14ae3c4d06808498c3ba895e67) (fichier : Objaverse) | CC-BY 4.0 | os renommés, animations ajoutées |
+| `fourthgreen_belier.glb` | « Rabbit Rigged » | FourthGreen | [Sketchfab](https://sketchfab.com/3d-models/rabbit-rigged-e7213589744d436b9d96e2dbb31198a5) (fichier : Objaverse) | CC-BY 4.0 | clip d'origine gardé, os renommés, animations ajoutées |
+| `victory_hollandais.glb` | « Rabbit » | victory_ (Paleo Modelist) | [Sketchfab](https://sketchfab.com/3d-models/rabbit-ce07bc73ca66435680e227767725f3f8) (fichier : Objaverse) | CC-BY 4.0 | clip d'origine retiré, os renommés, animations ajoutées |
+| `rattel_peint.glb` | « Hand-painted bunny (unrigged version) » (2020) | Rattel | [OpenGameArt](https://opengameart.org/content/hand-painted-bunny-unrigged-version) | CC0 1.0 | squelette, poids et animations ajoutés |
+
+Mentions à reprendre pour un modèle CC-BY (licence : https://creativecommons.org/licenses/by/4.0/) :
+
+- « Chat (tigré gris) : “Cat game asset” par Claire (claireanne3d)
+  (https://sketchfab.com/3d-models/cat-game-asset-7a0c1a65e18747799af9fe9481f1bdb2), CC BY 4.0, modifié :
+  squelette et animations ajoutés. »
+- « Chat (noir et blanc) : “My Cat Modeled” par lilyjoyhanna
+  (https://sketchfab.com/3d-models/my-cat-modeled-28d33c1592e14d8b895d36a1e0dfaa5d), CC BY 4.0, modifié :
+  squelette et animations ajoutés. »
+- « Chaton : “Kitten” par FainoDS (https://sketchfab.com/3d-models/kitten-4ae3704cd65b423ab994545988d4db1a),
+  CC BY 4.0, modifié : squelette et animations ajoutés. »
+- « Chat (roux tigré) : “cat Walk” par Erina eka syaharani
+  (https://sketchfab.com/3d-models/cat-walk-fc6e597a81ce4dc291dcca6a9e6888ba), CC BY 4.0, modifié : squelette
+  et animations refaits. »
+- « Chat (roux et blanc) : “Sheldon The Cat” par luketmcfarlane
+  (https://sketchfab.com/3d-models/sheldon-the-cat-b1cccd4b743b469dac8527480584f9fb), CC BY 4.0, modifié :
+  maillage allégé, squelette et animations ajoutés. »
+- « Lapin (gris) : “Rabbit” par Dakota.Hinkle (https://sketchfab.com/3d-models/rabbit-073eef14ae3c4d06808498c3ba895e67),
+  CC BY 4.0, modifié : animations ajoutées. »
+- « Lapin (bélier) : “Rabbit Rigged” par FourthGreen
+  (https://sketchfab.com/3d-models/rabbit-rigged-e7213589744d436b9d96e2dbb31198a5), CC BY 4.0, modifié :
+  animations ajoutées. »
+- « Lapin (hollandais) : “Rabbit” par victory_ / Paleo Modelist
+  (https://sketchfab.com/3d-models/rabbit-ce07bc73ca66435680e227767725f3f8), CC BY 4.0, modifié : animations
+  ajoutées. »
+- CC0, par courtoisie : « Lapin de garenne : “Rabbit” par CDmir (Čestmír Dammer), OpenGameArt, CC0 » ;
+  « Lapin peint : “Hand-painted bunny” par Rattel, OpenGameArt, CC0. »
+
+Point à vérifier avant une diffusion commerciale : la page de « cat Walk » (syaharanichan) n'a pas de
+description et sa texture s'appelle « GatoTextura.jpg » (provenance non documentée, peut-être une
+republication). Les squelettes, allures, poses et transitions ajoutés ont été calculés pour La ferme à
+Madichelle (Blender 4.2 en mode `--background`, glTF-Transform 4.5) et n'imposent aucune licence. Sur la page,
+robes et races des modèles sont des retouches faites dans le navigateur (shaders), le fichier n'est pas modifié.
+
 Le moteur 3D est [three.js](https://threejs.org) (licence MIT).

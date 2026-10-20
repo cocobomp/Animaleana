@@ -1,0 +1,27 @@
+{
+ "uid": "b1cccd4b743b469dac8527480584f9fb",
+ "name": "Sheldon The Cat",
+ "viewerUrl": "https://sketchfab.com/3d-models/sheldon-the-cat-b1cccd4b743b469dac8527480584f9fb",
+ "publishedAt": "2018-12-09T15:54:12.997984",
+ "createdAt": "2018-12-09T15:44:07.909329",
+ "isDownloadable": true,
+ "description": "A 3D model I created for my creative and technical modelling project with the sole intention of showing that I can bake normal maps.",
+ "animationCount": 0,
+ "faceCount": 41840,
+ "vertexCount": 21047,
+ "user": {
+  "username": "luketmcfarlane",
+  "displayName": "luketmcfarlane",
+  "profileUrl": "https://sketchfab.com/luketmcfarlane",
+  "uid": "742d2f3abd0848fda2aa8483a6c45d3b"
+ },
+ "license": {
+  "uri": "https://api.sketchfab.com/v3/licenses/322a749bcfa841b29dff1e8a1bb74b0b",
+  "label": "CC Attribution",
+  "fullName": "Creative Commons Attribution",
+  "requirements": "Author must be credited. Commercial use is allowed.",
+  "url": "http://creativecommons.org/licenses/by/4.0/",
+  "slug": "by"
+ },
+ "_consulté": "2026-10-20, https://api.sketchfab.com/v3/models/b1cccd4b743b469dac8527480584f9fb (API publique, sans connexion)"
+}

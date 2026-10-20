@@ -424,7 +424,8 @@ export function buildPendantEars(base, D, B) {
  */
 export function faceShape(base, B, P) {
   if (base.kind !== 'shiba') return;
-  if (!(B.cheek || B.mouth || B.flews || B.jowl || B.skullFlat || B.stop || B.square || B.eyeOpen || B.snout < 0.8 || B.underbite)) return;
+  // (dents et langue rentrées pour toutes les races du shiba, même sans autre retouche du visage : la pointe claire de
+  // la langue, prise pour une incisive, dépassait sous la truffe du shiba, de l'akita, du samoyède)
   const cheek = B.cheek ?? 0;
   const mouth = B.mouth ?? 0;
   const flews = B.flews ?? 0;
@@ -481,8 +482,9 @@ export function faceShape(base, B, P) {
       dy += stop * 0.006 * g(d, 0.018);
       dz += stop * 0.004 * g(d, 0.018);
     }
-    // paupières ouvertes : le tour de l'œil s'écarte verticalement du centre de l'œil (pas le globe)
-    if (open > 0 && we < 0.3 && wh > 0.5) {
+    // paupières ouvertes : le tour de l'œil s'écarte verticalement du centre de l'œil (pas le globe) ; plissées
+    // (eyeOpen < 0 : petits yeux enfoncés de l'akita) : il s'en rapproche
+    if (open !== 0 && we < 0.3 && wh > 0.5) {
       const dyE = y0 - L.eyeY;
       const d = Math.hypot(ax - L.eyeX, dyE * 0.9, z0 - L.eyeZ);
       if (d < 0.035) {
@@ -516,12 +518,13 @@ export function faceShape(base, B, P) {
       dy += 0.0015;
       dz -= 0.004;
     }
-    // langue rentrée dans un museau court (boxer : la pointe passait sous la truffe) ; menton un peu avancé
-    if (B.snout < 0.8) {
+    // langue rentrée : toujours un peu (sa pointe claire, couleur du museau, dépassait sous la truffe comme une
+    // incisive — shiba, akita, husky, samoyède…), davantage dans un museau court (boxer : la pointe passait dessous)
+    {
       let wt = 0;
       for (let k = 0; k < 4; k++) if (tongue.has(coat.si[i * 4 + k])) wt += coat.sw[i * 4 + k];
       if (wt > 0) {
-        dz -= wt * 0.035 * (0.8 - B.snout);
+        dz -= wt * (0.012 + 0.035 * Math.max(0, 0.8 - B.snout));
         dy += wt * 0.004;
       }
     }
@@ -580,7 +583,8 @@ export function buildPompons(base, D, B) {
       if (P[i * 3 + 1] > top.y) top = V(mid, P[i * 3 + 1], P[i * 3 + 2]);
     }
     const r = (only ? 0.034 * B.topknot : 0.046) * hs;
-    balls.push({ c: top.clone().add(V(0, r * (only ? 0.55 : 0.35), r * 0.15)), r, sc: only ? V(0.85, 1.05, 0.9) : V(1.05, 0.85, 1.1), bone: I('head'), part: [0, 0, 1, 0] });
+    // (yorkshire : une mèche relevée — étroite, haute, un peu penchée vers l'avant —, pas une boule posée sur le crâne)
+    balls.push({ c: top.clone().add(V(0, r * (only ? 0.9 : 0.35), r * (only ? 0.35 : 0.15))), r, sc: only ? V(0.5, 1.55, 0.62) : V(1.05, 0.85, 1.1), bone: I('head'), part: [0, 0, 1, 0], tuft: only });
   }
   // bracelets : au bas des pattes, au-dessus du pied
   if (!only) for (const [up, low, front] of [['metacarpusL', 'toesL', 1], ['metacarpusR', 'toesR', 1], ['metatarsusL', 'htoesL', 0], ['metatarsusR', 'htoesR', 0]]) {
@@ -630,7 +634,10 @@ export function buildPompons(base, D, B) {
         const ph = (k / NA) * Math.PI * 2;
         const d = V(Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph));
         // bosses de frisure (bruit sur la direction), plus douces aux pôles
-        const bump = 1 + 0.13 * (noise2(ph * 1.9 + j * 3.1, th * 2.3 + j) - 0.5) + 0.07 * (noise2(ph * 4.3 + j, th * 5.1) - 0.5);
+        const bump = bl.tuft
+          // (mèche : effilée vers le haut, en pointes de poil)
+          ? (1 - 0.45 * Math.max(0, d.y) ** 1.5) * (1 + 0.22 * (noise2(ph * 3.7 + j, th * 6.1) - 0.5))
+          : 1 + 0.13 * (noise2(ph * 1.9 + j * 3.1, th * 2.3 + j) - 0.5) + 0.07 * (noise2(ph * 4.3 + j, th * 5.1) - 0.5);
         const r = bl.r * bump;
         const p = bl.c.clone().add(V(d.x * bl.sc.x, d.y * bl.sc.y, d.z * bl.sc.z).multiplyScalar(r));
         pos.push(p.x, p.y, p.z);

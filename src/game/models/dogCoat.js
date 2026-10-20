@@ -453,7 +453,9 @@ float cmpWrinkleH(vec3 p, vec4 part) {
   float ax = abs(p.x - cMisc.x);
   float m = part.z * (1.0 - part.x) * smoothstep(cEye.y + 0.003, cEye.y + 0.012, p.y) * (1.0 - smoothstep(cEye.y + 0.032, cEye.y + 0.048, p.y))
     * (1.0 - smoothstep(cEye.x * 0.9, cEye.x * 1.5, ax)) * smoothstep(cEye.z - 0.06, cEye.z - 0.025, p.z);
-  float w = 0.5 + 0.5 * sin((p.y - cEye.y) * 700.0 + sin(ax * 90.0) * 1.3);
+  // (plis larges et doux : à 700 rad/m, des bandes d'aliasing rayaient le front du carlin)
+  float w = 0.5 + 0.5 * sin((p.y - cEye.y) * 390.0 + sin(ax * 70.0) * 1.1);
+  w = w * w * (3.0 - 2.0 * w);
   return mix(1.0, w, m);
 }
 // Liste (0 à 1) : bande au milieu du front, étroite entre les yeux, qui descend sur le chanfrein et s'élargit sur le
@@ -725,7 +727,7 @@ if (cOn > 0.5) {
   if (cCurl.x > 0.0) nc *= mix(1.0, 0.88 + 0.16 * smoothstep(0.25, 0.75, cmpCurlH(vCmpPos)), cCurl.x * (1.0 - smoothstep(0.25, 0.9, fwC * 80.0)));
   // (soyeux : les mèches sur le corps, pas sur la face au poil court, où elles faisaient des stries)
   if (cCurl.y > 0.0) nc *= mix(1.0, 0.82 + 0.26 * cmpSilkH(vCmpPos), cCurl.y * (1.0 - smoothstep(0.25, 0.9, fwC * 170.0)) * (1.0 - 0.8 * vCmpPart.z));
-  if (cWrinkle > 0.0) nc *= mix(1.0, 0.72 + 0.28 * cmpWrinkleH(vCmpPos, vCmpPart), cWrinkle);
+  if (cWrinkle > 0.0) nc *= mix(1.0, 0.8 + 0.2 * cmpWrinkleH(vCmpPos, vCmpPart), cWrinkle * (1.0 - smoothstep(0.3, 1.0, fwC * 160.0)));
   // Lèvres et gencives (jack) : brun-noir comme chez le vrai chien, pas rouge vif (« rouge à lèvres »).
   if (cKeepOpt.z > 0.0 && cKeepOpt.y > 0.0) {
     float dh2 = abs(fract(hsv.x - 0.985 + 0.5) - 0.5);
@@ -760,7 +762,7 @@ const CURL_F = /* glsl */ `
 if (cOn > 0.5 && cRole > 0.5 && (cCurl.x > 0.0 || cCurl.y > 0.0 || cWrinkle > 0.0)) {
   float fade = 1.0 - smoothstep(0.25, 0.9, length(fwidth(vCmpPos)) * 140.0);
   float hh = (cCurl.x * 0.004 * cmpCurlH(vCmpPos) + cCurl.y * 0.0015 * cmpSilkH(vCmpPos) * (1.0 - 0.8 * vCmpPart.z)) * fade
-    + cWrinkle * 0.0016 * cmpWrinkleH(vCmpPos, vCmpPart) * (1.0 - smoothstep(0.25, 0.9, length(fwidth(vCmpPos)) * 300.0));
+    + cWrinkle * 0.0022 * cmpWrinkleH(vCmpPos, vCmpPart) * (1.0 - smoothstep(0.3, 1.0, length(fwidth(vCmpPos)) * 160.0));
   vec2 dH = vec2(dFdx(hh), dFdy(hh));
   vec3 sx = dFdx(-vViewPosition);
   vec3 sy = dFdy(-vViewPosition);

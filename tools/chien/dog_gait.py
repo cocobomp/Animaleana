@@ -311,6 +311,10 @@ def _pose_bone(rig, name, pose, gp, t, e, targets, lows, solved, flex, flexw, w)
                 J3 = Vector((L['J'][3].x, L['neutral'].y + over.get('dy', 0.0), over.get('z3', L['J'][3].z)))
                 if 'J3' in over:
                     J3 = Vector((L['J'][3].x, over['J3'][0], over['J3'][1]))
+                # (under : pied posé à l'aplomb de l'articulation haute déplacée par le corps, décalé de under en y —
+                # antérieurs tendus quand le corps bascule pour renifler ou manger)
+                if 'under' in over:
+                    J3 = Vector((L['J'][3].x, J0.y + over['under'], L['J'][3].z))
                 J, pts = rig.solve_fold(lab, J0, J3, over.get('a3', 0.0), over.get('phi', 0.0), over.get('splay', 0.0), over.get('bend'))
             else:
                 P, phi = targets[lab]

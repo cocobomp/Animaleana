@@ -1718,11 +1718,15 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   setCoat(uniforms, plan);
   // Poil frisé (caniche, labradoodle) ou soyeux et frangé (yorkshire, setter, cavalier) : relief dans le shader.
   // (touffu : spitz — un relief de bouclettes léger, le poil n'est plus de la pâte à modeler)
-  uniforms.cCurl.value.set(B.curly ? 1 : B.fluffy ? 0.4 * B.fluffy : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : 0);
+  // (touffu : relief à peine marqué — à 0,4, des taches de pixels sombres en camouflage sur la face et le corps du loulou)
+  uniforms.cCurl.value.set(B.curly ? 1 : B.fluffy ? 0.12 * B.fluffy : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : 0);
   uniforms.cWrinkle.value = B.wrinkle ?? 0;
   const keepCfg = base.cfg.keep;
   const nose = S.measure.noseTip;
-  const spheres = keepCfg.nose ? [{ s: new THREE.Vector4(base.land.nose.x, base.land.nose.y, base.land.nose.z - keepCfg.nose[0] * 0.4, keepCfg.nose[0]), l: keepCfg.nose[1] }] : [];
+  // (barbe du labradoodle : truffe gardée plus serrée — le poil sombre de la lèvre du modèle, sous la truffe, restait
+  // en tache grise déchirée dans la barbe)
+  const noseK = B.beard ? 0.72 : 1;
+  const spheres = keepCfg.nose ? [{ s: new THREE.Vector4(base.land.nose.x, base.land.nose.y + (1 - noseK) * keepCfg.nose[0] * 0.5, base.land.nose.z - keepCfg.nose[0] * 0.4, keepCfg.nose[0] * noseK), l: keepCfg.nose[1] * (B.beard ? 0.55 : 1) }] : [];
   void nose;
   const coatMat = coatMaterial(base.prims.coat.material, uniforms, {
     role: 'fur', means: base.means, detail: base.detail, contrast: base.cfg.grain, keep: { ...keepCfg, spheres },
@@ -3081,16 +3085,39 @@ class RealDogAnim {
       md.root.updateMatrixWorld(true);
     }
     if (k < 0.05) return;
-    // Pieds arrière encore en l'air au-dessus de la croupe posée.
+    // Pieds avant sous le sol (gabarit long du caniche : 2 cm) : le corps est relevé pour les poser, puis basculé autour
+    // d'eux pour reposer la croupe.
+    if (settled && lowFront().y < -0.003) {
+      md.body.position.y -= f.y;
+      md.root.updateMatrixWorld(true);
+      for (let pass = 0; pass < 3; pass++) {
+        lowFront();
+        lowRest();
+        const gap = f.y - o.y;
+        if (!(gap < -0.003)) break;
+        const floor = f.y;
+        this.turn(md.body, AX, clamp(gap / Math.max(0.05, f.z - o.z), -0.25, 0));
+        md.root.updateMatrixWorld(true);
+        md.body.position.y -= lowFront().y - floor;
+        md.root.updateMatrixWorld(true);
+      }
+    }
+    // Pieds arrière encore en l'air au-dessus de la croupe posée (bouledogue, carlin : 2 cm) : le membre tourne à la
+    // hanche, puis le jarret se plie, jusqu'à les poser.
     lowRest();
     const base = Math.max(0, o.y);
+    // (deux passes : l'os ne tourne pas exactement dans le plan du corps, la première laisse 1 à 2 cm)
     for (const l of [2, 3]) {
-      const s = lowSole(l, t);
-      if (!(s.y > base + 0.006)) continue;
-      const pv = md.legs[l].pivot;
-      const c = _u.setFromMatrixPosition(pv.matrixWorld).applyMatrix4(_m);
-      this.turn(pv, AX, raiseAngle(c, s, base + 0.002, 0.35));
-      pv.updateMatrixWorld(true);
+      const leg = md.legs[l];
+      for (let pass = 0; pass < 2; pass++) {
+        for (const [b, max] of [[leg.pivot, 0.45], [leg.knee, 0.4]]) {
+          const s = lowSole(l, t);
+          if (!b || !(s.y > base + 0.004)) break;
+          const c = _u.setFromMatrixPosition(b.matrixWorld).applyMatrix4(_m);
+          this.turn(b, AX, raiseAngle(c, s, base + 0.001, max));
+          b.updateMatrixWorld(true);
+        }
+      }
     }
   }
 
@@ -3220,7 +3247,9 @@ function tailCarriage(model, base, B) {
     carrot: [-1.0, 0.15], stub: [-0.2, 0], curl: [-1.1, 0.9],
     // (tire-bouchon serré sur la hanche : carlin ; panache couché à plat sur le dos : spitz nain ; drapeau à
     // l'horizontale : setter ; droite dans l'axe du dos : cocker)
-    screw: [-1.9, 4.6], flat: [-2.25, -0.7], flag: [0.25, -0.15], level: [0.1, 0.05],
+    // (panache du spitz : part vers le haut puis se couche vers l'avant sur le dos, pointe vers la tête — courbé vers le
+    // haut, il se dressait en colonne sur la croupe)
+    screw: [-1.9, 4.6], flat: [-1.85, 1.05, 0.8], flag: [0.25, -0.15], level: [0.1, 0.05],
   };
   const [a0, curve, pw = 1] = shapes[want] ?? shapes.sabre;
   // Chaque os est orienté sur la courbe voulue : le premier part à a0 sous l'horizontale vers l'arrière, l'angle varie

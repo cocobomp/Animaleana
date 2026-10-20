@@ -53,7 +53,9 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
      `stand_up`, `lie_down`, `get_up`. Renifler, manger, boire : l'encolure descend, le corps bascule un peu
      (`sniff_pitch`), les **antérieurs restent tendus** (`front_planted` : métacarpe à son angle de repos, seuls
      l'épaule et le coude se plient — visés comme une allure à l'arrêt, le carpe se pliait vers l'avant, pattes
-     croisées sous le museau) ;
+     croisées sous le museau) ; le pied visé reste sous l'épaule à la hauteur du sol (`under` dans les réglages de
+     membre de `dog_gait.py`), un peu en avant pour renifler, manger et boire ; seules l'encolure et les épaules
+     descendent (`SNIFF_PITCH` 0,3 : à 0,12 la truffe restait à 18 cm du sol) ;
    - **gabarits** (`gabarits` dans `models.py`) : le jeu raccourcit ou allonge les membres des races (teckel 0,5,
      corgi 0,55, carlin 0,72, lévriers 1,22 à 1,28, chiots 0,8 environ) en gardant les rotations des clips ; la foulée
      des antérieurs ne correspondait plus à celle des postérieurs (pieds qui patinent, antérieurs qui ne touchaient
@@ -63,8 +65,14 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
      membre à la hauteur où son pied est alors monté ou descendu (`ground` dans `dog_gait.Rig`) ; seules leurs
      rotations sont gardées (le jeu place les os de la race). Shiba : `long` (1,25 : allures, assis, patte, couché,
      endormi, renifler, manger, boire et leurs transitions) et `court` (0,82, chiots : allures) ; jack : `court`
-     (0,52 : allures, assis, patte, renifler, manger, boire, transitions) et `trapu` (0,74 : allures). Clips nommés
-     `walk_long`, `sit_court`… ; longueur et vitesses naturelles de chaque gabarit dans `extras.dog.gabarits` ;
+     (0,52 : allures, assis, patte, renifler, manger, boire, révérence, transitions) et `trapu` (0,74 : allures). Clips
+     nommés `walk_long`, `sit_court`… ; longueur et vitesses naturelles de chaque gabarit dans `extras.dog.gabarits` ;
+     révérence du gabarit court (`gab_bow`) : l'avant descend autour des pieds avant, les postérieurs restent tendus
+     au sol par cinématique inverse (avant : pieds arrière à 6 cm du sol). Un assis généré (`sit_gen=True`,
+     `gab_sit_gen` : rotation autour de l'épaule jusqu'à une hauteur de hanches, postérieurs repliés sous le corps,
+     antérieurs `under`) a été essayé pour le court et le trapu sans être retenu : teckel et corgi gardaient les
+     hanches à 13 cm (contre 6) et le dos plus plat (8–11° contre 14–18°), le ventre profond touchant le sol avant
+     la croupe ; le yorkshire, du gabarit trapu, perdait son assis (dos à 6°, pieds arrière à 5 cm) ;
    - réglages des poses générées (`MODELS` dans `models.py`, utilisés seulement quand la pose n'est pas reprise du
      shiba) : assis `sit_flex`, `sit_tuck`, `sit_femur`, `sit_hip`, couché `lie_pitch_max`, `lie_elbow`, `lie_wrist`,
      `lie_fold` ; saut `jump_tuck` (postérieurs ramenés sous le corps à la réception : le maillage ne se déchire
@@ -85,8 +93,8 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
 5. **`lod.mjs`** : version allégée dans le même fichier (`extras.lod` : index simplifiés à 30 %) pour les chiens
    lointains (`DOG_LOD_DIST` dans `dogReal.js`).
 
-Fichiers obtenus : `dog_shiba.glb` 0,88 Mo (17 800 triangles, 5 300 au loin, 57 os, 19 clips + 17 de ses
-gabarits), `dog_jack.glb` 0,59 Mo (14 900 triangles, 36 os, 19 clips + 14 de ses gabarits). (Avant les gabarits et
+Fichiers obtenus : `dog_shiba.glb` 0,88 Mo (17 800 triangles, 5 300 au loin, 57 os, 20 clips + 17 de ses
+gabarits), `dog_jack.glb` 0,60 Mo (14 900 triangles, 36 os, 19 clips + 15 de ses gabarits). (Avant les gabarits et
 les poses reprises du shiba : 0,86 et 0,51 Mo ; les clips des gabarits sont allégés par `DECIMATE` et le
 ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été faits.)
 
@@ -108,16 +116,29 @@ ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été fait
     l'oreille dressée d'origine est effacée du crâne (`earSkullHide` : ramenée sur la surface du crâne interpolée,
     poids reportés sur l'os de la tête) ;
   - *visage* (`faceShape`, modèle du shiba) : joues, bouche neutre (plus de sourire de shiba), babines, bajoues,
-    crâne plat, stop, museau carré, paupières ouvertes ; gueule du jack fermée (`jackMouthClose`) ;
+    crâne plat, stop, museau carré, paupières ouvertes ou plissées (`eyeOpen` négatif : petits yeux enfoncés de
+    l'akita) ; dents et pointe de la langue rentrées pour toutes les races du shiba (la pointe claire de la langue,
+    couleur du museau, dépassait sous la truffe comme une incisive) ; gueule du jack fermée (`jackMouthClose`) ;
   - *pompons et toupet* (`buildPompons`) : toupet, bracelets et bout de la queue du caniche, repliés par le shader
-    selon la coupe du salon (`setCut`, attribut `cmpPom`) ; toupet seul du yorkshire.
+    selon la coupe du salon (`setCut`, attribut `cmpPom`) ; toupet seul du yorkshire (une mèche haute et étroite,
+    effilée vers le haut, plus une boule posée sur le crâne).
+- **Mémoire** : les pièces modelées sont rangées une fois par modèle (`partLayout` : pelage | pompons | oreilles
+  pendantes) et la géométrie de chaque race reprend cette disposition (`mergedCoatGeo`) : attributs de peau
+  quantifiés (poids sur 8 bits, index sur 16 bits), oreilles absentes exclues par `drawRange`, pompons absents
+  repliés sur leur articulation. 20 races en jeu : +14,9 Mo de tas JavaScript (72b1684 : +13,5 ; avant ce
+  rangement : +28,4).
 - **Nouveaux réglages de race** (`DOG_BUILDS`, valeurs neutres dans `ONE`) : `earLen`, `earW`, `earSet`, `cheek`,
   `mouth`, `flews`, `jowl`, `skullFlat`, `stop`, `square`, `eyeOpen`, `tailTaper` (effilement de la queue selon
   son port, `TAPER`), `pompons`, `beard`, `pear` (tronc en poire du bouledogue), `earTilt`, `underbite`, `fluffy`
-  (relief touffu des spitz), `wrinkle` (rides du carlin), `chest` (poitrine profonde et ventre levretté des
-  lévriers), `paws`, `neckSlim` (encolure lisse des poils ras, sans collerette), `topknot`.
+  (relief touffu des spitz), `wrinkle` (rides du carlin : sillons lissés par la taille à l'écran, sans scintiller),
+  `chest` (poitrine profonde et ventre levretté des lévriers), `paws`, `neckSlim` (encolure lisse des poils ras,
+  sans collerette), `topknot`, `tailRound` (section de queue ronde, sinon selon le port : `ROUND`).
+- **Queues** : formes des ports bas (`sabre`, `otter`, `plume`, `whip`) en courbe de puissance (`th = a0 −
+  total·(i/(n−1))^pw`) : la queue descend d'abord peu puis pend, au lieu d'une colonne verticale ; crochet du
+  galgo relevé au galop ; panache du spitz (`flat`) couché sur le dos.
 - **Chiots** : tête plus grosse, museau court et rond, yeux ronds grands ouverts, pattes courtes aux gros pieds,
-  ventre rond, oreilles pas encore dressées.
+  ventre rond, oreilles pas encore dressées ; front lisse, stop doux, ni bajoues ni babines, bouche à peine
+  relevée (`dogBuild` : plus de tête de vieux chien).
 - **Robes par shader** (`coatPlan`) : unie, dessous clair, feu (noir et feu, selle du berger allemand), bicolore
   (urajiro du shiba, masque du husky, plastron du boxer, collier du colley), tricolore, merle (plaques déchirées
   de toutes tailles), pie (plaques, tête colorée), dalmatien, moucheté, bringé (stries fines, effacées en teinte
@@ -139,18 +160,27 @@ ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été fait
     yeux) ; hanches ancrées (`hipE` : les clips tournent le corps autour de la racine du modèle, une race aux
     hanches déplacées décollait la croupe) ;
   - tours du spectacle et de l'éducateur : assis et couché par les transitions (`sit_down`, `lie_down`, plus vives
-    sur commande), « donner la patte » depuis l'assis, fin de roulade par « se lever » (d'un bond si le salut suit).
+    sur commande), « donner la patte » depuis l'assis, fin de roulade par « se lever » (d'un bond si le salut suit) ;
+    pendant le tour, la caméra se rapproche de l'artiste (de trois quarts, à 3 m environ : `CameraRig.focus.shot`),
+    comme pour la photo du podium du concours de beauté (de face) ; en laisse, elle cadre la joueuse et son chien
+    ensemble (`focus.pair` : visée entre les deux, recul selon l'écart) — laisse de 1,6 m (`LEASH_LEN`), mou dessiné
+    pour cette longueur, coins à renifler devant la joueuse.
 - **Au sol** (`RealDogAnim.ground`) : points d'appui de la peau mesurés une fois par race sur les poses (pieds,
   corps, queue, tête : `contactPoints`) ; au pas, le corps suit le pied le plus bas sans lissage (un pied est
   toujours posé : le chien qui tire en laisse ne flotte plus), au trot et au galop il est relevé tout de suite et
   redescend en douceur ; au pas, au trot et au galop, **pieds en appui tenus sur place** (`footLock`) : le bout des
   doigts (`toePts`, le point de la sole le plus en avant) est noté quand le pied se pose, le membre est tourné à
   l'épaule ou à la hanche pour l'y ramener, en long et sur le côté (deux passes), la correction s'efface en fondu
-  quand le pied repart ; les vitesses naturelles sont mesurées sur le squelette de la race au même point
+  quand le pied repart. C'est le clip qui décide de l'appui (pied à moins de 11 mm de son sol : posé ; relâché
+  au-dessus de 16 mm), le fondu de relâche suit la hauteur du pied et la correction change d'au plus quelques
+  millimètres par image : le pied ne saute plus de 2 à 5 cm en se posant ou en repartant (banc du trot : 5,1 cm →
+  0,04 cm d'une image à l'autre pour un pied posé, test « un pied posé ne bouge pas de plus de 5 mm ») ; les vitesses naturelles sont mesurées sur le squelette de la race au même point
   (`measureNatural`). Glissement des pieds posés (banc de `planche.html`, 15 races et 2 chiots, 240 images) : 0 à
   3 % de la course au pas, 0 à 4 % au trot, 0 à 2 % au galop (avant : jusqu'à 22 % au pas pour le corgi, 32 % au
   galop pour le galgo). Assis, le corps bascule pour poser les pieds avant (`settleSit` : écart signé, pivot sur
-  l'appui arrière, fondu selon l'avancement de la transition — le teckel se cabrait de 18 cm en une image) ; debout
+  l'appui arrière, fondu selon l'avancement de la transition — le teckel se cabrait de 18 cm en une image) ; pieds
+  avant sous le sol (caniche : 2 cm), le corps est relevé puis rebasculé autour d'eux ; pieds arrière en l'air
+  (bouledogue, carlin : 2 à 4 cm), le membre tourne à la hanche puis au jarret pour les poser ; debout
   sur place (renifler, manger, boire), il se redresse pour garder les pieds arrière posés (`settleStand`) ; queue
   (port de la race aligné sur la courbe, relevée sans à-coup d'une image à l'autre) et tête relevées au-dessus du
   sol ; oreilles pendantes compensées quand la tête plonge ; roulade : peau entière mesurée (`skinLow`).

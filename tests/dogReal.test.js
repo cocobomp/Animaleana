@@ -53,8 +53,9 @@ function lowest(md, { noTail = false, step = 2 } = {}) {
 }
 
 describe('fichiers des chiens réalistes', () => {
-  // (jack : 0,51 → 0,59 Mo avec les clips de ses gabarits court et trapu, shiba : 0,86 → 0,88 Mo)
-  it.each([['shiba', 57, 900_000], ['jack', 36, 600_000]])('%s : os, clips, compression, vitesses naturelles, poids', (kind, joints, maxBytes) => {
+  // (jack : 0,51 → 0,59 Mo avec les clips de ses gabarits court et trapu, 0,60 Mo avec la révérence du court ; shiba :
+  // 0,86 → 0,88 Mo)
+  it.each([['shiba', 57, 900_000], ['jack', 36, 620_000]])('%s : os, clips, compression, vitesses naturelles, poids', (kind, joints, maxBytes) => {
     const buf = fs.readFileSync(DOG_FILES[kind]);
     expect(buf.length).toBeLessThan(maxBytes);
     const json = glbJson(buf);

@@ -52,9 +52,11 @@ export const DOG_BUILDS = {
   saint_bernard: { legs: 0.98, legW: 1.18, back: 1.1, girth: 1.28, head: 1.3, snout: 0.85, muzzleW: 1.35, neck: 0.95, ears: 'floppy', earSize: 1.1, tail: 'plume', fur: 0.012, ruff: 0.5, earLen: 0.9, earW: 1.15, cheek: 0.5, mouth: 1, flews: 1, jowl: 1, skullFlat: 0.7, stop: 1, square: 1, eyeOpen: 0.4, tailThick: 0.9, tailFur: 1.3 },
   epagneul_breton: { legs: 1.0, back: 0.95, girth: 1.0, headW: 0.88, head: 1.0, snout: 1.12, ears: 'floppy', earSize: 0.95, tail: 'stub', fur: 0.004, feather: 0.6, earLen: 0.8, cheek: 1, mouth: 1, flews: 0.3, stop: 0.5, eyeOpen: 0.6 },
   husky: { legs: 1.0, back: 1.02, girth: 1.02, head: 1.0, snout: 1.1, ears: 'pointed', earSize: 1.05, tail: 'sickle', tailThick: 1.15, fur: 0.008, ruff: 0.5 },
-  berger_islandais: { legs: 0.98, back: 0.98, girth: 1.02, head: 1.0, snout: 1.08, ears: 'pointed', tail: 'curl', fur: 0.022, ruff: 1.0, headW: 0.92, feather: 0.7 },
+  berger_islandais: { legs: 0.98, back: 0.98, girth: 1.02, head: 1.0, snout: 1.08, ears: 'pointed', tail: 'curl', fur: 0.022, ruff: 1.0, headW: 0.92, feather: 0.7, mouth: 0.6, stop: 0.3, eyeOpen: 0.35, earSize: 1.08 },
   shiba: {},
-  akita: { legs: 1.0, legW: 1.18, back: 1.05, girth: 1.2, head: 1.22, snout: 0.85, muzzleW: 1.28, ears: 'pointed', earSize: 0.72, tail: 'curl', tailThick: 1.4, fur: 0.012, headW: 1.12, neck: 0.9, earTilt: 0.45, tailFur: 1.3, ruff: 0.8 },
+  // (akita : grosse tête large en triangle, petits yeux enfoncés, museau court, carré et large, bouche neutre — pas le
+  // sourire de renard du shiba —, petites oreilles épaisses inclinées vers l'avant)
+  akita: { legs: 1.0, legW: 1.18, back: 1.05, girth: 1.2, head: 1.28, snout: 0.78, muzzleW: 1.38, ears: 'pointed', earSize: 0.62, tail: 'curl', tailThick: 1.4, fur: 0.012, headW: 1.2, neck: 0.9, earTilt: 0.5, tailFur: 1.3, ruff: 0.8, cheek: 0.25, mouth: 1, square: 0.9, skullFlat: 0.7, stop: 0.35, eyeOpen: -0.7 },
   galgo: { legs: 1.28, legW: 0.82, back: 1.08, girth: 0.78, headW: 0.66, head: 0.92, snout: 1.65, muzzleW: 0.74, neck: 1.2, ears: 'rose', earSize: 0.9, tail: 'whip', tailLen: 1.25, tailThick: 0.35, fur: -0.02, tuck: 1, cheek: 1, mouth: 1, eyeOpen: 0.3, chest: 1, stop: 0, earLen: 1.0, neckSlim: 0.5 },
   coonhound: { legs: 1.02, back: 1.05, girth: 1.04, headW: 0.84, head: 1.05, snout: 1.35, ears: 'long', earSize: 1.5, tail: 'sickle', tailThick: 0.55, fur: -0.014, earLen: 1.4, earW: 1.2, cheek: 1, mouth: 1, flews: 0.9, jowl: 0.3, skullFlat: 0.4, stop: 0.5, square: 0.6, eyeOpen: 0.5, neckSlim: 1 },
   dogo: { legs: 1.0, legW: 1.12, back: 1.0, girth: 1.16, headW: 0.95, head: 1.18, snout: 1.05, muzzleW: 1.3, neck: 1.05, ears: 'floppy', earSize: 0.85, tail: 'sabre', tailThick: 0.5, fur: -0.016, earLen: 0.7, earSet: 0.01, cheek: 0.9, mouth: 1, flews: 0.6, skullFlat: 0.8, stop: 0.5, square: 0.8, eyeOpen: 0.4, neckSlim: 1 },
@@ -151,11 +153,15 @@ export function dogBuild(look = {}, puppy = false) {
     B.tuck *= 0.3;
     B.chest *= 0.3;
     B.eyeOpen = Math.max(B.eyeOpen, 0.9);
-    B.mouth = 1;
+    // (front lisse, stop doux, ni babines ni bajoues, coins de la bouche à peine relevés : pas une tête de vieux chien)
+    B.mouth = 0.45;
     B.cheek = Math.max(B.cheek, 0.4);
-    B.flews *= 0.4;
-    B.jowl *= 0.3;
-    B.wrinkle *= 0.5;
+    B.flews *= 0.15;
+    B.jowl = 0;
+    B.stop *= 0.3;
+    B.skullFlat *= 0.3;
+    B.square *= 0.4;
+    B.wrinkle *= 0.25;
     B.earSize *= 1.08;
     B.tailLen *= 0.8;
     B.fur *= 0.6;

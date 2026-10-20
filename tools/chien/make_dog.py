@@ -502,32 +502,35 @@ def head_search(base, zt, nb_max, ha_max, ha_min=0.9, pitch=True, w_pt=2.0, nb_m
     return best[1]
 
 
-def front_planted(base, dy=None, splay=0.05, rg=None):
-    """Antérieurs tendus et posés pendant que la tête descend (renifler, manger, boire) : métacarpe à son angle de
-    repos, seuls l'épaule et le coude se plient. (Visés comme une allure à l'arrêt, la cinématique inverse pliait le
-    carpe vers l'avant : antérieurs pliés à l'envers, pieds retournés sous le museau, pattes croisées.)"""
+def front_planted(base, dy=None, splay=0.07, rg=None):
+    """Antérieurs tendus et posés pendant que la tête descend (renifler, manger, boire) : pied à l'aplomb de l'épaule
+    (là où il est debout par rapport à elle, un peu en avant), métacarpe à son angle de repos, seul le coude se plie
+    de ce que l'épaule est descendue. (Visés à leur place du repos alors que le corps basculait de 0,3 rad, la
+    cinématique inverse repliait l'avant-bras et le carpe : pied retourné sous le poitrail.)"""
     rg = rg or rig
     gp = dict(base)
     gp['legs'] = dict(base.get('legs', {}))
     for lab in ('FL', 'FR'):
         R = rg.legs[lab]
         d_ = (dy or {}).get(lab, 0.0)
-        gp['legs'][lab] = {'J3': (R['neutral'].y + d_, R['J'][3].z), 'a3': a3_rest(lab, rg), 'phi': 0.0, 'bend': 1, 'splay': splay}
+        under = R['J'][3].y - R['J'][0].y
+        gp['legs'][lab] = {'under': under + d_, 'a3': a3_rest(lab, rg), 'phi': 0.0, 'bend': 1, 'splay': splay}
     return gp
 
 
-# renifler : bout du nez près du sol, petits coups de nez ; l'encolure descend, le corps bascule un peu, les antérieurs
-# tendus avancent pour qu'il descende sans s'agenouiller (gabarit court : il bascule à peine, voir gabarits)
+# renifler : bout du nez près du sol, petits coups de nez ; l'encolure et les épaules descendent (le corps bascule
+# autour des hanches), les antérieurs restent sous les épaules, un peu en avant, seul le coude se plie (gabarit court :
+# il bascule à peine, voir gabarits)
 SNIFF_PITCH = M.get('sniff_pitch', 0.3)
-sniff = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.01 * s), {'FL': 0.0, 'FR': 0.02 * s}), 0.025 * s, 3.4, 1.7, pitch_max=SNIFF_PITCH)
+sniff = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.01 * s), {'FL': -0.02 * s, 'FR': 0.0}), 0.025 * s, 3.4, 1.7, pitch_max=SNIFF_PITCH)
 dg.bake(rig, 'sniff', sniff, 90, lambda t: {'head': 0.05 * max(0.0, math.sin(math.tau * 6 * t)) ** 2,
                                              'neck_yaw': 0.25 * math.sin(math.tau * t), 'head_yaw': 0.1 * math.sin(math.tau * t + 0.4)})
 # manger : museau dans la gamelle (≈ 10 cm du sol), mâchoire qui mâche
-eat = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s), {'FL': 0.01 * s, 'FR': 0.01 * s}), 0.10 * s, 2.0, 1.3, ha_min=0.7, pitch_max=SNIFF_PITCH)
+eat = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s), {'FL': -0.015 * s, 'FR': -0.015 * s}), 0.10 * s, 2.0, 1.3, ha_min=0.7, pitch_max=SNIFF_PITCH)
 dg.bake(rig, 'eat', eat, 60, lambda t: {'head': 0.04 * math.sin(math.tau * 3 * t), 'jaw': 0.12 + 0.12 * math.sin(math.tau * 3 * t),
                                          'neck_yaw': 0.05 * math.sin(math.tau * t)})
 # boire : un peu plus haut, gueule entrouverte, langue qui lape (shiba), petits coups de tête rapides
-drink = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s), {'FL': 0.01 * s, 'FR': 0.01 * s}), 0.12 * s, 2.0, 1.3, ha_min=0.7, pitch_max=SNIFF_PITCH)
+drink = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s), {'FL': -0.015 * s, 'FR': -0.015 * s}), 0.12 * s, 2.0, 1.3, ha_min=0.7, pitch_max=SNIFF_PITCH)
 dg.bake(rig, 'drink', drink, 60, lambda t: {'head': 0.03 * math.sin(math.tau * 6 * t), 'jaw': 0.16 + 0.06 * math.sin(math.tau * 6 * t),
                                              'tongue': 0.35 * math.sin(math.tau * 6 * t)})
 
@@ -774,6 +777,76 @@ def gab_sit(gname, rg, k, gH, gF):
     return poses[0]
 
 
+def gab_sit_gen(gname, rg, gH, gF, gcfg):
+    """Assis généré d'un gabarit aux pattes courtes (teckel, corgi) : le corps bascule autour de l'épaule (antérieurs
+    tendus, posés sur leur sol) jusqu'à poser la croupe sur le sien ; reins creusés, bassin rentré ; postérieurs
+    repliés sous le corps — fémur vers l'avant le long du ventre, jarret et métatarse à plat au sol. (L'assis du jack
+    reporté sur ces membres gardait un dos presque à plat et des postérieurs en paquet derrière la croupe.)"""
+    hip_frac = gcfg.get('sit_hip', 0.16)
+    femur = gcfg.get('sit_femur', SIT_FEMUR)
+    flex = gcfg.get('sit_flex', M.get('sit_flex', 0.0))
+    tuck = gcfg.get('sit_tuck', M.get('sit_tuck', 0.0))
+    a3 = gcfg.get('sit_a3', 0.06)
+    target = gH + hip_frac * hipz
+    dy, dz = hp.y - sh.y, hp.z - sh.z
+    th = 0.0
+    for _ in range(60):
+        z = sh.z + dy * math.sin(th) + dz * math.cos(th)
+        th -= (z - target) / (dy * math.cos(th) - dz * math.sin(th) + 1e-9) * 0.7
+    hipn_y = sh.y + dy * math.cos(th) - dz * math.sin(th)
+    print('GABARIT', gname, 'assis généré : bascule', round(th, 3), 'rad, hanche à', round(target, 4))
+    gp = dict(still, pivot=sh.copy(), pitch_base=th, neck_base=-th * 0.6 - flex * 0.3, head_base=-th * 0.35 - flex * 0.2, flex_base=flex)
+    if tuck:
+        gp['tilt'] = {'pelvis': tuck, 'spine1': -tuck}
+    legsd = {}
+    for lab in ('HL', 'HR'):
+        R = rg.legs[lab]
+        l1, l2, l3 = R['l2d'][:3]
+        z3 = R['J'][3].z
+        zh = z3 + l3 * math.sin(a3)
+        sy = hipn_y - l1 * math.cos(femur)
+        sz = target + l1 * math.sin(femur)
+        hy = sy + math.sqrt(max(0.0, l2 * l2 - (sz - zh) ** 2)) * 0.97
+        legsd[lab] = {'J3': (hy - l3 * math.cos(a3), z3), 'a3': a3, 'phi': 0.0, 'splay': gcfg.get('sit_splay', 0.18), 'bend': 'up'}
+    # (antérieurs tendus à l'aplomb des épaules, un peu en avant)
+    for lab in ('FL', 'FR'):
+        R = rg.legs[lab]
+        legsd[lab] = {'under': R['J'][3].y - R['J'][0].y - 0.02 * hipz, 'a3': a3_rest(lab, rg), 'phi': 0.0, 'bend': 1, 'splay': 0.04}
+    gp['legs'] = legsd
+    gab_bake(rg, 'sit_' + gname, 90, gp=gp, extra=lambda t: dict(breathe(t), head_yaw=0.12 * math.sin(math.tau * t)))
+    return dg.pose_at(rg, 0.0, gp)[0]
+
+
+def gab_bow(gname, rg, gH, gF):
+    """Révérence d'un gabarit : postérieurs tendus debout sur leur sol, coudes au sol devant, corps basculé autour
+    des hanches. (La révérence du modèle d'origine sur des pattes raccourcies laissait les pieds arrière à 6 cm du
+    sol.)"""
+    s2 = (hipz - gH) / 0.42
+    midy = (sh.y + hp.y) / 2
+    chest = [p for _, _, p in torso if p.y < midy]
+    cpt = min(chest, key=lambda p: p.z)
+    th = math.atan2(cpt.z - (gF + 0.025), hp.y - cpt.y)
+    print('GABARIT', gname, 'révérence : bascule', round(th, 3))
+    gp = dict(still, pivot=hp.copy(), pitch_base=th, neck_base=-th * 0.9 - 0.15, head_base=-0.1)
+    piv = hp
+
+    def rot(p):
+        return Vector((p.x, piv.y + (p.y - piv.y) * math.cos(th) - (p.z - piv.z) * math.sin(th),
+                       piv.z + (p.y - piv.y) * math.sin(th) + (p.z - piv.z) * math.cos(th)))
+    legsd = {}
+    for lab in ('FL', 'FR'):
+        R = rg.legs[lab]
+        l1, l2, l3 = R['l2d'][:3]
+        J0 = rot(R['J'][0])
+        zE = gF + 0.05 * hipz
+        hz = max(0.0, J0.z - zE)
+        ey = J0.y + math.sqrt(max(0.0, l1 * l1 - hz * hz)) * 0.6 if hz < l1 else J0.y
+        legsd[lab] = {'J3': (ey - l2 * 0.97 - l3 * 0.9, R['J'][3].z), 'a3': 0.0, 'phi': 0.0, 'bend': 1}
+    # (postérieurs : posés debout sur leur sol par la cinématique inverse des allures, foulée nulle)
+    gp['legs'] = legsd
+    gab_bake(rg, 'bow_' + gname, 60, gp=gp, extra=lambda t: {'yaw': 0.04 * math.sin(math.tau * 2 * t), 'bob': 0.004 * s2 * math.sin(math.tau * 4 * t)})
+
+
 def gab_paw(gname, rg, p_sit):
     R = rg.legs['FL']
     l1, l2, l3 = R['l2d'][:3]
@@ -828,11 +901,13 @@ for gname, gcfg in GABARITS.items():
     stand2 = dg.pose_at(r2, 0.0, dict(still))[0]
     sit2 = lie2 = None
     if 'sit' in clips:
-        sit2 = gab_sit(gname, r2, k, gH, gF)
+        sit2 = gab_sit_gen(gname, r2, gH, gF, gcfg) if gcfg.get('sit_gen') else gab_sit(gname, r2, k, gH, gF)
         gab_bake(r2, 'sit_down_' + gname, 24, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, stand2, sit2, dg.smooth(t)), {}))
         gab_bake(r2, 'stand_up_' + gname, 20, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, sit2, stand2, dg.smooth(t)), {}))
     if 'paw' in clips and sit2 is not None:
         gab_paw(gname, r2, sit2)
+    if 'bow' in clips:
+        gab_bow(gname, r2, gH, gF)
     if 'lie' in clips:
         lie2 = gab_lie('lie', gname, r2, k, gH, gF)
         if sit2 is not None:
@@ -845,13 +920,13 @@ for gname, gcfg in GABARITS.items():
         gab_lie('sleep', gname, r2, k, gH, gF)
     if 'sniff' in clips:
         pm = gcfg.get('sniff_pitch', SNIFF_PITCH)
-        sn2 = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.01 * s2), {'FL': 0.0, 'FR': 0.02 * s2}, rg=r2), gF + 0.025 * s, 3.4, 1.7, pitch_max=pm, rg=r2)
+        sn2 = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.01 * s2), {'FL': -0.02 * s2, 'FR': 0.0}, rg=r2), gF + 0.025 * s, 3.4, 1.7, pitch_max=pm, rg=r2)
         gab_bake(r2, 'sniff_' + gname, 90, gp=sn2, extra=lambda t: {'head': 0.05 * max(0.0, math.sin(math.tau * 6 * t)) ** 2,
                                                                     'neck_yaw': 0.25 * math.sin(math.tau * t), 'head_yaw': 0.1 * math.sin(math.tau * t + 0.4)})
-        e2 = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s2), {'FL': 0.01 * s2, 'FR': 0.01 * s2}, rg=r2), gF + 0.10 * s, 2.0, 1.3, ha_min=0.7, pitch_max=pm, rg=r2)
+        e2 = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s2), {'FL': -0.015 * s2, 'FR': -0.015 * s2}, rg=r2), gF + 0.10 * s, 2.0, 1.3, ha_min=0.7, pitch_max=pm, rg=r2)
         gab_bake(r2, 'eat_' + gname, 60, gp=e2, extra=lambda t: {'head': 0.04 * math.sin(math.tau * 3 * t), 'jaw': 0.12 + 0.12 * math.sin(math.tau * 3 * t),
                                                                   'neck_yaw': 0.05 * math.sin(math.tau * t)})
-        d2 = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s2), {'FL': 0.01 * s2, 'FR': 0.01 * s2}, rg=r2), gF + 0.12 * s, 2.0, 1.3, ha_min=0.7, pitch_max=pm, rg=r2)
+        d2 = head_search(front_planted(dict(still, pivot=hp.copy(), drop=0.008 * s2), {'FL': -0.015 * s2, 'FR': -0.015 * s2}, rg=r2), gF + 0.12 * s, 2.0, 1.3, ha_min=0.7, pitch_max=pm, rg=r2)
         gab_bake(r2, 'drink_' + gname, 60, gp=d2, extra=lambda t: {'head': 0.03 * math.sin(math.tau * 6 * t), 'jaw': 0.16 + 0.06 * math.sin(math.tau * 6 * t),
                                                                     'tongue': 0.35 * math.sin(math.tau * 6 * t)})
     report['gabarits'][gname] = rep

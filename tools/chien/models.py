@@ -283,12 +283,17 @@ MODELS['jack'] = dict(
     # l'avant et le haut (grasset relevé) ; hauteur des hanches donnée (la croupe courte du jack ne touche le sol qu'en
     # écrasant la cuisse)
     sit_flex=-0.6, sit_tuck=-0.4, sit_femur=0.6, sit_hip=0.16,
-    # renifler, manger, boire : l'encolure descend, le corps bascule un peu, coudes pliés
+    # renifler, manger, boire : l'encolure et les épaules descendent, le corps bascule à peine, antérieurs tendus
     sniff_pitch=0.25,
     # gabarits (make_dog.py) : pattes courtes du teckel et du corgi (0,5 et 0,55), trapues du carlin, du bouledogue,
     # du spitz, du yorkshire et des chiots (0,7 à 0,85) — allures et poses refaites pour eux (clips « walk_court »…)
     gabarits={
-        'court': dict(legs=0.52, legW=1.13, clips=['walk', 'trot', 'run', 'sit', 'paw', 'sniff'], sniff_pitch=0.08),
+        # (court : révérence refaite, postérieurs tendus au sol — gab_bow. L'assis généré (sit_gen=True, gab_sit_gen)
+        # a été essayé : postérieurs bien repliés, mais hanches plus hautes (13 cm au lieu de 6) et dos plus plat
+        # (8–11° au lieu de 14–18°), le ventre profond du teckel touchant le sol avant la croupe — pas retenu)
+        'court': dict(legs=0.52, legW=1.13, clips=['walk', 'trot', 'run', 'sit', 'paw', 'sniff', 'bow'], sniff_pitch=0.08),
+        # (trapu : l'assis du jack reste ; ses pieds arrière en l'air — carlin, bouledogue — sont reposés en jeu par
+        # settleSit. L'assis généré cassait celui du yorkshire, du même gabarit : dos à 6°, pieds arrière à 5 cm)
         'trapu': dict(legs=0.74, legW=1.12, clips=['walk', 'trot', 'run']),
     },
 )

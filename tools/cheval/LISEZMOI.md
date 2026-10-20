@@ -316,6 +316,39 @@ ton gris par sommet, couleur dans la matière de chaque cheval) :
   suit l'encolure sans ressort ni flottement (les boutons, portés par l'encolure, restaient sinon en l'air quand la
   tête bougeait) ; face arrière des mèches de la queue, la tresse de queue suit les crins pendant un coup de queue
   (`tests/horseRealGame.test.js` : bouton et bourrelet sur la peau pour les 33 races).
+- *crins « en volume »* (masse + cartes ; sortes 8, 9 et 10 de `hairRoot.w` = 0, 1, 2 + 8) : sous les cartes, une
+  **masse** lissée, liée au squelette comme elles, donne le volume et la silhouette ; elle est peinte en crins dans
+  la bande du bas de la texture (512 × 256 : cartes en haut, `HAIR_V`), opaque entre ses deux rangées de pointes
+  (le cou ne se voit jamais au travers) ; les cartes, moins nombreuses (`MANE_CARDS`, `FORE_CARDS`, `TAIL_CARDS`)
+  et plus étroites, font les bords et les pointes qui bougent. Dans l'index, les masses d'abord (toujours dessinées ;
+  version réduite : une rangée et une colonne sur deux) ;
+  - *crinière* : une rangée de points par station le long de la crête (28 à 64), posée comme les cartes (`drape`)
+    puis écartée de la peau d'une épaisseur (`thick` : rouleau de `MANE_ROLL` 5 cm sur la crête, × style), 5 points
+    à gauche jusqu'à la crête et 10 ou 11 à droite (la crête est toujours la même colonne de la grille) ; à gauche,
+    le rouleau descend à 6,5 cm sous la crête et trois mèches de la masse (cinq pour `long` et `thick`, aucune pour
+    `short`) y tombent de 20 à 40 % de la crinière — vue de gauche, un bourrelet de crins et quelques mèches, plus
+    un liseré ; à droite, une nappe de 80 % de la crinière, au bas inégal d'une mèche à l'autre, bombée en mèches de
+    6,5 cm (relief ajouté après le lissage) ; les cartes s'y posent (champ `mbody` = corps − épaisseur), plus
+    nombreuses à gauche sur les mèches de gauche ; plus de rubans de crête (`MANE_CREST` = 0 : posés sur le rouleau,
+    ils sortaient de 6 à 12 cm et faisaient une brosse au garrot) ; tressée, la masse rentre toute dans les boutons ;
+  - *toupet* : neuf colonnes entre les oreilles (7 à 8 cm), plus longues au milieu, resserrées en pointe (80 %),
+    bombées en haut (les crins sortent de la nuque et basculent), rentrées sous le bonnet comme les cartes ;
+  - *queue* : un fuseau autour d'un axe (coupes du tronçon, puis une ligne qui pend, en fontaine pour une queue
+    portée haut), 24 anneaux × 20 points ; rayon : la peau du tronçon + les crins, puis plein sous le tronçon
+    (`TAIL_WIDTH` 11 cm de demi-largeur, `TAIL_DEPTH` 0,9 d'avant en arrière : de profil, de l'épaisseur), encore à
+    moitié large en bas ; cinq lobes de plus en plus marqués vers le bas (la queue s'y divise en mèches) qui
+    ondulent de côté, la queue entière un peu ondulée ; jamais sous sa hauteur limite (`Lh` : l'axe qui pend) ; les
+    cartes sont posées sur le fuseau en groupes de quatre ;
+  - *texture de la masse* (`hairMassPixels`) : sept mèches larges par bande, bombées en travers (canal B, relief aussi
+    en basse sur la masse), creux sombres entre elles, un jour çà et là, pointes inégales aux deux bouts ; crins
+    clairs : creux et tons moins écartés (`hHairContrast`, sinon des rainures et des dents sur une crinière grise).
+  Mesuré (avant : cc6010e, cartes seules ; après : masse + cartes ; mêmes graines, l'un après l'autre, deux tours) :
+  triangles des crins par cheval (33 races, `node`) 2 597 → 4 031 en moyenne (au plus 2 942 → 4 534), version
+  réduite 1 300 → 1 446 ; 10 chevaux au paddock, caméra normale (Chromium SwiftShader) : triangles à l'écran
+  327 k → 335 k en basse (390×844 DPR 3), 552 k → 565 k en haute (1280×800), soit + 2,4 % ; appels de dessin
+  104 et 174, programmes 25 et 43, textures 31 et 48 : inchangés ; temps de rendu seul, médiane des six mesures,
+  1 353 → 1 304 ms en basse et 3 373 → 3 492 ms en haute (machine partagée : écarts dans le bruit) ; temps
+  processeur d'une image sans rendu ≈ 1 ms des deux côtés ; tas JavaScript + 1,3 Mo.
 
   Mesuré (avant : juste avant l'étape 2 ; après : crins en cartes ; mêmes graines) :
   - *triangles par cheval* (33 races, moyenne, `node` sur le GLB) : 15 098 → 11 769 en version complète (crins

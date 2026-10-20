@@ -1826,7 +1826,9 @@ function tailCards(S, B, body, pos, coat, base) {
     const r0 = rDock(1) + 0.032;
     // (en éventail dès le bas du tronçon : vue de dos, la queue s'élargit tout de suite sous le couard ; le bas reste
     // à moitié de la largeur : des mèches qui finissent à leurs longueurs, pas une pointe unique)
-    const rx = (r0 + (Wmax - r0) * smooth(0, 0.2, f)) * (1 - 0.5 * smooth(0.5, 1, f));
+    // (et refermé tout au bout, là où la texture n'a plus que des pointes : ouvert, on voyait par le bas l'intérieur
+    // du fuseau, tourné vers le sol, en traînées sombres sous une queue claire)
+    const rx = (r0 + (Wmax - r0) * smooth(0, 0.2, f)) * (1 - 0.5 * smooth(0.5, 1, f)) * (1 - 0.9 * smooth(TAIL_MASS_LEN - 0.14, TAIL_MASS_LEN, f));
     const rz = rx * (0.85 - (0.85 - TAIL_DEPTH) * smooth(0, 0.35, f));
     return [Math.max(0.008, rx), Math.max(0.007, rz)];
   };

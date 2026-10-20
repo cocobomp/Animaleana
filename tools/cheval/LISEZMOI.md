@@ -257,8 +257,8 @@ ton gris par sommet, couleur dans la matière de chaque cheval) :
   (`model.setBraided`) ; la tresse de queue suit les crins pendant un coup de queue (`tests/horseRealGame.test.js`).
 
   Mesuré (avant : juste avant l'étape 2 ; après : crins en cartes ; mêmes graines) :
-  - *triangles par cheval* (33 races, moyenne, `node` sur le GLB) : 15 098 → 11 745 en version complète (crins
-    5 676 → 2 274, au plus 2 700), 6 436 → 4 786 en version réduite ; mêmes appels de dessin (5 en basse avec les
+  - *triangles par cheval* (33 races, moyenne, `node` sur le GLB) : 15 098 → 11 769 en version complète (crins
+    5 676 → 2 298, au plus 2 690), 6 436 → 4 798 en version réduite ; mêmes appels de dessin (5 en basse avec les
     ombres des sabots, 4 en haute) ;
   - *10 chevaux au paddock, caméra normale* (Chromium SwiftShader, 390×844 DPR 3 en basse, 1280×800 en haute) :
     triangles à l'écran 315 k → 300 k (basse), 573 k → 542 k (haute) ; appels 106 et 158, inchangés ; un

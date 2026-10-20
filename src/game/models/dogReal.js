@@ -955,6 +955,12 @@ export function deformDog(base, B) {
       k += head * 0.8 * (1 - smooth(L.eyeY - 0.06, L.eyeY - 0.01, y0)) * smooth(L.eyeX * 0.8, L.eyeX * 1.6, Math.abs(x0))
         * (1 - smooth(0.45, 0.65, (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z)));
       k += legSum * 0.3 * smooth(L.elbowY * 0.6, L.elbowY * 1.3, y0);
+      // Encolure et poitrail lisses (labrador, dogue, boxer, lévriers…) : la collerette de spitz du shiba, même
+      // raccourcie, gardait une crinière autour du cou et un poitrail de pigeon.
+      if (B.neckSlim) {
+        k += B.neckSlim * (neck * 1.5 + (1 - legSum) * (1 - head) * (1 - tail) * (1 - ear) * front * 1.1 * (1 - smooth(0.3, 0.95, h))
+          + head * 0.5 * (1 - smooth(L.eyeY - 0.07, L.eyeY - 0.02, y0)) * (1 - smooth(0.3, 0.5, (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z))));
+      }
       // (queue : au plus 30 % de son rayon — amincie, la brosse du shiba rasée de 2 cm passait à travers elle-même
       // et devenait une lame plate)
       const tr = tailR?.[i] || 0.05;
@@ -1009,7 +1015,7 @@ export function deformDog(base, B) {
       p.addScaledVector(_w, (B.fur * k * nz - shave) * (1 - hidden[i]));
       // Poil soyeux (yorkshire) : la robe tombe, les flancs descendent en jupe sur le haut des membres (jamais les
       // pieds, posés au sol avant).
-      if (B.silky) p.y -= B.silky * B.fur * 1.4 * (1 - smooth(0.1, 0.75, h)) * (1 - head) * (1 - tail) * (1 - ear) * (1 - 0.6 * legSum) * (1 - paw) * (1 - hidden[i]);
+      if (B.silky) p.y -= B.silky * B.fur * 2.4 * (1 - smooth(0.1, 0.8, h)) * (1 - head) * (1 - tail) * (1 - ear) * (1 - 0.5 * legSum) * (1 - paw) * (1 - hidden[i]);
       // Franges (golden, setter, épagneuls, bernois) : le poil long pend — sous le ventre, à l'arrière des membres
       // (culotte des cuisses, franges des avant-bras), au poitrail. Poussé vers le bas et l'arrière plutôt que le long de
       // la normale : la silhouette se frange au lieu de gonfler (le gonflement seul ne se voyait pas).

@@ -519,7 +519,9 @@ export function faceShape(base, B, P) {
  * (cPom, voir setCut). Renvoie les attributs à ajouter au pelage, ou null.
  */
 export function buildPompons(base, D, B) {
-  if (!B.pompons) return null;
+  // (topknot seul : le toupet du yorkshire, toujours montré — pas d'attribut pom)
+  if (!B.pompons && !B.topknot) return null;
+  const only = !B.pompons;
   const I = (nm) => base.index.get(nm) ?? -1;
   const coat = base.prims.coat;
   const n = coat.count;
@@ -555,11 +557,11 @@ export function buildPompons(base, D, B) {
       if (P[i * 3 + 2] > eyeZ || P[i * 3 + 2] < HJ.z) continue;
       if (P[i * 3 + 1] > top.y) top = V(mid, P[i * 3 + 1], P[i * 3 + 2]);
     }
-    const r = 0.046 * hs;
-    balls.push({ c: top.clone().add(V(0, r * 0.35, r * 0.15)), r, sc: V(1.05, 0.85, 1.1), bone: I('head'), part: [0, 0, 1, 0] });
+    const r = (only ? 0.034 * B.topknot : 0.046) * hs;
+    balls.push({ c: top.clone().add(V(0, r * (only ? 0.55 : 0.35), r * 0.15)), r, sc: only ? V(0.85, 1.05, 0.9) : V(1.05, 0.85, 1.1), bone: I('head'), part: [0, 0, 1, 0] });
   }
   // bracelets : au bas des pattes, au-dessus du pied
-  for (const [up, low, front] of [['metacarpusL', 'toesL', 1], ['metacarpusR', 'toesR', 1], ['metatarsusL', 'htoesL', 0], ['metatarsusR', 'htoesR', 0]]) {
+  if (!only) for (const [up, low, front] of [['metacarpusL', 'toesL', 1], ['metacarpusR', 'toesR', 1], ['metatarsusL', 'htoesL', 0], ['metatarsusR', 'htoesR', 0]]) {
     const a = D.heads[I(up)];
     const b = D.heads[I(low)];
     if (!a || !b) continue;
@@ -569,7 +571,7 @@ export function buildPompons(base, D, B) {
     balls.push({ c: c.add(V(0, 0.01, 0)), r, sc: V(1, 1.25, 1), bone: I(up), part: [0, 0, 0, 1] });
   }
   // pompon de la queue : au bout
-  {
+  if (!only) {
     const tb = base.tailBones;
     if (tb.length) {
       const t0 = D.heads[tb[0]];
@@ -655,7 +657,7 @@ export function buildPompons(base, D, B) {
     count,
     pos: Float32Array.from(pos), nrm: Float32Array.from(nrm), uv: Float32Array.from(uv), rest: Float32Array.from(rest),
     si: Uint16Array.from(si), sw: Float32Array.from(sw), part: Float32Array.from(part), low: new Float32Array(count).fill(low0),
-    pom: Float32Array.from(pom), index: Uint32Array.from(index),
+    pom: only ? null : Float32Array.from(pom), index: Uint32Array.from(index),
   };
 }
 

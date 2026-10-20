@@ -80,8 +80,8 @@ export function coatPlan(look = {}, breedId = null) {
       P.legLevel = 0.15;
     }
     if (/Fauve|Fawn/.test(name) && ['bouledogue', 'malinois', 'carlin', 'boxer'].includes(breed)) {
-      P.mask = 0.9;
-      P.maskEars = breed === 'malinois' ? 0.8 : 0.3;
+      P.mask = breed === 'malinois' ? 1 : 0.9;
+      P.maskEars = breed === 'malinois' ? 1 : 0.3;
     }
     if (breed === 'malinois') P.sable = Math.max(P.sable, 0.5);
   } else if (pattern === 'tan') {
@@ -122,11 +122,14 @@ export function coatPlan(look = {}, breedId = null) {
       Object.assign(P, { reach: 0.45, legLevel: 0.8, face: 1, cheek: 1, blaze: 0.7, tailTip: 0 });
       P.sable = Math.max(P.sable, 0.35);
     } else if (breed === 'boxer') {
-      Object.assign(P, { reach: 0.22, legLevel: 0.22, face: 0, blaze: 0.55, tailTip: 0 });
+      Object.assign(P, { reach: 0.22, legLevel: 0.22, face: 0, blaze: 0.25, tailTip: 0 });
       P.mask = 0.95;
     } else {
-      // Border collie, corgi, berger islandais… : collier, liste, poitrail, pattes, bout de la queue.
+      // Border collie, corgi, berger islandais… : collier, liste, poitrail, pattes, bout de la queue. (Colley : liste
+      // étroite, yeux dans le noir ; islandais : plus de blanc, collier.)
       Object.assign(P, { reach: 0.42, legLevel: 0.55, face: 0.7, blaze: 1, tailTip: 1, collar: breed === 'border_collie' ? 1 : breed === 'corgi' ? 0.6 : 0 });
+      if (breed === 'border_collie') Object.assign(P, { blaze: 0.45 });
+      if (breed === 'berger_islandais') Object.assign(P, { face: 0.5, blaze: 0.6, collar: 0.8, reach: 0.5, legLevel: 0.7 });
     }
   } else if (pattern === 'tricolor') {
     if (/merle/i.test(name)) {
@@ -159,12 +162,13 @@ export function coatPlan(look = {}, breedId = null) {
       P.pointsColor = sec;
       P.pointsHead = 1;
     } else {
-      // Tricolore clair (beagle) : fond feu, selle noire, blanc au poitrail, aux pattes, au museau.
+      // Tricolore clair (beagle) : fond feu, selle noire, blanc au poitrail, aux pattes, au museau et en liste
+      // étroite (joues et tour des yeux feu).
       P.saddle = 1;
       P.saddleColor = third;
       P.under = 1;
       P.underColor = sec;
-      Object.assign(P, { reach: 0.45, legLevel: 0.5, face: 0.65, blaze: 1, tailTip: 1 });
+      Object.assign(P, { reach: 0.45, legLevel: 0.5, face: 0.65, blaze: 0.5, tailTip: 1 });
     }
   } else if (pattern === 'patches') {
     if (white(coat)) {
@@ -321,6 +325,8 @@ export function makeLandUniforms(L) {
     cHead: { value: new THREE.Vector4(L.head.x, L.head.y, L.head.z, L.noseZ) },
     cEye: { value: new THREE.Vector4(L.eyeX, L.eyeY, L.eyeZ, L.elbowY) },
     cMisc: { value: new THREE.Vector4(L.midX, L.tailTipZ, L.neckZ, L.tailBaseZ) },
+    // (hauteur de la truffe : le dessus du museau descend des yeux jusqu'à elle — la liste le suit)
+    cNoseY: { value: L.nose?.y ?? L.eyeY - 0.03 },
   };
 }
 
@@ -405,6 +411,7 @@ uniform vec4 cLand;
 uniform vec4 cHead;
 uniform vec4 cEye;
 uniform vec4 cMisc;
+uniform float cNoseY;
 uniform float cRole;
 uniform float cTexMode;
 uniform vec3 cMeans;
@@ -448,6 +455,20 @@ float cmpWrinkleH(vec3 p, vec4 part) {
     * (1.0 - smoothstep(cEye.x * 0.9, cEye.x * 1.5, ax)) * smoothstep(cEye.z - 0.06, cEye.z - 0.025, p.z);
   float w = 0.5 + 0.5 * sin((p.y - cEye.y) * 700.0 + sin(ax * 90.0) * 1.3);
   return mix(1.0, w, m);
+}
+// Liste (0 à 1) : bande au milieu du front, étroite entre les yeux, qui descend sur le chanfrein et s'élargit sur le
+// museau. bw règle sa largeur, bs son départ sur le crâne. (Elle suit le dessus du museau, qui descend des yeux à la
+// truffe, au lieu de s'arrêter net à hauteur des yeux : une coupure horizontale en travers de la face.)
+float cmpBlaze(vec3 p, float hz, float ax, float edge, float bw, float bs) {
+  float hzE = (cEye.z - cHead.z) / max(0.05, cHead.w - cHead.z);
+  float fore = 1.0 - smoothstep(hzE - 0.25, hzE - 0.05, hz);
+  float snout = max(0.0, hz - hzE - 0.06);
+  float w = bw * (0.011 + 0.008 * fore) + snout * 0.3 * bw * bw;
+  float across = 1.0 - smoothstep(w * 0.6, w * 1.4, ax + edge * 0.03 * bw);
+  float t = clamp((hz - hzE - 0.13) / max(0.05, 0.87 - hzE), 0.0, 1.0);
+  float yLim = mix(cEye.y, cNoseY, t) - 0.012 - 0.008 * t;
+  float down = smoothstep(yLim - 0.008, yLim + 0.004, p.y);
+  return across * down * smoothstep(0.05 + bs, 0.25 + bs, hz);
 }
 // Taches rondes (dalmatien) : la plus proche, rayon propre à chaque tache.
 float cmpSpots(vec3 p) {
@@ -512,8 +533,8 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   }
   // ---- tête colorée (sauf la liste et le museau) et plaques (pie)
   if (cPatch.x > 0.0) {
-    float blazeOut = 1.0 - smoothstep(0.012, 0.026, ax - max(0.0, hz - 0.35) * 0.08 + edge * 0.05);
-    float hp = max(head * (1.0 - blazeOut * step(cEye.y - 0.03, p.y)) * (1.0 - muzzle * 0.85), ear);
+    float blazeOut = cmpBlaze(p, hz, ax, edge, 1.0, 0.0);
+    float hp = max(head * (1.0 - blazeOut) * (1.0 - muzzle * 0.85), ear);
     hp = max(hp, neckZone * smoothstep(0.55, 0.75, h + edge) * smoothstep(cMisc.z - 0.05, cMisc.z + 0.02, p.z));
     c = mix(c, cPatchC, cPatch.x * hp);
   }
@@ -568,13 +589,14 @@ vec3 cmpCoat(vec3 p, vec4 part) {
     float bel = trunk * (1.0 - smoothstep(reach - 0.12, reach + 0.04, h + edge));
     float lg = legs * (1.0 - smoothstep(elbowY * cUnder.z * 1.25 - 0.02, elbowY * cUnder.z * 1.25 + 0.02, p.y + edge * 0.15));
     lg *= step(0.01, cUnder.z);
-    float mz = muzzle * belowEye * cUnder.w + muzzle * smoothstep(0.75, 0.9, hz) * cUnder.w * 0.6;
+    // (museau blanc : devant les yeux, pas autour — l'œil du shiba est dans la zone du museau)
+    float hzE = (cEye.z - cHead.z) / headLen;
+    float mz = (muzzle * belowEye * smoothstep(hzE + 0.02, hzE + 0.12, hz + edge * 0.3) + muzzle * smoothstep(0.75, 0.9, hz) * 0.6) * cUnder.w;
     float cheek = head * (1.0 - ear) * cUnder2.w * belowEye * smoothstep(0.15, 0.4, hz) * smoothstep(0.02, 0.05, ax);
     float throat = neckZone * (1.0 - head) * (1.0 - smoothstep(0.35, 0.55, h + edge)) * step(0.01, cUnder.w + cUnder2.w);
-    // (liste : sa force règle aussi sa largeur — étroite chez le boxer, large chez le colley)
-    float bw = mix(0.55, 1.0, cUnder2.x);
-    float blaze = head * (1.0 - ear) * step(0.01, cUnder2.x) * (1.0 - smoothstep(0.008 * bw, 0.02 * bw, ax - max(0.0, hz - 0.45) * 0.3 * bw + edge * 0.03))
-      * step(cEye.y - 0.01, p.y) * smoothstep(0.05, 0.25, hz);
+    // (liste : sa force règle aussi sa largeur — étroite chez le boxer, large chez le colley — et sa longueur :
+    // étroite, elle part du front et non de l'arrière du crâne)
+    float blaze = head * (1.0 - ear) * step(0.01, cUnder2.x) * cmpBlaze(p, hz, ax, edge, mix(0.3, 1.0, cUnder2.x), 0.32 * (1.0 - cUnder2.x));
     blazeW = blaze;
     float tipT = tail * cUnder2.y * (1.0 - smoothstep(0.02, 0.06, p.z - cMisc.y + (n1 - 0.5) * 0.02));
     float collar = neckZone * (1.0 - head) * cUnder2.z * smoothstep(cMisc.z - 0.07, cMisc.z - 0.04, p.z + edge * 0.2)

@@ -46,6 +46,8 @@ export const COAT_LOOKS = {
   pinto: { warp: 0.15, jag: 0.06 },
   spots: { rMin: 0.13, rMax: 0.38, halo: 0.08 },
   dun: { stripe: 0.03 },
+  // robes dorées : pommelures de santé (fond × 1 - dark), plus marquées sur le palomino
+  bloom: { dark: 0.16 },
 };
 
 const glf = (x) => Number(x).toFixed(4);
@@ -57,6 +59,7 @@ hMuz = 0.0;
 hHoofV = 0.0;
 hGrainV = 0.5;
 hDarkV = 0.0;
+hEarIn = 0.0;
 {
   vec3 P = vHPos;
   float part = vHPart;
@@ -117,6 +120,17 @@ hDarkV = 0.0;
     c *= 1.0 + ctr * ${glf(DAP.light)} * zone;
     c = mix(c, c * 0.55, isLeg * (1.0 - smoothstep(0.12, 0.55, h)) * 0.85);
     c = mix(c, c * 0.74, isHead * smoothstep(0.5, 0.95, hl.z) * 0.8);
+  }
+
+  // Robes dorées (palomino surtout, un peu l'alezan et le bai) : pommelures de santé, discrètes, et un ton plus chaud
+  // et plus saturé dans la lumière (avant : un jaune plat, en plastique beige en basse).
+  if (hGold > 0.0 && hGrey <= 0.0) {
+    vec3 Pd = P + (vec3(hNoise(P * 3.1 + hSeed), hNoise(P * 3.1 + hSeed + 11.0), 0.5) - 0.5) * 0.08;
+    vec3 cl = hCell(Pd * ${glf(DAP.cell * 0.9)} + hSeed * 1.7);
+    float net = mix(smoothstep(0.3, 0.55, cl.x + (hNoise(P * 26.0) - 0.5) * 0.1), 0.45, aaW);
+    float zone = isBody * smoothstep(-0.3, 0.4, up) * (0.4 + 0.7 * hFbm(P * 1.3 + 9.0)) * hGold * hGoldDap;
+    c *= 1.0 - net * ${glf(COAT_LOOKS.bloom.dark)} * zone;
+    c = mix(c, c * vec3(1.06, 0.98, 0.84), hGold * hGoldDap * isBody * 0.7);
   }
 
   // Contre-ombrage : dos un peu plus foncé, ventre et intérieur des membres nettement plus clairs (le
@@ -269,10 +283,14 @@ hDarkV = 0.0;
   c = mix(c, hSkin * 0.5, lidD * 0.88);
   // Intérieur des oreilles (face avant creusée, hors du bord) : peau foncée au fond, poils clairs vers les bords.
   {
-    float inEar = isEar * clamp(vHInfo.z, 0.0, 1.0) * (1.0 - smoothstep(0.62, 0.9, abs(vHInfo.y))) * (1.0 - smoothstep(0.8, 0.95, h));
-    float hairs = clamp(smoothstep(0.3, 0.8, abs(vHInfo.y)) + 1.0 - smoothstep(0.3, 0.55, h), 0.0, 1.0) * (0.55 + 0.45 * hNoise(vec3(vHInfo.y * 14.0, h * 3.0, hSeed)));
-    vec3 inC = mix(hSkin * 1.15, mix(vec3(0.74, 0.7, 0.64), c, 0.3), hairs);
-    c = mix(c, inC, inEar * 0.9);
+    float inEar = isEar * clamp(vHInfo.z, 0.0, 1.0) * (1.0 - smoothstep(0.78, 0.98, abs(vHInfo.y))) * (1.0 - smoothstep(0.8, 0.95, h));
+    // (poils clairs en mèches, plus nombreux le long des bords et en bas de l'oreille, sur un fond plus foncé que la
+    // robe ; mat : pas le reflet d'un creux de plastique noir)
+    float hairs = clamp(smoothstep(0.2, 0.65, abs(vHInfo.y)) + 1.0 - smoothstep(0.25, 0.5, h), 0.0, 1.0) * 0.75 + 0.25;
+    float streak = 0.45 + 0.55 * hNoise(vec3(vHInfo.y * 18.0, h * 5.0, hSeed));
+    vec3 inC = mix(c * 0.45 + hSkin * 0.25, vec3(0.66, 0.62, 0.56), hairs * streak);
+    c = mix(c, inC, inEar * 0.85);
+    hEarIn = inEar;
   }
   float nosB = nos;
 #else
@@ -440,12 +458,15 @@ export function coatMaterial(look, build, breed = null, real = null) {
     hSkinPink: { value: spots ? 1 : 0.25 },
     hHoofStripe: { value: spots ? 1 : 0 },
     hGold: { value: gold },
+    // (pommelures de santé : marquées sur une robe dorée claire — palomino —, à peine sur l'alezan et le bai)
+    hGoldDap: { value: gold > 0 ? Math.min(1, Math.max(0.25, (coatL - 0.2) / 0.45)) : 0 },
     // (poulain : modelé presque effacé, il n'a pas encore les muscles d'un adulte)
     // (robes dorées claires — palomino — un peu moins effacées : sinon un jaune plat)
     hDetail: { value: build.foal ? 0.25 : light ? 0.35 + 0.1 * gold : 0.5 },
     // Satiné et liseré (voir RIM_FRAGMENT) : force, teinte (dorée pour l'Akhal-Teké, brun chaud pour le noir),
     // lumière du ciel et appoint du soir (partagés, mis à jour par World.updateSky).
-    hRim: { value: high ? 0.75 : 1 },
+    // (robes dorées : satiné un peu plus fort, le reflet doré se voit aussi sur téléphone)
+    hRim: { value: (high ? 0.75 : 1) * (1 + 0.3 * gold) },
     hRimTint: { value: rimTint },
     hSkyRim: gfx.skyRim,
     hFill: gfx.horseFill,
@@ -523,6 +544,7 @@ float hMuz; // bout du nez : poil ras et clairsemé, plus lisse
 float hHoofV; // corne des sabots (plus lisse que le poil)
 float hGrainV; // grain du poil couché vers l'arrière (0-1, 0,5 de loin) : le reflet se casse au lieu d'un latex lisse
 float hDarkV; // poil presque noir (bas des membres et crins d'un bai…) : pas de reflet doré dessus
+float hEarIn; // intérieur des oreilles (poils mats)
 ${NOISE}`)
       .replace('#include <map_fragment>', `${real ? 'vec4 hDetTex = texture2D( map, vMapUv );' : '#include <map_fragment>'}
 ${COAT_FRAGMENT}`)
@@ -530,7 +552,8 @@ ${COAT_FRAGMENT}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor *= mix(1.0, 0.55, step(5.5, vHPart) * step(vHPart, 6.5));
 roughnessFactor *= mix(1.0, 0.8, hHoofV) * mix(1.0, 0.62, hMuz);
-roughnessFactor = clamp(roughnessFactor * (0.78 + 0.44 * hGrainV), 0.04, 1.0);`)
+roughnessFactor = clamp(roughnessFactor * (0.78 + 0.44 * hGrainV), 0.04, 1.0);
+roughnessFactor = mix(roughnessFactor, 0.9, hEarIn);`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
 #ifdef USE_SHEEN
 material.sheenColor = mix( material.sheenColor, vec3( 0.3, 0.28, 0.26 ), hDarkV * hGold ) * ( 1.0 - hBare );

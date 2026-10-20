@@ -115,6 +115,11 @@ describe('robes crédibles (étape 8)', () => {
       expect(hsl.h * 360).toBeLessThan(55);
       expect(sc.r).toBeGreaterThan(sc.b * 1.5);
     }
+    // pommelures de santé : marquées sur le palomino (robe dorée claire), à peine sur le bai, aucune sur un gris
+    expect(material('quarter', 1).userData.horseUniforms.hGoldDap.value).toBe(1);
+    expect(material('selle_francais', 0).userData.horseUniforms.hGoldDap.value).toBeLessThan(0.4);
+    expect(material('pre', 0).userData.horseUniforms.hGoldDap.value).toBe(0);
+    expect(COAT_LOOKS.bloom.dark).toBeLessThan(COAT_LOOKS.dapple.dark / 2);
     const fs = compile(material('selle_francais', 0)).fragmentShader;
     expect(fs).toContain('mix( hRimTint, vec3( 1.0 ), hDarkV * hGold )');
     expect(fs).toContain('hDarkV * hGold ) * ( 1.0 - hBare )');

@@ -100,9 +100,10 @@ comparaisons), dans la même lumière et au même cadrage.
   (pas de patinage, même aux 1,2 à 3,4 m/s du jeu) ; postures et passages par le plus court chemin (accroupi → assis
   → debout ; couché → en boule ; porté en fondu) ; au repos, il renifle (nez qui frémit), s'assoit, fait sa
   toilette, se dresse, se couche, mange ; binky de joie de temps en temps ; tapi s'il a peur ou qu'il est triste ;
-  regard, oreilles qui pivotent et se couchent (peur, course, sommeil), pompon, respiration, embonpoint (shader) ;
-  porté dans les bras (concours de beauté), sur la table du salon, dans la caisse de transport (en boule, pose
-  figée), vignettes (pose figée). Jeux du clapier (roue et pirouette : bonds sur place sans pieds tenus ; plateforme :
+  regard, oreilles qui pivotent et se couchent (peur, course, sommeil) — celles du bélier pendent vers le sol quand il
+  baisse ou relève la tête —, pompon, respiration, embonpoint (shader) ;
+  porté dans les bras (concours de beauté : le joueur le tient à deux mains), sur la table du salon, dans la caisse de
+  transport (en boule, pose figée), vignettes (pose figée). Jeux du clapier (roue et pirouette : bonds sur place sans pieds tenus ; plateforme :
   saut tenu à sa phase ; foin : il mange), lapin-hop et agility (saut tenu à la phase de la haie), spectacle (saut,
   pirouette, salut debout sur les postérieurs) : poses imposées par `realRabbitPose`, jouées à l'image suivante.
 - **Sol** : les points de contact (soles, poignets et jarrets les plus bas sur toute la foulée, ventre, croupe,

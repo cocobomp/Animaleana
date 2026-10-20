@@ -6,6 +6,7 @@ import { gfx } from './gfx.js';
 import { preloadModels, loadModel, MODELS } from './assets.js';
 import { REAL_HORSE_KEY, horseView, realHorseBase } from './models/horseReal.js'; // cheval réaliste : chargé à part
 import { REAL_DOG_KEYS, realDogBase } from './models/dogReal.js'; // chiens réalistes : chargés après le cheval
+import { REAL_CAT_KEYS, realCatBase } from './models/catReal.js'; // chats réalistes : chargés après les chiens
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
@@ -173,14 +174,22 @@ export class Game {
     this.modelsLoaded = false;
     this.horseSwap = [];
     this.dogSwap = [];
+    this.catSwap = [];
     const grace = new Promise((r) => setTimeout(r, HORSE_GRACE_MS));
     const dogKeys = Object.values(REAL_DOG_KEYS);
-    const others = preloadModels(Object.keys(MODELS).filter((k) => k !== REAL_HORSE_KEY && !dogKeys.includes(k)));
+    const catKeys = Object.values(REAL_CAT_KEYS);
+    const others = preloadModels(Object.keys(MODELS).filter((k) => k !== REAL_HORSE_KEY && !dogKeys.includes(k) && !catKeys.includes(k)));
     const horse = others.then(() => loadModel(REAL_HORSE_KEY));
     // Chiens réalistes (shiba ≈ 0,85 Mo, jack ≈ 0,5 Mo) : demandés après le cheval, jamais attendus à l'ouverture ;
     // les chiens prennent le modèle réaliste dès qu'il arrive (onRealDogs), le procédural en attendant.
     this.realDogsReady = horse.then(() => Promise.all(dogKeys.map((k) => loadModel(k)))).then((list) => {
       if (list.some(Boolean)) this.onRealDogs(list);
+      return list.filter(Boolean).length;
+    });
+    // Chats réalistes (adulte ≈ 0,9 Mo, chaton ≈ 0,75 Mo) : demandés après les chiens, jamais attendus ; les chats
+    // prennent le modèle réaliste dès qu'il arrive (onRealCats), le chat procédural (catModel.js) en attendant.
+    this.realCatsReady = this.realDogsReady.then(() => Promise.all(catKeys.map((k) => loadModel(k)))).then((list) => {
+      if (list.some(Boolean)) this.onRealCats(list);
       return list.filter(Boolean).length;
     });
     this.modelsReady = Promise.all([others, Promise.race([horse, grace])])
@@ -228,6 +237,47 @@ export class Game {
       for (const e of this.allEntities()) if (e.data.species === 'dog' && !e.model?.realDog) this.dogSwap.push(e);
       this.thumbs?.modelsChanged?.();
     }, 60);
+  }
+
+  /**
+   * Les chats réalistes sont chargés (l'adulte, le chaton ou les deux). Leurs données de repos sont tirées des GLB juste
+   * après, hors de l'image en cours ; puis les chats au modèle de repli prennent le réaliste, un par image
+   * (swapRealCats), et les vignettes d'animaux et d'équipement sont refaites.
+   */
+  onRealCats(list) {
+    setTimeout(() => {
+      const kinds = Object.keys(REAL_CAT_KEYS);
+      list.forEach((gltf, i) => {
+        if (!gltf) return;
+        try {
+          realCatBase(gltf, kinds[i]);
+        } catch (err) {
+          console.warn('Chat réaliste : préparation impossible', kinds[i], err);
+        }
+      });
+      for (const e of this.allEntities()) if (e.data.species === 'cat' && !e.model?.realCat) this.catSwap.push(e);
+      this.thumbs?.modelsChanged?.();
+    }, 90);
+  }
+
+  /**
+   * Un chat au modèle de repli prend le chat réaliste (un par image). Pas pendant une séance qui le guide (spectacle,
+   * concours), porté dans les bras, sur la table du salon ni perché sur une barrière : il attend son tour.
+   */
+  swapRealCats() {
+    const list = this.catSwap;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      const here = e.root?.parent && !e.disposed;
+      if (!here || e.model?.realCat) {
+        list.splice(i--, 1);
+        continue;
+      }
+      if (e.scripted || e.herdCtrl || e.posing || e.onTable || e.carried || e.perch) continue;
+      list.splice(i, 1);
+      e.rebuildModel();
+      if (e.model?.realCat) return;
+    }
   }
 
   /**
@@ -679,6 +729,8 @@ export class Game {
     if (this.horseSwap.length) this.swapRealHorses();
     // Chiens réalistes arrivés en cours de partie : un chien de plus prend le vrai modèle.
     if (this.dogSwap.length) this.swapRealDogs();
+    // Chats réalistes arrivés en cours de partie : un chat de plus prend le vrai modèle.
+    if (this.catSwap.length) this.swapRealCats();
     // Point de vue pour la version réduite des chevaux au loin (horseReal.js) : la caméra de l'image d'avant.
     horseView.eye.setFromMatrixPosition(this.camera.matrixWorld);
     horseView.on = true;

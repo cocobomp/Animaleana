@@ -21,6 +21,10 @@ export const MODELS = {
   // (FainoDS, CC-BY 4.0) pour les petits. Clés à part (pas « dog ») ; s'ils manquent, le chien procédural reste.
   dog_shiba: 'dog_shiba.glb',
   dog_jack: 'dog_jack.glb',
+  // Chats réalistes (catReal.js) : le chat de Claire (claireanne3d, CC-BY 4.0) pour les adultes, le chaton de
+  // FainoDS (CC-BY 4.0) pour les bébés. Clés à part (pas « cat ») ; s'ils manquent, le chat procédural reste.
+  cat_adult: 'cat_adult.glb',
+  cat_kitten: 'cat_kitten.glb',
   tree_common: 'tree_common.glb',
   tree_common2: 'tree_common2.glb',
   tree_birch: 'tree_birch.glb',

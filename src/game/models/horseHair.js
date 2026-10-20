@@ -19,7 +19,7 @@ export const HAIR_TEX = { w: 512, h: 128, rows: 4, strands: 64 };
  * 128 px de haut. La texture entière fait 512 × 256 : cartes en haut (v de 0 à HAIR_V), masse en bas. clumps :
  * mèches par bande ; root : u où commencent la queue et le toupet (après les pointes du bord gauche de la crinière).
  */
-export const HAIR_MASS = { h: 128, clumps: 7, root: 0.04 };
+export const HAIR_MASS = { h: 128, clumps: 9, root: 0.1 };
 /** Part de la hauteur de la texture prise par la bande des cartes (v des cartes × HAIR_V). */
 export const HAIR_V = HAIR_TEX.h / (HAIR_TEX.h + HAIR_MASS.h);
 /** Seuil de découpe des crins (et de couverture des niveaux réduits). */
@@ -175,15 +175,16 @@ export function hairStrandPixels() {
 /**
  * Pixels de la bande de la masse (flottants 0-1, RGBA, 512 × 128), graine fixe. Peinte pour une masse de crins
  * vue en surface : u le long des crins, v en travers (une bande de la masse : quelques rangées de sa grille).
- * Opaque de u = 0,035 à u = 0,78 (le cou ne se voit jamais au travers), faite de HAIR_MASS.clumps mèches larges
- * (14 à 22 px) qui ondulent d'un bloc et se couchent l'une sur l'autre, chacune bombée en travers (canal B : un
- * bord tourné vers la lumière, l'autre à l'ombre — le relief en qualité haute), plus claire au milieu et sombre au
- * creux entre deux mèches (le relief qui reste en qualité basse, et de loin) ; crins fins de tons et de reflets
- * voisins dans chaque mèche, avec un jour plus sombre çà et là (une mèche se divise). Les deux bouts sont faits
- * de pointes : en u < 0,035, le bord gauche de la crinière (crins qui passent par-dessus la crête et retombent à
- * gauche, en dents) ; au-delà de 0,78, chaque mèche finit à sa longueur (0,84 à 1) en s'effilant sur son dernier
- * quart — le bas de la crinière, le bout de la queue et la pointe du toupet ne sont pas coupés droit. La queue et
- * le toupet commencent après les dents (u ≥ HAIR_MASS.root : leurs racines sont pleines). Périodique en v.
+ * Opaque de u = 0,09 à u = 0,78 (le cou ne se voit jamais au travers), faite de HAIR_MASS.clumps mèches de
+ * largeurs très inégales (6 à 20 px) qui ondulent d'un bloc et se couchent l'une sur l'autre, de tons bien écartés
+ * d'une mèche à l'autre ; chacune à peine bombée en travers (canal B : un bord tourné vers la lumière, l'autre à
+ * l'ombre — le relief en qualité haute), un peu plus claire au milieu ; crins fins de tons et de reflets voisins dans
+ * chaque mèche, avec deux jours plus sombres çà et là (la mèche se divise). (Avant : sept mèches de même largeur,
+ * bombées et creusées toutes pareil — des rayures régulières, un « papier plissé » de près.) Les deux bouts sont
+ * faits de pointes : en u < 0,09, le bord gauche de la crinière (crins qui passent par-dessus la crête et retombent
+ * à gauche, en dents) ; au-delà de 0,78, chaque mèche finit à sa longueur (0,8 à 1) en s'effilant sur son dernier
+ * tiers — le bas de la crinière, le bout de la queue et la pointe du toupet ne sont pas coupés droit. La queue et le
+ * toupet commencent après les dents (u ≥ HAIR_MASS.root : leurs racines sont pleines). Périodique en v.
  */
 export function hairMassPixels() {
   const W = HAIR_TEX.w;
@@ -196,15 +197,15 @@ export function hairMassPixels() {
     for (let x = 0; x < W; x++) {
       const u = (x + 0.5) / W;
       const i = (y * W + x) * 4;
-      rgba[i] = 0.4;
+      rgba[i] = 0.45;
       rgba[i + 1] = 0.5;
       rgba[i + 2] = 0.5;
-      rgba[i + 3] = smooth(0.012, 0.035, u) * (1 - smooth(0.74, 0.79, u));
+      rgba[i + 3] = smooth(0.06, 0.09, u) * (1 - smooth(0.74, 0.79, u));
     }
   }
   // Mèches : largeurs tirées puis ramenées à la hauteur de la bande (périodique).
   const widths = [];
-  for (let c = 0; c < NC; c++) widths.push(0.7 + rng() * 0.6);
+  for (let c = 0; c < NC; c++) widths.push(0.45 + rng() * 1.1);
   const sumW = widths.reduce((a, b) => a + b, 0);
   let acc = 0;
   const clumps = widths.map((w) => {
@@ -212,10 +213,10 @@ export function hairMassPixels() {
     const cy = acc + h / 2;
     acc += h;
     return {
-      cy, hw: h * 0.64, tone: 0.7 + 0.3 * rng(), shift: rng(), u0: rng() * 0.022, end: 0.84 + 0.16 * rng(),
+      cy, hw: h * 0.62, tone: 0.62 + 0.38 * rng(), shift: rng(), u0: rng() * 0.06, end: 0.8 + 0.2 * rng(),
       wf: 0.8 + rng() * 1.4, wp: rng() * 6.28, wa: 1.5 + rng() * 3, seed: Math.floor(rng() * 1e6),
-      // (un jour plus sombre le long de la mèche, qui la divise sur une partie de sa longueur)
-      split: rng() * 2 - 1, su0: 0.2 + rng() * 0.4, su1: 0.65 + rng() * 0.35,
+      // (deux jours plus sombres le long de la mèche, qui la divisent sur une partie de sa longueur)
+      splits: [0, 1].map(() => ({ at: rng() * 1.6 - 0.8, u0: 0.1 + rng() * 0.5, u1: 0.55 + rng() * 0.45 })),
     };
   });
   // (dans un ordre mêlé : une mèche se couche sur la précédente, pas de motif régulier)
@@ -233,13 +234,13 @@ export function hairMassPixels() {
       const u = (x + 0.5) / W;
       if (u > C.end) break;
       if (u < C.u0) continue;
-      // (la mèche s'effile sur son dernier quart, et s'efface au bout ; au bord gauche, elle commence en pointe)
-      const tip = smooth(C.end - 0.26, C.end, u);
-      const head = smooth(C.u0, C.u0 + 0.03, u);
-      const wt = C.hw * (1 - 0.8 * tip) * (0.35 + 0.65 * head);
+      // (la mèche s'effile sur son dernier tiers, et s'efface au bout ; au bord gauche, elle commence en pointe)
+      const tip = smooth(C.end - 0.3, C.end, u);
+      const head = smooth(C.u0, C.u0 + 0.05, u);
+      const wt = C.hw * (1 - 0.85 * tip) * (0.2 + 0.8 * head);
       const fade = (1 - smooth(C.end - 0.04, C.end, u)) * smooth(C.u0, C.u0 + 0.008, u);
       const vc = C.cy + Math.sin(u * 6.28 * C.wf + C.wp) * C.wa * smooth(0.04, 0.4, u);
-      const sp = smooth(C.su0, C.su0 + 0.08, u) * (1 - smooth(C.su1 - 0.08, C.su1, u));
+      const sp = C.splits.map((q) => smooth(q.u0, q.u0 + 0.08, u) * (1 - smooth(q.u1 - 0.08, q.u1, u)));
       for (let o = -1; o <= 1; o++) {
         const c0 = vc + o * Hh;
         const ya = Math.max(0, Math.floor(c0 - wt - 1));
@@ -252,9 +253,12 @@ export function hairMassPixels() {
           // crins de la mèche : un ton et un reflet par crin (1,6 px), le long de la mèche
           const sIdx = Math.floor((dy + 64) / 1.6);
           const hs = hash(C.seed + sIdx * 131);
-          // (jour : creux étroit à la place tirée, sur une partie de la longueur)
-          const gap = 1 - 0.45 * sp * Math.max(0, 1 - Math.abs(e - C.split * 0.5) * 6);
-          const tone = Math.min(1, C.tone * (0.6 + 0.4 * Math.cos(e * 1.45)) * (0.86 + 0.24 * hs) * gap);
+          // (jours : creux étroits aux places tirées, sur une partie de la longueur)
+          let gap = 1;
+          C.splits.forEach((q, j) => {
+            gap *= 1 - 0.4 * sp[j] * Math.max(0, 1 - Math.abs(e - q.at) * 7);
+          });
+          const tone = Math.min(1, C.tone * (0.8 + 0.2 * Math.cos(e * 1.3)) * (0.84 + 0.3 * hs) * gap);
           const shift = Math.min(1, Math.max(0, C.shift + (hash(C.seed + sIdx * 977) - 0.5) * 0.35));
           const i = (y * W + x) * 4;
           const a0 = rgba[i + 3];
@@ -263,8 +267,8 @@ export function hairMassPixels() {
           const k1 = cov / a;
           rgba[i] = rgba[i] * k0 + tone * k1;
           rgba[i + 1] = rgba[i + 1] * k0 + shift * k1;
-          // (bombée en travers : B de 0 à 1 d'un bord à l'autre, un peu de relief crin par crin)
-          rgba[i + 2] = rgba[i + 2] * k0 + Math.max(0, Math.min(1, 0.5 + 0.42 * e + (hs - 0.5) * 0.16)) * k1;
+          // (à peine bombée en travers : B de 0,2 à 0,8 d'un bord à l'autre, du relief crin par crin)
+          rgba[i + 2] = rgba[i + 2] * k0 + Math.max(0, Math.min(1, 0.5 + 0.3 * e + (hs - 0.5) * 0.22)) * k1;
           rgba[i + 3] = a;
         }
       }
@@ -438,7 +442,8 @@ void RE_Direct_Hair( const in IncidentLight directLight, const in vec3 geometryP
   float t2 = dot( T2, H );
   spec += material.diffuseColor * pow( max( 0.0, 1.0 - t2 * t2 ), 8.0 ) * hHairSpec * 2.2;
 #endif
-  reflectedLight.directSpecular += directLight.color * spec * lit * ( 1.0 - 0.65 * hHairFore() );
+  // (masse : grandes surfaces lisses, le reflet y faisait des bandes de satin gris — plus discret)
+  reflectedLight.directSpecular += directLight.color * spec * lit * ( 1.0 - 0.65 * hHairFore() ) * ( 1.0 - 0.35 * vHairM );
   float back = pow( saturate( dot( geometryViewDir, - L ) ), 5.0 );
   reflectedLight.directDiffuse += directLight.color * material.diffuseColor * back * ( 0.2 + 0.7 * vHairF ) * hHairBack;
 }
@@ -496,6 +501,9 @@ export function hairMaterial(color, sway, drag = NO_DRAG) {
   // (crins clairs : creux entre les mèches et tons des crins moins écartés — sur une crinière grise ou blanche,
   // les creux sombres de la texture se lisaient en rainures et en dents)
   const contrast = { value: 1 - 0.55 * light };
+  // (reflet du ciel : sur des normales « de volume », les 4 % d'un diélectrique faisaient de la crinière noire un
+  // aplat gris satiné ; moins encore sur les crins foncés — le reflet des crins, c'est la bande de Kajiya-Kay)
+  const sky = { value: 0.18 + 0.12 * light };
   const rootDark = { value: 0.06 + 0.16 * light };
   // (toupet rentré sous un bonnet ou un masque : ses mèches se replient vers leur racine, entre les oreilles)
   const tuck = { value: 0 };
@@ -507,6 +515,7 @@ export function hairMaterial(color, sway, drag = NO_DRAG) {
     sh.uniforms.hHairBack = back;
     sh.uniforms.hHairRoot = rootDark;
     sh.uniforms.hHairContrast = contrast;
+    sh.uniforms.hHairSky = sky;
     sh.uniforms.hairTime = gfx.time;
     sh.uniforms.hairWind = gfx.wind;
     sh.uniforms.hairSway = sway;
@@ -532,7 +541,8 @@ uniform vec3 hairUpT;
 varying vec3 vHairT;
 varying float vHairF;
 varying float vHairK;
-varying float vHairM;`)
+varying float vHairM;
+varying float vHairS;`)
       .replace('#include <skinnormal_vertex>', `#include <skinnormal_vertex>
 {
   vec3 hT = hairT;
@@ -544,6 +554,8 @@ varying float vHairM;`)
   // (sorte de la mèche ; + 8 pour la masse : crinière, toupet ou queue « en volume »)
   vHairK = mod( hairRoot.w, 8.0 );
   vHairM = step( 7.5, hairRoot.w );
+  // (tirage propre à chaque carte, d'après sa racine : décalage de son reflet)
+  vHairS = fract( sin( dot( hairRoot.xyz, vec3( 12.9898, 78.233, 37.719 ) ) ) * 43758.5453 );
 }`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 float hK = mod( hairRoot.w, 8.0 );
@@ -561,6 +573,11 @@ if ( hK > 0.5 && hK < 1.5 ) transformed = mix( transformed, hairRoot.xyz + ( tra
   transformed += normal * ( 0.5 + 0.5 * sin( ph ) ) * 0.012 * hw;
   transformed.z += cos( ph * 0.7 + 1.3 ) * 0.008 * hw;
   transformed.x += sin( ph ) * 0.012 * hw * step( 1.5, hK ) * step( hK, 3.5 );
+  // (au trot et au galop, crinière et queue flottent à la cadence de la foulée : une onde de la racine vers la pointe,
+  // décalée d'une mèche à l'autre, toujours vers l'extérieur ; la masse moins que les cartes posées dessus)
+  float fl = hairG * hairG * max( 0.0, hairSway - 0.6 ) * ( step( hK, 0.5 ) + step( 1.5, hK ) * step( hK, 2.5 ) ) * ( 1.0 - 0.6 * hM );
+  float ph2 = hairTime * 8.5 + hairRoot.z * 9.0 + hairRoot.x * 5.0 - hairG * 3.0;
+  transformed += normal * ( 0.5 + 0.5 * sin( ph2 ) ) * 0.012 * fl;
 }
 {
   // Courbure des mèches (horseReal.js, hairSprings) : queue (sorte 2) et crinière (0) traînées par la vitesse,
@@ -582,10 +599,12 @@ uniform float hHairLift;
 uniform float hHairBack;
 uniform float hHairRoot;
 uniform float hHairContrast;
+uniform float hHairSky;
 varying vec3 vHairT;
 varying float vHairF;
 varying float vHairK;
 varying float vHairM;
+varying float vHairS;
 // (toupet, sorte 1 : couché sur le front, face au ciel et au regard, ses crins tous parallèles s'allumaient en
 // traits gris — reflet et éclaircissement des crins foncés réduits, il reste noir sur un cheval aux crins noirs)
 float hHairFore() { return step( 0.5, vHairK ) * step( vHairK, 1.5 ); }`)
@@ -595,7 +614,7 @@ ${HAIR_LIGHT}`)
       // reflet d'un diélectrique faisaient de la crinière noire un aplat gris ; le reflet des crins, c'est
       // la bande de Kajiya-Kay)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-reflectedLight.indirectSpecular *= 0.3;`)
+reflectedLight.indirectSpecular *= hHairSky;`)
       .replace('#include <map_fragment>', `
 vec4 hTex = texture2D( map, vMapUv );
 hTex.r = mix( 0.82, hTex.r, hHairContrast );
@@ -606,13 +625,15 @@ diffuseColor.a *= hTex.a;`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
 normal = normalize( vNormal );
 hHairT = normalize( vHairT - normal * dot( vHairT, normal ) );
-hHairShift = hTex.g - 0.5;
+// (cartes : reflet décalé carte par carte — chaque mèche a sa bande claire à sa hauteur, on lit des mèches et non des
+// lamelles alignées ; la masse garde le décalage de sa texture, crin par crin)
+hHairShift = hTex.g - 0.5 + ( vHairS - 0.5 ) * 0.55 * ( 1.0 - vHairM );
 #ifdef HAIR_HQ
 // (relief du crin en travers : un bord tourné vers la lumière, l'autre à l'ombre)
 normal = normalize( normal + cross( normal, hHairT ) * ( hTex.b - 0.5 ) * 0.7 );
 #else
 // (qualité basse : relief des mèches de la masse seulement — elle se lit en mèches bombées, pas en aplat)
-normal = normalize( normal + cross( normal, hHairT ) * ( hTex.b - 0.5 ) * 0.6 * vHairM );
+normal = normalize( normal + cross( normal, hHairT ) * ( hTex.b - 0.5 ) * 0.45 * vHairM );
 #endif`);
   };
   m.customProgramCacheKey = () => `horsehair${high ? 'h' : 'l'}`;

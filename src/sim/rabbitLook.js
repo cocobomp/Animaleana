@@ -30,7 +30,7 @@ export const ONE = {
 // Proportions par race (relatives au lapin de Dakota ; le bélier : au bélier de FourthGreen).
 export const RABBIT_BUILDS = {
   // Nain (néerlandais) : tout rond, grosse tête ronde et courte, toutes petites oreilles, pattes courtes, gros yeux.
-  nain: { legs: 0.8, back: 0.76, girth: 1.14, head: 1.36, headW: 1.2, snout: 0.7, muzzleW: 1.08, neck: 0.66, eyes: 1.15, earLen: 0.46, earW: 0.95, earOut: 0.14, tail: 0.85 },
+  nain: { legs: 0.8, back: 0.76, girth: 1.14, head: 1.4, headW: 1.26, snout: 0.66, muzzleW: 1.08, neck: 0.62, eyes: 1.18, earLen: 0.38, earW: 1.02, earOut: 0.16, tail: 0.85 },
   // Bélier : le modèle de FourthGreen a déjà les oreilles tombantes ; tête large et forte, corps trapu.
   belier: { head: 1.06, headW: 1.1, girth: 1.06, snout: 0.92, muzzleW: 1.08, neck: 0.9, earLen: 1.04, earW: 1.06 },
   // Angora : une boule de poils longs (corps, pattes, joues), pinceaux au bout des oreilles.
@@ -101,12 +101,14 @@ export function rabbitBuild(look = {}, stage = 'adult') {
   if (stage === 'baby') {
     const soft = (k, f) => { B[k] = 1 + (B[k] - 1) * f; };
     for (const k of ['legW', 'girth', 'headW', 'muzzleW', 'earW']) soft(k, 0.6);
-    B.head *= 1.28;
+    // (bornés : sur la grosse tête ronde et le museau court du nain, le lapereau avait une tête de masque, aux yeux
+    // exorbités et à la bouche écrasée)
+    B.head = Math.min(1.58, B.head * 1.28);
     B.legs *= 0.85;
     B.back *= 0.86;
-    B.snout *= 0.76;
+    B.snout = Math.max(0.6, B.snout * 0.76);
     B.neck *= 0.85;
-    B.eyes *= 1.1;
+    B.eyes = Math.min(1.22, B.eyes * 1.1);
     B.earLen *= 0.72;
     B.fur *= 0.5;
     B.mane *= 0.4;

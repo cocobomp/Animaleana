@@ -1749,7 +1749,10 @@ class ShowSession extends Session {
     // environ 3 m, puis revient à la vue normale (au fond de la scène, le chien faisait une quarantaine de pixels).
     if (this.phase === 'face' || this.phase === 'gauge' || this.phase === 'trick' || this.phase === 'bow') {
       const sc = e.scale ?? 1;
-      this.game.rig.focus = { shot: { at: (this.shotAt ??= new THREE.Vector3()).set(e.position.x, e.position.y + 0.45 * sc, e.position.z), heading: e.heading, dist: 1.4 + 1.6 * sc, yaw: 0.75, pitch: 0.2 } };
+      // (lapin : une trentaine de centimètres de haut, deux fois plus près et visé à hauteur de son dos ; à 3 m il ne
+      // faisait qu'une tache sur la scène)
+      const k = e.data.species === 'rabbit' ? 0.5 : 1;
+      this.game.rig.focus = { shot: { at: (this.shotAt ??= new THREE.Vector3()).set(e.position.x, e.position.y + 0.45 * sc * k, e.position.z), heading: e.heading, dist: (1.4 + 1.6 * sc) * (k < 1 ? 0.55 : 1), yaw: 0.75, pitch: 0.2 } };
     }
     const onStage = Math.hypot(e.position.x - this.center.x, e.position.z - this.center.z) < 3.3;
     e.position.y = this.y(e.position.x, e.position.z) + (onStage ? this.stageTop : 0) + (e.scaleGroup.position.y > 0 ? 0 : 0);
@@ -1826,7 +1829,7 @@ function animateTrick(e, trick, k, dt) {
     }
     if (trick === 'spin') {
       sg.rotation.y = Math.PI * 2 * k;
-      e.speed = 0.6;
+      e.speed = 0.35 * (e.scale ?? 1); // (sautillement lent, sur place)
       e.petAction = 'wheel';
       return;
     }

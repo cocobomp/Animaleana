@@ -91,8 +91,11 @@ export function hairStrandPixels() {
       }
     }
     // Racines pleines, un peu plus sombres (le dessous de la mèche), qui commencent en dents irrégulières.
+    // (décalage du reflet propre à chaque ligne de pixels, comme un crin : avec une valeur unique, toutes les
+    // racines s'allumaient ensemble en une plaque grise, en haut de la queue et sur le toupet)
     for (let y = Math.floor(y0); y < Math.ceil(y1); y++) {
       const us = 0.01 + rng() * 0.035;
+      const sh = rng();
       for (let x = 0; x < W * 0.08; x++) {
         const i = (y * W + x) * 4;
         const a0 = rgba[i + 3];
@@ -100,7 +103,7 @@ export function hairStrandPixels() {
         const r = smooth(us, us + 0.012, u) * (1 - smooth(0.05, 0.08, u));
         if (a0 >= r) continue;
         rgba[i] = (rgba[i] * a0 + 0.62 * (r - a0)) / r;
-        rgba[i + 1] = (rgba[i + 1] * a0 + 0.5 * (r - a0)) / r;
+        rgba[i + 1] = (rgba[i + 1] * a0 + sh * (r - a0)) / r;
         rgba[i + 2] = (rgba[i + 2] * a0 + 0.5 * (r - a0)) / r;
         rgba[i + 3] = r;
       }
@@ -229,9 +232,13 @@ void RE_Direct_Hair( const in IncidentLight directLight, const in vec3 geometryP
   reflectedLight.directDiffuse += wrapNL * directLight.color * BRDF_Lambert( material.diffuseColor );
   vec3 H = normalize( L + geometryViewDir );
   float lit = smoothstep( -0.25, 0.35, dot( geometryNormal, L ) );
-  vec3 T1 = normalize( hHairT + geometryNormal * ( hHairShift * 0.5 - 0.1 ) );
+  // (décalage étalé crin par crin et bande étroite : sur des crins parallèles (toupet couché, queue), un crin
+  // sur cinq environ s'allume à la fois, pas toute la mèche)
+  vec3 T1 = normalize( hHairT + geometryNormal * ( hHairShift * 0.9 - 0.05 ) );
   float t1 = dot( T1, H );
-  vec3 spec = vec3( pow( max( 0.0, 1.0 - t1 * t1 ), 64.0 ) * hHairSpec );
+  // (racines plus mates : elles sont sous les autres crins ; un toupet couché, crins tous parallèles, ne
+  // s'allume plus d'un bloc en gris)
+  vec3 spec = vec3( pow( max( 0.0, 1.0 - t1 * t1 ), 96.0 ) * hHairSpec * ( 0.35 + 0.65 * smoothstep( 0.0, 0.3, vHairF ) ) );
 #ifdef HAIR_HQ
   vec3 T2 = normalize( hHairT + geometryNormal * ( hHairShift * 0.5 + 0.15 ) );
   float t2 = dot( T2, H );
@@ -279,7 +286,8 @@ export function hairMaterial(color, sway) {
   });
   // (force du reflet : plus discret sur les crins clairs, qui ont déjà de la lumière)
   // (qualité basse : pas d'ombre du soleil, le reflet brillerait aussi du côté à l'ombre : plus discret)
-  const spec = { value: (high ? 0.08 : 0.05) * (1 - 0.5 * Math.min(1, l * 2)) };
+  // (0,07 × soleil de 2,8 à 3,5, sur un crin sur cinq : des crins qui brillent sur du noir, pas un aplat gris)
+  const spec = { value: (high ? 0.07 : 0.045) * (1 - 0.5 * Math.min(1, l * 2)) };
   // (crins foncés : les crins clairs de la texture un peu éclaircis, comme la lumière du ciel prise par chaque
   // crin — on lit les mèches même sans reflet, en qualité basse aussi)
   const lift = { value: 0.05 * (1 - smooth(0, 0.12, l)) };
@@ -314,7 +322,8 @@ varying float vHairF;`)
   vHairF = hairG;
 }`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-if ( hairRoot.w < 0.5 ) transformed = mix( transformed, hairRoot.xyz + ( transformed - hairRoot.xyz ) * 0.12, hairBraid );
+// (crinière et crête de la crinière : sortes 0 et 4)
+if ( hairRoot.w < 0.5 || hairRoot.w > 3.5 ) transformed = mix( transformed, hairRoot.xyz + ( transformed - hairRoot.xyz ) * 0.12, hairBraid );
 {
   // Pointes qui ondulent au vent et quand le cheval court (racines immobiles) : une mèche bouge d'un bloc
   // (phase de sa racine), vers l'extérieur et d'avant en arrière ; la queue (hairRoot.w = 2) de côté aussi.
@@ -322,7 +331,7 @@ if ( hairRoot.w < 0.5 ) transformed = mix( transformed, hairRoot.xyz + ( transfo
   float ph = hairTime * 2.1 + hairRoot.y * 6.0 + hairRoot.z * 4.0 - hairG * 1.6;
   transformed += normal * ( 0.5 + 0.5 * sin( ph ) ) * 0.012 * hw;
   transformed.z += cos( ph * 0.7 + 1.3 ) * 0.008 * hw;
-  transformed.x += sin( ph ) * 0.012 * hw * step( 1.5, hairRoot.w );
+  transformed.x += sin( ph ) * 0.012 * hw * step( 1.5, hairRoot.w ) * step( hairRoot.w, 3.5 );
 }`);
     sh.fragmentShader = def + sh.fragmentShader
       .replace('#include <common>', `#include <common>

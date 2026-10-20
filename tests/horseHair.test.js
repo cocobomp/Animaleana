@@ -20,20 +20,22 @@ const horse = (breed, { foal = false, seed = 5 } = {}) => {
   return buildRealHorseModel(foal ? { ...a.look, foal: true } : a.look, a.breed, gltf);
 };
 
-/** Cartes de la géométrie des crins par sorte (0 crinière, 1 toupet, 2 queue) : racines et longueurs. */
+/** Cartes de la géométrie des crins par sorte (0 crinière, 1 toupet, 2 queue, 4 crête) : racines et longueurs. */
 function cards(md) {
   const g = md.hairMesh.geometry;
   const root = g.attributes.hairRoot;
   const f = g.attributes.hairG;
   const pos = g.attributes.position;
-  const out = { 0: [], 1: [], 2: [] };
+  const out = { 0: [], 1: [], 2: [], 4: [] };
   // (deux sommets par point, du premier point au dernier : une carte commence là où hairG repasse à 0)
   let start = 0;
   for (let i = 2; i <= pos.count; i += 2) {
     if (i === pos.count || f.getX(i) === 0) {
       const r = new THREE.Vector3(root.getX(start), root.getY(start), root.getZ(start));
       const tip = new THREE.Vector3().fromBufferAttribute(pos, i - 2).add(new THREE.Vector3().fromBufferAttribute(pos, i - 1)).multiplyScalar(0.5);
-      out[root.getW(start)]?.push({ root: r, len: tip.distanceTo(r), tip });
+      let top = -Infinity;
+      for (let j = start; j < i; j++) top = Math.max(top, pos.getY(j));
+      out[root.getW(start)]?.push({ root: r, len: tip.distanceTo(r), tip, top });
       start = i;
     }
   }
@@ -118,6 +120,27 @@ describe('crinière, toupet et queue en cartes de crins', () => {
     }
   });
 
+  it('crête de la crinière : mèches courtes dressées, visibles des deux côtés (pas un liseré vu de gauche)', () => {
+    for (const breed of ['selle_francais', 'akhal_teke', 'frison', 'haflinger']) {
+      const c = cards(horse(breed));
+      const n = c[0].length;
+      expect(c[4].length, breed).toBeGreaterThanOrEqual(Math.round(n * 0.7));
+      expect(c[4].length, breed).toBeLessThanOrEqual(Math.round(n * 0.8));
+      // (elles montent au-dessus de leur racine avant de retomber : la crête a du volume, vue de profil)
+      const risen = c[4].filter((m) => m.top > m.root.y + 0.015).length;
+      expect(risen / c[4].length, breed).toBeGreaterThan(0.6);
+      // (une sur quatre au moins retombe du côté gauche ; courtes : pas un second rideau)
+      const left = c[4].filter((m) => m.tip.x > m.root.x + 0.01).length;
+      expect(left / c[4].length, breed).toBeGreaterThan(0.18);
+      expect(left / c[4].length, breed).toBeLessThan(0.45);
+      const mean = (l) => l.reduce((s, m) => s + m.len, 0) / l.length;
+      expect(mean(c[4]), breed).toBeLessThan(0.12);
+    }
+    // Brosse (Fjord, poulain) : ni crinière, ni crête.
+    expect(cards(horse('fjord'))[4].length).toBe(0);
+    expect(cards(horse('selle_francais', { foal: true }))[4].length).toBe(0);
+  });
+
   it.each(['selle_francais', 'fjord', 'frison', 'shetland'])('%s : poids des os de somme 1, os valides (crins, brosse, fanons)', (breed) => {
     const md = horse(breed);
     const meshes = md.root.children.filter((m) => m.isSkinnedMesh && m.geometry.attributes.hairG);
@@ -155,6 +178,9 @@ describe('crinière, toupet et queue en cartes de crins', () => {
       if (k === 2 && f.getX(i) > 0.5) expect(weightOf(i, ['Tail2'])).toBeGreaterThan(0.99);
       if (k === 2) expect(weightOf(i, ['Tail1', 'Tail2', 'Spine'])).toBeGreaterThan(0.99);
       if (k === 0 && f.getX(i) > 0.5) expect(weightOf(i, ['Mane1', 'Mane2', 'Mane3', 'Mane4'])).toBeGreaterThan(0.75);
+      // (crête : liée à l'encolure et à la crinière, comme la peau de la crête — un peu d'épaule près du garrot)
+      if (k === 4) expect(weightOf(i, ['Neck', 'Mane1', 'Mane2', 'Mane3', 'Mane4', 'Spine', 'Head'])).toBeGreaterThan(0.85);
+      if (k === 4 && f.getX(i) > 0.7) expect(weightOf(i, ['Mane1', 'Mane2', 'Mane3', 'Mane4'])).toBeGreaterThan(0.3);
     }
     md.dispose();
   });
@@ -235,7 +261,8 @@ function inside(md) {
   let totalMane = 0;
   for (let j = 0; j < hg.position.count; j++) {
     if (hg.hairG.getX(j) === 0) continue;
-    const mane = hg.hairRoot.getW(j) < 1.5;
+    const w = hg.hairRoot.getW(j);
+    const mane = w < 1.5 || w > 3.5;
     total++;
     if (mane) totalMane++;
     hair.getVertexPosition(j, v);

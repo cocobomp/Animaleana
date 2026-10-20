@@ -837,7 +837,7 @@ const MANE_STYLE = {
   thick: { len: 0.85, n: 1.2, lift: 0.5, other: 0.25 },
   short: { len: 0.45, n: 0.85, lift: 0.7, other: 0 },
 };
-const FORELOCK = { normal: 0.4, long: 0.52, thick: 0.44, short: 0.24, brush: 0.26, foal: 0.18 };
+const FORELOCK = { normal: 0.46, long: 0.56, thick: 0.48, short: 0.26, brush: 0.26, foal: 0.18 };
 /** Rangées de la texture des crins (une mèche différente par quart de la hauteur) : [v du milieu, demi-hauteur]. */
 const HAIR_ROWS = [0, 1, 2, 3].map((k) => [(k + 0.5) / 4, 0.117]);
 
@@ -1136,6 +1136,42 @@ function maneCards(S, B, body, pos, coat) {
       meta: { t, root, primary },
     });
   }
+  // Crête : mèches courtes qui se dressent de la crête puis retombent (la plupart du côté de la crinière, une
+  // sur quatre de l'autre côté). Les grandes mèches, couchées en travers de la crête, y sont vues par la tranche
+  // depuis l'autre côté : sans cette crête, le cheval semblait sans crinière vu de gauche (un liseré noir).
+  // Rubans debout (plan vertical le long de l'encolure) : on les voit de face des deux côtés.
+  const nc = Math.round(n * 0.75);
+  const crestLen = MANE_LEN * Math.sqrt(B.mane ?? 1) * (style === 'short' ? 0.3 : 0.36);
+  for (let i = 0; i < nc; i++) {
+    const primary = i % 2 === 0;
+    const t = 0.04 + ((i + rng() * 0.8) / nc) * 0.88;
+    const c = at(t);
+    const dir = at(Math.min(1, t + 0.03)).sub(at(Math.max(0, t - 0.03))).normalize();
+    const up = V(0, dir.z, -dir.y).normalize();
+    if (up.y < 0) up.negate();
+    // (une sur quatre de l'autre côté, et quelques-unes de plus pour une crinière longue ou épaisse)
+    const sx = i % 4 === 1 || rng() < Math.max(0, st.other - 0.2) ? 1 : -1;
+    const root = c.clone().addScaledVector(up, -0.006).add(V((rng() - 0.5) * 0.012, 0, 0));
+    // (plus basse vers la nuque, sous la têtière, et au garrot)
+    const prof = 0.55 + 0.45 * smooth(0, 0.15, t) * (1 - 0.5 * smooth(0.8, 0.95, t));
+    const L = crestLen * prof * (0.55 + 0.9 * rng() ** 1.5);
+    // (plus ou moins dressée : pas une rangée de dents égales)
+    const rise = 0.45 + 0.4 * rng();
+    const d0 = up.clone().multiplyScalar(rise).add(V(sx * (1.05 - rise), 0, 0)).addScaledVector(dir, (rng() - 0.5) * 0.35);
+    const pts = drape(body, root, d0, L, { h: 0.007, bend: 0.06 + rng() * 0.04, np: 4, steps: 8 });
+    const normals = pts.map((p) => body.grad(p, V()).add(V(sx * 0.4, 0, 0)).normalize());
+    const side = dir.clone().applyAxisAngle(up, (rng() - 0.5) * 0.5);
+    const wR = skinNear(pos, coat, near, root);
+    const wT = blendWeights(tipW(root.clone().sub(O).dot(ez)), wR, 0.5);
+    const tone = 0.93 + rng() * 0.14;
+    const [v, dv] = HAIR_ROWS[Math.floor(rng() * 4)];
+    (primary ? main : fill).push({
+      pts, normals, side, w0: primary ? 0.046 : 0.036, w1: primary ? 0.028 : 0.022,
+      color: new THREE.Color(tone, tone, tone), uv: [0, 1, v, dv], kind: 4,
+      weights: (p, f) => blendWeights(wR, wT, smooth(0, 0.6, f)),
+      meta: { t, root, primary, crest: true },
+    });
+  }
   return { main, fill };
 }
 
@@ -1164,7 +1200,7 @@ function forelockCards(S, B, body, base) {
   for (let i = 0; i < n; i++) {
     const primary = i % 2 === 0;
     const r = rng() * 2 - 1;
-    const x = Math.sign(r) * Math.abs(r) ** 1.5 * halfX * 0.8;
+    const x = Math.sign(r) * Math.abs(r) ** 1.2 * halfX * 0.95;
     // (juste devant la base des oreilles, sur le haut du front : derrière, entre les oreilles, le creux de la
     // nuque remonte en marche vers le front et les mèches s'y retournaient)
     const z = ez0 + 0.035 + rng() * 0.035;
@@ -1172,10 +1208,11 @@ function forelockCards(S, B, body, base) {
     while (y > -0.1 && head(x, y, z) > 0) y -= 0.003;
     const root = fromH(V(x, y - 0.004, z));
     const d0 = V(x * 2, 0.25, 1).normalize().applyQuaternion(q);
-    const L = L0 * (0.78 + 0.4 * rng()) * (1 - 0.3 * Math.abs(x) / halfX);
+    // (plus long au milieu : un toupet en pointe, pas une frange coupée droit)
+    const L = L0 * (0.72 + 0.5 * rng()) * (1 - 0.7 * (Math.abs(x) / halfX) ** 2);
     const pts = drape(body, root, d0, L, { h: 0.005 + rng() * 0.008, bend: 0.06, np: 5, steps: 12, stick: 0.05 });
-    // (éventail : les mèches s'écartent un peu du milieu vers le bas)
-    const spread = x * 0.5 + (rng() - 0.5) * 0.016;
+    // (les mèches se rejoignent un peu vers le bas, au milieu du front, comme un toupet qui pend)
+    const spread = -x * 0.25 + (rng() - 0.5) * 0.016;
     const gr = V();
     pts.forEach((p, k) => {
       if (!k) return;
@@ -1870,8 +1907,8 @@ function sections(pos, tris, toFrame, z0, z1, dz) {
  * droits (horseHair.js : u le long de la mèche, de la racine à la pointe ; v en travers), ton ou couleur et os
  * par sommet. cards : [{ pts, w0, w1, side, normal | normals, color, uv: [u0, u1, v, dv], weights(p, f),
  * sway?, kind? }] — normal(s) : normale « de volume » (vers l'extérieur de la crinière), la même des deux
- * côtés du ruban ; kind : 0 crinière, 1 toupet, 2 queue, 3 fanons (la queue et les fanons ondulent aussi de
- * côté). Attributs pour la matière des crins : hairG (0 racine → 1 pointe), hairT (direction de la mèche, pour
+ * côtés du ruban ; kind : 0 crinière, 1 toupet, 2 queue, 3 fanons, 4 crête de la crinière (la queue et les
+ * fanons ondulent aussi de côté ; la crinière et sa crête rentrent dans les tresses). Attributs pour la matière des crins : hairG (0 racine → 1 pointe), hairT (direction de la mèche, pour
  * le reflet), hairRoot (racine de la mèche et kind : elle ondule d'un bloc).
  */
 function hairCards(cards) {

@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import * as THREE from 'three';
-import { buildRealDogModel, pickDogGait, realDogPose, REAL_DOG_KEYS } from '../src/game/models/dogReal.js';
+import { buildRealDogModel, pickDogGait, realDogPose, REAL_DOG_KEYS, realDogBase, deformDog } from '../src/game/models/dogReal.js';
 import { coatPlan } from '../src/game/models/dogCoat.js';
 import { buildGear, removeGear } from '../src/game/gearModels.js';
 import { buildAccessories } from '../src/game/models/salon.js';
@@ -146,6 +146,43 @@ describe('races et chiots', () => {
         }
       }
       r.dispose();
+    }
+  });
+
+  it('oreilles dressées des petits chiens : le lambeau replié du jack est caché sous la peau du crâne (pas d\'oreilles en double)', () => {
+    const base = realDogBase(G.jack, 'jack');
+    expect(base.earFlap?.length).toBe(2);
+    for (const b of ['chihuahua', 'bouledogue', 'corgi', 'spitz_nain', 'yorkshire']) {
+      for (const puppy of [false, true]) {
+        const B = dogBuild(lookOf(b), puppy);
+        const D = deformDog(base, B);
+        // (centre de la tête : entre l'os de la tête et les yeux, comme dogReal.js)
+        const eyes = D.heads[base.index.get('eyeL')].clone().add(D.heads[base.index.get('eyeR')]).multiplyScalar(0.5);
+        const hc = D.heads[base.index.get('head')].clone().lerp(eyes, 0.5);
+        for (const F of base.earFlap) {
+          // (le lambeau entier, pas seulement ce que le squelette automatique a pesé sur l'oreille)
+          expect(F.ids.length).toBeGreaterThan(400);
+          const flap = new Set(F.ids);
+          const skull = [];
+          for (let i = 0; i < base.prims.coat.count; i++) {
+            if (flap.has(i) || base.W.head[i] < 0.5) continue;
+            const v = new THREE.Vector3().fromArray(D.pos, i * 3).sub(hc);
+            skull.push([v.clone().normalize(), v.length()]);
+          }
+          let out = 0;
+          for (let k = 0; k < F.ids.length; k++) {
+            if (F.c[k] < 0.95) continue;
+            const v = new THREE.Vector3().fromArray(D.pos, F.ids[k] * 3).sub(hc);
+            const r = v.length();
+            v.normalize();
+            let rmax = 0;
+            for (const [d, rs] of skull) if (d.dot(v) > 0.9) rmax = Math.max(rmax, rs);
+            if (r > rmax + 0.003) out++;
+          }
+          // (lambeau non caché : 551 sommets sur 742 dépassent ; caché : 20 à 45, aux limites de la mesure)
+          expect(out, `${b}${puppy ? ' (chiot)' : ''}`).toBeLessThan(F.ids.length * 0.1);
+        }
+      }
     }
   });
 

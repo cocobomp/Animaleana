@@ -29,8 +29,11 @@ const NATIVE = {
 export const DOG_BUILDS = {
   // ---- petits (jack russell)
   chihuahua: { legs: 0.92, back: 0.9, girth: 0.95, head: 1.45, snout: 0.5, muzzleW: 0.9, neck: 0.85, ears: 'bat', earSize: 1.55, tail: 'sickle', tailLen: 0.9 },
-  spitz_nain: { legs: 0.8, back: 0.8, girth: 1.05, head: 1.12, snout: 0.6, ears: 'pointed', earSize: 0.75, tail: 'curl', fur: 0.039, ruff: 1, tailLen: 0.9 },
-  yorkshire: { legs: 0.85, back: 0.9, girth: 0.92, head: 1.05, snout: 0.75, ears: 'pointed', earSize: 0.85, tail: 'carrot', fur: 0.022, feather: 0.6, silky: 1 },
+  // (spitz : poil épais et collerette — dans le repère d'un chien de 57 cm, 5 cm de poil font les 2 cm du loulou —,
+  // pattes courtes sous la fourrure, petites oreilles droites)
+  spitz_nain: { legs: 0.75, back: 0.8, girth: 1.05, head: 1.1, snout: 0.55, ears: 'pointed', earSize: 0.7, tail: 'curl', fur: 0.052, ruff: 1.25, feather: 0.4, tailLen: 0.8 },
+  // (yorkshire : robe longue et soyeuse qui tombe en jupe, petite queue)
+  yorkshire: { legs: 0.85, back: 0.9, girth: 0.92, head: 1.05, snout: 0.75, ears: 'pointed', earSize: 0.85, tail: 'carrot', tailLen: 0.6, tailThick: 0.6, tailFur: 0.3, fur: 0.03, feather: 1.2, silky: 1 },
   carlin: { legs: 0.72, legW: 1.15, back: 0.85, girth: 1.28, head: 1.3, snout: 0.28, muzzleW: 1.3, neck: 0.8, ears: 'button', earSize: 0.6, tail: 'curl', tailLen: 0.7 },
   jack_russell: { tail: 'carrot', tailLen: 0.85 },
   corgi: { legs: 0.55, legW: 1.15, back: 1.25, girth: 1.18, head: 1.08, snout: 0.95, ears: 'pointed', earSize: 1.35, tail: 'stub', fur: 0.007 },
@@ -64,14 +67,15 @@ export const DOG_BUILDS = {
   samoyede: { legs: 1.0, back: 1.0, girth: 1.05, head: 1.0, snout: 1.0, ears: 'pointed', earSize: 0.9, tail: 'curl', fur: 0.028, ruff: 1, feather: 0.6 },
   whippet: { legs: 1.22, legW: 0.82, back: 1.02, girth: 0.82, headW: 0.78, head: 0.92, snout: 1.5, muzzleW: 0.8, neck: 1.15, ears: 'rose', earSize: 0.9, tail: 'whip', tailLen: 1.15, tailThick: 0.35, fur: -0.02, tuck: 1 },
   setter: { legs: 1.05, back: 1.05, girth: 0.95, headW: 0.8, head: 1.0, snout: 1.42, muzzleW: 0.9, neck: 1.08, ears: 'long', earSize: 1.15, tail: 'sabre', tailLen: 1.1, tailThick: 0.7, fur: 0.012, feather: 1 },
-  terre_neuve: { legs: 0.95, legW: 1.25, back: 1.08, girth: 1.34, head: 1.25, snout: 0.85, muzzleW: 1.3, neck: 0.95, ears: 'floppy', earSize: 0.85, tail: 'plume', fur: 0.025, ruff: 0.8, feather: 1 },
+  // (terre-neuve : grosse tête mais museau entier et large — raccourci, il lui faisait une face de bouledogue)
+  terre_neuve: { legs: 0.95, legW: 1.25, back: 1.08, girth: 1.34, head: 1.15, snout: 1.0, muzzleW: 1.15, neck: 0.95, ears: 'floppy', earSize: 0.95, tail: 'plume', fur: 0.025, ruff: 0.8, feather: 1 },
   labradoodle: { legs: 1.0, back: 1.0, girth: 1.04, headW: 0.9, head: 1.0, snout: 1.1, ears: 'floppy', earSize: 1.15, tail: 'plume', fur: 0.02, curly: 1 },
   berger_blanc: { legs: 1.02, back: 1.1, girth: 1.0, headW: 0.86, head: 1.02, snout: 1.35, ears: 'pointed', earSize: 1.2, tail: 'sabre', tailLen: 1.1, fur: 0.008 },
 };
 
 const ONE = {
   legs: 1, legW: 1, back: 1, girth: 1, head: 1, snout: 1, muzzleW: 1, neck: 1,
-  earSize: 1, headW: 1, tailLen: 1, tailThick: 1, fur: 0, ruff: 0, feather: 0, curly: 0, silky: 0, slope: 0, tuck: 0,
+  earSize: 1, headW: 1, tailLen: 1, tailThick: 1, tailFur: 1, fur: 0, ruff: 0, feather: 0, curly: 0, silky: 0, slope: 0, tuck: 0,
 };
 
 /** Modèle 3D d'un chien : 'jack' pour les petits, 'shiba' pour les autres (d'après la taille de sa race). */
@@ -87,7 +91,7 @@ const TAIL_OF = { dog: 'sabre', curl: 'curl', stub: 'stub' };
 /**
  * Gabarit d'un chien. look : sa robe et ses proportions (species.js : scale, legs, snout, fluff, earType,
  * tailType, breed) ; puppy : chiot (tête plus grosse, pattes et museau courts, oreilles pas encore dressées).
- * Renvoie { model, legs, legW, back, girth, head, snout, muzzleW, neck, ears, earSize, tail, tailLen, tailThick,
+ * Renvoie { model, legs, legW, back, girth, head, snout, muzzleW, neck, ears, earSize, tail, tailLen, tailThick, tailFur,
  * fur, ruff, feather, curly, silky, slope, tuck, puppy, key } (key : identifie la géométrie, partagée par race).
  */
 export function dogBuild(look = {}, puppy = false) {

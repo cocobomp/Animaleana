@@ -272,6 +272,71 @@ export function realDogBase(gltf, kind) {
     return best;
   })();
 
+  // Lambeau entier de l'oreille repliée du jack (rentré dans le crâne sous les oreilles dressées) : tout ce qui dépasse
+  // du plan tangent au crâne à la racine de l'oreille, jusqu'à 1,4 fois sa longueur. (Les poids des oreilles du
+  // squelette automatique n'en couvrent que le milieu : le bord et le pli restaient sur la tête, froissés.)
+  // Chaque sommet du lambeau a une place cachée : sous la peau du crâne, dans sa direction depuis le centre de la tête
+  // (3 mm sous le sommet du crâne le plus proche de cette direction). Le lambeau y est mis avant la déformation de la
+  // race, qu'il suit alors comme le crâne. (Ramené sur un seul point, il tirait de longues lames et plissait la tête
+  // là où il touche la joue.)
+  const earFlap = kind !== 'jack' ? null : (() => {
+    const hc = heads[B('head')].clone().lerp(V(land.midX, land.eyeY, land.eyeZ), 0.5);
+    const out = [0, 1].map((s) => {
+      const b1 = B(s === 0 ? 'ear1L' : 'ear1R');
+      if (b1 < 0) return null;
+      const root = heads[b1];
+      const nrm = root.clone().sub(heads[B('head')]).normalize();
+      const L = earTip[s].distanceTo(root);
+      const ids = [];
+      const cs = [];
+      const tipP = earTip[s];
+      for (let i = 0; i < n; i++) {
+        _v.fromArray(coat.pos, i * 3);
+        if (Math.sign(_v.x - land.midX) !== (s === 0 ? 1 : -1)) continue;
+        // (le bout du lambeau, qui retombe contre la tempe, passe un peu sous le plan : pris aussi près du bout,
+        // comme ce que le squelette automatique a pesé sur l'oreille)
+        const nearTip = 1 - smooth(0.25 * L, 0.45 * L, _v.distanceTo(tipP));
+        const d = _v.sub(root).dot(nrm);
+        if (_v.length() > 1.4 * L) continue;
+        const c = Math.max(smooth(0.002, 0.014, d), nearTip * smooth(-0.008, -0.003, d), W.ear[i * 2 + s] > 0.5 ? 1 : 0);
+        if (c <= 0) continue;
+        ids.push(i);
+        cs.push(c);
+      }
+      return { ids: Uint32Array.from(ids), c: Float32Array.from(cs), hide: new Float32Array(ids.length * 3) };
+    });
+    const inFlap = new Uint8Array(n);
+    for (const F of out) if (F) for (const i of F.ids) inFlap[i] = 1;
+    // sommets du crâne (tête, ni oreilles ni lambeau) : direction et distance depuis le centre de la tête
+    const skull = [];
+    for (let i = 0; i < n; i++) {
+      if (inFlap[i] || W.head[i] < 0.5 || W.ear[i * 2] + W.ear[i * 2 + 1] > 0.05) continue;
+      _v.fromArray(coat.pos, i * 3).sub(hc);
+      const r = _v.length();
+      skull.push([_v.x / r, _v.y / r, _v.z / r, r]);
+    }
+    for (const F of out) {
+      if (!F) continue;
+      for (let k = 0; k < F.ids.length; k++) {
+        _v.fromArray(coat.pos, F.ids[k] * 3).sub(hc);
+        const r = _v.length();
+        _v.multiplyScalar(1 / r);
+        let best = r;
+        let bc = 0.9;
+        for (const q of skull) {
+          const c = _v.x * q[0] + _v.y * q[1] + _v.z * q[2];
+          if (c > bc) {
+            bc = c;
+            best = q[3];
+          }
+        }
+        _w.copy(hc).addScaledVector(_v, Math.min(r, best) - 0.003);
+        F.hide.set([_w.x, _w.y, _w.z], k * 3);
+      }
+    }
+    return out;
+  })();
+
   // Zone de la texture des oreilles d'origine (pelage des coques des oreilles dressées du jack).
   const earUv = [0, 1].map((s) => {
     const r = [Infinity, Infinity, -Infinity, -Infinity];
@@ -312,7 +377,7 @@ export function realDogBase(gltf, kind) {
   }
   const ext = gltf.scene.userData?.dog ?? {};
   const base = {
-    kind, names, index, parent, heads, rotW, restW, prims, W, part, boneW, land, earTip, earUv, tailTip, tailBones, clips,
+    kind, names, index, parent, heads, rotW, restW, prims, W, part, boneW, land, earTip, earUv, earFlap, tailTip, tailBones, clips,
     tailPose, transBones: [...transBones].map((nm_) => index.get(nm_)).filter((i) => i !== undefined),
     natural: { ...NATURAL_SPEED, ...(ext.naturalSpeeds ?? {}) },
     cfg: MODEL[kind],
@@ -453,6 +518,23 @@ export function deformDog(base, B) {
   const legEnd = LEG_KEYS.map(([, s, front]) => I((front ? 'metacarpus' : 'metatarsus') + s));
   const T0 = legTop.map((i) => H[i].clone());
 
+  // 0. Oreilles dressées du jack : le lambeau replié d'origine (remplacé par des coques) est d'abord caché sous la
+  //    peau du crâne ; il suit ensuite toute la déformation comme le crâne. (Réduit au quart et à peine rentré, il
+  //    restait visible, froissé, devant ou sous la coque.)
+  // (le poil long ne les ressort pas : voir 9)
+  const hidden = new Float32Array(n);
+  if (base.earFlap && (B.ears === 'pointed' || B.ears === 'bat')) {
+    for (const F of base.earFlap) {
+      if (!F) continue;
+      for (let k = 0; k < F.ids.length; k++) {
+        const i = F.ids[k];
+        p.fromArray(P, i * 3).lerp(_w.fromArray(F.hide, k * 3), F.c[k]);
+        P.set([p.x, p.y, p.z], i * 3);
+        hidden[i] = F.c[k];
+      }
+    }
+  }
+
   // 1. Membres : raccourcis ou allongés entre l'épaule (la hanche) et le poignet (le jarret), le pied suit sans se
   //    déformer ; épaissis autour de leur axe.
   for (let l = 0; l < 4; l++) {
@@ -592,16 +674,15 @@ export function deformDog(base, B) {
   for (let s = 0; s < 2; s++) {
     const op = earOps[s];
     if (!op) continue;
+    if (op.collapse !== undefined && base.earFlap?.[s]) {
+      // (lambeau déjà caché sous la peau du crâne, voir plus haut) ; os des oreilles ramenés sur leur base
+      for (let j = n; j < n + nbn; j++) if (wEar(j, s) > 0) set(j, get(j, p).lerp(op.base, 0.9));
+      continue;
+    }
     for (let j = 0; j < total; j++) {
       const we = wEar(j, s);
       if (!(we > 0)) continue;
       get(j, p);
-      if (op.collapse) {
-        p.sub(op.base).multiplyScalar(1 + we * (op.collapse - 1)).add(op.base);
-        p.lerp(H[headI], we * 0.12);
-        set(j, p);
-        continue;
-      }
       if (op.size !== 1) p.sub(op.base).multiplyScalar(1 + we * (op.size - 1)).add(op.base);
       const w2 = wEar2(j, s);
       if (op.fold && w2 > 0) rot(p, _q.identity().slerp(op.fold, w2), op.hinge);
@@ -696,7 +777,7 @@ export function deformDog(base, B) {
         * (1 - smooth(0.45, 0.65, (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z)));
       k += legSum * 0.3 * smooth(L.elbowY * 0.6, L.elbowY * 1.3, y0);
       k += tail * 1.4;
-      p.addScaledVector(_w, B.fur * k);
+      p.addScaledVector(_w, B.fur * k * (1 - hidden[i]));
       P.set([p.x, p.y, p.z], i * 3);
     }
   } else if (B.fur > 0.0005) {
@@ -721,7 +802,7 @@ export function deformDog(base, B) {
       k += legSum * (1 - paw) * (0.3 + B.feather * 0.8 * smooth(-0.1, -0.7, _w.z) * smooth(L.elbowY * 0.3, L.elbowY, y0));
       k += (1 - legSum) * (1 - head) * (1 - tail) * B.feather * 0.7 * smooth(-0.3, -0.9, _w.y);
       k += ear * (0.1 + 0.4 * B.feather);
-      k += tail * (0.9 + 0.9 * B.feather);
+      k += tail * (0.9 + 0.9 * B.feather) * B.tailFur;
       const nz = B.curly ? 0.45 + 1.1 * fbm(p.x * 55, p.y * 55, p.z * 55) : 0.75 + 0.5 * fbm(p.x * 30, p.y * 30, p.z * 30);
       // Sans collerette (setter, caniche, golden) : celle du shiba et ses joues de spitz d'abord raccourcies (sinon
       // une crinière de lion autour de la tête).
@@ -731,7 +812,10 @@ export function deformDog(base, B) {
         shave = (1 - 2 * B.ruff) * 0.015 * (neck * 1.1 + head * 0.8 * (1 - smooth(L.eyeY - 0.06, L.eyeY - 0.01, y0))
           * smooth(L.eyeX * 0.8, L.eyeX * 1.6, Math.abs(x0)) * (1 - smooth(0.45, 0.65, (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z))));
       }
-      p.addScaledVector(_w, B.fur * k * nz - shave);
+      p.addScaledVector(_w, (B.fur * k * nz - shave) * (1 - hidden[i]));
+      // Poil soyeux (yorkshire) : la robe tombe, les flancs descendent en jupe sur le haut des membres (jamais les
+      // pieds, posés au sol avant).
+      if (B.silky) p.y -= B.silky * B.fur * 1.4 * (1 - smooth(0.1, 0.75, h)) * (1 - head) * (1 - tail) * (1 - ear) * (1 - 0.6 * legSum) * (1 - paw) * (1 - hidden[i]);
       P.set([p.x, p.y, p.z], i * 3);
     }
   }
@@ -813,7 +897,7 @@ function earPlan(base, B, H) {
       const unfold = new THREE.Quaternion().setFromUnitVectors(flap, dir1);
       if (want === 'pointed' || want === 'bat') {
         // (le lambeau replié ne se déplie pas proprement : il est rentré dans le crâne, des coques le remplacent)
-        op.collapse = 0.22;
+        op.collapse = 0;
         op.size = 1;
       } else if (want === 'semi') {
         op.fold = new THREE.Quaternion().identity().slerp(unfold, 0.45);
@@ -850,15 +934,19 @@ function erectEars(base, D, B) {
   const sw = [];
   const idx = [];
   const Hh = 0.075 * B.head * B.earSize;
-  const Wb = Hh * (bat ? 0.86 : 0.62);
+  // (pointues : un peu plus larges, et d'autant plus que l'oreille est grande — corgi ; fines, elles faisaient des
+  // cornes)
+  const Wb = Hh * (bat ? 0.86 : 0.7 + 0.2 * clamp((B.earSize - 1) / 0.4, 0, 1));
   const thick = Math.max(0.004, Hh * 0.05);
+  // (plantées au-dessus du poil long : sous la fourrure du spitz ou du yorkshire, on ne voyait que leur pointe)
+  const lift = Math.max(0, B.fur) * 0.7;
   for (let s = 0; s < 2; s++) {
     const side = s === 0 ? 1 : -1;
     const b1 = I(s === 0 ? 'ear1L' : 'ear1R');
     if (b1 < 0) continue;
-    const Bp = D.heads[b1].clone();
-    const Bn = base.heads[b1].clone();
     const up = V(side * (bat ? 0.75 : 0.32), 1, bat ? 0.02 : -0.06).normalize();
+    const Bp = D.heads[b1].clone().addScaledVector(up, lift);
+    const Bn = base.heads[b1].clone().addScaledVector(up, lift);
     const lat = V(0, 0, 1).cross(up).normalize().multiplyScalar(side); // vers l'extérieur
     if (lat.x * side < 0) lat.negate();
     const fwd = lat.clone().cross(up).normalize();

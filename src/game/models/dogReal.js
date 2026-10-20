@@ -1574,7 +1574,6 @@ class RealDogAnim {
     for (const nm of this.names) this.target[nm] = 0;
     // Os : pose écrite par le mixeur (rétablie avant chaque mise à jour, voir horseReal.js restorePose).
     this.bones = model.bones;
-    this.pose = this.bones.map((b) => [b.position.clone(), b.quaternion.clone()]);
     // Décalage des articulations de la race pour les os dont un clip anime la translation (racine…).
     //    (écart de la position locale : déplacement de l'os moins celui de son parent, dans le repère de repos du
     //    parent ; sans retirer celui du parent, il comptait deux fois le long des membres : le galgo volait au galop
@@ -1585,6 +1584,7 @@ class RealDogAnim {
       if (p >= 0) d.sub(_u.copy(S.heads[p]).sub(base.heads[p]));
       return [this.bones[i], d.applyQuaternion(p >= 0 ? base.rotW[p].clone().invert() : new THREE.Quaternion())];
     });
+    this.pose = this.bones.map((b) => [b.position.clone(), b.quaternion.clone()]);
     // Port de la queue de la race (rotations locales des os de la queue) et des oreilles.
     this.tailRest = tailCarriage(model, base, B);
     this.t = (model.root.id * 7.31) % 100;
@@ -1644,6 +1644,13 @@ class RealDogAnim {
     this.gOff = 0;
     // (bout de la queue gardé au-dessus du sol : plus haut pour une queue épaissie de poil, panache du terre-neuve)
     this.tailClear = 0.03 + Math.max(0, B.fur) * (0.9 + 0.9 * B.feather) * Math.max(0.5, B.tailThick);
+    // Les os à translation animée partent de leur position du modèle d'origine : le mixeur la garde comme valeur de
+    // repos, et c'est elle qu'il rend quand aucun clip actif n'anime leur translation ; le décalage de la race est
+    // ajouté après. (Partis de la position de la race, le décalage comptait deux fois dès qu'un clip n'animait pas
+    // l'os : les yeux du shiba sortaient de la tête des races à grosse tête — l'œil à 1,6 fois sa distance pour une
+    // tête 1,3 fois plus grosse.) Fait en dernier : les repères ci-dessus sont pris sur le squelette de la race.
+    for (const [b, d] of this.shift) b.position.sub(d);
+    this.savePose();
   }
 
   /** Tourne un os de ang autour d'un axe du chien (axe vu par son parent au repos ; il suit le parent animé). */

@@ -123,6 +123,32 @@ describe('races et chiots', () => {
     for (const md of [jack, chi, pup]) md.dispose();
   });
 
+  it('yeux dans leurs orbites : l\'œil animé reste à sa place dans la tête de la race (grosse tête, chiots)', () => {
+    // (un os à translation animée que le clip actif n'anime pas recevait deux fois le décalage de la race : œil à 1,6
+    // fois sa distance au crâne pour une tête 1,3 fois plus grosse, globe hors de l'orbite)
+    const eyeDist = (md) => {
+      md.root.updateMatrixWorld(true);
+      return md.bone('eyeL').getWorldPosition(new THREE.Vector3()).distanceTo(md.head.getWorldPosition(new THREE.Vector3())) / md.build.head;
+    };
+    for (const [ref, breeds] of [['shiba', ['saint_bernard', 'terre_neuve', 'akita', 'boxer', 'beagle']], ['jack_russell', ['chihuahua', 'bouledogue', 'carlin']]]) {
+      const r = dog(ref);
+      const d0 = eyeDist(r);
+      for (const b of breeds) {
+        for (const puppy of [false, true]) {
+          const md = dog(b, { puppy });
+          for (const pose of ['stand', 'sit', 'lie']) {
+            md.staticPose(pose);
+            // (le museau raccourci et le crâne étroit déplacent un peu l'œil : 12 % au plus)
+            expect(eyeDist(md) / d0, `${b}${puppy ? ' (chiot)' : ''} ${pose}`).toBeLessThan(1.12);
+            expect(eyeDist(md) / d0, `${b}${puppy ? ' (chiot)' : ''} ${pose}`).toBeGreaterThan(0.85);
+          }
+          md.dispose();
+        }
+      }
+      r.dispose();
+    }
+  });
+
   it('écourtée : la queue des races « stub » est courte', () => {
     for (const b of ['bouledogue', 'boxer', 'corgi', 'cocker']) expect(dogBuild(lookOf(b)).tailLen, b).toBeLessThan(0.5);
   });

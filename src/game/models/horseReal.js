@@ -1577,7 +1577,7 @@ function maneCards(S, B, body, pos, coat) {
 
 /**
  * Toupet « en volume » : une mèche pleine qui sort entre les oreilles, bombée en haut, et tombe vers l'avant sur le
- * chanfrein en se resserrant en pointe entre les yeux (masse de 9 colonnes, 7 à 8 cm de large en haut) ; les
+ * chanfrein en se resserrant en pointe entre les yeux (masse de 9 colonnes, 8 à 9 cm de large en haut) ; les
  * cartes, étroites, posées sur elle dans le même V, en font les bords et la pointe. La ligne du milieu est posée par
  * la pesanteur sur le front ; la largeur, réglée dans le repère de la tête, et chaque point redescendu sur la peau
  * le long de la verticale de la tête (posées une à une par la pesanteur, les colonnes glissaient de part et d'autre
@@ -1592,7 +1592,8 @@ function forelockCards(S, B, body, base) {
   const toH = (p) => p.clone().sub(poll).applyQuaternion(qi);
   const fromH = (p) => p.clone().applyQuaternion(q).add(poll);
   const style = B.maneStyle;
-  const L0 = S.headLen * (FORELOCK[style] ?? FORELOCK.normal) * Math.min(1.25, Math.sqrt(B.mane ?? 1));
+  // (un peu plus long que les rubans d'avant : la pointe effilée mange le bas de la mèche)
+  const L0 = S.headLen * (FORELOCK[style] ?? FORELOCK.normal) * Math.min(1.25, Math.sqrt(B.mane ?? 1)) * 1.08;
   // (moins de rubans : la masse fait la mèche pleine, les cartes ses bords et sa pointe)
   const n = Math.round(Math.min(34, Math.max(20, 26 * Math.sqrt(B.maneN ?? 1) * (style === 'thick' ? 1.15 : 1))) * FORE_CARDS);
   const eL = toH(heads[BONE_INDEX.EarL]);
@@ -1608,12 +1609,12 @@ function forelockCards(S, B, body, base) {
   };
   hd.grad = gradOf(hd, V(0, 1, 0).applyQuaternion(q));
   // (racines au milieu de celles d'avant : plus en arrière, sur la pente de la nuque, les mèches glissaient vers
-  // l'encolure ; 7 à 8 cm de large en haut, entre les oreilles sans les toucher)
+  // l'encolure ; 8 à 9 cm de large en haut, entre les oreilles sans les toucher)
   const z0 = ez0 + 0.032;
-  const halfM = Math.abs(eL.x - eR.x) * 0.4;
+  const halfM = Math.abs(eL.x - eR.x) * 0.44;
   // Largeur (demi, repère de la tête) le long du toupet : pleine en haut, un peu évasée sous les oreilles, resserrée en
   // pointe à 80 % de sa longueur, une pointe fine au bout.
-  const halfW = (f) => halfM * (1 + 0.1 * smooth(0, 0.12, f) * (1 - smooth(0.12, 0.3, f))) * (1 - 0.9 * smooth(0.05, 0.8, f) ** 0.85);
+  const halfW = (f) => halfM * (1 + 0.1 * smooth(0, 0.12, f) * (1 - smooth(0.12, 0.3, f))) * (1 - 0.88 * smooth(0.05, 0.85, f) ** 0.85);
   // Épaisseur de la masse : elle monte au-dessus du toupet en haut (les crins sortent de la nuque et basculent vers
   // l'avant — vu de face, le haut du toupet est arrondi, pas un bord droit sur le front), s'amincit vers la pointe et
   // sur les côtés.

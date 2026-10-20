@@ -219,8 +219,14 @@ ton gris par sommet, couleur dans la matière de chaque cheval) :
   de l'autre côté ; `thick` 0,85, plus de mèches, un quart de l'autre côté, plus courtes ; `short` 0,45), plus
   courte au garrot et à la nuque ; racine liée à la peau de la crête, pointe aux os `Mane1-4` (elle pend quand
   l'encolure descend) ;
+- *crête de la crinière* (sorte 4 de `hairRoot.w`) : autant de mèches courtes que les trois quarts de la crinière,
+  rubans debout le long de l'encolure, qui montent de la crête puis retombent, une sur quatre de l'autre côté,
+  texture arrêtée aux quatre cinquièmes des crins (crête pleine aux bouts inégaux). Les grandes mèches, couchées en
+  travers de la crête, y sont vues par la tranche depuis l'autre côté : sans la crête, à la caméra du jeu, le
+  cheval semblait sans crinière vu de gauche (un pointillé sur la crête) ;
 - *toupet* (`forelockCards`) : 15 à 25 rubans partis du haut du front, devant les oreilles, couchés sur le
-  chanfrein en léger éventail, liés à la tête ;
+  chanfrein, plus longs au milieu et qui se rejoignent un peu vers le bas (en pointe, pas une frange coupée
+  droit), liés à la tête ;
 - *queue* (`tailCards`) : 44 à 64 rubans partis de la peau du tronçon (coupes : centre et rayon ; 4 cm au-dessus
   des racines du GLB, plus de bosse de peau nue), plus serrés au milieu, qui suivent le tronçon puis pendent, plus
   larges à mi-longueur, effilés au bout, plus longs au milieu, 2,5 cm derrière les fesses et les cuisses (profil
@@ -231,13 +237,19 @@ ton gris par sommet, couleur dans la matière de chaque cheval) :
   mêmes rubans dressés, sur la nouvelle texture ;
 - *version réduite* : les mèches principales seulement (un ruban sur deux, rangées d'abord : un autre index sur les
   mêmes sommets) ;
-- *texture* (`hairTexture`) : bande de 512 × 128 générée en code (graine fixe), quatre mèches de 64 crins droits
-  en trois tons, racines pleines aux bords irréguliers, pointes effilées de longueurs inégales ; canaux : ton,
-  décalage du reflet, pente du crin en travers, couverture ; niveaux réduits qui gardent la même part de pixels
-  opaques (sinon la moyenne de l'alpha passe sous le seuil et les crins fondent au loin) ;
+- *texture* (`hairTexture`) : bande de 512 × 128 générée en code (graine fixe), quatre mèches de 64 crins droits ;
+  chaque mèche faite de 5 à 7 petites mèches qui ont chacune leur ton, leur décalage de reflet, leur longueur et
+  leur ondulation, crins resserrés vers la pointe (jours entre les petites mèches à partir de mi-longueur) : sur
+  les niveaux réduits (téléphone, de loin) les crins fondent mais pas les petites mèches, qui gardent des traînées
+  le long des crins et un reflet cassé au lieu d'un ruban de satin uni ; racines pleines aux bords irréguliers (le
+  décalage du reflet y change aussi d'un crin à l'autre), pointes effilées ; canaux : ton, décalage du reflet,
+  pente du crin en travers, couverture ; niveaux réduits qui gardent la même part de pixels opaques (sinon la
+  moyenne de l'alpha passe sous le seuil et les crins fondent au loin) ;
 - *matière* (`hairMaterial`) : normales « de volume » ; pointes qui ondulent vers l'extérieur (jamais dans
-  l'encolure) ; diffus enveloppant et reflet de Kajiya-Kay le long des crins, décalé crin par crin, ombre du soleil
-  comprise (`RE_Direct` de three.js remplacé) ; en haute, second reflet teinté et relief du crin ; contre-jour qui
+  l'encolure) ; diffus enveloppant et reflet de Kajiya-Kay le long des crins (0,06 × soleil en haute, 0,045 en
+  basse, bande étroite et décalage étalé : sur des crins parallèles comme le toupet couché, un sur cinq environ
+  s'allume, pas toute la mèche en gris ; racines plus mates), ombre du soleil comprise (`RE_Direct` de three.js
+  remplacé) ; en haute, second reflet teinté et relief du crin ; contre-jour qui
   traverse les pointes ; reflet du ciel atténué (la crinière noire était un aplat gris) ; crins foncés éclaircis crin
   par crin (on lit les mèches en basse, sans reflet), crins clairs plafonnés (plus de blanc brûlé) ;
 - *tresses du concours de beauté* : places mesurées sur les cartes (racines de la crinière, face arrière des mèches

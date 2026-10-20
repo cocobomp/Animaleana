@@ -925,17 +925,17 @@ const FORELOCK = { normal: 0.46, long: 0.56, thick: 0.48, short: 0.26, brush: 0.
  * TAIL_DEPTH : épaisseur d'avant en arrière du fuseau (part de sa largeur) ; TAIL_MASS_LEN : longueur du fuseau
  * (part de la queue sous le tronçon) ; TAIL_RINGS × TAIL_AROUND : anneaux et points par anneau.
  */
-const MANE_CARDS = 0.62;
+const MANE_CARDS = 0.52;
 const MANE_LEFT = 0.2;
 const MANE_ROLL = 0.055;
 const MANE_MASS_LEN = 0.8;
 const FORE_CARDS = 0.55;
 const FORE_THICK = 0.02;
-const TAIL_CARDS = 0.75;
+const TAIL_CARDS = 0.62;
 const TAIL_DEPTH = 0.8;
 const TAIL_WIDTH = 0.13;
 const TAIL_MASS_LEN = 0.95;
-const TAIL_RINGS = 24;
+const TAIL_RINGS = 18;
 const TAIL_AROUND = 20;
 /** Rangées de la texture des crins (une mèche différente par quart de la hauteur) : [v du milieu, demi-hauteur]. */
 const HAIR_ROWS = [0, 1, 2, 3].map((k) => [(k + 0.5) / 4, 0.117]);
@@ -1307,9 +1307,9 @@ function maneCards(S, B, body, pos, coat) {
   // le dessus de la crête, retournée, puis la grande du côté droit), rééchantillonnées à part (NL points à gauche
   // jusqu'à la crête, NR à droite : la crête est la même colonne de la grille à chaque station, la surface ne se tord
   // pas), puis écartées de la peau de l'épaisseur de la crinière à cet endroit (jamais rapprochées : la nappe qui
-  // pend reste où elle pend). Le bord gauche, où l'épaisseur s'annule, est sur la peau. (36 à 44 stations : la masse
-  // est lisse, 1,5 à 2 cm entre deux stations suffisent ; au-delà, des triangles de plus sans rien de plus à voir.)
-  const NS = Math.max(24, Math.round(44 * Math.min(1, 0.5 + len0)));
+  // pend reste où elle pend). Le bord gauche, où l'épaisseur s'annule, est sur la peau. (24 à 36 stations : la masse
+  // est lisse, 2 à 2,5 cm entre deux stations suffisent ; au-delà, des triangles de plus sans rien de plus à voir.)
+  const NS = Math.max(24, Math.round(36 * Math.min(1, 0.5 + len0)));
   const NL = 5;
   const NR = len0 > 0.4 ? 11 : 10;
   const NP = NL + NR;
@@ -1385,43 +1385,63 @@ function maneCards(S, B, body, pos, coat) {
   const LR = 5;
   const LP = 8;
   const lockT = 0.016 * Math.sqrt(S.D.scale.gx ?? 1);
+  // Chemin d'une mèche qui passe à gauche, à la place t : sur le flanc gauche du rouleau (les points de la nappe, de la
+  // crête à son bord gauche, entre deux stations), à la part keep de son épaisseur (1 : dessus, à h ; moins : dedans),
+  // puis le long de la peau sur L sous le bord du rouleau. (Posées par la pesanteur sur le champ « corps + épaisseur »,
+  // les mèches de gauche glissaient sur le flanc du rouleau comme sur un toit et sortaient de 10 cm en travers de
+  // l'encolure, au lieu de pendre.) f0 : part du chemin sur le rouleau.
+  const leftPath = (t, L, keep = 1, h = 0.003) => {
+    let i = 0;
+    while (i < NS - 2 && rows[i + 1].t < t) i++;
+    const u = Math.min(1, Math.max(0, (t - rows[i].t) / (rows[i + 1].t - rows[i].t)));
+    const roll = [];
+    for (let k = NL - 1; k >= 0; k--) {
+      const p = rows[i].pts[k].clone().lerp(rows[i + 1].pts[k], u);
+      const d = body(p);
+      roll.push(p.addScaledVector(body.grad(p, V(), d), h - (1 - keep) * Math.max(0, d)));
+    }
+    const edge = roll[NL - 1];
+    const dir = edge.clone().sub(roll[NL - 2]).normalize();
+    const hang = drape(body, edge, dir, L, { h: 0.004, bend: 0.04, np: 6, steps: Math.max(8, Math.round(L / 0.012)), stick: 0.02 });
+    let rl = 0;
+    for (let k = 1; k < NL; k++) rl += roll[k].distanceTo(roll[k - 1]);
+    return { pts: [...roll, ...hang.slice(1)], f0: rl / (rl + L) };
+  };
   const locks = lefts.map((m) => {
     const lr = [];
     for (let j = 0; j < LR; j++) {
       const r = (j / (LR - 1)) * 2 - 1;
       const t = m.t + r * m.w;
-      const F = frameAt(t);
-      const top = F.c.clone().addScaledVector(F.up, 0.002).add(V(-0.004, 0, 0));
-      const L = (LEFT + m.L) * (1 - 0.3 * r * r);
-      const pts = drape(mbody, top, F.up.clone().multiplyScalar(0.25).add(V(1, 0, 0)), L, { h: 0.003, bend: 0.05, np: LP, steps: Math.max(10, Math.round(L / 0.01)), stick: 0.03 });
-      lr.push({ r, t, pts });
+      const path = leftPath(t, m.L * (1 - 0.15 * r * r));
+      lr.push({ r, t, pts: resample(path.pts, LP), f0: path.f0 });
     }
-    // (resserrée vers la rangée du milieu à partir du premier quart : la mèche finit en pointe)
-    const mid = lr[(LR - 1) / 2].pts;
+    // (pleine sur le rouleau, resserrée vers la rangée du milieu en dessous : la mèche finit en pointe)
+    const mid = lr[(LR - 1) / 2];
     for (const row of lr) {
       row.pts.forEach((p, k) => {
         const f = k / (LP - 1);
-        p.lerp(mid[k], 0.75 * smooth(0.45, 1, f) * Math.abs(row.r) ** 0.5);
+        p.lerp(mid.pts[k], 0.9 * smooth(mid.f0, 1, f) * Math.abs(row.r) ** 0.5);
       });
     }
-    // (bombée au milieu, posée au-dessus du rouleau, jamais dans la peau)
+    // (sous le bord du rouleau, bombée au milieu ; jamais dans la peau)
     for (const row of lr) {
       row.pts.forEach((p, k) => {
-        if (!k) return;
         const f = k / (LP - 1);
-        const d = mbody(p);
-        const want = 0.003 + lockT * (1 - row.r * row.r) * (1 - 0.6 * f) * smooth(0, 0.15, f);
-        if (d < want) p.addScaledVector(mbody.grad(p, gq, d), want - d);
+        if (f < mid.f0) return;
+        const d = body(p);
+        const want = 0.004 + lockT * (1 - row.r * row.r) * smooth(mid.f0, mid.f0 + 0.25, f) * (1 - 0.5 * smooth(0.6, 1, f));
+        if (d < want) p.addScaledVector(body.grad(p, gq, d), want - d);
       });
     }
+    // (racine de la mèche à 6 mm sous la crête, juste sous celles de la nappe : jamais la même qu'une rangée de la nappe)
     const Fm = frameAt(m.t);
-    const root = Fm.c.addScaledVector(Fm.up, -0.005);
+    const root = Fm.c.addScaledVector(Fm.up, -0.006);
     const w = lockWeights(root, 0, 0.6);
     return {
       m, rows: lr,
       mass: {
         P: lr.map((row) => row.pts), kind: 0, strip: LR - 1, u0: HAIR_MASS.root,
-        out: (j, k) => mbody.grad(lr[j].pts[k], V()),
+        out: (j, k) => body.grad(lr[j].pts[k], V()),
         root: lr.map(() => root),
         G: (j, k) => k / (LP - 1),
         tone: (j, k) => 0.9 + 0.1 * smooth(0, 0.3, k / (LP - 1)) - 0.08 * Math.abs(lr[j].r),
@@ -1445,7 +1465,7 @@ function maneCards(S, B, body, pos, coat) {
       const p = pts[k];
       const F = frameNear(p);
       const hgt = -below(p, F);
-      const top = 0.75 * T0 * env(F.t) + 0.004;
+      const top = 0.65 * T0 * env(F.t) + 0.002;
       if (hgt > top) p.addScaledVector(F.up, top - hgt);
     }
   };
@@ -1463,14 +1483,16 @@ function maneCards(S, B, body, pos, coat) {
     const across = -sx * (0.002 + rng() * 0.008);
     const root = c.clone().addScaledVector(up, -0.005).add(V(across, 0, 0));
     const jit = 0.86 + 0.28 * rng();
-    // (celles de gauche, courtes : des pointes qui dépassent sous le bord du rouleau, pas un second rideau)
-    const L = sx > 0 ? (LEFT + 0.03 + 0.06 * rng()) * Math.min(1.4, 0.8 + len0) : len0 * prof(t) * jit;
+    const L = len0 * prof(t) * jit;
     // (vers la nuque, les mèches ne se soulèvent plus : elles passent sous la têtière)
     const lift = st.lift * (1 - 0.8 * smooth(0.75, 0.9, t));
     const d0 = up.clone().multiplyScalar(lift).add(V(sx * (1 - lift * 0.4), 0, 0)).addScaledVector(dir, (rng() - 0.5) * 0.2);
-    const h = 0.002 + rng() * (primary ? 0.004 : 0.007) + (sx > 0 ? 0.003 : 0);
-    const pts = drape(cbody, root, d0, L, { h, bend: 0.055 + rng() * 0.025, np: L > 0.26 ? 6 : 5, steps: 14, stick: 0.02, grav: gravAt(dir) });
-    cap(pts);
+    const h = 0.002 + rng() * (primary ? 0.004 : 0.007);
+    // (celles de gauche, courtes : dans le rouleau puis des pointes qui dépassent de 3 à 9 cm sous son bord, pas un
+    // second rideau ; racine sur la peau de la crête)
+    const pts = sx > 0
+      ? [root, ...resample(leftPath(t, (0.03 + 0.06 * rng()) * Math.min(1.4, 0.8 + len0), 0.6, h).pts, 5)]
+      : drape(cbody, root, d0, L, { h, bend: 0.055 + rng() * 0.025, np: L > 0.26 ? 6 : 5, steps: 14, stick: 0.02, grav: gravAt(dir) });
     const normals = pts.map((p) => mbody.grad(p, V()));
     if (style === 'long') {
       // Rideau ondulé : la mèche ondule en s'écartant de l'encolure (jamais vers elle) et un peu d'avant en arrière.
@@ -1482,6 +1504,7 @@ function maneCards(S, B, body, pos, coat) {
         p.addScaledVector(ez, 0.012 * w * Math.sin(f * 7 + ph * 1.3));
       });
     }
+    cap(pts);
     const m = Math.floor(pts.length / 2);
     const side = cardSide(normals[m], alongAt(pts, m), (rng() - 0.5) * 0.3);
     const card = {
@@ -1509,13 +1532,13 @@ function maneCards(S, B, body, pos, coat) {
       const x = ((r + 1) / 2) * (LR - 1);
       const j0 = Math.min(LR - 2, Math.floor(x));
       const u = x - j0;
-      const h = 0.002 + 0.002 * lrng();
+      const h = 0.001 + 0.002 * lrng();
       const pts = [];
       const normals = [];
       for (let k = 0; k < LP; k += 1) {
         const p = lk.rows[j0].pts[k].clone().lerp(lk.rows[j0 + 1].pts[k], u);
         const nn = mbody.grad(p, V());
-        pts.push(p.addScaledVector(nn, h + (k ? lockT * 0.4 * (1 - r * r) : 0)));
+        pts.push(p.addScaledVector(nn, h + (k ? 0.002 : 0)));
         normals.push(nn);
       }
       const root = pts[0].clone();

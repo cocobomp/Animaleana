@@ -199,6 +199,119 @@ describe('crinière, toupet et queue en cartes de crins', () => {
     expect(cards(horse('selle_francais', { foal: true }))[4].length).toBe(0);
   });
 
+  it('crinière : aucune carte au-dessus de la silhouette du rouleau, rien de dressé à la nuque', () => {
+    for (const breed of ['selle_francais', 'frison', 'arabe', 'akhal_teke', 'haflinger']) {
+      const md = horse(breed);
+      const g = md.hairMesh.geometry.attributes;
+      const coat = md.coatMesh.geometry.attributes.position;
+      const M = massVerts(md)[8];
+      // Haut de la masse par tranches de 2 cm le long de l'encolure (z).
+      const z0 = Math.min(...M.map((p) => p.z));
+      const top = new Map();
+      for (const p of M) {
+        const k = Math.floor((p.z - z0) / 0.02);
+        top.set(k, Math.max(top.get(k) ?? -Infinity, p.y));
+      }
+      // (le plus haut de la masse à 3 cm près le long de l'encolure : la crête monte vers la nuque, un bord de carte
+      // posé de biais peut être un peu plus loin que le dernier point de la masse)
+      const near = (z) => {
+        const k = Math.floor((z - z0) / 0.02);
+        return Math.max(top.get(k - 1) ?? -Infinity, top.get(k) ?? -Infinity, top.get(k + 1) ?? -Infinity);
+      };
+      // Les cartes de la crinière ne dépassent nulle part le haut de la masse de plus d'un centimètre et demi : vues de
+      // gauche, elles dépassaient en marches rectangulaires ; vers la nuque, elles se dressaient au-dessus des oreilles.
+      let n = 0;
+      for (let i = 0; i < g.position.count; i++) {
+        if (g.hairRoot.getW(i) !== 0) continue;
+        const m = near(g.position.getZ(i));
+        if (!Number.isFinite(m)) continue;
+        n++;
+        expect(g.position.getY(i), `${breed} z = ${g.position.getZ(i).toFixed(2)}`).toBeLessThan(m + 0.015);
+      }
+      expect(n, breed).toBeGreaterThan(200);
+      // La masse elle-même : un rouleau de quelques centimètres sur la crête, pas une brosse (par tranches de 4 cm, le
+      // haut du pelage près de la ligne du dessus, quand la tranche en a un sommet ; sur l'encolure, pas à la nuque où
+      // le haut du pelage de la tranche est déjà le front).
+      const kMax = Math.max(...top.keys());
+      for (const [k, mTop] of top) {
+        if (k > kMax * 0.85) continue;
+        const z = z0 + k * 0.02;
+        let topC = -Infinity;
+        for (let i = 0; i < coat.count; i++) if (Math.abs(coat.getX(i)) < 0.05 && Math.abs(coat.getZ(i) - z - 0.01) < 0.02) topC = Math.max(topC, coat.getY(i));
+        if (topC > mTop - 0.2) expect(mTop - topC, `${breed} z = ${z.toFixed(2)}`).toBeLessThan(0.13);
+      }
+      md.dispose();
+    }
+  });
+
+  it('mèches de gauche de la masse : sous le bord du rouleau, effilées en pointe ; aucune pour une crinière courte', () => {
+    const locks = (md) => {
+      // (mèches de gauche : les grilles de la masse dont toutes les rangées partent de la même racine)
+      const g = md.hairMesh.geometry.attributes;
+      // (et dont les points sont pris par huitièmes le long des crins : la nappe en a 15 ou 16, une rangée de la nappe
+      // peut avoir la même racine qu'une mèche ; ses rangées de bord de bande, en double, partagent aussi une racine)
+      const by = new Map();
+      for (let i = 0; i < g.position.count; i++) {
+        const f = g.hairG.getX(i);
+        if (g.hairRoot.getW(i) !== 8 || Math.abs(f * 7 - Math.round(f * 7)) > 1e-4) continue;
+        const k = [0, 1, 2].map((c) => g.hairRoot.getComponent(i, c).toFixed(5)).join(',');
+        if (!by.has(k)) by.set(k, []);
+        by.get(k).push({ p: new THREE.Vector3().fromBufferAttribute(g.position, i), f });
+      }
+      return [...by.values()].filter((l) => l.length >= 35);
+    };
+    for (const [breed, n] of [['selle_francais', 4], ['frison', 6], ['akhal_teke', 0]]) {
+      const md = horse(breed);
+      const L = locks(md);
+      expect(L.length, breed).toBe(n);
+      for (const l of L) {
+        // (plus grand écart entre deux points de la mèche pris au même endroit le long des crins)
+        const span = (sel) => {
+          const q = l.filter(sel).map((v) => v.p);
+          let d = 0;
+          for (const a of q) for (const b of q) d = Math.max(d, a.distanceTo(b));
+          return d;
+        };
+        const top = span((v) => v.f < 0.15);
+        const tip = span((v) => v.f > 0.95);
+        // (8 à 16 cm de large en haut, une pointe en bas)
+        expect(top, breed).toBeGreaterThan(0.07);
+        expect(tip, breed).toBeLessThan(top * 0.45);
+        // (du côté gauche, et plus bas que le bord du rouleau : 9,5 cm sous la crête)
+        const low = l.reduce((a, v) => (v.p.y < a.p.y ? v : a));
+        expect(low.p.x, breed).toBeGreaterThan(0.03);
+        expect(l[0].p.y - low.p.y, breed).toBeGreaterThan(0.1);
+      }
+      md.dispose();
+    }
+  });
+
+  it('queue : pleine de dos, d\'aplomb, et du volume de profil', () => {
+    for (const breed of ['selle_francais', 'arabe', 'frison']) {
+      const md = horse(breed);
+      const T = massVerts(md)[10];
+      const y0 = Math.min(...T.map((p) => p.y));
+      const y1 = Math.max(...T.map((p) => p.y));
+      let wide = 0;
+      let deep = 0;
+      for (let y = y0; y < y1; y += 0.05) {
+        const s = T.filter((p) => p.y >= y && p.y < y + 0.05);
+        if (s.length < 4) continue;
+        const xs = s.map((p) => p.x);
+        const zs = s.map((p) => p.z);
+        wide = Math.max(wide, Math.max(...xs) - Math.min(...xs));
+        deep = Math.max(deep, Math.max(...zs) - Math.min(...zs));
+        // (d'aplomb au repos : le milieu de chaque tranche à moins de 2 cm de l'axe du cheval)
+        expect(Math.abs(xs.reduce((a, b) => a + b, 0) / xs.length), breed).toBeLessThan(0.02);
+      }
+      // (vue de dos, plus large qu'un postérieur : 17 à 30 cm ; de profil, encore 13 cm au moins)
+      expect(wide, breed).toBeGreaterThan(0.17);
+      expect(wide, breed).toBeLessThan(0.3);
+      expect(deep, breed).toBeGreaterThan(0.13);
+      md.dispose();
+    }
+  });
+
   it.each(['selle_francais', 'fjord', 'frison', 'shetland'])('%s : poids des os de somme 1, os valides (crins, brosse, fanons)', (breed) => {
     const md = horse(breed);
     const meshes = md.root.children.filter((m) => m.isSkinnedMesh && m.geometry.attributes.hairG);
@@ -252,7 +365,7 @@ describe('crinière, toupet et queue en cartes de crins', () => {
     }
     // (masses + cartes : plus qu'avec les cartes seules, toujours moins que les crins du GLB ; version réduite : la
     // masse à un quart, une rangée et une colonne sur deux, et les cartes principales)
-    expect(worst).toBeLessThan(5000);
+    expect(worst).toBeLessThan(4200);
     const md = horse('selle_francais');
     const full = md.hairMesh.geometry;
     md.setLod(1);
@@ -367,6 +480,27 @@ describe('crins hors du corps, dans toutes les poses', () => {
 });
 
 describe('toupet en mèche', () => {
+  it('masse du toupet : resserrée en pointe entre les yeux, au milieu du chanfrein', () => {
+    for (const breed of ['selle_francais', 'frison', 'arabe', 'shetland']) {
+      const md = horse(breed);
+      md.root.updateMatrixWorld(true);
+      const g = md.hairMesh.geometry.attributes;
+      const top = [];
+      const tip = [];
+      for (let i = 0; i < g.position.count; i++) {
+        if (g.hairRoot.getW(i) !== 9) continue;
+        const p = md.head.worldToLocal(new THREE.Vector3().fromBufferAttribute(g.position, i));
+        if (g.hairG.getX(i) < 0.12) top.push(p.x);
+        if (g.hairG.getX(i) > 0.75) tip.push(p.x);
+      }
+      const w = (l) => Math.max(...l) - Math.min(...l);
+      expect(w(top), breed).toBeGreaterThan(0.05);
+      expect(w(tip), breed).toBeLessThan(w(top) * 0.3);
+      expect(Math.abs(tip.reduce((a, b) => a + b, 0) / tip.length), breed).toBeLessThan(0.01);
+      md.dispose();
+    }
+  });
+
   it('plus long au milieu qu\'aux bords : une mèche en pointe (pas un rectangle rayé collé sur le front)', () => {
     for (const breed of ['selle_francais', 'frison', 'arabe']) {
       const md = horse(breed);

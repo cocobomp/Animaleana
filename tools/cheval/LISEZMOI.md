@@ -52,7 +52,7 @@ Le modèle d'origine n'a aucune animation : toutes les allures sont générées 
    - un **index simplifié par matière** (fusion d'arêtes sur les sommets existants), rangé dans un nœud
      `horse_lod` (`extras.lod`) dont les primitives partagent les attributs de la primitive d'origine :
      robe 7 390 → 3 103 triangles (écart 0,45 % de sa taille, ≈ 1,2 cm), yeux 1 920 → 384, crins 5 676 → 2 837
-     (0,21 %, ≈ 0,6 cm) ; en tout
+     (0,21 %, ≈ 0,6 cm ; les crins du GLB ne sont plus dessinés depuis les cartes de crins, voir plus bas) ; en tout
      **14 986 → 6 324 triangles** ;
    - la **carte des crins** (`horse_hair_detail`) ramenée à **512²** comme sa carte de relief (354 → 103 Kio) :
      elle pesait plus que celle de la robe.
@@ -205,6 +205,46 @@ deux fois, la première pour un avatar aussitôt jeté). `tests/riderFit.test.js
   avec MSAA (SwiftShader dessine sur le processeur : 1,44 fois plus de pixels, MSAA payé en entier), comme
   avant au réglage de repli. En haute : + 0,6 k triangles, mêmes appels, même temps d'image.
 
+**Crins en cartes** (plan « cheval beau », étape 2 ; `src/game/models/horseHair.js`, `tests/horseHair.test.js`) :
+les crins du GLB (primitive `horse_mane`, 5 676 triangles, texture « Hair12 » de fourrure frisée rangée en étoile)
+ne sont plus dessinés — plaque de caoutchouc sur l'encolure, perruque sur le front, queue en sac. À leur place,
+des cartes de crins générées pour chaque gabarit (`hairShape`, géométrie partagée par les chevaux de la race,
+ton gris par sommet, couleur dans la matière de chaque cheval) :
+
+- *crinière* (`maneCards`) : 72 à 120 rubans de 5 ou 6 points le long de la crête, racines des deux côtés de la
+  ligne du dessus (vue de dessus, plus de raie de peau entre les mèches), posés par la pesanteur (`drape`) : la mèche
+  part un peu vers le haut, retombe en travers de la crête puis droit vers le bas, glisse sur la peau sans y entrer
+  (distance approchée `hairBody` : tronc, encolure en coupes perpendiculaires à son axe, tête) et reste couchée sur
+  une peau tournée vers le haut ; 24 cm × `B.mane` × le style (`long` 1,3 en rideau ondulé, un cinquième des mèches
+  de l'autre côté ; `thick` 0,85, plus de mèches, un quart de l'autre côté, plus courtes ; `short` 0,45), plus
+  courte au garrot et à la nuque ; racine liée à la peau de la crête, pointe aux os `Mane1-4` (elle pend quand
+  l'encolure descend) ;
+- *toupet* (`forelockCards`) : 15 à 25 rubans partis du haut du front, devant les oreilles, couchés sur le
+  chanfrein en léger éventail, liés à la tête ;
+- *queue* (`tailCards`) : 44 à 64 rubans partis de la peau du tronçon (coupes : centre et rayon ; 4 cm au-dessus
+  des racines du GLB, plus de bosse de peau nue), plus serrés au milieu, qui suivent le tronçon puis pendent, plus
+  larges à mi-longueur, effilés au bout, plus longs au milieu, 2,5 cm derrière les fesses et les cuisses (profil
+  arrière du pelage : au trot, le postérieur recule sous la queue) ; longueur de la queue du GLB × le gabarit,
+  jamais sous `TAIL_CLEAR` ; du tronçon vers `Tail2` sur la première moitié (la queue portée haut de l'arabe
+  retombe en arc) ;
+- *fanons* : rubans plus fins (3 cm au bout au lieu de 6) et plus nombreux ; *brosse* du Fjord et du poulain : les
+  mêmes rubans dressés, sur la nouvelle texture ;
+- *version réduite* : les mèches principales seulement (un ruban sur deux, rangées d'abord : un autre index sur les
+  mêmes sommets) ;
+- *texture* (`hairTexture`) : bande de 512 × 128 générée en code (graine fixe), quatre mèches de 64 crins droits
+  en trois tons, racines pleines aux bords irréguliers, pointes effilées de longueurs inégales ; canaux : ton,
+  décalage du reflet, pente du crin en travers, couverture ; niveaux réduits qui gardent la même part de pixels
+  opaques (sinon la moyenne de l'alpha passe sous le seuil et les crins fondent au loin) ;
+- *matière* (`hairMaterial`) : normales « de volume » ; pointes qui ondulent vers l'extérieur (jamais dans
+  l'encolure) ; diffus enveloppant et reflet de Kajiya-Kay le long des crins, décalé crin par crin, ombre du soleil
+  comprise (`RE_Direct` de three.js remplacé) ; en haute, second reflet teinté et relief du crin ; contre-jour qui
+  traverse les pointes ; reflet du ciel atténué (la crinière noire était un aplat gris) ; crins foncés éclaircis crin
+  par crin (on lit les mèches en basse, sans reflet), crins clairs plafonnés (plus de blanc brûlé) ;
+- *tresses du concours de beauté* : places mesurées sur les cartes (racines de la crinière, face arrière des mèches
+  de la queue) ; tant que le cheval est tressé, les mèches de la crinière rentrent dans les boutons
+  (`model.setBraided`).
+
+
 Ce qu'il coûte, et comment on le garde bas :
 
 - **élimination hors du champ** : chaque maillage du cheval (`HorseMesh`) a une boîte englobante refaite sur
@@ -213,7 +253,8 @@ Ce qu'il coûte, et comment on le garde bas :
   Elle contient toujours le maillage déformé (galop, broutage, saut, embonpoint, cartes de crins, couverture
   liée au squelette : `tests/horseRealPerf.test.js`) sans le dépasser de plus de quelques dizaines de cm ;
 - **version réduite** (index de `lod.mjs`) au-delà de 15 m en qualité basse et de 22 m en qualité haute
-  (distance divisée par la taille du cheval, hystérésis de 10 %) ; en qualité basse, crins sans carte de relief ;
+  (distance divisée par la taille du cheval, hystérésis de 10 %) ; en qualité basse, crins sans second reflet ni
+  relief du crin ;
 - **animation** : un cheval qui n'est ni dessiné ni dans une ombre n'est animé qu'une image sur trois (temps
   cumulé, jamais perdu), jamais quand on le monte, le mène ou qu'une séance le guide ; « vu ou pas » se décide
   une fois par image (`horseView.frame`), pas à chaque pas de simulation : en avance rapide (⏩, trois pas par

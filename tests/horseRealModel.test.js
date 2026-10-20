@@ -63,9 +63,9 @@ describe('animation du cheval réaliste', () => {
   });
 });
 
-/** Point le plus bas de la queue (sommets des crins liés aux os de la queue), maillage déformé. */
+/** Point le plus bas de la queue (sommets des cartes de crins liés aux os de la queue), maillage déformé. */
 function tailLow(md, rest = false) {
-  const mane = md.root.children.find((m) => m.isSkinnedMesh && m.geometry.attributes.hairG && !m.geometry.attributes.color);
+  const mane = md.hairMesh;
   const g = mane.geometry;
   const tail = [RIG_BONES.indexOf('Tail1'), RIG_BONES.indexOf('Tail2')];
   const v = new THREE.Vector3();
@@ -111,8 +111,7 @@ describe('queue du cheval réaliste', () => {
   it('allongée dans sa longueur, pas en largeur : une longue queue n\'est pas plus large qu\'une autre', () => {
     const width = (id) => {
       const md = horse(id);
-      const mane = md.root.children.find((m) => m.isSkinnedMesh && m.geometry.attributes.hairG && !m.geometry.attributes.color);
-      const g = mane.geometry;
+      const g = md.hairMesh.geometry;
       const tail = [RIG_BONES.indexOf('Tail1'), RIG_BONES.indexOf('Tail2')];
       let x0 = Infinity;
       let x1 = -Infinity;

@@ -1,6 +1,7 @@
 // Coutures de la robe : îlots d'UV de la carte de modelé (horse_body_detail) et de la carte de relief
 // (HorseMain2k00Norm00) poussés de DILATE pixels au-delà de leur bord, et niveaux de gris du modelé raccordés
-// d'un îlot à l'autre. node dilate.mjs <entrée.glb> <sortie.glb> (entrée : le GLB d'origine, pas déjà traité)
+// d'un îlot à l'autre ; côtes adoucies sur le corps (voir BAND). node dilate.mjs <entrée.glb> <sortie.glb> (entrée :
+// le GLB de lod.mjs, pas déjà traité)
 //
 // Hors des îlots, la carte de modelé gardait la mosaïque de gris de la texture source (des carrés de gris
 // différents collés au bord des îlots) et la carte de relief du noir (0, 0, 0). Le filtrage et les niveaux réduits
@@ -28,6 +29,19 @@ import sharp from 'sharp';
 const [inp, out] = process.argv.slice(2);
 const DILATE = 48; // (≥ 32 : jusqu'au niveau réduit 1/32, un texel ne voit plus que l'îlot)
 const LEVEL_BLUR = 5; // (rayon du flou de la mesure des gris de part et d'autre d'une couture, en texels)
+// Côtes : le modelé est une photo qui porte l'éclairage de la prise de vue — les ombres des côtes sur le flanc,
+// des bandes de 10 à 20 texels, lisibles même adoucies par le shader (hDetail). On retire BAND_CUT de la bande
+// moyenne (flou de BAND[0] moins flou de BAND[1] texels, îlots seuls) : le grain du poil (plus fin) et les grandes
+// masses (épaule, croupe, occlusion douce, plus larges) restent. Pas sur la tête (u < BAND_U[0], fondu jusqu'à
+// BAND_U[1]) : yeux, naseaux et ganache y sont de cette taille.
+const BAND = [3, 20];
+const BAND_CUT = 0.5;
+// Carte de relief (qui porte l'essentiel du relief des côtes : sans elle, plus de côtes sur le flanc) : des rayures
+// de 10 à 14 texels de période, dont le flou fin de BAND[0] ne laissait qu'un tiers dans la bande ; flou fin de 1 texel (le grain
+// du relief, 2 à 4 texels, reste aux quatre cinquièmes), BAND_CUT_N retiré.
+const BAND_N = [1, 20];
+const BAND_CUT_N = 0.8;
+const BAND_U = [0.3, 0.36];
 
 await MeshoptEncoder.ready;
 await MeshoptDecoder.ready;
@@ -330,8 +344,74 @@ for (const [re, normal] of [[/body_detail/, false], [/Norm00/, true]]) {
     }
     const after = seamGaps(lum(), mask, W, H);
     console.log(`coutures : ${seams.length} arêtes, ${before.n} mesures ; écart moyen des gris ${before.gap.toFixed(1)} -> ${after.gap.toFixed(1)} (sur 255)`);
+    // Bande moyenne retirée en partie (côtes) : voir BAND_CUT.
+    const l = lum();
+    const fine = maskedBlur(l, mask, W, H, BAND[0]);
+    const wide = maskedBlur(l, mask, W, H, BAND[1]);
+    let e0 = 0;
+    let e1 = 0;
+    let n = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (!mask[i]) continue;
+        const u = (x + 0.5) / W;
+        const k = BAND_CUT * Math.min(1, Math.max(0, (u - BAND_U[0]) / (BAND_U[1] - BAND_U[0])));
+        const band = fine[i] - wide[i];
+        for (let c = 0; c < 3; c++) px[i * 3 + c] -= k * band;
+        if (k > 0) {
+          e0 += band * band;
+          e1 += (band * (1 - k)) ** 2;
+          n++;
+        }
+      }
+    }
+    console.log(`bande moyenne (${BAND[0]}-${BAND[1]} texels) du corps : écart type ${Math.sqrt(e0 / n).toFixed(1)} -> ${Math.sqrt(e1 / n).toFixed(1)} (sur 255)`);
   }
   const filled = dilate(px, ok, W, H);
+  if (normal && W === H) {
+    // Relief des côtes (la carte de relief porte l'essentiel : sans elle, plus de côtes sur le flanc) : bande
+    // moyenne des pentes x et y retirée de BAND_CUT_N sur le corps, normales renormalisées.
+    const ch = (c) => {
+      const v = new Float32Array(W * H);
+      for (let i = 0; i < W * H; i++) v[i] = px[i * 3 + c] / 127.5 - 1;
+      return v;
+    };
+    const nx = ch(0);
+    const ny = ch(1);
+    const nz = ch(2);
+    const fx = maskedBlur(nx, mask, W, H, BAND_N[0]);
+    const wx = maskedBlur(nx, mask, W, H, BAND_N[1]);
+    const fy = maskedBlur(ny, mask, W, H, BAND_N[0]);
+    const wy = maskedBlur(ny, mask, W, H, BAND_N[1]);
+    let e0 = 0;
+    let e1 = 0;
+    let n = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (!mask[i]) continue;
+        const k = BAND_CUT_N * Math.min(1, Math.max(0, ((x + 0.5) / W - BAND_U[0]) / (BAND_U[1] - BAND_U[0])));
+        if (k <= 0) continue;
+        const bx = fx[i] - wx[i];
+        const by = fy[i] - wy[i];
+        let a = nx[i] - k * bx;
+        let b = ny[i] - k * by;
+        let c = Math.max(0.2, nz[i]);
+        const l = Math.hypot(a, b, c);
+        a /= l;
+        b /= l;
+        c /= l;
+        px[i * 3] = (a + 1) * 127.5;
+        px[i * 3 + 1] = (b + 1) * 127.5;
+        px[i * 3 + 2] = (c + 1) * 127.5;
+        e0 += bx * bx + by * by;
+        e1 += (bx * (1 - k)) ** 2 + (by * (1 - k)) ** 2;
+        n++;
+      }
+    }
+    console.log(`relief : bande moyenne (${BAND_N[0]}-${BAND_N[1]} texels) des pentes du corps ${Math.sqrt(e0 / n).toFixed(3)} -> ${Math.sqrt(e1 / n).toFixed(3)}`);
+  }
   const outPx = Buffer.alloc(W * H * 3);
   for (let i = 0; i < W * H; i++) {
     if (normal && !ok[i]) {

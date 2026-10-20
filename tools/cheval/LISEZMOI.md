@@ -62,6 +62,25 @@ Le modèle d'origine n'a aucune animation : toutes les allures sont générées 
    GLB brut, encodée en WebP comme `pack.mjs` — qualité 82, effort maximal, qui redonne l'ancienne image au
    bit près sans la correction — puis remise dans le GLB ; géométrie, allures et autres images identiques.)
    `lod.mjs` peut être relancé sur sa propre sortie (il refait les index).
+6. **`dilate.mjs`** (meshoptimizer, sharp ; `node dilate.mjs horse_real.glb sortie.glb`, sur le GLB de `lod.mjs`,
+   jamais deux fois) : coutures de la robe.
+   - les **îlots d'UV** de la carte de modelé et de la carte de relief sont retrouvés en dessinant les triangles de
+     la robe dans l'espace des UV, puis **dilatés de 48 px** (chaque texel hors d'un îlot prend la moyenne de ses
+     voisins déjà remplis ; au-delà, la moyenne des îlots) : hors des îlots, le modelé gardait la mosaïque de gris
+     de la texture source et le relief du noir, que le filtrage et les mipmaps mêlaient au bord des îlots (fin
+     trait sombre le long de la ganache d'un bai, petits triangles sombres à la nuque) ;
+   - **niveaux de gris raccordés** le long des 329 coutures (arêtes dont les deux triangles ont des UV
+     différentes) : écart des gris moyens (flou de 5 texels, îlot seul) mesuré des deux côtés, décalage de ∓ la
+     moitié fixé sur la couture et étendu à tout l'îlot par une interpolation de Laplace (du grossier au fin) : le
+     grain du poil ne change pas. Écart moyen 24,3 → 5,2 sur 255 ;
+   - **côtes adoucies** sur le corps (u > 0,3 ; pas sur la tête, où yeux, naseaux et ganache ont cette taille) :
+     la carte de relief porte l'essentiel des côtes (sans elle, plus aucune sur le flanc ; sans le modelé, elles
+     restent) — des rayures de 10 à 14 texels de période ; 80 % de sa bande moyenne (flou de 1 texel moins flou de
+     20 texels, sur les pentes x et y, îlots seuls) sont retirés et les normales renormalisées (écart type de la
+     bande 0,115 → 0,024) ; le grain du relief et les grandes masses (épaule, croupe, coude) restent. Le modelé perd
+     la moitié de sa bande 3-20 texels (les ombres peintes des côtes : écart type 18,8 → 9,5 sur 255).
+
+   Fichier final : **749 992 octets**.
 
 Pour ne changer qu'une texture sans refaire les allures : relancer `lyndon_prep.py` et `prep2.py`, puis
 **`retex.mjs`** remplace l'image dans le GLB brut d'origine (`node retex.mjs horse_raw.glb horse_body_detail
@@ -178,13 +197,18 @@ deux fois, la première pour un avatar aussitôt jeté). `tests/riderFit.test.js
 - *posé au sol* : le sable des carrières (paddock, concours, carrières construites) est au ras du terrain
   (`buildings.sandGeometry`, 0,4 cm, maille de 1,25 m, décalage de profondeur) ; il était 3 à 5 cm plus haut et
   cachait l'ombre de contact, les sabots et les pieds s'y enfonçaient. Ombre de contact à 0,75 en qualité basse.
-  En basse (pas d'ombre du soleil), quatre petites ombres sous les sabots (`soleShadows` : un maillage de
-  8 triangles par cheval, placé dans le shader juste avant le dessin d'après les matrices locales des membres :
-  pleine sabot posé, nulle levé de 25 cm, poses des activités comprises) ;
-- *net sur téléphone* : en qualité basse sur un écran fin, 1,5 pixel par point et MSAA au lieu de 1,25 sans
-  anticrénelage, repli à 1,25 si les premières secondes dépassent 22 ms par image (`src/game/pixelBudget.js`),
-  retenu (`animaleana.pixelSlow`) : aux parties suivantes, un téléphone lent reprend l'ancien réglage ;
-  crins en alphaToCoverage dès que l'anticrénelage est là ; version réduite au-delà de 15 m (et non 7) ;
+  En basse (pas d'ombre du soleil), quatre petites ombres sous les sabots (`soleShadows` : un maillage par
+  cheval, placé dans le shader juste avant le dessin d'après les matrices locales des membres : pleine sabot posé,
+  nulle levé de 25 cm, poses des activités comprises), qui porte aussi l'ombre de contact (5e carré, fixe sous le
+  corps, 0,75) : 10 triangles et **un seul appel de dessin** par cheval, comme avant les ombres des sabots (qui en
+  coûtaient un de plus) ; en haute, l'ombre de contact reste à part (0,5) ;
+- *net sur téléphone* : en qualité basse sur un écran fin, 1,25 pixel par point **avec MSAA** (avant : sans
+  anticrénelage) ; si les premières secondes dépassent 22 ms par image (`src/game/pixelBudget.js`), 1 pixel par
+  point pour la partie en cours (le MSAA ne peut plus changer) et l'appareil est retenu (`animaleana.pixelSlow`) :
+  aux parties suivantes, un téléphone lent reprend l'ancien réglage, 1,25 sans MSAA. (1,5 pixel par point avec
+  MSAA, essayé d'abord, coûtait 2 à 2,6 fois l'ancien temps d'image sur SwiftShader : voir plus bas ; sur un
+  processeur graphique de téléphone, qui dessine par tuiles, le MSAA coûte bien moins que des pixels en plus.)
+  Crins en alphaToCoverage dès que l'anticrénelage est là ; version réduite au-delà de 15 m (et non 7) ;
 - *port de tête* : `HEAD_UP` (encolure 0,12 rad, nuque 0,18 rad) ajouté par `overlay` à l'arrêt et au pas, rien au
   broutage ni en somnolence : chanfrein 68° → 48 à 50° sous l'horizontale, nuque 12 cm plus haut ; oreilles
   calmes (±0,06 rad, ensemble, un peu vers l'avant). `model.photoPose()` : la même pose attentive pour les photos ;
@@ -194,16 +218,40 @@ deux fois, la première pour un avatar aussitôt jeté). `tests/riderFit.test.js
   appoint du soir (`gfx.horseFill`) ; Akhal-Teké sans métal ; robes noires à reflet brun chaud ;
 - *bien le montrer* : essayage de la sellerie sur un double neuf de l'animal (`thumbScenes.photoDouble`), cheval
   entier pour la selle et la couverture ; vignettes en pose de photo, cadrées sur le maillage dans sa pose ;
-  vignettes des races deux fois plus grandes ; portrait en tête de la fiche ; au box, le cheval se tourne vers le
-  joueur ; caméra du concours de beauté cadrant l'animal mené ; à cheval sur un écran en hauteur, caméra décalée de 1,8 m
-  de côté, plus près ; « Saut automatique » dans la barre du haut.
+  vignettes des races deux fois plus grandes ; portrait de la fiche (sur un téléphone en hauteur, à droite des
+  étiquettes : au-dessus, il repoussait les boutons de soins sous le bas de l'écran) ; au box, le cheval se tourne
+  vers le joueur — une fois arrivé dans son box seulement (`inStall`, 1,2 m) : « Rentrer au box » ne s'arrête plus
+  en chemin quand l'enfant est à côté ; caméra du concours de beauté cadrant l'animal mené, qui passe devant un grand
+  décor (arche, panneau du terrain : `rig.occluders`, posé par `Beauty.js`) au lieu de reculer derrière ; à cheval
+  sur un écran en hauteur, caméra décalée de 0,85 × 1,8 m de côté (`MOUNT_SIDE`) mais visant le cheval
+  (`MOUNT_AIM` 0), plus bas et moins loin devant (`MOUNT_DROP` 1,1 m, `MOUNT_AHEAD` 0,1 m, tangage + 0,2) : le
+  cheval entier au milieu de l'écran, croupe, queue et postérieurs au-dessus de « Descendre » et des boutons ronds ;
+  le décalage de côté est testé contre les murs (réduit au premier mur, lissé : la caméra n'entre plus dans
+  l'écurie quand on longe son mur côté montoir) ; « Saut automatique » dans la barre du haut.
 
   Mesuré (téléphone 390×844 DPR 3, 10 chevaux au paddock, Chromium SwiftShader sur une machine chargée : les
   temps d'image ne valent qu'en comparaison de mesures faites l'une après l'autre) : en basse, 297 k → 315 k
   triangles (les deux chevaux les plus proches en version complète), 99 → 106 appels de dessin (ombres des
-  sabots), mémoire inchangée (≈ 112 Mo), 26 → 27 programmes ; temps d'image + 14 à 21 % à 1,5 pixel par point
-  avec MSAA (SwiftShader dessine sur le processeur : 1,44 fois plus de pixels, MSAA payé en entier), comme
-  avant au réglage de repli. En haute : + 0,6 k triangles, mêmes appels, même temps d'image.
+  sabots, revenus depuis à un appel par cheval), mémoire inchangée (≈ 112 Mo), 26 → 27 programmes. Temps
+  d'image : le « + 14 à 21 % » écrit ici d'abord était faux — la contre-vérification (6 paires en alternance) a
+  trouvé × 2,0 à × 2,6 à 1,5 pixel par point avec MSAA contre l'ancien réglage (SwiftShader dessine sur le
+  processeur : 1,44 fois plus de pixels et le MSAA payé en entier), + 7 à + 22 % pour le reste des changements au
+  réglage de repli (1,25 sans MSAA). D'où le réglage actuel, 1,25 avec MSAA (mesures de la correction
+  ci-dessous). En haute : + 0,6 k triangles, mêmes appels, même temps d'image.
+
+  Correction après la contre-vérification (ombres de contact et des sabots en un maillage, crins refaits, robes,
+  tresses, caméra ; même vue, avant/après en alternance ×2, machine chargée — charge 9 à 12 sur 4 cœurs) :
+  - *à définition et anticrénelage égaux*, temps d'un rendu seul (médiane de 10) dans le bruit : 1 471-2 657 →
+    1 525-1 947 ms (MSAA, 1,25 et 1,5 pixel par point, tour chargé), 711-1 074 → 781-1 123 ms (tour moins
+    chargé), 456-949 → 459-552 ms (sans MSAA, 1,25) ; processeur (image sans rendu) ≈ 1 ms des deux côtés ;
+  - appels de dessin 116 → 104 (contexte MSAA) et 112 → 104-106 (sans MSAA) : un de moins par cheval ;
+    triangles 318 263 → 319 621 (+ 0,4 %, crins plus larges) ; programmes 26 → 25 ; mémoire JS 135-137 →
+    130-132 Mo ; en haute (2 pixels par point, MSAA, ombres) 530 692 → 532 968 triangles, 104 appels et 4
+    géométries par cheval des deux côtés ;
+  - *définition*, mêmes tours : 1,25 sans MSAA (ancien réglage) 456-552 ms, 1,25 avec MSAA 711-855 ms (× 1,6),
+    1,5 avec MSAA 892-1 123 ms (× 2) — le nouveau réglage par défaut (1,25 avec MSAA) coûte 20 à 35 % de moins
+    que 1,5 avec MSAA sur SwiftShader ; à mesurer encore sur un vrai téléphone Android milieu de gamme (pas
+    disponible ici), le repli des premières secondes protège les appareils lents.
 
 **Crins en cartes** (plan « cheval beau », étape 2 ; `src/game/models/horseHair.js`, `tests/horseHair.test.js`) :
 les crins du GLB (primitive `horse_mane`, 5 676 triangles, texture « Hair12 » de fourrure frisée rangée en étoile)
@@ -211,23 +259,27 @@ ne sont plus dessinés — plaque de caoutchouc sur l'encolure, perruque sur le 
 des cartes de crins générées pour chaque gabarit (`hairShape`, géométrie partagée par les chevaux de la race,
 ton gris par sommet, couleur dans la matière de chaque cheval) :
 
-- *crinière* (`maneCards`) : 72 à 120 rubans de 5 ou 6 points le long de la crête, racines des deux côtés de la
-  ligne du dessus (vue de dessus, plus de raie de peau entre les mèches), posés par la pesanteur (`drape`) : la mèche
-  part un peu vers le haut, retombe en travers de la crête puis droit vers le bas, glisse sur la peau sans y entrer
-  (distance approchée `hairBody` : tronc, encolure en coupes perpendiculaires à son axe, tête) et reste couchée sur
-  une peau tournée vers le haut ; 24 cm × `B.mane` × le style (`long` 1,3 en rideau ondulé, un cinquième des mèches
-  de l'autre côté ; `thick` 1,1, plus de mèches, un quart de l'autre côté ; `short` 0,45), plus
-  courte au garrot et à la nuque ; racine liée à la peau de la crête, pointe aux os `Mane1-4` (elle pend quand
-  l'encolure descend) ;
-- *crête de la crinière* (sorte 4 de `hairRoot.w`) : autant de mèches courtes que les trois quarts de la crinière,
-  rubans debout le long de l'encolure, qui montent de la crête puis retombent, une sur quatre de l'autre côté,
-  texture arrêtée aux quatre cinquièmes des crins (crête pleine aux bouts inégaux). Les grandes mèches, couchées en
-  travers de la crête, y sont vues par la tranche depuis l'autre côté : sans la crête, à la caméra du jeu, le
-  cheval semblait sans crinière vu de gauche (un pointillé sur la crête) ;
-- *toupet* (`forelockCards`) : 15 à 25 rubans partis du haut du front, devant les oreilles, couchés sur le
-  chanfrein, plus longs au milieu et qui se rejoignent un peu vers le bas (en pointe, pas une frange coupée
-  droit), liés à la tête ;
-- *queue* (`tailCards`) : 44 à 64 rubans partis de la peau du tronçon (coupes : centre et rayon ; 4 cm au-dessus
+- *crinière* (`maneCards`) : 72 à 120 rubans de 5 ou 6 points le long de la crête, partis juste à gauche de la
+  ligne du dessus et couchés sur l'encolure du côté droit (vue de dessus, plus de raie de peau entre les mèches),
+  posés par la pesanteur (`drape`) : la mèche part un peu vers le haut, retombe en travers de la crête puis droit
+  vers le bas, glisse sur la peau sans y entrer (distance approchée `hairBody` : tronc, encolure en coupes
+  perpendiculaires à son axe, tête) et reste couchée sur une peau tournée vers le haut ; `MANE_LEN` 34 cm (24 avant :
+  elle ne pendait que de 10 cm et se lisait comme une crête de lamelles) × `B.mane` × le style (`MANE_STYLE` :
+  `long` en rideau ondulé, un cinquième des mèches de l'autre côté ; `thick`, plus de mèches, un quart de l'autre
+  côté ; `short`), au plus `MANE_MAX` 62 cm, plus courte au garrot et à la nuque, rubans plus larges ; racine liée
+  à la peau de la crête, pointe aux os `Mane1-4` (elle pend quand l'encolure descend) ;
+- *rouleau de la crête* (sorte 4 de `hairRoot.w`) : mèches courtes (26 % de `MANE_LEN`, 17 % pour `short`) qui
+  montent à peine de la crête et retombent du côté de la crinière, hauteurs régulières — un liseré bas et continu
+  vu de gauche (la crête de lamelles dressées, de hauteurs tirées au sort, faisait une « iroquoise » crénelée en
+  basse) ; mèches de l'autre côté seulement pour les styles qui en ont ;
+- *toupet* (`forelockCards`) : 20 à 34 rubans larges partis entre les oreilles, posés sur la tête seule (la distance
+  de l'encolure, qui couvre la nuque, les dressait à la verticale ; racines devant le sommet de la nuque), couchés
+  sur le chanfrein, plus longs au milieu et qui se rejoignent un peu vers le bas, racine pleine et sombre (plus de
+  bande grise translucide en dents de scie en basse, plus de mèches vues par la tranche au pied des oreilles) ;
+  sous un bonnet anti-mouches (`gearModels.js`, emplacement `head` : `model.setForelockTucked`), ses mèches se
+  replient vers leur racine (uniform `hairTuck`, comme la crinière tressée) au lieu de traverser le voile ;
+- *queue* (`tailCards`) : 60 à 80 rubans plus larges (44 pour un poulain), groupés par quatre (ondulation et
+  profondeur communes : des mèches, pas un rideau de fils), longueurs inégales, partis de la peau du tronçon (coupes : centre et rayon ; 4 cm au-dessus
   des racines du GLB, plus de bosse de peau nue), plus serrés au milieu, qui suivent le tronçon puis pendent, plus
   larges à mi-longueur, effilés au bout, plus longs au milieu, 2,5 cm derrière les fesses et les cuisses (profil
   arrière du pelage : au trot, le postérieur recule sous la queue) ; longueur de la queue du GLB × le gabarit,
@@ -252,9 +304,15 @@ ton gris par sommet, couleur dans la matière de chaque cheval) :
   remplacé) ; en haute, second reflet teinté et relief du crin ; contre-jour qui
   traverse les pointes ; reflet du ciel atténué (la crinière noire était un aplat gris) ; crins foncés éclaircis crin
   par crin (on lit les mèches en basse, sans reflet), crins clairs plafonnés (plus de blanc brûlé) ;
-- *tresses du concours de beauté* : places mesurées sur les cartes (racines de la crinière, face arrière des mèches
-  de la queue) ; tant que le cheval est tressé, les mèches de la crinière et de la crête rentrent dans les boutons
-  (`model.setBraided`) ; la tresse de queue suit les crins pendant un coup de queue (`tests/horseRealGame.test.js`).
+- *tresses du concours de beauté* : sept boutons sur la peau de la crête (`measureBraids`, du début des racines de
+  la crinière à t = 0,86 vers la nuque ; posés au-dessus des mèches, ils flottaient avec un jour dessous une fois la
+  crinière rentrée), enfoncés d'un tiers et reliés par un bourrelet bas de crins tressés centré sur la peau à
+  mi-chemin (`braidSpots.crest` : 3e élément ; pris sur la crête, pas sur la corde : l'encolure du Frison se creuse
+  devant le garrot) — plus de « perles » posées sur une crête ronde avec le ciel autour ; tant que le cheval est
+  tressé, les mèches de la crinière et de la crête rentrent dans les boutons (`model.setBraided`) et la crinière
+  suit l'encolure sans ressort ni flottement (les boutons, portés par l'encolure, restaient sinon en l'air quand la
+  tête bougeait) ; face arrière des mèches de la queue, la tresse de queue suit les crins pendant un coup de queue
+  (`tests/horseRealGame.test.js` : bouton et bourrelet sur la peau pour les 33 races).
 
   Mesuré (avant : juste avant l'étape 2 ; après : crins en cartes ; mêmes graines) :
   - *triangles par cheval* (33 races, moyenne, `node` sur le GLB) : 15 098 → 11 769 en version complète (crins
@@ -343,21 +401,25 @@ allongé, ≈ 6 à 15 ms pendant les temps morts) ; proportions faites au charge
 `src/game/models/horseCoat.js`, `earCup`, `openNostrils`, `openEyelids` dans `horseReal.js` ;
 `tests/horseFinish.test.js`) :
 
-- *gris pommelé* : pommelures rondes aux bords doux (cellules de 13 cm, rayon 0,40 à 0,52 cellule, un peu déformées),
-  plus claires au centre (+ 10 %), sur un fond gris plus foncé qui les sépare (× 0,55) ; nettes sur le corps, la
-  croupe et l'épaule, fondues vers le ventre et le bas des membres, en leur moyenne quand un pixel couvre plusieurs
-  centimètres (pas de scintillement). Avant : le réseau n'assombrissait que de 20 % au plus, sous le grain du modelé.
-  Contraste mesuré sur les captures (flanc, 90e contre 10e centile de la luminance rapportée à l'éclairage
-  d'ensemble) : 25 → 49 % en qualité haute, 22 → 45 % à la caméra du jeu rapprochée sur téléphone ;
-- *pie* : bruit déformé à deux octaves seulement (les fines faisaient des îlots), étiré en hauteur :
-  des plaques verticales qui coupent le dos, au bord net (antialiasé par `fwidth`) mais déchiqueté (± 8 % à 5 cm) ;
-- *léopard et couverture* : taches de 2 à 6 cm de rayon, un peu allongées, plus nombreuses vers l'arrière, cernées
-  d'un halo marbré ; plus petites sur la tête et le bas des membres ; bas de la couverture d'après la hauteur (et non
+- *gris pommelé* : pommelures claires et rondes qui se touchent, séparées par un réseau de fond gris aux lignes fines
+  et irrégulières (rapport F1 / F2 des distances aux deux centres de cellule les plus proches, `COAT_LOOKS.dapple` :
+  fond × 0,7, centre + 12 %, cellules de 13 cm), un peu déformées ; deux tailles mêlées en qualité haute (une cellule
+  sur deux redivisée) ; nettes sur le corps, la croupe et l'épaule, fondues vers le ventre et le bas des membres, en
+  leur moyenne quand un pixel couvre plusieurs centimètres (pas de scintillement). D'abord des pois ronds, réguliers
+  et très contrastés, isolés sur un fond × 0,55 ;
+- *pie* : pour une graine donnée, les plaques sont celles d'avant l'étape 8 (même champ de bruit, même seuil) : le
+  cheval d'une partie sauvegardée garde ses marques et tout son blanc — le bruit étiré en hauteur de l'étape 8 en
+  retirait l'essentiel (un Shetland pie presque noir) ; seuls les bords changent, un peu déformés (`COAT_LOOKS.pinto`)
+  et déchiquetés, au bord net (antialiasé par `fwidth`) ; tête foncée d'après le poids de la tête (`hHead`) ;
+- *léopard et couverture* : mêmes cellules et même seuil qu'avant l'étape 8 (toutes les taches d'un cheval déjà là
+  gardées à leur place), quelques-unes de plus vers l'arrière, de tailles inégales (2 à 6 cm de rayon), un peu
+  allongées, cernées d'un halo marbré ; plus petites sur la tête et le bas des membres
+  (`tests/horseMarks.test.js` : le bruit du shader recopié en JavaScript, 20 graines) ; bas de la couverture d'après la hauteur (et non
   plus l'orientation de la peau ni la partie du corps, constante par triangle : des dents de scie sur la cuisse),
   bord givré ;
-- *noir* : poil plus lisse (rugosité 0,36 en haute, 0,40 en basse) mais moins de voile gris-bleu du ciel
-  (`specularIntensity` 0,72 en haute), ventre sans voile gris (l'éclaircissement du dessous suit la luminance de la
-  robe) ; *grain du poil* dans la rugosité de toutes les robes (traînées le long du corps, ± 22 %) : le reflet se casse
+- *noir* : rugosité 0,46 en haute, 0,48 en basse (0,36-0,40 faisait des reflets blancs durs, « latex »), reflet
+  `specularIntensity` 0,6, base relevée à moitié vers un noir brun (`BLACK_FLOOR` 0x26211f), ventre sans voile gris
+  (l'éclaircissement du dessous suit la luminance de la robe) ; *grain du poil* dans la rugosité de toutes les robes (traînées le long du corps, ± 22 %) : le reflet se casse
   au lieu d'un latex lisse ;
 - *robes dorées* (`coatGold` : teinte de 16 à 55°, saturée, ni grise, ni blanche, ni presque noire : alezan, palomino,
   isabelle, crins lavés, bai) : reflet de bord doré, satiné (haute) = robe × 1,4 tirée vers l'or, plus marqué ;
@@ -367,7 +429,17 @@ allongé, ≈ 6 à 15 ms pendant les temps morts) ; proportions faites au charge
   l'alezan, pas sur le bai ; palomino un peu moins effacé (modelé 0,45) ;
 - *isabelle* : raie de mulet nette de 3 à 5 cm, zébrures plus marquées, tête plus foncée ; *rouan* : tête et bas des
   membres de la couleur de base, plus foncés ;
-- *peau des gris et des appaloosas* : noire marbrée (de rose chez l'appaloosa) au bout du nez et autour des yeux ;
+- *peau des gris et des appaloosas* : marbrures petites et serrées, rose foncé et gris (plus de grandes plaques
+  blanches et roses, lisibles comme une maladie de peau de près), au bord des naseaux, aux lèvres et en un fin
+  cercle autour de l'œil ;
+- *Akhal-Teké* : base réchauffée vers l'or orangé (`SHEEN_WARM`) ; lumière d'ambiance de la robe (`AMBIENT_FIX`) :
+  le reflet de l'herbe garde sa force mais perd l'excès de vert (ramené au rouge ou au bleu, luminance gardée), sans
+  toucher au ciel — teinte du haut du flanc au pré, téléphone basse, 49,9° → 45,2° (palomino), 46,4° → 42,1°
+  (isabelle), 49,6° → 44,8° en haute (olive avant) ;
+- *jonction tête-encolure* : tout ce qui ne vaut que pour le corps (réseau des pommelures, ventre éclairci, robes
+  dorées, raie de mulet, rouan) suit un poids du corps continu (`bodyS`, tiré de `hHead`) et non le numéro de partie,
+  constant par triangle, qui découpait des plaques grises en dents de scie derrière l'œil, sous l'oreille et le long
+  de la ganache des chevaux gris (avec les coutures de `dilate.mjs`, plus de marche visible de trois quarts) ;
   *sabots rayés* de l'appaloosa (bandes verticales autour du centre du sabot) ;
 - *œil* : globe × 1,12 (`EYE_SCALE`) autour de son centre, pelage autour écarté d'autant au bord des paupières, de moins
   en moins jusqu'à 2,4 rayons (rien n'entre dans le globe, aucune paupière retournée) ; bord des paupières foncé, plus

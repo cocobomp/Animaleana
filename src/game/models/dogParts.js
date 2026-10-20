@@ -25,29 +25,40 @@ export function pendantEars(B) {
 }
 
 /**
- * Oreilles droites du shiba effacées du crâne (une fois par GLB) pour les races aux oreilles modelées : autour de la
- * racine de chaque oreille, la peau est ramenée sur une surface de crâne interpolée depuis le crâne alentour (rayon
- * depuis le centre de la tête, moyenne pondérée des sommets du crâne à plus de 4 cm de la racine, dans un cône autour
- * de la direction du sommet) ; l'oreille elle-même passe 4 mm dessous. Seulement abaissés, jamais relevés ; part c
- * (0 → 1) qui s'efface vers le bord de la zone. (Rentrer seulement les sommets de l'oreille laissait sa base bombée
- * et des lames de peau tendues entre les deux, en cornes sur le crâne.)
+ * Oreilles d'origine effacées du crâne (une fois par GLB) : oreilles droites du shiba pour les races aux oreilles
+ * modelées, lambeau replié du jack (flap : sa part, repérée par realDogBase) pour les oreilles droites ou modelées.
+ * Autour de la racine de chaque oreille, la peau est ramenée sur une surface de crâne interpolée depuis le crâne
+ * alentour (rayon depuis le centre de la tête, moyenne pondérée des sommets du crâne loin de la racine, dans un cône
+ * autour de la direction du sommet) ; l'oreille elle-même passe quelques millimètres dessous. Seulement abaissés,
+ * jamais relevés ; part c (0 → 1) qui s'efface vers le bord de la zone, part e de l'oreille elle-même (sans poil, rendue
+ * à la tête). (Rentrer seulement les sommets de l'oreille laissait sa base bombée et des lames de peau tendues entre les
+ * deux : cornes sur le crâne du shiba, lambeaux et échardes à la tempe des petits chiens.)
  */
-export function shibaEarHide(base) {
+export function earSkullHide(base, flap = null) {
   const coat = base.prims.coat;
   const n = coat.count;
   const W = base.W;
   const L = base.land;
   const I = (nm) => base.index.get(nm) ?? -1;
+  const jack = base.kind === 'jack';
+  // (tête du jack plus petite que celle du shiba : zone et crâne de référence plus serrés)
+  const excl = jack ? 0.03 : 0.042;
+  // (jack : tout ce qui dépasse du crâne jusqu'au bout du lambeau replié, qui retombe sur la joue à 8 cm de la racine)
+  const z0 = jack ? 0.08 : 0.03;
+  const z1 = jack ? 0.105 : 0.05;
+  const eyes = ['eyeL', 'eyeR'].map((nm) => base.heads[I(nm)]);
   const headP = base.heads[I('head')];
   const hc = headP.clone().lerp(V(L.midX, L.eyeY, L.eyeZ), 0.35);
   const roots = ['ear1L', 'ear1R'].map((nm) => base.heads[I(nm)]);
+  const flapC = [new Map(), new Map()];
+  if (flap) flap.forEach((F, s) => { if (F) for (let k = 0; k < F.ids.length; k++) flapC[s].set(F.ids[k], F.c[k]); });
   const p = V();
-  // crâne de référence (tête, hors oreilles, à plus de 4,2 cm des racines)
+  // crâne de référence (tête, hors oreilles et lambeaux, loin des racines)
   const skull = [];
   for (let i = 0; i < n; i++) {
-    if (W.head[i] < 0.5 || W.ear[i * 2] + W.ear[i * 2 + 1] > 0.01) continue;
+    if (W.head[i] < 0.5 || W.ear[i * 2] + W.ear[i * 2 + 1] > 0.01 || flapC[0].has(i) || flapC[1].has(i)) continue;
     p.fromArray(coat.pos, i * 3);
-    if (Math.min(p.distanceTo(roots[0]), p.distanceTo(roots[1])) < 0.042) continue;
+    if (Math.min(p.distanceTo(roots[0]), p.distanceTo(roots[1])) < excl) continue;
     p.sub(hc);
     const r = p.length();
     skull.push([p.x / r, p.y / r, p.z / r, r]);
@@ -78,23 +89,29 @@ export function shibaEarHide(base) {
       p.fromArray(coat.pos, i * 3);
       if (Math.sign(p.x - L.midX) !== side) continue;
       const we = W.ear[i * 2 + s];
+      // (part du lambeau franche : à moitié rentré, le bout du lambeau faisait des ailerons à la tempe)
+      const fc = smooth(0.05, 0.2, flapC[s].get(i) ?? 0);
       const dr = p.distanceTo(roots[s]);
       // (toute la peau que les os de l'oreille portent un peu : chez le shiba, une bosse de poil derrière l'oreille)
-      const c = Math.max(1 - smooth(0.03, 0.05, dr), smooth(0.0, 0.08, we));
-      if (!(c > 0.001) || W.head[i] < 0.3) continue;
+      // (pas les paupières : le tour de l'œil reste)
+      // (le lambeau du jack retombe vers l'avant : rien derrière la racine — la nuque n'est pas un lambeau)
+      const ne = jack ? smooth(0.018, 0.03, Math.min(p.distanceTo(eyes[0]), p.distanceTo(eyes[1]))) * smooth(roots[s].z - 0.02, roots[s].z - 0.004, p.z) : 1;
+      const c = Math.max((1 - smooth(z0, z1, dr)) * ne, smooth(0.0, 0.08, we), fc);
+      if (!(c > 0.001) || W.head[i] + W.neck[i] < 0.3) continue;
       p.sub(hc);
       const r = p.length();
       p.multiplyScalar(1 / r);
       const rs = skullR(p);
       if (rs === null) continue;
-      const rt = Math.min(r, rs - 0.0015 - 0.0045 * smooth(0.02, 0.5, we));
+      // (part de l'oreille : ses os, le lambeau repéré, et pour le jack ce qui dépasse franchement du crâne)
+      const e = Math.max(smooth(0.01, 0.25, we), fc, jack ? smooth(0.0015, 0.005, r - rs) * (1 - smooth(z0, z1, dr)) * ne : 0);
+      const rt = Math.min(r, rs - 0.0015 - (jack ? 0.003 : 0.0045) * smooth(0.02, 0.5, e));
       if (rt >= r - 1e-5) continue;
       ids.push(i);
       cs.push(c);
-      es.push(smooth(0.01, 0.25, we));
+      es.push(e);
       hide.push(hc.x + p.x * rt, hc.y + p.y * rt, hc.z + p.z * rt);
     }
-    // (e : part de l'oreille elle-même — sans poil, rendue à la tête —, c : part du déplacement)
     return { ids: Uint32Array.from(ids), c: Float32Array.from(cs), e: Float32Array.from(es), hide: Float32Array.from(hide) };
   });
 }
@@ -139,7 +156,11 @@ export function earShape(B) {
   S.width *= B.earW ?? 1;
   S.up += B.earSet ?? 0;
   S.fringe = clamp((B.feather - 0.6) / 0.5, 0, 1) * (B.earFringe ?? 1);
+  // (frangée : oreille plus épaisse, plus large, ondulée — pas une lame raide)
+  if (S.fringe > 0) Object.assign(S, { thick: S.thick * (1 + 0.5 * S.fringe), width: S.width * (1 + 0.15 * S.fringe), fold: S.fold * 0.6 });
   S.curl = B.curly ? 1 : 0;
+  // (frisée : oreille épaisse et touffue, sans pli raide à l'attache)
+  if (S.curl) Object.assign(S, { thick: S.thick * 1.6, fold: 0.003, width: S.width * 1.1 });
   if (B.puppy) {
     S.len *= 0.85;
     S.fringe *= 0.4;
@@ -288,7 +309,8 @@ export function buildPendantEars(base, D, B) {
         const lift = S.fold * hs * (1 - smooth(0, 0.4, v)) * (S.rose ? 1 : 1.2);
         // (le haut de l'oreille part de sous la peau : l'attache n'a pas de bord ouvert)
         const tuck = 0.026 * hs * (1 - smooth(0, 0.16, v));
-        const bump = S.curl ? (noise2(u * 5 + seed, v * 7) - 0.5) * 0.008 * hs : 0;
+        const bump = S.curl ? ((noise2(u * 5 + seed, v * 7) - 0.5) * 0.01 + (noise2(u * 11 + seed, v * 13) - 0.5) * 0.005) * hs * (0.5 + 0.5 * Math.abs(t))
+          : S.fringe ? Math.sin(v * 11 + u * 2 + seed) * 0.0022 * hs * S.fringe * smooth(0.25, 0.7, v) : 0;
         const x = sx + 0.0025 * hs + T + t * T + lift - tuck + bump;
         const pX = mid + side * x;
         pos.push(pX, q.y, q.z);
@@ -380,6 +402,7 @@ export function buildPendantEars(base, D, B) {
  */
 export function faceShape(base, B, P) {
   if (base.kind !== 'shiba') return;
+  if (!(B.cheek || B.mouth || B.flews || B.jowl || B.skullFlat || B.stop || B.square || B.eyeOpen || B.snout < 0.8 || B.underbite)) return;
   const cheek = B.cheek ?? 0;
   const mouth = B.mouth ?? 0;
   const flews = B.flews ?? 0;
@@ -396,6 +419,7 @@ export function faceShape(base, B, P) {
   const I = (nm) => base.index.get(nm) ?? -1;
   const jawI = I('jaw');
   const eyes = new Set([I('eyeL'), I('eyeR')]);
+  const tongue = new Set([1, 2, 3, 4, 5, 6].map((k) => I('tongue' + k)));
   const hs = B.head;
   const mid = L.midX;
   // dents (bande du haut de la texture) : rentrées derrière la lèvre (une incisive pointait sous la truffe)
@@ -470,10 +494,231 @@ export function faceShape(base, B, P) {
       dy += 0.0015;
       dz -= 0.004;
     }
+    // langue rentrée dans un museau court (boxer : la pointe passait sous la truffe) ; menton un peu avancé
+    if (B.snout < 0.8) {
+      let wt = 0;
+      for (let k = 0; k < 4; k++) if (tongue.has(coat.si[i * 4 + k])) wt += coat.sw[i * 4 + k];
+      if (wt > 0) {
+        dz -= wt * 0.035 * (0.8 - B.snout);
+        dy += wt * 0.004;
+      }
+    }
+    if (B.underbite && wj > 0.5 && z0 > 0.43 && y0 < 0.53) dz += B.underbite * 0.005 * smooth(0.43, 0.46, z0);
     if (dx || dy || dz) {
       P[i * 3] += dx * hs;
       P[i * 3 + 1] += dy * hs;
       P[i * 3 + 2] += dz * hs;
     }
+  }
+}
+
+/**
+ * Pompons du caniche (B.pompons) : toupet sur le crâne, bracelets au bas des quatre pattes, pompon au bout de la
+ * queue — des boules de poil frisé (sphères bosselées), chacune liée à un seul os (tête, métacarpe, métatarse, bout de
+ * la queue). Attribut pom : rayon de la boule ; le shader la ramène à son centre quand la coupe n'est pas « caniche »
+ * (cPom, voir setCut). Renvoie les attributs à ajouter au pelage, ou null.
+ */
+export function buildPompons(base, D, B) {
+  if (!B.pompons) return null;
+  const I = (nm) => base.index.get(nm) ?? -1;
+  const coat = base.prims.coat;
+  const n = coat.count;
+  const W = base.W;
+  const P = D.pos;
+  const L = base.land;
+  const mid = L.midX;
+  const hs = B.head;
+  // grain : un coin de poil du flanc
+  let uv0 = [0.5, 0.5];
+  let low0 = 0;
+  {
+    let best = Infinity;
+    const zc = (L.hipZ + L.shZ) / 2;
+    const yc = L.topY - 0.05;
+    for (let i = 0; i < n; i++) {
+      const d = Math.abs(coat.pos[i * 3 + 2] - zc) + Math.abs(coat.pos[i * 3 + 1] - yc) + Math.abs(Math.abs(coat.pos[i * 3] - mid) - L.halfW * 0.8);
+      if (d < best) {
+        best = d;
+        uv0 = [coat.uv[i * 2], coat.uv[i * 2 + 1]];
+        low0 = base.attrs?.cmpLow?.array[i] ?? 0;
+      }
+    }
+  }
+  const balls = [];
+  // toupet : au-dessus du crâne, entre les oreilles, un peu vers l'avant
+  {
+    const HJ = D.heads[I('head')];
+    let top = HJ.clone();
+    const eyeZ = (D.heads[I('eyeL')].z + D.heads[I('eyeR')].z) / 2;
+    for (let i = 0; i < n; i++) {
+      if (W.head[i] < 0.8 || (D.hidden && D.hidden[i] > 0.3) || Math.abs(P[i * 3] - mid) > 0.02) continue;
+      if (P[i * 3 + 2] > eyeZ || P[i * 3 + 2] < HJ.z) continue;
+      if (P[i * 3 + 1] > top.y) top = V(mid, P[i * 3 + 1], P[i * 3 + 2]);
+    }
+    const r = 0.046 * hs;
+    balls.push({ c: top.clone().add(V(0, r * 0.35, r * 0.15)), r, sc: V(1.05, 0.85, 1.1), bone: I('head'), part: [0, 0, 1, 0] });
+  }
+  // bracelets : au bas des pattes, au-dessus du pied
+  for (const [up, low, front] of [['metacarpusL', 'toesL', 1], ['metacarpusR', 'toesR', 1], ['metatarsusL', 'htoesL', 0], ['metatarsusR', 'htoesR', 0]]) {
+    const a = D.heads[I(up)];
+    const b = D.heads[I(low)];
+    if (!a || !b) continue;
+    const c = a.clone().lerp(b, front ? 0.45 : 0.55);
+    c.y = Math.max(c.y, 0.045);
+    const r = 0.034 * Math.sqrt(B.legW || 1);
+    balls.push({ c: c.add(V(0, 0.01, 0)), r, sc: V(1, 1.25, 1), bone: I(up), part: [0, 0, 0, 1] });
+  }
+  // pompon de la queue : au bout
+  {
+    const tb = base.tailBones;
+    if (tb.length) {
+      const t0 = D.heads[tb[0]];
+      let tip = D.heads[tb[tb.length - 1]].clone();
+      let bd = -1;
+      for (let i = 0; i < n; i++) {
+        if (W.tail[i] < 0.6) continue;
+        const d = V(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]).distanceTo(t0);
+        if (d > bd) {
+          bd = d;
+          tip = V(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
+        }
+      }
+      const last = tb[tb.length - 1];
+      balls.push({ c: tip.lerp(D.heads[last], 0.25), r: 0.042, sc: V(1, 1, 1.05), bone: last, part: [0, 1, 0, 0] });
+    }
+  }
+  const NA = 12;
+  const NB = 9;
+  const pos = [];
+  const rest = [];
+  const uv = [];
+  const si = [];
+  const sw = [];
+  const part = [];
+  const pom = [];
+  const index = [];
+  const HJ = D.heads[I('head')];
+  balls.forEach((bl, j) => {
+    const start = pos.length / 3;
+    for (let a = 0; a <= NB; a++) {
+      const th = (a / NB) * Math.PI;
+      for (let k = 0; k < NA; k++) {
+        const ph = (k / NA) * Math.PI * 2;
+        const d = V(Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph));
+        // bosses de frisure (bruit sur la direction), plus douces aux pôles
+        const bump = 1 + 0.13 * (noise2(ph * 1.9 + j * 3.1, th * 2.3 + j) - 0.5) + 0.07 * (noise2(ph * 4.3 + j, th * 5.1) - 0.5);
+        const r = bl.r * bump;
+        const p = bl.c.clone().add(V(d.x * bl.sc.x, d.y * bl.sc.y, d.z * bl.sc.z).multiplyScalar(r));
+        pos.push(p.x, p.y, p.z);
+        // repos : autour de la tête d'origine pour le toupet, tel quel ailleurs (robe unie du caniche)
+        const rp = bl.part[2] ? p.clone().sub(HJ).multiplyScalar(1 / hs).add(base.heads[I('head')]) : p;
+        rest.push(rp.x, rp.y, rp.z);
+        uv.push(uv0[0] + (k / NA - 0.5) * 0.03, uv0[1] + (a / NB - 0.5) * 0.03);
+        si.push(bl.bone, 0, 0, 0);
+        sw.push(1, 0, 0, 0);
+        part.push(...bl.part);
+        // (distance au centre : le shader y ramène le sommet le long de sa normale, radiale)
+        pom.push(p.distanceTo(bl.c));
+      }
+    }
+    for (let a = 0; a < NB; a++) {
+      for (let k = 0; k < NA; k++) {
+        const p0 = start + a * NA + k;
+        const p1 = start + a * NA + ((k + 1) % NA);
+        const q0 = p0 + NA;
+        const q1 = p1 + NA;
+        index.push(p0, p1, q0, p1, q1, q0);
+      }
+    }
+  });
+  const count = pos.length / 3;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(index);
+  g.computeVertexNormals();
+  // (pôles : normales vers l'extérieur de la boule, quel que soit le maillage)
+  // (normales radiales : boule lisse à l'éclairage, et ramenée exactement à son centre hors de la coupe)
+  const nrm = g.attributes.normal.array;
+  let o = 0;
+  for (const bl of balls) {
+    for (let a = 0; a <= NB; a++) {
+      for (let k = 0; k < NA; k++, o++) {
+        const v = V(pos[o * 3], pos[o * 3 + 1], pos[o * 3 + 2]).sub(bl.c).normalize();
+        nrm[o * 3] = v.x;
+        nrm[o * 3 + 1] = v.y;
+        nrm[o * 3 + 2] = v.z;
+      }
+    }
+  }
+  g.dispose();
+  return {
+    count,
+    pos: Float32Array.from(pos), nrm: Float32Array.from(nrm), uv: Float32Array.from(uv), rest: Float32Array.from(rest),
+    si: Uint16Array.from(si), sw: Float32Array.from(sw), part: Float32Array.from(part), low: new Float32Array(count).fill(low0),
+    pom: Float32Array.from(pom), index: Uint32Array.from(index),
+  };
+}
+
+/** Pièces modelées mises bout à bout (mêmes attributs ; pom à 0 pour celles qui n'en ont pas). */
+export function joinParts(parts) {
+  const list = parts.filter(Boolean);
+  if (!list.length) return null;
+  if (list.length === 1 && !list[0].pom) return list[0];
+  const count = list.reduce((s, p) => s + p.count, 0);
+  const cat = (key, k, T) => {
+    const out = new T(count * k);
+    let o = 0;
+    for (const p of list) {
+      if (p[key]) out.set(p[key], o * k);
+      o += p.count;
+    }
+    return out;
+  };
+  const index = [];
+  let o = 0;
+  for (const p of list) {
+    for (const i of p.index) index.push(i + o);
+    o += p.count;
+  }
+  return {
+    count, pos: cat('pos', 3, Float32Array), nrm: cat('nrm', 3, Float32Array), uv: cat('uv', 2, Float32Array),
+    rest: cat('rest', 3, Float32Array), si: cat('si', 4, Uint16Array), sw: cat('sw', 4, Float32Array),
+    part: cat('part', 4, Float32Array), low: cat('low', 1, Float32Array),
+    pom: list.some((p) => p.pom) ? cat('pom', 1, Float32Array) : null, index: Uint32Array.from(index),
+  };
+}
+
+/**
+ * Gueule du jack fermée au repos (modèle sans os de mâchoire, sculpté la gueule entrouverte : une fente aux lèvres
+ * rouges et une rangée de dents sur les dix petites races) : la mâchoire du bas — ce qui est sous la ligne des lèvres,
+ * devant la commissure — est tournée vers le haut autour d'une charnière derrière la commissure, avant toute
+ * déformation de la race (P : positions de repos). Repères mesurés sur le maillage d'origine.
+ */
+export function jackMouthClose(base, P) {
+  if (base.kind !== 'jack') return;
+  const coat = base.prims.coat;
+  const W = base.W;
+  const mid = base.land.midX;
+  const hy = 0.482;
+  const hz = 0.335;
+  const ang = 0.17;
+  const cs = Math.cos(ang);
+  const sn = Math.sin(ang);
+  for (let i = 0; i < coat.count; i++) {
+    if (W.head[i] < 0.5) continue;
+    const x = P[i * 3] - mid;
+    const y = P[i * 3 + 1];
+    const z = P[i * 3 + 2];
+    if (z < hz - 0.01 || Math.abs(x) > 0.065 || y > 0.5) continue;
+    // ligne des lèvres (montant un peu vers l'avant), commissure à z ≈ 0,345
+    const yM = 0.479 + (z - 0.37) * 0.25;
+    const w = (1 - smooth(yM - 0.006, yM + 0.002, y)) * smooth(hz - 0.005, hz + 0.02, z) * (1 - smooth(0.05, 0.065, Math.abs(x)));
+    if (!(w > 0)) continue;
+    const dy = y - hy;
+    const dz = z - hz;
+    const ny = hy + dy * cs + dz * sn;
+    const nz = hz + dz * cs - dy * sn;
+    P[i * 3 + 1] = y + (ny - y) * w;
+    P[i * 3 + 2] = z + (nz - z) * w;
   }
 }

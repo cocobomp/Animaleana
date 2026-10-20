@@ -18,7 +18,7 @@ import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
 import { dogBuild } from '../../sim/dogLook.js';
 import { coatPlan, makeCoatUniforms, makeLandUniforms, setCoat, coatMaterial, furLow, furDetail } from './dogCoat.js';
-import { pendantEars, shibaEarHide, buildPendantEars, faceShape } from './dogParts.js';
+import { pendantEars, earSkullHide, buildPendantEars, faceShape, buildPompons, joinParts, jackMouthClose } from './dogParts.js';
 
 /** Clés des deux GLB (assets.js) : jamais « dog » (gltfAnimal.js le prendrait pour un animal GLB générique). */
 export const REAL_DOG_KEYS = { shiba: 'dog_shiba', jack: 'dog_jack' };
@@ -398,8 +398,10 @@ export function realDogBase(gltf, kind) {
     natural: { ...NATURAL_SPEED, ...(ext.naturalSpeeds ?? {}) },
     cfg: MODEL[kind],
   };
-  // Oreilles droites du shiba rentrées sous la peau du crâne pour les races aux oreilles modelées (dogParts.js).
-  base.earHide = kind === 'shiba' ? shibaEarHide(base) : null;
+  // Oreilles d'origine effacées du crâne : droites du shiba pour les races aux oreilles modelées, lambeau du jack
+  // (places cachées sur une surface de crâne interpolée, dogParts.js : remplacent celles calculées plus haut).
+  base.earHide = earSkullHide(base, earFlap);
+  if (earFlap) base.earFlap = base.earHide;
   // Attributs communs à toutes les races (robe) : position de repos d'origine, appartenance, grain du poil.
   const low = furLow(coat.material.map?.image, coat.uv, coat.pos, coat.index, n);
   base.means = low.none ? null : { lo: low.lo, hi: low.hi };
@@ -453,6 +455,7 @@ function weldGroups(pos, n) {
  */
 function tailShape(base, B, P, H, n, wTail) {
   const rad = new Float32Array(n);
+  const frac = new Float32Array(n);
   const tb = base.tailBones;
   const m = tb.length;
   const coat = base.prims.coat;
@@ -585,6 +588,7 @@ function tailShape(base, B, P, H, n, wTail) {
     // (effilée : le rayon décroît jusqu'à la pointe — un panache ou une queue de loutre, pas une massue)
     if (B.tailTaper > 0) o2.multiplyScalar(1 - B.tailTaper * Math.pow(clamp(s / tot, 0, 1), 1.15));
     rad[i] = o2.length();
+    frac[i] = clamp(s / tot, 0, 1);
     _w.copy(q).sub(C0).multiplyScalar(kl).add(C0).add(o2);
     x.lerp(_w, w);
     P.set([x.x, x.y, x.z], i * 3);
@@ -594,6 +598,7 @@ function tailShape(base, B, P, H, n, wTail) {
     const kl = 1 + (B.tailLen - 1) * on;
     H[tb[k]].copy(C[k]).sub(C0).multiplyScalar(kl).add(C0);
   }
+  rad.frac = frac;
   return rad;
 }
 
@@ -711,6 +716,8 @@ export function deformDog(base, B) {
     }
   }
 
+  // 0b. Gueule du jack fermée au repos (dogParts.js).
+  jackMouthClose(base, P);
   // 1. Membres : raccourcis ou allongés entre l'épaule (la hanche) et le poignet (le jarret), le pied suit sans se
   //    déformer ; épaissis autour de leur axe.
   for (let l = 0; l < 4; l++) {
@@ -719,7 +726,9 @@ export function deformDog(base, B) {
     const a = Wr.clone().sub(T);
     const len = a.length();
     a.normalize();
-    const k = B.legs;
+    // (dos qui descend du garrot à la croupe — berger allemand — : postérieurs un peu plus courts, le chien est
+    // reposé au sol plus bas derrière, voir 8)
+    const k = B.legs * (LEG_KEYS[l][2] ? 1 + 0.02 * B.slope : 1 - 0.075 * B.slope);
     for (let j = 0; j < total; j++) {
       const w = wLeg(j, l);
       if (!(w > 0)) continue;
@@ -728,7 +737,8 @@ export function deformDog(base, B) {
       const al = d.dot(a);
       const perp = _u.copy(d).addScaledVector(a, -al);
       const a2 = al <= 0 ? al : al < len ? al * k : len * k + (al - len);
-      p.addScaledVector(a, w * (a2 - al)).addScaledVector(perp, w * (B.legW - 1) * smooth(0, 0.05, al));
+      // (pieds plus gros : chiots)
+      p.addScaledVector(a, w * (a2 - al)).addScaledVector(perp, w * ((B.legW - 1) * smooth(0, 0.05, al) + (B.paws - 1) * smooth(len * 0.85, len * 1.05, al)));
       set(j, p);
     }
   }
@@ -738,6 +748,8 @@ export function deformDog(base, B) {
   const zm = (za + zb) / 2;
   const zoff = (z) => (B.back - 1) * (clamp(z, za, zb) - zm);
   const trunkZ = (z) => smooth(L.hipZ - 0.1, L.hipZ + 0.02, z) * (1 - smooth(L.shZ - 0.02, L.shZ + 0.12, z));
+  // (tronc en poire — bouledogue — : poitrine et avant-main larges, croupe plus légère)
+  const girthAt = (z) => B.girth * (1 + B.pear * (0.38 * clamp((z - L.hipZ) / Math.max(0.05, L.shZ - L.hipZ), 0, 1) - 0.16));
   for (let j = 0; j < total; j++) {
     get(j, p);
     let lw = 0;
@@ -748,17 +760,22 @@ export function deformDog(base, B) {
       if (!(w > 0)) continue;
       lw += w;
       dz += w * zoff(T0[l].z);
-      dx += w * (B.girth - 1) * (T0[l].x - L.midX) * trunkZ(T0[l].z);
+      dx += w * (girthAt(T0[l].z) - 1) * (T0[l].x - L.midX) * trunkZ(T0[l].z);
     }
     lw = Math.min(1, lw);
     const h = (p.y - L.bellyY) / Math.max(0.05, L.topY - L.bellyY);
     const body = (1 - lw) * (1 - wHead(j)) * (1 - wTail(j));
     const tz = trunkZ(p.z);
-    p.x = p.x + dx + body * (p.x - L.midX) * (B.girth - 1) * tz * (1 - 0.4 * wNeck(j));
+    p.x = p.x + dx + body * (p.x - L.midX) * (girthAt(p.z) - 1) * tz * (1 - 0.4 * wNeck(j));
     p.z += dz + (1 - lw) * zoff(p.z);
     if (B.tuck) {
       const u = (p.z - L.hipZ) / Math.max(0.05, L.shZ - L.hipZ);
       p.y += body * B.tuck * 0.05 * (1 - smooth(0.0, 0.45, h)) * smooth(-0.1, 0.25, u) * (1 - smooth(0.45, 0.8, u));
+    }
+    // (poitrine profonde, descendue jusqu'au coude : lévriers)
+    if (B.chest) {
+      const u = (p.z - L.hipZ) / Math.max(0.05, L.shZ - L.hipZ);
+      p.y -= body * B.chest * 0.035 * (1 - smooth(0.0, 0.5, h)) * smooth(0.5, 0.8, u) * (1 - smooth(1.05, 1.3, u));
     }
     set(j, p);
   }
@@ -962,13 +979,25 @@ export function deformDog(base, B) {
       let k = (1 - legSum) * (1 - head) * (1 - tail) * (1 - ear) * (0.7 + 0.4 * front * (1 - smooth(0.2, 0.8, h)) * B.ruff);
       k += neck * (0.3 + 0.5 * B.ruff - 0.6 * (1 - B.ruff));
       k += head * 0.12 * smooth(L.eyeY - 0.02, L.eyeY + 0.06, y0) * (1 - smooth(0.3, 0.6, (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z)));
+      // barbe et sourcils touffus (labradoodle : bouille de nounours) : bas du museau, menton, au-dessus des yeux
+      if (B.beard) {
+        const hz = (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z);
+        const ax = Math.abs(r0[i * 3] - L.midX);
+        const muzzle = smooth(0.5, 0.7, hz) * (1 - smooth(L.eyeY - 0.03, L.eyeY - 0.005, y0)) * (1 - smooth(0.93, 1.0, hz));
+        const brow = (1 - smooth(0.012, 0.03, Math.abs(y0 - L.eyeY - 0.022))) * smooth(0.25, 0.4, hz) * (1 - smooth(0.5, 0.6, hz)) * smooth(0.01, 0.025, ax);
+        k += head * (1 - ear) * B.beard * (0.9 * muzzle + 0.7 * brow);
+      }
       const paw = 1 - smooth(0.04, L.elbowY * 0.55, y0);
       k += legSum * (1 - paw) * (0.3 + B.feather * 0.8 * smooth(-0.1, -0.7, _w.z) * smooth(L.elbowY * 0.3, L.elbowY, y0));
       k += (1 - legSum) * (1 - head) * (1 - tail) * B.feather * 0.7 * smooth(-0.3, -0.9, _w.y);
       k += ear * (0.1 + 0.4 * B.feather);
-      // (racine de la queue épaissie aussi : le panache du saint-bernard faisait un bulbe sur une tige fine)
-      k += Math.sqrt(tail) * (0.9 + 0.9 * B.feather) * B.tailFur;
-      const nz = B.curly ? 0.45 + 1.1 * fbm(p.x * 55, p.y * 55, p.z * 55) : 0.75 + 0.5 * fbm(p.x * 30, p.y * 30, p.z * 30);
+      // (racine de la queue épaissie aussi : le panache du saint-bernard faisait un bulbe sur une tige fine ; poil
+      // effilé vers la pointe — sinon une boule au bout des queues courtes, une massue au bout des longues — et
+      // frange qui pend sous la queue des races frangées : le drapeau du setter, le panache du golden)
+      const tf = tailR?.frac?.[i] ?? 0;
+      const under = base.kind === 'shiba' ? smooth(-0.15, -0.75, _w.y) : smooth(-0.15, -0.75, _w.z);
+      k += Math.sqrt(tail) * B.tailFur * ((0.9 + 0.2 * B.feather) * (1 - B.tailTaper * 0.85 * tf ** 1.3) + B.feather * 2.4 * under * smooth(0.04, 0.3, tf) * (1 - tf) ** 1.2 * Math.min(1, 0.012 / B.fur));
+      const nz = B.curly ? 0.65 + 0.7 * fbm(p.x * 38, p.y * 38, p.z * 38) : 0.75 + 0.5 * fbm(p.x * 30, p.y * 30, p.z * 30);
       // Sans collerette (setter, caniche, golden) : celle du shiba et ses joues de spitz d'abord raccourcies (sinon
       // une crinière de lion autour de la tête).
       let shave = 0;
@@ -981,6 +1010,24 @@ export function deformDog(base, B) {
       // Poil soyeux (yorkshire) : la robe tombe, les flancs descendent en jupe sur le haut des membres (jamais les
       // pieds, posés au sol avant).
       if (B.silky) p.y -= B.silky * B.fur * 1.4 * (1 - smooth(0.1, 0.75, h)) * (1 - head) * (1 - tail) * (1 - ear) * (1 - 0.6 * legSum) * (1 - paw) * (1 - hidden[i]);
+      // Franges (golden, setter, épagneuls, bernois) : le poil long pend — sous le ventre, à l'arrière des membres
+      // (culotte des cuisses, franges des avant-bras), au poitrail. Poussé vers le bas et l'arrière plutôt que le long de
+      // la normale : la silhouette se frange au lieu de gonfler (le gonflement seul ne se voyait pas).
+      // (pas pour le poil soyeux du yorkshire, qui a sa jupe ; borné : assis ou couché, la frange entrait dans le sol)
+      if (B.feather >= 0.6 && !B.silky) {
+        const fe = Math.min(0.008, (B.feather - 0.5) * 2 * B.fur) * (1 - hidden[i]);
+        const u = (z0 - L.hipZ) / Math.max(0.05, L.shZ - L.hipZ);
+        const trunk = (1 - legSum) * (1 - head) * (1 - tail) * (1 - ear);
+        // (mèches : bord bas déchiqueté le long du corps, pas un ventre qui pend)
+        const strand = 0.45 + 1.1 * fbm(z0 * 95 + 3.1, (r0[i * 3] - L.midX) * 40, 1.7);
+        const belly = trunk * smooth(-0.6, -0.95, _w.y) * smooth(-0.05, 0.25, u) * (1 - smooth(0.8, 1.05, u)) * strand;
+        const backLeg = legSum * (1 - paw) * smooth(-0.2, -0.75, _w.z) * smooth(L.elbowY * 0.35, L.elbowY * 0.75, y0) * (1 - smooth(L.elbowY * 0.95, L.elbowY * 1.25, y0));
+        const chest = trunk * smooth(0.3, 0.8, _w.z) * smooth(0.85, 1.0, u) * (1 - smooth(0.25, 0.6, h));
+        // (culotte des cuisses vers l'arrière seulement : assis, poussée vers le bas, elle entrait dans le sol)
+        p.y -= fe * (2.0 * belly + 1.1 * chest);
+        p.z -= fe * 1.6 * backLeg;
+        p.z += fe * 0.9 * chest;
+      }
       P.set([p.x, p.y, p.z], i * 3);
     }
   }
@@ -1055,6 +1102,8 @@ function earPlan(base, B, H) {
       } else if (want === 'bat') {
         op.turn = qTo(V(side * 0.75, 1, 0.1));
       }
+      // (petites oreilles inclinées vers l'avant, dans le prolongement de la nuque : akita)
+      if (B.earTilt && want === 'pointed') op.turn = axisRot(V(1, 0, 0), B.earTilt);
     } else {
       // jack : oreille en bouton (base dressée, lambeau replié vers l'avant et le bas)
       const dir1 = fold.clone().sub(baseP).normalize();
@@ -1248,7 +1297,7 @@ function shapeFor(base, B) {
   S = { key, B, D, heads: D.heads, users: 1 };
   // Pièces modelées (oreilles pendantes : dogParts.js) ajoutées au pelage ; peau de l'oreille d'origine cachée rendue
   // à la tête (elle ne ressort plus quand l'oreille bouge).
-  const extra = buildPendantEars(base, D, B);
+  const extra = joinParts([buildPendantEars(base, D, B), buildPompons(base, D, B)]);
   S.coatGeo = extra ? mergedCoatGeo(base, D, extra) : geo(D.pos, D.nrm, coat, base.attrs);
   S.eyeGeo = base.prims.eye ? geo(D.eyePos, D.eyeNrm, base.prims.eye, base.eyeAttrs) : null;
   S.earGeo = erectEars(base, D, B);
@@ -1316,6 +1365,8 @@ function mergedCoatGeo(base, D, extra) {
   g.setAttribute('cmpRest', new THREE.BufferAttribute(cat(base.attrs.cmpRest.array, extra.rest, 3, Float32Array), 3));
   g.setAttribute('cmpPart', new THREE.BufferAttribute(cat(base.attrs.cmpPart.array, extra.part, 4, Float32Array), 4));
   g.setAttribute('cmpLow', new THREE.BufferAttribute(cat(base.attrs.cmpLow.array, extra.low, 1, Float32Array), 1));
+  // (pompons du caniche : rayon de chaque boule, ramenée à son centre par le shader hors de la coupe « caniche »)
+  if (extra.pom) g.setAttribute('cmpPom', new THREE.BufferAttribute(cat(new Float32Array(n), extra.pom, 1, Float32Array), 1));
   const idx = new Uint32Array(coat.index.length + extra.index.length);
   idx.set(coat.index);
   for (let i = 0; i < extra.index.length; i++) idx[coat.index.length + i] = extra.index[i] + n;
@@ -1537,7 +1588,9 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   const plan = coatPlan(look, lk.breed);
   setCoat(uniforms, plan);
   // Poil frisé (caniche, labradoodle) ou soyeux et frangé (yorkshire, setter, cavalier) : relief dans le shader.
-  uniforms.cCurl.value.set(B.curly ? 1 : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : 0);
+  // (touffu : spitz — un relief de bouclettes léger, le poil n'est plus de la pâte à modeler)
+  uniforms.cCurl.value.set(B.curly ? 1 : B.fluffy ? 0.4 * B.fluffy : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : 0);
+  uniforms.cWrinkle.value = B.wrinkle ?? 0;
   const keepCfg = base.cfg.keep;
   const nose = S.measure.noseTip;
   const spheres = keepCfg.nose ? [{ s: new THREE.Vector4(base.land.nose.x, base.land.nose.y, base.land.nose.z - keepCfg.nose[0] * 0.4, keepCfg.nose[0]), l: keepCfg.nose[1] }] : [];
@@ -1655,16 +1708,23 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   model.setCoat = (lk2) => setCoat(uniforms, coatPlan(lk2, lk2.breed ?? lk.breed));
   // Coupe du salon de toilettage (Groomer.refreshCutVisuals) : poil raccourci ou gonflé par le shader, collerette du
   // lion, pompons du caniche. null : poil de la race.
+  // (coupe de la race tant que le salon n'en a pas fait : le caniche a ses pompons — sans eux, un samoyède)
+  const breedCut = DEFAULT_CUT[lk.breed] ?? null;
   model.setCut = (style) => {
     const f = Math.max(0.006, B.fur);
+    const st = style ?? breedCut;
     const cut = {
       court: [-0.6 * f, -0.6 * f, -0.3 * f, -0.4 * f], tonte: [-0.8 * f, -0.8 * f, -0.5 * f, -0.6 * f],
       concours: [-0.25 * f, 0, 0, 0.3 * f], long: [0.35 * f, 0.35 * f, 0.2 * f, 0.3 * f],
-      lion: [-0.7 * f, 0.03 + 0.6 * f, -0.3 * f, 0.02], caniche: [-0.7 * f, 0.01, 0.028, 0.03],
-    }[style] ?? [0, 0, 0, 0];
+      lion: [-0.7 * f, 0.03 + 0.6 * f, -0.3 * f, 0.02],
+      // (pompons modelés de la race : seulement la crinière du devant au shader)
+      caniche: B.pompons ? [-0.75 * f, 0.016, 0, 0] : [-0.7 * f, 0.01, 0.028, 0.03],
+    }[st] ?? [0, 0, 0, 0];
     uniforms.cCut.value.set(...cut);
+    uniforms.cPom.value = st === 'caniche' ? 1 : 0;
     model.cut = style ?? null;
   };
+  model.setCut(null);
   let disposed = false;
   model.dispose = () => {
     if (disposed) return;
@@ -2712,7 +2772,9 @@ function raiseAngle(c, q, y, max) {
 
 const AXIS_Y = V(0, 1, 0);
 const AX = V(1, 0, 0); // (tourner autour de x du chien, positif : vers le bas pour une tête qui regarde devant)
-const JAW_CLOSED = -0.12; // (gueule du shiba fermée : angle de la mâchoire depuis la pose de repos du GLB, rad)
+const JAW_CLOSED = -0.12;
+/** Coupe de la race quand le salon n'en a pas fait (Groomer.refreshCutVisuals : setCut(null)). */
+const DEFAULT_CUT = { caniche: 'caniche' }; // (gueule du shiba fermée : angle de la mâchoire depuis la pose de repos du GLB, rad)
 const AZ = V(0, 0, 1);
 const _ax = V();
 const _q2v = V();
@@ -2733,8 +2795,11 @@ function tailCarriage(model, base, B) {
   // Direction de repos de la queue dans le repère du chien, puis courbe voulue : angle sous l'horizontale à la base,
   // courbure le long de la queue (positive : le bout remonte).
   const shapes = {
-    sabre: [0.9, -0.35], otter: [1.05, -0.12], plume: [0.85, -0.25], whip: [1.25, -0.35], sickle: [-0.6, 0.55],
+    sabre: [0.9, -0.35], otter: [1.05, -0.12], plume: [0.85, -0.25], whip: [1.25, -0.18], sickle: [-0.6, 0.55],
     carrot: [-1.0, 0.15], stub: [-0.2, 0], curl: [-1.1, 0.9],
+    // (tire-bouchon serré sur la hanche : carlin ; panache couché à plat sur le dos : spitz nain ; drapeau à
+    // l'horizontale : setter ; droite dans l'axe du dos : cocker)
+    screw: [-1.9, 4.6], flat: [-2.25, -0.7], flag: [0.25, -0.15], level: [0.1, 0.05],
   };
   const [a0, curve] = shapes[want] ?? shapes.sabre;
   // Le premier os : on le tourne pour que la queue parte à a0 sous l'horizontale vers l'arrière ; les suivants se

@@ -161,9 +161,11 @@ describe('races et chiots', () => {
         const eyes = D.heads[base.index.get('eyeL')].clone().add(D.heads[base.index.get('eyeR')]).multiplyScalar(0.5);
         const hc = D.heads[base.index.get('head')].clone().lerp(eyes, 0.5);
         for (const F of base.earFlap) {
-          // (le lambeau entier, pas seulement ce que le squelette automatique a pesé sur l'oreille)
-          expect(F.ids.length).toBeGreaterThan(400);
-          const flap = new Set(F.ids);
+          // (le lambeau entier, pas seulement ce que le squelette automatique a pesé sur l'oreille ; e : part du
+          // lambeau lui-même — la zone autour de la racine, ramenée sur le crâne interpolé, n'en est pas)
+          const ear = F.e ?? F.c;
+          expect(ear.filter((x) => x > 0.5).length).toBeGreaterThan(400);
+          const flap = new Set([...F.ids].filter((_, k) => ear[k] > 0.5));
           const skull = [];
           for (let i = 0; i < base.prims.coat.count; i++) {
             if (flap.has(i) || base.W.head[i] < 0.5) continue;
@@ -172,7 +174,7 @@ describe('races et chiots', () => {
           }
           let out = 0;
           for (let k = 0; k < F.ids.length; k++) {
-            if (F.c[k] < 0.95) continue;
+            if (ear[k] < 0.95) continue;
             const v = new THREE.Vector3().fromArray(D.pos, F.ids[k] * 3).sub(hc);
             const r = v.length();
             v.normalize();
@@ -185,6 +187,47 @@ describe('races et chiots', () => {
         }
       }
     }
+  });
+
+  it('oreilles tombantes modelées : l\'oreille droite du shiba est effacée du crâne, une vraie oreille pend le long de la joue', () => {
+    const base = realDogBase(G.shiba, 'shiba');
+    const n = base.prims.coat.count;
+    for (const b of ['labrador', 'golden', 'coonhound', 'setter', 'caniche', 'saint_bernard', 'terre_neuve']) {
+      const md = dog(b);
+      const P = md.coatMesh.geometry.attributes.position;
+      expect(P.count, b).toBeGreaterThan(n);
+      const eyeY = md.bone('eyeL').getWorldPosition(new THREE.Vector3()).y;
+      const skullY = md.skull.clone().applyMatrix4(md.head.matrixWorld).y;
+      // l'oreille modelée descend sous l'œil (jusqu'à la commissure ou plus bas : chiens courants)
+      let low = Infinity;
+      for (let i = n; i < P.count; i++) low = Math.min(low, md.coatMesh.getVertexPosition(i, _v).applyMatrix4(md.coatMesh.matrixWorld).y);
+      expect(low, b).toBeLessThan(eyeY - 0.03 * md.build.head);
+      // l'oreille droite d'origine ne dépasse plus du crâne (plus de cornes)
+      let earTop = -Infinity;
+      for (let i = 0; i < n; i++) {
+        if (base.W.ear[i * 2] + base.W.ear[i * 2 + 1] < 0.5) continue;
+        earTop = Math.max(earTop, md.coatMesh.getVertexPosition(i, _v).applyMatrix4(md.coatMesh.matrixWorld).y);
+      }
+      expect(earTop, b).toBeLessThan(skullY + 0.004);
+      md.dispose();
+    }
+  });
+
+  it('caniche : coupe « caniche » par défaut (pompons modelés montrés), cachés par une autre coupe du salon', () => {
+    const md = dog('caniche');
+    expect(md.coatMesh.geometry.attributes.cmpPom).toBeTruthy();
+    expect(md.uniforms.cPom.value).toBe(1);
+    md.setCut('court');
+    expect(md.uniforms.cPom.value).toBe(0);
+    md.setCut(null);
+    expect(md.uniforms.cPom.value).toBe(1);
+    md.dispose();
+    // (les autres races n'ont pas de pompons modelés : la coupe « caniche » reste celle du shader)
+    const doodle = dog('labradoodle');
+    expect(doodle.coatMesh.geometry.attributes.cmpPom).toBeUndefined();
+    doodle.setCut('caniche');
+    expect(doodle.uniforms.cCut.value.z).toBeGreaterThan(0.01);
+    doodle.dispose();
   });
 
   it('écourtée : la queue des races « stub » est courte', () => {

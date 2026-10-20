@@ -482,10 +482,23 @@ export function hairMaterial(color, sway, drag = NO_DRAG) {
   // ton moyen de la texture)
   const c = color === null ? new THREE.Color(1, 1, 1) : hairColor(color);
   const l = color === null ? 0.5 : 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const a2c = gfx.msaa || high;
   const m = new THREE.MeshStandardMaterial({
     color: c, map: hairTexture(), alphaTest: HAIR_CUT, side: THREE.DoubleSide, roughness: 0.75, metalness: 0,
-    alphaToCoverage: gfx.msaa || high, vertexColors: true,
+    alphaToCoverage: a2c, vertexColors: true,
   });
+  if (a2c) {
+    // (couverture par l'alpha : l'alpha de la carte décide quels échantillons elle couvre, mais il ne doit pas être
+    // écrit dans l'image — au bord des crins, un alpha < 1 rendait la toile transparente et le fond de la page
+    // passait au travers en points clairs le long de chaque mèche ; mélange sans effet sur la couleur, alpha
+    // d'avant gardé)
+    m.blending = THREE.CustomBlending;
+    m.blendEquation = THREE.AddEquation;
+    m.blendSrc = THREE.OneFactor;
+    m.blendDst = THREE.ZeroFactor;
+    m.blendSrcAlpha = THREE.ZeroFactor;
+    m.blendDstAlpha = THREE.OneFactor;
+  }
   // (force du reflet : plus discret sur les crins clairs, qui ont déjà de la lumière)
   // (qualité basse : pas d'ombre du soleil, le reflet brillerait aussi du côté à l'ombre : plus discret)
   // (0,06 × soleil de 2,8 à 3,5, sur un crin sur cinq : des crins qui brillent sur du noir, pas un aplat gris)
@@ -501,6 +514,9 @@ export function hairMaterial(color, sway, drag = NO_DRAG) {
   // (crins clairs : creux entre les mèches et tons des crins moins écartés — sur une crinière grise ou blanche,
   // les creux sombres de la texture se lisaient en rainures et en dents)
   const contrast = { value: 1 - 0.55 * light };
+  // (la masse, grandes surfaces : moins encore — sur une crinière claire, ses mèches de tons écartés faisaient des
+  // plaques grises)
+  const contrastM = { value: 1 - 0.75 * light };
   // (reflet du ciel : sur des normales « de volume », les 4 % d'un diélectrique faisaient de la crinière noire un
   // aplat gris satiné ; moins encore sur les crins foncés — le reflet des crins, c'est la bande de Kajiya-Kay)
   const sky = { value: 0.18 + 0.12 * light };
@@ -515,6 +531,7 @@ export function hairMaterial(color, sway, drag = NO_DRAG) {
     sh.uniforms.hHairBack = back;
     sh.uniforms.hHairRoot = rootDark;
     sh.uniforms.hHairContrast = contrast;
+    sh.uniforms.hHairContrastM = contrastM;
     sh.uniforms.hHairSky = sky;
     sh.uniforms.hairTime = gfx.time;
     sh.uniforms.hairWind = gfx.wind;
@@ -599,6 +616,7 @@ uniform float hHairLift;
 uniform float hHairBack;
 uniform float hHairRoot;
 uniform float hHairContrast;
+uniform float hHairContrastM;
 uniform float hHairSky;
 varying vec3 vHairT;
 varying float vHairF;
@@ -617,7 +635,7 @@ ${HAIR_LIGHT}`)
 reflectedLight.indirectSpecular *= hHairSky;`)
       .replace('#include <map_fragment>', `
 vec4 hTex = texture2D( map, vMapUv );
-hTex.r = mix( 0.82, hTex.r, hHairContrast );
+hTex.r = mix( 0.82, hTex.r, mix( hHairContrast, hHairContrastM, vHairM ) );
 diffuseColor.rgb = diffuseColor.rgb * hTex.r + hHairLift * ( 1.0 - 0.6 * hHairFore() ) * max( 0.0, hTex.r - 0.62 );
 // (masse : seulement au ras de la peau, le dessus du rouleau prend la lumière)
 diffuseColor.rgb *= 1.0 - hHairRoot * ( 1.0 - smoothstep( 0.0, mix( 0.35, 0.06, vHairM ), vHairF ) );

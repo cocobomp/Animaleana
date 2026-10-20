@@ -636,6 +636,21 @@ class BeautySession extends Session {
     const goal = this.animalGoal();
     if (this.carried) {
       e.position.set(goal.x, pl.root.position.y + 0.95, goal.z);
+      // Dans les bras : le joueur le tient devant lui à deux mains (pose « carry » de l'avatar, comme une caisse :
+      // Player.holdCrate) ; l'animal est posé sur ses mains, au lieu de flotter devant lui à hauteur de hanche.
+      if (pl.avatar && !pl.mount) {
+        if (!this.arms) {
+          this.arms = new THREE.Object3D();
+          pl.root.add(this.arms);
+          const s = e.scale ?? 1;
+          pl.holdCrate(this.arms, { w: 0.24 * s, h: 0.16 * s, d: 0.3 * s });
+        }
+        if (pl.carried === this.arms) {
+          pl.placeCrate();
+          this.arms.getWorldPosition(e.position);
+          e.position.y -= 0.07 * (e.scale ?? 1); // (le ventre sur les mains)
+        }
+      }
       e.heading = pl.heading;
       e.speed = 0;
       e.scaleGroup.rotation.x = 0;
@@ -766,6 +781,16 @@ class BeautySession extends Session {
     this.onTable = true;
     e.carried = false;
     e.onTable = true; // (chat réaliste : assis sur la table)
+    this.releaseArms();
+  }
+
+  /** Le joueur repose les bras (l'animal porté est posé). */
+  releaseArms() {
+    if (!this.arms) return;
+    const pl = this.game.player;
+    if (pl.carried === this.arms) pl.holdCrate(null);
+    this.arms.parent?.remove(this.arms);
+    this.arms = null;
   }
 
   /** Le gros bouton (ou Espace, ou un toucher) : on s'arrête / on tourne / on pose au bon moment. */
@@ -1100,6 +1125,7 @@ class BeautySession extends Session {
   }
 
   cleanup() {
+    this.releaseArms();
     this.game.rig.frameWith = null;
     this.game.rig.occluders = null;
     if (this.judgeNpc) {

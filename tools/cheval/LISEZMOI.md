@@ -274,6 +274,71 @@ ton gris par sommet, couleur dans la matière de chaque cheval) :
     (médiane, ≈ 35 → 59 ms pour le gabarit entier sur cette machine chargée ; en cache, rien : ≈ 1 ms).
 
 
+**Allures vivantes** (plan « cheval beau », étape 6 ; `RealHorseAnim.stretchGallop`, `hairSprings`, `overlay` ;
+`tests/horseGaitLife.test.js`) :
+
+- *galop allongé* : `lockedGaits` recale aussi `gallopX`, le clip du galop dont la pince posée suit une droite
+  `GALLOP_REACH` = 1,45 fois plus rapide — antérieurs posés plus loin devant, postérieurs levés plus loin
+  derrière, même cadence. Au-dessus de la vitesse naturelle du galop (8,4 m/s pour un selle français de taille 1),
+  le poids du galop est partagé entre le galop et le galop allongé (même instant du clip), joués à la cadence
+  (v ÷ naturelle)^0,35, au plus 1,22 ; la foulée du mélange fait le reste, et au-delà du galop allongé la cadence
+  reprend le relais. Monté à 14 m/s (joystick au bord) : cadence 1,67 → 1,20, part du galop allongé 0,88 (fini
+  le moulinet de dessin animé accéléré). Sabots posés : centre de la sole en appui à plat < 2 cm, moyenne des
+  points de la sole < 0,5 cm (pince en bascule < 4 cm) à 8,5, 11 et 14 m/s. Un poney monté va plus vite que sa
+  taille (Shetland : 14,8 m/s ramenés à la taille 1) : galop allongé entier, cadence 1,45 au lieu de 1,8 ;
+- *queue et crinière souples* : ressorts amortis (`springTo`, repère du cheval, pas de 1/60 s au plus) sur Tail1
+  (k 70, c 10), Tail2 (k 38, c 6,5 : elle fouette après le couard) et Mane1-4 (k 60 → 48, c 11). Ils suivent la
+  pose voulue (clip, port de queue, coup de queue, arc du galop) avec du retard, secoués par le rebond de l'allure
+  (quand le corps retombe, les crins s'allègent et se soulèvent) et par les virages (la queue part vers
+  l'extérieur) ; `springLimit` les tient hors des fesses et de l'encolure. Au galop, le bout de la queue retombe en
+  arc ; la queue portée haut (arabe, saddlebred, welsh) retombe en panache depuis le couard (0,4 → 0,75 rad).
+  Courbure des cartes de crins dans le shader (`hairDrag`, uniforms par cheval) : vent de la course vers
+  l'arrière (queue 0,45, crinière 0,3 par mètre de mèche), pointes de la queue en retard quand elle fouette,
+  toujours en travers de la mèche et jamais vers le bas ; la boîte de Tail1 et Tail2 suit (tous ces écarts sont
+  dans la sphère de diamètre longueur × courbure) ;
+- *tête qui hoche* au pas (encolure 0,05 → 0,09 rad, en phase avec le clip : deux fois par foulée) ; au galop,
+  pompe de l'encolure calmée (0,13 → 0,09 rad, plus de coup de tête en l'air vu de 3/4) et nez en avant ;
+- *respiration* : 12 par minute au repos (flanc ± 2 %, inspiration plus courte que l'expiration) ; après une
+  galopade il souffle (effort qui monte en 12 s et retombe en 40 s : jusqu'à 60 par minute, ± 4 %, l'encolure suit
+  le souffle) ;
+- *mouches* : coups d'oreille brefs (0,3 s, toutes les 5 s environ une demi-minute sur deux : le pavillon pivote
+  vers l'arrière, l'oreille ne se couche pas), coups de queue plus amples qui fouettent ;
+- pose de photo inchangée et toujours la même (ressorts remis à leur place, ni souffle ni mouches).
+
+**Proportions** (plan « cheval beau », étape 7 ; `deformer`, `src/sim/horseLook.js`, `src/sim/species.js` ;
+`tests/horseProportions.test.js`, mesures dans `tests/helpers/horseProportions.js` : coupes du tronc, garrot =
+haut du dessus derrière l'encolure, poitrine = garrot → dessous de la sangle) : le modèle d'origine est un cheval
+de trait, simplement rétréci pour les chevaux de selle (corps long, poitrine peu profonde, membres longs, dos
+ensellé sans garrot). Désormais : profondeur du tronc moins liée à sa largeur (`girth`^0,25 au lieu de ^0,6, plus
+`depth` par type) ; corps raccourci autour de la selle (gabarit natif `back` 1,08) ; ligne du dessus sculptée
+(`TOPLINE` : bosse étroite de 3,5 cm au garrot, creux du dos comblé de 1,8 cm devant la selle) ; sang chaud aux
+membres d'un cheval de selle (1,05 → 1), poneys plus ronds aux membres courts et aux petites oreilles (`ears`),
+Haflinger trapu (encolure courte et épaisse, petite tête). Garrot = 1 :
+
+| race | poitrine (réel ≈ 0,50) | vide sous la poitrine | longueur du corps (réel 1,00-1,05) |
+|---|---|---|---|
+| selle français | 0,47 → 0,50 | 0,53 → 0,50 | 1,15 → 1,05 |
+| pur-sang | 0,43 → 0,48 | 0,57 → 0,52 | 1,17 → 1,03 |
+| arabe | 0,44 → 0,49 | 0,56 → 0,51 | 1,10 → 1,02 |
+| Haflinger | 0,52 → 0,54 | 0,48 → 0,46 | 1,15 → 1,05 |
+| Shetland | 0,53 → 0,58 | 0,47 → 0,42 | 1,20 → 1,11 |
+| percheron | 0,55 → 0,55 | 0,45 → 0,45 | 1,16 → 1,10 |
+
+Poulain : membres plus longs (× 1,22), tronc court et peu profond (vide sous la poitrine 0,62 du garrot, corps
+0,90), grosse tête (× 1,32) au chanfrein court et front bombé (`headProfile` 'foal'), modelé de la robe presque
+effacé (`hDetail` 0,25 : pas de muscles d'adulte). Selles, couvertures et cavalier se règlent sur les coupes
+mesurées : ils suivent. Les coupes du tronc près de la hanche reprennent leur haut des côtés de la croupe (le
+milieu, lié à l'attache de la queue, en est exclu) : la couverture d'un poney s'arrêtait sinon à la hanche.
+
+Coût mesuré des étapes 6 et 7 (Chromium SwiftShader sur une machine chargée, 10 chevaux au paddock, caméra
+normale, avant/après en alternance ×2) : triangles, appels de dessin, géométries, programmes et mémoire
+inchangés (basse, téléphone 390×844 DPR 3 : ≈ 300 k triangles, 106 à 108 appels, 117 à 119 Mo ; haute,
+1280×800 : 541 842 triangles, 158 appels, 121 Mo) ; images/s identiques à la précision de la mesure (basse 1,5 et
+1,6 → 1,5 et 1,2 ; haute 0,8 et 0,7 → 0,7 et 0,8 : le bruit de la machine). Processeur, une mise à jour
+d'animation à chaud (µs, node) : arrêt 14,6 → 18,2, pas 21 → 27, trot 38 → 35, galop 39 → 46 (ressorts, galop
+allongé mêlé) : ≈ 0,05 ms de plus par image pour 10 chevaux. Une allure de plus à caler par gabarit (galop
+allongé, ≈ 6 à 15 ms pendant les temps morts) ; proportions faites au chargement du gabarit (mises en cache).
+
 Ce qu'il coûte, et comment on le garde bas :
 
 - **élimination hors du champ** : chaque maillage du cheval (`HorseMesh`) a une boîte englobante refaite sur

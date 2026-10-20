@@ -3769,8 +3769,8 @@ class RealHorseAnim {
     // Queue : de temps en temps un coup de fouet contre les mouches.
     const swish = photo ? 0 : tailSwish(t, kid);
     if (swish) {
-      md.tail.rotateZ(swish * 0.6);
-      md.tailTip.rotateZ(swish);
+      md.tail.rotateZ(swish * SWISH.dock);
+      md.tailTip.rotateZ(swish * SWISH.tip);
     }
     // Au galop, le bout de la queue retombe en arc (couard relevé par le clip, crins qui flottent derrière) au
     // lieu d'une planche levée d'un bloc.
@@ -3952,6 +3952,11 @@ export const BREATH = { rest: 0.2, blown: 1.0, amp: 0.02, ampBlown: 0.022 };
  * (rad) ; bend : courbure des crins par la vitesse (cartes de crins, hairDrag) ; lag : retard des crins de la queue
  * qui fouette (s).
  */
+/**
+ * Coup de queue contre les mouches (tailSwish × ce facteur, rad de rotation z du couard et du bout) : plus ample
+ * qu'avant (0,6 et 1) — les ressorts de la queue en retiennent une part, le bout fouette après le couard.
+ */
+const SWISH = { dock: 0.85, tip: 1.3 };
 export const TAIL_SPRING = { k1: 70, c1: 10, k2: 38, c2: 6.5, lift: 5, side: 0.5, bend: 0.45, lag: 0.07 };
 export const MANE_SPRING = { k: 60, c: 11, lift: 3.2, drag: 0.22, bend: 0.3 };
 

@@ -216,7 +216,7 @@ ton gris par sommet, couleur dans la matière de chaque cheval) :
   part un peu vers le haut, retombe en travers de la crête puis droit vers le bas, glisse sur la peau sans y entrer
   (distance approchée `hairBody` : tronc, encolure en coupes perpendiculaires à son axe, tête) et reste couchée sur
   une peau tournée vers le haut ; 24 cm × `B.mane` × le style (`long` 1,3 en rideau ondulé, un cinquième des mèches
-  de l'autre côté ; `thick` 0,85, plus de mèches, un quart de l'autre côté, plus courtes ; `short` 0,45), plus
+  de l'autre côté ; `thick` 1,1, plus de mèches, un quart de l'autre côté ; `short` 0,45), plus
   courte au garrot et à la nuque ; racine liée à la peau de la crête, pointe aux os `Mane1-4` (elle pend quand
   l'encolure descend) ;
 - *crête de la crinière* (sorte 4 de `hairRoot.w`) : autant de mèches courtes que les trois quarts de la crinière,

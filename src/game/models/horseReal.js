@@ -827,14 +827,15 @@ export const TAIL_CLEAR = 0.1;
 
 /**
  * Longueur de la crinière (cheval de taille 1) d'un cheval de selle au style normal, et par style : facteur de
- * longueur et de nombre de mèches ('long' : rideau ondulé des baroques ; 'thick' : épaisse, plus courte, en
- * partie de l'autre côté ; 'short' : courte et dressée, Akhal-Teké). Toupet : part de la longueur de la tête.
+ * longueur et de nombre de mèches ('long' : rideau ondulé des baroques ; 'thick' : épaisse, plus de mèches, en
+ * partie de l'autre côté, moins dressées ; 'short' : courte et dressée, Akhal-Teké). Toupet : part de la
+ * longueur de la tête.
  */
 const MANE_LEN = 0.24;
 const MANE_STYLE = {
   normal: { len: 1, n: 1, lift: 0.4, other: 0 },
   long: { len: 1.3, n: 1.1, lift: 0.3, other: 0.22 },
-  thick: { len: 0.85, n: 1.2, lift: 0.5, other: 0.25 },
+  thick: { len: 1.1, n: 1.2, lift: 0.4, other: 0.25 },
   short: { len: 0.45, n: 0.85, lift: 0.7, other: 0 },
 };
 const FORELOCK = { normal: 0.46, long: 0.56, thick: 0.48, short: 0.26, brush: 0.26, foal: 0.18 };
@@ -1353,7 +1354,7 @@ function tailCards(S, B, body, pos, coat, base) {
     const tone = 0.93 + rng() * 0.14;
     const [v, dv] = HAIR_ROWS[Math.floor(rng() * 4)];
     (primary ? main : fill).push({
-      pts, normals, side, w0: primary ? 0.065 : 0.045, w1: primary ? 0.03 : 0.02,
+      pts, normals, side, w0: primary ? 0.065 : 0.045, w1: primary ? 0.038 : 0.027,
       color: new THREE.Color(tone, tone, tone), uv: [0, 1, v, dv], kind: 2,
       // (du tronçon vers Tail2 sur la première moitié : une queue portée haut (arabe) retombe en arc)
       weights: (p, f) => blendWeights(wR, wT, smooth(0, 0.45, f)),

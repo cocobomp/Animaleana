@@ -64,7 +64,7 @@ export function hairStrandPixels() {
       const ctone = 0.55 + 0.45 * rng();
       const cshift = rng();
       const clen = Math.min(1, (0.8 + 0.2 * rng()) * (1 - 0.12 * e * e));
-      const cconv = 0.55 + 0.25 * rng();
+      const cconv = 0.4 + 0.25 * rng();
       const cwf = 0.7 + rng() * 1.5;
       const cwp = rng() * 6.28;
       const cwa = 0.3 + rng() * 0.6;

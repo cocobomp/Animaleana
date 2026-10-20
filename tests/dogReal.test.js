@@ -268,6 +268,24 @@ describe('pieds au sol', () => {
     }
   }, 120000);
 
+  it.each(['teckel', 'corgi', 'terre_neuve', 'labrador', 'jack_russell'])('%s : en reniflant, mangeant, buvant, les pieds arrière restent posés (le corps se redresse)', (b) => {
+    const m = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    const md = dog(b);
+    for (const action of ['sniff', 'eat', 'drink']) {
+      md.staticPose('stand');
+      for (let f = 0; f < 90; f++) md.anim.update(1 / 30, { v: 0, moving: false, posture: 'stand', action, happy: 0.25 });
+      md.root.updateMatrixWorld(true);
+      m.copy(md.root.matrixWorld).invert();
+      const soles = md.legs.map((leg, l) => Math.min(...md.anim.solePts[l].map((p) => v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(m).y)));
+      // (avant : 9 cm en l'air pour le teckel qui renifle, 6 pour le corgi, 3 pour le terre-neuve)
+      expect(Math.min(soles[2], soles[3]), `${b} ${action}`).toBeLessThan(0.01);
+      expect(Math.min(soles[0], soles[1]), `${b} ${action}`).toBeLessThan(0.045);
+      expect(lowest(md, { noTail: true, step: 2 }), `${b} ${action}`).toBeGreaterThan(-0.02);
+    }
+    md.dispose();
+  }, 120000);
+
   it.each(['teckel', 'corgi', 'basset_like_puppy'])('%s : la tête reste au-dessus du sol en reniflant, mangeant, buvant', (b) => {
     const breed = b === 'basset_like_puppy' ? 'teckel' : b;
     const md = dog(breed, { puppy: b === 'basset_like_puppy' });

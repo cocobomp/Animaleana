@@ -2381,7 +2381,9 @@ class RealDogAnim {
     if (st.moving || air) return;
     // Assis (et en s'asseyant, en se relevant) : voir settleSit.
     const sitW = (this.w.sit ?? 0) + (this.w.sit_down ?? 0) + (this.w.stand_up ?? 0);
+    const lieW = (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.lie_down ?? 0) + (this.w.get_up ?? 0);
     if (sitW > 0.3 && this.trick?.clip !== 'rollover') this.settleSit();
+    else if (sitW < 0.1 && lieW < 0.1 && !this.trick) this.settleStand();
     // Queue : sa peau (poil compris) au-dessus du sol, assis, couché, endormi — chaque os relevé, de la base au bout, de
     // ce qui passe encore sous le sol au-delà de lui. (Tenue par ses articulations seulement, la queue épaisse entrait
     // de 6 à 9 cm dans le sol, sur la table du salon ou la scène.)
@@ -2532,6 +2534,52 @@ class RealDogAnim {
       const c = _u.setFromMatrixPosition(pv.matrixWorld).applyMatrix4(_m);
       this.turn(pv, AX, raiseAngle(c, s, base + 0.002, 0.35));
       pv.updateMatrixWorld(true);
+    }
+  }
+
+  /**
+   * Debout sur place (renifler, manger, boire) : le clip du shiba baisse l'avant du corps ; avec le dos long ou les
+   * pattes avant courtes d'une race (teckel, corgi), l'avant-bras et les pieds avant passaient sous le sol, le chien
+   * entier était relevé d'autant et les pieds arrière flottaient (9 cm pour le teckel, 3 pour le terre-neuve). Le
+   * corps est redressé autour de l'os racine pour remettre l'avant (pieds et peau de la moitié avant) et l'arrière à la
+   * même hauteur, puis reposé au sol.
+   */
+  settleStand() {
+    const md = this.model;
+    const zMid = (md.legs[0].pivot.getWorldPosition(_u).applyMatrix4(_m).z + md.legs[2].pivot.getWorldPosition(_v).applyMatrix4(_m).z) / 2;
+    const F = V();
+    const Hn = V();
+    const scan = () => {
+      F.y = Infinity;
+      Hn.y = Infinity;
+      for (let l = 0; l < 4; l++) {
+        const out = l < 2 ? F : Hn;
+        for (const p of this.solePts[l]) {
+          _v.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld).applyMatrix4(_m);
+          if (_v.y < out.y) out.copy(_v);
+        }
+      }
+      for (const pt of this.bodyPts) {
+        const y = this.skinY(pt) + this.bodyAllow;
+        const out = _w.z > zMid ? F : Hn;
+        if (y < out.y) out.set(_w.x, y, _w.z);
+      }
+    };
+    let total = 0;
+    for (let pass = 0; pass < 3; pass++) {
+      scan();
+      // (positif : l'avant est plus bas, l'arrière flotte)
+      const gap = Hn.y - F.y;
+      if (!(Math.abs(gap) > 0.004)) break;
+      const floor = Math.min(F.y, Hn.y);
+      const th = clamp(-gap / Math.max(0.05, F.z - Hn.z), -0.35 - total, 0.35 - total);
+      if (!(Math.abs(th) > 0.001)) break;
+      this.turn(md.body, AX, th);
+      total += th;
+      md.root.updateMatrixWorld(true);
+      scan();
+      md.body.position.y -= Math.min(F.y, Hn.y) - floor;
+      md.root.updateMatrixWorld(true);
     }
   }
 

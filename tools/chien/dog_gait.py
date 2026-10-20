@@ -153,7 +153,14 @@ class Rig:
         pts = [Vector((0, J0.y + l1 * math.cos(c), J0.z + l1 * math.sin(c))) for c in cand]
         vy, vz = J2.y - J0.y, J2.z - J0.z
         cross = [vy * (p.z - J0.z) - vz * (p.y - J0.y) for p in pts]
-        k = 0 if (cross[0] > 0) == (bend > 0) else 1
+        if bend == 'fwd':
+            # (articulation J1 du côté de l'avant du chien, quel que soit le sens de J0 -> J2 : grasset du couché)
+            k = 0 if pts[0].y < pts[1].y else 1
+        elif bend == 'up':
+            # (J1 du côté du haut : grasset de l'assis, au-dessus de la ligne hanche -> jarret couchée vers l'arrière)
+            k = 0 if pts[0].z > pts[1].z else 1
+        else:
+            k = 0 if (cross[0] > 0) == (bend > 0) else 1
         y1, z1 = pts[k].y, pts[k].z
         dx = L['dxs']
         J1 = Vector((J0.x + dx[0], y1, z1))
@@ -319,6 +326,9 @@ def _pose_bone(rig, name, pose, gp, t, e, targets, lows, solved, flex, flexw, w)
             M = rot_x_about(L['scap_gain'] * sw, c) @ M
         if name in flexw:
             M = rot_x_about(flex * flexw[name], c) @ M
+        # (bascule d'un os autour de sa tête, poses seulement : bassin rentré de l'assis)
+        if name in gp.get('tilt', {}):
+            M = rot_x_about(gp['tilt'][name], c) @ M
         if name in cfg.get('neck', []):
             th = neck_base + neck_amp * math.cos(w * nf * (t - nph)) + e.get('neck', 0.0)
             M = rot_x_about(th / max(1, len(cfg['neck'])), c) @ M

@@ -226,6 +226,29 @@ def build(body, others=(), eyes=None, opts=None):
             if best not in body.vertex_groups:
                 body.vertex_groups.new(name=best)
             body.vertex_groups[best].add([vi], 1.0, 'REPLACE')
+    # fesses : l'arrière du haut de la cuisse (derrière la hanche, au-dessus du grasset) suit en partie le bassin,
+    # comme les ischio-jambiers attachés à l'ischion ; portée par le seul fémur, cette peau montait avec lui dès que la
+    # cuisse se repliait (assis : la croupe ne touchait jamais le sol, la cuisse s'écrasait en lame)
+    if o.get('buttock'):
+        gp_ = body.vertex_groups.get('pelvis') or body.vertex_groups.new(name='pelvis')
+        for side in ('L', 'R'):
+            gf = body.vertex_groups.get('femur' + side)
+            if gf is None:
+                continue
+            k0, k1 = J['H' + side][0], J['H' + side][1]
+            for v in body.data.vertices:
+                wf = next((e.weight for e in v.groups if e.group == gf.index), 0.0)
+                if wf <= 0:
+                    continue
+                p = body.matrix_world @ v.co
+                if (p.x > 0) != (k0.x > 0):
+                    continue
+                k = o['buttock'] * _smooth(k0.y - 0.02 * W, k0.y + 0.10 * W, p.y) * _smooth(k1.z - 0.02 * W, k1.z + 0.12 * W, p.z)
+                if k <= 0:
+                    continue
+                wp = next((e.weight for e in v.groups if e.group == gp_.index), 0.0)
+                gf.add([v.index], wf * (1 - k), 'REPLACE')
+                gp_.add([v.index], wp + wf * k, 'REPLACE')
     # oreilles : lambeau au-delà du pli -> ear2, entre la base et le pli -> ear1, fondu avec la tête à la base
     for side, e in ears.items():
         g1 = body.vertex_groups.new(name='ear1' + side)

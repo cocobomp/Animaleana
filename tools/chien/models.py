@@ -199,6 +199,12 @@ AUTO_LEGS = {
 }
 
 
+# Repères du squelette automatique du jack (fractions du garrot). La hanche est placée au milieu du haut de la
+# cuisse (à 0,76 du garrot, à l'aplomb du pied, elle était contre la peau de la fesse : la cuisse se déchirait au
+# saut et l'assis tournait autour d'un point de la peau) ; le grasset à l'avant de la cuisse.
+JACK_RIG = {'elbow': 0.47, 'hock': 0.26, 'hip': 0.72, 'hip_dy': -0.117, 'stifle': 0.455, 'stifle_fwd': 0.121, 'buttock': 0.75}
+
+
 def prep_jack():
     """Jack Russell statique : corps complet (le fichier le coupe en trois morceaux : Object_2, Object_3 et
     Object_4 ; Object_4 porte des bouts du visage, des lèvres, des paupières et du bas des postérieurs : sans lui,
@@ -242,7 +248,7 @@ def prep_jack():
     bm.free()
     body.name = 'jack_body'
     eyes.name = 'jack_eyes'
-    arm = autorig.build(body, [eyes], eyes, {'elbow': 0.47, 'hock': 0.26})
+    arm = autorig.build(body, [eyes], eyes, JACK_RIG)
     return arm, keep
 
 
@@ -257,4 +263,10 @@ MODELS['jack'] = dict(
     game_bones=r'^(tail\d|ear[12][LR])',
     # (repos et roulade : clips faits main du shiba repris sur ce squelette ; assis et patte : générés pour lui)
     retarget_clips=['idle', 'rollover'],
+    # couché à plat (bascule bornée), postérieurs repliés sous le corps à la réception du saut
+    lie_pitch_max=0.2, lie_fold=0.35, lie_elbow=0.17, lie_wrist=0.07, jump_tuck=True,
+    # assis : reins creusés, poitrail redressé (corps long : sinon assis très incliné), bassin rentré, fémur vers
+    # l'avant et le haut (grasset relevé) ; hauteur des hanches donnée (la croupe courte du jack ne touche le sol qu'en
+    # écrasant la cuisse)
+    sit_flex=-0.6, sit_tuck=-0.4, sit_femur=0.6, sit_hip=0.16,
 )

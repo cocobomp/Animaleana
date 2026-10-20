@@ -206,7 +206,15 @@ def breathe(t, k=1.0, n=3):
 
 
 # ---- assis : la croupe touche le sol (avant : un peu haute) ------------------------------------------------------
-def sit_gp(hip_frac):
+# Postérieurs repliés comme ceux d'un chien assis : fémur vers l'avant et un peu vers le haut (grasset devant la
+# hanche), jambe qui redescend vers l'arrière, jarret posé au sol derrière la hanche, métatarse à plat vers l'avant.
+# (Avant : le métatarse visé sous la hanche, le grasset pouvait passer derrière ou sous le sol, et la hanche du jack
+# descendait jusqu'en butée : assis « en grenouille », pattes arrière étalées.)
+SIT_FEMUR = M.get('sit_femur', 0.2)
+
+
+def sit_gp(hip_frac, a3=0.10, flex=M.get('sit_flex', 0.0), tuck=M.get('sit_tuck', 0.0), femur=None):
+    femur = SIT_FEMUR if femur is None else femur
     target = hip_frac * hipz
     dy, dz = hp.y - sh.y, hp.z - sh.z
     th = 0.0
@@ -214,18 +222,56 @@ def sit_gp(hip_frac):
         z = sh.z + dy * math.sin(th) + dz * math.cos(th)
         th -= (z - target) / (dy * math.cos(th) - dz * math.sin(th) + 1e-9) * 0.7
     hipn_y = sh.y + dy * math.cos(th) - dz * math.sin(th)
-    gp = dict(still, pivot=sh.copy(), pitch_base=th, neck_base=-th * 0.55, head_base=-th * 0.35)
-    gp['legs'] = {lab: {'dy': 0.0, 'J3': (hipn_y - 0.9 * l3h, rig.legs[lab]['J'][3].z), 'a3': 0.10, 'phi': 0.0, 'splay': 0.12}
-                  for lab in ('HL', 'HR')}
+    # (flex < 0 : le dos se creuse aux reins, le poitrail se redresse ; l'encolure et la tête suivent moins)
+    gp = dict(still, pivot=sh.copy(), pitch_base=th, neck_base=-th * 0.55 - flex * 0.3, head_base=-th * 0.35 - flex * 0.2, flex_base=flex)
+    if tuck:
+        # bassin rentré (tuck < 0 : l'arrière du bassin descend, les fesses passent sous la hanche, entre les
+        # jarrets) ; la colonne repart dans son axe (l'os suivant tourne en sens inverse)
+        gp['tilt'] = {'pelvis': tuck, 'spine1': -tuck}
+    legsd = {}
+    for lab in ('HL', 'HR'):
+        R = rig.legs[lab]
+        l1, l2, l3 = R['l2d'][:3]
+        z3 = R['J'][3].z
+        zh = z3 + l3 * math.sin(a3)
+        sy = hipn_y - l1 * math.cos(femur)
+        sz = target + l1 * math.sin(femur)
+        hy = sy + math.sqrt(max(0.0, l2 * l2 - (sz - zh) ** 2)) * 0.97
+        legsd[lab] = {'J3': (hy - l3 * math.cos(a3), z3), 'a3': a3, 'phi': 0.0, 'splay': 0.14, 'bend': 'up'}
+    gp['legs'] = legsd
     return gp
+
+
+# croupe (fesses, ischion) : sommets derrière et sous la hanche, ni la queue ni le bas des membres — ce qui touche le
+# sol assis (les seuls sommets portés par le bassin et le fémur, en haut de la cuisse, ne descendaient jamais)
+rump_sit = []
+for m in meshes:
+    mw = m.matrix_world
+    for i, v in enumerate(m.data.vertices):
+        d_ = dom[m][i]
+        if not d_ or GAME.search(d_) or d_ in tail or d_ in headset or d_.startswith(('metatarsus', 'htoes')):
+            continue
+        p = mw @ v.co
+        if p.y > hp.y + 0.01 and 0.35 * hipz < p.z < hipz:
+            rump_sit.append((m, i))
+print('RUMP (assis)', len(rump_sit), 'sommets')
+
+
+# (mise au point : --hook <script.py> exécute un script dans ce contexte, ici, puis s'arrête)
+if opt.get('--hook'):
+    exec(open(opt['--hook']).read(), globals())
+    sys.exit(0)
 
 
 if 'sit' not in kept:
     # hauteur des hanches : la plus haute où la croupe touche encore le sol (à 6 mm près)
     lo, hi = 0.12, 0.40
-    for _ in range(9):
+    if M.get('sit_hip'):
+        lo, hi = M['sit_hip'], M['sit_hip']
+    for _ in range(9 if hi > lo else 0):
         midf = (lo + hi) / 2
-        z = K.pose_probe(rig, sit_gp(midf), rump)
+        z = K.pose_probe(rig, sit_gp(midf), rump_sit)
+        print('SIT PROBE', round(midf, 3), round(z, 4))
         if z > 0.006:
             hi = midf
         else:
@@ -281,6 +327,12 @@ def lie_gp():
         th = 0.0
         drop = hp.z - target
         print('LIE : arrière-train non relevé, descente', round(drop, 4))
+    if th > M.get('lie_pitch_max', 1.0):
+        # (jack, poitrail profond : basculer autour du ventre pour descendre les hanches soulevait le poitrail, le
+        # chien restait appuyé sur ses antérieurs, croupe basse et dos en pente ; il se couche à plat, hanches un peu
+        # plus hautes)
+        th = M['lie_pitch_max']
+        print('LIE : bascule bornée', th)
     print('LIE th', round(th, 4), 'drop', round(drop, 4), 'cible hanches', round(target, 4))
     gp = dict(still, drop=drop, pivot=piv, pitch_base=-th, neck_base=0.05 + th * 0.6, head_base=0.05 + th * 0.4)
     def rot(p):
@@ -291,14 +343,30 @@ def lie_gp():
         R = rig.legs[lab]
         l1, l2, l3 = R['l2d'][:3]
         J0 = rot(R['J'][0])
-        zE = 0.08 * hipz
+        # (coude au-dessus du sol de l'épaisseur de l'avant-bras : trop bas, la peau de l'avant-bras passait sous le
+        # sol et tout le chien était relevé d'autant, arrière-train compris)
+        zE = M.get('lie_elbow', 0.08) * hipz
         hz = max(0.0, J0.z - zE)
         ey = J0.y + math.sqrt(max(0.0, l1 * l1 - hz * hz)) if hz < l1 else J0.y
-        legsd[lab] = {'J3': (ey - l2 * 0.97 - l3, R['J'][3].z), 'a3': 0.0, 'phi': 0.0, 'bend': 1}
+        # (métacarpe à plat : le poignet relevé de l'épaisseur du carpe, sinon il passait sous le sol)
+        legsd[lab] = {'J3': (ey - l2 * 0.97 - l3, R['J'][3].z + M.get('lie_wrist', 0.0) * hipz), 'a3': 0.0, 'phi': 0.0, 'bend': 1}
     for lab in ('HL', 'HR'):
         R = rig.legs[lab]
         J0 = rot(R['J'][0])
-        legsd[lab] = {'J3': (J0.y - 0.95 * l3h, R['J'][3].z), 'a3': 0.06, 'phi': 0.0, 'splay': 0.32}
+        if M.get('lie_fold'):
+            # (postérieurs repliés comme assis, à plat sur le côté : fémur vers l'avant et le bas, jarret posé
+            # derrière la hanche, métatarse à plat ; visés sous la hanche, ils restaient dépliés sous une croupe haute)
+            l1, l2, l3 = R['l2d'][:3]
+            a3 = 0.06
+            z3 = R['J'][3].z
+            zh = z3 + l3 * math.sin(a3)
+            fem = M['lie_fold']
+            sy = J0.y - l1 * math.cos(fem)
+            sz = max(zh + 0.02, J0.z - l1 * math.sin(fem))
+            hy = sy + math.sqrt(max(0.0, l2 * l2 - (sz - zh) ** 2)) * 0.97
+            legsd[lab] = {'J3': (hy - l3 * math.cos(a3), z3), 'a3': a3, 'phi': 0.0, 'splay': 0.36, 'bend': 'fwd'}
+        else:
+            legsd[lab] = {'J3': (J0.y - 0.95 * l3h, R['J'][3].z), 'a3': 0.06, 'phi': 0.0, 'splay': 0.32}
     gp['legs'] = legsd
     return gp
 
@@ -407,6 +475,20 @@ def fold_legs(base, front, hind):
     return gp
 
 
+def hind_tuck(gp, dz=0.62, dy=0.03, a3=1.2):
+    """Postérieurs ramenés sous le corps (réception du saut) : métapode visé sous la hanche (dz × hauteur de la
+    hanche plus bas, dy en avant), grasset vers l'avant. La flexion de la hanche reste celle d'un chien : le métapode
+    visé plus haut que la hanche (ancienne réception) mettait le grasset au-dessus du bassin et la cuisse du jack se
+    déchirait en voile."""
+    piv = gp.get('pivot') or cfg['pitch_pivot']
+    hipw = dg.rot_x_about(gp.get('pitch_base', 0.0), piv) @ hp
+    gp = dict(gp)
+    gp['legs'] = dict(gp['legs'])
+    for lab in ('HL', 'HR'):
+        gp['legs'][lab] = {'J3': (hipw.y - dy * hipz, hipw.z - gp.get('drop', 0.0) - dz * hipz), 'a3': a3, 'phi': 0.3, 'bend': 'fwd'}
+    return gp
+
+
 jump_keys = [
     (0.0, fold_legs(dict(still, drop=0.05 * s, pitch_base=0.08, neck_base=-0.1), (0.05, 0.0, 0.0), (0.12, 0.0, 0.2))),
     (0.22, fold_legs(dict(still, pitch_base=0.32, neck_base=-0.25, head_base=0.1), (0.25, 0.55, 2.2), (-0.35, 0.05, -0.4))),
@@ -414,6 +496,8 @@ jump_keys = [
     (0.78, fold_legs(dict(still, pitch_base=-0.25, neck_base=0.15), (0.35, 0.05, 0.3), (0.25, 0.45, 2.0))),
     (1.0, fold_legs(dict(still, drop=0.05 * s, pitch_base=0.08, neck_base=-0.1), (0.05, 0.0, 0.0), (0.12, 0.0, 0.2))),
 ]
+if M.get('jump_tuck'):
+    jump_keys[3] = (0.78, hind_tuck(jump_keys[3][1]))
 jposes = [(t, dg.pose_at(rig, 0.0, gp)[0]) for t, gp in jump_keys]
 
 

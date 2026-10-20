@@ -370,6 +370,21 @@ describe('allures et tours', () => {
     md.dispose();
   });
 
+  it.each(['labrador', 'teckel', 'berger_allemand', 'terre_neuve', 'jack_russell'])('%s : roulade du spectacle, la tête, les oreilles et la queue restent au-dessus du sol (de la scène)', (b) => {
+    const md = dog(b);
+    md.staticPose('stand');
+    let lo = Infinity;
+    // (comme Activities.js : la pose imposée à chaque image, la roulade avance de 0 à 1)
+    for (let f = 0; f <= 60; f++) {
+      realDogPose(md, 'roll', f / 60);
+      md.anim.update(1 / 30, { v: 0, moving: false, posture: 'stand', happy: 1 });
+      if (f % 4 === 0) lo = Math.min(lo, lowest(md, { step: 2 }));
+    }
+    // (avant : tête et oreilles 8 cm sous la scène, queue 7,6 cm)
+    expect(lo, b).toBeGreaterThan(-0.02);
+    md.dispose();
+  }, 120000);
+
   it('couché sur commande (éducateur canin) puis debout : la posture suit, les transitions jouées une fois', () => {
     const md = dog('labrador');
     for (let f = 0; f < 200; f++) md.anim.update(1 / 30, { v: 0, moving: false, posture: 'lie' });

@@ -2383,7 +2383,8 @@ class RealDogAnim {
     const sitW = (this.w.sit ?? 0) + (this.w.sit_down ?? 0) + (this.w.stand_up ?? 0);
     const lieW = (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.lie_down ?? 0) + (this.w.get_up ?? 0);
     if (sitW > 0.3 && this.trick?.clip !== 'rollover') this.settleSit();
-    else if (sitW < 0.1 && lieW < 0.1 && !this.trick) this.settleStand();
+    // (aussi au début d'un tour assis ou patte, quand le chien reniflait encore)
+    else if (sitW < 0.1 && lieW < 0.1 && (!this.trick || this.trick.clip === 'sit' || this.trick.clip === 'paw')) this.settleStand();
     // Queue : sa peau (poil compris) au-dessus du sol, assis, couché, endormi — chaque os relevé, de la base au bout, de
     // ce qui passe encore sous le sol au-delà de lui. (Tenue par ses articulations seulement, la queue épaisse entrait
     // de 6 à 9 cm dans le sol, sur la table du salon ou la scène.)
@@ -2427,6 +2428,17 @@ class RealDogAnim {
         if (!(lowY < floorH)) break;
         this.turn(md.neck, AX, raiseAngle(_v.setFromMatrixPosition(md.neck.matrixWorld).applyMatrix4(_m), _u, floorH + 0.004, 0.8));
         md.neck.updateMatrixWorld(true);
+      }
+    }
+    // Roulade : sur le dos, ce sont le dos, l'encolure, la tête et les oreilles qui touchent le sol (scène du
+    // spectacle) — des parties que les points d'appui des poses ne couvrent pas toutes (oreilles du berger allemand
+    // 5 cm, dos 15 cm sous la scène ; l'encolure relevée pour un point de la tête en descendait un autre). Le tour est
+    // court et rare : à la fin, la peau entière (un sommet sur trois) est mesurée et le corps relevé.
+    if (this.trick?.clip === 'rollover') {
+      const lo = this.skinLow(3);
+      if (lo < -this.bodyAllow) {
+        md.body.position.y -= lo + this.bodyAllow;
+        md.root.updateMatrixWorld(true);
       }
     }
   }
@@ -2581,6 +2593,18 @@ class RealDogAnim {
       md.body.position.y -= Math.min(F.y, Hn.y) - floor;
       md.root.updateMatrixWorld(true);
     }
+  }
+
+  /** Point le plus bas de la peau animée (repère du chien, _m : inverse de la racine), un sommet sur step. */
+  skinLow(step = 3) {
+    const m = this.model.coatMesh;
+    const n = m?.geometry.attributes.position.count ?? 0;
+    let lo = Infinity;
+    for (let i = 0; i < n; i += step) {
+      const y = m.getVertexPosition(i, _q2v).applyMatrix4(m.matrixWorld).applyMatrix4(_m).y;
+      if (y < lo) lo = y;
+    }
+    return lo;
   }
 
   /** Hauteur (repère du chien, _m : inverse de la racine) d'un point de peau ; sa position dans _w. */

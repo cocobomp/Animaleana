@@ -37,13 +37,13 @@ vec3 hCell(vec3 p) {
 /**
  * Réglages des robes (étape 8 du plan « cheval beau ») : lus par le shader (constantes écrites dans son texte) et
  * par les tests. Gris pommelé : fond foncé entre les pommelures (dark), centres éclaircis (light), cellules par
- * mètre (cell) et rayon d'une pommelure (r, en cellules). Pie : bruit déformé (warp, m), bord net mais déchiqueté
- * (jag). Léopard : rayon des taches (en cellules de 15 cm environ), halo marbré autour. Isabelle : largeur de la
- * raie de mulet (m).
+ * mètre (cell) et rayon d'une pommelure (r, en cellules). Pie : champ d'avant l'étape 8 un peu déformé (warp, en
+ * unités du bruit), bord déchiqueté (jag). Léopard : rayon des taches (en cellules de 12 cm environ), halo marbré
+ * autour. Isabelle : largeur de la raie de mulet (m).
  */
 export const COAT_LOOKS = {
   dapple: { dark: 0.45, light: 0.1, cell: 7.5, r: 0.4 },
-  pinto: { warp: 0.15, jag: 0.06 },
+  pinto: { warp: 0.12, jag: 0.06 },
   spots: { rMin: 0.13, rMax: 0.38, halo: 0.08 },
   dun: { stripe: 0.03 },
   // robes dorées : pommelures de santé (fond × 1 - dark), plus marquées sur le palomino
@@ -154,21 +154,20 @@ hEarIn = 0.0;
   c = mix(c, hPointC * 0.95 + c * 0.05, pts * hPoints);
   c = mix(c, hPointC, isEar * smoothstep(0.65, 0.95, h) * max(hPoints, 0.6));
 
-  // Pie (tobiano) : grandes plaques blanches plus hautes que larges, qui descendent du dos (elles le coupent entre
-  // le garrot et la croupe) et montent des membres, aux bords nets mais déchiquetés (bruit déformé : plus les taches
-  // rondes d'une vache) ; tête foncée (sa marque en tête à part).
+  // Pie (tobiano) : grandes plaques blanches qui coupent le dos et montent des membres, tête foncée (sa marque en
+  // tête à part). Pour une graine donnée, les plaques sont celles d'avant l'étape 8 du plan (même champ de bruit,
+  // même seuil) : le cheval d'une partie sauvegardée garde ses marques et tout son blanc — le bruit étiré en hauteur
+  // de l'étape 8 lui en retirait l'essentiel (un Shetland pie presque noir). Seuls les bords changent : un peu
+  // déformés (quelques centimètres, les plaques restent en place) et déchiquetés, au lieu des ronds d'une vache.
   if (hPinto > 0.0) {
-    // (bruit étiré en hauteur : des plaques verticales)
-    vec3 q = P * vec3(1.3, 0.6, 2.0) + hSeed * 3.1;
-    vec3 w = vec3(hFbm(q * 1.6 + 1.7), hFbm(q * 1.6 + 9.2), hFbm(q * 1.6 + 4.4)) - 0.5;
-    vec3 qw = q + w * ${glf(PIN.warp * 3.0)};
-    // (deux octaves seulement : les fines feraient des îlots, des taches de vache)
-    float pn = hNoise(qw) * 0.68 + hNoise(qw * 2.03 + 7.1) * 0.32;
+    vec3 q = P * vec3(1.7, 1.4, 1.7) + hSeed * 3.1;
+    vec3 w = vec3(hNoise(P * 4.0 + 1.7), hNoise(P * 4.0 + 9.2), hNoise(P * 4.0 + 4.4)) - 0.5;
+    float pn = hFbm(q + w * ${glf(PIN.warp)}) + (hNoise(P * 9.0) - 0.5) * 0.06;
     float jag = (hNoise(P * 20.0 + hSeed) - 0.5) * ${glf(PIN.jag)};
-    float back = isBody * smoothstep(0.2, 0.85, up) * (1.0 - smoothstep(0.25, 0.55, abs(P.z + 0.12)));
-    float t = pn + jag + isLeg * (1.0 - smoothstep(0.1, 0.75, h)) * 0.45 - headW * 0.55 + back * 0.12;
+    float back = isBody * smoothstep(0.35, 0.9, up) * smoothstep(-0.6, -0.2, -abs(P.z + 0.1));
+    float t = pn + jag + isLeg * (1.0 - smoothstep(0.1, 0.7, h)) * 0.45 - headW * 0.5 + back * 0.12;
     float wdt = max(fwidth(t) * 0.75, 0.002);
-    c = mix(c, hSec, smoothstep(0.56 - wdt, 0.56 + wdt, t) * hPinto * (1.0 - isHoof - isSkin));
+    c = mix(c, hSec, smoothstep(0.5 - wdt, 0.5 + wdt, t) * hPinto * (1.0 - isHoof - isSkin));
   }
 
   // Isabelle / souris : raie de mulet nette et assez large le long du dos (du garrot à la queue), zébrures sur les
@@ -199,12 +198,14 @@ hEarIn = 0.0;
   // allongées, plus nombreuses vers l'arrière, cernées d'un halo marbré (la peau foncée sous le poil blanc) ; plus
   // petites sur la tête et le bas des membres ; bord de la couverture givré. (Avant : des pois ronds tous pareils.)
   if (hLeopard + hBlanket > 0.0) {
-    vec3 cl = hCell(P * vec3(7.6, 8.6, 6.0) + hSeed);
+    // (cellules d'avant l'étape 8 : mêmes taches, aux mêmes places, pour un cheval déjà là)
+    vec3 cl = hCell(P * vec3(8.5, 8.5, 7.5) + hSeed);
     float small = clamp(isHead + isLeg * (1.0 - smoothstep(0.3, 0.85, h)), 0.0, 1.0);
     float r = mix(${glf(SPOT.rMin)}, ${glf(SPOT.rMax)}, fract(cl.z * 3.7)) * mix(1.15, 0.7, small);
     float dd = cl.x + (hNoise(P * 45.0) - 0.5) * 0.06;
     float rear = smoothstep(0.35, -0.55, P.z);
-    float present = step(mix(0.2, 0.03, rear) - hBlanket * 0.1, fract(cl.z * 7.31));
+    // (les taches d'avant — step(0,22, id) — toutes gardées, et quelques-unes de plus vers l'arrière)
+    float present = max(step(0.22, cl.z), step(mix(0.22, 0.04, rear) - hBlanket * 0.08, cl.z));
     float spot = (1.0 - smoothstep(r - 0.025, r + 0.025, dd)) * present;
     float halo = (1.0 - smoothstep(r + 0.02, r + ${glf(SPOT.halo + 0.04)}, dd)) * present * (1.0 - spot) * (0.45 + 0.55 * hNoise(P * 90.0));
     if (hBlanket > 0.0) {

@@ -59,10 +59,9 @@ describe('robes crédibles (étape 8)', () => {
     expect(material('camargue', 0).userData.horseUniforms.hGrey.value).toBeCloseTo(0.4, 5);
   });
 
-  it('pie : bruit déformé, deux octaves, plaques étirées en hauteur, bord net mais déchiqueté', () => {
+  it('pie : plaques d\'avant l\'étape 8 (même blanc, voir horseMarks.test.js), bord déformé, net mais déchiqueté', () => {
     const fs = compile(material('paint', 1)).fragmentShader;
-    expect(fs).toContain('vec3 qw = q + w *');
-    expect(fs).toContain('P * vec3(1.3, 0.6, 2.0)'); // (moins de détail en hauteur qu'en longueur : plaques verticales)
+    expect(fs).toContain(`hFbm(q + w * ${COAT_LOOKS.pinto.warp.toFixed(4)})`);
     expect(fs).toContain(`(hNoise(P * 20.0 + hSeed) - 0.5) * ${COAT_LOOKS.pinto.jag.toFixed(4)}`);
     expect(fs).toContain('fwidth(t)'); // (bord net, sans escalier)
   });

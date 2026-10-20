@@ -35,6 +35,45 @@ const smooth = (a, b, x) => {
 };
 
 /**
+ * Un crin de la bande, de sa racine (u0) à sa pointe (len), par-dessus ceux d'avant : ton, décalage du reflet,
+ * pente en travers, couverture. (Fonction à part : appelée 256 fois, le moteur JavaScript l'optimise vite ;
+ * la texture est faite une seule fois, en code froid.)
+ */
+function drawStrand(rgba, W, y0, y1, cy, o, cconv, conv, cw, len, hw, tone, shift, wf, wp, u0) {
+  const ylo = Math.floor(y0);
+  const yhi = Math.ceil(y1) - 1;
+  for (let x = Math.floor(u0 * W); x < W; x++) {
+    const u = (x + 0.5) / W;
+    if (u > len) break;
+    // (hors de la racine et de la pointe : crin plein, à sa largeur)
+    const inner = u >= u0 + 0.015 && u <= len - 0.2;
+    const fade = inner ? 1 : (1 - smooth(len - 0.14, len, u)) * smooth(u0, u0 + 0.015, u);
+    const wt = inner ? hw : hw * (1 - 0.45 * smooth(len - 0.2, len, u));
+    // (la petite mèche se resserre vers la pointe et ondule d'un bloc ; le crin, un peu, pour lui)
+    const vc = cy + o * (1 - cconv * conv[x]) + cw[x] + Math.sin(u * 6.28 * wf + wp) * 0.25;
+    const ya = Math.max(ylo, Math.floor(vc - wt - 1));
+    const yb = Math.min(yhi, Math.ceil(vc + wt + 1));
+    const iw = 1 / Math.max(0.6, wt);
+    for (let y = ya; y <= yb; y++) {
+      const d = Math.abs(y + 0.5 - vc);
+      const cov = Math.min(1, Math.max(0, wt + 0.5 - d)) * fade;
+      if (cov <= 0) continue;
+      const i = (y * W + x) * 4;
+      const a0 = rgba[i + 3];
+      const a = cov + a0 * (1 - cov);
+      const k0 = (a0 * (1 - cov)) / a;
+      const k1 = cov / a;
+      // (pente en travers : bord du crin tourné d'un côté ou de l'autre, comme un cylindre)
+      const slope = Math.max(-1, Math.min(1, (y + 0.5 - vc) * iw));
+      rgba[i] = rgba[i] * k0 + tone * k1;
+      rgba[i + 1] = rgba[i + 1] * k0 + shift * k1;
+      rgba[i + 2] = rgba[i + 2] * k0 + (0.5 + 0.5 * slope) * k1;
+      rgba[i + 3] = a;
+    }
+  }
+}
+
+/**
  * Pixels de la bande de crins (flottants 0-1, RGBA), sans hasard d'un appel à l'autre (graine fixe).
  * Chaque rangée (une mèche de carte) est faite de 5 à 7 petites mèches, chacune avec son ton, son décalage de
  * reflet, sa longueur et son ondulation ; ses crins (1 à 2,2 px) s'y resserrent vers la pointe : la mèche
@@ -49,6 +88,15 @@ export function hairStrandPixels() {
   const RH = Hh / ROWS;
   const rgba = new Float32Array(W * Hh * 4);
   const rng = mulberry(9157);
+  // (ce qui ne dépend que de la colonne, calculé une fois : la texture est faite d'un coup, en code froid)
+  const conv = new Float64Array(W);
+  const wave = new Float64Array(W);
+  const cw = new Float64Array(W);
+  for (let x = 0; x < W; x++) {
+    const u = (x + 0.5) / W;
+    conv[x] = smooth(0.25, 1, u);
+    wave[x] = smooth(0.1, 0.5, u);
+  }
   for (let k = 0; k < ROWS; k++) {
     const y0 = k * RH + 1; // (1 px vide entre deux mèches : pas de mélange au filtrage)
     const y1 = (k + 1) * RH - 1;
@@ -68,6 +116,8 @@ export function hairStrandPixels() {
       const cwf = 0.7 + rng() * 1.5;
       const cwp = rng() * 6.28;
       const cwa = 0.3 + rng() * 0.6;
+      // (ondulation de la petite mèche, d'un bloc)
+      for (let x = 0; x < W; x++) cw[x] = Math.sin(((x + 0.5) / W) * 6.28 * cwf + cwp) * cwa * wave[x];
       const ns = Math.round(NS / nc);
       for (let s = 0; s < ns; s++) {
         // (crins plus serrés au cœur de la petite mèche)
@@ -81,33 +131,7 @@ export function hairStrandPixels() {
         const wf = 1 + rng() * 2;
         const wp = rng() * 6.28;
         const u0 = rng() * 0.05; // (racine : chaque crin sort à sa place, pas de bord droit)
-        for (let x = Math.floor(u0 * W); x < W; x++) {
-          const u = (x + 0.5) / W;
-          if (u > len) break;
-          const fade = (1 - smooth(len - 0.14, len, u)) * smooth(u0, u0 + 0.015, u);
-          const wt = hw * (1 - 0.45 * smooth(len - 0.2, len, u));
-          // (la petite mèche se resserre vers la pointe et ondule d'un bloc ; le crin, un peu, pour lui)
-          const vc = cy + o * (1 - cconv * smooth(0.25, 1, u)) + Math.sin(u * 6.28 * cwf + cwp) * cwa * smooth(0.1, 0.5, u)
-            + Math.sin(u * 6.28 * wf + wp) * 0.25;
-          const ya = Math.max(Math.floor(y0), Math.floor(vc - wt - 1));
-          const yb = Math.min(Math.ceil(y1) - 1, Math.ceil(vc + wt + 1));
-          for (let y = ya; y <= yb; y++) {
-            const d = Math.abs(y + 0.5 - vc);
-            const cov = Math.min(1, Math.max(0, wt + 0.5 - d)) * fade;
-            if (cov <= 0) continue;
-            const i = (y * W + x) * 4;
-            const a0 = rgba[i + 3];
-            const a = cov + a0 * (1 - cov);
-            const k0 = (a0 * (1 - cov)) / a;
-            const k1 = cov / a;
-            // (pente en travers : bord du crin tourné d'un côté ou de l'autre, comme un cylindre)
-            const slope = Math.max(-1, Math.min(1, (y + 0.5 - vc) / Math.max(0.6, wt)));
-            rgba[i] = rgba[i] * k0 + tone * k1;
-            rgba[i + 1] = rgba[i + 1] * k0 + shift * k1;
-            rgba[i + 2] = rgba[i + 2] * k0 + (0.5 + 0.5 * slope) * k1;
-            rgba[i + 3] = a;
-          }
-        }
+        drawStrand(rgba, W, y0, y1, cy, o, cconv, conv, cw, len, hw, tone, shift, wf, wp, u0);
       }
     }
     // Racines pleines, un peu plus sombres (le dessous de la mèche), qui commencent en dents irrégulières.
@@ -214,9 +238,10 @@ export function hairTexture() {
   if (hairTex) return hairTex;
   const levels = hairMipLevels(hairStrandPixels());
   const bytes = levels.map((l) => {
-    const d = new Uint8Array(l.data.length);
-    for (let i = 0; i < d.length; i++) d[i] = Math.round(Math.min(1, Math.max(0, l.data[i])) * 255);
-    return { data: d, width: l.width, height: l.height };
+    // (tableau « bridé » : arrondi et borné à 0-255 par l'affectation)
+    const d = new Uint8ClampedArray(l.data.length);
+    for (let i = 0; i < d.length; i++) d[i] = l.data[i] * 255;
+    return { data: new Uint8Array(d.buffer), width: l.width, height: l.height };
   });
   const tex = new THREE.DataTexture(bytes[0].data, bytes[0].width, bytes[0].height, THREE.RGBAFormat);
   tex.mipmaps = bytes;

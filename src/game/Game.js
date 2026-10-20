@@ -5,6 +5,7 @@ import { World } from './World.js';
 import { gfx } from './gfx.js';
 import { preloadModels, loadModel, MODELS } from './assets.js';
 import { REAL_HORSE_KEY, horseView, realHorseBase } from './models/horseReal.js'; // cheval réaliste : chargé à part
+import { hairTexture } from './models/horseHair.js';
 import { renderSetup, PixelBudget, SLOW_KEY } from './pixelBudget.js'; // définition et anticrénelage selon la qualité
 import { Weather3D } from './Weather3D.js';
 import { Player, CameraRig } from './Player.js';
@@ -189,11 +190,13 @@ export class Game {
   }
 
   /**
-   * Le cheval réaliste est chargé. Ses données de repos (≈ 0,3 s de calcul, une fois) sont tirées du GLB
-   * juste après, hors de l'image en cours ; puis les chevaux déjà là avec le modèle de repli prennent le
+   * Le cheval réaliste est chargé. La texture des crins puis ses données de repos (≈ 0,3 s de calcul, une fois)
+   * sont faites juste après, hors de l'image en cours ; puis les chevaux déjà là avec le modèle de repli prennent le
    * réaliste, un par image (Game.frame : swapRealHorses), et les vignettes de chevaux sont refaites.
    */
   onRealHorse(gltf) {
+    // (texture des crins, faite en code une fois : ≈ 30 ms, dans sa propre tâche plutôt qu'au premier cheval)
+    setTimeout(() => hairTexture(), 0);
     setTimeout(() => {
       try {
         realHorseBase(gltf);

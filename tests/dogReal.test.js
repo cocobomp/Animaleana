@@ -8,6 +8,7 @@ import { buildRealDogModel, pickDogGait, realDogPose, REAL_DOG_KEYS, realDogBase
 import { coatPlan } from '../src/game/models/dogCoat.js';
 import { buildGear, removeGear } from '../src/game/gearModels.js';
 import { buildAccessories } from '../src/game/models/salon.js';
+import { dogLookWithBreed } from '../src/game/models/animalModel.js';
 import { DOG_BUILDS, SMALL_DOG, dogBuild, dogModelOf } from '../src/sim/dogLook.js';
 import { SPECIES } from '../src/sim/species.js';
 import { resolveLook } from '../src/sim/animal.js';
@@ -351,6 +352,22 @@ describe('robes', () => {
     if (sable >= 0) expect(plan('labrador', sable).sable).toBe(0);
     // chaque robe de chaque race donne un plan (les yeux, la truffe et la langue gardent leur texture)
     for (const b of SPECIES.dog.breeds) for (let i = 0; i < b.colors.length; i++) expect(plan(b.id, i).base).toBeTypeOf('number');
+  });
+});
+
+describe('anciennes sauvegardes', () => {
+  it('sans look.breed : la race de l\'animal passe avant la race devinée par la robe (labradoodle noir ≠ jack)', () => {
+    for (const [breed, colorIndex] of [['labradoodle', 3], ['spitz_nain', 0], ['carlin', 0], ['whippet', 0]]) {
+      const look = lookOf(breed, { colorIndex });
+      delete look.breed;
+      const lk = dogLookWithBreed(look, breed);
+      expect(lk.breed, breed).toBe(breed);
+      expect(dogModelOf(lk), breed).toBe(dogModelOf(lookOf(breed, { colorIndex })));
+      // (sans race connue, la robe sert encore à deviner une race)
+      expect(dogLookWithBreed(look).breed, breed).toBeTruthy();
+      // (une apparence qui a sa race la garde)
+      expect(dogLookWithBreed({ ...look, breed: 'teckel' }, breed).breed).toBe('teckel');
+    }
   });
 });
 

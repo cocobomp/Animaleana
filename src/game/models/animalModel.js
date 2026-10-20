@@ -405,6 +405,14 @@ function neckAt(ns, t) {
 
 // ------------------------------------------------------------------ construction
 
+/**
+ * Apparence d'un chien avec sa race (look.breed) : celle de l'apparence, sinon la race de l'animal (anciennes
+ * sauvegardes d'avant look.breed), et seulement à défaut la race devinée par la robe.
+ */
+export function dogLookWithBreed(look, breedOfAnimal = null) {
+  return look.breed ? look : { ...look, breed: breedOfAnimal ?? breedOf('dog', look)?.id };
+}
+
 export function buildAnimalModel(speciesId, look, breedOfAnimal = null) {
   // Vague 3 : le cheval et le chat ont chacun leur propre modèle (horseModel.js, catModel.js) ;
   // les autres espèces passent par le modèle commun ci-dessous.
@@ -412,10 +420,10 @@ export function buildAnimalModel(speciesId, look, breedOfAnimal = null) {
   if (speciesId === 'horse') return buildRealHorseModel(look, breedOfAnimal) ?? buildHorseModel(look, breedOfAnimal);
   if (speciesId === 'cat') return buildCatModel(look);
   // Chien réaliste (GLB : shiba pour les moyens et grands, jack russell pour les petits) ; s'il n'est pas encore
-  // chargé (ou dans les tests), le chien procédural ci-dessous. (Ancienne sauvegarde : la race retrouvée par la robe.)
+  // chargé (ou dans les tests), le chien procédural ci-dessous. (Ancienne sauvegarde sans look.breed : la race de
+  // l'animal d'abord, et seulement à défaut la race devinée par la robe — un labradoodle noir n'est pas un jack.)
   if (speciesId === 'dog') {
-    const lk = look.breed ? look : { ...look, breed: breedOf('dog', look)?.id ?? breedOfAnimal };
-    const real = buildRealDogModel(lk, breedOfAnimal);
+    const real = buildRealDogModel(dogLookWithBreed(look, breedOfAnimal), breedOfAnimal);
     if (real) return real;
   }
   const S = SPEC[speciesId] ?? SPEC.dog;

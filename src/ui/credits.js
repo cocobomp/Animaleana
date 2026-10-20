@@ -1,5 +1,5 @@
 // ℹ️ À propos : les crédits des modèles 3D, visibles dans le jeu (en bas de l'aide ❓).
-// Les chiens et les chats sont sous licence CC-BY 4.0 : l'attribution (auteur, titre, lien, licence, modifications) est
+// Les chiens, les chats et les lapins sont sous licence CC-BY 4.0 : l'attribution (auteur, titre, lien, licence, modifications) est
 // obligatoire, ici comme dans CREDITS.md et public/models/LICENSES/. Rien ici ne dépend du DOM (tests en node).
 
 import { h } from './dom.js';
@@ -52,6 +52,28 @@ export const MODEL_CREDITS = [
     changes: {
       fr: 'Pièces réunies, squelette et poids faits pour le jeu (hanches corrigées en position assise), allures, positions et gestes ajoutés, robes recolorées par le jeu, traits des races, textures WebP et compression meshopt.',
       en: 'Parts joined, skeleton and weights made for the game (hips corrected when sitting), gaits, postures and gestures added, coats recoloured by the game, breed features, WebP textures and meshopt compression.',
+    },
+  },
+  {
+    id: 'rabbit_up', file: 'rabbit.glb',
+    what: { fr: 'Lapins', en: 'Rabbits' },
+    title: 'Rabbit', author: 'Dakota.Hinkle',
+    url: 'https://sketchfab.com/3d-models/rabbit-073eef14ae3c4d06808498c3ba895e67',
+    license: CC_BY,
+    changes: {
+      fr: 'Mis à l\'échelle, allures (course et saut d\'après le lapin de CDmir, CC0), positions et gestes ajoutés, pattes jamais étirées, robes recolorées par le jeu, proportions et poils des races (angora, crinière du tête de lion), textures WebP et compression meshopt.',
+      en: 'Rescaled, gaits (run and jump after CDmir\'s rabbit, CC0), postures and gestures added, legs never stretched, coats recoloured by the game, breed proportions and fur (angora, lionhead mane), WebP textures and meshopt compression.',
+    },
+  },
+  {
+    id: 'rabbit_lop', file: 'rabbit_lop.glb',
+    what: { fr: 'Lapins béliers', en: 'Lop rabbits' },
+    title: 'Rabbit Rigged', author: 'FourthGreen',
+    url: 'https://sketchfab.com/3d-models/rabbit-rigged-e7213589744d436b9d96e2dbb31198a5',
+    license: CC_BY,
+    changes: {
+      fr: 'Mis à l\'échelle, os de bout retirés, allures, positions et gestes ajoutés, pattes jamais étirées, robes recolorées par le jeu, proportions du bélier, textures WebP et compression meshopt.',
+      en: 'Rescaled, end bones removed, gaits, postures and gestures added, legs never stretched, coats recoloured by the game, lop proportions, WebP textures and meshopt compression.',
     },
   },
   {

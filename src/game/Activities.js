@@ -23,6 +23,7 @@ import { emojiTexture } from './textures.js';
 import { realLegPose } from './models/horseReal.js'; // poses des membres du cheval réaliste (sauts, tours)
 import { realDogPose } from './models/dogReal.js'; // poses du chien réaliste (ses clips : assis, couché, saut…)
 import { realCatPose } from './models/catReal.js'; // poses du chat réaliste (ses clips : assis, patte levée, saut…)
+import { realRabbitPose } from './models/rabbitReal.js'; // poses du lapin réaliste (ses clips : saut, debout, binky…)
 import { ActivityHud, showActivityResults } from '../ui/activities.js';
 import { t, ta } from '../i18n.js';
 
@@ -154,7 +155,10 @@ export class Activities {
     e.scripted = true;
     e.sleeping = false;
     a.following = false;
-    this.plays.push({ a, e, toyId, toy, phase: 'go', t: 0 });
+    // (roue et tunnel à la taille du lapin : un géant des Flandres réaliste ne passait pas dans la roue de 0,76 m)
+    const fit = toyId === 'wheel' || toyId === 'tunnel' ? Math.max(1, (e.scale ?? 1) / 1.15) : 1;
+    toy.group.scale.setScalar(fit);
+    this.plays.push({ a, e, toyId, toy, phase: 'go', t: 0, fit });
     g.ui.toast(ta('actv_hutchGo', a, { toy: t(`actv_toy_${toyId}`) }), 3500);
     return true;
   }
@@ -190,10 +194,11 @@ export class Activities {
         e.speed = 0;
         switch (toyId) {
           case 'wheel':
-            // Dans la roue : elle tourne pendant que le lapin court.
-            p.set(toy.x, ground(toy.x, toy.z) + 0.07, toy.z);
+            // Dans la roue : elle tourne pendant que le lapin court (sur place : lapin réaliste, pieds non tenus).
+            p.set(toy.x, ground(toy.x, toy.z) + 0.07 * (pl.fit ?? 1), toy.z);
             e.heading = 0;
             e.speed = 2.6;
+            e.petAction = 'wheel';
             if (part) part.rotation.x -= dt * 6;
             break;
           case 'tunnel': {
@@ -222,12 +227,21 @@ export class Activities {
             const hop = k > 0.6 ? Math.max(0, Math.sin(k * 4)) * 0.08 : Math.sin(up * Math.PI) * 0.25;
             p.set(toy.x - 0.5 * (1 - up), ground(toy.x, toy.z) + 0.36 * up + hop, toy.z);
             e.heading = Math.PI / 2;
+            // (lapin réaliste : le saut sur la plateforme tenu à sa phase, puis de petits bonds sur place)
+            if (k < 0.6) {
+              e.petAction = 'jump';
+              e.petActionT = up;
+            } else {
+              e.petAction = 'wheel';
+              e.speed = 0.45;
+            }
             break;
           }
           default: // foin : il mange, la tête en bas
             p.set(toy.x, ground(toy.x, toy.z), toy.z + 0.38);
             e.heading = Math.PI;
-            if (!e.model.realDog && !e.model.realCat) e.model.neck.rotation.x = e.data.look.neckAngle + 0.9 + Math.sin(k * 7) * 0.06;
+            if (!e.model.realDog && !e.model.realCat && !e.model.realRabbit) e.model.neck.rotation.x = e.data.look.neckAngle + 0.9 + Math.sin(k * 7) * 0.06;
+            e.petAction = 'eat'; // (lapin réaliste : il mange, nez qui frémit, à l'image suivante)
         }
         if (k > 1 && Math.floor(k) !== Math.floor(k - dt) && Math.floor(k) % 2 === 0) e.emit(toyId === 'hay' ? '🌾' : '💕', 1);
         if (k >= T) this.endPlay(pl, true);
@@ -242,6 +256,7 @@ export class Activities {
     this.plays = this.plays.filter((x) => x !== pl);
     e.scripted = false;
     e.scaleGroup.visible = true;
+    toy.group.scale.setScalar(1);
     e.state = 'idle';
     e.timer = 3;
     if (toyId === 'wheel') e.position.z = toy.z + 0.6;
@@ -1414,7 +1429,8 @@ class AgilitySession extends Session {
         // (le clip plie les pattes pour l'appel jusqu'à 22 % et se reçoit à 78 % : il suit la course, pas l'envol)
         const jt = c.t;
         const jtCat = Math.min(1, Math.max(0, (c.t - 0.2) / 0.6)); // (chat réaliste : son clip suit l'envol)
-        if (!realLegPose(e.model, 'jump', s * 0.9) && !realDogPose(e.model, 'jump', s, null, jt) && !realCatPose(e.model, 'jump', s, null, jtCat)) for (const l of e.model.legs) l.pivot.rotation.x = l.front ? -1.1 * s : 0.8 * s;
+        if (!realLegPose(e.model, 'jump', s * 0.9) && !realDogPose(e.model, 'jump', s, null, jt) && !realCatPose(e.model, 'jump', s, null, jtCat)
+          && !realRabbitPose(e.model, 'jump', s, null, jtCat)) for (const l of e.model.legs) l.pivot.rotation.x = l.front ? -1.1 * s : 0.8 * s;
         if (!c.clean && !c.knocked && c.t > 0.5 && o.model.userData.parts.bar) {
           c.knocked = true;
           o.model.userData.parts.bar.position.y = 0.05;
@@ -1717,7 +1733,8 @@ class ShowSession extends Session {
         // Le salut après le tour : le cheval réaliste fait une petite révérence (ses antérieurs se tendent :
         // basculé tout d'une pièce, ses sabots avant passaient sous la scène).
         const b = Math.sin(Math.min(1, this.phaseT / 0.8) * Math.PI);
-        if (!realLegPose(e.model, 'bow', b * 0.85, e.scaleGroup) && !realDogPose(e.model, 'bow', b, e.scaleGroup) && !realCatPose(e.model, 'bow', b, e.scaleGroup)) e.scaleGroup.rotation.x = b * 0.25;
+        if (!realLegPose(e.model, 'bow', b * 0.85, e.scaleGroup) && !realDogPose(e.model, 'bow', b, e.scaleGroup) && !realCatPose(e.model, 'bow', b, e.scaleGroup)
+          && !realRabbitPose(e.model, 'bow', b, e.scaleGroup)) e.scaleGroup.rotation.x = b * 0.25;
         if (this.phaseT > 0.8) {
           e.scaleGroup.rotation.x = 0;
           e.scaleGroup.position.y = 0;
@@ -1790,6 +1807,29 @@ function animateTrick(e, trick, k, dt) {
       return;
     }
     if (trick === 'come') return;
+  }
+  // Lapin réaliste : ses clips (saut tenu à sa phase, à sa hauteur ; debout pour la révérence, assis) ; la pirouette
+  // sautillée sur place (pieds non tenus) ; « viens ! » : il court (rabbitReal.js) au lieu de tourner ses os à la main.
+  if (md.realRabbit) {
+    const up = Math.min(1, s * 2);
+    const real = { sit: ['sit', up], down: ['down', up], bow: ['bow', up], smile: ['sit', up] }[trick];
+    if (real) {
+      realRabbitPose(md, real[0], real[1], sg);
+      return;
+    }
+    if (trick === 'jump') {
+      const jt = Math.min(1, k * 1.4);
+      const j = Math.max(0, Math.sin(Math.PI * jt));
+      sg.position.y = j * 0.45 * Math.min(1.3, e.scale ?? 1);
+      realRabbitPose(md, 'jump', j, null, jt);
+      return;
+    }
+    if (trick === 'spin') {
+      sg.rotation.y = Math.PI * 2 * k;
+      e.speed = 0.6;
+      e.petAction = 'wheel';
+      return;
+    }
   }
   // Chien réaliste : ses clips (assis, couché, donner la patte, roulade, saut, révérence) au lieu de basculer tout le
   // modèle ou de tourner ses os à la main (dogReal.js) ; le sourire : content, la tête penchée.
@@ -1976,13 +2016,17 @@ class HopSession extends Session {
 
     // Sauts et tunnel selon la position du lapin.
     let y = 0;
+    let jt = null;
     let visible = true;
     this.obstacles.forEach((o, i) => {
       const a = approach(o, e.position.x, e.position.z);
       const inLane = Math.abs(a.v) < 0.45;
       if (inLane && Math.abs(a.u) < o.half) {
         if (o.type === 'tunnel') visible = Math.abs(a.u) > o.half - 0.3;
-        else y = Math.sin((Math.PI * (a.u + o.half)) / (2 * o.half)) * 0.3;
+        else {
+          y = Math.sin((Math.PI * (a.u + o.half)) / (2 * o.half)) * 0.3;
+          jt = (a.u + o.half) / (2 * o.half);
+        }
       }
       const prev = this.prev[i];
       this.prev[i] = a.u;
@@ -2006,6 +2050,8 @@ class HopSession extends Session {
     });
     e.position.y = this.y(e.position.x, e.position.z) + Math.max(0, y);
     e.scaleGroup.visible = visible;
+    // (lapin réaliste : le clip du saut tenu à la phase du saut au-dessus de la haie, à l'image suivante)
+    if (jt !== null) realRabbitPose(e.model, 'jump', 1, null, jt);
     e.root.rotation.y = e.heading;
 
     const target = this.obstacles[this.next] ?? this.finishLine;

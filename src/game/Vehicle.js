@@ -30,7 +30,8 @@ export function crateWithAnimal(a, colorIndex = 0) {
   const len = (a.look.bodyLen + a.look.headLen) * s;
   const c = crate(Math.min(0.85, Math.max(0.5, len * 1.15)), CRATE_COLORS[colorIndex % CRATE_COLORS.length]);
   const model = buildAnimalModel(a.species, travelLook(a), a.breed); // chaque espèce par son modèle (cheval de sa race, chat…)
-  model.staticPose?.('lie'); // (chien et chat réalistes : couchés dans leur caisse)
+  // (chien et chat réalistes : couchés dans leur caisse ; lapin réaliste : en boule, pattes repliées sous lui)
+  model.staticPose?.(a.species === 'rabbit' ? 'loaf' : 'lie');
   model.root.scale.setScalar(s * Math.min(1, (c.size.d * 0.8) / len));
   model.root.position.set(0, 0.03, -0.04);
   c.group.add(model.root);
@@ -39,11 +40,12 @@ export function crateWithAnimal(a, colorIndex = 0) {
 
 /**
  * Gabarit d'un voyageur : le chiot du chien réaliste a le sien (grosse tête, pattes courtes), comme en jeu ; le chat
- * réaliste aussi (chaton : modèle du chaton ; jeune : tête un peu plus grosse).
+ * réaliste aussi (chaton : modèle du chaton ; jeune : tête un peu plus grosse), le lapin réaliste aussi (lapereau).
  */
 function travelLook(a) {
   const stage = lifeStage(a);
   if (a.species === 'cat') return stage === 'baby' ? { ...a.look, kitten: true } : stage === 'young' ? { ...a.look, young: true } : a.look;
+  if (a.species === 'rabbit') return stage === 'baby' ? { ...a.look, kit: true } : stage === 'young' ? { ...a.look, young: true } : a.look;
   return a.species === 'dog' && stage === 'baby' ? { ...a.look, puppy: true } : a.look;
 }
 

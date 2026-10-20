@@ -25,6 +25,11 @@ export const MODELS = {
   // FainoDS (CC-BY 4.0) pour les bébés. Clés à part (pas « cat ») ; s'ils manquent, le chat procédural reste.
   cat_adult: 'cat_adult.glb',
   cat_kitten: 'cat_kitten.glb',
+  // Lapins réalistes (rabbitReal.js) : le lapin gris de Dakota.Hinkle (CC-BY 4.0) pour toutes les races sauf le bélier,
+  // le bélier fauve de FourthGreen (CC-BY 4.0) pour le bélier. Clés à part (pas « rabbit ») ; s'ils manquent, le lapin
+  // procédural reste.
+  rabbit_up: 'rabbit.glb',
+  rabbit_lop: 'rabbit_lop.glb',
   tree_common: 'tree_common.glb',
   tree_common2: 'tree_common2.glb',
   tree_birch: 'tree_birch.glb',

@@ -1,0 +1,23 @@
+Lapins béliers — « Rabbit Rigged » par FourthGreen (Sketchfab, 2020)
+Fichier du jeu : rabbit_lop.glb
+
+Source :
+  https://sketchfab.com/3d-models/rabbit-rigged-e7213589744d436b9d96e2dbb31198a5
+  (fichier obtenu par l'instantané Objaverse de Sketchfab ; licence vérifiée par l'API publique de Sketchfab
+  le 20/10/2026, voir public/compare-chats-lapins/LICENSES/)
+
+Licence :
+  Creative Commons Attribution 4.0 International (CC BY 4.0)
+  https://creativecommons.org/licenses/by/4.0/
+
+Attribution : « Rabbit Rigged » by FourthGreen, licensed under CC BY 4.0.
+
+Modifications faites pour La ferme à Madichelle (scripts de tools/lapin/, voir tools/lapin/LISEZMOI.md) :
+  - mis à l'échelle (0,35 m du nez à la croupe), os renommés, os de bout sans poids retirés, clip d'origine
+    remplacé ;
+  - animations calculées et ajoutées (mêmes clips que le lapin de Dakota.Hinkle : allures, positions, gestes,
+    transitions), pattes jamais étirées, pieds posés tenus sur place, corps recalé au-dessus du sol ;
+  - textures WebP, compression meshopt, version allégée pour les lapins lointains ;
+  - en jeu : robes recolorées par shader en gardant le grain du pelage, proportions du bélier par déformation
+    (src/game/models/rabbitReal.js, rabbitCoat.js).
+Le modèle d'origine n'est pas cautionné par son auteur pour cet usage ; aucune garantie.

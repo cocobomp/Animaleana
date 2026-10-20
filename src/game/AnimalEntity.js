@@ -16,6 +16,7 @@ import { animateCat } from './catAnim.js'; // chats : assis, toilette, en boule,
 import { animateRealHorse } from './models/horseReal.js'; // cheval réaliste (GLB) : allures du mixeur
 import { animateRealDog } from './models/dogReal.js'; // chien réaliste (GLB) : allures, postures, actions
 import { animateRealCat } from './models/catReal.js'; // chat réaliste (GLB) : allures, postures, gestes
+import { animateRealRabbit } from './models/rabbitReal.js'; // lapin réaliste (GLB) : allures, postures, gestes
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 // Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
@@ -111,8 +112,11 @@ export class AnimalEntity {
     const puppy = this.data.species === 'dog' && lifeStage(this.data) === 'baby';
     // (chat réaliste : le chaton prend le modèle du chaton de FainoDS, le jeune celui de l'adulte, tête un peu plus grosse)
     const catStage = this.data.species === 'cat' ? lifeStage(this.data) : null;
+    // (lapin réaliste : le lapereau a son gabarit — grosse tête, pattes et oreilles courtes —, le jeune aussi)
+    const rabbitStage = this.data.species === 'rabbit' ? lifeStage(this.data) : null;
     const look = foal ? { ...this.data.look, foal: true } : puppy ? { ...this.data.look, puppy: true }
-      : catStage === 'baby' ? { ...this.data.look, kitten: true } : catStage === 'young' ? { ...this.data.look, young: true } : this.data.look;
+      : catStage === 'baby' ? { ...this.data.look, kitten: true } : catStage === 'young' ? { ...this.data.look, young: true }
+        : rabbitStage === 'baby' ? { ...this.data.look, kit: true } : rabbitStage === 'young' ? { ...this.data.look, young: true } : this.data.look;
     this.model = buildGltfAnimal(this.data.species, look) ?? buildAnimalModel(this.data.species, look, this.data.breed);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
@@ -162,7 +166,8 @@ export class AnimalEntity {
     this.stage = lifeStage(this.data);
     // Le poulain (ou le chiot du chien réaliste, le chaton du chat réaliste) a grandi : il prend le gabarit de sa race.
     if (((this.model.horseV3 && this.model.foal !== (this.stage === 'baby')) || (this.model.realDog && this.model.puppy !== (this.stage === 'baby'))
-      || (this.model.realCat && this.model.stage !== (this.stage === 'baby' || this.stage === 'young' ? this.stage : 'adult'))) && this.label) {
+      || (this.model.realCat && this.model.stage !== (this.stage === 'baby' || this.stage === 'young' ? this.stage : 'adult'))
+      || (this.model.realRabbit && this.model.stage !== (this.stage === 'baby' || this.stage === 'young' ? this.stage : 'adult'))) && this.label) {
       this.rebuildModel();
       return;
     }
@@ -774,6 +779,7 @@ export class AnimalEntity {
     const sp = this.sp;
     if (md.gltf) return this.animateGltf(dt, sad);
     if (md.realCat) return animateRealCat(this, dt, sad); // chat réaliste (catReal.js)
+    if (md.realRabbit) return animateRealRabbit(this, dt, sad); // lapin réaliste (rabbitReal.js)
     if (md.cat) return animateCat(this, dt, sad); // chats procéduraux, repli : poses et allures dédiées (catAnim.js)
     if (md.real) return animateRealHorse(this, dt, sad); // cheval réaliste (horseReal.js)
     if (md.realDog) return animateRealDog(this, dt, sad); // chien réaliste (dogReal.js)

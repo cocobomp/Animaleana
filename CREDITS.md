@@ -2,7 +2,7 @@
 
 La ferme à Madichelle est un jeu libre et gratuit. Les modèles 3D ci-dessous viennent d'autres auteurs : ceux
 sous CC0 1.0 sont dans le domaine public (aucune attribution n'est exigée, mais nous tenons à les remercier) ; les
-chiens et les chats sont sous licence **Creative Commons Attribution 4.0 (CC BY 4.0)** : leur attribution ci-dessous est
+chiens, les chats et les lapins sont sous licence **Creative Commons Attribution 4.0 (CC BY 4.0)** : leur attribution ci-dessous est
 obligatoire et figure aussi dans le jeu (❓ Aide → ℹ️ À propos). Les textes de licence sont dans
 `public/models/LICENSES/`.
 
@@ -15,6 +15,9 @@ obligatoire et figure aussi dans le jeu (❓ Aide → ℹ️ À propos). Les tex
 | Petits chiens : *Jack Russell* | [FainoDS (doinspire)](https://sketchfab.com/3d-models/jack-russell-45f1bbf15b67488fba6bea6822d8a7c3), sur Sketchfab | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | `dog_jack.glb` |
 | Chats adultes : *Cat game asset* | [Claire (claireanne3d)](https://sketchfab.com/3d-models/cat-game-asset-7a0c1a65e18747799af9fe9481f1bdb2), sur Sketchfab | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | `cat_adult.glb` |
 | Chatons : *Kitten* | [FainoDS (doinspire)](https://sketchfab.com/3d-models/kitten-4ae3704cd65b423ab994545988d4db1a), sur Sketchfab | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | `cat_kitten.glb` |
+| Lapins : *Rabbit* | [Dakota.Hinkle](https://sketchfab.com/3d-models/rabbit-073eef14ae3c4d06808498c3ba895e67), sur Sketchfab | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | `rabbit.glb` |
+| Lapins béliers : *Rabbit Rigged* | [FourthGreen](https://sketchfab.com/3d-models/rabbit-rigged-e7213589744d436b9d96e2dbb31198a5), sur Sketchfab | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | `rabbit_lop.glb` |
+| Lapins : course et saut d'artiste (gabarits, *Rabbit*) | [CDmir (Čestmír Dammer)](https://opengameart.org/content/rabbit-0), sur OpenGameArt | CC0 1.0 | `rabbit.glb`, `rabbit_lop.glb` (mouvements) |
 
 Conversion : FBX → glTF binaire avec three.js (FBXLoader + GLTFExporter), animations
 ré-échantillonnées à 12 images/s, compression `meshopt` via glTF-Transform. Tout le reste
@@ -60,6 +63,27 @@ pendant le chargement ou si les fichiers ne se chargent pas.
 Ces modifications sont faites par les scripts de `tools/chat/` (voir `tools/chat/LISEZMOI.md`) et, en jeu, par
 `src/game/models/catReal.js` et `catCoat.js` (races, robes, poses). Le chat sculpté par le code
 (`src/game/models/catModel.js`) reste le modèle de repli pendant le chargement ou si les fichiers ne se chargent pas.
+
+### Les lapins (CC BY 4.0)
+
+- « Rabbit » par **Dakota.Hinkle**, https://sketchfab.com/3d-models/rabbit-073eef14ae3c4d06808498c3ba895e67,
+  sous licence CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). **Modifié** : mis à l'échelle, os renommés,
+  animations calculées et ajoutées (accroupi, sautillement lent, petit galop, course en bonds, saut, assis, debout sur
+  les pattes arrière, couché étalé, en boule, toilette, renifler, manger, binky, tapi, porté dans les bras,
+  transitions), pattes jamais étirées (cinématique inverse bornée, aucune translation d'os sauf la racine), pieds posés
+  tenus sur place, corps recalé au-dessus du sol, robe recolorée par shader, proportions et poils des races par
+  déformation et cartes de poils (angora, crinière du tête de lion), textures WebP, compression meshopt, version
+  allégée pour le lointain. Fichier : `rabbit.glb`, lapins de toutes les races sauf le bélier (et leurs lapereaux).
+- « Rabbit Rigged » par **FourthGreen**, https://sketchfab.com/3d-models/rabbit-rigged-e7213589744d436b9d96e2dbb31198a5,
+  sous licence CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). **Modifié** : mêmes traitements (os de bout
+  sans poids retirés, clip d'origine remplacé). Fichier : `rabbit_lop.glb`, lapins béliers (oreilles tombantes).
+- La course en bonds et le saut des deux lapins sont rejoués d'après les clips « Running » et « Jump » du lapin de
+  **CDmir (Čestmír Dammer)**, « Rabbit », https://opengameart.org/content/rabbit-0 (CC0 1.0 : attribution non exigée,
+  par courtoisie) ; gabarits relevés dans `tools/lapin/templates/`.
+
+Ces modifications sont faites par les scripts de `tools/lapin/` (voir `tools/lapin/LISEZMOI.md`) et, en jeu, par
+`src/game/models/rabbitReal.js` et `rabbitCoat.js` (races, robes, poses). Le lapin sculpté par le code
+(`src/game/models/animalModel.js`) reste le modèle de repli pendant le chargement ou si les fichiers ne se chargent pas.
 
 ## Page « Choisis ton chat et ton lapin » (`chats-lapins.html`, hors du jeu)
 

@@ -19,6 +19,8 @@ import { buildRealDogModel } from './dogReal.js'; // chiens réalistes (shiba et
 import { buildCatModel } from './catModel.js'; // chats : modèle dédié (races, poils, poses) — repli du chat réaliste
 import { buildRealCatModel } from './catReal.js'; // chats réalistes (Claire pour les adultes, FainoDS pour les chatons, GLB)
 import { catLookWithBreed } from '../../sim/catLook.js';
+import { buildRealRabbitModel } from './rabbitReal.js'; // lapins réalistes (Dakota.Hinkle, bélier de FourthGreen, GLB)
+import { rabbitLookWithBreed } from '../../sim/rabbitLook.js';
 
 // ------------------------------------------------------------------ anatomie par espèce
 // torso : formes du tronc. ['e', miroir, centre (x/R, y/R, z/L), rayons (x/R, y/R, z/L), k (fondu, /R)]
@@ -415,7 +417,7 @@ export function dogLookWithBreed(look, breedOfAnimal = null) {
   return look.breed ? look : { ...look, breed: breedOfAnimal ?? breedOf('dog', look)?.id };
 }
 
-export function buildAnimalModel(speciesId, look, breedOfAnimal = null, stage = null) {
+export function buildAnimalModel(speciesId, look, breedOfAnimal = null, stage = null, opts = {}) {
   // Vague 3 : le cheval et le chat ont chacun leur propre modèle (horseModel.js, catModel.js) ;
   // les autres espèces passent par le modèle commun ci-dessous.
   // (cheval réaliste du GLB ; s'il n'est pas chargé, le cheval sculpté)
@@ -426,6 +428,15 @@ export function buildAnimalModel(speciesId, look, breedOfAnimal = null, stage = 
   if (speciesId === 'cat') {
     const st = stage ?? (look.kitten ? 'baby' : look.young ? 'young' : 'adult');
     return buildRealCatModel(catLookWithBreed(look, breedOfAnimal), st) ?? buildCatModel(look);
+  }
+  // Lapin réaliste (GLB : bélier de FourthGreen aux oreilles tombantes, lapin de Dakota.Hinkle pour les autres races) ;
+  // s'il n'est pas encore chargé (ou dans les tests), le lapin procédural ci-dessous. (Race : look.breed, sinon celle de
+  // l'animal — anciennes sauvegardes, jamais « mix » —, sinon devinée par la robe ; stade : look.kit pour le lapereau,
+  // look.young pour le jeune, voir AnimalEntity.build ; opts.procedural : le lapin sculpté, planches AVANT/APRÈS.)
+  if (speciesId === 'rabbit' && !opts.procedural) {
+    const st = stage ?? (look.kit ? 'baby' : look.young ? 'young' : 'adult');
+    const real = buildRealRabbitModel(rabbitLookWithBreed(look, breedOfAnimal), st);
+    if (real) return real;
   }
   // Chien réaliste (GLB : shiba pour les moyens et grands, jack russell pour les petits) ; s'il n'est pas encore
   // chargé (ou dans les tests), le chien procédural ci-dessous. (Ancienne sauvegarde sans look.breed : la race de

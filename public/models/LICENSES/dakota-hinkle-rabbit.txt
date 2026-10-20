@@ -1,0 +1,25 @@
+Lapins (toutes les races sauf le bélier) — « Rabbit » par Dakota.Hinkle (Sketchfab, 2022)
+Fichier du jeu : rabbit.glb
+
+Source :
+  https://sketchfab.com/3d-models/rabbit-073eef14ae3c4d06808498c3ba895e67
+  (fichier obtenu par l'instantané Objaverse de Sketchfab ; licence vérifiée par l'API publique de Sketchfab
+  le 20/10/2026, voir public/compare-chats-lapins/LICENSES/)
+
+Licence :
+  Creative Commons Attribution 4.0 International (CC BY 4.0)
+  https://creativecommons.org/licenses/by/4.0/
+
+Attribution : « Rabbit » by Dakota.Hinkle, licensed under CC BY 4.0.
+
+Modifications faites pour La ferme à Madichelle (scripts de tools/lapin/, voir tools/lapin/LISEZMOI.md) :
+  - mis à l'échelle (0,35 m du nez à la croupe), os renommés, os sans poids retirés ;
+  - animations calculées et ajoutées : accroupi, sautillement lent, petit galop, course en bonds (d'après le clip
+    « Running » du lapin de CDmir, CC0), saut (d'après le clip « Jump » de CDmir), assis, debout sur les pattes
+    arrière, couché étalé, couché en boule, toilette, renifler, manger, binky, tapi, porté dans les bras,
+    transitions ; pattes jamais étirées (cinématique inverse bornée à 0,98 de l'allonge, aucune translation d'os
+    sauf la racine), pieds posés tenus sur place, corps recalé au-dessus du sol sur chaque image ;
+  - textures WebP, compression meshopt, version allégée (moins de triangles) pour les lapins lointains ;
+  - en jeu : robes recolorées par shader en gardant le grain du pelage, proportions et pelages des races par
+    déformation, poil long et crinière en cartes de poils (src/game/models/rabbitReal.js, rabbitCoat.js).
+Le modèle d'origine n'est pas cautionné par son auteur pour cet usage ; aucune garantie.

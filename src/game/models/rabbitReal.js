@@ -1173,18 +1173,21 @@ function fitBody(model, base, S) {
 
 /**
  * Allure d'après la vitesse (m/s, ramenée à la taille du lapin), avec hystérésis : sautillement lent, petit galop,
- * course en bonds. prev : allure de l'image précédente ('idle', 'hop', 'lope', 'run').
+ * course en bonds. prev : allure de l'image précédente ('idle', 'hop', 'lope', 'run') ; nat : vitesses naturelles des
+ * allures de ce lapin (le bélier de FourthGreen court à 0,92 m/s, le lapin gris à 1,58) : on passe d'une allure à la
+ * suivante à mi-chemin (moyenne géométrique) de leurs vitesses naturelles, ± 8 % : chaque clip reste près de sa cadence.
  */
-const GAIT_UP = { hop: 0.55, lope: 1.45 };
-const GAIT_DOWN = { lope: 0.45, run: 1.25 };
-export function pickRabbitGait(prev, u) {
+const GAIT_HYST = 1.08;
+export function pickRabbitGait(prev, u, nat = NATURAL_SPEED) {
   if (!(u >= 0.04)) return 'idle';
+  const hl = Math.sqrt((nat.hop ?? NATURAL_SPEED.hop) * (nat.lope ?? NATURAL_SPEED.lope));
+  const lr = Math.sqrt((nat.lope ?? NATURAL_SPEED.lope) * (nat.run ?? NATURAL_SPEED.run));
   let g = prev === 'idle' || !prev ? 'hop' : prev;
   for (let k = 0; k < 3; k++) {
-    if (g === 'hop' && u > GAIT_UP.hop) g = 'lope';
-    else if (g === 'lope' && u > GAIT_UP.lope) g = 'run';
-    else if (g === 'run' && u < GAIT_DOWN.run) g = 'lope';
-    else if (g === 'lope' && u < GAIT_DOWN.lope) g = 'hop';
+    if (g === 'hop' && u > hl * GAIT_HYST) g = 'lope';
+    else if (g === 'lope' && u > lr * GAIT_HYST) g = 'run';
+    else if (g === 'run' && u < lr / GAIT_HYST) g = 'lope';
+    else if (g === 'lope' && u < hl / GAIT_HYST) g = 'hop';
   }
   return g;
 }
@@ -1423,6 +1426,32 @@ class RealRabbitAnim {
         const lo = ys[ids[0]] ?? 0;
         return ids.filter((i) => ys[i] < lo + 0.012).slice(0, 28);
       });
+      // (aux allures, ce n'est pas toujours la sole qui touche : le poignet quand la patte avant se pose à plat, le
+      // jarret du bélier ; les sommets de chaque patte les plus bas sur toute la foulée s'y ajoutent, sinon ils
+      // passaient sous le sol, de 2 cm quand les pieds en appui sont tenus sur place)
+      const legIds = [0, 1, 2, 3].map((l) => {
+        const ids = [];
+        for (let i = 0; i < n; i++) if (W.leg[i * 4 + l] > 0.5) ids.push(i);
+        return ids;
+      });
+      const extra = soles.map((s) => new Set(s));
+      // (pattes aussi tournées à l'épaule et à la hanche, comme footLock les tourne pour tenir un pied en appui)
+      for (const clip of MOVING) {
+        if (!this.actions[clip]) continue;
+        for (let k = 0; k < 12; k++) {
+          for (const rot of [0, -0.35, 0.35]) {
+            this.clipPose(clip, k / 12, false);
+            if (rot) for (const leg of md.legs) this.turn(leg.pivot, AX, rot);
+            evalY();
+            legIds.forEach((ids, l) => {
+              const lo = ids.reduce((m, i) => Math.min(m, ys[i]), Infinity);
+              const low = ids.filter((i) => ys[i] < lo + 0.006).sort((a, b) => ys[a] - ys[b]);
+              for (const i of low.slice(0, 4)) extra[l].add(i);
+            });
+          }
+        }
+      }
+      for (let l = 0; l < 4; l++) soles[l] = [...extra[l]].slice(0, 80);
       const poses = [['sit', 0], ['groom', 0.3], ['groom', 0.7], ['lie', 0], ['sleep', 0], ['eat', 0.3], ['sniff', 0.4], ['hide', 0], ['idle', 0], ['stand', 0]];
       for (const [clip, t] of poses) {
         if (!this.actions[clip]) continue;
@@ -1542,7 +1571,7 @@ class RealRabbitAnim {
     this.restorePose();
     this.t += dt;
     const u = st.moving ? st.v : 0;
-    const g = pickRabbitGait(this.gait, u);
+    const g = pickRabbitGait(this.gait, u, this.natural);
     this.gait = g;
     // Posture voulue (accroupi dès qu'il bouge) ; passages joués une fois, par le plus court chemin.
     const want = st.moving ? 'crouch' : st.posture ?? 'crouch';

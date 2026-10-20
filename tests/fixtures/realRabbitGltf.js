@@ -55,7 +55,10 @@ export function loadRealRabbitGltf(kind) {
   if (!globalThis.document) {
     // (toile 2D muette : toute méthode existe et ne fait rien ; les dégradés acceptent leurs couleurs)
     const ctx = new Proxy({}, {
-      get: (o, k) => (k in o ? o[k] : String(k).startsWith('create') ? () => ({ addColorStop() {} }) : () => {}),
+      // (getImageData : un tampon de pixels, pour le lapin procédural de repli qui peint ses robes pixel par pixel)
+      get: (o, k) => (k in o ? o[k] : k === 'getImageData' || k === 'createImageData'
+        ? (x, y, w = 1, h = 1) => ({ data: new Uint8ClampedArray(Math.max(4, (w | 0) * (h | 0) * 4)), width: w, height: h })
+        : String(k).startsWith('create') ? () => ({ addColorStop() {} }) : () => {}),
       set: (o, k, v) => { o[k] = v; return true; },
     });
     globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) };

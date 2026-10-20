@@ -44,12 +44,12 @@ export const DOG_BUILDS = {
   // ---- moyens et grands (shiba) ; fur < 0 : le double poil du shiba est raccourci (races à poil ras)
   labrador: { legs: 0.97, legW: 1.08, back: 1.08, girth: 1.16, headW: 0.88, head: 1.08, snout: 1.15, muzzleW: 1.15, neck: 0.95, ears: 'floppy', earSize: 1.1, tail: 'otter', tailThick: 0.95, fur: -0.012, earLen: 1.0, cheek: 1, mouth: 1, flews: 0.7, skullFlat: 0.6, stop: 0.7, square: 0.6, eyeOpen: 0.7, neckSlim: 1 },
   berger_allemand: { legs: 1.02, back: 1.12, girth: 1.0, headW: 0.86, head: 1.05, snout: 1.38, ears: 'pointed', earSize: 1.25, tail: 'sabre', tailLen: 1.15, fur: 0.004, slope: 1, cheek: 0.6, mouth: 0.6, eyeOpen: 0.3 },
-  golden: { legs: 0.98, legW: 1.06, back: 1.06, girth: 1.1, headW: 0.86, head: 1.05, snout: 1.15, muzzleW: 1.08, ears: 'floppy', earSize: 1.1, tail: 'plume', tailThick: 0.6, fur: 0.012, feather: 1, ruff: 0.4, earLen: 1.05, cheek: 0.9, mouth: 1, flews: 0.5, skullFlat: 0.5, stop: 0.6, square: 0.4, eyeOpen: 0.7 },
+  golden: { legs: 0.98, legW: 1.06, back: 1.06, girth: 1.1, headW: 0.86, head: 1.05, snout: 1.15, muzzleW: 1.08, ears: 'floppy', earSize: 1.1, tail: 'plume', tailThick: 1.0, tailFur: 1.3, fur: 0.012, feather: 1, ruff: 0.4, earLen: 1.05, cheek: 0.9, mouth: 1, flews: 0.5, skullFlat: 0.5, stop: 0.6, square: 0.4, eyeOpen: 0.7 },
   beagle: { legs: 0.88, legW: 1.06, back: 1.0, girth: 1.08, head: 1.1, snout: 1.1, ears: 'long', earSize: 1.3, tail: 'sickle', tailLen: 0.9, tailThick: 0.55, fur: -0.012, earLen: 0.85, cheek: 1, mouth: 1, flews: 0.5, stop: 0.6, square: 0.5, eyeOpen: 0.8, neckSlim: 1 },
   border_collie: { legs: 1.0, back: 1.05, girth: 0.98, headW: 0.86, head: 0.98, snout: 1.12, ears: 'semi', tail: 'sabre', tailLen: 1.1, fur: 0.01, feather: 0.8, ruff: 0.6, cheek: 0.6, mouth: 0.6, eyeOpen: 0.3 },
   dalmatien: { legs: 1.05, back: 1.05, girth: 0.98, headW: 0.86, head: 1.0, snout: 1.25, ears: 'floppy', tail: 'sabre', tailLen: 1.1, tailThick: 0.5, fur: -0.016, earLen: 0.9, earW: 0.9, cheek: 1, mouth: 1, flews: 0.4, stop: 0.5, square: 0.3, eyeOpen: 0.5, neckSlim: 1 },
-  bouvier_bernois: { legs: 0.98, legW: 1.12, back: 1.08, girth: 1.2, headW: 0.95, head: 1.12, snout: 0.95, muzzleW: 1.12, ears: 'floppy', tail: 'plume', fur: 0.016, feather: 1, ruff: 0.8, earLen: 0.9, earW: 1.1, cheek: 0.5, mouth: 1, flews: 0.5, stop: 0.7, square: 0.5, eyeOpen: 0.6, tailThick: 0.7 },
-  saint_bernard: { legs: 0.98, legW: 1.18, back: 1.1, girth: 1.28, head: 1.3, snout: 0.85, muzzleW: 1.35, neck: 0.95, ears: 'floppy', earSize: 1.1, tail: 'plume', fur: 0.012, ruff: 0.5, earLen: 0.9, earW: 1.15, cheek: 0.5, mouth: 1, flews: 1, jowl: 1, skullFlat: 0.7, stop: 1, square: 1, eyeOpen: 0.4, tailThick: 0.75 },
+  bouvier_bernois: { legs: 0.98, legW: 1.12, back: 1.08, girth: 1.2, headW: 0.95, head: 1.12, snout: 0.95, muzzleW: 1.12, ears: 'floppy', tail: 'plume', fur: 0.016, feather: 1, ruff: 0.8, earLen: 0.9, earW: 1.1, cheek: 0.5, mouth: 1, flews: 0.5, stop: 0.7, square: 0.5, eyeOpen: 0.6, tailThick: 1.0, tailFur: 1.2 },
+  saint_bernard: { legs: 0.98, legW: 1.18, back: 1.1, girth: 1.28, head: 1.3, snout: 0.85, muzzleW: 1.35, neck: 0.95, ears: 'floppy', earSize: 1.1, tail: 'plume', fur: 0.012, ruff: 0.5, earLen: 0.9, earW: 1.15, cheek: 0.5, mouth: 1, flews: 1, jowl: 1, skullFlat: 0.7, stop: 1, square: 1, eyeOpen: 0.4, tailThick: 0.9, tailFur: 1.3 },
   epagneul_breton: { legs: 1.0, back: 0.95, girth: 1.0, headW: 0.88, head: 1.0, snout: 1.12, ears: 'floppy', earSize: 0.95, tail: 'stub', fur: 0.004, feather: 0.6, earLen: 0.8, cheek: 1, mouth: 1, flews: 0.3, stop: 0.5, eyeOpen: 0.6 },
   husky: { legs: 1.0, back: 1.02, girth: 1.02, head: 1.0, snout: 1.1, ears: 'pointed', earSize: 1.05, tail: 'sickle', tailThick: 1.15, fur: 0.008, ruff: 0.5 },
   berger_islandais: { legs: 0.98, back: 0.98, girth: 1.02, head: 1.0, snout: 1.08, ears: 'pointed', tail: 'curl', fur: 0.022, ruff: 1.0, headW: 0.92, feather: 0.7 },
@@ -70,7 +70,7 @@ export const DOG_BUILDS = {
   whippet: { legs: 1.22, legW: 0.82, back: 1.02, girth: 0.82, headW: 0.68, head: 0.92, snout: 1.55, muzzleW: 0.76, neck: 1.15, ears: 'rose', earSize: 0.9, tail: 'whip', tailLen: 1.15, tailThick: 0.35, fur: -0.02, tuck: 1, cheek: 1, mouth: 1, eyeOpen: 0.3, chest: 1, stop: 0, neckSlim: 0.5 },
   setter: { legs: 1.05, back: 1.05, girth: 0.95, headW: 0.8, head: 1.0, snout: 1.42, muzzleW: 0.9, neck: 1.08, ears: 'long', earSize: 1.15, tail: 'flag', tailLen: 1.1, tailThick: 0.45, fur: 0.012, feather: 1, earLen: 1.15, cheek: 1, mouth: 1, flews: 0.4, skullFlat: 0.3, stop: 0.6, square: 0.3, eyeOpen: 0.6 },
   // (terre-neuve : grosse tête mais museau entier et large — raccourci, il lui faisait une face de bouledogue)
-  terre_neuve: { legs: 0.95, legW: 1.25, back: 1.08, girth: 1.34, head: 1.15, snout: 1.0, muzzleW: 1.15, neck: 0.95, ears: 'floppy', earSize: 0.95, tail: 'plume', fur: 0.025, ruff: 0.8, feather: 1, earLen: 0.8, cheek: 0.4, mouth: 1, flews: 0.7, skullFlat: 0.7, stop: 0.6, square: 0.8, eyeOpen: 0.5, tailThick: 0.7 },
+  terre_neuve: { legs: 0.95, legW: 1.25, back: 1.08, girth: 1.34, head: 1.15, snout: 1.0, muzzleW: 1.15, neck: 0.95, ears: 'floppy', earSize: 0.95, tail: 'plume', fur: 0.025, ruff: 0.8, feather: 1, earLen: 0.8, cheek: 0.4, mouth: 1, flews: 0.7, skullFlat: 0.7, stop: 0.6, square: 0.8, eyeOpen: 0.5, tailThick: 0.95, tailFur: 1.3 },
   labradoodle: { legs: 1.0, back: 1.0, girth: 1.04, headW: 0.9, head: 1.0, snout: 1.0, ears: 'long', earSize: 1.15, tail: 'plume', fur: 0.022, curly: 1, earLen: 1.0, cheek: 0.6, mouth: 1, flews: 0.2, eyeOpen: 0.8, beard: 1 },
   berger_blanc: { legs: 1.02, back: 1.1, girth: 1.0, headW: 0.86, head: 1.02, snout: 1.35, ears: 'pointed', earSize: 1.2, tail: 'sabre', tailLen: 1.1, fur: 0.008, cheek: 0.6, mouth: 0.6, eyeOpen: 0.3 },
 };
@@ -83,8 +83,9 @@ const ONE = {
   // visage (modèle du shiba, dogParts.js faceShape) : joues amincies, bouche neutre, babines, bajoues, crâne plat,
   // stop, museau carré, paupières ouvertes (0 → 1)
   cheek: 0, mouth: 0, flews: 0, jowl: 0, skullFlat: 0, stop: 0, square: 0, eyeOpen: 0,
-  // queue effilée vers la pointe (0 : rayon constant ; -1 : selon le port, voir TAPER)
-  tailTaper: -1,
+  // queue effilée vers la pointe (0 : rayon constant ; -1 : selon le port, voir TAPER) ; section arrondie (0 → 1 ; -1 :
+  // selon le port, voir ROUND)
+  tailTaper: -1, tailRound: -1,
   // pompons modelés (caniche : toupet, bracelets, bout de la queue ; montrés avec la coupe « caniche »)
   pompons: 0,
   // barbe et sourcils touffus (fur > 0)
@@ -100,6 +101,9 @@ const ONE = {
 
 /** Effilement de la queue selon son port (rayon perdu à la pointe) : le panache et la loutre s'affinent au bout. */
 const TAPER = { plume: 0.55, otter: 0.6, sabre: 0.4, whip: 0.4, sickle: 0.3, carrot: 0.3, curl: 0, stub: 0.15, level: 0.5, flag: 0.6, flat: 0.3, screw: 0.2 };
+
+/** Section de la queue arrondie selon son port (à aire égale : une queue ronde et épaisse, pas une lame). */
+const ROUND = { plume: 0.6, otter: 0.8, sabre: 0.5, whip: 1, flag: 0.4 };
 
 /** Modèle 3D d'un chien : 'jack' pour les petits, 'shiba' pour les autres (d'après la taille de sa race). */
 export function dogModelOf(look) {
@@ -132,6 +136,7 @@ export function dogBuild(look = {}, puppy = false) {
   // Queue écourtée : courte, sauf longueur donnée par la race.
   if (B.tail === 'stub' && !(breed && DOG_BUILDS[breed].tailLen)) B.tailLen = 0.28;
   if (B.tailTaper < 0) B.tailTaper = TAPER[B.tail] ?? 0;
+  if (B.tailRound < 0) B.tailRound = ROUND[B.tail] ?? 0;
   B.puppy = !!puppy;
   if (puppy) {
     // (bouille de chiot : grosse tête, museau court et rond, yeux ronds grands ouverts, bouche neutre, pattes courtes

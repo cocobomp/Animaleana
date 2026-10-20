@@ -524,7 +524,9 @@ function tailShape(base, B, P, H, n, wTail) {
     }
   }
   const th = B.tailThick;
-  const ro = clamp((1 - th) / 0.4, 0, 1); // (arrondi : complet à tailThick 0,6 et moins)
+  // (arrondi : complet à tailThick 0,6 et moins ; ou selon le port, B.tailRound — le panache du golden, aminci pour
+  // être arrondi, devenait une lanière plate et fine : il garde son épaisseur, sa section s'arrondit à aire égale)
+  const ro = Math.max(clamp((1 - th) / 0.4, 0, 1), B.tailRound ?? 0);
   const Sk = seg.map((S, k) => {
     const [a0, b0, c0, cnt] = cov[k];
     const M = new THREE.Matrix3();
@@ -2588,7 +2590,9 @@ class RealDogAnim {
       this.wagAmt += ((sleeping ? 0 : Math.max(happy, st.action === 'wag' ? 1 : 0)) - this.wagAmt) * Math.min(1, dt * 3);
       const freq = 6 + happy * 6;
       const wag = Math.sin(t * freq) * (0.15 + 0.5 * this.wagAmt) * (B.tail === 'curl' ? 0.4 : 1) + Math.sin(t * 0.9) * 0.05;
-      const lift = (moving ? Math.min(1, st.v / 3) * 0.25 : 0) + happy * 0.15 - (st.sad ? 0.5 : 0) - (sleeping ? 0.2 : 0);
+      // (lévriers : au galop, la queue part en arrière dans l'axe du dos, en gouvernail — pas une ficelle entre les jarrets)
+      const run = B.tail === 'whip' ? 0.6 : 0.25;
+      const lift = (moving ? Math.min(1, st.v / 3) * run : 0) + happy * 0.15 - (st.sad ? 0.5 : 0) - (sleeping ? 0.2 : 0);
       const low = this.posture !== 'stand' ? 1 : 0;
       for (let i = 0; i < tb.length; i++) {
         const b = tb[i];
@@ -2774,45 +2778,71 @@ class RealDogAnim {
   footLock(dt = 1 / 60) {
     const md = this.model;
     const inv = _m; // (inverse de la racine, voir ground)
-    // (correction relâchée en fondu quand le pied se lève ou repart : remise à zéro d'un coup, le pied sautait de 20 à
-    // 28 cm en une image au départ du pas)
-    const fade = Math.exp(-dt * 12);
-    for (let l = 0; l < md.legs.length; l++) {
-      const leg = md.legs[l];
+    // (rotation de la racine seule, et son échelle : sa matrice porte aussi la taille du chien)
+    md.root.matrixWorld.decompose(_rt, _rq, _rs);
+    _rq.invert();
+    this.relTop ??= [0, 0, 0, 0];
+    const lowOf = (leg, l) => {
       let low = Infinity;
       for (const p of this.solePts[l]) {
         const y = _v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(inv).y;
         if (y < low) low = y;
       }
-      // (prise d'appui à 7 mm du sol, lâchée à 12 : notée plus haut, le pied qui finissait sa course en l'air était
-      // tenu en avant de sa place)
-      const down = low < (this.plant[l] ? 0.012 : 0.007);
-      if (!down || !this.plant[l]) {
-        // pied levé ou nouvelle prise : la correction d'avant s'efface, l'appui est noté là où le pied est alors
-        const held = this.lockAng[l] * fade;
-        const side = this.lockSide[l] * fade;
-        this.lockAng[l] = Math.abs(held) > 1e-4 ? held : 0;
-        this.lockSide[l] = Math.abs(side) > 1e-4 ? side : 0;
-        if (this.lockAng[l] || this.lockSide[l]) {
-          this.turn(leg.pivot, AX, this.lockAng[l]);
-          this.turn(leg.pivot, AZ, this.lockSide[l]);
+      return low;
+    };
+    for (let l = 0; l < md.legs.length; l++) {
+      const leg = md.legs[l];
+      // Le clip décide de l'appui (hauteur du pied dans sa pose). Prise d'appui à 15 mm du sol, lâchée à 20 : le pied
+      // du clip arrive encore lancé en avant ; pris à 7 mm, il filait avec le corps jusqu'au sol puis s'arrêtait net
+      // (2 cm en une image au pas) — tenu plus haut, il finit de descendre à sa place.
+      const lowClip = lowOf(leg, l);
+      const planted = !!this.plant[l];
+      const down = lowClip < (planted ? 0.016 : 0.011);
+      let ang = this.lockAng[l];
+      let sd = this.lockSide[l];
+      if (!down || !planted) {
+        // Pied levé ou nouvelle prise : la correction d'avant s'efface — seulement une fois le pied à plus de 1 cm du
+        // sol, en entier quand il est monté à 3 cm, et jamais de plus de 4 mm au bout des doigts par image (effacée
+        // de 18 % par image, le pied encore posé sautait de 2 à 5 cm au trot).
+        if (planted) this.relTop[l] = 0;
+        if (ang || sd) {
+          this.turn(leg.pivot, AX, ang);
+          this.turn(leg.pivot, AZ, sd);
           leg.pivot.updateMatrixWorld(true);
+          const low = lowOf(leg, l);
+          const prevTop = this.relTop[l];
+          this.relTop[l] = Math.max(prevTop, low);
+          const cap0 = 1 - smooth(0.01, 0.03, prevTop);
+          const cap1 = 1 - smooth(0.01, 0.03, this.relTop[l]);
+          const ratio = cap0 > 1e-3 ? cap1 / cap0 : 0;
+          const fade = Math.exp(-dt * 12 * smooth(0.01, 0.03, low)) * ratio;
+          const toe = _u.copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld);
+          const arm = Math.max(0.05 * _rs.y, _w.setFromMatrixPosition(leg.pivot.matrixWorld).sub(toe).applyQuaternion(_rq).y);
+          // (borne : 4 mm par image au ras du sol, 2 cm à 3 cm du sol)
+          const dmax = ((0.004 + 0.016 * smooth(0.005, 0.03, low)) * _rs.y) / arm;
+          const a2 = ang + clamp(ang * fade - ang, -dmax, dmax);
+          const s2 = sd + clamp(sd * fade - sd, -dmax, dmax);
+          this.turn(leg.pivot, AZ, s2 - sd);
+          this.turn(leg.pivot, AX, a2 - ang);
+          leg.pivot.updateMatrixWorld(true);
+          ang = Math.abs(a2) > 1e-4 ? a2 : 0;
+          sd = Math.abs(s2) > 1e-4 ? s2 : 0;
         }
+        this.lockAng[l] = ang;
+        this.lockSide[l] = sd;
         this.plant[l] = down ? this.toePts[l].clone().applyMatrix4(leg.paw.matrixWorld) : null;
         continue;
       }
       // (en long et sur le côté : les membres d'un gabarit allongés ou raccourcis pour la race balancent le pied posé
       // de quelques millimètres avec le roulis du corps, 0,6 mm par image chez le teckel ; deux passes, le pied n'étant
-      // pas à l'aplomb de l'articulation)
+      // pas à l'aplomb de l'articulation ; recalculée depuis la pose du clip à chaque image)
       let th = 0;
       let ph = 0;
       for (let pass = 0; pass < 2; pass++) {
         // (bout des doigts : le point posé, voir toePts)
         const toe = _u.copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld);
         // écart dans le repère du chien (avant : +z), à corriger en tournant le membre autour de son articulation haute
-        // (_q : turn s'en sert, repris à chaque passe)
-        _q.setFromRotationMatrix(md.root.matrixWorld).invert();
-        const err = _v.copy(toe).sub(this.plant[l]).applyQuaternion(_q);
+        const err = _v.copy(toe).sub(this.plant[l]).applyQuaternion(_rq);
         const ez = err.z;
         const ex = err.x;
         const top = _w.setFromMatrixPosition(leg.pivot.matrixWorld);
@@ -2831,8 +2861,25 @@ class RealDogAnim {
           this.turn(leg.pivot, AZ, dph);
           leg.pivot.updateMatrixWorld(true);
         }
-        if (off) this.plant[l] = null;
+        if (off) {
+          this.plant[l] = null;
+          this.relTop[l] = 0;
+        }
         if (off || !moved) break;
+      }
+      // (relâché au sol, la correction ne saute pas pour autant : la différence avec celle de l'image d'avant est
+      // bornée de même)
+      if (!this.plant[l]) {
+        const toe = _u.copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld);
+        const arm = Math.max(0.05 * _rs.y, _w.setFromMatrixPosition(leg.pivot.matrixWorld).sub(toe).applyQuaternion(_rq).y);
+        const dmax = (0.004 * _rs.y) / arm;
+        const a2 = ang + clamp(th - ang, -dmax, dmax);
+        const s2 = sd + clamp(ph - sd, -dmax, dmax);
+        this.turn(leg.pivot, AX, a2 - th);
+        this.turn(leg.pivot, AZ, s2 - ph);
+        leg.pivot.updateMatrixWorld(true);
+        th = a2;
+        ph = s2;
       }
       this.lockAng[l] = th;
       this.lockSide[l] = ph;
@@ -3037,14 +3084,19 @@ function tailCarriage(model, base, B) {
   if (base.kind === 'jack' && (want === 'carrot' || want === 'stub')) return rest;
   // Direction de repos de la queue dans le repère du chien, puis courbe voulue : angle sous l'horizontale à la base,
   // courbure le long de la queue (positive : le bout remonte).
+  // (troisième nombre : la courbure se concentre vers le bout — sabre, crochet du lévrier)
+  // Queues basses (sabre, loutre, panache, fouet) : à 35-45° sous l'horizontale, bout relevé. (Portées à 50-70° et
+  // courbées vers le bas, elles pendaient à la verticale le long de la cuisse et disparaissaient de la silhouette : le
+  // golden, le labrador, le bernois, le berger allemand n'avaient plus de queue de profil, celle des lévriers passait
+  // entre les jarrets.)
   const shapes = {
-    sabre: [0.9, -0.35], otter: [1.05, -0.12], plume: [0.85, -0.25], whip: [1.25, -0.18], sickle: [-0.6, 0.55],
+    sabre: [0.66, 0.26, 1.6], otter: [0.62, 0.16, 1], plume: [0.64, 0.25, 1.4], whip: [0.8, 0.55, 2.2], sickle: [-0.6, 0.55],
     carrot: [-1.0, 0.15], stub: [-0.2, 0], curl: [-1.1, 0.9],
     // (tire-bouchon serré sur la hanche : carlin ; panache couché à plat sur le dos : spitz nain ; drapeau à
     // l'horizontale : setter ; droite dans l'axe du dos : cocker)
     screw: [-1.9, 4.6], flat: [-2.25, -0.7], flag: [0.25, -0.15], level: [0.1, 0.05],
   };
-  const [a0, curve] = shapes[want] ?? shapes.sabre;
+  const [a0, curve, pw = 1] = shapes[want] ?? shapes.sabre;
   // Chaque os est orienté sur la courbe voulue : le premier part à a0 sous l'horizontale vers l'arrière, l'angle varie
   // ensuite régulièrement jusqu'au bout. (En ajoutant la courbure aux rotations de repos du GLB, les plis de la queue
   // d'origine restaient : bout de la queue des lévriers relevé en crochet, queue du cocker recourbée.)
@@ -3066,7 +3118,7 @@ function tailCarriage(model, base, B) {
     tb[i].updateWorldMatrix(true, false);
     tb[i].getWorldQuaternion(wq);
     const cur = localDir[i].clone().applyQuaternion(wq);
-    const th = a0 - total * (i / Math.max(1, n - 1));
+    const th = a0 - total * (i / Math.max(1, n - 1)) ** pw;
     const want = V(cur.x * 0.3, -Math.sin(th), -Math.cos(th)).normalize();
     q.setFromUnitVectors(cur, want);
     tb[i].parent.getWorldQuaternion(pq);
@@ -3081,6 +3133,10 @@ function tailCarriage(model, base, B) {
 // ------------------------------------------------------------------ entité du jeu
 
 const _wv = V();
+// (rotation inverse, position et échelle de la racine du chien : footLock)
+const _rq = new THREE.Quaternion();
+const _rt = V();
+const _rs = V(1, 1, 1);
 
 /**
  * Poses imposées par les activités (src/game/Activities.js, après l'animation) : 'sit', 'down', 'paw', 'roll',

@@ -377,6 +377,41 @@ describe('pieds en appui', () => {
     }
     return worst;
   };
+  // Saut d'un pied posé d'une image à l'autre (60 i/s) : quand l'appui était pris ou lâché, la correction du membre
+  // changeait d'un coup et le pied encore au sol sautait de 2 à 5 cm au trot (berger allemand, golden, labrador).
+  it.each(['berger_allemand', 'golden', 'labrador', 'caniche', 'beagle', 'jack_russell', 'corgi', 'teckel'])('%s : un pied posé ne bouge pas de plus de 5 mm d\'une image à l\'autre (pas, trot, galop)', (b) => {
+    for (const v0 of [1.2, 2.8, 6]) {
+      const md = dog(b);
+      md.staticPose('stand');
+      const v = v0 * md.anim.speedScale;
+      let prev = null;
+      let worst = 0;
+      for (let i = 0; i < 300; i++) {
+        md.anim.update(1 / 60, { v, moving: true, happy: 0.25 });
+        md.root.position.z += v / 60;
+        md.root.updateMatrixWorld(true);
+        const feet = md.legs.map((leg, l) => {
+          let lo = Infinity;
+          const c = new THREE.Vector3();
+          for (const p of md.anim.solePts[l]) {
+            const q = p.clone().applyMatrix4(leg.paw.matrixWorld);
+            c.add(q);
+            lo = Math.min(lo, q.y);
+          }
+          return { c: c.multiplyScalar(1 / md.anim.solePts[l].length), lo };
+        });
+        if (prev && i > 60) {
+          for (let l = 0; l < 4; l++) {
+            if (prev[l].lo < 0.008 && feet[l].lo < 0.008) worst = Math.max(worst, Math.hypot(feet[l].c.x - prev[l].c.x, feet[l].c.z - prev[l].c.z));
+          }
+        }
+        prev = feet;
+      }
+      expect(worst, `${b} ${v0}`).toBeLessThan(0.005);
+      md.dispose();
+    }
+  }, 120000);
+
   it.each(['teckel', 'corgi', 'galgo', 'bouledogue', 'labrador', 'beagle', 'jack_russell'])('%s : les pieds posés ne patinent pas au pas, au trot ni au galop', (b) => {
     // (pieds tenus en long et sur le côté, aussi au galop : 0 à 3 % au pas, 8 % au plus au trot ; le galgo patinait de
     // 32 % au galop, le beagle de 6 à 10 % au trot sur le gabarit des chiots)

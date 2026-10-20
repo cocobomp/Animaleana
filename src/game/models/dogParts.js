@@ -141,17 +141,20 @@ export function earShape(B) {
   const kind = B.model;
   const long = B.ears === 'long';
   const rose = B.ears === 'rose';
+  // (épaisseur : un cuir doublé de poil, 6 à 8 mm — à 3 à 5 mm, l'oreille vue de face n'était qu'un fil sombre, une anse
+  // de seau de chaque côté du crâne ; pli de l'attache bas : relevé de 13 mm, le haut de l'oreille s'écartait du crâne
+  // en arceau)
   const S = {
-    len: 0.115, width: 0.08, up: 0.058, back: 0.074, fwd: 0.14, thick: 0.0048, fringe: 0, curl: 0, round: 2.2, fold: 0.013,
+    len: 0.115, width: 0.08, up: 0.058, back: 0.074, fwd: 0.14, thick: 0.0066, fringe: 0, curl: 0, round: 2.2, fold: 0.007,
     rose, set: 0,
   };
-  if (long) Object.assign(S, { len: 0.15, width: 0.074, up: 0.05, back: 0.07, fwd: 0.1, round: 4, fold: 0.008, thick: 0.0065 });
-  if (rose) Object.assign(S, { len: 0.06, width: 0.036, up: 0.05, back: 0.07, fwd: -1, thick: 0.0028, round: 1.6, fold: 0.006 });
+  if (long) Object.assign(S, { len: 0.15, width: 0.074, up: 0.05, back: 0.07, fwd: 0.1, round: 4, fold: 0.005, thick: 0.008 });
+  if (rose) Object.assign(S, { len: 0.06, width: 0.036, up: 0.05, back: 0.07, fwd: -1, thick: 0.004, round: 1.6, fold: 0.005 });
   if (kind === 'jack') {
     // (jack : tête plus petite que celle du shiba dans le repère du chien, œil plus bas sur le crâne)
     Object.assign(S, { len: S.len * 0.95, width: S.width * 0.92, back: S.back * 0.85 });
   }
-  if (B.ears === 'drop') Object.assign(S, { len: 0.072, width: 0.06, up: 0.052, back: 0.058, fwd: 0.55, thick: 0.0032, round: 2, fold: 0.012 });
+  if (B.ears === 'drop') Object.assign(S, { len: 0.072, width: 0.06, up: 0.052, back: 0.058, fwd: 0.55, thick: 0.005, round: 2, fold: 0.007 });
   S.len *= B.earLen ?? 1;
   S.width *= B.earW ?? 1;
   S.up += B.earSet ?? 0;
@@ -162,7 +165,10 @@ export function earShape(B) {
   // (frisée : oreille épaisse et touffue, sans pli raide à l'attache)
   if (S.curl) Object.assign(S, { thick: S.thick * 1.6, fold: 0.003, width: S.width * 1.1 });
   if (B.puppy) {
-    S.len *= 0.85;
+    // (oreilles de chiot : plus courtes, mais larges et épaisses, molles — pas une lame fine de chaque côté)
+    S.len *= 0.92;
+    S.width *= 1.1;
+    S.thick *= 1.25;
     S.fringe *= 0.4;
   }
   return S;
@@ -229,7 +235,18 @@ export function buildPendantEars(base, D, B) {
     }
   }
   const eyeD = D.heads[I('eyeL')].clone().add(D.heads[I('eyeR')]).multiplyScalar(0.5);
-  const NU = 14; // points autour de la section (lentille)
+  const NU = 18; // points autour de la section (plaque aux bords roulés)
+  // Section : super-ellipse (faces presque plates, bords arrondis et épais comme un cuir roulé — en lentille, le bord
+  // s'amincissait en lame et l'oreille se lisait comme une plaque de carton)
+  const SE = 2 / 3.2;
+  const secU = (k) => {
+    const c = Math.cos((k / NU) * Math.PI * 2);
+    return 0.5 - 0.5 * Math.sign(c) * Math.abs(c) ** SE;
+  };
+  const secT = (k) => {
+    const sn = Math.sin((k / NU) * Math.PI * 2);
+    return Math.sign(sn) * Math.abs(sn) ** SE;
+  };
   const NV = 13; // rangées de l'attache au bout
   const pos = [];
   const rest = [];
@@ -264,15 +281,14 @@ export function buildPendantEars(base, D, B) {
       const rowQ = [];
       const rowX = [];
       for (let k = 0; k < NU; k++) {
-        const th = (k / NU) * Math.PI * 2;
-        const u = 0.5 - 0.5 * Math.cos(th); // 0 : bord avant, 1 : bord arrière
+        const u = secU(k); // 0 : bord avant, 1 : bord arrière
         // frange : bord bas ondulé et plus long
         let lv = v;
         if (S.fringe > 0) lv = v * (1 + S.fringe * (0.18 + 0.08 * Math.sin(u * 9 + seed)) * smooth(0.5, 1, v));
         const q = V(0, Ay, Az).addScaledVector(dir, lv * len).addScaledVector(across, (0.5 - u) * 2 * w);
         if (S.rose) q.y += 0.012 * hs * Math.sin(Math.PI * v);
         rowQ.push(q);
-        let sx = surfX(s, q.y, q.z, 4);
+        let sx = surfX(s, q.y, q.z, 3);
         if (sx < 0 && r > 0) sx = SX[r - 1][k];
         if (sx < 0) sx = surfX(s, q.y, q.z, 8);
         if (sx < 0) sx = 0.04 * hs;
@@ -301,9 +317,8 @@ export function buildPendantEars(base, D, B) {
       const v = r / NV;
       const T = (S.thick + S.fringe * 0.01 * v + S.curl * 0.004) * hs;
       for (let k = 0; k < NU; k++) {
-        const th = (k / NU) * Math.PI * 2;
-        const u = 0.5 - 0.5 * Math.cos(th);
-        const t = Math.sin(th); // + : face externe
+        const u = secU(k);
+        const t = secT(k); // + : face externe
         const q = Q[r][k];
         const sx = SX[r][k];
         const lift = S.fold * hs * (1 - smooth(0, 0.4, v)) * (S.rose ? 1 : 1.2);
@@ -311,11 +326,13 @@ export function buildPendantEars(base, D, B) {
         const tuck = 0.026 * hs * (1 - smooth(0, 0.16, v));
         const bump = S.curl ? ((noise2(u * 5 + seed, v * 7) - 0.5) * 0.01 + (noise2(u * 11 + seed, v * 13) - 0.5) * 0.005) * hs * (0.5 + 0.5 * Math.abs(t))
           : S.fringe ? Math.sin(v * 11 + u * 2 + seed) * 0.0022 * hs * S.fringe * smooth(0.25, 0.7, v) : 0;
-        const x = sx + 0.0025 * hs + T + t * T + lift - tuck + bump;
-        const pX = mid + side * x;
+        const xc = sx + 0.0015 * hs + T + lift - tuck + bump;
+        const pX = mid + side * (xc + t * T);
         pos.push(pX, q.y, q.z);
-        // repos (modèle d'origine) : ramené autour de l'os de la tête d'origine
-        const rp = V(pX, q.y, q.z).sub(HJ).multiplyScalar(1 / hs).add(base.heads[headI]);
+        // repos (modèle d'origine) : ramené autour de l'os de la tête d'origine ; le même pour les deux faces (milieu de
+        // l'épaisseur) — sinon la robe peinte d'après le repos (taches du dalmatien) donnait une face noire et l'autre
+        // blanche, et un liseré noir tout autour
+        const rp = V(mid + side * xc, q.y, q.z).sub(HJ).multiplyScalar(1 / hs).add(base.heads[headI]);
         rest.push(rp.x, rp.y, rp.z);
         uv.push(uv0[0] + (u - 0.5) * 0.02, uv0[1] + (v - 0.5) * 0.03);
         // os : tête à l'attache, puis oreille (base), puis bout

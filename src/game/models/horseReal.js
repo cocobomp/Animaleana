@@ -37,10 +37,13 @@ const RIDER_GAIT = { walk: 0, trot: 1, canter: 2, gallop: 2 };
 const RIDER_KEYS = [...MOVING, 'canterR'];
 
 /**
- * Version réduite (LOD) au-delà de cette distance à la caméra (m, divisée par la taille du cheval) : de
+ * Version réduite (LOD) au-delà de cette distance à la caméra (m, divisée par la taille du cheval) : plus
  * près en qualité basse (téléphone), plus loin en qualité haute. Hystérésis de 10 % (pas de va-et-vient).
+ * (Basse : 15 m et non plus 7 — la caméra du jeu est à 7 m du joueur, 9 m quand il monte, et le cheval d'à
+ * côté à 9 à 13 m de la caméra, 10 à 14,5 m une fois divisé par sa taille : on voyait toujours la version
+ * réduite, crinière en dents de peigne. Un poney à cette distance, plus petit à l'écran, reste en version réduite.)
  */
-export const LOD_DIST = { low: 7, high: 22 };
+export const LOD_DIST = { low: 15, high: 22 };
 /** Cheval hors du champ (ni dessiné ni dans l'ombre) : animé une image sur OFFSCREEN_STEP, avec le temps cumulé. */
 export const OFFSCREEN_STEP = 3;
 /**
@@ -1374,7 +1377,7 @@ function maneMaterial(base, color, sway) {
   const relief = !cards && gfx.quality === 'high' ? src.normalMap : null;
   const m = new THREE.MeshStandardMaterial({
     map: src.map, normalMap: relief, alphaTest: 0.42, side: THREE.DoubleSide, roughness: cards ? 0.8 : 0.62,
-    alphaToCoverage: gfx.quality === 'high', vertexColors: cards,
+    alphaToCoverage: gfx.msaa || gfx.quality === 'high', vertexColors: cards,
   });
   if (src.normalScale && relief) m.normalScale.copy(src.normalScale);
   // (modelé médian = 0,5 dans la texture : ×2)
@@ -1755,12 +1758,98 @@ function contactShadow(R, L) {
   }
   const geo = new THREE.PlaneGeometry(1, 1);
   geo.rotateX(-Math.PI / 2);
+  // (qualité basse : le soleil n'y projette pas d'ombre, c'est le seul signe que le cheval touche le sol ;
+  // décalage de profondeur : elle passe devant un sol posé juste au-dessus du terrain, sable, litière)
   const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-    map: contactTex, transparent: true, depthWrite: false, opacity: gfx.quality === 'high' ? 0.5 : 0.65, toneMapped: false,
+    map: contactTex, transparent: true, depthWrite: false, opacity: gfx.quality === 'high' ? 0.5 : 0.75, toneMapped: false,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
   }));
   m.scale.set(R * 3.0, 1, L * 1.45);
   m.position.y = 0.015;
   m.renderOrder = -1;
+  return m;
+}
+
+const SOLE_SHADOW_LIFT = 0.25; // (m, cheval de taille 1 : sabot levé de plus, plus d'ombre sous lui)
+
+/**
+ * Petites ombres sous les sabots (qualité basse, où le soleil ne projette pas d'ombre : sans elles, le cheval
+ * flotte). Un seul maillage par cheval, quatre carrés : le shader place chacun sous son sabot (uniform hSole :
+ * centre de la sole dans le repère du cheval, et opacité), recalculé juste avant son dessin (onBeforeRender),
+ * après l'animation et les poses des activités (sabot donné, saut, révérence). Sabot posé : ombre pleine ; levé
+ * de SOLE_SHADOW_LIFT : plus rien. 8 triangles et 16 nombres par image ; rien si le cheval n'est pas dans le champ.
+ */
+function soleShadows(model, size) {
+  const pos = [];
+  const uv = [];
+  const ids = [];
+  const index = [];
+  for (let i = 0; i < 4; i++) {
+    for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      pos.push(x * size * 0.5, 0, z * size * 0.62);
+      uv.push((x + 1) / 2, (1 - z) / 2);
+      ids.push(i);
+    }
+    const o = i * 4;
+    index.push(o, o + 2, o + 1, o, o + 3, o + 2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setAttribute('hIdx', new THREE.Float32BufferAttribute(ids, 1));
+  geo.setIndex(index);
+  // (les carrés sont déplacés dans le shader : la sphère englobante couvre tout le dessous du cheval)
+  geo.boundingSphere = new THREE.Sphere(V(0, 0, 0), 1.6);
+  geo.boundingBox = new THREE.Box3(V(-1.6, -0.1, -1.6), V(1.6, 0.1, 1.6));
+  const sole = { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) };
+  const mat = new THREE.MeshBasicMaterial({
+    map: contactTex, transparent: true, depthWrite: false, opacity: 0.6, toneMapped: false,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
+  });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.hSole = sole;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute float hIdx;
+uniform vec4 hSole[4];
+varying float vHSole;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+{
+  vec4 hs = hSole[int(hIdx + 0.5)];
+  transformed = vec3(hs.x + position.x, hs.y, hs.z + position.z);
+  vHSole = hs.w;
+}`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying float vHSole;`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+diffuseColor.a *= vHSole;`);
+  };
+  mat.customProgramCacheKey = () => 'horsereal-soles';
+  const m = new THREE.Mesh(geo, mat);
+  m.renderOrder = -1;
+  m.name = 'soleShadows';
+  m.onBeforeRender = () => {
+    const md = model;
+    md.body.updateMatrix();
+    for (let j = 0; j < md.legs.length; j++) {
+      const l = md.legs[j];
+      _m.multiplyMatrices(md.body.matrix, l.top.matrix).multiply(l.pivot.matrix).multiply(l.knee.matrix).multiply(l.fetlock.matrix);
+      let x = 0;
+      let z = 0;
+      let low = Infinity;
+      for (let q = 0; q < l.solePts.length; q++) {
+        _v.copy(l.solePts[q]).applyMatrix4(_m);
+        x += _v.x;
+        z += _v.z;
+        if (_v.y < low) low = _v.y;
+      }
+      const n = l.solePts.length;
+      const h = Math.max(0, low - 0.003);
+      const t = Math.min(1, h / SOLE_SHADOW_LIFT);
+      sole.value[j].set(x / n, 0.004, z / n, 1 - t * t * (3 - 2 * t));
+    }
+  };
   return m;
 }
 
@@ -1929,6 +2018,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   };
   for (const e of model.ears) e.userData.side = e === model.ears[0] ? 1 : -1;
   model.skinGear = (mesh) => skinGear(model, S, mesh, hb);
+  if (gfx.quality !== 'high') root.add(soleShadows(model, legR * 6.5));
   // Allures de la race aux appuis calés au sol (lockedGaits) : faites une fois par gabarit, une allure à la
   // fois (lockGaitStep : 6 à 15 ms chacune), pendant les temps morts du navigateur après la construction
   // (voir plus bas) ; ce qui reste est fait au premier pas (lockGaits). Avant, les cinq allures étaient
@@ -1948,6 +2038,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   };
   model.anim = new RealHorseAnim(model, S.gaits ?? base.clips);
   hb.anim = model.anim;
+  model.photoPose = () => model.anim.photoPose();
   model.bounds = hb;
   // Version réduite (LOD) : 0 complète, 1 réduite (index simplifié du GLB, ≈ 6 300 triangles au lieu de
   // 15 000). Choisie d'après la distance à la caméra du jeu (animateRealHorse) ; les photos la remettent à 0.
@@ -2674,6 +2765,7 @@ class RealHorseAnim {
     this.skipN = 0;
     this.doze = 0;
     this.sadAmt = 0;
+    this.proud = 1; // (port de tête relevé : voir overlay)
     if (gaits.natural) this.useGaits(gaits);
   }
 
@@ -2839,21 +2931,34 @@ class RealHorseAnim {
     const neckDrop = this.doze * 0.42 + this.sadAmt * 0.25 * (1 - graze);
     // Broutage : le clip pose le bout du nez à l'herbe pour le modèle d'origine ; pour une autre race
     // (membres, encolure, tête différents) on corrige l'angle de l'encolure.
-    const reach = this.reachFix * (this.w.eat ?? 0);
-    const feeder = (st.feeder ?? 0) * (this.w.eat ?? 0) * -0.42;
-    if (neckDrop || reach || feeder) md.neck.rotateX(neckDrop + reach + feeder);
-    if (this.doze) md.head.rotateX(this.doze * 0.12);
+    const eat = this.w.eat ?? 0;
+    const reach = (this.reachFix ?? 0) * eat;
+    const feeder = (st.feeder ?? 0) * eat * -0.42;
+    // Port de tête : les clips portent la tête « encapuchonnée » (à l'arrêt, chanfrein à 68° sous l'horizontale,
+    // menton rentré : air triste). Encolure et nuque relevées (HEAD_UP : 50° environ), partagées entre les deux
+    // pour ne pas étirer la gorge ; rien quand il broute ou somnole, moins quand il est triste et aux allures
+    // rapides (le galop tend l'encolure vers l'avant). Lissé : la tête monte et descend en douceur.
+    const fast = Math.min(1, (this.w.canter ?? 0) + (this.w.canterR ?? 0) + (this.w.gallop ?? 0));
+    const proud = (1 - eat) * (1 - this.doze) * (1 - 0.6 * fast) * (1 - 0.6 * this.sadAmt);
+    this.proud += (proud - this.proud) * Math.min(1, dt * 4);
+    const up = this.proud;
+    if (neckDrop || reach || feeder || up) md.neck.rotateX(neckDrop + reach + feeder - HEAD_UP.neck * up);
+    if (this.doze || up) md.head.rotateX(this.doze * 0.12 - HEAD_UP.head * up);
     // Regard qui se promène (moins en marche).
-    const look = (Math.sin(t * 0.37) * 0.5 + Math.sin(t * 0.13 + 1.7) * 0.5) * 0.32 * (st.moving ? 0.15 : 1) * (1 - graze * 0.7);
-    md.neck.quaternion.premultiply(_qYaw.setFromAxisAngle(AXIS_Y, look));
-    // Oreilles : elles pivotent vers ce qu'il écoute ; sur le côté quand il somnole.
+    const look = this.photo ? 0 : (Math.sin(t * 0.37) * 0.5 + Math.sin(t * 0.13 + 1.7) * 0.5) * 0.32 * (st.moving ? 0.15 : 1) * (1 - graze * 0.7);
+    if (look) md.neck.quaternion.premultiply(_qYaw.setFromAxisAngle(AXIS_Y, look));
+    // Oreilles : elles pivotent un peu vers ce qu'il écoute, ensemble la plupart du temps, pointées vers l'avant
+    // quand il est attentif ; sur le côté quand il somnole. (Avant : ±0,3 rad chacune de son côté, une oreille
+    // se couchait parfois à l'horizontale.)
+    const alert = 1 - this.doze;
+    const both = Math.sin(t * 0.31 + 0.6) * 0.09;
     for (let i = 0; i < md.ears.length; i++) {
       const e = md.ears[i];
       const s = i === 0 ? 1 : -1;
       const n1 = Math.sin(t * 1.3 + i * 2.1) + Math.sin(t * 0.47 + i);
-      e.rotateX(n1 * 0.06 + this.doze * 0.2);
-      e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.12));
-      e.rotateY(s * Math.sin(t * 0.7 + i * 3) * 0.3 * (1 - this.doze));
+      e.rotateX(n1 * 0.04 + this.doze * 0.2 - 0.08 * alert * this.proud);
+      e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.06));
+      e.rotateY((s * Math.sin(t * 0.7 + i * 3) * 0.06 + both) * alert);
     }
     // Port de queue de la race (arabe, saddlebred, welsh) : couard relevé, crins qui retombent en arc.
     const set = md.build.tailSet ?? 0;
@@ -2862,7 +2967,7 @@ class RealHorseAnim {
       md.tailTip.rotateX(-set * 0.4);
     }
     // Queue : de temps en temps un coup de fouet contre les mouches.
-    const swish = tailSwish(t, md.root.id % 7);
+    const swish = this.photo ? 0 : tailSwish(t, md.root.id % 7);
     if (swish) {
       md.tail.rotateZ(swish * 0.6);
       md.tailTip.rotateZ(swish);
@@ -2903,6 +3008,35 @@ class RealHorseAnim {
       }
     }
     if (low < 0) md.body.position.y -= low;
+  }
+
+  /**
+   * Pose de photo (vignettes, essayage de la sellerie, portrait de la fiche) : à l'arrêt, attentif — clip
+   * d'arrêt seul à un instant fixe, tête relevée (HEAD_UP), oreilles en avant, regard droit devant, sans
+   * broutage, somnolence, coup de queue ni hasard : la même photo à chaque fois.
+   */
+  photoPose() {
+    this.restorePose();
+    for (let j = 0; j < this.list.length; j++) {
+      const name = this.names[j];
+      const on = name === 'idle' || (!this.actions.idle && j === 0);
+      this.list[j].setEffectiveWeight(on ? 1 : 0);
+      this.list[j].time = 0;
+      this.w[name] = on ? 1 : 0;
+    }
+    this.mixer.update(0);
+    this.savePose();
+    this.doze = 0;
+    this.sadAmt = 0;
+    this.proud = 1;
+    this.photo = true;
+    const t = this.t;
+    this.t = 0;
+    // (dt = 1 : la crinière a fini de retomber)
+    this.overlay(1, { v: 0, moving: false, sleeping: false, sad: false, graze: 0, feeder: 0, turn: 0, fat: 1 }, 0);
+    this.t = t;
+    this.photo = false;
+    this.model.root.updateMatrixWorld(true);
   }
 
   /** Correction d'angle de l'encolure pour que le bout du nez touche l'herbe (pose « eat » de cette race). */
@@ -2970,6 +3104,12 @@ export function pickGait(prev, u) {
   }
   return g;
 }
+
+/**
+ * Port de tête relevé à l'arrêt et au pas (rad, rotation x : encolure à sa base, tête à la nuque ; voir
+ * RealHorseAnim.overlay). Chanfrein mesuré à 68° sous l'horizontale avec les clips seuls, 50° environ avec.
+ */
+export const HEAD_UP = { neck: 0.12, head: 0.18 };
 
 const QNECK_REST = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), NECK_REST);
 const QNECK_REST_INV = QNECK_REST.clone().invert();
@@ -3221,7 +3361,8 @@ export function animateRealHorse(e, dt, sad) {
   const t = e.time;
   e.grazeSeed ??= Math.random() * 10;
   // (pas pendant une séance qui le guide, spectacle, toilettage… : il attend tête haute)
-  const grazing = e.state === 'idle' && !e.sleeping && !e.herdCtrl && !e.ridden && !e.scripted && Math.sin(t * 0.3 + e.grazeSeed) > 0.2;
+  // (ni quand il regarde le joueur depuis son box : AnimalEntity.attending)
+  const grazing = e.state === 'idle' && !e.sleeping && !e.herdCtrl && !e.ridden && !e.scripted && !e.attending && Math.sin(t * 0.3 + e.grazeSeed) > 0.2;
   // (tête à l'herbe ou à la mangeoire : lissé, elle descend et remonte en douceur)
   e.grazeAmt = (e.grazeAmt ?? 0) + ((grazing ? 1 : 0) - (e.grazeAmt ?? 0)) * Math.min(1, dt * 1.2);
   e.feedAmt = (e.feedAmt ?? 0) + ((e.state === 'eat' ? 1 : 0) - (e.feedAmt ?? 0)) * Math.min(1, dt * 1.5);

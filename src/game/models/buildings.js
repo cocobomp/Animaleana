@@ -357,6 +357,24 @@ export const jumpOffset = (w) => Math.min(5, w / 4);
  * ground(lx, lz) : hauteur du sol par rapport au centre, pour que poteaux, lisses et sable suivent le terrain.
  * L'obstacle de saut est en (jumpOffset(w), 0).
  */
+/** Hauteur du sable des carrières au-dessus du terrain (m) : juste de quoi ne pas s'y mêler. */
+export const SAND_LIFT = 0.004;
+/** Réglages de matière du sable : décalage de profondeur (le terrain dessous ne le traverse pas). */
+export const SAND_OFFSET = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 };
+
+/**
+ * Sable d'une carrière (w × d, centré, à plat sur le terrain ground(x, z) du repère local) : au ras du sol, là où
+ * tout le monde marche (world.heightAt) — posé 3 à 5 cm plus haut, il cachait l'ombre de contact des chevaux, et
+ * sabots et pieds s'y enfonçaient. Maille fine (1,25 m) : il suit le relief de près.
+ */
+export function sandGeometry(w, d, ground = () => 0) {
+  const geo = new THREE.PlaneGeometry(w, d, Math.ceil(w / 1.25), Math.ceil(d / 1.25)).rotateX(-Math.PI / 2);
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setY(i, ground(p.getX(i), p.getZ(i)) + SAND_LIFT);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 export function paddock(w, d, ground = () => 0) {
   const g = new THREE.Group();
   const b = new MeshBatch();
@@ -390,12 +408,8 @@ export function paddock(w, d, ground = () => 0) {
       b.add(new THREE.BoxGeometry(Math.hypot(flat, yb - ya), 0.12, 0.05), wood, [(ax + bx) / 2, (ya + yb) / 2 + y, (az + bz) / 2], rot);
     }
   }
-  // Sable de carrière, piétiné (il épouse le terrain).
-  const sandGeo = new THREE.PlaneGeometry(w - 0.3, d - 0.3, Math.ceil(w / 3), Math.ceil(d / 3)).rotateX(-Math.PI / 2);
-  const sp = sandGeo.attributes.position;
-  for (let i = 0; i < sp.count; i++) sp.setY(i, ground(sp.getX(i), sp.getZ(i)) + 0.03);
-  sandGeo.computeVertexNormals();
-  const sand = new THREE.Mesh(sandGeo, mat(0xc4ae86, 1));
+  // Sable de carrière, piétiné (il épouse le terrain : voir sandGeometry).
+  const sand = new THREE.Mesh(sandGeometry(w - 0.3, d - 0.3, ground), mat(0xc4ae86, 1, SAND_OFFSET));
   sand.receiveShadow = true;
   g.add(sand);
   // Obstacle de saut (chandeliers et barres rayées), à côté du chemin de l'ouverture.

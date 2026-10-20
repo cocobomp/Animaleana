@@ -377,13 +377,15 @@ export class ActivityHud {
     this.choicesEl = h('div', { class: 'actv-choices', hidden: true });
     this.gaugeEl = h('div', { class: 'actv-gauge', hidden: true });
     this.mainEl = h('div', { class: 'actv-main' });
+    // (réglage de l'activité, « Saut automatique » : dans la barre du haut, pas au-dessus du gros bouton — sur un
+    // téléphone, il couvrait le dos du cheval)
     this.toggleEl = h('div', { class: 'actv-toggle' });
-    this.controls.append(this.choicesEl, this.gaugeEl, this.toggleEl, this.mainEl);
+    this.controls.append(this.choicesEl, this.gaugeEl, this.mainEl);
     this.root = h('div', { id: 'actv-hud' },
       h('div', { class: 'actv-top' },
         h('div', { class: 'actv-title' }, h('span', {}, `${icon} ${title}`),
           h('button', { class: 'actv-quit', 'aria-label': t('actv_quit'), title: t('actv_quit'), onClick: onQuit }, '✕')),
-        this.statsEl),
+        this.statsEl, this.toggleEl),
       this.hintEl, this.bigEl, this.controls);
     ui.root.append(this.root);
   }

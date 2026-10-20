@@ -27,6 +27,9 @@ export const HOME = { // (place et taille appliquées par coreLayout.js : enclos
 export const PEN = { x: 14, z: 35, r: 6, hw: 10.5, hd: 6.5, gate: { x: 14, z: 47 } };
 export const FIELD = { x: 0, z: 60, r: 12 };
 
+/** Le cheval rentré est-il arrivé dans son box (à 1,2 m du centre au plus) ? stall : Interiors.stallOf, ou null. */
+export const inStall = (stall, p) => !!stall && Math.hypot(p.x - stall.x, p.z - stall.z) <= 1.2;
+
 /** Vrai si (x, z) est dans l'enclos de la bergerie. */
 export const inPen = (x, z, margin = 0) => inside(enclosure('pen'), x, z, margin);
 
@@ -520,8 +523,8 @@ export class AnimalEntity {
     } else {
       // Un cheval qui rentre au box ne s'endort pas en chemin.
       const stall = d.stalled ? this.world.stallOf?.(d) : null;
-      const busy = this.herdCtrl || this.state === 'goTo' || this.state === 'eat' || den
-        || (stall && Math.hypot(p.x - stall.x, p.z - stall.z) > 1.2);
+      const atBox = inStall(stall, p); // (déjà chez lui, pas en chemin vers son box)
+      const busy = this.herdCtrl || this.state === 'goTo' || this.state === 'eat' || den || (stall && !atBox);
       const tired = d.needs.energy < 12 || (this.sleeping && d.needs.energy < 60);
       this.sleeping = !busy && !d.following && (ctx.night || tired) && distPlayer > 2.5;
       this.targetSpeed = 0;
@@ -689,8 +692,9 @@ export class AnimalEntity {
       }
 
       // Au box, le cheval vient voir le joueur qui s'approche : il s'arrête, se tourne vers lui et lève la tête
-      // (avant, on ne voyait que sa croupe depuis l'allée).
-      this.attending = !!stall && !this.sleeping && !this.herdCtrl && !d.following && this.state !== 'eat' && distPlayer < 4.5;
+      // (avant, on ne voyait que sa croupe depuis l'allée). Seulement une fois dans son box : en chemin (« Rentrer
+      // au box », « Rentrer les chevaux »), il continue jusqu'au box même si l'enfant marche à côté de lui.
+      this.attending = atBox && !this.sleeping && !this.herdCtrl && !d.following && this.state !== 'eat' && distPlayer < 4.5;
       if (this.attending) {
         this.targetSpeed = 0;
         if (this.state === 'walk') {

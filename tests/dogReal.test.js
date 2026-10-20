@@ -377,6 +377,19 @@ describe('équipement ajusté', () => {
       expect(size.x, b).toBeLessThan(0.6);
       expect(size.z, b).toBeLessThan(0.08);
       expect(size.z, b).toBeLessThan(size.x * 0.3);
+      // bande plate, pas une bouée : épaisseur radiale (sur le dessus de l'anneau) bien plus petite que sa largeur
+      const pos = torus.geometry.attributes.position;
+      let top = -Infinity;
+      let topIn = Infinity;
+      for (let i = 0; i < pos.count; i++) {
+        if (Math.abs(pos.getX(i)) > 0.08 * size.x) continue;
+        if (pos.getY(i) > 0) {
+          top = Math.max(top, pos.getY(i));
+          topIn = Math.min(topIn, pos.getY(i));
+        }
+      }
+      expect(top - topIn, b).toBeLessThan(0.012);
+      expect(top - topIn, b).toBeLessThan(size.z * 0.5);
       const acc = buildAccessories(md, look, { neck: { id: 'bandana', color: 'pink' }, head: { id: 'ribbon', color: 'blue' } });
       expect(acc.length).toBeGreaterThan(0);
       removeGear(g);

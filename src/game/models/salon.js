@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { signTexture } from '../textures.js';
 import { ACCESSORIES, ACC_COLORS } from '../../sim/groomer.js';
+import { flatBand } from '../gearModels.js';
 
 const mat = (color, roughness = 0.85, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
 
@@ -200,9 +201,9 @@ export function buildAccessories(model, look, accessories = {}) {
       frame.quaternion.copy(ring.q);
       const rx = ring.rx + 0.008;
       const ry = ring.ry + 0.008;
-      const band = Math.max(0.006, (rx + ry) * 0.1);
-      const torus = new THREE.Mesh(new THREE.TorusGeometry(1, band / Math.max(rx, ry), 6, 28), mat(worn.id === 'bandana' ? color : 0x3a2a20, 0.6));
-      torus.scale.set(rx + band * 0.5, ry + band * 0.5, Math.max(rx, ry) * 0.9); // (z : largeur de la bande)
+      // (bande plate, comme le collier : voir flatBand)
+      const band = 0.01;
+      const torus = new THREE.Mesh(flatBand(rx, ry, 0.003, band), mat(worn.id === 'bandana' ? color : 0x3a2a20, 0.6));
       frame.add(torus);
       const throat = -(ry + band);
       if (worn.id === 'bow') put(frame, bowMesh((rx + ry) * 0.45, color), [0, throat - band * 0.5, band * 0.5], [0.3, 0, 0]);

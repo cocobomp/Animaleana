@@ -543,6 +543,17 @@ function horseSaddle(model, gear, add) {
 // ------------------------------------------------------------------ chien réaliste
 
 /**
+ * Bande plate (collier) autour d'une ellipse de demi-axes rx, ry (plan xy, z le long du cou) : tore de rayon 1 dont
+ * le tube est aplati, épaisseur radiale 2 × th, largeur 2 × w. Géométrie mise à l'échelle (pas le maillage).
+ */
+export function flatBand(rx, ry, th, w) {
+  const R = Math.max(rx, ry);
+  const g = new THREE.TorusGeometry(1, th / R, 6, 32);
+  g.scale(rx + th, ry + th, w * R / th);
+  return g;
+}
+
+/**
  * Équipement du chien réaliste (dogReal.js), ajusté sur les mesures de sa race (model.dogFit) : collier autour de
  * l'encolure (anneau mesuré à 40 % du cou, ellipse de la coupe, avec boucle, anneau de laisse et médaille, porté
  * par l'os du cou), manteau taillé dans les coupes du tronc (du garrot aux hanches, sur le dos et les flancs) et lié
@@ -554,29 +565,31 @@ function buildDogGear(model, gear, add) {
     const c = fit.collar;
     const color = gearColor(gear.neck, BLANKET_COLORS.red);
     const gap = 0.006;
-    const band = Math.max(0.006, (c.rx + c.ry) * 0.12);
     const ring = new THREE.Group();
     ring.position.copy(c.center);
     ring.quaternion.copy(c.q);
-    // (bande plate : un tore aplati, ellipse de la coupe de l'encolure)
-    const geo = new THREE.TorusGeometry(1, band / Math.max(c.rx, c.ry), 6, 28);
+    // Bande plate : mince (épaisseur radiale 2 × th) et large le long du cou (2 × w), sur l'ellipse de la coupe de
+    // l'encolure. (Le tube rond d'un rayon d'un huitième du cou faisait une bouée : 5 à 11 cm d'épaisseur.)
+    const th = 0.0035;
+    const w = 0.013;
+    const geo = flatBand(c.rx + gap, c.ry + gap, th, w);
     const torus = new THREE.Mesh(geo, mat(color, 0.55));
-    torus.scale.set(c.rx + gap + band * 0.5, c.ry + gap + band * 0.5, Math.max(c.rx, c.ry) * 0.9); // (z : largeur de la bande)
     torus.castShadow = true;
     ring.add(torus);
     // Boucle, anneau (laisse) et médaille sous la gorge.
     const metal = mat(0xd2ab4e, 0.3, METAL);
-    const yb = -(c.ry + gap + band * 0.9);
-    const buckle = new THREE.Mesh(new THREE.TorusGeometry(band * 0.9, band * 0.22, 6, 12), metal);
+    const band = w;
+    const yb = -(c.ry + gap + th * 2);
+    const buckle = new THREE.Mesh(new THREE.TorusGeometry(band * 0.8, band * 0.15, 6, 12), metal);
     buckle.position.set(0, yb, 0);
     ring.add(buckle);
-    const medal = new THREE.Mesh(new THREE.CylinderGeometry(band * 1.2, band * 1.2, band * 0.3, 14), metal);
+    const medal = new THREE.Mesh(new THREE.CylinderGeometry(band * 0.9, band * 0.9, band * 0.2, 14), metal);
     medal.rotation.x = Math.PI / 2;
-    medal.position.set(0, yb - band * 1.6, band * 0.4);
+    medal.position.set(0, yb - band * 1.5, band * 0.3);
     ring.add(medal);
     // Anneau de la laisse sur le dessus de l'encolure (là où dogReal.js place leashPoint).
-    const dRing = new THREE.Mesh(new THREE.TorusGeometry(band * 0.8, band * 0.2, 6, 12), metal);
-    dRing.position.set(0, c.ry + gap + band * 1.3, 0);
+    const dRing = new THREE.Mesh(new THREE.TorusGeometry(band * 0.7, band * 0.14, 6, 12), metal);
+    dRing.position.set(0, c.ry + gap + th * 2 + band * 0.6, 0);
     dRing.rotation.y = Math.PI / 2;
     ring.add(dRing);
     add.group(c.bone, ring);

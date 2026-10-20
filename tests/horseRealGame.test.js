@@ -431,8 +431,9 @@ describe('saut d\'obstacle du cheval réaliste', () => {
       rider.position.copy(seat);
       pitchAbout({ scaleGroup: sg }, pitch, md.y0 * sc, -0.075 * sc, rider);
       const s = saddle();
-      // (autour du sol sous le ventre, la selle reculait ou avançait de ≈ 25 cm)
-      expect(Math.abs(s.z - rest.z)).toBeLessThan(0.06);
+      // (autour du sol sous le ventre, la selle reculait ou avançait de ≈ 25 cm ; autour du centre du tronc, de son
+      // demi-rayon × sin 0,16 — un peu plus avec la poitrine plus profonde de l'étape 7 : 6 cm)
+      expect(Math.abs(s.z - rest.z)).toBeLessThan(0.065);
       expect(rider.position.distanceTo(s)).toBeLessThan(0.002 + seat.distanceTo(rest));
       expect(rider.rotation.x).toBe(pitch);
     }

@@ -286,7 +286,8 @@ export function coatMaterial(look, build, breed = null, real = null) {
     hFace: { value: face },
     hSeed: { value: ((look.seed ?? 1) % 997) * 0.731 },
     hHoofY: { value: real?.hoofY ?? 0 },
-    hDetail: { value: light ? 0.35 : 0.5 },
+    // (poulain : modelé presque effacé, il n'a pas encore les muscles d'un adulte)
+    hDetail: { value: build.foal ? 0.25 : light ? 0.35 : 0.5 },
     // Satiné et liseré (voir RIM_FRAGMENT) : force, teinte (dorée pour l'Akhal-Teké, brun chaud pour le noir),
     // lumière du ciel et appoint du soir (partagés, mis à jour par World.updateSky).
     hRim: { value: high ? 0.75 : 1 },

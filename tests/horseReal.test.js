@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import * as THREE from 'three';
-import { deformer, pickGait, RIG_BONES, NATIVE_BUILD, NATURAL_SPEED } from '../src/game/models/horseReal.js';
+import { deformer, pickGait, RIG_BONES, NATIVE_BUILD, NATURAL_SPEED, TOPLINE } from '../src/game/models/horseReal.js';
 import { horseBuild, foalBuild } from '../src/sim/horseLook.js';
 import { SPECIES } from '../src/sim/species.js';
 
@@ -108,10 +108,17 @@ describe('fichier du cheval réaliste', () => {
       expect(ps.heads[RIG_BONES.indexOf('FL2')].y).toBeGreaterThan(tr.heads[RIG_BONES.indexOf('FL2')].y);
     });
 
-    it('le gabarit natif ne change rien', () => {
+    it('le gabarit natif ne change rien (sauf la ligne du dessus sculptée : garrot et creux du dos)', () => {
       const D = deformer(base, { ...NATIVE_BUILD });
       for (let i = 0; i < rest.length; i++) {
         if (!D.heads[i]) continue;
+        // (l'os de la crinière au garrot monte avec la bosse du garrot, d'au plus sa hauteur, sans avancer ni reculer)
+        if (RIG_BONES[i].startsWith('Mane')) {
+          expect(D.heads[i].y - rest[i].y).toBeGreaterThanOrEqual(-1e-6);
+          expect(D.heads[i].y - rest[i].y).toBeLessThanOrEqual(TOPLINE.withers + TOPLINE.fill + 1e-6);
+          expect(Math.abs(D.heads[i].z - rest[i].z)).toBeLessThan(1e-6);
+          continue;
+        }
         expect(D.heads[i].distanceTo(rest[i])).toBeLessThan(1e-6);
       }
     });

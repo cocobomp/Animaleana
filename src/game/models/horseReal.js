@@ -70,7 +70,17 @@ export const horseView = { eye: new THREE.Vector3(), on: false, frame: 0 };
 
 // Gabarit natif du modèle (cheval de trait, en unités de horseLook.js) : les races s'obtiennent en
 // divisant leur gabarit par celui-ci (pur-sang : tronc plus étroit, membres plus fins et plus longs…).
-export const NATIVE_BUILD = { girth: 1.24, legs: 0.98, bone: 1.36, neck: 0.95, neckW: 1.24, crest: 1.25, head: 1.1, croup: 1.12, back: 1, mane: 1.45, tail: 0.85 };
+// (back : 1,08 et non 1 — le modèle d'origine a le corps long, 1,12 fois la hauteur au garrot chez un selle
+// français, 1,21 chez un pur-sang ; un cheval de selle est presque carré, 1,00 à 1,05)
+export const NATIVE_BUILD = { girth: 1.24, legs: 0.98, bone: 1.36, neck: 0.95, neckW: 1.24, crest: 1.25, head: 1.1, croup: 1.12, back: 1.08, mane: 1.45, tail: 0.85 };
+/** Exposant de la profondeur du tronc selon son épaisseur (deformer : girth^GIRTH_DEPTH, 0,6 avant). */
+export const GIRTH_DEPTH = 0.25;
+/**
+ * Ligne du dessus (deformer, m, cheval de taille 1) : bosse du garrot (withers) à behind derrière la base de
+ * l'encolure, longue de wLen ; creux du dos comblé de fill, fillAt plus en arrière, long de fLen ; à partir de
+ * from au-dessus des coudes.
+ */
+export const TOPLINE = { withers: 0.035, behind: 0.17, wLen: 0.1, fill: 0.018, fillAt: 0.24, fLen: 0.13, from: 0.36 };
 
 // Squelette : [os, os parent dans le jeu]. Spine est le groupe body (origine au sol).
 const RIG = [
@@ -639,7 +649,9 @@ export function deformer(base, B) {
   const rest = base.rest;
   const J = (n) => rest[BONE_INDEX[n]];
   const gx = r('girth');
-  const gy = r('girth') ** 0.6;
+  // Profondeur du tronc : moins liée à sa largeur qu'avant (girth^0,6 : un pur-sang au tronc étroit avait aussi une
+  // poitrine de poulain, 0,43 du garrot au lieu de 0,50) ; B.depth la règle à part (poulain : tronc peu profond).
+  const gy = r('girth') ** GIRTH_DEPTH * (B.depth ?? 1);
   const rb = r('back');
   const rl = r('legs');
   const bone = r('bone');
@@ -652,11 +664,23 @@ export function deformer(base, B) {
   const zHip = J('Spine').z;
   // Tronc (et épaules, hanches, attache de la queue) : largeur, profondeur ancrée à la hauteur des
   // coudes (qui suit la longueur des membres), longueur du dos autour de la selle, croupe.
+  // Ligne du dessus sculptée (le modèle d'origine, un cheval de trait, n'a pas de garrot et a le dos ensellé) :
+  // bosse étroite du garrot derrière la base de l'encolure, creux du dos comblé juste derrière (devant la selle).
+  // Seulement le haut du tronc, près de la ligne du dessus (les articulations, plus bas, ne bougent pas).
+  const zW = J('Neck').z - TOPLINE.behind;
+  const yTop = elbowY + TOPLINE.from;
+  const sculpt = (p) => {
+    const hi = smooth(yTop, yTop + 0.16, p.y);
+    if (hi <= 0) return 0;
+    const dzW = (p.z - zW) / TOPLINE.wLen;
+    const dzF = (p.z - zW + TOPLINE.fillAt) / TOPLINE.fLen;
+    return hi * (TOPLINE.withers * Math.exp(-dzW * dzW - (p.x / 0.11) ** 2) + TOPLINE.fill * Math.exp(-dzF * dzF - (p.x / 0.2) ** 2));
+  };
   const trunk = (p, o) => {
     const rear = smooth(zHip + 0.38, zHip - 0.05, p.z);
     const kx = gx * (1 + (croup - 1) * 0.8 * rear);
     const ky = gy * (1 + (croup - 1) * 0.35 * rear);
-    return o.set(p.x * kx, yA2 + (p.y - yA) * ky, zSeat + (p.z - zSeat) * rb);
+    return o.set(p.x * kx, yA2 + (p.y + sculpt(p) - yA) * ky, zSeat + (p.z - zSeat) * rb);
   };
   const affine = (head, newHead, lin) => (p, o) => o.copy(p).sub(head).applyMatrix3(lin).add(newHead);
   const along = (a, f, t) => {
@@ -720,12 +744,19 @@ export function deformer(base, B) {
   const rh = r('head');
   const headLin = affine(poll, poll2, new THREE.Matrix3().multiplyScalar(rh));
   const prof = headProfile(base, B.profile);
+  // (poulain : chanfrein court, front bombé, petit bout du nez — après le profil de la race)
+  const foal = B.foalHead ? headProfile(base, 'foal') : null;
   const tmpP = V();
-  maps[BONE_INDEX.Head] = prof ? (p, o) => headLin(prof(p, tmpP), o) : headLin;
+  const tmpF = V();
+  maps[BONE_INDEX.Head] = prof && foal ? (p, o) => headLin(foal(prof(p, tmpP), tmpF), o)
+    : prof || foal ? (p, o) => headLin((prof || foal)(p, tmpP), o) : headLin;
+  // Oreilles : un peu plus petites chez les poneys (B.ears ; Shetland : de petites oreilles dans un gros toupet,
+  // pas les oreilles d'un cheval sur une tête de poney)
+  const re = rh ** 0.6 * (B.ears ?? 1);
   for (const e of ['EarL', 'EarR']) {
     const h = J(e);
     const h2 = maps[BONE_INDEX.Head](h, V());
-    maps[BONE_INDEX[e]] = affine(h, h2, new THREE.Matrix3().multiplyScalar(rh ** 0.6));
+    maps[BONE_INDEX[e]] = affine(h, h2, new THREE.Matrix3().multiplyScalar(re));
     heads[BONE_INDEX[e]] = h2;
   }
   // Queue : le tronçon qui pend s'allonge ou se raccourcit (les crins suivent).
@@ -740,7 +771,9 @@ export function deformer(base, B) {
   for (let i = 1; i <= 4; i++) heads[BONE_INDEX['Mane' + i]] = neck(J('Mane' + i), V());
   heads[BONE_INDEX.Tail1] = trunk(J('Tail1'), V());
   heads[BONE_INDEX.Tail2] = d1;
-  return { maps, heads, scale: { gx, gy, rb, rl, bone, hoof, head: rh, yA2 } };
+  // (longueur de la tête, nuque → bout du nez, raccourcie chez le poulain : voir headProfile 'foal')
+  const snout = foal ? FOAL_FACE.at + (1 - FOAL_FACE.at) * FOAL_FACE.face : 1;
+  return { maps, heads, scale: { gx, gy, rb, rl, bone, hoof, head: rh, yA2, snout } };
 }
 
 /**
@@ -750,6 +783,9 @@ export function deformer(base, B) {
  * 'dish' (arabe, welsh) creux entre les yeux et les naseaux, front bombé, bout du nez plus fin ;
  * 'square' (camargue) ganaches plus larges, bout du nez massif. Renvoie null pour une tête droite.
  */
+/** Tête de poulain (headProfile 'foal') : face raccourcie au-delà de at (× face), front bombé (dome, longueur de la tête). */
+const FOAL_FACE = { at: 0.4, face: 0.8, dome: 0.035 };
+
 function headProfile(base, kind) {
   if (!kind || kind === 'straight' || !base.snout) return null;
   const poll = base.rest[BONE_INDEX.Head];
@@ -773,6 +809,13 @@ function headProfile(base, kind) {
       const m = smooth(0.7, 0.98, z);
       h.x *= 1 - 0.1 * m;
       h.y = 0.02 + (h.y - 0.02) * (1 - 0.07 * m);
+    } else if (kind === 'foal') {
+      // Poulain : la face (au-delà de FOAL_FACE.at) raccourcie, front bombé entre les yeux, bout du nez plus petit.
+      if (z > FOAL_FACE.at) h.z = FOAL_FACE.at + (z - FOAL_FACE.at) * FOAL_FACE.face;
+      h.y += FOAL_FACE.dome * bump(z, 0.04, 0.5) * smooth(0.02, 0.15, y) * ridge(x, 0.24);
+      const m = smooth(0.55, 0.95, z);
+      h.x *= 1 - 0.1 * m;
+      h.y = 0.02 + (h.y - 0.02) * (1 - 0.08 * m);
     } else if (kind === 'square') {
       h.y -= 0.012 * bump(z, 0.4, 0.86) * top * ridge(x, 0.2);
       h.x *= 1 + 0.15 * bump(z, 0.05, 0.6) * smooth(0.02, -0.2, y);
@@ -1480,7 +1523,7 @@ function shapeFor(base, B) {
   const ao = new Float32Array(n);
   const poll = heads[BONE_INDEX.Head];
   const headQ = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), base.headTilt).invert();
-  const headLen = base.snout.distanceTo(base.rest[BONE_INDEX.Head]) * D.scale.head;
+  const headLen = base.snout.distanceTo(base.rest[BONE_INDEX.Head]) * D.scale.head * D.scale.snout;
   const legOf = (b) => LEGS.findIndex(([k]) => RIG[b][0].startsWith(k));
   const zMidLegs = (heads[BONE_INDEX.FL3].z + heads[BONE_INDEX.HL3].z) / 2;
   const P = V();
@@ -1821,6 +1864,12 @@ function sections(pos, tris, toFrame, z0, z1, dz) {
       top = Math.max(top, y);
       bot = Math.min(bot, y);
     }
+    // Coupe ouverte en haut : près de la hanche, le milieu du dessus de la croupe est lié à l'attache de la queue
+    // (exclue du tronc) ; sans lui, le haut de la coupe tombait à l'intérieur des cuisses (0,8 m au lieu de 1,4 m
+    // chez un Shetland) et la couverture s'arrêtait à la hanche. Le haut est repris des côtés de la croupe.
+    let side = -Infinity;
+    for (const [, y] of pts) side = Math.max(side, y);
+    if (top < side - 0.1) top = side;
     raw.push({ z, pts, top, bot });
   }
   // 2) Coupe ouverte en bas (entre les cuisses, l'intérieur des membres n'est pas compté) : le bas
@@ -3715,7 +3764,7 @@ class RealHorseAnim {
     const set = md.build.tailSet ?? 0;
     if (set) {
       md.tail.rotateX(set * 0.75);
-      md.tailTip.rotateX(-set * 0.4);
+      md.tailTip.rotateX(-set * TAIL_SET_FALL);
     }
     // Queue : de temps en temps un coup de fouet contre les mouches.
     const swish = photo ? 0 : tailSwish(t, kid);
@@ -3884,6 +3933,11 @@ export const WALK_NOD = { neck: 0.04, head: 0.015 };
  * galop allongé (rad, rotation x de la nuque).
  */
 const GALLOP_PUMP = { calm: 0.04, reach: 0.05, stretch: 0.05 };
+/**
+ * Queue portée haut (arabe, saddlebred, welsh : tailSet) : les crins retombent en panache depuis le couard relevé
+ * (rad, rotation x de Tail2 par rapport à Tail1, × tailSet ; 0,4 avant : une planche raide levée en arrière).
+ */
+const TAIL_SET_FALL = 0.75;
 /** Bout de la queue qui retombe en arc au galop (rad, rotation x de Tail2 par rapport à Tail1). */
 const TAIL_ARC = 0.35;
 /**

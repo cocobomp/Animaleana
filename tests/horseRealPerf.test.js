@@ -155,12 +155,14 @@ describe('boîte englobante du cheval réaliste (élimination hors du champ)', (
       expect(box.max.x, name).toBeGreaterThanOrEqual(exact.max.x - eps);
       expect(box.max.y, name).toBeGreaterThanOrEqual(exact.max.y - eps);
       expect(box.max.z, name).toBeGreaterThanOrEqual(exact.max.z - eps);
-      // juste : au plus quelques dizaines de cm de plus que le maillage de chaque côté (marge des crins comprise)
+      // juste : au plus quelques dizaines de cm de plus que le maillage de chaque côté (marge des crins comprise ; au
+      // galop, la courbure des crins de la queue est bornée par une sphère, un peu plus large que les crins courbés)
       const a = exact.getSize(new THREE.Vector3());
       const b = box.getSize(new THREE.Vector3());
-      expect(b.x - a.x, name).toBeLessThan(0.6);
-      expect(b.y - a.y, name).toBeLessThan(0.6);
-      expect(b.z - a.z, name).toBeLessThan(0.6);
+      const tol = name === 'galop' ? 0.8 : 0.6;
+      expect(b.x - a.x, name).toBeLessThan(tol);
+      expect(b.y - a.y, name).toBeLessThan(tol);
+      expect(b.z - a.z, name).toBeLessThan(tol);
       // la sphère de culling n'est pas une sphère fixe de 2,2 m : elle suit la taille de la race
       expect(meshes[0].boundingSphere.radius).toBeLessThan(b.length() / 2 + 1e-6);
     }

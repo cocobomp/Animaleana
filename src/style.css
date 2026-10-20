@@ -2480,7 +2480,14 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 @media (max-width: 360px) { .breed-thumb { width: 136px; height: 102px; } }
 /* Fiche d'un animal : son portrait en tête. */
 .animal-portrait { display: flex; justify-content: center; margin: 2px 0 8px; }
-.portrait-thumb { width: 100%; max-width: 420px; height: auto; aspect-ratio: 16 / 9; border-radius: 16px; --thumb-bg: #e6efe0; }
+.portrait-thumb { width: 100%; max-width: 320px; height: auto; aspect-ratio: 4 / 3; border-radius: 16px; --thumb-bg: #e6efe0; }
+/* Téléphone en hauteur : le portrait à droite des étiquettes (pas au-dessus) — les boutons de soins restent à l'écran. */
+@media (max-width: 640px) and (orientation: portrait) {
+  .animal-head { display: grid; grid-template-columns: minmax(0, 1fr) 42%; gap: 0 8px; align-items: start; }
+  .animal-head > .animal-portrait { grid-column: 2; grid-row: 1; margin: 2px 0 6px; }
+  .animal-head > .animal-info { grid-column: 1; grid-row: 1; min-width: 0; }
+  .animal-head .portrait-thumb { border-radius: 12px; }
+}
 .portrait-thumb .thumb-ph { font-size: 3.2rem; }
 .id-head .thumb { width: 96px; height: 72px; --thumb-bg: #e3eedc; }
 /* Construction et véhicules */

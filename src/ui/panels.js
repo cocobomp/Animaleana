@@ -124,10 +124,12 @@ function renderAnimal(ui, g, a) {
     NEEDS.map((n) => bar(t(`need_${n}`), a.needs[n])),
   );
 
-  // Portrait de l'animal en tête de sa fiche (vignette 3D : sa robe, son âge, de trois quarts avant).
+  // Portrait de l'animal en tête de sa fiche (vignette 3D : sa robe, son âge, de trois quarts avant). Sur un
+  // téléphone en hauteur, à côté des étiquettes (style.css, .animal-head) : au-dessus, il repoussait les boutons de
+  // soins sous le bas de l'écran.
   const portrait = h('div', { class: 'animal-portrait' },
-    thumb(g, portraitSpec(a, stage), { w: 320, h: 180, emoji: sp.emoji, cls: 'portrait-thumb', alt: a.name, hold: `portrait:${a.id}` }));
-  const out = [portrait, info, bars];
+    thumb(g, portraitSpec(a, stage), { w: 240, h: 180, emoji: sp.emoji, cls: 'portrait-thumb', alt: a.name, hold: `portrait:${a.id}` }));
+  const out = [h('div', { class: 'animal-head' }, portrait, info), bars];
   if (!here) return out;
   const training = isTrainingClient(a); // chien en éducation (métier éducateur canin) : ses séances d'abord
   if (training) out.push(...dogTrainerSection(ui, a));

@@ -1166,8 +1166,9 @@ function maneCards(S, B, body, pos, coat) {
     const tone = 0.93 + rng() * 0.14;
     const [v, dv] = HAIR_ROWS[Math.floor(rng() * 4)];
     (primary ? main : fill).push({
-      pts, normals, side, w0: primary ? 0.046 : 0.036, w1: primary ? 0.028 : 0.022,
-      color: new THREE.Color(tone, tone, tone), uv: [0, 1, v, dv], kind: 4,
+      // (texture jusqu'aux quatre cinquièmes des crins : une crête pleine aux bouts inégaux, pas des pointes isolées)
+      pts, normals, side, w0: primary ? 0.052 : 0.04, w1: primary ? 0.036 : 0.028,
+      color: new THREE.Color(tone, tone, tone), uv: [0, 0.8 + 0.12 * rng(), v, dv], kind: 4,
       weights: (p, f) => blendWeights(wR, wT, smooth(0, 0.6, f)),
       meta: { t, root, primary, crest: true },
     });

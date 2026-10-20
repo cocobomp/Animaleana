@@ -36,10 +36,13 @@ const smooth = (a, b, x) => {
 
 /**
  * Pixels de la bande de crins (flottants 0-1, RGBA), sans hasard d'un appel à l'autre (graine fixe).
- * Chaque crin est tracé de la racine à sa pointe, d'une largeur de 1 à 2,6 px, et se couche sur ceux d'avant
- * (« par-dessus ») ; les crins du bord de la mèche sont plus courts (mèche en pointe), la pointe de chaque
- * crin s'affine et s'efface sur ses 14 derniers %. Les racines (u < 0,06) sont pleines : pas de jour entre la
- * crinière et la peau.
+ * Chaque rangée (une mèche de carte) est faite de 5 à 7 petites mèches, chacune avec son ton, son décalage de
+ * reflet, sa longueur et son ondulation ; ses crins (1 à 2,2 px) s'y resserrent vers la pointe : la mèche
+ * s'effile, des jours s'ouvrent entre les petites mèches à partir de mi-longueur. Sur les niveaux réduits
+ * (téléphone, de loin), les crins se fondent mais pas les petites mèches : des traînées claires et foncées le
+ * long des crins et un reflet cassé, au lieu d'un ruban de satin uni. Chaque crin se couche sur ceux d'avant
+ * (« par-dessus ») ; les crins du bord d'une petite mèche sont plus courts, la pointe de chaque crin s'affine et
+ * s'efface sur ses 14 derniers %. Les racines (u < 0,06) sont pleines : pas de jour entre les crins et la peau.
  */
 export function hairStrandPixels() {
   const { w: W, h: Hh, rows: ROWS, strands: NS } = HAIR_TEX;
@@ -51,42 +54,59 @@ export function hairStrandPixels() {
     const y1 = (k + 1) * RH - 1;
     const yc = (y0 + y1) / 2;
     const half = (y1 - y0) / 2;
-    for (let s = 0; s < NS; s++) {
-      // (crins plus serrés au milieu de la mèche : ses bords sont clairsemés, pas une arête droite)
-      const sv = rng() * 2 - 1;
-      const v0 = yc + Math.sign(sv) * Math.abs(sv) ** 1.5 * (half - 0.6);
-      const e = Math.abs(v0 - yc) / half; // 0 au milieu de la mèche, 1 au bord
-      const len = Math.min(1, (0.8 + 0.2 * rng()) * (1 - 0.1 * e * e));
-      const hw = 0.5 + rng() * 0.8;
-      const tone = [0.7, 0.84, 1][Math.floor(rng() * 3)] * (0.94 + rng() * 0.12);
-      const shift = rng();
-      const conv = 0.04 + rng() * 0.08;
-      const wf = 1 + rng() * 2;
-      const wp = rng() * 6.28;
-      const u0 = rng() * 0.05; // (racine : chaque crin sort à sa place, pas de bord droit)
-      for (let x = Math.floor(u0 * W); x < W; x++) {
-        const u = (x + 0.5) / W;
-        if (u > len) break;
-        const fade = (1 - smooth(len - 0.14, len, u)) * smooth(u0, u0 + 0.015, u);
-        const wt = hw * (1 - 0.45 * smooth(len - 0.2, len, u));
-        const vc = v0 + (yc - v0) * conv * u + Math.sin(u * 6.28 * wf + wp) * 0.35;
-        const ya = Math.max(Math.floor(y0), Math.floor(vc - wt - 1));
-        const yb = Math.min(Math.ceil(y1) - 1, Math.ceil(vc + wt + 1));
-        for (let y = ya; y <= yb; y++) {
-          const d = Math.abs(y + 0.5 - vc);
-          const cov = Math.min(1, Math.max(0, wt + 0.5 - d)) * fade;
-          if (cov <= 0) continue;
-          const i = (y * W + x) * 4;
-          const a0 = rgba[i + 3];
-          const a = cov + a0 * (1 - cov);
-          const k0 = (a0 * (1 - cov)) / a;
-          const k1 = cov / a;
-          // (pente en travers : bord du crin tourné d'un côté ou de l'autre, comme un cylindre)
-          const slope = Math.max(-1, Math.min(1, (y + 0.5 - vc) / Math.max(0.6, wt)));
-          rgba[i] = rgba[i] * k0 + tone * k1;
-          rgba[i + 1] = rgba[i + 1] * k0 + shift * k1;
-          rgba[i + 2] = rgba[i + 2] * k0 + (0.5 + 0.5 * slope) * k1;
-          rgba[i + 3] = a;
+    const nc = 5 + Math.floor(rng() * 3);
+    const step = (y1 - y0 - 2) / nc;
+    for (let c = 0; c < nc; c++) {
+      const cy = y0 + 1 + step * (c + 0.5) + (rng() - 0.5) * step * 0.3;
+      const chw = step * (0.55 + 0.2 * rng());
+      const e = Math.abs(cy - yc) / half; // 0 au milieu de la rangée, 1 au bord
+      // (petites mèches de tons et de reflets différents : elles restent lisibles une fois les crins fondus)
+      const ctone = 0.55 + 0.45 * rng();
+      const cshift = rng();
+      const clen = Math.min(1, (0.8 + 0.2 * rng()) * (1 - 0.12 * e * e));
+      const cconv = 0.55 + 0.25 * rng();
+      const cwf = 0.7 + rng() * 1.5;
+      const cwp = rng() * 6.28;
+      const cwa = 0.3 + rng() * 0.6;
+      const ns = Math.round(NS / nc);
+      for (let s = 0; s < ns; s++) {
+        // (crins plus serrés au cœur de la petite mèche)
+        const sv = rng() * 2 - 1;
+        const o = Math.sign(sv) * Math.abs(sv) ** 1.3 * chw;
+        const f = Math.abs(o) / chw;
+        const len = Math.min(1, clen * (0.88 + 0.12 * rng()) * (1 - 0.14 * f * f));
+        const hw = 0.5 + rng() * 0.6;
+        const tone = Math.min(1, ctone * (0.86 + rng() * 0.28));
+        const shift = Math.min(1, Math.max(0, cshift + (rng() - 0.5) * 0.24));
+        const wf = 1 + rng() * 2;
+        const wp = rng() * 6.28;
+        const u0 = rng() * 0.05; // (racine : chaque crin sort à sa place, pas de bord droit)
+        for (let x = Math.floor(u0 * W); x < W; x++) {
+          const u = (x + 0.5) / W;
+          if (u > len) break;
+          const fade = (1 - smooth(len - 0.14, len, u)) * smooth(u0, u0 + 0.015, u);
+          const wt = hw * (1 - 0.45 * smooth(len - 0.2, len, u));
+          // (la petite mèche se resserre vers la pointe et ondule d'un bloc ; le crin, un peu, pour lui)
+          const vc = cy + o * (1 - cconv * smooth(0.25, 1, u)) + Math.sin(u * 6.28 * cwf + cwp) * cwa * smooth(0.1, 0.5, u)
+            + Math.sin(u * 6.28 * wf + wp) * 0.25;
+          const ya = Math.max(Math.floor(y0), Math.floor(vc - wt - 1));
+          const yb = Math.min(Math.ceil(y1) - 1, Math.ceil(vc + wt + 1));
+          for (let y = ya; y <= yb; y++) {
+            const d = Math.abs(y + 0.5 - vc);
+            const cov = Math.min(1, Math.max(0, wt + 0.5 - d)) * fade;
+            if (cov <= 0) continue;
+            const i = (y * W + x) * 4;
+            const a0 = rgba[i + 3];
+            const a = cov + a0 * (1 - cov);
+            const k0 = (a0 * (1 - cov)) / a;
+            const k1 = cov / a;
+            // (pente en travers : bord du crin tourné d'un côté ou de l'autre, comme un cylindre)
+            const slope = Math.max(-1, Math.min(1, (y + 0.5 - vc) / Math.max(0.6, wt)));
+            rgba[i] = rgba[i] * k0 + tone * k1;
+            rgba[i + 1] = rgba[i + 1] * k0 + shift * k1;
+            rgba[i + 2] = rgba[i + 2] * k0 + (0.5 + 0.5 * slope) * k1;
+            rgba[i + 3] = a;
+          }
         }
       }
     }
@@ -286,8 +306,8 @@ export function hairMaterial(color, sway) {
   });
   // (force du reflet : plus discret sur les crins clairs, qui ont déjà de la lumière)
   // (qualité basse : pas d'ombre du soleil, le reflet brillerait aussi du côté à l'ombre : plus discret)
-  // (0,07 × soleil de 2,8 à 3,5, sur un crin sur cinq : des crins qui brillent sur du noir, pas un aplat gris)
-  const spec = { value: (high ? 0.07 : 0.045) * (1 - 0.5 * Math.min(1, l * 2)) };
+  // (0,06 × soleil de 2,8 à 3,5, sur un crin sur cinq : des crins qui brillent sur du noir, pas un aplat gris)
+  const spec = { value: (high ? 0.06 : 0.045) * (1 - 0.5 * Math.min(1, l * 2)) };
   // (crins foncés : les crins clairs de la texture un peu éclaircis, comme la lumière du ciel prise par chaque
   // crin — on lit les mèches même sans reflet, en qualité basse aussi)
   const lift = { value: 0.05 * (1 - smooth(0, 0.12, l)) };

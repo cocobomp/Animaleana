@@ -587,6 +587,31 @@ describe('concours de beauté sur le cheval réaliste', () => {
     md.dispose();
   });
 
+  it.each(['selle_francais', 'arabe'])('%s : la tresse de queue suit les crins pendant un coup de queue', (breed) => {
+    const { md, e } = dressed(breed);
+    // (coup de queue le plus fort de tailSwish : 0,35 rad, Tail1 à 0,6 × comme dans overlay)
+    md.tail.rotateZ(0.35 * 0.6);
+    md.tailTip.rotateZ(0.35);
+    md.root.updateMatrixWorld(true);
+    md.hairMesh.skeleton.update();
+    const g = md.hairMesh.geometry.attributes;
+    const pts = [];
+    const v = new THREE.Vector3();
+    for (let i = 0; i < g.position.count; i++) if (g.hairRoot.getW(i) === 2) pts.push(md.hairMesh.getVertexPosition(i, v).clone());
+    const beads = [];
+    for (const grp of e.beautyDecor.groups) if ((grp.parent === md.tail || grp.parent === md.tailTip) && grp.isMesh) beads.push(grp.getWorldPosition(new THREE.Vector3()));
+    expect(beads.length).toBeGreaterThan(5);
+    for (const b of beads) {
+      // crins de la queue à la hauteur de la perle : milieu en travers, face arrière
+      const near = pts.filter((p) => Math.abs(p.y - b.y) < 0.025);
+      expect(near.length, `${breed} y ${b.y.toFixed(2)}`).toBeGreaterThan(4);
+      const xs = near.map((p) => p.x).sort((x, y) => x - y);
+      const mid = (xs[Math.floor(xs.length * 0.1)] + xs[Math.floor(xs.length * 0.9)]) / 2;
+      expect(Math.abs(b.x - mid), `${breed} y ${b.y.toFixed(2)} : perle au milieu de la queue`).toBeLessThan(0.05);
+    }
+    md.dispose();
+  });
+
   it.each(['selle_francais', 'percheron', 'shetland'])('%s : premier bouton sur les crins (pas sur le garrot nu), devant le bord d\'une couverture', (breed) => {
     const a = animal(breed);
     const md = horse(a);

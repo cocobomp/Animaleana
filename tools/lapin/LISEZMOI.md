@@ -115,6 +115,27 @@ comparaisons), dans la même lumière et au même cadrage.
   boîte des os pour le « frustum culling », lapins hors du champ animés une image sur trois, au loin une sur deux
   (sauf guidés, portés, sur la table ou qui suivent le joueur).
 
-## Performance
+## Performance (mesurée le 20/10/2026)
 
-Voir la section suivante (mesures du 20/10/2026).
+Navigateur Chromium sans carte graphique (SwiftShader) sur une machine partagée de 4 cœurs, chargée par d'autres
+navigateurs (charge 8 à 14) : le nombre d'images par seconde du jeu n'y mesure rien. Les chiffres sont pris la boucle du
+jeu arrêtée : animation (`AnimalEntity.animate`, 120 images au sautillement lent) et rendu d'une image attendu jusqu'au
+bout (`gl.finish`, médiane de 30), avec 0, 10 et 20 lapins des 6 races (dont des lapereaux) à 1–3 m de la caméra, puis à
+la caméra du jeu ; lapin réaliste (GLB) contre lapin procédural (GLB bloqués : le repli, et l'AVANT).
+
+| 20 lapins de près | appels de dessin | triangles ajoutés | rendu d'une image | animation d'un lapin |
+| --- | --- | --- | --- | --- |
+| téléphone 390×844, qualité basse — procédural | +180 | +104 000 | 4,1 ms | 0,003 ms |
+| téléphone 390×844, qualité basse — **réaliste** | **+64** | +85 000 (9 au loin) | **2,8 ms** | 0,08 ms |
+| ordinateur 1280×800, qualité haute — procédural | +573 | +4 150 000 | 9,3 ms | 0,002 ms |
+| ordinateur 1280×800, qualité haute — **réaliste** | **+80** | **+163 000** | 8,7 ms | 0,09 ms |
+
+Avec 10 lapins : téléphone 2,7 ms de rendu (procédural 3,1 ms), ordinateur 5,3 ms (procédural 7,4 ms). À la caméra du
+jeu (20 lapins, version réduite pour la plupart) : téléphone +80 appels et +59 000 triangles, 2,8 ms (procédural : +496
+appels, +260 000 triangles, 5,2 ms) ; ordinateur +84 appels et +123 000 triangles, 7,6 ms (procédural : +602 appels,
++4 190 000 triangles, 15,1 ms). La mémoire du script reste la même (150 à 170 Mo dans les deux cas). Le lapin réaliste
+coûte bien plus de calcul d'animation (mixeur, pieds tenus et posés : 0,08 à 0,19 ms par lapin et par image, contre
+presque rien au lapin procédural) mais 3 à 7 fois moins d'appels de dessin et jusqu'à 25 fois moins de triangles :
+l'image complète est moins chère, sur téléphone comme sur ordinateur. Au loin il n'est animé qu'une image sur deux
+(`FAR_STEP`), hors du champ une sur trois (`OFFSCREEN_STEP`). Les mèches de l'angora et du tête de lion (cartes de
+poils) sont moins nombreuses en qualité basse (55 %).

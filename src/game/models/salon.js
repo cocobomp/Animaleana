@@ -206,13 +206,17 @@ export function buildAccessories(model, look, accessories = {}) {
       const torus = new THREE.Mesh(flatBand(rx, ry, 0.003, band), mat(worn.id === 'bandana' ? color : 0x3a2a20, 0.6));
       frame.add(torus);
       const throat = -(ry + band);
-      if (worn.id === 'bow') put(frame, bowMesh((rx + ry) * 0.45, color), [0, throat - band * 0.5, band * 0.5], [0.3, 0, 0]);
+      // (lapin réaliste : le nœud sur le côté de la nuque ; accroupi, sa gorge touche presque le sol et le nœud y
+      // disparaissait entre ses pattes)
+      if (worn.id === 'bow' && model.realRabbit) put(frame, bowMesh((rx + ry) * 0.42, color), [rx * 0.85, ry * 0.5, band * 0.5], [0, Math.PI / 2, -0.5]);
+      else if (worn.id === 'bow') put(frame, bowMesh((rx + ry) * 0.45, color), [0, throat - band * 0.5, band * 0.5], [0.3, 0, 0]);
       else if (worn.id === 'bell') {
         const bell = new THREE.Mesh(new THREE.SphereGeometry((rx + ry) * 0.14, 10, 8), mat(0xf2c94c, 0.3, { metalness: 0.6 }));
         put(frame, bell, [0, throat - (rx + ry) * 0.14, band]);
       } else if (worn.id === 'bandana') {
         // foulard : triangle plié qui pend sous la gorge, un peu bombé sur le poitrail
-        const w = (rx + ry) * 1.1;
+        // (lapin : plus petit, sa gorge est près du sol quand il est accroupi)
+        const w = (rx + ry) * (model.realRabbit ? 0.75 : 1.1);
         const tri = new THREE.Mesh(new THREE.ConeGeometry(w * 0.55, w * 0.75, 3, 1), mat(color, 0.75, { side: THREE.DoubleSide }));
         tri.scale.z = 0.22;
         put(frame, tri, [0, throat - w * 0.32, band * 1.2], [Math.PI + 0.25, 0, 0]);

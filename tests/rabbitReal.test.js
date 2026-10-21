@@ -558,3 +558,34 @@ describe('corrections de la contre-vérification (beauté)', () => {
     md.dispose();
   });
 });
+
+describe('oreilles couchées du géant (tapi)', () => {
+  it('géant des Flandres tapi de peur : ses grandes oreilles couchées restent au-dessus du sol, bornées par la ligne du cou et du dos', () => {
+    const md = rabbit('geant_flandres');
+    md.staticPose('crouch');
+    for (let f = 0; f < 150; f++) md.anim.update(1 / 30, { v: 0, moving: false, posture: 'hide', fear: true, sad: false });
+    md.root.updateMatrixWorld(true);
+    const m = md.coatMesh;
+    const si = m.geometry.attributes.skinIndex;
+    const sw = m.geometry.attributes.skinWeight;
+    const ear = new Set();
+    for (const e of md.ears) {
+      ear.add(md.bones.indexOf(e));
+      for (const b of e.userData.chain ?? []) ear.add(md.bones.indexOf(b));
+    }
+    let lo = Infinity;
+    for (let i = 0; i < si.count; i++) {
+      if (!(ear.has(si.getX(i)) && sw.getX(i) > 0.6)) continue;
+      m.getVertexPosition(i, _v).applyMatrix4(m.matrixWorld);
+      lo = Math.min(lo, _v.y);
+    }
+    // (avant : −2,9 cm, dans le sol et le dos ; ses oreilles restent plus dressées, au-dessus du cou)
+    expect(lo).toBeGreaterThan(0.03);
+    expect(md.anim.dorsal.length).toBeGreaterThan(6);
+    // (les autres races, aux oreilles plus courtes, les couchent comme avant)
+    const rx = rabbit('rex');
+    expect(rx.anim.dorsal.length).toBe(0);
+    rx.dispose();
+    md.dispose();
+  });
+});

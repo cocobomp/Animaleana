@@ -1420,6 +1420,37 @@ class RealRabbitAnim {
         this.earLen[i] = bd;
         return e.worldToLocal(best);
       });
+      // Points le long de chaque oreille (repère de son os : la base est à l'origine) et ligne du dos : sommets du dessus
+      // du cou et du dos sur la ligne médiane, de la base des oreilles à la croupe (un par tranche). Oreilles couchées
+      // du géant : chaque point reste au-dessus de cette ligne (tapi, la tête basse, ses longues oreilles rentraient
+      // dans le cou et le dos ; elles restent alors plus dressées).
+      this.earPts = this.earTip.map((tl) => [0.6, 0.8, 1].map((f) => tl.clone().multiplyScalar(f)));
+      const L = base.land;
+      // (la ligne commence derrière la base des oreilles : le dessus du crâne, juste derrière elles, est plus haut que
+      // leur base, enfoncée dans la tête)
+      const zb = model.ears[0].getWorldPosition(V()).applyMatrix4(_m2.copy(model.root.matrixWorld).invert()).z;
+      const z1 = L.hipZ;
+      const z0 = zb + Math.sign(z1 - zb) * 0.3 * Math.max(...this.earLen);
+      const bins = 12;
+      const top = new Array(bins).fill(-1);
+      const topY = new Array(bins).fill(-Infinity);
+      for (let k = 0; k < base.prims.coat.count; k++) {
+        if (W.ear[k * 2] + W.ear[k * 2 + 1] > 0.05) continue;
+        if (W.leg[k * 4] + W.leg[k * 4 + 1] + W.leg[k * 4 + 2] + W.leg[k * 4 + 3] > 0.3) continue;
+        const x = P[k * 3] - L.midX;
+        if (Math.abs(x) > 0.25 * L.halfW) continue;
+        const u = (P[k * 3 + 2] - z0) / (z1 - z0);
+        if (!(u >= 0 && u < 1)) continue;
+        const b = Math.floor(u * bins);
+        if (P[k * 3 + 1] > topY[b]) {
+          topY[b] = P[k * 3 + 1];
+          top[b] = k;
+        }
+      }
+      // (oreilles longues seulement, le géant : les autres se couchent comme avant, le bout au-dessus de leur base)
+      this.dorsal = model.build.earLen >= 1.1 ? top.filter((k) => k >= 0) : [];
+      this.dorsalAt = -1;
+      this.dorsalP = this.dorsal.map(() => V());
     }
     this.t = (model.root.id * 7.31) % 100;
     this.seen = false;
@@ -1699,7 +1730,44 @@ class RealRabbitAnim {
     const tip = _gt.copy(this.earTip[i]).applyMatrix4(e.matrixWorld).applyMatrix4(_m2);
     const baseP = _gs.setFromMatrixPosition(e.matrixWorld).applyMatrix4(_m2);
     // (le sol : y = 0 dans le repère du lapin une fois posé — le calage de l'image d'avant, gOff, s'y ajoute)
-    return tip.y < baseP.y - 0.2 * this.earLen[i] || tip.y + (this.gOff ?? 0) < 0.005;
+    if (tip.y < baseP.y - 0.2 * this.earLen[i] || tip.y + (this.gOff ?? 0) < 0.005) return true;
+    return this.earInBack(i);
+  }
+
+  /**
+   * Un point de l'oreille i sous la ligne du dos (sommets du dessus du cou et du dos, posés cette image ; plus le poil
+   * et 4 mm) ? La ligne n'est relevée qu'une fois par image.
+   */
+  earInBack(i) {
+    const md = this.model;
+    if (!this.dorsal?.length) return false;
+    const mesh = md.coatMesh;
+    if (this.dorsalAt !== this.overlayN) {
+      this.dorsalAt = this.overlayN;
+      md.root.updateMatrixWorld(true);
+      _m2.copy(md.root.matrixWorld).invert();
+      this.dorsal.forEach((k, j) => mesh.getVertexPosition(k, this.dorsalP[j]).applyMatrix4(mesh.matrixWorld).applyMatrix4(_m2));
+      // (sans les points tombés bien plus bas que les autres : cuisse repliée, queue)
+      const ys = this.dorsalP.map((p) => p.y).sort((x, y) => x - y);
+      const med = ys[ys.length >> 1];
+      this.dorsalS = this.dorsalP.filter((p) => p.y > 0.6 * med).sort((x, y) => x.z - y.z);
+    }
+    _m2.copy(md.root.matrixWorld).invert();
+    const d = this.dorsalS;
+    if (d.length < 2) return false;
+    const margin = 0.004 + Math.max(0, md.build.fur ?? 0);
+    const e = md.ears[i];
+    for (const lp of this.earPts[i]) {
+      const p = _gt.copy(lp).applyMatrix4(e.matrixWorld).applyMatrix4(_m2);
+      if (p.z < d[0].z || p.z > d[d.length - 1].z) continue;
+      let k = 1;
+      while (k < d.length - 1 && d[k].z < p.z) k++;
+      const a = d[k - 1];
+      const b = d[k];
+      const y = a.y + (b.y - a.y) * clamp((p.z - a.z) / Math.max(1e-5, b.z - a.z), 0, 1);
+      if (p.y < y + margin) return true;
+    }
+    return false;
   }
 
   /** Tourne un os de ang autour d'un axe du lapin (axe vu par son parent au repos ; il suit le parent animé). */
@@ -1862,6 +1930,8 @@ class RealRabbitAnim {
   overlay(dt, st, still) {
     const md = this.model;
     const t = this.t;
+    // (une image de plus : la ligne du dos des oreilles couchées est relevée à nouveau, voir earInBack)
+    this.overlayN = (this.overlayN ?? 0) + 1;
     const u = md.uniforms;
     const sleeping = !!st.sleeping || this.posture === 'sleep';
     const lk = still ? 1 : Math.min(1, dt * 3);
@@ -1927,7 +1997,7 @@ class RealRabbitAnim {
       // 3 cm ; la rotation vers l'arrière est réduite jusqu'à ce que le bout reste au-dessus de sa base, moins un
       // cinquième de l'oreille, et du sol)
       let back = this.earBack * 1.0 + flick * 0.08 + n1 * 0.03;
-      for (let pass = 0; pass < 5; pass++) {
+      for (let pass = 0; pass < 9; pass++) {
         e.quaternion.copy(_qe2);
         this.turn(e, AX, -back);
         this.turn(e, AZ, -s * (this.earBack * 0.25 + flick * 0.05));

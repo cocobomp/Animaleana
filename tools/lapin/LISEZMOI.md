@@ -105,8 +105,9 @@ comparaisons), dans la même lumière et au même cadrage.
   → debout ; couché → en boule ; porté en fondu) ; au repos, il renifle (nez qui frémit), s'assoit, fait sa
   toilette (lapin gris : les bras de la pose assise, tête baissée — le clip étirait la peau du poitrail en voile),
   se dresse, se couche, mange ; binky de joie de temps en temps ; tapi s'il a peur ou qu'il est triste ;
-  regard, oreilles qui pivotent et se couchent (peur, course, sommeil ; couchées au-dessus du dos, rotation bornée
-  selon leur longueur : les grandes oreilles du géant ne rentrent plus dans le corps) — celles du bélier pendent vers le sol quand il
+  regard, oreilles qui pivotent et se couchent (peur, course, sommeil ; jamais dans le sol, le bout au-dessus de leur
+  base ; celles du géant, longues, restent au-dessus de la ligne du cou et du dos relevée à chaque image : tapi, la
+  tête basse, elles rentraient dans le cou et le sol) — celles du bélier pendent vers le sol quand il
   baisse ou relève la tête —, pompon, respiration, embonpoint (shader) ;
   porté dans les bras (concours de beauté : le joueur le tient à deux mains), sur la table du salon, dans la caisse de
   transport (en boule, pose figée), vignettes (pose figée). Jeux du clapier (roue et pirouette : bonds sur place sans pieds tenus ; plateforme :

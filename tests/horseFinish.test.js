@@ -300,7 +300,8 @@ describe('finitions de près (étape 9)', () => {
     const kinds = new Set();
     const r = md.hairMesh.geometry.attributes.hairRoot;
     for (let i = 0; i < r.count; i++) kinds.add(r.getW(i));
-    expect([...kinds].every((k) => [0, 1, 2, 4].includes(k))).toBe(true);
+    // (cartes 0, 1, 2, 4 et masses 8, 9, 10 — crinière, toupet et queue « en volume »)
+    expect([...kinds].every((k) => [0, 1, 2, 4, 8, 9, 10].includes(k))).toBe(true);
     md.dispose();
   });
 });

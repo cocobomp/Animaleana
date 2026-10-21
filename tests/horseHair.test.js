@@ -245,7 +245,7 @@ describe('crinière, toupet et queue en cartes de crins', () => {
     }
   }, 60000);
 
-  it('mèches de gauche de la masse : sous le bord du rouleau, effilées en pointe ; aucune pour une crinière courte', () => {
+  it('mèches de gauche de la masse : sous le bord du rouleau, étroites, nombreuses, effilées ; aucune pour une crinière courte', () => {
     const locks = (md) => {
       // (mèches de gauche : les grilles de la masse dont toutes les rangées partent de la même racine)
       const g = md.hairMesh.geometry.attributes;
@@ -261,7 +261,7 @@ describe('crinière, toupet et queue en cartes de crins', () => {
       }
       return [...by.values()].filter((l) => l.length >= 35);
     };
-    for (const [breed, n] of [['selle_francais', 5], ['frison', 7], ['akhal_teke', 0]]) {
+    for (const [breed, n] of [['selle_francais', 8], ['frison', 10], ['akhal_teke', 0]]) {
       const md = horse(breed);
       const L = locks(md);
       expect(L.length, breed).toBe(n);
@@ -275,9 +275,11 @@ describe('crinière, toupet et queue en cartes de crins', () => {
         };
         const top = span((v) => v.f < 0.15);
         const tip = span((v) => v.f > 0.95);
-        // (7 à 12 cm de large en haut, une pointe en bas)
-        expect(top, breed).toBeGreaterThan(0.06);
-        expect(tip, breed).toBeLessThan(top * 0.45);
+        // (4,4 à 8 cm de large en haut — plus larges, au téléphone, des languettes « en flammes » ou des pétales —,
+        // resserrée vers le bas : elle finit en crins de longueurs inégales, par la texture)
+        expect(top, breed).toBeGreaterThan(0.04);
+        expect(top, breed).toBeLessThan(0.11);
+        expect(tip, breed).toBeLessThan(top * 0.62);
         // (du côté gauche, et plus bas que le bord du rouleau : 9,5 cm sous la crête)
         const low = l.reduce((a, v) => (v.p.y < a.p.y ? v : a));
         expect(low.p.x, breed).toBeGreaterThan(0.03);
@@ -287,7 +289,8 @@ describe('crinière, toupet et queue en cartes de crins', () => {
     }
   }, 60000);
 
-  it('queue : pleine de dos, d\'aplomb, et du volume de profil', () => {
+  it('queue : pleine de dos, d\'aplomb, et du volume de profil ; en panache, plus large, si elle est portée haut', () => {
+    const wides = {};
     for (const breed of ['selle_francais', 'arabe', 'frison']) {
       const md = horse(breed);
       const T = massVerts(md)[10];
@@ -309,12 +312,16 @@ describe('crinière, toupet et queue en cartes de crins', () => {
       }
       // (d'aplomb au repos : en moyenne, à moins de 1 cm de l'axe du cheval — elle ne pend pas d'un côté)
       expect(Math.abs(mids.reduce((a, b) => a + b, 0) / mids.length), breed).toBeLessThan(0.01);
-      // (vue de dos, plus large qu'un postérieur : 17 à 30 cm ; de profil, encore 13 cm au moins)
+      // (vue de dos, plus large qu'un postérieur : 17 à 30 cm, jusqu'à 36 cm en panache ; de profil, encore 13 cm au moins)
       expect(wide, breed).toBeGreaterThan(0.17);
-      expect(wide, breed).toBeLessThan(0.3);
+      expect(wide, breed).toBeLessThan(breed === 'arabe' ? 0.36 : 0.3);
       expect(deep, breed).toBeGreaterThan(0.13);
+      wides[breed] = wide;
       md.dispose();
     }
+    // (queue portée haut, arabe : les crins retombent en éventail du couard relevé — à la largeur des autres, vue de dos,
+    // une lame plate grise, moitié moins large que les rubans d'avant)
+    expect(wides.arabe).toBeGreaterThan(wides.selle_francais * 1.12);
   }, 60000);
 
   it.each(['selle_francais', 'fjord', 'frison', 'shetland'])('%s : poids des os de somme 1, os valides (crins, brosse, fanons)', (breed) => {
@@ -494,14 +501,43 @@ describe('éclairage des crins', () => {
     }
   });
 
-  it('crins clairs sur une robe claire un peu assombris (toupet lisible sur un front blanc), pas sur une robe foncée', () => {
+  it('bout avant du rouleau, à la nuque : normales de la masse jamais vers le sol (pas de tache vert sombre)', () => {
+    // (derrière la nuque, la distance à la tête finissait par un plan, son bout arrière : les crins écartés de la peau
+    // dans ce sens se repliaient sous le rouleau, normales vers l'arrière et le sol — sur une crinière claire, au
+    // téléphone, une tache vert sombre, la lumière du sol)
+    for (const breed of ['haflinger', 'pre', 'camargue', 'comtois', 'lusitanien', 'trait_breton', 'arabe']) {
+      const md = horse(breed);
+      const g = md.hairMesh.geometry.attributes;
+      let zmax = -Infinity;
+      for (let i = 0; i < g.position.count; i++) if (g.hairRoot.getW(i) === 8) zmax = Math.max(zmax, g.position.getZ(i));
+      let n = 0;
+      let down = 0;
+      for (let i = 0; i < g.position.count; i++) {
+        if (g.hairRoot.getW(i) !== 8 || zmax - g.position.getZ(i) > 0.12) continue;
+        n++;
+        if (g.normal.getY(i) < -0.3) down++;
+      }
+      expect(n, breed).toBeGreaterThan(20);
+      expect(down / n, breed).toBeLessThan(0.02);
+      md.dispose();
+    }
+  });
+
+  it('crins clairs sur une robe claire un peu assombris à gauche et au toupet (lisibles sur l\'encolure et le front blancs), pas sur une robe foncée', () => {
     const grey = hairMaterial(0xc9c5bf, { value: 0 }, undefined, 0xdedbd5);
     const onBay = hairMaterial(0xc9c5bf, { value: 0 }, undefined, 0x6a3a20);
     const alone = hairMaterial(0xc9c5bf, { value: 0 });
-    expect(grey.color.r).toBeLessThan(onBay.color.r * 0.85);
-    expect(onBay.color.r).toBeCloseTo(alone.color.r, 6);
+    // (de 15 % au moins, dans le shader : le toupet et ce qui passe à gauche seulement — la nappe de droite et la queue
+    // restent claires)
+    expect(grey.userData.hairDark.value).toBeGreaterThan(0.15);
+    expect(onBay.userData.hairDark.value).toBe(0);
+    expect(alone.userData.hairDark.value).toBe(0);
+    expect(grey.color.r).toBeCloseTo(onBay.color.r, 6);
     // (crins noirs sur une robe noire : rien ne change)
-    expect(hairMaterial(0x0b0a0a, { value: 0 }, undefined, 0x171414).color.r).toBeCloseTo(hairMaterial(0x0b0a0a, { value: 0 }).color.r, 6);
+    expect(hairMaterial(0x0b0a0a, { value: 0 }, undefined, 0x171414).userData.hairDark.value).toBe(0);
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+    grey.onBeforeCompile(sh);
+    expect(sh.fragmentShader).toContain('hHairDark * max( hHairFore(), step( vHairK, 0.5 ) * smoothstep( 0.0, 0.03, vHairP.x ) )');
   });
 
   it('ombre du soleil adoucie sur les crins (qualité haute : plus de plaques d\'ombre nettes d\'une mèche sur l\'autre)', () => {

@@ -26,6 +26,11 @@ export const HAIR_V = HAIR_TEX.h / (HAIR_TEX.h + HAIR_MASS.h);
 export const HAIR_CUT = 0.5;
 /** Couleur des crins la plus claire (linéaire) : au-delà, le soleil les brûle en blanc uni. */
 export const HAIR_TOP = 0.6;
+/**
+ * Qualité basse : part de l'écart le long des crins comptée pour choisir le niveau réduit de la texture (1 : comme
+ * d'habitude ; moins : choisi d'après le travers des mèches, qui restent lisibles au loin).
+ */
+export const HAIR_ALONG = 0.4;
 
 function mulberry(seed) {
   let a = seed >>> 0;
@@ -501,12 +506,15 @@ export function hairMaterial(color, sway, drag = NO_DRAG, coat = null) {
   const c = color === null ? new THREE.Color(1, 1, 1) : hairColor(color);
   let l = color === null ? 0.5 : 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
   // (crins clairs sur une robe aussi claire — gris, blanc — : un peu assombris, sinon le toupet et les mèches de gauche
-  // disparaissaient au soleil sur le front et l'encolure blancs ; jamais sur une robe plus foncée, crins lavés compris)
+  // disparaissaient au soleil sur le front et l'encolure blancs ; jamais sur une robe plus foncée, crins lavés compris.
+  // Seulement le toupet et ce qui passe à gauche (dans le shader, hHairDark) : assombrie aussi, la nappe de droite et la
+  // queue d'une crinière blanche se lisaient en gris moyen strié de sombre au lieu de blanc.)
+  let dark = 0;
   if (coat !== null && color !== null) {
     const k = new THREE.Color(coat);
     const lc = 0.2126 * k.r + 0.7152 * k.g + 0.0722 * k.b;
-    c.multiplyScalar(1 - 0.22 * smooth(0.25, 0.45, l) * smooth(-0.1, 0.15, lc - l));
-    l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    dark = 0.22 * smooth(0.25, 0.45, l) * smooth(-0.1, 0.15, lc - l);
+    l *= 1 - dark;
   }
   const a2c = gfx.msaa || high;
   const m = new THREE.MeshStandardMaterial({
@@ -537,6 +545,7 @@ export function hairMaterial(color, sway, drag = NO_DRAG, coat = null) {
   // aplat gris satiné ; moins encore sur les crins foncés — le reflet des crins, c'est la bande de Kajiya-Kay)
   const sky = { value: 0.18 + 0.12 * light };
   const rootDark = { value: 0.06 + 0.16 * light };
+  const hairDark = { value: dark };
   // (toupet rentré sous un bonnet ou un masque : ses mèches se replient vers leur racine, entre les oreilles)
   const tuck = { value: 0 };
   // (crinière tressée pour le concours de beauté : ses mèches rentrent dans les boutons de la crête, Beauty.js)
@@ -548,6 +557,7 @@ export function hairMaterial(color, sway, drag = NO_DRAG, coat = null) {
     sh.uniforms.hHairRoot = rootDark;
     sh.uniforms.hHairContrast = contrast;
     sh.uniforms.hHairContrastM = contrastM;
+    sh.uniforms.hHairDark = hairDark;
     sh.uniforms.hHairSky = sky;
     sh.uniforms.hairTime = gfx.time;
     sh.uniforms.hairWind = gfx.wind;
@@ -557,7 +567,7 @@ export function hairMaterial(color, sway, drag = NO_DRAG, coat = null) {
     sh.uniforms.hairUpT = drag.up;
     sh.uniforms.hHairSpec = spec;
     sh.uniforms.hHairLift = lift;
-    const def = high ? '#define HAIR_HQ\n' : '';
+    const def = (high ? '#define HAIR_HQ\n' : '') + `#define HAIR_ALONG ${HAIR_ALONG.toFixed(3)}\n`;
     sh.vertexShader = def + sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute float hairG;
@@ -636,6 +646,7 @@ uniform float hHairBack;
 uniform float hHairRoot;
 uniform float hHairContrast;
 uniform float hHairContrastM;
+uniform float hHairDark;
 uniform float hHairSky;
 varying vec3 vHairT;
 varying float vHairF;
@@ -656,12 +667,25 @@ ${HAIR_LIGHT}`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
 reflectedLight.indirectSpecular *= hHairSky;`)
       .replace('#include <map_fragment>', `
+#ifdef HAIR_HQ
 vec4 hTex = texture2D( map, vMapUv );
-hTex.r = mix( 0.82, hTex.r, mix( hHairContrast, hHairContrastM, vHairM ) );
+#else
+// (qualité basse, sans filtrage anisotrope : le niveau réduit de la texture se choisit sur le sens le plus serré, le
+// long des crins — une mèche de 20 cm sur 15 pixels —, et le travers, où sont les mèches et leurs tons, fondait en
+// aplat : au téléphone, des languettes et des pétales unis. Ici, choisi d'après le travers surtout : les mèches
+// restent lisibles ; le long des crins, la texture change peu, sauf aux pointes.)
+vec4 hTex = textureGrad( map, vMapUv, dFdx( vMapUv ) * vec2( HAIR_ALONG, 1.0 ), dFdy( vMapUv ) * vec2( HAIR_ALONG, 1.0 ) );
+#endif
+// (toupet : le contraste des cartes, même sur sa masse — sur un front blanc, un toupet clair sans contraste se lisait en
+// triangle gris lisse)
+hTex.r = mix( 0.82, hTex.r, mix( hHairContrast, hHairContrastM, vHairM * ( 1.0 - hHairFore() ) ) );
 diffuseColor.rgb = diffuseColor.rgb * hTex.r + hHairLift * ( 1.0 - 0.6 * hHairFore() ) * max( 0.0, hTex.r - 0.62 );
 // (masse : seulement au ras de la peau, le dessus du rouleau prend la lumière)
 diffuseColor.rgb *= 1.0 - hHairRoot * ( 1.0 - smoothstep( 0.0, mix( 0.35, 0.06, vHairM ), vHairF ) );
-diffuseColor.a *= hTex.a;`)
+diffuseColor.a *= hTex.a;
+// (crins clairs sur robe claire : assombris là seulement où ils doivent se détacher du front et de l'encolure — le
+// toupet, ce qui passe à gauche de la crête (+x au repos) —, pas la nappe de droite ni la queue)
+diffuseColor.rgb *= 1.0 - hHairDark * max( hHairFore(), step( vHairK, 0.5 ) * smoothstep( 0.0, 0.03, vHairP.x ) );`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
 normal = normalize( vNormal );
 hHairT = normalize( vHairT - normal * dot( vHairT, normal ) );
@@ -677,12 +701,14 @@ hHairShift += 0.32 * sin( dot( vHairP, vec3( 11.0, 46.0, 19.0 ) ) + vHairS * 31.
 normal = normalize( normal + cross( normal, hHairT ) * ( hTex.b - 0.5 ) * 0.7 );
 #else
 // (qualité basse : relief des mèches de la masse seulement — elle se lit en mèches bombées, pas en aplat)
-normal = normalize( normal + cross( normal, hHairT ) * ( hTex.b - 0.5 ) * 0.45 * vHairM );
+// (moins sur les crins clairs : le côté à l'ombre de chaque mèche faisait des stries sombres sur une crinière blanche)
+normal = normalize( normal + cross( normal, hHairT ) * ( hTex.b - 0.5 ) * 0.45 * vHairM * ( 0.4 + 0.6 * hHairContrastM ) );
 #endif`);
   };
   m.customProgramCacheKey = () => `horsehair${high ? 'h' : 'l'}`;
   m.userData.hairSpec = spec;
   m.userData.hairBraid = braid;
   m.userData.hairTuck = tuck;
+  m.userData.hairDark = hairDark;
   return m;
 }

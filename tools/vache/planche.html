@@ -221,6 +221,10 @@ window.planche = {
       camera.updateProjectionMatrix();
       camera.lookAt(tgt);
       scene.background = new THREE.Color(0xdfe9ef);
+      // (xray : sol transparent, pour voir ce qui passe dessous)
+      ground.material.transparent = !!c.xray;
+      ground.material.opacity = c.xray ? 0.35 : 1;
+      ground.material.depthWrite = !c.xray;
       renderer.render(scene, camera);
       scene.remove(sg);
       for (const x of extra) x.parent?.remove(x);

@@ -764,9 +764,16 @@ export class RealCowAnim extends RealSheepAnim {
     this.skirt = (model.build.hair ?? 0) * 0.1;
     // (petit pas pour se replacer à l'arrêt : plus lent que celui du mouton, la vache est deux fois plus grande)
     this.stepT = 0.45;
-    // (couchée : les antérieurs repliés, sole tournée vers l'arrière, peuvent passer 8 cm sous l'herbe — ils portaient la
-    // vache à 3 à 7 cm au-dessus du sol)
-    this.lieSoleSlack = 0.08;
+    // (un sabot resté 40 cm derrière à l'arrêt revient en 0,8 s, pas en 0,45 s : il filait de 8 cm par image)
+    this.stepRef = 0.22;
+    // (sabot levé de 7 cm au petit pas : le postérieur, tourné à la hanche pour lever droit, montait à peine)
+    this.stepLift = 0.07;
+    // (sabot posé tenu tant que le clip ne l'a pas levé de 2,8 cm : la vache roule sur sa pince ; au seuil du mouton,
+    // 1,6 cm, l'onglon repartait en avant de 1,2 à 1,6 cm en une image au début de la levée, encore au ras du sol)
+    this.lockDown = [0.028, 0.012];
+    // (couchée : les sabots des antérieurs repliés, sole tournée vers l'arrière, peuvent passer 2,5 cm dans l'herbe —
+    // sinon ils portaient la vache au-dessus de ses avant-bras ; voir contactClass)
+    this.lieSoleSlack = 0.025;
     // (poids de repos des os de la queue : le balancement s'ajoute à la pose du clip)
     this.tailK = model.tailBones.map((_, i, a) => 0.35 + 0.65 * (i / Math.max(1, a.length - 1)));
     // Membres allongés par le gabarit (sheepJoints : avant-bras et canon, jambe et canon × kc) : couchée, ils sont
@@ -783,6 +790,11 @@ export class RealCowAnim extends RealSheepAnim {
   contactClass(nm, head) {
     // (ni la mamelle, aplatie couchée, ni la queue, posée à plat dans l'herbe : elles portaient la vache couchée)
     if (nm === 'udder' || nm === 'scrotum' || /^tail/.test(nm)) return -1;
+    // (couchée, la vache repose sur son poitrail, ses épaules, ses cuisses et ses avant-bras repliés — comme la pose
+    // « lie » du GLB, posée ainsi dans Blender : tools/vache/make_cow.py, lie_gp ; sans les avant-bras et les canons,
+    // le corps descendait jusqu'au ventre et les antérieurs repliés s'enfonçaient de 4 à 8 cm sous l'herbe. Les sabots,
+    // les jambes et les canons des postérieurs, repliés sur le côté, ne portent rien.)
+    if (!head && /^(humerus|radius|metacarpus|femur)[LR]$/.test(nm)) return 0;
     return super.contactClass(nm, head);
   }
 
@@ -912,7 +924,7 @@ export class RealCowAnim extends RealSheepAnim {
    */
   ground(st, dt = 0, moveClip = null) {
     const air = moveClip === 'calf_play' || (this.w?.calf_play ?? 0) > 0.3;
-    return this.withBones(() => super.ground(st, dt, air ? 'lamb_play' : moveClip), this.model.bone('neck1'));
+    this.withBones(() => super.ground(st, dt, air ? 'lamb_play' : moveClip), this.model.bone('neck1'));
   }
 
   /**

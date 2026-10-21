@@ -54,6 +54,15 @@ const trunkOnly = (md) => {
   const P = md.anim.base.prim;
   return (i) => P.part[i * 4 + 3] > 0.6 && P.part[i * 4 + 1] < 0.1;
 };
+/**
+ * Sommets qui portent la vache couchée : tronc, épaules, cuisses et avant-bras repliés (os dominant) — comme la pose
+ * « lie » du GLB (tools/vache/make_cow.py, lie_gp) et les points de contact du jeu (RealCowAnim.contactClass).
+ */
+const supportOnly = (md) => {
+  const P = md.anim.base.prim;
+  const names = md.anim.base.names;
+  return (i) => /^(root|pelvis|spine\d|chest|humerus|radius|metacarpus|femur)/.test(names[P.domBone[i]]);
+};
 /** Sole la plus basse d'un pied (repère du monde). */
 const soleLow = (md, k) => {
   md.root.updateMatrixWorld(true);
@@ -341,7 +350,9 @@ describe('au sol', () => {
     }
   });
 
-  it('couchée, endormie, ruminant : le ventre posé sur le sol (ni en l\'air, ni dedans), mamelle pleine comprise', () => {
+  // (couchée, la vache repose sur son poitrail et ses avant-bras repliés : ramenée jusqu'au ventre, ses antérieurs
+  // repliés s'enfonçaient de 4 à 8 cm sous l'herbe)
+  it('couchée, endormie, ruminant : posée sur le poitrail et les avant-bras repliés (ni en l\'air, ni dedans), mamelle pleine comprise', () => {
     for (const b of ['holstein', 'highland', 'charolaise', 'herens']) {
       for (const o of [{ udderFill: 1 }, { calf: true }, { sex: 'm' }]) {
         for (const posture of ['lie', 'sleep']) {
@@ -350,10 +361,13 @@ describe('au sol', () => {
           for (let i = 0; i < 200; i++) md.anim.update(1 / 30, st({ posture, ruminate: posture === 'lie' }));
           const tag = `${b} ${JSON.stringify(o)} ${posture}`;
           expect(md.anim.posture, tag).toBe(posture);
-          expect(lowest(md), tag).toBeGreaterThan(-0.03);
-          const belly = lowest(md, 1, trunkOnly(md)) - md.anim.skirt;
-          expect(belly, tag).toBeGreaterThan(-0.02);
-          expect(belly, tag).toBeLessThan(0.02);
+          // (sabots repliés : à peine dans l'herbe)
+          expect(lowest(md), tag).toBeGreaterThan(-0.025);
+          const rest = lowest(md, 1, supportOnly(md)) - md.anim.skirt;
+          expect(rest, tag).toBeGreaterThan(-0.015);
+          expect(rest, tag).toBeLessThan(0.015);
+          // (le ventre, au-dessus des antérieurs repliés, à quelques centimètres du sol au plus)
+          expect(lowest(md, 1, trunkOnly(md)) - md.anim.skirt, tag).toBeLessThan(0.09);
           md.dispose();
         }
       }
@@ -361,7 +375,7 @@ describe('au sol', () => {
   });
 
   // Défaut de la page de comparaison : à la fin de « se coucher », la vache flottait 2 à 3 cm avant de se poser.
-  it('se coucher : à la fin de la transition, le ventre est déjà posé (pas de vache qui flotte puis tombe)', () => {
+  it('se coucher : à la fin de la transition, elle est déjà posée (pas de vache qui flotte puis tombe)', () => {
     for (const b of ['normande', 'highland', 'holstein']) {
       const md = cow(b, { udderFill: 1 });
       const a = md.anim;
@@ -370,10 +384,10 @@ describe('au sol', () => {
       let lastTrans = null;
       for (let i = 0; i < 260; i++) {
         a.update(1 / 30, st({ posture: 'lie' }));
-        const belly = lowest(md, 2, trunkOnly(md));
-        if (a.trans?.name === 'lie_down') lastTrans = belly;
+        const rest = lowest(md, 2, supportOnly(md)) - a.skirt;
+        if (a.trans?.name === 'lie_down') lastTrans = rest;
         else if (lastTrans !== null && endGap === null) endGap = lastTrans;
-        if (i > 200) expect(Math.abs(belly), `${b} couchée ${i}`).toBeLessThan(0.02);
+        if (i > 200) expect(Math.abs(rest), `${b} couchée ${i}`).toBeLessThan(0.02);
       }
       expect(endGap, b).not.toBeNull();
       expect(endGap, `${b} fin de « se coucher »`).toBeLessThan(0.02);

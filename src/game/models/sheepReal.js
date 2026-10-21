@@ -1306,7 +1306,8 @@ export class RealSheepAnim {
 
   /**
    * Classe d'un sommet pour les points de contact au sol (contactPoints) : 1 tête (oreilles comprises : elles pendent en
-   * broutant), 0 corps, −1 ignoré (membres ; la vache y ajoute le bas de ses membres repliés, cowReal.js).
+   * broutant), 0 corps, −1 ignoré (membres ; la vache couchée repose aussi sur ses épaules, ses cuisses et ses
+   * avant-bras repliés, cowReal.js).
    */
   contactClass(nm, head) {
     return head || nm === 'head' || nm === 'jaw' || /^ear/.test(nm) ? 1 : TRUNK.has(nm) || /^neck|^tail/.test(nm) ? 0 : -1;
@@ -1747,7 +1748,9 @@ export class RealSheepAnim {
       }
       const lowClip = lowOf(leg, l);
       const planted = !!this.plant[l];
-      const down = lowClip < (planted ? 0.016 : 0.011);
+      // (seuils du sabot posé : 1,6 cm pour rester posé, 1,1 cm pour se poser ; lockDown d'un animal plus grand — la
+      // vache roule plus longtemps sur sa pince avant de lever le sabot)
+      const down = lowClip < (planted ? this.lockDown?.[0] ?? 0.016 : this.lockDown?.[1] ?? 0.011);
       let ang = this.lockAng[l];
       let sd = this.lockSide[l];
       if (!down || !planted) {
@@ -1826,7 +1829,9 @@ export class RealSheepAnim {
       let best = -1;
       let bestD = 0.015 * _rs.y;
       for (let l = 0; l < md.legs.length; l++) {
-        if (!this.plant[l]) continue;
+        // (posé, ou tenu au bout de sa correction — vers 30°, la place notée est relâchée puis reprise d'une image à
+        // l'autre : le sabot de la vache glissait de 6 cm en attendant son tour derrière un membre moins de travers)
+        if (!this.plant[l] && !(Math.hypot(this.lockAng[l], this.lockSide[l]) > 0.3)) continue;
         const leg = md.legs[l];
         const toe = _u.copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld);
         const Lg = _w.setFromMatrixPosition(leg.pivot.matrixWorld).distanceTo(toe);
@@ -1836,8 +1841,10 @@ export class RealSheepAnim {
           best = l;
         }
       }
-      // (durée du petit pas : 0,3 s pour un mouton ; la vache, deux fois plus grande, prend son temps : stepT)
-      if (best >= 0) this.stepL = { l: best, t: 0, a0: this.lockAng[best], s0: this.lockSide[best], T: this.stepT ?? 0.3 };
+      // (durée du petit pas : 0,3 s pour un mouton ; la vache, deux fois plus grande, prend son temps : stepT, plus
+      // longtemps pour un grand pas — stepRef : longueur au-delà de laquelle le pas dure plus, jusqu'à 1,8 fois)
+      const T = (this.stepT ?? 0.3) * (this.stepRef ? clamp(bestD / this.stepRef, 1, 1.8) : 1);
+      if (best >= 0) this.stepL = { l: best, t: 0, a0: this.lockAng[best], s0: this.lockSide[best], T };
     }
   }
 
@@ -1854,16 +1861,20 @@ export class RealSheepAnim {
     const k = 1 - smooth(0.15, 0.85, p);
     const a = S.a0 * k;
     const s = S.s0 * k;
+    // (place d'arrivée : l'onglon du clip, membre droit ; place de départ : notée au premier pas)
+    leg.pivot.updateMatrixWorld(true);
+    const toeEnd = _sE.copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld);
     this.turn(leg.pivot, AX, a);
     this.turn(leg.pivot, AZ, s);
     leg.pivot.updateMatrixWorld(true);
-    // (sabot levé jusqu'à 4,5 cm, genou et canon pliés ensemble d'un angle qui suit sin(πp) : αmax lu une fois dans la
+    if (!S.toe0) S.toe0 = this.toePts[l].clone().applyMatrix4(leg.paw.matrixWorld);
+    // (sabot levé jusqu'à 4,5 cm — stepLift —, genou et canon pliés ensemble d'un angle qui suit sin(πp) : αmax lu une fois dans la
     // table du gabarit ; il ne traîne jamais au sol et le pli n'a pas d'à-coup)
     const L = this.liftTab?.[l];
     if (L) {
       if (S.amax === undefined) {
         const tab = L.tab;
-        const want = 0.045;
+        const want = this.stepLift ?? 0.045;
         let i = 1;
         while (i < tab.length - 1 && tab[i] < want) i++;
         S.amax = 0.1 * (i - 1 + clamp((want - tab[i - 1]) / Math.max(1e-5, tab[i] - tab[i - 1]), 0, 1));
@@ -1872,6 +1883,16 @@ export class RealSheepAnim {
       this.turn(leg.knee, AX, L.kk * al);
       this.turn(leg.fetlock, AX, L.ff * al);
       leg.knee.updateMatrixWorld(true);
+      // (le pli du genou et du canon pousse l'onglon de côté, au ras du sol : le membre est tourné à l'épaule ou à la
+      // hanche pour que l'onglon suive un chemin régulier de sa place de départ à sa place d'arrivée, immobile tant
+      // qu'il se lève et quand il se repose — sinon le sabot de la vache traînait de 2 à 4 cm en se levant, puis
+      // sautait de 10 cm)
+      const target = _sT.copy(S.toe0).lerp(toeEnd, smooth(0.2, 0.8, p));
+      const err = _sL.copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld).sub(target).applyQuaternion(_rq);
+      const Lg = Math.max(0.05, _sP.setFromMatrixPosition(leg.pivot.matrixWorld).distanceTo(target));
+      this.turn(leg.pivot, AX, Math.asin(clamp(err.z / Lg, -0.3, 0.3)));
+      this.turn(leg.pivot, AZ, -Math.asin(clamp(err.x / Lg, -0.2, 0.2)));
+      leg.pivot.updateMatrixWorld(true);
     }
     this.lockAng[l] = a;
     this.lockSide[l] = s;
@@ -1885,6 +1906,10 @@ export class RealSheepAnim {
 
 }
 
+const _sE = V();
+const _sT = V();
+const _sL = V();
+const _sP = V();
 const _rt = V();
 const _rq = new THREE.Quaternion();
 const _rs = V(1, 1, 1);

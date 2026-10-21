@@ -638,8 +638,9 @@ export function buildAnimalModel(speciesId, look, breedOfAnimal = null, stage = 
     parts.skeleton = skeleton;
   }
 
-  // Mamelle des vaches (dessinée petite, pour toutes).
-  if (opt('udder')) {
+  // Mamelle des vaches (dessinée petite) : femelles seulement — le taureau et le veau de repli n'en ont plus (le modèle
+  // de repli d'un taureau, le temps que son GLB arrive, montrait une mamelle).
+  if (opt('udder') && look.sex !== 'm' && !look.calf && !look.kid) {
     const udderMat = mat(lum(look.coat) > 0.25 || lum(look.secondary) > 0.5 ? 0xe0ada2 : 0x5a4741, { roughness: 0.55 });
     const uz = -L * 0.36;
     const uy = y0 - R * 0.95;

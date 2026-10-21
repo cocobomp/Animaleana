@@ -146,6 +146,15 @@ describe('fichiers de la vache et du taureau', () => {
     expect(src).toMatch(/speciesId === 'cow' && !opts\.procedural\) \{\s*const real = buildRealCowModel\(look, breedOfAnimal\);\s*if \(real\) return real;/);
     // (taureau sans son GLB : la vache procédurale, jamais la vache de Lyndon Daniels avec une mamelle)
     expect(buildRealCowModel(lookOf('normande', { sex: 'm' }), 'normande', { cow: G.cow })).toBeNull();
+    // (et la vache procédurale d'un taureau ou d'un veau n'a pas de mamelle : une sphère et quatre trayons de moins)
+    const meshes = (o) => {
+      const md = buildAnimalModel('cow', lookOf('normande', o), 'normande', null, { procedural: true });
+      let n = 0;
+      md.root.traverse((x) => { if (x.isMesh) n++; });
+      return n;
+    };
+    expect(meshes({ sex: 'f' }) - meshes({ sex: 'm' })).toBe(5);
+    expect(meshes({ sex: 'f' }) - meshes({ sex: 'f', calf: true })).toBe(5);
   });
 
   it('les clips du jeu n\'ont aucune translation d\'os hors de la racine', () => {

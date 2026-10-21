@@ -79,7 +79,7 @@ float sHash(vec3 p) {
 float sNoiseV(vec3 p) {
   return 0.5 + 0.25 * (sin(dot(p, vec3(1.0, 1.7, 1.3)) + 1.3) + sin(dot(p, vec3(-1.4, 0.9, 1.1)) * 1.31 + 4.1));
 }
-}`;
+`;
 
 // Avant le squelette (après la cible de forme) : position de repos pour les motifs ; laine longue qui pend.
 const BEGIN_V = /* glsl */ `

@@ -711,6 +711,24 @@ describe('animation', () => {
   });
 });
 
+describe('shaders', () => {
+  it('les shaders de la robe et de son ombre restent bien formés (accolades et parenthèses équilibrées)', async () => {
+    const { goatMaterial, makeGoatUniforms } = await import('../src/game/models/goatCoat.js');
+    const out = goatMaterial(null, makeGoatUniforms());
+    const mats = [out.mat ?? out, out.depth].filter(Boolean);
+    for (const m of mats) {
+      const lib = m.isMeshDepthMaterial ? THREE.ShaderLib.depth : THREE.ShaderLib.standard;
+      const sh = { vertexShader: lib.vertexShader, fragmentShader: lib.fragmentShader, uniforms: {} };
+      m.onBeforeCompile(sh);
+      for (const src of [sh.vertexShader, sh.fragmentShader]) {
+        const count = (c) => src.split(c).length - 1;
+        expect(count('{')).toBe(count('}'));
+        expect(count('(')).toBe(count(')'));
+      }
+    }
+  });
+});
+
 describe('crédits', () => {
   it('la chèvre Rocketbox est créditée (MIT : notice de copyright et texte de la licence) dans le jeu, CREDITS.md et LICENSES', () => {
     const c = MODEL_CREDITS.find((x) => x.id === 'goat_real');

@@ -626,6 +626,27 @@ describe('animation', () => {
   });
 });
 
+describe('shaders', () => {
+  // (une accolade de trop dans le shader de la laine : le mouton ne se dessinait plus — rien ne le voyait dans node)
+  it('les shaders de la laine, de son ombre et des mèches restent bien formés (accolades et parenthèses équilibrées)', async () => {
+    const { sheepMaterial, makeSheepUniforms } = await import('../src/game/models/sheepCoat.js');
+    const { lockMaterial, makeLockUniforms } = await import('../src/game/models/ruminantHair.js');
+    const { mat, depth } = sheepMaterial(null, makeSheepUniforms());
+    const mats = [mat, depth, lockMaterial(makeLockUniforms(), 0xffffff, 0xffffff)];
+    for (const m of mats) {
+      const lib = m.isMeshDepthMaterial ? THREE.ShaderLib.depth : THREE.ShaderLib.standard;
+      const sh = { vertexShader: lib.vertexShader, fragmentShader: lib.fragmentShader, uniforms: {} };
+      m.onBeforeCompile(sh);
+      for (const src of [sh.vertexShader, sh.fragmentShader]) {
+        const count = (c) => src.split(c).length - 1;
+        expect(count('{'), m.name).toBe(count('}'));
+        expect(count('('), m.name).toBe(count(')'));
+      }
+      expect(sh.vertexShader).not.toBe(lib.vertexShader);
+    }
+  });
+});
+
 describe('tétée', () => {
   /** Fausse entité du jeu (ce que lit animateRealSheep). */
   const ent = (md, id, x, z, heading, scale) => {

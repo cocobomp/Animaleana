@@ -676,16 +676,17 @@ vec4 hTex = texture2D( map, vMapUv );
 // restent lisibles ; le long des crins, la texture change peu, sauf aux pointes.)
 vec4 hTex = textureGrad( map, vMapUv, dFdx( vMapUv ) * vec2( HAIR_ALONG, 1.0 ), dFdy( vMapUv ) * vec2( HAIR_ALONG, 1.0 ) );
 #endif
-// (toupet : le contraste des cartes, même sur sa masse — sur un front blanc, un toupet clair sans contraste se lisait en
-// triangle gris lisse)
-hTex.r = mix( 0.82, hTex.r, mix( hHairContrast, hHairContrastM, vHairM * ( 1.0 - hHairFore() ) ) );
+// (toupet : ses crins gardent leurs tons, même clairs et sur sa masse — sur un front blanc, un toupet clair sans
+// contraste se lisait en triangle gris lisse)
+hTex.r = mix( 0.82, hTex.r, mix( mix( hHairContrast, hHairContrastM, vHairM ), max( hHairContrast, 0.85 ), hHairFore() ) );
 diffuseColor.rgb = diffuseColor.rgb * hTex.r + hHairLift * ( 1.0 - 0.6 * hHairFore() ) * max( 0.0, hTex.r - 0.62 );
 // (masse : seulement au ras de la peau, le dessus du rouleau prend la lumière)
 diffuseColor.rgb *= 1.0 - hHairRoot * ( 1.0 - smoothstep( 0.0, mix( 0.35, 0.06, vHairM ), vHairF ) );
 diffuseColor.a *= hTex.a;
 // (crins clairs sur robe claire : assombris là seulement où ils doivent se détacher du front et de l'encolure — le
 // toupet, ce qui passe à gauche de la crête (+x au repos) —, pas la nappe de droite ni la queue)
-diffuseColor.rgb *= 1.0 - hHairDark * max( hHairFore(), step( vHairK, 0.5 ) * smoothstep( 0.0, 0.03, vHairP.x ) );`)
+// (le toupet un peu moins : ses crins, plus contrastés, se lisent déjà sur le front)
+diffuseColor.rgb *= 1.0 - hHairDark * max( 0.6 * hHairFore(), step( vHairK, 0.5 ) * smoothstep( 0.0, 0.03, vHairP.x ) );`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
 normal = normalize( vNormal );
 hHairT = normalize( vHairT - normal * dot( vHairT, normal ) );

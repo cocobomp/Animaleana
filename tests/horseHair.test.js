@@ -537,7 +537,7 @@ describe('éclairage des crins', () => {
     expect(hairMaterial(0x0b0a0a, { value: 0 }, undefined, 0x171414).userData.hairDark.value).toBe(0);
     const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
     grey.onBeforeCompile(sh);
-    expect(sh.fragmentShader).toContain('hHairDark * max( hHairFore(), step( vHairK, 0.5 ) * smoothstep( 0.0, 0.03, vHairP.x ) )');
+    expect(sh.fragmentShader).toContain('hHairDark * max( 0.6 * hHairFore(), step( vHairK, 0.5 ) * smoothstep( 0.0, 0.03, vHairP.x ) )');
   });
 
   it('ombre du soleil adoucie sur les crins (qualité haute : plus de plaques d\'ombre nettes d\'une mèche sur l\'autre)', () => {

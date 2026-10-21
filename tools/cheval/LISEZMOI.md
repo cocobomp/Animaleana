@@ -335,12 +335,22 @@ la matière, les fanons, la brosse et les tresses restent :
     crinière, au bas inégal, bombée en mèches de 6,5 cm (relief ajouté après le lissage, pas sur le dessus du
     rouleau : sa silhouette reste lisse et arrondie). Le rouleau s'amincit au garrot et vers la nuque. Au bord gauche
     du rouleau, là où la nappe se replie vers la peau, normales du corps (celles de la grille regardaient le sol : sur
-    une crinière grise, des taches vert sombre entre les pointes) ;
-  - *mèches de gauche* : 5 mèches de la masse (7 pour `long` et `thick`, aucune pour `short`), chacune une petite
-    grille à part (5 rangées × 10 points, 7 à 12 cm de large) qui suit le flanc gauche du rouleau puis pend le long de
-    la peau sur 30 à 52 % de la crinière (`leftPath`), peignée à demi vers le garrot comme la nappe de droite (elle
-    tombe en biais), pleine sur le rouleau, bombée et resserrée en pointe dessous (toutes les rangées d'autant :
-    resserrées chacune à sa mesure, elles se croisaient et la pointe se repliait en taches sombres), lissée le long
+    une crinière grise, des taches vert sombre entre les pointes). À la nuque, le champ du corps (`hairBody`) laisse
+    la place à l'encolure derrière la tête : la distance à la tête finissait par un plan (son bout arrière, 16 cm
+    derrière la nuque), et le bout avant du rouleau, écarté de la peau dans ce sens (vers l'arrière et le sol), se
+    repliait sous lui — normales vers le sol, une tache vert sombre au téléphone sur les crinières claires (Haflinger,
+    PRE, Camargue, Trait breton…). Au-delà de `HB` (10 % de la tête) derrière la nuque, la distance à la tête croît
+    maintenant vite (en douceur, au carré) et l'encolure, mesurée jusque-là, l'emporte ;
+  - *mèches de gauche* : 8 mèches de la masse (10 pour `long` et `thick`, aucune pour `short`), chacune une petite
+    grille à part (5 rangées × 10 points, 4,4 à 8 cm de large) qui suit le flanc gauche du rouleau puis pend le long de
+    la peau sur 22 à 50 % de la crinière, très inégalement (`leftPath`), peignée à demi vers le garrot comme la nappe
+    de droite (elle tombe en biais), pleine sur le rouleau, bombée et resserrée dessous (`LEFT_TAPER` 0,7 : elle finit
+    en crins de longueurs inégales, par la texture, pas en pointe géométrique ; une part seulement de la bande de la
+    masse en travers, `LEFT_VSPAN` 0,45 : trois ou quatre petites mèches de la texture sur sa largeur, pas neuf, qui
+    au téléphone fondaient en un aplat). Avant la correction : 5 mèches de 7 à 12 cm, resserrées en pointe, qui se
+    lisaient au téléphone en languettes sombres « en flammes » (crins foncés) ou en pétales gris réguliers (crins
+    clairs). Toutes les rangées sont resserrées d'autant (resserrées chacune à sa mesure, elles se croisaient et la
+    pointe se repliait en taches sombres) ; la mèche est lissée le long
     des crins (au bord du rouleau, le chemin tournait d'un coup : une arête, un papier froissé de près), normales à
     moitié celles du corps (`soft`), texture prise dès son bord en pointes. Avant : 4 mèches de 10 à 16 cm, à plomb,
     qui se lisaient en langues sombres collées sous le rouleau. Posées par la pesanteur sur le champ « corps +
@@ -356,19 +366,24 @@ la matière, les fanons, la brosse et les tresses restent :
     d'une crête qui remonte les dressait au-dessus des oreilles (les « mèches folles » de face et derrière le
     bonnet) ; parties de dedans, elles traversaient la masse en lames plates. Quelques cartes courtes à gauche,
     parties du milieu du flanc du rouleau (`MANE_LEFT` 20 %), et trois ou quatre sur chaque mèche de gauche, à la
-    même part des crins qu'elle (elles bougent avec elle). Plus de rubans de crête (sorte 4) : le rouleau est la
+    même part des crins qu'elle (elles bougent avec elle ; deux par mèche). Plus de rubans de crête (sorte 4) : le rouleau est la
     masse ; tressée, toute la crinière rentre dans les boutons ;
   - *toupet* (`forelockCards`) : la ligne du milieu est posée par la pesanteur sur le front ; la largeur (8 à 9 cm en
     haut, entre les oreilles, un peu évasée dessous, resserrée en pointe à 85 %) est réglée dans le repère de la tête
     et chaque point redescendu sur la peau le long de la verticale de la tête (posées une à une, les colonnes
     glissaient de part et d'autre du chanfrein : une plaque coupée droit au lieu d'une pointe) ; masse de 9 colonnes
     avec une bosse de 4 cm sous la nuque (de trois quarts, le toupet sort en arrondi d'entre les oreilles ; de face,
-    son haut est un dôme, pas un bord droit), cartes étroites dans le même V, racines sous la peau (rentrées sous le
-    bonnet comme avant) ;
+    son haut est un dôme, pas un bord droit), moins large que le V des cartes (`FORE_MASS_W` 0,8 : ses bords sont faits
+    des cartes, des mèches de longueurs inégales), cartes étroites dans le même V, racines sous la peau (rentrées sous
+    le bonnet comme avant) ; ses crins gardent leurs tons même clairs (sur un front blanc, un toupet clair sans
+    contraste se lisait en triangle gris lisse) ;
   - *queue* (`tailCards`) : un fuseau autour d'un axe (coupes du tronçon, puis une ligne qui pend, en fontaine pour
     une queue portée haut), 18 anneaux × 20 points ; rayon : la peau du tronçon + les crins, puis plein en éventail
     sous le tronçon (`TAIL_WIDTH` 13 cm de demi-largeur : vue de dos, plus large qu'un postérieur ; `TAIL_DEPTH` 0,8 :
-    de profil, encore de l'épaisseur), à moitié large en bas ; cinq lobes de plus en plus marqués vers le bas qui se
+    de profil, encore de l'épaisseur), à moitié large en bas ; une queue portée haut s'élargit de côté dès le couard
+    (`PLUME_WIDTH` 0,45 × `tailSet` : panache de l'Arabe, du Saddlebred, du Welsh ; ses groupes de cartes s'écartent
+    aussi plus de la masse) — à la largeur des autres, l'Arabe vu de dos avait une lame plate grise, moitié moins large
+    que les rubans d'avant ; cinq lobes de plus en plus marqués vers le bas qui se
     balancent de côté en descendant (un tiers d'écart entre deux lobes : de profil comme de dos, le bord ondule en
     mèches), la queue entière un peu ondulée ; sous le tronçon, chaque colonne a sa longueur (`colLen`, 86 à 100 %,
     plus longue derrière) : le bas finit en pointes inégales au lieu d'être coupé droit à la hauteur limite (`Lh`) ;
@@ -376,8 +391,8 @@ la matière, les fanons, la brosse et les tresses restent :
     pluie de points sous la queue). Cartes en groupes de quatre, groupes en treillis de Fibonacci sur le tronçon (ni
     trou ni paquet d'un côté), qui ondulent en S autour de la queue (2 à 3 cm de côté, une période et demie, 10 points
     par carte) et s'écartent puis se rapprochent de la masse : des mèches ondulées, et le reflet se casse en bandes au
-    lieu d'allumer d'un bloc une carte droite ; racine étroite (`rootTaper`), jamais plus de 10 % plus bas que la masse
-    (pas de pointes isolées sous la queue) ; bords tenus hors du corps et derrière les fesses (`pushCardOut` avec
+    lieu d'allumer d'un bloc une carte droite ; racine étroite (`rootTaper`), jamais plus de 6 % plus bas que la masse,
+    texture jusqu'à u = 0,92 (pas de pointes isolées sous la queue : à 10 % et 0,95, il en restait deux ou trois) ; bords tenus hors du corps et derrière les fesses (`pushCardOut` avec
     `keep`). Au repos elle pend d'aplomb (en moyenne à moins de 1 cm de l'axe, chaque tranche à moins de 3 cm) ; de
     dos, son bout bouge de ± 2 cm (± 10 cm pour une queue portée haut qui chasse les mouches) ;
   - *texture de la masse* (`hairMassPixels`) : neuf mèches par bande, de largeurs très inégales (6 à 20 px), tons bien
@@ -395,18 +410,27 @@ la matière, les fanons, la brosse et les tresses restent :
     12 à 15 cm) : de biais ou de loin, la texture réduite n'a plus le décalage propre à chaque crin, et une carte
     droite s'allumait d'un bloc — des rectangles gris sur le couard. Ombre du soleil adoucie sur les crins (qualité
     haute, au plus 55 % retirés : `HAIR_SHADOW`) ; crins clairs sur une robe aussi claire assombris de 22 % au plus
-    (`hairMaterial(…, coat)` : le toupet de l'Arabe gris disparaissait sur le front blanc). Les normales des cartes sont déjà
+    (`hairMaterial(…, coat)`, `hHairDark` : le toupet de l'Arabe gris disparaissait sur le front blanc) — seulement là
+    où ils doivent se détacher de la robe : ce qui passe à gauche de la crête (x > 0 au repos) et, à 60 %, le toupet ;
+    la nappe de droite et la queue restent claires (assombries aussi, elles se lisaient en gris moyen strié de sombre ;
+    en qualité basse, le relief de la masse est aussi adouci sur les crins clairs). En qualité basse (sans filtrage
+    anisotrope), le niveau réduit de la texture est choisi d'après le travers des crins (`textureGrad`, écart le long
+    des crins × `HAIR_ALONG` 0,4) : choisi d'après le sens le plus serré — une mèche de 20 cm sur 15 pixels —, il
+    fondait les petites mèches et leurs tons en aplats au téléphone ; le long des crins, la texture change peu, sauf
+    aux pointes. Les normales des cartes sont déjà
     « de volume » (les mêmes des deux côtés : l'ondulation déplace la carte d'un bloc, sans attribut de plus) ; celles
     de la masse sont tirées vers celle du volume là où les rangées se rejoignent. Couverture par l'alpha sans écrire
     l'alpha dans l'image (`keepFrameAlpha`, gfx.js, aussi pour le cheval simple) : la toile du jeu a un canal alpha,
     et au bord de chaque carte un alpha < 1 laissait passer le fond de la page en points clairs le long des mèches
     (la « pluie de points » sous la queue en basse) ;
   - *tests* (`tests/horseHair.test.js`) : cartes jamais au-dessus du rouleau ni dressées à la nuque, rouleau de
-    quelques centimètres visible des deux côtés, mèches de gauche effilées sous le bord du rouleau (aucune pour une
-    crinière courte), masse du toupet resserrée en pointe au milieu du chanfrein, queue pleine de dos, d'aplomb en
-    moyenne et épaisse de profil, toupet rentré sous le bonnet, crins hors du corps dans toutes les poses, normales
-    jamais tournées vers le sol, crins clairs sur robe claire, ombre adoucie, mélange qui garde l'alpha, triangles
-    bornés (au plus 4 700 par cheval, version réduite sous 1 300 en moyenne).
+    quelques centimètres visible des deux côtés, mèches de gauche étroites, nombreuses et effilées sous le bord du
+    rouleau (aucune pour une crinière courte), masse du toupet resserrée en pointe au milieu du chanfrein, queue pleine
+    de dos, d'aplomb en moyenne et épaisse de profil, plus large en panache si elle est portée haut, toupet rentré sous
+    le bonnet, crins hors du corps dans toutes les poses, normales jamais tournées vers le sol (bout avant du rouleau
+    compris, sept races aux crins clairs), crins clairs sur robe claire assombris à gauche et au toupet seulement,
+    ombre adoucie, mélange qui garde l'alpha, triangles bornés (au plus 4 700 par cheval, version réduite sous 1 300 en
+    moyenne).
   Mesuré : voir « Coût des crins en volume » plus bas.
 
   Mesuré (avant : juste avant l'étape 2 ; après : crins en cartes ; mêmes graines) :

@@ -46,7 +46,11 @@ GT=<dossier avec node_modules de @gltf-transform/core, extensions, functions, me
    - **positions et gestes** : `idle`, `sit`, `groom` (toilette, patte léchée puis passée sur la tête), `lie`
      (couché en sphinx), `sleep` (en boule, queue enroulée), `stretch` (étirement), `eat` (accroupi, tête à 3,5 cm
      du sol), `tail_up` (queue en point d'interrogation, calque), `ears` (calque), `highfive` (« tape-m'en cinq »),
-     `jump`, transitions `sit_down`, `stand_up`, `lie_down`, `get_up`, `curl_up` ;
+     `jump`, transitions `sit_down`, `stand_up`, `lie_down`, `get_up`, `curl_up` ; chaton (poitrail profond, ses bras
+     ne touchent pas le sol à plat) : couché **« en pain »** (`lie_loaf` : poignets sous le poitrail, pattes repliées
+     vers l'arrière, coudes contre le flanc ; avant, assis comme une otarie, pattes tendues devant), **en boule tête
+     baissée** (`curl_neck`, `curl_hb` : encolure et tête baissées, sans roulis ; avant, assis, tête dressée et
+     tordue) — réglages du chaton dans `cat_models.py`, les autres clips restent identiques à l'octet près ;
    - **pieds au sol** : sur chaque image, le chat est relevé de ce qui passe sous le sol (soles, ventre, croupe,
      queue), relevé noté par clip (`extras.cat.groundFix`) ;
    - les os que le jeu anime lui-même (bout de la queue, oreilles, yeux) sont exclus du contrôle du sol ;
@@ -79,7 +83,17 @@ comparaisons), dans la même lumière et au même cadrage.
   garde les rotations de repos du GLB, les clips s'y appliquent tels quels ; pieds au sol. Une géométrie par race
   (et par stade), partagée entre les chats de cette race.
 - **Chatons** : modèle du chaton, traits de la race adoucis ; le **jeune** prend le modèle adulte (tête un peu plus
-  grosse, pattes un peu plus courtes) ; le chat change de modèle quand il grandit (`AnimalEntity.applyScale`).
+  grosse, pattes un peu plus courtes) ; le chat change de modèle quand il grandit (`AnimalEntity.applyScale`). La
+  peau des oreilles du chaton est réparée au chargement (`repairEarSkin`) : le dos du pavillon, la conque et une
+  partie du bord suivaient la tête seule, les grandes oreilles (sphynx, siamois, devon rex) s'effilochaient en
+  franges ; le pli du scottish fold garde les poids d'origine (`base.earRaw`). Iris du chaton peint par le shader
+  des yeux (bleu des points, cuivre, vert…).
+- **British et chartreux** : british rond et trapu (crâne et joues larges, museau court, petites oreilles rondes,
+  poil en peluche), chartreux plus long (museau, pattes), gris bleu aux yeux orange. **Persan** : face plate en
+  rampe douce, la peau autour des yeux suit la tête d'un bloc et le poil n'y pousse pas (yeux dégagés, aussi chez
+  le chaton). **Devon rex** : ondulations régulières de la couleur du pelage, presque rien sur la face.
+- **Moustaches** : vibrisses fines et claires (`addWhiskers`, `petReal.js`) liées à l'os de la tête, courtes et rares
+  chez le sphynx, ondulées chez le devon rex ; cachées au loin (version allégée).
 - **Robes par shader** (`catCoatPlan`, `catTextures.js`/`catBreeds.js`) : la texture d'origine est ramenée à deux
   classes de luminance (fond et rayures) puis recolorée : le **grain du poil est gardé**. Motifs : uni, tigré
   (maquereau, marbré), rosettes (bengal), tiqueté (abyssin), points (siamois, sacré de Birmanie, ragdoll : masque,
@@ -92,14 +106,19 @@ comparaisons), dans la même lumière et au même cadrage.
   vitesse naturelle de la race (mesurée sur son squelette) et pieds en appui tenus sur place (pas de patinage) ;
   postures (debout, assis, toilette, couché, en boule, accroupi) et passages par le plus court chemin (debout →
   assis → couché → en boule) ; étirement au réveil ; équilibre sur les barrières ; tours du spectacle (assis,
-  couché, « tape-m'en cinq », révérence = étirement, saut) ; regard, clignements, paupières mi-closes (toilette,
-  couché) et fermées (en boule), oreilles qui bougent et se couchent (peur, tristesse), queue dressée quand il suit
+  couché, « tape-m'en cinq », révérence = étirement, saut) ; regard, clignements, **paupières** (bandeaux de peau
+  propres à la race, tournés sur l'œil : mi-closes à la toilette et couché, fermées en boule), oreilles qui bougent et se couchent (peur, tristesse), queue dressée quand il suit
   quelqu'un, gonflée quand il a peur, respiration, embonpoint ; porté dans les bras (couché), sur la table du salon
   (assis), dans la caisse de transport (couché, pose figée), vignettes (pose figée).
+- **Pieds posés** : au pas et au trot, pieds avant et arrière à la même hauteur (`levelPairs`, appui le plus bas de
+  chaque paire sur la dernière foulée) et pieds en appui tenus sur place (`footLock`, prise à 12 mm, lâchée à 18) ;
+  jarrets du chaton au-dessus du sol aux allures. Après les mesures faites sur le premier chat de la race, le mixeur
+  est forcé de tout réécrire (`resync`) : le premier chat marchait les pattes avant en l'air, les suivants non.
 - **Équipement** : collier plat ajusté sur l'encolure **mesurée sur le chat debout** (là où le cou est le plus
   fin ; à moitié enfoncé dans la collerette des poils longs), mêmes mesures que le chien réaliste
   (`dogFit`/`accessoryFit` : `gearModels.js`, `salon.js`, `Beauty.js`) ; accessoires du salon (nœud, fleur,
-  chapeau sur le crâne, bandana qui pend vers le sol, nœud de queue).
+  chapeau sur le crâne, bandana qui pend vers le sol, nœud de queue). Collier du chaton mesuré du poitrail vers la
+  tête : sur l'encolure, plus un cerceau autour du crâne.
 - **Performance** : version allégée au loin (5 m en basse qualité, 12 m en haute), boîte des os pour le
   « frustum culling », chats hors du champ animés une image sur trois (sauf guidés, portés, perchés), couches de
   poil en haute qualité seulement et de près.

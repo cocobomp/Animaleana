@@ -87,7 +87,11 @@ comparaisons), dans la même lumière et au même cadrage.
   autour de la face (nuque, base des oreilles, joues, barbe, cou), jupe sur les flancs, oreilles courtes. Sommets et
   têtes d'os sont déplacés ensemble : le squelette de chaque race garde les rotations de repos du GLB, les clips s'y
   appliquent tels quels ; pieds au sol. Une géométrie par race (et par stade), partagée entre les lapins de cette
-  race. Les mèches (cartes de poils) ont la couleur du pelage où elles poussent, jamais près des yeux ni sur la face.
+  race. Les mèches (cartes de poils) ont la couleur du pelage où elles poussent, jamais près des yeux ni sur la face ;
+  resserrées au bout (pas en éventail), brins au bout arrondi et estompé (ombrage séparé de l'opacité : les bouts ne
+  noircissent pas), plus fines et plus nombreuses près du sol.
+- **Moustaches** : longues vibrisses claires de part et d'autre du nez (`addWhiskers`, `petReal.js`), liées à l'os de
+  la tête, plus courtes chez le lapereau, cachées au loin.
 - **Lapereaux** (stade « bébé ») : grosse tête, pattes, museau et oreilles courts, poil encore court ; le jeune entre
   les deux ; le lapin change de gabarit quand il grandit (`AnimalEntity.applyScale`).
 - **Robes par shader** (`rabbitCoatPlan`) : la texture d'origine est ramenée à un gris neutre qui **garde son grain**,
@@ -96,18 +100,21 @@ comparaisons), dans la même lumière et au même cadrage.
   (lapereaux aux robes mélangées) ; yeux rubis de l'angora blanc ; truffe selon la robe.
 - **Animation** (`RealRabbitAnim`) : allure choisie par la vitesse **relativement aux vitesses naturelles de ce
   lapin** (passage à mi-chemin, ± 8 %), chaque clip joué à vitesse réelle ÷ vitesse naturelle de la race (mesurée
-  sur son squelette, la course jusqu'à 3,5 fois) et pieds en appui tenus sur place au sautillement et au petit galop
-  (pas de patinage, même aux 1,2 à 3,4 m/s du jeu) ; postures et passages par le plus court chemin (accroupi → assis
+  sur son squelette, la course jusqu'à 6 fois : bridée à 3,5, le lapin rapide patinait) et pieds en appui tenus sur place au sautillement et au petit galop
+  (pas de patinage, même aux 1,2 à 3,4 m/s du jeu ; prise à 10 mm, lâchée à 25) ; postures et passages par le plus court chemin (accroupi → assis
   → debout ; couché → en boule ; porté en fondu) ; au repos, il renifle (nez qui frémit), s'assoit, fait sa
-  toilette, se dresse, se couche, mange ; binky de joie de temps en temps ; tapi s'il a peur ou qu'il est triste ;
-  regard, oreilles qui pivotent et se couchent (peur, course, sommeil) — celles du bélier pendent vers le sol quand il
+  toilette (lapin gris : les bras de la pose assise, tête baissée — le clip étirait la peau du poitrail en voile),
+  se dresse, se couche, mange ; binky de joie de temps en temps ; tapi s'il a peur ou qu'il est triste ;
+  regard, oreilles qui pivotent et se couchent (peur, course, sommeil ; couchées au-dessus du dos, rotation bornée
+  selon leur longueur : les grandes oreilles du géant ne rentrent plus dans le corps) — celles du bélier pendent vers le sol quand il
   baisse ou relève la tête —, pompon, respiration, embonpoint (shader) ;
   porté dans les bras (concours de beauté : le joueur le tient à deux mains), sur la table du salon, dans la caisse de
   transport (en boule, pose figée), vignettes (pose figée). Jeux du clapier (roue et pirouette : bonds sur place sans pieds tenus ; plateforme :
   saut tenu à sa phase ; foin : il mange), lapin-hop et agility (saut tenu à la phase de la haie), spectacle (saut,
   pirouette, salut debout sur les postérieurs) : poses imposées par `realRabbitPose`, jouées à l'image suivante.
 - **Sol** : les points de contact (soles, poignets et jarrets les plus bas sur toute la foulée, ventre, croupe,
-  tête) sont relevés une fois par race ; aux allures, la patte la plus basse est posée sur le sol ; à l'arrêt, le
+  tête) sont relevés une fois par race ; aux allures, chaque paire (avant, arrière) se pose à sa hauteur d'appui
+  (minimum sur la foulée : les bonds gardent leur temps de suspension) ; après les mesures, le mixeur réécrit tout (`resync`) ; à l'arrêt, le
   corps bascule pour poser la croupe (assis) ou le ventre (couché) ; la tête ne passe jamais sous le sol.
 - **Équipement** : collier mesuré sur l'encolure du lapin accroupi (là où le cou est le plus fin, à moitié enfoncé
   dans le poil long), mêmes mesures que le chien réaliste (`dogFit`/`accessoryFit` : `gearModels.js`, `salon.js`,

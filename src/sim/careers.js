@@ -21,6 +21,8 @@
 //     diplomas: { vet: day },         // diplôme d'une école (src/sim/vetSchool.js) : on peut commencer avant le niveau
 //   }
 
+import { isOffered } from './species.js';
+
 export const RANKS = ['apprentice', 'skilled', 'expert'];
 export const ACTION_XP = 15; // première fois qu'on fait une action du carnet
 export const QUESTS_FOR_CAREER = 5; // quêtes finies avant qu'on propose un métier
@@ -249,6 +251,16 @@ export function rankOf(profile, id) {
 
 export const rankName = (profile, id) => RANKS[rankOf(profile, id)];
 export const perksOf = (profile, id) => CAREERS[id].perks[rankOf(profile, id)];
+
+/**
+ * Les espèces que ce rang apporte (perks[rang].species, sans celles du rang d'avant), seulement celles proposées
+ * (OFFERED_SPECIES, src/sim/species.js) : c'est ce que disent les textes des rangs (src/ui/names.js, perkParams).
+ */
+export function rankNewSpecies(id, rank) {
+  const perks = CAREERS[id]?.perks ?? [];
+  const before = rank > 0 ? perks[rank - 1]?.species ?? [] : [];
+  return (perks[rank]?.species ?? []).filter((s) => !before.includes(s) && isOffered(s));
+}
 
 /** Progression vers le rang suivant : { rank, xp, from, to, ratio } (to = null au rang expert). */
 export function rankProgress(profile, id) {

@@ -6,6 +6,7 @@
 import { h, hexColor } from './dom.js';
 import { t } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
+import { perkParams } from './names.js'; // textes des rangs (espèces proposées)
 import { animalCard } from './panels.js';
 import { runMinigame, registerMinigames } from './minigames.js';
 import { GROOMER_GAMES, GROOMER_ICONS, setFinishOptions, setCutStyle, drawAccessoryOn } from './minigames/groomer.js';
@@ -432,7 +433,7 @@ export function openCarnet(ui) {
     h('p', { class: 'note' }, t('grm_carnetHelp')),
     h('ul', { class: 'grm-ranks' }, RANKS.map((r, i) => h('li', { class: i === rank ? 'now' : i < rank ? 'done' : '' },
       h('b', {}, `${i < rank ? '✅' : i === rank ? '🎓' : '🔒'} ${t(`grm_rank_${r.id}`)}`),
-      h('small', {}, `${r.xp} XP · ${t(`grm_rankDesc_${r.id}`)}`)))),
+      h('small', {}, `${r.xp} XP · ${t(`grm_rankDesc_${r.id}`, perkParams('groomer', i))}`)))), // (espèces proposées)
     h('div', { class: 'chips' },
       h('span', { class: 'chip' }, `🎓 ${xp} XP`),
       h('span', { class: 'chip' }, `⭐ ${t('grm_reputation')} ${Math.round(reputation(p))}`),

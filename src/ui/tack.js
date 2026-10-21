@@ -8,7 +8,7 @@ import {
   GEAR, TACK_CATEGORIES, COLORS, SIZES, gearPrice, sizeOf, fitReason, stockOf, ownedVariant, freeStock,
   wornBy, defaultSize, riderHelmet, sizeFor, swapSize, isAway, atHomeCount,
 } from '../sim/gear.js';
-import { TOOLS, hasTool } from '../sim/tools.js';
+import { TOOLS, hasTool, toolShown } from '../sim/tools.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import { thumb, thumbsFor, photoDouble } from '../game/thumbScenes.js'; // vignettes 3D (src/game/thumbs.js)
@@ -127,7 +127,8 @@ function toolsList(ui) {
   const g = ui.game;
   const p = g.profile;
   const sandbox = isSandbox(p);
-  return h('div', { class: 'cards' }, h('p', { class: 'note' }, t('toolsHelp')), Object.entries(TOOLS).map(([tool, def]) => {
+  // (pas de tondeuse ni de seau à traire tant que moutons, chèvres et vaches ne sont pas proposés : toolShown)
+  return h('div', { class: 'cards' }, h('p', { class: 'note' }, t('toolsHelp')), Object.entries(TOOLS).filter(([tool]) => toolShown(p, tool)).map(([tool, def]) => {
     const have = hasTool(p, tool);
     return h('div', { class: 'card' },
       h('span', { class: 'card-emoji' }, def.emoji),

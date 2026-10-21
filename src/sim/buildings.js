@@ -2,6 +2,8 @@
 // Chaque action a ses conditions (heures d'ouverture, saison, animaux présents) et,
 // si elle est impossible, une raison expliquée au joueur.
 
+import { isOffered } from './species.js';
+
 const inHours = (h, from, to) => (from <= to ? h >= from && h < to : h >= from || h < to);
 // Les heures des raisons restent des nombres ({ h: 19 }, { from: 9, to: 18 }) : l'interface les écrit dans la
 // langue du joueur (hourParams de src/i18n.js : « 9 h » en français, « 9 am » en anglais).
@@ -108,7 +110,8 @@ const RULES = {
     { id: 'actvLesson', icon: '🎓', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) },
     { id: 'actvJumping', icon: '🏇', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) },
     { id: 'actvAgility', icon: '🐕', when: (c) => dayOnly(c, 7, 21) },
-    { id: 'actvHop', icon: '🐇', when: (c) => need(c.count.rabbit) ?? dayOnly(c, 7, 21) },
+    // (lapin-hop : caché tant que les lapins ne sont pas proposés, sauf s'il y a déjà un lapin ici)
+    { id: 'actvHop', icon: '🐇', when: (c) => (!c.count.rabbit && !isOffered('rabbit') ? { reason: 'notHere' } : need(c.count.rabbit) ?? dayOnly(c, 7, 21)) },
     { id: 'actvShow', icon: '🎪', when: (c) => dayOnly(c, 9, 23) },
     { id: 'actvBeauty', icon: '🎀', when: (c) => dayOnly(c, 8, 20) }, // concours de beauté (src/sim/beauty.js)
     { id: 'actvTrail', icon: '🧭', when: (c) => dayOnly(c, 7, 20) },

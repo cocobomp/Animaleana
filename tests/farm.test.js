@@ -6,6 +6,7 @@ import {
   tickProduce, collectProduct, passiveEquipment,
 } from '../src/sim/farm.js';
 import { mulberry32 } from '../src/sim/rng.js';
+import { isOffered } from '../src/sim/species.js';
 import { DAYS_PER_YEAR, dayOf } from '../src/sim/time.js';
 
 const rng = () => mulberry32(7);
@@ -29,8 +30,11 @@ describe('équipements', () => {
 
   it('la litière autonettoyante garde les chats propres', () => {
     const p = createProfile('A');
-    buyEquipment(p, 'autoLitter', 'maison');
+    // (chats pas encore proposés : la litière ne se vend qu'à une partie qui a déjà un chat, src/sim/species.js)
+    if (!isOffered('cat')) expect(buyEquipment(p, 'autoLitter', 'maison').reason).toBe('soon');
     const cat = adult('cat');
+    p.animals.push(cat);
+    expect(buyEquipment(p, 'autoLitter', 'maison').ok).toBe(true);
     cat.needs.hygiene = 10;
     passiveEquipment(p, [cat], 'maison', 4);
     expect(cat.needs.hygiene).toBe(20);
@@ -103,6 +107,9 @@ describe('matériel', () => {
     const p = createProfile('A', 'manage');
     expect(missingTool(p, 'brush')).toBeNull();
     expect(missingTool(p, 'shear')).toBe('shears');
+    // (moutons pas encore proposés : la tondeuse ne se vend qu'à une partie qui a déjà un mouton)
+    if (!isOffered('sheep')) expect(buyTool(p, 'shears').reason).toBe('soon');
+    p.animals.push(adult('sheep'));
     expect(buyTool(p, 'shears').ok).toBe(true);
     expect(missingTool(p, 'shear')).toBeNull();
     expect(p.money).toBe(420);

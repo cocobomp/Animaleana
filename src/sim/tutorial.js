@@ -2,6 +2,8 @@
 // Logique pure, sans 3D ni DOM : l'interface (src/ui/tutorial.js) fournit un « contexte »
 // (le joueur a-t-il marché ? le refuge est-il ouvert ?…) et les événements du jeu.
 
+import { objectiveShown } from './objectives.js'; // quêtes cachées tant que leur espèce n'est pas proposée
+
 const stat = (p, k) => p.stats?.[k] ?? 0;
 
 /**
@@ -256,7 +258,8 @@ export function questGuide(id, profile) {
 
 /** La quête conseillée maintenant (affichée à l'écran), ou null si tout est fait. */
 export function suggestedQuest(profile, objectives) {
-  const quests = objectives.filter((o) => o.kind === 'quest' && !profile.completed.includes(o.id));
+  // (pas de quête qui demande une espèce pas encore proposée, même en dernier recours : voir objectiveShown)
+  const quests = objectives.filter((o) => o.kind === 'quest' && !profile.completed.includes(o.id) && objectiveShown(profile, o));
   if (!quests.length) return null;
   const rank = (o) => {
     const i = QUEST_ORDER.indexOf(o.id);

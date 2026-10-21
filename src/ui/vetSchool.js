@@ -6,7 +6,7 @@
 
 import { h } from './dom.js';
 import { t, ta, L } from '../i18n.js';
-import { SPECIES } from '../sim/species.js';
+import { SPECIES, isOffered } from '../sim/species.js';
 import { createAnimal } from '../sim/animal.js';
 import { isStarted, canStart, RANKS } from '../sim/careers.js';
 import {
@@ -51,6 +51,18 @@ function schoolAnimal(species, breed, name, sex, sick = null) {
   const a = createAnimal({ species, breed, name, sex, ageDays: 120, colorIndex: 0 });
   a.sick = sick;
   return a;
+}
+
+// Patients des leçons « thermomètre » et « yeux, oreilles, bouche » : la chèvre et le chat quand ces espèces
+// sont proposées (OFFERED_SPECIES, src/sim/species.js), sinon un cheval et un chien.
+const PATIENTS = {
+  thermo: [['goat', 'alpine', 'Noisette', 'f'], ['horse', 'haflinger', 'Noisette', 'f']],
+  look: [['cat', 'europeen', 'Moustache', 'm'], ['dog', 'golden', 'Moustache', 'm']],
+};
+function patient(lesson, sick = null) {
+  const [first, other] = PATIENTS[lesson];
+  const [species, breed, name, sex] = isOffered(first[0]) ? first : other;
+  return schoolAnimal(species, breed, name, sex, sick);
 }
 
 // ------------------------------------------------------------------ le panneau de l'école
@@ -230,8 +242,8 @@ function learn(id, ui, st) {
           h('td', {}, `${num(V.temp[0])}–${num(V.temp[1])}`), h('td', {}, `${V.heart[0]}–${V.heart[1]}`), h('td', {}, `${V.resp[0]}–${V.resp[1]}`));
       }))));
   } else if (id === 'stetho') out.push(demoStage(st, schoolAnimal('dog', 'labrador', 'Biscuit', 'm'), ['heart', 'lungs', 'gut']));
-  else if (id === 'thermo') out.push(demoStage(st, schoolAnimal('goat', 'alpine', 'Noisette', 'f'), ['rump']));
-  else if (id === 'look') out.push(demoStage(st, schoolAnimal('cat', 'europeen', 'Moustache', 'm'), ['eye', 'ear', 'nose', 'mouth']));
+  else if (id === 'thermo') out.push(demoStage(st, patient('thermo'), ['rump']));
+  else if (id === 'look') out.push(demoStage(st, patient('look'), ['eye', 'ear', 'nose', 'mouth']));
   else if (id === 'palpate') out.push(demoStage(st, schoolAnimal('dog', 'beagle', 'Caramel', 'f'), ['belly', 'legFront', 'legHind']));
   else if (id === 'hooves') out.push(h('div', { class: 'vs-ill' }, hoofCanvas()));
   else if (id === 'illness') {
@@ -361,7 +373,7 @@ function exercise(ui, id, st, done) {
       return [h('p', { class: 'vs-q' }, t('vs_ex_stetho', { name: a.name })), examEx(a, ['stetho'], ['lungs', 'gut', 'heart'])];
     }
     case 'thermo': {
-      const a = schoolAnimal('goat', 'alpine', 'Noisette', 'f', 'cold');
+      const a = patient('thermo', 'cold');
       const wrap = h('div', {});
       const ex = examEx(a, ['thermo'], ['temp'], null, () => {
         wrap.append(h('p', { class: 'vs-q' }, t('vs_ex_thermo2')), thermoRounds(cont));
@@ -370,7 +382,7 @@ function exercise(ui, id, st, done) {
       return [h('p', { class: 'vs-q' }, t('vs_ex_thermo1', { name: a.name })), ex, wrap];
     }
     case 'look': {
-      const a = schoolAnimal('cat', 'europeen', 'Moustache', 'm', 'ear');
+      const a = patient('look', 'ear');
       return [h('p', { class: 'vs-q' }, t('vs_ex_look', { name: a.name })), examEx(a, ['light', 'mouth'], ['eyes', 'ears', 'nose', 'gums', 'crt'])];
     }
     case 'palpate': {

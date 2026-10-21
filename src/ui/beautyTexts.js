@@ -228,9 +228,9 @@ export const BEAUTY_FR = {
   // ---------------------------------------------------------------- métier : handler de concours de beauté
   career_handler: 'Handler de concours',
   careerd_handler: 'Prépare et présente au juge les animaux que les gens te confient pour le concours de beauté.',
-  ca_perk_apprentice_handler: 'Apprenti : petits animaux (chien, chat, lapin), 1 animal à la fois.',
-  ca_perk_skilled_handler: 'Confirmé : chevaux, moutons et chèvres, 2 animaux à la fois, meilleurs prix.',
-  ca_perk_expert_handler: 'Expert : vaches, les meilleurs prix, pourboires, 3 animaux à la fois.',
+  ca_perk_apprentice_handler: 'Apprenti : {animals}1 animal à la fois.', // ({animals} : perkParams, src/ui/names.js)
+  ca_perk_skilled_handler: 'Confirmé : {animals}2 animaux à la fois, meilleurs prix.',
+  ca_perk_expert_handler: 'Expert : {animals}les meilleurs prix, pourboires, 3 animaux à la fois.',
   ca_offer_handler: 'Tu veux devenir handler de concours de beauté ? Les gens te confieront leur animal pour que tu le prépares (bain, tresses, nœud) et que tu le présentes au juge.',
   ca_handler_welcome: 'Accueillir un client et accepter son animal',
   ca_handler_prep: 'Préparer un animal pour le concours (toute la liste)',
@@ -463,9 +463,9 @@ export const BEAUTY_EN = {
   // ---------------------------------------------------------------- career: beauty contest handler
   career_handler: 'Show handler',
   careerd_handler: 'Prepare and show to the judge the animals people entrust to you for the beauty contest.',
-  ca_perk_apprentice_handler: 'Apprentice: small animals (dog, cat, rabbit), 1 animal at a time.',
-  ca_perk_skilled_handler: 'Skilled: horses, sheep and goats, 2 animals at a time, better prices.',
-  ca_perk_expert_handler: 'Expert: cows, the best prices, tips, 3 animals at a time.',
+  ca_perk_apprentice_handler: 'Apprentice: {animals}1 animal at a time.',
+  ca_perk_skilled_handler: 'Skilled: {animals}2 animals at a time, better prices.',
+  ca_perk_expert_handler: 'Expert: {animals}the best prices, tips, 3 animals at a time.',
   ca_offer_handler: 'Do you want to become a beauty contest handler? People will entrust you with their animal so you prepare it (bath, braids, bow) and show it to the judge.',
   ca_handler_welcome: 'Welcome a client and accept their animal',
   ca_handler_prep: 'Prepare an animal for the contest (the whole list)',

@@ -3,6 +3,7 @@
 import { getLang, L } from '../i18n.js';
 import { lifeStage } from '../sim/animal.js';
 import { SPECIES } from '../sim/species.js';
+import { rankNewSpecies } from '../sim/careers.js';
 
 const NAMES = {
   fr: {
@@ -51,4 +52,40 @@ export function coatName(a) {
   const own = breeds.find((b) => b.id === a.breed);
   const color = [own, ...breeds].flatMap((b) => b?.colors ?? []).find((c) => c.name.fr === name.fr);
   return color?.m ?? L(name);
+}
+
+// Noms d'espèce dans une phrase : « un chien » (un seul, avec l'article) ou « chiens » (pluriel).
+const IN_TEXT = {
+  fr: {
+    horse: ['un cheval', 'chevaux'], dog: ['un chien', 'chiens'], cat: ['un chat', 'chats'], rabbit: ['un lapin', 'lapins'],
+    sheep: ['un mouton', 'moutons'], goat: ['une chèvre', 'chèvres'], cow: ['une vache', 'vaches'],
+  },
+  en: {
+    horse: ['a horse', 'horses'], dog: ['a dog', 'dogs'], cat: ['a cat', 'cats'], rabbit: ['a rabbit', 'rabbits'],
+    sheep: ['a sheep', 'sheep'], goat: ['a goat', 'goats'], cow: ['a cow', 'cows'],
+  },
+};
+const JOIN = { fr: { and: ' et ', or: ' ou ' }, en: { and: ' and ', or: ' or ' } };
+
+/**
+ * Liste d'espèces lisible dans une phrase : « chiens, chats et lapins », « un chien ou un chat ».
+ * one : au singulier avec l'article ; or : « ou » au lieu de « et ». Liste vide : ''.
+ * Sert aux textes qui suivent les espèces proposées (OFFERED_SPECIES, src/sim/species.js).
+ */
+export function speciesList(ids, { one = false, or = false } = {}) {
+  const lang = IN_TEXT[getLang()] ? getLang() : 'fr';
+  const words = ids.map((sid) => IN_TEXT[lang][sid]?.[one ? 0 : 1]).filter(Boolean);
+  if (words.length <= 1) return words[0] ?? '';
+  const last = words.pop();
+  return `${words.join(', ')}${JOIN[lang][or ? 'or' : 'and']}${last}`;
+}
+
+/**
+ * Paramètres des textes de rang (ca_perk_*, grm_rankDesc_*) : les animaux que le rang apporte, seulement les
+ * espèces proposées (rankNewSpecies, src/sim/careers.js). { animals: 'chiens, ', list: 'chiens', List: 'Chiens' } ;
+ * vides si le rang n'apporte aucune espèce proposée.
+ */
+export function perkParams(id, rank) {
+  const list = speciesList(rankNewSpecies(id, rank));
+  return { animals: list ? `${list}, ` : '', list, List: list.charAt(0).toUpperCase() + list.slice(1) };
 }

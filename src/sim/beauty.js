@@ -15,7 +15,7 @@
 //   (créé au besoin, comme le reste de profile.activities).
 
 import { weightClass, happiness, lifeStage, NEEDS } from './animal.js';
-import { NAMES } from './species.js';
+import { NAMES, anyAvailable } from './species.js';
 import { seeded, pick } from './rng.js';
 import { GEAR } from './gear.js';
 
@@ -380,6 +380,12 @@ export const BEAUTY_CLASSES = {
   small: { emoji: '🐰', species: ['rabbit'] },
   farm: { emoji: '🐑', species: ['sheep', 'goat', 'cow'] },
 };
+
+/**
+ * Les classes montrées dans cette partie : celles dont une espèce est proposée (OFFERED_SPECIES,
+ * src/sim/species.js) ou déjà à la ferme. (Un chat ou un mouton déjà là concourt toujours dans sa classe.)
+ */
+export const visibleClasses = (profile) => Object.keys(BEAUTY_CLASSES).filter((cls) => anyAvailable(profile, BEAUTY_CLASSES[cls].species));
 
 /** La classe d'une espèce. */
 export function classOf(species) {

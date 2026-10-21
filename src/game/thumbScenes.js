@@ -21,7 +21,7 @@ import { buildGltfAnimal } from './models/gltfAnimal.js';
 import { resolveLook, growthScale, lifeStage } from '../sim/animal.js';
 import { stageAgeDays } from '../sim/adoption.js';
 import { STRUCTURES } from '../sim/construction.js';
-import { SPECIES } from '../sim/species.js';
+import { SPECIES, isOffered } from '../sim/species.js';
 import { buildStructureModel } from './models/structures.js';
 import { EQUIPMENT_MODELS } from './models/equipment.js';
 import { car, towCar, horseTrailer, trunk } from './models/vehicles.js';
@@ -493,7 +493,9 @@ function structureThumb(spec) {
   const borrowed = [];
   const made = [];
   let sheep = null;
-  for (const [sp, fx, fz, rot] of ENCLOSURE_LIFE[spec.type] ?? []) {
+  // (le pré montre ses moutons quand ils sont proposés, OFFERED_SPECIES ; sinon un cheval, comme les paddocks)
+  const life = spec.type === 'pasture' && !isOffered('sheep') ? ENCLOSURE_LIFE.paddockLarge : ENCLOSURE_LIFE[spec.type];
+  for (const [sp, fx, fz, rot] of life ?? []) {
     let obj;
     if (sp === 'horse') {
       const m = mannequin('horse', 'dark'); // (bai : il se détache de l'herbe)

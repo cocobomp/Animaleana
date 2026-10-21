@@ -3,7 +3,8 @@
 
 import { h, bar } from './dom.js';
 import { t, ta, L } from '../i18n.js';
-import { SPECIES } from '../sim/species.js';
+import { SPECIES, SPECIES_IDS, speciesAvailable } from '../sim/species.js';
+import { speciesList } from './names.js';
 import { PLACES } from '../sim/places.js';
 import { isSandbox } from '../sim/profile.js';
 import { owned, inUse } from '../sim/gear.js';
@@ -54,7 +55,10 @@ function playTab(ui, state) {
   const g = ui.game;
   const here = g.animalsHere();
   const count = (type) => here.filter((a) => !eligibility(a, type)).length;
-  const cards = ['lesson', 'jumping', 'flat', 'figures', 'dressage', 'trail', 'agility', 'hop', 'show', 'beauty'].map((type) => {
+  // (lapin-hop : seulement si les lapins sont proposés, ou s'il y a déjà un lapin)
+  const types = ['lesson', 'jumping', 'flat', 'figures', 'dressage', 'trail', 'agility', 'hop', 'show', 'beauty']
+    .filter((type) => type !== 'hop' || speciesAvailable(g.profile, 'rabbit'));
+  const cards = types.map((type) => {
     const n = type === 'trail' ? count('trail') + here.filter((a) => a.following).length : count(type);
     return h('button', { class: 'card actv-card', onClick: () => { if (type === 'beauty') return openBeauty(ui); state.pick = type; ui.renderPanel(); } },
       h('span', { class: 'card-emoji' }, TYPE_ICON[type]),
@@ -112,7 +116,9 @@ function pickAnimal(ui, state) {
   }[type] ?? (() => true);
   const here = g.animalsHere().filter(fits);
   const out = [...head];
-  if (!here.length) out.push(h('p', { class: 'warn' }, t(`actv_none_${type}`)));
+  // (agility : « Il faut un chien… » avec les espèces qui peuvent en faire dans cette partie)
+  const agilityWho = () => speciesList(SPECIES_IDS.filter((sid) => SPECIES[sid].training.includes('agility') && speciesAvailable(g.profile, sid)), { one: true, or: true });
+  if (!here.length) out.push(h('p', { class: 'warn' }, t(`actv_none_${type}`, type === 'agility' ? { who: agilityWho() } : {})));
   out.push(h('div', { class: 'cards' }, here.map((a) => {
     const why = eligibility(a, type);
     // Saut d'obstacles à l'entraînement : on choisit le niveau du parcours (débloqué par la compétence de saut).

@@ -422,6 +422,36 @@ export const SPECIES = {
 
 export const SPECIES_IDS = Object.keys(SPECIES);
 
+// ---------------------------------------------------------------- espèces proposées
+// LA liste des espèces qu'on propose comme NOUVEL animal : animalerie, refuge, élevages en voyage,
+// animal perdu, clients des métiers, concurrents, bâtiments et objets dédiés, quêtes…
+// Pour ajouter une espèce quand son modèle réaliste est en ligne : l'ajouter ici, c'est tout
+// (cat et rabbit très bientôt, puis sheep et goat, puis cow).
+// Une espèce absente de la liste n'est pas retirée du jeu : SPECIES la garde, et les animaux déjà là
+// (anciennes parties) continuent de tout faire (soins, laine et lait, petits, bâtiments, objets, véto).
+export const OFFERED_SPECIES = new Set(['horse', 'dog']);
+
+/** Cette espèce est-elle proposée comme nouvel animal ? */
+export const isOffered = (id) => OFFERED_SPECIES.has(id);
+
+/** Les espèces proposées, dans l'ordre de SPECIES (relu à chaque appel : la liste peut changer). */
+export const offeredSpeciesIds = () => SPECIES_IDS.filter(isOffered);
+
+/** Toutes les espèces sont-elles proposées ? (sinon : « D'autres animaux arrivent bientôt ! ») */
+export const allOffered = () => SPECIES_IDS.every(isOffered);
+
+/** L'espèce compte pour cette partie : elle est proposée, ou la joueuse a déjà un animal de cette espèce. */
+export const speciesAvailable = (profile, sid) => isOffered(sid) || (profile?.animals ?? []).some((a) => a.species === sid);
+
+/**
+ * Un bâtiment, un objet, une aide ou une quête réservé à ces espèces est-il montré ?
+ * Oui si la liste est vide (pour tout le monde) ou si l'une d'elles compte pour la partie.
+ */
+export const anyAvailable = (profile, list) => !list?.length || list.some((sid) => speciesAvailable(profile, sid));
+
+/** Pour un figurant (concurrent, image) : l'espèce si elle est proposée, sinon une espèce proposée. */
+export const offeredOr = (sid, fallback = 'dog') => (isOffered(sid) ? sid : fallback);
+
 export const getSpecies = (id) => SPECIES[id];
 
 export function getBreed(speciesId, breedId) {

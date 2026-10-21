@@ -12,8 +12,12 @@ import { PLACES } from '../sim/places.js';
 import { openBeauty } from './beauty.js'; // 🎀 concours de beauté (métier de handler)
 import { clientDogs } from '../sim/dogTrainer.js'; // 🐕 éducateur canin : chiens en éducation
 import { salonCareerBlock } from './groomer.js'; // ✂️ le salon de toilettage (métier Toiletteur)
+import { perkParams } from './names.js';
 
 const rankLabel = (rank) => t(`ca_rank_${RANKS[rank]}`);
+
+/** Ce que change un rang du métier (« Apprenti : chiens, maladies simples… »). */
+export const perkText = (id, rank) => t(`ca_perk_${RANKS[rank]}_${id}`, perkParams(id, rank));
 
 /** Le panneau « Métiers ». */
 export function openCareers(ui) {
@@ -46,7 +50,7 @@ function careerCard(ui, s) {
     s.state === 'started' ? h('span', { class: `ca-rank r${s.rank}` }, `🎖️ ${rankLabel(s.rank)}`) : null);
   const body = [];
   if (s.state === 'available') {
-    body.push(h('p', { class: 'note' }, t('ca_perk_apprentice_' + s.id)),
+    body.push(h('p', { class: 'note' }, perkText(s.id, 0)),
       h('button', { class: 'primary big', onClick: () => { g.clients.startCareer(s.id); ui.renderPanel(); } }, `💼 ${t('ca_start')}`));
   } else if (s.state === 'locked') {
     body.push(h('p', { class: 'note' }, t('ca_lockedHelp', { n: s.level })));
@@ -56,7 +60,7 @@ function careerCard(ui, s) {
       h('span', {}, `✨ ${t('ca_xp')} ${pr.xp}`),
       h('span', { class: 'bar-track' }, h('span', { class: 'bar-fill good', style: { width: `${Math.round(pr.ratio * 100)}%` } })),
       h('small', {}, pr.to === null ? t('ca_maxRank') : t('ca_nextRank', { n: pr.to - pr.xp, rank: rankLabel(pr.rank + 1) }))));
-    body.push(h('p', { class: 'note ca-perk' }, t(`ca_perk_${RANKS[s.rank]}_${s.id}`)));
+    body.push(h('p', { class: 'note ca-perk' }, perkText(s.id, s.rank)));
     body.push(h('div', { class: 'ca-stats' },
       h('span', {}, `⭐ ${t('cl_rep')} ${Math.round(s.reputation)}`),
       isSandbox(p) ? null : h('span', {}, t('ca_earned', { n: s.earned }))));
@@ -129,7 +133,7 @@ export function showCareerOffer(ui, id, { yes, later }) {
     h('div', { class: 'ca-offer-emoji' }, def.emoji),
     h('h2', {}, t('ca_offer_title')),
     h('p', { class: 'cl-bubble owner' }, t(`ca_offer_${id}`)),
-    h('p', { class: 'note' }, t(`ca_perk_apprentice_${id}`)),
+    h('p', { class: 'note' }, perkText(id, 0)),
     h('div', { class: 'cl-buttons' },
       h('button', { class: 'cl-btn yes', onClick: () => { ui.hideModal(); yes(); } }, `💼 ${t('ca_yes')}`),
       h('button', { class: 'cl-btn no', onClick: () => { ui.hideModal(); later?.(); } }, t('ca_later')))));

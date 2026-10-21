@@ -89,8 +89,9 @@ describe('races de chats', () => {
     expect(getBreed('cat', 'europeen').colors.length).toBeGreaterThanOrEqual(5);
   });
 
-  it('le Ragdoll et les races courantes sont à l\'animalerie de la maison', () => {
-    const home = breedsFor('maison', true).filter((p) => p.species === 'cat').map((p) => p.breed.id);
+  it('le Ragdoll et les races courantes sont au catalogue de l\'animalerie de la maison', () => {
+    // (catalogue complet : les chats ne sont vendus que quand ils sont dans OFFERED_SPECIES, src/sim/species.js)
+    const home = breedsFor('maison', true, { all: true }).filter((p) => p.species === 'cat').map((p) => p.breed.id);
     for (const id of ['ragdoll', 'europeen', 'siamois', 'persan', 'sphynx', 'bengal']) expect(home).toContain(id);
   });
 

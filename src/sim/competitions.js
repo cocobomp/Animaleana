@@ -8,7 +8,7 @@ import {
   JUMP_COURSE, courseLength, jumpingResult, agilityResult, agilityPar, eligibility, compareResults, knownTricks,
 } from './activities.js';
 import { lifeStage } from './animal.js';
-import { SPECIES } from './species.js';
+import { SPECIES, offeredOr } from './species.js';
 import { seeded, pick, hashString } from './rng.js';
 import { GEAR, wears, sizeFor, stockKey } from './gear.js'; // selle et filet à la taille du cheval
 import { pack, unpack, inCargo, available, cargoItem } from './cargo.js'; // coffre de transport du voyage
@@ -266,7 +266,7 @@ export function competitionRivals(comp, course = null, count = 6) {
   for (let i = 0; i < count; i++) {
     const name = names.splice(Math.floor(rng() * names.length), 1)[0];
     const horse = DISCIPLINES[comp.discipline]?.horse;
-    const r = { name, animal: pick(horse ? HORSE_NAMES : PET_NAMES, rng), species: horse ? 'horse' : pick(['dog', 'dog', 'cat', 'rabbit'], rng) };
+    const r = { name, animal: pick(horse ? HORSE_NAMES : PET_NAMES, rng), species: horse ? 'horse' : offeredOr(pick(['dog', 'dog', 'cat', 'rabbit'], rng)) }; // (espèce proposée, même hasard)
     // Les concurrents sont meilleurs dans les concours relevés.
     const skill = clamp(0.3 + comp.level * 0.16 + (rng() - 0.5) * 0.4);
     if (comp.discipline === 'jumping') {

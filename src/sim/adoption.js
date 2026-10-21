@@ -1,20 +1,25 @@
 // Animaux proposés à l'adoption : ils changent chaque jour de jeu et selon le lieu.
 
-import { SPECIES, SPECIES_IDS } from './species.js';
+import { SPECIES, SPECIES_IDS, isOffered, offeredSpeciesIds } from './species.js';
 import { createAnimal } from './animal.js';
 import { DAYS_PER_YEAR } from './time.js';
 import { seeded, pick } from './rng.js';
 
-/** Races proposées : à la maison, les races courantes + celles de la région ; en voyage, les races locales. */
-export function breedsFor(placeId, isHome = false) {
+/**
+ * Races proposées : à la maison, les races courantes + celles de la région ; en voyage, les races locales.
+ * Seulement les espèces proposées (OFFERED_SPECIES, src/sim/species.js). all : tout le catalogue, même
+ * les espèces pas encore proposées (pour vérifier les races d'une espèce).
+ */
+export function breedsFor(placeId, isHome = false, { all = false } = {}) {
   const list = [];
   for (const sid of SPECIES_IDS) {
+    if (!all && !isOffered(sid)) continue; // espèce pas encore proposée : pas de nouvel animal
     for (const b of SPECIES[sid].breeds) {
       // homeShop : race d'ailleurs, mais si courante en France qu'on la trouve aussi à la maison.
       if (b.origin === placeId || (isHome && (b.origin === null || b.homeShop))) list.push({ species: sid, breed: b });
     }
   }
-  if (!list.length) return breedsFor(placeId, true);
+  if (!list.length) return isHome ? list : breedsFor(placeId, true, { all });
   return list;
 }
 
@@ -60,11 +65,12 @@ export function adoptionCandidates(placeId, day, adoptedKeys = [], isHome = fals
   const rng = seeded(`adopt-${placeId}-${day}`);
   const pool = breedsFor(placeId, isHome);
   const count = isHome ? 9 : 5;
+  const ids = offeredSpeciesIds();
   const out = [];
   for (let i = 0; i < count; i++) {
     const key = `${placeId}-${day}-${i}`;
-    // Les espèces sont tirées à tour de rôle pour qu'il y ait toujours de tout.
-    const sid = SPECIES_IDS[i % SPECIES_IDS.length];
+    // Les espèces (proposées) sont tirées à tour de rôle pour qu'il y ait toujours de tout.
+    const sid = ids[i % ids.length];
     const choices = pool.filter((p) => p.species === sid);
     const { breed } = choices.length ? pick(choices, rng) : pick(pool, rng);
     const species = choices.length ? sid : pool.find((p) => p.breed === breed).species;

@@ -9,7 +9,7 @@ import { SPECIES } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
 import { competitionsAt, eligibility } from '../sim/activities.js';
 import {
-  PREP_ITEMS, RIBBON_COLORS, checklist, isReady, beautyScore, nowHours, classOf, BEAUTY_CLASSES, classRivals, entryFor, entriesOf,
+  PREP_ITEMS, RIBBON_COLORS, checklist, isReady, beautyScore, nowHours, classOf, BEAUTY_CLASSES, visibleClasses, classRivals, entryFor, entriesOf,
   registerBlock, ringBlock, accessoryInfo, lowestNeed, JUDGE_CRITERIA, dirtState, prepItems,
 } from '../sim/beauty.js';
 import { canLead } from '../sim/gear.js';
@@ -124,7 +124,7 @@ function compCard(ui, comp) {
       h('b', {}, t('beauty_nextComp', { level: t(`actv_level_${comp.levelId}`) })),
       h('small', {}, `${t('day', { n: comp.day })} · ${whenText(g, comp)}`),
       h('small', {}, isSandbox(p) ? t('actv_prizesSandbox') : t('actv_prizes', { fee: comp.fee, a: comp.prizes[0], b: comp.prizes[1], c: comp.prizes[2] })),
-      h('small', { class: 'beauty-classes' }, `${t('beauty_classesLabel')} ${Object.keys(BEAUTY_CLASSES).map((c) => BEAUTY_CLASSES[c].emoji).join(' ')}`),
+      h('small', { class: 'beauty-classes' }, `${t('beauty_classesLabel')} ${visibleClasses(p).map((c) => BEAUTY_CLASSES[c].emoji).join(' ')}`),
       entries.length ? h('small', { class: 'beauty-entered' }, `📝 ${t('beauty_entriesLabel')} ${entries.map(({ e, a }) => `${a.name}${e.presented ? ' ✅' : ''}`).join(', ')}`) : null),
     open ? h('span', { class: 'beauty-today' }, t('beauty_openNow')) : null);
 }
@@ -179,7 +179,7 @@ export function beautyPick(ui, state) {
   if (comp) {
     out.push(compCard(ui, comp));
     out.push(h('details', { class: 'actv-rivals' }, h('summary', {}, `👥 ${t('actv_rivals')}`),
-      h('ul', {}, Object.keys(BEAUTY_CLASSES).map((cls) => h('li', {}, h('b', {}, className(cls)), ' : ',
+      h('ul', {}, visibleClasses(g.profile).map((cls) => h('li', {}, h('b', {}, className(cls)), ' : ',
         classRivals(comp, cls, 3).map((r) => `${r.name} & ${r.animal}`).join(', '))))));
   } else out.push(h('p', { class: 'note' }, t('beauty_noComp')));
   out.push(h('p', { class: 'note' }, t('actv_how_beauty')));

@@ -12,7 +12,7 @@
 //     playerDist,         // distance joueur → cible de l'événement (en mètres)
 //     strayAtRefuge }     // le petit animal perdu est arrivé au refuge
 
-import { SPECIES } from './species.js';
+import { SPECIES, isOffered } from './species.js';
 import { lifeStage, createAnimal, namesInUse } from './animal.js';
 import { PLACES } from './places.js';
 import { wears, canLead, keepsWarm } from './gear.js';
@@ -204,7 +204,10 @@ export function startEvent(profile, type, ctx, rng = Math.random, force = false)
       for (const a of ctx.animals) a.needs.thirst = Math.min(a.needs.thirst, 40);
       break;
     case 'lostPet': {
-      const species = rng() < 0.5 ? 'dog' : 'cat';
+      // (un seul tirage, comme avant : la suite du hasard ne bouge pas ; une espèce pas encore
+      // proposée est remplacée par un petit animal proposé — aujourd'hui, toujours un chien)
+      let species = rng() < 0.5 ? 'dog' : 'cat';
+      if (!isOffered(species)) species = PETS.find(isOffered) ?? 'dog';
       const sp = SPECIES[species];
       const stray = createAnimal({ species, ageDays: sp.adultYears * DAYS_PER_YEAR * 0.25, location: ctx.place, rng, day: ctx.day, avoidNames: namesInUse(profile) });
       stray.stray = true;

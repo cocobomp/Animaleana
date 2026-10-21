@@ -268,7 +268,7 @@ export const DOG_TRAINER_FR = {
   dt_show_dog: 'Touche {name}, puis 📋 Plus… → 🐕 Éducation.',
   dt_show_noDog: 'Aucun chien en éducation : accepte d\'abord un client près de la niche 🐶.',
   dt_show_ownDog: 'Touche {name}, puis 📋 Plus… → 🐕 Éducation.',
-  dt_show_noOwnDog: 'Adopte un chien (ou un chat, un lapin, un cheval) pour l\'entraîner.',
+  dt_show_noOwnDog: 'Adopte {who} pour l\'entraîner.', // ({who} : « un chien ou un cheval », espèces proposées)
   dt_show_deliver: 'Quand un chien est prêt, son maître revient près de la niche 🐶 : fais la démonstration 🎬 !',
   dt_show_rescue: 'Un chien de refuge arrive parfois au rang expert. Attends les maîtres près de la niche 🐶.',
 
@@ -558,7 +558,7 @@ export const DOG_TRAINER_EN = {
   dt_show_dog: 'Tap {name}, then 📋 More… → 🐕 Training.',
   dt_show_noDog: 'No dog in training: first accept a client next to the kennel 🐶.',
   dt_show_ownDog: 'Tap {name}, then 📋 More… → 🐕 Training.',
-  dt_show_noOwnDog: 'Adopt a dog (or a cat, a rabbit, a horse) to coach it.',
+  dt_show_noOwnDog: 'Adopt {who} to coach it.',
   dt_show_deliver: 'When a dog is ready, its owner comes back next to the kennel 🐶: do the demonstration 🎬!',
   dt_show_rescue: 'A rescue dog sometimes comes at expert rank. Wait for owners next to the kennel 🐶.',
 

@@ -25,9 +25,9 @@ import { disposeModel } from './models/animalModel.js';
 import {
   EQUIPMENT, HERD_SPECIES, equipmentAt, buyEquipment, refillEquipment, wantedEquipment, useEquipment,
   passiveEquipment, hireHelper, fireHelper, payHelpers, doHelperTask, tickProduce, collectProduct,
-  socialMoment, graze, companionsOf, hasStock, helperTask as helperTaskFn,
+  socialMoment, graze, companionsOf, hasStock, helperTask as helperTaskFn, HELPERS, equipmentShown, helperShown,
 } from '../sim/farm.js';
-import { SPECIES } from '../sim/species.js';
+import { SPECIES, isOffered } from '../sim/species.js';
 import {
   NEEDS, createAnimal, tickAnimal, applyCare, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
   namesInUse,
@@ -35,7 +35,7 @@ import {
 import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
 import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeason } from '../sim/places.js';
 import { adoptionPrice, shopPrice, stageAgeDays } from '../sim/adoption.js';
-import { checkObjectives } from '../sim/objectives.js';
+import { checkObjectives, objectiveParams } from '../sim/objectives.js';
 import { loadProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
 import { deviceStore, saveGuarded } from '../sim/saveStore.js'; // sauvegarde qui n'écrase rien en silence
 import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
@@ -54,7 +54,7 @@ import { t, L, getLang, fmtHour } from '../i18n.js';
 import { Structures } from './Structures.js';
 import { ManagementView } from './ManagementView.js';
 import { openStructure } from '../ui/construction.js';
-import { doorOf, equipmentPos } from '../sim/construction.js';
+import { doorOf, equipmentPos, STRUCTURES, structureShown } from '../sim/construction.js';
 import { applyCoreLayout } from './coreLayout.js';
 import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, trajet, pauses)
 import { CompetitionVenue } from './CompetitionVenue.js'; // concours à l'extérieur : site, épreuve, podium
@@ -78,7 +78,7 @@ const CARE_EMOJI = {
 
 export const JOBS = [
   { id: 'walk', pay: 25, hours: 1 },
-  { id: 'catsit', pay: 30, hours: 1.5 },
+  { id: 'catsit', pay: 30, hours: 1.5, needs: ['cat'] }, // (affiché quand les chats sont proposés : anyAvailable)
   { id: 'stable', pay: 40, hours: 2 },
   { id: 'hay', pay: 35, hours: 2 },
 ];
@@ -812,7 +812,7 @@ export class Game {
       this.checkAcc = 0;
       for (const o of checkObjectives(p)) {
         this.xp(o.kind === 'quest' ? 'quest' : 'achievement');
-        const name = t(`o_${o.id}`);
+        const name = t(`o_${o.id}`, objectiveParams(p, o));
         const msg = o.kind === 'quest' ? t('questDone', { name }) : t('achievementDone', { name });
         this.ui.toast(o.reward && p.mode === 'manage' ? `${msg} ${t('reward', { n: o.reward })}` : msg, 5000);
       }
@@ -1228,8 +1228,16 @@ export class Game {
     // retourné à l'animalerie.
     this.checkAcc = Infinity;
     if (!up) return;
-    const names = up.unlocked.map((k) => this.unlockName(k)).join(', ');
+    // (pas d'annonce pour ce qui est caché : clapier, litière, berger… tant que leurs espèces ne sont pas proposées)
+    const names = up.unlocked.filter((k) => this.unlockShown(k)).map((k) => this.unlockName(k)).join(', ');
     this.ui.levelUp(up.level, names);
+  }
+
+  /** Ce qu'un niveau débloque est-il montré ? (équipement, aide ou construction pour une espèce proposée) */
+  unlockShown(key) {
+    if (EQUIPMENT[key]) return equipmentShown(this.profile, key);
+    if (HELPERS[key]) return helperShown(this.profile, key);
+    return !STRUCTURES[key] || structureShown(this.profile, key);
   }
 
   unlockName(key) {
@@ -1539,7 +1547,7 @@ export class Game {
 
   buyTool(tool) {
     const r = buyTool(this.profile, tool);
-    if (!r.ok) return this.ui.toast(t(r.reason === 'money' ? 'r_money' : 'alreadyOwned'));
+    if (!r.ok) return this.ui.toast(t({ money: 'r_money', soon: 'moreSoon' }[r.reason] ?? 'alreadyOwned'));
     this.ui.toast(t('gearBought', { name: t(`tool_${tool}`) }));
     return r;
   }
@@ -1723,6 +1731,11 @@ export class Game {
 
   /** Acheter un animal choisi à l'animalerie (ou à l'élevage en voyage). */
   buyAnimal(cfg, name) {
+    // (une espèce pas encore proposée ne s'achète pas, même depuis une vieille fenêtre restée ouverte)
+    if (!isOffered(cfg.species)) {
+      this.ui.toast(t('moreSoon'));
+      return null;
+    }
     const price = shopPrice(cfg.species, cfg.breed, cfg.stage);
     const a = createAnimal({
       species: cfg.species, breed: cfg.breed, colorIndex: cfg.colorIndex, sex: cfg.sex,
@@ -1843,7 +1856,7 @@ export class Game {
   buyEquipment(type) {
     if (!this.isUnlocked(type)) return this.ui.toast(t('lockedLevel', { n: this.unlockLevel(type) }));
     const r = buyEquipment(this.profile, type, this.profile.place);
-    if (!r.ok) return this.ui.toast(t(r.reason === 'money' ? 'r_money' : 'alreadyOwned'));
+    if (!r.ok) return this.ui.toast(t({ money: 'r_money', soon: 'moreSoon' }[r.reason] ?? 'alreadyOwned'));
     this.spawnEquipment(r.equipment);
     addStat(this.profile, 'equipment');
     this.ui.toast(t('equipmentBought', { name: t(`eq_${type}`) }));
@@ -1861,7 +1874,7 @@ export class Game {
   hire(type) {
     if (!this.isUnlocked(type)) return this.ui.toast(t('lockedLevel', { n: this.unlockLevel(type) }));
     const r = hireHelper(this.profile, type, this.profile.place);
-    if (!r.ok) return this.ui.toast(t('alreadyHired'));
+    if (!r.ok) return this.ui.toast(t(r.reason === 'soon' ? 'moreSoon' : 'alreadyHired'));
     this.helpers.set(r.helper.id, new HelperEntity(r.helper, this.world, this.scene));
     addStat(this.profile, 'hired');
     this.ui.toast(t('hired', { name: r.helper.name, g: r.helper.sex, job: t(`helper_${type}`, { g: r.helper.sex }) }));

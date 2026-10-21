@@ -5,16 +5,16 @@ import { dogTrainerSection, trainingBadge } from './dogTrainer.js'; // éducateu
 import { isTrainingClient } from '../sim/dogTrainer.js';
 import { h, bar, hexColor } from './dom.js';
 import { t, L, getLang, setLang } from '../i18n.js';
-import { SPECIES, getBreed } from '../sim/species.js';
+import { SPECIES, getBreed, allOffered, anyAvailable, speciesAvailable } from '../sim/species.js';
 import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass } from '../sim/animal.js';
 import { DAYS_PER_YEAR } from '../sim/time.js';
 import { adoptionCandidates, adoptionPrice, shopPrice, shopBreeds, AGE_STAGES, stageAgeDays } from '../sim/adoption.js';
 import { createAnimal, freeName, namesInUse } from '../sim/animal.js';
 import { PLACES, PLACE_IDS, distanceKm, TRAVEL_MODES } from '../sim/places.js';
-import { OBJECTIVES } from '../sim/objectives.js';
+import { OBJECTIVES, objectiveShown, objectiveParams } from '../sim/objectives.js';
 import { canAfford, isSandbox } from '../sim/profile.js';
 import { JOBS } from '../game/Game.js';
-import { EQUIPMENT, HELPERS, canProduce } from '../sim/farm.js';
+import { EQUIPMENT, HELPERS, canProduce, equipmentShown, helperShown } from '../sim/farm.js';
 import { speciesName, coatName, coatLabel } from './names.js';
 import { GEAR } from '../sim/gear.js';
 import { openTackShop, animalGearSection } from './tack.js'; // sellerie : catalogue, fiches, équipement
@@ -296,6 +296,9 @@ export function openAnimals(ui) {
 
 // ---------------------------------------------------------------- adoption
 
+/** Petit mot pour les enfants tant que toutes les espèces ne sont pas proposées (OFFERED_SPECIES). */
+const moreSoonNote = () => (allOffered() ? null : h('p', { class: 'note more-soon' }, t('moreSoon')));
+
 export function openAdoption(ui) {
   const g = ui.game;
   const home = g.isHome;
@@ -324,7 +327,7 @@ export function openAdoption(ui) {
         }, `${t('adopt')} · ${t('free')}`));
     }))];
   };
-  ui.openPanel({ title: `🐾 ${t('refuge')}`, render: () => [h('p', { class: 'note' }, t('refugeHelp')), ...render()] });
+  ui.openPanel({ title: `🐾 ${t('refuge')}`, render: () => [h('p', { class: 'note' }, t('refugeHelp')), moreSoonNote(), ...render()] });
 }
 
 // ---------------------------------------------------------------- vétérinaire
@@ -443,13 +446,13 @@ export function openJournal(ui, tab = 'quest') {
           onClick: () => { state.tab = k; ui.renderPanel(); },
         }, k === 'quest' ? `🎯 ${t('quests')}` : k === 'clients' ? `🏷️ ${t('cl_tab')}` : `🏆 ${t('achievements')}`)));
       if (state.tab === 'clients') return [tabs, ...clientsTab(ui)]; // clients (src/ui/clients.js)
-      const list = OBJECTIVES.filter((o) => o.kind === state.tab).map((o) => {
+      const list = OBJECTIVES.filter((o) => o.kind === state.tab && objectiveShown(p, o)).map((o) => {
         const done = p.completed.includes(o.id);
         const [cur, max] = o.progress(p);
         return h('div', { class: `objective ${done ? 'done' : ''}` },
           h('span', { class: 'obj-icon' }, done ? '✅' : o.kind === 'quest' ? '🎯' : '🏆'),
           h('span', { class: 'card-main' },
-            h('b', {}, t(`o_${o.id}`)),
+            h('b', {}, t(`o_${o.id}`, objectiveParams(p, o))),
             h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${Math.min(100, (cur / max) * 100)}%` } })),
             questExtras(ui, o, done)), // où faire la quête + « Montre-moi » (src/ui/tutorial.js)
           h('small', {}, `${Math.min(cur, max)}/${max}${o.reward && !isSandbox(p) ? ` · ${o.reward} 🪙` : ''}`));
@@ -467,7 +470,8 @@ export function openJobs(ui) {
     title: `📋 ${t('jobsTitle')}`,
     render: () => [
       isSandbox(g.profile) ? h('p', { class: 'note' }, t('jobsSandbox')) : null,
-      h('div', { class: 'cards' }, JOBS.map((j) => h('button', { class: 'card', onClick: () => g.doJob(j) },
+      // (needs : un petit boulot avec une espèce pas encore proposée n'est pas affiché)
+      h('div', { class: 'cards' }, JOBS.filter((j) => anyAvailable(g.profile, j.needs)).map((j) => h('button', { class: 'card', onClick: () => g.doJob(j) },
         h('span', { class: 'card-emoji' }, { walk: '🐕', catsit: '🐈', stable: '🧹', hay: '🌾' }[j.id]),
         h('span', { class: 'card-main' }, h('b', {}, t(`job_${j.id}`)), h('small', {}, t('hours', { n: j.hours }))),
         h('span', { class: 'card-side' }, `+${j.pay} 🪙`)))),
@@ -612,15 +616,19 @@ export function openFarm(ui) {
     render: () => {
       const p = g.profile;
       const sandbox = isSandbox(p);
-      const tabs = h('div', { class: 'tabs' }, [['equipment', `🥣 ${t('equipment')}`], ['helpers', `🧑‍🌾 ${t('helpers')}`], ['herd', `🐑 ${t('herd')}`], ['buildings', `🏚️ ${t('fac_tab')}`]]
-        .map(([k, label]) => h('button', { class: state.tab === k ? 'active' : '', onClick: () => { state.tab = k; ui.renderPanel(); } }, label)));
+      // (onglet du troupeau : seulement si moutons, chèvres ou vaches sont proposés, ou déjà à la ferme)
+      const herdShown = anyAvailable(p, Object.keys(SPECIES).filter((sid) => SPECIES[sid].livestock));
+      if (state.tab === 'herd' && !herdShown) state.tab = 'equipment';
+      const tabs = h('div', { class: 'tabs' }, [['equipment', `🥣 ${t('equipment')}`], ['helpers', `🧑‍🌾 ${t('helpers')}`], herdShown ? ['herd', `🐑 ${t('herd')}`] : null, ['buildings', `🏚️ ${t('fac_tab')}`]]
+        .filter(Boolean).map(([k, label]) => h('button', { class: state.tab === k ? 'active' : '', onClick: () => { state.tab = k; ui.renderPanel(); } }, label)));
       const out = [tabs];
 
       if (state.tab === 'equipment') {
         out.push(h('p', { class: 'note' }, t('equipmentHelp')));
-        out.push(h('div', { class: 'cards' }, Object.entries(EQUIPMENT).map(([type, def]) => {
+        // (pas de litière ni de mangeoire de bergerie tant que leurs espèces ne sont pas proposées : equipmentShown)
+        out.push(h('div', { class: 'cards' }, Object.entries(EQUIPMENT).filter(([type]) => equipmentShown(p, type)).map(([type, def]) => {
           const owned = g.equipment.find((q) => q.eq.type === type);
-          const who = def.serves.map((sid) => SPECIES[sid].emoji).join(' ');
+          const who = def.serves.filter((sid) => speciesAvailable(p, sid)).map((sid) => SPECIES[sid].emoji).join(' ');
           let side;
           if (!owned && !g.isUnlocked(type)) {
             side = h('span', { class: 'lock' }, `🔒 ${t('level', { n: g.unlockLevel(type) })}`);
@@ -646,7 +654,7 @@ export function openFarm(ui) {
 
       if (state.tab === 'helpers') {
         out.push(h('p', { class: 'note' }, sandbox ? t('helpersHelpSandbox') : t('helpersHelp')));
-        out.push(h('div', { class: 'cards' }, Object.entries(HELPERS).map(([type, def]) => {
+        out.push(h('div', { class: 'cards' }, Object.entries(HELPERS).filter(([type]) => helperShown(p, type)).map(([type, def]) => {
           const hired = p.helpers.find((x) => x.type === type && x.place === p.place);
           const locked = !hired && !g.isUnlocked(type);
           const duties = hired && def.actions ? h('div', { class: 'duties' },
@@ -761,6 +769,7 @@ export function openShop(ui) {
     const coat = coatLabel(breed.colors[st.colorIndex % breed.colors.length], st.sex);
     return [
       h('p', { class: 'note' }, g.isHome ? t('shopHelp') : t('breederHelp')),
+      moreSoonNote(),
       h('h3', {}, t('species')),
       h('div', { class: 'row wrap' }, speciesList.map((sid) => chip(`${SPECIES[sid].emoji} ${L(SPECIES[sid].name)}`, st.species === sid, () => { st.species = sid; }))),
       // Aperçu toujours visible en haut (il suit la liste quand on la fait défiler).

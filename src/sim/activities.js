@@ -2,7 +2,7 @@
 // Logique pure (parcours, chances de réussite, notes, classements, calendrier, récompenses),
 // sans 3D : testée dans tests/activities.test.js. La partie 3D est dans src/game/Activities.js.
 
-import { SPECIES } from './species.js';
+import { SPECIES, offeredOr } from './species.js';
 import { happiness, lifeStage, canRide } from './animal.js';
 import { wears, rideGear, tackEffects } from './gear.js';
 import { seeded, pick, hashString } from './rng.js';
@@ -544,7 +544,8 @@ export function rivals(comp, count = 5) {
   for (let i = 0; i < count; i++) {
     const name = names.splice(Math.floor(rng() * names.length), 1)[0];
     const animal = pick(NAMES, rng);
-    const species = pick(RIVAL_SPECIES[comp.type], rng);
+    // (tiré puis remplacé par une espèce proposée : le hasard des points et des temps ne change pas)
+    const species = offeredOr(pick(RIVAL_SPECIES[comp.type], rng));
     // Le niveau des concurrents augmente avec le niveau du concours.
     const skill = clamp(0.25 + comp.level * 0.17 + (rng() - 0.5) * 0.4);
     const r = { name, animal, species };

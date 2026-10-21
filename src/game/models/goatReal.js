@@ -46,6 +46,7 @@ const LEG_KEYS = [['FL', 'L', true], ['FR', 'R', true], ['HL', 'L', false], ['HR
 const LEG_BONES = { front: ['humerus', 'radius', 'metacarpus', 'toes'], hind: ['femur', 'tibia', 'metatarsus', 'htoes'] };
 const ONCE_GOAT = ['rear_up', 'rear_down', 'headbutt', 'climb'];
 const MOVING = ['walk', 'trot', 'run'];
+const HIND = [2, 3]; // (membres : 0 et 1 antérieurs, 2 et 3 postérieurs)
 const HEAD_BONES = new Set(['head', 'jaw', 'earL', 'earR', 'eyeL', 'eyeR', 'beard', 'hornL', 'hornR']);
 const LEG_LOW = /^(radius|metacarpus|toes|tibia|metatarsus|htoes)/;
 const HOOF = /^(toes|htoes)/;
@@ -766,6 +767,15 @@ export class RealGoatAnim extends RealSheepAnim {
     if (on) this.nurseBend = clamp(this.nurseBend + clamp((m.y - st.nurseY) * 3, -0.12, 0.12) * Math.min(1, dt * 8), -0.5, 1.2);
   }
 
+  /**
+   * Dressée contre la barrière (se dresser, brouter en hauteur, redescendre) : les postérieurs restent posés où ils
+   * étaient (footLock sur eux seuls) ; du clip seul, ils glissaient de 3 à 19 cm pendant qu'elle se dressait.
+   */
+  holdLegs() {
+    const t = this.trans?.name;
+    return this.posture === 'rear' || t === 'rear_up' || t === 'rear_down' ? HIND : null;
+  }
+
   /** Sol : comme le mouton ; le chevreau qui gambade, le saut et l'escalade sont « en l'air » (ni posés ni tenus). */
   ground(st, dt = 0, moveClip = null) {
     const air = moveClip === 'kid_play' || (this.w?.kid_play ?? 0) > 0.3 || (this.w?.climb ?? 0) > 0.3;
@@ -844,7 +854,8 @@ export class RealGoatAnim extends RealSheepAnim {
       target[this.trans.name] = 1;
       fadeK = 10;
     } else if (st.moving) {
-      moveClip = st.play && this.actions.kid_play && g !== 'walk' ? 'kid_play' : g === 'idle' ? 'walk' : g;
+      // (en se déplaçant, toujours l'allure, sabots tenus : la gambade jouée sur place glissait ; voir le mouton)
+      moveClip = g === 'idle' ? 'walk' : g;
       target[moveClip] = 1;
       fadeK = 5;
     } else if (this.posture === 'rear') {
@@ -867,7 +878,7 @@ export class RealGoatAnim extends RealSheepAnim {
       fadeK = 2.5;
     } else if (st.action === 'play' && this.actions.kid_play) {
       target.kid_play = 1;
-      fadeK = 6;
+      fadeK = 3.5; // (voir le mouton : la tête qui broutait se relève en douceur)
     } else {
       target.idle = 1;
       fadeK = 3;
@@ -889,7 +900,8 @@ export class RealGoatAnim extends RealSheepAnim {
       a.setEffectiveWeight(w);
       if (MOVING.includes(name)) {
         const nat = this.natural[name];
-        a.timeScale = Math.min(2.2 / Math.sqrt(Math.min(1, size)), Math.max(0.45, (st.moving ? st.v : nat) / nat)) * (st.reverse ? -1 : 1);
+        // (arrêtée, l'allure qui s'efface est figée : voir le mouton)
+        a.timeScale = st.moving ? Math.min(2.2 / Math.sqrt(Math.min(1, size)), Math.max(0.45, st.v / nat)) * (st.reverse ? -1 : 1) : 0;
         if (w > leadW) {
           lead = name;
           leadW = w;
@@ -1015,7 +1027,9 @@ function browseFence(e, dt, anim, scale) {
     const dx = goal.x - p.x;
     const dz = goal.z - p.z;
     const d = Math.hypot(dx, dz);
-    const v = 0.38 * Math.max(0.6, scale);
+    // (le pas démarre et finit en douceur : la vitesse qui passait de 0,38 m/s à 0 d'une image à l'autre faisait sauter
+    // une patte de 13 cm au bout du pas et de 28 à 30 cm au bout du recul)
+    const v = 0.38 * Math.max(0.6, scale) * Math.min(1, 0.25 + b.t / 0.4) * clamp(d / (0.15 * Math.max(0.6, scale)), 0.3, 1);
     // (en reculant, les pattes vont à l'envers : le clip du pas est joué à rebours)
     anim.stepReverse = b.phase === 'back';
     if (Math.abs(dh) < 0.35 && d > 0.02) {
@@ -1027,13 +1041,27 @@ function browseFence(e, dt, anim, scale) {
     if (d <= 0.02 && Math.abs(dh) < 0.05) {
       anim.stepV = 0;
       if (b.phase === 'step') {
-        b.phase = 'up';
+        // (arrivée : elle se pose d'aplomb — sabots replacés, voir RealSheepAnim.footLock — avant de se dresser ; dressée
+        // depuis le milieu d'un pas, ses postérieurs glissaient de 19 cm)
+        b.phase = 'settle';
         b.t = 0;
       } else {
         e.goatBrowse = null;
         e.timer = 2 + Math.random() * 3;
         return null;
       }
+    }
+    return b;
+  }
+  if (b.phase === 'settle') {
+    e.heading = b.heading;
+    e.root.rotation.y = e.heading;
+    e.timer = Math.max(e.timer, 3);
+    const moveW = (anim.w?.walk ?? 0) + (anim.w?.trot ?? 0) + (anim.w?.run ?? 0);
+    const square = !anim.stepL && !anim.lockAng?.some((x) => Math.abs(x) > 0.03);
+    if ((b.t > 0.35 && moveW < 0.04 && square) || b.t > 2.5) {
+      b.phase = 'up';
+      b.t = 0;
     }
     return b;
   }

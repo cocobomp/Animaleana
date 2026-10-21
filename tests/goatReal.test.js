@@ -366,9 +366,93 @@ describe('au sol', () => {
       md.dispose();
     }
   });
+
+  // Contre-vérification : du clip seul, les postérieurs glissaient pendant qu'elle se dressait (3 à 19 cm).
+  it('dressée puis redescendue : les postérieurs restent posés où ils étaient', () => {
+    const md = goat('alpine');
+    const a = md.anim;
+    md.staticPose('stand');
+    const hind = () => [2, 3].map((k) => {
+      const c = new THREE.Vector3();
+      for (const p of a.solePts[k]) c.add(p.clone().applyMatrix4(md.legs[k].paw.matrixWorld));
+      return c.multiplyScalar(1 / a.solePts[k].length);
+    });
+    for (let i = 0; i < 30; i++) a.update(1 / 30, st());
+    const start = hind();
+    let drift = 0;
+    for (let i = 0; i < 240; i++) {
+      a.update(1 / 30, st({ posture: i < 160 ? 'rear' : 'stand' }));
+      md.root.updateMatrixWorld(true);
+      hind().forEach((c, j) => { drift = Math.max(drift, Math.hypot(c.x - start[j].x, c.z - start[j].z)); });
+      for (const k of [2, 3]) expect(soleLow(md, k)).toBeGreaterThan(-0.006);
+    }
+    expect(drift).toBeLessThan(0.02);
+    md.dispose();
+  });
 });
 
 describe('os et sabots', () => {
+  // Contre-vérification : le chevreau qui broute — sa tête sautait sous le poitrail pendant une image, toutes les ~19
+  // images (21 à 23 cm) : l'encolure relevait le museau tantôt vers l'avant, tantôt vers l'arrière.
+  it.each(['alpine', 'saanen'])('chevreau %s qui broute : la tête ne saute jamais d\'une image à l\'autre', (b) => {
+    const md = goat(b, { kid: true });
+    md.staticPose('stand');
+    const m = new THREE.Vector3();
+    let prev = null;
+    let jump = 0;
+    for (let i = 0; i < 600; i++) {
+      md.anim.update(1 / 30, st({ action: 'graze' }));
+      md.root.updateMatrixWorld(true);
+      md.head.localToWorld(m.copy(md.mouth));
+      if (prev && i > 60) jump = Math.max(jump, m.distanceTo(prev));
+      prev = (prev ?? new THREE.Vector3()).copy(m);
+    }
+    expect(jump).toBeLessThan(0.03);
+    md.dispose();
+  });
+
+  // Contre-vérification : à l'arrêt, une patte sautait de 12,7 cm en une image et un sabot glissait de 19 cm.
+  it('arrêtée depuis le pas : aucune patte ne saute, aucun sabot ne glisse, elle finit d\'aplomb', () => {
+    const md = goat('alpine');
+    md.staticPose('stand');
+    const dt = 1 / 30;
+    let v = 0.9;
+    let prev = null;
+    let jump = 0;
+    const slide = [0, 0, 0, 0];
+    const inv = new THREE.Matrix4();
+    const soles = () => md.legs.map((l, k) => {
+      let lo = Infinity;
+      const c = new THREE.Vector3();
+      for (const p of md.anim.solePts[k]) {
+        const q = p.clone().applyMatrix4(l.paw.matrixWorld);
+        c.add(q);
+        lo = Math.min(lo, q.y);
+      }
+      return { c: c.multiplyScalar(1 / md.anim.solePts[k].length), lo };
+    });
+    for (let i = 0; i < 240; i++) {
+      if (i > 60) v *= Math.exp(-3 * dt);
+      const moving = v > 0.06;
+      md.anim.update(dt, st({ v: moving ? v : 0, moving }));
+      if (moving) md.root.position.z += v * dt;
+      md.root.updateMatrixWorld(true);
+      inv.copy(md.root.matrixWorld).invert();
+      const f = soles().map((x) => ({ ...x, l: x.c.clone().applyMatrix4(inv) }));
+      if (!moving && prev) {
+        for (let l = 0; l < 4; l++) {
+          jump = Math.max(jump, f[l].l.distanceTo(prev[l].l));
+          if (prev[l].lo < 0.006 && f[l].lo < 0.006) slide[l] += Math.hypot(f[l].c.x - prev[l].c.x, f[l].c.z - prev[l].c.z);
+        }
+      }
+      prev = f;
+    }
+    expect(jump).toBeLessThan(0.06);
+    expect(Math.max(...slide)).toBeLessThan(0.025);
+    expect(Math.max(...md.anim.lockAng.map(Math.abs))).toBeLessThan(0.04);
+    md.dispose();
+  }, 60000);
+
   it('aucun os ne s\'étire : dans tous les clips, chaque os garde sa distance à son parent', () => {
     for (const b of ['alpine', 'col_noir']) {
       for (const o of [{}, { kid: true }]) {

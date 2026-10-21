@@ -405,6 +405,108 @@ describe('os et sabots', () => {
       md.dispose();
     }
   }, 120000);
+
+  // Centre des soles de chaque pied (monde) et sa hauteur la plus basse.
+  const soles = (md) => md.legs.map((l, k) => {
+    let lo = Infinity;
+    const c = new THREE.Vector3();
+    for (const p of md.anim.solePts[k]) {
+      const q = p.clone().applyMatrix4(l.paw.matrixWorld);
+      c.add(q);
+      lo = Math.min(lo, q.y);
+    }
+    return { c: c.multiplyScalar(1 / md.anim.solePts[k].length), lo };
+  });
+
+  // Contre-vérification : l'agneau qui gambadait en courant jouait sa gambade sur place pendant que le corps avançait
+  // (sabots qui glissaient comme sur la glace, 53 cm pour 53 cm de chemin).
+  it('agneau et jeune qui gambadent en courant : l\'allure, sabots posés tenus', () => {
+    for (const o of [{ lamb: true }, { young: true }]) {
+      const md = sheep('merinos', o);
+      md.staticPose('stand');
+      const dt = 1 / 60;
+      let prev = null;
+      const dist = [0, 0, 0, 0];
+      const stance = [0, 0, 0, 0];
+      const v = 3.2;
+      for (let i = 0; i < 240; i++) {
+        md.anim.update(dt, st({ v, moving: true, play: true }));
+        md.root.position.z += v * dt;
+        md.root.updateMatrixWorld(true);
+        const f = soles(md);
+        if (prev && i > 60) {
+          for (let l = 0; l < 4; l++) {
+            if (prev[l].lo < 0.008 && f[l].lo < 0.008) {
+              dist[l] += Math.hypot(f[l].c.x - prev[l].c.x, f[l].c.z - prev[l].c.z);
+              stance[l] += dt;
+            }
+          }
+        }
+        prev = f;
+      }
+      expect(md.anim.w.lamb_play ?? 0, JSON.stringify(o)).toBeLessThan(0.02);
+      const slip = Math.max(...dist.map((d, l) => (stance[l] > 0.05 ? d / stance[l] / v : 0)));
+      expect(slip, `${JSON.stringify(o)} glissement`).toBeLessThan(0.05);
+      md.dispose();
+    }
+  }, 120000);
+
+  // Contre-vérification : à chaque arrêt, une patte sautait de 12 cm en une image (correction des sabots tenus coupée
+  // net) puis un sabot glissait jusqu'à 19 cm (l'allure qui s'effaçait était jouée à sa vitesse naturelle, sur place).
+  it.each([['merinos', 0.9], ['suffolk', 0.9], ['merinos', 4.5]])('%s arrêté depuis %s m/s : aucune patte ne saute, aucun sabot ne glisse', (b, v0) => {
+    const md = sheep(b);
+    md.staticPose('stand');
+    const dt = 1 / 30;
+    let v = v0;
+    let prev = null;
+    let prevL = null;
+    let jump = 0;
+    const slide = [0, 0, 0, 0];
+    const inv = new THREE.Matrix4();
+    for (let i = 0; i < 240; i++) {
+      if (i > 60) v *= Math.exp(-3 * dt);
+      const moving = v > 0.06;
+      md.anim.update(dt, st({ v: moving ? v : 0, moving }));
+      if (moving) md.root.position.z += v * dt;
+      md.root.updateMatrixWorld(true);
+      const f = soles(md);
+      inv.copy(md.root.matrixWorld).invert();
+      const L = f.map((x) => x.c.clone().applyMatrix4(inv));
+      if (!moving && prev) {
+        for (let l = 0; l < 4; l++) {
+          jump = Math.max(jump, L[l].distanceTo(prevL[l]));
+          if (prev[l].lo < 0.006 && f[l].lo < 0.006) slide[l] += Math.hypot(f[l].c.x - prev[l].c.x, f[l].c.z - prev[l].c.z);
+        }
+      }
+      prev = f;
+      prevL = L;
+    }
+    expect(jump, `${b} saut d'une patte à l'arrêt`).toBeLessThan(0.06);
+    expect(Math.max(...slide), `${b} glissement à l'arrêt`).toBeLessThan(0.025);
+    // (et il finit d'aplomb : plus aucune correction sur les membres)
+    expect(Math.max(...md.anim.lockAng.map(Math.abs))).toBeLessThan(0.04);
+    md.dispose();
+  }, 120000);
+
+  // Contre-vérification : l'agneau qui broute — la tête sautait sous le poitrail une image puis revenait (l'encolure
+  // relevait le museau tantôt vers l'avant, tantôt vers l'arrière).
+  it('agneau qui broute : la tête ne saute jamais d\'une image à l\'autre', () => {
+    const md = sheep('merinos', { lamb: true });
+    md.staticPose('stand');
+    const m = new THREE.Vector3();
+    let prev = null;
+    let jump = 0;
+    for (let i = 0; i < 400; i++) {
+      md.anim.update(1 / 30, st({ action: 'graze' }));
+      md.root.updateMatrixWorld(true);
+      md.head.localToWorld(m.copy(md.mouth));
+      if (prev && i > 60) jump = Math.max(jump, m.distanceTo(prev));
+      prev = (prev ?? new THREE.Vector3()).copy(m);
+    }
+    expect(jump).toBeLessThan(0.03);
+    expect(md.anim.noseLift).toBeLessThanOrEqual(0); // (toujours relevée vers l'avant)
+    md.dispose();
+  });
 });
 
 describe('animation', () => {

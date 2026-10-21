@@ -79,7 +79,18 @@ function cowOf(c, i) {
 }
 
 function play(md, c, s) {
-  if (!md.realCow) return;
+  if (!md.realCow) {
+    // (AVANT : la vache procédurale, animée par son animate() comme en jeu — allure, tête baissée, couchée)
+    if (!c.clip || !md.animate) return;
+    const moving = ['walk', 'trot', 'run', 'calf_play'].includes(c.clip);
+    const st = { moving, gallop: c.clip === 'run', v: { walk: 1.2, trot: 2.5, run: 5, calf_play: 3 }[c.clip] ?? 0,
+      sleeping: ['lie', 'ruminate', 'sleep', 'lie_down'].includes(c.clip), headDown: ['graze', 'eat', 'suckle'].includes(c.clip) ? 0.9 : 0, sad: 0, time: 0 };
+    for (let k = 0; k < (c.frames ?? 60); k++) {
+      st.time = k / 30;
+      md.animate(1 / 30, st);
+    }
+    return;
+  }
   const a = md.anim;
   if (c.lod) md.setLod(1);
   if (!c.clip) return;
@@ -154,14 +165,20 @@ window.planche = {
       if (c.mother) {
         // (veau qui tète : sa mère, la mamelle pleine, et lui à sa place, comme en jeu — cowReal.js calfNurseSpot)
         const m = cowOf({ breed: c.breed, color: c.color, udder: 1 }, i + 100);
-        m.md.anim.staticPose('stand');
+        m.md.anim?.staticPose('stand');
         const mg = new THREE.Group();
         mg.scale.setScalar(m.s);
         mg.add(m.md.root);
         scene.add(mg);
         extra.push(mg);
+        if (!md.realCow) {
+          // (AVANT : le veau procédural à côté de sa mère, tête baissée)
+          sg.position.set(0.55, 0, 0.1);
+          sg.rotation.y = Math.PI;
+        }
         const mother = { position: new THREE.Vector3(), heading: 0, scale: m.s, model: m.md };
         const kid = { scale: s, model: md, nurseSide: 1 };
+        if (md.realCow) {
         const spot = new THREE.Vector3();
         sg.rotation.y = calfNurseSpot(kid, mother, spot);
         sg.position.copy(spot);
@@ -180,6 +197,7 @@ window.planche = {
         sg.updateMatrixWorld(true);
         const mw = md.anim.mouthW;
         if (mw) lows.push({ i, teat: mw.distanceTo(teat) });
+        }
       }
       md.root.updateMatrixWorld(true);
       // (sabot le plus bas et ventre le plus bas, pour la mesure)

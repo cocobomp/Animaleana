@@ -180,6 +180,7 @@ const COLOR_F = /* glsl */ `
   float n2 = cNoise(p * 9.0 + 5.0);
   vec3 col = cBase;
   float pat = cStyle.x;
+  float lun = 0.0;
   if (pat > 0.5 && pat < 1.5) {
     // Pie : taches du masque (la photo de la vache) ou calculées (taureau), seuil de la race, bord net un peu dentelé.
     float f;
@@ -206,7 +207,8 @@ const COLOR_F = /* glsl */ `
       // Lunettes (Normande) : le tour des yeux foncé, bord irrégulier.
       vec3 e = vec3(abs(p.x), p.y, p.z);
       float dE = distance(e, cEye.xyz) + (n2 - 0.5) * cEye.w * 0.4;
-      col = mix(col, cTan, head * (1.0 - ear) * (1.0 - smoothstep(cEye.w * 0.75, cEye.w, dE)) * cPie.y);
+      lun = head * (1.0 - ear) * (1.0 - smoothstep(cEye.w * 0.75, cEye.w, dE)) * cPie.y;
+      col = mix(col, cTan, lun);
     }
   } else if (pat > 1.5) {
     // Hereford : rouge ; tête, crête de l'encolure, fanon et poitrail, ventre, bas des pattes et toupillon blancs.
@@ -226,7 +228,8 @@ const COLOR_F = /* glsl */ `
   // Peau : nez (couleur de la race) et intérieur des oreilles (rosé, assombri sur une robe sombre).
   float lc = dot(col, LUM);
   vec3 earSkin = mix(col * 1.25 + vec3(0.03, 0.01, 0.01), vec3(0.78, 0.52, 0.48), smoothstep(0.1, 0.5, lc));
-  col = mix(col, mix(cNose, earSkin, ear), skin);
+  // (paupières des lunettes de la Normande : foncées comme le tour des yeux, pas roses)
+  col = mix(col, mix(mix(cNose, cTan, lun), earSkin, ear), skin);
   col = mix(col, cUdder, udder);
   col = mix(col, mix(cHorn, cHornTip, smoothstep(0.5, 1.0, vCAux.z)), horn);
   col = mix(col, cHoof, hoof * (1.0 - horn));

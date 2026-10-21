@@ -429,10 +429,11 @@ export const LIVESTOCK_IDS = SPECIES_IDS.filter((sid) => SPECIES[sid].livestock)
 // animal perdu, clients des métiers, concurrents, bâtiments et objets dédiés, quêtes…
 // Pour ajouter une espèce quand son modèle réaliste est en ligne : l'ajouter ici, c'est tout
 // (cat et rabbit sont là, sheep et goat aussi — moutons et chèvres Rocketbox, src/game/models/sheepReal.js et
-// goatReal.js ; bientôt cow).
+// goatReal.js —, et cow — vache de Lyndon Daniels et taureau Rocketbox, src/game/models/cowReal.js).
+// Toutes les espèces du jeu sont maintenant proposées.
 // Une espèce absente de la liste n'est pas retirée du jeu : SPECIES la garde, et les animaux déjà là
 // (anciennes parties) continuent de tout faire (soins, laine et lait, petits, bâtiments, objets, véto).
-export const OFFERED_SPECIES = new Set(['horse', 'dog', 'cat', 'rabbit', 'sheep', 'goat']);
+export const OFFERED_SPECIES = new Set(['horse', 'dog', 'cat', 'rabbit', 'sheep', 'goat', 'cow']);
 
 /** Cette espèce est-elle proposée comme nouvel animal ? */
 export const isOffered = (id) => OFFERED_SPECIES.has(id);

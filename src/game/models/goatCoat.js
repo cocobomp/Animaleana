@@ -190,6 +190,8 @@ const COLOR_F = /* glsl */ `
   float d = mix(detail, sqrt(detail), smoothstep(0.35, 0.8, l) * 0.7);
   // (chevreau : poil plus doux, grain adouci)
   d = mix(d, sqrt(d), gStyle.z * 0.5);
+  // (face claire — saanen, bandes de la poitevine — : les ombres de la photo grisaient le chanfrein, comme sale)
+  d = mix(d, max(d, 0.93), head * smoothstep(0.55, 0.85, l) * 0.85);
   col = min(col * d, vec3(1.0));
   // Yeux (texels très sombres autour de la place des yeux) et naseaux : couleurs du fichier.
   float eyeZone = (1.0 - smoothstep(0.025, 0.045, abs(p.z - gHead.x))) * (1.0 - smoothstep(0.03, 0.05, abs(p.y - gHead.y)));
@@ -242,7 +244,7 @@ export function goatMaterial(src, uniforms) {
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`);
   };
-  mat.customProgramCacheKey = () => 'goat-coat-v1';
+  mat.customProgramCacheKey = () => 'goat-coat-v2';
   mat.userData.goatUniforms = uniforms;
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (sh) => {
@@ -254,70 +256,4 @@ export function goatMaterial(src, uniforms) {
   return { mat, depth };
 }
 
-// ------------------------------------------------------------------ poil long (mèches en cartes)
-
-let strandTex = null;
-
-/** Mèches de poil (toile 32 × 128, partagée) : traits verticaux effilés, alpha pour les bords. */
-function hairStrands() {
-  if (strandTex) return strandTex;
-  const W = 32;
-  const H = 128;
-  const c = document.createElement('canvas');
-  c.width = W;
-  c.height = H;
-  const ctx = c.getContext('2d');
-  // (graines fixes : la même toile à chaque fois)
-  let s = 7;
-  const rnd = () => {
-    s = (s * 16807) % 2147483647;
-    return s / 2147483647;
-  };
-  // (mèches effilées de longueurs inégales qui se chevauchent : serrées à la racine, elles couvrent le haut de la carte
-  // sans bord droit)
-  for (let k = 0; k < 64 && ctx?.beginPath; k++) {
-    const x0 = rnd() * W;
-    const len = H * (0.4 + 0.6 * rnd());
-    const w = 1.4 + rnd() * 2.2;
-    const shade = Math.round(140 + rnd() * 115);
-    const sway = (rnd() - 0.5) * 7;
-    ctx.beginPath();
-    ctx.moveTo(x0 - w, 0);
-    ctx.quadraticCurveTo(x0 + sway, len * 0.55, x0 + sway * 0.6, len);
-    ctx.quadraticCurveTo(x0 + sway, len * 0.55, x0 + w, 0);
-    ctx.closePath();
-    ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
-    ctx.fill();
-  }
-  strandTex = new THREE.CanvasTexture(c);
-  strandTex.userData.shared = true;
-  strandTex.colorSpace = THREE.SRGBColorSpace;
-  return strandTex;
-}
-
-/**
- * Matière des mèches du poil long (cartes liées au squelette, goatReal.js hairCards) : couleur des deux zones de la
- * robe (attribut hairSide : 0 → hA, 1 → hB), grain des mèches, bords découpés (alphaTest) ; couchée, les mèches se
- * replient contre le corps (attribut hairTop, uniforme gStyle.w).
- */
-export function goatHairMaterial(uniforms, colA, colB) {
-  const hu = { hA: { value: new THREE.Color(colA) }, hB: { value: new THREE.Color(colB) } };
-  const mat = new THREE.MeshStandardMaterial({ map: hairStrands(), alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.9, metalness: 0, name: 'goat_hair' });
-  mat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, uniforms, hu);
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec3 hairTop;\nattribute float hairSide;\nuniform vec4 gStyle;\nvarying float vHSide;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHSide = hairSide;\ntransformed = hairTop + (transformed - hairTop) * (1.0 - 0.75 * gStyle.w);');
-    sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 hA;\nuniform vec3 hB;\nvarying float vHSide;')
-      .replace('#include <map_fragment>', `#include <map_fragment>
-{
-  // (la toile est grise : elle ne donne que le grain des mèches et leurs bords)
-  float g = diffuseColor.r;
-  diffuseColor.rgb = mix(hA, hB, vHSide) * (0.62 + 0.5 * g);
-}`);
-  };
-  mat.customProgramCacheKey = () => 'goat-hair-v1';
-  mat.userData.hairUniforms = hu;
-  return mat;
-}
+// (poil long en mèches : faites et peintes par ruminantHair.js, commun au mouton et à la chèvre)

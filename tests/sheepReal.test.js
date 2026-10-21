@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import * as THREE from 'three';
-import { buildRealSheepModel, realSheepBase, pickSheepGait, REAL_SHEEP_KEY, sheepJoints, realSheepPose, animateRealSheep, lambTeatPoint } from '../src/game/models/sheepReal.js';
+import { buildRealSheepModel, realSheepBase, pickSheepGait, REAL_SHEEP_KEY, sheepJoints, realSheepPose, animateRealSheep, lambTeatPoint, skinPoint } from '../src/game/models/sheepReal.js';
 import { buildAnimalModel } from '../src/game/models/animalModel.js';
 import { buildAccessories, removeAccessories } from '../src/game/models/salon.js';
 import { SHEEP_BUILDS, sheepBuild, sheepFleece, shornWeight, sheepLookOf, sheepBreedOfLook } from '../src/sim/sheepLook.js';
@@ -130,7 +130,12 @@ describe('races et agneaux', () => {
     expect(nezNoir.hornSize).toBeGreaterThan(0); // (cornes en spirale, brebis comprises)
     expect(sheepBuild(lookOf('islandais_mouton'), { breed: 'islandais_mouton' }).long).toBeGreaterThan(0.1);
     const merinos = sheepBuild(lookOf('merinos'), { breed: 'merinos', sex: 'f' });
-    expect(merinos.fleece).toBeGreaterThan(sheepBuild(lookOf('cheviot'), { breed: 'cheviot' }).fleece + 0.5);
+    // (mérinos très laineux : toison gonflée de près de 10 cm, contre aucune pour le cheviot à la toison nette ; le
+    // mérinos australien encore plus)
+    const chev = sheepBuild(lookOf('cheviot'), { breed: 'cheviot' });
+    expect(merinos.puff).toBeGreaterThan(chev.puff + 0.08);
+    expect(merinos.fleece).toBeGreaterThan(chev.fleece);
+    expect(sheepBuild(lookOf('merinos_australien'), { breed: 'merinos_australien' }).puff).toBeGreaterThan(merinos.puff);
     expect(merinos.hornSize).toBe(0);
     expect(sheepBuild(lookOf('merinos'), { breed: 'merinos', sex: 'm' }).hornSize).toBeGreaterThan(1);
     const cheviot = sheepBuild(lookOf('cheviot'), { breed: 'cheviot' });
@@ -306,9 +311,13 @@ describe('au sol', () => {
           const lo = lowest(md);
           // (laine longue : le shader la fait pendre sous le ventre, le corps est relevé d'autant — mesuré sans elle)
           const skirt = md.anim.skirt * Math.max(0, 1 - Math.max(0, md.anim.shorn));
+          // (volume de la toison : gonflée par le shader, comptée dans les points du ventre — skinPoint)
+          const inv = md.root.matrixWorld.clone().invert();
+          const belly = Math.min(...md.anim.bodyPts.map((pt) => skinPoint(pt, md.anim.shorn, inv, md.anim.puffNow ?? 0))) * md.size;
           // (les chèvres couchées de la page de comparaison flottaient au-dessus de l'herbe)
           expect(lo, `${b} ${JSON.stringify(o)} ${posture}`).toBeGreaterThan(-0.03);
-          expect(lo - skirt, `${b} ${JSON.stringify(o)} ${posture}`).toBeLessThan(0.02);
+          expect(Math.min(lo, belly) - skirt, `${b} ${JSON.stringify(o)} ${posture}`).toBeLessThan(0.02);
+          expect(belly - skirt, `${b} ${JSON.stringify(o)} ${posture} toison`).toBeGreaterThan(-0.02);
           md.dispose();
         }
       }

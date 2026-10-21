@@ -19,28 +19,32 @@ import { lifeStage } from './animal.js';
  * couvre le front et les joues (mérinos) ; legWool : laine qui descend sur les pattes ; knees : genoux, jarrets et pieds
  * de la couleur de la tête (nez noir du Valais) ; face, leg, hoof : couleurs de la tête nue, du bas des pattes et des
  * onglons (null : celles de la robe, look.secondary) ; horns : 'ram' (béliers seulement), 'both' (béliers et brebis,
- * plus petites), null (sans cornes) ; hornK : taille des cornes ; hornColor.
+ * plus petites), null (sans cornes) ; hornK : taille des cornes ; hornColor ; puff : volume de la toison pleine (m, gonflée
+ * le long de la normale : le mérinos est nettement plus gros que le cheviot) ; lumps, lumpFreq : grosses bosses de la
+ * toison (0 à 1, par mètre) ; folds : plis du cou (m, mérinos) ; forelock : toupet blanc bouclé sur le front (nez noir).
  */
 const ONE = {
   size: 1, legs: 1, head: 1, ears: 1, earUp: 0, fleece: 0.2, curl: 0, long: 0, headWool: 0, legWool: 0, knees: false,
   face: null, leg: null, hoof: 0x3a302a, horns: null, hornK: 1, hornColor: 0xc9b89a,
+  puff: 0, lumps: 0.3, lumpFreq: 9, folds: 0, forelock: 0,
 };
 export const SHEEP_BUILDS = {
-  // (très laineux : toison dense jusque sur le front et le haut des pattes, face et pattes blanches ; béliers à cornes
-  // en spirale)
-  merinos: { fleece: 0.75, curl: 0.25, headWool: 0.75, legWool: 0.6, face: 0xefe7d8, leg: 0xe9dfcd, hoof: 0x8c7c68, horns: 'ram', hornK: 1.15, head: 0.97, legs: 0.97 },
+  // (très laineux : grosse toison dense jusque sur le front et le haut des pattes, plis du cou, face et pattes blanches ;
+  // béliers à cornes en spirale)
+  merinos: { fleece: 0.15, puff: 0.095, lumps: 0.16, lumpFreq: 5, folds: 0.022, curl: 0.25, headWool: 0.9, legWool: 0.75, face: 0xefe7d8, leg: 0xe9dfcd, hoof: 0x8c7c68, horns: 'ram', hornK: 1.15, head: 0.97, legs: 0.97 },
   // (tête et pattes noires, sans laine sur la tête, grandes oreilles tombantes ; toison courte)
-  suffolk: { fleece: 0.08, face: 0x221c18, leg: 0x221c18, hoof: 0x14110f, legs: 1.07, head: 1.1, ears: 1.25, earUp: -0.35 },
+  suffolk: { fleece: 0.0, puff: 0.02, face: 0x221c18, leg: 0x221c18, hoof: 0x14110f, legs: 1.07, head: 1.1, ears: 1.25, earUp: -0.35 },
   // (tout petit, souvent noir ; béliers à cornes en spirale)
-  ouessant: { size: 0.95, fleece: 0.22, face: null, leg: null, hoof: 0x14100e, horns: 'ram', hornK: 0.85, hornColor: 0x7d705f, legs: 0.95, head: 1.1 },
-  // (laine bouclée, face, oreilles, genoux, jarrets et pieds noirs ; cornes en spirale, béliers et brebis)
-  nez_noir: { fleece: 0.45, curl: 1, headWool: 0.35, knees: true, face: 0x1a1614, leg: 0xede5d6, hoof: 0x14110f, horns: 'both', hornK: 1.2, hornColor: 0x8a7b66, head: 1.04 },
+  ouessant: { size: 0.95, fleece: 0.1, puff: 0.03, face: null, leg: null, hoof: 0x14100e, horns: 'ram', hornK: 0.85, hornColor: 0x7d705f, legs: 0.95, head: 1.1 },
+  // (laine bouclée en grosses mèches, face, oreilles, genoux, jarrets et pieds noirs, toupet blanc bouclé sur le front ;
+  // cornes en spirale, béliers et brebis)
+  nez_noir: { fleece: 0.12, puff: 0.065, lumps: 0.3, lumpFreq: 12, curl: 1, headWool: 0, forelock: 1, knees: true, face: 0x1a1614, leg: 0xede5d6, hoof: 0x14110f, horns: 'both', hornK: 1.2, hornColor: 0x8a7b66, head: 1.04 },
   // (laine longue en mèches qui pendent ; cornes, béliers et brebis)
-  islandais_mouton: { fleece: 0.45, long: 0.15, horns: 'both', hornK: 1.0, hornColor: 0xb9a786, legs: 0.95, face: null, leg: null, hoof: 0x4a3e34 },
-  // (toison très dense, mérinos plus grand ; béliers à cornes en spirale)
-  merinos_australien: { fleece: 0.85, curl: 0.3, headWool: 0.6, legWool: 0.55, face: 0xf0e8d9, leg: 0xeae0ce, hoof: 0x8c7c68, horns: 'ram', hornK: 1.25 },
-  // (face blanche nue, oreilles dressées, pattes blanches nues ; toison courte, sans cornes)
-  cheviot: { fleece: 0.0, face: 0xf3eee5, leg: 0xefe9df, hoof: 0x3a2f28, legs: 1.05, head: 1.03, ears: 1.12, earUp: 0.35 },
+  islandais_mouton: { fleece: 0.1, puff: 0.04, lumps: 0, long: 0.17, horns: 'both', hornK: 1.0, hornColor: 0xb9a786, legs: 0.95, face: null, leg: null, hoof: 0x4a3e34 },
+  // (toison encore plus dense et volumineuse, mérinos plus grand, plis du cou marqués ; béliers à cornes en spirale)
+  merinos_australien: { fleece: 0.2, puff: 0.115, lumps: 0.12, lumpFreq: 4.5, folds: 0.03, curl: 0.3, headWool: 0.75, legWool: 0.7, face: 0xf0e8d9, leg: 0xeae0ce, hoof: 0x8c7c68, horns: 'ram', hornK: 1.25, size: 1.04 },
+  // (face blanche nue, oreilles dressées bien visibles, pattes blanches nues ; toison courte et nette, sans cornes)
+  cheviot: { fleece: -0.12, puff: 0, face: 0xf5f1ea, leg: 0xf1ece3, hoof: 0x3a2f28, legs: 1.05, head: 1.03, ears: 1.25, earUp: 0.6 },
 };
 
 /** Agneau (stade « bébé ») et jeune : tête plus grosse, pattes plus longues, toison courte et bouclée. */
@@ -79,6 +83,8 @@ export function sheepBuild(look = {}, { breed = null, stage = 'adult', sex = 'f'
     B.curl = Math.max(B.curl, LAMB.curl * k);
     B.long *= 1 - k * 0.8;
     B.headWool *= 1 - k * 0.5;
+    B.puff *= 1 - k * 0.85;
+    B.folds *= 1 - k;
   }
   // Couleurs : laine = robe ; tête et pattes = celles de la race, ou la seconde couleur de la robe (marques des
   // « points » du suffolk et du nez noir, mouton noir d'Ouessant, islandais moorit, agneau croisé).

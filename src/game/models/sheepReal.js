@@ -20,6 +20,7 @@ import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
 import { sheepBuild, sheepFleece, shornWeight } from '../../sim/sheepLook.js';
 import { makeSheepUniforms, setSheepCoat, sheepMaterial, hornMaterial } from './sheepCoat.js';
+import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from './ruminantHair.js';
 
 /** Clé du GLB (assets.js) : jamais « sheep » (gltfAnimal.js le prendrait pour un animal GLB générique). */
 export const REAL_SHEEP_KEY = 'sheep_real';
@@ -227,9 +228,12 @@ export function realSheepBase(gltf) {
     };
   }
 
+  // Direction du volume de la toison : la normale lissée sur 7 cm (gonflée le long de la normale brute, la toison
+  // épaisse du mérinos faisait des arêtes et des facettes aux épaules et aux hanches).
+  const puffN = smoothNormals(pos, nrm, n, 0.07);
   const base = {
     names, index, parent, heads, rotW, nb,
-    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, trunk, index: idx, lodIndex, count: n, material: master.material, domBone },
+    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, trunk, puffN, index: idx, lodIndex, count: n, material: master.material, domBone },
     clips: cleanClips(gltf.animations),
     natural,
     legChains,
@@ -240,6 +244,51 @@ export function realSheepBase(gltf) {
   };
   gltf.userData.sheepBase = base;
   return base;
+}
+
+/** Normales moyennées (pondérées par la distance) sur un rayon r autour de chaque sommet (grille de voisinage). */
+export function smoothNormals(pos, nrm, n, r) {
+  const grid = new Map();
+  const key = (x, y, z) => `${x}|${y}|${z}`;
+  for (let i = 0; i < n; i++) {
+    const k = key(Math.floor(pos[i * 3] / r), Math.floor(pos[i * 3 + 1] / r), Math.floor(pos[i * 3 + 2] / r));
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(i);
+  }
+  const out = new Float32Array(n * 3);
+  const r2 = r * r;
+  for (let i = 0; i < n; i++) {
+    const x = pos[i * 3];
+    const y = pos[i * 3 + 1];
+    const z = pos[i * 3 + 2];
+    const gx = Math.floor(x / r);
+    const gy = Math.floor(y / r);
+    const gz = Math.floor(z / r);
+    let ax = 0;
+    let ay = 0;
+    let az = 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+      for (const j of grid.get(key(gx + a, gy + b, gz + c)) ?? []) {
+        const dx = pos[j * 3] - x;
+        const dy = pos[j * 3 + 1] - y;
+        const dz = pos[j * 3 + 2] - z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > r2) continue;
+        // (pas de l'autre côté d'une paroi : normales opposées ignorées — creux de l'aisselle, entre les cuisses)
+        const dot = nrm[i * 3] * nrm[j * 3] + nrm[i * 3 + 1] * nrm[j * 3 + 1] + nrm[i * 3 + 2] * nrm[j * 3 + 2];
+        if (dot < 0) continue;
+        const w = 1 - d2 / r2;
+        ax += nrm[j * 3] * w;
+        ay += nrm[j * 3 + 1] * w;
+        az += nrm[j * 3 + 2] * w;
+      }
+    }
+    const l = Math.hypot(ax, ay, az) || 1;
+    out[i * 3] = ax / l;
+    out[i * 3 + 1] = ay / l;
+    out[i * 3 + 2] = az / l;
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ gabarit (une fois par race et stade)
@@ -329,6 +378,7 @@ function shapeFor(base, B) {
     skinWeight: new THREE.BufferAttribute(P.sw, 4),
     sheepMask: new THREE.BufferAttribute(P.mask, 4),
     sheepTrunk: new THREE.BufferAttribute(P.trunk, 1),
+    sheepPuffN: new THREE.BufferAttribute(P.puffN, 3),
   };
   const morphP = new THREE.BufferAttribute(P.dPos, 3);
   const morphN = new THREE.BufferAttribute(P.dNrm, 3);
@@ -404,18 +454,30 @@ export function measureSheep(base, pos, H) {
     if (pos[i * 3 + 1] > skull.y) skull.set(0, pos[i * 3 + 1], z);
   }
   if (!Number.isFinite(skull.y)) skull.set(0, headY, hh.z);
-  // yeux : les sommets portés par l'os « eyes » (sinon à mi-chemin entre la tête et le nez)
+  // yeux : les sommets portés par l'os « eyes » (sinon à mi-chemin entre la tête et le nez) ; l'œil gauche (x > 0) :
+  // centre et rayon (œil dessiné sur les faces sombres, sheepCoat.js)
   const eye = V(0, (skull.y + nose.y) / 2 + 0.01, hh.z + (nose.z - hh.z) * 0.38);
+  const eyeL = { c: V(0.06, eye.y, eye.z), r: 0.009 };
   const eyesB = bi('eyes');
   if (eyesB >= 0) {
     let n0 = 0;
     const acc = V();
+    const accL = V();
+    const ptsL = [];
     for (let i = 0; i < n; i++) {
       if (dom[i] !== eyesB) continue;
       acc.add(_v.set(0, pos[i * 3 + 1], pos[i * 3 + 2]));
       n0++;
+      if (pos[i * 3] > 0) {
+        ptsL.push(V(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]));
+        accL.add(ptsL[ptsL.length - 1]);
+      }
     }
     if (n0 > 3) eye.copy(acc.multiplyScalar(1 / n0));
+    if (ptsL.length > 1) {
+      eyeL.c.copy(accL.multiplyScalar(1 / ptsL.length));
+      eyeL.r = Math.max(0.006, Math.min(0.014, Math.max(...ptsL.map((q) => q.distanceTo(eyeL.c)))));
+    }
   }
   // soles : sommets des onglons de chaque membre, les plus bas, et le bout des onglons (le plus en avant)
   const soles = base.legChains.map((c) => {
@@ -463,11 +525,44 @@ export function measureSheep(base, pos, H) {
   let tailTip = H[tailB]?.clone() ?? V(0, topY, hipZ - 0.2);
   for (let i = 0; i < n; i++) if (dom[i] === tailB && pos[i * 3 + 2] < tailTip.z) tailTip = V(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
   return {
-    topY, bellyY, hipZ, shZ, halfW, headY, nose, noseZ, skull, eye, soles,
+    topY, bellyY, hipZ, shZ, halfW, headY, nose, noseZ, skull, eye, eyeL, soles,
     collar: { center, axis: rz, rx: ex, ry: ey, basis: new THREE.Matrix4().makeBasis(rx, ry, rz) },
     tailTip,
     kneeY: [H[bi('metacarpusL')].y, H[bi('metatarsusL')].y, H[bi('toesL')].y],
   };
+}
+
+/**
+ * Laine longue (islandais) : des mèches effilées pendent des flancs, du dos, de la croupe et de l'encolure (pas sous le
+ * ventre), plus longues en bas ; géométrie partagée par gabarit et longueur (voir ruminantHair.js). null sans laine longue.
+ */
+function sheepLocks(base, S, B) {
+  if (!(B.long > 0.005)) return null;
+  const key = B.long.toFixed(3);
+  S.locks ??= new Map();
+  if (S.locks.has(key)) return S.locks.get(key);
+  const P = base.prim;
+  const n = P.count;
+  const pos = S.pos;
+  const M = S.measure;
+  const Hh = Math.max(0.05, M.topY - M.bellyY);
+  const cand = [];
+  for (let i = 0; i < n; i++) {
+    if (P.mask[i * 4] < 0.6 || P.mask[i * 4 + 1] > 0.2 || P.mask[i * 4 + 2] > 0.2 || P.trunk[i] < 0.75) continue;
+    const hl = (pos[i * 3 + 1] - M.bellyY) / Hh;
+    if (hl < -0.25 || P.nrm[i * 3 + 1] < -0.55) continue;
+    cand.push({ i, hl });
+  }
+  const picks = spreadLocks(cand, pos, 0.032, 560).map(({ i, hl }) => ({
+    i,
+    len: B.long * (0.75 + 0.55 * (1 - Math.min(1, Math.max(0, hl)))) * (0.85 + 0.3 * lockHash(i + 5)),
+    w: 0.075 + 0.025 * lockHash(i + 9),
+    back: pos[i * 3 + 2] < M.hipZ + 0.05 ? 0.4 : 0.1,
+    side: 0,
+  }));
+  const geo = lockCards(picks, { pos, nrm: P.puffN, si: P.si, sw: P.sw }, 0.006);
+  S.locks.set(key, geo);
+  return geo;
 }
 
 // ------------------------------------------------------------------ construction
@@ -562,8 +657,10 @@ export function buildRealSheepModel(look, breedId = null, gltf = null) {
   uniforms.sLand.value.set(M.bellyY, M.topY, M.hipZ, M.shZ);
   uniforms.sKnee.value.set(M.kneeY[0], M.kneeY[1], M.kneeY[2], (M.hipZ + M.shZ) / 2);
   uniforms.sHead.value.set(M.eye.z, M.eye.y, M.noseZ, M.skull.y);
+  uniforms.sEye.value.set(M.eyeL.c.x, M.eyeL.c.y, M.eyeL.c.z, M.eyeL.r);
   const { mat, depth } = sheepMaterial(base.prim.material, uniforms);
-  const hb = { box: new THREE.Box3(), sphere: new THREE.Sphere(), boneBox: S.boneBox, skeleton, meshes: [], anim: null };
+  const hb = { box: new THREE.Box3(), sphere: new THREE.Sphere(), boneBox: S.boneBox, skeleton, meshes: [], anim: null,
+    margin: WOOL_MARGIN + (B.puff ?? 0) * (1 + (B.lumps ?? 0)) + (B.folds ?? 0) + (B.long ?? 0) };
   const mesh = new SheepMesh(S.geo, mat, hb);
   mesh.customDepthMaterial = depth;
   mesh.bind(skeleton, new THREE.Matrix4());
@@ -590,6 +687,20 @@ export function buildRealSheepModel(look, breedId = null, gltf = null) {
     horns.castShadow = true;
     horns.receiveShadow = true;
     headB.add(horns);
+  }
+  // Laine longue (islandais) : mèches en cartes, liées au même squelette, de la couleur de la laine.
+  let locks = null;
+  const lockU = makeLockUniforms();
+  const lockGeo = sheepLocks(base, S, B);
+  if (lockGeo) {
+    const w = new THREE.Color(B.colors.wool);
+    locks = new SheepMesh(lockGeo, lockMaterial(lockU, w, w.clone().multiplyScalar(1.06), 'sheep_locks'), hb);
+    locks.name = 'sheep_locks';
+    locks.bind(skeleton, new THREE.Matrix4());
+    locks.castShadow = false;
+    locks.receiveShadow = true;
+    root.add(locks);
+    hb.meshes.push(locks);
   }
   const L = (M.shZ - M.hipZ) + 0.45;
   const shadow = contactShadow(M.halfW + 0.05, L * 0.9);
@@ -649,6 +760,8 @@ export function buildRealSheepModel(look, breedId = null, gltf = null) {
     mesh,
     coatMesh: mesh,
     horns,
+    locks,
+    lockUniforms: lockU,
     uniforms,
     build: B,
     size,
@@ -665,7 +778,8 @@ export function buildRealSheepModel(look, breedId = null, gltf = null) {
     teat,
     // (même nom que le chien réaliste : salon.js et Beauty.js y posent nœud, clochette et bandana)
     // (dans le repère des os : leur échelle — taille de la race, tête agrandie — s'applique d'elle-même)
-    dogFit: { collar: { center: collarC, normal: M.collar.axis.clone().applyQuaternion(neckQi), q: ringQ, rx: M.collar.rx, ry: M.collar.ry, bone: neckB }, topY: M.topY, bellyY: M.bellyY, hipZ: M.hipZ, shZ: M.shZ },
+    // (collier et nœud par-dessus la toison gonflée de l'encolure)
+    dogFit: { collar: { center: collarC, normal: M.collar.axis.clone().applyQuaternion(neckQi), q: ringQ, rx: M.collar.rx + (B.puff ?? 0) * 0.6, ry: M.collar.ry + (B.puff ?? 0) * 0.6, bone: neckB }, topY: M.topY, bellyY: M.bellyY, hipZ: M.hipZ, shZ: M.shZ },
     accessoryFit: { skull, headQ, mouth, headR: 0.075, tailTip },
     lamb: B.stage === 'baby',
     stage: B.stage,
@@ -681,6 +795,7 @@ export function buildRealSheepModel(look, breedId = null, gltf = null) {
     model.lodLevel = l;
     mesh.geometry = l ? S.lodGeo : S.geo;
     if (horns) horns.visible = !l || B.hornSize > 0.7;
+    if (locks) locks.visible = !l;
   };
   model.staticPose = (kind = 'stand') => model.anim.staticPose(kind);
   model.photoPose = () => model.anim.staticPose('stand');
@@ -752,7 +867,7 @@ function sheepBounds(hb, mesh) {
     if (Z + EZ > mx.z) mx.z = Z + EZ;
   }
   if (box.isEmpty()) box.set(V(-0.5, 0, -0.7), V(0.5, 1, 0.7));
-  box.expandByScalar(WOOL_MARGIN);
+  box.expandByScalar(hb.margin ?? WOOL_MARGIN);
   box.getBoundingSphere(hb.sphere);
   for (const m of hb.meshes) {
     m.boundingBox = box;
@@ -814,11 +929,38 @@ export function pickSheepGait(prev, u) {
 
 export const lying = (p) => p === 'lie' || p === 'sleep';
 
-/** Hauteur y (repère racine) d'un point de peau suivi par ses os (voir contactPoints) ; aussi rangé dans _w. */
-export function skinPoint(pt, s, inv) {
+/**
+ * Hauteur y (repère racine) d'un point de peau suivi par ses os (voir contactPoints) ; aussi rangé dans _w. s : poids de
+ * la cible « shorn » ; puff : volume de la toison du moment (m, sheepCoat.js : gonflée avant le squelette).
+ */
+export function skinPoint(pt, s, inv, puff = 0) {
   _w.set(0, 0, 0);
-  for (const [b, pr, ptip, w] of pt) _w.addScaledVector(_v.lerpVectors(pr, ptip, s).applyMatrix4(b.matrixWorld), w);
+  for (const [b, pr, ptip, w, off] of pt) {
+    _v.lerpVectors(pr, ptip, s);
+    if (puff && off) _v.addScaledVector(off, puff);
+    _w.addScaledVector(_v.applyMatrix4(b.matrixWorld), w);
+  }
   return _w.applyMatrix4(inv).y;
+}
+
+/**
+ * Déplacement du sommet i par mètre de volume de la toison (le même que le shader de sheepCoat.js : normale lissée ×
+ * bosses × masque du tronc), dans le repère de repos ; pos : positions du gabarit (celles du shader). Renvoie out.
+ */
+export function puffAt(P, pos, i, B, out) {
+  if (!P.puffN || !P.trunk) return out.set(0, 0, 0);
+  const sm = (a, b, x) => {
+    const t = clamp((x - a) / (b - a), 0, 1);
+    return t * t * (3 - 2 * t);
+  };
+  const pm = sm(0.35, 0.8, P.mask[i * 4]) * (1 - P.mask[i * 4 + 1]) * (1 - P.mask[i * 4 + 2]) * sm(0.35, 0.9, P.trunk[i]);
+  const f = B.lumpFreq ?? 9;
+  const x = pos[i * 3] * f;
+  const y = pos[i * 3 + 1] * f;
+  const z = pos[i * 3 + 2] * f;
+  const nz = 0.5 + 0.25 * (Math.sin(x + 1.7 * y + 1.3 * z + 1.3) + Math.sin((-1.4 * x + 0.9 * y + 1.1 * z) * 1.31 + 4.1));
+  const lump = 1 + (B.lumps ?? 0) * (nz * 2 - 1);
+  return out.set(P.puffN[i * 3], P.puffN[i * 3 + 1], P.puffN[i * 3 + 2]).multiplyScalar(lump * pm);
 }
 
 /**
@@ -901,7 +1043,7 @@ export class RealSheepAnim {
     this.lockSide = [0, 0, 0, 0];
     this.relTop = [0, 0, 0, 0];
     // (laine longue : la toison du ventre pend plus bas — le mouton couché est relevé d'autant)
-    this.skirt = (B.long ?? 0) * 0.3;
+    this.skirt = (B.long ?? 0) * 0.09;
     this.rootBone.position.y -= S.rise;
     this.savePose();
     this.rootBone.position.y += S.rise;
@@ -1118,6 +1260,8 @@ export class RealSheepAnim {
     // (position de liaison par l'inverse de liaison de chaque os, comme la peau : la tête agrandie compte)
     const bind = (i, s) => V(S.pos[i * 3] + P.dPos[i * 3] * s, S.pos[i * 3 + 1] + P.dPos[i * 3 + 1] * s, S.pos[i * 3 + 2] + P.dPos[i * 3 + 2] * s);
     const invs = md.skeleton.boneInverses;
+    const B = md.build;
+    const lin3 = new THREE.Matrix3();
     const infl = (i) => {
       const out = [];
       let tot = 0;
@@ -1126,7 +1270,9 @@ export class RealSheepAnim {
         const w = P.sw[i * 4 + c];
         if (!(w > 0.02)) continue;
         const k = P.si[i * 4 + c];
-        out.push([this.bones[k], bind(i, 0).applyMatrix4(invs[k]), bind(i, 1).applyMatrix4(invs[k]), w / (tot || 1)]);
+        // (volume de la toison : un déplacement, tourné par la partie linéaire de l'inverse de liaison)
+        const off = puffAt(P, S.pos, i, B, V()).applyMatrix3(lin3.setFromMatrix4(invs[k]));
+        out.push([this.bones[k], bind(i, 0).applyMatrix4(invs[k]), bind(i, 1).applyMatrix4(invs[k]), w / (tot || 1), off]);
       }
       return out;
     };
@@ -1164,9 +1310,17 @@ export class RealSheepAnim {
     if (Math.abs(target - this.shorn) < 1e-4) this.shorn = target;
     md.mesh.morphTargetInfluences[0] = this.shorn;
     md.uniforms.sState.value.x = clamp(this.shorn, 0, 1);
+    // (volume de la toison : suit la toison du jeu, gonflé pour le concours, rasé par la tonte du salon)
+    const puffT = (B.puff ?? 0) * (this.cutK ? 0.25 : clamp(md.fleece, 0, 1)) + (this.fluffExtra + this.cutExtra) * 0.12;
+    this.puffNow = (this.puffNow ?? puffT) + (puffT - (this.puffNow ?? puffT)) * Math.min(1, dt * 1.6);
+    md.uniforms.sPuff.value.x = this.puffNow;
+    md.uniforms.sPuff.value.y = (B.folds ?? 0) * (0.4 + 0.6 * clamp(md.fleece, 0, 1));
+    // (mèches de la laine longue : longueur de la toison du moment, repliées couché, racine poussée avec la toison)
+    if (md.lockUniforms) md.lockUniforms.hState.value.set(clamp(1 - this.shorn, 0, 1.4) / Math.max(0.2, 1 + (B.fleece ?? 0)), 0, this.puffNow * 0.85, 0);
     // (couché : la laine longue s'étale au sol au lieu de pendre sous le ventre)
     const lie = (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.ruminate ?? 0) + 0.6 * ((this.w.lie_down ?? 0) + (this.w.get_up ?? 0));
     md.uniforms.sState.value.w = clamp(lie, 0, 1);
+    if (md.lockUniforms) md.lockUniforms.hState.value.y = clamp(lie, 0, 1);
   }
 
   /**
@@ -1381,7 +1535,8 @@ export class RealSheepAnim {
       const flick = Math.max(0, Math.sin(t * 1.7 + i * 2.6) - 0.93) * 12;
       const down = (st.sad ? 0.25 : 0) + (this.posture === 'sleep' ? 0.3 : 0);
       this.turn(e, AZ, s * (B.earUp - down + flick * 0.08));
-      this.turn(e, AX, Math.sin(t * 1.1 + i) * 0.04 - flick * 0.15);
+      // (earFwd : oreilles portées vers l'avant — la chèvre, dont l'oreille du modèle se dresse à la verticale)
+      this.turn(e, AX, (B.earFwd ?? 0) + Math.sin(t * 1.1 + i) * 0.04 - flick * 0.15);
     }
     // Queue : frétille en broutant, en mangeant et en tétant.
     const tb = md.tail;
@@ -1423,10 +1578,11 @@ export class RealSheepAnim {
       const lie = (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.ruminate ?? 0) + (this.w.lie_down ?? 0) + (this.w.get_up ?? 0);
       if (lie > 0.05 || this.trans) {
         for (const pt of this.bodyPts) {
-          const y = skinPoint(pt, sh, _m);
+          const y = skinPoint(pt, sh, _m, this.puffNow ?? 0);
           if (y < lowB) lowB = y;
         }
-        // (laine longue qui pend sous le ventre : déplacée par le shader, le corps est relevé d'autant)
+        // (laine longue qui pend sous le ventre : déplacée par le shader, le corps est relevé d'autant ; le volume de la
+        // toison est compté dans chaque point, skinPoint)
         lowB -= this.skirt * Math.max(0, 1 - clamp(sh, 0, 1)) * Math.min(1, lie);
       }
       target = Math.max(-low, Number.isFinite(lowB) ? -(lowB + 0.006) : -Infinity);

@@ -32,6 +32,13 @@ export function makeSheepUniforms() {
     sKnee: { value: new THREE.Vector4(0.2, 0.25, 0.08, 0) },
     // tête : x en long des yeux, y hauteur des yeux, z bout du nez (en long), w hauteur du dessus du crâne
     sHead: { value: new THREE.Vector4(0.4, 0.62, 0.48, 0.7) },
+    // volume de la toison (gonflée le long de la normale, avant le squelette) : x épaisseur du moment (m), y plis du cou
+    // (m, mérinos), z bosses (0 à 1), w fréquence des bosses (1/m)
+    sPuff: { value: new THREE.Vector4(0, 0, 0, 9) },
+    // œil gauche au repos (x > 0 ; le droit en miroir) : centre et rayon
+    sEye: { value: new THREE.Vector4(0.06, 0.76, 0.385, 0.009) },
+    // x : toupet blanc bouclé du front (nez noir), y : œil dessiné sur une face sombre (iris ambre, paupière claire)
+    sTuft: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
 }
 
@@ -44,20 +51,34 @@ export function setSheepCoat(u, B) {
   u.sHoof.value.setHex(c.hoof);
   u.sWoolK.value.set(B.curl ?? 0, B.long > 0 ? 1 : 0, B.headWool ?? 0, B.legWool ?? 0);
   u.sState.value.y = B.knees ? 1 : 0;
-  u.sState.value.z = B.long ?? 0;
+  u.sState.value.z = (B.long ?? 0) * 0.3; // (la jupe du shader ne fait plus que du volume sous les mèches, ruminantHair.js)
+  // (épaisseur du moment : posée par RealSheepAnim.applyFleece selon la toison ; ici, plis, bosses et fréquence)
+  u.sPuff.value.set(u.sPuff.value.x, B.folds ?? 0, B.lumps ?? 0.3, B.lumpFreq ?? 9);
+  const f = u.sFace.value;
+  const faceLum = 0.2126 * f.r + 0.7152 * f.g + 0.0722 * f.b;
+  u.sTuft.value.set(B.forelock ?? 0, 1 - THREE.MathUtils.smoothstep(faceLum, 0.05, 0.25), 0, 0);
 }
 
 const COMMON_V = /* glsl */ `
 attribute vec4 sheepMask;
 attribute float sheepTrunk;
+attribute vec3 sheepPuffN;
 uniform vec4 sState;
 uniform vec4 sLand;
+uniform vec4 sHead;
+uniform vec4 sPuff;
+uniform vec4 sTuft;
 varying vec4 vSMask;
 varying vec3 vSRest;
 float sHash(vec3 p) {
   p = fract(p * 0.3183099 + 0.1);
   p *= 17.0;
   return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+// (bosses lisses et identiques sur le processeur, sheepReal.js puffAt : le mouton couché est posé sur sa toison)
+float sNoiseV(vec3 p) {
+  return 0.5 + 0.25 * (sin(dot(p, vec3(1.0, 1.7, 1.3)) + 1.3) + sin(dot(p, vec3(-1.4, 0.9, 1.1)) * 1.31 + 4.1));
+}
 }`;
 
 // Avant le squelette (après la cible de forme) : position de repos pour les motifs ; laine longue qui pend.
@@ -77,6 +98,21 @@ if (sState.z > 0.0) {
   // (vers le bas, un peu vers l'extérieur sur les côtés)
   // (tondue : plus de mèches ; couché : la laine s'étale au sol au lieu de pendre)
   transformed += vec3(sign(position.x) * len * 0.3 * skirt, -len * (0.25 + 0.75 * skirt) * (1.0 - 0.7 * sState.w), 0.0) * (1.0 - sState.x);
+}
+if (sPuff.x > 0.0 || sPuff.y > 0.0) {
+  // Volume de la toison : le tronc et l'encolure (pas la tête, ni le bas des pattes, ni le creux de l'aisselle, porté par
+  // le membre) gonflent le long de la normale de repos, en grosses bosses ; plis du cou du mérinos (anneaux).
+  float pm = smoothstep(0.35, 0.8, sheepMask.x) * (1.0 - sheepMask.y) * (1.0 - sheepMask.z) * smoothstep(0.35, 0.9, sheepTrunk);
+  float lump = 1.0 + sPuff.z * (sNoiseV(position * sPuff.w) * 2.0 - 1.0);
+  float neckZ = smoothstep(sLand.w - 0.02, sLand.w + 0.07, position.z) * (1.0 - smoothstep(sHead.x - 0.21, sHead.x - 0.13, position.z));
+  float fold = sPuff.y * neckZ * (0.5 + 0.5 * sin(position.z * 105.0));
+  transformed += sheepPuffN * (sPuff.x * lump + fold) * pm;
+}
+if (sTuft.x > 0.0) {
+  // Toupet du front (nez noir) : une touffe de laine bouclée entre les cornes, au-dessus des yeux.
+  float tz = smoothstep(sHead.y + 0.008, sHead.y + 0.03, position.y) * (1.0 - smoothstep(0.03, 0.055, abs(position.x)))
+    * (1.0 - smoothstep(sHead.x + 0.005, sHead.x + 0.04, position.z)) * smoothstep(sHead.x - 0.11, sHead.x - 0.07, position.z);
+  transformed += normal * 0.022 * sTuft.x * tz * smoothstep(0.3, 0.7, sheepMask.y) * (0.55 + 0.9 * sNoiseV(position * 60.0));
 }`;
 
 const COMMON_F = /* glsl */ `
@@ -90,6 +126,8 @@ uniform vec3 sMeans;
 uniform vec4 sLand;
 uniform vec4 sKnee;
 uniform vec4 sHead;
+uniform vec4 sEye;
+uniform vec4 sTuft;
 varying vec4 vSMask;
 varying vec3 vSRest;
 float sHashF(vec3 p) {
@@ -153,6 +191,14 @@ const COLOR_F = /* glsl */ `
     wool = max(wool, hw);
     head *= 1.0 - hw;
   }
+  // Toupet blanc bouclé du front (nez noir du Valais) : la laine de la robe entre les cornes, au-dessus des yeux.
+  if (sTuft.x > 0.0) {
+    float tuft = smoothstep(sHead.y + 0.006, sHead.y + 0.026, p.y) * (1.0 - smoothstep(0.03, 0.052, abs(p.x)))
+      * (1.0 - smoothstep(sHead.x + 0.005, sHead.x + 0.04, p.z)) * smoothstep(sHead.x - 0.11, sHead.x - 0.07, p.z);
+    tuft *= head * sTuft.x;
+    wool = max(wool, tuft);
+    head *= 1.0 - tuft;
+  }
   // Laine du haut des pattes (mérinos) : jusqu'au-dessus du genou / du jarret.
   if (sWoolK.w > 0.0) {
     float front = step(sKnee.w, p.z);
@@ -194,6 +240,25 @@ const COLOR_F = /* glsl */ `
   float pink = smoothstep(0.3, 0.7, vSMask.y) * smoothstep(0.05, 0.12, c0.r - c0.g) * step(0.45, dot(sFace, LUM));
   keep = max(keep, pink * 0.85);
   diffuseColor.rgb = mix(col, c0, clamp(keep, 0.0, 1.0));
+  // Regard : sur une face sombre (suffolk, nez noir, Ouessant noir), l'œil de la photo se perdait dans le noir — iris
+  // ambre, pupille horizontale, paupière plus claire autour ; un petit reflet sur toutes les races.
+  {
+    float headM = smoothstep(0.3, 0.7, vSMask.y);
+    vec3 e = vec3(abs(p.x), p.y, p.z) - sEye.xyz;
+    float r = sEye.w;
+    float dE = length(e);
+    if (sTuft.y > 0.0) {
+      float inEye = 1.0 - smoothstep(r * 0.85, r * 1.05, dE);
+      float pupil = (1.0 - smoothstep(r * 0.15, r * 0.26, abs(e.y))) * (1.0 - smoothstep(r * 0.45, r * 0.65, abs(e.z)));
+      vec3 iris = mix(vec3(0.52, 0.34, 0.1), vec3(0.015, 0.012, 0.01), pupil);
+      float rim = smoothstep(r * 0.95, r * 1.12, dE) * (1.0 - smoothstep(r * 1.15, r * 1.65, dE));
+      diffuseColor.rgb = mix(diffuseColor.rgb, iris, inEye * sTuft.y * headM);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.27, 0.25), rim * sTuft.y * headM * 0.8);
+    }
+    float glint = 1.0 - smoothstep(r * 0.1, r * 0.22, length(e - vec3(0.0, r * 0.35, r * 0.25)));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92), glint * headM * 0.85);
+    totalEmissiveRadiance += vec3(0.35) * glint * headM;
+  }
 }`;
 
 // Relief de la laine bouclée ou longue, après la carte de normales de la matière (dérivées d'écran).
@@ -241,7 +306,7 @@ export function sheepMaterial(src, uniforms) {
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`);
   };
-  mat.customProgramCacheKey = () => 'sheep-wool-v1';
+  mat.customProgramCacheKey = () => 'sheep-wool-v4';
   mat.userData.sheepUniforms = uniforms;
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (sh) => {
@@ -249,7 +314,7 @@ export function sheepMaterial(src, uniforms) {
     vert(sh);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec4 vSMask;\nvarying vec3 vSRest;');
   };
-  depth.customProgramCacheKey = () => 'sheep-wool-depth-v1';
+  depth.customProgramCacheKey = () => 'sheep-wool-depth-v4';
   return { mat, depth };
 }
 

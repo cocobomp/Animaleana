@@ -24,9 +24,11 @@ import { getModel } from '../assets.js';
 import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
 import { goatBuild, goatUdderFill, udderScale } from '../../sim/goatLook.js';
-import { makeGoatUniforms, setGoatCoat, goatMaterial, goatHairMaterial } from './goatCoat.js';
+import { makeGoatUniforms, setGoatCoat, goatMaterial } from './goatCoat.js';
+import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from './ruminantHair.js';
 import {
   cleanClips, emptyBoneBoxes, growBoneBoxes, measureSheep, sheepJoints, contactShadow, SheepMesh, RealSheepAnim, pickSheepGait, lying,
+  smoothNormals,
 } from './sheepReal.js';
 
 /** Clé du GLB (assets.js) : jamais « goat » (gltfAnimal.js le prendrait pour un animal GLB générique). */
@@ -313,10 +315,10 @@ function shapeFor(base, B) {
 }
 
 /**
- * Poil long (poitevine, col noir) : des mèches en cartes pendent du bas des flancs et de l'arrière des cuisses (la
- * « jupe » et la « culotte »), liées aux os comme le sommet qui les porte. Géométrie partagée par gabarit, motif et
- * longueur ; attributs : hairTop (haut de la mèche : couchée, elle s'y replie), hairSide (zone de la robe : 0 foncée,
- * 1 claire). Renvoie null sans poil long.
+ * Poil long (poitevine, col noir) : des mèches effilées et ondulées (ruminantHair.js) pendent des flancs, du dos, de la
+ * croupe et de l'arrière des cuisses — semées à espacement régulier, jamais en rang sous le ventre (la « jupe » de
+ * rectangles noirs de la première version). Géométrie partagée par gabarit, motif et longueur ; hairSide : zone de la
+ * robe (0 foncée, 1 claire). Renvoie null sans poil long.
  */
 function hairCards(base, S, B) {
   if (!(B.long > 0.005)) return null;
@@ -327,85 +329,43 @@ function hairCards(base, S, B) {
   const n = P.count;
   const pos = S.pos;
   const M = S.measure;
+  // (normales lissées : les mèches partent d'une peau sans arêtes)
+  P.smoothN ??= smoothNormals(P.pos, P.nrm, n, 0.06);
   const Hh = Math.max(0.05, M.topY - M.bellyY);
   const femur = new Set(['femurL', 'femurR'].map((nm) => base.index.get(nm)));
   const edge = M.hipZ + (M.shZ - M.hipZ) * 0.42;
-  const hash = (i) => {
-    const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
-    return x - Math.floor(x);
-  };
   const cand = [];
   for (let i = 0; i < n; i++) {
-    if (P.mask[i * 4 + 1] > 0.3 || P.part[i * 4 + 1] > 0.15 || P.mask[i * 4 + 3] > 0.1) continue;
+    if (P.mask[i * 4 + 1] > 0.3 || P.part[i * 4 + 1] > 0.15 || P.part[i * 4 + 2] > 0.15 || P.mask[i * 4 + 3] > 0.1) continue;
     const y = pos[i * 3 + 1];
     const z = pos[i * 3 + 2];
-    const nx = P.nrm[i * 3];
-    const ny = P.nrm[i * 3 + 1];
+    const ny = P.smoothN[i * 3 + 1];
+    if (ny < -0.45) continue; // (pas sous le ventre)
     let fw = 0;
     for (let k = 0; k < 4; k++) if (femur.has(P.si[i * 4 + k])) fw += P.sw[i * 4 + k];
     const hl = (y - M.bellyY) / Hh;
-    const flank = P.part[i * 4 + 3] > 0.6 && P.mask[i * 4 + 2] < 0.3 && hl > -0.1 && hl < 0.78 && Math.abs(nx) > 0.25 && ny < 0.7;
-    const thigh = fw > 0.3 && z < M.hipZ + 0.06 && y > M.kneeY[1] + 0.04 && Math.abs(nx) > 0.15;
-    if (flank || thigh) cand.push([i, hl, thigh]);
+    // (poitevine : le poil long couvre le dos, la croupe et le haut des flancs, pas le bas au-dessus du ventre clair)
+    const body = P.part[i * 4 + 3] > 0.6 && P.mask[i * 4 + 2] < 0.3 && hl > (B.pattern === 'poitevine' ? 0.32 : -0.15);
+    const thigh = fw > 0.3 && z < M.hipZ + 0.06 && y > M.kneeY[1] + 0.04;
+    if (body || thigh) cand.push({ i, hl, thigh });
   }
-  // (une mèche sur k sommets, au plus ≈ 170 : 340 triangles)
-  const step = Math.max(1, Math.ceil(cand.length / 170));
-  const keep = cand.filter((_, j) => j % step === 0);
-  const nq = keep.length;
-  const position = new Float32Array(nq * 4 * 3);
-  const top = new Float32Array(nq * 4 * 3);
-  const normal = new Float32Array(nq * 4 * 3);
-  const uv = new Float32Array(nq * 4 * 2);
-  const side = new Float32Array(nq * 4);
-  const si = new Uint16Array(nq * 4 * 4);
-  const sw = new Float32Array(nq * 4 * 4);
-  const index = new Uint16Array(nq * 6);
-  const T = V();
-  const N = V();
-  const D = V();
-  const W = V();
-  keep.forEach(([i, hl, thigh], q) => {
-    N.fromArray(P.nrm, i * 3).normalize();
-    // (le haut de la mèche rentre de 1 cm dans le corps : pas de bord visible)
-    T.fromArray(pos, i * 3).addScaledVector(N, -0.01);
-    // (vers le bas, un peu vers l'extérieur ; la culotte pend aussi un peu vers l'arrière)
-    D.set(0, -1, 0).addScaledVector(N, 0.38);
-    if (thigh) D.z -= 0.25;
-    D.normalize();
-    W.crossVectors(D, N).normalize();
-    const len = B.long * (0.8 + 0.45 * hash(i)) * (thigh ? 1.1 : 0.6 + 0.55 * (1 - clamp(hl, 0, 1)));
-    const w = 0.07 + 0.035 * hash(i + 7);
-    const corners = [[-0.5, 0], [0.5, 0], [0.42, 1], [-0.42, 1]];
+  const picks = spreadLocks(cand, pos, 0.036, 400).map(({ i, hl, thigh }) => {
     const z = pos[i * 3 + 2];
-    let s = 0;
-    if (B.pattern === 'colnoir') s = z > edge ? 0 : 1;
-    else if (B.pattern === 'poitevine') s = hl < 0.06 || (thigh && Math.abs(pos[i * 3]) < 0.07) ? 1 : 0;
-    corners.forEach(([u, v], c) => {
-      const k = q * 4 + c;
-      _v.copy(T).addScaledVector(W, u * w * (1 - 0.15 * v)).addScaledVector(D, v * len);
-      position.set([_v.x, _v.y, _v.z], k * 3);
-      top.set([T.x, T.y, T.z], k * 3);
-      normal.set([N.x, N.y, N.z], k * 3);
-      uv.set([u + 0.5, 1 - v], k * 2);
-      side[k] = s;
-      for (let m = 0; m < 4; m++) {
-        si[k * 4 + m] = P.si[i * 4 + m];
-        sw[k * 4 + m] = P.sw[i * 4 + m];
-      }
-    });
-    index.set([q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3], q * 6);
+    let side = 0;
+    if (B.pattern === 'colnoir') side = z > edge ? 0 : 1;
+    else if (B.pattern === 'poitevine') side = hl < 0.08 ? 1 : 0;
+    return {
+      i,
+      // (poitevine : poil long sur le dos et la croupe, plus court en bas des flancs — il ne pend pas en languettes noires
+      // sur le ventre clair ; col noir : plus long en bas, la jupe)
+      len: B.long * (thigh ? 1.1 : B.pattern === 'poitevine' ? 0.55 + 0.55 * Math.min(1, Math.max(0, hl)) : 0.62 + 0.5 * (1 - Math.min(1, Math.max(0, hl))))
+        * (0.85 + 0.3 * lockHash(i + 5)),
+      w: 0.07 + 0.022 * lockHash(i + 9),
+      back: thigh ? 0.45 : 0.1,
+      side,
+    };
   });
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(position, 3));
-  geo.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
-  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  geo.setAttribute('hairTop', new THREE.BufferAttribute(top, 3));
-  geo.setAttribute('hairSide', new THREE.BufferAttribute(side, 1));
-  geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
-  geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
-  geo.setIndex(new THREE.BufferAttribute(index, 1));
-  geo.userData.shared = true;
-  geo.userData.cards = nq;
+  const geo = lockCards(picks, { pos, nrm: P.smoothN, si: P.si, sw: P.sw }, 0.008);
   S.hair.set(key, geo);
   return geo;
 }
@@ -525,10 +485,11 @@ export function buildRealGoatModel(look, breedId = null, gltf = null) {
   hb.meshes.push(mesh);
   // Poil long (poitevine, col noir) : mèches en cartes, liées au même squelette.
   let hair = null;
+  const lockU = makeLockUniforms();
   const hairGeo = hairCards(base, S, B);
   if (hairGeo) {
     const c = B.colors;
-    const hmat = goatHairMaterial(uniforms, B.pattern === 'poitevine' ? c.base : c.dark, c.light);
+    const hmat = lockMaterial(lockU, B.pattern === 'poitevine' ? c.base : c.dark, c.light, 'goat_locks');
     hair = new SheepMesh(hairGeo, hmat, hb);
     hair.name = 'goat_hair';
     hair.bind(skeleton, new THREE.Matrix4());
@@ -586,6 +547,7 @@ export function buildRealGoatModel(look, breedId = null, gltf = null) {
     mesh,
     coatMesh: mesh,
     hair,
+    lockUniforms: lockU,
     udderBone: udderB,
     uniforms,
     build: B,
@@ -718,6 +680,7 @@ export class RealGoatAnim extends RealSheepAnim {
     // (os de la mamelle : y le long de l'os, vers le bas — couchée, elle s'étale au lieu de traverser le sol)
     md.udderBone?.scale.set(s * (1 + 0.2 * l), s * (1 - 0.6 * l), s * (1 + 0.2 * l));
     if (md.uniforms) md.uniforms.gStyle.value.w = l;
+    if (md.lockUniforms) md.lockUniforms.hState.value.y = l;
   }
 
   /**

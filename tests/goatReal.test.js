@@ -201,7 +201,8 @@ describe('races, cornes, barbe et chevreaux', () => {
         expect(md.mesh.morphTargetInfluences[0], tag).toBe(B.hornBack);
         expect(md.stage, tag).toBe(o.kid ? 'baby' : o.young ? 'young' : 'adult');
         if (!o.kid && !o.young) expect(!!md.hair, tag).toBe(B.long > 0);
-        if (md.hair) expect(md.hair.geometry.userData.cards, tag).toBeLessThanOrEqual(170);
+        // (mèches effilées en trois segments : au plus 400, soit 2 400 triangles)
+        if (md.hair) expect(md.hair.geometry.userData.cards, tag).toBeLessThanOrEqual(400);
         md.dispose();
       }
     }

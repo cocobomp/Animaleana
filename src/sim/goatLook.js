@@ -21,18 +21,18 @@ import { lifeStage } from './animal.js';
  * (sans) ; hornK : taille des cornes (chèvre ; bouc × BUCK.horns) ; beard : barbe de la chèvre ; hoof, horn : couleurs.
  */
 const ONE = {
-  size: 1, legs: 1, head: 1, ears: 1, earUp: 0, pattern: 'white', long: 0, horns: 'straight', hornK: 0.8, beard: 1,
+  size: 1, legs: 1, head: 1, ears: 1, earUp: -0.55, earFwd: 0.35, pattern: 'white', long: 0, horns: 'straight', hornK: 0.8, beard: 1,
   hoof: 0x3a2f28, horn: 0x5f5448,
 };
 export const GOAT_BUILDS = {
   // (brun chamois, raie dorsale noire, ventre et pattes noirs, deux bandes noires sur la face ; cornes arquées)
-  alpine: { pattern: 'chamoisee', horns: 'back', hornK: 0.8, earUp: 0.15, hoof: 0x1f1a17, horn: 0x4a3f36 },
-  // (toute blanche, sans cornes, oreilles dressées vers l'avant ; un peu plus grande)
-  saanen: { pattern: 'white', horns: null, earUp: 0.25, beard: 0.8, hoof: 0x9a8a78, horn: 0xb8ab98, legs: 1.02 },
+  alpine: { pattern: 'chamoisee', horns: 'back', hornK: 0.8, earUp: -0.5, hoof: 0x1f1a17, horn: 0x4a3f36 },
+  // (toute blanche, face blanche, sans cornes, oreilles portées vers l'avant et sur le côté ; un peu plus grande)
+  saanen: { pattern: 'white', horns: null, earUp: -0.35, earFwd: 0.45, ears: 0.9, beard: 0.8, hoof: 0x9a8a78, horn: 0xb8ab98, legs: 1.02 },
   // (poil long noir, ventre, intérieur des cuisses et bas des pattes clairs, bandes claires sur la face ; petites cornes)
-  poitevine: { pattern: 'poitevine', long: 0.11, horns: 'straight', hornK: 0.55, earUp: -0.05, hoof: 0x1c1714, horn: 0x5a5048 },
+  poitevine: { pattern: 'poitevine', long: 0.11, horns: 'straight', hornK: 0.55, earUp: -0.6, hoof: 0x1c1714, horn: 0x5a5048 },
   // (avant noir, arrière blanc, poil long ; grandes cornes arquées pour les deux sexes)
-  col_noir: { pattern: 'colnoir', long: 0.14, horns: 'back', hornK: 1.0, earUp: 0.1, hoof: 0x1c1714, horn: 0x2f2925, head: 1.03 },
+  col_noir: { pattern: 'colnoir', long: 0.14, horns: 'back', hornK: 1.0, earUp: -0.5, hoof: 0x1c1714, horn: 0x2f2925, head: 1.03 },
 };
 
 /** Chevreau (stade « bébé ») : tête plus grosse, pattes plus longues, oreilles plus grandes, ni cornes ni barbe. */

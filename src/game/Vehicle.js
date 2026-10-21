@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { towCar, horseTrailer, car, crate, trunk, cargoMesh, disposeVehicle } from './models/vehicles.js';
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { growthScale, lifeStage } from '../sim/animal.js';
+import { sheepFleece } from '../sim/sheepLook.js';
 import { needsTrailer } from '../sim/trip.js';
 import { cargoItem, cargoShape } from '../sim/cargo.js';
 
@@ -39,7 +40,10 @@ export function crateWithAnimal(a, colorIndex = 0) {
 
 /** Gabarit d'un voyageur : le chiot du chien réaliste a le sien (grosse tête, pattes courtes), comme en jeu. */
 function travelLook(a) {
-  return a.species === 'dog' && lifeStage(a) === 'baby' ? { ...a.look, puppy: true } : a.look;
+  const st = lifeStage(a);
+  // (mouton réaliste : agneau, jeune, cornes du bélier, toison du moment)
+  if (a.species === 'sheep') return { ...a.look, lamb: st === 'baby', young: st === 'young', sex: a.sex, fleece: sheepFleece(a) };
+  return a.species === 'dog' && st === 'baby' ? { ...a.look, puppy: true } : a.look;
 }
 
 /** Nombre de places de remorque pour ces animaux (deux moutons ou deux chèvres partagent une place). */

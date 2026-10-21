@@ -1,0 +1,45 @@
+Moutons (toutes les races et les agneaux) — « Sheep_White_01 », Microsoft Rocketbox Avatar Library
+Fichier du jeu : sheep.glb
+
+Source :
+  https://github.com/microsoft/Microsoft-Rocketbox
+  (Assets/Animals/Sheep_White_01, commit 0943055db6ec570bcef9f2c8b41c9e5467c808f9)
+
+Licence : MIT (texte complet ci-dessous, celui du fichier LICENSE.md du dépôt).
+
+Modifications faites pour La ferme à Madichelle (scripts de tools/mouton/, voir tools/mouton/LISEZMOI.md) :
+  - os renommés, os racine ajouté, omoplates rattachées au poitrail, base de l'encolure replacée ;
+  - poids de la peau refaits autour du coude, du grasset et de la base de l'encolure (la peau du poitrail ne
+    s'étire plus en rideau jusqu'à l'avant-bras, ni la cuisse) ;
+  - carte de normales convertie (vert inversé) ; mis à l'échelle (garrot 0,70 m), tourné vers +Z ;
+  - cible de forme « shorn » (toison tondue) et masques de la robe (toison, tête, bas des membres, onglons) ;
+  - cornes de bélier ajoutées (en option) ;
+  - 14 animations créées (le modèle n'en avait aucune) : arrêt, pas, trot, galop, brouter, manger, bêler, se
+    coucher et se relever en ruminant, couché, ruminer, dormir, saut, gambade de l'agneau ; membres jamais étirés
+    (aucune translation d'os sauf la racine), sabots jamais sous le sol ;
+  - textures WebP, compression meshopt, version allégée (moins de triangles) pour les moutons lointains ;
+  - en jeu : races et agneaux par les os, la toison et le shader (src/game/models/sheepReal.js, sheepCoat.js).
+
+-------------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2020 Microsoft
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

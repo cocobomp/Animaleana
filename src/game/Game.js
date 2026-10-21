@@ -6,6 +6,7 @@ import { gfx } from './gfx.js';
 import { preloadModels, loadModel, MODELS } from './assets.js';
 import { REAL_HORSE_KEY, horseView, realHorseBase } from './models/horseReal.js'; // cheval réaliste : chargé à part
 import { REAL_DOG_KEYS, realDogBase } from './models/dogReal.js'; // chiens réalistes : chargés après le cheval
+import { REAL_SHEEP_KEY, realSheepBase } from './models/sheepReal.js'; // mouton réaliste : chargé après les chiens
 import { hairTexture } from './models/horseHair.js';
 import { renderSetup, PixelBudget, SLOW_KEY } from './pixelBudget.js'; // définition et anticrénelage selon la qualité
 import { Weather3D } from './Weather3D.js';
@@ -181,15 +182,22 @@ export class Game {
     this.modelsLoaded = false;
     this.horseSwap = [];
     this.dogSwap = [];
+    this.sheepSwap = [];
     const grace = new Promise((r) => setTimeout(r, HORSE_GRACE_MS));
     const dogKeys = Object.values(REAL_DOG_KEYS);
-    const others = preloadModels(Object.keys(MODELS).filter((k) => k !== REAL_HORSE_KEY && !dogKeys.includes(k)));
+    const others = preloadModels(Object.keys(MODELS).filter((k) => k !== REAL_HORSE_KEY && k !== REAL_SHEEP_KEY && !dogKeys.includes(k)));
     const horse = others.then(() => loadModel(REAL_HORSE_KEY));
     // Chiens réalistes (shiba ≈ 0,85 Mo, jack ≈ 0,5 Mo) : demandés après le cheval, jamais attendus à l'ouverture ;
     // les chiens prennent le modèle réaliste dès qu'il arrive (onRealDogs), le procédural en attendant.
     this.realDogsReady = horse.then(() => Promise.all(dogKeys.map((k) => loadModel(k)))).then((list) => {
       if (list.some(Boolean)) this.onRealDogs(list);
       return list.filter(Boolean).length;
+    });
+    // Mouton réaliste (≈ 0,5 Mo) : demandé après les chiens, jamais attendu ; les moutons prennent le modèle réaliste
+    // dès qu'il arrive (onRealSheep), le procédural en attendant.
+    this.realSheepReady = this.realDogsReady.then(() => loadModel(REAL_SHEEP_KEY)).then((gltf) => {
+      if (gltf) this.onRealSheep(gltf);
+      return !!gltf;
     });
     this.modelsReady = Promise.all([others, Promise.race([horse, grace])])
       .then(([n]) => { this.modelsLoaded = true; return n; });
@@ -238,6 +246,43 @@ export class Game {
       for (const e of this.allEntities()) if (e.data.species === 'dog' && !e.model?.realDog) this.dogSwap.push(e);
       this.thumbs?.modelsChanged?.();
     }, 60);
+  }
+
+  /**
+   * Le mouton réaliste est chargé. Ses données de repos sont tirées du GLB juste après, hors de l'image en cours ; puis
+   * les moutons au modèle de repli prennent le réaliste, un par image (swapRealSheep), et les vignettes sont refaites.
+   */
+  onRealSheep(gltf) {
+    setTimeout(() => {
+      try {
+        realSheepBase(gltf);
+      } catch (err) {
+        console.warn('Mouton réaliste : préparation impossible', err);
+        return;
+      }
+      for (const e of this.allEntities()) if (e.data.species === 'sheep' && !e.model?.realSheep) this.sheepSwap.push(e);
+      this.thumbs?.modelsChanged?.();
+    }, 90);
+  }
+
+  /**
+   * Un mouton au modèle de repli prend le mouton réaliste (un par image). Pas quand il est mené (troupeau), guidé par
+   * une activité (van, concours, spectacle), en pose ni sur la table du salon : il attend son tour.
+   */
+  swapRealSheep() {
+    const list = this.sheepSwap;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      const here = e.root?.parent && !e.disposed;
+      if (!here || e.model?.realSheep) {
+        list.splice(i--, 1);
+        continue;
+      }
+      if (e.scripted || e.herdCtrl || e.posing || e.onTable) continue;
+      list.splice(i, 1);
+      e.rebuildModel();
+      if (e.model?.realSheep) return;
+    }
   }
 
   /**
@@ -703,6 +748,8 @@ export class Game {
     if (this.horseSwap.length) this.swapRealHorses();
     // Chiens réalistes arrivés en cours de partie : un chien de plus prend le vrai modèle.
     if (this.dogSwap.length) this.swapRealDogs();
+    // Mouton réaliste arrivé en cours de partie : un mouton de plus prend le vrai modèle.
+    if (this.sheepSwap.length) this.swapRealSheep();
     // Point de vue pour la version réduite des chevaux au loin (horseReal.js) : la caméra de l'image d'avant.
     horseView.eye.setFromMatrixPosition(this.camera.matrixWorld);
     horseView.on = true;

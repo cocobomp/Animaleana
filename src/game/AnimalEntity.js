@@ -15,6 +15,8 @@ import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.j
 import { animateCat } from './catAnim.js'; // chats : assis, toilette, en boule, queue levée
 import { animateRealHorse } from './models/horseReal.js'; // cheval réaliste (GLB) : allures du mixeur
 import { animateRealDog } from './models/dogReal.js'; // chien réaliste (GLB) : allures, postures, actions
+import { animateRealSheep } from './models/sheepReal.js'; // mouton réaliste (GLB) : allures, couché, brouter, toison
+import { sheepLookOf, sheepStage } from '../sim/sheepLook.js';
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 // Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
@@ -108,7 +110,9 @@ export class AnimalEntity {
     const foal = this.data.species === 'horse' && lifeStage(this.data) === 'baby';
     // (le chiot du chien réaliste a son propre gabarit : grosse tête, pattes et museau courts, voir dogLook.js)
     const puppy = this.data.species === 'dog' && lifeStage(this.data) === 'baby';
-    const look = foal ? { ...this.data.look, foal: true } : puppy ? { ...this.data.look, puppy: true } : this.data.look;
+    // (le mouton réaliste : l'agneau et le jeune ont leur gabarit, les béliers leurs cornes, voir sheepLook.js)
+    const sheep = this.data.species === 'sheep';
+    const look = foal ? { ...this.data.look, foal: true } : puppy ? { ...this.data.look, puppy: true } : sheep ? sheepLookOf(this.data) : this.data.look;
     this.model = buildGltfAnimal(this.data.species, look) ?? buildAnimalModel(this.data.species, look, this.data.breed);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
@@ -157,7 +161,8 @@ export class AnimalEntity {
     this.scaleGroup.scale.setScalar(this.scale);
     this.stage = lifeStage(this.data);
     // Le poulain (ou le chiot du chien réaliste) a grandi : il prend le gabarit de sa race.
-    if (((this.model.horseV3 && this.model.foal !== (this.stage === 'baby')) || (this.model.realDog && this.model.puppy !== (this.stage === 'baby'))) && this.label) {
+    if (((this.model.horseV3 && this.model.foal !== (this.stage === 'baby')) || (this.model.realDog && this.model.puppy !== (this.stage === 'baby'))
+      || (this.model.realSheep && this.model.stage !== sheepStage(this.stage))) && this.label) {
       this.rebuildModel();
       return;
     }
@@ -282,6 +287,7 @@ export class AnimalEntity {
     const m = mood(this.data);
     const how = kind ?? (m === 'sick' ? 'sick' : m === 'sad' ? 'sad' : m === 'happy' ? 'happy' : 'neutral');
     const pitch = this.stage === 'baby' ? 1.6 : this.stage === 'young' ? 1.25 : 1 / (0.55 + this.scale * 0.45);
+    this.spokeAt = this.time; // (le mouton réaliste bêle : tête levée, bouche ouverte)
     return audio.animal(this.data.species, how, this.data.id, { pitch, gain: 1 / (1 + dist / 7) });
   }
 
@@ -493,6 +499,8 @@ export class AnimalEntity {
 
     // Le nom n'apparaît que lorsque le joueur est proche.
     const distPlayer = p.distanceTo(ctx.playerPos);
+    this.distPlayer = distPlayer; // (regard du mouton réaliste vers le joueur proche)
+    this.playerAt = ctx.playerPos;
     this.label.visible = false; // les noms sont affichés en HTML (étiquettes qu'on peut toucher)
 
     // De temps en temps (rarement), l'animal se manifeste s'il est assez près ; plus souvent s'il va mal.
@@ -771,6 +779,7 @@ export class AnimalEntity {
     if (md.cat) return animateCat(this, dt, sad); // chats : poses et allures dédiées (catAnim.js)
     if (md.real) return animateRealHorse(this, dt, sad); // cheval réaliste (horseReal.js)
     if (md.realDog) return animateRealDog(this, dt, sad); // chien réaliste (dogReal.js)
+    if (md.realSheep) return animateRealSheep(this, dt, sad); // mouton réaliste (sheepReal.js)
     const legLen = this.data.look.legLen * (this.data.look.legs ?? 1);
     const v = this.speed / Math.max(0.3, this.scale);
     const moving = this.speed > 0.05;

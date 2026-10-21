@@ -22,6 +22,7 @@ import { enclosure, navTarget } from './nav.js';
 import { emojiTexture } from './textures.js';
 import { realLegPose } from './models/horseReal.js'; // poses des membres du cheval réaliste (sauts, tours)
 import { realDogPose } from './models/dogReal.js'; // poses du chien réaliste (ses clips : assis, couché, saut…)
+import { realSheepPose } from './models/sheepReal.js'; // mouton réaliste : sabots libres au tour, saut par son clip
 import { ActivityHud, showActivityResults } from '../ui/activities.js';
 import { t, ta } from '../i18n.js';
 
@@ -1792,6 +1793,18 @@ function animateTrick(e, trick, k, dt) {
       realDogPose(md, 'jump', j, null, jt);
       return;
     }
+  }
+  // Mouton réaliste : au tour « viens », il court (sabots libres : la scène déplace le modèle) ; tout autre tour est un
+  // saut joué par son clip (ses os ne sont jamais tournés à la main : le mixeur les reprendrait à l'image suivante).
+  if (md.realSheep) {
+    if (!['come', 'fetch', 'back', 'spin'].includes(trick)) {
+      const jt = Math.min(1, k * 1.2);
+      const j = Math.sin(Math.PI * Math.min(1, Math.max(0, (jt - 0.3) / 0.5)));
+      sg.position.y = j * 0.45 * Math.min(1.2, e.scale ?? 1);
+      realSheepPose(md, 'jump', j, jt);
+      return;
+    }
+    realSheepPose(md, 'come');
   }
   switch (trick) {
     case 'sit':

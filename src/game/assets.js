@@ -21,6 +21,9 @@ export const MODELS = {
   // (FainoDS, CC-BY 4.0) pour les petits. Clés à part (pas « dog ») ; s'ils manquent, le chien procédural reste.
   dog_shiba: 'dog_shiba.glb',
   dog_jack: 'dog_jack.glb',
+  // Mouton réaliste (sheepReal.js) : « Sheep_White_01 » de la Microsoft Rocketbox Avatar Library (MIT), pour les 7 races
+  // et les agneaux. Clé à part (pas « sheep ») ; s'il manque, le mouton procédural reste.
+  sheep_real: 'sheep.glb',
   tree_common: 'tree_common.glb',
   tree_common2: 'tree_common2.glb',
   tree_birch: 'tree_birch.glb',

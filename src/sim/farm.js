@@ -237,6 +237,8 @@ export function collectProduct(profile, a) {
   const p = SPECIES[a.species].product;
   a.produce = 0;
   a.produceReady = false;
+  // (mouton tondu au moins une fois : sa toison 3D suit désormais la repousse, src/sim/sheepLook.js sheepFleece)
+  if (p.id === 'wool') a.woolCut = true;
   a.needs.grooming = clamp(a.needs.grooming + (p.id === 'wool' ? 30 : 0));
   earn(profile, p.value);
   profile.stats[p.id] = (profile.stats[p.id] ?? 0) + 1;

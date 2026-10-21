@@ -16,6 +16,7 @@ import { hairMaterial, buildHorseLeg, buildHorseMane, buildHorseForelock, buildH
 import { buildHorseModel } from './horseModel.js';
 import { buildRealHorseModel } from './horseReal.js';
 import { buildRealDogModel } from './dogReal.js'; // chiens réalistes (shiba et jack russell, GLB)
+import { buildRealSheepModel } from './sheepReal.js'; // mouton réaliste (Rocketbox, GLB)
 import { buildCatModel } from './catModel.js'; // chats : modèle dédié (races, poils, poses)
 
 // ------------------------------------------------------------------ anatomie par espèce
@@ -424,6 +425,12 @@ export function buildAnimalModel(speciesId, look, breedOfAnimal = null) {
   // l'animal d'abord, et seulement à défaut la race devinée par la robe — un labradoodle noir n'est pas un jack.)
   if (speciesId === 'dog') {
     const real = buildRealDogModel(dogLookWithBreed(look, breedOfAnimal), breedOfAnimal);
+    if (real) return real;
+  }
+  // Mouton réaliste (GLB, toutes les races et les agneaux) ; tant qu'il n'est pas chargé (ou dans les tests), le
+  // mouton procédural ci-dessous.
+  if (speciesId === 'sheep') {
+    const real = buildRealSheepModel(look, breedOfAnimal);
     if (real) return real;
   }
   const S = SPEC[speciesId] ?? SPEC.dog;

@@ -22,6 +22,7 @@ import { resolveLook, growthScale, lifeStage } from '../sim/animal.js';
 import { stageAgeDays } from '../sim/adoption.js';
 import { STRUCTURES } from '../sim/construction.js';
 import { SPECIES } from '../sim/species.js';
+import { sheepFleece } from '../sim/sheepLook.js';
 import { buildStructureModel } from './models/structures.js';
 import { EQUIPMENT_MODELS } from './models/equipment.js';
 import { car, towCar, horseTrailer, trunk } from './models/vehicles.js';
@@ -355,7 +356,9 @@ function animalThumb(spec) {
   const foal = species === 'horse' && stage === 'baby';
   // (le chiot du chien réaliste : son gabarit, grosse tête et pattes courtes, comme en jeu)
   const puppy = species === 'dog' && stage === 'baby';
-  const model = withTexScale(THUMB_TEX, () => buildAnimalModel(species, foal ? { ...look, foal: true } : puppy ? { ...look, puppy: true } : look, breed));
+  // (mouton réaliste : gabarit de l'agneau et du jeune, cornes du bélier, toison de l'animal pour son portrait)
+  const sheep = species === 'sheep' ? { ...look, lamb: stage === 'baby', young: stage === 'young', sex, ...(Number.isFinite(spec.fleece) ? { fleece: spec.fleece } : {}) } : null;
+  const model = withTexScale(THUMB_TEX, () => buildAnimalModel(species, foal ? { ...look, foal: true } : puppy ? { ...look, puppy: true } : sheep ?? look, breed));
   model.photoPose?.(); // (cheval réaliste : à l'arrêt, tête relevée, oreilles en avant — jamais en train de brouter)
   model.root.traverse((o) => {
     if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false;
@@ -400,7 +403,9 @@ export function lookSig(look) {
  * À passer à thumb(game, spec, { w, h, … }).
  */
 export function portraitSpec(a, stage) {
-  return { kind: 'animal', view: 'portrait', species: a.species, breed: a.breed, sex: a.sex, stage, seed: a.look?.seed, sig: lookSig(a.look), look: a.look };
+  // (mouton : sa toison du moment, arrondie au dixième — tondu, puis qui repousse : une autre image)
+  const fleece = a.species === 'sheep' ? Math.round(sheepFleece(a) * 10) / 10 : undefined;
+  return { kind: 'animal', view: 'portrait', species: a.species, breed: a.breed, sex: a.sex, stage, seed: a.look?.seed, sig: lookSig(a.look), look: a.look, fleece };
 }
 
 /**
@@ -413,7 +418,9 @@ export function portraitSpec(a, stage) {
 export function photoDouble(e) {
   const data = e.data;
   const foal = data.species === 'horse' && lifeStage(data) === 'baby';
-  const look = foal ? { ...data.look, foal: true } : data.look;
+  const st = lifeStage(data);
+  const look = foal ? { ...data.look, foal: true }
+    : data.species === 'sheep' ? { ...data.look, lamb: st === 'baby', young: st === 'young', sex: data.sex, fleece: sheepFleece(data) } : data.look;
   const model = withTexScale(THUMB_TEX, () => buildGltfAnimal(data.species, look) ?? buildAnimalModel(data.species, look, data.breed));
   model.photoPose?.();
   model.root.traverse((o) => {
@@ -492,7 +499,6 @@ function structureThumb(spec) {
   // Animaux : le cheval mannequin (gardé, remis à sa place après la photo), des moutons fabriqués pour l'occasion.
   const borrowed = [];
   const made = [];
-  let sheep = null;
   for (const [sp, fx, fz, rot] of ENCLOSURE_LIFE[spec.type] ?? []) {
     let obj;
     if (sp === 'horse') {
@@ -500,15 +506,18 @@ function structureThumb(spec) {
       obj = m.holder;
       borrowed.push([obj, obj.position.clone(), obj.rotation.y, obj.scale.x]);
       obj.scale.setScalar(obj.scale.x * ANIMAL_ZOOM.horse);
-    } else if (!sheep) {
-      const look = { ...resolveLook('sheep', SPECIES.sheep.breeds[0].id, 0), seed: 77 };
-      sheep = withTexScale(THUMB_TEX, () => buildAnimalModel('sheep', look, SPECIES.sheep.breeds[0].id));
+    } else {
+      // (chaque mouton fabriqué à part : le mouton réaliste a son squelette, qu'une copie partagerait — le second
+      // mouton se dessinerait sur le premier)
+      const look = { ...resolveLook('sheep', SPECIES.sheep.breeds[0].id, 0), seed: 77 + made.length };
+      const sheep = withTexScale(THUMB_TEX, () => buildAnimalModel('sheep', look, SPECIES.sheep.breeds[0].id));
+      sheep.photoPose?.();
       sheep.root.traverse((o) => {
         if (o.isMesh && o.parent === sheep.root && o.material?.depthWrite === false) o.visible = false;
       });
       made.push(sheep);
       obj = sheep.root;
-    } else obj = sheep.root.clone(); // (même géométrie, mêmes matières : libérées une seule fois)
+    }
     if (sp !== 'horse') borrowed.push([obj, null, 0, 1]);
     obj.position.set(fx * def.w, 0, fz * def.d);
     obj.rotation.y = rot;
@@ -634,7 +643,8 @@ export function registerThumbKinds(thumbs) {
     .register('gear', gearThumb)
     .register('animal', animalThumb)
     // (le cheval mannequin des paddocks et de « À cheval » : refaits quand le cheval réaliste arrive)
-    .register('structure', structureThumb, { horse: (s) => !!ENCLOSURE_LIFE[s.type]?.some(([sp]) => sp === 'horse') })
+    // (et le pré et ses moutons : refaits quand le mouton réaliste arrive)
+    .register('structure', structureThumb, { horse: (s) => !!ENCLOSURE_LIFE[s.type]?.some(([sp]) => sp === 'horse' || sp === 'sheep') })
     .register('equipment', equipmentThumb)
     .register('vehicle', vehicleThumb, { horse: (s) => s.id === 'horse' });
   thumbs.onRelease(releaseMannequins);

@@ -591,7 +591,7 @@ describe('os et sabots', () => {
   });
 
   // Sabots posés qui glissent : vitesse horizontale d'un sabot en appui, rapportée à celle de la vache.
-  it.each([['normande', {}], ['highland', {}], ['hereford', { sex: 'm' }]])('%s : les sabots posés ne glissent pas (pas, trot, galop) et ne sautent pas', (b, o) => {
+  it.each([['normande', {}], ['highland', {}], ['hereford', { sex: 'm' }], ['highland', { sex: 'm' }]])('%s : les sabots posés ne glissent pas (pas, trot, galop) et ne sautent pas', (b, o) => {
     for (const [v, max] of [[1.0, 0.06], [2.4, 0.1], [4.2, 0.1]]) {
       const md = cow(b, o);
       md.staticPose('stand');

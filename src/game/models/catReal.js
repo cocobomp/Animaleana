@@ -23,7 +23,7 @@ import { hairTexture } from '../textures.js';
 import { catBuild } from '../../sim/catLook.js';
 import { SPECIES } from '../../sim/species.js';
 import { pickIdlePose } from '../../sim/catPoses.js';
-import { catCoatPlan, makeCatCoatUniforms, makeCatLandUniforms, setCatCoat, catCoatMaterial, catShellMaterial } from './catCoat.js';
+import { catCoatPlan, makeCatCoatUniforms, makeCatLandUniforms, setCatCoat, catCoatMaterial, catShellMaterial, catLidMaterial } from './catCoat.js';
 import {
   V, smooth, clamp, restPrims, weldGroups, weldedNormals, furLow, fbm, emptyBoneBoxes, growBoneBoxes, PetMesh, contactShadow, raiseAngle,
 } from './petReal.js';
@@ -56,6 +56,8 @@ const _w = V();
 const _u = V();
 const _q = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
+const _rt = V();
+const _rs = V();
 
 // ------------------------------------------------------------------ données de repos (une fois par GLB)
 
@@ -197,6 +199,9 @@ export function realCatBase(gltf, kind) {
     elbowY: (heads[B('radiusL')].y + heads[B('radiusR')].y) / 2,
     tailTipZ: tailTip.z, tailBaseZ: tb0.z, tailBase: tb0.clone(), tailLen,
     neckZ: (heads[B('neck1')].z + heads[B('head')].z) / 2,
+    // (rayon des globes ; chaton : iris peint par le shader des yeux, voir catCoat.js)
+    eyeR: (eyes[0].r + eyes[1].r) / 2,
+    paintIris: kind === 'kitten',
   };
   // Bouts des oreilles (le plus loin de leur base).
   const earTip = [0, 1].map((s) => {
@@ -791,11 +796,20 @@ function measureCat(base, D, B) {
   };
 }
 
+/** Paupière : ouverture du regard (rad, de chaque côté, vers l'extérieur) et rotation de la paupière ouverte ou fermée. */
+const LID_YAW = 0.32;
+export const LID_OPEN = -0.8;
+export const LID_SHUT = 1.0;
+
 /**
- * Paupières : une calotte de peau par œil (un peu plus grande que le globe), liée à un os ajouté au squelette (lidL,
- * lidR, enfants de la tête, au centre de l'œil). Fermée, elle couvre le devant de l'œil ; ouverte, l'os est réduit à
- * rien. Ses attributs de robe sont ceux de la peau autour de l'œil (modèle d'origine) : la paupière a la couleur du
- * visage à cet endroit. bone0 : index du premier os ajouté.
+ * Paupières : pour chaque œil, un bandeau de peau (une portion de sphère un peu plus grande que le globe) qui descend
+ * du haut de l'œil, lié à un os ajouté au squelette (lidL, lidR, enfants de la tête, au centre de l'œil, tourné vers
+ * l'extérieur comme le regard). Le bandeau va de derrière le haut du globe jusqu'à un bord horizontal (sombre, comme le
+ * liseré des yeux du chat) ; l'os le fait tourner autour de l'axe des coins de l'œil : bord au-dessus de l'iris
+ * (ouvert, caché), au milieu (mi-clos : seule la moitié du haut est couverte), sous l'œil (fermé : une fente sombre).
+ * La calotte entière d'avant bouchait l'œil d'un disque lisse dès qu'il était à moitié fermé. Ses attributs de robe
+ * sont ceux de la peau autour de l'œil (modèle d'origine) : la paupière a la couleur du visage à cet endroit.
+ * bone0 : index du premier os ajouté.
  */
 function lidGeometry(base, D, B, bone0) {
   const pos = [];
@@ -803,39 +817,64 @@ function lidGeometry(base, D, B, bone0) {
   const rest = [];
   const si = [];
   const sw = [];
+  const rim = [];
   const idx = [];
-  const NU = 14;
-  const NV = 6;
+  const NU = 12;
+  // rangées de la paupière (angle depuis le haut du globe vers l'avant ; π/2 : bord, à la hauteur du centre)
+  const PH = [-0.55, -0.15, 0.25, 0.6, 0.9, 1.15, 1.33, 1.46, 1.53, Math.PI / 2];
+  const RIM = [0, 0, 0, 0, 0, 0, 0, 0.25, 0.7, 1];
+  const PSI = 1.15; // demi-largeur (rad) : jusqu'aux coins de l'œil
+  const q = new THREE.Quaternion();
+  // (texture et grain du poil : ceux du sommet de la peau le plus proche, au repos du modèle d'origine — avec une
+  // coordonnée de texture commune, la paupière prenait la couleur d'un endroit quelconque de la texture : un fard pâle)
+  const coat = base.prims.coat;
+  const lowA = base.attrs.cmpLow.array;
+  const near = base.eyes.map((e) => {
+    const ids = [];
+    for (let i = 0; i < coat.count; i++) if (_w.fromArray(coat.pos, i * 3).distanceTo(e.c) < e.r * 2.2) ids.push(i);
+    return ids;
+  });
+  const uvs = [];
+  const lows = [];
   for (let s = 0; s < 2; s++) {
     const side = s === 0 ? 1 : -1;
     const e0 = base.eyes[s];
     const C = D.eyeCenters[s];
-    const r = e0.r * B.head * 1.12;
-    const r0 = e0.r * 1.12;
-    // axe de la calotte fermée : le regard (devant, un peu vers l'extérieur)
-    const g = V(side * 0.35, 0.05, 1).normalize();
-    const a1 = V(0, 1, 0).cross(g).normalize();
-    const a2 = g.clone().cross(a1).normalize();
+    q.setFromAxisAngle(AXIS_Y, side * LID_YAW);
     const start = pos.length / 3;
-    const TH = Math.PI * 0.62;
-    for (let v = 0; v <= NV; v++) {
-      const th = (v / NV) * TH;
+    for (let v = 0; v < PH.length; v++) {
+      const ph = PH[v];
+      // (le bord serre le globe ; le reste du bandeau en est un peu décollé, épaisseur de la peau)
+      const k = v === PH.length - 1 ? 1.03 : 1.09;
       for (let u = 0; u <= NU; u++) {
-        const ph = (u / NU) * Math.PI * 2;
-        const dir = g.clone().multiplyScalar(Math.cos(th)).addScaledVector(a1, Math.sin(th) * Math.cos(ph)).addScaledVector(a2, Math.sin(th) * Math.sin(ph));
-        const P = C.clone().addScaledVector(dir, r);
-        const R0 = e0.c.clone().addScaledVector(dir, r0);
+        const ps = -PSI + (2 * PSI * u) / NU;
+        const dir = V(Math.sin(ps), Math.cos(ps) * Math.cos(ph), Math.cos(ps) * Math.sin(ph)).applyQuaternion(q);
+        const P = C.clone().addScaledVector(dir, e0.r * B.head * k);
+        const R0 = e0.c.clone().addScaledVector(dir, e0.r * k);
         pos.push(P.x, P.y, P.z);
         rest.push(R0.x, R0.y, R0.z);
         nrm.push(dir.x, dir.y, dir.z);
+        let best = -1;
+        let bd = Infinity;
+        for (const i of near[s]) {
+          const d2 = _w.fromArray(coat.pos, i * 3).distanceToSquared(R0);
+          if (d2 < bd) {
+            bd = d2;
+            best = i;
+          }
+        }
+        uvs.push(best >= 0 ? coat.uv[best * 2] : 0.5, best >= 0 ? coat.uv[best * 2 + 1] : 0.5);
+        lows.push(best >= 0 ? lowA[best] : 0);
         si.push(bone0 + s, 0, 0, 0);
         sw.push(1, 0, 0, 0);
+        rim.push(RIM[v]);
       }
     }
     const row = NU + 1;
-    for (let v = 0; v < NV; v++) {
+    for (let v = 0; v < PH.length - 1; v++) {
       for (let u = 0; u < NU; u++) {
         const a = start + v * row + u;
+        // (faces tournées vers l'extérieur du globe)
         idx.push(a, a + row, a + 1, a + 1, a + row, a + row + 1);
       }
     }
@@ -846,12 +885,13 @@ function lidGeometry(base, D, B, bone0) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n * 2).fill(0.5), 2));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
   g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
   g.setAttribute('cmpRest', new THREE.Float32BufferAttribute(rest, 3));
   g.setAttribute('cmpPart', new THREE.BufferAttribute(part, 4));
-  g.setAttribute('cmpLow', new THREE.BufferAttribute(new Float32Array(n), 1));
+  g.setAttribute('cmpLow', new THREE.Float32BufferAttribute(lows, 1));
+  g.setAttribute('lidRim', new THREE.Float32BufferAttribute(rim, 1));
   g.setIndex(idx);
   g.computeBoundingSphere();
   g.userData.shared = true;
@@ -979,7 +1019,8 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     const b = new THREE.Bone();
     b.name = s === 0 ? 'lidL' : 'lidR';
     b.position.copy(S.D.eyeCenters[s]).sub(H[headI]).applyQuaternion(headQi);
-    b.quaternion.copy(headQi); // (repère du chat au repos)
+    // (repère du chat au repos, tourné vers l'extérieur comme le regard : la paupière tourne autour des coins de l'œil)
+    b.quaternion.copy(headQi).multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_Y, (s === 0 ? 1 : -1) * LID_YAW));
     bones[headI].add(b);
     b.userData.restP = b.position.clone();
     b.userData.restQ = b.quaternion.clone();
@@ -1014,7 +1055,8 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
   }
   // Paupières (géométrie propre à la race, partagée).
   S.lidGeo ??= lidGeometry(base, S.D, B, nb);
-  const lidMesh = new PetMesh(S.lidGeo, coatMat, hb);
+  const lidMat = catLidMaterial(coatMat);
+  const lidMesh = new PetMesh(S.lidGeo, lidMat, hb);
   meshes.push(lidMesh);
   growBoneBoxes(hb.boneBox, S.lidGeo.attributes.position.array, S.lidGeo.attributes.skinIndex.array, S.lidGeo.attributes.skinWeight.array, S.lidGeo.attributes.position.count);
   // Pinceaux et poils des oreilles.
@@ -1164,7 +1206,7 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     if (disposed) return;
     disposed = true;
     model.anim.dispose();
-    for (const m of [coatMat, eyeMesh?.material, tuftMesh?.material, ...shells.map((x) => x.material)]) m?.dispose?.();
+    for (const m of [coatMat, lidMat, eyeMesh?.material, tuftMesh?.material, ...shells.map((x) => x.material)]) m?.dispose?.();
     releaseShape(S);
   };
   fitCollar(model, base, S);
@@ -1189,45 +1231,54 @@ function fitCollar(model, base, S) {
     const W = base.W;
     const mesh = model.coatMesh;
     const n = base.prims.coat.count;
-    const n0 = model.bone('neck1').getWorldPosition(V());
+    // Axe du poitrail (os chest) à la tête : le chaton n'a presque pas de cou, sa grosse tête commence juste après
+    // neck1 ; des coupes prises entre neck1 et la tête passaient par les joues (cerceau autour de la tête).
+    const n0 = (model.bone('chest') ?? model.bone('neck1')).getWorldPosition(V());
     const hp = model.head.getWorldPosition(V());
     const axis = hp.clone().sub(n0);
     const nlen = axis.length();
     axis.normalize();
-    // Coupes perpendiculaires à l'axe cou → tête : le collier glisse là où le cou est le plus fin (le chaton n'a
-    // presque pas de cou : une coupe à mi-chemin passait par les joues et donnait un cerceau autour de la tête).
+    // Coupes perpendiculaires à cet axe : le collier se pose juste derrière la tête (la dernière coupe qui ne prend
+    // presque pas de peau de la tête), là où le cou est le plus fin dans les 10 % qui précèdent.
     const lx = V(1, 0, 0).addScaledVector(axis, -axis.x).normalize();
     const ly = axis.clone().cross(lx);
-    const mid = n0.clone().addScaledVector(axis, nlen * 0.5);
     const cand = [];
     const p = V();
     for (let i = 0; i < n; i++) {
       if (W.ear[i * 2] + W.ear[i * 2 + 1] > 0.1) continue;
       if (W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] > 0.5) continue;
       mesh.getVertexPosition(i, p);
-      if (p.distanceTo(mid) > 0.11) continue;
       _w.copy(p).sub(n0);
-      cand.push([_w.dot(axis), _w.dot(lx), _w.dot(ly)]);
+      const d = _w.dot(axis);
+      if (d < 0 || d > nlen * 1.05) continue;
+      cand.push([d, _w.dot(lx), _w.dot(ly), W.head[i]]);
     }
-    let best = null;
-    for (let t = 0.15; t <= 0.86; t += 0.1) {
+    const cuts = [];
+    for (let t = 0.1; t <= 0.951; t += 0.05) {
       const d0 = nlen * t;
       let x0 = Infinity;
       let x1 = -Infinity;
       let y0 = Infinity;
       let y1 = -Infinity;
       let cnt = 0;
-      for (const [d, x, y] of cand) {
-        if (Math.abs(d - d0) > 0.005) continue;
+      let hw = 0;
+      for (const [d, x, y, h] of cand) {
+        if (Math.abs(d - d0) > 0.004) continue;
         x0 = Math.min(x0, x);
         x1 = Math.max(x1, x);
         y0 = Math.min(y0, y);
         y1 = Math.max(y1, y);
+        hw += h;
         cnt++;
       }
       if (cnt < 12) continue;
-      const area = (x1 - x0) * (y1 - y0);
-      if (!best || area < best.area) best = { area, d0, x0, x1, y0, y1 };
+      cuts.push({ t, area: (x1 - x0) * (y1 - y0), head: hw / cnt, d0, x0, x1, y0, y1 });
+    }
+    const last = cuts.filter((c) => c.head <= 0.06).pop();
+    let best = null;
+    for (const c of cuts) {
+      if (!last || c.t > last.t + 1e-6 || c.t < last.t - 0.1 - 1e-6) continue;
+      if (!best || c.area < best.area) best = c;
     }
     const B = model.build;
     let center = n0.clone().addScaledVector(axis, nlen * 0.45);
@@ -1253,6 +1304,7 @@ function fitCollar(model, base, S) {
       rx, ry,
     };
   }
+  model.anim.resync();
   const F = S.collarFit;
   fit.center = F.center.clone();
   fit.normal = F.normal.clone();
@@ -1398,6 +1450,22 @@ class RealCatAnim {
     this.tailUpQ = this.sampleTail('tail_up');
     this.contactPoints();
     this.measureNatural();
+    this.resync();
+  }
+
+  /**
+   * Après les mesures (faites une fois par race, sur le premier chat construit) : os remis au repos et mixeur forcé de
+   * tout réécrire à la prochaine image. Le mixeur n'écrit un os que si sa valeur change d'une image à l'autre ; les os
+   * qu'un clip n'anime pas (le bassin dans idle et walk) gardaient la pose de la dernière mesure (le bassin basculé de
+   * la toilette) : le premier chat de chaque race marchait les pattes avant en l'air, les suivants non.
+   */
+  resync() {
+    for (const b of this.bones) {
+      b.position.copy(b.userData.restP);
+      b.quaternion.copy(b.userData.restQ);
+    }
+    this.savePose();
+    for (const pm of this.mixer._bindings ?? []) pm.buffer.fill(NaN, pm.valueSize, 3 * pm.valueSize);
   }
 
   /** Rotations locales des os de la queue d'un clip (calque « queue levée »), à son début. */
@@ -1768,20 +1836,22 @@ class RealCatAnim {
       this.turn(head, AX, this.look.y * 0.5);
     }
     if (st.sad && !moving && !sleeping) this.turn(neck, AX, 0.2);
-    // Paupières : clignement ; mi-closes pendant la toilette et couché ; fermées en boule.
+    // Paupières : clignement ; mi-closes pendant la toilette et couché (par moments), un peu dans les bras ; fermées
+    // en boule. Le bord descend du haut de l'œil (voir lidGeometry).
     this.blinkT -= dt;
     if (this.blinkT <= 0) {
       this.blink = 1;
       this.blinkT = 2.5 + ((Math.sin(t * 12.9898) * 43758.5) % 1 + 1) % 1 * 4;
     }
     this.blink = Math.max(0, this.blink - dt * 7);
-    const half = this.posture === 'groom' ? 0.55 : this.posture === 'lie' ? 0.3 + 0.25 * Math.max(0, Math.sin(t * 0.2)) : 0;
+    const drowse = Math.max(0, Math.sin(t * 0.2));
+    const half = this.posture === 'groom' ? 0.5 : st.carried ? 0.1 + 0.2 * drowse : this.posture === 'lie' ? 0.12 + 0.36 * drowse : 0;
     const closed = sleeping ? 1 : Math.max(half, Math.sin(Math.PI * this.blink));
     for (const lid of md.lids) {
-      const on = closed > 0.03;
+      const on = closed > 0.02;
       lid.scale.setScalar(on ? 1 : 0.0001);
       lid.quaternion.copy(lid.userData.restQ);
-      if (on) this.turn(lid, AX, -1.35 * (1 - closed));
+      if (on) lid.quaternion.multiply(_q.setFromAxisAngle(AX, LID_OPEN + (LID_SHUT - LID_OPEN) * closed));
     }
     // Oreilles : elles bougent vers ce qu'il écoute, se couchent quand il a peur, qu'il est triste ou endormi.
     const fold = md.build.ears === 'fold';
@@ -1818,6 +1888,13 @@ class RealCatAnim {
     const md = this.model;
     md.root.updateMatrixWorld(true);
     _m.copy(md.root.matrixWorld).invert();
+    const air = (this.trick?.clip === 'jump' && this.trick.age < 0.25) || (this.w.jump ?? 0) > 0.3;
+    // Aux allures posées (pas, trot, équilibre) : avant et arrière à la même hauteur (voir levelPairs).
+    if (st.moving && !air && this.gait !== 'run') this.levelPairs(dt);
+    else {
+      this.pitchGap = 0;
+      this.fMin = this.hMin = undefined;
+    }
     let low = Infinity;
     for (let l = 0; l < md.legs.length; l++) {
       const paw = md.legs[l].paw;
@@ -1827,7 +1904,6 @@ class RealCatAnim {
       }
     }
     if (!Number.isFinite(low)) low = 0;
-    const air = (this.trick?.clip === 'jump' && this.trick.age < 0.25) || (this.w.jump ?? 0) > 0.3;
     let target;
     let floor = -low;
     if (st.moving || air) {
@@ -1914,6 +1990,44 @@ class RealCatAnim {
   }
 
   /**
+   * Allures posées : le corps est basculé autour de la racine pour que la patte avant la plus basse et la patte arrière
+   * la plus basse soient à la même hauteur. Le clip est fait pour les pattes du modèle d'origine ; celles d'une race
+   * (british : pattes courtes, ventre bas) gardaient les pieds avant à 6 mm du sol, jamais posés, pendant que les
+   * postérieurs glissaient. Écart lissé (au pas, une patte avant et une arrière sont presque toujours en appui).
+   */
+  levelPairs(dt) {
+    const md = this.model;
+    let F = Infinity;
+    let H = Infinity;
+    let fz = 0;
+    let hz = 0;
+    for (let l = 0; l < md.legs.length; l++) {
+      const paw = md.legs[l].paw;
+      for (const p of this.solePts[l]) {
+        _v.copy(p).applyMatrix4(paw.matrixWorld).applyMatrix4(_m);
+        if (l < 2 && _v.y < F) {
+          F = _v.y;
+          fz = _v.z;
+        } else if (l >= 2 && _v.y < H) {
+          H = _v.y;
+          hz = _v.z;
+        }
+      }
+    }
+    if (!Number.isFinite(F) || !Number.isFinite(H)) return;
+    // (minimum glissant de chaque paire : la hauteur de ses appuis sur la foulée, pas celle d'une patte levée)
+    const rise = dt > 0 ? dt * 0.03 : Infinity;
+    this.fMin = Math.min(F, (this.fMin ?? F) + rise);
+    this.hMin = Math.min(H, (this.hMin ?? H) + rise);
+    const k = dt > 0 ? Math.min(1, dt * 6) : 1;
+    this.pitchGap = (this.pitchGap ?? 0) + (this.hMin - this.fMin - (this.pitchGap ?? 0)) * k;
+    const th = clamp(-this.pitchGap / Math.max(0.05, fz - hz), -0.15, 0.15);
+    if (!(Math.abs(th) > 1e-4)) return;
+    this.turn(md.body, AX, th);
+    md.root.updateMatrixWorld(true);
+  }
+
+  /**
    * Pieds en appui tenus sur place (pas, trot, équilibre) : quand une patte se pose, la place de ses doigts est notée ;
    * tant qu'elle reste posée, la patte est tournée à l'épaule ou à la hanche pour y ramener les doigts. Les pattes
    * raccourcies ou allongées d'une race changent la foulée du clip : sans cela, les pieds patinaient en appui.
@@ -1921,6 +2035,9 @@ class RealCatAnim {
   footLock() {
     const md = this.model;
     const inv = _m;
+    // (rotation seule de la racine : sa matrice porte aussi la taille du chat)
+    md.root.matrixWorld.decompose(_rt, _q, _rs);
+    _q.invert();
     for (let l = 0; l < md.legs.length; l++) {
       const leg = md.legs[l];
       let low = Infinity;
@@ -1928,25 +2045,37 @@ class RealCatAnim {
         const y = _v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(inv).y;
         if (y < low) low = y;
       }
-      if (!(low < 0.006)) {
+      // Prise d'appui à 12 mm du sol, lâchée à 18 (repère du chat de taille 1) : prise à 6 mm, le pied du clip
+      // arrivait encore lancé et glissait avant d'être tenu (2 cm par appui aux postérieurs du british).
+      if (!(low < (this.plant[l] ? 0.018 : 0.012))) {
         this.plant[l] = null;
         continue;
       }
-      const toe = _u.setFromMatrixPosition(leg.paw.matrixWorld);
       if (!this.plant[l]) {
-        this.plant[l] = toe.clone();
+        this.plant[l] = _u.setFromMatrixPosition(leg.paw.matrixWorld).clone();
         continue;
       }
-      const errW = _v.copy(toe).sub(this.plant[l]);
-      _q.setFromRotationMatrix(md.root.matrixWorld).invert();
-      const ez = errW.applyQuaternion(_q).z;
-      const top = _w.setFromMatrixPosition(leg.pivot.matrixWorld);
-      const Lg = Math.max(0.02, top.distanceTo(toe));
-      const th = Math.asin(clamp(ez / Lg, -0.5, 0.5));
-      if (Math.abs(th) < 1e-4) continue;
-      this.turn(leg.pivot, AX, th);
-      leg.pivot.updateMatrixWorld(true);
-      if (Math.abs(ez) > 0.45 * Lg) this.plant[l] = null;
+      // en long et sur le côté, deux passes (le pied n'est pas à l'aplomb de l'articulation)
+      let th = 0;
+      let ph = 0;
+      for (let pass = 0; pass < 2; pass++) {
+        const toe = _u.setFromMatrixPosition(leg.paw.matrixWorld);
+        const err = _v.copy(toe).sub(this.plant[l]).applyQuaternion(_q);
+        const top = _w.setFromMatrixPosition(leg.pivot.matrixWorld);
+        const Lg = Math.max(0.02 * _rs.y, top.distanceTo(toe));
+        if (!pass && Math.abs(err.z) > 0.45 * Lg) {
+          this.plant[l] = null;
+          break;
+        }
+        const dth = clamp(Math.asin(clamp(err.z / Lg, -0.5, 0.5)), -0.52 - th, 0.52 - th);
+        const dph = clamp(-Math.asin(clamp(err.x / Lg, -0.2, 0.2)), -0.2 - ph, 0.2 - ph);
+        if (!(Math.abs(dth) >= 1e-4 || Math.abs(dph) >= 1e-4)) break;
+        th += dth;
+        ph += dph;
+        this.turn(leg.pivot, AX, dth);
+        this.turn(leg.pivot, AZ, dph);
+        leg.pivot.updateMatrixWorld(true);
+      }
     }
   }
 
@@ -2163,6 +2292,7 @@ export function animateRealCat(e, dt, sad) {
   st.balance = e.perch?.phase === 'on';
   st.sleeping = asleep;
   st.posture = posture;
+  st.carried = !!e.carried;
   st.sad = sad;
   st.fear = e.state === 'flee';
   st.following = !!(d.following || e.herdCtrl?.pusher);

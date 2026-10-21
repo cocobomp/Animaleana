@@ -190,10 +190,12 @@ describe('races reconnaissables (par les os et le shader)', () => {
     expect(plan('devon_rex').curly).toBe(1);
     const copper = (hex) => ((hex >> 16) & 255) > 180 && (hex & 255) < 80;
     expect(copper(plan('chartreux').eye)).toBe(true);
-    // chaton : points encore pâles, masque plus petit
+    // chaton : points aussi marqués (sinon siamois, sacré de Birmanie et ragdoll se ressemblaient tous), masque à peine
+    // plus petit
     const k = catCoatPlan(lookOf('siamois'), breedOf('siamois'), true);
-    expect(k.points).toBeLessThan(1);
+    expect(k.points).toBe(1);
     expect(k.maskScale).toBeLessThan(1);
+    expect(k.maskScale).toBeGreaterThan(0.85);
   });
 
   it('chaton : modèle du chaton, traits de la race adoucis ; le jeune prend le modèle adulte', () => {

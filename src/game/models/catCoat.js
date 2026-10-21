@@ -53,9 +53,10 @@ export function catCoatPlan(look = {}, breed = null, kitten = false) {
   const P = {
     pattern, white, base: coat, sec, third, whiteC,
     eye: tr.eye, eye2: tr.eye2,
-    // (chaton : points un peu plus pâles et masque plus petit ; à 0,6 ils ne se voyaient presque plus)
-    points: pattern === 'points' ? (kitten ? 0.88 : 1) : 0,
-    maskScale: kitten ? 0.8 : 1,
+    // (chaton : masque à peine plus petit, points aussi marqués ; plus pâles, les chatons siamois, sacré de Birmanie et
+    // ragdoll se ressemblaient tous)
+    points: pattern === 'points' ? 1 : 0,
+    maskScale: kitten ? 0.92 : 1,
     hairless, curly: tr.hair === 'curly' ? 1 : 0, plush: tr.hair === 'plush' ? 1 : 0, wrinkles: hairless,
     dark: hexLum(coat) < 0.06 && pattern !== 'tricolor',
     seed: ((look.seed ?? 7) % 997) * 0.731,
@@ -119,6 +120,8 @@ export function makeCatLandUniforms(L) {
     cMisc: { value: new THREE.Vector4(L.midX, L.tailTipZ, L.neckZ, L.tailBaseZ) },
     cNose: { value: new THREE.Vector4(L.nose.x, L.nose.y, L.nose.z, Math.max(0.02, L.noseZ - L.head.z)) },
     cTailB: { value: new THREE.Vector4(L.tailBase.x, L.tailBase.y, L.tailBase.z, Math.max(0.05, L.tailLen)) },
+    // iris peint (chaton : yeux noirs dans sa texture) : actif, rayon du globe, demi-angle de l'iris, largeur de la pupille
+    cIris: { value: new THREE.Vector4(L.paintIris ? 1 : 0, L.eyeR ?? 0.008, 0.86, 0.14) },
   };
 }
 
@@ -494,7 +497,9 @@ if (cOn > 0.5 && cRole > 0.5 && (cHair.y > 0.0 || cHair.w > 0.0)) {
 }`;
 
 // Yeux : l'iris prend la couleur de la race (œil gauche cEyeL, droit cEyeR : yeux vairons), la pupille (texels
-// sombres) et les reflets (très clairs, peu colorés) gardent la texture.
+// sombres) et les reflets (très clairs, peu colorés) gardent la texture. Chaton (cIris.x) : ses yeux sont peints tout
+// noirs dans la texture de FainoDS ; l'iris y est dessiné autour du regard (disque de la couleur de la race, plus clair
+// vers la pupille, cercle sombre au bord, fibres), pupille ronde de chaton, reflet gardé.
 const EYE_F = /* glsl */ `
 {
   vec3 c0 = diffuseColor.rgb;
@@ -503,14 +508,36 @@ const EYE_F = /* glsl */ `
   float pupil = 1.0 - smoothstep(0.025, 0.06, lum0);
   float glint = smoothstep(0.55, 0.8, lum0) * (1.0 - smoothstep(0.1, 0.3, hsv.y));
   vec3 iris = (vCmpPos.x > cMisc.x ? cEyeL : cEyeR);
-  vec3 ic = iris * clamp(0.55 + 1.6 * lum0, 0.5, 1.45);
-  diffuseColor.rgb = mix(ic, c0, clamp(max(pupil, glint), 0.0, 1.0));
+  if (cIris.x > 0.5) {
+    float side = vCmpPos.x > cMisc.x ? 1.0 : -1.0;
+    vec3 C = vec3(cMisc.x + side * cEye.x, cEye.y, cEye.z);
+    vec3 d = normalize(vCmpPos - C);
+    vec3 G = normalize(vec3(side * 0.3, 0.08, 0.95));
+    vec3 R = normalize(cross(vec3(0.0, 1.0, 0.0), G));
+    vec3 U = cross(G, R);
+    float ang = acos(clamp(dot(d, G), -1.0, 1.0));
+    float t = ang / cIris.z;
+    float inI = 1.0 - smoothstep(0.9, 1.0, t);
+    float px = dot(d, R);
+    float py = dot(d, U);
+    float fib = 0.86 + 0.14 * sin(atan(py, px) * 31.0 + sin(atan(py, px) * 7.0) * 2.0);
+    vec3 ic = iris * (0.7 + 0.55 * (1.0 - t)) * fib * (1.0 - 0.55 * smoothstep(0.72, 1.0, t));
+    float pup = 1.0 - smoothstep(0.8, 1.0, length(vec2(px / cIris.w, py / (cIris.w * 1.35))));
+    vec3 col = mix(c0, ic, inI);
+    col = mix(col, vec3(0.012, 0.01, 0.01), pup * inI);
+    diffuseColor.rgb = mix(col, c0, glint);
+  } else {
+    vec3 ic = iris * clamp(0.55 + 1.6 * lum0, 0.5, 1.45);
+    diffuseColor.rgb = mix(ic, c0, clamp(max(pupil, glint), 0.0, 1.0));
+  }
 }`;
 
 const EYE_COMMON_F = /* glsl */ `
 uniform vec3 cEyeL;
 uniform vec3 cEyeR;
 uniform vec4 cMisc;
+uniform vec4 cEye;
+uniform vec4 cIris;
 varying vec3 vCmpPos;
 vec3 cmpHsv(vec3 c) {
   vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
@@ -539,7 +566,7 @@ export function catCoatMaterial(src, shared, opts) {
   if (mat.normalMap) mat.normalScale.set(0.8, 0.8);
   if (role === 'eye') {
     mat.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, { cEyeL: shared.cEyeL, cEyeR: shared.cEyeR, cMisc: shared.cMisc });
+      Object.assign(sh.uniforms, { cEyeL: shared.cEyeL, cEyeR: shared.cEyeR, cMisc: shared.cMisc, cEye: shared.cEye, cIris: shared.cIris });
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nattribute vec3 cmpRest;\nvarying vec3 vCmpPos;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCmpPos = cmpRest;');
@@ -547,7 +574,7 @@ export function catCoatMaterial(src, shared, opts) {
         .replace('#include <common>', `#include <common>\n${EYE_COMMON_F}`)
         .replace('#include <color_fragment>', `#include <color_fragment>\n${EYE_F}`);
     };
-    mat.customProgramCacheKey = () => 'cat-eye-v1';
+    mat.customProgramCacheKey = () => 'cat-eye-v2';
     return mat;
   }
   const keep = opts.keep ?? {};
@@ -575,6 +602,29 @@ export function catCoatMaterial(src, shared, opts) {
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.55, cHair.x), 0.45, cWet);');
   };
   mat.customProgramCacheKey = () => 'cat-coat-v1';
+  return mat;
+}
+
+/**
+ * Matière des paupières : celle du pelage (même robe), sans carte de normales ni d'occlusion (la paupière n'a pas de
+ * coordonnées de texture propres), avec un liseré sombre au bord (attribut lidRim : 1 au bord), comme le contour des
+ * yeux du chat ; fermée, il ne reste qu'une fente sombre.
+ */
+export function catLidMaterial(coatMat) {
+  const mat = coatMat.clone();
+  mat.normalMap = null;
+  mat.aoMap = null;
+  const coatCompile = coatMat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    coatCompile(sh, r);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float lidRim;\nvarying float vLidRim;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLidRim = lidRim;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vLidRim;')
+      .replace('#include <alphamap_fragment>', 'diffuseColor.rgb *= mix(1.0, 0.1, smoothstep(0.0, 1.0, vLidRim));\n#include <alphamap_fragment>');
+  };
+  mat.customProgramCacheKey = () => 'cat-lid-v1';
   return mat;
 }
 

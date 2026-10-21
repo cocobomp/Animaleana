@@ -28,7 +28,7 @@ import { makeGoatUniforms, setGoatCoat, goatMaterial } from './goatCoat.js';
 import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from './ruminantHair.js';
 import {
   cleanClips, emptyBoneBoxes, growBoneBoxes, measureSheep, sheepJoints, contactShadow, SheepMesh, RealSheepAnim, pickSheepGait, lying,
-  smoothNormals,
+  smoothNormals, nurseSideOf,
 } from './sheepReal.js';
 
 /** Clé du GLB (assets.js) : jamais « goat » (gltfAnimal.js le prendrait pour un animal GLB générique). */
@@ -1188,7 +1188,7 @@ export function animateRealGoat(e, dt, sad) {
     // le repousse pas et reste debout : tétée seulement si elle est debout)
     e.nursing = mother;
     mother.nursedFor = 1.5;
-    e.nurseSide ??= (d.id?.charCodeAt?.(2) ?? 1) % 2 ? 1 : -1;
+    nurseSideOf(e, mother); // (jumeaux : chacun son trayon)
     const want = nurseSpot(e, mother, _v);
     const p = e.root.position;
     const k = Math.min(1, dt * 2);

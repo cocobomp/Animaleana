@@ -231,9 +231,12 @@ export function realSheepBase(gltf) {
   // Direction du volume de la toison : la normale lissée sur 7 cm (gonflée le long de la normale brute, la toison
   // épaisse du mérinos faisait des arêtes et des facettes aux épaules et aux hanches).
   const puffN = smoothNormals(pos, nrm, n, 0.07);
+  // Part du volume de chaque sommet (tronc et encolure laineux), lissée sur 9 cm : passée d'une arête à l'autre (épaule,
+  // grasset), la toison gonflée surplombait le membre et se repliait (fente claire de l'épaule, faces retournées).
+  const puffW = puffWeights(pos, nrm, mask, trunk, n, 0.09);
   const base = {
     names, index, parent, heads, rotW, nb,
-    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, trunk, puffN, index: idx, lodIndex, count: n, material: master.material, domBone },
+    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, trunk, puffN, puffW, index: idx, lodIndex, count: n, material: master.material, domBone },
     clips: cleanClips(gltf.animations),
     natural,
     legChains,
@@ -246,16 +249,43 @@ export function realSheepBase(gltf) {
   return base;
 }
 
+/**
+ * Part du volume de la toison de chaque sommet : laineux (masque de laine), ni tête, ni bas des pattes, porté par le
+ * tronc (pas le creux de l'aisselle, porté par le membre) — puis moyennée sur un rayon r (comme smoothNormals : pas à
+ * travers une paroi), pour que la toison gonflée descende en pente douce sur l'épaule et la cuisse.
+ */
+export function puffWeights(pos, nrm, mask, trunk, n, r) {
+  const sm = (a, b, x) => {
+    const t = clamp((x - a) / (b - a), 0, 1);
+    return t * t * (3 - 2 * t);
+  };
+  const w0 = new Float32Array(n);
+  for (let i = 0; i < n; i++) w0[i] = sm(0.35, 0.8, mask[i * 4]) * (1 - mask[i * 4 + 1]) * (1 - mask[i * 4 + 2]) * sm(0.35, 0.9, trunk[i]);
+  return smoothField(pos, nrm, n, r, w0, 1);
+}
+
 /** Normales moyennées (pondérées par la distance) sur un rayon r autour de chaque sommet (grille de voisinage). */
 export function smoothNormals(pos, nrm, n, r) {
+  const out = smoothField(pos, nrm, n, r, nrm, 3);
+  for (let i = 0; i < n; i++) {
+    const l = Math.hypot(out[i * 3], out[i * 3 + 1], out[i * 3 + 2]) || 1;
+    out[i * 3] /= l;
+    out[i * 3 + 1] /= l;
+    out[i * 3 + 2] /= l;
+  }
+  return out;
+}
+
+/** Moyenne pondérée (1 − d²/r²) d'un champ à k composantes sur un rayon r, sans traverser une paroi (normales opposées). */
+function smoothField(pos, nrm, n, r, field, k) {
   const grid = new Map();
   const key = (x, y, z) => `${x}|${y}|${z}`;
   for (let i = 0; i < n; i++) {
-    const k = key(Math.floor(pos[i * 3] / r), Math.floor(pos[i * 3 + 1] / r), Math.floor(pos[i * 3 + 2] / r));
-    if (!grid.has(k)) grid.set(k, []);
-    grid.get(k).push(i);
+    const g = key(Math.floor(pos[i * 3] / r), Math.floor(pos[i * 3 + 1] / r), Math.floor(pos[i * 3 + 2] / r));
+    if (!grid.has(g)) grid.set(g, []);
+    grid.get(g).push(i);
   }
-  const out = new Float32Array(n * 3);
+  const out = new Float32Array(n * k);
   const r2 = r * r;
   for (let i = 0; i < n; i++) {
     const x = pos[i * 3];
@@ -264,9 +294,7 @@ export function smoothNormals(pos, nrm, n, r) {
     const gx = Math.floor(x / r);
     const gy = Math.floor(y / r);
     const gz = Math.floor(z / r);
-    let ax = 0;
-    let ay = 0;
-    let az = 0;
+    let ws = 0;
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
       for (const j of grid.get(key(gx + a, gy + b, gz + c)) ?? []) {
         const dx = pos[j * 3] - x;
@@ -278,15 +306,12 @@ export function smoothNormals(pos, nrm, n, r) {
         const dot = nrm[i * 3] * nrm[j * 3] + nrm[i * 3 + 1] * nrm[j * 3 + 1] + nrm[i * 3 + 2] * nrm[j * 3 + 2];
         if (dot < 0) continue;
         const w = 1 - d2 / r2;
-        ax += nrm[j * 3] * w;
-        ay += nrm[j * 3 + 1] * w;
-        az += nrm[j * 3 + 2] * w;
+        for (let c2 = 0; c2 < k; c2++) out[i * k + c2] += field[j * k + c2] * w;
+        ws += w;
       }
     }
-    const l = Math.hypot(ax, ay, az) || 1;
-    out[i * 3] = ax / l;
-    out[i * 3 + 1] = ay / l;
-    out[i * 3 + 2] = az / l;
+    // (normales : la longueur est refaite par smoothNormals ; champ scalaire : moyenne)
+    if (k === 1 && ws > 0) out[i] /= ws;
   }
   return out;
 }
@@ -379,6 +404,7 @@ function shapeFor(base, B) {
     sheepMask: new THREE.BufferAttribute(P.mask, 4),
     sheepTrunk: new THREE.BufferAttribute(P.trunk, 1),
     sheepPuffN: new THREE.BufferAttribute(P.puffN, 3),
+    sheepPuffW: new THREE.BufferAttribute(P.puffW, 1),
   };
   const morphP = new THREE.BufferAttribute(P.dPos, 3);
   const morphN = new THREE.BufferAttribute(P.dNrm, 3);
@@ -560,7 +586,8 @@ function sheepLocks(base, S, B) {
     back: pos[i * 3 + 2] < M.hipZ + 0.05 ? 0.4 : 0.1,
     side: 0,
   }));
-  const geo = lockCards(picks, { pos, nrm: P.puffN, si: P.si, sw: P.sw }, 0.006);
+  // (dPos : la racine rentre avec la cible « shorn » du corps, toison à moitié tondue)
+  const geo = lockCards(picks, { pos, nrm: P.puffN, si: P.si, sw: P.sw, dPos: P.dPos }, 0.006);
   S.locks.set(key, geo);
   return geo;
 }
@@ -948,12 +975,8 @@ export function skinPoint(pt, s, inv, puff = 0) {
  * bosses × masque du tronc), dans le repère de repos ; pos : positions du gabarit (celles du shader). Renvoie out.
  */
 export function puffAt(P, pos, i, B, out) {
-  if (!P.puffN || !P.trunk) return out.set(0, 0, 0);
-  const sm = (a, b, x) => {
-    const t = clamp((x - a) / (b - a), 0, 1);
-    return t * t * (3 - 2 * t);
-  };
-  const pm = sm(0.35, 0.8, P.mask[i * 4]) * (1 - P.mask[i * 4 + 1]) * (1 - P.mask[i * 4 + 2]) * sm(0.35, 0.9, P.trunk[i]);
+  if (!P.puffN || !P.puffW) return out.set(0, 0, 0);
+  const pm = P.puffW[i];
   const f = B.lumpFreq ?? 9;
   const x = pos[i * 3] * f;
   const y = pos[i * 3 + 1] * f;
@@ -1316,7 +1339,7 @@ export class RealSheepAnim {
     md.uniforms.sPuff.value.x = this.puffNow;
     md.uniforms.sPuff.value.y = (B.folds ?? 0) * (0.4 + 0.6 * clamp(md.fleece, 0, 1));
     // (mèches de la laine longue : longueur de la toison du moment, repliées couché, racine poussée avec la toison)
-    if (md.lockUniforms) md.lockUniforms.hState.value.set(clamp(1 - this.shorn, 0, 1.4) / Math.max(0.2, 1 + (B.fleece ?? 0)), 0, this.puffNow * 0.85, 0);
+    if (md.lockUniforms) md.lockUniforms.hState.value.set(clamp(1 - this.shorn, 0, 1.4) / Math.max(0.2, 1 + (B.fleece ?? 0)), 0, this.puffNow * 0.85, this.shorn);
     // (couché : la laine longue s'étale au sol au lieu de pendre sous le ventre)
     const lie = (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.ruminate ?? 0) + 0.6 * ((this.w.lie_down ?? 0) + (this.w.get_up ?? 0));
     md.uniforms.sState.value.w = clamp(lie, 0, 1);
@@ -1919,6 +1942,21 @@ export function lambNurseSpot(e, mother, out) {
   return h + Math.PI + side * 0.45;
 }
 
+/**
+ * Côté de la mère où tète le petit (1 ou −1, gardé dans e.nurseSide) : d'après son identifiant, mais des jumeaux qui
+ * tètent la même mère prennent chacun un trayon (ils visaient souvent le même côté, se poussaient et restaient à 20–35 cm
+ * de la mamelle). La mère retient qui tète de chaque côté (mother.nurseBy).
+ */
+export function nurseSideOf(e, mother) {
+  const claims = (mother.nurseBy ??= {});
+  let side = e.nurseSide ?? ((e.data?.id?.charCodeAt?.(2) ?? 1) % 2 ? 1 : -1);
+  const other = claims[side];
+  if (other && other !== e && other.nursing === mother) side = -side;
+  claims[side] = e;
+  e.nurseSide = side;
+  return side;
+}
+
 /** Mamelle de la mère (monde) où vient la bouche de l'agneau : l'ancre « teat » du mouton réaliste, de son côté. */
 export function lambTeatPoint(e, mother, out) {
   const md = mother.model;
@@ -2012,7 +2050,7 @@ export function animateRealSheep(e, dt, sad) {
       mother.state = 'idle';
       mother.timer = Math.max(mother.timer ?? 0, 3);
     }
-    e.nurseSide ??= (d.id?.charCodeAt?.(2) ?? 1) % 2 ? 1 : -1;
+    nurseSideOf(e, mother);
     const want = lambNurseSpot(e, mother, _nv);
     const p = e.root.position;
     const teat = lambTeatPoint(e, mother, _nt);

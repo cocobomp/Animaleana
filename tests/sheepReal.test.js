@@ -171,6 +171,54 @@ describe('races et agneaux', () => {
     md.dispose();
   });
 
+  it('laine longue à moitié tondue : la racine des mèches rentre avec le corps (pas de mèches qui flottent sur le dos)', () => {
+    const md = sheep('islandais_mouton', { fleece: 0.5 });
+    const locks = md.root.getObjectByName('sheep_locks');
+    expect(locks).toBeTruthy();
+    const g = locks.geometry;
+    const P = md.anim.base.prim;
+    // (chaque carte porte le déplacement de la cible « shorn » de son sommet porteur)
+    const hd = g.attributes.hairD;
+    expect(hd.count).toBe(g.attributes.position.count);
+    let moved = 0;
+    for (let v = 0; v < hd.count; v++) if (Math.hypot(hd.getX(v), hd.getY(v), hd.getZ(v)) > 0.01) moved++;
+    expect(moved).toBeGreaterThan(hd.count * 0.3);
+    expect(Math.max(...P.dPos.map(Math.abs))).toBeGreaterThan(0.01);
+    // (le poids de la cible du corps est passé aux mèches : la racine suit la peau)
+    md.anim.applyFleece(1e9);
+    expect(md.lockUniforms.hState.value.w).toBeCloseTo(md.mesh.morphTargetInfluences[0], 5);
+    expect(md.lockUniforms.hState.value.w).toBeGreaterThan(0.2);
+    md.dispose();
+  });
+
+  it('toison épaisse : le volume descend en pente douce sur l\'épaule et la cuisse (pas de marche qui se replie)', () => {
+    // (part du volume lissée sur 9 cm : d'un sommet à son voisin, le gonflement change de moins que la longueur de
+    // l'arête ; brute, la toison du mérinos australien faisait des marches de 5 fois l'arête à l'épaule et au grasset)
+    for (const breed of ['merinos', 'merinos_australien']) {
+      const md = sheep(breed);
+      const g = md.mesh.geometry;
+      const pos = g.attributes.position;
+      const w = g.attributes.sheepPuffW;
+      expect(w.count).toBe(pos.count);
+      const puff = sheepBuild(lookOf(breed), { breed }).puff;
+      expect(puff).toBeGreaterThan(0.08);
+      const idx = g.index.array;
+      let worst = 0;
+      let wMax = 0;
+      for (let t = 0; t < idx.length; t += 3) {
+        for (const [a, b] of [[idx[t], idx[t + 1]], [idx[t + 1], idx[t + 2]], [idx[t + 2], idx[t]]]) {
+          const L = Math.hypot(pos.getX(a) - pos.getX(b), pos.getY(a) - pos.getY(b), pos.getZ(a) - pos.getZ(b));
+          if (L < 1e-4) continue;
+          worst = Math.max(worst, (Math.abs(w.getX(a) - w.getX(b)) * puff) / L);
+          wMax = Math.max(wMax, w.getX(a));
+        }
+      }
+      expect(wMax).toBeGreaterThan(0.9); // (le tronc gonfle en plein)
+      expect(worst).toBeLessThan(1.3);
+      md.dispose();
+    }
+  });
+
   it('les 7 races et leurs agneaux se construisent : cornes selon la race et le sexe, taille de l\'Ouessant', () => {
     for (const b of BREEDS) {
       for (const o of [{ sex: 'm' }, { sex: 'f' }, { lamb: true }, { young: true }]) {
@@ -692,6 +740,42 @@ describe('tétée', () => {
     expect(lay).toBe(0);
     mom.model.dispose();
     lamb.model.dispose();
+  }, 60000);
+
+  // En jeu, des jumeaux visaient souvent le même côté (même parité d'identifiant) : ils se poussaient et restaient à
+  // 20–35 cm de la mamelle.
+  it('jumeaux : chacun son trayon, de part et d\'autre de la mère, la bouche à la mamelle', () => {
+    const mom = ent(sheep('cheviot'), 'mo-ther', 0, 0, 0.3, 1);
+    mom.restSeed = 0.22;
+    // (même caractère d'indice 2 : sans partage, ils prendraient le même côté)
+    const twins = [ent(sheep('cheviot', { lamb: true }), 'ki-d1', 0.9, -0.6, 2, 0.62), ent(sheep('cheviot', { lamb: true }), 'ki-d2', -0.8, -0.5, 1, 0.62)];
+    const teat = new THREE.Vector3();
+    const d = [[], []];
+    for (let f = 0; f < 900; f++) {
+      for (const e of [mom, ...twins]) e.time += 1 / 30;
+      mom.root.updateMatrixWorld(true);
+      animateRealSheep(mom, 1 / 30, false);
+      twins.forEach((l, k) => {
+        l.stage = 'baby';
+        l.state = 'mother';
+        l.partner = mom;
+        mom.root.updateMatrixWorld(true);
+        l.root.updateMatrixWorld(true);
+        animateRealSheep(l, 1 / 30, false);
+        l.root.updateMatrixWorld(true);
+        if (l.nursing === mom && f > 240 && l.model.anim.mouthW && lambTeatPoint(l, mom, teat)) d[k].push(l.model.anim.mouthW.distanceTo(teat));
+      });
+    }
+    expect(twins[0].nurseSide).toBe(-twins[1].nurseSide);
+    for (const dk of d) {
+      expect(dk.length).toBeGreaterThan(300);
+      dk.sort((a, b) => a - b);
+      expect(dk[Math.floor(dk.length / 2)]).toBeLessThan(0.08);
+    }
+    // (de part et d'autre : assez loin l'un de l'autre pour ne pas se chevaucher)
+    expect(Math.hypot(twins[0].position.x - twins[1].position.x, twins[0].position.z - twins[1].position.z)).toBeGreaterThan(0.3);
+    mom.model.dispose();
+    for (const l of twins) l.model.dispose();
   }, 60000);
 });
 

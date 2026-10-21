@@ -110,15 +110,17 @@ const SEGS = 3;
 /**
  * Géométrie des mèches (partagée) : picks [{ i (sommet porteur), len (m), w (largeur à la racine, m), back (penche vers
  * l'arrière, 0 à 1), side (zone de la robe : 0 ou 1) }] ; pos, nrm, si, sw : sommets du gabarit (repère de l'animal).
- * Attributs : hairTop (racine), hairN (normale de la peau à la racine), hairSide, uv (u en travers, v : 0 racine → 1
+ * Attributs : hairTop (racine), hairN (normale de la peau à la racine), hairD (déplacement de la racine par la cible
+ * de forme du corps, dPos : la toison tondue rentre ; zéro sans dPos), hairSide, uv (u en travers, v : 0 racine → 1
  * pointe), skinIndex, skinWeight. inset : la racine rentre dans le corps de tant (m).
  */
-export function lockCards(picks, { pos, nrm, si, sw }, inset = 0.012) {
+export function lockCards(picks, { pos, nrm, si, sw, dPos = null }, inset = 0.012) {
   const nq = picks.length;
   const nv = nq * (SEGS + 1) * 2;
   const position = new Float32Array(nv * 3);
   const top = new Float32Array(nv * 3);
   const hn = new Float32Array(nv * 3);
+  const hd = new Float32Array(nv * 3);
   const normal = new Float32Array(nv * 3);
   const uv = new Float32Array(nv * 2);
   const side = new Float32Array(nv);
@@ -148,6 +150,14 @@ export function lockCards(picks, { pos, nrm, si, sw }, inset = 0.012) {
     T.fromArray(pos, i * 3).addScaledVector(N, -inset);
     // (départ : s'écarte du corps ; arrivée : pend, un peu vers l'arrière pour la culotte)
     D0.copy(N).multiplyScalar(0.85).addScaledVector(Nh, 0.35).addScaledVector(down, 0.4).normalize();
+    // (sur le dos, elle part sur le côté, à peine vers le haut : sinon, raccourcie (toison qui repousse), elle se
+    // dressait en épis sombres au-dessus de la ligne du dos)
+    if (D0.y > 0.12) {
+      const hl = Math.hypot(D0.x, D0.z);
+      if (hl < 1e-4) D0.set(Nh.x, 0.12, Nh.z);
+      else D0.set((D0.x / hl) * Math.sqrt(1 - 0.12 * 0.12), 0.12, (D0.z / hl) * Math.sqrt(1 - 0.12 * 0.12));
+      D0.normalize();
+    }
     D1.copy(down).addScaledVector(Nh, 0.18).add(V(0, 0, -back * 0.45)).normalize();
     W.crossVectors(D0, N);
     if (W.lengthSq() < 1e-4) W.crossVectors(down, N);
@@ -173,6 +183,7 @@ export function lockCards(picks, { pos, nrm, si, sw }, inset = 0.012) {
         position.set([x, y, z], vi * 3);
         top.set([T.x, T.y, T.z], vi * 3);
         hn.set([N.x, N.y, N.z], vi * 3);
+        if (dPos) hd.set([dPos[i * 3], dPos[i * 3 + 1], dPos[i * 3 + 2]], vi * 3);
         // (éclairée comme la peau qui la porte, un peu tournée vers le bas à la pointe)
         normal.set([N.x, N.y - 0.25 * t, N.z], vi * 3);
         uv.set([u < 0 ? 0 : 1, t], vi * 2);
@@ -196,6 +207,7 @@ export function lockCards(picks, { pos, nrm, si, sw }, inset = 0.012) {
   geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   geo.setAttribute('hairTop', new THREE.BufferAttribute(top, 3));
   geo.setAttribute('hairN', new THREE.BufferAttribute(hn, 3));
+  geo.setAttribute('hairD', new THREE.BufferAttribute(hd, 3));
   geo.setAttribute('hairSide', new THREE.BufferAttribute(side, 1));
   geo.setAttribute('skinIndex', new THREE.BufferAttribute(sIdx, 4));
   geo.setAttribute('skinWeight', new THREE.BufferAttribute(sWgt, 4));
@@ -205,7 +217,10 @@ export function lockCards(picks, { pos, nrm, si, sw }, inset = 0.012) {
   return geo;
 }
 
-/** Uniformes des mèches d'un animal : x longueur (0 rentrées, 1 pleines), y couché (0 à 1), z décalage le long de la normale (m). */
+/**
+ * Uniformes des mèches d'un animal : x longueur (0 rentrées, 1 pleines), y couché (0 à 1), z décalage le long de la
+ * normale (m), w poids de la cible de forme du corps (la racine suit hairD : mouton à moitié tondu).
+ */
 export const makeLockUniforms = () => ({ hState: { value: new THREE.Vector4(1, 0, 0, 0) } });
 
 /**
@@ -218,14 +233,15 @@ export function lockMaterial(lu, colA, colB, name = 'ruminant_locks') {
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, lu, hu);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec3 hairTop;\nattribute vec3 hairN;\nattribute float hairSide;\nuniform vec4 hState;\nvarying float vHSide;\nvarying float vHT;')
+      .replace('#include <common>', '#include <common>\nattribute vec3 hairTop;\nattribute vec3 hairN;\nattribute vec3 hairD;\nattribute float hairSide;\nuniform vec4 hState;\nvarying float vHSide;\nvarying float vHT;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vHSide = hairSide;
 vHT = uv.y;
 {
-  // (longueur du moment, repliée vers la racine quand l'animal est couché ; racine poussée avec la toison)
+  // (longueur du moment, repliée vers la racine quand l'animal est couché ; racine poussée avec la toison et rentrée
+  // avec la cible de forme du corps : à moitié tondu, les mèches flottaient au-dessus du dos)
   float k = hState.x * (1.0 - 0.72 * hState.y);
-  transformed = hairTop + hairN * hState.z + (transformed - hairTop) * k;
+  transformed = hairTop + hairD * hState.w + hairN * hState.z + (transformed - hairTop) * k;
 }`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform vec3 hA;\nuniform vec3 hB;\nvarying float vHSide;\nvarying float vHT;')

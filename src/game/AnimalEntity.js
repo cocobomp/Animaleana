@@ -480,6 +480,8 @@ export class AnimalEntity {
       if (o === this || o.inside || o.ridden || o.data.stalled) continue;
       // (le chevreau qui tète se glisse sous le ventre de sa mère : ils ne s'écartent pas l'un de l'autre)
       if (o.nursing === this || this.nursing === o) continue;
+      // (jumeaux qui tètent la même mère, chacun de son côté : ils ne se repoussent pas loin de la mamelle)
+      if (this.nursing && this.nursing === o.nursing) continue;
       const minD = (this.radius + o.radius) * 0.85;
       const dx = p.x - o.position.x;
       const dz = p.z - o.position.z;

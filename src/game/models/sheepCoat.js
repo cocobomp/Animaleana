@@ -63,6 +63,7 @@ const COMMON_V = /* glsl */ `
 attribute vec4 sheepMask;
 attribute float sheepTrunk;
 attribute vec3 sheepPuffN;
+attribute float sheepPuffW;
 uniform vec4 sState;
 uniform vec4 sLand;
 uniform vec4 sHead;
@@ -102,7 +103,8 @@ if (sState.z > 0.0) {
 if (sPuff.x > 0.0 || sPuff.y > 0.0) {
   // Volume de la toison : le tronc et l'encolure (pas la tête, ni le bas des pattes, ni le creux de l'aisselle, porté par
   // le membre) gonflent le long de la normale de repos, en grosses bosses ; plis du cou du mérinos (anneaux).
-  float pm = smoothstep(0.35, 0.8, sheepMask.x) * (1.0 - sheepMask.y) * (1.0 - sheepMask.z) * smoothstep(0.35, 0.9, sheepTrunk);
+  // (part du volume, lissée sur 9 cm par sheepReal.js puffWeights : pente douce vers l'épaule et la cuisse)
+  float pm = sheepPuffW;
   float lump = 1.0 + sPuff.z * (sNoiseV(position * sPuff.w) * 2.0 - 1.0);
   float neckZ = smoothstep(sLand.w - 0.02, sLand.w + 0.07, position.z) * (1.0 - smoothstep(sHead.x - 0.21, sHead.x - 0.13, position.z));
   float fold = sPuff.y * neckZ * (0.5 + 0.5 * sin(position.z * 105.0));
@@ -306,7 +308,7 @@ export function sheepMaterial(src, uniforms) {
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`);
   };
-  mat.customProgramCacheKey = () => 'sheep-wool-v4';
+  mat.customProgramCacheKey = () => 'sheep-wool-v5';
   mat.userData.sheepUniforms = uniforms;
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (sh) => {
@@ -314,7 +316,7 @@ export function sheepMaterial(src, uniforms) {
     vert(sh);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec4 vSMask;\nvarying vec3 vSRest;');
   };
-  depth.customProgramCacheKey = () => 'sheep-wool-depth-v4';
+  depth.customProgramCacheKey = () => 'sheep-wool-depth-v5';
   return { mat, depth };
 }
 

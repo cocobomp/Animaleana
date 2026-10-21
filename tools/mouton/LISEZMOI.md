@@ -54,7 +54,9 @@ planches de races, de laines et de poses : `window.planche.show({ cells, cols, c
 - Sabots : jamais sous le sol debout (≤ 0,01 cm) ; couché, onglons à 1,2 cm au-dessus du sol.
 - Tête : les grands rapports (bêle 25,8, broute 11,0) sont l'ouverture de la bouche (lèvres de la mâchoire), voulue.
 - Reste : 3,5 au galop et au trot sur une arête de 1,4 cm au creux de l'aisselle (invisible en jeu, la laine la
-  couvre) ; les tests du jeu le bornent (`avant` < 4, `arrière` < 3).
+  couvre) ; les tests du jeu le bornent (`avant` < 4, `arrière` < 3). En jeu, avec la cible « shorn » et le squelette
+  des races, l'aisselle montait à ×9,3–10,1 (bande mouchetée) quand la cible servait de toison (mérinos 0,75) : elle
+  ne sert plus qu'un peu (mérinos 0,15), le volume vient du gonflement du shader → ×3,5 à ×4,8 au trot et au galop.
 
 ## Dans le jeu
 
@@ -65,20 +67,45 @@ planches de races, de laines et de poses : `window.planche.show({ cells, cols, c
 - **Races** (os, forme et shader, une seule géométrie) : mérinos (toison épaisse, laine sur la tête et les pattes,
   bélier à cornes en spirale), suffolk (tête et pattes noires, grandes oreilles tombantes, toison courte), Ouessant
   (le plus petit, garrot ≈ 0,4 m, souvent noir, bélier à cornes), nez noir du Valais (face noire, genoux et pieds
-  noirs, boucles, cornes pour les deux sexes), islandais (laine longue en mèches qui pendent, cornes, robes moorit
-  etc.), mérinos australien (plus grand, toison très dense), cheviot (face blanche nue, oreilles dressées).
+  noirs, boucles, toupet blanc bouclé sur le front, toison en grosses mèches bouclées, cornes pour les deux sexes),
+  islandais (laine longue en mèches qui pendent, cornes, robes moorit etc.), mérinos australien (plus grand, toison
+  très dense), cheviot (face blanche nue, oreilles dressées, toison nette). Faces sombres (suffolk, nez noir, Ouessant
+  noir) : iris ambre, pupille horizontale, paupière plus claire, pour que le regard se lise ; petit reflet partout.
+- **Volume de la toison** : gonflée dans le shader le long d'une normale lissée sur 7 cm (attribut `sheepPuffN`, sans
+  arêtes), d'une part du volume lissée sur 9 cm (attribut `sheepPuffW` : la toison descend en pente douce sur
+  l'épaule et la cuisse au lieu d'y faire une marche qui se replie), en grosses bosses lisses (bruit trigonométrique,
+  le même côté CPU dans `puffAt`) et plis du cou du mérinos ;
+  le gonflement est compté au sol (points du ventre, `skinPoint`), dans la boîte englobante et sous le collier. Le
+  mérinos et le mérinos australien sont nettement plus gros que le cheviot.
+- **Laine longue** (islandais) : mèches en cartes effilées, ondulées, à racine étroite (`ruminantHair.js`, commun avec
+  le poil long des chèvres), semées à espacement régulier sur les flancs, le dos, la croupe et les cuisses, jamais en
+  rang sous le ventre ; repliées couché, rentrées une fois tondu ; la racine suit la cible « shorn » du corps
+  (attribut `hairD`, poids `hState.w`) : à moitié tondu, les mèches ne flottent plus au-dessus du dos. Sur le dos,
+  elles partent sur le côté (jamais en épi). Une carte par mèche, un seul appel de dessin.
 - **Agneaux** : tête et pattes plus grandes, laine courte et bouclée, sans cornes ; ils grandissent (bébé → jeune →
   adulte : le modèle est refait au changement d'âge).
 - **Laine** : suit le jeu — pleine, tondue à la récolte de la laine (`a.woolCut`), puis repousse avec la production
-  (`sheepFleece`), fondue en douceur (cible `shorn` + shader). Salon (`Groomer` → `setCut`) : « tonte » et « court » raccourcissent la laine, « long » et « concours » la gonflent ; frais du jour (`Beauty` → `setFluff`).
+  (`sheepFleece`), fondue en douceur (gonflement du shader, un peu de cible `shorn`). Mouton jamais tondu (neuf,
+  agneau devenu adulte) : toison pleine et laine prête tout de suite (`settleFleece`, appelé par `tickProduce`).
+  Salon (`Groomer` → `setCut`) : « tonte » et « court » raccourcissent la laine, « long » et « concours » la gonflent ; frais du jour (`Beauty` → `setFluff`).
 - **Poses** : allures à leur vitesse (hystérésis pas/trot/galop, sabots tenus au sol), brouter, manger à la mangeoire,
   bêler (la bouche s'ouvre), se coucher (à genoux), couché, ruminer (mâchoire), dormir, se relever (arrière d'abord),
-  gambader et téter (agneau), sauter (tour), venir. Bouche fermée au repos. Sol : sabots, ventre, tête mesurés.
+  gambader (agneau, à l'arrêt seulement : en se déplaçant il joue l'allure, sabots tenus), sauter (tour), venir.
+  Bouche fermée au repos ; museau toujours au-dessus de l'herbe (encolure relevée vers l'avant). Sol : sabots,
+  ventre, tête mesurés.
+- **Arrêt** : l'allure qui s'efface est figée, les sabots posés restent tenus, puis chaque membre resté de travers se
+  replace d'un petit pas (sabot levé : genou et canon pliés d'après une table mesurée sur le gabarit, `measureLift`).
+- **Tétée** : l'agneau vient au pas jusqu'à la mamelle de sa mère (ancre « teat » sur le bassin, place corrigée par
+  la bouche mesurée, encolure qui ajuste la hauteur) ; la brebis reste debout tant qu'il tète, un agneau ne tète que
+  sa mère debout ; des jumeaux prennent chacun un trayon, de part et d'autre (`nurseSideOf`, ils ne se repoussent pas).
+  En jeu, bouche ↔ trayon : 8 cm (médiane, jumeaux) au lieu de 0,9 à 1,1 m.
 - **Chargement** : après les chiens (`Game.realSheepReady`), puis remplacement un mouton par image ; vignettes
   (portraits, enclos), van, salon, concours. Le service worker et la version à emporter prennent tous les
   `public/models/*.glb`.
-- **Tests** : `tests/sheepReal.test.js` (déterministes : fichier, races, laine, sol, os, glissement, allures, LOD,
-  accessoires, crédits).
+- **Tests** : `tests/sheepReal.test.js` (déterministes : fichier, races, laine et gonflement, sol debout et couché,
+  os, glissement, allures, gambade en courant, arrêts au pas et au galop, tête qui broute, tétée à la mamelle, mère
+  debout, jumeaux chacun son trayon, laine longue qui suit la tonte, volume en pente douce, toison d'un mouton neuf,
+  shaders bien formés, LOD, accessoires, crédits, espèce proposée).
 
 ## Perf (téléphone 390×844, Chromium SwiftShader sur une machine très chargée : seule la comparaison vaut)
 

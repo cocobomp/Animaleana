@@ -81,36 +81,48 @@ corrections), mesuré avec le même script.
 - `src/game/models/goatReal.js` : construction (squelette par chèvre, géométrie partagée par gabarit), races, robe,
   poil long en mèches, cornes, barbe, mamelle, animation (`RealGoatAnim`, sous-classe du mixeur du mouton
   `RealSheepAnim`), sol, LOD, hors champ ; comportements (dressée contre la barrière, traite, tétée, coup de tête).
-  `src/game/models/goatCoat.js` : matière (photo du GLB recolorée par motif, poil long, mèches en cartes).
+  `src/game/models/goatCoat.js` : matière (photo du GLB recolorée par motif, poil long). Mèches en cartes :
+  `src/game/models/ruminantHair.js` (commun avec la laine longue de l'islandais) — effilées, ondulées, à racine
+  étroite, semées à espacement régulier sur les flancs, le dos, la croupe et les cuisses, jamais en rang sous le
+  ventre (la poitevine n'a plus de languettes noires sur son ventre clair) ; ≤ 400 cartes par chèvre.
   `src/sim/goatLook.js` : réglages des races, des chevreaux et des boucs, mamelle selon le lait du jeu.
 - **Races** (os, forme et shader, une seule géométrie) :
   - **alpine chamoisée** : brun chamois, raie dorsale noire, ventre, bas des pattes et deux bandes de la face noirs ;
     cornes arquées ;
-  - **saanen** : toute blanche, sans cornes (bouchon du crâne), oreilles dressées, un peu plus grande ;
+  - **saanen** : toute blanche (face comprise : la photo du GLB y est éclaircie), sans cornes (bouchon du crâne),
+    oreilles dressées, un peu plus grande ;
   - **poitevine** : poil long noir (mèches qui pendent des flancs et des cuisses), ventre, intérieur des cuisses,
     dessous de la queue et bandes de la face clairs ; petites cornes droites ;
   - **col noir du Valais** : avant noir, arrière blanc (limite irrégulière), poil long, grandes cornes arquées pour les
     deux sexes.
 - **Bouc** : cornes × 1,45, barbe × 1,5, un peu plus massif. **Chevreau** : tête plus grosse, pattes et oreilles plus
   grandes, ni cornes ni barbe, poil plus court ; **jeune** : entre les deux, petites cornes. Ils grandissent (le
-  modèle est refait au changement d'âge).
+  modèle est refait au changement d'âge). Oreilles portées vers l'avant et sur le côté (`earUp`/`earFwd`), pour
+  qu'on ne les prenne pas pour une deuxième paire de cornes.
 - **Mamelle** : suit le lait du jeu (`goatUdderFill` : `a.produce`) — vide après la traite, pleine quand le lait est
   prêt, fondue en douceur ; couchée, elle s'aplatit contre le ventre. Petite chez le bouc et la chevrette.
 - **Poses et comportements** : allures à leur vitesse (hystérésis pas/trot/galop, sabots tenus au sol), brouter au sol,
   manger au râtelier, **se dresser contre la barrière** de la bergerie (au repos dans l'enclos, de temps en temps : elle
-  va jusqu'à la barrière, se dresse les antérieurs sur la lisse haute, broute en hauteur, redescend et recule ; jamais
-  la barrière du fond, derrière l'abri), se coucher (à genoux), couchée et ruminer, dormir, se relever, bêler,
+  va jusqu'à la barrière — pas qui démarre et finit en douceur —, se pose d'aplomb, se dresse les antérieurs sur la
+  lisse haute en gardant les postérieurs posés, broute en hauteur, redescend et recule ; jamais la barrière du fond,
+  derrière l'abri), se coucher (à genoux), couchée et ruminer, dormir, se relever, bêler,
   **coup de tête** entre deux copines (état « groom »), **traite** (elle reste debout, mâche, la mamelle se vide),
-  chevreau qui **gambade**, suit sa mère et **tète** (il se glisse à côté d'elle, tourné vers sa croupe, l'encolure
-  plonge jusqu'au trayon : bouche à ≤ 3 cm), saut et salut du spectacle et de l'agility, menée au trot par le chien de
-  troupeau. Escalade : le clip existe (`climb`), mais le jeu n'a pas encore d'objet où grimper.
+  chevreau qui **gambade** (à l'arrêt seulement : en se déplaçant il joue l'allure, sabots tenus), suit sa mère et
+  **tète** (il y va au pas, se glisse à côté d'elle, tourné vers sa croupe, l'encolure plonge jusqu'au trayon :
+  bouche à ≤ 3 cm ; la chèvre reste debout tant qu'il tète, il ne tète que sa mère debout ; des jumeaux prennent
+  chacun un trayon, de part et d'autre ; en jeu, 9 cm au lieu de 20 à 28 cm), saut et salut du
+  spectacle et de l'agility, menée au trot par le chien de troupeau. Museau toujours au-dessus de l'herbe : la tête
+  du chevreau qui broute ne saute plus. Arrêt : sabots tenus puis petit pas de replacement (comme le mouton).
+  Escalade : le clip existe (`climb`), mais le jeu n'a pas encore d'objet où grimper.
 - **Accessoires** : ancres de la tête et de l'encolure aux conventions du modèle procédural (licol, nœuds et rubans du
   salon) ; longe accrochée à l'anneau du licol sous le menton (`leashPoint`).
 - **Chargement** : après le mouton (`Game.realGoatReady`), puis remplacement une chèvre par image ; vignettes
   (portraits avec la mamelle du moment, boutique), van, salon, spectacle. Le service worker et la version à emporter
   prennent tous les `public/models/*.glb`.
 - **Tests** : `tests/goatReal.test.js` (déterministes : fichier, races, cornes, barbe, mamelle et traite, sol debout et
-  couchée, dressée contre la barrière, os, glissement, allures, tétée, LOD, accessoires, crédits).
+  couchée, dressée contre la barrière et postérieurs posés, os, glissement, allures, gambade en courant, arrêts,
+  tête du chevreau qui broute, tétée au pas et mère debout, oreilles, mèches (pas sous le ventre, budget), LOD,
+  accessoires, crédits, espèce proposée).
 
 ## Perf (téléphone 390×844, Chromium SwiftShader sur une machine très chargée : seule la comparaison vaut)
 

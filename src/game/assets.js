@@ -24,6 +24,9 @@ export const MODELS = {
   // Mouton réaliste (sheepReal.js) : « Sheep_White_01 » de la Microsoft Rocketbox Avatar Library (MIT), pour les 7 races
   // et les agneaux. Clé à part (pas « sheep ») ; s'il manque, le mouton procédural reste.
   sheep_real: 'sheep.glb',
+  // Chèvre réaliste (goatReal.js) : « Goat_White_01 » de la Microsoft Rocketbox Avatar Library (MIT), avec les cornes de
+  // « Goat_Brown_01 », pour les 4 races et les chevreaux. Clé à part (pas « goat ») ; s'il manque, la chèvre procédurale reste.
+  goat_real: 'goat.glb',
   tree_common: 'tree_common.glb',
   tree_common2: 'tree_common2.glb',
   tree_birch: 'tree_birch.glb',

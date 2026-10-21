@@ -11,6 +11,7 @@ import { towCar, horseTrailer, car, crate, trunk, cargoMesh, disposeVehicle } fr
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { growthScale, lifeStage } from '../sim/animal.js';
 import { sheepFleece } from '../sim/sheepLook.js';
+import { goatLookOf, goatUdderFill } from '../sim/goatLook.js';
 import { needsTrailer } from '../sim/trip.js';
 import { cargoItem, cargoShape } from '../sim/cargo.js';
 
@@ -43,6 +44,8 @@ function travelLook(a) {
   const st = lifeStage(a);
   // (mouton réaliste : agneau, jeune, cornes du bélier, toison du moment)
   if (a.species === 'sheep') return { ...a.look, lamb: st === 'baby', young: st === 'young', sex: a.sex, fleece: sheepFleece(a) };
+  // (chèvre réaliste : chevreau, jeune, bouc, mamelle du moment)
+  if (a.species === 'goat') return { ...goatLookOf(a, st), udderFill: goatUdderFill(a) };
   return a.species === 'dog' && st === 'baby' ? { ...a.look, puppy: true } : a.look;
 }
 
@@ -432,8 +435,10 @@ export class TripVehicle {
     const pos = this.lead.geometry.attributes.position;
     const hand = this.tmp.set(pp.x + Math.cos(pl.heading) * -0.25 * side, pp.y + 1.0, pp.z - Math.sin(pl.heading) * -0.25 * side);
     pos.setXYZ(0, hand.x, hand.y, hand.z);
-    head.getWorldPosition(this.tmp);
-    const hy = this.tmp.y - 0.15;
+    // (modèle réaliste : l'anneau du licol, sous le menton ; sinon 15 cm sous l'origine de la tête)
+    const ring = e.model.leashPoint;
+    (ring ?? head).getWorldPosition(this.tmp);
+    const hy = this.tmp.y - (ring ? 0 : 0.15);
     pos.setXYZ(2, this.tmp.x, hy, this.tmp.z);
     pos.setXYZ(1, (hand.x + this.tmp.x) / 2, Math.min(hand.y, hy) - 0.25, (hand.z + this.tmp.z) / 2);
     pos.needsUpdate = true;

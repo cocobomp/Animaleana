@@ -14,7 +14,7 @@ export function glbJson(buf) {
 }
 
 /** GLB sans textures (images, échantillonneurs, cartes des matières). */
-function withoutTextures(buf) {
+export function withoutTextures(buf) {
   const jlen = buf.readUInt32LE(12);
   const json = glbJson(buf);
   delete json.textures;

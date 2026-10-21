@@ -17,6 +17,8 @@ import { animateRealHorse } from './models/horseReal.js'; // cheval réaliste (G
 import { animateRealDog } from './models/dogReal.js'; // chien réaliste (GLB) : allures, postures, actions
 import { animateRealSheep } from './models/sheepReal.js'; // mouton réaliste (GLB) : allures, couché, brouter, toison
 import { sheepLookOf, sheepStage } from '../sim/sheepLook.js';
+import { animateRealGoat } from './models/goatReal.js'; // chèvre réaliste (GLB) : allures, dressée, traite, chevreau
+import { goatLookOf, goatStage } from '../sim/goatLook.js';
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 // Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
@@ -112,7 +114,9 @@ export class AnimalEntity {
     const puppy = this.data.species === 'dog' && lifeStage(this.data) === 'baby';
     // (le mouton réaliste : l'agneau et le jeune ont leur gabarit, les béliers leurs cornes, voir sheepLook.js)
     const sheep = this.data.species === 'sheep';
-    const look = foal ? { ...this.data.look, foal: true } : puppy ? { ...this.data.look, puppy: true } : sheep ? sheepLookOf(this.data) : this.data.look;
+    // (la chèvre réaliste : le chevreau et le jeune ont leur gabarit, le bouc ses cornes et sa barbe, voir goatLook.js)
+    const goat = this.data.species === 'goat';
+    const look = foal ? { ...this.data.look, foal: true } : puppy ? { ...this.data.look, puppy: true } : sheep ? sheepLookOf(this.data) : goat ? goatLookOf(this.data) : this.data.look;
     this.model = buildGltfAnimal(this.data.species, look) ?? buildAnimalModel(this.data.species, look, this.data.breed);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
@@ -162,7 +166,7 @@ export class AnimalEntity {
     this.stage = lifeStage(this.data);
     // Le poulain (ou le chiot du chien réaliste) a grandi : il prend le gabarit de sa race.
     if (((this.model.horseV3 && this.model.foal !== (this.stage === 'baby')) || (this.model.realDog && this.model.puppy !== (this.stage === 'baby'))
-      || (this.model.realSheep && this.model.stage !== sheepStage(this.stage))) && this.label) {
+      || (this.model.realSheep && this.model.stage !== sheepStage(this.stage)) || (this.model.realGoat && this.model.stage !== goatStage(this.stage))) && this.label) {
       this.rebuildModel();
       return;
     }
@@ -470,6 +474,8 @@ export class AnimalEntity {
     let moved = false;
     for (const o of ctx.entities) {
       if (o === this || o.inside || o.ridden || o.data.stalled) continue;
+      // (le chevreau qui tète se glisse sous le ventre de sa mère : ils ne s'écartent pas l'un de l'autre)
+      if (o.nursing === this || this.nursing === o) continue;
       const minD = (this.radius + o.radius) * 0.85;
       const dx = p.x - o.position.x;
       const dz = p.z - o.position.z;
@@ -780,6 +786,7 @@ export class AnimalEntity {
     if (md.real) return animateRealHorse(this, dt, sad); // cheval réaliste (horseReal.js)
     if (md.realDog) return animateRealDog(this, dt, sad); // chien réaliste (dogReal.js)
     if (md.realSheep) return animateRealSheep(this, dt, sad); // mouton réaliste (sheepReal.js)
+    if (md.realGoat) return animateRealGoat(this, dt, sad); // chèvre réaliste (goatReal.js)
     const legLen = this.data.look.legLen * (this.data.look.legs ?? 1);
     const v = this.speed / Math.max(0.3, this.scale);
     const moving = this.speed > 0.05;

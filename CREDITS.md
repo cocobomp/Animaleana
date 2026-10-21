@@ -3,8 +3,8 @@
 La ferme à Madichelle est un jeu libre et gratuit. Les modèles 3D ci-dessous viennent d'autres auteurs : ceux
 sous CC0 1.0 sont dans le domaine public (aucune attribution n'est exigée, mais nous tenons à les remercier) ; les
 deux chiens sont sous licence **Creative Commons Attribution 4.0 (CC BY 4.0)** : leur attribution ci-dessous est
-obligatoire et figure aussi dans le jeu (❓ Aide → ℹ️ À propos) ; le mouton est sous **licence MIT** (© 2020
-Microsoft) : sa notice de copyright et le texte de la licence (ci-dessous) accompagnent le jeu, ici, dans
+obligatoire et figure aussi dans le jeu (❓ Aide → ℹ️ À propos) ; le mouton et la chèvre sont sous **licence MIT**
+(© 2020 Microsoft) : leur notice de copyright et le texte de la licence (ci-dessous) accompagnent le jeu, ici, dans
 `public/models/LICENSES/` et dans l'écran À propos. Les textes de licence sont dans `public/models/LICENSES/`.
 
 | Pack | Auteur | Licence | Fichiers dans `public/models/` |
@@ -15,6 +15,7 @@ Microsoft) : sa notice de copyright et le texte de la licence (ci-dessous) accom
 | Chiens moyens et grands : *Animated Dog Shiba Inu* | [quander](https://sketchfab.com/3d-models/animated-dog-shiba-inu-9abfce885a834399b2c3ccaed51cd474), sur Sketchfab | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | `dog_shiba.glb` |
 | Petits chiens : *Jack Russell* | [FainoDS (doinspire)](https://sketchfab.com/3d-models/jack-russell-45f1bbf15b67488fba6bea6822d8a7c3), sur Sketchfab | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | `dog_jack.glb` |
 | Moutons (7 races, agneaux) : *Sheep_White_01* de la Microsoft Rocketbox Avatar Library | [Microsoft](https://github.com/microsoft/Microsoft-Rocketbox) (Rocketbox Studios, Microsoft Research), © 2020 Microsoft | [MIT](https://github.com/microsoft/Microsoft-Rocketbox/blob/master/LICENSE.md) | `sheep.glb` |
+| Chèvres (4 races, chevreaux) : *Goat_White_01* et cornes de *Goat_Brown_01*, Microsoft Rocketbox Avatar Library | [Microsoft](https://github.com/microsoft/Microsoft-Rocketbox) (Rocketbox Studios, Microsoft Research), © 2020 Microsoft | [MIT](https://github.com/microsoft/Microsoft-Rocketbox/blob/master/LICENSE.md) | `goat.glb` |
 
 Conversion : FBX → glTF binaire avec three.js (FBXLoader + GLTFExporter), animations
 ré-échantillonnées à 12 images/s, compression `meshopt` via glTF-Transform. Tout le reste
@@ -59,7 +60,25 @@ Ces modifications sont faites par les scripts de `tools/mouton/` (voir `tools/mo
 `src/game/models/sheepReal.js` et `sheepCoat.js` (races, robes, toison qui suit la tonte, animations). Le mouton
 sculpté par le code reste le modèle de repli pendant le chargement ou si le fichier ne se charge pas.
 
-Texte de la licence du mouton :
+### La chèvre (MIT)
+
+- « Goat_White_01 » et « Goat_Brown_01 », **Microsoft Rocketbox Avatar Library**, https://github.com/microsoft/Microsoft-Rocketbox
+  (`Assets/Animals/Goat_White_01` et `Goat_Brown_01`, commit `0943055`), Copyright (c) 2020 Microsoft, licence MIT.
+  **Modifié** : os renommés (racine ajoutée, omoplates rattachées au poitrail), os des cornes, de la barbe et de la
+  mamelle ajoutés, crâne refermé sous les cornes (chèvres sans cornes), cornes arquées de la chèvre brune en cible de
+  forme, poids de la peau refaits autour du coude, du bréchet, du grasset et de la mamelle, carte de normales
+  convertie, 20 animations créées (le modèle n'en avait aucune : allures, brouter au sol et en hauteur contre une
+  barrière, manger, bêler, traite, se coucher et se relever en ruminant, couchée, ruminer, dormir, coup de tête,
+  saut, escalade, gambade du chevreau ; aucun os étiré, sabots jamais sous le sol, couchée posée sur le sol),
+  textures WebP, compression meshopt, version allégée pour le lointain. Fichier : `goat.glb`, toutes les races et
+  les chevreaux.
+
+Ces modifications sont faites par les scripts de `tools/chevre/` (voir `tools/chevre/LISEZMOI.md`) et, en jeu, par
+`src/game/models/goatReal.js` et `goatCoat.js` (races, robes, cornes, barbe, mamelle qui suit la traite,
+animations). La chèvre sculptée par le code reste le modèle de repli pendant le chargement ou si le fichier ne se
+charge pas.
+
+Texte de la licence du mouton et de la chèvre :
 
 ```
 MIT License

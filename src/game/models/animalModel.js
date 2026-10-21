@@ -17,6 +17,7 @@ import { buildHorseModel } from './horseModel.js';
 import { buildRealHorseModel } from './horseReal.js';
 import { buildRealDogModel } from './dogReal.js'; // chiens réalistes (shiba et jack russell, GLB)
 import { buildRealSheepModel } from './sheepReal.js'; // mouton réaliste (Rocketbox, GLB)
+import { buildRealGoatModel } from './goatReal.js'; // chèvre réaliste (Rocketbox, GLB)
 import { buildCatModel } from './catModel.js'; // chats : modèle dédié (races, poils, poses)
 
 // ------------------------------------------------------------------ anatomie par espèce
@@ -431,6 +432,11 @@ export function buildAnimalModel(speciesId, look, breedOfAnimal = null) {
   // mouton procédural ci-dessous.
   if (speciesId === 'sheep') {
     const real = buildRealSheepModel(look, breedOfAnimal);
+    if (real) return real;
+  }
+  // Chèvre réaliste (GLB, toutes les races et les chevreaux) ; sinon la chèvre procédurale ci-dessous.
+  if (speciesId === 'goat') {
+    const real = buildRealGoatModel(look, breedOfAnimal);
     if (real) return real;
   }
   const S = SPEC[speciesId] ?? SPEC.dog;

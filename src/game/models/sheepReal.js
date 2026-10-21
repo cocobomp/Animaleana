@@ -97,7 +97,7 @@ function textureMeans(map, uv, mask, n) {
 }
 
 /** Clips du GLB, sans translation d'os hors de la racine ni échelle (un os qui se déplace s'étire). */
-function cleanClips(animations) {
+export function cleanClips(animations) {
   const out = {};
   for (const clip of animations ?? []) {
     const tracks = clip.tracks.filter((t) => {
@@ -244,13 +244,13 @@ export function realSheepBase(gltf) {
 
 // ------------------------------------------------------------------ gabarit (une fois par race et stade)
 
-const emptyBoneBoxes = (nb) => {
+export const emptyBoneBoxes = (nb) => {
   const b = new Float32Array(nb * 6);
   for (let k = 0; k < nb; k++) b.set([Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity], k * 6);
   return b;
 };
 
-function growBoneBoxes(box, pos, si, sw, count) {
+export function growBoneBoxes(box, pos, si, sw, count) {
   for (let i = 0; i < count; i++) {
     const x = pos[i * 3];
     const y = pos[i * 3 + 1];
@@ -357,7 +357,7 @@ function shapeFor(base, B) {
  * Repères d'un gabarit au repos (repère du mouton) : dessus du dos, ventre, hanches et épaules, demi-largeur, tête
  * (dessus, bout du nez, yeux), soles des sabots, anneau de l'encolure (collier, nœud du concours), bout de la queue.
  */
-function measureSheep(base, pos, H) {
+export function measureSheep(base, pos, H) {
   const P = base.prim;
   const n = P.count;
   const idx = base.index;
@@ -473,7 +473,7 @@ function measureSheep(base, pos, H) {
 // ------------------------------------------------------------------ construction
 
 let contactTex = null;
-function contactShadow(R, L) {
+export function contactShadow(R, L) {
   if (!contactTex) {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
@@ -754,7 +754,7 @@ function sheepBounds(hb, mesh) {
 }
 
 /** Maillage du mouton : boîte qui suit la pose (voir dogReal.js DogMesh) ; dessiné : noté pour l'animation. */
-class SheepMesh extends THREE.SkinnedMesh {
+export class SheepMesh extends THREE.SkinnedMesh {
   constructor(geometry, material, hb) {
     super(geometry, material);
     this.sheep = hb;
@@ -805,10 +805,10 @@ export function pickSheepGait(prev, u) {
   return g;
 }
 
-const lying = (p) => p === 'lie' || p === 'sleep';
+export const lying = (p) => p === 'lie' || p === 'sleep';
 
 /** Hauteur y (repère racine) d'un point de peau suivi par ses os (voir contactPoints) ; aussi rangé dans _w. */
-function skinPoint(pt, s, inv) {
+export function skinPoint(pt, s, inv) {
   _w.set(0, 0, 0);
   for (const [b, pr, ptip, w] of pt) _w.addScaledVector(_v.lerpVectors(pr, ptip, s).applyMatrix4(b.matrixWorld), w);
   return _w.applyMatrix4(inv).y;
@@ -821,7 +821,7 @@ function skinPoint(pt, s, inv) {
  * bêler, ruminer couché, gambader pour l'agneau) ; par-dessus : regard, oreilles, queue, tétée de l'agneau ; toison
  * (cible de forme) ; sabots jamais sous le sol, ventre posé au sol couché, museau au-dessus de l'herbe.
  */
-class RealSheepAnim {
+export class RealSheepAnim {
   constructor(model, base, S) {
     this.model = model;
     this.base = base;
@@ -1499,7 +1499,7 @@ const _rq = new THREE.Quaternion();
 const _rs = V(1, 1, 1);
 
 /** Angle (autour de x) dont tourner le point q autour de c pour qu'il monte à la hauteur y (voir dogReal.js). */
-function raiseAngle(c, q, y, max, prefer = 0) {
+export function raiseAngle(c, q, y, max, prefer = 0) {
   const dy = q.y - c.y;
   const dz = q.z - c.z;
   const R = Math.hypot(dy, dz);

@@ -15,7 +15,8 @@
 //
 // En plus de la chèvre : meugler, queue qui chasse les mouches (et la vache qui se retourne vers son flanc), brosse à
 // vaches, manger à l'auge à la hauteur de l'auge, veau qui gambade et tète, poil long et frange de la Highland (mèches en
-// cartes, ruminantHair.js), cornes en lyre (os allongés, ou cible de forme « horns_long » du taureau).
+// cartes, ruminantHair.js — semées aussi entre les sommets du taureau, moins dense), cornes longues refaites le long
+// d'une courbe propre à la race et au modèle (vache en lyre ; taureau de Highland à l'horizontale, pointes en avant).
 //
 // Interface : la même que la vache procédurale (animalModel.js), qui reste le modèle de repli tant que le GLB n'est pas
 // là (et dans les tests sans GLB). Repère : regard vers +Z, y vers le haut, origine au sol sous le milieu du corps ;

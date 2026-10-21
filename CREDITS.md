@@ -140,10 +140,11 @@ charge pas.
 
 - « Bull_Brown_01 », **Microsoft Rocketbox Avatar Library**, https://github.com/microsoft/Microsoft-Rocketbox
   (`Assets/Animals/Bull_Brown_01`, commit `0943055`), Copyright (c) 2020 Microsoft, licence MIT. **Modifié** : os
-  renommés, onglons fondus, os des cornes (bouchons sous les cornes) et du scrotum, longues cornes en lyre en cible de
-  forme, poids de la peau refaits, carte de normales convertie, 19 animations créées, photo de la robe changée en
-  carte de grain et masque, textures WebP, compression meshopt, version allégée. Fichier : `bull.glb`, taureaux des
-  11 races.
+  renommés, onglons fondus, os des cornes (bouchons sous les cornes) et du scrotum, poids de la peau refaits, carte de
+  normales convertie, 14 animations créées (ni traite, ni tétée, ni gambade de veau : un taureau ne les joue jamais),
+  photo de la robe changée en carte de grain fin et masque (seul l'iris des yeux peints est gardé), textures WebP,
+  compression meshopt, version allégée ; ses longues cornes (Highland, Retinta) sont courbées par le jeu selon la race.
+  Fichier : `bull.glb`, taureaux des 11 races.
 
 Ces modifications sont faites par les scripts de `tools/vache/` (voir `tools/vache/LISEZMOI.md`) et, en jeu, par
 `src/game/models/cowReal.js` et `cowCoat.js` (races, robes, cornes, poil long, mamelle qui suit la traite,

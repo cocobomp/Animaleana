@@ -148,8 +148,8 @@ export const MODEL_CREDITS = [
     notice: 'Copyright (c) 2020 Microsoft',
     licenseText: ROCKETBOX_MIT,
     changes: {
-      fr: 'Os renommés, os des cornes et du scrotum ajoutés, longues cornes en lyre en cible de forme, poids de la peau refaits, 19 animations ajoutées (allures, brouter, manger, se coucher et se relever, couché, ruminer, dormir, meugler, chasser une mouche, gambade), robe changée en carte de grain et masque, races peintes par le jeu, textures WebP et compression meshopt.',
-      en: 'Bones renamed, horn and scrotum bones added, long lyre horns as a morph target, skin weights redone, 19 animations added (gaits, grazing, eating, lying down and getting up, lying, ruminating, sleeping, mooing, chasing a fly, play), coat turned into a grain map and mask, breeds painted by the game, WebP textures and meshopt compression.',
+      fr: 'Os renommés, os des cornes et du scrotum ajoutés, poids de la peau refaits, 14 animations ajoutées (allures, brouter, manger, se coucher et se relever, couché, ruminer, dormir, meugler, chasser une mouche, secouer la tête), robe changée en carte de grain et masque, races, robes et longues cornes faites par le jeu, textures WebP et compression meshopt.',
+      en: 'Bones renamed, horn and scrotum bones added, skin weights redone, 14 animations added (gaits, grazing, eating, lying down and getting up, lying, ruminating, sleeping, mooing, chasing a fly, shaking the head), coat turned into a grain map and mask, breeds, coats and long horns made by the game, WebP textures and meshopt compression.',
     },
   },
   {

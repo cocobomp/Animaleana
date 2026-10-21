@@ -5,7 +5,7 @@ Toutes les **vaches, génisses et veaux** des 11 races du jeu sont un seul modè
 pack et même artiste que le cheval du jeu). Les **taureaux** (mâles adultes) sont **« Bull_Brown_01 »** de la
 *Microsoft Rocketbox Avatar Library* (**MIT**, © 2020 Microsoft, notice gardée). Textes : `public/models/LICENSES/
 lyndon-daniels-vache.txt` et `microsoft-rocketbox-taureau.txt`, `CREDITS.md`, écran « À propos » (`src/ui/credits.js`).
-Fichiers du jeu : `public/models/cow.glb` (≈ 750 Ko) et `public/models/bull.glb` (≈ 600 Ko). Ce dossier les refait à
+Fichiers du jeu : `public/models/cow.glb` (≈ 750 Ko) et `public/models/bull.glb` (≈ 550 Ko). Ce dossier les refait à
 partir des sources et documente ce qui a été corrigé.
 
 Si un fichier manque (hors ligne avant la mise en cache, erreur réseau), le jeu garde la vache procédurale d'avant
@@ -30,10 +30,10 @@ Les étapes `tex` et `pack` refont les fichiers du jeu à l'octet près à parti
 | Étape | Script | Ce qu'il fait |
 |---|---|---|
 | blender | `make_cow.py` + `cow_models.py`, `cowkit.py`, `cow_gait.py`, `cow_autorig.py` | Vache : le modèle n'avait que les groupes de sommets d'un ancien squelette — **squelette créé** (os aux noms des moutons et des chèvres du jeu : root, pelvis, spine1/2, chest, neck1/2/3, head, jaw, ear, scap/humerus/radius/metacarpus/toes, femur/tibia/metatarsus/htoes, tail1…6), os des **cornes** (échelle 0 : sans cornes), de la **mamelle** (4 trayons) et des oreilles, poids de la peau (diffusion de chaleur, tête rigide) ; garrot 1,40 m, tournée vers +Z, sabots à y = 0 ; 16 clips générés : `idle walk trot run graze eat lie_down lie ruminate sleep get_up moo milk tail_swish calf_play suckle` — se coucher à genoux devant puis l'arrière, se relever l'arrière d'abord ; IK des membres bornée (aucun os étiré), sabots jamais sous le sol, couchée posée sur le poitrail et les avant-bras repliés (descente cherchée par dichotomie). |
-| blender | `taureau/prep_tex.py`, `taureau/make_bull.py` + `taureau/cow_models.py`, `taureau/cow_gait.py` | Taureau : textures TGA → PNG (normales OpenGL) ; os Biped renommés comme la vache, onglons fondus dans le paturon, os du **scrotum**, cornes longues en cible de forme `horns_long` ; garrot 1,45 m ; 20 clips (les mêmes, plus `ear_flick head_shake swat tail_flick`). |
+| blender | `taureau/prep_tex.py`, `taureau/make_bull.py` + `taureau/cow_models.py`, `taureau/cow_gait.py` | Taureau : textures TGA → PNG (normales OpenGL) ; os Biped renommés comme la vache, onglons fondus dans le paturon, os du **scrotum**, cornes longues en cible de forme `horns_long` (retirée au paquet) ; garrot 1,45 m ; 20 clips (les mêmes, plus `ear_flick head_shake swat tail_flick`), dont 14 gardés au paquet. |
 | measure | `measure_cow.py`, `taureau/measure.py` | Mesures sur le maillage déformé, image par image : arêtes et os étirés, sabots sous le sol, glissement des sabots posés. |
-| tex | `tex.mjs` | **Robe propre** : la photo est remplacée par une **carte de grain** (chaque texel rapporté à la moyenne de sa classe de poil, flou par îlot d'UV : plus de taches ni d'ombres de la photo, plus de « gris sale ») et un **masque** (R : taches de la photo, G : peau rose — nez, intérieur des oreilles, paupières —, B : gardé tel quel — bouche, cils) ; trous sombres de la texture neutralisés ; yeux peints du taureau notés (`--eyeuv`). |
-| pack | `pack.mjs` | Canaux inutiles retirés (aucune translation d'os hors `root`, pas d'échelle animée), matières `cow_coat` / `cow_eye`, grain WebP 1024 q84, masque dans l'emplacement d'occlusion (512), géométrie meshopt ; mesures et réglages dans `scene.extras.cow`. |
+| tex | `tex.mjs` | **Robe propre** : la photo est remplacée par une **carte de grain** (chaque texel rapporté à la moyenne de sa classe de poil, flou par îlot d'UV : plus de taches ni d'ombres de la photo, plus de « gris sale » ; taureau : moyenne prise à 3,5 texels au lieu de 12 — les boucles du front et l'anneau clair des yeux restaient en plaques, « face marbrée de bleu » sur une robe blanche) et un **masque** (R : taches de la photo, G : peau rose — nez, intérieur des oreilles, paupières —, B : gardé tel quel — bouche, cils, iris du taureau) ; trous sombres de la texture neutralisés ; yeux peints du taureau notés (`--eyeuv`) : seul l'iris sombre est gardé, les paupières claires et le blanc de l'œil prennent la robe (plus d'anneau pâle autour de l'œil, ni de « monocle » dans les lunettes de la Normande). |
+| pack | `pack.mjs` | Canaux inutiles retirés (aucune translation d'os hors `root`, pas d'échelle animée), matières `cow_coat` / `cow_eye`, grain WebP 1024 q84, masque dans l'emplacement d'occlusion (512), géométrie meshopt ; mesures et réglages dans `scene.extras.cow`. Taureau : cible de forme `horns_long` retirée (le jeu courbe ses cornes selon la race ; `--morphs 1` la garde) et clips qu'il ne joue jamais retirés (`--drop calf_play,suckle,milk,ear_flick,tail_flick` : un taureau n'est jamais trait et ne tète pas) — 601 → 548 Ko. |
 | pack | `lod.mjs` | Version réduite (vache ≈ 30 %, taureau ≈ 36 % des triangles, meshoptimizer) dans le même fichier (nœud `cow_lod`, mêmes sommets). |
 
 `planche.html` (servie par vite : `/tools/vache/planche.html`, `?avant=1` pour la vache procédurale) rend des planches
@@ -45,7 +45,8 @@ bonnet anti-mouches, mère pour la tétée, râtelier, `xray` : sol transparent)
 
 - **cow.glb** : 3 517 sommets, 6 092 triangles (LOD 1 826) + yeux (116 sommets) ; 39 os ; grain 1024 et normales en
   WebP, masque 512. Vitesses naturelles (m/s, taille 1) : pas 1,18, trot 2,54, galop 5,21.
-- **bull.glb** : 1 878 sommets, 3 092 triangles (LOD 1 128) ; 40 os ; cible de forme `horns_long` ; yeux peints.
+- **bull.glb** : 1 878 sommets, 3 092 triangles (LOD 1 132) ; 40 os ; 14 clips (`idle walk trot run graze eat lie_down lie
+  ruminate get_up sleep moo swat head_shake`) ; ni cible de forme ni clip de traite, de tétée ou de gambade ; yeux peints.
 - Mesures (Blender, pire image de chaque clip) : **os étirés 0 %** sur tous les clips ; sabots ≥ −0,43 cm (galop de la
   vache ; ≤ −0,1 cm ailleurs) ; glissement des sabots posés du taureau 2,9 à 3,3 % ; arêtes ≤ 4,1 aux allures (mufle
   et paupières : 5,6 à 6,6 au meuglement et couchée, voulu — bouche ouverte, yeux fermés).
@@ -84,8 +85,15 @@ bonnet anti-mouches, mère pour la tétée, râtelier, `xray` : sol transparent)
   - **Hérens** : petite et trapue, noire ou rouge foncé, **cornes de lutteuse** portées en avant ;
   - **Wagyu** : noire unie ; **Canadienne** : brun noir, **mufle clair** ; **Hereford** : rouge, tête, poitrail, ventre,
     bas des pattes et toupillon blancs ; **Aberdeen Angus** : noire, sans cornes ; **Retinta** : rouge, cornes en lyre.
-- **Taureau** : son modèle (Rocketbox), plus massif, cornes longues de la Highland et de la Retinta par la cible de
-  forme, taches calculées pour les robes pie. **Veau** : tête plus grosse, pattes et oreilles plus longues, sans
+- **Taureau** (mâle adulte ; le veau mâle et le jeune taureau restent sur la vache de Lyndon Daniels, mamelle rentrée) :
+  son modèle (Rocketbox), plus massif ; cornes de sa race — sans cornes (Charolaise, Angus), longues refaites le long
+  d'une courbe (`bullHorn` : Highland à l'horizontale sur le côté, pointes tournées vers l'avant et relevées, épaisses à
+  la base ; Retinta en lyre), de lutteuse portées en avant (Hérens) ; poil long et frange de la Highland semés aussi
+  entre ses sommets (1 900 sommets, deux fois moins que la vache : 632 mèches) ; taches calculées pour les robes pie, au
+  seuil de la race (`bullPie` : Bretonne pie noire) ; lunettes de la Normande en tache allongée au bord irrégulier ;
+  face blanche sans marbrures (creux du grain d'une robe claire réchauffés, sinon gris-bleu sous le ciel) ; jamais trait
+  ni tété (pas de mamelle, pas de clip ; la tétée ne choisit qu'une mère) ; contre les mouches, il chasse de la queue ou
+  secoue la tête. **Veau** : tête plus grosse, pattes et oreilles plus longues, sans
   cornes, poil plus doux ; **génisse** : entre les deux, petites cornes. Ils grandissent (le modèle est refait au
   changement d'âge).
 - **Mamelle** visible chez la vache adulte : suit le lait du jeu (vide après la traite, pleine quand le lait est
@@ -123,3 +131,32 @@ en haute), version réduite, mèches cachées et animation une image sur deux ; 
 L'animation coûte plus que la procédurale (mixeur, sabots tenus, sol mesuré) mais le rendu, qui dominait, est divisé
 par 2 à 7. Construction d'une vache : 1 à 40 ms dans le navigateur (le premier gabarit ≈ 0,1 s, partagé ensuite ;
 la vache procédurale : 70 à 100 ms).
+
+### Bovins avec des taureaux (après les corrections du taureau)
+
+Mêmes mesures (`perf.mjs`), troupeau de 10 puis 20 bovins : un mâle sur trois (des taureaux et des veaux mâles), un veau
+sur six ; puis 10 et 20 taureaux seuls. Avant = vache procédurale (GLB bloqués), après = vache de Lyndon Daniels et
+taureau Rocketbox.
+
+| | appels de dessin | triangles (scène) | triangles des bovins | Game.frame (médiane) | animation (médiane) |
+|---|---|---|---|---|---|
+| basse, 10 (2 taureaux) | 593 → 313 | 361 k → 274 k | 123 k → 17 k | 11,1 → 10,4 ms | 0,1 → 1,1 ms |
+| basse, 20 (3 taureaux) | 962 → 346 | 489 k → 292 k | 248 k → 35 k | 14,5 → 11,5 ms | 0,3 → 1,8 ms |
+| haute, 10 (2 taureaux) | 593 → 311 | 873 k → 483 k | 350 k → 43 k | 16,0 → 12,8 ms | 0,1 → 1,6 ms |
+| haute, 20 (3 taureaux) | 827 → 336 | 1 199 k → 525 k | 700 k → 98 k | 22,0 → 15,9 ms | 0,3 → 2,7 ms |
+| basse, 10 taureaux | 544 → 303 | 347 k → 267 k | 123 k → 11 k | 11,7 → 9,7 ms | 0,2 → 1,0 ms |
+| basse, 20 taureaux | 871 → 324 | 457 k → 278 k | 248 k → 23 k | 13,7 → 10,4 ms | 0,3 → 2,2 ms |
+
+Un taureau = 2 appels de dessin (robe, ombre de contact ; + 1 pour les mèches de la Highland de près), 3 092 triangles
+(1 132 au loin) : moins qu'une vache. Géométries en mémoire (basse, 20 taureaux) 945 → 347, textures 158 → 50.
+
+## La vache est proposée
+
+`src/sim/species.js` : `'cow'` est dans `OFFERED_SPECIES` (en dernier) — toutes les espèces du jeu sont proposées.
+`tests/vacheProposee.test.js` vérifie, avec la liste du jeu (pas un scénario), que tout revient pour elle : animalerie
+(des vaches à la maison, les 11 races chez les éleveurs du monde ; aperçu et vignettes 3D, le taureau pour un mâle
+adulte), refuge, van (remorque, foin, seau à lait), clients du vétérinaire et de la pension (au rang qui apporte les
+vaches), classe « ferme » du concours de beauté, quêtes, grange, pré, abri et ranch, brosse à vaches, berger, traite des
+femelles (jamais du taureau ni du veau), école vétérinaire (tri des cœurs, textes). Les tests des espèces proposées qui
+jouent un scénario (`especesProposees.test.js`, `contreVerifEspeces.test.js` : seuls le cheval et le chien) fixent leur
+liste et la rendent ensuite : ils restent justes.

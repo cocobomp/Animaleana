@@ -430,13 +430,24 @@ la matière, les fanons, la brosse et les tresses restent :
 **Coût des crins en volume** (avant : main, crins en cartes seules ; après : masse + cartes ; mêmes graines,
 machine très chargée, mesures l'une après l'autre) :
 
-- *triangles des crins par cheval* (33 races, `node` sur le GLB) : 2 597 → 3 349 en moyenne (au plus 2 942 → 3 896) ;
-  version réduite 1 300 → 1 219 (la masse à un quart, une carte sur deux : moins qu'avant) ; poulain 728 → 1 368 (masse
-  du toupet et de la queue ; brosse inchangée) ; mêmes maillages, donc mêmes appels de dessin. (Le prototype « volume »
-  en était à 4 031 : nappe de 64 stations, queue de 24 anneaux, cartes plus nombreuses.) Pose des crins d'un gabarit
-  neuf : médiane 70 → 60-76 ms selon le tour (dans le bruit) ;
-- *10 chevaux au paddock, caméra normale* (Chromium SwiftShader ; basse : 390×844 DPR 3, haute : 1280×800) :
-  PERF_ICI
+- *triangles des crins par cheval* (33 races, `node` sur le GLB, `stats.mjs`) : 2 597 → 3 886 en moyenne (au plus
+  2 942 → 4 528 : crinières longues et épaisses, Frison, PRE, Shetland, Irish Cob) ; version réduite 1 300 → 1 059 (la
+  masse à un quart, les cartes principales avec un point sur deux : moins qu'avant, c'est elle que dessinent les
+  chevaux lointains du téléphone) ; poulain 728 → 1 584 (version réduite 368 → 464 : masse du toupet et de la queue ;
+  brosse inchangée) ; mêmes maillages, donc mêmes appels de dessin. (Le prototype « volume » en était à 4 031 et
+  1 446 en version réduite.) Pose des crins d'un gabarit neuf : médiane des 33 races 85 → 80 ms (de 39 à 838 ms
+  avant, de 31 à 868 ms après, le premier gabarit payant le chargement : dans le bruit) ;
+- *10 chevaux au paddock, caméra normale* (Chromium SwiftShader ; basse : 390×844 DPR 3, définition 1,25 avec MSAA ;
+  haute : 1280×800 ; avant et après l'un après l'autre, ordre inversé d'un tour à l'autre, 3 mesures de 25 rendus par
+  passage ; `perf.mjs`) : triangles à l'écran 326 902 → 332 854 en basse (+ 1,8 % ; 319 621 → 324 221 quand un cheval
+  de plus passe en version réduite) et 551 673 → 563 211 en haute (+ 2,1 %) ; appels de dessin (104 et 174),
+  programmes (25 et 43) et textures (31 et 48) inchangés ; tas JavaScript + 2 Mo ; temps processeur d'une image sans
+  rendu ≈ 1,2 ms des deux côtés. Temps de rendu seul : en basse, médiane des 6 mesures 1 798 → 1 732 ms (de 1 518 à
+  2 019 avant, de 763 à 2 533 après) ; en haute, médiane des 12 mesures (quatre tours) 2 936 → 3 522 ms, minimum
+  1 771 → 1 933 ms (de 1 771 à 4 536 avant, de 1 933 à 5 490 après). Machine partagée, charge de 7 à 14 sur 4 cœurs :
+  les mesures se chevauchent entièrement, le temps de rendu en basse est inchangé à la précision de la mesure ; en
+  haute, un surcoût de l'ordre de 10 % (d'après les minimums) n'est pas exclu — masse opaque sous les cartes,
+  recouvrement — et serait à mesurer sur un vrai appareil.
 
 **Allures vivantes** (plan « cheval beau », étape 6 ; `RealHorseAnim.stretchGallop`, `hairSprings`, `overlay` ;
 `tests/horseGaitLife.test.js`) :

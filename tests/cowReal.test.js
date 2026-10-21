@@ -241,6 +241,8 @@ describe('races, cornes, poil long, veaux et taureaux', () => {
       expect(calf.head).toBeGreaterThan(1.2 * f.head);
       expect(calf.legs).toBeGreaterThan(1.1 * f.legs);
       expect(calf.udder).toBe(UDDER.small);
+      // (veau mâle : pas de mamelle visible — rentrée)
+      expect(cowBuild(lookOf(b), { breed: b, stage: 'baby', sex: 'm' }).udder).toBe(UDDER.none);
       expect(young.milker).toBe(false);
       expect(f.milker).toBe(true);
       expect(m.kind).toBe('bull');

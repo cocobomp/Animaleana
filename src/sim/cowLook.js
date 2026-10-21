@@ -72,8 +72,8 @@ export const CALF = { head: 1.3, legs: 1.12, ears: 1.12, girth: 0.88, depth: 0.9
 const YOUNG = 0.45; // (la génisse ou le jeune taureau est à mi-chemin, un peu plus près de l'adulte)
 /** Taureau : plus massif, encolure épaisse (sur son propre modèle, Rocketbox). */
 export const BULL = { girth: 1.04, size: 1.04 };
-/** Mamelle : veau, génisse et mâle (petite), vache vide et pleine (échelle de l'os, × udder de la race). */
-export const UDDER = { small: 0.14, empty: 0.72, full: 1.12 };
+/** Mamelle : veau mâle (rentrée), velle et génisse (petite), vache vide et pleine (échelle de l'os, × udder de la race). */
+export const UDDER = { none: 0.02, small: 0.14, empty: 0.72, full: 1.12 };
 /** Couleur forcée de quelques robes (la couleur du jeu ne colle pas à la race). */
 const FORCED = {
   // (« brun noir » : la couleur « Brune » du jeu, 0x5a3a26, est trop claire)
@@ -171,10 +171,11 @@ export function cowBuild(look = {}, { breed = null, stage = 'adult', sex = 'f' }
   B.horns = want;
   B.hornLong = want === 'long' ? 1 : 0;
   B.hornSize = want === 'none' ? 0 : B.hornK * (stage === 'baby' ? 0 : stage === 'young' ? 0.4 : 1) * (B.bull ? 1.1 : 1);
-  // Mamelle de repos : petite pour le veau, la génisse et le mâle ; la vache : selon le lait (cowUdderFill).
+  // Mamelle de repos : petite pour la velle et la génisse, rentrée pour le veau mâle et le jeune taureau (le taureau
+  // adulte, son propre modèle, n'en a pas) ; la vache : selon le lait (cowUdderFill).
   B.milker = !B.male && B.stage === 'adult';
   B.udderBase = B.udder;
-  B.udder = B.milker ? UDDER.empty * B.udderBase : UDDER.small;
+  B.udder = B.milker ? UDDER.empty * B.udderBase : B.male ? UDDER.none : UDDER.small;
   B.key = [B.kind, id, B.stage, B.legs.toFixed(3), B.girth.toFixed(3), B.depth.toFixed(3)].join('|');
   return B;
 }

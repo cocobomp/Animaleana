@@ -25,7 +25,7 @@ import { SPECIES } from '../../sim/species.js';
 import { pickIdlePose } from '../../sim/catPoses.js';
 import { catCoatPlan, makeCatCoatUniforms, makeCatLandUniforms, setCatCoat, catCoatMaterial, catShellMaterial, catLidMaterial } from './catCoat.js';
 import {
-  V, smooth, clamp, restPrims, weldGroups, weldedNormals, furLow, fbm, emptyBoneBoxes, growBoneBoxes, PetMesh, contactShadow, raiseAngle,
+  V, smooth, clamp, WindowMin, restPrims, weldGroups, weldedNormals, furLow, fbm, emptyBoneBoxes, growBoneBoxes, PetMesh, contactShadow, raiseAngle,
 } from './petReal.js';
 
 /** Clés des deux GLB (assets.js) : jamais « cat » (gltfAnimal.js le prendrait pour un animal GLB générique). */
@@ -1443,6 +1443,8 @@ class RealCatAnim {
     this.lead = 'walk';
     this.gOff = 0;
     this.plant = [null, null, null, null];
+    // (minimums glissants sur la foulée : appuis avant, appuis arrière — voir levelPairs)
+    this.win = [new WindowMin(), new WindowMin()];
     this.bodyAllow = 0.003 + Math.max(0, B.fur) * 0.35;
     this.solePts = model.legs.map((l) => l.soles.map((i) => l.paw.worldToLocal(V().fromArray(S.D.pos, i * 3))));
     for (const [b, d] of this.shift) b.position.sub(d);
@@ -1890,10 +1892,10 @@ class RealCatAnim {
     _m.copy(md.root.matrixWorld).invert();
     const air = (this.trick?.clip === 'jump' && this.trick.age < 0.25) || (this.w.jump ?? 0) > 0.3;
     // Aux allures posées (pas, trot, équilibre) : avant et arrière à la même hauteur (voir levelPairs).
-    if (st.moving && !air && this.gait !== 'run') this.levelPairs(dt);
+    if (st.moving && !air && this.gait !== 'run' && dt > 0) this.levelPairs(dt);
     else {
       this.pitchGap = 0;
-      this.fMin = this.hMin = undefined;
+      for (const w of this.win) w.reset();
     }
     let low = Infinity;
     for (let l = 0; l < md.legs.length; l++) {
@@ -2015,12 +2017,13 @@ class RealCatAnim {
       }
     }
     if (!Number.isFinite(F) || !Number.isFinite(H)) return;
-    // (minimum glissant de chaque paire : la hauteur de ses appuis sur la foulée, pas celle d'une patte levée)
-    const rise = dt > 0 ? dt * 0.03 : Infinity;
-    this.fMin = Math.min(F, (this.fMin ?? F) + rise);
-    this.hMin = Math.min(H, (this.hMin ?? H) + rise);
-    const k = dt > 0 ? Math.min(1, dt * 6) : 1;
-    this.pitchGap = (this.pitchGap ?? 0) + (this.hMin - this.fMin - (this.pitchGap ?? 0)) * k;
+    // (plus bas appui de chaque paire sur la dernière foulée : la hauteur de ses appuis, pas celle d'une patte levée)
+    const a = this.actions[this.gait] ?? this.actions.walk;
+    const span = a ? Math.min(1.5, a.getClip().duration / Math.max(0.2, Math.abs(a.timeScale))) : 0.6;
+    const fMin = this.win[0].push(F, dt, span);
+    const hMin = this.win[1].push(H, dt, span);
+    const k = Math.min(1, dt * 6);
+    this.pitchGap = (this.pitchGap ?? 0) + (hMin - fMin - (this.pitchGap ?? 0)) * k;
     const th = clamp(-this.pitchGap / Math.max(0.05, fz - hz), -0.15, 0.15);
     if (!(Math.abs(th) > 1e-4)) return;
     this.turn(md.body, AX, th);
@@ -2034,19 +2037,18 @@ class RealCatAnim {
    */
   footLock() {
     const md = this.model;
-    const inv = _m;
     // (rotation seule de la racine : sa matrice porte aussi la taille du chat)
     md.root.matrixWorld.decompose(_rt, _q, _rs);
     _q.invert();
+    // Prise d'appui à 12 mm du sol, lâchée à 18 (repère du chat de taille 1) : prise à 6 mm, le pied du clip
+    // arrivait encore lancé et glissait avant d'être tenu (2 cm par appui aux postérieurs du british).
     for (let l = 0; l < md.legs.length; l++) {
       const leg = md.legs[l];
       let low = Infinity;
       for (const p of this.solePts[l]) {
-        const y = _v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(inv).y;
+        const y = _v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(_m).y;
         if (y < low) low = y;
       }
-      // Prise d'appui à 12 mm du sol, lâchée à 18 (repère du chat de taille 1) : prise à 6 mm, le pied du clip
-      // arrivait encore lancé et glissait avant d'être tenu (2 cm par appui aux postérieurs du british).
       if (!(low < (this.plant[l] ? 0.018 : 0.012))) {
         this.plant[l] = null;
         continue;

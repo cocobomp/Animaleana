@@ -114,7 +114,7 @@ window.planche = {
   /**
    * cells : [{ breed, color (indice de robe), stage ('adult' | 'baby' | 'young'), proc (lapin procédural), clip ('crouch',
    * 'hop', 'lope', 'run', 'jump', 'sit', 'rear', 'lie', 'sleep', 'groom', 'sniff', 'eat', 'binky', 'hide', 'held'), t
-   * (fraction), view ('side' | 'three' | 'front' | 'head' | 'back' | 'top' | 'face'), label, lod, zoom, acc
+   * (fraction), view ('side' | 'three' | 'front' | 'head' | 'back' | 'top' | 'face'), label, lod, zoom, magenta (faces arrière), acc
    * (buildAccessories), look (champs du look imposés), quality ('low' | 'high') }] ; cols ; cw, ch (taille d'une case).
    */
   async show({ cells, cols = 6, cw = 300, ch = 240 }) {
@@ -138,6 +138,22 @@ window.planche = {
       sg.add(md.root);
       scene.add(sg);
       if (c.lod && md.setLod) md.setLod(1);
+      // (mise au point : faces arrière en magenta — un trou ou une peau retournée se voient)
+      if (c.magenta) {
+        for (const m of [md.coatMesh, md.lidMesh, md.eyeMesh]) {
+          const mat = m?.material;
+          if (!mat) continue;
+          const prev = mat.onBeforeCompile;
+          const key = mat.customProgramCacheKey?.bind(mat);
+          mat.onBeforeCompile = (sh, r) => {
+            prev?.call(mat, sh, r);
+            sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\nif (!gl_FrontFacing) gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);');
+          };
+          mat.customProgramCacheKey = () => (key ? key() : '') + '-bf';
+          mat.side = THREE.DoubleSide;
+          mat.needsUpdate = true;
+        }
+      }
       for (const k of c.hide ?? []) {
         const m = { coat: md.coatMesh, eye: md.eyeMesh, card: md.cardMesh }[k];
         if (m) m.visible = false;

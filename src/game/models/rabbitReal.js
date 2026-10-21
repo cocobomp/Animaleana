@@ -22,7 +22,7 @@ import { horseView } from './horseReal.js';
 import { rabbitBuild } from '../../sim/rabbitLook.js';
 import { rabbitCoatPlan, makeRabbitCoatUniforms, makeRabbitLandUniforms, setRabbitCoat, rabbitCoatMaterial } from './rabbitCoat.js';
 import {
-  V, smooth, clamp, restPrims, weldGroups, weldedNormals, furLow, fbm, emptyBoneBoxes, growBoneBoxes, PetMesh, contactShadow, raiseAngle,
+  V, smooth, clamp, WindowMin, restPrims, weldGroups, weldedNormals, furLow, fbm, emptyBoneBoxes, growBoneBoxes, PetMesh, contactShadow, raiseAngle,
 } from './petReal.js';
 
 /** Clés des deux GLB (assets.js) : jamais « rabbit » (gltfAnimal.js le prendrait pour un animal GLB générique). */
@@ -51,6 +51,8 @@ const _w = V();
 const _u = V();
 const _q = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
+const _rt = V();
+const _rs = V();
 
 // ------------------------------------------------------------------ données de repos (une fois par GLB)
 
@@ -1301,6 +1303,15 @@ const _p0 = V();
 const _ev = V();
 const _qe = new THREE.Quaternion();
 const _qe2 = new THREE.Quaternion();
+const _m2 = new THREE.Matrix4();
+const _gm = V();
+const _gs = V();
+const _gp = V();
+const _gt = V();
+const _gv = V();
+const _gw = V();
+const _gq = new THREE.Quaternion();
+const _gq2 = new THREE.Quaternion();
 
 /**
  * Mixeur d'un lapin : allures fondues selon la vitesse (chaque clip joué à vitesse réelle ÷ vitesse naturelle de cette
@@ -1359,6 +1370,31 @@ class RealRabbitAnim {
       const tip = base.earTip[s].clone().sub(base.heads[base.index.get(e.name)]).normalize();
       return tip.applyQuaternion(this.pinv.get(e)).normalize();
     });
+    // Bout de chaque oreille (sommet le plus loin de sa base, peau de la race) dans le repère de l'os de l'oreille :
+    // borne des oreilles couchées (earLow).
+    this.earTip = null;
+    this.earLen = [];
+    if (model.build.model !== 'lop' && model.ears.length) {
+      model.root.updateMatrixWorld(true);
+      const W = base.W;
+      const P = S.D.pos;
+      this.earTip = model.ears.map((e, i) => {
+        const s = e.userData.side > 0 ? 0 : 1;
+        const b0 = e.getWorldPosition(V());
+        let best = b0.clone();
+        let bd = 0;
+        for (let k = 0; k < base.prims.coat.count; k++) {
+          if (W.ear[k * 2 + s] < 0.5) continue;
+          const d = _v.fromArray(P, k * 3).distanceTo(b0);
+          if (d > bd) {
+            bd = d;
+            best = _v.clone();
+          }
+        }
+        this.earLen[i] = bd;
+        return e.worldToLocal(best);
+      });
+    }
     this.t = (model.root.id * 7.31) % 100;
     this.seen = false;
     this.seenNow = false;
@@ -1373,6 +1409,8 @@ class RealRabbitAnim {
     this.lead = 'hop';
     this.gOff = 0;
     this.plant = [null, null, null, null];
+    // (minimums glissants sur la foulée : appuis avant, appuis arrière — voir ground)
+    this.win = [new WindowMin(), new WindowMin()];
     this.lastPos = null;
     this.bodyAllow = 0.002 + Math.max(0, B.fur) * 0.4 + B.mane * 0.2;
     for (const [b, d] of this.shift) b.position.sub(d);
@@ -1387,6 +1425,33 @@ class RealRabbitAnim {
       this.earHang = model.ears.map((_, i) => this.earPitch(i));
       this.restorePose();
     }
+    // Pose assise des pattes avant (rotations locales), pour la toilette du lapin gris (voir groomArms ; celle du bélier
+    // garde les pattes près du museau sans voile de peau).
+    this.groomArmQ = null;
+    if (this.actions.sit && this.actions.groom && model.build.model !== 'lop') {
+      this.clipPose('sit', 0, false);
+      this.groomArmQ = [];
+      for (const leg of model.legs) {
+        if (!leg.front) continue;
+        for (const b of [leg.top, leg.pivot, leg.knee, leg.fetlock, leg.paw]) if (b && !this.groomArmQ.some(([x]) => x === b)) this.groomArmQ.push([b, b.quaternion.clone()]);
+      }
+      this.restorePose();
+    }
+    this.resync();
+  }
+
+  /**
+   * Après les mesures (faites une fois par race, sur le premier lapin construit) : os remis au repos et mixeur forcé de
+   * tout réécrire à la prochaine image (il n'écrit un os que si sa valeur change ; un os qu'un clip n'anime pas gardait
+   * la pose de la dernière mesure — voir catReal.js resync).
+   */
+  resync() {
+    for (const b of this.bones) {
+      b.position.copy(b.userData.restP);
+      b.quaternion.copy(b.userData.restQ);
+    }
+    this.savePose();
+    for (const pm of this.mixer._bindings ?? []) pm.buffer.fill(NaN, pm.valueSize, 3 * pm.valueSize);
   }
 
   /**
@@ -1596,6 +1661,21 @@ class RealRabbitAnim {
     return Math.atan2(_ev.z, -_ev.y);
   }
 
+  /**
+   * Oreille i trop basse ? Son bout (sommet de l'oreille le plus loin de sa base) sous sa base moins un cinquième de sa
+   * longueur, ou à moins de 5 mm du sol (repère du lapin ; les parents sont mis à jour).
+   */
+  earLow(i) {
+    const md = this.model;
+    const e = md.ears[i];
+    e.updateMatrixWorld(true);
+    _m2.copy(md.root.matrixWorld).invert();
+    const tip = _gt.copy(this.earTip[i]).applyMatrix4(e.matrixWorld).applyMatrix4(_m2);
+    const baseP = _gs.setFromMatrixPosition(e.matrixWorld).applyMatrix4(_m2);
+    // (le sol : y = 0 dans le repère du lapin une fois posé — le calage de l'image d'avant, gOff, s'y ajoute)
+    return tip.y < baseP.y - 0.2 * this.earLen[i] || tip.y + (this.gOff ?? 0) < 0.005;
+  }
+
   /** Tourne un os de ang autour d'un axe du lapin (axe vu par son parent au repos ; il suit le parent animé). */
   turn(b, axis, ang) {
     if (!b || !ang) return;
@@ -1726,8 +1806,9 @@ class RealRabbitAnim {
       a.setEffectiveWeight(w);
       if (MOVING.includes(name)) {
         const nat = this.natural[name];
-        // (course : la cadence suit la vitesse jusqu'à 3,5 fois la vitesse naturelle, concours et agility compris)
-        a.timeScale = Math.min(name === 'run' ? 3.5 : 2.4, Math.max(0.45, (st.moving ? st.v : nat) / nat));
+        // (course : la cadence suit la vitesse jusqu'à 6 fois la vitesse naturelle, concours et agility compris ; à 3,5
+        // le lapereau qui suit l'enfant à 2,8 m/s glissait de la moitié de son chemin)
+        a.timeScale = Math.min(name === 'run' ? 6 : 2.4, Math.max(0.45, (st.moving ? st.v : nat) / nat));
         if (w > leadW) {
           lead = name;
           leadW = w;
@@ -1815,12 +1896,43 @@ class RealRabbitAnim {
       const swivel = (n1 * 0.18 + (st.alert ? 0 : 0.15)) * (1 - this.earBack);
       _ax.copy(this.earAxes[i]);
       e.quaternion.premultiply(_q.setFromAxisAngle(_ax, s * swivel));
-      this.turn(e, AX, -(this.earBack * 1.0 + flick * 0.08 + n1 * 0.03));
-      this.turn(e, AZ, -s * (this.earBack * 0.25 + flick * 0.05));
+      _qe2.copy(e.quaternion);
+      // (oreilles couchées : jamais dans le dos ni dans le sol — les longues oreilles du géant, tapi, y rentraient de
+      // 3 cm ; la rotation vers l'arrière est réduite jusqu'à ce que le bout reste au-dessus de sa base, moins un
+      // cinquième de l'oreille, et du sol)
+      let back = this.earBack * 1.0 + flick * 0.08 + n1 * 0.03;
+      for (let pass = 0; pass < 5; pass++) {
+        e.quaternion.copy(_qe2);
+        this.turn(e, AX, -back);
+        this.turn(e, AZ, -s * (this.earBack * 0.25 + flick * 0.05));
+        if (!this.earTip || back < 0.2 || !this.earLow(i)) break;
+        back *= 0.8;
+      }
     }
     // Pompon : petits coups quand il bouge ou qu'il est content.
     const tb = md.tailBones;
     if (tb.length) this.turn(tb[0], AX, (moving ? -0.25 : 0) + Math.max(0, Math.sin(t * 7)) * 0.05 * (st.happy ? 1 : 0.3));
+    // Toilette : pattes avant ramenées devant le museau.
+    const wg = this.w.groom ?? 0;
+    if (wg > 0.02) this.groomArms(wg);
+  }
+
+  /**
+   * Toilette : les pattes avant gardent à peu près leur pose assise (coudes près du corps, pattes posées devant) et la
+   * tête descend vers elles, comme un lapin qui se lèche les pattes avant de se frotter le museau. Le clip les levait de
+   * part et d'autre de la tête, à hauteur des yeux : la peau tendue entre l'avant-bras et l'épaule faisait un voile plat,
+   * retourné. w : poids de la toilette.
+   */
+  groomArms(w) {
+    const G = this.groomArmQ;
+    if (!G) return;
+    const k = Math.min(1, w);
+    for (const [b, q] of G) b.quaternion.slerp(q, k * 0.85);
+    const md = this.model;
+    const lick = Math.sin(this.t * 9) * 0.06;
+    this.turn(md.neck, AX, (0.4 + lick) * k);
+    this.turn(md.head, AX, (0.3 + lick) * k);
+    md.root.updateMatrixWorld(true);
   }
 
   /**
@@ -1833,18 +1945,38 @@ class RealRabbitAnim {
     const md = this.model;
     md.root.updateMatrixWorld(true);
     _m.copy(md.root.matrixWorld).invert();
+    const air = (this.trick?.clip === 'jump' && this.trick.age < 0.25) || (this.w.jump ?? 0) > 0.3 || (this.w.binky ?? 0) > 0.3;
     let low = Infinity;
-    for (const pts of this.solePts) {
-      for (const inf of pts) {
+    let F = Infinity;
+    let H = Infinity;
+    for (let l = 0; l < this.solePts.length; l++) {
+      for (const inf of this.solePts[l]) {
         const y = this.skinY(inf);
         if (y < low) low = y;
+        if (l < 2 && y < F) F = y;
+        else if (l >= 2 && y < H) H = y;
       }
     }
     if (!Number.isFinite(low)) low = 0;
-    const air = (this.trick?.clip === 'jump' && this.trick.age < 0.25) || (this.w.jump ?? 0) > 0.3 || (this.w.binky ?? 0) > 0.3;
     let target;
     let floor = -low;
-    if (st.moving || air) {
+    let k = 8;
+    const gaitOn = st.moving && !air && !st.inPlace && dt > 0 && Number.isFinite(F) && Number.isFinite(H);
+    if (!gaitOn) for (const w of this.win) w.reset();
+    if (gaitOn) {
+      // Allures (sautillement, petit galop, course en bonds) : chaque paire de pattes touche le sol au plus bas de sa
+      // foulée. Le corps descend vers la paire qui se pose (hauteur la plus basse de cette paire sur la dernière
+      // foulée), passe de l'une à l'autre pendant les temps de suspension ; les pattes d'une race (nain, géant)
+      // n'ont plus une paire qui reste en l'air pendant que l'autre glisse.
+      const span = this.cycle();
+      const fMin = this.win[0].push(F, dt, span);
+      const hMin = this.win[1].push(H, dt, span);
+      const wF = 1 - smooth(0.002, 0.012, F - fMin);
+      const wH = 1 - smooth(0.002, 0.012, H - hMin);
+      if (wF + wH > 1e-3) this.gaitY = -(wF * fMin + wH * hMin) / (wF + wH);
+      target = this.gaitY ?? -low;
+      k = 18;
+    } else if (st.moving || air) {
       target = !air && this.gait !== 'run' ? -low : Math.max(0, -low);
     } else {
       let lowB = Infinity;
@@ -1855,14 +1987,14 @@ class RealRabbitAnim {
       target = Math.max(-low, Number.isFinite(lowB) ? -(lowB + this.bodyAllow) : -Infinity);
       floor = target;
     }
-    let off = dt > 0 ? this.gOff + (target - this.gOff) * Math.min(1, dt * 8) : target;
+    let off = dt > 0 ? this.gOff + (target - this.gOff) * Math.min(1, dt * k) : target;
     off = Math.max(off, floor);
     this.gOff = off;
     if (Math.abs(off) > 0.0002) {
       md.body.position.y += off / Math.max(1e-6, md.body.parent?.isBone ? 1 : 1);
       md.root.updateMatrixWorld(true);
     }
-    if (st.moving && !air && dt > 0 && this.gait !== 'run' && !st.inPlace) {
+    if (st.moving && !air && dt > 0 && !st.inPlace) {
       this.footLock();
       let low2 = Infinity;
       for (const pts of this.solePts) {
@@ -1901,42 +2033,60 @@ class RealRabbitAnim {
     }
   }
 
+  /** Durée d'une foulée de l'allure en cours (s), à sa cadence. */
+  cycle() {
+    const a = this.actions[this.gait] ?? this.actions[this.lead];
+    return a ? Math.min(1.5, a.getClip().duration / Math.max(0.2, Math.abs(a.timeScale))) : 0.5;
+  }
+
   /**
-   * Pieds en appui tenus sur place (sautillement, petit galop) : quand une patte se pose, la place de sa sole est notée ;
-   * tant qu'elle reste posée, la patte est tournée à l'épaule ou à la hanche pour l'y ramener. Les pattes raccourcies ou
-   * allongées d'une race changent la foulée du clip : sans cela, les pieds patinaient en appui.
+   * Pieds en appui tenus sur place (toutes les allures) : quand une patte se pose, la place de ses doigts est notée ;
+   * tant qu'elle reste posée, la patte est tournée à l'épaule ou à la hanche pour l'y ramener, en long et sur le côté.
+   * Les pattes raccourcies ou allongées d'une race changent la foulée du clip : sans cela, les pieds patinaient en appui.
+   * Prise d'appui à 10 mm du sol, lâchée à 25 — la patte qui se déroule reste tenue (à 5 mm, le pied du clip arrivait encore lancé et glissait avant d'être
+   * tenu).
    */
   footLock() {
     const md = this.model;
+    // (rotation seule de la racine : sa matrice porte aussi la taille du lapin)
+    md.root.matrixWorld.decompose(_rt, _q, _rs);
+    _q.invert();
     for (let l = 0; l < md.legs.length; l++) {
       const leg = md.legs[l];
       let low = Infinity;
       for (const inf of this.solePts[l]) {
         const y = this.skinY(inf);
-        if (y < low) {
-          low = y;
-          _p0.copy(_w);
-        }
+        if (y < low) low = y;
       }
-      if (!(low < 0.005)) {
+      if (!(low < (this.plant[l] ? 0.025 : 0.01))) {
         this.plant[l] = null;
         continue;
       }
-      const toe = _u.setFromMatrixPosition(leg.paw.matrixWorld);
       if (!this.plant[l]) {
-        this.plant[l] = toe.clone();
+        this.plant[l] = _u.setFromMatrixPosition(leg.paw.matrixWorld).clone();
         continue;
       }
-      const errW = _v.copy(toe).sub(this.plant[l]);
-      _q.setFromRotationMatrix(md.root.matrixWorld).invert();
-      const ez = errW.applyQuaternion(_q).z;
-      const top = _w.setFromMatrixPosition(leg.pivot.matrixWorld);
-      const Lg = Math.max(0.02, top.distanceTo(toe));
-      const th = Math.asin(clamp(ez / Lg, -0.4, 0.4));
-      if (Math.abs(th) < 1e-4) continue;
-      this.turn(leg.pivot, AX, th);
-      leg.pivot.updateMatrixWorld(true);
-      if (Math.abs(ez) > 0.4 * Lg) this.plant[l] = null;
+      // en long et sur le côté, deux passes (le pied n'est pas à l'aplomb de l'articulation)
+      let th = 0;
+      let ph = 0;
+      for (let pass = 0; pass < 2; pass++) {
+        const toe = _u.setFromMatrixPosition(leg.paw.matrixWorld);
+        const err = _v.copy(toe).sub(this.plant[l]).applyQuaternion(_q);
+        const top = _p0.setFromMatrixPosition(leg.pivot.matrixWorld);
+        const Lg = Math.max(0.02 * _rs.y, top.distanceTo(toe));
+        if (!pass && Math.abs(err.z) > 0.45 * Lg) {
+          this.plant[l] = null;
+          break;
+        }
+        const dth = clamp(Math.asin(clamp(err.z / Lg, -0.5, 0.5)), -0.5 - th, 0.5 - th);
+        const dph = clamp(-Math.asin(clamp(err.x / Lg, -0.2, 0.2)), -0.2 - ph, 0.2 - ph);
+        if (!(Math.abs(dth) >= 1e-4 || Math.abs(dph) >= 1e-4)) break;
+        th += dth;
+        ph += dph;
+        this.turn(leg.pivot, AX, dth);
+        this.turn(leg.pivot, AZ, dph);
+        leg.pivot.updateMatrixWorld(true);
+      }
     }
   }
 

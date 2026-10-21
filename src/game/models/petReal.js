@@ -431,3 +431,34 @@ export function raiseAngle(c, q, y, max) {
   const th = Math.abs(t1) < Math.abs(t2) ? t1 : t2;
   return clamp(th, -max, max);
 }
+
+/**
+ * Minimum glissant sur une durée (s) : la plus basse des valeurs reçues pendant la dernière foulée (allures des chats
+ * et des lapins réalistes : hauteur des appuis d'une paire de pattes, point le plus bas de la course). Sans dérive :
+ * les valeurs plus vieilles que la durée sont oubliées.
+ */
+export class WindowMin {
+  constructor() {
+    this.t = [];
+    this.v = [];
+    this.now = 0;
+  }
+
+  push(v, dt, span) {
+    this.now += dt;
+    this.t.push(this.now);
+    this.v.push(v);
+    while (this.t.length > 1 && this.t[0] < this.now - span) {
+      this.t.shift();
+      this.v.shift();
+    }
+    let m = Infinity;
+    for (const x of this.v) if (x < m) m = x;
+    return m;
+  }
+
+  reset() {
+    this.t.length = 0;
+    this.v.length = 0;
+  }
+}

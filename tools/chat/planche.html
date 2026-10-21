@@ -108,7 +108,7 @@ window.planche = {
   /**
    * cells : [{ breed, color (indice de robe), stage ('adult' | 'baby' | 'young'), proc (chat procédural), clip ('stand',
    * 'sit', 'groom', 'lie', 'curl', 'eat', 'highfive', 'jump', 'stretch', 'walk', 'trot', 'run', 'balance'), t (fraction),
-   * view ('side' | 'three' | 'front' | 'head' | 'back' | 'top' | 'face'), label, lod, zoom, following, fear, gear
+   * view ('side' | 'three' | 'front' | 'head' | 'back' | 'top' | 'face'), label, lod, zoom, magenta (faces arrière), following, fear, gear
    * (buildGear : { neck: { item: 'collar', color } }), acc (buildAccessories) }] ; cols ;
    * cw, ch (taille d'une case).
    */
@@ -132,6 +132,22 @@ window.planche = {
       sg.add(md.root);
       scene.add(sg);
       if (c.lod && md.setLod) md.setLod(1, false);
+      // (mise au point : faces arrière en magenta — un trou ou une peau retournée se voient)
+      if (c.magenta) {
+        for (const m of [md.coatMesh, md.lidMesh, md.eyeMesh]) {
+          const mat = m?.material;
+          if (!mat) continue;
+          const prev = mat.onBeforeCompile;
+          const key = mat.customProgramCacheKey?.bind(mat);
+          mat.onBeforeCompile = (sh, r) => {
+            prev?.call(mat, sh, r);
+            sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\nif (!gl_FrontFacing) gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);');
+          };
+          mat.customProgramCacheKey = () => (key ? key() : '') + '-bf';
+          mat.side = THREE.DoubleSide;
+          mat.needsUpdate = true;
+        }
+      }
       // (mise au point : pelage sans le shader de la robe, pièces cachées)
       if (c.plain) md.coatMesh.material = new THREE.MeshStandardMaterial({ color: 0x999999 });
       for (const k of c.hide ?? []) {

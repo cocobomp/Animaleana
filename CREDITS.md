@@ -3,8 +3,9 @@
 La ferme à Madichelle est un jeu libre et gratuit. Les modèles 3D ci-dessous viennent d'autres auteurs : ceux
 sous CC0 1.0 sont dans le domaine public (aucune attribution n'est exigée, mais nous tenons à les remercier) ; les
 chiens, les chats et les lapins sont sous licence **Creative Commons Attribution 4.0 (CC BY 4.0)** : leur attribution ci-dessous est
-obligatoire et figure aussi dans le jeu (❓ Aide → ℹ️ À propos). Les textes de licence sont dans
-`public/models/LICENSES/`.
+obligatoire et figure aussi dans le jeu (❓ Aide → ℹ️ À propos) ; le mouton et la chèvre sont sous **licence MIT**
+(© 2020 Microsoft) : leur notice de copyright et le texte de la licence (ci-dessous) accompagnent le jeu, ici, dans
+`public/models/LICENSES/` et dans l'écran À propos. Les textes de licence sont dans `public/models/LICENSES/`.
 
 | Pack | Auteur | Licence | Fichiers dans `public/models/` |
 | --- | --- | --- | --- |
@@ -18,6 +19,8 @@ obligatoire et figure aussi dans le jeu (❓ Aide → ℹ️ À propos). Les tex
 | Lapins : *Rabbit* | [Dakota.Hinkle](https://sketchfab.com/3d-models/rabbit-073eef14ae3c4d06808498c3ba895e67), sur Sketchfab | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | `rabbit.glb` |
 | Lapins béliers : *Rabbit Rigged* | [FourthGreen](https://sketchfab.com/3d-models/rabbit-rigged-e7213589744d436b9d96e2dbb31198a5), sur Sketchfab | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | `rabbit_lop.glb` |
 | Lapins : course et saut d'artiste (gabarits, *Rabbit*) | [CDmir (Čestmír Dammer)](https://opengameart.org/content/rabbit-0), sur OpenGameArt | CC0 1.0 | `rabbit.glb`, `rabbit_lop.glb` (mouvements) |
+| Moutons (7 races, agneaux) : *Sheep_White_01* de la Microsoft Rocketbox Avatar Library | [Microsoft](https://github.com/microsoft/Microsoft-Rocketbox) (Rocketbox Studios, Microsoft Research), © 2020 Microsoft | [MIT](https://github.com/microsoft/Microsoft-Rocketbox/blob/master/LICENSE.md) | `sheep.glb` |
+| Chèvres (4 races, chevreaux) : *Goat_White_01* et cornes de *Goat_Brown_01*, Microsoft Rocketbox Avatar Library | [Microsoft](https://github.com/microsoft/Microsoft-Rocketbox) (Rocketbox Studios, Microsoft Research), © 2020 Microsoft | [MIT](https://github.com/microsoft/Microsoft-Rocketbox/blob/master/LICENSE.md) | `goat.glb` |
 
 Conversion : FBX → glTF binaire avec three.js (FBXLoader + GLTFExporter), animations
 ré-échantillonnées à 12 images/s, compression `meshopt` via glTF-Transform. Tout le reste
@@ -84,6 +87,66 @@ Ces modifications sont faites par les scripts de `tools/chat/` (voir `tools/chat
 Ces modifications sont faites par les scripts de `tools/lapin/` (voir `tools/lapin/LISEZMOI.md`) et, en jeu, par
 `src/game/models/rabbitReal.js` et `rabbitCoat.js` (races, robes, poses). Le lapin sculpté par le code
 (`src/game/models/animalModel.js`) reste le modèle de repli pendant le chargement ou si les fichiers ne se chargent pas.
+
+### Le mouton (MIT)
+
+- « Sheep_White_01 », **Microsoft Rocketbox Avatar Library**, https://github.com/microsoft/Microsoft-Rocketbox
+  (`Assets/Animals/Sheep_White_01`, commit `0943055`), Copyright (c) 2020 Microsoft, licence MIT. **Modifié** : os
+  renommés (racine ajoutée, omoplates rattachées au poitrail), poids de la peau refaits autour du coude, du grasset et
+  de la base de l'encolure (plus de peau du poitrail étirée en rideau ni de cuisse étirée au galop), carte de normales
+  convertie, cible de forme « shorn » (toison tondue) et masques de la robe, cornes de bélier en option, 14
+  animations créées (le modèle n'en avait aucune : allures, brouter, manger, bêler, se coucher et se relever en
+  ruminant, couché, ruminer, dormir, saut, gambade de l'agneau ; aucun os étiré, sabots jamais sous le sol),
+  textures WebP, compression meshopt, version allégée pour le lointain. Fichier : `sheep.glb`, toutes les races et
+  les agneaux.
+
+Ces modifications sont faites par les scripts de `tools/mouton/` (voir `tools/mouton/LISEZMOI.md`) et, en jeu, par
+`src/game/models/sheepReal.js` et `sheepCoat.js` (races, robes, toison qui suit la tonte, animations). Le mouton
+sculpté par le code reste le modèle de repli pendant le chargement ou si le fichier ne se charge pas.
+
+### La chèvre (MIT)
+
+- « Goat_White_01 » et « Goat_Brown_01 », **Microsoft Rocketbox Avatar Library**, https://github.com/microsoft/Microsoft-Rocketbox
+  (`Assets/Animals/Goat_White_01` et `Goat_Brown_01`, commit `0943055`), Copyright (c) 2020 Microsoft, licence MIT.
+  **Modifié** : os renommés (racine ajoutée, omoplates rattachées au poitrail), os des cornes, de la barbe et de la
+  mamelle ajoutés, crâne refermé sous les cornes (chèvres sans cornes), cornes arquées de la chèvre brune en cible de
+  forme, poids de la peau refaits autour du coude, du bréchet, du grasset et de la mamelle, carte de normales
+  convertie, 20 animations créées (le modèle n'en avait aucune : allures, brouter au sol et en hauteur contre une
+  barrière, manger, bêler, traite, se coucher et se relever en ruminant, couchée, ruminer, dormir, coup de tête,
+  saut, escalade, gambade du chevreau ; aucun os étiré, sabots jamais sous le sol, couchée posée sur le sol),
+  textures WebP, compression meshopt, version allégée pour le lointain. Fichier : `goat.glb`, toutes les races et
+  les chevreaux.
+
+Ces modifications sont faites par les scripts de `tools/chevre/` (voir `tools/chevre/LISEZMOI.md`) et, en jeu, par
+`src/game/models/goatReal.js` et `goatCoat.js` (races, robes, cornes, barbe, mamelle qui suit la traite,
+animations). La chèvre sculptée par le code reste le modèle de repli pendant le chargement ou si le fichier ne se
+charge pas.
+
+Texte de la licence du mouton et de la chèvre :
+
+```
+MIT License
+
+Copyright (c) 2020 Microsoft
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Page « Choisis ton chat et ton lapin » (`chats-lapins.html`, hors du jeu)
 

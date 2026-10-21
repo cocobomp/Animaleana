@@ -6,6 +6,8 @@ import { gfx } from './gfx.js';
 import { preloadModels, loadModel, MODELS } from './assets.js';
 import { REAL_HORSE_KEY, horseView, realHorseBase } from './models/horseReal.js'; // cheval réaliste : chargé à part
 import { REAL_DOG_KEYS, realDogBase } from './models/dogReal.js'; // chiens réalistes : chargés après le cheval
+import { REAL_SHEEP_KEY, realSheepBase } from './models/sheepReal.js'; // mouton réaliste : chargé après les chiens
+import { REAL_GOAT_KEY, realGoatBase } from './models/goatReal.js'; // chèvre réaliste : chargée après le mouton
 import { hairTexture } from './models/horseHair.js';
 import { renderSetup, PixelBudget, SLOW_KEY } from './pixelBudget.js'; // définition et anticrénelage selon la qualité
 import { REAL_CAT_KEYS, realCatBase } from './models/catReal.js'; // chats réalistes : chargés après les chiens
@@ -185,11 +187,14 @@ export class Game {
     this.dogSwap = [];
     this.catSwap = [];
     this.rabbitSwap = [];
+    this.sheepSwap = [];
+    this.goatSwap = [];
     const grace = new Promise((r) => setTimeout(r, HORSE_GRACE_MS));
     const dogKeys = Object.values(REAL_DOG_KEYS);
     const catKeys = Object.values(REAL_CAT_KEYS);
     const rabbitKeys = Object.values(REAL_RABBIT_KEYS);
-    const others = preloadModels(Object.keys(MODELS).filter((k) => k !== REAL_HORSE_KEY && !dogKeys.includes(k) && !catKeys.includes(k) && !rabbitKeys.includes(k)));
+    const others = preloadModels(Object.keys(MODELS).filter((k) => k !== REAL_HORSE_KEY && k !== REAL_SHEEP_KEY && k !== REAL_GOAT_KEY
+      && !dogKeys.includes(k) && !catKeys.includes(k) && !rabbitKeys.includes(k)));
     const horse = others.then(() => loadModel(REAL_HORSE_KEY));
     // Chiens réalistes (shiba ≈ 0,85 Mo, jack ≈ 0,5 Mo) : demandés après le cheval, jamais attendus à l'ouverture ;
     // les chiens prennent le modèle réaliste dès qu'il arrive (onRealDogs), le procédural en attendant.
@@ -208,6 +213,18 @@ export class Game {
     this.realRabbitsReady = this.realCatsReady.then(() => Promise.all(rabbitKeys.map((k) => loadModel(k)))).then((list) => {
       if (list.some(Boolean)) this.onRealRabbits(list);
       return list.filter(Boolean).length;
+    });
+    // Mouton réaliste (≈ 0,5 Mo) : demandé après les chiens, jamais attendu ; les moutons prennent le modèle réaliste
+    // dès qu'il arrive (onRealSheep), le procédural en attendant.
+    this.realSheepReady = this.realDogsReady.then(() => loadModel(REAL_SHEEP_KEY)).then((gltf) => {
+      if (gltf) this.onRealSheep(gltf);
+      return !!gltf;
+    });
+    // Chèvre réaliste (≈ 0,53 Mo) : demandée après le mouton, jamais attendue ; les chèvres prennent le modèle réaliste
+    // dès qu'il arrive (onRealGoats), la chèvre procédurale en attendant.
+    this.realGoatReady = this.realSheepReady.then(() => loadModel(REAL_GOAT_KEY)).then((gltf) => {
+      if (gltf) this.onRealGoats(gltf);
+      return !!gltf;
     });
     this.modelsReady = Promise.all([others, Promise.race([horse, grace])])
       .then(([n]) => { this.modelsLoaded = true; return n; });
@@ -337,6 +354,81 @@ export class Game {
       list.splice(i, 1);
       e.rebuildModel();
       if (e.model?.realCat) return;
+    }
+  }
+
+  /**
+   * Le mouton réaliste est chargé. Ses données de repos sont tirées du GLB juste après, hors de l'image en cours ; puis
+   * les moutons au modèle de repli prennent le réaliste, un par image (swapRealSheep), et les vignettes sont refaites.
+   */
+  onRealSheep(gltf) {
+    setTimeout(() => {
+      try {
+        realSheepBase(gltf);
+      } catch (err) {
+        console.warn('Mouton réaliste : préparation impossible', err);
+        return;
+      }
+      for (const e of this.allEntities()) if (e.data.species === 'sheep' && !e.model?.realSheep) this.sheepSwap.push(e);
+      this.thumbs?.modelsChanged?.();
+    }, 90);
+  }
+
+  /**
+   * La chèvre réaliste est chargée : données de repos tirées du GLB juste après, hors de l'image en cours ; puis les
+   * chèvres au modèle de repli prennent la réaliste, une par image (swapRealGoats), et les vignettes sont refaites.
+   */
+  onRealGoats(gltf) {
+    setTimeout(() => {
+      try {
+        realGoatBase(gltf);
+      } catch (err) {
+        console.warn('Chèvre réaliste : préparation impossible', err);
+        return;
+      }
+      for (const e of this.allEntities()) if (e.data.species === 'goat' && !e.model?.realGoat) this.goatSwap.push(e);
+      this.thumbs?.modelsChanged?.();
+    }, 90);
+  }
+
+  /**
+   * Une chèvre au modèle de repli prend la chèvre réaliste (une par image). Pas quand elle est menée (troupeau), guidée
+   * par une activité (van, concours, spectacle, agility), en pose, sur la table du salon ni en train de monter dans le
+   * van : elle attend son tour.
+   */
+  swapRealGoats() {
+    const list = this.goatSwap;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      const here = e.root?.parent && !e.disposed;
+      if (!here || e.model?.realGoat) {
+        list.splice(i--, 1);
+        continue;
+      }
+      if (e.scripted || e.herdCtrl || e.posing || e.onTable) continue;
+      list.splice(i, 1);
+      e.rebuildModel();
+      if (e.model?.realGoat) return;
+    }
+  }
+
+  /**
+   * Un mouton au modèle de repli prend le mouton réaliste (un par image). Pas quand il est mené (troupeau), guidé par
+   * une activité (van, concours, spectacle), en pose ni sur la table du salon : il attend son tour.
+   */
+  swapRealSheep() {
+    const list = this.sheepSwap;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      const here = e.root?.parent && !e.disposed;
+      if (!here || e.model?.realSheep) {
+        list.splice(i--, 1);
+        continue;
+      }
+      if (e.scripted || e.herdCtrl || e.posing || e.onTable) continue;
+      list.splice(i, 1);
+      e.rebuildModel();
+      if (e.model?.realSheep) return;
     }
   }
 
@@ -807,6 +899,10 @@ export class Game {
     if (this.catSwap.length) this.swapRealCats();
     // Lapins réalistes arrivés en cours de partie : un lapin de plus prend le vrai modèle.
     if (this.rabbitSwap.length) this.swapRealRabbits();
+    // Mouton réaliste arrivé en cours de partie : un mouton de plus prend le vrai modèle.
+    if (this.sheepSwap.length) this.swapRealSheep();
+    // Chèvre réaliste arrivée en cours de partie : une chèvre de plus prend le vrai modèle.
+    if (this.goatSwap.length) this.swapRealGoats();
     // Point de vue pour la version réduite des chevaux au loin (horseReal.js) : la caméra de l'image d'avant.
     horseView.eye.setFromMatrixPosition(this.camera.matrixWorld);
     horseView.on = true;

@@ -17,6 +17,10 @@ import { animateRealHorse } from './models/horseReal.js'; // cheval réaliste (G
 import { animateRealDog } from './models/dogReal.js'; // chien réaliste (GLB) : allures, postures, actions
 import { animateRealCat } from './models/catReal.js'; // chat réaliste (GLB) : allures, postures, gestes
 import { animateRealRabbit } from './models/rabbitReal.js'; // lapin réaliste (GLB) : allures, postures, gestes
+import { animateRealSheep } from './models/sheepReal.js'; // mouton réaliste (GLB) : allures, couché, brouter, toison
+import { sheepLookOf, sheepStage } from '../sim/sheepLook.js';
+import { animateRealGoat } from './models/goatReal.js'; // chèvre réaliste (GLB) : allures, dressée, traite, chevreau
+import { goatLookOf, goatStage } from '../sim/goatLook.js';
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 // Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
@@ -107,8 +111,10 @@ export class AnimalEntity {
     }
     // Modèle GLB animé si l'espèce en a un (src/game/assets.js), sinon le modèle procédural. Le poulain, le chiot du
     // chien réaliste, le chaton (modèle de FainoDS) et le jeune du chat réaliste, le lapereau et le jeune du lapin
-    // réaliste ont leur gabarit (stageLook : grosse tête, pattes courtes…).
-    const look = stageLook(this.data);
+    // réaliste ont leur gabarit (stageLook : grosse tête, pattes courtes…) ; l'agneau et le chevreau aussi, les béliers
+    // leurs cornes, le bouc ses cornes et sa barbe (sheepLook.js, goatLook.js).
+    const sp = this.data.species;
+    const look = sp === 'sheep' ? sheepLookOf(this.data) : sp === 'goat' ? goatLookOf(this.data) : stageLook(this.data);
     this.model = buildGltfAnimal(this.data.species, look) ?? buildAnimalModel(this.data.species, look, this.data.breed);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
@@ -160,10 +166,11 @@ export class AnimalEntity {
     this.scale = this.data.look.scale * growthScale(this.data);
     this.scaleGroup.scale.setScalar(this.scale);
     this.stage = lifeStage(this.data);
-    // Le poulain (ou le chiot du chien réaliste, le chaton du chat réaliste) a grandi : il prend le gabarit de sa race.
+    // Le poulain (ou le chiot du chien réaliste, le chaton du chat réaliste, l'agneau, le chevreau…) a grandi : il prend le gabarit de sa race.
     if (((this.model.horseV3 && this.model.foal !== (this.stage === 'baby')) || (this.model.realDog && this.model.puppy !== (this.stage === 'baby'))
       || (this.model.realCat && this.model.stage !== (this.stage === 'baby' || this.stage === 'young' ? this.stage : 'adult'))
-      || (this.model.realRabbit && this.model.stage !== (this.stage === 'baby' || this.stage === 'young' ? this.stage : 'adult'))) && this.label) {
+      || (this.model.realRabbit && this.model.stage !== (this.stage === 'baby' || this.stage === 'young' ? this.stage : 'adult'))
+      || (this.model.realSheep && this.model.stage !== sheepStage(this.stage)) || (this.model.realGoat && this.model.stage !== goatStage(this.stage))) && this.label) {
       this.rebuildModel();
       return;
     }
@@ -288,6 +295,7 @@ export class AnimalEntity {
     const m = mood(this.data);
     const how = kind ?? (m === 'sick' ? 'sick' : m === 'sad' ? 'sad' : m === 'happy' ? 'happy' : 'neutral');
     const pitch = this.stage === 'baby' ? 1.6 : this.stage === 'young' ? 1.25 : 1 / (0.55 + this.scale * 0.45);
+    this.spokeAt = this.time; // (le mouton réaliste bêle : tête levée, bouche ouverte)
     return audio.animal(this.data.species, how, this.data.id, { pitch, gain: 1 / (1 + dist / 7) });
   }
 
@@ -470,6 +478,10 @@ export class AnimalEntity {
     let moved = false;
     for (const o of ctx.entities) {
       if (o === this || o.inside || o.ridden || o.data.stalled) continue;
+      // (le chevreau qui tète se glisse sous le ventre de sa mère : ils ne s'écartent pas l'un de l'autre)
+      if (o.nursing === this || this.nursing === o) continue;
+      // (jumeaux qui tètent la même mère, chacun de son côté : ils ne se repoussent pas loin de la mamelle)
+      if (this.nursing && this.nursing === o.nursing) continue;
       const minD = (this.radius + o.radius) * 0.85;
       const dx = p.x - o.position.x;
       const dz = p.z - o.position.z;
@@ -499,6 +511,8 @@ export class AnimalEntity {
 
     // Le nom n'apparaît que lorsque le joueur est proche.
     const distPlayer = p.distanceTo(ctx.playerPos);
+    this.distPlayer = distPlayer; // (regard du mouton réaliste vers le joueur proche)
+    this.playerAt = ctx.playerPos;
     this.label.visible = false; // les noms sont affichés en HTML (étiquettes qu'on peut toucher)
 
     // De temps en temps (rarement), l'animal se manifeste s'il est assez près ; plus souvent s'il va mal.
@@ -779,6 +793,8 @@ export class AnimalEntity {
     if (md.cat) return animateCat(this, dt, sad); // chats procéduraux, repli : poses et allures dédiées (catAnim.js)
     if (md.real) return animateRealHorse(this, dt, sad); // cheval réaliste (horseReal.js)
     if (md.realDog) return animateRealDog(this, dt, sad); // chien réaliste (dogReal.js)
+    if (md.realSheep) return animateRealSheep(this, dt, sad); // mouton réaliste (sheepReal.js)
+    if (md.realGoat) return animateRealGoat(this, dt, sad); // chèvre réaliste (goatReal.js)
     const legLen = this.data.look.legLen * (this.data.look.legs ?? 1);
     const v = this.speed / Math.max(0.3, this.scale);
     const moving = this.speed > 0.05;

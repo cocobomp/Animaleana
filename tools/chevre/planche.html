@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planche des chèvres</title>
+<style>
+  html, body { margin: 0; background: #dfe9ef; font: 13px system-ui, sans-serif; color: #223; }
+  #grid { position: relative; }
+  canvas { display: block; }
+  .lab { position: absolute; transform: translateX(-50%); background: rgba(255,255,255,.85); border-radius: 6px; padding: 1px 6px; white-space: nowrap; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="grid"></div>
+<script type="module">
+// Planche des races, des chevreaux et des poses des chèvres réalistes (outil de mise au point, hors du jeu) : npx vite,
+// puis /tools/chevre/planche.html ; window.planche.show({ cells: [...] }) (voir plus bas).
+// ?avant=1 : le GLB n'est pas chargé, la planche montre la chèvre procédurale (le modèle de repli, l'AVANT).
+import * as THREE from 'three';
+import { loadModel } from '/src/game/assets.js';
+import { REAL_GOAT_KEY, FENCE_RAIL, nurseSpot, teatPoint } from '/src/game/models/goatReal.js';
+import { buildAnimalModel } from '/src/game/models/animalModel.js';
+import { buildGear } from '/src/game/gearModels.js';
+import { SPECIES } from '/src/sim/species.js';
+import { resolveLook } from '/src/sim/animal.js';
+
+const AVANT = new URLSearchParams(location.search).has('avant');
+const grid = document.getElementById('grid');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setScissorTest(true);
+grid.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xdfefff, 0x6b7d4a, 1.25));
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.6);
+sun.position.set(2.5, 5, 3.5);
+sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2 });
+sun.shadow.mapSize.set(2048, 2048);
+// (biais du soleil du jeu, World.js : sans lui, la toison et le poil se couvraient de taches d'ombre en facettes)
+sun.shadow.bias = -0.00035;
+sun.shadow.normalBias = 0.045;
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x8fb46a, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+const camera = new THREE.PerspectiveCamera(28, 1, 0.02, 60);
+const breeds = SPECIES.goat.breeds;
+const STAGE_SCALE = { baby: 0.5, young: 0.78, adult: 1 };
+const wood = new THREE.MeshStandardMaterial({ color: 0x9a7650, roughness: 0.9 });
+
+/** Barrière de la bergerie (comme farmLayout.js : lisses à 0,45 et 0,90 m), le long de x, en z = zf. */
+function fence(zf) {
+  const g = new THREE.Group();
+  for (const h of [0.45, 0.9]) {
+    const r = new THREE.Mesh(new THREE.BoxGeometry(3, 0.1, 0.08), wood);
+    r.position.set(0, h, zf);
+    r.castShadow = r.receiveShadow = true;
+    g.add(r);
+  }
+  for (const x of [-1.2, 1.2]) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.15, 0.14), wood);
+    p.position.set(x, 0.55, zf);
+    p.castShadow = true;
+    g.add(p);
+  }
+  return g;
+}
+
+function goatOf(c, i) {
+  const look = { ...resolveLook('goat', c.breed, c.color ?? 0), seed: 1234 + i * 17 };
+  const stage = c.stage ?? 'adult';
+  const flags = { kid: stage === 'baby', young: stage === 'young', sex: c.sex ?? 'f', udderFill: c.udder ?? 0.6 };
+  const md = buildAnimalModel('goat', { ...look, ...flags }, c.breed);
+  const s = (look.scale ?? 1) * (STAGE_SCALE[stage] ?? 1);
+  return { md, s, look, stage };
+}
+
+function play(md, c, s) {
+  if (!md.realGoat) return;
+  const a = md.anim;
+  if (c.lod) md.setLod(1);
+  if (!c.clip) return;
+  const moving = ['walk', 'trot', 'run', 'kid_play_run'].includes(c.clip);
+  const posture = ['lie', 'ruminate', 'sleep'].includes(c.clip) ? (c.clip === 'sleep' ? 'sleep' : 'lie') : ['browse_up', 'rear'].includes(c.clip) ? 'rear' : 'stand';
+  if (moving || c.frames) {
+    // (joué comme en jeu : allure à sa vitesse naturelle, sabots tenus, sol, transitions)
+    const g = c.clip === 'kid_play_run' ? 'trot' : c.clip;
+    const v = c.v ?? (moving ? a.natural[g] : 0);
+    const st = { v, moving, size: s * md.size, posture, play: c.clip === 'kid_play_run',
+      action: ['graze', 'eat', 'milk'].includes(c.clip) ? c.clip : c.clip === 'kid_play' ? 'play' : c.clip === 'nurse' ? 'nurse' : null,
+      ruminate: c.clip === 'ruminate', butt: c.clip === 'headbutt' };
+    const frames = c.frames ?? 90;
+    for (let k = 0; k < frames; k++) a.update(1 / 30, st);
+    if (c.t !== undefined && moving) {
+      const act = a.actions[g];
+      const T = act.getClip().duration / Math.max(0.05, act.timeScale);
+      const want = c.t * act.getClip().duration;
+      let guard = 0;
+      while (Math.abs(act.time - want) > 0.02 && guard++ < 400) a.update(T / 120, st);
+    }
+  } else {
+    a.clipPose(c.clip, c.t ?? 0);
+    const lie = ['lie', 'ruminate', 'sleep', 'lie_down', 'get_up'].includes(c.clip);
+    a.posture = lie ? 'lie' : c.clip === 'browse_up' ? 'rear' : 'stand';
+    a.applyFleece(1e9);
+    a.overlay(0, { moving: false, v: 0, posture: a.posture }, true);
+    const air = ['jump', 'kid_play', 'climb'].includes(c.clip);
+    a.ground({ moving: air }, 0, air ? 'kid_play' : null);
+  }
+}
+
+window.planche = {
+  breeds: breeds.map((b) => b.id),
+  /**
+   * cells : [{ breed, color, stage ('baby' | 'young' | 'adult'), sex ('f' | 'm'), udder (0-1), clip, t, frames, v,
+   * view ('side' | 'three' | 'front' | 'head' | 'back' | 'low' | 'top'), zoom, fixed, label, lod, fence (barrière devant
+   * elle : chèvre dressée), halter (licol), mother (chevreau qui tète : sa mère est posée à côté) }] ; cols ; cw, ch.
+   */
+  async show({ cells, cols = 6, cw = 300, ch = 240 }) {
+    if (!AVANT) await loadModel(REAL_GOAT_KEY);
+    const rows = Math.ceil(cells.length / cols);
+    renderer.setSize(cols * cw, rows * ch);
+    grid.querySelectorAll('.lab').forEach((e) => e.remove());
+    const stats = [];
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i];
+      const t0 = performance.now();
+      const { md, s, look, stage } = goatOf(c, i);
+      const ms = performance.now() - t0;
+      const extra = [];
+      const sg = new THREE.Group();
+      sg.scale.setScalar(s);
+      sg.add(md.root);
+      scene.add(sg);
+      sg.updateMatrixWorld(true);
+      play(md, c, s);
+      if (c.halter) {
+        const gear = buildGear(md, look, { halter: { item: 'halter', color: 'red' } });
+        extra.push(gear);
+      }
+      if (c.fence) {
+        // (barrière : la lisse du haut sous les sabots antérieurs de la chèvre dressée)
+        const hz = (md.browseHoof?.[0] ?? 0.29) * s * (md.size ?? 1);
+        const f = fence(hz);
+        scene.add(f);
+        extra.push(f);
+      }
+      if (c.mother) {
+        // (chevreau qui tète : sa mère, la mamelle pleine, et lui à sa place, comme en jeu — goatReal.js nurseSpot)
+        const m = goatOf({ breed: c.breed, color: c.color, udder: 1 }, i + 100);
+        m.md.anim.staticPose('stand');
+        const mg = new THREE.Group();
+        mg.scale.setScalar(m.s);
+        mg.add(m.md.root);
+        scene.add(mg);
+        extra.push(mg);
+        const mother = { position: new THREE.Vector3(), heading: 0, scale: m.s, model: m.md };
+        const kid = { scale: s, model: md, nurseSide: 1 };
+        const spot = new THREE.Vector3();
+        sg.rotation.y = nurseSpot(kid, mother, spot);
+        sg.position.copy(spot);
+        mg.updateMatrixWorld(true);
+        // (comme en jeu, animateRealGoat : l'encolure plonge jusqu'au trayon, la place suit la bouche mesurée)
+        const teat = teatPoint(kid, mother, new THREE.Vector3());
+        const st = { v: 0, moving: false, size: s * md.size, posture: 'stand', action: 'nurse', nurseY: teat.y };
+        for (let k = 0; k < 90; k++) {
+          sg.updateMatrixWorld(true);
+          md.anim.update(1 / 30, st);
+          const m = md.anim.mouthW;
+          if (m) {
+            sg.position.x += (teat.x - m.x) * 0.5;
+            sg.position.z += (teat.z - m.z) * 0.5;
+          }
+        }
+        sg.updateMatrixWorld(true);
+      }
+      md.root.updateMatrixWorld(true);
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const y = (rows - 1 - row) * ch;
+      renderer.setViewport(col * cw, y, cw, ch);
+      renderer.setScissor(col * cw, y, cw, ch);
+      camera.aspect = cw / ch;
+      const sc = c.fixed ? 1 : s * (md.size ?? 1);
+      const H = 0.85 * sc;
+      const view = c.view ?? 'three';
+      const dist = 2.5 * sc * (c.zoom ?? 1);
+      const tgt = new THREE.Vector3(0, H * 0.5, 0);
+      if (view === 'side') camera.position.set(dist, H * 0.55, 0.02);
+      else if (view === 'front') camera.position.set(dist * 0.3, H * 0.7, dist * 0.95);
+      else if (view === 'back') camera.position.set(-dist * 0.55, H * 0.8, -dist * 0.85);
+      else if (view === 'top') camera.position.set(dist * 0.2, dist * 1.1, dist * 0.3);
+      else if (view === 'low') {
+        tgt.set(0, H * 0.25, 0);
+        camera.position.set(dist * 0.9, H * 0.12, dist * 0.35);
+      } else if (view === 'head') {
+        const hp = (md.headBone ?? md.head).getWorldPosition(new THREE.Vector3());
+        const k = s * (md.size ?? 1) * (c.zoom ?? 1);
+        tgt.copy(hp).add(new THREE.Vector3(0, 0.0, 0.08 * k));
+        camera.position.copy(tgt).add(new THREE.Vector3(0.55 * k, 0.12 * k, 0.75 * k));
+      } else camera.position.set(dist * 0.85, H * 0.85, dist * 0.6);
+      if (c.target) tgt.set(...c.target);
+      if (c.cam) camera.position.set(...c.cam);
+      camera.fov = c.fov ?? 28;
+      camera.updateProjectionMatrix();
+      camera.lookAt(tgt);
+      scene.background = new THREE.Color(0xdfe9ef);
+      renderer.render(scene, camera);
+      scene.remove(sg);
+      for (const x of extra) x.parent?.remove(x);
+      md.dispose?.();
+      const lab = document.createElement('div');
+      lab.className = 'lab';
+      const b = breeds.find((x) => x.id === c.breed);
+      lab.textContent = c.label ?? `${b?.name.fr ?? c.breed}${stage === 'baby' ? ' (chevreau)' : stage === 'young' ? ' (jeune)' : c.sex === 'm' ? ' (bouc)' : ''}`;
+      lab.style.left = `${col * cw + cw / 2}px`;
+      lab.style.top = `${row * ch + 4}px`;
+      grid.appendChild(lab);
+      stats.push(Math.round(ms * 10) / 10);
+    }
+    window.buildMs = stats;
+    return true;
+  },
+  rail: FENCE_RAIL,
+};
+window.ready = true;
+</script>
+</body>
+</html>

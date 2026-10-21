@@ -19,7 +19,7 @@
 // ?avant=1 : le GLB n'est pas chargé, la planche montre la chèvre procédurale (le modèle de repli, l'AVANT).
 import * as THREE from 'three';
 import { loadModel } from '/src/game/assets.js';
-import { REAL_GOAT_KEY, FENCE_RAIL, nurseSpot } from '/src/game/models/goatReal.js';
+import { REAL_GOAT_KEY, FENCE_RAIL, nurseSpot, teatPoint } from '/src/game/models/goatReal.js';
 import { buildAnimalModel } from '/src/game/models/animalModel.js';
 import { buildGear } from '/src/game/gearModels.js';
 import { SPECIES } from '/src/sim/species.js';
@@ -164,6 +164,19 @@ window.planche = {
         sg.rotation.y = nurseSpot(kid, mother, spot);
         sg.position.copy(spot);
         mg.updateMatrixWorld(true);
+        // (comme en jeu, animateRealGoat : l'encolure plonge jusqu'au trayon, la place suit la bouche mesurée)
+        const teat = teatPoint(kid, mother, new THREE.Vector3());
+        const st = { v: 0, moving: false, size: s * md.size, posture: 'stand', action: 'nurse', nurseY: teat.y };
+        for (let k = 0; k < 90; k++) {
+          sg.updateMatrixWorld(true);
+          md.anim.update(1 / 30, st);
+          const m = md.anim.mouthW;
+          if (m) {
+            sg.position.x += (teat.x - m.x) * 0.5;
+            sg.position.z += (teat.z - m.z) * 0.5;
+          }
+        }
+        sg.updateMatrixWorld(true);
       }
       md.root.updateMatrixWorld(true);
       const col = i % cols;

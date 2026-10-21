@@ -114,4 +114,19 @@ corrections), mesuré avec le même script.
 
 ## Perf (téléphone 390×844, Chromium SwiftShader sur une machine très chargée : seule la comparaison vaut)
 
-PERF_TABLE
+Chèvres à la bergerie (4 races, boucs et chèvres, un chevreau sur six), caméra qui voit tout le troupeau
+(`perf.mjs`, le même que celui du mouton). Avant = chèvre procédurale (GLB bloqué), après = Rocketbox. La machine ne
+donnait que 3 à 17 images en 10 s : les temps d'image sont bruités, les appels de dessin et les triangles sont exacts.
+
+| | appels de dessin | triangles (scène) | triangles des chèvres | Game.frame (médiane) | animation des chèvres (médiane) |
+|---|---|---|---|---|---|
+| basse, 10 | 578 → 284 | 359 k → 265 k | 104 k → 10 k | 14,0 → 13,5 ms | 0,2 → 0,9 ms |
+| basse, 20 | 879 → 308 | 463 k → 275 k | 210 k → 20 k | 19,5 → 12,2 ms | 0,5 → 1,6 ms |
+| haute, 10 | 611 → 289 | 1 197 k → 464 k | 418 k → 25 k | 40,6 → 12,3 ms | 0,3 → 1,5 ms |
+| haute, 20 | 948 → 313 | 2 192 k → 489 k | 925 k → 50 k | 29,8 → 27,0 ms | 0,3 → 5,7 ms |
+
+Géométries en mémoire (basse, 20) 881 → 333, textures 170 → 55, tas JS 136 → 130 Mo. Une chèvre = 2 appels de
+dessin (robe et ombre de contact ; + 1 pour les mèches du poil long de près). Au loin (au-delà de 7 m en basse, 18 m en
+haute), version réduite, mèches cachées et animation une image sur deux ; hors champ, une image sur trois. L'animation
+coûte plus que la procédurale (mixeur, sabots tenus, sol mesuré : ≈ 0,1 ms par chèvre au loin, ≈ 0,3 ms de près) mais
+le rendu, qui dominait, est divisé par 2 à 4. Construction d’une chèvre : 3 à 15 ms dans le navigateur (le premier gabarit ≈ 0,3 s, partagé ensuite).

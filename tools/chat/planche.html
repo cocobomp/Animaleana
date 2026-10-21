@@ -108,7 +108,7 @@ window.planche = {
   /**
    * cells : [{ breed, color (indice de robe), stage ('adult' | 'baby' | 'young'), proc (chat procédural), clip ('stand',
    * 'sit', 'groom', 'lie', 'curl', 'eat', 'highfive', 'jump', 'stretch', 'walk', 'trot', 'run', 'balance'), t (fraction),
-   * view ('side' | 'three' | 'front' | 'head' | 'back' | 'top' | 'face'), label, lod, zoom, magenta (faces arrière), following, fear, gear
+   * view ('side' | 'three' | 'front' | 'head' | 'back' | 'top' | 'face' | 'profile' : tête de profil), label, lod, zoom, magenta (faces arrière), following, fear, gear
    * (buildGear : { neck: { item: 'collar', color } }), acc (buildAccessories) }] ; cols ;
    * cw, ch (taille d'une case).
    */
@@ -182,10 +182,11 @@ window.planche = {
       else if (view === 'front') camera.position.set(dist * 0.3, H * 0.7, dist * 0.98);
       else if (view === 'back') camera.position.set(-dist * 0.55, H * 0.85, -dist * 0.85);
       else if (view === 'top') camera.position.set(0.01, dist * 1.2, 0.02);
-      else if (view === 'head' || view === 'face') {
+      else if (view === 'head' || view === 'face' || view === 'profile') {
         const hp = md.head.getWorldPosition(new THREE.Vector3());
         tgt.copy(hp).add(new THREE.Vector3(0, 0.005 * s, 0.025 * s));
         if (view === 'face') camera.position.copy(tgt).add(new THREE.Vector3(0.02 * s, 0.01 * s, 0.32 * s * (c.zoom ?? 1)));
+        else if (view === 'profile') camera.position.copy(tgt).add(new THREE.Vector3(0.32 * s * (c.zoom ?? 1), 0.01 * s, 0.01 * s));
         else camera.position.copy(tgt).add(new THREE.Vector3(0.16 * s, 0.04 * s, 0.24 * s).multiplyScalar(c.zoom ?? 1));
       } else camera.position.set(dist * 0.85, H * 0.95, dist * 0.6);
       camera.fov = c.fov ?? 28;

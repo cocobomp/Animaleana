@@ -22,7 +22,7 @@ import { horseView } from './horseReal.js';
 import { rabbitBuild } from '../../sim/rabbitLook.js';
 import { rabbitCoatPlan, makeRabbitCoatUniforms, makeRabbitLandUniforms, setRabbitCoat, rabbitCoatMaterial } from './rabbitCoat.js';
 import {
-  V, smooth, clamp, WindowMin, restPrims, weldGroups, weldedNormals, furLow, fbm, emptyBoneBoxes, growBoneBoxes, PetMesh, contactShadow, raiseAngle,
+  V, smooth, clamp, WindowMin, addWhiskers, restPrims, weldGroups, weldedNormals, furLow, fbm, emptyBoneBoxes, growBoneBoxes, PetMesh, contactShadow, raiseAngle,
 } from './petReal.js';
 
 /** Clés des deux GLB (assets.js) : jamais « rabbit » (gltfAnimal.js le prendrait pour un animal GLB générique). */
@@ -1049,6 +1049,14 @@ export function buildRealRabbitModel(look, stage = 'adult', gltf = null) {
   const skull = toLocal(headB, M.skullTop);
   const headQ = headB.getWorldQuaternion(new THREE.Quaternion()).invert();
   const lastTail = tailB[tailB.length - 1] ?? null;
+  // Moustaches : longues vibrisses de part et d'autre du nez, plus courtes chez le lapereau.
+  const hr = 0.032 * B.head;
+  const whiskers = addWhiskers({
+    head: headB, midX: base.land.midX,
+    pad: M.noseTip.clone().add(V(0.25 * hr, -0.22 * hr, -0.18 * hr)),
+    len: hr * (B.kit ? 1.2 : 1.6), count: 4, spread: 0.05 * hr, droop: 0.15,
+    color: plan.dark ? 0xd8d4cc : 0xeeeae2, opacity: 0.75,
+  });
   const model = {
     root,
     body: bone('root') ?? bone('pelvis'),
@@ -1096,6 +1104,7 @@ export function buildRealRabbitModel(look, stage = 'adult', gltf = null) {
     model.lodLevel = l;
     coatMesh.geometry = l ? S.lodCoat : S.coatGeo;
     if (eyeMesh) eyeMesh.geometry = l ? S.lodEye ?? S.eyeGeo : S.eyeGeo;
+    whiskers.visible = !l;
   };
   model.staticPose = (kind = 'crouch') => model.anim.staticPose(kind);
   model.photoPose = () => model.anim.staticPose('crouch');
@@ -1120,7 +1129,8 @@ export function buildRealRabbitModel(look, stage = 'adult', gltf = null) {
     if (disposed) return;
     disposed = true;
     model.anim.dispose();
-    for (const m of [coatMat, eyeMesh?.material, cardMesh?.material]) m?.dispose?.();
+    for (const m of [coatMat, eyeMesh?.material, cardMesh?.material, whiskers.material]) m?.dispose?.();
+    whiskers.geometry.dispose();
     releaseShape(S);
   };
   model.anim.staticPose('crouch');

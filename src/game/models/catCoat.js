@@ -216,8 +216,11 @@ float cmpNoise(vec3 x) {
 const mat3 CMP_ROT = mat3(0.788, 0.441, -0.43, -0.39, 0.896, 0.215, 0.476, -0.054, 0.878);
 // Relief : bouclettes (frisé), plis de la peau nue (sphynx : rides du front, du cou et des épaules).
 float catCurlH(vec3 p) {
-  vec3 q = CMP_ROT * p * 160.0;
-  return cmpNoise(q) * 0.6 + cmpNoise(q * 2.1 + 7.0) * 0.4;
+  // ondulations régulières (vagues du poil frisé du devon rex), un peu déformées ; du bruit seul donnait une peau
+  // grumeleuse, tachée
+  vec3 q = CMP_ROT * p;
+  float w = sin(q.y * 520.0 + sin(q.z * 190.0 + q.x * 110.0) * 1.8 + cmpNoise(q * 90.0) * 1.4);
+  return 0.5 + 0.5 * w;
 }
 float catWrinkleH(vec3 p, vec4 part) {
   float headLen = cNose.w;
@@ -468,7 +471,9 @@ if (cOn > 0.5) {
   vec3 nc = min(coat * detail, vec3(1.0));
   float fwC = length(fwidth(vCmpPos));
   // poil frisé : bouclettes (effacées de loin, sinon des pixels qui scintillent)
-  if (cHair.y > 0.0) nc *= mix(1.0, 0.72 + 0.4 * smoothstep(0.25, 0.75, catCurlH(vCmpPos)), cHair.y * (1.0 - vCmpPart.x) * (1.0 - smoothstep(0.25, 0.9, fwC * 160.0)));
+  // (de la couleur du pelage : à peine plus clair sur la vague, jamais de creux sombres)
+  // (tête : poil ras, à peine ondulé — des vagues sur la face faisaient des rayures de zèbre)
+  if (cHair.y > 0.0) nc *= mix(1.0, 0.95 + 0.08 * catCurlH(vCmpPos), cHair.y * (1.0 - vCmpPart.x) * (1.0 - 0.8 * vCmpPart.z) * (1.0 - smoothstep(0.25, 0.9, fwC * 160.0)));
   // peau nue : plis plus sombres au fond, peau un peu rosée
   if (cHair.w > 0.0) nc *= mix(1.0, 0.8 + 0.25 * catWrinkleH(vCmpPos, vCmpPart), cHair.w * (1.0 - smoothstep(0.25, 0.9, fwC * 200.0)));
   // poil en peluche : pointes plus claires, grain doux et serré
@@ -485,7 +490,7 @@ if (cOn > 0.5) {
 const BUMP_F = /* glsl */ `
 if (cOn > 0.5 && cRole > 0.5 && (cHair.y > 0.0 || cHair.w > 0.0)) {
   float fade = 1.0 - smoothstep(0.25, 0.9, length(fwidth(vCmpPos)) * 150.0);
-  float hh = (cHair.y * 0.0025 * catCurlH(vCmpPos) * (1.0 - vCmpPart.x) + cHair.w * 0.0012 * catWrinkleH(vCmpPos, vCmpPart)) * fade;
+  float hh = (cHair.y * 0.0007 * catCurlH(vCmpPos) * (1.0 - vCmpPart.x) * (1.0 - 0.85 * vCmpPart.z) + cHair.w * 0.0012 * catWrinkleH(vCmpPos, vCmpPart)) * fade;
   vec2 dH = vec2(dFdx(hh), dFdy(hh));
   vec3 sx = dFdx(-vViewPosition);
   vec3 sy = dFdy(-vViewPosition);
@@ -601,7 +606,7 @@ export function catCoatMaterial(src, shared, opts) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.55, cHair.x), 0.45, cWet);');
   };
-  mat.customProgramCacheKey = () => 'cat-coat-v1';
+  mat.customProgramCacheKey = () => 'cat-coat-v3';
   return mat;
 }
 

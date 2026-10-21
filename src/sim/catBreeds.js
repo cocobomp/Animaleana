@@ -158,7 +158,8 @@ export const CAT_BREEDS = [
     temper: ['calm', 'shy'],
     desc: { fr: 'Le chat bleu français : fourrure laineuse et grands yeux orange.', en: 'The blue French cat: woolly coat and big orange eyes.' },
     pattern: 'solid',
-    colors: [C('Gris bleu', 'Blue grey', 0x7d848c, 0x7d848c, { eye: 0xd9902a })],
+    // (gris bleu aux reflets argentés, plus clair que le bleu du british ; yeux plus orangés)
+    colors: [C('Gris bleu', 'Blue grey', 0x8b949e, 0x8b949e, { eye: 0xe39a2c })],
   },
   {
     id: 'sphynx', name: { fr: 'Sphynx', en: 'Sphynx' }, origin: null, rarity: 3, scale: 0.95, fluff: 0.88, snout: 0.8, price: 240,

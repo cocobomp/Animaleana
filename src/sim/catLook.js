@@ -40,17 +40,19 @@ export const CAT_BUILDS = {
   // culottes et queue en panache.
   maine_coon: { legs: 1.05, legW: 1.18, back: 1.1, girth: 1.12, head: 1.06, headW: 1.02, snout: 1.1, muzzleW: 1.2, earSize: 1.28, earW: 1.12, tufts: 1, furnish: 1, tailLen: 1.1, fur: 0.012, ruff: 0.024, breeches: 1, tailFur: 1.7, shells: 4 },
   // Persan : face plate, tête ronde et large, petites oreilles écartées, pattes courtes et fortes, poil très long.
-  persan: { legs: 0.78, legW: 1.16, back: 0.92, girth: 1.2, head: 1.16, headW: 1.14, snout: 0.34, muzzleW: 1.1, flat: 1, neck: 0.72, earSize: 0.58, earOut: 0.35, earRound: 0.8, tailLen: 0.85, fur: 0.021, ruff: 0.022, breeches: 1, tailFur: 1.5, shells: 5, furnish: 0.8 },
+  persan: { legs: 0.78, legW: 1.16, back: 0.92, girth: 1.2, head: 1.16, headW: 1.14, snout: 0.58, muzzleW: 1.1, flat: 0.7, neck: 0.72, earSize: 0.58, earOut: 0.35, earRound: 0.8, tailLen: 0.85, fur: 0.021, ruff: 0.022, breeches: 1, tailFur: 1.5, shells: 5, furnish: 0.8 },
   // Siamois : fin et long, tête en triangle, très grandes oreilles, queue fine.
   siamois: { legs: 1.12, legW: 0.84, back: 1.08, girth: 0.82, head: 0.92, headW: 0.84, snout: 1.3, muzzleW: 0.86, neck: 1.12, earSize: 1.42, earW: 1.15, earOut: 0.18, tailLen: 1.1, tailThick: 0.72, fur: -0.003 },
   // Sacré de Birmanie : mi-long, tête ronde, corps solide (gants blancs et points : robe).
   sacre_birmanie: { legW: 1.06, back: 1.02, girth: 1.08, head: 1.06, headW: 1.06, snout: 0.86, earSize: 0.95, earRound: 0.3, fur: 0.01, ruff: 0.013, breeches: 0.5, tailFur: 1.2, shells: 3, furnish: 0.5 },
   // Bengal : musclé, petites oreilles (rosettes : robe).
   bengal: { legs: 1.05, legW: 1.08, back: 1.06, head: 0.95, snout: 1.05, muzzleW: 1.05, earSize: 0.84, earRound: 0.3, tailThick: 1.05, fur: -0.002 },
-  // British : tout rond, joues pleines, petites oreilles écartées, pattes courtes et fortes, poil dense en peluche.
-  british: { legs: 0.88, legW: 1.2, back: 0.95, girth: 1.24, head: 1.18, headW: 1.22, snout: 0.62, muzzleW: 1.28, neck: 0.8, earSize: 0.72, earOut: 0.3, earRound: 0.6, tailLen: 0.85, tailThick: 1.28, fur: 0.006, plush: 1 },
-  // Chartreux : solide, tête large aux joues pleines, poil laineux (gris bleu et yeux cuivre : robe).
-  chartreux: { legs: 0.95, legW: 1.12, back: 1.02, girth: 1.16, head: 1.1, headW: 1.13, snout: 0.8, muzzleW: 1.14, earSize: 0.9, earRound: 0.3, tailThick: 1.12, fur: 0.005, plush: 1 },
+  // British : tout rond et trapu, grosses joues, museau court et large, petites oreilles écartées, pattes courtes et
+  // fortes, poil dense en peluche.
+  british: { legs: 0.86, legW: 1.22, back: 0.93, girth: 1.26, head: 1.22, headW: 1.3, snout: 0.55, muzzleW: 1.34, neck: 0.78, earSize: 0.66, earOut: 0.34, earRound: 0.65, tailLen: 0.82, tailThick: 1.3, fur: 0.006, plush: 1 },
+  // Chartreux : solide mais plus haut et allongé que le british, museau fin et plus long (son « sourire »), oreilles
+  // moyennes, poil laineux (gris bleu argenté et yeux cuivre : robe).
+  chartreux: { legs: 1.0, legW: 1.1, back: 1.06, girth: 1.12, head: 1.04, headW: 1.05, snout: 0.98, muzzleW: 0.94, neck: 0.98, earSize: 0.98, earRound: 0.2, tailThick: 1.1, fur: 0.004, plush: 0.55 },
   // Sphynx : nu et plissé, ventre bas, très grandes oreilles larges, queue fine.
   sphynx: { legs: 1.02, legW: 0.92, girth: 0.97, belly: 1, head: 1.0, headW: 1.04, snout: 0.95, earSize: 1.6, earW: 1.32, earOut: 0.3, tailThick: 0.6, fur: -0.006, hairless: 1, wrinkles: 1 },
   // Norvégien : grand chat des forêts au poil long, pinceaux, collerette et queue en panache.
@@ -128,7 +130,8 @@ export function catBuild(look = {}, stage = 'adult') {
     for (const k of ['legs', 'legW', 'back', 'girth', 'head', 'headW', 'snout', 'muzzleW', 'neck', 'tailThick']) soft(k, 0.6);
     soft('earSize', 0.7);
     soft('earW', 0.7);
-    B.flat *= 0.5;
+    // (face à peine plate : le chaton persan gardait des yeux en fentes enfoncées sous un front bombé)
+    B.flat *= 0.15;
     B.belly *= 0.5;
     B.fur *= 0.65;
     B.ruff *= 0.45;

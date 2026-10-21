@@ -25,7 +25,7 @@ import { SPECIES } from '../../sim/species.js';
 import { pickIdlePose } from '../../sim/catPoses.js';
 import { catCoatPlan, makeCatCoatUniforms, makeCatLandUniforms, setCatCoat, catCoatMaterial, catShellMaterial, catLidMaterial } from './catCoat.js';
 import {
-  V, smooth, clamp, WindowMin, restPrims, weldGroups, weldedNormals, furLow, fbm, emptyBoneBoxes, growBoneBoxes, PetMesh, contactShadow, raiseAngle,
+  V, smooth, clamp, WindowMin, addWhiskers, restPrims, weldGroups, weldedNormals, furLow, fbm, emptyBoneBoxes, growBoneBoxes, PetMesh, contactShadow, raiseAngle,
 } from './petReal.js';
 
 /** Clés des deux GLB (assets.js) : jamais « cat » (gltfAnimal.js le prendrait pour un animal GLB générique). */
@@ -62,6 +62,119 @@ const _rs = V();
 // ------------------------------------------------------------------ données de repos (une fois par GLB)
 
 /**
+ * Peau des oreilles réparée : chez le chaton de FainoDS, l'oreille n'est liée à ses os que sur le devant et le bord ;
+ * le dos du pavillon, le creux de la conque et une partie du bord jusqu'à la pointe suivent la tête seule. Agrandies
+ * (sphynx, siamois, devon rex), couchées ou agitées, les oreilles s'effilochaient en franges sombres. Les sommets du
+ * pavillon (au-delà du cinquième de sa longueur, près de son axe) prennent la peau de leur plus proche voisin
+ * d'oreille, en fondu depuis la base (le crâne ne bouge pas). Seulement si le défaut est là (des sommets de la tête
+ * dans un même triangle que l'oreille, au-delà de sa moitié) : Claire, bien liée, n'est pas touchée. Modifie coat.si
+ * et coat.sw ; renvoie le nombre de sommets repris et les poids d'oreille d'origine (raw : { ear, ear2 }, null si rien
+ * n'a changé ; le pli du scottish fold s'en sert, voir deformCat).
+ */
+export function repairEarSkin(coat, earSets, heads, B) {
+  const n = coat.count;
+  const { si, sw, pos, index } = coat;
+  const earW = (i, s) => {
+    let w = 0;
+    for (let k = 0; k < 4; k++) if (sw[i * 4 + k] && earSets[s].has(si[i * 4 + k])) w += sw[i * 4 + k];
+    return w;
+  };
+  let fixed = 0;
+  let raw = null;
+  const p = V();
+  const q = V();
+  for (let s = 0; s < 2; s++) {
+    const b1 = B(s === 0 ? 'ear1L' : 'ear1R');
+    if (b1 < 0 || !earSets[s].size) continue;
+    const bp = heads[b1];
+    const ear = [];
+    let tip = null;
+    let bd = -1;
+    for (let i = 0; i < n; i++) {
+      if (earW(i, s) < 0.9) continue;
+      ear.push(i);
+      const d = p.fromArray(pos, i * 3).distanceTo(bp);
+      if (d > bd) {
+        bd = d;
+        tip = p.clone();
+      }
+    }
+    if (!tip) continue;
+    const ax = tip.sub(bp);
+    const elen = ax.length();
+    if (!(elen > 1e-5)) continue;
+    ax.normalize();
+    const u = (i) => p.fromArray(pos, i * 3).sub(bp).dot(ax) / elen;
+    // le défaut : des sommets de la tête seule dans un même triangle que l'oreille, au-delà de sa moitié
+    let bad = 0;
+    for (let t = 0; t < index.length; t += 3) {
+      let lo = 1;
+      let hi = 0;
+      let far = false;
+      for (let e = 0; e < 3; e++) {
+        const w = earW(index[t + e], s);
+        lo = Math.min(lo, w);
+        hi = Math.max(hi, w);
+        if (w < 0.02 && u(index[t + e]) > 0.5) far = true;
+      }
+      if (hi >= 0.9 && lo < 0.02 && far) bad++;
+    }
+    if (bad < 6) continue;
+    const take = [];
+    for (let i = 0; i < n; i++) {
+      const w0 = earW(i, s);
+      if (w0 >= 0.9) continue;
+      p.fromArray(pos, i * 3).sub(bp);
+      const al = p.dot(ax) / elen;
+      if (al < 0.2 || al > 1.3) continue;
+      const perp = p.addScaledVector(ax, -al * elen).length() / elen;
+      const f = smooth(0.2, 0.55, al) * (1 - smooth(0.55, 0.8, perp));
+      if (f <= w0 + 0.02) continue;
+      let best = -1;
+      let bd2 = Infinity;
+      p.fromArray(pos, i * 3);
+      for (const j of ear) {
+        const d = q.fromArray(pos, j * 3).distanceToSquared(p);
+        if (d < bd2) {
+          bd2 = d;
+          best = j;
+        }
+      }
+      take.push([i, best, (f - w0) / Math.max(1e-4, 1 - w0)]);
+    }
+    // (après la recherche : les voisins d'oreille sont ceux d'origine)
+    if (take.length && !raw) {
+      raw = { ear: new Float32Array(n * 2), ear2: new Float32Array(n * 2) };
+      for (let i = 0; i < n; i++) {
+        for (let k = 0; k < 4; k++) {
+          const w = sw[i * 4 + k];
+          if (!w) continue;
+          for (let e = 0; e < 2; e++) {
+            if (earSets[e].has(si[i * 4 + k])) raw.ear[i * 2 + e] += w;
+            if (si[i * 4 + k] === B(e === 0 ? 'ear2L' : 'ear2R')) raw.ear2[i * 2 + e] += w;
+          }
+        }
+      }
+    }
+    for (const [i, j, g] of take) {
+      const m = new Map();
+      for (let k = 0; k < 4; k++) {
+        if (sw[i * 4 + k]) m.set(si[i * 4 + k], (m.get(si[i * 4 + k]) ?? 0) + sw[i * 4 + k] * (1 - g));
+        if (sw[j * 4 + k]) m.set(si[j * 4 + k], (m.get(si[j * 4 + k]) ?? 0) + sw[j * 4 + k] * g);
+      }
+      const top = [...m].sort((x, y) => y[1] - x[1]).slice(0, 4);
+      const tot = top.reduce((acc, x) => acc + x[1], 0) || 1;
+      for (let k = 0; k < 4; k++) {
+        si[i * 4 + k] = top[k] ? top[k][0] : 0;
+        sw[i * 4 + k] = top[k] ? top[k][1] / tot : 0;
+      }
+    }
+    fixed += take.length;
+  }
+  return { fixed, raw };
+}
+
+/**
  * Géométrie, squelette, clips et repères de repos tirés d'un GLB de chat, dans le repère du chat. Gardé dans
  * gltf.userData (calculé une fois : Game.onRealCats le fait hors de l'image en cours).
  */
@@ -96,6 +209,7 @@ export function realCatBase(gltf, kind) {
 
   const coat = prims.coat;
   const n = coat.count;
+  const earFix = repairEarSkin(coat, earSets, heads, B);
   const W = {
     leg: new Float32Array(n * 4), ear: new Float32Array(n * 2), ear2: new Float32Array(n * 2),
     tail: new Float32Array(n), head: new Float32Array(n), neck: new Float32Array(n), nose: new Float32Array(n),
@@ -231,6 +345,8 @@ export function realCatBase(gltf, kind) {
     kind, names, index, parent, heads, rotW, prims, W, part, boneW, land, earTip, tailTip, tailBones, eyes, clips,
     natural: { ...NATURAL_SPEED, ...(ext.naturalSpeeds ?? {}) },
     cfg: MODEL[kind] ?? MODEL.adult,
+    // (poids d'oreille du GLB avant repairEarSkin, null s'il n'a rien repris)
+    earRaw: earFix.raw, earFixed: earFix.fixed,
   };
   // Attributs communs à toutes les races (robe) : position de repos d'origine, appartenance, grain du poil.
   const low = furLow(coat.material.map?.image, coat.uv, coat.pos, coat.index, n);
@@ -385,6 +501,15 @@ export function deformCat(base, B) {
   const legTop = LEG_KEYS.map(([, s, front]) => I((front ? 'humerus' : 'femur') + s));
   const legEnd = LEG_KEYS.map(([, s, front]) => I((front ? 'metacarpus' : 'metatarsus') + s));
   const T0 = legTop.map((i) => H[i].clone());
+  // Peau autour des yeux (1 contre le globe, 0 à plus de trois rayons) : elle suit la tête et les yeux d'un bloc dans
+  // les passes rigides (encolure, taille de la tête) et le poil n'y pousse pas. Partagée entre la tête et le cou chez
+  // le chaton, elle restait en arrière des yeux et les recouvrait (chaton persan aux yeux en fentes).
+  const nearEye = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    _u.fromArray(coat.pos, i * 3);
+    const de = Math.min(_u.distanceTo(base.eyes[0].c) / base.eyes[0].r, _u.distanceTo(base.eyes[1].c) / base.eyes[1].r);
+    nearEye[i] = 1 - smooth(1.3, 3.2, de);
+  }
 
   // 1. Pattes : raccourcies ou allongées entre l'épaule (la hanche) et le poignet (le jarret), le pied suit sans se
   //    déformer ; épaissies autour de leur axe.
@@ -403,7 +528,10 @@ export function deformCat(base, B) {
       const al = d.dot(a);
       const perp = _u.copy(d).addScaledVector(a, -al);
       const a2 = al <= 0 ? al : al < len ? al * k : len * k + (al - len);
-      p.addScaledVector(a, w * (a2 - al)).addScaledVector(perp, w * (B.legW - 1) * smooth(0, 0.03, al));
+      // (cuisse : pas épaissie près de la hanche — assis ou en toilette, la cuisse se replie contre le flanc et la peau
+      // épaissie s'y retournait)
+      const thick = l < 2 ? smooth(0, 0.03, al) : smooth(0.035, 0.08, al);
+      p.addScaledVector(a, w * (a2 - al)).addScaledVector(perp, w * (B.legW - 1) * thick);
       set(j, p);
     }
   }
@@ -450,7 +578,8 @@ export function deformCat(base, B) {
       if (!(wh > 0 || wn > 0)) continue;
       get(j, p);
       const s = clamp(_u.copy(p).sub(N0).dot(a) / len, 0, 1);
-      p.addScaledVector(a, (B.neck - 1) * len * (wh + wn * s));
+      const wk = j < n ? Math.max(Math.min(1, wh + wn * s), nearEye[j] * wh > 0 ? nearEye[j] : 0) : wh + wn * s;
+      p.addScaledVector(a, (B.neck - 1) * len * wk);
       set(j, p);
     }
   }
@@ -460,12 +589,13 @@ export function deformCat(base, B) {
     const HJ = H[headI].clone();
     const noseLen = Math.max(0.02, (L.noseZ - base.heads[headI].z) * B.head);
     for (let j = 0; j < total; j++) {
-      const wh = wHead(j);
+      const ne = j < n ? nearEye[j] : 0;
+      const wh = Math.max(wHead(j), wHead(j) > 0 ? ne : 0);
       if (!(wh > 0)) continue;
       get(j, p);
       p.sub(HJ).multiplyScalar(1 + wh * (B.head - 1));
       const fz = 1 - 0.5 * smooth(0.45, 0.95, p.z / noseLen);
-      p.x *= 1 + wh * fz * (B.headW - 1) * (isEye(j) ? 0.6 : 1);
+      p.x *= 1 + wh * fz * (B.headW - 1) * (isEye(j) ? 0.6 : 1 - 0.4 * ne);
       p.add(HJ);
       set(j, p);
     }
@@ -490,10 +620,13 @@ export function deformCat(base, B) {
       const t = d.dot(f);
       if (t <= 0) continue;
       // (la peau juste devant l'œil reste où elle est : sinon le globe passe à travers la paupière)
-      const on = smooth(eyeR * 0.8, eyeR * 0.8 + 0.25 * flen, t);
+      // Face plate : passage long et doux (une rampe courte faisait une arête sous les yeux et un plateau).
+      const ramp = B.flat ? 0.6 : 0.25;
+      const on = smooth(eyeR * 0.8, eyeR * 0.8 + ramp * flen, t);
       const lat = d.dot(side);
       p.addScaledVector(f, w * (t - eyeR * 0.8) * (B.snout - 1) * on).addScaledVector(side, w * lat * (B.muzzleW - 1) * on);
-      if (B.flat) p.y += w * B.flat * 0.25 * (1 - B.snout) * Math.max(0, t - eyeR) * on;
+      // (le nez remonte un peu entre les yeux ; pas les joues sous les yeux : elles les auraient enterrés)
+      if (B.flat) p.y += w * B.flat * 0.2 * (1 - B.snout) * Math.max(0, t - eyeR) * on * (1 - smooth(0.2 * L.eyeX, 0.7 * L.eyeX, Math.abs(lat)));
       set(j, p);
     }
     if (B.flat) {
@@ -525,7 +658,10 @@ export function deformCat(base, B) {
     const hinge = b2 >= 0 ? H[b2].clone() : bp.clone().lerp(tip, 0.45);
     const out = B.earOut ? new THREE.Quaternion().setFromAxisAngle(V(0, 0, 1), -sd * B.earOut) : null;
     // pli : rotation autour de l'axe latéral au pli, vers l'avant et le bas
-    const fold = B.ears === 'fold' ? new THREE.Quaternion().setFromAxisAngle(lat.clone().multiplyScalar(sd > 0 ? 1 : 1), 1.95) : null;
+    // (chaton : pli plus bas et plus fermé, ses oreilles courtes n'étaient pliées qu'au bout)
+    const kf = B.kitten ? [0.22, 0.24, 2.25] : [0.35, 0.3, 1.95];
+    const foldU = (al) => clamp((al - kf[0] * elen) / (kf[1] * elen), 0, 1);
+    const fold = B.ears === 'fold' ? new THREE.Quaternion().setFromAxisAngle(lat.clone().multiplyScalar(sd > 0 ? 1 : 1), kf[2]) : null;
     const lean = B.ears === 'fold' ? new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), 0.45) : null;
     for (let j = 0; j < total; j++) {
       const we = wEar(j, s);
@@ -544,12 +680,17 @@ export function deformCat(base, B) {
       }
       if (lean) rot(p, _q.identity().slerp(lean, we), bp);
       const w2 = wEar2(j, s);
+      // (pli : poids d'origine du GLB — le dos du pavillon et la conque du chaton, repris par repairEarSkin, restent
+      // dressés derrière la partie pliée : pliés eux aussi, ils se froissaient en pointes)
+      const raw = j < n ? base.earRaw : null;
+      const weF = raw ? raw.ear[j * 2 + s] : we;
+      const w2F = raw ? raw.ear2[j * 2 + s] : w2;
       if (fold) {
         // (pli au milieu de l'oreille, vers l'avant : la pointe se rabat devant, contre le crâne)
         const hp = hinge.clone();
         if (lean) rot(hp, lean, bp);
-        const u = clamp((al - 0.35 * elen) / (0.3 * elen), 0, 1);
-        const fw = Math.max(w2, we * u);
+        const u = foldU(al);
+        const fw = Math.max(w2F, weF * u);
         rot(p, _q.identity().slerp(fold, fw), hp);
         // l'oreille pliée est plus petite et serrée contre la tête
         p.y -= we * 0.002;
@@ -559,7 +700,7 @@ export function deformCat(base, B) {
       if (j < n && (fold || out || lean)) {
         _w.fromArray(N, j * 3);
         if (lean) _w.applyQuaternion(_q.identity().slerp(lean, we));
-        if (fold) _w.applyQuaternion(_q.identity().slerp(fold, Math.max(w2, we * clamp((al - 0.35 * elen) / (0.3 * elen), 0, 1))));
+        if (fold) _w.applyQuaternion(_q.identity().slerp(fold, Math.max(w2F, weF * foldU(al))));
         if (out) _w.applyQuaternion(_q.identity().slerp(out, we));
         N.set([_w.x, _w.y, _w.z], j * 3);
       }
@@ -618,14 +759,22 @@ export function deformCat(base, B) {
       const paw = 1 - smooth(0.012, L.elbowY * 0.5, y0);
       let k = (1 - legSum) * (1 - head) * (1 - tail) * (0.75 + 0.35 * (1 - smooth(0.1, 0.6, h)));
       k += legSum * (1 - paw) * 0.45 * smooth(L.elbowY * 0.4, L.elbowY * 1.2, y0);
+      // (pas autour des yeux : poussée, la peau du poil long les enterrait — chaton persan aux yeux en fentes)
+      const eyeClear = 1 - nearEye[i];
       k += head * 0.35 * (1 - smooth(-0.1, 0.35, hz));
       // collerette : cou, poitrail, joues (pas l'avant de la face)
       const ruff = (neck * 1.2 + (1 - legSum) * (1 - tail) * (1 - head) * smooth(0.85, 1.1, u) * (1 - smooth(0.5, 0.9, h)) * 0.9
-        + head * smooth(L.eyeX * 0.9, L.eyeX * 1.8, Math.abs(x0)) * (1 - smooth(L.eyeY - 0.005, L.eyeY + 0.01, y0)) * (1 - smooth(0.25, 0.55, hz)));
+        + head * smooth(L.eyeX * 0.9, L.eyeX * 1.8, Math.abs(x0)) * (1 - smooth(L.eyeY - 0.005, L.eyeY + 0.01, y0)) * (1 - smooth(0.25, 0.55, hz)) * eyeClear);
       // culottes : arrière du haut des cuisses
       const br = legSum * smooth(-0.2, -0.7, _w.z) * smooth(L.elbowY * 0.5, L.elbowY * 1.4, y0) * (1 - smooth(0.0, 0.35, u)) + (1 - legSum) * (1 - tail) * smooth(0.0, -0.35, u) * (1 - smooth(0.55, 0.9, h)) * 0.5;
       const nz = B.fur > 0.004 ? 0.85 + 0.3 * fbm(p.x * 160, p.y * 160, p.z * 160) : 1;
-      let push = B.fur * k * nz * (1 - ear * 0.8) + B.ruff * ruff * (0.75 + 0.5 * nz) + B.breeches * 0.012 * br * nz;
+      // (plis : la peau partagée entre la tête et le cou — joues, gorge — et entre la cuisse et le flanc se replie dans
+      // la toilette et le « tape-m'en cinq » ; poussée à plein, elle s'y retournait : plaque de collerette sur la joue,
+      // triangle retourné à la cuisse du british et du persan)
+      const legH = Math.min(1, W.leg[i * 4 + 2] + W.leg[i * 4 + 3]);
+      // (cuisse : moitié moins — rasée au pli, la croupe assise s'enfonçait et la queue avec, 3 cm sous le sol)
+      const fold = (1 - 2.6 * W.head[i] * (1 - W.head[i])) * (1 - 1.6 * legH * (1 - legH));
+      let push = (B.fur * k * nz * (1 - ear * 0.8) + B.ruff * ruff * (0.75 + 0.5 * nz) + B.breeches * 0.012 * br * nz) * eyeClear * fold;
       // poil ras : jamais plus que le tiers du rayon de la queue
       if (B.fur < 0) push = B.fur * k - Math.min(-B.fur, 0.3 * (tailR?.[i] || 0.01)) * tail;
       p.addScaledVector(_w, push * (1 - paw * 0.8));
@@ -789,8 +938,20 @@ function measureCat(base, D, B) {
     const step = Math.max(1, Math.floor(sorted.length / 32));
     return sorted.filter((_, k) => k % step === 0).slice(0, 32);
   });
+  // Jarrets : arrière du bas des pattes arrière, au-dessus des soles (à la course, celui du chaton passait de 2 à 4 mm
+  // sous le sol : seules les soles étaient contrôlées). 16 points par patte.
+  const hocks = [2, 3].map((l) => {
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      if (W.leg[i * 4 + l] < 0.5) continue;
+      const y = P[i * 3 + 1];
+      if (y >= 0.015 && y < 0.05) pts.push(i);
+    }
+    const sorted = pts.sort((a, b) => P[a * 3 + 2] - P[b * 3 + 2]);
+    return sorted.slice(0, 16);
+  });
   return {
-    hipZ, shZ, topY, bellyY, halfW, collar, skullTop, noseTip, soles, axis, nlen,
+    hipZ, shZ, topY, bellyY, halfW, collar, skullTop, noseTip, soles, hocks, axis, nlen,
     elbowY: (H[I('radiusL')].y + H[I('radiusR')].y) / 2,
     headY: HJ.y,
   };
@@ -1133,6 +1294,16 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
   })();
   const headQ = headB.getWorldQuaternion(new THREE.Quaternion()).invert();
   const lastTail = tailB[tailB.length - 1] ?? null;
+  // Moustaches : sur les coussinets, de part et d'autre du nez (courtes et rares chez le sphynx, ondulées chez le devon
+  // rex, claires ; foncées sur une robe blanche très claire elles se verraient mal : toujours claires comme le
+  // chat sculpté).
+  const hr = 0.034 * B.head * (B.kitten ? 1.15 : 1);
+  const whiskers = addWhiskers({
+    head: headB, midX: base.land.midX,
+    pad: M.noseTip.clone().add(V(0.3 * hr * B.muzzleW, -0.3 * hr, -0.32 * hr)),
+    len: hr * (B.hairless ? 0.6 : B.curly ? 0.95 : 1.5), count: B.hairless ? 2 : 4, spread: 0.06 * hr,
+    curl: !!B.curly, color: plan.dark ? 0xe8e4dc : 0xf6f3ec, opacity: plan.dark ? 0.85 : 0.7,
+  });
   const model = {
     root,
     body: bone('root'),
@@ -1186,6 +1357,7 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     coatMesh.geometry = l ? S.lodCoat : S.coatGeo;
     if (eyeMesh) eyeMesh.geometry = l ? S.lodEye ?? S.eyeGeo : S.eyeGeo;
     if (tuftMesh) tuftMesh.visible = !l;
+    whiskers.visible = !l;
   };
   model.staticPose = (kind = 'stand') => model.anim.staticPose(kind);
   model.setCoat = (lk2) => setCatCoat(uniforms, catCoatPlan(lk2, breedById(lk2.breed ?? look.breed), B.kitten));
@@ -1206,7 +1378,8 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     if (disposed) return;
     disposed = true;
     model.anim.dispose();
-    for (const m of [coatMat, lidMat, eyeMesh?.material, tuftMesh?.material, ...shells.map((x) => x.material)]) m?.dispose?.();
+    for (const m of [coatMat, lidMat, eyeMesh?.material, tuftMesh?.material, whiskers.material, ...shells.map((x) => x.material)]) m?.dispose?.();
+    whiskers.geometry.dispose();
     releaseShape(S);
   };
   fitCollar(model, base, S);
@@ -1447,6 +1620,11 @@ class RealCatAnim {
     this.win = [new WindowMin(), new WindowMin()];
     this.bodyAllow = 0.003 + Math.max(0, B.fur) * 0.35;
     this.solePts = model.legs.map((l) => l.soles.map((i) => l.paw.worldToLocal(V().fromArray(S.D.pos, i * 3))));
+    // (jarrets : liés au métatarse)
+    this.hockPts = (S.measure.hocks ?? []).map((ids, k) => {
+      const b = model.legs[2 + k].fetlock;
+      return { b, pts: b ? ids.map((i) => b.worldToLocal(V().fromArray(S.D.pos, i * 3))) : [] };
+    });
     for (const [b, d] of this.shift) b.position.sub(d);
     this.savePose();
     this.tailUpQ = this.sampleTail('tail_up');
@@ -1906,6 +2084,15 @@ class RealCatAnim {
       }
     }
     if (!Number.isFinite(low)) low = 0;
+    // (aux allures, les jarrets aussi au-dessus du sol)
+    if (st.moving || air) {
+      for (const h of this.hockPts) {
+        for (const p of h.pts) {
+          const y = _v.copy(p).applyMatrix4(h.b.matrixWorld).applyMatrix4(_m).y;
+          if (y < low) low = y;
+        }
+      }
+    }
     let target;
     let floor = -low;
     if (st.moving || air) {

@@ -462,3 +462,39 @@ export class WindowMin {
     this.v.length = 0;
   }
 }
+
+/**
+ * Moustaches (vibrisses) : fines lignes claires courbées, de part et d'autre du museau, liées à l'os de la tête (comme
+ * le chat sculpté par le code, catModel.js). o : { pad (coussinet de droite, repère de l'animal au repos, x > 0), head
+ * (os de la tête, squelette au repos), len (longueur), count (par côté), spread (écart vertical entre deux poils),
+ * curl (ondulation : poil frisé), droop (retombée), color, opacity }. Renvoie la ligne, déjà accrochée à l'os.
+ */
+export function addWhiskers(o) {
+  const pts = [];
+  const count = o.count ?? 4;
+  const midX = o.midX ?? 0;
+  for (const s of [1, -1]) {
+    for (let k = 0; k < count; k++) {
+      const start = V(midX + s * Math.abs(o.pad.x - midX), o.pad.y - k * (o.spread ?? 0.002), o.pad.z - k * 0.001);
+      const dir = V(s, -0.12 + k * 0.1, -0.32 + k * 0.08).normalize();
+      const len = o.len * (1 - k * 0.08);
+      let prev = start;
+      for (let q = 1; q <= 4; q++) {
+        const t = q / 4;
+        const wave = o.curl ? Math.sin(t * 9) * len * 0.05 : 0;
+        const pt = start.clone().addScaledVector(dir, len * t).add(V(0, -len * (o.droop ?? 0.2) * t * t + wave, 0));
+        pts.push(prev, pt);
+        prev = pt;
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  o.head.updateMatrixWorld(true);
+  geo.applyMatrix4(new THREE.Matrix4().copy(o.head.matrixWorld).invert());
+  const line = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: o.color ?? 0xf6f3ec, transparent: true, opacity: o.opacity ?? 0.75 }));
+  line.castShadow = false;
+  line.frustumCulled = false;
+  line.userData.whiskers = true;
+  o.head.add(line);
+  return line;
+}

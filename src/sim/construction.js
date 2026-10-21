@@ -22,7 +22,7 @@ export const STRUCTURES = {
   paddockSmall: { cat: 'enclosure', emoji: '🐴', w: 12, d: 10, price: 300, species: ['horse'], capacity: 3, comfort: 2, gate: 3, g: 'm' },
   shelter: { cat: 'building', emoji: '🛖', w: 6, d: 4, price: 400, species: ['horse', ...LIVESTOCK], capacity: 4, comfort: 8, g: 'm', open: true },
   paddockLarge: { cat: 'enclosure', emoji: '🐎', w: 20, d: 16, price: 550, species: ['horse'], capacity: 6, comfort: 2, gate: 4, g: 'm' },
-  pasture: { cat: 'enclosure', emoji: '🐑', w: 24, d: 20, price: 600, species: [...LIVESTOCK, 'horse'], capacity: 10, comfort: 2, gate: 4, g: 'm' },
+  pasture: { cat: 'enclosure', emoji: '🌿', w: 24, d: 20, price: 600, species: [...LIVESTOCK, 'horse'], capacity: 10, comfort: 2, gate: 4, g: 'm' },
   barn: { cat: 'building', emoji: '🏚️', w: 12, d: 8, price: 900, species: [...LIVESTOCK, 'horse'], capacity: 8, comfort: 10, g: 'f' },
   arena: { cat: 'enclosure', emoji: '🏇', w: 18, d: 28, price: 800, species: [], capacity: 0, comfort: 0, gate: 4, g: 'f', arena: true },
   newStable: { cat: 'building', emoji: '🐴', w: 16, d: 7, price: 1200, species: ['horse'], capacity: 4, comfort: 12, g: 'f' },

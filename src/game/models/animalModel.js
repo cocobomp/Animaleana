@@ -21,6 +21,8 @@ import { buildRealCatModel } from './catReal.js'; // chats réalistes (Claire po
 import { catLookWithBreed } from '../../sim/catLook.js';
 import { buildRealRabbitModel } from './rabbitReal.js'; // lapins réalistes (Dakota.Hinkle, bélier de FourthGreen, GLB)
 import { rabbitLookWithBreed } from '../../sim/rabbitLook.js';
+import { buildRealSheepModel } from './sheepReal.js'; // mouton réaliste (Rocketbox, GLB)
+import { buildRealGoatModel } from './goatReal.js'; // chèvre réaliste (Rocketbox, GLB)
 
 // ------------------------------------------------------------------ anatomie par espèce
 // torso : formes du tronc. ['e', miroir, centre (x/R, y/R, z/L), rayons (x/R, y/R, z/L), k (fondu, /R)]
@@ -443,6 +445,17 @@ export function buildAnimalModel(speciesId, look, breedOfAnimal = null, stage = 
   // l'animal d'abord, et seulement à défaut la race devinée par la robe — un labradoodle noir n'est pas un jack.)
   if (speciesId === 'dog') {
     const real = buildRealDogModel(dogLookWithBreed(look, breedOfAnimal), breedOfAnimal);
+    if (real) return real;
+  }
+  // Mouton réaliste (GLB, toutes les races et les agneaux) ; tant qu'il n'est pas chargé (ou dans les tests), le
+  // mouton procédural ci-dessous.
+  if (speciesId === 'sheep') {
+    const real = buildRealSheepModel(look, breedOfAnimal);
+    if (real) return real;
+  }
+  // Chèvre réaliste (GLB, toutes les races et les chevreaux) ; sinon la chèvre procédurale ci-dessous.
+  if (speciesId === 'goat') {
+    const real = buildRealGoatModel(look, breedOfAnimal);
     if (real) return real;
   }
   const S = SPEC[speciesId] ?? SPEC.dog;

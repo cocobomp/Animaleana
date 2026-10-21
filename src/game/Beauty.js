@@ -240,6 +240,8 @@ export function applyBeautyDecor(e, now) {
   const model = e.model;
   const decor = { key, model, groups: [], mats: [] };
   e.beautyDecor = decor;
+  // (mouton réaliste : laine gonflée fraîche — toison un peu plus épaisse, par sa cible de forme)
+  model?.setFluff?.(isFresh(a, 'fluff', now));
   if (!model || !look || !key.replace(/\|/g, '')) return;
   const R = (look.bodyR ?? 0.3) * (look.fluff ?? 1);
   const prep = a.beauty?.prep ?? {};

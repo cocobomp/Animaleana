@@ -6,3 +6,4 @@ dist/
 firebase-debug.log
 firestore-debug.log
 __pycache__/
+tools/mouton/work/

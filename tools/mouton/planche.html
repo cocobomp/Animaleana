@@ -55,7 +55,7 @@ window.planche = {
   /**
    * cells : [{ breed, color (indice de robe), stage ('baby' | 'young' | 'adult'), sex ('f' | 'm'), fleece (0 tondu à
    * 1 pleine), clip, t (fraction du clip), moving (allure : posée comme en jeu, sabots tenus), view ('side' | 'three' |
-   * 'front' | 'head' | 'back' | 'low'), zoom, label, lod, frames (images jouées avant la photo, clip en boucle) }] ;
+   * 'front' | 'head' | 'back' | 'low'), zoom, fixed (cadrage absolu), label, lod, frames (images jouées avant la photo, clip en boucle) }] ;
    * cols ; cw, ch (taille d'une case).
    */
   async show({ cells, cols = 6, cw = 300, ch = 240 }) {
@@ -117,9 +117,11 @@ window.planche = {
       renderer.setViewport(col * cw, y, cw, ch);
       renderer.setScissor(col * cw, y, cw, ch);
       camera.aspect = cw / ch;
-      const H = 0.8 * s * (md.size ?? 1);
+      // (fixed : même cadrage pour tous, les tailles se comparent ; sinon cadré sur l'animal)
+      const sc = c.fixed ? 1 : s * (md.size ?? 1);
+      const H = 0.8 * sc;
       const view = c.view ?? 'three';
-      const dist = 2.4 * s * (md.size ?? 1) * (c.zoom ?? 1);
+      const dist = 2.4 * sc * (c.zoom ?? 1);
       const tgt = new THREE.Vector3(0, H * 0.5, 0);
       if (view === 'side') camera.position.set(dist, H * 0.55, 0.02);
       else if (view === 'front') camera.position.set(dist * 0.3, H * 0.7, dist * 0.95);
@@ -129,8 +131,9 @@ window.planche = {
         camera.position.set(dist * 0.9, H * 0.12, dist * 0.35);
       } else if (view === 'head') {
         const hp = md.head.getWorldPosition(new THREE.Vector3());
-        tgt.copy(hp).add(new THREE.Vector3(0, 0.0, 0.07 * s));
-        camera.position.copy(tgt).add(new THREE.Vector3(0.3 * s, 0.06 * s, 0.45 * s));
+        const k = s * (md.size ?? 1) * (c.zoom ?? 1);
+        tgt.copy(hp).add(new THREE.Vector3(0, 0.02 * k, 0.06 * k));
+        camera.position.copy(tgt).add(new THREE.Vector3(0.5 * k, 0.1 * k, 0.72 * k));
       } else camera.position.set(dist * 0.85, H * 0.85, dist * 0.6);
       camera.fov = c.fov ?? 28;
       camera.updateProjectionMatrix();

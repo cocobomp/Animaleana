@@ -117,7 +117,8 @@ describe('races et agneaux', () => {
     expect(suffolk.colors.leg).toBeLessThan(0x404040);
     expect(suffolk.hornSize).toBe(0);
     const ouessant = sheepBuild(lookOf('ouessant'), { breed: 'ouessant' });
-    expect(ouessant.size * resolveLook('sheep', 'ouessant', 0).scale).toBeLessThan(0.5);
+    // (garrot ≈ 0,4 m contre 0,7 m au mérinos : la plus petite race)
+    expect(ouessant.size * resolveLook('sheep', 'ouessant', 0).scale).toBeLessThan(0.6);
     expect(ouessant.colors.wool).toBeLessThan(0x404040);
     const nezNoir = sheepBuild(lookOf('nez_noir', { sex: 'f' }), { breed: 'nez_noir', sex: 'f' });
     expect(nezNoir.knees).toBe(true);
@@ -136,6 +137,31 @@ describe('races et agneaux', () => {
     expect(moorit.colors.face).toBe(moorit.colors.wool);
   });
 
+  it('laine longue (islandais) : ne pend que du tronc, jamais d\'un membre qui se lève (poids du tronc par sommet)', () => {
+    const md = sheep('islandais_mouton', { sex: 'm' });
+    const base = md.anim.base;
+    const P = base.prim;
+    expect(md.coatMesh.geometry.attributes.sheepTrunk.count).toBe(P.count);
+    const limb = /^(humerus|radius|metacarpus|toes|femur|tibia|metatarsus|htoes)/;
+    let limbN = 0;
+    let limbMax = 0;
+    let trunkN = 0;
+    let trunkMin = 1;
+    for (let i = 0; i < P.count; i++) {
+      const nm = base.names[P.domBone[i]];
+      const w = P.sw[i * 4 + [0, 1, 2, 3].reduce((b, k) => (P.sw[i * 4 + k] > P.sw[i * 4 + b] ? k : b), 0)];
+      if (w < 0.8) continue;
+      if (limb.test(nm)) { limbN++; limbMax = Math.max(limbMax, P.trunk[i]); }
+      if (/^(spine1|spine2|pelvis|chest)$/.test(nm)) { trunkN++; trunkMin = Math.min(trunkMin, P.trunk[i]); }
+    }
+    expect(limbN).toBeGreaterThan(40);
+    expect(trunkN).toBeGreaterThan(20);
+    // (le shader fait pendre la laine au-dessus de 0,55 seulement : smoothstep(0,55, 0,95))
+    expect(limbMax).toBeLessThan(0.25);
+    expect(trunkMin).toBeGreaterThan(0.75);
+    md.dispose();
+  });
+
   it('les 7 races et leurs agneaux se construisent : cornes selon la race et le sexe, taille de l\'Ouessant', () => {
     for (const b of BREEDS) {
       for (const o of [{ sex: 'm' }, { sex: 'f' }, { lamb: true }, { young: true }]) {
@@ -147,7 +173,7 @@ describe('races et agneaux', () => {
         md.dispose();
       }
     }
-    expect(sheep('ouessant').size).toBeLessThan(0.85);
+    expect(sheep('ouessant').size).toBeLessThan(1);
   });
 
   it('agneau : tête plus grosse, pattes plus longues, toison courte ; le jeune entre les deux', () => {

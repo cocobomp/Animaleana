@@ -32,11 +32,11 @@ export const SHEEP_BUILDS = {
   // (tête et pattes noires, sans laine sur la tête, grandes oreilles tombantes ; toison courte)
   suffolk: { fleece: 0.08, face: 0x221c18, leg: 0x221c18, hoof: 0x14110f, legs: 1.07, head: 1.1, ears: 1.25, earUp: -0.35 },
   // (tout petit, souvent noir ; béliers à cornes en spirale)
-  ouessant: { size: 0.8, fleece: 0.22, face: null, leg: null, hoof: 0x14100e, horns: 'ram', hornK: 0.85, hornColor: 0x7d705f, legs: 0.95, head: 1.1 },
+  ouessant: { size: 0.95, fleece: 0.22, face: null, leg: null, hoof: 0x14100e, horns: 'ram', hornK: 0.85, hornColor: 0x7d705f, legs: 0.95, head: 1.1 },
   // (laine bouclée, face, oreilles, genoux, jarrets et pieds noirs ; cornes en spirale, béliers et brebis)
   nez_noir: { fleece: 0.45, curl: 1, headWool: 0.35, knees: true, face: 0x1a1614, leg: 0xede5d6, hoof: 0x14110f, horns: 'both', hornK: 1.2, hornColor: 0x8a7b66, head: 1.04 },
   // (laine longue en mèches qui pendent ; cornes, béliers et brebis)
-  islandais_mouton: { fleece: 0.45, long: 0.17, horns: 'both', hornK: 1.0, hornColor: 0xb9a786, legs: 0.95, face: null, leg: null, hoof: 0x4a3e34 },
+  islandais_mouton: { fleece: 0.45, long: 0.15, horns: 'both', hornK: 1.0, hornColor: 0xb9a786, legs: 0.95, face: null, leg: null, hoof: 0x4a3e34 },
   // (toison très dense, mérinos plus grand ; béliers à cornes en spirale)
   merinos_australien: { fleece: 0.85, curl: 0.3, headWool: 0.6, legWool: 0.55, face: 0xf0e8d9, leg: 0xeae0ce, hoof: 0x8c7c68, horns: 'ram', hornK: 1.25 },
   // (face blanche nue, oreilles dressées, pattes blanches nues ; toison courte, sans cornes)

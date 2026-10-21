@@ -49,6 +49,7 @@ export function setSheepCoat(u, B) {
 
 const COMMON_V = /* glsl */ `
 attribute vec4 sheepMask;
+attribute float sheepTrunk;
 uniform vec4 sState;
 uniform vec4 sLand;
 varying vec4 vSMask;
@@ -68,10 +69,11 @@ if (sState.z > 0.0) {
   // Laine longue : la toison du tronc pend, plus bas sous le ventre et sur les flancs qu'au dos ; mèches de longueurs
   // inégales (graine du sommet). Ni la tête, ni le bas des pattes, ni le dos.
   float h = (position.y - sLand.x) / max(0.02, sLand.y - sLand.x);
-  float trunk = smoothstep(0.35, 0.8, sheepMask.x) * (1.0 - sheepMask.y) * (1.0 - sheepMask.z);
-  float skirt = 1.0 - smoothstep(-0.1, 0.9, h);
-  // (mèches de longueurs inégales : le bas de la toison s'effrange)
-  float len = sState.z * trunk * (0.2 + 0.8 * skirt) * (0.5 + 0.9 * sHash(floor(position * 28.0)));
+  // (sheepTrunk : part du sommet portée par les os du tronc ; la laine d'un membre qui se lève ne pend pas en drapeau)
+  float trunk = smoothstep(0.35, 0.8, sheepMask.x) * (1.0 - sheepMask.y) * (1.0 - sheepMask.z) * smoothstep(0.55, 0.95, sheepTrunk);
+  float skirt = 1.0 - smoothstep(-0.2, 1.05, h);
+  // (mèches de longueurs inégales, d'un sommet à l'autre : le bas de la toison s'effrange)
+  float len = sState.z * trunk * (0.3 + 0.7 * skirt) * (0.55 + 0.9 * sHash(floor(position * 45.0)));
   // (vers le bas, un peu vers l'extérieur sur les côtés)
   // (tondue : plus de mèches ; couché : la laine s'étale au sol au lieu de pendre)
   transformed += vec3(sign(position.x) * len * 0.3 * skirt, -len * (0.25 + 0.75 * skirt) * (1.0 - 0.7 * sState.w), 0.0) * (1.0 - sState.x);
@@ -176,7 +178,7 @@ const COLOR_F = /* glsl */ `
   vec3 wc = sWool;
   float fade = sFade(p) * (1.0 - sh);
   if (sWoolK.x > 0.0) wc *= mix(1.0, 0.8 + 0.28 * sCurls(p), sWoolK.x * fade);
-  if (sWoolK.y > 0.0) wc *= mix(1.0, 0.66 + 0.5 * sLocks(p), sWoolK.y * fade * (1.0 - sh));
+  if (sWoolK.y > 0.0) wc *= mix(1.0, 0.6 + 0.58 * sLocks(p), sWoolK.y * fade * (1.0 - sh));
   // (laine tondue : rase, un peu plus claire, grain adouci)
   wc = mix(wc, wc * 1.05 + 0.012, sh);
   vec3 col = mix(skin, wc, wool);
@@ -185,8 +187,10 @@ const COLOR_F = /* glsl */ `
   float l = dot(col, LUM);
   float d = mix(detail, sqrt(detail), max(sh, smoothstep(0.35, 0.8, l) * (1.0 - wool) * 0.6));
   col = min(col * d, vec3(1.0));
-  // Yeux (texels très sombres de la tête) et truffe rose des faces claires : couleurs du fichier.
-  float keep = smoothstep(0.3, 0.7, vSMask.y) * (1.0 - smoothstep(0.05, 0.11, lum0));
+  // Yeux (texels très sombres de la tête, autour de la place des yeux — pas l'intérieur sombre des oreilles) et truffe
+  // rose des faces claires : couleurs du fichier.
+  float eyeZone = (1.0 - smoothstep(0.03, 0.05, abs(p.z - sHead.x))) * (1.0 - smoothstep(0.035, 0.06, abs(p.y - sHead.y)));
+  float keep = smoothstep(0.3, 0.7, vSMask.y) * (1.0 - smoothstep(0.05, 0.11, lum0)) * eyeZone;
   float pink = smoothstep(0.3, 0.7, vSMask.y) * smoothstep(0.05, 0.12, c0.r - c0.g) * step(0.45, dot(sFace, LUM));
   keep = max(keep, pink * 0.85);
   diffuseColor.rgb = mix(col, c0, clamp(keep, 0.0, 1.0));

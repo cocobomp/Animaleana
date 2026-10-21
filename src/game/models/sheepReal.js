@@ -27,6 +27,8 @@ export const REAL_SHEEP_KEY = 'sheep_real';
 export const SHEEP_LOD_DIST = { low: 7, high: 18 };
 /** Mouton hors du champ : animé une image sur OFFSCREEN_STEP, avec le temps cumulé (comme le chien). */
 export const OFFSCREEN_STEP = 3;
+/** Au loin (version réduite), animé une image sur FAR_STEP. */
+export const FAR_STEP = 2;
 /** Vitesses « naturelles » des allures (m/s, mouton de taille 1) si le GLB ne les donne pas. */
 export const NATURAL_SPEED = { walk: 0.77, trot: 2.12, run: 5.0 };
 
@@ -198,6 +200,11 @@ export function realSheepBase(gltf) {
   // Os : membres, tête, encolure, oreilles, queue.
   const B = (nmb) => index.get(nmb) ?? -1;
   const domBone = new Uint16Array(n);
+  // Part de chaque sommet portée par le tronc (épaule à moitié) : la laine longue ne pend que de là.
+  const trunkW = new Float32Array(names.length);
+  for (const [nm, w] of [['root', 1], ['pelvis', 1], ['spine1', 1], ['spine2', 1], ['chest', 1], ['neck1', 1], ['tail1', 1], ['scapL', 0.6], ['scapR', 0.6]]) if (B(nm) >= 0) trunkW[B(nm)] = w;
+  const trunk = new Float32Array(n);
+  for (let i = 0; i < n; i++) for (let k = 0; k < 4; k++) trunk[i] += sw[i * 4 + k] * trunkW[si[i * 4 + k]];
   for (let i = 0; i < n; i++) {
     let best = 0;
     for (let k = 1; k < 4; k++) if (sw[i * 4 + k] > sw[i * 4 + best]) best = k;
@@ -222,7 +229,7 @@ export function realSheepBase(gltf) {
 
   const base = {
     names, index, parent, heads, rotW, nb,
-    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, index: idx, lodIndex, count: n, material: master.material, domBone },
+    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, trunk, index: idx, lodIndex, count: n, material: master.material, domBone },
     clips: cleanClips(gltf.animations),
     natural,
     legChains,
@@ -321,6 +328,7 @@ function shapeFor(base, B) {
     skinIndex: new THREE.BufferAttribute(P.si, 4),
     skinWeight: new THREE.BufferAttribute(P.sw, 4),
     sheepMask: new THREE.BufferAttribute(P.mask, 4),
+    sheepTrunk: new THREE.BufferAttribute(P.trunk, 1),
   };
   const morphP = new THREE.BufferAttribute(P.dPos, 3);
   const morphN = new THREE.BufferAttribute(P.dNrm, 3);
@@ -396,8 +404,19 @@ function measureSheep(base, pos, H) {
     if (pos[i * 3 + 1] > skull.y) skull.set(0, pos[i * 3 + 1], z);
   }
   if (!Number.isFinite(skull.y)) skull.set(0, headY, hh.z);
-  // yeux : texels sombres inconnus ici — à mi-chemin entre la tête et le nez, un peu plus haut que la ligne du nez
+  // yeux : les sommets portés par l'os « eyes » (sinon à mi-chemin entre la tête et le nez)
   const eye = V(0, (skull.y + nose.y) / 2 + 0.01, hh.z + (nose.z - hh.z) * 0.38);
+  const eyesB = bi('eyes');
+  if (eyesB >= 0) {
+    let n0 = 0;
+    const acc = V();
+    for (let i = 0; i < n; i++) {
+      if (dom[i] !== eyesB) continue;
+      acc.add(_v.set(0, pos[i * 3 + 1], pos[i * 3 + 2]));
+      n0++;
+    }
+    if (n0 > 3) eye.copy(acc.multiplyScalar(1 / n0));
+  }
   // soles : sommets des onglons de chaque membre, les plus bas, et le bout des onglons (le plus en avant)
   const soles = base.legChains.map((c) => {
     const foot = c[3];
@@ -1258,6 +1277,11 @@ class RealSheepAnim {
       this.turn(neck, AX, -0.45 * this.nurse);
       this.turn(head, AX, -0.35 * this.nurse);
     }
+    // Bouche fermée au calme (l'arrêt du GLB mâchonne, la bouche entrouverte montrait les dents) ; elle s'ouvre pour
+    // brouter, manger, ruminer et bêler.
+    const chew = this.bleatOn || st.action === 'graze' || st.action === 'eat' || (this.posture === 'lie' && st.ruminate);
+    this.jawShut = (this.jawShut ?? 1) + ((chew ? 0 : 1) - (this.jawShut ?? 1)) * (still ? 1 : Math.min(1, dt * 4));
+    if (this.jawShut > 0.01) this.turn(this.jaw, AX, -0.07 * this.jawShut);
     // Bêler en marchant : tête levée, bouche ouverte un instant.
     if (this.bleatWalk > 0) {
       this.bleatWalk = Math.max(0, this.bleatWalk - dt);
@@ -1539,9 +1563,11 @@ export function animateRealSheep(e, dt, sad) {
     anim.seenNow = true;
     anim.seen = false;
   }
-  if (!anim.seenNow && !e.scripted && !e.herdCtrl && !e.posing && !d.following && horseView.on) {
+  // (au loin, en version réduite : une image sur FAR_STEP — à cette distance, sur un téléphone, ça ne se voit pas)
+  const step = !anim.seenNow ? OFFSCREEN_STEP : md.lodLevel ? FAR_STEP : 1;
+  if (step > 1 && !e.scripted && !e.herdCtrl && !e.posing && !d.following && horseView.on) {
     anim.skipDt += dt;
-    if (++anim.skipN < OFFSCREEN_STEP) return;
+    if (++anim.skipN < step) return;
     dt = anim.skipDt;
   } else {
     dt += anim.skipDt;

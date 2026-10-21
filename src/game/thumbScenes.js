@@ -23,6 +23,7 @@ import { stageAgeDays } from '../sim/adoption.js';
 import { STRUCTURES } from '../sim/construction.js';
 import { SPECIES } from '../sim/species.js';
 import { sheepFleece } from '../sim/sheepLook.js';
+import { realSheepReady } from './models/sheepReal.js';
 import { buildStructureModel } from './models/structures.js';
 import { EQUIPMENT_MODELS } from './models/equipment.js';
 import { car, towCar, horseTrailer, trunk } from './models/vehicles.js';
@@ -643,8 +644,8 @@ export function registerThumbKinds(thumbs) {
     .register('gear', gearThumb)
     .register('animal', animalThumb)
     // (le cheval mannequin des paddocks et de « À cheval » : refaits quand le cheval réaliste arrive)
-    // (et le pré et ses moutons : refaits quand le mouton réaliste arrive)
-    .register('structure', structureThumb, { horse: (s) => !!ENCLOSURE_LIFE[s.type]?.some(([sp]) => sp === 'horse' || sp === 'sheep') })
+    // (et le pré et ses moutons, une fois le mouton réaliste arrivé : refaits avec lui)
+    .register('structure', structureThumb, { horse: (s) => !!ENCLOSURE_LIFE[s.type]?.some(([sp]) => sp === 'horse' || (sp === 'sheep' && realSheepReady())) })
     .register('equipment', equipmentThumb)
     .register('vehicle', vehicleThumb, { horse: (s) => s.id === 'horse' });
   thumbs.onRelease(releaseMannequins);

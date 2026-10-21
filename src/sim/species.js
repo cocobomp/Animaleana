@@ -428,10 +428,10 @@ export const LIVESTOCK_IDS = SPECIES_IDS.filter((sid) => SPECIES[sid].livestock)
 // LA liste des espèces qu'on propose comme NOUVEL animal : animalerie, refuge, élevages en voyage,
 // animal perdu, clients des métiers, concurrents, bâtiments et objets dédiés, quêtes…
 // Pour ajouter une espèce quand son modèle réaliste est en ligne : l'ajouter ici, c'est tout
-// (cat et rabbit très bientôt, puis sheep et goat, puis cow).
+// (cat et rabbit sont là ; bientôt sheep et goat, puis cow).
 // Une espèce absente de la liste n'est pas retirée du jeu : SPECIES la garde, et les animaux déjà là
 // (anciennes parties) continuent de tout faire (soins, laine et lait, petits, bâtiments, objets, véto).
-export const OFFERED_SPECIES = new Set(['horse', 'dog']);
+export const OFFERED_SPECIES = new Set(['horse', 'dog', 'cat', 'rabbit']);
 
 /** Cette espèce est-elle proposée comme nouvel animal ? */
 export const isOffered = (id) => OFFERED_SPECIES.has(id);

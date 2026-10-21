@@ -3,7 +3,7 @@
 // constructions, objets, quêtes) ; les animaux déjà là d'une autre espèce (anciennes parties) gardent tout.
 // Tests déterministes : seulement du hasard avec graine (seeded, mulberry32).
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   SPECIES, SPECIES_IDS, OFFERED_SPECIES, isOffered, offeredSpeciesIds, allOffered, speciesAvailable, anyAvailable, offeredOr,
 } from '../src/sim/species.js';
@@ -30,8 +30,15 @@ import { serializeSave, parseSave } from '../src/sim/saveFile.js';
 import { seeded, mulberry32 } from '../src/sim/rng.js';
 import { DAYS_PER_YEAR } from '../src/sim/time.js';
 
-// Une copie de la liste du jeu : chaque test qui la change la remet comme avant (interrupteur).
+// Ces tests jouent le scénario « seuls le cheval et le chien sont proposés » (toutes les autres espèces
+// cachées), quelle que soit la liste du jeu, qui s'allonge au fil des modèles réalistes ; chaque test qui
+// change la liste la retrouve ensuite comme dans le jeu (interrupteur).
 const START = new Set(OFFERED_SPECIES);
+const SCENARIO = ['horse', 'dog'];
+beforeEach(() => {
+  OFFERED_SPECIES.clear();
+  for (const s of SCENARIO) OFFERED_SPECIES.add(s);
+});
 afterEach(() => {
   OFFERED_SPECIES.clear();
   for (const s of START) OFFERED_SPECIES.add(s);
@@ -53,7 +60,12 @@ function oldSave() {
 }
 
 describe('espèces proposées : la liste', () => {
-  it('une seule liste, facile à changer : aujourd\'hui le cheval et le chien', () => {
+  it('la liste du jeu : le cheval, le chien, le chat et le lapin au moins, rien que des espèces connues', () => {
+    for (const s of ['horse', 'dog', 'cat', 'rabbit']) expect(START.has(s), s).toBe(true);
+    for (const s of START) expect(SPECIES[s], s).toBeTruthy();
+  });
+
+  it('une seule liste, facile à changer (scénario : le cheval et le chien)', () => {
     expect([...OFFERED_SPECIES].sort()).toEqual(['dog', 'horse']);
     expect(offeredSpeciesIds()).toEqual(['horse', 'dog']); // (dans l'ordre de SPECIES)
     expect(isOffered('cat')).toBe(false);

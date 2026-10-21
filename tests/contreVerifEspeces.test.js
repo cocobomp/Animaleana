@@ -5,7 +5,7 @@
 // troupeau, orage, école vétérinaire, textes, quête des espèces, suivi de quête d'une ancienne partie.
 // Hasard avec graine seulement (seeded, mulberry32).
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SPECIES, SPECIES_IDS, OFFERED_SPECIES, isOffered, LIVESTOCK_IDS, coreShown } from '../src/sim/species.js';
 import { breedsFor, shopBreeds, adoptionCandidates } from '../src/sim/adoption.js';
 import { PLACE_IDS } from '../src/sim/places.js';
@@ -34,7 +34,15 @@ import { t, setLang, getLang } from '../src/i18n.js';
 import { seeded, mulberry32 } from '../src/sim/rng.js';
 import { DAYS_PER_YEAR } from '../src/sim/time.js';
 
+// Ces tests jouent le scénario « seuls le cheval et le chien sont proposés » (toutes les autres espèces
+// cachées), quelle que soit la liste du jeu, qui s'allonge au fil des modèles réalistes ; chaque test qui
+// change la liste la retrouve ensuite comme dans le jeu (interrupteur).
 const START = new Set(OFFERED_SPECIES);
+const SCENARIO = ['horse', 'dog'];
+beforeEach(() => {
+  OFFERED_SPECIES.clear();
+  for (const s of SCENARIO) OFFERED_SPECIES.add(s);
+});
 afterEach(() => {
   OFFERED_SPECIES.clear();
   for (const s of START) OFFERED_SPECIES.add(s);

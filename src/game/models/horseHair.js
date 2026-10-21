@@ -454,6 +454,20 @@ void RE_Direct_Hair( const in IncidentLight directLight, const in vec3 geometryP
 `;
 
 /**
+ * Ombre du soleil adoucie sur les crins (qualité haute) : la lumière passe entre les crins et d'une mèche à l'autre.
+ * Les cartes et la masse s'ombrent l'une l'autre par plaques nettes : sur une crinière grise ou blanche, des taches
+ * vert sombre (la lumière du sol seule) au milieu des mèches de gauche. Ici, au plus 55 % du soleil retiré. (Si le
+ * morceau de three.js change, il est gardé tel quel.)
+ */
+const SHADOW_CALL = 'vDirectionalShadowCoord[ i ] ) : 1.0;';
+const HAIR_SHADOW = THREE.ShaderChunk.lights_fragment_begin.includes('? getShadow( directionalShadowMap[ i ]')
+  && THREE.ShaderChunk.lights_fragment_begin.includes(SHADOW_CALL)
+  ? THREE.ShaderChunk.lights_fragment_begin
+    .replace('? getShadow( directionalShadowMap[ i ]', '? mix( 0.45, 1.0, getShadow( directionalShadowMap[ i ]')
+    .replace(SHADOW_CALL, 'vDirectionalShadowCoord[ i ] ) ) : 1.0;')
+  : '#include <lights_fragment_begin>';
+
+/**
  * Couleur de crins (linéaire) pour la matière ou les sommets d'une carte : crins presque noirs à peine éclaircis
  * (le reflet suffit à faire lire les mèches) ; ton moyen de la texture (≈ 0,85) compensé pour les crins foncés ;
  * crins clairs (lavés, crème, gris) plafonnés à HAIR_TOP, sinon le soleil les brûle en blanc uni.
@@ -478,12 +492,20 @@ export function hairColor(hex) {
 /** Crins sans courbure (cartes sans ressorts : vignettes, autres modèles). */
 const NO_DRAG = { tail: { value: new THREE.Vector3() }, mane: { value: new THREE.Vector3() }, up: { value: new THREE.Vector3(0, 1, 0) } };
 
-export function hairMaterial(color, sway, drag = NO_DRAG) {
+export function hairMaterial(color, sway, drag = NO_DRAG, coat = null) {
   const high = gfx.quality === 'high';
   // (cartes colorées par sommet : couleurs déjà plafonnées par hairColor ; la matière ne fait que compenser le
   // ton moyen de la texture)
   const c = color === null ? new THREE.Color(1, 1, 1) : hairColor(color);
-  const l = color === null ? 0.5 : 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  let l = color === null ? 0.5 : 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  // (crins clairs sur une robe aussi claire — gris, blanc — : un peu assombris, sinon le toupet et les mèches de gauche
+  // disparaissaient au soleil sur le front et l'encolure blancs ; jamais sur une robe plus foncée, crins lavés compris)
+  if (coat !== null && color !== null) {
+    const k = new THREE.Color(coat);
+    const lc = 0.2126 * k.r + 0.7152 * k.g + 0.0722 * k.b;
+    c.multiplyScalar(1 - 0.22 * smooth(0.25, 0.45, l) * smooth(-0.1, 0.15, lc - l));
+    l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  }
   const a2c = gfx.msaa || high;
   const m = new THREE.MeshStandardMaterial({
     color: c, map: hairTexture(), alphaTest: HAIR_CUT, side: THREE.DoubleSide, roughness: 0.75, metalness: 0,
@@ -624,6 +646,7 @@ varying vec3 vHairP;
 float hHairFore() { return step( 0.5, vHairK ) * step( vHairK, 1.5 ); }`)
       .replace('#include <lights_physical_pars_fragment>', `#include <lights_physical_pars_fragment>
 ${HAIR_LIGHT}`)
+      .replace('#include <lights_fragment_begin>', HAIR_SHADOW)
       // (reflet du ciel atténué : sur des normales « de volume » toutes tournées du même côté, les 4 % de
       // reflet d'un diélectrique faisaient de la crinière noire un aplat gris ; le reflet des crins, c'est
       // la bande de Kajiya-Kay)

@@ -1354,7 +1354,9 @@ function maneCards(S, B, body, pos, coat) {
   }
   const rowW = rows.map((r) => lockWeights(r.skinRoot, NL - 1, NL + 3));
   const mass = {
-    P: rows.map((r) => r.pts), kind: 0, strip: 6,
+    // (au bord gauche du rouleau, la nappe se replie vers la peau : normales de la grille tournées vers le sol, qui y
+    // prenaient la lumière du sol — sur une crinière grise, des taches vert sombre entre les pointes ; là, celles du corps)
+    P: rows.map((r) => r.pts), kind: 0, strip: 6, soft: (i, k) => 1 - smooth(1, NL, k),
     out: (i, k) => body.grad(rows[i].pts[k], V()),
     root: rows.map((r) => r.root),
     G: (i, k) => k / (NP - 1),
@@ -1521,7 +1523,9 @@ function maneCards(S, B, body, pos, coat) {
       const Lr = Math.max(0.06, L - used);
       pts = drape(mbody, start, b.sub(a).add(d0.clone().multiplyScalar(0.02)), Lr, { h, bend: 0.055 + rng() * 0.025, np: Lr > 0.24 ? 6 : 5, steps: 14, stick: 0.02, grav: gravAt(dir) });
     }
-    const normals = pts.map((p) => mbody.grad(p, V()));
+    // (normales de la peau, pas du champ « corps − épaisseur » : là où l'épaisseur décroît vers le bas, sa pente les
+    // tournait vers le sol — sur une crinière grise, des taches vert sombre, la lumière du sol, sur les mèches)
+    const normals = pts.map((p) => body.grad(p, V()));
     if (style === 'long') {
       // Rideau ondulé : la mèche ondule en s'écartant de l'encolure (jamais vers elle) et un peu d'avant en arrière.
       const ph = rng() * 6.28;
@@ -1572,7 +1576,7 @@ function maneCards(S, B, body, pos, coat) {
       const normals = [];
       for (let k = 0; k < LP; k += 1) {
         const p = lk.rows[j0].pts[k].clone().lerp(lk.rows[j0 + 1].pts[k], u);
-        const nn = mbody.grad(p, V());
+        const nn = body.grad(p, V());
         pts.push(p.addScaledVector(nn, h + (k ? 0.002 : 0)));
         normals.push(nn);
       }
@@ -2842,7 +2846,8 @@ function hairCards(cards, { masses = [], mainCount = 0 } = {}) {
         // (là où les rangées se rejoignent — la pointe d'une mèche —, la normale de la grille ne veut plus rien dire :
         // celle du volume ; sinon une pointe tournée vers le sol prenait la lumière du sol, en taches sombres)
         const wj = Math.min(1, dj.length() / Math.max(1e-6, 0.5 * dk.length()));
-        nr.push(nn.normalize().lerp(o, Math.max(M.soft ?? 0, 1 - wj)).normalize());
+        const soft = typeof M.soft === 'function' ? M.soft(j, k) : (M.soft ?? 0);
+        nr.push(nn.normalize().lerp(o, Math.max(soft, 1 - wj)).normalize());
         tr.push(dk.lengthSq() > 1e-14 ? dk.normalize() : V(0, -1, 0));
       }
       N.push(nr);
@@ -3439,7 +3444,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   // (courbure des crins par la vitesse et le fouet de la queue : RealHorseAnim.hairSprings)
   const hairDrag = { tail: { value: V() }, mane: { value: V() }, up: { value: V(0, 1, 0) } };
   // Crinière, toupet et queue : cartes de crins de la race (partagées), à la couleur des crins de ce cheval.
-  const mane = new HorseMesh(S.hairGeo, hairMaterial(look.mane ?? 0x1b1410, hairSway, hairDrag), hb);
+  const mane = new HorseMesh(S.hairGeo, hairMaterial(look.mane ?? 0x1b1410, hairSway, hairDrag, look.coat ?? null), hb);
   const meshes = [coat, eyes, mane];
   // Brosse (Fjord, poulain) et fanons : cartes de crins à la couleur de chaque cheval.
   const extra = [];

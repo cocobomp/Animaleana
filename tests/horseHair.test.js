@@ -474,6 +474,45 @@ function inside(md) {
   return [bad / total, badMane / totalMane];
 }
 
+describe('éclairage des crins', () => {
+  it('normales des mèches de la crinière jamais tournées vers le sol (pas de taches sombres sur une crinière grise)', () => {
+    for (const breed of ['selle_francais', 'pre', 'frison', 'arabe']) {
+      const md = horse(breed);
+      const g = md.hairMesh.geometry.attributes;
+      const n = { 0: 0, 8: 0 };
+      const down = { 0: 0, 8: 0 };
+      for (let i = 0; i < g.position.count; i++) {
+        const w = g.hairRoot.getW(i);
+        if (w !== 0 && w !== 8) continue;
+        n[w]++;
+        if (g.normal.getY(i) < -0.6) down[w]++;
+      }
+      // (cartes : normales de la peau ; masse : celles de la grille, celles du corps au bord gauche du rouleau)
+      expect(down[0] / n[0], `${breed} cartes`).toBeLessThan(0.01);
+      expect(down[8] / n[8], `${breed} masse`).toBeLessThan(0.03);
+      md.dispose();
+    }
+  });
+
+  it('crins clairs sur une robe claire un peu assombris (toupet lisible sur un front blanc), pas sur une robe foncée', () => {
+    const grey = hairMaterial(0xc9c5bf, { value: 0 }, undefined, 0xdedbd5);
+    const onBay = hairMaterial(0xc9c5bf, { value: 0 }, undefined, 0x6a3a20);
+    const alone = hairMaterial(0xc9c5bf, { value: 0 });
+    expect(grey.color.r).toBeLessThan(onBay.color.r * 0.85);
+    expect(onBay.color.r).toBeCloseTo(alone.color.r, 6);
+    // (crins noirs sur une robe noire : rien ne change)
+    expect(hairMaterial(0x0b0a0a, { value: 0 }, undefined, 0x171414).color.r).toBeCloseTo(hairMaterial(0x0b0a0a, { value: 0 }).color.r, 6);
+  });
+
+  it('ombre du soleil adoucie sur les crins (qualité haute : plus de plaques d\'ombre nettes d\'une mèche sur l\'autre)', () => {
+    const m = hairMaterial(0xc9c5bf, { value: 0 });
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+    m.onBeforeCompile(sh);
+    expect(sh.fragmentShader).toContain('mix( 0.45, 1.0, getShadow( directionalShadowMap[ i ]');
+    expect(sh.fragmentShader).not.toContain('#include <lights_fragment_begin>');
+  });
+});
+
 describe('crins hors du corps, dans toutes les poses', () => {
   it.each(['selle_francais', 'frison', 'shetland', 'arabe'])('%s : arrêt, broutage, repos, pas, trot, petit galop, galop, saut', (breed) => {
     for (const [name, pose] of Object.entries(POSES)) {

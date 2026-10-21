@@ -2070,6 +2070,8 @@ body.actv-nomove #touch-pad { display: none !important; }
 .grm-finish button { white-space: nowrap; }
 .grm-finish .big { min-height: 52px; font-size: 1.1rem; }
 .note.good { color: var(--primary); font-weight: 700; }
+/* Refuge et animalerie : « D'autres animaux arrivent bientôt ! » (espèces pas encore proposées) */
+.note.more-soon { margin-top: -4px; font-style: italic; }
 .grm-shop-slot { display: grid; gap: 6px; padding: 8px 10px; margin: 6px 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
 .grm-shop-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
 .grm-shop-item { display: grid; gap: 4px; justify-items: stretch; }

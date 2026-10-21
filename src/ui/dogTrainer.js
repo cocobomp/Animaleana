@@ -10,6 +10,7 @@ import { t } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox, addStat } from '../sim/profile.js';
 import { animalCard } from './panels.js';
+import { perkParams } from './names.js'; // textes des rangs ({herd} : seulement si un troupeau est possible)
 import { runMinigame } from './minigames.js';
 import './minigames/dogTraining.js'; // enregistre les mini-jeux des séances
 import { RANKS, rankProgress, careerState, isStarted } from '../sim/careers.js';
@@ -151,7 +152,7 @@ export function dogTrainerSection(ui, a) {
   const client = isTrainingClient(a);
   if (!client && !isStarted(p, CAREER_ID)) return []; // ses animaux : une fois le métier commencé
   const rank = dogTrainerRank(p);
-  const ids = client ? Object.keys(a.client.problems) : coachingsFor(a, 99);
+  const ids = client ? Object.keys(a.client.problems) : coachingsFor(a, 99, p); // (pas de troupeau possible : pas de coaching troupeau)
   if (!ids.length) return [];
   const can = canSession(a, g.day);
   const out = [h('h3', {}, t('dt_sectionTitle'))];
@@ -290,14 +291,14 @@ export function openDogTrainerPanel(ui) {
       return out;
     }
     if (!started) {
-      out.push(h('p', { class: 'note' }, t(`ca_perk_apprentice_${CAREER_ID}`)),
+      out.push(h('p', { class: 'note' }, t(`ca_perk_apprentice_${CAREER_ID}`, perkParams(CAREER_ID, 0, p))),
         h('p', { class: 'note' }, t('dt_notStarted')),
         h('button', { class: 'primary big', onClick: () => { g.clients.startCareer(CAREER_ID); ui.renderPanel(); } }, `💼 ${t('ca_start')}`));
       return out;
     }
     const d = dogTrainerOf(p);
     out.push(h('div', { class: 'bars' }, bar(`⭐ ${t('dt_reputation')}`, dogTrainerReputation(p), 'big')));
-    out.push(h('p', { class: 'note ca-perk' }, t(`ca_perk_${RANKS[rank]}_${CAREER_ID}`)));
+    out.push(h('p', { class: 'note ca-perk' }, t(`ca_perk_${RANKS[rank]}_${CAREER_ID}`, perkParams(CAREER_ID, rank, p)))); // ({herd} : troupeau possible ?)
     const money = isSandbox(p) ? '' : `🪙 ${t('dt_earned', { n: careerState(p).earned[CAREER_ID] ?? 0 })} · ${t('dt_pricePer', { n: sessionPrice(p) })} · `;
     out.push(h('p', { class: 'note' }, `${money}${t('dt_maxClients', { n: maxClients(p) })}`));
     out.push(h('p', { class: 'note' }, t('dt_visitHours')));

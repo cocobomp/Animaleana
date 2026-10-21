@@ -15,7 +15,7 @@
 //   kind = 'vet' (soins), 'pension' ou 'handler' (préparer et présenter l'animal au concours de
 //   beauté, src/sim/beauty.js) : c'est aussi l'identifiant du métier concerné.
 
-import { SPECIES } from './species.js';
+import { SPECIES, isOffered } from './species.js';
 import { createAnimal, NEEDS, happiness, ILLNESSES, namesInUse } from './animal.js';
 import { pick, uid } from './rng.js';
 import {
@@ -145,7 +145,9 @@ export function createVisit(profile, ctx, rng = Math.random, forcedKind = null) 
   const sex = rng() < 0.5 ? 'f' : 'm';
   const ownerName = pick(OWNER_NAMES[sex], rng);
   // Les petits animaux sont les plus fréquents ; les gros seulement si le rang et la ferme le permettent.
-  const pool = perks.species.filter((s) => !ctx.species || ctx.species.includes(s));
+  // Seulement les espèces proposées (OFFERED_SPECIES, src/sim/species.js) : un client n'amène pas une
+  // espèce qu'on ne peut pas encore adopter.
+  const pool = perks.species.filter((s) => isOffered(s) && (!ctx.species || ctx.species.includes(s)));
   const weighted = [...pool, ...pool.filter((s) => ['dog', 'cat', 'rabbit'].includes(s))];
   const species = pick(weighted.length ? weighted : ['dog'], rng);
   const sp = SPECIES[species];

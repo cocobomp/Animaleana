@@ -6,6 +6,7 @@ import { uid } from './rng.js';
 import { spend, earn } from './profile.js';
 import { isUnlocked, UNLOCKS } from './progress.js';
 import { EQUIPMENT } from './farm.js';
+import { anyAvailable } from './species.js';
 
 const LIVESTOCK = ['sheep', 'goat', 'cow'];
 
@@ -21,7 +22,7 @@ export const STRUCTURES = {
   paddockSmall: { cat: 'enclosure', emoji: '🐴', w: 12, d: 10, price: 300, species: ['horse'], capacity: 3, comfort: 2, gate: 3, g: 'm' },
   shelter: { cat: 'building', emoji: '🛖', w: 6, d: 4, price: 400, species: ['horse', ...LIVESTOCK], capacity: 4, comfort: 8, g: 'm', open: true },
   paddockLarge: { cat: 'enclosure', emoji: '🐎', w: 20, d: 16, price: 550, species: ['horse'], capacity: 6, comfort: 2, gate: 4, g: 'm' },
-  pasture: { cat: 'enclosure', emoji: '🐑', w: 24, d: 20, price: 600, species: [...LIVESTOCK, 'horse'], capacity: 10, comfort: 2, gate: 4, g: 'm' },
+  pasture: { cat: 'enclosure', emoji: '🌿', w: 24, d: 20, price: 600, species: [...LIVESTOCK, 'horse'], capacity: 10, comfort: 2, gate: 4, g: 'm' },
   barn: { cat: 'building', emoji: '🏚️', w: 12, d: 8, price: 900, species: [...LIVESTOCK, 'horse'], capacity: 8, comfort: 10, g: 'f' },
   arena: { cat: 'enclosure', emoji: '🏇', w: 18, d: 28, price: 800, species: [], capacity: 0, comfort: 0, gate: 4, g: 'f', arena: true },
   newStable: { cat: 'building', emoji: '🐴', w: 16, d: 7, price: 1200, species: ['horse'], capacity: 4, comfort: 12, g: 'f' },
@@ -453,10 +454,22 @@ export function structureAtPoint(profile, place, x, z, margin = 0.3) {
   }) ?? null;
 }
 
-/** Peut-on acheter ce type ? (niveau et argent) */
+/**
+ * La construction est-elle au catalogue ? Non si elle n'accueille que des espèces pas encore proposées
+ * (OFFERED_SPECIES, src/sim/species.js) et qu'on n'en a pas : le clapier sans lapin. Une construction déjà
+ * là reste visible (et on peut la déplacer, la démolir, y loger ses lapins).
+ */
+export function structureShown(profile, type) {
+  const def = STRUCTURES[type];
+  if (!def) return false;
+  return anyAvailable(profile, def.species) || (profile.structures ?? []).some((s) => s.type === type);
+}
+
+/** Peut-on acheter ce type ? (au catalogue, niveau et argent) */
 export function canBuild(profile, type) {
   const def = STRUCTURES[type];
   if (!def) return { ok: false, reason: 'unknown' };
+  if (!structureShown(profile, type)) return { ok: false, reason: 'soon' }; // espèce pas encore proposée
   if (UNLOCKS[type] && !isUnlocked(profile, type)) return { ok: false, reason: 'locked', level: UNLOCKS[type] };
   if (profile.mode !== 'sandbox' && profile.money < def.price) return { ok: false, reason: 'money' };
   return { ok: true };

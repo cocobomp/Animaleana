@@ -3,8 +3,21 @@
 import { happiness } from './animal.js';
 import { PLACE_IDS, PLACES } from './places.js';
 import { CAREERS } from './careers.js'; // paliers du métier Toiletteur
+import { SPECIES_IDS, isOffered, anyAvailable } from './species.js';
 
 const stat = (p, k) => p.stats[k] ?? 0;
+
+/**
+ * Quête « espèces différentes » : 4 espèces au plus, mais jamais plus que celles qu'on peut avoir dans
+ * cette partie (proposées, OFFERED_SPECIES de src/sim/species.js, ou déjà à soi). Seuls nos propres
+ * animaux comptent, pour le compte comme pour le but : un chat en pension (client d'une ancienne partie)
+ * ne relève pas le but à 3 espèces alors qu'aucun chat ne peut s'adopter.
+ */
+function speciesProgress(p) {
+  const own = new Set(p.animals.filter((a) => !a.client && !a.guest).map((a) => a.species));
+  const total = Math.min(4, SPECIES_IDS.filter((sid) => isOffered(sid) || own.has(sid)).length);
+  return [Math.min(own.size, total), total];
+}
 
 export const OBJECTIVES = [
   { id: 'adopt1', kind: 'quest', reward: 50, progress: (p) => [stat(p, 'adopted'), 1] },
@@ -21,7 +34,7 @@ export const OBJECTIVES = [
   { id: 'abroad', kind: 'quest', reward: 120, progress: (p) => [p.visited.some((id) => PLACES[id].country !== PLACES[p.home ?? 'maison'].country) ? 1 : 0, 1] },
   { id: 'horseTrip', kind: 'quest', reward: 150, progress: (p) => [stat(p, 'horseTravels'), 1] },
   { id: 'baby', kind: 'quest', reward: 100, progress: (p) => [stat(p, 'births'), 1] },
-  { id: 'species4', kind: 'quest', reward: 150, progress: (p) => [new Set(p.animals.map((a) => a.species)).size, 4] },
+  { id: 'species4', kind: 'quest', reward: 150, progress: speciesProgress }, // (texte : « Adopte {n} espèces… »)
   // activités (src/sim/activities.js)
   { id: 'actvJump1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvJumping'), 1] },
   { id: 'actvClear1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'actvClear'), 1] },
@@ -30,8 +43,9 @@ export const OBJECTIVES = [
   { id: 'actvShow1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'actvShows'), 1] },
   { id: 'actvCompete1', kind: 'quest', reward: 100, progress: (p) => [stat(p, 'actvCompetitions'), 1] },
   { id: 'actvLesson1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvLessons'), 1] },
-  { id: 'actvHop1', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvHop'), 1] },
-  { id: 'actvHutch5', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'actvHutchPlay'), 5] },
+  // needs : espèces nécessaires (quête cachée tant qu'aucune n'est proposée ni à la ferme, voir objectiveShown)
+  { id: 'actvHop1', kind: 'quest', reward: 60, needs: ['rabbit'], progress: (p) => [stat(p, 'actvHop'), 1] },
+  { id: 'actvHutch5', kind: 'quest', reward: 40, needs: ['rabbit'], progress: (p) => [stat(p, 'actvHutchPlay'), 5] },
   // dressage et concours à l'extérieur (src/sim/dressage.js, src/sim/competitions.js)
   { id: 'drTrain3', kind: 'quest', reward: 60, progress: (p) => [stat(p, 'actvTraining'), 3] },
   { id: 'drReprise1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'actvDressage'), 1] },
@@ -91,6 +105,18 @@ export const OBJECTIVES = [
   { id: 'beautyPodium', kind: 'achievement', progress: (p) => [stat(p, 'beautyPodium'), 1] }, // concours de beauté
   { id: 'beautyChampion', kind: 'achievement', progress: (p) => [stat(p, 'beautyChampion'), 1] }, // écharpe du plus bel animal
 ];
+
+/**
+ * L'objectif est-il montré (journal, quête conseillée, suivi) ? Non s'il demande une espèce pas encore
+ * proposée qu'on n'a pas (needs). Une quête déjà finie reste dans le journal.
+ */
+export const objectiveShown = (p, o) => !o.needs || anyAvailable(p, o.needs) || (p.completed ?? []).includes(o.id);
+
+/** Paramètres du texte d'un objectif (o_<id>) : {n} = le total à atteindre (« Adopte 2 espèces… »). */
+export function objectiveParams(p, o) {
+  if (!o || !p) return {};
+  return { n: o.progress(p)[1] };
+}
 
 /** Renvoie les objectifs qui viennent d'être terminés (et les marque comme faits). */
 export function checkObjectives(profile) {

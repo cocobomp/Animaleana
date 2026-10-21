@@ -3,7 +3,7 @@
 
 import { h } from './dom.js';
 import { t, ta, hourParams } from '../i18n.js';
-import { SPECIES } from '../sim/species.js';
+import { SPECIES, speciesAvailable, CORE_SPECIES, coreShown } from '../sim/species.js';
 import { canRide } from '../sim/animal.js';
 import { canProduce } from '../sim/farm.js';
 import { canLeash, owned, inUse } from '../sim/gear.js';
@@ -12,7 +12,7 @@ import { TOOLS } from '../sim/tools.js';
 import { isSandbox } from '../sim/profile.js';
 
 const canLeashNow = (a) => canLeash(a) || (a.following && a.leashed);
-import { speciesName } from './names.js';
+import { speciesName, speciesList } from './names.js';
 import { CARE, NEEDS, happiness } from '../sim/animal.js';
 import { NEED_ICON } from './UI.js';
 import { bar } from './dom.js';
@@ -112,9 +112,11 @@ export function openBuilding(ui, kind) {
     dogTrainer: () => ui.openDogTrainer(), // carnet de l'éducateur canin (niche)
     ...activityRuns(ui), // activités : terrain de concours
   };
-  // Maison des animaux : qui dort dans quel coin.
-  const header = kind === 'pethouse' ? () => petHouseList(g) : null;
-  sheet(ui, `${BUILDING_ICON[kind]} ${name}`, t(`bldd_${kind}`), () => g.buildingActions(kind).map((a) => ({
+  // Maison des animaux : qui dort dans quel coin. Clapier ou bergerie qui ne sert pas encore (ni lapin, ni
+  // troupeau possible : src/sim/species.js) : le petit mot « D'autres animaux arrivent bientôt ! » à la place.
+  const idle = !!CORE_SPECIES[kind] && !coreShown(g.profile, kind);
+  const header = kind === 'pethouse' ? () => petHouseList(g) : idle ? () => h('p', { class: 'note more-soon' }, t('moreSoon')) : null;
+  sheet(ui, `${BUILDING_ICON[kind]} ${name}`, idle ? null : t(`bldd_${kind}`), () => g.buildingActions(kind).map((a) => ({
     icon: a.icon,
     label: t(`do_${a.id}`),
     enabled: a.enabled,
@@ -135,7 +137,8 @@ export function openBuilding(ui, kind) {
 /** Les coins de la maison des animaux : un panier par chien, chat ou lapin. */
 function petHouseList(g) {
   const pets = g.animalsHere().filter((a) => ['dog', 'cat', 'rabbit'].includes(a.species));
-  if (!pets.length) return h('p', { class: 'note' }, t('ph_empty'));
+  // (« Adopte un chien ! » : seulement les espèces proposées, ou déjà à la ferme)
+  if (!pets.length) return h('p', { class: 'note' }, t('ph_empty', { who: speciesList(['dog', 'cat', 'rabbit'].filter((sid) => speciesAvailable(g.profile, sid)), { one: true, or: true }) }));
   return h('div', { class: 'ph-list' }, pets.map((a, i) => {
     const e = g.entities.get(a.id);
     const where = !a.housed ? t('ph_outside') : e?.inside ? (e.sleeping ? t('ph_sleeping') : t('ph_inside')) : t('ph_coming');

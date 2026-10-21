@@ -14,6 +14,8 @@ import { VisitorEntity, VISITOR_PATH } from './Clients.js';
 import { canLeash } from '../sim/gear.js';
 import { addStat } from '../sim/profile.js';
 import { RANKS, isStarted } from '../sim/careers.js';
+import { speciesAvailable } from '../sim/species.js';
+import { speciesList } from '../ui/names.js';
 import {
   CAREER_ID, PROBLEMS, COACHINGS, SESSION_MINUTES, makeClientRequest, acceptClient, canSession, applySession,
   readyForDelivery, finishClient, shouldClientArrive, dogTrainerOf, clientDogs, isFixed, isTrainingClient,
@@ -616,9 +618,11 @@ export class DogTrainer {
     // Entraîner un de ses animaux (coaching).
     const rank = dogTrainerRank(p);
     const want = action === 'coachHerd' ? 'herd' : action === 'coachAgility' ? 'agility' : null;
-    const own = p.animals.find((x) => !x.client && g.entities.has(x.id) && coachingsFor(x, rank).some((id) => !want || id === want));
+    const own = p.animals.find((x) => !x.client && g.entities.has(x.id) && coachingsFor(x, rank, p).some((id) => !want || id === want));
     if (!own) {
-      g.ui.toast(t('dt_show_noOwnDog'), 6000);
+      // (« Adopte un chien ou un cheval » : les espèces qu'on peut entraîner, seulement celles proposées)
+      const kinds = want === 'herd' ? ['dog'] : want === 'agility' ? ['dog', 'cat', 'rabbit'] : ['dog', 'cat', 'rabbit', 'horse'];
+      g.ui.toast(t('dt_show_noOwnDog', { who: speciesList(kinds.filter((sid) => speciesAvailable(p, sid)), { one: true, or: true }) }), 6000);
       return;
     }
     g.marker.show(g.entities.get(own.id), { hideNear: 2.5 });

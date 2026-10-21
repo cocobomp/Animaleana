@@ -4,7 +4,7 @@
 // et la coupe de ses propres animaux. Logique pure, testée dans tests/groomer.test.js.
 
 import { createAnimal, namesInUse } from './animal.js';
-import { SPECIES } from './species.js';
+import { SPECIES, isOffered } from './species.js';
 import { uid, pick } from './rng.js';
 import { levelOf } from './progress.js';
 import { dayOf } from './time.js';
@@ -194,7 +194,9 @@ const OWNERS = [
 export function newClient(profile, opts = {}) {
   const rng = opts.rng ?? Math.random;
   const day = opts.day ?? dayOf(profile.clock ?? 0);
-  const allowed = requestsFor(profile);
+  // Seulement des demandes pour une espèce proposée (OFFERED_SPECIES, src/sim/species.js) : pas de
+  // concours des moutons tant que les moutons ne sont pas proposés.
+  const allowed = requestsFor(profile).filter((id) => REQUESTS[id].species.some(isOffered));
   let requestId = opts.requestId && REQUESTS[opts.requestId] ? opts.requestId : null;
   if (!requestId) {
     // Les demandes de son rang sont un peu plus fréquentes que celles des rangs précédents.
@@ -203,7 +205,9 @@ export function newClient(profile, opts = {}) {
     requestId = pick(weighted, rng);
   }
   const req = REQUESTS[requestId];
-  const species = opts.species && req.species.includes(opts.species) ? opts.species : pick(req.species, rng);
+  const offered = req.species.filter(isOffered);
+  // (opts.species et opts.requestId forcent le client, pour tester : src/game/Groomer.js, force)
+  const species = opts.species && req.species.includes(opts.species) ? opts.species : pick(offered.length ? offered : req.species, rng);
   const sp = SPECIES[species];
   const breedPool = req.breeds ? sp.breeds.filter((b) => req.breeds.includes(b.id)) : sp.breeds.filter((b) => b.rarity <= (rankOf(profile) >= 2 ? 3 : 2));
   const breed = pick(breedPool.length ? breedPool : sp.breeds, rng);

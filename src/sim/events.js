@@ -12,7 +12,7 @@
 //     playerDist,         // distance joueur → cible de l'événement (en mètres)
 //     strayAtRefuge }     // le petit animal perdu est arrivé au refuge
 
-import { SPECIES } from './species.js';
+import { SPECIES, isOffered, speciesAvailable, anyAvailable, LIVESTOCK_IDS } from './species.js';
 import { lifeStage, createAnimal, namesInUse } from './animal.js';
 import { PLACES } from './places.js';
 import { wears, canLead, keepsWarm } from './gear.js';
@@ -57,6 +57,19 @@ const BIRTH_NEAR_HOURS = 0.75;
 const NEIGHBOURS = { f: ['Martine', 'Sophie', 'Claire', 'Inès', 'Lucie'], m: ['Paul', 'Jacques', 'Karim', 'Louis', 'Hugo'] };
 const NEIGHBOUR_TASKS = ['hay', 'fence', 'hens', 'apples'];
 const INJURIES = ['brambles', 'wire', 'stone', 'sprain', 'thorn'];
+
+/**
+ * Où mettre les animaux à l'abri avant l'orage (texte d'annonce ev_storm_intro) : seulement les groupes qui
+ * comptent pour la partie (espèces proposées ou déjà à la ferme, src/sim/species.js) — pas de « troupeau à la
+ * bergerie » tant qu'aucun mouton, chèvre ni vache n'est possible. ['horse', 'flock', 'pets'] au plus.
+ */
+export function stormShelters(profile) {
+  return [
+    speciesAvailable(profile, 'horse') ? 'horse' : null,
+    anyAvailable(profile, LIVESTOCK_IDS) ? 'flock' : null,
+    anyAvailable(profile, ['dog', 'cat', 'rabbit']) ? 'pets' : null,
+  ].filter(Boolean);
+}
 
 /**
  * Les événements. Pour chacun :
@@ -204,7 +217,10 @@ export function startEvent(profile, type, ctx, rng = Math.random, force = false)
       for (const a of ctx.animals) a.needs.thirst = Math.min(a.needs.thirst, 40);
       break;
     case 'lostPet': {
-      const species = rng() < 0.5 ? 'dog' : 'cat';
+      // (un seul tirage, comme avant : la suite du hasard ne bouge pas ; une espèce pas encore
+      // proposée est remplacée par un petit animal proposé — aujourd'hui, toujours un chien)
+      let species = rng() < 0.5 ? 'dog' : 'cat';
+      if (!isOffered(species)) species = PETS.find(isOffered) ?? 'dog';
       const sp = SPECIES[species];
       const stray = createAnimal({ species, ageDays: sp.adultYears * DAYS_PER_YEAR * 0.25, location: ctx.place, rng, day: ctx.day, avoidNames: namesInUse(profile) });
       stray.stray = true;

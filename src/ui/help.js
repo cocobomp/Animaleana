@@ -4,9 +4,13 @@
 import { h } from './dom.js';
 import { t, L, getLang } from '../i18n.js';
 import { creditsBlock } from './credits.js'; // ℹ️ À propos : crédits des modèles 3D (CC-BY des chiens)
+import { anyAvailable, LIVESTOCK_IDS as LIVESTOCK } from '../sim/species.js';
 
 // where : bâtiment ('refuge', 'petshop', 'stable', 'tackroom', 'pen', 'paddock', 'kennel', 'hutch', 'vet', 'house', 'jobs')
 //         ou bouton de l'écran ('hud:farm', 'hud:travel', 'hud:journal', 'hud:animals', 'hud:time')
+// needs : la fiche ne parle que d'espèces pas encore proposées (OFFERED_SPECIES, src/sim/species.js) : cachée
+//         tant que la partie n'en a pas. more : { needs, fr, en } (ou une liste) : des étapes de plus, seulement
+//         pour ces espèces.
 const TOPICS = [
   { id: 'adopt', icon: '🐾', where: 'refuge',
     title: { fr: 'Recueillir un animal (gratuit)', en: 'Adopt an animal (free)' },
@@ -47,7 +51,11 @@ const TOPICS = [
   { id: 'clean', icon: '🧹', where: 'stable',
     title: { fr: 'Ramasser les crottins et nettoyer', en: 'Pick up droppings and clean' },
     keys: 'crottin caca nettoyer propre curer box litière paille clean poop droppings stall litter',
-    steps: { fr: ['Touche un crottin pour le ramasser.', 'À l\'écurie : « Curer les box » ; à la bergerie : « Ramasser les crottins ».', 'Pour les chats et lapins : « Changer la litière » / « Nettoyer le clapier ».'], en: ['Tap a dropping to pick it up.', 'At the stable: "Muck out"; at the sheepfold: "Pick up droppings".', 'For cats and rabbits: "Change the litter" / "Clean the hutch".'] } },
+    steps: { fr: ['Touche un crottin pour le ramasser.', 'À l\'écurie : « Curer les box ».'], en: ['Tap a dropping to pick it up.', 'At the stable: "Muck out".'] },
+    more: [
+      { needs: LIVESTOCK, fr: 'À la bergerie : « Ramasser les crottins ».', en: 'At the sheepfold: "Pick up droppings".' },
+      { needs: ['cat', 'rabbit'], fr: 'Pour les chats et lapins : « Changer la litière » / « Nettoyer le clapier ».', en: 'For cats and rabbits: "Change the litter" / "Clean the hutch".' },
+    ] },
   { id: 'tricks', icon: '🎓', where: null,
     title: { fr: 'Apprendre des tours et entraîner', en: 'Teach tricks and train' },
     keys: 'tour dresser dressage entraîner assis patte au pied obéissance trick train sit paw heel',
@@ -69,10 +77,10 @@ const TOPICS = [
     keys: 'automatique mangeoire abreuvoir distributeur fontaine litière automatic feeder trough',
     steps: { fr: ['Ouvre 🚜 Ferme → Équipements.', 'Installe un équipement (débloqué avec les niveaux).', 'Les animaux y vont tout seuls quand ils en ont besoin.'], en: ['Open 🚜 Farm → Equipment.', 'Install equipment (unlocked with levels).', 'Animals use it by themselves when they need it.'] } },
   { id: 'grow', icon: '🏗️', where: 'hud:hud_build',
-    title: { fr: 'Agrandir le paddock, la bergerie ou un enclos', en: 'Make the paddock, the sheepfold or an enclosure bigger' },
+    title: { fr: 'Agrandir le paddock ou un enclos', en: 'Make the paddock or an enclosure bigger' },
     keys: 'agrandir grandir réduire taille paddock bergerie enclos clapier écurie box construire construction grille poignée bigger grow resize size enclosure sheepfold stable stalls build',
     steps: { fr: ['Appuie sur 🏗️ Construire (en haut de l\'écran).', 'Touche le paddock (ou un autre enclos) : des ronds blancs apparaissent.', 'Tire un rond pour agrandir ou réduire, au mètre près : la taille et le prix s\'affichent.', 'Touche ✅ Valider. Pour l\'écurie : touche-la puis « +4 box ».'], en: ['Tap 🏗️ Build (top of the screen).', 'Tap the paddock (or another enclosure): white dots appear.', 'Drag a dot to make it bigger or smaller, metre by metre: the size and price show up.', 'Tap ✅ Confirm. For the stable: tap it, then "+4 stalls".'] } },
-  { id: 'herd', icon: '🐑', where: 'pen',
+  { id: 'herd', icon: '🐑', where: 'pen', needs: LIVESTOCK,
     title: { fr: 'Conduire le troupeau', en: 'Drive the herd' },
     keys: 'troupeau mouton chèvre vache bergerie pré chien de troupeau herd sheep goat cow field',
     steps: { fr: ['Va à la bergerie.', 'Choisis « Emmener au pré » ou « Rentrer le troupeau ».', 'Avec un chien de troupeau ou un berger, c\'est automatique ; sinon fais-le toi-même (à cheval c\'est plus facile).'], en: ['Go to the sheepfold.', 'Choose "Take to the field" or "Bring the herd in".', 'With a herding dog or a shepherd it\'s automatic; otherwise do it yourself (easier on horseback).'] } },
@@ -88,14 +96,15 @@ const TOPICS = [
     title: { fr: 'Préparer ma liste de tâches', en: 'Plan my task list' },
     keys: 'liste tâches automatique manuel planifier task list auto manual plan',
     steps: { fr: ['Dans un menu d\'actions, appuie sur 📝 à côté d\'une action.', 'Dans « Ma liste » (en bas à droite), choisis 🤖 Auto ou ✋ Moi.', 'Appuie sur ▶ Lancer.'], en: ['In an action menu, tap 📝 next to an action.', 'In "My list" (bottom right), choose 🤖 Auto or ✋ Me.', 'Tap ▶ Start.'] } },
-  { id: 'tools', icon: '🧶', where: 'tackroom',
-    title: { fr: 'Acheter du matériel (tondeuse, seau…)', en: 'Buy tools (shears, pail…)' },
+  { id: 'tools', icon: '🧰', where: 'tackroom',
+    title: { fr: 'Acheter du matériel (shampooing, longe…)', en: 'Buy tools (shampoo, lunge line…)' },
     keys: 'matériel outil tondeuse seau shampooing coupe-griffes acheter tools shears pail shampoo buy',
     steps: { fr: ['Entre dans la sellerie (à côté de l\'écurie) et touche le comptoir.', 'Dans « Outils », achète l\'outil qu\'il te faut.', 'Le soin correspondant devient possible.'], en: ['Go into the tack room (next to the stable) and tap the counter.', 'In "Tools", buy the tool you need.', 'The matching care becomes possible.'] } },
   { id: 'money', icon: '🪙', where: 'jobs',
     title: { fr: 'Gagner de l\'argent', en: 'Earn money' },
     keys: 'argent pièces gagner travail boulot laine lait money coins earn job wool milk',
-    steps: { fr: ['Fais des petits boulots (panneau près de la maison).', 'Vends la laine et le lait (tonte et traite).', 'Termine des quêtes (📖 Journal).'], en: ['Do odd jobs (board near the house).', 'Sell wool and milk (shearing and milking).', 'Complete quests (📖 Journal).'] } },
+    steps: { fr: ['Fais des petits boulots (panneau près de la maison).', 'Termine des quêtes (📖 Journal).'], en: ['Do odd jobs (board near the house).', 'Complete quests (📖 Journal).'] },
+    more: { needs: LIVESTOCK, fr: 'Vends la laine et le lait (tonte et traite).', en: 'Sell wool and milk (shearing and milking).' } },
   { id: 'sleep', icon: '🛏️', where: 'house',
     title: { fr: 'Dormir', en: 'Sleep' },
     keys: 'dormir nuit lit maison sleep night bed house',
@@ -105,11 +114,11 @@ const TOPICS = [
     title: { fr: 'Concours de beauté : préparer et présenter', en: 'Beauty contest: prepare and show' },
     keys: 'beauté concours tresse tresser crinière ruban nœud bandana lustrer briller juge présenter inscription inscrire classe écharpe handler beauty contest braid mane ribbon bow shine judge show enter class sash',
     steps: {
-      fr: ['Au terrain de concours : « Concours de beauté » → « S\'inscrire » (une classe par espèce : chevaux, chiens, chats, petits animaux, ferme).',
+      fr: ['Au terrain de concours : « Concours de beauté » → « S\'inscrire » (une classe par espèce).',
         'Touche ton animal → « Plus… » → « Préparer pour le concours » : bain, brossage, tresses ou nœud, lustrage. Un licol ou un collier de la couleur des rubans : bonus !',
         'Garde-le propre et heureux (à manger, à boire, des câlins) : le juge le voit.',
         'Le jour du concours (9 h – 18 h) : « Entrer dans la carrière », puis présente-le au juge (au pas, halte, immobile, demi-tour, trot).'],
-      en: ['At the showground: "Beauty contest" → "Enter" (one class per species: horses, dogs, cats, small pets, farm animals).',
+      en: ['At the showground: "Beauty contest" → "Enter" (one class per species).',
         'Tap your animal → "More…" → "Prepare for the contest": bath, brushing, braids or a bow, coat shine. A halter or collar matching the ribbons: bonus!',
         'Keep them clean and happy (food, water, cuddles): the judge can tell.',
         'On contest day (9 am – 6 pm): "Enter the ring", then show them to the judge (walk, halt, stand still, turn, trot).'],
@@ -121,16 +130,30 @@ const norm = (str) => str.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 /** Fiches qui correspondent à la question tapée (meilleures d'abord). */
 const STOP = new Set(['les', 'des', 'une', 'mon', 'mes', 'ton', 'tes', 'est', 'sont', 'comment', 'faire', 'pour', 'avec', 'que', 'qui', 'quoi', 'the', 'how', 'and', 'can', 'est-ce', 'faut', 'peux', 'veux']);
 
-export function searchHelp(query) {
+/** La fiche est-elle montrée dans cette partie ? (needs : espèces pas encore proposées qu'on n'a pas) */
+const topicShown = (topic, profile) => !profile || anyAvailable(profile, topic.needs);
+
+/** Les étapes d'une fiche, avec l'étape en plus (more) si ses espèces comptent pour la partie. */
+export function topicSteps(topic, profile = null) {
+  const lang = getLang();
+  const steps = [...(topic.steps[lang] ?? topic.steps.fr)];
+  const more = topic.more ? [topic.more].flat() : [];
+  for (const m of more) if (!profile || anyAvailable(profile, m.needs)) steps.push(m[lang] ?? m.fr);
+  return steps;
+}
+
+/** profile : seulement les fiches de cette partie (pas celles des espèces pas encore proposées). */
+export function searchHelp(query, profile = null) {
+  const topics = TOPICS.filter((topic) => topicShown(topic, profile));
   const words = norm(query).split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.has(w));
-  if (!words.length) return TOPICS;
+  if (!words.length) return topics;
   const wordsOf = (str) => norm(str).split(/[^a-z0-9]+/);
   const hayOf = (topic) => wordsOf(`${topic.keys} ${topic.title.fr} ${topic.title.en} ${topic.steps.fr.join(' ')}`);
   // On compare des mots entiers (ou leur début : « cheva » trouve « cheval »).
   const has = (hay, w) => hay.some((x) => x === w || (w.length > 3 && x.startsWith(w)) || (x.length > 3 && w.startsWith(x)));
   // Un mot rare (présent dans peu de fiches) compte plus qu'un mot fréquent.
   const weight = (w) => 3 / Math.max(1, TOPICS.filter((x) => has(hayOf(x), w)).length);
-  return TOPICS
+  return topics
     .map((topic) => {
       const hay = hayOf(topic);
       const keys = wordsOf(topic.keys);
@@ -173,14 +196,14 @@ export function openHelp(ui) {
   const results = h('div', { class: 'help-results' });
   const head = [h('p', { class: 'note' }, t('helpIntro')), h('label', { class: 'field' }, input)];
   const drawList = () => {
-    const list = searchHelp(st.q);
+    const list = searchHelp(st.q, ui.game?.profile);
     results.replaceChildren(
       list.length ? '' : h('p', { class: 'note' }, t('helpNothing')),
       h('div', { class: 'help-list' }, list.map((topic) => {
         const open = st.open === topic.id || (st.q && list[0] === topic);
         return h('div', { class: `help-topic ${open ? 'open' : ''}` },
           h('button', { class: 'help-title', onClick: () => { st.open = open ? null : topic.id; drawList(); } }, `${topic.icon} ${L(topic.title)}`),
-          open ? h('ol', { class: 'help-steps' }, (topic.steps[getLang()] ?? topic.steps.fr).map((step) => h('li', {}, step))) : null,
+          open ? h('ol', { class: 'help-steps' }, topicSteps(topic, ui.game?.profile).map((step) => h('li', {}, step))) : null,
           open && topic.where ? h('button', { class: 'primary', onClick: () => showMe(ui, topic.where) }, `👉 ${t('helpShowMe')}`) : null);
       })));
   };

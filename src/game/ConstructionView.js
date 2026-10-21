@@ -19,6 +19,7 @@ import { canResize, worldLimits, dragRect, edgesOf, sameRect, resizeCost, localS
 import { stableRect, stableExt, ensureFacilities, canExtendStable, STABLE_SIZES } from '../sim/facilities.js';
 import { ENCLOSURES } from './nav.js';
 import { structureName, confirmDemolish } from '../ui/construction.js';
+import { SPECIES, speciesAvailable, coreShown } from '../sim/species.js';
 
 const HALF = 96; // la grille couvre -96 m … 96 m (la zone constructible va jusqu'à BOUNDS = 90 m)
 const N = HALF * 2; // une case de la carte des zones occupées = 1 m
@@ -374,20 +375,25 @@ export class ConstructionView {
     const st = this.st;
     if (sel.kind === 'core') {
       const def = CORE_ITEMS[sel.id];
+      // (clapier ou bergerie qui ne sert pas encore — ses espèces ne sont pas proposées, src/sim/species.js — :
+      // il se déplace, mais ne s'agrandit pas et n'annonce pas de places pour des lapins ou des moutons)
+      const on = coreShown(this.profile, sel.id);
       return {
         rect: coreRect(st.layout, sel.id), emoji: def.emoji, name: t(`bld_${sel.id}`), kindKey: sel.id, rot: 0,
-        resizable: RESIZABLE_CORE.includes(sel.id), movable: true, placeEmoji: PLACE_EMOJI[sel.id],
+        resizable: RESIZABLE_CORE.includes(sel.id) && on, movable: true, placeEmoji: on ? PLACE_EMOJI[sel.id] : '',
       };
     }
     if (sel.kind === 'structure') {
       const s = st.get(sel.id);
       if (!s || s.place !== this.profile.place) return null;
       const def = STRUCTURES[s.type];
-      const sp = def.species?.[0];
+      // (places : l'emoji de la première espèce qui compte pour la partie — un cheval au pré tant que les moutons
+      // ne sont pas proposés, src/sim/species.js)
+      const sp = def.species?.find((x) => speciesAvailable(this.profile, x));
       return {
         s, rect: footprintOf(s), emoji: def.emoji, name: structureName(s.type), kindKey: s.type, rot: s.rot,
         resizable: canResize(s.type), movable: true, rotatable: true, sellable: true,
-        placeEmoji: sp === 'horse' ? '🐴' : sp ? '🐑' : '',
+        placeEmoji: sp ? SPECIES[sp].emoji : '',
       };
     }
     if (sel.kind === 'equipment') {

@@ -1,8 +1,9 @@
 // Noms d'espèce accordés au sexe et à l'âge (jument, chienne, agneau…).
 
-import { getLang, L } from '../i18n.js';
+import { getLang, L, t } from '../i18n.js';
 import { lifeStage } from '../sim/animal.js';
-import { SPECIES } from '../sim/species.js';
+import { SPECIES, speciesAvailable, anyAvailable, isOffered, LIVESTOCK_IDS } from '../sim/species.js';
+import { rankNewSpecies } from '../sim/careers.js';
 
 const NAMES = {
   fr: {
@@ -51,4 +52,45 @@ export function coatName(a) {
   const own = breeds.find((b) => b.id === a.breed);
   const color = [own, ...breeds].flatMap((b) => b?.colors ?? []).find((c) => c.name.fr === name.fr);
   return color?.m ?? L(name);
+}
+
+/** Les emojis des espèces qui comptent pour la partie (proposées ou déjà à la ferme) : « 🐶 🐴 ». */
+export const availableEmojis = (ids, profile) => [...new Set(ids.filter((sid) => speciesAvailable(profile, sid)).map((sid) => SPECIES[sid]?.emoji).filter(Boolean))].join(' ');
+
+// Noms d'espèce dans une phrase : « un chien » (un seul, avec l'article) ou « chiens » (pluriel).
+const IN_TEXT = {
+  fr: {
+    horse: ['un cheval', 'chevaux'], dog: ['un chien', 'chiens'], cat: ['un chat', 'chats'], rabbit: ['un lapin', 'lapins'],
+    sheep: ['un mouton', 'moutons'], goat: ['une chèvre', 'chèvres'], cow: ['une vache', 'vaches'],
+  },
+  en: {
+    horse: ['a horse', 'horses'], dog: ['a dog', 'dogs'], cat: ['a cat', 'cats'], rabbit: ['a rabbit', 'rabbits'],
+    sheep: ['a sheep', 'sheep'], goat: ['a goat', 'goats'], cow: ['a cow', 'cows'],
+  },
+};
+const JOIN = { fr: { and: ' et ', or: ' ou ' }, en: { and: ' and ', or: ' or ' } };
+
+/**
+ * Liste d'espèces lisible dans une phrase : « chiens, chats et lapins », « un chien ou un chat ».
+ * one : au singulier avec l'article ; or : « ou » au lieu de « et ». Liste vide : ''.
+ * Sert aux textes qui suivent les espèces proposées (OFFERED_SPECIES, src/sim/species.js).
+ */
+export function speciesList(ids, { one = false, or = false } = {}) {
+  const lang = IN_TEXT[getLang()] ? getLang() : 'fr';
+  const words = ids.map((sid) => IN_TEXT[lang][sid]?.[one ? 0 : 1]).filter(Boolean);
+  if (words.length <= 1) return words[0] ?? '';
+  const last = words.pop();
+  return `${words.join(', ')}${JOIN[lang][or ? 'or' : 'and']}${last}`;
+}
+
+/**
+ * Paramètres des textes de rang (ca_perk_*, grm_rankDesc_*) : les animaux que le rang apporte, seulement les
+ * espèces proposées (rankNewSpecies, src/sim/careers.js). { animals: 'chiens, ', list: 'chiens', List: 'Chiens' } ;
+ * vides si le rang n'apporte aucune espèce proposée. herd : « , coaching chien de troupeau » (éducateur canin)
+ * seulement s'il peut y avoir un troupeau dans la partie (profile), ou si le bétail est proposé (sans profile).
+ */
+export function perkParams(id, rank, profile = null) {
+  const list = speciesList(rankNewSpecies(id, rank));
+  const herdOn = profile ? anyAvailable(profile, LIVESTOCK_IDS) : LIVESTOCK_IDS.some(isOffered);
+  return { animals: list ? `${list}, ` : '', list, List: list.charAt(0).toUpperCase() + list.slice(1), herd: herdOn ? t('ca_perk_herd') : '' };
 }

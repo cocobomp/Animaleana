@@ -6,6 +6,7 @@ import { focusField } from './viewport.js';
 import { t, getLang, setLang } from '../i18n.js';
 import { listProfiles, loadProfile, createProfile, saveProfile } from '../sim/profile.js';
 import { PLACES, PLACE_IDS } from '../sim/places.js';
+import { SPECIES, offeredSpeciesIds } from '../sim/species.js';
 import { L } from '../i18n.js';
 import { buildAvatar, animateAvatarWalk, updateAvatarLife } from '../game/models/avatarModel.js';
 import { disposeModel } from '../game/models/animalModel.js';
@@ -66,7 +67,7 @@ export function showProfiles(ui) {
     });
 
     ui.screen.replaceChildren(h('div', { class: 'menu' },
-      h('div', { class: 'logo' }, '🐴🐶🐱🐰'),
+      h('div', { class: 'logo' }, offeredSpeciesIds().slice(0, 4).map((sid) => SPECIES[sid].emoji).join('')), // (les animaux proposés)
       h('h1', {}, t('title')),
       h('p', { class: 'tagline' }, t('tagline')),
       h('div', { class: 'lang' }, [['fr', '🇫🇷 Français'], ['en', '🇬🇧 English']].map(([l, label]) => h('button', {

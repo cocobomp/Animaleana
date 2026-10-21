@@ -16,7 +16,7 @@ import { PEN, FIELD, HOME } from './AnimalEntity.js';
 import { SPECIES } from '../sim/species.js';
 import {
   EVENTS, EVENT_TYPES, eventState, startEvent, maybeStartEvent, eventProgress, eventOutcome, resolveEvent,
-  eventWeather, nextStep, minutesLeft, shelterOf,
+  eventWeather, nextStep, minutesLeft, shelterOf, stormShelters,
 } from '../sim/events.js';
 import { STRUCTURES, footprintOf } from '../sim/construction.js';
 import { GEAR, freeStock, sizeFor, gearPrice } from '../sim/gear.js';
@@ -367,7 +367,16 @@ export class Events {
     if (ev.type === 'escape') p.shelter = t(`ev_shelter_${who.species === 'horse' ? 'paddock' : 'pen'}`);
     if (ev.type === 'neighbour') Object.assign(p, { name: ev.data.neighbour.name, g: ev.data.neighbour.sex, task: t(`ev_task_${ev.data.task}`) });
     if (ev.type === 'birth') Object.assign(p, { g: 'f', baby: t(`ev_baby_${who.species}`) });
+    if (ev.type === 'storm') p.where = this.stormWhere(); // (« les chevaux à l'écurie et les petits animaux à la maison »)
     return t(`ev_${ev.type}_intro`, p);
+  }
+
+  /** Les abris de l'orage, seulement pour les espèces de la partie (stormShelters, src/sim/events.js). */
+  stormWhere() {
+    const parts = stormShelters(this.game.profile).map((k) => t(`ev_storm_where_${k}`));
+    if (parts.length <= 1) return parts[0] ?? '';
+    const last = parts.pop();
+    return `${parts.join(', ')}${t('ev_storm_and')}${last}`;
   }
 
   /** Texte, position et action du bouton « Y aller » pour la prochaine étape. */

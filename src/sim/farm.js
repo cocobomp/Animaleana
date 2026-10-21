@@ -2,7 +2,7 @@
 // produits (laine, lait) et vie de groupe entre animaux.
 // Ce fichier ne dépend pas de la 3D, il est testé dans tests/farm.test.js.
 
-import { SPECIES } from './species.js';
+import { SPECIES, anyAvailable } from './species.js';
 import { applyCare, cure, lifeStage, NEEDS, CARE } from './animal.js';
 import { dayOf } from './time.js';
 import { isSandbox, spend, earn } from './profile.js';
@@ -53,9 +53,28 @@ export function equipmentAt(profile, placeId) {
   return profile.equipment.filter((e) => e.place === placeId);
 }
 
+/**
+ * L'équipement est-il proposé (liste 🚜 Ferme, catalogue de construction) ? Non s'il ne sert que des espèces
+ * pas encore proposées (OFFERED_SPECIES, src/sim/species.js) qu'on n'a pas : la litière des chats et lapins,
+ * la mangeoire et l'abreuvoir de la bergerie. Un équipement déjà installé reste visible.
+ */
+export function equipmentShown(profile, type) {
+  const def = EQUIPMENT[type];
+  if (!def) return false;
+  return anyAvailable(profile, def.serves) || (profile.equipment ?? []).some((e) => e.type === type);
+}
+
+/** L'aide est-elle proposée à l'embauche ? (le berger : seulement s'il y a un troupeau possible) */
+export function helperShown(profile, type) {
+  const def = HELPERS[type];
+  if (!def) return false;
+  return def.species == null || anyAvailable(profile, def.species) || (profile.helpers ?? []).some((h) => h.type === type);
+}
+
 export function buyEquipment(profile, type, placeId) {
   const def = EQUIPMENT[type];
   if (equipmentAt(profile, placeId).some((e) => e.type === type)) return { ok: false, reason: 'owned' };
+  if (!equipmentShown(profile, type)) return { ok: false, reason: 'soon' }; // espèce pas encore proposée
   if (!spend(profile, def.price)) return { ok: false, reason: 'money' };
   const eq = { id: uid(), type, place: placeId, stock: def.stock };
   profile.equipment.push(eq);
@@ -111,6 +130,7 @@ export function passiveEquipment(profile, animals, placeId, hours) {
 
 export function hireHelper(profile, type, placeId, rng = Math.random) {
   if (profile.helpers.some((h) => h.type === type && h.place === placeId)) return { ok: false, reason: 'owned' };
+  if (!helperShown(profile, type)) return { ok: false, reason: 'soon' }; // pas de berger sans troupeau possible
   const used = profile.helpers.map((h) => h.name);
   const name = pick(HELPER_NAMES.filter((n) => !used.includes(n)), rng) ?? pick(HELPER_NAMES, rng);
   const helper = { id: uid(), type, name, sex: FEMALE_NAMES.includes(name) ? 'f' : 'm', place: placeId };

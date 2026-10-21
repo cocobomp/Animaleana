@@ -9,7 +9,7 @@
 import { h, isPhone } from './dom.js';
 import { t, getLang } from '../i18n.js';
 import { nbsp } from './minigames/frame.js'; // typographie française (« Adopter » ! ne se coupe pas)
-import { OBJECTIVES } from '../sim/objectives.js';
+import { OBJECTIVES, objectiveParams, objectiveShown } from '../sim/objectives.js';
 import { earn } from '../sim/profile.js';
 import {
   tutorialStep, stepNumber, noteEvent, updateTutorial, skipTutorial, restartTutorial,
@@ -18,6 +18,8 @@ import {
 } from '../sim/tutorial.js';
 
 const GUIDE = '🐶';
+/** Nom d'une quête (« Adopte {n} espèces… » : le total suit les espèces proposées). */
+const questTitle = (p, id) => t(`o_${id}`, objectiveParams(p, OBJECTIVES.find((o) => o.id === id)));
 const isTouch = () => matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const isNarrow = isPhone;
 // Taille du suivi de quête : téléphone en portrait (comme le CSS @media (max-width: 640px)), téléphone en paysage,
@@ -531,7 +533,7 @@ export class Tutorial {
     }
     const view = followView(p, OBJECTIVES);
     // Sans quête suivie : la dernière choisie (arrêtée avec ✋ : 🧭 la reprend là où on en était), sinon la conseillée.
-    const recent = this.recent && !p.completed.includes(this.recent.id) ? OBJECTIVES.find((o) => o.id === this.recent.id) : null;
+    const recent = this.recent && !p.completed.includes(this.recent.id) ? OBJECTIVES.find((o) => o.id === this.recent.id && objectiveShown(p, o)) ?? null : null;
     const q = view ? OBJECTIVES.find((o) => o.id === view.id) : recent ?? suggestedQuest(p, OBJECTIVES);
     if (!q) {
       this.tracker.hidden = true;
@@ -579,7 +581,7 @@ export class Tutorial {
   trackerContent(q, view, { count, where, mode }) {
     const right = mode !== 'desk'; // téléphone : contre le bord droit ; ordinateur : contre le bord gauche
     const icon = view ? '🧭' : '🎯';
-    const title = t(`o_${q.id}`);
+    const title = questTitle(this.profile, q.id);
     const chev = (s, cls = 'qt-chev') => h('span', { class: cls, 'aria-hidden': 'true' }, s);
     if (this.folded) {
       // La flèche montre de quel côté la carte va s'ouvrir.
@@ -770,7 +772,7 @@ export class Tutorial {
     }
     this.trackerKey = '';
     const v = followView(p, OBJECTIVES);
-    this.ui.toast(`🧭 ${t(`o_${id}`)} — ${t(`quest_step_${v.current.id}`)}`, 5000);
+    if (v?.current) this.ui.toast(`🧭 ${questTitle(p, id)} — ${t(`quest_step_${v.current.id}`)}`, 5000); // (rien pour une quête cachée)
     this.tick();
   }
 
@@ -802,7 +804,7 @@ export class Tutorial {
     if (r?.questDone) {
       this.highlight = null;
       this.releaseMarker();
-      this.ui.toast(`🏆 ${t('quest_followDone', { name: t(`o_${r.id}`) })}`, 5000);
+      this.ui.toast(`🏆 ${t('quest_followDone', { name: questTitle(p, r.id) })}`, 5000);
       return;
     }
     if (r?.stepDone) {
@@ -834,7 +836,7 @@ export class Tutorial {
     this.ui.closePanel();
     this.questFocus = { id, spec: g.target, until: performance.now() + 45000 };
     this.markerKey = '';
-    this.ui.toast(`${t(`o_${id}`)} — ${t(g.first ? `quest_hint_first_${g.first}` : `quest_hint_${id}`)}`, 6000);
+    this.ui.toast(`${questTitle(p, id)} — ${t(g.first ? `quest_hint_first_${g.first}` : `quest_hint_${id}`)}`, 6000);
     this.tick();
   }
 

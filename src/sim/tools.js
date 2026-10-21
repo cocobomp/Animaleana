@@ -2,6 +2,7 @@
 // Le matériel de base est offert ; le reste s'achète et débloque de nouveaux soins.
 
 import { spend } from './profile.js';
+import { SPECIES, SPECIES_IDS, anyAvailable } from './species.js';
 
 export const TOOLS = {
   brush: { emoji: '🪮', price: 10, actions: ['brush'] },
@@ -42,8 +43,27 @@ export function missingTool(profile, actionOrTraining) {
   return tool && !hasTool(profile, tool) ? tool : null;
 }
 
+/** Les espèces qui ont besoin de cet outil (ses soins ou ses entraînements) ; [] = utile à tous (trousse…). */
+export function toolSpecies(tool) {
+  const def = TOOLS[tool];
+  if (!def) return [];
+  return SPECIES_IDS.filter((sid) => (def.actions ?? []).some((a) => SPECIES[sid].actions.includes(a))
+    || (def.training ?? []).some((tr) => SPECIES[sid].training.includes(tr)));
+}
+
+/**
+ * L'outil est-il en vente ? Non s'il ne sert qu'à des espèces pas encore proposées (OFFERED_SPECIES,
+ * src/sim/species.js) qu'on n'a pas : la tondeuse et le seau à traire sans moutons, chèvres ni vaches.
+ * Un outil qu'on a déjà reste dans la liste.
+ */
+export function toolShown(profile, tool) {
+  if (!TOOLS[tool]) return false;
+  return anyAvailable(profile, toolSpecies(tool)) || (profile.tools ?? STARTER_TOOLS).includes(tool);
+}
+
 export function buyTool(profile, tool) {
   if (hasTool(profile, tool)) return { ok: false, reason: 'owned' };
+  if (!toolShown(profile, tool)) return { ok: false, reason: 'soon' }; // espèce pas encore proposée
   if (!spend(profile, TOOLS[tool].price)) return { ok: false, reason: 'money' };
   const all = profile.tools ?? STARTER_TOOLS;
   if (!all.includes(tool)) profile.tools = [...all, tool];

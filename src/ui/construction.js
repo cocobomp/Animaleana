@@ -5,14 +5,16 @@
 
 import { h } from './dom.js';
 import { t, getLang, hourParams } from '../i18n.js';
-import { SPECIES } from '../sim/species.js';
+import { SPECIES, anyAvailable } from '../sim/species.js';
+import { availableEmojis } from './names.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import {
-  STRUCTURES, CATEGORIES, spaceSummary, canAssign, refundOf, accepts, hasResidents, moveFeeFor, capacityOf, sizeOf,
+  STRUCTURES, CATEGORIES, spaceSummary, canAssign, refundOf, accepts, hasResidents, moveFeeFor, capacityOf, sizeOf, structureShown,
+  SPACE_GROUPS,
 } from '../sim/construction.js';
 import { localSize, canResize } from '../sim/resize.js';
 import { buildingActions } from '../sim/buildings.js';
-import { EQUIPMENT } from '../sim/farm.js';
+import { EQUIPMENT, equipmentShown } from '../sim/farm.js';
 import { actionSheet } from './actions.js';
 import { thumb } from '../game/thumbScenes.js'; // vignettes 3D du catalogue
 import { openSalon } from './groomer.js'; // salon de toilettage (métier Toiletteur)
@@ -31,7 +33,8 @@ export const structureName = (type) => (STRUCTURES[type].cat === 'decor' ? t(`co
 
 const has = (key) => t(key) !== key;
 const why = (reason, params) => (has(`con_why_${reason}`) ? t(`con_why_${reason}`, hourParams(params)) : t(`why_${reason}`, hourParams(params)));
-const speciesEmojis = (type) => [...new Set((STRUCTURES[type].species ?? []).map((s) => SPECIES[s]?.emoji).filter(Boolean))].join(' ');
+/** Les emojis des habitants possibles (seulement les espèces proposées ou déjà à la ferme : src/sim/species.js). */
+const speciesEmojis = (type, profile) => availableEmojis(STRUCTURES[type].species ?? [], profile);
 
 // ---------------------------------------------------------------- barre d'outils
 
@@ -183,17 +186,19 @@ export function openCatalogue(ui, tab = null) {
       const out = [
         h('p', { class: 'note' }, t(only?.id === 'equipment' ? 'cv_equipmentHelp' : 'con_catalogueHelp')),
         h('div', { class: 'chips' }, [['horse', '🐴'], ['livestock', '🐑'], ['dog', '🐶'], ['rabbit', '🐰']]
+          .filter(([k]) => anyAvailable(p, SPACE_GROUPS[k])) // (pas de places « moutons » tant qu'ils ne sont pas proposés)
           .map(([k, e]) => h('span', { class: 'chip' }, `${e} ${t('con_spaceChip', { used: space[k].used, cap: space[k].cap })}`))),
       ];
       // Équipements de la ferme (mangeoires, abreuvoirs…) : on choisit où les poser.
-      const eqTypes = !only || only.id === 'equipment' ? Object.keys(EQUIPMENT).filter((type) => !g.equipment.some((q) => q.eq.type === type)) : [];
+      const eqTypes = !only || only.id === 'equipment'
+        ? Object.keys(EQUIPMENT).filter((type) => !g.equipment.some((q) => q.eq.type === type) && equipmentShown(p, type)) : [];
       if (only?.id === 'equipment' && !eqTypes.length) out.push(h('p', { class: 'note' }, t('cv_allEquipment')));
       if (eqTypes.length) {
         out.push(h('h3', {}, t('mgmt_cat_equipment')));
         out.push(h('div', { class: 'cards' }, eqTypes.map((type) => {
           const def = EQUIPMENT[type];
           const locked = !g.isUnlocked(type);
-          const who = def.serves.map((sid) => SPECIES[sid].emoji).join(' ');
+          const who = availableEmojis(def.serves, p);
           const side = locked
             ? h('span', { class: 'lock' }, `🔒 ${t('level', { n: g.unlockLevel(type) })}`)
             : h('button', {
@@ -212,14 +217,16 @@ export function openCatalogue(ui, tab = null) {
         })));
       }
       for (const cat of only ? only.cats : CATEGORIES) {
-        const types = Object.keys(STRUCTURES).filter((k) => STRUCTURES[k].cat === cat);
+        // (pas de clapier tant que les lapins ne sont pas proposés : structureShown, src/sim/construction.js)
+        const types = Object.keys(STRUCTURES).filter((k) => STRUCTURES[k].cat === cat && structureShown(p, k));
+        if (!types.length) continue;
         out.push(h('h3', {}, t(`con_cat_${cat}`)));
         out.push(h('div', { class: 'cards' }, types.map((type) => {
           const def = STRUCTURES[type];
           const check = g.structures.canBuild(type);
           const locked = check.reason === 'locked';
           const info = [
-            def.capacity ? `${speciesEmojis(type)} · ${t('con_cap', { n: def.capacity })}` : null,
+            def.capacity ? `${speciesEmojis(type, p)} · ${t('con_cap', { n: def.capacity })}` : null,
             t('con_size', { w: def.w, d: def.d }) + (canResize(type) ? ` · ${t('cv_growable')}` : ''),
           ].filter(Boolean).join(' · ');
           const side = locked
@@ -329,7 +336,7 @@ export function openResidents(ui, s) {
         h('p', { class: 'note' }, `${t('con_residentsHelp')} ${t('con_spaceChip', { used: res.length, cap: capacityOf(s) })}`),
         h('button', { class: 'small', onClick: () => openStructure(ui, s) }, `⬅️ ${t('con_back')}`),
       ];
-      if (!list.length) out.push(h('p', {}, t('con_noneFits', { who: speciesEmojis(s.type) })));
+      if (!list.length) out.push(h('p', {}, t('con_noneFits', { who: speciesEmojis(s.type, g.profile) })));
       out.push(h('div', { class: 'cards' }, list.map((a) => {
         const home = st.homeOf(a);
         const here = a.homeId === s.id;

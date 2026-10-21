@@ -64,7 +64,9 @@ export function setCowCoat(u, B, kind = 'cow') {
   // (le corps ne gonfle qu'un peu : ce sont les mèches en cartes, cowReal.js, qui font le poil long)
   u.cStyle.value.y = (B.hair ?? 0) * 0.32;
   u.cStyle.value.z = B.calf ? 1 : B.stage === 'young' ? 0.45 : 0;
-  u.cPie.value.set(B.pie ?? 0.5, B.lunettes ?? 0, B.brindle ?? 0, B.whiteLegs ?? 0);
+  // (taureau : taches calculées, plus claires en moyenne que celles de la photo — seuil abaissé, sinon la Prim'Holstein
+  // était presque toute blanche)
+  u.cPie.value.set((B.pie ?? 0.5) - (kind === 'bull' ? 0.15 : 0), B.lunettes ?? 0, B.brindle ?? 0, B.whiteLegs ?? 0);
   const l = (h) => 0.2126 * ((h >> 16) & 255) / 255 + 0.7152 * ((h >> 8) & 255) / 255 + 0.0722 * (h & 255) / 255;
   u.cMark.value.set(B.muzzleRing ?? 0, kind === 'bull' ? 0 : 1, (B.breed?.length ?? 3) * 1.7, B.pattern === 'solid' ? Math.min(1, Math.max(0, (l(c.base) - 0.3) / 0.4)) : 0);
 }

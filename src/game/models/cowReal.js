@@ -290,8 +290,79 @@ function shapePositions(base, P, J, B, ref) {
 }
 
 /** Géométries (partagées) d'un gabarit, ses articulations et ses mesures. */
+/**
+ * Cornes en lyre (vache des races à longues cornes : Highland, Retinta) : la corne courte du modèle, droite, est
+ * refaite le long d'une courbe — elle part sur le côté (un peu en avant), puis se relève, la pointe vers le haut — et
+ * allongée (hornReach). Chaque sommet garde sa place autour de l'axe de la corne (section tournée avec la courbe) ; la
+ * base reste celle du modèle (pas de déchirure au crâne). Positions et normales du gabarit, une fois par gabarit.
+ */
+function bendLongHorns(base, P, pos, nrm, heads, B) {
+  const n = P.count;
+  const q = new THREE.Quaternion();
+  for (const [s, nm] of [[0, 'hornL'], [1, 'hornR']]) {
+    const bi = base.index.get(nm);
+    if (bi === undefined) continue;
+    const o = heads[bi];
+    const sx = s === 0 ? 1 : -1;
+    const side = (i) => (pos[i * 3] > 0 ? 0 : 1) === s;
+    const ax = V();
+    for (let i = 0; i < n; i++) {
+      if (P.part[i * 4] > 0.3 && side(i) && P.aux[i * 4 + 2] > 0.85) ax.add(_v.set(pos[i * 3] - o.x, pos[i * 3 + 1] - o.y, pos[i * 3 + 2] - o.z));
+    }
+    if (ax.lengthSq() < 1e-10) continue;
+    ax.normalize();
+    let len = 0;
+    for (let i = 0; i < n; i++) {
+      if (P.part[i * 4] > 0.3 && side(i)) len = Math.max(len, (pos[i * 3] - o.x) * ax.x + (pos[i * 3 + 1] - o.y) * ax.y + (pos[i * 3 + 2] - o.z) * ax.z);
+    }
+    if (len < 0.01) continue;
+    // (courbe de la corne : tangente qui passe de l'axe du modèle au côté, puis se relève)
+    const T0 = V(sx, 0.12, 0.32).normalize();
+    const T1 = V(sx * 0.15, 1, 0.3).normalize();
+    const N = 40;
+    const L = len * (B.hornReach ?? 2.6);
+    const tan = (u) => (u < 0.15 ? ax.clone().lerp(T0, smoothK(0, 0.15, u)) : T0.clone().lerp(T1, smoothK(0.3, 1, u))).normalize();
+    const T = [];
+    const C = [V()];
+    for (let k = 0; k <= N; k++) {
+      T.push(tan(k / N));
+      if (k) C.push(C[k - 1].clone().addScaledVector(T[k - 1], L / N));
+    }
+    for (let i = 0; i < n; i++) {
+      const w = clamp((P.part[i * 4] - 0.1) / 0.3, 0, 1);
+      if (!(w > 0) || !side(i)) continue;
+      const rel = _v.set(pos[i * 3] - o.x, pos[i * 3 + 1] - o.y, pos[i * 3 + 2] - o.z);
+      const a = rel.dot(ax);
+      const r = rel.addScaledVector(ax, -a);
+      const u = clamp(a / len, 0, 1);
+      const k = Math.min(N - 1, Math.floor(u * N));
+      const f = u * N - k;
+      const c = _w.lerpVectors(C[k], C[k + 1], f);
+      const t = _t.lerpVectors(T[k], T[k + 1], f).normalize();
+      q.setFromUnitVectors(ax, t);
+      // (base un peu plus forte, pointe fine)
+      const thick = 1 + 0.18 * smoothK(0, 0.2, u) * (1 - u) - 0.25 * smoothK(0.6, 1, u);
+      c.add(r.applyQuaternion(q).multiplyScalar(thick)).add(o);
+      pos[i * 3] += (c.x - pos[i * 3]) * w;
+      pos[i * 3 + 1] += (c.y - pos[i * 3 + 1]) * w;
+      pos[i * 3 + 2] += (c.z - pos[i * 3 + 2]) * w;
+      const nv = _t.set(nrm[i * 3], nrm[i * 3 + 1], nrm[i * 3 + 2]).applyQuaternion(q.slerp(_q0, 1 - w));
+      nrm[i * 3] = nv.x;
+      nrm[i * 3 + 1] = nv.y;
+      nrm[i * 3 + 2] = nv.z;
+    }
+  }
+}
+const _t = V();
+const _q0 = new THREE.Quaternion();
+const smoothK = (a, b, x) => {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
 function shapeFor(base, B) {
-  const key = `${B.legs.toFixed(3)}|${(B.girth ?? 1).toFixed(3)}|${(B.depth ?? 1).toFixed(3)}`;
+  const lyre = base.kind === 'cow' && B.hornLong > 0 && B.hornSize > 1e-3;
+  const key = `${B.legs.toFixed(3)}|${(B.girth ?? 1).toFixed(3)}|${(B.depth ?? 1).toFixed(3)}${lyre ? `|lyre${(B.hornReach ?? 2.6).toFixed(2)}` : ''}`;
   let S = base.shapes.get(key);
   if (S) return S;
   const P = base.prim;
@@ -304,9 +375,15 @@ function shapeFor(base, B) {
     base.ref = { topY: top };
   }
   const pos = shapePositions(base, P, J, B, base.ref);
+  // (cornes en lyre : positions et normales propres à ce gabarit)
+  let nrm = P.nrm;
+  if (lyre) {
+    nrm = Float32Array.from(P.nrm);
+    bendLongHorns(base, P, pos, nrm, J.heads, B);
+  }
   const attrs = {
     position: new THREE.BufferAttribute(pos, 3),
-    normal: new THREE.BufferAttribute(P.nrm, 3),
+    normal: new THREE.BufferAttribute(nrm, 3),
     uv: new THREE.BufferAttribute(P.uv, 2),
     skinIndex: new THREE.BufferAttribute(P.si, 4),
     skinWeight: new THREE.BufferAttribute(P.sw, 4),
@@ -536,12 +613,11 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
   for (const [h, sgn] of [[bone('hornL'), 1], [bone('hornR'), -1]]) {
     if (!h) continue;
     const s = Math.max(1e-4, B.hornSize);
-    if (base.kind === 'cow' && B.hornLong && s > 1e-3) {
-      // (cornes en lyre sur la vache : la corne allongée le long de son os, la base un peu plus forte, relevée)
-      h.scale.set(s * 1.15, s * 2.3, s * 1.15);
-    } else h.scale.setScalar(s);
-    // (relevées vers le haut — lyre — ou portées vers l'avant — Hérens, la lutteuse : axes de la vache)
-    if (B.hornLift) h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AZ.clone().applyQuaternion(pinv(h)), sgn * B.hornLift));
+    // (cornes en lyre de la vache : refaites dans le gabarit, bendLongHorns ; ici leur taille seulement)
+    h.scale.setScalar(s);
+    const lyre = base.kind === 'cow' && B.hornLong > 0;
+    // (relevées vers le haut ou portées vers l'avant — Hérens, la lutteuse : axes de la vache)
+    if (B.hornLift && !lyre) h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AZ.clone().applyQuaternion(pinv(h)), sgn * B.hornLift));
     if (B.hornFwd) h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AX.clone().applyQuaternion(pinv(h)), B.hornFwd));
   }
   const udderB = bone('udder');

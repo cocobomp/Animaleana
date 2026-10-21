@@ -22,12 +22,12 @@ import { lifeStage } from './animal.js';
  * 'hereford' (rouge, tête, poitrail, ventre, bas des pattes et toupillon blancs) ; lunettes (tour des yeux foncé),
  * brindle (bringé dans les taches), whiteLegs (bas des pattes et toupillon blancs), muzzleRing (mufle clair autour d'un
  * nez sombre) ; hair : poil long (m) ; fringe : frange sur les yeux (m) ; horns : 'cow' (courtes), 'long' (en lyre),
- * 'none' (sans) ; hornK : taille des cornes, hornLift : cornes relevées (lyre, rad), hornFwd : cornes portées en avant
- * (lutteuse) ; udder : mamelle (1 vache laitière) ; nose, hoof, horn, hornTip : couleurs.
+ * 'none' (sans) ; hornK : taille des cornes, hornLift : cornes courtes relevées (rad), hornFwd : cornes portées en avant
+ * (lutteuse), hornReach : longueur des cornes en lyre (× la corne du modèle, refaite en courbe : cowReal.js) ; udder : mamelle (1 vache laitière) ; nose, hoof, horn, hornTip : couleurs.
  */
 const ONE = {
   size: 1, legs: 1, girth: 1, depth: 1, head: 1, ears: 1, earUp: 0, pattern: 'solid', pie: 0.5, lunettes: 0, brindle: 0, whiteLegs: 0,
-  muzzleRing: 0, hair: 0, fringe: 0, horns: 'cow', hornK: 1, hornLift: 0, hornFwd: 0, udder: 1,
+  muzzleRing: 0, hair: 0, fringe: 0, horns: 'cow', hornK: 1, hornLift: 0, hornFwd: 0, hornReach: 2.6, udder: 1,
   nose: 0x3a3236, hoof: 0x2c2522, horn: 0xd8cbb0, hornTip: 0x3a3028,
 };
 export const COW_BUILDS = {
@@ -39,7 +39,7 @@ export const COW_BUILDS = {
   charolaise: { pattern: 'solid', horns: 'none', legs: 0.95, girth: 1.18, depth: 1.06, head: 1.04, nose: 0xd2a89a, hoof: 0x9c8a74, udder: 0.6 },
   // (petite, poil long roux, frange sur les yeux, très longues cornes en lyre)
   highland: {
-    pattern: 'solid', legs: 0.82, girth: 1.1, depth: 1.04, head: 1.05, ears: 1.05, hair: 0.17, fringe: 0.2, horns: 'long', hornK: 1.0, hornLift: 0.55,
+    pattern: 'solid', legs: 0.82, girth: 1.1, depth: 1.04, head: 1.05, ears: 1.05, hair: 0.17, fringe: 0.2, horns: 'long', hornK: 1.0, hornReach: 3.0,
     nose: 0x3c2e2a, hoof: 0x2a2320, horn: 0xe6dcc6, hornTip: 0x2e2620, udder: 0.5,
   },
   // (toute petite, pie noire — plus de noir que de blanc)
@@ -55,7 +55,7 @@ export const COW_BUILDS = {
   // (noire unie, sans cornes)
   angus: { pattern: 'solid', horns: 'none', legs: 0.94, girth: 1.12, depth: 1.03, nose: 0x2a2426, hoof: 0x231e1c, udder: 0.6 },
   // (rouge, cornes longues en lyre)
-  retinta: { pattern: 'solid', legs: 1.02, girth: 0.98, horns: 'long', hornK: 0.8, hornLift: 0.35, nose: 0x5a3c34, hoof: 0x3a2e28, udder: 0.6 },
+  retinta: { pattern: 'solid', legs: 1.02, girth: 0.98, horns: 'long', hornK: 0.85, hornReach: 2.2, nose: 0x5a3c34, hoof: 0x3a2e28, udder: 0.6 },
 };
 
 /** Veau (stade « bébé ») : tête plus grosse, longues pattes pour sa taille, corps plus fin, oreilles plus grandes. */

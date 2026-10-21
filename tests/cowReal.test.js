@@ -263,6 +263,34 @@ describe('races, cornes, poil long, veaux et taureaux', () => {
     }
   });
 
+  // (les cornes « longues » de la vache, droites et dressées comme des pointes, sont refaites en lyre : sur le côté,
+  // puis relevées, la pointe vers le haut)
+  it('cornes en lyre (Highland, Retinta) : larges sur le côté, pointes relevées ; courtes ailleurs', () => {
+    const tips = (md) => {
+      const P = md.anim.base.prim;
+      const pos = md.mesh.geometry.attributes.position;
+      let span = 0;
+      let tip = null;
+      for (let i = 0; i < pos.count; i++) {
+        if (P.part[i * 4] < 0.5 || pos.getX(i) <= 0) continue;
+        if (pos.getX(i) > span) span = pos.getX(i);
+        if (P.aux[i * 4 + 2] > 0.97 && (!tip || pos.getY(i) > tip.y)) tip = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
+      }
+      return { span, tip };
+    };
+    const n = cow('normande');
+    const h = cow('highland');
+    const r = cow('retinta');
+    const [tn, th, tr] = [tips(n), tips(h), tips(r)];
+    expect(th.span).toBeGreaterThan(tn.span + 0.18);
+    expect(tr.span).toBeGreaterThan(tn.span + 0.08);
+    // (pointe plus haute que la base de la corne, à l'aplomb du côté : relevée en lyre)
+    const base = h.anim.base.heads[h.anim.base.index.get('hornL')];
+    expect(th.tip.y).toBeGreaterThan(base.y + 0.1);
+    expect(th.tip.x).toBeGreaterThan(base.x + 0.15);
+    for (const md of [n, h, r]) md.dispose();
+  });
+
   it('apparence d\'une vache du jeu : stade, sexe, race (jamais « mix ») ; gabarit 3D par stade', () => {
     const a = createAnimal({ species: 'cow', breed: 'hereford', ageDays: 2, seed: 5, sex: 'm', rng: fixed });
     const lk = cowLookOf(a);

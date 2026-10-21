@@ -5,13 +5,13 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import fs from 'node:fs';
 import * as THREE from 'three';
-import { buildRealCatModel, realCatReady, REAL_CAT_KEYS, pickCatGait, catPosturePath, realCatPose, POSTURE_CLIP } from '../src/game/models/catReal.js';
+import { buildRealCatModel, realCatReady, REAL_CAT_KEYS, pickCatGait, catPosturePath, realCatPose, POSTURE_CLIP, realCatBase } from '../src/game/models/catReal.js';
 import { catCoatPlan } from '../src/game/models/catCoat.js';
 import { buildGear, removeGear } from '../src/game/gearModels.js';
 import { buildAccessories } from '../src/game/models/salon.js';
 import { catBuild, catLookWithBreed, CAT_BUILDS } from '../src/sim/catLook.js';
 import { SPECIES } from '../src/sim/species.js';
-import { resolveLook } from '../src/sim/animal.js';
+import { resolveLook, stageLook } from '../src/sim/animal.js';
 import { MODELS } from '../src/game/assets.js';
 import { MODEL_CREDITS } from '../src/ui/credits.js';
 import { loadRealCatGltf, CAT_FILES, glbJson } from './fixtures/realCatGltf.js';
@@ -454,5 +454,130 @@ describe('crédits CC-BY', () => {
       expect(txt).toContain('creativecommons.org/licenses/by/4.0');
       expect(txt).toContain('Modifications');
     }
+  });
+});
+
+describe('corrections de la contre-vérification (beauté et jeu)', () => {
+  /** Position d'un os dans le repère du chat (sans sa taille ni sa place dans le monde). */
+  const local = (md, name) => {
+    md.root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+    return md.bone(name).getWorldPosition(new THREE.Vector3()).applyMatrix4(inv);
+  };
+
+  it('stade de l\'animal dans son apparence : chaton, jeune ; lapereau ; poulain, chiot', () => {
+    const cat0 = { species: 'cat', ageDays: 0, lifespanYears: 15, look: { coat: 'x' } };
+    expect(stageLook(cat0).kitten).toBe(true);
+    const adult = stageLook({ ...cat0, ageDays: 80 * 30 });
+    expect(adult.kitten).toBeUndefined();
+    expect(adult.young).toBeUndefined();
+    expect(stageLook({ species: 'rabbit', ageDays: 0, lifespanYears: 9, look: {} }).kit).toBe(true);
+    expect(stageLook({ species: 'horse', ageDays: 0, lifespanYears: 30, look: {} }).foal).toBe(true);
+    expect(stageLook({ species: 'dog', ageDays: 0, lifespanYears: 13, look: {} }).puppy).toBe(true);
+    // (l'apparence d'origine n'est pas modifiée)
+    expect(cat0.look.kitten).toBeUndefined();
+  });
+
+  it('mixeur forcé de tout réécrire après les mesures : un os resté dans une autre pose revient à celle du clip', () => {
+    const a = cat('bengal');
+    const b = cat('bengal');
+    for (const md of [a, b]) md.staticPose('stand');
+    // (os laissé basculé comme après la mesure de la toilette)
+    a.bone('pelvis').rotateX(0.4);
+    a.anim.resync();
+    // le mixeur n'écrit un os que si sa valeur change : ses valeurs gardées sont effacées, il réécrit tout
+    const binds = a.anim.mixer._bindings ?? [];
+    expect(binds.length).toBeGreaterThan(10);
+    for (const pm of binds) expect(Number.isNaN(pm.buffer[pm.valueSize])).toBe(true);
+    for (const md of [a, b]) for (let f = 0; f < 30; f++) md.anim.update(1 / 30, { v: 0, moving: false, posture: 'stand' });
+    for (const n of ['pelvis', 'spine2', 'humerusL', 'femurR']) {
+      expect(a.bone(n).quaternion.angleTo(b.bone(n).quaternion), n).toBeLessThan(1e-3);
+    }
+    for (const md of [a, b]) md.dispose();
+  });
+
+  it('oreilles du chaton liées à leurs os (dos du pavillon et bord repris) ; celles de Claire inchangées', () => {
+    const kb = realCatBase(G.kitten, 'kitten');
+    const ab = realCatBase(G.adult, 'adult');
+    expect(kb.earFixed).toBeGreaterThan(300);
+    expect(ab.earFixed).toBe(0);
+    expect(ab.earRaw).toBeNull();
+    // plus aucun sommet de la tête seule dans un triangle de l'oreille au-delà de la moitié de sa longueur
+    const coat = kb.prims.coat;
+    const v = new THREE.Vector3();
+    for (let s = 0; s < 2; s++) {
+      const bp = kb.heads[kb.index.get(s ? 'ear1R' : 'ear1L')];
+      const ax = kb.earTip[s].clone().sub(bp);
+      const elen = ax.length();
+      ax.normalize();
+      let bad = 0;
+      for (let t = 0; t < coat.index.length; t += 3) {
+        const tri = [coat.index[t], coat.index[t + 1], coat.index[t + 2]];
+        const e = tri.map((i) => kb.W.ear[i * 2 + s]);
+        if (Math.max(...e) < 0.9) continue;
+        for (const i of tri) if (kb.W.ear[i * 2 + s] < 0.02 && v.fromArray(coat.pos, i * 3).sub(bp).dot(ax) / elen > 0.5) bad++;
+      }
+      expect(bad, `oreille ${s}`).toBe(0);
+    }
+  });
+
+  it('moustaches : fines lignes claires liées à l\'os de la tête, cachées au loin ; rares et courtes chez le sphynx', () => {
+    const count = (md) => {
+      let w = null;
+      md.bone('head').traverse((o) => { if (o.userData?.whiskers) w = o; });
+      return w;
+    };
+    const eu = cat('europeen');
+    const sp = cat('sphynx');
+    const we = count(eu);
+    const ws = count(sp);
+    expect(we).toBeTruthy();
+    expect(we.isLineSegments).toBe(true);
+    expect(we.geometry.attributes.position.count).toBeGreaterThan(ws.geometry.attributes.position.count);
+    eu.setLod(1, true);
+    expect(we.visible).toBe(false);
+    eu.setLod(0, true);
+    expect(we.visible).toBe(true);
+    eu.dispose();
+    sp.dispose();
+  });
+
+  it('british et chartreux différents : british rond et trapu (tête large, museau court), chartreux plus long ; robes et yeux', () => {
+    const br = catBuild(lookOf('british'), 'adult');
+    const ch = catBuild(lookOf('chartreux'), 'adult');
+    expect(br.headW / ch.headW).toBeGreaterThan(1.15);
+    expect(ch.snout / br.snout).toBeGreaterThan(1.5);
+    expect(ch.legs / br.legs).toBeGreaterThan(1.1);
+    expect(br.earSize).toBeLessThan(ch.earSize - 0.2);
+    const pb = catCoatPlan(lookOf('british'), breedOf('british'), false);
+    const pc = catCoatPlan(lookOf('chartreux'), breedOf('chartreux'), false);
+    expect(pb.base === pc.base && pb.eye === pc.eye).toBe(false);
+  });
+
+  it('collier du chaton sur l\'encolure, derrière la tête (plus un cerceau autour du crâne)', () => {
+    const md = cat('europeen', 'baby');
+    md.staticPose('stand');
+    const g = buildGear(md, lookOf('europeen'), { neck: { item: 'collar', color: 'red' } });
+    const ring = md.dogFit.collar;
+    const torus = ring.bone.children.find((o) => !o.isBone && o.children?.length).children[0];
+    md.root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+    const c = torus.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv);
+    expect(c.z).toBeLessThan(local(md, 'head').z);
+    removeGear(g);
+    md.dispose();
+  });
+
+  it('chaton couché « en pain » (coudes bas, pattes repliées) et en boule tête baissée', () => {
+    const md = cat('europeen', 'baby');
+    md.staticPose('lie');
+    const lieHead = local(md, 'head').y;
+    // (couché comme une otarie : coude à 9 cm, pattes tendues devant)
+    expect(local(md, 'radiusL').y).toBeLessThan(0.075);
+    expect(local(md, 'metacarpusL').z).toBeLessThan(local(md, 'toesL').z + 0.05);
+    md.staticPose('curl');
+    // (il dormait assis, tête dressée : plus haute en boule que couché)
+    expect(local(md, 'head').y).toBeLessThan(lieHead - 0.015);
+    md.dispose();
   });
 });

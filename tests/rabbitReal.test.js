@@ -507,3 +507,54 @@ describe('crédits CC-BY', () => {
     expect(realRabbitBase(G.up, 'up')).toBe(realRabbitBase(G.up, 'up'));
   });
 });
+
+describe('corrections de la contre-vérification (beauté)', () => {
+  it('moustaches : longues vibrisses claires liées à l\'os de la tête, plus courtes chez le lapereau, cachées au loin', () => {
+    const span = (md) => {
+      let w = null;
+      md.head.traverse((o) => { if (o.userData?.whiskers) w = o; });
+      expect(w).toBeTruthy();
+      // (longueur d'une vibrisse — 4 segments —, rapportée à la taille de la tête de la race)
+      const p = w.geometry.attributes.position;
+      let len = 0;
+      for (let k = 0; k < 8; k += 2) len += new THREE.Vector3().fromBufferAttribute(p, k).distanceTo(new THREE.Vector3().fromBufferAttribute(p, k + 1));
+      return { w, x: len / md.build.head };
+    };
+    const ad = rabbit('rex');
+    const kit = rabbit('rex', 'baby');
+    const lop = rabbit('belier');
+    const a = span(ad);
+    expect(a.w.isLineSegments).toBe(true);
+    expect(span(kit).x).toBeLessThan(a.x);
+    expect(span(lop).w).toBeTruthy();
+    ad.setLod(1, true);
+    expect(a.w.visible).toBe(false);
+    ad.setLod(0, true);
+    expect(a.w.visible).toBe(true);
+    for (const md of [ad, kit, lop]) md.dispose();
+  });
+
+  it('poil long : mèches resserrées au bout (pas en éventail), plus fines près du sol', () => {
+    const md = rabbit('angora');
+    const p = md.cardMesh.geometry.attributes.position;
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const w = (i) => a.fromBufferAttribute(p, i).distanceTo(b.fromBufferAttribute(p, i + 1));
+    let low = [0, 0];
+    let high = [0, 0];
+    let ys = [];
+    for (let i = 0; i < p.count; i += 6) ys.push(p.getY(i));
+    ys = ys.sort((x, y) => x - y);
+    const yLow = ys[Math.floor(ys.length * 0.2)];
+    const yHigh = ys[Math.floor(ys.length * 0.8)];
+    for (let i = 0; i < p.count; i += 6) {
+      // (6 sommets par mèche : racine, milieu, bout — deux à deux)
+      expect(w(i + 4), `mèche ${i / 6}`).toBeLessThan(w(i + 2));
+      const y = p.getY(i);
+      if (y <= yLow) low = [low[0] + w(i + 2), low[1] + 1];
+      if (y >= yHigh) high = [high[0] + w(i + 2), high[1] + 1];
+    }
+    expect(low[0] / low[1]).toBeLessThan(0.85 * (high[0] / high[1]));
+    md.dispose();
+  });
+});

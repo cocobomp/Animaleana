@@ -1370,11 +1370,12 @@ function maneCards(S, B, body, pos, coat) {
   // bombée au milieu, resserrée en pointe vers le bas, plus longue au milieu (une mèche, pas un rabat coupé droit).
   // Places et longueurs tirées d'une suite à part (la répartition des cartes ne change pas).
   const lrng = mulberry(4127);
-  const nLeft = style === 'short' ? 0 : style === 'long' || style === 'thick' ? 6 : 4;
+  const nLeft = style === 'short' ? 0 : style === 'long' || style === 'thick' ? 7 : 5;
   const lefts = [];
   for (let k = 0; k < nLeft; k++) {
-    // (demi-largeur 5 à 8 cm le long de la crête ; longueur sous le bord du rouleau : 25 à 50 % de la crinière)
-    lefts.push({ t: 0.14 + ((k + 0.15 + 0.7 * lrng()) / nLeft) * 0.68, w: (0.05 + 0.03 * lrng()) / crestSpan, L: (0.25 + 0.25 * lrng()) * len0 });
+    // (demi-largeur 3,5 à 6 cm le long de la crête ; longueur sous le bord du rouleau : 30 à 52 % de la crinière —
+    // plus larges et plus courtes, elles se lisaient en langues sombres collées sous le rouleau)
+    lefts.push({ t: 0.14 + ((k + 0.15 + 0.7 * lrng()) / nLeft) * 0.68, w: (0.035 + 0.025 * lrng()) / crestSpan, L: (0.3 + 0.22 * lrng()) * len0 });
   }
   // (part d'une mèche de gauche à la place t : les cartes courtes de gauche n'y vont pas, la mèche a les siennes)
   const leftLock = (t) => {
@@ -1383,7 +1384,7 @@ function maneCards(S, B, body, pos, coat) {
     return e;
   };
   const LR = 5;
-  const LP = 8;
+  const LP = 10;
   const lockT = 0.016 * Math.sqrt(S.D.scale.gx ?? 1);
   // Chemin d'une mèche qui passe à gauche, à la place t : sur le flanc gauche du rouleau (les points de la nappe, de la
   // crête à son bord gauche, entre deux stations), à la part keep de son épaisseur (1 : dessus, à h ; moins : dedans),
@@ -1405,7 +1406,8 @@ function maneCards(S, B, body, pos, coat) {
     }
     const edge = roll[NL - 1];
     const dir = edge.clone().sub(roll[NL - 2]).normalize();
-    const hang = drape(body, edge, dir, L, { h: 0.004, bend: 0.04, np: 6, steps: Math.max(8, Math.round(L / 0.012)), stick: 0.02 });
+    // (peignée à demi vers le garrot, comme la nappe de droite : la mèche tombe en biais, pas à plomb)
+    const hang = drape(body, edge, dir, L, { h: 0.004, bend: 0.04, np: 6, steps: Math.max(8, Math.round(L / 0.012)), stick: 0.02, grav: gravAt(frameAt(t).dir) });
     let rl = 0;
     for (let k = 1; k < NL; k++) rl += roll[k].distanceTo(roll[k - 1]);
     return { pts: [...roll, ...hang.slice(1)], f0: rl / (rl + L) };
@@ -1428,6 +1430,17 @@ function maneCards(S, B, body, pos, coat) {
         p.lerp(mid.pts[k], 0.88 * smooth(mid.f0, 1, f));
       });
     }
+    // (lissée le long des crins : au bord du rouleau, le chemin tournait d'un coup et la mèche se pliait en arête — de
+    // près, un papier froissé)
+    for (const row of lr) {
+      for (let pass = 0; pass < 2; pass++) {
+        const q = row.pts.map((p) => p.clone());
+        for (let k = 1; k < LP - 1; k++) {
+          if (k / (LP - 1) < mid.f0 - 0.12) continue;
+          row.pts[k].copy(q[k - 1]).add(q[k + 1]).multiplyScalar(0.25).addScaledVector(q[k], 0.5);
+        }
+      }
+    }
     // (sous le bord du rouleau, bombée au milieu ; jamais dans la peau)
     for (const row of lr) {
       row.pts.forEach((p, k) => {
@@ -1446,7 +1459,8 @@ function maneCards(S, B, body, pos, coat) {
       m, rows: lr, root,
       mass: {
         // (texture prise dès le bord en pointes : la mèche commence sur le rouleau en crins épars, pas en bord droit)
-        P: lr.map((row) => row.pts), kind: 0, strip: LR - 1, u0: 0,
+        // (normales à moitié celles du corps : une mèche souple, sans arêtes d'ombre)
+        P: lr.map((row) => row.pts), kind: 0, strip: LR - 1, u0: 0, soft: 0.5,
         out: (j, k) => body.grad(lr[j].pts[k], V()),
         root: lr.map(() => root),
         G: (j, k) => k / (LP - 1),
@@ -1462,11 +1476,11 @@ function maneCards(S, B, body, pos, coat) {
   // rectangulaires vues de gauche ; vers la nuque, la pesanteur « peignée » d'une crête qui remonte les dressait
   // au-dessus des oreilles ; parties de dedans, elles traversaient la masse en lames plates, bien visibles sur une
   // crinière claire.)
-  const cap = (pts) => {
+  const cap = (pts, side = null, half = null) => {
     for (let k = 1; k < pts.length; k++) {
       const p = pts[k];
       const F = frameNear(p);
-      const hgt = -below(p, F);
+      const hgt = -below(p, F) + (side ? Math.abs(side.dot(F.up)) * half(k / (pts.length - 1)) : 0);
       const top = 0.65 * T0 * env(F.t) + 0.002;
       if (hgt > top) p.addScaledVector(F.up, top - hgt);
     }
@@ -1518,12 +1532,16 @@ function maneCards(S, B, body, pos, coat) {
         p.addScaledVector(ez, 0.012 * w * Math.sin(f * 7 + ph * 1.3));
       });
     }
-    cap(pts);
     const m = Math.floor(pts.length / 2);
     const side = cardSide(normals[m], alongAt(pts, m), (rng() - 0.5) * 0.3);
+    // (étroites, posées sur la masse : des pointes de mèches, pas des lames ; celles de gauche plus encore)
+    const w0 = (primary ? 0.07 + rng() * 0.018 : 0.052 + rng() * 0.014) * (sx > 0 ? 0.5 : 0.65);
+    const w1 = (primary ? 0.046 : 0.034) * (sx > 0 ? 0.4 : 0.65);
+    // (bords compris : une carte peignée en arrière est de biais sur la crête, son bord haut dépassait du rouleau en
+    // aileron — vue de gauche, une rangée de dents sur la crinière)
+    cap(pts, side, (f) => ((w0 + (w1 - w0) * f) / 2) * (0.3 + 0.7 * smooth(0, 0.3, f)));
     const card = {
-      // (étroites, posées sur la masse : des pointes de mèches, pas des lames ; celles de gauche plus encore)
-      pts, normals, side, w0: (primary ? 0.07 + rng() * 0.018 : 0.052 + rng() * 0.014) * (sx > 0 ? 0.5 : 0.65), w1: (primary ? 0.046 : 0.034) * (sx > 0 ? 0.4 : 0.65),
+      pts, normals, side, w0, w1,
       // (racine sur la peau de la crête : tressée, la mèche s'y replie, sous le bouton ; partie du flanc du rouleau,
       // la carte en sort en pointe)
       root, rootTaper: 0.3,
@@ -1838,14 +1856,17 @@ function tailCards(S, B, body, pos, coat, base) {
   const wavePh = rng() * 6.28;
   const lobe = (phi, s) => {
     const f = fOf(s);
-    const tw = 0.5 * f + 0.2 * Math.sin(5.5 * f + wavePh) * smooth(0.05, 0.4, f);
+    // (les lobes se balancent de côté en descendant, d'un tiers d'écart entre deux lobes : de profil comme de dos, le
+    // bord de la queue ondule en mèches, pas une ligne droite)
+    const tw = 0.5 * f + 0.34 * Math.sin(6.2 * f + wavePh) * smooth(0.05, 0.35, f);
     // (sur le tronçon aussi, un peu : pas un tube lisse)
     const a = 0.035 + (0.035 + 0.22 * smooth(0.2, 0.85, f)) * smooth(0, 0.15, f);
     return 1 + a * Math.cos(5 * (phi - tw) + lobePh) + 0.05 * smooth(0, 0.2, f) * Math.sin(3 * phi - 1.3 * f + 1.7);
   };
   const gq = V();
-  const surface = (s, phi, off = 0) => {
-    const F = axisAt(s);
+  // (sAx : distance le long de l'axe, si elle diffère de celle qui donne la forme — colonne plus courte que la queue)
+  const surface = (s, phi, off = 0, sAx = s) => {
+    const F = axisAt(sAx);
     const [rx, rz] = radii(Math.min(s, total));
     const l = lobe(phi, s);
     // (la queue entière ondule un peu, de côté et d'avant en arrière : pas un fil à plomb)
@@ -1862,13 +1883,18 @@ function tailCards(S, B, body, pos, coat, base) {
     return { p, F };
   };
   // Masse : NR anneaux du haut du tronçon jusqu'à Lm, TAIL_AROUND points autour (quatre bandes de la texture).
+  // Sous le tronçon, chaque colonne a sa longueur (82 à 100 % : plus longue derrière, inégale d'une mèche à l'autre) :
+  // le bas de la queue finit en pointes de longueurs différentes, pas coupé droit à sa hauteur limite.
   const NA = TAIL_AROUND;
   const P = [];
   const sOf = (k) => (Lm * k) / (NR - 1);
+  const colPh = rng() * 6.28;
+  const colLen = (phi) => 0.91 + 0.05 * Math.cos(phi) + 0.025 * Math.sin(3 * phi + colPh) + 0.02 * Math.cos(5 * phi);
+  const sCol = (s, phi) => (s <= dockLen ? s : dockLen + (s - dockLen) * colLen(phi));
   for (let j = 0; j < NA; j++) {
     const phi = (j / NA) * Math.PI * 2;
     const row = [];
-    for (let k = 0; k < NR; k++) row.push(surface(sOf(k), phi).p);
+    for (let k = 0; k < NR; k++) row.push(surface(sOf(k), phi, 0, sCol(sOf(k), phi)).p);
     P.push(row);
   }
   // Poids : sur le tronçon, la peau du tronçon (sans les hanches) ; dessous, de plus en plus Tail2.
@@ -1887,7 +1913,7 @@ function tailCards(S, B, body, pos, coat, base) {
   const mass = {
     P, kind: 2, strip: TAIL_AROUND / 4, closed: true, u0: HAIR_MASS.root,
     out: (j, k) => {
-      const F = axisAt(sOf(k));
+      const F = axisAt(sCol(sOf(k), (j / NA) * Math.PI * 2));
       return P[j][k].clone().sub(F.p);
     },
     root: P.map(() => top),
@@ -1913,7 +1939,10 @@ function tailCards(S, B, body, pos, coat, base) {
       const k = i / 4;
       const sv = ((k * 0.618034 + 0.31) % 1) * 2 - 1;
       clump = {
-        phi: Math.sign(sv) * Math.abs(sv) ** 1.15 * Math.PI * 0.92, ph: crng() * 6.28, amp: 0.08 + crng() * 0.1,
+        // (chaque groupe ondule en S autour de la queue — 2 à 3 cm de côté, une période et demie sur sa longueur — et
+        // s'écarte puis se rapproche de la masse : des mèches ondulées, pas des fils tendus ; le reflet, qui suit la
+        // direction des crins, se casse en bandes au lieu d'allumer d'un bloc une carte droite)
+        phi: Math.sign(sv) * Math.abs(sv) ** 1.15 * Math.PI * 0.92, ph: crng() * 6.28, amp: 0.2 + crng() * 0.14, fr: 6.5 + crng() * 2.5,
         lift: 0.006 + crng() * 0.016, len: 0.88 + crng() * 0.22, u: (k + 0.5) / Math.ceil(n / 4),
       };
     }
@@ -1923,7 +1952,7 @@ function tailCards(S, B, body, pos, coat, base) {
     const s0 = u * dockLen;
     // (longueurs inégales, par mèche et par groupe : la queue finit en pointe irrégulière, pas coupée net)
     const Ls = (Lt + dockLen * (1 - u)) * (0.8 + 0.2 * cw) * (0.86 + 0.26 * rng()) * clump.len;
-    const NPc = 7;
+    const NPc = 10;
     const h = 0.003 + rng() * 0.004;
     const pts = [];
     const normals = [];
@@ -1932,9 +1961,10 @@ function tailCards(S, B, body, pos, coat, base) {
       const s = s0 + Ls * f;
       // (au-delà de la masse, la mèche rejoint l'axe : la pointe de la queue)
       const beyond = smooth(Lm * 0.92, Lm * 1.25, s);
-      const off = (h + clump.lift * smooth(0.2, 0.8, f)) * (1 - beyond);
-      const pw = phi + clump.amp * Math.sin(f * 4.2 + clump.ph) * smooth(0.25, 1, f);
-      const { p, F } = surface(s, pw, off);
+      const wf = smooth(0.12, 0.6, f);
+      const off = (h + clump.lift * smooth(0.2, 0.8, f) * (0.65 + 0.35 * Math.sin(f * clump.fr + clump.ph + 1.6))) * (1 - beyond);
+      const pw = phi + clump.amp * Math.sin(f * clump.fr + clump.ph) * wf;
+      const { p, F } = surface(s, pw, off, sCol(s, pw));
       if (beyond > 0) p.lerp(F.p, beyond * 0.4);
       // (au-dessus de la hauteur limite de la demi-largeur du ruban au moins : ses bords ne passent pas dessous)
       if (p.y < clear + 0.02) p.y = clear + 0.02;
@@ -1948,7 +1978,8 @@ function tailCards(S, B, body, pos, coat, base) {
     const tone = 0.93 + rng() * 0.14;
     const [v, dv] = HAIR_ROWS[Math.floor(rng() * 4)];
     const card = {
-      pts, normals, side, w0: primary ? 0.07 : 0.052, w1: primary ? 0.04 : 0.03,
+      // (racine étroite : la mèche sort du tronçon en pointe, pas une plaque large posée sur le couard)
+      pts, normals, side, w0: primary ? 0.07 : 0.052, w1: primary ? 0.04 : 0.03, rootTaper: 0.22,
       color: new THREE.Color(tone, tone, tone), uv: [0, 1, v, dv], kind: 2,
       // (du tronçon vers Tail2 sur la première moitié : une queue portée haut (arabe) retombe en arc)
       weights: (p, f) => blendWeights(wR, wT, smooth(0, 0.45, f)),
@@ -2719,9 +2750,11 @@ function hairCards(cards, { masses = [], mainCount = 0 } = {}) {
   const ht = [];
   const hr = [];
   const idx = [];
+  // (version réduite des cartes principales : un point sur deux le long de la mèche, bouts gardés — de loin, la
+  // courbe d'une mèche n'a pas besoin de ses dix points)
+  const lodIdx = [];
   const tan = V();
   const n0 = V();
-  let mainIdx = 0;
   cards.forEach((c, ci) => {
     const base0 = pos.length / 3;
     const n = c.pts.length;
@@ -2765,7 +2798,15 @@ function hairCards(cards, { masses = [], mainCount = 0 } = {}) {
         idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
       }
     }
-    if (ci === mainCount - 1) mainIdx = idx.length;
+    if (ci < mainCount) {
+      for (let i = 0; i < n - 1; ) {
+        const j = Math.min(n - 1, i + (n > 4 ? 2 : 1));
+        const a = base0 + i * 2;
+        const b = base0 + j * 2;
+        lodIdx.push(a, b, a + 1, a + 1, b, b + 1);
+        i = j;
+      }
+    }
   });
   // Masses (crinière, toupet, queue « en volume ») : grilles de points (rangées en travers, colonnes le long des
   // crins), après les cartes dans les sommets, avant elles dans l'index (dessinées d'abord, toujours gardées par
@@ -2794,7 +2835,7 @@ function hairCards(cards, { masses = [], mainCount = 0 } = {}) {
         // (là où les rangées se rejoignent — la pointe d'une mèche —, la normale de la grille ne veut plus rien dire :
         // celle du volume ; sinon une pointe tournée vers le sol prenait la lumière du sol, en taches sombres)
         const wj = Math.min(1, dj.length() / Math.max(1e-6, 0.5 * dk.length()));
-        nr.push(nn.normalize().lerp(o, 1 - wj).normalize());
+        nr.push(nn.normalize().lerp(o, Math.max(M.soft ?? 0, 1 - wj)).normalize());
         tr.push(dk.lengthSq() > 1e-14 ? dk.normalize() : V(0, -1, 0));
       }
       N.push(nr);
@@ -2873,7 +2914,7 @@ function hairCards(cards, { masses = [], mainCount = 0 } = {}) {
   g.computeBoundingSphere();
   // (index de la version réduite : masses réduites, puis les cartes principales, rangées d'abord)
   const Ix = pos.length / 3 > 65535 ? Uint32Array : Uint16Array;
-  g.userData.lodIndex = new Ix([...mlod, ...idx.slice(0, mainCount ? mainIdx : 0)]);
+  g.userData.lodIndex = new Ix([...mlod, ...lodIdx]);
   g.userData.massTris = midx.length / 3;
   return g;
 }

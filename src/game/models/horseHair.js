@@ -436,14 +436,16 @@ void RE_Direct_Hair( const in IncidentLight directLight, const in vec3 geometryP
   float t1 = dot( T1, H );
   // (racines plus mates : elles sont sous les autres crins ; un toupet couché, crins tous parallèles, ne
   // s'allume plus d'un bloc en gris)
-  vec3 spec = vec3( pow( max( 0.0, 1.0 - t1 * t1 ), 96.0 ) * hHairSpec * ( 0.35 + 0.65 * smoothstep( 0.0, 0.3, vHairF ) ) );
+  // (masse : bande plus large et plus douce — sur ses grandes surfaces, une bande étroite décalée crin par crin faisait
+  // des zigzags de chrome ; la bande suit la courbe du rouleau, comme sur une vraie crinière)
+  vec3 spec = vec3( pow( max( 0.0, 1.0 - t1 * t1 ), mix( 96.0, 48.0, vHairM ) ) * hHairSpec * ( 0.35 + 0.65 * smoothstep( 0.0, 0.3, vHairF ) ) );
 #ifdef HAIR_HQ
   vec3 T2 = normalize( hHairT + geometryNormal * ( hHairShift * 0.5 + 0.15 ) );
   float t2 = dot( T2, H );
   spec += material.diffuseColor * pow( max( 0.0, 1.0 - t2 * t2 ), 8.0 ) * hHairSpec * 2.2;
 #endif
   // (masse : grandes surfaces lisses, le reflet y faisait des bandes de satin gris — plus discret)
-  reflectedLight.directSpecular += directLight.color * spec * lit * ( 1.0 - 0.65 * hHairFore() ) * ( 1.0 - 0.35 * vHairM );
+  reflectedLight.directSpecular += directLight.color * spec * lit * ( 1.0 - 0.65 * hHairFore() ) * ( 1.0 - 0.45 * vHairM );
   float back = pow( saturate( dot( geometryViewDir, - L ) ), 5.0 );
   reflectedLight.directDiffuse += directLight.color * material.diffuseColor * back * ( 0.2 + 0.7 * vHairF ) * hHairBack;
 }
@@ -549,7 +551,8 @@ varying vec3 vHairT;
 varying float vHairF;
 varying float vHairK;
 varying float vHairM;
-varying float vHairS;`)
+varying float vHairS;
+varying vec3 vHairP;`)
       .replace('#include <skinnormal_vertex>', `#include <skinnormal_vertex>
 {
   vec3 hT = hairT;
@@ -563,6 +566,8 @@ varying float vHairS;`)
   vHairM = step( 7.5, hairRoot.w );
   // (tirage propre à chaque carte, d'après sa racine : décalage de son reflet)
   vHairS = fract( sin( dot( hairRoot.xyz, vec3( 12.9898, 78.233, 37.719 ) ) ) * 43758.5453 );
+  // (place au repos : le reflet se décale aussi d'une hauteur à l'autre, voir hHairShift)
+  vHairP = position;
 }`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 float hK = mod( hairRoot.w, 8.0 );
@@ -613,6 +618,7 @@ varying float vHairF;
 varying float vHairK;
 varying float vHairM;
 varying float vHairS;
+varying vec3 vHairP;
 // (toupet, sorte 1 : couché sur le front, face au ciel et au regard, ses crins tous parallèles s'allumaient en
 // traits gris — reflet et éclaircissement des crins foncés réduits, il reste noir sur un cheval aux crins noirs)
 float hHairFore() { return step( 0.5, vHairK ) * step( vHairK, 1.5 ); }`)
@@ -635,7 +641,11 @@ normal = normalize( vNormal );
 hHairT = normalize( vHairT - normal * dot( vHairT, normal ) );
 // (cartes : reflet décalé carte par carte — chaque mèche a sa bande claire à sa hauteur, on lit des mèches et non des
 // lamelles alignées ; la masse garde le décalage de sa texture, crin par crin)
-hHairShift = hTex.g - 0.5 + ( vHairS - 0.5 ) * 0.55 * ( 1.0 - vHairM );
+hHairShift = ( hTex.g - 0.5 ) * ( 1.0 - 0.65 * vHairM ) + ( vHairS - 0.5 ) * 0.55 * ( 1.0 - vHairM );
+// (et d'une hauteur à l'autre, tous les 12 à 15 cm : une carte droite, ou une masse lisse, ne s'allume plus d'un bloc
+// quand son angle est le bon — de biais ou de loin, la texture réduite n'a plus le décalage propre à chaque crin, et
+// des rectangles gris s'allumaient sur le couard ; ici des bandes claires coupées, comme sur des crins qui ondulent)
+hHairShift += 0.32 * sin( dot( vHairP, vec3( 11.0, 46.0, 19.0 ) ) + vHairS * 31.0 ) * ( 1.0 - 0.6 * vHairM );
 #ifdef HAIR_HQ
 // (relief du crin en travers : un bord tourné vers la lumière, l'autre à l'ombre)
 normal = normalize( normal + cross( normal, hHairT ) * ( hTex.b - 0.5 ) * 0.7 );

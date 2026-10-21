@@ -445,7 +445,9 @@ void RE_Direct_Hair( const in IncidentLight directLight, const in vec3 geometryP
   spec += material.diffuseColor * pow( max( 0.0, 1.0 - t2 * t2 ), 8.0 ) * hHairSpec * 2.2;
 #endif
   // (masse : grandes surfaces lisses, le reflet y faisait des bandes de satin gris — plus discret)
-  reflectedLight.directSpecular += directLight.color * spec * lit * ( 1.0 - 0.65 * hHairFore() ) * ( 1.0 - 0.45 * vHairM );
+  // (queue, sorte 2 : ses cartes ondulées s'allument par segments — sur une queue large et longue (cob, franches-montagnes),
+  // tant de segments clairs la grisaient en qualité haute ; un peu plus discret)
+  reflectedLight.directSpecular += directLight.color * spec * lit * ( 1.0 - 0.65 * hHairFore() ) * ( 1.0 - 0.45 * vHairM ) * ( 1.0 - 0.4 * hHairTail() );
   float back = pow( saturate( dot( geometryViewDir, - L ) ), 5.0 );
   reflectedLight.directDiffuse += directLight.color * material.diffuseColor * back * ( 0.2 + 0.7 * vHairF ) * hHairBack;
 }
@@ -643,7 +645,8 @@ varying float vHairS;
 varying vec3 vHairP;
 // (toupet, sorte 1 : couché sur le front, face au ciel et au regard, ses crins tous parallèles s'allumaient en
 // traits gris — reflet et éclaircissement des crins foncés réduits, il reste noir sur un cheval aux crins noirs)
-float hHairFore() { return step( 0.5, vHairK ) * step( vHairK, 1.5 ); }`)
+float hHairFore() { return step( 0.5, vHairK ) * step( vHairK, 1.5 ); }
+float hHairTail() { return step( 1.5, vHairK ) * step( vHairK, 2.5 ); }`)
       .replace('#include <lights_physical_pars_fragment>', `#include <lights_physical_pars_fragment>
 ${HAIR_LIGHT}`)
       .replace('#include <lights_fragment_begin>', HAIR_SHADOW)

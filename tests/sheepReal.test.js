@@ -5,11 +5,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import * as THREE from 'three';
-import { buildRealSheepModel, realSheepBase, pickSheepGait, REAL_SHEEP_KEY, sheepJoints, realSheepPose } from '../src/game/models/sheepReal.js';
+import { buildRealSheepModel, realSheepBase, pickSheepGait, REAL_SHEEP_KEY, sheepJoints, realSheepPose, animateRealSheep, lambTeatPoint } from '../src/game/models/sheepReal.js';
 import { buildAnimalModel } from '../src/game/models/animalModel.js';
 import { buildAccessories, removeAccessories } from '../src/game/models/salon.js';
 import { SHEEP_BUILDS, sheepBuild, sheepFleece, shornWeight, sheepLookOf, sheepBreedOfLook } from '../src/sim/sheepLook.js';
-import { SPECIES } from '../src/sim/species.js';
+import { SPECIES, isOffered } from '../src/sim/species.js';
 import { resolveLook, createAnimal } from '../src/sim/animal.js';
 import { collectProduct, tickProduce } from '../src/sim/farm.js';
 import { MODELS } from '../src/game/assets.js';
@@ -74,6 +74,10 @@ describe('fichier du mouton réaliste', () => {
       expect(m.edgeMaxBy.avant, clip).toBeLessThan(4);
       expect(m.edgeMaxBy.arriere, clip).toBeLessThan(3);
     }
+  });
+
+  it('le mouton est proposé comme nouvel animal (son modèle réaliste est en ligne : OFFERED_SPECIES)', () => {
+    expect(isOffered('sheep')).toBe(true);
   });
 
   it('la clé du modèle est sheep_real (jamais « sheep » : le mouton procédural reste le repli)', () => {
@@ -208,8 +212,12 @@ describe('toison qui suit la tonte', () => {
   it('jamais tondu : toison pleine ; tondu : elle repousse avec la laine du jeu', () => {
     const a = createAnimal({ species: 'sheep', breed: 'merinos', ageDays: 80, seed: 7, rng: fixed });
     expect(sheepFleece(a)).toBe(1); // (adulte neuf, produce 0 : pas tondu pour autant)
-    tickProduce(a, 200);
+    // (contre-vérification : toison pleine à l'écran mais « Tondre » grisé et jauge à 0 pendant 120 h de jeu — la laine
+    // d'un mouton jamais tondu est prête dès le premier instant de jeu)
+    tickProduce(a, 0.01);
     expect(a.produceReady).toBe(true);
+    expect(a.produce).toBe(100);
+    expect(sheepFleece(a)).toBe(1);
     const profile = { animals: [a], stats: {}, money: 0, coins: 0 };
     expect(collectProduct(profile, a).ok).toBe(true);
     expect(a.woolCut).toBe(true);
@@ -218,6 +226,20 @@ describe('toison qui suit la tonte', () => {
     expect(sheepFleece(a)).toBeCloseTo(0.5, 2);
     tickProduce(a, 100);
     expect(sheepFleece(a)).toBe(1);
+    // ancienne partie : laine qui repoussait sans que la tonte ait été notée — la toison suit la repousse
+    const old = createAnimal({ species: 'sheep', breed: 'merinos', ageDays: 80, seed: 8, rng: fixed });
+    old.produce = 30;
+    tickProduce(old, 0.01);
+    expect(old.woolCut).toBe(true);
+    expect(old.produceReady).toBe(false);
+    expect(sheepFleece(old)).toBeCloseTo(0.3, 2);
+    // agneau : pas de laine à tondre ; devenu adulte, sa toison pleine est prête
+    const lamb = createAnimal({ species: 'sheep', breed: 'merinos', ageDays: 1.5, seed: 9, rng: fixed });
+    tickProduce(lamb, 5);
+    expect(lamb.produceReady).toBeFalsy();
+    lamb.ageDays = 80;
+    tickProduce(lamb, 0.01);
+    expect(lamb.produceReady).toBe(true);
   });
 
   it('poids de la cible « shorn » : 1 tondu, négatif quand la toison épaisse est pleine, en douceur à l\'écran', () => {
@@ -593,6 +615,54 @@ describe('animation', () => {
     expect(md.mesh.boundingBox.min.y).toBeLessThan(0.02);
     md.dispose();
   });
+});
+
+describe('tétée', () => {
+  /** Fausse entité du jeu (ce que lit animateRealSheep). */
+  const ent = (md, id, x, z, heading, scale) => {
+    const root = new THREE.Group();
+    const sg = new THREE.Group();
+    sg.scale.setScalar(scale);
+    sg.add(md.root);
+    root.add(sg);
+    root.position.set(x, 0, z);
+    root.rotation.y = heading;
+    const e = { model: md, root, scale, heading, speed: 0, state: 'idle', time: 3, phase: 1.3, timer: 99, data: { id }, stage: 'adult', partner: null };
+    Object.defineProperty(e, 'position', { get: () => root.position });
+    return e;
+  };
+  // Contre-vérification : l'agneau « tétait » dans le vide, à un mètre de sa mère (souvent couchée).
+  it('l\'agneau vient à la mamelle de sa mère, qui reste debout tant qu\'il tète', () => {
+    const mom = ent(sheep('cheviot'), 'mo-ther', 0, 0, 0.3, 1);
+    const lamb = ent(sheep('cheviot', { lamb: true }), 'ki-d1', 0.9, -0.6, 2, 0.62);
+    lamb.stage = 'baby';
+    mom.restSeed = 0.22; // (sans l'agneau, elle se coucherait pour ruminer au bout de 7 s : sin(0,045 t + graine) > 0,62)
+    const teat = new THREE.Vector3();
+    const d = [];
+    let lay = 0;
+    for (let f = 0; f < 900; f++) {
+      for (const e of [mom, lamb]) e.time += 1 / 30;
+      lamb.state = 'mother';
+      lamb.partner = mom;
+      mom.root.updateMatrixWorld(true);
+      animateRealSheep(mom, 1 / 30, false);
+      mom.root.updateMatrixWorld(true);
+      lamb.root.updateMatrixWorld(true);
+      animateRealSheep(lamb, 1 / 30, false);
+      lamb.root.updateMatrixWorld(true);
+      if (lamb.nursing === mom) {
+        if (mom.model.anim.posture !== 'stand' || mom.model.anim.trans) lay++;
+        if (f > 240 && lamb.model.anim.mouthW && lambTeatPoint(lamb, mom, teat)) d.push(lamb.model.anim.mouthW.distanceTo(teat));
+      }
+    }
+    expect(d.length).toBeGreaterThan(300);
+    d.sort((a, b) => a - b);
+    expect(d[Math.floor(d.length / 2)]).toBeLessThan(0.08);
+    expect(d[Math.floor(d.length * 0.9)]).toBeLessThan(0.15);
+    expect(lay).toBe(0);
+    mom.model.dispose();
+    lamb.model.dispose();
+  }, 60000);
 });
 
 describe('accessoires et crédits', () => {

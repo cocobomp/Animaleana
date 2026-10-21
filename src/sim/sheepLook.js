@@ -106,6 +106,24 @@ export function sheepFleece(a) {
 }
 
 /**
+ * La laine du jeu d'accord avec la toison qu'on voit (appelé par tickProduce, src/sim/farm.js) : un mouton adulte jamais
+ * tondu (neuf, agneau devenu adulte) a sa toison pleine — sa laine est prête, on peut le tondre tout de suite (avant :
+ * toison pleine à l'écran, mais « Tondre » grisé et jauge à 0 pendant 120 h de jeu). Une ancienne partie dont la laine
+ * repoussait (production entre 0 et 100, tonte faite avant que le jeu ne la note) garde sa production : sa toison suit
+ * désormais la repousse.
+ */
+export function settleFleece(a) {
+  if (a?.species !== 'sheep' || a.woolCut) return;
+  const p = a.produce ?? 0;
+  if (p > 0 && p < 100) {
+    a.woolCut = true;
+    return;
+  }
+  a.produce = 100;
+  a.produceReady = true;
+}
+
+/**
  * Poids de la cible de forme « shorn » pour une toison f (0 tondu, 1 pleine) : 1 tondu, jusqu'à -fleece (plus épaisse
  * que le modèle) quand elle est pleine. extra : épaisseur en plus (laine gonflée du concours de beauté, coupe du salon).
  */

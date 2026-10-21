@@ -1198,7 +1198,9 @@ export function animateRealGoat(e, dt, sad) {
   // Couchée : endormie, ou au repos (elle rumine) ; une chèvre qui vient de dormir reste couchée quand on s'approche.
   if (e.sleeping) anim.sleptAt = t;
   const justWoke = anim.sleptAt !== undefined && t - anim.sleptAt < 12;
-  const restLie = idle && !br && !(anim.milkT > 0) && Math.sin(t * 0.045 + e.restSeed) > 0.66;
+  // (une chèvre dont le chevreau tète reste debout : nursedFor, compté par le chevreau — elle se couchait sous lui)
+  if (e.nursedFor > 0) e.nursedFor -= dt;
+  const restLie = idle && !br && !(anim.milkT > 0) && !(e.nursedFor > 0) && Math.sin(t * 0.045 + e.restSeed) > 0.66;
   let posture = 'stand';
   if (e.sleeping) posture = 'sleep';
   else if (br && (br.phase === 'up')) posture = 'rear';
@@ -1212,13 +1214,17 @@ export function animateRealGoat(e, dt, sad) {
   const mother = kid && e.state === 'mother' ? e.partner : null;
   e.nursing = null;
   st.nurseY = null;
+  let nurseV = 0;
+  const mAnim = mother?.model?.anim;
   if (anim.milkT > 0 && !st.moving) action = 'milk';
   else if (e.state === 'eat') action = 'eat';
-  else if (mother && !st.moving && !mother.sleeping && (mother.speed ?? 0) < 0.1
+  else if (mother && !st.moving && !mother.sleeping && (mother.speed ?? 0) < 0.1 && (!mAnim || (mAnim.posture === 'stand' && !mAnim.trans))
     && Math.hypot(mother.position.x - e.root.position.x, mother.position.z - e.root.position.z) < 1.6 * Math.max(0.6, mother.scale ?? 1)) {
     action = 'nurse';
-    // (il se glisse à côté de sa mère, la tête sous son ventre, devant la mamelle ; la mère ne le repousse pas)
+    // (il se glisse à côté de sa mère — au pas, sabots posés —, la tête sous son ventre, devant la mamelle ; la mère ne
+    // le repousse pas et reste debout : tétée seulement si elle est debout)
     e.nursing = mother;
+    mother.nursedFor = 1.5;
     e.nurseSide ??= (d.id?.charCodeAt?.(2) ?? 1) % 2 ? 1 : -1;
     const want = nurseSpot(e, mother, _v);
     const p = e.root.position;
@@ -1231,8 +1237,11 @@ export function animateRealGoat(e, dt, sad) {
       _v.set(p.x + teat.x - m.x, 0, p.z + teat.z - m.z);
     }
     st.nurseY = teat ? teat.y : null;
-    p.x += clamp((_v.x - p.x) * k, -0.04, 0.04);
-    p.z += clamp((_v.z - p.z) * k, -0.04, 0.04);
+    const dx = clamp((_v.x - p.x) * k, -dt * 0.45, dt * 0.45);
+    const dz = clamp((_v.z - p.z) * k, -dt * 0.45, dt * 0.45);
+    p.x += dx;
+    p.z += dz;
+    nurseV = Math.hypot(dx, dz) / Math.max(1e-4, dt);
     let diff = want - e.heading;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     e.heading += diff * Math.min(1, dt * 3);
@@ -1248,6 +1257,10 @@ export function animateRealGoat(e, dt, sad) {
   } else if (idle && !br && (kid || e.stage === 'young') && Math.sin(t * 0.37 + e.restSeed * 1.3) > 0.8) action = 'play';
   else if (idle && !br && Math.sin(t * 0.3 + (e.phase ?? 0)) > -0.1) action = 'graze';
   st.action = action;
+  if (nurseV > 0.06) {
+    st.moving = true;
+    st.v = Math.max(st.v, nurseV / Math.max(0.15, scale));
+  }
   st.play = (kid || e.stage === 'young') && st.moving && !e.herdCtrl && Math.sin(t * 0.5 + e.restSeed) > 0.3;
   // Bêler : quand elle se fait entendre (AnimalEntity.speak).
   st.bleat = e.spokeAt !== undefined && e.spokeAt !== anim.spokeSeen;

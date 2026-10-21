@@ -628,6 +628,12 @@ export function buildRealSheepModel(look, breedId = null, gltf = null) {
   const tailTip = new THREE.Object3D();
   tailB?.add(tailTip);
   if (tailB) tailTip.position.copy(toLocal(tailB, M.tailTip));
+  // Mamelle de la brebis (où l'agneau vient téter) : sous le ventre, devant les cuisses, portée par le bassin.
+  const pelvisB = bone('pelvis');
+  const teat = new THREE.Object3D();
+  teat.name = 'teat';
+  pelvisB?.add(teat);
+  if (pelvisB) teat.position.copy(toLocal(pelvisB, V(0, M.bellyY - 0.03, M.hipZ + 0.07)));
   const model = {
     root,
     body: bone('root'),
@@ -656,6 +662,7 @@ export function buildRealSheepModel(look, breedId = null, gltf = null) {
     mouth,
     skull,
     leashPoint,
+    teat,
     // (même nom que le chien réaliste : salon.js et Beauty.js y posent nœud, clochette et bandana)
     // (dans le repère des os : leur échelle — taille de la race, tête agrandie — s'applique d'elle-même)
     dogFit: { collar: { center: collarC, normal: M.collar.axis.clone().applyQuaternion(neckQi), q: ringQ, rx: M.collar.rx, ry: M.collar.ry, bone: neckB }, topY: M.topY, bellyY: M.bellyY, hipZ: M.hipZ, shZ: M.shZ },
@@ -1286,8 +1293,33 @@ export class RealSheepAnim {
     this.savePose();
     this.applyShift();
     this.overlay(dt, st, false);
+    this.nurseReach(dt, st, false);
     this.applyFleece(dt);
     this.ground(st, dt, moveClip);
+  }
+
+  /**
+   * Agneau qui tète : l'encolure monte ou descend jusqu'à ce que la bouche arrive à la hauteur de la mamelle de sa mère
+   * (st.nurseY, hauteur dans le monde, donnée par l'entité), le museau relevé ; la bouche (monde) est rendue dans
+   * this.mouthW pour que l'entité ajuste sa place (voir la chèvre, goatReal.js). Corrigé d'une image à l'autre.
+   */
+  nurseReach(dt, st, still) {
+    const md = this.model;
+    const on = st.action === 'nurse' && st.nurseY != null && this.posture === 'stand' && !this.trans && !st.moving;
+    this.nurseK = (this.nurseK ?? 0) + ((on ? 1 : 0) - (this.nurseK ?? 0)) * (still ? 1 : Math.min(1, dt * 3));
+    if (this.nurseK < 0.01 || !md.neck || !md.head || !md.mouth) {
+      this.nurseK = on ? this.nurseK : 0;
+      this.nurseBend = 0;
+      this.mouthW = null;
+      return;
+    }
+    this.nurseBend ??= -0.3;
+    this.turn(md.neck, AX, this.nurseBend * this.nurseK);
+    this.turn(md.head, AX, -0.35 * this.nurseK);
+    md.head.updateWorldMatrix(true, false);
+    const m = (this.mouthW ??= V()).copy(md.mouth);
+    md.head.localToWorld(m);
+    if (on) this.nurseBend = clamp(this.nurseBend + clamp((m.y - st.nurseY) * 3, -0.12, 0.12) * Math.min(1, dt * 8), -0.9, 0.9);
   }
 
   /** Procédural par-dessus les clips : regard, tétée, bêlement en marchant, oreilles, queue. */
@@ -1324,7 +1356,8 @@ export class RealSheepAnim {
     if (st.sad && stand && !moving) this.turn(neck, AX, 0.15);
     // Agneau qui tète : encolure tendue vers le haut sous le ventre de sa mère, queue qui frétille.
     this.nurse += ((st.action === 'nurse' && stand && !moving ? 1 : 0) - this.nurse) * (still ? 1 : Math.min(1, dt * 3));
-    if (this.nurse > 0.01) {
+    // (hauteur de la mamelle connue, st.nurseY : c'est nurseReach qui amène la bouche, après)
+    if (this.nurse > 0.01 && st.nurseY == null) {
       this.turn(neck, AX, -0.45 * this.nurse);
       this.turn(head, AX, -0.35 * this.nurse);
     }
@@ -1708,6 +1741,41 @@ export function realSheepPose(md, kind, s = 1, t = null) {
   return true;
 }
 
+const _nv = V();
+const _nt = V();
+
+/**
+ * Place de l'agneau qui tète : à côté de sa mère, tourné vers sa croupe, la tête sous son ventre, devant la mamelle (le
+ * museau ≈ 0,6 × sa taille devant son milieu) ; l'entité corrige ensuite d'après la bouche mesurée. Renvoie son cap.
+ */
+export function lambNurseSpot(e, mother, out) {
+  const ms = (mother.scale ?? 1) * (mother.model?.size ?? 1);
+  const ks = (e.scale ?? 1) * (e.model?.size ?? 1);
+  const h = mother.heading ?? 0;
+  const fx = Math.sin(h);
+  const fz = Math.cos(h);
+  const side = e.nurseSide ?? 1;
+  const back = -(mother.model?.dogFit?.hipZ ?? -0.3) - 0.07; // (mamelle : un peu devant les hanches)
+  const ux = mother.position.x - fx * back * ms;
+  const uz = mother.position.z - fz * back * ms;
+  const lat = 0.2 * ms + 0.1 * ks;
+  out.set(ux + fx * 0.6 * ks + fz * side * lat, 0, uz + fz * 0.6 * ks - fx * side * lat);
+  return h + Math.PI + side * 0.45;
+}
+
+/** Mamelle de la mère (monde) où vient la bouche de l'agneau : l'ancre « teat » du mouton réaliste, de son côté. */
+export function lambTeatPoint(e, mother, out) {
+  const md = mother.model;
+  if (!md?.teat) return null;
+  md.teat.getWorldPosition(out);
+  const ms = (mother.scale ?? 1) * (md.size ?? 1);
+  const h = mother.heading ?? 0;
+  const side = e.nurseSide ?? 1;
+  out.x += Math.cos(h) * side * 0.03 * ms;
+  out.z -= Math.sin(h) * side * 0.03 * ms;
+  return out;
+}
+
 /**
  * Animation d'une entité (AnimalEntity) au mouton réaliste : ce qu'il fait (allure selon sa vitesse, brouter, manger à
  * la mangeoire, couché et ruminer, dormir, bêler, gambader et téter pour l'agneau, mené par le chien de troupeau) ;
@@ -1761,7 +1829,9 @@ export function animateRealSheep(e, dt, sad) {
   // on s'approche (le jeu le réveille à moins de 2,5 m) ; il ne se relève que pour partir.
   if (e.sleeping) anim.sleptAt = t;
   const justWoke = anim.sleptAt !== undefined && t - anim.sleptAt < 12;
-  const restLie = idle && Math.sin(t * 0.045 + e.restSeed) > 0.62;
+  // (une brebis dont l'agneau tète reste debout : nursedFor, compté par l'agneau)
+  if (e.nursedFor > 0) e.nursedFor -= dt;
+  const restLie = idle && !(e.nursedFor > 0) && Math.sin(t * 0.045 + e.restSeed) > 0.62;
   let posture = 'stand';
   if (e.sleeping) posture = 'sleep';
   else if (!st.moving && !e.scripted && !e.herdCtrl && (justWoke || restLie || (lying(anim.posture) && anim.hold < 6))) posture = 'lie';
@@ -1770,18 +1840,46 @@ export function animateRealSheep(e, dt, sad) {
   // Gestes : manger à la mangeoire, brouter au repos (au pré et dans l'enclos), téter (agneau près de sa mère), gambader.
   let action = null;
   const mother = lamb && e.state === 'mother' ? e.partner : null;
+  const mAnim = mother?.model?.anim;
+  e.nursing = null;
+  st.nurseY = null;
+  let nurseV = 0;
   if (e.state === 'eat') action = 'eat';
-  else if (mother && !st.moving && Math.hypot(mother.position.x - e.root.position.x, mother.position.z - e.root.position.z) < 1.4 * Math.max(0.6, mother.scale ?? 1)) {
+  else if (mother && !st.moving && !mother.sleeping && (mother.speed ?? 0) < 0.1 && (!mAnim || (mAnim.posture === 'stand' && !mAnim.trans))
+    && Math.hypot(mother.position.x - e.root.position.x, mother.position.z - e.root.position.z) < 1.6 * Math.max(0.6, mother.scale ?? 1)) {
+    // (il se glisse à côté de sa mère, la tête sous son ventre, la bouche à la mamelle — avant, il « tétait » à un mètre
+    // d'elle ; il y va au pas, sabots posés, et elle reste debout et tranquille tant qu'il tète)
     action = 'nurse';
-    // (tourné vers le flanc de sa mère, la tête sous son ventre)
-    const want = Math.atan2(mother.position.x - e.root.position.x, mother.position.z - e.root.position.z);
+    e.nursing = mother;
+    mother.nursedFor = 1.5;
+    if (mother.state === 'idle' || mother.state === 'walk') {
+      mother.state = 'idle';
+      mother.timer = Math.max(mother.timer ?? 0, 3);
+    }
+    e.nurseSide ??= (d.id?.charCodeAt?.(2) ?? 1) % 2 ? 1 : -1;
+    const want = lambNurseSpot(e, mother, _nv);
+    const p = e.root.position;
+    const teat = lambTeatPoint(e, mother, _nt);
+    const m = anim.mouthW;
+    if (teat && m && Math.hypot(_nv.x - p.x, _nv.z - p.z) < 0.6) _nv.set(p.x + teat.x - m.x, 0, p.z + teat.z - m.z);
+    st.nurseY = teat ? teat.y : null;
+    const dx = clamp((_nv.x - p.x) * Math.min(1, dt * 2), -dt * 0.45, dt * 0.45);
+    const dz = clamp((_nv.z - p.z) * Math.min(1, dt * 2), -dt * 0.45, dt * 0.45);
+    p.x += dx;
+    p.z += dz;
+    nurseV = Math.hypot(dx, dz) / Math.max(1e-4, dt);
     let diff = want - e.heading;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    e.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 1.5);
+    e.heading += diff * Math.min(1, dt * 3);
     e.root.rotation.y = e.heading;
   } else if (idle && (lamb || e.stage === 'young') && Math.sin(t * 0.37 + e.restSeed * 1.3) > 0.82) action = 'play';
   else if (idle && Math.sin(t * 0.3 + (e.phase ?? 0)) > 0.0) action = 'graze';
   st.action = action;
+  // (en se glissant à sa place pour téter, il marche : sabots posés, pas glissés)
+  if (nurseV > 0.06) {
+    st.moving = true;
+    st.v = Math.max(st.v, nurseV / Math.max(0.15, scale));
+  }
   st.play = (lamb || e.stage === 'young') && st.moving && !e.herdCtrl && Math.sin(t * 0.5 + e.restSeed) > 0.3;
   // Bêler : quand il se fait entendre (AnimalEntity.speak).
   st.bleat = e.spokeAt !== undefined && e.spokeAt !== anim.spokeSeen;

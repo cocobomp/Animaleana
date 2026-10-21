@@ -9,6 +9,7 @@ import { isSandbox, spend, earn } from './profile.js';
 import { pick, uid } from './rng.js';
 import { onBreak, helperQuality } from './helpers.js'; // progression des aides
 import { droppingsAt, removeDroppings } from './droppings.js';
+import { settleFleece } from './sheepLook.js';
 
 const PETS = ['dog', 'cat', 'rabbit'];
 const LIVESTOCK = ['sheep', 'goat', 'cow'];
@@ -246,6 +247,7 @@ export function canProduce(a) {
 /** Fait pousser la laine / monter le lait. */
 export function tickProduce(a, hours) {
   if (!canProduce(a)) return;
+  settleFleece(a); // (mouton jamais tondu : toison pleine, laine prête — src/sim/sheepLook.js)
   const p = SPECIES[a.species].product;
   a.produce = Math.min(100, (a.produce ?? 0) + (100 / p.hours) * hours);
   a.produceReady = a.produce >= 100;

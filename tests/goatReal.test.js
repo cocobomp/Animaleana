@@ -7,12 +7,12 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import * as THREE from 'three';
 import {
-  buildRealGoatModel, realGoatBase, REAL_GOAT_KEY, realGoatPose, nurseSpot, teatPoint, FENCE_RAIL, GOAT_LOD_DIST,
+  buildRealGoatModel, realGoatBase, REAL_GOAT_KEY, realGoatPose, nurseSpot, teatPoint, FENCE_RAIL, GOAT_LOD_DIST, animateRealGoat,
 } from '../src/game/models/goatReal.js';
 import { pickSheepGait } from '../src/game/models/sheepReal.js';
 import { buildAnimalModel } from '../src/game/models/animalModel.js';
 import { GOAT_BUILDS, goatBuild, goatBreedOfLook, goatUdderFill, udderScale, goatLookOf, goatStage, UDDER } from '../src/sim/goatLook.js';
-import { SPECIES } from '../src/sim/species.js';
+import { SPECIES, isOffered } from '../src/sim/species.js';
 import { resolveLook, createAnimal } from '../src/sim/animal.js';
 import { collectProduct, tickProduce } from '../src/sim/farm.js';
 import { MODELS } from '../src/game/assets.js';
@@ -96,6 +96,10 @@ describe('fichier de la chèvre réaliste', () => {
       expect(m.edgeMaxBy.tronc, clip).toBeLessThan(3.5);
       if (m.slipPct !== undefined) expect(m.slipPct, clip).toBeLessThan(6);
     }
+  });
+
+  it('la chèvre est proposée comme nouvel animal (son modèle réaliste est en ligne : OFFERED_SPECIES)', () => {
+    expect(isOffered('goat')).toBe(true);
   });
 
   it('la clé du modèle est goat_real (jamais « goat » : la chèvre procédurale reste le repli)', () => {
@@ -609,6 +613,56 @@ describe('animation', () => {
     mom.dispose();
     kid.dispose();
   });
+
+  // Contre-vérification : la chèvre se couchait pendant que son chevreau tétait (mamelle au sol).
+  it('chevreau qui tète (comme en jeu) : la bouche au trayon, sa mère reste debout', () => {
+    const rnd = Math.random;
+    Math.random = () => 0.5; // (aucun tirage ne compte : pas de barrière à brouter ici)
+    const ent = (md, id, x, z, heading, scale) => {
+      const root = new THREE.Group();
+      const sg = new THREE.Group();
+      sg.scale.setScalar(scale);
+      sg.add(md.root);
+      root.add(sg);
+      root.position.set(x, 0, z);
+      root.rotation.y = heading;
+      const e = { model: md, root, scale, heading, speed: 0, state: 'idle', time: 3, phase: 1.3, timer: 99, data: { id, produce: 100 }, stage: 'adult', partner: null, target: new THREE.Vector3() };
+      Object.defineProperty(e, 'position', { get: () => root.position });
+      return e;
+    };
+    const mom = ent(goat('alpine', { udderFill: 1 }), 'mo-ther', 0, 0, 0.3, 1);
+    const kid = ent(goat('alpine', { kid: true }), 'ki-d1', 0.9, -0.6, 2, 0.62);
+    kid.stage = 'baby';
+    mom.restSeed = 0.22; // (sans le chevreau, elle se coucherait au bout de 9 s : sin(0,045 t + graine) > 0,66)
+    const teat = new THREE.Vector3();
+    const d = [];
+    let lay = 0;
+    try {
+      for (let f = 0; f < 900; f++) {
+        for (const e of [mom, kid]) e.time += 1 / 30;
+        kid.state = 'mother';
+        kid.partner = mom;
+        mom.root.updateMatrixWorld(true);
+        animateRealGoat(mom, 1 / 30, false);
+        mom.root.updateMatrixWorld(true);
+        kid.root.updateMatrixWorld(true);
+        animateRealGoat(kid, 1 / 30, false);
+        kid.root.updateMatrixWorld(true);
+        if (kid.nursing === mom) {
+          if (mom.model.anim.posture !== 'stand' || mom.model.anim.trans) lay++;
+          if (f > 240 && kid.model.anim.mouthW && teatPoint(kid, mom, teat)) d.push(kid.model.anim.mouthW.distanceTo(teat));
+        }
+      }
+    } finally {
+      Math.random = rnd;
+    }
+    expect(d.length).toBeGreaterThan(300);
+    d.sort((a, b) => a - b);
+    expect(d[Math.floor(d.length / 2)]).toBeLessThan(0.06);
+    expect(lay).toBe(0);
+    mom.model.dispose();
+    kid.model.dispose();
+  }, 60000);
 
   it('version réduite au loin : un autre index sur la même géométrie, mèches du poil long cachées', () => {
     expect(GOAT_LOD_DIST.high).toBeGreaterThan(GOAT_LOD_DIST.low);

@@ -89,7 +89,7 @@ Ces modifications sont faites par les scripts de `tools/lapin/` (voir `tools/lap
 
 Page de comparaison des chats et des lapins (`src/compare/chatsLapins.js`). Ses modèles sont dans
 `public/compare-chats-lapins/` : ils ne font pas partie du jeu (ni du service worker, ni de la version à
-emporter). Textes de licence, réponses de l'API publique de Sketchfab (licence vérifiée le 20/10/2026) et
+emporter) et ne sont pas publiés avec lui (le build les retire de `dist/` ; `COMPARE=1 npx vite build` les garde). Textes de licence, réponses de l'API publique de Sketchfab (licence vérifiée le 20/10/2026) et
 métadonnées d'origine (instantané Objaverse, pages OpenGameArt) dans `public/compare-chats-lapins/LICENSES/`.
 Les modèles sous **CC-BY 4.0** demandent la mention ci-dessous s'ils entrent dans le jeu (écran des crédits).
 

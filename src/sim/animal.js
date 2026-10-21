@@ -203,6 +203,21 @@ export function growthScale(a) {
   return 0.42 + 0.58 * Math.sqrt(t);
 }
 
+/**
+ * Robe et gabarit de l'animal à son âge, pour construire son modèle : le poulain, le chiot du chien réaliste, le chaton
+ * (modèle du chaton) et le jeune du chat réaliste, le lapereau et le jeune du lapin réaliste ont leur gabarit. Le même
+ * partout (dans le jeu, en voyage, à l'essayage de la sellerie), sinon le double d'un chaton était un chat adulte.
+ */
+export function stageLook(a) {
+  const stage = lifeStage(a);
+  const look = a.look;
+  if (a.species === 'horse') return stage === 'baby' ? { ...look, foal: true } : look;
+  if (a.species === 'dog') return stage === 'baby' ? { ...look, puppy: true } : look;
+  if (a.species === 'cat') return stage === 'baby' ? { ...look, kitten: true } : stage === 'young' ? { ...look, young: true } : look;
+  if (a.species === 'rabbit') return stage === 'baby' ? { ...look, kit: true } : stage === 'young' ? { ...look, young: true } : look;
+  return look;
+}
+
 /** 'thin' | 'ideal' | 'chubby' | 'fat' */
 export function weightClass(a) {
   const w = a.weight ?? 50;

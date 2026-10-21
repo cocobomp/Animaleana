@@ -1809,7 +1809,8 @@ function animateTrick(e, trick, k, dt) {
       realCatPose(md, 'jump', j, null, Math.min(1, k * 1.4));
       return;
     }
-    if (trick === 'come') return;
+    // (« Viens ! » : il passe par le cas commun plus bas — aller-retour en courant, e.speed = 4 donne le galop de
+    // catReal.js, et le ❤️ ; il restait planté au milieu de la piste)
   }
   // Lapin réaliste : ses clips (saut tenu à sa phase, à sa hauteur ; debout pour la révérence, assis) ; la pirouette
   // sautillée sur place (pieds non tenus) ; « viens ! » : il court (rabbitReal.js) au lieu de tourner ses os à la main.

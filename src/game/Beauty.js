@@ -981,8 +981,11 @@ class BeautySession extends Session {
     if (this.onTable) {
       e.speed = 0;
       e.root.rotation.y = e.heading;
+    } else if (this.phase === 'podium') {
+      // (au podium il reste sur sa marche : le chat ou le lapin porté revenait dans les bras et la photo de l'album
+      // ne montrait plus que la joueuse)
     } else if (this.carried) this.placeAnimal();
-    else if (this.phase !== 'podium') this.followPlayer(dt);
+    else this.followPlayer(dt);
     this.updateRope();
     if (this.state === 'run') this.refreshHud();
   }
@@ -1015,6 +1018,7 @@ class BeautySession extends Session {
     this.onTable = false;
     e.onTable = false;
     e.carried = false;
+    this.releaseArms(); // (la joueuse repose les bras : l'animal est sur sa marche)
     e.position.set(px, this.y(px, pz) + s.h, pz);
     e.heading = Math.PI; // face au joueur (côté −z)
     e.speed = 0;

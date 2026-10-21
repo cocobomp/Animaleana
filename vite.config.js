@@ -122,7 +122,11 @@ const define = {
 // build que le jeu, three.js et le code des animaux partiraient dans un morceau commun : le jeu changerait
 // de forme et la version « à emporter » (un seul script inclus) casserait. Elles ne sont ni dans le service
 // worker ni dans la version à emporter (générés avant elles) ; leurs modèles sont dans public/compare-*/.
+// Elles ne sont pas publiées avec le jeu : le build normal retire de dist/ les modèles de comparaison (public/
+// est copié tel quel : 6,5 Mo de GLB qui ne servent pas au jeu) et ne construit pas les pages. Pour les avoir dans
+// dist/ (aperçu local) : COMPARE=1 npx vite build. Au développement (npx vite), elles sont toujours servies.
 const COMPARE_PAGES = { chiens: 'chiens.html', 'chats-lapins': 'chats-lapins.html' };
+const WITH_COMPARE = !!process.env.COMPARE;
 function comparePages() {
   let config = null;
   return {
@@ -132,6 +136,13 @@ function comparePages() {
       config = c;
     },
     async closeBundle() {
+      if (!WITH_COMPARE) {
+        const out = path.resolve(config.root, config.build.outDir);
+        if (fs.existsSync(out)) {
+          for (const f of fs.readdirSync(out)) if (f.startsWith('compare-')) fs.rmSync(join(out, f), { recursive: true, force: true });
+        }
+        return;
+      }
       const input = Object.fromEntries(Object.entries(COMPARE_PAGES)
         .map(([k, f]) => [k, path.resolve(config.root, f)]).filter(([, f]) => fs.existsSync(f)));
       if (!Object.keys(input).length) return;

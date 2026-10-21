@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { towCar, horseTrailer, car, crate, trunk, cargoMesh, disposeVehicle } from './models/vehicles.js';
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
-import { growthScale, lifeStage } from '../sim/animal.js';
+import { growthScale, stageLook } from '../sim/animal.js';
 import { needsTrailer } from '../sim/trip.js';
 import { cargoItem, cargoShape } from '../sim/cargo.js';
 
@@ -43,10 +43,7 @@ export function crateWithAnimal(a, colorIndex = 0) {
  * réaliste aussi (chaton : modèle du chaton ; jeune : tête un peu plus grosse), le lapin réaliste aussi (lapereau).
  */
 function travelLook(a) {
-  const stage = lifeStage(a);
-  if (a.species === 'cat') return stage === 'baby' ? { ...a.look, kitten: true } : stage === 'young' ? { ...a.look, young: true } : a.look;
-  if (a.species === 'rabbit') return stage === 'baby' ? { ...a.look, kit: true } : stage === 'young' ? { ...a.look, young: true } : a.look;
-  return a.species === 'dog' && stage === 'baby' ? { ...a.look, puppy: true } : a.look;
+  return stageLook(a);
 }
 
 /** Nombre de places de remorque pour ces animaux (deux moutons ou deux chèvres partagent une place). */

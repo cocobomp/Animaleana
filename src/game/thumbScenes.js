@@ -18,7 +18,7 @@ import { tackModel } from './models/tackModels.js';
 import { buildGear, removeGear } from './gearModels.js';
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { buildGltfAnimal } from './models/gltfAnimal.js';
-import { resolveLook, growthScale, lifeStage } from '../sim/animal.js';
+import { resolveLook, growthScale, stageLook } from '../sim/animal.js';
 import { stageAgeDays } from '../sim/adoption.js';
 import { STRUCTURES } from '../sim/construction.js';
 import { SPECIES } from '../sim/species.js';
@@ -416,8 +416,8 @@ export function portraitSpec(a, stage) {
  */
 export function photoDouble(e) {
   const data = e.data;
-  const foal = data.species === 'horse' && lifeStage(data) === 'baby';
-  const look = foal ? { ...data.look, foal: true } : data.look;
+  // (le double a le gabarit de l'animal à son âge, comme en jeu : un chaton, pas un chat adulte ; un lapereau, un chiot)
+  const look = stageLook(data);
   const model = withTexScale(THUMB_TEX, () => buildGltfAnimal(data.species, look) ?? buildAnimalModel(data.species, look, data.breed));
   model.photoPose?.();
   model.root.traverse((o) => {

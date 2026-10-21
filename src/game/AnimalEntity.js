@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 import { SPECIES } from '../sim/species.js';
-import { growthScale, mood, lifeStage } from '../sim/animal.js';
+import { growthScale, mood, lifeStage, stageLook } from '../sim/animal.js';
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { buildGltfAnimal } from './models/gltfAnimal.js';
 import { emojiTexture } from './textures.js';
@@ -105,18 +105,10 @@ export class AnimalEntity {
       this.model.dispose?.();
       disposeModel(this.model.root);
     }
-    // Modèle GLB animé si l'espèce en a un (src/game/assets.js), sinon le modèle procédural.
-    // (le poulain a son propre gabarit : membres longs, grosse tête, brosse de crins, petite queue)
-    const foal = this.data.species === 'horse' && lifeStage(this.data) === 'baby';
-    // (le chiot du chien réaliste a son propre gabarit : grosse tête, pattes et museau courts, voir dogLook.js)
-    const puppy = this.data.species === 'dog' && lifeStage(this.data) === 'baby';
-    // (chat réaliste : le chaton prend le modèle du chaton de FainoDS, le jeune celui de l'adulte, tête un peu plus grosse)
-    const catStage = this.data.species === 'cat' ? lifeStage(this.data) : null;
-    // (lapin réaliste : le lapereau a son gabarit — grosse tête, pattes et oreilles courtes —, le jeune aussi)
-    const rabbitStage = this.data.species === 'rabbit' ? lifeStage(this.data) : null;
-    const look = foal ? { ...this.data.look, foal: true } : puppy ? { ...this.data.look, puppy: true }
-      : catStage === 'baby' ? { ...this.data.look, kitten: true } : catStage === 'young' ? { ...this.data.look, young: true }
-        : rabbitStage === 'baby' ? { ...this.data.look, kit: true } : rabbitStage === 'young' ? { ...this.data.look, young: true } : this.data.look;
+    // Modèle GLB animé si l'espèce en a un (src/game/assets.js), sinon le modèle procédural. Le poulain, le chiot du
+    // chien réaliste, le chaton (modèle de FainoDS) et le jeune du chat réaliste, le lapereau et le jeune du lapin
+    // réaliste ont leur gabarit (stageLook : grosse tête, pattes courtes…).
+    const look = stageLook(this.data);
     this.model = buildGltfAnimal(this.data.species, look) ?? buildAnimalModel(this.data.species, look, this.data.breed);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
@@ -154,9 +146,13 @@ export class AnimalEntity {
     this.label.material.map?.dispose();
     this.label.material.dispose();
     this.status.material.dispose();
+    const hidden = this.root.visible === false;
     this.build();
     this.root.position.copy(pos);
     this.root.rotation.y = this.heading;
+    // Rangé pour la nuit dans la maison des animaux (ou caché pour une autre raison) : le nouveau modèle reste caché,
+    // sinon le chat ou le lapin qui prend son modèle réaliste au rechargement apparaîtrait devant la porte.
+    if (hidden || this.inside) this.root.visible = false;
     (parent ?? this.scene).add(this.root);
   }
 

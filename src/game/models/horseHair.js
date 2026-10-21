@@ -683,6 +683,11 @@ diffuseColor.rgb = diffuseColor.rgb * hTex.r + hHairLift * ( 1.0 - 0.6 * hHairFo
 // (masse : seulement au ras de la peau, le dessus du rouleau prend la lumière)
 diffuseColor.rgb *= 1.0 - hHairRoot * ( 1.0 - smoothstep( 0.0, mix( 0.35, 0.06, vHairM ), vHairF ) );
 diffuseColor.a *= hTex.a;
+#ifndef HAIR_HQ
+// (qualité basse : les derniers crins des cartes de la queue, les plus fins, effacés un peu plus tôt — choisis d'après le
+// travers des crins (textureGrad), ils restaient au téléphone en deux ou trois points isolés sous la queue)
+diffuseColor.a *= 1.0 - 0.5 * hHairTail() * ( 1.0 - vHairM ) * smoothstep( 0.8, 1.0, vHairF );
+#endif
 // (crins clairs sur robe claire : assombris là seulement où ils doivent se détacher du front et de l'encolure — le
 // toupet, ce qui passe à gauche de la crête (+x au repos) —, pas la nappe de droite ni la queue)
 // (le toupet un peu moins : ses crins, plus contrastés, se lisent déjà sur le front)

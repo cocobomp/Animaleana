@@ -685,6 +685,12 @@ describe('matière des crins', () => {
         expect(sh.fragmentShader.includes('#define HAIR_HQ')).toBe(q === 'high');
         expect(m.alphaTest).toBe(HAIR_CUT);
         expect(m.customProgramCacheKey()).toBe(q === 'high' ? 'horsehairh' : 'horsehairl');
+        // (qualité basse, sans filtrage anisotrope : niveau réduit choisi d'après le travers des crins — les mèches restent
+        // lisibles au téléphone —, derniers crins des cartes de la queue effacés plus tôt — pas de points sous la queue ;
+        // compilés seulement sans HAIR_HQ)
+        expect(sh.fragmentShader).toContain('textureGrad( map, vMapUv, dFdx( vMapUv ) * vec2( HAIR_ALONG, 1.0 )');
+        expect(sh.fragmentShader).toContain('#define HAIR_ALONG 0.400');
+        expect(sh.fragmentShader).toContain('#ifndef HAIR_HQ\n// (qualité basse : les derniers crins des cartes de la queue');
         m.dispose();
       }
     } finally {

@@ -392,7 +392,8 @@ la matière, les fanons, la brosse et les tresses restent :
     trou ni paquet d'un côté), qui ondulent en S autour de la queue (2 à 3 cm de côté, une période et demie, 10 points
     par carte) et s'écartent puis se rapprochent de la masse : des mèches ondulées, et le reflet se casse en bandes au
     lieu d'allumer d'un bloc une carte droite ; racine étroite (`rootTaper`), jamais plus de 6 % plus bas que la masse,
-    texture jusqu'à u = 0,92 (pas de pointes isolées sous la queue : à 10 % et 0,95, il en restait deux ou trois) ; bords tenus hors du corps et derrière les fesses (`pushCardOut` avec
+    texture jusqu'à u = 0,92, et en qualité basse leurs derniers crins (le dernier cinquième) effacés plus tôt dans le
+    shader (pas de pointes isolées sous la queue : à 10 % et 0,95, il en restait deux ou trois au téléphone) ; bords tenus hors du corps et derrière les fesses (`pushCardOut` avec
     `keep`). Au repos elle pend d'aplomb (en moyenne à moins de 1 cm de l'axe, chaque tranche à moins de 3 cm) ; de
     dos, son bout bouge de ± 2 cm (± 10 cm pour une queue portée haut qui chasse les mouches) ;
   - *texture de la masse* (`hairMassPixels`) : neuf mèches par bande, de largeurs très inégales (6 à 20 px), tons bien
@@ -431,7 +432,7 @@ la matière, les fanons, la brosse et les tresses restent :
     compris, sept races aux crins clairs), crins clairs sur robe claire assombris à gauche et au toupet seulement,
     ombre adoucie, mélange qui garde l'alpha, triangles bornés (au plus 4 700 par cheval, version réduite sous 1 300 en
     moyenne).
-  Mesuré : voir « Coût des crins en volume » plus bas.
+  Mesuré : voir « Coût des crins en volume » plus bas (et, après la correction, « Coût après la correction »).
 
   Mesuré (avant : juste avant l'étape 2 ; après : crins en cartes ; mêmes graines) :
   - *triangles par cheval* (33 races, moyenne, `node` sur le GLB) : 15 098 → 11 769 en version complète (crins
@@ -472,6 +473,15 @@ machine très chargée, mesures l'une après l'autre) :
   les mesures se chevauchent entièrement, le temps de rendu en basse est inchangé à la précision de la mesure ; en
   haute, un surcoût de l'ordre de 10 % (d'après les minimums) n'est pas exclu — masse opaque sous les cartes,
   recouvrement — et serait à mesurer sur un vrai appareil.
+
+**Coût après la correction** (nuque, mèches de gauche, queue en panache, toupet ; mêmes graines, mêmes outils) :
+triangles des crins par cheval (33 races) 3 886 → 4 047 en moyenne (+ 4 % : trois mèches de gauche de plus par
+crinière, une carte de moins par mèche), au plus 4 528 → 4 602 (toujours sous le plafond de 4 700 du test) ; version
+réduite 1 059 → 1 144 en moyenne (sous 1 300). 10 chevaux au paddock (`perf.mjs`, niveau de détail imposé, crins
+visibles et cachés en alternance) : triangles des crins 37 276 → 38 724 en version complète, 10 158 → 10 960 en
+version réduite ; appels de dessin inchangés (54) ; part des crins dans le temps de rendu (médiane, SwiftShader, charge
+3 à 5) au téléphone 18,2 % → 14,1 % (2 mesures, 11 et 17 %), en haute 15,5 % → 17,1 % (1 mesure) : dans le bruit des
+mesures d'une machine partagée. Le coût de remplissage sur un vrai téléphone n'est toujours pas mesuré.
 
 **Allures vivantes** (plan « cheval beau », étape 6 ; `RealHorseAnim.stretchGallop`, `hairSprings`, `overlay` ;
 `tests/horseGaitLife.test.js`) :

@@ -13,6 +13,7 @@ import {
   EQUIP_SIZE, normRot, frontSide, SPACE_GROUPS,
 } from './construction.js';
 import { spend, earn, isSandbox } from './profile.js';
+import { CORE_SPECIES, coreShown } from './species.js';
 import {
   ensureFacilities, stableExt, stableRect, tackRoomPos, TACKROOM_SIZE, petHousePos, PETHOUSE_SIZE, canExtendStable,
 } from './facilities.js';
@@ -250,6 +251,8 @@ export function resizeCost(profile, kind, old, nu) {
 
 /** Agrandit (ou réduit) une installation de base de ce lieu : rect = nouveau rectangle (déjà validé). */
 export function resizeCore(profile, place, id, rect) {
+  // (clapier ou bergerie qui ne sert pas encore : ses espèces ne sont pas proposées, src/sim/species.js)
+  if (CORE_SPECIES[id] && !coreShown(profile, id)) return { ok: false, reason: 'soon' };
   profile.coreLayout = profile.coreLayout ?? {};
   const layout = profile.coreLayout[place] ?? {};
   const c = resizeCost(profile, id, coreRect(layout, id), rect);

@@ -451,6 +451,16 @@ export const speciesAvailable = (profile, sid) => isOffered(sid) || (profile?.an
  */
 export const anyAvailable = (profile, list) => !list?.length || list.some((sid) => speciesAvailable(profile, sid));
 
+/**
+ * Installations de base de la ferme réservées à des espèces : le clapier (lapins) et la bergerie (moutons,
+ * chèvres, vaches). Tant que ces espèces ne comptent pas pour la partie (ni proposées, ni à la ferme), le
+ * bâtiment reste dans le décor mais sans ses menus, ses améliorations ni son agrandissement (coreShown).
+ */
+export const CORE_SPECIES = { hutch: ['rabbit'], pen: LIVESTOCK_IDS };
+
+/** L'installation de base sert-elle dans cette partie ? (toujours oui pour l'écurie, le paddock, la niche…) */
+export const coreShown = (profile, kind) => anyAvailable(profile, CORE_SPECIES[kind]);
+
 /** Pour un figurant (concurrent, image) : l'espèce si elle est proposée, sinon une espèce proposée. */
 export const offeredOr = (sid, fallback = 'dog') => (isOffered(sid) ? sid : fallback);
 

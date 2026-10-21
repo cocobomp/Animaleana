@@ -2,7 +2,7 @@
 // Chaque action a ses conditions (heures d'ouverture, saison, animaux présents) et,
 // si elle est impossible, une raison expliquée au joueur.
 
-import { isOffered } from './species.js';
+import { isOffered, LIVESTOCK_IDS } from './species.js';
 
 const inHours = (h, from, to) => (from <= to ? h >= from && h < to : h >= from || h < to);
 // Les heures des raisons restent des nombres ({ h: 19 }, { from: 9, to: 18 }) : l'interface les écrit dans la
@@ -10,8 +10,19 @@ const inHours = (h, from, to) => (from <= to ? h >= from && h < to : h >= from |
 const fmtHour = (h) => Math.floor(h);
 
 /**
+ * Le clapier ou la bergerie de la ferme sert-il dans cette partie ? (ctx.shown, rempli par le jeu avec coreShown ;
+ * sinon : un animal de ces espèces ici, ou une espèce proposée). Sinon le bâtiment reste au décor : ses actions
+ * dédiées (soins du troupeau, traite, tonte, lapins, améliorations, agrandir) disparaissent du menu.
+ */
+const coreOn = (c, kind) => c.shown?.[kind]
+  ?? (kind === 'hutch' ? c.count.rabbit > 0 || isOffered('rabbit') : c.count.livestock > 0 || LIVESTOCK_IDS.some(isOffered));
+/** La règle d'une action dédiée au clapier ou à la bergerie : cachée (notHere) quand le bâtiment ne sert pas. */
+const onlyIf = (kind, when) => (c) => (coreOn(c, kind) ? when(c) : { reason: 'notHere' });
+
+/**
  * Règles par bâtiment. when(ctx) renvoie null si c'est possible, sinon { reason, params }.
- * ctx : { hour, season, home, count: { horse, livestock, pets, sick, milkable, shearable } }
+ * ctx : { hour, season, home, count: { horse, livestock, pets, sick, milkable, shearable },
+ *         shown: { hutch, pen } } (shown : coreShown de src/sim/species.js, voir coreOn)
  */
 const RULES = {
   stable: [
@@ -48,30 +59,33 @@ const RULES = {
     { id: 'farm', icon: '🔧', when: () => null },
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
   ],
+  // (sans lapin possible dans la partie, il ne reste que 🔧 Ferme et ↔️ Déplacer : voir coreOn)
   hutch: [
-    { id: 'feedRabbits', icon: '🥕', when: (c) => need(c.count.rabbit) },
-    { id: 'cleanHutch', icon: '🧹', when: (c) => need(c.count.rabbit) },
-    { id: 'actvHutchPlay', icon: '🎡', when: (c) => need(c.count.rabbit) }, // activités : jouer dans l'enclos
+    { id: 'feedRabbits', icon: '🥕', when: onlyIf('hutch', (c) => need(c.count.rabbit)) },
+    { id: 'cleanHutch', icon: '🧹', when: onlyIf('hutch', (c) => need(c.count.rabbit)) },
+    { id: 'actvHutchPlay', icon: '🎡', when: onlyIf('hutch', (c) => need(c.count.rabbit)) }, // activités : jouer dans l'enclos
     { id: 'farm', icon: '🔧', when: () => null },
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
-    { id: 'resizeCore', icon: '⤢', when: () => null }, // agrandir (vue construction, src/game/ConstructionView.js)
+    { id: 'resizeCore', icon: '⤢', when: onlyIf('hutch', () => null) }, // agrandir (vue construction, src/game/ConstructionView.js)
   ],
+  // (sans mouton, chèvre ni vache possible dans la partie, il ne reste que 🔧 Ferme et ↔️ Déplacer : voir coreOn ;
+  // et « Ramasser les crottins » s'il y en a)
   pen: [
-    { id: 'outFlock', icon: '🌿', when: (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18) },
-    { id: 'inFlock', icon: '🏠', when: (c) => need(c.count.livestock) },
-    { id: 'leadIn', icon: '🤠', when: (c) => need(c.count.livestock) },
-    { id: 'leadOut', icon: '🤠', when: (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18) },
-    { id: 'hayFlock', icon: '🌾', when: (c) => need(c.count.livestock) },
-    { id: 'waterFlock', icon: '💧', when: (c) => need(c.count.livestock) },
-    { id: 'cleanPen', icon: '🧹', when: (c) => (c.count.penDroppings > 0 ? null : { reason: 'alreadyClean' }) },
+    { id: 'outFlock', icon: '🌿', when: onlyIf('pen', (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18)) },
+    { id: 'inFlock', icon: '🏠', when: onlyIf('pen', (c) => need(c.count.livestock)) },
+    { id: 'leadIn', icon: '🤠', when: onlyIf('pen', (c) => need(c.count.livestock)) },
+    { id: 'leadOut', icon: '🤠', when: onlyIf('pen', (c) => need(c.count.livestock) ?? dayOnly(c, 6, 18)) },
+    { id: 'hayFlock', icon: '🌾', when: onlyIf('pen', (c) => need(c.count.livestock)) },
+    { id: 'waterFlock', icon: '💧', when: onlyIf('pen', (c) => need(c.count.livestock)) },
+    { id: 'cleanPen', icon: '🧹', when: (c) => (c.count.penDroppings > 0 ? null : coreOn(c, 'pen') ? { reason: 'alreadyClean' } : { reason: 'notHere' }) },
     // La traite se fait le matin et le soir.
-    { id: 'milkAll', icon: '🥛', when: (c) => need(c.count.milkable, 'noneReady') ?? (inHours(c.hour, 6, 10) || inHours(c.hour, 17, 21) ? null : { reason: 'milkTime' }) },
+    { id: 'milkAll', icon: '🥛', when: onlyIf('pen', (c) => need(c.count.milkable, 'noneReady') ?? (inHours(c.hour, 6, 10) || inHours(c.hour, 17, 21) ? null : { reason: 'milkTime' })) },
     // On tond au printemps et en été.
-    { id: 'shearAll', icon: '🧶', when: (c) => need(c.count.shearable, 'noneReady') ?? (['spring', 'summer'].includes(c.season) ? null : { reason: 'shearSeason' }) ?? dayOnly(c, 7, 19) },
+    { id: 'shearAll', icon: '🧶', when: onlyIf('pen', (c) => need(c.count.shearable, 'noneReady') ?? (['spring', 'summer'].includes(c.season) ? null : { reason: 'shearSeason' }) ?? dayOnly(c, 7, 19)) },
     { id: 'farm', icon: '🔧', when: () => null },
-    { id: 'facManage', icon: '📋', when: () => null }, // entretien et améliorations
+    { id: 'facManage', icon: '📋', when: onlyIf('pen', () => null) }, // entretien et améliorations
     { id: 'moveCore', icon: '↔️', when: () => null }, // déplacer (vue d'ensemble, src/game/BuildMode.js)
-    { id: 'resizeCore', icon: '⤢', when: () => null }, // agrandir (vue construction, src/game/ConstructionView.js)
+    { id: 'resizeCore', icon: '⤢', when: onlyIf('pen', () => null) }, // agrandir (vue construction, src/game/ConstructionView.js)
   ],
   house: [
     { id: 'sleep', icon: '🛏️', when: (c) => (inHours(c.hour, 19, 7) ? null : { reason: 'notTired', params: { h: fmtHour(19) } }) },

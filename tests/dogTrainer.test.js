@@ -42,6 +42,9 @@ describe('éducateur canin : inscrit dans le registre des métiers', () => {
   });
   it('le métier se commence comme les autres, et le carnet ferme les actions des rangs suivants', () => {
     const p = profile({ start: false });
+    // (une partie avec un mouton : le coaching « chien de troupeau » est au carnet ; sans troupeau possible,
+    // il est caché, voir tests/especesProposees.test.js)
+    p.animals.push({ id: 'mouton', species: 'sheep' });
     expect(careerSummary(p, 'dogTrainer', { level: 2 }).state).toBe('locked');
     expect(careerSummary(p, 'dogTrainer', { level: 3 }).state).toBe('available');
     expect(startCareer(p, 'dogTrainer', 1, { level: 3 }).ok).toBe(true);

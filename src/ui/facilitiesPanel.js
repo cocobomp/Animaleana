@@ -4,7 +4,7 @@
 import { h, bar } from './dom.js';
 import { t, hourParams } from '../i18n.js';
 import { sheet } from './actions.js';
-import { SPECIES, LIVESTOCK_IDS, anyAvailable } from '../sim/species.js';
+import { SPECIES, coreShown } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
 import {
   ensureFacilities, cleanliness, condition, boxCount, boxOccupants, repairCost, repair, UPGRADES, ROOMS,
@@ -89,9 +89,12 @@ export function openFacility(ui, kind) {
       }, wear >= 99 ? `✅ ${t('fac_goodState')}` : `🔨 ${t('fac_repair')}${sandbox ? '' : ` · ${cost} 🪙`}`));
       out.push(h('div', { class: 'grid fac-row' }, row));
 
-      // Améliorations
-      out.push(h('h3', {}, t('fac_upgrades')));
-      out.push(h('div', { class: 'cards' }, UPGRADES[kind].map((u) => {
+      // Améliorations (bergerie sans troupeau possible : seulement celles déjà installées, et le petit mot)
+      const idle = !coreShown(p, kind);
+      const ups = UPGRADES[kind].filter((u) => !idle || hasUpgrade(f, kind, u.id));
+      if (idle) out.push(h('p', { class: 'note more-soon' }, t('moreSoon')));
+      if (ups.length) out.push(h('h3', {}, t('fac_upgrades')));
+      out.push(h('div', { class: 'cards' }, ups.map((u) => {
         const owned = hasUpgrade(f, kind, u.id);
         const c = canBuyUpgrade(p, kind, u.id);
         let side;
@@ -132,8 +135,7 @@ export function facilitiesTab(ui) {
   return [
     h('p', { class: 'note' }, t('fac_tabHelp')),
     // (la bergerie et ses améliorations : seulement si moutons, chèvres ou vaches sont proposés, ou déjà là)
-    h('div', { class: 'cards' }, ['stable', 'house', 'pen'].filter((kind) => kind !== 'pen'
-      || anyAvailable(g.profile, LIVESTOCK_IDS)).map((kind) => h('div', { class: 'card' },
+    h('div', { class: 'cards' }, ['stable', 'house', 'pen'].filter((kind) => coreShown(g.profile, kind)).map((kind) => h('div', { class: 'card' },
       h('span', { class: 'card-emoji' }, ICON[kind]),
       h('span', { class: 'card-main' },
         h('b', {}, t(`fac_title_${kind}`)),

@@ -15,6 +15,7 @@
 import { createAnimal, namesInUse } from './animal.js';
 import { dailyCareScore, VISITOR_WAIT_HOURS } from './clients.js';
 import { DAYS_PER_YEAR } from './time.js';
+import { anyAvailable } from './species.js'; // espèces proposées (coaching du troupeau)
 import { earn } from './profile.js';
 import { pick, randRange } from './rng.js';
 import {
@@ -41,16 +42,22 @@ export const PROBLEM_IDS = Object.keys(PROBLEMS);
 
 /** Coaching de ses propres animaux (gratuit) : les mêmes séances + deux spécialités. */
 export const COACHINGS = {
-  herd: { emoji: '🐑', game: 'dt_herd', gains: { herding: 6, obedience: 2 }, rank: 1, species: ['dog'] },
+  // needs : un troupeau possible dans la partie (moutons, chèvres ou vaches proposés ou déjà là : src/sim/species.js)
+  herd: { emoji: '🐑', game: 'dt_herd', gains: { herding: 6, obedience: 2 }, rank: 1, species: ['dog'], needs: ['sheep', 'goat', 'cow'] },
   agility: { emoji: '🎯', game: 'dt_agility', gains: { jump: 5, speed: 4, obedience: 2 }, rank: 2, species: ['dog', 'cat', 'rabbit'] },
 };
 
-/** Séances possibles pour un animal à soi, selon l'espèce (chiens : tout ; chats, chevaux, lapins : ordres et rappel). */
-export function coachingsFor(a, rank = 0) {
+/**
+ * Séances possibles pour un animal à soi, selon l'espèce (chiens : tout ; chats, chevaux, lapins : ordres et rappel).
+ * profile : sans troupeau possible dans la partie, pas de coaching « chien de troupeau » (needs).
+ */
+export function coachingsFor(a, rank = 0, profile = null) {
   const out = [];
   if (a.species === 'dog') out.push(...PROBLEM_IDS);
   else if (['cat', 'horse', 'rabbit'].includes(a.species)) out.push('obey', 'recall');
-  for (const [id, c] of Object.entries(COACHINGS)) if (c.species.includes(a.species) && rank >= c.rank) out.push(id);
+  for (const [id, c] of Object.entries(COACHINGS)) {
+    if (c.species.includes(a.species) && rank >= c.rank && (!profile || anyAvailable(profile, c.needs))) out.push(id);
+  }
   return out;
 }
 

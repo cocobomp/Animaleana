@@ -210,8 +210,10 @@ function renderAnimal(ui, g, a) {
     }
   }
 
-  // Chien de troupeau
-  if (a.species === 'dog') {
+  // Chien de troupeau : seulement s'il peut y avoir un troupeau dans la partie (moutons, chèvres ou vaches
+  // proposés ou déjà à la ferme : src/sim/species.js), ou s'il est déjà le chien de troupeau.
+  const herdOn = anyAvailable(g.profile, LIVESTOCK_IDS) || a.role === 'herder';
+  if (a.species === 'dog' && herdOn) {
     const skill = a.skills.herding ?? 0;
     const able = skill >= 25;
     out.push(h('h3', {}, `🐑 ${t('herdDog')}`),
@@ -228,10 +230,11 @@ function renderAnimal(ui, g, a) {
   if (!training) out.push(...dogTrainerSection(ui, a)); // éducateur canin : coaching de ses propres animaux
 
   if (a.client) return out; // animal confié : ni entraînement, ni tours, ni bébés (il repart bientôt)
+  // (« Conduite de troupeau » et la jauge Troupeau : seulement quand un troupeau est possible, voir herdOn)
   out.push(h('h3', {}, t('training')), h('div', { class: 'grid' },
-    sp.training.map((x) => btn(t(`tr_${x}`), () => g.train(a, x), { disabled: stage === 'baby' })),
+    sp.training.filter((x) => x !== 'herding' || herdOn).map((x) => btn(t(`tr_${x}`), () => g.train(a, x), { disabled: stage === 'baby' })),
   ), h('div', { class: 'bars small' },
-    Object.entries(a.skills).map(([k, v]) => bar(t(`skill_${k}`), v)),
+    Object.entries(a.skills).filter(([k]) => k !== 'herding' || herdOn).map(([k, v]) => bar(t(`skill_${k}`), v)),
   ));
 
   out.push(h('h3', {}, t('tricks')), h('div', { class: 'grid' },

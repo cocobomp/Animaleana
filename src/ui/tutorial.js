@@ -9,7 +9,7 @@
 import { h, isPhone } from './dom.js';
 import { t, getLang } from '../i18n.js';
 import { nbsp } from './minigames/frame.js'; // typographie française (« Adopter » ! ne se coupe pas)
-import { OBJECTIVES, objectiveParams } from '../sim/objectives.js';
+import { OBJECTIVES, objectiveParams, objectiveShown } from '../sim/objectives.js';
 import { earn } from '../sim/profile.js';
 import {
   tutorialStep, stepNumber, noteEvent, updateTutorial, skipTutorial, restartTutorial,
@@ -533,7 +533,7 @@ export class Tutorial {
     }
     const view = followView(p, OBJECTIVES);
     // Sans quête suivie : la dernière choisie (arrêtée avec ✋ : 🧭 la reprend là où on en était), sinon la conseillée.
-    const recent = this.recent && !p.completed.includes(this.recent.id) ? OBJECTIVES.find((o) => o.id === this.recent.id) : null;
+    const recent = this.recent && !p.completed.includes(this.recent.id) ? OBJECTIVES.find((o) => o.id === this.recent.id && objectiveShown(p, o)) ?? null : null;
     const q = view ? OBJECTIVES.find((o) => o.id === view.id) : recent ?? suggestedQuest(p, OBJECTIVES);
     if (!q) {
       this.tracker.hidden = true;
@@ -772,7 +772,7 @@ export class Tutorial {
     }
     this.trackerKey = '';
     const v = followView(p, OBJECTIVES);
-    this.ui.toast(`🧭 ${questTitle(p, id)} — ${t(`quest_step_${v.current.id}`)}`, 5000);
+    if (v?.current) this.ui.toast(`🧭 ${questTitle(p, id)} — ${t(`quest_step_${v.current.id}`)}`, 5000); // (rien pour une quête cachée)
     this.tick();
   }
 

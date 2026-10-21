@@ -4,6 +4,7 @@
 
 import { spend, canAfford } from './profile.js';
 import { levelOf } from './progress.js';
+import { CORE_SPECIES, coreShown } from './species.js';
 
 /**
  * Box de l'écurie. Elle en a 8 au début (4 utilisables, les autres débloqués par des améliorations) ;
@@ -269,6 +270,8 @@ export function canBuyUpgrade(profile, kind, id) {
   const u = UPGRADES[kind]?.find((x) => x.id === id);
   if (!u) return { ok: false, reason: 'unknown' };
   if (hasUpgrade(f, kind, id)) return { ok: false, reason: 'owned' };
+  // (la bergerie ne s'équipe pas tant qu'aucun mouton, chèvre ni vache n'est possible : src/sim/species.js)
+  if (CORE_SPECIES[kind] && !coreShown(profile, kind)) return { ok: false, reason: 'soon' };
   if (levelOf(profile.xp ?? 0) < u.level) return { ok: false, reason: 'level', level: u.level };
   if (u.requires && !hasUpgrade(f, kind, u.requires)) return { ok: false, reason: 'requires', requires: u.requires };
   if (!canAfford(profile, u.price)) return { ok: false, reason: 'money' };

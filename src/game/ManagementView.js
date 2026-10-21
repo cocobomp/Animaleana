@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { h } from '../ui/dom.js';
 import { t } from '../i18n.js';
-import { SPECIES } from '../sim/species.js';
+import { SPECIES, coreShown } from '../sim/species.js';
 import { STRUCTURES, RESIZABLE_CORE, footprintOf, capacityOf } from '../sim/construction.js';
 import { PEN } from './AnimalEntity.js';
 import { BuildMode } from './BuildMode.js';
@@ -402,6 +402,8 @@ export class ManagementView {
     for (const it of w.interactables) {
       if (it.kind === 'spot') continue;
       if (it.structure) continue; // porte d'une construction du joueur (salon de toilettage) : son étiquette vient plus bas
+      // Clapier ou bergerie qui ne sert pas encore (ni lapin ni troupeau possible : src/sim/species.js) : décor, sans étiquette.
+      if (!coreShown(g.profile, it.kind)) continue;
       const col = w.colliders.find((c) => c.kind === it.kind);
       let pos = col ? { x: col.x, z: col.z } : { x: it.x, z: it.z };
       if (it.kind === 'pen') pos = { x: PEN.x, z: PEN.z - 3 };

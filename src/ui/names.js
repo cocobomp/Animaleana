@@ -1,8 +1,8 @@
 // Noms d'espèce accordés au sexe et à l'âge (jument, chienne, agneau…).
 
-import { getLang, L } from '../i18n.js';
+import { getLang, L, t } from '../i18n.js';
 import { lifeStage } from '../sim/animal.js';
-import { SPECIES, speciesAvailable } from '../sim/species.js';
+import { SPECIES, speciesAvailable, anyAvailable, isOffered, LIVESTOCK_IDS } from '../sim/species.js';
 import { rankNewSpecies } from '../sim/careers.js';
 
 const NAMES = {
@@ -86,9 +86,11 @@ export function speciesList(ids, { one = false, or = false } = {}) {
 /**
  * Paramètres des textes de rang (ca_perk_*, grm_rankDesc_*) : les animaux que le rang apporte, seulement les
  * espèces proposées (rankNewSpecies, src/sim/careers.js). { animals: 'chiens, ', list: 'chiens', List: 'Chiens' } ;
- * vides si le rang n'apporte aucune espèce proposée.
+ * vides si le rang n'apporte aucune espèce proposée. herd : « , coaching chien de troupeau » (éducateur canin)
+ * seulement s'il peut y avoir un troupeau dans la partie (profile), ou si le bétail est proposé (sans profile).
  */
-export function perkParams(id, rank) {
+export function perkParams(id, rank, profile = null) {
   const list = speciesList(rankNewSpecies(id, rank));
-  return { animals: list ? `${list}, ` : '', list, List: list.charAt(0).toUpperCase() + list.slice(1) };
+  const herdOn = profile ? anyAvailable(profile, LIVESTOCK_IDS) : LIVESTOCK_IDS.some(isOffered);
+  return { animals: list ? `${list}, ` : '', list, List: list.charAt(0).toUpperCase() + list.slice(1), herd: herdOn ? t('ca_perk_herd') : '' };
 }

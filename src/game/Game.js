@@ -27,7 +27,7 @@ import {
   passiveEquipment, hireHelper, fireHelper, payHelpers, doHelperTask, tickProduce, collectProduct,
   socialMoment, graze, companionsOf, hasStock, helperTask as helperTaskFn, HELPERS, equipmentShown, helperShown,
 } from '../sim/farm.js';
-import { SPECIES, isOffered } from '../sim/species.js';
+import { SPECIES, isOffered, coreShown } from '../sim/species.js';
 import {
   NEEDS, createAnimal, tickAnimal, applyCare, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
   namesInUse,
@@ -1011,6 +1011,9 @@ export class Game {
         tackDirty: this.day - (this.profile.tackCleanedDay ?? -99) >= 2 ? 1 : 0,
         penDroppings: this.zoneDroppings('pen'),
       },
+      // Le clapier et la bergerie de la ferme ne servent que si leurs espèces comptent pour la partie
+      // (proposées ou déjà là : src/sim/species.js) ; sinon ils restent au décor, sans leurs menus.
+      shown: { hutch: coreShown(this.profile, 'hutch'), pen: coreShown(this.profile, 'pen') },
     };
   }
 

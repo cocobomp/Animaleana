@@ -3,18 +3,19 @@
 import { happiness } from './animal.js';
 import { PLACE_IDS, PLACES } from './places.js';
 import { CAREERS } from './careers.js'; // paliers du métier Toiletteur
-import { SPECIES_IDS, speciesAvailable, anyAvailable } from './species.js';
+import { SPECIES_IDS, isOffered, anyAvailable } from './species.js';
 
 const stat = (p, k) => p.stats[k] ?? 0;
 
 /**
  * Quête « espèces différentes » : 4 espèces au plus, mais jamais plus que celles qu'on peut avoir dans
- * cette partie (proposées, OFFERED_SPECIES de src/sim/species.js, ou déjà à la ferme). Seuls nos propres
- * animaux comptent (pas ceux des clients).
+ * cette partie (proposées, OFFERED_SPECIES de src/sim/species.js, ou déjà à soi). Seuls nos propres
+ * animaux comptent, pour le compte comme pour le but : un chat en pension (client d'une ancienne partie)
+ * ne relève pas le but à 3 espèces alors qu'aucun chat ne peut s'adopter.
  */
 function speciesProgress(p) {
   const own = new Set(p.animals.filter((a) => !a.client && !a.guest).map((a) => a.species));
-  const total = Math.min(4, SPECIES_IDS.filter((sid) => speciesAvailable(p, sid)).length);
+  const total = Math.min(4, SPECIES_IDS.filter((sid) => isOffered(sid) || own.has(sid)).length);
   return [Math.min(own.size, total), total];
 }
 

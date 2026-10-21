@@ -21,7 +21,7 @@
 //     diplomas: { vet: day },         // diplôme d'une école (src/sim/vetSchool.js) : on peut commencer avant le niveau
 //   }
 
-import { isOffered } from './species.js';
+import { isOffered, anyAvailable } from './species.js';
 
 export const RANKS = ['apprentice', 'skilled', 'expert'];
 export const ACTION_XP = 15; // première fois qu'on fait une action du carnet
@@ -139,7 +139,8 @@ export const CAREERS = {
       { id: 'session', emoji: '🎓', where: 'animal' },
       { id: 'deliver', emoji: '🎬', where: 'visitor' },
       { id: 'coachOwn', emoji: '🐶', where: 'animal' },
-      { id: 'coachHerd', emoji: '🐑', where: 'animal', rank: 1 },
+      // needs : espèces nécessaires (action cachée du carnet tant qu'aucune ne compte pour la partie, voir actionShown)
+      { id: 'coachHerd', emoji: '🐑', where: 'animal', rank: 1, needs: ['sheep', 'goat', 'cow'] },
       { id: 'coachAgility', emoji: '🎯', where: 'animal', rank: 2 },
       { id: 'rescue', emoji: '💛', where: 'visitor', rank: 2 },
     ],
@@ -343,15 +344,22 @@ export const isActionDone = (profile, id, action) => (careerState(profile).done[
 /** Une action du carnet encore fermée (elle s'ouvre à un rang plus haut) ? */
 export const isActionLocked = (profile, id, action) => rankOf(profile, id) < (action.rank ?? 0);
 
+/**
+ * L'action est-elle dans le carnet de cette partie ? Non si elle demande des espèces pas encore proposées
+ * qu'on n'a pas (needs, OFFERED_SPECIES de src/sim/species.js) : le coaching « chien de troupeau » sans
+ * troupeau possible. Une action déjà cochée reste.
+ */
+export const actionShown = (profile, id, action) => anyAvailable(profile, action.needs) || isActionDone(profile, id, action.id);
+
 /** La prochaine action du carnet à faire (dans l'ordre, sans celles encore fermées), ou null. */
 export function nextAction(profile, id) {
   if (!isStarted(profile, id)) return null;
-  return CAREERS[id].actions.find((a) => !isActionDone(profile, id, a.id) && !isActionLocked(profile, id, a)) ?? null;
+  return CAREERS[id].actions.find((a) => !isActionDone(profile, id, a.id) && !isActionLocked(profile, id, a) && actionShown(profile, id, a)) ?? null;
 }
 
 /** Le carnet : [{ id, emoji, where, rank?, done, locked }]. */
 export function carnet(profile, id) {
-  return CAREERS[id].actions.map((a) => {
+  return CAREERS[id].actions.filter((a) => actionShown(profile, id, a)).map((a) => {
     const done = isActionDone(profile, id, a.id);
     return { ...a, done, locked: !done && isActionLocked(profile, id, a) };
   });

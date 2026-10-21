@@ -432,7 +432,9 @@ export function updateFollow(profile, objectives, ctx = {}) {
   const f = profile.questFollow;
   if (!f) return null;
   const o = objectives.find((x) => x.id === f.id);
-  if (!o) {
+  // (quête suivie avant la mise à jour, qui demande une espèce pas encore proposée — le lapin-hop sans lapin :
+  // objectiveShown, src/sim/objectives.js —, ou qui n'existe plus : le suivi s'arrête)
+  if (!o || !objectiveShown(profile, o)) {
     stopFollow(profile);
     return null;
   }
@@ -461,7 +463,7 @@ export function followView(profile, objectives) {
   const f = profile.questFollow;
   if (!f) return null;
   const o = objectives.find((x) => x.id === f.id);
-  if (!o) return null;
+  if (!o || !objectiveShown(profile, o)) return null; // (quête cachée : voir updateFollow)
   const [cur, max] = o.progress(profile);
   const id = f.steps[f.step];
   return {

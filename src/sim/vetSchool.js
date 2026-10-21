@@ -14,6 +14,7 @@
 //   }
 
 import { careerState, isStarted, addCareerXp } from './careers.js';
+import { speciesAvailable } from './species.js'; // espèces de la partie (tri des cœurs, textes)
 
 export const LESSON_XP = 15; // XP de métier par leçon réussie (la première fois)
 export const MASTER_XP = 30; // bonus quand toute l'école est finie
@@ -39,6 +40,34 @@ export const LESSONS = [
  * chevauchent (chien 60–140, mouton 70–90) et l'ordre ne se lirait pas sur les nombres affichés.
  */
 export const HEART_SORT = ['horse', 'cow', 'sheep', 'dog', 'cat', 'rabbit'];
+
+/** Le tri des cœurs de cette partie : seulement les espèces proposées ou déjà à la ferme (src/sim/species.js). */
+export const heartSortFor = (profile) => HEART_SORT.filter((sp) => speciesAvailable(profile, sp));
+
+/**
+ * Textes de l'école qui parlent d'une espèce précise (src/ui/vetTexts.js). Tant qu'elle ne compte pas pour la
+ * partie (ni proposée, ni à la ferme), on prend la variante « _hd » (cheval et chien) du même texte.
+ */
+export const VS_TEXT_NEEDS = {
+  vs_vitals_p1: ['cat', 'rabbit'],
+  vs_vitals_p2: ['rabbit'],
+  vs_vitals_q1_why: ['cat'],
+  vs_vitals_q2_a2: ['rabbit'],
+  vs_vitals_q2_a3: ['cow'],
+  vs_vitals_q2_why: ['rabbit'],
+  vs_thermo_q2: ['sheep'],
+  vs_thermo_q2_why: ['sheep'],
+  vs_look_q3: ['rabbit'],
+  vs_look_q3_a1: ['rabbit'],
+  vs_look_q3_why: ['rabbit'],
+  vs_care_q1_why: ['cat'],
+};
+
+/** La clé du texte à montrer dans cette partie : la clé elle-même, ou sa variante « _hd » (voir VS_TEXT_NEEDS). */
+export function vsTextKey(profile, key) {
+  const needs = VS_TEXT_NEEDS[key];
+  return !needs || needs.every((sp) => speciesAvailable(profile, sp)) ? key : `${key}_hd`;
+}
 export const LESSON_IDS = LESSONS.map((l) => l.id);
 export const BASIC_IDS = LESSONS.filter((l) => l.basic).map((l) => l.id);
 export const lessonDef = (id) => LESSONS.find((l) => l.id === id) ?? null;

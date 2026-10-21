@@ -3,7 +3,7 @@
 
 import { h } from './dom.js';
 import { t, ta, hourParams } from '../i18n.js';
-import { SPECIES, speciesAvailable } from '../sim/species.js';
+import { SPECIES, speciesAvailable, CORE_SPECIES, coreShown } from '../sim/species.js';
 import { canRide } from '../sim/animal.js';
 import { canProduce } from '../sim/farm.js';
 import { canLeash, owned, inUse } from '../sim/gear.js';
@@ -112,9 +112,11 @@ export function openBuilding(ui, kind) {
     dogTrainer: () => ui.openDogTrainer(), // carnet de l'éducateur canin (niche)
     ...activityRuns(ui), // activités : terrain de concours
   };
-  // Maison des animaux : qui dort dans quel coin.
-  const header = kind === 'pethouse' ? () => petHouseList(g) : null;
-  sheet(ui, `${BUILDING_ICON[kind]} ${name}`, t(`bldd_${kind}`), () => g.buildingActions(kind).map((a) => ({
+  // Maison des animaux : qui dort dans quel coin. Clapier ou bergerie qui ne sert pas encore (ni lapin, ni
+  // troupeau possible : src/sim/species.js) : le petit mot « D'autres animaux arrivent bientôt ! » à la place.
+  const idle = !!CORE_SPECIES[kind] && !coreShown(g.profile, kind);
+  const header = kind === 'pethouse' ? () => petHouseList(g) : idle ? () => h('p', { class: 'note more-soon' }, t('moreSoon')) : null;
+  sheet(ui, `${BUILDING_ICON[kind]} ${name}`, idle ? null : t(`bldd_${kind}`), () => g.buildingActions(kind).map((a) => ({
     icon: a.icon,
     label: t(`do_${a.id}`),
     enabled: a.enabled,

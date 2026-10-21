@@ -6,13 +6,14 @@
 
 import { h } from './dom.js';
 import { t, ta, L } from '../i18n.js';
-import { SPECIES, isOffered } from '../sim/species.js';
+import { SPECIES, isOffered, speciesAvailable } from '../sim/species.js';
 import { createAnimal } from '../sim/animal.js';
 import { isStarted, canStart, RANKS } from '../sim/careers.js';
 import {
-  LESSONS, LESSON_IDS, BASIC_IDS, lessonDef, schoolSummary, completeLesson, isUnlocked, quizStars, isRightAnswer, MASTER_XP, HEART_SORT,
+  LESSONS, LESSON_IDS, BASIC_IDS, lessonDef, schoolSummary, completeLesson, isUnlocked, quizStars, isRightAnswer, MASTER_XP,
+  heartSortFor, vsTextKey,
 } from '../sim/vetSchool.js';
-import { VITALS, ILLNESS_IDS, TREATMENTS, makeCase, treatmentFor, classify, typicalHeartOf } from '../sim/vetExam.js';
+import { VITALS, VITAL_SPECIES, ILLNESS_IDS, TREATMENTS, makeCase, treatmentFor, classify, typicalHeartOf } from '../sim/vetExam.js';
 import { createExamView, openOverlay, num, illName, ILL_EMOJI, TREAT_EMOJI } from './vetExam.js';
 import { VetStage } from './vetStage.js';
 
@@ -26,7 +27,6 @@ const POINT_EMOJI = {
   illness: ['🔎', '🤒', '🤢', '👂'],
   care: ['💊', '⚖️', '📋', '🧼'],
 };
-const SORT_ORDER = HEART_SORT; // du cœur le plus lent au plus rapide (cœur typique au repos)
 const MATCH_SIGNS = {
   ear: ['earsRed', 'painEar'],
   paw: ['lame', 'painLeg'],
@@ -35,7 +35,10 @@ const MATCH_SIGNS = {
   flu: ['fever', 'crackles', 'breathFast'],
   fleas: ['fleas'],
 };
-const THERMO_ROUNDS = [{ sp: 'horse', t: 38.9 }, { sp: 'dog', t: 38.5 }, { sp: 'rabbit', t: 37.6 }];
+// alt : la manche quand l'espèce ne compte pas pour la partie (src/sim/species.js) : un chien un peu froid.
+const THERMO_ROUNDS = [{ sp: 'horse', t: 38.9 }, { sp: 'dog', t: 38.5 }, { sp: 'rabbit', t: 37.6, alt: { sp: 'dog', t: 37.3 } }];
+/** Un texte de l'école, ou sa variante « cheval et chien » si l'espèce dont il parle n'est pas dans la partie. */
+const vt = (profile, key, params) => t(vsTextKey(profile, key), params);
 
 const shuffle = (arr) => {
   const a = [...arr];
@@ -167,7 +170,7 @@ export function openLesson(ui, id) {
           onClick: () => {
             if (isRightAnswer(id, st.q, k)) {
               state.solved = true;
-              why.replaceChildren(h('p', { class: 'vx-msg good' }, t('vs_right')), h('p', { class: 'vs-why' }, `💡 ${t(`${key}_why`)}`),
+              why.replaceChildren(h('p', { class: 'vx-msg good' }, t('vs_right')), h('p', { class: 'vs-why' }, `💡 ${vt(g.profile, `${key}_why`)}`),
                 h('button', { class: 'primary big', onClick: () => { if (st.q + 1 < def.quiz.length) { st.q++; renderQuiz(); } else go('done'); } }, t('vs_continue')));
             } else {
               st.mistakes++;
@@ -176,11 +179,11 @@ export function openLesson(ui, id) {
             }
             draw();
           },
-        }, t(`${key}_a${k + 1}`));
+        }, vt(g.profile, `${key}_a${k + 1}`));
       }));
     };
     draw();
-    body.replaceChildren(h('small', { class: 'note' }, t('vs_qN', { n, total: def.quiz.length })), h('p', { class: 'vs-q' }, t(key)), box, why);
+    body.replaceChildren(h('small', { class: 'note' }, t('vs_qN', { n, total: def.quiz.length })), h('p', { class: 'vs-q' }, vt(g.profile, key)), box, why);
     body.scrollTop = 0;
   }
 
@@ -220,8 +223,8 @@ export function openLesson(ui, id) {
 
 // ------------------------------------------------------------------ 📖 j'apprends
 
-function points(id) {
-  return h('ul', { class: 'vs-points' }, POINT_EMOJI[id].map((e, i) => h('li', {}, h('span', {}, e), h('span', {}, t(`vs_${id}_p${i + 1}`)))));
+function points(id, profile) {
+  return h('ul', { class: 'vs-points' }, POINT_EMOJI[id].map((e, i) => h('li', {}, h('span', {}, e), h('span', {}, vt(profile, `vs_${id}_p${i + 1}`)))));
 }
 
 /** Une scène fixe : l'animal avec les zones montrées et nommées. */
@@ -236,7 +239,8 @@ function learn(id, ui, st) {
   if (id === 'vitals') {
     out.push(h('table', { class: 'vs-table' },
       h('thead', {}, h('tr', {}, h('th', {}, t('vs_tbl_animal')), h('th', {}, '🌡️ °C'), h('th', {}, '❤️ /min'), h('th', {}, '🫁 /min'))),
-      h('tbody', {}, ['horse', 'cow', 'sheep', 'goat', 'dog', 'cat', 'rabbit'].map((sp) => {
+      // (seulement les espèces de la partie : proposées ou déjà à la ferme, src/sim/species.js)
+      h('tbody', {}, VITAL_SPECIES.filter((sp) => speciesAvailable(ui.game.profile, sp)).map((sp) => {
         const V = VITALS[sp];
         return h('tr', {}, h('td', {}, `${SPECIES[sp].emoji} ${L(SPECIES[sp].name)}`),
           h('td', {}, `${num(V.temp[0])}–${num(V.temp[1])}`), h('td', {}, `${V.heart[0]}–${V.heart[1]}`), h('td', {}, `${V.resp[0]}–${V.resp[1]}`));
@@ -253,7 +257,7 @@ function learn(id, ui, st) {
     out.push(h('div', { class: 'vx-tx-grid' }, TREATMENTS.map((x) => h('div', { class: 'vx-tx vs-card' },
       h('span', { class: 'vx-tx-emoji' }, TREAT_EMOJI[x]), h('b', {}, t(`treat_${x}`)), h('small', {}, t(`vx_txd_${x}`))))));
   }
-  out.push(points(id));
+  out.push(points(id, ui.game.profile));
   return out;
 }
 
@@ -367,7 +371,7 @@ function exercise(ui, id, st, done) {
   };
 
   switch (def.exercise) {
-    case 'sortHeart': return [h('p', { class: 'vs-q' }, t('vs_ex_sort')), sortHeart(cont)];
+    case 'sortHeart': return [h('p', { class: 'vs-q' }, t('vs_ex_sort')), sortHeart(cont, heartSortFor(ui.game.profile))];
     case 'stetho': {
       const a = schoolAnimal('dog', 'labrador', 'Biscuit', 'm');
       return [h('p', { class: 'vs-q' }, t('vs_ex_stetho', { name: a.name })), examEx(a, ['stetho'], ['lungs', 'gut', 'heart'])];
@@ -376,7 +380,7 @@ function exercise(ui, id, st, done) {
       const a = patient('thermo', 'cold');
       const wrap = h('div', {});
       const ex = examEx(a, ['thermo'], ['temp'], null, () => {
-        wrap.append(h('p', { class: 'vs-q' }, t('vs_ex_thermo2')), thermoRounds(cont));
+        wrap.append(h('p', { class: 'vs-q' }, t('vs_ex_thermo2')), thermoRounds(cont, ui.game.profile));
         setTimeout(() => wrap.lastElementChild?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 50);
       });
       return [h('p', { class: 'vs-q' }, t('vs_ex_thermo1', { name: a.name })), ex, wrap];
@@ -410,7 +414,8 @@ function exercise(ui, id, st, done) {
   }
 }
 
-function sortHeart(cont) {
+/** order : du cœur le plus lent au plus rapide (cœur typique au repos), les espèces de la partie (heartSortFor). */
+function sortHeart(cont, order) {
   const picked = [];
   const line = h('div', { class: 'vs-line' });
   const msg = h('div', {});
@@ -418,15 +423,15 @@ function sortHeart(cont) {
   const drawLine = () => line.replaceChildren(...(picked.length
     ? picked.flatMap((sp, i) => (i ? [h('span', { class: 'arrow' }, '➜'), SPECIES[sp].emoji] : [SPECIES[sp].emoji]))
     : [h('small', { class: 'note' }, '🐢 ❤️ … ❤️ 🚀')]));
-  for (const sp of shuffle(SORT_ORDER)) {
+  for (const sp of shuffle(order)) {
     const b = h('button', {
       onClick: () => {
-        if (sp === SORT_ORDER[picked.length]) {
+        if (sp === order[picked.length]) {
           picked.push(sp);
           b.classList.add('picked');
           drawLine();
           msg.replaceChildren();
-          if (picked.length === SORT_ORDER.length) {
+          if (picked.length === order.length) {
             grid.hidden = true;
             msg.replaceChildren(h('p', { class: 'vx-msg good' }, t('vs_sort_done')), cont());
           }
@@ -483,9 +488,9 @@ function choiceRow(options, isRight, onRight, wrongText) {
   return [row, msg];
 }
 
-function thermoRounds(cont) {
+function thermoRounds(cont, profile) {
   return rounds(THERMO_ROUNDS.length, (i, next) => {
-    const r = THERMO_ROUNDS[i];
+    const r = THERMO_ROUNDS[i].alt && !speciesAvailable(profile, THERMO_ROUNDS[i].sp) ? THERMO_ROUNDS[i].alt : THERMO_ROUNDS[i];
     const V = VITALS[r.sp];
     const truth = classify(r.t, V.temp);
     const fill = Math.max(8, Math.min(100, ((r.t - 35) / 7) * 100));

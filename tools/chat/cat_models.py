@@ -22,8 +22,9 @@ MODELS = {
                    eye_mats=('material',),
                    gait_over={'run': {'stride': 0.42, 'drop': 0.008, 'lift': 0.09}, 'trot': {'stride': 0.28}, 'walk': {'stride': 0.24}},
                    pose_opts=dict(groom_dz=0.06, groom_dy=0.02, groom_head=0.35, groom_a3=1.8, groom_wipe_dy=0.02, groom_wipe_dz=-0.055,
-                                  groom_wipe_head=0.38, stretch_reach=0.66, stretch_scap=0.2, curl=0.36,
-                                  sit_flex=0.3, sit_tuck=-0.15, sit_femur=0.2)),
+                                  groom_wipe_head=0.38, stretch_reach=0.66, stretch_scap=0.2,
+                                  sit_flex=0.3, sit_tuck=-0.15, sit_femur=0.2, lie_hip=0.6, lie_chest=0.05, lie_loaf=1,
+                                  curl=0.6, curl_neck=0.9, curl_hb=0.6, curl_roll=0.0)),
 }
 
 

@@ -318,6 +318,13 @@ def lie_gp():
         hz = max(0.0, J0.z - zE)
         ey = J0.y + math.sqrt(max(0.0, l1 * l1 - hz * hz)) if hz < l1 else J0.y
         legsd[lab] = {'J3': (ey - l2 * 0.97 - l3, R['J'][3].z + P.get('lie_wrist', 0.03) * hipz), 'a3': 0.0, 'phi': 0.0, 'bend': 1}
+        if P.get('lie_loaf'):
+            # (« en pain » : poignet sous le poitrail, un peu devant l'épaule, patte repliée vers l'arrière, coude
+            # replié contre le flanc — chaton au poitrail profond : ses bras ne touchaient pas le sol à plat, pattes
+            # tendues devant comme une otarie)
+            wy = J0.y - P.get('lie_loaf_fwd', 0.25) * l2
+            a3 = math.pi - P.get('lie_loaf_a3', 0.25)
+            legsd[lab] = {'J3': (wy - l3 * math.cos(a3), R['J'][3].z), 'a3': a3, 'phi': P.get('lie_loaf_phi', 0.0), 'bend': 1}
     for lab in ('HL', 'HR'):
         R = rig.legs[lab]
         J0 = rot(R['J'][0])
@@ -342,7 +349,9 @@ if want('lie'):
 
 # ---- en boule (dormir) : couché, colonne courbée sur le côté, tête posée contre les cuisses, queue autour ---------
 def curl_pose(t=0.0, k=1.0):
-    gp = dict(LIE, tail_side=[x * 1.1 for x in WRAP], neck_base=LIE['neck_base'] + 0.25, head_base=LIE['head_base'] + 0.35)
+    # (curl_neck, curl_hb : encolure et tête baissées de plus, la tête posée — chaton à grosse tête)
+    gp = dict(LIE, tail_side=[x * 1.1 for x in WRAP], neck_base=LIE['neck_base'] + P.get('curl_neck', 0.25),
+              head_base=LIE['head_base'] + P.get('curl_hb', 0.35))
     base, _ = dg.pose_at(rig, t, gp, lambda u: breathe(u, 1.4, 1))
     a = P.get('curl', 0.42) * k
     spec = {'spine1': ('Z', a * 0.8), 'spine2': ('Z', a), 'spine3': ('Z', a), 'chest': ('Z', a * 0.7),

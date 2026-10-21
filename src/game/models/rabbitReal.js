@@ -706,11 +706,12 @@ function cardGeometry(base, D, B, density = 1) {
     const mid = root.clone().addScaledVector(dir, len * 0.5);
     const dir2 = dir.clone().addScaledVector(down, bend).normalize();
     const tip = mid.clone().addScaledVector(dir2, len * 0.5);
-    // (mèche en éventail : étroite à la racine, large au bout, comme les brins de la texture)
+    // (mèche étroite à la racine, pleine au milieu, un peu resserrée au bout : élargie jusqu'au bout, elle finissait
+    // en copeau de papier carré, et ses brins pointus se voyaient de profil)
     const pts = [
       [root, -wid * 0.22, 0], [root, wid * 0.22, 0],
-      [mid, -wid * 0.4, 0.5], [mid, wid * 0.4, 0.5],
-      [tip, -wid * 0.5, 1], [tip, wid * 0.5, 1],
+      [mid, -wid * 0.42, 0.5], [mid, wid * 0.42, 0.5],
+      [tip, -wid * 0.34, 1], [tip, wid * 0.34, 1],
     ];
     // Éclairée comme la peau où elle pousse (sa normale ; le shader la tourne à moitié vers la caméra) : une toison douce, pas des
     // éclats de papier qui brillent ou noircissent selon leur face.
@@ -746,21 +747,26 @@ function cardGeometry(base, D, B, density = 1) {
     const head = k.head > 0.5;
     if (head && k.fz > 0.45) continue;
     const ln = B.cardLen * (0.7 + 0.6 * hash(i * 1.37));
+    // Près du sol (bas des flancs, ventre, pattes) : mèches plus fines et plus nombreuses (de profil, au ras du sol,
+    // quelques cartes larges se lisaient une à une)
+    const lowZ = 1 - smooth(0.25, 0.5, (r0[i * 3 + 1] - L.bellyY) / Math.max(0.03, L.topY - L.bellyY));
+    const thin = 1 - 0.45 * lowZ;
+    const more = 1 + 0.6 * lowZ;
     const sideN = Math.abs(N[i * 3]) / Math.max(1e-6, Math.hypot(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]));
     // joues : sous les yeux et sur les côtés de la tête
     const cheek = head && k.below > 0.5 && k.fz > -0.6 && sideN > 0.45;
-    if (cards > 0.05 && (k.body > 0.3 || cheek) && hash(i * 2.3) < cards) {
+    if (cards > 0.05 && (k.body > 0.3 || cheek) && hash(i * 2.3) < cards * more) {
       // angora : une toison de mèches larges et serrées autour du corps, couchées vers l'arrière et vers le bas comme
       // un poil long qui retombe, plus courtes sur les joues, la tête et les pattes
       const kk = cheek ? 0.5 : head ? 0.6 : Math.min(1, 0.35 + k.body * 0.7);
-      addCard(i, ln * kk, ln * 0.8 * kk, 0.55, 0.55, 0.5);
+      addCard(i, ln * kk, ln * 0.8 * kk * thin, 0.55, 0.55, 0.5);
     } else if (maneC > 0.05 && (k.mane > 0.4 || cheek) && hash(i * 2.9) < maneC * 0.95) {
       // crinière : une collerette autour de la face (nuque, base des oreilles, joues, barbe, cou, poitrail) dont les
       // mèches rayonnent depuis la tête, un peu vers l'arrière
       addCard(i, ln * (cheek ? 0.65 : head ? 0.8 : 0.95), ln * 0.75, 0.25, 0.35, 0.35, head || k.mane > 0.7 ? 0.6 : 0.3);
-    } else if (maneC > 0.05 && B.skirt > 0.05 && k.skirt > 0.5 && hash(i * 3.7) < B.skirt * 1.2) {
+    } else if (maneC > 0.05 && B.skirt > 0.05 && k.skirt > 0.5 && hash(i * 3.7) < B.skirt * 1.2 * more) {
       // jupe : brins qui tombent vers le sol au bas des flancs
-      addCard(i, ln * 0.7, ln * 0.5, 1.1, 0.3, 0.45);
+      addCard(i, ln * 0.7, ln * 0.5 * thin, 1.1, 0.3, 0.45);
     }
   }
   // Pinceaux au bout des oreilles (angora).
@@ -794,8 +800,9 @@ function cardGeometry(base, D, B, density = 1) {
 let cardTex = null;
 /**
  * Texture des cartes de poils : une mèche faite de brins effilés, serrés et pleins à la racine (en bas), qui s'écartent
- * et s'affinent vers le bout. Sert d'opacité (canal vert, découpée par alphaTest) et d'ombrage des brins (racine plus
- * sombre, brins clairs et foncés mêlés). Null hors d'un navigateur (tests).
+ * et s'affinent vers le bout. Canal vert : opacité (découpée par alphaTest, estompée au bout des brins) ; canal rouge :
+ * ombrage des brins (racine plus sombre, brins clairs et foncés mêlés), séparé de l'opacité pour que les bouts
+ * estompés ne noircissent pas. Null hors d'un navigateur (tests).
  */
 function cardTexture() {
   if (cardTex || typeof document === 'undefined') return cardTex;
@@ -813,7 +820,8 @@ function cardTexture() {
     s = (s * 16807) % 2147483647;
     return s / 2147483647;
   };
-  // Un brin : bande effilée (largeur w0 à la racine, presque rien au bout), légèrement courbe.
+  // Un brin : bande effilée (largeur w0 à la racine, le tiers au bout, bout arrondi), légèrement courbe ; son opacité
+  // (canal vert) s'estompe sur le dernier quart : découpé par alphaTest, le bout est court et rond, pas en pointe.
   const strand = (x0, x1, len, w0, v) => {
     const cx = (x0 + x1) / 2 + (r() - 0.5) * 8;
     const N = 10;
@@ -823,22 +831,30 @@ function cardTexture() {
       const t = k / N;
       const x = (1 - t) * (1 - t) * x0 + 2 * t * (1 - t) * cx + t * t * x1;
       const y = h - len * t;
-      const hw = (w0 / 2) * (1 - t * 0.92);
+      const hw = (w0 / 2) * (1 - t * 0.66);
       L.push([x - hw, y]);
       R.push([x + hw, y]);
     }
     const g = ctx.createLinearGradient(0, h, 0, h - len);
-    g.addColorStop(0, `rgb(${v * 0.78},${v * 0.78},${v * 0.78})`);
-    g.addColorStop(0.5, `rgb(${v * 0.9},${v * 0.9},${v * 0.9})`);
-    g.addColorStop(1, `rgb(${v},${v},${v})`);
+    const c = (sh, a) => `rgb(${Math.round(sh)},${Math.round(a)},0)`;
+    g.addColorStop(0, c(v * 0.78, 255));
+    g.addColorStop(0.5, c(v * 0.9, 255));
+    g.addColorStop(0.75, c(v, 235));
+    g.addColorStop(1, c(v, 60));
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.moveTo(L[0][0], L[0][1]);
     for (const p of L.slice(1)) ctx.lineTo(p[0], p[1]);
+    // (bout arrondi : demi-cercle entre les deux bords)
+    const e = L[N];
+    const f = R[N];
+    ctx.arc((e[0] + f[0]) / 2, e[1], Math.max(0.5, (f[0] - e[0]) / 2), Math.PI, 0, false);
     for (const p of R.reverse()) ctx.lineTo(p[0], p[1]);
     ctx.closePath();
     ctx.fill();
   };
+  // (brins superposés : le plus opaque et le plus clair l'emporte, un bout estompé ne troue pas le brin voisin)
+  ctx.globalCompositeOperation = 'lighten';
   // (cœur de la mèche : brins larges, puis brins fins qui s'échappent sur les bords)
   for (let i = 0; i < 16; i++) strand(w * (0.36 + 0.28 * r()), w * (0.22 + 0.56 * r()), h * (0.7 + 0.3 * r()), 7 + r() * 5, 190 + r() * 65);
   for (let i = 0; i < 26; i++) strand(w * (0.3 + 0.4 * r()), w * (0.04 + 0.92 * r()), h * (0.45 + 0.5 * r()), 3 + r() * 3, 160 + r() * 95);

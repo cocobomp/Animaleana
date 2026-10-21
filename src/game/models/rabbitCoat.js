@@ -358,7 +358,7 @@ export function rabbitCoatMaterial(src, shared, opts) {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${COMMON_F}`)
       .replace('#include <color_fragment>', card
-        ? `#include <color_fragment>\nvec3 cardC0 = diffuseColor.rgb;\n${COLOR_F}\ndiffuseColor.rgb *= (0.95 + 0.1 * vCmpLow) * (0.76 + 0.3 * dot(cardC0, vec3(0.3333)));`
+        ? `#include <color_fragment>\nvec3 cardC0 = diffuseColor.rgb;\n${COLOR_F}\ndiffuseColor.rgb *= (0.95 + 0.1 * vCmpLow) * (0.76 + 0.3 * clamp(cardC0.r / max(cardC0.g, 0.05), 0.4, 1.0));`
         : `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.62, cHair.x), 0.45, cWet);');
     // (cartes : éclairées comme la peau où elles poussent, des deux côtés ; sinon le revers d'une carte est noir)
@@ -366,6 +366,6 @@ export function rabbitCoatMaterial(src, shared, opts) {
     // par-devant, ne montre plus le revers sombre de ses mèches, ni la gorge le vert sombre du sol)
     if (card) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(normalize(vNormal) + vec3(0.0, 0.0, 0.9) + (viewMatrix * vec4(0.0, 0.6, 0.0, 0.0)).xyz);');
   };
-  mat.customProgramCacheKey = () => (card ? 'rabbit-card-v3' : 'rabbit-coat-v1');
+  mat.customProgramCacheKey = () => (card ? 'rabbit-card-v4' : 'rabbit-coat-v1');
   return mat;
 }

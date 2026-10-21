@@ -103,16 +103,22 @@ describe('fichiers de la vache et du taureau', () => {
     expect(ext.naturalSpeeds.run).toBeGreaterThan(ext.naturalSpeeds.trot);
   });
 
-  it('bull.glb (Rocketbox) : os aux noms des moutons et des chèvres, scrotum, cornes longues en cible de forme, yeux peints notés', () => {
+  it('bull.glb (Rocketbox) : os aux noms des moutons et des chèvres, scrotum, allégé (ni cible de forme ni clips inutiles), yeux peints notés', () => {
     const buf = fs.readFileSync(BULL_FILE);
-    expect(buf.length).toBeLessThan(700_000);
+    expect(buf.length).toBeLessThan(600_000);
     const json = glbJson(buf);
     expect(json.extensionsUsed).toEqual(expect.arrayContaining(['EXT_meshopt_compression', 'EXT_texture_webp']));
     expect(json.skins[0].joints.length).toBe(40);
     const names = new Set(json.nodes.map((n) => n.name));
     for (const b of ['root', 'head', 'jaw', 'hornL', 'hornR', 'scrotum', 'tail1', 'toesL', 'htoesR']) expect(names, b).toContain(b);
     const m = json.meshes.find((x) => x.name === 'cow');
-    expect(m.extras.targetNames).toEqual(['horns_long']);
+    // (cornes longues courbées par le jeu, selon la race : plus de cible de forme « horns_long »)
+    expect(m.extras?.targetNames).toBeUndefined();
+    expect(m.primitives[0].targets).toBeUndefined();
+    // (le taureau n'est jamais trait, ne tète pas et ne gambade pas comme un veau : ces clips ne sont pas dans son GLB)
+    const clips = json.animations.map((a) => a.name);
+    for (const c of ['idle', 'walk', 'trot', 'run', 'graze', 'eat', 'lie_down', 'lie', 'ruminate', 'get_up', 'sleep', 'moo', 'swat', 'head_shake']) expect(clips, c).toContain(c);
+    for (const c of ['milk', 'suckle', 'calf_play', 'ear_flick', 'tail_flick']) expect(clips, c).not.toContain(c);
     expect(json.meshes.find((x) => x.name === 'cow_lod')?.extras?.lod).toBe(true);
     const ext = json.scenes[json.scene ?? 0].extras.cow;
     expect(ext.kind).toBe('bull');
@@ -252,7 +258,13 @@ describe('races, cornes, poil long, veaux et taureaux', () => {
         const horn = md.bone('hornL').scale;
         if (B.hornSize > 0) expect(Math.max(horn.x, horn.y, horn.z), tag).toBeGreaterThan(B.hornSize * 0.99);
         else expect(horn.x, tag).toBeLessThan(1e-3);
-        if (md.kind === 'bull') expect(md.mesh.morphTargetInfluences[0], tag).toBe(B.hornLong);
+        // (taureau : ni mamelle, ni traite, ni tétée — ses clips n'existent pas)
+        if (md.kind === 'bull') {
+          expect(md.udderBone, tag).toBeNull();
+          expect(md.anim.actions.milk, tag).toBeUndefined();
+          expect(md.anim.actions.suckle, tag).toBeUndefined();
+          expect(md.build.milker, tag).toBe(false);
+        }
         expect(md.stage, tag).toBe(o.calf ? 'baby' : o.young ? 'young' : 'adult');
         expect(!!md.hair, tag).toBe(B.hair > 0.005 || B.fringe > 0.005);
         // (mèches : au plus 900 sur le corps et 140 pour la frange, trois segments chacune)
@@ -289,6 +301,80 @@ describe('races, cornes, poil long, veaux et taureaux', () => {
     expect(th.tip.y).toBeGreaterThan(base.y + 0.1);
     expect(th.tip.x).toBeGreaterThan(base.x + 0.15);
     for (const md of [n, h, r]) md.dispose();
+  });
+
+  // (taureau : ses cornes longues sont courbées par le jeu — celles de la cible de forme du GLB se dressaient vers le
+  // haut et l'arrière, comme un bouquetin) ; Highland : à l'horizontale sur le côté, pointes vers l'avant et relevées ;
+  // Retinta : en lyre ; Charolaise : sans cornes ; Hérens : portées en avant
+  it('taureau : cornes de sa race (Highland larges, pointes en avant ; Retinta en lyre ; Charolaise sans ; Hérens en avant)', () => {
+    const hornPts = (md) => {
+      md.root.updateMatrixWorld(true);
+      const P = md.anim.base.prim;
+      const m = md.mesh;
+      let span = 0;
+      let tip = null;
+      let n = 0;
+      for (let i = 0; i < m.geometry.attributes.position.count; i++) {
+        if (P.part[i * 4] < 0.5) continue;
+        const v = m.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(m.matrixWorld);
+        if (v.x <= 0) continue;
+        n++;
+        span = Math.max(span, v.x);
+        if (P.aux[i * 4 + 2] > 0.97 && (!tip || v.x > tip.x)) tip = v;
+      }
+      return { span, tip, n };
+    };
+    const base = (md) => md.bone('hornL').getWorldPosition(new THREE.Vector3());
+    const nor = cow('normande', { sex: 'm' });
+    const hig = cow('highland', { sex: 'm' });
+    const ret = cow('retinta', { sex: 'm' });
+    const cha = cow('charolaise', { sex: 'm' });
+    const her = cow('herens', { sex: 'm' });
+    const [tn, th, tr] = [hornPts(nor), hornPts(hig), hornPts(ret)];
+    expect(th.span).toBeGreaterThan(tn.span + 0.25);
+    expect(tr.span).toBeGreaterThan(tn.span + 0.1);
+    const bh = base(hig);
+    expect(th.tip.z).toBeGreaterThan(bh.z + 0.08); // (pointes vers l'avant)
+    expect(th.tip.y).toBeGreaterThan(bh.y + 0.05); // (relevées)
+    expect(th.tip.y).toBeLessThan(bh.y + 0.4); // (pas dressées)
+    const br = base(ret);
+    expect(tr.tip.y).toBeGreaterThan(br.y + 0.15); // (en lyre)
+    // (Charolaise : sans cornes — l'os des cornes à l'échelle 0)
+    expect(cha.bone('hornL').scale.x).toBeLessThan(1e-3);
+    // (Hérens, la lutteuse : pointes plus en avant que celles de la Normande)
+    const hn = hornPts(her);
+    expect(hn.tip.z - base(her).z).toBeGreaterThan(hornPts(nor).tip.z - base(nor).z + 0.03);
+    for (const md of [nor, hig, ret, cha, her]) md.dispose();
+  });
+
+  it('taureau de Highland : poil long et frange aussi (semés entre ses sommets, deux fois moins nombreux que ceux de la vache)', () => {
+    const f = cow('highland');
+    const m = cow('highland', { sex: 'm' });
+    expect(m.hair).toBeTruthy();
+    expect(m.hair.geometry.userData.cards).toBeGreaterThan(0.9 * f.hair.geometry.userData.cards);
+    f.dispose();
+    m.dispose();
+  });
+
+  it('taureau : jamais trait ni tété — pas de lait, la traite ne change rien, aucun veau ne tète à sa place', () => {
+    const a = createAnimal({ species: 'cow', breed: 'holstein', ageDays: 80, seed: 11, sex: 'm', rng: fixed });
+    a.produce = 100;
+    tickProduce(a, 48);
+    expect(a.produceReady).toBeFalsy();
+    expect(collectProduct({ money: 0, xp: 0, stats: {} }, a).ok).toBe(false);
+    const md = cow('holstein', { sex: 'm' });
+    const e = { model: md, data: a, scale: 1, speed: 0, root: md.root, position: md.root.position, heading: 0, state: 'idle', time: 0 };
+    md.root.updateMatrixWorld(true);
+    for (let i = 0; i < 60; i++) {
+      a.produce = i < 30 ? 100 : 0; // (même si son lait « tombait » : pas de traite)
+      animateRealCow(e, 1 / 30, 0);
+    }
+    expect(md.anim.milkT ?? 0).toBe(0);
+    expect(md.anim.w.milk ?? 0).toBe(0);
+    // (la place du veau qui tète vient de la mère : jamais d'un taureau — AnimalEntity ne choisit qu'une mère)
+    const src = fs.readFileSync(new URL('../src/game/AnimalEntity.js', import.meta.url), 'utf8');
+    expect(src).toMatch(/d\.parents\.includes\(o\.data\.id\) && o\.data\.sex === 'f'/);
+    md.dispose();
   });
 
   it('apparence d\'une vache du jeu : stade, sexe, race (jamais « mix ») ; gabarit 3D par stade', () => {

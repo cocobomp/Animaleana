@@ -1,6 +1,6 @@
 // Compression de la vache ou du taureau du jeu : node pack.mjs <brut.glb> <sortie.glb> --kind cow|bull
 // --report <rapport.json> [--measures <mesures.json>] [--color <grain.png>] [--mask <masque.png>] [--texinfo <grain.json>]
-// [--tex 1024] [--quality 84]. Repris de tools/chevre/pack.mjs :
+// [--tex 1024] [--quality 84] [--drop clip,clip] [--morphs 1]. Repris de tools/chevre/pack.mjs :
 // - canaux d'animation inutiles retirés (échelles, poids des cibles de forme ; translations et rotations restées au repos
 //   sur tout un clip) : il ne reste de translation qu'à l'os racine (une translation d'un autre os est retirée et
 //   signalée : un os qui se déplace s'étire) ;
@@ -9,7 +9,8 @@
 // - photo de la robe remplacée par la carte « grain » de tex.mjs (robe sans ses taches ni ses ombres) et masque de la robe
 //   (taches, peau, couleurs gardées) rangé dans l'emplacement « occlusion » de la matière de la robe (le jeu le lit comme
 //   masque, jamais comme occlusion) ;
-// - cible de forme « horns_long » du taureau gardée (cornes longues en lyre) ;
+// - cible de forme « horns_long » du taureau retirée (le jeu refait ses cornes longues le long d'une courbe, propre à
+//   chaque race : cowReal.js, bendLongHorns ; --morphs 1 la garde) ;
 // - textures en WebP, maillage quantifié et compressé (meshopt). Noms des os et des clips gardés ;
 // - mesures du rapport de Blender rangées dans la scène (extras.cow).
 import { NodeIO } from '@gltf-transform/core';
@@ -33,7 +34,9 @@ const root = doc.getRoot();
 if (opt.report) {
   const rep = JSON.parse(fs.readFileSync(opt.report, 'utf8'));
   const clips = {};
+  const dropped = String(opt.drop ?? '').split(',');
   for (const [k, v] of Object.entries(rep.clips || {})) {
+    if (dropped.includes(k)) continue;
     if (typeof v === 'string') clips[k] = { note: v };
     else clips[k] = { seconds: v.seconds, loop: v.loop !== false, ...(v.note ? { note: v.note } : {}) };
   }
@@ -46,8 +49,35 @@ if (opt.report) {
     ...(opt.texinfo ? JSON.parse(fs.readFileSync(opt.texinfo, 'utf8')) : {}),
     measures: opt.measures ? JSON.parse(fs.readFileSync(opt.measures, 'utf8')) : null,
     textures: { map: 'grain de la robe (gris neutre 0,5 linéaire) ; bouche, cils et yeux peints gardés', occlusion: 'masque de la robe : R taches, G peau rose, B couleurs gardées' },
-    ...(KIND === 'bull' ? { morphs: { horns_long: '0 = cornes courtes du taureau, 1 = longues cornes en lyre' } } : {}),
+    ...(KIND === 'bull' && opt.morphs ? { morphs: { horns_long: '0 = cornes courtes du taureau, 1 = longues cornes en lyre' } } : {}),
   } });
+}
+// (cible de forme des cornes longues du taureau : inutile au jeu, qui courbe lui-même les cornes de la race)
+if (!opt.morphs) {
+  for (const m of root.listMeshes()) {
+    let had = false;
+    for (const p of m.listPrimitives()) for (const t of p.listTargets()) {
+      p.removeTarget(t);
+      t.dispose();
+      had = true;
+    }
+    if (had) {
+      m.setWeights([]);
+      const ex = { ...m.getExtras() };
+      delete ex.targetNames;
+      m.setExtras(ex);
+    }
+  }
+}
+// (clips qu'un modèle ne joue jamais, retirés : --drop a,b,c — le taureau n'est jamais trait, ne tète pas, ne gambade
+// pas comme un veau, et le jeu ne joue pas ses battements d'oreille et de queue)
+for (const nm of String(opt.drop ?? '').split(',').filter(Boolean)) {
+  const a = root.listAnimations().find((x) => x.getName() === nm);
+  if (!a) continue;
+  for (const ch of a.listChannels()) ch.dispose();
+  for (const smp of a.listSamplers()) smp.dispose();
+  a.dispose();
+  console.log('clip retiré :', nm);
 }
 const TOL_T = 0.0003; // m
 const TOL_R = 0.002; // rad

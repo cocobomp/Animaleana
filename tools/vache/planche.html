@@ -153,6 +153,12 @@ window.planche = {
       scene.add(sg);
       sg.updateMatrixWorld(true);
       play(md, c, s);
+      // (mise au point : relief de la carte de normales de la robe, 0 = lisse)
+      if (c.normalScale !== undefined && md.mesh?.material?.normalScale) md.mesh.material.normalScale.setScalar(c.normalScale);
+      if (c.noMap && md.mesh?.material) {
+        md.mesh.material.map = null;
+        md.mesh.material.needsUpdate = true;
+      }
       if (c.halter || c.flyMask) {
         const gear = buildGear(md, look, c.flyMask ? { flyMask: { item: 'flyMask', color: 'blue' } } : { halter: { item: 'halter', color: 'red' } });
         extra.push(gear);

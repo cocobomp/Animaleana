@@ -65,8 +65,8 @@ export function setCowCoat(u, B, kind = 'cow') {
   u.cStyle.value.y = (B.hair ?? 0) * 0.32;
   u.cStyle.value.z = B.calf ? 1 : B.stage === 'young' ? 0.45 : 0;
   // (taureau : taches calculées, plus claires en moyenne que celles de la photo — seuil abaissé, sinon la Prim'Holstein
-  // était presque toute blanche)
-  u.cPie.value.set((B.pie ?? 0.5) - (kind === 'bull' ? 0.15 : 0), B.lunettes ?? 0, B.brindle ?? 0, B.whiteLegs ?? 0);
+  // était presque toute blanche ; seuil propre à la race s'il le faut : la Bretonne pie noire était toute noire)
+  u.cPie.value.set(kind === 'bull' ? B.bullPie ?? (B.pie ?? 0.5) - 0.15 : B.pie ?? 0.5, B.lunettes ?? 0, B.brindle ?? 0, B.whiteLegs ?? 0);
   const l = (h) => 0.2126 * ((h >> 16) & 255) / 255 + 0.7152 * ((h >> 8) & 255) / 255 + 0.0722 * (h & 255) / 255;
   u.cMark.value.set(B.muzzleRing ?? 0, kind === 'bull' ? 0 : 1, (B.breed?.length ?? 3) * 1.7, B.pattern === 'solid' ? Math.min(1, Math.max(0, (l(c.base) - 0.3) / 0.4)) : 0);
 }
@@ -207,7 +207,15 @@ const COLOR_F = /* glsl */ `
       // Lunettes (Normande) : le tour des yeux foncé, bord irrégulier.
       vec3 e = vec3(abs(p.x), p.y, p.z);
       float dE = distance(e, cEye.xyz) + (n2 - 0.5) * cEye.w * 0.4;
-      lun = head * (1.0 - ear) * (1.0 - smoothstep(cEye.w * 0.75, cEye.w, dE)) * cPie.y;
+      // (taureau : tache allongée vers l'arrière et le haut, bord irrégulier — ronde et nette autour de l'œil, elle
+      // faisait un monocle)
+      float bull = 1.0 - cMark.y;
+      vec3 dv = e - cEye.xyz;
+      dv.z *= dv.z < 0.0 ? 0.62 : 1.15;
+      dv.y *= dv.y > 0.0 ? 0.85 : 1.25;
+      float dB = length(dv) + (cNoise(p * 24.0 + 3.0) - 0.5) * cEye.w * 0.8 + (n2 - 0.5) * cEye.w * 0.3;
+      dE = mix(dE, dB, bull);
+      lun = head * (1.0 - ear) * (1.0 - smoothstep(cEye.w * mix(0.75, 0.8, bull), cEye.w * mix(1.0, 1.25, bull), dE)) * cPie.y;
       col = mix(col, cTan, lun);
     }
   } else if (pat > 1.5) {
@@ -247,7 +255,9 @@ const COLOR_F = /* glsl */ `
   d = mix(d, max(d, 0.9), light * 0.8 * (1.0 - hoof) * (1.0 - horn));
   // (veau : poil plus doux, grain adouci)
   d = mix(d, sqrt(d), cStyle.z * 0.5);
-  col = min(col * d, vec3(1.0));
+  // (creux du grain d'une robe claire un peu réchauffés : gris neutres, ils viraient au bleu sous le ciel — face du
+  // taureau « marbrée de bleu », flancs gris sales)
+  col = min(col * d * mix(vec3(1.0), vec3(1.05, 1.0, 0.9), clamp((1.0 - d) * 4.0, 0.0, 1.0) * light), vec3(1.0));
   diffuseColor.rgb = mix(col, c0, keep);
 }`;
 
@@ -300,7 +310,7 @@ export function cowMaterial(src, uniforms) {
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`);
   };
-  mat.customProgramCacheKey = () => 'cow-coat-v1';
+  mat.customProgramCacheKey = () => 'cow-coat-v2';
   mat.userData.cowUniforms = uniforms;
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: src?.map ?? null, alphaTest: 0.5 });
   depth.onBeforeCompile = (sh) => {

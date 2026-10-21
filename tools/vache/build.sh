@@ -62,7 +62,8 @@ if step pack; then
   fi
   if bull; then
     node "$GT/pack.mjs" "$WORK/rb_taureau.glb" "$WORK/bull_packed.glb" --kind bull --report "$WORK/rb_taureau.json" --measures "$WORK/rb_taureau_mesures.json" \
-      --color "$WORK/bull_grain.png" --mask "$WORK/bull_mask.png" --texinfo "$WORK/bull_grain.json"
+      --color "$WORK/bull_grain.png" --mask "$WORK/bull_mask.png" --texinfo "$WORK/bull_grain.json" \
+      --drop calf_play,suckle,milk,ear_flick,tail_flick
     node "$GT/lod.mjs" "$WORK/bull_packed.glb" "$OUT/bull.glb" 0.35
   fi
   ls -l "$OUT/cow.glb" "$OUT/bull.glb"

@@ -293,6 +293,7 @@ for (let o = 0; o < N; o++) if ((part[o] === 2 || part[o] === 3) && isl[o] === m
 // 0 rien, 1 poil foncé, 2 poil clair, 3 peau rose, 4 corne, 5 onglon, 6 mamelle, 7 gardé (bouche, cils, yeux peints)
 const cls = new Uint8Array(N);
 const alpha = new Uint8Array(N);
+const eyeLid = new Uint8Array(N);
 for (let o = 0; o < N; o++) {
   alpha[o] = raw[o * 4 + 3];
   const I = isl[o];
@@ -301,7 +302,16 @@ for (let o = 0; o < N; o++) {
   const h = hsv[o * 3];
   const s = hsv[o * 3 + 1];
   const v = hsv[o * 3 + 2];
-  if (keepIsl[I] || alpha[o] < 250 || pt === 10 || (eyes.length && pt === 2 && nearEye(o))) {
+  // (œil peint du taureau : seul l'œil sombre — iris, pupille — garde ses couleurs ; les paupières claires et le blanc de
+  // l'œil, gardés aussi, faisaient un anneau pâle autour de l'œil sur les robes sombres et un « monocle » dans les
+  // lunettes de la Normande : ils prennent la robe, peinte par le jeu)
+  const eyeHere = eyes.length && pt === 2 && nearEye(o);
+  if (eyeHere && KIND === 'bull' && lum[o] > Number(opt.lid ?? 0.16)) {
+    cls[o] = 2;
+    eyeLid[o] = 1;
+    continue;
+  }
+  if (keepIsl[I] || alpha[o] < 250 || pt === 10 || eyeHere) {
     cls[o] = 7;
     continue;
   }
@@ -439,7 +449,10 @@ for (let o = 0; o < N; o++) {
   const c = cls[o];
   gcls[o] = c === 1 || c === 2 ? (d1[o] > 0.5 ? 1 : 2) : c;
 }
-const SIG = Number(opt.sigma ?? 12);
+// (taureau : moyenne prise de près — 3,5 texels — : sa photo, brun uni, n'a qu'une classe de poil ; à 12 texels, les
+// boucles du front et l'anneau clair des yeux restaient en plaques claires et grises, « marbrées de bleu » sur une face
+// blanche ; ici ne reste que le grain fin du poil)
+const SIG = Number(opt.sigma ?? (KIND === 'bull' ? 3.5 : 12));
 const mean = new Float32Array(N);
 const own = new Float32Array(N);
 const wide = islandBlur(lum, ones, 40);
@@ -465,7 +478,7 @@ for (let o = 0; o < N; o++) {
   grain[o] = Math.min(1.6, Math.max(0.5, lum[o] / Math.max(0.01, mean[o])));
   // (bord d'une classe : texels mêlés, grain repris du voisinage ; de même les trous noirs de la photo — la base des
   // oreilles du taureau —, qui faisaient des points noirs sur la tête)
-  okw[o] = Math.min(1, Math.max(0, (own[o] - 0.62) / 0.3)) * (hsv[o * 3 + 2] < 0.07 && (gcls[o] === 1 || gcls[o] === 2) ? 0 : 1);
+  okw[o] = Math.min(1, Math.max(0, (own[o] - 0.62) / 0.3)) * (hsv[o * 3 + 2] < 0.07 && (gcls[o] === 1 || gcls[o] === 2) ? 0 : 1) * (eyeLid[o] ? 0 : 1);
 }
 const gs = islandBlur(grain, okw, 2.2, ones);
 const hash = (o) => {

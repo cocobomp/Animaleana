@@ -289,14 +289,27 @@ function shapePositions(base, P, J, B, ref) {
   return pos;
 }
 
-/** Géométries (partagées) d'un gabarit, ses articulations et ses mesures. */
 /**
  * Cornes en lyre (vache des races à longues cornes : Highland, Retinta) : la corne courte du modèle, droite, est
  * refaite le long d'une courbe — elle part sur le côté (un peu en avant), puis se relève, la pointe vers le haut — et
  * allongée (hornReach). Chaque sommet garde sa place autour de l'axe de la corne (section tournée avec la courbe) ; la
  * base reste celle du modèle (pas de déchirure au crâne). Positions et normales du gabarit, une fois par gabarit.
+ * Taureau : sa courbe à lui (B.bullHorn : la corne du taureau de Highland part à l'horizontale et tourne sa pointe vers
+ * l'avant ; celle de la cible de forme « horns_long » se dressait vers le haut et l'arrière, comme un bouquetin), plus
+ * épaisse à la base.
  */
+function hornCurve(base, B) {
+  const c = base.kind === 'bull' ? B.bullHorn ?? {} : {};
+  return {
+    t0: c.t0 ?? [1, 0.12, 0.32],
+    t1: c.t1 ?? [0.15, 1, 0.3],
+    reach: c.reach ?? B.hornReach ?? 2.6,
+    thick: c.thick ?? 1,
+  };
+}
+
 function bendLongHorns(base, P, pos, nrm, heads, B) {
+  const cv = hornCurve(base, B);
   const n = P.count;
   const q = new THREE.Quaternion();
   for (const [s, nm] of [[0, 'hornL'], [1, 'hornR']]) {
@@ -317,10 +330,10 @@ function bendLongHorns(base, P, pos, nrm, heads, B) {
     }
     if (len < 0.01) continue;
     // (courbe de la corne : tangente qui passe de l'axe du modèle au côté, puis se relève)
-    const T0 = V(sx, 0.12, 0.32).normalize();
-    const T1 = V(sx * 0.15, 1, 0.3).normalize();
+    const T0 = V(sx * cv.t0[0], cv.t0[1], cv.t0[2]).normalize();
+    const T1 = V(sx * cv.t1[0], cv.t1[1], cv.t1[2]).normalize();
     const N = 40;
-    const L = len * (B.hornReach ?? 2.6);
+    const L = len * cv.reach;
     const tan = (u) => (u < 0.15 ? ax.clone().lerp(T0, smoothK(0, 0.15, u)) : T0.clone().lerp(T1, smoothK(0.3, 1, u))).normalize();
     const T = [];
     const C = [V()];
@@ -341,7 +354,7 @@ function bendLongHorns(base, P, pos, nrm, heads, B) {
       const t = _t.lerpVectors(T[k], T[k + 1], f).normalize();
       q.setFromUnitVectors(ax, t);
       // (base un peu plus forte, pointe fine)
-      const thick = 1 + 0.18 * smoothK(0, 0.2, u) * (1 - u) - 0.25 * smoothK(0.6, 1, u);
+      const thick = (1 + 0.18 * smoothK(0, 0.2, u) * (1 - u) - 0.25 * smoothK(0.6, 1, u)) * (1 + (cv.thick - 1) * (1 - u));
       c.add(r.applyQuaternion(q).multiplyScalar(thick)).add(o);
       pos[i * 3] += (c.x - pos[i * 3]) * w;
       pos[i * 3 + 1] += (c.y - pos[i * 3 + 1]) * w;
@@ -360,9 +373,11 @@ const smoothK = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
+/** Géométries (partagées) d'un gabarit, ses articulations et ses mesures. */
 function shapeFor(base, B) {
-  const lyre = base.kind === 'cow' && B.hornLong > 0 && B.hornSize > 1e-3;
-  const key = `${B.legs.toFixed(3)}|${(B.girth ?? 1).toFixed(3)}|${(B.depth ?? 1).toFixed(3)}${lyre ? `|lyre${(B.hornReach ?? 2.6).toFixed(2)}` : ''}`;
+  const lyre = B.hornLong > 0 && B.hornSize > 1e-3;
+  const cv = hornCurve(base, B);
+  const key = `${B.legs.toFixed(3)}|${(B.girth ?? 1).toFixed(3)}|${(B.depth ?? 1).toFixed(3)}${lyre ? `|lyre${[...cv.t0, ...cv.t1, cv.reach, cv.thick].map((x) => x.toFixed(2)).join(',')}` : ''}`;
   let S = base.shapes.get(key);
   if (S) return S;
   const P = base.prim;
@@ -476,6 +491,78 @@ function shapeFor(base, B) {
 }
 
 /**
+ * Points de semis en plus pour les mèches d'un modèle peu dense : le milieu de chaque arête et de chaque triangle dont
+ * les sommets sont tous du même genre (kindOf : 1 corps, 2 frange) ; position et normale moyennes, poids de la peau
+ * fusionnés (les 4 os les plus lourds). Ajoute les candidats à cand et fringe (indices après les sommets) et renvoie les
+ * tableaux étendus { pos, nrm, si, sw }.
+ */
+function densifyLocks(P, src, kindOf, hlOf, thighOf, cand, fringe) {
+  const n = P.count;
+  const idx = P.index;
+  const pts = [];
+  const seen = new Set();
+  const add = (ids) => {
+    if (ids.length === 2) {
+      const k = Math.min(ids[0], ids[1]) * 1048576 + Math.max(ids[0], ids[1]);
+      if (seen.has(k)) return;
+      seen.add(k);
+    }
+    pts.push(ids);
+  };
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t];
+    const b = idx[t + 1];
+    const c = idx[t + 2];
+    const k = kindOf[a];
+    if (!k || kindOf[b] !== k || kindOf[c] !== k) continue;
+    add([a, b, c]);
+    add([a, b]);
+    add([b, c]);
+    add([c, a]);
+  }
+  const m = pts.length;
+  const pos = new Float32Array((n + m) * 3);
+  const nrm = new Float32Array((n + m) * 3);
+  const si = new Uint16Array((n + m) * 4);
+  const sw = new Float32Array((n + m) * 4);
+  pos.set(src.pos.subarray(0, n * 3));
+  nrm.set(src.nrm.subarray(0, n * 3));
+  si.set(src.si.subarray(0, n * 4));
+  sw.set(src.sw.subarray(0, n * 4));
+  const acc = new Map();
+  for (let j = 0; j < m; j++) {
+    const ids = pts[j];
+    const o = n + j;
+    acc.clear();
+    let hl = 0;
+    let thigh = 0;
+    for (const i of ids) {
+      for (let c = 0; c < 3; c++) {
+        pos[o * 3 + c] += src.pos[i * 3 + c] / ids.length;
+        nrm[o * 3 + c] += src.nrm[i * 3 + c];
+      }
+      for (let k = 0; k < 4; k++) {
+        const w = src.sw[i * 4 + k];
+        if (w > 0) acc.set(src.si[i * 4 + k], (acc.get(src.si[i * 4 + k]) ?? 0) + w);
+      }
+      hl += hlOf[i] / ids.length;
+      thigh = Math.max(thigh, thighOf[i]);
+    }
+    const l = Math.hypot(nrm[o * 3], nrm[o * 3 + 1], nrm[o * 3 + 2]) || 1;
+    for (let c = 0; c < 3; c++) nrm[o * 3 + c] /= l;
+    const top = [...acc].sort((x, y) => y[1] - x[1]).slice(0, 4);
+    const tot = top.reduce((q, x) => q + x[1], 0) || 1;
+    top.forEach(([b, w], k) => {
+      si[o * 4 + k] = b;
+      sw[o * 4 + k] = w / tot;
+    });
+    if (kindOf[ids[0]] === 2) fringe.push({ i: o, hl: 1 });
+    else cand.push({ i: o, hl, thigh: !!thigh });
+  }
+  return { pos, nrm, si, sw };
+}
+
+/**
  * Poil long (Highland) : des mèches effilées et ondulées (ruminantHair.js) pendent des flancs, du dos, de la croupe, de
  * l'encolure et de l'arrière des cuisses — semées à espacement régulier, jamais en rang sous le ventre — et une frange
  * tombe du toupet sur les yeux. Géométrie partagée par gabarit et longueur ; hairSide : 0 couleur de la robe, 1 pointe
@@ -497,6 +584,10 @@ function hairCards(base, S, B) {
   const neck = new Set(['neck1', 'neck2', 'neck3'].map((nm) => base.index.get(nm)));
   const cand = [];
   const fringe = [];
+  // (genre de chaque sommet : 1 corps, 2 frange — pour semer aussi entre les sommets, plus bas)
+  const kindOf = new Uint8Array(n);
+  const hlOf = new Float32Array(n);
+  const thighOf = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     const head = P.mask[i * 4 + 1];
     if (P.part[i * 4] > 0.15 || P.part[i * 4 + 1] > 0.15 || P.part[i * 4 + 2] > 0.3 || P.mask[i * 4 + 3] > 0.1 || P.aux[i * 4] > 0.3) continue;
@@ -506,7 +597,10 @@ function hairCards(base, S, B) {
     // Frange : le toupet, entre les cornes et au-dessus des yeux, tourné vers le haut ou l'avant.
     if (head > 0.7) {
       if (B.fringe > 0.005 && P.aux[i * 4 + 1] < 0.2 && y > M.eye.y - 0.01 && z > M.eye.z - 0.16 && z < M.eye.z + 0.07 && Math.abs(pos[i * 3]) < 0.14
-        && P.smoothN[i * 3 + 1] > -0.1) fringe.push({ i, hl: 1 });
+        && P.smoothN[i * 3 + 1] > -0.1) {
+        fringe.push({ i, hl: 1 });
+        kindOf[i] = 2;
+      }
       continue;
     }
     if (!(B.hair > 0.005) || ny < -0.5) continue; // (pas sous le ventre)
@@ -520,10 +614,20 @@ function hairCards(base, S, B) {
     const body = P.part[i * 4 + 3] > 0.55 && P.mask[i * 4 + 2] < 0.3 && hl > -0.2;
     const thigh = fw > 0.3 && z < M.hipZ + 0.08 && y > M.kneeY[1] + 0.06;
     const nk = nw > 0.4 && head < 0.3;
-    if (body || thigh || nk) cand.push({ i, hl, thigh });
+    if (body || thigh || nk) {
+      cand.push({ i, hl, thigh });
+      kindOf[i] = 1;
+      hlOf[i] = hl;
+      thighOf[i] = thigh ? 1 : 0;
+    }
   }
+  // (modèle peu dense — le taureau : 1 900 sommets, deux fois moins que la vache — : les mèches, semées sur les sommets,
+  // restaient clairsemées et la frange en quelques lanières ; on sème aussi au milieu des arêtes et des triangles dont
+  // les sommets sont tous candidats)
+  let src = { pos, nrm: P.smoothN, si: P.si, sw: P.sw };
+  if (n < 2600) src = densifyLocks(P, src, kindOf, hlOf, thighOf, cand, fringe);
   // (mèches étroites et longues, serrées : larges et courtes, elles faisaient des écailles plates sur le corps)
-  const picks = spreadLocks(cand, pos, 0.05, 900).map(({ i, hl, thigh }) => ({
+  const picks = spreadLocks(cand, src.pos, 0.05, 900).map(({ i, hl, thigh }) => ({
     i,
     // (plus longues en bas des flancs — la jupe — et à la culotte ; le dos garde un poil plus court)
     len: B.hair * (thigh ? 1.25 : 0.75 + 0.7 * (1 - clamp(hl, 0, 1))) * (0.8 + 0.4 * lockHash(i + 5)),
@@ -531,11 +635,12 @@ function hairCards(base, S, B) {
     back: thigh ? 0.45 : 0.08,
     side: lockHash(i + 31) > 0.7 ? 1 : 0,
   }));
-  // (frange : mèches fines du toupet qui tombent en avant, sur les yeux)
-  for (const f of spreadLocks(fringe, pos, 0.018, 140)) {
-    picks.push({ i: f.i, len: B.fringe * (0.75 + 0.5 * lockHash(f.i + 3)), w: 0.04 + 0.02 * lockHash(f.i + 7), back: -0.35, side: lockHash(f.i + 11) > 0.6 ? 1 : 0 });
+  // (frange : mèches fines du toupet qui tombent en avant, sur les yeux — étroites et nombreuses : larges de 4 à 6 cm,
+  // elles faisaient des lanières plates)
+  for (const f of spreadLocks(fringe, src.pos, 0.014, 140)) {
+    picks.push({ i: f.i, len: B.fringe * (0.7 + 0.6 * lockHash(f.i + 3)), w: 0.024 + 0.014 * lockHash(f.i + 7), back: -0.35, side: lockHash(f.i + 11) > 0.5 ? 1 : 0 });
   }
-  const geo = picks.length ? lockCards(picks, { pos, nrm: P.smoothN, si: P.si, sw: P.sw }, 0.012) : null;
+  const geo = picks.length ? lockCards(picks, src, 0.012) : null;
   S.hair.set(key, geo);
   return geo;
 }
@@ -613,12 +718,15 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
   for (const [h, sgn] of [[bone('hornL'), 1], [bone('hornR'), -1]]) {
     if (!h) continue;
     const s = Math.max(1e-4, B.hornSize);
-    // (cornes en lyre de la vache : refaites dans le gabarit, bendLongHorns ; ici leur taille seulement)
+    // (cornes en lyre : refaites dans le gabarit, bendLongHorns ; ici leur taille seulement)
     h.scale.setScalar(s);
-    const lyre = base.kind === 'cow' && B.hornLong > 0;
+    const lyre = B.hornLong > 0;
     // (relevées vers le haut ou portées vers l'avant — Hérens, la lutteuse : axes de la vache)
     if (B.hornLift && !lyre) h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AZ.clone().applyQuaternion(pinv(h)), sgn * B.hornLift));
     if (B.hornFwd) h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AX.clone().applyQuaternion(pinv(h)), B.hornFwd));
+    // (taureau : ses cornes partent sur le côté, la rotation autour de l'axe des flancs ne les avançait pas — tournées
+    // aussi autour de la verticale, vers l'avant)
+    if (B.hornFwd && base.kind === 'bull') h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AY.clone().applyQuaternion(pinv(h)), -sgn * B.hornFwd * 0.9));
   }
   const udderB = bone('udder');
   for (const b of bones) {
@@ -634,7 +742,7 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
   // (haut du toupillon : le bas de la queue, ≈ 35 cm au-dessus du bout)
   uniforms.cKnee.value.set(M.kneeY[0], M.kneeY[1], M.kneeY[2], M.tailTip.y + 0.35);
   uniforms.cHead.value.set(M.eye.z, M.eye.y, M.noseZ, M.skull.y);
-  uniforms.cEye.value.set(M.eyeL.c.x, M.eyeL.c.y, M.eyeL.c.z, base.kind === 'bull' ? 0.075 : 0.07);
+  uniforms.cEye.value.set(M.eyeL.c.x, M.eyeL.c.y, M.eyeL.c.z, base.kind === 'bull' ? 0.085 : 0.07);
   const { mat, depth } = cowMaterial(base.prim.material, uniforms);
   const hb = { box: new THREE.Box3(), sphere: new THREE.Sphere(), boneBox: S.boneBox, skeleton, meshes: [], anim: null, margin: 0.06 + (B.hair ?? 0) * 0.6 };
   const mesh = new SheepMesh(S.geo, mat, hb);
@@ -643,8 +751,9 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
   mesh.bind(skeleton, new THREE.Matrix4());
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  // (cornes longues en lyre du taureau : cible de forme)
-  if (base.prim.morph) mesh.morphTargetInfluences = [base.kind === 'bull' ? B.hornLong : 0];
+  // (cible de forme « horns_long » du taureau : plus utilisée — ses cornes longues sont refaites en courbe dans le
+  // gabarit, bendLongHorns)
+  if (base.prim.morph) mesh.morphTargetInfluences = [0];
   root.add(mesh);
   hb.meshes.push(mesh);
   // Yeux de la vache (primitive à part, même squelette).
@@ -1054,9 +1163,12 @@ export class RealCowAnim extends RealSheepAnim {
     }
     if (this.mooOn && (!mo || mo.time >= mo.getClip().duration - 0.05 || st.moving || this.posture !== 'stand')) this.mooOn = false;
     if (st.moo && st.moving) this.bleatWalk = 1.6;
-    // Mouche sur le flanc : la vache se retourne (tail_swish de la vache, swat du taureau), une fois de temps en temps.
-    const flyClip = this.actions.tail_swish ? 'tail_swish' : this.actions.swat ? 'swat' : null;
+    // Mouche sur le flanc : la vache se retourne (tail_swish de la vache, swat du taureau), une fois de temps en temps ;
+    // le taureau secoue aussi la tête, une fois sur deux.
+    const flyClip = this.actions.tail_swish ? 'tail_swish'
+      : this.actions.head_shake && (this.flyN ?? 0) % 2 === 1 ? 'head_shake' : this.actions.swat ? 'swat' : null;
     if (st.fly && flyClip && !this.flyOn && !this.mooOn && standing && !st.action) {
+      this.flyN = (this.flyN ?? 0) + 1;
       const a = this.actions[flyClip];
       a.reset();
       if (flyClip === 'tail_swish') a.setLoop(THREE.LoopOnce, 1);

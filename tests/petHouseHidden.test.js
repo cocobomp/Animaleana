@@ -1,8 +1,11 @@
 // Maison des animaux : un chat ou un lapin rangé pour la nuit reste caché quand son modèle est refait (modèle réaliste
 // arrivé après le rechargement, chaton ou lapereau qui grandit dedans : AnimalEntity.rebuildModel). Sans cela, il
 // apparaissait dehors devant la porte. Math.random est remplacé par une suite fixe : le test ne dépend d'aucun tirage.
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as THREE from 'three';
+
+// (machine chargée : construire un chat ou un lapin et ses étiquettes prend parfois plusieurs secondes)
+vi.setConfig({ testTimeout: 60000 });
 
 let AnimalEntity;
 let createAnimal;

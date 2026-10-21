@@ -2,7 +2,7 @@
 
 import { getLang, L } from '../i18n.js';
 import { lifeStage } from '../sim/animal.js';
-import { SPECIES } from '../sim/species.js';
+import { SPECIES, speciesAvailable } from '../sim/species.js';
 import { rankNewSpecies } from '../sim/careers.js';
 
 const NAMES = {
@@ -53,6 +53,9 @@ export function coatName(a) {
   const color = [own, ...breeds].flatMap((b) => b?.colors ?? []).find((c) => c.name.fr === name.fr);
   return color?.m ?? L(name);
 }
+
+/** Les emojis des espèces qui comptent pour la partie (proposées ou déjà à la ferme) : « 🐶 🐴 ». */
+export const availableEmojis = (ids, profile) => [...new Set(ids.filter((sid) => speciesAvailable(profile, sid)).map((sid) => SPECIES[sid]?.emoji).filter(Boolean))].join(' ');
 
 // Noms d'espèce dans une phrase : « un chien » (un seul, avec l'article) ou « chiens » (pluriel).
 const IN_TEXT = {

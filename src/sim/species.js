@@ -421,6 +421,8 @@ export const SPECIES = {
 };
 
 export const SPECIES_IDS = Object.keys(SPECIES);
+/** Le bétail (moutons, chèvres, vaches) : bergerie, troupeau, berger. */
+export const LIVESTOCK_IDS = SPECIES_IDS.filter((sid) => SPECIES[sid].livestock);
 
 // ---------------------------------------------------------------- espèces proposées
 // LA liste des espèces qu'on propose comme NOUVEL animal : animalerie, refuge, élevages en voyage,

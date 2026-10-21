@@ -4,7 +4,7 @@
 import { h, bar } from './dom.js';
 import { t, hourParams } from '../i18n.js';
 import { sheet } from './actions.js';
-import { SPECIES } from '../sim/species.js';
+import { SPECIES, LIVESTOCK_IDS, anyAvailable } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
 import {
   ensureFacilities, cleanliness, condition, boxCount, boxOccupants, repairCost, repair, UPGRADES, ROOMS,
@@ -131,7 +131,9 @@ export function facilitiesTab(ui) {
   const f = ensureFacilities(g.profile);
   return [
     h('p', { class: 'note' }, t('fac_tabHelp')),
-    h('div', { class: 'cards' }, ['stable', 'house', 'pen'].map((kind) => h('div', { class: 'card' },
+    // (la bergerie et ses améliorations : seulement si moutons, chèvres ou vaches sont proposés, ou déjà là)
+    h('div', { class: 'cards' }, ['stable', 'house', 'pen'].filter((kind) => kind !== 'pen'
+      || anyAvailable(g.profile, LIVESTOCK_IDS)).map((kind) => h('div', { class: 'card' },
       h('span', { class: 'card-emoji' }, ICON[kind]),
       h('span', { class: 'card-main' },
         h('b', {}, t(`fac_title_${kind}`)),

@@ -4,9 +4,7 @@
 import { h } from './dom.js';
 import { t, L, getLang } from '../i18n.js';
 import { creditsBlock } from './credits.js'; // ℹ️ À propos : crédits des modèles 3D (CC-BY des chiens)
-import { anyAvailable } from '../sim/species.js';
-
-const LIVESTOCK = ['sheep', 'goat', 'cow'];
+import { anyAvailable, LIVESTOCK_IDS as LIVESTOCK } from '../sim/species.js';
 
 // where : bâtiment ('refuge', 'petshop', 'stable', 'tackroom', 'pen', 'paddock', 'kennel', 'hutch', 'vet', 'house', 'jobs')
 //         ou bouton de l'écran ('hud:farm', 'hud:travel', 'hud:journal', 'hud:animals', 'hud:time')

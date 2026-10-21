@@ -454,7 +454,6 @@ export function structureAtPoint(profile, place, x, z, margin = 0.3) {
   }) ?? null;
 }
 
-/** Peut-on acheter ce type ? (niveau et argent) */
 /**
  * La construction est-elle au catalogue ? Non si elle n'accueille que des espèces pas encore proposées
  * (OFFERED_SPECIES, src/sim/species.js) et qu'on n'en a pas : le clapier sans lapin. Une construction déjà
@@ -466,6 +465,7 @@ export function structureShown(profile, type) {
   return anyAvailable(profile, def.species) || (profile.structures ?? []).some((s) => s.type === type);
 }
 
+/** Peut-on acheter ce type ? (au catalogue, niveau et argent) */
 export function canBuild(profile, type) {
   const def = STRUCTURES[type];
   if (!def) return { ok: false, reason: 'unknown' };

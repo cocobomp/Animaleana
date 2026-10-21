@@ -5,7 +5,8 @@
 
 import { h } from './dom.js';
 import { t, getLang, hourParams } from '../i18n.js';
-import { SPECIES, anyAvailable, speciesAvailable } from '../sim/species.js';
+import { SPECIES, anyAvailable } from '../sim/species.js';
+import { availableEmojis } from './names.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import {
   STRUCTURES, CATEGORIES, spaceSummary, canAssign, refundOf, accepts, hasResidents, moveFeeFor, capacityOf, sizeOf, structureShown,
@@ -33,9 +34,7 @@ export const structureName = (type) => (STRUCTURES[type].cat === 'decor' ? t(`co
 const has = (key) => t(key) !== key;
 const why = (reason, params) => (has(`con_why_${reason}`) ? t(`con_why_${reason}`, hourParams(params)) : t(`why_${reason}`, hourParams(params)));
 /** Les emojis des habitants possibles (seulement les espèces proposées ou déjà à la ferme : src/sim/species.js). */
-const speciesEmojis = (type, profile) => [...new Set((STRUCTURES[type].species ?? []).filter((s) => speciesAvailable(profile, s))
-  .map((s) => SPECIES[s]?.emoji).filter(Boolean))].join(' ');
-const servesEmojis = (def, profile) => def.serves.filter((sid) => speciesAvailable(profile, sid)).map((sid) => SPECIES[sid].emoji).join(' ');
+const speciesEmojis = (type, profile) => availableEmojis(STRUCTURES[type].species ?? [], profile);
 
 // ---------------------------------------------------------------- barre d'outils
 
@@ -199,7 +198,7 @@ export function openCatalogue(ui, tab = null) {
         out.push(h('div', { class: 'cards' }, eqTypes.map((type) => {
           const def = EQUIPMENT[type];
           const locked = !g.isUnlocked(type);
-          const who = servesEmojis(def, p);
+          const who = availableEmojis(def.serves, p);
           const side = locked
             ? h('span', { class: 'lock' }, `🔒 ${t('level', { n: g.unlockLevel(type) })}`)
             : h('button', {

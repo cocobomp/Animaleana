@@ -1638,7 +1638,9 @@ function forelockCards(S, B, body, base) {
   // l'avant — vu de face, le haut du toupet est arrondi, pas un bord droit sur le front), s'amincit vers la pointe et
   // sur les côtés.
   const TF0 = FORE_THICK * Math.sqrt(Math.min(1.4, B.mane ?? 1));
-  const tf = (r, f) => TF0 * smooth(0, 0.08, f) * (1 + 0.5 * (1 - smooth(0.05, 0.25, f))) * (1 - 0.6 * smooth(0.1, 0.9, f)) * Math.max(0, 1 - r * r);
+  // (bosse de 4 cm sous la nuque : de trois quarts, le toupet sort en arrondi d'entre les oreilles au lieu d'une
+  // plaque couchée sur le front)
+  const tf = (r, f) => TF0 * smooth(0, 0.07, f) * (1 + 1.1 * (1 - smooth(0.04, 0.32, f))) * (1 - 0.6 * smooth(0.1, 0.9, f)) * Math.max(0, 1 - r * r) ** 0.8;
   // Ligne du milieu, posée par la pesanteur sur le front, dans le repère de la tête.
   const rootY = (x, z) => {
     let y = 0.3;
@@ -1883,13 +1885,13 @@ function tailCards(S, B, body, pos, coat, base) {
     return { p, F };
   };
   // Masse : NR anneaux du haut du tronçon jusqu'à Lm, TAIL_AROUND points autour (quatre bandes de la texture).
-  // Sous le tronçon, chaque colonne a sa longueur (82 à 100 % : plus longue derrière, inégale d'une mèche à l'autre) :
+  // Sous le tronçon, chaque colonne a sa longueur (86 à 100 % : plus longue derrière, inégale d'une mèche à l'autre) :
   // le bas de la queue finit en pointes de longueurs différentes, pas coupé droit à sa hauteur limite.
   const NA = TAIL_AROUND;
   const P = [];
   const sOf = (k) => (Lm * k) / (NR - 1);
   const colPh = rng() * 6.28;
-  const colLen = (phi) => 0.91 + 0.05 * Math.cos(phi) + 0.025 * Math.sin(3 * phi + colPh) + 0.02 * Math.cos(5 * phi);
+  const colLen = (phi) => Math.min(1, 0.95 + 0.05 * Math.cos(phi) + 0.025 * Math.sin(3 * phi + colPh) + 0.02 * Math.cos(5 * phi));
   const sCol = (s, phi) => (s <= dockLen ? s : dockLen + (s - dockLen) * colLen(phi));
   for (let j = 0; j < NA; j++) {
     const phi = (j / NA) * Math.PI * 2;
@@ -1911,7 +1913,9 @@ function tailCards(S, B, body, pos, coat, base) {
   }
   const top = axis[0].clone();
   const mass = {
-    P, kind: 2, strip: TAIL_AROUND / 4, closed: true, u0: HAIR_MASS.root,
+    // (u1 : les pointes les plus fines de la texture laissées de côté — tout au bout d'une queue longue, réduites au
+    // loin, elles se lisaient en une pluie de points sous la queue ; les cartes font la pointe)
+    P, kind: 2, strip: TAIL_AROUND / 4, closed: true, u0: HAIR_MASS.root, u1: 0.93,
     out: (j, k) => {
       const F = axisAt(sCol(sOf(k), (j / NA) * Math.PI * 2));
       return P[j][k].clone().sub(F.p);
@@ -1951,7 +1955,9 @@ function tailCards(S, B, body, pos, coat, base) {
     const cw = Math.max(0, Math.cos(phi));
     const s0 = u * dockLen;
     // (longueurs inégales, par mèche et par groupe : la queue finit en pointe irrégulière, pas coupée net)
-    const Ls = (Lt + dockLen * (1 - u)) * (0.8 + 0.2 * cw) * (0.86 + 0.26 * rng()) * clump.len;
+    // (jamais plus de 10 % plus bas que la masse : au-delà, des pointes isolées pendaient sous la queue et, de loin au
+    // téléphone, se lisaient en une pluie de points)
+    const Ls = Math.min(Lm * 1.1 - s0, (Lt + dockLen * (1 - u)) * (0.8 + 0.2 * cw) * (0.86 + 0.26 * rng()) * clump.len);
     const NPc = 10;
     const h = 0.003 + rng() * 0.004;
     const pts = [];
@@ -1980,7 +1986,7 @@ function tailCards(S, B, body, pos, coat, base) {
     const card = {
       // (racine étroite : la mèche sort du tronçon en pointe, pas une plaque large posée sur le couard)
       pts, normals, side, w0: primary ? 0.07 : 0.052, w1: primary ? 0.04 : 0.03, rootTaper: 0.22,
-      color: new THREE.Color(tone, tone, tone), uv: [0, 1, v, dv], kind: 2,
+      color: new THREE.Color(tone, tone, tone), uv: [0, 0.95, v, dv], kind: 2,
       // (du tronçon vers Tail2 sur la première moitié : une queue portée haut (arabe) retombe en arc)
       weights: (p, f) => blendWeights(wR, wT, smooth(0, 0.45, f)),
       meta: { root, primary },
@@ -2818,6 +2824,7 @@ function hairCards(cards, { masses = [], mainCount = 0 } = {}) {
     const R = M.P.length;
     const C = M.P[0].length;
     const u0m = M.u0 ?? 0;
+    const u1m = M.u1 ?? 1;
     const at = (j, k) => M.P[M.closed ? (j + R) % R : Math.min(R - 1, Math.max(0, j))][Math.min(C - 1, Math.max(0, k))];
     // normales (vers l'extérieur) et direction des crins
     const N = [];
@@ -2861,7 +2868,7 @@ function hairCards(cards, { masses = [], mainCount = 0 } = {}) {
           pos.push(p.x, p.y, p.z);
           nrm.push(nn.x, nn.y, nn.z);
           // (u : de M.u0 — après les pointes du bord gauche de la crinière — au bout des crins)
-          uv.push(u0m + (1 - u0m) * (k / (C - 1)), HAIR_V + vm + (1 - HAIR_V - 2 * vm) * lv);
+          uv.push(u0m + (u1m - u0m) * (k / (C - 1)), HAIR_V + vm + (1 - HAIR_V - 2 * vm) * lv);
           const tone = M.tone(j, k);
           col.push(tone, tone, tone);
           const ww = M.weights(j, k);

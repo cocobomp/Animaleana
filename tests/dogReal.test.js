@@ -189,7 +189,7 @@ describe('races et chiots', () => {
         }
       }
     }
-  });
+  }, 60000); // (10 modèles déformés : plus de 5 s quand toute la suite tourne)
 
   it('oreilles tombantes modelées : l\'oreille droite du shiba est effacée du crâne, une vraie oreille pend le long de la joue', () => {
     const base = realDogBase(G.shiba, 'shiba');

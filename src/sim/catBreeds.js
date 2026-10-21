@@ -145,7 +145,8 @@ export const CAT_BREEDS = [
     desc: { fr: 'Tout rond, poil épais comme une peluche, yeux cuivre.', en: 'Round all over, thick plush coat, copper eyes.' },
     pattern: 'solid',
     colors: [
-      C('Bleu', 'Blue', 0x7f8790, 0x7f8790, { eye: 0xd9902a }),
+      // (bleu profond, plus foncé que le chartreux ; yeux cuivre foncé)
+      C('Bleu', 'Blue', 0x6e7884, 0x6e7884, { eye: 0xc8761e }),
       C('Crème', 'Cream', 0xe6cfa6, 0xe6cfa6, { eye: COPPER }),
       C('Lilas', 'Lilac', 0xb4a8ac, 0xb4a8ac, { eye: ORANGE }),
       C('Argenté tigré', 'Silver tabby', 0xcbcbc9, 0x26262a, { pattern: 'classic', eye: GREEN }),
@@ -158,8 +159,8 @@ export const CAT_BREEDS = [
     temper: ['calm', 'shy'],
     desc: { fr: 'Le chat bleu français : fourrure laineuse et grands yeux orange.', en: 'The blue French cat: woolly coat and big orange eyes.' },
     pattern: 'solid',
-    // (gris bleu aux reflets argentés, plus clair que le bleu du british ; yeux plus orangés)
-    colors: [C('Gris bleu', 'Blue grey', 0x8b949e, 0x8b949e, { eye: 0xe39a2c })],
+    // (gris bleu aux reflets argentés, bien plus clair que le bleu du british ; yeux or orangé)
+    colors: [C('Gris bleu', 'Blue grey', 0x98a2ad, 0x98a2ad, { eye: 0xeaa53a })],
   },
   {
     id: 'sphynx', name: { fr: 'Sphynx', en: 'Sphynx' }, origin: null, rarity: 3, scale: 0.95, fluff: 0.88, snout: 0.8, price: 240,

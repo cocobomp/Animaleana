@@ -49,10 +49,10 @@ export const CAT_BUILDS = {
   bengal: { legs: 1.05, legW: 1.08, back: 1.06, head: 0.95, snout: 1.05, muzzleW: 1.05, earSize: 0.84, earRound: 0.3, tailThick: 1.05, fur: -0.002 },
   // British : tout rond et trapu, grosses joues, museau court et large, petites oreilles écartées, pattes courtes et
   // fortes, poil dense en peluche.
-  british: { legs: 0.86, legW: 1.22, back: 0.93, girth: 1.26, head: 1.22, headW: 1.3, snout: 0.55, muzzleW: 1.34, neck: 0.78, earSize: 0.66, earOut: 0.34, earRound: 0.65, tailLen: 0.82, tailThick: 1.3, fur: 0.006, plush: 1 },
+  british: { legs: 0.84, legW: 1.22, back: 0.92, girth: 1.28, head: 1.24, headW: 1.38, snout: 0.5, muzzleW: 1.38, neck: 0.78, earSize: 0.66, earOut: 0.34, earRound: 0.65, tailLen: 0.82, tailThick: 1.3, fur: 0.006, plush: 1 },
   // Chartreux : solide mais plus haut et allongé que le british, museau fin et plus long (son « sourire »), oreilles
   // moyennes, poil laineux (gris bleu argenté et yeux cuivre : robe).
-  chartreux: { legs: 1.0, legW: 1.1, back: 1.06, girth: 1.12, head: 1.04, headW: 1.05, snout: 0.98, muzzleW: 0.94, neck: 0.98, earSize: 0.98, earRound: 0.2, tailThick: 1.1, fur: 0.004, plush: 0.55 },
+  chartreux: { legs: 1.04, legW: 1.08, back: 1.08, girth: 1.08, head: 1.02, headW: 1.0, snout: 1.06, muzzleW: 0.9, neck: 1.0, earSize: 1.02, earRound: 0.2, tailThick: 1.1, fur: 0.004, plush: 0.55 },
   // Sphynx : nu et plissé, ventre bas, très grandes oreilles larges, queue fine.
   sphynx: { legs: 1.02, legW: 0.92, girth: 0.97, belly: 1, head: 1.0, headW: 1.04, snout: 0.95, earSize: 1.6, earW: 1.32, earOut: 0.3, tailThick: 0.6, fur: -0.006, hairless: 1, wrinkles: 1 },
   // Norvégien : grand chat des forêts au poil long, pinceaux, collerette et queue en panache.

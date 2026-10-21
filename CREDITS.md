@@ -3,7 +3,7 @@
 La ferme à Madichelle est un jeu libre et gratuit. Les modèles 3D ci-dessous viennent d'autres auteurs : ceux
 sous CC0 1.0 sont dans le domaine public (aucune attribution n'est exigée, mais nous tenons à les remercier) ; les
 chiens, les chats et les lapins sont sous licence **Creative Commons Attribution 4.0 (CC BY 4.0)** : leur attribution ci-dessous est
-obligatoire et figure aussi dans le jeu (❓ Aide → ℹ️ À propos) ; le mouton et la chèvre sont sous **licence MIT**
+obligatoire et figure aussi dans le jeu (❓ Aide → ℹ️ À propos) ; le mouton, la chèvre et le taureau sont sous **licence MIT**
 (© 2020 Microsoft) : leur notice de copyright et le texte de la licence (ci-dessous) accompagnent le jeu, ici, dans
 `public/models/LICENSES/` et dans l'écran À propos. Les textes de licence sont dans `public/models/LICENSES/`.
 
@@ -21,6 +21,8 @@ obligatoire et figure aussi dans le jeu (❓ Aide → ℹ️ À propos) ; le mou
 | Lapins : course et saut d'artiste (gabarits, *Rabbit*) | [CDmir (Čestmír Dammer)](https://opengameart.org/content/rabbit-0), sur OpenGameArt | CC0 1.0 | `rabbit.glb`, `rabbit_lop.glb` (mouvements) |
 | Moutons (7 races, agneaux) : *Sheep_White_01* de la Microsoft Rocketbox Avatar Library | [Microsoft](https://github.com/microsoft/Microsoft-Rocketbox) (Rocketbox Studios, Microsoft Research), © 2020 Microsoft | [MIT](https://github.com/microsoft/Microsoft-Rocketbox/blob/master/LICENSE.md) | `sheep.glb` |
 | Chèvres (4 races, chevreaux) : *Goat_White_01* et cornes de *Goat_Brown_01*, Microsoft Rocketbox Avatar Library | [Microsoft](https://github.com/microsoft/Microsoft-Rocketbox) (Rocketbox Studios, Microsoft Research), © 2020 Microsoft | [MIT](https://github.com/microsoft/Microsoft-Rocketbox/blob/master/LICENSE.md) | `goat.glb` |
+| Vaches (11 races, génisses, veaux) : la vache du *Realtime Rancher's 3D Model Pack* | [Lyndon Daniels](https://opengameart.org/content/realtime-ranchers-3d-model-pack), sur OpenGameArt | CC0 1.0 | `cow.glb` |
+| Taureaux (11 races) : *Bull_Brown_01* de la Microsoft Rocketbox Avatar Library | [Microsoft](https://github.com/microsoft/Microsoft-Rocketbox) (Rocketbox Studios, Microsoft Research), © 2020 Microsoft | [MIT](https://github.com/microsoft/Microsoft-Rocketbox/blob/master/LICENSE.md) | `bull.glb` |
 
 Conversion : FBX → glTF binaire avec three.js (FBXLoader + GLTFExporter), animations
 ré-échantillonnées à 12 images/s, compression `meshopt` via glTF-Transform. Tout le reste
@@ -122,7 +124,33 @@ Ces modifications sont faites par les scripts de `tools/chevre/` (voir `tools/ch
 animations). La chèvre sculptée par le code reste le modèle de repli pendant le chargement ou si le fichier ne se
 charge pas.
 
-Texte de la licence du mouton et de la chèvre :
+### La vache (CC0 1.0)
+
+- La vache du « Realtime Rancher's 3D Model Pack », **Lyndon Daniels**, https://opengameart.org/content/realtime-ranchers-3d-model-pack
+  (même pack et même artiste que le cheval), licence CC0 1.0 (domaine public : aucune attribution n'est exigée,
+  nous remercions Lyndon Daniels). **Modifié** : squelette créé (os des cornes rentrées à l'échelle 0, de la mamelle à
+  quatre trayons, des oreilles et de la queue), poids de la peau, mise à l'échelle (garrot 1,40 m), 16 animations
+  créées (allures, brouter, manger à l'auge, se coucher et se relever en bovin, couchée, ruminer, dormir, meugler,
+  traite, queue qui chasse les mouches, gambade et tétée du veau ; aucun os étiré, sabots jamais sous le sol), photo
+  de la robe changée en carte de grain et masque (plus de taches ni d'ombres de la photo : les robes des races sont
+  peintes par le jeu), textures WebP, compression meshopt, version allégée pour le lointain. Fichier : `cow.glb`,
+  vaches, génisses et veaux des 11 races.
+
+### Le taureau (MIT)
+
+- « Bull_Brown_01 », **Microsoft Rocketbox Avatar Library**, https://github.com/microsoft/Microsoft-Rocketbox
+  (`Assets/Animals/Bull_Brown_01`, commit `0943055`), Copyright (c) 2020 Microsoft, licence MIT. **Modifié** : os
+  renommés, onglons fondus, os des cornes (bouchons sous les cornes) et du scrotum, longues cornes en lyre en cible de
+  forme, poids de la peau refaits, carte de normales convertie, 19 animations créées, photo de la robe changée en
+  carte de grain et masque, textures WebP, compression meshopt, version allégée. Fichier : `bull.glb`, taureaux des
+  11 races.
+
+Ces modifications sont faites par les scripts de `tools/vache/` (voir `tools/vache/LISEZMOI.md`) et, en jeu, par
+`src/game/models/cowReal.js` et `cowCoat.js` (races, robes, cornes, poil long, mamelle qui suit la traite,
+animations). La vache sculptée par le code reste le modèle de repli pendant le chargement ou si les fichiers ne se
+chargent pas.
+
+Texte de la licence du mouton, de la chèvre et du taureau :
 
 ```
 MIT License

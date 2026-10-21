@@ -1,0 +1,26 @@
+Vache réaliste — modèle et textures de Lyndon Daniels (OpenGameArt)
+Fichier du jeu : cow.glb (vaches, génisses et veaux des 11 races)
+
+Source :
+  Lyndon Daniels, « Realtime Rancher's 3D Model Pack » (cow.zip : cowTM08New00RTime02.blend, textures 2k)
+    https://opengameart.org/content/realtime-ranchers-3d-model-pack
+    (même pack et même artiste que le cheval du jeu, horse_real.glb)
+
+Licence (indiquée sur la page OpenGameArt, lue le 2026-10-21) :
+  CC0 1.0 Universal (CC0 1.0) — Public Domain Dedication
+  https://creativecommons.org/publicdomain/zero/1.0/
+
+Aucune attribution n'est exigée ; nous remercions Lyndon Daniels.
+
+Modifications faites pour La ferme à Madichelle (scripts de tools/vache/, voir tools/vache/LISEZMOI.md) :
+  - squelette créé (le modèle n'avait que les groupes de sommets d'un ancien squelette) : os nommés comme les moutons
+    et les chèvres du jeu, os des cornes (rentrées à l'échelle 0, sans cornes), de la mamelle (4 trayons), des
+    oreilles et de la queue (6 os) ; poids de la peau ;
+  - mise à l'échelle (garrot 1,40 m), tournée vers +Z, sabots à y = 0 ;
+  - 16 animations créées : arrêt, pas, trot, galop, brouter, manger à l'auge, se coucher (à genoux devant, puis
+    l'arrière) et se relever (l'arrière d'abord), couchée, ruminer, dormir, meugler, traite, queue qui chasse les
+    mouches, gambade et tétée du veau ; aucun os étiré, sabots jamais sous le sol ;
+  - photo de la robe remplacée par une carte de grain (chaque texel rapporté à la moyenne de sa classe de poil : plus
+    de taches ni d'ombres de la photo) et un masque (taches, peau rose, bouche et cils gardés) ; la robe de chaque race
+    est peinte par le jeu (src/game/models/cowCoat.js) ;
+  - textures WebP, compression meshopt, version allégée (moins de triangles) pour les vaches lointaines.

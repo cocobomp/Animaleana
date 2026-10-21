@@ -36,6 +36,11 @@ export const MODELS = {
   // Chèvre réaliste (goatReal.js) : « Goat_White_01 » de la Microsoft Rocketbox Avatar Library (MIT), avec les cornes de
   // « Goat_Brown_01 », pour les 4 races et les chevreaux. Clé à part (pas « goat ») ; s'il manque, la chèvre procédurale reste.
   goat_real: 'goat.glb',
+  // Vache réaliste (cowReal.js) : la vache de Lyndon Daniels, « Realtime Rancher's 3D Model Pack » (CC0), pour les vaches,
+  // les génisses et les veaux des 11 races ; le taureau « Bull_Brown_01 » de la Microsoft Rocketbox Avatar Library (MIT)
+  // pour les mâles adultes. Clés à part (jamais « cow ») ; s'ils manquent, la vache procédurale reste.
+  cow_real: 'cow.glb',
+  bull_real: 'bull.glb',
   tree_common: 'tree_common.glb',
   tree_common2: 'tree_common2.glb',
   tree_birch: 'tree_birch.glb',

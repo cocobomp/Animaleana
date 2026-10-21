@@ -26,6 +26,7 @@ import { realCatPose } from './models/catReal.js'; // poses du chat réaliste (s
 import { realRabbitPose } from './models/rabbitReal.js'; // poses du lapin réaliste (ses clips : saut, debout, binky…)
 import { realSheepPose } from './models/sheepReal.js'; // mouton réaliste : sabots libres au tour, saut par son clip
 import { realGoatPose } from './models/goatReal.js'; // chèvre réaliste : saut par son clip (tours, agility), salut
+import { realCowPose } from './models/cowReal.js'; // vache réaliste : « viens » sabots libres, salut tête baissée
 import { ActivityHud, showActivityResults } from '../ui/activities.js';
 import { t, ta } from '../i18n.js';
 
@@ -1736,7 +1737,7 @@ class ShowSession extends Session {
         // basculé tout d'une pièce, ses sabots avant passaient sous la scène).
         const b = Math.sin(Math.min(1, this.phaseT / 0.8) * Math.PI);
         if (!realLegPose(e.model, 'bow', b * 0.85, e.scaleGroup) && !realDogPose(e.model, 'bow', b, e.scaleGroup) && !realCatPose(e.model, 'bow', b, e.scaleGroup)
-          && !realRabbitPose(e.model, 'bow', b, e.scaleGroup) && !realGoatPose(e.model, 'bow', b)) e.scaleGroup.rotation.x = b * 0.25;
+          && !realRabbitPose(e.model, 'bow', b, e.scaleGroup) && !realGoatPose(e.model, 'bow', b) && !realCowPose(e.model, 'bow', b)) e.scaleGroup.rotation.x = b * 0.25;
         if (this.phaseT > 0.8) {
           e.scaleGroup.rotation.x = 0;
           e.scaleGroup.position.y = 0;
@@ -1883,6 +1884,12 @@ function animateTrick(e, trick, k, dt) {
       return;
     }
     realGoatPose(md, 'come');
+  }
+  // Vache réaliste : son seul tour est « viens » — elle court, sabots libres (la scène déplace le modèle ; le footLock
+  // luttait contre la course) ; jamais le modèle entier basculé.
+  if (md.realCow) {
+    realCowPose(md, 'come');
+    return;
   }
   switch (trick) {
     case 'sit':

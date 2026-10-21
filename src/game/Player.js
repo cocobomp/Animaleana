@@ -546,7 +546,10 @@ export class Player {
     const sc = entity.scale ?? 1;
     const back = (entity.model?.saddleY ?? 0.5) * sc; // hauteur du dos
     this.faceHead = false;
+    this.faceUdder = false;
     if (kind === 'offer' && entity.model?.head && this.offerToHead(entity, kind)) return;
+    // (traite d'une vache réaliste : la main va aux trayons, sous le ventre, pas au flanc)
+    if (kind === 'milk' && entity.model?.udderPoint && this.milkAtUdder(entity, kind)) return;
     const y = gestureHeight(kind, back);
     // Distance au bord de l'animal dans notre direction (une ellipse : long devant, étroit sur le côté).
     const ep = entity.position;
@@ -610,6 +613,42 @@ export class Player {
   }
 
   /**
+   * Traite : la main va aux trayons (model.udderPoint, le bas de la mamelle de la vache réaliste), à leur hauteur ; petit
+   * pas jusqu'à côté de la mamelle, de notre côté de l'animal, si besoin. Renvoie faux si la mamelle est trop loin.
+   */
+  milkAtUdder(entity, kind) {
+    const a = this.avatar;
+    const p = this.root.position;
+    entity.root?.updateMatrixWorld(true);
+    const up = entity.model.udderPoint.getWorldPosition(_head);
+    const groundY = this.world.heightAt(up.x, up.z);
+    const y = clamp(up.y - groundY + 0.05, 0.25, 1.0);
+    const d = Math.hypot(p.x - up.x, p.z - up.z);
+    if (d > 4.5) return false;
+    this.faceTo = entity;
+    this.faceUdder = true;
+    const sc = entity.scale ?? 1;
+    const half = Math.max(0.2, (entity.data?.look?.bodyR ?? 0.46) * sc * 0.9);
+    const go = () => {
+      const q = entity.model.udderPoint.getWorldPosition(_head);
+      const dd = Math.hypot(this.root.position.x - q.x, this.root.position.z - q.z);
+      startAvatarGesture(a, kind, { y, z: clamp(dd - 0.05, 0.3, 0.55) });
+    };
+    if (d > half + 0.6 && !this.auto) {
+      const h = entity.heading ?? 0;
+      const rx = Math.cos(h);
+      const rz = -Math.sin(h);
+      const side = (p.x - entity.position.x) * rx + (p.z - entity.position.z) * rz >= 0 ? 1 : -1;
+      const off = half + 0.42;
+      const target = new THREE.Vector3(up.x + rx * side * off, 0, up.z + rz * side * off);
+      this.goTo(target, 0.2, go, { slow: true, budget: 3.2 });
+      return true;
+    }
+    go();
+    return true;
+  }
+
+  /**
    * Vrai pendant un geste de soin (ou le petit pas qui le précède) : la liste de tâches attend
    * qu'il soit fini avant de partir vers la suivante (TaskQueue.update).
    */
@@ -620,6 +659,7 @@ export class Player {
   cancelGesture() {
     this.faceTo = null;
     this.faceHead = false;
+    this.faceUdder = false;
     if (this.avatar.life) this.avatar.life.act.kind = null;
   }
 
@@ -696,7 +736,8 @@ export class Player {
       if (!this.auto?.slow) this.faceTo = null;
     } else if (this.faceTo && !mount) {
       // Pendant un geste de soin : on se tourne vers l'animal (vers sa bouche pour une friandise).
-      const f = this.faceHead && this.faceTo.model?.head ? mouthOf(this.faceTo, _head) : this.faceTo.position;
+      const f = this.faceUdder && this.faceTo.model?.udderPoint ? this.faceTo.model.udderPoint.getWorldPosition(_head)
+        : this.faceHead && this.faceTo.model?.head ? mouthOf(this.faceTo, _head) : this.faceTo.position;
       const p0 = this.root.position;
       let diff = Math.atan2(f.x - p0.x, f.z - p0.z) - this.heading;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));

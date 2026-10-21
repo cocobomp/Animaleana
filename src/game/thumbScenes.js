@@ -24,6 +24,7 @@ import { STRUCTURES } from '../sim/construction.js';
 import { SPECIES, isOffered } from '../sim/species.js';
 import { sheepFleece } from '../sim/sheepLook.js';
 import { goatLookOf, goatUdderFill } from '../sim/goatLook.js';
+import { cowLookOf, cowUdderFill } from '../sim/cowLook.js';
 import { realSheepReady } from './models/sheepReal.js';
 import { buildStructureModel } from './models/structures.js';
 import { EQUIPMENT_MODELS } from './models/equipment.js';
@@ -366,8 +367,10 @@ function animalThumb(spec) {
   const sheep = species === 'sheep' ? { ...look, lamb: stage === 'baby', young: stage === 'young', sex, ...(Number.isFinite(spec.fleece) ? { fleece: spec.fleece } : {}) } : null;
   // (chèvre réaliste : chevreau, jeune, bouc, mamelle de la chèvre — à moitié pleine, ou celle de l'animal du portrait)
   const goat = species === 'goat' ? { ...look, kid: stage === 'baby', young: stage === 'young', sex, udderFill: Number.isFinite(spec.udder) ? spec.udder : 0.5 } : null;
+  // (vache réaliste : veau, génisse, taureau — son propre modèle —, mamelle de la vache à moitié pleine ou celle du portrait)
+  const cow = species === 'cow' ? { ...look, calf: stage === 'baby', young: stage === 'young', sex, udderFill: Number.isFinite(spec.udder) ? spec.udder : 0.5 } : null;
   const model = withTexScale(THUMB_TEX, () => buildAnimalModel(species, foal ? { ...look, foal: true } : puppy ? { ...look, puppy: true }
-    : cat ? { ...look, ...cat } : sheep ?? goat ?? look, breed));
+    : cat ? { ...look, ...cat } : sheep ?? goat ?? cow ?? look, breed));
   model.photoPose?.(); // (cheval réaliste : à l'arrêt, tête relevée, oreilles en avant — jamais en train de brouter)
   model.root.traverse((o) => {
     if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false;
@@ -415,7 +418,8 @@ export function portraitSpec(a, stage) {
   // (mouton : sa toison du moment, arrondie au dixième — tondu, puis qui repousse : une autre image)
   const fleece = a.species === 'sheep' ? Math.round(sheepFleece(a) * 10) / 10 : undefined;
   // (chèvre laitière : sa mamelle du moment, au quart près — pleine, puis vide après la traite : une autre image)
-  const udder = a.species === 'goat' && a.sex === 'f' ? Math.round(goatUdderFill(a) * 4) / 4 : undefined;
+  const udder = a.species === 'goat' && a.sex === 'f' ? Math.round(goatUdderFill(a) * 4) / 4
+    : a.species === 'cow' && a.sex === 'f' ? Math.round(cowUdderFill(a) * 4) / 4 : undefined;
   return { kind: 'animal', view: 'portrait', species: a.species, breed: a.breed, sex: a.sex, stage, seed: a.look?.seed, sig: lookSig(a.look), look: a.look, fleece, udder };
 }
 
@@ -432,7 +436,8 @@ export function photoDouble(e) {
   // un agneau avec la toison du moment, un chevreau)
   const st = lifeStage(data);
   const look = data.species === 'sheep' ? { ...data.look, lamb: st === 'baby', young: st === 'young', sex: data.sex, fleece: sheepFleece(data) }
-    : data.species === 'goat' ? { ...goatLookOf(data, st), udderFill: goatUdderFill(data) } : stageLook(data);
+    : data.species === 'goat' ? { ...goatLookOf(data, st), udderFill: goatUdderFill(data) }
+      : data.species === 'cow' ? { ...cowLookOf(data, st), udderFill: cowUdderFill(data) } : stageLook(data);
   const model = withTexScale(THUMB_TEX, () => buildGltfAnimal(data.species, look) ?? buildAnimalModel(data.species, look, data.breed));
   model.photoPose?.();
   model.root.traverse((o) => {

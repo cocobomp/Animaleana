@@ -1228,11 +1228,7 @@ export class RealSheepAnim {
     const names = base.names;
     if (!S.contact) {
       const cls = new Int8Array(n); // 0 corps, 1 tête (oreilles comprises : elles pendent en broutant), -1 ignoré (membres)
-      for (let i = 0; i < n; i++) {
-        const nm = names[P.domBone[i]];
-        const head = P.mask[i * 4 + 1] > 0.5;
-        cls[i] = head || nm === 'head' || nm === 'jaw' || /^ear/.test(nm) ? 1 : TRUNK.has(nm) || /^neck|^tail/.test(nm) ? 0 : -1;
-      }
+      for (let i = 0; i < n; i++) cls[i] = this.contactClass(names[P.domBone[i]], P.mask[i * 4 + 1] > 0.5);
       const pick = [new Set(), new Set()];
       const inv = md.skeleton.boneInverses;
       const bm = new THREE.Matrix4();
@@ -1306,6 +1302,14 @@ export class RealSheepAnim {
       this.bones[i].quaternion.copy(hold[i][1]);
     }
     md.root.updateMatrixWorld(true);
+  }
+
+  /**
+   * Classe d'un sommet pour les points de contact au sol (contactPoints) : 1 tête (oreilles comprises : elles pendent en
+   * broutant), 0 corps, −1 ignoré (membres ; la vache y ajoute le bas de ses membres repliés, cowReal.js).
+   */
+  contactClass(nm, head) {
+    return head || nm === 'head' || nm === 'jaw' || /^ear/.test(nm) ? 1 : TRUNK.has(nm) || /^neck|^tail/.test(nm) ? 0 : -1;
   }
 
   /** Pose figée (vignettes, van, caisse) : debout (tête levée, de face), couché ou endormi, sans temps qui passe. */
@@ -1608,7 +1612,10 @@ export class RealSheepAnim {
         // toison est compté dans chaque point, skinPoint)
         lowB -= this.skirt * Math.max(0, 1 - clamp(sh, 0, 1)) * Math.min(1, lie);
       }
-      target = Math.max(-low, Number.isFinite(lowB) ? -(lowB + 0.006) : -Infinity);
+      // (couchée, les sabots repliés peuvent passer un peu sous le sol — lieSoleSlack, la vache : la sole d'un antérieur
+      // replié, tournée vers l'arrière, la portait à plusieurs centimètres au-dessus de l'herbe)
+      const slack = (this.lieSoleSlack ?? 0) * clamp(lie, 0, 1);
+      target = Math.max(-low - slack, Number.isFinite(lowB) ? -(lowB + 0.006) : -Infinity);
       floor = target;
     }
     // (arrêté, sabots encore tenus : posé tout de suite comme au pas — un corps qui redescendait en douceur soulevait
@@ -1829,7 +1836,8 @@ export class RealSheepAnim {
           best = l;
         }
       }
-      if (best >= 0) this.stepL = { l: best, t: 0, a0: this.lockAng[best], s0: this.lockSide[best], T: 0.3 };
+      // (durée du petit pas : 0,3 s pour un mouton ; la vache, deux fois plus grande, prend son temps : stepT)
+      if (best >= 0) this.stepL = { l: best, t: 0, a0: this.lockAng[best], s0: this.lockSide[best], T: this.stepT ?? 0.3 };
     }
   }
 

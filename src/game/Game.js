@@ -8,6 +8,7 @@ import { REAL_HORSE_KEY, horseView, realHorseBase } from './models/horseReal.js'
 import { REAL_DOG_KEYS, realDogBase } from './models/dogReal.js'; // chiens réalistes : chargés après le cheval
 import { REAL_SHEEP_KEY, realSheepBase } from './models/sheepReal.js'; // mouton réaliste : chargé après les chiens
 import { REAL_GOAT_KEY, realGoatBase } from './models/goatReal.js'; // chèvre réaliste : chargée après le mouton
+import { REAL_COW_KEY, REAL_BULL_KEY, realCowBase } from './models/cowReal.js'; // vache et taureau réalistes : après la chèvre
 import { hairTexture } from './models/horseHair.js';
 import { renderSetup, PixelBudget, SLOW_KEY } from './pixelBudget.js'; // définition et anticrénelage selon la qualité
 import { REAL_CAT_KEYS, realCatBase } from './models/catReal.js'; // chats réalistes : chargés après les chiens
@@ -189,11 +190,13 @@ export class Game {
     this.rabbitSwap = [];
     this.sheepSwap = [];
     this.goatSwap = [];
+    this.cowSwap = [];
     const grace = new Promise((r) => setTimeout(r, HORSE_GRACE_MS));
     const dogKeys = Object.values(REAL_DOG_KEYS);
     const catKeys = Object.values(REAL_CAT_KEYS);
     const rabbitKeys = Object.values(REAL_RABBIT_KEYS);
     const others = preloadModels(Object.keys(MODELS).filter((k) => k !== REAL_HORSE_KEY && k !== REAL_SHEEP_KEY && k !== REAL_GOAT_KEY
+      && k !== REAL_COW_KEY && k !== REAL_BULL_KEY
       && !dogKeys.includes(k) && !catKeys.includes(k) && !rabbitKeys.includes(k)));
     const horse = others.then(() => loadModel(REAL_HORSE_KEY));
     // Chiens réalistes (shiba ≈ 0,85 Mo, jack ≈ 0,5 Mo) : demandés après le cheval, jamais attendus à l'ouverture ;
@@ -225,6 +228,12 @@ export class Game {
     this.realGoatReady = this.realSheepReady.then(() => loadModel(REAL_GOAT_KEY)).then((gltf) => {
       if (gltf) this.onRealGoats(gltf);
       return !!gltf;
+    });
+    // Vache réaliste (≈ 0,75 Mo) et taureau (≈ 0,6 Mo) : demandés après la chèvre, jamais attendus ; les vaches prennent
+    // le modèle réaliste dès qu'il arrive (onRealCows), la vache procédurale en attendant.
+    this.realCowReady = this.realGoatReady.then(() => Promise.all([loadModel(REAL_COW_KEY), loadModel(REAL_BULL_KEY)])).then((list) => {
+      if (list.some(Boolean)) this.onRealCows(list);
+      return list.filter(Boolean).length;
     });
     this.modelsReady = Promise.all([others, Promise.race([horse, grace])])
       .then(([n]) => { this.modelsLoaded = true; return n; });
@@ -389,6 +398,53 @@ export class Game {
       for (const e of this.allEntities()) if (e.data.species === 'goat' && !e.model?.realGoat) this.goatSwap.push(e);
       this.thumbs?.modelsChanged?.();
     }, 90);
+  }
+
+  /**
+   * La vache (ou le taureau) réaliste est chargée : données de repos tirées des GLB juste après, hors de l'image en cours
+   * (l'un après l'autre : ≈ 0,1 à 0,3 s chacun) ; puis les vaches au modèle de repli prennent la réaliste, une par image
+   * (swapRealCows), et les vignettes sont refaites.
+   */
+  onRealCows(list) {
+    const todo = list.filter(Boolean);
+    const next = () => {
+      const gltf = todo.shift();
+      if (gltf) {
+        try {
+          realCowBase(gltf);
+        } catch (err) {
+          console.warn('Vache réaliste : préparation impossible', err);
+        }
+        if (todo.length) {
+          setTimeout(next, 60);
+          return;
+        }
+      }
+      for (const e of this.allEntities()) if (e.data.species === 'cow' && !e.model?.realCow) this.cowSwap.push(e);
+      this.thumbs?.modelsChanged?.();
+    };
+    setTimeout(next, 90);
+  }
+
+  /**
+   * Une vache au modèle de repli prend la vache réaliste (une par image). Pas quand elle est menée (troupeau), guidée par
+   * une activité (van, concours, spectacle), en pose ni sur la table : elle attend son tour. (Un taureau dont le GLB
+   * manque garde la vache procédurale : on passe à la suivante.)
+   */
+  swapRealCows() {
+    const list = this.cowSwap;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      const here = e.root?.parent && !e.disposed;
+      if (!here || e.model?.realCow) {
+        list.splice(i--, 1);
+        continue;
+      }
+      if (e.scripted || e.herdCtrl || e.posing || e.onTable) continue;
+      list.splice(i--, 1);
+      e.rebuildModel();
+      if (e.model?.realCow) return;
+    }
   }
 
   /**
@@ -903,6 +959,8 @@ export class Game {
     if (this.sheepSwap.length) this.swapRealSheep();
     // Chèvre réaliste arrivée en cours de partie : une chèvre de plus prend le vrai modèle.
     if (this.goatSwap.length) this.swapRealGoats();
+    // Vache réaliste arrivée en cours de partie : une vache de plus prend le vrai modèle.
+    if (this.cowSwap.length) this.swapRealCows();
     // Point de vue pour la version réduite des chevaux au loin (horseReal.js) : la caméra de l'image d'avant.
     horseView.eye.setFromMatrixPosition(this.camera.matrixWorld);
     horseView.on = true;

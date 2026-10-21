@@ -370,8 +370,8 @@ function hairCards(base, S, B) {
   return geo;
 }
 
-/** Tour du museau (licol) : centre et rayon de la coupe de la tête 4 cm derrière le bout du nez (au repos). */
-function muzzleRing(P, pos, M) {
+/** Tour du museau (licol) : centre et rayon de la coupe de la tête 4 cm derrière le bout du nez (au repos ; repris par la vache). */
+export function muzzleRing(P, pos, M) {
   const n = P.count;
   const axis = V().subVectors(M.nose, M.eye).normalize();
   const c0 = M.nose.clone().addScaledVector(axis, -0.045);
@@ -608,7 +608,7 @@ export function buildRealGoatModel(look, breedId = null, gltf = null) {
  * devant l'origine, de rayon 0,9 × headR) tombe sur le museau mesuré ; +z le long du chanfrein, +y vers le dessus du
  * crâne. k : échelle de l'ancre (rayon du museau ÷ rayon de la muserolle).
  */
-function makeHeadAnchor(M, look) {
+export function makeHeadAnchor(M, look) {
   const mz = M.muzzle;
   const k = clamp((mz.radius + 0.006) / (look.headR * 0.9), 0.3, 2);
   const z = mz.axis.clone();
@@ -628,7 +628,7 @@ function makeHeadAnchor(M, look) {
  * Ancre de l'encolure : +y le long du cou (vers la tête), −z vers la crête, +z vers la gorge ; échelle telle que le
  * collier générique (rayon 0,62 × R à 0,5 × neckLen de l'origine) entoure l'anneau mesuré de l'encolure.
  */
-function makeNeckAnchor(M, look) {
+export function makeNeckAnchor(M, look) {
   const c = M.collar;
   const R = (look.bodyR ?? 0.19) * (look.fluff ?? 1);
   const k = clamp(((c.rx + c.ry) / 2 + 0.012) / (R * 0.62), 0.2, 2);

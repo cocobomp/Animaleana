@@ -23,6 +23,7 @@ import { buildRealRabbitModel } from './rabbitReal.js'; // lapins réalistes (Da
 import { rabbitLookWithBreed } from '../../sim/rabbitLook.js';
 import { buildRealSheepModel } from './sheepReal.js'; // mouton réaliste (Rocketbox, GLB)
 import { buildRealGoatModel } from './goatReal.js'; // chèvre réaliste (Rocketbox, GLB)
+import { buildRealCowModel } from './cowReal.js'; // vache réaliste (Lyndon Daniels) et taureau (Rocketbox), GLB
 
 // ------------------------------------------------------------------ anatomie par espèce
 // torso : formes du tronc. ['e', miroir, centre (x/R, y/R, z/L), rayons (x/R, y/R, z/L), k (fondu, /R)]
@@ -456,6 +457,13 @@ export function buildAnimalModel(speciesId, look, breedOfAnimal = null, stage = 
   // Chèvre réaliste (GLB, toutes les races et les chevreaux) ; sinon la chèvre procédurale ci-dessous.
   if (speciesId === 'goat') {
     const real = buildRealGoatModel(look, breedOfAnimal);
+    if (real) return real;
+  }
+  // Vache réaliste (GLB : la vache de Lyndon Daniels pour les vaches, génisses et veaux, le taureau Rocketbox pour les
+  // mâles adultes) ; tant qu'elle n'est pas chargée (ou dans les tests, ou opts.procedural : planches AVANT/APRÈS), la
+  // vache procédurale ci-dessous.
+  if (speciesId === 'cow' && !opts.procedural) {
+    const real = buildRealCowModel(look, breedOfAnimal);
     if (real) return real;
   }
   const S = SPEC[speciesId] ?? SPEC.dog;

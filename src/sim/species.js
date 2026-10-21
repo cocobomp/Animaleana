@@ -405,7 +405,7 @@ export const SPECIES = {
       { id: 'bretonne_pie_noire', name: { fr: 'Bretonne pie noire', en: 'Breton black pied' }, origin: 'bretagne', rarity: 3, scale: 0.75,
         pattern: 'patches', colors: [C('Pie noire', 'Black pied', 0x1a1716, 0xf2efe9, { m: 'Pie noir' })] },
       { id: 'herens', name: { fr: 'Hérens', en: 'Hérens' }, origin: 'alpes', rarity: 3, scale: 0.85,
-        pattern: 'solid', colors: [C('Noire', 'Black', 0x231c18, 0x231c18, { m: 'Noir' })] },
+        pattern: 'solid', colors: [C('Noire', 'Black', 0x231c18, 0x231c18, { m: 'Noir' }), C('Rouge foncé', 'Dark red', 0x4a1f14, 0x4a1f14)] },
       { id: 'wagyu', name: { fr: 'Wagyu', en: 'Wagyu' }, origin: 'japon', rarity: 3, scale: 0.95,
         pattern: 'solid', colors: [C('Noire', 'Black', 0x1c1816, 0x1c1816, { m: 'Noir' })] },
       { id: 'canadienne', name: { fr: 'Canadienne', en: 'Canadienne' }, origin: 'canada', rarity: 3, scale: 0.85,

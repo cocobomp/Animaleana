@@ -21,6 +21,8 @@ import { animateRealSheep } from './models/sheepReal.js'; // mouton réaliste (G
 import { sheepLookOf, sheepStage } from '../sim/sheepLook.js';
 import { animateRealGoat } from './models/goatReal.js'; // chèvre réaliste (GLB) : allures, dressée, traite, chevreau
 import { goatLookOf, goatStage } from '../sim/goatLook.js';
+import { animateRealCow } from './models/cowReal.js'; // vache réaliste (GLB) : allures, couchée, traite, veau, taureau
+import { cowLookOf, cowStage, cowModelKind } from '../sim/cowLook.js';
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
 // Un cercle { x, z, r } ; les enclos ont aussi leur rectangle intérieur hw × hd (toute la place, même agrandi).
@@ -112,9 +114,10 @@ export class AnimalEntity {
     // Modèle GLB animé si l'espèce en a un (src/game/assets.js), sinon le modèle procédural. Le poulain, le chiot du
     // chien réaliste, le chaton (modèle de FainoDS) et le jeune du chat réaliste, le lapereau et le jeune du lapin
     // réaliste ont leur gabarit (stageLook : grosse tête, pattes courtes…) ; l'agneau et le chevreau aussi, les béliers
-    // leurs cornes, le bouc ses cornes et sa barbe (sheepLook.js, goatLook.js).
+    // leurs cornes, le bouc ses cornes et sa barbe (sheepLook.js, goatLook.js) ; le veau, la génisse et le taureau
+    // (cowLook.js : le taureau a son propre modèle).
     const sp = this.data.species;
-    const look = sp === 'sheep' ? sheepLookOf(this.data) : sp === 'goat' ? goatLookOf(this.data) : stageLook(this.data);
+    const look = sp === 'sheep' ? sheepLookOf(this.data) : sp === 'goat' ? goatLookOf(this.data) : sp === 'cow' ? cowLookOf(this.data) : stageLook(this.data);
     this.model = buildGltfAnimal(this.data.species, look) ?? buildAnimalModel(this.data.species, look, this.data.breed);
     this.root = new THREE.Group();
     this.root.userData.entity = this;
@@ -170,7 +173,9 @@ export class AnimalEntity {
     if (((this.model.horseV3 && this.model.foal !== (this.stage === 'baby')) || (this.model.realDog && this.model.puppy !== (this.stage === 'baby'))
       || (this.model.realCat && this.model.stage !== (this.stage === 'baby' || this.stage === 'young' ? this.stage : 'adult'))
       || (this.model.realRabbit && this.model.stage !== (this.stage === 'baby' || this.stage === 'young' ? this.stage : 'adult'))
-      || (this.model.realSheep && this.model.stage !== sheepStage(this.stage)) || (this.model.realGoat && this.model.stage !== goatStage(this.stage))) && this.label) {
+      || (this.model.realSheep && this.model.stage !== sheepStage(this.stage)) || (this.model.realGoat && this.model.stage !== goatStage(this.stage))
+      // (veau devenu génisse ou vache ; veau mâle devenu taureau : un autre GLB)
+      || (this.model.realCow && (this.model.stage !== cowStage(this.stage) || this.model.kind !== cowModelKind(cowLookOf(this.data, this.stage))))) && this.label) {
       this.rebuildModel();
       return;
     }
@@ -240,7 +245,9 @@ export class AnimalEntity {
 
   /** Rayon approximatif, pour savoir si le joueur est assez près. */
   get radius() {
-    return (this.data.look.bodyLen * 0.5 + 0.4) * this.scale;
+    // (vache réaliste : sa longueur mesurée — 2,3 m du nez aux fesses, pas le bodyLen de 1,85 m du modèle procédural)
+    const len = this.model?.realCow ? this.model.bodyLength : this.data.look.bodyLen;
+    return (len * 0.5 + 0.4) * this.scale;
   }
 
   snap(dt = 0.016) {
@@ -795,6 +802,7 @@ export class AnimalEntity {
     if (md.realDog) return animateRealDog(this, dt, sad); // chien réaliste (dogReal.js)
     if (md.realSheep) return animateRealSheep(this, dt, sad); // mouton réaliste (sheepReal.js)
     if (md.realGoat) return animateRealGoat(this, dt, sad); // chèvre réaliste (goatReal.js)
+    if (md.realCow) return animateRealCow(this, dt, sad); // vache réaliste (cowReal.js)
     const legLen = this.data.look.legLen * (this.data.look.legs ?? 1);
     const v = this.speed / Math.max(0.3, this.scale);
     const moving = this.speed > 0.05;

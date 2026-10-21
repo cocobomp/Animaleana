@@ -1,0 +1,44 @@
+Taureaux (mâles adultes des 11 races) — « Bull_Brown_01 », Microsoft Rocketbox Avatar Library
+Fichier du jeu : bull.glb
+
+Source :
+  https://github.com/microsoft/Microsoft-Rocketbox
+  (Assets/Animals/Bull_Brown_01, commit 0943055db6ec570bcef9f2c8b41c9e5467c808f9 — même dépôt que le mouton et la chèvre)
+
+Licence : MIT (texte complet ci-dessous, celui du fichier LICENSE.md du dépôt).
+
+Modifications faites pour La ferme à Madichelle (scripts de tools/vache/taureau/, voir tools/vache/LISEZMOI.md) :
+  - os renommés comme les moutons et les chèvres du jeu, os racine ajouté ; onglons fondus ; os des cornes (bouchons
+    sous les cornes : taureau sans cornes) et du scrotum ; longues cornes en lyre en cible de forme (« horns_long ») ;
+  - poids de la peau refaits autour du coude et du grasset ; carte de normales convertie (vert inversé) ;
+  - mise à l'échelle (garrot 1,45 m), tournée vers +Z, sabots à y = 0 ;
+  - 19 animations créées (le modèle n'en avait aucune) : arrêt, pas, trot, galop, brouter, manger, meugler, traite,
+    se coucher (un genou, puis les deux, puis l'arrière), couchée, ruminer, dormir, se relever, chasser une mouche,
+    secouer la tête, coups de queue et d'oreille, gambade et tétée ; aucun os étiré, sabots jamais sous le sol ;
+  - photo de la robe remplacée par une carte de grain (robe sans ses ombres) et un masque (mufle, bouche et yeux
+    peints gardés) ; la robe de chaque race est peinte par le jeu (src/game/models/cowCoat.js) ;
+  - textures WebP, compression meshopt, version allégée pour les taureaux lointains.
+
+-------------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2020 Microsoft
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

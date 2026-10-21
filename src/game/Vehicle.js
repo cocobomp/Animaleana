@@ -12,6 +12,7 @@ import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { growthScale, lifeStage, stageLook } from '../sim/animal.js';
 import { sheepFleece } from '../sim/sheepLook.js';
 import { goatLookOf, goatUdderFill } from '../sim/goatLook.js';
+import { cowLookOf, cowUdderFill } from '../sim/cowLook.js';
 import { needsTrailer } from '../sim/trip.js';
 import { cargoItem, cargoShape } from '../sim/cargo.js';
 
@@ -50,6 +51,8 @@ function travelLook(a) {
   if (a.species === 'sheep') return { ...a.look, lamb: st === 'baby', young: st === 'young', sex: a.sex, fleece: sheepFleece(a) };
   // (chèvre réaliste : chevreau, jeune, bouc, mamelle du moment)
   if (a.species === 'goat') return { ...goatLookOf(a, st), udderFill: goatUdderFill(a) };
+  // (vache réaliste : veau, génisse, taureau, mamelle du moment)
+  if (a.species === 'cow') return { ...cowLookOf(a, st), udderFill: cowUdderFill(a) };
   return stageLook(a);
 }
 
@@ -286,7 +289,37 @@ export class TripVehicle {
     const half = (a.look.bodyLen * scale) / 2;
     const slot = this.stallUse[i].indexOf(a.id);
     const back = SMALL_LIVESTOCK.includes(a.species) && slot === 1 ? 0.95 : 0;
+    // (vache réaliste : sa longueur mesurée — 2,3 m du nez aux fesses, plus que le bodyLen de 1,85 m — ; la pointe des
+    // fesses juste devant la barre arrière, la barre de poitrail à la base de l'encolure : calculée d'après le bodyLen, la
+    // croupe de la Prim'Holstein et de la Charolaise traversait la barre arrière)
+    const fit = this.cowFit?.(a, scale);
+    if (fit != null) return new THREE.Vector3(st.x, st.y, Math.min(st.zFront - fit.chest, (st.zRear ?? -Infinity) + fit.rump));
     return new THREE.Vector3(st.x, st.y, st.zFront - half - 0.14 - back);
+  }
+
+  /**
+   * Place d'une vache réaliste dans sa stalle : distances (m, à sa taille) de son origine à la base de l'encolure (chest)
+   * et à la pointe des fesses (rump), mesurées sur son modèle (le modèle vivant s'il est là, sinon un double construit une
+   * fois par race et stade). null : pas une vache réaliste.
+   */
+  cowFit(a, scale) {
+    if (a.species !== 'cow') return null;
+    const e = this.game?.entities?.get?.(a.id);
+    let md = e?.model?.realCow ? e.model : null;
+    if (!md) {
+      this.cowFits ??= new Map();
+      const look = travelLook(a);
+      const key = `${look.breed}|${look.calf}|${look.young}|${look.sex}`;
+      if (!this.cowFits.has(key)) {
+        const m = buildAnimalModel('cow', look, a.breed);
+        this.cowFits.set(key, m.realCow ? { noseZ: m.noseZ, rumpZ: m.rumpZ, saddleY: m.saddleY } : null);
+        if (m.realCow) m.dispose?.();
+      }
+      md = this.cowFits.get(key);
+    }
+    if (!md) return null;
+    // (base de l'encolure ≈ 0,62 m derrière le bout du nez pour une vache de taille 1 ; 5 cm devant la barre arrière)
+    return { chest: (md.noseZ - 0.62 * (md.size ?? 1)) * scale, rump: -md.rumpZ * scale + 0.05 };
   }
 
   /** Les points du chemin (monde) pour monter jusqu'à la place i : derrière le van, bas du pont, haut du pont, la place. */
@@ -538,7 +571,8 @@ export class TripVehicle {
       const ring = this.trailer.tieRings[i];
       const a = this.passengerAt(i);
       const scale = a ? a.look.scale * growthScale(a) : 1;
-      const head = new THREE.Vector3(s.x * 0.75, s.y + 1.45 * scale, s.zFront + 0.2);
+      // (licol à hauteur de tête : celle d'un cheval, ou d'une vache, qui porte la tête plus bas)
+      const head = new THREE.Vector3(s.x * 0.75, s.y + (a?.species === 'cow' ? 1.18 : 1.45) * scale, s.zFront + 0.2);
       const mid = ring.clone().lerp(head, 0.5);
       mid.y -= 0.12;
       const geo = new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(ring.clone(), mid, head), 10, 0.012, 5, false);

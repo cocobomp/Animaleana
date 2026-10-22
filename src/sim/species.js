@@ -241,11 +241,12 @@ export const SPECIES = {
       { id: 'berger_blanc', herder: true, name: { fr: 'Berger blanc suisse', en: 'White Swiss shepherd' }, origin: 'alpes', rarity: 2, scale: 1.05, fluff: 1.15, earType: 'pointed',
         pattern: 'solid', colors: [C('Blanc', 'White', 0xf6f4ef, 0xf6f4ef)] },
       // Retriever de la Nouvelle-Écosse (« toller », ≈ 48 cm) : roux à orange vif, marques blanches (liste, poitrail,
-      // pieds, bout de la queue ; un toller sans blanc est admis), poil mi-long frangé, panache. Élevé au Canada, et si
+      // pieds, bout de la queue ; le roux foncé n'en garde que de discrètes — bout de la queue, doigts, un peu de
+      // poitrail —, sans quoi on le prenait pour un golden roux), poil mi-long frangé, panache. Élevé au Canada, et si
       // courant qu'on le trouve aussi à l'animalerie de la maison.
       { id: 'toller', name: { fr: 'Retriever de la Nouvelle-Écosse', en: 'Nova Scotia Duck Tolling Retriever' }, origin: 'canada', homeShop: true, rarity: 2, scale: 0.85, fluff: 1.1,
         pattern: 'bicolor', colors: [C('Roux à marques blanches', 'Red with white markings', 0xb4532a, 0xf5f0e6), C('Orange à marques blanches', 'Orange with white markings', 0xd2742f, 0xf5f0e6),
-          C('Roux foncé', 'Dark red', 0x93421f, 0xb5643a, { pattern: 'solid' })] },
+          C('Roux foncé', 'Dark red', 0x93421f, 0xf5f0e6)] },
       // Lagotto romagnolo (chien d'eau et chercheur de truffes de Romagne, ≈ 45 cm) : tout en boucles serrées et
       // laineuses, jusque sur la tête, les oreilles et la queue ; robes de la race (blanc cassé, taches marron ou
       // orange, rouan marron, marron, orange).

@@ -124,10 +124,17 @@ describe('robes', () => {
       expect(c.r).toBeGreaterThan(c.g * 1.4);
       expect(c.g).toBeGreaterThan(c.b);
     }
-    // roux foncé sans blanc : ni liste ni pieds blancs, franges plus claires gardées
+    // roux foncé : marques discrètes — ni liste ni museau, mais le bout de la queue, les doigts et une petite goutte
+    // au poitrail (sans aucun blanc, on le prenait pour un golden roux foncé) ; franges plus claires gardées
     const D = plan('toller', 2);
     expect(D.blaze).toBe(0);
-    expect(D.tailTip).toBe(0);
+    expect(D.face).toBe(0);
+    expect(D.tailTip).toBe(1);
+    expect(D.under).toBe(1);
+    expect(white(D.underColor)).toBe(true);
+    expect(D.legLevel).toBeLessThan(plan('toller', 0).legLevel);
+    expect(D.reach).toBeLessThan(plan('toller', 0).reach);
+    expect(D.chestOnly).toBe(1);
     expect(D.light).toBeGreaterThan(0);
   });
 
@@ -160,19 +167,32 @@ describe('modèle 3D', () => {
     expect(md.uniforms.cCut.value.toArray()).toEqual([0, 0, 0, 0]);
     md.setCut('lagotto');
     const [trunk, ruff, legs, top] = md.uniforms.cCut.value.toArray();
-    expect(trunk).toBeLessThan(0);
+    // (bien visible : tronc raccourci de plus que la longueur moyenne du poil, tête nettement arrondie — à −0,85 et
+    // +0,45 fois le poil, elle se voyait à peine)
+    expect(trunk).toBeLessThan(-1.2 * md.build.fur);
     expect(ruff).toBeLessThan(0);
     expect(legs).toBe(0);
-    expect(top).toBeGreaterThan(0);
+    expect(top).toBeGreaterThan(0.8 * md.build.fur);
     md.setCut(null);
     expect(md.uniforms.cCut.value.toArray()).toEqual([0, 0, 0, 0]);
     md.dispose();
-    // (les autres chiens n'ont pas de bouclettes serrées)
+    // (les autres chiens n'ont pas de bouclettes serrées, ni de truffe peinte)
     for (const b of ['labradoodle', 'caniche', 'golden', 'toller']) {
       const m = dog(b);
       expect(m.uniforms.cCurl.value.z, b).toBe(0);
+      expect(m.uniforms.cNose.value.w, b).toBe(0);
       m.dispose();
     }
+    // truffe brune peinte au bord net dans la barbe (celle de la texture faisait une tache grise floue), plus claire
+    // sur la robe orange
+    for (const i of [0, 3, 4]) {
+      const m = dog('lagotto', i);
+      expect(m.uniforms.cNose.value.w).toBeGreaterThan(0.01);
+      const c = m.uniforms.cNoseC.value;
+      expect(c.r).toBeGreaterThan(c.b * 1.3);
+      m.dispose();
+    }
+    expect(dog('lagotto', 4).uniforms.cNoseC.value.getHex()).not.toBe(dog('lagotto', 0).uniforms.cNoseC.value.getHex());
   });
 
   it('lagotto : les touffes de boucles festonnent la silhouette (et pas en éclats : relief lissé)', () => {

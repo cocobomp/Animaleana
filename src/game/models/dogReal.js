@@ -1890,6 +1890,15 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   const noseK = B.beard ? (B.ringlets ? 0.62 : 0.72) : 1;
   const spheres = keepCfg.nose ? [{ s: new THREE.Vector4(base.land.nose.x, base.land.nose.y + (1 - noseK) * keepCfg.nose[0] * 0.5, base.land.nose.z - keepCfg.nose[0] * 0.4, keepCfg.nose[0] * noseK), l: keepCfg.nose[1] * (B.beard ? 0.55 : 1) }] : [];
   void nose;
+  // (bouclettes serrées : truffe peinte, brune comme chez le lagotto — plus claire sur les robes orange —, au lieu de
+  // celle de la texture, une tache grise floue dans la barbe ; voir cNose dans dogCoat.js)
+  if (B.ringlets && spheres.length) {
+    const s0 = spheres[0].s;
+    uniforms.cNose.value.set(s0.x, s0.y, s0.z + keepCfg.nose[0] * 0.08, s0.w * 0.88);
+    const hsl = new THREE.Color(look.coat ?? 0xffffff).getHSL({}, THREE.SRGBColorSpace);
+    uniforms.cNoseC.value.setHex(hsl.s > 0.45 && hsl.l > 0.45 && hsl.l < 0.8 && hsl.h < 0.12 ? 0x523020 : 0x2b1b15);
+    spheres[0].l = 0;
+  }
   const coatMat = coatMaterial(base.prims.coat.material, uniforms, {
     role: 'fur', means: base.means, detail: base.detail, contrast: base.cfg.grain, keep: { ...keepCfg, spheres },
   });
@@ -2015,8 +2024,9 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
       lion: [-0.7 * f, 0.03 + 0.6 * f, -0.3 * f, 0.02],
       // (pompons modelés de la race : seulement la crinière du devant au shader)
       caniche: B.pompons ? [-0.75 * f, 0.016, 0, 0] : [-0.7 * f, 0.01, 0.028, 0.03],
-      // (coupe du lagotto : boucles égalisées sur le corps et l'encolure, pattes bouclées gardées, tête ronde)
-      lagotto: [-0.85 * f, -0.5 * f, 0, 0.45 * f],
+      // (coupe du lagotto : corps nettement raccourci, boucles égalisées sur le corps et l'encolure, pattes bouclées
+      // gardées, tête ronde bien gonflée — moins marquée, elle ne se voyait presque pas)
+      lagotto: [-1.25 * f, -0.6 * f, 0, 0.85 * f],
     }[st] ?? [0, 0, 0, 0];
     uniforms.cCut.value.set(...cut);
     uniforms.cPom.value = st === 'caniche' ? 1 : 0;

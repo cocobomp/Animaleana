@@ -136,6 +136,8 @@ export function coatPlan(look = {}, breedId = null) {
       // poitrail (le ventre reste roux), pieds (pas au-dessus du paturon), bout de la queue ; franges et dessous de la
       // queue plus clairs.
       Object.assign(P, { reach: 0.14, legLevel: 0.13, face: 0.3, blaze: 0.42, tailTip: 1, collar: 0, cheek: 0, chestOnly: 1 });
+      // (roux foncé : marques discrètes — bout de la queue, doigts, petite goutte au poitrail, ni liste ni museau)
+      if (/Roux foncé|Dark red/.test(name)) Object.assign(P, { reach: 0.06, legLevel: 0.07, face: 0, blaze: 0 });
       P.light = 0.5;
       P.lightColor = mixHex(coat, 0xf2cf9a, 0.45);
     } else {
@@ -225,10 +227,10 @@ export function coatPlan(look = {}, breedId = null) {
       P.headPatch = 0.85;
       P.patchColor = coat;
       if (breed === 'lagotto') {
-        // (rouan marron du lagotto : poils blancs et marron mêlés — un fond brun grisé moucheté —, tête, oreilles et
-        // quelques plaques marron)
-        P.base = mixHex(sec, coat, 0.35);
-        P.tickColor = mixHex(coat, sec, 0.12);
+        // (rouan marron du lagotto : poils blancs et marron mêlés finement — un fond brun clair chaud moucheté de
+        // marron, pas un camouflage kaki et gris de grandes taches —, tête, oreilles et quelques plaques marron)
+        P.base = mixHex(coat, sec, 0.42);
+        P.tickColor = coat;
         P.headPatch = 0.9;
         P.blobs = 0.45;
         P.blobColor = coat;
@@ -305,6 +307,9 @@ export function makeCoatUniforms() {
     cPom: { value: 0 },
     // Rides du front (carlin), 0 à 1 : relief du shader.
     cWrinkle: { value: 0 },
+    // Truffe peinte (lagotto, dans sa barbe : centre xyz au repos, rayon w ; 0 : celle de la texture) et sa couleur.
+    cNose: { value: new THREE.Vector4(0, 0, 0, 0) },
+    cNoseC: { value: new THREE.Color(0x3a2419) },
   };
 }
 
@@ -438,6 +443,8 @@ uniform float cWet;
 uniform vec3 cCurl;
 uniform vec4 cIris;
 uniform float cSheen;
+uniform vec4 cNose;
+uniform vec3 cNoseC;
 uniform float cWrinkle;
 uniform vec4 cLand;
 uniform vec4 cHead;
@@ -679,15 +686,31 @@ vec3 cmpCoat(vec3 p, vec4 part) {
     float chest = body * (1.0 - legs * 0.6) * smoothstep(shZ - 0.06, shZ + 0.02, p.z + edge * 0.3)
       * (1.0 - smoothstep(bellyY + (reach + 0.12) * (topY - bellyY), bellyY + (reach + 0.32) * (topY - bellyY), p.y + edge * 0.3));
     float bel = trunk * (1.0 - smoothstep(reach - 0.12, reach + 0.04, h + edge)) * (1.0 - cLight.y);
-    // (poitrail seul — toller — : une plaque au milieu du poitrail, pas un plastron jusqu'aux épaules)
-    chest *= 1.0 - cLight.y * smoothstep(0.035, 0.07, ax + edge * 0.08);
+    // (poitrail seul — toller — : une goutte qui part étroite de la gorge et s'élargit sur le poitrail, au bord
+    // déchiré, et s'arrête entre les antérieurs — ni un plastron jusqu'aux épaules, ni une bavette carrée au bord
+    // du haut horizontal)
+    if (cLight.y > 0.0) {
+      float yTop = bellyY + (reach + 0.66) * (topY - bellyY);
+      float yBot = bellyY + (reach + 0.02) * (topY - bellyY);
+      float t = clamp((yTop - p.y) / max(0.02, yTop - yBot), 0.0, 1.0);
+      // (largeur : étroite à la gorge, la plus large aux deux tiers, arrondie en pointe vers le bas)
+      // (plus petite si les marques sont discrètes : roux foncé)
+      float wd = mix(0.006, 0.042 * clamp(reach / 0.14, 0.4, 1.0), sqrt(t)) * (1.0 - 0.55 * smoothstep(0.6, 1.0, t)) * (0.85 + 0.3 * n2);
+      float drop = max(body, neckZone) * (1.0 - legs) * smoothstep(shZ - 0.03, shZ + 0.04, p.z + edge * 0.25)
+        * (1.0 - smoothstep(wd - 0.007, wd + 0.007, ax + (n1 - 0.5) * 0.018))
+        * (1.0 - smoothstep(yTop - 0.012, yTop + 0.008, p.y + edge * 0.12))
+        * smoothstep(yBot - 0.035, yBot + 0.005, p.y + edge * 0.15);
+      chest = mix(chest, drop, cLight.y);
+    }
     float lg = legs * (1.0 - smoothstep(elbowY * cUnder.z * 1.25 - 0.02, elbowY * cUnder.z * 1.25 + 0.02, p.y + edge * 0.15));
     lg *= step(0.01, cUnder.z);
     // (museau blanc : devant les yeux, pas autour — l'œil du shiba est dans la zone du museau)
     float hzE = (cEye.z - cHead.z) / headLen;
     float mz = (muzzle * belowEye * smoothstep(hzE + 0.02, hzE + 0.12, hz + edge * 0.3) + muzzle * smoothstep(0.75, 0.9, hz) * 0.6) * cUnder.w;
     float cheek = head * (1.0 - ear) * cUnder2.w * belowEye * smoothstep(0.15, 0.4, hz) * smoothstep(0.02, 0.05, ax);
-    float throat = neckZone * (1.0 - head) * (1.0 - smoothstep(0.35, 0.55, h + edge)) * step(0.01, cUnder.w + cUnder2.w);
+    // (gorge : pas pour le poitrail seul — toller —, où elle faisait une bande blanche d'une épaule à l'autre ; sa
+    // goutte part déjà de la gorge)
+    float throat = neckZone * (1.0 - head) * (1.0 - smoothstep(0.35, 0.55, h + edge)) * step(0.01, cUnder.w + cUnder2.w) * (1.0 - cLight.y);
     // (liste : sa force règle aussi sa largeur — étroite chez le boxer, large chez le colley — et sa longueur :
     // étroite, elle part du front et non de l'arrière du crâne)
     float blaze = head * (1.0 - ear) * step(0.01, cUnder2.x) * cmpBlaze(p, hz, ax, edge, mix(0.3, 1.0, cUnder2.x), 0.32 * (1.0 - cUnder2.x));
@@ -729,9 +752,12 @@ vec3 cmpCoat(vec3 p, vec4 part) {
     // (bouclettes serrées : mèches marron et blanches mêlées par touffes de la taille des boucles, sur le fond grisé —
     // le rouan du lagotto ; tirées boucle par boucle, elles faisaient une mosaïque de facettes ; axes tournés, sinon
     // le bruit suit la grille et le rouan devient un camouflage en pixels carrés)
+    // (mouchetures fines, de la taille d'une mèche : à 2 cm, elles faisaient un camouflage ; fondues en leur moyenne
+    // de loin, où elles scintilleraient)
     if (cCurl.z > 0.0) {
       vec3 rq = CMP_ROT * sp;
-      tk = smoothstep(0.4, 0.64, cmpNoise(rq * 120.0) * 0.7 + cmpNoise(rq * 47.0 + 5.0) * 0.3) * 0.8;
+      tk = smoothstep(0.36, 0.6, cmpNoise(rq * 190.0) * 0.75 + cmpNoise(rq * 85.0 + 5.0) * 0.25) * 0.85;
+      tk = mix(tk, 0.5, smoothstep(0.45, 1.1, length(fwidth(sp)) * 190.0));
     }
     c = mix(c, cTickC, cTick * tk);
   }
@@ -802,6 +828,8 @@ if (cOn > 0.5 && cCurl.z > 0.0 && cRole > 0.5) {
     cmpCurlG = cv.yzw;
     cmpCurlFade = fadeB;
     cmpCurlBump = (1.0 - smoothstep(0.16, 0.36, fw * 25.0)) * (1.0 - 0.75 * vCmpPart.x);
+    // (coupé au salon — tronc raccourci — : relief des boucles égalisé sur le corps aussi)
+    cmpCurlBump *= 1.0 - 0.7 * clamp(-cCut.x / 0.02, 0.0, 1.0) * (1.0 - vCmpPart.w) * (1.0 - vCmpPart.z) * (1.0 - vCmpPart.y);
   }
 }
 if (cOn > 0.5) {
@@ -867,7 +895,7 @@ if (cOn > 0.5) {
     // (coupé au salon — tronc raccourci — : boucles égalisées, robe plus unie sur le corps ; pattes et tête gardent
     // leurs boucles)
     float trim = clamp(-cCut.x / 0.02, 0.0, 1.0) * (1.0 - vCmpPart.w) * (1.0 - vCmpPart.z) * (1.0 - vCmpPart.y);
-    float ringK = cCurl.z * (1.0 - 0.65 * trim);
+    float ringK = cCurl.z * (1.0 - 0.8 * trim);
     // (creux entre les mèches un peu plus sombres, sans trou noir au centre des boucles ; grain de la laine)
     nc *= mix(1.0, mix(0.74, 1.05, smoothstep(0.05, 0.8, cmpCurlZ)) * (1.0 + (cmpNoise(CMP_ROT * vCmpPos * 260.0) - 0.5) * 0.14 * (1.0 - smoothstep(0.25, 0.6, fwC * 260.0))), ringK * cmpCurlFade);
     float tuft = cmpNoise(CMP_ROT * vCmpPos * 34.0) * 0.65 + cmpNoise(CMP_ROT * vCmpPos * 71.0 + 3.0) * 0.35;
@@ -886,6 +914,19 @@ if (cOn > 0.5) {
     nc = mix(nc, vec3(0.035, 0.026, 0.022), lip);
   }
   diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0));
+  // Truffe peinte (lagotto) : dans la barbe poussée autour d'elle, la truffe de la texture, prise au seuil de luminance
+  // sur des texels flous, faisait une tache grise étalée sans contour, et la lèvre sombre une bavure dessous. Une
+  // truffe brune au bord net (adouci d'un pixel), deux narines plus sombres en avant.
+  if (cNose.w > 0.0) {
+    vec3 nq = vCmpPos - cNose.xyz;
+    float dn = length(nq * vec3(1.0, 1.25, 1.0)) + (cmpNoise(vCmpPos * 260.0) - 0.5) * 0.0015;
+    float aa = fwidth(dn) + 1e-5;
+    float nm = 1.0 - smoothstep(cNose.w - aa, cNose.w + aa, dn);
+    float nost = (1.0 - smoothstep(0.0025, 0.0045, length(vec2(abs(nq.x) - cNose.w * 0.36, nq.y + cNose.w * 0.12)))) * smoothstep(0.0, cNose.w * 0.4, nq.z);
+    vec3 nc2 = cNoseC * (0.82 + 0.3 * cmpNoise(vCmpPos * 700.0)) * (1.0 - 0.55 * nost);
+    diffuseColor.rgb = mix(diffuseColor.rgb, nc2, nm);
+    cmpEyeK = max(cmpEyeK, nm * 0.35);
+  }
   // Blanc de l'œil du shiba : foncé (il se voyait autour de l'iris dès que la tête grandit : chiots aux yeux ronds)
   if (eyeK > 0.5) {
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.038, 0.03), smoothstep(0.22, 0.45, lum0) * (1.0 - smoothstep(0.12, 0.3, hsv.y)));
@@ -1172,6 +1213,6 @@ export function coatMaterial(src, shared, opts) {
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, cWet);\nroughnessFactor = mix(roughnessFactor, 0.12, cmpEyeK);')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${SHEEN_F}`);
   };
-  mat.customProgramCacheKey = () => 'dog-coat-v5';
+  mat.customProgramCacheKey = () => 'dog-coat-v6';
   return mat;
 }

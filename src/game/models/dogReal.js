@@ -980,6 +980,13 @@ export function deformDog(base, B) {
     // (bouclettes serrées : touffes de boucles, lissées de proche en proche sur la peau — sans lissage, les grands
     // triangles de la tête et du corps se dressaient en éclats)
     const tufts = B.ringlets ? ringletTufts(P, coat.index, coat.weld, n) : null;
+    // (bouclettes serrées : la poussée de chaque sommet notée, puis lissée sur la tête avant d'être appliquée — voir
+    // plus bas)
+    const push = tufts ? new Float32Array(n) : null;
+    const headMask = tufts ? new Float32Array(n) : null;
+    const lidKeep = tufts ? new Float32Array(n) : null;
+    // (hauteur du jarret au repos : haut du métatarse)
+    const hockY = (base.heads[I('metatarsusL')].y + base.heads[I('metatarsusR')].y) / 2;
     for (let i = 0; i < n; i++) {
       p.fromArray(P, i * 3);
       _w.fromArray(nr, i * 3);
@@ -1004,7 +1011,7 @@ export function deformDog(base, B) {
         const brow = (1 - smooth(0.012, 0.03, Math.abs(y0 - L.eyeY - 0.022))) * smooth(0.25, 0.4, hz) * (1 - smooth(0.5, 0.6, hz)) * smooth(0.01, 0.025, ax);
         // (bouclettes serrées : les sourcils s'arrêtent au bord de la paupière — poussés avec les touffes, ils faisaient
         // une écharde de poil au-dessus de l'œil)
-        const lid = B.ringlets ? smooth(0.014, 0.028, Math.hypot(ax - L.eyeX, y0 - L.eyeY, z0 - L.eyeZ)) : 1;
+        const lid = B.ringlets ? smooth(0.035, 0.06, Math.hypot(ax - L.eyeX, y0 - L.eyeY, z0 - L.eyeZ)) : 1;
         k += head * (1 - ear) * B.beard * (0.9 * muzzle + 0.7 * brow * lid);
       }
       const paw = 1 - smooth(0.04, L.elbowY * 0.55, y0);
@@ -1013,7 +1020,7 @@ export function deformDog(base, B) {
       if (B.ringlets) {
         const hz = (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z);
         const dEye = Math.hypot(Math.abs(r0[i * 3] - L.midX) - L.eyeX, y0 - L.eyeY, z0 - L.eyeZ);
-        k += head * B.ringlets * 0.3 * (1 - smooth(0.6, 0.85, hz)) * smooth(0.016, 0.034, dEye);
+        k += head * B.ringlets * 0.3 * (1 - smooth(0.6, 0.85, hz)) * smooth(0.035, 0.06, dEye);
         k += legSum * B.ringlets * 0.35 * (1 - 0.6 * paw);
       }
       k += legSum * (1 - paw) * (0.3 + B.feather * 0.8 * smooth(-0.1, -0.7, _w.z) * smooth(L.elbowY * 0.3, L.elbowY, y0));
@@ -1025,6 +1032,9 @@ export function deformDog(base, B) {
       const tf = tailR?.frac?.[i] ?? 0;
       const under = base.kind === 'shiba' ? smooth(-0.15, -0.75, _w.y) : smooth(-0.15, -0.75, _w.z);
       k += Math.sqrt(tail) * B.tailFur * ((0.9 + 0.2 * B.feather) * (1 - B.tailTaper * 0.85 * tf ** 1.3) + B.feather * 2.4 * under * smooth(0.04, 0.3, tf) * (1 - tf) ** 1.2 * Math.min(1, 0.012 / B.fur));
+      // (bouclettes serrées : sous le jarret, le métatarse arrière garde un poil ras — assis, il est couché au sol, et
+      // ses boucles, plus épaisses que celles du pied posé, entraient de 1,6 cm dans le sol)
+      if (B.ringlets) k *= 1 - 0.75 * B.ringlets * Math.min(1, W.leg[i * 4 + 2] + W.leg[i * 4 + 3]) * (1 - smooth(hockY, hockY + 0.05, y0)) * (1 - paw);
       let nz = B.curly ? 0.65 + 0.7 * fbm(p.x * 38, p.y * 38, p.z * 38) : 0.75 + 0.5 * fbm(p.x * 30, p.y * 30, p.z * 30);
       // (bouclettes serrées : la silhouette se festonne de touffes de boucles — bosses rondes, creux nets entre elles)
       if (tufts) nz = nz * (1 - B.ringlets) + B.ringlets * (0.62 + 0.8 * tufts[i]);
@@ -1036,7 +1046,13 @@ export function deformDog(base, B) {
         shave = (1 - 2 * B.ruff) * 0.015 * (neck * 1.1 + head * 0.8 * (1 - smooth(L.eyeY - 0.06, L.eyeY - 0.01, y0))
           * smooth(L.eyeX * 0.8, L.eyeX * 1.6, Math.abs(x0)) * (1 - smooth(0.45, 0.65, (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z))));
       }
-      p.addScaledVector(_w, (B.fur * k * nz - shave) * (1 - hidden[i]));
+      if (push) {
+        push[i] = (B.fur * k * nz - shave) * (1 - hidden[i]);
+        headMask[i] = head;
+        // (autour de l'œil — paupières, pli de l'arcade du modèle, deux couches de peau qui se chevauchent — : rien
+        // de poussé, même après le lissage, comme le labradoodle)
+        lidKeep[i] = 1 - head * (1 - smooth(0.035, 0.06, Math.hypot(Math.abs(r0[i * 3] - L.midX) - L.eyeX, y0 - L.eyeY, z0 - L.eyeZ)));
+      } else p.addScaledVector(_w, (B.fur * k * nz - shave) * (1 - hidden[i]));
       // Poil soyeux (yorkshire) : la robe tombe, les flancs descendent en jupe sur le haut des membres (jamais les
       // pieds, posés au sol avant).
       if (B.silky) p.y -= B.silky * B.fur * 2.4 * (1 - smooth(0.1, 0.8, h)) * (1 - head) * (1 - tail) * (1 - ear) * (1 - 0.5 * legSum) * (1 - paw) * (1 - hidden[i]);
@@ -1060,6 +1076,19 @@ export function deformDog(base, B) {
       }
       P.set([p.x, p.y, p.z], i * 3);
     }
+    // Bouclettes serrées : sur la tête, poussée et direction lissées de proche en proche avant d'être appliquées. Autour
+    // de l'œil, de la truffe et des lèvres, de petits triangles changent vite d'orientation (creux de l'orbite, pli de
+    // la babine) : poussés de 2 à 3 cm le long de leur propre normale, avec une poussée qui passe de rien à tout en
+    // un centimètre, ils se croisaient et se repliaient en éclats (l'« écharde » au-dessus de l'œil).
+    if (push) {
+      smoothOnMesh(push, 1, coat.index, coat.weld, n, 6, headMask);
+      smoothOnMesh(nr, 3, coat.index, coat.weld, n, 4, headMask);
+      for (let i = 0; i < n; i++) {
+        _w.fromArray(nr, i * 3).normalize();
+        p.fromArray(P, i * 3).addScaledVector(_w, push[i] * lidKeep[i]);
+        P.set([p.x, p.y, p.z], i * 3);
+      }
+    }
   }
   // Normales : celles du modèle, tournées comme la surface (différence des normales recalculées avant et après).
   const nDef = weldedNormals(P, coat.index, coat.weld, n);
@@ -1068,6 +1097,52 @@ export function deformDog(base, B) {
     N.set([_w.x, _w.y, _w.z], i * 3);
   }
   return { pos: P, nrm: N, heads: H, eyePos: EP, eyeNrm: EN, hidden };
+}
+
+/**
+ * Lisse des valeurs par sommet (comps composantes) sur le maillage : moyenne des voisins par les arêtes des triangles,
+ * sommets confondus (grp) traités ensemble ; mask (0 → 1 par sommet) : part lissée (0 : valeur gardée).
+ */
+function smoothOnMesh(vals, comps, index, grp, n, iters, mask) {
+  let G = 0;
+  for (let i = 0; i < n; i++) G = Math.max(G, grp[i] + 1);
+  const val = new Float32Array(G * comps);
+  const cnt = new Float32Array(G);
+  const m = new Float32Array(G);
+  for (let i = 0; i < n; i++) {
+    const g = grp[i];
+    for (let c = 0; c < comps; c++) val[g * comps + c] += vals[i * comps + c];
+    cnt[g]++;
+    m[g] = Math.max(m[g], mask[i]);
+  }
+  for (let g = 0; g < G; g++) for (let c = 0; c < comps; c++) val[g * comps + c] /= cnt[g] || 1;
+  const sum = new Float32Array(G * comps);
+  const deg = new Float32Array(G);
+  for (let it = 0; it < iters; it++) {
+    sum.fill(0);
+    deg.fill(0);
+    for (let t = 0; t < index.length; t += 3) {
+      for (let e = 0; e < 3; e++) {
+        const a = grp[index[t + e]];
+        const b = grp[index[t + ((e + 1) % 3)]];
+        for (let c = 0; c < comps; c++) {
+          sum[a * comps + c] += val[b * comps + c];
+          sum[b * comps + c] += val[a * comps + c];
+        }
+        deg[a]++;
+        deg[b]++;
+      }
+    }
+    for (let g = 0; g < G; g++) {
+      if (!deg[g] || !(m[g] > 0)) continue;
+      const w = 0.5 * m[g];
+      for (let c = 0; c < comps; c++) val[g * comps + c] = (1 - w) * val[g * comps + c] + w * (sum[g * comps + c] / deg[g]);
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    const g = grp[i];
+    for (let c = 0; c < comps; c++) vals[i * comps + c] = val[g * comps + c];
+  }
 }
 
 /**
@@ -2300,7 +2375,9 @@ class RealDogAnim {
     this.tailPts = [];
     this.headPts = [];
     // (le poil s'écrase un peu, pas de plusieurs centimètres : la croupe du terre-neuve assis entrait de 4 cm)
-    this.bodyAllow = 0.004 + Math.max(0, B.fur) * 0.3;
+    // (bouclettes serrées : la laine bouclée et dense du lagotto ne s'écrase guère — assis sur une croupe enfoncée de
+    // l'épaisseur de son poil, ses jarrets entraient de 1,6 cm dans le sol)
+    this.bodyAllow = 0.004 + Math.max(0, B.fur) * 0.3 * (1 - 0.9 * (B.ringlets ?? 0));
     this.gOff = 0;
     this.plant = [null, null, null, null];
     // (correction de chaque membre tenu en appui, relâchée en fondu ; bascule d'assise fondue ; relèvement de chaque os

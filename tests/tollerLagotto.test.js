@@ -177,23 +177,54 @@ describe('modèle 3D', () => {
 
   it('lagotto : les touffes de boucles festonnent la silhouette (et pas en éclats : relief lissé)', () => {
     const base = realDogBase(G.shiba, 'shiba');
+    const coat = base.prims.coat;
+    const n = coat.count;
     const B = dogBuild(lookOf('lagotto'));
     const smooth = dogBuild({ ...lookOf('lagotto'), breed: 'lagotto' });
     smooth.ringlets = 0;
     const A = deformDog(base, B);
     const S = deformDog(base, smooth);
-    const n = base.prims.coat.count;
-    let max = 0;
     let sum = 0;
-    for (let i = 0; i < n; i++) {
-      const d = Math.hypot(A.pos[i * 3] - S.pos[i * 3], A.pos[i * 3 + 1] - S.pos[i * 3 + 1], A.pos[i * 3 + 2] - S.pos[i * 3 + 2]);
-      max = Math.max(max, d);
-      sum += d;
-    }
+    for (let i = 0; i < n; i++) sum += Math.hypot(A.pos[i * 3] - S.pos[i * 3], A.pos[i * 3 + 1] - S.pos[i * 3 + 1], A.pos[i * 3 + 2] - S.pos[i * 3 + 2]);
     expect(sum / n).toBeGreaterThan(0.002);
-    // (sans lissage, des éclats de 3 cm se dressaient sur la tête)
-    expect(max).toBeLessThan(0.025);
-  });
+    // Éclats : un sommet poussé autrement que ses voisins (écart à la moyenne de leurs déplacements par le poil). Sans
+    // lissage, des éclats de 3 cm se dressaient sur la tête ; pas plus que chez le labradoodle (barbe et frisure),
+    // dont la bouche, les lèvres et la truffe ont déjà leurs plis.
+    const spikes = (b) => {
+      const Bb = dogBuild(lookOf(b));
+      const D1 = deformDog(base, Bb);
+      const D0 = deformDog(base, { ...Bb, fur: 0, ringlets: 0, beard: 0, key: Bb.key + '|ras' });
+      const d = new Float32Array(n * 3);
+      for (let i = 0; i < n * 3; i++) d[i] = D1.pos[i] - D0.pos[i];
+      const acc = new Float32Array(n * 3);
+      const deg = new Float32Array(n);
+      for (let t = 0; t < coat.index.length; t += 3) {
+        for (let e = 0; e < 3; e++) {
+          const a = coat.index[t + e];
+          const c = coat.index[t + ((e + 1) % 3)];
+          for (let k = 0; k < 3; k++) {
+            acc[a * 3 + k] += d[c * 3 + k];
+            acc[c * 3 + k] += d[a * 3 + k];
+          }
+          deg[a]++;
+          deg[c]++;
+        }
+      }
+      let max = 0;
+      let count = 0;
+      for (let i = 0; i < n; i++) {
+        if (!deg[i] || D1.hidden[i] > 0.3) continue;
+        const e = Math.hypot(d[i * 3] - acc[i * 3] / deg[i], d[i * 3 + 1] - acc[i * 3 + 1] / deg[i], d[i * 3 + 2] - acc[i * 3 + 2] / deg[i]);
+        max = Math.max(max, e);
+        if (e > 0.006) count++;
+      }
+      return { max, count };
+    };
+    const lag = spikes('lagotto');
+    const doodle = spikes('labradoodle');
+    expect(lag.count).toBeLessThanOrEqual(doodle.count);
+    expect(lag.max).toBeLessThan(doodle.max + 0.005);
+  }, 60000);
 
   it('les oreilles tombantes des autres races ne changent pas (sommets figés, mêmes qu\'avant l\'ajout des deux races)', () => {
     // (la phase des franges et des bosses frisées vient de la longueur de la clé du gabarit : ringlets et tailAction
@@ -219,6 +250,57 @@ describe('modèle 3D', () => {
     // (les nouvelles races gardent leurs paramètres dans la clé)
     expect(dogBuild(lookOf('lagotto')).key).toMatch(/ringlets1/);
     expect(dogBuild(lookOf('toller')).key).toMatch(/tailAction1/);
+  }, 60000);
+
+  it('lagotto : rien de poussé ni de replié autour de l\'œil (pas d\'éclats au-dessus de la paupière)', () => {
+    // (les bouclettes de la tête et les sourcils poussaient de 2 à 7 mm les petits triangles de la paupière et du pli
+    // de l'arcade — deux couches de peau du modèle qui se chevauchent : elles se croisaient en éclats)
+    const base = realDogBase(G.shiba, 'shiba');
+    const coat = base.prims.coat;
+    const L = base.land;
+    const idx = coat.index;
+    const nrmOf = (P, a, b, c) => {
+      const u = new THREE.Vector3().fromArray(P, b * 3).sub(new THREE.Vector3().fromArray(P, a * 3));
+      const v = new THREE.Vector3().fromArray(P, c * 3).sub(new THREE.Vector3().fromArray(P, a * 3));
+      return u.cross(v).normalize();
+    };
+    for (const puppy of [false, true]) {
+      const B = dogBuild(lookOf('lagotto', 0, puppy), puppy);
+      const B0 = { ...B, fur: 0, ringlets: 0, beard: 0, key: B.key + '|ras' };
+      const D = deformDog(base, B);
+      const D0 = deformDog(base, B0);
+      const dEye = (i) => Math.hypot(Math.abs(coat.pos[i * 3] - L.midX) - L.eyeX, coat.pos[i * 3 + 1] - L.eyeY, coat.pos[i * 3 + 2] - L.eyeZ);
+      let pushed = 0;
+      for (let i = 0; i < coat.count; i++) {
+        if (base.W.head[i] < 0.99 || dEye(i) > 0.03) continue;
+        const d = Math.hypot(D.pos[i * 3] - D0.pos[i * 3], D.pos[i * 3 + 1] - D0.pos[i * 3 + 1], D.pos[i * 3 + 2] - D0.pos[i * 3 + 2]);
+        if (d > 0.001) pushed++;
+      }
+      expect(pushed, `chiot ${puppy}`).toBe(0);
+      let folded = 0;
+      for (let t = 0; t < idx.length; t += 3) {
+        const [a, b, c] = [idx[t], idx[t + 1], idx[t + 2]];
+        if (base.W.head[a] < 0.5 || dEye(a) > 0.06 || coat.pos[a * 3 + 1] < L.eyeY - 0.02) continue;
+        if (nrmOf(D.pos, a, b, c).dot(nrmOf(D0.pos, a, b, c)) < 0.3) folded++;
+      }
+      expect(folded, `chiot ${puppy}`).toBe(0);
+    }
+  }, 60000);
+
+  it('lagotto assis : les jarrets ne s\'enfoncent pas dans le sol (laine dense qui s\'écrase peu)', () => {
+    // (assis sur une croupe enfoncée de l'épaisseur de son poil, ses jarrets entraient de 1,9 cm dans le sol ; le
+    // golden : 0,7 cm, le labradoodle : 1,05 cm)
+    const v = new THREE.Vector3();
+    for (const puppy of [false, true]) {
+      const md = dog('lagotto', 0, puppy);
+      md.staticPose('sit');
+      md.root.updateMatrixWorld(true);
+      const m = md.coatMesh;
+      let lo = Infinity;
+      for (let i = 0; i < m.geometry.attributes.position.count; i += 2) lo = Math.min(lo, m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld).y);
+      expect(lo, `chiot ${puppy}`).toBeGreaterThan(-0.012);
+      md.dispose();
+    }
   }, 60000);
 
   it('toller : marques blanches dans le shader, panache relevé au trot plus haut qu\'à l\'arrêt', () => {

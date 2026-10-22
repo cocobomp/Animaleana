@@ -167,7 +167,7 @@ export function earShape(B) {
   if (S.curl) Object.assign(S, { thick: S.thick * 1.6, fold: 0.003, width: S.width * 1.1 });
   // (bouclettes serrées — lagotto — : triangle aux bouts arrondis, section bombée en lentille, pas une planche aux faces
   // plates et aux bords en marches)
-  if (B.ringlets) Object.assign(S, { round: 1.6, se: 0.95 });
+  if (B.ringlets) Object.assign(S, { round: 2, se: 0.95, lumpy: 1 });
   if (B.puppy) {
     // (oreilles de chiot : plus courtes, mais larges et épaisses, molles — pas une lame fine de chaque côté)
     S.len *= 0.92;
@@ -332,7 +332,11 @@ export function buildPendantEars(base, D, B) {
         const lift = S.fold * hs * (1 - smooth(0, 0.4, v)) * (S.rose ? 1 : 1.2);
         // (le haut de l'oreille part de sous la peau : l'attache n'a pas de bord ouvert)
         const tuck = 0.026 * hs * (1 - smooth(0, 0.16, v));
-        const bump = S.curl ? ((noise2(u * 5 + seed, v * 7) - 0.5) * 0.01 + (noise2(u * 11 + seed, v * 13) - 0.5) * 0.005) * hs * (0.5 + 0.5 * Math.abs(t))
+        // (bouclettes serrées : bosses plus larges le long de l'oreille — un bruit tiré rangée par rangée, 13 cases pour
+        // 13 rangées, décalait chaque rangée de la suivante : des planches empilées ; les petites boucles sont dans le
+        // shader)
+        const bump = S.curl && S.lumpy ? ((noise2(u * 4 + seed, v * 3.2) - 0.5) * 0.011 + (noise2(u * 8 + seed + 5, v * 5) - 0.5) * 0.004) * hs * (0.5 + 0.5 * Math.abs(t))
+          : S.curl ? ((noise2(u * 5 + seed, v * 7) - 0.5) * 0.01 + (noise2(u * 11 + seed, v * 13) - 0.5) * 0.005) * hs * (0.5 + 0.5 * Math.abs(t))
           : S.fringe ? Math.sin(v * 11 + u * 2 + seed) * 0.0022 * hs * S.fringe * smooth(0.25, 0.7, v) : 0;
         const xc = sx + 0.0015 * hs + T + lift - tuck + bump;
         const pX = mid + side * (xc + t * T);

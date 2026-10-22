@@ -1268,7 +1268,7 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     const names4 = front ? LEG_BONES.front : LEG_BONES.hind;
     return {
       top: bone((front ? 'scap' : 'femur') + s), pivot: bone(names4[0] + s), knee: bone(names4[1] + s), fetlock: bone(names4[2] + s), paw: bone(names4[3] + s),
-      front, side: s === 'L' ? 1 : -1, soles: M.soles[l],
+      front, side: s === 'L' ? 1 : -1, soles: M.soles[l], index: l,
     };
   });
   const headB = bone('head');
@@ -1618,8 +1618,11 @@ class RealCatAnim {
     this.plant = [null, null, null, null];
     // (minimums glissants sur la foulée : appuis avant, appuis arrière — voir levelPairs)
     this.win = [new WindowMin(), new WindowMin()];
+    this.gwin = [new WindowMin(), new WindowMin()];
     this.bodyAllow = 0.003 + Math.max(0, B.fur) * 0.35;
     this.solePts = model.legs.map((l) => l.soles.map((i) => l.paw.worldToLocal(V().fromArray(S.D.pos, i * 3))));
+    // (os qui porte chaque point de sole : le pied ; chez le chaton, celui qui porte le plus le sommet, voir contactPoints)
+    this.soleB = model.legs.map((l) => l.soles.map(() => l.paw));
     // (jarrets : liés au métatarse)
     this.hockPts = (S.measure.hocks ?? []).map((ids, k) => {
       const b = model.legs[2 + k].fetlock;
@@ -1803,6 +1806,18 @@ class RealCatAnim {
       return { inf: infl(i), bone: best };
     });
     this.headPts = [...S.contact[2]].map(infl);
+    // Soles du chaton : la peau de son pied se plie entre doigts et métacarpe ; liée au seul os du pied, sa sole
+    // calculée passait de 3 mm au-dessus à 3 mm sous la vraie peau au pas (chez l'adulte, les deux se confondent). Chaque
+    // point suit l'os qui le porte le plus (même coût qu'un point lié à l'os du pied ; la peau mélangée de ses quatre
+    // influences coûtait 40 % de plus pour un gain de quelques dixièmes de millimètre).
+    this.soleB = md.legs.map((leg) => leg.soles.map(() => leg.paw));
+    if (base.kind === 'kitten') {
+      md.legs.forEach((leg, l) => leg.soles.forEach((i, k) => {
+        const [b, p] = infl(i).reduce((m, x) => (x[2] > m[2] ? x : m));
+        this.soleB[l][k] = b;
+        this.solePts[l][k] = p;
+      }));
+    }
     this.bones.forEach((b, i) => {
       b.position.copy(hold[i][0]);
       b.quaternion.copy(hold[i][1]);
@@ -2069,21 +2084,53 @@ class RealCatAnim {
     md.root.updateMatrixWorld(true);
     _m.copy(md.root.matrixWorld).invert();
     const air = (this.trick?.clip === 'jump' && this.trick.age < 0.25) || (this.w.jump ?? 0) > 0.3;
-    // Aux allures posées (pas, trot, équilibre) : avant et arrière à la même hauteur (voir levelPairs).
-    if (st.moving && !air && this.gait !== 'run' && dt > 0) this.levelPairs(dt);
-    else {
+    // Aux allures posées (pas, trot, équilibre) : avant et arrière à la même hauteur (voir levelPairs), puis pieds en
+    // appui tenus sur place (footLock) AVANT de poser le corps : tenus après, les membres tournés à l'épaule ou à la
+    // hanche descendaient sous le sol (jusqu'à 1 cm au trot du persan) et le corps entier était relevé d'autant, l'autre
+    // paire en l'air ; la hauteur du corps est maintenant prise sur les pieds déjà tenus.
+    const gaitOn = st.moving && !air && this.gait !== 'run' && dt > 0;
+    if (gaitOn) {
+      this.levelPairs(dt);
+      this.footLock(this.gOff, dt, st.v ?? 0, this.gait === 'trot');
+    } else {
       this.pitchGap = 0;
       for (const w of this.win) w.reset();
+      this.plant.fill(null);
+      this.prevOk?.fill(false);
     }
     let low = Infinity;
+    let F = Infinity;
+    let H = Infinity;
     for (let l = 0; l < md.legs.length; l++) {
-      const paw = md.legs[l].paw;
-      for (const p of this.solePts[l]) {
-        const y = _v.copy(p).applyMatrix4(paw.matrixWorld).applyMatrix4(_m).y;
-        if (y < low) low = y;
+      // (pied tenu : il sera reposé sur le sol par seatPlanted, jusqu'à 8 mm plus haut — il ne relève pas le corps)
+      const allow = gaitOn && !md.lodLevel && this.locked(l) ? 0.008 : 0;
+      for (let k = 0; k < this.solePts[l].length; k++) {
+        const y = this.solePt(l, k, _v).y;
+        if (y + allow < low) low = y + allow;
+        if (l < 2) F = Math.min(F, y);
+        else H = Math.min(H, y);
       }
     }
     if (!Number.isFinite(low)) low = 0;
+    // Au trot : chaque paire diagonale touche le sol au plus bas de sa foulée (comme les lapins). Le corps descend vers
+    // la paire qui se pose (hauteur la plus basse de cette paire sur la dernière foulée) et passe de l'une à l'autre
+    // pendant les temps de suspension. Posé sur la sole la plus basse de l'instant puis redescendu en douceur, le corps
+    // restait porté par le haut de la foulée : siamois, abyssin, devon rex, bobtail et sphynx trottaient les pattes
+    // avant à 6 à 13 mm du sol, jamais posées.
+    let trotY = null;
+    if (gaitOn && this.gait === 'trot' && Number.isFinite(F) && Number.isFinite(H)) {
+      const a = this.actions.trot;
+      const span = a ? Math.min(1.5, a.getClip().duration / Math.max(0.2, Math.abs(a.timeScale))) : 0.6;
+      const fMin = this.gwin[0].push(F, dt, span);
+      const hMin = this.gwin[1].push(H, dt, span);
+      const wF = 1 - smooth(0.002, 0.012, F - fMin);
+      const wH = 1 - smooth(0.002, 0.012, H - hMin);
+      if (wF + wH > 1e-3) this.trotY = -(wF * fMin + wH * hMin) / (wF + wH);
+      trotY = this.trotY ?? -low;
+    } else {
+      for (const w of this.gwin) w.reset();
+      this.trotY = null;
+    }
     // (aux allures, les jarrets aussi au-dessus du sol)
     if (st.moving || air) {
       for (const h of this.hockPts) {
@@ -2095,7 +2142,11 @@ class RealCatAnim {
     }
     let target;
     let floor = -low;
-    if (st.moving || air) {
+    let rate = 6;
+    if (trotY !== null) {
+      target = trotY;
+      rate = 18;
+    } else if (st.moving || air) {
       target = !air && this.gait !== 'run' ? -low : Math.max(0, -low);
     } else {
       let lowB = Infinity;
@@ -2108,28 +2159,30 @@ class RealCatAnim {
       target = Math.max(-low, Number.isFinite(lowB) ? -(lowB + this.bodyAllow) : -Infinity);
       floor = target;
     }
-    let off = dt > 0 ? this.gOff + (target - this.gOff) * Math.min(1, dt * 6) : target;
+    let off = dt > 0 ? this.gOff + (target - this.gOff) * Math.min(1, dt * rate) : target;
     off = Math.max(off, floor);
     this.gOff = off;
     if (Math.abs(off) > 0.0002) {
       md.body.position.y += off;
       md.root.updateMatrixWorld(true);
     }
-    if (st.moving && !air && dt > 0 && this.gait !== 'run') {
-      this.footLock();
+    if (gaitOn) {
+      // (au loin, dans la version réduite, le pied posé au millimètre ne se voit pas : pas de reprise des pattes)
+      if (!md.lodLevel) this.seatPlanted();
+      // (ce qui passerait encore sous le sol relève le corps)
       let low2 = Infinity;
       for (let l = 0; l < md.legs.length; l++) {
-        for (const p of this.solePts[l]) {
-          const y = _v.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld).applyMatrix4(_m).y;
+        for (let k = 0; k < this.solePts[l].length; k++) {
+          const y = this.solePt(l, k, _v).y;
           if (y < low2) low2 = y;
         }
       }
-      if (low2 < -0.0003) {
+      if (low2 < -0.0005) {
         md.body.position.y -= low2;
         this.gOff -= low2;
         md.root.updateMatrixWorld(true);
       }
-    } else this.plant.fill(null);
+    }
     if (st.moving || air) return;
     const sitW = (this.w.sit ?? 0) + (this.w.groom ?? 0) + (this.w.sit_down ?? 0) + (this.w.stand_up ?? 0) + (this.w.highfive ?? 0);
     const lieW = (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.lie_down ?? 0) + (this.w.get_up ?? 0) + (this.w.curl_up ?? 0);
@@ -2191,9 +2244,8 @@ class RealCatAnim {
     let fz = 0;
     let hz = 0;
     for (let l = 0; l < md.legs.length; l++) {
-      const paw = md.legs[l].paw;
-      for (const p of this.solePts[l]) {
-        _v.copy(p).applyMatrix4(paw.matrixWorld).applyMatrix4(_m);
+      for (let k = 0; k < this.solePts[l].length; k++) {
+        this.solePt(l, k, _v);
         if (l < 2 && _v.y < F) {
           F = _v.y;
           fz = _v.z;
@@ -2211,10 +2263,114 @@ class RealCatAnim {
     const hMin = this.win[1].push(H, dt, span);
     const k = Math.min(1, dt * 6);
     this.pitchGap = (this.pitchGap ?? 0) + (hMin - fMin - (this.pitchGap ?? 0)) * k;
-    const th = clamp(-this.pitchGap / Math.max(0.05, fz - hz), -0.15, 0.15);
+    // (bras de levier : de l'épaule à la hanche. Pris entre les deux soles les plus basses de l'instant, il tombait à
+    // presque rien au trot quand l'antérieur recule et que le postérieur avance sous le ventre : la bascule sautait de
+    // 0,04 à 0,15 rad d'une image à l'autre chez les races aux pattes longues)
+    const lever = md.legs[0].pivot.getWorldPosition(_u).applyMatrix4(_m).z - md.legs[2].pivot.getWorldPosition(_w).applyMatrix4(_m).z;
+    const th = clamp(-this.pitchGap / Math.max(0.05, Number.isFinite(lever) ? lever : fz - hz), -0.15, 0.15);
     if (!(Math.abs(th) > 1e-4)) return;
     this.turn(md.body, AX, th);
     md.root.updateMatrixWorld(true);
+  }
+
+  /** Point k de la sole de la patte l dans le repère du chat (_m : inverse de la racine), écrit dans out. */
+  solePt(l, k, out) {
+    return out.copy(this.solePts[l][k]).applyMatrix4(this.soleB[l][k].matrixWorld).applyMatrix4(_m);
+  }
+
+  /** Patte tenue sur place (posée, plus suivie : voir footLock). */
+  locked(l) {
+    return !!this.plant[l] && (this.followT?.[l] ?? 1) >= 1;
+  }
+
+  /**
+   * Pieds tenus posés à plat sur le sol (pas, trot), corps déjà posé : chaque patte tenue est allongée ou repliée à
+   * l'épaule et au coude (à la hanche et au grasset) pour amener sa sole au ras du sol sans bouger le pied en long.
+   * Tourner le membre à l'épaule pour tenir le pied en place le relevait ou l'enfonçait de 5 à 9 mm en fin d'appui
+   * (chatons au trot) ; le corps posé sur la foulée laissait les autres appuis à quelques millimètres du sol.
+   * Fondu : pleinement tirée jusqu'à 6 mm du sol, plus du tout à 16 mm ; le pied qui se lève n'est pas retenu.
+   */
+  seatPlanted() {
+    const md = this.model;
+    const sole = (l) => {
+      let y = Infinity;
+      for (let k = 0; k < this.solePts[l].length; k++) y = Math.min(y, this.solePt(l, k, _v).y);
+      return y;
+    };
+    // (point d'appui : le plus bas de la sole au début ; c'est lui qui ne doit pas bouger en long)
+    let kc = 0;
+    const toe = (leg, out) => this.solePt(leg.index, kc, out);
+    const e = 0.02;
+    const t0 = _u;
+    const t1 = _w;
+    const t2 = _q2v;
+    this.seatMin ??= [Infinity, Infinity, Infinity, Infinity];
+    for (let l = 0; l < md.legs.length; l++) {
+      if (!this.locked(l)) {
+        this.seatMin[l] = Infinity;
+        continue;
+      }
+      const leg = md.legs[l];
+      if (!leg.knee || !leg.pivot) continue;
+      let s0 = Infinity;
+      kc = 0;
+      for (let k = 0; k < this.solePts[l].length; k++) {
+        const y = this.solePt(l, k, _v).y;
+        if (y < s0) {
+          s0 = y;
+          kc = k;
+        }
+      }
+      // (le pied du clip qui commence à se lever — 2 à 8 mm au-dessus de son plus bas depuis la pose — est relâché :
+      // tiré au sol pendant qu'il roule sur les doigts, le coussinet glissait de 5 mm chez le chaton)
+      this.seatMin[l] = Math.min(this.seatMin[l], s0);
+      const w = (s0 <= 0 ? 1 : 1 - smooth(0.006, 0.016, s0)) * (1 - smooth(0.002, 0.008, s0 - this.seatMin[l]));
+      if (!(w > 0.01)) continue;
+      let A = 0;
+      let Bk = 0;
+      let jz1 = 0;
+      let jy1 = 0;
+      let jz2 = 0;
+      let jy2 = 0;
+      let det = 0;
+      for (let it = 0; it < 2; it++) {
+        const s = it ? sole(l) : s0;
+        const dy = -s * w;
+        if (!(Math.abs(dy) > 0.0004)) break;
+        if (!it) {
+          // (jacobien du point d'appui, en long et en hauteur, pour un petit tour à l'épaule puis au coude ; gardé
+          // pour la seconde passe)
+          toe(leg, t0);
+          this.turn(leg.pivot, AX, e);
+          leg.pivot.updateMatrixWorld(true);
+          toe(leg, t1);
+          this.turn(leg.pivot, AX, -e);
+          this.turn(leg.knee, AX, e);
+          leg.pivot.updateMatrixWorld(true);
+          toe(leg, t2);
+          this.turn(leg.knee, AX, -e);
+          jz1 = (t1.z - t0.z) / e;
+          jy1 = (t1.y - t0.y) / e;
+          jz2 = (t2.z - t0.z) / e;
+          jy2 = (t2.y - t0.y) / e;
+          det = jz1 * jy2 - jz2 * jy1;
+          if (!(Math.abs(det) > 1e-6)) {
+            leg.pivot.updateMatrixWorld(true);
+            break;
+          }
+        }
+        // (en long : rien ; en hauteur : dy)
+        let a = (-jz2 * dy) / det;
+        let b = (jz1 * dy) / det;
+        a = clamp(a, -0.25 - A, 0.25 - A);
+        b = clamp(b, -0.4 - Bk, 0.4 - Bk);
+        A += a;
+        Bk += b;
+        this.turn(leg.pivot, AX, a);
+        this.turn(leg.knee, AX, b);
+        leg.pivot.updateMatrixWorld(true);
+      }
+    }
   }
 
   /**
@@ -2222,28 +2378,48 @@ class RealCatAnim {
    * tant qu'elle reste posée, la patte est tournée à l'épaule ou à la hanche pour y ramener les doigts. Les pattes
    * raccourcies ou allongées d'une race changent la foulée du clip : sans cela, les pieds patinaient en appui.
    */
-  footLock() {
+  footLock(lift = 0, dt = 1 / 60, v = 0, follow = false) {
     const md = this.model;
+    // (lift : hauteur dont le corps sera posé ensuite — celle de l'image d'avant, voir ground)
     // (rotation seule de la racine : sa matrice porte aussi la taille du chat)
     md.root.matrixWorld.decompose(_rt, _q, _rs);
     _q.invert();
+    this.prevToe ??= [V(), V(), V(), V()];
+    this.prevOk ??= [false, false, false, false];
+    this.followT ??= [0, 0, 0, 0];
     // Prise d'appui à 12 mm du sol, lâchée à 18 (repère du chat de taille 1) : prise à 6 mm, le pied du clip
     // arrivait encore lancé et glissait avant d'être tenu (2 cm par appui aux postérieurs du british).
     for (let l = 0; l < md.legs.length; l++) {
       const leg = md.legs[l];
       let low = Infinity;
-      for (const p of this.solePts[l]) {
-        const y = _v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(_m).y;
+      for (let k = 0; k < this.solePts[l].length; k++) {
+        const y = this.solePt(l, k, _v).y + lift;
         if (y < low) low = y;
       }
+      // (vitesse du pied du clip sur le sol, dans le monde : celle du chat moins son recul sous le corps)
+      const toe0 = _u.setFromMatrixPosition(leg.paw.matrixWorld);
+      const sp = this.prevOk[l] && dt > 0 ? Math.hypot(toe0.x - this.prevToe[l].x, toe0.z - this.prevToe[l].z) / dt : 0;
+      this.prevToe[l].copy(toe0);
+      this.prevOk[l] = true;
       if (!(low < (this.plant[l] ? 0.018 : 0.012))) {
         this.plant[l] = null;
         continue;
       }
       if (!this.plant[l]) {
-        this.plant[l] = _u.setFromMatrixPosition(leg.paw.matrixWorld).clone();
+        this.plant[l] = toe0.clone();
+        this.followT[l] = 0;
         continue;
       }
+      // Pied du clip encore lancé en avant après la prise (trot des pattes longues : 1,5 fois la vitesse du chat à 9 mm
+      // du sol) : la place notée le suit jusqu'à ce qu'il se pose vraiment (0,12 s au plus). Tenu là où il passait,
+      // le membre était tourné de 0,15 rad à la hanche : le pied s'enfonçait de 17 mm et le chat entier était relevé
+      // d'autant, l'autre paire en l'air.
+      if (follow && this.followT[l] < 0.12 && sp > 0.3 * v + 0.05) {
+        this.plant[l].copy(toe0);
+        this.followT[l] += dt;
+        continue;
+      }
+      this.followT[l] = 1;
       // en long et sur le côté, deux passes (le pied n'est pas à l'aplomb de l'articulation)
       let th = 0;
       let ph = 0;
@@ -2277,8 +2453,8 @@ class RealCatAnim {
     const md = this.model;
     const lowSole = (l, out) => {
       out.y = Infinity;
-      for (const p of this.solePts[l]) {
-        _v.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld).applyMatrix4(_m);
+      for (let k = 0; k < this.solePts[l].length; k++) {
+        this.solePt(l, k, _v);
         if (_v.y < out.y) out.copy(_v);
       }
       return out;
@@ -2332,8 +2508,8 @@ class RealCatAnim {
       Hn.y = Infinity;
       for (let l = 0; l < 4; l++) {
         const out = l < 2 ? F : Hn;
-        for (const p of this.solePts[l]) {
-          _v.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld).applyMatrix4(_m);
+        for (let k = 0; k < this.solePts[l].length; k++) {
+          this.solePt(l, k, _v);
           if (_v.y < out.y) out.copy(_v);
         }
       }

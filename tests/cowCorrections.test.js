@@ -281,3 +281,134 @@ describe('sabots des veaux', () => {
     expect(r.lowest).toBeGreaterThan(-0.012);
   }, 120000);
 });
+
+/**
+ * Se coucher et se relever comme en jeu (mixeur à 30 images/s, la vache dans son groupe à sa taille) : départ debout,
+ * au pas puis arrêtée net, ou en broutant ; couchée 4 s puis relevée. Rend la peau la plus basse (tous les sommets, une
+ * image sur deux) et la sole la plus basse pendant les transitions (m, monde), et couchée.
+ */
+function lieDown(breed, o, from = 'stand') {
+  const look = lookOf(breed, o);
+  const md = buildRealCowModel(look, breed, G);
+  const s = look.scale ?? 1;
+  const g = inScene(md, s);
+  const a = md.anim;
+  const dt = 1 / 30;
+  md.staticPose('stand');
+  const r = { transSkin: Infinity, transSole: Infinity, transKnee: Infinity, lieSkin: Infinity, lieSole: Infinity, lieFloat: -Infinity, s };
+  const P = md.mesh.geometry.attributes.position.count;
+  const mask = md.anim.base.prim.mask;
+  const dom = md.anim.base.prim.domBone;
+  const knee = md.anim.base.names.map((nm) => /^(radius|metacarpus)[LR]$/.test(nm));
+  const measure = (f) => {
+    md.root.updateMatrixWorld(true);
+    // (peau hors des onglons — genoux et canons des antérieurs à part —, et onglons entiers, pince comprise)
+    let skin = Infinity;
+    let hoof = Infinity;
+    let kn = Infinity;
+    if (f % 2 === 0) {
+      for (let i = 0; i < P; i++) {
+        const y = md.mesh.getVertexPosition(i, _v).applyMatrix4(md.mesh.matrixWorld).y;
+        if (mask[i * 4 + 3] > 0.2) hoof = Math.min(hoof, y);
+        else {
+          skin = Math.min(skin, y);
+          if (knee[dom[i]]) kn = Math.min(kn, y);
+        }
+      }
+    }
+    let sole = hoof;
+    for (let k = 0; k < 4; k++) sole = Math.min(sole, soleLow(md, k));
+    return { skin, sole, kn };
+  };
+  const v = 1.0 / s;
+  let f = 0;
+  const run = (n, o2) => {
+    for (let k = 0; k < n; k++, f++) {
+      // (slow : la vache ralentit jusqu'à l'arrêt, comme l'entité, puis se couche aussitôt)
+      const o3 = o2.slow ? { v: v * Math.max(0.03, 1 - k / n), moving: 1 - k / n > 0.06 / (v * s) } : o2;
+      if (o3.moving) {
+        g.position.z += o3.v * s * dt;
+        g.updateMatrixWorld(true);
+      }
+      a.update(dt, st({ size: s, ...o3 }));
+      const m = measure(f);
+      if (a.trans) {
+        r.transSkin = Math.min(r.transSkin, m.skin);
+        r.transSole = Math.min(r.transSole, m.sole);
+        r.transKnee = Math.min(r.transKnee, m.kn);
+      } else if (a.posture === 'lie') {
+        r.lieSkin = Math.min(r.lieSkin, m.skin);
+        r.lieSole = Math.min(r.lieSole, m.sole);
+        // (point le plus bas de toute la peau, couchée depuis 2 s : posée, elle ne flotte pas)
+        if (a.hold > 1 && f % 2 === 0) r.lieFloat = Math.max(r.lieFloat, Math.min(m.skin, m.sole));
+      }
+    }
+  };
+  if (from === 'walk') run(60, { v, moving: true });
+  else if (from === 'slow') {
+    run(45, { v, moving: true });
+    run(30, { slow: true });
+  }
+  else if (from === 'graze') run(60, { action: 'graze' });
+  else run(20, {});
+  run(150, { posture: 'lie' });
+  run(120, {});
+  md.dispose();
+  return r;
+}
+
+describe('se coucher et se relever : genoux et sabots au ras du sol', () => {
+  it.each([
+    ['holstein', {}, 'stand'], ['charolaise', {}, 'stand'], ['hereford', {}, 'stand'], ['holstein', {}, 'walk'], ['holstein', {}, 'graze'],
+    ['charolaise', {}, 'walk'], ['holstein', {}, 'slow'], ['hereford', {}, 'slow'], ['highland', { calf: true }, 'stand'],
+    ['highland', { sex: 'm' }, 'stand'], ['holstein', { sex: 'm' }, 'stand'], ['herens', { sex: 'm' }, 'stand'], ['highland', {}, 'stand'],
+  ])('%s %j depuis %s', (b, o, from) => {
+    const r = lieDown(b, o, from);
+    if (process.env.COW_LOG) console.log('COUCHER', b, JSON.stringify(o), from, JSON.stringify(Object.fromEntries(Object.entries(r).map(([k, x]) => [k, +(x * 100).toFixed(2)]))));
+    // (peau — genoux, canons, ventre — au ras du sol pendant les transitions ; onglons repliés, pince
+    // comprise, dans la marge de 2,5 cm — 3,7 à 3,9 cm avant)
+    // (genoux et canons des antérieurs, à genoux : 1 cm au plus sous le sol — 3,2 à 3,9 cm avant ; les canons des
+    // postérieurs, repliés sur le côté à la fin de « se coucher », dans la marge de couchée)
+    expect(r.transKnee, `${b} ${from} genoux en transition`).toBeGreaterThan(-0.012);
+    expect(r.transSkin, `${b} ${from} peau en transition`).toBeGreaterThan(-0.025 * Math.max(1, r.s) - 0.0015);
+    // (marge de 2,5 cm à la taille du modèle : × la taille de la race, la Charolaise est plus grande)
+    expect(r.transSole, `${b} ${from} sabots en transition`).toBeGreaterThan(-0.025 * Math.max(1, r.s) - 0.0015);
+    expect(r.lieSkin, `${b} ${from} peau couchée`).toBeGreaterThan(-0.012);
+    expect(r.lieSole, `${b} ${from} sabots couchée`).toBeGreaterThan(-0.025 * Math.max(1, r.s) - 0.0015);
+    // (couchée, posée sur le sol : le taureau de Highland flottait d'1 cm, sabots repliés à 6-11 cm de l'herbe)
+    expect(r.lieFloat, `${b} ${from} flotte`).toBeLessThan(0.004);
+  }, 120000);
+});
+
+describe('cornes de lutteuse de la Hérens', () => {
+  /** Base (os de la corne gauche) et pointe (sommet de la corne le plus loin de la base), unités du modèle. */
+  const horn = (md) => {
+    md.staticPose('stand');
+    md.root.updateMatrixWorld(true);
+    const P = md.anim.base.prim;
+    const o = md.bone('hornL').getWorldPosition(new THREE.Vector3());
+    let tip = o.clone();
+    let rBase = 0;
+    for (let i = 0; i < P.count; i++) {
+      if (P.part[i * 4] < 0.3 || P.pos[i * 3] < 0) continue;
+      md.mesh.getVertexPosition(i, _v).applyMatrix4(md.mesh.matrixWorld);
+      if (_v.distanceTo(o) > tip.distanceTo(o)) tip = _v.clone();
+      if (P.aux[i * 4 + 2] < 0.25) rBase = Math.max(rBase, _v.distanceTo(o));
+    }
+    const s = md.root.scale.x * md.headBone.scale.x;
+    return { fwd: (tip.z - o.z) / s, up: (tip.y - o.y) / s, len: tip.distanceTo(o) / s, rBase: rBase / s };
+  };
+  it('plus épaisses à la base, pointes nettement plus en avant que celles de la Wagyu (pas seulement plus grandes)', () => {
+    const her = cow('herens');
+    const wag = cow('wagyu');
+    const h = horn(her);
+    const w = horn(wag);
+    if (process.env.COW_LOG) console.log('CORNES', JSON.stringify({ h, w }));
+    expect(h.fwd).toBeGreaterThan(w.fwd + 0.05);
+    expect(h.up).toBeGreaterThan(0.02);
+    // (courtes : guère plus longues que celles de la Wagyu)
+    expect(h.len).toBeLessThan(w.len * 1.8);
+    her.dispose();
+    wag.dispose();
+  });
+});

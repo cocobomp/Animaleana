@@ -1233,8 +1233,7 @@ export class RealSheepAnim {
       const inv = md.skeleton.boneInverses;
       const bm = new THREE.Matrix4();
       const ys = new Float32Array(n);
-      const poses = [['lie', 0], ['sleep', 0], ['ruminate', 0.5], ['lie_down', 0.95], ['get_up', 0.05], ['graze', 0.1], ['graze', 0.6], ['eat', 0.3]];
-      for (const [clip, t] of poses) {
+      for (const [clip, t] of this.contactPoses()) {
         if (!this.actions[clip]) continue;
         this.clipPose(clip, t);
         md.root.updateMatrixWorld(true);
@@ -1302,6 +1301,11 @@ export class RealSheepAnim {
       this.bones[i].quaternion.copy(hold[i][1]);
     }
     md.root.updateMatrixWorld(true);
+  }
+
+  /** Poses (clip, instant 0-1) où sont cherchés les points de la peau les plus bas (contactPoints). */
+  contactPoses() {
+    return [['lie', 0], ['sleep', 0], ['ruminate', 0.5], ['lie_down', 0.95], ['get_up', 0.05], ['graze', 0.1], ['graze', 0.6], ['eat', 0.3]];
   }
 
   /**
@@ -1595,6 +1599,7 @@ export class RealSheepAnim {
       }
     }
     if (!Number.isFinite(low)) low = 0;
+    let hoofSlack = null;
     const air = !!(this.trick && this.trick.age < 0.25) || moveClip === 'lamb_play' || (this.w.jump ?? 0) > 0.3;
     const sh = this.shorn;
     let target;
@@ -1617,6 +1622,13 @@ export class RealSheepAnim {
       // replié, tournée vers l'arrière, la portait à plusieurs centimètres au-dessus de l'herbe)
       const slack = (this.lieSoleSlack ?? 0) * clamp(lie, 0, 1);
       target = Math.max(-low - slack, Number.isFinite(lowB) ? -(lowB + 0.006) : -Infinity);
+      // (sabots entiers, pince comprise — hoofPts, la vache — : à genoux, la pince des antérieurs repliés passait 3,9 cm
+      // sous l'herbe, plus bas que la sole ; elle reste dans la même marge que les soles)
+      if (this.hoofPts && (lie > 0.05 || this.trans)) {
+        hoofSlack = Math.max(slack, 0.008);
+        const lowH = this.lowHoof(_m);
+        if (Number.isFinite(lowH)) target = Math.max(target, -lowH - hoofSlack);
+      }
       floor = target;
     }
     // (arrêté, sabots encore tenus : posé tout de suite comme au pas — un corps qui redescendait en douceur soulevait
@@ -1659,7 +1671,19 @@ export class RealSheepAnim {
         this.gOff -= low2;
         md.root.updateMatrixWorld(true);
       }
-    } else this.releaseLock(dt);
+    } else {
+      this.releaseLock(dt);
+      // (la correction des sabots tenus qui s'efface — la vache qui se couche en arrivant du pas — peut enfoncer un
+      // onglon : le corps est relevé de ce qui dépasse la marge)
+      if (hoofSlack !== null) {
+        const lowH = this.lowHoof(_m);
+        if (lowH < -hoofSlack - 0.0005) {
+          md.body.position.y += -hoofSlack - lowH;
+          this.gOff += -hoofSlack - lowH;
+          md.root.updateMatrixWorld(true);
+        }
+      }
+    }
     // Museau : jamais sous l'herbe (tête plus grosse d'une race ou d'un agneau qui broute, dort) — l'encolure le relève,
     // toujours vers l'avant (prefer : la solution qui ramenait la tête sous le poitrail était prise une image sur deux,
     // la tête du chevreau sautait de 22 cm) ; la correction est relâchée en douceur d'une image à l'autre.
@@ -1689,6 +1713,16 @@ export class RealSheepAnim {
       md.neck.updateMatrixWorld(true);
     }
     this.noseLift = Math.min(need, keep);
+  }
+
+  /** Point le plus bas des onglons entiers (hoofPts : [{ b : os, p : point dans son repère }], repère inv), Infinity sans eux. */
+  lowHoof(inv) {
+    let lowH = Infinity;
+    for (const { b, p } of this.hoofPts ?? []) {
+      const y = _v.copy(p).applyMatrix4(b.matrixWorld).applyMatrix4(inv).y;
+      if (y < lowH) lowH = y;
+    }
+    return lowH;
   }
 
   /** Membres tenus à l'arrêt hors des allures (aucun pour le mouton ; la chèvre dressée : ses postérieurs). */

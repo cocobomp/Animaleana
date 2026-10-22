@@ -289,8 +289,16 @@ const COLOR_F = /* glsl */ `
   diffuseColor.rgb = mix(col, c0, keep);
 }`;
 
-// Relief des mèches du poil long, après la carte de normales de la matière (dérivées d'écran).
+// Après la carte de normales de la matière : face claire du taureau adoucie, relief des mèches du poil long (dérivées
+// d'écran).
 const BUMP_F = /* glsl */ `
+if (cMark.y < 0.5) {
+  // (taureau à face claire — Hereford, Charolais, Holstein… — : les plis de la carte de normales du Rocketbox autour de
+  // l'œil, éclairés par le ciel, faisaient un croissant et des stries gris-bleu sous et derrière l'œil ; ils sont
+  // adoucis sur la tête claire)
+  float hk = smoothstep(0.3, 0.7, vCMask.y) * smoothstep(0.4, 0.7, dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)));
+  normal = normalize(mix(normal, nonPerturbedNormal, 0.8 * hk));
+}
 if (cStyle.y > 0.0) {
   float cW = smoothstep(0.3, 0.85, vCPart.w) * (1.0 - smoothstep(0.3, 0.7, vCMask.y)) * (1.0 - smoothstep(0.3, 0.7, vCMask.z)) * cFade(vCRest);
   float cH = cLocks(vCRest) * cW;
@@ -338,7 +346,7 @@ export function cowMaterial(src, uniforms) {
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`);
   };
-  mat.customProgramCacheKey = () => 'cow-coat-v3';
+  mat.customProgramCacheKey = () => 'cow-coat-v4';
   mat.userData.cowUniforms = uniforms;
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: src?.map ?? null, alphaTest: 0.5 });
   depth.onBeforeCompile = (sh) => {

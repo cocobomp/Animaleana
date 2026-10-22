@@ -301,7 +301,7 @@ function shapePositions(base, P, J, B, ref) {
  * épaisse à la base.
  */
 function hornCurve(base, B) {
-  const c = base.kind === 'bull' ? B.bullHorn ?? {} : {};
+  const c = base.kind === 'bull' ? B.bullHorn ?? {} : B.cowHorn ?? {};
   return {
     t0: c.t0 ?? [1, 0.12, 0.32],
     t1: c.t1 ?? [0.15, 1, 0.3],
@@ -427,8 +427,11 @@ const smoothK = (a, b, x) => {
 };
 
 /** Géométries (partagées) d'un gabarit, ses articulations et ses mesures. */
+/** Cornes refaites le long d'une courbe : longues (lyre) ou propres à la race sur la vache (cowHorn : la lutteuse). */
+const curvedHorns = (base, B) => B.hornSize > 1e-3 && (B.hornLong > 0 || (base.kind !== 'bull' && !!B.cowHorn));
+
 function shapeFor(base, B) {
-  const lyre = B.hornLong > 0 && B.hornSize > 1e-3;
+  const lyre = curvedHorns(base, B);
   const cv = hornCurve(base, B);
   // (sans cornes — races sans cornes, veaux — : chignon, sur la vache de Lyndon Daniels ; le taureau, dont la corne est
   // portée tout entière par son os, la rentre sans pyramide)
@@ -783,9 +786,11 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
     // (cornes en lyre : refaites dans le gabarit, bendLongHorns ; ici leur taille seulement)
     h.scale.setScalar(s);
     const lyre = B.hornLong > 0;
+    // (cornes courbées dans le gabarit — la lutteuse : pas de rotation en plus)
+    const curved = curvedHorns(base, B);
     // (relevées vers le haut ou portées vers l'avant — Hérens, la lutteuse : axes de la vache)
-    if (B.hornLift && !lyre) h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AZ.clone().applyQuaternion(pinv(h)), sgn * B.hornLift));
-    if (B.hornFwd) h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AX.clone().applyQuaternion(pinv(h)), B.hornFwd));
+    if (B.hornLift && !lyre && !curved) h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AZ.clone().applyQuaternion(pinv(h)), sgn * B.hornLift));
+    if (B.hornFwd && !curved) h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AX.clone().applyQuaternion(pinv(h)), B.hornFwd));
     // (taureau : ses cornes partent sur le côté, la rotation autour de l'axe des flancs ne les avançait pas — tournées
     // aussi autour de la verticale, vers l'avant)
     if (B.hornFwd && base.kind === 'bull') h.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(AY.clone().applyQuaternion(pinv(h)), -sgn * B.hornFwd * 0.9));
@@ -1011,7 +1016,10 @@ export class RealCowAnim extends RealSheepAnim {
     this.mooOn = false;
     this.flyOn = null;
     this.swish = 0;
-    this.skirt = (model.build.hair ?? 0) * 0.1;
+    // (poil long qui pend sous le ventre, couchée : le corps est relevé de sa chute ; le taureau, posé sur son poitrail et
+    // ses avant-bras plus que sur son ventre, de la moitié — relevé de toute la chute, le taureau de Highland flottait
+    // d'1 cm)
+    this.skirt = (model.build.hair ?? 0) * (base.kind === 'bull' ? 0.05 : 0.1);
     // (petit pas pour se replacer à l'arrêt : plus lent que celui du mouton, la vache est deux fois plus grande)
     this.stepT = 0.45;
     // (un sabot resté 40 cm derrière à l'arrêt revient en 0,8 s, pas en 0,45 s : il filait de 8 cm par image)
@@ -1032,6 +1040,20 @@ export class RealCowAnim extends RealSheepAnim {
     // ramenés à la longueur du modèle d'origine (échelle de l'avant-bras et de la jambe, qui portent le canon et le
     // pied), pour que la pose couchée du GLB tombe juste — sinon les membres repliés, plus longs, portaient la vache
     // 4 à 12 cm au-dessus du sol (veau : 12 cm), ou s'enfonçaient dans le sol.
+    // Sabots entiers (les sommets des onglons, portés par le pied ou le canon, une trentaine par pied), chacun dans le
+    // repère de son os : couchée et pendant les transitions, la pince ne passe pas plus sous le sol que la sole (ground).
+    const P = base.prim;
+    this.hoofPts = [];
+    for (const l of model.legs) {
+      const own = new Set([model.bones.indexOf(l.paw), model.bones.indexOf(l.fetlock)]);
+      const ids = [];
+      for (let i = 0; i < P.count; i++) if (own.has(P.domBone[i]) && P.mask[i * 4 + 3] > 0.2) ids.push(i);
+      const step = Math.max(1, Math.floor(ids.length / 32));
+      for (let j = 0; j < ids.length; j += step) {
+        const bi = P.domBone[ids[j]];
+        this.hoofPts.push({ b: model.bones[bi], p: V().fromArray(S.pos, ids[j] * 3).applyMatrix4(model.skeleton.boneInverses[bi]) });
+      }
+    }
     const H = base.heads;
     const span = (c) => H[c[1]].y - H[c[3]].y;
     const rise = (model.build.legs - 1) * span(base.legChains[0]);
@@ -1048,6 +1070,16 @@ export class RealCowAnim extends RealSheepAnim {
     // les jambes et les canons des postérieurs, repliés sur le côté, ne portent rien.)
     if (!head && /^(humerus|radius|metacarpus|femur)[LR]$/.test(nm)) return 0;
     return super.contactClass(nm, head);
+  }
+
+  /**
+   * Points de la peau les plus bas cherchés aussi au milieu de « se coucher » et de « se relever » : à genoux, ce sont
+   * les carpes et les canons repliés qui touchent le sol — pris seulement couchée, ils passaient 3,3 à 3,9 cm sous
+   * l'herbe pendant les transitions.
+   */
+  contactPoses() {
+    return [...super.contactPoses(), ['lie_down', 0.3], ['lie_down', 0.45], ['lie_down', 0.6], ['lie_down', 0.75], ['get_up', 0.25], ['get_up', 0.4],
+      ['get_up', 0.55], ['get_up', 0.7]];
   }
 
   /** Mamelle (échelle de l'os, aplatie contre le ventre couchée) et poil long étalé au sol couché. */

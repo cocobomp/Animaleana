@@ -26,7 +26,8 @@ import { lifeStage } from './animal.js';
  * (lutteuse), hornReach : longueur des cornes en lyre (× la corne du modèle, refaite en courbe : cowReal.js) ; udder : mamelle (1 vache laitière) ; nose, hoof, horn, hornTip : couleurs.
  * Taureau (son propre modèle, sans taches dans sa photo) : bullPie, seuil de ses taches calculées (pie) ; bullHorn,
  * courbe de ses cornes longues (t0 : départ, t1 : pointe — directions dans le repère de la vache, x vers son côté —,
- * reach : longueur × sa corne courte, thick : épaisseur à la base) ; bullHair : poil long du taureau (× hair).
+ * reach : longueur × sa corne courte, thick : épaisseur à la base) ; bullHair : poil long du taureau (× hair). cowHorn :
+ * courbe des cornes de la vache d'une race à cornes courtes, mêmes champs (la lutteuse de la Hérens).
  */
 const ONE = {
   size: 1, legs: 1, girth: 1, depth: 1, head: 1, ears: 1, earUp: 0, pattern: 'solid', pie: 0.5, lunettes: 0, brindle: 0, whiteLegs: 0,
@@ -49,8 +50,13 @@ export const COW_BUILDS = {
   },
   // (toute petite, pie noire — plus de noir que de blanc)
   bretonne_pie_noire: { pattern: 'pie', pie: 0.4, bullPie: 0.43, legs: 0.94, head: 1.07, nose: 0x2e2a2c, hoof: 0x2a2624, udder: 0.85, hornK: 0.9, hornLift: 0.2 },
-  // (petite, trapue, noire ou rouge foncé, cornes de lutteuse portées en avant)
-  herens: { pattern: 'solid', legs: 0.86, girth: 1.14, depth: 1.05, head: 1.1, horns: 'cow', hornK: 1.15, hornFwd: 0.5, nose: 0x2a2426, hoof: 0x231e1c, udder: 0.65 },
+  // (petite, trapue, noire ou rouge foncé, cornes de lutteuse : courtes, épaisses, base large, sur le côté puis
+  // nettement vers l'avant et relevées — une lyre courte ; tournées seulement, elles avaient la forme de celles de la
+  // Wagyu)
+  herens: {
+    pattern: 'solid', legs: 0.86, girth: 1.14, depth: 1.05, head: 1.1, horns: 'cow', hornK: 1.15, hornFwd: 0.5, nose: 0x2a2426, hoof: 0x231e1c, udder: 0.65,
+    cowHorn: { t0: [1, 0.1, 0.65], t1: [0.25, 0.6, 1], reach: 1.35, thick: 1.55 },
+  },
   // (noire unie)
   wagyu: { pattern: 'solid', girth: 1.03, nose: 0x2a2426, hoof: 0x231e1c, udder: 0.65 },
   // (brun noir, mufle clair)

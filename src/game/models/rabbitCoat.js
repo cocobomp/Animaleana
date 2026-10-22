@@ -15,6 +15,7 @@
 // le long de la normale (embonpoint, respiration, coupe du salon) et fait frémir le nez (renifler).
 
 import * as THREE from 'three';
+import { gfx, keepFrameAlpha } from '../gfx.js';
 
 const MAX_KEEP = 4;
 
@@ -331,6 +332,9 @@ const EYE_F = /* glsl */ `
 export function rabbitCoatMaterial(src, shared, opts) {
   const role = opts.role ?? 'fur';
   const card = role === 'card';
+  // (cartes, rendu anticrénelé — qualité haute, ou basse sur un écran fin — : bouts des brins translucides par la
+  // couverture des échantillons, comme les crins du cheval ; sans, découpés net à alphaTest)
+  const a2c = card && (gfx.msaa || gfx.quality === 'high');
   const mat = new THREE.MeshStandardMaterial({
     // (cartes : la texture des brins sert aussi d'ombrage, racines plus sombres, brins mêlés)
     map: card ? opts.alphaMap ?? null : src?.map ?? null,
@@ -339,12 +343,15 @@ export function rabbitCoatMaterial(src, shared, opts) {
     aoMapIntensity: 0.8,
     alphaMap: card ? opts.alphaMap ?? null : null,
     alphaTest: card ? 0.42 : 0,
+    alphaToCoverage: a2c,
     side: card ? THREE.DoubleSide : THREE.FrontSide,
     roughness: role === 'eye' ? 0.1 : 0.88,
     metalness: 0,
     name: role === 'eye' ? 'rabbit_eye' : role === 'card' ? 'rabbit_fur' : 'rabbit_coat',
   });
   if (mat.normalMap) mat.normalScale.set(0.8, 0.8);
+  // (sinon, au bord des brins, le fond de la page passait au travers en points clairs)
+  if (a2c) keepFrameAlpha(mat);
   if (role === 'eye' && !mat.map) {
     // (globes sans texture, lapin de Dakota : œil de la couleur de la race, brillant ; le reflet fait le regard)
     mat.color.copy(shared.cEyeC.value);
@@ -382,14 +389,17 @@ export function rabbitCoatMaterial(src, shared, opts) {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${COMMON_F}`)
       .replace('#include <color_fragment>', card
-        ? `#include <color_fragment>\nvec3 cardC0 = diffuseColor.rgb;\n${COLOR_F}\ndiffuseColor.rgb *= (0.95 + 0.1 * vCmpLow) * (0.76 + 0.3 * clamp(cardC0.r / max(cardC0.g, 0.05), 0.4, 1.0));`
+        ? `#include <color_fragment>\nvec3 cardC0 = diffuseColor.rgb;\n${COLOR_F}\ndiffuseColor.rgb *= (0.93 + 0.18 * vCmpLow) * (0.76 + 0.3 * clamp(cardC0.r / max(cardC0.g, 0.05), 0.4, 1.0));`
         : `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(mix(roughnessFactor, 0.62, cHair.x), 0.45, cWet), 0.12, cEyeIn);');
     // (cartes : éclairées comme la peau où elles poussent, des deux côtés ; sinon le revers d'une carte est noir)
     // (et tournées vers la caméra et le ciel, comme un poil que la lumière traverse : la crinière vue de face, éclairée
     // par-devant, ne montre plus le revers sombre de ses mèches, ni la gorge le vert sombre du sol)
+    // (bouts des brins : l'opacité de la texture devient une couverture partielle sur toute sa pente — le seuil d'origine
+    // ne garde qu'un pixel de fondu au bord, des brins découpés au ciseau)
+    if (a2c) sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', 'diffuseColor.a = smoothstep(0.1, 0.75, diffuseColor.a);\nif (diffuseColor.a < 0.04) discard;');
     if (card) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(normalize(vNormal) + vec3(0.0, 0.0, 0.9) + (viewMatrix * vec4(0.0, 0.6, 0.0, 0.0)).xyz);');
   };
-  mat.customProgramCacheKey = () => (card ? 'rabbit-card-v5' : 'rabbit-coat-v3');
+  mat.customProgramCacheKey = () => (card ? (a2c ? 'rabbit-card-v6-a2c' : 'rabbit-card-v6') : 'rabbit-coat-v3');
   return mat;
 }

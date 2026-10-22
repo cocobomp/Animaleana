@@ -713,29 +713,40 @@ function cardGeometry(base, D, B, density = 1) {
   // Centre de la crinière (derrière les yeux, au milieu de la tête) : ses mèches rayonnent autour de la face.
   const maneC0 = V(L.midX, L.eyeY - 0.004, L.eyeZ - 0.012 * fr);
   /**
-   * Une mèche plantée au sommet i : len, wid (m) ; droop (vers le sol), comb (vers la croupe), bend (le bout retombe) ;
-   * radial : part de la direction prise depuis le centre de la crinière plutôt que la normale de la peau.
+   * Une mèche plantée au sommet i : len, wid (m) ; droop (vers le sol), comb (vers la croupe), bend (le bout se couche
+   * sur le pelage et retombe) ; radial : part de la direction prise depuis le centre de la crinière plutôt que la normale
+   * de la peau ; rise : pente de la mèche au-dessus de la peau (1 : à 45°, 0,4 : couchée à 22°) ; salt : graine d'une
+   * seconde mèche au même sommet.
    */
   const jit = V();
-  const addCard = (i, len, wid, droop, comb, bend = 0.3, radial = 0, up = false) => {
+  const flow = V();
+  const addCard = (i, len, wid, droop, comb, bend = 0.3, radial = 0, up = false, rise = 1, salt = 0) => {
+    const hi = i + salt * 0.618;
     root.fromArray(P, i * 3);
     nrm.fromArray(N, i * 3).normalize();
     dir.copy(nrm);
-    if (radial > 0) dir.lerp(out.copy(root).sub(maneC0).normalize(), radial);
-    // (mèches un peu en désordre : pas toutes peignées dans le même sens)
-    jit.set(hash(i * 5.3) - 0.5, hash(i * 6.1) - 0.5, hash(i * 4.7) - 0.5).multiplyScalar(0.5);
-    dir.addScaledVector(down, droop).addScaledVector(back, comb).add(jit).normalize();
+    if (radial > 0) dir.lerp(out.copy(root).sub(maneC0).normalize(), radial).normalize();
+    // Sens du poil le long de la peau (vers la croupe et le sol), un peu en désordre : pas toutes peignées dans le même
+    // sens. La mèche monte de rise au-dessus : hérissées (à 48° de la peau), les cartes de l'angora se lisaient en
+    // copeaux de papier plantés de chant tout autour de la silhouette ; couchées comme un poil long qui retombe, elles
+    // se recouvrent en toison.
+    jit.set(hash(hi * 5.3) - 0.5, hash(hi * 6.1) - 0.5, hash(hi * 4.7) - 0.5).multiplyScalar(0.5);
+    flow.copy(down).multiplyScalar(droop).addScaledVector(back, comb).add(jit);
+    flow.addScaledVector(dir, -flow.dot(dir));
+    if (flow.lengthSq() < 1e-6) flow.copy(back);
+    flow.normalize();
+    dir.multiplyScalar(rise * (0.8 + 0.4 * hash(hi * 8.9))).add(flow).normalize();
     // (racine un peu sous la peau : la mèche sort du pelage sans laisser voir sa base)
     root.addScaledVector(nrm, -0.002);
     side.crossVectors(dir, nrm);
     if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
     side.normalize();
-    const tw = (hash(i * 3.1) - 0.5) * 1.2;
+    const tw = (hash(hi * 3.1) - 0.5) * 1.2 * Math.min(1, rise);
     side.applyAxisAngle(dir, tw);
     const s = pos.length / 3;
-    // deux segments : la carte s'incurve vers le bas
+    // deux segments : le bout se couche sur le pelage (dans le sens du poil) et retombe vers le sol
     const mid = root.clone().addScaledVector(dir, len * 0.5);
-    const dir2 = dir.clone().addScaledVector(down, bend).normalize();
+    const dir2 = dir.clone().addScaledVector(flow, bend * 0.8).addScaledVector(down, bend * 0.4).normalize();
     const tip = mid.clone().addScaledVector(dir2, len * 0.5);
     // (mèche étroite à la racine, pleine au milieu, un peu resserrée au bout : élargie jusqu'au bout, elle finissait
     // en copeau de papier carré, et ses brins pointus se voyaient de profil)
@@ -748,7 +759,7 @@ function cardGeometry(base, D, B, density = 1) {
     // éclats de papier qui brillent ou noircissent selon leur face.
     if (up) cn.set(0, 1, 0.2).normalize(); // (pinceaux des oreilles : éclairés par le ciel, pas verts comme le sol)
     else cn.copy(nrm);
-    const lo = (hash(i * 7.7) - 0.5) * 0.8;
+    const lo = (hash(hi * 7.7) - 0.5) * 0.8;
     for (const [c, o, v] of pts) {
       const q = c.clone().addScaledVector(side, o);
       pos.push(q.x, q.y, q.z);
@@ -787,17 +798,22 @@ function cardGeometry(base, D, B, density = 1) {
     // joues : sous les yeux et sur les côtés de la tête
     const cheek = head && k.below > 0.5 && k.fz > -0.6 && sideN > 0.45;
     if (cards > 0.05 && (k.body > 0.3 || cheek) && hash(i * 2.3) < cards * more) {
-      // angora : une toison de mèches larges et serrées autour du corps, couchées vers l'arrière et vers le bas comme
-      // un poil long qui retombe, plus courtes sur les joues, la tête et les pattes
+      // angora : une toison de mèches étroites et serrées autour du corps, couchées vers l'arrière et vers le bas comme
+      // un poil long qui retombe, plus courtes sur les joues, la tête et les pattes ; une sur deux doublée d'une autre
+      // mèche au même endroit, d'un autre sens (larges, elles se lisaient en plaques une à une)
       const kk = cheek ? 0.5 : head ? 0.6 : Math.min(1, 0.35 + k.body * 0.7);
-      addCard(i, ln * kk, ln * 0.8 * kk * thin, 0.55, 0.55, 0.5);
+      addCard(i, ln * kk, ln * 0.5 * kk * thin, 0.55, 0.55, 0.5, 0, false, 0.42);
+      if (hash(i * 8.3) < 0.5 * cards) addCard(i, ln * kk * 0.85, ln * 0.45 * kk * thin, 0.6, 0.5, 0.5, 0, false, 0.38, 1);
     } else if (maneC > 0.05 && (k.mane > 0.4 || cheek) && hash(i * 2.9) < maneC * 0.95) {
       // crinière : une collerette autour de la face (nuque, base des oreilles, joues, barbe, cou, poitrail) dont les
-      // mèches rayonnent depuis la tête, un peu vers l'arrière
-      addCard(i, ln * (cheek ? 0.65 : head ? 0.8 : 0.95), ln * 0.75, 0.25, 0.35, 0.35, head || k.mane > 0.7 ? 0.6 : 0.3);
+      // mèches partent de la tête et se courbent vers l'arrière, plus étroites et plus nombreuses
+      const len = ln * (cheek ? 0.65 : head ? 0.8 : 0.95);
+      const rad = head || k.mane > 0.7 ? 0.6 : 0.3;
+      addCard(i, len, ln * 0.4, 0.25, 0.8, 0.6, rad, false, 0.9);
+      if (hash(i * 8.3) < 0.8 * maneC) addCard(i, len * 0.85, ln * 0.34, 0.3, 0.8, 0.6, rad, false, 0.7, 1);
     } else if (maneC > 0.05 && B.skirt > 0.05 && k.skirt > 0.5 && hash(i * 3.7) < B.skirt * 1.2 * more) {
       // jupe : brins qui tombent vers le sol au bas des flancs
-      addCard(i, ln * 0.7, ln * 0.5 * thin, 1.1, 0.3, 0.45);
+      addCard(i, ln * 0.7, ln * 0.5 * thin, 1.1, 0.3, 0.45, 0, false, 0.6);
     }
   }
   // Pinceaux au bout des oreilles (angora).
@@ -809,7 +825,7 @@ function cardGeometry(base, D, B, density = 1) {
       const cand = [];
       for (let i = 0; i < n; i++) if (W.ear[i * 2 + s] > 0.6 && _v.fromArray(r0, i * 3).distanceTo(tip) < 0.025) cand.push(i);
       cand.sort((a, b) => _v.fromArray(r0, a * 3).distanceTo(tip) - _w.fromArray(r0, b * 3).distanceTo(tip));
-      for (const i of cand.slice(0, 7)) addCard(i, 0.035 * B.tassels * B.head, 0.016, -0.2, 0.1, 0.15, 0, true);
+      for (const i of cand.slice(0, 7)) addCard(i, 0.035 * B.tassels * B.head, 0.016, -0.2, 0.1, 0.15, 0, true, 2.5);
     }
   }
   if (!pos.length) return null;
@@ -852,8 +868,9 @@ function cardTexture() {
     return s / 2147483647;
   };
   // Un brin : bande effilée (largeur w0 à la racine, le tiers au bout, bout arrondi), légèrement courbe ; son opacité
-  // (canal vert) s'estompe sur le dernier quart : découpé par alphaTest, le bout est court et rond, pas en pointe.
-  const strand = (x0, x1, len, w0, v) => {
+  // (canal vert, jusqu'à a) s'estompe sur ses derniers 45 % : translucide au bout quand le rendu est anticrénelé
+  // (alphaToCoverage), sinon découpé par alphaTest, court et rond, pas en pointe.
+  const strand = (x0, x1, len, w0, v, a = 255) => {
     const cx = (x0 + x1) / 2 + (r() - 0.5) * 8;
     const N = 10;
     const L = [];
@@ -868,10 +885,10 @@ function cardTexture() {
     }
     const g = ctx.createLinearGradient(0, h, 0, h - len);
     const c = (sh, a) => `rgb(${Math.round(sh)},${Math.round(a)},0)`;
-    g.addColorStop(0, c(v * 0.78, 255));
-    g.addColorStop(0.5, c(v * 0.9, 255));
-    g.addColorStop(0.75, c(v, 235));
-    g.addColorStop(1, c(v, 60));
+    g.addColorStop(0, c(v * 0.78, a));
+    g.addColorStop(0.55, c(v * 0.9, a * 0.96));
+    g.addColorStop(0.85, c(v, a * 0.6));
+    g.addColorStop(1, c(v, 0));
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.moveTo(L[0][0], L[0][1]);
@@ -886,9 +903,10 @@ function cardTexture() {
   };
   // (brins superposés : le plus opaque et le plus clair l'emporte, un bout estompé ne troue pas le brin voisin)
   ctx.globalCompositeOperation = 'lighten';
-  // (cœur de la mèche : brins larges, puis brins fins qui s'échappent sur les bords)
-  for (let i = 0; i < 16; i++) strand(w * (0.36 + 0.28 * r()), w * (0.22 + 0.56 * r()), h * (0.7 + 0.3 * r()), 7 + r() * 5, 190 + r() * 65);
-  for (let i = 0; i < 26; i++) strand(w * (0.3 + 0.4 * r()), w * (0.04 + 0.92 * r()), h * (0.45 + 0.5 * r()), 3 + r() * 3, 160 + r() * 95);
+  // (cœur de la mèche : quelques brins moyens, puis des brins fins de longueurs inégales qui s'écartent sur les bords et
+  // laissent passer le jour entre eux ; serrée et pleine, la mèche se lisait en feuille de papier découpée)
+  for (let i = 0; i < 10; i++) strand(w * (0.34 + 0.32 * r()), w * (0.2 + 0.6 * r()), h * (0.65 + 0.35 * r()), 5 + r() * 3, 185 + r() * 70);
+  for (let i = 0; i < 30; i++) strand(w * (0.26 + 0.48 * r()), w * (0.03 + 0.94 * r()), h * (0.4 + 0.55 * r()), 2 + r() * 2.5, 140 + r() * 115, 190 + r() * 65);
   cardTex = new THREE.CanvasTexture(c);
   cardTex.flipY = true;
   cardTex.colorSpace = THREE.NoColorSpace;

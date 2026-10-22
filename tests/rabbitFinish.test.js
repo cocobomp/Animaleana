@@ -1,4 +1,5 @@
 // Finitions des lapins réalistes vues de près (critique « chats-lapins ») : visage du bélier (truffe, moustaches, yeux),
+// mèches de l'angora et du tête de lion (couchées, étroites, bouts translucides).
 // ... Déterministe : graines fixes, aucun Math.random (le mixeur est appelé avec des états donnés).
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import * as THREE from 'three';
@@ -6,6 +7,7 @@ import { buildRealRabbitModel } from '../src/game/models/rabbitReal.js';
 import { rabbitBuild, rabbitLookWithBreed } from '../src/sim/rabbitLook.js';
 import { resolveLook } from '../src/sim/animal.js';
 import { loadRealRabbitGltf } from './fixtures/realRabbitGltf.js';
+import { gfx } from '../src/game/gfx.js';
 
 vi.setConfig({ testTimeout: 180000 });
 
@@ -68,5 +70,76 @@ describe('visage du bélier', () => {
     expect(rex.anim.base.land.eyes[0].painted).toBeFalsy();
     expect(compile(rex).uniforms.cKeepOpt.value.z).toBe(0);
     rex.dispose();
+  });
+});
+
+describe('mèches de l\'angora et du tête de lion', () => {
+  // Cartes plantées à 48° de la peau, larges de 2 cm et pleines : des copeaux de papier hérissés autour de la silhouette.
+  const stats = (md) => {
+    const g = md.cardMesh.geometry;
+    const p = g.attributes.position;
+    const nA = g.attributes.normal;
+    const a = new THREE.Vector3();
+    const t = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    const ang = [];
+    const wid = [];
+    // (6 sommets par mèche : racine, milieu, bout — deux à deux ; normale de la peau où elle pousse)
+    for (let i = 0; i < p.count; i += 6) {
+      a.fromBufferAttribute(p, i).add(t.fromBufferAttribute(p, i + 1)).multiplyScalar(0.5);
+      t.fromBufferAttribute(p, i + 4).add(n.fromBufferAttribute(p, i + 5)).multiplyScalar(0.5).sub(a).normalize();
+      n.fromBufferAttribute(nA, i);
+      ang.push((Math.acos(THREE.MathUtils.clamp(t.dot(n), -1, 1)) * 180) / Math.PI);
+      wid.push(a.fromBufferAttribute(p, i + 2).distanceTo(t.fromBufferAttribute(p, i + 3)));
+    }
+    const med = (v) => [...v].sort((x, y) => x - y)[Math.floor(v.length / 2)];
+    return { n: p.count / 6, ang: med(ang), wid: med(wid) };
+  };
+
+  it('angora : mèches couchées le long du corps (à plus de 60° de la normale), étroites (moins de 1,4 cm), plus nombreuses', () => {
+    const md = rabbit('angora');
+    const s = stats(md);
+    expect(s.ang).toBeGreaterThan(60);
+    expect(s.wid).toBeLessThan(0.014);
+    expect(s.n).toBeGreaterThan(1500);
+    md.dispose();
+  });
+
+  it('tête de lion : crinière courbée vers l\'arrière (à plus de 55° de la normale), mèches de moins de 1,7 cm', () => {
+    const md = rabbit('tete_de_lion');
+    const s = stats(md);
+    expect(s.ang).toBeGreaterThan(55);
+    expect(s.wid).toBeLessThan(0.017);
+    md.dispose();
+  });
+
+  it('bouts translucides (alphaToCoverage) quand le rendu est anticrénelé ; découpés net sinon', () => {
+    const was = { q: gfx.quality, m: gfx.msaa };
+    const compile = (m) => {
+      const sh = { uniforms: {}, vertexShader: '#include <common>\n#include <begin_vertex>\n#include <skinning_vertex>', fragmentShader: '#include <common>\n#include <color_fragment>\n#include <alphatest_fragment>\n#include <roughnessmap_fragment>\n#include <normal_fragment_begin>' };
+      m.onBeforeCompile(sh);
+      return sh.fragmentShader;
+    };
+    try {
+      for (const [q, msaa, on] of [['high', false, true], ['low', true, true], ['low', false, false]]) {
+        gfx.quality = q;
+        gfx.msaa = msaa;
+        const md = rabbit('angora');
+        const m = md.cardMesh.material;
+        expect(m.alphaToCoverage, `${q} msaa ${msaa}`).toBe(on);
+        const f = compile(m);
+        expect(f.includes('#include <alphatest_fragment>'), `${q} msaa ${msaa}`).toBe(!on);
+        if (on) {
+          expect(f).toContain('smoothstep(0.1, 0.75, diffuseColor.a)');
+          // (couleur gardée, alpha du cadre intact : rien du fond de la page ne passe au bord des brins)
+          expect(m.blending).toBe(THREE.CustomBlending);
+        }
+        expect(md.coatMesh.material.alphaToCoverage).toBe(false);
+        md.dispose();
+      }
+    } finally {
+      gfx.quality = was.q;
+      gfx.msaa = was.m;
+    }
   });
 });

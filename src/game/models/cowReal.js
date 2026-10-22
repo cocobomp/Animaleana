@@ -369,6 +369,57 @@ function bendLongHorns(base, P, pos, nrm, heads, B) {
 }
 const _t = V();
 const _q0 = new THREE.Quaternion();
+
+/**
+ * Sans cornes (races sans cornes, veaux) : la corne du modèle est écrasée le long de son axe jusqu'à un chignon — petite
+ * bosse ronde au-dessus de l'oreille, haute de capH (le bouton de corne du veau, sous le poil) — et peinte de la robe
+ * (cowPart.x mis à 0 dans part). Avant, l'os de la corne était seulement mis à l'échelle 0 : les sommets en partie portés
+ * par lui s'écrasaient sur sa base, deux pyramides couleur corne restaient sur le chignon. La base de la corne ne bouge
+ * pas (pas de trou au crâne) ; les normales se tournent vers l'axe (le dessus de la bosse).
+ */
+function pollHorns(base, P, pos, nrm, part, heads, capH) {
+  const n = P.count;
+  for (const [s, nm] of [[0, 'hornL'], [1, 'hornR']]) {
+    const bi = base.index.get(nm);
+    if (bi === undefined) continue;
+    const o = heads[bi];
+    const side = (i) => (pos[i * 3] > 0 ? 0 : 1) === s;
+    const ax = V();
+    for (let i = 0; i < n; i++) {
+      if (P.part[i * 4] > 0.3 && side(i) && P.aux[i * 4 + 2] > 0.85) ax.add(_v.set(pos[i * 3] - o.x, pos[i * 3 + 1] - o.y, pos[i * 3 + 2] - o.z));
+    }
+    if (ax.lengthSq() < 1e-10) continue;
+    ax.normalize();
+    let len = 0;
+    for (let i = 0; i < n; i++) {
+      if (P.part[i * 4] > 0.1 && side(i)) len = Math.max(len, (pos[i * 3] - o.x) * ax.x + (pos[i * 3 + 1] - o.y) * ax.y + (pos[i * 3 + 2] - o.z) * ax.z);
+    }
+    if (len < 0.01) continue;
+    for (let i = 0; i < n; i++) {
+      if (!(P.part[i * 4] > 0.1) || !side(i)) continue;
+      const w = clamp((P.part[i * 4] - 0.1) / 0.3, 0, 1);
+      const rel = _v.set(pos[i * 3] - o.x, pos[i * 3 + 1] - o.y, pos[i * 3 + 2] - o.z);
+      const a = rel.dot(ax);
+      const r = rel.addScaledVector(ax, -a);
+      const u = clamp(a / len, 0, 1);
+      // (dôme : hauteur capH au sommet, la section se resserre un peu vers le haut)
+      const h = a > 0 ? capH * Math.sin(u * Math.PI * 0.5) : a;
+      const c = _w.copy(o).addScaledVector(ax, h).addScaledVector(r, 1 - 0.3 * u);
+      pos[i * 3] += (c.x - pos[i * 3]) * w;
+      pos[i * 3 + 1] += (c.y - pos[i * 3 + 1]) * w;
+      pos[i * 3 + 2] += (c.z - pos[i * 3 + 2]) * w;
+      const k = w * smoothK(0, 0.6, u);
+      const nv = _t.set(nrm[i * 3], nrm[i * 3 + 1], nrm[i * 3 + 2]).multiplyScalar(1 - k).addScaledVector(ax, k).normalize();
+      nrm[i * 3] = nv.x;
+      nrm[i * 3 + 1] = nv.y;
+      nrm[i * 3 + 2] = nv.z;
+    }
+  }
+  // (peinte de la robe, jusqu'au bord de la base)
+  for (let i = 0; i < n; i++) part[i * 4] = 0;
+}
+/** Hauteur du chignon sans cornes (m, vache de taille 1) : à peine bombé chez l'adulte, bouton de corne chez le veau. */
+export const POLL_CAP = { adult: 0.006, calf: 0.014 };
 const smoothK = (a, b, x) => {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
@@ -378,7 +429,10 @@ const smoothK = (a, b, x) => {
 function shapeFor(base, B) {
   const lyre = B.hornLong > 0 && B.hornSize > 1e-3;
   const cv = hornCurve(base, B);
-  const key = `${B.legs.toFixed(3)}|${(B.girth ?? 1).toFixed(3)}|${(B.depth ?? 1).toFixed(3)}${lyre ? `|lyre${[...cv.t0, ...cv.t1, cv.reach, cv.thick].map((x) => x.toFixed(2)).join(',')}` : ''}`;
+  // (sans cornes — races sans cornes, veaux — : chignon, sur la vache de Lyndon Daniels ; le taureau, dont la corne est
+  // portée tout entière par son os, la rentre sans pyramide)
+  const poll = !(B.hornSize > 1e-3) && base.kind !== 'bull' ? (B.calf ? POLL_CAP.calf : POLL_CAP.adult) : 0;
+  const key = `${B.legs.toFixed(3)}|${(B.girth ?? 1).toFixed(3)}|${(B.depth ?? 1).toFixed(3)}${lyre ? `|lyre${[...cv.t0, ...cv.t1, cv.reach, cv.thick].map((x) => x.toFixed(2)).join(',')}` : ''}${poll ? `|poll${poll}` : ''}`;
   let S = base.shapes.get(key);
   if (S) return S;
   const P = base.prim;
@@ -393,9 +447,14 @@ function shapeFor(base, B) {
   const pos = shapePositions(base, P, J, B, base.ref);
   // (cornes en lyre : positions et normales propres à ce gabarit)
   let nrm = P.nrm;
+  let part = P.part;
   if (lyre) {
     nrm = Float32Array.from(P.nrm);
     bendLongHorns(base, P, pos, nrm, J.heads, B);
+  } else if (poll) {
+    nrm = Float32Array.from(P.nrm);
+    part = Float32Array.from(P.part);
+    pollHorns(base, P, pos, nrm, part, J.heads, poll);
   }
   const attrs = {
     position: new THREE.BufferAttribute(pos, 3),
@@ -404,7 +463,7 @@ function shapeFor(base, B) {
     skinIndex: new THREE.BufferAttribute(P.si, 4),
     skinWeight: new THREE.BufferAttribute(P.sw, 4),
     cowMask: new THREE.BufferAttribute(P.mask, 4),
-    cowPart: new THREE.BufferAttribute(P.part, 4),
+    cowPart: new THREE.BufferAttribute(part, 4),
     cowAux: new THREE.BufferAttribute(P.aux, 4),
   };
   const morphP = P.morph ? new THREE.BufferAttribute(P.dPos, 3) : null;
@@ -486,7 +545,7 @@ function shapeFor(base, B) {
     }
     measure.teat = k ? c.multiplyScalar(1 / k) : J.heads[ub].clone();
   }
-  S = { key, heads: J.heads, D: J.D, rise: J.rise, pos, geo, lodGeo, eyeGeo, eyeLod, boneBox, measure };
+  S = { key, heads: J.heads, D: J.D, rise: J.rise, pos, geo, lodGeo, eyeGeo, eyeLod, boneBox, measure, poll };
   base.shapes.set(key, S);
   return S;
 }
@@ -717,7 +776,8 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
   for (const e of [bone('earL'), bone('earR')]) if (e) e.scale.setScalar(B.ears);
   const pinv = (b) => base.rotW[base.parent[bones.indexOf(b)]].clone().invert();
   for (const [h, sgn] of [[bone('hornL'), 1], [bone('hornR'), -1]]) {
-    if (!h) continue;
+    // (sans cornes : chignon fait dans le gabarit, pollHorns — l'os garde sa taille, sa corne écrasée suit la tête)
+    if (!h || S.poll) continue;
     const s = Math.max(1e-4, B.hornSize);
     // (cornes en lyre : refaites dans le gabarit, bendLongHorns ; ici leur taille seulement)
     h.scale.setScalar(s);

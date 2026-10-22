@@ -21,6 +21,19 @@ import * as THREE from 'three';
 
 export const COW_PATTERNS = { solid: 0, pie: 1, hereford: 2 };
 
+/**
+ * Grain ramené à la même clarté dans le champ des taches de la photo et hors taches (× sur detail, hors taches puis
+ * dans les taches). La carte de grain de tools/vache/tex.mjs, bornée puis reprise du voisinage aux bords, n'a plus la
+ * moyenne de sa classe : dans les anciennes taches de la vache de Lyndon Daniels, le grain du shader vaut 0,942 en
+ * moyenne contre 1,172 hors taches (cow.glb, 238 076 et 615 683 texels de robe) ; à l'écran, sur le flanc d'une robe
+ * unie rousse ou rouge, les anciennes taches restaient 10 à 15 % plus sombres (rendu normal / rendu au grain plat, même
+ * lumière) — les taches de la Normande se lisaient en clair-obscur (« taches fantômes »). Rapport des deux facteurs
+ * réglé à l'écran (1,10 : l'écart tombe sous 2 % sur la Retinta, la Highland, la Hérens rouge, la Hereford, la
+ * Canadienne et la Wagyu) ; la robe garde sa clarté moyenne. Le taureau n'a pas de taches dans sa photo : rien à
+ * corriger. (À remesurer si tex.mjs refait la carte de grain.)
+ */
+export const COW_GRAIN = { cow: [0.977, 1.0745], bull: [1, 1] };
+
 /** Uniformes d'une vache (partagés par sa matière, son ombre et leurs clones). */
 export function makeCowUniforms() {
   return {
@@ -38,6 +51,8 @@ export function makeCowUniforms() {
     cPie: { value: new THREE.Vector4(0.5, 0, 0, 0) },
     // x : mufle clair, y : taches du masque (1) ou calculées (0), z : graine des taches calculées, w : robe claire (0-1)
     cMark: { value: new THREE.Vector4(0, 1, 0, 0) },
+    // grain : facteur hors des taches de la photo (x) et dans les taches (y) — COW_GRAIN
+    cGrain: { value: new THREE.Vector4(1, 1, 0, 0) },
     // repères de repos : x ventre, y dos (hauteurs), z hanches, w épaules (en long)
     cLand: { value: new THREE.Vector4(0.6, 1.3, -0.7, 0.5) },
     // genou (carpe), jarret, boulet (hauteurs de repos), w : haut du toupillon (hauteur)
@@ -68,6 +83,8 @@ export function setCowCoat(u, B, kind = 'cow') {
   // était presque toute blanche ; seuil propre à la race s'il le faut : la Bretonne pie noire était toute noire)
   u.cPie.value.set(kind === 'bull' ? B.bullPie ?? (B.pie ?? 0.5) - 0.15 : B.pie ?? 0.5, B.lunettes ?? 0, B.brindle ?? 0, B.whiteLegs ?? 0);
   const l = (h) => 0.2126 * ((h >> 16) & 255) / 255 + 0.7152 * ((h >> 8) & 255) / 255 + 0.0722 * (h & 255) / 255;
+  const k = COW_GRAIN[kind] ?? COW_GRAIN.cow;
+  u.cGrain.value.set(k[0], k[1], 0, 0);
   u.cMark.value.set(B.muzzleRing ?? 0, kind === 'bull' ? 0 : 1, (B.breed?.length ?? 3) * 1.7, B.pattern === 'solid' ? Math.min(1, Math.max(0, (l(c.base) - 0.3) / 0.4)) : 0);
 }
 
@@ -117,6 +134,7 @@ uniform vec3 cUdder;
 uniform vec4 cStyle;
 uniform vec4 cPie;
 uniform vec4 cMark;
+uniform vec4 cGrain;
 uniform vec4 cLand;
 uniform vec4 cKnee;
 uniform vec4 cHead;
@@ -166,18 +184,28 @@ const COLOR_F = /* glsl */ `
   float ear = smoothstep(0.3, 0.7, vCAux.x);
   float skin = smoothstep(0.35, 0.75, mk.g) * (1.0 - horn) * (1.0 - hoof);
   float keep = smoothstep(0.3, 0.7, mk.b);
-  // Grain (carte de tools/vache/tex.mjs : 0,5 = la moyenne de sa classe).
-  float detail = clamp(dot(c0, LUM) * 2.0, 0.45, 1.7);
+  // Grain (carte de tools/vache/tex.mjs : 0,5 = la moyenne de sa classe), même moyenne dans les anciennes taches de la
+  // photo et hors taches (COW_GRAIN : plus de taches fantômes sur les robes unies).
+  float detail = clamp(dot(c0, LUM) * 2.0, 0.45, 1.7) * mix(cGrain.x, cGrain.y, smoothstep(0.4, 0.6, mk.r));
   // (repères : le tronc entre les épaules et les hanches ; dessous du ventre ; bas des pattes sous le genou / jarret)
   float L = max(0.1, cLand.w - cLand.z);
   float trunkZ = smoothstep(cLand.z - 0.06, cLand.z + 0.1, p.z) * (1.0 - smoothstep(cLand.w - 0.1, cLand.w + 0.06, p.z));
   float hl = (p.y - cLand.x) / max(0.02, cLand.y - cLand.x);
   float front = step(mix(cLand.z, cLand.w, 0.5), p.z);
   float kneeY = mix(cKnee.y, cKnee.x, front);
-  float lowLeg = leg * (1.0 - smoothstep(kneeY - 0.03, kneeY + 0.06, p.y));
-  float belly = (1.0 - smoothstep(0.04, 0.32, hl)) * trunkZ * (1.0 - head) * (1.0 - leg) * (1.0 - udder);
-  float tuft = tail * (1.0 - smoothstep(cKnee.w - 0.04, cKnee.w + 0.08, p.y));
   float n2 = cNoise(p * 9.0 + 5.0);
+  // (bas des pattes blanc : bord net, un peu irrégulier — sur 9 cm, il faisait une bande grise au genou)
+  float lowLeg = leg * (1.0 - smoothstep(kneeY - 0.012, kneeY + 0.012, p.y + (n2 - 0.5) * 0.05));
+  float belly = (1.0 - smoothstep(0.04, 0.32, hl)) * trunkZ * (1.0 - head) * (1.0 - leg) * (1.0 - udder);
+  // Ventre blanc (Prim'Holstein, Hereford) : une ligne nette et irrégulière, plus haute au milieu du ventre, qui s'efface
+  // vers la mamelle et remonte un peu sous le poitrail ; ni les membres ni la tête (ils passent sous la ligne d'un coup).
+  // La rampe d'avant (28 % de la hauteur du tronc, tache effacée à 80 %) faisait un dégradé gris sale au bas du flanc.
+  float zr = (p.z - cLand.z) / L;
+  float wbH = (cStyle.x > 1.5 ? 0.3 : 0.22) * smoothstep(-0.05, 0.3, zr) * (1.0 - smoothstep(1.1, 1.45, zr));
+  float wb = wbH + (cNoise(p * vec3(2.4, 2.0, 3.4) + 7.0) - 0.5) * 0.3 + (cNoise(p * vec3(6.0, 4.0, 8.0) + 3.0) - 0.5) * 0.14
+    + (n2 - 0.5) * 0.04 - hl - leg * 0.8 - head * 2.0 - tail * 2.0;
+  float bellyW = smoothstep(-0.012, 0.012, wb) * (1.0 - udder);
+  float tuft = tail * (1.0 - smoothstep(cKnee.w - 0.04, cKnee.w + 0.08, p.y));
   vec3 col = cBase;
   float pat = cStyle.x;
   float lun = 0.0;
@@ -195,7 +223,7 @@ const COLOR_F = /* glsl */ `
     }
     float spot = smoothstep(cPie.x - 0.025, cPie.x + 0.025, f);
     // (Prim'Holstein : bas des pattes, ventre et toupillon blancs)
-    spot *= 1.0 - cPie.w * max(lowLeg, max(tuft, belly * 0.8));
+    spot *= 1.0 - cPie.w * max(lowLeg, max(tuft, bellyW));
     vec3 sc = cBase;
     if (cPie.z > 0.0) {
       // Bringé (Normande) : fines stries verticales, irrégulières, plus foncées, dans les taches.
@@ -224,7 +252,7 @@ const COLOR_F = /* glsl */ `
     float brisket = neck * (1.0 - smoothstep(0.4, 0.66, hl + (n2 - 0.5) * 0.2));
     float crest = neck * smoothstep(cLand.w + 0.25 * L, cLand.w + 0.45 * L, p.z) * smoothstep(0.86, 1.0, hl + (n2 - 0.5) * 0.1);
     float face = head * (1.0 - ear * 0.85);
-    float w = max(max(face, max(brisket, crest)), max(belly, max(lowLeg, tuft)));
+    float w = max(max(face, max(brisket, crest)), max(bellyW, max(lowLeg, tuft)));
     col = mix(cBase, cWhite, smoothstep(0.35, 0.65, w + (n2 - 0.5) * 0.12));
   }
   // Mufle clair (Canadienne) : un anneau fauve autour du nez, le nez reste sombre.
@@ -310,7 +338,7 @@ export function cowMaterial(src, uniforms) {
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`);
   };
-  mat.customProgramCacheKey = () => 'cow-coat-v2';
+  mat.customProgramCacheKey = () => 'cow-coat-v3';
   mat.userData.cowUniforms = uniforms;
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: src?.map ?? null, alphaTest: 0.5 });
   depth.onBeforeCompile = (sh) => {

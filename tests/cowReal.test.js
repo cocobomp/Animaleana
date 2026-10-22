@@ -268,7 +268,10 @@ describe('races, cornes, poil long, veaux et taureaux', () => {
         expect(md.kind, tag).toBe(o.sex === 'm' && !o.calf && !o.young ? 'bull' : 'cow');
         const horn = md.bone('hornL').scale;
         if (B.hornSize > 0) expect(Math.max(horn.x, horn.y, horn.z), tag).toBeGreaterThan(B.hornSize * 0.99);
-        else expect(horn.x, tag).toBeLessThan(1e-3);
+        // (sans cornes : chignon fait dans le gabarit sur la vache — l'os garde sa taille — ; le taureau rentre sa corne,
+        // portée tout entière par son os, à l'échelle 0)
+        else if (md.kind === 'bull') expect(horn.x, tag).toBeLessThan(1e-3);
+        else expect(horn.x, tag).toBe(1);
         // (taureau : ni mamelle, ni traite, ni tétée — ses clips n'existent pas)
         if (md.kind === 'bull') {
           expect(md.udderBone, tag).toBeNull();

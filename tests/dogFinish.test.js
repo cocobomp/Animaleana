@@ -143,6 +143,69 @@ describe('collier', () => {
   });
 });
 
+/** Pose mesurée dans le repère du chien (cm, taille réelle) : pente du dos, pieds, triangles de l'arrière-train étirés. */
+function poseOf(md, s) {
+  md.root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+  const loc = (n) => md.bone(n).getWorldPosition(new THREE.Vector3()).applyMatrix4(inv);
+  const hip = loc('femurL').add(loc('femurR')).multiplyScalar(0.5);
+  const sh = loc('humerusL').add(loc('humerusR')).multiplyScalar(0.5);
+  const feet = md.legs.map((leg, l) => {
+    let lo = Infinity;
+    for (const p of md.anim.solePts[l]) lo = Math.min(lo, p.clone().applyMatrix4(leg.paw.matrixWorld).applyMatrix4(inv).y);
+    return lo * s * 100;
+  });
+  const m = md.coatMesh;
+  const pos = m.geometry.attributes.position;
+  const base = md.anim.base;
+  const ci = base.prims.coat.index;
+  const D = [];
+  const v = new THREE.Vector3();
+  for (let i = 0; i < base.prims.coat.count; i++) D.push(m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld).applyMatrix4(inv).clone());
+  let stretch = 0;
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  for (let t = 0; t + 2 < ci.length; t += 3) {
+    const [i0, i1, i2] = [ci[t], ci[t + 1], ci[t + 2]];
+    if (!(D[i0].z < hip.z + 0.06) || base.part[i0 * 4 + 1] > 0.5) continue;
+    a.fromBufferAttribute(pos, i0);
+    b.fromBufferAttribute(pos, i1);
+    c.fromBufferAttribute(pos, i2);
+    const ar = b.clone().sub(a).cross(c.clone().sub(a)).length();
+    if (ar < 1e-10) continue;
+    const ad = D[i1].clone().sub(D[i0]).cross(D[i2].clone().sub(D[i0])).length();
+    if (ad / ar > 3) stretch++;
+  }
+  return { back: (Math.atan2(sh.y - hip.y, sh.z - hip.z) * 180) / Math.PI, hipY: hip.y * s * 100, feet, stretch };
+}
+
+describe('assis et couché des petits chiens', () => {
+  it('teckel et corgi assis : antérieurs tendus, postérieurs repliés (plus d\'arrière-train fripé), dos plus relevé', () => {
+    // (avant : dos 13,6° et 17,4°, 121 et 110 triangles de l'arrière-train étirés plus de trois fois — jack : 43°, 0)
+    for (const breed of ['teckel', 'corgi']) {
+      const { md, s } = dog(breed);
+      for (let i = 0; i < 240; i++) md.anim.update(1 / 60, st({ size: s, posture: 'sit' }));
+      const p = poseOf(md, s);
+      expect(p.back).toBeGreaterThan(17);
+      expect(p.stretch).toBeLessThan(70);
+      for (const f of p.feet) expect(Math.abs(f)).toBeLessThan(0.6);
+      md.dispose();
+    }
+  });
+
+  it('couchés des races du jack aux membres changés : postérieurs repliés au sol (avant : pieds arrière à 4 à 6 cm)', () => {
+    for (const breed of ['teckel', 'corgi', 'carlin', 'bouledogue']) {
+      const { md, s } = dog(breed);
+      for (let i = 0; i < 300; i++) md.anim.update(1 / 60, st({ size: s, posture: 'lie' }));
+      const p = poseOf(md, s);
+      expect(Math.max(p.feet[2], p.feet[3])).toBeLessThan(1.2);
+      expect(Math.min(...p.feet)).toBeGreaterThan(-0.8);
+      md.dispose();
+    }
+  });
+});
+
 describe('queues qui frétillent', () => {
   // Bout de la queue dans le repère du bassin, chien content qui frétille : plus grand écart au point moyen rapporté à la
   // longueur de la queue (entre la base et le dernier os).

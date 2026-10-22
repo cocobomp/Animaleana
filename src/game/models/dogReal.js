@@ -3178,6 +3178,73 @@ class RealDogAnim {
       + (this.w.stand_up ?? 0) * (1 - smooth(0, 0.45, prog('stand_up')))
       + (this.w.lie_down ?? 0) * (1 - smooth(0.25, 0.85, prog('lie_down'))));
     if (settleW > 0.002 || Math.abs(this.sitTilt) > 0.001) this.settleSit(settleW, dt);
+    // Couché, endormi (races du jack aux membres changés : aucun clip couché de leur gabarit ; lévriers, au couché du
+    // gabarit long accroupi, croupe en l'air) : postérieurs repliés au sol comme ceux du jack russell, puis le corps
+    // reposé (voir foldHind).
+    const lieSettle = (this.base.kind === 'jack' && this.gabarit) || this.gabarit === 'long' ? Math.min(1, (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.lie_down ?? 0) * smooth(0.4, 1, prog('lie_down')) + (this.w.get_up ?? 0) * (1 - smooth(0, 0.5, prog('get_up')))) : 0;
+    if (!(lieSettle > 0.01)) this.lieTilt = 0;
+    if (lieSettle > 0.01 && this.trick?.clip !== 'rollover') {
+      this.foldHind(lieSettle, true);
+      // (poitrine profonde des lévriers posée, croupe encore en l'air : le corps bascule, l'avant sur son appui, jusqu'à
+      // poser l'arrière)
+      const zMid = (md.legs[0].pivot.getWorldPosition(_u).applyMatrix4(_m).z + md.legs[2].pivot.getWorldPosition(_v).applyMatrix4(_m).z) / 2;
+      let tilt = 0;
+      for (let pass = 0; pass < 3; pass++) {
+        let fy = Infinity;
+        let fz = 0;
+        let ry = Infinity;
+        let rz = 0;
+        for (const pt of this.bodyPts) {
+          const y = this.skinY(pt);
+          if (_w.z > zMid ? y < fy : y < ry) {
+            if (_w.z > zMid) [fy, fz] = [y, _w.z];
+            else [ry, rz] = [y, _w.z];
+          }
+        }
+        const gap = ry - fy;
+        if (!(gap > 0.006) || !(fz - rz > 0.05)) break;
+        const th = Math.max(-0.3 - tilt, -gap / (fz - rz)) * lieSettle;
+        if (!(Math.abs(th) > 0.001)) break;
+        this.turn(md.body, AX, th);
+        tilt += th;
+        md.root.updateMatrixWorld(true);
+      }
+      // (fondue dans le temps : l'appui le plus bas de l'avant ou de l'arrière change d'un point à l'autre pendant « se
+      // coucher », la bascule sautait de 4 cm en une image)
+      const lt = dt > 0 ? (this.lieTilt ?? 0) + (tilt - (this.lieTilt ?? 0)) * Math.min(1, dt * 6) : tilt;
+      if (Math.abs(lt - tilt) > 1e-5) {
+        this.turn(md.body, AX, lt - tilt);
+        md.root.updateMatrixWorld(true);
+      }
+      this.lieTilt = lt;
+      let lowB = Infinity;
+      for (const pt of this.bodyPts) lowB = Math.min(lowB, this.skinY(pt));
+      for (let l = 0; l < md.legs.length; l++) {
+        for (const p of this.solePts[l]) lowB = Math.min(lowB, _v.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld).applyMatrix4(_m).y);
+      }
+      // (au poids du couché : pendant « se coucher », reposé d'un coup sur le plus bas des appuis, le corgi sautait de 6 cm)
+      if (Number.isFinite(lowB) && Math.abs(lowB + this.bodyAllow * 0.5) > 0.002) {
+        md.body.position.y -= (lowB + this.bodyAllow * 0.5) * lieSettle;
+        md.root.updateMatrixWorld(true);
+      }
+      // (lévriers, caniche : antérieurs qui flottent au-dessus du sol, l'avant-bras descend, au coude puis au poignet,
+      // jusqu'à poser le pied ; pas les petits chiens, dont l'avant-bras plongeait alors vers le sol, appuyé sur les
+      // doigts)
+      for (const l of this.gabarit === 'long' ? [0, 1] : []) {
+        const leg = md.legs[l];
+        for (const b of [leg.knee, leg.fetlock]) {
+          let lo = Infinity;
+          for (const p of this.solePts[l]) {
+            _v.copy(p).applyMatrix4(leg.paw.matrixWorld).applyMatrix4(_m);
+            if (_v.y < lo) [lo] = [_v.y, _u.copy(_v)];
+          }
+          if (!(lo > 0.006)) break;
+          const c = _w.setFromMatrixPosition(b.matrixWorld).applyMatrix4(_m);
+          this.turn(b, AX, raiseAngle(c, _u, 0.002, 0.6) * lieSettle);
+          b.updateMatrixWorld(true);
+        }
+      }
+    }
     // (aussi au début d'un tour assis ou patte, quand le chien reniflait encore)
     if (sitW < 0.1 && lieW < 0.1 && (!this.trick || this.trick.clip === 'sit' || this.trick.clip === 'paw')) this.settleStand();
     // Queue : sa peau (poil compris) au-dessus du sol, assis, couché, endormi — chaque os relevé, de la base au bout, de
@@ -3408,6 +3475,9 @@ class RealDogAnim {
     };
     let total = 0;
     const settled = !this.trans && (this.w.sit ?? 0) + (this.w.paw ?? 0) > 0.7;
+    // (pattes courtes du jack — teckel, corgi — : antérieurs tendus d'aplomb avant la bascule, le poitrail monte d'autant)
+    const short = this.gabarit === 'court' && this.base.kind === 'jack';
+    if (short) this.straightFront(k);
     for (let pass = 0; pass < 4; pass++) {
       lowFront();
       lowRest();
@@ -3440,6 +3510,7 @@ class RealDogAnim {
       md.root.updateMatrixWorld(true);
     }
     if (k < 0.05) return;
+    if (short) this.foldHind(k);
     // Pieds avant sous le sol (gabarit long du caniche : 2 cm) : le corps est relevé pour les poser, puis basculé autour
     // d'eux pour reposer la croupe.
     if (settled && lowFront().y < -0.003) {
@@ -3473,6 +3544,80 @@ class RealDogAnim {
           b.updateMatrixWorld(true);
         }
       }
+    }
+  }
+
+  /**
+   * Oriente l'os b pour que son enfant (position monde child) parte dans la direction voulue want (repère du chien),
+   * au poids k (0 : rien). Les enfants suivent (matrices mises à jour).
+   */
+  aimBone(b, child, want, k) {
+    const md = this.model;
+    const pos = _u.setFromMatrixPosition(b.matrixWorld);
+    const cur = _v.copy(child).sub(pos);
+    if (cur.lengthSq() < 1e-12) return;
+    md.root.getWorldQuaternion(_rq);
+    const w = _w.copy(want).applyQuaternion(_rq).normalize();
+    const q = _q.setFromUnitVectors(cur.normalize(), w);
+    if (k < 1) q.slerp(_qI, 1 - k);
+    const bw = b.getWorldQuaternion(_q3);
+    const pw = b.parent.getWorldQuaternion(_q4).invert();
+    b.quaternion.copy(pw.multiply(q.multiply(bw)));
+    b.updateMatrixWorld(true);
+  }
+
+  /**
+   * Assis, pattes courtes du jack (teckel, corgi) : les antérieurs tendus d'aplomb sous l'épaule (le clip du gabarit
+   * gardait le coude plié, l'humérus presque à plat : poitrail 5 cm plus bas, dos à 13° pour le teckel).
+   */
+  straightFront(k) {
+    const md = this.model;
+    for (const l of [0, 1]) {
+      const leg = md.legs[l];
+      const P = (b) => V().setFromMatrixPosition(b.matrixWorld);
+      // (« donne la patte » : l'antérieur gauche levé reste tel que le clip le donne)
+      const k2 = l === 0 ? k * (1 - Math.min(1, (this.w.paw ?? 0) * 1.5)) : k;
+      if (k2 < 0.01) continue;
+      // (humérus et radius dans l'axe, presque à la verticale ; paturon un peu incliné vers l'avant)
+      this.aimBone(leg.pivot, P(leg.knee), _ax.set(0, -1, 0.12), k2);
+      this.aimBone(leg.knee, P(leg.fetlock), _ax.set(0, -1, 0.06), k2);
+      this.aimBone(leg.fetlock, P(leg.paw), _ax.set(0, -1, 0.3), k2);
+    }
+  }
+
+  /**
+   * Assis, pattes courtes du jack : les postérieurs repliés comme ceux du jack russell — cuisse vers l'avant (un peu
+   * relevée), jarret posé derrière, sous la hanche, métatarse à plat vers l'avant. (Le clip assis du gabarit, repris du
+   * shiba sur des membres raccourcis, dressait la cuisse à la verticale, genou à 19 cm au-dessus de la hanche : un
+   * arrière-train fripé, une centaine de triangles de la croupe étirés plus de trois fois.)
+   */
+  foldHind(k, lie = false) {
+    const md = this.model;
+    const inv = _m; // (inverse de la racine, voir ground)
+    const loc = (b) => V().setFromMatrixPosition(b.matrixWorld).applyMatrix4(inv);
+    for (const l of [2, 3]) {
+      const leg = md.legs[l];
+      const H = loc(leg.pivot);
+      const K0 = loc(leg.knee);
+      const A0 = loc(leg.fetlock);
+      const T0 = loc(leg.paw);
+      const Lf = H.distanceTo(K0);
+      const Lt = K0.distanceTo(A0);
+      const Lm = A0.distanceTo(T0);
+      // hauteurs voulues (repère du chien, taille 1) : jarret et articulation des doigts près du sol
+      const ya = 0.04;
+      const yt = 0.035;
+      // cuisse : vers l'avant, relevée de 25° (moins si le jarret ne peut plus atteindre le sol) ; couché, le genou
+      // descend au sol le long du flanc, un peu écarté du ventre
+      let e = lie ? Math.asin(clamp((0.075 - H.y) / Lf, -0.95, 0.3)) : 0.44;
+      while (e > -1.2 && H.y + Lf * Math.sin(e) - ya > 0.92 * Lt) e -= 0.05;
+      const side = lie ? Math.sign(K0.x - H.x || leg.side) * Lf * 0.25 : 0;
+      const K = V(K0.x + side, H.y + Lf * Math.sin(e), H.z + Lf * Math.cos(e) * (lie ? 0.97 : 1));
+      const A = V(A0.x, ya, K.z - Math.sqrt(Math.max(0, Lt * Lt - (K.y - ya) ** 2)));
+      const T = V(T0.x, yt, A.z + Math.sqrt(Math.max(0, Lm * Lm - (A.y - yt) ** 2)));
+      this.aimBone(leg.pivot, V().setFromMatrixPosition(leg.knee.matrixWorld), K.clone().sub(H), k);
+      this.aimBone(leg.knee, V().setFromMatrixPosition(leg.fetlock.matrixWorld), A.clone().sub(K), k);
+      this.aimBone(leg.fetlock, V().setFromMatrixPosition(leg.paw.matrixWorld), T.clone().sub(A), k);
     }
   }
 
@@ -3650,6 +3795,10 @@ const _wv = V();
 const _rq = new THREE.Quaternion();
 const _rt = V();
 const _rs = V(1, 1, 1);
+// (aimBone)
+const _qI = new THREE.Quaternion();
+const _q3 = new THREE.Quaternion();
+const _q4 = new THREE.Quaternion();
 
 /**
  * Poses imposées par les activités (src/game/Activities.js, après l'animation) : 'sit', 'down', 'paw', 'roll',

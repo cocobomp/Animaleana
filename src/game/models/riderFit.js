@@ -64,6 +64,8 @@ const PUSH_TRIES = 4;
  * poney, cuisses et tibias entraient de 4 à 5 cm dans le cheval.)
  */
 const PUSH_STIRRUP = 0.15;
+/** Échelle du cheval sous laquelle le cavalier s'assoit par le milieu de son bassin (Falabella : 0,5). */
+const SMALL_PONY = 0.55;
 const PUSH_BARE = 0.3;
 
 /** Os qui porte le plus le sommet i du pelage. */
@@ -227,9 +229,24 @@ export function prepareRiderFit(entity, a, bareback = false) {
       pelvis.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(_mi));
     }
   }
+  // Très petit poney (Falabella) sous une selle de cheval (mixte, dressage, western) : le bassin du cavalier, plus long
+  // que le siège, portait sur le pommeau et le troussequin, 3 à 5,5 cm au-dessus du siège. Il s'y pose par le milieu
+  // de son assise (les ischions : le tiers du milieu d'avant en arrière, la moitié du milieu en travers) ; l'avant et
+  // l'arrière du bassin effleurent le pommeau et le troussequin, comme un enfant sur une selle trop grande.
+  let seatPts = pelvis;
+  if (seat && sc < SMALL_PONY && pelvis.length > 8) {
+    const zs = pelvis.map((p) => p.z);
+    const xs = pelvis.map((p) => p.x);
+    const zc = (Math.min(...zs) + Math.max(...zs)) / 2;
+    const zh = (Math.max(...zs) - Math.min(...zs)) / 2;
+    const xc = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const xh = (Math.max(...xs) - Math.min(...xs)) / 2;
+    const core = pelvis.filter((p) => Math.abs(p.z - zc) <= zh * 0.34 && Math.abs(p.x - xc) <= xh * 0.5);
+    if (core.length > 4) seatPts = core;
+  }
   const fit = {
     entity, gear: entity.gearGroup ?? null, md, sc, seat, bareback: !seat, cell, y0, z0, ny, nz, nx, W, H, Wd: new Float32Array(ny * nz),
-    dyn: Uint32Array.from(dyn), pelvis, thighs, pelvisLow: Number.isFinite(low) ? low : 0.74, inv: new THREE.Matrix4(),
+    dyn: Uint32Array.from(dyn), pelvis, seatPts, thighs, pelvisLow: Number.isFinite(low) ? low : 0.74, inv: new THREE.Matrix4(),
     feet: [new THREE.Vector3(), new THREE.Vector3()], stirrups: [null, null], phi: [0.35, 0.35],
   };
   // Dessus du siège (repère de body) : creux, là où le cavalier s'assoit.
@@ -251,7 +268,7 @@ export function prepareRiderFit(entity, a, bareback = false) {
   a.root.updateWorldMatrix(true, true);
   {
     _m.multiplyMatrices(inv, a.torso.matrixWorld);
-    const pts = pelvis.map((p) => p.clone().applyMatrix4(_m));
+    const pts = seatPts.map((p) => p.clone().applyMatrix4(_m));
     // (+z du joueur dans le repère de body, par mètre)
     _mi.multiplyMatrices(inv, a.root.parent ? a.root.parent.matrixWorld : _ri.identity());
     const d = _w.set(0, 0, 1).applyMatrix4(_mi).sub(_p.set(0, 0, 0).applyMatrix4(_mi));
@@ -458,7 +475,7 @@ export function fitRider(fit, a) {
     if (top > -Infinity) need = Math.max(need, top + GAP / sc - p.y);
   };
   _m.multiplyMatrices(inv, a.torso.matrixWorld);
-  for (const p of fit.pelvis) lift(_v.copy(p).applyMatrix4(_m));
+  for (const p of fit.seatPts) lift(_v.copy(p).applyMatrix4(_m));
   // (haut des cuisses : à cru seulement, sur le dos arrondi ; sous la selle, la carte des hauteurs a le haut des
   // quartiers, à côté desquels les cuisses descendent : la carte des flancs s'en charge)
   for (let i = 0; i < 2 && fit.bareback; i++) {

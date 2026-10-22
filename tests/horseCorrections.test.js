@@ -274,3 +274,93 @@ describe('galop monté très rapide', () => {
     expect(Math.max(...flats)).toBeLessThan(0.02);
   });
 });
+
+describe('couverture imperméable en mouvement', () => {
+  // (sommet de la nappe sous la peau : parité verticale contre le pelage déformé, profondeur verticale)
+  const insideOf = (C, I) => {
+    const CS = 0.04;
+    const grid = new Map();
+    for (let t = 0; t < I.length; t += 3) {
+      let x0 = Infinity;
+      let x1 = -Infinity;
+      let z0 = Infinity;
+      let z1 = -Infinity;
+      for (let k = 0; k < 3; k++) {
+        const o = I[t + k] * 3;
+        x0 = Math.min(x0, C[o]);
+        x1 = Math.max(x1, C[o]);
+        z0 = Math.min(z0, C[o + 2]);
+        z1 = Math.max(z1, C[o + 2]);
+      }
+      for (let a = Math.floor(x0 / CS); a <= Math.floor(x1 / CS); a++) {
+        for (let b = Math.floor(z0 / CS); b <= Math.floor(z1 / CS); b++) {
+          const key = a * 100003 + b;
+          if (!grid.has(key)) grid.set(key, []);
+          grid.get(key).push(t);
+        }
+      }
+    }
+    return (p) => {
+      const L = grid.get(Math.floor(p.x / CS) * 100003 + Math.floor(p.z / CS));
+      if (!L) return 0;
+      let up = 0;
+      let dn = 0;
+      let dUp = Infinity;
+      let dDn = Infinity;
+      for (const t of L) {
+        const a = I[t] * 3;
+        const b = I[t + 1] * 3;
+        const c = I[t + 2] * 3;
+        const det = (C[b + 2] - C[c + 2]) * (C[a] - C[c]) + (C[c] - C[b]) * (C[a + 2] - C[c + 2]);
+        if (Math.abs(det) < 1e-12) continue;
+        const l1 = ((C[b + 2] - C[c + 2]) * (p.x - C[c]) + (C[c] - C[b]) * (p.z - C[c + 2])) / det;
+        const l2 = ((C[c + 2] - C[a + 2]) * (p.x - C[c]) + (C[a] - C[c]) * (p.z - C[c + 2])) / det;
+        if (l1 < 0 || l2 < 0 || l1 + l2 > 1) continue;
+        const y = l1 * C[a + 1] + l2 * C[b + 1] + (1 - l1 - l2) * C[c + 1];
+        if (y > p.y) {
+          up++;
+          dUp = Math.min(dUp, y - p.y);
+        } else {
+          dn++;
+          dDn = Math.min(dDn, p.y - y);
+        }
+      }
+      return up % 2 === 1 && dn % 2 === 1 ? Math.min(dUp, dDn) : 0;
+    };
+  };
+  it.each([['akhal_teke'], ['trait_breton'], ['comtois']])('%s : la nappe ne passe pas sous la peau de la hanche ni du grasset au pas et au trot (avant : 3 à 4 cm)', async (breed) => {
+    const { buildGear } = await import('../src/game/gearModels.js');
+    const random = Math.random;
+    let n = 0;
+    Math.random = () => (0.37 + 0.618 * n++) % 1;
+    try {
+      const a = createAnimal({ species: 'horse', breed, colorIndex: 0, ageDays: 80, seed: 1234 });
+      const md = buildRealHorseModel(a.look, a.breed, gltf);
+      md.anim.useGaits?.();
+      const own = new Set(md.bounds.meshes);
+      buildGear(md, a.look, { blanket: { item: 'blanketRain', color: 'navy' } });
+      const shell = md.bounds.meshes.filter((m) => !own.has(m)).sort((x, y) => y.geometry.attributes.position.count - x.geometry.attributes.position.count)[0];
+      const coat = md.coatMesh;
+      const g = coat.geometry;
+      const p = new THREE.Vector3();
+      let worst = 0;
+      for (const u of [md.anim.natural.walk, md.anim.natural.trot]) {
+        const st = { v: u, moving: true, graze: 0, feeder: 0, turn: 0, fat: 1 };
+        for (let f = 0; f < 60; f++) md.anim.update(1 / 60, st, {});
+        for (let f = 0; f < 8; f++) {
+          md.anim.update(0.083, st, {});
+          md.root.updateMatrixWorld(true);
+          const C = new Float32Array(g.attributes.position.count * 3);
+          for (let i = 0; i < g.attributes.position.count; i++) coat.getVertexPosition(i, p).applyMatrix4(coat.matrixWorld).toArray(C, i * 3);
+          const inside = insideOf(C, g.index.array);
+          const sp = shell.geometry.attributes.position;
+          for (let i = 0; i < sp.count; i++) worst = Math.max(worst, inside(shell.getVertexPosition(i, p).applyMatrix4(shell.matrixWorld)));
+        }
+      }
+      md.dispose();
+      expect(worst).toBeLessThan(0.003);
+    } finally {
+      Math.random = random;
+    }
+  }, 120000);
+});

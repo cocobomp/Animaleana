@@ -171,7 +171,10 @@ describe('cavalier sur le cheval réaliste', () => {
   // s'écarter que de 5 cm ; il reste au plus 4 mm, la pointe du pied contre l'avant-bras à un instant du galop, dont
   // la peau n'est pas relue à chaque image. Shetland en western : semelle à 1,8 cm du fond de l'étrier en bois,
   // décalé en x seulement.) tol : enfoncement toléré (m).
-  it.each([['shetland', 'saddle', 0.002], ['selle_francais', 'saddle', 0.002], ['frison', 'saddle', 0.002], ['percheron', 'saddle', 0.002], ['falabella', 'saddlePony', 0.005], ['shetland', 'saddleWestern', 0.002]])('%s (%s) : bassin sur la selle, jambes hors des flancs, pieds aux étriers (arrêt, pas, trot, galop, saut)', (breed, saddle, tol) => {
+  it.each([['shetland', 'saddle', 0.002], ['selle_francais', 'saddle', 0.002], ['frison', 'saddle', 0.002], ['percheron', 'saddle', 0.002], ['falabella', 'saddlePony', 0.005], ['shetland', 'saddleWestern', 0.002],
+    // (Falabella en selle de cheval : le bassin, plus long que le siège, portait sur le pommeau et le troussequin, 3 à
+    // 5,5 cm au-dessus du siège)
+    ['falabella', 'saddleWestern', 0.005], ['falabella', 'saddle', 0.005], ['falabella', 'saddleDressage', 0.005]])('%s (%s) : bassin sur la selle, jambes hors des flancs, pieds aux étriers (arrêt, pas, trot, galop, saut)', (breed, saddle, tol) => {
     const random = Math.random;
     let s = 4242;
     Math.random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
@@ -193,6 +196,7 @@ describe('cavalier sur le cheval réaliste', () => {
       let feet = 0;
       let seatGap = [Infinity, -Infinity];
       let jumpGap = 0;
+      let seatIn = 0;
       const dt = 1 / 60;
       const check = (gait, jump) => {
         pl.scene.updateMatrixWorld(true);
@@ -224,6 +228,20 @@ describe('cavalier sur le cheval réaliste', () => {
           seat.material.side = side;
           if (jump) jumpGap = Math.max(jumpGap, h ? low.y - h.point.y : Infinity);
           else seatGap = [Math.min(seatGap[0], low.y - h.point.y), Math.max(seatGap[1], low.y - h.point.y)];
+          // (bassin dans le siège : chaque sommet du bassin sous le dessus du siège à sa verticale — pommeau et
+          // troussequin compris)
+          if (!jump) {
+            seat.material.side = THREE.DoubleSide;
+            for (const m of parts.bassin) {
+              const pos = m.geometry.attributes.position;
+              for (let i = 0; i < pos.count; i += 2) {
+                const p = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+                const top = new THREE.Raycaster(p.clone().setY(p.y + 2), new THREE.Vector3(0, -1, 0)).intersectObject(seat, false)[0];
+                if (top) seatIn = Math.max(seatIn, top.point.y - p.y);
+              }
+            }
+            seat.material.side = side;
+          }
         }
       };
       for (const [gait, u] of [['arrêt', 0], ['pas', md.anim.natural?.walk ?? 1.6], ['trot', md.anim.natural?.trot ?? 3], ['galop', 6.5 / sc]]) {
@@ -268,7 +286,10 @@ describe('cavalier sur le cheval réaliste', () => {
       expect(feet, `${breed} : semelle sur la grille de l'étrier`).toBeLessThan(0.006);
       // (assis sur le siège : ni dedans, ni à plus de 3 cm au-dessus)
       expect(seatGap[0], `${breed} : bassin dans le siège`).toBeGreaterThan(-0.002);
+      if (process.env.SEAT_LOG) console.log(breed, saddle, 'dans le siège', (seatIn * 100).toFixed(2), seatGap.map((x) => (x * 100).toFixed(2)), JSON.stringify(Object.fromEntries(Object.entries(worst).map(([k, x]) => [k, +(x * 1000).toFixed(1)]))), (feet * 1000).toFixed(1));
       expect(seatGap[1], `${breed} : bassin au-dessus du siège`).toBeLessThan(0.03);
+      // (sur un Falabella, l'avant et l'arrière du bassin effleurent le pommeau et le troussequin : 1 cm au plus)
+      expect(seatIn, `${breed} : bassin dans le pommeau ou le troussequin`).toBeLessThan(0.012);
       // (au saut, le cavalier se soulève de sa selle, en suspension : une douzaine de cm au plus)
       expect(jumpGap, `${breed} : cavalier au-dessus de la selle au saut`).toBeLessThan(0.15);
       md.dispose();

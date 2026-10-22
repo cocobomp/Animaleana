@@ -1761,6 +1761,9 @@ function forelockCards(S, B, body, base) {
     const k = Math.floor(x);
     return center[k].clone().lerp(center[k + 1], x - k);
   };
+  // (ombre portée du toupet sur le front, pour le shader de la robe : racine et pointe le long du chanfrein, demi-largeur
+  // en haut, en longueurs de tête — voir horseCoat.js, hFore)
+  S.foreShade = [center[0].z / S.headLen, center[center.length - 1].z / S.headLen, halfM / S.headLen, 1];
   // (point du toupet en travers r (−1 à 1) à la part f, à la hauteur off au-dessus de la peau : redescendu le long de la
   // verticale de la tête, par dichotomie, depuis 6 cm au-dessus de la ligne du milieu)
   const surf = (r, f, off, zTop = 0) => {
@@ -3127,9 +3130,27 @@ function brushCards(S, B, look) {
     }
   }
   if (foal) return cards;
-  // Cœur foncé du Fjord : rubans fins et nombreux, pas plus hauts que les bords, chacun un peu tourné et
-  // incliné au hasard (pas une palissade de plaques alignées), de la couleur des crins foncés (pas grisée).
-  const nc = 110;
+  // Cœur foncé du Fjord, continu : une bande de rubans le long de la crête (6 cm de large chacun, qui se chevauchent,
+  // à peine tournés), un peu plus haute que les bords crème — la ligne noire du milieu se lit sur le dessus de la
+  // brosse, de loin aussi. (Avec les seuls rubans fins ci-dessous, au téléphone : des points noirs isolés dans une
+  // bande blanche.)
+  const nw = 34;
+  for (let i = 0; i < nw; i++) {
+    const t = 0.04 + ((i + 0.2 + rng() * 0.6) / nw) * 0.9;
+    const c = at(t).addScaledVector(up, -0.012);
+    const dir = at(Math.min(1, t + 0.02)).sub(at(Math.max(0, t - 0.02))).normalize();
+    const h = height(t) * (1.03 + rng() * 0.06);
+    const tip = c.clone().addScaledVector(up, h).addScaledVector(dir, (rng() - 0.5) * 0.02);
+    const [v] = HAIR_ROWS[Math.floor(rng() * 4)];
+    cards.push({
+      pts: [c, c.clone().lerp(tip, 0.5), tip], w0: 0.06, w1: 0.05, side: dir.clone().applyAxisAngle(up, (rng() - 0.5) * 0.25),
+      color: tint(coreC.clone().lerp(maneC, 0.02), 0.08), uv: [0.1, 0.84 + rng() * 0.08, v, 0.12], weights: weights(t), sway: 0.22,
+      normal: up.clone(),
+    });
+  }
+  // (et des rubans fins et nombreux, chacun un peu tourné et incliné au hasard : le grain du cœur, pas une palissade
+  // de plaques alignées, de la couleur des crins foncés, pas grisée)
+  const nc = 80;
   for (let i = 0; i < nc; i++) {
     const t = 0.03 + ((i + rng() * 0.8) / nc) * 0.93;
     const c = at(t).addScaledVector(up, -0.012).add(V((rng() - 0.5) * 0.01, 0, 0));
@@ -3542,7 +3563,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   const coatSrc = base.prims.coat.material;
   const coatMat = coatMaterial(look, B, breed, {
     detail: coatSrc.map, normalMap: coatSrc.normalMap, normalSign: Math.sign(coatSrc.normalScale?.y ?? 1), hoofY: S.hoofY,
-    hooves: S.hooves, eye: S.eyeHL, nostril: S.nostril,
+    hooves: S.hooves, eye: S.eyeHL, nostril: S.nostril, fore: S.foreShade,
   });
   // Boîte englobante du cheval, commune à ses maillages : recalculée sur la pose des os à chaque image où il
   // passe le test du champ de la caméra (voir HorseMesh, horseBounds). Les boîtes par os viennent de la race,
@@ -3731,6 +3752,10 @@ function tailLength(geo) {
  * de rester rigide sur le dos (le pelage la traversait sur la croupe et les flancs).
  * Renvoie le nouveau maillage (à la place de l'ancien, retiré de son parent).
  */
+/** Écart en plus (m) de l'équipement lié à la peau là où la peau voisine suit la cuisse (× son poids). */
+const GEAR_LEG_GAP = 0.024;
+/** Portée en z (m) au-delà de la tranche mesurée où la peau de la cuisse compte (elle avance avec le membre). */
+const LEG_REACH = 0.08;
 function skinGear(model, S, mesh, hb) {
   const coat = S.coatGeo;
   const cp = coat.attributes.position;
@@ -3748,6 +3773,8 @@ function skinGear(model, S, mesh, hb) {
     const list = [];
     const thigh = [];
     const tail = [];
+    const leg = [];
+    const hind = new Set(['HL1', 'HR1', 'HL2', 'HR2'].map((nm) => BONE_INDEX[nm]));
     for (let i = 0; i < cp.count; i++) {
       let b = csi.getX(i);
       let w = csw.getX(i);
@@ -3757,11 +3784,15 @@ function skinGear(model, S, mesh, hb) {
         list.push(i);
         thigh.push(nm === 'HL2' || nm === 'HR2' ? 1 : 0);
         tail.push(nm === 'Tail1' ? 1 : 0);
+        let lw = 0;
+        for (let k = 0; k < 4; k++) if (hind.has(csi.getComponent(i, k))) lw += csw.getComponent(i, k);
+        leg.push(lw);
       }
     }
     S.trunkSkin = Uint32Array.from(list);
     S.trunkThigh = Uint8Array.from(thigh);
     S.trunkTail = Uint8Array.from(tail);
+    S.trunkLeg = Float32Array.from(leg);
   }
   const geo = mesh.geometry;
   const pos = geo.attributes.position;
@@ -3780,6 +3811,7 @@ function skinGear(model, S, mesh, hb) {
     return rings[k][1] + (rings[k + 1][1] - rings[k][1]) * (f - k);
   };
   const push = new Float32Array(n);
+  const legNear = new Float32Array(n);
   const dirs = new Float32Array(n * 3);
   const q = V();
   const nrm = V();
@@ -3802,6 +3834,16 @@ function skinGear(model, S, mesh, hb) {
       const j = S.trunkSkin[t];
       // (peau de la même tranche : à moins de dzWin en z, à moins de 6 cm de côté dans la tranche)
       const dz = cp.getZ(j) - q.z;
+      // (peau portée par la cuisse : regardée plus loin, elle avance et recule avec le membre — le grasset passe
+      // sous le bas de la couverture quand le postérieur se porte en avant)
+      if (S.trunkLeg[t] > 0 && Math.abs(dz) < dzWin + LEG_REACH) {
+        const lx = cp.getX(j) - q.x;
+        const ly = cp.getY(j) - q.y;
+        const al = lx * nrm.x + ly * nrm.y;
+        if (al > -0.05 && lx * lx + ly * ly - al * al < 0.09 * 0.09) {
+          legNear[i] = Math.max(legNear[i], S.trunkLeg[t] * (1 - smooth(dzWin, dzWin + LEG_REACH, Math.abs(dz))));
+        }
+      }
       if (dz * dz > dzWin * dzWin) continue;
       const dx = cp.getX(j) - q.x;
       const dy = cp.getY(j) - q.y;
@@ -3815,6 +3857,10 @@ function skinGear(model, S, mesh, hb) {
     // la pointe de la cuisse, sous le bord arrière de la nappe, en demande jusqu'à 2,6 cm chez l'akhal-teke : la
     // peau de la hanche passait par-dessus, de 1,2 cm avec la couverture imperméable)
     push[i] = Math.max(Math.min(push[i], 0.015), Math.min(thigh[i], 0.03));
+    // (peau voisine portée par la cuisse — hanche, grasset — : elle sort quand le membre se porte en avant ou en
+    // arrière, la pièce liée surtout au tronc restait dessous, 3 à 4 cm au pas et au galop sous la couverture
+    // imperméable de l'Akhal-Teké et des traits ; un peu plus d'écart là)
+    push[i] += GEAR_LEG_GAP * legNear[i];
   }
   if (geo.index) {
     const nb = new Float32Array(n);

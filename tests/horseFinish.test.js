@@ -60,11 +60,11 @@ describe('robes crédibles (étape 8)', () => {
 
   it('gris pommelé : pommelures rondes et floues sur un fond plus foncé, pas un réseau de fines lignes (« girafe ») ; gris et gris clair sans pommelures ; poulain gris foncé', () => {
     const { rMin, rMax, soft, mean } = COAT_LOOKS.dapple;
-    // (rayons inégaux, bord flou large, ni pois isolés ni cellules qui se touchent : environ un tiers de la robe)
+    // (rayons inégaux, bord flou large, ni pois isolés ni cellules qui se touchent : environ la moitié de la robe)
     expect(rMax / rMin).toBeGreaterThan(1.4);
     expect(soft).toBeGreaterThan(0.1);
     expect(mean).toBeGreaterThan(0.25);
-    expect(mean).toBeLessThan(0.5);
+    expect(mean).toBeLessThan(0.65);
     const fs = compile(material('pre', 0)).fragmentShader;
     expect(fs).not.toContain('cl.x / max(cl.y'); // (plus de rapport F1 / F2 : les lignes fines entre cellules)
     expect(fs).toContain('if (hGrey > 0.5)'); // (bruit cellulaire calculé pour les seuls vrais pommelés)

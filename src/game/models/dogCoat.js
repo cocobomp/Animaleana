@@ -494,9 +494,10 @@ float cmpSilkH(vec3 p) {
 // peau (nr : normale de repos) : coupées en travers, des sphères ne laissaient sur la peau que des cercles épars, des
 // anneaux nets comme des rondelles. Le centre d'une cellule ne s'écarte que d'un quart de cellule et une mèche ne
 // dépasse pas les deux tiers : les 2 × 2 × 2 cellules qui entourent le point suffisent (au lieu de 3 × 3 × 3).
-// q : position en cellules (déjà tournée et déformée, cmpWarp), n : normale de repos tournée. Renvoie (hauteur 0 →
+// q : position en cellules (déjà tournée et déformée, cmpWarp), n : normale de repos tournée, ak : force des arcs
+// (les grappes de 4 cm n'en gardent qu'un peu : à mi-distance, leurs spirales se lisaient comme des cratères). Renvoie (hauteur 0 →
 // ~1,5, pente par cellule, calculée — pas tirée de dFdx/dFdy, constantes par carré de deux pixels : un damier).
-vec4 cmpCurls(vec3 q, vec3 n) {
+vec4 cmpCurls(vec3 q, vec3 n, float ak) {
   vec3 b = floor(q - 0.5);
   float h = 0.0;
   vec3 g = vec3(0.0);
@@ -522,10 +523,10 @@ vec4 cmpCurls(vec3 q, vec3 n) {
     float sd = 2.0 * dot(d, rnd - 0.5) / (r * R);
     float k = (r - 0.62) / 0.2;
     float t1 = max(0.0, 1.0 - k * k * 0.333);
-    float s1 = smoothstep(-0.65, 0.7, sd) * 0.7 * wd;
+    float s1 = smoothstep(-0.65, 0.7, sd) * 0.7 * wd * ak;
     float k2 = (r - 0.3) / 0.14;
     float t2 = max(0.0, 1.0 - k2 * k2 * 0.333);
-    float s2 = smoothstep(-0.65, 0.7, -sd) * 0.45 * wd;
+    float s2 = smoothstep(-0.65, 0.7, -sd) * 0.45 * wd * ak;
     h += t1 * t1 * s1 + t2 * t2 * s2;
     g += (s1 * t1 * (-1.333 * k / 0.2) + s2 * t2 * (-1.333 * k2 / 0.14)) * d / (r * R * R);
   }
@@ -813,14 +814,16 @@ if (cOn > 0.5 && cCurl.z > 0.0 && cRole > 0.5) {
     vec4 cv = vec4(0.0);
     // grappes de 4 cm (25 par mètre) ; de près, presque couvertes par les petites : pas calculées
     if (fadeS < 0.99) {
-      vec4 bg = cmpCurls(cmpWarp(CMP_ROT * (vCmpPos + 3.7) * 25.0), nq);
+      vec4 bg = cmpCurls(cmpWarp(CMP_ROT * (vCmpPos + 3.7) * 25.0), nq, 0.3);
+      bg.x *= 1.25;
+      bg.yzw *= 1.25;
       cv = vec4(bg.x, (bg.yzw * CMP_ROT) * 25.0);
     }
     // boucles de 1,7 cm (58 par mètre), deux pavages décalés : des mèches partout, pas des grappes éparses sur une
     // laine lisse (une seule déformation pour les deux)
     if (fadeS > 0.0) {
       vec3 qs = cmpWarp(CMP_ROT * vCmpPos * 58.0);
-      vec4 sm = (cmpCurls(qs, nq) + cmpCurls(qs + vec3(7.5, 7.37, 7.61), nq)) * 0.6;
+      vec4 sm = (cmpCurls(qs, nq, 1.0) + cmpCurls(qs + vec3(7.5, 7.37, 7.61), nq, 1.0)) * 0.6;
       sm = vec4(sm.x, (sm.yzw * CMP_ROT) * 58.0);
       cv = mix(cv, cv * 0.25 + sm, fadeS);
     }

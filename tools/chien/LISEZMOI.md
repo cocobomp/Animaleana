@@ -154,7 +154,8 @@ ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été fait
   en triangle aux bouts arrondis, section en lentille (`earShape` : `se`, plus une planche aux faces plates) ; sourcils
   arrêtés au bord des paupières, truffe gardée plus serrée dans la barbe. Robes : blanc cassé, taches marron ou orange (tête colorée,
   plaques), rouan marron (fond grisé, mèches marron et blanches mêlées), marron, orange. Coupe du salon `lagotto`
-  (`setCut` : boucles égalisées sur le corps et l'encolure, pattes bouclées gardées, dessus de la tête arrondi) ;
+  (`setCut` : corps et encolure raccourcis, boucles égalisées — moins de relief et de contraste sur le tronc dès que la
+  coupe raccourcit le tronc, uniforme `cCut` lu par le shader —, pattes bouclées gardées, dessus de la tête arrondi) ;
   sans coupe, ses boucles naturelles (pas de pompons).
 - **Queues** : formes des ports bas (`sabre`, `otter`, `plume`, `whip`) en courbe de puissance (`th = a0 −
   total·(i/(n−1))^pw`) : la queue descend d'abord peu puis pend, au lieu d'une colonne verticale ; crochet du

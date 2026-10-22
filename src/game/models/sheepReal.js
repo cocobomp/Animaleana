@@ -38,6 +38,7 @@ const ONCE = ['bleat', 'lie_down', 'get_up', 'jump'];
 const LEG_KEYS = [['FL', 'L', true], ['FR', 'R', true], ['HL', 'L', false], ['HR', 'R', false]];
 const LEG_BONES = { front: ['humerus', 'radius', 'metacarpus', 'toes'], hind: ['femur', 'tibia', 'metatarsus', 'htoes'] };
 const TRUNK = new Set(['root', 'pelvis', 'spine1', 'spine2', 'chest']);
+const HOLD_ALL = [0, 1, 2, 3];
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -1065,6 +1066,10 @@ export class RealSheepAnim {
     this.lockAng = [0, 0, 0, 0];
     this.lockSide = [0, 0, 0, 0];
     this.relTop = [0, 0, 0, 0];
+    // (seuils du sabot tenu dans le monde aussi — posé sous 1,15 cm, levé au-delà de 1,6 cm — : l'agneau, le chevreau et
+    // l'Ouessant, deux fois plus petits que le modèle, posaient leurs sabots à 5 mm du sol et les levaient à 8 mm, ceux
+    // qui frôlaient le sol sans se poser glissaient de 2 à 5 cm ; comme le veau, voir footLock)
+    this.lockWorld = [0.016, 0.0115];
     // (laine longue : la toison du ventre pend plus bas — le mouton couché est relevé d'autant)
     this.skirt = (B.long ?? 0) * 0.09;
     this.rootBone.position.y -= S.rise;
@@ -1475,12 +1480,18 @@ export class RealSheepAnim {
       } else a.timeScale = name === 'lamb_play' ? 1.15 : 1;
     }
     if (lead && leadW > 0.3) this.lead = lead;
+    // (vitesse de lecture de l'allure en tête : footLock efface ses corrections d'autant plus vite — l'agneau fait
+    // presque deux fois plus de pas que le mouton à la même vitesse, la correction restait au poser suivant)
+    this.leadRate = st.moving && this.lead ? Math.abs(this.actions[this.lead]?.timeScale ?? 1) : 1;
     this.mixer.update(dt);
     this.savePose();
     this.applyShift();
     this.overlay(dt, st, false);
     this.nurseReach(dt, st, false);
     this.applyFleece(dt);
+    // (l'agneau qui gambade sur place : le corps libre de sauter, les sabots qui retombent tenus où ils se posent —
+    // holdLegs ; sans eux, chaque appui glissait de 3 cm)
+    this.airLock = (this.w.lamb_play ?? 0) > 0.3 && !st.moving;
     this.ground(st, dt, moveClip);
   }
 
@@ -1600,7 +1611,7 @@ export class RealSheepAnim {
     }
     if (!Number.isFinite(low)) low = 0;
     let hoofSlack = null;
-    const air = !!(this.trick && this.trick.age < 0.25) || moveClip === 'lamb_play' || (this.w.jump ?? 0) > 0.3;
+    const air = !!(this.trick && this.trick.age < 0.25) || moveClip === 'lamb_play' || (this.w.lamb_play ?? 0) > 0.3 || (this.w.jump ?? 0) > 0.3;
     const sh = this.shorn;
     let target;
     let floor = -low;
@@ -1725,9 +1736,12 @@ export class RealSheepAnim {
     return lowH;
   }
 
-  /** Membres tenus à l'arrêt hors des allures (aucun pour le mouton ; la chèvre dressée : ses postérieurs). */
+  /**
+   * Membres tenus à l'arrêt hors des allures : les quatre pendant la gambade sur place (airLock : agneau, chevreau,
+   * veau) ; la chèvre dressée : ses postérieurs.
+   */
   holdLegs() {
-    return null;
+    return this.airLock && this.posture === 'stand' && !this.trans ? HOLD_ALL : null;
   }
 
   /** Sabots libres (couché, transition, saut) : la correction de footLock s'efface en fondu, sans à-coup. */

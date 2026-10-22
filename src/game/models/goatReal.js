@@ -736,12 +736,18 @@ export class RealGoatAnim extends RealSheepAnim {
    */
   holdLegs() {
     const t = this.trans?.name;
-    return this.posture === 'rear' || t === 'rear_up' || t === 'rear_down' ? HIND : null;
+    return this.posture === 'rear' || t === 'rear_up' || t === 'rear_down' ? HIND : super.holdLegs();
   }
 
-  /** Sol : comme le mouton ; le chevreau qui gambade, le saut et l'escalade sont « en l'air » (ni posés ni tenus). */
+  /**
+   * Sol : comme le mouton ; le chevreau qui gambade, le saut et l'escalade sont « en l'air » (le corps libre). Le
+   * chevreau qui gambade sur place garde ses sabots qui retombent tenus où ils se posent (airLock, comme l'agneau et le
+   * veau) ; l'escalade, non.
+   */
   ground(st, dt = 0, moveClip = null) {
-    const air = moveClip === 'kid_play' || (this.w?.kid_play ?? 0) > 0.3 || (this.w?.climb ?? 0) > 0.3;
+    const play = moveClip === 'kid_play' || (this.w?.kid_play ?? 0) > 0.3;
+    const air = play || (this.w?.climb ?? 0) > 0.3;
+    this.airLock = play && !st.moving && !((this.w?.climb ?? 0) > 0.3);
     return this.withBones(() => super.ground(st, dt, air ? 'lamb_play' : moveClip));
   }
 
@@ -877,6 +883,8 @@ export class RealGoatAnim extends RealSheepAnim {
       } else a.timeScale = name === 'kid_play' ? 1.1 : 1;
     }
     if (lead && leadW > 0.3) this.lead = lead;
+    // (vitesse de lecture de l'allure en tête : footLock efface ses corrections d'autant plus vite, voir le mouton)
+    this.leadRate = st.moving && this.lead ? Math.abs(this.actions[this.lead]?.timeScale ?? 1) : 1;
     this.mixer.update(dt);
     this.savePose();
     this.applyShift();

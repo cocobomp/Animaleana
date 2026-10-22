@@ -292,9 +292,26 @@ export class TripVehicle {
     // (vache réaliste : sa longueur mesurée — 2,3 m du nez aux fesses, plus que le bodyLen de 1,85 m — ; la pointe des
     // fesses juste devant la barre arrière, la barre de poitrail à la base de l'encolure : calculée d'après le bodyLen, la
     // croupe de la Prim'Holstein et de la Charolaise traversait la barre arrière)
-    const fit = this.cowFit?.(a, scale);
+    // (trop longue pour la stalle — le taureau charolais : 2,13 m de la base de l'encolure à la pointe des fesses pour
+    // 1,95 m entre les barres — : un peu réduite dans le van, stallShrink ; placée au poitrail, sa croupe passait 18 cm
+    // au-delà de la barre arrière)
+    const fit = this.cowFit?.(a, scale * this.stallShrink(i, a, scale));
     if (fit != null) return new THREE.Vector3(st.x, st.y, Math.min(st.zFront - fit.chest, (st.zRear ?? -Infinity) + fit.rump));
     return new THREE.Vector3(st.x, st.y, st.zFront - half - 0.14 - back);
+  }
+
+  /**
+   * Réduction (≤ 1, au plus 15 %) d'une vache trop longue pour sa stalle, entre la barre de poitrail et la barre arrière :
+   * le modèle est réduit d'autant dans le van (boardEntity, addPassenger ; en douceur pendant qu'elle entre).
+   */
+  stallShrink(i, a, scale) {
+    const st = this.trailer?.stalls?.[i];
+    if (!st || st.zRear == null) return 1;
+    const fit = this.cowFit?.(a, scale);
+    if (!fit) return 1;
+    const need = fit.chest + fit.rump;
+    const room = st.zFront - st.zRear;
+    return need > room ? Math.max(0.85, room / need) : 1;
   }
 
   /**
@@ -427,6 +444,12 @@ export class TripVehicle {
         }
         continue;
       }
+      // (dans le van, une vache trop longue pour sa stalle se réduit en douceur jusqu'à sa place — stallShrink)
+      if (w.step === w.path.length - 1 && e.model?.root) {
+        w.shrink ??= this.stallShrink(w.i, w.a, e.scale);
+        w.seg ??= Math.max(0.01, d);
+        if (w.shrink < 1) e.model.root.scale.setScalar((e.model.size ?? 1) * (1 + (w.shrink - 1) * Math.min(1, 1 - d / w.seg)));
+      }
       const want = Math.atan2(dx, dz);
       let diff = want - e.heading;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -503,6 +526,8 @@ export class TripVehicle {
     e.speed = 0;
     a.following = false;
     this.trailer.group.add(e.root);
+    const k = this.stallShrink(i, a, e.scale);
+    if (k < 1 && e.model?.root) e.model.root.scale.setScalar((e.model.size ?? 1) * k);
     e.root.position.copy(this.stallPose(i, a, e.scale));
     e.heading = 0;
     e.root.rotation.set(0, 0, 0);
@@ -528,8 +553,9 @@ export class TripVehicle {
     if (i < 0) return this.addCrate(a);
     const model = buildAnimalModel(a.species, travelLook(a), a.breed); // chaque espèce par son modèle (cheval de sa race, chat…)
     const s = a.look.scale * growthScale(a);
-    model.root.scale.setScalar(s);
     this.stallUse[i].push(a.id);
+    // (vache réaliste : son modèle garde sa taille propre — le taureau, 4 % de plus —, comme dans la cour)
+    model.root.scale.setScalar(s * (model.realCow ? model.size ?? 1 : 1) * this.stallShrink(i, a, s));
     model.root.position.copy(this.stallPose(i, a, s));
     this.trailer.group.add(model.root);
     this.passengers.set(a.id, { model, stall: i });

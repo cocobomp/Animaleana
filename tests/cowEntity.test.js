@@ -224,3 +224,29 @@ describe('traite : la joueuse fait le geste, la main aux trayons', () => {
     em.model.dispose?.();
   }, 60000);
 });
+
+describe('van : le bovin tient entre ses barres', () => {
+  it('taureau charolais, taureau de Highland, Prim\'Holstein : la croupe devant la barre arrière, le poitrail derrière la barre de poitrail', async () => {
+    const { TripVehicle: Vehicle } = await import('../src/game/Vehicle.js');
+    const { growthScale } = await import('../src/sim/animal.js');
+    // (place du van à deux chevaux : barre de poitrail à z = 1,06, barre arrière 1,95 m derrière — vehicles.js)
+    const stall = { x: 0.44, zFront: 1.06, zRear: 1.06 - 1.95, y: 0.4 };
+    for (const [breed, sex] of [['charolaise', 'm'], ['highland', 'm'], ['holstein', 'f']]) {
+      seed(4242);
+      const a = createAnimal({ species: 'cow', breed, sex, colorIndex: 0, ageDays: 80, seed: 3 });
+      const v = Object.create(Vehicle.prototype);
+      Object.assign(v, { trailer: { stalls: [stall] }, stallUse: [[a.id]], game: { entities: new Map() } });
+      const scale = a.look.scale * growthScale(a);
+      const k = v.stallShrink(0, a, scale);
+      const pos = v.stallPose(0, a, scale);
+      const fit = v.cowFit(a, scale * k);
+      const rump = pos.z - fit.rump + 0.05;
+      const chest = pos.z + fit.chest;
+      // (réduite de 15 % au plus ; la Prim'Holstein tient sans être réduite)
+      expect(k, breed).toBeGreaterThanOrEqual(0.85);
+      if (breed === 'holstein') expect(k).toBe(1);
+      expect(rump, `${breed} croupe`).toBeGreaterThan(stall.zRear - 0.005);
+      expect(chest, `${breed} poitrail`).toBeLessThan(stall.zFront + 0.005);
+    }
+  }, 60000);
+});

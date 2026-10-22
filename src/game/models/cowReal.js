@@ -681,26 +681,26 @@ function hairCards(base, S, B) {
       thighOf[i] = thigh ? 1 : 0;
     }
   }
-  // (modèle peu dense — le taureau : 1 900 sommets, deux fois moins que la vache — : les mèches, semées sur les sommets,
-  // restaient clairsemées et la frange en quelques lanières ; on sème aussi au milieu des arêtes et des triangles dont
-  // les sommets sont tous candidats)
-  let src = { pos, nrm: P.smoothN, si: P.si, sw: P.sw };
-  if (n < 2600) src = densifyLocks(P, src, kindOf, hlOf, thighOf, cand, fringe);
-  // (mèches étroites et longues, serrées : larges et courtes, elles faisaient des écailles plates sur le corps)
-  const picks = spreadLocks(cand, src.pos, 0.05, 900).map(({ i, hl, thigh }) => ({
+  // (les mèches, semées sur les sommets, restaient clairsemées — le taureau : 1 900 sommets, la vache : 3 500, à 4 ou 5 cm
+  // les uns des autres — et la frange en quelques lanières ; on sème aussi au milieu des arêtes et des triangles dont les
+  // sommets sont tous candidats)
+  const src = densifyLocks(P, { pos, nrm: P.smoothN, si: P.si, sw: P.sw }, kindOf, hlOf, thighOf, cand, fringe);
+  // (mèches étroites et longues, serrées, en deux cartes croisées, sur une toile de poils fins à jours : larges de 6 à
+  // 9 cm et semées tous les 5 cm, elles faisaient des feuilles plates clairsemées, la robe marbrée visible entre elles)
+  const picks = spreadLocks(cand, src.pos, base.kind === 'bull' ? 0.028 : 0.034, 1100).map(({ i, hl, thigh }) => ({
     i,
     // (plus longues en bas des flancs — la jupe — et à la culotte ; le dos garde un poil plus court)
     len: B.hair * (thigh ? 1.25 : 0.75 + 0.7 * (1 - clamp(hl, 0, 1))) * (0.8 + 0.4 * lockHash(i + 5)),
-    w: 0.06 + 0.03 * lockHash(i + 9),
+    w: 0.038 + 0.022 * lockHash(i + 9),
     back: thigh ? 0.45 : 0.08,
     side: lockHash(i + 31) > 0.7 ? 1 : 0,
   }));
-  // (frange : mèches fines du toupet qui tombent en avant, sur les yeux — étroites et nombreuses : larges de 4 à 6 cm,
-  // elles faisaient des lanières plates)
-  for (const f of spreadLocks(fringe, src.pos, 0.014, 140)) {
-    picks.push({ i: f.i, len: B.fringe * (0.7 + 0.6 * lockHash(f.i + 3)), w: 0.024 + 0.014 * lockHash(f.i + 7), back: -0.35, side: lockHash(f.i + 11) > 0.5 ? 1 : 0 });
+  // (frange : mèches fines et serrées du toupet qui tombent en avant, sur les yeux — larges de 2 à 4 cm, semées tous
+  // les 1,4 cm, elles faisaient des lanières plates, le front lisse visible entre elles)
+  for (const f of spreadLocks(fringe, src.pos, 0.009, 320)) {
+    picks.push({ i: f.i, len: B.fringe * (0.75 + 0.6 * lockHash(f.i + 3)), w: 0.016 + 0.01 * lockHash(f.i + 7), back: -0.4, side: lockHash(f.i + 11) > 0.5 ? 1 : 0 });
   }
-  const geo = picks.length ? lockCards(picks, src, 0.012) : null;
+  const geo = picks.length ? lockCards(picks, src, 0.012, { cross: true }) : null;
   S.hair.set(key, geo);
   return geo;
 }
@@ -834,7 +834,7 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
   const hairGeo = hairCards(base, S, B);
   if (hairGeo) {
     const c = new THREE.Color(B.colors.base);
-    const hmat = lockMaterial(lockU, c, c.clone().lerp(new THREE.Color(0xe0a060), 0.14), 'cow_locks');
+    const hmat = lockMaterial(lockU, c, c.clone().lerp(new THREE.Color(0xe0a060), 0.14), 'cow_locks', 'fine');
     hair = new SheepMesh(hairGeo, hmat, hb);
     hair.name = 'cow_hair';
     hair.bind(skeleton, new THREE.Matrix4());

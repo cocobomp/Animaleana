@@ -19,13 +19,16 @@ export const lockHash = (i) => {
   return x - Math.floor(x);
 };
 
-let lockTex = null;
+const lockTexs = {};
 /**
  * Toile d'une mèche (grise : elle ne donne que le grain et la découpe) : des brins effilés de longueurs inégales, serrés
  * en haut, qui s'écartent et finissent en pointes à des hauteurs différentes ; bords latéraux en brins isolés.
+ * kind 'fine' (poil long de la Highland) : brins plus fins et moins nombreux, des jours entre eux — une mèche de poils,
+ * pas une feuille.
  */
-export function lockTexture() {
-  if (lockTex) return lockTex;
+export function lockTexture(kind = 'wool') {
+  if (lockTexs[kind]) return lockTexs[kind];
+  const fine = kind === 'fine';
   const W = 64;
   const H = 256;
   const c = typeof document !== 'undefined' ? document.createElement('canvas') : null;
@@ -42,12 +45,12 @@ export function lockTexture() {
   if (ctx?.beginPath) {
     ctx.clearRect(0, 0, W, H);
     // (brins : partent du haut, plus serrés au milieu de la carte ; longueur 55 à 100 % ; ondulés)
-    for (let k = 0; k < 150; k++) {
+    for (let k = 0; k < (fine ? 90 : 150); k++) {
       const u = rnd();
-      const x0 = W * (0.5 + (u - 0.5) * (0.55 + 0.45 * rnd()));
-      const len = H * (0.6 + 0.4 * rnd()) * (1 - 0.3 * Math.abs(u - 0.5) * 2);
-      const w = 2.4 + rnd() * 3.2;
-      const sway = (rnd() - 0.5) * 9;
+      const x0 = W * (0.5 + (u - 0.5) * (fine ? 0.8 + 0.2 * rnd() : 0.55 + 0.45 * rnd()));
+      const len = H * (fine ? 0.45 + 0.55 * rnd() : 0.6 + 0.4 * rnd()) * (1 - 0.3 * Math.abs(u - 0.5) * 2);
+      const w = fine ? 1.1 + rnd() * 1.4 : 2.4 + rnd() * 3.2;
+      const sway = (rnd() - 0.5) * (fine ? 14 : 9);
       const shade = Math.round(120 + rnd() * 135);
       ctx.beginPath();
       ctx.moveTo(x0 - w, 0);
@@ -58,11 +61,12 @@ export function lockTexture() {
       ctx.fill();
     }
   }
-  lockTex = c ? new THREE.CanvasTexture(c) : new THREE.Texture();
-  lockTex.userData.shared = true;
-  lockTex.colorSpace = THREE.SRGBColorSpace;
-  lockTex.anisotropy = 4;
-  return lockTex;
+  const tex = c ? new THREE.CanvasTexture(c) : new THREE.Texture();
+  tex.userData.shared = true;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  lockTexs[kind] = tex;
+  return tex;
 }
 
 /**
@@ -114,8 +118,11 @@ const SEGS = 3;
  * de forme du corps, dPos : la toison tondue rentre ; zéro sans dPos), hairSide, uv (u en travers, v : 0 racine → 1
  * pointe), skinIndex, skinWeight. inset : la racine rentre dans le corps de tant (m).
  */
-export function lockCards(picks, { pos, nrm, si, sw, dPos = null }, inset = 0.012) {
-  const nq = picks.length;
+export function lockCards(picks, { pos, nrm, si, sw, dPos = null }, inset = 0.012, { cross = false } = {}) {
+  // (cross : chaque mèche a une deuxième carte, tournée d'un quart de tour autour de la mèche — vue de profil, elle
+  // garde du volume ; vue de face, la première ne fait plus une feuille plate posée sur le flanc)
+  const planes = cross ? 2 : 1;
+  const nq = picks.length * planes;
   const nv = nq * (SEGS + 1) * 2;
   const position = new Float32Array(nv * 3);
   const top = new Float32Array(nv * 3);
@@ -139,7 +146,10 @@ export function lockCards(picks, { pos, nrm, si, sw, dPos = null }, inset = 0.01
   let vi = 0;
   let ii = 0;
   for (let q = 0; q < nq; q++) {
-    const { i, len, w, back = 0, side: sd = 0 } = picks[q];
+    const plane = q % planes;
+    const { i, len, w: w0, back = 0, side: sd = 0 } = picks[(q - plane) / planes];
+    // (deuxième carte un peu plus étroite et plus courte : elle épaissit la mèche sans la doubler)
+    const w = plane ? w0 * 0.8 : w0;
     const h1 = lockHash(i);
     const h2 = lockHash(i + 17);
     N.fromArray(nrm, i * 3).normalize();
@@ -162,6 +172,7 @@ export function lockCards(picks, { pos, nrm, si, sw, dPos = null }, inset = 0.01
     W.crossVectors(D0, N);
     if (W.lengthSq() < 1e-4) W.crossVectors(down, N);
     W.normalize();
+    if (plane) W.crossVectors(W, D0).normalize();
     const phase = h1 * 6.28;
     const wave = 0.18 * len * (0.6 + 0.8 * h2);
     P.copy(T);
@@ -227,9 +238,9 @@ export const makeLockUniforms = () => ({ hState: { value: new THREE.Vector4(1, 0
  * Matière des mèches : couleur des deux zones de la robe (hairSide : 0 → colA, 1 → colB), grain des brins, racine un
  * peu plus sombre, découpe des brins (alphaTest) ; reflets doux (roughness 0,75 : la laine longue brille un peu).
  */
-export function lockMaterial(lu, colA, colB, name = 'ruminant_locks') {
+export function lockMaterial(lu, colA, colB, name = 'ruminant_locks', texKind = 'wool') {
   const hu = { hA: { value: new THREE.Color(colA) }, hB: { value: new THREE.Color(colB) } };
-  const mat = new THREE.MeshStandardMaterial({ map: lockTexture(), alphaTest: 0.32, side: THREE.DoubleSide, roughness: 0.75, metalness: 0, name });
+  const mat = new THREE.MeshStandardMaterial({ map: lockTexture(texKind), alphaTest: 0.32, side: THREE.DoubleSide, roughness: 0.75, metalness: 0, name });
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, lu, hu);
     sh.vertexShader = sh.vertexShader

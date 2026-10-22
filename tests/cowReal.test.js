@@ -281,8 +281,8 @@ describe('races, cornes, poil long, veaux et taureaux', () => {
         }
         expect(md.stage, tag).toBe(o.calf ? 'baby' : o.young ? 'young' : 'adult');
         expect(!!md.hair, tag).toBe(B.hair > 0.005 || B.fringe > 0.005);
-        // (mèches : au plus 900 sur le corps et 140 pour la frange, trois segments chacune)
-        if (md.hair) expect(md.hair.geometry.userData.cards, tag).toBeLessThanOrEqual(1040);
+        // (mèches : au plus 1 100 sur le corps et 320 pour la frange, en deux cartes croisées de trois segments)
+        if (md.hair) expect(md.hair.geometry.userData.cards, tag).toBeLessThanOrEqual(2 * (1100 + 320));
         if (md.kind === 'cow') expect(md.eyes, tag).toBeTruthy();
         md.dispose();
       }
@@ -365,7 +365,7 @@ describe('races, cornes, poil long, veaux et taureaux', () => {
     const f = cow('highland');
     const m = cow('highland', { sex: 'm' });
     expect(m.hair).toBeTruthy();
-    expect(m.hair.geometry.userData.cards).toBeGreaterThan(0.9 * f.hair.geometry.userData.cards);
+    expect(m.hair.geometry.userData.cards).toBeGreaterThan(0.7 * f.hair.geometry.userData.cards);
     f.dispose();
     m.dispose();
   });

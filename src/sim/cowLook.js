@@ -128,9 +128,10 @@ export function cowBuild(look = {}, { breed = null, stage = 'adult', sex = 'f' }
     B.ears *= 1 + (CALF.ears - 1) * k;
     B.girth *= 1 + (CALF.girth - 1) * k;
     B.depth *= 1 + (CALF.depth - 1) * k;
-    // (poil du veau : plus court, frange légère)
-    B.hair *= 1 - k * 0.55;
-    B.fringe *= 1 - k * 0.5;
+    // (poil du veau : un peu plus court, frange plus légère — mais une boule de poils, pas un veau ras : à 45 %, le veau
+    // de Highland n'avait que quelques mèches)
+    B.hair *= 1 - k * 0.25;
+    B.fringe *= 1 - k * 0.3;
   }
   if (B.bull) {
     B.girth *= BULL.girth;

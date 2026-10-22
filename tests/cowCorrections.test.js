@@ -117,3 +117,29 @@ describe('sans cornes : un chignon, plus de pyramides', () => {
     }
   });
 });
+
+describe('poil long de la Highland', () => {
+  it('mèches serrées en cartes croisées, étroites ; frange dense ; veau poilu (70 % de la longueur, toute la densité)', () => {
+    const f = cow('highland');
+    const calf = cow('highland', { calf: true });
+    const g = f.hair.geometry;
+    // (plus de 2 000 cartes : 1 100 mèches sur le corps, la frange, deux cartes croisées par mèche — il y en avait 920)
+    expect(g.userData.cards).toBeGreaterThan(2000);
+    expect(g.userData.cards % 2).toBe(0);
+    // (cartes étroites : 4,8 cm au plus à leur plus large, au lieu de 7,2 cm — feuilles plates)
+    const pos = g.attributes.position.array;
+    const uv = g.attributes.uv.array;
+    let widest = 0;
+    for (let v = 0; v + 1 < pos.length / 3; v += 2) {
+      if (Math.abs(uv[v * 2 + 1] - 1 / 3) > 1e-3) continue;
+      widest = Math.max(widest, Math.hypot(pos[v * 3] - pos[v * 3 + 3], pos[v * 3 + 1] - pos[v * 3 + 4], pos[v * 3 + 2] - pos[v * 3 + 5]));
+    }
+    expect(widest).toBeLessThan(0.05);
+    // (veau : poil à 75 % de celui de l'adulte, frange à 70 %, presque autant de mèches)
+    expect(calf.build.hair).toBeGreaterThan(0.7 * f.build.hair);
+    expect(calf.build.fringe).toBeGreaterThan(0.65 * f.build.fringe);
+    expect(calf.hair.geometry.userData.cards).toBeGreaterThan(0.9 * g.userData.cards);
+    f.dispose();
+    calf.dispose();
+  });
+});

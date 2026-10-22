@@ -1,0 +1,144 @@
+// Finitions des chiens réalistes vues au téléphone : manteau, collier, queues, assis et couchés (src/game/models/dogReal.js).
+import { describe, it, expect, beforeAll } from 'vitest';
+import * as THREE from 'three';
+import { buildRealDogModel } from '../src/game/models/dogReal.js';
+import { buildGear, removeGear } from '../src/game/gearModels.js';
+import { buildAccessories, removeAccessories } from '../src/game/models/salon.js';
+import { dogModelOf } from '../src/sim/dogLook.js';
+import { resolveLook } from '../src/sim/animal.js';
+import { loadRealDogGltf } from './fixtures/realDogGltf.js';
+
+let G;
+beforeAll(async () => {
+  G = { shiba: await loadRealDogGltf('shiba'), jack: await loadRealDogGltf('jack') };
+}, 120000);
+
+const dog = (breed) => {
+  const look = { ...resolveLook('dog', breed, 0), seed: 4242 };
+  return { look, md: buildRealDogModel(look, breed, G[dogModelOf(look)]), s: look.scale ?? 1 };
+};
+const st = (o = {}) => ({ v: 0, moving: false, posture: 'stand', action: null, sleeping: false, happy: 0.25, sad: false, pull: 0, size: 1, ...o });
+
+/**
+ * Peau du dessus du tronc qui passe hors du manteau : un rayon part de l'axe du tronc (centre de la coupe la plus
+ * proche) vers chaque sommet de la peau (ni membres, ni tête, ni queue, ni oreilles) ; s'il dépasse la coque du manteau
+ * de plus d'un millimètre, il en sort. Renvoie la part des sommets du dos (à moins de 30° du dessus) qui sortent et le
+ * plus grand dépassement (cm, taille réelle).
+ */
+function coatLeak(md, coat, s) {
+  md.root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+  const fit = md.dogFit;
+  const v = new THREE.Vector3();
+  const cp = coat.geometry.attributes.position;
+  const pts = [];
+  for (let i = 0; i < cp.count; i++) pts.push(coat.getVertexPosition(i, v).applyMatrix4(coat.matrixWorld).applyMatrix4(inv).clone());
+  const idx = coat.geometry.index;
+  const tris = [];
+  for (let t = 0; t < idx.count; t += 3) tris.push([pts[idx.getX(t)], pts[idx.getX(t + 1)], pts[idx.getX(t + 2)]]);
+  const zs = pts.map((p) => p.z);
+  const zMin = Math.min(...zs) + 0.01;
+  const zMax = Math.max(...zs) - 0.01;
+  const base = md.anim.base;
+  const part = base.part;
+  const m = md.coatMesh;
+  const ray = new THREE.Ray();
+  const hit = new THREE.Vector3();
+  let back = 0;
+  let out = 0;
+  let worst = 0;
+  for (let i = 0; i < base.prims.coat.count; i++) {
+    if (part[i * 4] > 0.1 || part[i * 4 + 1] > 0.3 || part[i * 4 + 2] > 0.3 || part[i * 4 + 3] > 0.3) continue;
+    m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld).applyMatrix4(inv);
+    if (v.z < zMin || v.z > zMax) continue;
+    const rg = fit.rings.reduce((b, x) => (Math.abs(x[0] - v.z) < Math.abs(b[0] - v.z) ? x : b));
+    const c = new THREE.Vector3(fit.midX, rg[2], v.z);
+    const d = v.clone().sub(c);
+    if (Math.abs(Math.atan2(d.x, d.y)) > 0.5) continue;
+    ray.set(c, d.clone().normalize());
+    let best = Infinity;
+    for (const [a, b, e] of tris) if (ray.intersectTriangle(a, b, e, false, hit)) best = Math.min(best, hit.distanceTo(c));
+    if (!Number.isFinite(best)) continue;
+    back++;
+    const dd = d.length() - best;
+    if (dd > 0.001) {
+      out++;
+      worst = Math.max(worst, dd);
+    }
+  }
+  return { back, pct: (100 * out) / Math.max(1, back), worstCm: worst * 100 * s };
+}
+
+describe('manteau du chien', () => {
+  // (races du jack : ses grands triangles et ses poids qui débordent des membres laissaient la plupart des secteurs des
+  // coupes vides — 80 à 96 % du dos hors du manteau, dents de scie ; races du shiba : 9 à 36 %)
+  it.each(['jack_russell', 'teckel', 'corgi', 'carlin', 'cocker', 'chihuahua', 'yorkshire', 'spitz_nain', 'labrador', 'golden', 'samoyede', 'terre_neuve'])(
+    '%s : le dos ne passe pas à travers le manteau (debout et au pas)', (breed) => {
+      const { look, md, s } = dog(breed);
+      const g = buildGear(md, look, { blanket: { item: 'dogCoat', color: 'navy' } });
+      const coat = g.userData.meshes.find((x) => x.isSkinnedMesh && x.material.side === THREE.DoubleSide);
+      expect(coat).toBeTruthy();
+      for (let i = 0; i < 60; i++) md.anim.update(1 / 60, st({ size: s }));
+      const a = coatLeak(md, coat, s);
+      for (let i = 0; i < 37; i++) md.anim.update(1 / 60, st({ size: s, moving: true, v: 1.1 / Math.sqrt(s) }));
+      const b = coatLeak(md, coat, s);
+      expect(a.back).toBeGreaterThan(100);
+      expect(a.pct).toBeLessThan(3);
+      expect(b.pct).toBeLessThan(3);
+      expect(Math.max(a.worstCm, b.worstCm)).toBeLessThan(0.8);
+      // (coupes du tronc sous le manteau : un centre propre à chacune, aucun rayon de repli de 1,6 cm sur le dos et les
+      // flancs)
+      const f = md.dogFit;
+      for (const [z, r, yc] of f.rings) {
+        if (z <= f.hipZ - 0.01 || z >= f.shZ + 0.035) continue;
+        expect(Number.isFinite(yc)).toBe(true);
+        const top = [...r.slice(0, 7), ...r.slice(r.length - 6)];
+        expect(Math.min(...top)).toBeGreaterThan(0.03);
+      }
+      removeGear(g);
+      md.dispose();
+    }, 60000);
+});
+
+describe('collier', () => {
+  it('races à poil du shiba : collier serré dans le poil (sillon), pas un cerceau autour de la collerette', () => {
+    const lab = dog('labrador');
+    const rLab = lab.md.dogFit.collar;
+    for (const breed of ['golden', 'samoyede', 'terre_neuve', 'bouvier_bernois', 'saint_bernard', 'berger_islandais', 'akita', 'lagotto']) {
+      const { look, md } = dog(breed);
+      const c = md.dogFit.collar;
+      // (avant : golden 11 × 15 cm de demi-axes contre 5 × 8 au labrador ; samoyède 15 × 20)
+      expect(c.rx - rLab.rx).toBeLessThan(0.075);
+      expect(c.ry).toBeLessThan(1.45 * c.rx);
+      // sillon du poil sous la bande : posé avec le collier, retiré avec lui
+      const u = md.uniforms.cCollarR.value;
+      expect(u.w).toBe(0);
+      const g = buildGear(md, look, { neck: { item: 'collar', color: 'red' } });
+      expect(u.w).toBe(1);
+      expect(u.x).toBeGreaterThan(c.rx);
+      expect(u.x).toBeLessThan(c.rx + 0.012);
+      removeGear(g);
+      expect(u.w).toBe(0);
+      md.dispose();
+    }
+    lab.md.dispose();
+  });
+
+  it('petits chiens : l\'anneau penche comme le cou (plus à plat dans la gorge), le nœud du salon serre aussi le poil', () => {
+    for (const breed of ['jack_russell', 'spitz_nain', 'carlin', 'chihuahua', 'yorkshire']) {
+      const { look, md } = dog(breed);
+      // (axe du plan du collier à 40° au plus au-dessus de l'horizontale : les os du cou du jack montent à la verticale)
+      const ax = md.anim.S.measure.axis;
+      expect(Math.asin(ax.y)).toBeLessThan(0.71);
+      const acc = buildAccessories(md, look, { neck: { id: 'bow', color: 'pink' } });
+      expect(md.uniforms.cCollarR.value.w).toBe(1);
+      const g = buildGear(md, look, { neck: { item: 'collar', color: 'red' } });
+      removeAccessories(acc);
+      // (le collier reste porté : son sillon aussi)
+      expect(md.uniforms.cCollarR.value.w).toBe(1);
+      removeGear(g);
+      expect(md.uniforms.cCollarR.value.w).toBe(0);
+      md.dispose();
+    }
+  });
+});

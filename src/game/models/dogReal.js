@@ -1689,84 +1689,219 @@ function measureDog(base, D, B) {
     bellyY = Math.min(bellyY, P[i * 3 + 1]);
     halfW = Math.max(halfW, Math.abs(P[i * 3] - L.midX));
   }
-  // Encolure : coupe perpendiculaire à l'axe cou → tête, aux 45 % (là où se pose le collier).
+  // Encolure : coupe perpendiculaire à l'axe cou → tête, aux 40 % (là où se pose le collier).
   const N0 = H[I('neck1')];
   const HJ = H[I('head')];
   const axis = HJ.clone().sub(N0);
   const nlen = axis.length();
   axis.normalize();
+  // (encolure du jack : ses os montent à la verticale alors que le cou penche vers l'avant ; perpendiculaire à eux, le
+  // collier était un anneau à plat dont l'avant passait dans la gorge et la mâchoire — on n'en voyait qu'un bout rouge
+  // sur le côté. Plan du collier incliné comme celui du shiba : axe à 40° au plus au-dessus de l'horizontale.)
+  const AXMAX = 0.7;
+  const neckAxis = Math.asin(clamp(axis.y, -1, 1)) > AXMAX ? V(0, Math.sin(AXMAX), Math.cos(AXMAX)) : axis.clone();
+  // Contour de la coupe tiré de la surface (triangles coupés par le plan, échantillonnés tous les 3 mm), puis ellipse :
+  // demi-axe de côté sur les secteurs des flancs du cou, du dessus sur ceux de la nuque, du dessous sur ceux de la
+  // gorge, borné (le poitrail et la collerette qui débordent sous la gorge ne l'agrandissent plus) ; le collier
+  // s'enfonce dans le poil sur un peu plus de la moitié de son épaisseur. (Le plus grand écart de quelques sommets, poil
+  // et poitrail compris, faisait des races à poil du shiba — golden, samoyède, terre-neuve, bouvier — un cerceau qui
+  // partait de derrière les oreilles et pendait sur le poitrail.)
   const ringAt = (t) => {
     const c = N0.clone().addScaledVector(axis, nlen * t);
-    let sx = 0;
-    let sy = 0;
-    let sz = 0;
-    let cnt = 0;
+    const ax = neckAxis;
+    const part = base.part;
+    const idx = base.prims.coat.index;
+    const ly = V(0, 1, 0).addScaledVector(ax, -ax.y).normalize();
+    const lx = ly.clone().cross(ax).normalize();
+    if (lx.x < 0) lx.negate();
+    const skip = (i) => part[i * 4] > 0.1 || part[i * 4 + 3] > 0.5 || W.head[i] > 0.7 || W.tail[i] > 0.1;
     const pts = [];
-    for (let i = 0; i < n; i++) {
-      if (W.neck[i] + W.head[i] < 0.3 && !(W.leg[i * 4] + W.leg[i * 4 + 1] < 0.05 && Math.abs(P[i * 3 + 2] - c.z) < 0.06)) continue;
-      _v.fromArray(P, i * 3);
-      const dd = _v.clone().sub(c).dot(axis);
-      if (Math.abs(dd) > 0.012) continue;
-      if (W.ear[i * 2] + W.ear[i * 2 + 1] > 0.1) continue;
-      // (pas les joues d'une grosse tête qui débordent sur le cou : chihuahua, carlin)
-      if (W.head[i] > 0.7) continue;
-      pts.push(_v.clone());
-      sx += _v.x;
-      sy += _v.y;
-      sz += _v.z;
-      cnt++;
+    const sd = (i) => (P[i * 3] - c.x) * ax.x + (P[i * 3 + 1] - c.y) * ax.y + (P[i * 3 + 2] - c.z) * ax.z;
+    const ep = [];
+    for (let k = 0; k + 2 < idx.length; k += 3) {
+      const tri = [idx[k], idx[k + 1], idx[k + 2]];
+      const d = tri.map(sd);
+      if ((d[0] > 0 && d[1] > 0 && d[2] > 0) || (d[0] < 0 && d[1] < 0 && d[2] < 0)) continue;
+      if (tri.some(skip)) continue;
+      ep.length = 0;
+      for (const [u, w] of [[0, 1], [1, 2], [2, 0]]) {
+        if (d[u] * d[w] > 0 || d[u] === d[w]) continue;
+        const f = d[u] / (d[u] - d[w]);
+        const iu = tri[u];
+        const iw = tri[w];
+        ep.push(V(P[iu * 3] + (P[iw * 3] - P[iu * 3]) * f, P[iu * 3 + 1] + (P[iw * 3 + 1] - P[iu * 3 + 1]) * f, P[iu * 3 + 2] + (P[iw * 3 + 2] - P[iu * 3 + 2]) * f));
+      }
+      if (ep.length < 2) continue;
+      const m = Math.max(1, Math.ceil(ep[0].distanceTo(ep[1]) / 0.003));
+      for (let j = 0; j <= m; j++) {
+        const q = ep[0].clone().lerp(ep[1], j / m);
+        if (q.distanceTo(c) < 0.25) pts.push(q);
+      }
     }
-    if (!cnt) return { center: c, r: 0.05, rx: 0.05, ry: 0.05 };
-    const center = V(sx / cnt, sy / cnt, sz / cnt);
-    // (demi-axes dans le plan de la coupe : x sur le côté, y vers le dessus du cou ; mesurés en y du monde, le cou
-    // dressé d'un petit chien donnait un collier aplati)
-    const ly = V(0, 1, 0).addScaledVector(axis, -axis.y).normalize();
-    let rx = 0;
-    let ry = 0;
+    if (pts.length < 8) return { center: c, r: 0.05, rx: 0.05, ry: 0.05 };
+    // (étendue du contour : x sur le côté, y vers la nuque)
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let top = -Infinity;
+    let bot = Infinity;
     for (const q of pts) {
-      _w.copy(q).sub(center);
-      rx = Math.max(rx, Math.abs(_w.x));
-      ry = Math.max(ry, Math.abs(_w.dot(ly)));
+      _w.copy(q).sub(c);
+      const x = _w.dot(lx);
+      const y = _w.dot(ly);
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      top = Math.max(top, y);
+      bot = Math.min(bot, y);
     }
-    return { center, r: Math.max(rx, ry), rx, ry };
+    const side = (x1 - x0) / 2;
+    const half = Math.min((top - bot) / 2, 1.3 * side);
+    // Poil du cou au-dessus de la peau : collerette du shiba (à peu près 3 cm, rasée par les races à poil ras et à
+    // l'encolure lisse) et poil ajouté de la race (voir deformDog, étape 9).
+    const kNeck = Math.max(0, 0.3 + 0.5 * B.ruff - 0.6 * (1 - B.ruff));
+    const ruff0 = base.kind === 'shiba' ? 0.031 : 0;
+    const fur = Math.max(0, B.fur < 0 ? ruff0 + B.fur * (1.1 + 1.5 * B.neckSlim) : ruff0 + B.fur * kNeck);
+    const sink = 0.55 * fur;
+    const center = c.clone().addScaledVector(lx, (x0 + x1) / 2).addScaledVector(ly, top - half);
+    const rx = Math.max(side * 0.6, side - sink);
+    const ry = Math.max(half * 0.6, half - sink);
+    return { center, r: Math.max(rx, ry), rx, ry, lx, ly };
   };
   const collar = ringAt(0.4);
-  // Coupes du tronc pour le manteau : de l'épaule à la hanche, rayon par secteur de 15° autour de l'axe du tronc.
+  // Coupes du tronc pour le manteau : de l'épaule à la hanche, rayon par secteur de 15° autour de l'axe du tronc,
+  // centre propre à chaque coupe ([z, rayons, y du centre]). Mesurées sur la surface (triangles de la peau de la race
+  // coupés par le plan de la tranche), pas sur ses sommets : les grands triangles du tronc du jack laissaient la plupart
+  // des secteurs vides, remplis d'un rayon de 1,6 cm (le manteau rentrait sous la peau, des dents de scie sur le dos là
+  // où un sommet tombait dans la tranche), et ses poids par diffusion de chaleur, qui débordent des membres sur les
+  // flancs, écartaient presque tout le tronc (dessus et ventre mesurés à 3 cm l'un de l'autre). Chaque coupe prend le
+  // plus grand rayon des tranches à ±1 cm (la peau bombe entre deux coupes).
   const rings = [];
   const SECT = 24;
   const z0 = hipZ - 0.04;
   const z1 = shZ + 0.04;
   const step = 0.02;
   const ycAt = (topY + bellyY) / 2;
-  for (let z = z0; z <= z1 + 1e-6; z += step) {
-    const r = new Float32Array(SECT);
-    for (let i = 0; i < n; i++) {
-      const lw = W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3];
-      if (W.head[i] > 0.05 || W.tail[i] > 0.05 || W.neck[i] > 0.6) continue;
-      const pz = P[i * 3 + 2];
-      if (Math.abs(pz - z) > step * 0.75) continue;
-      const px = P[i * 3] - L.midX;
-      const py = P[i * 3 + 1] - ycAt;
-      // (membres seulement au-dessus du coude : épaule, cuisse)
-      if (lw > 0.3 && P[i * 3 + 1] < bellyY + 0.25 * (topY - bellyY)) continue;
-      const a = Math.atan2(px, py);
-      const k = ((Math.round((a / (Math.PI * 2)) * SECT) % SECT) + SECT) % SECT;
-      r[k] = Math.max(r[k], Math.hypot(px, py));
-    }
-    for (let k = 0; k < SECT; k++) {
-      if (r[k] > 0) continue;
-      let a = 0;
-      let c = 0;
-      for (const kk of [k - 1, k + 1, k - 2, k + 2]) {
-        const v = r[(kk + SECT) % SECT];
-        if (v > 0) {
-          a += v;
-          c++;
+  {
+    const part = base.part;
+    const idx = base.prims.coat.index;
+    const dz = step / 2;
+    const ns = Math.round((z1 + dz - (z0 - dz)) / dz) + 1;
+    const zs0 = z0 - dz;
+    // (échantillons de chaque tranche : x, y, appartenance aux membres)
+    const sl = Array.from({ length: ns }, () => []);
+    const skip = (i) => part[i * 4] > 0.1 || part[i * 4 + 1] > 0.5 || part[i * 4 + 2] > 0.3;
+    const ep = [];
+    for (let t = 0; t + 2 < idx.length; t += 3) {
+      const a = idx[t];
+      const b = idx[t + 1];
+      const c = idx[t + 2];
+      if (skip(a) || skip(b) || skip(c)) continue;
+      const za = P[a * 3 + 2];
+      const zb = P[b * 3 + 2];
+      const zc = P[c * 3 + 2];
+      const lo = Math.max(0, Math.ceil((Math.min(za, zb, zc) - zs0) / dz));
+      const hi = Math.min(ns - 1, Math.floor((Math.max(za, zb, zc) - zs0) / dz));
+      for (let s = lo; s <= hi; s++) {
+        const Z = zs0 + s * dz;
+        ep.length = 0;
+        for (const [u, w] of [[a, b], [b, c], [c, a]]) {
+          const zu = P[u * 3 + 2];
+          const zw = P[w * 3 + 2];
+          if ((zu - Z) * (zw - Z) > 0 || zu === zw) continue;
+          const f = (Z - zu) / (zw - zu);
+          ep.push([P[u * 3] + (P[w * 3] - P[u * 3]) * f, P[u * 3 + 1] + (P[w * 3 + 1] - P[u * 3 + 1]) * f, part[u * 4 + 3] + (part[w * 4 + 3] - part[u * 4 + 3]) * f]);
+        }
+        if (ep.length < 2) continue;
+        const [p, q] = ep;
+        const m = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / 0.004));
+        for (let k = 0; k <= m; k++) {
+          const f = k / m;
+          sl[s].push(p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, p[2] + (q[2] - p[2]) * f);
         }
       }
-      r[k] = c ? a / c : (topY - bellyY) / 2;
     }
-    rings.push([z, r]);
+    // Centre commun des coupes : milieu du dessus et du dessous du tronc sur la ligne médiane, mesuré au milieu du tronc
+    // (vers les épaules, le dessus devient la crête de l'encolure et le dessous le sternum ou les pieds avant, serrés,
+    // du jack : le centre sautait de 15 cm d'une coupe à l'autre).
+    const sOf = (z) => clamp(Math.round((z - zs0) / dz), 0, ns - 1);
+    let tSum = 0;
+    let bSum = 0;
+    let cnt = 0;
+    for (let s = sOf(hipZ + 0.25 * (shZ - hipZ)); s <= sOf(shZ - 0.25 * (shZ - hipZ)); s++) {
+      const S = sl[s];
+      let top = -Infinity;
+      let bot = Infinity;
+      for (let k = 0; k < S.length; k += 3) {
+        if (Math.abs(S[k] - L.midX) > 0.03) continue;
+        top = Math.max(top, S[k + 1]);
+        bot = Math.min(bot, S[k + 1]);
+      }
+      if (!(top > bot)) continue;
+      tSum += top;
+      bSum += bot;
+      cnt++;
+    }
+    const topC = cnt ? tSum / cnt : topY;
+    const botC = cnt ? bSum / cnt : bellyY;
+    const yc = (topC + botC) / 2;
+    const legCut = botC + 0.25 * (topC - botC);
+    // Rayons de chaque tranche autour de ce centre ; les membres seulement au-dessus du quart bas du tronc (épaule,
+    // cuisse).
+    const cut = sl.map((S) => {
+      if (S.length < 9) return null;
+      const r = new Float32Array(SECT);
+      for (let k = 0; k < S.length; k += 3) {
+        if (S[k + 2] > 0.3 && S[k + 1] < legCut) continue;
+        const px = S[k] - L.midX;
+        const py = S[k + 1] - yc;
+        const s = ((Math.round((Math.atan2(px, py) / (Math.PI * 2)) * SECT) % SECT) + SECT) % SECT;
+        r[s] = Math.max(r[s], Math.hypot(px, py));
+      }
+      return r;
+    });
+    // Chaque coupe : le plus grand rayon des tranches à ±1 cm, secteur par secteur.
+    const got = [];
+    for (let z = z0, j = 1; z <= z1 + 1e-6; z += step, j += 2) {
+      const r = new Float32Array(SECT);
+      for (const o of [cut[j - 1], cut[j], cut[j + 1]]) if (o) for (let k = 0; k < SECT; k++) r[k] = Math.max(r[k], o[k]);
+      rings.push([z, r, yc]);
+      got.push(r.map((x) => (x > 0 ? 1 : 0)));
+    }
+    // Secteur sans surface (membres écartés, coupe au-delà des épaules où presque rien n'est mesuré) : le rayon de la coupe
+    // voisine vers le milieu du tronc (en interpolant autour de la coupe, l'avant du manteau des races du jack s'ouvrait
+    // en ailes devant les épaules), sinon interpolé entre les secteurs mesurés les plus proches.
+    const mid = rings.reduce((b, x, i) => (Math.abs(x[0] - (hipZ + shZ) / 2) < Math.abs(rings[b][0] - (hipZ + shZ) / 2) ? i : b), 0);
+    const fill = (i, from) => {
+      const r = rings[i][1];
+      const known = got[i].reduce((a, x) => a + x, 0);
+      for (let k = 0; k < SECT; k++) {
+        if (got[i][k] && known >= SECT / 2) continue;
+        if (from !== null && !got[i][k]) {
+          r[k] = rings[from][1][k];
+          continue;
+        }
+        if (got[i][k]) continue;
+        let a = 0;
+        let b = 0;
+        let da = 0;
+        let db = 0;
+        for (let d = 1; d < SECT && !a; d++) if (got[i][(k - d + SECT) % SECT]) [a, da] = [r[(k - d + SECT) % SECT], d];
+        for (let d = 1; d < SECT && !b; d++) if (got[i][(k + d) % SECT]) [b, db] = [r[(k + d) % SECT], d];
+        r[k] = a && b ? (a * db + b * da) / (da + db) : a || b || (topC - botC) / 2;
+      }
+      // (moins de la moitié des secteurs mesurés : à peine plus que la coupe voisine, partout ; jamais moins des trois
+      // quarts de la coupe voisine — devant les épaules du jack, la tranche ne touche plus que l'encolure et le manteau
+      // rentrait dans le poitrail)
+      if (from === null) return;
+      for (let k = 0; k < SECT; k++) {
+        if (known < SECT / 2) r[k] = Math.min(r[k], rings[from][1][k] * 1.15);
+        r[k] = Math.max(r[k], rings[from][1][k] * 0.75);
+      }
+    };
+    if (rings.length) {
+      fill(mid, null);
+      for (let i = mid + 1; i < rings.length; i++) fill(i, i - 1);
+      for (let i = mid - 1; i >= 0; i--) fill(i, i + 1);
+    }
   }
   // Dessus du crâne entre les oreilles, bout du nez, bouche.
   let skullTop = HJ.clone();
@@ -1791,7 +1926,8 @@ function measureDog(base, D, B) {
     hipZ, shZ, topY, bellyY, halfW, ycAt, collar, rings, skullTop, noseTip, soles,
     elbowY: (H[I('radiusL')].y + H[I('radiusR')].y) / 2,
     headY: HJ.y,
-    axis, nlen,
+    // (axe du plan du collier, voir neckAxis)
+    axis: neckAxis, nlen,
   };
 }
 
@@ -1998,6 +2134,23 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
     realDog: true,
   };
   model.skinGear = (mesh) => skinDogGear(model, S, base, mesh, hb);
+  // Sillon du collier (dogCoat.js, cCollar*) : le poil est serré sous la bande d'un collier ou d'un accessoire du cou
+  // porté. key : qui le porte ; null le retire. Plusieurs : l'ellipse la plus petite.
+  uniforms.cCollarC.value.copy(M.collar.center);
+  uniforms.cCollarN.value.copy(M.axis);
+  if (M.collar.lx) uniforms.cCollarX.value.copy(M.collar.lx);
+  const grooves = new Map();
+  model.setGroove = (key, g = null) => {
+    if (g) grooves.set(key, g);
+    else grooves.delete(key);
+    const all = [...grooves.values()];
+    const r = uniforms.cCollarR.value;
+    if (!all.length) {
+      r.w = 0;
+      return;
+    }
+    r.set(Math.min(...all.map((x) => x.rx)), Math.min(...all.map((x) => x.ry)), Math.max(...all.map((x) => x.w)), 1);
+  };
   model.anim = new RealDogAnim(model, base, S);
   hb.anim = model.anim;
   model.bounds = hb;

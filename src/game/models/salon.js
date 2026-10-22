@@ -205,6 +205,11 @@ export function buildAccessories(model, look, accessories = {}) {
       const band = 0.01;
       const torus = new THREE.Mesh(flatBand(rx, ry, 0.003, band), mat(worn.id === 'bandana' ? color : 0x3a2a20, 0.6));
       frame.add(torus);
+      // (chien réaliste : le poil est serré sous la bande, comme sous le collier — voir dogReal.js setGroove)
+      if (model.setGroove) {
+        model.setGroove(frame, { rx, ry, w: band });
+        frame.userData.onRemove = () => model.setGroove(frame, null);
+      }
       const throat = -(ry + band);
       // (lapin réaliste : le nœud sur le côté de la nuque ; accroupi, sa gorge touche presque le sol et le nœud y
       // disparaissait entre ses pattes)
@@ -293,6 +298,7 @@ export function buildAccessories(model, look, accessories = {}) {
 export function removeAccessories(list) {
   for (const o of list ?? []) {
     o.parent?.remove(o);
+    o.userData.onRemove?.();
     o.traverse((m) => {
       if (m.isMesh) {
         m.geometry.dispose();

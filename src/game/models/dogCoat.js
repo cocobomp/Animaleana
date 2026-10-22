@@ -297,6 +297,12 @@ export function makeCoatUniforms() {
     // Coupe du salon de toilettage (m, le long de la normale) : tronc, collerette (cou et poitrail), pompons (bas des
     // pattes), bout de la queue et dessus du crâne.
     cCut: { value: new THREE.Vector4(0, 0, 0, 0) },
+    // Collier porté (dogReal.js setGroove) : le poil est serré sous sa bande. Centre, axe du cou et côté de l'anneau
+    // (repère de repos de la race) ; demi-axes de l'ellipse, demi-largeur de la bande, 1 si porté.
+    cCollarC: { value: new THREE.Vector3() },
+    cCollarN: { value: new THREE.Vector3(0, 0, 1) },
+    cCollarX: { value: new THREE.Vector3(1, 0, 0) },
+    cCollarR: { value: new THREE.Vector4(0.05, 0.05, 0.01, 0) },
     // Relief du poil : frisé (x : bouclettes), soyeux (y : mèches qui tombent) et bouclettes serrées (z : anneaux de
     // poil laineux du lagotto), 0 à 1.
     cCurl: { value: new THREE.Vector3(0, 0, 0) },
@@ -377,6 +383,10 @@ uniform vec4 cHead;
 uniform float cFat;
 uniform float cBreath;
 uniform vec4 cCut;
+uniform vec3 cCollarC;
+uniform vec3 cCollarN;
+uniform vec3 cCollarX;
+uniform vec4 cCollarR;
 varying vec3 vCmpPos;
 varying vec4 vCmpPart;
 varying float vCmpLow;`;
@@ -407,6 +417,25 @@ const PUSH_V = /* glsl */ `
   // (pompon modelé : ni embonpoint ni coupe, seulement montré ou ramené à son centre)
   if (cmpPom > 0.0) push = -cmpPom * (1.0 - cPom);
   transformed += normalize(objectNormal) * push;
+  // Collier porté : dans sa bande (et un peu au-delà, en fondu), le poil qui dépasse de l'ellipse du collier est ramené
+  // vers l'axe du cou, comme serré sous lui (sans cela, le collier d'un chien à collerette flottait en cerceau autour
+  // du poil ou disparaissait dedans). Mesuré sur la position de repos, appliqué après la peau (matrice du sommet).
+  if (cCollarR.w > 0.0) {
+    vec3 dp = position - cCollarC;
+    float d = dot(dp, cCollarN);
+    vec3 rv = dp - d * cCollarN;
+    float rl = max(length(rv), 1e-5);
+    float ux = dot(rv, cCollarX) / rl;
+    float uy2 = max(0.0, 1.0 - ux * ux);
+    float re = inversesqrt(ux * ux / (cCollarR.x * cCollarR.x) + uy2 / (cCollarR.y * cCollarR.y));
+    float band = 1.0 - smoothstep(cCollarR.z, cCollarR.z * 2.8, abs(d));
+    float keepC = (1.0 - cmpPart.x) * (1.0 - smoothstep(0.5, 0.9, cmpPart.z)) * (1.0 - cmpPart.w) * (1.0 - cmpPart.y);
+    vec3 pinch = rv * (max(0.0, rl - re) / rl) * band * keepC;
+    #ifdef USE_SKINNING
+      pinch = (skinMatrix * vec4(pinch, 0.0)).xyz;
+    #endif
+    transformed -= pinch;
+  }
 }`;
 
 const COMMON_F = /* glsl */ `

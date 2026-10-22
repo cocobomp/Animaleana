@@ -595,7 +595,10 @@ function buildDogGear(model, gear, add) {
     dRing.rotation.y = Math.PI / 2;
     ring.add(dRing);
     add.group(c.bone, ring);
-    ring.userData.dispose = [geo, torus.material, buckle.geometry, medal.geometry, dRing.geometry, metal];
+    // (le poil est serré sous la bande : sillon du collier dans la robe, retiré avec lui)
+    const groove = { dispose: () => model.setGroove?.(ring, null) };
+    model.setGroove?.(ring, { rx: c.rx + gap, ry: c.ry + gap, w });
+    ring.userData.dispose = [geo, torus.material, buckle.geometry, medal.geometry, dRing.geometry, metal, groove];
   }
   if (gear.blanket && fit.rings?.length) {
     const color = gearColor(gear.blanket, BLANKET_COLORS.red);
@@ -611,11 +614,12 @@ function buildDogGear(model, gear, add) {
     const pos = [];
     const uv = [];
     const idx = [];
-    rings.forEach(([z, r], i) => {
+    // (centre de chaque coupe : son troisième nombre, sinon celui du tronc)
+    rings.forEach(([z, r, yc = fit.ycAt], i) => {
       for (let j = 0; j <= NA; j++) {
         const a = -A + (2 * A * j) / NA;
         const rr = radiusAt(r, a) + 0.012;
-        pos.push(fit.midX + Math.sin(a) * rr, fit.ycAt + Math.cos(a) * rr, z);
+        pos.push(fit.midX + Math.sin(a) * rr, yc + Math.cos(a) * rr, z);
         uv.push(j / NA, i / Math.max(1, rings.length - 1));
       }
     });
@@ -636,24 +640,24 @@ function buildDogGear(model, gear, add) {
     // Bordure claire tout autour, sangles sous le ventre (à l'avant et à l'arrière).
     const trim = [];
     const ends = [rings[0], rings[rings.length - 1]];
-    for (const [z, r] of ends) {
+    for (const [z, r, yc = fit.ycAt] of ends) {
       const pts = [];
       for (let j = 0; j <= NA; j++) {
         const a = -A + (2 * A * j) / NA;
         const rr = radiusAt(r, a) + 0.016;
-        pts.push(new THREE.Vector3(fit.midX + Math.sin(a) * rr, fit.ycAt + Math.cos(a) * rr, z));
+        pts.push(new THREE.Vector3(fit.midX + Math.sin(a) * rr, yc + Math.cos(a) * rr, z));
       }
       trim.push(pts);
     }
     for (const pts of trim) add.skin(add(model.root, strap(pts, 0.007, 0.004), mat(0xf2ede4, 0.8)));
     const belt = mat(0x2a2a2a, 0.6);
     for (const t of [0.22, 0.8]) {
-      const [z, r] = rings[Math.min(rings.length - 1, Math.round(t * (rings.length - 1)))];
+      const [z, r, yc = fit.ycAt] = rings[Math.min(rings.length - 1, Math.round(t * (rings.length - 1)))];
       const pts = [];
       for (let j = 0; j <= 24; j++) {
         const a = A + ((Math.PI * 2 - 2 * A) * j) / 24;
         const rr = radiusAt(r, a) + 0.01;
-        pts.push(new THREE.Vector3(fit.midX + Math.sin(a) * rr, fit.ycAt + Math.cos(a) * rr, z));
+        pts.push(new THREE.Vector3(fit.midX + Math.sin(a) * rr, yc + Math.cos(a) * rr, z));
       }
       add.skin(add(model.root, strap(pts, 0.008, 0.003), belt));
     }

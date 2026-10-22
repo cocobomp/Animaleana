@@ -139,6 +139,12 @@ describe('poil long de la Highland', () => {
     expect(calf.build.hair).toBeGreaterThan(0.7 * f.build.hair);
     expect(calf.build.fringe).toBeGreaterThan(0.65 * f.build.fringe);
     expect(calf.hair.geometry.userData.cards).toBeGreaterThan(0.9 * g.userData.cards);
+    if (process.env.COW_LOG) {
+      const tri = (m) => (m.hair.geometry.index ? m.hair.geometry.index.count : m.hair.geometry.attributes.position.count) / 3;
+      const bull = cow('highland', { sex: 'm' });
+      console.log('MECHES', JSON.stringify({ vache: [g.userData.cards, tri(f)], veau: [calf.hair.geometry.userData.cards, tri(calf)], taureau: [bull.hair?.geometry.userData.cards, bull.hair ? tri(bull) : 0] }));
+      bull.dispose();
+    }
     f.dispose();
     calf.dispose();
   });

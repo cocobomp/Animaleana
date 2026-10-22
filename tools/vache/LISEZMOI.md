@@ -68,6 +68,42 @@ bonnet anti-mouches, mère pour la tétée, râtelier, `xray` : sol transparent)
   le gabarit — sur le côté, puis relevée, pointe vers le haut (`bendLongHorns`) ; elles ressemblaient à deux pointes
   dressées.
 
+### Après la contre-vérification (beauté et jeu)
+
+- **Taches fantômes** des robes unies (Charolaise, Highland, Retinta, Hérens rouge, Wagyu, Canadienne) : le grain du GLB
+  garde la clarté des taches de la photo d'origine (masque `aoMap` R) ; il est ramené à la même clarté dedans et dehors
+  (`COW_GRAIN` dans `cowCoat.js`, mesuré à l'écran : rapport 1,10). Écart de clarté tache/hors tache à l'écran : 9,6 à
+  15,3 % → −2,4 à +1,2 %. **À remesurer si `tex.mjs` refait la texture de grain** (rendu au grain plat comparé au rendu
+  normal, même lumière, dans les anciennes taches et hors taches).
+- **Ventre blanc** (Prim'Holstein, Hereford) : limite nette et irrégulière, plus de dégradé gris sale sur le poitrail et le
+  bas du flanc ; bas des pattes blanc à bord net au genou.
+- **Races sans cornes et veaux** : les cornes « rentrées » ne sont plus deux pyramides couleur corne ; la corne est
+  écrasée en petit dôme sous la peau du chignon (`pollHorns`, 6 mm chez l'adulte, 14 mm de bouton chez le veau), peint
+  couleur robe.
+- **Highland** : vraies mèches serrées (1 100 sur le corps), étroites (4,8 cm au plus), en deux cartes croisées, texture
+  de brins fins (`lockTexture('fine')`) ; frange dense qui couvre les yeux (320 mèches) ; veau poilu (poil à 75 %, frange
+  à 70 %, presque autant de mèches). **Coût** : vache 2 524 cartes (15 144 triangles), veau 2 404 (14 424), taureau
+  1 892 (11 352) — il y en avait 920 et 632 ; un seul appel de dessin, caché au loin (au-delà de 12 m en basse).
+- **Mangeoire** : les petites races (Highland, Hérens, Bretonne) relèvent l'encolure jusqu'au foin (bouche à 61-62 cm
+  pour toutes les races, au lieu de 41 cm) ; le veau trop petit pour atteindre le bac broute au pied de la mangeoire
+  (plus de museau dans le bac).
+- **Sabots des veaux** : ils ne glissent plus aux allures ni quand ils gambadent sur place (seuils du sabot tenu en
+  centimètres du monde — `lockWorld` — et rappel suivant la vitesse du clip ; glissement par appui > 1 cm : 16/71, 4/47,
+  10/119 → 0 ; gambade 6-7 cm → 0).
+- **Se coucher et se relever**, à l'arrêt, au pas ou en broutant : genoux et avant-bras à 1 cm au plus sous l'herbe
+  (−3,7 cm avant), onglons repliés à 2,5 cm au plus (`hoofPts`, poses intermédiaires de « se coucher » et « se relever »
+  dans les points de contact) ; taureau de Highland couché posé (+0,3 cm, il flottait d'1 cm).
+- **Face des taureaux à face blanche** : la carte de normales du Rocketbox est adoucie sur la tête claire (plus de stries
+  gris-bleu sous l'œil) ; **cornes de lutteuse** de l'Hérens propres à la vache (épaisses à la base, pointes en avant), plus
+  celles de la Wagyu ; **Hereford** : limite rouge/blanc nette.
+- **Jeu** : le veau rejoint sa place à la mamelle en longeant le flanc, s'y arrête et tète (au jeu, 120 s après une
+  naissance : 0,06 % → 67 à 92 % du temps) ; il ne pousse plus sa mère (seul le veau s'écarte du corps de sa mère, une
+  boîte et non un cercle) ; **traite** (`Game.collect`) : la joueuse fait le geste, face à la mamelle, mains aux trayons ;
+  **van** : un bovin trop long pour sa stalle (taureau charolais) est réduit de 15 % au plus, sa croupe reste devant la
+  barre arrière (18 cm au-delà avant ; seule la queue la dépasse).
+- Tests : `tests/cowCorrections.test.js` (robe, chignon, Highland, mangeoire, sabots des veaux, se coucher et se relever,
+  cornes) et `tests/cowEntity.test.js` (tétée par l'entité, traite par `Game.collect`, van) — déterministes.
+
 ## Dans le jeu
 
 - `src/game/models/cowReal.js` : construction (squelette par vache, géométrie partagée par gabarit), races, cornes,
@@ -89,7 +125,7 @@ bonnet anti-mouches, mère pour la tétée, râtelier, `xray` : sol transparent)
   son modèle (Rocketbox), plus massif ; cornes de sa race — sans cornes (Charolaise, Angus), longues refaites le long
   d'une courbe (`bullHorn` : Highland à l'horizontale sur le côté, pointes tournées vers l'avant et relevées, épaisses à
   la base ; Retinta en lyre), de lutteuse portées en avant (Hérens) ; poil long et frange de la Highland semés aussi
-  entre ses sommets (1 900 sommets, deux fois moins que la vache : 632 mèches) ; taches calculées pour les robes pie, au
+  entre ses sommets (1 900 sommets, deux fois moins que la vache : 946 mèches croisées, 1 892 cartes) ; taches calculées pour les robes pie, au
   seuil de la race (`bullPie` : Bretonne pie noire) ; lunettes de la Normande en tache allongée au bord irrégulier ;
   face blanche sans marbrures (creux du grain d'une robe claire réchauffés, sinon gris-bleu sous le ciel) ; jamais trait
   ni tété (pas de mamelle, pas de clip ; la tétée ne choisit qu'une mère) ; contre les mouches, il chasse de la queue ou

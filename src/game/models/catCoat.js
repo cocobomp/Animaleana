@@ -120,6 +120,8 @@ export function makeCatLandUniforms(L) {
     cMisc: { value: new THREE.Vector4(L.midX, L.tailTipZ, L.neckZ, L.tailBaseZ) },
     cNose: { value: new THREE.Vector4(L.nose.x, L.nose.y, L.nose.z, Math.max(0.02, L.noseZ - L.head.z)) },
     cTailB: { value: new THREE.Vector4(L.tailBase.x, L.tailBase.y, L.tailBase.z, Math.max(0.05, L.tailLen)) },
+    // demi-largeur du tronc (dessous clair : sous le ventre, pas sur les flancs)
+    cBody: { value: new THREE.Vector4(Math.max(0.02, L.halfW ?? 0.05), 0, 0, 0) },
     // iris peint (chaton : yeux noirs dans sa texture) : actif, rayon du globe, demi-angle de l'iris, largeur de la pupille
     cIris: { value: new THREE.Vector4(L.paintIris ? 1 : 0, L.eyeR ?? 0.008, 0.86, 0.14) },
   };
@@ -190,6 +192,7 @@ uniform vec4 cEye;
 uniform vec4 cMisc;
 uniform vec4 cNose;
 uniform vec4 cTailB;
+uniform vec4 cBody;
 uniform float cRole;
 uniform float cTexMode;
 uniform vec3 cMeans;
@@ -261,7 +264,7 @@ vec3 cmpHsv(vec3 c) {
 struct CatR {
   float ear; float tail; float head; float legs; float face; float trunk;
   float h; float u; float hz; float dn; float tt; float ax;
-  float muzzle; float chin; float throat; float belly; float chest; float legLow; float paws;
+  float muzzle; float chin; float throat; float belly; float chest; float legLow; float paws; float under;
   vec3 q;
 };
 CatR catRegions(vec3 p, vec4 part) {
@@ -290,6 +293,18 @@ CatR catRegions(vec3 p, vec4 part) {
     * (1.0 - smoothstep(yl - 0.006, yl + 0.006, p.y)) * (1.0 - smoothstep(0.3, 0.6, r.hz));
   r.chest = r.trunk * (1.0 - r.legs * 0.4) * smoothstep(0.8, 1.0, r.u) * (1.0 - smoothstep(0.35, 0.65, r.h));
   r.belly = r.trunk * (1.0 - r.legs * 0.5) * (1.0 - smoothstep(0.02, 0.3, r.h)) * smoothstep(-0.1, 0.15, r.u) * (1.0 - smoothstep(1.0, 1.25, r.u));
+  // Dessous clair des robes tigrées, tiquetées, tachetées et unies : sous la ligne du ventre, bord en arc (plus haut au
+  // milieu du ventre) et bruité, fondu vers le bas des pattes par la hauteur. Le ventre des taches blanches (r.belly),
+  // borné par l'appartenance des sommets aux pattes, faisait un rectangle clair à bords nets sur le flanc (bord du haut
+  // droit de l'épaule à la hanche, bords droits au coude et à la cuisse).
+  float arcU = clamp((r.u + 0.05) / 1.15, 0.0, 1.0);
+  float edgeN = (cmpNoise(r.q * 7.0 + 2.3) - 0.5) * 0.14 + (cmpNoise(r.q * 19.0 + 8.1) - 0.5) * 0.06;
+  float topH = -0.06 + 0.16 * sin(3.1416 * arcU);
+  // (et sous le ventre plutôt que sur les flancs : pâlit vers le milieu, vu de profil il ne reste qu'un liseré fondu ;
+  // les plis de l'aisselle et de l'aine ne découpent plus de bords droits)
+  r.under = r.trunk * (1.0 - smoothstep(topH - 0.1, topH + 0.1, r.h + edgeN)) * smoothstep(-0.3, 0.12, r.u) * (1.0 - smoothstep(1.0, 1.3, r.u))
+    * smoothstep(-0.95, -0.4, r.h) * (1.0 - smoothstep(0.3, 0.85, r.ax / cBody.x + edgeN));
+  r.under = max(r.under, r.chest * 0.6 * (1.0 - smoothstep(0.45, 1.0, r.ax / cBody.x + edgeN)));
   r.legLow = r.legs * (1.0 - smoothstep(cEye.w * 0.25, cEye.w * 0.55, p.y));
   r.paws = r.legs * (1.0 - smoothstep(cEye.w * 0.12, cEye.w * 0.26, p.y));
   return r;
@@ -346,11 +361,11 @@ vec3 catCoat(vec3 p, vec4 part) {
   vec3 sd = vec3(cSeed, cSeed * 0.37, cSeed * 0.71);
   float n1 = cmpNoise(r.q * 4.0 + sd);
   float n2 = cmpNoise(r.q * 11.0 + 5.0 + sd);
-  float light = max(r.belly * 0.75, max(r.chin * 0.8, r.muzzle * 0.45));
+  float light = max(r.under * 0.7, max(r.chin * 0.8, r.muzzle * 0.45));
   vec3 c = cBase;
   if (cPat < 0.5) {
     // uni : un peu plus clair dessous
-    c = mix(cBase, mix(cBase, vec3(1.0), 0.18), r.belly * 0.5);
+    c = mix(cBase, mix(cBase, vec3(1.0), 0.18), r.under * 0.5);
   } else if (cPat < 2.5) {
     float warp = n1 * 0.9 + n2 * 0.25;
     float tring = sin((r.tt * 8.0 + n2 * 0.3) * 6.2832);
@@ -372,7 +387,7 @@ vec3 catCoat(vec3 p, vec4 part) {
     }
     s = mix(s, tring, r.tail);
     float stripe = smoothstep(0.25, 0.8, s + (n2 - 0.5) * 0.6) * (0.6 + 0.4 * n1);
-    stripe *= (1.0 - r.belly * 0.85) * (1.0 - r.muzzle) * (1.0 - r.chin);
+    stripe *= (1.0 - r.under * 0.8) * (1.0 - r.muzzle) * (1.0 - r.chin);
     stripe = max(stripe * (1.0 - r.face * (1.0 - smoothstep(0.55, 0.7, r.hz))), catFaceStripes(p, r, n2));
     stripe = max(stripe, r.trunk * (1.0 - r.legs) * smoothstep(0.88, 0.98, r.h) * (1.0 - smoothstep(0.006, 0.014, r.ax)));
     stripe = max(stripe, r.tail * smoothstep(0.82, 0.95, r.tt));
@@ -383,7 +398,8 @@ vec3 catCoat(vec3 p, vec4 part) {
     float small = max(r.face, r.legs);
     vec2 sp = catSpots(r.q * mix(5.5, mix(11.0, 20.0, r.face), small) + vec3(3.1, 1.7, 0.0) + sd, 0.3 - 0.08 * r.face, 0.12);
     float tring = smoothstep(0.55, 0.85, sin(r.tt * 6.0 * 6.2832) * 0.5 + 0.5) * smoothstep(0.3, 0.6, r.tt);
-    vec3 ground = mix(cBase, vec3(0.95, 0.9, 0.8), max(r.belly * 0.85, max(r.chin, r.muzzle * 0.7)));
+    // (dessous du bengal à peine plus clair : doré pâle, pas blanc)
+    vec3 ground = mix(cBase, vec3(0.95, 0.9, 0.8), max(r.under * 0.5, max(r.chin, r.muzzle * 0.7)));
     vec3 core = mix(cBase, cSec, 0.4);
     c = mix(ground, core, sp.x * (1.0 - small) * (1.0 - r.tail));
     float dark = max(sp.y * (1.0 - small), sp.x * small * (1.0 - r.muzzle) * (1.0 - r.face * smoothstep(0.35, 0.55, r.hz)));
@@ -397,7 +413,8 @@ vec3 catCoat(vec3 p, vec4 part) {
     c = mix(c, mix(cBase, vec3(1.0, 0.92, 0.8), 0.3), smoothstep(0.1, 0.35, 1.0 - tick) * 0.25);
     float bars = r.legs * smoothstep(0.6, 0.9, sin(p.y / max(0.02, cEye.w) * 4.0 * 6.2832) * 0.5 + 0.5) * smoothstep(cEye.w * 0.5, cEye.w, p.y) * 0.35;
     c = mix(c, cSec, max(bars, max(r.tail * smoothstep(0.85, 0.97, r.tt), catFaceStripes(p, r, n2) * 0.5)));
-    c = mix(c, mix(cBase, vec3(0.97, 0.92, 0.82), 0.6), max(light, r.throat * 0.4));
+    // (dessous de l'abyssin : crème doux, à peine plus clair que la robe)
+    c = mix(c, mix(cBase, vec3(0.97, 0.92, 0.82), 0.45), max(max(r.under * 0.55, max(r.chin * 0.8, r.muzzle * 0.45)), r.throat * 0.4));
   } else if (cPat < 5.5) {
     // colourpoint : corps crème (un peu plus foncé sur le dos), masque autour du nez, oreilles, pattes et queue
     float ms = cPoint.y;
@@ -606,7 +623,7 @@ export function catCoatMaterial(src, shared, opts) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.55, cHair.x), 0.45, cWet);');
   };
-  mat.customProgramCacheKey = () => 'cat-coat-v3';
+  mat.customProgramCacheKey = () => 'cat-coat-v4';
   return mat;
 }
 
@@ -697,7 +714,7 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
       .replace('#include <common>', `#include <common>\n${SHELL_F}`)
       .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${SHELL_DISCARD_F}`);
   };
-  mat.customProgramCacheKey = () => 'cat-shell-v3';
+  mat.customProgramCacheKey = () => 'cat-shell-v4';
   mat.side = THREE.FrontSide;
   // (couches dessinées après les objets opaques, dans l'ordre : renderOrder croissant, voir catReal.js)
   mat.transparent = true;

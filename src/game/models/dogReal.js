@@ -2025,6 +2025,8 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   // Os de la langue (indices contigus du squelette) : rose dans le shader jusqu'au bout.
   const tongueI = [1, 2, 3, 4, 5, 6].map((k) => base.index.get('tongue' + k)).filter((i) => i !== undefined);
   if (tongueI.length && Math.max(...tongueI) - Math.min(...tongueI) === tongueI.length - 1) uniforms.cTongue.value.set(Math.min(...tongueI), Math.max(...tongueI));
+  // Vibrisses des sourcils du shiba (lames sombres restées dans le GLB) : leur texel (mesuré sur la texture du shiba).
+  if (B.model === 'shiba') uniforms.cWhisk.value.set(0.4025, 0.0805, 0.409, 0.086);
   const keepCfg = base.cfg.keep;
   const nose = S.measure.noseTip;
   // (barbe du labradoodle : truffe gardée plus serrée — le poil sombre de la lèvre du modèle, sous la truffe, restait

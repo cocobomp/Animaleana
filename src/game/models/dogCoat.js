@@ -316,6 +316,9 @@ export function makeCoatUniforms() {
     // Os de la langue (premier et dernier indices du squelette, contigus ; 0 : pas de langue) : la langue qui pend
     // reste rose jusqu'au bout (le bout de sa texture, pâle, n'était pas gardé par le masque rose et prenait la robe).
     cTongue: { value: new THREE.Vector2(0, 0) },
+    // Vibrisses des sourcils (rectangle de leur texel sombre dans la texture du shiba : u0, v0, u1, v1 ; vide : aucune)
+    // éclaircies sur les robes claires (traits noirs au-dessus des yeux du dogue, du lagotto, de l'akita).
+    cWhisk: { value: new THREE.Vector4(0, 0, 0, 0) },
     // Truffe peinte (lagotto, dans sa barbe : centre xyz au repos, rayon w ; 0 : celle de la texture) et sa couleur.
     cNose: { value: new THREE.Vector4(0, 0, 0, 0) },
     cNoseC: { value: new THREE.Color(0x3a2419) },
@@ -504,6 +507,7 @@ uniform float cSheen;
 uniform vec4 cNose;
 uniform vec3 cNoseC;
 uniform float cWrinkle;
+uniform vec4 cWhisk;
 uniform vec4 cLand;
 uniform vec4 cHead;
 uniform vec4 cEye;
@@ -983,6 +987,13 @@ if (cOn > 0.5) {
     keep = keep * (1.0 - lip);
     nc = mix(nc, vec3(0.035, 0.026, 0.022), lip);
   }
+  // Vibrisses des sourcils : sur une robe claire, de la teinte de la robe un peu assombrie au lieu de noires.
+  #ifdef USE_MAP
+  if (cWhisk.z > cWhisk.x && vMapUv.x >= cWhisk.x && vMapUv.x <= cWhisk.z && vMapUv.y >= cWhisk.y && vMapUv.y <= cWhisk.w) {
+    float lc = dot(coat, LUM);
+    c0 = mix(c0, coat * 0.72, smoothstep(0.2, 0.55, lc));
+  }
+  #endif
   // Langue (poids de ses os) : rose là où la texture ne l'est pas (son bout pâle).
   nc = mix(nc, vec3(0.6, 0.16, 0.19) * (0.85 + 0.3 * smoothstep(0.1, 0.5, lum0)), smoothstep(0.3, 0.7, vCmpTongue));
   diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0));

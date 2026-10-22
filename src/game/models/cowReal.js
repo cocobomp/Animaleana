@@ -923,6 +923,8 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
     // (longueur mesurée, du bout du nez à la pointe des fesses — van, rayon — et mamelle, en long : tétée du veau)
     bodyLength: (M.noseZ - M.rearZ) * size,
     noseZ: M.noseZ * size,
+    // (hauteur du bout du nez au repos, tête haute : la mangeoire est-elle à sa portée ?)
+    noseY: M.nose.y * size,
     rumpZ: M.rearZ * size,
     halfWidth: M.halfW * size,
     udderZ: (M.teat?.z ?? M.hipZ + 0.1) * size,
@@ -1116,12 +1118,22 @@ export class RealCowAnim extends RealSheepAnim {
       return;
     }
     this.reachBend ??= 0;
-    this.turn(md.neckBone, AX, this.reachBend * this.reachK);
+    const eat = st.action !== 'nurse';
+    const b = this.reachBend * this.reachK;
+    // (à l'auge, l'encolure relève la tête par sa BASE — neck1 — et le haut de l'encolure : les races à pattes courtes
+    // — Highland, Hérens, Bretonne — gardaient la bouche à 41 cm, 20 cm sous le foin, l'encolure ne pliant que près de la
+    // tête ; la tête reste penchée vers le foin)
+    const base = eat && b < 0 ? this.model.bone('neck1') : null;
+    if (base) {
+      this.turn(base, AX, b * 0.6);
+      this.turn(md.neckBone, AX, b * 0.4);
+      this.turn(md.headBone, AX, -b * 0.35);
+    } else this.turn(md.neckBone, AX, b);
     if (st.action === 'nurse') this.turn(md.headBone, AX, -0.25 * this.reachK);
     md.head.updateWorldMatrix(true, false);
     const m = (this.mouthW ??= V()).copy(md.mouth);
     md.head.localToWorld(m);
-    if (on) this.reachBend = clamp(this.reachBend + clamp((m.y - want) * 2.5, -0.1, 0.1) * Math.min(1, dt * 8), -0.9, 1.0);
+    if (on) this.reachBend = clamp(this.reachBend + clamp((m.y - want) * 2.5, -0.1, 0.1) * Math.min(1, dt * 8), eat ? -1.6 : -0.9, 1.0);
   }
 
   /**
@@ -1486,7 +1498,12 @@ export function animateRealCow(e, dt, sad) {
   if (anim.milkT > 0 && !st.moving) action = 'milk';
   else if (e.state === 'eat') {
     action = eq === 'cowBrush' ? 'brush' : 'eat';
-    if (FEED_Y[eq]) st.reachY = FEED_Y[eq];
+    // (le foin du râtelier ou l'eau de l'abreuvoir, s'il y arrive la tête relevée ; le veau, trop petit — sa bouche à 20
+    // cm, 40 cm sous le foin, la tête dans le bac —, mange le foin tombé au pied de la mangeoire)
+    if (FEED_Y[eq]) {
+      if ((md.noseY ?? 1) * (e.scale ?? 1) + 0.08 >= FEED_Y[eq]) st.reachY = FEED_Y[eq];
+      else action = 'graze';
+    }
   } else if (mother && !st.moving && !mother.sleeping && (mother.speed ?? 0) < 0.1 && (!mAnim || (mAnim.posture === 'stand' && !mAnim.trans))
     && Math.hypot(mother.position.x - e.root.position.x, mother.position.z - e.root.position.z) < 2.6 * Math.max(0.6, mother.scale ?? 1)) {
     action = 'nurse';

@@ -4,10 +4,10 @@
 // temps fixe, aucun tirage au hasard).
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-import { buildRealCowModel, POLL_CAP } from '../src/game/models/cowReal.js';
+import { buildRealCowModel, POLL_CAP, animateRealCow, FEED_Y } from '../src/game/models/cowReal.js';
 import { COW_GRAIN, makeCowUniforms, setCowCoat, cowMaterial } from '../src/game/models/cowCoat.js';
 import { cowBuild } from '../src/sim/cowLook.js';
-import { resolveLook } from '../src/sim/animal.js';
+import { resolveLook, createAnimal, growthScale } from '../src/sim/animal.js';
 import { loadRealCowGltf } from './fixtures/realCowGltf.js';
 
 let G;
@@ -141,5 +141,79 @@ describe('poil long de la Highland', () => {
     expect(calf.hair.geometry.userData.cards).toBeGreaterThan(0.9 * g.userData.cards);
     f.dispose();
     calf.dispose();
+  });
+});
+
+/** Le modèle dans un groupe à la taille de l'animal (look.scale), comme dans le jeu (AnimalEntity.scaleGroup). */
+const inScene = (md, scale) => {
+  const g = new THREE.Group();
+  g.scale.setScalar(scale);
+  g.add(md.root);
+  g.updateMatrixWorld(true);
+  return g;
+};
+const st = (o = {}) => ({ v: 0, moving: false, size: 1, posture: 'stand', action: null, ...o });
+/** Sole la plus basse d'un pied (repère du monde). */
+const soleLow = (md, k) => {
+  md.root.updateMatrixWorld(true);
+  let lo = Infinity;
+  for (const p of md.anim.solePts[k]) lo = Math.min(lo, p.clone().applyMatrix4(md.legs[k].paw.matrixWorld).y);
+  return lo;
+};
+
+describe('mangeoire de la bergerie', () => {
+  it('toutes les races, petites comprises (Highland, Hérens, Bretonne), et les taureaux : la bouche au foin (62 cm), sabots au sol', () => {
+    const out = {};
+    for (const [b, o] of [['holstein', {}], ['normande', {}], ['highland', {}], ['herens', {}], ['bretonne_pie_noire', {}], ['charolaise', {}], ['angus', {}],
+      ['highland', { sex: 'm' }], ['hereford', { sex: 'm' }], ['holstein', { young: true }]]) {
+      const look = lookOf(b, o);
+      const md = buildRealCowModel(look, b, G);
+      const s = look.scale ?? 1;
+      inScene(md, s);
+      md.staticPose('stand');
+      let front = -Infinity;
+      for (let f = 0; f < 180; f++) {
+        md.anim.update(1 / 30, st({ action: 'eat', reachY: 0.62, size: s }));
+        md.root.parent.updateMatrixWorld(true);
+        if (f > 120) front = Math.max(front, Math.min(soleLow(md, 0), soleLow(md, 1)));
+      }
+      out[`${b} ${JSON.stringify(o)}`] = { mouth: md.anim.mouthW?.y ?? -1, front };
+      md.dispose();
+    }
+    if (process.env.COW_LOG) console.log('BOUCHES', JSON.stringify(out));
+    for (const [tag, r] of Object.entries(out)) {
+      expect(Math.abs(r.mouth - 0.62), tag).toBeLessThan(0.05);
+      // (sabots avant posés : la Holstein relevait déjà ses antérieurs de 1,2 cm à l'auge)
+      expect(r.front, `${tag} sabots avant`).toBeLessThan(0.015);
+    }
+  });
+});
+
+/** Entité minimale (comme AnimalEntity) autour d'un modèle, à la taille de l'animal. */
+const entity = (md, a, scale) => {
+  const root = new THREE.Group();
+  const sg = new THREE.Group();
+  sg.scale.setScalar(scale);
+  sg.add(md.root);
+  root.add(sg);
+  const e = { model: md, root, scale, heading: 0, speed: 0, state: 'idle', time: 3, phase: 1.3, timer: 99, data: a, stage: 'adult', partner: null, target: new THREE.Vector3() };
+  Object.defineProperty(e, 'position', { get: () => root.position });
+  return e;
+};
+
+describe('mangeoire : le veau, trop petit, mange le foin tombé au pied', () => {
+  it('à la mangeoire de la bergerie, la vache et la génisse mangent le foin à sa hauteur, le veau broute au pied', () => {
+    for (const [days, want] of [[80, 'eat'], [14, 'eat'], [3, 'graze']]) {
+      const a = createAnimal({ species: 'cow', breed: 'highland', sex: 'f', colorIndex: 0, ageDays: days, seed: 7, rng: () => 0.42 });
+      const stage = days < 8 ? { calf: true } : days < 24 ? { young: true } : {};
+      const md = buildRealCowModel({ ...a.look, sex: 'f', ...stage }, 'highland', G);
+      const e = entity(md, a, a.look.scale * growthScale(a));
+      e.state = 'eat';
+      e.goal = { eq: { type: 'penFeeder' } };
+      for (let f = 0; f < 30; f++) animateRealCow(e, 1 / 30, false);
+      expect(e.cowSt.action, `${days} j`).toBe(want);
+      expect(e.cowSt.reachY, `${days} j`).toBe(want === 'eat' ? FEED_Y.penFeeder : null);
+      md.dispose();
+    }
   });
 });

@@ -319,10 +319,10 @@ hEarIn = 0.0;
   }
   // Ombre du toupet sur le front (contact, douce, un peu plus large que lui) : un toupet clair sur une robe claire se
   // détache par son ombre au lieu d'une plaque pâle translucide ; sous un toupet foncé, à peine visible.
-  if (hFore.w > 0.0) {
+  if (hFore.w > 0.0 && isHead > 0.5) {
     float ff = (hl.z - hFore.x) / max(1e-3, hFore.y - hFore.x);
     float fw = hFore.z * (1.0 - 0.85 * pow(smoothstep(0.05, 0.85, ff), 0.85)) * 1.2 + 0.006;
-    float fsh = isHead * smoothstep(-0.04, 0.06, ff) * (1.0 - smoothstep(0.8, 1.05, ff)) * (1.0 - smoothstep(fw * 0.55, fw, abs(hl.x))) * smoothstep(-0.03, 0.02, hl.y);
+    float fsh = smoothstep(-0.04, 0.06, ff) * (1.0 - smoothstep(0.8, 1.05, ff)) * (1.0 - smoothstep(fw * 0.55, fw, abs(hl.x))) * smoothstep(-0.03, 0.02, hl.y);
     c *= 1.0 - ${glf(FORE_SHADE)} * fsh * hFore.w;
   }
   // (plus épais au-dessus : le bord de la paupière supérieure et ses cils)

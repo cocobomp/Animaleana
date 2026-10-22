@@ -1,7 +1,7 @@
 // Finitions des chiens réalistes vues au téléphone : manteau, collier, queues, assis et couchés (src/game/models/dogReal.js).
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-import { buildRealDogModel } from '../src/game/models/dogReal.js';
+import { buildRealDogModel, deformDog } from '../src/game/models/dogReal.js';
 import { buildGear, removeGear } from '../src/game/gearModels.js';
 import { buildAccessories, removeAccessories } from '../src/game/models/salon.js';
 import { EAR_GRID } from '../src/game/models/dogParts.js';
@@ -377,6 +377,47 @@ describe('oreilles modelées', () => {
       // (avant : jusqu'à -0,8 sur les premières rangées du dogue)
       expect(low, breed).toBeGreaterThan(-0.45);
       md.dispose();
+    }
+  });
+});
+
+describe('oreilles d\'origine cachées', () => {
+  // Sommets de l'oreille d'origine cachée (lambeau du jack) qui ressortent de la peau voisine : au-dessus du plan des 6
+  // sommets visibles de la tête les plus proches (moyenne et normale), après la déformation de la race.
+  const poke = (breed, puppy) => {
+    const look = { ...resolveLook('dog', breed, 0), seed: 4242, ...(puppy ? { puppy: true } : {}) };
+    const md = buildRealDogModel(look, breed, G[dogModelOf(look)]);
+    const base = md.anim.base;
+    const D = deformDog(base, md.build);
+    const n = base.prims.coat.count;
+    const P = D.pos;
+    const N = D.nrm;
+    const vis = [];
+    for (let i = 0; i < n; i++) if (base.W.head[i] > 0.5 && !(D.hidden[i] > 0.02)) vis.push(i);
+    let out = 0;
+    let worst = 0;
+    for (let i = 0; i < n; i++) {
+      if (!(D.hidden[i] > 0.3)) continue;
+      const near = vis.map((j) => [(P[j * 3] - P[i * 3]) ** 2 + (P[j * 3 + 1] - P[i * 3 + 1]) ** 2 + (P[j * 3 + 2] - P[i * 3 + 2]) ** 2, j]).sort((a, b) => a[0] - b[0]).slice(0, 6);
+      const c = new THREE.Vector3();
+      const nn = new THREE.Vector3();
+      for (const [, j] of near) {
+        c.add(new THREE.Vector3().fromArray(P, j * 3).multiplyScalar(1 / 6));
+        nn.add(new THREE.Vector3().fromArray(N, j * 3));
+      }
+      const d = new THREE.Vector3().fromArray(P, i * 3).sub(c).dot(nn.normalize());
+      if (d > 0.001) out++;
+      worst = Math.max(worst, d);
+    }
+    md.dispose();
+    return { out, worst: worst * 1000 };
+  };
+  it('chihuahua (et son chiot) : le lambeau caché ne ressort plus en échardes à la base de l\'oreille', () => {
+    // (avant : 544 et 552 sommets dehors, jusqu'à 15 et 11 mm ; après : 2, 1,4 mm au plus)
+    for (const puppy of [true, false]) {
+      const r = poke('chihuahua', puppy);
+      expect(r.out, 'chiot ' + puppy).toBeLessThan(30);
+      expect(r.worst, 'chiot ' + puppy).toBeLessThan(3);
     }
   });
 });

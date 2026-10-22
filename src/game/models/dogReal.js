@@ -1093,6 +1093,10 @@ export function deformDog(base, B) {
       }
     }
   }
+  // 10. Oreilles d'origine cachées (voir 0) : rentrées de nouveau sous le crâne déformé — elles le suivaient de loin,
+  //     et la grosse tête du chiot chihuahua en faisait ressortir des échardes et un bourrelet à la base de l'oreille.
+  //     (jack seulement : chez le shiba, l'oreille modelée recouvre la place de l'oreille d'origine)
+  if (hideSet && base.kind === 'jack') rehideEars(base, B, { pos: P, heads: H, hidden });
   // Normales : celles du modèle, tournées comme la surface (différence des normales recalculées avant et après).
   const nDef = weldedNormals(P, coat.index, coat.weld, n);
   for (let i = 0; i < n; i++) {
@@ -1100,6 +1104,80 @@ export function deformDog(base, B) {
     N.set([_w.x, _w.y, _w.z], i * 3);
   }
   return { pos: P, nrm: N, heads: H, eyePos: EP, eyeNrm: EN, hidden };
+}
+
+/**
+ * Crâne de la race autour des racines des oreilles, après sa déformation : centre de la tête (hc) et rayon du crâne dans
+ * une direction (R, null hors de portée) — moyenne pondérée, dans un cône autour de la direction, des sommets visibles
+ * de la tête entre 3 et 9 cm des racines (comme earSkullHide sur le modèle d'origine). Mis en cache sur D.
+ */
+function skullNearEars(base, B, D) {
+  if (D.skullEars) return D.skullEars;
+  const P = D.pos;
+  const H = D.heads;
+  const hidden = D.hidden;
+  const coat = base.prims.coat;
+  const n = coat.count;
+  const W = base.W;
+  const I = (nm) => base.index.get(nm) ?? -1;
+  const hs = B.head ?? 1;
+  const eyeM = H[I('eyeL')].clone().add(H[I('eyeR')]).multiplyScalar(0.5);
+  const hc = H[I('head')].clone().lerp(eyeM, 0.35);
+  const roots = ['ear1L', 'ear1R'].map((nm) => H[I(nm)]);
+  const excl = (base.kind === 'jack' ? 0.03 : 0.042) * hs;
+  const p = V();
+  const skull = [];
+  for (let i = 0; i < n; i++) {
+    if (W.head[i] < 0.5 || hidden?.[i] > 0.02 || W.ear[i * 2] + W.ear[i * 2 + 1] > 0.01) continue;
+    p.fromArray(P, i * 3);
+    // (crâne autour des racines seulement : les cônes ne regardent pas plus loin, et tout le museau coûtait)
+    const dRoot = Math.min(p.distanceTo(roots[0]), p.distanceTo(roots[1]));
+    if (dRoot < excl || dRoot > 0.09 * hs) continue;
+    p.sub(hc);
+    const r = p.length();
+    if (r < 1e-6) continue;
+    skull.push(p.x / r, p.y / r, p.z / r, r);
+  }
+  const R = (dx, dy, dz) => {
+    for (const lim of [0.8, 0.65, 0.45]) {
+      let sw = 0;
+      let sr = 0;
+      for (let k = 0; k < skull.length; k += 4) {
+        const c = dx * skull[k] + dy * skull[k + 1] + dz * skull[k + 2];
+        if (c < lim) continue;
+        const w = (c - lim) ** 2 + 1e-6;
+        sw += w;
+        sr += w * skull[k + 3];
+      }
+      if (sw > 1e-4) return sr / sw;
+    }
+    return null;
+  };
+  D.skullEars = { hc, R };
+  return D.skullEars;
+}
+
+/**
+ * Sommets d'oreille cachés (part hidden > 0,08) ramenés sous le crâne de la race, après sa déformation : rayon depuis le
+ * centre de la tête au plus celui du crâne alentour (skullNearEars) moins 3 mm à l'échelle de la tête. Seulement
+ * abaissés.
+ */
+function rehideEars(base, B, D) {
+  const { hc, R } = skullNearEars(base, B, D);
+  const P = D.pos;
+  const hidden = D.hidden;
+  const margin = 0.003 * (B.head ?? 1);
+  const p = V();
+  for (let i = 0; i < base.prims.coat.count; i++) {
+    if (!(hidden[i] > 0.08)) continue;
+    p.fromArray(P, i * 3).sub(hc);
+    const r = p.length();
+    if (r < 1e-6) continue;
+    const rs = R(p.x / r, p.y / r, p.z / r);
+    if (rs === null || r <= rs - margin) continue;
+    p.multiplyScalar((rs - margin) / r).add(hc);
+    P.set([p.x, p.y, p.z], i * 3);
+  }
 }
 
 /**
@@ -1330,6 +1408,19 @@ function erectEars(base, D, B) {
   const thick = Math.max(0.004, Hh * 0.05);
   // (plantées au-dessus du poil long : sous la fourrure du spitz ou du yorkshire, on ne voyait que leur pointe)
   const lift = Math.max(0, B.fur) * 0.7;
+  // (bas de la coque fondu dans le crâne sur 1 à 2 cm : sa base pleine largeur ressortait en lame à la tempe du chiot
+  // chihuahua, dont le crâne s'arrondit devant l'oreille)
+  const SK = skullNearEars(base, B, D);
+  const sink = (P, h) => {
+    const w = 1 - smooth(-0.05, 0.15, h);
+    if (!(w > 0)) return;
+    _v.copy(P).sub(SK.hc);
+    const r = _v.length();
+    const rs = r > 1e-6 ? SK.R(_v.x / r, _v.y / r, _v.z / r) : null;
+    if (rs === null) return;
+    const rt = rs - 0.0015 * B.head;
+    if (r > rt) P.copy(SK.hc).addScaledVector(_v, (r + (rt - r) * w) / r);
+  };
   for (let s = 0; s < 2; s++) {
     const side = s === 0 ? 1 : -1;
     const b1 = I(s === 0 ? 'ear1L' : 'ear1R');
@@ -1354,6 +1445,7 @@ function erectEars(base, D, B) {
           const cup = Wb * 0.22 * (1 - x * x) * (1 - hh) * (bat ? 1 : 0.8);
           const off = (q) => q.clone().addScaledVector(up, h * Hh).addScaledVector(lat, x * w).addScaledVector(fwd, -cup - layer * thick);
           const P = off(Bp);
+          sink(P, h);
           const R = off(Bn);
           pos.push(P.x, P.y, P.z);
           rest.push(R.x, R.y, R.z);
@@ -1479,6 +1571,7 @@ function shapeFor(base, B) {
   S.coatGeo = parts ? mergedCoatGeo(base, D, parts, ears, pom) : geo(D.pos, D.nrm, coat, base.attrs);
   S.eyeGeo = base.prims.eye ? geo(D.eyePos, D.eyeNrm, base.prims.eye, base.eyeAttrs) : null;
   S.earGeo = erectEars(base, D, B);
+  delete D.skullEars;
   S.lodCoat = lodGeo(S.coatGeo, parts ? parts.lodIndex : coat.lodIndex);
   if (parts) {
     // (sans oreilles modelées, la fin des indices — leurs triangles — n'est pas dessinée)

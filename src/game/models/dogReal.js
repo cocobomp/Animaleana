@@ -2089,6 +2089,11 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   const mouth = toLocal(headB, M.noseTip.clone().add(V(0, -0.035 * B.head, -0.02 * B.head)));
   const skull = toLocal(headB, M.skullTop);
   const collarC = toLocal(neckB, M.collar.center);
+  // (bas du menton au repos : le plus bas des sommets de la tête devant l'anneau — le nœud du salon se pose dessous)
+  let chinY = Infinity;
+  for (let i = 0; i < base.prims.coat.count; i++) {
+    if (base.W.head[i] > 0.5 && S.D.pos[i * 3 + 2] > M.collar.center.z) chinY = Math.min(chinY, S.D.pos[i * 3 + 1]);
+  }
   const neckQi = neckB.getWorldQuaternion(new THREE.Quaternion()).invert();
   const collarN = M.axis.clone().applyQuaternion(neckQi);
   // Repère de l'anneau du collier (z le long du cou, x sur le côté gauche, -y vers la gorge), dans celui de l'os.
@@ -2133,7 +2138,8 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
     mouth,
     skull,
     leashPoint,
-    dogFit: { collar: { center: collarC, normal: collarN, q: ringQ, rx: M.collar.rx, ry: M.collar.ry, bone: neckB }, rings: M.rings, ycAt: M.ycAt, midX: base.land.midX, hipZ: M.hipZ, shZ: M.shZ, topY: M.topY, bellyY: M.bellyY },
+    // (rest : l'anneau dans le repère de repos du chien — centre et axe du cou —, pour les pièces liées au squelette)
+    dogFit: { collar: { center: collarC, normal: collarN, q: ringQ, rx: M.collar.rx, ry: M.collar.ry, bone: neckB, rest: { center: M.collar.center.clone(), axis: M.axis.clone().normalize(), chinY } }, rings: M.rings, ycAt: M.ycAt, midX: base.land.midX, hipZ: M.hipZ, shZ: M.shZ, topY: M.topY, bellyY: M.bellyY },
     accessoryFit: { skull, headQ, mouth, headR: 0.085 * B.head, tailTip: lastTail },
     build: B,
     kind: B.model,
@@ -2141,6 +2147,7 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
     realDog: true,
   };
   model.skinGear = (mesh) => skinDogGear(model, S, base, mesh, hb);
+  model.drapeChest = (pts, clear) => drapeDogChest(S, base, pts, clear);
   // Sillon du collier (dogCoat.js, cCollar*) : le poil est serré sous la bande d'un collier ou d'un accessoire du cou
   // porté. key : qui le porte ; null le retire. Plusieurs : l'ellipse la plus petite.
   uniforms.cCollarC.value.copy(M.collar.center);
@@ -2204,6 +2211,52 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   return model;
 }
 
+/** Sommets de la peau du tronc et du cou (ni tête, ni queue, ni bas des pattes), au repos de la race. */
+function trunkSkinOf(S, base) {
+  if (S.trunkSkin) return S.trunkSkin;
+  const coat = base.prims.coat;
+  const cp = S.D.pos;
+  const W = base.W;
+  const list = [];
+  for (let i = 0; i < coat.count; i++) {
+    const lw = W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3];
+    if (W.head[i] > 0.1 || W.tail[i] > 0.1) continue;
+    if (lw > 0.5 && cp[i * 3 + 1] < S.measure.bellyY + 0.3 * (S.measure.topY - S.measure.bellyY)) continue;
+    list.push(i);
+  }
+  S.trunkSkin = Uint32Array.from(list);
+  return S.trunkSkin;
+}
+
+/**
+ * Plaque des points (repère de repos du chien, z devant) sur le devant de la peau du poitrail et du cou : chacun prend
+ * le z de la peau la plus en avant sous lui (dans 1,5 cm en x et en y, au plus 4 cm devant et 12 cm derrière lui),
+ * plus clear. Renvoie, pour chaque point, ce z de peau (NaN : pas de peau trouvée, le point est laissé). La peau : tout
+ * sauf la tête et la queue (le bas du poitrail est pris dans les poids des antérieurs).
+ */
+function drapeDogChest(S, base, pts, clear) {
+  const cp = S.D.pos;
+  if (!S.frontSkin) {
+    const W = base.W;
+    const list = [];
+    for (let i = 0; i < base.prims.coat.count; i++) if (W.head[i] <= 0.1 && W.tail[i] <= 0.1) list.push(i);
+    S.frontSkin = Uint32Array.from(list);
+  }
+  const list = S.frontSkin;
+  const R = 0.015;
+  return pts.map((p) => {
+    let best = -Infinity;
+    for (const j of list) {
+      const z = cp[j * 3 + 2];
+      if (z <= best || z > p.z + 0.04 || z < p.z - 0.12) continue;
+      if (Math.abs(cp[j * 3] - p.x) < R && Math.abs(cp[j * 3 + 1] - p.y) < R) best = z;
+    }
+    if (best === -Infinity) return NaN;
+    p.z = best + clear;
+    return best;
+  });
+}
+
 /**
  * Pièce d'équipement (manteau : coque dans le repère du chien) changée en maillage lié au squelette : chaque sommet
  * prend les poids des sommets de la peau les plus proches (tronc, épaules, hanches). Elle suit alors la respiration,
@@ -2212,17 +2265,7 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
 function skinDogGear(model, S, base, mesh, hb) {
   const coat = base.prims.coat;
   const cp = S.D.pos;
-  const W = base.W;
-  if (!S.trunkSkin) {
-    const list = [];
-    for (let i = 0; i < coat.count; i++) {
-      const lw = W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3];
-      if (W.head[i] > 0.1 || W.tail[i] > 0.1) continue;
-      if (lw > 0.5 && cp[i * 3 + 1] < S.measure.bellyY + 0.3 * (S.measure.topY - S.measure.bellyY)) continue;
-      list.push(i);
-    }
-    S.trunkSkin = Uint32Array.from(list);
-  }
+  trunkSkinOf(S, base);
   const geo = mesh.geometry;
   mesh.updateMatrix();
   geo.applyMatrix4(mesh.matrix);
@@ -2530,14 +2573,15 @@ class RealDogAnim {
     this.eyes = ['eyeL', 'eyeR'].map((nm) => model.bone(nm)).filter(Boolean);
     this.jaw = model.bone('jaw');
     this.tongue = [1, 2, 3, 4, 5, 6].map((i) => model.bone('tongue' + i)).filter(Boolean);
-    // (glissement de la langue qui pend, dans le repère de la mâchoire : vers l'avant, 60 % de sa longueur, un peu vers
-    // le bas)
+    // (glissement de la langue qui pend, dans le repère de la mâchoire : vers l'avant, 60 % de sa longueur plus ce que
+    // faceShape l'a rentrée dans un museau court — boxer : sinon elle restait derrière les dents —, un peu vers le bas)
     if (this.tongue.length > 1 && this.jaw) {
       const t1 = base.index.get('tongue1');
       const tn = base.index.get(this.tongue[this.tongue.length - 1].name);
       const d = S.heads[tn].clone().sub(S.heads[t1]);
       const len = d.length();
-      d.normalize().multiplyScalar(len * 0.6).add(V(0, -len * 0.08, 0));
+      const k = len / Math.max(1e-6, base.heads[tn].distanceTo(base.heads[t1]));
+      d.normalize().multiplyScalar(len * 0.6 + k * 0.035 * Math.max(0, 0.8 - (B.snout ?? 1))).add(V(0, -len * 0.08, 0));
       this.tongueSlide = d.applyQuaternion(base.rotW[base.index.get('jaw')].clone().invert());
     }
     this.breathe = model.bone('breathe');

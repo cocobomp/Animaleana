@@ -309,3 +309,53 @@ describe('gueule ouverte', () => {
     }
   });
 });
+
+describe('accessoires du salon', () => {
+  // Pièce liée au squelette (nœud ou foulard) : distance de son centre et de son sommet le plus éloigné à la peau, et
+  // hauteur de son centre sous le menton (cm, dans le repère du modèle, à la taille du shiba), après une seconde debout.
+  const place = (breed, id) => {
+    const { look, md, s } = dog(breed);
+    for (let i = 0; i < 30; i++) md.anim.update(1 / 60, st({ size: s }));
+    const acc = buildAccessories(md, look, { neck: { id, color: 'pink' } });
+    for (let i = 0; i < 30; i++) md.anim.update(1 / 60, st({ size: s }));
+    md.root.updateMatrixWorld(true);
+    const sk = acc.find((o) => o.isSkinnedMesh);
+    const v = new THREE.Vector3();
+    const m = md.coatMesh;
+    const base = md.anim.base;
+    const skin = [];
+    let chin = Infinity;
+    const ringZ = md.dogFit.collar.rest.center.z;
+    for (let i = 0; i < base.prims.coat.count; i++) {
+      const p = m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld).clone();
+      skin.push(p);
+      if (base.W.head[i] > 0.5 && md.anim.S.D.pos[i * 3 + 2] > ringZ) chin = Math.min(chin, p.y);
+    }
+    const near = (p) => Math.min(...skin.map((q) => q.distanceTo(p)));
+    const c = new THREE.Vector3();
+    let worst = 0;
+    const n = sk.geometry.attributes.position.count;
+    for (let i = 0; i < n; i++) {
+      const p = sk.getVertexPosition(i, v).applyMatrix4(sk.matrixWorld).clone();
+      c.add(p);
+      worst = Math.max(worst, near(p));
+    }
+    c.multiplyScalar(1 / n);
+    const out = { center: near(c) * 100, worst: worst * 100, belowChin: (chin - c.y) * 100 };
+    removeAccessories(acc);
+    expect(sk.parent).toBe(null);
+    md.dispose();
+    return out;
+  };
+  it('foulard plaqué sur le poitrail et nœud sous l\'anneau, sous le menton (avant : nœud devant la bouche du yorkshire, foulard qui flotte)', () => {
+    for (const breed of ['labrador', 'yorkshire', 'samoyede', 'caniche']) {
+      const b = place(breed, 'bandana');
+      // (mesuré : centre à 0,4-2 cm de la peau, sommet le plus loin à 1,5-4,3 cm — collerette du samoyède)
+      expect(b.center, breed).toBeLessThan(2.5);
+      expect(b.worst, breed).toBeLessThan(5);
+      const w = place(breed, 'bow');
+      expect(w.center, breed).toBeLessThan(2.5);
+      expect(w.belowChin, breed).toBeGreaterThan(1);
+    }
+  });
+});

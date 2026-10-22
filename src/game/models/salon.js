@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { signTexture } from '../textures.js';
 import { ACCESSORIES, ACC_COLORS } from '../../sim/groomer.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { flatBand } from '../gearModels.js';
 
 const mat = (color, roughness = 0.85, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
@@ -133,6 +134,78 @@ function bowMesh(size, color) {
 }
 
 /**
+ * Chien réaliste (dogReal.js) : bavette sous l'anneau du cou mesuré, plaquée sur le devant de la peau (model.drapeChest),
+ * dans le repère de repos du chien. Grille de NC colonnes sur NR + 1 rangées : la première suit le bas de l'anneau
+ * (± 57° autour de la gorge), les suivantes descendent vers la pointe, à la verticale sous la gorge, et se posent sur le
+ * cou puis le poitrail. Renvoie la grille (pts).
+ */
+const BIB_NC = 9;
+const BIB_NR = 7;
+function dogBib(model, ring, rx, ry, lenOf, clear) {
+  const C = ring.rest.center;
+  const z = ring.rest.axis;
+  const x = new THREE.Vector3(1, 0, 0).addScaledVector(z, -z.x).normalize();
+  const y = z.clone().cross(x);
+  const at = (th) => C.clone().addScaledVector(x, rx * Math.sin(th)).addScaledVector(y, -ry * Math.cos(th));
+  const tip = at(0);
+  tip.y -= lenOf(tip.y);
+  const pts = [];
+  for (let i = 0; i <= BIB_NR; i++) {
+    for (let j = 0; j < BIB_NC; j++) pts.push(at(((j / (BIB_NC - 1)) * 2 - 1) * 1.0).lerp(tip, i / BIB_NR));
+  }
+  const plane = pts.map((p) => p.z);
+  const skin = model.drapeChest(pts.map((p) => p.clone()), clear);
+  // (pas de peau sous un point — entre les antérieurs — : celle de la rangée du dessus)
+  for (let k = BIB_NC; k < pts.length; k++) if (Number.isNaN(skin[k])) skin[k] = skin[k - BIB_NC];
+  // (la rangée du haut reste sur l'anneau ; dessous, posée sur la peau — fondu sur les premières rangées : sur les
+  // côtés du cou, parallèles à z, la peau « devant » le point n'a pas de sens)
+  const w = (i) => Math.min(1, Math.max(0, (i / BIB_NR - 0.1) / 0.3));
+  const fit = () => {
+    for (let k = 0; k < pts.length; k++) {
+      const i = Math.floor(k / BIB_NC);
+      if (Number.isNaN(skin[k]) || !w(i)) continue;
+      pts[k].z = Math.max(pts[k].z, skin[k] + clear * w(i));
+    }
+  };
+  for (let k = 0; k < pts.length; k++) {
+    const i = Math.floor(k / BIB_NC);
+    if (!Number.isNaN(skin[k])) pts[k].z = plane[k] + (skin[k] + clear - plane[k]) * w(i);
+  }
+  // (lissée : deux passes de moyenne entre voisines, sans rentrer dans la peau)
+  for (let pass = 0; pass < 2; pass++) {
+    const zs = pts.map((p) => p.z);
+    for (let i = 1; i <= BIB_NR; i++) {
+      for (let j = 0; j < BIB_NC; j++) {
+        const nb = [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]].filter(([a, b]) => a >= 0 && a <= BIB_NR && b >= 0 && b < BIB_NC);
+        pts[i * BIB_NC + j].z = (zs[i * BIB_NC + j] + nb.reduce((t, [a, b]) => t + zs[a * BIB_NC + b], 0) / nb.length) / 2;
+      }
+    }
+    fit();
+  }
+  return { pts };
+}
+
+/** Maillage de la bavette (grille de dogBib), dans le repère de repos du chien. */
+function bibGeometry(pts) {
+  const pos = new Float32Array(pts.length * 3);
+  pts.forEach((p, k) => p.toArray(pos, k * 3));
+  const idx = [];
+  for (let i = 0; i < BIB_NR; i++) {
+    for (let j = 0; j + 1 < BIB_NC; j++) {
+      const a = i * BIB_NC + j;
+      const b = a + BIB_NC;
+      idx.push(a, b, a + 1);
+      if (i + 1 < BIB_NR) idx.push(a + 1, b, b + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
  * Accroche les accessoires d'un animal (a.accessories = { head: { id, color }, neck: …, tail: … })
  * aux pièces du modèle (model.head / neck / tail). Tolère un modèle sans ces pièces.
  * Renvoie la liste des objets ajoutés (à retirer avec removeAccessories).
@@ -211,6 +284,48 @@ export function buildAccessories(model, look, accessories = {}) {
         frame.userData.onRemove = () => model.setGroove(frame, null);
       }
       const throat = -(ry + band);
+      // Chien réaliste : nœud et foulard posés sous l'anneau, sur le devant du cou et du poitrail mesurés au repos
+      // (avant : à la gorge de l'anneau, le nœud du yorkshire, dont l'anneau penche comme le cou, tombait devant la
+      // bouche ; le triangle du foulard, orienté de façon fixe, flottait devant le poitrail)
+      // (longueur : celle du foulard des autres animaux, au plus 55 % de la hauteur de la gorge au ventre — l'anneau des
+      // races à collerette, mesuré sur le poil, est large)
+      const fitD = model.dogFit;
+      const bibLen = (thr) => Math.min((rx + ry) * 0.85, 0.55 * Math.max(0.03, thr - (fitD?.bellyY ?? -1)));
+      const bib = model.realDog && model.drapeChest && model.skinGear && ring.rest ? dogBib(model, ring, rx, ry, bibLen, 0.006) : null;
+      if (bib && (worn.id === 'bow' || worn.id === 'bandana')) {
+        if (worn.id === 'bow') {
+          // (sur la peau, sous la gorge, de face et un peu penché vers le haut ; sous le menton — gorge haute du
+          // yorkshire : on descend le long de la bavette jusqu'à ce qu'il passe dessous)
+          // (taille d'après la tête, pas d'après l'anneau : mesuré sur le poil, celui des races à poil long ou à
+          // collerette donnait un nœud plus large que la tête)
+          const sz = Math.min((rx + ry) * 0.4, (fit?.headR ?? 1) * 0.5);
+          let row = 2;
+          while (row < BIB_NR - 2 && bib.pts[row * BIB_NC + (BIB_NC >> 1)].y + sz * 0.4 > (ring.rest.chinY ?? Infinity) - 0.004) row++;
+          const g = bowMesh(sz, color);
+          g.position.copy(bib.pts[row * BIB_NC + (BIB_NC >> 1)]);
+          g.position.z += sz * 0.15;
+          g.rotation.set(-0.25, 0, 0);
+          g.updateMatrixWorld(true);
+          // (lié au squelette comme le foulard : rigide sur l'os du cou, il flottait devant la peau quand le cou se
+          // pliait — la peau sous lui suit aussi le poitrail)
+          const m = new THREE.Mesh(mergeGeometries(g.children.map((c) => c.geometry.clone().applyMatrix4(c.matrixWorld))), mat(color, 0.5));
+          g.children.forEach((c) => {
+            c.geometry.dispose();
+            c.material.dispose();
+          });
+          m.castShadow = true;
+          out.push(model.skinGear(m));
+        } else {
+          // (lié au squelette : il suit le cou et le poitrail, assis comme debout)
+          const m = new THREE.Mesh(bibGeometry(bib.pts), mat(color, 0.75, { side: THREE.DoubleSide }));
+          m.castShadow = true;
+          const sk = model.skinGear(m);
+          out.push(sk);
+        }
+        model.neck.add(frame);
+        out.push(frame);
+        continue;
+      }
       // (lapin réaliste : le nœud sur le côté de la nuque ; accroupi, sa gorge touche presque le sol et le nœud y
       // disparaissait entre ses pattes)
       if (worn.id === 'bow' && model.realRabbit) put(frame, bowMesh((rx + ry) * 0.42, color), [rx * 0.85, ry * 0.5, band * 0.5], [0, Math.PI / 2, -0.5]);

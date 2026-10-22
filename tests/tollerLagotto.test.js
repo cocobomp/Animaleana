@@ -171,7 +171,9 @@ describe('modèle 3D', () => {
     // +0,45 fois le poil, elle se voyait à peine)
     expect(trunk).toBeLessThan(-1.2 * md.build.fur);
     expect(ruff).toBeLessThan(0);
-    expect(legs).toBe(0);
+    // (pattes bouclées gardées, à peine raccourcies : de face, la coupe changeait peu la silhouette)
+    expect(legs).toBeLessThan(0);
+    expect(legs).toBeGreaterThan(-0.5 * md.build.fur);
     expect(top).toBeGreaterThan(0.8 * md.build.fur);
     md.setCut(null);
     expect(md.uniforms.cCut.value.toArray()).toEqual([0, 0, 0, 0]);

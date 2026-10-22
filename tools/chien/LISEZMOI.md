@@ -237,6 +237,42 @@ ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été fait
   `gearModels.js` ; manteau, accessoires du salon, nœud du concours de beauté, laisse accrochée à l'anneau du
   collier).
 
+### Finitions vues au téléphone (correcteur des chiens)
+
+Mesures dans `tests/dogFinish.test.js` (taille réelle sauf mention) :
+
+- **Manteau** (`measureDog`) : coupes du tronc tranchées dans la peau de la race (contour des triangles coupés par le
+  plan, centre commun pris sur les coupes du milieu, secteurs vides repris de la coupe voisine), coque liée au
+  squelette. Races du jack : 80 à 96 % du dos sortait du manteau (dents de scie sur le teckel) → moins de 3 %,
+  dépassement < 8 mm, debout et au pas, 12 races.
+- **Collier** : anneau mesuré sur la peau sous le poil (enfoncé de 55 % du poil) et penché comme le cou (au plus
+  0,7 rad au-dessus de l'horizontale : les os du cou du jack montent à la verticale) ; le poil est serré sous la bande
+  dans le shader (`cCollar*`, `model.setGroove` : collier et nœud du salon). Golden : 11 × 15 cm de demi-axes → celui
+  du labrador + moins de 7,5 cm, plus de cerceau autour de la collerette.
+- **Queues dressées** (jack, chihuahua, yorkshire, spitz) : elles battent de côté autour de l'axe du bassin au lieu de
+  tourner sur elles-mêmes (battement rapporté à la longueur : 0,36 → plus de 1) ; queue enroulée battue d'un bloc ;
+  panache du spitz touffu (relief de mèches).
+- **Assis des pattes courtes** (`settleSit`) : antérieurs tendus (`straightFront`), postérieurs repliés (`foldHind`) :
+  dos du teckel 13,6° → 18,2°, du corgi 17,4° → 22,8° ; triangles de l'arrière-train étirés 121 et 110 → 54 et 62
+  (jack : 43°, 0 — le modèle d'origine). **Couché** des races du jack : postérieurs repliés au sol (pieds arrière
+  4 à 6 cm → 0,2 à 0,6 cm), inclinaison lissée dans le temps (plus d'à-coup de 6 cm de la tête du corgi). Galgo
+  couché : hanche 18,7 → 16,9 cm, antérieurs 5,5 cm → au sol.
+- **Yorkshire** : robe soyeuse en mèches modelées qui pendent (jupe des flancs jusqu'à moins de 4 cm du sol, barbe ;
+  `silkyStrands`, gravité et sol dans le shader), museau affiné sans bajoues, toupet bas et noué.
+- **Gueule** : au calme (content à moins de 0,5) fermée ; en haletant, la langue glisse en avant (os `tongue1`, plus
+  ce que `faceShape` l'a rentrée dans un museau court) et pend : sa pointe 2 à 2,3 cm derrière les lèvres au calme,
+  3 à 3,6 cm devant en haletant ; rose jusqu'au bout (`cTongue` : poids des os de la langue dans le shader).
+- **Salon** : foulard en bavette posée sur le cou et le poitrail (`dogBib`, `model.drapeChest`) et lié au squelette ;
+  nœud à la taille de la tête, posé sur la peau sous l'anneau et sous le menton (yorkshire : plus devant la bouche).
+- **Pieds en virage** (`footLock`) : correction latérale du membre jusqu'à 0,38 rad (0,2 avant) — au pas en virage à
+  1,2 rad/s, le postérieur intérieur glissait de 8 à 9 cm par appui (teckel, cocker, cavalier) → 2 à 5 cm, l'extérieur
+  9,8 → 4 à 6 cm.
+- **Têtes** : plis en V du carlin (`cmpWrinkleH`) ; museau carré de l'akita sans cran ; face intérieure des oreilles
+  tombantes éclairée comme la face externe (liseré verdâtre du dogue) ; boucles de l'oreille du lagotto à moitié
+  (coupe « lagotto » : poitrail et pattes un peu raccourcis) ; vibrisses des sourcils éclaircies sur les robes
+  claires (`cWhisk`) ; lambeau d'origine du jack caché de nouveau sous le crâne déformé (`rehideEars` : chiot
+  chihuahua, 544 sommets dehors jusqu'à 15 mm → 2, 1,4 mm), bas des coques d'oreilles fondu dans le crâne.
+
 La planche de contrôle `planche.html` (servie par vite : `/tools/chien/planche.html`) montre n'importe quelle
 liste de races, robes, chiots, clips et points de vue (`window.planche.show({ cells: [...] })`), avec une coupe du
 salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et d'autres races dans la même case, côte

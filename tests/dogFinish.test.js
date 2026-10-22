@@ -142,3 +142,36 @@ describe('collier', () => {
     }
   });
 });
+
+describe('queues qui frétillent', () => {
+  // Bout de la queue dans le repère du bassin, chien content qui frétille : plus grand écart au point moyen rapporté à la
+  // longueur de la queue (entre la base et le dernier os).
+  const wagRatio = (breed) => {
+    const { md, s } = dog(breed);
+    const pel = md.bone('pelvis');
+    const pts = [];
+    let len = 0;
+    for (let i = 0; i < 240; i++) {
+      md.anim.update(1 / 60, st({ size: s, happy: 1, action: 'wag' }));
+      md.root.updateMatrixWorld(true);
+      if (i > 60) pts.push(pel.worldToLocal(md.tailTip.getWorldPosition(new THREE.Vector3())));
+      if (i === 61) {
+        const tb = md.tailBones;
+        for (let k = 0; k + 1 < tb.length; k++) len += tb[k].getWorldPosition(new THREE.Vector3()).distanceTo(tb[k + 1].getWorldPosition(new THREE.Vector3()));
+      }
+    }
+    const c = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(1 / pts.length);
+    const amp = Math.max(...pts.map((p) => p.distanceTo(c)));
+    md.dispose();
+    return (2 * amp) / len;
+  };
+  it('queues dressées des petits chiens : elles battent de côté (avant : elles tournaient sur elles-mêmes, pointe à 1-2 cm)', () => {
+    // (avant : jack 0,36, chihuahua 0,54, yorkshire 0,36 — labrador 1,4)
+    for (const breed of ['jack_russell', 'chihuahua', 'yorkshire', 'spitz_nain']) expect(wagRatio(breed)).toBeGreaterThan(1.0);
+    for (const breed of ['labrador', 'beagle', 'golden']) {
+      const r = wagRatio(breed);
+      expect(r).toBeGreaterThan(1.1);
+      expect(r).toBeLessThan(1.9);
+    }
+  });
+});

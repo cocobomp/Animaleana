@@ -1038,6 +1038,9 @@ export function deformDog(base, B) {
       let nz = B.curly ? 0.65 + 0.7 * fbm(p.x * 38, p.y * 38, p.z * 38) : 0.75 + 0.5 * fbm(p.x * 30, p.y * 30, p.z * 30);
       // (bouclettes serrées : la silhouette se festonne de touffes de boucles — bosses rondes, creux nets entre elles)
       if (tufts) nz = nz * (1 - B.ringlets) + B.ringlets * (0.62 + 0.8 * tufts[i]);
+      // (panache touffu du spitz : des mèches dans sa silhouette — d'un poil égal, un bloc plein et lisse)
+      // (bosses larges : à 2 cm, plus fines que les triangles de la queue du jack, elles froissaient le panache en papier)
+      if (B.fluffy && tail > 0.2) nz = nz * (1 - tail) + tail * (0.62 + 0.76 * fbm(p.x * 26 + 5.3, p.y * 26, p.z * 26));
       // Sans collerette (setter, caniche, golden) : celle du shiba et ses joues de spitz d'abord raccourcies (sinon
       // une crinière de lion autour de la tête).
       let shave = 0;
@@ -2016,7 +2019,8 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   // (touffu : relief à peine marqué — à 0,4, des taches de pixels sombres en camouflage sur la face et le corps du loulou)
   // (bouclettes serrées du lagotto : leurs mèches enroulées couvrent toute la robe et remplacent la frisure douce, qui
   // les brouillait et coûtait quatre bruits de plus par pixel)
-  uniforms.cCurl.value.set(B.curly ? 1 - B.ringlets : B.fluffy ? 0.12 * B.fluffy : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : 0, B.ringlets);
+  // (touffu : des mèches aussi, celles du poil soyeux, plus légères — le panache et la collerette du spitz étaient lisses)
+  uniforms.cCurl.value.set(B.curly ? 1 - B.ringlets : B.fluffy ? 0.12 * B.fluffy : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : B.fluffy ? 0.45 * B.fluffy : 0, B.ringlets);
   uniforms.cWrinkle.value = B.wrinkle ?? 0;
   const keepCfg = base.cfg.keep;
   const nose = S.measure.noseTip;
@@ -2496,6 +2500,18 @@ class RealDogAnim {
     this.pose = this.bones.map((b) => [b.position.clone(), b.quaternion.clone()]);
     // Port de la queue de la race (rotations locales des os de la queue) et des oreilles.
     this.tailRest = tailCarriage(model, base, B);
+    // Direction de chaque os de la queue dans son propre repère (vers l'os suivant, le dernier comme son parent) : axe
+    // du battement (voir overlay).
+    this.tailDir = model.tailBones.map((b, i, tb) => {
+      const bi = base.index.get(b.name);
+      const nx = tb[i + 1] ? base.index.get(tb[i + 1].name) : -1;
+      const pi = base.index.get(tb[Math.max(0, i - 1)].name);
+      const d = nx >= 0 ? S.heads[nx].clone().sub(S.heads[bi]) : S.heads[bi].clone().sub(S.heads[pi]);
+      if (d.lengthSq() < 1e-10) d.set(0, 0, -1);
+      return d.applyQuaternion(base.rotW[bi].clone().invert()).normalize();
+    });
+    // (queues courtes dressées des petits chiens : battement un peu plus large, la pointe de 5 cm bougeait à peine)
+    this.tailWagK = B.model === 'jack' && (B.tail === 'carrot' || B.tail === 'sickle' || B.tail === 'screw') ? 1.3 : 1;
     this.t = (model.root.id * 7.31) % 100;
     this.seen = false;
     this.seenNow = false;
@@ -3060,12 +3076,19 @@ class RealDogAnim {
         const b = tb[i];
         b.quaternion.copy(this.tailRest[i]);
         const f = 1 - i / tb.length;
-        if (i === 0) {
-          this.turn(b, AX, lift - low * 0.35); // (positif : queue relevée)
-          this.turn(b, AXIS_Y, wag * 0.8);
-        } else {
-          this.turn(b, AXIS_Y, wag * 0.25 * f);
-        }
+        if (i === 0) this.turn(b, AX, lift - low * 0.35); // (positif : queue relevée)
+        // Battement de côté : autour de l'axe perpendiculaire à l'os et au côté du chien (dans le repère du parent : la
+        // direction de l'os après son port, le côté par le repos du parent — le port courbe la queue dans le plan du dos,
+        // le côté n'en change pas). Autour de la verticale, une queue dressée (jack, chihuahua, yorkshire), en
+        // tire-bouchon (carlin) ou couchée sur le dos (spitz) tournait sur elle-même sans battre.
+        _ax.copy(this.tailDir[i]).applyQuaternion(b.quaternion);
+        _u.copy(AX).applyQuaternion(this.pinv.get(b));
+        _w.crossVectors(_u, _ax);
+        // (queue enroulée, en tire-bouchon : elle bat d'un bloc depuis sa base — chaque os battant autour de son axe, les
+        // battements s'annulaient dans la boucle)
+        const curled = B.tail === 'screw' || B.tail === 'curl';
+        const ang = wag * (i === 0 ? (curled ? 1.1 : 0.8) : curled ? 0 : 0.25 * f) * this.tailWagK;
+        if (ang && _w.lengthSq() > 1e-8) b.quaternion.premultiply(_q.setFromAxisAngle(_w.normalize(), ang));
       }
     }
     // Sabots… pattes : voir ground.

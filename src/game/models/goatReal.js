@@ -28,13 +28,17 @@ import { makeGoatUniforms, setGoatCoat, goatMaterial } from './goatCoat.js';
 import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from './ruminantHair.js';
 import {
   cleanClips, emptyBoneBoxes, growBoneBoxes, measureSheep, sheepJoints, contactShadow, SheepMesh, RealSheepAnim, pickSheepGait, lying,
-  smoothNormals, nurseSideOf,
+  smoothNormals, nurseSideOf, lodScale,
 } from './sheepReal.js';
 
 /** Clé du GLB (assets.js) : jamais « goat » (gltfAnimal.js le prendrait pour un animal GLB générique). */
 export const REAL_GOAT_KEY = 'goat_real';
-/** Version réduite au-delà de cette distance à la caméra (m, divisée par la taille de la chèvre) ; hystérésis 10 %. */
-export const GOAT_LOD_DIST = { low: 7, high: 18 };
+/**
+ * Version réduite au-delà de cette distance à la caméra (m, allongée pour une grande chèvre, jamais raccourcie pour un
+ * chevreau — lodScale) ; hystérésis 10 %. En basse, 13 m, comme le mouton : à 7 m, la caméra normale du téléphone ne
+ * voyait que des chèvres réduites, sans leur poil long, animées une image sur deux.
+ */
+export const GOAT_LOD_DIST = { low: 13, high: 18 };
 /** Chèvre hors du champ : animée une image sur OFFSCREEN_STEP, avec le temps cumulé. */
 export const OFFSCREEN_STEP = 3;
 /** Au loin (version réduite), animée une image sur FAR_STEP. */
@@ -1105,7 +1109,7 @@ export function animateRealGoat(e, dt, sad) {
   // Version réduite au loin.
   if (horseView.on && md.setLod && !md.lodHold) {
     const far = gfx.quality === 'high' ? GOAT_LOD_DIST.high : GOAT_LOD_DIST.low;
-    const dist = _wv.setFromMatrixPosition(e.root.matrixWorld).distanceTo(horseView.eye) / Math.max(0.25, scale);
+    const dist = _wv.setFromMatrixPosition(e.root.matrixWorld).distanceTo(horseView.eye) / lodScale(scale);
     md.setLod(dist > far * (md.lodLevel ? 0.9 : 1) ? 1 : 0);
   }
   // Mamelle : le lait de l'animal (pleine quand il est prêt, vide juste après la traite).

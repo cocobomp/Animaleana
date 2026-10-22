@@ -24,8 +24,18 @@ import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from
 
 /** Clé du GLB (assets.js) : jamais « sheep » (gltfAnimal.js le prendrait pour un animal GLB générique). */
 export const REAL_SHEEP_KEY = 'sheep_real';
-/** Version réduite au-delà de cette distance à la caméra (m, divisée par la taille du mouton) ; hystérésis 10 %. */
-export const SHEEP_LOD_DIST = { low: 7, high: 18 };
+/**
+ * Version réduite au-delà de cette distance à la caméra (m, allongée pour un grand mouton, jamais raccourcie pour un
+ * petit — lodScale) ; hystérésis 10 %. En basse, 13 m : la caméra normale du téléphone (rig.dist 7 derrière la joueuse)
+ * voit le troupeau à 8-12 m — à 7 m, tous les moutons étaient en version réduite, mèches de l'islandais cachées et
+ * animés une image sur deux.
+ */
+export const SHEEP_LOD_DIST = { low: 13, high: 18 };
+/**
+ * Taille qui allonge la distance de la version réduite : celle d'un grand animal ; jamais moins de 1 — l'agneau, le
+ * chevreau, le veau (moitié de la taille) passaient en version réduite à 3,5-6 m, sous les yeux de la joueuse.
+ */
+export const lodScale = (scale) => Math.max(1, scale);
 /** Mouton hors du champ : animé une image sur OFFSCREEN_STEP, avec le temps cumulé (comme le chien). */
 export const OFFSCREEN_STEP = 3;
 /** Au loin (version réduite), animé une image sur FAR_STEP. */
@@ -2070,7 +2080,7 @@ export function animateRealSheep(e, dt, sad) {
   // Version réduite au loin.
   if (horseView.on && md.setLod && !md.lodHold) {
     const far = gfx.quality === 'high' ? SHEEP_LOD_DIST.high : SHEEP_LOD_DIST.low;
-    const dist = _wv.setFromMatrixPosition(e.root.matrixWorld).distanceTo(horseView.eye) / Math.max(0.25, scale);
+    const dist = _wv.setFromMatrixPosition(e.root.matrixWorld).distanceTo(horseView.eye) / lodScale(scale);
     md.setLod(dist > far * (md.lodLevel ? 0.9 : 1) ? 1 : 0);
   }
   // Toison de l'animal (pleine, tondue, qui repousse) : lue à chaque image, fondue en douceur.

@@ -31,15 +31,19 @@ import { cowBuild, cowUdderFill, cowUdderScale, cowModelKind } from '../../sim/c
 import { makeCowUniforms, setCowCoat, cowMaterial, cowEyeMaterial } from './cowCoat.js';
 import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from './ruminantHair.js';
 import {
-  cleanClips, emptyBoneBoxes, growBoneBoxes, measureSheep, sheepJoints, contactShadow, SheepMesh, RealSheepAnim, lying, smoothNormals, nurseSideOf,
+  cleanClips, emptyBoneBoxes, growBoneBoxes, measureSheep, sheepJoints, contactShadow, SheepMesh, RealSheepAnim, lying, smoothNormals, nurseSideOf, lodScale,
 } from './sheepReal.js';
 import { makeHeadAnchor, makeNeckAnchor, muzzleRing } from './goatReal.js';
 
 /** Clés des GLB (assets.js) : jamais « cow » (gltfAnimal.js la prendrait pour un animal GLB générique). */
 export const REAL_COW_KEY = 'cow_real';
 export const REAL_BULL_KEY = 'bull_real';
-/** Version réduite au-delà de cette distance à la caméra (m, divisée par la taille de la vache) ; hystérésis 10 %. */
-export const COW_LOD_DIST = { low: 12, high: 26 };
+/**
+ * Version réduite au-delà de cette distance à la caméra (m, allongée pour un grand bovin, jamais raccourcie pour un veau
+ * — lodScale) ; hystérésis 10 %. En basse, 16 m : la caméra normale du téléphone voit le troupeau à 10-14 m — à 12 m,
+ * la Holstein, la Hereford, la Normande, la Highland (sans son poil long) et tous les veaux étaient réduits.
+ */
+export const COW_LOD_DIST = { low: 16, high: 26 };
 /** Vache hors du champ : animée une image sur OFFSCREEN_STEP, avec le temps cumulé. */
 export const OFFSCREEN_STEP = 3;
 /** Au loin (version réduite), animée une image sur FAR_STEP. */
@@ -1462,7 +1466,7 @@ export function animateRealCow(e, dt, sad) {
   // Version réduite au loin.
   if (horseView.on && md.setLod && !md.lodHold) {
     const far = gfx.quality === 'high' ? COW_LOD_DIST.high : COW_LOD_DIST.low;
-    const dist = _wv.setFromMatrixPosition(e.root.matrixWorld).distanceTo(horseView.eye) / Math.max(0.25, scale);
+    const dist = _wv.setFromMatrixPosition(e.root.matrixWorld).distanceTo(horseView.eye) / lodScale(scale);
     md.setLod(dist > far * (md.lodLevel ? 0.9 : 1) ? 1 : 0);
   }
   // Mamelle : le lait de l'animal (pleine quand il est prêt, vide juste après la traite).

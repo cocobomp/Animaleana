@@ -4,17 +4,23 @@
 // GLB chargés dans node sans textures ; tout est déterministe (pas de temps fixe, aucun tirage au hasard).
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-import { buildRealSheepModel } from '../src/game/models/sheepReal.js';
-import { buildRealGoatModel } from '../src/game/models/goatReal.js';
-import { resolveLook } from '../src/sim/animal.js';
+import { buildRealSheepModel, animateRealSheep, SHEEP_LOD_DIST } from '../src/game/models/sheepReal.js';
+import { buildRealGoatModel, animateRealGoat, GOAT_LOD_DIST } from '../src/game/models/goatReal.js';
+import { buildRealCowModel, animateRealCow, COW_LOD_DIST } from '../src/game/models/cowReal.js';
+import { horseView } from '../src/game/models/horseReal.js';
+import { gfx } from '../src/game/gfx.js';
+import { resolveLook, createAnimal, growthScale } from '../src/sim/animal.js';
 import { loadRealSheepGltf } from './fixtures/realSheepGltf.js';
 import { loadRealGoatGltf } from './fixtures/realGoatGltf.js';
+import { loadRealCowGltf } from './fixtures/realCowGltf.js';
 
 let GS;
 let GG;
+let GC;
 beforeAll(async () => {
   GS = await loadRealSheepGltf();
   GG = await loadRealGoatGltf();
+  GC = await loadRealCowGltf();
 }, 120000);
 
 const lookOf = (sp, breed, o = {}) => ({
@@ -96,4 +102,67 @@ describe('sabots des agneaux, des chevreaux et de l\'Ouessant', () => {
     expect(r.max, `${b} : glissement ${(r.max * 100).toFixed(1)} cm`).toBeLessThan(0.01);
     expect(r.lowest).toBeGreaterThan(-0.012);
   }, 120000);
+});
+
+/** Entité minimale (comme AnimalEntity) autour d'un modèle, à la taille de l'animal, posée à l'origine. */
+const entity = (md, a, scale) => {
+  const root = new THREE.Group();
+  const sg = new THREE.Group();
+  sg.scale.setScalar(scale);
+  sg.add(md.root);
+  root.add(sg);
+  root.updateMatrixWorld(true);
+  const e = { model: md, root, scale, heading: 0, speed: 0, state: 'idle', time: 3, phase: 1.3, timer: 99, data: a, stage: 'adult', partner: null, target: new THREE.Vector3() };
+  Object.defineProperty(e, 'position', { get: () => root.position });
+  return e;
+};
+
+describe('version réduite à la vraie distance de la caméra du téléphone', () => {
+  // (critique : caméra normale du téléphone — rig.dist 7 derrière la joueuse — : moutons et chèvres à 9-11 m de l'œil,
+  // vaches à 10-14 m, tous en version réduite (seuils 7 et 12 m, divisés par la taille : le veau et le chevreau
+  // passaient en version réduite à 3,5-6 m) ; mèches de l'islandais, poil long des chèvres et de la Highland cachés,
+  // animation une image sur deux)
+  const lodAt = (sp, breed, days, dist, quality = 'low') => {
+    const a = createAnimal({ species: sp, breed, sex: 'f', colorIndex: 0, ageDays: days, seed: 7, rng: () => 0.42 });
+    const baby = days < 8;
+    const stage = baby ? { calf: true, lamb: true, kid: true } : {};
+    const build = { sheep: buildRealSheepModel, goat: buildRealGoatModel, cow: buildRealCowModel }[sp];
+    const G = { sheep: GS, goat: GG, cow: GC }[sp];
+    const md = build({ ...a.look, sex: 'f', ...stage }, breed, G);
+    const e = entity(md, a, a.look.scale * growthScale(a));
+    const anim = { sheep: animateRealSheep, goat: animateRealGoat, cow: animateRealCow }[sp];
+    const q0 = gfx.quality;
+    gfx.quality = quality;
+    horseView.on = true;
+    horseView.eye.set(0, 1.6, dist);
+    try {
+      for (let f = 0; f < 3; f++) {
+        horseView.frame++;
+        anim(e, 1 / 30, false);
+      }
+    } finally {
+      horseView.on = false;
+      gfx.quality = q0;
+    }
+    const r = { lod: md.lodLevel, hair: (md.hair ?? md.locks)?.visible ?? null };
+    md.dispose?.();
+    return r;
+  };
+
+  it('seuils en basse : 13 m pour le mouton et la chèvre, 16 m pour la vache (la haute inchangée)', () => {
+    expect(SHEEP_LOD_DIST).toEqual({ low: 13, high: 18 });
+    expect(GOAT_LOD_DIST).toEqual({ low: 13, high: 18 });
+    expect(COW_LOD_DIST).toEqual({ low: 16, high: 26 });
+  });
+
+  it.each([
+    ['sheep', 'islandais_mouton', 80, 10.5, 0], ['sheep', 'islandais_mouton', 80, 15, 1], ['sheep', 'merinos', 3, 10.5, 0],
+    ['goat', 'poitevine', 80, 10.5, 0], ['goat', 'alpine', 3, 9.5, 0], ['goat', 'col_noir', 80, 15.5, 1],
+    ['cow', 'highland', 80, 13.5, 0], ['cow', 'holstein', 3, 11, 0], ['cow', 'holstein', 80, 18.5, 1],
+  ])('%s %s (%s j) à %s m de l\'œil : version %s', (sp, breed, days, dist, want) => {
+    const r = lodAt(sp, breed, days, dist);
+    expect(r.lod).toBe(want);
+    // (mèches et poil long montrés de près, cachés au loin)
+    if (r.hair !== null) expect(r.hair).toBe(want === 0);
+  }, 60000);
 });

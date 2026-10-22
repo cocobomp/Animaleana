@@ -421,3 +421,54 @@ describe('oreilles d\'origine cachées', () => {
     }
   });
 });
+
+describe('pieds posés en virage', () => {
+  // Chemin du bout des doigts d'un pied tenu au sol (appui du footLock), moyenne par appui (cm, taille réelle), au pas
+  // en virage à gauche à 1,2 rad/s — comme le jeu : groupe parent à l'échelle de la race, v en unités du modèle.
+  const slip = (breed) => {
+    const { md, s } = dog(breed);
+    const g = new THREE.Group();
+    g.add(md.root);
+    g.scale.setScalar(s);
+    const anim = md.anim;
+    const toe = new THREE.Vector3();
+    const prev = md.legs.map(() => null);
+    const path = md.legs.map(() => 0);
+    const stances = md.legs.map(() => []);
+    for (let f = 0; f < 60 * 7; f++) {
+      g.rotation.y += 1.2 / 60;
+      g.position.x += (Math.sin(g.rotation.y) * s) / 60;
+      g.position.z += (Math.cos(g.rotation.y) * s) / 60;
+      g.updateMatrixWorld(true);
+      anim.update(1 / 60, st({ v: 1, moving: true, size: s }));
+      g.updateMatrixWorld(true);
+      if (f < 120) continue;
+      for (let l = 0; l < md.legs.length; l++) {
+        toe.copy(anim.toePts[l]).applyMatrix4(md.legs[l].paw.matrixWorld);
+        if (anim.plant[l]) {
+          if (prev[l]) path[l] += Math.hypot(toe.x - prev[l].x, toe.z - prev[l].z);
+          prev[l] = toe.clone();
+        } else if (prev[l]) {
+          stances[l].push(path[l]);
+          path[l] = 0;
+          prev[l] = null;
+        }
+      }
+    }
+    g.remove(md.root);
+    md.dispose();
+    return stances.map((a) => {
+      const v = a.slice(1);
+      return v.length ? (v.reduce((x, y) => x + y, 0) / v.length) * 100 / s : 0;
+    });
+  };
+  it('pattes courtes : le postérieur intérieur ne glisse plus de 8 à 9 cm par appui (correction latérale plus large)', () => {
+    for (const breed of ['teckel', 'cocker', 'cavalier']) {
+      // (FL, FR, HL — intérieur —, HR ; avant : HL 9,2 / 7,7 / 8,1 cm, HR 9,8 / 9,7 / 9,8 ; après : HL 4,9 / 1,7 / 2,2,
+      // HR 5,8 / 4,1 / 4,3)
+      const [, , hl, hr] = slip(breed);
+      expect(hl, breed).toBeLessThan(6);
+      expect(hr, breed).toBeLessThan(7.5);
+    }
+  });
+});

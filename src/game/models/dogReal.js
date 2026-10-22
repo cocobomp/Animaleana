@@ -3562,9 +3562,11 @@ class RealDogAnim {
         // (trop loin de sa place, le pied repart : nouvelle prise d'appui, la correction s'efface en fondu)
         const off = !pass && Math.abs(ez) > 0.45 * Lg;
         // (rotation +θ autour de x : le pied, sous l'articulation, recule de L sin θ ; +φ autour de z : il part vers +x
-        // de L sin φ ; bornées)
+        // de L sin φ ; bornées — sur le côté jusqu'à 0,38 rad : en virage serré au pas, le corps tourne sous le pied
+        // posé ; bornée à 0,2, la correction ne suivait plus et le postérieur des pattes courtes glissait de 8 à 10 cm
+        // par appui)
         const dth = clamp(Math.asin(clamp(ez / Lg, -0.5, 0.5)), -0.52 - th, 0.52 - th);
-        const dph = clamp(-Math.asin(clamp(ex / Lg, -0.2, 0.2)), -0.2 - ph, 0.2 - ph);
+        const dph = clamp(-Math.asin(clamp(ex / Lg, -0.4, 0.4)), -0.38 - ph, 0.38 - ph);
         const moved = Math.abs(dth) >= 1e-4 || Math.abs(dph) >= 1e-4;
         if (moved) {
           th += dth;

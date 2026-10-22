@@ -1878,8 +1878,9 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   // Poil frisé (caniche, labradoodle) ou soyeux et frangé (yorkshire, setter, cavalier) : relief dans le shader.
   // (touffu : spitz — un relief de bouclettes léger, le poil n'est plus de la pâte à modeler)
   // (touffu : relief à peine marqué — à 0,4, des taches de pixels sombres en camouflage sur la face et le corps du loulou)
-  // (bouclettes serrées du lagotto : leurs anneaux remplacent en partie la frisure douce, qui les brouillait)
-  uniforms.cCurl.value.set(B.curly ? 1 - 0.6 * B.ringlets : B.fluffy ? 0.12 * B.fluffy : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : 0, B.ringlets);
+  // (bouclettes serrées du lagotto : leurs mèches enroulées couvrent toute la robe et remplacent la frisure douce, qui
+  // les brouillait et coûtait quatre bruits de plus par pixel)
+  uniforms.cCurl.value.set(B.curly ? 1 - B.ringlets : B.fluffy ? 0.12 * B.fluffy : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : 0, B.ringlets);
   uniforms.cWrinkle.value = B.wrinkle ?? 0;
   const keepCfg = base.cfg.keep;
   const nose = S.measure.noseTip;

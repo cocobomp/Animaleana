@@ -318,6 +318,16 @@ export function buildPendantEars(base, D, B) {
         }
       }
     }
+    // (bouclettes serrées : la tête sous l'oreille est bosselée de touffes ; suivie rangée par rangée, l'oreille en
+    // gardait des marches horizontales — des planches empilées. Lissée le long de l'oreille, un peu écartée.)
+    if (S.lumpy) {
+      for (let it = 0; it < 8; it++) {
+        const prev = SX.map((row) => row.slice());
+        for (let r = 0; r <= NV; r++) {
+          for (let k = 0; k < NU; k++) SX[r][k] = 0.25 * prev[Math.max(0, r - 1)][k] + 0.5 * prev[r][k] + 0.25 * prev[Math.min(NV, r + 1)][k] + 0.0004 * hs;
+        }
+      }
+    }
     for (let r = 1; r <= NV; r++) for (let k = 0; k < NU; k++) SX[r][k] = Math.max(SX[r][k], SX[r - 1][k] - 0.0035 * hs);
     // 2. Sommets : section en lentille (bords arrondis) posée sur la surface, pli de l'attache, frisure.
     const ring = SX;
@@ -335,7 +345,7 @@ export function buildPendantEars(base, D, B) {
         // (bouclettes serrées : bosses plus larges le long de l'oreille — un bruit tiré rangée par rangée, 13 cases pour
         // 13 rangées, décalait chaque rangée de la suivante : des planches empilées ; les petites boucles sont dans le
         // shader)
-        const bump = S.curl && S.lumpy ? ((noise2(u * 4 + seed, v * 3.2) - 0.5) * 0.011 + (noise2(u * 8 + seed + 5, v * 5) - 0.5) * 0.004) * hs * (0.5 + 0.5 * Math.abs(t))
+        const bump = S.curl && S.lumpy ? ((noise2(u * 2.5 + seed, v * 2.5) - 0.5) * 0.005 + (noise2(u * 5 + seed + 5, v * 4) - 0.5) * 0.002) * hs * (0.5 + 0.5 * Math.abs(t))
           : S.curl ? ((noise2(u * 5 + seed, v * 7) - 0.5) * 0.01 + (noise2(u * 11 + seed, v * 13) - 0.5) * 0.005) * hs * (0.5 + 0.5 * Math.abs(t))
           : S.fringe ? Math.sin(v * 11 + u * 2 + seed) * 0.0022 * hs * S.fringe * smooth(0.25, 0.7, v) : 0;
         const xc = sx + 0.0015 * hs + T + lift - tuck + bump;

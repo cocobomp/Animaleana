@@ -480,24 +480,56 @@ float cmpSilkH(vec3 p) {
   vec3 r = CMP_ROT * vec3(p.x, 0.0, p.z);
   return cmpNoise(vec3(r.x * 170.0, p.y * 18.0, r.z * 170.0)) * 0.7 + cmpNoise(vec3(r.x * 340.0, p.y * 34.0, r.z * 340.0)) * 0.3;
 }
-// Bouclettes serrées (lagotto) : des boucles de poil entremêlées. Autour du centre de chaque cellule d'un pavage (bruit
-// cellulaire sur des axes tournés, un peu déformé), une coquille de rayon propre à la cellule ; la peau la coupe en
-// anneaux et en arcs de boucle qui se chevauchent (la plus haute l'emporte), les creux entre elles restent sombres.
-// fr : cellules par mètre (58 : boucles de 1,7 cm, chien de taille 1). Renvoie (hauteur 0 → 1, creux 0 → 1).
-vec2 cmpRing(vec3 p, float fr) {
-  vec3 q = CMP_ROT * p * fr;
-  q += vec3(cmpNoise(q * 0.37), cmpNoise(q * 0.37 + 13.1), cmpNoise(q * 0.37 + 27.7)) * 0.6;
-  vec3 i = floor(q);
-  vec3 f = fract(q);
+// Bouclettes serrées (lagotto) : des mèches de laine enroulées, serrées les unes contre les autres. Chaque cellule d'un
+// pavage (axes tournés, un peu déformé) porte une mèche : un dôme de laine adouci jusqu'à son bord, un arc large d'un
+// côté et un arc plus serré de l'autre — une spirale, pas un anneau — ; les mèches voisines s'additionnent (pas de
+// « la plus haute l'emporte », qui traçait des contours nets : des écailles). Elles sont mesurées dans le plan de la
+// peau (nr : normale de repos) : coupées en travers, des sphères ne laissaient sur la peau que des cercles épars, des
+// anneaux nets comme des rondelles. Le centre d'une cellule ne s'écarte que d'un quart de cellule et une mèche ne
+// dépasse pas les deux tiers : les 2 × 2 × 2 cellules qui entourent le point suffisent (au lieu de 3 × 3 × 3).
+// q : position en cellules (déjà tournée et déformée, cmpWarp), n : normale de repos tournée. Renvoie (hauteur 0 →
+// ~1,5, pente par cellule, calculée — pas tirée de dFdx/dFdy, constantes par carré de deux pixels : un damier).
+vec4 cmpCurls(vec3 q, vec3 n) {
+  vec3 b = floor(q - 0.5);
   float h = 0.0;
-  for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
-    vec3 g = vec3(float(x), float(y), float(z));
-    vec3 c = i + g;
-    float d = length(g + vec3(cmpHash(c), cmpHash(c + 17.31), cmpHash(c + 41.7)) * 0.8 + 0.1 - f);
-    float k = (d - 0.33 - 0.14 * cmpHash(c + 7.7)) / 0.2;
-    h = max(h, exp(-k * k));
+  vec3 g = vec3(0.0);
+  for (int z = 0; z <= 1; z++) for (int y = 0; y <= 1; y++) for (int x = 0; x <= 1; x++) {
+    vec3 c = b + vec3(float(x), float(y), float(z));
+    vec3 rnd = vec3(cmpHash(c), cmpHash(c + 17.31), cmpHash(c + 41.7));
+    vec3 d = q - (c + 0.5 + (rnd - 0.5) * 0.5);
+    float dn = dot(d, n);
+    // (mèches dont le centre est loin de la peau, devant ou derrière : effacées)
+    float wd = 1.0 - smoothstep(0.2, 0.5, abs(dn));
+    d -= n * dn;
+    float R = 0.56 + 0.1 * fract(rnd.x * 7.13 + rnd.z);
+    float x2 = dot(d, d) / (R * R);
+    if (x2 >= 1.0 || wd <= 0.0) continue;
+    // dôme de laine (nul et plat au bord)
+    float A = (0.35 + 0.25 * rnd.x) * wd;
+    float f = 1.0 - x2;
+    h += A * f * f;
+    g += A * (-4.0 * f / (R * R)) * d;
+    // la mèche enroulée : un arc large au bord, d'un côté, un arc serré vers le centre, de l'autre côté (bosses en
+    // (1 − k²/3)², presque des gaussiennes, moins chères)
+    float r = sqrt(x2) + 1e-4;
+    float sd = 2.0 * dot(d, rnd - 0.5) / (r * R);
+    float k = (r - 0.62) / 0.2;
+    float t1 = max(0.0, 1.0 - k * k * 0.333);
+    float s1 = smoothstep(-0.65, 0.7, sd) * 0.7 * wd;
+    float k2 = (r - 0.3) / 0.14;
+    float t2 = max(0.0, 1.0 - k2 * k2 * 0.333);
+    float s2 = smoothstep(-0.65, 0.7, -sd) * 0.45 * wd;
+    h += t1 * t1 * s1 + t2 * t2 * s2;
+    g += (s1 * t1 * (-1.333 * k / 0.2) + s2 * t2 * (-1.333 * k2 / 0.14)) * d / (r * R * R);
   }
-  return vec2(h, 1.0 - smoothstep(0.12, 0.5, h));
+  return vec4(h, g);
+}
+// Pavage des bouclettes déformé (un peu de bruit sur les axes tournés : pas une grille régulière)
+vec3 cmpWarp(vec3 q) {
+  vec3 w = q * 0.37;
+  float a = cmpNoise(w);
+  float b = cmpNoise(w + 13.1);
+  return q + vec3(a, b, a + b - 1.0) * 0.6;
 }
 // Rides du front (carlin) : plis horizontaux au-dessus des yeux, 0 à 1 (creux à 0).
 float cmpWrinkleH(vec3 p, vec4 part) {
@@ -738,23 +770,38 @@ const COLOR_F = /* glsl */ `
 float cmpEyeK = 0.0;
 float cmpCatch = 0.0;
 // (bouclettes serrées : calculées une fois, pour la couleur et pour le relief)
-vec2 cmpRingV = vec2(0.0);
-float cmpRingFade = 0.0;
-float cmpRingBump = 0.0;
+float cmpCurlZ = 0.0;
+vec3 cmpCurlG = vec3(0.0);
+float cmpCurlFade = 0.0;
+float cmpCurlBump = 0.0;
 if (cOn > 0.5 && cCurl.z > 0.0 && cRole > 0.5) {
   // (deux tailles : les boucles de 1,7 cm de près, des grappes de boucles de 4 cm à mi-distance — sinon la robe
   // paraissait lisse dès que le chien s'éloigne ; chacune effacée à moins de quatre ou cinq pixels par boucle, où elle
-  // faisait un grain de papier de verre qui scintille)
+  // faisait un grain de papier de verre qui scintille ; les petites ne sont calculées que de près)
   float fw = length(fwidth(vCmpPos));
   float fadeS = 1.0 - smoothstep(0.2, 0.42, fw * 58.0);
   float fadeB = 1.0 - smoothstep(0.2, 0.42, fw * 25.0);
   if (fadeB > 0.0) {
-    vec2 big = cmpRing(vCmpPos + 3.7, 25.0);
-    vec2 small = fadeS > 0.0 ? cmpRing(vCmpPos, 58.0) : big;
-    cmpRingV = mix(big, small * (0.55 + 0.45 * big.x) + vec2(0.0, 0.3) * big.y, fadeS);
-    cmpRingFade = fadeB;
-    // (relief plus tôt effacé que la couleur : sa pente, prise par carrés de deux pixels, faisait un damier)
-    cmpRingBump = 1.0 - smoothstep(0.1, 0.24, fw * 25.0);
+    // (normale de repos, des pas d'écran de la position de repos)
+    vec3 nq = CMP_ROT * normalize(cross(dFdx(vCmpPos), dFdy(vCmpPos)) + 1e-9);
+    vec4 cv = vec4(0.0);
+    // grappes de 4 cm (25 par mètre) ; de près, presque couvertes par les petites : pas calculées
+    if (fadeS < 0.99) {
+      vec4 bg = cmpCurls(cmpWarp(CMP_ROT * (vCmpPos + 3.7) * 25.0), nq);
+      cv = vec4(bg.x, (bg.yzw * CMP_ROT) * 25.0);
+    }
+    // boucles de 1,7 cm (58 par mètre), deux pavages décalés : des mèches partout, pas des grappes éparses sur une
+    // laine lisse (une seule déformation pour les deux)
+    if (fadeS > 0.0) {
+      vec3 qs = cmpWarp(CMP_ROT * vCmpPos * 58.0);
+      vec4 sm = (cmpCurls(qs, nq) + cmpCurls(qs + vec3(7.5, 7.37, 7.61), nq)) * 0.6;
+      sm = vec4(sm.x, (sm.yzw * CMP_ROT) * 58.0);
+      cv = mix(cv, cv * 0.25 + sm, fadeS);
+    }
+    cmpCurlZ = cv.x;
+    cmpCurlG = cv.yzw;
+    cmpCurlFade = fadeB;
+    cmpCurlBump = (1.0 - smoothstep(0.16, 0.36, fw * 25.0)) * (1.0 - 0.75 * vCmpPart.x);
   }
 }
 if (cOn > 0.5) {
@@ -821,7 +868,8 @@ if (cOn > 0.5) {
     // leurs boucles)
     float trim = clamp(-cCut.x / 0.02, 0.0, 1.0) * (1.0 - vCmpPart.w) * (1.0 - vCmpPart.z) * (1.0 - vCmpPart.y);
     float ringK = cCurl.z * (1.0 - 0.65 * trim);
-    nc *= mix(1.0, (0.76 + 0.3 * cmpRingV.x - 0.08 * cmpRingV.y) * (0.92 + 0.16 * cmpNoise(CMP_ROT * vCmpPos * 260.0)), ringK * cmpRingFade);
+    // (creux entre les mèches un peu plus sombres, sans trou noir au centre des boucles ; grain de la laine)
+    nc *= mix(1.0, mix(0.74, 1.05, smoothstep(0.05, 0.8, cmpCurlZ)) * (1.0 + (cmpNoise(CMP_ROT * vCmpPos * 260.0) - 0.5) * 0.14 * (1.0 - smoothstep(0.25, 0.6, fwC * 260.0))), ringK * cmpCurlFade);
     float tuft = cmpNoise(CMP_ROT * vCmpPos * 34.0) * 0.65 + cmpNoise(CMP_ROT * vCmpPos * 71.0 + 3.0) * 0.35;
     nc *= mix(1.0, 0.86 + 0.24 * tuft, ringK * (1.0 - smoothstep(0.3, 0.9, fwC * 34.0)));
   }
@@ -860,9 +908,10 @@ const CURL_F = /* glsl */ `
 if (cOn > 0.5 && cRole > 0.5 && (cCurl.x > 0.0 || cCurl.y > 0.0 || cCurl.z > 0.0 || cWrinkle > 0.0)) {
   float fade = 1.0 - smoothstep(0.25, 0.9, length(fwidth(vCmpPos)) * 140.0);
   float hh = (cCurl.x * 0.004 * cmpCurlH(vCmpPos) + cCurl.y * 0.0015 * cmpSilkH(vCmpPos) * (1.0 - 0.8 * vCmpPart.z)) * fade
-    + cCurl.z * 0.0022 * cmpRingV.x * cmpRingBump
     + cWrinkle * 0.0022 * cmpWrinkleH(vCmpPos, vCmpPart) * (1.0 - smoothstep(0.3, 1.0, length(fwidth(vCmpPos)) * 160.0));
   vec2 dH = vec2(dFdx(hh), dFdy(hh));
+  // (bouclettes serrées : leur pente calculée, projetée sur les pas d'écran de la position de repos)
+  if (cCurl.z > 0.0) dH += cCurl.z * 0.0022 * cmpCurlBump * vec2(dot(cmpCurlG, dFdx(vCmpPos)), dot(cmpCurlG, dFdy(vCmpPos)));
   vec3 sx = dFdx(-vViewPosition);
   vec3 sy = dFdy(-vViewPosition);
   vec3 r1 = cross(sy, normal);
@@ -1123,6 +1172,6 @@ export function coatMaterial(src, shared, opts) {
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, cWet);\nroughnessFactor = mix(roughnessFactor, 0.12, cmpEyeK);')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${SHEEN_F}`);
   };
-  mat.customProgramCacheKey = () => 'dog-coat-v4';
+  mat.customProgramCacheKey = () => 'dog-coat-v5';
   return mat;
 }

@@ -58,7 +58,7 @@ export const COAT_LOOKS = {
 
 const glf = (x) => Number(x).toFixed(4);
 /** Ombre du toupet sur le front (part de lumière en moins sous lui). */
-export const FORE_SHADE = 0.3;
+export const FORE_SHADE = 0.34;
 const { dapple: DAP, pinto: PIN, spots: SPOT, dun: DUN, roan: ROAN, blanket: BLANKET } = COAT_LOOKS;
 
 const COAT_FRAGMENT = /* glsl */ `
@@ -317,12 +317,13 @@ hEarIn = 0.0;
     float snout = smoothstep(0.86, 0.94, hl.z + (hNoise(P * 30.0) - 0.5) * 0.03);
     c = mix(c, mottled, isHead * clamp(spect * 0.5 + snout * 0.85, 0.0, 1.0) * hSkinMot * (1.0 - face * 0.6));
   }
-  // Ombre du toupet sur le front (contact, douce, un peu plus large que lui) : un toupet clair sur une robe claire se
-  // détache par son ombre au lieu d'une plaque pâle translucide ; sous un toupet foncé, à peine visible.
+  // Ombre du toupet sur le front (contact, douce, plus large que lui : un liseré d'ombre autour de ses bords et de sa
+  // pointe) : un toupet clair sur une robe claire se détache par son ombre au lieu d'une plaque pâle translucide ;
+  // sous un toupet foncé, à peine visible.
   if (hFore.w > 0.0 && isHead > 0.5) {
     float ff = (hl.z - hFore.x) / max(1e-3, hFore.y - hFore.x);
-    float fw = hFore.z * (1.0 - 0.85 * pow(smoothstep(0.05, 0.85, ff), 0.85)) * 1.2 + 0.006;
-    float fsh = smoothstep(-0.04, 0.06, ff) * (1.0 - smoothstep(0.8, 1.05, ff)) * (1.0 - smoothstep(fw * 0.55, fw, abs(hl.x))) * smoothstep(-0.03, 0.02, hl.y);
+    float fw = hFore.z * (1.0 - 0.85 * pow(smoothstep(0.05, 0.85, ff), 0.85)) * 1.7 + 0.012;
+    float fsh = smoothstep(-0.04, 0.06, ff) * (1.0 - smoothstep(0.85, 1.15, ff)) * (1.0 - smoothstep(fw * 0.45, fw, abs(hl.x))) * smoothstep(-0.03, 0.02, hl.y);
     c *= 1.0 - ${glf(FORE_SHADE)} * fsh * hFore.w;
   }
   // (plus épais au-dessus : le bord de la paupière supérieure et ses cils)

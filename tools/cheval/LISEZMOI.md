@@ -625,6 +625,39 @@ cavalier.
   réduit). Ajouté au pixel : un bruit pour le grain du poil (toutes les robes), quelques opérations pour l'œil, le
   naseau et l'oreille ; le bruit cellulaire des pommelures de santé seulement sur les robes dorées claires.
 
+Finitions vues au téléphone (critique « finitions », 390×844, qualité basse, caméra du jeu à 7 m) :
+
+- **nuque et base des oreilles** : les triangles à cheval entre l'oreille et la nuque prenaient la partie « oreille »
+  (attribut `hPart`, plat : WebGL le prend au dernier sommet) ; la hauteur relative de la nuque (≈ 1,7 coude) y était
+  lue comme une hauteur sur l'oreille et la pointe noire s'y peignait (triangles noirs nets, bai, isabelle, alezan).
+  L'ordre de leurs sommets tourne à la lecture du GLB (`provokeOffEars`) : 45 triangles mixtes, 22 assombris → 0 ;
+- **pangaré** (Trotteur noir pangaré, Fjord) et ton doré : poids du corps continu jusqu'au haut des membres
+  (`bodyL`, hauteur relative au coude) au lieu du numéro de partie : plus de dents noires au coude et au grasset ;
+- **gris** : « Gris » et « Gris clair » sans pommelures (d'après le nom pour les anciennes sauvegardes) ; vrais
+  pommelés : pommelures rondes et floues (distance au centre de cellule, rayon propre à chaque cellule) sur un fond
+  gris acier plus foncé, au lieu d'un réseau de fines lignes (« girafe ») ; poulain gris foncé, sans pommelures ;
+  le bruit cellulaire n'est plus calculé pour les gris sans pommelures ;
+- **rouans** : robe de base plus foncée et plus saturée (`roanBase`) et 19 % de poils blancs au loin (mélange en
+  lumière linéaire) au lieu de 27 % sur la teinte d'ensemble : un rouan rouge, bai ou bleu, plus un gris presque blanc ;
+- **appaloosa couverture** : bord avant incliné (en avant sur le rein, en arrière vers le ventre), déchiqueté, flocons
+  blancs devant ;
+- **mèches de gauche de la crinière** : en grappes de 1 à 4 qui se chevauchent, vides inégaux, longueurs de 12 à
+  46 % de la crinière, ton propre à chaque mèche (`leftLocks`) : plus une rangée régulière de pétales ou de flammes ;
+- **toupet** : ombre douce sur le front (un toupet clair sur une robe claire se détache) ; **brosse du Fjord** : une
+  bande continue de rubans foncés de 6 cm le long de la crête, un peu plus haute que le crème ;
+- **pente** : la racine s'incline d'après la hauteur du terrain sous les quatre sabots (`groundTilt`, amorti, borné
+  à 20° de tangage et 12° de roulis ; rien hors du terrain : van, saut, podium) et le cavalier suit. 99 chevaux sur
+  une grille de la ferme : 40 avec un sabot à plus de 2 cm du terrain, pire 9,2 cm → 0, pire 0,7 cm ; au galop monté
+  sur la pente, sole jusqu'à 9,9 cm sous le terrain → 1,3 cm. 5 hauteurs du terrain par cheval animé et par image ;
+- **galop monté très rapide** : cadence du galop bornée à 2,9 fois la naturelle au-delà du galop allongé (et non
+  1,8) : à la vitesse montée la plus haute (compétence 100, selle de course), glissement des sabots posés 8 à 48 cm
+  → moins de 1,7 cm (selle français, Shetland, Falabella) ;
+- **Falabella en selle de cheval** : le cavalier s'assoit par le milieu de son bassin (`SMALL_PONY`) : 3 à 5,5 cm
+  au-dessus du siège → 1,6 à 2,8 cm, 1 cm au plus dans le pommeau ou le troussequin ;
+- **couverture imperméable** : un peu plus d'écart (`GEAR_LEG_GAP`) là où la peau voisine suit la cuisse (hanche,
+  grasset, regardée 8 cm plus loin d'avant en arrière) : tissu sous la peau en mouvement 3 à 4 cm (Akhal-Teké, traits)
+  → 0 sur les 33 races × 3 couvertures × 5 allures, peau par-dessus le tissu toujours ≤ 3 mm.
+
 Ce qu'il coûte, et comment on le garde bas :
 
 - **élimination hors du champ** : chaque maillage du cheval (`HorseMesh`) a une boîte englobante refaite sur

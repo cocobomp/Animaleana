@@ -94,6 +94,20 @@ describe('robes', () => {
   });
 });
 
+describe('toupet', () => {
+  it('ombre douce du toupet sur le front : de sa racine à sa pointe le long du chanfrein, plus large que lui', () => {
+    const md = horse('arabe', 0); // gris clair, crins clairs
+    const u = md.coatMesh.material.userData.horseUniforms.hFore.value;
+    expect(u.w).toBe(1);
+    expect(u.y).toBeGreaterThan(u.x + 0.1); // (pointe plus bas sur le chanfrein que la racine, en longueurs de tête)
+    expect(u.z).toBeGreaterThan(0.03);
+    expect(u.z).toBeLessThan(0.15);
+    const fs = compile(md.coatMesh.material);
+    expect(fs).toContain('if (hFore.w > 0.0 && isHead > 0.5)');
+    md.dispose();
+  });
+});
+
 describe('crinière : mèches de gauche', () => {
   const spread = (xs) => {
     const m = xs.reduce((a, b) => a + b, 0) / xs.length;

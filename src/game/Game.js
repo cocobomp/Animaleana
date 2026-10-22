@@ -2186,7 +2186,11 @@ export class Game {
   collect(a) {
     const r = collectProduct(this.profile, a);
     if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
-    this.entities.get(a.id)?.emit(r.product === 'wool' ? '🧶' : '🥛', 3);
+    const e = this.entities.get(a.id);
+    e?.emit(r.product === 'wool' ? '🧶' : '🥛', 3);
+    // La joueuse fait le geste : la main aux trayons pour traire (vache, chèvre : Player.milkAtUdder), la tonte au flanc
+    // (rien ne l'appelait : elle restait les bras ballants pendant que la mamelle se vidait).
+    this.player?.careGesture?.(SPECIES[a.species]?.product?.action ?? (r.product === 'wool' ? 'shear' : 'milk'), e);
     audio.ui('coin');
     this.xp('collect');
     this.ui.toast(t(`got_${r.product}`, { name: a.name, g: a.sex, n: r.earned }));

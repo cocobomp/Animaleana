@@ -864,6 +864,7 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
     bodyLength: (M.noseZ - M.rearZ) * size,
     noseZ: M.noseZ * size,
     rumpZ: M.rearZ * size,
+    halfWidth: M.halfW * size,
     udderZ: (M.teat?.z ?? M.hipZ + 0.1) * size,
     // (accessoires du salon : dessus du crâne et tour de tête dans le repère de l'ancre de la tête, bout de la queue)
     accessoryFit: { skull, headQ: headAnchor.qInv.clone(), mouth, headR: 0.13, tailTip },
@@ -1305,6 +1306,16 @@ export function calfNurseSpot(e, mother, out) {
   const lat = 0.32 * ms + 0.12 * ks;
   out.set(ux + fx * 0.95 * ks + fz * side * lat, 0, uz + fz * 0.95 * ks - fx * side * lat);
   return h + Math.PI + side * 0.42;
+}
+
+/**
+ * Corps d'une vache au sol (monde, mètres, dans son repère : x vers son flanc gauche, z vers l'avant) : demi-largeur du
+ * tronc, bout du nez et pointe des fesses — le veau qui la rejoint la contourne au lieu de la traverser (AnimalEntity).
+ */
+export function calfMotherBox(mother) {
+  const md = mother.model ?? {};
+  const s = mother.scale ?? 1;
+  return { halfW: (md.halfWidth ?? 0.34) * s, front: (md.noseZ ?? 1.15) * s, rear: (md.rumpZ ?? -1.1) * s };
 }
 
 /** Trayon où vient la bouche du veau (monde) : le bas de la mamelle de sa mère, de son côté. */

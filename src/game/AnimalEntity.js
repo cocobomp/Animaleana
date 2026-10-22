@@ -21,7 +21,7 @@ import { animateRealSheep } from './models/sheepReal.js'; // mouton réaliste (G
 import { sheepLookOf, sheepStage } from '../sim/sheepLook.js';
 import { animateRealGoat } from './models/goatReal.js'; // chèvre réaliste (GLB) : allures, dressée, traite, chevreau
 import { goatLookOf, goatStage } from '../sim/goatLook.js';
-import { animateRealCow } from './models/cowReal.js'; // vache réaliste (GLB) : allures, couchée, traite, veau, taureau
+import { animateRealCow, calfNurseSpot, calfMotherBox } from './models/cowReal.js'; // vache réaliste (GLB) : allures, couchée, traite, veau, taureau
 import { cowLookOf, cowStage, cowModelKind } from '../sim/cowLook.js';
 
 // Où chaque espèce aime traîner (les chevaux au paddock, le troupeau à la bergerie…).
@@ -43,6 +43,56 @@ export const inPen = (x, z, margin = 0) => inside(enclosure('pen'), x, z, margin
 
 // Les petits animaux passent sous les barrières.
 const SMALL = (e) => e.data.species === 'cat' || e.data.species === 'rabbit' || (e.data.species === 'dog' && e.scale < 0.65);
+
+/** Le veau e est-il avec sa mère o (état « mother », vaches réalistes) ? */
+const calfOf = (e, o) => e.state === 'mother' && e.partner === o && !!e.model?.realCow && !!o.model?.realCow;
+
+/**
+ * Veau d'une vache réaliste qui rejoint sa mère pour téter : sa cible (out) et sa vitesse. Il va à sa place de tétée
+ * (calfNurseSpot : à côté de la mamelle, tourné vers la croupe) en longeant le flanc de son côté — s'il est devant, derrière
+ * ou de l'autre côté, il gagne d'abord le côté, sans traverser sa mère — et s'y arrête : la tétée prend alors la main
+ * (animateRealCow). Le côté est celui où il arrive, sauf si un jumeau tète déjà de ce côté.
+ */
+function calfApproach(e, mother, out) {
+  const p = e.root.position;
+  const m = mother.position;
+  const h = mother.heading ?? 0;
+  const fx = Math.sin(h);
+  const fz = Math.cos(h);
+  const rx = p.x - m.x;
+  const rz = p.z - m.z;
+  const lz = rx * fx + rz * fz;
+  const lx = rx * fz - rz * fx;
+  const box = calfMotherBox(mother);
+  const ks = e.scale * (e.model?.size ?? 1);
+  const nursing = e.nursing === mother;
+  if (!nursing) {
+    const s = lx >= 0 ? 1 : -1;
+    const other = mother.nurseBy?.[s];
+    if (!other || other === e || other.nursing !== mother) e.nurseSide = s;
+  }
+  const side = e.nurseSide ?? 1;
+  const lane = box.halfW + 0.22 * ks + 0.12;
+  const own = lx * side;
+  calfNurseSpot(e, mother, out);
+  let lead = false;
+  if (!nursing && own < lane * 0.75) {
+    lead = true;
+    let tz = Math.min(box.front, Math.max(box.rear, lz));
+    let tx = side * lane;
+    // (de l'autre côté de sa mère : il passe d'abord devant ou derrière elle)
+    if (own < -box.halfW * 0.5 && lz < box.front + 0.2 && lz > box.rear - 0.2) {
+      tz = lz >= 0 ? box.front + 0.5 : box.rear - 0.5;
+      tx = lx;
+    }
+    out.set(m.x + fx * tz + fz * tx, 0, m.z + fz * tz - fx * tx);
+  }
+  const dn = Math.hypot(out.x - p.x, out.z - p.z);
+  // (arrivé : il s'arrête — tétée en cours, la place corrigée par la bouche peut s'écarter un peu de la place calculée)
+  if (!lead && dn < (nursing ? 1.0 : 0.4) * Math.max(0.6, ks + 0.3)) return 0;
+  const near = !lead && dn < 1.6;
+  return Math.min(near ? e.sp.walkSpeed * 0.7 : e.sp.runSpeed, (mother.speed ?? 0) + 0.4 + dn * 0.6);
+}
 
 const MOOD_EMOJI = { sick: '🤒', sad: '😢' };
 const HERD = ['horse', 'sheep', 'goat', 'cow'];
@@ -478,6 +528,31 @@ export class AnimalEntity {
     }
   }
 
+  /**
+   * Veau entré dans le corps de sa mère (vache réaliste, boîte de son tronc) : il en sort sur le côté le plus proche.
+   * Pas pendant la tétée (sa tête est sous le ventre, son corps contre le flanc). Renvoie vrai s'il a bougé.
+   */
+  calfOutOfMother(mother) {
+    if (this.nursing === mother) return false;
+    const p = this.root.position;
+    const m = mother.position;
+    const h = mother.heading ?? 0;
+    const fx = Math.sin(h);
+    const fz = Math.cos(h);
+    const rx = p.x - m.x;
+    const rz = p.z - m.z;
+    const lz = rx * fx + rz * fz;
+    const lx = rx * fz - rz * fx;
+    const box = calfMotherBox(mother);
+    const w = box.halfW + 0.12 * this.scale;
+    if (Math.abs(lx) >= w || lz > box.front - 0.2 || lz < box.rear + 0.15) return false;
+    const s = lx >= 0 ? 1 : -1;
+    const push = w - Math.abs(lx);
+    p.x += fz * s * push;
+    p.z -= fx * s * push;
+    return true;
+  }
+
   /** Les animaux ne se marchent pas dessus : ceux qui se chevauchent s'écartent doucement. */
   separate(ctx, dt) {
     if (this.sleeping || this.ridden || this.inside || this.data.stalled || this.perch?.phase === 'on') return;
@@ -489,6 +564,13 @@ export class AnimalEntity {
       if (o.nursing === this || this.nursing === o) continue;
       // (jumeaux qui tètent la même mère, chacun de son côté : ils ne se repoussent pas loin de la mamelle)
       if (this.nursing && this.nursing === o.nursing) continue;
+      // (veau qui rejoint sa vache : le cercle de 1,5 m de rayon de la vache le tenait loin de la mamelle et il la
+      // poussait ; seul le veau s'écarte, s'il entre dans le corps de sa mère — une boîte, pas un cercle)
+      if (calfOf(o, this)) continue;
+      if (calfOf(this, o)) {
+        if (this.calfOutOfMother(o)) moved = true;
+        continue;
+      }
       const minD = (this.radius + o.radius) * 0.85;
       const dx = p.x - o.position.x;
       const dz = p.z - o.position.z;
@@ -702,8 +784,15 @@ export class AnimalEntity {
               break;
             }
             const dd = Math.hypot(partner.position.x - p.x, partner.position.z - p.z);
-            this.target.set(partner.position.x - Math.sin(partner.heading) * 0.8, 0, partner.position.z - Math.cos(partner.heading) * 0.8);
-            this.targetSpeed = dd > 1.2 ? Math.min(this.sp.runSpeed, partner.speed + 0.8 + dd * 0.2) : 0;
+            if (partner.model?.realCow && this.model?.realCow) {
+              // (veau d'une vache réaliste : il va à sa place de tétée, à côté de la mamelle, et s'y arrête — la vache fait
+              // 2,3 m de long : visant 0,8 m derrière son milieu et ne s'arrêtant qu'à 1,2 m de lui, il trottait autour
+              // d'elle sans jamais téter)
+              this.targetSpeed = calfApproach(this, partner, this.target);
+            } else {
+              this.target.set(partner.position.x - Math.sin(partner.heading) * 0.8, 0, partner.position.z - Math.cos(partner.heading) * 0.8);
+              this.targetSpeed = dd > 1.2 ? Math.min(this.sp.runSpeed, partner.speed + 0.8 + dd * 0.2) : 0;
+            }
             if (this.timer <= 0) {
               if (d.needs.hunger < 60) ctx.game.socialMoment(this, 'nurse');
               this.decide(ctx);

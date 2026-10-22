@@ -57,7 +57,9 @@ export function catCoatPlan(look = {}, breed = null, kitten = false) {
     // ragdoll se ressemblaient tous)
     points: pattern === 'points' ? 1 : 0,
     maskScale: kitten ? 0.92 : 1,
-    hairless, curly: tr.hair === 'curly' ? 1 : 0, plush: tr.hair === 'plush' ? 1 : 0, wrinkles: hairless,
+    // (chaton devon rex : vagues plus douces — à pleine force, des bandes sombres sur les joues et le cou, un corps en
+    // carton ondulé)
+    hairless, curly: tr.hair === 'curly' ? (kitten ? 0.35 : 1) : 0, plush: tr.hair === 'plush' ? 1 : 0, wrinkles: hairless,
     dark: hexLum(coat) < 0.06 && pattern !== 'tricolor',
     seed: ((look.seed ?? 7) % 997) * 0.731,
   };
@@ -226,10 +228,20 @@ const mat3 CMP_ROT = mat3(0.788, 0.441, -0.43, -0.39, 0.896, 0.215, 0.476, -0.05
 // Relief : bouclettes (frisé), plis de la peau nue (sphynx : rides du front, du cou et des épaules).
 float catCurlH(vec3 p) {
   // ondulations régulières (vagues du poil frisé du devon rex), un peu déformées ; du bruit seul donnait une peau
-  // grumeleuse, tachée
-  vec3 q = CMP_ROT * p;
+  // grumeleuse, tachée (chaton, cIris.x : modèle à la taille d'un adulte, vagues deux fois plus fines — à la même
+  // fréquence, trois ou quatre larges bandes sur sa grosse tête)
+  vec3 q = CMP_ROT * p * (cIris.x > 0.5 ? 2.0 : 1.0);
   float w = sin(q.y * 520.0 + sin(q.z * 190.0 + q.x * 110.0) * 1.8 + cmpNoise(q * 90.0) * 1.4);
   return 0.5 + 0.5 * w;
+}
+// Où les vagues se voient : pas sur les pattes ; à peine sur la tête et le haut du cou — repérés par l'os (part.z) et
+// par la distance au centre de la tête (chez le chaton, la peau des joues et du cou ne suit pas l'os de la tête : des
+// bandes sombres y passaient).
+float catCurlMask(vec3 p, vec4 part) {
+  // (chaton, cIris.x : grosse tête ronde et face courte — rayon plus large, en longueurs de tête)
+  float kt = cIris.x > 0.5 ? 1.0 : 0.0;
+  float hg = 1.0 - smoothstep(0.9 + 0.8 * kt, 1.5 + 1.0 * kt, distance(p, cHead.xyz) / max(0.01, cNose.w));
+  return (1.0 - part.x) * (1.0 - 0.85 * max(part.z, hg));
 }
 float catWrinkleH(vec3 p, vec4 part) {
   float headLen = cNose.w;
@@ -506,7 +518,7 @@ if (cOn > 0.5) {
   // poil frisé : bouclettes (effacées de loin, sinon des pixels qui scintillent)
   // (de la couleur du pelage : à peine plus clair sur la vague, jamais de creux sombres)
   // (tête : poil ras, à peine ondulé — des vagues sur la face faisaient des rayures de zèbre)
-  if (cHair.y > 0.0) nc *= mix(1.0, 0.95 + 0.08 * catCurlH(vCmpPos), cHair.y * (1.0 - vCmpPart.x) * (1.0 - 0.8 * vCmpPart.z) * (1.0 - smoothstep(0.25, 0.9, fwC * 160.0)));
+  if (cHair.y > 0.0) nc *= mix(1.0, 0.95 + 0.08 * catCurlH(vCmpPos), cHair.y * catCurlMask(vCmpPos, vCmpPart) * (1.0 - smoothstep(0.25, 0.9, fwC * 160.0)));
   // peau nue : plis plus sombres au fond, peau un peu rosée
   if (cHair.w > 0.0) nc *= mix(1.0, 0.8 + 0.25 * catWrinkleH(vCmpPos, vCmpPart), cHair.w * (1.0 - smoothstep(0.25, 0.9, fwC * 200.0)));
   // poil en peluche : pointes plus claires, grain doux et serré
@@ -523,7 +535,7 @@ if (cOn > 0.5) {
 const BUMP_F = /* glsl */ `
 if (cOn > 0.5 && cRole > 0.5 && (cHair.y > 0.0 || cHair.w > 0.0)) {
   float fade = 1.0 - smoothstep(0.25, 0.9, length(fwidth(vCmpPos)) * 150.0);
-  float hh = (cHair.y * 0.0007 * catCurlH(vCmpPos) * (1.0 - vCmpPart.x) * (1.0 - 0.85 * vCmpPart.z) + cHair.w * 0.0012 * catWrinkleH(vCmpPos, vCmpPart)) * fade;
+  float hh = (cHair.y * 0.0007 * catCurlH(vCmpPos) * catCurlMask(vCmpPos, vCmpPart) + cHair.w * 0.0012 * catWrinkleH(vCmpPos, vCmpPart)) * fade;
   vec2 dH = vec2(dFdx(hh), dFdy(hh));
   vec3 sx = dFdx(-vViewPosition);
   vec3 sy = dFdy(-vViewPosition);
@@ -639,7 +651,7 @@ export function catCoatMaterial(src, shared, opts) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.55, cHair.x), 0.45, cWet);');
   };
-  mat.customProgramCacheKey = () => 'cat-coat-v5';
+  mat.customProgramCacheKey = () => 'cat-coat-v7';
   return mat;
 }
 
@@ -662,7 +674,7 @@ export function catLidMaterial(coatMat) {
       .replace('#include <common>', '#include <common>\nvarying float vLidRim;')
       .replace('#include <alphamap_fragment>', 'diffuseColor.rgb *= mix(1.0, 0.1, smoothstep(0.0, 1.0, vLidRim));\n#include <alphamap_fragment>');
   };
-  mat.customProgramCacheKey = () => 'cat-lid-v2';
+  mat.customProgramCacheKey = () => 'cat-lid-v4';
   return mat;
 }
 
@@ -739,7 +751,7 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
       .replace('#include <common>', `#include <common>\n${SHELL_F}`)
       .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${SHELL_DISCARD_F}`);
   };
-  mat.customProgramCacheKey = () => 'cat-shell-v6';
+  mat.customProgramCacheKey = () => 'cat-shell-v8';
   mat.side = THREE.FrontSide;
   // (couches dessinées après les objets opaques, dans l'ordre : renderOrder croissant, voir catReal.js)
   mat.transparent = true;

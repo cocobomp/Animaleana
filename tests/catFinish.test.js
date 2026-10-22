@@ -320,6 +320,30 @@ describe('collier des chats à poil long', () => {
   });
 });
 
+describe('chaton devon rex', () => {
+  // Vagues du poil frisé à pleine force sur la grosse tête du chaton : bandes sombres sur les joues et le cou, corps en
+  // carton ondulé. Chaton : vagues plus douces et deux fois plus fines, tête et haut du cou épargnés (rayon plus large).
+  it('vagues plus douces que chez l\'adulte, masque de tête par la distance au centre de la tête', () => {
+    const kit = cat('devon_rex', 'baby');
+    const ad = cat('devon_rex');
+    const compile = (md) => {
+      const sh = { uniforms: {}, vertexShader: '#include <common>\n#include <begin_vertex>\n#include <skinning_vertex>', fragmentShader: '#include <common>\n#include <color_fragment>\n#include <roughnessmap_fragment>\n#include <normal_fragment_maps>' };
+      md.coatMesh.material.onBeforeCompile(sh, {});
+      return sh;
+    };
+    const k = compile(kit);
+    const a = compile(ad);
+    expect(k.uniforms.cHair.value.y).toBeGreaterThan(0);
+    expect(k.uniforms.cHair.value.y).toBeLessThan(0.5 * a.uniforms.cHair.value.y);
+    expect(k.uniforms.cIris.value.x).toBe(1);
+    expect(a.uniforms.cIris.value.x).toBe(0);
+    expect(k.fragmentShader).toContain('cHair.y * catCurlMask(vCmpPos, vCmpPart)');
+    expect(k.fragmentShader).toContain('distance(p, cHead.xyz) / max(0.01, cNose.w)');
+    kit.dispose();
+    ad.dispose();
+  });
+});
+
 describe('sous les yeux', () => {
   // La texture d'origine est peinte lisse et claire sous l'œil : un croissant sans poil (british, chartreux, scottish fold,
   // européen). Le relief y est pris sur un grain du pelage, jamais plus clair que le pelage voisin.

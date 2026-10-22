@@ -178,6 +178,10 @@ export function earShape(B) {
   return S;
 }
 
+/** Grille des oreilles modelées : points autour de la section, rangées de l'attache au bout (sommets par oreille :
+ * (NV + 1) × NU, plus le bout). */
+export const EAR_GRID = { NU: 18, NV: 13 };
+
 /**
  * Oreilles modelées d'une race (voir en tête) dans le repère du chien, après la déformation de la race (D : sortie de
  * deformDog). Place aussi les os des oreilles (base à l'attache, bout au milieu de l'oreille) dans D.heads. Renvoie les
@@ -243,7 +247,7 @@ export function buildPendantEars(base, D, B) {
   const eye0 = base.heads[I('eyeL')].clone().add(base.heads[I('eyeR')]).multiplyScalar(0.5);
   const dir0 = V(0, -1, 0.14).normalize();
   const across0 = V(0, -dir0.z, dir0.y);
-  const NU = 18; // points autour de la section (plaque aux bords roulés)
+  const NU = EAR_GRID.NU; // points autour de la section (plaque aux bords roulés)
   // Section : super-ellipse (faces presque plates, bords arrondis et épais comme un cuir roulé — en lentille, le bord
   // s'amincissait en lame et l'oreille se lisait comme une plaque de carton)
   const SE = S.se ?? 2 / 3.2;
@@ -255,7 +259,7 @@ export function buildPendantEars(base, D, B) {
     const sn = Math.sin((k / NU) * Math.PI * 2);
     return Math.sign(sn) * Math.abs(sn) ** SE;
   };
-  const NV = 13; // rangées de l'attache au bout
+  const NV = EAR_GRID.NV; // rangées de l'attache au bout
   const pos = [];
   const rest = [];
   const uv = [];
@@ -263,6 +267,9 @@ export function buildPendantEars(base, D, B) {
   const sw = [];
   const part = [];
   const index = [];
+  const rowV = []; // (par sommet : rangée et côté — pour les normales, plus bas)
+  const sideOf = [];
+  const starts = [];
   const seed = (B.key.length % 7) * 1.7;
   for (let s = 0; s < 2; s++) {
     const side = s === 0 ? 1 : -1;
@@ -279,6 +286,7 @@ export function buildPendantEars(base, D, B) {
     const across = V(0, -dir.z, dir.y); // (vers l'avant pour une oreille pendante)
     if (across.z < 0) across.negate();
     const start = pos.length / 3;
+    starts.push(start);
     // 1. Grille de l'oreille dans le plan du côté de la tête, et surface sur laquelle elle tombe (enveloppe lissée de la
     //    tête : elle ne recopie pas les petites bosses du crâne).
     const Q = [];
@@ -351,6 +359,8 @@ export function buildPendantEars(base, D, B) {
         const xc = sx + 0.0015 * hs + T + lift - tuck + bump;
         const pX = mid + side * (xc + t * T);
         pos.push(pX, q.y, q.z);
+        rowV.push(v);
+        sideOf.push(side);
         // repos (modèle d'origine) : une oreille de référence, la même pour toutes les races (ces coordonnées, où la robe
         // est peinte, sont partagées par les races aux oreilles modelées : voir dogReal.js mergedCoatGeo) ; la même
         // pour les deux faces (milieu de l'épaisseur) — sinon la robe peinte d'après le repos (taches du dalmatien)
@@ -392,6 +402,8 @@ export function buildPendantEars(base, D, B) {
         cz += pos[(last + k) * 3 + 2];
       }
       pos.push(cx / NU, cy / NU, cz / NU);
+      rowV.push(1);
+      sideOf.push(side);
       for (let c = 0; c < 3; c++) rest.push(rest[(last) * 3 + c]);
       uv.push(uv0[0], uv0[1] + 0.015);
       si.push(headI, e1, e2 >= 0 ? e2 : e1, 0);
@@ -422,6 +434,34 @@ export function buildPendantEars(base, D, B) {
   g.computeVertexNormals();
   const nrm = g.attributes.normal.array;
   g.dispose();
+  // Face intérieure éclairée comme la face externe en face d'elle (lambeau mince) : tournée vers la joue et le sol, elle
+  // prenait la teinte sombre et verdâtre de la lumière du sol — un liseré sombre au bord et sous le pli de l'attache de
+  // l'oreille plate (dogue argentin) ; à l'attache, normale ramenée vers celle du crâne (le pli y faisait un trait
+  // sombre).
+  for (const st of starts) {
+    for (let r = 0; r <= NV; r++) {
+      for (let k = 1; k < NU; k++) {
+        const t = secT(k);
+        if (t >= 0) continue;
+        const w = smooth(0, 0.6, -t);
+        const a = (st + r * NU + k) * 3;
+        const b = (st + r * NU + (NU - k)) * 3;
+        for (let c = 0; c < 3; c++) nrm[a + c] += (nrm[b + c] - nrm[a + c]) * w;
+      }
+    }
+  }
+  for (let i = 0; i < count; i++) {
+    const sd = sideOf[i];
+    let nx = nrm[i * 3];
+    const wA = 0.5 * (1 - smooth(0, 0.25, rowV[i]));
+    nx += (sd - nx) * wA;
+    const ny = nrm[i * 3 + 1] * (1 - wA);
+    const nz = nrm[i * 3 + 2] * (1 - wA);
+    const l = Math.hypot(nx, ny, nz) || 1;
+    nrm[i * 3] = nx / l;
+    nrm[i * 3 + 1] = ny / l;
+    nrm[i * 3 + 2] = nz / l;
+  }
   return {
     count,
     pos: Float32Array.from(pos), nrm: Float32Array.from(nrm), uv: Float32Array.from(uv), rest: Float32Array.from(rest),

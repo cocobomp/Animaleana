@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { buildRealDogModel } from '../src/game/models/dogReal.js';
 import { buildGear, removeGear } from '../src/game/gearModels.js';
 import { buildAccessories, removeAccessories } from '../src/game/models/salon.js';
+import { EAR_GRID } from '../src/game/models/dogParts.js';
 import { dogModelOf } from '../src/sim/dogLook.js';
 import { resolveLook } from '../src/sim/animal.js';
 import { loadRealDogGltf } from './fixtures/realDogGltf.js';
@@ -356,6 +357,26 @@ describe('accessoires du salon', () => {
       const w = place(breed, 'bow');
       expect(w.center, breed).toBeLessThan(2.5);
       expect(w.belowChin, breed).toBeGreaterThan(1);
+    }
+  });
+});
+
+describe('oreilles modelées', () => {
+  it('face intérieure éclairée comme la face externe : pas tournée vers le sol près de l\'attache (avant : liseré sombre et verdâtre du dogue)', () => {
+    const { NU, NV } = EAR_GRID;
+    for (const breed of ['dogo', 'labrador', 'beagle']) {
+      const { md } = dog(breed);
+      const L = md.anim.base.parts;
+      const N = md.coatMesh.geometry.attributes.normal.array;
+      let low = 1;
+      for (let s = 0; s < 2; s++) {
+        const st = L.earStart + s * ((NV + 1) * NU + 1);
+        // (moitié haute de l'oreille, face intérieure : points k de NU/2 + 1 à NU - 1)
+        for (let r = 0; r <= NV / 2; r++) for (let k = NU / 2 + 1; k < NU; k++) low = Math.min(low, N[(st + r * NU + k) * 3 + 1]);
+      }
+      // (avant : jusqu'à -0,8 sur les premières rangées du dogue)
+      expect(low, breed).toBeGreaterThan(-0.45);
+      md.dispose();
     }
   });
 });

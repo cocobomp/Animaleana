@@ -965,7 +965,8 @@ function shapeFor(base, B) {
     return g;
   };
   S = { key, B, D, heads: D.heads, users: 1 };
-  S.coatGeo = geo(D.pos, D.nrm, coat, base.attrs);
+  // (cmpFur : épaisseur du poil long poussé, rabbitCoat.js GROUND_V — couché contre le sol au lieu d'y entrer)
+  S.coatGeo = geo(D.pos, D.nrm, coat, D.furW.some((x) => x > 0.0005) ? { ...base.attrs, cmpFur: new THREE.BufferAttribute(D.furW, 1) } : base.attrs);
   S.eyeGeo = base.prims.eye ? geo(D.eyePos, D.eyeNrm, base.prims.eye, base.eyeAttrs) : null;
   S.lodCoat = lodGeo(S.coatGeo, coat.lodIndex);
   S.lodEye = S.eyeGeo ? lodGeo(S.eyeGeo, base.prims.eye.lodIndex) : null;

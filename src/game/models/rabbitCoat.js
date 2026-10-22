@@ -100,6 +100,7 @@ const COMMON_V = /* glsl */ `
 attribute vec3 cmpRest;
 attribute vec4 cmpPart;
 attribute float cmpLow;
+attribute float cmpFur;
 uniform vec4 cLand;
 uniform vec4 cEye;
 uniform vec4 cHead;
@@ -123,6 +124,17 @@ if (cSniff != 0.0) {
   transformed.y += cSniff * k;
   transformed.z -= cSniff * 0.4 * k;
 }`;
+
+// Poil long contre le sol (après le squelette : repère du lapin, sol à y = 0) : couché sur le sol au lieu d'y entrer —
+// ventre de l'angora, barbe et collerette du tête de lion passaient de 15 à 30 mm sous le sol aux allures. La peau du
+// pelage remonte au plus de l'épaisseur de son poil (cmpFur, poussée de la race) ; les mèches (cartes), jamais dessous.
+const GROUND_V = /* glsl */ `
+{
+  float under = 0.0015 - transformed.y;
+  if (under > 0.0) transformed.y += min(under, max(cmpFur, 0.0) * 1.1);
+}`;
+const GROUND_CARD_V = /* glsl */ `
+transformed.y = max(transformed.y, 0.0015);`;
 
 // Embonpoint (ventre et flancs), respiration (cage thoracique) et coupe du salon, le long de la normale du sommet déformé.
 const PUSH_V = /* glsl */ `
@@ -385,7 +397,7 @@ export function rabbitCoatMaterial(src, shared, opts) {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>\n${COMMON_V}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${REST_V}`)
-      .replace('#include <skinning_vertex>', `#include <skinning_vertex>\n${PUSH_V}`);
+      .replace('#include <skinning_vertex>', `#include <skinning_vertex>\n${PUSH_V}\n${card ? GROUND_CARD_V : GROUND_V}`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${COMMON_F}`)
       .replace('#include <color_fragment>', card
@@ -400,6 +412,6 @@ export function rabbitCoatMaterial(src, shared, opts) {
     if (a2c) sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', 'diffuseColor.a = smoothstep(0.1, 0.75, diffuseColor.a);\nif (diffuseColor.a < 0.04) discard;');
     if (card) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(normalize(vNormal) + vec3(0.0, 0.0, 0.9) + (viewMatrix * vec4(0.0, 0.6, 0.0, 0.0)).xyz);');
   };
-  mat.customProgramCacheKey = () => (card ? (a2c ? 'rabbit-card-v6-a2c' : 'rabbit-card-v6') : 'rabbit-coat-v3');
+  mat.customProgramCacheKey = () => (card ? (a2c ? 'rabbit-card-v7-a2c' : 'rabbit-card-v7') : 'rabbit-coat-v4');
   return mat;
 }

@@ -209,3 +209,44 @@ describe('allures du bélier', () => {
     expect(med).toBeLessThan(0.007);
   });
 });
+
+describe('poil long contre le sol', () => {
+  // Ventre de l'angora, barbe et collerette du tête de lion de 15 à 30 mm sous le sol au sautillement et au petit galop :
+  // le shader couche la peau du pelage sur le sol, au plus de l'épaisseur de son poil (attribut cmpFur, GROUND_V).
+  it.each([['angora', 0.9], ['tete_de_lion', 0.9], ['angora', 0], ['tete_de_lion', 0.3]])('%s à %s m/s : poil couché sur le sol, rien dessous', (b, v) => {
+    const md = rabbit(b);
+    const m = md.coatMesh;
+    const fur = m.geometry.attributes.cmpFur;
+    expect(fur, 'épaisseur du poil par sommet').toBeTruthy();
+    const sh = { uniforms: {}, vertexShader: '#include <common>\n#include <begin_vertex>\n#include <skinning_vertex>', fragmentShader: '#include <common>\n#include <color_fragment>\n#include <roughnessmap_fragment>' };
+    m.material.onBeforeCompile(sh);
+    expect(sh.vertexShader).toContain('attribute float cmpFur');
+    expect(sh.vertexShader).toContain('transformed.y += min(under, max(cmpFur, 0.0) * 1.1)');
+    const v3 = new THREE.Vector3();
+    let raw = Infinity;
+    let lifted = Infinity;
+    for (let f = 0; f < 200; f++) {
+      md.anim.update(1 / 60, { v, moving: v > 0, posture: 'crouch' });
+      md.root.position.z += v / 60;
+      md.root.updateMatrixWorld(true);
+      if (f < 120 || f % 4) continue;
+      for (let i = 0; i < m.geometry.attributes.position.count; i++) {
+        const y = m.getVertexPosition(i, v3).y;
+        raw = Math.min(raw, y);
+        // (même calcul que GROUND_V, repère du lapin : sol à y = 0)
+        const under = 0.0015 - y;
+        lifted = Math.min(lifted, under > 0 ? y + Math.min(under, Math.max(0, fur.getX(i)) * 1.1) : y);
+      }
+    }
+    expect(lifted, `${b} brut ${(raw * 1000).toFixed(1)} mm`).toBeGreaterThan(-0.001);
+    md.dispose();
+  });
+
+  it('mèches (cartes) : jamais sous le sol', () => {
+    const md = rabbit('angora');
+    const sh = { uniforms: {}, vertexShader: '#include <common>\n#include <begin_vertex>\n#include <skinning_vertex>', fragmentShader: '#include <common>\n#include <color_fragment>\n#include <roughnessmap_fragment>\n#include <normal_fragment_begin>' };
+    md.cardMesh.material.onBeforeCompile(sh);
+    expect(sh.vertexShader).toContain('transformed.y = max(transformed.y, 0.0015)');
+    md.dispose();
+  });
+});

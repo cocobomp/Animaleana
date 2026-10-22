@@ -148,8 +148,11 @@ ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été fait
   de la tête se dressaient en éclats) festonnent la silhouette, jusque sur le crâne, les joues et le bas des pattes ;
   dans le shader (`cCurl.z`, `cmpRing`), des boucles de poil entremêlées (coquilles autour des centres d'un pavage
   cellulaire de 1,7 cm, coupées par la peau en anneaux et en arcs qui se chevauchent, creux sombres, grain de fibres),
-  effacées à moins de quatre ou cinq pixels par boucle (sinon un grain de papier de verre), puis des touffes de 3 cm
-  plus douces ; laine mate (rugosité 0,86, pas de lustre). Robes : blanc cassé, taches marron ou orange (tête colorée,
+  à deux tailles (boucles de 1,7 cm de près, grappes de 4 cm à mi-distance), chacune effacée à moins de quatre ou cinq
+  pixels par boucle (sinon un grain de papier de verre qui scintille), le relief plus tôt que la couleur (sa pente,
+  prise par carrés de deux pixels, faisait un damier) ; laine mate (rugosité 0,86, pas de lustre). Oreilles bouclées
+  en triangle aux bouts arrondis, section en lentille (`earShape` : `se`, plus une planche aux faces plates) ; sourcils
+  arrêtés au bord des paupières, truffe gardée plus serrée dans la barbe. Robes : blanc cassé, taches marron ou orange (tête colorée,
   plaques), rouan marron (fond grisé, mèches marron et blanches mêlées), marron, orange. Coupe du salon `lagotto`
   (`setCut` : boucles égalisées sur le corps et l'encolure, pattes bouclées gardées, dessus de la tête arrondi) ;
   sans coupe, ses boucles naturelles (pas de pompons).

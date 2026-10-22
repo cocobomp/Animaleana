@@ -51,8 +51,8 @@ window.planche = {
   /**
    * cells : [{ breed, color (indice de robe), puppy, clip, t (s), view ('side' | 'three' | 'front' | 'head' | 'back'),
    * label, lod, cut (coupe du salon : 'lagotto', 'caniche', 'court'…), v (vitesse des allures, m/s : queue relevée en
-   * action), happy, zoom, fov, with (autres chiens de la case, côte à côte : [{ breed, color, puppy, dx }]) }] ; cols ;
-   * cw, ch (taille d'une case).
+   * action), happy, zoom, fov, with (autres chiens de la case, côte à côte : [{ breed, color, puppy, dx, dz }]), center
+   * ([x, z] : point visé décalé, pour cadrer un groupe) }] ; cols ; cw, ch (taille d'une case).
    */
   async show({ cells, cols = 6, cw = 300, ch = 240 }) {
     await Promise.all(Object.values(REAL_DOG_KEYS).map((k) => loadModel(k)));
@@ -82,7 +82,7 @@ window.planche = {
         const m2 = buildRealDogModel(lk, w.breed);
         const g2 = new THREE.Group();
         g2.scale.setScalar((lk.scale ?? 1) * (w.puppy ? 0.55 : 1));
-        g2.position.x = w.dx ?? (k + 1) * 0.7;
+        g2.position.set(w.dx ?? (w.dz === undefined ? (k + 1) * 0.7 : 0), 0, w.dz ?? 0);
         g2.add(m2.root);
         scene.add(g2);
         m2.root.updateMatrixWorld(true);
@@ -126,6 +126,11 @@ window.planche = {
         tgt.copy(hp).add(new THREE.Vector3(0, 0.02 * s, 0.06 * s));
         camera.position.copy(tgt).add(new THREE.Vector3(0.28 * s, 0.06 * s, 0.42 * s).multiplyScalar(c.zoom ?? 1));
       } else camera.position.set(dist * 0.85, H * 0.85, dist * 0.6);
+      if (c.center) {
+        const off = new THREE.Vector3(c.center[0], 0, c.center[1]);
+        tgt.add(off);
+        camera.position.add(off);
+      }
       camera.fov = c.fov ?? 28;
       camera.updateProjectionMatrix();
       camera.lookAt(tgt);

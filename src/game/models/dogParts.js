@@ -165,6 +165,9 @@ export function earShape(B) {
   S.curl = B.curly ? (B.ringlets ? 0.5 : 1) : 0;
   // (frisée : oreille épaisse et touffue, sans pli raide à l'attache)
   if (S.curl) Object.assign(S, { thick: S.thick * 1.6, fold: 0.003, width: S.width * 1.1 });
+  // (bouclettes serrées — lagotto — : triangle aux bouts arrondis, section bombée en lentille, pas une planche aux faces
+  // plates et aux bords en marches)
+  if (B.ringlets) Object.assign(S, { round: 1.6, se: 0.95 });
   if (B.puppy) {
     // (oreilles de chiot : plus courtes, mais larges et épaisses, molles — pas une lame fine de chaque côté)
     S.len *= 0.92;
@@ -243,7 +246,7 @@ export function buildPendantEars(base, D, B) {
   const NU = 18; // points autour de la section (plaque aux bords roulés)
   // Section : super-ellipse (faces presque plates, bords arrondis et épais comme un cuir roulé — en lentille, le bord
   // s'amincissait en lame et l'oreille se lisait comme une plaque de carton)
-  const SE = 2 / 3.2;
+  const SE = S.se ?? 2 / 3.2;
   const secU = (k) => {
     const c = Math.cos((k / NU) * Math.PI * 2);
     return 0.5 - 0.5 * Math.sign(c) * Math.abs(c) ** SE;

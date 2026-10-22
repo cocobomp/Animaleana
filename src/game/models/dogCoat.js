@@ -433,6 +433,7 @@ uniform float cTick;
 uniform vec3 cTickC;
 uniform vec2 cLight;
 uniform vec3 cLightC;
+uniform vec4 cCut;
 uniform float cWet;
 uniform vec3 cCurl;
 uniform vec4 cIris;
@@ -646,6 +647,8 @@ vec3 cmpCoat(vec3 p, vec4 part) {
     float chest = body * (1.0 - legs * 0.6) * smoothstep(shZ - 0.06, shZ + 0.02, p.z + edge * 0.3)
       * (1.0 - smoothstep(bellyY + (reach + 0.12) * (topY - bellyY), bellyY + (reach + 0.32) * (topY - bellyY), p.y + edge * 0.3));
     float bel = trunk * (1.0 - smoothstep(reach - 0.12, reach + 0.04, h + edge)) * (1.0 - cLight.y);
+    // (poitrail seul — toller — : une plaque au milieu du poitrail, pas un plastron jusqu'aux épaules)
+    chest *= 1.0 - cLight.y * smoothstep(0.035, 0.07, ax + edge * 0.08);
     float lg = legs * (1.0 - smoothstep(elbowY * cUnder.z * 1.25 - 0.02, elbowY * cUnder.z * 1.25 + 0.02, p.y + edge * 0.15));
     lg *= step(0.01, cUnder.z);
     // (museau blanc : devant les yeux, pas autour — l'œil du shiba est dans la zone du museau)
@@ -733,6 +736,7 @@ float cmpCatch = 0.0;
 // (bouclettes serrées : calculées une fois, pour la couleur et pour le relief)
 vec2 cmpRingV = vec2(0.0);
 float cmpRingFade = 0.0;
+float cmpRingBump = 0.0;
 if (cOn > 0.5 && cCurl.z > 0.0 && cRole > 0.5) {
   // (deux tailles : les boucles de 1,7 cm de près, des grappes de boucles de 4 cm à mi-distance — sinon la robe
   // paraissait lisse dès que le chien s'éloigne ; chacune effacée à moins de quatre ou cinq pixels par boucle, où elle
@@ -745,6 +749,8 @@ if (cOn > 0.5 && cCurl.z > 0.0 && cRole > 0.5) {
     vec2 small = fadeS > 0.0 ? cmpRing(vCmpPos, 58.0) : big;
     cmpRingV = mix(big, small * (0.55 + 0.45 * big.x) + vec2(0.0, 0.3) * big.y, fadeS);
     cmpRingFade = fadeB;
+    // (relief plus tôt effacé que la couleur : sa pente, prise par carrés de deux pixels, faisait un damier)
+    cmpRingBump = 1.0 - smoothstep(0.1, 0.24, fw * 25.0);
   }
 }
 if (cOn > 0.5) {
@@ -807,9 +813,13 @@ if (cOn > 0.5) {
   // (bouclettes serrées : le dessus de chaque boucle éclairé, les creux entre elles plus sombres ; de loin, des touffes
   // de boucles de 2 à 3 cm restent lisibles — la robe se lit laineuse, pas lisse)
   if (cCurl.z > 0.0) {
-    nc *= mix(1.0, (0.76 + 0.3 * cmpRingV.x - 0.08 * cmpRingV.y) * (0.92 + 0.16 * cmpNoise(CMP_ROT * vCmpPos * 260.0)), cCurl.z * cmpRingFade);
+    // (coupé au salon — tronc raccourci — : boucles égalisées, robe plus unie sur le corps ; pattes et tête gardent
+    // leurs boucles)
+    float trim = clamp(-cCut.x / 0.02, 0.0, 1.0) * (1.0 - vCmpPart.w) * (1.0 - vCmpPart.z) * (1.0 - vCmpPart.y);
+    float ringK = cCurl.z * (1.0 - 0.65 * trim);
+    nc *= mix(1.0, (0.76 + 0.3 * cmpRingV.x - 0.08 * cmpRingV.y) * (0.92 + 0.16 * cmpNoise(CMP_ROT * vCmpPos * 260.0)), ringK * cmpRingFade);
     float tuft = cmpNoise(CMP_ROT * vCmpPos * 34.0) * 0.65 + cmpNoise(CMP_ROT * vCmpPos * 71.0 + 3.0) * 0.35;
-    nc *= mix(1.0, 0.86 + 0.24 * tuft, cCurl.z * (1.0 - smoothstep(0.3, 0.9, fwC * 34.0)));
+    nc *= mix(1.0, 0.86 + 0.24 * tuft, ringK * (1.0 - smoothstep(0.3, 0.9, fwC * 34.0)));
   }
   if (cWrinkle > 0.0) nc *= mix(1.0, 0.8 + 0.2 * cmpWrinkleH(vCmpPos, vCmpPart), cWrinkle * (1.0 - smoothstep(0.3, 1.0, fwC * 160.0)));
   // Lèvres et gencives (jack) : brun-noir comme chez le vrai chien, pas rouge vif (« rouge à lèvres »).
@@ -846,7 +856,7 @@ const CURL_F = /* glsl */ `
 if (cOn > 0.5 && cRole > 0.5 && (cCurl.x > 0.0 || cCurl.y > 0.0 || cCurl.z > 0.0 || cWrinkle > 0.0)) {
   float fade = 1.0 - smoothstep(0.25, 0.9, length(fwidth(vCmpPos)) * 140.0);
   float hh = (cCurl.x * 0.004 * cmpCurlH(vCmpPos) + cCurl.y * 0.0015 * cmpSilkH(vCmpPos) * (1.0 - 0.8 * vCmpPart.z)) * fade
-    + cCurl.z * 0.0022 * cmpRingV.x * cmpRingFade
+    + cCurl.z * 0.0022 * cmpRingV.x * cmpRingBump
     + cWrinkle * 0.0022 * cmpWrinkleH(vCmpPos, vCmpPart) * (1.0 - smoothstep(0.3, 1.0, length(fwidth(vCmpPos)) * 160.0));
   vec2 dH = vec2(dFdx(hh), dFdy(hh));
   vec3 sx = dFdx(-vViewPosition);

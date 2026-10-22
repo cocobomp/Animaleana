@@ -26,6 +26,7 @@ import { horseView } from './horseReal.js';
 import { goatBuild, goatUdderFill, udderScale } from '../../sim/goatLook.js';
 import { makeGoatUniforms, setGoatCoat, goatMaterial } from './goatCoat.js';
 import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from './ruminantHair.js';
+import { fitRuminantHead } from './ruminantGear.js';
 import {
   cleanClips, emptyBoneBoxes, growBoneBoxes, measureSheep, sheepJoints, contactShadow, SheepMesh, RealSheepAnim, pickSheepGait, lying,
   smoothNormals, nurseSideOf, lodScale,
@@ -35,10 +36,10 @@ import {
 export const REAL_GOAT_KEY = 'goat_real';
 /**
  * Version réduite au-delà de cette distance à la caméra (m, allongée pour une grande chèvre, jamais raccourcie pour un
- * chevreau — lodScale) ; hystérésis 10 %. En basse, 13 m, comme le mouton : à 7 m, la caméra normale du téléphone ne
+ * chevreau — lodScale) ; hystérésis 10 %. En basse, 15 m, comme le mouton : à 7 m, la caméra normale du téléphone ne
  * voyait que des chèvres réduites, sans leur poil long, animées une image sur deux.
  */
-export const GOAT_LOD_DIST = { low: 13, high: 18 };
+export const GOAT_LOD_DIST = { low: 15, high: 18 };
 /** Chèvre hors du champ : animée une image sur OFFSCREEN_STEP, avec le temps cumulé. */
 export const OFFSCREEN_STEP = 3;
 /** Au loin (version réduite), animée une image sur FAR_STEP. */
@@ -456,6 +457,9 @@ export function buildRealGoatModel(look, breedId = null, gltf = null) {
   };
   place(headAnchor.obj, headB, headAnchor);
   place(neckAnchor.obj, neckB, neckAnchor);
+  // Licol mesuré sur la tête du gabarit (ruminantGear.js), une fois par gabarit : le licol générique, taillé pour la
+  // tête procédurale, passait sous la peau (il n'en restait qu'un V rouge sur le nez).
+  S.headFit ??= fitRuminantHead(base, S, 'goat', (p) => toLocal(headB, p));
   // Tête, oreilles, cornes, barbe et mamelle de la race (échelle des os : les clips n'animent pas d'échelle).
   headB.scale.setScalar(B.head);
   for (const e of [bone('earL'), bone('earR')]) if (e) e.scale.setScalar(B.ears);
@@ -530,7 +534,8 @@ export function buildRealGoatModel(look, breedId = null, gltf = null) {
   const leashPoint = new THREE.Object3D();
   leashPoint.name = 'leashPoint';
   ha.add(leashPoint);
-  leashPoint.position.set(0, -look0.headR * 0.95, look0.headLen * 0.7 - look0.headR * 0.1);
+  // (anneau du licol sous le menton, mesuré : la longe s'y attache)
+  leashPoint.position.copy(inA(S.headFit.leash));
   const tailTip = new THREE.Object3D();
   tailB?.add(tailTip);
   if (tailB) tailTip.position.copy(toLocal(tailB, M.tailTip));
@@ -567,6 +572,8 @@ export function buildRealGoatModel(look, breedId = null, gltf = null) {
     leashPoint,
     // (accessoires du salon : dessus du crâne et tour de tête dans le repère de l'ancre de la tête, bout de la queue)
     accessoryFit: { skull, headQ: headAnchor.qInv.clone(), mouth, headR: 0.065, tailTip },
+    // (licol posé sur la tête mesurée : gearModels.js, buildRuminantGear)
+    headFit: { ...S.headFit, bone: headB },
     kid: B.stage === 'baby',
     stage: B.stage,
     buck: B.buck,

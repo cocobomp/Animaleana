@@ -9,6 +9,7 @@ import { buildRealGoatModel, animateRealGoat, GOAT_LOD_DIST } from '../src/game/
 import { buildRealCowModel, animateRealCow, COW_LOD_DIST } from '../src/game/models/cowReal.js';
 import { horseView } from '../src/game/models/horseReal.js';
 import { gfx } from '../src/game/gfx.js';
+import { buildGear } from '../src/game/gearModels.js';
 import { resolveLook, createAnimal, growthScale } from '../src/sim/animal.js';
 import { loadRealSheepGltf } from './fixtures/realSheepGltf.js';
 import { loadRealGoatGltf } from './fixtures/realGoatGltf.js';
@@ -149,15 +150,15 @@ describe('version réduite à la vraie distance de la caméra du téléphone', (
     return r;
   };
 
-  it('seuils en basse : 13 m pour le mouton et la chèvre, 16 m pour la vache (la haute inchangée)', () => {
-    expect(SHEEP_LOD_DIST).toEqual({ low: 13, high: 18 });
-    expect(GOAT_LOD_DIST).toEqual({ low: 13, high: 18 });
+  it('seuils en basse : 15 m pour le mouton et la chèvre, 16 m pour la vache (la haute inchangée)', () => {
+    expect(SHEEP_LOD_DIST).toEqual({ low: 15, high: 18 });
+    expect(GOAT_LOD_DIST).toEqual({ low: 15, high: 18 });
     expect(COW_LOD_DIST).toEqual({ low: 16, high: 26 });
   });
 
   it.each([
-    ['sheep', 'islandais_mouton', 80, 10.5, 0], ['sheep', 'islandais_mouton', 80, 15, 1], ['sheep', 'merinos', 3, 10.5, 0],
-    ['goat', 'poitevine', 80, 10.5, 0], ['goat', 'alpine', 3, 9.5, 0], ['goat', 'col_noir', 80, 15.5, 1],
+    ['sheep', 'islandais_mouton', 80, 12.5, 0], ['sheep', 'islandais_mouton', 80, 17, 1], ['sheep', 'merinos', 3, 10.5, 0],
+    ['goat', 'poitevine', 80, 12.5, 0], ['goat', 'alpine', 3, 9.5, 0], ['goat', 'col_noir', 80, 17.5, 1],
     ['cow', 'highland', 80, 13.5, 0], ['cow', 'holstein', 3, 11, 0], ['cow', 'holstein', 80, 18.5, 1],
   ])('%s %s (%s j) à %s m de l\'œil : version %s', (sp, breed, days, dist, want) => {
     const r = lodAt(sp, breed, days, dist);
@@ -165,4 +166,107 @@ describe('version réduite à la vraie distance de la caméra du téléphone', (
     // (mèches et poil long montrés de près, cachés au loin)
     if (r.hair !== null) expect(r.hair).toBe(want === 0);
   }, 60000);
+});
+
+describe('licol et masque anti-mouches sur la vraie tête (vache, taureau, veau, chèvre)', () => {
+  // (critique : licol générique taillé pour la tête procédurale — rien ne se voyait sur la vache, le taureau ou le veau,
+  // un V rouge sur le nez de la chèvre — ; masque anti-mouches (une demi-sphère) caché dans le crâne)
+  const gearOn = (sp, breed, o, gear) => {
+    const look = { ...resolveLook(sp, breed, 0), seed: 4242, sex: o.sex ?? 'f', ...(o.baby ? { calf: true, kid: true } : {}) };
+    const md = sp === 'cow' ? buildRealCowModel(look, breed, GC) : buildRealGoatModel(look, breed, GG);
+    const g = buildGear(md, look, gear);
+    md.root.updateMatrixWorld(true);
+    return { md, g, look };
+  };
+  const _d = new THREE.Vector3();
+  /**
+   * Sommets de la peau de la tête (repos, monde) et leurs normales — sans les oreilles (la têtière passe sous elles,
+   * comme un vrai licol) ni la barbe de la chèvre (des poils qui pendent).
+   */
+  const headSkin = (md) => {
+    const P = md.anim.base.prim;
+    const names = md.anim.base.names;
+    const geo = md.mesh.geometry;
+    const nrm = geo.attributes.normal;
+    const out = [];
+    const v = new THREE.Vector3();
+    for (let i = 0; i < geo.attributes.position.count; i++) {
+      if (P.mask[i * 4 + 1] < 0.5 || /^ear/.test(names[P.domBone[i]]) || (md.realGoat && P.part[i * 4 + 2] > 0.3)) continue;
+      md.mesh.getVertexPosition(i, v).applyMatrix4(md.mesh.matrixWorld);
+      out.push([v.clone(), new THREE.Vector3().fromBufferAttribute(nrm, i).transformDirection(md.mesh.matrixWorld), /^horn/.test(names[P.domBone[i]])]);
+    }
+    return out;
+  };
+  /**
+   * Sommets d'une pièce sous la peau (du côté intérieur de la peau la plus proche) : leur part et la plus grande
+   * profondeur (m, négative) de ceux qui sont à moins de 4 cm de la peau.
+   */
+  const inside = (mesh, skin) => {
+    const pos = mesh.geometry.attributes.position;
+    const v = new THREE.Vector3();
+    let n = 0;
+    let bad = 0;
+    let worst = 0;
+    for (let i = 0; i < pos.count; i += 3) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+      let best = Infinity;
+      let side = 1;
+      for (const [p, nn] of skin) {
+        const d = p.distanceToSquared(v);
+        if (d < best) {
+          best = d;
+          side = _d.subVectors(v, p).dot(nn);
+        }
+      }
+      n++;
+      if (side < -0.002) bad++;
+      if (best < 0.0016) worst = Math.min(worst, side);
+    }
+    return { part: bad / Math.max(1, n), worst };
+  };
+
+  it.each([
+    ['cow', 'holstein', {}], ['cow', 'highland', {}], ['cow', 'hereford', { sex: 'm' }], ['cow', 'charolaise', { baby: true }],
+    ['goat', 'saanen', {}], ['goat', 'col_noir', { sex: 'm' }], ['goat', 'alpine', { baby: true }],
+  ])('%s %s %j : muserolle, têtière, montants et anneau par-dessus la peau, larges comme la tête', (sp, breed, o) => {
+    const { md, g } = gearOn(sp, breed, o, { halter: { item: 'halter', color: 'red' } });
+    const parts = g.userData.meshes;
+    expect(parts.length).toBe(5);
+    const skin = headSkin(md);
+    // (muserolle et montants : par-dessus la peau, à 1 cm près ; têtière : à 3 cm près au pied des cornes, que la race
+    // allonge et tourne après les mesures — l'ancien licol passait 15 cm sous la peau)
+    const [nb0, crown, ch0, ch1] = parts.map((m) => inside(m, skin));
+    if (process.env.RUM_LOG) console.log('LICOL', breed, JSON.stringify([nb0, crown, ch0, ch1]));
+    for (const [r, tag] of [[nb0, 'muserolle'], [ch0, 'montant'], [ch1, 'montant']]) {
+      expect(r.part, `${breed} ${tag}`).toBeLessThan(0.08);
+      expect(r.worst, `${breed} ${tag}`).toBeGreaterThan(-0.01);
+    }
+    expect(crown.worst, `${breed} têtière`).toBeGreaterThan(-0.03);
+    // (la muserolle fait le tour du museau : plus large que le tiers de la tête vue de face)
+    const nb = new THREE.Box3().setFromObject(parts[0]);
+    const hb = new THREE.Box3();
+    for (const [p, , horn] of skin) if (!horn) hb.expandByPoint(p);
+    expect(nb.max.x - nb.min.x).toBeGreaterThan(0.35 * (hb.max.x - hb.min.x));
+    // (l'anneau de la longe sous le menton, sous la nuque ; la longe y est attachée)
+    const ring = parts[4].getWorldPosition(new THREE.Vector3());
+    const lp = md.leashPoint.getWorldPosition(new THREE.Vector3());
+    expect(ring.distanceTo(lp)).toBeLessThan(0.03);
+    expect(ring.y).toBeLessThan(md.headBone.getWorldPosition(new THREE.Vector3()).y);
+    md.dispose?.();
+  });
+
+  it('masque anti-mouches de la vache : une coque par-dessus le front et les yeux (plus une demi-sphère dans le crâne)', () => {
+    for (const breed of ['holstein', 'highland']) {
+      const { md, g } = gearOn('cow', breed, {}, { head: { item: 'flyMask', color: 'sky' } });
+      const [shellMesh] = g.userData.meshes;
+      expect(shellMesh.material.transparent).toBe(true);
+      expect(inside(shellMesh, headSkin(md)).worst).toBeGreaterThan(-0.03);
+      // (elle couvre les yeux : elle passe au-dessus et en dessous de la hauteur des yeux)
+      const box = new THREE.Box3().setFromObject(shellMesh);
+      const eyeY = md.anim.S.measure.eye.y * md.size;
+      expect(box.min.y).toBeLessThan(eyeY);
+      expect(box.max.y).toBeGreaterThan(eyeY);
+      md.dispose?.();
+    }
+  });
 });

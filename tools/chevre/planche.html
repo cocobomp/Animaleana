@@ -142,7 +142,7 @@ window.planche = {
       sg.updateMatrixWorld(true);
       play(md, c, s);
       if (c.halter) {
-        const gear = buildGear(md, look, { halter: { item: 'halter', color: 'red' } });
+        const gear = buildGear(md, look, { halter: { item: c.halterItem ?? 'halter', color: c.halterColor ?? 'red' } });
         extra.push(gear);
       }
       if (c.fence) {

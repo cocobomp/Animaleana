@@ -160,7 +160,11 @@ window.planche = {
         md.mesh.material.needsUpdate = true;
       }
       if (c.halter || c.flyMask) {
-        const gear = buildGear(md, look, c.flyMask ? { flyMask: { item: 'flyMask', color: 'blue' } } : { halter: { item: 'halter', color: 'red' } });
+        // (le masque anti-mouches se porte dans l'emplacement « head », comme dans le jeu — src/sim/gear.js)
+        const gear = buildGear(md, look, {
+          ...(c.flyMask ? { head: { item: 'flyMask', color: c.maskColor ?? 'white' } } : {}),
+          ...(c.halter ? { halter: { item: c.halterItem ?? 'halter', color: c.halterColor ?? 'red' } } : {}),
+        });
         extra.push(gear);
       }
       if (c.feeder) {

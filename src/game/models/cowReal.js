@@ -34,6 +34,7 @@ import {
   cleanClips, emptyBoneBoxes, growBoneBoxes, measureSheep, sheepJoints, contactShadow, SheepMesh, RealSheepAnim, lying, smoothNormals, nurseSideOf, lodScale,
 } from './sheepReal.js';
 import { makeHeadAnchor, makeNeckAnchor, muzzleRing } from './goatReal.js';
+import { fitRuminantHead } from './ruminantGear.js';
 
 /** Clés des GLB (assets.js) : jamais « cow » (gltfAnimal.js la prendrait pour un animal GLB générique). */
 export const REAL_COW_KEY = 'cow_real';
@@ -779,6 +780,9 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
   };
   place(headAnchor.obj, headB, headAnchor);
   place(neckAnchor.obj, neckB, neckAnchor);
+  // Licol et masque anti-mouches mesurés sur la tête du gabarit (ruminantGear.js), une fois par gabarit : le licol
+  // générique, taillé pour la tête procédurale, passait sous la peau (rien ne se voyait).
+  S.headFit ??= fitRuminantHead(base, S, 'cow', (p) => toLocal(headB, p));
   // Tête, oreilles, cornes et mamelle de la race (échelle des os : les clips n'animent pas d'échelle).
   headB.scale.setScalar(B.head);
   for (const e of [bone('earL'), bone('earR')]) if (e) e.scale.setScalar(B.ears);
@@ -881,7 +885,8 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
   const leashPoint = new THREE.Object3D();
   leashPoint.name = 'leashPoint';
   ha.add(leashPoint);
-  leashPoint.position.set(0, -look0.headR * 0.95, look0.headLen * 0.7 - look0.headR * 0.1);
+  // (anneau du licol sous le menton, mesuré : la longe s'y attache)
+  leashPoint.position.copy(inA(S.headFit.leash));
   const tailTip = new THREE.Object3D();
   tailB?.add(tailTip);
   const tailEnd = bone(base.tailBones[base.tailBones.length - 1] ?? 'tail1');
@@ -940,6 +945,8 @@ export function buildRealCowModel(look, breedId = null, gltf = null) {
     udderZ: (M.teat?.z ?? M.hipZ + 0.1) * size,
     // (accessoires du salon : dessus du crâne et tour de tête dans le repère de l'ancre de la tête, bout de la queue)
     accessoryFit: { skull, headQ: headAnchor.qInv.clone(), mouth, headR: 0.13, tailTip },
+    // (licol et masque anti-mouches posés sur la tête mesurée : gearModels.js, buildRuminantGear)
+    headFit: { ...S.headFit, bone: headB },
     calf: B.stage === 'baby',
     stage: B.stage,
     bull: B.bull,

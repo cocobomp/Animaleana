@@ -9,6 +9,7 @@ import { BLANKET_COLORS, COLORS, GEAR } from '../sim/gear.js';
 import { loft } from './models/shapes.js';
 import { rayHit, sdfNormal } from './models/sdf.js';
 import { SADDLE_STYLES, TACK_PARTS, flapOutline } from './models/tackModels.js';
+import { shellGeometry } from './models/ruminantGear.js';
 
 const mat = (color, roughness = 0.7, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
 const LEATHER = 0x2a1a10;
@@ -140,6 +141,7 @@ export function buildGear(model, look, gear = {}) {
   if (model.sdf) buildHorseGear(model, look, gear, add);
   else if (model.gearFit) buildHorseGear(model.gearFit, look, gear, add); // cheval GLB (src/game/models/gltfHorseFit.js)
   else if (model.dogFit) buildDogGear(model, gear, add); // chien réaliste (src/game/models/dogReal.js)
+  else if (model.headFit) buildRuminantGear(model, gear, add); // vache, taureau, veau, chèvre réalistes
   else buildGenericGear(model, look, gear, add, L, R, y0);
   group.userData.meshes = holders;
   // Où s'attachent les rênes (anneaux du mors, ou côtés de la muserolle du hackamore) : Player les tend
@@ -665,6 +667,46 @@ function buildDogGear(model, gear, add) {
 }
 
 // ------------------------------------------------------------------ autres animaux
+
+/**
+ * Licol et masque anti-mouches des ruminants réalistes (cowReal.js, goatReal.js), posés sur la tête mesurée
+ * (model.headFit, ruminantGear.js : coupes de la tête du gabarit, repère de l'os de la tête) : muserolle et têtière en
+ * sangles plates fermées, montants sur les joues, anneau sous le menton (la longe), et pour la vache une coque de
+ * maille claire sur le front et les yeux. Le licol générique, taillé pour la tête procédurale, passait sous la peau.
+ */
+function buildRuminantGear(model, gear, add) {
+  const fit = model.headFit;
+  const bone = fit.bone;
+  if (gear.halter) {
+    const item = gear.halter.item;
+    const color = gearColor(gear.halter, BLANKET_COLORS.red);
+    // (licol de corde : rond, un peu plus épais ; en cuir : plus brillant)
+    const rope = item === 'halterRope';
+    const w = rope ? fit.th * 1.7 : fit.w;
+    const th = rope ? fit.th * 1.7 : fit.th;
+    const m = mat(color, item === 'halterLeather' ? 0.45 : rope ? 0.85 : 0.65);
+    add(bone, strap(fit.noseband, w, th, true), m);
+    add(bone, strap(fit.crown, w, th), m);
+    for (const c of fit.cheeks) add(bone, strap(c, w * 0.9, th), m);
+    const ring = add(bone, new THREE.TorusGeometry(fit.ringR, fit.ringR * 0.2, 8, 18), mat(0xc9c9c9, 0.3, METAL), [fit.ring.x, fit.ring.y, fit.ring.z]);
+    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), fit.ringN);
+  }
+  if (gear.head) {
+    const color = gearColor(gear.head, 0xd8e4ea);
+    const net = new THREE.MeshStandardMaterial({ color, roughness: 0.9, transparent: true, opacity: 0.78, side: THREE.DoubleSide, depthWrite: false });
+    const m = add(bone, shellGeometry(fit.shell), net);
+    m.castShadow = false;
+    // (bordure de la coque : un liseré plus foncé)
+    const rows = fit.shell;
+    const nz = rows.length;
+    const na = rows[0].length;
+    const edge = [
+      ...rows.map((r) => r[0]), ...rows[nz - 1].slice(1),
+      ...rows.slice(0, nz - 1).map((r) => r[na - 1]).reverse(), ...rows[0].slice(1, na - 1).reverse(),
+    ];
+    add(bone, strap(edge, fit.w * 0.45, fit.th * 0.8, true), mat(new THREE.Color(color).multiplyScalar(0.55), 0.8));
+  }
+}
 
 function buildGenericGear(model, look, gear, add, L, R, y0) {
   const back = model.saddleY ?? y0 + R;

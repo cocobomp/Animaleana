@@ -26,11 +26,11 @@ import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from
 export const REAL_SHEEP_KEY = 'sheep_real';
 /**
  * Version réduite au-delà de cette distance à la caméra (m, allongée pour un grand mouton, jamais raccourcie pour un
- * petit — lodScale) ; hystérésis 10 %. En basse, 13 m : la caméra normale du téléphone (rig.dist 7 derrière la joueuse)
- * voit le troupeau à 8-12 m — à 7 m, tous les moutons étaient en version réduite, mèches de l'islandais cachées et
- * animés une image sur deux.
+ * petit — lodScale) ; hystérésis 10 %. En basse, 15 m (13,5 m pour revenir au maillage complet) : la caméra normale du
+ * téléphone (rig.dist 7 derrière la joueuse) voit le troupeau à 8-12,5 m — à 7 m, tous les moutons étaient en
+ * version réduite, mèches de l'islandais cachées et animés une image sur deux.
  */
-export const SHEEP_LOD_DIST = { low: 13, high: 18 };
+export const SHEEP_LOD_DIST = { low: 15, high: 18 };
 /**
  * Taille qui allonge la distance de la version réduite : celle d'un grand animal ; jamais moins de 1 — l'agneau, le
  * chevreau, le veau (moitié de la taille) passaient en version réduite à 3,5-6 m, sous les yeux de la joueuse.

@@ -134,30 +134,54 @@ ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été fait
   `chest` (poitrine profonde et ventre levretté des lévriers), `paws`, `neckSlim` (encolure lisse des poils ras,
   sans collerette), `topknot`, `tailRound` (section de queue ronde, sinon selon le port : `ROUND`), `ringlets`
   (bouclettes serrées du lagotto, voir plus bas), `tailAction` (queue relevée haut en action : panache du toller).
+  Ces deux derniers (et tout réglage ajouté après eux : `KEY_IF_SET`, `dogLook.js`) n'entrent dans la clé du gabarit
+  que s'ils servent : la longueur de la clé donne la phase des franges et des bosses frisées des oreilles tombantes
+  (`dogParts.js`) — ajoutés à toutes les clés, ils changeaient les oreilles du golden, du setter, du caniche…
 - **Retriever de la Nouvelle-Écosse** (`toller`, ≈ 48 cm : taille 0,85) : plus compact que le golden, tête en coin
   (`muzzleW` 0,92), oreilles triangulaires courtes attachées haut (`earLen` 0,78, `earSet`), franges légères,
   panache `brush` (au repos dans le prolongement du dos, bout relevé) relevé haut au trot, au galop et au jeu
   (`tailAction` : jusqu'à 0,6 rad de plus que les autres races, jamais couché sur le dos). Robe (`coatPlan`,
-  bicolore du toller) : roux ou orange vif, liste étroite sur le chanfrein, bout du museau, poitrail blanc **sans**
-  le ventre (`chestOnly`, uniforme `cLight.y`), pieds blancs jusqu'au paturon, bout de la queue blanc ; franges,
-  ventre et dessous de la queue plus clairs (`light`, `cLight.x`/`cLightC`) ; « Roux foncé » sans blanc.
+  bicolore du toller) : roux ou orange vif, liste étroite sur le chanfrein, bout du museau, au poitrail une **goutte**
+  blanche (`chestOnly`, uniforme `cLight.y`) qui part étroite de la gorge, s'élargit et s'arrondit vers le bas, au bord
+  déchiré, sans le ventre ni la bande de la gorge d'une épaule à l'autre (elle faisait une bavette carrée), pieds blancs
+  jusqu'au paturon, bout de la queue blanc ; franges, ventre et dessous de la queue plus clairs (`light`,
+  `cLight.x`/`cLightC`) ; « Roux foncé » aux marques discrètes (bout de la queue, doigts, petite goutte, ni liste ni
+  museau : sans aucun blanc, on le prenait pour un golden roux foncé).
 - **Lagotto romagnolo** (`lagotto`, ≈ 45 cm : taille 0,8) : silhouette carrée (dos court 0,85, membres épais), tête
   large et ronde, museau court et large, oreilles moyennes bouclées, queue en faucille, sourcils et barbe frisés
   (`beard`). Ses **bouclettes serrées** (`ringlets`) : dans la géométrie, des touffes de boucles (bruit cellulaire
   `curlTufts`, cellules de 2,5 cm, **lissé sur le maillage** par `ringletTufts` — sans lissage, les grands triangles
   de la tête se dressaient en éclats) festonnent la silhouette, jusque sur le crâne, les joues et le bas des pattes ;
-  dans le shader (`cCurl.z`, `cmpRing`), des boucles de poil entremêlées (coquilles autour des centres d'un pavage
-  cellulaire de 1,7 cm, coupées par la peau en anneaux et en arcs qui se chevauchent, creux sombres, grain de fibres),
-  à deux tailles (boucles de 1,7 cm de près, grappes de 4 cm à mi-distance), chacune effacée à moins de quatre ou cinq
-  pixels par boucle (sinon un grain de papier de verre qui scintille), le relief plus tôt que la couleur (sa pente,
-  prise par carrés de deux pixels, faisait un damier) ; laine mate (rugosité 0,86, pas de lustre). Oreilles bouclées
-  en triangle aux bouts arrondis, section en lentille (`earShape` : `se`, plus une planche aux faces plates) ; sourcils
-  arrêtés au bord des paupières, truffe gardée plus serrée dans la barbe. Robes : blanc cassé, taches marron ou orange (tête colorée,
-  plaques), rouan marron (fond grisé, mèches marron et blanches mêlées, bruit sur axes tournés — sur les axes de la
-  grille il faisait un camouflage en pixels carrés), marron, orange. Coupe du salon `lagotto`
-  (`setCut` : corps et encolure raccourcis, boucles égalisées — moins de relief et de contraste sur le tronc dès que la
-  coupe raccourcit le tronc, uniforme `cCut` lu par le shader —, pattes bouclées gardées, dessus de la tête arrondi) ;
-  sans coupe, ses boucles naturelles (pas de pompons).
+  sur la tête, la poussée du poil et sa direction sont lissées de proche en proche (`smoothOnMesh`) avant d'être
+  appliquées, et **rien n'est poussé autour de l'œil** (moins de 3,5 cm, en fondu jusqu'à 6 cm) : les petits
+  triangles de la paupière et du pli de l'arcade, deux couches de peau du modèle qui se chevauchent, poussés le long
+  de normales divergentes, se croisaient en éclats au-dessus de l'œil. Dans le shader (`cCurl.z`, `cmpCurls`), des
+  **mèches de laine enroulées** : chaque cellule d'un pavage (axes tournés, déformé par `cmpWarp`) porte un dôme de
+  laine adouci et deux arcs opposés — une spirale, pas un anneau —, mesurés **dans le plan de la peau** (normale de
+  repos tirée des pas d'écran) et additionnés à ceux des voisines ; des sphères coupées par la peau ne laissaient que
+  des anneaux nets et épars (des rondelles, des écailles, des cratères). Deux pavages décalés pour les boucles de
+  1,7 cm (couverture de toute la robe), un pour les grappes de 4 cm à mi-distance (presque sans arcs : leurs spirales y
+  faisaient des cratères), chacun effacé à moins de quatre ou cinq pixels par boucle. Le centre d'une cellule ne
+  s'écarte que d'un quart de cellule, une mèche ne dépasse pas les deux tiers : les **2 × 2 × 2** cellules qui entourent
+  le point suffisent. Le **relief** vient de la pente calculée des mèches, projetée sur les pas d'écran de la position
+  de repos (`dot(cmpCurlG, dFdx(vCmpPos))`) : tirée de `dFdx`/`dFdy` d'une hauteur fine, constante par carré de deux
+  pixels, elle faisait un damier 2 × 2 sur le corps et les chiots. Pas de frisure douce (`cCurl.x` à 0) en plus.
+  Laine mate (rugosité 0,86). Oreilles bouclées en triangle aux bouts arrondis, section en lentille (`earShape` :
+  `se`, `lumpy`), bosses modelées larges et douces (tirées rangée par rangée, elles empilaient des planches), surface
+  de la tête sous l'oreille lissée le long de l'oreille, relief des mèches réduit au quart sur l'oreille (ses
+  coordonnées de repos, une oreille de référence plate, y étiraient le relief en marches). **Truffe peinte**
+  (`cNose`, `cNoseC` : brune, plus claire sur la robe orange, bord net adouci d'un pixel, deux narines) au lieu de
+  celle de la texture, qui faisait dans la barbe une tache grise floue et une bavure. Assis, la laine dense s'écrase peu
+  (`bodyAllow` réduit) et le métatarse arrière, couché au sol, garde un poil ras : jarrets à −0,8 à −1,2 cm (−1,6 à
+  −1,9 cm avant ; golden −0,7). Robes : blanc cassé, taches marron ou orange (tête colorée, plaques), rouan marron (fond
+  brun clair chaud moucheté finement de marron, mèches de 5 mm fondues en leur moyenne de loin — à 2 cm sur un fond
+  grisé, un camouflage kaki), marron, orange. Coupe du salon `lagotto` (`setCut` : tronc raccourci de 1,25 fois le
+  poil, encolure raccourcie, boucles égalisées en couleur et en relief sur le tronc coupé, pattes bouclées gardées,
+  dessus de la tête bien arrondi, +0,85 fois le poil) ; sans coupe, ses boucles naturelles (pas de pompons).
+- **Coût du pelage du lagotto** (swiftshader, 800 × 800, `perf-chiens.html` du correcteur) : les mèches coûtent
+  +19 à +37 % de près et +9 à +16 % à mi-distance par rapport au même lagotto sans elles (avant : +39 à +63 % et
+  +35 %) ; le lagotto reste 1,4 à 1,6 fois le golden de près (sans ses boucles, déjà 1,15 à 1,3 fois : plus de pixels
+  couverts), 1,5 à 1,6 fois avec 10 ou 20 chiens (avant 1,55 à 1,7), autant que lui de loin.
 - **Queues** : formes des ports bas (`sabre`, `otter`, `plume`, `whip`) en courbe de puissance (`th = a0 −
   total·(i/(n−1))^pw`) : la queue descend d'abord peu puis pend, au lieu d'une colonne verticale ; crochet du
   galgo relevé au galop ; panache du spitz (`flat`) couché sur le dos.

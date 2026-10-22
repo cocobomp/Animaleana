@@ -313,6 +313,9 @@ export function makeCoatUniforms() {
     cPom: { value: 0 },
     // Rides du front (carlin), 0 à 1 : relief du shader.
     cWrinkle: { value: 0 },
+    // Os de la langue (premier et dernier indices du squelette, contigus ; 0 : pas de langue) : la langue qui pend
+    // reste rose jusqu'au bout (le bout de sa texture, pâle, n'était pas gardé par le masque rose et prenait la robe).
+    cTongue: { value: new THREE.Vector2(0, 0) },
     // Truffe peinte (lagotto, dans sa barbe : centre xyz au repos, rayon w ; 0 : celle de la texture) et sa couleur.
     cNose: { value: new THREE.Vector4(0, 0, 0, 0) },
     cNoseC: { value: new THREE.Color(0x3a2419) },
@@ -387,14 +390,20 @@ uniform vec3 cCollarC;
 uniform vec3 cCollarN;
 uniform vec3 cCollarX;
 uniform vec4 cCollarR;
+uniform vec2 cTongue;
 varying vec3 vCmpPos;
 varying vec4 vCmpPart;
-varying float vCmpLow;`;
+varying float vCmpLow;
+varying float vCmpTongue;`;
 
 const REST_V = /* glsl */ `
 vCmpPos = cmpRest;
 vCmpPart = cmpPart;
-vCmpLow = cmpLow;`;
+vCmpLow = cmpLow;
+vCmpTongue = 0.0;
+#ifdef USE_SKINNING
+if (cTongue.y > 0.0) vCmpTongue = dot(skinWeight, step(vec4(cTongue.x - 0.5), skinIndex) * step(skinIndex, vec4(cTongue.y + 0.5)));
+#endif`;
 
 // Embonpoint (ventre et flancs) et respiration (cage thoracique), le long de la normale du sommet déformé.
 const PUSH_V = /* glsl */ `
@@ -511,6 +520,7 @@ uniform sampler2D cDetail;
 varying vec3 vCmpPos;
 varying vec4 vCmpPart;
 varying float vCmpLow;
+varying float vCmpTongue;
 float cmpHash(vec3 p) {
   p = fract(p * 0.3183099 + 0.1);
   p *= 17.0;
@@ -965,6 +975,8 @@ if (cOn > 0.5) {
     keep = keep * (1.0 - lip);
     nc = mix(nc, vec3(0.035, 0.026, 0.022), lip);
   }
+  // Langue (poids de ses os) : rose là où la texture ne l'est pas (son bout pâle).
+  nc = mix(nc, vec3(0.6, 0.16, 0.19) * (0.85 + 0.3 * smoothstep(0.1, 0.5, lum0)), smoothstep(0.3, 0.7, vCmpTongue));
   diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0));
   // Truffe peinte (lagotto) : dans la barbe poussée autour d'elle, la truffe de la texture, prise au seuil de luminance
   // sur des texels flous, faisait une tache grise étalée sans contour, et la lèvre sombre une bavure dessous. Une

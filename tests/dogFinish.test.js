@@ -266,3 +266,46 @@ describe('queues qui frétillent', () => {
     }
   });
 });
+
+describe('gueule ouverte', () => {
+  // Pointe de la langue au-delà du devant de la mâchoire du bas (cm, taille réelle), sur l'axe tête → truffe, après 6 s.
+  const tongueOut = (breed, o) => {
+    const { md, s } = dog(breed);
+    const base = md.anim.base;
+    const c = base.prims.coat;
+    const tI = new Set([1, 2, 3, 4, 5, 6].map((k) => base.index.get('tongue' + k)));
+    const jI = base.index.get('jaw');
+    for (let i = 0; i < 360; i++) md.anim.update(1 / 60, st({ size: s, ...o }));
+    md.root.updateMatrixWorld(true);
+    const m = md.coatMesh;
+    const v = new THREE.Vector3();
+    const head = md.bone('head').getWorldPosition(new THREE.Vector3());
+    let nose = 0;
+    const tongue = [];
+    const lip = [];
+    for (let i = 0; i < c.count; i++) {
+      let wt = 0;
+      let wj = 0;
+      for (let k = 0; k < 4; k++) {
+        if (tI.has(c.si[i * 4 + k])) wt += c.sw[i * 4 + k];
+        if (c.si[i * 4 + k] === jI) wj += c.sw[i * 4 + k];
+      }
+      if (wt > 0.5) tongue.push(i);
+      else if (wj > 0.5 && wt < 0.05) lip.push(i);
+      if (base.part[i * 4 + 2] > 0.9 && c.pos[i * 3 + 2] > c.pos[nose * 3 + 2]) nose = i;
+    }
+    const fwd = m.getVertexPosition(nose, v).applyMatrix4(m.matrixWorld).sub(head).normalize().clone();
+    const proj = (i) => m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld).sub(head).dot(fwd);
+    const out = (Math.max(...tongue.map(proj)) - Math.max(...lip.map(proj))) * 100 / s;
+    md.dispose();
+    return out;
+  };
+  it('en haletant, la langue pend hors de la gueule (avant : rentrée derrière les dents, un rictus) ; au calme, elle est dedans', () => {
+    for (const breed of ['labrador', 'golden', 'husky']) {
+      // (mesuré : 3 à 3,6 cm à l'arrêt, 2,9 à 3,2 en marchant ; au calme -2,1 à -2,3)
+      expect(tongueOut(breed, { happy: 1, hot: true })).toBeGreaterThan(2);
+      expect(tongueOut(breed, { hot: true, v: 1.2, moving: true })).toBeGreaterThan(2);
+      expect(tongueOut(breed, { happy: 0.25 })).toBeLessThan(0);
+    }
+  });
+});

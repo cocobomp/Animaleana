@@ -2022,6 +2022,9 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   // (touffu : des mèches aussi, celles du poil soyeux, plus légères — le panache et la collerette du spitz étaient lisses)
   uniforms.cCurl.value.set(B.curly ? 1 - B.ringlets : B.fluffy ? 0.12 * B.fluffy : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : B.fluffy ? 0.45 * B.fluffy : 0, B.ringlets);
   uniforms.cWrinkle.value = B.wrinkle ?? 0;
+  // Os de la langue (indices contigus du squelette) : rose dans le shader jusqu'au bout.
+  const tongueI = [1, 2, 3, 4, 5, 6].map((k) => base.index.get('tongue' + k)).filter((i) => i !== undefined);
+  if (tongueI.length && Math.max(...tongueI) - Math.min(...tongueI) === tongueI.length - 1) uniforms.cTongue.value.set(Math.min(...tongueI), Math.max(...tongueI));
   const keepCfg = base.cfg.keep;
   const nose = S.measure.noseTip;
   // (barbe du labradoodle : truffe gardée plus serrée — le poil sombre de la lèvre du modèle, sous la truffe, restait
@@ -2527,6 +2530,16 @@ class RealDogAnim {
     this.eyes = ['eyeL', 'eyeR'].map((nm) => model.bone(nm)).filter(Boolean);
     this.jaw = model.bone('jaw');
     this.tongue = [1, 2, 3, 4, 5, 6].map((i) => model.bone('tongue' + i)).filter(Boolean);
+    // (glissement de la langue qui pend, dans le repère de la mâchoire : vers l'avant, 60 % de sa longueur, un peu vers
+    // le bas)
+    if (this.tongue.length > 1 && this.jaw) {
+      const t1 = base.index.get('tongue1');
+      const tn = base.index.get(this.tongue[this.tongue.length - 1].name);
+      const d = S.heads[tn].clone().sub(S.heads[t1]);
+      const len = d.length();
+      d.normalize().multiplyScalar(len * 0.6).add(V(0, -len * 0.08, 0));
+      this.tongueSlide = d.applyQuaternion(base.rotW[base.index.get('jaw')].clone().invert());
+    }
     this.breathe = model.bone('breathe');
     this.trick = null;
     this.lead = 'walk';
@@ -2976,7 +2989,9 @@ class RealDogAnim {
     u.cFat.value = Math.max(-0.012, Math.min(0.03, ((st.fat ?? 1) - 1) * 0.08));
     u.cWet.value = st.wet ?? 0;
     // Gueule entrouverte et langue qui pend quand il halète ou qu'il est content.
-    const open = Math.max(this.pant * 0.9, (st.happy ?? 0) * 0.35) * (sleeping ? 0 : 1);
+    // (content : ouverte au-delà de la moitié de sa joie seulement — à 0,25, au calme, elle restait entrouverte sur une
+    // fente de dents)
+    const open = Math.max(this.pant * 0.9, Math.max(0, (st.happy ?? 0) - 0.5) * 0.7) * (sleeping ? 0 : 1);
     // (au calme, la gueule du shiba, ouverte dans ses animations, est refermée : sinon il montre les dents. Jusqu'à
     // l'angle de la gueule fermée, mesuré depuis la pose de repos du GLB (elle-même entrouverte) — pas d'un angle
     // fixe : fermée de 0,1 rad, l'idle montrait encore une rangée de dents ; de 0,2, la marche, sans piste de
@@ -2987,9 +3002,14 @@ class RealDogAnim {
       const a = 2 * Math.atan2(_q.x, _q.w);
       shut = Math.max(0, a - JAW_CLOSED) * (1 - Math.min(1, open * 2.5));
     }
-    if (this.jaw && (open > 0.01 || shut > 0)) this.turn(this.jaw, AX, open * 0.22 + Math.sin(t * rate) * 0.03 * this.pant - shut);
-    if (this.tongue.length && this.pant > 0.05) {
-      for (let i = 0; i < this.tongue.length; i++) this.turn(this.tongue[i], AX, this.pant * 0.12 * (i + 1) / this.tongue.length);
+    if (this.jaw && (open > 0.01 || shut > 0)) this.turn(this.jaw, AX, open * 0.22 + this.pant * 0.1 + Math.sin(t * rate) * 0.03 * this.pant - shut);
+    // Langue : en haletant, elle glisse vers l'avant sur les dents du bas et pend hors de la gueule (rentrée dans la
+    // géométrie pour la gueule fermée — voir faceShape —, elle restait au fond de la gueule ouverte : un rictus de dents)
+    // (content, gueule ouverte sans haleter : la langue avance à moitié et repose sur les dents du bas)
+    const tk = Math.max(smooth(0.05, 0.6, this.pant), 0.5 * smooth(0.1, 0.35, open));
+    if (this.tongue.length && tk > 0.01) {
+      if (this.tongueSlide) this.tongue[0].position.addScaledVector(this.tongueSlide, tk);
+      for (let i = 0; i < this.tongue.length; i++) this.turn(this.tongue[i], AX, tk * 0.22 * (i + 1) / this.tongue.length);
     }
     // Regard : vers ce qui l'intéresse (le joueur proche), sinon il regarde autour de lui ; moins en marche.
     const moving = !!st.moving;

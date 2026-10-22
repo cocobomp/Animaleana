@@ -346,7 +346,7 @@ describe('allures, postures et gestes', () => {
     expect(tired.has('rear')).toBe(false);
   });
 
-  it.each([['rex', 'hop', 0.29], ['rex', 'lope', 0.9], ['rex', 'run', 1.8], ['belier', 'hop', 0.3], ['belier', 'lope', 0.7], ['belier', 'run', 1.2]])(
+  it.each([['rex', 'hop', 0.29], ['rex', 'lope', 0.9], ['rex', 'run', 1.8], ['belier', 'hop', 0.3], ['belier', 'lope', 0.7], ['belier', 'lope', 1.2], ['belier', 'run', 1.6]])(
     '%s, %s à %f m/s : les pieds posés ne glissent pas (sole suivie dans le repère du sol)', (breed, gait, v) => {
       const md = rabbit(breed);
       const a = md.anim;

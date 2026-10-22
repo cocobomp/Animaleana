@@ -143,3 +143,69 @@ describe('mèches de l\'angora et du tête de lion', () => {
     }
   });
 });
+
+describe('allures du bélier', () => {
+  // La course du bélier (petits bonds, cadence naturelle à 0,92 m/s) était prise dès 0,78 m/s et jouée 1,3 fois trop vite
+  // à 1,2 m/s (vitesse de marche du jeu) : lapin presque toujours en l'air, antérieurs posés 9 % du temps, et chez le
+  // jeune et le lapereau qui patinaient de 1 à 1,9 cm par appui. Petit galop jusqu'à 1,25 m/s (taille 1).
+  const track = (stage, v, frames = 240) => {
+    const md = rabbit('belier', stage);
+    md.staticPose('crouch');
+    const a = md.anim;
+    const m = md.coatMesh;
+    const dt = 1 / 60;
+    const _v = new THREE.Vector3();
+    const step = () => {
+      a.update(dt, { v, moving: true, posture: 'crouch' });
+      md.root.position.z += v * dt;
+      md.root.updateMatrixWorld(true);
+    };
+    for (let f = 0; f < 120; f++) step();
+    const gait = a.gait;
+    const soles = a.S.soles;
+    const cur = [null, null];
+    const slides = [[], []];
+    for (let f = 0; f < frames; f++) {
+      step();
+      for (let l = 0; l < 2; l++) {
+        if (cur[l]) {
+          m.getVertexPosition(cur[l].i, _v).applyMatrix4(m.matrixWorld);
+          if (_v.y < 0.004) {
+            cur[l].d = Math.max(cur[l].d, Math.hypot(_v.x - cur[l].x, _v.z - cur[l].z));
+            cur[l].n++;
+            continue;
+          }
+          if (cur[l].n >= 3) slides[l].push(cur[l].d);
+          cur[l] = null;
+        }
+        let lo = Infinity;
+        let best = -1;
+        for (const i of soles[l]) {
+          const y = m.getVertexPosition(i, _v).applyMatrix4(m.matrixWorld).y;
+          if (y < lo) {
+            lo = y;
+            best = i;
+          }
+        }
+        if (lo < 0.004) {
+          m.getVertexPosition(best, _v).applyMatrix4(m.matrixWorld);
+          cur[l] = { i: best, x: _v.x, z: _v.z, d: 0, n: 0 };
+        }
+      }
+    }
+    md.dispose();
+    return { gait, slides: slides.flat() };
+  };
+
+  it.each(['adult', 'young', 'baby'])('bélier (%s) : petit galop à 1,2 m/s, course en bonds à 1,6 m/s', (stage) => {
+    expect(track(stage, 1.2, 1).gait).toBe('lope');
+    expect(track(stage, 1.6, 1).gait).toBe('run');
+  });
+
+  it('jeune bélier à 1,2 m/s : les pieds avant posés glissent de moins de 7 mm par appui', () => {
+    const { slides } = track('young', 1.2);
+    expect(slides.length).toBeGreaterThan(2);
+    const med = [...slides].sort((x, y) => x - y)[Math.floor(slides.length / 2)];
+    expect(med).toBeLessThan(0.007);
+  });
+});

@@ -45,7 +45,10 @@ const MODEL = {
   up: { keep: { pink: true, nose: [0.012, 0.3] }, grain: 0.75 },
   // (bélier : yeux peints dans la texture de 256 px — trous sombres déchirés au bord, sans reflet —, repeints ronds par
   // la robe ; centres et rayon mesurés sur la texture, repère du GLB au repos : grappe des texels sombres de la tête)
-  lop: { keep: { pink: true, dark: 0.05, nose: [0.012, 0.28] }, grain: 0.6, eyes: [[0.0319, 0.2809, 0.1035], [-0.0319, 0.2809, 0.1035]], eyeR: 0.0078 },
+  // (runFrom : course en bonds prise seulement au-delà de cette vitesse, m/s, lapin de taille 1 — la course du bélier,
+  // à petits bonds, a sa cadence naturelle à 0,92 m/s : prise dès 0,78, elle était jouée 1,3 fois trop vite à 1,2 m/s, le
+  // lapin presque toujours en l'air, les pattes avant effleurant le sol 9 % du temps et patinant chez les jeunes)
+  lop: { keep: { pink: true, dark: 0.05, nose: [0.012, 0.28] }, grain: 0.6, eyes: [[0.0319, 0.2809, 0.1035], [-0.0319, 0.2809, 0.1035]], eyeR: 0.0078, runFrom: 1.25 },
 };
 
 const _v = V();
@@ -1316,10 +1319,11 @@ function fitBody(model, base, S) {
  * suivante à mi-chemin (moyenne géométrique) de leurs vitesses naturelles, ± 8 % : chaque clip reste près de sa cadence.
  */
 const GAIT_HYST = 1.08;
-export function pickRabbitGait(prev, u, nat = NATURAL_SPEED) {
+export function pickRabbitGait(prev, u, nat = NATURAL_SPEED, runFrom = 0) {
   if (!(u >= 0.04)) return 'idle';
   const hl = Math.sqrt((nat.hop ?? NATURAL_SPEED.hop) * (nat.lope ?? NATURAL_SPEED.lope));
-  const lr = Math.sqrt((nat.lope ?? NATURAL_SPEED.lope) * (nat.run ?? NATURAL_SPEED.run));
+  // (runFrom : vitesse sous laquelle la course n'est pas prise, voir MODEL.lop)
+  const lr = Math.max(runFrom, Math.sqrt((nat.lope ?? NATURAL_SPEED.lope) * (nat.run ?? NATURAL_SPEED.run)));
   let g = prev === 'idle' || !prev ? 'hop' : prev;
   for (let k = 0; k < 3; k++) {
     if (g === 'hop' && u > hl * GAIT_HYST) g = 'lope';
@@ -1423,6 +1427,7 @@ class RealRabbitAnim {
     }
     const k = 0.35 + 0.65 * B.legs;
     this.natural = Object.fromEntries(MOVING.map((g) => [g, (base.natural[g] ?? NATURAL_SPEED[g]) * k]));
+    this.runFrom = (base.cfg.runFrom ?? 0) * k;
     this.speedScale = 1;
     this.gait = 'idle';
     this.posture = 'crouch';
@@ -1879,7 +1884,7 @@ class RealRabbitAnim {
     this.restorePose();
     this.t += dt;
     const u = st.moving ? st.v : 0;
-    const g = pickRabbitGait(this.gait, u, this.natural);
+    const g = pickRabbitGait(this.gait, u, this.natural, this.runFrom);
     this.gait = g;
     // Posture voulue (accroupi dès qu'il bouge) ; passages joués une fois, par le plus court chemin.
     const want = st.moving ? 'crouch' : st.posture ?? 'crouch';

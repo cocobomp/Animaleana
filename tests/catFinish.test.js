@@ -319,3 +319,18 @@ describe('collier des chats à poil long', () => {
     md.dispose();
   });
 });
+
+describe('sous les yeux', () => {
+  // La texture d'origine est peinte lisse et claire sous l'œil : un croissant sans poil (british, chartreux, scottish fold,
+  // européen). Le relief y est pris sur un grain du pelage, jamais plus clair que le pelage voisin.
+  it.each(['british', 'europeen'])('%s : la robe remplace le relief lisse sous l\'œil par du grain', (b) => {
+    const md = cat(b);
+    const sh = { uniforms: {}, vertexShader: '#include <common>\n#include <begin_vertex>\n#include <skinning_vertex>', fragmentShader: '#include <common>\n#include <color_fragment>\n#include <roughnessmap_fragment>' };
+    md.coatMesh.material.onBeforeCompile(sh, {});
+    expect(sh.fragmentShader).toContain('uniform vec4 cIris;');
+    expect(sh.fragmentShader).toContain('detail = mix(detail, min(detail, 1.0) * grainE, ringE)');
+    // (rayon du globe pour l'anneau : celui de la race, non nul)
+    expect(sh.uniforms.cIris.value.y).toBeGreaterThan(0.002);
+    md.dispose();
+  });
+});

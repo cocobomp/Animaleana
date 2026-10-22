@@ -198,6 +198,7 @@ uniform vec4 cMisc;
 uniform vec4 cNose;
 uniform vec4 cTailB;
 uniform vec4 cBody;
+uniform vec4 cIris;
 uniform float cRole;
 uniform float cTexMode;
 uniform vec3 cMeans;
@@ -487,6 +488,16 @@ if (cOn > 0.5) {
     // (peau nue : presque plus de poils peints)
     detail = mix(detail, 1.0 + (detail - 1.0) * 0.15, cHair.x);
   }
+  // Sous les yeux : la texture d'origine y est peinte lisse et claire (un croissant sans poil, le « fard » sous l'œil
+  // du british, du chartreux, de l'européen) ; son relief y est remplacé par le grain du pelage voisin, jamais plus clair.
+  if (cTexMode > 0.5) {
+    float sideE = vCmpPos.x > cMisc.x ? 1.0 : -1.0;
+    vec3 dE = (vCmpPos - vec3(cMisc.x + sideE * cEye.x, cEye.y, cEye.z)) / max(0.003, cIris.y);
+    float deE = length(dE);
+    float ringE = vCmpPart.z * (1.0 - vCmpPart.x) * smoothstep(0.95, 1.15, deE) * (1.0 - smoothstep(2.2, 3.0, deE)) * (1.0 - smoothstep(-0.6, 0.2, dE.y));
+    float grainE = exp((cmpNoise(CMP_ROT * vCmpPos * 900.0) - 0.5) * 0.5 * cMeans.z - 0.04);
+    detail = mix(detail, min(detail, 1.0) * grainE, ringE);
+  }
   vec3 coat = catCoat(vCmpPos, vCmpPart);
   float l = dot(coat, LUM);
   detail = mix(detail, sqrt(detail), smoothstep(0.3, 0.8, l));
@@ -628,7 +639,7 @@ export function catCoatMaterial(src, shared, opts) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.55, cHair.x), 0.45, cWet);');
   };
-  mat.customProgramCacheKey = () => 'cat-coat-v4';
+  mat.customProgramCacheKey = () => 'cat-coat-v5';
   return mat;
 }
 
@@ -651,7 +662,7 @@ export function catLidMaterial(coatMat) {
       .replace('#include <common>', '#include <common>\nvarying float vLidRim;')
       .replace('#include <alphamap_fragment>', 'diffuseColor.rgb *= mix(1.0, 0.1, smoothstep(0.0, 1.0, vLidRim));\n#include <alphamap_fragment>');
   };
-  mat.customProgramCacheKey = () => 'cat-lid-v1';
+  mat.customProgramCacheKey = () => 'cat-lid-v2';
   return mat;
 }
 
@@ -728,7 +739,7 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
       .replace('#include <common>', `#include <common>\n${SHELL_F}`)
       .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${SHELL_DISCARD_F}`);
   };
-  mat.customProgramCacheKey = () => 'cat-shell-v5';
+  mat.customProgramCacheKey = () => 'cat-shell-v6';
   mat.side = THREE.FrontSide;
   // (couches dessinées après les objets opaques, dans l'ordre : renderOrder croissant, voir catReal.js)
   mat.transparent = true;

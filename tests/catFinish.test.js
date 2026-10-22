@@ -5,6 +5,7 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 import * as THREE from 'three';
 import { buildRealCatModel } from '../src/game/models/catReal.js';
 import { buildAccessories } from '../src/game/models/salon.js';
+import { buildGear } from '../src/game/gearModels.js';
 import { catLookWithBreed } from '../src/sim/catLook.js';
 import { resolveLook } from '../src/sim/animal.js';
 import { loadRealCatGltf } from './fixtures/realCatGltf.js';
@@ -262,6 +263,59 @@ describe('pinceaux et poils d\'oreille', () => {
       const h = V().fromBufferAttribute(p, q).distanceTo(V().fromBufferAttribute(p, q + 3));
       expect(w).toBeLessThan(0.6 * h);
     }
+    md.dispose();
+  });
+});
+
+describe('collier des chats à poil long', () => {
+  // Collier enfoncé de moitié dans la collerette restée debout : seul un bout dépassait à la nuque (maine coon, persan,
+  // norvégien, ragdoll). Le poil des couches est couché sous la bande du collier porté (sillon, comme chez le chien).
+  const STUB_V = '#include <common>\n#include <begin_vertex>\n#include <skinning_vertex>';
+  const STUB_F = '#include <common>\n#include <color_fragment>\n#include <roughnessmap_fragment>\n#include <alphatest_fragment>';
+  const compile = (m) => {
+    const sh = { uniforms: {}, vertexShader: STUB_V, fragmentShader: STUB_F };
+    m.onBeforeCompile(sh, {});
+    return sh;
+  };
+  it.each(['maine_coon', 'persan'])('%s : sillon posé avec le collier, retiré avec lui, à la place de l\'anneau', (b) => {
+    const md = cat(b);
+    let shell = null;
+    md.root.traverse((o) => {
+      if (!shell && o.material?.customProgramCacheKey?.()?.startsWith('cat-shell')) shell = o;
+    });
+    expect(shell, 'couches du poil (qualité haute)').toBeTruthy();
+    const sh = compile(shell.material);
+    expect(sh.vertexShader).toContain('len *= 1.0 - 0.92 * bandC');
+    const R = sh.uniforms.cCollarR.value;
+    expect(R.w).toBe(0);
+    const g = buildGear(md, lookOf(b), { neck: { item: 'collar', color: 'red' } });
+    expect(R.w).toBe(1);
+    const F = md.dogFit.collar;
+    expect(R.x).toBeGreaterThan(F.rx);
+    expect(R.z).toBeGreaterThan(0.005);
+    // (la bande, repérée dans la pose de liaison, tombe sur l'anneau une fois le chat debout)
+    md.staticPose('stand');
+    md.root.updateMatrixWorld(true);
+    const C = sh.uniforms.cCollarC.value;
+    const N = sh.uniforms.cCollarN.value;
+    const ring = F.bone.localToWorld(F.center.clone());
+    const nW = F.normal.clone().transformDirection(F.bone.matrixWorld);
+    const m = md.coatMesh;
+    const pos = m.geometry.attributes.position;
+    const v = V();
+    let n = 0;
+    let sum = 0;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).sub(C);
+      const d = v.dot(N);
+      if (Math.abs(d) > 0.004 || v.addScaledVector(N, -d).length() > 2 * Math.max(F.rx, F.ry)) continue;
+      sum += Math.abs(m.getVertexPosition(i, _v).applyMatrix4(m.matrixWorld).sub(ring).dot(nW));
+      n++;
+    }
+    expect(n).toBeGreaterThan(10);
+    expect(sum / n).toBeLessThan(0.009);
+    for (const h of g.userData.meshes) for (const x of h.userData?.dispose ?? []) x.dispose?.();
+    expect(R.w).toBe(0);
     md.dispose();
   });
 });

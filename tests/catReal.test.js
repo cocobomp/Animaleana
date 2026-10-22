@@ -417,8 +417,9 @@ describe('équipement ajusté', () => {
       expect(ring.bone.children.length, b).toBeGreaterThan(0);
       // la bande entoure le cou : son rayon suit la coupe mesurée (chat : 2 à 7 cm)
       expect(ring.rx, b).toBeGreaterThan(0.012);
-      // (poil long : le collier n'est qu'à moitié enfoncé dans la collerette ; chaton : modèle à la taille d'un adulte)
-      expect(ring.rx, b).toBeLessThan((md.kitten ? 0.075 : 0.055) + 0.9 * (Math.max(0, md.build.fur) + md.build.ruff));
+      // (poil long : le collier s'enfonce un peu dans la collerette, couchée sous sa bande — catFinish.test.js — ; chaton :
+      // modèle à la taille d'un adulte)
+      expect(ring.rx, b).toBeLessThan((md.kitten ? 0.075 : 0.055) + 1.0 * (Math.max(0, md.build.fur) + md.build.ruff));
       const torus = ring.bone.children.find((o) => !o.isBone && o.children?.length).children[0];
       torus.geometry.computeBoundingBox();
       const size = torus.geometry.boundingBox.getSize(new THREE.Vector3());

@@ -92,6 +92,11 @@ export function makeCatCoatUniforms() {
     cCut: { value: new THREE.Vector4(0, 0, 0, 0) },
     cEyeL: { value: new THREE.Color() },
     cEyeR: { value: new THREE.Color() },
+    // Collier porté (catReal.js setGroove) : le poil long est couché sous sa bande. Centre et axe du cou dans la pose de
+    // liaison (repère des sommets), demi-axes de l'ellipse, demi-largeur de la bande, w : 1 si porté.
+    cCollarC: { value: new THREE.Vector3() },
+    cCollarN: { value: new THREE.Vector3(0, 0, 1) },
+    cCollarR: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
 }
 
@@ -693,7 +698,7 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
     coatCompile(sh, r);
     Object.assign(sh.uniforms, own);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', `#include <common>\nuniform float cShellK;\nuniform vec4 cFurMap;\nvarying float vShellLen;`)
+      .replace('#include <common>', `#include <common>\nuniform float cShellK;\nuniform vec4 cFurMap;\nuniform vec3 cCollarC;\nuniform vec3 cCollarN;\nuniform vec4 cCollarR;\nvarying float vShellLen;`)
       .replace('if (push != 0.0) transformed += objectNormal * (push / max(1e-6, length(objectNormal)));', `if (push != 0.0) transformed += objectNormal * (push / max(1e-6, length(objectNormal)));
   {
     float L2 = max(0.05, cLand.y - cLand.x);
@@ -705,6 +710,15 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
     float ruff = (1.0 - cmpPart.w) * (1.0 - cmpPart.y) * smoothstep(0.75, 1.05, u2) * (1.0 - face2 * smoothstep(-0.2, 0.25, hz2));
     float br = cmpPart.w * (1.0 - smoothstep(-0.1, 0.25, u2)) * smoothstep(0.03, 0.07, cmpRest.y);
     len += cFurMap.y * ruff + cFurMap.z * br + cFurMap.w * cmpPart.y * smoothstep(0.05, 0.2, distance(cmpRest, cTailB.xyz) / cTailB.w);
+    // (collier porté : le poil est couché sous sa bande et un peu au-delà, en fondu — sinon la collerette du maine coon ou
+    // du persan l'engloutissait, seul un bout dépassait à la nuque)
+    if (cCollarR.w > 0.0) {
+      vec3 dpc = position - cCollarC;
+      float dc = dot(dpc, cCollarN);
+      float rc = length(dpc - dc * cCollarN);
+      float bandC = (1.0 - smoothstep(cCollarR.z, cCollarR.z * 2.6, abs(dc))) * (1.0 - smoothstep(1.5, 2.2, rc / max(1e-4, max(cCollarR.x, cCollarR.y))));
+      len *= 1.0 - 0.92 * bandC;
+    }
     vShellLen = len;
     transformed += objectNormal * (len * cShellK / max(1e-6, length(objectNormal)));
     // (le poil long retombe un peu : les couches extérieures descendent)
@@ -714,7 +728,7 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
       .replace('#include <common>', `#include <common>\n${SHELL_F}`)
       .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${SHELL_DISCARD_F}`);
   };
-  mat.customProgramCacheKey = () => 'cat-shell-v4';
+  mat.customProgramCacheKey = () => 'cat-shell-v5';
   mat.side = THREE.FrontSide;
   // (couches dessinées après les objets opaques, dans l'ordre : renderOrder croissant, voir catReal.js)
   mat.transparent = true;

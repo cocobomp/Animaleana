@@ -1480,6 +1480,31 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     releaseShape(S);
   };
   fitCollar(model, base, S);
+  // Sillon du collier (catCoat.js, cCollar*) : le poil long est couché sous la bande d'un collier ou d'un accessoire du
+  // cou porté (gearModels.js, salon.js). key : qui le porte ; null le retire. Plusieurs : l'ellipse la plus petite.
+  // L'anneau, porté par l'os du cou, est ramené dans la pose de liaison (repère des sommets) par l'inverse de sa matrice
+  // de liaison.
+  {
+    const F = model.dogFit.collar;
+    const bi = skeleton.bones.indexOf(F.bone);
+    if (bi >= 0) {
+      const toBind = skeleton.boneInverses[bi].clone().invert();
+      uniforms.cCollarC.value.copy(F.center).applyMatrix4(toBind);
+      uniforms.cCollarN.value.copy(F.normal).transformDirection(toBind);
+    }
+  }
+  const grooves = new Map();
+  model.setGroove = (key, g = null) => {
+    if (g) grooves.set(key, g);
+    else grooves.delete(key);
+    const all = [...grooves.values()];
+    const r = uniforms.cCollarR.value;
+    if (!all.length) {
+      r.w = 0;
+      return;
+    }
+    r.set(Math.min(...all.map((x) => x.rx)), Math.min(...all.map((x) => x.ry)), Math.max(...all.map((x) => x.w)), 1);
+  };
   model.anim.staticPose('stand');
   return model;
 }
@@ -1559,9 +1584,9 @@ function fitCollar(model, base, S) {
       center = n0.clone().addScaledVector(axis, best.d0).addScaledVector(lx, (best.x0 + best.x1) / 2).addScaledVector(ly, (best.y0 + best.y1) / 2);
       rx = (best.x1 - best.x0) / 2;
       ry = (best.y1 - best.y0) / 2;
-      // (le collier s'enfonce dans le poil long et la collerette : sinon un cerceau autour du maine coon)
-      // (à moitié seulement : le collier doit rester visible)
-      const sink = 0.45 * (Math.max(0, B.fur) + 1.2 * Math.max(0, B.ruff));
+      // (le collier s'enfonce un peu dans le poil long et la collerette, couchés sous sa bande — setGroove — : sinon un
+      // cerceau autour du maine coon ; enfoncé de moitié dans un poil resté debout, seul un bout dépassait à la nuque)
+      const sink = 0.2 * (Math.max(0, B.fur) + 1.2 * Math.max(0, B.ruff));
       rx = Math.max(rx * 0.7, rx - sink);
       ry = Math.max(ry * 0.7, ry - sink);
     }

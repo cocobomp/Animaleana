@@ -977,6 +977,9 @@ export function deformDog(base, B) {
     }
   } else if (B.fur > 0.0005) {
     const nr = weldedNormals(P, coat.index, coat.weld, n);
+    // (bouclettes serrées : touffes de boucles, lissées de proche en proche sur la peau — sans lissage, les grands
+    // triangles de la tête et du corps se dressaient en éclats)
+    const tufts = B.ringlets ? ringletTufts(P, coat.index, coat.weld, n) : null;
     for (let i = 0; i < n; i++) {
       p.fromArray(P, i * 3);
       _w.fromArray(nr, i * 3);
@@ -999,9 +1002,20 @@ export function deformDog(base, B) {
         const ax = Math.abs(r0[i * 3] - L.midX);
         const muzzle = smooth(0.5, 0.7, hz) * (1 - smooth(L.eyeY - 0.03, L.eyeY - 0.005, y0)) * (1 - smooth(0.93, 1.0, hz));
         const brow = (1 - smooth(0.012, 0.03, Math.abs(y0 - L.eyeY - 0.022))) * smooth(0.25, 0.4, hz) * (1 - smooth(0.5, 0.6, hz)) * smooth(0.01, 0.025, ax);
-        k += head * (1 - ear) * B.beard * (0.9 * muzzle + 0.7 * brow);
+        // (bouclettes serrées : les sourcils s'arrêtent au bord de la paupière — poussés avec les touffes, ils faisaient
+        // une écharde de poil au-dessus de l'œil)
+        const lid = B.ringlets ? smooth(0.014, 0.028, Math.hypot(ax - L.eyeX, y0 - L.eyeY, z0 - L.eyeZ)) : 1;
+        k += head * (1 - ear) * B.beard * (0.9 * muzzle + 0.7 * brow * lid);
       }
       const paw = 1 - smooth(0.04, L.elbowY * 0.55, y0);
+      // bouclettes serrées (lagotto) : boucles sur tout le crâne et les joues (pas sur le bout du museau, qui a sa barbe,
+      // ni sur les paupières), et jusqu'en bas des pattes
+      if (B.ringlets) {
+        const hz = (z0 - L.head.z) / Math.max(0.05, L.noseZ - L.head.z);
+        const dEye = Math.hypot(Math.abs(r0[i * 3] - L.midX) - L.eyeX, y0 - L.eyeY, z0 - L.eyeZ);
+        k += head * B.ringlets * 0.3 * (1 - smooth(0.6, 0.85, hz)) * smooth(0.016, 0.034, dEye);
+        k += legSum * B.ringlets * 0.35 * (1 - 0.6 * paw);
+      }
       k += legSum * (1 - paw) * (0.3 + B.feather * 0.8 * smooth(-0.1, -0.7, _w.z) * smooth(L.elbowY * 0.3, L.elbowY, y0));
       k += (1 - legSum) * (1 - head) * (1 - tail) * B.feather * 0.7 * smooth(-0.3, -0.9, _w.y);
       k += ear * (0.1 + 0.4 * B.feather);
@@ -1011,7 +1025,9 @@ export function deformDog(base, B) {
       const tf = tailR?.frac?.[i] ?? 0;
       const under = base.kind === 'shiba' ? smooth(-0.15, -0.75, _w.y) : smooth(-0.15, -0.75, _w.z);
       k += Math.sqrt(tail) * B.tailFur * ((0.9 + 0.2 * B.feather) * (1 - B.tailTaper * 0.85 * tf ** 1.3) + B.feather * 2.4 * under * smooth(0.04, 0.3, tf) * (1 - tf) ** 1.2 * Math.min(1, 0.012 / B.fur));
-      const nz = B.curly ? 0.65 + 0.7 * fbm(p.x * 38, p.y * 38, p.z * 38) : 0.75 + 0.5 * fbm(p.x * 30, p.y * 30, p.z * 30);
+      let nz = B.curly ? 0.65 + 0.7 * fbm(p.x * 38, p.y * 38, p.z * 38) : 0.75 + 0.5 * fbm(p.x * 30, p.y * 30, p.z * 30);
+      // (bouclettes serrées : la silhouette se festonne de touffes de boucles — bosses rondes, creux nets entre elles)
+      if (tufts) nz = nz * (1 - B.ringlets) + B.ringlets * (0.62 + 0.8 * tufts[i]);
       // Sans collerette (setter, caniche, golden) : celle du shiba et ses joues de spitz d'abord raccourcies (sinon
       // une crinière de lion autour de la tête).
       let shave = 0;
@@ -1052,6 +1068,74 @@ export function deformDog(base, B) {
     N.set([_w.x, _w.y, _w.z], i * 3);
   }
   return { pos: P, nrm: N, heads: H, eyePos: EP, eyeNrm: EN, hidden };
+}
+
+/**
+ * Touffes de boucles (lagotto) de chaque sommet du pelage (0 → 1), lissées sur le maillage (groupes de sommets
+ * confondus, voisins par les arêtes des triangles).
+ */
+function ringletTufts(P, index, grp, n) {
+  let G = 0;
+  for (let i = 0; i < n; i++) G = Math.max(G, grp[i] + 1);
+  const val = new Float32Array(G);
+  const cnt = new Float32Array(G);
+  for (let i = 0; i < n; i++) {
+    val[grp[i]] += curlTufts(P[i * 3] * 40, P[i * 3 + 1] * 40, P[i * 3 + 2] * 40);
+    cnt[grp[i]]++;
+  }
+  for (let g = 0; g < G; g++) val[g] /= cnt[g] || 1;
+  const sum = new Float32Array(G);
+  const deg = new Float32Array(G);
+  for (let it = 0; it < 2; it++) {
+    sum.fill(0);
+    deg.fill(0);
+    for (let t = 0; t < index.length; t += 3) {
+      for (let e = 0; e < 3; e++) {
+        const a = grp[index[t + e]];
+        const b = grp[index[t + ((e + 1) % 3)]];
+        sum[a] += val[b];
+        deg[a]++;
+        sum[b] += val[a];
+        deg[b]++;
+      }
+    }
+    for (let g = 0; g < G; g++) if (deg[g]) val[g] = 0.5 * val[g] + 0.5 * (sum[g] / deg[g]);
+  }
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = val[grp[i]];
+  return out;
+}
+
+/**
+ * Touffes de boucles (lagotto) : bruit cellulaire déterministe, bosse ronde de 1 au centre d'une touffe à 0 au bord,
+ * dans le creux entre deux touffes voisines (cellules de taille 1 : appeler avec la position × fréquence).
+ */
+function curlTufts(x, y, z) {
+  const h = (a, b, c, k) => {
+    const s = Math.sin(a * 127.1 + b * 311.7 + c * 74.7 + k * 19.19) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const zi = Math.floor(z);
+  let d1 = 9;
+  let d2 = 9;
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+    const cx = xi + a;
+    const cy = yi + b;
+    const cz = zi + c;
+    const dx = cx + 0.1 + 0.8 * h(cx, cy, cz, 0) - x;
+    const dy = cy + 0.1 + 0.8 * h(cx, cy, cz, 1) - y;
+    const dz = cz + 0.1 + 0.8 * h(cx, cy, cz, 2) - z;
+    const d = dx * dx + dy * dy + dz * dz;
+    if (d < d1) {
+      d2 = d1;
+      d1 = d;
+    } else if (d < d2) d2 = d;
+  }
+  // (bosse arrondie : la distance au centre de la touffe, adoucie vers le creux entre deux touffes)
+  const e = Math.sqrt(d2) - Math.sqrt(d1);
+  return smooth(0, 0.6, e) * (1 - 0.4 * smooth(0.2, 0.9, Math.sqrt(d1)));
 }
 
 /** Bruit lisse simple (déterministe) pour les touffes de poil. */
@@ -1719,20 +1803,23 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
   // Poil frisé (caniche, labradoodle) ou soyeux et frangé (yorkshire, setter, cavalier) : relief dans le shader.
   // (touffu : spitz — un relief de bouclettes léger, le poil n'est plus de la pâte à modeler)
   // (touffu : relief à peine marqué — à 0,4, des taches de pixels sombres en camouflage sur la face et le corps du loulou)
-  uniforms.cCurl.value.set(B.curly ? 1 : B.fluffy ? 0.12 * B.fluffy : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : 0);
+  // (bouclettes serrées du lagotto : leurs anneaux remplacent en partie la frisure douce, qui les brouillait)
+  uniforms.cCurl.value.set(B.curly ? 1 - 0.6 * B.ringlets : B.fluffy ? 0.12 * B.fluffy : 0, B.silky ? 1 : B.feather >= 0.8 ? 0.55 : 0, B.ringlets);
   uniforms.cWrinkle.value = B.wrinkle ?? 0;
   const keepCfg = base.cfg.keep;
   const nose = S.measure.noseTip;
   // (barbe du labradoodle : truffe gardée plus serrée — le poil sombre de la lèvre du modèle, sous la truffe, restait
   // en tache grise déchirée dans la barbe)
-  const noseK = B.beard ? 0.72 : 1;
+  // (lagotto : barbe plus touffue encore, truffe gardée plus serrée)
+  const noseK = B.beard ? (B.ringlets ? 0.62 : 0.72) : 1;
   const spheres = keepCfg.nose ? [{ s: new THREE.Vector4(base.land.nose.x, base.land.nose.y + (1 - noseK) * keepCfg.nose[0] * 0.5, base.land.nose.z - keepCfg.nose[0] * 0.4, keepCfg.nose[0] * noseK), l: keepCfg.nose[1] * (B.beard ? 0.55 : 1) }] : [];
   void nose;
   const coatMat = coatMaterial(base.prims.coat.material, uniforms, {
     role: 'fur', means: base.means, detail: base.detail, contrast: base.cfg.grain, keep: { ...keepCfg, spheres },
   });
   // (robe noire : du lustre, sinon le poil n'a plus de modelé ; brune ou bringée foncée : un peu)
-  coatMat.roughness = plan.dark ? 0.48 : plan.sheen ? 0.66 : 0.82;
+  // (laine bouclée : mate, même marron)
+  coatMat.roughness = B.ringlets ? 0.86 : plan.dark ? 0.48 : plan.sheen ? 0.66 : 0.82;
   const hb = { box: new THREE.Box3(), sphere: new THREE.Sphere(), boneBox: S.boneBox.slice(), skeleton, meshes: [], anim: null };
   const coatMesh = new DogMesh(S.coatGeo, coatMat, hb);
   const meshes = [coatMesh];
@@ -1852,6 +1939,8 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
       lion: [-0.7 * f, 0.03 + 0.6 * f, -0.3 * f, 0.02],
       // (pompons modelés de la race : seulement la crinière du devant au shader)
       caniche: B.pompons ? [-0.75 * f, 0.016, 0, 0] : [-0.7 * f, 0.01, 0.028, 0.03],
+      // (coupe du lagotto : boucles égalisées sur le corps et l'encolure, pattes bouclées gardées, tête ronde)
+      lagotto: [-0.5 * f, -0.3 * f, 0, 0.3 * f],
     }[st] ?? [0, 0, 0, 0];
     uniforms.cCut.value.set(...cut);
     uniforms.cPom.value = st === 'caniche' ? 1 : 0;
@@ -2722,7 +2811,9 @@ class RealDogAnim {
       const wag = Math.sin(t * freq) * (0.15 + 0.5 * this.wagAmt) * (B.tail === 'curl' ? 0.4 : 1) + Math.sin(t * 0.9) * 0.05;
       // (lévriers : au galop, la queue part en arrière dans l'axe du dos, en gouvernail — pas une ficelle entre les jarrets)
       const run = B.tail === 'whip' ? 0.6 : 0.25;
-      const lift = (moving ? Math.min(1, st.v / 3) * run : 0) + happy * 0.15 - (st.sad ? 0.5 : 0) - (sleeping ? 0.2 : 0);
+      // (panache relevé haut en action — trot, galop, jeu — : toller ; pas quand il est triste)
+      const action = B.tailAction * (st.sad ? 0 : (moving ? 0.6 * Math.min(1, st.v / 2.2) : 0) + 0.35 * happy);
+      const lift = (moving ? Math.min(1, st.v / 3) * run : 0) + happy * 0.15 + action - (st.sad ? 0.5 : 0) - (sleeping ? 0.2 : 0);
       const low = this.posture !== 'stand' ? 1 : 0;
       for (let i = 0; i < tb.length; i++) {
         const b = tb[i];
@@ -3250,6 +3341,9 @@ function tailCarriage(model, base, B) {
     // (panache du spitz : part vers le haut puis se couche vers l'avant sur le dos, pointe vers la tête — courbé vers le
     // haut, il se dressait en colonne sur la croupe)
     screw: [-1.9, 4.6], flat: [-1.85, 1.05, 0.8], flag: [0.25, -0.15], level: [0.1, 0.05],
+    // (panache du toller : au repos dans le prolongement du dos, un peu plus bas, le bout relevé en courbe ; relevé haut
+    // en action, voir tailAction)
+    brush: [0.42, 0.42, 1.3],
   };
   const [a0, curve, pw = 1] = shapes[want] ?? shapes.sabre;
   // Chaque os est orienté sur la courbe voulue : le premier part à a0 sous l'horizontale vers l'arrière, l'angle varie

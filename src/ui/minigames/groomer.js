@@ -225,6 +225,8 @@ function keepFor(style) {
     case 'long': return (u, v, k) => k < 1.12;
     case 'lion': return (u, v, k, head) => head || u > 0.3;
     case 'caniche': return (u, v, k, head) => head || u < -0.85 || (v > 0.55 && Math.abs(Math.abs(u) - 0.58) < 0.14);
+    // (lagotto : la tête ronde et les pattes bouclées restent, le corps est égalisé)
+    case 'lagotto': return (u, v, k, head) => head || v > 0.62;
     case 'coeur': return (u, v, k, head) => !head && k <= 1 && heart(u, v);
     case 'tonte': return (u, v, k, head) => head;
     case 'concours': return (u, v, k, head) => head || (k <= 1 && v > 0.25);

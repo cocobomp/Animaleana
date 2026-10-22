@@ -428,6 +428,7 @@ export class Groomer {
         else if (style === 'long') furs.forEach((o) => sc(o, 1.04, 1.03, 1));
         else if (style === 'lion') { furs.forEach((o) => sc(o, 0.94, 0.95, 1)); sc(md.neck, 1.14, 1.05, 1.14); }
         else if (style === 'caniche') { furs.forEach((o) => sc(o, 0.93, 0.95, 1)); sc(md.tail, 1.25, 1.25, 1.25); }
+        else if (style === 'lagotto') furs.forEach((o) => sc(o, 0.95, 0.96, 1));
       } catch { /* modèle différent : pas d'aspect particulier */ }
       this.cutVisuals.set(e, { style, saved, model: e.model });
     }

@@ -240,6 +240,19 @@ export const SPECIES = {
         pattern: 'solid', colors: [C('Abricot', 'Apricot', 0xdca46a, 0xdca46a), C('Crème', 'Cream', 0xefe0c4, 0xefe0c4), C('Chocolat', 'Chocolate', 0x5a3a26, 0x5a3a26), C('Noir', 'Black', 0x181615, 0x181615)] },
       { id: 'berger_blanc', herder: true, name: { fr: 'Berger blanc suisse', en: 'White Swiss shepherd' }, origin: 'alpes', rarity: 2, scale: 1.05, fluff: 1.15, earType: 'pointed',
         pattern: 'solid', colors: [C('Blanc', 'White', 0xf6f4ef, 0xf6f4ef)] },
+      // Retriever de la Nouvelle-Écosse (« toller », ≈ 48 cm) : roux à orange vif, marques blanches (liste, poitrail,
+      // pieds, bout de la queue ; un toller sans blanc est admis), poil mi-long frangé, panache. Élevé au Canada, et si
+      // courant qu'on le trouve aussi à l'animalerie de la maison.
+      { id: 'toller', name: { fr: 'Retriever de la Nouvelle-Écosse', en: 'Nova Scotia Duck Tolling Retriever' }, origin: 'canada', homeShop: true, rarity: 2, scale: 0.85, fluff: 1.1,
+        pattern: 'bicolor', colors: [C('Roux à marques blanches', 'Red with white markings', 0xb4532a, 0xf5f0e6), C('Orange à marques blanches', 'Orange with white markings', 0xd2742f, 0xf5f0e6),
+          C('Roux foncé', 'Dark red', 0x93421f, 0xb5643a, { pattern: 'solid' })] },
+      // Lagotto romagnolo (chien d'eau et chercheur de truffes de Romagne, ≈ 45 cm) : tout en boucles serrées et
+      // laineuses, jusque sur la tête, les oreilles et la queue ; robes de la race (blanc cassé, taches marron ou
+      // orange, rouan marron, marron, orange).
+      { id: 'lagotto', name: { fr: 'Lagotto romagnolo', en: 'Lagotto Romagnolo' }, origin: null, rarity: 2, scale: 0.8, fluff: 1.3,
+        pattern: 'solid', colors: [C('Blanc cassé', 'Off-white', 0xeee6d5, 0xeee6d5), C('Blanc taché marron', 'White with brown patches', 0xf2ede3, 0x5f3a24, { pattern: 'patches' }),
+          C('Rouan marron', 'Brown roan', 0x5f3a24, 0xefe9de, { pattern: 'spots' }), C('Marron', 'Brown', 0x5a3825, 0x5a3825), C('Orange', 'Orange', 0xd99a5c, 0xd99a5c),
+          C('Blanc taché orange', 'White with orange patches', 0xf2ede3, 0xd28d4c, { pattern: 'patches' })] },
     ],
   },
   cat: {

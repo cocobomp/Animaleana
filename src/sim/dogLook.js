@@ -15,10 +15,12 @@ export const SMALL_DOG = 0.65;
  * replié : border collie), 'button' (repliées vers l'avant : jack russell), 'rose' (repliées vers l'arrière :
  * lévriers, carlin), 'floppy' (tombantes : labrador), 'long' (longues et tombantes : beagle, cocker, teckel).
  * Queue : 'curl' (enroulée sur le dos), 'sickle' (relevée en faucille), 'sabre' (pendante, bout relevé), 'otter'
- * (épaisse, portée bas : labrador), 'plume' (panache frangé, porté bas), 'whip' (fine et longue : lévriers),
- * 'carrot' (dressée, courte : terriers), 'stub' (écourtée).
+ * (épaisse, portée bas : labrador), 'plume' (panache frangé, porté bas), 'brush' (panache frangé porté à hauteur du
+ * dos, bout relevé : toller), 'whip' (fine et longue : lévriers), 'carrot' (dressée, courte : terriers), 'stub'
+ * (écourtée).
  * fur : longueur du poil (m, chien de taille 1) ajoutée en épaississant la silhouette ; ruff : collerette (cou,
- * poitrail) ; feather : franges (arrière des membres, ventre, oreilles, queue) ; curly : poil frisé (caniche).
+ * poitrail) ; feather : franges (arrière des membres, ventre, oreilles, queue) ; curly : poil frisé (caniche) ;
+ * ringlets : bouclettes serrées (lagotto).
  */
 const NATIVE = {
   shiba: { ears: 'pointed', tail: 'curl' },
@@ -75,6 +77,14 @@ export const DOG_BUILDS = {
   terre_neuve: { legs: 0.95, legW: 1.25, back: 1.08, girth: 1.34, head: 1.15, snout: 1.0, muzzleW: 1.15, neck: 0.95, ears: 'floppy', earSize: 0.95, tail: 'plume', fur: 0.025, ruff: 0.8, feather: 1, earLen: 0.8, cheek: 0.4, mouth: 1, flews: 0.7, skullFlat: 0.7, stop: 0.6, square: 0.8, eyeOpen: 0.5, tailThick: 0.95, tailFur: 1.3 },
   labradoodle: { legs: 1.0, back: 1.0, girth: 1.04, headW: 0.9, head: 1.0, snout: 1.0, ears: 'long', earSize: 1.15, tail: 'plume', fur: 0.022, curly: 1, earLen: 1.0, cheek: 0.6, mouth: 1, flews: 0.2, eyeOpen: 0.8, beard: 1 },
   berger_blanc: { legs: 1.02, back: 1.1, girth: 1.0, headW: 0.86, head: 1.02, snout: 1.35, ears: 'pointed', earSize: 1.2, tail: 'sabre', tailLen: 1.1, fur: 0.008, cheek: 0.6, mouth: 0.6, eyeOpen: 0.3 },
+  // (retriever de la Nouvelle-Écosse : plus petit et plus compact que le golden, poitrine profonde, tête en coin — crâne
+  // large, museau qui s'affine —, oreilles triangulaires plus courtes attachées haut, poil mi-long aux franges légères,
+  // panache frangé porté à hauteur du dos et relevé haut quand il est en action)
+  toller: { legs: 0.95, legW: 1.04, back: 0.98, girth: 1.08, headW: 0.88, head: 1.0, snout: 1.04, muzzleW: 0.92, ears: 'floppy', earSize: 1.0, tail: 'brush', tailThick: 1.0, tailFur: 1.45, fur: 0.01, feather: 0.8, ruff: 0.45, earLen: 0.78, earW: 0.9, earSet: 0.014, cheek: 0.9, mouth: 1, flews: 0.25, skullFlat: 0.45, stop: 0.45, square: 0.15, eyeOpen: 0.65, tailAction: 1 },
+  // (lagotto romagnolo : silhouette carrée et solide — dos court, membres d'aplomb —, tête large et ronde, museau un peu
+  // plus court que le crâne, large ; tout en boucles serrées et laineuses jusque sur la tête, les oreilles et la queue,
+  // avec sourcils, moustache et barbe frisés ; oreilles moyennes, triangulaires, bouclées ; queue en faucille)
+  lagotto: { legs: 1.06, legW: 1.1, back: 0.85, girth: 1.08, headW: 0.98, head: 1.06, snout: 0.86, muzzleW: 1.12, neck: 0.92, ears: 'floppy', earSize: 1.0, tail: 'sickle', tailLen: 0.82, tailThick: 0.8, tailFur: 1.15, fur: 0.026, ruff: 0.7, curly: 1, ringlets: 1, earLen: 0.88, earW: 1.12, cheek: 0.5, mouth: 1, flews: 0.15, skullFlat: 0.3, stop: 0.45, square: 0.5, eyeOpen: 0.7, beard: 0.75 },
 };
 
 const ONE = {
@@ -99,13 +109,17 @@ const ONE = {
   chest: 0, paws: 1, neckSlim: 0,
   // toupet (yorkshire : taille de la boule sur le crâne)
   topknot: 0,
+  // bouclettes serrées (lagotto : petits anneaux de poil laineux, en relief et dans la silhouette ; avec curly)
+  ringlets: 0,
+  // queue relevée haut en action (au trot, au galop, au jeu : le panache du toller), 0 → 1
+  tailAction: 0,
 };
 
 /** Effilement de la queue selon son port (rayon perdu à la pointe) : le panache et la loutre s'affinent au bout. */
-const TAPER = { plume: 0.55, otter: 0.6, sabre: 0.4, whip: 0.4, sickle: 0.3, carrot: 0.3, curl: 0, stub: 0.15, level: 0.5, flag: 0.6, flat: 0.3, screw: 0.2 };
+const TAPER = { plume: 0.55, otter: 0.6, sabre: 0.4, whip: 0.4, sickle: 0.3, carrot: 0.3, curl: 0, stub: 0.15, level: 0.5, flag: 0.6, flat: 0.3, screw: 0.2, brush: 0.5 };
 
 /** Section de la queue arrondie selon son port (à aire égale : une queue ronde et épaisse, pas une lame). */
-const ROUND = { plume: 0.6, otter: 0.8, sabre: 0.5, whip: 1, flag: 0.4 };
+const ROUND = { plume: 0.6, otter: 0.8, sabre: 0.5, whip: 1, flag: 0.4, brush: 0.65 };
 
 /** Modèle 3D d'un chien : 'jack' pour les petits, 'shiba' pour les autres (d'après la taille de sa race). */
 export function dogModelOf(look) {

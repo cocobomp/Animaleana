@@ -43,7 +43,7 @@ rouvrir le même fichier (au même endroit) pour les retrouver. Ce fichier est p
 ## Contenu (version 0.4)
 
 - Plusieurs profils, avatar personnalisable, modes **bac à sable** et **gestion** (argent, petits boulots)
-- 7 espèces et 91 races : chevaux, chiens, chats, lapins, moutons, chèvres, vaches (avec des races locales en voyage) ; chiens de troupeau
+- 7 espèces et 116 races : chevaux, chiens, chats, lapins, moutons, chèvres, vaches (avec des races locales en voyage) ; chiens de troupeau
 - Besoins réalistes, personnalités, maladies ; **vétérinaire à jouer soi-même** (examen, carnet, diagnostic, soin) et trousse de soins
 - **Mini-jeux pour chaque corvée** : curer le box, pailler, balayer l'allée, ranger le salon, faire la vaisselle
 - **Mini-jeux pour chaque soin** : nourrir, boire, brosser, laver, nettoyer, griffes, ferrer, caresser, friandise, jouer, longe, liberté, tonte et traite

@@ -50,7 +50,9 @@ window.planche = {
   breeds: breeds.map((b) => b.id),
   /**
    * cells : [{ breed, color (indice de robe), puppy, clip, t (s), view ('side' | 'three' | 'front' | 'head' | 'back'),
-   * label, lod }] ; cols ; cw, ch (taille d'une case).
+   * label, lod, cut (coupe du salon : 'lagotto', 'caniche', 'court'…), v (vitesse des allures, m/s : queue relevée en
+   * action), happy, zoom, fov, with (autres chiens de la case, côte à côte : [{ breed, color, puppy, dx }]) }] ; cols ;
+   * cw, ch (taille d'une case).
    */
   async show({ cells, cols = 6, cw = 300, ch = 240 }) {
     await Promise.all(Object.values(REAL_DOG_KEYS).map((k) => loadModel(k)));
@@ -71,6 +73,21 @@ window.planche = {
       sg.add(md.root);
       scene.add(sg);
       if (c.lod) md.setLod(1);
+      if (c.cut !== undefined) md.setCut(c.cut);
+      // (côte à côte : d'autres races dans la même case, à leur taille, décalées sur le côté)
+      const extra = (c.with ?? []).map((w, k) => {
+        const lk = resolveLook('dog', w.breed, w.color ?? 0);
+        lk.seed = 777 + k * 31;
+        if (w.puppy) lk.puppy = true;
+        const m2 = buildRealDogModel(lk, w.breed);
+        const g2 = new THREE.Group();
+        g2.scale.setScalar((lk.scale ?? 1) * (w.puppy ? 0.55 : 1));
+        g2.position.x = w.dx ?? (k + 1) * 0.7;
+        g2.add(m2.root);
+        scene.add(g2);
+        m2.root.updateMatrixWorld(true);
+        return { m2, g2 };
+      });
       if (c.clip) {
         const a = md.anim;
         for (const nm of a.names) {
@@ -83,9 +100,10 @@ window.planche = {
         a.mixer.update(0);
         a.savePose();
         a.applyShift();
-        a.overlay(0, { moving: false, v: 0, sleeping: c.clip === 'sleep', happy: c.happy ?? 0.3, sad: false }, true);
         // (allures et saut : seulement relevé, comme en jeu ; les temps de suspension restent)
         const moving = ['walk', 'trot', 'run', 'jump'].includes(c.clip);
+        const v = c.v ?? (moving ? { walk: 1.1, trot: 2.6, run: 6, jump: 3 }[c.clip] : 0);
+        a.overlay(0, { moving: moving && v > 0, v, sleeping: c.clip === 'sleep', happy: c.happy ?? 0.3, sad: false }, true);
         a.gait = c.clip === 'walk' || c.clip === 'trot' ? c.clip : 'run';
         a.ground({ moving });
       }
@@ -106,7 +124,7 @@ window.planche = {
       else if (view === 'head') {
         const hp = md.head.getWorldPosition(new THREE.Vector3());
         tgt.copy(hp).add(new THREE.Vector3(0, 0.02 * s, 0.06 * s));
-        camera.position.copy(tgt).add(new THREE.Vector3(0.28 * s, 0.06 * s, 0.42 * s));
+        camera.position.copy(tgt).add(new THREE.Vector3(0.28 * s, 0.06 * s, 0.42 * s).multiplyScalar(c.zoom ?? 1));
       } else camera.position.set(dist * 0.85, H * 0.85, dist * 0.6);
       camera.fov = c.fov ?? 28;
       camera.updateProjectionMatrix();
@@ -115,6 +133,10 @@ window.planche = {
       renderer.render(scene, camera);
       scene.remove(sg);
       md.dispose();
+      for (const { m2, g2 } of extra) {
+        scene.remove(g2);
+        m2.dispose();
+      }
       const lab = document.createElement('div');
       lab.className = 'lab';
       const b = breeds.find((x) => x.id === c.breed);

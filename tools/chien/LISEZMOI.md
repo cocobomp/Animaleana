@@ -1,6 +1,6 @@
 # Chiens réalistes : fabrication de `public/models/dog_shiba.glb` et `dog_jack.glb`
 
-Deux modèles d'artistes servent aux 38 races de chiens du jeu, tous deux sous licence
+Deux modèles d'artistes servent aux 40 races de chiens du jeu, tous deux sous licence
 **Creative Commons Attribution 4.0** (CC BY 4.0 : l'attribution est obligatoire, voir `CREDITS.md`,
 `public/models/LICENSES/` et, dans le jeu, ❓ Aide → ℹ️ À propos) :
 
@@ -132,7 +132,27 @@ ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été fait
   son port, `TAPER`), `pompons`, `beard`, `pear` (tronc en poire du bouledogue), `earTilt`, `underbite`, `fluffy`
   (relief touffu des spitz), `wrinkle` (rides du carlin : sillons lissés par la taille à l'écran, sans scintiller),
   `chest` (poitrine profonde et ventre levretté des lévriers), `paws`, `neckSlim` (encolure lisse des poils ras,
-  sans collerette), `topknot`, `tailRound` (section de queue ronde, sinon selon le port : `ROUND`).
+  sans collerette), `topknot`, `tailRound` (section de queue ronde, sinon selon le port : `ROUND`), `ringlets`
+  (bouclettes serrées du lagotto, voir plus bas), `tailAction` (queue relevée haut en action : panache du toller).
+- **Retriever de la Nouvelle-Écosse** (`toller`, ≈ 48 cm : taille 0,85) : plus compact que le golden, tête en coin
+  (`muzzleW` 0,92), oreilles triangulaires courtes attachées haut (`earLen` 0,78, `earSet`), franges légères,
+  panache `brush` (au repos dans le prolongement du dos, bout relevé) relevé haut au trot, au galop et au jeu
+  (`tailAction` : jusqu'à 0,6 rad de plus que les autres races, jamais couché sur le dos). Robe (`coatPlan`,
+  bicolore du toller) : roux ou orange vif, liste étroite sur le chanfrein, bout du museau, poitrail blanc **sans**
+  le ventre (`chestOnly`, uniforme `cLight.y`), pieds blancs jusqu'au paturon, bout de la queue blanc ; franges,
+  ventre et dessous de la queue plus clairs (`light`, `cLight.x`/`cLightC`) ; « Roux foncé » sans blanc.
+- **Lagotto romagnolo** (`lagotto`, ≈ 45 cm : taille 0,8) : silhouette carrée (dos court 0,85, membres épais), tête
+  large et ronde, museau court et large, oreilles moyennes bouclées, queue en faucille, sourcils et barbe frisés
+  (`beard`). Ses **bouclettes serrées** (`ringlets`) : dans la géométrie, des touffes de boucles (bruit cellulaire
+  `curlTufts`, cellules de 2,5 cm, **lissé sur le maillage** par `ringletTufts` — sans lissage, les grands triangles
+  de la tête se dressaient en éclats) festonnent la silhouette, jusque sur le crâne, les joues et le bas des pattes ;
+  dans le shader (`cCurl.z`, `cmpRing`), des boucles de poil entremêlées (coquilles autour des centres d'un pavage
+  cellulaire de 1,7 cm, coupées par la peau en anneaux et en arcs qui se chevauchent, creux sombres, grain de fibres),
+  effacées à moins de quatre ou cinq pixels par boucle (sinon un grain de papier de verre), puis des touffes de 3 cm
+  plus douces ; laine mate (rugosité 0,86, pas de lustre). Robes : blanc cassé, taches marron ou orange (tête colorée,
+  plaques), rouan marron (fond grisé, mèches marron et blanches mêlées), marron, orange. Coupe du salon `lagotto`
+  (`setCut` : boucles égalisées sur le corps et l'encolure, pattes bouclées gardées, dessus de la tête arrondi) ;
+  sans coupe, ses boucles naturelles (pas de pompons).
 - **Queues** : formes des ports bas (`sabre`, `otter`, `plume`, `whip`) en courbe de puissance (`th = a0 −
   total·(i/(n−1))^pw`) : la queue descend d'abord peu puis pend, au lieu d'une colonne verticale ; crochet du
   galgo relevé au galop ; panache du spitz (`flat`) couché sur le dos.
@@ -189,4 +209,6 @@ ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été fait
   collier).
 
 La planche de contrôle `planche.html` (servie par vite : `/tools/chien/planche.html`) montre n'importe quelle
-liste de races, robes, chiots, clips et points de vue (`window.planche.show({ cells: [...] })`).
+liste de races, robes, chiots, clips et points de vue (`window.planche.show({ cells: [...] })`), avec une coupe du
+salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et d'autres races dans la même case, côte
+à côte (`with`).

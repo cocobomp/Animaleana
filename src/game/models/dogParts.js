@@ -161,7 +161,8 @@ export function earShape(B) {
   S.fringe = clamp((B.feather - 0.6) / 0.5, 0, 1) * (B.earFringe ?? 1);
   // (frangée : oreille plus épaisse, plus large, ondulée — pas une lame raide)
   if (S.fringe > 0) Object.assign(S, { thick: S.thick * (1 + 0.5 * S.fringe), width: S.width * (1 + 0.15 * S.fringe), fold: S.fold * 0.6 });
-  S.curl = B.curly ? 1 : 0;
+  // (bouclettes serrées : les boucles sont dans le shader, le relief modelé de l'oreille plus doux — sinon des marches)
+  S.curl = B.curly ? (B.ringlets ? 0.5 : 1) : 0;
   // (frisée : oreille épaisse et touffue, sans pli raide à l'attache)
   if (S.curl) Object.assign(S, { thick: S.thick * 1.6, fold: 0.003, width: S.width * 1.1 });
   if (B.puppy) {

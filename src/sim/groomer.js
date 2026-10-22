@@ -49,6 +49,8 @@ export const STYLES = {
   long: { emoji: '🌾', rank: 1 },
   lion: { emoji: '🦁', rank: 1, species: ['dog', 'cat'] },
   caniche: { emoji: '🐩', rank: 1, species: ['dog'] },
+  // (coupe du lagotto romagnolo : boucles égalisées sur le corps, pattes bouclées, tête ronde avec sourcils et barbe)
+  lagotto: { emoji: '🍄', rank: 1, species: ['dog'] },
   coeur: { emoji: '💗', rank: 1 },
   tonte: { emoji: '🐎', rank: 1, species: ['horse', 'sheep'] },
   concours: { emoji: '🏆', rank: 2 },
@@ -67,6 +69,8 @@ export const REQUESTS = {
   spa: { rank: 0, species: ['dog', 'cat', 'rabbit'], steps: ['bath', 'dry', 'knots', 'nails', 'finish'], price: 55 },
   lion: { rank: 1, species: ['dog', 'cat'], steps: ['bath', 'dry', 'cut'], style: 'lion', price: 60 },
   poodle: { rank: 1, species: ['dog'], breeds: ['caniche', 'labradoodle', 'spitz_nain'], steps: ['bath', 'dry', 'cut', 'finish'], style: 'caniche', price: 70 },
+  // (les boucles du lagotto feutrent vite : démêlage avant la coupe)
+  lagotto: { rank: 1, species: ['dog'], breeds: ['lagotto'], steps: ['bath', 'dry', 'knots', 'cut'], style: 'lagotto', price: 65 },
   heart: { rank: 1, species: ['dog', 'cat', 'rabbit'], steps: ['brush', 'cut', 'finish'], style: 'coeur', price: 55 },
   horseMane: { rank: 1, species: ['horse'], steps: ['knots', 'brush', 'bath', 'dry'], price: 70 },
   horseClip: { rank: 1, species: ['horse'], steps: ['bath', 'dry', 'cut'], style: 'tonte', price: 90 },

@@ -238,7 +238,7 @@ describe('races et chiots', () => {
 });
 
 describe('pieds au sol', () => {
-  it('debout : les 38 races et leurs chiots posent les pieds sur le sol, sans s\'y enfoncer', () => {
+  it('debout : les 40 races et leurs chiots posent les pieds sur le sol, sans s\'y enfoncer', () => {
     for (const b of BREEDS) {
       for (const puppy of [false, true]) {
         const md = dog(b, { puppy });
@@ -453,7 +453,7 @@ describe('poses et allures par gabarit', () => {
     expect(dogClips({ clips: { walk: 'a', walk_long: 'b', sit_down: 'c', sit_down_long: 'd' }, gabarits: { long: {} } }, 'long')).toEqual({ walk: 'b', sit_down: 'd' });
   });
 
-  it('yeux dans les orbites après s\'asseoir, se coucher, sauter (38 races et leurs chiots)', async () => {
+  it('yeux dans les orbites après s\'asseoir, se coucher, sauter (40 races et leurs chiots)', async () => {
     // (le mixeur rendait aux os à translation animée leur position notée sur le squelette de la race : le décalage
     // comptait deux fois dès qu'une transition avait animé les yeux — globes 4 cm devant le visage du saint-bernard)
     for (const b of BREEDS) {

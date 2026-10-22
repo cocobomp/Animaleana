@@ -115,6 +115,9 @@ const ONE = {
   tailAction: 0,
 };
 
+/** Paramètres du gabarit mis dans la clé seulement s'ils ne sont pas nuls (tout nouveau paramètre va ici : voir dogBuild). */
+const KEY_IF_SET = new Set(['ringlets', 'tailAction']);
+
 /** Effilement de la queue selon son port (rayon perdu à la pointe) : le panache et la loutre s'affinent au bout. */
 const TAPER = { plume: 0.55, otter: 0.6, sabre: 0.4, whip: 0.4, sickle: 0.3, carrot: 0.3, curl: 0, stub: 0.15, level: 0.5, flag: 0.6, flat: 0.3, screw: 0.2, brush: 0.5 };
 
@@ -191,6 +194,10 @@ export function dogBuild(look = {}, puppy = false) {
     }
   }
   const r = (x) => Math.round(x * 1000) / 1000;
-  B.key = [model, ...Object.keys(ONE).map((k) => r(B[k])), B.ears, B.tail, B.puppy ? 1 : 0].join('|');
+  // (paramètres ajoutés après coup : dans la clé seulement s'ils servent, avec leur nom — la longueur de la clé donne la
+  // phase des franges et des bosses frisées des oreilles tombantes, dogParts.js : ajoutés à toutes les races, ils
+  // changeaient les oreilles du golden, du setter, du caniche…)
+  const late = Object.keys(ONE).filter((k) => KEY_IF_SET.has(k) && B[k]).map((k) => k + r(B[k]));
+  B.key = [model, ...Object.keys(ONE).filter((k) => !KEY_IF_SET.has(k)).map((k) => r(B[k])), B.ears, B.tail, B.puppy ? 1 : 0, ...late].join('|');
   return B;
 }

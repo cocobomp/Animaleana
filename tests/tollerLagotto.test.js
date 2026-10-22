@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { buildRealDogModel, realDogBase, deformDog } from '../src/game/models/dogReal.js';
+import { buildPendantEars } from '../src/game/models/dogParts.js';
 import { coatPlan } from '../src/game/models/dogCoat.js';
 import { DOG_BUILDS, dogBuild, dogModelOf } from '../src/sim/dogLook.js';
 import { SPECIES, getBreed } from '../src/sim/species.js';
@@ -193,6 +194,32 @@ describe('modèle 3D', () => {
     // (sans lissage, des éclats de 3 cm se dressaient sur la tête)
     expect(max).toBeLessThan(0.025);
   });
+
+  it('les oreilles tombantes des autres races ne changent pas (sommets figés, mêmes qu\'avant l\'ajout des deux races)', () => {
+    // (la phase des franges et des bosses frisées vient de la longueur de la clé du gabarit : ringlets et tailAction
+    // ajoutés à toutes les clés décalaient les oreilles du golden, du setter, du caniche, du labradoodle…)
+    const base = realDogBase(G.shiba, 'shiba');
+    const want = {
+      golden: [[40, 0.11697, 0.62774, 0.34484], [160, 0.097, 0.56981, 0.3672], [233, 0.08686, 0.51444, 0.36143]],
+      caniche: [[40, 0.11668, 0.6604, 0.33369], [160, 0.06046, 0.58991, 0.35579], [233, 0.0708, 0.54086, 0.35007]],
+      setter: [[40, 0.11362, 0.62961, 0.35111], [160, 0.06423, 0.55083, 0.37506], [233, 0.07429, 0.48438, 0.37032]],
+      labradoodle: [[40, 0.13926, 0.61735, 0.33445], [160, 0.0917, 0.55003, 0.35698], [233, 0.09204, 0.50299, 0.3505]],
+    };
+    for (const [b, pts] of Object.entries(want)) {
+      const B = dogBuild(lookOf(b));
+      expect(B.key, b).not.toMatch(/ringlets|tailAction/);
+      const E = buildPendantEars(base, deformDog(base, B), B);
+      expect(E.count, b).toBe(506);
+      for (const [i, x, y, z] of pts) {
+        expect(E.pos[i * 3], `${b} ${i}`).toBeCloseTo(x, 4);
+        expect(E.pos[i * 3 + 1], `${b} ${i}`).toBeCloseTo(y, 4);
+        expect(E.pos[i * 3 + 2], `${b} ${i}`).toBeCloseTo(z, 4);
+      }
+    }
+    // (les nouvelles races gardent leurs paramètres dans la clé)
+    expect(dogBuild(lookOf('lagotto')).key).toMatch(/ringlets1/);
+    expect(dogBuild(lookOf('toller')).key).toMatch(/tailAction1/);
+  }, 60000);
 
   it('toller : marques blanches dans le shader, panache relevé au trot plus haut qu\'à l\'arrêt', () => {
     const md = dog('toller');

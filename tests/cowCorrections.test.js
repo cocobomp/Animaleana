@@ -217,3 +217,67 @@ describe('mangeoire : le veau, trop petit, mange le foin tombé au pied', () => 
     }
   });
 });
+
+/**
+ * Allure ou gambade comme en jeu (mesure de la contre-vérification) : la vache dans son groupe à la taille de l'animal,
+ * avancée à la vitesse du jeu (m/s), mixeur à 30 images/s ; après 3 s, glissement de l'onglon pendant chaque appui
+ * (sole la plus basse à moins d'1 cm du sol, dans le monde) : liste des glissements (m).
+ */
+function gaitSlips(breed, o, speed, { secs = 10, action = null } = {}) {
+  const look = lookOf(breed, o);
+  const md = buildRealCowModel(look, breed, G);
+  const s = (look.scale ?? 1) * (o.calf ? 0.5 : 1);
+  const g = inScene(md, s);
+  const a = md.anim;
+  const scale = s * (md.size ?? 1);
+  const dt = 1 / 30;
+  const stt = st({ v: speed / scale, moving: speed > 0.06, size: scale, action });
+  const prev = md.legs.map(() => null);
+  const cur = md.legs.map(() => 0);
+  const slips = [];
+  let lowest = Infinity;
+  for (let f = 0; f < Math.round((3 + secs) / dt); f++) {
+    g.position.z += speed * dt;
+    g.updateMatrixWorld(true);
+    a.update(dt, stt);
+    md.root.updateMatrixWorld(true);
+    if (f < 3 / dt) continue;
+    md.legs.forEach((leg, l) => {
+      let lo = Infinity;
+      for (const p of a.solePts[l]) lo = Math.min(lo, p.clone().applyMatrix4(leg.paw.matrixWorld).y);
+      lowest = Math.min(lowest, lo);
+      const toe = a.toePts[l].clone().applyMatrix4(leg.paw.matrixWorld);
+      toe.lo = lo;
+      if (prev[l]) {
+        const d = Math.hypot(toe.x - prev[l].x, toe.z - prev[l].z);
+        if (lo < 0.01 && prev[l].lo < 0.01) cur[l] += d;
+        else if (cur[l] > 0) {
+          slips.push(cur[l]);
+          cur[l] = 0;
+        }
+      }
+      prev[l] = toe;
+    });
+  }
+  md.dispose();
+  return { slips, lowest, n: slips.length, over1: slips.filter((x) => x > 0.01).length, max: Math.max(0, ...slips) };
+}
+
+describe('sabots des veaux', () => {
+  it.each([
+    ['highland', 1.0], ['holstein', 1.0], ['bretonne_pie_noire', 4.2], ['hereford', 4.2], ['normande', 2.4],
+  ])('veau %s à %s m/s : les sabots posés ne glissent pas (pas plus d\'1 cm par appui)', (b, v) => {
+    const r = gaitSlips(b, { calf: true }, v);
+    if (process.env.COW_LOG) console.log('GLISSE', b, v, r.n, r.over1, (r.max * 100).toFixed(1));
+    expect(r.n).toBeGreaterThan(10);
+    expect(r.over1, `${b} ${v} : ${r.over1} appuis sur ${r.n} glissent de plus d'1 cm (max ${(r.max * 100).toFixed(1)} cm)`).toBe(0);
+  }, 120000);
+
+  it.each(['holstein', 'highland'])('veau %s qui gambade sur place : les sabots qui retombent ne glissent pas', (b) => {
+    const r = gaitSlips(b, { calf: true }, 0, { action: 'play', secs: 8 });
+    if (process.env.COW_LOG) console.log('GAMBADE', b, r.n, r.over1, (r.max * 100).toFixed(1), (r.lowest * 100).toFixed(1));
+    expect(r.n).toBeGreaterThan(8);
+    expect(r.max, `${b} : glissement ${(r.max * 100).toFixed(1)} cm`).toBeLessThan(0.01);
+    expect(r.lowest).toBeGreaterThan(-0.012);
+  }, 120000);
+});

@@ -52,6 +52,7 @@ export const FEED_Y = { penFeeder: 0.62, penTrough: 0.48 };
 const LEG_KEYS = [['FL', 'L', true], ['FR', 'R', true], ['HL', 'L', false], ['HR', 'R', false]];
 const LEG_BONES = { front: ['humerus', 'radius', 'metacarpus', 'toes'], hind: ['femur', 'tibia', 'metatarsus', 'htoes'] };
 const ONCE_COW = ['moo', 'swat', 'head_shake'];
+const HOLD_ALL = [0, 1, 2, 3];
 const MOVING = ['walk', 'trot', 'run'];
 const HEAD_BONES = new Set(['head', 'jaw', 'earL', 'earR', 'eyeL', 'eyeR', 'hornL', 'hornR']);
 const LEG_LOW = /^(radius|metacarpus|toes|tibia|metatarsus|htoes)/;
@@ -1020,6 +1021,8 @@ export class RealCowAnim extends RealSheepAnim {
     // (sabot posé tenu tant que le clip ne l'a pas levé de 2,8 cm : la vache roule sur sa pince ; au seuil du mouton,
     // 1,6 cm, l'onglon repartait en avant de 1,2 à 1,6 cm en une image au début de la levée, encore au ras du sol)
     this.lockDown = [0.028, 0.012];
+    // (seuils dans le monde aussi, pour le veau et les petites races : posé sous 1,15 cm, levé au-delà de 1,6 cm)
+    this.lockWorld = [0.016, 0.0115];
     // (couchée : les sabots des antérieurs repliés, sole tournée vers l'arrière, peuvent passer 2,5 cm dans l'herbe —
     // sinon ils portaient la vache au-dessus de ses avant-bras ; voir contactClass)
     this.lieSoleSlack = 0.025;
@@ -1183,7 +1186,15 @@ export class RealCowAnim extends RealSheepAnim {
    */
   ground(st, dt = 0, moveClip = null) {
     const air = moveClip === 'calf_play' || (this.w?.calf_play ?? 0) > 0.3;
+    // (le corps reste libre de sauter, mais les sabots qui retombent sont tenus là où ils se posent — holdLegs : traité
+    // tout en l'air, chaque appui de la gambade glissait de 4 à 7 cm)
+    this.airLock = air && !st.moving;
     this.withBones(() => super.ground(st, dt, air ? 'lamb_play' : moveClip), this.model.bone('neck1'));
+  }
+
+  /** Gambade sur place (calf_play) : les quatre sabots tenus quand ils touchent le sol. */
+  holdLegs() {
+    return this.airLock && this.posture === 'stand' && !this.trans ? HOLD_ALL : null;
   }
 
   /**
@@ -1326,6 +1337,8 @@ export class RealCowAnim extends RealSheepAnim {
       } else a.timeScale = name === 'calf_play' ? 1.05 : 1;
     }
     if (lead && leadW > 0.3) this.lead = lead;
+    // (vitesse de lecture de l'allure en tête : footLock efface ses corrections d'autant plus vite)
+    this.leadRate = st.moving && this.lead ? Math.abs(this.actions[this.lead]?.timeScale ?? 1) : 1;
     this.mixer.update(dt);
     this.savePose();
     this.applyShift();

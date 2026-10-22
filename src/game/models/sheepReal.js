@@ -1635,7 +1635,8 @@ export class RealSheepAnim {
     // posés restent où ils sont, ceux qui étaient levés se posent, puis chaque membre resté de travers se replace d'un
     // petit pas, sabot levé). Ailleurs (couché, transition, saut, tour du spectacle) la correction s'efface en fondu :
     // coupée net, elle faisait sauter une patte de 12 cm en une image à chaque arrêt.
-    const lockable = !air && dt > 0 && !st.noLock;
+    // (airLock : en l'air par moments mais les sabots qui retombent sont tenus — le veau qui gambade sur place)
+    const lockable = (!air || !!this.airLock) && dt > 0 && !st.noLock;
     const standing = this.posture === 'stand' && !this.trans;
     const moveW = (this.w.walk ?? 0) + (this.w.trot ?? 0) + (this.w.run ?? 0);
     const locked = this.lockAng.some((x) => x) || this.lockSide.some((x) => x) || !!this.stepL;
@@ -1750,7 +1751,10 @@ export class RealSheepAnim {
       const planted = !!this.plant[l];
       // (seuils du sabot posé : 1,6 cm pour rester posé, 1,1 cm pour se poser ; lockDown d'un animal plus grand — la
       // vache roule plus longtemps sur sa pince avant de lever le sabot)
-      const down = lowClip < (planted ? this.lockDown?.[0] ?? 0.016 : this.lockDown?.[1] ?? 0.011);
+      // (lockWorld : seuils dans le monde — le veau, deux fois plus petit que le modèle, posait ses sabots à 5 mm du sol
+      // et les levait à 1,2 cm : ceux qui frôlaient le sol sans se poser glissaient)
+      const lw = this.lockWorld;
+      const down = lowClip < (planted ? Math.max(this.lockDown?.[0] ?? 0.016, lw ? lw[0] / _rs.y : 0) : Math.max(this.lockDown?.[1] ?? 0.011, lw ? lw[1] / _rs.y : 0));
       let ang = this.lockAng[l];
       let sd = this.lockSide[l];
       if (!down || !planted) {
@@ -1768,7 +1772,9 @@ export class RealSheepAnim {
           const fade = Math.exp(-dt * 12 * smooth(0.01, 0.03, lo)) * ratio;
           const toe = _u.copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld);
           const arm = Math.max(0.05 * _rs.y, _w.setFromMatrixPosition(leg.pivot.matrixWorld).sub(toe).applyQuaternion(_rq).y);
-          const dmax = ((0.004 + 0.016 * smooth(0.005, 0.03, lo)) * _rs.y) / arm;
+          // (leadRate : l'allure jouée plus vite que le clip — le veau fait deux fois plus de pas que la vache à la même
+          // vitesse — : la correction s'efface d'autant plus vite, sinon elle restait au poser suivant et le sabot glissait)
+          const dmax = ((0.004 + 0.016 * smooth(0.005, 0.03, lo)) * _rs.y * Math.max(1, this.leadRate ?? 1)) / arm;
           const a2 = ang + clamp(ang * fade - ang, -dmax, dmax);
           const s2 = sd + clamp(sd * fade - sd, -dmax, dmax);
           this.turn(leg.pivot, AZ, s2 - sd);

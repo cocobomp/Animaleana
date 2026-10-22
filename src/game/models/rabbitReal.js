@@ -43,7 +43,9 @@ const LEG_BONES = { front: ['humerus', 'radius', 'metacarpus', 'toes'], hind: ['
 // Ce qui garde sa couleur d'origine dans la texture (truffe, intérieur des oreilles ; yeux peints du bélier).
 const MODEL = {
   up: { keep: { pink: true, nose: [0.012, 0.3] }, grain: 0.75 },
-  lop: { keep: { pink: true, dark: 0.05, nose: [0.012, 0.28] }, grain: 0.6 },
+  // (bélier : yeux peints dans la texture de 256 px — trous sombres déchirés au bord, sans reflet —, repeints ronds par
+  // la robe ; centres et rayon mesurés sur la texture, repère du GLB au repos : grappe des texels sombres de la tête)
+  lop: { keep: { pink: true, dark: 0.05, nose: [0.012, 0.28] }, grain: 0.6, eyes: [[0.0319, 0.2809, 0.1035], [-0.0319, 0.2809, 0.1035]], eyeR: 0.0078 },
 };
 
 const _v = V();
@@ -125,10 +127,6 @@ function landmarks(base, pos, eyePos) {
     const x = pos[i * 3];
     const y = pos[i * 3 + 1];
     const z = pos[i * 3 + 2];
-    if (W.nose[i] > 0.5 && z > noseZ) {
-      noseZ = z;
-      nose = V(x, y, z);
-    }
     if (part[i * 4 + 3] < 0.05 && W.tail[i] < 0.05 && W.head[i] < 0.05 && W.neck[i] < 0.5 && z > Math.min(z0, z1) && z < Math.max(z0, z1)) {
       bellyY = Math.min(bellyY, y);
       topY = Math.max(topY, y);
@@ -137,6 +135,19 @@ function landmarks(base, pos, eyePos) {
     }
   }
   const midX = Number.isFinite(minX) ? (minX + maxX) / 2 : 0;
+  // Bout du nez : le sommet du museau le plus en avant, sur l'axe du corps. Pris n'importe où, celui du bélier tombait
+  // sur le bord de la joue, à 5,6 cm du milieu (oreilles pendantes en partie portées par la tête) : truffe d'origine
+  // gardée sur la joue (tache brune), moustaches parties du vide, museau allongé de travers.
+  const nearAxis = 0.18 * Math.max(0.02, maxX - minX);
+  for (let pass = 0; pass < 2 && noseZ === -Infinity; pass++) {
+    for (let i = 0; i < n; i++) {
+      const z = pos[i * 3 + 2];
+      if (W.nose[i] > 0.5 && z > noseZ && (pass || Math.abs(pos[i * 3] - midX) < nearAxis)) {
+        noseZ = z;
+        nose = V(pos[i * 3], pos[i * 3 + 1], z);
+      }
+    }
+  }
   // Tête : centre des sommets de la tête (sans les oreilles).
   const hc = V();
   let hn = 0;
@@ -168,7 +179,27 @@ function landmarks(base, pos, eyePos) {
       }
     }
     if (cnt) c.multiplyScalar(1 / cnt);
-    else c.set(midX + side * headMaxX * 0.78, hc.y + 0.25 * (nose.y - hc.y) + 0.012, hc.z + 0.45 * (noseZ - hc.z));
+    const known = !cnt && (MODEL[base.kind] ?? MODEL.up).eyes;
+    if (known) {
+      // (yeux peints du bélier, place connue au repos : suivis dans la pose par les sommets de la peau voisins)
+      const e0 = V(...known[side === 1 ? 0 : 1]);
+      const rest = coat.pos;
+      let ws = 0;
+      for (let i = 0; i < n; i++) {
+        if (W.head[i] < 0.5) continue;
+        const d = _v.fromArray(rest, i * 3).distanceTo(e0);
+        if (d > 0.015) continue;
+        const w = 1 - d / 0.015;
+        c.x += w * (pos[i * 3] + e0.x - rest[i * 3]);
+        c.y += w * (pos[i * 3 + 1] + e0.y - rest[i * 3 + 1]);
+        c.z += w * (pos[i * 3 + 2] + e0.z - rest[i * 3 + 2]);
+        ws += w;
+      }
+      if (ws > 0) c.multiplyScalar(1 / ws);
+      else c.copy(e0);
+      return { c, r: (MODEL[base.kind] ?? MODEL.up).eyeR ?? 0.008, painted: true };
+    }
+    if (!cnt) c.set(midX + side * headMaxX * 0.78, hc.y + 0.25 * (nose.y - hc.y) + 0.012, hc.z + 0.45 * (noseZ - hc.z));
     let r = 0;
     if (cnt) for (let i = 0; i < e.count; i++) if (Math.sign(eyePos[i * 3] - midX) === side) r += _v.fromArray(eyePos, i * 3).distanceTo(c);
     return { c, r: cnt ? r / cnt : 0.008 };
@@ -946,11 +977,13 @@ function measureRabbit(base, D, B) {
   const HJ = H[I('head')];
   let skullTop = HJ.clone();
   let noseTip = HJ.clone();
+  // (bout du nez sur l'axe du corps, voir landmarks)
+  const nearAxis = 0.18 * Math.max(0.02, 2 * L.halfW);
   for (let i = 0; i < n; i++) {
     if (W.head[i] < 0.6 || W.ear[i * 2] + W.ear[i * 2 + 1] > 0.05) continue;
     _v.fromArray(P, i * 3);
     if (Math.abs(_v.x - L.midX) < 0.01 && _v.y > skullTop.y && Math.abs(_v.z - HJ.z) < 0.03 * B.head) skullTop = _v.clone();
-    if (W.nose[i] > 0.6 && _v.z > noseTip.z) noseTip = _v.clone();
+    if (W.nose[i] > 0.6 && _v.z > noseTip.z && Math.abs(_v.x - L.midX) < nearAxis) noseTip = _v.clone();
   }
   return { hipZ, shZ, skullTop, noseTip, elbowY: (H[I('radiusL')].y + H[I('radiusR')].y) / 2, headY: HJ.y };
 }
@@ -1012,7 +1045,7 @@ export function buildRealRabbitModel(look, stage = 'adult', gltf = null) {
   const L0 = base.paint;
   const spheres = keepCfg.nose ? [{ s: new THREE.Vector4(L0.nose.x, L0.nose.y, L0.nose.z - keepCfg.nose[0] * 0.3, keepCfg.nose[0]), l: keepCfg.nose[1] }] : [];
   const coatMat = rabbitCoatMaterial(base.prims.coat.material, uniforms, {
-    role: 'fur', means: base.means, contrast: base.cfg.grain, keep: { ...keepCfg, spheres },
+    role: 'fur', means: base.means, contrast: base.cfg.grain, keep: { ...keepCfg, spheres, eyeR: base.paint.eyes[0].painted ? base.paint.eyes[0].r : 0 },
   });
   coatMat.roughness = plan.dark ? 0.66 : 0.88;
   const hb = { box: new THREE.Box3(), sphere: new THREE.Sphere(), boneBox: S.boneBox.slice(), skeleton, meshes: [], anim: null, margin: 0.02 + Math.max(0, B.fur) + B.cardLen * 0.6 };

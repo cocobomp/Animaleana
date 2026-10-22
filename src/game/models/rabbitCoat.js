@@ -148,6 +148,8 @@ uniform float cPat;
 uniform vec3 cBase;
 uniform vec3 cSec;
 uniform vec3 cNoseC;
+uniform vec3 cEyeC;
+float cEyeIn = 0.0;
 uniform vec4 cHair;
 uniform float cSeed;
 uniform float cWet;
@@ -261,8 +263,17 @@ if (cOn > 0.5) {
     pinkK = vCmpPart.z * (1.0 - smoothstep(0.035, 0.07, dh)) * smoothstep(0.14, 0.28, hsv.y) * smoothstep(0.25, 0.4, hsv.z);
     keep = max(keep, pinkK);
   }
-  // Yeux peints (bélier) : texels très sombres de la tête.
-  if (cKeepOpt.x > 0.0) keep = max(keep, vCmpPart.z * (1.0 - vCmpPart.x) * (1.0 - smoothstep(cKeepOpt.x * 0.6, cKeepOpt.x, lum0)));
+  // Yeux peints (bélier) : repeints ronds par la robe (cKeepOpt.z : rayon, centres cEye) ; ailleurs sur la tête, les
+  // texels très sombres de la texture gardent leur couleur (bouche).
+  float eyeD = 9.0;
+  vec3 eyeC = vec3(0.0);
+  if (cKeepOpt.z > 0.0) {
+    vec3 eL = vec3(cMisc.x + cEye.x, cEye.y, cEye.z);
+    vec3 eR = vec3(cMisc.x - cEye.x, cEye.y, cEye.z);
+    eyeC = distance(vCmpPos, eL) < distance(vCmpPos, eR) ? eL : eR;
+    eyeD = distance(vCmpPos, eyeC) / cKeepOpt.z;
+  }
+  if (cKeepOpt.x > 0.0) keep = max(keep, vCmpPart.z * (1.0 - vCmpPart.x) * smoothstep(1.5, 2.1, eyeD) * (1.0 - smoothstep(cKeepOpt.x * 0.6, cKeepOpt.x, lum0)));
   float detail = 1.0;
   if (cTexMode > 0.5) {
     float ll = log(max(lum0, 1e-3));
@@ -285,6 +296,19 @@ if (cOn > 0.5) {
   vec3 kc = c0;
   kc = mix(kc, cNoseC * (0.55 + 0.9 * lum0), noseK * (1.0 - pinkK * 0.5) * 0.85);
   diffuseColor.rgb = mix(nc, kc, keep);
+  if (eyeD < 1.2) {
+    // œil rond : iris (couleur des yeux de la race) plus clair vers le bas, pupille, liseré sombre, paupière fondue dans
+    // le poil, reflet en haut vers l'avant
+    float eyeIn = vCmpPart.z * (1.0 - vCmpPart.x) * (1.0 - smoothstep(0.95, 1.12, eyeD));
+    float lower = smoothstep(-0.7, 0.5, (eyeC.y - vCmpPos.y) / cKeepOpt.z);
+    vec3 iris = mix(cEyeC * 1.3, cEyeC * 2.6 + vec3(0.06, 0.035, 0.015), lower * smoothstep(0.35, 0.8, eyeD));
+    vec3 ecol = mix(vec3(0.012, 0.01, 0.01), iris, smoothstep(0.34, 0.46, eyeD));
+    ecol = mix(ecol, vec3(0.025, 0.018, 0.016), smoothstep(0.82, 0.96, eyeD));
+    float glint = 1.0 - smoothstep(0.18, 0.3, distance(vCmpPos, eyeC + vec3(0.0, 0.3, 0.32) * cKeepOpt.z) / cKeepOpt.z);
+    ecol = mix(ecol, vec3(1.0), glint);
+    diffuseColor.rgb = mix(diffuseColor.rgb, ecol, eyeIn);
+    cEyeIn = eyeIn;
+  }
 }`;
 
 // Yeux (sphères du lapin de Dakota) : l'iris prend la couleur de la race (brun foncé, rubis de l'albinos) ; la pupille
@@ -346,7 +370,7 @@ export function rabbitCoatMaterial(src, shared, opts) {
     cMeans: { value: new THREE.Vector3(opts.means?.lo ?? -3, opts.means?.hi ?? -1, opts.contrast ?? 1) },
     cKeepS: { value: spheres.slice(0, MAX_KEEP).map((x) => (card ? new THREE.Vector4() : x.s)) },
     cKeepL: { value: spheres.slice(0, MAX_KEEP).map((x) => x.l) },
-    cKeepOpt: { value: new THREE.Vector4(card ? 0 : keep.dark ?? 0, keep.pink && !card ? 1 : 0, 0, 0) },
+    cKeepOpt: { value: new THREE.Vector4(card ? 0 : keep.dark ?? 0, keep.pink && !card ? 1 : 0, card ? 0 : keep.eyeR ?? 0, 0) },
   };
   const uniforms = { ...shared, ...own };
   mat.onBeforeCompile = (sh) => {
@@ -360,12 +384,12 @@ export function rabbitCoatMaterial(src, shared, opts) {
       .replace('#include <color_fragment>', card
         ? `#include <color_fragment>\nvec3 cardC0 = diffuseColor.rgb;\n${COLOR_F}\ndiffuseColor.rgb *= (0.95 + 0.1 * vCmpLow) * (0.76 + 0.3 * clamp(cardC0.r / max(cardC0.g, 0.05), 0.4, 1.0));`
         : `#include <color_fragment>\n${COLOR_F}`)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.62, cHair.x), 0.45, cWet);');
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(mix(roughnessFactor, 0.62, cHair.x), 0.45, cWet), 0.12, cEyeIn);');
     // (cartes : éclairées comme la peau où elles poussent, des deux côtés ; sinon le revers d'une carte est noir)
     // (et tournées vers la caméra et le ciel, comme un poil que la lumière traverse : la crinière vue de face, éclairée
     // par-devant, ne montre plus le revers sombre de ses mèches, ni la gorge le vert sombre du sol)
     if (card) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(normalize(vNormal) + vec3(0.0, 0.0, 0.9) + (viewMatrix * vec4(0.0, 0.6, 0.0, 0.0)).xyz);');
   };
-  mat.customProgramCacheKey = () => (card ? 'rabbit-card-v4' : 'rabbit-coat-v1');
+  mat.customProgramCacheKey = () => (card ? 'rabbit-card-v5' : 'rabbit-coat-v3');
   return mat;
 }

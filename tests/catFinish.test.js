@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import * as THREE from 'three';
 import { buildRealCatModel } from '../src/game/models/catReal.js';
+import { buildAccessories } from '../src/game/models/salon.js';
 import { catLookWithBreed } from '../src/sim/catLook.js';
 import { resolveLook } from '../src/sim/animal.js';
 import { loadRealCatGltf } from './fixtures/realCatGltf.js';
@@ -19,6 +20,7 @@ beforeAll(async () => {
 const lookOf = (breed, colorIndex = 0) => catLookWithBreed({ ...resolveLook('cat', breed, colorIndex), seed: 4242 }, breed);
 const cat = (breed, stage = 'adult') => buildRealCatModel(lookOf(breed), stage, G[stage === 'baby' ? 'kitten' : 'adult']);
 const _v = new THREE.Vector3();
+const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 /**
  * Chat qui avance comme en jeu (le mixeur tient les pieds posés) : plus bas de la peau de chaque sole (sommets des
@@ -144,5 +146,63 @@ describe('appuis tenus', () => {
       }
       md.dispose();
     }
+  });
+});
+
+describe('queue en pompon du bobtail', () => {
+  /** Bout de la queue (peau déformée de la race, repos) : avancée de l'extrémité au centre et au bord, rayon. */
+  function tipShape(md) {
+    const S = md.anim.S;
+    const base = md.anim.base;
+    const P = S.D.pos;
+    const H = S.D.heads;
+    const tb = base.tailBones;
+    const a = V(...H[tb[tb.length - 2]].toArray());
+    const b = V(...H[tb[tb.length - 1]].toArray());
+    const axis = b.clone().sub(a).normalize();
+    const pts = [];
+    for (let i = 0; i < base.prims.coat.count; i++) {
+      if (base.W.tail[i] < 0.7) continue;
+      const p = V(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]).sub(b);
+      const t = p.dot(axis);
+      const rho = p.clone().addScaledVector(axis, -t).length();
+      pts.push([t, rho]);
+    }
+    const tMax = Math.max(...pts.map((x) => x[0]));
+    const end = pts.filter((x) => x[0] > tMax - 0.03);
+    const R = Math.max(...end.map((x) => x[1]));
+    const rim = Math.max(...pts.filter((x) => x[1] > 0.8 * R).map((x) => x[0]));
+    return { R, dome: tMax - rim };
+  }
+  // Le bout était un disque plat (moignon coupé net) : il est bombé d'au moins 40 % de son rayon.
+  it.each([['bobtail', 'adult'], ['bobtail', 'baby']])('%s (%s) : bout de la queue arrondi', (b, stage) => {
+    const md = cat(b, stage);
+    const { R, dome } = tipShape(md);
+    expect(R, b).toBeGreaterThan(0.005);
+    expect(dome / R, `${b} ${stage}`).toBeGreaterThan(0.4);
+    md.dispose();
+  });
+  // Le nœud de queue du salon était posé sur l'os du bout de la queue, enfoui dans le pompon : il sort de la boule.
+  it('bobtail : le nœud de queue du salon est posé à la surface du pompon, pas dedans', () => {
+    const md = cat('bobtail');
+    md.staticPose('stand');
+    md.root.updateMatrixWorld(true);
+    const acc = buildAccessories(md, lookOf('bobtail'), { tail: { id: 'tailBow', color: 'blue' } });
+    expect(acc.length).toBe(1);
+    md.root.updateMatrixWorld(true);
+    const bow = acc[0].getWorldPosition(V());
+    // distance au plus proche sommet de la queue (peau animée) : le nœud est dehors, posé dessus (moins de 1,5 cm)
+    const m = md.coatMesh;
+    let near = Infinity;
+    const tip = md.tailTip.getWorldPosition(V());
+    for (let i = 0; i < md.anim.base.prims.coat.count; i++) {
+      if (md.anim.base.W.tail[i] < 0.7) continue;
+      const p = m.getVertexPosition(i, _v).applyMatrix4(m.matrixWorld);
+      near = Math.min(near, p.distanceTo(bow));
+    }
+    expect(near).toBeLessThan(0.015);
+    // (loin de l'os du bout de la queue, qui est au cœur de la boule)
+    expect(bow.distanceTo(tip)).toBeGreaterThan(0.01);
+    md.dispose();
   });
 });

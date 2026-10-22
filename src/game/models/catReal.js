@@ -429,6 +429,25 @@ function tailShape(base, B, P, H, n, wTail) {
     return s;
   };
   const o2 = V();
+  const thick = (s, on) => {
+    const f = s / tot;
+    let th = 1 + (B.tailThick - 1) * on + B.tailFur * 0.55 * smooth(0.05, 0.4, f) * (1 - 0.35 * smooth(0.75, 1, f));
+    if (B.stub) th *= 1 + 1.3 * smooth(0.15, 0.9, f);
+    return th;
+  };
+  // Pompon du bobtail : rayon de la boule (le plus gros du bout de la queue, avant son extrémité). Raccourcie au quart
+  // et épaissie, la queue finissait en cylindre coupé net, un disque plat au bout ; son extrémité est bombée en
+  // demi-sphère de ce rayon, le long du dernier segment, avec une poussée irrégulière du poil.
+  let ball = 0;
+  if (B.stub) {
+    for (let i = 0; i < n; i++) {
+      if (!(wTail(i) > 0.5)) continue;
+      const s = project(i);
+      if (s < 0.6 * tot || s > 0.97 * tot) continue;
+      ball = Math.max(ball, o.length() * thick(s, smooth(0, 0.3 * tot, s)));
+    }
+  }
+  const axis = seg[m - 1].e;
   for (let i = 0; i < n; i++) {
     const w = wTail(i);
     if (!(w > 0)) continue;
@@ -437,12 +456,20 @@ function tailShape(base, B, P, H, n, wTail) {
     const on = smooth(0, 0.3 * tot, s);
     const kl = 1 + (B.tailLen - 1) * on;
     // épaisseur : la race, le panache du poil long (plus vers le milieu), le pompon du bobtail (au bout)
-    const f = s / tot;
-    let th = 1 + (B.tailThick - 1) * on + B.tailFur * 0.55 * smooth(0.05, 0.4, f) * (1 - 0.35 * smooth(0.75, 1, f));
-    if (B.stub) th *= 1 + 1.3 * smooth(0.15, 0.9, f);
+    const th = thick(s, on);
     o2.copy(o).multiplyScalar(th);
-    rad[i] = o2.length();
     _w.copy(q).sub(C0).multiplyScalar(kl).add(C0).add(o2);
+    if (ball > 0) {
+      const g = smooth(0.8, 0.98, s / tot);
+      if (g > 0) {
+        // (bout bombé : au centre de l'extrémité, poussé d'un rayon ; au bord, rien ; touffes irrégulières)
+        const rho = Math.min(ball, o2.length());
+        const tuft = 0.85 + 0.3 * fbm(x.x * 260, x.y * 260, x.z * 260);
+        _w.addScaledVector(axis, g * ball * Math.sqrt(Math.max(0, 1 - (rho / ball) ** 2)) * tuft);
+        _w.addScaledVector(o2, 0.15 * g * (tuft - 1));
+      }
+    }
+    rad[i] = o2.length();
     x.lerp(_w, w);
     P.set([x.x, x.y, x.z], i * 3);
   }
@@ -1297,6 +1324,17 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
   // Moustaches : sur les coussinets, de part et d'autre du nez (courtes et rares chez le sphynx, ondulées chez le devon
   // rex, claires ; foncées sur une robe blanche très claire elles se verraient mal : toujours claires comme le
   // chat sculpté).
+  // Nœud de queue (salon) : à la surface du pompon du bobtail (le haut de sa boule) ; posé sur l'os du bout de la
+  // queue, il était enfoui dans la boule, invisible.
+  let tailBowAt = null;
+  if (B.stub && lastTail) {
+    let top = null;
+    for (let i = 0; i < base.prims.coat.count; i++) {
+      if (base.W.tail[i] < 0.7) continue;
+      if (!top || S.D.pos[i * 3 + 1] > top.y) top = V().fromArray(S.D.pos, i * 3);
+    }
+    if (top) tailBowAt = lastTail.worldToLocal(top).toArray();
+  }
   const hr = 0.034 * B.head * (B.kitten ? 1.15 : 1);
   const whiskers = addWhiskers({
     head: headB, midX: base.land.midX,
@@ -1337,7 +1375,7 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     // (mêmes mesures que le chien réaliste : collier plat de gearModels.js, nœud du concours de Beauty.js, accessoires
     // du salon de salon.js ; un chat ne porte pas de manteau : pas de coupes du tronc)
     dogFit: { collar: { center: collarC, normal: collarN, q: ringQ, rx: M.collar.rx, ry: M.collar.ry, bone: neckB }, rings: [], ycAt: (M.topY + M.bellyY) / 2, midX: base.land.midX, hipZ: M.hipZ, shZ: M.shZ, topY: M.topY, bellyY: M.bellyY },
-    accessoryFit: { skull, headQ, mouth, headR: 0.034 * B.head, tailTip: lastTail },
+    accessoryFit: { skull, headQ, mouth, headR: 0.034 * B.head, tailTip: lastTail, tailBowAt },
     build: B,
     kind: B.model,
     kitten: !!B.kitten,

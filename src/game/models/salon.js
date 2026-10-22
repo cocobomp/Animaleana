@@ -357,7 +357,8 @@ export function buildAccessories(model, look, accessories = {}) {
       continue;
     }
     if (fit && slot === 'tail' && worn.id === 'tailBow') {
-      if (fit.tailTip) put(fit.tailTip, bowMesh(fit.headR * 0.45, color), [0, 0, 0], [0.6, 0, 0]);
+      // (tailBowAt : place mesurée à la surface d'une queue en pompon — bobtail —, dans le repère de l'os)
+      if (fit.tailTip) put(fit.tailTip, bowMesh(fit.headR * 0.45, color), fit.tailBowAt ?? [0, 0, 0], [0.6, 0, 0]);
       continue;
     }
     if (slot === 'head') {

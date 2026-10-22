@@ -36,22 +36,28 @@ vec3 hCell(vec3 p) {
 
 /**
  * Réglages des robes (étape 8 du plan « cheval beau ») : lus par le shader (constantes écrites dans son texte) et
- * par les tests. Gris pommelé : fond foncé entre les pommelures (dark), centres éclaircis (light), cellules par
- * mètre (cell) et largeur des lignes de fond entre pommelures (line, part du rapport F1 / F2). Pie : champ d'avant l'étape 8 un peu déformé (warp, en
- * unités du bruit), bord déchiqueté (jag). Léopard : rayon des taches (en cellules de 12 cm environ), halo marbré
- * autour. Isabelle : largeur de la raie de mulet (m).
+ * par les tests. Gris pommelé : fond foncé entre les pommelures (dark), pommelures éclaircies (light), cellules par
+ * mètre (cell), rayon des pommelures (rMin à rMax, en cellules), largeur de leur bord flou (soft) et part de la robe
+ * qu'elles couvrent en moyenne (mean : valeur prise au loin, même teinte d'ensemble). Pie : champ d'avant l'étape 8
+ * un peu déformé (warp, en unités du bruit), bord déchiqueté (jag). Léopard : rayon des taches (en cellules de 12 cm
+ * environ), halo marbré autour. Isabelle : largeur de la raie de mulet (m).
  */
 export const COAT_LOOKS = {
-  dapple: { dark: 0.3, light: 0.12, cell: 7.5, line: 0.2 },
+  dapple: { dark: 0.26, light: 0.16, cell: 7.5, rMin: 0.33, rMax: 0.5, soft: 0.2, mean: 0.48 },
   pinto: { warp: 0.12, jag: 0.06 },
   spots: { rMin: 0.13, rMax: 0.38, halo: 0.08 },
   dun: { stripe: 0.03 },
   // robes dorées : pommelures de santé (fond × 1 - dark), plus marquées sur le palomino
   bloom: { dark: 0.16 },
+  // Rouan : part de blanc sur un poil blanc (en moyenne × 0,45 au loin) ; robe de base tirée de la teinte d'ensemble
+  // de la race (saturation × sat, clarté × light)
+  roan: { white: 0.82, sat: 2.2, light: 0.62 },
+  // Appaloosa « couverture » : inclinaison du bord avant (m vers l'avant par m de hauteur)
+  blanket: { slope: 0.55 },
 };
 
 const glf = (x) => Number(x).toFixed(4);
-const { dapple: DAP, pinto: PIN, spots: SPOT, dun: DUN } = COAT_LOOKS;
+const { dapple: DAP, pinto: PIN, spots: SPOT, dun: DUN, roan: ROAN, blanket: BLANKET } = COAT_LOOKS;
 
 const COAT_FRAGMENT = /* glsl */ `
 hBare = 0.0;
@@ -96,6 +102,11 @@ hEarIn = 0.0;
   float headW = isHead;
   float bodyS = isBody;
 #endif
+  // Poids du corps prolongé sur le haut des membres, continu au coude et au grasset (hauteur relative au coude,
+  // la même sur le corps et sur les membres) : le numéro de partie, constant par triangle, y découpait en dents de
+  // scie ce qui ne vaut que pour le corps — ventre éclairci du pangaré (des dents noires dans la bande claire du
+  // Trotteur noir pangaré et du Fjord), ton et pommelures des robes dorées.
+  float bodyL = clamp(bodyS + isLeg * smoothstep(0.55, 0.9, h), 0.0, 1.0);
   float up = normalize(vHNrm).y;
   float aa = clamp(length(fwidth(P)) * 140.0, 0.0, 1.0); // atténue les détails fins au loin (pas de scintillement)
   // (motifs larges — pommelures, taches — fondus en leur moyenne seulement quand un pixel couvre plusieurs cm)
@@ -108,28 +119,28 @@ hEarIn = 0.0;
   float n1 = hFbm(P * 2.3 + hSeed);
   c *= 0.93 + n1 * 0.14;
 
-  // Gris pommelé : pommelures claires et rondes qui se touchent, séparées par un réseau de fond gris plus foncé aux
-  // lignes fines et irrégulières (rapport F1 / F2 des distances aux deux centres de cellule les plus proches : rond
-  // près du centre, frontière entre voisines au bord), plus claires au centre, un peu déformées ; deux tailles
-  // mêlées en qualité haute (une cellule sur deux redivisée en pommelures plus petites) ; nettes sur le corps, la
-  // croupe et l'épaule, fondues vers le ventre et le bas des membres ; tête et bas des membres plus foncés.
-  // (Avant : des pois ronds, réguliers et très contrastés, isolés sur un fond foncé.)
+  // Gris pommelé : pommelures claires, rondes et floues, de tailles inégales (distance au centre de cellule le plus
+  // proche, F1, rayon propre à chaque cellule), sur un fond gris plus foncé et large entre elles ; un peu déformées ;
+  // une cellule sur deux redivisée en pommelures plus petites en qualité haute ; nettes sur le corps, la croupe et
+  // l'épaule, fondues vers le ventre et le bas des membres, fondues en leur moyenne au loin ; tête et bas des membres
+  // plus foncés. (Avant : un réseau de fines lignes grises sur fond blanc, rapport F1 / F2 — au téléphone, une
+  // mosaïque « girafe » ou une terre craquelée.) Les gris sans pommelures (hGrey 0,4 : « Gris », « Gris clair »,
+  // poulains) n'ont que la tête et le bas des membres plus foncés : pas de bruit cellulaire à calculer.
   if (hGrey > 0.0) {
-    vec3 Pd = P + (vec3(hNoise(P * 3.1 + hSeed), hNoise(P * 3.1 + hSeed + 11.0), hNoise(P * 3.1 + hSeed + 23.0)) - 0.5) * 0.09;
-    vec3 cl = hCell(Pd * ${glf(DAP.cell)} + hSeed);
-    float ratio = cl.x / max(cl.y, 1e-3);
+    if (hGrey > 0.5) {
+      vec3 Pd = P + (vec3(hNoise(P * 3.1 + hSeed), hNoise(P * 3.1 + hSeed + 11.0), hNoise(P * 3.1 + hSeed + 23.0)) - 0.5) * 0.09;
+      vec3 cl = hCell(Pd * ${glf(DAP.cell)} + hSeed);
+      float d1 = cl.x + (hNoise(P * 26.0) - 0.5) * 0.07 + (hNoise(P * 7.0 + hSeed) - 0.5) * 0.1;
+      float r = mix(${glf(DAP.rMin)}, ${glf(DAP.rMax)}, fract(cl.z * 5.3));
+      float spot = 1.0 - smoothstep(r - ${glf(DAP.soft)}, r + 0.05, d1);
 #ifdef H_HQ
-    vec3 cs = hCell(Pd * ${glf(DAP.cell * 1.9)} + hSeed * 1.3 + 5.0);
-    ratio = mix(ratio, max(ratio, cs.x / max(cs.y, 1e-3)), step(0.5, cl.z));
+      vec3 cs = hCell(Pd * ${glf(DAP.cell * 1.9)} + hSeed * 1.3 + 5.0);
+      spot = max(spot, (1.0 - smoothstep(r - ${glf(DAP.soft)}, r + 0.05, cs.x)) * step(0.5, cl.z));
 #endif
-    ratio += (hNoise(P * 26.0) - 0.5) * 0.1 + (hNoise(P * 7.0 + hSeed) - 0.5) * 0.12;
-    float net = smoothstep(1.0 - ${glf(DAP.line)} - 0.18, 1.0 - ${glf(DAP.line)} * 0.3, ratio);
-    float ctr = 1.0 - smoothstep(0.15, 0.7, ratio);
-    net = mix(net, 0.45, aaW);
-    ctr = mix(ctr, 0.25, aaW);
-    float zone = min(1.0, (bodyS + isLeg * smoothstep(0.55, 0.9, h)) * smoothstep(-0.7, 0.1, up) * hGrey * (0.6 + 0.55 * hFbm(P * 1.3 + 3.0)));
-    c *= 1.0 - net * ${glf(DAP.dark)} * zone;
-    c *= 1.0 + ctr * ${glf(DAP.light)} * zone;
+      spot = mix(spot, ${glf(DAP.mean)}, aaW);
+      float zone = min(1.0, (bodyS + isLeg * smoothstep(0.55, 0.9, h)) * smoothstep(-0.7, 0.1, up) * (0.6 + 0.55 * hFbm(P * 1.3 + 3.0)));
+      c *= mix(1.0 - ${glf(DAP.dark)} * zone, 1.0 + ${glf(DAP.light)} * zone, spot);
+    }
     c = mix(c, c * 0.55, isLeg * (1.0 - smoothstep(0.12, 0.55, h)) * 0.85);
     c = mix(c, c * 0.74, isHead * smoothstep(0.5, 0.95, hl.z) * 0.8);
   }
@@ -142,10 +153,10 @@ hEarIn = 0.0;
     vec3 Pd = P + (vec3(hNoise(P * 3.1 + hSeed), hNoise(P * 3.1 + hSeed + 11.0), 0.5) - 0.5) * 0.08;
     vec3 cl = hCell(Pd * ${glf(DAP.cell * 0.9)} + hSeed * 1.7);
     float net = mix(smoothstep(0.3, 0.55, cl.x + (hNoise(P * 26.0) - 0.5) * 0.1), 0.45, aaW);
-    float zone = bodyS * smoothstep(-0.3, 0.4, up) * (0.4 + 0.7 * hFbm(P * 1.3 + 9.0)) * hGold * hGoldDap;
+    float zone = bodyL * smoothstep(-0.3, 0.4, up) * (0.4 + 0.7 * hFbm(P * 1.3 + 9.0)) * hGold * hGoldDap;
     c *= 1.0 - net * ${glf(COAT_LOOKS.bloom.dark)} * zone;
   }
-  c = mix(c, c * vec3(1.06, 0.98, 0.84), hGold * hGoldDap * bodyS * 0.7);
+  c = mix(c, c * vec3(1.06, 0.98, 0.84), hGold * hGoldDap * bodyL * 0.7);
 
   // Contre-ombrage : dos un peu plus foncé, ventre et intérieur des membres nettement plus clairs (le
   // ventre reste lisible au soleil, la lumière du sol l'éclaire peu). Le haut des membres suit la même
@@ -153,7 +164,7 @@ hEarIn = 0.0;
   // presque rien d'ajouté, sinon un voile gris de latex sous le ventre.)
   float under = smoothstep(0.1, -0.8, up) * (bodyS + isLeg);
   float inner = isLeg * smoothstep(0.15, 0.85, -sign(P.x) * normalize(vHNrm).x);
-  float belly = under * bodyS;
+  float belly = under * bodyL;
   float lift = 0.03 * clamp(dot(hCoat, vec3(0.2126, 0.7152, 0.0722)) * 8.0 + 0.3, 0.0, 1.0);
   c = mix(c, c * 1.38 + lift, clamp(under + inner * 0.55, 0.0, 1.0) * 0.62);
   c *= 1.0 - smoothstep(0.55, 1.0, up) * 0.06 * bodyS;
@@ -198,12 +209,14 @@ hEarIn = 0.0;
     c = mix(c, vec3(0.42, 0.27, 0.18), fl * 0.75 * hFlea);
   }
 
-  // Rouan : poils blancs mêlés à la robe ; la tête et le bas des membres gardent la couleur de base, plus foncée.
+  // Rouan : poils blancs mêlés à la robe de base (plus foncée et plus saturée que la teinte d'ensemble de la race,
+  // voir roanBase) sur le corps, un peu plus de 35 % au loin ; la tête et le bas des membres gardent la couleur de
+  // base. (Avant : 60 % de blanc sur la teinte d'ensemble, déjà claire — au téléphone, un gris presque blanc.)
   if (hRoan > 0.0) {
     float speck = mix(step(0.55, hNoise(P * 170.0)), 0.45, aa);
     float zone = bodyS + isLeg * smoothstep(0.5, 0.75, h);
-    c = mix(c, hWhite, speck * 0.6 * hRoan * zone);
-    c = mix(c, c * 0.82, (headW + isLeg * (1.0 - smoothstep(0.35, 0.6, h))) * hRoan * 0.7);
+    c = mix(c, hWhite, speck * ${glf(ROAN.white)} * hRoan * zone);
+    c = mix(c, c * 0.9, (headW + isLeg * (1.0 - smoothstep(0.35, 0.6, h))) * hRoan * 0.7);
   }
 
   // Léopard (robe blanche à taches) et couverture (croupe blanche tachetée) : taches de tailles inégales, un peu
@@ -221,7 +234,9 @@ hEarIn = 0.0;
     float spot = (1.0 - smoothstep(r - 0.025, r + 0.025, dd)) * present;
     float halo = (1.0 - smoothstep(r + 0.02, r + ${glf(SPOT.halo + 0.04)}, dd)) * present * (1.0 - spot) * (0.45 + 0.55 * hNoise(P * 90.0));
     if (hBlanket > 0.0) {
-      float edge = -(P.z + 0.15) + (hFbm(P * 3.0) - 0.5) * 0.25 + (hNoise(P * 14.0) - 0.5) * 0.08;
+      // (bord avant incliné : plus en avant sur le rein, il recule vers le ventre et la cuisse ; déchiqueté, à grande et
+      // petite échelle — avant : un plan vertical, une coupe droite au milieu du flanc, comme peinte)
+      float edge = -(P.z + 0.15) + ${glf(BLANKET.slope)} * (P.y - 1.12) + (hFbm(P * 2.2 + hSeed) - 0.5) * 0.34 + (hNoise(P * 14.0) - 0.5) * 0.1 + (hNoise(P * 38.0) - 0.5) * 0.035;
       // (bas de la couverture d'après la hauteur, pas d'après l'orientation de la peau ni la partie du corps,
       // constante par triangle : elle découpait des dents de scie sur la cuisse)
       float onBody = smoothstep(1.02, 1.22, h + (hFbm(P * 4.0 + 5.0) - 0.5) * 0.25) * (bodyS + isLeg);
@@ -229,7 +244,11 @@ hEarIn = 0.0;
       float frost = (1.0 - smoothstep(0.0, 0.12, abs(edge + 0.06))) * mix(step(0.5, hNoise(P * 150.0)), 0.5, aa) * onBody;
       vec3 inside = mix(hSec, hCoat, spot);
       inside = mix(inside, mix(hSec, hCoat, 0.3), halo * 0.5);
+      // (quelques taches blanches détachées devant le bord, sur la robe foncée : des flocons, pas une ligne)
+      float flake = (1.0 - smoothstep(r * 0.55 - 0.02, r * 0.55 + 0.02, dd)) * step(0.55, fract(cl.z * 7.3))
+        * smoothstep(-0.3, -0.08, edge) * (1.0 - bl) * onBody;
       c = mix(c, hSec, frost * 0.6 * hBlanket);
+      c = mix(c, hSec, flake * 0.9 * hBlanket);
       c = mix(c, inside, bl * hBlanket);
     } else {
       float k = hLeopard * (1.0 - isHoof - isSkin);
@@ -425,8 +444,22 @@ const col = (hex) => new THREE.Color(hex);
 
 /** Réchauffement de la base des robes métallisées (Akhal-Teké), linéaire : moins de vert, nettement moins de bleu. */
 export const SHEEN_WARM = new THREE.Color(1, 0.82, 0.55);
+/** Robe d'un poulain gris (linéaire, × la robe adulte) : gris foncé, il grisonnera en grandissant. */
+export const GREY_FOAL = 0.3;
+/** Robe d'un gris pommelé (linéaire, × la couleur de la race) : fond gris acier sous les pommelures claires. */
+export const DAPPLE_BASE = 0.86;
 /** Noir brun vers lequel la base des robes presque noires est relevée à moitié (contre les reflets « latex »). */
 export const BLACK_FLOOR = new THREE.Color(0x26211f);
+
+/**
+ * Robe de base d'un rouan : la couleur de la race est la teinte d'ensemble (poils blancs mêlés compris) ; le shader
+ * mêle lui-même les poils blancs — à une base plus foncée et plus saturée (rouan rouge, rouan bai : brun-roux ; rouan
+ * bleu : presque noir).
+ */
+export function roanBase(hex) {
+  const hsl = col(hex).getHSL({}, THREE.SRGBColorSpace);
+  return new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * COAT_LOOKS.roan.sat), hsl.l * COAT_LOOKS.roan.light, THREE.SRGBColorSpace);
+}
 
 /**
  * Part dorée d'une robe (0 à 1) : teinte orangée à jaune (16 à 55°), assez saturée, ni grise, ni blanche, ni presque
@@ -454,7 +487,12 @@ export function coatMaterial(look, build, breed = null, real = null) {
   const sheen = build.sheen ?? 0;
   // (robe métallisée de l'Akhal-Teké : base réchauffée vers l'or orangé — un palomino « crème » sortait kaki au pré,
   // teinte du flanc 66° au lieu de 40-50°)
-  const coat = sheen ? col(look.coat).multiply(SHEEN_WARM) : col(look.coat);
+  // (poulain gris : il naît foncé et grisonne en grandissant — robe gris foncé, sans pommelures ; avant : la mosaïque
+  // d'un adulte sur un poulain de 12 jours)
+  const greyFoal = tr.grey > 0 && !!(look.foal || build.foal);
+  // (gris pommelé : fond un peu plus foncé, gris acier, sous des pommelures claires — pas un cheval blanc à pois)
+  const coat = sheen ? col(look.coat).multiply(SHEEN_WARM) : greyFoal ? col(look.coat).multiplyScalar(GREY_FOAL)
+    : tr.roan > 0 ? roanBase(look.coat ?? 0x9c8a80) : tr.grey >= 1 ? col(look.coat).multiplyScalar(DAPPLE_BASE) : col(look.coat);
   const black0 = srgbLum(look.coat ?? 0x7a4528) < 0.09 && !sheen;
   // Robe claire (gris, blanc, crème…) : modelé peint plus doux encore (voir COAT_FRAGMENT).
   const coatL = srgbLum(look.coat ?? 0x7a4528);

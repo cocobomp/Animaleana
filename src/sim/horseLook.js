@@ -94,6 +94,7 @@ const lum = (c) => ((c >> 16 & 255) * 0.2126 + (c >> 8 & 255) * 0.7152 + (c & 25
  * on devine d'après les couleurs et le nom de la robe.
  */
 export function horseCoatTraits(look = {}) {
+  // (look.foal : robe d'un poulain, voir stageLook)
   const name = look.colorName?.fr ?? '';
   const pattern = look.pattern ?? 'solid';
   const coatL = lum(look.coat ?? 0x7a4528);
@@ -107,8 +108,13 @@ export function horseCoatTraits(look = {}) {
   const points = look.points ?? (maneL < 0.12 && coatL > 0.07 && coatL < 0.5 && pattern !== 'spots' && !grey);
   const spots = pattern === 'spots';
   const blanket = spots && coatL < secL; // couverture blanche sur la croupe (appaloosa « couverture »)
+  // Gris pommelé (pommelures rondes) seulement quand la robe le dit (dapple, ou « pommelé » dans son nom) : les
+  // « Gris » et « Gris clair » sont des gris presque blancs, sans pommelures (avant : pommelés par défaut, une
+  // mosaïque « girafe » de fines lignes grises sur fond blanc au téléphone). Poulain gris : pas encore de
+  // pommelures (il naît foncé et grisonne en grandissant, voir coatMaterial).
+  const dappled = (look.dapple ?? /pommel/i.test(name)) && !look.foal;
   return {
-    grey: grey ? (look.dapple ?? true ? 1 : 0.4) : 0,
+    grey: grey ? (dappled ? 1 : 0.4) : 0,
     dun: dun ? 1 : 0,
     roan: roan ? 1 : 0,
     points: points || dun ? 1 : 0,

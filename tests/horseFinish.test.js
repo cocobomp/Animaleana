@@ -53,10 +53,34 @@ describe('robes crédibles (étape 8)', () => {
     const m = material('pre', 0);
     expect(m.userData.horseUniforms.hGrey.value).toBe(1);
     const fs = compile(m).fragmentShader;
-    expect(fs).toContain(`net * ${dark.toFixed(4)} * zone`);
-    expect(fs).toContain(`ctr * ${light.toFixed(4)} * zone`);
+    expect(fs).toContain(`c *= mix(1.0 - ${dark.toFixed(4)} * zone, 1.0 + ${light.toFixed(4)} * zone, spot);`);
     // (gris clair sans pommelures : motif à 0,4)
     expect(material('camargue', 0).userData.horseUniforms.hGrey.value).toBeCloseTo(0.4, 5);
+  });
+
+  it('gris pommelé : pommelures rondes et floues sur un fond plus foncé, pas un réseau de fines lignes (« girafe ») ; gris et gris clair sans pommelures ; poulain gris foncé', () => {
+    const { rMin, rMax, soft, mean } = COAT_LOOKS.dapple;
+    // (rayons inégaux, bord flou large, ni pois isolés ni cellules qui se touchent : environ un tiers de la robe)
+    expect(rMax / rMin).toBeGreaterThan(1.4);
+    expect(soft).toBeGreaterThan(0.1);
+    expect(mean).toBeGreaterThan(0.25);
+    expect(mean).toBeLessThan(0.5);
+    const fs = compile(material('pre', 0)).fragmentShader;
+    expect(fs).not.toContain('cl.x / max(cl.y'); // (plus de rapport F1 / F2 : les lignes fines entre cellules)
+    expect(fs).toContain('if (hGrey > 0.5)'); // (bruit cellulaire calculé pour les seuls vrais pommelés)
+    // « Gris » et « Gris clair » : presque blancs, sans pommelures ; « Gris pommelé » : pommelé
+    for (const [breed, ci, want] of [['arabe', 0, 0.4], ['selle_francais', 2, 0.4], ['connemara', 0, 0.4], ['welsh', 1, 0.4], ['pre', 0, 1], ['percheron', 0, 1]]) {
+      expect(horseCoatTraits(look(breed, ci)).grey, `${breed} ${ci}`).toBeCloseTo(want, 5);
+    }
+    // (anciennes sauvegardes sans le drapeau : d'après le nom de la robe)
+    expect(horseCoatTraits({ coat: 0xdedbd5, secondary: 0xdedbd5, mane: 0xc9c5bf, colorName: { fr: 'Gris clair' } }).grey).toBeCloseTo(0.4, 5);
+    expect(horseCoatTraits({ coat: 0xc4c1bb, secondary: 0xc4c1bb, mane: 0xe8e6e2, colorName: { fr: 'Gris pommelé' } }).grey).toBe(1);
+    // poulain gris : pas de pommelures, robe nettement plus foncée que celle de l'adulte
+    const fl = { ...look('pre', 0), foal: true };
+    expect(horseCoatTraits(fl).grey).toBeCloseTo(0.4, 5);
+    const foal = coatMaterial(fl, horseBuild(null, fl), null, realOpts).userData.horseUniforms.hCoat.value;
+    const adult = material('pre', 0).userData.horseUniforms.hCoat.value;
+    expect(lum(foal)).toBeLessThan(lum(adult) * 0.4);
   });
 
   it('pie : plaques d\'avant l\'étape 8 (même blanc, voir horseMarks.test.js), bord déformé, net mais déchiqueté', () => {
@@ -118,7 +142,9 @@ describe('robes crédibles (étape 8)', () => {
     expect(material('quarter', 1).userData.horseUniforms.hGoldDap.value).toBe(1);
     expect(material('selle_francais', 0).userData.horseUniforms.hGoldDap.value).toBeLessThan(0.4);
     expect(material('pre', 0).userData.horseUniforms.hGoldDap.value).toBe(0);
-    expect(COAT_LOOKS.bloom.dark).toBeLessThan(COAT_LOOKS.dapple.dark * 0.6);
+    // (écart entre pommelure et fond bien moindre que celui d'un gris pommelé)
+    const dap = (1 + COAT_LOOKS.dapple.light) / (1 - COAT_LOOKS.dapple.dark) - 1;
+    expect(1 / (1 - COAT_LOOKS.bloom.dark) - 1).toBeLessThan(dap * 0.6);
     const fs = compile(material('selle_francais', 0)).fragmentShader;
     expect(fs).toContain('mix( hRimTint, vec3( 1.0 ), hDarkV * hGold )');
     expect(fs).toContain('hDarkV * hGold ) * ( 1.0 - hBare )');

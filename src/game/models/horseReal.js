@@ -187,6 +187,7 @@ export function realHorseBase(gltf) {
     const same = src && mesh.geometry.attributes.position.count === src.geometry.attributes.position.count;
     if (prims[name] && same && mesh.geometry.index) prims[name].lodIndex = Uint32Array.from(mesh.geometry.index.array);
   }
+  provokeOffEars(prims.coat);
   // Recalage en z : le creux du dos (là où se pose la selle) à z = -0,075, comme le cheval sculpté
   // (Player.seat, gearModels.js). Le GLB est centré sur sa boîte, qui comprend la tête et la queue.
   const rest = restW.map((m) => V().setFromMatrixPosition(m));
@@ -503,6 +504,86 @@ function solesOf(coat, rest) {
     const mid = toe.clone().lerp(heel, 0.5);
     return [toe, mid, heel].map((p) => p.clone().sub(rest[b]).setY(-rest[b].y));
   });
+}
+
+/**
+ * Mèches de gauche de la masse de la crinière (celles qui passent par-dessus la crête) : en grappes de une à quatre
+ * mèches qui se chevauchent, séparées par des vides inégaux, de largeurs et de longueurs très dispersées (une longue
+ * par grappe, les autres courtes) et d'un ton propre à chacune ; dans une grappe, chacune un peu au-dessus de la
+ * précédente (h : pas de scintillement là où elles se recouvrent). Avant : une par huitième de la crête, à peine
+ * décalées, de formes voisines — au téléphone, une rangée régulière de pétales gris (crins clairs) ou de flammes
+ * (crins foncés) sous le rouleau. t : place le long de la crête (0 garrot, 1 nuque) ; w : demi-largeur (part de la
+ * crête) ; L : longueur sous le bord du rouleau (m) ; v0 : bande de la texture ; tone : ton ; h : écart à la peau (m).
+ */
+export function leftLocks(n, rng, crestSpan, len0) {
+  if (!n) return [];
+  const nG = n >= 10 ? 4 : 3;
+  const sizes = new Array(nG).fill(1);
+  for (let k = nG; k < n; k++) {
+    let g = Math.floor(rng() * nG);
+    while (sizes[g] >= 4) g = (g + 1) % nG;
+    sizes[g]++;
+  }
+  // (vides inégaux entre les grappes, plus courts aux deux bouts)
+  const gaps = Array.from({ length: nG + 1 }, (_, i) => (i === 0 || i === nG ? 0.35 : 0.55) + rng());
+  const tot = gaps.reduce((a, b) => a + b, 0);
+  const out = [];
+  let acc = 0;
+  for (let g = 0; g < nG; g++) {
+    acc += gaps[g];
+    const tc = 0.14 + (acc / tot) * 0.7;
+    const sz = sizes[g];
+    const lead = Math.floor(rng() * sz);
+    // (demi-largeurs 2,1 à 4,2 cm, le plus souvent étroites)
+    const ws = Array.from({ length: sz }, () => 0.021 + 0.021 * rng() ** 1.5);
+    // (voisines qui se chevauchent : centres écartés de 40 à 65 % de leurs demi-largeurs mises bout à bout)
+    const pos = [0];
+    for (let k = 1; k < sz; k++) pos.push(pos[k - 1] + (ws[k - 1] + ws[k]) * (0.4 + 0.25 * rng()));
+    const mid = pos[sz - 1] / 2;
+    for (let k = 0; k < sz; k++) {
+      out.push({
+        t: tc + (pos[k] - mid) / crestSpan,
+        w: ws[k] / crestSpan,
+        L: (k === lead ? 0.3 + 0.16 * rng() : 0.12 + 0.14 * rng()) * len0,
+        v0: rng() * (1 - LEFT_VSPAN),
+        tone: 0.86 + 0.2 * rng(),
+        h: 0.003 + 0.002 * k,
+      });
+    }
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+
+/**
+ * Triangles à cheval entre une oreille et la nuque ou le front : la partie du corps (attribut hPart, « flat » dans
+ * le shader de la robe : WebGL la prend au DERNIER sommet du triangle) était celle de l'oreille quand ce dernier
+ * sommet en était. Ses voisins de la nuque portent la hauteur relative du corps (≈ 1,7 coude), lue alors comme la
+ * hauteur sur l'oreille : la pointe noire des oreilles se peignait en triangles noirs nets à la nuque et à la base
+ * des oreilles (bai, isabelle, alezan, en basse comme en haute). On fait tourner l'ordre de leurs sommets (même
+ * sens, même face) pour que le dernier ne soit pas de l'oreille ; index complet et version réduite.
+ */
+export function provokeOffEars(prim) {
+  if (!prim) return 0;
+  const ear = new Uint8Array(prim.count);
+  for (let i = 0; i < prim.count; i++) {
+    const b = dominant(prim, i);
+    ear[i] = b === BONE_INDEX.EarL || b === BONE_INDEX.EarR ? 1 : 0;
+  }
+  let n = 0;
+  for (const idx of [prim.index, prim.lodIndex]) {
+    if (!idx) continue;
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t];
+      const b = idx[t + 1];
+      const c = idx[t + 2];
+      if (!ear[c] || (ear[a] && ear[b])) continue;
+      // (a, b, c) → (b, c, a) si a n'est pas de l'oreille, sinon (c, a, b) : b n'en est pas
+      if (!ear[a]) idx.set([b, c, a], t);
+      else idx.set([c, a, b], t);
+      n++;
+    }
+  }
+  return n;
 }
 
 function dominant(p, i) {
@@ -1388,13 +1469,7 @@ function maneCards(S, B, body, pos, coat) {
   // Places et longueurs tirées d'une suite à part (la répartition des cartes ne change pas).
   const lrng = mulberry(4127);
   const nLeft = style === 'short' ? 0 : style === 'long' || style === 'thick' ? 10 : 8;
-  const lefts = [];
-  for (let k = 0; k < nLeft; k++) {
-    // (demi-largeur 2,2 à 4 cm le long de la crête ; longueur sous le bord du rouleau : 22 à 50 % de la crinière, très
-    // inégale — plus larges, plus courtes et de même longueur, elles se lisaient au téléphone en langues sombres « en
-    // flammes » ou en pétales gris réguliers sous le rouleau ; plus étroites, plus nombreuses et inégales, des mèches)
-    lefts.push({ t: 0.13 + ((k + 0.1 + 0.8 * lrng()) / nLeft) * 0.7, w: (0.022 + 0.018 * lrng()) / crestSpan, L: (0.22 + 0.28 * lrng()) * len0, v0: lrng() * (1 - LEFT_VSPAN) });
-  }
+  const lefts = leftLocks(nLeft, lrng, crestSpan, len0);
   // (part d'une mèche de gauche à la place t : les cartes courtes de gauche n'y vont pas, la mèche a les siennes)
   const leftLock = (t) => {
     let e = 0;
@@ -1435,7 +1510,7 @@ function maneCards(S, B, body, pos, coat) {
     for (let j = 0; j < LR; j++) {
       const r = (j / (LR - 1)) * 2 - 1;
       const t = m.t + r * m.w;
-      const path = leftPath(t, m.L * (1 - 0.15 * r * r));
+      const path = leftPath(t, m.L * (1 - 0.15 * r * r), 1, m.h);
       lr.push({ r, t, pts: resample(path.pts, LP), f0: path.f0 });
     }
     // (pleine sur le rouleau, resserrée vers la rangée du milieu en dessous : la mèche finit en pointe — toutes les
@@ -1465,7 +1540,7 @@ function maneCards(S, B, body, pos, coat) {
         const f = k / (LP - 1);
         if (f < mid.f0) return;
         const d = body(p);
-        const want = 0.004 + lockT * (1 - row.r * row.r) * smooth(mid.f0, mid.f0 + 0.25, f) * (1 - 0.5 * smooth(0.6, 1, f));
+        const want = m.h + 0.001 + lockT * (1 - row.r * row.r) * smooth(mid.f0, mid.f0 + 0.25, f) * (1 - 0.5 * smooth(0.6, 1, f));
         if (d < want) p.addScaledVector(body.grad(p, gq, d), want - d);
       });
     }
@@ -1484,7 +1559,9 @@ function maneCards(S, B, body, pos, coat) {
         out: (j, k) => body.grad(lr[j].pts[k], V()),
         root: lr.map(() => root),
         G: (j, k) => k / (LP - 1),
-        tone: (j, k) => 0.9 + 0.1 * smooth(0, 0.3, k / (LP - 1)) - 0.08 * Math.abs(lr[j].r),
+        // (ton propre à chaque mèche : voisines, elles se distinguent — sur des crins clairs, une rangée de pétales du
+        // même gris sinon)
+        tone: (j, k) => (0.9 + 0.1 * smooth(0, 0.3, k / (LP - 1)) - 0.08 * Math.abs(lr[j].r)) * m.tone,
         weights: (j, k) => w(k / (LP - 1)),
       },
     };

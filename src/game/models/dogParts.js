@@ -526,10 +526,12 @@ export function faceShape(base, B, P) {
       dx += sx * (flews * 0.004 + jowl * 0.007) * f;
     }
     // museau haut et carré : les côtés du bas du museau élargis, l'arête un peu relevée
+    // (fondus longs et saturation douce : la fenêtre de 3 cm et le plafond net à 4 cm faisaient un cran dans la
+    // silhouette de face de l'akita, à la jonction de la joue et du museau)
     if (square > 0 && wh > 0.5 && we < 0.05) {
-      const zf = smooth(0.39, 0.42, z0) * (1 - smooth(0.47, 0.49, z0));
-      const yf = 1 - smooth(0.54, 0.575, y0);
-      dx += sx * square * 0.18 * Math.min(ax, 0.04) * zf * yf;
+      const zf = smooth(0.35, 0.43, z0) * (1 - smooth(0.465, 0.495, z0));
+      const yf = 1 - smooth(0.535, 0.58, y0);
+      dx += sx * square * 0.18 * 0.04 * Math.tanh(ax / 0.04) * zf * yf * (1 - 0.6 * smooth(0.045, 0.08, ax));
       dy += square * 0.003 * zf * smooth(0.55, 0.58, y0) * (1 - smooth(0.015, 0.03, ax));
     }
     if (teeth(i)) {

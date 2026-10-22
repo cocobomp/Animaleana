@@ -469,6 +469,9 @@ export class Player {
     const a = this.avatar;
     a.root.position.set(0, 0, 0);
     a.root.rotation.x = 0;
+    // (remis droit : il suivait l'inclinaison du cheval sur une pente)
+    this.root.rotation.x = 0;
+    this.root.rotation.z = 0;
     poseAvatar(a, 'stand');
     // On descend à côté du cheval.
     const side = new THREE.Vector3(Math.cos(this.heading), 0, -Math.sin(this.heading)).multiplyScalar(1.4);
@@ -791,6 +794,15 @@ export class Player {
   lateUpdate(dt) {
     const m = this.mount;
     if (!m || !this.ride0) return;
+    // Cheval réaliste incliné sur une pente (horseReal.js, groundTilt) : le cavalier prend le même tangage, le même
+    // roulis et la même hauteur que lui (son siège est mesuré dans le repère du cheval).
+    const mr = m.root;
+    if (mr && (mr.rotation.x || mr.rotation.z || this.root.rotation.x || this.root.rotation.z)) {
+      this.root.rotation.order = mr.rotation.order;
+      this.root.rotation.x = mr.rotation.x;
+      this.root.rotation.z = mr.rotation.z;
+      this.root.position.y = mr.position.y;
+    }
     const a = this.avatar;
     const md = m.model;
     const sc = Math.max(0.3, m.scale);

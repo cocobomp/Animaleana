@@ -43,7 +43,7 @@ vec3 hCell(vec3 p) {
  * environ), halo marbré autour. Isabelle : largeur de la raie de mulet (m).
  */
 export const COAT_LOOKS = {
-  dapple: { dark: 0.26, light: 0.16, cell: 7.5, rMin: 0.33, rMax: 0.5, soft: 0.2, mean: 0.48 },
+  dapple: { dark: 0.26, light: 0.16, cell: 7.5, rMin: 0.36, rMax: 0.53, soft: 0.2, mean: 0.55 },
   pinto: { warp: 0.12, jag: 0.06 },
   spots: { rMin: 0.13, rMax: 0.38, halo: 0.08 },
   dun: { stripe: 0.03 },
@@ -51,7 +51,7 @@ export const COAT_LOOKS = {
   bloom: { dark: 0.16 },
   // Rouan : part de blanc sur un poil blanc (en moyenne × 0,45 au loin) ; robe de base tirée de la teinte d'ensemble
   // de la race (saturation × sat, clarté × light)
-  roan: { white: 0.82, sat: 2.2, light: 0.62 },
+  roan: { white: 0.85, sat: 2.2, light: 0.62 },
   // Appaloosa « couverture » : inclinaison du bord avant (m vers l'avant par m de hauteur)
   blanket: { slope: 0.55 },
 };
@@ -210,10 +210,12 @@ hEarIn = 0.0;
   }
 
   // Rouan : poils blancs mêlés à la robe de base (plus foncée et plus saturée que la teinte d'ensemble de la race,
-  // voir roanBase) sur le corps, un peu plus de 35 % au loin ; la tête et le bas des membres gardent la couleur de
-  // base. (Avant : 60 % de blanc sur la teinte d'ensemble, déjà claire — au téléphone, un gris presque blanc.)
+  // voir roanBase) sur le corps, environ 19 % au loin (mélange en lumière linéaire : à 27 %, le blanc l'emportait
+  // déjà) ; la tête et le bas des membres gardent la couleur de base. (Avant : 27 % de blanc sur la teinte
+  // d'ensemble, déjà claire — au téléphone, un gris presque blanc, aucune couleur de base lisible.)
   if (hRoan > 0.0) {
-    float speck = mix(step(0.55, hNoise(P * 170.0)), 0.45, aa);
+    // (un point sur cinq environ : 22 % des valeurs du bruit au-dessus de 0,65 ; même part au loin)
+    float speck = mix(step(0.65, hNoise(P * 170.0)), 0.223, aa);
     float zone = bodyS + isLeg * smoothstep(0.5, 0.75, h);
     c = mix(c, hWhite, speck * ${glf(ROAN.white)} * hRoan * zone);
     c = mix(c, c * 0.9, (headW + isLeg * (1.0 - smoothstep(0.35, 0.6, h))) * hRoan * 0.7);

@@ -44,6 +44,11 @@ const RIDER_KEYS = [...MOVING, 'canterR'];
  * joué à v ÷ naturelle, 1,67 fois trop vite à 14 m/s (moulinet de dessin animé accéléré).
  */
 export const GALLOP_REACH = 1.45;
+/**
+ * Cadence la plus rapide du galop (× la naturelle), au-delà du galop allongé : de quoi suivre sans glisser la vitesse
+ * montée la plus haute de chaque race (compétence 100, selle de course : 2,7 × le galop allongé d’un Shetland).
+ */
+export const GALLOP_TS_MAX = 2.9;
 export const GALLOP_CADENCE = 0.35;
 export const GALLOP_CADENCE_MAX = 1.22;
 const LOCK_KEYS = [...RIDER_KEYS, 'gallopX'];
@@ -3640,6 +3645,8 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
     horseV3: true,
     real: true,
     speedScale: heads[BONE_INDEX.FL1].y / base.rest[BONE_INDEX.FL1].y,
+    // (centre de la sole de chaque sabot au repos, x et z : terrain cherché sous eux, voir groundTilt)
+    feet: S.hooves,
   };
   for (const e of model.ears) e.userData.side = e === model.ears[0] ? 1 : -1;
   model.skinGear = (mesh) => skinGear(model, S, mesh, hb);
@@ -4629,7 +4636,10 @@ class RealHorseAnim {
         x = 1;
         ts = st.v / natX;
       }
-      ts = Math.min(1.8, ts);
+      // (borne de la cadence au-delà du galop allongé : à 1,8, les sabots posés glissaient de 8 à 28 cm aux vitesses
+      // du galop monté d'un cheval entraîné en selle de course — 24,6 m/s pour un cheval de taille 1, 27,6 ramenés
+      // à la taille 1 pour un Shetland)
+      ts = Math.min(GALLOP_TS_MAX, ts);
       ag.timeScale = ts;
     }
     this.stretch = x;
@@ -5330,4 +5340,63 @@ export function animateRealHorse(e, dt, sad) {
   e.gait = o.gait;
   e.phase = o.phase;
   e.headDown = Math.max(e.grazeAmt, e.feedAmt);
+  groundTilt(e, dt);
+}
+
+/**
+ * Cheval sur un terrain en pente : tangage et roulis de sa racine d'après la hauteur du terrain sous les quatre
+ * sabots (centre de leur sole au repos, gabarit de la race), et hauteur de la racine prise sur ce plan. Amortis,
+ * bornés (TILT_MAX, rad : au-delà, le reste dans le sol ou en l'air) ; rien si le cheval n'est pas posé sur le
+ * terrain (van, box surélevé, saut, vignette : la racine n'est pas à la hauteur du terrain), l'inclinaison revient
+ * alors doucement à zéro. Le cavalier suit (Player.lateUpdate), l'ombre des sabots aussi (liée à la racine). Avant :
+ * seule la hauteur au centre comptait — sur une pente de 28 %, des sabots jusqu'à 9 cm dans le sol ou en l'air et
+ * l'ombre de contact, plate, tranchée par le terrain. 4 hauteurs du terrain par cheval animé et par image.
+ */
+export const TILT_MAX = { pitch: 0.36, roll: 0.22 };
+export function groundTilt(e, dt) {
+  const world = e.world;
+  const root = e.root;
+  const feet = e.model?.feet;
+  if (!world?.heightAt || !root || !feet) return;
+  const p = root.position;
+  const st = e.tilt ??= { pitch: 0, roll: 0, dy: 0 };
+  const h0 = world.heightAt(p.x, p.z);
+  // (posé : remis à la hauteur du terrain cette image — snap, cavalier — ou laissé où on l'avait mis l'image d'avant)
+  const onGround = Math.abs(p.y - h0) < 0.03 || Math.abs(p.y - h0 - st.dy) < 0.003;
+  let tp = 0;
+  let tr = 0;
+  let dy = 0;
+  if (onGround) {
+    const sc = Math.max(0.3, e.scale ?? 1);
+    const c = Math.cos(e.heading ?? root.rotation.y);
+    const s = Math.sin(e.heading ?? root.rotation.y);
+    // (FL, FR, HL, HR : x > 0 à gauche, z > 0 vers l'avant)
+    let hF = 0, hB = 0, hL = 0, hR = 0, zF = 0, zB = 0, xL = 0, xR = 0;
+    for (let i = 0; i < 4; i++) {
+      const [x, z] = feet[i];
+      const h = world.heightAt(p.x + (x * c + z * s) * sc, p.z + (-x * s + z * c) * sc);
+      if (i < 2) { hF += h / 2; zF += z * sc / 2; } else { hB += h / 2; zB += z * sc / 2; }
+      if (i % 2 === 0) { hL += h / 2; xL += x * sc / 2; } else { hR += h / 2; xR += x * sc / 2; }
+    }
+    const gz = (hF - hB) / Math.max(0.1, zF - zB);
+    const gx = (hL - hR) / Math.max(0.05, xL - xR);
+    tp = Math.max(-TILT_MAX.pitch, Math.min(TILT_MAX.pitch, -Math.atan(gz)));
+    tr = Math.max(-TILT_MAX.roll, Math.min(TILT_MAX.roll, Math.atan(gx)));
+    // (hauteur du plan sous la racine : moyenne des quatre, ramenée au centre)
+    dy = (hF + hB) / 2 - gz * (zF + zB) / 2 - gx * (xL + xR) / 2 - h0;
+  }
+  const k = Math.min(1, dt * 8);
+  st.pitch += (tp - st.pitch) * k;
+  st.roll += (tr - st.roll) * k;
+  if (Math.abs(st.pitch) < 1e-4 && Math.abs(st.roll) < 1e-4 && !tp && !tr) {
+    st.pitch = 0;
+    st.roll = 0;
+  }
+  root.rotation.order = 'YXZ';
+  root.rotation.x = st.pitch;
+  root.rotation.z = st.roll;
+  if (onGround) {
+    st.dy += (dy - st.dy) * k;
+    p.y = h0 + st.dy;
+  } else st.dy = 0;
 }

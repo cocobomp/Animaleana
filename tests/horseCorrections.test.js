@@ -3,7 +3,7 @@
 // régulière… GLB chargé dans node, sans textures ; rien ne dépend du hasard (graines fixes).
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-import { realHorseBase, buildRealHorseModel, leftLocks } from '../src/game/models/horseReal.js';
+import { realHorseBase, buildRealHorseModel, leftLocks, groundTilt, TILT_MAX, GALLOP_TS_MAX } from '../src/game/models/horseReal.js';
 import { coatMaterial } from '../src/game/models/horseCoat.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { horseBuild } from '../src/sim/horseLook.js';
@@ -146,5 +146,131 @@ describe('crinière : mèches de gauche', () => {
       }
     }
     expect(leftLocks(0, mulberry(4127), 0.75, 0.34)).toEqual([]);
+  });
+});
+
+describe('terrain en pente', () => {
+  // (cheval posé comme dans le jeu : racine → groupe d'échelle → modèle ; terrain : un plan incliné)
+  const place = (md, scale, heading, heightAt, x = 3, z = -2) => {
+    const root = new THREE.Group();
+    const sg = new THREE.Group();
+    sg.scale.setScalar(scale);
+    sg.add(md.root);
+    root.add(sg);
+    root.position.set(x, heightAt(x, z), z);
+    root.rotation.y = heading;
+    return { root, model: md, scale, heading, world: { heightAt } };
+  };
+  // plus grand écart (m) entre le dessous de chaque sabot (point le plus bas de sa sole) et le terrain sous lui
+  const hoofGap = (e) => {
+    e.root.updateMatrixWorld(true);
+    const p = new THREE.Vector3();
+    let worst = 0;
+    for (const l of e.model.legs) {
+      let low = Infinity;
+      for (const q of l.solePts) {
+        p.copy(q).applyMatrix4(l.fetlock.matrixWorld);
+        low = Math.min(low, p.y - e.world.heightAt(p.x, p.z));
+      }
+      worst = Math.max(worst, Math.abs(low));
+    }
+    return worst;
+  };
+  it('sabots sur le terrain en pente (28 % dans l\'axe, 15 % en travers), amorti ; rien hors du terrain', () => {
+    for (const [breed, scale] of [['selle_francais', 1], ['shetland', 0.58]]) {
+      const md = horse(breed);
+      for (const [gx, gz, heading] of [[0, 0.28, 0], [0.15, 0, 0.4], [0.12, -0.22, 2.3]]) {
+        const heightAt = (x, z) => 0.5 + gx * x + gz * z;
+        const e = place(md, scale, heading, heightAt);
+        // (au repos : sole à 3 mm sous le sol du modèle)
+        const flat = hoofGap(e);
+        for (let i = 0; i < 40; i++) {
+          e.root.position.y = heightAt(e.root.position.x, e.root.position.z); // (snap, comme AnimalEntity)
+          groundTilt(e, 1 / 60);
+        }
+        const tilted = hoofGap(e);
+        expect(flat, `${breed} ${gx} ${gz}`).toBeGreaterThan(0.03 * scale);
+        expect(tilted, `${breed} ${gx} ${gz}`).toBeLessThan(0.012);
+        expect(Math.abs(e.root.rotation.x)).toBeLessThanOrEqual(TILT_MAX.pitch);
+        expect(Math.abs(e.root.rotation.z)).toBeLessThanOrEqual(TILT_MAX.roll);
+        md.root.removeFromParent();
+      }
+      // hors du terrain (dans un van, sur un podium) : inclinaison qui revient à zéro, hauteur laissée telle quelle
+      const heightAt = (x, z) => 0.3 * z;
+      const e = place(md, scale, 0, heightAt);
+      for (let i = 0; i < 30; i++) {
+        e.root.position.y = heightAt(e.root.position.x, e.root.position.z);
+        groundTilt(e, 1 / 60);
+      }
+      expect(Math.abs(e.root.rotation.x)).toBeGreaterThan(0.2);
+      const y = e.root.position.y + 0.45;
+      for (let i = 0; i < 60; i++) {
+        e.root.position.y = y;
+        groundTilt(e, 1 / 60);
+      }
+      expect(Math.abs(e.root.rotation.x)).toBeLessThan(0.01);
+      expect(e.root.position.y).toBe(y);
+      md.root.removeFromParent();
+      md.dispose();
+    }
+  });
+});
+
+describe('galop monté très rapide', () => {
+  // (instants de départ des clips fixés : le mixeur les tire au hasard)
+  const fixedHorse = (breed) => {
+    const random = Math.random;
+    let n = 0;
+    Math.random = () => (0.31 + 0.377 * n++) % 1;
+    try {
+      const md = horse(breed);
+      md.anim.useGaits();
+      md.anim.resting = false;
+      md.anim.restTimer = 1e9;
+      return md;
+    } finally {
+      Math.random = random;
+    }
+  };
+  const go = (v) => ({ v, moving: true, sleeping: false, sad: false, graze: 0, feeder: 0, turn: 0, fat: 1 });
+  // Vitesse montée la plus haute, ramenée à la taille 1 (Player.update : 11 × (1 + 100/150) × min(1,2 ; taille + 0,2)
+  // × selle de course 1,12, ÷ taille) : 24,6 m/s (Selle français), 27,6 (Shetland), 28,8 (Falabella).
+  it.each([['selle_francais', 1], ['shetland', 0.58], ['falabella', 0.5]])('%s à sa vitesse montée la plus haute : les sabots posés ne glissent pas (avant : 8 à 28 cm)', (breed, sc) => {
+    const v = (11 * (1 + 100 / 150) * Math.min(1.2, sc + 0.2) * 1.12) / sc;
+    const md = fixedHorse(breed);
+    expect(v / md.anim.natural.gallopX).toBeLessThan(GALLOP_TS_MAX);
+    const dt = 1 / 60;
+    const step = () => {
+      md.root.position.z += v * dt;
+      md.anim.update(dt, go(v), {});
+    };
+    for (let f = 0; f < 200; f++) step();
+    const p = new THREE.Vector3();
+    const flat = md.legs.map(() => null);
+    const flats = [];
+    for (let f = 0; f < 240; f++) {
+      step();
+      md.root.updateMatrixWorld(true);
+      md.legs.forEach((l, i) => {
+        let hi = -Infinity;
+        let z = 0;
+        for (const q of l.solePts) {
+          p.copy(q).applyMatrix4(l.fetlock.matrixWorld);
+          hi = Math.max(hi, p.y);
+          z += p.z / l.solePts.length;
+        }
+        if (hi < 0.015) {
+          flat[i] ??= { z0: z, n: 0 };
+          flat[i].z1 = z;
+          flat[i].n++;
+        } else if (flat[i]) {
+          if (flat[i].n > 1) flats.push(Math.abs(flat[i].z1 - flat[i].z0));
+          flat[i] = null;
+        }
+      });
+    }
+    md.dispose();
+    expect(flats.length).toBeGreaterThan(6);
+    expect(Math.max(...flats)).toBeLessThan(0.02);
   });
 });

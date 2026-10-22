@@ -69,8 +69,9 @@ export const REQUESTS = {
   spa: { rank: 0, species: ['dog', 'cat', 'rabbit'], steps: ['bath', 'dry', 'knots', 'nails', 'finish'], price: 55 },
   lion: { rank: 1, species: ['dog', 'cat'], steps: ['bath', 'dry', 'cut'], style: 'lion', price: 60 },
   poodle: { rank: 1, species: ['dog'], breeds: ['caniche', 'labradoodle', 'spitz_nain'], steps: ['bath', 'dry', 'cut', 'finish'], style: 'caniche', price: 70 },
-  // (les boucles du lagotto feutrent vite : démêlage avant la coupe)
-  lagotto: { rank: 1, species: ['dog'], breeds: ['lagotto'], steps: ['bath', 'dry', 'knots', 'cut'], style: 'lagotto', price: 65 },
+  // (les boucles du lagotto feutrent vite : démêlage avant la coupe ; demande d'une seule race, donc rare — weight —,
+  // sinon un chien client sur quatre était un lagotto)
+  lagotto: { rank: 1, species: ['dog'], breeds: ['lagotto'], steps: ['bath', 'dry', 'knots', 'cut'], style: 'lagotto', price: 65, weight: 0.15 },
   heart: { rank: 1, species: ['dog', 'cat', 'rabbit'], steps: ['brush', 'cut', 'finish'], style: 'coeur', price: 55 },
   horseMane: { rank: 1, species: ['horse'], steps: ['knots', 'brush', 'bath', 'dry'], price: 70 },
   horseClip: { rank: 1, species: ['horse'], steps: ['bath', 'dry', 'cut'], style: 'tonte', price: 90 },
@@ -203,10 +204,19 @@ export function newClient(profile, opts = {}) {
   const allowed = requestsFor(profile).filter((id) => REQUESTS[id].species.some(isOffered));
   let requestId = opts.requestId && REQUESTS[opts.requestId] ? opts.requestId : null;
   if (!requestId) {
-    // Les demandes de son rang sont un peu plus fréquentes que celles des rangs précédents.
+    // Les demandes de son rang sont un peu plus fréquentes que celles des rangs précédents ; weight : poids propre à
+    // une demande (1 par défaut ; plus petit pour une demande d'une seule race).
     const rank = rankOf(profile);
-    const weighted = allowed.flatMap((id) => (REQUESTS[id].rank === rank ? [id, id] : [id]));
-    requestId = pick(weighted, rng);
+    const w = allowed.map((id) => (REQUESTS[id].weight ?? 1) * (REQUESTS[id].rank === rank ? 2 : 1));
+    let r = rng() * w.reduce((a, b) => a + b, 0);
+    requestId = allowed[allowed.length - 1];
+    for (let i = 0; i < allowed.length; i++) {
+      if (r < w[i]) {
+        requestId = allowed[i];
+        break;
+      }
+      r -= w[i];
+    }
   }
   const req = REQUESTS[requestId];
   const offered = req.species.filter(isOffered);

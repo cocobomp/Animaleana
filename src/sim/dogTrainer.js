@@ -15,7 +15,7 @@
 import { createAnimal, namesInUse } from './animal.js';
 import { dailyCareScore, VISITOR_WAIT_HOURS } from './clients.js';
 import { DAYS_PER_YEAR } from './time.js';
-import { anyAvailable } from './species.js'; // espèces proposées (coaching du troupeau)
+import { anyAvailable, SPECIES } from './species.js'; // espèces proposées (coaching du troupeau), races des chiens clients
 import { earn } from './profile.js';
 import { pick, randRange } from './rng.js';
 import {
@@ -135,8 +135,11 @@ export function makeClientRequest(profile, { day = 1, rng = Math.random, problem
     const other = pick(pool.filter((p) => p !== main), rng);
     problems[other] = Math.round(randRange(50, 75, rng));
   }
-  // Un chien adulte (1,5 à 7 ans ; une année de jeu = DAYS_PER_YEAR jours).
-  const dog = createAnimal({ species: 'dog', location: profile.place, day, rng, ageDays: Math.round(randRange(1.5 * DAYS_PER_YEAR, 7 * DAYS_PER_YEAR, rng)), avoidNames: namesInUse(profile) });
+  // Un chien adulte (1,5 à 7 ans ; une année de jeu = DAYS_PER_YEAR jours), d'une race qu'on trouve par ici (celles de
+  // l'animalerie de la maison, pas trop rares) — sans race, c'était toujours un labrador.
+  const breeds = SPECIES.dog.breeds.filter((b) => (b.origin === null || b.homeShop) && b.rarity <= 2);
+  const breed = pick(breeds.length ? breeds : SPECIES.dog.breeds, rng).id;
+  const dog = createAnimal({ species: 'dog', breed, location: profile.place, day, rng, ageDays: Math.round(randRange(1.5 * DAYS_PER_YEAR, 7 * DAYS_PER_YEAR, rng)), avoidNames: namesInUse(profile) });
   // Un chien pas encore éduqué : peu d'obéissance, peu de tours ; il vient avec SON collier et SA laisse
   // (own : ce n'est pas le matériel de ta sellerie, src/sim/gear.js ne le compte pas).
   dog.skills.obedience = Math.round(randRange(5, 20, rng));

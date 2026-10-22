@@ -10,6 +10,8 @@ import { SPECIES, getBreed } from '../src/sim/species.js';
 import { resolveLook } from '../src/sim/animal.js';
 import { breedsFor } from '../src/sim/adoption.js';
 import { STYLES, REQUESTS, newClient, stylesFor, addCareerXp } from '../src/sim/groomer.js';
+import { makeClientRequest } from '../src/sim/dogTrainer.js';
+import { seeded } from '../src/sim/rng.js';
 import { createProfile } from '../src/sim/profile.js';
 import { xpForLevel } from '../src/sim/progress.js';
 import { t } from '../src/i18n.js';
@@ -262,4 +264,46 @@ describe('salon de toilettage', () => {
     }
     expect(t('grm_req_lagotto', { name: 'Truffe' })).toContain('Truffe');
   });
+
+  it('la demande « lagotto » reste rare : moins de 8 % de lagottos parmi les chiens clients, au rang confirmé et expert', () => {
+    // (demande d'une seule race, de rang 1 : comptée deux fois au rang confirmé, elle amenait un chien client sur quatre)
+    expect(REQUESTS.lagotto.weight).toBeLessThan(0.5);
+    for (const xp of [300, 3000]) {
+      const p = createProfile('Lou', 'manage');
+      p.xp = xpForLevel(8);
+      addCareerXp(p, xp);
+      let dogs = 0;
+      let lagotto = 0;
+      for (let s = 0; s < 1200; s++) {
+        const c = newClient(p, { rng: seeded('c' + s), day: 3 });
+        if (c.animal.species !== 'dog') continue;
+        dogs++;
+        if (c.animal.breed === 'lagotto') lagotto++;
+      }
+      expect(dogs, `xp ${xp}`).toBeGreaterThan(300);
+      expect(lagotto / dogs, `xp ${xp}`).toBeLessThan(0.08);
+      // (il en vient quand même : demandes de coupe et clients ordinaires)
+      expect(lagotto, `xp ${xp}`).toBeGreaterThan(0);
+    }
+  }, 60000);
+});
+
+describe('éducateur canin', () => {
+  it('les chiens des clients sont de races variées de la maison, toller et lagotto compris (pas toujours un labrador)', () => {
+    const p = createProfile('Lou', 'manage');
+    const count = {};
+    for (let s = 0; s < 600; s++) {
+      const b = makeClientRequest(p, { day: 3, rng: seeded('e' + s) }).dog.breed;
+      count[b] = (count[b] ?? 0) + 1;
+    }
+    expect(Object.keys(count).length).toBeGreaterThan(15);
+    expect(count.toller).toBeGreaterThan(0);
+    expect(count.lagotto).toBeGreaterThan(0);
+    expect(count.labrador ?? 0).toBeLessThan(600 * 0.15);
+    // (races de la maison seulement : pas d'élevage du voyage)
+    for (const b of Object.keys(count)) {
+      const br = getBreed('dog', b);
+      expect(br.origin === null || br.homeShop, b).toBeTruthy();
+    }
+  }, 60000);
 });

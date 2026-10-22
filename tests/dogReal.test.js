@@ -39,8 +39,11 @@ function lowest(md, { noTail = false, step = 2 } = {}) {
   const si = m.geometry.attributes.skinIndex;
   const sw = m.geometry.attributes.skinWeight;
   const tail = new Set(md.tailBones.map((b) => md.bones.indexOf(b)));
+  // (mèches de la robe soyeuse : le shader les fait pendre et les pose sur le sol, voir dogCoat.js — pas la peau)
+  const hang = m.geometry.attributes.cmpPom;
   let lo = Infinity;
   for (let i = 0; i < m.geometry.attributes.position.count; i += step) {
+    if (hang && hang.getX(i) < 0) continue;
     if (noTail) {
       let wt = 0;
       for (let k = 0; k < 4; k++) if (tail.has(si.getComponent(i, k))) wt += sw.getComponent(i, k);

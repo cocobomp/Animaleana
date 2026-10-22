@@ -206,6 +206,34 @@ describe('assis et couché des petits chiens', () => {
   });
 });
 
+describe('yorkshire', () => {
+  it('robe soyeuse : une jupe de mèches des flancs presque jusqu\'au sol et une barbe, qui pendent (pas chez les autres races du jack)', async () => {
+    const { SILK_SIDE, SILK_BEARD } = await import('../src/game/models/dogParts.js');
+    const { md, s } = dog('yorkshire');
+    const g = md.coatMesh.geometry;
+    const hang = g.attributes.cmpPom;
+    expect(hang).toBeTruthy();
+    let n = 0;
+    for (let i = 0; i < hang.count; i++) if (hang.getX(i) < 0) n++;
+    // (six rangs de trois sommets par mèche)
+    expect(n).toBe((2 * SILK_SIDE + SILK_BEARD) * 18);
+    // debout : le bout des mèches de la jupe à moins de 4 cm du sol (taille réelle), au-dessous du coude
+    for (let i = 0; i < 60; i++) md.anim.update(1 / 60, st({ size: s }));
+    md.root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+    const v = new THREE.Vector3();
+    let low = Infinity;
+    for (let i = 0; i < hang.count; i++) if (hang.getX(i) < 0) low = Math.min(low, md.coatMesh.getVertexPosition(i, v).applyMatrix4(inv).y);
+    expect(low * s * 100).toBeLessThan(4);
+    expect(low).toBeGreaterThan(0);
+    md.dispose();
+    // (les autres races du jack : pas de mèches qui pendent)
+    const jack = dog('jack_russell');
+    expect(jack.md.coatMesh.geometry.attributes.cmpPom).toBeFalsy();
+    jack.md.dispose();
+  });
+});
+
 describe('queues qui frétillent', () => {
   // Bout de la queue dans le repère du bassin, chien content qui frétille : plus grand écart au point moyen rapporté à la
   // longueur de la queue (entre la base et le dernier os).

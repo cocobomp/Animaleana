@@ -601,8 +601,9 @@ export function buildPompons(base, D, B) {
       if (P[i * 3 + 1] > top.y) top = V(mid, P[i * 3 + 1], P[i * 3 + 2]);
     }
     const r = (only ? 0.034 * B.topknot : 0.046) * hs;
-    // (yorkshire : une mèche relevée — étroite, haute, un peu penchée vers l'avant —, pas une boule posée sur le crâne)
-    balls.push({ c: top.clone().add(V(0, r * (only ? 0.9 : 0.35), r * (only ? 0.35 : 0.15))), r, sc: only ? V(0.5, 1.55, 0.62) : V(1.05, 0.85, 1.1), bone: I('head'), part: [0, 0, 1, 0], tuft: only });
+    // (yorkshire : une petite mèche nouée sur le crâne — plus basse et plus large qu'avant : haute et étroite, elle se
+    // dressait comme une corne —, pas une boule posée sur le crâne)
+    balls.push({ c: top.clone().add(V(0, r * (only ? 0.55 : 0.35), r * (only ? 0.25 : 0.15))), r, sc: only ? V(0.68, 1.05, 0.78) : V(1.05, 0.85, 1.1), bone: I('head'), part: [0, 0, 1, 0], tuft: only });
   }
   // bracelets : au bas des pattes, au-dessus du pied
   if (!only) for (const [up, low, front] of [['metacarpusL', 'toesL', 1], ['metacarpusR', 'toesR', 1], ['metatarsusL', 'htoesL', 0], ['metatarsusR', 'htoesR', 0]]) {
@@ -680,6 +681,9 @@ export function buildPompons(base, D, B) {
       }
     }
   });
+  // (mèches : hauteur jusqu'à leur accroche, négative dans cmpPom — le shader les fait pendre, voir dogCoat.js)
+  const hang = only ? new Array(pos.length / 3).fill(0) : null;
+  if (only) silkyStrands(base, D, B, { pos, rest, uv, si, sw, part, index, hang });
   const count = pos.length / 3;
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -704,8 +708,146 @@ export function buildPompons(base, D, B) {
     count,
     pos: Float32Array.from(pos), nrm: Float32Array.from(nrm), uv: Float32Array.from(uv), rest: Float32Array.from(rest),
     si: Uint16Array.from(si), sw: Float32Array.from(sw), part: Float32Array.from(part), low: new Float32Array(count).fill(low0),
-    pom: only ? null : Float32Array.from(pom), index: Uint32Array.from(index),
+    pom: only ? (hang.some((h) => h < 0) ? Float32Array.from(hang) : null) : Float32Array.from(pom), index: Uint32Array.from(index),
   };
+}
+
+/** Nombre de mèches de la robe soyeuse (voir silkyStrands) : par côté du tronc, et de la barbe. */
+export const SILK_SIDE = 22;
+export const SILK_BEARD = 12;
+const SILK_ROWS = 6;
+
+/**
+ * Robe soyeuse du yorkshire (pièces du modèle du jack, avec son toupet) : une jupe de longues mèches qui tombent de
+ * chaque flanc presque jusqu'au sol (la raie du dos au-dessus), et une barbe de mèches sous le museau. Chaque mèche est
+ * un ruban en toit (trois sommets de large, bord au vent vers l'extérieur) accroché à un sommet de la peau : elle en
+ * prend les poids (elle suit le tronc, les épaules et les hanches), sa couleur (repos et grain : celle du flanc, qui
+ * glisse vers celle du ventre au bout des mèches). Les sommets d'accroche sont choisis sur le modèle d'origine (même
+ * disposition pour toutes les races du modèle, voir partLayout), les mèches posées sur la peau de la race (D).
+ * (Sans elles, un poil ras, une silhouette de terrier australien.)
+ */
+function silkyStrands(base, D, B, out) {
+  const coat = base.prims.coat;
+  const n = coat.count;
+  const R = coat.pos;
+  const P = D.pos;
+  const part = base.part;
+  const L = base.land;
+  const mid = L.midX;
+  const hs = B.head ?? 1;
+  // Sommet d'accroche le plus proche d'une cible sur le modèle d'origine, parmi ceux qui conviennent.
+  const nearest = (ok, tx, ty, tz) => {
+    let best = -1;
+    let bd = Infinity;
+    for (let i = 0; i < n; i++) {
+      if (!ok(i)) continue;
+      const d = (R[i * 3] - tx) ** 2 + (R[i * 3 + 1] - ty) ** 2 + (R[i * 3 + 2] - tz) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    }
+    return Math.max(0, best);
+  };
+  const trunk = (i) => part[i * 4] < 0.05 && part[i * 4 + 1] < 0.1 && part[i * 4 + 2] < 0.1 && part[i * 4 + 3] < 0.3;
+  const headOk = (i) => part[i * 4] < 0.05 && base.W.head[i] > 0.8;
+  const noise = (k) => {
+    const s = Math.sin(k * 127.1 + 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  // (poids d'une mèche du flanc : ceux du sommet d'accroche sans les membres — liée aussi aux épaules et aux cuisses,
+  // elle se cassait au pas avec la patte)
+  const spine = base.index.get('spine2') ?? base.index.get('root') ?? 0;
+  const weights = (ai, trunkOnly) => {
+    let list = [];
+    for (let q = 0; q < 4; q++) {
+      const b = coat.si[ai * 4 + q];
+      const w = coat.sw[ai * 4 + q];
+      if (w > 0 && !(trunkOnly && base.boneW[b].leg >= 0)) list.push([b, w]);
+    }
+    if (!list.length) list = [[spine, 1]];
+    const tot = list.reduce((a, x) => a + x[1], 0);
+    return [0, 1, 2, 3].map((q) => (list[q] ? [list[q][0], list[q][1] / tot] : [0, 0]));
+  };
+  // (mèche : de la peau P0 jusqu'au point bas, un ruban de largeur w qui s'effile en pointe, écarté vers l'extérieur ox
+  // du côté s, qui glisse de oz le long du corps ; faces tournées vers l'extérieur ; couleur du repos rTop au repos
+  // rLow vers le bout)
+  const strand = (ai, P0, bottom, w, ox, oz, s, rTop, rLow, trunkOnly) => {
+    const start = out.pos.length / 3;
+    const wts = weights(ai, trunkOnly);
+    for (let r = 0; r < SILK_ROWS; r++) {
+      const t = r / (SILK_ROWS - 1);
+      const y = P0.y + (bottom - P0.y) * t;
+      const flare = ox * (0.35 * t + 0.65 * t * t);
+      for (let c = -1; c <= 1; c++) {
+        const wz = (w / 2) * (1 - 0.6 * t) * c;
+        out.pos.push(P0.x + s * (flare + (c === 0 ? 0.003 * hs : 0)), y, P0.z + oz * t + wz);
+        out.hang.push(-(P0.y - y) - 1e-4);
+        const rp = rTop.clone().lerp(rLow, smooth(0.55, 1, t));
+        out.rest.push(rp.x, rp.y, rp.z);
+        out.uv.push(coat.uv[ai * 2] + c * 0.004, coat.uv[ai * 2 + 1] + t * 0.01);
+        for (const [b, wq] of wts) {
+          out.si.push(b);
+          out.sw.push(wq);
+        }
+        out.part.push(0, 0, 0, 0);
+      }
+    }
+    for (let r = 0; r < SILK_ROWS - 1; r++) {
+      for (let c = 0; c < 2; c++) {
+        const a = start + r * 3 + c;
+        const b = a + 1;
+        const d = a + 3;
+        const e = d + 1;
+        if (s > 0) out.index.push(a, b, d, b, e, d);
+        else out.index.push(a, d, b, b, d, e);
+      }
+    }
+  };
+  // Jupe : de derrière le coude à la hanche, accrochée au haut du flanc (sous la raie du dos), en deux rangs qui se
+  // chevauchent (un sur deux un peu plus haut et plus écarté).
+  const z0 = L.shZ - 0.015;
+  const z1 = L.hipZ + 0.005;
+  const H0 = L.topY - L.bellyY;
+  const yBlue = L.bellyY + 0.82 * H0;
+  const yLow = L.bellyY + 0.05 * H0;
+  const fur = Math.max(0.006, B.fur ?? 0);
+  for (const s of [1, -1]) {
+    for (let j = 0; j < SILK_SIDE; j++) {
+      const u = j / (SILK_SIDE - 1);
+      const tz = z0 + (z1 - z0) * u;
+      const odd = j % 2;
+      const ai = nearest((i) => trunk(i) && s * (R[i * 3] - mid) > L.halfW * 0.5, mid + s * L.halfW, L.bellyY + (odd ? 0.8 : 0.68) * H0, tz);
+      // (le haut de la mèche rentré d'un centimètre dans le poil : pas de bord net à l'accroche)
+      const P0 = V(P[ai * 3] - s * 0.01 * hs, P[ai * 3 + 1], P[ai * 3 + 2]);
+      const k = (s > 0 ? 0 : 100) + j;
+      // (bout des mèches : à 1,5 ou 3 cm du sol, inégal ; jamais plus haut que la mi-hauteur de la mèche)
+      const bottom = Math.min(P0.y * 0.5, (0.016 + 0.018 * noise(k)) * hs);
+      const w = ((z0 - z1) / (SILK_SIDE - 1)) * 2.4;
+      const ox = (0.006 + fur * 0.25) * (odd ? 1.25 : 0.9) * (0.85 + 0.3 * noise(k + 50));
+      const rx = R[ai * 3];
+      const rz = R[ai * 3 + 2];
+      strand(ai, P0, bottom, w, ox, -0.006 * u + 0.004 * (noise(k + 70) - 0.5), s, V(rx, yBlue, rz), V(rx, yLow, rz), true);
+    }
+  }
+  // Barbe et moustache : le long de la lèvre, de la truffe à la joue, des mèches qui tombent sous le menton.
+  {
+    const nose = L.nose;
+    const half = SILK_BEARD / 2;
+    for (let j = 0; j < SILK_BEARD; j++) {
+      const s = j % 2 ? -1 : 1;
+      const q = Math.floor(j / 2) / Math.max(1, half - 1);
+      const tx = mid + s * (0.01 + 0.02 * q);
+      const ty = nose.y - 0.022 - 0.012 * q;
+      const tz = nose.z - 0.012 - 0.045 * q;
+      const ai = nearest((i) => headOk(i) && s * (R[i * 3] - mid) > 0.003 && R[i * 3 + 2] < nose.z - 0.004, tx, ty, tz);
+      const P0 = V(P[ai * 3], P[ai * 3 + 1], P[ai * 3 + 2]);
+      const k = 300 + j;
+      const len = (0.036 + 0.016 * noise(k)) * hs;
+      const r0 = V(R[ai * 3], R[ai * 3 + 1], R[ai * 3 + 2]);
+      strand(ai, P0, P0.y - len, 0.05 * hs, 0.012 * hs, -0.01 * hs * q, s, r0, r0.clone().add(V(0, -0.02, 0)), false);
+    }
+  }
 }
 
 /** Pièces modelées mises bout à bout (mêmes attributs ; pom à 0 pour celles qui n'en ont pas). */

@@ -2514,6 +2514,13 @@ class RealCatAnim {
       if (lowSole(1, t).y < f.y) f.copy(t);
       return f;
     };
+    // Pieds avant en l'air (postérieurs longs du siamois et de l'abyssin qui portent la croupe, antérieurs courts du
+    // persan) : chaque patte avant descend d'abord vers le sol, tendue ou ramenée sous le poitrail à l'épaule et au
+    // coude (au plus 0,3 rad) ; le corps ne bascule que pour le reste. Basculé de toute la hauteur, le dos assis
+    // tombait à 24° (siamois), 28° (abyssin), 26° (persan) contre 34° pour l'européen : un chat accroupi, pas assis.
+    lowRest();
+    const rest = o.y;
+    for (let l = 0; l < 2; l++) this.reachSit(md.legs[l], rest);
     let total = 0;
     for (let pass = 0; pass < 4; pass++) {
       lowFront();
@@ -2529,6 +2536,51 @@ class RealCatAnim {
       const m = Math.min(lowFront().y, lowRest().y);
       md.body.position.y -= m - fl;
       md.root.updateMatrixWorld(true);
+    }
+  }
+
+  /**
+   * Patte avant d'un chat assis amenée vers la hauteur y (repère du chat) : petit tour à l'épaule et au coude, de norme
+   * minimale pour descendre la sole la plus basse (le pied avance ou recule un peu : la patte se redresse sous l'épaule),
+   * borné à lim rad chacun. Seulement vers le bas : un pied sous le sol est laissé à la bascule du corps. (Replier de
+   * même les postérieurs longs pour poser la croupe ne tenait pas : la peau de la cuisse suit la patte, et les quatre
+   * pieds finissaient en l'air.)
+   */
+  reachSit(leg, y, lim = 0.3) {
+    if (!leg?.pivot || !leg.knee) return;
+    const l = leg.index;
+    const low = () => {
+      let s = Infinity;
+      for (let k = 0; k < this.solePts[l].length; k++) s = Math.min(s, this.solePt(l, k, _v).y);
+      return s;
+    };
+    const e = 0.02;
+    let A = 0;
+    let B = 0;
+    for (let it = 0; it < 3; it++) {
+      const s0 = low();
+      const dy = y - s0;
+      if (!(dy < -0.001)) break;
+      this.turn(leg.pivot, AX, e);
+      leg.pivot.updateMatrixWorld(true);
+      const j1 = (low() - s0) / e;
+      this.turn(leg.pivot, AX, -e);
+      this.turn(leg.knee, AX, e);
+      leg.pivot.updateMatrixWorld(true);
+      const j2 = (low() - s0) / e;
+      this.turn(leg.knee, AX, -e);
+      const n2 = j1 * j1 + j2 * j2;
+      if (!(n2 > 1e-6)) {
+        leg.pivot.updateMatrixWorld(true);
+        break;
+      }
+      const a = clamp((j1 * dy) / n2, -lim - A, lim - A);
+      const b = clamp((j2 * dy) / n2, -lim - B, lim - B);
+      A += a;
+      B += b;
+      this.turn(leg.pivot, AX, a);
+      this.turn(leg.knee, AX, b);
+      leg.pivot.updateMatrixWorld(true);
     }
   }
 

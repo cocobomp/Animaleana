@@ -206,3 +206,39 @@ describe('queue en pompon du bobtail', () => {
     md.dispose();
   });
 });
+
+describe('assis droit', () => {
+  // Pieds avant en l'air (postérieurs longs du siamois et de l'abyssin, antérieurs courts du persan) : le corps basculait
+  // de toute la hauteur et le dos tombait à 24° (siamois), 28° (abyssin), 26° (persan), 15,5° (chaton siamois) contre 34°
+  // pour l'européen — un chat accroupi. Les pattes avant descendent d'abord vers le sol, redressées sous l'épaule.
+  const sit = (b, stage) => {
+    const md = cat(b, stage);
+    md.staticPose('stand');
+    for (let f = 0; f < 420; f++) md.anim.update(1 / 60, { v: 0, moving: false, posture: 'sit' });
+    md.root.updateMatrixWorld(true);
+    const P = md.bone('pelvis').getWorldPosition(V());
+    const C = md.bone('chest').getWorldPosition(V());
+    const back = (Math.atan2(C.y - P.y, Math.hypot(C.x - P.x, C.z - P.z)) * 180) / Math.PI;
+    // (plus bas de la peau des soles avant, repère du monde : le chat est à l'origine)
+    const m = md.coatMesh;
+    const soles = md.anim.S.measure.soles;
+    const front = [0, 1].map((l) => {
+      let lo = Infinity;
+      for (const i of soles[l]) lo = Math.min(lo, m.getVertexPosition(i, _v).applyMatrix4(m.matrixWorld).y);
+      return lo;
+    });
+    md.dispose();
+    return { back, front };
+  };
+  it.each([
+    ['siamois', 'adult', 29], ['abyssin', 'adult', 32], ['persan', 'adult', 27.5], ['europeen', 'adult', 33],
+    ['siamois', 'baby', 25], ['abyssin', 'baby', 30], ['maine_coon', 'baby', 25],
+  ])('%s (%s) : dos assis à plus de %s°, pieds avant posés', (b, stage, min) => {
+    const r = sit(b, stage);
+    expect(r.back).toBeGreaterThan(min);
+    for (const y of r.front) {
+      expect(y).toBeLessThan(0.003);
+      expect(y).toBeGreaterThan(-0.004);
+    }
+  });
+});

@@ -242,3 +242,26 @@ describe('assis droit', () => {
     }
   });
 });
+
+describe('pinceaux et poils d\'oreille', () => {
+  // Cartes qui prenaient la texture à l'envers : leur bout tombait sur les racines serrées et opaques des brins, coupées
+  // net — des étiquettes grises à bord droit dans les oreilles des chatons maine coon et norvégien.
+  it.each([['maine_coon', 'baby'], ['norvegien', 'baby'], ['maine_coon', 'adult']])('%s (%s) : racine de chaque carte en haut de la texture (v = 1), bout en bas (v = 0), poils d\'oreille étroits', (b, stage) => {
+    const md = cat(b, stage);
+    const g = md.tuftMesh.geometry;
+    const uv = g.attributes.uv;
+    const p = g.attributes.position;
+    expect(uv.count % 4).toBe(0);
+    for (let q = 0; q < uv.count; q += 4) {
+      expect(uv.getY(q)).toBe(1);
+      expect(uv.getY(q + 1)).toBe(1);
+      expect(uv.getY(q + 2)).toBe(0);
+      expect(uv.getY(q + 3)).toBe(0);
+      // (largeur de la carte au plus 0,6 fois sa longueur)
+      const w = V().fromBufferAttribute(p, q).distanceTo(V().fromBufferAttribute(p, q + 1));
+      const h = V().fromBufferAttribute(p, q).distanceTo(V().fromBufferAttribute(p, q + 3));
+      expect(w).toBeLessThan(0.6 * h);
+    }
+    md.dispose();
+  });
+});

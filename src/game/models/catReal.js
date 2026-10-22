@@ -1099,13 +1099,16 @@ function earTuftGeometry(base, D, B) {
   const sw = [];
   const idx = [];
   const col = [];
+  // (texture des pinceaux, tuftTexture : quelques brins tirés du haut de l'image, v = 1, vers le bas ; la racine de la
+  // carte prend le haut, son bout le bas. Sur la texture serrée des poils génériques, et dans l'autre sens, le bout de la
+  // carte tombait sur les racines opaques des brins, coupées net : une étiquette grise à bord droit dans l'oreille.)
   const quad = (a, up, side, w, h, bone, c) => {
     const s = pos.length / 3;
     const p0 = a.clone().addScaledVector(side, -w / 2);
     const p1 = a.clone().addScaledVector(side, w / 2);
     const p2 = p1.clone().addScaledVector(up, h);
     const p3 = p0.clone().addScaledVector(up, h);
-    for (const [p, u, v] of [[p0, 0, 0], [p1, 1, 0], [p2, 1, 1], [p3, 0, 1]]) {
+    for (const [p, u, v] of [[p0, 0, 1], [p1, 1, 1], [p2, 1, 0], [p3, 0, 0]]) {
       pos.push(p.x, p.y, p.z);
       uv.push(u, v);
       si.push(bone, 0, 0, 0);
@@ -1129,7 +1132,9 @@ function earTuftGeometry(base, D, B) {
       for (const k of [-1, 0, 1]) {
         const up = ax.clone().add(V(sd * 0.25 * k + sd * 0.1, 0.35, -0.1)).normalize();
         const side = V(1, 0, 0).cross(up).normalize().add(V(0, 0, k * 0.4)).normalize();
-        quad(tip.clone().addScaledVector(ax, -elen * 0.12), up, side, elen * 0.16, elen * (0.32 + 0.1 * (1 - Math.abs(k))) * B.tufts, b2 >= 0 ? b2 : b1, [0, 0, 0]);
+        // (étroites, au plus la moitié de leur longueur : les pinceaux courts du chaton, larges, faisaient des carrés)
+        const h = elen * (0.32 + 0.1 * (1 - Math.abs(k))) * B.tufts;
+        quad(tip.clone().addScaledVector(ax, -elen * 0.12), up, side, Math.min(elen * 0.16, h * 0.5), h, b2 >= 0 ? b2 : b1, [0, 0, 0]);
       }
     }
     if (B.furnish > 0.05) {
@@ -1137,7 +1142,10 @@ function earTuftGeometry(base, D, B) {
       for (const k of [-0.5, 0.5]) {
         const a = bp.clone().addScaledVector(ax, elen * 0.15).add(V(sd * k * elen * 0.12, 0, elen * 0.06));
         const up = ax.clone().add(V(-sd * 0.15 * k, 0, 0.35)).normalize();
-        quad(a, up, V(1, 0, 0), elen * 0.22, elen * 0.5 * B.furnish, b1, [1, 1, 1]);
+        // (étroites, au plus la moitié de leur longueur : chez le chaton, aux poils courts, la carte large se lisait en
+        // étiquette)
+        const h = elen * 0.5 * B.furnish;
+        quad(a, up, V(1, 0, 0), Math.min(elen * 0.15, h * 0.5), h, b1, [1, 1, 1]);
       }
     }
   }
@@ -1152,6 +1160,57 @@ function earTuftGeometry(base, D, B) {
   g.computeBoundingSphere();
   g.userData.shared = true;
   return g;
+}
+
+let tuftTex = null;
+/**
+ * Texture des pinceaux et des poils d'oreille : neuf brins effilés et écartés, partis du haut de l'image (racine) et
+ * arrêtés à des longueurs inégales, opacité estompée vers le bout (canal alpha), ton des brins mêlé (canal rouge).
+ * Null hors d'un navigateur (tests) : la matière prend alors la texture des poils génériques.
+ */
+function tuftTexture() {
+  if (tuftTex || typeof document === 'undefined') return tuftTex;
+  const w = 32;
+  const h = 128;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  if (!ctx?.fillRect) return null;
+  ctx.clearRect(0, 0, w, h);
+  let sd = 5;
+  const r = () => {
+    sd = (sd * 16807) % 2147483647;
+    return sd / 2147483647;
+  };
+  for (let i = 0; i < 9; i++) {
+    const x0 = w * (0.3 + 0.4 * r());
+    const x1 = w * (0.06 + 0.88 * r());
+    const len = h * (0.6 + 0.4 * r());
+    const w0 = 2.2 + r() * 2;
+    const v = Math.round(170 + r() * 85);
+    const g = ctx.createLinearGradient(0, 0, 0, len);
+    g.addColorStop(0, `rgba(${v},${v},${v},1)`);
+    g.addColorStop(0.6, `rgba(${v},${v},${v},0.9)`);
+    g.addColorStop(1, `rgba(${v},${v},${v},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    const N = 8;
+    const pts = [];
+    for (let k = 0; k <= N; k++) {
+      const t = k / N;
+      pts.push([x0 + (x1 - x0) * t * t, len * t, (w0 / 2) * (1 - 0.8 * t)]);
+    }
+    ctx.moveTo(pts[0][0] - pts[0][2], 0);
+    for (const [x, y, hw] of pts) ctx.lineTo(x - hw, y);
+    for (const [x, y, hw] of pts.reverse()) ctx.lineTo(x + hw, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  tuftTex = new THREE.CanvasTexture(c);
+  tuftTex.colorSpace = THREE.SRGBColorSpace;
+  tuftTex.userData.shared = true;
+  return tuftTex;
 }
 
 // ------------------------------------------------------------------ construction
@@ -1252,7 +1311,7 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
   let tuftMesh = null;
   if (S.tuftGeo) {
     const tc = new THREE.Color(plan.pattern === 'points' ? plan.sec : plan.dark ? 0x141010 : new THREE.Color(plan.base).multiplyScalar(0.55).getHex());
-    const tm = new THREE.MeshStandardMaterial({ map: hairTexture(), alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.85, vertexColors: true });
+    const tm = new THREE.MeshStandardMaterial({ map: tuftTexture() ?? hairTexture(), alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.85, vertexColors: true });
     tm.onBeforeCompile = (sh) => {
       sh.uniforms.cTuft = { value: tc };
       sh.uniforms.cFurn = { value: new THREE.Color(0xf0ebe2) };
@@ -1260,7 +1319,7 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
         .replace('#include <common>', '#include <common>\nuniform vec3 cTuft;\nuniform vec3 cFurn;')
         .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(cTuft, cFurn, vColor.r) * (0.7 + 0.3 * diffuseColor.r);');
     };
-    tm.customProgramCacheKey = () => 'cat-tuft-v1';
+    tm.customProgramCacheKey = () => 'cat-tuft-v2';
     tuftMesh = new PetMesh(S.tuftGeo, tm, hb);
     meshes.push(tuftMesh);
   }

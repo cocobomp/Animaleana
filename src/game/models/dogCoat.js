@@ -695,8 +695,12 @@ vec3 cmpCoat(vec3 p, vec4 part) {
   if (cTick > 0.0) {
     float tk = smoothstep(0.74, 0.79, cmpNoise(sp * 115.0) + (cmpNoise(sp * 30.0) - 0.5) * 0.15) * (1.0 - head * 0.5);
     // (bouclettes serrées : mèches marron et blanches mêlées par touffes de la taille des boucles, sur le fond grisé —
-    // le rouan du lagotto ; tirées boucle par boucle, elles faisaient une mosaïque de facettes)
-    if (cCurl.z > 0.0) tk = smoothstep(0.46, 0.62, cmpNoise(sp * 130.0) * 0.75 + cmpNoise(sp * 30.0) * 0.25) * 0.75;
+    // le rouan du lagotto ; tirées boucle par boucle, elles faisaient une mosaïque de facettes ; axes tournés, sinon
+    // le bruit suit la grille et le rouan devient un camouflage en pixels carrés)
+    if (cCurl.z > 0.0) {
+      vec3 rq = CMP_ROT * sp;
+      tk = smoothstep(0.4, 0.64, cmpNoise(rq * 120.0) * 0.7 + cmpNoise(rq * 47.0 + 5.0) * 0.3) * 0.8;
+    }
     c = mix(c, cTickC, cTick * tk);
   }
   // ---- taches du dalmatien : plus petites sur la tête et les pattes, oreilles foncées

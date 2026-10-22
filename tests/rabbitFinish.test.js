@@ -250,3 +250,31 @@ describe('poil long contre le sol', () => {
     md.dispose();
   });
 });
+
+describe('pieds posés au petit galop', () => {
+  // Corps posé sur la foulée de chaque paire : le pied dont la patte du clip est la plus courte restait en l'air (géant des
+  // Flandres : un postérieur à 3,2–3,8 mm du sol, posé 0 à 3 % du temps ; antérieur du jeune géant à 3,8 mm).
+  it.each([['geant_flandres', 'adult', 0.9], ['geant_flandres', 'adult', 1.2], ['geant_flandres', 'young', 0.9], ['geant_flandres', 'baby', 1.2]])('%s (%s) à %s m/s : chaque pied touche le sol au plus bas de sa foulée', (b, stage, v) => {
+    const md = rabbit(b, stage);
+    md.staticPose('crouch');
+    const a = md.anim;
+    const m = md.coatMesh;
+    const p = new THREE.Vector3();
+    const lo = [Infinity, Infinity, Infinity, Infinity];
+    for (let f = 0; f < 360; f++) {
+      a.update(1 / 60, { v, moving: true, posture: 'crouch' });
+      md.root.position.z += v / 60;
+      md.root.updateMatrixWorld(true);
+      if (f < 120) continue;
+      a.S.soles.forEach((ids, l) => {
+        for (const i of ids) lo[l] = Math.min(lo[l], m.getVertexPosition(i, p).applyMatrix4(m.matrixWorld).y);
+      });
+    }
+    expect(a.gait).toBe('lope');
+    for (const y of lo) {
+      expect(y).toBeLessThan(0.0015);
+      expect(y).toBeGreaterThan(-0.002);
+    }
+    md.dispose();
+  });
+});

@@ -2115,7 +2115,7 @@ class RealRabbitAnim {
     let floor = -low;
     let k = 8;
     const gaitOn = st.moving && !air && !st.inPlace && dt > 0 && Number.isFinite(F) && Number.isFinite(H);
-    if (!gaitOn) for (const w of this.win) w.reset();
+    if (!gaitOn) for (const w of [...this.win, ...(this.footWin ?? [])]) w.reset();
     if (gaitOn) {
       // Allures (sautillement, petit galop, course en bonds) : chaque paire de pattes touche le sol au plus bas de sa
       // foulée. Le corps descend vers la paire qui se pose (hauteur la plus basse de cette paire sur la dernière
@@ -2149,6 +2149,7 @@ class RealRabbitAnim {
     }
     if (st.moving && !air && dt > 0 && !st.inPlace) {
       this.footLock();
+      if (!md.lodLevel && this.gait !== 'run') this.reachPlanted(dt, this.cycle());
       let low2 = Infinity;
       for (const pts of this.solePts) {
         for (const inf of pts) {
@@ -2238,6 +2239,60 @@ class RealRabbitAnim {
         ph += dph;
         this.turn(leg.pivot, AX, dth);
         this.turn(leg.pivot, AZ, dph);
+        leg.pivot.updateMatrixWorld(true);
+      }
+    }
+  }
+
+  /**
+   * Pieds tenus (footLock) restés au-dessus du sol : le corps posé sur la foulée de chaque paire laisse en l'air le pied
+   * dont la patte du clip est la plus courte (géant des Flandres au petit galop : un postérieur à 3,5 mm du sol, posé
+   * 0 à 3 % du temps ; antérieur du jeune et du lapereau). Au plus bas de sa foulée seulement (à 1 mm du plus bas de ce
+   * pied sur la dernière foulée : son appui — tendue pendant qu'elle arrive ou repart, elle frottait le sol), la patte
+   * est tendue à l'épaule et au coude (à la hanche et au grasset), de norme minimale, au plus 0,2 rad, jusqu'au sol ;
+   * pleinement jusqu'à 4,5 mm, plus du tout à 8.
+   */
+  reachPlanted(dt, span) {
+    const md = this.model;
+    const e = 0.02;
+    this.footWin ??= md.legs.map(() => new WindowMin());
+    for (let l = 0; l < md.legs.length; l++) {
+      const leg = md.legs[l];
+      const low = () => {
+        let y = Infinity;
+        for (const inf of this.solePts[l]) y = Math.min(y, this.skinY(inf));
+        return y;
+      };
+      const sNow = low();
+      const fMin = this.footWin[l].push(sNow, dt, span);
+      if (!this.plant[l] || !leg.pivot || !leg.knee) continue;
+      const wPhase = 1 - smooth(0.0008, 0.002, sNow - fMin);
+      if (!(wPhase > 0.01)) continue;
+      let A = 0;
+      let B = 0;
+      for (let it = 0; it < 2; it++) {
+        const s0 = it ? low() : sNow;
+        if (!(s0 > 0.0005 && s0 < 0.008)) break;
+        const dy = -s0 * (1 - smooth(0.0045, 0.008, s0)) * wPhase;
+        this.turn(leg.pivot, AX, e);
+        leg.pivot.updateMatrixWorld(true);
+        const j1 = (low() - s0) / e;
+        this.turn(leg.pivot, AX, -e);
+        this.turn(leg.knee, AX, e);
+        leg.pivot.updateMatrixWorld(true);
+        const j2 = (low() - s0) / e;
+        this.turn(leg.knee, AX, -e);
+        const n2 = j1 * j1 + j2 * j2;
+        if (!(n2 > 1e-6)) {
+          leg.pivot.updateMatrixWorld(true);
+          break;
+        }
+        const a = clamp((j1 * dy) / n2, -0.2 - A, 0.2 - A);
+        const b = clamp((j2 * dy) / n2, -0.2 - B, 0.2 - B);
+        A += a;
+        B += b;
+        this.turn(leg.pivot, AX, a);
+        this.turn(leg.knee, AX, b);
         leg.pivot.updateMatrixWorld(true);
       }
     }

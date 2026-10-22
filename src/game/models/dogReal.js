@@ -2192,8 +2192,9 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
       // (pompons modelés de la race : seulement la crinière du devant au shader)
       caniche: B.pompons ? [-0.75 * f, 0.016, 0, 0] : [-0.7 * f, 0.01, 0.028, 0.03],
       // (coupe du lagotto : corps nettement raccourci, boucles égalisées sur le corps et l'encolure, pattes bouclées
-      // gardées, tête ronde bien gonflée — moins marquée, elle ne se voyait presque pas)
-      lagotto: [-1.25 * f, -0.6 * f, 0, 0.85 * f],
+      // un peu raccourcies, tête ronde bien gonflée — moins marquée, elle ne se voyait presque pas ; poitrail et pattes
+      // plus courts aussi : de face, la coupe changeait peu la silhouette)
+      lagotto: [-1.25 * f, -0.95 * f, -0.35 * f, 0.85 * f],
     }[st] ?? [0, 0, 0, 0];
     uniforms.cCut.value.set(...cut);
     uniforms.cPom.value = st === 'caniche' ? 1 : 0;

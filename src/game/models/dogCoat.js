@@ -896,7 +896,8 @@ if (cOn > 0.5 && cCurl.z > 0.0 && cRole > 0.5) {
     cmpCurlZ = cv.x;
     cmpCurlG = cv.yzw;
     cmpCurlFade = fadeB;
-    cmpCurlBump = (1.0 - smoothstep(0.16, 0.36, fw * 25.0)) * (1.0 - 0.75 * vCmpPart.x);
+    // (oreille : relief à moitié — au quart, de près, elle restait lisse à côté des boucles de la tête)
+    cmpCurlBump = (1.0 - smoothstep(0.16, 0.36, fw * 25.0)) * (1.0 - 0.5 * vCmpPart.x);
     // (coupé au salon — tronc raccourci — : relief des boucles égalisé sur le corps aussi)
     cmpCurlBump *= 1.0 - 0.7 * clamp(-cCut.x / 0.02, 0.0, 1.0) * (1.0 - vCmpPart.w) * (1.0 - vCmpPart.z) * (1.0 - vCmpPart.y);
   }

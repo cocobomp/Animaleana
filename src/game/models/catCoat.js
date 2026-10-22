@@ -130,7 +130,9 @@ export function makeCatLandUniforms(L) {
     // demi-largeur du tronc (dessous clair : sous le ventre, pas sur les flancs)
     cBody: { value: new THREE.Vector4(Math.max(0.02, L.halfW ?? 0.05), 0, 0, 0) },
     // iris peint (chaton : yeux noirs dans sa texture) : actif, rayon du globe, demi-angle de l'iris, largeur de la pupille
-    cIris: { value: new THREE.Vector4(L.paintIris ? 1 : 0, L.eyeR ?? 0.008, 0.86, 0.14) },
+    // (iris jusqu'au bord de l'œil ouvert, comme chez le chaton : à 0,86 rad, le globe peint en noir se voyait tout autour
+    // de l'iris — un cercle sombre, épais chez le chaton persan aux yeux grands ouverts)
+    cIris: { value: new THREE.Vector4(L.paintIris ? 1 : 0, L.eyeR ?? 0.008, 1.02, 0.14) },
   };
 }
 

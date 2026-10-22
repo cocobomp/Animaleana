@@ -342,6 +342,16 @@ describe('chaton devon rex', () => {
     kit.dispose();
     ad.dispose();
   });
+
+  // Iris peint du chaton à 0,86 rad : le globe peint en noir se voyait tout autour (cercle sombre du chaton persan).
+  it('chaton : iris peint jusqu\'au bord de l\'œil ouvert (demi-angle d\'au moins 1 rad)', () => {
+    const kit = cat('persan', 'baby');
+    const sh = { uniforms: {}, vertexShader: '#include <common>\n#include <begin_vertex>', fragmentShader: '#include <common>\n#include <color_fragment>' };
+    kit.eyeMesh.material.onBeforeCompile(sh, {});
+    expect(sh.uniforms.cIris.value.x).toBe(1);
+    expect(sh.uniforms.cIris.value.z).toBeGreaterThanOrEqual(1);
+    kit.dispose();
+  });
 });
 
 describe('sous les yeux', () => {

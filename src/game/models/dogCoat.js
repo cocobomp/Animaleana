@@ -601,11 +601,18 @@ vec3 cmpWarp(vec3 q) {
 // Rides du front (carlin) : plis horizontaux au-dessus des yeux, 0 à 1 (creux à 0).
 float cmpWrinkleH(vec3 p, vec4 part) {
   float ax = abs(p.x - cMisc.x);
-  float m = part.z * (1.0 - part.x) * smoothstep(cEye.y + 0.003, cEye.y + 0.012, p.y) * (1.0 - smoothstep(cEye.y + 0.032, cEye.y + 0.048, p.y))
+  // (entre les yeux, la zone descend jusqu'à leur hauteur : la pointe des plis en V y plonge)
+  float lo = cEye.y + 0.004 - 0.012 * (1.0 - smoothstep(0.0, cEye.x * 0.6, ax));
+  float m = part.z * (1.0 - part.x) * smoothstep(lo, lo + 0.008, p.y) * (1.0 - smoothstep(cEye.y + 0.034, cEye.y + 0.05, p.y))
     * (1.0 - smoothstep(cEye.x * 0.9, cEye.x * 1.5, ax)) * smoothstep(cEye.z - 0.06, cEye.z - 0.025, p.z);
-  // (plis larges et doux : à 700 rad/m, des bandes d'aliasing rayaient le front du carlin)
-  float w = 0.5 + 0.5 * sin((p.y - cEye.y) * 390.0 + sin(ax * 70.0) * 1.1);
-  w = w * w * (3.0 - 2.0 * w);
+  // Trois ou quatre plis en V au-dessus de la truffe et entre les yeux (un seul sillon droit avant) : sillons étroits
+  // tous les 1,1 cm, pointe en bas au milieu, bords qui remontent vers les tempes ; bourrelets arrondis entre eux. (Plis
+  // larges et doux : plus fins, des bandes d'aliasing rayaient le front du carlin — ils s'effacent de loin, voir fwC.)
+  float u = (p.y - cEye.y - 0.004) - 0.45 * ax + sin(ax * 90.0) * 0.0015;
+  float d = abs(fract(u / 0.011 + 0.5) - 0.5) * 0.011;
+  float w = 0.4 + 0.6 * smoothstep(0.0008, 0.0042, d);
+  // (pli vertical court entre les yeux, au-dessus de la truffe)
+  w *= 1.0 - 0.6 * (1.0 - smoothstep(0.0012, 0.0035, ax)) * (1.0 - smoothstep(cEye.y + 0.004, cEye.y + 0.022, p.y));
   return mix(1.0, w, m);
 }
 // Liste (0 à 1) : bande au milieu du front, étroite entre les yeux, qui descend sur le chanfrein et s'élargit sur le

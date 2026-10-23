@@ -755,8 +755,8 @@ export function buildPompons(base, D, B) {
 }
 
 /** Nombre de mèches de la robe soyeuse (voir silkyStrands) : par côté du tronc, et de la barbe. */
-export const SILK_SIDE = 22;
-export const SILK_BEARD = 12;
+export const SILK_SIDE = 34;
+export const SILK_BEARD = 20;
 const SILK_ROWS = 6;
 
 /**
@@ -817,15 +817,18 @@ function silkyStrands(base, D, B, out) {
   const strand = (ai, P0, bottom, w, ox, oz, s, rTop, rLow, trunkOnly) => {
     const start = out.pos.length / 3;
     const wts = weights(ai, trunkOnly);
+    // (bout en pointe douce : les bords remontent au dernier rang et la mèche se resserre de moitié — coupée au carré,
+    // la jupe faisait des lanières plates ; effilée à rien, des piques sombres entre lesquelles on voyait les pattes)
+    const rise = (P0.y - bottom) / (SILK_ROWS - 1) * (0.25 + 0.4 * ((ai * 0.618) % 1));
     for (let r = 0; r < SILK_ROWS; r++) {
       const t = r / (SILK_ROWS - 1);
-      const y = P0.y + (bottom - P0.y) * t;
       const flare = ox * (0.35 * t + 0.65 * t * t);
       for (let c = -1; c <= 1; c++) {
-        const wz = (w / 2) * (1 - 0.6 * t) * c;
+        const y = P0.y + (bottom - P0.y) * t + (c === 0 ? 0 : rise * t * t * t);
+        const wz = (w / 2) * (1 - 0.5 * t * t) * c;
         out.pos.push(P0.x + s * (flare + (c === 0 ? 0.003 * hs : 0)), y, P0.z + oz * t + wz);
         out.hang.push(-(P0.y - y) - 1e-4);
-        const rp = rTop.clone().lerp(rLow, smooth(0.55, 1, t));
+        const rp = rTop.clone().lerp(rLow, smooth(0.6, 1, t) * 0.45);
         out.rest.push(rp.x, rp.y, rp.z);
         out.uv.push(coat.uv[ai * 2] + c * 0.004, coat.uv[ai * 2 + 1] + t * 0.01);
         for (const [b, wq] of wts) {
@@ -863,9 +866,9 @@ function silkyStrands(base, D, B, out) {
       // (le haut de la mèche rentré d'un centimètre dans le poil : pas de bord net à l'accroche)
       const P0 = V(P[ai * 3] - s * 0.01 * hs, P[ai * 3 + 1], P[ai * 3 + 2]);
       const k = (s > 0 ? 0 : 100) + j;
-      // (bout des mèches : à 1,5 ou 3 cm du sol, inégal ; jamais plus haut que la mi-hauteur de la mèche)
-      const bottom = Math.min(P0.y * 0.5, (0.016 + 0.018 * noise(k)) * hs);
-      const w = ((z0 - z1) / (SILK_SIDE - 1)) * 2.4;
+      // (bout des mèches : de 1 à 4 cm du sol, inégal ; jamais plus haut que la mi-hauteur de la mèche)
+      const bottom = Math.min(P0.y * 0.5, (0.012 + 0.028 * noise(k)) * hs);
+      const w = ((z0 - z1) / (SILK_SIDE - 1)) * 3.4;
       const ox = (0.006 + fur * 0.25) * (odd ? 1.25 : 0.9) * (0.85 + 0.3 * noise(k + 50));
       const rx = R[ai * 3];
       const rz = R[ai * 3 + 2];
@@ -885,9 +888,10 @@ function silkyStrands(base, D, B, out) {
       const ai = nearest((i) => headOk(i) && s * (R[i * 3] - mid) > 0.003 && R[i * 3 + 2] < nose.z - 0.004, tx, ty, tz);
       const P0 = V(P[ai * 3], P[ai * 3 + 1], P[ai * 3 + 2]);
       const k = 300 + j;
-      const len = (0.036 + 0.016 * noise(k)) * hs;
+      // (mèches de 3 cm de longueurs inégales : larges de 5 cm, elles faisaient deux planchettes sous le museau)
+      const len = (0.028 + 0.026 * noise(k)) * hs;
       const r0 = V(R[ai * 3], R[ai * 3 + 1], R[ai * 3 + 2]);
-      strand(ai, P0, P0.y - len, 0.05 * hs, 0.012 * hs, -0.01 * hs * q, s, r0, r0.clone().add(V(0, -0.02, 0)), false);
+      strand(ai, P0, P0.y - len, (0.026 + 0.01 * noise(k + 9)) * hs, 0.012 * hs, -0.01 * hs * q, s, r0, r0.clone().add(V(0, -0.02, 0)), false);
     }
   }
 }

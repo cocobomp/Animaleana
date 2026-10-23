@@ -141,7 +141,7 @@ function bowMesh(size, color) {
  */
 const BIB_NC = 9;
 const BIB_NR = 7;
-function dogBib(model, ring, rx, ry, lenOf, clear) {
+function dogBib(model, ring, rx, ry, lenOf, clear, spread = 1.0) {
   const C = ring.rest.center;
   const z = ring.rest.axis;
   const x = new THREE.Vector3(1, 0, 0).addScaledVector(z, -z.x).normalize();
@@ -151,7 +151,7 @@ function dogBib(model, ring, rx, ry, lenOf, clear) {
   tip.y -= lenOf(tip.y);
   const pts = [];
   for (let i = 0; i <= BIB_NR; i++) {
-    for (let j = 0; j < BIB_NC; j++) pts.push(at(((j / (BIB_NC - 1)) * 2 - 1) * 1.0).lerp(tip, i / BIB_NR));
+    for (let j = 0; j < BIB_NC; j++) pts.push(at(((j / (BIB_NC - 1)) * 2 - 1) * spread).lerp(tip, i / BIB_NR));
   }
   const plane = pts.map((p) => p.z);
   const skin = model.drapeChest(pts.map((p) => p.clone()), clear);
@@ -290,8 +290,15 @@ export function buildAccessories(model, look, accessories = {}) {
       // (longueur : celle du foulard des autres animaux, au plus 55 % de la hauteur de la gorge au ventre — l'anneau des
       // races à collerette, mesuré sur le poil, est large)
       const fitD = model.dogFit;
-      const bibLen = (thr) => Math.min((rx + ry) * 0.85, 0.55 * Math.max(0.03, thr - (fitD?.bellyY ?? -1)));
-      const bib = model.realDog && model.drapeChest && model.skinGear && ring.rest ? dogBib(model, ring, rx, ry, bibLen, 0.006) : null;
+      // (foulard : plus large et plus long que la bavette du nœud — à ± 57° et 55 %, il ne se voyait presque plus de loin ;
+      // au moins 7 cm à la taille du shiba : chez les races du jack, le bas de l'anneau est presque à hauteur du ventre et
+      // il ne restait qu'un liseré de 2 cm sous le collier)
+      const big = worn.id === 'bandana';
+      const bibLen = (thr) => {
+        const len = Math.min((rx + ry) * (big ? 1.1 : 0.85), (big ? 0.68 : 0.55) * Math.max(0.03, thr - (fitD?.bellyY ?? -1)));
+        return big ? Math.max(0.07, len) : len;
+      };
+      const bib = model.realDog && model.drapeChest && model.skinGear && ring.rest ? dogBib(model, ring, rx, ry, bibLen, 0.006, big ? 1.3 : 1.0) : null;
       if (bib && (worn.id === 'bow' || worn.id === 'bandana')) {
         if (worn.id === 'bow') {
           // (sur la peau, sous la gorge, de face et un peu penché vers le haut ; sous le menton — gorge haute du

@@ -2390,6 +2390,12 @@ function shapeFor(base, B) {
   const n = coat.count;
   const part = new Float32Array(n);
   const info = new Float32Array(n * 3);
+  // Repère de la tête et hauteur relative au coude pour TOUS les sommets (attribut hHL) : le shader y lit la tête et
+  // la hauteur, et non dans hInfo, dont le sens change d'une partie à l'autre. Un triangle à cheval entre la tête et
+  // l'encolure (ganache, gorge) ou une oreille est peint selon la partie de son dernier sommet ; hInfo y mêlait le
+  // repère de la tête et la hauteur du corps (≈ 1,7) : une position fausse, qui passait par l'œil sur un bout de
+  // chaque triangle — le bord foncé des paupières s'y peignait en pointillés le long de la ganache.
+  const hhl = new Float32Array(n * 4);
   const ao = new Float32Array(n);
   const poll = heads[BONE_INDEX.Head];
   const headQ = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), base.headTilt).invert();
@@ -2402,10 +2408,11 @@ function shapeFor(base, B) {
     const name = RIG[b][0];
     P.fromArray(dc.pos, i * 3);
     ao[i] = 0.45 + 0.55 * coat.ao[i];
+    const hv = P.clone().sub(poll).applyQuaternion(headQ).multiplyScalar(1 / headLen);
+    hhl.set([hv.x, hv.y, hv.z, P.y / elbowY], i * 4);
     if (name === 'Head') {
-      const h = P.clone().sub(poll).applyQuaternion(headQ).multiplyScalar(1 / headLen);
       part[i] = PART.head;
-      info.set([h.x, h.y, h.z], i * 3);
+      info.set([hv.x, hv.y, hv.z], i * 3);
     } else if (name === 'EarL' || name === 'EarR') {
       part[i] = PART.ear;
       const e = heads[b];
@@ -2466,6 +2473,7 @@ function shapeFor(base, B) {
       hInfo: new THREE.BufferAttribute(info, 3),
       hAO: new THREE.BufferAttribute(ao, 1),
       hHead: new THREE.BufferAttribute(headW, 1),
+      hHL: new THREE.BufferAttribute(hhl, 4),
     }),
     // (axe du regard par sommet : le reflet reste dans l'ouverture des paupières, eyeMaterial)
     eyeGeo: geo(de, base.prims.eye, base.prims.eye.axis ? { eyeAxis: new THREE.BufferAttribute(base.prims.eye.axis, 3) } : null),

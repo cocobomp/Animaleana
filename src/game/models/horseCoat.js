@@ -76,8 +76,15 @@ hEarIn = 0.0;
   float isHoof = step(5.5, part) * step(part, 6.5);
   float isSkin = step(6.5, part) * step(part, 7.5);
   float isEar = step(7.5, part);
+#ifdef H_REAL
+  // (repère de la tête et hauteur relative au coude justes sur tous les sommets, même ceux d'une autre partie dans un
+  // triangle à cheval entre deux parties : voir hHL dans horseReal.js)
+  float h = isEar > 0.5 ? vHInfo.x : vHHL.w;
+  vec3 hl = vHHL.xyz;
+#else
   float h = vHInfo.x;          // membres : hauteur relative (0 = sol, 1 = coude) ; oreilles : 0 = base, 1 = pointe
   vec3 hl = vHInfo;            // tête : position dans le repère de la tête (÷ longueur de la tête)
+#endif
   float legI = vHInfo.y;
   vec2 hc = vec2(0.0);
 #ifdef H_REAL
@@ -614,6 +621,8 @@ attribute float hAO;
 #ifdef H_REAL
 attribute float hHead;
 varying float vHHead;
+attribute vec4 hHL;
+varying vec4 vHHL;
 #endif
 varying vec3 vHPos;
 varying vec3 vHNrm;
@@ -624,6 +633,7 @@ varying float vHAO;`)
 vHPos = position; vHNrm = normal; vHPart = hPart; vHInfo = hInfo; vHAO = hAO;
 #ifdef H_REAL
 vHHead = hHead;
+vHHL = hHL;
 #endif`);
     sh.fragmentShader = def + sh.fragmentShader
       .replace('#include <common>', `#include <common>
@@ -635,6 +645,7 @@ varying vec3 vHInfo;
 varying float vHAO;
 #ifdef H_REAL
 varying float vHHead;
+varying vec4 vHHL;
 #endif
 float hBare; // peau nue et sabots : pas de reflet satiné du poil
 float hMuz; // bout du nez : poil ras et clairsemé, plus lisse

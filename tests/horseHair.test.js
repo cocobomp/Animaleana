@@ -537,7 +537,8 @@ describe('éclairage des crins', () => {
     expect(hairMaterial(0x0b0a0a, { value: 0 }, undefined, 0x171414).userData.hairDark.value).toBe(0);
     const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
     grey.onBeforeCompile(sh);
-    expect(sh.fragmentShader).toContain('hHairDark * max( 0.6 * hHairFore(), step( vHairK, 0.5 ) * smoothstep( 0.0, 0.03, vHairP.x ) )');
+    // (le toupet à peine : il se détache par ses mèches séparées et son ombre sur le front, voir « toupet en mèches »)
+    expect(sh.fragmentShader).toContain('hHairDark * max( 0.25 * hHairFore(), step( vHairK, 0.5 ) * smoothstep( 0.0, 0.03, vHairP.x ) )');
   });
 
   it('ombre du soleil adoucie sur les crins (qualité haute : plus de plaques d\'ombre nettes d\'une mèche sur l\'autre)', () => {
@@ -602,6 +603,49 @@ describe('toupet en mèche', () => {
       expect(mean(mid), breed).toBeGreaterThan(mean(edge) * 1.25);
       md.dispose();
     }
+  });
+
+  it('en mèches séparées (pas une plaque) : trois ou quatre langues qui se chevauchent en haut et s\'écartent en bas', () => {
+    for (const [breed, nl] of [['arabe', 3], ['selle_francais', 3], ['camargue', 4], ['shetland', 4]]) {
+      const md = horse(breed);
+      md.root.updateMatrixWorld(true);
+      const g = md.hairMesh.geometry.attributes;
+      // (une grille par mèche : sommets du toupet regroupés par racine de colonne, mèche = suite de colonnes)
+      const tips = [];
+      const tops = [];
+      for (let i = 0; i < g.position.count; i++) {
+        if (g.hairRoot.getW(i) !== 9) continue;
+        const p = md.head.worldToLocal(new THREE.Vector3().fromBufferAttribute(g.position, i));
+        if (g.hairG.getX(i) > 0.99) tips.push(p.x);
+        if (g.hairG.getX(i) < 0.01) tops.push(p.x);
+      }
+      // 4 colonnes par mèche
+      expect(tips.length, breed).toBe(nl * 4);
+      // en bas, des trous entre les mèches (le front visible) : plus grand écart entre deux pointes voisines
+      // au moins le double de l'écart moyen dans une mèche
+      tips.sort((a, b) => a - b);
+      const gaps = tips.slice(1).map((x, k) => x - tips[k]);
+      const inLock = [];
+      const between = [];
+      gaps.forEach((d, k) => ((k + 1) % 4 === 0 ? between : inLock).push(d));
+      const mean = (l) => l.reduce((a, b) => a + b, 0) / l.length;
+      expect(Math.min(...between), breed).toBeGreaterThan(2 * mean(inLock));
+      // en haut, elles se chevauchent : les racines couvrent toute la largeur sans trou
+      tops.sort((a, b) => a - b);
+      const topGaps = tops.slice(1).map((x, k) => x - tops[k]);
+      expect(Math.max(...topGaps), breed).toBeLessThan((tops.at(-1) - tops[0]) * 0.2);
+      md.dispose();
+    }
+  });
+
+  it('crins clairs sur une robe claire : l\'ombre du toupet sur le front est plus marquée (pas sur une robe foncée)', () => {
+    const grey = horse('arabe');
+    const bay = horse('selle_francais');
+    const w = (md) => md.coatMesh.material.userData.horseUniforms.hFore.value.w;
+    expect(w(grey)).toBeGreaterThan(1.45);
+    expect(w(bay)).toBeCloseTo(1, 5);
+    grey.dispose();
+    bay.dispose();
   });
 
   it('reflet et éclaircissement des crins foncés réduits sur le toupet (il reste noir)', () => {

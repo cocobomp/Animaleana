@@ -59,6 +59,15 @@ export const COAT_LOOKS = {
 const glf = (x) => Number(x).toFixed(4);
 /** Ombre du toupet sur le front (part de lumière en moins sous lui). */
 export const FORE_SHADE = 0.34;
+/** Ombre du toupet en plus (part de FORE_SHADE) quand des crins clairs sont sur une robe claire. */
+export const FORE_SHADE_LIGHT = 0.6;
+
+/** Crins clairs sur une robe claire (0 à 1) : gris, blanc, crème aux crins clairs. */
+export function lightManeOnLight(look) {
+  const l = (hex) => { const c = new THREE.Color(hex); return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b; };
+  const s = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  return s(0.25, 0.45, l(look.mane ?? 0x1b1410)) * s(0.25, 0.45, l(look.coat ?? 0x7a4528));
+}
 const { dapple: DAP, pinto: PIN, spots: SPOT, dun: DUN, roan: ROAN, blanket: BLANKET } = COAT_LOOKS;
 
 const COAT_FRAGMENT = /* glsl */ `
@@ -553,7 +562,9 @@ export function coatMaterial(look, build, breed = null, real = null) {
     hEye: { value: new THREE.Vector4(...(real?.eye ?? [0, 0, 0, 0])) },
     hNos: { value: new THREE.Vector4(...(real?.nostril ?? [0, 0, 0, 0])) },
     // (toupet : racine et pointe le long du chanfrein, demi-largeur en haut — repère de la tête — et force de son ombre)
-    hFore: { value: new THREE.Vector4(...(real?.fore ?? [0, 0, 0, 0])) },
+    // (crins clairs sur une robe claire : ombre plus marquée — c'est elle qui détache le toupet du front, plutôt que
+    // des crins grisés, qui se lisaient en plaque pâle)
+    hFore: { value: new THREE.Vector4(...(real?.fore ?? [0, 0, 0, 0])).setW((real?.fore?.[3] ?? 0) * (1 + FORE_SHADE_LIGHT * lightManeOnLight(look))) },
     // Gris et appaloosas : peau noire marbrée (de rose chez l'appaloosa) autour des yeux et au bout du nez ;
     // sabots rayés de l'appaloosa.
     hSkinMot: { value: spots ? 1 : tr.grey > 0 ? 0.85 : 0 },

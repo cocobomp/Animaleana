@@ -686,6 +686,20 @@ Finitions 2 (téléphone 390×844 en basse et de près en haute ; planches AVANT
     sur les oreilles, qui gardent `hInfo`). Points du bord des paupières peints à plus de 3 rayons de l'œil (33 races
     et leurs poulains, 10 points par triangle) : 149 → 0 (`tests/horseCheek.test.js`) ;
   - *tirets clairs sous la gorge* : bord des îlots de la carte de relief (voir `bords.mjs`, étape 7).
+- **toupet clair sur robe claire** (gris, Camargue, Boulonnais, Connemara, Welsh gris) : une plaque pâle, grisée et
+  striée sur le front. Le toupet est maintenant fait de `FORE_LOCKS` mèches (3 ; 4 pour un toupet épais), une petite
+  grille de masse par mèche (4 colonnes × 10 points) au lieu d'une seule masse lisse peinte de neuf mèches de la
+  texture sur 8 cm : les mèches se chevauchent en haut (racines entre les oreilles) et se séparent vers le bas en
+  langues effilées (un quart de leur largeur au bout, le front visible entre elles), chacune bombée (`FORE_LOCK_BUMP`
+  8 mm), plus foncée sur ses bords, de longueur propre (plus courtes sur les côtés : la pointe reste au milieu), la
+  mèche du milieu par-dessus ; une ou deux mèches de la texture par mèche (`vSpan` 0,25) ; normales de la tête sur le
+  dessus, à la nuque. Les cartes se rangent sur les mèches (ton et longueur de leur mèche), plus étroites (3 et
+  2,2 cm au lieu de 4 et 3) et à crins deux fois plus larges dans la texture. Crins clairs sur robe claire : le toupet
+  n'est plus grisé que de 25 % de `hHairDark` (au lieu de 60 %, ≈ 5 % au lieu de 13 %), contraste de ses cartes 0,6 au
+  lieu de 0,85, racines à peine assombries ; c'est son ombre sur le front qui le détache (`hFore.w` × 1,6, soit 0,54 au
+  lieu de 0,34 au cœur de l'ombre, `FORE_SHADE_LIGHT`, `lightManeOnLight`). Triangles des crins par cheval (33 races) :
+  4 044 → 4 077 en moyenne, au plus 4 602 → 4 674 (Irish Cob), sous le plafond de 4 700 ; version réduite 1 141 → 1 166
+  (`tests/horseHair.test.js` : mèches séparées en bas et chevauchées en haut, ombre plus marquée sur robe claire).
 
 Ce qu'il coûte, et comment on le garde bas :
 

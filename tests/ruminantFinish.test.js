@@ -417,3 +417,48 @@ describe('mèches couchées : jamais sous le sol (islandais, poil long des chèv
     md.dispose?.();
   });
 });
+
+describe('restes de mesures : se relever en marchant, col noir couché', () => {
+  const skinLow = (md, step = 2) => {
+    md.root.updateMatrixWorld(true);
+    const m = md.mesh;
+    const v = new THREE.Vector3();
+    let lo = Infinity;
+    for (let i = 0; i < m.geometry.attributes.position.count; i += step) {
+      m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld);
+      lo = Math.min(lo, v.y);
+    }
+    return lo;
+  };
+  const st = (o = {}) => ({ v: 0, moving: false, size: 1, posture: 'stand', action: null, ...o });
+
+  // (critique : le taureau Highland qui se relève en repartant au pas passait 4,5 cm sous le sol — à genoux, posé sur
+  // ses seules soles ; mesuré ici 4,7 cm pour le Highland, 5,3 cm pour le Hereford)
+  it.each([['highland', 'm'], ['hereford', 'm']])('taureau %s : se relève en marchant sans passer sous le sol', (breed, sex) => {
+    const md = buildRealCowModel(lookOf('cow', breed, { sex }), breed, GC);
+    const a = md.anim;
+    for (let i = 0; i < 200; i++) a.update(1 / 30, st({ posture: 'lie' }));
+    let lo = Infinity;
+    let rose = false;
+    for (let i = 0; i < 90; i++) {
+      a.update(1 / 30, st({ moving: true, v: 0.9 }));
+      md.root.position.z += 0.9 / 30;
+      if (a.trans?.name === 'get_up') rose = true;
+      if (i % 2 === 0) lo = Math.min(lo, skinLow(md));
+    }
+    expect(rose).toBe(true);
+    expect(lo, `${breed} : ${(lo * 100).toFixed(1)} cm`).toBeGreaterThan(-0.012);
+    md.dispose?.();
+  }, 60000);
+
+  // (critique : col noir couché, peau 1,1 à 1,2 cm au-dessus du sol — relevé du plus long poil qui pend sous le ventre)
+  it.each([['col_noir', 'f'], ['col_noir', 'm'], ['poitevine', 'f']])('%s (%s) couchée : posée sur le sol', (breed, sex) => {
+    const md = buildRealGoatModel(lookOf('goat', breed, { sex }), breed, GG);
+    for (let i = 0; i < 200; i++) md.anim.update(1 / 30, st({ posture: 'lie' }));
+    const lo = skinLow(md, 1);
+    expect(lo).toBeLessThan(0.009);
+    expect(lo).toBeGreaterThan(-0.012);
+    md.dispose?.();
+  }, 60000);
+
+});

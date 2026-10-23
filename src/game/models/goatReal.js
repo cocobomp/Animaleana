@@ -691,8 +691,9 @@ export class RealGoatAnim extends RealSheepAnim {
     this.udder = model.udderFill ?? 0.5;
     this.buttOn = false;
     // (poil long couchée : le shader ne le fait plus pendre qu'à 30 % et les mèches se replient — le corps n'est relevé
-    // que de ce qui dépasse encore sous le ventre, pas de toute la longueur comme la laine du mouton)
-    this.skirt = (model.build.long ?? 0) * 0.12;
+    // que de la longueur MOYENNE du poil qui pend encore sous le ventre, 0,3 × gStyle.y (0,3 × long) ; relevé de son
+    // maximum, 0,12 × long, le col noir couché flottait 1,2 cm au-dessus du sol)
+    this.skirt = (model.build.long ?? 0) * 0.09;
   }
 
   /** Mamelle (échelle de l'os, aplatie contre le ventre couchée) et poil long étalé au sol couché. */

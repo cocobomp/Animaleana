@@ -1626,7 +1626,9 @@ export class RealSheepAnim {
     const sh = this.shorn;
     let target;
     let floor = -low;
-    if (st.moving || air) {
+    // (se relever ou se coucher en marchant — l'entité repart pendant que le clip se joue — : posé comme à l'arrêt, sur
+    // les genoux et le poitrail ; posé sur les seules soles, le taureau à genoux passait de 4,7 à 5,3 cm sous le sol)
+    if ((st.moving && !this.trans) || air) {
       target = !air && this.gait === 'walk' ? -low : Math.max(0, -low);
     } else {
       let lowB = Infinity;

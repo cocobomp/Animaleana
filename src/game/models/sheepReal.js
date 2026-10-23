@@ -1694,6 +1694,9 @@ export class RealSheepAnim {
     this.trans = null;
     this.bleatOn = false;
     this.clipPose(clip, 0);
+    // (laine, poil long, mamelle de la pose figée, tout de suite : couché dans la caisse ou le van, les mèches longues
+    // de l'islandais, du col noir, de la poitevine, de la Highland pendaient droit sous le ventre, à travers le plancher)
+    this.applyFleece?.(1e9);
     const st = { moving: false, v: 0, sleeping: kind === 'sleep', posture: this.posture };
     this.look.set(0, 0);
     this.overlay(0, st, true);
@@ -1705,7 +1708,9 @@ export class RealSheepAnim {
   applyFleece(dt) {
     const md = this.model;
     const B = md.build;
-    let target = shornWeight(B, md.fleece, this.fluffExtra + this.cutExtra);
+    // (toison pas encore donnée — pose figée appelée pendant la construction : pleine)
+    const fleece = Number.isFinite(md.fleece) ? md.fleece : 1;
+    let target = shornWeight(B, fleece, this.fluffExtra + this.cutExtra);
     // (tonte du salon : toison égale et courte)
     if (this.cutK) target = Math.max(target, this.cutK);
     this.shorn += (target - this.shorn) * Math.min(1, dt * 1.6);
@@ -1713,10 +1718,10 @@ export class RealSheepAnim {
     md.mesh.morphTargetInfluences[0] = this.shorn;
     md.uniforms.sState.value.x = clamp(this.shorn, 0, 1);
     // (volume de la toison : suit la toison du jeu, gonflé pour le concours, rasé par la tonte du salon)
-    const puffT = (B.puff ?? 0) * (this.cutK ? 0.25 : clamp(md.fleece, 0, 1)) + (this.fluffExtra + this.cutExtra) * 0.12;
+    const puffT = (B.puff ?? 0) * (this.cutK ? 0.25 : clamp(fleece, 0, 1)) + (this.fluffExtra + this.cutExtra) * 0.12;
     this.puffNow = (this.puffNow ?? puffT) + (puffT - (this.puffNow ?? puffT)) * Math.min(1, dt * 1.6);
     md.uniforms.sPuff.value.x = this.puffNow;
-    md.uniforms.sPuff.value.y = (B.folds ?? 0) * (0.4 + 0.6 * clamp(md.fleece, 0, 1));
+    md.uniforms.sPuff.value.y = (B.folds ?? 0) * (0.4 + 0.6 * clamp(fleece, 0, 1));
     // (mèches de la laine longue : longueur de la toison du moment, repliées couché, racine poussée avec la toison)
     if (md.lockUniforms) md.lockUniforms.hState.value.set(clamp(1 - this.shorn, 0, 1.4) / Math.max(0.2, 1 + (B.fleece ?? 0)), 0, this.puffNow * 0.85, this.shorn);
     // (couché : la laine longue s'étale au sol au lieu de pendre sous le ventre)

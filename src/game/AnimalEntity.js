@@ -843,6 +843,10 @@ export class AnimalEntity {
           const s = this.model.steer(diff, Math.hypot(t.x - p.x, t.z - p.z), this.speed, this.targetSpeed, dt, urgent);
           this.heading += s.turn;
           this.targetSpeed = s.speed;
+          // (le temps de se retourner sur place ne compte pas dans sa promenade, 8 s au plus par demi-tour : sinon, la
+          // vache, qui met 4 à 6 s à faire demi-tour, repartait à peine tournée — 20 à 45 % de chemin en moins)
+          if (Math.abs(diff) < 0.3) this.turnHold = 0;
+          else if (this.state === 'walk' && Math.abs(diff) > 0.8 && (this.turnHold = (this.turnHold ?? 0) + dt) < 8) this.timer += dt;
         } else this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 3.5);
       }
       if (this.perch?.phase !== 'on') this.speed += (this.targetSpeed - this.speed) * Math.min(1, dt * 3);

@@ -228,6 +228,28 @@ describe('assis et couché des petits chiens', () => {
     }
   });
 
+  it('galgo et whippet couchés et endormis : posés comme le labrador, antérieurs en sphinx, hanches plus basses que les siennes', () => {
+    // (avant : couché du gabarit long à genoux sur ses coudes, tronc à 4,2 cm du sol, hanches du galgo à 16,9 cm,
+    // du whippet à 12,9, du labrador à 14,6 cm)
+    const hipOf = (breed, sleeping) => {
+      const { md, s } = dog(breed);
+      for (let i = 0; i < 300; i++) md.anim.update(1 / 60, st({ size: s, posture: sleeping ? 'sleep' : 'lie', sleeping }));
+      const p = poseOf(md, s);
+      md.dispose();
+      return p;
+    };
+    for (const sleeping of [false, true]) {
+      const lab = hipOf('labrador', sleeping);
+      for (const breed of ['galgo', 'whippet']) {
+        const p = hipOf(breed, sleeping);
+        expect(p.hipY, breed).toBeLessThan(lab.hipY);
+        expect(p.trunk, breed).toBeLessThan(1.5);
+        expect(p.trunk, breed).toBeGreaterThan(-0.8);
+        for (const f of p.feet) expect(Math.abs(f), breed).toBeLessThan(1);
+      }
+    }
+  });
+
   it('yorkshire couché : posé sur le ventre (la jupe de peau et les mèches s\'étalent au sol), croupe basse, pieds arrière posés', () => {
     // (avant : hanches à 7,9 cm, pieds arrière à 2,6 cm — le corps reposait sur la jupe de peau sous le ventre et sur
     // la peau de l'aine tirée par les cuisses repliées ; carlin, du même gabarit : 4,0 cm)

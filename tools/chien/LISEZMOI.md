@@ -328,3 +328,9 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   aux poids des deux cuisses (`bodyMid`) ne sont plus des appuis couché — hanches 7,9 → 2,7 cm, pieds arrière 2,6 → 0 cm ;
   ses mèches (shader, `cmpPom` < 0) se couchent au sol vers l'extérieur de la longueur qui passerait dessous (avant :
   aplaties sur place, une palissade de planches sous le chien couché ou assis).
+- **Couché et endormi du gabarit long** (galgo, whippet, caniche ; `gab_lie`, `front_sphinx`) : antérieurs en sphinx —
+  coude posé contre le poitrail à l'épaisseur de l'avant-bras au-dessus du sol (en arrière de l'épaule de ce que
+  l'humérus ne peut descendre), avant-bras à plat vers l'avant, main posée. Repliés par `ground_leg` depuis l'épaule
+  descendue au sol du tronc, les antérieurs allongés passaient le coude 4 cm sous le sol (les clips des gabarits ne
+  passent pas par `ground_fix`) : le jeu relevait tout le chien sur ses coudes, tronc à 4 cm du sol, à genoux croupe
+  haute. Hanches du galgo couché 16,9 → 13,9 cm (labrador 14,6), whippet 12,9 → 9,6, caniche 10,3 → 7,9 ; tronc posé.

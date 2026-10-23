@@ -896,8 +896,32 @@ def gab_paw(gname, rg, p_sit):
         rg, p_sit, p_up, dg.smooth(t / 0.25) * (1 - dg.smooth((t - 0.8) / 0.2))), {}))
 
 
+def front_sphinx(p, rg, lab, rE):
+    """Antérieur du couché en sphinx (gabarit aux membres allongés) : coude posé contre le poitrail, à rE au-dessus du sol
+    du membre, en arrière de l'épaule de ce que l'humérus ne peut descendre ; avant-bras à plat vers l'avant, main posée.
+    (Replié par ground_leg depuis l'épaule descendue au sol du tronc, l'antérieur allongé passait le coude 4 cm sous le
+    sol : le jeu relevait tout le chien sur ses coudes, tronc à 4 cm du sol, croupe haute.)"""
+    L = rg.legs[lab]
+    l1, l2, l3 = L['l2d'][:3]
+    dx = L['dxs']
+    J0 = leg_joints(p, lab, rg)[0]
+    g = L['ground']
+    zE = max(g + rE, J0.z - l1 * 0.995)
+    E = Vector((J0.x + dx[0], J0.y + math.sqrt(max(0.0, l1 * l1 - (J0.z - zE) ** 2)), zE))
+    zW = g + rE * 0.8
+    W = Vector((E.x + dx[1], E.y - math.sqrt(max(0.0, l2 * l2 - (zE - zW) ** 2)), zW))
+    z3 = L['J'][3].z
+    F = Vector((W.x + dx[2], W.y - math.sqrt(max(0.0, l3 * l3 - (zW - z3) ** 2)), z3))
+    Js = [J0, E, W, F, F + L['paw0']]
+    out = dict(p)
+    for n, k_ in L['drive']:
+        out[n] = rg.bone_matrix(n, L['seg'][k_], L['J'][k_], Js[k_], Js[k_ + 1])
+    return out
+
+
 def gab_lie(name, gname, rg, k, gH, gF):
-    """Couché ou endormi du gabarit : corps descendu (ou relevé) jusqu'à son sol, membres repliés."""
+    """Couché ou endormi du gabarit : corps descendu (ou relevé) jusqu'à son sol, membres repliés ; antérieurs en sphinx
+    (front_sphinx) pour les membres allongés."""
     frames = action_frames(name)
 
     def g(y):
@@ -906,10 +930,13 @@ def gab_lie(name, gname, rg, k, gH, gF):
     print('GABARIT', gname, name, 'descente', round(dz, 4))
     Mx = Matrix.Translation(Vector((0, 0, dz)))
 
+    # (rayon de l'avant-bras au coude : celui du modèle, à la taille du chien)
+    rE = 0.035 * hipz / 0.42
+
     def one(p_):
         p = hind_folded(transformed(p_, Mx), rg, k, 0.06)
         for lab in ('FL', 'FR'):
-            p = ground_leg(p, lab, a3=0.15, dz=0.008, rg=rg)
+            p = front_sphinx(p, rg, lab, rE) if k > 1 else ground_leg(p, lab, a3=0.15, dz=0.008, rg=rg)
         return p
     poses = [one(p_) for p_ in frames]
     n = len(poses) - 1

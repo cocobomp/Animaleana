@@ -1164,14 +1164,15 @@ function skullNearEars(base, B, D) {
 
 /**
  * Sommets d'oreille cachés (part hidden > 0,08) ramenés sous le crâne de la race, après sa déformation : rayon depuis le
- * centre de la tête au plus celui du crâne alentour (skullNearEars) moins 3 mm à l'échelle de la tête. Seulement
+ * centre de la tête au plus celui du crâne alentour (skullNearEars) moins 6,5 mm à l'échelle de la tête. Seulement
  * abaissés.
  */
 function rehideEars(base, B, D) {
   const { hc, R } = skullNearEars(base, B, D);
   const P = D.pos;
   const hidden = D.hidden;
-  const margin = 0.003 * (B.head ?? 1);
+  // (6,5 mm : à 3 mm, une petite lame claire du lambeau ressortait à la tempe du chiot chihuahua, 1,4 mm dehors)
+  const margin = 0.0065 * (B.head ?? 1);
   const p = V();
   for (let i = 0; i < base.prims.coat.count; i++) {
     if (!(hidden[i] > 0.08)) continue;

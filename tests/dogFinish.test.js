@@ -494,12 +494,13 @@ describe('oreilles d\'origine cachées', () => {
     md.dispose();
     return { out, worst: worst * 1000 };
   };
-  it('chihuahua (et son chiot) : le lambeau caché ne ressort plus en échardes à la base de l\'oreille', () => {
-    // (avant : 544 et 552 sommets dehors, jusqu'à 15 et 11 mm ; après : 2, 1,4 mm au plus)
+  it('chihuahua (et son chiot) : le lambeau caché ne ressort plus en échardes à la base de l\'oreille ni en lame à la tempe', () => {
+    // (avant : 544 et 552 sommets dehors, jusqu'à 15 et 11 mm ; finitions 1 : 2, 1,4 mm au plus — une petite lame claire
+    // à la tempe du chiot ; finitions 2, lambeau rentré à 6,5 mm sous le crâne au lieu de 3 : aucun, 0,6 mm au plus)
     for (const puppy of [true, false]) {
       const r = poke('chihuahua', puppy);
-      expect(r.out, 'chiot ' + puppy).toBeLessThan(30);
-      expect(r.worst, 'chiot ' + puppy).toBeLessThan(3);
+      expect(r.out, 'chiot ' + puppy).toBe(0);
+      expect(r.worst, 'chiot ' + puppy).toBeLessThan(1);
     }
   });
 });

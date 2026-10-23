@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { realHorseBase, buildRealHorseModel, leftLocks, groundTilt, TILT_MAX, GALLOP_TS_MAX } from '../src/game/models/horseReal.js';
-import { coatMaterial } from '../src/game/models/horseCoat.js';
+import { coatMaterial, FORE_SHADE_LIGHT } from '../src/game/models/horseCoat.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { horseBuild } from '../src/sim/horseLook.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
@@ -98,7 +98,8 @@ describe('toupet', () => {
   it('ombre douce du toupet sur le front : de sa racine à sa pointe le long du chanfrein, plus large que lui', () => {
     const md = horse('arabe', 0); // gris clair, crins clairs
     const u = md.coatMesh.material.userData.horseUniforms.hFore.value;
-    expect(u.w).toBe(1);
+    // (crins clairs sur une robe claire : ombre renforcée, le toupet s'en détache — voir horseHair.test.js)
+    expect(u.w).toBeCloseTo(1 + FORE_SHADE_LIGHT, 5);
     expect(u.y).toBeGreaterThan(u.x + 0.1); // (pointe plus bas sur le chanfrein que la racine, en longueurs de tête)
     expect(u.z).toBeGreaterThan(0.03);
     expect(u.z).toBeLessThan(0.15);

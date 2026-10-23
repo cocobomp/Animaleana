@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import { getModel } from '../assets.js';
 import { gfx } from '../gfx.js';
 import { horseBuild, horseBreedOf, foalBuild, horseCoatTraits, horseSocks } from '../../sim/horseLook.js';
-import { coatMaterial, PART } from './horseCoat.js';
+import { coatMaterial, roanBase, PART } from './horseCoat.js';
 import { hairMaterial, hairColor, HAIR_V, HAIR_TEX, HAIR_MASS } from './horseHair.js';
 
 export const REAL_HORSE_KEY = 'horse_real';
@@ -3229,8 +3229,11 @@ function featherCards(S, B, look) {
     const K = S.heads[BONE_INDEX[k + '3']];
     const sole = F.clone().add(S.soles[i][1]);
     const white = socks[i] > 0.1 || traits.pinto > 0;
-    // (poils longs plus clairs que la robe au soleil : un peu éclaircis, jamais plus foncés)
-    const legC = new THREE.Color(white ? 0xf1ede6 : traits.points ? (look.maneCore ?? look.mane ?? look.coat) : look.coat);
+    // (poils longs plus clairs que la robe au soleil : un peu éclaircis, jamais plus foncés ; rouan : la robe de base,
+    // celle du bas de ses membres — la teinte d'ensemble, poils blancs compris, en faisait des fanons gris clair sur
+    // des membres roux)
+    const legC = white ? new THREE.Color(0xf1ede6) : traits.points ? new THREE.Color(look.maneCore ?? look.mane ?? look.coat)
+      : traits.roan > 0 ? roanBase(look.coat ?? 0x9c8a80) : new THREE.Color(look.coat);
     if (!white && !traits.points) legC.multiplyScalar(1.2).lerp(new THREE.Color(0xd9c3a5), 0.1);
     legC.copy(hairColor(legC));
     // (rubans fins et nombreux : des poils, pas des bottes pleines)

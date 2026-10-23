@@ -2,11 +2,19 @@
 // base en lumière linéaire. Avant, 19 % de blanc sur un brun peu saturé : le flanc du Trait breton et du Criollo rouans
 // se lisait gris clair (saturation du flanc mesurée au téléphone : 0,03 et 0,02). Maintenant, moins de blanc sur un fond
 // roux plus saturé : rouan rouge lisible (flanc brun rosé, la tête et les membres roux). Sans GLB ni hasard.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { coatMaterial, roanBase, COAT_LOOKS } from '../src/game/models/horseCoat.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { horseBuild } from '../src/sim/horseLook.js';
+import { buildRealHorseModel, realHorseBase } from '../src/game/models/horseReal.js';
+import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
+
+let gltf;
+beforeAll(async () => {
+  gltf = await loadRealHorseGltf();
+  realHorseBase(gltf);
+}, 60000);
 
 const realOpts = { detail: null, normalMap: null, normalSign: 1, hoofY: 0.12 };
 const look = (breed, colorIndex) => createAnimal({ species: 'horse', breed, colorIndex, ageDays: 900, seed: 77 }).look;
@@ -82,5 +90,19 @@ describe('rouans', () => {
       expect(u.hCoat.value.getHex()).toBe(new THREE.Color(l.coat).getHex());
       m.dispose();
     }
+  });
+
+  it('Trait breton rouan : fanons à la robe de base, comme le bas de ses membres (pas gris clair sur des membres roux)', () => {
+    const a = createAnimal({ species: 'horse', breed: 'trait_breton', colorIndex: 1, ageDays: 900, seed: 77 });
+    const md = buildRealHorseModel(a.look, a.breed, gltf);
+    const feathers = md.bounds.meshes[3].geometry.attributes.color;
+    const m = new THREE.Color(0, 0, 0);
+    for (let i = 0; i < feathers.count; i++) m.r += feathers.getX(i) / feathers.count, m.g += feathers.getY(i) / feathers.count, m.b += feathers.getZ(i) / feathers.count;
+    const f = hsl(m);
+    const b = hsl(roanBase(a.look.coat));
+    // (avant : la teinte d'ensemble éclaircie, gris beige — saturation 0,16)
+    expect(Math.abs(f.h - b.h) * 360).toBeLessThan(12);
+    expect(f.s).toBeGreaterThan(0.35);
+    md.dispose();
   });
 });

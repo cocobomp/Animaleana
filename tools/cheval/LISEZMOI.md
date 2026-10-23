@@ -708,6 +708,10 @@ Finitions 2 (téléphone 390×844 en basse et de près en haute ; planches AVANT
   du jeu (390×844, basse) : Trait breton saturation 0,03 → 0,27 (clarté 46 → 37), Criollo 0,02 → 0,16 ; brun rosé,
   tête et membres roux, poils blancs bien visibles de près ; rouan bleu du Mustang un peu plus foncé (gris bleu) ;
   autres robes inchangées (`tests/horseRoan.test.js`). Aucun coût.
+- **fanons des rouans** (Trait breton) : ils prenaient la teinte d'ensemble de la race (poils blancs compris),
+  éclaircie : des mèches gris clair sur des membres roux. Ils prennent maintenant la robe de base du rouan, celle du
+  bas de ses membres (saturation moyenne des fanons 0,16 → 0,42, teinte celle de la base à 1° près) ; autres robes
+  inchangées.
 
 Ce qu'il coûte, et comment on le garde bas :
 

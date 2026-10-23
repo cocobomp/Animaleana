@@ -106,8 +106,16 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
    yeux géants).
 5. **`lod.mjs`** : version allégée dans le même fichier (`extras.lod` : index simplifiés à 30 %) pour les chiens
    lointains (`DOG_LOD_DIST` dans `dogReal.js`).
+6. **`clips.mjs`** (à la main, après `build.sh`) : `node clips.mjs <jeu.glb> <refait.glb> <sortie.glb> clip1,clip2…`
+   greffe des clips refaits sur le GLB du dépôt sans toucher à son maillage, à son squelette, à ses textures ni aux
+   autres clips (données non re-quantifiées). Le shiba refait aujourd'hui avec les mêmes sources n'a pas le maillage
+   du dépôt : même nombre de triangles mais pas les mêmes (simplification), 10 743 sommets au lieu de 10 795 — des
+   éclats de 1 cm de plus aux dents du lagotto et un triangle de l'arcade retourné (tests de tollerLagotto.test.js).
+   Un clip refait ne doit pas changer la peau des 20 races du shiba : `dog_shiba.glb` est le GLB du dépôt où
+   `lie_long`, `sleep_long`, `lie_down_long` et `get_up_long` sont ceux de `build.sh` (finitions 2, couché du gabarit
+   long ; +16 Ko, la compression des clips n'est pas refaite à l'identique).
 
-Fichiers obtenus : `dog_shiba.glb` 0,88 Mo (17 800 triangles, 5 300 au loin, 57 os, 20 clips + 17 de ses
+Fichiers obtenus : `dog_shiba.glb` 0,89 Mo (17 800 triangles, 5 300 au loin, 57 os, 20 clips + 17 de ses
 gabarits), `dog_jack.glb` 0,61 Mo (15 500 triangles, 41 os, 19 clips + 15 de ses gabarits ; mâchoire et langue :
 +600 triangles, +5 os, +8 Ko). (Avant les gabarits et
 les poses reprises du shiba : 0,86 et 0,51 Mo ; les clips des gabarits sont allégés par `DECIMATE` et le
@@ -334,6 +342,7 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   descendue au sol du tronc, les antérieurs allongés passaient le coude 4 cm sous le sol (les clips des gabarits ne
   passent pas par `ground_fix`) : le jeu relevait tout le chien sur ses coudes, tronc à 4 cm du sol, à genoux croupe
   haute. Hanches du galgo couché 16,9 → 13,9 cm (labrador 14,6), whippet 12,9 → 9,6, caniche 10,3 → 7,9 ; tronc posé.
+  (Ces quatre clips greffés par `clips.mjs` sur le `dog_shiba.glb` du dépôt : maillage du shiba inchangé.)
 - **Pieds posés en virage serré** (jeu, `footLock`) : la correction latérale du membre va jusqu'à 0,6 rad (0,38 avant) —
   au pas en virage à 1,2 rad/s, le pied posé qui glissait le plus par appui : teckel 5,7 → 1,3 cm, corgi 4,4 → 0,8, jack
   russell 5,0 → 1,0, cocker 4,3 → 1,0, cavalier 4,2 → 1,0, chihuahua 3,9 → 1,0 ; en ligne droite inchangé (0,1 à 0,2 cm),

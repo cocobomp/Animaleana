@@ -18,7 +18,7 @@ import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
 import { dogBuild, DOG_BUILDS, dogModelOf } from '../../sim/dogLook.js';
 import { coatPlan, makeCoatUniforms, makeLandUniforms, setCoat, coatMaterial, furLow, furDetail } from './dogCoat.js';
-import { pendantEars, earSkullHide, buildPendantEars, faceShape, buildPompons, jackMouthClose } from './dogParts.js';
+import { pendantEars, earSkullHide, buildPendantEars, faceShape, buildPompons } from './dogParts.js';
 
 /** Clés des deux GLB (assets.js) : jamais « dog » (gltfAnimal.js le prendrait pour un animal GLB générique). */
 export const REAL_DOG_KEYS = { shiba: 'dog_shiba', jack: 'dog_jack' };
@@ -720,8 +720,7 @@ export function deformDog(base, B) {
     }
   }
 
-  // 0b. Gueule du jack fermée au repos (dogParts.js).
-  jackMouthClose(base, P);
+  // (gueule du jack : fermée au repos dans le GLB, ouverte par l'os de la mâchoire — tools/chien/models.py jack_mouth)
   // 1. Membres : raccourcis ou allongés entre l'épaule (la hanche) et le poignet (le jarret), le pied suit sans se
   //    déformer ; épaissis autour de leur axe.
   for (let l = 0; l < 4; l++) {
@@ -2671,13 +2670,34 @@ class RealDogAnim {
     this.tongue = [1, 2, 3, 4, 5, 6].map((i) => model.bone('tongue' + i)).filter(Boolean);
     // (glissement de la langue qui pend, dans le repère de la mâchoire : vers l'avant, 60 % de sa longueur plus ce que
     // faceShape l'a rentrée dans un museau court — boxer : sinon elle restait derrière les dents —, un peu vers le bas)
+    // (jack : langue modelée en quatre os, posée dans le creux de la mâchoire du bas — tools/chien/models.py jack_mouth.
+    // En haletant, elle glisse de 1,1 fois sa longueur, un peu vers le haut pour passer sur les incisives, s'allonge de
+    // moitié et pend en arc — courbure par os, de plus en plus forte vers le bout. La gueule, charnière à la commissure,
+    // s'ouvre une fois et demie plus que celle du shiba. Langue sortie de 2,1 à 3,5 cm devant les lèvres à la taille de
+    // la tête d'un chien de taille 1 ; avant : ni mâchoire ni langue, la gueule restait fermée)
+    this.jawK = B.model === 'jack' ? 1.5 : 1;
+    this.tongueCurl = B.model === 'jack' ? [0, 0.18, 0.4, 0.55] : null;
+    this.tongueStretch = null;
     if (this.tongue.length > 1 && this.jaw) {
       const t1 = base.index.get('tongue1');
       const tn = base.index.get(this.tongue[this.tongue.length - 1].name);
       const d = S.heads[tn].clone().sub(S.heads[t1]);
       const len = d.length();
       const k = len / Math.max(1e-6, base.heads[tn].distanceTo(base.heads[t1]));
-      d.normalize().multiplyScalar(len * 0.6 + k * 0.035 * Math.max(0, 0.8 - (B.snout ?? 1))).add(V(0, -len * 0.08, 0));
+      if (B.model === 'jack') {
+        // (longueurs de repos à la taille de la tête de la race — racine de head — : le museau raccourci du carlin
+        // raccourcit aussi la langue, qui reprend sa longueur en sortant ; celui du teckel, plus long, la garde)
+        const hk = Math.sqrt(B.head ?? 1);
+        const lenS = Math.max(len, base.heads[tn].distanceTo(base.heads[t1]) * hk);
+        d.normalize().multiplyScalar(lenS * 1.1).add(V(0, lenS * 0.2, 0));
+        this.tongueStretch = this.tongue.map((b, i) => {
+          if (i === 0) return 0;
+          const a = base.index.get(this.tongue[i - 1].name);
+          const c = base.index.get(b.name);
+          const def = S.heads[c].distanceTo(S.heads[a]);
+          return Math.max(0, (Math.max(def, base.heads[c].distanceTo(base.heads[a]) * hk) * 1.5) / Math.max(1e-6, def) - 1);
+        });
+      } else d.normalize().multiplyScalar(len * 0.6 + k * 0.035 * Math.max(0, 0.8 - (B.snout ?? 1))).add(V(0, -len * 0.08, 0));
       this.tongueSlide = d.applyQuaternion(base.rotW[base.index.get('jaw')].clone().invert());
     }
     this.breathe = model.bone('breathe');
@@ -2801,13 +2821,20 @@ class RealDogAnim {
     const W = base.W;
     const n = coat.count;
     if (!S.contact) {
-      const cls = new Int8Array(n); // 0 corps, 1 queue, 2 tête, -1 ignoré (oreilles)
+      const cls = new Int8Array(n); // 0 corps, 1 queue, 2 tête, -1 ignoré (oreilles, langue)
+      // (langue modelée du jack, ajoutée au bout de la peau : ignorée, et le pas d'échantillonnage du corps compté sans
+      // elle — compté avec, il tombait sur d'autres sommets et manquait la croupe du chiot carlin assis)
+      const tongueB = new Set([1, 2, 3, 4, 5, 6].map((k) => base.index.get('tongue' + k)).filter((k) => k !== undefined));
+      let nSkin = 0;
       for (let i = 0; i < n; i++) {
         const ear = W.ear[i * 2] + W.ear[i * 2 + 1];
-        cls[i] = W.tail[i] > 0.3 ? 1 : ear > 0.3 ? -1 : W.head[i] > 0.6 ? 2 : 0;
+        let wt = 0;
+        if (tongueB.size && base.kind === 'jack') for (let c = 0; c < 4; c++) if (tongueB.has(coat.si[i * 4 + c])) wt += coat.sw[i * 4 + c];
+        cls[i] = wt > 0.5 ? -1 : W.tail[i] > 0.3 ? 1 : ear > 0.3 ? -1 : W.head[i] > 0.6 ? 2 : 0;
+        if (!(wt > 0.5)) nSkin++;
       }
       const pick = [new Set(), new Set(), new Set()];
-      const stride = [Math.ceil(n / 100), 9, 14];
+      const stride = [Math.ceil(nSkin / 100), 9, 14];
       for (let i = 0; i < n; i++) if (cls[i] >= 0 && i % stride[cls[i]] === 0) pick[cls[i]].add(i);
       const P = S.D.pos;
       const inv = md.skeleton.boneInverses;
@@ -2872,6 +2899,8 @@ class RealDogAnim {
     }
     md.root.updateMatrixWorld(true);
     this.bodyPts = [...S.contact[0]].map(infl);
+    // (races du jack : peau des antérieurs, pas un appui « hors pieds avant » pour l'assise — voir settleSit)
+    this.bodyFront = base.kind === 'jack' ? Uint8Array.from([...S.contact[0]], (i) => (W.leg[i * 4] + W.leg[i * 4 + 1] > 0.5 ? 1 : 0)) : null;
     const tb = md.tailBones;
     this.tailPts = [...S.contact[1]].map((i) => {
       let best = 0;
@@ -3142,14 +3171,17 @@ class RealDogAnim {
       const a = 2 * Math.atan2(_q.x, _q.w);
       shut = Math.max(0, a - JAW_CLOSED) * (1 - Math.min(1, open * 2.5));
     }
-    if (this.jaw && (open > 0.01 || shut > 0)) this.turn(this.jaw, AX, open * 0.22 + this.pant * 0.1 + Math.sin(t * rate) * 0.03 * this.pant - shut);
+    if (this.jaw && (open > 0.01 || shut > 0)) this.turn(this.jaw, AX, (open * 0.22 + this.pant * 0.1 + Math.sin(t * rate) * 0.03 * this.pant) * this.jawK - shut);
     // Langue : en haletant, elle glisse vers l'avant sur les dents du bas et pend hors de la gueule (rentrée dans la
     // géométrie pour la gueule fermée — voir faceShape —, elle restait au fond de la gueule ouverte : un rictus de dents)
     // (content, gueule ouverte sans haleter : la langue avance à moitié et repose sur les dents du bas)
     const tk = Math.max(smooth(0.05, 0.6, this.pant), 0.5 * smooth(0.1, 0.35, open));
     if (this.tongue.length && tk > 0.01) {
       if (this.tongueSlide) this.tongue[0].position.addScaledVector(this.tongueSlide, tk);
-      for (let i = 0; i < this.tongue.length; i++) this.turn(this.tongue[i], AX, tk * 0.22 * (i + 1) / this.tongue.length);
+      // (jack : la langue s'allonge aussi en sortant — chaque os s'écarte du précédent ; seule, glissée de plus que sa
+      // longueur, elle sortait tout entière de la gueule)
+      if (this.tongueStretch) for (let i = 1; i < this.tongue.length; i++) this.tongue[i].position.multiplyScalar(1 + this.tongueStretch[i] * tk);
+      for (let i = 0; i < this.tongue.length; i++) this.turn(this.tongue[i], AX, tk * (this.tongueCurl ? this.tongueCurl[i] : 0.22 * (i + 1) / this.tongue.length));
     }
     // Regard : vers ce qui l'intéresse (le joueur proche), sinon il regarde autour de lui ; moins en marche.
     const moving = !!st.moving;
@@ -3620,11 +3652,15 @@ class RealDogAnim {
     const f = V();
     const o = V();
     const t = V();
-    // appui hors pieds avant : pieds arrière et peau du corps (croupe), avec la marge du poil
+    // appui hors pieds avant : pieds arrière et peau du corps (croupe), avec la marge du poil — races du jack : sans la
+    // peau des antérieurs (le bas d'un antérieur, aussi bas que le pied, rendait l'écart pieds avant / croupe presque
+    // nul : selon un dixième de millimètre, le chiot carlin assis basculait ou non, croupe 2,8 cm sous le sol)
     const lowRest = () => {
       o.y = Infinity;
       for (const l of [2, 3]) if (lowSole(l, t).y < o.y) o.copy(t);
-      for (const pt of this.bodyPts) {
+      for (let q = 0; q < this.bodyPts.length; q++) {
+        if (this.bodyFront?.[q]) continue;
+        const pt = this.bodyPts[q];
         const y = this.skinY(pt) + this.bodyAllow;
         if (y < o.y) o.set(_w.x, y, _w.z);
       }

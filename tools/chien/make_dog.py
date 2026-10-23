@@ -32,6 +32,9 @@ pts = K.world_verts(meshes)
 cx = sum((arm.matrix_world @ B[L['joints'][0]].head_local).x for L in M['legs'].values()) / 4
 off = Vector((-cx, -(min(p.y for p in pts) + max(p.y for p in pts)) / 2, -min(p.z for p in pts)))
 K.transform_all(arm, meshes, Matrix.Translation(off))
+# (jack : os de la mâchoire, langue modelée et gueule refermée, à l'échelle du jeu — models.jack_mouth)
+if M.get('mouth'):
+    M['mouth'](arm, meshes)
 report['tris'] = K.tris(meshes)
 report['bones'] = len(B)
 

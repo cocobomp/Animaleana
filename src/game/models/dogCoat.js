@@ -983,7 +983,7 @@ if (cOn > 0.5) {
     // même teinte et faisaient des taches sales sur le front et autour des yeux)
     float yM = cEye.y - 0.066 + (vCmpPos.z - cHead.w + 0.041) * 0.25;
     float mouthZone = (1.0 - smoothstep(0.016, 0.026, abs(vCmpPos.y - yM))) * smoothstep(cEye.z, cEye.z + 0.025, vCmpPos.z);
-    float lip = vCmpPart.z * mouthZone * (1.0 - smoothstep(0.05, 0.09, dh2)) * smoothstep(0.25, 0.4, hsv.y) * smoothstep(0.12, 0.25, hsv.z);
+    float lip = vCmpPart.z * mouthZone * (1.0 - smoothstep(0.05, 0.09, dh2)) * smoothstep(0.25, 0.4, hsv.y) * smoothstep(0.12, 0.25, hsv.z) * (1.0 - vCmpTongue);
     keep = keep * (1.0 - lip);
     nc = mix(nc, vec3(0.035, 0.026, 0.022), lip);
   }
@@ -995,8 +995,11 @@ if (cOn > 0.5) {
   }
   #endif
   // Langue (poids de ses os) : rose là où la texture ne l'est pas (son bout pâle).
-  nc = mix(nc, vec3(0.6, 0.16, 0.19) * (0.85 + 0.3 * smoothstep(0.1, 0.5, lum0)), smoothstep(0.3, 0.7, vCmpTongue));
-  diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0));
+  // (jack, lèvres brun-noir — cKeepOpt.z — : la texture n'est pas gardée sur sa langue modelée, posée sur un texel rouge
+  // sombre du creux de la gueule : elle prenait la couleur des lèvres ou du masque sombre du carlin)
+  float tng = smoothstep(0.3, 0.7, vCmpTongue);
+  nc = mix(nc, vec3(0.6, 0.16, 0.19) * (0.85 + 0.3 * smoothstep(0.1, 0.5, lum0)), tng);
+  diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0) * (1.0 - tng * step(0.5, cKeepOpt.z)));
   // Truffe peinte (lagotto) : dans la barbe poussée autour d'elle, la truffe de la texture, prise au seuil de luminance
   // sur des texels flous, faisait une tache grise étalée sans contour, et la lèvre sombre une bavure dessous. Une
   // truffe brune au bord net (adouci d'un pixel), deux narines plus sombres en avant.

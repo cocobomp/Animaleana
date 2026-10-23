@@ -25,7 +25,16 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
      courbes d'animation : un renommage direct faisait des doublons) ; les paupières sont rattachées aux yeux ;
      les 560 sommets des **moustaches** sont retirés (des pointes qui traversaient tout une fois la tête déformée).
    - *Jack* : les trois pièces (corps, yeux, intérieur de la gueule : la pièce oubliée laissait le museau
-     **troué et déchiré**) sont réunies et **soudées** ; mise à l'échelle.
+     **troué et déchiré**) sont réunies et **soudées** ; mise à l'échelle. **Gueule** (`jack_mouth`, une fois à
+     l'échelle du jeu) : le modèle n'a ni os de mâchoire ni langue (le creux rose de la mâchoire du bas est sa peau) ;
+     un os `jaw` (enfant de `head`, charnière à la commissure `JACK_HINGE`) reçoit les poids de la mâchoire du bas
+     (sous la ligne des lèvres, devant la commissure : 334 sommets, pris sur la tête), une **langue modelée**
+     (`JACK_TONGUE` : 308 sommets, du fond de la gueule jusque derrière les incisives du bas, dessous posé dans le creux
+     en V de la mâchoire par lancers de rayons, dessus sous la ligne des lèvres, section en lentille, bout arrondi) est
+     ajoutée au bout de la peau, portée par quatre os `tongue1…4` (enfants de `jaw`, poids fondus d'un os à l'autre) ;
+     puis mâchoire et langue sont tournées de `JACK_JAW_OPEN` (0,17 rad) pour joindre les lèvres : le repos du GLB est
+     la gueule fermée (avant : refermée par le jeu, `jackMouthClose`, sans os — la gueule ne s'ouvrait jamais). Mâchoire
+     et langue sont des os du jeu (`game_bones` : aucune clé dans les clips).
 2. **`autorig.py`** (jack) : squelette du même plan que celui du shiba, poids par chaleur (heat weights) ; os des
    **yeux** (sommets des yeux, séparés par côté) et des **oreilles** (base → pli → bout, poids géométriques sur le
    lambeau mince repéré par épaisseur et remplissage limité). Réglages du jack dans `models.py` (`JACK_RIG`) :
@@ -94,7 +103,8 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
    lointains (`DOG_LOD_DIST` dans `dogReal.js`).
 
 Fichiers obtenus : `dog_shiba.glb` 0,88 Mo (17 800 triangles, 5 300 au loin, 57 os, 20 clips + 17 de ses
-gabarits), `dog_jack.glb` 0,60 Mo (14 900 triangles, 36 os, 19 clips + 15 de ses gabarits). (Avant les gabarits et
+gabarits), `dog_jack.glb` 0,61 Mo (15 500 triangles, 41 os, 19 clips + 15 de ses gabarits ; mâchoire et langue :
++600 triangles, +5 os, +8 Ko). (Avant les gabarits et
 les poses reprises du shiba : 0,86 et 0,51 Mo ; les clips des gabarits sont allégés par `DECIMATE` et le
 ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été faits.)
 
@@ -277,3 +287,17 @@ La planche de contrôle `planche.html` (servie par vite : `/tools/chien/planche.
 liste de races, robes, chiots, clips et points de vue (`window.planche.show({ cells: [...] })`), avec une coupe du
 salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et d'autres races dans la même case, côte
 à côte (`with`).
+
+### Finitions 2 (correcteur des chiens)
+
+- **Gueule des races du jack** (jack russell, cavalier, cocker, chihuahua, carlin, bouledogue, teckel, corgi, yorkshire,
+  spitz nain) : os de la mâchoire et langue modelée dans le GLB (voir `jack_mouth` plus haut). Dans le jeu
+  (`RealDogAnim`) : la gueule s'ouvre une fois et demie plus que celle du shiba (charnière à la commissure) ; en
+  haletant, la langue glisse de 1,1 fois sa longueur (à la taille de la tête de la race, racine de `head`), un peu vers
+  le haut pour passer sur les incisives, s'allonge de moitié (elle reprend sa longueur dans un museau raccourci : carlin,
+  bouledogue) et pend en arc (`tongueCurl`) ; rose (`cTongue`, texture jamais gardée sur elle : sinon brun-noir des
+  lèvres du jack). Langue sortie (test `tongueOut`, cm rapportés à la taille de la tête) : jack russell 2,2, cavalier
+  3,5, chihuahua 2,6, carlin 2,5, bouledogue 2,7 à l'arrêt (avant : pas de langue, gueule fermée) ; au calme −1,5 à
+  −1,6 (dedans), mâchoire à son repos. Points d'appui : la langue n'en est pas (le pas d'échantillonnage du corps est
+  compté sans elle) ; assis, la peau des antérieurs n'est plus un appui « hors pieds avant » (races du jack : le chiot
+  carlin basculait ou non selon un dixième de millimètre).

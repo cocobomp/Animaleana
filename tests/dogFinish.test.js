@@ -269,7 +269,10 @@ describe('queues qui frétillent', () => {
 });
 
 describe('gueule ouverte', () => {
-  // Pointe de la langue au-delà du devant de la mâchoire du bas (cm, taille réelle), sur l'axe tête → truffe, après 6 s.
+  // Pointe de la langue au-delà du devant de la mâchoire du bas, sur l'axe tête → truffe, après 6 s : cm à la taille du
+  // modèle (chien de taille 1 ; la taille réelle pour le labrador, le golden et le husky), rapportés à la taille de la
+  // tête de la race (head : 1,45 pour le chihuahua). (Avant : divisés par la taille de la race, ce qui grossissait la
+  // langue des petits chiens au lieu de la ramener à leur taille.)
   const tongueOut = (breed, o) => {
     const { md, s } = dog(breed);
     const base = md.anim.base;
@@ -297,7 +300,7 @@ describe('gueule ouverte', () => {
     }
     const fwd = m.getVertexPosition(nose, v).applyMatrix4(m.matrixWorld).sub(head).normalize().clone();
     const proj = (i) => m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld).sub(head).dot(fwd);
-    const out = (Math.max(...tongue.map(proj)) - Math.max(...lip.map(proj))) * 100 / s;
+    const out = ((Math.max(...tongue.map(proj)) - Math.max(...lip.map(proj))) * 100) / (md.build.head ?? 1);
     md.dispose();
     return out;
   };
@@ -307,6 +310,29 @@ describe('gueule ouverte', () => {
       expect(tongueOut(breed, { happy: 1, hot: true })).toBeGreaterThan(2);
       expect(tongueOut(breed, { hot: true, v: 1.2, moving: true })).toBeGreaterThan(2);
       expect(tongueOut(breed, { happy: 0.25 })).toBeLessThan(0);
+    }
+  });
+
+  it('races du jack : la gueule s\'ouvre et la langue modelée pend en haletant (avant : ni os de mâchoire ni langue, gueule toujours fermée) ; au calme, gueule fermée', () => {
+    // (le GLB du jack porte la mâchoire et quatre os de langue, contigus : la langue est peinte en rose par le shader)
+    const idx = G.jack.scene.getObjectByProperty('isSkinnedMesh', true).skeleton.bones.map((b) => b.name);
+    expect(idx).toContain('jaw');
+    const t = [1, 2, 3, 4].map((k) => idx.indexOf('tongue' + k));
+    expect(Math.min(...t)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...t) - Math.min(...t)).toBe(3);
+    for (const breed of ['jack_russell', 'cavalier', 'chihuahua']) {
+      // (mesuré : 2,2 / 3,5 / 2,6 à l'arrêt, 2,3 / 3,4 / 2,4 en marchant ; au calme -1,5 à -1,6 ; avant : pas de langue)
+      const a = tongueOut(breed, { happy: 1, hot: true });
+      expect(a, breed).toBeGreaterThan(2);
+      expect(a, breed).toBeLessThan(3.8);
+      expect(tongueOut(breed, { hot: true, v: 1.2, moving: true }), breed).toBeGreaterThan(2);
+      expect(tongueOut(breed, { happy: 0.25 }), breed).toBeLessThan(0);
+      // au calme, la mâchoire reste à son repos (la gueule fermée du GLB)
+      const { md, s } = dog(breed);
+      for (let i = 0; i < 120; i++) md.anim.update(1 / 60, st({ size: s }));
+      const jaw = md.bone('jaw');
+      expect(jaw.quaternion.angleTo(jaw.userData.restQ)).toBeLessThan(0.01);
+      md.dispose();
     }
   });
 });

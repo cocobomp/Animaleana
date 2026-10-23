@@ -144,3 +144,50 @@ version réduite, mèches cachées et animation une image sur deux ; hors champ,
 15 m (basse, caméra du jeu, 10 et 20 chèvres) : +8 à +15 k triangles, mêmes appels de dessin. L'animation
 coûte plus que la procédurale (mixeur, sabots tenus, sol mesuré : ≈ 0,1 ms par chèvre au loin, ≈ 0,3 ms de près) mais
 le rendu, qui dominait, est divisé par 2 à 4. Construction d’une chèvre : 3 à 15 ms dans le navigateur (le premier gabarit ≈ 0,3 s, partagé ensuite).
+
+## Finitions 2 (ruminants)
+
+### Bouc nettement plus grand et massif (`src/sim/goatLook.js` BUCK, `goatReal.js` shapeFor, railPitch, browseFence)
+
+Le bouc adulte est × 1,12 (× 1,05 avant), tête × 1,06, encolure, épaules et poitrail épaissis : dans le gabarit, la
+peau est poussée le long de sa normale lissée de 2,5 à 5,6 cm (plus sur le dessus de l'encolure), ni la tête ni le bas
+des pattes ni l'arrière du corps (gabarit partagé par longueur de pattes et épaississement : + 19 Ko de positions par
+gabarit de bouc, + les mèches du poil long pour le col noir et la poitevine). Le bouc ainsi agrandi restait dressé au-dessus de
+la lisse : `railPitch` atténuait sa correction selon l'écart sans signe (pleine à 8 cm, nulle à 25 cm) alors que le
+clip lève les antérieurs d'un grand bouc 15 cm au-dessus de la lisse — il n'en corrigeait que la moitié (saanen
+7,8-8,7 cm, col noir 6,3-7,2 cm au-dessus). Maintenant : atténuation seulement sous la lisse, bascule jusqu'à
+0,24 rad avec le terme du second ordre (au premier ordre, 1,2 cm de trop : dans la lisse), et glissade réglée sur les
+onglons mesurés (`railFrontAt`) pour les poser au milieu de la lisse (en basculant, l'avant avance ; la chèvre alpine
+s'arrêtait aussi 10,7 cm avant le milieu de la lisse). Boucs alpine, saanen, col noir, poitevine : sole des
+antérieurs 0,3-1,6 cm au-dessus de la lisse, à 0-0,4 cm de son milieu, aucun sommet dans les lisses
+(`tests/ruminantFinish.test.js`).
+
+### Demi-tour sur place et petit pas : les sabots piétinent (`sheepReal.js`, commun au mouton, à la chèvre et à la vache)
+
+Quand le corps tourne sur place ou avance à peine (`trackMotion` : rotation qui domine, ou moins de 22 % de la vitesse
+du pas), le clip du pas n'est plus joué : l'animal reste sur son pose debout et **chaque sabot se lève et se repose à
+son tour** (`shuffleSteps`, `pivotStep` : deux sabots au plus en l'air, jamais deux de la même ceinture), le sabot
+levé posé un peu en avant de là où le corps l'entraîne. L'allure qui repart entre calée sur les sabots posés
+(`matchPhase`). La rotation suit ce que les sabots peuvent tenir (`turnRate`, `steer` : sur place, au rythme des pas ;
+au pas, le cercle de virage que tiennent les sabots ; il ralentit quand sa cible est dans ce cercle ; plus vite quand
+il suit le troupeau, sa mère ou la joueuse) et le sabot levé est posé du côté où le corps l'entraînera (`turnLead`).
+Le temps de se retourner ne compte pas dans la promenade de l'entité (8 s au plus par demi-tour, `AnimalEntity.js`).
+Glissement d'un sabot posé sur son appui (max), demi-tour de l'entité (`tests/ruminantFinish.test.js`) : mouton
+suffolk 41-59 → 2-5 cm, agneau islandais 28-33 → 3-4 cm, chèvre alpine 36 → 4-5 cm, bouc col noir 47 → 4-7 cm,
+chevreau 21-23 → 2-8 cm, vache holstein 110-117 → 9-11 cm, taureau hereford 44 → 4-9 cm, veau 68 → 8-11 cm ;
+chèvre qui se retourne vers la barrière 36-52 → 3-6 cm, correction des sabots 0,52 → 0,2-0,42 rad. Un demi-tour
+prend ≈ 2,5 s au mouton, 3,4 s à la chèvre, 4 à 6 s à la vache (avant : 1 s, sabots traînés). Le sabot levé balance de
+9,5 à 10,5 cm d'une image à l'autre pendant un pas sur place (moins qu'au pas : 14 à 16 cm). Coût (node, 12 ruminants
+qui font demi-tour toutes les 4 s, machine chargée) : 64-86 → 72-119 µs par animal et par image (≈ +0,3 ms par image
+pour 20 animaux). Promenade libre de 60 s (4 vaches) : 24-30 m parcourus comme avant, aucun animal sur place plus de
+0,6 s.
+
+### Mèches longues couché (`ruminantHair.js`, commun à l'islandais, au col noir, à la poitevine et à la Highland)
+
+Couchée, la mèche garde 88 % de sa longueur (repliée aux trois quarts, elle disparaissait dans la toison), se rabat
+contre la peau (dans le shader, après le squelette : l'essentiel de ce qui l'écarte du corps est retiré, la longueur
+gardée) et la part qui entrerait dans le sol s'étale dans l'herbe, vers l'extérieur et un peu vers l'arrière. La pose
+figée couchée (caisse de voyage, van : `staticPose`) donne le repli tout de suite — les mèches pendaient droit sous le
+ventre, à travers le plancher. Mèches visibles couché, vue de dessus : islandais 630 → 5558 pixels dont 208 → 2751
+étalés hors du corps ; col noir 149 → 1340 ; poitevine 68 → 2034 ; de côté : islandais 1081 → 12 120. Coût : une
+branche du vertex shader des mèches, prise seulement couché (uniforme), ≈ 30 opérations par sommet.

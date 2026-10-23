@@ -201,3 +201,46 @@ vaches), classe « ferme » du concours de beauté, quêtes, grange, pré, abri 
 femelles (jamais du taureau ni du veau), école vétérinaire (tri des cœurs, textes). Les tests des espèces proposées qui
 jouent un scénario (`especesProposees.test.js`, `contreVerifEspeces.test.js` : seuls le cheval et le chien) fixent leur
 liste et la rendent ensuite : ils restent justes.
+
+## Finitions 2 (ruminants)
+
+### Tête claire sans strie d'ombre derrière l'œil (`cowCoat.js`, qualité haute)
+
+La strie gris-bleu à bord net derrière l'œil des taureaux et vaches à tête claire (Hereford, Charolais…) était surtout
+l'ombre des cornes (et des oreilles), minces et proches de la joue (le rendu sans ombres, puis sans les cornes dans la
+carte d'ombre, l'a montré). Biais de profondeur de l'ombre de 30 cm, à la taille de la bête, sur la tête seulement
+(`HEAD_SHADOW_BIAS`, ajouté aux coordonnées d'ombre du soleil dans le vertex shader de la robe) : les ombres du décor
+(abri, arbres, à plus d'un mètre) tombent toujours sur la tête, le corps garde le biais du soleil, les cornes et les
+oreilles portent toujours leur ombre sur l'encolure et au sol ; `World.js` inchangé. Joue derrière l'œil (planche) :
+3382 pixels assombris de plus de 10 % (jusqu'à 44 %) → 2 ; tête du taureau dans le jeu (16 vues, 8 h à 18 h) :
+28 224 pixels clairs assombris de plus de 15 % → 590 (bord des naseaux). Coût : trois opérations par sommet de la robe.
+
+### Demi-tour sur place et petit pas : les sabots piétinent (`sheepReal.js`, commun au mouton, à la chèvre et à la vache)
+
+Quand le corps tourne sur place ou avance à peine (`trackMotion` : rotation qui domine, ou moins de 22 % de la vitesse
+du pas), le clip du pas n'est plus joué : l'animal reste sur son pose debout et **chaque sabot se lève et se repose à
+son tour** (`shuffleSteps`, `pivotStep` : deux sabots au plus en l'air, jamais deux de la même ceinture), le sabot
+levé posé un peu en avant de là où le corps l'entraîne. L'allure qui repart entre calée sur les sabots posés
+(`matchPhase`). La rotation suit ce que les sabots peuvent tenir (`turnRate`, `steer` : sur place, au rythme des pas ;
+au pas, le cercle de virage que tiennent les sabots ; il ralentit quand sa cible est dans ce cercle ; plus vite quand
+il suit le troupeau, sa mère ou la joueuse) et le sabot levé est posé du côté où le corps l'entraînera (`turnLead`).
+Le temps de se retourner ne compte pas dans la promenade de l'entité (8 s au plus par demi-tour, `AnimalEntity.js`).
+Glissement d'un sabot posé sur son appui (max), demi-tour de l'entité (`tests/ruminantFinish.test.js`) : mouton
+suffolk 41-59 → 2-5 cm, agneau islandais 28-33 → 3-4 cm, chèvre alpine 36 → 4-5 cm, bouc col noir 47 → 4-7 cm,
+chevreau 21-23 → 2-8 cm, vache holstein 110-117 → 9-11 cm, taureau hereford 44 → 4-9 cm, veau 68 → 8-11 cm ;
+chèvre qui se retourne vers la barrière 36-52 → 3-6 cm, correction des sabots 0,52 → 0,2-0,42 rad. Un demi-tour
+prend ≈ 2,5 s au mouton, 3,4 s à la chèvre, 4 à 6 s à la vache (avant : 1 s, sabots traînés). Le sabot levé balance de
+9,5 à 10,5 cm d'une image à l'autre pendant un pas sur place (moins qu'au pas : 14 à 16 cm). Coût (node, 12 ruminants
+qui font demi-tour toutes les 4 s, machine chargée) : 64-86 → 72-119 µs par animal et par image (≈ +0,3 ms par image
+pour 20 animaux). Promenade libre de 60 s (4 vaches) : 24-30 m parcourus comme avant, aucun animal sur place plus de
+0,6 s.
+
+### Mèches longues couché (`ruminantHair.js`, commun à l'islandais, au col noir, à la poitevine et à la Highland)
+
+Couchée, la mèche garde 88 % de sa longueur (repliée aux trois quarts, elle disparaissait dans la toison), se rabat
+contre la peau (dans le shader, après le squelette : l'essentiel de ce qui l'écarte du corps est retiré, la longueur
+gardée) et la part qui entrerait dans le sol s'étale dans l'herbe, vers l'extérieur et un peu vers l'arrière. La pose
+figée couchée (caisse de voyage, van : `staticPose`) donne le repli tout de suite — les mèches pendaient droit sous le
+ventre, à travers le plancher. Mèches visibles couché, vue de dessus : islandais 630 → 5558 pixels dont 208 → 2751
+étalés hors du corps ; col noir 149 → 1340 ; poitevine 68 → 2034 ; de côté : islandais 1081 → 12 120. Coût : une
+branche du vertex shader des mèches, prise seulement couché (uniforme), ≈ 30 opérations par sommet.

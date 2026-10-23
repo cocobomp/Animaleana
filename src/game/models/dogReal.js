@@ -2671,33 +2671,42 @@ class RealDogAnim {
     // (glissement de la langue qui pend, dans le repère de la mâchoire : vers l'avant, 60 % de sa longueur plus ce que
     // faceShape l'a rentrée dans un museau court — boxer : sinon elle restait derrière les dents —, un peu vers le bas)
     // (jack : langue modelée en quatre os, posée dans le creux de la mâchoire du bas — tools/chien/models.py jack_mouth.
-    // En haletant, elle glisse de 1,1 fois sa longueur, un peu vers le haut pour passer sur les incisives, s'allonge de
-    // moitié et pend en arc — courbure par os, de plus en plus forte vers le bout. La gueule, charnière à la commissure,
-    // s'ouvre une fois et demie plus que celle du shiba. Langue sortie de 2,1 à 3,5 cm devant les lèvres à la taille de
-    // la tête d'un chien de taille 1 ; avant : ni mâchoire ni langue, la gueule restait fermée)
+    // En haletant, elle glisse de 1,1 fois sa longueur, un peu vers le haut pour passer sur les incisives, s'allonge
+    // (au plus de 55 %) et pend en arc — courbure par os, de plus en plus forte vers le bout. La gueule, charnière à la
+    // commissure, s'ouvre une fois et demie plus que celle du shiba. Langue sortie de 2,2 à 3,2 cm devant les lèvres à
+    // la taille de la tête d'un chien de taille 1 ; avant : ni mâchoire ni langue, la gueule restait fermée)
     this.jawK = B.model === 'jack' ? 1.5 : 1;
-    this.tongueCurl = B.model === 'jack' ? [0, 0.18, 0.4, 0.55] : null;
+    this.tongueCurl = B.model === 'jack' ? [0, 0.22, 0.42, 0.55] : null;
     this.tongueStretch = null;
     if (this.tongue.length > 1 && this.jaw) {
       const t1 = base.index.get('tongue1');
       const tn = base.index.get(this.tongue[this.tongue.length - 1].name);
       const d = S.heads[tn].clone().sub(S.heads[t1]);
       const len = d.length();
-      const k = len / Math.max(1e-6, base.heads[tn].distanceTo(base.heads[t1]));
       if (B.model === 'jack') {
         // (longueurs de repos à la taille de la tête de la race — racine de head — : le museau raccourci du carlin
         // raccourcit aussi la langue, qui reprend sa longueur en sortant ; celui du teckel, plus long, la garde)
         const hk = Math.sqrt(B.head ?? 1);
         const lenS = Math.max(len, base.heads[tn].distanceTo(base.heads[t1]) * hk);
-        d.normalize().multiplyScalar(lenS * 1.1).add(V(0, lenS * 0.2, 0));
+        // (museau raccourci : la langue glisse d'un peu plus que sa longueur dans la gueule, pas de toute sa longueur
+        // de repos — sinon elle sortait presque entière, raide, à l'horizontale)
+        const lenM = len + (lenS - len) * 0.3;
+        d.normalize().multiplyScalar(lenM * 1.1).add(V(0, lenM * 0.2, 0));
         this.tongueStretch = this.tongue.map((b, i) => {
           if (i === 0) return 0;
           const a = base.index.get(this.tongue[i - 1].name);
           const c = base.index.get(b.name);
           const def = S.heads[c].distanceTo(S.heads[a]);
-          return Math.max(0, (Math.max(def, base.heads[c].distanceTo(base.heads[a]) * hk) * 1.5) / Math.max(1e-6, def) - 1);
+          // (allongement borné : allongée de plus de la moitié, elle se pliait en équerre entre deux os)
+          return Math.min(0.55, Math.max(0, (Math.max(def, base.heads[c].distanceTo(base.heads[a]) * hk) * 1.5) / Math.max(1e-6, def) - 1));
         });
-      } else d.normalize().multiplyScalar(len * 0.6 + k * 0.035 * Math.max(0, 0.8 - (B.snout ?? 1))).add(V(0, -len * 0.08, 0));
+      } else {
+        // (museau court — boxer, akita — : la langue, raccourcie avec le museau et rentrée par faceShape, glisse de
+        // sa longueur de repos à la taille de la tête et reprend tout ce que faceShape l'a rentrée ; avant : sortie de
+        // 0,1 cm, cachée derrière les babines du boxer)
+        const lenS = Math.max(len, base.heads[tn].distanceTo(base.heads[t1]) * Math.sqrt(B.head ?? 1));
+        d.normalize().multiplyScalar(lenS * 0.6 + (B.head ?? 1) * 0.035 * Math.max(0, 0.8 - (B.snout ?? 1))).add(V(0, -len * 0.08, 0));
+      }
       this.tongueSlide = d.applyQuaternion(base.rotW[base.index.get('jaw')].clone().invert());
     }
     this.breathe = model.bone('breathe');

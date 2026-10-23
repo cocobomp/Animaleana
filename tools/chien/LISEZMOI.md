@@ -293,11 +293,16 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
 - **Gueule des races du jack** (jack russell, cavalier, cocker, chihuahua, carlin, bouledogue, teckel, corgi, yorkshire,
   spitz nain) : os de la mâchoire et langue modelée dans le GLB (voir `jack_mouth` plus haut). Dans le jeu
   (`RealDogAnim`) : la gueule s'ouvre une fois et demie plus que celle du shiba (charnière à la commissure) ; en
-  haletant, la langue glisse de 1,1 fois sa longueur (à la taille de la tête de la race, racine de `head`), un peu vers
-  le haut pour passer sur les incisives, s'allonge de moitié (elle reprend sa longueur dans un museau raccourci : carlin,
-  bouledogue) et pend en arc (`tongueCurl`) ; rose (`cTongue`, texture jamais gardée sur elle : sinon brun-noir des
-  lèvres du jack). Langue sortie (test `tongueOut`, cm rapportés à la taille de la tête) : jack russell 2,2, cavalier
-  3,5, chihuahua 2,6, carlin 2,5, bouledogue 2,7 à l'arrêt (avant : pas de langue, gueule fermée) ; au calme −1,5 à
-  −1,6 (dedans), mâchoire à son repos. Points d'appui : la langue n'en est pas (le pas d'échantillonnage du corps est
+  haletant, la langue glisse de 1,1 fois sa longueur (dans un museau raccourci, un peu plus : 30 % de ce que le museau
+  lui a pris), un peu vers le haut pour passer sur les incisives, s'allonge (au plus de 55 % : au-delà elle se pliait en
+  équerre entre deux os) et pend en arc (`tongueCurl`) ; rose (`cTongue`, texture jamais gardée sur elle : sinon
+  brun-noir des lèvres du jack). Langue sortie (test `tongueOut`, cm rapportés à la taille de la tête) : jack russell
+  2,8, cavalier 2,7, chihuahua 2,6, carlin 2,2, bouledogue 2,3, teckel 3,2, spitz nain 2,4 à l'arrêt (avant : pas de
+  langue, gueule fermée) ; au calme −1,1 à −1,6 (dedans), mâchoire à son repos. (Le dessous de la langue est posé sur
+  la première surface tournée vers le haut sous le rayon : au fond de la gueule, le rayon touchait la paroi du fond.)
+- **Langue du boxer** (et des autres museaux courts du shiba : akita, saint-bernard, lagotto) : elle glisse de sa
+  longueur de repos à la taille de la tête (racine de `head`) et reprend tout ce que `faceShape` l'a rentrée (avant :
+  le terme était multiplié par le raccourcissement de la langue). Boxer : +0,1 → 3,2 cm devant les lèvres (labrador 3,2 ;
+  akita 2,0 → 2,6). Points d'appui : la langue n'en est pas (le pas d'échantillonnage du corps est
   compté sans elle) ; assis, la peau des antérieurs n'est plus un appui « hors pieds avant » (races du jack : le chiot
   carlin basculait ou non selon un dixième de millimètre).

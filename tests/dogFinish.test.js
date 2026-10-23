@@ -305,8 +305,9 @@ describe('gueule ouverte', () => {
     return out;
   };
   it('en haletant, la langue pend hors de la gueule (avant : rentrée derrière les dents, un rictus) ; au calme, elle est dedans', () => {
-    for (const breed of ['labrador', 'golden', 'husky']) {
-      // (mesuré : 3 à 3,6 cm à l'arrêt, 2,9 à 3,2 en marchant ; au calme -2,1 à -2,3)
+    // (boxer, museau court : avant, la langue s'arrêtait à la lèvre, +0,1 cm, cachée derrière les babines)
+    for (const breed of ['labrador', 'golden', 'husky', 'boxer']) {
+      // (mesuré, rapporté à la tête : 2,9 à 3,3 à l'arrêt, 2,6 à 3,1 en marchant ; au calme -2 à -3,2)
       expect(tongueOut(breed, { happy: 1, hot: true })).toBeGreaterThan(2);
       expect(tongueOut(breed, { hot: true, v: 1.2, moving: true })).toBeGreaterThan(2);
       expect(tongueOut(breed, { happy: 0.25 })).toBeLessThan(0);
@@ -321,7 +322,7 @@ describe('gueule ouverte', () => {
     expect(Math.min(...t)).toBeGreaterThanOrEqual(0);
     expect(Math.max(...t) - Math.min(...t)).toBe(3);
     for (const breed of ['jack_russell', 'cavalier', 'chihuahua']) {
-      // (mesuré : 2,2 / 3,5 / 2,6 à l'arrêt, 2,3 / 3,4 / 2,4 en marchant ; au calme -1,5 à -1,6 ; avant : pas de langue)
+      // (mesuré : 2,8 / 2,7 / 2,6 à l'arrêt, 2,9 / 2,7 / 2,5 en marchant ; au calme -1,1 à -1,6 ; avant : pas de langue)
       const a = tongueOut(breed, { happy: 1, hot: true });
       expect(a, breed).toBeGreaterThan(2);
       expect(a, breed).toBeLessThan(3.8);

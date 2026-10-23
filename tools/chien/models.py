@@ -304,6 +304,19 @@ def jack_mouth(arm, meshes):
     gname = {g.index: g.name for g in body.vertex_groups}
     # --- langue : dessous posé sur le creux de la mâchoire du bas (gueule ouverte du modèle d'origine)
     bvh = BVHTree.FromPolygons([v.co.copy() for v in me.vertices], [tuple(p.vertices) for p in me.polygons])
+
+    def floor_at(x, z):
+        # (creux de la mâchoire du bas sous le point : première surface tournée vers le haut en descendant — au fond de
+        # la gueule, le rayon touchait d'abord la paroi du fond, 1,7 cm plus haut, et le fond de la langue s'y relevait)
+        o = Bl(x, 0.484, z)
+        for _ in range(6):
+            hit = bvh.ray_cast(o, Vector((0, 0, -1)), 0.06)
+            if hit[0] is None:
+                return 0.46
+            if hit[1].z > 0.2:
+                return hit[0].z
+            o = hit[0] - Vector((0, 0, 1e-4))
+        return 0.46
     T = JACK_TONGUE
     nS, nA = T['sections'], T['across']
     rings = []
@@ -319,8 +332,7 @@ def jack_mouth(arm, meshes):
         for j in range(nA):
             a = -1 + 2 * j / (nA - 1)
             x = a * hw
-            hit = bvh.ray_cast(Bl(x, 0.484, z), Vector((0, 0, -1)), 0.06)
-            yb = (hit[0].z if hit[0] is not None else 0.46) + 0.0012
+            yb = floor_at(x, z) + 0.0012
             # (épaisseur en lentille, plus mince au bout)
             th = T['thick'] * (1 - 0.35 * u ** 2) * math.sqrt(max(0.05, 1 - a * a))
             # (dessus sous la ligne des lèvres du bas, au milieu un léger sillon)
@@ -423,8 +435,7 @@ def jack_mouth(arm, meshes):
     tz = zj
     ty = []
     for z in tz:
-        hit = bvh.ray_cast(Bl(0.0, 0.484, z), Vector((0, 0, -1)), 0.06)
-        ty.append((hit[0].z if hit[0] is not None else 0.46) + 0.0012 + 0.35 * T['thick'])
+        ty.append(floor_at(0.0, z) + 0.0012 + 0.35 * T['thick'])
     K.select_only([arm])
     bpy.ops.object.mode_set(mode='EDIT')
     eb = arm.data.edit_bones

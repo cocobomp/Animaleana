@@ -81,6 +81,20 @@ Le modèle d'origine n'a aucune animation : toutes les allures sont générées 
      la moitié de sa bande 3-20 texels (les ombres peintes des côtes : écart type 18,8 → 9,5 sur 255).
 
    Fichier final : **749 992 octets**.
+7. **`bords.mjs`** (sharp ; `node bords.mjs horse_real.glb sortie.glb`, sur le GLB de `dilate.mjs` ; `--mesure` mesure
+   sans écrire) : bord des îlots de la **carte de relief**. La photo de relief de la source s'arrête en escalier :
+   sur les premiers texels à l'intérieur d'une couture, des normales mal cuites, en dents de scie le long du bord ;
+   `dilate.mjs` ne refaisait que l'extérieur, et le prolongeait depuis ces dents (des traînées de couleurs vives
+   hors des îlots). Lu en bilinéaire, le long de la couture du milieu de la gorge et du poitrail, le relief tombait
+   tantôt sur la peau, tantôt sur une dent : des **tirets clairs** sous la gorge, vus de face. Les texels d'îlot à
+   moins de 3 texels du bord sont refaits depuis l'intérieur (passes de `dilate.mjs`), puis l'extérieur repart de ce
+   bord propre ; pas sur la tête (u < 0,4 : bords au ras des naseaux, des lèvres et des yeux, relief voulu — refait,
+   le bout du nez montrait ses facettes). Écart d'un texel du bord au fond de l'îlot (corps, sur 255, profondeur 1 à
+   6) : 19,3 / 8,1 / 6,5 / 5,0 / 3,5 / 2,7 → 5,4 / 5,2 / 5,0 / 5,0 / 3,5 / 2,7. Géométrie, allures et autres images
+   identiques (vérifié accesseur par accesseur) ; carte de relief 76,8 → 43,3 Kio (les traînées de couleurs vives
+   pesaient lourd).
+
+   Fichier final : **715 656 octets**.
 
 Pour ne changer qu'une texture sans refaire les allures : relancer `lyndon_prep.py` et `prep2.py`, puis
 **`retex.mjs`** remplace l'image dans le GLB brut d'origine (`node retex.mjs horse_raw.glb horse_body_detail
@@ -657,6 +671,21 @@ Finitions vues au téléphone (critique « finitions », 390×844, qualité bass
 - **couverture imperméable** : un peu plus d'écart (`GEAR_LEG_GAP`) là où la peau voisine suit la cuisse (hanche,
   grasset, regardée 8 cm plus loin d'avant en arrière) : tissu sous la peau en mouvement 3 à 4 cm (Akhal-Teké, traits)
   → 0 sur les 33 races × 3 couvertures × 5 allures, peau par-dessus le tissu toujours ≤ 3 mm.
+
+Finitions 2 (téléphone 390×844 en basse et de près en haute ; planches AVANT/APRÈS du correcteur) :
+
+- **pointillés de la joue** — deux causes, aucune dans le maillage (soudé, fermé, mêmes poids sur les sommets
+  doublés : vérifié) ni dans l'anticrénelage :
+  - *points sombres sur la ganache* : un triangle à cheval entre la tête et l'encolure (ganache, gorge, base des
+    oreilles) est peint selon la partie de son dernier sommet (`hPart`, « flat ») ; le shader lisait le repère de la
+    tête dans `hInfo`, qui pour un sommet de l'encolure porte sa hauteur relative au coude (≈ 1,7) : la position
+    fausse passait par l'œil sur un bout du triangle, et le bord foncé des paupières s'y peignait (un point par
+    triangle, alignés le long de la ganache ; ils disparaissaient en coupant l'œil, pas en coupant les textures).
+    Nouvel attribut `hHL` (vec4, 16 octets par sommet, ≈ 64 Kio par gabarit) : repère de la tête et hauteur relative
+    au coude, justes sur tous les sommets ; le shader du cheval réaliste y lit la tête (`hl`) et la hauteur (sauf
+    sur les oreilles, qui gardent `hInfo`). Points du bord des paupières peints à plus de 3 rayons de l'œil (33 races
+    et leurs poulains, 10 points par triangle) : 149 → 0 (`tests/horseCheek.test.js`) ;
+  - *tirets clairs sous la gorge* : bord des îlots de la carte de relief (voir `bords.mjs`, étape 7).
 
 Ce qu'il coûte, et comment on le garde bas :
 

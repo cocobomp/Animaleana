@@ -401,9 +401,11 @@ export function rabbitCoatMaterial(src, shared, opts) {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${COMMON_F}`)
       .replace('#include <color_fragment>', card
-        ? `#include <color_fragment>\nvec3 cardC0 = diffuseColor.rgb;\n${COLOR_F}\ndiffuseColor.rgb *= (0.93 + 0.18 * vCmpLow) * (0.76 + 0.3 * clamp(cardC0.r / max(cardC0.g, 0.05), 0.4, 1.0));`
+        ? `#include <color_fragment>\nvec3 cardC0 = diffuseColor.rgb;\n${COLOR_F}\ndiffuseColor.rgb *= (0.93 + 0.26 * vCmpLow) * (0.76 + 0.3 * clamp(cardC0.r / max(cardC0.g, 0.05), 0.4, 1.0)) * (0.7 + 0.3 * (1.0 - pow(abs(vMapUv.x * 2.0 - 1.0), 2.0)));`
         : `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(mix(roughnessFactor, 0.62, cHair.x), 0.45, cWet), 0.12, cEyeIn);');
+    // (cartes : chaque mèche d'une teinte un peu à elle, ses bords un peu plus sombres que son milieu — une mèche ronde,
+    // pas un ruban de papier d'une seule teinte vu de près)
     // (cartes : éclairées comme la peau où elles poussent, des deux côtés ; sinon le revers d'une carte est noir)
     // (et tournées vers la caméra et le ciel, comme un poil que la lumière traverse : la crinière vue de face, éclairée
     // par-devant, ne montre plus le revers sombre de ses mèches, ni la gorge le vert sombre du sol)
@@ -412,6 +414,6 @@ export function rabbitCoatMaterial(src, shared, opts) {
     if (a2c) sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', 'diffuseColor.a = smoothstep(0.1, 0.75, diffuseColor.a);\nif (diffuseColor.a < 0.04) discard;');
     if (card) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(normalize(vNormal) + vec3(0.0, 0.0, 0.9) + (viewMatrix * vec4(0.0, 0.6, 0.0, 0.0)).xyz);');
   };
-  mat.customProgramCacheKey = () => (card ? (a2c ? 'rabbit-card-v7-a2c' : 'rabbit-card-v7') : 'rabbit-coat-v4');
+  mat.customProgramCacheKey = () => (card ? (a2c ? 'rabbit-card-v8-a2c' : 'rabbit-card-v8') : 'rabbit-coat-v4');
   return mat;
 }

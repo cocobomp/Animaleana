@@ -84,16 +84,34 @@ describe('mèches de l\'angora et du tête de lion', () => {
     const n = new THREE.Vector3();
     const ang = [];
     const wid = [];
-    // (6 sommets par mèche : racine, milieu, bout — deux à deux ; normale de la peau où elle pousse)
-    for (let i = 0; i < p.count; i += 6) {
-      a.fromBufferAttribute(p, i).add(t.fromBufferAttribute(p, i + 1)).multiplyScalar(0.5);
-      t.fromBufferAttribute(p, i + 4).add(n.fromBufferAttribute(p, i + 5)).multiplyScalar(0.5).sub(a).normalize();
-      n.fromBufferAttribute(nA, i);
+    // (une mèche : trois rangées — racine, milieu, bout — de deux sommets, ou de trois si elle est pliée en long, le
+    // milieu de la rangée sorti du plan ; normale de la peau où elle pousse au milieu de la racine ; mèches repérées
+    // par leurs triangles, une mèche n'en partage avec aucune autre)
+    const ix = g.index.array;
+    const par = Array.from({ length: p.count }, (_, i) => i);
+    const f = (k) => (par[k] === k ? k : (par[k] = f(par[k])));
+    for (let k = 0; k < ix.length; k += 3) {
+      const r = f(ix[k]);
+      par[f(ix[k + 1])] = r;
+      par[f(ix[k + 2])] = r;
+    }
+    const comp = new Map();
+    for (let i = 0; i < p.count; i++) {
+      const r = f(i);
+      if (!comp.has(r)) comp.set(r, []);
+      comp.get(r).push(i);
+    }
+    for (const vs of comp.values()) {
+      vs.sort((x, y) => x - y);
+      const c = vs.length / 3;
+      a.fromBufferAttribute(p, vs[0]).add(t.fromBufferAttribute(p, vs[c - 1])).multiplyScalar(0.5);
+      t.fromBufferAttribute(p, vs[2 * c]).add(n.fromBufferAttribute(p, vs[3 * c - 1])).multiplyScalar(0.5).sub(a).normalize();
+      n.fromBufferAttribute(nA, vs[c === 3 ? 1 : 0]);
       ang.push((Math.acos(THREE.MathUtils.clamp(t.dot(n), -1, 1)) * 180) / Math.PI);
-      wid.push(a.fromBufferAttribute(p, i + 2).distanceTo(t.fromBufferAttribute(p, i + 3)));
+      wid.push(a.fromBufferAttribute(p, vs[c]).distanceTo(t.fromBufferAttribute(p, vs[2 * c - 1])));
     }
     const med = (v) => [...v].sort((x, y) => x - y)[Math.floor(v.length / 2)];
-    return { n: p.count / 6, ang: med(ang), wid: med(wid) };
+    return { n: comp.size, ang: med(ang), wid: med(wid) };
   };
 
   it('angora : mèches couchées le long du corps (à plus de 60° de la normale), étroites (moins de 1,4 cm), plus nombreuses', () => {
@@ -337,6 +355,75 @@ describe('pieds avant des jeunes béliers', () => {
         if (d !== null) expect(d, `${look.breed} ${v} m/s patte ${l}`).toBeLessThan(0.003);
       });
       expect(r.some((d) => d !== null), `${look.breed} ${v} m/s : un pied avant posé`).toBe(true);
+    }
+  });
+});
+
+describe('crinière du tête de lion', () => {
+  // De près, des cartes de la crinière se lisaient en rubans de papier plats d'une seule teinte : larges (largeur 0,42
+  // de la longueur en médiane, jusqu'à 0,52) et planes. Mèches plus étroites, une de plus par sommet, pliées en long en
+  // haute qualité (le milieu sort du plan), teinte arrondie d'un bord à l'autre par le shader ; au téléphone, pas de pli
+  // (deux fois moins de triangles), mèches un peu plus larges.
+  const locks = (md) => {
+    const g = md.cardMesh.geometry;
+    const P = g.attributes.position;
+    const R = g.attributes.cmpRest;
+    const ix = g.index.array;
+    const par = Array.from({ length: P.count }, (_, i) => i);
+    const f = (a) => (par[a] === a ? a : (par[a] = f(par[a])));
+    for (let t = 0; t < ix.length; t += 3) {
+      const a = f(ix[t]);
+      par[f(ix[t + 1])] = a;
+      par[f(ix[t + 2])] = a;
+    }
+    const comp = new Map();
+    for (let i = 0; i < P.count; i++) {
+      const r = f(i);
+      if (!comp.has(r)) comp.set(r, []);
+      comp.get(r).push(i);
+    }
+    const L = md.anim.base.land;
+    const v = (i) => new THREE.Vector3().fromBufferAttribute(P, i);
+    const out = [];
+    for (const vs of comp.values()) {
+      vs.sort((a, b) => a - b);
+      const nc = vs.length / 3;
+      // (crinière : mèches plantées devant les épaules)
+      if ((nc !== 2 && nc !== 3) || R.getZ(vs[0]) < L.shZ) continue;
+      const c = (r) => v(vs[r * nc]).add(v(vs[r * nc + nc - 1])).multiplyScalar(0.5);
+      const m0 = v(vs[nc]);
+      const m1 = v(vs[2 * nc - 1]);
+      const len = c(0).distanceTo(c(1)) + c(1).distanceTo(c(2));
+      const fold = nc === 3 ? v(vs[nc + 1]).distanceTo(c(1)) / (m0.distanceTo(m1) / 2) : 0;
+      out.push({ ratio: m0.distanceTo(m1) / len, fold });
+    }
+    return out;
+  };
+  it.each(['high', 'low'])('qualité %s : mèches étroites (pliées en haute qualité), coût borné', (q) => {
+    const prev = gfx.quality;
+    gfx.quality = q;
+    try {
+      const md = rabbit('tete_de_lion');
+      const ls = locks(md);
+      expect(ls.length).toBeGreaterThan(q === 'high' ? 380 : 200);
+      const r = ls.map((l) => l.ratio).sort((a, b) => a - b);
+      // (au téléphone, mèches un peu plus larges : elles sont moins nombreuses)
+      expect(r[r.length >> 1], 'largeur / longueur, médiane').toBeLessThan(q === 'high' ? 0.31 : 0.35);
+      expect(r[r.length - 1], 'largeur / longueur, la plus large').toBeLessThan(q === 'high' ? 0.38 : 0.43);
+      const folded = ls.filter((l) => l.fold > 0.3).length / ls.length;
+      if (q === 'high') expect(folded, 'part des mèches pliées').toBeGreaterThan(0.95);
+      else expect(folded).toBe(0);
+      // (coût : triangles des cartes du tête de lion adulte — haute 2 452 → 5 164, basse 1 408 → 1 732)
+      expect(md.cardMesh.geometry.index.count / 3).toBeLessThan(q === 'high' ? 5600 : 1900);
+      md.dispose();
+      // (angora : ses cartes ne changent pas — jamais pliées)
+      const an = rabbit('angora');
+      const g = an.cardMesh.geometry;
+      expect(g.attributes.position.count % 6).toBe(0);
+      expect(g.index.count / 3).toBe(g.attributes.position.count / 6 * 4);
+      an.dispose();
+    } finally {
+      gfx.quality = prev;
     }
   });
 });

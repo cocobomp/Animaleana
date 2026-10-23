@@ -89,7 +89,13 @@ comparaisons), dans la même lumière et au même cadrage.
   appliquent tels quels ; pieds au sol. Une géométrie par race (et par stade), partagée entre les lapins de cette
   race. Les mèches (cartes de poils) ont la couleur du pelage où elles poussent, jamais près des yeux ni sur la face ;
   resserrées au bout (pas en éventail), brins au bout arrondi et estompé (ombrage séparé de l'opacité : les bouts ne
-  noircissent pas), plus fines et plus nombreuses près du sol.
+  noircissent pas), plus fines et plus nombreuses près du sol. Crinière du tête de lion : mèches étroites (largeur
+  sur longueur en médiane 0,42 → 0,28), trois par sommet au lieu de deux (334 → 436 mèches), pliées en long en
+  qualité haute (le milieu sort du plan, les deux pans penchent leur normale) ; chaque mèche a sa teinte, ses bords
+  un peu plus sombres que son milieu (shader des cartes) ; texture des brins 128 × 256, brins plus fins : de près,
+  plus de rubans de papier plats d'une seule teinte. Coût (tête de lion adulte, triangles des cartes) : haute
+  2 452 → 5 164 (le lapin entier 9 428 → 12 140), basse 1 408 → 1 732 (pas de pli au téléphone, mèches un peu plus
+  larges).
 - **Moustaches** : longues vibrisses claires de part et d'autre du nez (`addWhiskers`, `petReal.js`), liées à l'os de
   la tête, plus courtes chez le lapereau, cachées au loin.
 - **Lapereaux** (stade « bébé ») : grosse tête, pattes, museau et oreilles courts, poil encore court ; le jeune entre

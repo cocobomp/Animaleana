@@ -86,8 +86,13 @@ comparaisons), dans la même lumière et au même cadrage.
 - **Races par les os** (`CAT_BUILDS`) : pattes, dos, tour de poitrine, ventre, cou, taille et largeur du crâne,
   museau et face plate (persan : la face recule sans toucher aux yeux), oreilles (taille, largeur, arrondi,
   écartement ; **pliées** vers l'avant du scottish fold), pinceaux (maine coon, norvégien), queue (longueur,
-  épaisseur, panache ; **pompon** du bobtail), poil long poussé le long de la normale (collerette, culottes,
-  panache) ou ras (siamois, sphynx). Sommets et têtes d'os sont déplacés ensemble : le squelette de chaque race
+  épaisseur, panache ; **pompon** du bobtail : le bout de la queue raccourcie est posé sur une boule de 2,7 cm
+  (adulte ; moins de deux fois le rayon de la queue à sa base) qui touche la croupe, en touffes irrégulières, portée
+  d'un bloc par le premier os de la queue et dont la robe est lue près de la croupe — `stubSkin`, poids et repères
+  propres à la race ; avant, un tonneau de 4 cm au bout bombé, froissé par les huit os de la queue, au motif lu au bout
+  de la queue d'origine : un bouchon sombre à bord net ; en haute qualité et de près, 3 couches de poil sur le pompon
+  seulement, 3 appels de dessin de plus par bobtail proche), poil long poussé le long de la normale (collerette,
+  culottes, panache) ou ras (siamois, sphynx). Sommets et têtes d'os sont déplacés ensemble : le squelette de chaque race
   garde les rotations de repos du GLB, les clips s'y appliquent tels quels ; pieds au sol. Une géométrie par race
   (et par stade), partagée entre les chats de cette race.
 - **Chatons** : modèle du chaton, traits de la race adoucis ; le **jeune** prend le modèle adulte (tête un peu plus

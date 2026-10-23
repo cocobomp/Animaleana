@@ -151,15 +151,26 @@ describe('appuis tenus', () => {
 });
 
 describe('queue en pompon du bobtail', () => {
-  /** Bout de la queue (peau déformée de la race, repos) : avancée de l'extrémité au centre et au bord, rayon. */
+  /**
+   * Bout de la queue (peau déformée de la race, repos) : avancée de l'extrémité au centre et au bord, rayon ; le long de
+   * l'axe de la base de la queue au centre du pompon (la boule n'est plus dans l'axe des deux derniers os, ramenés en
+   * arrière avec la queue raccourcie).
+   */
   function tipShape(md) {
     const S = md.anim.S;
     const base = md.anim.base;
     const P = S.D.pos;
     const H = S.D.heads;
     const tb = base.tailBones;
-    const a = V(...H[tb[tb.length - 2]].toArray());
-    const b = V(...H[tb[tb.length - 1]].toArray());
+    const a = V(...H[tb[0]].toArray());
+    const b = V();
+    let cnt = 0;
+    for (let i = 0; i < base.prims.coat.count; i++) {
+      if (base.W.tail[i] < 0.7) continue;
+      b.add(V(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]));
+      cnt++;
+    }
+    b.multiplyScalar(1 / cnt);
     const axis = b.clone().sub(a).normalize();
     const pts = [];
     for (let i = 0; i < base.prims.coat.count; i++) {

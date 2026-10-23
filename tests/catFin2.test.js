@@ -1,4 +1,5 @@
-// Finitions (2e passe) des chats réalistes : chaton qui dort vraiment roulé en boule sur le flanc, ... Déterministe :
+// Finitions (2e passe) des chats réalistes : chaton qui dort vraiment roulé en boule sur le flanc, pompon du bobtail
+// en boule, ... Déterministe :
 // graines fixes, pas de temps fixe, aucun Math.random (le mixeur est appelé avec des états donnés).
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import * as THREE from 'three';
@@ -88,6 +89,108 @@ describe('chaton en boule', () => {
       // (au repos, la peau peut s'enfoncer de bodyAllow, 3 mm et plus pour le poil long ; 1 mm de plus en passant)
       expect(worst, breed).toBeGreaterThan(-0.001 - md.anim.bodyAllow);
       expect(high, breed).toBeLessThan(0.008);
+      md.dispose();
+    }
+  });
+});
+
+describe('pompon du bobtail', () => {
+  /** Sommets de la boule du pompon (portés par la base de la queue) : positions (repère du chat), repos ou pose. */
+  function pompon(md, rest = false) {
+    const base = md.anim.base;
+    const P = md.anim.S.D.pos;
+    const k = md.anim.S.D.stubK;
+    md.root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+    const out = [];
+    for (let i = 0; i < base.prims.coat.count; i++) {
+      if (!(k?.[i] > 0.95)) continue;
+      out.push(rest ? new THREE.Vector3().fromArray(P, i * 3) : md.coatMesh.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(md.coatMesh.matrixWorld).applyMatrix4(inv));
+    }
+    return out;
+  }
+  /**
+   * Rondeur : sphère ajustée aux points (moindres carrés, forme algébrique |p|² = 2 c·p + d) ; écart relatif des
+   * distances à son centre (0 pour une boule parfaite) et rayon moyen.
+   */
+  function roundness(pts) {
+    const N = Array.from({ length: 4 }, () => new Array(5).fill(0));
+    for (const p of pts) {
+      const row = [2 * p.x, 2 * p.y, 2 * p.z, 1];
+      const y = p.lengthSq();
+      for (let r = 0; r < 4; r++) {
+        N[r][4] += row[r] * y;
+        for (let c = 0; c < 4; c++) N[r][c] += row[r] * row[c];
+      }
+    }
+    for (let i = 0; i < 4; i++) {
+      for (let r = 0; r < 4; r++) {
+        if (r === i) continue;
+        const f = N[r][i] / N[i][i];
+        for (let c = i; c < 5; c++) N[r][c] -= f * N[i][c];
+      }
+    }
+    const c = new THREE.Vector3(N[0][4] / N[0][0], N[1][4] / N[1][1], N[2][4] / N[2][2]);
+    const d = pts.map((p) => p.distanceTo(c));
+    const m = d.reduce((s, x) => s + x, 0) / d.length;
+    const sd = Math.sqrt(d.reduce((s, x) => s + (x - m) ** 2, 0) / d.length);
+    return { cv: sd / m, r: m, c };
+  }
+  // Le pompon était un tonneau au bout bombé, lié aux huit os de la queue (un bouchon à bord net, froissé quand la queue
+  // bougeait) : c'est une boule (écart à la sphère ajustée, mêmes sommets : 0,08 à 0,25 avant, 0,03 maintenant),
+  // portée d'un bloc par la base de la queue, qui reste ronde dans les poses.
+  it.each(['adult', 'young', 'baby'])('%s : une boule, ronde aussi debout, au trot et assis', (stage) => {
+    const md = cat('bobtail', stage);
+    const pts = pompon(md, true);
+    expect(pts.length).toBeGreaterThan(100);
+    const r0 = roundness(pts);
+    expect(r0.cv, 'repos').toBeLessThan(0.08);
+    expect(r0.r).toBeGreaterThan(0.012);
+    expect(r0.r).toBeLessThan(0.03);
+    for (const [clip, t] of [['idle', 0.5], ['trot', 0.3], ['sit', 0]]) {
+      md.anim.clipPose(clip, t);
+      expect(roundness(pompon(md)).cv, `${stage} ${clip}`).toBeLessThan(0.08);
+    }
+    md.dispose();
+  });
+
+  it('se voit de dos et de profil : la boule sort de la silhouette de la croupe (en arrière ou au-dessus) d\'au moins la moitié de son rayon', () => {
+    for (const stage of ['adult', 'young', 'baby']) {
+      const md = cat('bobtail', stage);
+      md.staticPose('stand');
+      const pts = pompon(md);
+      const { r } = roundness(pts);
+      const back = Math.min(...pts.map((p) => p.z));
+      const top = Math.max(...pts.map((p) => p.y));
+      const zc = pts.reduce((s, p) => s + p.z, 0) / pts.length;
+      md.root.updateMatrixWorld(true);
+      const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+      const base = md.anim.base;
+      let rump = Infinity;
+      let hip = -Infinity;
+      for (let i = 0; i < base.prims.coat.count; i += 2) {
+        if (base.W.tail[i] > 0.05) continue;
+        const q = md.coatMesh.getVertexPosition(i, _v).applyMatrix4(md.coatMesh.matrixWorld).applyMatrix4(inv);
+        rump = Math.min(rump, q.z);
+        if (Math.abs(q.z - zc) < 0.03) hip = Math.max(hip, q.y);
+      }
+      expect(Math.max(rump - back, top - hip), stage).toBeGreaterThan(0.5 * r);
+      md.dispose();
+    }
+  });
+
+  it('robe lue près de la croupe : repères du motif du pompon à moins de 35 % de la longueur de la queue d\'origine', () => {
+    for (const stage of ['adult', 'baby']) {
+      const md = cat('bobtail', stage);
+      const base = md.anim.base;
+      const rest = md.coatMesh.geometry.attributes.cmpRest.array;
+      const c0 = base.heads[base.tailBones[0]];
+      let far = 0;
+      for (let i = 0; i < base.prims.coat.count; i++) {
+        if (base.W.tail[i] < 0.7) continue;
+        far = Math.max(far, _v.fromArray(rest, i * 3).distanceTo(c0));
+      }
+      expect(far / base.land.tailLen, stage).toBeLessThan(0.35);
       md.dispose();
     }
   });

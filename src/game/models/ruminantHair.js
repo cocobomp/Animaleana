@@ -262,10 +262,13 @@ vHT = uv.y;
   vec3 hc = mix(hA, hB, vHSide);
   // (grain des brins moins marqué sur le poil clair : les mèches blanches ne grisent pas)
   float lc = dot(hc, vec3(0.2126, 0.7152, 0.0722));
-  diffuseColor.rgb = hc * mix(0.6 + 0.45 * g, 0.86 + 0.2 * g, smoothstep(0.3, 0.75, lc)) * (0.82 + 0.18 * smoothstep(0.0, 0.35, vHT));
+  // (racine assombrie — l'ombre du poil voisin — à peine sur le poil clair : grise, la racine de chaque mèche blanche se
+  // posait sur la pointe de la précédente et dessinait des tuiles)
+  float lt = smoothstep(0.3, 0.75, lc);
+  diffuseColor.rgb = hc * mix(0.6 + 0.45 * g, 0.86 + 0.2 * g, lt) * (mix(0.82, 0.95, lt) + mix(0.18, 0.05, lt) * smoothstep(0.0, 0.35, vHT));
 }`);
   };
-  mat.customProgramCacheKey = () => `${name}-v3`;
+  mat.customProgramCacheKey = () => `${name}-v4`;
   mat.userData.hairUniforms = hu;
   return mat;
 }

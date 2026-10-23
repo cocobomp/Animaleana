@@ -363,3 +363,28 @@ describe('chèvre contre la barrière (en jeu : browseFence)', () => {
     expect(r.frontStepMax).toBeLessThan(0.085);
   }, 120000);
 });
+
+describe('poil long des chèvres (col noir, poitevine)', () => {
+  // (critique : mèches claires de l'arrière du col noir en « plumes » qui se chevauchent, languettes sombres qui dépassent
+  // du dessus de l'encolure)
+  it.each([['col_noir', 'f'], ['col_noir', 'm'], ['poitevine', 'f']])('%s (%s) : mèches étroites, aucune devant les épaules', (breed, sex) => {
+    const md = buildRealGoatModel(lookOf('goat', breed, { sex }), breed, GG);
+    const M = md.anim.S.measure;
+    const g = md.hair.geometry;
+    const top = g.attributes.hairTop;
+    const pos = g.attributes.position;
+    let zMax = -Infinity;
+    for (let i = 0; i < top.count; i++) zMax = Math.max(zMax, top.getZ(i));
+    // (racines derrière les épaules : rien sur l'encolure)
+    expect(zMax).toBeLessThan(M.shZ - 0.02);
+    // (largeur d'une mèche : les deux sommets d'un même rang, au plus 6,6 cm au tiers de sa longueur)
+    let wMax = 0;
+    for (let v = 0; v + 1 < pos.count; v += 2) {
+      wMax = Math.max(wMax, Math.hypot(pos.getX(v) - pos.getX(v + 1), pos.getY(v) - pos.getY(v + 1), pos.getZ(v) - pos.getZ(v + 1)));
+    }
+    // (l'ondulation déplace les deux bords ensemble : elle ne change pas la largeur ; 9,2 cm avant)
+    expect(wMax).toBeLessThan(0.068);
+    expect(g.userData.cards).toBeGreaterThan(80);
+    md.dispose?.();
+  });
+});

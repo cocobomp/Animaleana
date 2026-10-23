@@ -353,6 +353,9 @@ function hairCards(base, S, B) {
     const z = pos[i * 3 + 2];
     const ny = P.smoothN[i * 3 + 1];
     if (ny < -0.45) continue; // (pas sous le ventre)
+    // (ni devant les épaules : sur l'encolure, les mèches dépassaient en languettes sombres de chaque côté du cou vu du
+    // dessus — le poil long est sur le dos, les flancs, la croupe et les cuisses)
+    if (z > M.shZ - 0.02) continue;
     let fw = 0;
     for (let k = 0; k < 4; k++) if (femur.has(P.si[i * 4 + k])) fw += P.sw[i * 4 + k];
     const hl = (y - M.bellyY) / Hh;
@@ -361,8 +364,12 @@ function hairCards(base, S, B) {
     const thigh = fw > 0.3 && z < M.hipZ + 0.06 && y > M.kneeY[1] + 0.04;
     if (body || thigh) cand.push({ i, hl, thigh });
   }
-  const picks = spreadLocks(cand, pos, 0.036, 400).map(({ i, hl, thigh }) => {
+  // (mèches étroites et serrées — 5 à 6,6 cm de large au lieu de 7 à 9, 3,1 cm entre deux au lieu de 3,6 — : larges, les
+  // mèches claires de l'arrière du col noir se chevauchaient en « plumes » posées en tuiles)
+  const picks = spreadLocks(cand, pos, 0.031, 400).map(({ i, hl, thigh }) => {
     const z = pos[i * 3 + 2];
+    // (plus courtes en approchant des épaules)
+    const shoulder = 1 - 0.4 * Math.min(1, Math.max(0, (z - (M.shZ - 0.16)) / 0.14));
     let side = 0;
     if (B.pattern === 'colnoir') side = z > edge ? 0 : 1;
     else if (B.pattern === 'poitevine') side = hl < 0.08 ? 1 : 0;
@@ -371,8 +378,8 @@ function hairCards(base, S, B) {
       // (poitevine : poil long sur le dos et la croupe, plus court en bas des flancs — il ne pend pas en languettes noires
       // sur le ventre clair ; col noir : plus long en bas, la jupe)
       len: B.long * (thigh ? 1.1 : B.pattern === 'poitevine' ? 0.55 + 0.55 * Math.min(1, Math.max(0, hl)) : 0.62 + 0.5 * (1 - Math.min(1, Math.max(0, hl))))
-        * (0.85 + 0.3 * lockHash(i + 5)),
-      w: 0.07 + 0.022 * lockHash(i + 9),
+        * (0.85 + 0.3 * lockHash(i + 5)) * shoulder,
+      w: 0.05 + 0.016 * lockHash(i + 9),
       back: thigh ? 0.45 : 0.1,
       side,
     };
@@ -504,7 +511,8 @@ export function buildRealGoatModel(look, breedId = null, gltf = null) {
   const hairGeo = hairCards(base, S, B);
   if (hairGeo) {
     const c = B.colors;
-    const hmat = lockMaterial(lockU, B.pattern === 'poitevine' ? c.base : c.dark, c.light, 'goat_locks');
+    // (toile « fine » : des brins séparés, du poil — la toile de la laine en faisait des feuilles)
+    const hmat = lockMaterial(lockU, B.pattern === 'poitevine' ? c.base : c.dark, c.light, 'goat_locks', 'fine');
     hair = new SheepMesh(hairGeo, hmat, hb);
     hair.name = 'goat_hair';
     hair.bind(skeleton, new THREE.Matrix4());

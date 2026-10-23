@@ -2248,7 +2248,7 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
     realDog: true,
   };
   model.skinGear = (mesh) => skinDogGear(model, S, base, mesh, hb);
-  model.drapeChest = (pts, clear) => drapeDogChest(S, base, pts, clear);
+  model.drapeChest = (pts, clear) => drapeDogChest(S, base, pts, clear, uniforms.cCut.value.y);
   // Sillon du collier (dogCoat.js, cCollar*) : le poil est serré sous la bande d'un collier ou d'un accessoire du cou
   // porté. key : qui le porte ; null le retire. Plusieurs : l'ellipse la plus petite.
   uniforms.cCollarC.value.copy(M.collar.center);
@@ -2336,20 +2336,34 @@ function trunkSkinOf(S, base) {
  * plus clear. Renvoie, pour chaque point, ce z de peau (NaN : pas de peau trouvée, le point est laissé). La peau : tout
  * sauf la tête et la queue (le bas du poitrail est pris dans les poids des antérieurs).
  */
-function drapeDogChest(S, base, pts, clear) {
+function drapeDogChest(S, base, pts, clear, ruffPush = 0) {
   const cp = S.D.pos;
   if (!S.frontSkin) {
     const W = base.W;
     const list = [];
     for (let i = 0; i < base.prims.coat.count; i++) if (W.head[i] <= 0.1 && W.tail[i] <= 0.1) list.push(i);
     S.frontSkin = Uint32Array.from(list);
+    // (part de la collerette du shader — coupe du salon, cCut.y : crinière du caniche gonflée de 1,6 cm —, comme
+    // PUSH_V de dogCoat.js : sans elle, le foulard posé sur la peau était traversé par les boucles du poitrail, froissé
+    // de face)
+    const L = base.land;
+    const part = base.part;
+    const R0 = base.prims.coat.pos;
+    const sm = (a, b, x) => smooth(a, b, x);
+    S.frontRuff = Float32Array.from(list, (i) => {
+      const u = (R0[i * 3 + 2] - L.hipZ) / Math.max(0.05, L.shZ - L.hipZ);
+      return (1 - part[i * 4 + 3]) * (1 - part[i * 4 + 1]) * (1 - part[i * 4]) * sm(0.85, 1.05, u)
+        * (1 - sm(L.head.z - 0.02, L.head.z + 0.05, R0[i * 3 + 2])) * (1 - part[i * 4 + 2] * 0.6);
+    });
   }
   const list = S.frontSkin;
+  const ruff = S.frontRuff;
   const R = 0.015;
   return pts.map((p) => {
     let best = -Infinity;
-    for (const j of list) {
-      const z = cp[j * 3 + 2];
+    for (let q = 0; q < list.length; q++) {
+      const j = list[q];
+      const z = cp[j * 3 + 2] + (ruffPush > 0 ? ruffPush * ruff[q] : 0);
       if (z <= best || z > p.z + 0.04 || z < p.z - 0.12) continue;
       if (Math.abs(cp[j * 3] - p.x) < R && Math.abs(cp[j * 3 + 1] - p.y) < R) best = z;
     }

@@ -157,6 +157,26 @@ function dogBib(model, ring, rx, ry, lenOf, clear, spread = 1.0) {
   const skin = model.drapeChest(pts.map((p) => p.clone()), clear);
   // (pas de peau sous un point — entre les antérieurs — : celle de la rangée du dessus)
   for (let k = BIB_NC; k < pts.length; k++) if (Number.isNaN(skin[k])) skin[k] = skin[k - BIB_NC];
+  // (enveloppe lissée de la peau, jamais en dessous d'elle : le foulard s'y pose. Posé point par point sur la peau, il
+  // en prenait chaque bosse — sur les boucles du caniche, un foulard froissé de face)
+  const raw = skin.slice();
+  for (let pass = 0; pass < 6; pass++) {
+    const prev = skin.slice();
+    for (let i = 0; i <= BIB_NR; i++) {
+      for (let j = 0; j < BIB_NC; j++) {
+        const k = i * BIB_NC + j;
+        if (Number.isNaN(raw[k])) continue;
+        let sum = 0;
+        let cnt = 0;
+        for (const [a, b] of [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]]) {
+          if (a < 0 || a > BIB_NR || b < 0 || b >= BIB_NC || Number.isNaN(prev[a * BIB_NC + b])) continue;
+          sum += prev[a * BIB_NC + b];
+          cnt++;
+        }
+        if (cnt) skin[k] = Math.max(raw[k], (prev[k] + sum / cnt) / 2);
+      }
+    }
+  }
   // (la rangée du haut reste sur l'anneau ; dessous, posée sur la peau — fondu sur les premières rangées : sur les
   // côtés du cou, parallèles à z, la peau « devant » le point n'a pas de sens)
   const w = (i) => Math.min(1, Math.max(0, (i / BIB_NR - 0.1) / 0.3));
@@ -171,8 +191,9 @@ function dogBib(model, ring, rx, ry, lenOf, clear, spread = 1.0) {
     const i = Math.floor(k / BIB_NC);
     if (!Number.isNaN(skin[k])) pts[k].z = plane[k] + (skin[k] + clear - plane[k]) * w(i);
   }
-  // (lissée : deux passes de moyenne entre voisines, sans rentrer dans la peau)
-  for (let pass = 0; pass < 2; pass++) {
+  // (lissée : quatre passes de moyenne entre voisines, sans rentrer dans la peau — à deux, le pli du poitrail entre
+  // les antérieurs restait marqué au milieu du foulard)
+  for (let pass = 0; pass < 4; pass++) {
     const zs = pts.map((p) => p.z);
     for (let i = 1; i <= BIB_NR; i++) {
       for (let j = 0; j < BIB_NC; j++) {

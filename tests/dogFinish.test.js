@@ -443,6 +443,44 @@ describe('accessoires du salon', () => {
   });
 });
 
+describe('foulard du caniche', () => {
+  it('posé sur la crinière gonflée par la coupe, pas dedans : plus froissé de face (sans la collerette de la coupe : 4,1 mm dans les boucles ; avec : 3,7 mm devant)', () => {
+    const { look, md } = dog('caniche');
+    const acc = buildAccessories(md, look, { neck: { id: 'bandana', color: 'red' } });
+    const bib = acc.find((o) => o.isMesh && o.geometry.index && o.geometry.attributes.position.count === 9 * 8);
+    const P = bib.geometry.attributes.position;
+    // surface du poil poussée par le shader (comme PUSH_V de dogCoat.js) : peau + collerette de la coupe (cCut.y)
+    const base = md.anim.base;
+    const S = md.anim.S;
+    const cp = S.D.pos;
+    const L = base.land;
+    const part = base.part;
+    const R0 = base.prims.coat.pos;
+    const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const cutY = md.uniforms.cCut.value.y;
+    expect(cutY).toBeGreaterThan(0);
+    let worst = -Infinity;
+    // (rangées 2 à 6 : la rangée du haut reste sur l'anneau du collier, la dernière est la pointe)
+    for (let k = 2 * 9; k < 7 * 9; k++) {
+      const x = P.getX(k), y = P.getY(k), z = P.getZ(k);
+      let top = -Infinity;
+      for (let j = 0; j < base.prims.coat.count; j++) {
+        if (base.W.head[j] > 0.1 || base.W.tail[j] > 0.1) continue;
+        if (Math.abs(cp[j * 3] - x) > 0.015 || Math.abs(cp[j * 3 + 1] - y) > 0.015) continue;
+        const zj = cp[j * 3 + 2];
+        if (zj > z + 0.06 || zj < z - 0.12) continue;
+        const u = (R0[j * 3 + 2] - L.hipZ) / Math.max(0.05, L.shZ - L.hipZ);
+        const ruff = (1 - part[j * 4 + 3]) * (1 - part[j * 4 + 1]) * (1 - part[j * 4]) * sm(0.85, 1.05, u) * (1 - sm(L.head.z - 0.02, L.head.z + 0.05, R0[j * 3 + 2])) * (1 - part[j * 4 + 2] * 0.6);
+        top = Math.max(top, zj + cutY * ruff);
+      }
+      if (Number.isFinite(top)) worst = Math.max(worst, top - z);
+    }
+    // (enfoncé de 1 mm au plus dans le poil)
+    expect(worst * 1000).toBeLessThan(1);
+    md.dispose();
+  });
+});
+
 describe('oreilles modelées', () => {
   it('face intérieure éclairée comme la face externe : pas tournée vers le sol près de l\'attache (avant : liseré sombre et verdâtre du dogue)', () => {
     const { NU, NV } = EAR_GRID;

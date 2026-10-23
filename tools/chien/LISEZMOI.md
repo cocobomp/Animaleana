@@ -342,3 +342,7 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   claire à la tempe du chiot chihuahua (1,4 mm dehors, 6 sommets) et du chihuahua adulte (1,2 mm) a disparu. La bouche
   en zigzag du chiot chihuahua n'est pas reprise (voir le rapport : la lèvre du bas du modèle du jack ne rejoint pas
   celle du haut aux commissures ; refermer la mâchoire de 0,05 à 0,1 rad de plus au calme ne la cachait pas).
+- **Foulard du salon sur le caniche** (jeu, `drapeDogChest` et `dogBib` de salon.js) : posé sur la crinière telle que la
+  coupe du shader la gonfle (`cCut.y`, 1,6 cm sur le poitrail du caniche), sur une enveloppe lissée de la peau et lissé
+  en quatre passes — il était posé sur la peau sans la crinière, 4 mm dans les boucles qui le traversaient (froissé de
+  face) ; maintenant 3,7 mm devant. Taille inchangée (celle de e00898a).

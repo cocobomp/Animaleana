@@ -194,7 +194,10 @@ const COLOR_F = /* glsl */ `
   d = mix(d, max(d, 0.93), head * smoothstep(0.55, 0.85, l) * 0.85);
   col = min(col * d, vec3(1.0));
   // Yeux (texels très sombres autour de la place des yeux) et naseaux : couleurs du fichier.
-  float eyeZone = (1.0 - smoothstep(0.025, 0.045, abs(p.z - gHead.x))) * (1.0 - smoothstep(0.03, 0.05, abs(p.y - gHead.y)));
+  // (robe claire — saanen, chevreau saanen — : seulement l'œil et le bord de la paupière ; la photo, d'une chèvre brune, a
+  // le tour de l'œil et le sourcil foncés, gardés sur 9 × 10 cm ils cernaient l'œil de gris comme du maquillage)
+  float eyeK = mix(1.0, 0.42, head * smoothstep(0.55, 0.8, l));
+  float eyeZone = (1.0 - smoothstep(0.025 * eyeK, 0.045 * eyeK, abs(p.z - gHead.x))) * (1.0 - smoothstep(0.03 * eyeK, 0.05 * eyeK, abs(p.y - gHead.y)));
   float keep = head * (1.0 - smoothstep(0.05, 0.11, lum0)) * eyeZone;
   diffuseColor.rgb = mix(col, c0, clamp(keep, 0.0, 1.0));
 }`;

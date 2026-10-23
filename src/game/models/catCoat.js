@@ -98,6 +98,9 @@ export function makeCatCoatUniforms() {
     // liaison (repère des sommets), demi-axes de l'ellipse, demi-largeur de la bande, w : 1 si porté.
     cCollarC: { value: new THREE.Vector3() },
     cCollarN: { value: new THREE.Vector3(0, 0, 1) },
+    // (côté de l'anneau, pour l'ellipse ; os qui porte le collier : la bande est retrouvée dans la pose du moment)
+    cCollarX: { value: new THREE.Vector3(1, 0, 0) },
+    cCollarB: { value: 0 },
     cCollarR: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
 }
@@ -149,6 +152,11 @@ uniform float cFat;
 uniform float cBreath;
 uniform float cPuff;
 uniform vec4 cCut;
+uniform vec3 cCollarC;
+uniform vec3 cCollarN;
+uniform vec3 cCollarX;
+uniform float cCollarB;
+uniform vec4 cCollarR;
 varying vec3 vCmpPos;
 varying vec4 vCmpPart;
 varying float vCmpLow;`;
@@ -180,6 +188,35 @@ const PUSH_V = /* glsl */ `
   }
   // (jamais normalize(0) : une normale nulle donne NaN, et NaN × 0 reste NaN — un sommet perdu à l'infini)
   if (push != 0.0) transformed += objectNormal * (push / max(1e-6, length(objectNormal)));
+  // Collier porté : sous sa bande (et un peu au-delà, en fondu), la robe qui dépasse de l'ellipse du collier est
+  // ramenée sous lui, vers l'axe du cou — le poil est serré par le collier (sans cela, la collerette du poil long
+  // couvrait l'avant du collier sous le menton). Les sommets serrés sont choisis au repos (zone de l'anneau, jamais la
+  // tête) ; l'ellipse est retrouvée dans la pose du moment par la matrice de l'os qui porte le collier, et la peau y
+  // est ramenée juste sous la bande (4 mm : la moitié de son épaisseur).
+  #ifdef USE_SKINNING
+  if (cCollarR.w > 0.0) {
+    vec3 dq = (bindMatrix * vec4(position, 1.0)).xyz - cCollarC;
+    float dd = dot(dq, cCollarN);
+    vec3 rq = dq - dd * cCollarN;
+    float rlq = max(length(rq), 1e-5);
+    float uq = dot(rq, cCollarX) / rlq;
+    float req = inversesqrt(uq * uq / (cCollarR.x * cCollarR.x) + max(0.0, 1.0 - uq * uq) / (cCollarR.y * cCollarR.y));
+    float zone = (1.0 - smoothstep(cCollarR.z, cCollarR.z * 2.8, abs(dd))) * (1.0 - smoothstep(1.3, 1.8, rlq / req))
+      * (1.0 - smoothstep(0.4, 0.8, cmpPart.z));
+    if (zone > 0.0) {
+      mat4 nb = bindMatrixInverse * getBoneMatrix(cCollarB);
+      vec3 cp = (nb * vec4(cCollarC, 1.0)).xyz;
+      vec3 np = normalize(mat3(nb) * cCollarN);
+      vec3 xp = normalize(mat3(nb) * cCollarX);
+      vec3 dp = transformed - cp;
+      vec3 rv = dp - dot(dp, np) * np;
+      float rl = max(length(rv), 1e-5);
+      float ux = dot(rv, xp) / rl;
+      float re = inversesqrt(ux * ux / (cCollarR.x * cCollarR.x) + max(0.0, 1.0 - ux * ux) / (cCollarR.y * cCollarR.y)) - 0.004;
+      transformed -= rv * (max(0.0, rl - re) / rl) * zone;
+    }
+  }
+  #endif
 }`;
 
 const COMMON_F = /* glsl */ `
@@ -723,7 +760,7 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
     coatCompile(sh, r);
     Object.assign(sh.uniforms, own);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', `#include <common>\nuniform float cShellK;\nuniform vec4 cFurMap;\nuniform vec3 cCollarC;\nuniform vec3 cCollarN;\nuniform vec4 cCollarR;\nvarying float vShellLen;`)
+      .replace('#include <common>', `#include <common>\nuniform float cShellK;\nuniform vec4 cFurMap;\nvarying float vShellLen;`)
       .replace('if (push != 0.0) transformed += objectNormal * (push / max(1e-6, length(objectNormal)));', `if (push != 0.0) transformed += objectNormal * (push / max(1e-6, length(objectNormal)));
   {
     float L2 = max(0.05, cLand.y - cLand.x);

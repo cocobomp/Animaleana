@@ -159,7 +159,12 @@ comparaisons), dans la même lumière et au même cadrage.
   fin ; à moitié enfoncé dans la collerette des poils longs), mêmes mesures que le chien réaliste
   (`dogFit`/`accessoryFit` : `gearModels.js`, `salon.js`, `Beauty.js`) ; accessoires du salon (nœud, fleur,
   chapeau sur le crâne, bandana qui pend vers le sol, nœud de queue). Collier du chaton mesuré du poitrail vers la
-  tête : sur l'encolure, plus un cerceau autour du crâne.
+  tête : sur l'encolure, plus un cerceau autour du crâne. La coupe du cou compte aussi la gorge (sa peau est portée
+  surtout par les pattes avant : sans elle, l'avant du collier passait 3 à 6 cm dans le cou, caché sous le menton) ;
+  la robe est serrée sous la bande dans le shader (`catCoat.js`, pose du moment retrouvée par l'os du cou). De face,
+  dessous de la bande visible : 0/7 → 7/7 points (`catFin2.test.js`), pixels du collier sous le menton 0 → 360 à
+  400 (maine coon, norvégien, ragdoll, persan). Nœud, grelot et foulard posés sur le bas de la bande, à leur taille
+  d'avant (`span`). Reste : en mangeant (tête baissée), l'anneau porté par l'os du cou sort encore de la peau.
 - **Performance** : version allégée au loin (5 m en basse qualité, 12 m en haute), boîte des os pour le
   « frustum culling », chats hors du champ animés une image sur trois (sauf guidés, portés, perchés), couches de
   poil en haute qualité seulement et de près.

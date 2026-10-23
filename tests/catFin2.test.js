@@ -1,9 +1,11 @@
 // Finitions (2e passe) des chats réalistes : chaton qui dort vraiment roulé en boule sur le flanc, pompon du bobtail
-// en boule, pas de peau retournée à l'aine pendant la toilette, ... Déterministe :
+// en boule, pas de peau retournée à l'aine pendant la toilette, pas posés au pas, avant du collier visible sous le
+// menton, ... Déterministe :
 // graines fixes, pas de temps fixe, aucun Math.random (le mixeur est appelé avec des états donnés).
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import * as THREE from 'three';
 import { buildRealCatModel } from '../src/game/models/catReal.js';
+import { buildGear } from '../src/game/gearModels.js';
 import { catLookWithBreed } from '../src/sim/catLook.js';
 import { SPECIES } from '../src/sim/species.js';
 import { resolveLook } from '../src/sim/animal.js';
@@ -402,5 +404,95 @@ describe('pas posé des races longilignes', () => {
       tr.forEach((ys, l) => expect(ys.filter((y) => y < 0.003).length / n, `${b} ${stage} ${v} m/s patte ${l}`).toBeGreaterThan(0.25));
       md.dispose();
     }
+  });
+});
+
+describe('collier sous le menton', () => {
+  // L'anneau du collier, mesuré sur la coupe du cou, laissait de côté la gorge (sa peau est portée surtout par les pattes
+  // avant) : l'ellipse s'arrêtait 3 à 6 cm au-dessus, et l'avant du collier passait dans le cou, caché sous le menton et
+  // la collerette (maine coon, norvégien, ragdoll, persan ; le dessous seul chez l'européen). Mesure : depuis une caméra
+  // devant la tête (comme la vue « face » des planches), part des points du dessous de la bande (150° à 210°) que la
+  // robe ne cache pas. La robe est prise telle que le shader la montre : serrée sous la bande (réplique de PUSH_V,
+  // catCoat.js : sommets choisis au repos, ellipse retrouvée dans la pose par la matrice de l'os du collier).
+  function wornCoat(md) {
+    const m = md.coatMesh;
+    const geo = m.geometry;
+    const pos = geo.attributes.position;
+    const part = geo.attributes.cmpPart;
+    const u = md.uniforms;
+    const C = u.cCollarC.value;
+    const N = u.cCollarN.value;
+    const X = u.cCollarX.value;
+    const R = u.cCollarR.value;
+    const bone = m.skeleton.bones[u.cCollarB.value];
+    // (matrice de l'os dans le repère du maillage, comme bindMatrixInverse * getBoneMatrix)
+    const nb = new THREE.Matrix4().copy(m.bindMatrixInverse).multiply(bone.matrixWorld).multiply(m.skeleton.boneInverses[u.cCollarB.value]);
+    const cp = C.clone().applyMatrix4(nb);
+    const np = N.clone().transformDirection(nb);
+    const xp = X.clone().transformDirection(nb);
+    const sm = (a, b, x) => {
+      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
+    const ell = (ux) => 1 / Math.sqrt((ux * ux) / (R.x * R.x) + Math.max(0, 1 - ux * ux) / (R.y * R.y));
+    const out = new Float32Array(pos.count * 3);
+    const q = new THREE.Vector3();
+    const t = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      q.fromBufferAttribute(pos, i).applyMatrix4(m.bindMatrix).sub(C);
+      const dd = q.dot(N);
+      q.addScaledVector(N, -dd);
+      const rlq = Math.max(q.length(), 1e-5);
+      const zone = (1 - sm(R.z, R.z * 2.8, Math.abs(dd))) * (1 - sm(1.3, 1.8, rlq / ell(q.dot(X) / rlq))) * (1 - sm(0.4, 0.8, part.getZ(i)));
+      m.getVertexPosition(i, t);
+      if (zone > 0 && R.w > 0) {
+        const rv = t.clone().sub(cp);
+        rv.addScaledVector(np, -rv.dot(np));
+        const rl = Math.max(rv.length(), 1e-5);
+        const re = ell(rv.dot(xp) / rl) - 0.004;
+        t.addScaledVector(rv, (-Math.max(0, rl - re) / rl) * zone);
+      }
+      t.applyMatrix4(m.matrixWorld);
+      out.set([t.x, t.y, t.z], i * 3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(out, 3));
+    g.setIndex(geo.index);
+    return new THREE.Mesh(g, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  }
+
+  it.each([
+    ['maine_coon', 'adult'], ['norvegien', 'adult'], ['ragdoll', 'adult'], ['persan', 'adult'], ['europeen', 'adult'],
+    ['siamois', 'adult'], ['maine_coon', 'baby'], ['persan', 'baby'],
+  ])('%s (%s) : le dessous de la bande se voit de face, sous le menton', (b, stage) => {
+    const md = cat(b, stage);
+    md.staticPose('stand');
+    const g = buildGear(md, lookOf(b), { neck: { item: 'collar', color: 'red' } });
+    md.root.updateMatrixWorld(true);
+    const F = md.dogFit.collar;
+    const ring = F.bone.children.find((o) => !o.isBone && o.children?.length);
+    const coat = wornCoat(md);
+    // caméra : devant la tête (le chat regarde vers +z), à sa hauteur
+    const cam = md.head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0.02, 0.01, 0.35).transformDirection(md.root.matrixWorld).multiplyScalar(0.35 * md.root.scale.x));
+    const ray = new THREE.Raycaster();
+    let seen = 0;
+    const N = 7;
+    for (let k = 0; k < N; k++) {
+      const a = Math.PI * (150 + (60 * k) / (N - 1)) / 180;
+      // (surface extérieure de la bande : rayon de l'ellipse + écart 6 mm + épaisseur 7 mm)
+      const p = new THREE.Vector3((F.rx + 0.013) * Math.sin(a), (F.ry + 0.013) * Math.cos(a), 0).applyMatrix4(ring.matrixWorld);
+      const dir = p.clone().sub(cam);
+      const dist = dir.length();
+      ray.set(cam, dir.normalize());
+      ray.far = dist - 0.002;
+      if (!ray.intersectObject(coat).length) seen++;
+    }
+    expect(seen / N, `${b} ${stage} : ${seen}/${N} points du dessous de la bande visibles`).toBeGreaterThanOrEqual(5 / 7);
+    // (sillon : réglé par le collier, retiré avec lui)
+    expect(md.uniforms.cCollarB.value).toBe(md.coatMesh.skeleton.bones.indexOf(F.bone));
+    for (const h of g.userData.meshes) for (const x of h.userData?.dispose ?? []) x.dispose?.();
+    expect(md.uniforms.cCollarR.value.w).toBe(0);
+    coat.geometry.dispose();
+    md.dispose();
   });
 });

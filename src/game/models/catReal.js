@@ -1607,6 +1607,9 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
       const toBind = skeleton.boneInverses[bi].clone().invert();
       uniforms.cCollarC.value.copy(F.center).applyMatrix4(toBind);
       uniforms.cCollarN.value.copy(F.normal).transformDirection(toBind);
+      // (côté de l'anneau, et l'os qui le porte : la robe est serrée sous la bande dans la pose du moment)
+      uniforms.cCollarX.value.set(1, 0, 0).applyQuaternion(F.q).transformDirection(toBind);
+      uniforms.cCollarB.value = bi;
     }
   }
   const grooves = new Map();
@@ -1654,15 +1657,18 @@ function fitCollar(model, base, S) {
     const lx = V(1, 0, 0).addScaledVector(axis, -axis.x).normalize();
     const ly = axis.clone().cross(lx);
     const cand = [];
+    // (sommets surtout portés par les pattes avant : à part — ils ne choisissent pas la coupe, mais le dessous du cou
+    // en fait partie, voir plus bas)
+    const legCand = [];
     const p = V();
     for (let i = 0; i < n; i++) {
       if (W.ear[i * 2] + W.ear[i * 2 + 1] > 0.1) continue;
-      if (W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] > 0.5) continue;
       mesh.getVertexPosition(i, p);
       _w.copy(p).sub(n0);
       const d = _w.dot(axis);
       if (d < 0 || d > nlen * 1.05) continue;
-      cand.push([d, _w.dot(lx), _w.dot(ly), W.head[i]]);
+      const leg = W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] > 0.5;
+      (leg ? legCand : cand).push([d, _w.dot(lx), _w.dot(ly), W.head[i]]);
     }
     const cuts = [];
     for (let t = 0.1; t <= 0.951; t += 0.05) {
@@ -1695,7 +1701,24 @@ function fitCollar(model, base, S) {
     let center = n0.clone().addScaledVector(axis, nlen * 0.45);
     let rx = fit.rx;
     let ry = fit.ry;
+    let span = rx + ry;
     if (best) {
+      // Dessous du cou : la coupe, penchée comme le cou, passe sous la gorge par la peau partagée avec les pattes avant
+      // (poids des pattes > 0,5). Sans elle, l'ellipse s'arrêtait 3 à 5 cm au-dessus de la gorge : l'avant du collier
+      // passait dans le cou, caché sous le menton (et sous la collerette du poil long). Seuls les sommets proches de
+      // la coupe comptent (jamais une patte loin du cou).
+      // (taille des accessoires du salon — nœud, grelot, foulard — : celle de la coupe sans la gorge, comme avant)
+      span = (best.x1 - best.x0) / 2 + (best.y1 - best.y0) / 2;
+      const reach = 2.5 * Math.max(best.x1 - best.x0, best.y1 - best.y0) / 2;
+      const bx = (best.x0 + best.x1) / 2;
+      const by = (best.y0 + best.y1) / 2;
+      for (const [d, x, y] of legCand) {
+        if (Math.abs(d - best.d0) > 0.004 || Math.hypot(x - bx, y - by) > reach) continue;
+        best.x0 = Math.min(best.x0, x);
+        best.x1 = Math.max(best.x1, x);
+        best.y0 = Math.min(best.y0, y);
+        best.y1 = Math.max(best.y1, y);
+      }
       // ellipse de la boîte de la coupe (le centre des sommets, plus nombreux sous la gorge, décollait le dessus)
       center = n0.clone().addScaledVector(axis, best.d0).addScaledVector(lx, (best.x0 + best.x1) / 2).addScaledVector(ly, (best.y0 + best.y1) / 2);
       rx = (best.x1 - best.x0) / 2;
@@ -1705,6 +1728,7 @@ function fitCollar(model, base, S) {
       const sink = 0.2 * (Math.max(0, B.fur) + 1.2 * Math.max(0, B.ruff));
       rx = Math.max(rx * 0.7, rx - sink);
       ry = Math.max(ry * 0.7, ry - sink);
+      span = Math.max(span * 0.7, span - 2 * sink);
     }
     const neckB = model.neck;
     const nq = neckB.getWorldQuaternion(new THREE.Quaternion()).invert();
@@ -1712,7 +1736,7 @@ function fitCollar(model, base, S) {
       center: neckB.worldToLocal(center.clone()),
       normal: axis.clone().applyQuaternion(nq),
       q: nq.clone().multiply(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(lx, ly, axis))),
-      rx, ry,
+      rx, ry, span,
     };
   }
   model.anim.resync();
@@ -1722,6 +1746,7 @@ function fitCollar(model, base, S) {
   fit.q = F.q.clone();
   fit.rx = F.rx;
   fit.ry = F.ry;
+  fit.span = F.span;
 }
 
 // ------------------------------------------------------------------ animation

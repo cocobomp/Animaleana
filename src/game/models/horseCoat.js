@@ -49,9 +49,10 @@ export const COAT_LOOKS = {
   dun: { stripe: 0.03 },
   // robes dorées : pommelures de santé (fond × 1 - dark), plus marquées sur le palomino
   bloom: { dark: 0.16 },
-  // Rouan : part de blanc sur un poil blanc (en moyenne × 0,45 au loin) ; robe de base tirée de la teinte d'ensemble
-  // de la race (saturation × sat, clarté × light)
-  roan: { white: 0.85, sat: 2.2, light: 0.62 },
+  // Rouan : part de blanc sur un poil blanc, seuil du bruit au-dessus duquel un poil est blanc (cut : 8,7 % des poils),
+  // la même part au loin (far : le motif fondu en sa moyenne) ; robe de base tirée de la teinte d'ensemble de la race
+  // (saturation × sat, clarté × light)
+  roan: { white: 0.85, cut: 0.76, far: 0.087, sat: 5, light: 0.62 },
   // Appaloosa « couverture » : inclinaison du bord avant (m vers l'avant par m de hauteur)
   blanket: { slope: 0.55 },
 };
@@ -227,13 +228,14 @@ hEarIn = 0.0;
     c = mix(c, vec3(0.42, 0.27, 0.18), fl * 0.75 * hFlea);
   }
 
-  // Rouan : poils blancs mêlés à la robe de base (plus foncée et plus saturée que la teinte d'ensemble de la race,
-  // voir roanBase) sur le corps, environ 19 % au loin (mélange en lumière linéaire : à 27 %, le blanc l'emportait
-  // déjà) ; la tête et le bas des membres gardent la couleur de base. (Avant : 27 % de blanc sur la teinte
-  // d'ensemble, déjà claire — au téléphone, un gris presque blanc, aucune couleur de base lisible.)
+  // Rouan : poils blancs mêlés à la robe de base (plus saturée que la teinte d'ensemble de la race, voir roanBase)
+  // sur le corps, 7 % de blanc de près comme au loin ; la tête et le bas des membres gardent la couleur de base. Le
+  // mélange est en lumière linéaire : sur un fond foncé, un peu de blanc pèse lourd — avec 19 % de blanc sur un brun
+  // peu saturé, le flanc d'un Trait breton rouan se lisait gris au téléphone (saturation 0,03) ; avec moins de blanc
+  // sur un fond roux plus saturé, il reste rouan rouge (flanc brun rosé, la tête et les membres restés roux).
   if (hRoan > 0.0) {
-    // (un point sur cinq environ : 22 % des valeurs du bruit au-dessus de 0,65 ; même part au loin)
-    float speck = mix(step(0.65, hNoise(P * 170.0)), 0.223, aa);
+    // (8,7 % des valeurs du bruit au-dessus de 0,76 ; même part au loin)
+    float speck = mix(step(${glf(ROAN.cut)}, hNoise(P * 170.0)), ${glf(ROAN.far)}, aa);
     float zone = bodyS + isLeg * smoothstep(0.5, 0.75, h);
     c = mix(c, hWhite, speck * ${glf(ROAN.white)} * hRoan * zone);
     c = mix(c, c * 0.9, (headW + isLeg * (1.0 - smoothstep(0.35, 0.6, h))) * hRoan * 0.7);
@@ -525,7 +527,8 @@ export function coatMaterial(look, build, breed = null, real = null) {
   const black0 = srgbLum(look.coat ?? 0x7a4528) < 0.09 && !sheen;
   // Robe claire (gris, blanc, crème…) : modelé peint plus doux encore (voir COAT_FRAGMENT).
   const coatL = srgbLum(look.coat ?? 0x7a4528);
-  const light = tr.grey > 0 || coatL > 0.55;
+  // (rouan : sa robe de base, plus foncée que la teinte d'ensemble de la race, n'est pas une robe claire)
+  const light = tr.grey > 0 || (coatL > 0.55 && !(tr.roan > 0));
   // Robes dorées (alezan, palomino, isabelle, crins lavés, bai) : teinte orangée à jaune assez saturée. Leur reflet
   // est doré (avant : un reflet blanc, le palomino était un jaune plat).
   const gold = coatGold(look, tr, sheen);

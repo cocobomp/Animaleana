@@ -700,6 +700,14 @@ Finitions 2 (téléphone 390×844 en basse et de près en haute ; planches AVANT
   lieu de 0,34 au cœur de l'ombre, `FORE_SHADE_LIGHT`, `lightManeOnLight`). Triangles des crins par cheval (33 races) :
   4 044 → 4 077 en moyenne, au plus 4 602 → 4 674 (Irish Cob), sous le plafond de 4 700 ; version réduite 1 141 → 1 166
   (`tests/horseHair.test.js` : mèches séparées en bas et chevauchées en haut, ombre plus marquée sur robe claire).
+- **rouans au téléphone** (Trait breton, Criollo) : lus comme des gris clairs. Les poils blancs, fondus en leur
+  moyenne au loin, sont mêlés à la robe de base en lumière linéaire : sur un fond foncé, un peu de blanc pèse lourd.
+  Avant : 19 % de blanc sur une base peu saturée (saturation × 2,2). Maintenant : 7 % de blanc (8,7 % des poils,
+  `COAT_LOOKS.roan.cut` 0,76, la même part au loin, `far`, le flanc ne s'éclaircit plus quand on approche) sur une
+  base plus saturée (× 5, clarté × 0,62 inchangée), et le rouan n'est plus traité en robe claire. Flanc à la caméra
+  du jeu (390×844, basse) : Trait breton saturation 0,03 → 0,27 (clarté 46 → 37), Criollo 0,02 → 0,16 ; brun rosé,
+  tête et membres roux, poils blancs bien visibles de près ; rouan bleu du Mustang un peu plus foncé (gris bleu) ;
+  autres robes inchangées (`tests/horseRoan.test.js`). Aucun coût.
 
 Ce qu'il coûte, et comment on le garde bas :
 

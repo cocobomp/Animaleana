@@ -1,7 +1,7 @@
 // Finitions des chiens réalistes vues au téléphone : manteau, collier, queues, assis et couchés (src/game/models/dogReal.js).
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-import { buildRealDogModel, deformDog } from '../src/game/models/dogReal.js';
+import { buildRealDogModel, deformDog, realDogPose } from '../src/game/models/dogReal.js';
 import { buildGear, removeGear } from '../src/game/gearModels.js';
 import { buildAccessories, removeAccessories } from '../src/game/models/salon.js';
 import { EAR_GRID } from '../src/game/models/dogParts.js';
@@ -178,20 +178,36 @@ function poseOf(md, s) {
     const ad = D[i1].clone().sub(D[i0]).cross(D[i2].clone().sub(D[i0])).length();
     if (ad / ar > 3) stretch++;
   }
-  return { back: (Math.atan2(sh.y - hip.y, sh.z - hip.z) * 180) / Math.PI, hipY: hip.y * s * 100, feet, stretch };
+  // plus bas de la peau du tronc (ni membres, ni tête, ni queue) : la croupe, assis
+  let trunk = Infinity;
+  const W = base.W;
+  for (let i = 0; i < base.prims.coat.count; i++) {
+    if (W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] > 0.3 || W.head[i] > 0.3 || W.tail[i] > 0.3) continue;
+    trunk = Math.min(trunk, D[i].y);
+  }
+  return { back: (Math.atan2(sh.y - hip.y, sh.z - hip.z) * 180) / Math.PI, hipY: hip.y * s * 100, feet, stretch, trunk: trunk * s * 100 };
 }
 
 describe('assis et couché des petits chiens', () => {
-  it('teckel et corgi assis : antérieurs tendus, postérieurs repliés (plus d\'arrière-train fripé), dos plus relevé', () => {
-    // (avant : dos 13,6° et 17,4°, 121 et 110 triangles de l'arrière-train étirés plus de trois fois — jack : 43°, 0)
+  it('teckel et corgi assis et « donne la patte » : dos relevé (≥ 30°), arrière-train sans triangles étirés, croupe au sol, pieds posés', () => {
+    // (avant : dos 13,6° et 17,4°, 121 et 110 triangles de l'arrière-train étirés plus de trois fois — jack : 43°, 0 ;
+    // finitions 1 : dos 18° et 23°, 54 et 62 triangles ; finitions 2 — assis du gabarit court aux reins fléchis, peau du
+    // grasset laissée au tibia : dos 33° et 47°, 6 et 2 triangles)
     for (const breed of ['teckel', 'corgi']) {
-      const { md, s } = dog(breed);
-      for (let i = 0; i < 240; i++) md.anim.update(1 / 60, st({ size: s, posture: 'sit' }));
-      const p = poseOf(md, s);
-      expect(p.back).toBeGreaterThan(17);
-      expect(p.stretch).toBeLessThan(70);
-      for (const f of p.feet) expect(Math.abs(f)).toBeLessThan(0.6);
-      md.dispose();
+      for (const paw of [false, true]) {
+        const { md, s } = dog(breed);
+        for (let i = 0; i < 240; i++) {
+          if (paw) realDogPose(md, 'paw', Math.min(1, i / 60));
+          md.anim.update(1 / 60, st({ size: s, posture: 'sit' }));
+        }
+        const p = poseOf(md, s);
+        expect(p.back).toBeGreaterThan(30);
+        expect(p.stretch).toBeLessThan(15);
+        expect(p.trunk).toBeLessThan(1.5);
+        expect(p.trunk).toBeGreaterThan(-0.8);
+        for (const f of paw ? p.feet.slice(1) : p.feet) expect(Math.abs(f)).toBeLessThan(0.6);
+        md.dispose();
+      }
     }
   });
 

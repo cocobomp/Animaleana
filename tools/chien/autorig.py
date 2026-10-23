@@ -235,6 +235,7 @@ def build(body, others=(), eyes=None, opts=None):
             gf = body.vertex_groups.get('femur' + side)
             if gf is None:
                 continue
+            gt = body.vertex_groups.get('tibia' + side)
             k0, k1 = J['H' + side][0], J['H' + side][1]
             for v in body.data.vertices:
                 wf = next((e.weight for e in v.groups if e.group == gf.index), 0.0)
@@ -244,6 +245,12 @@ def build(body, others=(), eyes=None, opts=None):
                 if (p.x > 0) != (k0.x > 0):
                     continue
                 k = o['buttock'] * _smooth(k0.y - 0.02 * W, k0.y + 0.10 * W, p.y) * _smooth(k1.z - 0.02 * W, k1.z + 0.12 * W, p.z)
+                # (pas la peau du grasset, déjà portée en partie par le tibia : passée du fémur au bassin, elle restait
+                # tiraillée entre le bassin et la jambe — triangles étirés plus de trois fois au grasset du teckel
+                # assis, cuisse en avant)
+                if gt is not None and o.get('buttock_knee'):
+                    wt = next((e.weight for e in v.groups if e.group == gt.index), 0.0)
+                    k *= 1 - _smooth(0.05, 0.3, wt)
                 if k <= 0:
                     continue
                 wp = next((e.weight for e in v.groups if e.group == gp_.index), 0.0)

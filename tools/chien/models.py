@@ -209,7 +209,9 @@ AUTO_LEGS = {
 # Repères du squelette automatique du jack (fractions du garrot). La hanche est placée au milieu du haut de la
 # cuisse (à 0,76 du garrot, à l'aplomb du pied, elle était contre la peau de la fesse : la cuisse se déchirait au
 # saut et l'assis tournait autour d'un point de la peau) ; le grasset à l'avant de la cuisse.
-JACK_RIG = {'elbow': 0.47, 'hock': 0.26, 'hip': 0.72, 'hip_dy': -0.117, 'stifle': 0.455, 'stifle_fwd': 0.121, 'buttock': 0.75}
+# buttock_knee : la peau du grasset, déjà portée en partie par le tibia, ne passe pas du fémur au bassin.
+JACK_RIG = {'elbow': 0.47, 'hock': 0.26, 'hip': 0.72, 'hip_dy': -0.117, 'stifle': 0.455, 'stifle_fwd': 0.121, 'buttock': 0.75,
+            'buttock_knee': True}
 
 
 def prep_jack():
@@ -495,7 +497,11 @@ MODELS['jack'] = dict(
         # (court : révérence refaite, postérieurs tendus au sol — gab_bow. L'assis généré (sit_gen=True, gab_sit_gen)
         # a été essayé : postérieurs bien repliés, mais hanches plus hautes (13 cm au lieu de 6) et dos plus plat
         # (8–11° au lieu de 14–18°), le ventre profond du teckel touchant le sol avant la croupe — pas retenu)
-        'court': dict(legs=0.52, legW=1.13, clips=['walk', 'trot', 'run', 'sit', 'paw', 'sniff', 'bow'], sniff_pitch=0.08),
+        # (court : assis aux reins fléchis — sit_flex, voir gab_sit : bassin −0,5 rad autour de spine1, bas du dos −0,6
+        # autour de spine2 et −0,6 autour de chest, poitrail redressé de 0,55, tête relevée de 0,55 — dos du teckel 18 → 33°,
+        # du corgi 23 → 47°)
+        'court': dict(legs=0.52, legW=1.13, clips=['walk', 'trot', 'run', 'sit', 'paw', 'sniff', 'bow'], sniff_pitch=0.08,
+                      sit_flex=[-0.5, -0.6, 0.55, -0.6, 0.55]),
         # (trapu : l'assis du jack reste ; ses pieds arrière en l'air — carlin, bouledogue — sont reposés en jeu par
         # settleSit. L'assis généré cassait celui du yorkshire, du même gabarit : dos à 6°, pieds arrière à 5 cm)
         'trapu': dict(legs=0.74, legW=1.12, clips=['walk', 'trot', 'run']),

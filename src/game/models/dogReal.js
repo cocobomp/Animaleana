@@ -3717,10 +3717,29 @@ class RealDogAnim {
       md.root.updateMatrixWorld(true);
     }
     if (k < 0.05) return;
-    if (short) this.foldHind(k);
+    if (short) {
+      this.foldHind(k);
+      // (antérieur tendu resté plus haut que l'autre — le corps un peu roulé de l'assis du clip, reins fléchis : 0,7 à
+      // 0,9 cm sous le pied droit du teckel et du corgi — : l'omoplate tourne pour le poser à la hauteur de l'autre ;
+      // pas en donnant la patte)
+      if (!((this.w.paw ?? 0) > 0.05)) {
+        const lo = Math.min(lowSole(0, t).y, lowSole(1, t).y);
+        for (const l of [0, 1]) {
+          const leg = md.legs[l];
+          const s = lowSole(l, t);
+          if (!leg.top || !(s.y > lo + 0.003)) continue;
+          const c = _u.setFromMatrixPosition(leg.top.matrixWorld).applyMatrix4(_m);
+          this.turn(leg.top, AX, raiseAngle(c, s, lo + 0.0005, 0.25) * k);
+          leg.top.updateMatrixWorld(true);
+        }
+      }
+    }
     // Pieds avant sous le sol (gabarit long du caniche : 2 cm) : le corps est relevé pour les poser, puis basculé autour
-    // d'eux pour reposer la croupe.
-    if (settled && lowFront().y < -0.003) {
+    // d'eux pour reposer la croupe — bascule fondue dans le temps quand le chien finit de s'asseoir ou se relève (prise
+    // d'un coup à la fin de « s'asseoir », la tête du teckel aux reins fléchis sautait de 5 cm en une image).
+    this.settledW = dt > 0 ? (this.settledW ?? 0) + ((settled ? 1 : 0) - (this.settledW ?? 0)) * Math.min(1, dt * 5) : settled ? 1 : 0;
+    const sw = this.settledW;
+    if (sw > 0.01 && lowFront().y < -0.003) {
       md.body.position.y -= f.y;
       md.root.updateMatrixWorld(true);
       for (let pass = 0; pass < 3; pass++) {
@@ -3729,7 +3748,7 @@ class RealDogAnim {
         const gap = f.y - o.y;
         if (!(gap < -0.003)) break;
         const floor = f.y;
-        this.turn(md.body, AX, clamp(gap / Math.max(0.05, f.z - o.z), -0.25, 0));
+        this.turn(md.body, AX, clamp(gap / Math.max(0.05, f.z - o.z), -0.25, 0) * sw);
         md.root.updateMatrixWorld(true);
         md.body.position.y -= lowFront().y - floor;
         md.root.updateMatrixWorld(true);

@@ -743,10 +743,34 @@ def hind_folded(p, rg, k, a3, bend='fwd'):
     return p
 
 
-def gab_sit(gname, rg, k, gH, gF):
+def flexed(p, steps):
+    """Reins fléchis : chaque pas (pivot, os déplacés, angle) tourne les os déplacés (espace armature) autour de la tête
+    de l'os pivot, axe X ; angle < 0 : l'arrière (bassin, cuisses, queue) passe en avant et en dessous."""
+    p = dict(p)
+    for pivot, moved, ang in steps:
+        R = dg.rot_x_about(ang, p[pivot].translation.copy())
+        for n_ in moved:
+            p[n_] = R @ p[n_]
+    return p
+
+
+def gab_sit(gname, rg, k, gH, gF, flex=None):
     """Assis du gabarit : croupe posée sur son sol, corps basculé pour que les antérieurs presque tendus touchent le
-    leur, tête gardée à son inclinaison, postérieurs repliés pieds à plat."""
+    leur, tête gardée à son inclinaison, postérieurs repliés pieds à plat. flex (pattes courtes) : reins fléchis avant
+    la pose — bassin rentré sous le corps (autour de la tête de spine1), puis bas du dos (autour de celle de spine2) : la
+    croupe vient sous le poitrail, le dos se redresse (sans eux, la corde hanche → épaule restait à 0,62 m pour 0,2 m de
+    hauteur d'épaule : dos à 18°, un chien accroupi)."""
     frames = action_frames('sit')
+    if flex:
+        rear = ['pelvis'] + [b for r in ('femurL', 'femurR', cfg['tail'][0]) for b in K.descendants(arm, r)]
+        steps = [('spine1', rear, flex[0]), ('spine2', rear + ['spine1'], flex[1])]
+        # (flex : bassin autour de spine1, bas du dos autour de spine2, poitrail redressé autour de chest, reins autour de
+        # chest, tête relevée en plus)
+        if len(flex) > 3 and flex[3]:
+            steps.append(('chest', rear + ['spine1', 'spine2'], flex[3]))
+        if len(flex) > 2 and flex[2]:
+            steps.append(('chest', K.descendants(arm, 'chest'), flex[2]))
+        frames = [flexed(p_, steps) for p_ in frames]
     p0 = frames[0]
     c = min(pose_points(p0, trunk_items), key=lambda p: p.z)
     J0 = sum((p0[rg.legs[l]['anchor']].translation for l in ('FL', 'FR')), Vector()) / 2
@@ -766,9 +790,17 @@ def gab_sit(gname, rg, k, gH, gF):
 
     def one(p_):
         p = transformed(p_, Mx)
-        Rn = dg.rot_x_about(-0.8 * phi, p[cfg['neck'][0]].translation)
+        # (tête gardée à l'inclinaison du clip : ce que la bascule et le redressement du poitrail lui ont donné est
+        # repris à l'encolure — sans le poitrail, le teckel assis regardait ses pieds)
+        Rn = dg.rot_x_about(-0.8 * phi - (flex[2] if flex and len(flex) > 2 else 0.0), p[cfg['neck'][0]].translation)
         for n_ in neck_desc:
             p[n_] = Rn @ p[n_]
+        if flex and len(flex) > 4 and flex[4]:
+            # (le reste à l'attache de la tête : tout à la base de l'encolure, elle se cassait en équerre)
+            for nk, part in ((cfg['neck'][-1], 0.5), (cfg['head'][0], 0.5)):
+                Rh = dg.rot_x_about(-flex[4] * part, p[nk].translation)
+                for n_ in K.descendants(arm, nk):
+                    p[n_] = Rh @ p[n_]
         p = hind_folded(p, rg, k, 0.08, 'up')
         for lab in ('FL', 'FR'):
             j0 = p[rg.legs[lab]['anchor']].translation
@@ -904,7 +936,7 @@ for gname, gcfg in GABARITS.items():
     stand2 = dg.pose_at(r2, 0.0, dict(still))[0]
     sit2 = lie2 = None
     if 'sit' in clips:
-        sit2 = gab_sit_gen(gname, r2, gH, gF, gcfg) if gcfg.get('sit_gen') else gab_sit(gname, r2, k, gH, gF)
+        sit2 = gab_sit_gen(gname, r2, gH, gF, gcfg) if gcfg.get('sit_gen') else gab_sit(gname, r2, k, gH, gF, gcfg.get('sit_flex'))
         gab_bake(r2, 'sit_down_' + gname, 24, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, stand2, sit2, dg.smooth(t)), {}))
         gab_bake(r2, 'stand_up_' + gname, 20, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, sit2, stand2, dg.smooth(t)), {}))
     if 'paw' in clips and sit2 is not None:

@@ -39,7 +39,9 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
    **yeux** (sommets des yeux, séparés par côté) et des **oreilles** (base → pli → bout, poids géométriques sur le
    lambeau mince repéré par épaisseur et remplissage limité). Réglages du jack dans `models.py` (`JACK_RIG`) :
    hauteur du coude, du jarret, de la hanche et du grasset, et `buttock` (le poids du fémur débordait sur la croupe :
-   rendu au bassin derrière la hanche et au-dessus du grasset — assise, la croupe ne se déchire plus).
+   rendu au bassin derrière la hanche et au-dessus du grasset — assise, la croupe ne se déchire plus) ;
+   `buttock_knee` : la peau du grasset, déjà portée en partie par le tibia, reste au fémur (passée au bassin, elle était
+   tiraillée entre le bassin et la jambe : une trentaine de triangles étirés au grasset du teckel assis).
 3. **`make_dog.py`** + **`dog_gait.py`** : animations.
    - orientation (le chien regarde +z), garrot à 0,57 m, courbes d'échelle retirées ;
    - le shiba écrit ses **poses faites main** (repos, assis, patte, roulade) et ses **poses couchées générées**
@@ -81,7 +83,10 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
      `gab_sit_gen` : rotation autour de l'épaule jusqu'à une hauteur de hanches, postérieurs repliés sous le corps,
      antérieurs `under`) a été essayé pour le court et le trapu sans être retenu : teckel et corgi gardaient les
      hanches à 13 cm (contre 6) et le dos plus plat (8–11° contre 14–18°), le ventre profond touchant le sol avant
-     la croupe ; le yorkshire, du gabarit trapu, perdait son assis (dos à 6°, pieds arrière à 5 cm) ;
+     la croupe ; le yorkshire, du gabarit trapu, perdait son assis (dos à 6°, pieds arrière à 5 cm). Assis du gabarit
+   court (`gab_sit`, `sit_flex` du gabarit : cinq angles) : reins fléchis avant la pose — bassin rentré autour de
+   spine1, bas du dos autour de spine2 puis de chest, poitrail redressé, tête relevée en deux moitiés (base de la tête
+   et dernier os de l'encolure : tout à la base, l'encolure se cassait en équerre) ;
    - réglages des poses générées (`MODELS` dans `models.py`, utilisés seulement quand la pose n'est pas reprise du
      shiba) : assis `sit_flex`, `sit_tuck`, `sit_femur`, `sit_hip`, couché `lie_pitch_max`, `lie_elbow`, `lie_wrist`,
      `lie_fold` ; saut `jump_tuck` (postérieurs ramenés sous le corps à la réception : le maillage ne se déchire
@@ -306,3 +311,12 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   akita 2,0 → 2,6). Points d'appui : la langue n'en est pas (le pas d'échantillonnage du corps est
   compté sans elle) ; assis, la peau des antérieurs n'est plus un appui « hors pieds avant » (races du jack : le chiot
   carlin basculait ou non selon un dixième de millimètre).
+- **Assis et « donne la patte » du teckel et du corgi** (gabarit court) : reins fléchis dans le clip (`sit_flex`, voir
+  `gab_sit`) et peau du grasset laissée au tibia (`buttock_knee`) — dos du teckel 18 → 33°, du corgi 23 → 44°
+  (patte : 18 → 33°, 23 → 41°), triangles de l'arrière-train étirés plus de trois fois 54 → 6 et 62 → 2, croupe posée
+  (peau du tronc à 0,5 cm du sol). Dans le jeu (`settleSit`) : l'antérieur resté plus haut que l'autre (corps un peu
+  roulé de l'assis du clip : 0,7 à 0,9 cm) est posé en tournant l'omoplate ; la bascule qui repose la croupe sur des
+  pieds avant enfoncés est fondue dans le temps (`settledW` : prise d'un coup à la fin de « s'asseoir », la tête du
+  teckel sautait de 5 cm en une image). Couché et endormi par des clips de gabarit (`lie`, `sleep` dans les clips du
+  court et du trapu, `gab_lie`) : essayé, pas retenu — corps posé trop haut (antérieurs à 7,8 cm, tronc à 8,5 cm du sol
+  pour le teckel).

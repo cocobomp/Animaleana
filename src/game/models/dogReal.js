@@ -1574,7 +1574,7 @@ function shapeFor(base, B) {
   const ears = buildPendantEars(base, D, B);
   const pom = buildPompons(base, D, B);
   const parts = ears || pom ? partLayout(base, D, B, ears, pom) : null;
-  S.coatGeo = parts ? mergedCoatGeo(base, D, parts, ears, pom) : geo(D.pos, D.nrm, coat, base.attrs);
+  S.coatGeo = parts ? mergedCoatGeo(base, D, parts, ears, pom, B) : geo(D.pos, D.nrm, coat, base.attrs);
   S.eyeGeo = base.prims.eye ? geo(D.eyePos, D.eyeNrm, base.prims.eye, base.eyeAttrs) : null;
   S.earGeo = erectEars(base, D, B);
   delete D.skullEars;
@@ -1716,9 +1716,9 @@ function partLayout(base, D, B, ears, pom) {
 /**
  * Géométrie du pelage d'une race avec ses pièces modelées (L : partLayout) : ses positions et ses normales, les autres
  * attributs et les indices partagés. Pompons absents : repliés sur l'articulation de leur os ; oreilles absentes : sur
- * celle de la tête, pas dessinées.
+ * celle de la tête, pas dessinées. Bouclettes serrées (lagotto) : repos de ses oreilles à elle (voir earRest).
  */
-function mergedCoatGeo(base, D, L, ears, pom) {
+function mergedCoatGeo(base, D, L, ears, pom, B = {}) {
   const n = L.n;
   const N = n + L.m;
   const pos = new Float32Array(N * 3);
@@ -1753,6 +1753,7 @@ function mergedCoatGeo(base, D, L, ears, pom) {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   for (const k of ['uv', 'skinIndex', 'skinWeight', 'cmpRest', 'cmpPart', 'cmpLow']) g.setAttribute(k, L[k]);
+  if (ears && B.ringlets) g.setAttribute('cmpRest', earRest(base, D, L, ears, B));
   // (pompons du caniche : rayon de chaque boule, ramenée à son centre par le shader hors de la coupe « caniche »)
   if (pom?.pom) {
     const pr = new Float32Array(N);
@@ -1764,6 +1765,30 @@ function mergedCoatGeo(base, D, L, ears, pom) {
   g.computeBoundingSphere();
   g.userData.shared = true;
   return g;
+}
+
+/**
+ * Repos des oreilles modelées d'une race aux bouclettes serrées (lagotto) : celui de la peau de SON oreille (positions
+ * de la race ramenées au repère d'origine par la tête : décalage à l'os de la tête, divisé par sa taille), au lieu de
+ * l'oreille de référence partagée — une plaque plate, la même pour les deux faces, plus courte et plus étroite que
+ * l'oreille bombée du lagotto. Ses boucles (shader, tirées du repos) y étaient étirées en traînées, et le bord roulé de
+ * l'oreille, sans épaisseur au repos, n'en était qu'une rayure. Copie du repos commun pour cette race (le reste du
+ * pelage garde le sien).
+ */
+function earRest(base, D, L, ears, B) {
+  const a = Float32Array.from(L.cmpRest.array);
+  const hI = base.index.get('head');
+  const h0 = base.heads[hI];
+  const hD = D.heads[hI];
+  const k = 1 / (B.head ?? 1);
+  const P = ears.pos;
+  for (let i = 0; i < L.earCount; i++) {
+    const o = (L.earStart + i) * 3;
+    a[o] = h0.x + (P[i * 3] - hD.x) * k;
+    a[o + 1] = h0.y + (P[i * 3 + 1] - hD.y) * k;
+    a[o + 2] = h0.z + (P[i * 3 + 2] - hD.z) * k;
+  }
+  return new THREE.BufferAttribute(a, 3);
 }
 
 /**
@@ -2294,10 +2319,13 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
       caniche: B.pompons ? [-0.75 * f, 0.016, 0, 0] : [-0.7 * f, 0.01, 0.028, 0.03],
       // (coupe du lagotto : corps nettement raccourci, boucles égalisées sur le corps et l'encolure, pattes bouclées
       // un peu raccourcies, tête ronde bien gonflée — moins marquée, elle ne se voyait presque pas ; poitrail et pattes
-      // plus courts aussi : de face, la coupe changeait peu la silhouette)
-      lagotto: [-1.25 * f, -0.95 * f, -0.35 * f, 0.85 * f],
+      // plus courts aussi. Cinquième valeur : le haut des pattes, coudes et cuisses, raccourci comme le bas — de face,
+      // la silhouette est faite des épaules et des coudes, que le bas des pattes et le tronc ne touchaient pas : la
+      // coupe ne l'amincissait que de 4 %)
+      lagotto: [-1.25 * f, -0.95 * f, -0.35 * f, 0.85 * f, -0.6 * f],
     }[st] ?? [0, 0, 0, 0];
-    uniforms.cCut.value.set(...cut);
+    uniforms.cCut.value.set(cut[0], cut[1], cut[2], cut[3]);
+    uniforms.cCutLeg.value = cut[4] ?? 0;
     uniforms.cPom.value = st === 'caniche' ? 1 : 0;
     model.cut = style ?? null;
   };

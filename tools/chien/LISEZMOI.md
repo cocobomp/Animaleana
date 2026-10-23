@@ -199,8 +199,9 @@ ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été fait
   −1,9 cm avant ; golden −0,7). Robes : blanc cassé, taches marron ou orange (tête colorée, plaques), rouan marron (fond
   brun clair chaud moucheté finement de marron, mèches de 5 mm fondues en leur moyenne de loin — à 2 cm sur un fond
   grisé, un camouflage kaki), marron, orange. Coupe du salon `lagotto` (`setCut` : tronc raccourci de 1,25 fois le
-  poil, encolure raccourcie, boucles égalisées en couleur et en relief sur le tronc coupé, pattes bouclées gardées,
-  dessus de la tête bien arrondi, +0,85 fois le poil) ; sans coupe, ses boucles naturelles (pas de pompons).
+  poil, encolure raccourcie, boucles égalisées en couleur et en relief sur le tronc coupé, pattes bouclées gardées mais
+  raccourcies — bas 0,35 fois le poil, haut des pattes `cCutLeg` 0,6 fois —, dessus de la tête bien arrondi, +0,85 fois
+  le poil) ; sans coupe, ses boucles naturelles (pas de pompons).
 - **Coût du pelage du lagotto** (swiftshader, 800 × 800, `perf-chiens.html` du correcteur) : les mèches coûtent
   +19 à +37 % de près et +9 à +16 % à mi-distance par rapport au même lagotto sans elles (avant : +39 à +63 % et
   +35 %) ; le lagotto reste 1,4 à 1,6 fois le golden de près (sans ses boucles, déjà 1,15 à 1,3 fois : plus de pixels
@@ -355,3 +356,15 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   coupe du shader la gonfle (`cCut.y`, 1,6 cm sur le poitrail du caniche), sur une enveloppe lissée de la peau et lissé
   en quatre passes — il était posé sur la peau sans la crinière, 4 mm dans les boucles qui le traversaient (froissé de
   face) ; maintenant 3,7 mm devant. Taille inchangée (celle de e00898a).
+- **Coupe « lagotto » vue de face** (shader, `cCutLeg`) : le haut des pattes — coudes, avant-bras, cuisses, au-dessus
+  de la bande des pompons — est raccourci de 0,6 fois le poil (le bas de 0,35 fois comme avant). De face, la silhouette
+  est faite des épaules et des coudes, que le tronc et le bas des pattes coupés ne touchaient pas : la coupe ne
+  l'amincissait que de 3,9 % (épaules 2,9 cm, pattes 0,8 cm) ; maintenant 10 % (épaules 5,3 cm, pattes 2,9 cm). Les
+  autres coupes ne touchent pas le haut des pattes (`cCutLeg` 0).
+- **Oreilles bouclées du lagotto** (`earRest` de `mergedCoatGeo`) : leur repos (`cmpRest`, d'où le shader tire les
+  boucles et la robe) est celui de la peau de SON oreille, ramenée au repère d'origine par la tête (décalage à l'os de la
+  tête divisé par sa taille), au lieu de l'oreille de référence partagée — une plaque plate, la même pour les deux faces,
+  plus petite que l'oreille bombée du lagotto. Ses boucles s'y étiraient en traînées (anisotropie médiane 1,57, 3,61
+  pour 90 % des triangles ; le bord roulé, sans épaisseur au repos, n'en était qu'une rayure) : maintenant 1,00 partout,
+  boucles de la taille de celles de la tête. Copie du repos commun pour cette seule race (+0,14 Mo ; les autres gardent
+  l'attribut partagé).

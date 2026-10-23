@@ -297,6 +297,10 @@ export function makeCoatUniforms() {
     // Coupe du salon de toilettage (m, le long de la normale) : tronc, collerette (cou et poitrail), pompons (bas des
     // pattes), bout de la queue et dessus du crâne.
     cCut: { value: new THREE.Vector4(0, 0, 0, 0) },
+    // (coupe : haut des pattes, du coude ou du grasset au-dessus des pompons — m, le long de la normale ; seule la coupe
+    // « lagotto » le raccourcit : sans lui, de face, la coupe ne changeait presque pas la silhouette, faite surtout du
+    // haut des pattes et des coudes)
+    cCutLeg: { value: 0 },
     // Collier porté (dogReal.js setGroove) : le poil est serré sous sa bande. Centre, axe du cou et côté de l'anneau
     // (repère de repos de la race) ; demi-axes de l'ellipse, demi-largeur de la bande, 1 si porté.
     cCollarC: { value: new THREE.Vector3() },
@@ -389,6 +393,7 @@ uniform vec4 cHead;
 uniform float cFat;
 uniform float cBreath;
 uniform vec4 cCut;
+uniform float cCutLeg;
 uniform vec3 cCollarC;
 uniform vec3 cCollarN;
 uniform vec3 cCollarX;
@@ -417,14 +422,15 @@ const PUSH_V = /* glsl */ `
   float belly = trunkW * smoothstep(-0.15, 0.25, u) * (1.0 - smoothstep(0.85, 1.15, u)) * (1.0 - smoothstep(0.55, 1.0, h));
   float ribs = trunkW * smoothstep(0.35, 0.65, u) * (1.0 - smoothstep(1.0, 1.25, u)) * (1.0 - smoothstep(0.7, 1.05, h));
   float push = cFat * belly + cBreath * ribs;
-  if (cCut != vec4(0.0)) {
+  if (cCut != vec4(0.0) || cCutLeg != 0.0) {
     float tr = trunkW * smoothstep(-0.25, 0.0, u) * (1.0 - smoothstep(0.95, 1.2, u));
     float ruff = (1.0 - cmpPart.w) * (1.0 - cmpPart.y) * (1.0 - cmpPart.x) * smoothstep(0.85, 1.05, u)
       * (1.0 - smoothstep(cHead.z - 0.02, cHead.z + 0.05, cmpRest.z)) * (1.0 - cmpPart.z * 0.6);
     float pom = cmpPart.w * smoothstep(0.02, 0.05, cmpRest.y) * (1.0 - smoothstep(cEye.w * 0.35, cEye.w * 0.55, cmpRest.y));
     float tip = cmpPart.y * (1.0 - smoothstep(0.03, 0.09, cmpRest.z - cMisc.y));
     float top = cmpPart.z * (1.0 - cmpPart.x) * smoothstep(cEye.y + 0.01, cEye.y + 0.05, cmpRest.y) * (1.0 - smoothstep(cEye.z - 0.02, cEye.z + 0.02, cmpRest.z));
-    push += cCut.x * tr + cCut.y * ruff + cCut.z * pom + cCut.w * max(tip, top);
+    float upLeg = cmpPart.w * smoothstep(cEye.w * 0.35, cEye.w * 0.55, cmpRest.y);
+    push += cCut.x * tr + cCut.y * ruff + cCut.z * pom + cCut.w * max(tip, top) + cCutLeg * upLeg;
   }
   // (pompon modelé : ni embonpoint ni coupe, seulement montré ou ramené à son centre)
   if (cmpPom > 0.0) push = -cmpPom * (1.0 - cPom);

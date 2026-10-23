@@ -175,8 +175,16 @@ describe('modèle 3D', () => {
     expect(legs).toBeLessThan(0);
     expect(legs).toBeGreaterThan(-0.5 * md.build.fur);
     expect(top).toBeGreaterThan(0.8 * md.build.fur);
+    // (haut des pattes — coudes, avant-bras, cuisses — raccourci aussi : de face, la silhouette en est faite)
+    expect(md.uniforms.cCutLeg.value).toBeLessThan(-0.5 * md.build.fur);
     md.setCut(null);
     expect(md.uniforms.cCut.value.toArray()).toEqual([0, 0, 0, 0]);
+    expect(md.uniforms.cCutLeg.value).toBe(0);
+    // (les autres coupes ne touchent pas le haut des pattes)
+    for (const st of ['court', 'tonte', 'concours', 'long', 'lion', 'caniche']) {
+      md.setCut(st);
+      expect(md.uniforms.cCutLeg.value, st).toBe(0);
+    }
     md.dispose();
     // (les autres chiens n'ont pas de bouclettes serrées, ni de truffe peinte)
     for (const b of ['labradoodle', 'caniche', 'golden', 'toller']) {
@@ -246,6 +254,131 @@ describe('modèle 3D', () => {
     const doodle = spikes('labradoodle');
     expect(lag.count).toBeLessThanOrEqual(doodle.count);
     expect(lag.max).toBeLessThan(doodle.max + 0.005);
+  }, 60000);
+
+  it('lagotto : la coupe « lagotto » amincit nettement la silhouette de face (épaules, coudes, pattes)', () => {
+    // Silhouette de face du corps (sans tête ni oreilles) : cases de 5 mm occupées par la peau poussée comme le fait le
+    // shader (PUSH_V de dogCoat.js, recopié ici : tronc, collerette, bas des pattes, haut des pattes), sur la pose de
+    // repos. Avant : la coupe ne touchait que le tronc, le poitrail et le bas des pattes — de face, la silhouette, faite
+    // des épaules et des coudes, ne s'amincissait que de 3,9 % (pattes 0,8 cm) ; maintenant 10 % (pattes 2,9 cm).
+    const ss = (a, b, x) => {
+      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
+    const front = (md) => {
+      const g = md.coatMesh.geometry;
+      const P = g.attributes.position.array;
+      const N = g.attributes.normal.array;
+      const R = g.attributes.cmpRest.array;
+      const pa = g.attributes.cmpPart;
+      const PA = pa.array;
+      const pn = pa.normalized ? 255 : 1;
+      const u_ = md.uniforms;
+      const [cL, cH, cE, cM, cC] = ['cLand', 'cHead', 'cEye', 'cMisc', 'cCut'].map((k) => u_[k].value);
+      const cLeg = u_.cCutLeg.value;
+      const cells = new Set();
+      const legs = new Map();
+      for (let i = 0; i < g.attributes.position.count; i++) {
+        const [px, py, pz, pw] = [0, 1, 2, 3].map((k) => PA[i * 4 + k] / pn);
+        if (pz > 0.5 || px > 0.3) continue;
+        const ry = R[i * 3 + 1];
+        const rz = R[i * 3 + 2];
+        const u = (rz - cL.x) / Math.max(0.05, cL.y - cL.x);
+        const tr = (1 - pw) * (1 - py) * (1 - pz) * ss(-0.25, 0, u) * (1 - ss(0.95, 1.2, u));
+        const ruff = (1 - pw) * (1 - py) * (1 - px) * ss(0.85, 1.05, u) * (1 - ss(cH.z - 0.02, cH.z + 0.05, rz)) * (1 - pz * 0.6);
+        const pom = pw * ss(0.02, 0.05, ry) * (1 - ss(cE.w * 0.35, cE.w * 0.55, ry));
+        const tip = py * (1 - ss(0.03, 0.09, rz - cM.y));
+        const top = pz * (1 - px) * ss(cE.y + 0.01, cE.y + 0.05, ry) * (1 - ss(cE.z - 0.02, cE.z + 0.02, rz));
+        const up = pw * ss(cE.w * 0.35, cE.w * 0.55, ry);
+        const push = cC.x * tr + cC.y * ruff + cC.z * pom + cC.w * Math.max(tip, top) + cLeg * up;
+        const nl = Math.hypot(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]) || 1;
+        const x = P[i * 3] + (N[i * 3] / nl) * push;
+        const y = P[i * 3 + 1] + (N[i * 3 + 1] / nl) * push;
+        if (y < 0.03) continue;
+        const k = `${Math.floor(x / 0.005)},${Math.floor(y / 0.01)}`;
+        cells.add(k);
+        if (y < cE.w) legs.set(k, Math.floor(y / 0.01));
+      }
+      const bands = new Set(legs.values()).size;
+      return { area: cells.size * 0.5, legs: (legs.size * 0.5) / Math.max(1, bands) };
+    };
+    const md = dog('lagotto');
+    const a = front(md);
+    md.setCut('lagotto');
+    const b = front(md);
+    md.dispose();
+    expect(1 - b.area / a.area).toBeGreaterThan(0.08);
+    expect(a.legs - b.legs).toBeGreaterThan(2);
+  }, 60000);
+
+  it('lagotto : ses oreilles bouclées ont le repos de leur propre peau (boucles rondes, pas étirées)', () => {
+    // Le repos (cmpRest, d'où le shader tire les boucles) des oreilles modelées était celui de l'oreille de référence
+    // partagée : une plaque plate, la même pour les deux faces, plus petite que l'oreille bombée du lagotto. Ses
+    // boucles s'étiraient en traînées (anisotropie médiane 1,57, 90 % des triangles sous 3,61 ; le bord roulé, sans
+    // épaisseur au repos, en rayures). Maintenant : la peau de son oreille ramenée au repère d'origine par la tête.
+    const n0 = realDogBase(G.shiba, 'shiba').prims.coat.count;
+    const stretch = (md) => {
+      const g = md.coatMesh.geometry;
+      const P = g.attributes.position.array;
+      const R = g.attributes.cmpRest.array;
+      const idx = g.index.array;
+      const an = [];
+      const sc = [];
+      const v = () => new THREE.Vector3();
+      const [a, b, c, ra, rb, rc] = [v(), v(), v(), v(), v(), v()];
+      for (let t = 0; t < idx.length; t += 3) {
+        const [i0, i1, i2] = [idx[t], idx[t + 1], idx[t + 2]];
+        if (i0 < n0 || i1 < n0 || i2 < n0) continue;
+        a.fromArray(P, i0 * 3);
+        b.fromArray(P, i1 * 3).sub(a);
+        c.fromArray(P, i2 * 3).sub(a);
+        ra.fromArray(R, i0 * 3);
+        rb.fromArray(R, i1 * 3).sub(ra);
+        rc.fromArray(R, i2 * 3).sub(ra);
+        const nn = b.clone().cross(c);
+        if (nn.length() < 1e-12) continue;
+        const x = b.clone().normalize();
+        const y = nn.cross(x).normalize();
+        const E = [b.dot(x), c.dot(x), b.dot(y), c.dot(y)];
+        const det = E[0] * E[3] - E[1] * E[2];
+        if (Math.abs(det) < 1e-12) continue;
+        // J = F · E⁻¹ (peau réelle → repos), valeurs singulières
+        let s11 = 0;
+        let s12 = 0;
+        let s22 = 0;
+        for (const k of ['x', 'y', 'z']) {
+          const j0 = (rb[k] * E[3] - rc[k] * E[2]) / det;
+          const j1 = (-rb[k] * E[1] + rc[k] * E[0]) / det;
+          s11 += j0 * j0;
+          s12 += j0 * j1;
+          s22 += j1 * j1;
+        }
+        const d = Math.sqrt(Math.max(0, (s11 - s22) ** 2 / 4 + s12 * s12));
+        const l1 = Math.sqrt((s11 + s22) / 2 + d);
+        const l2 = Math.sqrt(Math.max(0, (s11 + s22) / 2 - d));
+        an.push(l1 / Math.max(1e-6, l2));
+        sc.push(Math.sqrt(l1 * l2));
+      }
+      const q = (arr, p) => [...arr].sort((u, w) => u - w)[Math.floor(p * (arr.length - 1))];
+      return { med: q(an, 0.5), p90: q(an, 0.9), sc: q(sc, 0.5) };
+    };
+    const md = dog('lagotto');
+    const s = stretch(md);
+    expect(s.med).toBeLessThan(1.05);
+    expect(s.p90).toBeLessThan(1.2);
+    // (boucles de la taille de celles de la tête : repos divisé par la taille de la tête)
+    expect(s.sc).toBeCloseTo(1 / md.build.head, 2);
+    // (le reste du pelage garde le repos commun ; les autres races gardent l'oreille de référence partagée)
+    const lab = dog('labrador');
+    const cock = dog('golden');
+    const Rl = md.coatMesh.geometry.attributes.cmpRest;
+    const Rb = lab.coatMesh.geometry.attributes.cmpRest;
+    expect(cock.coatMesh.geometry.attributes.cmpRest).toBe(Rb);
+    expect(Rl).not.toBe(Rb);
+    let diff = 0;
+    for (let i = 0; i < n0 * 3; i++) diff = Math.max(diff, Math.abs(Rl.array[i] - Rb.array[i]));
+    expect(diff).toBe(0);
+    for (const m of [md, lab, cock]) m.dispose();
   }, 60000);
 
   it('les oreilles tombantes des autres races ne changent pas (sommets figés, mêmes qu\'avant l\'ajout des deux races)', () => {

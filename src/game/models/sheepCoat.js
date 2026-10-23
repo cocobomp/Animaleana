@@ -108,7 +108,10 @@ if (sPuff.x > 0.0 || sPuff.y > 0.0) {
   float lump = 1.0 + sPuff.z * (sNoiseV(position * sPuff.w) * 2.0 - 1.0);
   float neckZ = smoothstep(sLand.w - 0.02, sLand.w + 0.07, position.z) * (1.0 - smoothstep(sHead.x - 0.21, sHead.x - 0.13, position.z));
   float fold = sPuff.y * neckZ * (0.5 + 0.5 * sin(position.z * 105.0));
-  transformed += sheepPuffN * (sPuff.x * lump + fold) * pm;
+  // (dessous du ventre : gonflé à moitié — le gabarit y a peu de sommets, et la toison poussée tout droit vers le bas en
+  // faisait un ventre en facettes droites, vu du bas et au galop)
+  float under = 1.0 - 0.5 * smoothstep(0.35, 0.9, -sheepPuffN.y);
+  transformed += sheepPuffN * (sPuff.x * lump * under + fold) * pm;
 }
 if (sTuft.x > 0.0) {
   // Toupet du front (nez noir) : une touffe de laine bouclée entre les cornes, au-dessus des yeux.

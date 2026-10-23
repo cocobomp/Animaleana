@@ -994,7 +994,11 @@ export function puffAt(P, pos, i, B, out) {
   const z = pos[i * 3 + 2] * f;
   const nz = 0.5 + 0.25 * (Math.sin(x + 1.7 * y + 1.3 * z + 1.3) + Math.sin((-1.4 * x + 0.9 * y + 1.1 * z) * 1.31 + 4.1));
   const lump = 1 + (B.lumps ?? 0) * (nz * 2 - 1);
-  return out.set(P.puffN[i * 3], P.puffN[i * 3 + 1], P.puffN[i * 3 + 2]).multiplyScalar(lump * pm);
+  // (dessous du ventre gonflé à moitié, comme le shader)
+  const ny = -P.puffN[i * 3 + 1];
+  const t = Math.min(1, Math.max(0, (ny - 0.35) / 0.55));
+  const under = 1 - 0.5 * t * t * (3 - 2 * t);
+  return out.set(P.puffN[i * 3], P.puffN[i * 3 + 1], P.puffN[i * 3 + 2]).multiplyScalar(lump * pm * under);
 }
 
 /**

@@ -20,7 +20,7 @@ import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
 import { sheepBuild, sheepFleece, shornWeight } from '../../sim/sheepLook.js';
 import { makeSheepUniforms, setSheepCoat, sheepMaterial, hornMaterial } from './sheepCoat.js';
-import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from './ruminantHair.js';
+import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash, setLockFloor } from './ruminantHair.js';
 
 /** Clé du GLB (assets.js) : jamais « sheep » (gltfAnimal.js le prendrait pour un animal GLB générique). */
 export const REAL_SHEEP_KEY = 'sheep_real';
@@ -1368,6 +1368,7 @@ export class RealSheepAnim {
     const lie = (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.ruminate ?? 0) + 0.6 * ((this.w.lie_down ?? 0) + (this.w.get_up ?? 0));
     md.uniforms.sState.value.w = clamp(lie, 0, 1);
     if (md.lockUniforms) md.lockUniforms.hState.value.y = clamp(lie, 0, 1);
+    setLockFloor(md.lockUniforms, md);
   }
 
   /**

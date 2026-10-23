@@ -388,3 +388,32 @@ describe('poil long des chèvres (col noir, poitevine)', () => {
     md.dispose?.();
   });
 });
+
+describe('mèches couchées : jamais sous le sol (islandais, poil long des chèvres et de la Highland)', () => {
+  // (critique : islandais couché, les longues mèches pendaient droit sous le ventre et entraient dans le sol)
+  it('le sol sous l\'animal est donné aux mèches et le shader y pose leur bout', () => {
+    const md = buildRealSheepModel(lookOf('sheep', 'islandais_mouton'), 'islandais_mouton', GS);
+    const g = new THREE.Group();
+    g.position.set(1, 0.3, -2);
+    g.add(md.root);
+    g.updateMatrixWorld(true);
+    const st = { v: 0, moving: false, size: 1, posture: 'lie', action: null };
+    for (let i = 0; i < 90; i++) {
+      md.anim.update(1 / 30, st);
+      g.updateMatrixWorld(true);
+    }
+    const lu = md.lockUniforms;
+    expect(lu.hState.value.y).toBeGreaterThan(0.8);
+    expect(lu.hFloor.value).toBeCloseTo(0.305, 3);
+    // (le shader des mèches : après le squelette, le sommet sous le sol remonte au sol)
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+    md.locks.material.onBeforeCompile(sh);
+    expect(sh.uniforms.hFloor).toBe(lu.hFloor);
+    const iSkin = sh.vertexShader.indexOf('#include <skinning_vertex>');
+    const iClamp = sh.vertexShader.indexOf('hFloor - hw.y');
+    expect(iSkin).toBeGreaterThan(0);
+    expect(iClamp).toBeGreaterThan(iSkin);
+    expect(iClamp).toBeLessThan(sh.vertexShader.indexOf('#include <project_vertex>'));
+    md.dispose?.();
+  });
+});

@@ -25,7 +25,7 @@ import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
 import { goatBuild, goatUdderFill, udderScale } from '../../sim/goatLook.js';
 import { makeGoatUniforms, setGoatCoat, goatMaterial } from './goatCoat.js';
-import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from './ruminantHair.js';
+import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash, setLockFloor } from './ruminantHair.js';
 import { fitRuminantHead } from './ruminantGear.js';
 import {
   cleanClips, emptyBoneBoxes, growBoneBoxes, measureSheep, sheepJoints, contactShadow, SheepMesh, RealSheepAnim, pickSheepGait, lying,
@@ -709,6 +709,7 @@ export class RealGoatAnim extends RealSheepAnim {
     md.udderBone?.scale.set(s * (1 + 0.2 * l), s * (1 - 0.6 * l), s * (1 + 0.2 * l));
     if (md.uniforms) md.uniforms.gStyle.value.w = l;
     if (md.lockUniforms) md.lockUniforms.hState.value.y = l;
+    setLockFloor(md.lockUniforms, md);
   }
 
   /**

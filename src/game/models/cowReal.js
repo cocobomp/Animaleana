@@ -29,7 +29,7 @@ import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
 import { cowBuild, cowUdderFill, cowUdderScale, cowModelKind } from '../../sim/cowLook.js';
 import { makeCowUniforms, setCowCoat, cowMaterial, cowEyeMaterial } from './cowCoat.js';
-import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash } from './ruminantHair.js';
+import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash, setLockFloor } from './ruminantHair.js';
 import {
   cleanClips, emptyBoneBoxes, growBoneBoxes, measureSheep, sheepJoints, contactShadow, SheepMesh, RealSheepAnim, lying, smoothNormals, nurseSideOf, lodScale,
 } from './sheepReal.js';
@@ -1113,6 +1113,7 @@ export class RealCowAnim extends RealSheepAnim {
     if (md.uniforms) md.uniforms.cStyle.value.w = l;
     // (mèches du poil long couchée : à moitié repliées seulement, elles s'étalent dans l'herbe au lieu de disparaître)
     if (md.lockUniforms) md.lockUniforms.hState.value.y = l * 0.45;
+    setLockFloor(md.lockUniforms, md);
   }
 
   /** Avancement (0-1) d'une transition jouée une fois (se coucher, se relever), 0 si elle ne joue pas. */

@@ -232,7 +232,13 @@ export function lockCards(picks, { pos, nrm, si, sw, dPos = null }, inset = 0.01
  * Uniformes des mèches d'un animal : x longueur (0 rentrées, 1 pleines), y couché (0 à 1), z décalage le long de la
  * normale (m), w poids de la cible de forme du corps (la racine suit hairD : mouton à moitié tondu).
  */
-export const makeLockUniforms = () => ({ hState: { value: new THREE.Vector4(1, 0, 0, 0) } });
+// (hFloor : hauteur du sol sous l'animal, monde — le bout des mèches n'y entre jamais ; très bas tant que l'espèce ne le
+// donne pas)
+export const makeLockUniforms = () => ({ hState: { value: new THREE.Vector4(1, 0, 0, 0) }, hFloor: { value: -1e4 } });
+/** Sol sous l'animal pour ses mèches : la hauteur de l'origine du modèle (ses sabots au sol), + 5 mm. */
+export function setLockFloor(lu, md) {
+  if (lu?.hFloor) lu.hFloor.value = md.root.matrixWorld.elements[13] + 0.005;
+}
 
 /**
  * Matière des mèches : couleur des deux zones de la robe (hairSide : 0 → colA, 1 → colB), grain des brins, racine un
@@ -244,7 +250,7 @@ export function lockMaterial(lu, colA, colB, name = 'ruminant_locks', texKind = 
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, lu, hu);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec3 hairTop;\nattribute vec3 hairN;\nattribute vec3 hairD;\nattribute float hairSide;\nuniform vec4 hState;\nvarying float vHSide;\nvarying float vHT;')
+      .replace('#include <common>', '#include <common>\nattribute vec3 hairTop;\nattribute vec3 hairN;\nattribute vec3 hairD;\nattribute float hairSide;\nuniform vec4 hState;\nuniform float hFloor;\nvarying float vHSide;\nvarying float vHT;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vHSide = hairSide;
 vHT = uv.y;
@@ -253,6 +259,12 @@ vHT = uv.y;
   // avec la cible de forme du corps : à moitié tondu, les mèches flottaient au-dessus du dos)
   float k = hState.x * (1.0 - 0.72 * hState.y);
   transformed = hairTop + hairD * hState.w + hairN * hState.z + (transformed - hairTop) * k;
+}`)
+      .replace('#include <skinning_vertex>', `#include <skinning_vertex>
+{
+  // (jamais sous le sol : couché, le bout des longues mèches pendait sous le ventre et entrait dans le sol ; il s'y pose)
+  vec4 hw = modelMatrix * vec4(transformed, 1.0);
+  if (hw.y < hFloor) transformed += inverse(mat3(modelMatrix)) * vec3(0.0, hFloor - hw.y, 0.0);
 }`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform vec3 hA;\nuniform vec3 hB;\nvarying float vHSide;\nvarying float vHT;')
@@ -268,7 +280,7 @@ vHT = uv.y;
   diffuseColor.rgb = hc * mix(0.6 + 0.45 * g, 0.86 + 0.2 * g, lt) * (mix(0.82, 0.95, lt) + mix(0.18, 0.05, lt) * smoothstep(0.0, 0.35, vHT));
 }`);
   };
-  mat.customProgramCacheKey = () => `${name}-v4`;
+  mat.customProgramCacheKey = () => `${name}-v5`;
   mat.userData.hairUniforms = hu;
   return mat;
 }

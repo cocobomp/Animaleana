@@ -38,7 +38,7 @@ export const COW_BUILDS = {
   // (pie rouge et blanche à « lunettes » foncées autour des yeux, bringé dans les taches ; face blanche)
   normande: { pattern: 'pie', pie: 0.56, lunettes: 1, brindle: 0.55, nose: 0xc99a8a, hoof: 0x6a5a4c, udder: 1.05, girth: 1.03 },
   // (pie NOIRE et blanche à grandes taches, grande, grosse mamelle ; bas des pattes et toupillon blancs)
-  holstein: { pattern: 'pie', pie: 0.62, whiteLegs: 1, legs: 1.05, girth: 0.95, depth: 0.97, nose: 0x2e2a2c, hoof: 0x34302e, udder: 1.25 },
+  holstein: { pattern: 'pie', pie: 0.62, bullPie: 0.44, whiteLegs: 1, legs: 1.05, girth: 0.95, depth: 0.97, nose: 0x2e2a2c, hoof: 0x34302e, udder: 1.25 },
   // (blanc crème uni, massive, sans cornes)
   charolaise: { pattern: 'solid', horns: 'none', legs: 0.95, girth: 1.18, depth: 1.06, head: 1.04, nose: 0xd2a89a, hoof: 0x9c8a74, udder: 0.6 },
   // (petite, poil long roux, frange sur les yeux, très longues cornes en lyre)
@@ -49,7 +49,7 @@ export const COW_BUILDS = {
     bullHorn: { t0: [1, -0.06, 0.16], t1: [0.3, 0.8, 0.62], reach: 2.7, thick: 1.5 },
   },
   // (toute petite, pie noire — plus de noir que de blanc)
-  bretonne_pie_noire: { pattern: 'pie', pie: 0.4, bullPie: 0.43, legs: 0.94, head: 1.07, nose: 0x2e2a2c, hoof: 0x2a2624, udder: 0.85, hornK: 0.9, hornLift: 0.2 },
+  bretonne_pie_noire: { pattern: 'pie', pie: 0.4, bullPie: 0.37, legs: 0.94, head: 1.07, nose: 0x2e2a2c, hoof: 0x2a2624, udder: 0.85, hornK: 0.9, hornLift: 0.2 },
   // (petite, trapue, noire ou rouge foncé, cornes de lutteuse : courtes, épaisses, base large, sur le côté puis
   // nettement vers l'avant et relevées — une lyre courte ; tournées seulement, elles avaient la forme de celles de la
   // Wagyu)

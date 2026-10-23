@@ -196,7 +196,6 @@ const COLOR_F = /* glsl */ `
   float n2 = cNoise(p * 9.0 + 5.0);
   // (bas des pattes blanc : bord net, un peu irrégulier — sur 9 cm, il faisait une bande grise au genou)
   float lowLeg = leg * (1.0 - smoothstep(kneeY - 0.012, kneeY + 0.012, p.y + (n2 - 0.5) * 0.05));
-  float belly = (1.0 - smoothstep(0.04, 0.32, hl)) * trunkZ * (1.0 - head) * (1.0 - leg) * (1.0 - udder);
   // Ventre blanc (Prim'Holstein, Hereford) : une ligne nette et irrégulière, plus haute au milieu du ventre, qui s'efface
   // vers la mamelle et remonte un peu sous le poitrail ; ni les membres ni la tête (ils passent sous la ligne d'un coup).
   // La rampe d'avant (28 % de la hauteur du tronc, tache effacée à 80 %) faisait un dégradé gris sale au bas du flanc.
@@ -215,10 +214,13 @@ const COLOR_F = /* glsl */ `
     if (cMark.y > 0.5) {
       f = mk.r + (n2 - 0.5) * 0.05;
     } else {
-      vec3 q = p * vec3(2.4, 2.0, 1.6) + vec3(cMark.z, 1.3, 2.7);
-      f = cNoise(q) * 0.65 + cNoise(q * 2.3 + 4.0) * 0.3 + (n2 - 0.5) * 0.06;
-      // (calculées : ventre blanc, liste blanche sur la face, oreilles de couleur)
-      f -= belly * 0.6 + head * (1.0 - smoothstep(0.03, 0.07, abs(p.x))) * smoothstep(cHead.x - 0.05, cHead.x + 0.05, p.z) * 0.8;
+      // (taches de 25 à 50 cm sur le corps du taureau, trois octaves ; à la fréquence d'avant — p × (2,4 ; 2,0 ; 1,6), deux
+      // octaves —, une seule tache couvrait le dos : selle noire de la Prim'Holstein, Normande brune unie à ventre blanc)
+      vec3 q = p * vec3(4.4, 3.6, 2.9) + vec3(cMark.z, 1.3, 2.7);
+      f = cNoise(q) * 0.58 + cNoise(q * 2.1 + 4.0) * 0.28 + cNoise(q * 4.3 + 9.0) * 0.14 + (n2 - 0.5) * 0.05;
+      // (calculées : ventre blanc sous sa ligne nette — la rampe sur le bas du tronc blanchissait toute la moitié basse —,
+      // liste blanche sur la face, oreilles de couleur)
+      f -= bellyW * 0.6 + head * (1.0 - smoothstep(0.03, 0.07, abs(p.x))) * smoothstep(cHead.x - 0.05, cHead.x + 0.05, p.z) * 0.8;
       f = max(f, ear);
     }
     float spot = smoothstep(cPie.x - 0.025, cPie.x + 0.025, f);

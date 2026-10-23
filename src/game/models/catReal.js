@@ -55,6 +55,7 @@ const _v = V();
 const _w = V();
 const _u = V();
 const _q = new THREE.Quaternion();
+const _q3 = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const _rt = V();
 const _rs = V();
@@ -1869,7 +1870,9 @@ class RealCatAnim {
       const inv = md.skeleton.boneInverses;
       const ys = new Float32Array(n);
       const bm = new THREE.Matrix4();
-      const poses = [['sit', 0], ['groom', 0.3], ['groom', 0.7], ['lie', 0], ['sleep', 0], ['eat', 0.3], ['stretch', 0.5], ['highfive', 0.5]];
+      // (et le milieu du passage couché -> en boule : le chaton y roule sur le flanc, sur ses pattes repliées)
+      const poses = [['sit', 0], ['groom', 0.3], ['groom', 0.7], ['lie', 0], ['sleep', 0], ['curl_up', 0.3], ['curl_up', 0.45],
+        ['curl_up', 0.6], ['curl_up', 0.75], ['eat', 0.3], ['stretch', 0.5], ['highfive', 0.5]];
       for (const [clip, t] of poses) {
         if (!this.actions[clip]) continue;
         this.clipPose(clip, t, false);
@@ -1928,6 +1931,17 @@ class RealCatAnim {
       return { inf: infl(i), bone: best };
     });
     this.headPts = [...S.contact[2]].map(infl);
+    // Bout de chaque oreille (les 16 sommets les plus loin de sa base) : relevé quand il toucherait le sol (chaton qui
+    // roule sur le flanc pour se mettre en boule : l'oreille du dessous plongeait de 5 à 11 mm dans le sol).
+    this.earPts = md.ears.map((e) => {
+      const k = e.userData.side > 0 ? 0 : 1;
+      const r = e.getWorldPosition(V());
+      const ids = [];
+      for (let i = 0; i < n; i++) if (W.ear[i * 2 + k] > 0.5) ids.push(i);
+      const d = (i) => (S.D.pos[i * 3] - r.x) ** 2 + (S.D.pos[i * 3 + 1] - r.y) ** 2 + (S.D.pos[i * 3 + 2] - r.z) ** 2;
+      ids.sort((a, b) => d(b) - d(a));
+      return ids.slice(0, 16).map(infl);
+    });
     // Soles du chaton : la peau de son pied se plie entre doigts et métacarpe ; liée au seul os du pied, sa sole
     // calculée passait de 3 mm au-dessus à 3 mm sous la vraie peau au pas (chez l'adulte, les deux se confondent). Chaque
     // point suit l'os qui le porte le plus (même coût qu'un point lié à l'os du pied ; la peau mélangée de ses quatre
@@ -2280,6 +2294,10 @@ class RealCatAnim {
       }
       target = Math.max(-low, Number.isFinite(lowB) ? -(lowB + this.bodyAllow) : -Infinity);
       floor = target;
+      // (en boule <-> couché : le chaton roule du flanc au ventre, le corps suit le sol sans retard — il flottait
+      // jusqu'à 13 mm au-dessus en se déroulant)
+      const sw = (this.w.sleep ?? 0) + (this.w.curl_up ?? 0);
+      if (sw > 0.02 && sw < 0.98) rate = 24;
     }
     let off = dt > 0 ? this.gOff + (target - this.gOff) * Math.min(1, dt * rate) : target;
     off = Math.max(off, floor);
@@ -2350,6 +2368,27 @@ class RealCatAnim {
         this.turn(md.neck, AX, raiseAngle(_v.setFromMatrixPosition(md.neck.matrixWorld).applyMatrix4(_m), _u, floorH + 0.003, 0.8));
         md.neck.updateMatrixWorld(true);
       }
+    }
+    // Oreilles : leur bout jamais sous le sol (couché, en boule, en roulant sur le flanc) — l'oreille tourne à sa base.
+    if (lieW > 0.1 && this.earPts) {
+      md.ears.forEach((e, k) => {
+        let lowY = Infinity;
+        for (const inf of this.earPts[k]) {
+          const y = this.skinY(inf);
+          if (y < lowY) {
+            lowY = y;
+            _u.copy(_w);
+          }
+        }
+        const floorE = 0.002;
+        if (!(lowY < floorE)) return;
+        // (autour de l'axe x du chat tel qu'il est maintenant : la tête du chaton couché sur le flanc est tournée de
+        // près d'un quart de tour, l'axe x vu par la tête au repos ne relevait plus l'oreille)
+        const ang = raiseAngle(_v.setFromMatrixPosition(e.matrixWorld).applyMatrix4(_m), _u, floorE + 0.002, 0.9);
+        _ax.set(1, 0, 0).transformDirection(md.root.matrixWorld).applyQuaternion(e.parent.getWorldQuaternion(_q3).invert());
+        e.quaternion.premultiply(_q.setFromAxisAngle(_ax, ang));
+        e.updateMatrixWorld(true);
+      });
     }
   }
 

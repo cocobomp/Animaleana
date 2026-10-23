@@ -48,9 +48,17 @@ GT=<dossier avec node_modules de @gltf-transform/core, extensions, functions, me
      du sol), `tail_up` (queue en point d'interrogation, calque), `ears` (calque), `highfive` (« tape-m'en cinq »),
      `jump`, transitions `sit_down`, `stand_up`, `lie_down`, `get_up`, `curl_up` ; chaton (poitrail profond, ses bras
      ne touchent pas le sol à plat) : couché **« en pain »** (`lie_loaf` : poignets sous le poitrail, pattes repliées
-     vers l'arrière, coudes contre le flanc ; avant, assis comme une otarie, pattes tendues devant), **en boule tête
-     baissée** (`curl_neck`, `curl_hb` : encolure et tête baissées, sans roulis ; avant, assis, tête dressée et
-     tordue) — réglages du chaton dans `cat_models.py`, les autres clips restent identiques à l'octet près ;
+     vers l'arrière, coudes contre le flanc ; avant, assis comme une otarie, pattes tendues devant), **en boule
+     couché sur le flanc** (`curl_side` : roulé sur le flanc droit de 83° (`curl_roll`), colonne enroulée autour de
+     la verticale du sol, tête ramenée contre les pieds arrière puis tournée sur sa joue (`curl_head`,
+     `curl_head_roll`), queue enroulée dans le plan du sol (`curl_tail`), pattes du dessous rentrées vers le ventre
+     (`curl_splay`), boule posée sur le sol et recentrée au-dessus de la racine ; mesuré dans le jeu : roulis 0 → 83°,
+     tête à 70 → 37-50 % de sa hauteur debout, à 0,54 → 0,24 longueur de corps des pieds arrière ; avant, debout
+     tassé sur ses pattes, dos rond, tête entre les pattes) et son passage `curl_up` (le chaton roule sur le flanc,
+     la tête tourne avant le corps ; à chaque image, le plus bas sommet posé sur le sol : il ne flotte plus de 4 cm à
+     mi-chemin) ; **yeux peints portés par la seule tête** (`eye_rigid` : la chaleur leur donnait encolure et
+     omoplate, le globe s'étirait de 25 à 36 % en boule) — réglages du chaton dans `cat_models.py`, les autres clips
+     restent identiques à l'octet près ;
    - **pieds au sol** : sur chaque image, le chat est relevé de ce qui passe sous le sol (soles, ventre, croupe,
      queue), relevé noté par clip (`extras.cat.groundFix`) ;
    - les os que le jeu anime lui-même (bout de la queue, oreilles, yeux) sont exclus du contrôle du sol ;
@@ -63,7 +71,7 @@ GT=<dossier avec node_modules de @gltf-transform/core, extensions, functions, me
    attributs de la version complète) pour les chats lointains (`CAT_LOD_DIST` dans `catReal.js`).
 
 Fichiers obtenus : `cat_adult.glb` **0,93 Mo** (19 990 triangles, 5 920 au loin, 43 os, 20 clips, 649 canaux),
-`cat_kitten.glb` **0,73 Mo** (15 530 triangles, 4 600 au loin, 41 os, 20 clips).
+`cat_kitten.glb` **0,74 Mo** (15 530 triangles, 4 600 au loin, 41 os, 20 clips ; +4 Ko pour la boule sur le flanc).
 
 **`planche.html`** (outil de mise au point, servi par `npx vite`) : `window.planche.show({ cells })` rend une planche de
 races, robes, chatons, poses et équipements, avec le chat procédural en regard (`proc: true`, l'AVANT des
@@ -107,7 +115,7 @@ comparaisons), dans la même lumière et au même cadrage.
   postures (debout, assis, toilette, couché, en boule, accroupi) et passages par le plus court chemin (debout →
   assis → couché → en boule) ; étirement au réveil ; équilibre sur les barrières ; tours du spectacle (assis,
   couché, « tape-m'en cinq », révérence = étirement, saut) ; regard, clignements, **paupières** (bandeaux de peau
-  propres à la race, tournés sur l'œil : mi-closes à la toilette et couché, fermées en boule), oreilles qui bougent et se couchent (peur, tristesse), queue dressée quand il suit
+  propres à la race, tournés sur l'œil : mi-closes à la toilette et couché, fermées en boule), oreilles qui bougent et se couchent (peur, tristesse) et dont le bout ne passe jamais sous le sol (couché, en boule : l'oreille tourne à sa base autour de l'axe du chat tel qu'il est couché), queue dressée quand il suit
   quelqu'un, gonflée quand il a peur, respiration, embonpoint ; porté dans les bras (couché), sur la table du salon
   (assis), dans la caisse de transport (couché, pose figée), vignettes (pose figée).
 - **Pieds posés** : au pas et au trot, pieds avant et arrière à la même hauteur (`levelPairs`, appui le plus bas de

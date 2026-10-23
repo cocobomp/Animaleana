@@ -496,7 +496,8 @@ def blend_poses(rig, pa, pb, u):
     """Mélange deux poses (matrices espace armature) dans le repère local de chaque os : rotations sphériques,
     translations linéaires, puis la chaîne est recomposée de la racine vers les bouts. (Mélanger directement les
     matrices de l'armature déplaçait les os les uns par rapport aux autres ; Blender ignore la translation d'un os
-    connecté : au milieu d'une transition, la queue passait sous le sol.)"""
+    connecté : au milieu d'une transition, la queue passait sous le sol.) u : nombre, ou fonction (nom de l'os -> u)
+    pour qu'une partie du corps devance l'autre."""
     ba, bb = rig.to_basis(pa), rig.to_basis(pb)
     out = {'__body__': pa['__body__']}
     for name in rig.order:
@@ -504,8 +505,9 @@ def blend_poses(rig, pa, pb, u):
         lb, qb, _ = bb[name].decompose()
         if qa.dot(qb) < 0:
             qb = -qb
-        Mb = qa.slerp(qb, u).to_matrix().to_4x4()
-        Mb.translation = la.lerp(lb, u)
+        un = u(name) if callable(u) else u
+        Mb = qa.slerp(qb, un).to_matrix().to_4x4()
+        Mb.translation = la.lerp(lb, un)
         b = rig.bones[name]
         if b.parent is None:
             out[name] = rig.rest[name] @ Mb
@@ -551,10 +553,14 @@ def bend(rig, pose, spec, glob=None):
         b = rig.bones[name]
         Mo = old[name]
         if name in spec:
-            axn, ang = spec[name] if isinstance(spec[name], tuple) else ('Z', spec[name])
-            D = Mo @ rig.rest[name].inverted()
-            ax = D.to_3x3() @ Vector({'X': (1, 0, 0), 'Y': (0, 1, 0), 'Z': (0, 0, 1)}[axn])
-            Mo = rot_axis_about(ang, ax.normalized(), Mo.translation.copy()) @ Mo
+            # (une flexion (axe, angle), ou une liste de flexions appliquées l'une après l'autre)
+            sp = spec[name] if isinstance(spec[name], list) else [spec[name] if isinstance(spec[name], tuple) else ('Z', spec[name])]
+            for axn, ang in sp:
+                D = Mo @ rig.rest[name].inverted()
+                # (axe nommé, ou vecteur dans le repère du corps : chaton en boule couché sur le flanc, flexion autour
+                # de la verticale du sol une fois couché)
+                ax = D.to_3x3() @ (Vector(axn) if not isinstance(axn, str) else Vector({'X': (1, 0, 0), 'Y': (0, 1, 0), 'Z': (0, 0, 1)}[axn]))
+                Mo = rot_axis_about(ang, ax.normalized(), Mo.translation.copy()) @ Mo
         if b.parent is None:
             new[name] = Mo
         else:

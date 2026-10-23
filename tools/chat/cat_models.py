@@ -18,13 +18,17 @@ MODELS = {
     # tendues devant)
     # (cuisse assise : l'arrière du haut de la cuisse suit le bassin (buttock), le grasset est plus haut et plus en
     # avant ; sans cela, la peau du fémur sortait du flanc, déchirée, quand le chaton s'asseyait)
+    # (en boule : couché sur le flanc droit, colonne enroulée dans le plan du sol, tête ramenée vers les cuisses,
+    # queue enroulée autour, pattes du dessous rentrées — curl_side, voir make_cat.py)
     'kitten': dict(file='faino_kitten.glb', rig=dict(elbow=0.42, hock=0.28, stifle=0.46, hip=0.70, buttock=0.5, haunch=0.9, arm_clip=(0.10, 0.18, 4.0)),
-                   eye_mats=('material',),
+                   eye_mats=('material',), eye_rigid=1,
                    gait_over={'run': {'stride': 0.42, 'drop': 0.008, 'lift': 0.09}, 'trot': {'stride': 0.28}, 'walk': {'stride': 0.24}},
                    pose_opts=dict(groom_dz=0.06, groom_dy=0.02, groom_head=0.35, groom_a3=1.8, groom_wipe_dy=0.02, groom_wipe_dz=-0.055,
                                   groom_wipe_head=0.38, stretch_reach=0.66, stretch_scap=0.2,
                                   sit_flex=0.3, sit_tuck=-0.15, sit_femur=0.2, lie_hip=0.6, lie_chest=0.05, lie_loaf=1,
-                                  curl=0.6, curl_neck=0.9, curl_hb=0.6, curl_roll=0.0)),
+                                  curl_side=1, curl_roll=1.45, curl=0.65, curl_head=0.5, curl_head_roll=0.45, curl_tail_neg=1,
+                                  curl_tail=[0.3, 0.5, 0.6, 0.7, 0.75, 0.75, 0.7, 0.6],
+                                  curl_splay={'HR': -0.25, 'FR': -0.15, 'HL': 0.1, 'FL': 0.0})),
 }
 
 

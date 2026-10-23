@@ -11,7 +11,9 @@ SRC = os.environ.get('SRC', os.path.join(os.path.dirname(os.path.abspath(__file_
 MODELS = {
     # Adultes des 15 races : « Cat game asset », Claire (claireanne3d, Sketchfab, CC-BY 4.0) — chat tigré gris
     # réaliste, yeux séparés (vairons), PBR 1024 (couleur, normales, occlusion).
-    'adult': dict(file='claire_cat.glb', rig=dict(buttock=0.45, haunch=0.8),
+    # (genou, pattes arrière propres, flanc : voir cat_autorig.py ; sans eux, la peau du pli du genou et du flanc se
+    # retournait quand le chat s'asseyait, faces arrière visibles à l'aine pendant la toilette)
+    'adult': dict(file='claire_cat.glb', rig=dict(buttock=0.45, haunch=0.8, leg_clean=1, knee_band=(1.0, 1.5), flank_clip=(0.16, 0.26)),
                   pose_opts=dict(sit_flex=-0.2, sit_tuck=-0.2, sit_femur=0.35)),
     # Chatons : « Kitten », FainoDS (doinspire, Sketchfab, CC-BY 4.0) — chaton tigré gris réaliste, grosse tête.
     # (arm_clip : la peau du poitrail entre les pattes avant suit le poitrail, plus le bras : sinon un voile, pattes
@@ -20,7 +22,10 @@ MODELS = {
     # avant ; sans cela, la peau du fémur sortait du flanc, déchirée, quand le chaton s'asseyait)
     # (en boule : couché sur le flanc droit, colonne enroulée dans le plan du sol, tête ramenée vers les cuisses,
     # queue enroulée autour, pattes du dessous rentrées — curl_side, voir make_cat.py)
-    'kitten': dict(file='faino_kitten.glb', rig=dict(elbow=0.42, hock=0.28, stifle=0.46, hip=0.70, buttock=0.5, haunch=0.9, arm_clip=(0.10, 0.18, 4.0)),
+    # (genou et pattes arrière propres comme l'adulte ; pas flank_clip : le flanc court du chaton y perdait la cuisse,
+    # retournée en boule)
+    'kitten': dict(file='faino_kitten.glb', rig=dict(elbow=0.42, hock=0.28, stifle=0.46, hip=0.70, buttock=0.5, haunch=0.9, arm_clip=(0.10, 0.18, 4.0),
+                                                      leg_clean=1, knee_band=(1.3, 1.2)),
                    eye_mats=('material',), eye_rigid=1,
                    gait_over={'run': {'stride': 0.42, 'drop': 0.008, 'lift': 0.09}, 'trot': {'stride': 0.28}, 'walk': {'stride': 0.24}},
                    pose_opts=dict(groom_dz=0.06, groom_dy=0.02, groom_head=0.35, groom_a3=1.8, groom_wipe_dy=0.02, groom_wipe_dz=-0.055,

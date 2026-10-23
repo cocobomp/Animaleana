@@ -1,5 +1,5 @@
 // Finitions (2e passe) des chats réalistes : chaton qui dort vraiment roulé en boule sur le flanc, pompon du bobtail
-// en boule, ... Déterministe :
+// en boule, pas de peau retournée à l'aine pendant la toilette, ... Déterministe :
 // graines fixes, pas de temps fixe, aucun Math.random (le mixeur est appelé avec des états donnés).
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import * as THREE from 'three';
@@ -191,6 +191,106 @@ describe('pompon du bobtail', () => {
         far = Math.max(far, _v.fromArray(rest, i * 3).distanceTo(c0));
       }
       expect(far / base.land.tailLen, stage).toBeLessThan(0.35);
+      md.dispose();
+    }
+  });
+});
+
+/**
+ * Peau retournée visible sur les pattes arrière, dans la pose du clip à l'instant t : triangles dont l'ordre des
+ * sommets s'est inversé (normale du triangle déformé opposée aux normales des sommets, tournées par leurs os) et
+ * qu'un rayon partant de leur centre le long de la peau quitte sans rien toucher (ils se voient : faces arrière,
+ * magenta en rendu de débogage). Seuls les triangles portés surtout par la cuisse, la jambe ou le pied arrière.
+ * Retourne { n, cm2 }.
+ */
+function legFlips(md, clip, t) {
+  const g = md.coatMesh.geometry;
+  const idx = g.index.array;
+  const n = g.attributes.position.count;
+  const si = g.attributes.skinIndex.array;
+  const sw = g.attributes.skinWeight.array;
+  const N = g.attributes.normal.array;
+  const names = md.skeleton.bones.map((b) => b.name);
+  const isLeg = names.map((nm) => /^(femur|tibia|metatarsus|htoes|haunch)[LR]$/.test(nm));
+  md.anim.clipPose(clip, t);
+  md.coatMesh.updateMatrixWorld(true);
+  md.skeleton.update();
+  const P = new Float32Array(n * 3);
+  const NP = new Float32Array(n * 3);
+  const legW = new Float32Array(n);
+  const inv = new THREE.Matrix4().copy(md.coatMesh.matrixWorld).invert();
+  const mats = md.skeleton.bones.map((bn, k) => new THREE.Matrix4().multiplyMatrices(bn.matrixWorld, md.skeleton.boneInverses[k]).premultiply(inv));
+  const v = new THREE.Vector3();
+  const acc = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    md.coatMesh.getVertexPosition(i, v);
+    P.set([v.x, v.y, v.z], i * 3);
+    acc.set(0, 0, 0);
+    for (let c = 0; c < 4; c++) {
+      const w = sw[i * 4 + c];
+      if (!(w > 0)) continue;
+      acc.addScaledVector(v.fromArray(N, i * 3).transformDirection(mats[si[i * 4 + c]]), w);
+      if (isLeg[si[i * 4 + c]]) legW[i] += w;
+    }
+    NP.set([acc.x, acc.y, acc.z], i * 3);
+  }
+  const fg = new THREE.BufferGeometry();
+  fg.setAttribute('position', new THREE.BufferAttribute(P, 3));
+  fg.setIndex(new THREE.BufferAttribute(idx, 1));
+  const fm = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  const ray = new THREE.Raycaster();
+  ray.far = 0.08;
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const nf = new THREE.Vector3();
+  const nv = new THREE.Vector3();
+  const ce = new THREE.Vector3();
+  let cnt = 0;
+  let area = 0;
+  for (let f = 0; f < idx.length; f += 3) {
+    const i0 = idx[f];
+    const i1 = idx[f + 1];
+    const i2 = idx[f + 2];
+    if (legW[i0] + legW[i1] + legW[i2] < 1.5) continue;
+    a.fromArray(P, i0 * 3);
+    b.fromArray(P, i1 * 3).sub(a);
+    c.fromArray(P, i2 * 3).sub(a);
+    nf.crossVectors(b, c);
+    if (nf.lengthSq() < 1e-14) continue;
+    nv.fromArray(NP, i0 * 3).add(b.fromArray(NP, i1 * 3)).add(c.fromArray(NP, i2 * 3));
+    if (!(nf.dot(nv) < 0)) continue;
+    ce.fromArray(P, i0 * 3).add(b.fromArray(P, i1 * 3)).add(c.fromArray(P, i2 * 3)).multiplyScalar(1 / 3);
+    nv.normalize();
+    ray.set(ce.addScaledVector(nv, 0.0005), nv);
+    if (ray.intersectObject(fm, false).some((h) => h.faceIndex !== f / 3)) continue;
+    cnt++;
+    area += nf.length() / 2;
+  }
+  fg.dispose();
+  return { n: cnt, cm2: area * 1e4 };
+}
+
+describe('aine pendant la toilette', () => {
+  // Avant (poids de chaleur bruts ; culottes poussées à plein dans le pli du genou), toilette à 0,35 : de 15 à 116
+  // triangles retournés visibles sur les pattes arrière selon la race adulte, 0,8 à 25 cm² (13 races sur 15 au-dessus
+  // de 3,6 cm²), 2,6 à 8,8 cm² chez le chaton ; triangle magenta devant la cuisse repliée, de profil. Après : genou
+  // fondu large, pattes arrière sans part de la queue ni de la patte d'en face, flanc rendu au dos (cat_autorig.py),
+  // poil long presque pas poussé dans le pli du genou (deformCat) : 0,3 à 1,2 cm² (adulte), 0,9 à 2,2 cm² (chaton).
+  it.each(BREEDS)('%s adulte : moins de 1,5 cm² de peau retournée visible sur les pattes arrière (assis, toilette)', (breed) => {
+    const md = cat(breed);
+    for (const [clip, t] of [['groom', 0.35], ['sit', 0]]) {
+      const r = legFlips(md, clip, t);
+      expect(r.cm2, `${clip} ${t} : ${r.n} triangles`).toBeLessThan(1.5);
+    }
+    md.dispose();
+  });
+
+  it('chatons (européen, maine coon, persan, british) : moins de 2,5 cm² sur les pattes arrière pendant la toilette', () => {
+    for (const breed of ['europeen', 'maine_coon', 'persan', 'british']) {
+      const md = cat(breed, 'baby');
+      const r = legFlips(md, 'groom', 0.35);
+      expect(r.cm2, `${breed} : ${r.n} triangles`).toBeLessThan(2.5);
       md.dispose();
     }
   });

@@ -532,6 +532,115 @@ def build(body, others=(), eyes=(), opts=None):
                     if g.name in ('femur' + side, 'pelvis', 'spine1'):
                         g.add([v.index], w * (1 - h), 'REPLACE')
                 gh.add([v.index], share * h, 'REPLACE')
+    # pattes arrière propres (leg_clean) : la chaleur donnait un peu de la queue (jusqu'à 0,07) et de la patte d'en face
+    # (jusqu'à 0,09) à la peau de la jambe ; assis, ces parts tiraient la peau du jarret et de l'intérieur de la jambe
+    # en sens contraire et la retournaient (faces arrière visibles à l'aine). Sur une patte, la part de la queue revient
+    # à l'os de la patte qui domine ; hors de la ligne du milieu, la part de la patte d'en face revient au même os du
+    # bon côté.
+    LEG = ('femur', 'tibia', 'metatarsus', 'htoes', 'haunch')
+    if o.get('leg_clean'):
+        gidx = {g.index: g.name for g in body.vertex_groups}
+        n_tail = n_side = 0
+        for v in body.data.vertices:
+            p = body.matrix_world @ v.co
+            ws = {gidx[e.group]: e.weight for e in v.groups if e.weight > 0}
+            if not ws:
+                continue
+            side = 'L' if p.x > 0 else 'R'
+            other = 'R' if side == 'L' else 'L'
+            mine = [n for n in ws if n.startswith(LEG) and n.endswith(side)]
+            legw = sum(ws[n] for n in mine)
+            tails = [n for n in ws if n.startswith('tail')]
+            if tails and legw > 0.3:
+                k = _smooth(0.3, 0.6, legw)
+                top = max(mine, key=lambda n: ws[n])
+                for n in tails:
+                    body.vertex_groups[n].add([v.index], ws[n] * (1 - k), 'REPLACE')
+                    ws[top] += ws[n] * k
+                body.vertex_groups[top].add([v.index], ws[top], 'REPLACE')
+                n_tail += 1
+            k = _smooth(0.016 * W, 0.064 * W, abs(p.x))
+            for n in [n for n in ws if n.startswith(LEG) and n.endswith(other)]:
+                m = n[:-1] + side
+                if k <= 0 or m not in body.vertex_groups:
+                    continue
+                body.vertex_groups[n].add([v.index], ws[n] * (1 - k), 'REPLACE')
+                ws[m] = ws.get(m, 0.0) + ws[n] * k
+                body.vertex_groups[m].add([v.index], ws[m], 'REPLACE')
+                n_side += 1
+        print('AUTORIG pattes arrière : part de la queue rendue', n_tail, 'sommets, de la patte d\'en face', n_side)
+    # genou (knee_band = (demi-largeur, rayon), en longueurs de fémur) : la chaleur passait du fémur au tibia sur une
+    # bande étroite et irrégulière derrière le genou ; assis (genou fermé à fond), la peau du pli s'y retournait et se
+    # voyait de côté, devant la cuisse repliée (faces arrière). Près du genou, le partage fémur/tibia suit maintenant
+    # le plan qui coupe l'angle du genou en deux, en fondu large (la somme des deux parts ne change pas).
+    kb = o.get('knee_band')
+    if kb:
+        for side in ('L', 'R'):
+            gf, gt = body.vertex_groups.get('femur' + side), body.vertex_groups.get('tibia' + side)
+            if gf is None or gt is None:
+                continue
+            k0, k1, k2 = J['H' + side][0], J['H' + side][1], J['H' + side][2]
+            d1, d2 = (k0 - k1).normalized(), (k2 - k1).normalized()
+            nrm = d1.cross(d2).normalized().cross((d1 + d2).normalized()).normalized()
+            if (k0 - k1).dot(nrm) < 0:
+                nrm = -nrm
+            Lk = min((k0 - k1).length, (k2 - k1).length)
+            n_moved = 0
+            for v in body.data.vertices:
+                p = body.matrix_world @ v.co
+                if (p.x > 0) != (k1.x > 0):
+                    continue
+                wf = next((e.weight for e in v.groups if e.group == gf.index), 0.0)
+                wt = next((e.weight for e in v.groups if e.group == gt.index), 0.0)
+                S = wf + wt
+                if S <= 1e-4:
+                    continue
+                fall = 1 - _smooth(kb[1] * 0.7, kb[1], (p - k1).length / Lk)
+                if fall <= 0:
+                    continue
+                t0 = wt / S
+                tn = t0 + (1 - _smooth(-kb[0], kb[0], (p - k1).dot(nrm) / Lk) - t0) * fall
+                gf.add([v.index], S * (1 - tn), 'REPLACE')
+                gt.add([v.index], S * tn, 'REPLACE')
+                n_moved += 1
+            print('AUTORIG genou', side, n_moved, 'sommets')
+    # flanc (flank_clip = (r0, r1), en hauteurs au garrot ; adulte) : la chaleur donnait au fémur et au bras une part
+    # du milieu du flanc (jusqu'à 0,3 à 8 cm devant la hanche) ; assis, la cuisse levée tirait le flanc, retourné en
+    # petites plaques. Loin de l'os, devant la hanche (fémur) ou derrière l'épaule (bras), leur part revient à l'os
+    # du dos le plus proche.
+    fc = o.get('flank_clip')
+    if fc:
+        segs_all = {b.name: (b.head_local, b.tail_local) for b in arm.data.bones}
+
+        def dseg(p, nme):
+            h, t = segs_all[nme]
+            d = t - h
+            u = max(0.0, min(1.0, (p - h).dot(d) / d.length_squared))
+            return (p - (h + d * u)).length
+        spine = [n for n in ('pelvis', 'spine1', 'spine2', 'spine3', 'chest') if body.vertex_groups.get(n)]
+        n_moved = 0
+        for side in ('L', 'R'):
+            for top in ('femur', 'humerus'):
+                g = body.vertex_groups.get(top + side)
+                if g is None:
+                    continue
+                h0 = segs_all[top + side][0]
+                for v in body.data.vertices:
+                    w = next((e.weight for e in v.groups if e.group == g.index), 0.0)
+                    if w <= 0:
+                        continue
+                    p = body.matrix_world @ v.co
+                    far = _smooth(fc[0] * W, fc[1] * W, dseg(p, top + side))
+                    far *= _smooth(0.1 * W, 0.3 * W, h0.y - p.y) if top == 'femur' else _smooth(0.0, 0.2 * W, p.y - h0.y)
+                    if far <= 1e-3:
+                        continue
+                    sp = min(spine, key=lambda n: dseg(p, n))
+                    gs = body.vertex_groups[sp]
+                    ws_ = next((e.weight for e in v.groups if e.group == gs.index), 0.0)
+                    g.add([v.index], w * (1 - far), 'REPLACE')
+                    gs.add([v.index], ws_ + w * far, 'REPLACE')
+                    n_moved += 1
+        print('AUTORIG flanc : part du fémur et du bras rendue au dos', n_moved)
     # yeux : chacun suit son os ; accessoires : poids de la peau la plus proche (transfert de données)
     for ob in others:
         if not ob.data.vertices:

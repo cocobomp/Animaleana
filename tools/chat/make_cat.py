@@ -129,9 +129,13 @@ for m in meshes:
 belly = min(p.z for _, _, p in torso)
 print('BELLY rest z', round(belly, 4), 'torso verts', len(torso), 'muzzle', len(muzzle))
 rump_sit = []
+# (bas de la jambe exclu d'après la part de ses os, pas d'après l'os dominant : l'arrière de la cuisse, partagé à
+# parts presque égales entre fémur et tibia depuis le fondu large du genou, reste dans la croupe assise)
+gname_b = {g.index: g.name for g in body.vertex_groups}
 for i, v in enumerate(body.data.vertices):
     d_ = dom[body][i]
-    if not d_ or GAME.search(d_) or d_ in headset or d_.startswith(('metatarsus', 'htoes', 'tibia')):
+    low_ = sum(g.weight for g in v.groups if gname_b[g.group].startswith(('metatarsus', 'htoes', 'tibia')))
+    if not d_ or GAME.search(d_) or d_ in headset or low_ > 0.6:
         continue
     p = body.matrix_world @ v.co
     if p.y > hp.y - 0.01 and 0.25 * hipz < p.z < hipz:

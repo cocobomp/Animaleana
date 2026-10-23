@@ -37,6 +37,19 @@ GT=<dossier avec node_modules de @gltf-transform/core, extensions, functions, me
      levée du « tape-m'en cinq » ne froisse plus l'épaule) ; chaton : la peau du poitrail entre les pattes avant
      revient au poitrail (`arm_clip`), sinon elle partait en voile jusqu'aux pieds, pattes tendues devant (couché,
      étirement, saut) et le chaton était relevé de 11 cm dans l'étirement ;
+   - **genou fondu large** (`knee_band`) : près du genou, le partage fémur/tibia suit le plan qui coupe l'angle du
+     genou en deux, en fondu sur une demi-largeur de 1 (adulte) ou 1,3 (chaton) longueur de fémur ; **pattes arrière
+     propres** (`leg_clean`) : la part de la queue (jusqu'à 0,07) revient à l'os de la patte, celle de la patte d'en
+     face (jusqu'à 0,09) au même os du bon côté ; **flanc** (adulte, `flank_clip`) : loin de l'os, devant la hanche
+     ou derrière l'épaule, la part du fémur et du bras (jusqu'à 0,3 au milieu du flanc) revient à l'os du dos. Avant,
+     assis et pendant la toilette, la peau du pli du genou et du flanc se retournait : triangle de faces arrière
+     (magenta en débogage) devant la cuisse repliée, sur toutes les races. Mesuré dans Blender (tous les clips à 0, ¼,
+     ½, ¾) : peau retournée visible de l'adulte 376 → 94 cm² au total, assis 16,7 → 1,4 cm² ; dans le jeu, pattes
+     arrière pendant la toilette 0,8–25 → 0,3–1,2 cm² (adulte), 2,6–8,8 → 0,9–2,2 cm² (chaton). Le chaton garde un
+     fondu plus étroit (rayon 1,2 au lieu de 1,5) : plus large, l'arrière de la cuisse remontait dans le pli et la
+     recherche de la hauteur assise (`sit_search`) l'asseyait deux fois plus bas ; la croupe assise est maintenant
+     choisie d'après la part des os du bas de la jambe (plus de 0,6 : exclue), pas d'après l'os dominant. Coût : nul
+     dans le jeu ; GLB adulte −0,2 Ko, chaton +2,4 Ko ;
    - tête rigide, oreilles en deux os (base → bout), queue en 8 os le long de son axe.
 3. **`make_cat.py`** + **`cat_gait.py`** : animations, 20 clips par modèle.
    - **allures générées** par trajectoires de pieds et cinématique inverse : `walk`, `trot`, `run` (galop),
@@ -92,7 +105,9 @@ comparaisons), dans la même lumière et au même cadrage.
   propres à la race ; avant, un tonneau de 4 cm au bout bombé, froissé par les huit os de la queue, au motif lu au bout
   de la queue d'origine : un bouchon sombre à bord net ; en haute qualité et de près, 3 couches de poil sur le pompon
   seulement, 3 appels de dessin de plus par bobtail proche), poil long poussé le long de la normale (collerette,
-  culottes, panache) ou ras (siamois, sphynx). Sommets et têtes d'os sont déplacés ensemble : le squelette de chaque race
+  culottes, panache ; presque pas dans le pli du genou, `W.knee`, et pattes épaissies à moitié seulement : assis,
+  les culottes poussées de 1,2 cm s'y retournaient — maine coon 18,8 → 1,0 cm² de peau retournée visible pendant la
+  toilette, norvégien 18,2 → 0,8, british 10,4 → 1,6) ou ras (siamois, sphynx). Sommets et têtes d'os sont déplacés ensemble : le squelette de chaque race
   garde les rotations de repos du GLB, les clips s'y appliquent tels quels ; pieds au sol. Une géométrie par race
   (et par stade), partagée entre les chats de cette race.
 - **Chatons** : modèle du chaton, traits de la race adoucis ; le **jeune** prend le modèle adulte (tête un peu plus

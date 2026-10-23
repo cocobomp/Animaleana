@@ -214,9 +214,22 @@ export function realCatBase(gltf, kind) {
   const W = {
     leg: new Float32Array(n * 4), ear: new Float32Array(n * 2), ear2: new Float32Array(n * 2),
     tail: new Float32Array(n), head: new Float32Array(n), neck: new Float32Array(n), nose: new Float32Array(n),
+    knee: new Float32Array(n),
   };
+  // Pli du genou (W.knee : 1 quand la peau est partagée à parts égales entre le fémur et le tibia d'une patte arrière,
+  // 0 quand un seul des deux la porte) : le poil long n'y est presque pas poussé (voir deformCat, 9).
+  const kneeB = ['L', 'R'].map((s) => [B('femur' + s), B('tibia' + s)]);
   const part = new Float32Array(n * 4);
   for (let i = 0; i < n; i++) {
+    for (const [bf, bt] of kneeB) {
+      let wf = 0;
+      let wt = 0;
+      for (let k = 0; k < 4; k++) {
+        if (coat.si[i * 4 + k] === bf) wf += coat.sw[i * 4 + k];
+        else if (coat.si[i * 4 + k] === bt) wt += coat.sw[i * 4 + k];
+      }
+      if (wf + wt > 1e-4) W.knee[i] = Math.max(W.knee[i], Math.min(1, (4 * wf * wt) / (wf + wt)));
+    }
     for (let k = 0; k < 4; k++) {
       const w = coat.sw[i * 4 + k];
       if (!w) continue;
@@ -653,7 +666,8 @@ export function deformCat(base, B) {
       const a2 = al <= 0 ? al : al < len ? al * k : len * k + (al - len);
       // (cuisse : pas épaissie près de la hanche — assis ou en toilette, la cuisse se replie contre le flanc et la peau
       // épaissie s'y retournait)
-      const thick = l < 2 ? smooth(0, 0.03, al) : smooth(0.035, 0.08, al);
+      // (genou : épaissi à moitié dans le pli, où la jambe se replie sous la cuisse — british : faces arrière assis)
+      const thick = l < 2 ? smooth(0, 0.03, al) : smooth(0.035, 0.08, al) * (j < n ? 1 - 0.5 * W.knee[j] : 1);
       p.addScaledVector(a, w * (a2 - al)).addScaledVector(perp, w * (B.legW - 1) * thick);
       set(j, p);
     }
@@ -896,7 +910,9 @@ export function deformCat(base, B) {
       // triangle retourné à la cuisse du british et du persan)
       const legH = Math.min(1, W.leg[i * 4 + 2] + W.leg[i * 4 + 3]);
       // (cuisse : moitié moins — rasée au pli, la croupe assise s'enfonçait et la queue avec, 3 cm sous le sol)
-      const fold = (1 - 2.6 * W.head[i] * (1 - W.head[i])) * (1 - 1.6 * legH * (1 - legH));
+      // (genou : pli du genou presque rasé — assis, la jambe se replie à fond sous la cuisse, et les culottes poussées
+      // de 1,2 cm s'y retournaient : triangle de faces arrière devant la cuisse du maine coon, du norvégien, du persan)
+      const fold = (1 - 2.6 * W.head[i] * (1 - W.head[i])) * (1 - 1.6 * legH * (1 - legH)) * (1 - 0.85 * W.knee[i]);
       let push = (B.fur * k * nz * (1 - ear * 0.8) + B.ruff * ruff * (0.75 + 0.5 * nz) + B.breeches * 0.012 * br * nz) * eyeClear * fold;
       // poil ras : jamais plus que le tiers du rayon de la queue
       if (B.fur < 0) push = B.fur * k - Math.min(-B.fur, 0.3 * (tailR?.[i] || 0.01)) * tail;

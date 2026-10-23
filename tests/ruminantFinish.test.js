@@ -10,6 +10,7 @@ import { buildRealCowModel, animateRealCow, COW_LOD_DIST } from '../src/game/mod
 import { horseView } from '../src/game/models/horseReal.js';
 import { gfx } from '../src/game/gfx.js';
 import { buildGear } from '../src/game/gearModels.js';
+import { HEAD_SHADOW_BIAS } from '../src/game/models/cowCoat.js';
 import { resolveLook, createAnimal, growthScale } from '../src/sim/animal.js';
 import { loadRealSheepGltf } from './fixtures/realSheepGltf.js';
 import { loadRealGoatGltf } from './fixtures/realGoatGltf.js';
@@ -588,4 +589,50 @@ describe('demi-tour sur place et petit pas vers la barrière : les sabots piéti
     expect(T.lock).toBeLessThan(0.46);
     md.dispose?.();
   }, 120000);
+});
+
+describe('tête claire des vaches et des taureaux : plus de strie d\'ombre derrière l\'œil', () => {
+  // Les cornes et les oreilles, minces et proches, posaient en qualité haute une strie gris-bleu à bord net sur la joue
+  // blanche (Hereford, Charolais). Biais de profondeur de l'ombre sur la tête seulement : ombres du décor gardées.
+  const shade = (md) => {
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+    md.mesh.material.onBeforeCompile(sh, null);
+    const dsh = { uniforms: {}, vertexShader: THREE.ShaderLib.depth.vertexShader, fragmentShader: THREE.ShaderLib.depth.fragmentShader };
+    md.mesh.customDepthMaterial.onBeforeCompile(dsh, null);
+    return { v: sh.vertexShader, dv: dsh.vertexShader };
+  };
+  it('biais sur la tête (cornes et oreilles comprises) après le calcul des coordonnées d\'ombre, pas sur le corps', () => {
+    expect(HEAD_SHADOW_BIAS).toBeGreaterThanOrEqual(0.2);
+    // (au-delà d'un demi-mètre, l'ombre d'une barrière ou d'un râtelier ne tomberait plus sur la tête)
+    expect(HEAD_SHADOW_BIAS).toBeLessThanOrEqual(0.5);
+    for (const [breed, sex] of [['hereford', 'm'], ['charolaise', 'm'], ['hereford', 'f'], ['holstein', 'f']]) {
+      const md = buildRealCowModel({ ...resolveLook('cow', breed, 0), seed: 4242, sex }, breed, GC);
+      const { v, dv } = shade(md);
+      const at = v.indexOf('#include <shadowmap_vertex>');
+      const k = v.indexOf('vDirectionalShadowCoord[ i ].z -= cHeadSB');
+      expect(at).toBeGreaterThan(0);
+      expect(k).toBeGreaterThan(at);
+      expect(v).toMatch(/cHeadSB = smoothstep\(0\.3, 0\.8, cowMask\.y\) \* 0\.30 \* length\(modelMatrix\[0\]\.xyz\)/);
+      // (l'ombre que la vache porte, elle, est entière : cornes et oreilles toujours dans la carte d'ombre)
+      expect(dv).not.toContain('cHeadSB');
+      // tête (masque > 0,8) : cornes et oreilles dedans ; tronc (en arrière de l'épaule, au-dessus du ventre) : hors du
+      // biais (masque < 0,3)
+      const g = md.mesh.geometry;
+      const mask = g.attributes.cowMask, part = g.attributes.cowPart, aux = g.attributes.cowAux, pos = g.attributes.position;
+      const land = md.mesh.material.userData.cowUniforms.cLand.value;
+      let horn = 0, hornIn = 0, ear = 0, earIn = 0, trunk = 0, trunkIn = 0;
+      for (let i = 0; i < mask.count; i++) {
+        const h = mask.getY(i);
+        if (part.getX(i) > 0.5) { horn++; if (h > 0.8) hornIn++; }
+        if (aux.getX(i) > 0.5) { ear++; if (h > 0.8) earIn++; }
+        if (pos.getZ(i) < land.w - 0.1 && pos.getY(i) > land.x) { trunk++; if (h > 0.3) trunkIn++; }
+      }
+      if (horn) expect(hornIn / horn).toBeGreaterThan(0.95);
+      expect(ear).toBeGreaterThan(20);
+      expect(earIn / ear).toBeGreaterThan(0.95);
+      expect(trunk).toBeGreaterThan(200);
+      expect(trunkIn).toBe(0);
+      md.dispose?.();
+    }
+  });
 });

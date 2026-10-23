@@ -122,6 +122,24 @@ if (cStyle.y > 0.0) {
   transformed += vec3(sign(position.x) * len * 0.45, -len * (0.25 + 0.75 * skirt) * (1.0 - 0.7 * cStyle.w), -len * 0.25 * rump);
 }`;
 
+// Ombre sur la tête : ses propres cornes et oreilles n'y portent plus d'ombre (biais de profondeur de 30 cm, à la taille
+// de la bête, sur la tête seulement). Vues de côté par le soleil, les cornes et les oreilles, minces et proches, posaient
+// une strie gris-bleu à bord net sur la joue blanche, derrière l'œil (taureau Hereford, Charolais… en qualité haute).
+// Les ombres du décor (arbres, bâtiments, à plus d'un mètre) tombent toujours sur la tête ; le reste du corps garde le
+// biais du soleil (World.js), et les cornes et les oreilles portent toujours leur ombre sur l'encolure et au sol.
+export const HEAD_SHADOW_BIAS = 0.3;
+const SHADOW_V = /* glsl */ `
+#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+{
+  float cHeadSB = smoothstep(0.3, 0.8, cowMask.y) * ${HEAD_SHADOW_BIAS.toFixed(2)} * length(modelMatrix[0].xyz);
+  #pragma unroll_loop_start
+  for ( int i = 0; i < NUM_DIR_LIGHT_SHADOWS; i ++ ) {
+    vDirectionalShadowCoord[ i ].z -= cHeadSB * length(vec3(directionalShadowMatrix[ i ][0].z, directionalShadowMatrix[ i ][1].z, directionalShadowMatrix[ i ][2].z));
+  }
+  #pragma unroll_loop_end
+}
+#endif`;
+
 const COMMON_F = /* glsl */ `
 uniform vec3 cBase;
 uniform vec3 cWhite;
@@ -352,12 +370,13 @@ export function cowMaterial(src, uniforms) {
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms);
     vert(sh);
+    sh.vertexShader = sh.vertexShader.replace('#include <shadowmap_vertex>', `#include <shadowmap_vertex>\n${SHADOW_V}`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${COMMON_F}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`);
   };
-  mat.customProgramCacheKey = () => 'cow-coat-v4';
+  mat.customProgramCacheKey = () => 'cow-coat-v5';
   mat.userData.cowUniforms = uniforms;
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: src?.map ?? null, alphaTest: 0.5 });
   depth.onBeforeCompile = (sh) => {

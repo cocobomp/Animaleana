@@ -52,6 +52,9 @@ export const FENCE_RAIL = 0.95;
 const LEG_KEYS = [['FL', 'L', true], ['FR', 'R', true], ['HL', 'L', false], ['HR', 'R', false]];
 const LEG_BONES = { front: ['humerus', 'radius', 'metacarpus', 'toes'], hind: ['femur', 'tibia', 'metatarsus', 'htoes'] };
 const ONCE_GOAT = ['rear_up', 'rear_down', 'headbutt', 'climb'];
+/** Se dresser et redescendre : joués à 0,7 de leur vitesse (≈ 1,1 s chacun). */
+const REAR_TRANS = new Set(['rear_up', 'rear_down']);
+export const REAR_RATE = 0.7;
 const MOVING = ['walk', 'trot', 'run'];
 const HIND = [2, 3]; // (membres : 0 et 1 antérieurs, 2 et 3 postérieurs)
 const HEAD_BONES = new Set(['head', 'jaw', 'earL', 'earR', 'eyeL', 'eyeR', 'beard', 'hornL', 'hornR']);
@@ -62,6 +65,10 @@ const TRUNK_W = { root: 1, pelvis: 1, spine1: 1, spine2: 1, chest: 1, neck1: 0.8
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const X_AXIS = V(1, 0, 0);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const smooth = (a, b, x) => {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
 const _v = V();
 const _w = V();
 const _q = new THREE.Quaternion();
@@ -566,6 +573,8 @@ export function buildRealGoatModel(look, breedId = null, gltf = null) {
     legTop: M.bellyY * size,
     saddleY: M.topY * size,
     headHeight: Math.max(M.headY, M.skull.y) * size,
+    // (bout du nez au repos, en avant de l'origine : la chèvre s'arrête avant que son museau touche la barrière)
+    noseZ: M.noseZ * size,
     headTilt: 0,
     snoutTip: [0, 0, 0],
     mouth,
@@ -890,7 +899,9 @@ export class RealGoatAnim extends RealSheepAnim {
         a.timeScale = 0;
         a.time = trick.time * a.getClip().duration;
       } else if (this.trans?.name === name) {
-        a.timeScale = st.moving ? 2.4 : st.quick ? 1.6 : 1;
+        // (se dresser et redescendre : 1,1 s au lieu de 0,77 — les antérieurs balayaient 1 m en 0,4 s, jusqu'à 10 cm
+        // par image)
+        a.timeScale = st.moving ? 2.4 : st.quick ? 1.6 : REAR_TRANS.has(name) ? REAR_RATE : 1;
       } else a.timeScale = name === 'kid_play' ? 1.1 : 1;
     }
     if (lead && leadW > 0.3) this.lead = lead;
@@ -906,8 +917,73 @@ export class RealGoatAnim extends RealSheepAnim {
     st.action = action;
     this.applyFleece(dt);
     this.ground(st, dt, moveClip);
+    this.railPitch(dt, st);
+  }
+
+  /**
+   * Dressée contre la barrière (st.rail : hauteur du sol sous la barrière, monde) : le corps bascule un peu autour des
+   * postérieurs posés pour que les onglons antérieurs se posent SUR la lisse du haut (sole 1,2 cm au-dessus de son
+   * dessus) — à la taille de la chèvre, ils étaient dedans (alpine, poitevine : 1,4 cm sous le dessus) ou au-dessus
+   * (bouc col noir : 8 cm). En fondu pendant qu'elle se dresse et redescend.
+   */
+  railPitch(dt, st) {
+    const md = this.model;
+    const t = this.trans?.name;
+    const rear = this.posture === 'rear' ? (t === 'rear_down' ? 1 - this.transProgress() : 1) : t === 'rear_up' ? this.transProgress() : 0;
+    const on = st.rail != null && rear > 0 && dt > 0;
+    let want = 0;
+    if (on) {
+      md.root.updateMatrixWorld(true);
+      let fy = Infinity;
+      const fc = _gv.set(0, 0, 0);
+      const hc = _gw.set(0, 0, 0);
+      for (let l = 0; l < 4; l++) {
+        for (const p of this.solePts[l]) {
+          const w = _gu.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld);
+          if (l < 2) {
+            fy = Math.min(fy, w.y);
+            fc.add(w);
+          } else hc.add(w);
+        }
+      }
+      fc.multiplyScalar(1 / (this.solePts[0].length + this.solePts[1].length));
+      hc.multiplyScalar(1 / (this.solePts[2].length + this.solePts[3].length));
+      const D = Math.max(0.2, Math.hypot(fc.x - hc.x, fc.z - hc.z));
+      // (seulement près du haut de la dressée : sabots à moins de 25 cm de la lisse)
+      const k = smooth(0.25, 0.08, Math.abs(st.rail + FENCE_RAIL - fy));
+      want = clamp((st.rail + FENCE_RAIL + 0.012 - fy) / D, -0.14, 0.12) * k * smooth(0.6, 0.95, rear);
+      this.railPivot = (this.railPivot ??= V()).copy(hc);
+    }
+    this.railA = (this.railA ?? 0) + (want - (this.railA ?? 0)) * Math.min(1, dt * 5);
+    if (Math.abs(this.railA) < 1e-4 || !this.railPivot) {
+      this.railA = 0;
+      return;
+    }
+    // (rotation autour de l'axe des flancs, par le milieu des postérieurs : l'avant monte, les postérieurs restent)
+    const body = md.body;
+    const par = body.parent;
+    par.updateMatrixWorld(true);
+    _gm.copy(par.matrixWorld).invert();
+    const piv = _gu.copy(this.railPivot).applyMatrix4(_gm);
+    const ax = _gv.set(1, 0, 0).transformDirection(md.root.matrixWorld).transformDirection(_gm).normalize();
+    _gq.setFromAxisAngle(ax, -this.railA);
+    body.position.sub(piv).applyQuaternion(_gq).add(piv);
+    body.quaternion.premultiply(_gq);
+    md.root.updateMatrixWorld(true);
+  }
+
+  /** Avancement (0-1) de la transition en cours. */
+  transProgress() {
+    const a = this.trans && this.actions[this.trans.name];
+    return a ? clamp(a.time / Math.max(1e-3, a.getClip().duration), 0, 1) : 1;
   }
 }
+
+const _gv = V();
+const _gw = V();
+const _gu = V();
+const _gm = new THREE.Matrix4();
+const _gq = new THREE.Quaternion();
 
 // ------------------------------------------------------------------ entité du jeu
 
@@ -972,12 +1048,21 @@ function browseFence(e, dt, anim, scale) {
     const n = Math.sign(best.d); // vers la barrière
     const line = best.alongX ? best.f.z : best.f.x;
     const reach = (e.model.browseHoof?.[0] ?? 0.29) * scale;
+    // (debout, son museau dépasse de ≈ 0,37 m ses sabots dressés : elle ne s'avance que jusqu'à 5 cm de la barrière
+    // — tête, cornes et barbe traversaient la lisse du haut —, se dresse là, puis avance sur ses postérieurs jusqu'à
+    // poser les antérieurs sur la lisse ; elle recule de même avant de redescendre)
+    const msz = e.model.size ?? 1;
+    const near = Math.max(reach, ((e.model.noseZ ?? 0.66 * msz) / msz) * scale + 0.05);
     const at = (dist) => (best.alongX ? V(best.t, 0, line - n * dist) : V(line - n * dist, 0, best.t));
     b = e.goatBrowse = {
       phase: 'go',
       heading: best.alongX ? (n > 0 ? 0 : Math.PI) : (n > 0 ? Math.PI / 2 : -Math.PI / 2),
-      from: at(0.75 + 0.1 * scale),
+      from: at(Math.max(near + 0.15, 0.75 + 0.1 * scale)),
+      near: at(near),
       to: at(reach),
+      // (la barrière : un point de sa ligne et la normale vers l'autre côté — mesures, essais)
+      line: at(0),
+      n: best.alongX ? V(0, 0, n) : V(n, 0, 0),
       t: 0,
       dur: 6 + Math.random() * 6,
     };
@@ -1002,7 +1087,7 @@ function browseFence(e, dt, anim, scale) {
     b.t = 0;
   }
   if (b.phase === 'step' || b.phase === 'back') {
-    const goal = b.phase === 'step' ? b.to : b.from;
+    const goal = b.phase === 'step' ? b.near : b.from;
     const dh = wrap(b.heading - e.heading);
     e.heading += Math.sign(dh) * Math.min(Math.abs(dh), dt * 2.5);
     e.root.rotation.y = e.heading;
@@ -1047,11 +1132,27 @@ function browseFence(e, dt, anim, scale) {
     }
     return b;
   }
-  if (b.phase === 'up') {
+  if (b.phase === 'up' || b.phase === 'off') {
     e.heading = b.heading;
     e.root.rotation.y = e.heading;
     e.timer = Math.max(e.timer, 3);
-    if (b.t > b.dur) {
+    // Dressée (le clip « se dresser » fini) : elle avance sur ses postérieurs jusqu'à la barrière, puis, le temps fini,
+    // recule jusqu'à sa place avant de redescendre. Les postérieurs tenus se replacent en chemin (footLock).
+    const goal = b.phase === 'up' ? b.to : b.near;
+    const dx = goal.x - p.x;
+    const dz = goal.z - p.z;
+    const d = Math.hypot(dx, dz);
+    if (anim.posture === 'rear' && !anim.trans && d > 0.004) {
+      b.glideT = (b.glideT ?? 0) + dt;
+      const v = 0.16 * Math.max(0.6, scale) * Math.min(1, 0.2 + b.glideT / 0.5) * clamp(d / (0.08 * Math.max(0.6, scale)), 0.25, 1);
+      const step = Math.min(d, v * dt);
+      p.x += (dx / d) * step;
+      p.z += (dz / d) * step;
+    } else b.glideT = 0;
+    if (b.phase === 'up' && b.t > b.dur) {
+      b.phase = 'off';
+      b.t = 0;
+    } else if (b.phase === 'off' && (d <= 0.004 || b.t > 6)) {
       b.phase = 'down';
       b.t = 0;
     }
@@ -1161,6 +1262,10 @@ export function animateRealGoat(e, dt, sad) {
   anim.stepV = 0;
   anim.stepReverse = false;
   const br = browseFence(e, dt, anim, scale);
+  // (sol sous la barrière : les onglons dressés se posent sur la lisse du haut, RealGoatAnim.railPitch)
+  st.rail = br && br.line ? (e.world?.heightAt?.(br.line.x, br.line.z) ?? e.root.position.y) : null;
+  // (dressée, elle avance ou recule sur ses postérieurs : ils se replacent à petits pas, sabot levé — footLock)
+  anim.holdStep = !!br && (br.phase === 'up' || br.phase === 'off');
   st.v = Math.max(e.speed, anim.stepV) / Math.max(0.15, scale);
   st.moving = (e.speed > 0.06 || anim.stepV > 0.05) && e.perch?.phase !== 'on';
   st.size = scale;
@@ -1185,7 +1290,7 @@ export function animateRealGoat(e, dt, sad) {
   const restLie = idle && !br && !(anim.milkT > 0) && !(e.nursedFor > 0) && Math.sin(t * 0.045 + e.restSeed) > 0.66;
   let posture = 'stand';
   if (e.sleeping) posture = 'sleep';
-  else if (br && (br.phase === 'up')) posture = 'rear';
+  else if (br && (br.phase === 'up' || br.phase === 'off')) posture = 'rear';
   else if (!st.moving && !e.scripted && !e.herdCtrl && !br && !(anim.milkT > 0) && (justWoke || restLie || (lying(anim.posture) && anim.hold < 6))) posture = 'lie';
   st.posture = posture;
   st.ruminate = posture === 'lie' && Math.sin(t * 0.13 + e.restSeed * 0.7) > -0.2;

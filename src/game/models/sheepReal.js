@@ -1676,8 +1676,11 @@ export class RealSheepAnim {
     // (certains membres seulement — la chèvre dressée garde ses postérieurs posés, voir RealGoatAnim.holdLegs)
     const only = lockable && !st.moving ? this.holdLegs() : null;
     if (only || (lockable && (st.moving || (standing && (moveW > 0.02 || locked))))) {
-      if (st.moving || only) this.stepL = null;
-      this.footLock(dt, !only && !st.moving && moveW < 0.12, only);
+      // (holdStep : les membres tenus se replacent d'un petit pas, sabot levé, quand le corps avance — la chèvre dressée
+      // qui s'avance sur ses postérieurs jusqu'à la barrière)
+      const holdStep = !!only && !!this.holdStep;
+      if (st.moving || (only && !holdStep)) this.stepL = null;
+      this.footLock(dt, (!only && !st.moving && moveW < 0.12) || holdStep, only);
       // (un membre tourné peut descendre un peu : le corps est relevé de ce qui passerait sous le sol)
       let low2 = Infinity;
       for (let l = 0; l < md.legs.length; l++) {
@@ -1893,6 +1896,7 @@ export class RealSheepAnim {
       let best = -1;
       let bestD = 0.015 * _rs.y;
       for (let l = 0; l < md.legs.length; l++) {
+        if (only && !only.includes(l)) continue;
         // (posé, ou tenu au bout de sa correction — vers 30°, la place notée est relâchée puis reprise d'une image à
         // l'autre : le sabot de la vache glissait de 6 cm en attendant son tour derrière un membre moins de travers)
         if (!this.plant[l] && !(Math.hypot(this.lockAng[l], this.lockSide[l]) > 0.3)) continue;

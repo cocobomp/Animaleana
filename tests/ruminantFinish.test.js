@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { buildRealSheepModel, animateRealSheep, SHEEP_LOD_DIST } from '../src/game/models/sheepReal.js';
-import { buildRealGoatModel, animateRealGoat, GOAT_LOD_DIST } from '../src/game/models/goatReal.js';
+import { buildRealGoatModel, animateRealGoat, GOAT_LOD_DIST, FENCE_RAIL } from '../src/game/models/goatReal.js';
 import { buildRealCowModel, animateRealCow, COW_LOD_DIST } from '../src/game/models/cowReal.js';
 import { horseView } from '../src/game/models/horseReal.js';
 import { gfx } from '../src/game/gfx.js';
@@ -269,4 +269,97 @@ describe('licol et masque anti-mouches sur la vraie tête (vache, taureau, veau,
       md.dispose?.();
     }
   });
+});
+
+describe('chèvre contre la barrière (en jeu : browseFence)', () => {
+  // (critique : en s'avançant et en reculant, 14 à 82 sommets de la tête — barbe, cornes, mâchoire — dans la lisse du
+  // haut ; dressées, les onglons de l'alpine et de la poitevine dans la lisse ; se dresser et redescendre en 0,77 s, les
+  // antérieurs jusqu'à 10 cm par image)
+  const RAIL_Z = 1.2;
+  const soleLow = (md, k) => {
+    let lo = Infinity;
+    for (const p of md.anim.solePts[k]) lo = Math.min(lo, p.clone().applyMatrix4(md.legs[k].paw.matrixWorld).y);
+    return lo;
+  };
+  const fenceRun = (breed, sex) => {
+    const a = createAnimal({ species: 'goat', breed, sex, colorIndex: 0, ageDays: 80, seed: 7, rng: () => 0.42 });
+    const md = buildRealGoatModel({ ...a.look, sex }, breed, GG);
+    const e = entity(md, a, a.look.scale * growthScale(a));
+    // (bergerie : la barrière de devant, le long de x, à 1,2 m devant la chèvre ; celle du fond, loin derrière)
+    e.world = { fences: [{ core: 'pen', x: 0, z: RAIL_Z, hw: 3, hd: 0.04 }, { core: 'pen', x: 0, z: -5, hw: 3, hd: 0.04 }], heightAt: () => 0 };
+    const m = md.mesh;
+    const pos = m.geometry.attributes.position;
+    const V = new THREE.Vector3();
+    const anim = md.anim;
+    anim.browseCheck = 0.05;
+    const out = { phases: new Set(), railHits: 0, railFrames: 0, rearUpFrames: 0, rearDownFrames: 0, frontStepMax: 0, upFront: [], upHind: [] };
+    const prevF = [null, null];
+    const rnd = Math.random;
+    Math.random = () => 0.2; // (la barrière est choisie, la durée dressée fixée : 7,2 s)
+    try {
+      for (let f = 0; f < 900; f++) {
+        e.time += 1 / 30;
+        anim.seen = true;
+        md.lodHold = true;
+        animateRealGoat(e, 1 / 30, false);
+        e.root.updateMatrixWorld(true);
+        const b = e.goatBrowse;
+        if (!b) {
+          if (out.phases.size) break;
+          continue;
+        }
+        out.phases.add(b.phase);
+        if (b.phase === 'go') continue;
+        const tr = anim.trans?.name;
+        if (tr === 'rear_up') out.rearUpFrames++;
+        if (tr === 'rear_down') out.rearDownFrames++;
+        for (let l = 0; l < 2; l++) {
+          const c = new THREE.Vector3();
+          for (const sp of anim.solePts[l]) c.add(V.copy(sp).applyMatrix4(md.legs[l].paw.matrixWorld));
+          c.multiplyScalar(1 / anim.solePts[l].length);
+          if (prevF[l] && tr) out.frontStepMax = Math.max(out.frontStepMax, c.distanceTo(prevF[l]));
+          prevF[l] = c;
+        }
+        if ((b.phase === 'up' || b.phase === 'off') && !tr && b.t > 1.5) {
+          out.upFront.push(Math.min(soleLow(md, 0), soleLow(md, 1)) - FENCE_RAIL);
+          out.upHind.push(Math.min(soleLow(md, 2), soleLow(md, 3)));
+        }
+        if (f % 2) continue;
+        // (sommets de la peau dans les lisses : centrées à 0,45 et 0,9 m, 10 cm de haut, 8 cm d'épaisseur — les onglons
+        // posés sur la lisse du haut, à 0,95 m, la touchent sans y entrer)
+        let hits = 0;
+        for (let i = 0; i < pos.count; i++) {
+          V.fromBufferAttribute(pos, i);
+          m.applyBoneTransform(i, V);
+          V.applyMatrix4(m.matrixWorld);
+          if (Math.abs(V.z - RAIL_Z) < 0.04 && (Math.abs(V.y - 0.45) < 0.05 || Math.abs(V.y - 0.9) < 0.05)) hits++;
+        }
+        out.railHits = Math.max(out.railHits, hits);
+        if (hits) out.railFrames++;
+      }
+    } finally {
+      Math.random = rnd;
+    }
+    out.done = !e.goatBrowse;
+    md.dispose?.();
+    return out;
+  };
+
+  it.each([['alpine', 'f'], ['col_noir', 'm']])('%s (%s) : ni la tête ni les sabots dans les lisses, onglons posés sur la lisse du haut, se dresse en 1,1 s', (breed, sex) => {
+    const r = fenceRun(breed, sex);
+    if (process.env.RUM_LOG) console.log('BARRIERE', breed, JSON.stringify({ ...r, phases: [...r.phases], upFront: [Math.min(...r.upFront), Math.max(...r.upFront)], upHind: [Math.min(...r.upHind), Math.max(...r.upHind)] }));
+    expect([...r.phases]).toEqual(expect.arrayContaining(['step', 'settle', 'up', 'off', 'down', 'back']));
+    expect(r.done).toBe(true);
+    expect(r.railHits, `${breed} : ${r.railHits} sommets dans une lisse (${r.railFrames} images)`).toBe(0);
+    // (dressée : la sole des antérieurs 0 à 2,5 cm au-dessus du dessus de la lisse, les postérieurs au sol)
+    expect(r.upFront.length).toBeGreaterThan(60);
+    expect(Math.min(...r.upFront)).toBeGreaterThan(-0.002);
+    expect(Math.max(...r.upFront)).toBeLessThan(0.025);
+    expect(Math.min(...r.upHind)).toBeGreaterThan(-0.012);
+    expect(Math.max(...r.upHind)).toBeLessThan(0.02);
+    // (se dresser et redescendre : ≈ 1,1 s chacun, les antérieurs à moins de 8,5 cm par image)
+    expect(r.rearUpFrames).toBeGreaterThanOrEqual(30);
+    expect(r.rearDownFrames).toBeGreaterThanOrEqual(30);
+    expect(r.frontStepMax).toBeLessThan(0.085);
+  }, 120000);
 });

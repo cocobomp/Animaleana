@@ -228,7 +228,21 @@ def leg_target(rig, lab, t, gp):
         b = beta * smooth((u - (1 - bo)) / bo)
         return Vector((n.x, y, n.z)), b
     u = (ph - D) / (1 - D)
-    y = base.y + S / 2 - S * smooth(u)
+    # (land < 1 : le pied arrive un peu au-delà de sa pose à cette fraction du lever, puis revient en arrière en
+    # prenant peu à peu la vitesse de l'appui : il touche le sol immobile par rapport au sol. Au pas des races aux
+    # longues pattes (siamois, abyssin) et du chaton, la sole touchait le sol avant la fin du lever, le pied encore lancé
+    # en avant à 1 à 2,4 fois la vitesse d'appui : pris trop tôt, il était retenu, enfoncé, et le corps entier relevé de
+    # 2 à 3 cm, les quatre pieds en l'air ; ou bien il glissait.)
+    land = gp.get('land', {}).get(kind, 1.0)
+    if land < 1.0:
+        e = S * (1 - D) * (1 - land) / (2 * D)
+        if u < land:
+            y = base.y + S / 2 - (S + e) * smooth(u / land)
+        else:
+            w_ = (u - land) / (1 - land)
+            y = base.y - S / 2 - e * (1 - w_ * w_)
+    else:
+        y = base.y + S / 2 - S * smooth(u)
     k = gp.get('lift_skew', 0.35)
     s = math.sin(math.pi * min(1.0, u * (1 + k) / (1 + k * u)))
     z = n.z + lift * max(0.0, s)
@@ -582,7 +596,7 @@ def cat_gaits(s, fps=30):
     G = {}
     # Pas : 4 temps latéraux, pas feutrés (pieds levés bas, posés l'un devant l'autre), tête basse et stable, queue
     # levée en point d'interrogation.
-    G['walk'] = dict(frames=24, stride=0.30 * s, duty=0.64, lift=0.040 * s, lift_scale={'front': 1.2, 'hind': 0.9},
+    G['walk'] = dict(frames=24, stride=0.30 * s, duty=0.64, lift=0.040 * s, lift_scale={'front': 1.2, 'hind': 0.9}, land={'hind': 0.8},
                      phase={'HL': 0.0, 'FL': 0.24, 'HR': 0.5, 'FR': 0.74}, breakover=0.45, curl=1.0, curl_scale={'front': 1.1, 'hind': 0.8},
                      bob=0.003 * s, bob_freq=2, bob_phase=0.1, pitch=0.005, neck=0.02, neck_freq=2, neck_phase=0.3,
                      head=0.015, roll=0.02, sway=0.004 * s, fold=0.02 * s, drop=0.004 * s,

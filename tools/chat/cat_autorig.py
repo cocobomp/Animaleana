@@ -641,6 +641,35 @@ def build(body, others=(), eyes=(), opts=None):
                     gs.add([v.index], ws_ + w * far, 'REPLACE')
                     n_moved += 1
         print('AUTORIG flanc : part du fémur et du bras rendue au dos', n_moved)
+    # soles à plat (sole_flat = (h0, h1, rayon) ; chaton) : la chaleur partageait la peau de la sole entre les doigts et
+    # le métacarpe (ou le métatarse) à parts égales jusqu'au sol. Au pas, la patte posée passe par-dessus le pied (le
+    # métacarpe bascule autour de l'articulation des doigts, 12 mm au-dessus du sol) : le coussinet de la sole, à moitié
+    # porté par le métacarpe, reculait en se levant — 12 à 15 % de la vitesse en glissement aux pieds avant. Près du
+    # sol (sous h0 × la hauteur de l'articulation), la sole suit maintenant les seuls doigts ; fondu jusqu'à h1 ×.
+    sf = o.get('sole_flat')
+    if sf:
+        n_moved = 0
+        for side in ('L', 'R'):
+            for lab, low_b, top_b in (('F', 'toes', 'metacarpus'), ('H', 'htoes', 'metatarsus')):
+                gl, gm = body.vertex_groups.get(low_b + side), body.vertex_groups.get(top_b + side)
+                if gl is None or gm is None:
+                    continue
+                j3 = J[lab + side][-2]
+                for v in body.data.vertices:
+                    wm = next((e.weight for e in v.groups if e.group == gm.index), 0.0)
+                    if wm <= 0:
+                        continue
+                    p = body.matrix_world @ v.co
+                    if (p.x > 0) != (j3.x > 0) or (p - j3).length > sf[2] * W:
+                        continue
+                    k = 1 - _smooth(sf[0] * j3.z, sf[1] * j3.z, p.z)
+                    if k <= 0:
+                        continue
+                    wl = next((e.weight for e in v.groups if e.group == gl.index), 0.0)
+                    gm.add([v.index], wm * (1 - k), 'REPLACE')
+                    gl.add([v.index], wl + wm * k, 'REPLACE')
+                    n_moved += 1
+        print('AUTORIG soles à plat :', n_moved, 'sommets')
     # yeux : chacun suit son os ; accessoires : poids de la peau la plus proche (transfert de données)
     for ob in others:
         if not ob.data.vertices:

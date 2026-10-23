@@ -2599,6 +2599,15 @@ class RealCatAnim {
           kc = k;
         }
       }
+      // (pieds avant : point d'appui gardé tout l'appui, celui qui était le plus bas à la pose. Repris image par image, il
+      // sautait du coussinet aux doigts quand le pied se met à rouler, et la reprise, qui ne bouge pas en long le seul
+      // point choisi, reculait d'un coup de 2 mm l'appui déjà posé — chaton siamois au pas lent. Aux pieds arrière, qui
+      // roulent sur le jarret, le point le plus bas de l'instant reste le meilleur.)
+      this.seatK ??= [-1, -1, -1, -1];
+      if (leg.front) {
+        if (this.seatMin[l] === Infinity || this.seatK[l] < 0) this.seatK[l] = kc;
+        else kc = this.seatK[l];
+      }
       // (le pied du clip qui commence à se lever — 2 à 8 mm au-dessus de son plus bas depuis la pose — est relâché :
       // tiré au sol pendant qu'il roule sur les doigts, le coussinet glissait de 5 mm chez le chaton)
       this.seatMin[l] = Math.min(this.seatMin[l], s0);
@@ -2684,6 +2693,12 @@ class RealCatAnim {
         continue;
       }
       if (!this.plant[l]) {
+        // (pied arrière du clip encore lancé en avant, plus vite que le chat : pas encore pris. Au pas, il passe bas en
+        // fin de lever ; pris à 12 mm alors qu'il avançait encore de 2 à 9 cm, il était retenu en arrière, enfoncé dans
+        // le sol, et le corps entier relevé de 2 à 3 cm — siamois, abyssin, devon rex, sphynx, bobtail : les quatre
+        // pieds en l'air 40 à 50 % du temps. Le clip le fait maintenant revenir à la vitesse du sol avant de le poser,
+        // voir tools/chat/cat_gait.py, land.)
+        if (!follow && !leg.front && sp > v + 0.05) continue;
         this.plant[l] = toe0.clone();
         this.followT[l] = 0;
         continue;

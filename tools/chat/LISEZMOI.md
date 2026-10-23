@@ -50,12 +50,20 @@ GT=<dossier avec node_modules de @gltf-transform/core, extensions, functions, me
      recherche de la hauteur assise (`sit_search`) l'asseyait deux fois plus bas ; la croupe assise est maintenant
      choisie d'après la part des os du bas de la jambe (plus de 0,6 : exclue), pas d'après l'os dominant. Coût : nul
      dans le jeu ; GLB adulte −0,2 Ko, chaton +2,4 Ko ;
+   - **soles à plat** (chaton, `sole_flat`) : la chaleur partageait la peau de la sole à parts égales entre les doigts
+     et le métacarpe (ou le métatarse) jusqu'au sol ; au pas, le métacarpe bascule autour de l'articulation des doigts,
+     12 mm au-dessus du sol, et le coussinet reculait en se levant. Près du sol, la sole suit les seuls doigts ;
    - tête rigide, oreilles en deux os (base → bout), queue en 8 os le long de son axe.
 3. **`make_cat.py`** + **`cat_gait.py`** : animations, 20 clips par modèle.
    - **allures générées** par trajectoires de pieds et cinématique inverse : `walk`, `trot`, `run` (galop),
      `balance` (marche lente sur une barrière, pattes resserrées sous le corps, queue en balancier) ; leurs
      **vitesses naturelles** (doigts en appui immobiles) vont dans le GLB (`extras.cat.naturalSpeeds`) : adulte
-     0,54 / 1,62 / 5,74 m/s (équilibre 0,27), chaton 0,41 / 1,19 / 3,68 m/s (0,26) ;
+     0,54 / 1,62 / 5,74 m/s (équilibre 0,27), chaton 0,41 / 1,19 / 3,68 m/s (0,26) ; au pas, le pied arrière (et
+     le pied avant du chaton) **se pose immobile par rapport au sol** (`land`) : il arrive un peu au-delà de sa pose aux
+     80 % du lever (93 % pour le pied avant du chaton), puis revient en arrière en prenant la vitesse de l'appui. Avant,
+     sur le squelette des races aux longues pattes, la sole touchait le sol avant la fin du lever, le pied encore lancé
+     en avant à 1,9 à 2,3 fois la vitesse d'appui (siamois ; abyssin 1 à 1,4 ; jeune siamois 1,3 à 1,8 ; pieds avant
+     du chaton 2,4) ; maintenant de −0,6 à +0,7 ;
    - **positions et gestes** : `idle`, `sit`, `groom` (toilette, patte léchée puis passée sur la tête), `lie`
      (couché en sphinx), `sleep` (en boule, queue enroulée), `stretch` (étirement), `eat` (accroupi, tête à 3,5 cm
      du sol), `tail_up` (queue en point d'interrogation, calque), `ears` (calque), `highfive` (« tape-m'en cinq »),
@@ -139,7 +147,12 @@ comparaisons), dans la même lumière et au même cadrage.
   quelqu'un, gonflée quand il a peur, respiration, embonpoint ; porté dans les bras (couché), sur la table du salon
   (assis), dans la caisse de transport (couché, pose figée), vignettes (pose figée).
 - **Pieds posés** : au pas et au trot, pieds avant et arrière à la même hauteur (`levelPairs`, appui le plus bas de
-  chaque paire sur la dernière foulée) et pieds en appui tenus sur place (`footLock`, prise à 12 mm, lâchée à 18) ;
+  chaque paire sur la dernière foulée) et pieds en appui tenus sur place (`footLock`, prise à 12 mm, lâchée à 18 ;
+  pied arrière pris seulement quand il ne va plus plus vite que le chat, et point d'appui du pied avant gardé tout
+  l'appui par la reprise au sol `seatPlanted`). Mesuré au pas : siamois, abyssin, devon rex, sphynx et bobtail
+  (adultes et jeunes, 0,5 à 0,7 m/s) avaient les quatre pieds en l'air 38 à 51 % du temps, maintenant jamais (chaque
+  pied posé 29 à 58 % du temps, glissement 1,2 à 2,6 %) ; pieds avant du chaton au pas lent (0,3 m/s) : glissement 8 à
+  23 % → 1,4 à 3,1 %, pieds arrière 3,5 à 4,8 % → 0,7 à 1,4 % ;
   jarrets du chaton au-dessus du sol aux allures. Après les mesures faites sur le premier chat de la race, le mixeur
   est forcé de tout réécrire (`resync`) : le premier chat marchait les pattes avant en l'air, les suivants non.
 - **Équipement** : collier plat ajusté sur l'encolure **mesurée sur le chat debout** (là où le cou est le plus

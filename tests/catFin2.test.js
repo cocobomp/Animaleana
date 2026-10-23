@@ -295,3 +295,112 @@ describe('aine pendant la toilette', () => {
     }
   });
 });
+
+/**
+ * Chat qui avance comme en jeu : plus bas de la peau de chaque sole (repère du monde) image par image, après une
+ * seconde pour prendre l'allure (comme catFinish.test.js).
+ */
+function soleTrack(md, v, frames = 240) {
+  const m = md.coatMesh;
+  const soles = md.anim.S.measure.soles;
+  const out = soles.map(() => []);
+  const dt = 1 / 60;
+  for (let f = 0; f < 60 + frames; f++) {
+    md.anim.update(dt, { v, moving: true, posture: 'stand' });
+    md.root.position.z += v * dt;
+    md.root.updateMatrixWorld(true);
+    if (f < 60) continue;
+    soles.forEach((ids, l) => {
+      let lo = Infinity;
+      for (const i of ids) lo = Math.min(lo, m.getVertexPosition(i, _v).applyMatrix4(m.matrixWorld).y);
+      out[l].push(lo);
+    });
+  }
+  return out;
+}
+
+/**
+ * Glissement des appuis (méthode de la critique, comme catFinish.test.js) : le sommet de peau le plus bas d'une sole est
+ * suivi tant qu'il reste à moins de 4 mm du sol ; chemin sur le sol ÷ (durée × vitesse). Médiane par patte.
+ */
+function slipRatios(md, v, frames = 240) {
+  const m = md.coatMesh;
+  const soles = md.anim.S.measure.soles;
+  const dt = 1 / 60;
+  const cur = soles.map(() => null);
+  const ratios = soles.map(() => []);
+  for (let f = 0; f < 120 + frames; f++) {
+    md.anim.update(dt, { v, moving: true, posture: 'stand' });
+    md.root.position.z += v * dt;
+    md.root.updateMatrixWorld(true);
+    if (f < 120) continue;
+    soles.forEach((ids, l) => {
+      const c = cur[l];
+      if (c) {
+        m.getVertexPosition(c.i, _v).applyMatrix4(m.matrixWorld);
+        if (_v.y < 0.004) {
+          c.path += Math.hypot(_v.x - c.x, _v.z - c.z);
+          c.x = _v.x;
+          c.z = _v.z;
+          c.n++;
+          return;
+        }
+        if (c.n >= 3) ratios[l].push(c.path / (c.n * dt) / v);
+        cur[l] = null;
+      }
+      let lo = Infinity;
+      let best = -1;
+      for (const i of ids) {
+        const y = m.getVertexPosition(i, _v).applyMatrix4(m.matrixWorld).y;
+        if (y < lo) {
+          lo = y;
+          best = i;
+        }
+      }
+      if (lo < 0.004) {
+        m.getVertexPosition(best, _v).applyMatrix4(m.matrixWorld);
+        cur[l] = { i: best, x: _v.x, z: _v.z, n: 0, path: 0 };
+      }
+    });
+  }
+  return ratios.map((r) => (r.length ? [...r].sort((a, b) => a - b)[Math.floor(r.length / 2)] : null));
+}
+
+describe('chaton au pas lent', () => {
+  // Avant, à 0,3 m/s : les pieds avant posés glissaient de 9 à 23 % de la vitesse (européen 12 et 14 %, norvégien 23 %,
+  // siamois 12 et 14 %, abyssin 8 et 9 %) : le coussinet de la sole, à moitié porté par le métacarpe qui bascule
+  // pendant l'appui, reculait en se levant ; pieds posés encore lancés en avant. Après : 1,4 à 3,1 %, arrière 1 %.
+  it.each(['europeen', 'siamois', 'norvegien', 'abyssin', 'bobtail'])('%s chaton : au pas lent, pieds avant et arrière posés glissent de moins de 5 %', (b) => {
+    const md = cat(b, 'baby');
+    md.staticPose('stand');
+    const r = slipRatios(md, 0.3);
+    expect(md.anim.gait).toBe('walk');
+    r.forEach((x, l) => {
+      expect(x, `${b} patte ${l}`).not.toBeNull();
+      expect(x, `${b} patte ${l}`).toBeLessThan(0.05);
+    });
+    md.dispose();
+  });
+});
+
+describe('pas posé des races longilignes', () => {
+  // Avant, au pas de 0,5 à 0,7 m/s, siamois, abyssin, devon rex, sphynx et bobtail (adultes et jeunes) avaient les
+  // quatre pieds à plus de 3 mm du sol 38 à 51 % du temps (chaque pied posé 13 à 16 % du temps) : le pied arrière du
+  // clip, encore lancé en avant, était pris trop tôt, retenu, enfoncé, et le corps relevé de 2 à 3 cm. Après : jamais.
+  it.each([
+    ['siamois', 'adult'], ['siamois', 'young'], ['abyssin', 'adult'], ['devon_rex', 'adult'], ['sphynx', 'young'], ['bobtail', 'adult'],
+  ])('%s (%s) : au pas, toujours un pied posé et chaque pied posé plus du quart du temps', (b, stage) => {
+    for (const v of [0.5, 0.7]) {
+      const md = cat(b, stage);
+      md.staticPose('stand');
+      const tr = soleTrack(md, v);
+      expect(md.anim.gait).toBe('walk');
+      const n = tr[0].length;
+      let air = 0;
+      for (let f = 0; f < n; f++) if (Math.min(tr[0][f], tr[1][f], tr[2][f], tr[3][f]) > 0.003) air++;
+      expect(air / n, `${b} ${stage} ${v} m/s`).toBeLessThan(0.05);
+      tr.forEach((ys, l) => expect(ys.filter((y) => y < 0.003).length / n, `${b} ${stage} ${v} m/s patte ${l}`).toBeGreaterThan(0.25));
+      md.dispose();
+    }
+  });
+});

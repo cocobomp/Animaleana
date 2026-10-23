@@ -25,9 +25,9 @@ MODELS = {
     # (genou et pattes arrière propres comme l'adulte ; pas flank_clip : le flanc court du chaton y perdait la cuisse,
     # retournée en boule)
     'kitten': dict(file='faino_kitten.glb', rig=dict(elbow=0.42, hock=0.28, stifle=0.46, hip=0.70, buttock=0.5, haunch=0.9, arm_clip=(0.10, 0.18, 4.0),
-                                                      leg_clean=1, knee_band=(1.3, 1.2)),
+                                                      leg_clean=1, knee_band=(1.3, 1.2), sole_flat=(0.3, 0.9, 0.2)),
                    eye_mats=('material',), eye_rigid=1,
-                   gait_over={'run': {'stride': 0.42, 'drop': 0.008, 'lift': 0.09}, 'trot': {'stride': 0.28}, 'walk': {'stride': 0.24}},
+                   gait_over={'run': {'stride': 0.42, 'drop': 0.008, 'lift': 0.09}, 'trot': {'stride': 0.28}, 'walk': {'stride': 0.24, 'land': {'front': 0.93, 'hind': 0.8}}},
                    pose_opts=dict(groom_dz=0.06, groom_dy=0.02, groom_head=0.35, groom_a3=1.8, groom_wipe_dy=0.02, groom_wipe_dz=-0.055,
                                   groom_wipe_head=0.38, stretch_reach=0.66, stretch_scap=0.2,
                                   sit_flex=0.3, sit_tuck=-0.15, sit_femur=0.2, lie_hip=0.6, lie_chest=0.05, lie_loaf=1,

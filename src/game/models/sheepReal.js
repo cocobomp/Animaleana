@@ -49,6 +49,11 @@ const LEG_KEYS = [['FL', 'L', true], ['FR', 'R', true], ['HL', 'L', false], ['HR
 const LEG_BONES = { front: ['humerus', 'radius', 'metacarpus', 'toes'], hind: ['femur', 'tibia', 'metatarsus', 'htoes'] };
 const TRUNK = new Set(['root', 'pelvis', 'spine1', 'spine2', 'chest']);
 const HOLD_ALL = [0, 1, 2, 3];
+/** Piétinement : temps minimal d'appui entre deux pas d'un même membre (s). */
+const PIVOT_REST = 0.08;
+/** Au pas en tournant : écart de côté (rad, à la hanche ou à l'épaule) d'un sabot posé en avance (turnLead, turnRate). */
+const TURN_SIDE = 0.18;
+
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -825,6 +830,9 @@ export function buildRealSheepModel(look, breedId = null, gltf = null) {
   };
   model.anim = new RealSheepAnim(model, base, S);
   hb.anim = model.anim;
+  // (rotation la plus rapide selon la vitesse et ralenti pour tourner : AnimalEntity, voir RealSheepAnim.steer)
+  model.turnRate = (v) => model.anim.turnRate(v);
+  model.steer = (diff, dist, v, want, dt, urgent) => model.anim.steer(diff, dist, v, want, dt, urgent);
   model.bounds = hb;
   model.lodLevel = 0;
   model.setLod = (level) => {
@@ -1084,6 +1092,17 @@ export class RealSheepAnim {
     // l'Ouessant, deux fois plus petits que le modèle, posaient leurs sabots à 5 mm du sol et les levaient à 8 mm, ceux
     // qui frôlaient le sol sans se poser glissaient de 2 à 5 cm ; comme le veau, voir footLock)
     this.lockWorld = [0.016, 0.0115];
+    // Piétinement (demi-tour sur place, petit pas lent, recul) : mouvement réel du corps (vitesse dans son repère, m/s,
+    // et rotation, rad/s), poids du piétinement et pas de chaque membre en cours (voir trackMotion, shuffleSteps).
+    this.om = 0;
+    this.vb = new THREE.Vector2();
+    this.mPrev = null;
+    this.shufOn = false;
+    this.shufT = 9;
+    this.pv = [null, null, null, null];
+    this.pvRest = [9, 9, 9, 9];
+    this.nW = [V(), V(), V(), V()];
+    this.rFar = null;
     // (laine longue : la toison du ventre pend plus bas — le mouton couché est relevé d'autant)
     this.skirt = (B.long ?? 0) * 0.09;
     this.rootBone.position.y -= S.rise;
@@ -1141,6 +1160,265 @@ export class RealSheepAnim {
     this.liftTab = S.lift;
   }
 
+  /**
+   * Mouvement réel du corps à cette image (avant le mixeur) : vitesse dans le repère de l'animal (vb : x de côté, y
+   * vers l'avant, m/s) et rotation (om, rad/s), lissées. Elles décident du piétinement : quand la rotation domine
+   * (demi-tour sur place : les sabots de l'arrière-train, à 0,5 m de la racine de la chèvre, 1 m de la vache, décrivent
+   * un cercle) ou que l'animal avance à peine (début et fin d'un petit pas), le clip du pas — joué au moins à 0,45 fois
+   * sa vitesse et fondu à l'entrée — balayait les sabots vers l'arrière sans que le corps avance : sabots
+   * tenus jusqu'à 0,5 rad de correction puis traînés de 20 cm à 1 m. Piétinement : le corps reste sur la pose debout et
+   * chaque sabot se lève et se repose à son tour (shuffleSteps).
+   */
+  trackMotion(dt, st) {
+    const md = this.model;
+    md.root.updateWorldMatrix(true, false);
+    md.root.matrixWorld.decompose(_mp, _mq, _ms);
+    _mf.set(0, 0, 1).applyQuaternion(_mq);
+    const yaw = Math.atan2(_mf.x, _mf.z);
+    let om = 0;
+    let vx = 0;
+    let vz = 0;
+    if (this.mPrev && dt > 0) {
+      const dy = Math.atan2(Math.sin(yaw - this.mPrev.yaw), Math.cos(yaw - this.mPrev.yaw));
+      const dx = _mp.x - this.mPrev.x;
+      const dz = _mp.z - this.mPrev.z;
+      // (téléporté — van, changement de lieu — : rien)
+      if (Math.abs(dy) < 0.5 && Math.hypot(dx, dz) < 0.6 * Math.max(1, _ms.y)) {
+        om = dy / dt;
+        const c = Math.cos(yaw);
+        const s = Math.sin(yaw);
+        vx = (dx * c - dz * s) / dt;
+        vz = (dx * s + dz * c) / dt;
+      }
+    }
+    if (dt > 0) this.mPrev = { yaw, x: _mp.x, z: _mp.z };
+    const k = Math.min(1, dt * 12);
+    this.om += (om - this.om) * k;
+    this.vb.x += (vx - this.vb.x) * k;
+    this.vb.y += (vz - this.vb.y) * k;
+    const sc = _ms.y;
+    const rFar = (this.rFar ?? 0.6) * sc;
+    const vT = Math.hypot(this.vb.x, this.vb.y);
+    const natW = (this.natural.walk ?? 0.8) * sc;
+    const trick = this.trick && this.trick.age < 0.25;
+    const turnV = Math.abs(this.om) * rFar;
+    // (tourné sur place sans encore avancer — vitesse de l'entité sous 6 cm/s — : il piétine aussi)
+    const can = dt > 0 && (st.moving || turnV > 0.06 * sc) && !st.noLock && !trick && !this.trans && this.posture === 'stand' && !this.airLock;
+    // (au-delà de 0,25 fois la vitesse naturelle du pas — un peu plus en tournant —, l'allure reprend : les pas un à un ne
+    // suivraient plus ; elle est jouée au moins à 0,3 fois sa vitesse)
+    const lim = this.shufOn ? 0.28 : 0.22;
+    const pivot = turnV > 0.06 * sc && turnV > 0.6 * vT && vT < (lim + 0.08) * natW;
+    // (lent et qui ne ralentit pas : un départ, un petit pas — l'arrêt depuis l'allure garde l'allure qui s'efface et ses
+    // petits pas de replacement, footLock)
+    this.accT = dt > 0 ? (this.accT ?? 0) + (((vT - (this.vTPrev ?? vT)) / dt) - (this.accT ?? 0)) * Math.min(1, dt * 6) : this.accT ?? 0;
+    this.vTPrev = vT;
+    const slow = vT < lim * natW && (this.shufOn || this.accT > -0.25 * natW);
+    const want = can && (pivot || slow);
+    // (shufT : temps depuis la fin du piétinement — l'allure qui reprend entre vite, moveTarget)
+    this.shufT = want ? 0 : this.shufT + dt;
+    this.shufOn = can && (want || (this.shufOn && this.shufT < 0.2));
+  }
+
+  /**
+   * Poids voulus en se déplaçant : l'allure, ou la pose debout quand il piétine (trackMotion) ; rend la vitesse du fondu
+   * — l'allure qui reprend après le piétinement entre vite (le corps va déjà au quart de la vitesse du pas : fondue en
+   * 0,5 s, les sabots posés restaient en arrière jusqu'à 0,5 rad).
+   */
+  moveTarget(target, clip) {
+    const on = this.shufOn && !!this.actions.idle;
+    target[on ? 'idle' : clip] = 1;
+    return on ? 8 : this.shufT < 0.6 ? 12 : 5;
+  }
+
+  /**
+   * Piétinement : chaque sabot posé glisse, dans le repère de l'animal, à la vitesse u (corps qui tourne et avance) ;
+   * quand il a dépassé sa place d'une demi-foulée (0,15 de la longueur du membre) dans ce sens, il se lève et se repose
+   * une demi-foulée en avant de sa place (pivotStep) — au plus deux à la fois, jamais les deux antérieurs ni les deux
+   * postérieurs ensemble. Appelé après footLock (sabots posés tenus).
+   */
+  shuffleSteps(dt) {
+    const md = this.model;
+    for (let l = 0; l < 4; l++) this.pvRest[l] += dt;
+    md.root.matrixWorld.decompose(_pT, _pQ, _pS);
+    _pQ.invert();
+    const sc = _pS.y;
+    let busy = 0;
+    for (let l = 0; l < md.legs.length; l++) if (this.pv[l] || this.stepL?.l === l) busy++;
+    if (busy >= 2) return;
+    // (besoin de chaque membre posé : 1 quand il a dépassé sa place d'une demi-foulée)
+    const need = _pNeed;
+    for (let l = 0; l < md.legs.length; l++) {
+      need[l] = 0;
+      if (this.pv[l] || this.stepL?.l === l || !this.plant[l]) continue;
+      const n = _pB.copy(this.nW[l]).sub(_pT).applyQuaternion(_pQ);
+      const q = _pC.copy(this.plant[l]).sub(_pT).applyQuaternion(_pQ);
+      const ex = q.x - n.x;
+      const ez = q.z - n.z;
+      const ux = -this.vb.x - this.om * n.z;
+      const uz = -this.vb.y + this.om * n.x;
+      const um = Math.hypot(ux, uz);
+      const half = 0.15 * this.legLen(l);
+      const along = um > 0.02 * sc ? (ex * ux + ez * uz) / um : 0;
+      need[l] = Math.max(along / half, Math.hypot(ex, ez) / (1.6 * half));
+    }
+    // (deux membres d'une même paire qui en auront besoin ensemble : le plus pressé part dès la moitié — sinon l'autre
+    // attendait tout un pas, tenu au bout de sa correction, et glissait de 10 cm)
+    let best = -1;
+    let bestS = 0;
+    for (let l = 0; l < md.legs.length; l++) {
+      const mate = l ^ 1;
+      if (!need[l] || this.pvRest[l] < PIVOT_REST || this.pv[mate] || this.stepL?.l === mate) continue;
+      const lim = need[mate] > 0.5 && need[l] >= need[mate] ? 0.5 : 1;
+      if (need[l] >= lim && need[l] - lim > bestS - 1e-6) {
+        bestS = need[l] - lim;
+        best = l;
+      }
+    }
+    if (best < 0) return;
+    this.pv[best] = { t: 0, T: this.pivotT(), toe0: this.plant[best].clone() };
+    this.plant[best] = null;
+  }
+
+  /**
+   * Rotation la plus rapide de l'animal (rad/s) à la vitesse speed (m/s, monde) — AnimalEntity, chèvre vers la
+   * barrière. Sur place, celle que le piétinement suit : le sabot le plus loin de la racine (arrière-train, à rFar) glisse
+   * à ω·rFar et chaque postérieur, l'un après l'autre, refait une foulée de 0,3 longueur de membre ; au pas, la rotation
+   * de l'entité (3,5 rad/s) traînait les sabots posés de 20 cm à 1 m. Plus vite, elle remonte vers celle de l'allure.
+   */
+  turnRate(speed) {
+    const md = this.model;
+    md.root.updateWorldMatrix(true, false);
+    const sc = _ms.setFromMatrixScale(md.root.matrixWorld).y;
+    const r = Math.max(0.1, (this.rFar ?? 0.6) * sc);
+    const L = (this.legRest ?? 0.55) * sc;
+    const T = this.pivotT();
+    const piv = clamp((0.85 * 0.3 * L) / (T + PIVOT_REST) / r, 0.5, 2.5);
+    // (en avançant : le cercle le plus serré que suivent les sabots — pendant un appui, le corps avance d'une longueur
+    // d'appui et le sabot le plus loin glisse de côté de rFar fois l'angle tourné ; posé une demi-foulée en avance
+    // (turnLead), il tient ±0,18 rad à la hanche — ; à la même vitesse, la vache, plus longue, tourne plus large)
+    const stance = (this.S.phase?.stance?.walk ?? 0.4) * sc;
+    const Rmin = (r * stance) / (0.85 * 2 * TURN_SIDE * L);
+    const natW = (this.natural.walk ?? 0.8) * sc;
+    const k = smooth(0.2 * natW, 0.45 * natW, speed);
+    return clamp(piv * (1 - k) + (speed / Rmin) * k, 0.2, 3.5);
+  }
+
+  /**
+   * Au pas en tournant (allure, pas de piétinement) : écart de côté (rad, à l'épaule ou à la hanche) du sabot levé, pour
+   * qu'il se pose une demi-foulée du côté où la rotation du corps l'entraînera pendant son appui ; posé droit, il était
+   * tenu au bout de sa correction (0,2 rad) puis traîné. Appelé par footLock (repère _rt, _rq).
+   */
+  turnLead(l) {
+    if (this.shufOn || Math.abs(this.om) < 0.15 || !this.lead) return 0;
+    const a = this.actions[this.lead];
+    const rate = Math.abs(a?.timeScale ?? 0);
+    if (!(rate > 0.05) || !((this.w[this.lead] ?? 0) > 0.5)) return 0;
+    const Ts = ((this.S.phase?.duty?.[this.lead] ?? 0.6) * a.getClip().duration) / rate;
+    const n = _pB.copy(this.nW[l]).sub(_rt).applyQuaternion(_rq);
+    const Lg = this.legLen(l);
+    return Math.asin(clamp((this.om * n.z * Ts * 0.5) / Lg, -TURN_SIDE, TURN_SIDE));
+  }
+
+  /**
+   * Ruminant réaliste qui tourne vers sa cible (AnimalEntity) : écart de cap diff (rad), cible à dist (m), vitesse et
+   * vitesse voulue (m/s), pas de temps dt ; rend { turn : rotation de cette image (rad), speed : vitesse voulue }.
+   * Tourné à plus de 90° de sa cible, ou la cible dans son cercle de virage (au pas, il tourne large), il se retourne
+   * presque sur place, au pas du piétinement, avant de repartir ; sous 57°, cible hors du cercle, il garde sa vitesse.
+   */
+  steer(diff, dist, speed, want, dt, urgent = false) {
+    const ad = Math.abs(diff);
+    // (urgent — il suit sa mère, la joueuse ou le chien de troupeau — : il ne ralentit pas tant et tourne deux fois plus
+    // serré, quitte à replacer un sabot)
+    let v = want * (urgent ? 0.5 + 0.5 * smooth(2.2, 1.4, ad) : 0.2 + 0.8 * smooth(1.6, 1.0, ad));
+    const tr = (x) => this.turnRate(x) * (urgent ? 2 : 1);
+    if (want > 0) {
+      const md = this.model;
+      md.root.updateWorldMatrix(true, false);
+      const sc = _ms.setFromMatrixScale(md.root.matrixWorld).y;
+      const natW = (this.natural.walk ?? 0.8) * sc;
+      // (rayon qu'il faudrait pour passer par la cible, et rayon de virage au pas : cercle des sabots, turnRate)
+      const need = dist / (2 * Math.max(0.05, Math.sin(Math.min(ad, Math.PI / 2))));
+      const spd = Math.max(speed, 0.45 * natW);
+      if (!urgent && ad > 0.1 && need < spd / tr(spd)) v = Math.min(v, 0.18 * natW);
+    }
+    return { turn: Math.sign(diff) * Math.min(ad, dt * tr(speed)), speed: v };
+  }
+
+  /** Durée d'un pas du piétinement (s) : un peu plus vif que le petit pas de replacement, 0,3 s au plus (la vache). */
+  pivotT() {
+    return Math.min(0.3, (this.stepT ?? 0.3) * 0.85);
+  }
+
+  /** Longueur d'un membre (épaule ou hanche → bout de l'onglon, monde). */
+  legLen(l) {
+    const leg = this.model.legs[l];
+    return Math.max(0.05, _pD.setFromMatrixPosition(leg.pivot.matrixWorld).distanceTo(this.nW[l]));
+  }
+
+  /**
+   * Un pas du piétinement (voir shuffleSteps) : le sabot se lève (carpe ou jarret fléchi, comme squareStep), suit un
+   * chemin régulier de sa place de départ à sa place d'arrivée — une demi-foulée en avant de sa place sous le corps, dans
+   * le sens où le corps l'entraîne — et s'y pose ; footLock le tient ensuite.
+   */
+  pivotStep(l, dt) {
+    const md = this.model;
+    const leg = md.legs[l];
+    const S = this.pv[l];
+    // (l'allure reprend : le pas en cours finit vite, posé là où le clip met ce sabot — posé ailleurs, il était tenu à
+    // 0,45 rad du clip et traîné en l'air)
+    const back = !this.shufOn;
+    S.t += dt;
+    S.p = Math.min(1, (S.p ?? 0) + dt / (back ? Math.min(S.T, 0.25) : S.T));
+    const p = S.p;
+    md.root.matrixWorld.decompose(_pT, _pQ, _pS);
+    _pQi.copy(_pQ).invert();
+    leg.pivot.updateMatrixWorld(true);
+    const toeN = this.nW[l].copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld);
+    const n = _pB.copy(toeN).sub(_pT).applyQuaternion(_pQi);
+    const ux = -this.vb.x - this.om * n.z;
+    const uz = -this.vb.y + this.om * n.x;
+    const um = Math.hypot(ux, uz);
+    const Lg0 = this.legLen(l);
+    const lead = um > 0.02 * _pS.y && !back ? (0.15 * Lg0) / um : 0;
+    const end = _pE.set(-ux * lead, 0, -uz * lead).applyQuaternion(_pQ).add(toeN);
+    const L = this.liftTab?.[l];
+    if (L) {
+      if (S.amax === undefined) {
+        const tab = L.tab;
+        const want = (this.stepLift ?? 0.045) * 0.8;
+        let i = 1;
+        while (i < tab.length - 1 && tab[i] < want) i++;
+        S.amax = 0.1 * (i - 1 + clamp((want - tab[i - 1]) / Math.max(1e-5, tab[i] - tab[i - 1]), 0, 1));
+      }
+      const al = S.amax * Math.sin(Math.PI * p);
+      this.turn(leg.knee, AX, L.kk * al);
+      this.turn(leg.fetlock, AX, L.ff * al);
+      leg.knee.updateMatrixWorld(true);
+    }
+    const target = _pC.copy(S.toe0).lerp(end, smooth(0.1, 0.9, p));
+    let ga = 0;
+    let gs = 0;
+    for (let pass = 0; pass < 2; pass++) {
+      const err = _pB.copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld).sub(target).applyQuaternion(_pQi);
+      const Lg = Math.max(0.05, _pD.setFromMatrixPosition(leg.pivot.matrixWorld).distanceTo(target));
+      const da = clamp(Math.asin(clamp(err.z / Lg, -0.6, 0.6)), -0.55 - ga, 0.55 - ga);
+      const ds = clamp(-Math.asin(clamp(err.x / Lg, -0.3, 0.3)), -0.28 - gs, 0.28 - gs);
+      this.turn(leg.pivot, AX, da);
+      this.turn(leg.pivot, AZ, ds);
+      leg.pivot.updateMatrixWorld(true);
+      ga += da;
+      gs += ds;
+    }
+    this.lockAng[l] = ga;
+    this.lockSide[l] = gs;
+    if (p >= 1) {
+      this.pv[l] = null;
+      this.pvRest[l] = 0;
+      this.plant[l] = this.toePts[l].clone().applyMatrix4(leg.paw.matrixWorld);
+      this.relTop[l] = 0;
+    }
+  }
+
   /** Décalage du gabarit ajouté à la racine après le mixeur (corps monté de S.rise : sabots au sol). */
   applyShift() {
     this.rootBone.position.y += this.S.rise;
@@ -1193,19 +1471,25 @@ export class RealSheepAnim {
    */
   measureNatural() {
     const S = this.S;
-    if (!S.natural) {
+    if (!S.natural || !S.phase) {
       const md = this.model;
       const nat = {};
       const N = 36;
+      // (table des phases : onglons de chaque membre dans le repère du modèle, à chaque instant de chaque allure, et à
+      // l'arrêt — l'allure qui entre se cale sur les sabots posés, matchPhase)
+      const phase = {};
+      const toLocal = (p) => p.clone().applyMatrix4(_m.copy(md.root.matrixWorld).invert());
       for (const g of MOVING) {
         const a = this.actions[g];
         if (!a) continue;
         const T = a.getClip().duration;
         const tracks = md.legs.map(() => []);
+        phase[g] = [];
         for (let k = 0; k <= N; k++) {
           this.clipPose(g, k / N);
           md.root.updateMatrixWorld(true);
           md.legs.forEach((l, j) => tracks[j].push(this.toePts[j].clone().applyMatrix4(l.paw.matrixWorld)));
+          if (k < N) phase[g].push(md.legs.map((l, j) => toLocal(tracks[j][k])));
         }
         const s = md.size;
         const speed = tracks.map((tr) => {
@@ -1228,9 +1512,76 @@ export class RealSheepAnim {
         nat[g] = (avg(fr) + avg(hi)) / 2;
       }
       S.natural = nat;
+      this.clipPose('idle', 0);
+      md.root.updateMatrixWorld(true);
+      phase.idle = md.legs.map((l, j) => toLocal(this.toePts[j].clone().applyMatrix4(l.paw.matrixWorld)));
+      // (part d'appui de chaque allure et longueur d'un appui — ce que le corps avance pendant qu'un sabot est posé —,
+      // repère du modèle : turnLead, turnRate)
+      phase.duty = {};
+      phase.stance = {};
+      for (const g of Object.keys(phase)) {
+        if (!MOVING.includes(g)) continue;
+        let du = 0;
+        let len = 0;
+        for (let j = 0; j < md.legs.length; j++) {
+          const ys = phase[g].map((f) => f[j].y);
+          const ymin = Math.min(...ys);
+          const on = phase[g].filter((f) => f[j].y < ymin + 0.012).map((f) => f[j].z);
+          du += on.length / phase[g].length;
+          len += on.length ? Math.max(...on) - Math.min(...on) : 0;
+        }
+        phase.duty[g] = du / md.legs.length;
+        phase.stance[g] = len / md.legs.length;
+      }
+      // (debout : distance des onglons à la racine et longueur des membres, repère du modèle — turnRate)
+      phase.rFar = Math.max(...phase.idle.map((q) => Math.hypot(q.x, q.z)));
+      phase.leg = Math.max(...[0, 2].map((j) => toLocal(_w.setFromMatrixPosition(md.legs[j].pivot.matrixWorld)).distanceTo(phase.idle[j])));
+      S.phase = phase;
       this.staticPose('stand');
     }
     for (const g of MOVING) if (S.natural[g] > 0.1) this.natural[g] = S.natural[g];
+    this.rFar = S.phase.rFar;
+    this.legRest = S.phase.leg;
+  }
+
+  /**
+   * Une allure qui entre (au départ, après le piétinement ou l'arrêt) : sa phase est celle où ses onglons en appui sont
+   * au plus près des sabots posés (ou, sans sabot posé, de la pose debout) — prise au hasard, le clip trouvait un
+   * antérieur posé loin derrière en début d'appui : tenu à 0,4-0,5 rad de correction, il glissait de 8 à 19 cm.
+   */
+  matchPhase(name, a) {
+    const tab = this.S.phase?.[name];
+    const idle = this.S.phase?.idle;
+    if (!tab || !idle) return;
+    const md = this.model;
+    md.root.updateWorldMatrix(true, false);
+    _m.copy(md.root.matrixWorld).invert();
+    const held = md.legs.map((l, j) => (this.plant[j] ? _pC.copy(this.plant[j]).applyMatrix4(_m).clone() : null));
+    if (!held.some(Boolean)) return;
+    let best = -1;
+    let bestC = Infinity;
+    for (let k = 0; k < tab.length; k++) {
+      let c = 0;
+      for (let j = 0; j < md.legs.length; j++) {
+        const q = tab[k][j];
+        if (!held[j]) continue;
+        c += (q.x - held[j].x) ** 2 + (q.z - held[j].z) ** 2;
+        // (un sabot posé là où le clip lève ce membre : il serait lâché aussitôt)
+        if (q.y > idle[j].y + 0.02) c += 0.01;
+      }
+      if (c < bestC) {
+        bestC = c;
+        best = k;
+      }
+    }
+    if (best >= 0) a.time = (best / tab.length) * a.getClip().duration;
+  }
+
+  /** Allure qui entre (poids qui dépasse 0,02) : calée sur celle qui sort, ou sur les sabots posés (matchPhase). */
+  enterGait(name, a) {
+    const from = this.lead && this.lead !== name ? this.actions[this.lead] : null;
+    if (from && (this.w[this.lead] ?? 0) > 0.02) a.time = (from.time / from.getClip().duration) * a.getClip().duration;
+    else this.matchPhase(name, a);
   }
 
   /**
@@ -1385,6 +1736,7 @@ export class RealSheepAnim {
     this.restorePose();
     this.t += dt;
     this.hold += dt;
+    this.trackMotion(dt, st);
     const size = clamp(st.size ?? 1, 0.15, 1.6);
     // (allure au même nombre de Froude que le modèle : vitesse rapportée à la racine de la taille et des membres)
     const u = st.moving ? (st.v * Math.sqrt(size)) / Math.sqrt(this.speedScale) : 0;
@@ -1440,8 +1792,7 @@ export class RealSheepAnim {
       // (en se déplaçant, toujours l'allure : la gambade de l'agneau, jouée sur place pendant que le corps avançait,
       // faisait glisser ses sabots comme sur la glace ; il gambade à l'arrêt, action 'play')
       moveClip = g === 'idle' ? 'walk' : g;
-      target[moveClip] = 1;
-      fadeK = 5;
+      fadeK = this.moveTarget(target, moveClip);
     } else if (this.posture === 'lie') {
       target[st.ruminate && this.actions.ruminate ? 'ruminate' : 'lie'] = 1;
       fadeK = 1.5;
@@ -1471,17 +1822,14 @@ export class RealSheepAnim {
       let w = was + (target[name] - was) * k;
       if (w < 0.002) w = 0;
       this.w[name] = w;
-      // (une allure qui entre se cale sur la phase de celle qui sort)
-      if (was < 0.02 && w >= 0.02 && MOVING.includes(name) && this.lead && this.lead !== name) {
-        const from = this.actions[this.lead];
-        if (from) a.time = (from.time / from.getClip().duration) * a.getClip().duration;
-      }
+      // (une allure qui entre se cale sur celle qui sort, ou sur les sabots posés)
+      if (was < 0.02 && w >= 0.02 && MOVING.includes(name)) this.enterGait(name, a);
       a.setEffectiveWeight(w);
       if (MOVING.includes(name)) {
         const nat = this.natural[name];
         // (petits moutons, agneaux : la cadence monte comme 1 / racine de la taille, sans s'emballer ; arrêté, l'allure
         // qui s'efface est figée — jouée à sa vitesse naturelle, elle faisait glisser les sabots de 10 à 19 cm sur place)
-        a.timeScale = st.moving ? Math.min(2.2 / Math.sqrt(Math.min(1, size)), Math.max(0.45, st.v / nat)) : 0;
+        a.timeScale = st.moving ? Math.min(2.2 / Math.sqrt(Math.min(1, size)), Math.max(0.3, st.v / nat)) : 0;
         if (w > leadW) {
           lead = name;
           leadW = w;
@@ -1679,15 +2027,17 @@ export class RealSheepAnim {
     const lockable = (!air || !!this.airLock) && dt > 0 && !st.noLock;
     const standing = this.posture === 'stand' && !this.trans;
     const moveW = (this.w.walk ?? 0) + (this.w.trot ?? 0) + (this.w.run ?? 0);
-    const locked = this.lockAng.some((x) => x) || this.lockSide.some((x) => x) || !!this.stepL;
+    const locked = this.lockAng.some((x) => x) || this.lockSide.some((x) => x) || !!this.stepL || this.pv.some(Boolean);
     // (certains membres seulement — la chèvre dressée garde ses postérieurs posés, voir RealGoatAnim.holdLegs)
     const only = lockable && !st.moving ? this.holdLegs() : null;
-    if (only || (lockable && (st.moving || (standing && (moveW > 0.02 || locked))))) {
+    if (only || (lockable && (st.moving || (standing && (moveW > 0.02 || locked || this.shufOn))))) {
       // (holdStep : les membres tenus se replacent d'un petit pas, sabot levé, quand le corps avance — la chèvre dressée
       // qui s'avance sur ses postérieurs jusqu'à la barrière)
       const holdStep = !!only && !!this.holdStep;
       if (st.moving || (only && !holdStep)) this.stepL = null;
       this.footLock(dt, (!only && !st.moving && moveW < 0.12) || holdStep, only);
+      // (piétinement : demi-tour sur place, petit pas lent — chaque sabot se lève à son tour, trackMotion)
+      if (this.shufOn && standing && !only) this.shuffleSteps(dt);
       // (un membre tourné peut descendre un peu : le corps est relevé de ce qui passerait sous le sol)
       let low2 = Infinity;
       for (let l = 0; l < md.legs.length; l++) {
@@ -1772,6 +2122,7 @@ export class RealSheepAnim {
     for (let l = 0; l < md.legs.length; l++) {
       if (except?.includes(l)) continue;
       this.plant[l] = null;
+      this.pv[l] = null;
       const a = this.lockAng[l] * k;
       const s = this.lockSide[l] * k;
       this.lockAng[l] = Math.abs(a) > 1e-3 ? a : 0;
@@ -1806,6 +2157,12 @@ export class RealSheepAnim {
     for (let l = 0; l < md.legs.length; l++) {
       const leg = md.legs[l];
       if (only && !only.includes(l)) continue;
+      if (this.pv[l]) {
+        this.pivotStep(l, dt);
+        continue;
+      }
+      // (place du sabot sous le corps, sans correction : celle du clip — piétinement, shuffleSteps)
+      this.nW[l].copy(this.toePts[l]).applyMatrix4(leg.paw.matrixWorld);
       if (this.stepL?.l === l) {
         this.squareStep(l, dt);
         continue;
@@ -1827,7 +2184,9 @@ export class RealSheepAnim {
       let sd = this.lockSide[l];
       if (!down || !planted) {
         if (planted) this.relTop[l] = 0;
-        if (ang || sd) {
+        // (au pas en tournant : le sabot levé va se poser du côté où le corps l'entraînera — turnLead)
+        const sT = this.turnLead(l);
+        if (ang || sd || sT) {
           this.turn(leg.pivot, AX, ang);
           this.turn(leg.pivot, AZ, sd);
           leg.pivot.updateMatrixWorld(true);
@@ -1844,7 +2203,7 @@ export class RealSheepAnim {
           // vitesse — : la correction s'efface d'autant plus vite, sinon elle restait au poser suivant et le sabot glissait)
           const dmax = ((0.004 + 0.016 * smooth(0.005, 0.03, lo)) * _rs.y * Math.max(1, this.leadRate ?? 1)) / arm;
           const a2 = ang + clamp(ang * fade - ang, -dmax, dmax);
-          const s2 = sd + clamp(sd * fade - sd, -dmax, dmax);
+          const s2 = sd + clamp((sd - sT) * fade + sT - sd, -dmax, dmax);
           this.turn(leg.pivot, AZ, s2 - sd);
           this.turn(leg.pivot, AX, a2 - ang);
           leg.pivot.updateMatrixWorld(true);
@@ -1867,7 +2226,10 @@ export class RealSheepAnim {
         const Lg = Math.max(0.05, top.distanceTo(toe));
         const off = !pass && Math.abs(ez) > 0.45 * Lg;
         const dth = clamp(Math.asin(clamp(ez / Lg, -0.5, 0.5)), -0.52 - th, 0.52 - th);
-        const dph = clamp(-Math.asin(clamp(ex / Lg, -0.2, 0.2)), -0.2 - ph, 0.2 - ph);
+        // (de côté : 0,2 rad au plus ; un peu plus en tournant — le membre croise sous le corps — et quand il piétine, le
+        // temps qu'un membre attende que l'autre ait reposé le sien)
+        const sm = this.shufOn ? 0.26 : Math.abs(this.om) > 0.15 ? 0.23 : 0.2;
+        const dph = clamp(-Math.asin(clamp(ex / Lg, -sm, sm)), -sm - ph, sm - ph);
         const moved = Math.abs(dth) >= 1e-4 || Math.abs(dph) >= 1e-4;
         if (moved) {
           th += dth;
@@ -1899,7 +2261,7 @@ export class RealSheepAnim {
     }
     // Arrêté, l'allure effacée : le membre le plus de travers (sabot tenu loin de sa place) se replace d'un petit pas,
     // un seul à la fois — le sabot se lève, revient sous le corps et se repose (jamais traîné au sol).
-    if (settle && !this.stepL) {
+    if (settle && !this.stepL && !this.pv.some(Boolean)) {
       let best = -1;
       let bestD = 0.015 * _rs.y;
       for (let l = 0; l < md.legs.length; l++) {
@@ -1983,6 +2345,19 @@ export class RealSheepAnim {
 
 const _sE = V();
 const _sT = V();
+const _mp = V();
+const _mq = new THREE.Quaternion();
+const _ms = V(1, 1, 1);
+const _mf = V();
+const _pT = V();
+const _pQ = new THREE.Quaternion();
+const _pQi = new THREE.Quaternion();
+const _pS = V(1, 1, 1);
+const _pB = V();
+const _pC = V();
+const _pD = V();
+const _pE = V();
+const _pNeed = [0, 0, 0, 0];
 const _sL = V();
 const _sP = V();
 const _rt = V();

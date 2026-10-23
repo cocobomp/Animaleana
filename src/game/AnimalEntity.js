@@ -836,7 +836,14 @@ export class AnimalEntity {
         const want = Math.atan2(t.x - p.x, t.z - p.z);
         let diff = want - this.heading;
         diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-        this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 3.5);
+        // (ruminant réaliste : il tourne au rythme de ses sabots — sur place, ils piétinent — et ralentit pour se
+        // retourner ou quand sa cible est dans son cercle de virage ; voir RealSheepAnim.steer)
+        if (this.model?.steer) {
+          const urgent = !!this.herdCtrl || !!d.following || this.state === 'mother';
+          const s = this.model.steer(diff, Math.hypot(t.x - p.x, t.z - p.z), this.speed, this.targetSpeed, dt, urgent);
+          this.heading += s.turn;
+          this.targetSpeed = s.speed;
+        } else this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 3.5);
       }
       if (this.perch?.phase !== 'on') this.speed += (this.targetSpeed - this.speed) * Math.min(1, dt * 3);
       if (this.speed > 0.01 && this.perch?.phase !== 'on') {

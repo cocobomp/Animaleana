@@ -462,3 +462,130 @@ describe('restes de mesures : se relever en marchant, col noir couché', () => {
   }, 60000);
 
 });
+
+describe('demi-tour sur place et petit pas vers la barrière : les sabots piétinent au lieu de glisser', () => {
+  // (vérification de la passe précédente : la chèvre qui s'avance vers la barrière et se retourne — correction des
+  // sabots jusqu'à 0,5 rad, sabot qui glisse —, et tout demi-tour de l'entité, tournée à 3,5 rad/s : le clip du pas,
+  // joué au moins à 0,45 fois sa vitesse, balayait les sabots sans que le corps avance ; mesuré avant : glissement d'un
+  // sabot posé, cumulé sur son appui, 36 cm (chèvre), 59 cm (mouton), 117 cm (vache), correction 0,52 rad)
+  /** Suivi des sabots : glissement cumulé par appui (sole sous 1 cm), correction de footLock la plus grande. */
+  const tracker = (md) => {
+    const an = md.anim;
+    const prev = md.legs.map(() => null);
+    const cur = md.legs.map(() => 0);
+    const r = { slips: [], lock: 0 };
+    r.tick = () => {
+      md.root.updateMatrixWorld(true);
+      md.legs.forEach((leg, l) => {
+        let lo = Infinity;
+        for (const p of an.solePts[l]) lo = Math.min(lo, p.clone().applyMatrix4(leg.paw.matrixWorld).y);
+        const toe = an.toePts[l].clone().applyMatrix4(leg.paw.matrixWorld);
+        toe.lo = lo;
+        if (prev[l]) {
+          if (lo < 0.01 && prev[l].lo < 0.01) cur[l] += Math.hypot(toe.x - prev[l].x, toe.z - prev[l].z);
+          else if (cur[l] > 0) {
+            r.slips.push(cur[l]);
+            cur[l] = 0;
+          }
+        }
+        prev[l] = toe;
+        r.lock = Math.max(r.lock, Math.abs(an.lockAng[l]));
+      });
+    };
+    r.max = () => Math.max(0, ...r.slips, ...cur);
+    return r;
+  };
+  const ANIM = { sheep: animateRealSheep, goat: animateRealGoat, cow: animateRealCow };
+  const BUILD = { sheep: buildRealSheepModel, goat: buildRealGoatModel, cow: buildRealCowModel };
+
+  // (l'entité comme AnimalEntity : debout 3 s, puis elle part vers une cible presque derrière elle, au pas)
+  it.each([
+    ['goat', 'alpine', 'f', false, 0.06], ['goat', 'col_noir', 'm', false, 0.06], ['sheep', 'suffolk', 'f', false, 0.1],
+    ['cow', 'holstein', 'f', false, 0.18], ['cow', 'hereford', 'm', false, 0.1], ['cow', 'holstein', 'f', true, 0.12],
+  ])('%s %s (%s, petit : %s) : demi-tour de l\'entité, aucun sabot posé ne glisse de plus de %s m', (sp, breed, sex, baby, maxSlip) => {
+    const G = { sheep: GS, goat: GG, cow: GC }[sp];
+    const a = createAnimal({ species: sp, breed, sex, colorIndex: 0, ageDays: baby ? 3 : 80, seed: 7, rng: () => 0.42 });
+    const md = BUILD[sp]({ ...a.look, sex, ...(baby ? { calf: true, lamb: true, kid: true } : {}) }, breed, G);
+    const e = entity(md, a, a.look.scale * growthScale(a));
+    expect(typeof md.steer).toBe('function');
+    const dt = 1 / 30;
+    const rnd = Math.random;
+    Math.random = () => 0.9;
+    const T = tracker(md);
+    let turned = 0;
+    try {
+      for (let f = 0; f < 90; f++) {
+        e.time += dt;
+        ANIM[sp](e, dt, false);
+      }
+      const th = Math.PI * 0.98;
+      e.target.set(Math.sin(th) * 6, 0, Math.cos(th) * 6);
+      const ws = { sheep: 1.1, goat: 1.2, cow: 1 }[sp];
+      for (let f = 0; f < 8 / dt; f++) {
+        e.time += dt;
+        const p = e.position;
+        e.targetSpeed = Math.hypot(e.target.x - p.x, e.target.z - p.z) < 0.5 ? 0 : ws;
+        let diff = Math.atan2(e.target.x - p.x, e.target.z - p.z) - e.heading;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        if (e.targetSpeed > 0) {
+          const s = md.steer(diff, Math.hypot(e.target.x - p.x, e.target.z - p.z), e.speed, e.targetSpeed, dt);
+          e.heading += s.turn;
+          e.targetSpeed = s.speed;
+        }
+        if (Math.abs(diff) < 0.1) turned++;
+        e.speed += (e.targetSpeed - e.speed) * Math.min(1, dt * 3);
+        p.x += Math.sin(e.heading) * e.speed * dt;
+        p.z += Math.cos(e.heading) * e.speed * dt;
+        e.root.rotation.y = e.heading;
+        e.root.updateMatrixWorld(true);
+        ANIM[sp](e, dt, false);
+        T.tick();
+      }
+    } finally {
+      Math.random = rnd;
+    }
+    if (process.env.RUM_LOG) console.log('DEMITOUR', sp, breed, sex, baby, (T.max() * 100).toFixed(1), T.lock.toFixed(2));
+    // (retournée en moins de 7 s — la vache, longue, tourne large —, elle repart vers sa cible)
+    expect(turned).toBeGreaterThan(30);
+    expect(T.max(), `${breed} : glissement ${(T.max() * 100).toFixed(1)} cm`).toBeLessThan(maxSlip);
+    expect(T.lock).toBeLessThan(0.53);
+    md.dispose?.();
+  }, 120000);
+
+  // (la chèvre au repos, tournée de côté ou dos à la barrière : elle se retourne sur place, s'avance, se dresse, recule)
+  it.each([['alpine', 'f', Math.PI / 2], ['alpine', 'f', Math.PI], ['col_noir', 'm', Math.PI]])('%s (%s) partie tournée de %s rad : vers la barrière, sabots posés qui ne glissent pas', (breed, sex, heading) => {
+    const a = createAnimal({ species: 'goat', breed, sex, colorIndex: 0, ageDays: 80, seed: 7, rng: () => 0.42 });
+    const md = buildRealGoatModel({ ...a.look, sex }, breed, GG);
+    const e = entity(md, a, a.look.scale * growthScale(a));
+    e.heading = heading;
+    e.root.rotation.y = heading;
+    e.world = { fences: [{ core: 'pen', x: 0, z: 1.2, hw: 3, hd: 0.04 }, { core: 'pen', x: 0, z: -5, hw: 3, hd: 0.04 }], heightAt: () => 0 };
+    md.anim.browseCheck = 0.05;
+    const T = tracker(md);
+    const phases = new Set();
+    const rnd = Math.random;
+    Math.random = () => 0.2;
+    try {
+      for (let f = 0; f < 1100; f++) {
+        e.time += 1 / 30;
+        md.anim.seen = true;
+        md.lodHold = true;
+        animateRealGoat(e, 1 / 30, false);
+        e.root.updateMatrixWorld(true);
+        if (!e.goatBrowse) {
+          if (phases.size) break;
+          continue;
+        }
+        phases.add(e.goatBrowse.phase);
+        T.tick();
+      }
+    } finally {
+      Math.random = rnd;
+    }
+    if (process.env.RUM_LOG) console.log('BARRIERE-TOUR', breed, sex, heading, (T.max() * 100).toFixed(1), T.lock.toFixed(2));
+    expect([...phases]).toEqual(expect.arrayContaining(['step', 'settle', 'up', 'down', 'back']));
+    expect(T.max(), `${breed} : glissement ${(T.max() * 100).toFixed(1)} cm`).toBeLessThan(0.075);
+    expect(T.lock).toBeLessThan(0.46);
+    md.dispose?.();
+  }, 120000);
+});

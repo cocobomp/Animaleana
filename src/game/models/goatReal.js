@@ -599,6 +599,8 @@ export function buildRealGoatModel(look, breedId = null, gltf = null) {
     browseHoof: base.browseHoof,
   };
   model.anim = new RealGoatAnim(model, base, S);
+  model.turnRate = (v) => model.anim.turnRate(v);
+  model.steer = (diff, dist, v, want, dt, urgent) => model.anim.steer(diff, dist, v, want, dt, urgent);
   hb.anim = model.anim;
   model.bounds = hb;
   model.lodLevel = 0;
@@ -789,6 +791,7 @@ export class RealGoatAnim extends RealSheepAnim {
     this.restorePose();
     this.t += dt;
     this.hold += dt;
+    this.trackMotion(dt, st);
     const size = clamp(st.size ?? 1, 0.15, 1.6);
     const u = st.moving ? (st.v * Math.sqrt(size)) / Math.sqrt(this.speedScale) : 0;
     const g = pickSheepGait(this.gait, u);
@@ -855,8 +858,7 @@ export class RealGoatAnim extends RealSheepAnim {
     } else if (st.moving) {
       // (en se déplaçant, toujours l'allure, sabots tenus : la gambade jouée sur place glissait ; voir le mouton)
       moveClip = g === 'idle' ? 'walk' : g;
-      target[moveClip] = 1;
-      fadeK = 5;
+      fadeK = this.moveTarget(target, moveClip);
     } else if (this.posture === 'rear') {
       target.browse_up = 1;
       fadeK = 6;
@@ -892,15 +894,13 @@ export class RealGoatAnim extends RealSheepAnim {
       let w = was + (target[name] - was) * k;
       if (w < 0.002) w = 0;
       this.w[name] = w;
-      if (was < 0.02 && w >= 0.02 && MOVING.includes(name) && this.lead && this.lead !== name) {
-        const from = this.actions[this.lead];
-        if (from) a.time = (from.time / from.getClip().duration) * a.getClip().duration;
-      }
+      // (une allure qui entre se cale sur celle qui sort, ou sur les sabots posés)
+      if (was < 0.02 && w >= 0.02 && MOVING.includes(name)) this.enterGait(name, a);
       a.setEffectiveWeight(w);
       if (MOVING.includes(name)) {
         const nat = this.natural[name];
         // (arrêtée, l'allure qui s'efface est figée : voir le mouton)
-        a.timeScale = st.moving ? Math.min(2.2 / Math.sqrt(Math.min(1, size)), Math.max(0.45, st.v / nat)) * (st.reverse ? -1 : 1) : 0;
+        a.timeScale = st.moving ? Math.min(2.2 / Math.sqrt(Math.min(1, size)), Math.max(0.3, st.v / nat)) * (st.reverse ? -1 : 1) : 0;
         if (w > leadW) {
           lead = name;
           leadW = w;
@@ -1099,7 +1099,9 @@ function browseFence(e, dt, anim, scale) {
   if (b.phase === 'step' || b.phase === 'back') {
     const goal = b.phase === 'step' ? b.near : b.from;
     const dh = wrap(b.heading - e.heading);
-    e.heading += Math.sign(dh) * Math.min(Math.abs(dh), dt * 2.5);
+    // (tournée sur place au rythme de ses sabots, qui piétinent : RealSheepAnim.turnRate ; à 2,5 rad/s, ses postérieurs
+    // posés étaient traînés de 36 à 52 cm)
+    e.heading += Math.sign(dh) * Math.min(Math.abs(dh), dt * Math.min(2.5, e.model.turnRate?.(0) ?? 2.5));
     e.root.rotation.y = e.heading;
     const dx = goal.x - p.x;
     const dz = goal.z - p.z;
@@ -1114,7 +1116,7 @@ function browseFence(e, dt, anim, scale) {
       p.x += (dx / d) * step;
       p.z += (dz / d) * step;
       anim.stepV = v;
-    } else anim.stepV = d > 0.02 ? 0.25 : 0;
+    } else anim.stepV = d > 0.02 || Math.abs(dh) >= 0.05 ? 0.25 : 0;
     if (d <= 0.02 && Math.abs(dh) < 0.05) {
       anim.stepV = 0;
       if (b.phase === 'step') {

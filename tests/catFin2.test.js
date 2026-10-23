@@ -1,10 +1,10 @@
 // Finitions (2e passe) des chats réalistes : chaton qui dort vraiment roulé en boule sur le flanc, pompon du bobtail
 // en boule, pas de peau retournée à l'aine pendant la toilette, pas posés au pas, avant du collier visible sous le
-// menton, ... Déterministe :
+// menton, fourrure sous les yeux, ... Déterministe :
 // graines fixes, pas de temps fixe, aucun Math.random (le mixeur est appelé avec des états donnés).
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import * as THREE from 'three';
-import { buildRealCatModel } from '../src/game/models/catReal.js';
+import { buildRealCatModel, realCatBase } from '../src/game/models/catReal.js';
 import { buildGear } from '../src/game/gearModels.js';
 import { catLookWithBreed } from '../src/sim/catLook.js';
 import { SPECIES } from '../src/sim/species.js';
@@ -493,6 +493,72 @@ describe('collier sous le menton', () => {
     for (const h of g.userData.meshes) for (const x of h.userData?.dispose ?? []) x.dispose?.();
     expect(md.uniforms.cCollarR.value.w).toBe(0);
     coat.geometry.dispose();
+    md.dispose();
+  });
+});
+
+describe('fourrure sous les yeux', () => {
+  // La texture de l'adulte est peinte lisse et claire sous l'œil (un croissant sans poil : british, chartreux, scottish
+  // fold, européen) et sombre au coin intérieur (une tache de larme sur le maine coon). Le shader de la robe y prend le
+  // relief de la joue voisine : décalage de texture cEyeUv, mesuré sur le modèle. Vérifié ici : le décalage existe pour
+  // l'adulte (symétrique d'un œil à l'autre), et pour presque tous les sommets du tour de l'œil il mène dans la texture à
+  // de la fourrure de la joue (le sommet dont la coordonnée de texture est la plus proche est hors de l'œil, plus en
+  // dehors que lui).
+  it.each(['british', 'chartreux', 'scottish_fold', 'europeen', 'maine_coon'])('%s : relief pris sur la joue', (b) => {
+    const md = cat(b);
+    const sh = { uniforms: {}, vertexShader: '#include <common>\n#include <begin_vertex>\n#include <skinning_vertex>', fragmentShader: '#include <common>\n#include <color_fragment>\n#include <roughnessmap_fragment>' };
+    md.coatMesh.material.onBeforeCompile(sh, {});
+    expect(sh.fragmentShader).toContain('vec2 uvE = vMapUv + offE;');
+    expect(sh.fragmentShader).toContain('detail = mix(detail, detS, ringE);');
+    const o = sh.uniforms.cEyeUv.value;
+    for (const [du, dv] of [[o.x, o.y], [o.z, o.w]]) {
+      expect(Math.hypot(du, dv), b).toBeGreaterThan(0.03);
+      expect(Math.hypot(du, dv), b).toBeLessThan(0.12);
+    }
+    expect(Math.sign(o.x), b).toBe(-Math.sign(o.z));
+    expect(Math.abs(o.y - o.w), b).toBeLessThan(0.01);
+    // où mène le décalage, sommet par sommet (dessous et coins de l'œil, de 1,1 à 2,6 rayons du globe)
+    const base = realCatBase(G.adult, 'adult');
+    const c = base.prims.coat;
+    const L = base.land;
+    let n = 0;
+    let ok = 0;
+    for (let i = 0; i < c.count; i++) {
+      if (base.W.head[i] < 0.6) continue;
+      const x = c.pos[i * 3];
+      const side = x > L.midX ? 1 : -1;
+      const dx = (x - (L.midX + side * L.eyeX)) / L.eyeR;
+      const dy = (c.pos[i * 3 + 1] - L.eyeY) / L.eyeR;
+      const dz = (c.pos[i * 3 + 2] - L.eyeZ) / L.eyeR;
+      const de = Math.hypot(dx, dy, dz);
+      if (de < 1.1 || de > 2.6 || dy > 0) continue;
+      const u = c.uv[i * 2] + (side > 0 ? o.x : o.z);
+      const v = c.uv[i * 2 + 1] + (side > 0 ? o.y : o.w);
+      let bd = Infinity;
+      let bj = -1;
+      for (let j = 0; j < c.count; j++) {
+        const d = (c.uv[j * 2] - u) ** 2 + (c.uv[j * 2 + 1] - v) ** 2;
+        if (d < bd) {
+          bd = d;
+          bj = j;
+        }
+      }
+      const ex = (c.pos[bj * 3] - (L.midX + side * L.eyeX)) / L.eyeR;
+      const ey = (c.pos[bj * 3 + 1] - L.eyeY) / L.eyeR;
+      const ez = (c.pos[bj * 3 + 2] - L.eyeZ) / L.eyeR;
+      n++;
+      // (hors de l'œil peint, plus en dehors sur la joue que le sommet lui-même, et pas au-dessus de l'œil)
+      if (Math.hypot(ex, ey, ez) > 1.15 && ex * side - dx * side > 0.3 && ey < 0.3) ok++;
+    }
+    expect(n, b).toBeGreaterThan(20);
+    expect(ok / n, `${b} : ${ok}/${n} sommets du tour de l'œil prennent la fourrure de la joue`).toBeGreaterThan(0.8);
+    md.dispose();
+  });
+
+  it('chaton : yeux peints, rien de prêté', () => {
+    const md = cat('british', 'baby');
+    const o = md.uniforms.cEyeUv.value;
+    expect(o.x === 0 && o.y === 0 && o.z === 0 && o.w === 0).toBe(true);
     md.dispose();
   });
 });

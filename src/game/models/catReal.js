@@ -331,6 +331,39 @@ export function realCatBase(gltf, kind) {
     eyeR: (eyes[0].r + eyes[1].r) / 2,
     paintIris: kind === 'kitten',
   };
+  // Fourrure prêtée au tour de l'œil (catCoat.js, cEyeUv) : la texture de l'adulte y est peinte lisse et claire sous
+  // l'œil, sombre au coin intérieur (tache de larme) ; le shader y prend le relief de la joue voisine. Décalage de
+  // texture du dessous de l'œil vers la joue (en bas, en dehors, en arrière), mesuré sur les sommets de la tête, pour
+  // chaque œil (x > midX d'abord). Chaton : yeux peints, rien.
+  land.eyeUv = [0, 0, 0, 0];
+  if (kind !== 'kitten') {
+    const uvAt = (p) => {
+      let bd = Infinity;
+      let bi = -1;
+      for (let i = 0; i < n; i++) {
+        if (W.head[i] < 0.6) continue;
+        const d = _v.fromArray(coat.pos, i * 3).distanceToSquared(p);
+        if (d < bd) {
+          bd = d;
+          bi = i;
+        }
+      }
+      return bi >= 0 && Math.sqrt(bd) < land.eyeR ? [coat.uv[bi * 2], coat.uv[bi * 2 + 1]] : null;
+    };
+    [1, -1].forEach((s, k) => {
+      const E = V(midX + s * land.eyeX, land.eyeY, land.eyeZ);
+      const r = land.eyeR;
+      const a = uvAt(E.clone().add(V(0, -1.7 * r, 0.1 * r)));
+      const b = uvAt(E.clone().add(V(s * 1.5 * r, -2.4 * r, -1.0 * r)));
+      if (!a || !b) return;
+      const du = b[0] - a[0];
+      const dv = b[1] - a[1];
+      // (jamais un saut d'une île de texture à l'autre)
+      if (Math.hypot(du, dv) > 0.15) return;
+      land.eyeUv[k * 2] = du;
+      land.eyeUv[k * 2 + 1] = dv;
+    });
+  }
   // Bouts des oreilles (le plus loin de leur base).
   const earTip = [0, 1].map((s) => {
     const b1 = B(s === 0 ? 'ear1L' : 'ear1R');

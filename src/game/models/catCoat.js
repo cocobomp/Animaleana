@@ -136,6 +136,8 @@ export function makeCatLandUniforms(L) {
     // (iris jusqu'au bord de l'œil ouvert, comme chez le chaton : à 0,86 rad, le globe peint en noir se voyait tout autour
     // de l'iris — un cercle sombre, épais chez le chaton persan aux yeux grands ouverts)
     cIris: { value: new THREE.Vector4(L.paintIris ? 1 : 0, L.eyeR ?? 0.008, 1.02, 0.14) },
+    // décalage de texture du dessous de chaque œil vers la joue (x > midX, puis l'autre) : relief prêté sous l'œil
+    cEyeUv: { value: new THREE.Vector4(...(L.eyeUv ?? [0, 0, 0, 0])) },
   };
 }
 
@@ -240,6 +242,7 @@ uniform vec4 cNose;
 uniform vec4 cTailB;
 uniform vec4 cBody;
 uniform vec4 cIris;
+uniform vec4 cEyeUv;
 uniform float cRole;
 uniform float cTexMode;
 uniform vec3 cMeans;
@@ -540,14 +543,41 @@ if (cOn > 0.5) {
     detail = mix(detail, 1.0 + (detail - 1.0) * 0.15, cHair.x);
   }
   // Sous les yeux : la texture d'origine y est peinte lisse et claire (un croissant sans poil, le « fard » sous l'œil
-  // du british, du chartreux, de l'européen) ; son relief y est remplacé par le grain du pelage voisin, jamais plus clair.
+  // du british, du chartreux, de l'européen), et sombre au coin intérieur (une tache de larme sur le maine coon) ;
+  // son relief y est pris sur la joue voisine (cEyeUv : décalage de texture mesuré sur le modèle), haute et basse
+  // fréquence comme ailleurs (la basse : la texture lue floue, à un niveau de mip plus haut). Sans décalage (chaton) :
+  // le grain du pelage, jamais plus clair.
   if (cTexMode > 0.5) {
     float sideE = vCmpPos.x > cMisc.x ? 1.0 : -1.0;
     vec3 dE = (vCmpPos - vec3(cMisc.x + sideE * cEye.x, cEye.y, cEye.z)) / max(0.003, cIris.y);
     float deE = length(dE);
-    float ringE = vCmpPart.z * (1.0 - vCmpPart.x) * smoothstep(0.95, 1.15, deE) * (1.0 - smoothstep(2.2, 3.0, deE)) * (1.0 - smoothstep(-0.6, 0.2, dE.y));
-    float grainE = exp((cmpNoise(CMP_ROT * vCmpPos * 900.0) - 0.5) * 0.5 * cMeans.z - 0.04);
-    detail = mix(detail, min(detail, 1.0) * grainE, ringE);
+    vec2 offE = sideE > 0.0 ? cEyeUv.xy : cEyeUv.zw;
+    float ringE = vCmpPart.z * (1.0 - vCmpPart.x) * smoothstep(0.95, 1.15, deE);
+    #ifdef USE_MAP
+    if (dot(offE, offE) > 0.0) {
+      // (tout le dessous et les deux coins, jusqu'à 3 rayons du globe ; pas l'arête du nez entre les yeux : la joue
+      // prêtée n'y est pas la même à gauche et à droite — une couture — et l'arête y prenait le bord sombre de l'œil)
+      ringE *= (1.0 - smoothstep(2.6, 3.4, deE)) * (1.0 - smoothstep(-0.6, 0.15, dE.y))
+        * smoothstep(0.3, 1.0, abs(vCmpPos.x - cMisc.x) / max(0.003, cIris.y));
+      if (ringE > 0.0) {
+        vec2 uvE = vMapUv + offE;
+        float lS = dot(texture2D(map, uvE).rgb, LUM);
+        float lB = dot(texture2D(map, uvE, 4.0).rgb, LUM);
+        float llS = log(max(lS, 1e-3));
+        float llB = log(max(lB, 1e-3));
+        float wS = smoothstep(cMeans.x + 0.15 * (cMeans.y - cMeans.x), cMeans.x + 0.85 * (cMeans.y - cMeans.x), llB);
+        float mS = mix(cMeans.x, cMeans.y, wS);
+        float detS = exp(clamp((llS - llB) * cMeans.z + (llB - mS) * 0.12, -0.9, 0.45));
+        detS = mix(detS, 1.0 + (detS - 1.0) * 0.15, cHair.x);
+        detail = mix(detail, detS, ringE);
+      }
+    } else
+    #endif
+    {
+      ringE *= (1.0 - smoothstep(2.2, 3.0, deE)) * (1.0 - smoothstep(-0.6, 0.2, dE.y));
+      float grainE = exp((cmpNoise(CMP_ROT * vCmpPos * 900.0) - 0.5) * 0.5 * cMeans.z - 0.04);
+      detail = mix(detail, min(detail, 1.0) * grainE, ringE);
+    }
   }
   vec3 coat = catCoat(vCmpPos, vCmpPart);
   float l = dot(coat, LUM);
@@ -690,7 +720,7 @@ export function catCoatMaterial(src, shared, opts) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.55, cHair.x), 0.45, cWet);');
   };
-  mat.customProgramCacheKey = () => 'cat-coat-v7';
+  mat.customProgramCacheKey = () => 'cat-coat-v8';
   return mat;
 }
 

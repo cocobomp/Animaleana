@@ -136,6 +136,12 @@ comparaisons), dans la même lumière et au même cadrage.
   oreilles, pattes et queue foncés), écaille, tricolore, bicolore ; blancs : gants (sacré de Birmanie), mitaines
   (ragdoll), plastron, bicolore, van, smoking. Peau nue et plis (sphynx), poil frisé (devon rex), peluche (british,
   chartreux) par relief. Iris recoloré (bleu des points, cuivre du chartreux, vairons), truffe selon la robe.
+  Sous les yeux de l'adulte, la texture est peinte lisse et claire (un croissant sans poil) et sombre au coin
+  intérieur (tache de larme du maine coon) : le shader y lit le relief de la joue voisine (`cEyeUv`, décalage de
+  texture mesuré sur les sommets de la tête dans `realCatBase` ; basse fréquence lue floue, au mip 4). Relief du
+  dessous de l'œil rapporté au front, vue de face (basse qualité) : british 0,52 → 1,17, chartreux 0,92 → 1,36,
+  scottish fold 0,51 → 1,30, maine coon 0,96 → 1,82. Pas sur l'arête du nez (couture entre la joue prêtée à gauche
+  et à droite). Chaton (yeux peints) : inchangé. Coût : deux lectures de texture de plus, seulement autour des yeux.
 - **Poil long** : en haute qualité, couches de poil (3 à 5) sur la version allégée, de près seulement
   (`CAT_SHELL_DIST`), brins flous mélangés par transparence (un halo doux) ; plus des mèches de pinceaux.
 - **Animation** (`RealCatAnim`) : allure choisie par la vitesse avec hystérésis, chaque clip joué à vitesse réelle ÷

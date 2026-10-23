@@ -289,6 +289,9 @@ const COLOR_F = /* glsl */ `
   float light = smoothstep(0.3, 0.75, l);
   float d = mix(detail, sqrt(detail), light * 0.75);
   d = mix(d, max(d, 0.9), light * 0.8 * (1.0 - hoof) * (1.0 - horn));
+  // (tête claire — face blanche du taureau Hereford, Charolais, Prim'Holstein… — : grain resserré autour de 1 ; celui de
+  // la photo du taureau marbrait la face de crème et de gris, avec un croissant clair autour de l'œil)
+  d = mix(d, clamp(d, 0.95, 1.02), head * (1.0 - ear) * light * (1.0 - horn));
   // (veau : poil plus doux, grain adouci)
   d = mix(d, sqrt(d), cStyle.z * 0.5);
   // (creux du grain d'une robe claire un peu réchauffés : gris neutres, ils viraient au bleu sous le ciel — face du

@@ -83,7 +83,7 @@ bonnet anti-mouches, mère pour la tétée, râtelier, `xray` : sol transparent)
 - **Highland** : vraies mèches serrées (1 100 sur le corps), étroites (4,8 cm au plus), en deux cartes croisées, texture
   de brins fins (`lockTexture('fine')`) ; frange dense qui couvre les yeux (320 mèches) ; veau poilu (poil à 75 %, frange
   à 70 %, presque autant de mèches). **Coût** : vache 2 524 cartes (15 144 triangles), veau 2 404 (14 424), taureau
-  1 892 (11 352) — il y en avait 920 et 632 ; un seul appel de dessin, caché au loin (au-delà de 12 m en basse).
+  1 892 (11 352) — il y en avait 920 et 632 ; un seul appel de dessin, caché au loin (au-delà de 16 m en basse).
 - **Mangeoire** : les petites races (Highland, Hérens, Bretonne) relèvent l'encolure jusqu'au foin (bouche à 61-62 cm
   pour toutes les races, au lieu de 41 cm) ; le veau trop petit pour atteindre le bac broute au pied de la mangeoire
   (plus de museau dans le bac).
@@ -162,8 +162,13 @@ Rocketbox. Les temps d'image sont bruités (1 à 4 images par seconde) ; appels 
 | haute, 20 | 815 → 337 | 1 197 k → 523 k | 700 k → 95 k | 23,8 → 23,2 ms | 0,4 → 4,9 ms |
 
 Géométries en mémoire (basse, 20) 947 → 360, textures 161 → 58, tas JS 171 → 159 Mo. Une vache = 3 appels de dessin
-(robe, yeux, ombre de contact ; + 1 pour les mèches de la Highland de près). Au loin (au-delà de 12 m en basse, 26 m
-en haute), version réduite, mèches cachées et animation une image sur deux ; hors champ, une image sur trois.
+(robe, yeux, ombre de contact ; + 1 pour les mèches de la Highland de près). Au loin (au-delà de 16 m de l'œil en
+basse — la caméra normale du téléphone voit les vaches à 10-14 m —, 26 m en haute ; jamais raccourcie pour le veau),
+version réduite, mèches cachées et animation une image sur deux ; hors champ, une image sur trois. Coût du seuil de
+16 m (basse, caméra du jeu, 10 vaches à 7-14 m, toutes en maillage complet) : +33 k triangles, mêmes appels de dessin,
+Game.frame au bruit près. **Licol et masque anti-mouches** : posés sur la vraie tête (`ruminantGear.js` : la tête du
+gabarit coupée en tranches, rayon de la peau tout autour) — muserolle en biais autour du museau, montants, têtière
+devant les oreilles, anneau de la longe sous le menton ; masque en coque claire sur le front et les yeux.
 L'animation coûte plus que la procédurale (mixeur, sabots tenus, sol mesuré) mais le rendu, qui dominait, est divisé
 par 2 à 7. Construction d'une vache : 1 à 40 ms dans le navigateur (le premier gabarit ≈ 0,1 s, partagé ensuite ;
 la vache procédurale : 70 à 100 ms).

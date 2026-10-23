@@ -138,7 +138,9 @@ donnait que 3 à 17 images en 10 s : les temps d'image sont bruités, les appels
 | haute, 20 | 948 → 313 | 2 192 k → 489 k | 925 k → 50 k | 29,8 → 27,0 ms | 0,3 → 5,7 ms |
 
 Géométries en mémoire (basse, 20) 881 → 333, textures 170 → 55, tas JS 136 → 130 Mo. Une chèvre = 2 appels de
-dessin (robe et ombre de contact ; + 1 pour les mèches du poil long de près). Au loin (au-delà de 7 m en basse, 18 m en
-haute), version réduite, mèches cachées et animation une image sur deux ; hors champ, une image sur trois. L'animation
+dessin (robe et ombre de contact ; + 1 pour les mèches du poil long de près). Au loin (au-delà de 15 m de l'œil en
+basse — la caméra normale du téléphone voit les chèvres à 9-12 m —, 18 m en haute ; jamais raccourcie pour le chevreau),
+version réduite, mèches cachées et animation une image sur deux ; hors champ, une image sur trois. Coût du seuil de
+15 m (basse, caméra du jeu, 10 et 20 chèvres) : +8 à +15 k triangles, mêmes appels de dessin. L'animation
 coûte plus que la procédurale (mixeur, sabots tenus, sol mesuré : ≈ 0,1 ms par chèvre au loin, ≈ 0,3 ms de près) mais
 le rendu, qui dominait, est divisé par 2 à 4. Construction d’une chèvre : 3 à 15 ms dans le navigateur (le premier gabarit ≈ 0,3 s, partagé ensuite).

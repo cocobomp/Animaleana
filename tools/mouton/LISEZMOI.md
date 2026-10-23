@@ -119,6 +119,10 @@ Moutons à la bergerie, caméra qui voit tout le troupeau (`perf.mjs` de la vér
 | haute, 10 | 609 → 288 | 763 k → 463 k | 324 k → 24 k | 21,4 → 16,4 ms | 0,2 → 1,1 ms |
 | haute, 20 | 931 → 313 | 1 099 k → 492 k | 666 k → 52 k | 55 → 24 ms | 0,3 → 3,2 ms |
 
-Géométries en mémoire (basse, 20) 937 → 333, textures 114 → 59. Au loin (au-delà de 7 m en basse, 18 m en haute),
-version réduite et animation une image sur deux ; hors champ, une image sur trois. Construction d'un mouton :
+Géométries en mémoire (basse, 20) 937 → 333, textures 114 → 59. Au loin (au-delà de 15 m de l'œil en basse — la
+caméra normale du téléphone voit le troupeau à 9-12 m ; 13,5 m pour revenir au maillage complet —, 18 m en haute ; la
+distance n'est jamais divisée par une taille inférieure à 1 : l'agneau garde son maillage aussi loin que l'adulte),
+version réduite, mèches de l'islandais cachées et animation une image sur deux ; hors champ, une image sur trois. Coût
+du seuil de 15 m (basse, caméra du jeu, 10 et 20 moutons) : +12 à +16 k triangles dans la scène, mêmes appels de
+dessin, Game.frame inchangé au bruit près. Construction d'un mouton :
 ≈ 6 ms (node), gabarit partagé ensuite.

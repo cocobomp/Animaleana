@@ -544,13 +544,12 @@ describe('pieds posés en virage', () => {
       return v.length ? (v.reduce((x, y) => x + y, 0) / v.length) * 100 / s : 0;
     });
   };
-  it('pattes courtes : le postérieur intérieur ne glisse plus de 8 à 9 cm par appui (correction latérale plus large)', () => {
-    for (const breed of ['teckel', 'cocker', 'cavalier']) {
-      // (FL, FR, HL — intérieur —, HR ; avant : HL 9,2 / 7,7 / 8,1 cm, HR 9,8 / 9,7 / 9,8 ; après : HL 4,9 / 1,7 / 2,2,
-      // HR 5,8 / 4,1 / 4,3)
-      const [, , hl, hr] = slip(breed);
-      expect(hl, breed).toBeLessThan(6);
-      expect(hr, breed).toBeLessThan(7.5);
+  it('pattes courtes : aucun pied posé ne glisse de plus de 2 cm par appui (correction latérale jusqu\'à 0,6 rad)', () => {
+    for (const breed of ['teckel', 'corgi', 'cocker', 'cavalier', 'chihuahua', 'jack_russell']) {
+      // (FL, FR, HL — intérieur —, HR ; avant : HL 9,2 / 7,7 / 8,1 cm, HR 9,8 / 9,7 / 9,8 ; finitions 1 — 0,38 rad — :
+      // teckel HL 4,8 HR 5,7, corgi 3,2 / 4,4, jack russell 3,1 / 5,0 ; finitions 2 : 1,3 cm au plus)
+      const r = slip(breed);
+      for (const x of r) expect(x, breed).toBeLessThan(2);
     }
   });
 });

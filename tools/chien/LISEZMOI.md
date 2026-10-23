@@ -334,3 +334,7 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   descendue au sol du tronc, les antérieurs allongés passaient le coude 4 cm sous le sol (les clips des gabarits ne
   passent pas par `ground_fix`) : le jeu relevait tout le chien sur ses coudes, tronc à 4 cm du sol, à genoux croupe
   haute. Hanches du galgo couché 16,9 → 13,9 cm (labrador 14,6), whippet 12,9 → 9,6, caniche 10,3 → 7,9 ; tronc posé.
+- **Pieds posés en virage serré** (jeu, `footLock`) : la correction latérale du membre va jusqu'à 0,6 rad (0,38 avant) —
+  au pas en virage à 1,2 rad/s, le pied posé qui glissait le plus par appui : teckel 5,7 → 1,3 cm, corgi 4,4 → 0,8, jack
+  russell 5,0 → 1,0, cocker 4,3 → 1,0, cavalier 4,2 → 1,0, chihuahua 3,9 → 1,0 ; en ligne droite inchangé (0,1 à 0,2 cm),
+  labrador inchangé (0,4).

@@ -248,11 +248,17 @@ const COLOR_F = /* glsl */ `
     }
   } else if (pat > 1.5) {
     // Hereford : rouge ; tête, crête de l'encolure, fanon et poitrail, ventre, bas des pattes et toupillon blancs.
-    float neck = (1.0 - head) * (1.0 - tail) * (1.0 - leg * 0.7) * smoothstep(cLand.w - 0.1 * L, cLand.w + 0.06 * L, p.z);
+    // (membres franchement retirés du poitrail et du ventre blancs, dès leur attache — legU — : l'avant-bras et la cuisse
+    // restent rouges jusqu'au genou et au jarret, chaussette blanche dessous ; retirés à 70 % et seulement au-delà de la
+    // moitié du masque, le blanc du poitrail et du ventre descendait sur le haut du membre, puis une bande rouge
+    // au-dessus du genou, puis la chaussette : un bracelet rouge sur une patte blanche)
+    float legU = smoothstep(0.14, 0.42, vCMask.z) * (1.0 - head);
+    float neck = (1.0 - head) * (1.0 - tail) * (1.0 - legU) * smoothstep(cLand.w - 0.1 * L, cLand.w + 0.06 * L, p.z);
     float brisket = neck * (1.0 - smoothstep(0.4, 0.66, hl + (n2 - 0.5) * 0.2));
     float crest = neck * smoothstep(cLand.w + 0.25 * L, cLand.w + 0.45 * L, p.z) * smoothstep(0.86, 1.0, hl + (n2 - 0.5) * 0.1);
     float face = head * (1.0 - ear * 0.85);
-    float w = max(max(face, max(brisket, crest)), max(bellyW, max(lowLeg, tuft)));
+    float bellyH = smoothstep(-0.012, 0.012, wb - legU * 1.2) * (1.0 - udder);
+    float w = max(max(face, max(brisket, crest)), max(bellyH, max(lowLeg, tuft)));
     col = mix(cBase, cWhite, smoothstep(0.35, 0.65, w + (n2 - 0.5) * 0.12));
   }
   // Mufle clair (Canadienne) : un anneau fauve autour du nez, le nez reste sombre.

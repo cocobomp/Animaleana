@@ -38,8 +38,11 @@ export const GOAT_BUILDS = {
 /** Chevreau (stade « bébé ») : tête plus grosse, pattes plus longues, oreilles plus grandes, ni cornes ni barbe. */
 export const KID = { head: 1.28, legs: 1.12, ears: 1.12 };
 const YOUNG = 0.45; // (le jeune est à mi-chemin, un peu plus près de l'adulte)
-/** Bouc : cornes et barbe plus grandes, un peu plus massif. */
-export const BUCK = { horns: 1.45, beard: 1.5, size: 1.05 };
+/**
+ * Bouc adulte : cornes et barbe plus grandes, nettement plus grand que la chèvre (× 1,12), tête plus forte, encolure,
+ * épaules et poitrail épaissis (neck : m de peau en plus, goatReal.js shapeFor — l'encolure du bouc fait ≈ 25 % de plus).
+ */
+export const BUCK = { horns: 1.45, beard: 1.5, size: 1.12, head: 1.06, neck: 0.04 };
 /** Mamelle : bouc et chevreau (petite), chèvre vide et pleine (échelle de l'os). */
 export const UDDER = { small: 0.28, empty: 0.72, full: 1.18 };
 
@@ -80,7 +83,12 @@ export function goatBuild(look = {}, { breed = null, stage = 'adult', sex = 'f' 
     // (poil des chevreaux : plus court)
     B.long *= 1 - k * 0.7;
   }
-  if (B.buck && B.stage === 'adult') B.size *= BUCK.size;
+  B.mass = 0;
+  if (B.buck && B.stage === 'adult') {
+    B.size *= BUCK.size;
+    B.head *= BUCK.head;
+    B.mass = BUCK.neck;
+  }
   // Couleurs : celles de l'animal (look.coat, look.secondary : mélangées chez un chevreau croisé), arrangées selon le
   // motif de la race.
   const coat = look.coat ?? 0xf3efe6;

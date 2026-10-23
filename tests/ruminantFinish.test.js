@@ -346,7 +346,9 @@ describe('chèvre contre la barrière (en jeu : browseFence)', () => {
     return out;
   };
 
-  it.each([['alpine', 'f'], ['col_noir', 'm']])('%s (%s) : ni la tête ni les sabots dans les lisses, onglons posés sur la lisse du haut, se dresse en 1,1 s', (breed, sex) => {
+  // (les boucs, 12 % plus grands : leur clip lève les antérieurs jusqu'à 15 cm au-dessus de la lisse — RealGoatAnim.railPitch
+  // les y ramène, la glissade les pose au milieu de la lisse)
+  it.each([['alpine', 'f'], ['col_noir', 'm'], ['saanen', 'm'], ['alpine', 'm']])('%s (%s) : ni la tête ni les sabots dans les lisses, onglons posés sur la lisse du haut, se dresse en 1,1 s', (breed, sex) => {
     const r = fenceRun(breed, sex);
     if (process.env.RUM_LOG) console.log('BARRIERE', breed, JSON.stringify({ ...r, phases: [...r.phases], upFront: [Math.min(...r.upFront), Math.max(...r.upFront)], upHind: [Math.min(...r.upHind), Math.max(...r.upHind)] }));
     expect([...r.phases]).toEqual(expect.arrayContaining(['step', 'settle', 'up', 'off', 'down', 'back']));
@@ -633,6 +635,40 @@ describe('tête claire des vaches et des taureaux : plus de strie d\'ombre derri
       expect(trunk).toBeGreaterThan(200);
       expect(trunkIn).toBe(0);
       md.dispose?.();
+    }
+  });
+});
+
+describe('bouc : nettement plus grand et plus massif que la chèvre', () => {
+  it('× 1,12, tête plus forte, encolure et poitrail épaissis (ni la tête ni l\'arrière du corps touchés)', () => {
+    for (const breed of ['saanen', 'alpine', 'col_noir', 'poitevine']) {
+      const f = buildRealGoatModel(lookOf('goat', breed, { sex: 'f' }), breed, GG);
+      const m = buildRealGoatModel(lookOf('goat', breed, { sex: 'm' }), breed, GG);
+      expect(m.size / f.size).toBeGreaterThanOrEqual(1.1);
+      expect(m.size / f.size).toBeLessThanOrEqual(1.15);
+      expect(m.headBone.scale.x / f.headBone.scale.x).toBeGreaterThan(1.03);
+      const pf = f.mesh.geometry.attributes.position;
+      const pm = m.mesh.geometry.attributes.position;
+      const mask = f.mesh.geometry.attributes.goatMask;
+      const land = f.uniforms.gLand.value;
+      let neck = 0, neckN = 0, neckMax = 0, other = 0;
+      for (let i = 0; i < pf.count; i++) {
+        const d = Math.hypot(pm.getX(i) - pf.getX(i), pm.getY(i) - pf.getY(i), pm.getZ(i) - pf.getZ(i));
+        const z = pf.getZ(i);
+        if (mask.getY(i) > 0.9 || z < land.w - 0.2) other = Math.max(other, d);
+        else if (z > land.w + 0.06 && mask.getY(i) < 0.05 && pf.getY(i) > land.x + 0.1) {
+          neck += d;
+          neckN++;
+          neckMax = Math.max(neckMax, d);
+        }
+      }
+      // (encolure : 2,5 à 6 cm de peau en plus, à la taille 1 — avant le × 1,12)
+      expect(neckN).toBeGreaterThan(30);
+      expect(neck / neckN).toBeGreaterThan(0.025);
+      expect(neckMax).toBeLessThan(0.06);
+      expect(other).toBeLessThan(0.0005);
+      f.dispose?.();
+      m.dispose?.();
     }
   });
 });

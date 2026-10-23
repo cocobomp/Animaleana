@@ -451,7 +451,9 @@ const PUSH_V = /* glsl */ `
   // Mèches qui pendent (robe soyeuse du yorkshire, dogParts.js silkyStrands ; cmpPom < 0 : hauteur jusqu'à l'accroche,
   // tous les sommets d'une mèche ont les poids de son accroche) : la mèche entière tourne autour de son accroche pour
   // retomber à la verticale, et s'étale au sol au lieu d'y entrer (assis ou couché, raide, elle partait de travers en
-  // planche et plongeait dans le sol).
+  // planche et plongeait dans le sol) — couchée vers l'extérieur, du côté de son flanc (repos : x de part et d'autre
+  // de cMisc.x), de la longueur qui passerait sous le sol (aplatie sur place, elle faisait sous le chien couché une
+  // palissade de planches verticales).
   #ifdef USE_SKINNING
   if (cmpPom < 0.0) {
     vec3 piv = (skinMatrix * vec4(position + vec3(0.0, -cmpPom, 0.0), 1.0)).xyz;
@@ -465,7 +467,12 @@ const PUSH_V = /* glsl */ `
       off = off * cs + cross(ka, off) * sn + ka * dot(ka, off) * (1.0 - cs);
     }
     transformed = piv + off;
-    transformed.y = max(transformed.y, 0.004);
+    float under = 0.004 - transformed.y;
+    if (under > 0.0) {
+      vec2 out2 = vec2(position.x >= cMisc.x ? 1.0 : -1.0, 0.0) + off.xz * 6.0;
+      transformed.xz += normalize(out2) * under;
+      transformed.y = 0.004 + 0.002 * min(1.0, under * 40.0);
+    }
   }
   #endif
 }`;

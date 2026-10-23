@@ -320,3 +320,11 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   teckel sautait de 5 cm en une image). Couché et endormi par des clips de gabarit (`lie`, `sleep` dans les clips du
   court et du trapu, `gab_lie`) : essayé, pas retenu — corps posé trop haut (antérieurs à 7,8 cm, tronc à 8,5 cm du sol
   pour le teckel).
+- **Couché et endormi des races du jack aux membres changés** (teckel, corgi, carlin, bouledogue, yorkshire, spitz nain ;
+  jeu, `lieSettle`) : antérieurs posés — l'avant-bras s'abaisse au coude jusqu'à poser le poignet à l'épaisseur de la
+  main, la main se pose à plat au poignet, puis, s'il le faut, le bras descend à l'épaule (avant-bras gardant son
+  inclinaison) ; antérieurs 3,4 / 3,7 / 4,6 / 6,1 / 5,5 / 4,7 cm → 0,0 à 0,1 cm du sol, poitrail jamais dessous (tronc
+  1,2 à 3,9 cm). Yorkshire : la jupe de peau sous le ventre (`silkDrop` de `deformDog`, `bodySilk`) et la peau de l'aine
+  aux poids des deux cuisses (`bodyMid`) ne sont plus des appuis couché — hanches 7,9 → 2,7 cm, pieds arrière 2,6 → 0 cm ;
+  ses mèches (shader, `cmpPom` < 0) se couchent au sol vers l'extérieur de la longueur qui passerait dessous (avant :
+  aplaties sur place, une palissade de planches sous le chien couché ou assis).

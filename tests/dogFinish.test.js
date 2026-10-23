@@ -211,15 +211,32 @@ describe('assis et couché des petits chiens', () => {
     }
   });
 
-  it('couchés des races du jack aux membres changés : postérieurs repliés au sol (avant : pieds arrière à 4 à 6 cm)', () => {
-    for (const breed of ['teckel', 'corgi', 'carlin', 'bouledogue']) {
-      const { md, s } = dog(breed);
-      for (let i = 0; i < 300; i++) md.anim.update(1 / 60, st({ size: s, posture: 'lie' }));
-      const p = poseOf(md, s);
-      expect(Math.max(p.feet[2], p.feet[3])).toBeLessThan(1.2);
-      expect(Math.min(...p.feet)).toBeGreaterThan(-0.8);
-      md.dispose();
+  it('couchés et endormis des races du jack aux membres changés : postérieurs repliés au sol, antérieurs posés, poitrail jamais sous le sol', () => {
+    // (avant : pieds arrière à 4 à 6 cm ; finitions 2 — antérieurs allongés devant à 3,4 cm (teckel), 3,7 (corgi), 4,6
+    // (carlin), 6,1 (bouledogue), 5,5 (yorkshire), 4,7 (spitz nain) du sol)
+    for (const breed of ['teckel', 'corgi', 'carlin', 'bouledogue', 'yorkshire', 'spitz_nain']) {
+      for (const sleeping of [false, true]) {
+        const { md, s } = dog(breed);
+        for (let i = 0; i < 300; i++) md.anim.update(1 / 60, st({ size: s, posture: sleeping ? 'sleep' : 'lie', sleeping }));
+        const p = poseOf(md, s);
+        expect(Math.max(p.feet[2], p.feet[3]), breed).toBeLessThan(1.2);
+        expect(Math.max(p.feet[0], p.feet[1]), breed).toBeLessThan(1);
+        expect(Math.min(...p.feet), breed).toBeGreaterThan(-0.8);
+        expect(p.trunk, breed).toBeGreaterThan(-0.3);
+        md.dispose();
+      }
     }
+  });
+
+  it('yorkshire couché : posé sur le ventre (la jupe de peau et les mèches s\'étalent au sol), croupe basse, pieds arrière posés', () => {
+    // (avant : hanches à 7,9 cm, pieds arrière à 2,6 cm — le corps reposait sur la jupe de peau sous le ventre et sur
+    // la peau de l'aine tirée par les cuisses repliées ; carlin, du même gabarit : 4,0 cm)
+    const { md, s } = dog('yorkshire');
+    for (let i = 0; i < 300; i++) md.anim.update(1 / 60, st({ size: s, posture: 'lie' }));
+    const p = poseOf(md, s);
+    expect(p.hipY).toBeLessThan(4);
+    expect(Math.max(p.feet[2], p.feet[3])).toBeLessThan(1);
+    md.dispose();
   });
 });
 

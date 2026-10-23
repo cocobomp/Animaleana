@@ -706,6 +706,7 @@ export function deformDog(base, B) {
   //    restait visible, froissé, devant ou sous la coque.)
   // (le poil long ne les ressort pas : voir 9)
   const hidden = new Float32Array(n);
+  const silkDrop = B.silky ? new Float32Array(n) : null;
   // (oreilles modelées — pendantes, en rose — : l'oreille d'origine des deux modèles est cachée de même, voir dogParts.js)
   const hideSet = base.earFlap && (B.ears === 'pointed' || B.ears === 'bat' || pendantEars(B)) ? base.earFlap : base.earHide && pendantEars(B) ? base.earHide : null;
   if (hideSet) {
@@ -1057,7 +1058,12 @@ export function deformDog(base, B) {
       } else p.addScaledVector(_w, (B.fur * k * nz - shave) * (1 - hidden[i]));
       // Poil soyeux (yorkshire) : la robe tombe, les flancs descendent en jupe sur le haut des membres (jamais les
       // pieds, posés au sol avant).
-      if (B.silky) p.y -= B.silky * B.fur * 2.4 * (1 - smooth(0.1, 0.8, h)) * (1 - head) * (1 - tail) * (1 - ear) * (1 - 0.5 * legSum) * (1 - paw) * (1 - hidden[i]);
+      if (B.silky) {
+        const drop = B.silky * B.fur * 2.4 * (1 - smooth(0.1, 0.8, h)) * (1 - head) * (1 - tail) * (1 - ear) * (1 - 0.5 * legSum) * (1 - paw) * (1 - hidden[i]);
+        p.y -= drop;
+        // (couché : cette jupe de peau s'écrase au sol, elle n'est pas un appui — voir contactPoints, bodySilk)
+        silkDrop[i] = drop;
+      }
       // Franges (golden, setter, épagneuls, bernois) : le poil long pend — sous le ventre, à l'arrière des membres
       // (culotte des cuisses, franges des avant-bras), au poitrail. Poussé vers le bas et l'arrière plutôt que le long de
       // la normale : la silhouette se frange au lieu de gonfler (le gonflement seul ne se voyait pas).
@@ -1102,7 +1108,7 @@ export function deformDog(base, B) {
     _w.fromArray(N, i * 3).add(_v.fromArray(nDef, i * 3)).sub(_u.fromArray(coat.nrmCalc, i * 3)).normalize();
     N.set([_w.x, _w.y, _w.z], i * 3);
   }
-  return { pos: P, nrm: N, heads: H, eyePos: EP, eyeNrm: EN, hidden };
+  return { pos: P, nrm: N, heads: H, eyePos: EP, eyeNrm: EN, hidden, silkDrop: B.silky ? silkDrop : null };
 }
 
 /**
@@ -2909,7 +2915,16 @@ class RealDogAnim {
     md.root.updateMatrixWorld(true);
     this.bodyPts = [...S.contact[0]].map(infl);
     // (races du jack : peau des antérieurs, pas un appui « hors pieds avant » pour l'assise — voir settleSit)
-    this.bodyFront = base.kind === 'jack' ? Uint8Array.from([...S.contact[0]], (i) => (W.leg[i * 4] + W.leg[i * 4 + 1] > 0.5 ? 1 : 0)) : null;
+    // (1 ou 2 : antérieur gauche ou droit)
+    this.bodyFront = base.kind === 'jack' ? Uint8Array.from([...S.contact[0]], (i) => (W.leg[i * 4] > 0.5 ? 1 : W.leg[i * 4 + 1] > 0.5 ? 2 : 0)) : null;
+    // (races du jack : peau du ventre entre les cuisses, aux poids des deux postérieurs — couché, les cuisses repliées
+    // l'entraînaient de 7 cm vers le bas : le yorkshire reposait sur cette pointe, croupe haute, pieds arrière à 2,6 cm)
+    this.bodyMid = base.kind === 'jack' ? Uint8Array.from([...S.contact[0]], (i) => (W.leg[i * 4 + 2] > 0.08 && W.leg[i * 4 + 3] > 0.08 ? 1 : 0)) : null;
+    // (yorkshire : de combien la jupe de peau descend sous le ventre — couché, elle s'écrase au sol et le corps se pose
+    // sur le ventre : posé sur elle, il restait 4 cm plus haut, pieds arrière en l'air)
+    this.bodySilk = base.kind === 'jack' && S.D.silkDrop ? Float32Array.from([...S.contact[0]], (i) => S.D.silkDrop[i]) : null;
+    // (peau du tronc seule — ni membres : couché, voir lieSettle)
+    this.bodyTrunk = Uint8Array.from([...S.contact[0]], (i) => (W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] < 0.3 ? 1 : 0));
     const tb = md.tailBones;
     this.tailPts = [...S.contact[1]].map((i) => {
       let best = 0;
@@ -3326,10 +3341,12 @@ class RealDogAnim {
       target = !air && this.gait !== 'run' ? -low : Math.max(0, -low);
     } else {
       let lowB = Infinity;
-      for (const pt of this.bodyPts) {
+      const skipMid = this.lying > 0.5 ? this.bodyMid : null;
+      for (let q = 0; q < this.bodyPts.length; q++) {
+        if (skipMid?.[q]) continue;
         _w.set(0, 0, 0);
-        for (const [b, p, w] of pt) _w.addScaledVector(_v.copy(p).applyMatrix4(b.matrixWorld), w);
-        const y = _w.applyMatrix4(_m).y;
+        for (const [b, p, w] of this.bodyPts[q]) _w.addScaledVector(_v.copy(p).applyMatrix4(b.matrixWorld), w);
+        const y = _w.applyMatrix4(_m).y + (skipMid && this.bodySilk ? this.bodySilk[q] : 0);
         if (y < lowB) lowB = y;
       }
       target = Math.max(-low, Number.isFinite(lowB) ? -(lowB + this.bodyAllow) : -Infinity);
@@ -3384,6 +3401,9 @@ class RealDogAnim {
     // reposé (voir foldHind).
     const lieSettle = (this.base.kind === 'jack' && this.gabarit) || this.gabarit === 'long' ? Math.min(1, (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.lie_down ?? 0) * smooth(0.4, 1, prog('lie_down')) + (this.w.get_up ?? 0) * (1 - smooth(0, 0.5, prog('get_up')))) : 0;
     if (!(lieSettle > 0.01)) this.lieTilt = 0;
+    // (couché : la peau du ventre entre les cuisses — poids des deux postérieurs — n'est pas un appui ; voir bodyMid)
+    this.lying = lieSettle;
+    const skipMid = lieSettle > 0.01 ? this.bodyMid : null;
     if (lieSettle > 0.01 && this.trick?.clip !== 'rollover') {
       this.foldHind(lieSettle, true);
       // (poitrine profonde des lévriers posée, croupe encore en l'air : le corps bascule, l'avant sur son appui, jusqu'à
@@ -3395,8 +3415,9 @@ class RealDogAnim {
         let fz = 0;
         let ry = Infinity;
         let rz = 0;
-        for (const pt of this.bodyPts) {
-          const y = this.skinY(pt);
+        for (let q = 0; q < this.bodyPts.length; q++) {
+          if (skipMid?.[q]) continue;
+          const y = this.skinY(this.bodyPts[q]) + (this.bodySilk ? this.bodySilk[q] : 0);
           if (_w.z > zMid ? y < fy : y < ry) {
             if (_w.z > zMid) [fy, fz] = [y, _w.z];
             else [ry, rz] = [y, _w.z];
@@ -3419,7 +3440,8 @@ class RealDogAnim {
       }
       this.lieTilt = lt;
       let lowB = Infinity;
-      for (const pt of this.bodyPts) lowB = Math.min(lowB, this.skinY(pt));
+      const silk = this.bodySilk;
+      for (let q = 0; q < this.bodyPts.length; q++) if (!skipMid?.[q]) lowB = Math.min(lowB, this.skinY(this.bodyPts[q]) + (silk ? silk[q] : 0));
       for (let l = 0; l < md.legs.length; l++) {
         for (const p of this.solePts[l]) lowB = Math.min(lowB, _v.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld).applyMatrix4(_m).y);
       }
@@ -3427,6 +3449,65 @@ class RealDogAnim {
       if (Number.isFinite(lowB) && Math.abs(lowB + this.bodyAllow * 0.5) > 0.002) {
         md.body.position.y -= (lowB + this.bodyAllow * 0.5) * lieSettle;
         md.root.updateMatrixWorld(true);
+      }
+      // (races du jack aux membres changés — teckel, corgi, carlin, bouledogue, yorkshire, spitz nain — : antérieurs
+      // allongés devant, qui flottaient de 3 à 6 cm. L'avant-bras s'abaisse au coude jusqu'à poser le poignet (à
+      // l'épaisseur de la main au-dessus du sol), la main gardant son inclinaison — tournée d'autant en sens inverse au
+      // poignet — ; puis la main se pose à plat au poignet. Si le poignet ne peut descendre assez, le bras descend à
+      // l'épaule, l'avant-bras gardant son inclinaison. Le poitrail ne bouge pas. — En posant la main d'un seul coup de
+      // coude, le poignet passait 1 à 1,4 cm sous le sol.)
+      const sole = (l) => {
+        let lo = Infinity;
+        for (const p of this.solePts[l]) {
+          _v.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld).applyMatrix4(_m);
+          if (_v.y < lo) [lo] = [_v.y, _q2v.copy(_v)];
+        }
+        return lo;
+      };
+      const head = (b, out) => out.setFromMatrixPosition(b.matrixWorld).applyMatrix4(_m);
+      for (const l of this.base.kind === 'jack' && this.gabarit ? [0, 1] : []) {
+        const leg = md.legs[l];
+        // (épaisseur de la main : plus grande distance de l'articulation des doigts à la sole)
+        const r = this.solePts[l].reduce((a, p) => Math.max(a, p.length()), 0);
+        for (let pass = 0; pass < 2; pass++) {
+          if (!(sole(l) > 0.003)) break;
+          const wr = head(leg.fetlock, _u);
+          if (!(wr.y > r + 0.002)) break;
+          const a = raiseAngle(head(leg.knee, _w), wr, r, 0.9) * lieSettle;
+          if (!(Math.abs(a) > 1e-4)) break;
+          this.turn(leg.knee, AX, a);
+          leg.knee.updateMatrixWorld(true);
+          this.turn(leg.fetlock, AX, -a);
+          leg.fetlock.updateMatrixWorld(true);
+        }
+        for (let pass = 0; pass < 2; pass++) {
+          if (!(sole(l) > 0.003)) break;
+          const a = raiseAngle(head(leg.fetlock, _w), _q2v, 0.001, 0.9) * lieSettle;
+          if (!(Math.abs(a) > 1e-4)) break;
+          this.turn(leg.fetlock, AX, a);
+          leg.fetlock.updateMatrixWorld(true);
+        }
+        for (let pass = 0; pass < 3; pass++) {
+          const lo = sole(l);
+          const room = Math.min(head(leg.fetlock, _u).y - r, head(leg.knee, _u).y - 1.5 * r);
+          if (!(lo > 0.003) || !(room > 0.001)) break;
+          const e = head(leg.knee, _u);
+          const a = raiseAngle(head(leg.pivot, _w), e, e.y - Math.min(lo - 0.001, room), 0.8) * lieSettle;
+          if (!(Math.abs(a) > 1e-4)) break;
+          this.turn(leg.pivot, AX, a);
+          leg.pivot.updateMatrixWorld(true);
+          this.turn(leg.knee, AX, -a);
+          leg.knee.updateMatrixWorld(true);
+        }
+      }
+      if (this.base.kind === 'jack' && this.gabarit) {
+        // (peau du flanc tirée par le bras descendu — poids du membre jusque sous le ventre — : jamais sous le sol)
+        let lowB2 = Infinity;
+        for (let q = 0; q < this.bodyPts.length; q++) if (this.bodyTrunk[q]) lowB2 = Math.min(lowB2, this.skinY(this.bodyPts[q]));
+        if (lowB2 < -0.001) {
+          md.body.position.y -= lowB2 * lieSettle;
+          md.root.updateMatrixWorld(true);
+        }
       }
       // (lévriers, caniche : antérieurs qui flottent au-dessus du sol, l'avant-bras descend, au coude puis au poignet,
       // jusqu'à poser le pied ; pas les petits chiens, dont l'avant-bras plongeait alors vers le sol, appuyé sur les

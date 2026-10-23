@@ -101,7 +101,10 @@ comparaisons), dans la même lumière et au même cadrage.
 - **Animation** (`RealRabbitAnim`) : allure choisie par la vitesse **relativement aux vitesses naturelles de ce
   lapin** (passage à mi-chemin, ± 8 %), chaque clip joué à vitesse réelle ÷ vitesse naturelle de la race (mesurée
   sur son squelette, la course jusqu'à 6 fois : bridée à 3,5, le lapin rapide patinait) et pieds en appui tenus sur place au sautillement et au petit galop
-  (pas de patinage, même aux 1,2 à 3,4 m/s du jeu ; prise à 10 mm, lâchée à 25) ; postures et passages par le plus court chemin (accroupi → assis
+  (pas de patinage, même aux 1,2 à 3,4 m/s du jeu ; prise à 10 mm, lâchée à 25 ; pied avant pris à 8 mm et tenu par
+  le point de sa sole le plus bas à la prise, pas par le poignet, 2 à 4 cm plus haut, autour duquel le pied tourne
+  pendant l'appui : les doigts des jeunes béliers glissaient de 2,5 à 7,2 mm par appui, 12 à 22 % de la vitesse,
+  maintenant 0,2 à 2,8 mm ; coût : un point de peau par pied avant et par image) ; postures et passages par le plus court chemin (accroupi → assis
   → debout ; couché → en boule ; porté en fondu) ; au repos, il renifle (nez qui frémit), s'assoit, fait sa
   toilette (lapin gris : les bras de la pose assise, tête baissée — le clip étirait la peau du poitrail en voile),
   se dresse, se couche, mange ; binky de joie de temps en temps ; tapi s'il a peur ou qu'il est triste ;

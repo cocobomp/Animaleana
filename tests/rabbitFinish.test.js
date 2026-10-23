@@ -278,3 +278,65 @@ describe('pieds posés au petit galop', () => {
     md.dispose();
   });
 });
+
+describe('pieds avant des jeunes béliers', () => {
+  // Avant : le pied avant était tenu par l'articulation du poignet, 2 à 4 cm au-dessus de la sole ; le pied tourne
+  // autour pendant l'appui et les doigts posés glissaient de 2,5 à 7,2 mm par appui (12 à 22 % de la vitesse) au
+  // sautillement et au petit galop. Le point de la sole le plus bas à la prise est maintenant tenu : 0,2 à 2,8 mm.
+  const frontSlides = (look, stage, v) => {
+    const md = buildRealRabbitModel(look, stage, G[rabbitBuild(look, stage).model]);
+    md.staticPose('crouch');
+    const a = md.anim;
+    const m = md.coatMesh;
+    const dt = 1 / 60;
+    const _v = new THREE.Vector3();
+    const step = () => {
+      a.update(dt, { v, moving: true, posture: 'crouch' });
+      md.root.position.z += v * dt;
+      md.root.updateMatrixWorld(true);
+    };
+    for (let f = 0; f < 120; f++) step();
+    const cur = [null, null];
+    const slides = [[], []];
+    for (let f = 0; f < 300; f++) {
+      step();
+      for (let l = 0; l < 2; l++) {
+        const c = cur[l];
+        if (c) {
+          m.getVertexPosition(c.i, _v).applyMatrix4(m.matrixWorld);
+          if (_v.y < 0.004) {
+            c.d = Math.max(c.d, Math.hypot(_v.x - c.x, _v.z - c.z));
+            c.n++;
+            continue;
+          }
+          if (c.n >= 3) slides[l].push(c.d);
+          cur[l] = null;
+        }
+        let lo = Infinity;
+        let best = -1;
+        for (const i of a.S.soles[l]) {
+          const y = m.getVertexPosition(i, _v).applyMatrix4(m.matrixWorld).y;
+          if (y < lo) {
+            lo = y;
+            best = i;
+          }
+        }
+        if (lo < 0.004) {
+          m.getVertexPosition(best, _v).applyMatrix4(m.matrixWorld);
+          cur[l] = { i: best, x: _v.x, z: _v.z, d: 0, n: 0 };
+        }
+      }
+    }
+    md.dispose();
+    return slides.map((s) => (s.length >= 2 ? [...s].sort((x, y) => x - y)[Math.floor(s.length / 2)] : null));
+  };
+  it.each([[0.3], [0.7], [1.0], [1.2]])('jeune bélier à %s m/s : chaque pied avant posé glisse de moins de 3 mm par appui', (v) => {
+    for (const look of [lookOf('belier'), { ...lookOf('rex'), earType: 'lop' }]) {
+      const r = frontSlides(look, 'young', v);
+      r.forEach((d, l) => {
+        if (d !== null) expect(d, `${look.breed} ${v} m/s patte ${l}`).toBeLessThan(0.003);
+      });
+      expect(r.some((d) => d !== null), `${look.breed} ${v} m/s : un pied avant posé`).toBe(true);
+    }
+  });
+});

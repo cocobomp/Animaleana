@@ -1523,6 +1523,7 @@ class RealRabbitAnim {
     this.lead = 'hop';
     this.gOff = 0;
     this.plant = [null, null, null, null];
+    this.plantK = [0, 0, 0, 0];
     // (minimums glissants sur la foulée : appuis avant, appuis arrière — voir ground)
     this.win = [new WindowMin(), new WindowMin()];
     this.lastPos = null;
@@ -2197,8 +2198,8 @@ class RealRabbitAnim {
    * Pieds en appui tenus sur place (toutes les allures) : quand une patte se pose, la place de ses doigts est notée ;
    * tant qu'elle reste posée, la patte est tournée à l'épaule ou à la hanche pour l'y ramener, en long et sur le côté.
    * Les pattes raccourcies ou allongées d'une race changent la foulée du clip : sans cela, les pieds patinaient en appui.
-   * Prise d'appui à 10 mm du sol, lâchée à 25 — la patte qui se déroule reste tenue (à 5 mm, le pied du clip arrivait encore lancé et glissait avant d'être
-   * tenu).
+   * Prise d'appui à 10 mm du sol (8 aux pieds avant), lâchée à 25 — la patte qui se déroule reste tenue (à 5 mm, le pied du clip arrivait encore lancé et glissait avant d'être
+   * tenu). Pied avant : tenu par le point de sa sole le plus bas à la prise.
    */
   footLock() {
     const md = this.model;
@@ -2212,19 +2213,34 @@ class RealRabbitAnim {
         const y = this.skinY(inf);
         if (y < low) low = y;
       }
-      if (!(low < (this.plant[l] ? 0.025 : 0.01))) {
+      if (!(low < (this.plant[l] ? 0.025 : leg.front ? 0.008 : 0.01))) {
         this.plant[l] = null;
         continue;
       }
       if (!this.plant[l]) {
-        this.plant[l] = _u.setFromMatrixPosition(leg.paw.matrixWorld).clone();
+        // (pied avant : on tient le point de la sole le plus bas à la prise, pas l'articulation du poignet, 2 à 4 cm
+        // plus haut — le pied tourne autour pendant l'appui et les doigts glissaient de 3 à 7 mm, 12 à 22 % de la
+        // vitesse, chez le jeune bélier)
+        if (leg.front) {
+          let kb = 0;
+          let yb = Infinity;
+          this.solePts[l].forEach((inf, k) => {
+            const y = this.skinY(inf);
+            if (y < yb) {
+              yb = y;
+              kb = k;
+            }
+          });
+          this.plantK[l] = kb;
+          this.plant[l] = this.soleW(this.solePts[l][kb], V());
+        } else this.plant[l] = _u.setFromMatrixPosition(leg.paw.matrixWorld).clone();
         continue;
       }
       // en long et sur le côté, deux passes (le pied n'est pas à l'aplomb de l'articulation)
       let th = 0;
       let ph = 0;
       for (let pass = 0; pass < 2; pass++) {
-        const toe = _u.setFromMatrixPosition(leg.paw.matrixWorld);
+        const toe = leg.front ? this.soleW(this.solePts[l][this.plantK[l]], _u) : _u.setFromMatrixPosition(leg.paw.matrixWorld);
         const err = _v.copy(toe).sub(this.plant[l]).applyQuaternion(_q);
         const top = _p0.setFromMatrixPosition(leg.pivot.matrixWorld);
         const Lg = Math.max(0.02 * _rs.y, top.distanceTo(toe));
@@ -2381,6 +2397,13 @@ class RealRabbitAnim {
       md.body.position.y -= Math.min(F.y, Hn.y) - fl;
       md.root.updateMatrixWorld(true);
     }
+  }
+
+  /** Point de peau (influences d'os) dans le monde. */
+  soleW(inf, out) {
+    out.set(0, 0, 0);
+    for (const [b, p, w] of inf) out.addScaledVector(_q2v.copy(p).applyMatrix4(b.matrixWorld), w);
+    return out;
   }
 
   /** Hauteur (repère du lapin, _m : inverse de la racine) d'un point de peau ; sa position dans _w. */

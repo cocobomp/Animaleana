@@ -116,8 +116,8 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
    long ; +16 Ko, la compression des clips n'est pas refaite à l'identique).
 
 Fichiers obtenus : `dog_shiba.glb` 0,89 Mo (17 800 triangles, 5 300 au loin, 57 os, 20 clips + 17 de ses
-gabarits), `dog_jack.glb` 0,61 Mo (15 500 triangles, 41 os, 19 clips + 15 de ses gabarits ; mâchoire et langue :
-+600 triangles, +5 os, +8 Ko). (Avant les gabarits et
+gabarits), `dog_jack.glb` 0,65 Mo (15 500 triangles, 41 os, 19 clips + 20 de ses gabarits — dont 5 de la variante « nain »
+du court, reprise des finitions 2 : +41 Ko ; mâchoire et langue : +600 triangles, +5 os, +8 Ko). (Avant les gabarits et
 les poses reprises du shiba : 0,86 et 0,51 Mo ; les clips des gabarits sont allégés par `DECIMATE` et le
 ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été faits.)
 

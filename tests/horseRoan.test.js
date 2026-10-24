@@ -65,7 +65,7 @@ describe('rouans', () => {
   });
 
   it('autant de poils blancs de près qu\'au loin (le flanc ne s\'éclaircit pas quand on approche)', () => {
-    const { cut, far } = COAT_LOOKS.roan;
+    const { cut, far, across, along } = COAT_LOOKS.roan;
     let n = 0;
     let s = 0;
     for (let i = 0; i < 60000; i++) {
@@ -73,12 +73,24 @@ describe('rouans', () => {
       const y = 0.7 + fract(Math.sin(i * 78.233) * 43758.5453);
       const z = fract(Math.sin(i * 39.425) * 43758.5453) * 2 - 1;
       n++;
-      if (noise(x * 170, y * 170, z * 170) > cut) s++;
+      // (poils blancs couchés dans le sens du poil : bruit étiré le long du corps, voir le test suivant)
+      if (noise(x * across, y * across, z * along) > cut) s++;
     }
     expect(Math.abs(s / n - far)).toBeLessThan(0.01);
     const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader };
     material('trait_breton', 1).onBeforeCompile(sh);
-    expect(sh.fragmentShader).toContain(`mix(step(${cut.toFixed(4)}, hNoise(P * 170.0)), ${far.toFixed(4)}, aa)`);
+    expect(sh.fragmentShader).toContain(`mix(step(${cut.toFixed(4)}, hNoise(P * roanS)), ${far.toFixed(4)}, clamp(length(fwidth(P)) * ${(across * 0.85).toFixed(4)}, 0.0, 1.0))`);
+  });
+
+  it('poils blancs étirés dans le sens du poil (des poils mêlés de près, pas des flocons ronds)', () => {
+    const { across, along } = COAT_LOOKS.roan;
+    // (4 fois plus longs que larges : le long du corps sur le corps, vers le bas sur les membres)
+    expect(across / along).toBeGreaterThanOrEqual(3.5);
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader };
+    material('trait_breton', 1).onBeforeCompile(sh);
+    const a = across.toFixed(4);
+    const b = along.toFixed(4);
+    expect(sh.fragmentShader).toContain(`mix(vec3(${a}, ${b}, ${a}), vec3(${a}, ${a}, ${b}), bodyS)`);
   });
 
   it('les autres robes ne changent pas (couleur de la race telle quelle)', () => {

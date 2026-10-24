@@ -51,8 +51,9 @@ export const COAT_LOOKS = {
   bloom: { dark: 0.16 },
   // Rouan : part de blanc sur un poil blanc, seuil du bruit au-dessus duquel un poil est blanc (cut : 8,7 % des poils),
   // la même part au loin (far : le motif fondu en sa moyenne) ; robe de base tirée de la teinte d'ensemble de la race
-  // (saturation × sat, clarté × light)
-  roan: { white: 0.85, cut: 0.76, far: 0.087, sat: 5, light: 0.62 },
+  // (saturation × sat, clarté × light) ; fréquence du bruit en travers du poil et le long du poil (par mètre : des poils
+  // blancs de 0,8 mm sur 3 mm environ, couchés dans le sens du poil)
+  roan: { white: 0.85, cut: 0.76, far: 0.087, sat: 5, light: 0.62, across: 600, along: 150 },
   // Appaloosa « couverture » : inclinaison du bord avant (m vers l'avant par m de hauteur)
   blanket: { slope: 0.55 },
 };
@@ -293,7 +294,11 @@ hEarIn = 0.0;
   // sur un fond roux plus saturé, il reste rouan rouge (flanc brun rosé, la tête et les membres restés roux).
   if (hRoan > 0.0) {
     // (8,7 % des valeurs du bruit au-dessus de 0,76 ; même part au loin)
-    float speck = mix(step(${glf(ROAN.cut)}, hNoise(P * 170.0)), ${glf(ROAN.far)}, aa);
+    // (poils blancs étirés dans le sens du poil — vers l'arrière sur le corps, vers le bas sur les membres — : de près,
+    // des poils mêlés à la robe ; ronds, ils se lisaient en flocons blancs épars ; fondus en leur moyenne dès qu'un pixel
+    // couvre la largeur d'un poil, sans scintiller)
+    vec3 roanS = mix(vec3(${glf(ROAN.across)}, ${glf(ROAN.along)}, ${glf(ROAN.across)}), vec3(${glf(ROAN.across)}, ${glf(ROAN.across)}, ${glf(ROAN.along)}), bodyS);
+    float speck = mix(step(${glf(ROAN.cut)}, hNoise(P * roanS)), ${glf(ROAN.far)}, clamp(length(fwidth(P)) * ${glf(ROAN.across * 0.85)}, 0.0, 1.0));
     float zone = bodyS + isLeg * smoothstep(0.5, 0.75, h);
     c = mix(c, hWhite, speck * ${glf(ROAN.white)} * hRoan * zone);
     c = mix(c, c * 0.9, (headW + isLeg * (1.0 - smoothstep(0.35, 0.6, h))) * hRoan * 0.7);

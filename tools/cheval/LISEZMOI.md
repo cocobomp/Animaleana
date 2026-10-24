@@ -741,6 +741,12 @@ Finitions 2 (téléphone 390×844 en basse et de près en haute ; planches AVANT
   du jeu (390×844, basse) : Trait breton saturation 0,03 → 0,27 (clarté 46 → 37), Criollo 0,02 → 0,16 ; brun rosé,
   tête et membres roux, poils blancs bien visibles de près ; rouan bleu du Mustang un peu plus foncé (gris bleu) ;
   autres robes inchangées (`tests/horseRoan.test.js`). Aucun coût.
+- **rouan de près** (reprise) : les poils blancs étaient des taches rondes du bruit (6 mm, `hNoise(P × 170)`), lues de
+  près comme des flocons blancs épars. Le bruit est maintenant étiré dans le sens du poil (`COAT_LOOKS.roan.across` 600
+  et `along` 150 par mètre : vers l'arrière sur le corps, vers le bas sur les membres) : des poils blancs fins, 0,8 mm sur
+  3 mm environ, mêlés à la robe ; ils fondent en leur moyenne dès qu'un pixel couvre la largeur d'un poil (pas de
+  scintillement). Même part de blanc (8,7 %, `tests/horseRoan.test.js`) : à la caméra du jeu, flanc du Trait breton, du
+  Criollo et du Mustang rouans à moins de 2/255 de 983def9. Aucun coût.
 - **fanons des rouans** (Trait breton) : ils prenaient la teinte d'ensemble de la race (poils blancs compris),
   éclaircie : des mèches gris clair sur des membres roux. Ils prennent maintenant la robe de base du rouan, celle du
   bas de ses membres (saturation moyenne des fanons 0,16 → 0,42, teinte celle de la base à 1° près) ; autres robes

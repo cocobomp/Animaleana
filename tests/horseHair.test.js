@@ -5,6 +5,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { buildRealHorseModel, realLegPose, RIG_BONES } from '../src/game/models/horseReal.js';
 import { hairStrandPixels, hairMassPixels, hairMipLevels, hairMaterial, HAIR_TEX, HAIR_MASS, HAIR_CUT, HAIR_TOP } from '../src/game/models/horseHair.js';
+import { foreShadeAt } from '../src/game/models/horseCoat.js';
 import { gfx } from '../src/game/gfx.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { SPECIES } from '../src/sim/species.js';
@@ -19,6 +20,31 @@ const horse = (breed, { foal = false, seed = 5 } = {}) => {
   const a = createAnimal({ species: 'horse', breed, colorIndex: 0, ageDays: foal ? 10 : 80, seed });
   return buildRealHorseModel(foal ? { ...a.look, foal: true } : a.look, a.breed, gltf);
 };
+
+/**
+ * Repère de la tête du shader de la robe (attribut hHL : en longueurs de tête, depuis la nuque, tourné comme le chanfrein)
+ * pour un point du maillage au repos : transformation affine ajustée (moindres carrés) sur les sommets de la tête de la
+ * robe ; .headLen : la longueur de tête (m).
+ */
+function headFrame(md) {
+  const g = md.coatMesh.geometry.attributes;
+  const N = Array.from({ length: 4 }, () => new Float64Array(4));
+  const B = Array.from({ length: 3 }, () => new Float64Array(4));
+  for (let i = 0; i < g.position.count; i++) {
+    const h = [g.hHL.getX(i), g.hHL.getY(i), g.hHL.getZ(i)];
+    if (Math.hypot(...h) > 1.3) continue;
+    const x = [g.position.getX(i), g.position.getY(i), g.position.getZ(i), 1];
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) N[r][c] += x[r] * x[c];
+      for (let o = 0; o < 3; o++) B[o][r] += x[r] * h[o];
+    }
+  }
+  const M = new THREE.Matrix4().set(...N.flatMap((r) => [...r])).invert();
+  const rows = B.map((b) => new THREE.Vector4(...b).applyMatrix4(M));
+  const f = (p) => new THREE.Vector3(...rows.map((r) => r.x * p.x + r.y * p.y + r.z * p.z + r.w));
+  f.headLen = 1 / Math.cbrt(Math.abs(new THREE.Matrix3().set(...rows.flatMap((r) => [r.x, r.y, r.z])).determinant()));
+  return f;
+}
 
 /** Sommets des masses (crins « en volume ») par sorte : 8 crinière, 9 toupet, 10 queue. */
 function massVerts(md) {
@@ -537,7 +563,8 @@ describe('éclairage des crins', () => {
     expect(hairMaterial(0x0b0a0a, { value: 0 }, undefined, 0x171414).userData.hairDark.value).toBe(0);
     const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
     grey.onBeforeCompile(sh);
-    expect(sh.fragmentShader).toContain('hHairDark * max( 0.6 * hHairFore(), step( vHairK, 0.5 ) * smoothstep( 0.0, 0.03, vHairP.x ) )');
+    // (le toupet à peine : il se détache par ses mèches séparées et son ombre sur le front, voir « toupet en mèches »)
+    expect(sh.fragmentShader).toContain('hHairDark * max( 0.25 * hHairFore(), step( vHairK, 0.5 ) * smoothstep( 0.0, 0.03, vHairP.x ) )');
   });
 
   it('ombre du soleil adoucie sur les crins (qualité haute : plus de plaques d\'ombre nettes d\'une mèche sur l\'autre)', () => {
@@ -566,7 +593,7 @@ describe('crins hors du corps, dans toutes les poses', () => {
 });
 
 describe('toupet en mèche', () => {
-  it('masse du toupet : resserrée en pointe entre les yeux, au milieu du chanfrein', () => {
+  it('masse du toupet : faisceau resserré entre les yeux, au milieu du chanfrein, qui finit en plusieurs pointes', () => {
     for (const breed of ['selle_francais', 'frison', 'arabe', 'shetland']) {
       const md = horse(breed);
       md.root.updateMatrixWorld(true);
@@ -581,7 +608,10 @@ describe('toupet en mèche', () => {
       }
       const w = (l) => Math.max(...l) - Math.min(...l);
       expect(w(top), breed).toBeGreaterThan(0.05);
-      expect(w(tip), breed).toBeLessThan(w(top) * 0.3);
+      // (resserré, mais pas en une seule pointe : les mèches pendent côte à côte, un peu écartées — une seule pointe au
+      // milieu, ses mèches serrées l'une contre l'autre, se lisait en V aux bords droits, une plaque)
+      expect(w(tip), breed).toBeLessThan(w(top) * 0.6);
+      expect(w(tip), breed).toBeGreaterThan(w(top) * 0.25);
       expect(Math.abs(tip.reduce((a, b) => a + b, 0) / tip.length), breed).toBeLessThan(0.01);
       md.dispose();
     }
@@ -603,6 +633,110 @@ describe('toupet en mèche', () => {
       md.dispose();
     }
   });
+
+  it('en mèches séparées (pas une plaque) : trois ou quatre langues qui se chevauchent en haut et s\'écartent en bas', () => {
+    for (const [breed, nl] of [['arabe', 3], ['selle_francais', 3], ['camargue', 4], ['shetland', 4]]) {
+      const md = horse(breed);
+      md.root.updateMatrixWorld(true);
+      const g = md.hairMesh.geometry.attributes;
+      // (une grille par mèche : sommets du toupet regroupés par racine de colonne, mèche = suite de colonnes)
+      const tips = [];
+      const tops = [];
+      for (let i = 0; i < g.position.count; i++) {
+        if (g.hairRoot.getW(i) !== 9) continue;
+        const p = md.head.worldToLocal(new THREE.Vector3().fromBufferAttribute(g.position, i));
+        if (g.hairG.getX(i) > 0.99) tips.push(p.x);
+        if (g.hairG.getX(i) < 0.01) tops.push(p.x);
+      }
+      // 4 colonnes par mèche
+      expect(tips.length, breed).toBe(nl * 4);
+      // en bas, des trous entre les mèches (le front visible) : plus grand écart entre deux pointes voisines
+      // au moins le double de l'écart moyen dans une mèche
+      tips.sort((a, b) => a - b);
+      const gaps = tips.slice(1).map((x, k) => x - tips[k]);
+      const inLock = [];
+      const between = [];
+      gaps.forEach((d, k) => ((k + 1) % 4 === 0 ? between : inLock).push(d));
+      const mean = (l) => l.reduce((a, b) => a + b, 0) / l.length;
+      expect(Math.min(...between), breed).toBeGreaterThan(2 * mean(inLock));
+      // en haut, elles se chevauchent : les racines couvrent toute la largeur sans trou
+      tops.sort((a, b) => a - b);
+      const topGaps = tops.slice(1).map((x, k) => x - tops[k]);
+      expect(Math.max(...topGaps), breed).toBeLessThan((tops.at(-1) - tops[0]) * 0.2);
+      md.dispose();
+    }
+  });
+
+  it('crins clairs sur une robe claire : l\'ombre du toupet sur le front est plus marquée (pas sur une robe foncée)', () => {
+    const grey = horse('arabe');
+    const bay = horse('selle_francais');
+    const w = (md) => md.coatMesh.material.userData.horseUniforms.hFore.value.w;
+    expect(w(grey)).toBeGreaterThan(1.45);
+    expect(w(bay)).toBeCloseTo(1, 5);
+    grey.dispose();
+    bay.dispose();
+  });
+
+  it('ombre du toupet sur le front : sous ses mèches et en un liseré autour d\'elles, finie avant leurs pointes (33 races)', () => {
+    // (une seule ombre en V, plus large que le toupet et prolongée sous sa pointe, renforcée sous des crins clairs, traçait
+    // une bande grise sur le chanfrein entre les yeux, là où il n'y a pas de crins)
+    const V3 = () => new THREE.Vector3();
+    let worst = 0;
+    let worstAt = '';
+    let shaded = 0;
+    for (const b of SPECIES.horse.breeds) {
+      const md = horse(b.id);
+      const F = md.coatMesh.material.userData.horseUniforms.hFore.value;
+      const L = md.coatMesh.material.userData.horseUniforms.hForeL.value;
+      const tips = [L.x, L.y, L.z, L.w];
+      const toHL = headFrame(md);
+      const geo = md.hairMesh.geometry;
+      const g = geo.attributes;
+      // (points semés dans chaque triangle du toupet, cartes et masse, rangés par cases de 3 mm : (x, z) en m sur le front)
+      const sx = F.z * toHL.headLen;
+      const sz = (F.y - F.x) * toHL.headLen;
+      const C = 0.003;
+      const cells = new Map();
+      const ix = geo.index.array;
+      const P = [V3(), V3(), V3()];
+      for (let t = 0; t < ix.length; t += 3) {
+        const k = g.hairRoot.getW(ix[t]);
+        if (k !== 1 && k !== 9) continue;
+        for (let c = 0; c < 3; c++) P[c] = toHL(V3().fromBufferAttribute(g.position, ix[t + c]));
+        for (let i = 0; i <= 4; i++) {
+          for (let j = 0; i + j <= 4; j++) {
+            const p = P[0].clone().multiplyScalar(i / 4).addScaledVector(P[1], j / 4).addScaledVector(P[2], (4 - i - j) / 4);
+            const x = p.x * toHL.headLen;
+            const z = p.z * toHL.headLen;
+            const key = `${Math.floor(x / C)},${Math.floor(z / C)}`;
+            if (!cells.has(key)) cells.set(key, []);
+            cells.get(key).push([x, z]);
+          }
+        }
+      }
+      const near = (x, z) => {
+        let d = Infinity;
+        const cx = Math.floor(x / C);
+        const cz = Math.floor(z / C);
+        for (let u = -4; u <= 4; u++) for (let v = -4; v <= 4; v++) for (const [px, pz] of cells.get(`${cx + u},${cz + v}`) ?? []) d = Math.min(d, Math.hypot(px - x, pz - z));
+        return d;
+      };
+      // ombre sur une grille du front (comme le shader de la robe : foreShadeAt) : là où elle passe 5 %, des crins à
+      // moins de 7 mm
+      for (let ff = -0.1; ff <= 1.2; ff += 0.02) {
+        for (let ax = -1.5; ax <= 1.5; ax += 0.04) {
+          const s = foreShadeAt(ax, ff, tips);
+          if (s < 0.05) continue;
+          shaded++;
+          const d = near(ax * sx, F.x * toHL.headLen + ff * sz);
+          if (d > worst) { worst = d; worstAt = `${b.id} ff ${ff.toFixed(2)} x ${ax.toFixed(2)} ombre ${s.toFixed(2)}`; }
+        }
+      }
+      md.dispose();
+    }
+    expect(shaded).toBeGreaterThan(1000);
+    expect(worst, worstAt).toBeLessThan(0.007);
+  }, 120000);
 
   it('reflet et éclaircissement des crins foncés réduits sur le toupet (il reste noir)', () => {
     const m = hairMaterial(0x1b1410, { value: 0 });

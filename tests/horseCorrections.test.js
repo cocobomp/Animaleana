@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { realHorseBase, buildRealHorseModel, leftLocks, groundTilt, TILT_MAX, GALLOP_TS_MAX } from '../src/game/models/horseReal.js';
-import { coatMaterial } from '../src/game/models/horseCoat.js';
+import { coatMaterial, FORE_SHADE_LIGHT, FORE_SHADE_EDGE, FORE_SHADE_TIP, FORE_PINCH } from '../src/game/models/horseCoat.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { horseBuild } from '../src/sim/horseLook.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
@@ -95,15 +95,26 @@ describe('robes', () => {
 });
 
 describe('toupet', () => {
-  it('ombre douce du toupet sur le front : de sa racine à sa pointe le long du chanfrein, plus large que lui', () => {
+  it('ombre douce du toupet sur le front : sous ses mèches, de leur racine à leur pointe le long du chanfrein, un liseré autour d\'elles', () => {
     const md = horse('arabe', 0); // gris clair, crins clairs
     const u = md.coatMesh.material.userData.horseUniforms.hFore.value;
-    expect(u.w).toBe(1);
+    // (crins clairs sur une robe claire : ombre renforcée, le toupet s'en détache — voir horseHair.test.js)
+    expect(u.w).toBeCloseTo(1 + FORE_SHADE_LIGHT, 5);
     expect(u.y).toBeGreaterThan(u.x + 0.1); // (pointe plus bas sur le chanfrein que la racine, en longueurs de tête)
     expect(u.z).toBeGreaterThan(0.03);
     expect(u.z).toBeLessThan(0.15);
     const fs = compile(md.coatMesh.material);
     expect(fs).toContain('if (hFore.w > 0.0 && isHead > 0.5)');
+    // (sous chaque mèche et en un liseré autour d'elle, finie avant sa pointe : le dessin des mèches de forelockCards, voir
+    // horseHair.test.js, « sous ses mèches et en un liseré autour d'elles »)
+    expect(fs).toContain(`smoothstep(-0.04, ${FORE_SHADE_EDGE.toFixed(4)}, d)`);
+    expect(fs).toContain(`smoothstep(len - ${FORE_SHADE_TIP[0].toFixed(4)}, len - ${FORE_SHADE_TIP[1].toFixed(4)}, ff)`);
+    expect(fs).toContain(`(1.0 - ${FORE_PINCH.toFixed(4)} * smoothstep(0.05, 0.7, f))`);
+    // (une pointe par mèche, de 0,7 à 1 de la longueur de la ligne du milieu, plus longue au milieu)
+    const L = md.coatMesh.material.userData.horseUniforms.hForeL.value;
+    expect(L.x).toBeGreaterThan(0.6);
+    expect(L.y).toBeGreaterThan(Math.max(L.x, L.z));
+    expect(L.w).toBe(0);
     md.dispose();
   });
 });

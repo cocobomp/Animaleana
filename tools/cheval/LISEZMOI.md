@@ -11,7 +11,12 @@ Le modèle d'origine n'a aucune animation : toutes les allures sont générées 
 
 ## Chaîne de fabrication (Blender 4.2 en mode `--background`, puis glTF-Transform)
 
-`build.sh` enchaîne les quatre étapes (variables `BLENDER`, `SRC`, `WORK`, `GT`).
+`build.sh` enchaîne les sept étapes, de la source au fichier du jeu (variables `BLENDER`, `SRC`, `WORK`, `GT` ; `DEBUT=4`
+reprend à la compression avec le `horse_raw_fix.glb` déjà dans `WORK`, sans Blender ni sources). Il s'arrêtait à
+`lod.mjs` (étape 5) : relancé, il refaisait un GLB sans les coutures de `dilate.mjs` ni le bord des îlots de `bords.mjs`
+(traînées hors des îlots, tirets clairs sous la gorge). Vérifié : `DEBUT=4` sur le GLB brut de la dernière retouche de
+texture (`retex.mjs` puis `normfix.mjs`) redonne le fichier du jeu, accesseurs identiques et images identiques au pixel
+près (715 648 octets au lieu de 715 656 : 8 octets d'en-tête WebP de la carte de relief des crins).
 
 1. **`lyndon_prep.py`** : matières refaites (robe, crins en cartes alpha, yeux), crinière, queue et yeux liés
    au squelette puis fusionnés en un seul maillage, mise à l'échelle (garrot 1,6 m), sabots au sol.
@@ -81,11 +86,26 @@ Le modèle d'origine n'a aucune animation : toutes les allures sont générées 
      la moitié de sa bande 3-20 texels (les ombres peintes des côtes : écart type 18,8 → 9,5 sur 255).
 
    Fichier final : **749 992 octets**.
+7. **`bords.mjs`** (sharp ; `node bords.mjs horse_real.glb sortie.glb`, sur le GLB de `dilate.mjs` ; `--mesure` mesure
+   sans écrire) : bord des îlots de la **carte de relief**. La photo de relief de la source s'arrête en escalier :
+   sur les premiers texels à l'intérieur d'une couture, des normales mal cuites, en dents de scie le long du bord ;
+   `dilate.mjs` ne refaisait que l'extérieur, et le prolongeait depuis ces dents (des traînées de couleurs vives
+   hors des îlots). Lu en bilinéaire, le long de la couture du milieu de la gorge et du poitrail, le relief tombait
+   tantôt sur la peau, tantôt sur une dent : des **tirets clairs** sous la gorge, vus de face. Les texels d'îlot à
+   moins de 3 texels du bord sont refaits depuis l'intérieur (passes de `dilate.mjs`), puis l'extérieur repart de ce
+   bord propre ; pas sur la tête (u < 0,4 : bords au ras des naseaux, des lèvres et des yeux, relief voulu — refait,
+   le bout du nez montrait ses facettes). Écart d'un texel du bord au fond de l'îlot (corps, sur 255, profondeur 1 à
+   6) : 19,3 / 8,1 / 6,5 / 5,0 / 3,5 / 2,7 → 5,4 / 5,2 / 5,0 / 5,0 / 3,5 / 2,7. Géométrie, allures et autres images
+   identiques (vérifié accesseur par accesseur) ; carte de relief 76,8 → 43,3 Kio (les traînées de couleurs vives
+   pesaient lourd).
+
+   Fichier final : **715 656 octets**.
 
 Pour ne changer qu'une texture sans refaire les allures : relancer `lyndon_prep.py` et `prep2.py`, puis
 **`retex.mjs`** remplace l'image dans le GLB brut d'origine (`node retex.mjs horse_raw.glb horse_body_detail
-work/tex/horse_body_detail.png horse_raw_retex.glb`), `normfix.mjs` bouche les taches du relief, `pack.mjs` le
-compresse et `lod.mjs` ajoute la version allégée (géométrie et allures identiques).
+work/tex/horse_body_detail.png horse_raw_retex.glb`), `normfix.mjs` bouche les taches du relief (sortie
+`WORK/horse_raw_fix.glb`), puis `DEBUT=4 build.sh` compresse (`pack.mjs`), ajoute la version allégée (`lod.mjs`) et
+refait les coutures et le bord des îlots (`dilate.mjs`, `bords.mjs`) ; géométrie et allures identiques.
 
 ## Dans le jeu
 
@@ -657,6 +677,80 @@ Finitions vues au téléphone (critique « finitions », 390×844, qualité bass
 - **couverture imperméable** : un peu plus d'écart (`GEAR_LEG_GAP`) là où la peau voisine suit la cuisse (hanche,
   grasset, regardée 8 cm plus loin d'avant en arrière) : tissu sous la peau en mouvement 3 à 4 cm (Akhal-Teké, traits)
   → 0 sur les 33 races × 3 couvertures × 5 allures, peau par-dessus le tissu toujours ≤ 3 mm.
+
+Finitions 2 (téléphone 390×844 en basse et de près en haute ; planches AVANT/APRÈS du correcteur) :
+
+- **pointillés de la joue** — deux causes, aucune dans le maillage (soudé, fermé, mêmes poids sur les sommets
+  doublés : vérifié) ni dans l'anticrénelage :
+  - *points sombres sur la ganache* : un triangle à cheval entre la tête et l'encolure (ganache, gorge, base des
+    oreilles) est peint selon la partie de son dernier sommet (`hPart`, « flat ») ; le shader lisait le repère de la
+    tête dans `hInfo`, qui pour un sommet de l'encolure porte sa hauteur relative au coude (≈ 1,7) : la position
+    fausse passait par l'œil sur un bout du triangle, et le bord foncé des paupières s'y peignait (un point par
+    triangle, alignés le long de la ganache ; ils disparaissaient en coupant l'œil, pas en coupant les textures).
+    Nouvel attribut `hHL` (vec4, 16 octets par sommet, ≈ 64 Kio par gabarit) : repère de la tête et hauteur relative
+    au coude, justes sur tous les sommets ; le shader du cheval réaliste y lit la tête (`hl`) et la hauteur (sauf
+    sur les oreilles, qui gardent `hInfo`). Points du bord des paupières peints à plus de 3 rayons de l'œil (33 races
+    et leurs poulains, 10 points par triangle) : 149 → 0 (`tests/horseCheek.test.js`) ;
+  - *tirets clairs sous la gorge* : bord des îlots de la carte de relief (voir `bords.mjs`, étape 7).
+- **toupet clair sur robe claire** (gris, Camargue, Boulonnais, Connemara, Welsh gris) : une plaque pâle, grisée et
+  striée sur le front. Le toupet est maintenant fait de `FORE_LOCKS` mèches (3 ; 4 pour un toupet épais), une petite
+  grille de masse par mèche (4 colonnes × 10 points) au lieu d'une seule masse lisse peinte de neuf mèches de la
+  texture sur 8 cm : les mèches se chevauchent en haut (racines entre les oreilles) et se séparent vers le bas en
+  langues effilées (un quart de leur largeur au bout, le front visible entre elles), chacune bombée (`FORE_LOCK_BUMP`
+  8 mm), plus foncée sur ses bords, de longueur propre (plus courtes sur les côtés : la pointe reste au milieu), la
+  mèche du milieu par-dessus ; une ou deux mèches de la texture par mèche (`vSpan` 0,25) ; normales de la tête sur le
+  dessus, à la nuque. Les cartes se rangent sur les mèches (ton et longueur de leur mèche), plus étroites (3 et
+  2,2 cm au lieu de 4 et 3) et à crins deux fois plus larges dans la texture. Crins clairs sur robe claire : le toupet
+  n'est plus grisé que de 25 % de `hHairDark` (au lieu de 60 %, ≈ 5 % au lieu de 13 %), contraste de ses cartes 0,6 au
+  lieu de 0,85, racines à peine assombries ; c'est son ombre sur le front qui le détache (`hFore.w` × 1,6, soit 0,54 au
+  lieu de 0,34 au cœur de l'ombre, `FORE_SHADE_LIGHT`, `lightManeOnLight`). Triangles des crins par cheval (33 races) :
+  4 044 → 4 077 en moyenne, au plus 4 602 → 4 674 (Irish Cob), sous le plafond de 4 700 ; version réduite 1 141 → 1 166
+  (`tests/horseHair.test.js` : mèches séparées en bas et chevauchées en haut, ombre plus marquée sur robe claire).
+- **bande grise sous la pointe du toupet** (reprise) : l'ombre du toupet était 1,7 fois plus large que lui (+ 6 mm) et
+  prolongée 15 % plus bas que sa ligne du milieu (pleine jusqu'à 0,85, nulle à 1,15), alors que sa plus longue mèche
+  finit à 0,92 et ses côtés à 0,80 ; renforcée sous des crins clairs, elle traçait une bande grise sur le chanfrein entre
+  les yeux, là où il n'y a pas de crins. Elle finit maintenant avant la pointe des mèches (`FORE_SHADE_END` : pleine
+  jusqu'à 0,6, nulle à 0,9) et ne déborde plus que d'un liseré (`FORE_SHADE_W` 1,15 fois la demi-largeur du toupet
+  + 2,5 mm : au plus 6,6 mm hors des crins, mesuré sur les 33 races, triangles des crins échantillonnés). Téléphone, 1,2 m
+  de face, pixels sans crins sous la pointe assombris de plus de 8/255 par l'ombre (main / 983def9 / maintenant) : arabe
+  8 906 / 13 900 / 154, Camargue 11 844 / 28 413 / 61, selle français gris 7 849 / 16 297 / 0, Fjord 6 215 / 11 771 / 12,
+  percheron 13 419 / 23 962 / 0. (Depuis, l'ombre suit chaque mèche : voir ci-dessous.)
+- **toupet en mèches pendantes** (reprise ; le toupet clair sur robe claire se lisait encore en nappe pâle, striée, aux
+  bords droits) : les mèches du toupet se refermaient en V vers une seule pointe, serrées l'une contre l'autre jusqu'en
+  bas, et les cartes posées en travers de leurs creux ; une seule ombre en V dessous. Leur dessin est maintenant commun à
+  la géométrie et à l'ombre (`foreLock`, `horseCoat.js`) : côte à côte et chevauchées entre les oreilles, le faisceau se
+  resserre jusqu'aux deux tiers (`FORE_PINCH` 0,45), puis chaque mèche pend à sa place, un peu écartée (`FORE_FAN`), et
+  s'effile en langue sur ses deux derniers tiers ; plus courtes sur les côtés (0,36 de moins aux bords : la plus longue
+  au milieu), le bas du toupet finit en trois ou quatre pointes, le front visible entre elles. Les cartes restent dans
+  leur mèche (place à ± 0,45 de sa demi-largeur, jamais plus larges qu'elle : `widths`, largeur propre à chaque point
+  dans `hairCards`) et vont jusqu'à sa pointe. L'ombre sur le front est celle de chaque mèche (`hForeShade`, pointes
+  mesurées sur la géométrie : `hForeL`) : pleine dessous, un liseré de `FORE_SHADE_EDGE` (0,12 demi-largeur du toupet,
+  ≈ 4 mm) autour — une rainure grise dans le jour entre deux mèches —, finie avant chaque pointe (`FORE_SHADE_TIP`).
+  Brosse du Fjord : la mèche du milieu plus foncée (`FORE_CORE`, gris brun, ses cartes principales crème) comme la raie
+  de la crinière, au lieu d'une petite plaque blanche. Téléphone, 1,2 m de face, jour entre les mèches dans le bas du
+  toupet (55 à 90 % de sa hauteur, pixels sans crins entre le premier et le dernier crin de chaque rangée), 983def9 →
+  maintenant : arabe 10 → 25 %, Camargue 7 → 42 %, Welsh gris 9 → 25 %, Fjord 3 → 19 %, selle français gris 23 → 25 %,
+  percheron 21 → 30 %. Pixels sans crins sous la pointe assombris de plus de 8/255 : 0 sur ces six chevaux (1,2 et 1,9 m).
+  Ombre à plus de 7 mm des crins : aucune, 33 races (`tests/horseHair.test.js`, « sous ses mèches et en un liseré autour
+  d'elles »). Mêmes triangles (cartes et grilles en même nombre).
+- **rouans au téléphone** (Trait breton, Criollo) : lus comme des gris clairs. Les poils blancs, fondus en leur
+  moyenne au loin, sont mêlés à la robe de base en lumière linéaire : sur un fond foncé, un peu de blanc pèse lourd.
+  Avant : 19 % de blanc sur une base peu saturée (saturation × 2,2). Maintenant : 7 % de blanc (8,7 % des poils,
+  `COAT_LOOKS.roan.cut` 0,76, la même part au loin, `far`, le flanc ne s'éclaircit plus quand on approche) sur une
+  base plus saturée (× 5, clarté × 0,62 inchangée), et le rouan n'est plus traité en robe claire. Flanc à la caméra
+  du jeu (390×844, basse) : Trait breton saturation 0,03 → 0,27 (clarté 46 → 37), Criollo 0,02 → 0,16 ; brun rosé,
+  tête et membres roux, poils blancs bien visibles de près ; rouan bleu du Mustang un peu plus foncé (gris bleu) ;
+  autres robes inchangées (`tests/horseRoan.test.js`). Aucun coût.
+- **rouan de près** (reprise) : les poils blancs étaient des taches rondes du bruit (6 mm, `hNoise(P × 170)`), lues de
+  près comme des flocons blancs épars. Le bruit est maintenant étiré dans le sens du poil (`COAT_LOOKS.roan.across` 600
+  et `along` 150 par mètre : vers l'arrière sur le corps, vers le bas sur les membres) : des poils blancs fins, 0,8 mm sur
+  3 mm environ, mêlés à la robe ; ils fondent en leur moyenne dès qu'un pixel couvre la largeur d'un poil (pas de
+  scintillement). Même part de blanc (8,7 %, `tests/horseRoan.test.js`) : à la caméra du jeu, flanc du Trait breton, du
+  Criollo et du Mustang rouans à moins de 2/255 de 983def9. Aucun coût.
+- **fanons des rouans** (Trait breton) : ils prenaient la teinte d'ensemble de la race (poils blancs compris),
+  éclaircie : des mèches gris clair sur des membres roux. Ils prennent maintenant la robe de base du rouan, celle du
+  bas de ses membres (saturation moyenne des fanons 0,16 → 0,42, teinte celle de la base à 1° près) ; autres robes
+  inchangées.
 
 Ce qu'il coûte, et comment on le garde bas :
 

@@ -42,12 +42,23 @@ describe('fichier du cheval réaliste', () => {
   const json = glbJson(buf);
 
   it('est léger et compressé (meshopt, WebP), avec sa version réduite', () => {
-    // (749 992 octets : crins en 512², index simplifiés de tools/cheval/lod.mjs, relief de la robe sans taches,
-    // coutures dilatées et raccordées, côtes adoucies — tools/cheval/dilate.mjs)
+    // (715 656 octets : crins en 512², index simplifiés de tools/cheval/lod.mjs, relief de la robe sans taches,
+    // coutures dilatées et raccordées, côtes adoucies — tools/cheval/dilate.mjs —, bord des îlots du relief refait
+    // depuis l'intérieur — tools/cheval/bords.mjs)
     expect(buf.length).toBeLessThan(800 * 1024);
     const lod = json.meshes.find((m) => m.extras?.lod);
     expect(lod?.primitives).toHaveLength(3);
     expect(json.extensionsUsed).toEqual(expect.arrayContaining(['EXT_meshopt_compression', 'EXT_texture_webp']));
+  });
+
+  it('est refait par tools/cheval/build.sh jusqu\'au bout : coutures (dilate.mjs) puis bord des îlots (bords.mjs)', () => {
+    // (build.sh s'arrêtait à lod.mjs : relancé, il refaisait un GLB sans les coutures ni le bord des îlots du relief)
+    const sh = fs.readFileSync(new URL('../tools/cheval/build.sh', import.meta.url), 'utf8');
+    const steps = [...sh.matchAll(/^\s*node "\$GT\/(\w+)\.mjs" "([^"]+)" "([^"]+)"/gm)].map((m) => ({ tool: m[1], inp: m[2], out: m[3] }));
+    expect(steps.map((s) => s.tool)).toEqual(['normfix', 'pack', 'lod', 'dilate', 'bords']);
+    // chaque étape lit la sortie de la précédente ; seul bords.mjs écrit le fichier du jeu
+    steps.slice(1).forEach((s, i) => expect(s.inp, s.tool).toBe(steps[i].out));
+    expect(steps.filter((s) => s.out.includes('public/models/horse_real.glb')).map((s) => s.tool)).toEqual(['bords']);
   });
 
   it('a les allures, le squelette et les matières attendus', () => {

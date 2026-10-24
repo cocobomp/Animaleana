@@ -550,6 +550,10 @@ describe('concours de beauté sur le cheval réaliste', () => {
   const dressed = (breed) => {
     const a = animal(breed);
     const md = horse(a);
+    // (instant de l'animation et phase du souffle fixés : tirés au sort à la construction, ils donnaient à la queue un
+    // coup de queue au hasard avant la pose des tresses — « la tresse de queue suit les crins » échouait 2 fois sur 10)
+    md.anim.t = 10;
+    md.anim.breathPh = 0;
     md.anim.update(1 / 30, still(), {});
     md.root.updateMatrixWorld(true);
     notePrep(a, 'braid', 10, 1, { color: 'blue' });

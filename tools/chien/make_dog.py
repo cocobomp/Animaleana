@@ -882,11 +882,13 @@ def gab_bow(gname, rg, gH, gF):
     gab_bake(rg, 'bow_' + gname, 60, gp=gp, extra=lambda t: {'yaw': 0.04 * math.sin(math.tau * 2 * t), 'bob': 0.004 * s2 * math.sin(math.tau * 4 * t)})
 
 
-def gab_paw(gname, rg, p_sit):
+def gab_paw(gname, rg, p_sit, lift=None):
+    """« Donne la patte » du gabarit : l'antérieur gauche levé vers l'avant de l'épaule (lift : devant et dessous,
+    en longueurs de bras et d'avant-bras)."""
     R = rg.legs['FL']
     l1, l2, l3 = R['l2d'][:3]
     J = leg_joints(p_sit, 'FL', rg)
-    lift_k = M.get('paw_lift', (0.62, 0.42))
+    lift_k = lift or M.get('paw_lift', (0.62, 0.42))
     J3t = Vector((R['J'][3].x, J[0].y - lift_k[0] * (l1 + l2), J[0].z - lift_k[1] * (l1 + l2)))
     Js, _pts = rg.solve_fold('FL', J[0], J3t, 2.3, 0.7, 0.0, 1)
     p_up = dict(p_sit)
@@ -952,6 +954,11 @@ for gname, gcfg in GABARITS.items():
     s2 = (hipz - gH) / 0.42
     clips = gcfg.get('clips', ['walk', 'trot', 'run'])
     rep = {'legs': k, 'legW': gcfg.get('legW', 1.0), 'paws': gcfg.get('paws', 1.0), 'groundH': round(gH, 4), 'groundF': round(gF, 4), 'clips': clips}
+    # (variante d'un gabarit — of — : seulement quelques clips, fondus par le jeu avec ceux du gabarit selon la longueur
+    # du dos de la race, back)
+    for key in ('of', 'back'):
+        if key in gcfg:
+            rep[key] = gcfg[key]
     G2 = dg.gaits(s2, K.FPS)
     sp = {}
     for name in ('walk', 'trot', 'run'):
@@ -967,7 +974,7 @@ for gname, gcfg in GABARITS.items():
         gab_bake(r2, 'sit_down_' + gname, 24, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, stand2, sit2, dg.smooth(t)), {}))
         gab_bake(r2, 'stand_up_' + gname, 20, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, sit2, stand2, dg.smooth(t)), {}))
     if 'paw' in clips and sit2 is not None:
-        gab_paw(gname, r2, sit2)
+        gab_paw(gname, r2, sit2, gcfg.get('paw_lift'))
     if 'bow' in clips:
         gab_bow(gname, r2, gH, gF)
     if 'lie' in clips:
@@ -1085,9 +1092,12 @@ def decimate(act, step):
 
 
 DECIMATE = {'idle': 3, 'sit': 3, 'lie': 3, 'sleep': 3, 'paw': 2, 'rollover': 2}
+# (transitions des gabarits — fondus de deux poses — : une clé sur 2 ; la variante « nain » du court en ajoutait cinq)
+GAB_DECIMATE = {'sit_down': 2, 'stand_up': 2, 'lie_down': 2, 'get_up': 2}
 for act in bpy.data.actions:
     nm_ = act.name.rsplit('_', 1)
-    st_ = DECIMATE.get(nm_[0] if len(nm_) == 2 and nm_[1] in GABARITS else act.name)
+    gab_ = len(nm_) == 2 and nm_[1] in GABARITS
+    st_ = DECIMATE.get(nm_[0] if gab_ else act.name) or (GAB_DECIMATE.get(nm_[0]) if gab_ else None)
     if st_ and not act.name.startswith('_'):
         decimate(act, st_)
 report['clips'] = K.check_clips(arm, meshes, paws, muzzle, skip=('pose_tail', *gab_actions))

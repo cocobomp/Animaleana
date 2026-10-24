@@ -2550,6 +2550,8 @@ export function pickGabarit(gabarits, legs, paws = 1) {
   let best = null;
   let bd = Math.abs(Math.log(L)) + Math.abs(Math.log(P));
   for (const [name, g] of Object.entries(gabarits ?? {})) {
+    // (variante d'un gabarit — of — : jamais choisie seule, voir dogClips)
+    if (g.of) continue;
     const d = Math.abs(Math.log(L / g.legs)) + Math.abs(Math.log(P / (g.paws ?? 1)));
     if (d < bd - 1e-6) {
       best = name;
@@ -2559,19 +2561,81 @@ export function pickGabarit(gabarits, legs, paws = 1) {
   return best;
 }
 
-/** Clips d'un chien : ceux du modèle d'origine, remplacés par ceux de son gabarit (« sit_court » joue « sit »). */
-export function dogClips(base, gabarit) {
-  const names = Object.keys(base.gabarits ?? {});
+/**
+ * Clips d'un chien : ceux du modèle d'origine, remplacés par ceux de son gabarit (« sit_court » joue « sit »). back :
+ * longueur du dos de la race — les clips d'une variante du gabarit (of, back : « sit_nain », assis des dos courts aux
+ * pattes courtes) sont fondus avec ceux du gabarit selon elle, de la variante (dos de la variante ou plus court) au
+ * gabarit (dos du gabarit ou plus long) ; clips fondus partagés par les races de même mélange (pas de 0,05).
+ */
+export function dogClips(base, gabarit, back = null) {
+  const gabs = base.gabarits ?? {};
+  const names = Object.keys(gabs);
   const out = {};
   const own = {};
+  const vars = {};
+  const G = gabarit ? gabs[gabarit] : null;
+  const variant = G && back != null && G.back ? names.find((v) => gabs[v].of === gabarit && gabs[v].back) : null;
   for (const [name, clip] of Object.entries(base.clips)) {
     const m = name.match(/^(.+)_([a-z]+)$/);
     if (m && names.includes(m[2])) {
       if (m[2] === gabarit) own[m[1]] = clip;
+      else if (m[2] === variant) vars[m[1]] = clip;
     } else out[name] = clip;
+  }
+  if (variant) {
+    const V = gabs[variant];
+    const f = Math.round(clamp((back - V.back) / (G.back - V.back), 0, 1) * 20) / 20;
+    for (const [nm, vc] of Object.entries(vars)) {
+      const gc = own[nm];
+      if (!gc || f >= 1) continue;
+      if (f <= 0) {
+        own[nm] = vc;
+        continue;
+      }
+      base.mixed ??= new Map();
+      const key = `${nm}|${variant}|${f}`;
+      if (!base.mixed.has(key)) base.mixed.set(key, mixClips(vc, gc, f, `${nm}_${gabarit}`));
+      own[nm] = base.mixed.get(key);
+    }
   }
   return { ...out, ...own };
 }
+
+/**
+ * Clip mêlé de deux clips des mêmes os : a au poids 1 − f, b au poids f (rotations interpolées sur la sphère,
+ * translations en ligne droite), aux instants des deux clips ; pistes de b seules ou de a seules gardées telles quelles.
+ */
+export function mixClips(a, b, f, name = a.name) {
+  const byName = new Map(b.tracks.map((t) => [t.name, t]));
+  const done = new Set();
+  const tracks = [];
+  for (const ta of a.tracks) {
+    const tb = byName.get(ta.name);
+    if (!tb) {
+      tracks.push(ta.clone());
+      continue;
+    }
+    done.add(ta.name);
+    const times = Float32Array.from(new Set([...ta.times, ...tb.times])).sort();
+    const n = ta.getValueSize();
+    const ia = ta.createInterpolant();
+    const ib = tb.createInterpolant();
+    const vals = new Float32Array(times.length * n);
+    const quat = ta instanceof THREE.QuaternionKeyframeTrack;
+    for (let i = 0; i < times.length; i++) {
+      const va = Array.from(ia.evaluate(times[i]));
+      const vb = Array.from(ib.evaluate(times[i]));
+      if (quat) {
+        _qa.fromArray(va).slerp(_qb.fromArray(vb), f).toArray(vals, i * n);
+      } else for (let k = 0; k < n; k++) vals[i * n + k] = va[k] + (vb[k] - va[k]) * f;
+    }
+    tracks.push(new ta.constructor(ta.name, times, vals));
+  }
+  for (const tb of b.tracks) if (!done.has(tb.name)) tracks.push(tb.clone());
+  return new THREE.AnimationClip(name, Math.max(a.duration, b.duration), tracks);
+}
+const _qa = new THREE.Quaternion();
+const _qb = new THREE.Quaternion();
 
 /**
  * Allure d'après la vitesse (m/s, ramenée à la taille et aux membres du modèle d'origine), avec hystérésis.
@@ -2637,7 +2701,9 @@ class RealDogAnim {
     // Clips du gabarit le plus proche de la longueur des membres de la race (pattes courtes du teckel, longues des
     // lévriers…) à la place de ceux du modèle d'origine.
     this.gabarit = pickGabarit(base.gabarits, B.legs, B.paws);
-    for (const [name, clip] of Object.entries(dogClips(base, this.gabarit))) {
+    // (assis des pattes courtes : celui du gabarit fondu avec celui de sa variante selon la longueur du dos — teckel,
+    // corgi aux reins fléchis ; chiots carlin et bouledogue, trapus, sans)
+    for (const [name, clip] of Object.entries(dogClips(base, this.gabarit, B.back ?? 1))) {
       const a = this.mixer.clipAction(clip);
       const once = ['sit_down', 'stand_up', 'lie_down', 'get_up', 'jump', 'paw', 'rollover'].includes(name);
       if (once) {

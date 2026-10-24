@@ -211,6 +211,31 @@ describe('assis et couché des petits chiens', () => {
     }
   });
 
+  it('chiots trapus aux pattes courtes (carlin, bouledogue) et chiot corgi assis et « donne la patte » : jamais à la renverse', () => {
+    // (gabarit court : l'assis aux reins fléchis, fait pour les dos longs du teckel et du corgi, faisait basculer les
+    // chiots carlin et bouledogue sur le dos — dos à 130° et 121°, 76 et 93 triangles étirés ; chiot corgi presque
+    // vertical, 59°, peau 1,1 cm sous le sol. L'assis du gabarit est fondu avec celui de sa variante « nain », sans
+    // reins fléchis, selon la longueur du dos : chiots carlin et bouledogue 42° et 40°, comme avant les finitions 2)
+    for (const breed of ['carlin', 'bouledogue', 'corgi']) {
+      for (const paw of [false, true]) {
+        const look = { ...resolveLook('dog', breed, 0), seed: 4242, puppy: true };
+        const md = buildRealDogModel(look, breed, G[dogModelOf(look)]);
+        const s = (look.scale ?? 1) * 0.55;
+        expect(md.anim.gabarit, breed).toBe('court');
+        for (let i = 0; i < 240; i++) {
+          if (paw) realDogPose(md, 'paw', Math.min(1, i / 60));
+          md.anim.update(1 / 60, st({ size: s, posture: 'sit' }));
+        }
+        const p = poseOf(md, s);
+        expect(p.back, breed).toBeGreaterThan(30);
+        expect(p.back, breed).toBeLessThan(50);
+        expect(p.stretch, breed).toBeLessThan(35);
+        expect(p.trunk, breed).toBeGreaterThan(-0.8);
+        md.dispose();
+      }
+    }
+  });
+
   it('couchés et endormis des races du jack aux membres changés : postérieurs repliés au sol, antérieurs posés, poitrail jamais sous le sol', () => {
     // (avant : pieds arrière à 4 à 6 cm ; finitions 2 — antérieurs allongés devant à 3,4 cm (teckel), 3,7 (corgi), 4,6
     // (carlin), 6,1 (bouledogue), 5,5 (yorkshire), 4,7 (spitz nain) du sol)

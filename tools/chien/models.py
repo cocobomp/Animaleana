@@ -500,8 +500,14 @@ MODELS['jack'] = dict(
         # (court : assis aux reins fléchis — sit_flex, voir gab_sit : bassin −0,5 rad autour de spine1, bas du dos −0,6
         # autour de spine2 et −0,6 autour de chest, poitrail redressé de 0,55, tête relevée de 0,55 — dos du teckel 18 → 33°,
         # du corgi 23 → 47°)
-        'court': dict(legs=0.52, legW=1.13, clips=['walk', 'trot', 'run', 'sit', 'paw', 'sniff', 'bow'], sniff_pitch=0.08,
+        # (back : longueur du dos pour laquelle l'assis est fait — teckel 1,45, corgi 1,25)
+        'court': dict(legs=0.52, legW=1.13, back=1.25, clips=['walk', 'trot', 'run', 'sit', 'paw', 'sniff', 'bow'], sniff_pitch=0.08,
                       sit_flex=[-0.5, -0.6, 0.55, -0.6, 0.55]),
+        # (nain : variante du court — of — pour les dos courts aux pattes courtes, chiots carlin et bouledogue (dos 0,72
+        # et 0,77) : assis et patte sans les reins fléchis, comme avant les finitions 2. Le jeu fond les deux assis selon
+        # la longueur du dos de la race, de nain (0,8) à court (1,35) — dogReal.js dogClips. Sur l'assis aux reins
+        # fléchis, fait pour les dos longs, ces chiots trapus basculaient à la renverse : dos à 130° et 121°)
+        'nain': dict(legs=0.52, legW=1.13, of='court', back=0.8, clips=['sit', 'paw']),
         # (trapu : l'assis du jack reste ; ses pieds arrière en l'air — carlin, bouledogue — sont reposés en jeu par
         # settleSit. L'assis généré cassait celui du yorkshire, du même gabarit : dos à 6°, pieds arrière à 5 cm)
         'trapu': dict(legs=0.74, legW=1.12, clips=['walk', 'trot', 'run']),

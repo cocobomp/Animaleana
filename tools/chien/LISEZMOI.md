@@ -368,3 +368,16 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   pour 90 % des triangles ; le bord roulé, sans épaisseur au repos, n'en était qu'une rayure) : maintenant 1,00 partout,
   boucles de la taille de celles de la tête. Copie du repos commun pour cette seule race (+0,14 Mo ; les autres gardent
   l'attribut partagé).
+### Finitions 2, reprise (correcteur des chiens, après la critique)
+
+- **Variante « nain » du gabarit court** (`models.py`, gabarit `nain` : `of='court'`, `back=0.8`, clips `sit` et `paw`) :
+  l'assis aux reins fléchis du gabarit court (`sit_flex`) est fait pour les dos longs du teckel et du corgi ; les chiots
+  carlin et bouledogue, aux pattes courtes (0,60 et 0,58) mais au dos court (0,72 et 0,77), prennent aussi ce gabarit et
+  basculaient à la renverse (dos 130° et 121°, 76 et 93 triangles étirés). La variante refait l'assis sans les reins
+  fléchis (celui d'avant les finitions 2) ; `extras.dog.gabarits` garde `of` et `back` (`pack.mjs`) ; le jeu
+  (`dogClips`, `mixClips` de `dogReal.js`) ne choisit jamais une variante seule et fond, clé par clé, ses clips avec ceux du
+  gabarit selon la longueur du dos de la race, de la variante (dos 0,8 ou moins) au gabarit (court : `back=1.25` ou plus ;
+  pas de 0,05, clips mêlés partagés). Chiots carlin 130 → 42°, bouledogue 121 → 40°, corgi 59 → 46° (peau 1,1 → 0,9 cm
+  sous le sol) ; teckel et corgi adultes inchangés (dos 1,45 et 1,25 : assis du gabarit seul). Transitions des gabarits
+  (`sit_down`, `stand_up`, `lie_down`, `get_up`) : une clé sur 2 (`GAB_DECIMATE`). `dog_jack.glb` 614 → 655 Ko (+5 clips ;
+  0,60 Mo sur main : +9 %).

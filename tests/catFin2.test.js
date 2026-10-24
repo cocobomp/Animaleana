@@ -2,7 +2,7 @@
 // en boule, pas de peau retournée à l'aine pendant la toilette, pas posés au pas, avant du collier visible sous le
 // menton, fourrure sous les yeux, ... Déterministe :
 // graines fixes, pas de temps fixe, aucun Math.random (le mixeur est appelé avec des états donnés).
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import * as THREE from 'three';
 import { buildRealCatModel, realCatBase, realCatPose } from '../src/game/models/catReal.js';
 import { buildGear } from '../src/game/gearModels.js';
@@ -20,6 +20,9 @@ let G;
 beforeAll(async () => {
   G = { adult: await loadRealCatGltf('adult'), kitten: await loadRealCatGltf('kitten') };
 }, 120000);
+// (la main rendue entre deux tests : tous synchrones, ils tenaient le fil plus d'une minute d'affilée sous charge et
+// l'échange du travailleur avec vitest expirait — « Timeout calling onTaskUpdate », suite entière en échec)
+afterEach(() => new Promise((r) => setTimeout(r, 0)));
 
 const lookOf = (breed, colorIndex = 0) => catLookWithBreed({ ...resolveLook('cat', breed, colorIndex), seed: 4242 }, breed);
 const cat = (breed, stage = 'adult') => buildRealCatModel(lookOf(breed), stage, G[stage === 'baby' ? 'kitten' : 'adult']);

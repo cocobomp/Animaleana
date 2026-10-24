@@ -20,7 +20,7 @@ import { competitionRivals, calendar } from '../src/sim/competitions.js';
 import { visibleClasses, classOf, classRivals } from '../src/sim/beauty.js';
 import { buildingActions } from '../src/sim/buildings.js';
 import { OBJECTIVES, objectiveShown, objectiveParams, checkObjectives } from '../src/sim/objectives.js';
-import { suggestedQuest } from '../src/sim/tutorial.js';
+import { trackerQuest, otherQuests, joinQuest, STORY } from '../src/sim/quests.js'; // quêtes principales et secondaires
 import { STRUCTURES, structureShown, canBuild, build, canAssign } from '../src/sim/construction.js';
 import {
   EQUIPMENT, HELPERS, equipmentShown, helperShown, buyEquipment, hireHelper, tickProduce, collectProduct, passiveEquipment,
@@ -286,20 +286,26 @@ describe('ce qu\'on ne propose plus dans une nouvelle partie', () => {
     expect(species4.progress(q)).toEqual([1, 2]);
   });
 
-  it('la quête conseillée n\'est jamais une quête cachée, même en dernier recours (simulation de 60 parties)', () => {
+  it('le suivi et les autres quêtes ne montrent jamais une quête cachée, même en dernier recours (simulation de 60 parties)', () => {
     for (let n = 0; n < 60; n++) {
       const rng = mulberry32(500 + n);
       const p = createProfile('A');
       p.animals.push(adult('horse'), adult('dog'));
       // Une partie plus ou moins avancée : une partie des quêtes est déjà finie.
       for (const o of OBJECTIVES) if (o.kind === 'quest' && rng() < 0.85) p.completed.push(o.id);
-      const q = suggestedQuest(p, OBJECTIVES);
-      if (q) expect(objectiveShown(p, q), q.id).toBe(true);
+      // L'enfant essaie de rejoindre n'importe quelle quête : les cachées sont refusées.
+      for (const o of OBJECTIVES) if (o.kind === 'quest' && rng() < 0.3) joinQuest(p, o.id);
+      const q = trackerQuest(p);
+      if (q) expect(objectiveShown(p, OBJECTIVES.find((o) => o.id === q.id)), q.id).toBe(true);
+      for (const th of otherQuests(p)) for (const id of th.quests) expect(objectiveShown(p, OBJECTIVES.find((o) => o.id === id)), id).toBe(true);
     }
-    // Il ne reste que les quêtes du lapin : rien à conseiller.
+    // Il ne reste que les quêtes du lapin : rien à montrer, rien à rejoindre.
     const p = createProfile('A');
     for (const o of OBJECTIVES) if (o.kind === 'quest' && !o.needs) p.completed.push(o.id);
-    expect(suggestedQuest(p, OBJECTIVES)).toBeNull();
+    expect(trackerQuest(p)).toBeNull();
+    expect(otherQuests(p)).toEqual([]);
+    expect(joinQuest(p, 'actvHop1')).toEqual({ ok: false, reason: 'unknown' });
+    expect(STORY.every((id) => p.completed.includes(id))).toBe(true);
   });
 });
 

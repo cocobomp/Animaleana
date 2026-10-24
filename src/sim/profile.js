@@ -14,6 +14,7 @@ import { SPECIES, getBreed } from './species.js'; // anciens chats : look compl�
 import { upgradeCatLook } from './catBreeds.js';
 import { defaultGroomerState } from './groomer.js'; // métier Toiletteur (salon de toilettage)
 import { defaultTrailGuide, tgState } from './trailGuide.js'; // métier guide de randonnée 🧭
+import { defaultQuests, migrateQuests } from './quests.js'; // quêtes principales et secondaires
 
 const INDEX_KEY = 'animaleana.profiles';
 const PROFILE_KEY = (id) => `animaleana.profile.${id}`;
@@ -68,6 +69,7 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     events: { active: null, cooldowns: {}, nextAt: 0, lastRoll: -1, weather: null, done: {} },
     settings: { camera: 'third', timeSpeed: 'normal', sound: { on: true, volume: 0.7 } }, // sound : src/game/audio.js
     tutorial: createTutorial(), // tutoriel guidé (src/sim/tutorial.js)
+    quests: defaultQuests(), // quêtes secondaires rejointes et chapitres de l'histoire passés (src/sim/quests.js)
     clients: defaultClients(), // visiteurs et animaux confiés (src/sim/clients.js)
     careers: defaultCareers(), // métiers appris (src/sim/careers.js)
     vetSchool: defaultVetSchool(), // leçons de l'école vétérinaire (src/sim/vetSchool.js)
@@ -162,6 +164,10 @@ export function migrate(p, hint = {}) {
   }
   // 🧭 Guide de randonnée : l'ancienne réputation du guide passe dans le registre des métiers (src/sim/careers.js).
   tgState(out);
+  // Quêtes principales et secondaires (ajoutées plus tard) : rien de rejoint, sauf la quête qu'on suivait si
+  // c'était une quête secondaire ; les chapitres déjà finis restent finis (src/sim/quests.js).
+  out.quests = p.quests;
+  migrateQuests(out);
   // Paddock, bergerie et enclos des lapins plus grands : on agrandit sans casser les déplacements enregistrés.
   return migrateCoreSizes(out);
 }

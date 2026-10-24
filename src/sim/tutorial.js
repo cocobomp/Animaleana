@@ -3,6 +3,10 @@
 // (le joueur a-t-il marché ? le refuge est-il ouvert ?…) et les événements du jeu.
 
 import { objectiveShown } from './objectives.js'; // quêtes cachées tant que leur espèce n'est pas proposée
+import { levelOf } from './progress.js';
+import { PLACES, PLACE_IDS, TRAVEL_MODES, checkTravel } from './places.js'; // le voyage le moins cher (quête du voyage)
+import { POOPS_PER_DAY } from './droppings.js'; // qui fait des crottins (quête « ramasser »)
+import { SPECIES } from './species.js';
 
 const stat = (p, k) => p.stats?.[k] ?? 0;
 
@@ -159,79 +163,151 @@ export function restartTutorial(profile) {
 // ------------------------------------------------------------------ quêtes claires
 
 /**
- * Pour chaque quête : où aller (clé de texte quest_where_*) et quoi montrer.
- * ready(p) : la quête est faisable maintenant (sinon on en propose une autre).
+ * Ce qu'il faut avoir pour pouvoir faire une quête (need de QUEST_GUIDE). Chaque besoin dit s'il est rempli ;
+ * sinon la quête dit simplement pourquoi (texte qneed_<id>, voir questBlock) et n'est jamais imposée.
+ * Seuls nos propres animaux comptent (pas ceux des clients ni les invités).
  */
-const hasHorse = (p) => p.animals.some((a) => a.species === 'horse');
-const hasAnimal = (p) => p.animals.length > 0;
+const own = (p) => (p.animals ?? []).filter((a) => !a.client && !a.guest);
+const hasAnimal = (p) => own(p).length > 0;
+const hasHorse = (p) => own(p).some((a) => a.species === 'horse');
 const hasSalon = (p) => (p.structures ?? []).some((s) => s.type === 'salon'); // salon de toilettage
 const hasCareer = (p) => Object.keys(p.careers?.started ?? {}).length > 0;
-const dogTrainerStarted = (p) => p.careers?.started?.dogTrainer !== undefined; // éducateur canin (src/sim/dogTrainer.js)
-const hasTrainingDog = (p) => p.animals.some((a) => a.client?.kind === 'training');
-const coachable = (p) => p.animals.some((a) => !a.client && ['dog', 'cat', 'horse', 'rabbit'].includes(a.species));
+const careerOn = (p, id) => p.careers?.started?.[id] !== undefined;
+const dogTrainerStarted = (p) => careerOn(p, 'dogTrainer'); // éducateur canin (src/sim/dogTrainer.js)
+const hasTrainingDog = (p) => (p.animals ?? []).some((a) => a.client?.kind === 'training');
+const coachable = (p) => own(p).some((a) => ['dog', 'cat', 'horse', 'rabbit'].includes(a.species));
+const level = (p) => levelOf(p.xp ?? 0);
 
-const SHOWGROUND = { type: 'building', id: 'showground' };
+/** Le voyage le moins cher d'ici (en 🪙 : sans animal, sans le cheval), seulement vers l'étranger avec abroad. */
+export function cheapestTrip(p, { abroad = false } = {}) {
+  const here = PLACES[p.place] ?? PLACES[p.home] ?? PLACES[PLACE_IDS[0]];
+  const homeCountry = PLACES[p.home ?? 'maison']?.country;
+  let best = null;
+  for (const to of PLACE_IDS) {
+    if (abroad && PLACES[to].country === homeCountry) continue;
+    for (const mode of Object.keys(TRAVEL_MODES)) {
+      if (TRAVEL_MODES[mode].needsHorse) continue;
+      const r = checkTravel(here.id, to, mode, []);
+      if (r.ok && (best === null || r.cost < best)) best = r.cost;
+    }
+  }
+  return best ?? 0;
+}
+const tripOk = (p, abroad) => p.mode !== 'manage' || (p.money ?? 0) >= cheapestTrip(p, { abroad });
 
-export const QUEST_GUIDE = {
-  adopt1: { where: 'refuge', target: { type: 'building', id: 'refuge' } },
-  feed5: { where: 'animal', target: { type: 'action', id: 'feed' }, ready: hasAnimal },
-  pet3: { where: 'animal', target: { type: 'action', id: 'pet' }, ready: hasAnimal },
-  water3: { where: 'animal', target: { type: 'action', id: 'water' }, ready: hasAnimal },
-  brush3: { where: 'animal', target: { type: 'action', id: 'brush' }, ready: hasAnimal },
-  scoop1: { where: 'ground', target: { type: 'dropping' }, ready: (p) => (p.droppings ?? []).some((d) => d.kind === 'poop' && d.place === p.place) },
-  vet1: { where: 'vet', target: { type: 'building', id: 'vet' }, ready: hasAnimal },
-  trick1: { where: 'sheet', target: { type: 'action', id: 'more' }, ready: hasAnimal },
-  ride1: { where: 'horse', target: { type: 'action', id: 'ride', species: 'horse' }, ready: hasHorse },
-  travel1: { where: 'travel', target: { type: 'hud', id: 'travel' } },
-  abroad: { where: 'travel', target: { type: 'hud', id: 'travel' } },
-  horseTrip: { where: 'travel', target: { type: 'hud', id: 'travel' }, ready: hasHorse },
-  baby: { where: 'sheet', target: { type: 'action', id: 'more' }, ready: (p) => p.animals.length >= 2 },
-  species4: { where: 'refuge', target: { type: 'building', id: 'refuge' } },
-  // Activités : au terrain de concours (src/sim/activities.js)
-  actvLesson1: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
-  actvJump1: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
-  actvClear1: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
-  actvTrail1: { where: 'showground', target: SHOWGROUND },
-  actvAgility1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
-  actvShow1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
-  actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
-  actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
-  actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, ready: (p) => p.animals.some((a) => a.species === 'rabbit') },
-  // Dressage et concours à l'extérieur (src/sim/dressage.js, src/sim/competitions.js)
-  drTrain3: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
-  drReprise1: { where: 'showground', target: SHOWGROUND, horse: true, ready: hasHorse },
-  compRegister1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, ready: hasAnimal },
-  compAway1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, ready: hasAnimal },
-  // Concours de beauté (src/sim/beauty.js) : préparer depuis la fiche, présenter au terrain de concours
-  beautyPrep1: { where: 'sheet', target: { type: 'action', id: 'more' }, animal: true, ready: hasAnimal },
-  beautyBraid1: { where: 'sheet', target: { type: 'action', id: 'more' }, horse: true, ready: hasHorse },
-  beauty1: { where: 'showground', target: SHOWGROUND, animal: true, ready: hasAnimal },
-  // Métier éducateur canin (une fois commencé) : les maîtres arrivent près de la niche, les séances se font
-  // depuis le chien (menu rapide ou fiche).
-  dtClient1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, ready: dogTrainerStarted },
-  dtSession3: { where: 'dogSheet', target: { type: 'animal', training: true }, ready: hasTrainingDog },
-  dtDeliver1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, ready: hasTrainingDog },
-  dtCoach1: { where: 'dogSheet', target: { type: 'action', id: 'more' }, ready: (p) => dogTrainerStarted(p) && coachable(p) },
-  // Métier Toiletteur (src/sim/groomer.js) : construire le salon, puis y travailler.
-  grmSalon: { where: 'build', target: { type: 'hud', id: 'hud_build' }, ready: (p) => (p.xp ?? 0) >= 150 }, // 150 XP = niveau 3
-  grmClient1: { where: 'salon', target: { type: 'building', id: 'salon' }, ready: hasSalon },
-  grmOwn1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, ready: (p) => hasSalon(p) && hasAnimal(p) },
-  grmAccessory1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, ready: (p) => hasSalon(p) && hasAnimal(p) },
-  grmFive1: { where: 'salon', target: { type: 'building', id: 'salon' }, ready: hasSalon },
-  // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
-  career1: { where: 'careers', target: { type: 'hud', id: 'careers' } },
-  client1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
-  clientVet1: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: (p) => !!p.careers?.started?.vet },
-  clientHappy5: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
-  clientMoney500: { where: 'home', target: { type: 'hud', id: 'careers' }, ready: hasCareer },
-  // 🧭 Guide de randonnée (src/sim/trailGuide.js) : les visiteurs arrivent près de l'écurie.
-  tgFirst: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
-  tgStars3: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
-  tgRiders10: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, ready: hasHorse },
-  tgAbroad: { where: 'travel', target: { type: 'hud', id: 'travel' }, horse: true, ready: hasHorse },
+/**
+ * Les besoins : ok(p) = rempli ; params(p) = ce que dit le texte (« Il te faut {n} 🪙 »).
+ * Le niveau : { id: 'level', n, for } (« Niveau 3 pour construire », texte qneed_level_<for>).
+ */
+export const QUEST_NEEDS = {
+  animal: { ok: hasAnimal },
+  horse: { ok: hasHorse },
+  rabbit: { ok: (p) => own(p).some((a) => a.species === 'rabbit') },
+  // deux animaux pour un bébé : un mâle et une femelle de la même espèce
+  pair: { ok: (p) => own(p).some((a) => a.sex === 'f' && own(p).some((b) => b.sex === 'm' && b.species === a.species)) },
+  pooper: { ok: (p) => own(p).some((a) => POOPS_PER_DAY[a.species]) }, // (chats et lapins : litière, pas de crottin)
+  agility: { ok: (p) => own(p).some((a) => SPECIES[a.species]?.training?.includes('agility')) },
+  coachable: { ok: coachable },
+  salon: { ok: hasSalon },
+  career: { ok: hasCareer },
+  // métiers dont les visiteurs viennent confier leur animal (src/sim/clients.js)
+  visitCareer: { ok: (p) => ['vet', 'pension', 'handler'].some((id) => careerOn(p, id)) },
+  vetCareer: { ok: (p) => careerOn(p, 'vet') },
+  dogTrainer: { ok: dogTrainerStarted },
+  trainingDog: { ok: hasTrainingDog },
+  trip: { ok: (p) => tripOk(p, false), params: (p) => ({ n: cheapestTrip(p) }) },
+  tripAbroad: { ok: (p) => tripOk(p, true), params: (p) => ({ n: cheapestTrip(p, { abroad: true }) }) },
+  level: { ok: (p, need) => level(p) >= need.n, params: (p, need) => ({ n: need.n }) },
 };
 
-/** Ordre conseillé des quêtes, de la plus facile à la plus difficile. */
+const SHOWGROUND = { type: 'building', id: 'showground' };
+const LEVEL_BUILD = { id: 'level', n: 3, for: 'build' }; // 150 XP = niveau 3 (salon de toilettage)
+const LEVEL_CAREER = { id: 'level', n: 3, for: 'career' }; // premier métier (src/sim/careers.js : niveau 3)
+const LEVEL_TRAIL = { id: 'level', n: 4, for: 'career' }; // 🧭 guide de randonnée (niveau 4)
+
+/**
+ * Pour chaque quête : où aller (clé de texte quest_where_*), quoi montrer, et ce qu'il faut avoir (need, dans
+ * l'ordre : le premier qui manque est celui qu'on dit).
+ */
+export const QUEST_GUIDE = {
+  adopt1: { where: 'refuge', target: { type: 'building', id: 'refuge' } },
+  feed5: { where: 'animal', target: { type: 'action', id: 'feed' }, need: ['animal'] },
+  pet3: { where: 'animal', target: { type: 'action', id: 'pet' }, need: ['animal'] },
+  water3: { where: 'animal', target: { type: 'action', id: 'water' }, need: ['animal'] },
+  brush3: { where: 'animal', target: { type: 'action', id: 'brush' }, need: ['animal'] },
+  // (un crottin arrive tout seul avec le temps : l'étape « attends un crottin » du suivi)
+  scoop1: { where: 'ground', target: { type: 'dropping' }, need: ['animal', 'pooper'] },
+  vet1: { where: 'vet', target: { type: 'building', id: 'vet' }, need: ['animal'] },
+  trick1: { where: 'sheet', target: { type: 'action', id: 'more' }, need: ['animal'] },
+  ride1: { where: 'horse', target: { type: 'action', id: 'ride', species: 'horse' }, need: ['horse'] },
+  travel1: { where: 'travel', target: { type: 'hud', id: 'travel' }, need: ['trip'] },
+  abroad: { where: 'travel', target: { type: 'hud', id: 'travel' }, need: ['tripAbroad'] },
+  horseTrip: { where: 'travel', target: { type: 'hud', id: 'travel' }, need: ['horse'] },
+  baby: { where: 'sheet', target: { type: 'action', id: 'more' }, need: ['animal', 'pair'] },
+  species4: { where: 'refuge', target: { type: 'building', id: 'refuge' } },
+  // Activités : au terrain de concours (src/sim/activities.js)
+  actvLesson1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] },
+  actvJump1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] },
+  actvClear1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] },
+  actvTrail1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] }, // (la balade se fait à cheval)
+  actvAgility1: { where: 'showground', target: SHOWGROUND, animal: true, need: ['animal', 'agility'] },
+  actvShow1: { where: 'showground', target: SHOWGROUND, animal: true, need: ['animal'] },
+  actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, need: ['animal'] },
+  actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, need: ['rabbit'] },
+  actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, need: ['rabbit'] },
+  // Dressage et concours à l'extérieur (src/sim/dressage.js, src/sim/competitions.js)
+  drTrain3: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] },
+  drReprise1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] },
+  compRegister1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, need: ['animal'] },
+  compAway1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, need: ['animal'] },
+  // Concours de beauté (src/sim/beauty.js) : préparer depuis la fiche, présenter au terrain de concours
+  beautyPrep1: { where: 'sheet', target: { type: 'action', id: 'more' }, animal: true, need: ['animal'] },
+  beautyBraid1: { where: 'sheet', target: { type: 'action', id: 'more' }, horse: true, need: ['horse'] },
+  beauty1: { where: 'showground', target: SHOWGROUND, animal: true, need: ['animal'] },
+  // Métier éducateur canin (une fois commencé) : les maîtres arrivent près de la niche, les séances se font
+  // depuis le chien (menu rapide ou fiche).
+  dtClient1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, need: ['dogTrainer'] },
+  dtSession3: { where: 'dogSheet', target: { type: 'animal', training: true }, need: ['dogTrainer', 'trainingDog'] },
+  dtDeliver1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, need: ['dogTrainer', 'trainingDog'] },
+  dtCoach1: { where: 'dogSheet', target: { type: 'action', id: 'more' }, need: ['dogTrainer', 'coachable'] },
+  // Métier Toiletteur (src/sim/groomer.js) : construire le salon, puis y travailler.
+  grmSalon: { where: 'build', target: { type: 'hud', id: 'hud_build' }, need: [LEVEL_BUILD] },
+  grmClient1: { where: 'salon', target: { type: 'building', id: 'salon' }, need: ['salon'] },
+  grmOwn1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, need: ['salon', 'animal'] },
+  grmAccessory1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, need: ['salon', 'animal'] },
+  grmFive1: { where: 'salon', target: { type: 'building', id: 'salon' }, need: ['salon'] },
+  // Métiers et clients (src/sim/careers.js, src/sim/clients.js)
+  career1: { where: 'careers', target: { type: 'hud', id: 'careers' }, need: [LEVEL_CAREER] },
+  client1: { where: 'home', target: { type: 'hud', id: 'careers' }, need: ['career', 'visitCareer'] },
+  clientVet1: { where: 'home', target: { type: 'hud', id: 'careers' }, need: ['vetCareer'] },
+  clientHappy5: { where: 'home', target: { type: 'hud', id: 'careers' }, need: ['career', 'visitCareer'] },
+  clientMoney500: { where: 'home', target: { type: 'hud', id: 'careers' }, need: ['career', 'visitCareer'] },
+  // 🧭 Guide de randonnée (src/sim/trailGuide.js) : les visiteurs arrivent près de l'écurie (dès le niveau 4).
+  tgFirst: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, need: ['horse', LEVEL_TRAIL] },
+  tgStars3: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, need: ['horse', LEVEL_TRAIL] },
+  tgRiders10: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, need: ['horse', LEVEL_TRAIL] },
+  tgAbroad: { where: 'travel', target: { type: 'hud', id: 'travel' }, horse: true, need: ['horse', LEVEL_TRAIL] },
+};
+
+/**
+ * Pourquoi cette quête n'est pas encore possible ? null si on peut la faire maintenant, sinon
+ * { need, key, params } : key = le texte à dire (qneed_horse « Il te faut d'abord un cheval », qneed_level_build
+ * « Niveau 3 pour construire »…).
+ */
+export function questBlock(id, profile) {
+  for (const raw of QUEST_GUIDE[id]?.need ?? []) {
+    const need = typeof raw === 'string' ? { id: raw } : raw;
+    const def = QUEST_NEEDS[need.id];
+    if (!def || def.ok(profile, need)) continue;
+    return { need: need.id, key: need.for ? `qneed_${need.id}_${need.for}` : `qneed_${need.id}`, params: def.params?.(profile, need) ?? {} };
+  }
+  return null;
+}
+
+/** La quête est-elle faisable maintenant ? */
+export const questReady = (id, profile) => !questBlock(id, profile);
+
+/** Ordre des quêtes, de la plus facile à la plus difficile (journal, thèmes des quêtes : src/sim/quests.js). */
 export const QUEST_ORDER = [
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
@@ -254,19 +330,6 @@ export function questGuide(id, profile) {
   if (needsAnimal && !hasAnimal(profile)) return { where: 'refuge', target: { type: 'building', id: 'refuge' }, first: 'adopt' };
   if ((g.where === 'horse' || g.horse) && !hasHorse(profile)) return { where: 'refuge', target: { type: 'building', id: 'refuge' }, first: 'horse' };
   return { where: g.where, target: g.target };
-}
-
-/** La quête conseillée maintenant (affichée à l'écran), ou null si tout est fait. */
-export function suggestedQuest(profile, objectives) {
-  // (pas de quête qui demande une espèce pas encore proposée, même en dernier recours : voir objectiveShown)
-  const quests = objectives.filter((o) => o.kind === 'quest' && !profile.completed.includes(o.id) && objectiveShown(profile, o));
-  if (!quests.length) return null;
-  const rank = (o) => {
-    const i = QUEST_ORDER.indexOf(o.id);
-    return i < 0 ? QUEST_ORDER.length : i;
-  };
-  quests.sort((a, b) => rank(a) - rank(b));
-  return quests.find((o) => QUEST_GUIDE[o.id]?.ready?.(profile) ?? true) ?? quests[0];
 }
 
 // ------------------------------------------------------------------ suivre une quête

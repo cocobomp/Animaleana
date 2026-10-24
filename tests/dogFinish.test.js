@@ -284,6 +284,22 @@ describe('assis et couché des petits chiens', () => {
     }
   });
 
+  it('couchés et endormis des races du jack sans gabarit (cavalier, cocker, chihuahua, jack russell) : postérieurs repliés au sol', () => {
+    // (avant : pieds arrière à 2,3 cm (cavalier), 2,8 (cocker), 0,9 (chihuahua), 0,8 (jack russell) — avant-bras posés
+    // par le clip, gardés)
+    for (const breed of ['cavalier', 'cocker', 'chihuahua', 'jack_russell']) {
+      for (const sleeping of [false, true]) {
+        const { md, s } = dog(breed);
+        for (let i = 0; i < 300; i++) md.anim.update(1 / 60, st({ size: s, posture: sleeping ? 'sleep' : 'lie', sleeping }));
+        const p = poseOf(md, s);
+        expect(Math.max(p.feet[2], p.feet[3]), breed).toBeLessThan(0.5);
+        expect(Math.min(p.feet[2], p.feet[3]), breed).toBeGreaterThan(-0.8);
+        expect(p.trunk, breed).toBeGreaterThan(-0.3);
+        md.dispose();
+      }
+    }
+  });
+
   it('galgo et whippet couchés et endormis : posés comme le labrador, antérieurs en sphinx, hanches plus basses que les siennes', () => {
     // (avant : couché du gabarit long à genoux sur ses coudes, tronc à 4,2 cm du sol, hanches du galgo à 16,9 cm,
     // du whippet à 12,9, du labrador à 14,6 cm)

@@ -410,3 +410,8 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   races du jack et les membres courts (longueur < 0,85 : chiots du shiba) ; les membres longs gardent 0,38 rad. En virage
   à 2 rad/s, membre le plus écarté : labrador 33 → 30°, saint-bernard 36 → 31°, husky 28 → 25°, galgo 28 → 24° (valeurs
   de main) ; pieds posés inchangés ; teckel et jack russell inchangés (glissement en virage de la reprise gardé).
+- **Couché des races du jack sans gabarit** (cavalier, cocker, chihuahua, jack russell ; jeu, `lieSettle`) : leurs
+  postérieurs, que les membres un peu raccourcis laissaient en l'air (pieds arrière à 2,3 / 2,8 / 0,9 / 0,8 cm), sont
+  repliés au sol par `foldHind` (0,0 à 0,1 cm) ; le reste — bascule, corps reposé, antérieurs abaissés — ne s'applique
+  pas à elles : essayé, il les relevait sur des antérieurs dressés, poitrail haut ; leur clip pose déjà les avant-bras à
+  plat (bout des pieds avant relevé de 1 à 2,6 cm, une patte au repos, gardé).

@@ -3515,13 +3515,18 @@ class RealDogAnim {
     // Couché, endormi (races du jack aux membres changés : aucun clip couché de leur gabarit ; lévriers, au couché du
     // gabarit long accroupi, croupe en l'air) : postérieurs repliés au sol comme ceux du jack russell, puis le corps
     // reposé (voir foldHind).
-    const lieSettle = (this.base.kind === 'jack' && this.gabarit) || this.gabarit === 'long' ? Math.min(1, (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.lie_down ?? 0) * smooth(0.4, 1, prog('lie_down')) + (this.w.get_up ?? 0) * (1 - smooth(0, 0.5, prog('get_up')))) : 0;
+    const lieSettle = this.base.kind === 'jack' || this.gabarit === 'long' ? Math.min(1, (this.w.lie ?? 0) + (this.w.sleep ?? 0) + (this.w.lie_down ?? 0) * smooth(0.4, 1, prog('lie_down')) + (this.w.get_up ?? 0) * (1 - smooth(0, 0.5, prog('get_up')))) : 0;
     if (!(lieSettle > 0.01)) this.lieTilt = 0;
     // (couché : la peau du ventre entre les cuisses — poids des deux postérieurs — n'est pas un appui ; voir bodyMid)
     this.lying = lieSettle;
     const skipMid = lieSettle > 0.01 ? this.bodyMid : null;
     if (lieSettle > 0.01 && this.trick?.clip !== 'rollover') {
       this.foldHind(lieSettle, true);
+    }
+    // (races du jack sans gabarit — cavalier, cocker, chihuahua, jack russell — : leur clip couché leur va, avant-bras
+    // posés à plat ; seuls les postérieurs, que les membres un peu raccourcis laissaient de 0,8 à 2,8 cm en l'air, sont
+    // repliés au sol. Le reste — bascule, corps reposé, antérieurs abaissés — les relevait sur leurs antérieurs dressés)
+    if (lieSettle > 0.01 && this.trick?.clip !== 'rollover' && !(this.base.kind === 'jack' && !this.gabarit)) {
       // (poitrine profonde des lévriers posée, croupe encore en l'air : le corps bascule, l'avant sur son appui, jusqu'à
       // poser l'arrière)
       const zMid = (md.legs[0].pivot.getWorldPosition(_u).applyMatrix4(_m).z + md.legs[2].pivot.getWorldPosition(_v).applyMatrix4(_m).z) / 2;
@@ -3581,7 +3586,7 @@ class RealDogAnim {
         return lo;
       };
       const head = (b, out) => out.setFromMatrixPosition(b.matrixWorld).applyMatrix4(_m);
-      for (const l of this.base.kind === 'jack' && this.gabarit ? [0, 1] : []) {
+      for (const l of this.base.kind === 'jack' ? [0, 1] : []) {
         const leg = md.legs[l];
         // (épaisseur de la main : plus grande distance de l'articulation des doigts à la sole)
         const r = this.solePts[l].reduce((a, p) => Math.max(a, p.length()), 0);
@@ -3616,7 +3621,7 @@ class RealDogAnim {
           leg.knee.updateMatrixWorld(true);
         }
       }
-      if (this.base.kind === 'jack' && this.gabarit) {
+      if (this.base.kind === 'jack') {
         // (peau du flanc tirée par le bras descendu — poids du membre jusque sous le ventre — : jamais sous le sol)
         let lowB2 = Infinity;
         for (let q = 0; q < this.bodyPts.length; q++) if (this.bodyTrunk[q]) lowB2 = Math.min(lowB2, this.skinY(this.bodyPts[q]));

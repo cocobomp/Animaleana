@@ -706,6 +706,15 @@ Finitions 2 (téléphone 390×844 en basse et de près en haute ; planches AVANT
   lieu de 0,34 au cœur de l'ombre, `FORE_SHADE_LIGHT`, `lightManeOnLight`). Triangles des crins par cheval (33 races) :
   4 044 → 4 077 en moyenne, au plus 4 602 → 4 674 (Irish Cob), sous le plafond de 4 700 ; version réduite 1 141 → 1 166
   (`tests/horseHair.test.js` : mèches séparées en bas et chevauchées en haut, ombre plus marquée sur robe claire).
+- **bande grise sous la pointe du toupet** (reprise) : l'ombre du toupet était 1,7 fois plus large que lui (+ 6 mm) et
+  prolongée 15 % plus bas que sa ligne du milieu (pleine jusqu'à 0,85, nulle à 1,15), alors que sa plus longue mèche
+  finit à 0,92 et ses côtés à 0,80 ; renforcée sous des crins clairs, elle traçait une bande grise sur le chanfrein entre
+  les yeux, là où il n'y a pas de crins. Elle finit maintenant avant la pointe des mèches (`FORE_SHADE_END` : pleine
+  jusqu'à 0,6, nulle à 0,9) et ne déborde plus que d'un liseré (`FORE_SHADE_W` 1,15 fois la demi-largeur du toupet
+  + 2,5 mm : au plus 6,6 mm hors des crins, mesuré sur les 33 races, triangles des crins échantillonnés). Téléphone, 1,2 m
+  de face, pixels sans crins sous la pointe assombris de plus de 8/255 par l'ombre (main / 983def9 / maintenant) : arabe
+  8 906 / 13 900 / 154, Camargue 11 844 / 28 413 / 61, selle français gris 7 849 / 16 297 / 0, Fjord 6 215 / 11 771 / 12,
+  percheron 13 419 / 23 962 / 0 (`tests/horseHair.test.js`, « finie avant la pointe de la plus longue mèche »).
 - **rouans au téléphone** (Trait breton, Criollo) : lus comme des gris clairs. Les poils blancs, fondus en leur
   moyenne au loin, sont mêlés à la robe de base en lumière linéaire : sur un fond foncé, un peu de blanc pèse lourd.
   Avant : 19 % de blanc sur une base peu saturée (saturation × 2,2). Maintenant : 7 % de blanc (8,7 % des poils,

@@ -62,6 +62,13 @@ const glf = (x) => Number(x).toFixed(4);
 export const FORE_SHADE = 0.34;
 /** Ombre du toupet en plus (part de FORE_SHADE) quand des crins clairs sont sur une robe claire. */
 export const FORE_SHADE_LIGHT = 0.6;
+/**
+ * Fin de l'ombre du toupet le long du chanfrein (part de sa longueur, de la racine à la pointe de sa ligne du milieu) :
+ * pleine jusqu'à FORE_SHADE_END[0], nulle à FORE_SHADE_END[1], avant la pointe de la plus longue mèche (≈ 0,92, voir
+ * forelockCards) ; FORE_SHADE_W : sa largeur, en demi-largeurs du toupet à la même hauteur (ses bords, cartes comprises).
+ */
+export const FORE_SHADE_END = [0.6, 0.9];
+export const FORE_SHADE_W = 1.15;
 
 /** Crins clairs sur une robe claire (0 à 1) : gris, blanc, crème aux crins clairs. */
 export function lightManeOnLight(look) {
@@ -335,13 +342,16 @@ hEarIn = 0.0;
     float snout = smoothstep(0.86, 0.94, hl.z + (hNoise(P * 30.0) - 0.5) * 0.03);
     c = mix(c, mottled, isHead * clamp(spect * 0.5 + snout * 0.85, 0.0, 1.0) * hSkinMot * (1.0 - face * 0.6));
   }
-  // Ombre du toupet sur le front (contact, douce, plus large que lui : un liseré d'ombre autour de ses bords et de sa
-  // pointe) : un toupet clair sur une robe claire se détache par son ombre au lieu d'une plaque pâle translucide ;
-  // sous un toupet foncé, à peine visible.
+  // Ombre du toupet sur le front (contact, douce, un fin liseré autour de ses bords) : un toupet clair sur une robe claire
+  // se détache par son ombre au lieu d'une plaque pâle translucide ; sous un toupet foncé, à peine visible. Elle finit
+  // avant la pointe des mèches, là où il ne reste que des crins fins (FORE_SHADE_END), et ne déborde de ses bords que
+  // d'un liseré (FORE_SHADE_W) : plus large (× 1,7 + 6 mm) et prolongée 15 % plus bas que la ligne du milieu, renforcée
+  // sous des crins clairs, elle traçait une bande grise sur le chanfrein entre les yeux, sous la pointe, là où il n'y a
+  // pas de crins.
   if (hFore.w > 0.0 && isHead > 0.5) {
     float ff = (hl.z - hFore.x) / max(1e-3, hFore.y - hFore.x);
-    float fw = hFore.z * (1.0 - 0.85 * pow(smoothstep(0.05, 0.85, ff), 0.85)) * 1.7 + 0.012;
-    float fsh = smoothstep(-0.04, 0.06, ff) * (1.0 - smoothstep(0.85, 1.15, ff)) * (1.0 - smoothstep(fw * 0.45, fw, abs(hl.x))) * smoothstep(-0.03, 0.02, hl.y);
+    float fw = hFore.z * (1.0 - 0.85 * pow(smoothstep(0.05, 0.85, ff), 0.85)) * ${glf(FORE_SHADE_W)} + 0.005;
+    float fsh = smoothstep(-0.04, 0.06, ff) * (1.0 - smoothstep(${glf(FORE_SHADE_END[0])}, ${glf(FORE_SHADE_END[1])}, ff)) * (1.0 - smoothstep(fw * 0.6, fw, abs(hl.x))) * smoothstep(-0.03, 0.02, hl.y);
     c *= 1.0 - ${glf(FORE_SHADE)} * fsh * hFore.w;
   }
   // (plus épais au-dessus : le bord de la paupière supérieure et ses cils)

@@ -497,12 +497,14 @@ MODELS['jack'] = dict(
         # (court : révérence refaite, postérieurs tendus au sol — gab_bow. L'assis généré (sit_gen=True, gab_sit_gen)
         # a été essayé : postérieurs bien repliés, mais hanches plus hautes (13 cm au lieu de 6) et dos plus plat
         # (8–11° au lieu de 14–18°), le ventre profond du teckel touchant le sol avant la croupe — pas retenu)
-        # (court : assis aux reins fléchis — sit_flex, voir gab_sit : bassin −0,5 rad autour de spine1, bas du dos −0,6
-        # autour de spine2 et −0,6 autour de chest, poitrail redressé de 0,55, tête relevée de 0,55 — dos du teckel 18 → 33°,
-        # du corgi 23 → 47°)
+        # (court : assis aux reins fléchis — sit_flex, voir gab_sit : bassin −0,65 rad autour de spine1, bas du dos −0,75
+        # autour de spine2 et −0,6 autour de chest, poitrail relevé de 0,25 (angle négatif : vers le haut), tête relevée
+        # de 0,3 — dos du teckel 18 → 32°, du corgi 23 → 46°. Avec +0,55 au poitrail, il était baissé : bosse au garrot,
+        # base du cou plus basse que le garrot, tête du teckel au niveau des épaules. paw_lift : patte donnée devant le
+        # poitrail, pas repliée sous le menton)
         # (back : longueur du dos pour laquelle l'assis est fait — teckel 1,45, corgi 1,25)
         'court': dict(legs=0.52, legW=1.13, back=1.25, clips=['walk', 'trot', 'run', 'sit', 'paw', 'sniff', 'bow'], sniff_pitch=0.08,
-                      sit_flex=[-0.5, -0.6, 0.55, -0.6, 0.55]),
+                      sit_flex=[-0.65, -0.75, -0.25, -0.6, 0.3], paw_lift=(0.9, 0.22)),
         # (nain : variante du court — of — pour les dos courts aux pattes courtes, chiots carlin et bouledogue (dos 0,72
         # et 0,77) : assis et patte sans les reins fléchis, comme avant les finitions 2. Le jeu fond les deux assis selon
         # la longueur du dos de la race, de nain (0,8) à court (1,35) — dogReal.js dogClips. Sur l'assis aux reins

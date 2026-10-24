@@ -764,8 +764,8 @@ def gab_sit(gname, rg, k, gH, gF, flex=None):
     if flex:
         rear = ['pelvis'] + [b for r in ('femurL', 'femurR', cfg['tail'][0]) for b in K.descendants(arm, r)]
         steps = [('spine1', rear, flex[0]), ('spine2', rear + ['spine1'], flex[1])]
-        # (flex : bassin autour de spine1, bas du dos autour de spine2, poitrail redressé autour de chest, reins autour de
-        # chest, tête relevée en plus)
+        # (flex : bassin autour de spine1, bas du dos autour de spine2, poitrail autour de chest — angle négatif : relevé,
+        # positif : baissé —, reins autour de chest, tête relevée en plus)
         if len(flex) > 3 and flex[3]:
             steps.append(('chest', rear + ['spine1', 'spine2'], flex[3]))
         if len(flex) > 2 and flex[2]:

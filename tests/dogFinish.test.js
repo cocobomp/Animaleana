@@ -211,6 +211,37 @@ describe('assis et couché des petits chiens', () => {
     }
   });
 
+  it('teckel et corgi assis : tête au-dessus des épaules, à niveau ; patte donnée devant le poitrail', () => {
+    // (finitions 2 : assis aux reins fléchis, poitrail baissé — tête du teckel à 7,3 cm au-dessus des épaules contre
+    // 10,5 pour le jack russell, museau vers l'avant et le bas, dos bossu ; corgi tête renversée, 10 à 14° au-dessus de
+    // son port ; patte donnée repliée sous le menton)
+    for (const breed of ['teckel', 'corgi']) {
+      for (const paw of [false, true]) {
+        const { md, s } = dog(breed);
+        for (let i = 0; i < 240; i++) {
+          if (paw) realDogPose(md, 'paw', Math.min(1, i / 60));
+          md.anim.update(1 / 60, st({ size: s, posture: 'sit' }));
+        }
+        md.root.updateMatrixWorld(true);
+        const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+        const loc = (n) => md.bone(n).getWorldPosition(new THREE.Vector3()).applyMatrix4(inv);
+        const sh = loc('humerusL').add(loc('humerusR')).multiplyScalar(0.5);
+        const fwd = md.anim.headFwd.clone().applyQuaternion(md.head.getWorldQuaternion(new THREE.Quaternion()))
+          .applyQuaternion(md.root.getWorldQuaternion(new THREE.Quaternion()).invert());
+        const pitch = (Math.asin(fwd.y) * 180) / Math.PI;
+        expect((loc('head').y - sh.y) * s * 100, breed).toBeGreaterThan(9.5);
+        expect(pitch, breed).toBeGreaterThan(-4);
+        expect(pitch, breed).toBeLessThan(9);
+        if (paw) {
+          const p = md.legs[0].paw.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv);
+          expect((p.z - sh.z) * s * 100, breed).toBeGreaterThan(3.2);
+          expect(p.y * s * 100, breed).toBeGreaterThan(8);
+        }
+        md.dispose();
+      }
+    }
+  });
+
   it('chiots trapus aux pattes courtes (carlin, bouledogue) et chiot corgi assis et « donne la patte » : jamais à la renverse', () => {
     // (gabarit court : l'assis aux reins fléchis, fait pour les dos longs du teckel et du corgi, faisait basculer les
     // chiots carlin et bouledogue sur le dos — dos à 130° et 121°, 76 et 93 triangles étirés ; chiot corgi presque

@@ -3345,6 +3345,9 @@ class RealDogAnim {
       this.turn(neck, AX, 0.16 * st.pull);
       this.turn(head, AX, -0.12 * st.pull);
     }
+    // (ce que l'air triste, la laisse et le regard ont tourné l'encolure et la tête vers le bas : gardé par sitHead)
+    this.neckOff = (st.sad && !moving ? 0.18 : 0) + 0.16 * (st.pull ?? 0);
+    this.headOff = head ? this.look.y * 0.5 - 0.12 * (st.pull ?? 0) : 0;
     // Chien de troupeau : tête basse, encolure tendue (« l'œil »).
     if (st.herd && moving) this.turn(neck, AX, 0.3);
     // Clignement des yeux (shiba : paupières ; jack : globe aplati) ; yeux clos endormi.
@@ -3961,6 +3964,8 @@ class RealDogAnim {
         }
       }
     }
+    // (encolure et tête en dernier : après toutes les bascules du corps)
+    if (short) this.sitHead(k);
   }
 
   /**
@@ -3998,6 +4003,39 @@ class RealDogAnim {
       this.aimBone(leg.pivot, P(leg.knee), _ax.set(0, -1, 0.12), k2);
       this.aimBone(leg.knee, P(leg.fetlock), _ax.set(0, -1, 0.06), k2);
       this.aimBone(leg.fetlock, P(leg.paw), _ax.set(0, -1, 0.3), k2);
+    }
+  }
+
+  /**
+   * Assis, pattes courtes du jack (teckel, corgi, chiots carlin et bouledogue) : encolure redressée et tête à niveau
+   * comme celles du jack russell assis — tête au-dessus de la base du cou (SIT_NECK, angle de la base du cou à la tête
+   * au-dessus de l'horizontale, vers l'avant) et à SIT_HEAD au-dessus de son port debout —, en gardant ce que l'air
+   * triste, la laisse et le regard y ajoutent. L'assis du gabarit, aux reins fléchis, garde l'encolure à l'inclinaison du
+   * chien debout : tête du teckel au niveau des épaules, museau vers l'avant (encolure à 73°, un chien accroupi), celle du
+   * corgi renversée en arrière (tête 10 à 14° au-dessus de son port, contre 1,5 pour le jack russell).
+   */
+  sitHead(k) {
+    const md = this.model;
+    const n1 = md.bone('neck1');
+    const hd = md.head;
+    if (!n1 || !hd) return;
+    const P = (b, o) => o.setFromMatrixPosition(b.matrixWorld).applyMatrix4(_m);
+    const a = P(n1, _u);
+    const h = P(hd, _v);
+    const ang = Math.atan2(h.y - a.y, h.z - a.z);
+    // (l'encolure tournée à sa base est celle de neck2, à mi-chemin : la moitié de son angle compte ici)
+    const dn = clamp(ang - (SIT_NECK - 0.5 * (this.neckOff ?? 0)), -0.7, 0.35) * k;
+    if (Math.abs(dn) > 1e-4) {
+      this.turn(n1, AX, dn);
+      n1.updateMatrixWorld(true);
+    }
+    md.root.getWorldQuaternion(_rq).invert();
+    _w.copy(this.headFwd).applyQuaternion(hd.getWorldQuaternion(_q3)).applyQuaternion(_rq);
+    const pitch = Math.asin(clamp(_w.y, -1, 1));
+    const dh = clamp(pitch - (SIT_HEAD - (this.headOff ?? 0) - (this.neckOff ?? 0)), -0.5, 0.5) * k;
+    if (Math.abs(dh) > 1e-4) {
+      this.turn(hd, AX, dh);
+      hd.updateMatrixWorld(true);
     }
   }
 
@@ -4131,6 +4169,9 @@ function raiseAngle(c, q, y, max, prefer = 0) {
 
 const AXIS_Y = V(0, 1, 0);
 const AX = V(1, 0, 0); // (tourner autour de x du chien, positif : vers le bas pour une tête qui regarde devant)
+// (assis des pattes courtes, voir sitHead : encolure du jack russell assis, 104°, tête 2° au-dessus de son port debout)
+const SIT_NECK = (104 * Math.PI) / 180;
+const SIT_HEAD = (2 * Math.PI) / 180;
 const JAW_CLOSED = -0.12;
 /** Coupe de la race quand le salon n'en a pas fait (Groomer.refreshCutVisuals : setCut(null)). */
 const DEFAULT_CUT = { caniche: 'caniche' }; // (gueule du shiba fermée : angle de la mâchoire depuis la pose de repos du GLB, rad)

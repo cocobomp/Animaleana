@@ -204,16 +204,21 @@ liste et la rendent ensuite : ils restent justes.
 
 ## Finitions 2 (ruminants)
 
-### Tête claire sans strie d'ombre derrière l'œil (`cowCoat.js`, qualité haute)
+### Tête claire sans strie d'ombre derrière l'œil (`ruminantShadow.js`, qualité haute ; vache, chèvre, mouton)
 
-La strie gris-bleu à bord net derrière l'œil des taureaux et vaches à tête claire (Hereford, Charolais…) était surtout
-l'ombre des cornes (et des oreilles), minces et proches de la joue (le rendu sans ombres, puis sans les cornes dans la
-carte d'ombre, l'a montré). Biais de profondeur de l'ombre de 30 cm, à la taille de la bête, sur la tête seulement
-(`HEAD_SHADOW_BIAS`, ajouté aux coordonnées d'ombre du soleil dans le vertex shader de la robe) : les ombres du décor
-(abri, arbres, à plus d'un mètre) tombent toujours sur la tête, le corps garde le biais du soleil, les cornes et les
-oreilles portent toujours leur ombre sur l'encolure et au sol ; `World.js` inchangé. Joue derrière l'œil (planche) :
-3382 pixels assombris de plus de 10 % (jusqu'à 44 %) → 2 ; tête du taureau dans le jeu (16 vues, 8 h à 18 h) :
-28 224 pixels clairs assombris de plus de 15 % → 590 (bord des naseaux). Coût : trois opérations par sommet de la robe.
+La strie gris-bleu à bord net derrière l'œil des têtes claires (Hereford, Charolais, saanen, mérinos…) est l'ombre des
+oreilles et des cornes, minces et tout près de la joue. Leur ombre est reculée le long du rayon, dans la passe d'ombre
+seulement : la matière d'ombre (`customDepthMaterial`) recule leurs sommets de 65 cm pour la vache, 30 cm pour la chèvre
+et le mouton, à la taille de la bête (`SELF_SHADOW_GAP` ; part des oreilles et des cornes : `cowPart.x`, `cowAux.x` ;
+`goatPart.x` et le nouvel attribut `goatEar` ; `sheepEar`, et une matière d'ombre pour le maillage des cornes du
+bélier). Leur ombre ne tombe plus sur la tête, toujours au sol. La première passe mettait un biais de 30 cm sur la tête
+qui reçoit l'ombre : une lisse, un râtelier, un barreau à moins de 30 cm de la tête n'y portaient plus d'ombre (barre de
+4 cm à 0,12 / 0,25 / 0,4 m, pixels ombrés : main 1636 / 2622 / 3264, biais 0 / 45 / 1521, maintenant 1636 / 2622 /
+3263), et le bas de la joue et le naseau gardaient une tache au soleil bas (taureau Hereford 9 h : 2768 pixels). Ombre
+propre sur la tête claire dans le jeu (36 vues, 3 heures × 6 caps × 2 côtés, même bête AVANT/APRÈS, disque autour de la
+tête) : taureau Hereford 65 029 → 448 pixels assombris de plus de 10 %, Charolais 32 877 → 643, vache Hereford 59 265 →
+2 544, bouc saanen 7 652 → 3 273 (le reste : la barbe sous le menton), brebis mérinos 1 726 → 243. Coût : quatre
+opérations par sommet de la passe d'ombre ; un flottant par sommet (chèvre, mouton : ≈ 6 Ko par gabarit).
 
 ### Demi-tour sur place et petit pas : les sabots piétinent (`sheepReal.js`, commun au mouton, à la chèvre et à la vache)
 
@@ -228,12 +233,23 @@ Le temps de se retourner ne compte pas dans la promenade de l'entité (8 s au pl
 Glissement d'un sabot posé sur son appui (max), demi-tour de l'entité (`tests/ruminantFinish.test.js`) : mouton
 suffolk 41-59 → 2-5 cm, agneau islandais 28-33 → 3-4 cm, chèvre alpine 36 → 4-5 cm, bouc col noir 47 → 4-7 cm,
 chevreau 21-23 → 2-8 cm, vache holstein 110-117 → 9-11 cm, taureau hereford 44 → 4-9 cm, veau 68 → 8-11 cm ;
-chèvre qui se retourne vers la barrière 36-52 → 3-6 cm, correction des sabots 0,52 → 0,2-0,42 rad. Un demi-tour
-prend ≈ 2,5 s au mouton, 3,4 s à la chèvre, 4 à 6 s à la vache (avant : 1 s, sabots traînés). Le sabot levé balance de
-9,5 à 10,5 cm d'une image à l'autre pendant un pas sur place (moins qu'au pas : 14 à 16 cm). Coût (node, 12 ruminants
-qui font demi-tour toutes les 4 s, machine chargée) : 64-86 → 72-119 µs par animal et par image (≈ +0,3 ms par image
-pour 20 animaux). Promenade libre de 60 s (4 vaches) : 24-30 m parcourus comme avant, aucun animal sur place plus de
-0,6 s.
+chèvre qui se retourne vers la barrière 36-52 → 3-6 cm. Le sabot levé balance de 9,5 à 10,5 cm d'une image à
+l'autre pendant un pas sur place (moins qu'au pas : 14 à 16 cm). Promenade libre de 60 s (4 vaches) : 24-30 m
+parcourus comme avant, aucun animal sur place plus de 0,6 s.
+
+Reprise après la critique (régressions de cette passe) : pressé (il suit la joueuse ou sa mère, conduit par le chien),
+il ne tourne plus deux fois plus vite au trot en traînant un sabot jusqu'à 54 cm : il se retourne presque sur place, à
+pas plus vifs, puis repart (`steer`, niveaux de hâte). Sur place, il tourne autour du milieu de ses sabots (l'entité
+suit), pas de sa racine ; la vitesse en se retournant est rapportée à sa taille ; la rotation freine tant qu'un sabot
+posé attend son tour ; un sabot posé est corrigé au plus de 0,38 rad en long et 0,2 de côté (avant : 0,52 et 0,28,
+membres lancés de côté), au-delà il est replacé d'un petit pas ; un sabot qui part se lève au moins comme dans le clip.
+Glissement d'un appui (vraie entité, 30 images/s), main → première passe → maintenant : pressé Holstein 38,6 → 53,8 →
+6,5 cm, Highland 26,9 → 48,3 → 4,5, Hereford 30,4 → 41,3 → 7,6, suffolk 30,4 → 36,2 → 6,0 ; demi-tour ordinaire
+13-30 → 2,6-12,6 → 1,4-5,5 cm ; ligne droite ≤ 3 cm. Demi-tour de 175° : 0,9 s sur main (sabots traînés) → 3,5-6,2 →
+3,0-3,8 s (pressé 2,0-2,7 s). Coût mesuré (node, `AnimalEntity.update` complet, 12 ruminants qui font demi-tour toutes
+les 4 s, cinq passages alternés main / maintenant, machine peu chargée) : 57-62 → 65-78 µs par animal et par image
+(médianes 59 → 73 µs, + 24 % ; ≈ + 0,3 ms par image pour 20 animaux) ; l'essentiel du temps reste la mise à jour des
+matrices de three.js.
 
 ### Mèches longues couché (`ruminantHair.js`, commun à l'islandais, au col noir, à la poitevine et à la Highland)
 
@@ -244,3 +260,11 @@ figée couchée (caisse de voyage, van : `staticPose`) donne le repli tout de su
 ventre, à travers le plancher. Mèches visibles couché, vue de dessus : islandais 630 → 5558 pixels dont 208 → 2751
 étalés hors du corps ; col noir 149 → 1340 ; poitevine 68 → 2034 ; de côté : islandais 1081 → 12 120. Coût : une
 branche du vertex shader des mèches, prise seulement couché (uniforme), ≈ 30 opérations par sommet.
+
+Reste (critique) : vues de près, les mèches rabattues sur le flanc se lisent encore comme des cartes plates rangées en
+écailles, et vues de dessus leurs pointes font une frange en dents de scie autour du corps. Essayé dans la reprise
+(gardé hors du dépôt) : longueur, repli et étalement tirés au hasard pour chaque mèche, étalement vers l'arrière,
+éclairage des deux faces comme la peau, grain plus marqué, repli plus fort (85-100 %). Mesure des pointes vues de
+dessus (pixels qu'une ouverture de 11 px enlève au contour, islandais couché) : 581 → 380 de près, 406 → 467 à 3 m,
+827 → 697 endormi — pas de vrai progrès, la frange reste ; il faudrait d'autres mèches (plusieurs cartes plus étroites,
+pointes en brins séparés) plutôt qu'un réglage du repli.

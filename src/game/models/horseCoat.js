@@ -63,12 +63,63 @@ export const FORE_SHADE = 0.34;
 /** Ombre du toupet en plus (part de FORE_SHADE) quand des crins clairs sont sur une robe claire. */
 export const FORE_SHADE_LIGHT = 0.6;
 /**
- * Fin de l'ombre du toupet le long du chanfrein (part de sa longueur, de la racine à la pointe de sa ligne du milieu) :
- * pleine jusqu'à FORE_SHADE_END[0], nulle à FORE_SHADE_END[1], avant la pointe de la plus longue mèche (≈ 0,92, voir
- * forelockCards) ; FORE_SHADE_W : sa largeur, en demi-largeurs du toupet à la même hauteur (ses bords, cartes comprises).
+ * Mèches du toupet (géométrie : horseReal.js, forelockCards ; ombre sur le front : ici, le même dessin). En demi-largeurs
+ * du toupet en haut (entre les oreilles) et en part f de sa longueur : les mèches partent côte à côte et se chevauchent
+ * entre les oreilles, le faisceau se resserre jusqu'aux deux tiers (FORE_PINCH), puis chacune pend à sa place, un peu
+ * écartée des autres (FORE_FAN), et s'effile en langue sur son dernier tiers jusqu'à sa pointe (len) : le front se voit
+ * entre elles à partir de mi-longueur, et le bas du toupet finit en plusieurs pointes. FORE_MASS_W : largeur de la masse
+ * (part de celle du toupet, ses cartes la débordent un peu).
  */
-export const FORE_SHADE_END = [0.6, 0.9];
-export const FORE_SHADE_W = 1.15;
+export const FORE_MASS_W = 0.8;
+export const FORE_PINCH = 0.45;
+export const FORE_FAN = 0.08;
+/**
+ * Ombre de contact du toupet sur le front : pleine sous chaque mèche, un liseré de FORE_SHADE_EDGE (demi-largeurs du
+ * toupet) au-delà de ses bords — dans le jour entre deux mèches, une rainure grise —, finie avant la pointe de chaque mèche
+ * (FORE_SHADE_TIP[0] à [1] avant elle : il n'y reste que des crins fins).
+ */
+export const FORE_SHADE_EDGE = 0.12;
+export const FORE_SHADE_TIP = [0.28, 0.1];
+/** Début de l'ombre du toupet le long du chanfrein (part de sa longueur) : sous ses racines, entre les oreilles. */
+export const FORE_SHADE_TOP = [-0.01, 0.08];
+
+const smoothJS = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+/** Mèche l (sur nl) du toupet à la part f de sa longueur, sa pointe à len : [centre, demi-largeur] (demi-largeurs du toupet). */
+export function foreLock(f, len, l, nl) {
+  const rc = ((l + 0.5) / nl) * 2 - 1;
+  const sp = (1 + 0.1 * smoothJS(0, 0.12, f) * (1 - smoothJS(0.12, 0.3, f))) * (1 - FORE_PINCH * smoothJS(0.05, 0.7, f)) + FORE_FAN * smoothJS(0.4, 1, f / len);
+  const hw = (1.12 / nl) * FORE_MASS_W * (1 - 0.3 * smoothJS(0.05, 0.6, f)) * (1 - 0.82 * smoothJS(0.3 * len, len, f));
+  return [rc * FORE_MASS_W * sp, hw];
+}
+/**
+ * Ombre du toupet (0 à 1) au point du front ax (demi-largeurs du toupet, depuis le milieu), ff (part de sa longueur), sous
+ * des mèches dont les pointes sont à tips (0 : pas de mèche) : la même que le shader de la robe (hForeShade).
+ */
+export function foreShadeAt(ax, ff, tips) {
+  const nl = tips.filter((t) => t > 0.01).length;
+  let s = 0;
+  tips.forEach((len, l) => {
+    if (len <= 0.01) return;
+    const [cx, hw] = foreLock(Math.min(len, Math.max(0, ff)), len, l, nl);
+    const d = Math.abs(ax - cx) - hw;
+    s = Math.max(s, (1 - smoothJS(-0.04, FORE_SHADE_EDGE, d)) * (1 - smoothJS(len - FORE_SHADE_TIP[0], len - FORE_SHADE_TIP[1], ff)));
+  });
+  return s * smoothJS(FORE_SHADE_TOP[0], FORE_SHADE_TOP[1], ff);
+}
+const FORE_GLSL = /* glsl */ `
+// Mèche du toupet (voir foreLock) : centre et demi-largeur, en demi-largeurs du toupet.
+vec2 hForeLock(float f, float len, float rc, float nl) {
+  float sp = (1.0 + 0.1 * smoothstep(0.0, 0.12, f) * (1.0 - smoothstep(0.12, 0.3, f))) * (1.0 - ${glf(FORE_PINCH)} * smoothstep(0.05, 0.7, f)) + ${glf(FORE_FAN)} * smoothstep(0.4, 1.0, f / len);
+  float hw = (1.12 / nl) * ${glf(FORE_MASS_W)} * (1.0 - 0.3 * smoothstep(0.05, 0.6, f)) * (1.0 - 0.82 * smoothstep(0.3 * len, len, f));
+  return vec2(rc * ${glf(FORE_MASS_W)} * sp, hw);
+}
+// Ombre de contact d'une mèche du toupet (voir foreShadeAt).
+float hForeShade(float ax, float ff, float len, float l, float nl) {
+  if (len < 0.01) return 0.0;
+  vec2 L = hForeLock(clamp(ff, 0.0, len), len, ((l + 0.5) / nl) * 2.0 - 1.0, nl);
+  float d = abs(ax - L.x) - L.y;
+  return (1.0 - smoothstep(-0.04, ${glf(FORE_SHADE_EDGE)}, d)) * (1.0 - smoothstep(len - ${glf(FORE_SHADE_TIP[0])}, len - ${glf(FORE_SHADE_TIP[1])}, ff));
+}`;
 
 /** Crins clairs sur une robe claire (0 à 1) : gris, blanc, crème aux crins clairs. */
 export function lightManeOnLight(look) {
@@ -342,16 +393,18 @@ hEarIn = 0.0;
     float snout = smoothstep(0.86, 0.94, hl.z + (hNoise(P * 30.0) - 0.5) * 0.03);
     c = mix(c, mottled, isHead * clamp(spect * 0.5 + snout * 0.85, 0.0, 1.0) * hSkinMot * (1.0 - face * 0.6));
   }
-  // Ombre du toupet sur le front (contact, douce, un fin liseré autour de ses bords) : un toupet clair sur une robe claire
-  // se détache par son ombre au lieu d'une plaque pâle translucide ; sous un toupet foncé, à peine visible. Elle finit
-  // avant la pointe des mèches, là où il ne reste que des crins fins (FORE_SHADE_END), et ne déborde de ses bords que
-  // d'un liseré (FORE_SHADE_W) : plus large (× 1,7 + 6 mm) et prolongée 15 % plus bas que la ligne du milieu, renforcée
-  // sous des crins clairs, elle traçait une bande grise sur le chanfrein entre les yeux, sous la pointe, là où il n'y a
-  // pas de crins.
+  // Ombre du toupet sur le front (contact, douce) : sous chaque mèche et en un fin liseré autour d'elle, finie avant sa
+  // pointe (hForeShade, le dessin des mèches de forelockCards) ; dans le jour entre deux mèches, une rainure grise — un
+  // toupet clair sur une robe claire se lit en mèches, pas en plaque ; sous un toupet foncé, à peine visible. (Une seule
+  // ombre en V, plus large que le toupet et prolongée sous sa pointe, traçait une bande grise sur le chanfrein entre les
+  // yeux, là où il n'y a pas de crins.)
   if (hFore.w > 0.0 && isHead > 0.5) {
     float ff = (hl.z - hFore.x) / max(1e-3, hFore.y - hFore.x);
-    float fw = hFore.z * (1.0 - 0.85 * pow(smoothstep(0.05, 0.85, ff), 0.85)) * ${glf(FORE_SHADE_W)} + 0.005;
-    float fsh = smoothstep(-0.04, 0.06, ff) * (1.0 - smoothstep(${glf(FORE_SHADE_END[0])}, ${glf(FORE_SHADE_END[1])}, ff)) * (1.0 - smoothstep(fw * 0.6, fw, abs(hl.x))) * smoothstep(-0.03, 0.02, hl.y);
+    float ax = hl.x / max(1e-4, hFore.z);
+    float nl = dot(step(vec4(0.01), hForeL), vec4(1.0));
+    float fsh = max(max(hForeShade(ax, ff, hForeL.x, 0.0, nl), hForeShade(ax, ff, hForeL.y, 1.0, nl)),
+      max(hForeShade(ax, ff, hForeL.z, 2.0, nl), hForeShade(ax, ff, hForeL.w, 3.0, nl)));
+    fsh *= smoothstep(${glf(FORE_SHADE_TOP[0])}, ${glf(FORE_SHADE_TOP[1])}, ff) * smoothstep(-0.03, 0.02, hl.y);
     c *= 1.0 - ${glf(FORE_SHADE)} * fsh * hFore.w;
   }
   // (plus épais au-dessus : le bord de la paupière supérieure et ses cils)
@@ -578,6 +631,8 @@ export function coatMaterial(look, build, breed = null, real = null) {
     // (crins clairs sur une robe claire : ombre plus marquée — c'est elle qui détache le toupet du front, plutôt que
     // des crins grisés, qui se lisaient en plaque pâle)
     hFore: { value: new THREE.Vector4(...(real?.fore ?? [0, 0, 0, 0])).setW((real?.fore?.[3] ?? 0) * (1 + FORE_SHADE_LIGHT * lightManeOnLight(look))) },
+    // (pointe de chaque mèche du toupet, part de sa longueur ; 0 : pas de mèche)
+    hForeL: { value: new THREE.Vector4(...(real?.foreLocks ?? [0, 0, 0, 0])) },
     // Gris et appaloosas : peau noire marbrée (de rose chez l'appaloosa) autour des yeux et au bout du nez ;
     // sabots rayés de l'appaloosa.
     hSkinMot: { value: spots ? 1 : tr.grey > 0 ? 0.85 : 0 },
@@ -677,7 +732,8 @@ float hHoofV; // corne des sabots (plus lisse que le poil)
 float hGrainV; // grain du poil couché vers l'arrière (0-1, 0,5 de loin) : le reflet se casse au lieu d'un latex lisse
 float hDarkV; // poil presque noir (bas des membres et crins d'un bai…) : pas de reflet doré dessus
 float hEarIn; // intérieur des oreilles (poils mats)
-${NOISE}`)
+${NOISE}
+${FORE_GLSL}`)
       .replace('#include <map_fragment>', `${real ? 'vec4 hDetTex = texture2D( map, vMapUv );' : '#include <map_fragment>'}
 ${COAT_FRAGMENT}`)
       // Sabots plus lisses et brillants que le poil (corne : 0,45 environ), bout du nez aussi (0,35 environ).

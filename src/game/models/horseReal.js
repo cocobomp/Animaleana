@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import { getModel } from '../assets.js';
 import { gfx } from '../gfx.js';
 import { horseBuild, horseBreedOf, foalBuild, horseCoatTraits, horseSocks } from '../../sim/horseLook.js';
-import { coatMaterial, roanBase, PART } from './horseCoat.js';
+import { coatMaterial, roanBase, PART, foreLock, FORE_MASS_W, FORE_PINCH } from './horseCoat.js';
 import { hairMaterial, hairColor, HAIR_V, HAIR_TEX, HAIR_MASS } from './horseHair.js';
 
 export const REAL_HORSE_KEY = 'horse_real';
@@ -1009,9 +1009,12 @@ const FORELOCK = { normal: 0.46, long: 0.56, thick: 0.48, short: 0.26, brush: 0.
  * rouleau sur la crête (m, cheval de taille 1) ; MANE_MASS_LEN : longueur de la nappe (part de la crinière) ;
  * MANE_LEFT : part des mèches qui passent à gauche ; LEFT_TAPER : resserrement des mèches de la masse qui passent à
  * gauche vers leur pointe (1 : une pointe ; moins : elles finissent en crins de longueurs inégales, par la texture) ;
- * LEFT_VSPAN : part de la hauteur de la bande de la masse sur la largeur d'une de ces mèches ; FORE_MASS_W : largeur de
- * la masse du toupet (part de celle du V de ses cartes, qui en font les bords) ; FORE_THICK : épaisseur du toupet sous les oreilles ;
- * FORE_LOCKS : mèches du toupet côte à côte (une de plus s'il est épais) ; FORE_LOCK_BUMP : relief d'une mèche (m) ;
+ * LEFT_VSPAN : part de la hauteur de la bande de la masse sur la largeur d'une de ces mèches ; FORE_THICK : épaisseur du
+ * toupet sous les oreilles (sa largeur, FORE_MASS_W, et le dessin de ses mèches : horseCoat.js, foreLock) ;
+ * FORE_LOCKS : mèches du toupet côte à côte (une de plus s'il est épais ; leur dessin : foreLock, horseCoat.js) ;
+ * FORE_LOCK_BUMP : relief d'une mèche (m) ; FORE_CORE : ton de la mèche du milieu du toupet d'une brosse (Fjord : crins
+ * foncés du cœur mêlés de crins clairs, part du ton des crins crème — un gris brun, pas le noir du cœur de la brosse,
+ * qui se lisait en bande noire découpée sur le front) ;
  * TAIL_DEPTH : épaisseur d'avant en arrière du fuseau (part de sa largeur) ; TAIL_MASS_LEN : longueur du fuseau
  * (part de la queue sous le tronçon) ; TAIL_RINGS × TAIL_AROUND : anneaux et points par anneau ; PLUME_WIDTH : largeur en
  * plus, de côté, d'une queue portée haut (× tailSet : panache de l'arabe).
@@ -1024,9 +1027,9 @@ const LEFT_VSPAN = 0.45;
 const MANE_MASS_LEN = 0.8;
 const FORE_CARDS = 0.55;
 const FORE_THICK = 0.02;
-const FORE_MASS_W = 0.8;
 const FORE_LOCKS = 3;
 const FORE_LOCK_BUMP = 0.008;
+const FORE_CORE = 0.3;
 const TAIL_CARDS = 0.62;
 const TAIL_DEPTH = 0.8;
 const TAIL_WIDTH = 0.13;
@@ -1262,7 +1265,7 @@ function pushCardOut(card, sdf, h, keep = null) {
   const n = card.pts.length;
   for (let i = 1; i < n; i++) {
     const p = card.pts[i];
-    const half = (card.w0 + (card.w1 - card.w0) * (i / (n - 1))) / 2;
+    const half = (card.widths ? card.widths[i] : card.w0 + (card.w1 - card.w0) * (i / (n - 1))) / 2;
     for (let it = 0; it < 2; it++) {
       let moved = false;
       for (const k of [-1, 1]) {
@@ -1769,9 +1772,8 @@ function forelockCards(S, B, body, base) {
   S.foreShade = [center[0].z / S.headLen, center[center.length - 1].z / S.headLen, halfM / S.headLen, 1];
   // (point du toupet en travers r (−1 à 1) à la part f, à la hauteur off au-dessus de la peau : redescendu le long de la
   // verticale de la tête, par dichotomie, depuis 6 cm au-dessus de la ligne du milieu)
-  const surf = (r, f, off, zTop = 0) => {
+  const surfX = (x, f, off, zTop = 0) => {
     const c = centerAt(f);
-    const x = r * halfW(f);
     const z = c.z + zTop * (1 - f);
     let hi = c.y + 0.06;
     let lo = c.y - 0.1;
@@ -1784,50 +1786,54 @@ function forelockCards(S, B, body, base) {
     }
     return fromH(V(x, (hi + lo) / 2, z));
   };
-  // Mèches : FORE_LOCKS mèches côte à côte (une de plus pour un toupet épais), chacune bombée (FORE_LOCK_BUMP) et plus
-  // foncée dans le creux qui la sépare de sa voisine, de longueurs inégales (le bas du toupet finit en pointes, pas en
-  // une seule) ; les cartes se rangent sur elles. Avant : une masse lisse peinte de neuf mèches de la texture sur 8 cm
-  // et des cartes réparties au hasard — de face, une plaque pâle et striée sur un front clair.
+  // Mèches : FORE_LOCKS mèches (une de plus pour un toupet épais), dessinées par foreLock (horseCoat.js : le même dessin
+  // que leur ombre sur le front) — côte à côte et chevauchées entre les oreilles, le faisceau se resserre jusqu'aux deux
+  // tiers, puis chacune pend à sa place et s'effile en langue jusqu'à sa pointe : le front se voit entre elles à partir de
+  // mi-longueur, et le bas du toupet finit en plusieurs pointes de longueurs inégales (la plus longue au milieu). Avant :
+  // un V qui se refermait en une seule pointe, ses mèches serrées l'une contre l'autre jusqu'en bas et des cartes posées
+  // en travers de leurs creux — de face, une plaque pâle, striée, aux bords droits, sur un front clair.
   const NL = FORE_LOCKS + (style === 'thick' ? 1 : 0);
   const lockLen = [];
-  // (plus courtes sur les côtés : le toupet reste en pointe au milieu)
-  for (let l = 0; l < NL; l++) lockLen.push(1 - 0.1 * rng() - 0.18 * Math.abs(((l + 0.5) / NL) * 2 - 1));
+  // (plus courtes sur les côtés : la pointe la plus longue reste au milieu)
+  for (let l = 0; l < NL; l++) lockLen.push(1 - 0.1 * rng() - 0.36 * Math.abs(((l + 0.5) / NL) * 2 - 1));
   const lockTone = [];
   for (let l = 0; l < NL; l++) lockTone.push(0.93 + 0.13 * rng());
-  // (r de −1 à 1 en travers → mèche, place dans la mèche de 0 à 1)
-  const lockAt = (r) => {
-    const x = Math.min(NL - 1e-6, Math.max(0, ((r + 1) / 2) * NL));
-    return [Math.floor(x), x - Math.floor(x)];
+  // (brosse du Fjord : la mèche du milieu plus foncée, crins du cœur mêlés de crins clairs, comme la raie de la crinière —
+  // tout crème, son toupet se lisait en petite plaque blanche sur le front)
+  if (style === 'brush') lockTone[Math.floor(NL / 2)] = FORE_CORE;
+  // (x de la mèche l à la part f, à la place e de −1 à 1 en travers : repère de la tête)
+  const lockX = (l, f, e) => {
+    const [cx, hw] = foreLock(f, lockLen[l], l, NL);
+    return (cx + e * hw) * halfM;
   };
-  // Masse : une petite grille par mèche (4 colonnes), moins large que le V des cartes (FORE_MASS_W : ses bords sont faits
-  // des cartes, des mèches de longueurs inégales). Les mèches se chevauchent en haut (racines entre les oreilles, haut
-  // arrondi) et se séparent vers le bas en langues effilées, le front visible entre elles ; chacune bombée au milieu,
-  // plus foncée sur ses bords, la mèche du milieu par-dessus ses voisines. Une seule masse lisse sur toute la largeur
-  // se lisait, sur un front clair, en plaque pâle et striée.
+  // (épaisseur sous les mèches : plus épais au milieu du faisceau, aminci sur ses bords)
+  const thick = (x, f) => tf(Math.max(-1, Math.min(1, x / (halfM * (1 - FORE_PINCH * smooth(0.05, 0.7, f))))), f);
+  // Masse : une petite grille par mèche (4 colonnes) ; chacune bombée au milieu (FORE_LOCK_BUMP), plus foncée sur ses
+  // bords, la mèche du milieu par-dessus ses voisines.
   const JL = 4;
   const masses = [];
+  const tips = [];
   for (let l = 0; l < NL; l++) {
-    const rc = ((l + 0.5) / NL) * 2 - 1;
-    const hw = (1 / NL) * 1.12;
+    // (la mèche du milieu par-dessus ses voisines)
     const layer = (NL - 1) / 2 - Math.abs(l - (NL - 1) / 2);
     const len = lockLen[l];
     const cols = [];
     for (let j = 0; j < JL; j++) {
       const e = (j / (JL - 1)) * 2 - 1;
-      const r0 = Math.max(-1, Math.min(1, rc + hw * e));
+      const x0 = lockX(l, 0, e);
+      const r0 = Math.max(-1, Math.min(1, x0 / (FORE_MASS_W * halfW(0))));
       const zTop = 0.008 * r0 * r0;
-      const x0 = r0 * FORE_MASS_W * halfW(0);
       const root = fromH(V(x0, rootY(x0, z0 - 0.008 * (1 - r0 * r0)) - 0.004 - 0.001 * (1 - layer), z0 - 0.008 * (1 - r0 * r0)));
       const pts = [root];
       for (let k = 1; k < NP; k++) {
         const f = (k / (NP - 1)) * len;
-        // (langue effilée : un quart de sa largeur au bout)
-        const r = Math.max(-1, Math.min(1, rc + hw * e * (1 - 0.75 * smooth(0.25, 0.95, f / len))));
-        const off = tf(r, f) + 0.0015 + 0.0012 * layer + FORE_LOCK_BUMP * (1 - e * e) * smooth(0, 0.15, f) * (1 - 0.5 * f);
-        pts.push(surf(r * FORE_MASS_W, f, off, zTop));
+        const x = lockX(l, f, e);
+        const off = thick(x, f) + 0.0015 + 0.0012 * layer + FORE_LOCK_BUMP * (1 - e * e) * smooth(0, 0.15, f) * (1 - 0.5 * f);
+        pts.push(surfX(x, f, off, zTop));
       }
       cols.push({ pts, root, e });
     }
+    tips.push(cols[1].pts[NP - 1].clone().lerp(cols[2].pts[NP - 1], 0.5));
     masses.push({
       P: cols.map((c) => c.pts), kind: 1, strip: JL - 1, u0: HAIR_MASS.root,
       // (une ou deux mèches de la texture par mèche du toupet)
@@ -1843,34 +1849,45 @@ function forelockCards(S, B, body, base) {
       weights: () => [[BONE_INDEX.Head, 1]],
     });
   }
-  // Cartes : dans le même V, posées sur la masse (2 à 6 mm au-dessus), plus longues au milieu, racines à des hauteurs
-  // différentes entre les oreilles (pas de bord droit sur le front).
+  // (pointe de chaque mèche pour l'ombre sur le front : part de la longueur de la ligne du milieu, comme hFore ; aucune
+  // si le toupet ne descend pas le long du chanfrein)
+  const [fz0, fz1] = S.foreShade;
+  S.foreLocks = [0, 0, 0, 0];
+  if (fz1 > fz0 + 0.05) tips.forEach((t, l) => { S.foreLocks[l] = (toH(t).z / S.headLen - fz0) / (fz1 - fz0); });
+  // Cartes : chacune dans une mèche, à une place de sa largeur, jusqu'à sa pointe (un peu plus loin : des crins fins),
+  // jamais plus large qu'elle (elles ne bouchent pas le jour entre deux mèches), posées sur la masse (2 à 6 mm au-dessus),
+  // racines à des hauteurs différentes entre les oreilles (pas de bord droit sur le front).
   const main = [];
   const fill = [];
   for (let i = 0; i < n; i++) {
     const primary = i % 2 === 0;
-    // (rangée sur une mèche : près de son milieu, pas sur le creux entre deux)
     const lk = i % NL;
-    const rr = ((lk + 0.5 + (rng() - 0.5) * 0.7) / NL) * 2 - 1;
-    const r = Math.sign(rr) * Math.abs(rr) ** 1.15 * 0.95;
-    const fmax = Math.min(1.04, (0.8 + 0.3 * rng()) * (1 - 0.35 * r * r) * (0.5 + 0.5 * lockLen[lockAt(r)[0]]));
+    const len = lockLen[lk];
+    const e = (rng() - 0.5) * 0.9;
+    const fmax = Math.min(1.04, len * (0.94 + 0.12 * rng()));
     const h = 0.002 + rng() * 0.004;
     const zTop = -0.01 + rng() * 0.03;
     const pts = [];
+    const widths = [];
     for (let k = 0; k < 5; k++) {
       const f = (fmax * k) / 4;
+      const fl = Math.min(f, len);
+      const x = lockX(lk, fl, e * (1 - 0.3 * f));
       // (racine dans la peau, 4 mm sous elle : rentrée sous un bonnet, la mèche se replie sous le voile)
-      pts.push(surf(r * (1 - 0.15 * f), f, k ? tf(r, Math.min(1, f)) + h : -0.004, zTop));
+      pts.push(surfX(x, f, k ? thick(x, Math.min(1, f)) + h : -0.004, zTop));
+      const [, hw] = foreLock(fl, len, lk, NL);
+      widths.push(Math.min((primary ? 0.026 : 0.02) * (1 - (0.8 * k) / 4) + 0.003, 1.1 * hw * halfM + 0.001));
     }
     const normals = pts.map((p) => hd.grad(p, V()));
     const m = 2;
     const side = cardSide(normals[m], alongAt(pts, m), (rng() - 0.5) * 0.25);
     const card = {
-      // (étroits, posés sur la masse : ils en font les bords et la pointe, pas une plaque rayée ; la pointe fine)
-      pts, normals, side, w0: primary ? 0.03 : 0.022, w1: primary ? 0.007 : 0.005,
+      // (étroits, posés sur la masse, la pointe fine)
+      pts, normals, side, w0: widths[0], w1: widths[4], widths,
       // (tons peu écartés d'un ruban à l'autre : couchés côte à côte sur le front, des tons différents se lisaient en
       // rayures ; texture prise après les dents de la racine : racine pleine, pas une bande translucide sur le front)
-      color: grey(lockTone[lockAt(r)[0]] * (0.97 + rng() * 0.06)), uv: [0.055, 1, HAIR_ROWS[Math.floor(rng() * 4)][0], HAIR_ROWS[0][1] * 0.55], kind: 1,
+      // (mèche foncée d'une brosse : ses cartes principales crème — des crins clairs mêlés aux foncés, pas une bande grise unie)
+      color: grey((lockTone[lk] === FORE_CORE && primary ? 0.95 : lockTone[lk]) * (0.97 + rng() * 0.06)), uv: [0.055, 1, HAIR_ROWS[Math.floor(rng() * 4)][0], HAIR_ROWS[0][1] * 0.55], kind: 1,
       weights: () => [[BONE_INDEX.Head, 1]], meta: { root: pts[0].clone(), primary },
     };
     pushCardOut(card, hd, 0.002);
@@ -2941,7 +2958,8 @@ function hairCards(cards, { masses = [], mainCount = 0 } = {}) {
       else n0.crossVectors(c.side, tan).normalize();
       // (rootTaper : la carte s'élargit depuis sa racine — une mèche qui sort de la masse en pointe, pas un bord coupé
       // droit en travers)
-      const w = ((c.w0 + (c.w1 - c.w0) * f) / 2) * (c.rootTaper ? 0.3 + 0.7 * smooth(0, c.rootTaper, f) : 1);
+      // (widths : largeur propre à chaque point — cartes du toupet, pas plus larges que leur mèche)
+      const w = ((c.widths ? c.widths[i] : c.w0 + (c.w1 - c.w0) * f) / 2) * (c.rootTaper ? 0.3 + 0.7 * smooth(0, c.rootTaper, f) : 1);
       const ww = c.weights(p, f);
       // (somme 1 : un poids négligeable écarté par une carte ne doit pas rétrécir le sommet vers l'origine)
       let wsum = 0;
@@ -3613,7 +3631,7 @@ export function buildRealHorseModel(look, breedId = null, gltf = getModel(REAL_H
   const coatSrc = base.prims.coat.material;
   const coatMat = coatMaterial(look, B, breed, {
     detail: coatSrc.map, normalMap: coatSrc.normalMap, normalSign: Math.sign(coatSrc.normalScale?.y ?? 1), hoofY: S.hoofY,
-    hooves: S.hooves, eye: S.eyeHL, nostril: S.nostril, fore: S.foreShade,
+    hooves: S.hooves, eye: S.eyeHL, nostril: S.nostril, fore: S.foreShade, foreLocks: S.foreLocks,
   });
   // Boîte englobante du cheval, commune à ses maillages : recalculée sur la pose des os à chaque image où il
   // passe le test du champ de la caméra (voir HorseMesh, horseBounds). Les boîtes par os viennent de la race,

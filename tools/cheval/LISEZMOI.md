@@ -714,7 +714,25 @@ Finitions 2 (téléphone 390×844 en basse et de près en haute ; planches AVANT
   + 2,5 mm : au plus 6,6 mm hors des crins, mesuré sur les 33 races, triangles des crins échantillonnés). Téléphone, 1,2 m
   de face, pixels sans crins sous la pointe assombris de plus de 8/255 par l'ombre (main / 983def9 / maintenant) : arabe
   8 906 / 13 900 / 154, Camargue 11 844 / 28 413 / 61, selle français gris 7 849 / 16 297 / 0, Fjord 6 215 / 11 771 / 12,
-  percheron 13 419 / 23 962 / 0 (`tests/horseHair.test.js`, « finie avant la pointe de la plus longue mèche »).
+  percheron 13 419 / 23 962 / 0. (Depuis, l'ombre suit chaque mèche : voir ci-dessous.)
+- **toupet en mèches pendantes** (reprise ; le toupet clair sur robe claire se lisait encore en nappe pâle, striée, aux
+  bords droits) : les mèches du toupet se refermaient en V vers une seule pointe, serrées l'une contre l'autre jusqu'en
+  bas, et les cartes posées en travers de leurs creux ; une seule ombre en V dessous. Leur dessin est maintenant commun à
+  la géométrie et à l'ombre (`foreLock`, `horseCoat.js`) : côte à côte et chevauchées entre les oreilles, le faisceau se
+  resserre jusqu'aux deux tiers (`FORE_PINCH` 0,45), puis chaque mèche pend à sa place, un peu écartée (`FORE_FAN`), et
+  s'effile en langue sur ses deux derniers tiers ; plus courtes sur les côtés (0,36 de moins aux bords : la plus longue
+  au milieu), le bas du toupet finit en trois ou quatre pointes, le front visible entre elles. Les cartes restent dans
+  leur mèche (place à ± 0,45 de sa demi-largeur, jamais plus larges qu'elle : `widths`, largeur propre à chaque point
+  dans `hairCards`) et vont jusqu'à sa pointe. L'ombre sur le front est celle de chaque mèche (`hForeShade`, pointes
+  mesurées sur la géométrie : `hForeL`) : pleine dessous, un liseré de `FORE_SHADE_EDGE` (0,12 demi-largeur du toupet,
+  ≈ 4 mm) autour — une rainure grise dans le jour entre deux mèches —, finie avant chaque pointe (`FORE_SHADE_TIP`).
+  Brosse du Fjord : la mèche du milieu plus foncée (`FORE_CORE`, gris brun, ses cartes principales crème) comme la raie
+  de la crinière, au lieu d'une petite plaque blanche. Téléphone, 1,2 m de face, jour entre les mèches dans le bas du
+  toupet (55 à 90 % de sa hauteur, pixels sans crins entre le premier et le dernier crin de chaque rangée), 983def9 →
+  maintenant : arabe 10 → 25 %, Camargue 7 → 42 %, Welsh gris 9 → 25 %, Fjord 3 → 19 %, selle français gris 23 → 25 %,
+  percheron 21 → 30 %. Pixels sans crins sous la pointe assombris de plus de 8/255 : 0 sur ces six chevaux (1,2 et 1,9 m).
+  Ombre à plus de 7 mm des crins : aucune, 33 races (`tests/horseHair.test.js`, « sous ses mèches et en un liseré autour
+  d'elles »). Mêmes triangles (cartes et grilles en même nombre).
 - **rouans au téléphone** (Trait breton, Criollo) : lus comme des gris clairs. Les poils blancs, fondus en leur
   moyenne au loin, sont mêlés à la robe de base en lumière linéaire : sur un fond foncé, un peu de blanc pèse lourd.
   Avant : 19 % de blanc sur une base peu saturée (saturation × 2,2). Maintenant : 7 % de blanc (8,7 % des poils,

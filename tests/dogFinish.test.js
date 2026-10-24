@@ -618,9 +618,8 @@ describe('accessoires du salon', () => {
 });
 
 describe('foulard du caniche', () => {
-  it('posé sur la crinière gonflée par la coupe, pas dedans : plus froissé de face (sans la collerette de la coupe : 4,1 mm dans les boucles ; avec : 3,7 mm devant)', () => {
-    const { look, md } = dog('caniche');
-    const acc = buildAccessories(md, look, { neck: { id: 'bandana', color: 'red' } });
+  // Enfoncement du foulard dans le poil (m) : rangées 2 à 6 de la bavette, sous la surface du poil poussée par le shader.
+  const bibDepth = (md, acc) => {
     const bib = acc.find((o) => o.isMesh && o.geometry.index && o.geometry.attributes.position.count === 9 * 8);
     const P = bib.geometry.attributes.position;
     // surface du poil poussée par le shader (comme PUSH_V de dogCoat.js) : peau + collerette de la coupe (cCut.y)
@@ -649,8 +648,34 @@ describe('foulard du caniche', () => {
       }
       if (Number.isFinite(top)) worst = Math.max(worst, top - z);
     }
+    return worst;
+  };
+  it('posé sur la crinière gonflée par la coupe, pas dedans : plus froissé de face (sans la collerette de la coupe : 4,1 mm dans les boucles ; avec : 3,7 mm devant)', () => {
+    const { look, md } = dog('caniche');
+    const acc = buildAccessories(md, look, { neck: { id: 'bandana', color: 'red' } });
+    expect(md.uniforms.cCut.value.y).toBeGreaterThan(0);
     // (enfoncé de 1 mm au plus dans le poil)
-    expect(worst * 1000).toBeLessThan(1);
+    expect(bibDepth(md, acc) * 1000).toBeLessThan(1);
+    md.dispose();
+  });
+
+  it('coupe changée après la pose du foulard (le salon l\'applique une seconde après) : foulard refait sur la nouvelle collerette', () => {
+    // (avant : resté sur la crinière d'avant, avalé à moitié par la collerette de la coupe « lion »)
+    const { look, md } = dog('caniche');
+    const worn = { neck: { id: 'bandana', color: 'red' } };
+    let acc = buildAccessories(md, look, worn);
+    let rebuilt = 0;
+    md.onCutChange = () => {
+      rebuilt++;
+      removeAccessories(acc);
+      acc = buildAccessories(md, look, worn);
+    };
+    md.setCut('lion');
+    expect(rebuilt).toBe(1);
+    expect(bibDepth(md, acc) * 1000).toBeLessThan(1);
+    // (même collerette : rien à refaire)
+    md.setCut('lion');
+    expect(rebuilt).toBe(1);
     md.dispose();
   });
 });

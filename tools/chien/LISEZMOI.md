@@ -415,3 +415,7 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   repliés au sol par `foldHind` (0,0 à 0,1 cm) ; le reste — bascule, corps reposé, antérieurs abaissés — ne s'applique
   pas à elles : essayé, il les relevait sur des antérieurs dressés, poitrail haut ; leur clip pose déjà les avant-bras à
   plat (bout des pieds avant relevé de 1 à 2,6 cm, une patte au repos, gardé).
+- **Foulard posé avant la coupe** (jeu : `setCut` de `dogReal.js`, `onCutChange` posé par `AnimalEntity.applyGear`) : le
+  salon applique la coupe environ une seconde après les accessoires ; quand la collerette de la coupe change (`cCut.y`),
+  les accessoires du cou sont refaits sur elle. Avant : le foulard restait posé sur la crinière d'avant, à moitié avalé
+  par la collerette « lion » (planche téléphone `t3_tel_foulard_puis_coupe`).

@@ -2324,10 +2324,15 @@ export function buildRealDogModel(look, breedId = null, gltf = null) {
       // coupe ne l'amincissait que de 4 %)
       lagotto: [-1.25 * f, -0.95 * f, -0.35 * f, 0.85 * f, -0.6 * f],
     }[st] ?? [0, 0, 0, 0];
+    const ruffBefore = uniforms.cCut.value.y;
     uniforms.cCut.value.set(cut[0], cut[1], cut[2], cut[3]);
     uniforms.cCutLeg.value = cut[4] ?? 0;
     uniforms.cPom.value = st === 'caniche' ? 1 : 0;
     model.cut = style ?? null;
+    // (collerette changée : les accessoires du cou, posés sur elle — foulard, nœud —, sont refaits par qui les porte,
+    // voir AnimalEntity.applyGear ; posés avant la coupe — le salon l'applique une seconde après eux —, le foulard
+    // restait sur la crinière d'avant, avalé par la collerette « lion »)
+    if (model.onCutChange && Math.abs(ruffBefore - cut[1]) > 1e-6) model.onCutChange();
   };
   model.setCut(null);
   let disposed = false;

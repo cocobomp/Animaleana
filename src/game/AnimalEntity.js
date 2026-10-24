@@ -839,6 +839,11 @@ export class AnimalEntity {
         this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 3.5);
       }
       if (this.perch?.phase !== 'on') this.speed += (this.targetSpeed - this.speed) * Math.min(1, dt * 3);
+      // (l'animal se relève avant de partir : le modèle demande d'attendre — catReal.js, chat couché ou en boule)
+      if (this.holdMove > 0) {
+        this.holdMove -= dt;
+        this.speed = 0;
+      }
       if (this.speed > 0.01 && this.perch?.phase !== 'on') {
         const step = this.speed * dt;
         const nx = p.x + Math.sin(this.heading) * step;

@@ -147,7 +147,9 @@ comparaisons), dans la même lumière et au même cadrage.
 - **Animation** (`RealCatAnim`) : allure choisie par la vitesse avec hystérésis, chaque clip joué à vitesse réelle ÷
   vitesse naturelle de la race (mesurée sur son squelette) et pieds en appui tenus sur place (pas de patinage) ;
   postures (debout, assis, toilette, couché, en boule, accroupi) et passages par le plus court chemin (debout →
-  assis → couché → en boule) ; étirement au réveil ; équilibre sur les barrières ; tours du spectacle (assis,
+  assis → couché → en boule) ; étirement au réveil ; couché ou en boule, il se relève avant de partir (clip `get_up`,
+  l'entité attend — `AnimalEntity.holdMove` ; en boule, il roule d'abord sur le ventre en 0,6 s) : le chaton réveillé
+  passait de la boule sur le flanc à la marche en 0,15 à 0,3 s, sans se relever, maintenant en 1,0 à 1,3 s ; équilibre sur les barrières ; tours du spectacle (assis,
   couché, « tape-m'en cinq », révérence = étirement, saut) ; regard, clignements, **paupières** (bandeaux de peau
   propres à la race, tournés sur l'œil : mi-closes à la toilette et couché, fermées en boule), oreilles qui bougent et se couchent (peur, tristesse) et dont le bout ne passe jamais sous le sol (couché, en boule : l'oreille tourne à sa base autour de l'axe du chat tel qu'il est couché), queue dressée quand il suit
   quelqu'un, gonflée quand il a peur, respiration, embonpoint ; porté dans les bras (couché), sur la table du salon

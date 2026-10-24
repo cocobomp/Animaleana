@@ -2545,6 +2545,19 @@ class RealCatAnim {
     this.gait = g;
     // Posture voulue (debout dès qu'il bouge) ; passages joués une fois, par le plus court chemin.
     const want = st.moving ? 'stand' : st.posture ?? 'stand';
+    // Il part alors qu'il est couché ou roulé en boule (réveil) : il se relève d'abord (clip get_up, l'entité attend —
+    // e.holdMove, voir animateRealCat). Sans cela, la boule couchée sur le flanc se fondait dans la marche en 0,15 à
+    // 0,3 s, sans se relever : un saut de pose.
+    if (st.moving && !this.trans && !st.quick && !st.carried && (this.posture === 'curl' || this.posture === 'lie') && this.actions.get_up
+      && (this.w.sleep ?? 0) + (this.w.lie ?? 0) + (this.w.curl_up ?? 0) + (this.w.lie_down ?? 0) > 0.4) {
+      const a = this.actions.get_up;
+      a.reset();
+      a.play();
+      // (roulé en boule sur le flanc : il roule d'abord sur le ventre — le clip tenu à son début, couché, le temps du
+      // fondu —, puis se relève ; fondu direct de la boule au clip : un chaton froissé un instant)
+      this.trans = { name: 'get_up', to: 'stand', rise: true, pre: this.posture === 'curl' ? 0.6 : 0, roll: this.posture === 'curl' };
+    }
+    if (this.trans?.pre > 0) this.trans.pre -= dt;
     if (this.trans) {
       const a = this.actions[this.trans.name];
       if (!a || a.time >= a.getClip().duration - 0.04 || (st.moving && this.trans.to !== 'stand')) {
@@ -2586,7 +2599,8 @@ class RealCatAnim {
       fadeK = 6;
     } else if (this.trans) {
       target[this.trans.name] = 1;
-      fadeK = 12;
+      // (en se relevant : fondu plus doux depuis la boule, pendant que le début du clip est encore couché)
+      fadeK = this.trans.roll ? 3.5 : this.trans.rise ? 5 : 12;
     } else if (st.moving) {
       target[g === 'idle' ? 'walk' : g] = 1;
       fadeK = 6;
@@ -2623,7 +2637,8 @@ class RealCatAnim {
         a.timeScale = 0;
         a.time = trick.time * a.getClip().duration;
       } else {
-        a.timeScale = st.quick && this.trans?.name === name ? 1.8 : 1;
+        // (clip tenu à son début pendant que le chat roule de la boule sur le ventre, voir plus haut)
+        a.timeScale = this.trans?.name === name && this.trans.pre > 0 ? 0 : st.quick && this.trans?.name === name ? 1.8 : 1;
       }
     }
     if (lead && leadW > 0.3) this.lead = lead;
@@ -3399,6 +3414,8 @@ export function animateRealCat(e, dt, sad) {
   st.fat = 1 + ((d.weight ?? 50) - 50) / 50 * 0.6;
   st.look = e.lookAt ?? null;
   anim.update(dt, st);
+  // (il se relève avant de partir : l'entité ne bouge pas tant que le clip get_up joue — AnimalEntity holdMove)
+  if (anim.trans?.rise && !e.scripted) e.holdMove = 0.1;
   e.gait = anim.gait === 'run' ? 2 : anim.gait === 'trot' ? 1 : 0;
   e.headDown = posture === 'crouch' ? 1 : 0;
 }

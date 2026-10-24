@@ -677,3 +677,27 @@ describe('foulard et nœud du salon', () => {
     md.dispose();
   });
 });
+
+describe('réveil du chaton', () => {
+  // Réveillé, le chaton roulé en boule sur le flanc se fondait dans la marche en 0,15 à 0,3 s, sans se relever (saut de
+  // pose). Maintenant il roule sur le ventre (clip get_up tenu à son début, couché), se relève, puis marche ; l'entité
+  // attend (e.holdMove, AnimalEntity).
+  it.each([['europeen', 'baby'], ['maine_coon', 'baby'], ['europeen', 'adult']])('%s (%s) : de la boule, il se relève avant de marcher', (b, stage) => {
+    const md = cat(b, stage);
+    md.staticPose('curl');
+    const a = md.anim;
+    let walkAt = null;
+    let rose = false;
+    for (let i = 0; i < 60; i++) {
+      // (il veut partir : l'entité, retenue, ne bouge pas tant qu'il se relève)
+      const moving = !a.trans?.rise;
+      a.update(1 / 30, { moving, v: moving ? 0.4 : 0, posture: 'stand', sleeping: false });
+      if (a.trans?.rise) rose = true;
+      if (walkAt === null && (a.w.walk ?? 0) > 0.5) walkAt = (i + 1) / 30;
+    }
+    expect(rose, `${b} ${stage} : il se relève`).toBe(true);
+    // (roulade 0,6 s puis get_up 0,8 s : la marche ne l'emporte pas avant 1 s)
+    expect(walkAt, `${b} ${stage} : marche à ${walkAt} s`).toBeGreaterThan(1.0);
+    md.dispose();
+  });
+});

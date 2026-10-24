@@ -142,7 +142,7 @@ describe('quêtes claires', () => {
     expect(questBlock('ride1', p)).toMatchObject({ key: 'qneed_horse' });
     expect(followBlock('ride1', p)).toBeNull(); // 🧭 emmène d'abord au refuge
     expect(questGuide('ride1', p)).toMatchObject({ where: 'refuge', first: 'horse' });
-    p.animals.push(createAnimal({ species: 'horse', sex: 'f', ageDays: 3000, rng: seeded('cheval') })); // adulte
+    p.animals.push(createAnimal({ species: 'horse', sex: 'f', ageDays: 60, rng: seeded('cheval') })); // adulte
     expect(questGuide('ride1', p).where).toBe('horse');
     expect(questBlock('ride1', p)).toBeNull(); // (le filet offert, rangé à la sellerie, se met tout seul)
   });

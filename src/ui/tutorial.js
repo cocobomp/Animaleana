@@ -22,7 +22,7 @@ import {
   followQuest, stopFollow, noteFollowEvent, updateFollow, followView, stepWindow,
 } from '../sim/tutorial.js';
 import {
-  trackerQuest, questKind, storyView, joinQuest, leaveQuest, skipChapter, resumeChapter, chapterEnd, joinedQuests, canFollow, MAX_JOINED,
+  trackerQuest, questKind, storyView, joinQuest, leaveQuest, skipChapter, resumeChapter, chapterEnd, joinedQuests, canFollow, questState, STORY, MAX_JOINED,
 } from '../sim/quests.js';
 import { hintText, blockText, shortBlockText } from './quests.js';
 import { NoticeQueue } from './questNotices.js'; // les petits mots du guide, qui attendent qu'aucune fenêtre ne soit ouverte
@@ -79,6 +79,13 @@ export class Tutorial {
     this.ring = h('div', { id: 'tuto-ring', hidden: true }, h('span', { class: 'tuto-finger' }, '👆'));
     this.tracker = h('div', { id: 'quest-tracker', hidden: true });
     ui.root.append(this.bubble, this.ring, this.tracker);
+    // La bulle change de taille (son texte) ou le haut de l'écran bouge : le suivi se repose tout de suite dessous
+    // (sinon, jusqu'au prochain tick, il passait un instant sous le bas de la bulle).
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeWatch = new ResizeObserver(() => { if (this.profile) this.layoutTop(); });
+      this.resizeWatch.observe(this.bubble);
+      if (ui.hud) this.resizeWatch.observe(ui.hud);
+    }
 
     game.on('start', () => this.begin());
     game.on('stop', () => this.end());
@@ -911,13 +918,14 @@ export class Tutorial {
   /** « Tu as déjà 3 quêtes » : le journal ouvert descend jusqu'à 🎯 Mes quêtes, pour en enlever une. */
   fullToast() {
     this.ui.toast(`✋ ${t('qj_full', { max: MAX_JOINED })}`, 5000);
-    const mine = this.ui.panelEl?.querySelector?.('.qj-mine');
-    if (mine) {
-      mine.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      mine.classList.remove('flash');
-      void mine.offsetWidth; // relance l'animation
+    // (après le nouveau dessin du journal, qui suit le toucher du bouton)
+    setTimeout(() => {
+      const mine = this.ui.panelEl?.querySelector?.('.qj-mine');
+      if (!mine) return;
+      mine.scrollIntoView({ block: 'start' }); // (pas « smooth » : le journal se redessine souvent et l'arrêtait)
       mine.classList.add('flash');
-    }
+      setTimeout(() => mine.classList.remove('flash'), 1300);
+    }, 60);
   }
 
   /** ➕ Rejoindre une quête secondaire. */
@@ -953,7 +961,9 @@ export class Tutorial {
     if (r?.questDone) {
       this.highlight = null;
       this.releaseMarker();
-      this.ui.toast(`🏆 ${t('quest_followDone', { name: questTitle(p, r.id) })}`, 5000);
+      // (le chapitre en cours — un chapitre suivi et pas passé — : le guide fête sa fin et annonce le suivant,
+      // chapterDone ; pas deux messages)
+      if (!STORY.includes(r.id) || questState(p).skipped.includes(r.id)) this.ui.toast(`🏆 ${t('quest_followDone', { name: questTitle(p, r.id) })}`, 5000);
       return;
     }
     if (r?.stepDone) {

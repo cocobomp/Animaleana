@@ -24,7 +24,7 @@ import { NoticeQueue } from '../src/ui/questNotices.js';
 const QUEST_IDS = OBJECTIVES.filter((o) => o.kind === 'quest').map((o) => o.id);
 const pet = (species = 'dog', sex = 'f', seed = species + sex) => createAnimal({ species, sex, ageDays: 80, rng: seeded(seed) });
 /** Un animal adulte (un cheval qu'on peut monter). */
-const grown = (species = 'horse', sex = 'f', seed = species + sex) => createAnimal({ species, sex, ageDays: 3000, rng: seeded(seed) });
+const grown = (species = 'horse', sex = 'f', seed = species + sex) => createAnimal({ species, sex, ageDays: 60, rng: seeded(seed) });
 const finish = (p, ...ids) => p.completed.push(...ids);
 
 describe('les quêtes sont rangées', () => {
@@ -520,7 +520,7 @@ describe('à cheval : un cheval adulte, avec un filet ou un licol', () => {
   it('le premier poney ou cheval de trait adopté reçoit aussi le licol, le filet et la selle offerts (taille échangée)', () => {
     for (const breed of ['shetland', 'connemara', 'percheron', 'irish_cob', 'selle_francais']) {
       const p = createProfile('Lou');
-      const a = createAnimal({ species: 'horse', breed, sex: 'f', ageDays: 3000, rng: seeded(breed) });
+      const a = createAnimal({ species: 'horse', breed, sex: 'f', ageDays: 60, rng: seeded(breed) });
       expect(starterTack(p, a), `${breed} (${sizeOf(a)})`).toEqual(['halter', 'bridle', 'saddle']);
       expect(rideGear(a).ok, breed).toBe(true);
     }

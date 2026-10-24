@@ -173,7 +173,9 @@ function othersSection(ui) {
   const full = joinedQuests(p).length >= MAX_JOINED;
   const out = [h('h3', { class: 'qj-h' }, t('qj_othersTitle'))];
   const fullNote = () => h('p', { class: 'qj-note warn' }, `✋ ${t('qj_full', { max: MAX_JOINED })}`);
-  out.push(full ? fullNote() : h('p', { class: 'qj-note' }, t('qj_othersHelp')));
+  // (un thème ouvert a déjà la phrase « Tu as déjà 3 quêtes » en tête : pas deux fois l'une sous l'autre)
+  const anyOpen = themes.some((th) => openParts.has(`theme:${th.id}`));
+  out.push(full && !anyOpen ? fullNote() : h('p', { class: 'qj-note' }, t('qj_othersHelp')));
   for (const th of themes) {
     const key = `theme:${th.id}`;
     out.push(toggle(ui, key, `${t(`qj_theme_${th.id}`)} (${th.quests.length})`));

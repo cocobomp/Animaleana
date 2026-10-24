@@ -26,6 +26,7 @@ import {
 } from '../sim/quests.js';
 import { hintText, blockText, shortBlockText } from './quests.js';
 import { NoticeQueue } from './questNotices.js'; // les petits mots du guide, qui attendent qu'aucune fenêtre ne soit ouverte
+import { ringSpot } from './ringSpot.js'; // où poser le cercle et le doigt
 
 const GUIDE = '🐶';
 /** Nom d'une quête (« Adopte {n} espèces… » : le total suit les espèces proposées). */
@@ -517,6 +518,19 @@ export class Tutorial {
     this.ownsMarker = false;
   }
 
+  /**
+   * La place de la bulle à l'écran, sans son animation d'entrée : au début, un transform la montre plus petite et
+   * plus haute, et le suivi se posait alors 20 px trop haut, sous son bas (offsetTop/offsetHeight ignorent les
+   * transforms ; la bulle est en position fixe et la page ne défile pas). null si elle est cachée.
+   */
+  bubbleBox() {
+    const b = this.bubble;
+    if (b.hidden || !b.offsetHeight) return null;
+    const left = b.offsetLeft;
+    const top = b.offsetTop;
+    return { left, top, right: left + b.offsetWidth, bottom: top + b.offsetHeight, width: b.offsetWidth, height: b.offsetHeight };
+  }
+
   /** Le cercle qui clignote autour du bouton à presser, et le doigt 👆. */
   placeRing() {
     const el = this.highlight;
@@ -531,20 +545,14 @@ export class Tutorial {
       this.ring.hidden = true;
       return;
     }
-    const pad = 6;
-    // Le doigt vient d'en dessous (ou d'au-dessus si le bouton est en bas de l'écran). Sous un bouton du haut
-    // (💼 Métiers, 🧭 Voyager), il cachait le texte de la bulle ou le nom de la quête du suivi : il vient alors
-    // de côté (de la gauche, ou de la droite contre le bord gauche de l'écran).
-    const fromTop = r.bottom > window.innerHeight - 90;
-    const cx = r.left + r.width / 2;
-    const below = { left: cx - 26, right: cx + 26, top: r.bottom + pad, bottom: r.bottom + pad + 48 };
-    const covers = (box) => {
-      if (!box || box.hidden) return false;
-      const b = box.getBoundingClientRect();
-      return b.width > 0 && b.left < below.right && b.right > below.left && b.top < below.bottom && b.bottom > below.top;
-    };
-    const side = !fromTop && (covers(this.bubble) || covers(this.tracker));
-    const fromLeft = side && r.left > 56;
+    // Le doigt vient d'en dessous, d'au-dessus ou de côté, sans cacher la bulle ni le suivi (ringSpot).
+    const spot = ringSpot(r, { bubble: this.bubbleBox(), tracker: this.tracker.hidden ? null : this.tracker.getBoundingClientRect() }, window.innerHeight);
+    if (spot.hidden) {
+      // (la bulle cache tout le bouton : le cercle reviendra quand elle se fermera)
+      if (!this.ring.hidden) this.ring.hidden = true;
+      return;
+    }
+    const pad = spot.pad;
     this.ring.hidden = false;
     Object.assign(this.ring.style, {
       left: `${r.left - pad}px`,
@@ -553,12 +561,15 @@ export class Tutorial {
       height: `${r.height + pad * 2}px`,
     });
     const cl = this.ring.classList;
-    cl.toggle('from-top', fromTop);
-    cl.toggle('from-left', fromLeft);
-    cl.toggle('from-right', side && !fromLeft);
+    cl.toggle('from-top', spot.fromTop);
+    cl.toggle('from-left', spot.side === 'left');
+    cl.toggle('from-right', spot.side === 'right');
+    cl.toggle('under', spot.under);
     const finger = this.ring.firstChild;
-    const glyph = !side ? '👆' : fromLeft ? '👉' : '👈';
-    if (finger && finger.textContent !== glyph) finger.textContent = glyph;
+    if (finger && finger.textContent !== spot.glyph) finger.textContent = spot.glyph;
+    // (sous la bulle : le doigt au milieu de ce qu'on voit du cercle)
+    const fy = spot.fingerY == null ? '' : `${spot.fingerY}px`;
+    if (finger && finger.style.top !== fy) finger.style.top = fy;
   }
 
   // ------------------------------------------------------------ quêtes claires
@@ -725,18 +736,14 @@ export class Tutorial {
       // Ordinateur : à gauche, sous la carte d'infos (et sous la bulle de la quête quand elle est ouverte : elle se
       // pose au même endroit ; pendant le tutoriel, le suivi est caché).
       top = (hud.querySelector('.hud-info')?.getBoundingClientRect().bottom || 148) + 8;
-      if (!this.bubble.hidden && this.bubble.classList.contains('quest-bubble')) {
-        const b = this.bubble.getBoundingClientRect();
-        if (b.height && b.bottom + 8 > top) top = b.bottom + 8;
-      }
+      const b = this.bubble.classList.contains('quest-bubble') ? this.bubbleBox() : null;
+      if (b && b.bottom + 8 > top) top = b.bottom + 8;
     } else {
       // Téléphone : à droite, sous les boutons du haut (en paysage, ils ne prennent que la droite de la barre).
       top = (hud.querySelector('.hud-buttons')?.getBoundingClientRect().bottom || hud.getBoundingClientRect().bottom || 100) + 6;
-      if (!this.bubble.hidden) {
-        const b = this.bubble.getBoundingClientRect();
-        const r = el.getBoundingClientRect();
-        if (b.height && b.left < r.right && b.right > r.left && b.bottom + 6 > top) top = b.bottom + 6;
-      }
+      const b = this.bubbleBox();
+      const r = el.getBoundingClientRect();
+      if (b && b.left < r.right && b.right > r.left && b.bottom + 6 > top) top = b.bottom + 6;
     }
     const px = `${Math.round(top)}px`;
     if (el.style.top !== px) el.style.top = px;
@@ -801,8 +808,9 @@ export class Tutorial {
       if (el.style.top !== top) el.style.top = top;
       // Posé par le haut seulement : un `bottom` venu du CSS l'étirerait jusqu'en bas de l'écran.
       if (el.style.bottom !== 'auto') el.style.bottom = 'auto';
-      const r = el.getBoundingClientRect();
-      if (r.height > 0) y = r.bottom + gap;
+      // (la bulle : sa vraie place, sans son animation d'entrée, voir bubbleBox)
+      const r = el === this.bubble ? this.bubbleBox() : el.getBoundingClientRect();
+      if (r?.height > 0) y = r.bottom + gap;
     };
     place(this.bubble);
     side = this.placeTracker();

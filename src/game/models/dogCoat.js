@@ -1012,6 +1012,19 @@ if (cOn > 0.5) {
     float lip = vCmpPart.z * mouthZone * (1.0 - smoothstep(0.05, 0.09, dh2)) * smoothstep(0.25, 0.4, hsv.y) * smoothstep(0.12, 0.25, hsv.z) * (1.0 - vCmpTongue);
     keep = keep * (1.0 - lip);
     nc = mix(nc, vec3(0.035, 0.026, 0.022), lip);
+    // (dessous de la lèvre du haut, dessus de celle du bas — tournés vers le bas ou le haut au repos, le long de la fente
+    // de la gueule : cachés gueule fermée, ils se voient gueule ouverte. La texture y est celle du poil, blanc verdi par
+    // le ciel chez le jack russell et le cavalier : gencive brun rose sombre, plus sombre au fond — poil clair seulement,
+    // — robe calculée claire —, les lèvres noires du carlin le sont déjà)
+    // (normale de repos de la face — celle des sommets, partagés avec le dehors de la lèvre au bord, en est moyennée ;
+    // tournée vers le haut ou vers le bas, dans la bande de la fente, pas plus haut — sous la truffe, une étoile rose)
+    vec3 nR = normalize(cross(dFdx(vCmpPos), dFdy(vCmpPos)));
+    float dy = vCmpPos.y - yM;
+    float gum = vCmpPart.z * smoothstep(cEye.z + 0.005, cEye.z + 0.025, vCmpPos.z)
+      * smoothstep(-0.026, -0.016, dy) * (1.0 - smoothstep(0.004, 0.01, dy)) * smoothstep(0.3, 0.65, abs(nR.y)) * (1.0 - vCmpTongue)
+      * smoothstep(0.12, 0.3, dot(nc, LUM));
+    keep = keep * (1.0 - gum);
+    nc = mix(nc, vec3(0.2, 0.08, 0.08) * (0.6 + 0.4 * smoothstep(cEye.z + 0.01, cHead.w, vCmpPos.z)), gum);
   }
   // Vibrisses des sourcils : sur une robe claire, de la teinte de la robe un peu assombrie au lieu de noires.
   #ifdef USE_MAP

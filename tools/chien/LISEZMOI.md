@@ -400,3 +400,9 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   (rideau devant le poitrail). Debout, inchangé (84 %). Reste : vues de face, les mèches de devant, rubans vus de chant,
   font encore quelques traits verticaux devant les antérieurs du chien assis (rubans tournés autour de l'épaule essayés :
   couché, ils se dressaient en plaque claire au coude — pas retenu).
+- **Intérieur des babines du jack, gueule ouverte** (shader, `dogCoat.js`, bloc des lèvres du jack) : le dessous de la
+  lèvre du haut et le dessus de celle du bas (faces tournées vers le bas ou le haut au repos, normale de la face tirée des
+  dérivées de la position de repos, dans la bande de la fente, pas plus haut — sous la truffe, une étoile rose) prennent
+  une teinte de gencive brun rose sombre, plus sombre au fond, là où la robe calculée est claire (jack russell, cavalier,
+  corgi : avant, poil blanc verdi par le ciel, vert olive ; carlin et bouledogue, lèvres déjà noires, inchangés). Reste :
+  vu de très près, le bord est en dents de scie (classement par face) ; pas de dents modelées.

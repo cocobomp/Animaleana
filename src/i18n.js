@@ -607,6 +607,7 @@ const fr = {
   statusLess: '➖ Replier',
   r_needBridle: 'Il faut mettre un filet ou un licol à {name} pour le monter (fiche de l\'animal).',
   r_needBridle_f: 'Il faut mettre un filet ou un licol à {name} pour la monter (fiche de l\'animal).',
+  r_putHalterFirst: 'On met d\'abord le licol à {name}.', // (« 🏇 Monter » sans filet : celui qui reste à la sellerie)
   ridingBareback: 'Tu montes {name} à cru (sans selle) : il va moins vite. 🏃 ou Maj pour galoper !',
   ridingBareback_f: 'Tu montes {name} à cru (sans selle) : elle va moins vite. 🏃 ou Maj pour galoper !',
   do_tack: 'Sellerie (selles, couvertures…)',
@@ -1444,7 +1445,8 @@ const fr = {
   quest_hint_first_adopt: 'Il te faut d\'abord un animal : va au refuge 🐾.',
   quest_hint_first_horse: 'Il te faut d\'abord un cheval : va au refuge 🐾.',
   // Aides des quêtes Métiers et clients (« Montre-moi » du suivi de quête et du journal ; elles manquaient).
-  quest_hint_career1: 'Touche 💼 Métiers et commence un métier (dès le niveau 3).',
+  // (l'histoire continue avec un premier client : seuls ces trois métiers en font venir)
+  quest_hint_career1: 'Touche 💼 Métiers et commence un métier (dès le niveau 3). Pour avoir des clients, choisis Vétérinaire 🩺, Gardien de pension 🏡 ou Handler de concours 🎀.',
   quest_hint_client1: 'Avec le métier de vétérinaire, de pension ou de beauté, un visiteur vient te confier son animal. Reste près de la maison.',
   quest_hint_clientVet1: 'Un client t\'amène un animal malade : soigne-le avec 🩺 dans sa fiche.',
   quest_hint_clientHappy5: 'Prends bien soin des animaux confiés jusqu\'au retour de leur propriétaire.',
@@ -1873,7 +1875,7 @@ const fr = {
   o_actvClear1: 'Réussir un sans-faute',
   o_actvTrail1: 'Finir une balade',
   o_actvAgility1: 'Faire un parcours d\'agility',
-  o_actvShow1: 'Présenter un spectacle',
+  o_actvShow1: 'Présente un spectacle avec un tour',
   o_actvCompete1: 'Participer à un concours',
   o_actvWin1: 'Gagner un concours',
   o_actvPodium5: 'Monter 5 fois sur le podium',
@@ -2425,6 +2427,7 @@ const en = {
   statusMore: '➕ {n} more',
   statusLess: '➖ Show less',
   r_needBridle: '{name} needs a bridle to be ridden (animal card or the stable\'s tack room).',
+  r_putHalterFirst: 'We\'ll put the halter on {name} first.',
   ridingBareback: 'You are riding {name} bareback (no saddle): slower. 🏃 or Shift to gallop!',
   do_tack: 'Tack room (saddles, blankets…)',
   tackRoom: 'Tack room',
@@ -3215,7 +3218,7 @@ const en = {
   quest_hint_first_adopt: 'You need an animal first: go to the shelter 🐾.',
   quest_hint_first_horse: 'You need a horse first: go to the shelter 🐾.',
   // Hints for the Careers and clients quests ("Show me" in the quest tracker and the journal; they were missing).
-  quest_hint_career1: 'Press 💼 Careers and start a career (from level 3).',
+  quest_hint_career1: 'Press 💼 Careers and start a career (from level 3). To get clients, choose Vet 🩺, Boarding keeper 🏡 or Show handler 🎀.',
   quest_hint_client1: 'With the vet, boarding or beauty career, a visitor comes to leave their animal with you. Stay near the house.',
   quest_hint_clientVet1: 'A client brings you a sick animal: heal it with 🩺 in its card.',
   quest_hint_clientHappy5: 'Take good care of boarded animals until their owners come back.',
@@ -3635,7 +3638,7 @@ const en = {
   o_actvClear1: 'Ride a clear round',
   o_actvTrail1: 'Finish a trail ride',
   o_actvAgility1: 'Run an agility course',
-  o_actvShow1: 'Put on a show',
+  o_actvShow1: 'Put on a show with a trick',
   o_actvCompete1: 'Enter a contest',
   o_actvWin1: 'Win a contest',
   o_actvPodium5: 'Reach the podium 5 times',

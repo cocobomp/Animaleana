@@ -166,7 +166,11 @@ export function migrate(p, hint = {}) {
   tgState(out);
   // Quêtes principales et secondaires (ajoutées plus tard) : rien de rejoint, sauf la quête qu'on suivait si
   // c'était une quête secondaire ; les chapitres déjà finis restent finis (src/sim/quests.js).
-  out.quests = p.quests;
+  // (une copie : migrateQuests répare les listes sans toucher à l'objet qu'on nous a donné)
+  const q = p.quests;
+  out.quests = q && typeof q === 'object' && !Array.isArray(q)
+    ? { ...q, joined: Array.isArray(q.joined) ? [...q.joined] : q.joined, skipped: Array.isArray(q.skipped) ? [...q.skipped] : q.skipped }
+    : q;
   migrateQuests(out);
   // Paddock, bergerie et enclos des lapins plus grands : on agrandit sans casser les déplacements enregistrés.
   return migrateCoreSizes(out);

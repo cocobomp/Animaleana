@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { createProfile, addStat } from '../src/sim/profile.js';
 import {
   TUTORIAL_STEPS, updateTutorial, noteEvent, tutorialStep, skipTutorial, restartTutorial,
-  questGuide, questBlock, QUEST_GUIDE, stepNumber,
+  questGuide, questBlock, followBlock, QUEST_GUIDE, stepNumber,
   followQuest, updateFollow, noteFollowEvent, followView, stopFollow, QUEST_STEPS, FOLLOW_STEPS, stepWindow,
 } from '../src/sim/tutorial.js';
 import { OBJECTIVES } from '../src/sim/objectives.js';
+import { createAnimal } from '../src/sim/animal.js';
+import { seeded } from '../src/sim/rng.js';
 import { trackerQuest, mainQuest, joinQuest } from '../src/sim/quests.js'; // ce que montre le suivi à l'écran
 
 const fakeAnimal = (species = 'dog') => ({ id: Math.random().toString(36), species, needs: {} });
@@ -130,18 +132,25 @@ describe('quêtes claires', () => {
   it("ne montre pas de monter à cheval sans cheval (sauf si on l'a choisi, et alors il dit pourquoi)", () => {
     const p = createProfile('Lou');
     p.animals.push(fakeAnimal('cat'));
-    p.completed.push(...OBJECTIVES.filter((o) => o.kind === 'quest' && o.id !== 'ride1' && o.id !== 'travel1').map((o) => o.id));
-    expect(trackerQuest(p).id).toBe('travel1');
-    expect(mainQuest(p)).toBe('travel1');
-    p.completed.push('travel1');
+    p.completed.push(...OBJECTIVES.filter((o) => o.kind === 'quest' && o.id !== 'ride1' && o.id !== 'client1').map((o) => o.id));
+    expect(trackerQuest(p).id).toBe('client1'); // le dernier chapitre de l'histoire
+    expect(mainQuest(p)).toBe('client1');
+    p.completed.push('client1');
     expect(trackerQuest(p)).toBeNull(); // ride1 n'est pas imposée
     joinQuest(p, 'ride1');
     expect(trackerQuest(p).id).toBe('ride1');
     expect(questBlock('ride1', p)).toMatchObject({ key: 'qneed_horse' });
+    expect(followBlock('ride1', p)).toBeNull(); // 🧭 emmène d'abord au refuge
     expect(questGuide('ride1', p)).toMatchObject({ where: 'refuge', first: 'horse' });
-    p.animals.push(fakeAnimal('horse'));
+    p.animals.push(createAnimal({ species: 'horse', sex: 'f', ageDays: 3000, rng: seeded('cheval') })); // adulte
     expect(questGuide('ride1', p).where).toBe('horse');
-    expect(questBlock('ride1', p)).toBeNull();
+    expect(questBlock('ride1', p)).toBeNull(); // (le filet offert, rangé à la sellerie, se met tout seul)
+  });
+
+  it('sans aucun animal, une quête à cheval commence par adopter un cheval (pas « un animal »)', () => {
+    const p = createProfile('Lou');
+    expect(questGuide('ride1', p)).toMatchObject({ where: 'refuge', first: 'horse' });
+    expect(questGuide('actvJump1', p)).toMatchObject({ first: 'horse' });
   });
 
   it('sans animal, les soins commencent au refuge', () => {

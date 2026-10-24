@@ -50,7 +50,9 @@ import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
 import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone } from '../sim/droppings.js';
 import { enclosure } from './nav.js';
 import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
-import { GEAR, buyGear, equip, unequip, rideGear, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN } from '../sim/gear.js';
+import {
+  GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
+} from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
@@ -1079,7 +1081,7 @@ export class Game {
         const name = t(`o_${o.id}`, objectiveParams(p, o));
         const reward = o.reward && p.mode === 'manage' ? t('reward', { n: o.reward }) : '';
         if (o.id === story?.chapter && this.ui.tutorial?.chapterDone) {
-          this.ui.tutorial.chapterDone(o.id, story.next, reward);
+          this.ui.tutorial.chapterDone(o.id, story, reward); // (bravo, et la suite : chapitre suivant, fin, chapitres passés)
           continue;
         }
         const msg = o.kind === 'quest' ? t('questDone', { name }) : t('achievementDone', { name });
@@ -1840,7 +1842,16 @@ export class Game {
   ride(a, bareback = false) {
     const r = canRide(a);
     if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
-    const gear = rideGear(a, bareback);
+    let gear = rideGear(a, bareback);
+    if (!gear.ok) {
+      // Pas de filet ni de licol : on lui met celui qui reste à la sellerie, puis on monte (src/sim/gear.js).
+      const tack = tackUpForRide(this.profile, a, { home: this.isHome });
+      if (tack.ok && tack.item) {
+        this.entities.get(a.id)?.applyGear();
+        this.ui.toast(t(GEAR[tack.item]?.type === 'halter' ? 'r_putHalterFirst' : 'actv_putBridleFirst', { name: a.name, g: a.sex }), 3000);
+        gear = rideGear(a, bareback);
+      }
+    }
     if (!gear.ok) return this.ui.toast(t('r_needBridle', { name: a.name, g: a.sex }), 5000);
     this.bareback = gear.bareback;
     this.player.bareback = gear.bareback;
@@ -1982,16 +1993,9 @@ export class Game {
     this.profile.animals.push(a);
     addStat(this.profile, 'adopted');
     this.xp('adopt');
-    // Le premier cheval reçoit tout de suite le filet et la selle offerts.
-    if (a.species === 'dog') {
-      equip(this.profile, a, 'collar', 'red');
-      equip(this.profile, a, 'leash');
-    }
-    if (a.species === 'horse') {
-      equip(this.profile, a, 'halter', 'red');
-      equip(this.profile, a, 'bridle');
-      equip(this.profile, a, 'saddle');
-    }
+    // Le premier cheval reçoit tout de suite le licol, le filet et la selle offerts (à sa taille : un poney ou un
+    // cheval de trait aussi), le premier chien son collier et sa laisse (src/sim/gear.js).
+    starterTack(this.profile, a, { home: this.isHome });
     const door = this.world.interactables.find((i) => i.kind === from) ?? this.world.interactables.find((i) => i.kind === 'refuge');
     const e = this.spawnEntity(a, door);
     e.emit('❤️', 5);

@@ -40,8 +40,30 @@ describe('textes des quêtes', () => {
       setLang(lang);
       for (const k of keys) expect(t(k, { n: 3 }), `${lang} ${k}`).not.toBe(k);
     }
+    // chaque raison a aussi sa version courte (le petit suivi à l'écran n'a qu'une ligne au téléphone)
+    for (const lang of ['fr', 'en']) {
+      setLang(lang);
+      for (const k of keys) {
+        if (!k.startsWith('qneed_')) continue;
+        const short = k.replace(/^qneed_/, 'qshort_');
+        const s = t(short, { n: 776, max: 20 });
+        expect(s, `${lang} ${short}`).not.toBe(short);
+        expect(s.length, `${lang} ${short} : « ${s} »`).toBeLessThanOrEqual(33);
+      }
+    }
     setLang('fr');
     expect(t('qj_upcoming', { n: 1 })).toBe('🔒 Encore 1 chapitre après celui-ci');
+    expect(t('qj_skippedLeft', { n: 1 })).toBe('Il te reste 1 chapitre passé. Reprends-le dans 📖 Journal quand tu veux.');
     expect(t('qj_notYet', { why: t('qneed_horse') })).toBe('Pas encore possible : il te faut d\'abord un cheval 🐴.');
+  });
+
+  it('commencer un métier dit lesquels font venir des clients (le chapitre suivant est le premier client)', () => {
+    const { t, setLang } = i18n;
+    for (const lang of ['fr', 'en']) {
+      setLang(lang);
+      const hint = t('quest_hint_career1');
+      for (const id of ['vet', 'pension', 'handler']) expect(hint, `${lang} ${id}`).toContain(t(`career_${id}`));
+    }
+    setLang('fr');
   });
 });

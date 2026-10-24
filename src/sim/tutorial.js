@@ -7,6 +7,9 @@ import { levelOf } from './progress.js';
 import { PLACES, PLACE_IDS, TRAVEL_MODES, checkTravel } from './places.js'; // le voyage le moins cher (quête du voyage)
 import { POOPS_PER_DAY } from './droppings.js'; // qui fait des crottins (quête « ramasser »)
 import { SPECIES } from './species.js';
+import { ageYears, BOND_FOR_TRICKS } from './animal.js'; // monter un cheval adulte ; le lien qu'il faut pour un tour
+import { wears, hasFreeHeadgear } from './gear.js'; // filet ou licol pour monter
+import { STRUCTURES } from './construction.js'; // prix du salon de toilettage
 
 const stat = (p, k) => p.stats?.[k] ?? 0;
 
@@ -177,6 +180,14 @@ const dogTrainerStarted = (p) => careerOn(p, 'dogTrainer'); // éducateur canin 
 const hasTrainingDog = (p) => (p.animals ?? []).some((a) => a.client?.kind === 'training');
 const coachable = (p) => own(p).some((a) => ['dog', 'cat', 'horse', 'rabbit'].includes(a.species));
 const level = (p) => levelOf(p.xp ?? 0);
+const horses = (p) => own(p).filter((a) => a.species === 'horse');
+// (un cheval trop jeune ne se monte pas : canRide, src/sim/animal.js)
+const grownHorse = (p) => horses(p).some((a) => ageYears(a) >= (SPECIES.horse.rideYears ?? 0));
+// Pour monter : un filet ou un licol sur le cheval, ou un libre à lui mettre (« 🏇 Monter » le met tout seul).
+const headgear = (p) => horses(p).some((a) => wears(a, 'bridle') || wears(a, 'halter')) || hasFreeHeadgear(p);
+const bestBond = (p) => Math.max(0, ...own(p).map((a) => a.bond ?? 0));
+const knowsTrick = (p) => own(p).some((a) => Object.values(a.tricks ?? {}).some((v) => v >= 100)); // (activities.js : knownTricks)
+const salonPrice = () => STRUCTURES.salon?.price ?? 0;
 
 /** Le voyage le moins cher d'ici (en 🪙 : sans animal, sans le cheval), seulement vers l'étranger avec abroad. */
 export function cheapestTrip(p, { abroad = false } = {}) {
@@ -202,6 +213,11 @@ const tripOk = (p, abroad) => p.mode !== 'manage' || (p.money ?? 0) >= cheapestT
 export const QUEST_NEEDS = {
   animal: { ok: hasAnimal },
   horse: { ok: hasHorse },
+  grownHorse: { ok: grownHorse }, // un cheval assez grand pour être monté
+  tack: { ok: headgear }, // un filet ou un licol
+  // le lien qu'il faut pour apprendre un tour (trainTrick : BOND_FOR_TRICKS) ; on le gagne en s'occupant de l'animal
+  bond: { ok: (p) => bestBond(p) >= BOND_FOR_TRICKS, params: (p) => ({ n: Math.floor(bestBond(p)), max: BOND_FOR_TRICKS }) },
+  trickKnown: { ok: knowsTrick }, // un tour appris (le spectacle)
   rabbit: { ok: (p) => own(p).some((a) => a.species === 'rabbit') },
   // deux animaux pour un bébé : un mâle et une femelle de la même espèce
   pair: { ok: (p) => own(p).some((a) => a.sex === 'f' && own(p).some((b) => b.sex === 'm' && b.species === a.species)) },
@@ -209,6 +225,7 @@ export const QUEST_NEEDS = {
   agility: { ok: (p) => own(p).some((a) => SPECIES[a.species]?.training?.includes('agility')) },
   coachable: { ok: coachable },
   salon: { ok: hasSalon },
+  salonMoney: { ok: (p) => p.mode !== 'manage' || (p.money ?? 0) >= salonPrice(), params: () => ({ n: salonPrice() }) },
   career: { ok: hasCareer },
   // métiers dont les visiteurs viennent confier leur animal (src/sim/clients.js)
   visitCareer: { ok: (p) => ['vet', 'pension', 'handler'].some((id) => careerOn(p, id)) },
@@ -224,6 +241,8 @@ const SHOWGROUND = { type: 'building', id: 'showground' };
 const LEVEL_BUILD = { id: 'level', n: 3, for: 'build' }; // 150 XP = niveau 3 (salon de toilettage)
 const LEVEL_CAREER = { id: 'level', n: 3, for: 'career' }; // premier métier (src/sim/careers.js : niveau 3)
 const LEVEL_TRAIL = { id: 'level', n: 4, for: 'career' }; // 🧭 guide de randonnée (niveau 4)
+// Monter à cheval : un cheval, assez grand, avec un filet ou un licol (le jeu le met tout seul s'il en reste un).
+const MOUNT = ['horse', 'grownHorse', 'tack'];
 
 /**
  * Pour chaque quête : où aller (clé de texte quest_where_*), quoi montrer, et ce qu'il faut avoir (need, dans
@@ -238,26 +257,26 @@ export const QUEST_GUIDE = {
   // (un crottin arrive tout seul avec le temps : l'étape « attends un crottin » du suivi)
   scoop1: { where: 'ground', target: { type: 'dropping' }, need: ['animal', 'pooper'] },
   vet1: { where: 'vet', target: { type: 'building', id: 'vet' }, need: ['animal'] },
-  trick1: { where: 'sheet', target: { type: 'action', id: 'more' }, need: ['animal'] },
-  ride1: { where: 'horse', target: { type: 'action', id: 'ride', species: 'horse' }, need: ['horse'] },
+  trick1: { where: 'sheet', target: { type: 'action', id: 'more' }, need: ['animal', 'bond'] },
+  ride1: { where: 'horse', target: { type: 'action', id: 'ride', species: 'horse' }, need: MOUNT },
   travel1: { where: 'travel', target: { type: 'hud', id: 'travel' }, need: ['trip'] },
   abroad: { where: 'travel', target: { type: 'hud', id: 'travel' }, need: ['tripAbroad'] },
-  horseTrip: { where: 'travel', target: { type: 'hud', id: 'travel' }, need: ['horse'] },
+  horseTrip: { where: 'travel', target: { type: 'hud', id: 'travel' }, need: ['horse', 'grownHorse'] },
   baby: { where: 'sheet', target: { type: 'action', id: 'more' }, need: ['animal', 'pair'] },
   species4: { where: 'refuge', target: { type: 'building', id: 'refuge' } },
   // Activités : au terrain de concours (src/sim/activities.js)
-  actvLesson1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] },
-  actvJump1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] },
-  actvClear1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] },
-  actvTrail1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] }, // (la balade se fait à cheval)
+  actvLesson1: { where: 'showground', target: SHOWGROUND, horse: true, need: MOUNT },
+  actvJump1: { where: 'showground', target: SHOWGROUND, horse: true, need: MOUNT },
+  actvClear1: { where: 'showground', target: SHOWGROUND, horse: true, need: MOUNT },
+  actvTrail1: { where: 'showground', target: SHOWGROUND, horse: true, need: MOUNT }, // (la balade se fait à cheval)
   actvAgility1: { where: 'showground', target: SHOWGROUND, animal: true, need: ['animal', 'agility'] },
-  actvShow1: { where: 'showground', target: SHOWGROUND, animal: true, need: ['animal'] },
+  actvShow1: { where: 'showground', target: SHOWGROUND, animal: true, need: ['animal', 'trickKnown'] }, // (on montre un tour appris)
   actvCompete1: { where: 'showground', target: SHOWGROUND, animal: true, need: ['animal'] },
   actvHop1: { where: 'showground', target: SHOWGROUND, animal: true, need: ['rabbit'] },
   actvHutch5: { where: 'hutch', target: { type: 'building', id: 'hutch' }, animal: true, need: ['rabbit'] },
   // Dressage et concours à l'extérieur (src/sim/dressage.js, src/sim/competitions.js)
-  drTrain3: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] },
-  drReprise1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse'] },
+  drTrain3: { where: 'showground', target: SHOWGROUND, horse: true, need: MOUNT },
+  drReprise1: { where: 'showground', target: SHOWGROUND, horse: true, need: MOUNT },
   compRegister1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, need: ['animal'] },
   compAway1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, need: ['animal'] },
   // Concours de beauté (src/sim/beauty.js) : préparer depuis la fiche, présenter au terrain de concours
@@ -271,7 +290,7 @@ export const QUEST_GUIDE = {
   dtDeliver1: { where: 'dogTrainer', target: { type: 'building', id: 'kennel' }, need: ['dogTrainer', 'trainingDog'] },
   dtCoach1: { where: 'dogSheet', target: { type: 'action', id: 'more' }, need: ['dogTrainer', 'coachable'] },
   // Métier Toiletteur (src/sim/groomer.js) : construire le salon, puis y travailler.
-  grmSalon: { where: 'build', target: { type: 'hud', id: 'hud_build' }, need: [LEVEL_BUILD] },
+  grmSalon: { where: 'build', target: { type: 'hud', id: 'hud_build' }, need: [LEVEL_BUILD, 'salonMoney'] },
   grmClient1: { where: 'salon', target: { type: 'building', id: 'salon' }, need: ['salon'] },
   grmOwn1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, need: ['salon', 'animal'] },
   grmAccessory1: { where: 'salon', target: { type: 'building', id: 'salon' }, animal: true, need: ['salon', 'animal'] },
@@ -283,10 +302,10 @@ export const QUEST_GUIDE = {
   clientHappy5: { where: 'home', target: { type: 'hud', id: 'careers' }, need: ['career', 'visitCareer'] },
   clientMoney500: { where: 'home', target: { type: 'hud', id: 'careers' }, need: ['career', 'visitCareer'] },
   // 🧭 Guide de randonnée (src/sim/trailGuide.js) : les visiteurs arrivent près de l'écurie (dès le niveau 4).
-  tgFirst: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, need: ['horse', LEVEL_TRAIL] },
-  tgStars3: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, need: ['horse', LEVEL_TRAIL] },
-  tgRiders10: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, need: ['horse', LEVEL_TRAIL] },
-  tgAbroad: { where: 'travel', target: { type: 'hud', id: 'travel' }, horse: true, need: ['horse', LEVEL_TRAIL] },
+  tgFirst: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, need: [...MOUNT, LEVEL_TRAIL] },
+  tgStars3: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, need: [...MOUNT, LEVEL_TRAIL] },
+  tgRiders10: { where: 'trailGuide', target: { type: 'building', id: 'stable' }, horse: true, need: [...MOUNT, LEVEL_TRAIL] },
+  tgAbroad: { where: 'travel', target: { type: 'hud', id: 'travel' }, horse: true, need: [...MOUNT, LEVEL_TRAIL] },
 };
 
 /**
@@ -306,6 +325,28 @@ export function questBlock(id, profile) {
 
 /** La quête est-elle faisable maintenant ? */
 export const questReady = (id, profile) => !questBlock(id, profile);
+
+/**
+ * Ce qu'il manque et que l'enfant trouve au refuge : sans animal (ou sans cheval), « 🧭 Suivre » commence par y
+ * aller (questSteps : étapes goRefuge, adoptFirst / adoptHorse), et le cheval adopté reçoit son licol.
+ */
+const AT_REFUGE = new Set(['animal', 'horse', 'grownHorse', 'tack', 'rabbit', 'pooper', 'agility', 'coachable']);
+
+/**
+ * Peut-on SUIVRE cette quête (🧭) ? null si oui, sinon ce qui manque (comme questBlock). Le suivi guide pas à pas :
+ * il ne doit jamais emmener l'enfant vers une action impossible (un bébé avec un seul animal, un voyage sans assez
+ * d'argent…). Seul ce qu'on trouve au refuge ne bloque pas : le suivi commence alors par l'adoption.
+ */
+export function followBlock(id, profile) {
+  const adopting = !!questGuide(id, profile)?.first; // (le suivi commence par le refuge)
+  for (const raw of QUEST_GUIDE[id]?.need ?? []) {
+    const need = typeof raw === 'string' ? { id: raw } : raw;
+    const def = QUEST_NEEDS[need.id];
+    if (!def || def.ok(profile, need) || (adopting && AT_REFUGE.has(need.id))) continue;
+    return { need: need.id, key: need.for ? `qneed_${need.id}_${need.for}` : `qneed_${need.id}`, params: def.params?.(profile, need) ?? {} };
+  }
+  return null;
+}
 
 /** Ordre des quêtes, de la plus facile à la plus difficile (journal, thèmes des quêtes : src/sim/quests.js). */
 export const QUEST_ORDER = [
@@ -327,8 +368,9 @@ export function questGuide(id, profile) {
   const g = QUEST_GUIDE[id];
   if (!g) return null;
   const needsAnimal = g.target.type === 'action' || g.where === 'vet' || g.animal || g.horse;
-  if (needsAnimal && !hasAnimal(profile)) return { where: 'refuge', target: { type: 'building', id: 'refuge' }, first: 'adopt' };
+  // (une quête à cheval sans aucun animal : un cheval d'abord, pas « un animal » — un chat ne servirait à rien)
   if ((g.where === 'horse' || g.horse) && !hasHorse(profile)) return { where: 'refuge', target: { type: 'building', id: 'refuge' }, first: 'horse' };
+  if (needsAnimal && !hasAnimal(profile)) return { where: 'refuge', target: { type: 'building', id: 'refuge' }, first: 'adopt' };
   return { where: g.where, target: g.target };
 }
 

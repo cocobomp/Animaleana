@@ -1,28 +1,41 @@
 // Journal, onglet Quêtes (openJournal, src/ui/panels.js) : quatre parties lisibles au téléphone.
 //   ⭐ Histoire de la ferme : le chapitre en cours (Montre-moi, Suivre, Passer pour l'instant), les chapitres passés
-//      (Reprendre), ceux déjà faits ✅ et combien il en reste à venir ;
+//      (Reprendre : une seule fois dans le journal), ceux déjà faits ✅ et combien il en reste à venir ;
 //   🎯 Mes quêtes (n/3) : les quêtes secondaires rejointes (Montre-moi, Suivre, Enlever) ;
-//   🗺️ Autres quêtes : par thème (on touche un thème pour l'ouvrir), avec ➕ Rejoindre ;
+//   🗺️ Autres quêtes : par thème (on touche un thème pour l'ouvrir), avec comment les faire, Montre-moi et
+//      ➕ Rejoindre (grisé avec 3 quêtes : le toucher dit d'en enlever une) ;
 //   ✅ Terminées : repliées.
+// Une quête pas encore possible dit pourquoi (🔒) et n'a ni 🧭 Suivre ni Montre-moi (followBlock).
 // Le modèle est dans src/sim/quests.js ; les actions (suivre, passer, enlever…) dans src/ui/tutorial.js.
 
 import { h } from './dom.js';
 import { t } from '../i18n.js';
 import { OBJECTIVES, objectiveParams } from '../sim/objectives.js';
 import { isSandbox } from '../sim/profile.js';
-import { questGuide, questBlock } from '../sim/tutorial.js';
+import { questGuide, followBlock } from '../sim/tutorial.js';
 import {
-  storyView, joinedQuests, otherQuests, doneQuests, canJoin, MAX_JOINED, STORY,
+  storyView, joinedQuests, otherQuests, doneQuests, MAX_JOINED, STORY, resumeMode,
 } from '../sim/quests.js';
 
 const obj = (id) => OBJECTIVES.find((o) => o.id === id);
 export const questName = (p, id) => t(`o_${id}`, objectiveParams(p, obj(id)));
 /** « il te faut d'abord un cheval » → « Il te faut d'abord un cheval » (seul, en début de ligne). */
 export const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-/** Pourquoi la quête n'est pas encore possible (texte), ou null. */
+/**
+ * Pourquoi la quête n'est pas encore possible (texte), ou null. (Ce qu'on trouve au refuge ne compte pas : le suivi
+ * y emmène d'abord, et l'aide le dit : « Il te faut d'abord un cheval : va au refuge ».)
+ */
 export function blockText(p, id) {
-  const b = questBlock(id, p);
+  const b = followBlock(id, p);
   return b ? t(b.key, b.params) : null;
+}
+/** La même raison, en court (le petit suivi à l'écran n'a qu'une ligne : « Il faut un cheval adulte 🐴 »). */
+export function shortBlockText(p, id) {
+  const b = followBlock(id, p);
+  if (!b) return '';
+  const key = b.key.replace(/^qneed_/, 'qshort_');
+  const s = t(key, b.params);
+  return s === key ? cap(t(b.key, b.params)) : s;
 }
 /** Comment faire la quête : l'aide du suivi (sans animal ou sans cheval, d'abord le refuge). */
 export function hintText(p, id) {
@@ -46,8 +59,8 @@ function progress(p, id) {
 
 /**
  * Une carte de quête. kind : 'main' (chapitre en cours), 'joined' (rejointe), 'side' (à rejoindre).
- * Le chapitre en cours et les quêtes rejointes disent où aller et comment ; les autres seulement si elles ne sont
- * pas encore possibles.
+ * Elle dit où aller et comment (les autres quêtes : seulement comment, en plus court), ou pourquoi ce n'est pas
+ * encore possible (🔒 : alors ni Montre-moi ni 🧭 Suivre, qui guideraient vers l'impossible).
  */
 function questCard(ui, id, kind) {
   const tuto = ui.tutorial;
@@ -63,19 +76,23 @@ function questCard(ui, id, kind) {
   };
   const btn = (label, onClick, cls = '') => h('button', { class: `qc-btn ${cls}`.trim(), onClick }, label);
   const buttons = [];
+  if (!block) buttons.push(btn(`👉 ${t('quest_showMe')}`, (e) => { e.stopPropagation(); tuto.showQuest(id); }));
   if (kind === 'main' || kind === 'joined') {
-    buttons.push(btn(`👉 ${t('quest_showMe')}`, (e) => { e.stopPropagation(); tuto.showQuest(id); }));
-    buttons.push(followed
-      ? btn(`✋ ${t('quest_stop')}`, act(() => tuto.stopFollowing()))
-      : btn(`🧭 ${t('quest_follow')}`, (e) => { e.stopPropagation(); tuto.startFollow(id); }, 'primary'));
+    if (followed) buttons.push(btn(`✋ ${t('quest_stop')}`, act(() => tuto.stopFollowing())));
+    else if (!block) buttons.push(btn(`🧭 ${t('quest_follow')}`, (e) => { e.stopPropagation(); tuto.startFollow(id); }, 'primary'));
     buttons.push(kind === 'main'
       ? btn(t('qj_skip'), act(() => tuto.skipMain(id)), 'qc-skip')
       : btn(t('qj_leave'), act(() => tuto.leave(id)), 'qc-leave'));
   } else {
-    const can = canJoin(p, id);
-    buttons.push(h('button', { class: 'qc-btn primary qc-join', disabled: !can.ok, onClick: act(() => tuto.join(id)) }, t('qj_join')));
+    // Déjà MAX_JOINED quêtes : le bouton est grisé mais répond (il dit d'en enlever une et montre 🎯 Mes quêtes).
+    const full = joinedQuests(p).length >= MAX_JOINED;
+    buttons.push(h('button', {
+      class: `qc-btn primary qc-join${full ? ' off' : ''}`,
+      'aria-disabled': full ? 'true' : null,
+      onClick: act(() => tuto.join(id)),
+    }, t('qj_join')));
   }
-  const wasChapter = kind === 'side' && STORY.includes(id);
+  const wasChapter = kind === 'joined' && STORY.includes(id); // (un chapitre passé, repris dans « Mes quêtes »)
   return h('div', { class: `qcard ${kind}${followed ? ' following' : ''}`, 'data-quest': id },
     h('div', { class: 'qc-top' },
       h('span', { class: 'obj-icon', 'aria-hidden': 'true' }, icon),
@@ -85,7 +102,7 @@ function questCard(ui, id, kind) {
         bar),
       count),
     kind !== 'side' && !block ? h('p', { class: 'qc-where' }, `📍 ${tuto.whereText(id)}`) : null,
-    kind !== 'side' && !block ? h('p', { class: 'qc-hint' }, hintText(p, id)) : null,
+    !block ? h('p', { class: 'qc-hint' }, hintText(p, id)) : null,
     block ? h('p', { class: 'qc-block' }, `🔒 ${t('qj_notYet', { why: block })}`) : null,
     h('div', { class: 'qc-actions' }, buttons));
 }
@@ -117,11 +134,20 @@ function storySection(ui) {
     out.push(h('p', { class: 'qj-note big' }, t(s.finished ? 'qj_storyDone' : 'qj_storyRest')));
   }
   if (s.skipped.length) {
+    // ↩️ Reprendre : un chapitre d'avant redevient le chapitre en cours ; un chapitre d'après va dans 🎯 Mes quêtes
+    // (l'histoire garde son ordre), ce que la ligne dit ; avec déjà 3 quêtes, le bouton est grisé mais répond.
     out.push(h('div', { class: 'qj-skipped' },
       h('b', {}, t('qj_skippedTitle')),
-      ...s.skipped.map((id) => h('div', { class: 'qj-row' },
-        h('span', {}, questName(p, id)),
-        h('button', { class: 'qc-btn', onClick: () => { ui.tutorial.resume(id); ui.renderPanel(); } }, t('qj_resume'))))));
+      ...s.skipped.map((id) => {
+        const how = resumeMode(p, id);
+        return h('div', { class: 'qj-row', 'data-quest': id },
+          h('span', {}, questName(p, id), how !== 'main' ? h('small', { class: 'qj-row-note' }, t(how === 'full' ? 'qj_resumeFull' : 'qj_resumeToMine')) : null),
+          h('button', {
+            class: `qc-btn${how === 'full' ? ' off' : ''}`,
+            'aria-disabled': how === 'full' ? 'true' : null,
+            onClick: () => { ui.tutorial.resume(id); ui.renderPanel(); },
+          }, t('qj_resume')));
+      })));
   }
   if (s.done.length) {
     out.push(h('div', { class: 'qj-done-chips' },
@@ -146,11 +172,13 @@ function othersSection(ui) {
   const themes = otherQuests(p);
   const full = joinedQuests(p).length >= MAX_JOINED;
   const out = [h('h3', { class: 'qj-h' }, t('qj_othersTitle'))];
-  out.push(h('p', { class: `qj-note ${full ? 'warn' : ''}` }, full ? `✋ ${t('qj_full', { max: MAX_JOINED })}` : t('qj_othersHelp')));
+  const fullNote = () => h('p', { class: 'qj-note warn' }, `✋ ${t('qj_full', { max: MAX_JOINED })}`);
+  out.push(full ? fullNote() : h('p', { class: 'qj-note' }, t('qj_othersHelp')));
   for (const th of themes) {
     const key = `theme:${th.id}`;
     out.push(toggle(ui, key, `${t(`qj_theme_${th.id}`)} (${th.quests.length})`));
-    if (openParts.has(key)) out.push(h('div', { class: 'qj-list' }, th.quests.map((id) => questCard(ui, id, 'side'))));
+    // (la phrase « Tu as déjà 3 quêtes » aussi en tête du thème ouvert : celle du haut sort vite de l'écran)
+    if (openParts.has(key)) out.push(h('div', { class: 'qj-list' }, full ? fullNote() : null, th.quests.map((id) => questCard(ui, id, 'side'))));
   }
   return h('section', { class: 'qj-part qj-others' }, out);
 }

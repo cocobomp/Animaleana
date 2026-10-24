@@ -3,22 +3,28 @@
 
 import { describe, it, expect } from 'vitest';
 import { createProfile, migrate, addStat } from '../src/sim/profile.js';
-import { createAnimal } from '../src/sim/animal.js';
+import { createAnimal, applyCare, trainTrick, BOND_FOR_TRICKS, canRide } from '../src/sim/animal.js';
 import { SPECIES, offeredSpeciesIds } from '../src/sim/species.js';
 import { OBJECTIVES, checkObjectives, objectiveShown } from '../src/sim/objectives.js';
 import { PLACE_IDS } from '../src/sim/places.js';
 import { XP, levelOf } from '../src/sim/progress.js';
 import { canStart, startCareer } from '../src/sim/careers.js';
-import { followQuest, questBlock, questReady, cheapestTrip, QUEST_GUIDE, QUEST_ORDER } from '../src/sim/tutorial.js';
+import { eligibility, knownTricks } from '../src/sim/activities.js';
+import { rideGear, tackUpForRide, starterTack, wears, sizeOf } from '../src/sim/gear.js';
+import { followQuest, stopFollow, questBlock, followBlock, questReady, cheapestTrip, QUEST_GUIDE, QUEST_ORDER } from '../src/sim/tutorial.js';
 import { serializeSave, parseSave, mergeProfiles } from '../src/sim/saveFile.js';
 import { mulberry32, seeded } from '../src/sim/rng.js';
 import {
-  STORY, THEMES, MAX_JOINED, mainQuest, storyView, skipChapter, resumeChapter, joinQuest, leaveQuest, canJoin,
-  joinedQuests, otherQuests, trackerQuest, afterQuestsDone, questKind, isSideQuest, migrateQuests, doneQuests, questState,
+  STORY, THEMES, MAX_JOINED, mainQuest, storyView, skipChapter, resumeChapter, resumeMode, joinQuest, leaveQuest, canJoin,
+  joinedQuests, otherQuests, trackerQuest, afterQuestsDone, chapterEnd, questKind, isSideQuest, migrateQuests, doneQuests,
+  questState, canFollow, tidyFollow, skippedLeft,
 } from '../src/sim/quests.js';
+import { NoticeQueue } from '../src/ui/questNotices.js';
 
 const QUEST_IDS = OBJECTIVES.filter((o) => o.kind === 'quest').map((o) => o.id);
 const pet = (species = 'dog', sex = 'f', seed = species + sex) => createAnimal({ species, sex, ageDays: 80, rng: seeded(seed) });
+/** Un animal adulte (un cheval qu'on peut monter). */
+const grown = (species = 'horse', sex = 'f', seed = species + sex) => createAnimal({ species, sex, ageDays: 3000, rng: seeded(seed) });
 const finish = (p, ...ids) => p.completed.push(...ids);
 
 describe('les quêtes sont rangées', () => {
@@ -37,16 +43,29 @@ describe('les quêtes sont rangées', () => {
       const o = OBJECTIVES.find((x) => x.id === id);
       expect(o.needs, id).toBeUndefined();
       expect(objectiveShown(p, o), id).toBe(true);
-      // ni cheval, ni lapin, ni deux animaux, ni crottin : n'importe quel animal suffit
-      for (const n of QUEST_GUIDE[id].need ?? []) expect(['horse', 'rabbit', 'pair', 'pooper', 'agility'], `${id} → ${n}`).not.toContain(n);
+      // ni cheval, ni lapin, ni deux animaux, ni crottin, ni argent pour voyager : n'importe quel animal suffit
+      for (const n of QUEST_GUIDE[id].need ?? []) {
+        expect(['horse', 'grownHorse', 'tack', 'rabbit', 'pair', 'pooper', 'agility', 'trip', 'tripAbroad'], `${id} → ${n}`).not.toContain(n);
+      }
     }
   });
 
-  it('chaque espèce proposée peut être caressée, nourrie, abreuvée, brossée et apprendre un tour', () => {
+  it('chaque espèce proposée peut être caressée, nourrie, abreuvée, brossée, apprendre un tour et le montrer en spectacle', () => {
     for (const sid of offeredSpeciesIds()) {
       for (const act of ['pet', 'feed', 'water', 'brush']) expect(SPECIES[sid].actions, `${sid} ${act}`).toContain(act);
       expect(SPECIES[sid].tricks.length, sid).toBeGreaterThan(0);
+      const a = grown(sid);
+      expect(eligibility(a, 'show'), sid).toBe('noTricks');
+      a.tricks[SPECIES[sid].tricks[0]] = 100;
+      expect(eligibility(a, 'show'), sid).toBeNull();
     }
+  });
+
+  it('le premier voyage n\'est plus un chapitre : depuis certaines maisons, il coûte plus de 750 🪙', () => {
+    expect(STORY).not.toContain('travel1');
+    const costs = PLACE_IDS.map((home) => cheapestTrip(createProfile('Lou', 'manage', home)));
+    expect(Math.max(...costs)).toBeGreaterThan(750);
+    expect(THEMES.find((th) => th.id === 'travel').quests).toContain('travel1'); // (une quête secondaire)
   });
 });
 
@@ -63,12 +82,12 @@ describe('l\'histoire de la ferme', () => {
 
   it('un chapitre fini plus tôt (hors de l\'histoire) compte comme fini', () => {
     const p = createProfile('Lou');
-    finish(p, 'adopt1', 'travel1', 'vet1');
+    finish(p, 'adopt1', 'actvShow1', 'vet1');
     expect(mainQuest(p)).toBe('pet3');
-    expect(storyView(p).done).toEqual(['adopt1', 'vet1', 'travel1']);
+    expect(storyView(p).done).toEqual(['adopt1', 'vet1', 'actvShow1']);
     // les chapitres finis ne reviennent jamais
-    finish(p, 'pet3', 'feed5', 'water3', 'brush3');
-    expect(mainQuest(p)).toBe('trick1');
+    finish(p, 'pet3', 'feed5', 'water3', 'brush3', 'trick1');
+    expect(mainQuest(p)).toBe('career1');
   });
 
   it('histoire finie : plus de chapitre, et c\'est dit', () => {
@@ -89,27 +108,70 @@ describe('l\'histoire de la ferme', () => {
     expect(storyView(p).skipped).toEqual(['pet3']);
     expect(isSideQuest(p, 'pet3')).toBe(true);
     expect(questKind(p, 'pet3')).toBe('side');
-    expect(otherQuests(p).find((th) => th.id === 'animals').quests).toContain('pet3');
-    // on peut le rejoindre comme une quête secondaire
-    expect(joinQuest(p, 'pet3')).toEqual({ ok: true });
-    expect(joinedQuests(p)).toEqual(['pet3']);
     // seul le chapitre en cours se passe
     expect(skipChapter(p, 'water3')).toBeUndefined();
     expect(mainQuest(p)).toBe('feed5');
   });
 
-  it('reprendre un chapitre passé : il redevient le chapitre en cours', () => {
+  it('reprendre un chapitre passé qui vient AVANT le chapitre en cours : il redevient le chapitre en cours', () => {
     const p = createProfile('Lou');
     finish(p, 'adopt1');
     skipChapter(p); // pet3
     skipChapter(p); // feed5
     expect(mainQuest(p)).toBe('water3');
-    joinQuest(p, 'feed5');
-    expect(resumeChapter(p, 'feed5')).toBe(true);
+    expect(resumeMode(p, 'feed5')).toBe('main');
+    expect(resumeChapter(p, 'feed5')).toEqual({ ok: true, how: 'main' });
     expect(mainQuest(p)).toBe('feed5'); // avant water3 dans l'histoire
-    expect(joinedQuests(p)).toEqual([]); // (il n'est plus une quête secondaire)
+    expect(joinedQuests(p)).toEqual([]);
     expect(storyView(p).skipped).toEqual(['pet3']);
-    expect(resumeChapter(p, 'water3')).toBe(false); // pas passé
+    expect(resumeChapter(p, 'water3')).toEqual({ ok: false, reason: 'notSkipped' }); // pas passé
+  });
+
+  it('reprendre un chapitre passé qui vient APRÈS le chapitre en cours : il va dans « Mes quêtes » (il ne disparaît plus)', () => {
+    const p = createProfile('Lou');
+    for (let i = 0; i < STORY.length; i++) skipChapter(p); // tout passé
+    expect(resumeChapter(p, 'career1').how).toBe('main');
+    expect(mainQuest(p)).toBe('career1');
+    // « Pars en voyage » avant : le spectacle, lui, vient après le métier
+    expect(resumeMode(p, 'client1')).toBe('joined');
+    expect(resumeChapter(p, 'client1')).toEqual({ ok: true, how: 'joined' });
+    expect(mainQuest(p)).toBe('career1'); // l'histoire garde son ordre
+    expect(joinedQuests(p)).toEqual(['client1']); // on le voit, on peut le suivre
+    expect(questKind(p, 'client1')).toBe('joined');
+    expect(storyView(p).skipped).not.toContain('client1'); // une seule fois dans le journal
+    expect(trackerQuest(p).id).toBe('career1');
+    // l'enlever : il revient dans « Passés pour l'instant »
+    leaveQuest(p, 'client1');
+    expect(storyView(p).skipped).toContain('client1');
+    // « Mes quêtes » pleines : reprendre un chapitre d'après le dit, sans rien changer
+    for (const id of ['scoop1', 'ride1', 'abroad']) joinQuest(p, id);
+    expect(resumeMode(p, 'client1')).toBe('full');
+    expect(resumeChapter(p, 'client1')).toEqual({ ok: false, reason: 'full' });
+    expect(questState(p).skipped).toContain('client1');
+    // un chapitre d'avant se reprend même avec 3 quêtes (il ne va pas dans « Mes quêtes »)
+    expect(resumeChapter(p, 'pet3').how).toBe('main');
+  });
+
+  it('reprendre un chapitre d\'avant pendant qu\'on suit le chapitre en cours : on ne suit plus un chapitre à venir', () => {
+    const p = createProfile('Lou');
+    p.animals.push(pet());
+    finish(p, 'adopt1');
+    skipChapter(p); // pet3
+    followQuest(p, 'feed5');
+    resumeChapter(p, 'pet3');
+    expect(mainQuest(p)).toBe('pet3');
+    expect(p.questFollow).toBeNull();
+    expect(trackerQuest(p)).toEqual({ id: 'pet3', kind: 'main', followed: false });
+  });
+
+  it('un chapitre passé n\'apparaît qu\'une fois dans le journal (dans l\'histoire, pas dans « Autres quêtes »)', () => {
+    const p = createProfile('Lou');
+    finish(p, 'adopt1');
+    p.animals.push(pet());
+    skipChapter(p); // pet3
+    expect(storyView(p).skipped).toEqual(['pet3']);
+    for (const th of otherQuests(p)) expect(th.quests).not.toContain('pet3');
+    for (const th of otherQuests(p)) for (const id of th.quests) expect(STORY, id).not.toContain(id);
   });
 
   it('tout passer : plus de chapitre en cours, sans rien perdre', () => {
@@ -117,8 +179,9 @@ describe('l\'histoire de la ferme', () => {
     for (let i = 0; i < STORY.length; i++) skipChapter(p);
     expect(mainQuest(p)).toBeNull();
     expect(storyView(p)).toMatchObject({ current: null, finished: false, skipped: STORY });
-    resumeChapter(p, 'travel1');
-    expect(mainQuest(p)).toBe('travel1');
+    expect(skippedLeft(p)).toEqual(STORY);
+    expect(resumeChapter(p, 'client1').how).toBe('main');
+    expect(mainQuest(p)).toBe('client1');
   });
 });
 
@@ -139,7 +202,7 @@ describe('rejoindre et enlever des quêtes secondaires', () => {
   it('on ne rejoint ni un chapitre de l\'histoire (en cours ou à venir), ni une quête finie, ni deux fois la même', () => {
     const p = createProfile('Lou');
     expect(canJoin(p, 'adopt1').reason).toBe('story'); // le chapitre en cours
-    expect(canJoin(p, 'travel1').reason).toBe('story'); // un chapitre à venir
+    expect(canJoin(p, 'client1').reason).toBe('story'); // un chapitre à venir
     finish(p, 'ride1');
     expect(canJoin(p, 'ride1').reason).toBe('done');
     joinQuest(p, 'scoop1');
@@ -150,7 +213,7 @@ describe('rejoindre et enlever des quêtes secondaires', () => {
 
   it('enlever ne perd rien : la progression reste, et on peut la rejoindre de nouveau', () => {
     const p = createProfile('Lou');
-    p.animals.push(pet('horse'));
+    p.animals.push(grown('horse'));
     joinQuest(p, 'ride1');
     followQuest(p, 'ride1');
     addStat(p, 'feed', 2);
@@ -165,13 +228,13 @@ describe('rejoindre et enlever des quêtes secondaires', () => {
     const p = createProfile('Lou');
     expect(questBlock('ride1', p)).toMatchObject({ need: 'horse', key: 'qneed_horse' });
     expect(joinQuest(p, 'ride1').ok).toBe(true);
-    p.animals.push(pet('horse'));
+    p.animals.push(grown('horse'));
     expect(questBlock('ride1', p)).toBeNull();
   });
 
   it('une quête rejointe et finie quitte « Mes quêtes », avec sa récompense', () => {
     const p = createProfile('Lou', 'manage');
-    p.animals.push(pet('horse'));
+    p.animals.push(grown('horse'));
     joinQuest(p, 'ride1');
     joinQuest(p, 'scoop1');
     const money = p.money;
@@ -191,9 +254,22 @@ describe('rejoindre et enlever des quêtes secondaires', () => {
     const p = createProfile('Lou', 'manage');
     const money = p.money;
     addStat(p, 'travels');
-    expect(checkObjectives(p).map((o) => o.id)).toEqual(['travel1']); // un chapitre à venir, fini en avance
+    expect(checkObjectives(p).map((o) => o.id)).toEqual(['travel1']); // une quête secondaire, pas rejointe
     expect(p.money).toBe(money + OBJECTIVES.find((o) => o.id === 'travel1').reward);
-    expect(storyView(p).done).toEqual(['travel1']);
+    expect(doneQuests(p)).toEqual(['travel1']);
+    // un chapitre à venir fini en avance : récompensé, et l'histoire le saute
+    addStat(p, 'careersStarted');
+    expect(checkObjectives(p).map((o) => o.id)).toEqual(['career1']);
+    expect(storyView(p).done).toEqual(['career1']);
+  });
+
+  it('les autres quêtes : d\'abord celles qu\'on peut faire, puis celles où le suivi passe par le refuge, puis les autres', () => {
+    const p = createProfile('Lou');
+    p.animals.push(grown('dog'));
+    const animals = otherQuests(p).find((th) => th.id === 'animals').quests;
+    // scoop1 (un chien fait des crottins) avant ride1 (il faut un cheval : le refuge) avant baby (un seul animal)
+    expect(animals.indexOf('scoop1')).toBeLessThan(animals.indexOf('ride1'));
+    expect(animals.indexOf('ride1')).toBeLessThan(animals.indexOf('baby'));
   });
 });
 
@@ -206,20 +282,75 @@ describe('fin d\'un chapitre', () => {
     addStat(p, 'pet', 3);
     const r = afterQuestsDone(p, checkObjectives(p), before);
     expect(r).toMatchObject({ chapter: 'pet3', next: 'feed5', storyDone: false });
+    expect(chapterEnd(r)).toEqual({ kind: 'next', next: 'feed5', n: 0 });
   });
 
   it('le dernier chapitre : l\'histoire est finie', () => {
     const p = createProfile('Lou');
     finish(p, ...STORY.slice(0, -1));
     const before = mainQuest(p);
-    expect(before).toBe('travel1');
-    addStat(p, 'travels');
-    expect(afterQuestsDone(p, checkObjectives(p), before)).toMatchObject({ chapter: 'travel1', next: null, storyDone: true });
+    expect(before).toBe('client1');
+    addStat(p, 'clients');
+    const r = afterQuestsDone(p, checkObjectives(p), before);
+    expect(r).toMatchObject({ chapter: 'client1', next: null, storyDone: true, skippedLeft: 0 });
+    expect(chapterEnd(r).kind).toBe('finished');
+  });
+
+  it('le dernier chapitre pas passé, avec des chapitres passés : PAS « tu as fini toute l\'histoire »', () => {
+    const p = createProfile('Lou');
+    p.animals.push(pet());
+    finish(p, 'adopt1');
+    for (let i = 0; i < STORY.length; i++) skipChapter(p); // pet3 … client1 passés
+    resumeChapter(p, 'feed5'); // repris : le seul chapitre en cours
+    expect(mainQuest(p)).toBe('feed5');
+    const before = mainQuest(p);
+    addStat(p, 'feed', 5);
+    const r = afterQuestsDone(p, checkObjectives(p), before);
+    expect(r).toMatchObject({ chapter: 'feed5', next: null, storyDone: false, skippedLeft: STORY.length - 2 });
+    expect(chapterEnd(r)).toEqual({ kind: 'skippedLeft', next: null, n: STORY.length - 2 });
+  });
+});
+
+describe('le petit mot de fin de chapitre attend qu\'aucune fenêtre ne soit ouverte', () => {
+  it('une fenêtre ouverte : il attend, puis il est montré', () => {
+    const q = new NoticeQueue(1000);
+    q.add({ text: 'Chapitre réussi' });
+    expect(q.update(true, 0)).toBeNull(); // le menu des soins (ou 💼 Métiers) est ouvert
+    expect(q.update(true, 5000)).toBeNull();
+    expect(q.update(false, 6000)).toMatchObject({ text: 'Chapitre réussi' }); // fermé : on le voit
+    expect(q.update(false, 6500)).toMatchObject({ text: 'Chapitre réussi' });
+    expect(q.update(false, 7100)).toBeNull(); // vu assez longtemps
+  });
+
+  it('une fenêtre s\'ouvre pendant qu\'on le lit (« niveau 4 ») : il revient après', () => {
+    const q = new NoticeQueue(1000);
+    q.add({ text: 'Chapitre réussi' });
+    expect(q.update(false, 0)).toBeTruthy();
+    expect(q.update(true, 200)).toBeNull(); // la fenêtre du niveau
+    expect(q.size).toBe(1);
+    expect(q.update(false, 9000)).toMatchObject({ text: 'Chapitre réussi' }); // OK touché : il revient, pour 1 s
+    expect(q.update(false, 9500)).toBeTruthy();
+  });
+
+  it('dans l\'ordre ; la réponse à un bouton passe devant ; OK fait venir le suivant', () => {
+    const q = new NoticeQueue(1000);
+    q.add({ text: 'A' });
+    q.add({ text: 'B' });
+    expect(q.update(false, 0).text).toBe('A');
+    q.hold();
+    q.add({ text: 'Tu as déjà 3 quêtes' }, { first: true });
+    expect(q.update(false, 10).text).toBe('Tu as déjà 3 quêtes');
+    q.close();
+    expect(q.update(false, 20).text).toBe('A');
+    q.close();
+    expect(q.update(false, 30).text).toBe('B');
+    q.clear();
+    expect(q.update(false, 40)).toBeNull();
   });
 });
 
 describe('le suivi à l\'écran', () => {
-  it('montre le chapitre en cours, puis la quête suivie, puis la première rejointe, sinon rien', () => {
+  it('montre la quête suivie, sinon le chapitre en cours, sinon la première rejointe, sinon rien', () => {
     const p = createProfile('Lou');
     expect(trackerQuest(p)).toEqual({ id: 'adopt1', kind: 'main', followed: false });
     joinQuest(p, 'scoop1');
@@ -227,15 +358,35 @@ describe('le suivi à l\'écran', () => {
     expect(trackerQuest(p).id).toBe('adopt1'); // la quête principale d'abord
     followQuest(p, 'abroad');
     expect(trackerQuest(p)).toEqual({ id: 'abroad', kind: 'joined', followed: true });
-    p.questFollow = null;
-    // la dernière choisie (✋ puis 🧭 la reprend) : seulement si elle est encore principale ou rejointe
-    expect(trackerQuest(p, { recent: 'abroad' }).id).toBe('abroad');
-    expect(trackerQuest(p, { recent: 'ride1' }).id).toBe('adopt1');
     finish(p, ...STORY);
+    stopFollow(p);
     expect(trackerQuest(p)).toEqual({ id: 'scoop1', kind: 'joined', followed: false });
     leaveQuest(p, 'scoop1');
     leaveQuest(p, 'abroad');
     expect(trackerQuest(p)).toBeNull();
+  });
+
+  it('après ✋ sur une quête rejointe, le suivi revient au chapitre en cours (pas la quête arrêtée)', () => {
+    const p = createProfile('Lou');
+    p.animals.push(grown('horse'));
+    finish(p, 'adopt1');
+    joinQuest(p, 'ride1');
+    followQuest(p, 'ride1');
+    expect(trackerQuest(p).id).toBe('ride1');
+    stopFollow(p); // ✋
+    expect(trackerQuest(p)).toEqual({ id: 'pet3', kind: 'main', followed: false });
+  });
+
+  it('un chapitre pas encore arrivé n\'est jamais montré, même s\'il était suivi (ancienne sauvegarde)', () => {
+    const old = createProfile('Abimee');
+    delete old.quests;
+    old.animals.push(pet());
+    old.completed = ['adopt1'];
+    old.questFollow = { id: 'water3', step: 0, seen: [], steps: ['tapAnimal', 'do_water'] };
+    expect(trackerQuest(old).id).toBe('pet3'); // (sans même la migration)
+    const m = migrate(JSON.parse(JSON.stringify(old)));
+    expect(m.questFollow).toBeNull();
+    expect(trackerQuest(m)).toEqual({ id: 'pet3', kind: 'main', followed: false });
   });
 
   it('suivre le chapitre en cours : ⭐ et 🧭 ensemble', () => {
@@ -244,40 +395,47 @@ describe('le suivi à l\'écran', () => {
     expect(trackerQuest(p)).toEqual({ id: 'adopt1', kind: 'main', followed: true });
   });
 
-  it('aucune quête impossible ou non choisie n\'est imposée (simulation de 300 parties)', () => {
+  it('aucune quête impossible ou non choisie n\'est imposée ni suivie (simulation de 300 parties)', () => {
     const species = offeredSpeciesIds();
     for (let n = 0; n < 300; n++) {
       const rng = mulberry32(900 + n);
       const p = createProfile('A', rng() < 0.5 ? 'manage' : 'sandbox', PLACE_IDS[Math.floor(rng() * PLACE_IDS.length)]);
+      if (rng() < 0.5) p.money = Math.floor(rng() * 400);
       const k = Math.floor(rng() * 4);
-      for (let i = 0; i < k; i++) p.animals.push(pet(species[Math.floor(rng() * species.length)], rng() < 0.5 ? 'f' : 'm', `${n}-${i}`));
+      for (let i = 0; i < k; i++) p.animals.push((rng() < 0.5 ? pet : grown)(species[Math.floor(rng() * species.length)], rng() < 0.5 ? 'f' : 'm', `${n}-${i}`));
       for (const id of QUEST_IDS) if (rng() < 0.4) p.completed.push(id);
       for (let i = 0; i < 3; i++) if (rng() < 0.3) skipChapter(p);
       for (const id of QUEST_IDS) if (rng() < 0.1) joinQuest(p, id);
-      if (rng() < 0.3) {
-        const pick = [mainQuest(p), ...joinedQuests(p)].filter(Boolean);
-        if (pick.length) followQuest(p, pick[Math.floor(rng() * pick.length)]);
+      for (const id of STORY) if (rng() < 0.1) resumeChapter(p, id);
+      if (rng() < 0.5) {
+        // l'enfant touche 🧭 sur une quête au hasard : seulement si c'est possible
+        const id = QUEST_IDS[Math.floor(rng() * QUEST_IDS.length)];
+        if (canFollow(p, id).ok) {
+          if (questKind(p, id) === 'side') expect(joinQuest(p, id).ok).toBe(true);
+          followQuest(p, id);
+        }
       }
       const q = trackerQuest(p);
       const main = mainQuest(p);
       const joined = joinedQuests(p);
       expect(joined.length).toBeLessThanOrEqual(MAX_JOINED);
+      if (p.questFollow) expect(followBlock(p.questFollow.id, p), `${n} ${p.questFollow.id}`).toBeNull();
       if (!q) {
         expect(main).toBeNull();
         expect(joined).toEqual([]);
         continue;
       }
       // Ce que montre le suivi : la quête suivie, le chapitre en cours ou une quête rejointe, jamais une autre.
-      expect(q.followed ? q.id === p.questFollow.id : q.id === main || joined.includes(q.id), `${n} ${q.id}`).toBe(true);
-      if (!q.followed && q.kind === 'joined') expect(main).toBeNull();
+      expect(q.followed ? q.id === p.questFollow.id : q.id === (main ?? joined[0]), `${n} ${q.id}`).toBe(true);
+      expect(['main', 'joined']).toContain(q.kind);
       expect(p.completed).not.toContain(q.id);
       expect(objectiveShown(p, OBJECTIVES.find((o) => o.id === q.id))).toBe(true);
-      // Les autres quêtes : ni finies, ni rejointes, ni cachées, ni des chapitres pas encore arrivés.
+      // Les autres quêtes : ni finies, ni rejointes, ni cachées, ni des chapitres de l'histoire.
       for (const th of otherQuests(p)) {
         for (const id of th.quests) {
           expect(p.completed).not.toContain(id);
           expect(joined).not.toContain(id);
-          expect(isSideQuest(p, id)).toBe(true);
+          expect(STORY).not.toContain(id);
           expect(objectiveShown(p, OBJECTIVES.find((o) => o.id === id))).toBe(true);
         }
       }
@@ -285,47 +443,158 @@ describe('le suivi à l\'écran', () => {
   });
 });
 
+describe('on ne suit jamais une quête pas encore possible (🧭 ne guide pas vers l\'impossible)', () => {
+  it('bébé avec un seul animal, voyage sans assez d\'argent : pas de suivi, et la raison', () => {
+    const p = createProfile('Lou', 'manage', 'japon');
+    p.animals.push(grown('horse'));
+    finish(p, ...STORY);
+    expect(canFollow(p, 'baby')).toMatchObject({ ok: false, reason: 'blocked', block: { need: 'pair' } });
+    p.money = 30;
+    expect(canFollow(p, 'travel1')).toMatchObject({ ok: false, reason: 'blocked', block: { need: 'trip' } });
+    expect(canFollow(p, 'travel1').block.params.n).toBe(cheapestTrip(p));
+    p.money = 5000;
+    expect(canFollow(p, 'travel1')).toEqual({ ok: true });
+  });
+
+  it('ce qu\'on trouve au refuge ne bloque pas : le suivi commence par l\'adoption', () => {
+    const p = createProfile('Lou');
+    finish(p, 'adopt1');
+    expect(questBlock('ride1', p)).toMatchObject({ need: 'horse' }); // « Il te faut d'abord un cheval »
+    expect(followBlock('ride1', p)).toBeNull(); // … et 🧭 emmène au refuge
+    expect(canFollow(p, 'ride1')).toEqual({ ok: true });
+    followQuest(p, 'ride1');
+    expect(p.questFollow.steps.slice(0, 3)).toEqual(['goRefuge', 'waitOpen', 'adoptHorse']);
+    // mais deux animaux pour un bébé, ça ne s'adopte pas en un tour : bloqué
+    expect(followBlock('baby', p)).toMatchObject({ need: 'pair' });
+  });
+
+  it('une quête devenue impossible (ancienne sauvegarde qui suivait « bébé ») n\'est plus suivie, mais reste rejointe', () => {
+    const old = createProfile('Experte');
+    delete old.quests;
+    old.animals.push(grown('dog'));
+    old.completed = ['adopt1'];
+    old.questFollow = { id: 'baby', step: 0, seen: [], steps: ['tapAnimal', 'openMore', 'breedNow'] };
+    const m = migrate(JSON.parse(JSON.stringify(old)));
+    expect(m.quests.joined).toEqual(['baby']);
+    expect(m.questFollow).toBeNull();
+    expect(trackerQuest(m).id).toBe('pet3');
+    // tidyFollow : la même règle à tout moment
+    const p = createProfile('Lou');
+    finish(p, 'adopt1');
+    p.questFollow = { id: 'baby', step: 0, seen: [], steps: [] };
+    expect(tidyFollow(p)).toBe(true);
+    expect(p.questFollow).toBeNull();
+  });
+});
+
+describe('à cheval : un cheval adulte, avec un filet ou un licol', () => {
+  it('un poulain ne se monte pas : la balade le dit', () => {
+    const p = createProfile('Lou');
+    p.animals.push(createAnimal({ species: 'horse', sex: 'f', ageDays: 1, rng: seeded('poulain') })); // un poulain
+    expect(canRide(p.animals[0]).reason).toBe('tooYoung');
+    expect(questBlock('ride1', p)).toMatchObject({ need: 'grownHorse', key: 'qneed_grownHorse' });
+    p.animals.push(grown('horse'));
+    expect(questBlock('ride1', p)).toBeNull();
+  });
+
+  it('sans filet ni licol libre : la balade le dit ; avec un libre, « Monter » le met tout seul', () => {
+    const p = createProfile('Lou');
+    const h = grown('horse');
+    p.animals.push(h);
+    expect(wears(h, 'bridle') || wears(h, 'halter')).toBe(false);
+    expect(questBlock('ride1', p)).toBeNull(); // le filet offert est rangé à la sellerie
+    expect(rideGear(h).ok).toBe(false);
+    const r = tackUpForRide(p, h);
+    expect(r.ok).toBe(true);
+    expect(r.item).toBeTruthy();
+    expect(rideGear(h).ok).toBe(true);
+    // un deuxième cheval, plus rien de libre : la balade dit pourquoi (elle ne pointe plus « Monter » pour rien)
+    const p2 = createProfile('Lou');
+    p2.items = { ...p2.items, bridle: 0, halter: 0 };
+    p2.animals.push(grown('horse', 'm', 'h2'));
+    expect(questBlock('ride1', p2)).toMatchObject({ need: 'tack', key: 'qneed_tack' });
+    expect(tackUpForRide(p2, p2.animals[0]).ok).toBe(false);
+    for (const id of ['actvLesson1', 'actvJump1', 'actvTrail1', 'drTrain3', 'tgFirst']) expect(questBlock(id, p2)?.need, id).toBe('tack');
+  });
+
+  it('le premier poney ou cheval de trait adopté reçoit aussi le licol, le filet et la selle offerts (taille échangée)', () => {
+    for (const breed of ['shetland', 'connemara', 'percheron', 'irish_cob', 'selle_francais']) {
+      const p = createProfile('Lou');
+      const a = createAnimal({ species: 'horse', breed, sex: 'f', ageDays: 3000, rng: seeded(breed) });
+      expect(starterTack(p, a), `${breed} (${sizeOf(a)})`).toEqual(['halter', 'bridle', 'saddle']);
+      expect(rideGear(a).ok, breed).toBe(true);
+    }
+    const p = createProfile('Lou');
+    expect(starterTack(p, grown('dog'))).toEqual(['collar', 'leash']);
+    expect(starterTack(p, grown('cat'))).toEqual([]);
+  });
+});
+
 /**
- * Joue un chapitre comme dans le jeu (statistiques, XP de src/sim/progress.js, coûts en mode gestion), puis
- * checkObjectives (récompenses) : de quoi vérifier que chaque chapitre est faisable quand il arrive, avec
- * l'argent et le niveau qu'on a à ce moment-là.
+ * Joue un chapitre comme dans le jeu (statistiques, soins avec le lien qu'ils donnent, XP de src/sim/progress.js,
+ * coûts en mode gestion), puis checkObjectives (récompenses) : de quoi vérifier que chaque chapitre est faisable
+ * quand il arrive, avec l'argent, le niveau et le lien qu'on a à ce moment-là. Renvoie ce qu'on a dépensé.
  */
-function playChapter(p, id, species) {
+function playChapter(p, id, species, career = 'pension') {
   const xp = (k, n = 1) => { p.xp += XP[k] * n; };
-  const pay = (n) => { if (p.mode === 'manage') p.money -= n; };
+  let spent = 0;
+  const pay = (n) => { if (p.mode === 'manage') { p.money -= n; spent += n; } };
+  const a = p.animals[0];
+  const care = (action, need, n) => {
+    for (let i = 0; i < n; i++) {
+      a.needs[need] = 20;
+      expect(applyCare(a, action).ok, `${species} ${action}`).toBe(true);
+    }
+    addStat(p, action, n);
+    xp('care', n);
+  };
   switch (id) {
     case 'adopt1': p.animals.push(pet(species)); addStat(p, 'adopted'); xp('adopt'); break; // le refuge est gratuit
-    case 'pet3': addStat(p, 'pet', 3); xp('care', 3); break;
-    case 'feed5': addStat(p, 'feed', 5); xp('care', 5); pay(5 * 3); break;
-    case 'water3': addStat(p, 'water', 3); xp('care', 3); break;
-    case 'brush3': addStat(p, 'brush', 3); xp('care', 3); break;
+    case 'pet3': care('pet', 'affection', 3); break;
+    case 'feed5': care('feed', 'hunger', 5); pay(5 * 3); break;
+    case 'water3': care('water', 'thirst', 3); break;
+    case 'brush3': care('brush', 'grooming', 3); break;
     case 'vet1': addStat(p, 'vet'); xp('vet'); pay(30); break; // la clinique (VET_COST.clinic)
-    case 'trick1': addStat(p, 'tricksLearned'); xp('trick', 4); xp('trickLearned'); break;
+    case 'trick1': {
+      const trick = SPECIES[species].tricks[0];
+      for (let i = 0; i < 40 && !knownTricks(a).length; i++) {
+        a.needs.energy = 100;
+        const r = trainTrick(a, trick, () => 0); // (réussite à chaque essai)
+        expect(r.ok, `${species} ${r.reason}`).toBe(true);
+        xp('trick');
+      }
+      addStat(p, 'tricksLearned');
+      xp('trickLearned');
+      break;
+    }
+    case 'actvShow1': expect(eligibility(a, 'show'), species).toBeNull(); addStat(p, 'actvShows'); xp('show'); break; // gratuit
     case 'career1': {
-      expect(canStart(p, 'pension', { level: levelOf(p.xp) }).ok, 'métier').toBe(true);
-      startCareer(p, 'pension', 2, { level: levelOf(p.xp) });
+      expect(canStart(p, career, { level: levelOf(p.xp) }).ok, 'métier').toBe(true);
+      startCareer(p, career, 2, { level: levelOf(p.xp) });
       break;
     }
     case 'client1': addStat(p, 'clients'); p.money += p.mode === 'manage' ? 40 : 0; xp('client'); break; // 2 jours de pension d'un chien
-    case 'travel1': pay(cheapestTrip(p)); addStat(p, 'travels'); xp('travel'); break;
     default: throw new Error(id);
   }
   for (const o of checkObjectives(p)) xp(o.kind);
+  return spent;
 }
 
 describe('chaque chapitre est faisable quand il arrive', () => {
-  it('pour chaque espèce, chaque maison, en bac à sable comme en gestion (sans la récompense du tutoriel)', () => {
+  it('pour chaque espèce, chaque maison, en bac à sable comme en gestion (sans la récompense du tutoriel), sans gros budget', () => {
     for (const species of offeredSpeciesIds()) {
       for (const home of PLACE_IDS) {
         for (const mode of ['sandbox', 'manage']) {
           const p = createProfile('Lou', mode, home);
+          let spent = 0;
           for (const id of STORY) {
             expect(mainQuest(p), `${species} ${home} ${mode}`).toBe(id);
             expect(questBlock(id, p), `${species} ${home} ${mode} ${id} (${p.money} 🪙, niveau ${levelOf(p.xp)})`).toBeNull();
-            playChapter(p, id, species);
+            spent += playChapter(p, id, species);
             if (mode === 'manage') expect(p.money, `${home} ${id}`).toBeGreaterThanOrEqual(0);
           }
           expect(storyView(p).finished).toBe(true);
+          expect(spent, `${species} ${home}`).toBeLessThanOrEqual(50); // (5 repas et la clinique)
         }
       }
     }
@@ -340,6 +609,21 @@ describe('chaque chapitre est faisable quand il arrive', () => {
     expect(questReady('client1', p)).toBe(true);
   });
 
+  it('apprendre un tour demande le lien : après avoir passé caresser, nourrir et brosser, le chapitre le dit', () => {
+    const p = createProfile('Lou');
+    p.animals.push(pet('cat'));
+    finish(p, 'adopt1');
+    for (let i = 0; i < 5; i++) skipChapter(p); // pet3, feed5, water3, brush3, vet1
+    expect(mainQuest(p)).toBe('trick1');
+    expect(p.animals[0].bond).toBeLessThan(BOND_FOR_TRICKS);
+    expect(questBlock('trick1', p)).toMatchObject({ need: 'bond', params: { n: 5, max: BOND_FOR_TRICKS } });
+    expect(canFollow(p, 'trick1').reason).toBe('blocked');
+    p.animals[0].bond = BOND_FOR_TRICKS;
+    expect(questBlock('trick1', p)).toBeNull();
+    // le spectacle demande un tour appris
+    expect(questBlock('actvShow1', p)).toMatchObject({ need: 'trickKnown' });
+  });
+
   it('en gestion sans assez d\'argent, le voyage dit combien il faut', () => {
     const p = createProfile('Lou', 'manage', 'japon');
     p.money = 10;
@@ -347,6 +631,19 @@ describe('chaque chapitre est faisable quand il arrive', () => {
     expect(b).toMatchObject({ need: 'trip', key: 'qneed_trip' });
     expect(b.params.n).toBe(cheapestTrip(p));
     expect(b.params.n).toBeGreaterThan(10);
+  });
+
+  it('construire le salon : le niveau 3, et en gestion son prix', () => {
+    const p = createProfile('Lou', 'manage');
+    p.xp = 400;
+    p.money = 100;
+    expect(questBlock('grmSalon', p)).toMatchObject({ need: 'salonMoney', key: 'qneed_salonMoney', params: { n: 350 } });
+    p.money = 350;
+    expect(questBlock('grmSalon', p)).toBeNull();
+    const s = createProfile('Lou', 'sandbox');
+    s.xp = 400;
+    s.money = 0;
+    expect(questBlock('grmSalon', s)).toBeNull(); // (bac à sable : gratuit)
   });
 });
 
@@ -366,6 +663,7 @@ describe('sauvegarde', () => {
     const old = createProfile('Old');
     delete old.quests;
     old.completed = ['adopt1', 'pet3', 'feed5'];
+    old.animals.push(grown('horse'));
     old.questFollow = { id: 'ride1', step: 0, seen: [], steps: ['tapHorse', 'doRide'] };
     const m = migrate(JSON.parse(JSON.stringify(old)));
     expect(m.quests).toEqual({ joined: ['ride1'], skipped: [] });
@@ -379,6 +677,9 @@ describe('sauvegarde', () => {
     const old3 = JSON.parse(JSON.stringify(old));
     delete old3.questFollow;
     expect(migrate(old3).quests).toEqual({ joined: [], skipped: [] });
+    // l'ancien dernier chapitre (le voyage) suivi : c'est maintenant une quête secondaire, rejointe
+    const old4 = { ...JSON.parse(JSON.stringify(old)), questFollow: { id: 'travel1', step: 0, seen: [], steps: [] } };
+    expect(migrate(old4).quests.joined).toEqual(['travel1']);
     // et par le fichier de sauvegarde
     const back = parseSave(serializeSave([old]));
     expect(back.ok).toBe(true);
@@ -394,6 +695,25 @@ describe('sauvegarde', () => {
     const q = createProfile('Lou');
     q.quests = 'n\'importe quoi';
     expect(questState(q)).toEqual({ joined: [], skipped: [] });
+  });
+
+  it('un fichier dont l\'état des quêtes est abîmé (un tableau) se charge quand même, réparé', () => {
+    const p = createProfile('Lou');
+    const text = serializeSave([p]).replace('"quests":{"joined":[],"skipped":[]}', '"quests":[]');
+    expect(text).toContain('"quests":[]');
+    const back = parseSave(text);
+    expect(back.ok).toBe(true);
+    expect(back.profiles[0].quests).toEqual({ joined: [], skipped: [] });
+  });
+
+  it('migrate ne touche pas à l\'objet qu\'on lui donne', () => {
+    const raw = JSON.parse(JSON.stringify(createProfile('Lou')));
+    raw.quests = { joined: ['scoop1', 'scoop1', 'zz'], skipped: ['pet3', 'zz'] };
+    const before = JSON.stringify(raw);
+    const m = migrate(raw);
+    expect(JSON.stringify(raw)).toBe(before);
+    expect(m.quests).toEqual({ joined: ['scoop1'], skipped: ['pet3'] });
+    expect(m.quests).not.toBe(raw.quests);
   });
 
   it('deux copies d\'une partie : la plus récente garde son état des quêtes', () => {

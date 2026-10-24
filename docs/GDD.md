@@ -159,13 +159,18 @@ réussite au dressage…).
 ## 10. Quêtes et succès
 - **Histoire de la ferme** (quête principale ⭐) : une suite de 10 chapitres, un seul à la fois, faisables par
   tout le monde avec n'importe quel animal et sans gros budget : adopter, caresser, nourrir, donner à boire,
-  brosser, vétérinaire, un tour, un métier, un premier client, un voyage. Un chapitre trop dur se **passe pour
-  l'instant** (le suivant arrive) et se **reprend** plus tard depuis le journal.
+  brosser, vétérinaire, un tour, un spectacle avec ce tour, un métier, un premier client. (Le premier voyage n'en
+  fait pas partie : depuis le Japon, l'Australie ou la Pampa, il coûte plus de 750 🪙 ; c'est une quête
+  secondaire.) Un chapitre trop dur se **passe pour l'instant** (le suivant arrive) et se **reprend** plus tard
+  depuis le journal : il redevient le chapitre en cours s'il vient avant, sinon il va dans « Mes quêtes ».
 - **Quêtes secondaires** (🎯), rangées par thème (animaux, voyages, activités et concours, métiers) : l'enfant
   **rejoint** celles qu'elle veut (3 au plus en même temps) et les **enlève** quand elle veut, sans rien perdre.
-  Une quête qu'on ne peut pas encore faire dit pourquoi (« Il te faut d'abord un cheval ») ; rien n'est imposé.
+  Une quête qu'on ne peut pas encore faire dit pourquoi (« Il te faut un mâle et une femelle ») ; elle ne se
+  suit pas (🧭 ne guide jamais vers l'impossible) et rien n'est imposé. Ce qu'on trouve au refuge (un animal, un
+  cheval) ne bloque pas : le suivi y emmène d'abord.
 - Toute quête finie donne sa récompense, rejointe ou non. Le suivi sur le côté de l'écran montre la quête suivie
-  (🧭), sinon le chapitre en cours, sinon la première quête rejointe (src/sim/quests.js).
+  (🧭), sinon le chapitre en cours, sinon la première quête rejointe (src/sim/quests.js). La fin d'un chapitre est
+  fêtée par le guide dès qu'aucune fenêtre n'est ouverte (le petit mot attend : src/ui/questNotices.js).
 - Succès à débloquer.
 
 ## 11. Technique

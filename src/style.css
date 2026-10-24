@@ -1386,6 +1386,12 @@ body.trip-road #pause-banner, body.trip-road #quest-tracker, body.veh-view #ev-b
   animation: tuto-tap 0.9s ease-in-out infinite;
 }
 #tuto-ring.from-top .tuto-finger { top: auto; bottom: 100%; transform: rotate(180deg); animation-name: tuto-tap-down; }
+/* Sous un bouton du haut, la bulle ou le suivi de quête : le doigt (👉 / 👈) vient de côté, sans cacher leur texte. */
+#tuto-ring.from-left .tuto-finger, #tuto-ring.from-right .tuto-finger { top: 50%; margin-top: -0.6em; margin-left: 0; animation-name: tuto-tap-side; }
+#tuto-ring.from-left .tuto-finger { left: auto; right: 100%; margin-right: 2px; }
+#tuto-ring.from-right .tuto-finger { left: 100%; margin-left: 2px; animation-name: tuto-tap-side-r; }
+@keyframes tuto-tap-side { 0%, 100% { translate: -6px 0; } 50% { translate: 4px 0; } }
+@keyframes tuto-tap-side-r { 0%, 100% { translate: 6px 0; } 50% { translate: -4px 0; } }
 @keyframes tuto-tap { 0%, 100% { translate: 0 6px; } 50% { translate: 0 -4px; } }
 @keyframes tuto-tap-down { 0%, 100% { translate: 0 -6px; } 50% { translate: 0 4px; } }
 
@@ -1498,6 +1504,8 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 /* Suivi à l'écran : le chapitre en cours de l'histoire (⭐) a un fond doré ; « 🔒 ce qu'il faut d'abord ». */
 #quest-tracker.main:not(.following) { background: rgba(255, 246, 214, 0.97); }
 .qt-block { color: #8a5a00; font-weight: 700; }
+/* Pas encore possible : pas de 🧭, la raison (courte) a toute la largeur ; elle peut passer à la ligne sur l'ordinateur. */
+#quest-tracker.blocked:not(.compact) .qt-where { white-space: normal; }
 
 /* Journal, onglet Quêtes (src/ui/quests.js) : quatre parties, de gros boutons faciles à toucher. */
 .quest-journal { display: grid; gap: 14px; }
@@ -1522,6 +1530,11 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 .qc-btn { flex: 1 1 auto; min-height: 48px; padding: 0 12px; border-radius: 12px; font-size: 0.95rem; }
 .qc-skip, .qc-leave { color: var(--muted); }
 .qc-join { flex: 0 1 auto; margin-left: auto; min-width: 140px; }
+/* Grisé mais qui répond au doigt (« Tu as déjà 3 quêtes » + 🎯 Mes quêtes) : un bouton désactivé ne disait rien. */
+.qc-btn.off, .qb-btn.off { opacity: 0.55; filter: grayscale(0.6); }
+.qj-row-note { display: block; font-size: 0.78rem; color: var(--muted); }
+.qj-mine.flash { animation: qj-flash 1.2s ease-out; border-radius: 14px; }
+@keyframes qj-flash { 0%, 40% { box-shadow: 0 0 0 4px #ffd23f; } 100% { box-shadow: 0 0 0 0 rgba(255, 210, 63, 0); } }
 .qj-toggle { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; min-height: 52px; padding: 0 14px; font-weight: 700; font-size: 1rem; text-align: left; border-radius: 14px; }
 .qj-toggle.open { background: #f6f1e4; }
 .qj-chev { font-size: 1.2rem; color: var(--muted); }

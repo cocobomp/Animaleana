@@ -427,6 +427,40 @@ export function rideGear(a, wantBareback = false) {
   return { ok: true, bareback: wantBareback || !wears(a, 'saddle') };
 }
 
+/** Reste-t-il ici un filet ou un licol libre (rangé, porté par personne) ? */
+export const hasFreeHeadgear = (profile) => ['bridle', 'halter'].some((k) => owned(profile, k) > inUse(profile, k));
+
+/**
+ * Avant de monter : un cheval sans filet ni licol reçoit celui qui reste à la sellerie (comme le bouton « Seller »
+ * des activités). Avant, « 🏇 Monter » disait seulement « Il faut mettre un filet ou un licol » et l'enfant restait
+ * coincée. home : à la maison, la sellière échange la taille gratuitement (un licol cheval devient un licol poney).
+ * Renvoie { ok: true, item } (item : ce qu'on vient de lui mettre, null s'il en portait déjà un) ou { ok: false, reason }.
+ */
+export function tackUpForRide(profile, a, { home = true } = {}) {
+  if (rideGear(a).ok) return { ok: true, item: null };
+  let reason = 'needBridle';
+  for (const item of ['bridle', 'halter']) {
+    if (owned(profile, item) <= inUse(profile, item)) continue;
+    const r = equip(profile, a, item, undefined, { autoSwap: home });
+    if (r.ok) return { ok: true, item: r.item, swapped: r.swapped ?? null };
+    reason = r.reason;
+  }
+  return { ok: false, reason };
+}
+
+/**
+ * Le matériel offert au début, mis tout de suite au premier animal adopté qui en a besoin : collier et laisse pour un
+ * chien ; licol, filet et selle pour un cheval. home : à la maison, la taille s'échange gratuitement (avant, un poney
+ * ou un cheval de trait ne recevait rien : le licol offert était à la taille d'un cheval, et il ne pouvait pas être
+ * monté). Renvoie la liste des objets mis.
+ */
+export function starterTack(profile, a, { home = true } = {}) {
+  const items = a.species === 'dog' ? [['collar', 'red'], ['leash']] : a.species === 'horse' ? [['halter', 'red'], ['bridle'], ['saddle']] : [];
+  const put = [];
+  for (const [item, color] of items) if (equip(profile, a, item, color, { autoSwap: home }).ok) put.push(item);
+  return put;
+}
+
 /** Promener un chien en laisse : il faut le collier et la laisse. */
 export const canLeash = (a) => a.species === 'dog' && wears(a, 'collar') && wears(a, 'leash');
 

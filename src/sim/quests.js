@@ -1,8 +1,8 @@
 // Quêtes principales et secondaires : l'histoire de la ferme (une suite de chapitres, un seul à la fois), et des
 // quêtes secondaires qu'on REJOINT quand on veut (MAX_JOINED au plus) et qu'on peut ENLEVER sans rien perdre.
 // Le chapitre en cours ne s'enlève pas : il se PASSE « pour l'instant » (il devient une quête secondaire, le
-// chapitre suivant arrive) et se reprend plus tard. Rien n'est jamais imposé : une quête qu'on ne peut pas encore
-// faire le dit (questBlock, src/sim/tutorial.js).
+// chapitre suivant arrive) et se REPREND plus tard. Rien n'est jamais imposé : une quête qu'on ne peut pas encore
+// faire le dit (questBlock, src/sim/tutorial.js), et le suivi 🧭 ne guide jamais vers l'impossible (followBlock).
 //
 // Les récompenses ne changent pas : toute quête finie est récompensée (checkObjectives, src/sim/objectives.js),
 // qu'on l'ait rejointe ou non. Une quête rejointe et finie quitte « Mes quêtes ».
@@ -18,7 +18,7 @@
 // dehors de l'histoire) est fini.
 
 import { OBJECTIVES, objectiveShown } from './objectives.js';
-import { QUEST_ORDER, questBlock } from './tutorial.js';
+import { QUEST_ORDER, questBlock, followBlock } from './tutorial.js';
 
 /** Quêtes secondaires rejointes en même temps, au plus. */
 export const MAX_JOINED = 3;
@@ -27,11 +27,13 @@ export const MAX_JOINED = 3;
  * L'histoire de la ferme, dans l'ordre. Chaque chapitre se fait avec n'importe quel animal, sans chance et sans
  * gros budget, avec ce qu'on a gagné jusque-là (tests/quests.test.js le vérifie) :
  * adopter (gratuit), caresser, nourrir, donner à boire, brosser (le lien qu'il faut pour un tour), le vétérinaire,
- * un tour, un métier (niveau 3, déjà atteint grâce aux chapitres d'avant), un premier client, puis un voyage
- * (payé par les récompenses d'avant). Ramasser un crottin n'en fait pas partie : les chats et les lapins n'en
- * font pas (litière).
+ * un tour, un spectacle avec ce tour (gratuit, au terrain de concours), un métier (niveau 3, déjà atteint grâce aux
+ * chapitres d'avant), puis un premier client.
+ * Pas dans l'histoire : ramasser un crottin (les chats et les lapins n'en font pas : litière) et le premier voyage
+ * (depuis le Japon, l'Australie ou la Pampa, le moins cher coûte 776 à 861 🪙 : trop pour tout le monde). Ce sont
+ * des quêtes secondaires.
  */
-export const STORY = ['adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'vet1', 'trick1', 'career1', 'client1', 'travel1'];
+export const STORY = ['adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'vet1', 'trick1', 'actvShow1', 'career1', 'client1'];
 
 /** Thèmes des quêtes secondaires (journal : « 🗺️ Autres quêtes »). Chaque quête est dans un seul thème. */
 export const THEMES = [
@@ -53,6 +55,8 @@ const QUESTS = new Map(OBJECTIVES.filter((o) => o.kind === 'quest').map((o) => [
 
 const isDone = (p, id) => (p.completed ?? []).includes(id);
 const shown = (p, id) => QUESTS.has(id) && objectiveShown(p, QUESTS.get(id));
+/** Faisable tout de suite (0), faisable avec le suivi qui commence par le refuge (1), pas encore possible (2). */
+const readiness = (p, id) => (!questBlock(id, p) ? 0 : !followBlock(id, p) ? 1 : 2);
 const rank = (id) => {
   const i = QUEST_ORDER.indexOf(id);
   return i < 0 ? QUEST_ORDER.length : i;
@@ -86,7 +90,23 @@ export function migrateQuests(p) {
   const st = questState(p);
   st.skipped = cleanList(st.skipped).filter((id) => STORY.includes(id));
   st.joined = cleanList(st.joined).filter((id) => !isDone(p, id) && (!STORY.includes(id) || st.skipped.includes(id))).slice(0, MAX_JOINED);
+  tidyFollow(p);
   return st;
+}
+
+/**
+ * La quête suivie (🧭) doit être le chapitre en cours ou une quête rejointe, et possible à suivre : sinon on ne la
+ * suit plus (elle reste rejointe). Ex. une ancienne sauvegarde qui suivait « Fais naître un bébé » avec un seul
+ * animal, ou un chapitre qui n'est pas encore arrivé ; ou le chapitre en cours qui ne l'est plus après « Reprendre ».
+ * Renvoie true si le suivi a été arrêté.
+ */
+export function tidyFollow(p) {
+  const f = p.questFollow?.id;
+  if (!f) return false;
+  const kind = questKind(p, f);
+  if ((kind === 'main' || kind === 'joined') && !followBlock(f, p)) return false;
+  p.questFollow = null;
+  return true;
 }
 
 // ------------------------------------------------------------------ l'histoire
@@ -99,10 +119,11 @@ export function mainQuest(p) {
 
 /**
  * Ce que montre le journal : { current, chapter (numéro du chapitre en cours, 1…), total, done: [ids finis],
- * skipped: [ids passés et pas finis], upcoming (nombre de chapitres à venir après celui-ci), finished }.
+ * skipped: [ids passés, pas finis, et pas dans « Mes quêtes »], upcoming (nombre de chapitres à venir après
+ * celui-ci), finished }.
  */
 export function storyView(p) {
-  const { skipped } = questState(p);
+  const { skipped, joined } = questState(p);
   const current = mainQuest(p);
   const at = current ? STORY.indexOf(current) : STORY.length;
   return {
@@ -110,11 +131,14 @@ export function storyView(p) {
     chapter: current ? at + 1 : null,
     total: STORY.length,
     done: STORY.filter((id) => isDone(p, id)),
-    skipped: STORY.filter((id) => skipped.includes(id) && !isDone(p, id)),
+    skipped: STORY.filter((id) => skipped.includes(id) && !isDone(p, id) && !joined.includes(id)),
     upcoming: STORY.filter((id, i) => i > at && !isDone(p, id) && !skipped.includes(id)).length,
     finished: STORY.every((id) => isDone(p, id)),
   };
 }
+
+/** Les chapitres passés et pas encore finis (qu'ils soient dans « Mes quêtes » ou non). */
+export const skippedLeft = (p) => STORY.filter((id) => questState(p).skipped.includes(id) && !isDone(p, id));
 
 /** Passer le chapitre en cours « pour l'instant ». Renvoie le nouveau chapitre (ou null), undefined si impossible. */
 export function skipChapter(p, id = mainQuest(p)) {
@@ -125,13 +149,38 @@ export function skipChapter(p, id = mainQuest(p)) {
   return mainQuest(p);
 }
 
-/** Reprendre un chapitre passé : il redevient le chapitre en cours s'il vient avant celui-ci (sinon il attend son tour). */
-export function resumeChapter(p, id) {
+/**
+ * Comment « ↩️ Reprendre » ce chapitre passé ? 'main' : il vient avant le chapitre en cours (ou il n'y en a plus) et
+ * redevient le chapitre en cours ; 'joined' : il vient après, il va donc dans « Mes quêtes » pour être fait tout de
+ * suite (l'histoire garde son ordre) ; 'full' : il viendrait dans « Mes quêtes », mais elles sont déjà MAX_JOINED ;
+ * null : pas un chapitre passé (ou déjà fini, ou déjà dans « Mes quêtes »).
+ */
+export function resumeMode(p, id) {
   const st = questState(p);
-  if (!st.skipped.includes(id) || isDone(p, id)) return false;
+  if (!STORY.includes(id) || !st.skipped.includes(id) || isDone(p, id) || joinedQuests(p).includes(id)) return null;
+  const main = mainQuest(p);
+  if (!main || STORY.indexOf(id) < STORY.indexOf(main)) return 'main';
+  return joinedQuests(p).length >= MAX_JOINED ? 'full' : 'joined';
+}
+
+/**
+ * ↩️ Reprendre un chapitre passé (voir resumeMode). Renvoie { ok: true, how: 'main' | 'joined' } ou
+ * { ok: false, reason: 'full' | 'notSkipped' }. Avant, reprendre un chapitre placé après celui en cours le faisait
+ * disparaître de partout jusqu'à son tour.
+ */
+export function resumeChapter(p, id) {
+  const how = resumeMode(p, id);
+  if (!how) return { ok: false, reason: 'notSkipped' };
+  if (how === 'full') return { ok: false, reason: 'full' };
+  const st = questState(p);
+  if (how === 'joined') {
+    st.joined.push(id); // (il reste « passé » : c'est une quête secondaire jusqu'à ce qu'il soit fini)
+    return { ok: true, how };
+  }
   st.skipped = st.skipped.filter((x) => x !== id);
-  st.joined = st.joined.filter((x) => x !== id); // (rejoint comme quête secondaire : il revient dans l'histoire)
-  return true;
+  st.joined = st.joined.filter((x) => x !== id);
+  tidyFollow(p); // (on suivait l'ancien chapitre en cours : il attend maintenant son tour)
+  return { ok: true, how };
 }
 
 // ------------------------------------------------------------------ quêtes secondaires
@@ -172,6 +221,22 @@ export function canJoin(p, id) {
   return { ok: true };
 }
 
+/**
+ * Peut-on suivre (🧭) cette quête ? { ok: true } ou { ok: false, reason } : 'blocked' (pas encore possible ; block dit
+ * pourquoi : le suivi ne guide jamais vers l'impossible), 'full' (une quête secondaire pas encore rejointe, et déjà
+ * MAX_JOINED quêtes), 'story' (un chapitre pas encore arrivé), 'done' ou 'unknown'. Une quête secondaire qu'on suit
+ * est rejointe d'abord (src/ui/tutorial.js, startFollow).
+ */
+export function canFollow(p, id) {
+  const kind = questKind(p, id);
+  if (kind === 'hidden') return { ok: false, reason: 'unknown' };
+  if (kind === 'done' || kind === 'story') return { ok: false, reason: kind };
+  const block = followBlock(id, p);
+  if (block) return { ok: false, reason: 'blocked', block };
+  if (kind === 'side' && joinedQuests(p).length >= MAX_JOINED) return { ok: false, reason: 'full' };
+  return { ok: true };
+}
+
 export function joinQuest(p, id) {
   const r = canJoin(p, id);
   if (!r.ok) return r;
@@ -197,13 +262,18 @@ export function pruneQuests(p) {
   return gone;
 }
 
-/** Les autres quêtes, par thème : celles qu'on peut rejoindre (pas finies, pas rejointes, pas de l'histoire à venir). */
+/**
+ * Les autres quêtes, par thème : celles qu'on peut rejoindre (pas finies, pas rejointes, pas de l'histoire). Les
+ * chapitres passés n'y sont pas : ils restent dans l'histoire (« Passés pour l'instant », avec ↩️ Reprendre), pour
+ * n'apparaître qu'une fois.
+ */
 export function otherQuests(p) {
   const joined = joinedQuests(p);
   return THEMES.map((th) => {
-    const quests = th.quests.filter((id) => shown(p, id) && !isDone(p, id) && !joined.includes(id) && isSideQuest(p, id));
-    // Celles qu'on peut faire tout de suite d'abord, puis les autres (chacune dans l'ordre du plus facile).
-    quests.sort((a, b) => (questBlock(a, p) ? 1 : 0) - (questBlock(b, p) ? 1 : 0) || rank(a) - rank(b));
+    const quests = th.quests.filter((id) => shown(p, id) && !isDone(p, id) && !joined.includes(id) && !STORY.includes(id));
+    // Celles qu'on peut faire tout de suite d'abord, puis celles où le suivi passe par le refuge, puis les autres
+    // (chacune dans l'ordre du plus facile).
+    quests.sort((a, b) => readiness(p, a) - readiness(p, b) || rank(a) - rank(b));
     return { id: th.id, quests };
   }).filter((th) => th.quests.length);
 }
@@ -216,17 +286,17 @@ export function doneQuests(p) {
 // ------------------------------------------------------------------ suivi à l'écran
 
 /**
- * Quelle quête montre le suivi à l'écran ? La quête suivie (🧭), sinon la dernière choisie (recent : arrêtée
- * avec ✋, ou montrée depuis le journal) si c'est encore le chapitre en cours ou une quête rejointe, sinon le
- * chapitre en cours, sinon la première quête rejointe, sinon rien. Jamais une quête que l'enfant n'a pas choisie
- * en dehors de l'histoire. Renvoie { id, kind: 'main' | 'joined' | 'story', followed } ou null.
+ * Quelle quête montre le suivi à l'écran ? La quête suivie (🧭), sinon le chapitre en cours, sinon la première quête
+ * rejointe, sinon rien. Jamais une quête que l'enfant n'a pas choisie en dehors de l'histoire, ni un chapitre qui
+ * n'est pas encore arrivé. (Avant, après ✋ sur une quête rejointe, le suivi la gardait au lieu de revenir au
+ * chapitre en cours.) Renvoie { id, kind: 'main' | 'joined', followed } ou null.
  */
-export function trackerQuest(p, { recent = null } = {}) {
+export function trackerQuest(p) {
   const f = p.questFollow?.id;
-  if (f && QUESTS.has(f) && !isDone(p, f) && shown(p, f)) return { id: f, kind: questKind(p, f), followed: true };
+  const fk = f ? questKind(p, f) : null;
+  if (fk === 'main' || fk === 'joined') return { id: f, kind: fk, followed: true };
   const main = mainQuest(p);
   const joined = joinedQuests(p);
-  if (recent && (recent === main || joined.includes(recent))) return { id: recent, kind: recent === main ? 'main' : 'joined', followed: false };
   if (main) return { id: main, kind: 'main', followed: false };
   if (joined.length) return { id: joined[0], kind: 'joined', followed: false };
   return null;
@@ -234,11 +304,29 @@ export function trackerQuest(p, { recent = null } = {}) {
 
 /**
  * Après checkObjectives : « Mes quêtes » se vide des quêtes finies, et si le chapitre en cours (before, lu avant
- * checkObjectives) vient d'être fini, on le dit et on annonce le suivant.
- * Renvoie { chapter: id | null, next: id | null, storyDone: bool, left: [ids rejoints finis] }.
+ * checkObjectives) vient d'être fini, on le dit et on annonce la suite.
+ * Renvoie { chapter: id | null, next: id | null, storyDone: bool, skippedLeft: n, left: [ids rejoints finis] } :
+ * next = le nouveau chapitre en cours ; sans lui, storyDone dit si TOUTE l'histoire est finie, et skippedLeft
+ * combien de chapitres passés restent à faire (« Tu as fini toute l'histoire » ne se dit que s'il n'en reste aucun).
  */
 export function afterQuestsDone(p, done, before) {
   const left = pruneQuests(p);
   const chapter = before && done.some((o) => o.id === before) ? before : null;
-  return { chapter, next: chapter ? mainQuest(p) : null, storyDone: !!chapter && STORY.every((id) => isDone(p, id)), left };
+  return {
+    chapter,
+    next: chapter ? mainQuest(p) : null,
+    storyDone: !!chapter && STORY.every((id) => isDone(p, id)),
+    skippedLeft: chapter ? skippedLeft(p).length : 0,
+    left,
+  };
+}
+
+/**
+ * Le petit mot de la fin d'un chapitre (r : afterQuestsDone) : { kind: 'next' (le chapitre suivant est là),
+ * 'finished' (toute l'histoire est finie) ou 'skippedLeft' (il ne reste que des chapitres passés), next, n }.
+ */
+export function chapterEnd(r) {
+  if (r.next) return { kind: 'next', next: r.next, n: 0 };
+  if (r.storyDone || !r.skippedLeft) return { kind: 'finished', next: null, n: 0 };
+  return { kind: 'skippedLeft', next: null, n: r.skippedLeft };
 }

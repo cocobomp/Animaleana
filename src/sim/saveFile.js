@@ -83,6 +83,9 @@ export function saveFileName(profiles, { now = Date.now(), manyLabel = (n) => `$
  * Forme d'un profil : chaque champ connu (ceux de createProfile) a le bon type quand il est présent.
  * Renvoie le nom du premier champ abîmé, ou null si tout va bien.
  */
+/** Champs que migrate répare tout seul s'ils sont abîmés (l'état des quêtes : migrateQuests, src/sim/quests.js). */
+const REPAIRED = new Set(['quests']);
+
 export function profileProblem(p) {
   if (!isObj(p)) return 'profile';
   // D'abord la version : une partie d'une version plus récente a pu changer la forme d'un champ ; le bon
@@ -93,6 +96,7 @@ export function profileProblem(p) {
   for (const [k, ref] of Object.entries(fresh)) {
     const v = p[k];
     if (v === undefined || v === null) continue;
+    if (REPAIRED.has(k)) continue; // (migrate le répare : pas de quoi refuser toute la partie)
     if (Array.isArray(ref) ? !Array.isArray(v) : isObj(ref) ? !isObj(v) : typeof v !== typeof ref) return k;
     if (typeof ref === 'number' && !Number.isFinite(v)) return k;
   }

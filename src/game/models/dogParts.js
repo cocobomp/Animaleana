@@ -924,38 +924,3 @@ export function joinParts(parts) {
     pom: list.some((p) => p.pom) ? cat('pom', 1, Float32Array) : null, index: Uint32Array.from(index),
   };
 }
-
-/**
- * Gueule du jack fermée au repos (modèle sans os de mâchoire, sculpté la gueule entrouverte : une fente aux lèvres
- * rouges et une rangée de dents sur les dix petites races) : la mâchoire du bas — ce qui est sous la ligne des lèvres,
- * devant la commissure — est tournée vers le haut autour d'une charnière derrière la commissure, avant toute
- * déformation de la race (P : positions de repos). Repères mesurés sur le maillage d'origine.
- */
-export function jackMouthClose(base, P) {
-  if (base.kind !== 'jack') return;
-  const coat = base.prims.coat;
-  const W = base.W;
-  const mid = base.land.midX;
-  const hy = 0.482;
-  const hz = 0.335;
-  const ang = 0.17;
-  const cs = Math.cos(ang);
-  const sn = Math.sin(ang);
-  for (let i = 0; i < coat.count; i++) {
-    if (W.head[i] < 0.5) continue;
-    const x = P[i * 3] - mid;
-    const y = P[i * 3 + 1];
-    const z = P[i * 3 + 2];
-    if (z < hz - 0.01 || Math.abs(x) > 0.065 || y > 0.5) continue;
-    // ligne des lèvres (montant un peu vers l'avant), commissure à z ≈ 0,345
-    const yM = 0.479 + (z - 0.37) * 0.25;
-    const w = (1 - smooth(yM - 0.006, yM + 0.002, y)) * smooth(hz - 0.005, hz + 0.02, z) * (1 - smooth(0.05, 0.065, Math.abs(x)));
-    if (!(w > 0)) continue;
-    const dy = y - hy;
-    const dz = z - hz;
-    const ny = hy + dy * cs + dz * sn;
-    const nz = hz + dz * cs - dy * sn;
-    P[i * 3 + 1] = y + (ny - y) * w;
-    P[i * 3 + 2] = z + (nz - z) * w;
-  }
-}

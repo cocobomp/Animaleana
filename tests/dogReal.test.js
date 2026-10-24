@@ -56,9 +56,9 @@ function lowest(md, { noTail = false, step = 2 } = {}) {
 }
 
 describe('fichiers des chiens réalistes', () => {
-  // (jack : 0,51 → 0,59 Mo avec les clips de ses gabarits court et trapu, 0,60 Mo avec la révérence du court ; shiba :
-  // 0,86 → 0,88 Mo)
-  it.each([['shiba', 57, 900_000], ['jack', 36, 620_000]])('%s : os, clips, compression, vitesses naturelles, poids', (kind, joints, maxBytes) => {
+  // (jack : 0,51 → 0,59 Mo avec les clips de ses gabarits court et trapu, 0,60 Mo avec la révérence du court, 0,61 Mo
+  // avec la mâchoire et la langue modelée — 36 → 41 os ; shiba : 0,86 → 0,88 Mo)
+  it.each([['shiba', 57, 900_000], ['jack', 41, 670_000]])('%s : os, clips, compression, vitesses naturelles, poids', (kind, joints, maxBytes) => {
     const buf = fs.readFileSync(DOG_FILES[kind]);
     expect(buf.length).toBeLessThan(maxBytes);
     const json = glbJson(buf);
@@ -454,6 +454,24 @@ describe('poses et allures par gabarit', () => {
     expect(chiot.anim.gabarit).toBe('court');
     chiot.dispose();
     expect(dogClips({ clips: { walk: 'a', walk_long: 'b', sit_down: 'c', sit_down_long: 'd' }, gabarits: { long: {} } }, 'long')).toEqual({ walk: 'b', sit_down: 'd' });
+    // (variante d'un gabarit — of, back — : jamais choisie seule ; ses clips fondus avec ceux du gabarit selon la longueur
+    // du dos — de la variante au dos court au gabarit au dos long)
+    const gv = { court: { legs: 0.52, back: 1.25 }, nain: { legs: 0.52, of: 'court', back: 0.8 }, trapu: { legs: 0.74 } };
+    expect(pickGabarit(gv, 0.52)).toBe('court');
+    const clip = (v) => new THREE.AnimationClip('c', 1, [new THREE.NumberKeyframeTrack('b.morphTargetInfluences[0]', [0, 1], [v, v])]);
+    const base = { clips: { sit: clip(0), sit_court: clip(1), sit_nain: clip(3), walk_court: clip(5) }, gabarits: gv };
+    const val = (c) => c.tracks[0].values[0];
+    expect(val(dogClips(base, 'court', 1.45).sit)).toBe(1);
+    expect(val(dogClips(base, 'court', 0.72).sit)).toBe(3);
+    expect(val(dogClips(base, 'court', 1.025).sit)).toBeCloseTo(2, 5);
+    expect(val(dogClips(base, 'court', 1.025).walk)).toBe(5);
+    expect(dogClips(base, 'court', 1.025).sit).toBe(dogClips(base, 'court', 1.03).sit);
+    // (teckel et corgi, dos de 1,45 et 1,25 : l'assis du gabarit seul)
+    for (const b of ['teckel', 'corgi']) {
+      const md = dog(b);
+      expect(md.anim.actions.sit.getClip().name, b).toBe('sit_court');
+      md.dispose();
+    }
   });
 
   it('yeux dans les orbites après s\'asseoir, se coucher, sauter (40 races et leurs chiots)', async () => {

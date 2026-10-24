@@ -25,12 +25,23 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
      courbes d'animation : un renommage direct faisait des doublons) ; les paupières sont rattachées aux yeux ;
      les 560 sommets des **moustaches** sont retirés (des pointes qui traversaient tout une fois la tête déformée).
    - *Jack* : les trois pièces (corps, yeux, intérieur de la gueule : la pièce oubliée laissait le museau
-     **troué et déchiré**) sont réunies et **soudées** ; mise à l'échelle.
+     **troué et déchiré**) sont réunies et **soudées** ; mise à l'échelle. **Gueule** (`jack_mouth`, une fois à
+     l'échelle du jeu) : le modèle n'a ni os de mâchoire ni langue (le creux rose de la mâchoire du bas est sa peau) ;
+     un os `jaw` (enfant de `head`, charnière à la commissure `JACK_HINGE`) reçoit les poids de la mâchoire du bas
+     (sous la ligne des lèvres, devant la commissure : 334 sommets, pris sur la tête), une **langue modelée**
+     (`JACK_TONGUE` : 308 sommets, du fond de la gueule jusque derrière les incisives du bas, dessous posé dans le creux
+     en V de la mâchoire par lancers de rayons, dessus sous la ligne des lèvres, section en lentille, bout arrondi) est
+     ajoutée au bout de la peau, portée par quatre os `tongue1…4` (enfants de `jaw`, poids fondus d'un os à l'autre) ;
+     puis mâchoire et langue sont tournées de `JACK_JAW_OPEN` (0,17 rad) pour joindre les lèvres : le repos du GLB est
+     la gueule fermée (avant : refermée par le jeu, `jackMouthClose`, sans os — la gueule ne s'ouvrait jamais). Mâchoire
+     et langue sont des os du jeu (`game_bones` : aucune clé dans les clips).
 2. **`autorig.py`** (jack) : squelette du même plan que celui du shiba, poids par chaleur (heat weights) ; os des
    **yeux** (sommets des yeux, séparés par côté) et des **oreilles** (base → pli → bout, poids géométriques sur le
    lambeau mince repéré par épaisseur et remplissage limité). Réglages du jack dans `models.py` (`JACK_RIG`) :
    hauteur du coude, du jarret, de la hanche et du grasset, et `buttock` (le poids du fémur débordait sur la croupe :
-   rendu au bassin derrière la hanche et au-dessus du grasset — assise, la croupe ne se déchire plus).
+   rendu au bassin derrière la hanche et au-dessus du grasset — assise, la croupe ne se déchire plus) ;
+   `buttock_knee` : la peau du grasset, déjà portée en partie par le tibia, reste au fémur (passée au bassin, elle était
+   tiraillée entre le bassin et la jambe : une trentaine de triangles étirés au grasset du teckel assis).
 3. **`make_dog.py`** + **`dog_gait.py`** : animations.
    - orientation (le chien regarde +z), garrot à 0,57 m, courbes d'échelle retirées ;
    - le shiba écrit ses **poses faites main** (repos, assis, patte, roulade) et ses **poses couchées générées**
@@ -72,7 +83,10 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
      `gab_sit_gen` : rotation autour de l'épaule jusqu'à une hauteur de hanches, postérieurs repliés sous le corps,
      antérieurs `under`) a été essayé pour le court et le trapu sans être retenu : teckel et corgi gardaient les
      hanches à 13 cm (contre 6) et le dos plus plat (8–11° contre 14–18°), le ventre profond touchant le sol avant
-     la croupe ; le yorkshire, du gabarit trapu, perdait son assis (dos à 6°, pieds arrière à 5 cm) ;
+     la croupe ; le yorkshire, du gabarit trapu, perdait son assis (dos à 6°, pieds arrière à 5 cm). Assis du gabarit
+   court (`gab_sit`, `sit_flex` du gabarit : cinq angles) : reins fléchis avant la pose — bassin rentré autour de
+   spine1, bas du dos autour de spine2 puis de chest, poitrail redressé, tête relevée en deux moitiés (base de la tête
+   et dernier os de l'encolure : tout à la base, l'encolure se cassait en équerre) ;
    - réglages des poses générées (`MODELS` dans `models.py`, utilisés seulement quand la pose n'est pas reprise du
      shiba) : assis `sit_flex`, `sit_tuck`, `sit_femur`, `sit_hip`, couché `lie_pitch_max`, `lie_elbow`, `lie_wrist`,
      `lie_fold` ; saut `jump_tuck` (postérieurs ramenés sous le corps à la réception : le maillage ne se déchire
@@ -92,9 +106,18 @@ avec `node_modules/` de `@gltf-transform/core`, `extensions`, `functions`, `mesh
    yeux géants).
 5. **`lod.mjs`** : version allégée dans le même fichier (`extras.lod` : index simplifiés à 30 %) pour les chiens
    lointains (`DOG_LOD_DIST` dans `dogReal.js`).
+6. **`clips.mjs`** (à la main, après `build.sh`) : `node clips.mjs <jeu.glb> <refait.glb> <sortie.glb> clip1,clip2…`
+   greffe des clips refaits sur le GLB du dépôt sans toucher à son maillage, à son squelette, à ses textures ni aux
+   autres clips (données non re-quantifiées). Le shiba refait aujourd'hui avec les mêmes sources n'a pas le maillage
+   du dépôt : même nombre de triangles mais pas les mêmes (simplification), 10 743 sommets au lieu de 10 795 — des
+   éclats de 1 cm de plus aux dents du lagotto et un triangle de l'arcade retourné (tests de tollerLagotto.test.js).
+   Un clip refait ne doit pas changer la peau des 20 races du shiba : `dog_shiba.glb` est le GLB du dépôt où
+   `lie_long`, `sleep_long`, `lie_down_long` et `get_up_long` sont ceux de `build.sh` (finitions 2, couché du gabarit
+   long ; +16 Ko, la compression des clips n'est pas refaite à l'identique).
 
-Fichiers obtenus : `dog_shiba.glb` 0,88 Mo (17 800 triangles, 5 300 au loin, 57 os, 20 clips + 17 de ses
-gabarits), `dog_jack.glb` 0,60 Mo (14 900 triangles, 36 os, 19 clips + 15 de ses gabarits). (Avant les gabarits et
+Fichiers obtenus : `dog_shiba.glb` 0,89 Mo (17 800 triangles, 5 300 au loin, 57 os, 20 clips + 17 de ses
+gabarits), `dog_jack.glb` 0,65 Mo (15 500 triangles, 41 os, 19 clips + 20 de ses gabarits — dont 5 de la variante « nain »
+du court, reprise des finitions 2 : +41 Ko ; mâchoire et langue : +600 triangles, +5 os, +8 Ko). (Avant les gabarits et
 les poses reprises du shiba : 0,86 et 0,51 Mo ; les clips des gabarits sont allégés par `DECIMATE` et le
 ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été faits.)
 
@@ -176,8 +199,9 @@ ré-échantillonnage, les couchés du gabarit court du jack n'ont pas été fait
   −1,9 cm avant ; golden −0,7). Robes : blanc cassé, taches marron ou orange (tête colorée, plaques), rouan marron (fond
   brun clair chaud moucheté finement de marron, mèches de 5 mm fondues en leur moyenne de loin — à 2 cm sur un fond
   grisé, un camouflage kaki), marron, orange. Coupe du salon `lagotto` (`setCut` : tronc raccourci de 1,25 fois le
-  poil, encolure raccourcie, boucles égalisées en couleur et en relief sur le tronc coupé, pattes bouclées gardées,
-  dessus de la tête bien arrondi, +0,85 fois le poil) ; sans coupe, ses boucles naturelles (pas de pompons).
+  poil, encolure raccourcie, boucles égalisées en couleur et en relief sur le tronc coupé, pattes bouclées gardées mais
+  raccourcies — bas 0,35 fois le poil, haut des pattes `cCutLeg` 0,6 fois —, dessus de la tête bien arrondi, +0,85 fois
+  le poil) ; sans coupe, ses boucles naturelles (pas de pompons).
 - **Coût du pelage du lagotto** (swiftshader, 800 × 800, `perf-chiens.html` du correcteur) : les mèches coûtent
   +19 à +37 % de près et +9 à +16 % à mi-distance par rapport au même lagotto sans elles (avant : +39 à +63 % et
   +35 %) ; le lagotto reste 1,4 à 1,6 fois le golden de près (sans ses boucles, déjà 1,15 à 1,3 fois : plus de pixels
@@ -277,3 +301,121 @@ La planche de contrôle `planche.html` (servie par vite : `/tools/chien/planche.
 liste de races, robes, chiots, clips et points de vue (`window.planche.show({ cells: [...] })`), avec une coupe du
 salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et d'autres races dans la même case, côte
 à côte (`with`).
+
+### Finitions 2 (correcteur des chiens)
+
+- **Gueule des races du jack** (jack russell, cavalier, cocker, chihuahua, carlin, bouledogue, teckel, corgi, yorkshire,
+  spitz nain) : os de la mâchoire et langue modelée dans le GLB (voir `jack_mouth` plus haut). Dans le jeu
+  (`RealDogAnim`) : la gueule s'ouvre une fois et demie plus que celle du shiba (charnière à la commissure) ; en
+  haletant, la langue glisse de 1,1 fois sa longueur (dans un museau raccourci, un peu plus : 30 % de ce que le museau
+  lui a pris), un peu vers le haut pour passer sur les incisives, s'allonge (au plus de 55 % : au-delà elle se pliait en
+  équerre entre deux os) et pend en arc (`tongueCurl`) ; rose (`cTongue`, texture jamais gardée sur elle : sinon
+  brun-noir des lèvres du jack). Langue sortie (test `tongueOut`, cm rapportés à la taille de la tête) : jack russell
+  2,8, cavalier 2,7, chihuahua 2,6, carlin 2,2, bouledogue 2,3, teckel 3,2, spitz nain 2,4 à l'arrêt (avant : pas de
+  langue, gueule fermée) ; au calme −1,1 à −1,6 (dedans), mâchoire à son repos. (Le dessous de la langue est posé sur
+  la première surface tournée vers le haut sous le rayon : au fond de la gueule, le rayon touchait la paroi du fond.)
+- **Langue du boxer** (et des autres museaux courts du shiba : akita, saint-bernard, lagotto) : elle glisse de sa
+  longueur de repos à la taille de la tête (racine de `head`) et reprend tout ce que `faceShape` l'a rentrée (avant :
+  le terme était multiplié par le raccourcissement de la langue). Boxer : +0,1 → 3,2 cm devant les lèvres (labrador 3,2 ;
+  akita 2,0 → 2,6). Points d'appui : la langue n'en est pas (le pas d'échantillonnage du corps est
+  compté sans elle) ; assis, la peau des antérieurs n'est plus un appui « hors pieds avant » (races du jack : le chiot
+  carlin basculait ou non selon un dixième de millimètre).
+- **Assis et « donne la patte » du teckel et du corgi** (gabarit court) : reins fléchis dans le clip (`sit_flex`, voir
+  `gab_sit`) et peau du grasset laissée au tibia (`buttock_knee`) — dos du teckel 18 → 33°, du corgi 23 → 44°
+  (patte : 18 → 33°, 23 → 41°), triangles de l'arrière-train étirés plus de trois fois 54 → 6 et 62 → 2, croupe posée
+  (peau du tronc à 0,5 cm du sol). Dans le jeu (`settleSit`) : l'antérieur resté plus haut que l'autre (corps un peu
+  roulé de l'assis du clip : 0,7 à 0,9 cm) est posé en tournant l'omoplate ; la bascule qui repose la croupe sur des
+  pieds avant enfoncés est fondue dans le temps (`settledW` : prise d'un coup à la fin de « s'asseoir », la tête du
+  teckel sautait de 5 cm en une image). Couché et endormi par des clips de gabarit (`lie`, `sleep` dans les clips du
+  court et du trapu, `gab_lie`) : essayé, pas retenu — corps posé trop haut (antérieurs à 7,8 cm, tronc à 8,5 cm du sol
+  pour le teckel).
+- **Couché et endormi des races du jack aux membres changés** (teckel, corgi, carlin, bouledogue, yorkshire, spitz nain ;
+  jeu, `lieSettle`) : antérieurs posés — l'avant-bras s'abaisse au coude jusqu'à poser le poignet à l'épaisseur de la
+  main, la main se pose à plat au poignet, puis, s'il le faut, le bras descend à l'épaule (avant-bras gardant son
+  inclinaison) ; antérieurs 3,4 / 3,7 / 4,6 / 6,1 / 5,5 / 4,7 cm → 0,0 à 0,1 cm du sol, poitrail jamais dessous (tronc
+  1,2 à 3,9 cm). Yorkshire : la jupe de peau sous le ventre (`silkDrop` de `deformDog`, `bodySilk`) et la peau de l'aine
+  aux poids des deux cuisses (`bodyMid`) ne sont plus des appuis couché — hanches 7,9 → 2,7 cm, pieds arrière 2,6 → 0 cm ;
+  ses mèches (shader, `cmpPom` < 0) se couchent au sol vers l'extérieur de la longueur qui passerait dessous (avant :
+  aplaties sur place, une palissade de planches sous le chien couché ou assis).
+- **Couché et endormi du gabarit long** (galgo, whippet, caniche ; `gab_lie`, `front_sphinx`) : antérieurs en sphinx —
+  coude posé contre le poitrail à l'épaisseur de l'avant-bras au-dessus du sol (en arrière de l'épaule de ce que
+  l'humérus ne peut descendre), avant-bras à plat vers l'avant, main posée. Repliés par `ground_leg` depuis l'épaule
+  descendue au sol du tronc, les antérieurs allongés passaient le coude 4 cm sous le sol (les clips des gabarits ne
+  passent pas par `ground_fix`) : le jeu relevait tout le chien sur ses coudes, tronc à 4 cm du sol, à genoux croupe
+  haute. Hanches du galgo couché 16,9 → 13,9 cm (labrador 14,6), whippet 12,9 → 9,6, caniche 10,3 → 7,9 ; tronc posé.
+  (Ces quatre clips greffés par `clips.mjs` sur le `dog_shiba.glb` du dépôt : maillage du shiba inchangé.)
+- **Pieds posés en virage serré** (jeu, `footLock`) : la correction latérale du membre va jusqu'à 0,6 rad (0,38 avant) —
+  au pas en virage à 1,2 rad/s, le pied posé qui glissait le plus par appui : teckel 5,7 → 1,3 cm, corgi 4,4 → 0,8, jack
+  russell 5,0 → 1,0, cocker 4,3 → 1,0, cavalier 4,2 → 1,0, chihuahua 3,9 → 1,0 ; en ligne droite inchangé (0,1 à 0,2 cm),
+  labrador inchangé (0,4).
+- **Lambeau de l'oreille d'origine caché** (jeu, `rehideEars`) : rentré à 6,5 mm sous le crâne (3 avant) — la petite lame
+  claire à la tempe du chiot chihuahua (1,4 mm dehors, 6 sommets) et du chihuahua adulte (1,2 mm) a disparu. La bouche
+  en zigzag du chiot chihuahua n'est pas reprise (voir le rapport : la lèvre du bas du modèle du jack ne rejoint pas
+  celle du haut aux commissures ; refermer la mâchoire de 0,05 à 0,1 rad de plus au calme ne la cachait pas).
+- **Foulard du salon sur le caniche** (jeu, `drapeDogChest` et `dogBib` de salon.js) : posé sur la crinière telle que la
+  coupe du shader la gonfle (`cCut.y`, 1,6 cm sur le poitrail du caniche), sur une enveloppe lissée de la peau et lissé
+  en quatre passes — il était posé sur la peau sans la crinière, 4 mm dans les boucles qui le traversaient (froissé de
+  face) ; maintenant 3,7 mm devant. Taille inchangée (celle de e00898a).
+- **Coupe « lagotto » vue de face** (shader, `cCutLeg`) : le haut des pattes — coudes, avant-bras, cuisses, au-dessus
+  de la bande des pompons — est raccourci de 0,6 fois le poil (le bas de 0,35 fois comme avant). De face, la silhouette
+  est faite des épaules et des coudes, que le tronc et le bas des pattes coupés ne touchaient pas : la coupe ne
+  l'amincissait que de 3,9 % (épaules 2,9 cm, pattes 0,8 cm) ; maintenant 10 % (épaules 5,3 cm, pattes 2,9 cm). Les
+  autres coupes ne touchent pas le haut des pattes (`cCutLeg` 0).
+- **Oreilles bouclées du lagotto** (`earRest` de `mergedCoatGeo`) : leur repos (`cmpRest`, d'où le shader tire les
+  boucles et la robe) est celui de la peau de SON oreille, ramenée au repère d'origine par la tête (décalage à l'os de la
+  tête divisé par sa taille), au lieu de l'oreille de référence partagée — une plaque plate, la même pour les deux faces,
+  plus petite que l'oreille bombée du lagotto. Ses boucles s'y étiraient en traînées (anisotropie médiane 1,57, 3,61
+  pour 90 % des triangles ; le bord roulé, sans épaisseur au repos, n'en était qu'une rayure) : maintenant 1,00 partout,
+  boucles de la taille de celles de la tête. Copie du repos commun pour cette seule race (+0,14 Mo ; les autres gardent
+  l'attribut partagé).
+### Finitions 2, reprise (correcteur des chiens, après la critique)
+
+- **Variante « nain » du gabarit court** (`models.py`, gabarit `nain` : `of='court'`, `back=0.8`, clips `sit` et `paw`) :
+  l'assis aux reins fléchis du gabarit court (`sit_flex`) est fait pour les dos longs du teckel et du corgi ; les chiots
+  carlin et bouledogue, aux pattes courtes (0,60 et 0,58) mais au dos court (0,72 et 0,77), prennent aussi ce gabarit et
+  basculaient à la renverse (dos 130° et 121°, 76 et 93 triangles étirés). La variante refait l'assis sans les reins
+  fléchis (celui d'avant les finitions 2) ; `extras.dog.gabarits` garde `of` et `back` (`pack.mjs`) ; le jeu
+  (`dogClips`, `mixClips` de `dogReal.js`) ne choisit jamais une variante seule et fond, clé par clé, ses clips avec ceux du
+  gabarit selon la longueur du dos de la race, de la variante (dos 0,8 ou moins) au gabarit (court : `back=1.25` ou plus ;
+  pas de 0,05, clips mêlés partagés). Chiots carlin 130 → 42°, bouledogue 121 → 40°, corgi 59 → 46° (peau 1,1 → 0,9 cm
+  sous le sol) ; teckel et corgi adultes inchangés (dos 1,45 et 1,25 : assis du gabarit seul). Transitions des gabarits
+  (`sit_down`, `stand_up`, `lie_down`, `get_up`) : une clé sur 2 (`GAB_DECIMATE`). `dog_jack.glb` 614 → 655 Ko (+5 clips ;
+  0,60 Mo sur main : +9 %).
+- **Assis du teckel et du corgi, sans bosse ni tête renversée** : dans `gab_sit`, un angle positif autour de `chest`
+  baisse le poitrail (chien tourné vers −Y) ; les +0,55 « poitrail redressé » le baissaient — base du cou 73° sous le
+  garrot (segment poitrail → encolure à −73° contre +40° pour le jack russell assis), dos bossu, tête du teckel à 7,3 cm
+  au-dessus des épaules (jack russell 10,5). `sit_flex` du court : `[-0.65, -0.75, -0.25, -0.6, 0.3]` (reins plus
+  fléchis, poitrail relevé de 0,25) ; `paw_lift=(0.9, 0.22)` : patte donnée devant le poitrail (avant : repliée sous le
+  menton). Dans le jeu (`sitHead`, fin de `settleSit`, gabarit court) : encolure redressée comme celle du jack russell
+  assis (angle base du cou → tête 104°) et tête à 2° au-dessus de son port debout, en gardant ce que l'air triste, la
+  laisse et le regard y mettent. Teckel : tête 7,3 → 10,3 cm au-dessus des épaules, inclinaison −4,4 → 0,1°, dos 32°,
+  patte levée 7,6 → 8,9 cm et 2,5 → 3,7 cm devant l'épaule ; corgi : tête 13,7 → 4° au-dessus de son port, dos 46°
+  (patte 42°) ; chiot corgi 21 → 1°. Taille du GLB inchangée.
+- **Mèches du yorkshire couché et assis** (shader, `SILK` de `dogCoat.js`) : la mèche ne pend à la verticale que tronc
+  presque à plat (debout, au pas, couché) ; tronc incliné de 0,12 à 0,4 rad (assis), elle suit le corps, couchée le long
+  du flanc et de la cuisse. Ce qui passerait sous le sol se couche vers l'extérieur, tassé au 0,4 de cette longueur et un
+  peu bombé. Réplique sur le processeur dans `tests/dogFinish.test.js` (`silkLayout`) : couché, les mèches dépassaient
+  du corps vu d'en haut de 19 cm (lames droites en oursin ; main : 0, aplaties sous le corps en palissade), maintenant
+  4,2 cm (chiot 8,6 → 1,7) ; assis, 25 → 1,3 cm, et la part des segments de mèche verticaux 73 % (main) / 59 % → 10 %
+  (rideau devant le poitrail). Debout, inchangé (84 %). Reste : vues de face, les mèches de devant, rubans vus de chant,
+  font encore quelques traits verticaux devant les antérieurs du chien assis (rubans tournés autour de l'épaule essayés :
+  couché, ils se dressaient en plaque claire au coude — pas retenu).
+- **Intérieur des babines du jack, gueule ouverte** (shader, `dogCoat.js`, bloc des lèvres du jack) : le dessous de la
+  lèvre du haut et le dessus de celle du bas (faces tournées vers le bas ou le haut au repos, normale de la face tirée des
+  dérivées de la position de repos, dans la bande de la fente, pas plus haut — sous la truffe, une étoile rose) prennent
+  une teinte de gencive brun rose sombre, plus sombre au fond, là où la robe calculée est claire (jack russell, cavalier,
+  corgi : avant, poil blanc verdi par le ciel, vert olive ; carlin et bouledogue, lèvres déjà noires, inchangés). Reste :
+  vu de très près, le bord est en dents de scie (classement par face) ; pas de dents modelées.
+- **Écart latéral des membres en virage** (`footLock`, `sideMax`) : la borne de 0,6 rad (finitions 2) ne vaut que pour les
+  races du jack et les membres courts (longueur < 0,85 : chiots du shiba) ; les membres longs gardent 0,38 rad. En virage
+  à 2 rad/s, membre le plus écarté : labrador 33 → 30°, saint-bernard 36 → 31°, husky 28 → 25°, galgo 28 → 24° (valeurs
+  de main) ; pieds posés inchangés ; teckel et jack russell inchangés (glissement en virage de la reprise gardé).
+- **Couché des races du jack sans gabarit** (cavalier, cocker, chihuahua, jack russell ; jeu, `lieSettle`) : leurs
+  postérieurs, que les membres un peu raccourcis laissaient en l'air (pieds arrière à 2,3 / 2,8 / 0,9 / 0,8 cm), sont
+  repliés au sol par `foldHind` (0,0 à 0,1 cm) ; le reste — bascule, corps reposé, antérieurs abaissés — ne s'applique
+  pas à elles : essayé, il les relevait sur des antérieurs dressés, poitrail haut ; leur clip pose déjà les avant-bras à
+  plat (bout des pieds avant relevé de 1 à 2,6 cm, une patte au repos, gardé).
+- **Foulard posé avant la coupe** (jeu : `setCut` de `dogReal.js`, `onCutChange` posé par `AnimalEntity.applyGear`) : le
+  salon applique la coupe environ une seconde après les accessoires ; quand la collerette de la coupe change (`cCut.y`),
+  les accessoires du cou sont refaits sur elle. Avant : le foulard restait posé sur la crinière d'avant, à moitié avalé
+  par la collerette « lion » (planche téléphone `t3_tel_foulard_puis_coupe`).

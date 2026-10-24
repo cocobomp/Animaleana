@@ -32,6 +32,9 @@ pts = K.world_verts(meshes)
 cx = sum((arm.matrix_world @ B[L['joints'][0]].head_local).x for L in M['legs'].values()) / 4
 off = Vector((-cx, -(min(p.y for p in pts) + max(p.y for p in pts)) / 2, -min(p.z for p in pts)))
 K.transform_all(arm, meshes, Matrix.Translation(off))
+# (jack : os de la mâchoire, langue modelée et gueule refermée, à l'échelle du jeu — models.jack_mouth)
+if M.get('mouth'):
+    M['mouth'](arm, meshes)
 report['tris'] = K.tris(meshes)
 report['bones'] = len(B)
 
@@ -740,10 +743,34 @@ def hind_folded(p, rg, k, a3, bend='fwd'):
     return p
 
 
-def gab_sit(gname, rg, k, gH, gF):
+def flexed(p, steps):
+    """Reins fléchis : chaque pas (pivot, os déplacés, angle) tourne les os déplacés (espace armature) autour de la tête
+    de l'os pivot, axe X ; angle < 0 : l'arrière (bassin, cuisses, queue) passe en avant et en dessous."""
+    p = dict(p)
+    for pivot, moved, ang in steps:
+        R = dg.rot_x_about(ang, p[pivot].translation.copy())
+        for n_ in moved:
+            p[n_] = R @ p[n_]
+    return p
+
+
+def gab_sit(gname, rg, k, gH, gF, flex=None):
     """Assis du gabarit : croupe posée sur son sol, corps basculé pour que les antérieurs presque tendus touchent le
-    leur, tête gardée à son inclinaison, postérieurs repliés pieds à plat."""
+    leur, tête gardée à son inclinaison, postérieurs repliés pieds à plat. flex (pattes courtes) : reins fléchis avant
+    la pose — bassin rentré sous le corps (autour de la tête de spine1), puis bas du dos (autour de celle de spine2) : la
+    croupe vient sous le poitrail, le dos se redresse (sans eux, la corde hanche → épaule restait à 0,62 m pour 0,2 m de
+    hauteur d'épaule : dos à 18°, un chien accroupi)."""
     frames = action_frames('sit')
+    if flex:
+        rear = ['pelvis'] + [b for r in ('femurL', 'femurR', cfg['tail'][0]) for b in K.descendants(arm, r)]
+        steps = [('spine1', rear, flex[0]), ('spine2', rear + ['spine1'], flex[1])]
+        # (flex : bassin autour de spine1, bas du dos autour de spine2, poitrail autour de chest — angle négatif : relevé,
+        # positif : baissé —, reins autour de chest, tête relevée en plus)
+        if len(flex) > 3 and flex[3]:
+            steps.append(('chest', rear + ['spine1', 'spine2'], flex[3]))
+        if len(flex) > 2 and flex[2]:
+            steps.append(('chest', K.descendants(arm, 'chest'), flex[2]))
+        frames = [flexed(p_, steps) for p_ in frames]
     p0 = frames[0]
     c = min(pose_points(p0, trunk_items), key=lambda p: p.z)
     J0 = sum((p0[rg.legs[l]['anchor']].translation for l in ('FL', 'FR')), Vector()) / 2
@@ -763,9 +790,17 @@ def gab_sit(gname, rg, k, gH, gF):
 
     def one(p_):
         p = transformed(p_, Mx)
-        Rn = dg.rot_x_about(-0.8 * phi, p[cfg['neck'][0]].translation)
+        # (tête gardée à l'inclinaison du clip : ce que la bascule et le redressement du poitrail lui ont donné est
+        # repris à l'encolure — sans le poitrail, le teckel assis regardait ses pieds)
+        Rn = dg.rot_x_about(-0.8 * phi - (flex[2] if flex and len(flex) > 2 else 0.0), p[cfg['neck'][0]].translation)
         for n_ in neck_desc:
             p[n_] = Rn @ p[n_]
+        if flex and len(flex) > 4 and flex[4]:
+            # (le reste à l'attache de la tête : tout à la base de l'encolure, elle se cassait en équerre)
+            for nk, part in ((cfg['neck'][-1], 0.5), (cfg['head'][0], 0.5)):
+                Rh = dg.rot_x_about(-flex[4] * part, p[nk].translation)
+                for n_ in K.descendants(arm, nk):
+                    p[n_] = Rh @ p[n_]
         p = hind_folded(p, rg, k, 0.08, 'up')
         for lab in ('FL', 'FR'):
             j0 = p[rg.legs[lab]['anchor']].translation
@@ -847,11 +882,13 @@ def gab_bow(gname, rg, gH, gF):
     gab_bake(rg, 'bow_' + gname, 60, gp=gp, extra=lambda t: {'yaw': 0.04 * math.sin(math.tau * 2 * t), 'bob': 0.004 * s2 * math.sin(math.tau * 4 * t)})
 
 
-def gab_paw(gname, rg, p_sit):
+def gab_paw(gname, rg, p_sit, lift=None):
+    """« Donne la patte » du gabarit : l'antérieur gauche levé vers l'avant de l'épaule (lift : devant et dessous,
+    en longueurs de bras et d'avant-bras)."""
     R = rg.legs['FL']
     l1, l2, l3 = R['l2d'][:3]
     J = leg_joints(p_sit, 'FL', rg)
-    lift_k = M.get('paw_lift', (0.62, 0.42))
+    lift_k = lift or M.get('paw_lift', (0.62, 0.42))
     J3t = Vector((R['J'][3].x, J[0].y - lift_k[0] * (l1 + l2), J[0].z - lift_k[1] * (l1 + l2)))
     Js, _pts = rg.solve_fold('FL', J[0], J3t, 2.3, 0.7, 0.0, 1)
     p_up = dict(p_sit)
@@ -861,8 +898,32 @@ def gab_paw(gname, rg, p_sit):
         rg, p_sit, p_up, dg.smooth(t / 0.25) * (1 - dg.smooth((t - 0.8) / 0.2))), {}))
 
 
+def front_sphinx(p, rg, lab, rE):
+    """Antérieur du couché en sphinx (gabarit aux membres allongés) : coude posé contre le poitrail, à rE au-dessus du sol
+    du membre, en arrière de l'épaule de ce que l'humérus ne peut descendre ; avant-bras à plat vers l'avant, main posée.
+    (Replié par ground_leg depuis l'épaule descendue au sol du tronc, l'antérieur allongé passait le coude 4 cm sous le
+    sol : le jeu relevait tout le chien sur ses coudes, tronc à 4 cm du sol, croupe haute.)"""
+    L = rg.legs[lab]
+    l1, l2, l3 = L['l2d'][:3]
+    dx = L['dxs']
+    J0 = leg_joints(p, lab, rg)[0]
+    g = L['ground']
+    zE = max(g + rE, J0.z - l1 * 0.995)
+    E = Vector((J0.x + dx[0], J0.y + math.sqrt(max(0.0, l1 * l1 - (J0.z - zE) ** 2)), zE))
+    zW = g + rE * 0.8
+    W = Vector((E.x + dx[1], E.y - math.sqrt(max(0.0, l2 * l2 - (zE - zW) ** 2)), zW))
+    z3 = L['J'][3].z
+    F = Vector((W.x + dx[2], W.y - math.sqrt(max(0.0, l3 * l3 - (zW - z3) ** 2)), z3))
+    Js = [J0, E, W, F, F + L['paw0']]
+    out = dict(p)
+    for n, k_ in L['drive']:
+        out[n] = rg.bone_matrix(n, L['seg'][k_], L['J'][k_], Js[k_], Js[k_ + 1])
+    return out
+
+
 def gab_lie(name, gname, rg, k, gH, gF):
-    """Couché ou endormi du gabarit : corps descendu (ou relevé) jusqu'à son sol, membres repliés."""
+    """Couché ou endormi du gabarit : corps descendu (ou relevé) jusqu'à son sol, membres repliés ; antérieurs en sphinx
+    (front_sphinx) pour les membres allongés."""
     frames = action_frames(name)
 
     def g(y):
@@ -871,10 +932,13 @@ def gab_lie(name, gname, rg, k, gH, gF):
     print('GABARIT', gname, name, 'descente', round(dz, 4))
     Mx = Matrix.Translation(Vector((0, 0, dz)))
 
+    # (rayon de l'avant-bras au coude : celui du modèle, à la taille du chien)
+    rE = 0.035 * hipz / 0.42
+
     def one(p_):
         p = hind_folded(transformed(p_, Mx), rg, k, 0.06)
         for lab in ('FL', 'FR'):
-            p = ground_leg(p, lab, a3=0.15, dz=0.008, rg=rg)
+            p = front_sphinx(p, rg, lab, rE) if k > 1 else ground_leg(p, lab, a3=0.15, dz=0.008, rg=rg)
         return p
     poses = [one(p_) for p_ in frames]
     n = len(poses) - 1
@@ -890,6 +954,11 @@ for gname, gcfg in GABARITS.items():
     s2 = (hipz - gH) / 0.42
     clips = gcfg.get('clips', ['walk', 'trot', 'run'])
     rep = {'legs': k, 'legW': gcfg.get('legW', 1.0), 'paws': gcfg.get('paws', 1.0), 'groundH': round(gH, 4), 'groundF': round(gF, 4), 'clips': clips}
+    # (variante d'un gabarit — of — : seulement quelques clips, fondus par le jeu avec ceux du gabarit selon la longueur
+    # du dos de la race, back)
+    for key in ('of', 'back'):
+        if key in gcfg:
+            rep[key] = gcfg[key]
     G2 = dg.gaits(s2, K.FPS)
     sp = {}
     for name in ('walk', 'trot', 'run'):
@@ -901,11 +970,11 @@ for gname, gcfg in GABARITS.items():
     stand2 = dg.pose_at(r2, 0.0, dict(still))[0]
     sit2 = lie2 = None
     if 'sit' in clips:
-        sit2 = gab_sit_gen(gname, r2, gH, gF, gcfg) if gcfg.get('sit_gen') else gab_sit(gname, r2, k, gH, gF)
+        sit2 = gab_sit_gen(gname, r2, gH, gF, gcfg) if gcfg.get('sit_gen') else gab_sit(gname, r2, k, gH, gF, gcfg.get('sit_flex'))
         gab_bake(r2, 'sit_down_' + gname, 24, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, stand2, sit2, dg.smooth(t)), {}))
         gab_bake(r2, 'stand_up_' + gname, 20, cyclic=False, pose_fn=lambda t: (dg.blend_local(r2, sit2, stand2, dg.smooth(t)), {}))
     if 'paw' in clips and sit2 is not None:
-        gab_paw(gname, r2, sit2)
+        gab_paw(gname, r2, sit2, gcfg.get('paw_lift'))
     if 'bow' in clips:
         gab_bow(gname, r2, gH, gF)
     if 'lie' in clips:
@@ -1023,9 +1092,12 @@ def decimate(act, step):
 
 
 DECIMATE = {'idle': 3, 'sit': 3, 'lie': 3, 'sleep': 3, 'paw': 2, 'rollover': 2}
+# (transitions des gabarits — fondus de deux poses — : une clé sur 2 ; la variante « nain » du court en ajoutait cinq)
+GAB_DECIMATE = {'sit_down': 2, 'stand_up': 2, 'lie_down': 2, 'get_up': 2}
 for act in bpy.data.actions:
     nm_ = act.name.rsplit('_', 1)
-    st_ = DECIMATE.get(nm_[0] if len(nm_) == 2 and nm_[1] in GABARITS else act.name)
+    gab_ = len(nm_) == 2 and nm_[1] in GABARITS
+    st_ = DECIMATE.get(nm_[0] if gab_ else act.name) or (GAB_DECIMATE.get(nm_[0]) if gab_ else None)
     if st_ and not act.name.startswith('_'):
         decimate(act, st_)
 report['clips'] = K.check_clips(arm, meshes, paws, muzzle, skip=('pose_tail', *gab_actions))

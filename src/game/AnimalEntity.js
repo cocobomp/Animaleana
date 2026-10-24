@@ -195,6 +195,13 @@ export class AnimalEntity {
     // Accessoires du salon de toilettage (nœud, bandana… : src/game/models/salon.js)
     removeAccessories(this.accessoryMeshes);
     this.accessoryMeshes = buildAccessories(this.model, this.data.look, this.data.accessories);
+    // (chien réaliste : refaits quand la coupe change la collerette où le foulard est posé — dogReal.js setCut)
+    if (this.model?.realDog) {
+      this.model.onCutChange = () => {
+        removeAccessories(this.accessoryMeshes);
+        this.accessoryMeshes = buildAccessories(this.model, this.data.look, this.data.accessories);
+      };
+    }
   }
 
   /** Refait le modèle (même place, même parent dans la scène). */

@@ -297,6 +297,10 @@ export function makeCoatUniforms() {
     // Coupe du salon de toilettage (m, le long de la normale) : tronc, collerette (cou et poitrail), pompons (bas des
     // pattes), bout de la queue et dessus du crâne.
     cCut: { value: new THREE.Vector4(0, 0, 0, 0) },
+    // (coupe : haut des pattes, du coude ou du grasset au-dessus des pompons — m, le long de la normale ; seule la coupe
+    // « lagotto » le raccourcit : sans lui, de face, la coupe ne changeait presque pas la silhouette, faite surtout du
+    // haut des pattes et des coudes)
+    cCutLeg: { value: 0 },
     // Collier porté (dogReal.js setGroove) : le poil est serré sous sa bande. Centre, axe du cou et côté de l'anneau
     // (repère de repos de la race) ; demi-axes de l'ellipse, demi-largeur de la bande, 1 si porté.
     cCollarC: { value: new THREE.Vector3() },
@@ -389,6 +393,7 @@ uniform vec4 cHead;
 uniform float cFat;
 uniform float cBreath;
 uniform vec4 cCut;
+uniform float cCutLeg;
 uniform vec3 cCollarC;
 uniform vec3 cCollarN;
 uniform vec3 cCollarX;
@@ -409,6 +414,14 @@ if (cTongue.y > 0.0) vCmpTongue = dot(skinWeight, step(vec4(cTongue.x - 0.5), sk
 #endif`;
 
 // Embonpoint (ventre et flancs) et respiration (cage thoracique), le long de la normale du sommet déformé.
+/**
+ * Mèches qui pendent du yorkshire (shader, voir PUSH_V) : tronc incliné de follow0 à follow1 (rad), la mèche passe de
+ * pendue à la verticale à couchée le long du corps (keep : part de l'inclinaison gardée) ; ce qui passerait sous le sol
+ * se couche vers l'extérieur, tassé à spread de cette longueur, bombé de lift (au plus 3 cm de longueur comptée).
+ */
+export const SILK = { follow0: 0.12, follow1: 0.4, keep: 0.9, spread: 0.4, lift: 0.12 };
+const glf = (x) => x.toFixed(3);
+
 const PUSH_V = /* glsl */ `
 {
   float trunkW = (1.0 - cmpPart.w) * (1.0 - cmpPart.y) * (1.0 - cmpPart.z);
@@ -417,14 +430,15 @@ const PUSH_V = /* glsl */ `
   float belly = trunkW * smoothstep(-0.15, 0.25, u) * (1.0 - smoothstep(0.85, 1.15, u)) * (1.0 - smoothstep(0.55, 1.0, h));
   float ribs = trunkW * smoothstep(0.35, 0.65, u) * (1.0 - smoothstep(1.0, 1.25, u)) * (1.0 - smoothstep(0.7, 1.05, h));
   float push = cFat * belly + cBreath * ribs;
-  if (cCut != vec4(0.0)) {
+  if (cCut != vec4(0.0) || cCutLeg != 0.0) {
     float tr = trunkW * smoothstep(-0.25, 0.0, u) * (1.0 - smoothstep(0.95, 1.2, u));
     float ruff = (1.0 - cmpPart.w) * (1.0 - cmpPart.y) * (1.0 - cmpPart.x) * smoothstep(0.85, 1.05, u)
       * (1.0 - smoothstep(cHead.z - 0.02, cHead.z + 0.05, cmpRest.z)) * (1.0 - cmpPart.z * 0.6);
     float pom = cmpPart.w * smoothstep(0.02, 0.05, cmpRest.y) * (1.0 - smoothstep(cEye.w * 0.35, cEye.w * 0.55, cmpRest.y));
     float tip = cmpPart.y * (1.0 - smoothstep(0.03, 0.09, cmpRest.z - cMisc.y));
     float top = cmpPart.z * (1.0 - cmpPart.x) * smoothstep(cEye.y + 0.01, cEye.y + 0.05, cmpRest.y) * (1.0 - smoothstep(cEye.z - 0.02, cEye.z + 0.02, cmpRest.z));
-    push += cCut.x * tr + cCut.y * ruff + cCut.z * pom + cCut.w * max(tip, top);
+    float upLeg = cmpPart.w * smoothstep(cEye.w * 0.35, cEye.w * 0.55, cmpRest.y);
+    push += cCut.x * tr + cCut.y * ruff + cCut.z * pom + cCut.w * max(tip, top) + cCutLeg * upLeg;
   }
   // (pompon modelé : ni embonpoint ni coupe, seulement montré ou ramené à son centre)
   if (cmpPom > 0.0) push = -cmpPom * (1.0 - cPom);
@@ -450,8 +464,12 @@ const PUSH_V = /* glsl */ `
   }
   // Mèches qui pendent (robe soyeuse du yorkshire, dogParts.js silkyStrands ; cmpPom < 0 : hauteur jusqu'à l'accroche,
   // tous les sommets d'une mèche ont les poids de son accroche) : la mèche entière tourne autour de son accroche pour
-  // retomber à la verticale, et s'étale au sol au lieu d'y entrer (assis ou couché, raide, elle partait de travers en
-  // planche et plongeait dans le sol).
+  // retomber à la verticale — seulement quand le tronc est presque à plat (debout, au pas, couché) : tronc relevé
+  // (assis, 40°), elle suit le corps, couchée le long du flanc et de la cuisse (pendue à la verticale, la jupe faisait un
+  // rideau de planches devant le poitrail et entre les antérieurs). Ce qui passerait sous le sol se couche au sol vers
+  // l'extérieur, du côté de son flanc (repos : x de part et d'autre de cMisc.x), tassé au 0,4 de cette longueur et un peu
+  // bombé (de toute la longueur, les mèches faisaient autour du chien couché des lames droites d'une largeur de corps,
+  // un oursin vu d'en haut ; aplaties sur place, une palissade sous le chien).
   #ifdef USE_SKINNING
   if (cmpPom < 0.0) {
     vec3 piv = (skinMatrix * vec4(position + vec3(0.0, -cmpPom, 0.0), 1.0)).xyz;
@@ -459,13 +477,21 @@ const PUSH_V = /* glsl */ `
     vec3 off = transformed - piv;
     vec3 ka = cross(dS, vec3(0.0, -1.0, 0.0));
     float sn = length(ka);
-    float cs = -dS.y;
     if (sn > 1e-4) {
       ka /= sn;
-      off = off * cs + cross(ka, off) * sn + ka * dot(ka, off) * (1.0 - cs);
+      float tilt = atan(sn, -dS.y);
+      float a = tilt * (1.0 - ${glf(SILK.keep)} * smoothstep(${glf(SILK.follow0)}, ${glf(SILK.follow1)}, tilt));
+      float cs = cos(a);
+      float s2 = sin(a);
+      off = off * cs + cross(ka, off) * s2 + ka * dot(ka, off) * (1.0 - cs);
     }
     transformed = piv + off;
-    transformed.y = max(transformed.y, 0.004);
+    float under = 0.004 - transformed.y;
+    if (under > 0.0) {
+      vec2 out2 = vec2(position.x >= cMisc.x ? 1.0 : -1.0, 0.0) + off.xz * 6.0;
+      transformed.xz += normalize(out2) * under * ${glf(SILK.spread)};
+      transformed.y = 0.004 + min(under, 0.03) * ${glf(SILK.lift)};
+    }
   }
   #endif
 }`;
@@ -983,9 +1009,22 @@ if (cOn > 0.5) {
     // même teinte et faisaient des taches sales sur le front et autour des yeux)
     float yM = cEye.y - 0.066 + (vCmpPos.z - cHead.w + 0.041) * 0.25;
     float mouthZone = (1.0 - smoothstep(0.016, 0.026, abs(vCmpPos.y - yM))) * smoothstep(cEye.z, cEye.z + 0.025, vCmpPos.z);
-    float lip = vCmpPart.z * mouthZone * (1.0 - smoothstep(0.05, 0.09, dh2)) * smoothstep(0.25, 0.4, hsv.y) * smoothstep(0.12, 0.25, hsv.z);
+    float lip = vCmpPart.z * mouthZone * (1.0 - smoothstep(0.05, 0.09, dh2)) * smoothstep(0.25, 0.4, hsv.y) * smoothstep(0.12, 0.25, hsv.z) * (1.0 - vCmpTongue);
     keep = keep * (1.0 - lip);
     nc = mix(nc, vec3(0.035, 0.026, 0.022), lip);
+    // (dessous de la lèvre du haut, dessus de celle du bas — tournés vers le bas ou le haut au repos, le long de la fente
+    // de la gueule : cachés gueule fermée, ils se voient gueule ouverte. La texture y est celle du poil, blanc verdi par
+    // le ciel chez le jack russell et le cavalier : gencive brun rose sombre, plus sombre au fond — poil clair seulement,
+    // — robe calculée claire —, les lèvres noires du carlin le sont déjà)
+    // (normale de repos de la face — celle des sommets, partagés avec le dehors de la lèvre au bord, en est moyennée ;
+    // tournée vers le haut ou vers le bas, dans la bande de la fente, pas plus haut — sous la truffe, une étoile rose)
+    vec3 nR = normalize(cross(dFdx(vCmpPos), dFdy(vCmpPos)));
+    float dy = vCmpPos.y - yM;
+    float gum = vCmpPart.z * smoothstep(cEye.z + 0.005, cEye.z + 0.025, vCmpPos.z)
+      * smoothstep(-0.026, -0.016, dy) * (1.0 - smoothstep(0.004, 0.01, dy)) * smoothstep(0.3, 0.65, abs(nR.y)) * (1.0 - vCmpTongue)
+      * smoothstep(0.12, 0.3, dot(nc, LUM));
+    keep = keep * (1.0 - gum);
+    nc = mix(nc, vec3(0.2, 0.08, 0.08) * (0.6 + 0.4 * smoothstep(cEye.z + 0.01, cHead.w, vCmpPos.z)), gum);
   }
   // Vibrisses des sourcils : sur une robe claire, de la teinte de la robe un peu assombrie au lieu de noires.
   #ifdef USE_MAP
@@ -995,8 +1034,11 @@ if (cOn > 0.5) {
   }
   #endif
   // Langue (poids de ses os) : rose là où la texture ne l'est pas (son bout pâle).
-  nc = mix(nc, vec3(0.6, 0.16, 0.19) * (0.85 + 0.3 * smoothstep(0.1, 0.5, lum0)), smoothstep(0.3, 0.7, vCmpTongue));
-  diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0));
+  // (jack, lèvres brun-noir — cKeepOpt.z — : la texture n'est pas gardée sur sa langue modelée, posée sur un texel rouge
+  // sombre du creux de la gueule : elle prenait la couleur des lèvres ou du masque sombre du carlin)
+  float tng = smoothstep(0.3, 0.7, vCmpTongue);
+  nc = mix(nc, vec3(0.6, 0.16, 0.19) * (0.85 + 0.3 * smoothstep(0.1, 0.5, lum0)), tng);
+  diffuseColor.rgb = mix(nc, c0, clamp(keep, 0.0, 1.0) * (1.0 - tng * step(0.5, cKeepOpt.z)));
   // Truffe peinte (lagotto) : dans la barbe poussée autour d'elle, la truffe de la texture, prise au seuil de luminance
   // sur des texels flous, faisait une tache grise étalée sans contour, et la lèvre sombre une bavure dessous. Une
   // truffe brune au bord net (adouci d'un pixel), deux narines plus sombres en avant.

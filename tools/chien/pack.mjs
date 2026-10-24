@@ -29,7 +29,11 @@ if (opt.report) {
   const rep = JSON.parse(fs.readFileSync(opt.report, 'utf8'));
   // (gabarits : longueur des membres de chacun, taille de ses pieds et vitesses naturelles de ses allures, voir
   // make_dog.py)
-  const gab = Object.fromEntries(Object.entries(rep.gabarits ?? {}).map(([k, g]) => [k, { legs: g.legs, paws: g.paws ?? 1, naturalSpeeds: g.naturalSpeeds }]));
+  // (variante d'un gabarit : of, celui dont elle remplace quelques clips ; back : longueur du dos pour laquelle ses poses
+  // sont faites — le jeu fond les clips des deux selon celle de la race)
+  const gab = Object.fromEntries(Object.entries(rep.gabarits ?? {}).map(([k, g]) => [k, {
+    legs: g.legs, paws: g.paws ?? 1, naturalSpeeds: g.naturalSpeeds, ...(g.of ? { of: g.of } : {}), ...(g.back ? { back: g.back } : {}),
+  }]));
   root.listScenes()[0].setExtras({ dog: { naturalSpeeds: rep.naturalSpeeds, hipHeight: rep.hipHeight, shoulder: rep.shoulderJoint, gabarits: gab } });
 }
 

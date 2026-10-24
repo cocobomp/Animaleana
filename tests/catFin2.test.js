@@ -6,6 +6,7 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 import * as THREE from 'three';
 import { buildRealCatModel, realCatBase, realCatPose } from '../src/game/models/catReal.js';
 import { buildGear } from '../src/game/gearModels.js';
+import { buildAccessories } from '../src/game/models/salon.js';
 import { catLookWithBreed } from '../src/sim/catLook.js';
 import { SPECIES } from '../src/sim/species.js';
 import { resolveLook } from '../src/sim/animal.js';
@@ -624,6 +625,55 @@ describe('collier lié à la peau', () => {
       const mc = verts(medal).reduce((a, v) => a.add(v.applyMatrix4(inv)), new THREE.Vector3()).multiplyScalar(1 / medal.geometry.attributes.position.count);
       expect(mc.y, `${b} ${stage} ${p} : médaille au-dessus du sol (m)`).toBeGreaterThan(0.005);
     }
+    md.dispose();
+  });
+});
+
+describe('foulard et nœud du salon', () => {
+  // Foulard : un triangle rigide sur l'os du cou pendait en pyramide sous l'anneau et pointait en bec quand le chat
+  // s'asseyait ; nœud large comme la tête du maine coon. Maintenant (comme le chien réaliste) une bavette posée sur la
+  // peau du poitrail debout et liée au squelette, et un nœud à la taille de la tête.
+  const near = (pts, q) => Math.sqrt(Math.min(...pts.map((p) => p.distanceToSquared(q))));
+  it.each(['europeen', 'maine_coon', 'persan'])('%s : foulard posé sur le poitrail debout comme assis, nœud pas plus large que la tête', (b) => {
+    const md = cat(b);
+    md.staticPose('stand');
+    const look = lookOf(b);
+    const acc = buildAccessories(md, look, { neck: { id: 'bandana', color: 'blue' } });
+    const bib = acc.find((o) => o.isSkinnedMesh && !o.userData.collarBand);
+    expect(bib, 'bavette liée au squelette').toBeTruthy();
+    const verts = (m) => {
+      md.root.updateMatrixWorld(true);
+      const out = [];
+      for (let i = 0; i < m.geometry.attributes.position.count; i++) out.push(m.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(m.matrixWorld));
+      return out;
+    };
+    const skin = () => {
+      const m = md.coatMesh;
+      const out = [];
+      for (let i = 0; i < m.geometry.attributes.position.count; i++) out.push(m.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(m.matrixWorld));
+      return out;
+    };
+    const sc = md.root.matrixWorld.getMaxScaleOnAxis();
+    for (const p of ['stand', 'sit']) {
+      md.staticPose(p);
+      const S = skin();
+      const d = verts(bib).map((q) => near(S, q) / sc);
+      // haut de la bavette (5 rangées sur 8, sur le cou et le poitrail) à moins de 2 cm de la peau pour 9 points sur 10 ;
+      // le bas tombe entre les antérieurs, posé sur le devant des bras (au plus 5 cm de la peau)
+      const top = d.slice(0, 45).sort((x, y) => x - y);
+      expect(top[Math.floor(top.length * 0.9)], `${b} ${p} : haut de la bavette sur la peau (m)`).toBeLessThan(0.02);
+      expect(Math.max(...d), `${b} ${p} : bas de la bavette (m)`).toBeLessThan(0.05);
+    }
+    for (const o of acc) {
+      o.parent?.remove(o);
+      o.userData.onRemove?.();
+    }
+    md.staticPose('stand');
+    const acc2 = buildAccessories(md, look, { neck: { id: 'bow', color: 'pink' } });
+    const bow = acc2.find((o) => o.isSkinnedMesh && !o.userData.collarBand);
+    expect(bow, 'nœud lié au squelette').toBeTruthy();
+    const bx = verts(bow).map((v) => v.x / sc);
+    expect(Math.max(...bx) - Math.min(...bx), `${b} : largeur du nœud (m)`).toBeLessThan(2.4 * md.accessoryFit.headR);
     md.dispose();
   });
 });

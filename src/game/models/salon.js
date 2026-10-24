@@ -299,10 +299,16 @@ export function buildAccessories(model, look, accessories = {}) {
       // il ne restait qu'un liseré de 2 cm sous le collier)
       const big = worn.id === 'bandana';
       const bibLen = (thr) => {
+        // (chat réaliste : d'après la coupe du cou sans la gorge — span — : son anneau, qui passe sur la gorge, est plus
+        // haut que large ; la gorge du chat debout est sous le ventre — le poitrail descend entre les antérieurs — : au
+        // plus la moitié de sa hauteur au-dessus du sol)
+        if (model.realCat) return Math.max(0.02, Math.min((ring.span ?? rx + ry) * (big ? 0.7 : 0.45), 0.5 * thr));
         const len = Math.min((rx + ry) * (big ? 1.1 : 0.85), (big ? 0.68 : 0.55) * Math.max(0.03, thr - (fitD?.bellyY ?? -1)));
         return big ? Math.max(0.07, len) : len;
       };
-      const bib = model.realDog && model.drapeChest && model.skinGear && ring.rest ? dogBib(model, ring, rx, ry, bibLen, 0.006, big ? 1.3 : 1.0) : null;
+      // (chat réaliste aussi : bavette posée sur sa peau debout, où l'anneau est mesuré — catReal.js drapeChest —, liée
+      // au squelette ; le triangle rigide pendait en pyramide sous l'anneau, en bec assis)
+      const bib = (model.realDog || model.realCat) && model.drapeChest && model.skinGear && ring.rest ? dogBib(model, ring, rx, ry, bibLen, 0.006, big ? 1.3 : 1.0) : null;
       if (bib && (worn.id === 'bow' || worn.id === 'bandana')) {
         if (worn.id === 'bow') {
           // (sur la peau, sous la gorge, de face et un peu penché vers le haut ; sous le menton — gorge haute du
@@ -326,7 +332,7 @@ export function buildAccessories(model, look, accessories = {}) {
           });
           m.castShadow = true;
           // (chat : d'un bloc, avec les poids de la peau sous son centre)
-          out.push(model.skinGear(m));
+          out.push(model.skinGear(m, model.realCat ? { at: g.position.clone() } : undefined));
         } else {
           // (lié au squelette : il suit le cou et le poitrail, assis comme debout)
           const m = new THREE.Mesh(bibGeometry(bib.pts), mat(color, 0.75, { side: THREE.DoubleSide }));

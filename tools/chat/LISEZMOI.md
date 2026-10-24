@@ -186,7 +186,9 @@ comparaisons), dans la même lumière et au même cadrage.
   la peau », mesure `zz_collier.test.js` dans le dossier des planches. Coût : un
   attribut de 154 Ko par gabarit, +4 ms au premier chat d'une race (collier : 2 à 10 ms à l'équiper, foulard 25 ms),
   mêmes appels de dessin qu'avant.
-  Accessoires du salon : la bande et les pièces posées dessus liées de même.
+  Accessoires du salon : la bande liée de même ; foulard et nœud posés sur la peau debout (bavette du chien
+  réaliste, `salon.js` dogBib + `drapeChest` du chat) et liés au squelette — le triangle rigide pendait en pyramide
+  sous l'anneau, en bec assis ; nœud à la taille de la tête (il était aussi large que la tête du maine coon).
 - **Performance** : version allégée au loin (5 m en basse qualité, 12 m en haute), boîte des os pour le
   « frustum culling », chats hors du champ animés une image sur trois (sauf guidés, portés, perchés), couches de
   poil en haute qualité seulement et de près.

@@ -12,6 +12,7 @@ import { DOG_TRAINER_FR, DOG_TRAINER_EN } from './ui/dogTrainerTexts.js'; // mé
 import { GROOMER_FR, GROOMER_EN } from './ui/groomerTexts.js'; // métier Toiletteur (grm_*, mg_g*, ca_groomer_*)
 import { TRAIL_FR, TRAIL_EN } from './ui/trailGuideTexts.js'; // 🧭 métier guide de randonnée (tg_*, career_trailGuide)
 import { SPECIES_TXT_FR, SPECIES_TXT_EN } from './ui/speciesTexts.js'; // espèces proposées (« D'autres animaux arrivent bientôt ! »)
+import { QUESTS_FR, QUESTS_EN } from './ui/questsTexts.js'; // quêtes principales et secondaires (qj_*, qneed_*)
 
 const fr = {
   title: 'La ferme à Madichelle',
@@ -1382,14 +1383,14 @@ const fr = {
   tuto_farm: 'Ouvre la 🚜 Ferme.',
   tuto_farm_hint: 'Avec les niveaux ⭐, tu auras des machines et des aides !',
   tuto_end: 'Bravo {name} ! Tu sais tout ! 🏆',
-  tuto_end_hint: 'Cadeau : de l\'XP ⭐ ! Suis l\'objectif 🎯 pour la suite.',
-  tuto_end_money: 'Cadeau : {money} 🪙 et de l\'XP ⭐ ! Suis l\'objectif 🎯 pour la suite.',
+  tuto_end_hint: 'Cadeau : de l\'XP ⭐ ! Pour la suite, suis l\'histoire de la ferme ⭐ sur le côté.',
+  tuto_end_money: 'Cadeau : {money} 🪙 et de l\'XP ⭐ ! Pour la suite, suis l\'histoire de la ferme ⭐ sur le côté.',
   tuto_go: 'C\'est parti ! 🚀',
   tuto_thanks: 'Merci Biscuit ! 🎉',
   tuto_skip: 'Passer',
   tuto_skipAll: 'Passer le tutoriel',
   tuto_skipConfirm: 'Arrêter le tutoriel ? Tu pourras le revoir dans ⚙️ Réglages.',
-  tuto_skipped: 'D\'accord ! Suis l\'objectif 🎯 sur le côté de l\'écran.', // le suivi de quête (src/ui/tutorial.js)
+  tuto_skipped: 'D\'accord ! Suis l\'histoire de la ferme ⭐ sur le côté de l\'écran.', // le suivi de quête (src/ui/tutorial.js)
   tuto_read: 'Lire à voix haute',
   tuto_replay: 'Revoir le tutoriel',
   tuto_cheer1: 'Bravo !',
@@ -1444,7 +1445,7 @@ const fr = {
   quest_hint_first_horse: 'Il te faut d\'abord un cheval : va au refuge 🐾.',
   // Aides des quêtes Métiers et clients (« Montre-moi » du suivi de quête et du journal ; elles manquaient).
   quest_hint_career1: 'Touche 💼 Métiers et commence un métier (dès le niveau 3).',
-  quest_hint_client1: 'Reste près de la maison : un visiteur vient te confier son animal (dès le niveau 2).',
+  quest_hint_client1: 'Avec le métier de vétérinaire, de pension ou de beauté, un visiteur vient te confier son animal. Reste près de la maison.',
   quest_hint_clientVet1: 'Un client t\'amène un animal malade : soigne-le avec 🩺 dans sa fiche.',
   quest_hint_clientHappy5: 'Prends bien soin des animaux confiés jusqu\'au retour de leur propriétaire.',
   quest_hint_clientMoney500: 'Garde des animaux en pension : chaque client te paie à son retour.',
@@ -3153,14 +3154,14 @@ const en = {
   tuto_farm: 'Open the 🚜 Farm.',
   tuto_farm_hint: 'With levels ⭐ you get machines and helpers!',
   tuto_end: 'Well done {name}! You know everything! 🏆',
-  tuto_end_hint: 'Gift: some XP ⭐! Follow the 🎯 goal for what\'s next.',
-  tuto_end_money: 'Gift: {money} 🪙 and some XP ⭐! Follow the 🎯 goal for what\'s next.',
+  tuto_end_hint: 'Gift: some XP ⭐! For what\'s next, follow the farm\'s story ⭐ on the side.',
+  tuto_end_money: 'Gift: {money} 🪙 and some XP ⭐! For what\'s next, follow the farm\'s story ⭐ on the side.',
   tuto_go: 'Let\'s go! 🚀',
   tuto_thanks: 'Thanks Biscuit! 🎉',
   tuto_skip: 'Skip',
   tuto_skipAll: 'Skip the tutorial',
   tuto_skipConfirm: 'Stop the tutorial? You can watch it again in ⚙️ Settings.',
-  tuto_skipped: 'OK! Follow the 🎯 goal on the side of the screen.', // the quest tracker (src/ui/tutorial.js)
+  tuto_skipped: 'OK! Follow the farm\'s story ⭐ on the side of the screen.', // the quest tracker (src/ui/tutorial.js)
   tuto_read: 'Read aloud',
   tuto_replay: 'Replay the tutorial',
   tuto_cheer1: 'Well done!',
@@ -3215,7 +3216,7 @@ const en = {
   quest_hint_first_horse: 'You need a horse first: go to the shelter 🐾.',
   // Hints for the Careers and clients quests ("Show me" in the quest tracker and the journal; they were missing).
   quest_hint_career1: 'Press 💼 Careers and start a career (from level 3).',
-  quest_hint_client1: 'Stay near the house: a visitor comes to leave their animal with you (from level 2).',
+  quest_hint_client1: 'With the vet, boarding or beauty career, a visitor comes to leave their animal with you. Stay near the house.',
   quest_hint_clientVet1: 'A client brings you a sick animal: heal it with 🩺 in its card.',
   quest_hint_clientHappy5: 'Take good care of boarded animals until their owners come back.',
   quest_hint_clientMoney500: 'Board animals: each client pays you when they come back.',
@@ -3671,6 +3672,8 @@ Object.assign(fr, TRAIL_FR); // 🧭 guide de randonnée
 Object.assign(en, TRAIL_EN);
 Object.assign(fr, SPECIES_TXT_FR); // espèces proposées (OFFERED_SPECIES)
 Object.assign(en, SPECIES_TXT_EN);
+Object.assign(fr, QUESTS_FR); // quêtes principales et secondaires (src/sim/quests.js)
+Object.assign(en, QUESTS_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

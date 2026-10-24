@@ -41,6 +41,7 @@ import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.
 import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeason } from '../sim/places.js';
 import { adoptionPrice, shopPrice, stageAgeDays } from '../sim/adoption.js';
 import { checkObjectives, objectiveParams } from '../sim/objectives.js';
+import { mainQuest, afterQuestsDone } from '../sim/quests.js'; // l'histoire de la ferme : fin d'un chapitre
 import { loadProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
 import { deviceStore, saveGuarded } from '../sim/saveStore.js'; // sauvegarde qui n'écrase rien en silence
 import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
@@ -1068,11 +1069,21 @@ export class Game {
     this.checkAcc += dt;
     if (this.checkAcc > 2) {
       this.checkAcc = 0;
-      for (const o of checkObjectives(p)) {
+      // Toute quête finie est récompensée, rejointe ou non ; une quête rejointe et finie quitte « Mes quêtes », et
+      // la fin du chapitre en cours de l'histoire est fêtée par le guide, qui annonce le suivant (src/sim/quests.js).
+      const chapterBefore = mainQuest(p);
+      const done = checkObjectives(p);
+      const story = done.length ? afterQuestsDone(p, done, chapterBefore) : null;
+      for (const o of done) {
         this.xp(o.kind === 'quest' ? 'quest' : 'achievement');
         const name = t(`o_${o.id}`, objectiveParams(p, o));
+        const reward = o.reward && p.mode === 'manage' ? t('reward', { n: o.reward }) : '';
+        if (o.id === story?.chapter && this.ui.tutorial?.chapterDone) {
+          this.ui.tutorial.chapterDone(o.id, story.next, reward);
+          continue;
+        }
         const msg = o.kind === 'quest' ? t('questDone', { name }) : t('achievementDone', { name });
-        this.ui.toast(o.reward && p.mode === 'manage' ? `${msg} ${t('reward', { n: o.reward })}` : msg, 5000);
+        this.ui.toast(reward ? `${msg} ${reward}` : msg, 5000);
       }
     }
     this.saveAcc += dt;

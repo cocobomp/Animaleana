@@ -2,20 +2,28 @@
 // - une bulle avec le guide Biscuit 🐶, des phrases très courtes et de gros emojis ;
 // - le repère 3D (game.marker) au-dessus de ce qu'il faut toucher dans le monde ;
 // - un cercle qui clignote autour du bouton à presser (barre du haut, menus) ;
-// - un petit suivi de quête discret sur le côté : la quête conseillée, ou la quête suivie
-//   (« Suivre la quête ») avec ses petites étapes qui se cochent toutes seules ; il se range en pastille.
-// La logique (étapes, réussite) est dans src/sim/tutorial.js.
+// - un petit suivi de quête discret sur le côté : la quête suivie (« Suivre la quête », avec ses petites étapes
+//   qui se cochent toutes seules), sinon le chapitre en cours de l'histoire de la ferme (⭐), sinon la première
+//   quête rejointe (🎯), sinon rien ; il se range en pastille ;
+// - la bulle de la quête (toucher son nom) : où aller, comment, et « Passer pour l'instant » (chapitre),
+//   « Enlever cette quête » (quête rejointe), « 📖 Mes quêtes » ; et le petit mot de fin d'un chapitre.
+// La logique (étapes, réussite) est dans src/sim/tutorial.js ; l'histoire et les quêtes rejointes dans
+// src/sim/quests.js ; le journal dans src/ui/quests.js.
 
 import { h, isPhone } from './dom.js';
 import { t, getLang } from '../i18n.js';
 import { nbsp } from './minigames/frame.js'; // typographie française (« Adopter » ! ne se coupe pas)
-import { OBJECTIVES, objectiveParams, objectiveShown } from '../sim/objectives.js';
-import { earn } from '../sim/profile.js';
+import { OBJECTIVES, objectiveParams } from '../sim/objectives.js';
+import { earn, isSandbox } from '../sim/profile.js';
 import {
   tutorialStep, stepNumber, noteEvent, updateTutorial, skipTutorial, restartTutorial,
-  suggestedQuest, questGuide, TUTORIAL_REWARD,
+  questGuide, questBlock, TUTORIAL_REWARD,
   followQuest, stopFollow, noteFollowEvent, updateFollow, followView, stepWindow,
 } from '../sim/tutorial.js';
+import {
+  trackerQuest, questKind, mainQuest, storyView, joinQuest, leaveQuest, skipChapter, resumeChapter, MAX_JOINED,
+} from '../sim/quests.js';
+import { cap, hintText } from './quests.js';
 
 const GUIDE = '🐶';
 /** Nom d'une quête (« Adopte {n} espèces… » : le total suit les espèces proposées). */
@@ -30,6 +38,9 @@ const keepLast = (s) => s.replace(/\s+(\S+)\s*$/u, '\u00a0$1');
 // Texte de la bulle : en plus, « » ! ? : ; restent collés à leur mot (« touche « / Adopter » ! » se coupait
 // après le guillemet ouvrant, sur téléphone).
 const bubbleText = (s) => keepLast(nbsp(s));
+
+/** Combien de temps la bulle de la quête reste ouverte si on n'y touche pas. */
+const QUEST_BUBBLE_MS = 25000;
 
 // Suivi de quête rangé en pastille ou non : un confort mémorisé sur cet appareil (pas dans la sauvegarde).
 const FOLD_KEY = 'animaleana.questFold';
@@ -59,6 +70,7 @@ export class Tutorial {
     this.questFocus = null; // « Montre-moi » : { id, spec, until }
     this.folded = readFold(); // suivi de quête rangé en pastille
     this.trackerBox = null; // où est le suivi à l'écran (lu par la flèche du repère, src/game/Marker.js)
+    this.questBubble = null; // la bulle de la quête : { id, until } ou un petit mot { notice, until }
 
     this.bubble = h('div', { id: 'tuto-bubble', hidden: true, role: 'status', 'aria-live': 'polite' });
     this.ring = h('div', { id: 'tuto-ring', hidden: true }, h('span', { class: 'tuto-finger' }, '👆'));
@@ -103,11 +115,14 @@ export class Tutorial {
     this.animalId = null;
     this.trackerKey = '';
     this.recent = null; // la dernière quête choisie (arrêtée avec ✋, ou montrée depuis le journal)
+    this.questBubble = null;
     if (this.active) this.ui.hideHelp();
     this.tick();
   }
 
   end() {
+    this.questBubble = null;
+    this.bubbleKey = '';
     this.bubble.hidden = true;
     this.ring.hidden = true;
     this.tracker.hidden = true;
@@ -171,7 +186,9 @@ export class Tutorial {
       this.renderBubble(step);
       if (step.manual && !this.ui.modalOpen) this.applyTarget({ el: this.bubble.querySelector('.tuto-ok') });
     } else {
-      this.bubble.hidden = true;
+      // Pas de tutoriel : la bulle sert à la quête (son nom touché, ou la fin d'un chapitre).
+      if (this.questBubble) this.renderQuestBubble();
+      else this.bubble.hidden = true;
       if (p.questFollow) this.updateFollowing();
       else this.updateQuestFocus();
     }
@@ -307,6 +324,8 @@ export class Tutorial {
           (sel ? this.bubble.querySelector(`button${sel}`) : null)?.focus({ preventScroll: true });
         });
       }
+      this.bubble.classList.remove('quest-bubble'); // (la bulle servait peut-être à une quête)
+      this.qbKey = '';
       this.bubble.replaceChildren(
         h('div', { class: 'tuto-guide', 'aria-hidden': 'true' }, GUIDE),
         h('div', { class: 'tuto-main' },
@@ -514,9 +533,12 @@ export class Tutorial {
   /**
    * Le suivi de quête, discret sur le côté : à gauche sous la carte d'infos (ordinateur), à droite sous les
    * boutons du haut (téléphone, loin du joystick). Une poignée ‹ / › à gauche pour le ranger en pastille (mémorisé),
-   * puis 🎯 le nom de la quête (le toucher = « Montre-moi ») avec sa progression (0/3), et 🧭 pour la suivre
-   * (✋ pour arrêter) contre l'autre bord : le nom sépare toujours « ranger » de « arrêter ».
-   * Sous le nom : « 0/3 📍 où aller ». Quête suivie :
+   * puis le nom de la quête (le toucher ouvre sa bulle : où aller, Passer / Enlever, 📖 Mes quêtes) avec sa
+   * progression (0/3), et 🧭 pour la suivre (✋ pour arrêter) contre l'autre bord : le nom sépare toujours
+   * « ranger » de « arrêter ». Quelle quête : la suivie (🧭), sinon le chapitre en cours (⭐), sinon la première
+   * quête rejointe (🎯), sinon rien (trackerQuest, src/sim/quests.js) : jamais une quête que l'enfant n'a pas choisie
+   * en dehors de l'histoire.
+   * Sous le nom : « 0/3 📍 où aller », ou « 🔒 ce qu'il faut d'abord » si elle n'est pas encore possible. Quête suivie :
    * - téléphone (portrait et paysage) : le nom en petit et, dessous, l'étape en cours « 0/3 👉 … » (48 px de haut en
    *   portrait, comme l'ancienne pastille) ; les étapes suivantes s'annoncent par un message quand une étape se coche ;
    * - ordinateur, tablette : « 0/3 ●●○○ » et 4 étapes en petit dessous (✅ faite, 👉 en cours, ⬜ à faire).
@@ -532,9 +554,10 @@ export class Tutorial {
       return;
     }
     const view = followView(p, OBJECTIVES);
-    // Sans quête suivie : la dernière choisie (arrêtée avec ✋ : 🧭 la reprend là où on en était), sinon la conseillée.
-    const recent = this.recent && !p.completed.includes(this.recent.id) ? OBJECTIVES.find((o) => o.id === this.recent.id && objectiveShown(p, o)) ?? null : null;
-    const q = view ? OBJECTIVES.find((o) => o.id === view.id) : recent ?? suggestedQuest(p, OBJECTIVES);
+    // Sans quête suivie : la dernière choisie (arrêtée avec ✋ : 🧭 la reprend là où on en était) si c'est encore le
+    // chapitre en cours ou une quête rejointe, sinon le chapitre en cours, sinon la première quête rejointe.
+    const tq = trackerQuest(p, { recent: this.recent?.id ?? null });
+    const q = tq ? OBJECTIVES.find((o) => o.id === tq.id) : null;
     if (!q) {
       this.tracker.hidden = true;
       this.layoutTop();
@@ -543,17 +566,21 @@ export class Tutorial {
     const [cur, max] = q.progress(p);
     const count = `${Math.min(cur, max)}/${max}`;
     const where = this.whereText(q.id);
+    const b = questBlock(q.id, p);
+    const block = b ? cap(t(b.key, b.params)) : '';
+    const kind = tq.kind;
     const mode = trackerMode();
     const stepsKey = view ? view.steps.map((s) => s.state[0]).join('') : '';
-    const key = `${q.id}|${count}|${where}|${getLang()}|${stepsKey}|${this.folded}|${mode}`;
+    const key = `${q.id}|${kind}|${count}|${where}|${block}|${getLang()}|${stepsKey}|${this.folded}|${mode}`;
     if (key !== this.trackerKey) {
       // La même quête a avancé : petit rebond (surtout utile quand le suivi est rangé en pastille).
       const moved = !!this.trackerKey && this.trackerWas?.id === q.id && (this.trackerWas.count !== count || this.trackerWas.steps !== stepsKey);
       this.trackerKey = key;
       this.trackerWas = { id: q.id, count, steps: stepsKey };
-      this.tracker.replaceChildren(...this.trackerContent(q, view, { count, where, mode }));
+      this.tracker.replaceChildren(...this.trackerContent(q, view, { count, where, mode, kind, block }));
       const cl = this.tracker.classList;
       cl.toggle('following', !!view);
+      cl.toggle('main', kind === 'main'); // ⭐ le chapitre en cours de l'histoire
       cl.toggle('folded', this.folded);
       cl.toggle('side-right', mode !== 'desk');
       cl.toggle('compact', mode === 'compact');
@@ -577,10 +604,13 @@ export class Tutorial {
     this.layoutTop();
   }
 
-  /** Ce qu'il y a dans le suivi : la pastille rangée, ou la poignée, le nom de la quête et 🧭 / ✋ (+ ses étapes). */
-  trackerContent(q, view, { count, where, mode }) {
+  /**
+   * Ce qu'il y a dans le suivi : la pastille rangée, ou la poignée, le nom de la quête et 🧭 / ✋ (+ ses étapes).
+   * L'icône : ⭐ le chapitre en cours (⭐🧭 s'il est suivi), 🧭 une quête suivie, 🎯 une quête rejointe.
+   */
+  trackerContent(q, view, { count, where, mode, kind, block }) {
     const right = mode !== 'desk'; // téléphone : contre le bord droit ; ordinateur : contre le bord gauche
-    const icon = view ? '🧭' : '🎯';
+    const icon = kind === 'main' ? (view ? '⭐🧭' : '⭐') : view ? '🧭' : '🎯';
     const title = questTitle(this.profile, q.id);
     const chev = (s, cls = 'qt-chev') => h('span', { class: cls, 'aria-hidden': 'true' }, s);
     if (this.folded) {
@@ -593,13 +623,13 @@ export class Tutorial {
         onClick: () => this.setFolded(false),
       }, right ? chev('‹') : null, h('span', { class: 'qt-icon' }, icon), h('b', { class: 'qt-count' }, count), right ? null : chev('›'))];
     }
-    const show = () => (view ? this.reshow() : this.showQuest(q.id));
+    const show = () => this.showQuest(q.id); // la bulle de la quête (et le repère de l'étape en cours)
     const countEl = h('b', { class: 'qt-count' }, count);
     // Ordinateur : 4 étapes sous le nom ; téléphone : seulement l'étape en cours, dans la ligne sous le nom.
     const w = view && mode === 'desk' ? stepWindow(view.steps, 4) : null;
     // Sous le nom : « 0/3 📍 où aller » ; quête suivie : « 0/3 👉 l'étape en cours » (téléphone) ou « 0/3 ●●○○ ».
     let sub;
-    if (!view) sub = [countEl, where ? h('span', { class: 'qt-where' }, `📍 ${where}`) : null];
+    if (!view) sub = [countEl, block ? h('span', { class: 'qt-where qt-block' }, `🔒 ${block}`) : where ? h('span', { class: 'qt-where' }, `📍 ${where}`) : null];
     else if (!w) sub = [countEl, view.current ? h('span', { class: 'qt-now' }, `👉 ${keepLast(t(`quest_step_${view.current.id}`))}`) : null];
     else {
       // Longue quête : des petits points disent où on en est (comme dans la bulle du guide).
@@ -655,8 +685,13 @@ export class Tutorial {
     const hud = this.ui.hud;
     let top;
     if (!isNarrow()) {
-      // Ordinateur : à gauche, sous la carte d'infos.
+      // Ordinateur : à gauche, sous la carte d'infos (et sous la bulle de la quête quand elle est ouverte : elle se
+      // pose au même endroit ; pendant le tutoriel, le suivi est caché).
       top = (hud.querySelector('.hud-info')?.getBoundingClientRect().bottom || 148) + 8;
+      if (!this.bubble.hidden && this.questBubble) {
+        const b = this.bubble.getBoundingClientRect();
+        if (b.height && b.bottom + 8 > top) top = b.bottom + 8;
+      }
     } else {
       // Téléphone : à droite, sous les boutons du haut (en paysage, ils ne prennent que la droite de la barre).
       top = (hud.querySelector('.hud-buttons')?.getBoundingClientRect().bottom || hud.getBoundingClientRect().bottom || 100) + 6;
@@ -757,13 +792,25 @@ export class Tutorial {
 
   // --- « Suivre la quête »
 
+  /**
+   * Suivre une quête (🧭). Une quête secondaire qu'on n'a pas encore rejointe est rejointe d'abord ; s'il y en a
+   * déjà MAX_JOINED, un petit mot dit d'en enlever une (avec 📖 Mes quêtes) et rien d'autre ne change.
+   */
   startFollow(id) {
     const p = this.profile;
     if (!p) return;
+    if (questKind(p, id) === 'side') {
+      const r = joinQuest(p, id);
+      if (!r.ok) {
+        if (r.reason === 'full') this.notice({ emoji: '🎯', text: t('qj_fullFollow', { max: MAX_JOINED }), journal: true });
+        return;
+      }
+    }
     // Même quête que celle qu'on vient d'arrêter (✋ par erreur) : on reprend à la même étape.
     followQuest(p, id, this.recent);
     this.recent = null;
     this.questFocus = null;
+    this.questBubble = null;
     this.ui.closePanel();
     // L'enfant choisit lui-même de suivre une quête : le suivi rangé en pastille se rouvre (il pourra le ranger).
     if (this.folded) {
@@ -788,13 +835,57 @@ export class Tutorial {
     this.tick();
   }
 
-  /** Toucher l'objectif suivi : remontre le repère et redit l'étape en cours. */
-  reshow() {
-    const v = followView(this.profile, OBJECTIVES);
-    if (!v) return;
-    this.markerKey = '';
-    this.highlight = null;
-    this.ui.toast(`👉 ${t(`quest_step_${v.current.id}`)}`, 4000);
+  /** Après une quête passée ou enlevée : plus de repère ni de bulle pour elle. */
+  forgetQuest(id) {
+    if (this.recent?.id === id) this.recent = null;
+    if (this.questFocus?.id === id) this.stopQuestFocus();
+    if (this.questBubble?.id === id) this.questBubble = null;
+    if (!this.profile?.questFollow) {
+      this.highlight = null;
+      this.releaseMarker();
+    }
+    this.trackerKey = '';
+  }
+
+  /** ⏭️ Passer le chapitre en cours pour l'instant : le suivant arrive (il est annoncé). */
+  skipMain(id) {
+    const p = this.profile;
+    if (!p) return;
+    const next = skipChapter(p, id);
+    if (next === undefined) return;
+    this.forgetQuest(id);
+    this.ui.toast(next ? `${t('qj_skipped')} ${t('qj_newChapter', { name: questTitle(p, next) })}` : t('qj_skipped'), 6000);
+    this.tick();
+  }
+
+  /** ↩️ Reprendre un chapitre passé (il redevient le chapitre en cours s'il vient avant). */
+  resume(id) {
+    const p = this.profile;
+    if (!p || !resumeChapter(p, id)) return;
+    this.trackerKey = '';
+    this.ui.toast(t('qj_resumed', { name: questTitle(p, id) }), 4000);
+    this.tick();
+  }
+
+  /** ➕ Rejoindre une quête secondaire. */
+  join(id) {
+    const p = this.profile;
+    if (!p) return false;
+    const r = joinQuest(p, id);
+    if (r.ok) {
+      this.trackerKey = '';
+      this.ui.toast(t('qj_joined', { name: questTitle(p, id) }), 4000);
+      this.tick();
+    } else if (r.reason === 'full') this.ui.toast(t('qj_full', { max: MAX_JOINED }), 5000);
+    return r.ok;
+  }
+
+  /** ✖️ Enlever une quête rejointe (sans rien perdre). */
+  leave(id) {
+    const p = this.profile;
+    if (!p || !leaveQuest(p, id)) return;
+    this.forgetQuest(id);
+    this.ui.toast(t('qj_left'), 4500);
     this.tick();
   }
 
@@ -816,28 +907,146 @@ export class Tutorial {
     this.applyTarget(res);
   }
 
-  // --- « Montre-moi »
+  // --- « Montre-moi » et la bulle de la quête
 
-  showSuggested() {
-    const q = suggestedQuest(this.profile, OBJECTIVES);
-    if (q) this.showQuest(q.id);
-  }
-
-  /** « Montre-moi » : ferme le journal et montre où faire la quête. */
+  /**
+   * Toucher le nom d'une quête (suivi à l'écran, « Montre-moi » du journal) : ferme le journal, montre où la faire
+   * (repère, cercle) et ouvre sa bulle. Pour la quête suivie : le repère de l'étape en cours revient.
+   */
   showQuest(id) {
     const p = this.profile;
     if (!p) return;
     const g = questGuide(id, p);
     if (!g) return;
-    if (p.questFollow?.id === id) return this.reshow();
-    if (p.questFollow) stopFollow(p); // une seule quête guidée à la fois
-    this.recent = { id }; // le suivi montre cette quête (🧭 pour la suivre)
-    this.trackerKey = '';
     this.ui.closePanel();
-    this.questFocus = { id, spec: g.target, until: performance.now() + 45000 };
-    this.markerKey = '';
-    this.ui.toast(`${questTitle(p, id)} — ${t(g.first ? `quest_hint_first_${g.first}` : `quest_hint_${id}`)}`, 6000);
+    if (p.questFollow?.id === id) {
+      this.markerKey = '';
+      this.highlight = null;
+    } else {
+      if (p.questFollow) stopFollow(p); // une seule quête guidée à la fois
+      this.recent = { id }; // le suivi montre cette quête (🧭 pour la suivre)
+      this.questFocus = { id, spec: g.target, until: performance.now() + 45000 };
+      this.markerKey = '';
+    }
+    this.trackerKey = '';
+    this.questBubble = { id, until: performance.now() + QUEST_BUBBLE_MS };
+    this.qbKey = '';
     this.tick();
+  }
+
+  /**
+   * Un petit mot du guide dans la bulle (pas pendant le tutoriel : alors un message) :
+   * { emoji, text, hint?, follow? (id d'une quête : bouton 🧭 Suivre), journal? (bouton 📖 Mes quêtes) }.
+   */
+  notice(n) {
+    if (this.active || this.ui.minigameOpen || !this.profile) {
+      this.ui.toast(`${n.emoji} ${n.text}${n.hint ? ` ${n.hint}` : ''}`, 6000);
+      return;
+    }
+    this.questBubble = { notice: n, until: performance.now() + QUEST_BUBBLE_MS };
+    this.qbKey = '';
+    this.tick();
+  }
+
+  /**
+   * Un chapitre de l'histoire vient d'être fini (src/game/Game.js) : bravo, et le chapitre suivant (🧭 pour le suivre).
+   * reward : « +20 🪙 » ou ''.
+   */
+  chapterDone(id, next, reward = '') {
+    const p = this.profile;
+    if (!p) return;
+    const text = `${t('qj_chapterDone', { name: questTitle(p, id) })}${reward ? ` ${reward}` : ''}`;
+    if (next) this.notice({ emoji: '⭐', text, hint: t('qj_nextChapter', { name: questTitle(p, next) }), follow: next });
+    else this.notice({ emoji: '🎉', text, hint: t('qj_storyFinished'), journal: true });
+  }
+
+  closeQuestBubble() {
+    this.questBubble = null;
+    this.qbKey = '';
+    this.bubble.hidden = true;
+    this.bubble.classList.remove('quest-bubble');
+    this.layoutTop();
+  }
+
+  /** La bulle de la quête : son nom, où aller et comment (ou ce qu'il faut d'abord), et ses boutons. */
+  renderQuestBubble() {
+    const p = this.profile;
+    const b = this.questBubble;
+    // Une fenêtre ou un mini-jeu prend la place : la bulle a fait son travail.
+    if (!p || performance.now() > b.until || this.ui.panel || this.ui.modalOpen || this.ui.minigameOpen) {
+      this.closeQuestBubble();
+      return;
+    }
+    let key;
+    let parts;
+    const btn = (label, onClick, cls = '') => h('button', { class: `qb-btn ${cls}`.trim(), onClick }, label);
+    const journal = () => btn(t('qj_myQuests'), () => { this.closeQuestBubble(); this.ui.openJournal('quest'); });
+    if (b.notice) {
+      const n = b.notice;
+      key = `n|${n.text}|${n.hint ?? ''}|${getLang()}`;
+      const buttons = [];
+      if (n.follow && questKind(p, n.follow) !== 'done') buttons.push(btn(`🧭 ${t('quest_follow')}`, () => this.startFollow(n.follow), 'primary'));
+      if (n.journal) buttons.push(journal());
+      buttons.push(btn('OK', () => this.closeQuestBubble(), n.follow || n.journal ? '' : 'primary'));
+      parts = { emoji: n.emoji, label: '', title: n.text, lines: n.hint ? [h('p', { class: 'tuto-hint' }, bubbleText(n.hint))] : [], buttons, speak: `${n.text} ${n.hint ?? ''}` };
+    } else {
+      const id = b.id;
+      const kind = questKind(p, id);
+      if (kind === 'done' || kind === 'hidden') {
+        this.closeQuestBubble();
+        return;
+      }
+      const followed = p.questFollow?.id === id;
+      const view = followed ? followView(p, OBJECTIVES) : null;
+      const o = OBJECTIVES.find((x) => x.id === id);
+      const [cur, max] = o.progress(p);
+      const blk = questBlock(id, p);
+      const why = blk ? t(blk.key, blk.params) : '';
+      const s = storyView(p);
+      const label = kind === 'main' ? t('qj_bubbleMain', { n: s.chapter, total: s.total }) : kind === 'story' ? t('qj_bubbleStory') : t('qj_bubbleSide');
+      const step = view?.current ? t(`quest_step_${view.current.id}`) : '';
+      key = `q|${id}|${kind}|${followed}|${cur}/${max}|${why}|${step}|${getLang()}`;
+      const lines = [];
+      if (why) lines.push(h('p', { class: 'tuto-hint qb-block' }, bubbleText(`🔒 ${t('qj_notYet', { why })}`)));
+      else {
+        lines.push(h('p', { class: 'tuto-hint qb-where' }, bubbleText(`📍 ${this.whereText(id)}`)));
+        if (step) lines.push(h('p', { class: 'tuto-hint qb-now' }, bubbleText(t('qj_now', { step }))));
+        else lines.push(h('p', { class: 'tuto-hint' }, bubbleText(hintText(p, id))));
+      }
+      const buttons = [];
+      if (!followed) buttons.push(btn(`🧭 ${t('quest_follow')}`, () => this.startFollow(id), 'primary'));
+      if (kind === 'main') buttons.push(btn(t('qj_skip'), () => this.skipMain(id), 'qb-skip'));
+      if (kind === 'joined') buttons.push(btn(t('qj_leaveLong'), () => this.leave(id), 'qb-leave'));
+      buttons.push(journal());
+      const reward = o.reward && !isSandbox(p) ? ` · ${o.reward} 🪙` : '';
+      parts = {
+        emoji: kind === 'main' ? '⭐' : followed ? '🧭' : '🎯',
+        label,
+        title: `${questTitle(p, id)} (${Math.min(cur, max)}/${max}${reward})`,
+        lines,
+        buttons,
+        speak: `${questTitle(p, id)}. ${why || hintText(p, id)}`,
+      };
+    }
+    if (key !== this.qbKey) {
+      this.qbKey = key;
+      this.bubble.classList.remove('cheer');
+      this.bubble.replaceChildren(
+        h('div', { class: 'tuto-guide', 'aria-hidden': 'true' }, GUIDE),
+        h('div', { class: 'tuto-main' },
+          h('div', { class: 'tuto-top' },
+            h('span', { class: 'tuto-emoji' }, parts.emoji),
+            h('span', { class: 'qb-label' }, parts.label),
+            h('button', { class: 'tuto-icon', title: t('tuto_read'), 'aria-label': t('tuto_read'), onClick: () => this.speak(parts.speak) }, '🔊'),
+            h('button', { class: 'tuto-icon qb-close', title: t('qj_close'), 'aria-label': t('qj_close'), onClick: () => this.closeQuestBubble() }, '✕')),
+          h('p', { class: 'tuto-text qb-title' }, bubbleText(parts.title)),
+          ...parts.lines,
+          h('div', { class: 'qb-actions' }, parts.buttons)),
+      );
+      this.bubble.classList.add('quest-bubble');
+    }
+    this.bubble.hidden = false;
+    this.layoutTop();
   }
 
   questEvent(name) {
@@ -870,24 +1079,4 @@ export class Tutorial {
     if (r.why === 'close') r.el = null;
     this.applyTarget(r);
   }
-}
-
-/**
- * Ligne en plus pour une quête du journal : où la faire, une aide, « Montre-moi » et « Suivre ».
- * Utilisé par openJournal (src/ui/panels.js).
- */
-export function questExtras(ui, o, done) {
-  if (o.kind !== 'quest' || done || !ui.tutorial || !ui.game?.profile) return null;
-  const tuto = ui.tutorial;
-  const p = ui.game.profile;
-  const g = questGuide(o.id, p);
-  if (!g) return null;
-  const followed = p.questFollow?.id === o.id;
-  return h('div', { class: 'quest-extra' },
-    h('span', { class: 'quest-where' }, `📍 ${tuto.whereText(o.id)}`),
-    h('span', { class: 'quest-hint' }, t(g.first ? `quest_hint_first_${g.first}` : `quest_hint_${o.id}`)),
-    h('button', { class: 'quest-show', onClick: (e) => { e.stopPropagation(); tuto.showQuest(o.id); } }, `👉 ${t('quest_showMe')}`),
-    followed
-      ? h('button', { class: 'quest-show', onClick: (e) => { e.stopPropagation(); tuto.stopFollowing(); ui.renderPanel(); } }, `✋ ${t('quest_stop')}`)
-      : h('button', { class: 'primary quest-show', onClick: (e) => { e.stopPropagation(); tuto.startFollow(o.id); } }, `🧭 ${t('quest_follow')}`));
 }

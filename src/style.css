@@ -1495,11 +1495,55 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 .qt-pill .qt-icon { font-size: 1.15rem; }
 .qt-chev { color: var(--muted); font-size: 1.35rem; font-weight: 700; line-height: 1; }
 
-/* Journal : où faire la quête et « Montre-moi ». */
-.quest-extra { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 4px; }
-.quest-where { font-weight: 700; font-size: 0.88rem; color: var(--ink); }
-.quest-hint { font-size: 0.85rem; color: var(--muted); flex-basis: 100%; }
-.quest-show { min-height: 48px; padding: 0 14px; border-radius: 12px; }
+/* Suivi à l'écran : le chapitre en cours de l'histoire (⭐) a un fond doré ; « 🔒 ce qu'il faut d'abord ». */
+#quest-tracker.main:not(.following) { background: rgba(255, 246, 214, 0.97); }
+.qt-block { color: #8a5a00; font-weight: 700; }
+
+/* Journal, onglet Quêtes (src/ui/quests.js) : quatre parties, de gros boutons faciles à toucher. */
+.quest-journal { display: grid; gap: 14px; }
+.qj-part { display: grid; gap: 8px; min-width: 0; }
+.qj-h { margin: 4px 0 0; font-size: 1.1rem; text-transform: none; letter-spacing: 0; color: var(--ink); }
+.qj-h small { font-size: 0.82rem; font-weight: 600; color: var(--muted); }
+.qj-note { margin: 0; font-size: 0.9rem; color: var(--muted); line-height: 1.35; }
+.qj-note.big { font-size: 1rem; color: var(--ink); font-weight: 600; }
+.qj-note.warn { color: #8a5a00; font-weight: 700; background: #fff4d6; border-radius: 10px; padding: 8px 10px; }
+.qcard { display: grid; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; min-width: 0; }
+.qcard.main { border: 3px solid #ffd23f; background: #fffaf0; }
+.qcard.following { border-color: var(--primary); }
+.qc-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.qc-title { overflow-wrap: break-word; line-height: 1.25; }
+.qcard.main .qc-title { font-size: 1.05rem; }
+.qc-tag { justify-self: start; font-size: 0.75rem; font-weight: 700; color: #8a5a00; background: #fff1c2; border-radius: 999px; padding: 1px 8px; }
+.qc-count { color: var(--muted); white-space: nowrap; align-self: start; }
+.qc-where { margin: 0; font-weight: 700; font-size: 0.9rem; }
+.qc-hint { margin: 0; font-size: 0.86rem; color: var(--muted); line-height: 1.3; }
+.qc-block { margin: 0; font-size: 0.88rem; font-weight: 700; color: #8a5a00; line-height: 1.3; }
+.qc-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.qc-btn { flex: 1 1 auto; min-height: 48px; padding: 0 12px; border-radius: 12px; font-size: 0.95rem; }
+.qc-skip, .qc-leave { color: var(--muted); }
+.qc-join { flex: 0 1 auto; margin-left: auto; min-width: 140px; }
+.qj-toggle { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; min-height: 52px; padding: 0 14px; font-weight: 700; font-size: 1rem; text-align: left; border-radius: 14px; }
+.qj-toggle.open { background: #f6f1e4; }
+.qj-chev { font-size: 1.2rem; color: var(--muted); }
+.qj-list { display: grid; gap: 8px; }
+.qj-skipped { display: grid; gap: 6px; background: #f6f1e4; border-radius: 12px; padding: 8px 10px; }
+.qj-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.qj-row > span { min-width: 0; overflow-wrap: break-word; font-size: 0.92rem; }
+.qj-row .qc-btn { flex: 0 0 auto; }
+.qj-done-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.qj-done-label { font-size: 0.85rem; font-weight: 700; color: var(--muted); }
+.qj-chip { font-size: 0.8rem; background: #eef8f1; border-radius: 999px; padding: 3px 9px; }
+.qj-donelist { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 0.92rem; }
+
+/* La bulle de la quête (src/ui/tutorial.js, renderQuestBubble) : la bulle du guide, avec ses boutons. */
+#tuto-bubble.quest-bubble .tuto-top { gap: 6px; }
+.qb-label { flex: 1; min-width: 0; font-size: 0.85rem; font-weight: 700; color: var(--muted); }
+#tuto-bubble.quest-bubble .qb-title { font-size: 1.1rem; }
+.qb-block { color: #8a5a00; font-weight: 700; }
+.qb-now { color: var(--ink); font-weight: 700; }
+.qb-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.qb-btn { flex: 1 1 auto; min-height: 48px; padding: 0 12px; border-radius: 12px; font-size: 0.95rem; }
+.qb-skip, .qb-leave { color: var(--muted); }
 
 /* Téléphone : la bulle prend toute la largeur sous le bloc du haut ; le suivi de quête passe à droite. */
 @media (max-width: 640px), (max-height: 480px) {
@@ -1511,6 +1555,8 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
   .tuto-hint { font-size: 0.88rem; }
   .tuto-ok { min-height: 48px; font-size: 1.05rem; }
   .tuto-icon { min-height: 44px; min-width: 44px; font-size: 1.1rem; }
+  #tuto-bubble.quest-bubble .qb-title { font-size: 1rem; }
+  .qb-btn { min-height: 44px; font-size: 0.9rem; padding: 0 10px; }
   /* Suivi de quête : contre le bord droit, sous la barre d'outils (le joystick est en bas à gauche) ; sa taille en
      portrait : #quest-tracker.compact. */
   #quest-tracker { left: auto; right: calc(8px + var(--safe-r)); }

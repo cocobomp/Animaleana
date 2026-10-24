@@ -15,5 +15,10 @@ describe('aide', () => {
     expect(searchHelp('enter a show elsewhere')[0].id).toBe('shows');
     expect(searchHelp('guide de randonnée')[0].id).toBe('trailGuide'); // 🧭 métier
     expect(searchHelp('trail guide visitors')[0].id).toBe('trailGuide');
+    // Quêtes principales et secondaires : passer, enlever, rejoindre
+    expect(searchHelp('je suis bloquée avec une quête')[0].id).toBe('quests');
+    expect(searchHelp('enlever une quête')[0].id).toBe('quests');
+    expect(searchHelp('passer un chapitre de l\'histoire')[0].id).toBe('quests');
+    expect(searchHelp('how do I remove a quest')[0].id).toBe('quests');
   });
 });

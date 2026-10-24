@@ -24,7 +24,7 @@ import { facilitiesTab } from './facilitiesPanel.js'; // onglet « Bâtiments »
 import { homeSection } from './construction.js'; // rubrique « Maison » (constructions)
 import { groomingSection } from './groomer.js'; // métier Toiletteur : coupe et accessoires
 import { travelAdvice } from './trip.js'; // voyages réalistes
-import { questExtras } from './tutorial.js';
+import { questsTab } from './quests.js'; // onglet Quêtes : histoire de la ferme, mes quêtes, autres quêtes, terminées
 import { animalActivitySection } from './activities.js';
 import { competitionSection, journalCalendarButton } from './competitions.js'; // concours à l'extérieur, dressage
 import { clientBadge, clientInfo, clientsTab } from './clients.js'; // animaux confiés par des clients
@@ -449,15 +449,16 @@ export function openJournal(ui, tab = 'quest') {
           onClick: () => { state.tab = k; ui.renderPanel(); },
         }, k === 'quest' ? `🎯 ${t('quests')}` : k === 'clients' ? `🏷️ ${t('cl_tab')}` : `🏆 ${t('achievements')}`)));
       if (state.tab === 'clients') return [tabs, ...clientsTab(ui)]; // clients (src/ui/clients.js)
+      // Quêtes : l'histoire de la ferme, mes quêtes, les autres quêtes par thème, les terminées (src/ui/quests.js).
+      if (state.tab === 'quest') return [tabs, journalCalendarButton(ui), ...questsTab(ui)]; // + calendrier des concours
       const list = OBJECTIVES.filter((o) => o.kind === state.tab && objectiveShown(p, o)).map((o) => {
         const done = p.completed.includes(o.id);
         const [cur, max] = o.progress(p);
         return h('div', { class: `objective ${done ? 'done' : ''}` },
-          h('span', { class: 'obj-icon' }, done ? '✅' : o.kind === 'quest' ? '🎯' : '🏆'),
+          h('span', { class: 'obj-icon' }, done ? '✅' : '🏆'),
           h('span', { class: 'card-main' },
             h('b', {}, t(`o_${o.id}`, objectiveParams(p, o))),
-            h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${Math.min(100, (cur / max) * 100)}%` } })),
-            questExtras(ui, o, done)), // où faire la quête + « Montre-moi » (src/ui/tutorial.js)
+            h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${Math.min(100, (cur / max) * 100)}%` } }))),
           h('small', {}, `${Math.min(cur, max)}/${max}${o.reward && !isSandbox(p) ? ` · ${o.reward} 🪙` : ''}`));
       });
       return [tabs, journalCalendarButton(ui), h('div', { class: 'objectives' }, list)]; // + calendrier des concours

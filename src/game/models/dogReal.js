@@ -2701,6 +2701,10 @@ class RealDogAnim {
     // Clips du gabarit le plus proche de la longueur des membres de la race (pattes courtes du teckel, longues des
     // lévriers…) à la place de ceux du modèle d'origine.
     this.gabarit = pickGabarit(base.gabarits, B.legs, B.paws);
+    // (pied posé en virage, voir footLock : écart latéral du membre jusqu'à 0,6 rad pour les petits chiens et les pattes
+    // courtes, 0,38 pour les membres longs — à 0,6 pour tous, le membre du labrador s'écartait de 30° au lieu de 24°, celui
+    // du saint-bernard de 36° en virage serré, sans pied qui glisse moins)
+    this.sideMax = B.model === 'jack' || B.legs < 0.85 ? 0.6 : 0.38;
     // (assis des pattes courtes : celui du gabarit fondu avec celui de sa variante selon la longueur du dos — teckel,
     // corgi aux reins fléchis ; chiots carlin et bouledogue, trapus, sans)
     for (const [name, clip] of Object.entries(dogClips(base, this.gabarit, B.back ?? 1))) {
@@ -3796,11 +3800,12 @@ class RealDogAnim {
         // (trop loin de sa place, le pied repart : nouvelle prise d'appui, la correction s'efface en fondu)
         const off = !pass && Math.abs(ez) > 0.45 * Lg;
         // (rotation +θ autour de x : le pied, sous l'articulation, recule de L sin θ ; +φ autour de z : il part vers +x
-        // de L sin φ ; bornées — sur le côté jusqu'à 0,6 rad : en virage serré au pas, le corps tourne sous le pied
+        // de L sin φ ; bornées — sur le côté jusqu'à sideMax : en virage serré au pas, le corps tourne sous le pied
         // posé ; bornée à 0,2, la correction ne suivait plus et le postérieur des pattes courtes glissait de 8 à 10 cm
-        // par appui, à 0,38 encore de 4 à 6 cm — teckel, corgi, jack russell ; les membres longs n'y arrivent pas)
+        // par appui, à 0,38 encore de 4 à 6 cm — teckel, corgi, jack russell)
+        const sm = this.sideMax;
         const dth = clamp(Math.asin(clamp(ez / Lg, -0.5, 0.5)), -0.52 - th, 0.52 - th);
-        const dph = clamp(-Math.asin(clamp(ex / Lg, -0.6, 0.6)), -0.6 - ph, 0.6 - ph);
+        const dph = clamp(-Math.asin(clamp(ex / Lg, -sm, sm)), -sm - ph, sm - ph);
         const moved = Math.abs(dth) >= 1e-4 || Math.abs(dph) >= 1e-4;
         if (moved) {
           th += dth;

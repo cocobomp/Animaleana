@@ -749,4 +749,14 @@ describe('pieds posés en virage', () => {
       for (const x of r) expect(x, breed).toBeLessThan(2);
     }
   });
+
+  it('membres longs : écart latéral du membre borné comme avant (0,38 rad), pattes courtes et petits chiens 0,6', () => {
+    // (finitions 2 : 0,6 pour toutes les races — membre du labrador écarté de 30 → 33°, du saint-bernard 31 → 36° en
+    // virage à 2 rad/s, sans pied qui glisse moins)
+    for (const [breed, want] of [['labrador', 0.38], ['saint_bernard', 0.38], ['galgo', 0.38], ['beagle', 0.38], ['teckel', 0.6], ['jack_russell', 0.6], ['cavalier', 0.6]]) {
+      const { md } = dog(breed);
+      expect(md.anim.sideMax, breed).toBe(want);
+      md.dispose();
+    }
+  });
 });

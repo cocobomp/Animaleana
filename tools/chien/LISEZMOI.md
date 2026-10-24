@@ -406,3 +406,7 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   une teinte de gencive brun rose sombre, plus sombre au fond, là où la robe calculée est claire (jack russell, cavalier,
   corgi : avant, poil blanc verdi par le ciel, vert olive ; carlin et bouledogue, lèvres déjà noires, inchangés). Reste :
   vu de très près, le bord est en dents de scie (classement par face) ; pas de dents modelées.
+- **Écart latéral des membres en virage** (`footLock`, `sideMax`) : la borne de 0,6 rad (finitions 2) ne vaut que pour les
+  races du jack et les membres courts (longueur < 0,85 : chiots du shiba) ; les membres longs gardent 0,38 rad. En virage
+  à 2 rad/s, membre le plus écarté : labrador 33 → 30°, saint-bernard 36 → 31°, husky 28 → 25°, galgo 28 → 24° (valeurs
+  de main) ; pieds posés inchangés ; teckel et jack russell inchangés (glissement en virage de la reprise gardé).

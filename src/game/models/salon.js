@@ -277,6 +277,7 @@ export function buildAccessories(model, look, accessories = {}) {
       // (bande plate, comme le collier : voir flatBand)
       const band = 0.01;
       const torus = new THREE.Mesh(flatBand(rx, ry, 0.003, band), mat(worn.id === 'bandana' ? color : 0x3a2a20, 0.6));
+      torus.userData.collarBand = true;
       frame.add(torus);
       // (chien réaliste : le poil est serré sous la bande, comme sous le collier — voir dogReal.js setGroove)
       if (model.setGroove) {
@@ -324,6 +325,7 @@ export function buildAccessories(model, look, accessories = {}) {
             c.material.dispose();
           });
           m.castShadow = true;
+          // (chat : d'un bloc, avec les poids de la peau sous son centre)
           out.push(model.skinGear(m));
         } else {
           // (lié au squelette : il suit le cou et le poitrail, assis comme debout)
@@ -333,6 +335,8 @@ export function buildAccessories(model, look, accessories = {}) {
           out.push(sk);
         }
         model.neck.add(frame);
+        // (chat réaliste : la bande aussi est liée au squelette, comme le collier — gearModels.js)
+        if (model.skinCollar) out.push(...model.skinCollar(frame, rx, ry));
         out.push(frame);
         continue;
       }
@@ -369,6 +373,7 @@ export function buildAccessories(model, look, accessories = {}) {
         }
       }
       model.neck.add(frame);
+      if (model.skinCollar) out.push(...model.skinCollar(frame, rx, ry));
       out.push(frame);
       continue;
     }

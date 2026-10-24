@@ -94,13 +94,8 @@ export function makeCatCoatUniforms() {
     cCut: { value: new THREE.Vector4(0, 0, 0, 0) },
     cEyeL: { value: new THREE.Color() },
     cEyeR: { value: new THREE.Color() },
-    // Collier porté (catReal.js setGroove) : le poil long est couché sous sa bande. Centre et axe du cou dans la pose de
-    // liaison (repère des sommets), demi-axes de l'ellipse, demi-largeur de la bande, w : 1 si porté.
-    cCollarC: { value: new THREE.Vector3() },
-    cCollarN: { value: new THREE.Vector3(0, 0, 1) },
-    // (côté de l'anneau, pour l'ellipse ; os qui porte le collier : la bande est retrouvée dans la pose du moment)
-    cCollarX: { value: new THREE.Vector3(1, 0, 0) },
-    cCollarB: { value: 0 },
+    // Collier porté (catReal.js setGroove) : demi-axes de l'ellipse, demi-largeur de la bande, w : 1 si porté. La robe
+    // serrée et le poil couché sous la bande sont mesurés une fois debout (attribut cmpCollar, catReal.js collarStand).
     cCollarR: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
 }
@@ -154,11 +149,10 @@ uniform float cFat;
 uniform float cBreath;
 uniform float cPuff;
 uniform vec4 cCut;
-uniform vec3 cCollarC;
-uniform vec3 cCollarN;
-uniform vec3 cCollarX;
-uniform float cCollarB;
 uniform vec4 cCollarR;
+// (collier : déplacement de la robe sous la bande, dans la pose de liaison ; w : 1 - part de poil couché. Sans
+// l'attribut — paupières — : (0, 0, 0, 1), rien)
+attribute vec4 cmpCollar;
 varying vec3 vCmpPos;
 varying vec4 vCmpPart;
 varying float vCmpLow;`;
@@ -166,7 +160,10 @@ varying float vCmpLow;`;
 const REST_V = /* glsl */ `
 vCmpPos = cmpRest;
 vCmpPart = cmpPart;
-vCmpLow = cmpLow;`;
+vCmpLow = cmpLow;
+// Collier porté : la robe qui dépassait de la bande est ramenée sous elle (mesuré debout, ajouté avant les os : elle
+// suit la peau comme la bande, elle aussi liée au squelette)
+transformed += cmpCollar.xyz * cCollarR.w;`;
 
 // Embonpoint (ventre et flancs), respiration (cage thoracique), queue gonflée et coupe du salon, le long de la normale
 // du sommet déformé.
@@ -188,37 +185,10 @@ const PUSH_V = /* glsl */ `
     float tip = cmpPart.y * smoothstep(0.75, 0.9, distance(cmpRest, cTailB.xyz) / cTailB.w);
     push += cCut.x * tr + cCut.y * ruff + cCut.z * pom + cCut.w * tip;
   }
+  // (collier porté : sous sa bande, le poil est couché — rien ne regonfle la robe serrée)
+  push *= 1.0 - cCollarR.w * (1.0 - cmpCollar.w);
   // (jamais normalize(0) : une normale nulle donne NaN, et NaN × 0 reste NaN — un sommet perdu à l'infini)
   if (push != 0.0) transformed += objectNormal * (push / max(1e-6, length(objectNormal)));
-  // Collier porté : sous sa bande (et un peu au-delà, en fondu), la robe qui dépasse de l'ellipse du collier est
-  // ramenée sous lui, vers l'axe du cou — le poil est serré par le collier (sans cela, la collerette du poil long
-  // couvrait l'avant du collier sous le menton). Les sommets serrés sont choisis au repos (zone de l'anneau, jamais la
-  // tête) ; l'ellipse est retrouvée dans la pose du moment par la matrice de l'os qui porte le collier, et la peau y
-  // est ramenée juste sous la bande (4 mm : la moitié de son épaisseur).
-  #ifdef USE_SKINNING
-  if (cCollarR.w > 0.0) {
-    vec3 dq = (bindMatrix * vec4(position, 1.0)).xyz - cCollarC;
-    float dd = dot(dq, cCollarN);
-    vec3 rq = dq - dd * cCollarN;
-    float rlq = max(length(rq), 1e-5);
-    float uq = dot(rq, cCollarX) / rlq;
-    float req = inversesqrt(uq * uq / (cCollarR.x * cCollarR.x) + max(0.0, 1.0 - uq * uq) / (cCollarR.y * cCollarR.y));
-    float zone = (1.0 - smoothstep(cCollarR.z, cCollarR.z * 2.8, abs(dd))) * (1.0 - smoothstep(1.3, 1.8, rlq / req))
-      * (1.0 - smoothstep(0.4, 0.8, cmpPart.z));
-    if (zone > 0.0) {
-      mat4 nb = bindMatrixInverse * getBoneMatrix(cCollarB);
-      vec3 cp = (nb * vec4(cCollarC, 1.0)).xyz;
-      vec3 np = normalize(mat3(nb) * cCollarN);
-      vec3 xp = normalize(mat3(nb) * cCollarX);
-      vec3 dp = transformed - cp;
-      vec3 rv = dp - dot(dp, np) * np;
-      float rl = max(length(rv), 1e-5);
-      float ux = dot(rv, xp) / rl;
-      float re = inversesqrt(ux * ux / (cCollarR.x * cCollarR.x) + max(0.0, 1.0 - ux * ux) / (cCollarR.y * cCollarR.y)) - 0.004;
-      transformed -= rv * (max(0.0, rl - re) / rl) * zone;
-    }
-  }
-  #endif
 }`;
 
 const COMMON_F = /* glsl */ `
@@ -720,7 +690,7 @@ export function catCoatMaterial(src, shared, opts) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.55, cHair.x), 0.45, cWet);');
   };
-  mat.customProgramCacheKey = () => 'cat-coat-v8';
+  mat.customProgramCacheKey = () => 'cat-coat-v9';
   return mat;
 }
 
@@ -804,13 +774,7 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
     len += cFurMap.y * ruff + cFurMap.z * br + cFurMap.w * cmpPart.y * smoothstep(0.05, 0.2, distance(cmpRest, cTailB.xyz) / cTailB.w);
     // (collier porté : le poil est couché sous sa bande et un peu au-delà, en fondu — sinon la collerette du maine coon ou
     // du persan l'engloutissait, seul un bout dépassait à la nuque)
-    if (cCollarR.w > 0.0) {
-      vec3 dpc = position - cCollarC;
-      float dc = dot(dpc, cCollarN);
-      float rc = length(dpc - dc * cCollarN);
-      float bandC = (1.0 - smoothstep(cCollarR.z, cCollarR.z * 2.6, abs(dc))) * (1.0 - smoothstep(1.5, 2.2, rc / max(1e-4, max(cCollarR.x, cCollarR.y))));
-      len *= 1.0 - 0.92 * bandC;
-    }
+    len *= 1.0 - 0.92 * cCollarR.w * (1.0 - cmpCollar.w);
     vShellLen = len;
     transformed += objectNormal * (len * cShellK / max(1e-6, length(objectNormal)));
     // (le poil long retombe un peu : les couches extérieures descendent)
@@ -820,7 +784,7 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
       .replace('#include <common>', `#include <common>\n${SHELL_F}`)
       .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${SHELL_DISCARD_F}`);
   };
-  mat.customProgramCacheKey = () => 'cat-shell-v8';
+  mat.customProgramCacheKey = () => 'cat-shell-v9';
   mat.side = THREE.FrontSide;
   // (couches dessinées après les objets opaques, dans l'ordre : renderOrder croissant, voir catReal.js)
   mat.transparent = true;

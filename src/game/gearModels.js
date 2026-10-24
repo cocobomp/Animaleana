@@ -596,7 +596,15 @@ function buildDogGear(model, gear, add) {
     dRing.position.set(0, c.ry + gap + th * 2 + band * 0.6, 0);
     dRing.rotation.y = Math.PI / 2;
     ring.add(dRing);
+    torus.userData.collarBand = true;
+    medal.userData.collarMedal = true;
     add.group(c.bone, ring);
+    // Chat réaliste (catReal.js skinCollar) : les pièces sont liées au squelette, la bande prend les poids de la peau
+    // sous elle tout autour, boucle, médaille et anneau ceux de la bande à leur place. Rigide sur l'os du cou, l'anneau
+    // quittait la peau dès que le cou se pliait (sa gorge suit surtout les pattes avant) : cerceau autour du poitrail
+    // couché, bandoulière assis, barre au-dessus de la tête en mangeant. (ring reste, vide, sur l'os du cou : il porte
+    // le sillon et ce qu'il faut libérer.)
+    if (model.skinCollar) for (const sk of model.skinCollar(ring, c.rx + gap, c.ry + gap)) add.group(model.root, sk);
     // (le poil est serré sous la bande : sillon du collier dans la robe, retiré avec lui)
     const groove = { dispose: () => model.setGroove?.(ring, null) };
     model.setGroove?.(ring, { rx: c.rx + gap, ry: c.ry + gap, w });

@@ -4,7 +4,7 @@
 // graines fixes, pas de temps fixe, aucun Math.random (le mixeur est appelé avec des états donnés).
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import * as THREE from 'three';
-import { buildRealCatModel, realCatBase } from '../src/game/models/catReal.js';
+import { buildRealCatModel, realCatBase, realCatPose } from '../src/game/models/catReal.js';
 import { buildGear } from '../src/game/gearModels.js';
 import { catLookWithBreed } from '../src/sim/catLook.js';
 import { SPECIES } from '../src/sim/species.js';
@@ -412,46 +412,20 @@ describe('collier sous le menton', () => {
   // avant) : l'ellipse s'arrêtait 3 à 6 cm au-dessus, et l'avant du collier passait dans le cou, caché sous le menton et
   // la collerette (maine coon, norvégien, ragdoll, persan ; le dessous seul chez l'européen). Mesure : depuis une caméra
   // devant la tête (comme la vue « face » des planches), part des points du dessous de la bande (150° à 210°) que la
-  // robe ne cache pas. La robe est prise telle que le shader la montre : serrée sous la bande (réplique de PUSH_V,
-  // catCoat.js : sommets choisis au repos, ellipse retrouvée dans la pose par la matrice de l'os du collier).
+  // robe ne cache pas. La robe est prise telle que le shader la montre : serrée sous la bande (déplacement cmpCollar
+  // ajouté avant les os, catCoat.js / catReal.js collarStand).
   function wornCoat(md) {
     const m = md.coatMesh;
     const geo = m.geometry;
     const pos = geo.attributes.position;
-    const part = geo.attributes.cmpPart;
-    const u = md.uniforms;
-    const C = u.cCollarC.value;
-    const N = u.cCollarN.value;
-    const X = u.cCollarX.value;
-    const R = u.cCollarR.value;
-    const bone = m.skeleton.bones[u.cCollarB.value];
-    // (matrice de l'os dans le repère du maillage, comme bindMatrixInverse * getBoneMatrix)
-    const nb = new THREE.Matrix4().copy(m.bindMatrixInverse).multiply(bone.matrixWorld).multiply(m.skeleton.boneInverses[u.cCollarB.value]);
-    const cp = C.clone().applyMatrix4(nb);
-    const np = N.clone().transformDirection(nb);
-    const xp = X.clone().transformDirection(nb);
-    const sm = (a, b, x) => {
-      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-      return t * t * (3 - 2 * t);
-    };
-    const ell = (ux) => 1 / Math.sqrt((ux * ux) / (R.x * R.x) + Math.max(0, 1 - ux * ux) / (R.y * R.y));
+    const cc = geo.attributes.cmpCollar;
+    const on = md.uniforms.cCollarR.value.w;
     const out = new Float32Array(pos.count * 3);
-    const q = new THREE.Vector3();
     const t = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++) {
-      q.fromBufferAttribute(pos, i).applyMatrix4(m.bindMatrix).sub(C);
-      const dd = q.dot(N);
-      q.addScaledVector(N, -dd);
-      const rlq = Math.max(q.length(), 1e-5);
-      const zone = (1 - sm(R.z, R.z * 2.8, Math.abs(dd))) * (1 - sm(1.3, 1.8, rlq / ell(q.dot(X) / rlq))) * (1 - sm(0.4, 0.8, part.getZ(i)));
-      m.getVertexPosition(i, t);
-      if (zone > 0 && R.w > 0) {
-        const rv = t.clone().sub(cp);
-        rv.addScaledVector(np, -rv.dot(np));
-        const rl = Math.max(rv.length(), 1e-5);
-        const re = ell(rv.dot(xp) / rl) - 0.004;
-        t.addScaledVector(rv, (-Math.max(0, rl - re) / rl) * zone);
-      }
+      t.fromBufferAttribute(pos, i);
+      if (cc && on) t.add(new THREE.Vector3(cc.getX(i), cc.getY(i), cc.getZ(i)).multiplyScalar(on));
+      m.applyBoneTransform(i, t);
       t.applyMatrix4(m.matrixWorld);
       out.set([t.x, t.y, t.z], i * 3);
     }
@@ -470,7 +444,7 @@ describe('collier sous le menton', () => {
     const g = buildGear(md, lookOf(b), { neck: { item: 'collar', color: 'red' } });
     md.root.updateMatrixWorld(true);
     const F = md.dogFit.collar;
-    const ring = F.bone.children.find((o) => !o.isBone && o.children?.length);
+    const ring = F.bone.children.find((o) => !o.isBone); // (repère de l'anneau mesuré, sur l'os du cou)
     const coat = wornCoat(md);
     // caméra : devant la tête (le chat regarde vers +z), à sa hauteur
     const cam = md.head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0.02, 0.01, 0.35).transformDirection(md.root.matrixWorld).multiplyScalar(0.35 * md.root.scale.x));
@@ -488,8 +462,13 @@ describe('collier sous le menton', () => {
       if (!ray.intersectObject(coat).length) seen++;
     }
     expect(seen / N, `${b} ${stage} : ${seen}/${N} points du dessous de la bande visibles`).toBeGreaterThanOrEqual(5 / 7);
-    // (sillon : réglé par le collier, retiré avec lui)
-    expect(md.uniforms.cCollarB.value).toBe(md.coatMesh.skeleton.bones.indexOf(F.bone));
+    // (bande liée au squelette, debout à la place de l'anneau mesuré ; sillon réglé par le collier, retiré avec lui)
+    let band = null;
+    for (const h of g.userData.meshes) h.traverse((o) => {
+      if (o.userData?.collarBand) band = o;
+    });
+    expect(band?.isSkinnedMesh).toBe(true);
+    expect(md.uniforms.cCollarR.value.w).toBe(1);
     for (const h of g.userData.meshes) for (const x of h.userData?.dispose ?? []) x.dispose?.();
     expect(md.uniforms.cCollarR.value.w).toBe(0);
     coat.geometry.dispose();
@@ -559,6 +538,92 @@ describe('fourrure sous les yeux', () => {
     const md = cat('british', 'baby');
     const o = md.uniforms.cEyeUv.value;
     expect(o.x === 0 && o.y === 0 && o.z === 0 && o.w === 0).toBe(true);
+    md.dispose();
+  });
+});
+
+describe('collier lié à la peau', () => {
+  // Anneau rigide porté par l'os du cou (même agrandi jusqu'à la gorge) : il quittait la peau dès que le cou se pliait —
+  // la gorge suit surtout les pattes avant — : cerceau autour du poitrail couché (médaille au sol), bandoulière assis,
+  // barre au-dessus de la tête en mangeant, patte levée passée dedans. Lié au squelette, chaque point de la bande reste
+  // près du point de peau qu'il touchait debout. Mesure : écart bande–peau de chaque sommet de la bande à son sommet de
+  // peau le plus proche debout, comparé debout et dans la pose (avant, en mangeant : 4 à 10 cm au pire, 2 à 6 cm en
+  // médiane ; maintenant au plus 0,2 cm en médiane, 1,4 cm pour 9 points sur 10). Peau telle que le shader la montre
+  // (serrée sous la bande).
+  const skinNow = (md) => {
+    const m = md.coatMesh;
+    const geo = m.geometry;
+    const cc = geo.attributes.cmpCollar;
+    const on = md.uniforms.cCollarR.value.w;
+    md.root.updateMatrixWorld(true);
+    const out = [];
+    for (let i = 0; i < geo.attributes.position.count; i++) {
+      const t = new THREE.Vector3().fromBufferAttribute(geo.attributes.position, i);
+      if (cc && on) t.add(new THREE.Vector3(cc.getX(i), cc.getY(i), cc.getZ(i)).multiplyScalar(on));
+      m.applyBoneTransform(i, t);
+      out.push(t.applyMatrix4(m.matrixWorld));
+    }
+    return out;
+  };
+  const verts = (m) => {
+    const out = [];
+    for (let i = 0; i < m.geometry.attributes.position.count; i++) out.push(m.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(m.matrixWorld));
+    return out;
+  };
+  const near = (S, q) => {
+    let d = Infinity;
+    let j = -1;
+    for (let k = 0; k < S.length; k++) {
+      const e = S[k].distanceToSquared(q);
+      if (e < d) {
+        d = e;
+        j = k;
+      }
+    }
+    return j;
+  };
+  const pose = (md, p) => {
+    if (p === 'groom' || p === 'eat') {
+      md.staticPose(p === 'groom' ? 'sit' : 'stand');
+      for (let i = 0; i < 180; i++) md.anim.update(1 / 60, { moving: false, v: 0, posture: p === 'groom' ? 'groom' : 'crouch' });
+    } else if (p === 'highfive') {
+      md.staticPose('sit');
+      for (let i = 0; i < 40; i++) {
+        realCatPose(md, 'highfive', 1);
+        md.anim.update(1 / 60, { moving: false, v: 0, posture: 'sit' });
+      }
+    } else md.staticPose(p);
+    md.root.updateMatrixWorld(true);
+  };
+  it.each([['europeen', 'adult'], ['maine_coon', 'adult'], ['persan', 'adult'], ['europeen', 'baby']])('%s (%s) : la bande reste sur la peau couché, assis, à la toilette, en mangeant, patte levée', (b, stage) => {
+    const md = cat(b, stage);
+    md.staticPose('stand');
+    const g = buildGear(md, lookOf(b), { neck: { item: 'collar', color: 'red' } });
+    let band = null;
+    let medal = null;
+    for (const h of g.userData.meshes) h.traverse((o) => {
+      if (o.userData?.collarBand) band = o;
+      if (o.userData?.collarMedal) medal = o;
+    });
+    md.root.updateMatrixWorld(true);
+    const S0 = skinNow(md);
+    const B0 = verts(band);
+    const anc = B0.map((q) => near(S0, q));
+    const d0 = B0.map((q, k) => q.distanceTo(S0[anc[k]]));
+    const sc = md.root.matrixWorld.getMaxScaleOnAxis();
+    const inv = new THREE.Matrix4();
+    for (const p of ['lie', 'sit', 'groom', 'eat', 'highfive']) {
+      pose(md, p);
+      const S = skinNow(md);
+      const dr = verts(band).map((q, k) => Math.abs(q.distanceTo(S[anc[k]]) - d0[k]) / sc).sort((x, y) => x - y);
+      expect(dr[dr.length >> 1], `${b} ${stage} ${p} : dérive médiane (m)`).toBeLessThan(0.005);
+      // (9 points sur 10 : le pire, ancré debout près de la tête ou du côté de la patte levée — la peau de la gorge suit
+      // l'humérus, la bande pour moitié l'omoplate —, n'est pas pris)
+      expect(dr[Math.floor(dr.length * 0.9)], `${b} ${stage} ${p} : dérive de 9 points sur 10 (m)`).toBeLessThan(0.02);
+      inv.copy(md.root.matrixWorld).invert();
+      const mc = verts(medal).reduce((a, v) => a.add(v.applyMatrix4(inv)), new THREE.Vector3()).multiplyScalar(1 / medal.geometry.attributes.position.count);
+      expect(mc.y, `${b} ${stage} ${p} : médaille au-dessus du sol (m)`).toBeGreaterThan(0.005);
+    }
     md.dispose();
   });
 });

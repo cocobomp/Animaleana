@@ -296,7 +296,9 @@ describe('collier des chats à poil long', () => {
     });
     expect(shell, 'couches du poil (qualité haute)').toBeTruthy();
     const sh = compile(shell.material);
-    expect(sh.vertexShader).toContain('len *= 1.0 - 0.92 * bandC');
+    // (poil couché sous la bande : part mesurée debout, attribut cmpCollar.w — catReal.js collarStand)
+    expect(sh.vertexShader).toContain('len *= 1.0 - 0.92 * cCollarR.w * (1.0 - cmpCollar.w)');
+    expect(sh.vertexShader).toContain('transformed += cmpCollar.xyz * cCollarR.w');
     const R = sh.uniforms.cCollarR.value;
     expect(R.w).toBe(0);
     const g = buildGear(md, lookOf(b), { neck: { item: 'collar', color: 'red' } });
@@ -304,27 +306,43 @@ describe('collier des chats à poil long', () => {
     const F = md.dogFit.collar;
     expect(R.x).toBeGreaterThan(F.rx);
     expect(R.z).toBeGreaterThan(0.005);
-    // (la bande, repérée dans la pose de liaison, tombe sur l'anneau une fois le chat debout)
+    // Debout, la robe serrée (déplacement ajouté avant les os, comme le shader) ne dépasse plus la bande : dans la
+    // tranche de la bande, aucun sommet hors du dedans de la bande (ellipse + 6 mm), et la collerette y était bien.
     md.staticPose('stand');
     md.root.updateMatrixWorld(true);
-    const C = sh.uniforms.cCollarC.value;
-    const N = sh.uniforms.cCollarN.value;
-    const ring = F.bone.localToWorld(F.center.clone());
-    const nW = F.normal.clone().transformDirection(F.bone.matrixWorld);
     const m = md.coatMesh;
-    const pos = m.geometry.attributes.position;
-    const v = V();
+    const geo = m.geometry;
+    const cc = geo.attributes.cmpCollar;
+    expect(cc, 'attribut de la robe serrée').toBeTruthy();
+    const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+    const { center: C, axis: N } = F.rest;
+    const X = V(1, 0, 0).addScaledVector(N, -N.x).normalize();
+    const ell = (u) => 1 / Math.sqrt((u * u) / (F.rx + 0.006) ** 2 + Math.max(0, 1 - u * u) / (F.ry + 0.006) ** 2);
     let n = 0;
-    let sum = 0;
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i).sub(C);
-      const d = v.dot(N);
-      if (Math.abs(d) > 0.004 || v.addScaledVector(N, -d).length() > 2 * Math.max(F.rx, F.ry)) continue;
-      sum += Math.abs(m.getVertexPosition(i, _v).applyMatrix4(m.matrixWorld).sub(ring).dot(nW));
-      n++;
+    let out0 = 0;
+    let out1 = 0;
+    const v = V();
+    const d = V();
+    for (let i = 0; i < geo.attributes.position.count; i++) {
+      if (geo.attributes.cmpPart.getZ(i) > 0.4) continue;
+      for (const k of [0, 1]) {
+        v.fromBufferAttribute(geo.attributes.position, i);
+        if (k) v.add(V(cc.getX(i), cc.getY(i), cc.getZ(i)));
+        m.applyBoneTransform(i, v);
+        v.applyMatrix4(m.matrixWorld).applyMatrix4(inv);
+        d.copy(v).sub(C);
+        const dd = d.dot(N);
+        if (Math.abs(dd) > 0.006) continue;
+        d.addScaledVector(N, -dd);
+        const rl = d.length();
+        if (rl > 2.5 * Math.max(F.rx, F.ry)) continue;
+        if (!k) n++;
+        if (rl > ell(d.dot(X) / rl) + 0.001) k ? out1++ : out0++;
+      }
     }
     expect(n).toBeGreaterThan(10);
-    expect(sum / n).toBeLessThan(0.009);
+    expect(out0, 'sans serrer : la collerette passait par-dessus la bande').toBeGreaterThan(0);
+    expect(out1).toBe(0);
     for (const h of g.userData.meshes) for (const x of h.userData?.dispose ?? []) x.dispose?.();
     expect(R.w).toBe(0);
     md.dispose();

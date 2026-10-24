@@ -166,11 +166,27 @@ comparaisons), dans la même lumière et au même cadrage.
   (`dogFit`/`accessoryFit` : `gearModels.js`, `salon.js`, `Beauty.js`) ; accessoires du salon (nœud, fleur,
   chapeau sur le crâne, bandana qui pend vers le sol, nœud de queue). Collier du chaton mesuré du poitrail vers la
   tête : sur l'encolure, plus un cerceau autour du crâne. La coupe du cou compte aussi la gorge (sa peau est portée
-  surtout par les pattes avant : sans elle, l'avant du collier passait 3 à 6 cm dans le cou, caché sous le menton) ;
-  la robe est serrée sous la bande dans le shader (`catCoat.js`, pose du moment retrouvée par l'os du cou). De face,
-  dessous de la bande visible : 0/7 → 7/7 points (`catFin2.test.js`), pixels du collier sous le menton 0 → 360 à
-  400 (maine coon, norvégien, ragdoll, persan). Nœud, grelot et foulard posés sur le bas de la bande, à leur taille
-  d'avant (`span`). Reste : en mangeant (tête baissée), l'anneau porté par l'os du cou sort encore de la peau.
+  surtout par les pattes avant : sans elle, l'avant du collier passait 3 à 6 cm dans le cou, caché sous le menton).
+  De face, dessous de la bande visible : 0/7 → 7/7 points (`catFin2.test.js`), pixels du collier sous le menton 0 →
+  360 à 400 (maine coon, norvégien, ragdoll, persan).
+  **Collier lié au squelette** (`catReal.js` collarStand / skinCatGear / skinCatCollar) : rigide sur l'os du cou,
+  l'anneau quittait la peau dès que le cou se pliait (la gorge suit surtout les pattes avant) — cerceau autour du
+  poitrail couché, médaille au sol, bandoulière assis, barre au-dessus de la tête en mangeant, patte levée passée
+  dedans. Une fois par gabarit, dans la pose debout de la mesure : matrices de peau de chaque os, peau debout, poids
+  de l'anneau tout autour (48 angles, pris sur la peau sous la bande, lissés ; la moitié du poids des pattes avant
+  reportée sur l'omoplate, sinon la bande partait en écharpe avec la patte levée). La bande prend ces poids sommet
+  par sommet ; boucle, médaille, anneau de laisse, grelot ceux de la bande à leur angle, d'un bloc ; le repère de
+  l'anneau reste, vide, sur l'os du cou (sillon, libération). La robe serrée sous la bande est mesurée debout et
+  ramenée dans la pose de liaison (attribut `cmpCollar` : déplacement ajouté avant les os, part de poil couché) : elle
+  suit la peau comme la bande. Pièces dessinées après les couches de poil (le poil long ne passe plus par-dessus).
+  Dérive de la bande par rapport à la peau qu'elle touchait debout (7 races adultes, 2 chatons ; couché, assis,
+  toilette, mange, patte levée) : médiane jusqu'à 5,7 cm → 0,3 cm au plus, au pire jusqu'à 11 cm → 4,7 cm (en boule
+  4,5–16 → 1–10 cm) ; médaille couchée à 1,2–5,4 cm du sol (anneau agrandi rigide : 0,6–3,8 ; main : cachée dans le
+  cou) ; médaille d'un bloc avec la bande (dérive au plus 1,2 cm, main 11,6 cm) — `catFin2.test.js` « collier lié à
+  la peau », mesure `zz_collier.test.js` dans le dossier des planches. Coût : un
+  attribut de 154 Ko par gabarit, +4 ms au premier chat d'une race (collier : 2 à 10 ms à l'équiper, foulard 25 ms),
+  mêmes appels de dessin qu'avant.
+  Accessoires du salon : la bande et les pièces posées dessus liées de même.
 - **Performance** : version allégée au loin (5 m en basse qualité, 12 m en haute), boîte des os pour le
   « frustum culling », chats hors du champ animés une image sur trois (sauf guidés, portés, perchés), couches de
   poil en haute qualité seulement et de près.

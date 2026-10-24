@@ -1629,22 +1629,14 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     releaseShape(S);
   };
   fitCollar(model, base, S);
-  // Sillon du collier (catCoat.js, cCollar*) : le poil long est couché sous la bande d'un collier ou d'un accessoire du
-  // cou porté (gearModels.js, salon.js). key : qui le porte ; null le retire. Plusieurs : l'ellipse la plus petite.
-  // L'anneau, porté par l'os du cou, est ramené dans la pose de liaison (repère des sommets) par l'inverse de sa matrice
-  // de liaison.
-  {
-    const F = model.dogFit.collar;
-    const bi = skeleton.bones.indexOf(F.bone);
-    if (bi >= 0) {
-      const toBind = skeleton.boneInverses[bi].clone().invert();
-      uniforms.cCollarC.value.copy(F.center).applyMatrix4(toBind);
-      uniforms.cCollarN.value.copy(F.normal).transformDirection(toBind);
-      // (côté de l'anneau, et l'os qui le porte : la robe est serrée sous la bande dans la pose du moment)
-      uniforms.cCollarX.value.set(1, 0, 0).applyQuaternion(F.q).transformDirection(toBind);
-      uniforms.cCollarB.value = bi;
-    }
-  }
+  // Collier et accessoires du cou liés au squelette (voir collarStand) : ils suivent la peau dans toutes les poses.
+  // skinGear : une pièce posée dans la pose debout de la mesure (repère du chat) ; skinCollar : les pièces d'un repère
+  // d'anneau (gearModels.js, salon.js) ; drapeChest : points posés sur le devant de la peau debout (bavette du salon).
+  model.skinGear = (mesh, opts) => skinCatGear(model, S, mesh, opts);
+  model.skinCollar = (frame, rx, ry) => skinCatCollar(model, S, frame, rx, ry);
+  model.drapeChest = (pts, clear) => drapeCatChest(S, pts, clear);
+  // Sillon du collier (catCoat.js : cmpCollar, cCollarR) : le poil long est couché et la robe serrée sous la bande d'un
+  // collier ou d'un accessoire du cou porté (gearModels.js, salon.js). key : qui le porte ; null le retire.
   const grooves = new Map();
   model.setGroove = (key, g = null) => {
     if (g) grooves.set(key, g);
@@ -1770,6 +1762,7 @@ function fitCollar(model, base, S) {
       normal: axis.clone().applyQuaternion(nq),
       q: nq.clone().multiply(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(lx, ly, axis))),
       rx, ry, span,
+      stand: collarStand(model, base, S, center, axis, lx, ly, rx, ry),
     };
   }
   model.anim.resync();
@@ -1780,6 +1773,342 @@ function fitCollar(model, base, S) {
   fit.rx = F.rx;
   fit.ry = F.ry;
   fit.span = F.span;
+  // (repère debout du collier, repère du chat : bavette du salon — salon.js dogBib —, comme le « rest » du chien)
+  fit.rest = { center: F.stand.C.clone(), axis: F.stand.N.clone(), chinY: F.stand.chinY, bellyY: F.stand.bellyY };
+}
+
+// ------------------------------------------------------------------ collier lié au squelette
+
+/** Demi-diamètre d'une ellipse (demi-axes a, b) dans la direction de cosinus u depuis l'axe a. */
+const ellR = (a, b, u) => 1 / Math.sqrt((u * u) / (a * a) + Math.max(0, 1 - u * u) / (b * b));
+// (écart de la bande du collier à l'ellipse mesurée, demi-largeur de la bande : gearModels.js buildDogGear)
+const COLLAR_GAP = 0.006;
+const COLLAR_BAND = 0.013;
+const COLLAR_NT = 48;
+// (part du poids des pattes avant de la peau sous la bande reportée sur l'omoplate, voir collarStand : à 1, la bande
+// quittait la peau d'un côté à la toilette ; à 0, elle partait en écharpe avec la patte levée)
+const ARM_TO_SCAP = 0.5;
+
+/**
+ * Collier lié au squelette (pose debout où l'anneau est mesuré, une fois par gabarit) : l'anneau rigide, porté par l'os
+ * du cou, quittait la peau dès que le cou se pliait — la gorge suit surtout les pattes avant : cerceau autour du poitrail
+ * couché, bandoulière assis, barre au-dessus de la tête en mangeant. Ici :
+ * - matrices de peau de chaque os debout (K, repère du chat), os du cou debout, peau debout (pos) ;
+ * - poids de l'anneau tout autour (table : COLLAR_NT angles, 4 os) pris sur la peau sous la bande, lissés en tournant ;
+ * - robe serrée sous la bande : déplacement de chaque sommet (attribut cmpCollar, dans la pose de liaison, ajouté avant
+ *   les os dans le shader : il suit la peau comme la bande), et part de poil couché sous elle (cmpCollar.w = 1 - part).
+ */
+function collarStand(model, base, S, C, N, X, Y, rx, ry) {
+  const mesh = model.coatMesh;
+  const sk = mesh.skeleton;
+  model.root.updateMatrixWorld(true);
+  const rootInv = model.root.matrixWorld.clone().invert();
+  const nbn = sk.bones.length;
+  const K = new Float32Array(nbn * 16);
+  for (let j = 0; j < nbn; j++) _m.multiplyMatrices(rootInv, sk.bones[j].matrixWorld).multiply(sk.boneInverses[j]).toArray(K, j * 16);
+  const neckM = new THREE.Matrix4().multiplyMatrices(rootInv, model.neck.matrixWorld);
+  const geo = S.coatGeo;
+  const n = geo.attributes.position.count;
+  const si = geo.attributes.skinIndex;
+  const sw = geo.attributes.skinWeight;
+  const part = geo.attributes.cmpPart;
+  const W = base.W;
+  const pos = new Float32Array(n * 3);
+  const p = V();
+  for (let i = 0; i < n; i++) {
+    mesh.getVertexPosition(i, p).applyMatrix4(mesh.matrixWorld).applyMatrix4(rootInv);
+    p.toArray(pos, i * 3);
+  }
+  // peau de l'avant (ni queue ni oreilles) : poids des pièces liées par le plus proche, bavette du salon posée dessus
+  const front = [];
+  for (let i = 0; i < n; i++) if (W.tail[i] < 0.1 && W.ear[i * 2] + W.ear[i * 2 + 1] < 0.1) front.push(i);
+  // menton (le plus bas de la tête) et ventre (le plus bas du tronc au milieu) debout
+  let chinY = Infinity;
+  for (let i = 0; i < n; i++) if (W.head[i] > 0.6) chinY = Math.min(chinY, pos[i * 3 + 1]);
+  const M = S.measure;
+  const midZ = (M.hipZ + M.shZ) / 2;
+  let bellyY = Infinity;
+  for (const i of front) {
+    if (W.head[i] > 0.05 || Math.abs(pos[i * 3 + 2] - midZ) > 0.03) continue;
+    if (W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] > 0.05) continue;
+    bellyY = Math.min(bellyY, pos[i * 3 + 1]);
+  }
+  // Poids de l'anneau : à chaque angle, les 6 sommets de peau les plus proches du point de la bande (dans la tranche
+  // du collier), pondérés par l'inverse de la distance ; puis lissés en tournant (sans saut d'un sommet à l'autre).
+  const ra = rx + COLLAR_GAP;
+  const rb = ry + COLLAR_GAP;
+  const slab = [];
+  const d = V();
+  for (const i of front) {
+    d.fromArray(pos, i * 3).sub(C);
+    if (Math.abs(d.dot(N)) < 0.022) slab.push(i);
+  }
+  // (os des pattes avant ramenés pour moitié à l'omoplate du même côté : la gorge, sous l'anneau, est portée par les
+  // humérus — patte levée, pour le salut, la bande partait avec le bras et traversait le poitrail en écharpe)
+  const boneIx = new Map(sk.bones.map((b, j) => [b.name, j]));
+  const toArm = sk.bones.map((b, j) => {
+    const m = /^(humerus|radius|metacarpus|toes)([LR])$/.exec(b.name);
+    return m && boneIx.has('scap' + m[2]) ? boneIx.get('scap' + m[2]) : j;
+  });
+  const raw = [];
+  const q = V();
+  for (let k = 0; k < COLLAR_NT; k++) {
+    const th = (2 * Math.PI * k) / COLLAR_NT;
+    q.copy(C).addScaledVector(X, ra * Math.sin(th)).addScaledVector(Y, rb * Math.cos(th));
+    const near = [];
+    for (const i of slab) {
+      const e = (pos[i * 3] - q.x) ** 2 + (pos[i * 3 + 1] - q.y) ** 2 + (pos[i * 3 + 2] - q.z) ** 2;
+      if (near.length < 6 || e < near[5][0]) {
+        near.push([e, i]);
+        near.sort((a, b) => a[0] - b[0]);
+        if (near.length > 6) near.pop();
+      }
+    }
+    const acc = new Map();
+    for (const [e, i] of near) {
+      const f = 1 / (Math.sqrt(e) + 0.004);
+      for (let c = 0; c < 4; c++) {
+        const w = sw.getComponent(i, c);
+        if (!(w > 0)) continue;
+        const b0 = si.getComponent(i, c);
+        const b = toArm[b0];
+        const k = b === b0 ? 0 : ARM_TO_SCAP;
+        acc.set(b, (acc.get(b) ?? 0) + w * f * k + (b === b0 ? w * f : 0));
+        if (k < 1 && b !== b0) acc.set(b0, (acc.get(b0) ?? 0) + w * f * (1 - k));
+      }
+    }
+    raw.push(acc);
+  }
+  const table = new Float32Array(COLLAR_NT * 8);
+  for (let k = 0; k < COLLAR_NT; k++) {
+    const acc = new Map();
+    for (const [o, f] of [[-2, 1], [-1, 2], [0, 3], [1, 2], [2, 1]]) {
+      const m = raw[(k + o + COLLAR_NT) % COLLAR_NT];
+      const tot = [...m.values()].reduce((a, b) => a + b, 0) || 1;
+      for (const [b, w] of m) acc.set(b, (acc.get(b) ?? 0) + (w / tot) * f);
+    }
+    const top = [...acc].sort((a, b) => b[1] - a[1]).slice(0, 4);
+    const tot = top.reduce((a, [, w]) => a + w, 0) || 1;
+    top.forEach(([b, w], c) => {
+      table[k * 8 + c * 2] = b;
+      table[k * 8 + c * 2 + 1] = w / tot;
+    });
+  }
+  // Robe serrée sous la bande (voir catCoat.js) : debout, la peau qui dépasse de l'ellipse de la bande moins 4 mm (la
+  // moitié de son épaisseur ; plus profond, la peau serrée se plissait tête baissée) est ramenée vers l'axe du cou, en
+  // fondu au bord de la bande ; jamais la tête. Le déplacement est ramené dans la pose de liaison par l'inverse de la
+  // matrice de peau du sommet.
+  const cmp = new Float32Array(n * 4);
+  const lin = new THREE.Matrix3();
+  const sm = new THREE.Matrix4();
+  const e4 = new THREE.Matrix4();
+  for (let i = 0; i < n; i++) {
+    cmp[i * 4 + 3] = 1;
+    d.fromArray(pos, i * 3).sub(C);
+    const dd = d.dot(N);
+    if (Math.abs(dd) > COLLAR_BAND * 2.8) continue;
+    d.addScaledVector(N, -dd);
+    const rl = Math.max(1e-5, d.length());
+    const u = d.dot(X) / rl;
+    const re = ellR(ra, rb, u);
+    const flat = (1 - smooth(COLLAR_BAND, COLLAR_BAND * 3.4, Math.abs(dd))) * (1 - smooth(1.6, 2.4, rl / Math.max(ra, rb)));
+    cmp[i * 4 + 3] = 1 - flat;
+    const zone = (1 - smooth(COLLAR_BAND, COLLAR_BAND * 2.8, Math.abs(dd))) * (1 - smooth(1.3, 1.8, rl / re)) * (1 - smooth(0.4, 0.8, part.getZ(i)));
+    const out = rl - (re - 0.004);
+    if (zone <= 0 || out <= 0) continue;
+    // déplacement debout, puis dans la pose de liaison
+    q.copy(d).multiplyScalar((-out / rl) * zone);
+    sm.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    for (let c = 0; c < 4; c++) {
+      const w = sw.getComponent(i, c);
+      if (!w) continue;
+      e4.fromArray(K, si.getComponent(i, c) * 16);
+      for (let t = 0; t < 16; t++) sm.elements[t] += e4.elements[t] * w;
+    }
+    lin.setFromMatrix4(sm).invert();
+    q.applyMatrix3(lin);
+    cmp[i * 4] = q.x;
+    cmp[i * 4 + 1] = q.y;
+    cmp[i * 4 + 2] = q.z;
+  }
+  const attr = new THREE.BufferAttribute(cmp, 4);
+  S.coatGeo.setAttribute('cmpCollar', attr);
+  S.lodCoat?.setAttribute('cmpCollar', attr);
+  return { K, neckM, pos, front: Uint32Array.from(front), C: C.clone(), N: N.clone(), X: X.clone(), Y: Y.clone(), rx, ry, table, chinY, bellyY };
+}
+
+/**
+ * Points (repère du chat, pose debout de la mesure du collier) posés sur le devant de la peau : z de la peau la plus en
+ * avant sous chaque point (à 1,2 cm près en x et y), plus clear ; NaN s'il n'y en a pas (entre les antérieurs). Comme
+ * dogReal.js drapeDogChest, sur la peau debout.
+ */
+function drapeCatChest(S, pts, clear) {
+  const st = S.collarFit.stand;
+  const cp = st.pos;
+  const R = 0.012;
+  return pts.map((p) => {
+    let best = -Infinity;
+    for (const j of st.front) {
+      const z = cp[j * 3 + 2];
+      if (z <= best || z > p.z + 0.04 || z < p.z - 0.1) continue;
+      if (Math.abs(cp[j * 3] - p.x) < R && Math.abs(cp[j * 3 + 1] - p.y) < R) best = z;
+    }
+    if (best === -Infinity) return NaN;
+    p.z = best + clear;
+    return best;
+  });
+}
+
+/** Poids (4 os) de l'anneau du collier à l'angle th (0 : dessus de la nuque, π : gorge), interpolés dans la table. */
+function collarWeights(st, th) {
+  const f = (((th / (2 * Math.PI)) * COLLAR_NT) % COLLAR_NT + COLLAR_NT) % COLLAR_NT;
+  const k0 = Math.floor(f) % COLLAR_NT;
+  const k1 = (k0 + 1) % COLLAR_NT;
+  const t = f - Math.floor(f);
+  const acc = new Map();
+  for (const [k, g] of [[k0, 1 - t], [k1, t]]) {
+    for (let c = 0; c < 4; c++) {
+      const w = st.table[k * 8 + c * 2 + 1] * g;
+      if (w > 0) acc.set(st.table[k * 8 + c * 2], (acc.get(st.table[k * 8 + c * 2]) ?? 0) + w);
+    }
+  }
+  return [...acc].sort((a, b) => b[1] - a[1]).slice(0, 4);
+}
+
+/** Poids (4 os) de la peau debout près du point p (repère du chat) : les 6 sommets les plus proches. */
+function skinWeightsAt(st, geo, p) {
+  const pos = st.pos;
+  const near = [];
+  for (const i of st.front) {
+    const e = (pos[i * 3] - p.x) ** 2 + (pos[i * 3 + 1] - p.y) ** 2 + (pos[i * 3 + 2] - p.z) ** 2;
+    if (near.length < 6 || e < near[5][0]) {
+      near.push([e, i]);
+      near.sort((a, b) => a[0] - b[0]);
+      if (near.length > 6) near.pop();
+    }
+  }
+  const si = geo.attributes.skinIndex;
+  const sw = geo.attributes.skinWeight;
+  const acc = new Map();
+  for (const [e, i] of near) {
+    const f = 1 / (Math.sqrt(e) + 0.004);
+    for (let c = 0; c < 4; c++) {
+      const w = sw.getComponent(i, c);
+      if (w > 0) acc.set(si.getComponent(i, c), (acc.get(si.getComponent(i, c)) ?? 0) + w * f);
+    }
+  }
+  return [...acc].sort((a, b) => b[1] - a[1]).slice(0, 4);
+}
+
+/**
+ * Pièce portée (collier, accessoires du cou du salon) changée en maillage lié au squelette. Sa géométrie est donnée dans
+ * la pose debout où le collier est mesuré, repère du chat (opts.matrix : vers ce repère ; sinon mesh.matrix). Poids :
+ * opts.ring → ceux de l'anneau à l'angle de chaque sommet (opts.ringM : repère de l'anneau, sinon celui de la mesure) ;
+ * opts.angle → ceux de l'anneau à cet angle pour toute la pièce ; opts.at (point, repère du chat) → ceux de la peau en
+ * ce point pour toute la pièce (elle reste d'un bloc) ; sinon la peau la plus proche de chaque sommet. La position de
+ * liaison de chaque sommet est celle que ses poids ramènent, debout, à sa place. Renvoie le maillage lié (enfant de la
+ * racine, compté dans la boîte englobante du chat).
+ */
+function skinCatGear(model, S, mesh, opts = {}) {
+  const st = S.collarFit.stand;
+  const hb = model.bounds;
+  const geo = mesh.geometry;
+  mesh.updateMatrix();
+  geo.applyMatrix4(opts.matrix ?? mesh.matrix);
+  const pos = geo.attributes.position;
+  const nrm = geo.attributes.normal;
+  const n = pos.count;
+  const si = new Uint16Array(n * 4);
+  const sw = new Float32Array(n * 4);
+  const ringInv = opts.ring ? (opts.ringM ?? new THREE.Matrix4().makeBasis(st.X, st.Y, st.N).setPosition(st.C)).clone().invert() : null;
+  const fixed = opts.angle !== undefined ? collarWeights(st, opts.angle) : opts.at ? skinWeightsAt(st, S.coatGeo, opts.at) : null;
+  const sm = new THREE.Matrix4();
+  const e4 = new THREE.Matrix4();
+  const lin = new THREE.Matrix3();
+  const p = V();
+  const lp = V();
+  const rx = opts.rx ?? st.rx + COLLAR_GAP;
+  const ry = opts.ry ?? st.ry + COLLAR_GAP;
+  for (let i = 0; i < n; i++) {
+    p.fromBufferAttribute(pos, i);
+    let ws = fixed;
+    if (!ws && ringInv) {
+      lp.copy(p).applyMatrix4(ringInv);
+      ws = collarWeights(st, Math.atan2(lp.x / rx, lp.y / ry));
+    }
+    if (!ws) ws = skinWeightsAt(st, S.coatGeo, p);
+    const tot = ws.reduce((a, [, w]) => a + w, 0) || 1;
+    sm.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    ws.forEach(([b, w], c) => {
+      si[i * 4 + c] = b;
+      sw[i * 4 + c] = w / tot;
+      e4.fromArray(st.K, b * 16);
+      for (let t = 0; t < 16; t++) sm.elements[t] += e4.elements[t] * (w / tot);
+    });
+    sm.invert();
+    p.applyMatrix4(sm);
+    pos.setXYZ(i, p.x, p.y, p.z);
+    if (nrm) {
+      lin.setFromMatrix4(sm);
+      p.fromBufferAttribute(nrm, i).applyMatrix3(lin).normalize();
+      nrm.setXYZ(i, p.x, p.y, p.z);
+    }
+  }
+  geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  growBoneBoxes(hb.boneBox, pos.array, si, sw, n);
+  const sk = new PetMesh(geo, mesh.material, hb);
+  sk.castShadow = mesh.castShadow;
+  sk.receiveShadow = true;
+  sk.userData = { ...mesh.userData };
+  // (dessinée après les couches de poil — transparentes, sans profondeur — : le poil long, couché sous elle, ne passe
+  // plus par-dessus ; le foulard du salon n'était plus qu'un liseré sous l'anneau. Opaque quand même.)
+  sk.material.transparent = true;
+  sk.material.opacity = 1;
+  sk.renderOrder = 8;
+  mesh.parent?.remove(mesh);
+  model.root.add(sk);
+  sk.bind(model.skeleton, new THREE.Matrix4());
+  hb.meshes = hb.meshes.filter((m) => m.parent);
+  hb.meshes.push(sk);
+  return sk;
+}
+
+/**
+ * Pièces posées dans le repère de l'anneau du collier (frame : enfant de l'os du cou, ou pas encore accroché, à
+ * center/q de la mesure) changées en maillages liés au squelette : la bande (userData.collarBand) prend les poids de
+ * l'anneau sommet par sommet ; chaque autre pièce (boucle, médaille, grelot, anneau de laisse…), ceux de l'anneau à
+ * l'angle de son centre, d'un bloc. Le repère du cou est celui de la pose debout de la mesure. Renvoie les maillages
+ * liés ; frame reste vide.
+ */
+function skinCatCollar(model, S, frame, rx, ry) {
+  const st = S.collarFit.stand;
+  frame.updateMatrix();
+  const fM = new THREE.Matrix4().multiplyMatrices(st.neckM, frame.matrix);
+  const meshes = [];
+  frame.traverse((o) => {
+    if (o.isMesh) meshes.push(o);
+  });
+  const out = [];
+  const c = V();
+  for (const m of meshes) {
+    // repère de la pièce dans celui de l'anneau
+    const rel = new THREE.Matrix4();
+    for (let o = m; o && o !== frame; o = o.parent) {
+      o.updateMatrix();
+      rel.premultiply(o.matrix);
+    }
+    const toStand = new THREE.Matrix4().multiplyMatrices(fM, rel);
+    let opts;
+    if (m.userData.collarBand) opts = { matrix: toStand, ring: true, ringM: fM, rx, ry };
+    else {
+      m.geometry.computeBoundingBox();
+      m.geometry.boundingBox.getCenter(c).applyMatrix4(rel);
+      opts = { matrix: toStand, angle: Math.atan2(c.x / rx, c.y / ry) };
+    }
+    out.push(skinCatGear(model, S, m, opts));
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ animation

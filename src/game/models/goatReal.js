@@ -119,7 +119,7 @@ function goatTextureMeans(map, uv, mask, part, n) {
  * repère de la chèvre (flottants : les positions du fichier sont quantifiées). Gardé dans gltf.userData.
  * Régions (attribut goatMask) : x corps, y tête (tête, mâchoire, oreilles, yeux, barbe, cornes), z bas des membres
  * (avant-bras, canon, pied ; jambe, canon, pied), w onglons ; goatPart : x cornes, y mamelle, z barbe, w part portée par
- * le tronc (poil long).
+ * le tronc (poil long) ; goatEar : part portée par les oreilles.
  */
 export function realGoatBase(gltf) {
   if (gltf.userData.goatBase) return gltf.userData.goatBase;
@@ -200,6 +200,8 @@ export function realGoatBase(gltf) {
   const part = new Float32Array(n * 4);
   const domBone = new Uint16Array(n);
   const trunk = new Float32Array(n);
+  // (part portée par les oreilles : leur ombre reculée, goatCoat.js)
+  const ear = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     let head = 0;
     let leg = 0;
@@ -214,6 +216,7 @@ export function realGoatBase(gltf) {
       if (nmb === 'hornL' || nmb === 'hornR') part[i * 4] += w;
       else if (nmb === 'udder') part[i * 4 + 1] += w;
       else if (nmb === 'beard') part[i * 4 + 2] += w;
+      else if (nmb === 'earL' || nmb === 'earR') ear[i] += w;
       part[i * 4 + 3] += w * (TRUNK_W[nmb] ?? 0);
       if (w > sw[i * 4 + best]) best = k;
     }
@@ -241,7 +244,7 @@ export function realGoatBase(gltf) {
   const natural = { ...NATURAL_SPEED, ...(ext.naturalSpeeds ?? {}) };
   const base = {
     names, index, parent, heads, rotW, nb,
-    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, part, trunk, index: idx, lodIndex, count: n, material: master.material, domBone },
+    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, part, trunk, ear, index: idx, lodIndex, count: n, material: master.material, domBone },
     clips: cleanClips(gltf.animations),
     natural,
     legChains,
@@ -315,6 +318,7 @@ function shapeFor(base, B) {
     skinWeight: new THREE.BufferAttribute(P.sw, 4),
     goatMask: new THREE.BufferAttribute(P.mask, 4),
     goatPart: new THREE.BufferAttribute(P.part, 4),
+    goatEar: new THREE.BufferAttribute(P.ear, 1),
   };
   const morphP = new THREE.BufferAttribute(P.dPos, 3);
   const morphN = new THREE.BufferAttribute(P.dNrm, 3);

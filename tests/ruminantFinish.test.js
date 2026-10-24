@@ -10,7 +10,7 @@ import { buildRealCowModel, animateRealCow, COW_LOD_DIST } from '../src/game/mod
 import { horseView } from '../src/game/models/horseReal.js';
 import { gfx } from '../src/game/gfx.js';
 import { buildGear } from '../src/game/gearModels.js';
-import { HEAD_SHADOW_BIAS } from '../src/game/models/cowCoat.js';
+import { SELF_SHADOW_GAP } from '../src/game/models/ruminantShadow.js';
 import { resolveLook, createAnimal, growthScale } from '../src/sim/animal.js';
 import { loadRealSheepGltf } from './fixtures/realSheepGltf.js';
 import { loadRealGoatGltf } from './fixtures/realGoatGltf.js';
@@ -697,47 +697,124 @@ describe('demi-tour sur place et petit pas vers la barrière : les sabots piéti
   }, 120000);
 });
 
-describe('tête claire des vaches et des taureaux : plus de strie d\'ombre derrière l\'œil', () => {
+describe('tête claire des ruminants : plus de strie d\'ombre des oreilles et des cornes derrière l\'œil', () => {
   // Les cornes et les oreilles, minces et proches, posaient en qualité haute une strie gris-bleu à bord net sur la joue
-  // blanche (Hereford, Charolais). Biais de profondeur de l'ombre sur la tête seulement : ombres du décor gardées.
-  const shade = (md) => {
-    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
-    md.mesh.material.onBeforeCompile(sh, null);
+  // blanche (Hereford, Charolais, saanen, mérinos). Leur ombre est reculée le long du rayon, dans la passe d'ombre
+  // seulement (ruminantShadow.js) : rien ne change pour la tête qui reçoit l'ombre — une lisse, un râtelier ou un
+  // barreau à 12 cm de la tête y porte toujours la sienne (le biais sur la tête de la passe précédente l'effaçait).
+  const shade = (mesh) => {
+    const out = {};
+    if (mesh.material.onBeforeCompile) {
+      const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+      mesh.material.onBeforeCompile(sh, null);
+      out.v = sh.vertexShader;
+    }
     const dsh = { uniforms: {}, vertexShader: THREE.ShaderLib.depth.vertexShader, fragmentShader: THREE.ShaderLib.depth.fragmentShader };
-    md.mesh.customDepthMaterial.onBeforeCompile(dsh, null);
-    return { v: sh.vertexShader, dv: dsh.vertexShader };
+    mesh.customDepthMaterial.onBeforeCompile(dsh, null);
+    out.dv = dsh.vertexShader;
+    out.du = dsh.uniforms;
+    return out;
   };
-  it('biais sur la tête (cornes et oreilles comprises) après le calcul des coordonnées d\'ombre, pas sur le corps', () => {
-    expect(HEAD_SHADOW_BIAS).toBeGreaterThanOrEqual(0.2);
-    // (au-delà d'un demi-mètre, l'ombre d'une barrière ou d'un râtelier ne tomberait plus sur la tête)
-    expect(HEAD_SHADOW_BIAS).toBeLessThanOrEqual(0.5);
+  // recul après la projection (mvPosition : repère de la lumière), à la taille de la bête
+  const gapAfterProject = (dv, expr, gap, unit = '1.0') => {
+    const at = dv.indexOf('#include <project_vertex>');
+    const k = dv.indexOf('mvPosition.z -= rGap');
+    expect(at).toBeGreaterThan(0);
+    expect(k).toBeGreaterThan(at);
+    expect(dv).toContain(`float rGap = (${expr}) * ${gap.toFixed(3)} * length(modelMatrix[0].xyz) * (${unit});`);
+    expect(dv.indexOf('gl_Position = projectionMatrix * mvPosition;', k)).toBeGreaterThan(k);
+  };
+  // part des sommets portée par les oreilles (et les cornes) : dedans pour elles, nulle sur le tronc et le reste de la
+  // tête (joue, front, museau)
+  const weights = (n, w, head, trunk, isEar) => {
+    let ear = 0, earIn = 0, face = 0, faceIn = 0, body = 0, bodyIn = 0;
+    for (let i = 0; i < n; i++) {
+      const k = w(i);
+      if (isEar(i)) { ear++; if (k > 0.5) earIn++; } else if (head(i) > 0.95) { face++; if (k > 0.15) faceIn++; }
+      if (trunk(i)) { body++; if (k > 0.01) bodyIn++; }
+    }
+    return { ear, earIn, face, faceIn, body, bodyIn };
+  };
+  it('recul de 20 à 70 cm (bête à l\'échelle 1), par espèce', () => {
+    for (const sp of ['cow', 'goat', 'sheep']) {
+      expect(SELF_SHADOW_GAP[sp]).toBeGreaterThanOrEqual(0.2);
+      // (au-delà, les cornes et les oreilles ne porteraient plus d'ombre sur l'encolure, ni la tête baissée au sol)
+      expect(SELF_SHADOW_GAP[sp]).toBeLessThanOrEqual(0.7);
+    }
+  });
+  it('vaches et taureaux : recul des cornes et des oreilles, rien sur la tête qui reçoit l\'ombre', () => {
     for (const [breed, sex] of [['hereford', 'm'], ['charolaise', 'm'], ['hereford', 'f'], ['holstein', 'f']]) {
       const md = buildRealCowModel({ ...resolveLook('cow', breed, 0), seed: 4242, sex }, breed, GC);
-      const { v, dv } = shade(md);
-      const at = v.indexOf('#include <shadowmap_vertex>');
-      const k = v.indexOf('vDirectionalShadowCoord[ i ].z -= cHeadSB');
-      expect(at).toBeGreaterThan(0);
-      expect(k).toBeGreaterThan(at);
-      expect(v).toMatch(/cHeadSB = smoothstep\(0\.3, 0\.8, cowMask\.y\) \* 0\.30 \* length\(modelMatrix\[0\]\.xyz\)/);
-      // (l'ombre que la vache porte, elle, est entière : cornes et oreilles toujours dans la carte d'ombre)
-      expect(dv).not.toContain('cHeadSB');
-      // tête (masque > 0,8) : cornes et oreilles dedans ; tronc (en arrière de l'épaule, au-dessus du ventre) : hors du
-      // biais (masque < 0,3)
+      const { v, dv } = shade(md.mesh);
+      // (coordonnées d'ombre de la robe intactes : plus de biais sur la tête)
+      expect(v).not.toContain('vDirectionalShadowCoord[ i ].z -=');
+      expect(v).not.toContain('rGap');
+      gapAfterProject(dv, 'max(smoothstep(0.15, 0.5, cowPart.x), smoothstep(0.15, 0.5, cowAux.x))', SELF_SHADOW_GAP.cow);
       const g = md.mesh.geometry;
       const mask = g.attributes.cowMask, part = g.attributes.cowPart, aux = g.attributes.cowAux, pos = g.attributes.position;
       const land = md.mesh.material.userData.cowUniforms.cLand.value;
-      let horn = 0, hornIn = 0, ear = 0, earIn = 0, trunk = 0, trunkIn = 0;
-      for (let i = 0; i < mask.count; i++) {
-        const h = mask.getY(i);
-        if (part.getX(i) > 0.5) { horn++; if (h > 0.8) hornIn++; }
-        if (aux.getX(i) > 0.5) { ear++; if (h > 0.8) earIn++; }
-        if (pos.getZ(i) < land.w - 0.1 && pos.getY(i) > land.x) { trunk++; if (h > 0.3) trunkIn++; }
+      const sm = (x) => THREE.MathUtils.smoothstep(x, 0.15, 0.5);
+      const W = weights(mask.count, (i) => Math.max(sm(part.getX(i)), sm(aux.getX(i))), (i) => mask.getY(i),
+        (i) => pos.getZ(i) < land.w - 0.1 && pos.getY(i) > land.x, (i) => aux.getX(i) > 0.5 || part.getX(i) > 0.5);
+      expect(W.ear).toBeGreaterThan(20);
+      expect(W.earIn / W.ear).toBeGreaterThan(0.95);
+      expect(W.face).toBeGreaterThan(200);
+      expect(W.faceIn / W.face).toBeLessThan(0.1);
+      expect(W.body).toBeGreaterThan(200);
+      expect(W.bodyIn).toBe(0);
+      md.dispose?.();
+    }
+  });
+  it('chèvres (saanen, alpine, bouc cornu) : oreilles et cornes', () => {
+    for (const [breed, sex] of [['saanen', 'm'], ['saanen', 'f'], ['alpine', 'm']]) {
+      const md = build('goat', breed, { sex });
+      const { v, dv } = shade(md.mesh);
+      expect(v).not.toContain('rGap');
+      gapAfterProject(dv, 'max(smoothstep(0.15, 0.5, goatPart.x), smoothstep(0.15, 0.5, goatEar))', SELF_SHADOW_GAP.goat);
+      const g = md.mesh.geometry;
+      const mask = g.attributes.goatMask, part = g.attributes.goatPart, ear = g.attributes.goatEar;
+      expect(ear.count).toBe(mask.count);
+      const sm = (x) => THREE.MathUtils.smoothstep(x, 0.15, 0.5);
+      const W = weights(mask.count, (i) => Math.max(sm(part.getX(i)), sm(ear.getX(i))), (i) => mask.getY(i),
+        (i) => part.getW(i) > 0.9, (i) => ear.getX(i) > 0.5 || part.getX(i) > 0.5);
+      expect(W.ear).toBeGreaterThan(20);
+      expect(W.earIn / W.ear).toBeGreaterThan(0.95);
+      expect(W.face).toBeGreaterThan(100);
+      expect(W.faceIn / W.face).toBeLessThan(0.1);
+      expect(W.body).toBeGreaterThan(80);
+      expect(W.bodyIn).toBe(0);
+      md.dispose?.();
+    }
+  });
+  it('moutons (mérinos, suffolk) : oreilles, et cornes du bélier (maillage à part, à l\'échelle du mouton)', () => {
+    for (const [breed, sex] of [['merinos', 'f'], ['merinos', 'm'], ['suffolk', 'f']]) {
+      const md = build('sheep', breed, { sex });
+      const { v, dv } = shade(md.mesh);
+      expect(v).not.toContain('rGap');
+      gapAfterProject(dv, 'smoothstep(0.15, 0.5, sheepEar)', SELF_SHADOW_GAP.sheep);
+      const g = md.mesh.geometry;
+      const mask = g.attributes.sheepMask, ear = g.attributes.sheepEar, trunk = g.attributes.sheepTrunk;
+      expect(ear.count).toBe(mask.count);
+      let n = 0, body = 0, bodyIn = 0;
+      for (let i = 0; i < ear.count; i++) {
+        if (ear.getX(i) > 0.5) n++;
+        if (trunk.getX(i) > 0.9) { body++; if (ear.getX(i) > 0.01) bodyIn++; }
       }
-      if (horn) expect(hornIn / horn).toBeGreaterThan(0.95);
-      expect(ear).toBeGreaterThan(20);
-      expect(earIn / ear).toBeGreaterThan(0.95);
-      expect(trunk).toBeGreaterThan(200);
-      expect(trunkIn).toBe(0);
+      expect(n).toBeGreaterThan(20);
+      expect(n / ear.count).toBeLessThan(0.08);
+      expect(body).toBeGreaterThan(80);
+      expect(bodyIn).toBe(0);
+      const horns = md.horns;
+      if (sex === 'm' && breed === 'merinos') {
+        expect(horns).toBeTruthy();
+        const h = shade(horns);
+        gapAfterProject(h.dv, '1.0', SELF_SHADOW_GAP.sheep, 'rUnit');
+        md.root.updateMatrixWorld(true);
+        const rel = new THREE.Matrix4().copy(md.root.matrixWorld).invert().multiply(horns.matrixWorld);
+        const sc = new THREE.Vector3().setFromMatrixColumn(rel, 0).length();
+        // (recul des cornes à l'échelle du mouton, pas à celle de leur maillage)
+        expect(h.du.rUnit.value * sc).toBeCloseTo(1, 3);
+      }
       md.dispose?.();
     }
   });

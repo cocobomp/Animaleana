@@ -19,7 +19,7 @@ import { getModel } from '../assets.js';
 import { gfx } from '../gfx.js';
 import { horseView } from './horseReal.js';
 import { sheepBuild, sheepFleece, shornWeight } from '../../sim/sheepLook.js';
-import { makeSheepUniforms, setSheepCoat, sheepMaterial, hornMaterial } from './sheepCoat.js';
+import { makeSheepUniforms, setSheepCoat, sheepMaterial, hornMaterial, hornDepthMaterial } from './sheepCoat.js';
 import { lockCards, spreadLocks, lockMaterial, makeLockUniforms, lockHash, setLockFloor } from './ruminantHair.js';
 
 /** Clé du GLB (assets.js) : jamais « sheep » (gltfAnimal.js le prendrait pour un animal GLB générique). */
@@ -231,6 +231,11 @@ export function realSheepBase(gltf) {
   for (const [nm, w] of [['root', 1], ['pelvis', 1], ['spine1', 1], ['spine2', 1], ['chest', 1], ['neck1', 1], ['tail1', 1], ['scapL', 0.6], ['scapR', 0.6]]) if (B(nm) >= 0) trunkW[B(nm)] = w;
   const trunk = new Float32Array(n);
   for (let i = 0; i < n; i++) for (let k = 0; k < 4; k++) trunk[i] += sw[i * 4 + k] * trunkW[si[i * 4 + k]];
+  // Part portée par les oreilles : leur ombre reculée (sheepCoat.js).
+  const earW = new Float32Array(names.length);
+  for (const nm of ['earL', 'earR']) if (B(nm) >= 0) earW[B(nm)] = 1;
+  const ear = new Float32Array(n);
+  for (let i = 0; i < n; i++) for (let k = 0; k < 4; k++) ear[i] += sw[i * 4 + k] * earW[si[i * 4 + k]];
   for (let i = 0; i < n; i++) {
     let best = 0;
     for (let k = 1; k < 4; k++) if (sw[i * 4 + k] > sw[i * 4 + best]) best = k;
@@ -261,7 +266,7 @@ export function realSheepBase(gltf) {
   const puffW = puffWeights(pos, nrm, mask, trunk, n, 0.09);
   const base = {
     names, index, parent, heads, rotW, nb,
-    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, trunk, puffN, puffW, index: idx, lodIndex, count: n, material: master.material, domBone },
+    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, trunk, ear, puffN, puffW, index: idx, lodIndex, count: n, material: master.material, domBone },
     clips: cleanClips(gltf.animations),
     natural,
     legChains,
@@ -430,6 +435,7 @@ function shapeFor(base, B) {
     sheepTrunk: new THREE.BufferAttribute(P.trunk, 1),
     sheepPuffN: new THREE.BufferAttribute(P.puffN, 3),
     sheepPuffW: new THREE.BufferAttribute(P.puffW, 1),
+    sheepEar: new THREE.BufferAttribute(P.ear, 1),
   };
   const morphP = new THREE.BufferAttribute(P.dPos, 3);
   const morphN = new THREE.BufferAttribute(P.dNrm, 3);
@@ -739,6 +745,8 @@ export function buildRealSheepModel(look, breedId = null, gltf = null) {
     horns.castShadow = true;
     horns.receiveShadow = true;
     headB.add(horns);
+    root.updateMatrixWorld(true);
+    horns.customDepthMaterial = hornDepthMaterial(1 / Math.max(1e-6, V().setFromMatrixColumn(horns.matrixWorld, 0).length()));
   }
   // Laine longue (islandais) : mèches en cartes, liées au même squelette, de la couleur de la laine.
   let locks = null;
@@ -879,6 +887,7 @@ export function buildRealSheepModel(look, breedId = null, gltf = null) {
     model.anim.dispose();
     shadow.geometry.dispose();
     shadow.material.dispose();
+    horns?.customDepthMaterial?.dispose();
   };
   model.anim.applyFleece(1e9);
   model.anim.staticPose('stand');

@@ -12,6 +12,7 @@
 // La matière garde son shader quand on la clone (Beauty.js : robe lustrée) : uniformes partagés, defines, clé.
 
 import * as THREE from 'three';
+import { addSelfShadow, SELF_SHADOW_GAP } from './ruminantShadow.js';
 
 /** Uniformes d'un mouton (partagés par sa matière, son ombre et leurs clones). */
 export function makeSheepUniforms() {
@@ -64,6 +65,7 @@ attribute vec4 sheepMask;
 attribute float sheepTrunk;
 attribute vec3 sheepPuffN;
 attribute float sheepPuffW;
+attribute float sheepEar;
 uniform vec4 sState;
 uniform vec4 sLand;
 uniform vec4 sHead;
@@ -317,9 +319,11 @@ export function sheepMaterial(src, uniforms) {
   depth.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms);
     vert(sh);
+    // (ombre des oreilles reculée : plus de strie sur la tête claire — ruminantShadow.js)
+    addSelfShadow(sh, 'smoothstep(0.15, 0.5, sheepEar)', SELF_SHADOW_GAP.sheep);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec4 vSMask;\nvarying vec3 vSRest;');
   };
-  depth.customProgramCacheKey = () => 'sheep-wool-depth-v5';
+  depth.customProgramCacheKey = () => 'sheep-wool-depth-v6';
   return { mat, depth };
 }
 
@@ -342,4 +346,19 @@ export function hornMaterial(color) {
   };
   mat.customProgramCacheKey = () => 'sheep-horn-v1';
   return mat;
+}
+
+/**
+ * Matière de l'ombre des cornes : reculée comme celle des oreilles (ruminantShadow.js). unit : 1 / échelle des cornes
+ * dans le repère du mouton (maillage à part, enfant de l'os de la tête).
+ */
+export function hornDepthMaterial(unit) {
+  const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  depth.onBeforeCompile = (sh) => {
+    sh.uniforms.rUnit = { value: unit };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float rUnit;');
+    addSelfShadow(sh, '1.0', SELF_SHADOW_GAP.sheep, 'rUnit');
+  };
+  depth.customProgramCacheKey = () => 'sheep-horn-depth-v1';
+  return depth;
 }

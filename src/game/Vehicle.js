@@ -20,6 +20,12 @@ import { cargoItem, cargoShape } from '../sim/cargo.js';
 export const PARKING = { x: 3, z: 4, heading: Math.PI / 2 };
 const CRATE_COLORS = [0x3f8fd0, 0xe07a3a, 0x6b3fa0, 0x2f8a5f, 0xd0a03f];
 const SMALL_LIVESTOCK = ['sheep', 'goat'];
+// Deux moutons ou chèvres dans une place du van (2 places de cheval de 1,95 m entre les barres, 0,84 m de large) :
+// celui de devant le nez à 15 cm devant la barre de poitrail (sous la barre ; le panneau de la rangée suivante est à
+// 22 cm), contre la séparation ; celui de derrière la pointe des fesses à 20 cm derrière la barre arrière (la porte ou le
+// panneau suivant à 28-36 cm), contre la paroi. Écart latéral au plus 20 cm de part et d'autre du milieu, le flanc à
+// 40-42 cm du milieu au plus (séparation, paroi), plus ce que la tête balaie en tournant (cornes, oreilles : turn).
+const SMALL_STALL = { front: 0.15, rear: 0.2, in: 0.4, out: 0.42, shift: 0.2, turn: { goat: 0.04, sheep: 0.05 } };
 const UP = new THREE.Vector3(0, 1, 0);
 const CAB_LOOK = new THREE.Vector3(0, -0.05, 3); // le conducteur regarde droit devant
 // Au volant, sur un téléphone en portrait (image étroite) : l'œil un peu plus haut, plus en arrière et vers le milieu
@@ -56,6 +62,25 @@ function travelLook(a) {
   return stageLook(a);
 }
 
+/** Mouton ou chèvre réaliste : bout du nez, pointe des fesses (négatif) et demi-largeur au repos, à la taille 1. */
+function smallFitOf(md) {
+  if (!(md?.realSheep || md?.realGoat) || !md.mesh?.geometry) return null;
+  if (md.smallFit) return md.smallFit;
+  const pos = md.mesh.geometry.attributes.position;
+  let front = -Infinity, rear = Infinity, halfW = 0;
+  for (let i = 0; i < pos.count; i++) {
+    const z = pos.getZ(i);
+    if (z > front) front = z;
+    if (z < rear) rear = z;
+    halfW = Math.max(halfW, Math.abs(pos.getX(i)));
+  }
+  // (toison du mouton : gonflée par le shader, au-delà des sommets)
+  const wool = md.realSheep ? (md.build?.puff ?? 0) * 1.25 : 0;
+  const s = md.size ?? 1;
+  md.smallFit = { front: front * s, rear: (rear - wool) * s, halfW: (halfW + wool) * s };
+  return md.smallFit;
+}
+
 /** Nombre de places de remorque pour ces animaux (deux moutons ou deux chèvres partagent une place). */
 export function placesNeeded(animals) {
   const big = animals.filter((a) => needsTrailer(a) && !SMALL_LIVESTOCK.includes(a.species)).length;
@@ -83,6 +108,8 @@ export class TripVehicle {
     this.tmp3 = new THREE.Vector3();
 
     if (kind === 'trailer') {
+      // (les voyageurs : places à garder aux grands animaux pas encore montés, freeStall)
+      this.travellers = animals;
       this.main = towCar();
       const rows = Math.max(1, Math.ceil(placesNeeded(animals) / 2));
       this.trailer = horseTrailer(rows);
@@ -272,11 +299,27 @@ export class TripVehicle {
 
   // ------------------------------------------------------------ places dans le van
 
-  /** Une place libre pour cet animal (deux moutons par place), ou -1. */
+  /**
+   * Une place libre pour cet animal, ou -1. Deux moutons ou chèvres peuvent partager une place, mais un mouton ou une
+   * chèvre prend d'abord une place vide, tant qu'il en reste assez pour les voyageurs pas encore montés : deux chèvres
+   * l'une derrière l'autre ne tiennent pas entre les barres (1,3 à 1,6 m du nez à la queue chacune ; avant, à 0,95 m l'une
+   * de l'autre, elles se traversaient de 38 à 65 cm).
+   */
   freeStall(a) {
     if (!this.trailer) return -1;
     const small = SMALL_LIVESTOCK.includes(a.species);
-    return this.stallUse.findIndex((ids) => ids.length === 0 || (small && ids.length === 1 && SMALL_LIVESTOCK.includes(this.speciesOf(ids[0]))));
+    const empty = this.stallUse.findIndex((ids) => ids.length === 0);
+    const shared = small ? this.stallUse.findIndex((ids) => ids.length === 1 && SMALL_LIVESTOCK.includes(this.speciesOf(ids[0]))) : -1;
+    if (shared < 0) return empty;
+    if (empty < 0 || !this.travellers) return shared;
+    // (s'il prend la place vide : reste-t-il des places pour les grands animaux, et des moitiés de place pour les petits ?)
+    const aboard = new Set(this.stallUse.flat());
+    const rest = this.travellers.filter((x) => x.id !== a.id && !aboard.has(x.id));
+    const big = rest.filter((x) => needsTrailer(x) && !SMALL_LIVESTOCK.includes(x.species)).length;
+    const smallRest = rest.filter((x) => SMALL_LIVESTOCK.includes(x.species)).length;
+    const free = this.stallUse.filter((ids) => ids.length === 0).length - 1;
+    const halves = this.stallUse.filter((ids) => ids.length === 1 && SMALL_LIVESTOCK.includes(this.speciesOf(ids[0]))).length + 1;
+    return big <= free && smallRest <= 2 * (free - big) + halves ? empty : shared;
   }
 
   speciesOf(id) {
@@ -297,7 +340,41 @@ export class TripVehicle {
     // au-delà de la barre arrière)
     const fit = this.cowFit?.(a, scale * this.stallShrink(i, a, scale));
     if (fit != null) return new THREE.Vector3(st.x, st.y, Math.min(st.zFront - fit.chest, (st.zRear ?? -Infinity) + fit.rump));
+    // (mouton, chèvre réalistes : leurs longueur et largeur mesurées — SMALL_STALL)
+    const sf = this.smallFit?.(a, scale);
+    if (sf) {
+      const side = Math.sign(st.x) || 1;
+      const k = SMALL_STALL;
+      const hw = sf.halfW + (k.turn[a.species] ?? 0) * scale;
+      if (slot === 1) return new THREE.Vector3(st.x + side * THREE.MathUtils.clamp(k.out - hw, 0, k.shift), st.y, (st.zRear ?? st.zFront - 1.95) - k.rear - sf.rear);
+      // (seul dans sa place : au milieu — contre la séparation, ses cornes y entraient quand il tourne la tête)
+      const pair = this.stallUse[i].length > 1;
+      return new THREE.Vector3(st.x - (pair ? side * THREE.MathUtils.clamp(k.in - hw, 0, k.shift) : 0), st.y, st.zFront + k.front - sf.front);
+    }
     return new THREE.Vector3(st.x, st.y, st.zFront - half - 0.14 - back);
+  }
+
+  /**
+   * Mouton ou chèvre réaliste : distances (m, à sa taille) de son origine au bout du nez (front), à la pointe des fesses ou
+   * de la queue (rear, négatif) et demi-largeur (halfW), toison comprise, mesurées sur son maillage au repos (le modèle
+   * vivant s'il est là, sinon un double construit une fois par race, stade et sexe). null : pas un modèle réaliste.
+   */
+  smallFit(a, scale) {
+    if (!SMALL_LIVESTOCK.includes(a.species)) return null;
+    const e = this.game?.entities?.get?.(a.id);
+    let f = e?.model ? smallFitOf(e.model) : null;
+    if (!f && !(e?.model?.realSheep || e?.model?.realGoat)) {
+      this.smallFits ??= new Map();
+      const look = travelLook(a);
+      const key = `${a.species}|${a.breed}|${lifeStage(a)}|${a.sex}`;
+      if (!this.smallFits.has(key)) {
+        const m = buildAnimalModel(a.species, look, a.breed);
+        this.smallFits.set(key, smallFitOf(m));
+        if (m?.realSheep || m?.realGoat) m.dispose?.();
+      }
+      f = this.smallFits.get(key);
+    }
+    return f ? { front: f.front * scale, rear: f.rear * scale, halfW: f.halfW * scale } : null;
   }
 
   /**
@@ -555,11 +632,26 @@ export class TripVehicle {
     const s = a.look.scale * growthScale(a);
     this.stallUse[i].push(a.id);
     // (vache réaliste : son modèle garde sa taille propre — le taureau, 4 % de plus —, comme dans la cour)
-    model.root.scale.setScalar(s * (model.realCow ? model.size ?? 1 : 1) * this.stallShrink(i, a, s));
+    // (mouton et chèvre réalistes aussi : le bouc, 12 % de plus que la chèvre)
+    model.root.scale.setScalar(s * (model.realCow || model.realSheep || model.realGoat ? model.size ?? 1 : 1) * this.stallShrink(i, a, s));
     model.root.position.copy(this.stallPose(i, a, s));
     this.trailer.group.add(model.root);
     this.passengers.set(a.id, { model, stall: i });
+    this.replaceStall(i);
     return null;
+  }
+
+  /**
+   * Les passagers sans animation d'une place à leur place : un second mouton ou une seconde chèvre vient d'y monter (le
+   * premier se range contre la séparation), ou l'un des deux est descendu. Les passagers vivants y vont d'eux-mêmes
+   * (update).
+   */
+  replaceStall(i) {
+    for (const [id, p] of this.passengers) {
+      if (p.stall !== i || !p.model || p.entity) continue;
+      const a = this.game?.profile?.animals.find((x) => x.id === id);
+      if (a) p.model.root.position.copy(this.stallPose(i, a, a.look.scale * growthScale(a)));
+    }
   }
 
   removePassenger(id) {
@@ -582,6 +674,7 @@ export class TripVehicle {
       this.showStall(p.stall, { breastBar: false, rearBar: false, tie: false });
     }
     this.passengers.delete(id);
+    if (p.stall !== undefined) this.replaceStall(p.stall);
   }
 
   /** Barres et corde d'attache d'une place (état venant de sim/loading.js). */
@@ -736,6 +829,17 @@ export class TripVehicle {
     for (const p of this.passengers.values()) {
       if (!p.entity) continue;
       p.entity.speed = 0;
+      // (mouton, chèvre : se range à pas lents quand un second monte dans sa place, ou qu'il redevient seul)
+      if (p.stall !== undefined && SMALL_LIVESTOCK.includes(p.entity.data.species)) {
+        const want = this.stallPose(p.stall, p.entity.data, p.entity.scale);
+        const pos = p.entity.root.position;
+        const d = Math.hypot(want.x - pos.x, want.z - pos.z);
+        if (d > 0.002) {
+          const k = Math.min(1, (dt * 0.35) / d);
+          pos.x += (want.x - pos.x) * k;
+          pos.z += (want.z - pos.z) * k;
+        }
+      }
       p.entity.update(dt, this.ctx);
     }
     for (const w of this.walkers) {

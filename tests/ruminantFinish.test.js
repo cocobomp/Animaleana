@@ -853,3 +853,88 @@ describe('bouc : nettement plus grand et plus massif que la chèvre', () => {
     }
   });
 });
+
+describe('van : deux moutons ou chèvres dans une place sans se traverser', () => {
+  // (place du van à deux chevaux : barre de poitrail à z = 1,06, barre arrière 1,95 m derrière, séparation à x = 0 —
+  // vehicles.js ; avant, la seconde bête se tenait 0,95 m derrière la première, au milieu : deux chèvres de 1,3 à 1,6 m
+  // du nez à la queue se traversaient de 32 à 44 cm)
+  const stall = { x: 0.44, zFront: 1.06, zRear: 1.06 - 1.95, y: 0.4 };
+  const vehicleWith = async (ids, ents, travellers = null, nStalls = 1) => {
+    const { TripVehicle } = await import('../src/game/Vehicle.js');
+    const v = Object.create(TripVehicle.prototype);
+    const stalls = Array.from({ length: nStalls }, (_, i) => ({ ...stall, x: i % 2 ? -0.44 : 0.44 }));
+    Object.assign(v, { trailer: { stalls }, stallUse: ids, travellers, game: { entities: ents, profile: { animals: travellers ?? [] } } });
+    return v;
+  };
+  // sommets du maillage (debout, après le squelette), par tranche de 2 cm en z : étendue en x et en y
+  const slices = (md, at) => {
+    md.root.position.copy(at);
+    md.root.updateMatrixWorld(true);
+    const S = new Map();
+    const v = new THREE.Vector3();
+    const pos = md.mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      md.mesh.getVertexPosition(i, v);
+      v.applyMatrix4(md.mesh.matrixWorld);
+      const k = Math.floor(v.z / 0.02);
+      const q = S.get(k) ?? [Infinity, -Infinity, Infinity, -Infinity];
+      S.set(k, [Math.min(q[0], v.x), Math.max(q[1], v.x), Math.min(q[2], v.y), Math.max(q[3], v.y)]);
+    }
+    return S;
+  };
+  // pénétration (m) : le plus petit du chevauchement en travers et de la longueur où les deux corps se recouvrent
+  const penetration = (A, B) => {
+    let over = 0, n = 0;
+    for (const [k, a] of A) {
+      const b = B.get(k);
+      if (!b || a[3] < b[2] || b[3] < a[2]) continue;
+      const ov = Math.min(a[1], b[1]) - Math.max(a[0], b[0]);
+      if (ov > 0) { over = Math.max(over, ov); n++; }
+    }
+    return Math.min(over, n * 0.02);
+  };
+  it('deux chèvres prennent chacune leur place quand il y en a ; un mouton partage la sienne s\'il faut garder la place du cheval', async () => {
+    const g1 = createAnimal({ species: 'goat', breed: 'alpine', sex: 'f', colorIndex: 0, ageDays: 400, seed: 1 });
+    const g2 = createAnimal({ species: 'goat', breed: 'alpine', sex: 'f', colorIndex: 0, ageDays: 400, seed: 2 });
+    let v = await vehicleWith([[g1.id], []], new Map(), [g1, g2], 2);
+    expect(v.freeStall(g2)).toBe(1);
+    const s1 = createAnimal({ species: 'sheep', breed: 'suffolk', sex: 'f', colorIndex: 0, ageDays: 400, seed: 3 });
+    const s2 = createAnimal({ species: 'sheep', breed: 'suffolk', sex: 'f', colorIndex: 0, ageDays: 400, seed: 4 });
+    const h = createAnimal({ species: 'horse', breed: 'selle_francais', sex: 'f', colorIndex: 0, ageDays: 2000, seed: 5 });
+    v = await vehicleWith([[s1.id], []], new Map(), [s1, s2, h], 2);
+    expect(v.freeStall(s2)).toBe(0);
+    expect(v.freeStall(h)).toBe(1);
+  });
+  it('deux boucs col noir, deux chèvres alpines, deux béliers suffolk : décalés en long et en travers, dans la place', async () => {
+    for (const [sp, breed, sex, maxPen] of [['goat', 'col_noir', 'm', 0.08], ['goat', 'alpine', 'f', 0.01], ['sheep', 'suffolk', 'm', 0.01]]) {
+      const a = createAnimal({ species: sp, breed, sex, colorIndex: 0, ageDays: 400, seed: 1 });
+      const b = createAnimal({ species: sp, breed, sex, colorIndex: 0, ageDays: 400, seed: 2 });
+      const ma = build(sp, breed, { sex }), mb = build(sp, breed, { sex });
+      for (const md of [ma, mb]) md.anim.staticPose('stand');
+      const ents = new Map([[a.id, { model: ma }], [b.id, { model: mb }]]);
+      const v = await vehicleWith([[a.id, b.id]], ents);
+      const pa = v.stallPose(0, a, 1), pb = v.stallPose(0, b, 1);
+      const A = slices(ma, pa), B = slices(mb, pb);
+      expect(penetration(A, B), `${breed} ${sex}`).toBeLessThan(maxPen);
+      // (ancienne règle : 0,95 m l'une derrière l'autre, au milieu de la place)
+      const half = a.look.bodyLen / 2;
+      const old = penetration(slices(ma, new THREE.Vector3(stall.x, 0, stall.zFront - half - 0.14)), slices(mb, new THREE.Vector3(stall.x, 0, stall.zFront - half - 0.14 - 0.95)));
+      expect(old, `${breed} ${sex} avant`).toBeGreaterThan(sp === 'goat' ? 0.2 : 0.02);
+      // dans la place : le nez au plus 22 cm devant la barre de poitrail, la pointe des fesses au plus 28 cm derrière la
+      // barre arrière, les flancs entre la séparation et la paroi
+      for (const S of [A, B]) {
+        const ks = [...S.keys()];
+        expect(Math.max(...ks) * 0.02 + 0.02).toBeLessThan(stall.zFront + 0.22);
+        expect(Math.min(...ks) * 0.02).toBeGreaterThan(stall.zRear - 0.28);
+        const xs = [...S.values()];
+        expect(Math.min(...xs.map((q) => q[0]))).toBeGreaterThan(0.025);
+        expect(Math.max(...xs.map((q) => q[1]))).toBeLessThan(0.88);
+      }
+      // seule dans sa place : au milieu
+      const v1 = await vehicleWith([[a.id]], ents);
+      expect(v1.stallPose(0, a, 1).x).toBeCloseTo(stall.x, 5);
+      ma.dispose?.();
+      mb.dispose?.();
+    }
+  });
+});

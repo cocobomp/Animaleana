@@ -50,9 +50,6 @@ export const THEMES = [
 ];
 
 const QUESTS = new Map(OBJECTIVES.filter((o) => o.kind === 'quest').map((o) => [o.id, o]));
-export const isQuestId = (id) => QUESTS.has(id);
-export const questObjective = (id) => QUESTS.get(id) ?? null;
-export const themeOf = (id) => THEMES.find((th) => th.quests.includes(id))?.id ?? null;
 
 const isDone = (p, id) => (p.completed ?? []).includes(id);
 const shown = (p, id) => QUESTS.has(id) && objectiveShown(p, QUESTS.get(id));

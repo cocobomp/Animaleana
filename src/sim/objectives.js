@@ -1,4 +1,5 @@
 // Quêtes (facultatives) et succès. Chaque objectif donne sa progression [actuel, total].
+// Quêtes principales (l'histoire de la ferme) et secondaires (à rejoindre) : src/sim/quests.js.
 
 import { happiness } from './animal.js';
 import { PLACE_IDS, PLACES } from './places.js';
@@ -107,7 +108,7 @@ export const OBJECTIVES = [
 ];
 
 /**
- * L'objectif est-il montré (journal, quête conseillée, suivi) ? Non s'il demande une espèce pas encore
+ * L'objectif est-il montré (journal, histoire de la ferme, quêtes à rejoindre, suivi) ? Non s'il demande une espèce pas encore
  * proposée qu'on n'a pas (needs). Une quête déjà finie reste dans le journal.
  */
 export const objectiveShown = (p, o) => !o.needs || anyAvailable(p, o.needs) || (p.completed ?? []).includes(o.id);

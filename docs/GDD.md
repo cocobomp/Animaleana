@@ -157,8 +157,15 @@ réussite au dressage…).
 - La météo a un effet sur les animaux (froid → besoin d'abri ou de couverture).
 
 ## 10. Quêtes et succès
-- Quêtes **facultatives** (exemples : « Adopte ton premier animal », « Fais une
-  balade à cheval », « Voyage à l'étranger »).
+- **Histoire de la ferme** (quête principale ⭐) : une suite de 10 chapitres, un seul à la fois, faisables par
+  tout le monde avec n'importe quel animal et sans gros budget : adopter, caresser, nourrir, donner à boire,
+  brosser, vétérinaire, un tour, un métier, un premier client, un voyage. Un chapitre trop dur se **passe pour
+  l'instant** (le suivant arrive) et se **reprend** plus tard depuis le journal.
+- **Quêtes secondaires** (🎯), rangées par thème (animaux, voyages, activités et concours, métiers) : l'enfant
+  **rejoint** celles qu'elle veut (3 au plus en même temps) et les **enlève** quand elle veut, sans rien perdre.
+  Une quête qu'on ne peut pas encore faire dit pourquoi (« Il te faut d'abord un cheval ») ; rien n'est imposé.
+- Toute quête finie donne sa récompense, rejointe ou non. Le suivi sur le côté de l'écran montre la quête suivie
+  (🧭), sinon le chapitre en cours, sinon la première quête rejointe (src/sim/quests.js).
 - Succès à débloquer.
 
 ## 11. Technique

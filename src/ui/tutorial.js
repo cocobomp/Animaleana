@@ -21,7 +21,7 @@ import {
   followQuest, stopFollow, noteFollowEvent, updateFollow, followView, stepWindow,
 } from '../sim/tutorial.js';
 import {
-  trackerQuest, questKind, mainQuest, storyView, joinQuest, leaveQuest, skipChapter, resumeChapter, MAX_JOINED,
+  trackerQuest, questKind, storyView, joinQuest, leaveQuest, skipChapter, resumeChapter, MAX_JOINED,
 } from '../sim/quests.js';
 import { cap, hintText } from './quests.js';
 

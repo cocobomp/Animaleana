@@ -1155,9 +1155,12 @@ function browseFence(e, dt, anim, scale) {
   if (b.phase === 'step' || b.phase === 'back') {
     const goal = b.phase === 'step' ? b.near : b.from;
     const dh = wrap(b.heading - e.heading);
-    // (tournée sur place au rythme de ses sabots, qui piétinent : RealSheepAnim.turnRate ; à 2,5 rad/s, ses postérieurs
-    // posés étaient traînés de 36 à 52 cm)
-    e.heading += Math.sign(dh) * Math.min(Math.abs(dh), dt * Math.min(2.5, e.model.turnRate?.(0) ?? 2.5));
+    // (tournée sur place au rythme de ses sabots, qui piétinent : RealSheepAnim.turnRate, freinée par les sabots qui
+    // attendent leur tour ; à 2,5 rad/s, ses postérieurs posés étaient traînés de 36 à 52 cm ; autour du milieu de ses
+    // sabots, pivotShift)
+    const turn = Math.sign(dh) * Math.min(Math.abs(dh), dt * Math.min(2.5, e.model.turnRate?.(0) ?? 2.5) * (anim.brake ?? 1));
+    if (anim.pivotShift) anim.pivotShift(e, turn, 0);
+    else e.heading += turn;
     e.root.rotation.y = e.heading;
     const dx = goal.x - p.x;
     const dz = goal.z - p.z;

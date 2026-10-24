@@ -533,6 +533,7 @@ describe('demi-tour sur place et petit pas vers la barrière : les sabots piéti
         }
         prev[l] = toe;
         r.lock = Math.max(r.lock, Math.abs(an.lockAng[l]));
+        r.side = Math.max(r.side ?? 0, Math.abs(an.lockSide[l]));
       });
     };
     r.max = () => Math.max(0, ...r.slips, ...cur);
@@ -591,7 +592,69 @@ describe('demi-tour sur place et petit pas vers la barrière : les sabots piéti
     // (retournée en moins de 7 s — la vache, longue, tourne large —, elle repart vers sa cible)
     expect(turned).toBeGreaterThan(30);
     expect(T.max(), `${breed} : glissement ${(T.max() * 100).toFixed(1)} cm`).toBeLessThan(maxSlip);
-    expect(T.lock).toBeLessThan(0.53);
+    // (correction plafonnée à 0,38 rad en long et 0,2 de côté : au-delà, le sabot se replace d'un pas)
+    expect(T.lock).toBeLessThan(0.385);
+    expect(T.side).toBeLessThan(0.205);
+    md.dispose?.();
+  }, 120000);
+
+  // (critique de la passe précédente : pressé — il suit la joueuse, sa mère, le chien —, il tournait deux fois plus vite
+  // au trot et un postérieur posé était traîné jusqu'à 54 cm (Holstein), 48 cm (Highland), 41 cm (Hereford), 36 cm
+  // (suffolk) ; correction des membres jusqu'à 0,52 rad en long, 0,28 de côté ; demi-tours ordinaires de 3,5 à 6 s)
+  it.each([
+    ['cow', 'holstein', 'f', 3.5, 0.08], ['cow', 'hereford', 'm', 3.5, 0.09], ['cow', 'highland', 'm', 3.5, 0.08], ['sheep', 'suffolk', 'f', 4, 0.08], ['goat', 'alpine', 'f', 4.5, 0.08],
+  ])('%s %s (%s) pressé vers une cible derrière lui à %s m/s : sabots posés tenus (moins de %s m), membres jamais lancés', (sp, breed, sex, run, maxSlip) => {
+    const G = { sheep: GS, goat: GG, cow: GC }[sp];
+    const a = createAnimal({ species: sp, breed, sex, colorIndex: 0, ageDays: 80, seed: 7, rng: () => 0.42 });
+    const md = BUILD[sp]({ ...a.look, sex }, breed, G);
+    const e = entity(md, a, a.look.scale * growthScale(a));
+    const dt = 1 / 30;
+    const rnd = Math.random;
+    Math.random = () => 0.9;
+    const T = tracker(md);
+    let faced = null;
+    try {
+      for (let f = 0; f < 90; f++) {
+        e.time += dt;
+        ANIM[sp](e, dt, false);
+      }
+      const th = Math.PI * 0.97;
+      e.target.set(Math.sin(th) * 14, 0, Math.cos(th) * 14);
+      for (let f = 0; f < 8 / dt; f++) {
+        e.time += dt;
+        const p = e.position;
+        e.targetSpeed = Math.hypot(e.target.x - p.x, e.target.z - p.z) < 3 ? 0 : run;
+        let diff = Math.atan2(e.target.x - p.x, e.target.z - p.z) - e.heading;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        if (e.targetSpeed > 0) {
+          // (comme AnimalEntity : tourné autour du milieu de ses sabots, s.pz)
+          const s = md.steer(diff, Math.hypot(e.target.x - p.x, e.target.z - p.z), e.speed, e.targetSpeed, dt, 1);
+          const h0 = e.heading;
+          e.heading += s.turn;
+          p.x += s.pz * (Math.sin(h0) - Math.sin(e.heading));
+          p.z += s.pz * (Math.cos(h0) - Math.cos(e.heading));
+          e.targetSpeed = s.speed;
+        }
+        if (faced === null && Math.abs(diff) < 0.15) faced = f * dt;
+        e.speed += (e.targetSpeed - e.speed) * Math.min(1, dt * 3);
+        p.x += Math.sin(e.heading) * e.speed * dt;
+        p.z += Math.cos(e.heading) * e.speed * dt;
+        e.root.rotation.y = e.heading;
+        e.root.updateMatrixWorld(true);
+        ANIM[sp](e, dt, false);
+        T.tick();
+      }
+    } finally {
+      Math.random = rnd;
+    }
+    if (process.env.RUM_LOG) console.log('PRESSE', sp, breed, sex, (T.max() * 100).toFixed(1), T.lock.toFixed(2), T.side.toFixed(2), faced);
+    // (retourné en 3,5 s au plus — 0,9 s avant, sabots traînés ; 1,7 à 1,8 s pour la vache à la passe précédente,
+    // sabot traîné de 54 cm —, membres corrigés de 0,38 rad au plus en long et 0,2 de côté : au-delà, il se replace)
+    expect(faced).not.toBeNull();
+    expect(faced).toBeLessThan(3.5);
+    expect(T.max(), `${breed} : glissement ${(T.max() * 100).toFixed(1)} cm`).toBeLessThan(maxSlip);
+    expect(T.lock).toBeLessThan(0.385);
+    expect(T.side).toBeLessThan(0.205);
     md.dispose?.();
   }, 120000);
 
@@ -628,7 +691,8 @@ describe('demi-tour sur place et petit pas vers la barrière : les sabots piéti
     if (process.env.RUM_LOG) console.log('BARRIERE-TOUR', breed, sex, heading, (T.max() * 100).toFixed(1), T.lock.toFixed(2));
     expect([...phases]).toEqual(expect.arrayContaining(['step', 'settle', 'up', 'down', 'back']));
     expect(T.max(), `${breed} : glissement ${(T.max() * 100).toFixed(1)} cm`).toBeLessThan(0.075);
-    expect(T.lock).toBeLessThan(0.46);
+    expect(T.lock).toBeLessThan(0.385);
+    expect(T.side).toBeLessThan(0.205);
     md.dispose?.();
   }, 120000);
 });

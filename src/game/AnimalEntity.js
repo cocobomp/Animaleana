@@ -839,9 +839,16 @@ export class AnimalEntity {
         // (ruminant réaliste : il tourne au rythme de ses sabots — sur place, ils piétinent — et ralentit pour se
         // retourner ou quand sa cible est dans son cercle de virage ; voir RealSheepAnim.steer)
         if (this.model?.steer) {
-          const urgent = !!this.herdCtrl || !!d.following || this.state === 'mother';
+          // (pressé : conduit par le chien — il repart dès qu'il fait à peu près face —, ou il suit la joueuse, sa mère)
+          const urgent = this.herdCtrl ? 2 : d.following || this.state === 'mother' ? 1 : 0;
           const s = this.model.steer(diff, Math.hypot(t.x - p.x, t.z - p.z), this.speed, this.targetSpeed, dt, urgent);
+          // (sur place, il tourne autour du milieu de ses sabots, pas de sa racine : l'entité suit, s.pz)
+          const h0 = this.heading;
           this.heading += s.turn;
+          if (s.pz) {
+            p.x += s.pz * (Math.sin(h0) - Math.sin(this.heading));
+            p.z += s.pz * (Math.cos(h0) - Math.cos(this.heading));
+          }
           this.targetSpeed = s.speed;
           // (le temps de se retourner sur place ne compte pas dans sa promenade, 8 s au plus par demi-tour : sinon, la
           // vache, qui met 4 à 6 s à faire demi-tour, repartait à peine tournée — 20 à 45 % de chemin en moins)

@@ -843,7 +843,25 @@ export class AnimalEntity {
         const want = Math.atan2(t.x - p.x, t.z - p.z);
         let diff = want - this.heading;
         diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-        this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 3.5);
+        // (ruminant réaliste : il tourne au rythme de ses sabots — sur place, ils piétinent — et ralentit pour se
+        // retourner ou quand sa cible est dans son cercle de virage ; voir RealSheepAnim.steer)
+        if (this.model?.steer) {
+          // (pressé : conduit par le chien — il repart dès qu'il fait à peu près face —, ou il suit la joueuse, sa mère)
+          const urgent = this.herdCtrl ? 2 : d.following || this.state === 'mother' ? 1 : 0;
+          const s = this.model.steer(diff, Math.hypot(t.x - p.x, t.z - p.z), this.speed, this.targetSpeed, dt, urgent);
+          // (sur place, il tourne autour du milieu de ses sabots, pas de sa racine : l'entité suit, s.pz)
+          const h0 = this.heading;
+          this.heading += s.turn;
+          if (s.pz) {
+            p.x += s.pz * (Math.sin(h0) - Math.sin(this.heading));
+            p.z += s.pz * (Math.cos(h0) - Math.cos(this.heading));
+          }
+          this.targetSpeed = s.speed;
+          // (le temps de se retourner sur place ne compte pas dans sa promenade, 8 s au plus par demi-tour : sinon, la
+          // vache, qui met 4 à 6 s à faire demi-tour, repartait à peine tournée — 20 à 45 % de chemin en moins)
+          if (Math.abs(diff) < 0.3) this.turnHold = 0;
+          else if (this.state === 'walk' && Math.abs(diff) > 0.8 && (this.turnHold = (this.turnHold ?? 0) + dt) < 8) this.timer += dt;
+        } else this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 3.5);
       }
       if (this.perch?.phase !== 'on') this.speed += (this.targetSpeed - this.speed) * Math.min(1, dt * 3);
       // (l'animal se relève avant de partir : le modèle demande d'attendre — catReal.js, chat couché ou en boule)

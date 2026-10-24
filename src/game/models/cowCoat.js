@@ -18,6 +18,7 @@
 // La matière garde son shader quand on la clone (Beauty.js : robe lustrée) : uniformes partagés, clé de programme.
 
 import * as THREE from 'three';
+import { addSelfShadow, SELF_SHADOW_GAP } from './ruminantShadow.js';
 
 export const COW_PATTERNS = { solid: 0, pie: 1, hereford: 2 };
 
@@ -363,9 +364,11 @@ export function cowMaterial(src, uniforms) {
   depth.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms);
     vert(sh);
+    // (ombre des cornes et des oreilles reculée : plus de strie sur la tête claire — ruminantShadow.js)
+    addSelfShadow(sh, 'max(smoothstep(0.15, 0.5, cowPart.x), smoothstep(0.15, 0.5, cowAux.x))', SELF_SHADOW_GAP.cow);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec4 vCMask;\nvarying vec4 vCPart;\nvarying vec4 vCAux;\nvarying vec3 vCRest;');
   };
-  depth.customProgramCacheKey = () => 'cow-coat-depth-v1';
+  depth.customProgramCacheKey = () => 'cow-coat-depth-v2';
   return { mat, depth };
 }
 

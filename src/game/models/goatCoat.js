@@ -14,6 +14,7 @@
 // La matière garde son shader quand on la clone (Beauty.js : robe lustrée) : uniformes partagés, clé de programme.
 
 import * as THREE from 'three';
+import { addSelfShadow, SELF_SHADOW_GAP } from './ruminantShadow.js';
 
 export const PATTERNS = { white: 0, chamoisee: 1, poitevine: 2, colnoir: 3 };
 
@@ -59,6 +60,7 @@ export function setGoatCoat(u, B) {
 const COMMON_V = /* glsl */ `
 attribute vec4 goatMask;
 attribute vec4 goatPart;
+attribute float goatEar;
 uniform vec4 gStyle;
 uniform vec4 gLand;
 varying vec4 vGMask;
@@ -253,9 +255,11 @@ export function goatMaterial(src, uniforms) {
   depth.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms);
     vert(sh);
+    // (ombre des cornes et des oreilles reculée : plus de strie sur la tête claire — ruminantShadow.js)
+    addSelfShadow(sh, 'max(smoothstep(0.15, 0.5, goatPart.x), smoothstep(0.15, 0.5, goatEar))', SELF_SHADOW_GAP.goat);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec4 vGMask;\nvarying vec4 vGPart;\nvarying vec3 vGRest;');
   };
-  depth.customProgramCacheKey = () => 'goat-coat-depth-v1';
+  depth.customProgramCacheKey = () => 'goat-coat-depth-v2';
   return { mat, depth };
 }
 

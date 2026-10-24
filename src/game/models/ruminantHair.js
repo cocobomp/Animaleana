@@ -6,7 +6,8 @@
 // s'écarte un peu du corps puis pend, et s'effile jusqu'à une pointe ; sa toile (des brins de longueurs inégales, alpha
 // découpé) en fait une frange, jamais un rectangle. Les mèches sont semées sur la peau à espacement régulier (elles se
 // chevauchent : pas de trou), sur les flancs, le dos, la croupe et les cuisses — jamais en rang sous le ventre.
-// Couchée, la mèche se replie vers sa racine (hState.y) ; tondue, elle rentre dans le corps (hState.x : longueur).
+// Couchée (hState.y), la mèche se rabat sur le corps et ce qui toucherait le sol s'étale dans l'herbe ; tondue, elle
+// rentre dans le corps (hState.x : longueur).
 // Rien ici ne dépend de la race : les modules des espèces choisissent les sommets, les longueurs et les couleurs.
 
 import * as THREE from 'three';
@@ -254,16 +255,38 @@ export function lockMaterial(lu, colA, colB, name = 'ruminant_locks', texKind = 
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vHSide = hairSide;
 vHT = uv.y;
-{
-  // (longueur du moment, repliée vers la racine quand l'animal est couché ; racine poussée avec la toison et rentrée
-  // avec la cible de forme du corps : à moitié tondu, les mèches flottaient au-dessus du dos)
-  float k = hState.x * (1.0 - 0.72 * hState.y);
-  transformed = hairTop + hairD * hState.w + hairN * hState.z + (transformed - hairTop) * k;
-}`)
+// (racine poussée avec la toison et rentrée avec la cible de forme du corps : à moitié tondu, les mèches flottaient
+// au-dessus du dos ; couché, à peine raccourcie — repliée aux trois quarts, elle disparaissait dans la toison)
+vec3 hRoot = hairTop + hairD * hState.w + hairN * hState.z;
+transformed = hRoot + (transformed - hairTop) * hState.x * (1.0 - 0.12 * hState.y);`)
       .replace('#include <skinning_vertex>', `#include <skinning_vertex>
 {
-  // (jamais sous le sol : couché, le bout des longues mèches pendait sous le ventre et entrait dans le sol ; il s'y pose)
   vec4 hw = modelMatrix * vec4(transformed, 1.0);
+#ifdef USE_SKINNING
+  if (hState.y > 0.001) {
+    // Couché (monde, après le squelette) : la mèche se rabat sur le corps — on lui retire l'essentiel de ce qui
+    // l'écarte de la peau, sa longueur gardée —, et ce qui passerait sous le sol s'étale dans l'herbe, vers
+    // l'extérieur ; elles pendaient droit sous le ventre, jusque dans le sol.
+    vec3 rw = (modelMatrix * (skinMatrix * vec4(hRoot, 1.0))).xyz;
+    vec3 nw = normalize(mat3(modelMatrix) * (mat3(skinMatrix) * hairN));
+    vec3 L = hw.xyz - rw;
+    vec3 Lf = L - nw * dot(L, nw) * 0.7;
+    Lf *= length(L) / max(1e-4, length(Lf));
+    vec3 p = rw + mix(L, Lf, hState.y);
+    float ex = hFloor - p.y;
+    if (ex > 0.0) {
+      vec3 o = vec3(nw.x, 0.0, nw.z);
+      if (dot(o, o) < 0.04) o = vec3(rw.x - modelMatrix[3].x, 0.0, rw.z - modelMatrix[3].z);
+      // (vers l'extérieur et un peu vers l'arrière, les trois quarts de ce qui entrerait dans le sol)
+      vec3 bk = -normalize(vec3(modelMatrix[2].x, 0.0, modelMatrix[2].z) + vec3(0.0, 0.0, 1e-4));
+      o = normalize(normalize(o + vec3(1e-4, 0.0, 0.0)) + bk * 0.35);
+      p += vec3(0.0, ex, 0.0) + o * (ex * 0.75 * hState.y);
+    }
+    transformed += inverse(mat3(modelMatrix)) * (p - hw.xyz);
+    hw.xyz = p;
+  }
+#endif
+  // (jamais sous le sol)
   if (hw.y < hFloor) transformed += inverse(mat3(modelMatrix)) * vec3(0.0, hFloor - hw.y, 0.0);
 }`);
     sh.fragmentShader = sh.fragmentShader
@@ -280,7 +303,7 @@ vHT = uv.y;
   diffuseColor.rgb = hc * mix(0.6 + 0.45 * g, 0.86 + 0.2 * g, lt) * (mix(0.82, 0.95, lt) + mix(0.18, 0.05, lt) * smoothstep(0.0, 0.35, vHT));
 }`);
   };
-  mat.customProgramCacheKey = () => `${name}-v5`;
+  mat.customProgramCacheKey = () => `${name}-v6`;
   mat.userData.hairUniforms = hu;
   return mat;
 }

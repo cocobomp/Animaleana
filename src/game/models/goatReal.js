@@ -119,7 +119,7 @@ function goatTextureMeans(map, uv, mask, part, n) {
  * repère de la chèvre (flottants : les positions du fichier sont quantifiées). Gardé dans gltf.userData.
  * Régions (attribut goatMask) : x corps, y tête (tête, mâchoire, oreilles, yeux, barbe, cornes), z bas des membres
  * (avant-bras, canon, pied ; jambe, canon, pied), w onglons ; goatPart : x cornes, y mamelle, z barbe, w part portée par
- * le tronc (poil long).
+ * le tronc (poil long) ; goatEar : part portée par les oreilles.
  */
 export function realGoatBase(gltf) {
   if (gltf.userData.goatBase) return gltf.userData.goatBase;
@@ -200,6 +200,8 @@ export function realGoatBase(gltf) {
   const part = new Float32Array(n * 4);
   const domBone = new Uint16Array(n);
   const trunk = new Float32Array(n);
+  // (part portée par les oreilles : leur ombre reculée, goatCoat.js)
+  const ear = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     let head = 0;
     let leg = 0;
@@ -214,6 +216,7 @@ export function realGoatBase(gltf) {
       if (nmb === 'hornL' || nmb === 'hornR') part[i * 4] += w;
       else if (nmb === 'udder') part[i * 4 + 1] += w;
       else if (nmb === 'beard') part[i * 4 + 2] += w;
+      else if (nmb === 'earL' || nmb === 'earR') ear[i] += w;
       part[i * 4 + 3] += w * (TRUNK_W[nmb] ?? 0);
       if (w > sw[i * 4 + best]) best = k;
     }
@@ -241,7 +244,7 @@ export function realGoatBase(gltf) {
   const natural = { ...NATURAL_SPEED, ...(ext.naturalSpeeds ?? {}) };
   const base = {
     names, index, parent, heads, rotW, nb,
-    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, part, trunk, index: idx, lodIndex, count: n, material: master.material, domBone },
+    prim: { pos, nrm, dPos, dNrm, si, sw, uv, mask, part, trunk, ear, index: idx, lodIndex, count: n, material: master.material, domBone },
     clips: cleanClips(gltf.animations),
     natural,
     legChains,
@@ -259,7 +262,8 @@ export function realGoatBase(gltf) {
 
 /** Géométries (partagées) d'un gabarit, ses articulations et ses mesures. */
 function shapeFor(base, B) {
-  const key = `legs:${B.legs.toFixed(3)}`;
+  const mass = B.mass ?? 0;
+  const key = `legs:${B.legs.toFixed(3)}|mass:${mass.toFixed(3)}`;
   let S = base.shapes.get(key);
   if (S) return S;
   const P = base.prim;
@@ -280,6 +284,32 @@ function shapeFor(base, B) {
     }
     pos.set([x, y, z], i * 3);
   }
+  // Bouc : encolure, épaules et poitrail épaissis (la peau poussée le long de sa normale lissée, plus sur le dessus de
+  // l'encolure), avant le squelette — ni la tête, ni le bas des pattes, ni la barbe ; les mèches du poil long partent de
+  // cette peau-là.
+  if (mass > 0) {
+    const M0 = measureSheep(base, pos, J.heads);
+    P.smoothN ??= smoothNormals(P.pos, P.nrm, n, 0.06);
+    const sm = (a, b, x) => {
+      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
+    for (let i = 0; i < n; i++) {
+      const y = pos[i * 3 + 1];
+      const z = pos[i * 3 + 2];
+      const head = P.mask[i * 4 + 1];
+      const w = sm(M0.shZ - 0.14, M0.shZ + 0.02, z) * sm(M0.bellyY - 0.04, M0.bellyY + 0.06, y) * (1 - head) * (1 - head)
+        * (1 - sm(0.1, 0.5, P.mask[i * 4 + 2])) * (1 - Math.min(1, P.part[i * 4 + 2] * 3)) * (1 - Math.min(1, P.part[i * 4 + 1] * 3));
+      if (!(w > 0.001)) continue;
+      const nx = P.smoothN[i * 3];
+      const ny = P.smoothN[i * 3 + 1];
+      const nz = P.smoothN[i * 3 + 2];
+      const d = mass * w * (0.6 + 0.8 * Math.max(0, ny));
+      pos[i * 3] += nx * d;
+      pos[i * 3 + 1] += ny * d;
+      pos[i * 3 + 2] += nz * d;
+    }
+  }
   const attrs = {
     position: new THREE.BufferAttribute(pos, 3),
     normal: new THREE.BufferAttribute(P.nrm, 3),
@@ -288,6 +318,7 @@ function shapeFor(base, B) {
     skinWeight: new THREE.BufferAttribute(P.sw, 4),
     goatMask: new THREE.BufferAttribute(P.mask, 4),
     goatPart: new THREE.BufferAttribute(P.part, 4),
+    goatEar: new THREE.BufferAttribute(P.ear, 1),
   };
   const morphP = new THREE.BufferAttribute(P.dPos, 3);
   const morphN = new THREE.BufferAttribute(P.dNrm, 3);
@@ -599,6 +630,8 @@ export function buildRealGoatModel(look, breedId = null, gltf = null) {
     browseHoof: base.browseHoof,
   };
   model.anim = new RealGoatAnim(model, base, S);
+  model.turnRate = (v) => model.anim.turnRate(v);
+  model.steer = (diff, dist, v, want, dt, urgent) => model.anim.steer(diff, dist, v, want, dt, urgent);
   hb.anim = model.anim;
   model.bounds = hb;
   model.lodLevel = 0;
@@ -789,6 +822,7 @@ export class RealGoatAnim extends RealSheepAnim {
     this.restorePose();
     this.t += dt;
     this.hold += dt;
+    this.trackMotion(dt, st);
     const size = clamp(st.size ?? 1, 0.15, 1.6);
     const u = st.moving ? (st.v * Math.sqrt(size)) / Math.sqrt(this.speedScale) : 0;
     const g = pickSheepGait(this.gait, u);
@@ -855,8 +889,7 @@ export class RealGoatAnim extends RealSheepAnim {
     } else if (st.moving) {
       // (en se déplaçant, toujours l'allure, sabots tenus : la gambade jouée sur place glissait ; voir le mouton)
       moveClip = g === 'idle' ? 'walk' : g;
-      target[moveClip] = 1;
-      fadeK = 5;
+      fadeK = this.moveTarget(target, moveClip);
     } else if (this.posture === 'rear') {
       target.browse_up = 1;
       fadeK = 6;
@@ -892,15 +925,13 @@ export class RealGoatAnim extends RealSheepAnim {
       let w = was + (target[name] - was) * k;
       if (w < 0.002) w = 0;
       this.w[name] = w;
-      if (was < 0.02 && w >= 0.02 && MOVING.includes(name) && this.lead && this.lead !== name) {
-        const from = this.actions[this.lead];
-        if (from) a.time = (from.time / from.getClip().duration) * a.getClip().duration;
-      }
+      // (une allure qui entre se cale sur celle qui sort, ou sur les sabots posés)
+      if (was < 0.02 && w >= 0.02 && MOVING.includes(name)) this.enterGait(name, a);
       a.setEffectiveWeight(w);
       if (MOVING.includes(name)) {
         const nat = this.natural[name];
         // (arrêtée, l'allure qui s'efface est figée : voir le mouton)
-        a.timeScale = st.moving ? Math.min(2.2 / Math.sqrt(Math.min(1, size)), Math.max(0.45, st.v / nat)) * (st.reverse ? -1 : 1) : 0;
+        a.timeScale = st.moving ? Math.min(2.2 / Math.sqrt(Math.min(1, size)), Math.max(0.3, st.v / nat)) * (st.reverse ? -1 : 1) : 0;
         if (w > leadW) {
           lead = name;
           leadW = w;
@@ -959,14 +990,22 @@ export class RealGoatAnim extends RealSheepAnim {
       fc.multiplyScalar(1 / (this.solePts[0].length + this.solePts[1].length));
       hc.multiplyScalar(1 / (this.solePts[2].length + this.solePts[3].length));
       const D = Math.max(0.2, Math.hypot(fc.x - hc.x, fc.z - hc.z));
-      // (seulement près du haut de la dressée : sabots à moins de 25 cm de la lisse)
-      const k = smooth(0.25, 0.08, Math.abs(st.rail + FENCE_RAIL - fy));
-      want = clamp((st.rail + FENCE_RAIL + 0.012 - fy) / D, -0.14, 0.12) * k * smooth(0.6, 0.95, rear);
+      // (en montant, rien tant que les sabots sont à plus de 25 cm sous la lisse ; au-dessus, toujours : le fondu
+      // calculé sur l'écart sans signe ne corrigeait plus qu'à moitié un grand bouc, dont le clip lève les antérieurs
+      // 15 cm au-dessus de la lisse — il restait dressé 6 à 9 cm trop haut)
+      const over = fy - (st.rail + FENCE_RAIL + 0.012);
+      const k = over > -0.08 ? 1 : smooth(-0.25, -0.08, over);
+      // (basculé de θ autour des postérieurs, l'avant descend de D·sin θ + H·(1 − cos θ), H : hauteur des antérieurs
+      // au-dessus des postérieurs — au premier ordre seulement, le grand bouc descendait 1,2 cm de trop, dans la lisse)
+      const H = Math.max(0, fy - hc.y);
+      const a0 = over / D;
+      want = clamp(-over / (D + 0.5 * H * Math.abs(a0)), -0.24, 0.12) * k * smooth(0.6, 0.95, rear);
       this.railPivot = (this.railPivot ??= V()).copy(hc);
     }
     this.railA = (this.railA ?? 0) + (want - (this.railA ?? 0)) * Math.min(1, dt * 5);
     if (Math.abs(this.railA) < 1e-4 || !this.railPivot) {
       this.railA = 0;
+      if (on) this.railFrontAt(rear);
       return;
     }
     // (rotation autour de l'axe des flancs, par le milieu des postérieurs : l'avant monte, les postérieurs restent)
@@ -980,6 +1019,27 @@ export class RealGoatAnim extends RealSheepAnim {
     body.position.sub(piv).applyQuaternion(_gq).add(piv);
     body.quaternion.premultiply(_gq);
     md.root.updateMatrixWorld(true);
+    if (on) this.railFrontAt(rear);
+  }
+
+  /**
+   * Milieu des onglons antérieurs, monde, une fois le corps basculé (rear : 0-1, dressée) : browseFence y règle sa
+   * glissade pour les poser au milieu de la lisse — en basculant, l'avant avance aussi, et un grand bouc pose ses
+   * antérieurs plus loin devant lui que la chèvre de taille 1 (browseHoof).
+   */
+  railFrontAt(rear) {
+    const md = this.model;
+    const f = (this.railFront ??= V()).set(0, 0, 0);
+    let c = 0;
+    for (let l = 0; l < 2; l++) {
+      for (const p of this.solePts[l]) {
+        f.add(_gu.copy(p).applyMatrix4(md.legs[l].paw.matrixWorld));
+        c++;
+      }
+    }
+    f.multiplyScalar(1 / Math.max(1, c));
+    this.railFrontT = rear;
+    this.railFrontN = (this.railFrontN ?? 0) + 1;
   }
 
   /** Avancement (0-1) de la transition en cours. */
@@ -1099,7 +1159,12 @@ function browseFence(e, dt, anim, scale) {
   if (b.phase === 'step' || b.phase === 'back') {
     const goal = b.phase === 'step' ? b.near : b.from;
     const dh = wrap(b.heading - e.heading);
-    e.heading += Math.sign(dh) * Math.min(Math.abs(dh), dt * 2.5);
+    // (tournée sur place au rythme de ses sabots, qui piétinent : RealSheepAnim.turnRate, freinée par les sabots qui
+    // attendent leur tour ; à 2,5 rad/s, ses postérieurs posés étaient traînés de 36 à 52 cm ; autour du milieu de ses
+    // sabots, pivotShift)
+    const turn = Math.sign(dh) * Math.min(Math.abs(dh), dt * Math.min(2.5, e.model.turnRate?.(0) ?? 2.5) * (anim.brake ?? 1));
+    if (anim.pivotShift) anim.pivotShift(e, turn, 0);
+    else e.heading += turn;
     e.root.rotation.y = e.heading;
     const dx = goal.x - p.x;
     const dz = goal.z - p.z;
@@ -1114,7 +1179,7 @@ function browseFence(e, dt, anim, scale) {
       p.x += (dx / d) * step;
       p.z += (dz / d) * step;
       anim.stepV = v;
-    } else anim.stepV = d > 0.02 ? 0.25 : 0;
+    } else anim.stepV = d > 0.02 || Math.abs(dh) >= 0.05 ? 0.25 : 0;
     if (d <= 0.02 && Math.abs(dh) < 0.05) {
       anim.stepV = 0;
       if (b.phase === 'step') {
@@ -1148,7 +1213,15 @@ function browseFence(e, dt, anim, scale) {
     e.timer = Math.max(e.timer, 3);
     // Dressée (le clip « se dresser » fini) : elle avance sur ses postérieurs jusqu'à la barrière, puis, le temps fini,
     // recule jusqu'à sa place avant de redescendre. Les postérieurs tenus se replacent en chemin (footLock).
-    const goal = b.phase === 'up' ? b.to : b.near;
+    let goal = b.phase === 'up' ? b.to : b.near;
+    // (dressée : les onglons antérieurs mesurés — RealGoatAnim.railFrontAt — viennent au milieu de la lisse ; b.to,
+    // tiré de browseHoof à la taille 1, laissait le grand bouc, basculé pour se poser sur la lisse, les antérieurs
+    // au-delà)
+    if (b.phase === 'up' && anim.posture === 'rear' && !anim.trans && anim.railFront && anim.railFrontT > 0.99) {
+      const rel = (anim.railFront.x - p.x) * b.n.x + (anim.railFront.z - p.z) * b.n.z;
+      b.rel = b.rel == null ? rel : b.rel + (rel - b.rel) * Math.min(1, dt * 3);
+      goal = (b.goal ??= V()).copy(b.line).addScaledVector(b.n, -b.rel);
+    }
     const dx = goal.x - p.x;
     const dz = goal.z - p.z;
     const d = Math.hypot(dx, dz);

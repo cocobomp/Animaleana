@@ -108,6 +108,8 @@ window.planche = {
             a.clipPose(c.clip, c.t ?? 0);
             const lie = ['lie', 'ruminate', 'sleep', 'lie_down', 'get_up'].includes(c.clip);
             a.posture = lie ? 'lie' : 'stand';
+            // (laine et mèches de la pose figée tout de suite, comme en jeu : couché, mèches rabattues — staticPose)
+            a.applyFleece(1e9);
             a.overlay(0, { moving: false, v: 0, posture: a.posture }, true);
             a.ground({ moving: c.clip === 'jump' || c.clip === 'lamb_play' }, 0, c.clip === 'lamb_play' ? 'lamb_play' : null);
           }

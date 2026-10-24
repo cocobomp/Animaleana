@@ -10,6 +10,7 @@ import { buildRealCowModel, animateRealCow, COW_LOD_DIST } from '../src/game/mod
 import { horseView } from '../src/game/models/horseReal.js';
 import { gfx } from '../src/game/gfx.js';
 import { buildGear } from '../src/game/gearModels.js';
+import { SELF_SHADOW_GAP } from '../src/game/models/ruminantShadow.js';
 import { resolveLook, createAnimal, growthScale } from '../src/sim/animal.js';
 import { loadRealSheepGltf } from './fixtures/realSheepGltf.js';
 import { loadRealGoatGltf } from './fixtures/realGoatGltf.js';
@@ -345,7 +346,9 @@ describe('chèvre contre la barrière (en jeu : browseFence)', () => {
     return out;
   };
 
-  it.each([['alpine', 'f'], ['col_noir', 'm']])('%s (%s) : ni la tête ni les sabots dans les lisses, onglons posés sur la lisse du haut, se dresse en 1,1 s', (breed, sex) => {
+  // (les boucs, 12 % plus grands : leur clip lève les antérieurs jusqu'à 15 cm au-dessus de la lisse — RealGoatAnim.railPitch
+  // les y ramène, la glissade les pose au milieu de la lisse)
+  it.each([['alpine', 'f'], ['col_noir', 'm'], ['saanen', 'm'], ['alpine', 'm']])('%s (%s) : ni la tête ni les sabots dans les lisses, onglons posés sur la lisse du haut, se dresse en 1,1 s', (breed, sex) => {
     const r = fenceRun(breed, sex);
     if (process.env.RUM_LOG) console.log('BARRIERE', breed, JSON.stringify({ ...r, phases: [...r.phases], upFront: [Math.min(...r.upFront), Math.max(...r.upFront)], upHind: [Math.min(...r.upHind), Math.max(...r.upHind)] }));
     expect([...r.phases]).toEqual(expect.arrayContaining(['step', 'settle', 'up', 'off', 'down', 'back']));
@@ -418,6 +421,46 @@ describe('mèches couchées : jamais sous le sol (islandais, poil long des chèv
   });
 });
 
+describe('mèches longues couché : rabattues sur les flancs, étalées au sol (et dans la caisse de voyage)', () => {
+  // (couché, elles se repliaient aux trois quarts et disparaissaient dans la toison ; dans la pose figée — caisse et van,
+  // Vehicle.js — le repli n'était pas donné : elles pendaient droit sous le ventre, à travers le plancher)
+  it('pose figée couchée : repli donné tout de suite (islandais, col noir, poitevine, Highland), rien de tel debout', () => {
+    const cases = [
+      ['sheep', 'islandais_mouton', (md) => md.uniforms.sState.value.w],
+      ['goat', 'col_noir', (md) => md.uniforms.gStyle.value.w],
+      ['goat', 'poitevine', (md) => md.uniforms.gStyle.value.w],
+      ['cow', 'highland', (md) => md.uniforms.cStyle.value.w],
+    ];
+    for (const [sp, breed, coatLie] of cases) {
+      const md = sp === 'cow' ? buildRealCowModel({ ...resolveLook('cow', breed, 0), seed: 4242, sex: 'f' }, breed, GC) : build(sp, breed);
+      expect(md.lockUniforms, breed).toBeTruthy();
+      expect(md.lockUniforms.hState.value.y).toBe(0);
+      md.staticPose('lie');
+      expect(md.lockUniforms.hState.value.y, breed).toBeCloseTo(1, 5);
+      expect(coatLie(md), breed).toBeCloseTo(1, 5);
+      // (toison et longueur des mèches jamais NaN, même pour une pose figée demandée pendant la construction)
+      for (const v of md.lockUniforms.hState.value.toArray()) expect(Number.isFinite(v), breed).toBe(true);
+      md.staticPose('stand');
+      expect(md.lockUniforms.hState.value.y).toBe(0);
+      md.dispose?.();
+    }
+  });
+  it('shader : couchée, la mèche garde 88 % de sa longueur, se rabat contre la peau et s\'étale au sol vers l\'extérieur', () => {
+    const md = buildRealSheepModel(lookOf('sheep', 'islandais_mouton'), 'islandais_mouton', GS);
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+    md.locks.material.onBeforeCompile(sh);
+    const v = sh.vertexShader;
+    expect(v).toContain('(1.0 - 0.12 * hState.y)');
+    const iSkin = v.indexOf('#include <skinning_vertex>');
+    const iFold = v.indexOf('L - nw * dot(L, nw) * 0.7');
+    const iSpread = v.indexOf('o * (ex * 0.75 * hState.y)');
+    expect(iFold).toBeGreaterThan(iSkin);
+    expect(iSpread).toBeGreaterThan(iFold);
+    expect(iSpread).toBeLessThan(v.indexOf('#include <project_vertex>'));
+    md.dispose?.();
+  });
+});
+
 describe('restes de mesures : se relever en marchant, col noir couché', () => {
   const skinLow = (md, step = 2) => {
     md.root.updateMatrixWorld(true);
@@ -461,4 +504,437 @@ describe('restes de mesures : se relever en marchant, col noir couché', () => {
     md.dispose?.();
   }, 60000);
 
+});
+
+describe('demi-tour sur place et petit pas vers la barrière : les sabots piétinent au lieu de glisser', () => {
+  // (vérification de la passe précédente : la chèvre qui s'avance vers la barrière et se retourne — correction des
+  // sabots jusqu'à 0,5 rad, sabot qui glisse —, et tout demi-tour de l'entité, tournée à 3,5 rad/s : le clip du pas,
+  // joué au moins à 0,45 fois sa vitesse, balayait les sabots sans que le corps avance ; mesuré avant : glissement d'un
+  // sabot posé, cumulé sur son appui, 36 cm (chèvre), 59 cm (mouton), 117 cm (vache), correction 0,52 rad)
+  /** Suivi des sabots : glissement cumulé par appui (sole sous 1 cm), correction de footLock la plus grande. */
+  const tracker = (md) => {
+    const an = md.anim;
+    const prev = md.legs.map(() => null);
+    const cur = md.legs.map(() => 0);
+    const r = { slips: [], lock: 0 };
+    r.tick = () => {
+      md.root.updateMatrixWorld(true);
+      md.legs.forEach((leg, l) => {
+        let lo = Infinity;
+        for (const p of an.solePts[l]) lo = Math.min(lo, p.clone().applyMatrix4(leg.paw.matrixWorld).y);
+        const toe = an.toePts[l].clone().applyMatrix4(leg.paw.matrixWorld);
+        toe.lo = lo;
+        if (prev[l]) {
+          if (lo < 0.01 && prev[l].lo < 0.01) cur[l] += Math.hypot(toe.x - prev[l].x, toe.z - prev[l].z);
+          else if (cur[l] > 0) {
+            r.slips.push(cur[l]);
+            cur[l] = 0;
+          }
+        }
+        prev[l] = toe;
+        r.lock = Math.max(r.lock, Math.abs(an.lockAng[l]));
+        r.side = Math.max(r.side ?? 0, Math.abs(an.lockSide[l]));
+      });
+    };
+    r.max = () => Math.max(0, ...r.slips, ...cur);
+    return r;
+  };
+  const ANIM = { sheep: animateRealSheep, goat: animateRealGoat, cow: animateRealCow };
+  const BUILD = { sheep: buildRealSheepModel, goat: buildRealGoatModel, cow: buildRealCowModel };
+
+  // (l'entité comme AnimalEntity : debout 3 s, puis elle part vers une cible presque derrière elle, au pas)
+  it.each([
+    ['goat', 'alpine', 'f', false, 0.06], ['goat', 'col_noir', 'm', false, 0.06], ['sheep', 'suffolk', 'f', false, 0.1],
+    ['cow', 'holstein', 'f', false, 0.18], ['cow', 'hereford', 'm', false, 0.1], ['cow', 'holstein', 'f', true, 0.12],
+  ])('%s %s (%s, petit : %s) : demi-tour de l\'entité, aucun sabot posé ne glisse de plus de %s m', (sp, breed, sex, baby, maxSlip) => {
+    const G = { sheep: GS, goat: GG, cow: GC }[sp];
+    const a = createAnimal({ species: sp, breed, sex, colorIndex: 0, ageDays: baby ? 3 : 80, seed: 7, rng: () => 0.42 });
+    const md = BUILD[sp]({ ...a.look, sex, ...(baby ? { calf: true, lamb: true, kid: true } : {}) }, breed, G);
+    const e = entity(md, a, a.look.scale * growthScale(a));
+    expect(typeof md.steer).toBe('function');
+    const dt = 1 / 30;
+    const rnd = Math.random;
+    Math.random = () => 0.9;
+    const T = tracker(md);
+    let turned = 0;
+    try {
+      for (let f = 0; f < 90; f++) {
+        e.time += dt;
+        ANIM[sp](e, dt, false);
+      }
+      const th = Math.PI * 0.98;
+      e.target.set(Math.sin(th) * 6, 0, Math.cos(th) * 6);
+      const ws = { sheep: 1.1, goat: 1.2, cow: 1 }[sp];
+      for (let f = 0; f < 8 / dt; f++) {
+        e.time += dt;
+        const p = e.position;
+        e.targetSpeed = Math.hypot(e.target.x - p.x, e.target.z - p.z) < 0.5 ? 0 : ws;
+        let diff = Math.atan2(e.target.x - p.x, e.target.z - p.z) - e.heading;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        if (e.targetSpeed > 0) {
+          const s = md.steer(diff, Math.hypot(e.target.x - p.x, e.target.z - p.z), e.speed, e.targetSpeed, dt);
+          e.heading += s.turn;
+          e.targetSpeed = s.speed;
+        }
+        if (Math.abs(diff) < 0.1) turned++;
+        e.speed += (e.targetSpeed - e.speed) * Math.min(1, dt * 3);
+        p.x += Math.sin(e.heading) * e.speed * dt;
+        p.z += Math.cos(e.heading) * e.speed * dt;
+        e.root.rotation.y = e.heading;
+        e.root.updateMatrixWorld(true);
+        ANIM[sp](e, dt, false);
+        T.tick();
+      }
+    } finally {
+      Math.random = rnd;
+    }
+    if (process.env.RUM_LOG) console.log('DEMITOUR', sp, breed, sex, baby, (T.max() * 100).toFixed(1), T.lock.toFixed(2));
+    // (retournée en moins de 7 s — la vache, longue, tourne large —, elle repart vers sa cible)
+    expect(turned).toBeGreaterThan(30);
+    expect(T.max(), `${breed} : glissement ${(T.max() * 100).toFixed(1)} cm`).toBeLessThan(maxSlip);
+    // (correction plafonnée à 0,38 rad en long et 0,2 de côté : au-delà, le sabot se replace d'un pas)
+    expect(T.lock).toBeLessThan(0.385);
+    expect(T.side).toBeLessThan(0.205);
+    md.dispose?.();
+  }, 120000);
+
+  // (critique de la passe précédente : pressé — il suit la joueuse, sa mère, le chien —, il tournait deux fois plus vite
+  // au trot et un postérieur posé était traîné jusqu'à 54 cm (Holstein), 48 cm (Highland), 41 cm (Hereford), 36 cm
+  // (suffolk) ; correction des membres jusqu'à 0,52 rad en long, 0,28 de côté ; demi-tours ordinaires de 3,5 à 6 s)
+  it.each([
+    ['cow', 'holstein', 'f', 3.5, 0.08], ['cow', 'hereford', 'm', 3.5, 0.09], ['cow', 'highland', 'm', 3.5, 0.08], ['sheep', 'suffolk', 'f', 4, 0.08], ['goat', 'alpine', 'f', 4.5, 0.08],
+  ])('%s %s (%s) pressé vers une cible derrière lui à %s m/s : sabots posés tenus (moins de %s m), membres jamais lancés', (sp, breed, sex, run, maxSlip) => {
+    const G = { sheep: GS, goat: GG, cow: GC }[sp];
+    const a = createAnimal({ species: sp, breed, sex, colorIndex: 0, ageDays: 80, seed: 7, rng: () => 0.42 });
+    const md = BUILD[sp]({ ...a.look, sex }, breed, G);
+    const e = entity(md, a, a.look.scale * growthScale(a));
+    const dt = 1 / 30;
+    const rnd = Math.random;
+    Math.random = () => 0.9;
+    const T = tracker(md);
+    let faced = null;
+    try {
+      for (let f = 0; f < 90; f++) {
+        e.time += dt;
+        ANIM[sp](e, dt, false);
+      }
+      const th = Math.PI * 0.97;
+      e.target.set(Math.sin(th) * 14, 0, Math.cos(th) * 14);
+      for (let f = 0; f < 8 / dt; f++) {
+        e.time += dt;
+        const p = e.position;
+        e.targetSpeed = Math.hypot(e.target.x - p.x, e.target.z - p.z) < 3 ? 0 : run;
+        let diff = Math.atan2(e.target.x - p.x, e.target.z - p.z) - e.heading;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        if (e.targetSpeed > 0) {
+          // (comme AnimalEntity : tourné autour du milieu de ses sabots, s.pz)
+          const s = md.steer(diff, Math.hypot(e.target.x - p.x, e.target.z - p.z), e.speed, e.targetSpeed, dt, 1);
+          const h0 = e.heading;
+          e.heading += s.turn;
+          p.x += s.pz * (Math.sin(h0) - Math.sin(e.heading));
+          p.z += s.pz * (Math.cos(h0) - Math.cos(e.heading));
+          e.targetSpeed = s.speed;
+        }
+        if (faced === null && Math.abs(diff) < 0.15) faced = f * dt;
+        e.speed += (e.targetSpeed - e.speed) * Math.min(1, dt * 3);
+        p.x += Math.sin(e.heading) * e.speed * dt;
+        p.z += Math.cos(e.heading) * e.speed * dt;
+        e.root.rotation.y = e.heading;
+        e.root.updateMatrixWorld(true);
+        ANIM[sp](e, dt, false);
+        T.tick();
+      }
+    } finally {
+      Math.random = rnd;
+    }
+    if (process.env.RUM_LOG) console.log('PRESSE', sp, breed, sex, (T.max() * 100).toFixed(1), T.lock.toFixed(2), T.side.toFixed(2), faced);
+    // (retourné en 3,5 s au plus — 0,9 s avant, sabots traînés ; 1,7 à 1,8 s pour la vache à la passe précédente,
+    // sabot traîné de 54 cm —, membres corrigés de 0,38 rad au plus en long et 0,2 de côté : au-delà, il se replace)
+    expect(faced).not.toBeNull();
+    expect(faced).toBeLessThan(3.5);
+    expect(T.max(), `${breed} : glissement ${(T.max() * 100).toFixed(1)} cm`).toBeLessThan(maxSlip);
+    expect(T.lock).toBeLessThan(0.385);
+    expect(T.side).toBeLessThan(0.205);
+    md.dispose?.();
+  }, 120000);
+
+  // (la chèvre au repos, tournée de côté ou dos à la barrière : elle se retourne sur place, s'avance, se dresse, recule)
+  it.each([['alpine', 'f', Math.PI / 2], ['alpine', 'f', Math.PI], ['col_noir', 'm', Math.PI]])('%s (%s) partie tournée de %s rad : vers la barrière, sabots posés qui ne glissent pas', (breed, sex, heading) => {
+    const a = createAnimal({ species: 'goat', breed, sex, colorIndex: 0, ageDays: 80, seed: 7, rng: () => 0.42 });
+    const md = buildRealGoatModel({ ...a.look, sex }, breed, GG);
+    const e = entity(md, a, a.look.scale * growthScale(a));
+    e.heading = heading;
+    e.root.rotation.y = heading;
+    e.world = { fences: [{ core: 'pen', x: 0, z: 1.2, hw: 3, hd: 0.04 }, { core: 'pen', x: 0, z: -5, hw: 3, hd: 0.04 }], heightAt: () => 0 };
+    md.anim.browseCheck = 0.05;
+    const T = tracker(md);
+    const phases = new Set();
+    const rnd = Math.random;
+    Math.random = () => 0.2;
+    try {
+      for (let f = 0; f < 1100; f++) {
+        e.time += 1 / 30;
+        md.anim.seen = true;
+        md.lodHold = true;
+        animateRealGoat(e, 1 / 30, false);
+        e.root.updateMatrixWorld(true);
+        if (!e.goatBrowse) {
+          if (phases.size) break;
+          continue;
+        }
+        phases.add(e.goatBrowse.phase);
+        T.tick();
+      }
+    } finally {
+      Math.random = rnd;
+    }
+    if (process.env.RUM_LOG) console.log('BARRIERE-TOUR', breed, sex, heading, (T.max() * 100).toFixed(1), T.lock.toFixed(2));
+    expect([...phases]).toEqual(expect.arrayContaining(['step', 'settle', 'up', 'down', 'back']));
+    expect(T.max(), `${breed} : glissement ${(T.max() * 100).toFixed(1)} cm`).toBeLessThan(0.075);
+    expect(T.lock).toBeLessThan(0.385);
+    expect(T.side).toBeLessThan(0.205);
+    md.dispose?.();
+  }, 120000);
+});
+
+describe('tête claire des ruminants : plus de strie d\'ombre des oreilles et des cornes derrière l\'œil', () => {
+  // Les cornes et les oreilles, minces et proches, posaient en qualité haute une strie gris-bleu à bord net sur la joue
+  // blanche (Hereford, Charolais, saanen, mérinos). Leur ombre est reculée le long du rayon, dans la passe d'ombre
+  // seulement (ruminantShadow.js) : rien ne change pour la tête qui reçoit l'ombre — une lisse, un râtelier ou un
+  // barreau à 12 cm de la tête y porte toujours la sienne (le biais sur la tête de la passe précédente l'effaçait).
+  const shade = (mesh) => {
+    const out = {};
+    if (mesh.material.onBeforeCompile) {
+      const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+      mesh.material.onBeforeCompile(sh, null);
+      out.v = sh.vertexShader;
+    }
+    const dsh = { uniforms: {}, vertexShader: THREE.ShaderLib.depth.vertexShader, fragmentShader: THREE.ShaderLib.depth.fragmentShader };
+    mesh.customDepthMaterial.onBeforeCompile(dsh, null);
+    out.dv = dsh.vertexShader;
+    out.du = dsh.uniforms;
+    return out;
+  };
+  // recul après la projection (mvPosition : repère de la lumière), à la taille de la bête
+  const gapAfterProject = (dv, expr, gap, unit = '1.0') => {
+    const at = dv.indexOf('#include <project_vertex>');
+    const k = dv.indexOf('mvPosition.z -= rGap');
+    expect(at).toBeGreaterThan(0);
+    expect(k).toBeGreaterThan(at);
+    expect(dv).toContain(`float rGap = (${expr}) * ${gap.toFixed(3)} * length(modelMatrix[0].xyz) * (${unit});`);
+    expect(dv.indexOf('gl_Position = projectionMatrix * mvPosition;', k)).toBeGreaterThan(k);
+  };
+  // part des sommets portée par les oreilles (et les cornes) : dedans pour elles, nulle sur le tronc et le reste de la
+  // tête (joue, front, museau)
+  const weights = (n, w, head, trunk, isEar) => {
+    let ear = 0, earIn = 0, face = 0, faceIn = 0, body = 0, bodyIn = 0;
+    for (let i = 0; i < n; i++) {
+      const k = w(i);
+      if (isEar(i)) { ear++; if (k > 0.5) earIn++; } else if (head(i) > 0.95) { face++; if (k > 0.15) faceIn++; }
+      if (trunk(i)) { body++; if (k > 0.01) bodyIn++; }
+    }
+    return { ear, earIn, face, faceIn, body, bodyIn };
+  };
+  it('recul de 20 à 70 cm (bête à l\'échelle 1), par espèce', () => {
+    for (const sp of ['cow', 'goat', 'sheep']) {
+      expect(SELF_SHADOW_GAP[sp]).toBeGreaterThanOrEqual(0.2);
+      // (au-delà, les cornes et les oreilles ne porteraient plus d'ombre sur l'encolure, ni la tête baissée au sol)
+      expect(SELF_SHADOW_GAP[sp]).toBeLessThanOrEqual(0.7);
+    }
+  });
+  it('vaches et taureaux : recul des cornes et des oreilles, rien sur la tête qui reçoit l\'ombre', () => {
+    for (const [breed, sex] of [['hereford', 'm'], ['charolaise', 'm'], ['hereford', 'f'], ['holstein', 'f']]) {
+      const md = buildRealCowModel({ ...resolveLook('cow', breed, 0), seed: 4242, sex }, breed, GC);
+      const { v, dv } = shade(md.mesh);
+      // (coordonnées d'ombre de la robe intactes : plus de biais sur la tête)
+      expect(v).not.toContain('vDirectionalShadowCoord[ i ].z -=');
+      expect(v).not.toContain('rGap');
+      gapAfterProject(dv, 'max(smoothstep(0.15, 0.5, cowPart.x), smoothstep(0.15, 0.5, cowAux.x))', SELF_SHADOW_GAP.cow);
+      const g = md.mesh.geometry;
+      const mask = g.attributes.cowMask, part = g.attributes.cowPart, aux = g.attributes.cowAux, pos = g.attributes.position;
+      const land = md.mesh.material.userData.cowUniforms.cLand.value;
+      const sm = (x) => THREE.MathUtils.smoothstep(x, 0.15, 0.5);
+      const W = weights(mask.count, (i) => Math.max(sm(part.getX(i)), sm(aux.getX(i))), (i) => mask.getY(i),
+        (i) => pos.getZ(i) < land.w - 0.1 && pos.getY(i) > land.x, (i) => aux.getX(i) > 0.5 || part.getX(i) > 0.5);
+      expect(W.ear).toBeGreaterThan(20);
+      expect(W.earIn / W.ear).toBeGreaterThan(0.95);
+      expect(W.face).toBeGreaterThan(200);
+      expect(W.faceIn / W.face).toBeLessThan(0.1);
+      expect(W.body).toBeGreaterThan(200);
+      expect(W.bodyIn).toBe(0);
+      md.dispose?.();
+    }
+  });
+  it('chèvres (saanen, alpine, bouc cornu) : oreilles et cornes', () => {
+    for (const [breed, sex] of [['saanen', 'm'], ['saanen', 'f'], ['alpine', 'm']]) {
+      const md = build('goat', breed, { sex });
+      const { v, dv } = shade(md.mesh);
+      expect(v).not.toContain('rGap');
+      gapAfterProject(dv, 'max(smoothstep(0.15, 0.5, goatPart.x), smoothstep(0.15, 0.5, goatEar))', SELF_SHADOW_GAP.goat);
+      const g = md.mesh.geometry;
+      const mask = g.attributes.goatMask, part = g.attributes.goatPart, ear = g.attributes.goatEar;
+      expect(ear.count).toBe(mask.count);
+      const sm = (x) => THREE.MathUtils.smoothstep(x, 0.15, 0.5);
+      const W = weights(mask.count, (i) => Math.max(sm(part.getX(i)), sm(ear.getX(i))), (i) => mask.getY(i),
+        (i) => part.getW(i) > 0.9, (i) => ear.getX(i) > 0.5 || part.getX(i) > 0.5);
+      expect(W.ear).toBeGreaterThan(20);
+      expect(W.earIn / W.ear).toBeGreaterThan(0.95);
+      expect(W.face).toBeGreaterThan(100);
+      expect(W.faceIn / W.face).toBeLessThan(0.1);
+      expect(W.body).toBeGreaterThan(80);
+      expect(W.bodyIn).toBe(0);
+      md.dispose?.();
+    }
+  });
+  it('moutons (mérinos, suffolk) : oreilles, et cornes du bélier (maillage à part, à l\'échelle du mouton)', () => {
+    for (const [breed, sex] of [['merinos', 'f'], ['merinos', 'm'], ['suffolk', 'f']]) {
+      const md = build('sheep', breed, { sex });
+      const { v, dv } = shade(md.mesh);
+      expect(v).not.toContain('rGap');
+      gapAfterProject(dv, 'smoothstep(0.15, 0.5, sheepEar)', SELF_SHADOW_GAP.sheep);
+      const g = md.mesh.geometry;
+      const mask = g.attributes.sheepMask, ear = g.attributes.sheepEar, trunk = g.attributes.sheepTrunk;
+      expect(ear.count).toBe(mask.count);
+      let n = 0, body = 0, bodyIn = 0;
+      for (let i = 0; i < ear.count; i++) {
+        if (ear.getX(i) > 0.5) n++;
+        if (trunk.getX(i) > 0.9) { body++; if (ear.getX(i) > 0.01) bodyIn++; }
+      }
+      expect(n).toBeGreaterThan(20);
+      expect(n / ear.count).toBeLessThan(0.08);
+      expect(body).toBeGreaterThan(80);
+      expect(bodyIn).toBe(0);
+      const horns = md.horns;
+      if (sex === 'm' && breed === 'merinos') {
+        expect(horns).toBeTruthy();
+        const h = shade(horns);
+        gapAfterProject(h.dv, '1.0', SELF_SHADOW_GAP.sheep, 'rUnit');
+        md.root.updateMatrixWorld(true);
+        const rel = new THREE.Matrix4().copy(md.root.matrixWorld).invert().multiply(horns.matrixWorld);
+        const sc = new THREE.Vector3().setFromMatrixColumn(rel, 0).length();
+        // (recul des cornes à l'échelle du mouton, pas à celle de leur maillage)
+        expect(h.du.rUnit.value * sc).toBeCloseTo(1, 3);
+      }
+      md.dispose?.();
+    }
+  });
+});
+
+describe('bouc : nettement plus grand et plus massif que la chèvre', () => {
+  it('× 1,12, tête plus forte, encolure et poitrail épaissis (ni la tête ni l\'arrière du corps touchés)', () => {
+    for (const breed of ['saanen', 'alpine', 'col_noir', 'poitevine']) {
+      const f = buildRealGoatModel(lookOf('goat', breed, { sex: 'f' }), breed, GG);
+      const m = buildRealGoatModel(lookOf('goat', breed, { sex: 'm' }), breed, GG);
+      expect(m.size / f.size).toBeGreaterThanOrEqual(1.1);
+      expect(m.size / f.size).toBeLessThanOrEqual(1.15);
+      expect(m.headBone.scale.x / f.headBone.scale.x).toBeGreaterThan(1.03);
+      const pf = f.mesh.geometry.attributes.position;
+      const pm = m.mesh.geometry.attributes.position;
+      const mask = f.mesh.geometry.attributes.goatMask;
+      const land = f.uniforms.gLand.value;
+      let neck = 0, neckN = 0, neckMax = 0, other = 0;
+      for (let i = 0; i < pf.count; i++) {
+        const d = Math.hypot(pm.getX(i) - pf.getX(i), pm.getY(i) - pf.getY(i), pm.getZ(i) - pf.getZ(i));
+        const z = pf.getZ(i);
+        if (mask.getY(i) > 0.9 || z < land.w - 0.2) other = Math.max(other, d);
+        else if (z > land.w + 0.06 && mask.getY(i) < 0.05 && pf.getY(i) > land.x + 0.1) {
+          neck += d;
+          neckN++;
+          neckMax = Math.max(neckMax, d);
+        }
+      }
+      // (encolure : 2,5 à 6 cm de peau en plus, à la taille 1 — avant le × 1,12)
+      expect(neckN).toBeGreaterThan(30);
+      expect(neck / neckN).toBeGreaterThan(0.025);
+      expect(neckMax).toBeLessThan(0.06);
+      expect(other).toBeLessThan(0.0005);
+      f.dispose?.();
+      m.dispose?.();
+    }
+  });
+});
+
+describe('van : deux moutons ou chèvres dans une place sans se traverser', () => {
+  // (place du van à deux chevaux : barre de poitrail à z = 1,06, barre arrière 1,95 m derrière, séparation à x = 0 —
+  // vehicles.js ; avant, la seconde bête se tenait 0,95 m derrière la première, au milieu : deux chèvres de 1,3 à 1,6 m
+  // du nez à la queue se traversaient de 32 à 44 cm)
+  const stall = { x: 0.44, zFront: 1.06, zRear: 1.06 - 1.95, y: 0.4 };
+  const vehicleWith = async (ids, ents, travellers = null, nStalls = 1) => {
+    const { TripVehicle } = await import('../src/game/Vehicle.js');
+    const v = Object.create(TripVehicle.prototype);
+    const stalls = Array.from({ length: nStalls }, (_, i) => ({ ...stall, x: i % 2 ? -0.44 : 0.44 }));
+    Object.assign(v, { trailer: { stalls }, stallUse: ids, travellers, game: { entities: ents, profile: { animals: travellers ?? [] } } });
+    return v;
+  };
+  // sommets du maillage (debout, après le squelette), par tranche de 2 cm en z : étendue en x et en y
+  const slices = (md, at) => {
+    md.root.position.copy(at);
+    md.root.updateMatrixWorld(true);
+    const S = new Map();
+    const v = new THREE.Vector3();
+    const pos = md.mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      md.mesh.getVertexPosition(i, v);
+      v.applyMatrix4(md.mesh.matrixWorld);
+      const k = Math.floor(v.z / 0.02);
+      const q = S.get(k) ?? [Infinity, -Infinity, Infinity, -Infinity];
+      S.set(k, [Math.min(q[0], v.x), Math.max(q[1], v.x), Math.min(q[2], v.y), Math.max(q[3], v.y)]);
+    }
+    return S;
+  };
+  // pénétration (m) : le plus petit du chevauchement en travers et de la longueur où les deux corps se recouvrent
+  const penetration = (A, B) => {
+    let over = 0, n = 0;
+    for (const [k, a] of A) {
+      const b = B.get(k);
+      if (!b || a[3] < b[2] || b[3] < a[2]) continue;
+      const ov = Math.min(a[1], b[1]) - Math.max(a[0], b[0]);
+      if (ov > 0) { over = Math.max(over, ov); n++; }
+    }
+    return Math.min(over, n * 0.02);
+  };
+  it('deux chèvres prennent chacune leur place quand il y en a ; un mouton partage la sienne s\'il faut garder la place du cheval', async () => {
+    const g1 = createAnimal({ species: 'goat', breed: 'alpine', sex: 'f', colorIndex: 0, ageDays: 400, seed: 1 });
+    const g2 = createAnimal({ species: 'goat', breed: 'alpine', sex: 'f', colorIndex: 0, ageDays: 400, seed: 2 });
+    let v = await vehicleWith([[g1.id], []], new Map(), [g1, g2], 2);
+    expect(v.freeStall(g2)).toBe(1);
+    const s1 = createAnimal({ species: 'sheep', breed: 'suffolk', sex: 'f', colorIndex: 0, ageDays: 400, seed: 3 });
+    const s2 = createAnimal({ species: 'sheep', breed: 'suffolk', sex: 'f', colorIndex: 0, ageDays: 400, seed: 4 });
+    const h = createAnimal({ species: 'horse', breed: 'selle_francais', sex: 'f', colorIndex: 0, ageDays: 2000, seed: 5 });
+    v = await vehicleWith([[s1.id], []], new Map(), [s1, s2, h], 2);
+    expect(v.freeStall(s2)).toBe(0);
+    expect(v.freeStall(h)).toBe(1);
+  });
+  it('deux boucs col noir, deux chèvres alpines, deux béliers suffolk : décalés en long et en travers, dans la place', async () => {
+    for (const [sp, breed, sex, maxPen] of [['goat', 'col_noir', 'm', 0.08], ['goat', 'alpine', 'f', 0.01], ['sheep', 'suffolk', 'm', 0.01]]) {
+      const a = createAnimal({ species: sp, breed, sex, colorIndex: 0, ageDays: 400, seed: 1 });
+      const b = createAnimal({ species: sp, breed, sex, colorIndex: 0, ageDays: 400, seed: 2 });
+      const ma = build(sp, breed, { sex }), mb = build(sp, breed, { sex });
+      for (const md of [ma, mb]) md.anim.staticPose('stand');
+      const ents = new Map([[a.id, { model: ma }], [b.id, { model: mb }]]);
+      const v = await vehicleWith([[a.id, b.id]], ents);
+      const pa = v.stallPose(0, a, 1), pb = v.stallPose(0, b, 1);
+      const A = slices(ma, pa), B = slices(mb, pb);
+      expect(penetration(A, B), `${breed} ${sex}`).toBeLessThan(maxPen);
+      // (ancienne règle : 0,95 m l'une derrière l'autre, au milieu de la place)
+      const half = a.look.bodyLen / 2;
+      const old = penetration(slices(ma, new THREE.Vector3(stall.x, 0, stall.zFront - half - 0.14)), slices(mb, new THREE.Vector3(stall.x, 0, stall.zFront - half - 0.14 - 0.95)));
+      expect(old, `${breed} ${sex} avant`).toBeGreaterThan(sp === 'goat' ? 0.2 : 0.02);
+      // dans la place : le nez au plus 22 cm devant la barre de poitrail, la pointe des fesses au plus 28 cm derrière la
+      // barre arrière, les flancs entre la séparation et la paroi
+      for (const S of [A, B]) {
+        const ks = [...S.keys()];
+        expect(Math.max(...ks) * 0.02 + 0.02).toBeLessThan(stall.zFront + 0.22);
+        expect(Math.min(...ks) * 0.02).toBeGreaterThan(stall.zRear - 0.28);
+        const xs = [...S.values()];
+        expect(Math.min(...xs.map((q) => q[0]))).toBeGreaterThan(0.025);
+        expect(Math.max(...xs.map((q) => q[1]))).toBeLessThan(0.88);
+      }
+      // seule dans sa place : au milieu
+      const v1 = await vehicleWith([[a.id]], ents);
+      expect(v1.stallPose(0, a, 1).x).toBeCloseTo(stall.x, 5);
+      ma.dispose?.();
+      mb.dispose?.();
+    }
+  });
 });

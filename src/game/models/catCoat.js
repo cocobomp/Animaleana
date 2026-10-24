@@ -88,6 +88,9 @@ export function makeCatCoatUniforms() {
     cFat: { value: 0 }, // poussée du ventre et des flancs (m)
     cBreath: { value: 0 }, // poussée de la cage thoracique (m)
     cPuff: { value: 0 }, // queue gonflée (m : peur)
+    // pompon du bobtail (1) : ses repères sont la boule elle-même, posée sur la base de la queue (catReal.js stubSkin) —
+    // poil du bout de la queue partout sur la boule, grain du pelage tiré des repères (la texture y converge en étoile)
+    cStub: { value: 0 },
     cWet: { value: 0 },
     // Coupe du salon (m, le long de la normale) : tronc, collerette, bas des pattes, bout de la queue.
     // (Vector4() vaut (0, 0, 0, 1) : la coupe « bout de la queue » poussait la queue d'un mètre)
@@ -148,6 +151,7 @@ uniform vec4 cTailB;
 uniform float cFat;
 uniform float cBreath;
 uniform float cPuff;
+uniform float cStub;
 uniform vec4 cCut;
 uniform vec4 cCollarR;
 // (collier : déplacement de la robe sous la bande, dans la pose de liaison ; w : 1 - part de poil couché. Sans
@@ -176,7 +180,7 @@ const PUSH_V = /* glsl */ `
   float ribs = trunkW * smoothstep(0.35, 0.65, u) * (1.0 - smoothstep(1.0, 1.25, u)) * (1.0 - smoothstep(0.7, 1.05, h));
   float push = cFat * belly + cBreath * ribs;
   // (queue gonflée : plus vers le bout ; la base reste soudée à la croupe)
-  if (cPuff > 0.0) push += cPuff * cmpPart.y * smoothstep(0.0, 0.25, distance(cmpRest, cTailB.xyz) / cTailB.w);
+  if (cPuff > 0.0) push += cPuff * cmpPart.y * max(cStub, smoothstep(0.0, 0.25, distance(cmpRest, cTailB.xyz) / cTailB.w));
   if (cCut != vec4(0.0)) {
     float tr = trunkW * smoothstep(-0.25, 0.0, u) * (1.0 - smoothstep(0.95, 1.2, u));
     float ruff = (1.0 - cmpPart.w) * (1.0 - cmpPart.y) * (1.0 - cmpPart.x) * smoothstep(0.85, 1.05, u)
@@ -204,6 +208,7 @@ uniform vec2 cPoint;
 uniform vec4 cHair;
 uniform float cSeed;
 uniform float cWet;
+uniform float cStub;
 uniform vec4 cLand;
 uniform vec4 cHead;
 uniform vec4 cEye;
@@ -549,6 +554,12 @@ if (cOn > 0.5) {
       detail = mix(detail, min(detail, 1.0) * grainE, ringE);
     }
   }
+  // Pompon du bobtail : la texture du bout de la longue queue d'origine y converge en étoile (traits sombres vers le
+  // bout de la boule) ; grain tiré des repères de la boule, aussi fin que celui du pelage.
+  if (cStub > 0.0 && cTexMode > 0.5) {
+    float grainP = exp((cmpNoise(CMP_ROT * vCmpPos * 650.0) - 0.5) * 0.55 * cMeans.z + (cmpNoise(CMP_ROT * vCmpPos * 160.0 + 3.1) - 0.5) * 0.35 - 0.04);
+    detail = mix(detail, grainP, cmpStubK);
+  }
   vec3 coat = catCoat(vCmpPos, vCmpPart);
   float l = dot(coat, LUM);
   detail = mix(detail, sqrt(detail), smoothstep(0.3, 0.8, l));
@@ -684,13 +695,16 @@ export function catCoatMaterial(src, shared, opts) {
       .replace('#include <common>', `#include <common>\n${COMMON_V}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${REST_V}`)
       .replace('#include <skinning_vertex>', `#include <skinning_vertex>\n${PUSH_V}`);
+    // (pompon du bobtail, cmpStubK : ni relief ni occlusion de la texture — tous deux convergent en étoile au bout de la
+    // longue queue d'origine, d'où viennent ses coordonnées : des plis en tourbillon au bout de la boule)
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${COMMON_F}`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR_F}`)
-      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${BUMP_F}`)
+      .replace('#include <color_fragment>', `float cmpStubK = cStub * smoothstep(0.3, 0.8, vCmpPart.y);\n#include <color_fragment>\n${COLOR_F}`)
+      .replace('#include <normal_fragment_maps>', `vec3 cmpGeoN = normal;\n#include <normal_fragment_maps>\nnormal = normalize(mix(normal, cmpGeoN, cmpStubK));\n${BUMP_F}`)
+      .replace('#include <aomap_fragment>', THREE.ShaderChunk.aomap_fragment.replace('texture2D( aoMap, vAoMapUv ).r', 'mix( texture2D( aoMap, vAoMapUv ).r, 1.0, cmpStubK )'))
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.55, cHair.x), 0.45, cWet);');
   };
-  mat.customProgramCacheKey = () => 'cat-coat-v9';
+  mat.customProgramCacheKey = () => 'cat-coat-v10';
   return mat;
 }
 
@@ -713,7 +727,7 @@ export function catLidMaterial(coatMat) {
       .replace('#include <common>', '#include <common>\nvarying float vLidRim;')
       .replace('#include <alphamap_fragment>', 'diffuseColor.rgb *= mix(1.0, 0.1, smoothstep(0.0, 1.0, vLidRim));\n#include <alphamap_fragment>');
   };
-  mat.customProgramCacheKey = () => 'cat-lid-v4';
+  mat.customProgramCacheKey = () => 'cat-lid-v5';
   return mat;
 }
 
@@ -721,6 +735,7 @@ export function catLidMaterial(coatMat) {
 
 const SHELL_F = /* glsl */ `
 uniform float cShellK;
+uniform float cShellCell;
 varying float vShellLen;
 float shHash(vec3 p) {
   p = fract(p * 0.3183099 + 0.1);
@@ -733,7 +748,7 @@ const SHELL_DISCARD_F = /* glsl */ `
   // brins ronds (un par cellule de 1,9 mm, centre au hasard), plus fins vers le bout, bord flou ; couches mélangées
   // (transparence, de la peau vers le bout) et plus pâles vers le bout : un halo doux, pas une neige de points durs ;
   // rien là où le poil est court
-  vec3 g = vCmpPos * 520.0;
+  vec3 g = vCmpPos * cShellCell;
   vec3 cell = floor(g);
   vec3 f = fract(g) - 0.5 - (vec3(shHash(cell), shHash(cell + 7.1), shHash(cell + 3.3)) - 0.5) * 0.4;
   float h = shHash(cell + 11.0);
@@ -750,12 +765,13 @@ const SHELL_DISCARD_F = /* glsl */ `
  * Matière d'une couche de poil (k de 0 à 1, de la peau au bout des poils) : celle du pelage (même robe, même grain),
  * poussée le long de la normale selon la longueur du poil à cet endroit (cFurMap), percée en brins.
  */
-export function catShellMaterial(coatMat, shared, k, furMap) {
+export function catShellMaterial(coatMat, shared, k, furMap, cell = 520) {
   const mat = coatMat.clone();
   mat.normalMap = null;
   mat.aoMap = null;
   const coatCompile = coatMat.onBeforeCompile;
-  const own = { cShellK: { value: k }, cFurMap: { value: furMap } };
+  // (cell : brins par mètre du repère de repos — 520, un brin par 1,9 mm ; le pompon du bobtail en prend de plus gros)
+  const own = { cShellK: { value: k }, cFurMap: { value: furMap }, cShellCell: { value: cell } };
   mat.onBeforeCompile = (sh, r) => {
     coatCompile(sh, r);
     Object.assign(sh.uniforms, own);
@@ -771,7 +787,7 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
     len *= 1.0 - 0.8 * cmpPart.w * (1.0 - smoothstep(0.02, 0.08, cmpRest.y));
     float ruff = (1.0 - cmpPart.w) * (1.0 - cmpPart.y) * smoothstep(0.75, 1.05, u2) * (1.0 - face2 * smoothstep(-0.2, 0.25, hz2));
     float br = cmpPart.w * (1.0 - smoothstep(-0.1, 0.25, u2)) * smoothstep(0.03, 0.07, cmpRest.y);
-    len += cFurMap.y * ruff + cFurMap.z * br + cFurMap.w * cmpPart.y * smoothstep(0.05, 0.2, distance(cmpRest, cTailB.xyz) / cTailB.w);
+    len += cFurMap.y * ruff + cFurMap.z * br + cFurMap.w * cmpPart.y * max(cStub, smoothstep(0.05, 0.2, distance(cmpRest, cTailB.xyz) / cTailB.w));
     // (collier porté : le poil est couché sous sa bande et un peu au-delà, en fondu — sinon la collerette du maine coon ou
     // du persan l'engloutissait, seul un bout dépassait à la nuque)
     len *= 1.0 - 0.92 * cCollarR.w * (1.0 - cmpCollar.w);
@@ -784,7 +800,7 @@ export function catShellMaterial(coatMat, shared, k, furMap) {
       .replace('#include <common>', `#include <common>\n${SHELL_F}`)
       .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n${SHELL_DISCARD_F}`);
   };
-  mat.customProgramCacheKey = () => 'cat-shell-v9';
+  mat.customProgramCacheKey = () => 'cat-shell-v10';
   mat.side = THREE.FrontSide;
   // (couches dessinées après les objets opaques, dans l'ordre : renderOrder croissant, voir catReal.js)
   mat.transparent = true;

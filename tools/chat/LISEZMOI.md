@@ -111,8 +111,17 @@ comparaisons), dans la même lumière et au même cadrage.
   (adulte ; moins de deux fois le rayon de la queue à sa base) qui touche la croupe, en touffes irrégulières, portée
   d'un bloc par le premier os de la queue et dont la robe est lue près de la croupe — `stubSkin`, poids et repères
   propres à la race ; avant, un tonneau de 4 cm au bout bombé, froissé par les huit os de la queue, au motif lu au bout
-  de la queue d'origine : un bouchon sombre à bord net ; en haute qualité et de près, 3 couches de poil sur le pompon
-  seulement, 3 appels de dessin de plus par bobtail proche), poil long poussé le long de la normale (collerette,
+  de la queue d'origine : un bouchon sombre à bord net. Ses repères de robe sont la boule elle-même posée sur la base
+  de la queue (pris sur le long tube d'origine, ils étaient étirés 6 à 8 fois autour de la boule : grain, motif et
+  brins en rayons serrés vers le bout), ses normales celles de la boule (celles du bout de la longue queue, reportées,
+  étaient retournées au bout chez le chaton), le côté de chaque sommet pris autour de la ligne médiane de la queue
+  courbe, touffes pas plus fines que les sommets (`fbm` à 4 et 8 par rayon : à 14, des plis en tourbillon) et, dans
+  le shader (`cStub`), ni relief ni occlusion de la texture ni son grain (tous convergent en étoile au bout de la
+  queue d'origine), un grain tiré des repères — au téléphone, le bout de la boule était un nombril froncé. Couches de
+  poil sur ses seuls triangles (`S.pomGeo`), **aussi en qualité basse**, de près : 4 couches, brins de 2,6 mm
+  (`POM_CELL`), coût 4 × 2 560 triangles et 4 appels de dessin par bobtail adulte proche (chaton 4 × 514) ; avant,
+  en haute qualité seulement, 3 couches sur toute la version allégée du pelage (3 × 5 564 triangles) et rien en basse
+  qualité : un pompon lisse au contour net), poil long poussé le long de la normale (collerette,
   culottes, panache ; presque pas dans le pli du genou, `W.knee`, et pattes épaissies à moitié seulement : assis,
   les culottes poussées de 1,2 cm s'y retournaient — maine coon 18,8 → 1,0 cm² de peau retournée visible pendant la
   toilette, norvégien 18,2 → 0,8, british 10,4 → 1,6) ou ras (siamois, sphynx). Sommets et têtes d'os sont déplacés ensemble : le squelette de chaque race

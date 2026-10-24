@@ -182,6 +182,63 @@ describe('pompon du bobtail', () => {
     }
   });
 
+  // Le bout de la boule était un nombril froncé (au téléphone, des traits sombres en étoile) : repères de la robe pris
+  // sur le long tube de la queue d'origine, étirés jusqu'à 8 fois autour de la boule (grain, motif et brins en rayons
+  // vers le bout), normales du bout de la longue queue reportées sur la boule (retournées au bout chez le chaton :
+  // jusqu'à 170° du rayon). Repères : la boule elle-même ; normales : celles de la boule.
+  it.each(['adult', 'baby'])('%s : pas de nombril au bout de la boule (repères sans étirement, normales vers l\'extérieur)', (stage) => {
+    const md = cat('bobtail', stage);
+    const S = md.anim.S;
+    const P = S.D.pos;
+    const k = S.D.stubK;
+    const pts = pompon(md, true);
+    const { c } = roundness(pts);
+    const R = S.coatGeo.attributes.cmpRest.array;
+    const idx = S.coatGeo.index.array;
+    const ratios = [];
+    const p0 = new THREE.Vector3();
+    const e1 = new THREE.Vector3();
+    const e2 = new THREE.Vector3();
+    const f1 = new THREE.Vector3();
+    const f2 = new THREE.Vector3();
+    for (let t = 0; t < idx.length; t += 3) {
+      const [i0, i1, i2] = [idx[t], idx[t + 1], idx[t + 2]];
+      if (!(k[i0] > 0.95 && k[i1] > 0.95 && k[i2] > 0.95)) continue;
+      p0.fromArray(P, i0 * 3);
+      e1.fromArray(P, i1 * 3).sub(p0);
+      e2.fromArray(P, i2 * 3).sub(p0);
+      const r0 = new THREE.Vector3().fromArray(R, i0 * 3);
+      f1.fromArray(R, i1 * 3).sub(r0);
+      f2.fromArray(R, i2 * 3).sub(r0);
+      // application surface → repère de la robe dans le plan du triangle : rapport de ses deux valeurs singulières
+      const ux = e1.clone().normalize();
+      const nz = new THREE.Vector3().crossVectors(e1, e2);
+      if (nz.lengthSq() < 1e-16) continue;
+      const uy = nz.normalize().cross(ux);
+      const a = [e1.dot(ux), e1.dot(uy)];
+      const b = [e2.dot(ux), e2.dot(uy)];
+      const det = a[0] * b[1] - a[1] * b[0];
+      const c1 = f1.clone().multiplyScalar(b[1] / det).addScaledVector(f2, -a[1] / det);
+      const c2 = f1.clone().multiplyScalar(-b[0] / det).addScaledVector(f2, a[0] / det);
+      const g11 = c1.dot(c1);
+      const g22 = c2.dot(c2);
+      const g12 = c1.dot(c2);
+      const dd = Math.sqrt((g11 - g22) ** 2 / 4 + g12 * g12);
+      ratios.push(Math.sqrt(((g11 + g22) / 2 + dd) / Math.max(1e-20, (g11 + g22) / 2 - dd)));
+    }
+    ratios.sort((x, y) => x - y);
+    expect(ratios[Math.floor(ratios.length * 0.9)], `${stage} étirement (9 triangles sur 10)`).toBeLessThan(1.3);
+    const N = S.D.nrm;
+    let worst = 0;
+    for (let i = 0; i < k.length; i++) {
+      if (!(k[i] > 0.95)) continue;
+      const rad = new THREE.Vector3().fromArray(P, i * 3).sub(c).normalize();
+      worst = Math.max(worst, Math.acos(Math.min(1, Math.max(-1, rad.dot(new THREE.Vector3().fromArray(N, i * 3).normalize())))));
+    }
+    expect((worst * 180) / Math.PI, `${stage} normale la plus loin du rayon (°)`).toBeLessThan(100);
+    md.dispose();
+  });
+
   it('robe lue près de la croupe : repères du motif du pompon à moins de 35 % de la longueur de la queue d\'origine', () => {
     for (const stage of ['adult', 'baby']) {
       const md = cat('bobtail', stage);
@@ -598,6 +655,8 @@ describe('collier lié à la peau', () => {
   };
   it.each([['europeen', 'adult'], ['maine_coon', 'adult'], ['persan', 'adult'], ['europeen', 'baby']])('%s (%s) : la bande reste sur la peau couché, assis, à la toilette, en mangeant, patte levée', (b, stage) => {
     const md = cat(b, stage);
+    // (phase du regard fixée : elle venait du numéro de l'objet, qui dépend de tout ce qui a été construit avant)
+    md.anim.t = 0;
     md.staticPose('stand');
     const g = buildGear(md, lookOf(b), { neck: { item: 'collar', color: 'red' } });
     let band = null;
@@ -609,7 +668,12 @@ describe('collier lié à la peau', () => {
     md.root.updateMatrixWorld(true);
     const S0 = skinNow(md);
     const B0 = verts(band);
-    const anc = B0.map((q) => near(S0, q));
+    // (ancres sur la peau du cou, pas sur celle de la tête : la bande du persan touche ses joues, qui tournent avec la
+    // tête par-dessus — ancrées là, la tête tournée debout et droite en mangeant, 9 points sur 10 « dérivaient » de 2,5
+    // à 3,6 cm selon la phase du regard ; ancrées au cou, 1,1 à 1,3 cm dans toutes les phases)
+    const Wh = md.anim.base.W.head;
+    const S0n = S0.map((q, i) => (Wh[i] > 0.5 ? new THREE.Vector3(1e3, 1e3, 1e3) : q));
+    const anc = B0.map((q) => near(S0n, q));
     const d0 = B0.map((q, k) => q.distanceTo(S0[anc[k]]));
     const sc = md.root.matrixWorld.getMaxScaleOnAxis();
     const inv = new THREE.Matrix4();

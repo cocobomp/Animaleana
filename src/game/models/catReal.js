@@ -430,7 +430,7 @@ export function realCatBase(gltf, kind) {
  * bougeait), et sa robe est lue près de la croupe (lue au bout de la longue queue d'origine, elle tombait sur une autre
  * plaque : un bouchon noir à bord net sur le chat mi-ke). Poids et repères propres à la race (copies).
  */
-function stubSkin(g, base, k) {
+function stubSkin(g, base, k, P, h1) {
   const coat = base.prims.coat;
   const n = coat.count;
   const t1 = base.tailBones[0];
@@ -454,12 +454,12 @@ function stubSkin(g, base, k) {
       sw[i * 4 + slot] = 0;
     }
     for (let c = 0; c < 4; c++) sw[i * 4 + c] = c === slot ? sw[i * 4 + c] * (1 - w) + w : sw[i * 4 + c] * (1 - w);
-    // repère de la robe : ramené à 30 % de sa distance à la base de la queue (le poil du bout de la queue — couches de
-    // poil — y pousse encore)
+    // repère de la robe : la boule elle-même, posée sur la base de la queue (ramenés à 30 % de leur distance à la base
+    // de la queue d'origine, les repères du long tube étaient étirés jusqu'à huit fois autour de la boule : grain,
+    // motif et brins des couches de poil en rayons serrés vers le bout — un nombril froncé au bout de la boule)
     for (let a = 0; a < 3; a++) {
       const r = rest[i * 3 + a];
-      const c = c0.getComponent(a);
-      rest[i * 3 + a] = r + (c + (r - c) * 0.3 - r) * w;
+      rest[i * 3 + a] = r + (c0.getComponent(a) + P[i * 3 + a] - h1.getComponent(a) - r) * w;
     }
   }
   g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
@@ -494,6 +494,7 @@ function tailShape(base, B, P, H, n, wTail) {
   const x = V();
   const q = V();
   const o = V();
+  const ax = V();
   const project = (i) => {
     wk.fill(0);
     let sw = 0;
@@ -506,6 +507,7 @@ function tailShape(base, B, P, H, n, wTail) {
     if (!(sw > 0)) return -1;
     x.fromArray(P, i * 3);
     q.set(0, 0, 0);
+    ax.set(0, 0, 0);
     let s = 0;
     for (let k = 0; k < m; k++) {
       if (!wk[k]) continue;
@@ -513,6 +515,7 @@ function tailShape(base, B, P, H, n, wTail) {
       const S = seg[k];
       const t = clamp(_u.copy(x).sub(C[k]).dot(S.e) / S.len, 0, 1);
       q.addScaledVector(_u.copy(C[k]).addScaledVector(S.e, t * S.len), wk[k]);
+      ax.addScaledVector(S.e, wk[k]);
       s += wk[k] * (S.s0 + t * S.len);
     }
     o.copy(x).sub(q);
@@ -542,12 +545,21 @@ function tailShape(base, B, P, H, n, wTail) {
   // (part de chaque sommet dans la boule du pompon : portée par la base de la queue, couleur prise près de la croupe)
   const stubK = B.stub ? new Float32Array(n) : null;
   rad.stubK = stubK;
+  // (pompon : côté de chaque sommet autour de la ligne médiane de la queue, ramené dans le repère de la boule — l'axe
+  // local de la queue tourné sur son axe d'ensemble)
+  const dirAll = V().copy(C[m]).sub(C0).normalize();
+  const side = B.stub ? new Float32Array(n * 3) : null;
   for (let i = 0; i < n; i++) {
     const w = wTail(i);
     if (!(w > 0)) continue;
     const s = project(i);
     if (s < 0) continue;
     sv[i] = s;
+    if (side && ax.lengthSq() > 1e-12) {
+      _q.setFromUnitVectors(ax.normalize(), dirAll);
+      _v.copy(o).applyQuaternion(_q);
+      side.set([_v.x, _v.y, _v.z], i * 3);
+    }
     const on = smooth(0, 0.3 * tot, s);
     const kl = 1 + (B.tailLen - 1) * on;
     // épaisseur : la race, le panache du poil long (plus vers le milieu), le pompon du bobtail (au bout)
@@ -598,7 +610,9 @@ function tailShape(base, B, P, H, n, wTail) {
       const k = w * smooth(0.02, 0.14, sv[i] / tot);
       if (!(k > 0)) continue;
       x.fromArray(P, i * 3);
-      rh.copy(x).sub(C0);
+      // (côté autour de la ligne médiane, pas autour de l'axe d'ensemble : la queue courbe, les petits anneaux du bout
+      // partaient tous du même côté — sommets serrés en tourbillon, plis en spirale au bout de la boule)
+      rh.fromArray(side, i * 3);
       rh.addScaledVector(dir, -rh.dot(dir));
       const rl = rh.length();
       if (rl < 1e-7) rh.set(dir.y, -dir.x, 0).normalize();
@@ -606,8 +620,9 @@ function tailShape(base, B, P, H, n, wTail) {
       const u = clamp((sv[i] - s0) / Math.max(1e-6, sEnd - s0), 0, 1);
       const al = (1 - u) * 2.18;
       _u.copy(dir).multiplyScalar(Math.cos(al)).addScaledVector(rh, Math.sin(al));
-      // (touffes : bruit sur la direction, à deux échelles)
-      const tuft = 0.92 + 0.14 * fbm(_u.x * 4 + 7, _u.y * 4, _u.z * 4) + 0.06 * fbm(_u.x * 11 + 2, _u.y * 11 + 5, _u.z * 11);
+      // (touffes : bruit sur la direction, à deux échelles — pas plus fines que les sommets de la boule : à 14 par rayon,
+      // le bruit tombait entre les sommets et faisait des plis en tourbillon au bout de la boule, un nombril froncé)
+      const tuft = 0.9 + 0.16 * fbm(_u.x * 4 + 7, _u.y * 4, _u.z * 4) + 0.08 * fbm(_u.x * 8 + 2, _u.y * 8 + 5, _u.z * 8);
       _w.copy(G).addScaledVector(_u, R * tuft);
       x.lerp(_w, k);
       P.set([x.x, x.y, x.z], i * 3);
@@ -954,9 +969,14 @@ export function deformCat(base, B) {
     }
   }
   // Normales : celles du modèle, tournées comme la surface (différence des normales recalculées avant et après).
+  // (pompon du bobtail : les normales recalculées seules — la différence venait du bout de la longue queue d'origine,
+  // tournée tout autrement : ombres en étoile au bout de la boule, un nombril froncé, normales retournées au chaton)
   const nDef = weldedNormals(P, coat.index, coat.weld, n);
+  const stubK = tailR?.stubK;
   for (let i = 0; i < n; i++) {
-    _w.fromArray(N, i * 3).add(_v.fromArray(nDef, i * 3)).sub(_u.fromArray(coat.nrmCalc, i * 3)).normalize();
+    _w.fromArray(N, i * 3).sub(_u.fromArray(coat.nrmCalc, i * 3));
+    if (stubK) _w.multiplyScalar(1 - stubK[i]);
+    _w.add(_v.fromArray(nDef, i * 3)).normalize();
     N.set([_w.x, _w.y, _w.z], i * 3);
   }
   return { pos: P, nrm: N, heads: H, eyePos: EP, eyeNrm: EN, eyeCenters: EC, stubK: tailR?.stubK ?? null };
@@ -972,7 +992,7 @@ function releaseShape(S) {
   const idle = [...shapes.values()].filter((x) => x.users === 0).sort((a, b) => a.idleAt - b.idleAt);
   for (const x of idle.slice(0, Math.max(0, idle.length - SPARE_SHAPES))) {
     shapes.delete(x.key);
-    for (const g of [x.coatGeo, x.eyeGeo, x.lidGeo, x.tuftGeo, x.lodCoat, x.lodEye]) g?.dispose();
+    for (const g of [x.coatGeo, x.eyeGeo, x.lidGeo, x.tuftGeo, x.lodCoat, x.lodEye, x.pomGeo]) g?.dispose();
   }
 }
 
@@ -1010,10 +1030,20 @@ function shapeFor(base, B) {
   };
   S = { key, B, D, heads: D.heads, users: 1 };
   S.coatGeo = geo(D.pos, D.nrm, coat, base.attrs);
-  if (D.stubK) stubSkin(S.coatGeo, base, D.stubK);
+  if (D.stubK) stubSkin(S.coatGeo, base, D.stubK, D.pos, D.heads[base.tailBones[0]]);
   S.eyeGeo = base.prims.eye ? geo(D.eyePos, D.eyeNrm, base.prims.eye, base.eyeAttrs) : null;
   S.lodCoat = lodGeo(S.coatGeo, coat.lodIndex);
   S.lodEye = S.eyeGeo ? lodGeo(S.eyeGeo, base.prims.eye.lodIndex) : null;
+  // Pompon du bobtail : ses seuls triangles (couches de poil du pompon). Les couches tirées sur tout le pelage — corps ras,
+  // jeté au fragment — redessinaient trois fois le chat entier pour une boule de 3 cm.
+  if (D.stubK) {
+    const idx = coat.index;
+    const keep = [];
+    for (let t = 0; t < idx.length; t += 3) {
+      if (D.stubK[idx[t]] > 0.05 || D.stubK[idx[t + 1]] > 0.05 || D.stubK[idx[t + 2]] > 0.05) keep.push(idx[t], idx[t + 1], idx[t + 2]);
+    }
+    S.pomGeo = lodGeo(S.coatGeo, Uint32Array.from(keep));
+  }
   S.measure = measureCat(base, D, B);
   S.boneBox = emptyBoneBoxes(base.names.length + 2);
   growBoneBoxes(S.boneBox, D.pos, coat.si, coat.sw, coat.count);
@@ -1430,6 +1460,7 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
   const uniforms = { ...makeCatCoatUniforms(), ...base.landUniforms };
   const plan = catCoatPlan(look, breed, B.kitten);
   setCatCoat(uniforms, plan);
+  uniforms.cStub.value = S.D.stubK ? 1 : 0;
   const keepCfg = base.cfg.keep;
   const L0 = base.land;
   const spheres = keepCfg.nose ? [{ s: new THREE.Vector4(L0.nose.x, L0.nose.y, L0.nose.z - keepCfg.nose[0] * 0.4, keepCfg.nose[0]), l: keepCfg.nose[1] }] : [];
@@ -1478,12 +1509,15 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
   }
   // Couches de poil (poil long) : haute qualité seulement, copies de la version réduite du pelage.
   const shells = [];
-  if (gfx.quality === 'high' && B.shells > 0) {
-    const sg = S.lodCoat ?? S.coatGeo;
+  // (pompon du bobtail : couches sur ses seuls triangles, aussi en qualité basse — lisse au contour net et facetté sur
+  // le téléphone, il n'était touffu qu'en qualité haute ; quelques centaines de triangles)
+  if ((gfx.quality === 'high' || S.pomGeo) && B.shells > 0) {
+    const sg = S.pomGeo ?? S.lodCoat ?? S.coatGeo;
     // (poil ras du bobtail : aucune couche sur le corps, seulement sur le pompon)
-    const furMap = new THREE.Vector4(B.fur > 0 ? Math.max(0.003, B.fur * 0.45) : 0, B.ruff * 0.35, B.breeches * 0.005, B.tailFur * 0.004);
-    for (let k = 1; k <= B.shells; k++) {
-      const sm = new PetMesh(sg, catShellMaterial(coatMat, uniforms, k / B.shells, furMap), hb);
+    const furMap = new THREE.Vector4(B.fur > 0 ? Math.max(0.003, B.fur * 0.45) : 0, B.ruff * 0.35, B.breeches * 0.005, B.tailFur * 0.004 * (S.pomGeo ? POM_LEN : 1));
+    const nSh = S.pomGeo ? POM_SHELLS : B.shells;
+    for (let k = 1; k <= nSh; k++) {
+      const sm = new PetMesh(sg, catShellMaterial(coatMat, uniforms, k / nSh, furMap, S.pomGeo ? POM_CELL : 520), hb);
       sm.bind(skeleton, new THREE.Matrix4());
       sm.castShadow = false;
       sm.receiveShadow = true;
@@ -1785,6 +1819,12 @@ const ellR = (a, b, u) => 1 / Math.sqrt((u * u) / (a * a) + Math.max(0, 1 - u * 
 const COLLAR_GAP = 0.006;
 const COLLAR_BAND = 0.013;
 const COLLAR_NT = 48;
+// Couches de poil du pompon du bobtail : POM_SHELLS couches, brins un peu plus gros que ceux du corps (POM_CELL par
+// mètre de ses repères, la boule elle-même : 2,6 mm), poil du panache × POM_LEN (à pleine longueur, 1,4 cm sur une
+// boule de 2,8 cm de rayon : une frange de taches détachées).
+const POM_CELL = 380;
+const POM_LEN = 0.7;
+const POM_SHELLS = 4;
 // (part du poids des pattes avant de la peau sous la bande reportée sur l'omoplate, voir collarStand : à 1, la bande
 // quittait la peau d'un côté à la toilette ; à 0, elle partait en écharpe avec la patte levée)
 const ARM_TO_SCAP = 0.5;
@@ -1934,6 +1974,14 @@ function collarStand(model, base, S, C, N, X, Y, rx, ry) {
   const attr = new THREE.BufferAttribute(cmp, 4);
   S.coatGeo.setAttribute('cmpCollar', attr);
   S.lodCoat?.setAttribute('cmpCollar', attr);
+  S.pomGeo?.setAttribute('cmpCollar', attr);
+  // (paupières : même shader, rien sous la bande — l'attribut à sa valeur neutre plutôt qu'absent)
+  if (S.lidGeo && !S.lidGeo.attributes.cmpCollar) {
+    const nl = S.lidGeo.attributes.position.count;
+    const zl = new Float32Array(nl * 4);
+    for (let i = 0; i < nl; i++) zl[i * 4 + 3] = 1;
+    S.lidGeo.setAttribute('cmpCollar', new THREE.BufferAttribute(zl, 4));
+  }
   return { K, neckM, pos, front: Uint32Array.from(front), C: C.clone(), N: N.clone(), X: X.clone(), Y: Y.clone(), rx, ry, table, chinY, bellyY };
 }
 

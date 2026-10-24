@@ -414,6 +414,14 @@ if (cTongue.y > 0.0) vCmpTongue = dot(skinWeight, step(vec4(cTongue.x - 0.5), sk
 #endif`;
 
 // Embonpoint (ventre et flancs) et respiration (cage thoracique), le long de la normale du sommet déformé.
+/**
+ * Mèches qui pendent du yorkshire (shader, voir PUSH_V) : tronc incliné de follow0 à follow1 (rad), la mèche passe de
+ * pendue à la verticale à couchée le long du corps (keep : part de l'inclinaison gardée) ; ce qui passerait sous le sol
+ * se couche vers l'extérieur, tassé à spread de cette longueur, bombé de lift (au plus 3 cm de longueur comptée).
+ */
+export const SILK = { follow0: 0.12, follow1: 0.4, keep: 0.9, spread: 0.4, lift: 0.12 };
+const glf = (x) => x.toFixed(3);
+
 const PUSH_V = /* glsl */ `
 {
   float trunkW = (1.0 - cmpPart.w) * (1.0 - cmpPart.y) * (1.0 - cmpPart.z);
@@ -456,10 +464,12 @@ const PUSH_V = /* glsl */ `
   }
   // Mèches qui pendent (robe soyeuse du yorkshire, dogParts.js silkyStrands ; cmpPom < 0 : hauteur jusqu'à l'accroche,
   // tous les sommets d'une mèche ont les poids de son accroche) : la mèche entière tourne autour de son accroche pour
-  // retomber à la verticale, et s'étale au sol au lieu d'y entrer (assis ou couché, raide, elle partait de travers en
-  // planche et plongeait dans le sol) — couchée vers l'extérieur, du côté de son flanc (repos : x de part et d'autre
-  // de cMisc.x), de la longueur qui passerait sous le sol (aplatie sur place, elle faisait sous le chien couché une
-  // palissade de planches verticales).
+  // retomber à la verticale — seulement quand le tronc est presque à plat (debout, au pas, couché) : tronc relevé
+  // (assis, 40°), elle suit le corps, couchée le long du flanc et de la cuisse (pendue à la verticale, la jupe faisait un
+  // rideau de planches devant le poitrail et entre les antérieurs). Ce qui passerait sous le sol se couche au sol vers
+  // l'extérieur, du côté de son flanc (repos : x de part et d'autre de cMisc.x), tassé au 0,4 de cette longueur et un peu
+  // bombé (de toute la longueur, les mèches faisaient autour du chien couché des lames droites d'une largeur de corps,
+  // un oursin vu d'en haut ; aplaties sur place, une palissade sous le chien).
   #ifdef USE_SKINNING
   if (cmpPom < 0.0) {
     vec3 piv = (skinMatrix * vec4(position + vec3(0.0, -cmpPom, 0.0), 1.0)).xyz;
@@ -467,17 +477,20 @@ const PUSH_V = /* glsl */ `
     vec3 off = transformed - piv;
     vec3 ka = cross(dS, vec3(0.0, -1.0, 0.0));
     float sn = length(ka);
-    float cs = -dS.y;
     if (sn > 1e-4) {
       ka /= sn;
-      off = off * cs + cross(ka, off) * sn + ka * dot(ka, off) * (1.0 - cs);
+      float tilt = atan(sn, -dS.y);
+      float a = tilt * (1.0 - ${glf(SILK.keep)} * smoothstep(${glf(SILK.follow0)}, ${glf(SILK.follow1)}, tilt));
+      float cs = cos(a);
+      float s2 = sin(a);
+      off = off * cs + cross(ka, off) * s2 + ka * dot(ka, off) * (1.0 - cs);
     }
     transformed = piv + off;
     float under = 0.004 - transformed.y;
     if (under > 0.0) {
       vec2 out2 = vec2(position.x >= cMisc.x ? 1.0 : -1.0, 0.0) + off.xz * 6.0;
-      transformed.xz += normalize(out2) * under;
-      transformed.y = 0.004 + 0.002 * min(1.0, under * 40.0);
+      transformed.xz += normalize(out2) * under * ${glf(SILK.spread)};
+      transformed.y = 0.004 + min(under, 0.03) * ${glf(SILK.lift)};
     }
   }
   #endif

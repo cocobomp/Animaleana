@@ -318,7 +318,109 @@ describe('assis et couché des petits chiens', () => {
   });
 });
 
+/**
+ * Mèches du yorkshire posées comme le fait le shader (dogCoat.js, SILK) : réplique sur le processeur. Renvoie le
+ * dépassement des mèches hors du corps vu d'en haut (cm, taille réelle) et la part des segments de mèche à moins de 15°
+ * de la verticale.
+ */
+function silkLayout(md, s, SILK) {
+  md.root.updateMatrixWorld(true);
+  const m = md.coatMesh;
+  const g = m.geometry;
+  const sk = m.skeleton;
+  const pom = g.attributes.cmpPom;
+  const si = g.attributes.skinIndex;
+  const sw = g.attributes.skinWeight;
+  const pos = g.attributes.position;
+  const midX = md.anim.base.land.midX;
+  const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+  const T = new THREE.Matrix4();
+  const skinM = (i) => {
+    const M = new THREE.Matrix4().set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    for (let k = 0; k < 4; k++) {
+      const w = sw.getComponent(i, k);
+      if (!w) continue;
+      T.multiplyMatrices(sk.bones[si.getComponent(i, k)].matrixWorld, sk.boneInverses[si.getComponent(i, k)]).premultiply(inv);
+      for (let e = 0; e < 16; e++) M.elements[e] += T.elements[e] * w;
+    }
+    return M;
+  };
+  const sm = (a, b, x) => {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  let bodyX = 0;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pom.count; i += 3) if (!(pom.getX(i) < 0)) bodyX = Math.max(bodyX, Math.abs(v.fromBufferAttribute(pos, i).applyMatrix4(skinM(i)).x - midX));
+  const P = [];
+  let reach = 0;
+  const down = new THREE.Vector3(0, -1, 0);
+  for (let i = 0; i < pom.count; i++) {
+    const h = pom.getX(i);
+    if (!(h < 0)) {
+      P.push(null);
+      continue;
+    }
+    const M = skinM(i);
+    const p0 = new THREE.Vector3().fromBufferAttribute(pos, i);
+    const piv = p0.clone().add(new THREE.Vector3(0, -h, 0)).applyMatrix4(M);
+    let off = p0.clone().applyMatrix4(M).sub(piv);
+    const dS = down.clone().transformDirection(M);
+    const ka = new THREE.Vector3().crossVectors(dS, down);
+    const sn = ka.length();
+    if (sn > 1e-4) {
+      ka.divideScalar(sn);
+      const tilt = Math.atan2(sn, -dS.y);
+      off.applyAxisAngle(ka, tilt * (1 - SILK.keep * sm(SILK.follow0, SILK.follow1, tilt)));
+    }
+    const t = piv.add(off);
+    const under = 0.004 - t.y;
+    if (under > 0) {
+      const o2 = new THREE.Vector2(p0.x >= midX ? 1 : -1, 0).add(new THREE.Vector2(off.x, off.z).multiplyScalar(6)).normalize();
+      t.x += o2.x * under * SILK.spread;
+      t.z += o2.y * under * SILK.spread;
+      t.y = 0.004 + Math.min(under, 0.03) * SILK.lift;
+    }
+    P.push(t);
+    reach = Math.max(reach, Math.abs(t.x - midX) - bodyX);
+  }
+  let vert = 0;
+  let segs = 0;
+  for (let i = 0; i + 3 < P.length; i++) {
+    if (!P[i] || !P[i + 3] || Math.abs(pom.getX(i + 3)) <= Math.abs(pom.getX(i))) continue;
+    const d = P[i + 3].clone().sub(P[i]);
+    if (d.length() < 0.005) continue;
+    segs++;
+    if (Math.acos(Math.min(1, -d.y / d.length())) < (15 * Math.PI) / 180) vert++;
+  }
+  return { reach: reach * s * 100, vertical: vert / Math.max(1, segs) };
+}
+
 describe('yorkshire', () => {
+  it('mèches : pendues debout, couchées autour du corps couché (ni palissade ni oursin), le long du corps assis (pas de rideau)', async () => {
+    // (main : couché, aplaties sur place sous le corps, une palissade ; finitions 2 : couchées vers l'extérieur de toute
+    // la longueur qui passait sous le sol — des lames droites jusqu'à 19 cm hors du corps couché, 25 cm assis, un oursin vu
+    // d'en haut ; assis, 73 % des segments de mèche à la verticale, un rideau devant le poitrail)
+    const { SILK } = await import('../src/game/models/dogCoat.js');
+    const at = (post) => {
+      const { md, s } = dog('yorkshire');
+      for (let i = 0; i < 300; i++) md.anim.update(1 / 60, st({ size: s, posture: post, sleeping: post === 'sleep' }));
+      const r = silkLayout(md, s, SILK);
+      md.dispose();
+      return r;
+    };
+    const stand = at('stand');
+    expect(stand.vertical).toBeGreaterThan(0.7);
+    for (const post of ['lie', 'sleep']) {
+      const r = at(post);
+      expect(r.reach, post).toBeGreaterThan(1);
+      expect(r.reach, post).toBeLessThan(6);
+    }
+    const sit = at('sit');
+    expect(sit.reach).toBeLessThan(3);
+    expect(sit.vertical).toBeLessThan(0.3);
+  });
+
   it('robe soyeuse : une jupe de mèches des flancs presque jusqu\'au sol et une barbe, qui pendent (pas chez les autres races du jack)', async () => {
     const { SILK_SIDE, SILK_BEARD } = await import('../src/game/models/dogParts.js');
     const { md, s } = dog('yorkshire');

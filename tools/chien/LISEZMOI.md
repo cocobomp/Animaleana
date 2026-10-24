@@ -382,7 +382,7 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   (`sit_down`, `stand_up`, `lie_down`, `get_up`) : une clé sur 2 (`GAB_DECIMATE`). `dog_jack.glb` 614 → 655 Ko (+5 clips ;
   0,60 Mo sur main : +9 %).
 - **Assis du teckel et du corgi, sans bosse ni tête renversée** : dans `gab_sit`, un angle positif autour de `chest`
-  baisse le poitrail (dog tourné vers −Y) ; les +0,55 « poitrail redressé » le baissaient — base du cou 73° sous le
+  baisse le poitrail (chien tourné vers −Y) ; les +0,55 « poitrail redressé » le baissaient — base du cou 73° sous le
   garrot (segment poitrail → encolure à −73° contre +40° pour le jack russell assis), dos bossu, tête du teckel à 7,3 cm
   au-dessus des épaules (jack russell 10,5). `sit_flex` du court : `[-0.65, -0.75, -0.25, -0.6, 0.3]` (reins plus
   fléchis, poitrail relevé de 0,25) ; `paw_lift=(0.9, 0.22)` : patte donnée devant le poitrail (avant : repliée sous le
@@ -391,3 +391,12 @@ salon (`cut`), une vitesse pour les allures (`v` : queue relevée en action) et 
   laisse et le regard y mettent. Teckel : tête 7,3 → 10,3 cm au-dessus des épaules, inclinaison −4,4 → 0,1°, dos 32°,
   patte levée 7,6 → 8,9 cm et 2,5 → 3,7 cm devant l'épaule ; corgi : tête 13,7 → 4° au-dessus de son port, dos 46°
   (patte 42°) ; chiot corgi 21 → 1°. Taille du GLB inchangée.
+- **Mèches du yorkshire couché et assis** (shader, `SILK` de `dogCoat.js`) : la mèche ne pend à la verticale que tronc
+  presque à plat (debout, au pas, couché) ; tronc incliné de 0,12 à 0,4 rad (assis), elle suit le corps, couchée le long
+  du flanc et de la cuisse. Ce qui passerait sous le sol se couche vers l'extérieur, tassé au 0,4 de cette longueur et un
+  peu bombé. Réplique sur le processeur dans `tests/dogFinish.test.js` (`silkLayout`) : couché, les mèches dépassaient
+  du corps vu d'en haut de 19 cm (lames droites en oursin ; main : 0, aplaties sous le corps en palissade), maintenant
+  4,2 cm (chiot 8,6 → 1,7) ; assis, 25 → 1,3 cm, et la part des segments de mèche verticaux 73 % (main) / 59 % → 10 %
+  (rideau devant le poitrail). Debout, inchangé (84 %). Reste : vues de face, les mèches de devant, rubans vus de chant,
+  font encore quelques traits verticaux devant les antérieurs du chien assis (rubans tournés autour de l'épaule essayés :
+  couché, ils se dressaient en plaque claire au coude — pas retenu).

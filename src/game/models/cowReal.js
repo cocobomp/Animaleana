@@ -1113,8 +1113,9 @@ export class RealCowAnim extends RealSheepAnim {
       + (this.w.get_up ?? 0) * (1 - this.transK('get_up')), 0, 1);
     for (const f of this.legFold ?? []) f.b.scale.setScalar(1 + (f.k - 1) * fold);
     if (md.uniforms) md.uniforms.cStyle.value.w = l;
-    // (mèches du poil long couchée : rabattues sur les flancs, étalées dans l'herbe — ruminantHair.js)
-    if (md.lockUniforms) md.lockUniforms.hState.value.y = l;
+    // (mèches du poil long couchée : rabattues sur les flancs, étalées dans l'herbe — ruminantHair.js ; à moitié
+    // seulement : repliée et rabattue tout à fait, la Highland couchée perdait son long poil)
+    if (md.lockUniforms) md.lockUniforms.hState.value.y = l * 0.45;
     setLockFloor(md.lockUniforms, md);
   }
 

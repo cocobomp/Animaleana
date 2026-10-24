@@ -256,9 +256,10 @@ export function lockMaterial(lu, colA, colB, name = 'ruminant_locks', texKind = 
 vHSide = hairSide;
 vHT = uv.y;
 // (racine poussée avec la toison et rentrée avec la cible de forme du corps : à moitié tondu, les mèches flottaient
-// au-dessus du dos ; couché, à peine raccourcie — repliée aux trois quarts, elle disparaissait dans la toison)
+// au-dessus du dos ; couchée, repliée aux trois quarts puis rabattue contre la peau : gardée à 88 %, la mèche
+// rabattue se lisait en éclats de papier sous le ventre de l'islandais couché)
 vec3 hRoot = hairTop + hairD * hState.w + hairN * hState.z;
-transformed = hRoot + (transformed - hairTop) * hState.x * (1.0 - 0.12 * hState.y);`)
+transformed = hRoot + (transformed - hairTop) * hState.x * (1.0 - 0.72 * hState.y);`)
       .replace('#include <skinning_vertex>', `#include <skinning_vertex>
 {
   vec4 hw = modelMatrix * vec4(transformed, 1.0);

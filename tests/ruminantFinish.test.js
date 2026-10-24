@@ -426,17 +426,18 @@ describe('mèches longues couché : rabattues sur les flancs, étalées au sol (
   // Vehicle.js — le repli n'était pas donné : elles pendaient droit sous le ventre, à travers le plancher)
   it('pose figée couchée : repli donné tout de suite (islandais, col noir, poitevine, Highland), rien de tel debout', () => {
     const cases = [
-      ['sheep', 'islandais_mouton', (md) => md.uniforms.sState.value.w],
-      ['goat', 'col_noir', (md) => md.uniforms.gStyle.value.w],
-      ['goat', 'poitevine', (md) => md.uniforms.gStyle.value.w],
-      ['cow', 'highland', (md) => md.uniforms.cStyle.value.w],
+      ['sheep', 'islandais_mouton', (md) => md.uniforms.sState.value.w, 1],
+      ['goat', 'col_noir', (md) => md.uniforms.gStyle.value.w, 1],
+      ['goat', 'poitevine', (md) => md.uniforms.gStyle.value.w, 1],
+      // (Highland : repli à moitié — tout à fait, elle perdait son long poil couchée)
+      ['cow', 'highland', (md) => md.uniforms.cStyle.value.w, 0.45],
     ];
-    for (const [sp, breed, coatLie] of cases) {
+    for (const [sp, breed, coatLie, fold] of cases) {
       const md = sp === 'cow' ? buildRealCowModel({ ...resolveLook('cow', breed, 0), seed: 4242, sex: 'f' }, breed, GC) : build(sp, breed);
       expect(md.lockUniforms, breed).toBeTruthy();
       expect(md.lockUniforms.hState.value.y).toBe(0);
       md.staticPose('lie');
-      expect(md.lockUniforms.hState.value.y, breed).toBeCloseTo(1, 5);
+      expect(md.lockUniforms.hState.value.y, breed).toBeCloseTo(fold, 5);
       expect(coatLie(md), breed).toBeCloseTo(1, 5);
       // (toison et longueur des mèches jamais NaN, même pour une pose figée demandée pendant la construction)
       for (const v of md.lockUniforms.hState.value.toArray()) expect(Number.isFinite(v), breed).toBe(true);
@@ -445,12 +446,12 @@ describe('mèches longues couché : rabattues sur les flancs, étalées au sol (
       md.dispose?.();
     }
   });
-  it('shader : couchée, la mèche garde 88 % de sa longueur, se rabat contre la peau et s\'étale au sol vers l\'extérieur', () => {
+  it('shader : couchée, la mèche se replie aux trois quarts, se rabat contre la peau et s\'étale au sol vers l\'extérieur (gardée à 88 %, elle faisait des éclats de papier)', () => {
     const md = buildRealSheepModel(lookOf('sheep', 'islandais_mouton'), 'islandais_mouton', GS);
     const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
     md.locks.material.onBeforeCompile(sh);
     const v = sh.vertexShader;
-    expect(v).toContain('(1.0 - 0.12 * hState.y)');
+    expect(v).toContain('(1.0 - 0.72 * hState.y)');
     const iSkin = v.indexOf('#include <skinning_vertex>');
     const iFold = v.indexOf('L - nw * dot(L, nw) * 0.7');
     const iSpread = v.indexOf('o * (ex * 0.75 * hState.y)');

@@ -224,7 +224,7 @@ matrices de three.js.
 
 ### Mèches longues couché (`ruminantHair.js`, commun à l'islandais, au col noir, à la poitevine et à la Highland)
 
-Couchée, la mèche garde 88 % de sa longueur (repliée aux trois quarts, elle disparaissait dans la toison), se rabat
+Couchée, la mèche se replie aux trois quarts (la Highland à moitié : `hState.y` = 0,45 × couchée) — gardée à 88 %, rabattue, elle se lisait en éclats de papier sous le ventre de l'islandais —, se rabat
 contre la peau (dans le shader, après le squelette : l'essentiel de ce qui l'écarte du corps est retiré, la longueur
 gardée) et la part qui entrerait dans le sol s'étale dans l'herbe, vers l'extérieur et un peu vers l'arrière. La pose
 figée couchée (caisse de voyage, van : `staticPose`) donne le repli tout de suite — les mèches pendaient droit sous le

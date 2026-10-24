@@ -55,6 +55,7 @@ const _v = V();
 const _w = V();
 const _u = V();
 const _q = new THREE.Quaternion();
+const _q3 = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const _rt = V();
 const _rs = V();
@@ -213,9 +214,22 @@ export function realCatBase(gltf, kind) {
   const W = {
     leg: new Float32Array(n * 4), ear: new Float32Array(n * 2), ear2: new Float32Array(n * 2),
     tail: new Float32Array(n), head: new Float32Array(n), neck: new Float32Array(n), nose: new Float32Array(n),
+    knee: new Float32Array(n),
   };
+  // Pli du genou (W.knee : 1 quand la peau est partagée à parts égales entre le fémur et le tibia d'une patte arrière,
+  // 0 quand un seul des deux la porte) : le poil long n'y est presque pas poussé (voir deformCat, 9).
+  const kneeB = ['L', 'R'].map((s) => [B('femur' + s), B('tibia' + s)]);
   const part = new Float32Array(n * 4);
   for (let i = 0; i < n; i++) {
+    for (const [bf, bt] of kneeB) {
+      let wf = 0;
+      let wt = 0;
+      for (let k = 0; k < 4; k++) {
+        if (coat.si[i * 4 + k] === bf) wf += coat.sw[i * 4 + k];
+        else if (coat.si[i * 4 + k] === bt) wt += coat.sw[i * 4 + k];
+      }
+      if (wf + wt > 1e-4) W.knee[i] = Math.max(W.knee[i], Math.min(1, (4 * wf * wt) / (wf + wt)));
+    }
     for (let k = 0; k < 4; k++) {
       const w = coat.sw[i * 4 + k];
       if (!w) continue;
@@ -317,6 +331,39 @@ export function realCatBase(gltf, kind) {
     eyeR: (eyes[0].r + eyes[1].r) / 2,
     paintIris: kind === 'kitten',
   };
+  // Fourrure prêtée au tour de l'œil (catCoat.js, cEyeUv) : la texture de l'adulte y est peinte lisse et claire sous
+  // l'œil, sombre au coin intérieur (tache de larme) ; le shader y prend le relief de la joue voisine. Décalage de
+  // texture du dessous de l'œil vers la joue (en bas, en dehors, en arrière), mesuré sur les sommets de la tête, pour
+  // chaque œil (x > midX d'abord). Chaton : yeux peints, rien.
+  land.eyeUv = [0, 0, 0, 0];
+  if (kind !== 'kitten') {
+    const uvAt = (p) => {
+      let bd = Infinity;
+      let bi = -1;
+      for (let i = 0; i < n; i++) {
+        if (W.head[i] < 0.6) continue;
+        const d = _v.fromArray(coat.pos, i * 3).distanceToSquared(p);
+        if (d < bd) {
+          bd = d;
+          bi = i;
+        }
+      }
+      return bi >= 0 && Math.sqrt(bd) < land.eyeR ? [coat.uv[bi * 2], coat.uv[bi * 2 + 1]] : null;
+    };
+    [1, -1].forEach((s, k) => {
+      const E = V(midX + s * land.eyeX, land.eyeY, land.eyeZ);
+      const r = land.eyeR;
+      const a = uvAt(E.clone().add(V(0, -1.7 * r, 0.1 * r)));
+      const b = uvAt(E.clone().add(V(s * 1.5 * r, -2.4 * r, -1.0 * r)));
+      if (!a || !b) return;
+      const du = b[0] - a[0];
+      const dv = b[1] - a[1];
+      // (jamais un saut d'une île de texture à l'autre)
+      if (Math.hypot(du, dv) > 0.15) return;
+      land.eyeUv[k * 2] = du;
+      land.eyeUv[k * 2 + 1] = dv;
+    });
+  }
   // Bouts des oreilles (le plus loin de leur base).
   const earTip = [0, 1].map((s) => {
     const b1 = B(s === 0 ? 'ear1L' : 'ear1R');
@@ -378,6 +425,49 @@ export function realCatBase(gltf, kind) {
 // ------------------------------------------------------------------ géométrie d'une race (par ses os)
 
 /**
+ * Pompon du bobtail (queue en boule, voir tailShape) : la boule suit la base de la queue d'un bloc (ses sommets venaient
+ * de toute la longueur de la queue d'origine ; liés à ses huit os, la boule se froissait en nœud dès que la queue
+ * bougeait), et sa robe est lue près de la croupe (lue au bout de la longue queue d'origine, elle tombait sur une autre
+ * plaque : un bouchon noir à bord net sur le chat mi-ke). Poids et repères propres à la race (copies).
+ */
+function stubSkin(g, base, k, P, h1) {
+  const coat = base.prims.coat;
+  const n = coat.count;
+  const t1 = base.tailBones[0];
+  const si = new Uint16Array(coat.si);
+  const sw = new Float32Array(coat.sw);
+  const rest = base.attrs.cmpRest.array.slice();
+  const c0 = base.heads[t1];
+  for (let i = 0; i < n; i++) {
+    const w = k[i];
+    if (!(w > 0)) continue;
+    // poids : vers le seul premier os de la queue (fondu à la jonction avec la croupe)
+    let slot = -1;
+    for (let c = 0; c < 4; c++) {
+      if (si[i * 4 + c] === t1) slot = c;
+    }
+    if (slot < 0) {
+      let lo = 0;
+      for (let c = 1; c < 4; c++) if (sw[i * 4 + c] < sw[i * 4 + lo]) lo = c;
+      slot = lo;
+      si[i * 4 + slot] = t1;
+      sw[i * 4 + slot] = 0;
+    }
+    for (let c = 0; c < 4; c++) sw[i * 4 + c] = c === slot ? sw[i * 4 + c] * (1 - w) + w : sw[i * 4 + c] * (1 - w);
+    // repère de la robe : la boule elle-même, posée sur la base de la queue (ramenés à 30 % de leur distance à la base
+    // de la queue d'origine, les repères du long tube étaient étirés jusqu'à huit fois autour de la boule : grain,
+    // motif et brins des couches de poil en rayons serrés vers le bout — un nombril froncé au bout de la boule)
+    for (let a = 0; a < 3; a++) {
+      const r = rest[i * 3 + a];
+      rest[i * 3 + a] = r + (c0.getComponent(a) + P[i * 3 + a] - h1.getComponent(a) - r) * w;
+    }
+  }
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  g.setAttribute('cmpRest', new THREE.BufferAttribute(rest, 3));
+}
+
+/**
  * Queue plus courte ou plus longue (B.tailLen), plus fine ou plus épaisse (B.tailThick, B.tailFur), en pompon (B.stub) :
  * autour de la chaîne de ses os (projection lissée par les poids de la peau ; voir dogReal.js tailShape). Modifie P et
  * H ; renvoie la distance de chaque sommet de la queue à sa ligne médiane (0 hors de la queue).
@@ -404,6 +494,7 @@ function tailShape(base, B, P, H, n, wTail) {
   const x = V();
   const q = V();
   const o = V();
+  const ax = V();
   const project = (i) => {
     wk.fill(0);
     let sw = 0;
@@ -416,6 +507,7 @@ function tailShape(base, B, P, H, n, wTail) {
     if (!(sw > 0)) return -1;
     x.fromArray(P, i * 3);
     q.set(0, 0, 0);
+    ax.set(0, 0, 0);
     let s = 0;
     for (let k = 0; k < m; k++) {
       if (!wk[k]) continue;
@@ -423,6 +515,7 @@ function tailShape(base, B, P, H, n, wTail) {
       const S = seg[k];
       const t = clamp(_u.copy(x).sub(C[k]).dot(S.e) / S.len, 0, 1);
       q.addScaledVector(_u.copy(C[k]).addScaledVector(S.e, t * S.len), wk[k]);
+      ax.addScaledVector(S.e, wk[k]);
       s += wk[k] * (S.s0 + t * S.len);
     }
     o.copy(x).sub(q);
@@ -448,11 +541,25 @@ function tailShape(base, B, P, H, n, wTail) {
     }
   }
   const axis = seg[m - 1].e;
+  const sv = new Float32Array(n).fill(-1);
+  // (part de chaque sommet dans la boule du pompon : portée par la base de la queue, couleur prise près de la croupe)
+  const stubK = B.stub ? new Float32Array(n) : null;
+  rad.stubK = stubK;
+  // (pompon : côté de chaque sommet autour de la ligne médiane de la queue, ramené dans le repère de la boule — l'axe
+  // local de la queue tourné sur son axe d'ensemble)
+  const dirAll = V().copy(C[m]).sub(C0).normalize();
+  const side = B.stub ? new Float32Array(n * 3) : null;
   for (let i = 0; i < n; i++) {
     const w = wTail(i);
     if (!(w > 0)) continue;
     const s = project(i);
     if (s < 0) continue;
+    sv[i] = s;
+    if (side && ax.lengthSq() > 1e-12) {
+      _q.setFromUnitVectors(ax.normalize(), dirAll);
+      _v.copy(o).applyQuaternion(_q);
+      side.set([_v.x, _v.y, _v.z], i * 3);
+    }
     const on = smooth(0, 0.3 * tot, s);
     const kl = 1 + (B.tailLen - 1) * on;
     // épaisseur : la race, le panache du poil long (plus vers le milieu), le pompon du bobtail (au bout)
@@ -472,6 +579,56 @@ function tailShape(base, B, P, H, n, wTail) {
     rad[i] = o2.length();
     x.lerp(_w, w);
     P.set([x.x, x.y, x.z], i * 3);
+  }
+  // Pompon du bobtail en boule : raccourcie et épaissie, la queue restait un tonneau au bout bombé (un bouchon à bord net,
+  // de profil comme de dos). Le bout de la queue est ramené sur une boule (un peu moins de deux fois le rayon de la queue
+  // à sa base) qui touche la croupe, sa surface en touffes irrégulières (poil) ; la base reste soudée à la croupe.
+  if (B.stub && ball > 0) {
+    const rs = [];
+    for (let i = 0; i < n; i++) {
+      if (sv[i] < 0 || !(wTail(i) > 0.5)) continue;
+      const f = sv[i] / tot;
+      if (f > 0.04 && f < 0.15) rs.push(rad[i] / thick(sv[i], smooth(0, 0.3 * tot, sv[i])));
+    }
+    rs.sort((p1, p2) => p1 - p2);
+    const r0 = rs.length ? rs[Math.floor(rs.length / 2)] : ball / 2;
+    // (au plus 2,8 cm pour un garrot de 25 cm : la queue épaisse du chaton en faisait une boule de 4 cm)
+    const R = Math.min(r0 * (B.stubR ?? 1.9), 0.028);
+    // centre : dans l'axe de la queue raccourcie, à un peu moins d'un rayon de sa base
+    const dir = V().copy(C[m]).sub(C0).normalize();
+    const G = C0.clone().addScaledVector(dir, R * 0.4);
+    // (le tube de la queue est posé sur la boule comme sur une sphère : sa longueur donne la latitude, de 125° à la
+    // croupe jusqu'au pôle au bout ; son tour, la longitude — ramené seulement par la direction depuis le centre, le
+    // tube se repliait en anneaux sur l'arrière de la boule)
+    let sEnd = 0;
+    for (let i = 0; i < n; i++) if (sv[i] > sEnd) sEnd = sv[i];
+    const s0 = 0.04 * tot;
+    const rh = V();
+    for (let i = 0; i < n; i++) {
+      const w = wTail(i);
+      if (!(w > 0) || sv[i] < 0) continue;
+      const k = w * smooth(0.02, 0.14, sv[i] / tot);
+      if (!(k > 0)) continue;
+      x.fromArray(P, i * 3);
+      // (côté autour de la ligne médiane, pas autour de l'axe d'ensemble : la queue courbe, les petits anneaux du bout
+      // partaient tous du même côté — sommets serrés en tourbillon, plis en spirale au bout de la boule)
+      rh.fromArray(side, i * 3);
+      rh.addScaledVector(dir, -rh.dot(dir));
+      const rl = rh.length();
+      if (rl < 1e-7) rh.set(dir.y, -dir.x, 0).normalize();
+      else rh.divideScalar(rl);
+      const u = clamp((sv[i] - s0) / Math.max(1e-6, sEnd - s0), 0, 1);
+      const al = (1 - u) * 2.18;
+      _u.copy(dir).multiplyScalar(Math.cos(al)).addScaledVector(rh, Math.sin(al));
+      // (touffes : bruit sur la direction, à deux échelles — pas plus fines que les sommets de la boule : à 14 par rayon,
+      // le bruit tombait entre les sommets et faisait des plis en tourbillon au bout de la boule, un nombril froncé)
+      const tuft = 0.9 + 0.16 * fbm(_u.x * 4 + 7, _u.y * 4, _u.z * 4) + 0.08 * fbm(_u.x * 8 + 2, _u.y * 8 + 5, _u.z * 8);
+      _w.copy(G).addScaledVector(_u, R * tuft);
+      x.lerp(_w, k);
+      P.set([x.x, x.y, x.z], i * 3);
+      rad[i] = Math.max(rad[i] * (1 - k), R * tuft * k);
+      stubK[i] = k;
+    }
   }
   for (let k = 1; k < m; k++) {
     const on = smooth(0, 0.3 * tot, seg[k].s0);
@@ -557,7 +714,8 @@ export function deformCat(base, B) {
       const a2 = al <= 0 ? al : al < len ? al * k : len * k + (al - len);
       // (cuisse : pas épaissie près de la hanche — assis ou en toilette, la cuisse se replie contre le flanc et la peau
       // épaissie s'y retournait)
-      const thick = l < 2 ? smooth(0, 0.03, al) : smooth(0.035, 0.08, al);
+      // (genou : épaissi à moitié dans le pli, où la jambe se replie sous la cuisse — british : faces arrière assis)
+      const thick = l < 2 ? smooth(0, 0.03, al) : smooth(0.035, 0.08, al) * (j < n ? 1 - 0.5 * W.knee[j] : 1);
       p.addScaledVector(a, w * (a2 - al)).addScaledVector(perp, w * (B.legW - 1) * thick);
       set(j, p);
     }
@@ -800,7 +958,9 @@ export function deformCat(base, B) {
       // triangle retourné à la cuisse du british et du persan)
       const legH = Math.min(1, W.leg[i * 4 + 2] + W.leg[i * 4 + 3]);
       // (cuisse : moitié moins — rasée au pli, la croupe assise s'enfonçait et la queue avec, 3 cm sous le sol)
-      const fold = (1 - 2.6 * W.head[i] * (1 - W.head[i])) * (1 - 1.6 * legH * (1 - legH));
+      // (genou : pli du genou presque rasé — assis, la jambe se replie à fond sous la cuisse, et les culottes poussées
+      // de 1,2 cm s'y retournaient : triangle de faces arrière devant la cuisse du maine coon, du norvégien, du persan)
+      const fold = (1 - 2.6 * W.head[i] * (1 - W.head[i])) * (1 - 1.6 * legH * (1 - legH)) * (1 - 0.85 * W.knee[i]);
       let push = (B.fur * k * nz * (1 - ear * 0.8) + B.ruff * ruff * (0.75 + 0.5 * nz) + B.breeches * 0.012 * br * nz) * eyeClear * fold;
       // poil ras : jamais plus que le tiers du rayon de la queue
       if (B.fur < 0) push = B.fur * k - Math.min(-B.fur, 0.3 * (tailR?.[i] || 0.01)) * tail;
@@ -809,12 +969,17 @@ export function deformCat(base, B) {
     }
   }
   // Normales : celles du modèle, tournées comme la surface (différence des normales recalculées avant et après).
+  // (pompon du bobtail : les normales recalculées seules — la différence venait du bout de la longue queue d'origine,
+  // tournée tout autrement : ombres en étoile au bout de la boule, un nombril froncé, normales retournées au chaton)
   const nDef = weldedNormals(P, coat.index, coat.weld, n);
+  const stubK = tailR?.stubK;
   for (let i = 0; i < n; i++) {
-    _w.fromArray(N, i * 3).add(_v.fromArray(nDef, i * 3)).sub(_u.fromArray(coat.nrmCalc, i * 3)).normalize();
+    _w.fromArray(N, i * 3).sub(_u.fromArray(coat.nrmCalc, i * 3));
+    if (stubK) _w.multiplyScalar(1 - stubK[i]);
+    _w.add(_v.fromArray(nDef, i * 3)).normalize();
     N.set([_w.x, _w.y, _w.z], i * 3);
   }
-  return { pos: P, nrm: N, heads: H, eyePos: EP, eyeNrm: EN, eyeCenters: EC };
+  return { pos: P, nrm: N, heads: H, eyePos: EP, eyeNrm: EN, eyeCenters: EC, stubK: tailR?.stubK ?? null };
 }
 
 const shapes = new Map();
@@ -827,7 +992,7 @@ function releaseShape(S) {
   const idle = [...shapes.values()].filter((x) => x.users === 0).sort((a, b) => a.idleAt - b.idleAt);
   for (const x of idle.slice(0, Math.max(0, idle.length - SPARE_SHAPES))) {
     shapes.delete(x.key);
-    for (const g of [x.coatGeo, x.eyeGeo, x.lidGeo, x.tuftGeo, x.lodCoat, x.lodEye]) g?.dispose();
+    for (const g of [x.coatGeo, x.eyeGeo, x.lidGeo, x.tuftGeo, x.lodCoat, x.lodEye, x.pomGeo]) g?.dispose();
   }
 }
 
@@ -865,9 +1030,20 @@ function shapeFor(base, B) {
   };
   S = { key, B, D, heads: D.heads, users: 1 };
   S.coatGeo = geo(D.pos, D.nrm, coat, base.attrs);
+  if (D.stubK) stubSkin(S.coatGeo, base, D.stubK, D.pos, D.heads[base.tailBones[0]]);
   S.eyeGeo = base.prims.eye ? geo(D.eyePos, D.eyeNrm, base.prims.eye, base.eyeAttrs) : null;
   S.lodCoat = lodGeo(S.coatGeo, coat.lodIndex);
   S.lodEye = S.eyeGeo ? lodGeo(S.eyeGeo, base.prims.eye.lodIndex) : null;
+  // Pompon du bobtail : ses seuls triangles (couches de poil du pompon). Les couches tirées sur tout le pelage — corps ras,
+  // jeté au fragment — redessinaient trois fois le chat entier pour une boule de 3 cm.
+  if (D.stubK) {
+    const idx = coat.index;
+    const keep = [];
+    for (let t = 0; t < idx.length; t += 3) {
+      if (D.stubK[idx[t]] > 0.05 || D.stubK[idx[t + 1]] > 0.05 || D.stubK[idx[t + 2]] > 0.05) keep.push(idx[t], idx[t + 1], idx[t + 2]);
+    }
+    S.pomGeo = lodGeo(S.coatGeo, Uint32Array.from(keep));
+  }
   S.measure = measureCat(base, D, B);
   S.boneBox = emptyBoneBoxes(base.names.length + 2);
   growBoneBoxes(S.boneBox, D.pos, coat.si, coat.sw, coat.count);
@@ -1284,6 +1460,7 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
   const uniforms = { ...makeCatCoatUniforms(), ...base.landUniforms };
   const plan = catCoatPlan(look, breed, B.kitten);
   setCatCoat(uniforms, plan);
+  uniforms.cStub.value = S.D.stubK ? 1 : 0;
   const keepCfg = base.cfg.keep;
   const L0 = base.land;
   const spheres = keepCfg.nose ? [{ s: new THREE.Vector4(L0.nose.x, L0.nose.y, L0.nose.z - keepCfg.nose[0] * 0.4, keepCfg.nose[0]), l: keepCfg.nose[1] }] : [];
@@ -1332,11 +1509,15 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
   }
   // Couches de poil (poil long) : haute qualité seulement, copies de la version réduite du pelage.
   const shells = [];
-  if (gfx.quality === 'high' && B.shells > 0) {
-    const sg = S.lodCoat ?? S.coatGeo;
-    const furMap = new THREE.Vector4(Math.max(0.003, B.fur * 0.45), B.ruff * 0.35, B.breeches * 0.005, B.tailFur * 0.004);
-    for (let k = 1; k <= B.shells; k++) {
-      const sm = new PetMesh(sg, catShellMaterial(coatMat, uniforms, k / B.shells, furMap), hb);
+  // (pompon du bobtail : couches sur ses seuls triangles, aussi en qualité basse — lisse au contour net et facetté sur
+  // le téléphone, il n'était touffu qu'en qualité haute ; quelques centaines de triangles)
+  if ((gfx.quality === 'high' || S.pomGeo) && B.shells > 0) {
+    const sg = S.pomGeo ?? S.lodCoat ?? S.coatGeo;
+    // (poil ras du bobtail : aucune couche sur le corps, seulement sur le pompon)
+    const furMap = new THREE.Vector4(B.fur > 0 ? Math.max(0.003, B.fur * 0.45) : 0, B.ruff * 0.35, B.breeches * 0.005, B.tailFur * 0.004 * (S.pomGeo ? POM_LEN : 1));
+    const nSh = S.pomGeo ? POM_SHELLS : B.shells;
+    for (let k = 1; k <= nSh; k++) {
+      const sm = new PetMesh(sg, catShellMaterial(coatMat, uniforms, k / nSh, furMap, S.pomGeo ? POM_CELL : 520), hb);
       sm.bind(skeleton, new THREE.Matrix4());
       sm.castShadow = false;
       sm.receiveShadow = true;
@@ -1385,14 +1566,16 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
   // chat sculpté).
   // Nœud de queue (salon) : à la surface du pompon du bobtail (le haut de sa boule) ; posé sur l'os du bout de la
   // queue, il était enfoui dans la boule, invisible.
+  // (la boule du pompon suit la base de la queue d'un bloc, voir stubSkin : le nœud aussi)
   let tailBowAt = null;
-  if (B.stub && lastTail) {
+  const bowBone = B.stub && S.D.stubK ? tailB[0] : lastTail;
+  if (B.stub && bowBone) {
     let top = null;
     for (let i = 0; i < base.prims.coat.count; i++) {
-      if (base.W.tail[i] < 0.7) continue;
+      if ((S.D.stubK ? S.D.stubK[i] : base.W.tail[i]) < 0.7) continue;
       if (!top || S.D.pos[i * 3 + 1] > top.y) top = V().fromArray(S.D.pos, i * 3);
     }
-    if (top) tailBowAt = lastTail.worldToLocal(top).toArray();
+    if (top) tailBowAt = bowBone.worldToLocal(top).toArray();
   }
   const hr = 0.034 * B.head * (B.kitten ? 1.15 : 1);
   const whiskers = addWhiskers({
@@ -1434,7 +1617,7 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     // (mêmes mesures que le chien réaliste : collier plat de gearModels.js, nœud du concours de Beauty.js, accessoires
     // du salon de salon.js ; un chat ne porte pas de manteau : pas de coupes du tronc)
     dogFit: { collar: { center: collarC, normal: collarN, q: ringQ, rx: M.collar.rx, ry: M.collar.ry, bone: neckB }, rings: [], ycAt: (M.topY + M.bellyY) / 2, midX: base.land.midX, hipZ: M.hipZ, shZ: M.shZ, topY: M.topY, bellyY: M.bellyY },
-    accessoryFit: { skull, headQ, mouth, headR: 0.034 * B.head, tailTip: lastTail, tailBowAt },
+    accessoryFit: { skull, headQ, mouth, headR: 0.034 * B.head, tailTip: bowBone ?? lastTail, tailBowAt },
     build: B,
     kind: B.model,
     kitten: !!B.kitten,
@@ -1480,19 +1663,14 @@ export function buildRealCatModel(look, stage = 'adult', gltf = null) {
     releaseShape(S);
   };
   fitCollar(model, base, S);
-  // Sillon du collier (catCoat.js, cCollar*) : le poil long est couché sous la bande d'un collier ou d'un accessoire du
-  // cou porté (gearModels.js, salon.js). key : qui le porte ; null le retire. Plusieurs : l'ellipse la plus petite.
-  // L'anneau, porté par l'os du cou, est ramené dans la pose de liaison (repère des sommets) par l'inverse de sa matrice
-  // de liaison.
-  {
-    const F = model.dogFit.collar;
-    const bi = skeleton.bones.indexOf(F.bone);
-    if (bi >= 0) {
-      const toBind = skeleton.boneInverses[bi].clone().invert();
-      uniforms.cCollarC.value.copy(F.center).applyMatrix4(toBind);
-      uniforms.cCollarN.value.copy(F.normal).transformDirection(toBind);
-    }
-  }
+  // Collier et accessoires du cou liés au squelette (voir collarStand) : ils suivent la peau dans toutes les poses.
+  // skinGear : une pièce posée dans la pose debout de la mesure (repère du chat) ; skinCollar : les pièces d'un repère
+  // d'anneau (gearModels.js, salon.js) ; drapeChest : points posés sur le devant de la peau debout (bavette du salon).
+  model.skinGear = (mesh, opts) => skinCatGear(model, S, mesh, opts);
+  model.skinCollar = (frame, rx, ry) => skinCatCollar(model, S, frame, rx, ry);
+  model.drapeChest = (pts, clear) => drapeCatChest(S, pts, clear);
+  // Sillon du collier (catCoat.js : cmpCollar, cCollarR) : le poil long est couché et la robe serrée sous la bande d'un
+  // collier ou d'un accessoire du cou porté (gearModels.js, salon.js). key : qui le porte ; null le retire.
   const grooves = new Map();
   model.setGroove = (key, g = null) => {
     if (g) grooves.set(key, g);
@@ -1538,15 +1716,18 @@ function fitCollar(model, base, S) {
     const lx = V(1, 0, 0).addScaledVector(axis, -axis.x).normalize();
     const ly = axis.clone().cross(lx);
     const cand = [];
+    // (sommets surtout portés par les pattes avant : à part — ils ne choisissent pas la coupe, mais le dessous du cou
+    // en fait partie, voir plus bas)
+    const legCand = [];
     const p = V();
     for (let i = 0; i < n; i++) {
       if (W.ear[i * 2] + W.ear[i * 2 + 1] > 0.1) continue;
-      if (W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] > 0.5) continue;
       mesh.getVertexPosition(i, p);
       _w.copy(p).sub(n0);
       const d = _w.dot(axis);
       if (d < 0 || d > nlen * 1.05) continue;
-      cand.push([d, _w.dot(lx), _w.dot(ly), W.head[i]]);
+      const leg = W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] > 0.5;
+      (leg ? legCand : cand).push([d, _w.dot(lx), _w.dot(ly), W.head[i]]);
     }
     const cuts = [];
     for (let t = 0.1; t <= 0.951; t += 0.05) {
@@ -1579,7 +1760,24 @@ function fitCollar(model, base, S) {
     let center = n0.clone().addScaledVector(axis, nlen * 0.45);
     let rx = fit.rx;
     let ry = fit.ry;
+    let span = rx + ry;
     if (best) {
+      // Dessous du cou : la coupe, penchée comme le cou, passe sous la gorge par la peau partagée avec les pattes avant
+      // (poids des pattes > 0,5). Sans elle, l'ellipse s'arrêtait 3 à 5 cm au-dessus de la gorge : l'avant du collier
+      // passait dans le cou, caché sous le menton (et sous la collerette du poil long). Seuls les sommets proches de
+      // la coupe comptent (jamais une patte loin du cou).
+      // (taille des accessoires du salon — nœud, grelot, foulard — : celle de la coupe sans la gorge, comme avant)
+      span = (best.x1 - best.x0) / 2 + (best.y1 - best.y0) / 2;
+      const reach = 2.5 * Math.max(best.x1 - best.x0, best.y1 - best.y0) / 2;
+      const bx = (best.x0 + best.x1) / 2;
+      const by = (best.y0 + best.y1) / 2;
+      for (const [d, x, y] of legCand) {
+        if (Math.abs(d - best.d0) > 0.004 || Math.hypot(x - bx, y - by) > reach) continue;
+        best.x0 = Math.min(best.x0, x);
+        best.x1 = Math.max(best.x1, x);
+        best.y0 = Math.min(best.y0, y);
+        best.y1 = Math.max(best.y1, y);
+      }
       // ellipse de la boîte de la coupe (le centre des sommets, plus nombreux sous la gorge, décollait le dessus)
       center = n0.clone().addScaledVector(axis, best.d0).addScaledVector(lx, (best.x0 + best.x1) / 2).addScaledVector(ly, (best.y0 + best.y1) / 2);
       rx = (best.x1 - best.x0) / 2;
@@ -1589,6 +1787,7 @@ function fitCollar(model, base, S) {
       const sink = 0.2 * (Math.max(0, B.fur) + 1.2 * Math.max(0, B.ruff));
       rx = Math.max(rx * 0.7, rx - sink);
       ry = Math.max(ry * 0.7, ry - sink);
+      span = Math.max(span * 0.7, span - 2 * sink);
     }
     const neckB = model.neck;
     const nq = neckB.getWorldQuaternion(new THREE.Quaternion()).invert();
@@ -1596,7 +1795,8 @@ function fitCollar(model, base, S) {
       center: neckB.worldToLocal(center.clone()),
       normal: axis.clone().applyQuaternion(nq),
       q: nq.clone().multiply(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(lx, ly, axis))),
-      rx, ry,
+      rx, ry, span,
+      stand: collarStand(model, base, S, center, axis, lx, ly, rx, ry),
     };
   }
   model.anim.resync();
@@ -1606,6 +1806,357 @@ function fitCollar(model, base, S) {
   fit.q = F.q.clone();
   fit.rx = F.rx;
   fit.ry = F.ry;
+  fit.span = F.span;
+  // (repère debout du collier, repère du chat : bavette du salon — salon.js dogBib —, comme le « rest » du chien)
+  fit.rest = { center: F.stand.C.clone(), axis: F.stand.N.clone(), chinY: F.stand.chinY, bellyY: F.stand.bellyY };
+}
+
+// ------------------------------------------------------------------ collier lié au squelette
+
+/** Demi-diamètre d'une ellipse (demi-axes a, b) dans la direction de cosinus u depuis l'axe a. */
+const ellR = (a, b, u) => 1 / Math.sqrt((u * u) / (a * a) + Math.max(0, 1 - u * u) / (b * b));
+// (écart de la bande du collier à l'ellipse mesurée, demi-largeur de la bande : gearModels.js buildDogGear)
+const COLLAR_GAP = 0.006;
+const COLLAR_BAND = 0.013;
+const COLLAR_NT = 48;
+// Couches de poil du pompon du bobtail : POM_SHELLS couches, brins un peu plus gros que ceux du corps (POM_CELL par
+// mètre de ses repères, la boule elle-même : 2,6 mm), poil du panache × POM_LEN (à pleine longueur, 1,4 cm sur une
+// boule de 2,8 cm de rayon : une frange de taches détachées).
+const POM_CELL = 380;
+const POM_LEN = 0.7;
+const POM_SHELLS = 4;
+// (part du poids des pattes avant de la peau sous la bande reportée sur l'omoplate, voir collarStand : à 1, la bande
+// quittait la peau d'un côté à la toilette ; à 0, elle partait en écharpe avec la patte levée)
+const ARM_TO_SCAP = 0.5;
+
+/**
+ * Collier lié au squelette (pose debout où l'anneau est mesuré, une fois par gabarit) : l'anneau rigide, porté par l'os
+ * du cou, quittait la peau dès que le cou se pliait — la gorge suit surtout les pattes avant : cerceau autour du poitrail
+ * couché, bandoulière assis, barre au-dessus de la tête en mangeant. Ici :
+ * - matrices de peau de chaque os debout (K, repère du chat), os du cou debout, peau debout (pos) ;
+ * - poids de l'anneau tout autour (table : COLLAR_NT angles, 4 os) pris sur la peau sous la bande, lissés en tournant ;
+ * - robe serrée sous la bande : déplacement de chaque sommet (attribut cmpCollar, dans la pose de liaison, ajouté avant
+ *   les os dans le shader : il suit la peau comme la bande), et part de poil couché sous elle (cmpCollar.w = 1 - part).
+ */
+function collarStand(model, base, S, C, N, X, Y, rx, ry) {
+  const mesh = model.coatMesh;
+  const sk = mesh.skeleton;
+  model.root.updateMatrixWorld(true);
+  const rootInv = model.root.matrixWorld.clone().invert();
+  const nbn = sk.bones.length;
+  const K = new Float32Array(nbn * 16);
+  for (let j = 0; j < nbn; j++) _m.multiplyMatrices(rootInv, sk.bones[j].matrixWorld).multiply(sk.boneInverses[j]).toArray(K, j * 16);
+  const neckM = new THREE.Matrix4().multiplyMatrices(rootInv, model.neck.matrixWorld);
+  const geo = S.coatGeo;
+  const n = geo.attributes.position.count;
+  const si = geo.attributes.skinIndex;
+  const sw = geo.attributes.skinWeight;
+  const part = geo.attributes.cmpPart;
+  const W = base.W;
+  const pos = new Float32Array(n * 3);
+  const p = V();
+  for (let i = 0; i < n; i++) {
+    mesh.getVertexPosition(i, p).applyMatrix4(mesh.matrixWorld).applyMatrix4(rootInv);
+    p.toArray(pos, i * 3);
+  }
+  // peau de l'avant (ni queue ni oreilles) : poids des pièces liées par le plus proche, bavette du salon posée dessus
+  const front = [];
+  for (let i = 0; i < n; i++) if (W.tail[i] < 0.1 && W.ear[i * 2] + W.ear[i * 2 + 1] < 0.1) front.push(i);
+  // menton (le plus bas de la tête) et ventre (le plus bas du tronc au milieu) debout
+  let chinY = Infinity;
+  for (let i = 0; i < n; i++) if (W.head[i] > 0.6) chinY = Math.min(chinY, pos[i * 3 + 1]);
+  const M = S.measure;
+  const midZ = (M.hipZ + M.shZ) / 2;
+  let bellyY = Infinity;
+  for (const i of front) {
+    if (W.head[i] > 0.05 || Math.abs(pos[i * 3 + 2] - midZ) > 0.03) continue;
+    if (W.leg[i * 4] + W.leg[i * 4 + 1] + W.leg[i * 4 + 2] + W.leg[i * 4 + 3] > 0.05) continue;
+    bellyY = Math.min(bellyY, pos[i * 3 + 1]);
+  }
+  // Poids de l'anneau : à chaque angle, les 6 sommets de peau les plus proches du point de la bande (dans la tranche
+  // du collier), pondérés par l'inverse de la distance ; puis lissés en tournant (sans saut d'un sommet à l'autre).
+  const ra = rx + COLLAR_GAP;
+  const rb = ry + COLLAR_GAP;
+  const slab = [];
+  const d = V();
+  for (const i of front) {
+    d.fromArray(pos, i * 3).sub(C);
+    if (Math.abs(d.dot(N)) < 0.022) slab.push(i);
+  }
+  // (os des pattes avant ramenés pour moitié à l'omoplate du même côté : la gorge, sous l'anneau, est portée par les
+  // humérus — patte levée, pour le salut, la bande partait avec le bras et traversait le poitrail en écharpe)
+  const boneIx = new Map(sk.bones.map((b, j) => [b.name, j]));
+  const toArm = sk.bones.map((b, j) => {
+    const m = /^(humerus|radius|metacarpus|toes)([LR])$/.exec(b.name);
+    return m && boneIx.has('scap' + m[2]) ? boneIx.get('scap' + m[2]) : j;
+  });
+  const raw = [];
+  const q = V();
+  for (let k = 0; k < COLLAR_NT; k++) {
+    const th = (2 * Math.PI * k) / COLLAR_NT;
+    q.copy(C).addScaledVector(X, ra * Math.sin(th)).addScaledVector(Y, rb * Math.cos(th));
+    const near = [];
+    for (const i of slab) {
+      const e = (pos[i * 3] - q.x) ** 2 + (pos[i * 3 + 1] - q.y) ** 2 + (pos[i * 3 + 2] - q.z) ** 2;
+      if (near.length < 6 || e < near[5][0]) {
+        near.push([e, i]);
+        near.sort((a, b) => a[0] - b[0]);
+        if (near.length > 6) near.pop();
+      }
+    }
+    const acc = new Map();
+    for (const [e, i] of near) {
+      const f = 1 / (Math.sqrt(e) + 0.004);
+      for (let c = 0; c < 4; c++) {
+        const w = sw.getComponent(i, c);
+        if (!(w > 0)) continue;
+        const b0 = si.getComponent(i, c);
+        const b = toArm[b0];
+        const k = b === b0 ? 0 : ARM_TO_SCAP;
+        acc.set(b, (acc.get(b) ?? 0) + w * f * k + (b === b0 ? w * f : 0));
+        if (k < 1 && b !== b0) acc.set(b0, (acc.get(b0) ?? 0) + w * f * (1 - k));
+      }
+    }
+    raw.push(acc);
+  }
+  const table = new Float32Array(COLLAR_NT * 8);
+  for (let k = 0; k < COLLAR_NT; k++) {
+    const acc = new Map();
+    for (const [o, f] of [[-2, 1], [-1, 2], [0, 3], [1, 2], [2, 1]]) {
+      const m = raw[(k + o + COLLAR_NT) % COLLAR_NT];
+      const tot = [...m.values()].reduce((a, b) => a + b, 0) || 1;
+      for (const [b, w] of m) acc.set(b, (acc.get(b) ?? 0) + (w / tot) * f);
+    }
+    const top = [...acc].sort((a, b) => b[1] - a[1]).slice(0, 4);
+    const tot = top.reduce((a, [, w]) => a + w, 0) || 1;
+    top.forEach(([b, w], c) => {
+      table[k * 8 + c * 2] = b;
+      table[k * 8 + c * 2 + 1] = w / tot;
+    });
+  }
+  // Robe serrée sous la bande (voir catCoat.js) : debout, la peau qui dépasse de l'ellipse de la bande moins 4 mm (la
+  // moitié de son épaisseur ; plus profond, la peau serrée se plissait tête baissée) est ramenée vers l'axe du cou, en
+  // fondu au bord de la bande ; jamais la tête. Le déplacement est ramené dans la pose de liaison par l'inverse de la
+  // matrice de peau du sommet.
+  const cmp = new Float32Array(n * 4);
+  const lin = new THREE.Matrix3();
+  const sm = new THREE.Matrix4();
+  const e4 = new THREE.Matrix4();
+  for (let i = 0; i < n; i++) {
+    cmp[i * 4 + 3] = 1;
+    d.fromArray(pos, i * 3).sub(C);
+    const dd = d.dot(N);
+    if (Math.abs(dd) > COLLAR_BAND * 2.8) continue;
+    d.addScaledVector(N, -dd);
+    const rl = Math.max(1e-5, d.length());
+    const u = d.dot(X) / rl;
+    const re = ellR(ra, rb, u);
+    const flat = (1 - smooth(COLLAR_BAND, COLLAR_BAND * 3.4, Math.abs(dd))) * (1 - smooth(1.6, 2.4, rl / Math.max(ra, rb)));
+    cmp[i * 4 + 3] = 1 - flat;
+    const zone = (1 - smooth(COLLAR_BAND, COLLAR_BAND * 2.8, Math.abs(dd))) * (1 - smooth(1.3, 1.8, rl / re)) * (1 - smooth(0.4, 0.8, part.getZ(i)));
+    const out = rl - (re - 0.004);
+    if (zone <= 0 || out <= 0) continue;
+    // déplacement debout, puis dans la pose de liaison
+    q.copy(d).multiplyScalar((-out / rl) * zone);
+    sm.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    for (let c = 0; c < 4; c++) {
+      const w = sw.getComponent(i, c);
+      if (!w) continue;
+      e4.fromArray(K, si.getComponent(i, c) * 16);
+      for (let t = 0; t < 16; t++) sm.elements[t] += e4.elements[t] * w;
+    }
+    lin.setFromMatrix4(sm).invert();
+    q.applyMatrix3(lin);
+    cmp[i * 4] = q.x;
+    cmp[i * 4 + 1] = q.y;
+    cmp[i * 4 + 2] = q.z;
+  }
+  const attr = new THREE.BufferAttribute(cmp, 4);
+  S.coatGeo.setAttribute('cmpCollar', attr);
+  S.lodCoat?.setAttribute('cmpCollar', attr);
+  S.pomGeo?.setAttribute('cmpCollar', attr);
+  // (paupières : même shader, rien sous la bande — l'attribut à sa valeur neutre plutôt qu'absent)
+  if (S.lidGeo && !S.lidGeo.attributes.cmpCollar) {
+    const nl = S.lidGeo.attributes.position.count;
+    const zl = new Float32Array(nl * 4);
+    for (let i = 0; i < nl; i++) zl[i * 4 + 3] = 1;
+    S.lidGeo.setAttribute('cmpCollar', new THREE.BufferAttribute(zl, 4));
+  }
+  return { K, neckM, pos, front: Uint32Array.from(front), C: C.clone(), N: N.clone(), X: X.clone(), Y: Y.clone(), rx, ry, table, chinY, bellyY };
+}
+
+/**
+ * Points (repère du chat, pose debout de la mesure du collier) posés sur le devant de la peau : z de la peau la plus en
+ * avant sous chaque point (à 1,2 cm près en x et y), plus clear ; NaN s'il n'y en a pas (entre les antérieurs). Comme
+ * dogReal.js drapeDogChest, sur la peau debout.
+ */
+function drapeCatChest(S, pts, clear) {
+  const st = S.collarFit.stand;
+  const cp = st.pos;
+  const R = 0.012;
+  return pts.map((p) => {
+    let best = -Infinity;
+    for (const j of st.front) {
+      const z = cp[j * 3 + 2];
+      if (z <= best || z > p.z + 0.04 || z < p.z - 0.1) continue;
+      if (Math.abs(cp[j * 3] - p.x) < R && Math.abs(cp[j * 3 + 1] - p.y) < R) best = z;
+    }
+    if (best === -Infinity) return NaN;
+    p.z = best + clear;
+    return best;
+  });
+}
+
+/** Poids (4 os) de l'anneau du collier à l'angle th (0 : dessus de la nuque, π : gorge), interpolés dans la table. */
+function collarWeights(st, th) {
+  const f = (((th / (2 * Math.PI)) * COLLAR_NT) % COLLAR_NT + COLLAR_NT) % COLLAR_NT;
+  const k0 = Math.floor(f) % COLLAR_NT;
+  const k1 = (k0 + 1) % COLLAR_NT;
+  const t = f - Math.floor(f);
+  const acc = new Map();
+  for (const [k, g] of [[k0, 1 - t], [k1, t]]) {
+    for (let c = 0; c < 4; c++) {
+      const w = st.table[k * 8 + c * 2 + 1] * g;
+      if (w > 0) acc.set(st.table[k * 8 + c * 2], (acc.get(st.table[k * 8 + c * 2]) ?? 0) + w);
+    }
+  }
+  return [...acc].sort((a, b) => b[1] - a[1]).slice(0, 4);
+}
+
+/** Poids (4 os) de la peau debout près du point p (repère du chat) : les 6 sommets les plus proches. */
+function skinWeightsAt(st, geo, p) {
+  const pos = st.pos;
+  const near = [];
+  for (const i of st.front) {
+    const e = (pos[i * 3] - p.x) ** 2 + (pos[i * 3 + 1] - p.y) ** 2 + (pos[i * 3 + 2] - p.z) ** 2;
+    if (near.length < 6 || e < near[5][0]) {
+      near.push([e, i]);
+      near.sort((a, b) => a[0] - b[0]);
+      if (near.length > 6) near.pop();
+    }
+  }
+  const si = geo.attributes.skinIndex;
+  const sw = geo.attributes.skinWeight;
+  const acc = new Map();
+  for (const [e, i] of near) {
+    const f = 1 / (Math.sqrt(e) + 0.004);
+    for (let c = 0; c < 4; c++) {
+      const w = sw.getComponent(i, c);
+      if (w > 0) acc.set(si.getComponent(i, c), (acc.get(si.getComponent(i, c)) ?? 0) + w * f);
+    }
+  }
+  return [...acc].sort((a, b) => b[1] - a[1]).slice(0, 4);
+}
+
+/**
+ * Pièce portée (collier, accessoires du cou du salon) changée en maillage lié au squelette. Sa géométrie est donnée dans
+ * la pose debout où le collier est mesuré, repère du chat (opts.matrix : vers ce repère ; sinon mesh.matrix). Poids :
+ * opts.ring → ceux de l'anneau à l'angle de chaque sommet (opts.ringM : repère de l'anneau, sinon celui de la mesure) ;
+ * opts.angle → ceux de l'anneau à cet angle pour toute la pièce ; opts.at (point, repère du chat) → ceux de la peau en
+ * ce point pour toute la pièce (elle reste d'un bloc) ; sinon la peau la plus proche de chaque sommet. La position de
+ * liaison de chaque sommet est celle que ses poids ramènent, debout, à sa place. Renvoie le maillage lié (enfant de la
+ * racine, compté dans la boîte englobante du chat).
+ */
+function skinCatGear(model, S, mesh, opts = {}) {
+  const st = S.collarFit.stand;
+  const hb = model.bounds;
+  const geo = mesh.geometry;
+  mesh.updateMatrix();
+  geo.applyMatrix4(opts.matrix ?? mesh.matrix);
+  const pos = geo.attributes.position;
+  const nrm = geo.attributes.normal;
+  const n = pos.count;
+  const si = new Uint16Array(n * 4);
+  const sw = new Float32Array(n * 4);
+  const ringInv = opts.ring ? (opts.ringM ?? new THREE.Matrix4().makeBasis(st.X, st.Y, st.N).setPosition(st.C)).clone().invert() : null;
+  const fixed = opts.angle !== undefined ? collarWeights(st, opts.angle) : opts.at ? skinWeightsAt(st, S.coatGeo, opts.at) : null;
+  const sm = new THREE.Matrix4();
+  const e4 = new THREE.Matrix4();
+  const lin = new THREE.Matrix3();
+  const p = V();
+  const lp = V();
+  const rx = opts.rx ?? st.rx + COLLAR_GAP;
+  const ry = opts.ry ?? st.ry + COLLAR_GAP;
+  for (let i = 0; i < n; i++) {
+    p.fromBufferAttribute(pos, i);
+    let ws = fixed;
+    if (!ws && ringInv) {
+      lp.copy(p).applyMatrix4(ringInv);
+      ws = collarWeights(st, Math.atan2(lp.x / rx, lp.y / ry));
+    }
+    if (!ws) ws = skinWeightsAt(st, S.coatGeo, p);
+    const tot = ws.reduce((a, [, w]) => a + w, 0) || 1;
+    sm.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    ws.forEach(([b, w], c) => {
+      si[i * 4 + c] = b;
+      sw[i * 4 + c] = w / tot;
+      e4.fromArray(st.K, b * 16);
+      for (let t = 0; t < 16; t++) sm.elements[t] += e4.elements[t] * (w / tot);
+    });
+    sm.invert();
+    p.applyMatrix4(sm);
+    pos.setXYZ(i, p.x, p.y, p.z);
+    if (nrm) {
+      lin.setFromMatrix4(sm);
+      p.fromBufferAttribute(nrm, i).applyMatrix3(lin).normalize();
+      nrm.setXYZ(i, p.x, p.y, p.z);
+    }
+  }
+  geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  growBoneBoxes(hb.boneBox, pos.array, si, sw, n);
+  const sk = new PetMesh(geo, mesh.material, hb);
+  sk.castShadow = mesh.castShadow;
+  sk.receiveShadow = true;
+  sk.userData = { ...mesh.userData };
+  // (dessinée après les couches de poil — transparentes, sans profondeur — : le poil long, couché sous elle, ne passe
+  // plus par-dessus ; le foulard du salon n'était plus qu'un liseré sous l'anneau. Opaque quand même.)
+  sk.material.transparent = true;
+  sk.material.opacity = 1;
+  sk.renderOrder = 8;
+  mesh.parent?.remove(mesh);
+  model.root.add(sk);
+  sk.bind(model.skeleton, new THREE.Matrix4());
+  hb.meshes = hb.meshes.filter((m) => m.parent);
+  hb.meshes.push(sk);
+  return sk;
+}
+
+/**
+ * Pièces posées dans le repère de l'anneau du collier (frame : enfant de l'os du cou, ou pas encore accroché, à
+ * center/q de la mesure) changées en maillages liés au squelette : la bande (userData.collarBand) prend les poids de
+ * l'anneau sommet par sommet ; chaque autre pièce (boucle, médaille, grelot, anneau de laisse…), ceux de l'anneau à
+ * l'angle de son centre, d'un bloc. Le repère du cou est celui de la pose debout de la mesure. Renvoie les maillages
+ * liés ; frame reste vide.
+ */
+function skinCatCollar(model, S, frame, rx, ry) {
+  const st = S.collarFit.stand;
+  frame.updateMatrix();
+  const fM = new THREE.Matrix4().multiplyMatrices(st.neckM, frame.matrix);
+  const meshes = [];
+  frame.traverse((o) => {
+    if (o.isMesh) meshes.push(o);
+  });
+  const out = [];
+  const c = V();
+  for (const m of meshes) {
+    // repère de la pièce dans celui de l'anneau
+    const rel = new THREE.Matrix4();
+    for (let o = m; o && o !== frame; o = o.parent) {
+      o.updateMatrix();
+      rel.premultiply(o.matrix);
+    }
+    const toStand = new THREE.Matrix4().multiplyMatrices(fM, rel);
+    let opts;
+    if (m.userData.collarBand) opts = { matrix: toStand, ring: true, ringM: fM, rx, ry };
+    else {
+      m.geometry.computeBoundingBox();
+      m.geometry.boundingBox.getCenter(c).applyMatrix4(rel);
+      opts = { matrix: toStand, angle: Math.atan2(c.x / rx, c.y / ry) };
+    }
+    out.push(skinCatGear(model, S, m, opts));
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ animation
@@ -1853,7 +2404,9 @@ class RealCatAnim {
     const S = this.S;
     const base = this.base;
     const md = this.model;
-    const coat = base.prims.coat;
+    // (poids de la peau de la race : ceux du GLB, sauf le pompon du bobtail, porté par la base de la queue)
+    const ga = md.coatMesh.geometry.attributes;
+    const coat = { si: ga.skinIndex.array, sw: ga.skinWeight.array, count: base.prims.coat.count };
     const W = base.W;
     const n = coat.count;
     if (!S.contact) {
@@ -1869,7 +2422,9 @@ class RealCatAnim {
       const inv = md.skeleton.boneInverses;
       const ys = new Float32Array(n);
       const bm = new THREE.Matrix4();
-      const poses = [['sit', 0], ['groom', 0.3], ['groom', 0.7], ['lie', 0], ['sleep', 0], ['eat', 0.3], ['stretch', 0.5], ['highfive', 0.5]];
+      // (et le milieu du passage couché -> en boule : le chaton y roule sur le flanc, sur ses pattes repliées)
+      const poses = [['sit', 0], ['groom', 0.3], ['groom', 0.7], ['lie', 0], ['sleep', 0], ['curl_up', 0.3], ['curl_up', 0.45],
+        ['curl_up', 0.6], ['curl_up', 0.75], ['eat', 0.3], ['stretch', 0.5], ['highfive', 0.5]];
       for (const [clip, t] of poses) {
         if (!this.actions[clip]) continue;
         this.clipPose(clip, t, false);
@@ -1928,6 +2483,17 @@ class RealCatAnim {
       return { inf: infl(i), bone: best };
     });
     this.headPts = [...S.contact[2]].map(infl);
+    // Bout de chaque oreille (les 16 sommets les plus loin de sa base) : relevé quand il toucherait le sol (chaton qui
+    // roule sur le flanc pour se mettre en boule : l'oreille du dessous plongeait de 5 à 11 mm dans le sol).
+    this.earPts = md.ears.map((e) => {
+      const k = e.userData.side > 0 ? 0 : 1;
+      const r = e.getWorldPosition(V());
+      const ids = [];
+      for (let i = 0; i < n; i++) if (W.ear[i * 2 + k] > 0.5) ids.push(i);
+      const d = (i) => (S.D.pos[i * 3] - r.x) ** 2 + (S.D.pos[i * 3 + 1] - r.y) ** 2 + (S.D.pos[i * 3 + 2] - r.z) ** 2;
+      ids.sort((a, b) => d(b) - d(a));
+      return ids.slice(0, 16).map(infl);
+    });
     // Soles du chaton : la peau de son pied se plie entre doigts et métacarpe ; liée au seul os du pied, sa sole
     // calculée passait de 3 mm au-dessus à 3 mm sous la vraie peau au pas (chez l'adulte, les deux se confondent). Chaque
     // point suit l'os qui le porte le plus (même coût qu'un point lié à l'os du pied ; la peau mélangée de ses quatre
@@ -2027,6 +2593,19 @@ class RealCatAnim {
     this.gait = g;
     // Posture voulue (debout dès qu'il bouge) ; passages joués une fois, par le plus court chemin.
     const want = st.moving ? 'stand' : st.posture ?? 'stand';
+    // Il part alors qu'il est couché ou roulé en boule (réveil) : il se relève d'abord (clip get_up, l'entité attend —
+    // e.holdMove, voir animateRealCat). Sans cela, la boule couchée sur le flanc se fondait dans la marche en 0,15 à
+    // 0,3 s, sans se relever : un saut de pose.
+    if (st.moving && !this.trans && !st.quick && !st.carried && (this.posture === 'curl' || this.posture === 'lie') && this.actions.get_up
+      && (this.w.sleep ?? 0) + (this.w.lie ?? 0) + (this.w.curl_up ?? 0) + (this.w.lie_down ?? 0) > 0.4) {
+      const a = this.actions.get_up;
+      a.reset();
+      a.play();
+      // (roulé en boule sur le flanc : il roule d'abord sur le ventre — le clip tenu à son début, couché, le temps du
+      // fondu —, puis se relève ; fondu direct de la boule au clip : un chaton froissé un instant)
+      this.trans = { name: 'get_up', to: 'stand', rise: true, pre: this.posture === 'curl' ? 0.6 : 0, roll: this.posture === 'curl' };
+    }
+    if (this.trans?.pre > 0) this.trans.pre -= dt;
     if (this.trans) {
       const a = this.actions[this.trans.name];
       if (!a || a.time >= a.getClip().duration - 0.04 || (st.moving && this.trans.to !== 'stand')) {
@@ -2068,7 +2647,8 @@ class RealCatAnim {
       fadeK = 6;
     } else if (this.trans) {
       target[this.trans.name] = 1;
-      fadeK = 12;
+      // (en se relevant : fondu plus doux depuis la boule, pendant que le début du clip est encore couché)
+      fadeK = this.trans.roll ? 3.5 : this.trans.rise ? 5 : 12;
     } else if (st.moving) {
       target[g === 'idle' ? 'walk' : g] = 1;
       fadeK = 6;
@@ -2105,7 +2685,8 @@ class RealCatAnim {
         a.timeScale = 0;
         a.time = trick.time * a.getClip().duration;
       } else {
-        a.timeScale = st.quick && this.trans?.name === name ? 1.8 : 1;
+        // (clip tenu à son début pendant que le chat roule de la boule sur le ventre, voir plus haut)
+        a.timeScale = this.trans?.name === name && this.trans.pre > 0 ? 0 : st.quick && this.trans?.name === name ? 1.8 : 1;
       }
     }
     if (lead && leadW > 0.3) this.lead = lead;
@@ -2280,6 +2861,10 @@ class RealCatAnim {
       }
       target = Math.max(-low, Number.isFinite(lowB) ? -(lowB + this.bodyAllow) : -Infinity);
       floor = target;
+      // (en boule <-> couché : le chaton roule du flanc au ventre, le corps suit le sol sans retard — il flottait
+      // jusqu'à 13 mm au-dessus en se déroulant)
+      const sw = (this.w.sleep ?? 0) + (this.w.curl_up ?? 0);
+      if (sw > 0.02 && sw < 0.98) rate = 24;
     }
     let off = dt > 0 ? this.gOff + (target - this.gOff) * Math.min(1, dt * rate) : target;
     off = Math.max(off, floor);
@@ -2350,6 +2935,27 @@ class RealCatAnim {
         this.turn(md.neck, AX, raiseAngle(_v.setFromMatrixPosition(md.neck.matrixWorld).applyMatrix4(_m), _u, floorH + 0.003, 0.8));
         md.neck.updateMatrixWorld(true);
       }
+    }
+    // Oreilles : leur bout jamais sous le sol (couché, en boule, en roulant sur le flanc) — l'oreille tourne à sa base.
+    if (lieW > 0.1 && this.earPts) {
+      md.ears.forEach((e, k) => {
+        let lowY = Infinity;
+        for (const inf of this.earPts[k]) {
+          const y = this.skinY(inf);
+          if (y < lowY) {
+            lowY = y;
+            _u.copy(_w);
+          }
+        }
+        const floorE = 0.002;
+        if (!(lowY < floorE)) return;
+        // (autour de l'axe x du chat tel qu'il est maintenant : la tête du chaton couché sur le flanc est tournée de
+        // près d'un quart de tour, l'axe x vu par la tête au repos ne relevait plus l'oreille)
+        const ang = raiseAngle(_v.setFromMatrixPosition(e.matrixWorld).applyMatrix4(_m), _u, floorE + 0.002, 0.9);
+        _ax.set(1, 0, 0).transformDirection(md.root.matrixWorld).applyQuaternion(e.parent.getWorldQuaternion(_q3).invert());
+        e.quaternion.premultiply(_q.setFromAxisAngle(_ax, ang));
+        e.updateMatrixWorld(true);
+      });
     }
   }
 
@@ -2443,6 +3049,15 @@ class RealCatAnim {
           kc = k;
         }
       }
+      // (pieds avant : point d'appui gardé tout l'appui, celui qui était le plus bas à la pose. Repris image par image, il
+      // sautait du coussinet aux doigts quand le pied se met à rouler, et la reprise, qui ne bouge pas en long le seul
+      // point choisi, reculait d'un coup de 2 mm l'appui déjà posé — chaton siamois au pas lent. Aux pieds arrière, qui
+      // roulent sur le jarret, le point le plus bas de l'instant reste le meilleur.)
+      this.seatK ??= [-1, -1, -1, -1];
+      if (leg.front) {
+        if (this.seatMin[l] === Infinity || this.seatK[l] < 0) this.seatK[l] = kc;
+        else kc = this.seatK[l];
+      }
       // (le pied du clip qui commence à se lever — 2 à 8 mm au-dessus de son plus bas depuis la pose — est relâché :
       // tiré au sol pendant qu'il roule sur les doigts, le coussinet glissait de 5 mm chez le chaton)
       this.seatMin[l] = Math.min(this.seatMin[l], s0);
@@ -2528,6 +3143,12 @@ class RealCatAnim {
         continue;
       }
       if (!this.plant[l]) {
+        // (pied arrière du clip encore lancé en avant, plus vite que le chat : pas encore pris. Au pas, il passe bas en
+        // fin de lever ; pris à 12 mm alors qu'il avançait encore de 2 à 9 cm, il était retenu en arrière, enfoncé dans
+        // le sol, et le corps entier relevé de 2 à 3 cm — siamois, abyssin, devon rex, sphynx, bobtail : les quatre
+        // pieds en l'air 40 à 50 % du temps. Le clip le fait maintenant revenir à la vitesse du sol avant de le poser,
+        // voir tools/chat/cat_gait.py, land.)
+        if (!follow && !leg.front && sp > v + 0.05) continue;
         this.plant[l] = toe0.clone();
         this.followT[l] = 0;
         continue;
@@ -2841,6 +3462,8 @@ export function animateRealCat(e, dt, sad) {
   st.fat = 1 + ((d.weight ?? 50) - 50) / 50 * 0.6;
   st.look = e.lookAt ?? null;
   anim.update(dt, st);
+  // (il se relève avant de partir : l'entité ne bouge pas tant que le clip get_up joue — AnimalEntity holdMove)
+  if (anim.trans?.rise && !e.scripted) e.holdMove = 0.1;
   e.gait = anim.gait === 'run' ? 2 : anim.gait === 'trot' ? 1 : 0;
   e.headDown = posture === 'crouch' ? 1 : 0;
 }

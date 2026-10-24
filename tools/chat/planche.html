@@ -109,7 +109,8 @@ window.planche = {
    * cells : [{ breed, color (indice de robe), stage ('adult' | 'baby' | 'young'), proc (chat procédural), clip ('stand',
    * 'sit', 'groom', 'lie', 'curl', 'eat', 'highfive', 'jump', 'stretch', 'walk', 'trot', 'run', 'balance'), t (fraction),
    * view ('side' | 'three' | 'front' | 'head' | 'back' | 'top' | 'face' | 'profile' : tête de profil), label, lod, zoom, magenta (faces arrière), following, fear, gear
-   * (buildGear : { neck: { item: 'collar', color } }), acc (buildAccessories) }] ; cols ;
+   * (buildGear : { neck: { item: 'collar', color } }), acc (buildAccessories), probe (centre des yeux en pixels :
+   * window.probes) }] ; cols ;
    * cw, ch (taille d'une case).
    */
   async show({ cells, cols = 6, cw = 300, ch = 240 }) {
@@ -194,6 +195,17 @@ window.planche = {
       camera.lookAt(tgt);
       scene.background = new THREE.Color(0xdfe9ef);
       renderer.render(scene, camera);
+      // (mesures : centre des yeux en pixels de la planche, window.probes[case])
+      if (c.probe) {
+        const pr = [];
+        for (const nm of ['eyeL', 'eyeR']) {
+          const b = md.bone(nm);
+          if (!b) continue;
+          const q = b.getWorldPosition(new THREE.Vector3()).project(camera);
+          pr.push({ x: col * cw + ((q.x + 1) / 2) * cw, y: row * ch + ((1 - q.y) / 2) * ch });
+        }
+        (window.probes ??= {})[i] = pr;
+      }
       scene.remove(sg);
       md.dispose?.();
       const lab = document.createElement('div');

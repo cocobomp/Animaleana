@@ -405,28 +405,57 @@ describe('postures et passages', () => {
   });
 });
 
+/** Bande du collier porté (chat réaliste : maillage lié au squelette, gearModels.js / catReal.js skinCollar). */
+function collarBand(g) {
+  let band = null;
+  for (const h of g.userData.meshes) h.traverse((o) => {
+    if (o.userData?.collarBand) band = o;
+  });
+  return band;
+}
+
+/** Sommets d'un maillage lié au squelette dans la pose du moment (repère du chat). */
+function posedVerts(md, m) {
+  md.root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
+  const out = [];
+  for (let i = 0; i < m.geometry.attributes.position.count; i++) out.push(m.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(m.matrixWorld).applyMatrix4(inv));
+  return out;
+}
+
 describe('équipement ajusté', () => {
-  it('collier plat sur l\'encolure mesurée (porté par l\'os du cou), accessoires du salon sur la tête et au cou ; tout se retire', () => {
+  it('collier plat sur l\'encolure mesurée (lié au squelette), accessoires du salon sur la tête et au cou ; tout se retire', () => {
     for (const [b, stage] of [['europeen', 'adult'], ['maine_coon', 'adult'], ['persan', 'adult'], ['siamois', 'baby']]) {
       const md = cat(b, stage);
       const look = lookOf(b);
+      md.staticPose('stand');
       const g = buildGear(md, look, { neck: { item: 'collar', color: 'red' } });
       expect(g, b).toBeTruthy();
       const ring = md.dogFit.collar;
       expect(ring.bone, b).toBe(md.neck);
+      // (repère de l'anneau, vide, sur l'os du cou : il porte le sillon et ce qu'il faut libérer)
       expect(ring.bone.children.length, b).toBeGreaterThan(0);
       // la bande entoure le cou : son rayon suit la coupe mesurée (chat : 2 à 7 cm)
       expect(ring.rx, b).toBeGreaterThan(0.012);
       // (poil long : le collier s'enfonce un peu dans la collerette, couchée sous sa bande — catFinish.test.js — ; chaton :
       // modèle à la taille d'un adulte)
       expect(ring.rx, b).toBeLessThan((md.kitten ? 0.075 : 0.055) + 1.0 * (Math.max(0, md.build.fur) + md.build.ruff));
-      const torus = ring.bone.children.find((o) => !o.isBone && o.children?.length).children[0];
-      torus.geometry.computeBoundingBox();
-      const size = torus.geometry.boundingBox.getSize(new THREE.Vector3());
-      expect(size.z, b).toBeLessThan(size.x * 0.5);
+      // bande liée au squelette du chat, plate : debout, moins large le long du cou que de travers
+      const band = collarBand(g);
+      expect(band?.isSkinnedMesh, b).toBe(true);
+      expect(band.skeleton, b).toBe(md.skeleton);
+      const N = ring.rest.axis;
+      const X = new THREE.Vector3(1, 0, 0).addScaledVector(N, -N.x).normalize();
+      const pts = posedVerts(md, band);
+      const span = (f) => Math.max(...pts.map(f)) - Math.min(...pts.map(f));
+      expect(span((p) => p.dot(N)), b).toBeLessThan(span((p) => p.dot(X)) * 0.5);
       const acc = buildAccessories(md, look, { neck: { id: 'bandana', color: 'pink' }, head: { id: 'ribbon', color: 'blue' } });
       expect(acc.length, b).toBeGreaterThan(0);
+      const n0 = md.root.children.length;
       removeGear(g);
+      // (les pièces liées, enfants de la racine, sont retirées avec lui)
+      expect(md.root.children.length, b).toBeLessThan(n0);
+      expect(collarBand(g)?.parent ?? null, b).toBe(null);
       md.dispose();
     }
   });
@@ -559,11 +588,8 @@ describe('corrections de la contre-vérification (beauté et jeu)', () => {
     const md = cat('europeen', 'baby');
     md.staticPose('stand');
     const g = buildGear(md, lookOf('europeen'), { neck: { item: 'collar', color: 'red' } });
-    const ring = md.dogFit.collar;
-    const torus = ring.bone.children.find((o) => !o.isBone && o.children?.length).children[0];
-    md.root.updateMatrixWorld(true);
-    const inv = new THREE.Matrix4().copy(md.root.matrixWorld).invert();
-    const c = torus.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv);
+    const pts = posedVerts(md, collarBand(g));
+    const c = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(1 / pts.length);
     expect(c.z).toBeLessThan(local(md, 'head').z);
     removeGear(g);
     md.dispose();

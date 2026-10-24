@@ -37,20 +37,49 @@ GT=<dossier avec node_modules de @gltf-transform/core, extensions, functions, me
      levée du « tape-m'en cinq » ne froisse plus l'épaule) ; chaton : la peau du poitrail entre les pattes avant
      revient au poitrail (`arm_clip`), sinon elle partait en voile jusqu'aux pieds, pattes tendues devant (couché,
      étirement, saut) et le chaton était relevé de 11 cm dans l'étirement ;
+   - **genou fondu large** (`knee_band`) : près du genou, le partage fémur/tibia suit le plan qui coupe l'angle du
+     genou en deux, en fondu sur une demi-largeur de 1 (adulte) ou 1,3 (chaton) longueur de fémur ; **pattes arrière
+     propres** (`leg_clean`) : la part de la queue (jusqu'à 0,07) revient à l'os de la patte, celle de la patte d'en
+     face (jusqu'à 0,09) au même os du bon côté ; **flanc** (adulte, `flank_clip`) : loin de l'os, devant la hanche
+     ou derrière l'épaule, la part du fémur et du bras (jusqu'à 0,3 au milieu du flanc) revient à l'os du dos. Avant,
+     assis et pendant la toilette, la peau du pli du genou et du flanc se retournait : triangle de faces arrière
+     (magenta en débogage) devant la cuisse repliée, sur toutes les races. Mesuré dans Blender (tous les clips à 0, ¼,
+     ½, ¾) : peau retournée visible de l'adulte 376 → 94 cm² au total, assis 16,7 → 1,4 cm² ; dans le jeu, pattes
+     arrière pendant la toilette 0,8–25 → 0,3–1,2 cm² (adulte), 2,6–8,8 → 0,9–2,2 cm² (chaton). Le chaton garde un
+     fondu plus étroit (rayon 1,2 au lieu de 1,5) : plus large, l'arrière de la cuisse remontait dans le pli et la
+     recherche de la hauteur assise (`sit_search`) l'asseyait deux fois plus bas ; la croupe assise est maintenant
+     choisie d'après la part des os du bas de la jambe (plus de 0,6 : exclue), pas d'après l'os dominant. Coût : nul
+     dans le jeu ; GLB adulte −0,2 Ko, chaton +2,4 Ko ;
+   - **soles à plat** (chaton, `sole_flat`) : la chaleur partageait la peau de la sole à parts égales entre les doigts
+     et le métacarpe (ou le métatarse) jusqu'au sol ; au pas, le métacarpe bascule autour de l'articulation des doigts,
+     12 mm au-dessus du sol, et le coussinet reculait en se levant. Près du sol, la sole suit les seuls doigts ;
    - tête rigide, oreilles en deux os (base → bout), queue en 8 os le long de son axe.
 3. **`make_cat.py`** + **`cat_gait.py`** : animations, 20 clips par modèle.
    - **allures générées** par trajectoires de pieds et cinématique inverse : `walk`, `trot`, `run` (galop),
      `balance` (marche lente sur une barrière, pattes resserrées sous le corps, queue en balancier) ; leurs
      **vitesses naturelles** (doigts en appui immobiles) vont dans le GLB (`extras.cat.naturalSpeeds`) : adulte
-     0,54 / 1,62 / 5,74 m/s (équilibre 0,27), chaton 0,41 / 1,19 / 3,68 m/s (0,26) ;
+     0,54 / 1,62 / 5,74 m/s (équilibre 0,27), chaton 0,41 / 1,19 / 3,68 m/s (0,26) ; au pas, le pied arrière (et
+     le pied avant du chaton) **se pose immobile par rapport au sol** (`land`) : il arrive un peu au-delà de sa pose aux
+     80 % du lever (93 % pour le pied avant du chaton), puis revient en arrière en prenant la vitesse de l'appui. Avant,
+     sur le squelette des races aux longues pattes, la sole touchait le sol avant la fin du lever, le pied encore lancé
+     en avant à 1,9 à 2,3 fois la vitesse d'appui (siamois ; abyssin 1 à 1,4 ; jeune siamois 1,3 à 1,8 ; pieds avant
+     du chaton 2,4) ; maintenant de −0,6 à +0,7 ;
    - **positions et gestes** : `idle`, `sit`, `groom` (toilette, patte léchée puis passée sur la tête), `lie`
      (couché en sphinx), `sleep` (en boule, queue enroulée), `stretch` (étirement), `eat` (accroupi, tête à 3,5 cm
      du sol), `tail_up` (queue en point d'interrogation, calque), `ears` (calque), `highfive` (« tape-m'en cinq »),
      `jump`, transitions `sit_down`, `stand_up`, `lie_down`, `get_up`, `curl_up` ; chaton (poitrail profond, ses bras
      ne touchent pas le sol à plat) : couché **« en pain »** (`lie_loaf` : poignets sous le poitrail, pattes repliées
-     vers l'arrière, coudes contre le flanc ; avant, assis comme une otarie, pattes tendues devant), **en boule tête
-     baissée** (`curl_neck`, `curl_hb` : encolure et tête baissées, sans roulis ; avant, assis, tête dressée et
-     tordue) — réglages du chaton dans `cat_models.py`, les autres clips restent identiques à l'octet près ;
+     vers l'arrière, coudes contre le flanc ; avant, assis comme une otarie, pattes tendues devant), **en boule
+     couché sur le flanc** (`curl_side` : roulé sur le flanc droit de 83° (`curl_roll`), colonne enroulée autour de
+     la verticale du sol, tête ramenée contre les pieds arrière puis tournée sur sa joue (`curl_head`,
+     `curl_head_roll`), queue enroulée dans le plan du sol (`curl_tail`), pattes du dessous rentrées vers le ventre
+     (`curl_splay`), boule posée sur le sol et recentrée au-dessus de la racine ; mesuré dans le jeu : roulis 0 → 83°,
+     tête à 70 → 37-50 % de sa hauteur debout, à 0,54 → 0,24 longueur de corps des pieds arrière ; avant, debout
+     tassé sur ses pattes, dos rond, tête entre les pattes) et son passage `curl_up` (le chaton roule sur le flanc,
+     la tête tourne avant le corps ; à chaque image, le plus bas sommet posé sur le sol : il ne flotte plus de 4 cm à
+     mi-chemin) ; **yeux peints portés par la seule tête** (`eye_rigid` : la chaleur leur donnait encolure et
+     omoplate, le globe s'étirait de 25 à 36 % en boule) — réglages du chaton dans `cat_models.py`, les autres clips
+     restent identiques à l'octet près ;
    - **pieds au sol** : sur chaque image, le chat est relevé de ce qui passe sous le sol (soles, ventre, croupe,
      queue), relevé noté par clip (`extras.cat.groundFix`) ;
    - les os que le jeu anime lui-même (bout de la queue, oreilles, yeux) sont exclus du contrôle du sol ;
@@ -63,7 +92,7 @@ GT=<dossier avec node_modules de @gltf-transform/core, extensions, functions, me
    attributs de la version complète) pour les chats lointains (`CAT_LOD_DIST` dans `catReal.js`).
 
 Fichiers obtenus : `cat_adult.glb` **0,93 Mo** (19 990 triangles, 5 920 au loin, 43 os, 20 clips, 649 canaux),
-`cat_kitten.glb` **0,73 Mo** (15 530 triangles, 4 600 au loin, 41 os, 20 clips).
+`cat_kitten.glb` **0,74 Mo** (15 530 triangles, 4 600 au loin, 41 os, 20 clips ; +4 Ko pour la boule sur le flanc).
 
 **`planche.html`** (outil de mise au point, servi par `npx vite`) : `window.planche.show({ cells })` rend une planche de
 races, robes, chatons, poses et équipements, avec le chat procédural en regard (`proc: true`, l'AVANT des
@@ -78,8 +107,24 @@ comparaisons), dans la même lumière et au même cadrage.
 - **Races par les os** (`CAT_BUILDS`) : pattes, dos, tour de poitrine, ventre, cou, taille et largeur du crâne,
   museau et face plate (persan : la face recule sans toucher aux yeux), oreilles (taille, largeur, arrondi,
   écartement ; **pliées** vers l'avant du scottish fold), pinceaux (maine coon, norvégien), queue (longueur,
-  épaisseur, panache ; **pompon** du bobtail), poil long poussé le long de la normale (collerette, culottes,
-  panache) ou ras (siamois, sphynx). Sommets et têtes d'os sont déplacés ensemble : le squelette de chaque race
+  épaisseur, panache ; **pompon** du bobtail : le bout de la queue raccourcie est posé sur une boule de 2,7 cm
+  (adulte ; moins de deux fois le rayon de la queue à sa base) qui touche la croupe, en touffes irrégulières, portée
+  d'un bloc par le premier os de la queue et dont la robe est lue près de la croupe — `stubSkin`, poids et repères
+  propres à la race ; avant, un tonneau de 4 cm au bout bombé, froissé par les huit os de la queue, au motif lu au bout
+  de la queue d'origine : un bouchon sombre à bord net. Ses repères de robe sont la boule elle-même posée sur la base
+  de la queue (pris sur le long tube d'origine, ils étaient étirés 6 à 8 fois autour de la boule : grain, motif et
+  brins en rayons serrés vers le bout), ses normales celles de la boule (celles du bout de la longue queue, reportées,
+  étaient retournées au bout chez le chaton), le côté de chaque sommet pris autour de la ligne médiane de la queue
+  courbe, touffes pas plus fines que les sommets (`fbm` à 4 et 8 par rayon : à 14, des plis en tourbillon) et, dans
+  le shader (`cStub`), ni relief ni occlusion de la texture ni son grain (tous convergent en étoile au bout de la
+  queue d'origine), un grain tiré des repères — au téléphone, le bout de la boule était un nombril froncé. Couches de
+  poil sur ses seuls triangles (`S.pomGeo`), **aussi en qualité basse**, de près : 4 couches, brins de 2,6 mm
+  (`POM_CELL`), coût 4 × 2 560 triangles et 4 appels de dessin par bobtail adulte proche (chaton 4 × 514) ; avant,
+  en haute qualité seulement, 3 couches sur toute la version allégée du pelage (3 × 5 564 triangles) et rien en basse
+  qualité : un pompon lisse au contour net), poil long poussé le long de la normale (collerette,
+  culottes, panache ; presque pas dans le pli du genou, `W.knee`, et pattes épaissies à moitié seulement : assis,
+  les culottes poussées de 1,2 cm s'y retournaient — maine coon 18,8 → 1,0 cm² de peau retournée visible pendant la
+  toilette, norvégien 18,2 → 0,8, british 10,4 → 1,6) ou ras (siamois, sphynx). Sommets et têtes d'os sont déplacés ensemble : le squelette de chaque race
   garde les rotations de repos du GLB, les clips s'y appliquent tels quels ; pieds au sol. Une géométrie par race
   (et par stade), partagée entre les chats de cette race.
 - **Chatons** : modèle du chaton, traits de la race adoucis ; le **jeune** prend le modèle adulte (tête un peu plus
@@ -100,25 +145,61 @@ comparaisons), dans la même lumière et au même cadrage.
   oreilles, pattes et queue foncés), écaille, tricolore, bicolore ; blancs : gants (sacré de Birmanie), mitaines
   (ragdoll), plastron, bicolore, van, smoking. Peau nue et plis (sphynx), poil frisé (devon rex), peluche (british,
   chartreux) par relief. Iris recoloré (bleu des points, cuivre du chartreux, vairons), truffe selon la robe.
+  Sous les yeux de l'adulte, la texture est peinte lisse et claire (un croissant sans poil) et sombre au coin
+  intérieur (tache de larme du maine coon) : le shader y lit le relief de la joue voisine (`cEyeUv`, décalage de
+  texture mesuré sur les sommets de la tête dans `realCatBase` ; basse fréquence lue floue, au mip 4). Relief du
+  dessous de l'œil rapporté au front, vue de face (basse qualité) : british 0,52 → 1,17, chartreux 0,92 → 1,36,
+  scottish fold 0,51 → 1,30, maine coon 0,96 → 1,82. Pas sur l'arête du nez (couture entre la joue prêtée à gauche
+  et à droite). Chaton (yeux peints) : inchangé. Coût : deux lectures de texture de plus, seulement autour des yeux.
 - **Poil long** : en haute qualité, couches de poil (3 à 5) sur la version allégée, de près seulement
   (`CAT_SHELL_DIST`), brins flous mélangés par transparence (un halo doux) ; plus des mèches de pinceaux.
 - **Animation** (`RealCatAnim`) : allure choisie par la vitesse avec hystérésis, chaque clip joué à vitesse réelle ÷
   vitesse naturelle de la race (mesurée sur son squelette) et pieds en appui tenus sur place (pas de patinage) ;
   postures (debout, assis, toilette, couché, en boule, accroupi) et passages par le plus court chemin (debout →
-  assis → couché → en boule) ; étirement au réveil ; équilibre sur les barrières ; tours du spectacle (assis,
+  assis → couché → en boule) ; étirement au réveil ; couché ou en boule, il se relève avant de partir (clip `get_up`,
+  l'entité attend — `AnimalEntity.holdMove` ; en boule, il roule d'abord sur le ventre en 0,6 s) : le chaton réveillé
+  passait de la boule sur le flanc à la marche en 0,15 à 0,3 s, sans se relever, maintenant en 1,0 à 1,3 s ; équilibre sur les barrières ; tours du spectacle (assis,
   couché, « tape-m'en cinq », révérence = étirement, saut) ; regard, clignements, **paupières** (bandeaux de peau
-  propres à la race, tournés sur l'œil : mi-closes à la toilette et couché, fermées en boule), oreilles qui bougent et se couchent (peur, tristesse), queue dressée quand il suit
+  propres à la race, tournés sur l'œil : mi-closes à la toilette et couché, fermées en boule), oreilles qui bougent et se couchent (peur, tristesse) et dont le bout ne passe jamais sous le sol (couché, en boule : l'oreille tourne à sa base autour de l'axe du chat tel qu'il est couché), queue dressée quand il suit
   quelqu'un, gonflée quand il a peur, respiration, embonpoint ; porté dans les bras (couché), sur la table du salon
   (assis), dans la caisse de transport (couché, pose figée), vignettes (pose figée).
 - **Pieds posés** : au pas et au trot, pieds avant et arrière à la même hauteur (`levelPairs`, appui le plus bas de
-  chaque paire sur la dernière foulée) et pieds en appui tenus sur place (`footLock`, prise à 12 mm, lâchée à 18) ;
+  chaque paire sur la dernière foulée) et pieds en appui tenus sur place (`footLock`, prise à 12 mm, lâchée à 18 ;
+  pied arrière pris seulement quand il ne va plus plus vite que le chat, et point d'appui du pied avant gardé tout
+  l'appui par la reprise au sol `seatPlanted`). Mesuré au pas : siamois, abyssin, devon rex, sphynx et bobtail
+  (adultes et jeunes, 0,5 à 0,7 m/s) avaient les quatre pieds en l'air 38 à 51 % du temps, maintenant jamais (chaque
+  pied posé 29 à 58 % du temps, glissement 1,2 à 2,6 %) ; pieds avant du chaton au pas lent (0,3 m/s) : glissement 8 à
+  23 % → 1,4 à 3,1 %, pieds arrière 3,5 à 4,8 % → 0,7 à 1,4 % ;
   jarrets du chaton au-dessus du sol aux allures. Après les mesures faites sur le premier chat de la race, le mixeur
   est forcé de tout réécrire (`resync`) : le premier chat marchait les pattes avant en l'air, les suivants non.
 - **Équipement** : collier plat ajusté sur l'encolure **mesurée sur le chat debout** (là où le cou est le plus
   fin ; à moitié enfoncé dans la collerette des poils longs), mêmes mesures que le chien réaliste
   (`dogFit`/`accessoryFit` : `gearModels.js`, `salon.js`, `Beauty.js`) ; accessoires du salon (nœud, fleur,
   chapeau sur le crâne, bandana qui pend vers le sol, nœud de queue). Collier du chaton mesuré du poitrail vers la
-  tête : sur l'encolure, plus un cerceau autour du crâne.
+  tête : sur l'encolure, plus un cerceau autour du crâne. La coupe du cou compte aussi la gorge (sa peau est portée
+  surtout par les pattes avant : sans elle, l'avant du collier passait 3 à 6 cm dans le cou, caché sous le menton).
+  De face, dessous de la bande visible : 0/7 → 7/7 points (`catFin2.test.js`), pixels du collier sous le menton 0 →
+  360 à 400 (maine coon, norvégien, ragdoll, persan).
+  **Collier lié au squelette** (`catReal.js` collarStand / skinCatGear / skinCatCollar) : rigide sur l'os du cou,
+  l'anneau quittait la peau dès que le cou se pliait (la gorge suit surtout les pattes avant) — cerceau autour du
+  poitrail couché, médaille au sol, bandoulière assis, barre au-dessus de la tête en mangeant, patte levée passée
+  dedans. Une fois par gabarit, dans la pose debout de la mesure : matrices de peau de chaque os, peau debout, poids
+  de l'anneau tout autour (48 angles, pris sur la peau sous la bande, lissés ; la moitié du poids des pattes avant
+  reportée sur l'omoplate, sinon la bande partait en écharpe avec la patte levée). La bande prend ces poids sommet
+  par sommet ; boucle, médaille, anneau de laisse, grelot ceux de la bande à leur angle, d'un bloc ; le repère de
+  l'anneau reste, vide, sur l'os du cou (sillon, libération). La robe serrée sous la bande est mesurée debout et
+  ramenée dans la pose de liaison (attribut `cmpCollar` : déplacement ajouté avant les os, part de poil couché) : elle
+  suit la peau comme la bande. Pièces dessinées après les couches de poil (le poil long ne passe plus par-dessus).
+  Dérive de la bande par rapport à la peau qu'elle touchait debout (7 races adultes, 2 chatons ; couché, assis,
+  toilette, mange, patte levée) : médiane jusqu'à 5,7 cm → 0,3 cm au plus, au pire jusqu'à 11 cm → 4,7 cm (en boule
+  4,5–16 → 1–10 cm) ; médaille couchée à 1,2–5,4 cm du sol (anneau agrandi rigide : 0,6–3,8 ; main : cachée dans le
+  cou) ; médaille d'un bloc avec la bande (dérive au plus 1,2 cm, main 11,6 cm) — `catFin2.test.js` « collier lié à
+  la peau », mesure `zz_collier.test.js` dans le dossier des planches. Coût : un
+  attribut de 154 Ko par gabarit, +4 ms au premier chat d'une race (collier : 2 à 10 ms à l'équiper, foulard 25 ms),
+  mêmes appels de dessin qu'avant.
+  Accessoires du salon : la bande liée de même ; foulard et nœud posés sur la peau debout (bavette du chien
+  réaliste, `salon.js` dogBib + `drapeChest` du chat) et liés au squelette — le triangle rigide pendait en pyramide
+  sous l'anneau, en bec assis ; nœud à la taille de la tête (il était aussi large que la tête du maine coon).
 - **Performance** : version allégée au loin (5 m en basse qualité, 12 m en haute), boîte des os pour le
   « frustum culling », chats hors du champ animés une image sur trois (sauf guidés, portés, perchés), couches de
   poil en haute qualité seulement et de près.

@@ -19,6 +19,22 @@ P = dict(M.get('pose_opts', {}))
 P.update(json.loads(os.environ.get('POSE_OPTS', '{}')))  # (mise au point : réglages passés par l'environnement)
 body, eyes, others, prep_rep = CM.prep(mid)
 arm, info = CM.rig(mid, body, eyes, others)
+# yeux peints du chaton (pièces de la matière des yeux dans le maillage du corps) : portés par la seule tête. La chaleur
+# leur donnait de l'encolure et de l'omoplate (tête 0,38, encolure 0,52, omoplate 0,10) : en boule, tête tournée sur
+# l'encolure, le globe s'étirait de 25 à 36 %.
+print('MAILLAGES', [(o.name, [m_.name for m_ in o.data.materials if m_], len(o.data.vertices)) for o in [body] + list(eyes) + list(others)])
+if M.get('eye_rigid'):
+    for o in [body] + list(eyes) + list(others):
+        em = {k for k, m in enumerate(o.data.materials) if m and (m.name in M.get('eye_mats', ()) or o in eyes)}
+        ev = sorted({v for p_ in o.data.polygons if p_.material_index in em for v in p_.vertices})
+        if not ev or 'head' not in o.vertex_groups:
+            continue
+        gh = o.vertex_groups['head']
+        for g in o.vertex_groups:
+            if g.name != 'head':
+                g.remove(ev)
+        gh.add(ev, 1.0, 'REPLACE')
+        print('YEUX rigides (tête seule)', o.name, len(ev), 'sommets')
 meshes = [body] + list(eyes) + list(others)
 B = arm.data.bones
 report = {'id': mid, 'prep': prep_rep, 'rig': {k: (round(v, 4) if isinstance(v, float) else v) for k, v in info.items()}, 'clips': {}}
@@ -113,9 +129,13 @@ for m in meshes:
 belly = min(p.z for _, _, p in torso)
 print('BELLY rest z', round(belly, 4), 'torso verts', len(torso), 'muzzle', len(muzzle))
 rump_sit = []
+# (bas de la jambe exclu d'après la part de ses os, pas d'après l'os dominant : l'arrière de la cuisse, partagé à
+# parts presque égales entre fémur et tibia depuis le fondu large du genou, reste dans la croupe assise)
+gname_b = {g.index: g.name for g in body.vertex_groups}
 for i, v in enumerate(body.data.vertices):
     d_ = dom[body][i]
-    if not d_ or GAME.search(d_) or d_ in headset or d_.startswith(('metatarsus', 'htoes', 'tibia')):
+    low_ = sum(g.weight for g in v.groups if gname_b[g.group].startswith(('metatarsus', 'htoes', 'tibia')))
+    if not d_ or GAME.search(d_) or d_ in headset or low_ > 0.6:
         continue
     p = body.matrix_world @ v.co
     if p.y > hp.y - 0.01 and 0.25 * hipz < p.z < hipz:
@@ -364,6 +384,73 @@ def curl_pose(t=0.0, k=1.0):
     return clamp_tail(dg.bend(rig, base, spec, G_))
 
 
+def pose_points(pose, items):
+    """Positions (monde) des sommets items dans une pose (matrices espace armature)."""
+    act = dg.bake(rig, '_probe', None, 2, pose_fn=lambda t: (dict(pose), {}))
+    arm.animation_data.action = act
+    bpy.context.scene.frame_set(0)
+    dgp = bpy.context.evaluated_depsgraph_get()
+    dgp.update()
+    byobj = {}
+    for m_, i_ in items:
+        byobj.setdefault(m_, []).append(i_)
+    pts = []
+    for m_, ids in byobj.items():
+        ev = m_.evaluated_get(dgp)
+        me = ev.to_mesh()
+        pts.extend(ev.matrix_world @ me.vertices[i_].co for i_ in ids)
+        ev.to_mesh_clear()
+    arm.animation_data.action = None
+    bpy.data.actions.remove(act)
+    return pts
+
+
+# ---- en boule couché sur le flanc (chaton, curl_side) : couché sur le flanc droit (curl_roll), la colonne s'enroule
+# autour de la verticale du sol (flexion surtout ventrale une fois couché : tête ramenée vers les cuisses, pattes
+# repliées à l'intérieur), tête posée, queue enroulée autour du corps dans le plan du sol, posé sur le sol. (Assis
+# sur ses pattes, encolure baissée, le chaton « en boule » restait debout tassé, dos rond, tête entre les pattes.)
+CURL_DZ = [Vector((0.0, 0.0, 0.0))]
+
+
+def curl_side_pose(t=0.0, k=1.0):
+    rho = P.get('curl_roll', 1.2) * k
+    mix = P.get('curl_mix', P.get('curl_roll', 1.2))
+    ax = (math.sin(mix), 0.0, math.cos(mix))
+    gp = dict(LIE, neck_base=LIE['neck_base'] + P.get('curl_neck', 0.0) * k, head_base=LIE['head_base'] + P.get('curl_hb', 0.0) * k,
+              tail_shape=P.get('curl_tail_shape', [-0.1] * 8), tail_side=[0.0] * 8, ear_back=P.get('curl_ear_back', 0.0) * k)
+    # (pattes du côté du sol rentrées vers le ventre, celles du dessus un peu écartées : couché sur le flanc, elles ne
+    # passent pas sous le corps)
+    gp['legs'] = {lab: dict(L_, splay=P.get('curl_splay', {}).get(lab, L_.get('splay', 0.0))) for lab, L_ in LIE['legs'].items()}
+    base, _ = dg.pose_at(rig, t, gp, lambda u: breathe(u, 1.4, 1))
+    a = P.get('curl', 0.45) * k
+    sw = P.get('curl_spine', [0.3, 0.8, 1.0, 1.0, 0.8, 1.2, 1.0])
+    spec = {n: (ax, a * w_) for n, w_ in zip(('pelvis', 'spine1', 'spine2', 'spine3', 'chest', 'neck1', 'neck2'), sw)}
+    # (tête ramenée vers les cuisses, puis tournée sur son axe à l'inverse du corps : posée sur la joue, l'oreille
+    # du dessous ne plonge pas dans le sol)
+    spec['head'] = [(tuple(P.get('curl_head_ax', (1.0, 0.0, 0.0))), P.get('curl_head', 0.3) * k), ('Y', P.get('curl_head_roll', 0.0) * k)]
+    tw = P.get('curl_tail', [0.2, 0.35, 0.45, 0.5, 0.55, 0.55, 0.5, 0.45])
+    for n_, w_ in zip(TAIL, tw):
+        spec[n_] = (ax, -w_ * k if P.get('curl_tail_neg') else w_ * k)
+    # (roulé autour de l'axe long du corps, à mi-hauteur du chat couché : il reste au-dessus de sa racine)
+    piv = Vector((0.0, (sh.y + hp.y) / 2, P.get('curl_pz', 0.35) * hipz))
+    G_ = Matrix.Translation(-CURL_DZ[0] * k) @ dg.rot_axis_about(-rho, (0, 1, 0), piv)
+    return clamp_tail(dg.bend(rig, base, spec, G_))
+
+
+if P.get('curl_side'):
+    # (posé sur le sol : le plus bas sommet du corps, hors queue et oreilles, à 2 mm)
+    if os.environ.get('CURL_DEBUG'):
+        exec(open(os.environ['CURL_DEBUG']).read(), globals())
+    # (posé sur le sol : le plus bas sommet du corps, hors queue et oreilles, à 2 mm ; et recentré au-dessus de la
+    # racine au repos, au milieu de la boule)
+    pts_ = pose_points(curl_side_pose(0.0), solid)
+    lo_ = Vector((min(p.x for p in pts_), min(p.y for p in pts_), min(p.z for p in pts_)))
+    hi_ = Vector((max(p.x for p in pts_), max(p.y for p in pts_), max(p.z for p in pts_)))
+    c0 = B['root'].head_local
+    CURL_DZ[0] = Vector(((lo_.x + hi_.x) / 2 - c0.x, (lo_.y + hi_.y) / 2 - c0.y, lo_.z - 0.002))
+    print('CURL côté : décalage', [round(x, 4) for x in CURL_DZ[0]], 'boule', [round(x, 3) for x in (hi_ - lo_)])
+    curl_pose = curl_side_pose
+
 if want('sleep'):
     dg.bake(rig, 'sleep', None, 120, pose_fn=lambda t: (curl_pose(t), {}))
 
@@ -562,7 +649,28 @@ trans('sit_down', stand_p, sit_p, 24)
 trans('stand_up', sit_p, stand_p, 18)
 trans('lie_down', sit_p, lie_p, 30)
 trans('get_up', lie_p, stand_p, 24)
-if want('sleep'):
+if want('sleep') and P.get('curl_side'):
+    # (couché -> en boule sur le flanc : le chat roule sur le flanc droit ; à chaque image, le plus bas sommet du corps
+    # est posé sur le sol, à une hauteur qui va de celle du couché à celle de la boule — sans cela, à mi-chemin, les
+    # pattes repliées du dessous passaient sous le sol et le chaton, relevé d'autant, flottait à 4 cm)
+    cu_a, cu_b, cu_n = lie_p, curl_pose(0.0), 36
+    # (la tête tourne sur sa joue avant que le corps ait fini de rouler : l'oreille du dessous reste au-dessus du sol)
+    cu_head = set(K.descendants(arm, 'neck1'))
+    cu_lead = P.get('curl_head_lead', 0.6)
+    cu_pose = lambda t: dg.blend_poses(rig, cu_a, cu_b, lambda n_: dg.smooth(min(1.0, t / cu_lead)) if n_ in cu_head else dg.smooth(t))
+    cu_low = [min(p.z for p in pose_points(cu_pose(i / cu_n), solid)) for i in range(cu_n + 1)]
+    ears_ = [(body, i_) for i_ in range(len(body.data.vertices)) if (dom[body][i_] or '').startswith('ear')]
+    print('CURL_UP oreilles - sol (mm)', [round(1000 * (min(p.z for p in pose_points(cu_pose(i / cu_n), ears_)) - cu_low[i] + (cu_low[0] * (1 - i / cu_n) + cu_low[-1] * i / cu_n)), 1) for i in range(0, cu_n + 1, 4)])
+
+    def cu_fn(t):
+        x = t * cu_n
+        i = min(cu_n - 1, int(x))
+        u = x - i
+        dz = cu_low[i] * (1 - u) + cu_low[i + 1] * u - (cu_low[0] * (1 - t) + cu_low[-1] * t)
+        T = Matrix.Translation((0.0, 0.0, -dz))
+        return clamp_tail({k_: T @ v_ for k_, v_ in cu_pose(t).items()}), {}
+    dg.bake(rig, 'curl_up', None, cu_n, cyclic=False, pose_fn=cu_fn)
+elif want('sleep'):
     trans('curl_up', lie_p, curl_pose(0.0), 36)
 
 

@@ -64,7 +64,8 @@ export const CAT_BUILDS = {
   // Devon rex : lutin aux immenses oreilles basses et écartées, joues saillantes, poil frisé.
   devon_rex: { legs: 1.06, legW: 0.88, back: 0.98, girth: 0.92, head: 1.02, headW: 1.08, snout: 0.7, neck: 1.05, earSize: 1.75, earW: 1.45, earOut: 0.45, earRound: 0.5, tailThick: 0.75, fur: -0.002, curly: 1 },
   // Bobtail japonais : fin, grandes oreilles, queue courte en pompon.
-  bobtail: { legs: 1.04, legW: 0.92, girth: 0.92, head: 0.98, snout: 1.1, earSize: 1.25, earW: 1.05, tailLen: 0.24, stub: 1 },
+  // (poil ras, mais pompon touffu : couches de poil sur le pompon seulement — tailFur —, en haute qualité et de près)
+  bobtail: { legs: 1.04, legW: 0.92, girth: 0.92, head: 0.98, snout: 1.1, earSize: 1.25, earW: 1.05, tailLen: 0.24, stub: 1, tailFur: 2.2, shells: 3 },
 };
 
 /**

@@ -298,6 +298,7 @@ export function buildAccessories(model, look, accessories = {}) {
       // (bande plate, comme le collier : voir flatBand)
       const band = 0.01;
       const torus = new THREE.Mesh(flatBand(rx, ry, 0.003, band), mat(worn.id === 'bandana' ? color : 0x3a2a20, 0.6));
+      torus.userData.collarBand = true;
       frame.add(torus);
       // (chien réaliste : le poil est serré sous la bande, comme sous le collier — voir dogReal.js setGroove)
       if (model.setGroove) {
@@ -305,6 +306,9 @@ export function buildAccessories(model, look, accessories = {}) {
         frame.userData.onRemove = () => model.setGroove(frame, null);
       }
       const throat = -(ry + band);
+      // (taille des pièces : chat réaliste, celle de la coupe du cou sans la gorge — span, catReal.js fitCollar — :
+      // son anneau descend sur la gorge, plus haut que large, et le nœud ou le grelot auraient grossi d'un quart)
+      const span = ring.span ? ring.span + 0.016 : rx + ry;
       // Chien réaliste : nœud et foulard posés sous l'anneau, sur le devant du cou et du poitrail mesurés au repos
       // (avant : à la gorge de l'anneau, le nœud du yorkshire, dont l'anneau penche comme le cou, tombait devant la
       // bouche ; le triangle du foulard, orienté de façon fixe, flottait devant le poitrail)
@@ -316,10 +320,16 @@ export function buildAccessories(model, look, accessories = {}) {
       // il ne restait qu'un liseré de 2 cm sous le collier)
       const big = worn.id === 'bandana';
       const bibLen = (thr) => {
+        // (chat réaliste : d'après la coupe du cou sans la gorge — span — : son anneau, qui passe sur la gorge, est plus
+        // haut que large ; la gorge du chat debout est sous le ventre — le poitrail descend entre les antérieurs — : au
+        // plus la moitié de sa hauteur au-dessus du sol)
+        if (model.realCat) return Math.max(0.02, Math.min((ring.span ?? rx + ry) * (big ? 0.7 : 0.45), 0.5 * thr));
         const len = Math.min((rx + ry) * (big ? 1.1 : 0.85), (big ? 0.68 : 0.55) * Math.max(0.03, thr - (fitD?.bellyY ?? -1)));
         return big ? Math.max(0.07, len) : len;
       };
-      const bib = model.realDog && model.drapeChest && model.skinGear && ring.rest ? dogBib(model, ring, rx, ry, bibLen, 0.006, big ? 1.3 : 1.0) : null;
+      // (chat réaliste aussi : bavette posée sur sa peau debout, où l'anneau est mesuré — catReal.js drapeChest —, liée
+      // au squelette ; le triangle rigide pendait en pyramide sous l'anneau, en bec assis)
+      const bib = (model.realDog || model.realCat) && model.drapeChest && model.skinGear && ring.rest ? dogBib(model, ring, rx, ry, bibLen, 0.006, big ? 1.3 : 1.0) : null;
       if (bib && (worn.id === 'bow' || worn.id === 'bandana')) {
         if (worn.id === 'bow') {
           // (sur la peau, sous la gorge, de face et un peu penché vers le haut ; sous le menton — gorge haute du
@@ -342,7 +352,8 @@ export function buildAccessories(model, look, accessories = {}) {
             c.material.dispose();
           });
           m.castShadow = true;
-          out.push(model.skinGear(m));
+          // (chat : d'un bloc, avec les poids de la peau sous son centre)
+          out.push(model.skinGear(m, model.realCat ? { at: g.position.clone() } : undefined));
         } else {
           // (lié au squelette : il suit le cou et le poitrail, assis comme debout)
           const m = new THREE.Mesh(bibGeometry(bib.pts), mat(color, 0.75, { side: THREE.DoubleSide }));
@@ -351,20 +362,25 @@ export function buildAccessories(model, look, accessories = {}) {
           out.push(sk);
         }
         model.neck.add(frame);
+        // (chat réaliste : la bande aussi est liée au squelette, comme le collier — gearModels.js)
+        if (model.skinCollar) out.push(...model.skinCollar(frame, rx, ry));
         out.push(frame);
         continue;
       }
       // (lapin réaliste : le nœud sur le côté de la nuque ; accroupi, sa gorge touche presque le sol et le nœud y
       // disparaissait entre ses pattes)
       if (worn.id === 'bow' && model.realRabbit) put(frame, bowMesh((rx + ry) * 0.42, color), [rx * 0.85, ry * 0.5, band * 0.5], [0, Math.PI / 2, -0.5]);
-      else if (worn.id === 'bow') put(frame, bowMesh((rx + ry) * 0.45, color), [0, throat - band * 0.5, band * 0.5], [0.3, 0, 0]);
+      // (chat réaliste : son anneau passe sur la gorge — catReal.js fitCollar — ; nœud, grelot et foulard se posent sur
+      // le bas de la bande, contre la gorge et le poitrail : placés plus bas, ils flottaient devant le poitrail)
+      else if (worn.id === 'bow') put(frame, bowMesh(span * 0.45, color), [0, model.realCat ? -(ry + 0.004) : throat - band * 0.5, band * 0.5], [0.3, 0, 0]);
       else if (worn.id === 'bell') {
-        const bell = new THREE.Mesh(new THREE.SphereGeometry((rx + ry) * 0.14, 10, 8), mat(0xf2c94c, 0.3, { metalness: 0.6 }));
-        put(frame, bell, [0, throat - (rx + ry) * 0.14, band]);
+        const r = span * 0.14;
+        const bell = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), mat(0xf2c94c, 0.3, { metalness: 0.6 }));
+        put(frame, bell, model.realCat ? [0, -(ry + r * 0.7), -r * 0.4] : [0, throat - r, band]);
       } else if (worn.id === 'bandana') {
         // foulard : triangle plié qui pend sous la gorge, un peu bombé sur le poitrail
         // (lapin : plus petit, sa gorge est près du sol quand il est accroupi)
-        const w = (rx + ry) * (model.realRabbit ? 0.75 : 1.1);
+        const w = span * (model.realRabbit ? 0.75 : 1.1);
         const tri = new THREE.Mesh(new THREE.ConeGeometry(w * 0.55, w * 0.75, 3, 1), mat(color, 0.75, { side: THREE.DoubleSide }));
         tri.scale.z = 0.22;
         put(frame, tri, [0, throat - w * 0.32, band * 1.2], [Math.PI + 0.25, 0, 0]);
@@ -375,12 +391,16 @@ export function buildAccessories(model, look, accessories = {}) {
           const q = model.neck.getWorldQuaternion(new THREE.Quaternion()).multiply(frame.quaternion).invert();
           const down = new THREE.Vector3(0, -1, 0).applyQuaternion(q);
           // (pointe du cône tournée de π + a autour de x : vers (0, -cos a, -sin a) ; a = 0 : vers la gorge)
-          const a = Math.atan2(-down.z, -down.y) + 0.15;
+          // (chat : penché vers le poitrail, à plat contre lui, depuis le bas de la bande)
+          const a = Math.atan2(-down.z, -down.y) + (model.realCat ? 0.5 : 0.15);
+          const y0 = model.realCat ? -(ry + band * 0.3) : throat;
+          const z0 = model.realCat ? 0 : band * 1.2;
           tri.rotation.x = Math.PI + a;
-          tri.position.set(0, throat - w * 0.32 * Math.cos(a), band * 1.2 - w * 0.32 * Math.sin(a));
+          tri.position.set(0, y0 - w * 0.32 * Math.cos(a), z0 - w * 0.32 * Math.sin(a));
         }
       }
       model.neck.add(frame);
+      if (model.skinCollar) out.push(...model.skinCollar(frame, rx, ry));
       out.push(frame);
       continue;
     }

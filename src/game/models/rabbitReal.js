@@ -723,7 +723,8 @@ function cardGeometry(base, D, B, density = 1) {
    */
   const jit = V();
   const flow = V();
-  const addCard = (i, len, wid, droop, comb, bend = 0.3, radial = 0, up = false, rise = 1, salt = 0) => {
+  const pn = V();
+  const addCard = (i, len, wid, droop, comb, bend = 0.3, radial = 0, up = false, rise = 1, salt = 0, fold = 0) => {
     const hi = i + salt * 0.618;
     root.fromArray(P, i * 3);
     nrm.fromArray(N, i * 3).normalize();
@@ -753,30 +754,44 @@ function cardGeometry(base, D, B, density = 1) {
     const tip = mid.clone().addScaledVector(dir2, len * 0.5);
     // (mèche étroite à la racine, pleine au milieu, un peu resserrée au bout : élargie jusqu'au bout, elle finissait
     // en copeau de papier carré, et ses brins pointus se voyaient de profil)
-    const pts = [
-      [root, -wid * 0.22, 0], [root, wid * 0.22, 0],
-      [mid, -wid * 0.42, 0.5], [mid, wid * 0.42, 0.5],
-      [tip, -wid * 0.34, 1], [tip, wid * 0.34, 1],
-    ];
+    // (fold : mèche pliée en long, en toit — son milieu monte de fold demi-largeurs hors du plan, et ses deux pans
+    // penchent leur normale de chaque côté — : de près, une carte plate de la crinière se lisait en ruban de papier,
+    // d'une seule teinte d'un bord à l'autre)
+    const cols = fold > 0 ? [-1, 0, 1] : [-1, 1];
+    const rows = [[root, 0.22, 0], [mid, 0.42, 0.5], [tip, 0.34, 1]];
+    pn.crossVectors(side, dir).normalize();
+    if (pn.dot(nrm) < 0) pn.negate();
     // Éclairée comme la peau où elle pousse (sa normale ; le shader la tourne à moitié vers la caméra) : une toison douce, pas des
     // éclats de papier qui brillent ou noircissent selon leur face.
     if (up) cn.set(0, 1, 0.2).normalize(); // (pinceaux des oreilles : éclairés par le ciel, pas verts comme le sol)
     else cn.copy(nrm);
     const lo = (hash(hi * 7.7) - 0.5) * 0.8;
-    for (const [c, o, v] of pts) {
-      const q = c.clone().addScaledVector(side, o);
-      pos.push(q.x, q.y, q.z);
-      nrmA.push(cn.x, cn.y, cn.z);
-      uv.push(o > 0 ? 1 : 0, v);
-      for (let k = 0; k < 4; k++) {
-        si.push(coat.si[i * 4 + k]);
-        sw.push(coat.sw[i * 4 + k]);
+    const cq = V();
+    for (const [c, hw, v] of rows) {
+      for (const k of cols) {
+        const q = c.clone().addScaledVector(side, k * wid * hw);
+        if (fold > 0 && k === 0) q.addScaledVector(pn, fold * wid * hw);
+        pos.push(q.x, q.y, q.z);
+        if (fold > 0 && k !== 0) cq.copy(cn).addScaledVector(side, k * 0.7).normalize();
+        else cq.copy(cn);
+        nrmA.push(cq.x, cq.y, cq.z);
+        uv.push((k + 1) / 2, v);
+        for (let j = 0; j < 4; j++) {
+          si.push(coat.si[i * 4 + j]);
+          sw.push(coat.sw[i * 4 + j]);
+        }
+        rest.push(base.attrs.cmpRest.array[i * 3], base.attrs.cmpRest.array[i * 3 + 1], base.attrs.cmpRest.array[i * 3 + 2]);
+        partA.push(...base.part.subarray(i * 4, i * 4 + 4));
+        lowA.push(lo);
       }
-      rest.push(base.attrs.cmpRest.array[i * 3], base.attrs.cmpRest.array[i * 3 + 1], base.attrs.cmpRest.array[i * 3 + 2]);
-      partA.push(...base.part.subarray(i * 4, i * 4 + 4));
-      lowA.push(lo);
     }
-    idx.push(s, s + 1, s + 3, s, s + 3, s + 2, s + 2, s + 3, s + 5, s + 2, s + 5, s + 4);
+    const nc = cols.length;
+    for (let r = 0; r < 2; r++) {
+      for (let k = 0; k < nc - 1; k++) {
+        const a = s + r * nc + k;
+        idx.push(a, a + 1, a + nc + 1, a, a + nc + 1, a + nc);
+      }
+    }
   };
   for (let i = 0; i < n; i++) {
     const g = grp[i];
@@ -810,10 +825,17 @@ function cardGeometry(base, D, B, density = 1) {
     } else if (maneC > 0.05 && (k.mane > 0.4 || cheek) && hash(i * 2.9) < maneC * 0.95) {
       // crinière : une collerette autour de la face (nuque, base des oreilles, joues, barbe, cou, poitrail) dont les
       // mèches partent de la tête et se courbent vers l'arrière, plus étroites et plus nombreuses
+      // (mèches étroites, une de plus par sommet, et pliées en long en haute qualité : larges et plates, elles se
+      // lisaient de près en rubans de papier d'une seule teinte ; au téléphone, pas de pli — deux fois moins de
+      // triangles —, le shader arrondit déjà la teinte d'un bord à l'autre)
       const len = ln * (cheek ? 0.65 : head ? 0.8 : 0.95);
       const rad = head || k.mane > 0.7 ? 0.6 : 0.3;
-      addCard(i, len, ln * 0.4, 0.25, 0.8, 0.6, rad, false, 0.9);
-      if (hash(i * 8.3) < 0.8 * maneC) addCard(i, len * 0.85, ln * 0.34, 0.3, 0.8, 0.6, rad, false, 0.7, 1);
+      // (au téléphone, moins de mèches : un peu plus larges, la crinière reste fournie)
+      const fold = density >= 1 ? 0.45 : 0;
+      const wk = density >= 1 ? 1 : 1.15;
+      addCard(i, len, ln * 0.27 * wk, 0.25, 0.8, 0.6, rad, false, 0.9, 0, fold);
+      if (hash(i * 8.3) < 0.8 * maneC) addCard(i, len * 0.85, ln * 0.23 * wk, 0.3, 0.8, 0.6, rad, false, 0.7, 1, fold);
+      if (hash(i * 9.1) < 0.6 * maneC) addCard(i, len * 0.75, ln * 0.2 * wk, 0.35, 0.7, 0.6, rad, false, 0.8, 2, fold);
     } else if (maneC > 0.05 && B.skirt > 0.05 && k.skirt > 0.5 && hash(i * 3.7) < B.skirt * 1.2 * more) {
       // jupe : brins qui tombent vers le sol au bas des flancs
       addCard(i, ln * 0.7, ln * 0.5 * thin, 1.1, 0.3, 0.45, 0, false, 0.6);
@@ -856,8 +878,9 @@ let cardTex = null;
  */
 function cardTexture() {
   if (cardTex || typeof document === 'undefined') return cardTex;
-  const w = 64;
-  const h = 128;
+  // (128 × 256, brins plus fins et deux fois plus nombreux : en 64 × 128, de près, la mèche était une tache floue)
+  const w = 128;
+  const h = 256;
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
@@ -874,7 +897,7 @@ function cardTexture() {
   // (canal vert, jusqu'à a) s'estompe sur ses derniers 45 % : translucide au bout quand le rendu est anticrénelé
   // (alphaToCoverage), sinon découpé par alphaTest, court et rond, pas en pointe.
   const strand = (x0, x1, len, w0, v, a = 255) => {
-    const cx = (x0 + x1) / 2 + (r() - 0.5) * 8;
+    const cx = (x0 + x1) / 2 + (r() - 0.5) * 16;
     const N = 10;
     const L = [];
     const R = [];
@@ -908,8 +931,8 @@ function cardTexture() {
   ctx.globalCompositeOperation = 'lighten';
   // (cœur de la mèche : quelques brins moyens, puis des brins fins de longueurs inégales qui s'écartent sur les bords et
   // laissent passer le jour entre eux ; serrée et pleine, la mèche se lisait en feuille de papier découpée)
-  for (let i = 0; i < 10; i++) strand(w * (0.34 + 0.32 * r()), w * (0.2 + 0.6 * r()), h * (0.65 + 0.35 * r()), 5 + r() * 3, 185 + r() * 70);
-  for (let i = 0; i < 30; i++) strand(w * (0.26 + 0.48 * r()), w * (0.03 + 0.94 * r()), h * (0.4 + 0.55 * r()), 2 + r() * 2.5, 140 + r() * 115, 190 + r() * 65);
+  for (let i = 0; i < 14; i++) strand(w * (0.34 + 0.32 * r()), w * (0.2 + 0.6 * r()), h * (0.65 + 0.35 * r()), 7 + r() * 4, 185 + r() * 70);
+  for (let i = 0; i < 70; i++) strand(w * (0.26 + 0.48 * r()), w * (0.03 + 0.94 * r()), h * (0.4 + 0.55 * r()), 3 + r() * 3, 120 + r() * 135, 190 + r() * 65);
   cardTex = new THREE.CanvasTexture(c);
   cardTex.flipY = true;
   cardTex.colorSpace = THREE.NoColorSpace;
@@ -1523,6 +1546,7 @@ class RealRabbitAnim {
     this.lead = 'hop';
     this.gOff = 0;
     this.plant = [null, null, null, null];
+    this.plantK = [0, 0, 0, 0];
     // (minimums glissants sur la foulée : appuis avant, appuis arrière — voir ground)
     this.win = [new WindowMin(), new WindowMin()];
     this.lastPos = null;
@@ -2197,8 +2221,8 @@ class RealRabbitAnim {
    * Pieds en appui tenus sur place (toutes les allures) : quand une patte se pose, la place de ses doigts est notée ;
    * tant qu'elle reste posée, la patte est tournée à l'épaule ou à la hanche pour l'y ramener, en long et sur le côté.
    * Les pattes raccourcies ou allongées d'une race changent la foulée du clip : sans cela, les pieds patinaient en appui.
-   * Prise d'appui à 10 mm du sol, lâchée à 25 — la patte qui se déroule reste tenue (à 5 mm, le pied du clip arrivait encore lancé et glissait avant d'être
-   * tenu).
+   * Prise d'appui à 10 mm du sol (8 aux pieds avant), lâchée à 25 — la patte qui se déroule reste tenue (à 5 mm, le pied du clip arrivait encore lancé et glissait avant d'être
+   * tenu). Pied avant : tenu par le point de sa sole le plus bas à la prise.
    */
   footLock() {
     const md = this.model;
@@ -2212,19 +2236,34 @@ class RealRabbitAnim {
         const y = this.skinY(inf);
         if (y < low) low = y;
       }
-      if (!(low < (this.plant[l] ? 0.025 : 0.01))) {
+      if (!(low < (this.plant[l] ? 0.025 : leg.front ? 0.008 : 0.01))) {
         this.plant[l] = null;
         continue;
       }
       if (!this.plant[l]) {
-        this.plant[l] = _u.setFromMatrixPosition(leg.paw.matrixWorld).clone();
+        // (pied avant : on tient le point de la sole le plus bas à la prise, pas l'articulation du poignet, 2 à 4 cm
+        // plus haut — le pied tourne autour pendant l'appui et les doigts glissaient de 3 à 7 mm, 12 à 22 % de la
+        // vitesse, chez le jeune bélier)
+        if (leg.front) {
+          let kb = 0;
+          let yb = Infinity;
+          this.solePts[l].forEach((inf, k) => {
+            const y = this.skinY(inf);
+            if (y < yb) {
+              yb = y;
+              kb = k;
+            }
+          });
+          this.plantK[l] = kb;
+          this.plant[l] = this.soleW(this.solePts[l][kb], V());
+        } else this.plant[l] = _u.setFromMatrixPosition(leg.paw.matrixWorld).clone();
         continue;
       }
       // en long et sur le côté, deux passes (le pied n'est pas à l'aplomb de l'articulation)
       let th = 0;
       let ph = 0;
       for (let pass = 0; pass < 2; pass++) {
-        const toe = _u.setFromMatrixPosition(leg.paw.matrixWorld);
+        const toe = leg.front ? this.soleW(this.solePts[l][this.plantK[l]], _u) : _u.setFromMatrixPosition(leg.paw.matrixWorld);
         const err = _v.copy(toe).sub(this.plant[l]).applyQuaternion(_q);
         const top = _p0.setFromMatrixPosition(leg.pivot.matrixWorld);
         const Lg = Math.max(0.02 * _rs.y, top.distanceTo(toe));
@@ -2381,6 +2420,13 @@ class RealRabbitAnim {
       md.body.position.y -= Math.min(F.y, Hn.y) - fl;
       md.root.updateMatrixWorld(true);
     }
+  }
+
+  /** Point de peau (influences d'os) dans le monde. */
+  soleW(inf, out) {
+    out.set(0, 0, 0);
+    for (const [b, p, w] of inf) out.addScaledVector(_q2v.copy(p).applyMatrix4(b.matrixWorld), w);
+    return out;
   }
 
   /** Hauteur (repère du lapin, _m : inverse de la racine) d'un point de peau ; sa position dans _w. */

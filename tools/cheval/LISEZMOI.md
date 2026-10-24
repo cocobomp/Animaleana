@@ -11,7 +11,12 @@ Le modèle d'origine n'a aucune animation : toutes les allures sont générées 
 
 ## Chaîne de fabrication (Blender 4.2 en mode `--background`, puis glTF-Transform)
 
-`build.sh` enchaîne les quatre étapes (variables `BLENDER`, `SRC`, `WORK`, `GT`).
+`build.sh` enchaîne les sept étapes, de la source au fichier du jeu (variables `BLENDER`, `SRC`, `WORK`, `GT` ; `DEBUT=4`
+reprend à la compression avec le `horse_raw_fix.glb` déjà dans `WORK`, sans Blender ni sources). Il s'arrêtait à
+`lod.mjs` (étape 5) : relancé, il refaisait un GLB sans les coutures de `dilate.mjs` ni le bord des îlots de `bords.mjs`
+(traînées hors des îlots, tirets clairs sous la gorge). Vérifié : `DEBUT=4` sur le GLB brut de la dernière retouche de
+texture (`retex.mjs` puis `normfix.mjs`) redonne le fichier du jeu, accesseurs identiques et images identiques au pixel
+près (715 648 octets au lieu de 715 656 : 8 octets d'en-tête WebP de la carte de relief des crins).
 
 1. **`lyndon_prep.py`** : matières refaites (robe, crins en cartes alpha, yeux), crinière, queue et yeux liés
    au squelette puis fusionnés en un seul maillage, mise à l'échelle (garrot 1,6 m), sabots au sol.
@@ -98,8 +103,9 @@ Le modèle d'origine n'a aucune animation : toutes les allures sont générées 
 
 Pour ne changer qu'une texture sans refaire les allures : relancer `lyndon_prep.py` et `prep2.py`, puis
 **`retex.mjs`** remplace l'image dans le GLB brut d'origine (`node retex.mjs horse_raw.glb horse_body_detail
-work/tex/horse_body_detail.png horse_raw_retex.glb`), `normfix.mjs` bouche les taches du relief, `pack.mjs` le
-compresse et `lod.mjs` ajoute la version allégée (géométrie et allures identiques).
+work/tex/horse_body_detail.png horse_raw_retex.glb`), `normfix.mjs` bouche les taches du relief (sortie
+`WORK/horse_raw_fix.glb`), puis `DEBUT=4 build.sh` compresse (`pack.mjs`), ajoute la version allégée (`lod.mjs`) et
+refait les coutures et le bord des îlots (`dilate.mjs`, `bords.mjs`) ; géométrie et allures identiques.
 
 ## Dans le jeu
 

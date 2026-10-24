@@ -51,6 +51,16 @@ describe('fichier du cheval réaliste', () => {
     expect(json.extensionsUsed).toEqual(expect.arrayContaining(['EXT_meshopt_compression', 'EXT_texture_webp']));
   });
 
+  it('est refait par tools/cheval/build.sh jusqu\'au bout : coutures (dilate.mjs) puis bord des îlots (bords.mjs)', () => {
+    // (build.sh s'arrêtait à lod.mjs : relancé, il refaisait un GLB sans les coutures ni le bord des îlots du relief)
+    const sh = fs.readFileSync(new URL('../tools/cheval/build.sh', import.meta.url), 'utf8');
+    const steps = [...sh.matchAll(/^\s*node "\$GT\/(\w+)\.mjs" "([^"]+)" "([^"]+)"/gm)].map((m) => ({ tool: m[1], inp: m[2], out: m[3] }));
+    expect(steps.map((s) => s.tool)).toEqual(['normfix', 'pack', 'lod', 'dilate', 'bords']);
+    // chaque étape lit la sortie de la précédente ; seul bords.mjs écrit le fichier du jeu
+    steps.slice(1).forEach((s, i) => expect(s.inp, s.tool).toBe(steps[i].out));
+    expect(steps.filter((s) => s.out.includes('public/models/horse_real.glb')).map((s) => s.tool)).toEqual(['bords']);
+  });
+
   it('a les allures, le squelette et les matières attendus', () => {
     const clips = json.animations.map((a) => a.name);
     expect(clips).toEqual(expect.arrayContaining(['idle', 'rest', 'walk', 'trot', 'canter', 'canterR', 'gallop', 'eat']));

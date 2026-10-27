@@ -5,9 +5,10 @@
 // - un petit suivi de quête discret sur le côté : la quête suivie (« Suivre la quête », avec ses petites étapes
 //   qui se cochent toutes seules), sinon le chapitre en cours de l'histoire de la ferme (⭐), sinon la première
 //   quête rejointe (🎯), sinon rien ; il se range en pastille ;
-// - la bulle de la quête (toucher son nom) : où aller, comment, et « Passer pour l'instant » (chapitre),
-//   « Enlever cette quête » (quête rejointe), « 📖 Mes quêtes » ; et les petits mots du guide (fin d'un chapitre…),
-//   qui attendent qu'aucune fenêtre ne soit ouverte pour être vus.
+// - ⇄ sur le suivi (touche N au clavier) : jongler entre le chapitre en cours et les quêtes rejointes ;
+// - la bulle de la quête (toucher son nom) : où aller, comment, les pastilles « Tes quêtes » pour en mettre une
+//   autre devant, « ⏭️ Passer pour l'instant » (chapitre ou quête rejointe), « 📖 Mes quêtes » ; et les petits mots
+//   du guide (fin d'un chapitre…), qui attendent qu'aucune fenêtre ne soit ouverte pour être vus.
 // La logique (étapes, réussite) est dans src/sim/tutorial.js ; l'histoire et les quêtes rejointes dans
 // src/sim/quests.js ; le journal dans src/ui/quests.js.
 
@@ -22,7 +23,8 @@ import {
   followQuest, stopFollow, noteFollowEvent, updateFollow, followView, stepWindow,
 } from '../sim/tutorial.js';
 import {
-  trackerQuest, questKind, storyView, joinQuest, leaveQuest, skipChapter, resumeChapter, chapterEnd, joinedQuests, canFollow, questState, STORY, MAX_JOINED,
+  trackerQuest, questKind, storyView, joinQuest, leaveQuest, resumeChapter, chapterEnd, joinedQuests, canFollow, questState, STORY, MAX_JOINED,
+  activeQuests, nextQuest, holdFollow, heldFollow, setFront, passQuest, resumeAside as resumeAsideQuest, mainQuest,
 } from '../sim/quests.js';
 import { hintText, blockText, shortBlockText } from './quests.js';
 import { NoticeQueue } from './questNotices.js'; // les petits mots du guide, qui attendent qu'aucune fenêtre ne soit ouverte
@@ -577,9 +579,9 @@ export class Tutorial {
   /**
    * Le suivi de quête, discret sur le côté : à gauche sous la carte d'infos (ordinateur), à droite sous les
    * boutons du haut (téléphone, loin du joystick). Une poignée ‹ / › à gauche pour le ranger en pastille (mémorisé),
-   * puis le nom de la quête (le toucher ouvre sa bulle : où aller, Passer / Enlever, 📖 Mes quêtes) avec sa
-   * progression (0/3), et 🧭 pour la suivre (✋ pour arrêter) contre l'autre bord : le nom sépare toujours
-   * « ranger » de « arrêter ». Quelle quête : la suivie (🧭), sinon le chapitre en cours (⭐), sinon la première
+   * puis le nom de la quête (le toucher ouvre sa bulle : où aller, « Tes quêtes », ⏭️ Passer, 📖 Mes quêtes) avec sa
+   * progression (0/3), ⇄ s'il y a plusieurs quêtes en cours (la suivante passe devant ; touche N), et 🧭 pour la
+   * suivre (✋ pour arrêter) contre l'autre bord : le nom sépare toujours « ranger » de « arrêter ». Quelle quête : la suivie (🧭), sinon le chapitre en cours (⭐), sinon la première
    * quête rejointe (🎯), sinon rien (trackerQuest, src/sim/quests.js) : jamais une quête que l'enfant n'a pas choisie
    * en dehors de l'histoire.
    * Sous le nom : « 0/3 📍 où aller », ou « 🔒 ce qu'il faut d'abord » (court) si elle n'est pas encore possible : alors
@@ -614,13 +616,14 @@ export class Tutorial {
     const kind = tq.kind;
     const mode = trackerMode();
     const stepsKey = view ? view.steps.map((s) => s.state[0]).join('') : '';
-    const key = `${q.id}|${kind}|${count}|${where}|${block}|${getLang()}|${stepsKey}|${this.folded}|${mode}`;
+    const active = activeQuests(p);
+    const key = `${q.id}|${kind}|${count}|${where}|${block}|${getLang()}|${stepsKey}|${this.folded}|${mode}|${active.join(',')}`;
     if (key !== this.trackerKey) {
       // La même quête a avancé : petit rebond (surtout utile quand le suivi est rangé en pastille).
       const moved = !!this.trackerKey && this.trackerWas?.id === q.id && (this.trackerWas.count !== count || this.trackerWas.steps !== stepsKey);
       this.trackerKey = key;
       this.trackerWas = { id: q.id, count, steps: stepsKey };
-      this.tracker.replaceChildren(...this.trackerContent(q, view, { count, where, mode, kind, block }));
+      this.tracker.replaceChildren(...this.trackerContent(q, view, { count, where, mode, kind, block, active }));
       const cl = this.tracker.classList;
       cl.toggle('following', !!view);
       cl.toggle('main', kind === 'main'); // ⭐ le chapitre en cours de l'histoire
@@ -630,8 +633,10 @@ export class Tutorial {
       // téléphone, quête suivie (et possible) : l'étape en cours sous le nom
       cl.toggle('step-only', mode !== 'desk' && !!view && !block);
       cl.toggle('blocked', !!block);
+      cl.toggle('juggle', active.length > 1); // (⇄ : plusieurs quêtes en cours)
       cl.remove('title2', 'step3');
-      if (moved) this.bumpTracker();
+      if (moved || this.switched) this.bumpTracker();
+      this.switched = false;
       this.trackerFit = mode !== 'desk' && !!view && !block && !this.folded; // à mesurer une fois affiché
     }
     this.tracker.hidden = false;
@@ -653,7 +658,7 @@ export class Tutorial {
    * Ce qu'il y a dans le suivi : la pastille rangée, ou la poignée, le nom de la quête et 🧭 / ✋ (+ ses étapes).
    * L'icône : ⭐ le chapitre en cours (⭐🧭 s'il est suivi), 🧭 une quête suivie, 🎯 une quête rejointe.
    */
-  trackerContent(q, view, { count, where, mode, kind, block }) {
+  trackerContent(q, view, { count, where, mode, kind, block, active = [] }) {
     const right = mode !== 'desk'; // téléphone : contre le bord droit ; ordinateur : contre le bord gauche
     const icon = kind === 'main' ? (view ? '⭐🧭' : '⭐') : view ? '🧭' : '🎯';
     const title = questTitle(this.profile, q.id);
@@ -696,7 +701,19 @@ export class Tutorial {
     // Ranger : une poignée sur le bord gauche de la carte (la flèche montre le bord où elle se range), loin de ✋.
     const fold = h('button', { class: 'qt-fold', title: t('quest_fold'), 'aria-label': t('quest_fold'), 'aria-expanded': 'true', onClick: () => this.setFolded(true) },
       chev(right ? '›' : '‹', 'qt-grip'));
-    const out = [fold, h('div', { class: 'qt-row' }, head, quick)];
+    // ⇄ Plusieurs quêtes en cours (le chapitre et les quêtes rejointes) : on passe à la suivante d'un toucher (touche N
+    // au clavier). Les petits points disent combien il y en a et laquelle est devant.
+    const at = active.indexOf(q.id);
+    const juggle = active.length > 1
+      ? h('button', {
+        class: 'qt-switch',
+        title: `${t('qj_switch')} (${at + 1}/${active.length})${mode === 'desk' ? ' · N' : ''}`,
+        'aria-label': `${t('qj_switch')} (${at + 1}/${active.length})`,
+        onClick: () => this.cycleQuest(1),
+      }, h('span', { class: 'qt-switch-icon', 'aria-hidden': 'true' }, '⇄'),
+      h('span', { class: 'qt-switch-dots', 'aria-hidden': 'true' }, active.map((x) => h('i', { class: x === q.id ? 'on' : '' }))))
+      : null;
+    const out = [fold, h('div', { class: 'qt-row' }, head, juggle, quick)];
     if (w) {
       out.push(h('ol', { class: 'qt-steps' }, w.steps.map((s) => h('li', { class: `qt-step ${s.state}` },
         h('span', { class: 'qt-check', 'aria-hidden': 'true' }, s.state === 'done' ? '✅' : s.state === 'now' ? '👉' : '⬜'),
@@ -852,9 +869,11 @@ export class Tutorial {
       return;
     }
     if (questKind(p, id) === 'side' && !joinQuest(p, id).ok) return;
-    // Même quête que celle qu'on vient d'arrêter (✋ par erreur) : on reprend à la même étape.
-    followQuest(p, id, this.recent);
+    if (p.questFollow && p.questFollow.id !== id) holdFollow(p); // (la quête qu'on quitte reprendra à son étape)
+    // Même quête que celle qu'on vient d'arrêter (✋ par erreur), ou qu'on a quittée en jonglant : même étape.
+    followQuest(p, id, this.recent?.id === id ? this.recent : heldFollow(p, id));
     this.recent = null;
+    this.keepGuiding = false;
     this.questFocus = null;
     this.questBubble = null;
     this.notices.close(); // (🧭 touché dans un petit mot : il a fait son travail)
@@ -874,7 +893,11 @@ export class Tutorial {
     const p = this.profile;
     if (!p) return;
     // Le suivi garde cette quête (avec 🧭 pour la reprendre là où on en était) au lieu de passer à une autre.
-    if (p.questFollow) this.recent = { ...p.questFollow, seen: [...p.questFollow.seen] };
+    if (p.questFollow) {
+      this.recent = { ...p.questFollow, seen: [...p.questFollow.seen] };
+      holdFollow(p);
+    }
+    this.keepGuiding = false;
     stopFollow(p);
     this.highlight = null;
     this.releaseMarker();
@@ -894,15 +917,88 @@ export class Tutorial {
     this.trackerKey = '';
   }
 
-  /** ⏭️ Passer le chapitre en cours pour l'instant : le suivant arrive (il est annoncé). */
-  skipMain(id) {
+  /**
+   * ⏭️ Passer une quête pour l'instant (src/sim/quests.js, passQuest) : le chapitre en cours (le suivant arrive, il est
+   * annoncé) ou une quête rejointe (mise de côté : ↩️ Reprendre dans 📖 Journal, 🎯 Mes quêtes). Rien n'est perdu.
+   * La bulle de la quête, si elle est ouverte, montre la quête qui est maintenant devant : on peut passer, passer…
+   */
+  pass(id) {
     const p = this.profile;
     if (!p) return;
-    const next = skipChapter(p, id);
-    if (next === undefined) return;
+    const hadBubble = this.questBubble?.id === id;
+    const r = passQuest(p, id);
+    if (!r.ok) return;
     this.forgetQuest(id);
-    this.ui.toast(next ? `${t('qj_skipped')} ${t('qj_newChapter', { name: questTitle(p, next) })}` : t('qj_skipped'), 6000);
+    if (r.kind === 'main') this.ui.toast(r.next ? `${t('qj_skipped')} ${t('qj_newChapter', { name: questTitle(p, r.next) })}` : t('qj_skipped'), 6000);
+    else this.ui.toast(t(STORY.includes(id) ? 'qj_passedChapter' : 'qj_passed'), 5000);
+    const tq = trackerQuest(p);
+    if (hadBubble && tq) {
+      this.questBubble = { id: tq.id, until: performance.now() + QUEST_BUBBLE_MS };
+      this.qbKey = '';
+    }
+    this.switched = true;
     this.tick();
+  }
+
+  /** (ancien nom, gardé pour les appels existants) */
+  skipMain(id) {
+    this.pass(id);
+  }
+
+  /**
+   * ⇄ Mettre une autre quête devant (le chapitre en cours ou une quête rejointe). Si on suivait une quête (🧭), on
+   * suit la nouvelle, reprise à son étape, quand c'est possible ; sinon le suivi dit ce qu'il faut d'abord (🔒).
+   * La bulle de la quête, si elle est ouverte, montre la nouvelle.
+   */
+  switchTo(id) {
+    const p = this.profile;
+    if (!p || this.active) return false;
+    const cur = trackerQuest(p);
+    if (!id || cur?.id === id) return false;
+    // On guidait (🧭) : on continue de guider, même après être passé par une quête pas encore possible (🔒, elle
+    // ne se suit pas) ; ✋ ou 🧭 remettent cela à zéro.
+    const guiding = !!cur?.followed || (!!this.keepGuiding && !p.questFollow);
+    if (!setFront(p, id)) return false;
+    if (p.questFollow) {
+      holdFollow(p);
+      stopFollow(p);
+    }
+    this.recent = null;
+    this.stopQuestFocus();
+    if (guiding && !followBlock(id, p)) followQuest(p, id, heldFollow(p, id));
+    this.keepGuiding = guiding;
+    if (this.questBubble) {
+      this.questBubble = { id, until: performance.now() + QUEST_BUBBLE_MS };
+      this.qbKey = '';
+    }
+    this.markerKey = '';
+    this.trackerKey = '';
+    this.switched = true;
+    this.tick();
+    return true;
+  }
+
+  /** ⇄ La quête suivante (dir = 1) ou précédente (dir = -1) dans le suivi ; touche N au clavier. */
+  cycleQuest(dir = 1) {
+    const p = this.profile;
+    if (!p || this.active) return false;
+    const id = nextQuest(p, dir);
+    return id ? this.switchTo(id) : false;
+  }
+
+  /** ↩️ Reprendre une quête mise de côté : elle revient dans 🎯 Mes quêtes (sauf s'il y en a déjà MAX_JOINED). */
+  resumeAside(id) {
+    const p = this.profile;
+    if (!p) return false;
+    const r = resumeAsideQuest(p, id);
+    if (!r.ok) {
+      if (r.reason === 'full') this.fullToast();
+      return false;
+    }
+    this.trackerKey = '';
+    this.ui.toast(t('qj_resumedAside', { name: questTitle(p, id) }), 4500);
+    this.tick();
+    return true;
   }
 
   /**
@@ -995,12 +1091,14 @@ export class Tutorial {
     const g = questGuide(id, p);
     if (!g) return;
     this.ui.closePanel();
+    setFront(p, id); // (le suivi à l'écran montre la même quête que la bulle ; rien si ce n'est ni le chapitre ni une rejointe)
     if (p.questFollow?.id === id) {
       this.markerKey = '';
       this.highlight = null;
     } else {
       if (p.questFollow) {
         this.recent = { ...p.questFollow, seen: [...p.questFollow.seen] }; // (🧭 la reprendra à la même étape)
+        holdFollow(p);
         stopFollow(p); // une seule quête guidée à la fois
       }
       // Pas encore possible : la bulle dit pourquoi, sans montrer où aller.
@@ -1121,7 +1219,8 @@ export class Tutorial {
       const label = kind === 'main' ? t('qj_bubbleMain', { n: s.chapter, total: s.total })
         : kind === 'story' ? t('qj_bubbleStory') : kind === 'side' ? t('qj_bubbleOther') : t('qj_bubbleSide');
       const step = view?.current ? t(`quest_step_${view.current.id}`) : '';
-      key = `q|${id}|${kind}|${followed}|${cur}/${max}|${why}|${step}|${getLang()}`;
+      const active = activeQuests(p);
+      key = `q|${id}|${kind}|${followed}|${cur}/${max}|${why}|${step}|${getLang()}|${active.join(',')}`;
       const lines = [];
       if (why) lines.push(h('p', { class: 'tuto-hint qb-block' }, bubbleText(`🔒 ${t('qj_notYet', { why })}`)));
       else {
@@ -1129,11 +1228,23 @@ export class Tutorial {
         if (step) lines.push(h('p', { class: 'tuto-hint qb-now' }, bubbleText(t('qj_now', { step }))));
         else lines.push(h('p', { class: 'tuto-hint' }, bubbleText(hintText(p, id))));
       }
+      // Tes quêtes : une pastille par quête en cours (⭐ le chapitre, 🎯 les rejointes) ; la toucher la met devant.
+      if (active.length > 1 && (kind === 'main' || kind === 'joined')) {
+        const main = mainQuest(p);
+        lines.push(h('div', { class: 'qb-switch', role: 'group', 'aria-label': t('qj_activeTitle') },
+          h('span', { class: 'qb-switch-label' }, t('qj_activeTitle')),
+          active.map((x) => h('button', {
+            class: `qb-chip${x === id ? ' on' : ''}`,
+            'aria-pressed': x === id ? 'true' : 'false',
+            title: questTitle(p, x),
+            onClick: () => this.switchTo(x),
+          }, h('span', { 'aria-hidden': 'true' }, x === main ? '⭐' : '🎯'), ' ', h('span', { class: 'qb-chip-name' }, questTitle(p, x))))));
+      }
       const buttons = [];
       if (!followed && !why) buttons.push(btn(`🧭 ${t('quest_follow')}`, () => this.startFollow(id), 'primary'));
       if (followed) buttons.push(btn(`✋ ${t('quest_stop')}`, () => { this.closeQuestBubble(); this.stopFollowing(); }));
-      if (kind === 'main') buttons.push(btn(t('qj_skip'), () => this.skipMain(id), 'qb-skip'));
-      if (kind === 'joined') buttons.push(btn(t('qj_leaveLong'), () => this.leave(id), 'qb-leave'));
+      // ⏭️ Passer pour l'instant : le chapitre (le suivant arrive) comme une quête rejointe (mise de côté).
+      if (kind === 'main' || kind === 'joined') buttons.push(btn(t('qj_skip'), () => this.pass(id), 'qb-skip'));
       if (kind === 'side') {
         const full = joinedQuests(p).length >= MAX_JOINED; // (grisé, mais il répond : « Tu as déjà 3 quêtes »)
         buttons.push(btn(t('qj_join'), () => { if (this.join(id)) this.qbKey = ''; }, `${why ? 'primary' : ''}${full ? ' off' : ''}`));

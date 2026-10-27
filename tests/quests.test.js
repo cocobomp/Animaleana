@@ -18,6 +18,7 @@ import {
   STORY, THEMES, MAX_JOINED, mainQuest, storyView, skipChapter, resumeChapter, resumeMode, joinQuest, leaveQuest, canJoin,
   joinedQuests, otherQuests, trackerQuest, afterQuestsDone, chapterEnd, questKind, isSideQuest, migrateQuests, doneQuests,
   questState, canFollow, tidyFollow, skippedLeft,
+  activeQuests, nextQuest, setFront, passQuest, asideQuests, resumeAside, holdFollow, heldFollow,
 } from '../src/sim/quests.js';
 import { NoticeQueue } from '../src/ui/questNotices.js';
 
@@ -724,4 +725,223 @@ describe('sauvegarde', () => {
     const r = mergeProfiles([a], [b]);
     expect(r.profiles[0].quests.joined).toEqual(['abroad']);
   });
+});
+
+describe('jongler entre les quêtes et les passer (⇄, ⏭️)', () => {
+  it('les quêtes en cours : le chapitre puis les rejointes ; ⇄ fait le tour', () => {
+    const p = createProfile('Lou');
+    expect(activeQuests(p)).toEqual(['adopt1']);
+    expect(nextQuest(p)).toBeNull(); // une seule : rien à changer
+    joinQuest(p, 'scoop1');
+    joinQuest(p, 'abroad');
+    expect(activeQuests(p)).toEqual(['adopt1', 'scoop1', 'abroad']);
+    expect(nextQuest(p)).toBe('scoop1');
+    expect(nextQuest(p, -1)).toBe('abroad');
+    expect(setFront(p, 'scoop1')).toBe(true);
+    expect(trackerQuest(p)).toEqual({ id: 'scoop1', kind: 'joined', followed: false });
+    expect(nextQuest(p)).toBe('abroad');
+    setFront(p, 'abroad');
+    expect(nextQuest(p)).toBe('adopt1'); // (on revient au début)
+  });
+
+  it('on ne met devant que le chapitre en cours ou une quête rejointe ; la quête suivie (🧭) reste devant', () => {
+    const p = createProfile('Lou');
+    joinQuest(p, 'scoop1');
+    expect(setFront(p, 'feed5')).toBe(false); // chapitre pas encore arrivé
+    expect(setFront(p, 'abroad')).toBe(false); // pas rejointe
+    expect(setFront(p, 'zz')).toBe(false);
+    setFront(p, 'scoop1');
+    followQuest(p, 'adopt1');
+    expect(trackerQuest(p)).toEqual({ id: 'adopt1', kind: 'main', followed: true });
+    stopFollow(p);
+    expect(trackerQuest(p).id).toBe('scoop1'); // ✋ : la quête mise devant revient
+  });
+
+  it('une quête mise devant puis finie : le suivi revient au chapitre en cours', () => {
+    const p = createProfile('Lou');
+    joinQuest(p, 'scoop1');
+    setFront(p, 'scoop1');
+    finish(p, 'scoop1');
+    expect(trackerQuest(p)).toEqual({ id: 'adopt1', kind: 'main', followed: false });
+    afterQuestsDone(p, [{ id: 'scoop1' }], 'adopt1');
+    expect(questState(p).front).toBeUndefined();
+  });
+
+  it('⏭️ passer le chapitre en cours : le suivant arrive (comme « Passer pour l\'instant »)', () => {
+    const p = createProfile('Lou');
+    setFront(p, 'adopt1');
+    expect(passQuest(p, 'adopt1')).toEqual({ ok: true, kind: 'main', next: 'pet3' });
+    expect(mainQuest(p)).toBe('pet3');
+    expect(storyView(p).skipped).toEqual(['adopt1']);
+    expect(trackerQuest(p).id).toBe('pet3');
+    expect(passQuest(p, 'feed5').ok).toBe(false); // pas encore arrivé
+  });
+
+  it('⏭️ passer une quête rejointe : elle va dans « Mises de côté », pas dans « Autres quêtes » ; ↩️ la reprend', () => {
+    const p = createProfile('Lou');
+    joinQuest(p, 'scoop1');
+    joinQuest(p, 'abroad');
+    setFront(p, 'scoop1');
+    expect(passQuest(p, 'scoop1')).toEqual({ ok: true, kind: 'joined', next: null });
+    expect(joinedQuests(p)).toEqual(['abroad']);
+    expect(asideQuests(p)).toEqual(['scoop1']);
+    expect(otherQuests(p).flatMap((th) => th.quests)).not.toContain('scoop1');
+    expect(trackerQuest(p).id).toBe('adopt1'); // la quête passée n'est plus devant
+    expect(resumeAside(p, 'scoop1')).toEqual({ ok: true });
+    expect(joinedQuests(p)).toEqual(['abroad', 'scoop1']);
+    expect(asideQuests(p)).toEqual([]);
+    expect(questState(p).aside).toBeUndefined(); // (le champ disparaît quand il est vide)
+    expect(resumeAside(p, 'scoop1')).toEqual({ ok: false, reason: 'notAside' });
+  });
+
+  it('reprendre une quête mise de côté avec déjà 3 quêtes : il faut d\'abord en passer une', () => {
+    const p = createProfile('Lou');
+    joinQuest(p, 'scoop1');
+    passQuest(p, 'scoop1');
+    for (const id of ['abroad', 'travel1', 'species4']) expect(joinQuest(p, id).ok, id).toBe(true);
+    expect(resumeAside(p, 'scoop1')).toEqual({ ok: false, reason: 'full' });
+    passQuest(p, 'travel1');
+    expect(resumeAside(p, 'scoop1').ok).toBe(true);
+    expect(asideQuests(p)).toEqual(['travel1']);
+    // rejoindre depuis ailleurs une quête mise de côté la sort aussi des mises de côté
+    passQuest(p, 'abroad');
+    expect(joinQuest(p, 'abroad').ok).toBe(true);
+    expect(asideQuests(p)).toEqual(['travel1']);
+  });
+
+  it('⏭️ passer un chapitre repris dans « Mes quêtes » : il retourne avec les chapitres passés', () => {
+    const p2 = createProfile('Lou');
+    finish(p2, 'adopt1');
+    skipChapter(p2); // pet3 passé, feed5 en cours
+    skipChapter(p2); // feed5 passé, water3 en cours
+    expect(resumeChapter(p2, 'feed5')).toEqual({ ok: true, how: 'main' });
+    skipChapter(p2); // feed5 de nouveau passé
+    expect(mainQuest(p2)).toBe('water3');
+    finish(p2, 'water3');
+    expect(mainQuest(p2)).toBe('brush3');
+    // un chapitre passé qui vient APRÈS le chapitre en cours va dans « Mes quêtes » quand on le reprend
+    const p3 = createProfile('Lou');
+    skipChapter(p3); // adopt1
+    skipChapter(p3); // pet3
+    expect(resumeChapter(p3, 'adopt1')).toEqual({ ok: true, how: 'main' });
+    expect(resumeChapter(p3, 'pet3')).toEqual({ ok: true, how: 'joined' });
+    expect(joinedQuests(p3)).toEqual(['pet3']);
+    expect(passQuest(p3, 'pet3')).toEqual({ ok: true, kind: 'joined', next: null });
+    expect(joinedQuests(p3)).toEqual([]);
+    expect(asideQuests(p3)).toEqual([]); // pas dans les mises de côté…
+    expect(storyView(p3).skipped).toEqual(['pet3']); // …mais avec les chapitres passés (↩️ Reprendre)
+  });
+
+  it('jongler garde l\'étape du suivi pas à pas de chaque quête', () => {
+    const p = createProfile('Lou');
+    p.animals.push(pet());
+    finish(p, 'adopt1');
+    joinQuest(p, 'scoop1');
+    const f = followQuest(p, 'pet3');
+    expect(f.steps.length).toBeGreaterThan(1);
+    p.questFollow.step = 1;
+    p.questFollow.seen.push('panel:animal');
+    holdFollow(p); // ⇄ vers une autre quête
+    stopFollow(p);
+    followQuest(p, 'scoop1', heldFollow(p, 'scoop1'));
+    expect(p.questFollow.step).toBe(0);
+    holdFollow(p);
+    stopFollow(p);
+    followQuest(p, 'pet3', heldFollow(p, 'pet3')); // ⇄ retour : même étape
+    expect(p.questFollow).toMatchObject({ id: 'pet3', step: 1, seen: ['panel:animal'] });
+    // passer une quête suivie garde aussi son étape pour plus tard
+    passQuest(p, 'pet3');
+    expect(heldFollow(p, 'pet3')).toMatchObject({ step: 1 });
+  });
+
+  it('sauvegarde : mises de côté, quête devant et étapes gardées sont relues ; un état abîmé est réparé', () => {
+    const p = createProfile('Lou');
+    joinQuest(p, 'scoop1');
+    joinQuest(p, 'abroad');
+    passQuest(p, 'scoop1');
+    setFront(p, 'abroad');
+    followQuest(p, 'abroad');
+    holdFollow(p);
+    const back = parseSave(serializeSave([p]));
+    expect(back.ok).toBe(true);
+    const q = back.profiles[0];
+    expect(asideQuests(q)).toEqual(['scoop1']);
+    expect(trackerQuest(q).id).toBe('abroad');
+    expect(heldFollow(q, 'abroad')).toMatchObject({ id: 'abroad', step: 0 });
+    const bad = createProfile('Lou');
+    bad.completed = ['ride1'];
+    bad.quests = { joined: ['scoop1'], skipped: [], aside: ['pet3', 'zz', 'ride1', 'abroad', 'abroad', 'scoop1'], front: 'zz', held: { ride1: { step: 1, seen: [], steps: ['a'] }, abroad: 'x', baby: { step: 0, seen: [], steps: ['a'] } } };
+    migrateQuests(bad);
+    expect(bad.quests).toEqual({ joined: ['scoop1'], skipped: [], aside: ['abroad'], held: { baby: { step: 0, seen: [], steps: ['a'] } } });
+    const empty = createProfile('Lou');
+    empty.quests = { joined: [], skipped: [], aside: 'x', front: 3, held: [] };
+    migrateQuests(empty);
+    expect(empty.quests).toEqual({ joined: [], skipped: [] });
+  });
+
+  it('jongler et passer au hasard ne casse jamais rien (simulation de 120 parties)', () => {
+    const species = offeredSpeciesIds();
+    for (let n = 0; n < 120; n++) {
+      const rng = mulberry32(4200 + n);
+      const p = createProfile('A', rng() < 0.5 ? 'manage' : 'sandbox', PLACE_IDS[Math.floor(rng() * PLACE_IDS.length)]);
+      const k = Math.floor(rng() * 4);
+      for (let i = 0; i < k; i++) p.animals.push((rng() < 0.5 ? pet : grown)(species[Math.floor(rng() * species.length)], rng() < 0.5 ? 'f' : 'm', `${n}-${i}`));
+      for (const id of QUEST_IDS) if (rng() < 0.3) p.completed.push(id);
+      for (let step = 0; step < 20; step++) {
+        const r = rng();
+        const any = QUEST_IDS[Math.floor(rng() * QUEST_IDS.length)];
+        const act = activeQuests(p);
+        const one = act[Math.floor(rng() * act.length)];
+        if (r < 0.2) joinQuest(p, any);
+        else if (r < 0.35 && one) passQuest(p, one);
+        else if (r < 0.5) {
+          const next = nextQuest(p, rng() < 0.5 ? 1 : -1);
+          if (next) {
+            const guiding = !!trackerQuest(p)?.followed;
+            expect(setFront(p, next)).toBe(true);
+            if (p.questFollow) { holdFollow(p); stopFollow(p); }
+            if (guiding && !followBlock(next, p)) followQuest(p, next, heldFollow(p, next));
+          }
+        } else if (r < 0.6) {
+          const aside = asideQuests(p);
+          if (aside.length) resumeAside(p, aside[Math.floor(rng() * aside.length)]);
+        } else if (r < 0.7) {
+          if (canFollow(p, any).ok) {
+            if (questKind(p, any) === 'side') joinQuest(p, any);
+            if (p.questFollow && p.questFollow.id !== any) holdFollow(p);
+            followQuest(p, any, heldFollow(p, any));
+          }
+        } else if (r < 0.75) stopFollow(p);
+        else if (r < 0.8 && one) p.completed.push(one);
+        else if (r < 0.85) {
+          const skipped = storyView(p).skipped;
+          if (skipped.length) resumeChapter(p, skipped[0]);
+        }
+        pruneAndCheck(p, n);
+      }
+      // relu depuis la sauvegarde : le même état
+      const back = parseSave(serializeSave([p]));
+      expect(back.ok).toBe(true);
+      expect(activeQuests(back.profiles[0])).toEqual(activeQuests(p));
+    }
+
+    function pruneAndCheck(p, n) {
+      afterQuestsDone(p, [], null);
+      const act = activeQuests(p);
+      const joined = joinedQuests(p);
+      const aside = asideQuests(p);
+      const q = trackerQuest(p);
+      expect(joined.length, `${n}`).toBeLessThanOrEqual(MAX_JOINED);
+      expect(act.length).toBeLessThanOrEqual(MAX_JOINED + 1);
+      if (q) expect(act, `${n} ${q.id}`).toContain(q.id);
+      else expect(act).toEqual([]);
+      for (const id of aside) {
+        expect(joined).not.toContain(id);
+        expect(STORY).not.toContain(id);
+        expect(p.completed).not.toContain(id);
+      }
+      for (const th of otherQuests(p)) for (const id of th.quests) expect(aside).not.toContain(id);
+      if (p.questFollow && questKind(p, p.questFollow.id) !== 'done') expect(followBlock(p.questFollow.id, p), `${n} ${p.questFollow.id}`).toBeNull();
+    }
+  }, 30000);
 });

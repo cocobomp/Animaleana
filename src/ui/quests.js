@@ -1,7 +1,8 @@
 // Journal, onglet Quêtes (openJournal, src/ui/panels.js) : quatre parties lisibles au téléphone.
 //   ⭐ Histoire de la ferme : le chapitre en cours (Montre-moi, Suivre, Passer pour l'instant), les chapitres passés
 //      (Reprendre : une seule fois dans le journal), ceux déjà faits ✅ et combien il en reste à venir ;
-//   🎯 Mes quêtes (n/3) : les quêtes secondaires rejointes (Montre-moi, Suivre, Enlever) ;
+//   🎯 Mes quêtes (n/3) : les quêtes secondaires rejointes (Montre-moi, Suivre, ⏭️ Passer pour l'instant), puis
+//      « ⏭️ Mises de côté » (↩️ Reprendre) ; la quête montrée par le suivi à l'écran porte « 📌 À l'écran » ;
 //   🗺️ Autres quêtes : par thème (on touche un thème pour l'ouvrir), avec comment les faire, Montre-moi et
 //      ➕ Rejoindre (grisé avec 3 quêtes : le toucher dit d'en enlever une) ;
 //   ✅ Terminées : repliées.
@@ -14,7 +15,7 @@ import { OBJECTIVES, objectiveParams } from '../sim/objectives.js';
 import { isSandbox } from '../sim/profile.js';
 import { questGuide, followBlock } from '../sim/tutorial.js';
 import {
-  storyView, joinedQuests, otherQuests, doneQuests, MAX_JOINED, STORY, resumeMode,
+  storyView, joinedQuests, otherQuests, doneQuests, MAX_JOINED, STORY, resumeMode, asideQuests, trackerQuest, activeQuests,
 } from '../sim/quests.js';
 
 const obj = (id) => OBJECTIVES.find((o) => o.id === id);
@@ -80,9 +81,8 @@ function questCard(ui, id, kind) {
   if (kind === 'main' || kind === 'joined') {
     if (followed) buttons.push(btn(`✋ ${t('quest_stop')}`, act(() => tuto.stopFollowing())));
     else if (!block) buttons.push(btn(`🧭 ${t('quest_follow')}`, (e) => { e.stopPropagation(); tuto.startFollow(id); }, 'primary'));
-    buttons.push(kind === 'main'
-      ? btn(t('qj_skip'), act(() => tuto.skipMain(id)), 'qc-skip')
-      : btn(t('qj_leave'), act(() => tuto.leave(id)), 'qc-leave'));
+    // ⏭️ Passer pour l'instant : le chapitre (le suivant arrive) comme une quête rejointe (« Mises de côté »).
+    buttons.push(btn(t('qj_skip'), act(() => tuto.pass(id)), 'qc-skip'));
   } else {
     // Déjà MAX_JOINED quêtes : le bouton est grisé mais répond (il dit d'en enlever une et montre 🎯 Mes quêtes).
     const full = joinedQuests(p).length >= MAX_JOINED;
@@ -93,12 +93,15 @@ function questCard(ui, id, kind) {
     }, t('qj_join')));
   }
   const wasChapter = kind === 'joined' && STORY.includes(id); // (un chapitre passé, repris dans « Mes quêtes »)
+  // La quête que montre le suivi à l'écran (avec plusieurs quêtes en cours : on jongle avec ⇄).
+  const onScreen = (kind === 'main' || kind === 'joined') && activeQuests(p).length > 1 && trackerQuest(p)?.id === id;
   return h('div', { class: `qcard ${kind}${followed ? ' following' : ''}`, 'data-quest': id },
     h('div', { class: 'qc-top' },
       h('span', { class: 'obj-icon', 'aria-hidden': 'true' }, icon),
       h('span', { class: 'card-main' },
         h('b', { class: 'qc-title' }, questName(p, id)),
         wasChapter ? h('span', { class: 'qc-tag' }, t('qj_wasChapter')) : null,
+        onScreen ? h('span', { class: 'qc-tag on-screen' }, t('qj_onScreen')) : null,
         bar),
       count),
     kind !== 'side' && !block ? h('p', { class: 'qc-where' }, `📍 ${tuto.whereText(id)}`) : null,
@@ -157,13 +160,24 @@ function storySection(ui) {
   return h('section', { class: 'qj-part qj-story' }, out);
 }
 
-/** 🎯 Mes quêtes (n/3). */
+/** 🎯 Mes quêtes (n/3), puis ⏭️ Mises de côté (↩️ Reprendre ; grisé avec déjà 3 quêtes, mais il répond). */
 function mineSection(ui) {
   const p = ui.game.profile;
   const mine = joinedQuests(p);
+  const aside = asideQuests(p);
+  const full = mine.length >= MAX_JOINED;
   return h('section', { class: 'qj-part qj-mine' },
     h('h3', { class: 'qj-h' }, t('qj_mineTitle', { n: mine.length, max: MAX_JOINED })),
-    mine.length ? mine.map((id) => questCard(ui, id, 'joined')) : h('p', { class: 'qj-note' }, t('qj_mineEmpty', { max: MAX_JOINED })));
+    mine.length ? mine.map((id) => questCard(ui, id, 'joined')) : h('p', { class: 'qj-note' }, t('qj_mineEmpty', { max: MAX_JOINED })),
+    aside.length ? h('div', { class: 'qj-skipped qj-aside' },
+      h('b', {}, t('qj_asideTitle')),
+      ...aside.map((id) => h('div', { class: 'qj-row', 'data-quest': id },
+        h('span', {}, questName(p, id), full ? h('small', { class: 'qj-row-note' }, t('qj_resumeFull')) : null),
+        h('button', {
+          class: `qc-btn${full ? ' off' : ''}`,
+          'aria-disabled': full ? 'true' : null,
+          onClick: () => { ui.tutorial.resumeAside(id); ui.renderPanel(); },
+        }, t('qj_resume'))))) : null);
 }
 
 /** 🗺️ Autres quêtes, par thème. */

@@ -11,9 +11,16 @@
 // le suivi à l'écran et la bulle de la quête (src/ui/tutorial.js).
 //
 // Dans le profil (sauvegardé, synchronisé avec le reste de la partie) :
-//   profile.quests = { joined: [ids], skipped: [ids] }
+//   profile.quests = { joined: [ids], skipped: [ids], aside?: [ids], front?: id, held?: { id: suivi } }
 //     joined  : les quêtes secondaires rejointes, dans l'ordre où on les a rejointes ;
-//     skipped : les chapitres de l'histoire passés pour l'instant.
+//     skipped : les chapitres de l'histoire passés pour l'instant ;
+//     aside   : les quêtes secondaires passées pour l'instant (« ⏭️ Mises de côté » : ↩️ Reprendre les remet dans
+//               « Mes quêtes ») ;
+//     front   : la quête que l'enfant a mise devant, dans le suivi à l'écran (⇄ pour jongler entre le chapitre en
+//               cours et les quêtes rejointes) ;
+//     held    : où en était le suivi pas à pas (🧭) des quêtes qu'on a quittées en jonglant, pour le reprendre à la
+//               même étape.
+// Ces trois derniers champs n'existent que s'ils servent (une ancienne partie n'a que joined et skipped).
 // L'avancée de l'histoire se lit dans profile.completed : un chapitre fini (même avant cette version, ou en
 // dehors de l'histoire) est fini.
 
@@ -67,6 +74,24 @@ const cleanList = (list) => [...new Set((Array.isArray(list) ? list : []).filter
 
 export const defaultQuests = () => ({ joined: [], skipped: [] });
 
+/** Les champs facultatifs (aside, front, held) réparés : seulement s'ils existent. */
+function tidyExtras(p, st) {
+  if ('aside' in st) {
+    st.aside = cleanList(st.aside).filter((id) => !isDone(p, id) && !STORY.includes(id) && !st.joined.includes(id));
+    if (!st.aside.length) delete st.aside;
+  }
+  if ('front' in st && (typeof st.front !== 'string' || !QUESTS.has(st.front) || isDone(p, st.front))) delete st.front;
+  if ('held' in st) {
+    const held = st.held && typeof st.held === 'object' && !Array.isArray(st.held) ? st.held : {};
+    for (const id of Object.keys(held)) {
+      const f = held[id];
+      if (!QUESTS.has(id) || isDone(p, id) || !f || !Array.isArray(f.steps) || !Array.isArray(f.seen)) delete held[id];
+    }
+    if (Object.keys(held).length) st.held = held;
+    else delete st.held;
+  }
+}
+
 /** L'état des quêtes du profil (créé ou réparé s'il manque ou s'il est abîmé). */
 export function questState(p) {
   const q = p.quests;
@@ -90,6 +115,7 @@ export function migrateQuests(p) {
   const st = questState(p);
   st.skipped = cleanList(st.skipped).filter((id) => STORY.includes(id));
   st.joined = cleanList(st.joined).filter((id) => !isDone(p, id) && (!STORY.includes(id) || st.skipped.includes(id))).slice(0, MAX_JOINED);
+  tidyExtras(p, st);
   tidyFollow(p);
   return st;
 }
@@ -145,7 +171,10 @@ export function skipChapter(p, id = mainQuest(p)) {
   if (!id || id !== mainQuest(p)) return undefined;
   const st = questState(p);
   st.skipped.push(id);
-  if (p.questFollow?.id === id) p.questFollow = null; // on ne le suit plus
+  if (p.questFollow?.id === id) {
+    holdFollow(p); // (repris plus tard, le suivi pas à pas reprendra à la même étape)
+    p.questFollow = null; // on ne le suit plus
+  }
   return mainQuest(p);
 }
 
@@ -241,7 +270,12 @@ export function joinQuest(p, id) {
   const r = canJoin(p, id);
   if (!r.ok) return r;
   pruneQuests(p);
-  questState(p).joined.push(id);
+  const st = questState(p);
+  st.joined.push(id);
+  if (st.aside) {
+    st.aside = st.aside.filter((x) => x !== id);
+    if (!st.aside.length) delete st.aside;
+  }
   return r;
 }
 
@@ -250,15 +284,19 @@ export function leaveQuest(p, id) {
   const st = questState(p);
   if (!st.joined.includes(id)) return false;
   st.joined = st.joined.filter((x) => x !== id);
-  if (p.questFollow?.id === id) p.questFollow = null;
+  if (p.questFollow?.id === id) {
+    holdFollow(p);
+    p.questFollow = null;
+  }
   return true;
 }
 
-/** Retire de « Mes quêtes » celles qui sont finies. Renvoie les ids retirés. */
+/** Retire de « Mes quêtes » (et des quêtes mises de côté) celles qui sont finies. Renvoie les ids retirés de « Mes quêtes ». */
 export function pruneQuests(p) {
   const st = questState(p);
   const gone = st.joined.filter((id) => isDone(p, id));
   if (gone.length) st.joined = st.joined.filter((id) => !gone.includes(id));
+  tidyExtras(p, st);
   return gone;
 }
 
@@ -270,7 +308,9 @@ export function pruneQuests(p) {
 export function otherQuests(p) {
   const joined = joinedQuests(p);
   return THEMES.map((th) => {
-    const quests = th.quests.filter((id) => shown(p, id) && !isDone(p, id) && !joined.includes(id) && !STORY.includes(id));
+    const aside = questState(p).aside ?? [];
+    // (les quêtes mises de côté sont dans « Mes quêtes », sous « ⏭️ Mises de côté » : une seule fois dans le journal)
+    const quests = th.quests.filter((id) => shown(p, id) && !isDone(p, id) && !joined.includes(id) && !STORY.includes(id) && !aside.includes(id));
     // Celles qu'on peut faire tout de suite d'abord, puis celles où le suivi passe par le refuge, puis les autres
     // (chacune dans l'ordre du plus facile).
     quests.sort((a, b) => readiness(p, a) - readiness(p, b) || rank(a) - rank(b));
@@ -295,11 +335,90 @@ export function trackerQuest(p) {
   const f = p.questFollow?.id;
   const fk = f ? questKind(p, f) : null;
   if (fk === 'main' || fk === 'joined') return { id: f, kind: fk, followed: true };
+  // La quête que l'enfant a mise devant (⇄), si c'est toujours le chapitre en cours ou une quête rejointe.
+  const front = questState(p).front;
+  const frk = front ? questKind(p, front) : null;
+  if (frk === 'main' || frk === 'joined') return { id: front, kind: frk, followed: false };
   const main = mainQuest(p);
   const joined = joinedQuests(p);
   if (main) return { id: main, kind: 'main', followed: false };
   if (joined.length) return { id: joined[0], kind: 'joined', followed: false };
   return null;
+}
+
+// ------------------------------------------------------------------ jongler entre les quêtes
+
+/**
+ * Les quêtes entre lesquelles on jongle (⇄) : le chapitre en cours puis les quêtes rejointes, dans l'ordre où on
+ * les a rejointes (MAX_JOINED + 1 au plus).
+ */
+export function activeQuests(p) {
+  const main = mainQuest(p);
+  return [...(main ? [main] : []), ...joinedQuests(p)];
+}
+
+/** La quête qui vient après (dir = 1) ou avant (dir = -1) celle du suivi, en faisant le tour ; null s'il n'y en a qu'une. */
+export function nextQuest(p, dir = 1) {
+  const list = activeQuests(p);
+  if (list.length < 2) return null;
+  const at = Math.max(0, list.indexOf(trackerQuest(p)?.id));
+  return list[(at + (dir < 0 ? -1 : 1) + list.length) % list.length];
+}
+
+/** Garde où en était le suivi pas à pas de la quête suivie (pour la reprendre à la même étape). */
+export function holdFollow(p) {
+  const f = p.questFollow;
+  if (!f?.id || !Array.isArray(f.steps)) return;
+  const st = questState(p);
+  st.held = { ...(st.held ?? {}), [f.id]: { step: f.step | 0, seen: [...(f.seen ?? [])], steps: [...f.steps] } };
+}
+
+/** Où en était le suivi pas à pas de cette quête quand on l'a quittée ({ id, step, seen, steps }), ou null. */
+export function heldFollow(p, id) {
+  const h = questState(p).held?.[id];
+  return h ? { id, ...h } : null;
+}
+
+/**
+ * Mettre une quête devant, dans le suivi à l'écran (⇄ ou une pastille de la bulle). Seulement le chapitre en cours
+ * ou une quête rejointe. Renvoie true si c'est fait.
+ */
+export function setFront(p, id) {
+  const k = questKind(p, id);
+  if (k !== 'main' && k !== 'joined') return false;
+  questState(p).front = id;
+  return true;
+}
+
+/**
+ * ⏭️ Passer une quête pour l'instant : le chapitre en cours (skipChapter : le suivant arrive) ou une quête rejointe
+ * (elle quitte « Mes quêtes » et va dans « ⏭️ Mises de côté », d'où ↩️ Reprendre la remet ; un chapitre passé repris
+ * dans « Mes quêtes » retourne, lui, dans « Passés pour l'instant » de l'histoire). Rien n'est perdu.
+ * Renvoie { ok: true, kind: 'main' | 'joined', next: le nouveau chapitre (pour 'main') } ou { ok: false }.
+ */
+export function passQuest(p, id) {
+  const k = questKind(p, id);
+  const st = questState(p);
+  if (st.front === id) delete st.front; // (le suivi passe à la quête suivante)
+  if (k === 'main') {
+    const next = skipChapter(p, id);
+    return next === undefined ? { ok: false } : { ok: true, kind: 'main', next };
+  }
+  if (k !== 'joined' || !leaveQuest(p, id)) return { ok: false };
+  if (!STORY.includes(id)) st.aside = [...(st.aside ?? []).filter((x) => x !== id), id];
+  return { ok: true, kind: 'joined', next: null };
+}
+
+/** Les quêtes secondaires passées pour l'instant (« ⏭️ Mises de côté »), encore à faire. */
+export function asideQuests(p) {
+  const joined = joinedQuests(p);
+  return (questState(p).aside ?? []).filter((id) => QUESTS.has(id) && shown(p, id) && !isDone(p, id) && !joined.includes(id));
+}
+
+/** ↩️ Reprendre une quête mise de côté : elle revient dans « Mes quêtes » (joinQuest : 'full' s'il y en a déjà MAX_JOINED). */
+export function resumeAside(p, id) {
+  if (!asideQuests(p).includes(id)) return { ok: false, reason: 'notAside' };
+  return joinQuest(p, id);
 }
 
 /**

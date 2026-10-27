@@ -1721,6 +1721,7 @@ export class Game {
       if (this.ui.panel && this.ui.panel !== before) this.ui.focusPanel();
     }
     if (code === 'KeyC') this.toggleCamera();
+    if (code === 'KeyN') this.ui.tutorial?.cycleQuest(1); // ⇄ la quête suivante dans le suivi à l'écran
   }
 
   interact() {

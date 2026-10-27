@@ -1559,6 +1559,25 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 .qb-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .qb-btn { flex: 1 1 auto; min-height: 48px; padding: 0 12px; border-radius: 12px; font-size: 0.95rem; }
 .qb-skip, .qb-leave { color: var(--muted); }
+/* ⇄ Jongler entre les quêtes : le bouton du suivi (points = les quêtes en cours, le plein = celle de devant)
+   et les pastilles « Tes quêtes » de la bulle. */
+.qt-switch { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; flex-shrink: 0; display: grid; place-items: center; align-content: center; gap: 2px;
+  border: none; border-radius: 12px; background: rgba(255, 210, 63, 0.22); color: #8a5a00; }
+.qt-switch-icon { font-size: 1.1rem; font-weight: 800; line-height: 1; }
+.qt-switch-dots { display: flex; gap: 3px; }
+.qt-switch-dots i { width: 5px; height: 5px; border-radius: 50%; background: rgba(138, 90, 0, 0.3); }
+.qt-switch-dots i.on { background: #8a5a00; }
+@media (hover: hover) { .qt-switch:hover { background: rgba(255, 210, 63, 0.45); } }
+#quest-tracker.following .qt-switch { background: rgba(47, 138, 95, 0.12); color: var(--primary); }
+#quest-tracker.following .qt-switch-dots i { background: rgba(47, 138, 95, 0.3); }
+#quest-tracker.following .qt-switch-dots i.on { background: var(--primary); }
+.qb-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0; }
+.qb-switch-label { font-size: 0.82rem; font-weight: 700; color: var(--muted); }
+.qb-chip { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; min-height: 40px; padding: 0 12px; border-radius: 999px;
+  border: 2px solid var(--line); background: #fff; font-size: 0.85rem; color: var(--ink); }
+.qb-chip-name { min-width: 0; max-width: 15em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qb-chip.on { border-color: #f0a500; background: #fff4d0; font-weight: 800; }
+.qc-tag.on-screen { color: var(--primary); background: #e3f3ea; }
 
 /* Téléphone : la bulle prend toute la largeur sous le bloc du haut ; le suivi de quête passe à droite. */
 @media (max-width: 640px), (max-height: 480px) {
@@ -1572,6 +1591,8 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
   .tuto-icon { min-height: 44px; min-width: 44px; font-size: 1.1rem; }
   #tuto-bubble.quest-bubble .qb-title { font-size: 1rem; }
   .qb-btn { min-height: 44px; font-size: 0.9rem; padding: 0 10px; }
+  .qb-chip { min-height: 44px; font-size: 0.82rem; padding: 0 10px; }
+  .qb-chip-name { max-width: 11em; }
   /* Suivi de quête : contre le bord droit, sous la barre d'outils (le joystick est en bas à gauche) ; sa taille en
      portrait : #quest-tracker.compact. */
   #quest-tracker { left: auto; right: calc(8px + var(--safe-r)); }
@@ -1589,6 +1610,8 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
     max-width: max(176px, calc(50vw - (var(--safe-l) + var(--safe-r)) / 2 + 7px - var(--col-w) / 2));
   }
   #quest-tracker .qt-title { font-size: 0.82rem; -webkit-line-clamp: 3; line-clamp: 3; }
+  /* (le suivi est étroit ici : ⇄ un peu moins large, le nom garde de la place) */
+  .qt-switch { width: 36px; min-width: 36px; }
   #toasts { width: min(400px, calc(100vw - 380px)); }
   #status-bar { left: max(190px, calc(50% - 200px)); right: auto; width: min(400px, calc(100vw - 380px)); transform: none; justify-items: center; }
 }

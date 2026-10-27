@@ -91,7 +91,7 @@ const fr = {
   quit: 'Sauver et quitter',
   close: 'Fermer',
   saved: 'Partie sauvegardée',
-  controlsHelp: 'ZQSD / flèches : marcher · Maj : courir · E : interagir · C : caméra · glisser ou pavé numérique (4 6 8 2) : tourner la vue',
+  controlsHelp: 'ZQSD / flèches : marcher · Maj : courir · E : interagir · C : caméra · N : changer de quête · glisser ou pavé numérique (4 6 8 2) : tourner la vue',
 
   interact: 'S\'occuper de {name}',
   enterRefuge: 'Entrer au refuge',
@@ -1960,7 +1960,7 @@ const en = {
   quit: 'Save and quit',
   close: 'Close',
   saved: 'Game saved',
-  controlsHelp: 'WASD / arrows: walk · Shift: run · E: interact · C: camera · drag or numpad (4 6 8 2): look around',
+  controlsHelp: 'WASD / arrows: walk · Shift: run · E: interact · C: camera · N: switch quest · drag or numpad (4 6 8 2): look around',
 
   interact: 'Take care of {name}',
   enterRefuge: 'Enter the shelter',

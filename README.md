@@ -40,7 +40,7 @@ rouvrir le même fichier (au même endroit) pour les retrouver. Ce fichier est p
 | C | 🎥 | caméra 1ʳᵉ / 3ᵉ personne |
 | glisser la souris, molette | glisser, pincer | tourner la vue, zoomer |
 
-## Contenu (version 0.4)
+## Contenu (version 0.5)
 
 - Plusieurs profils, avatar personnalisable, modes **bac à sable** et **gestion** (argent, petits boulots)
 - 7 espèces et 116 races : chevaux, chiens, chats, lapins, moutons, chèvres, vaches (avec des races locales en voyage) ; chiens de troupeau
@@ -57,9 +57,12 @@ rouvrir le même fichier (au même endroit) pour les retrouver. Ce fichier est p
 - 11 lieux : Normandie, Bretagne, Alpes suisses, Islande, Alberta, Kyoto, Cotswolds, Andalousie, Kentucky, Pampa, bush australien. Voyage réaliste en voiture, en van (chargement, pauses, stress), à cheval, en bateau ou en avion ; on monte dans le 4x4 et le van à chevaux (le cheval monte le pont au licol, barres et filet à foin, coffre de transport, trajet suivi depuis la cabine)
 - Jour et nuit, météo selon le lieu et la vraie saison (saisons inversées dans l'hémisphère sud)
 - **Sons** doux, tous fabriqués par le code : voix des animaux (hennissement, aboiement, miaulement, bêlement, meuglement…), pas selon le sol, oiseaux le jour, grillons la nuit, vent, pluie et tonnerre ; réglables dans ⚙️ Réglages
-- Tutoriel guidé pour les enfants, l'**histoire de la ferme** (des chapitres qu'on peut passer pour l'instant) et des quêtes secondaires à rejoindre ou à enlever (3 au plus), succès, mode Auto (le personnage prévoit et fait ses prochaines tâches simples)
+- Tutoriel guidé pour les enfants, l'**histoire de la ferme** (10 chapitres) et des **quêtes secondaires** à rejoindre (3 au plus) ; on **jongle** entre le chapitre et ses quêtes d'un toucher (⇄ sur le suivi de quête, touche N au clavier, ou les pastilles « Tes quêtes » de sa bulle) et on **passe** celle qu'on veut pour l'instant (⏭️ : un chapitre passé se reprend dans l'histoire, une quête passée dans « ⏭️ Mises de côté ») ; succès, mode Auto (le personnage prévoit et fait ses prochaines tâches simples)
 - **Vue d'ensemble** (🗺️) : la ferme vue d'en haut, on donne des ordres à chaque bâtiment, enclos ou animal, et on **construit** niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs et décorations ; on **déplace** aussi les équipements (mangeoires, abreuvoirs…), la bergerie, le paddock, la niche et le clapier (petit prix en mode gestion, gratuit en bac à sable)
 - **Vue construction** (🏗️ Construire) : la ferme vue d'aplomb avec une grille de 1 m et les zones occupées en couleur ; on touche un enclos puis on **tire ses poignées** pour l'agrandir ou le réduire au mètre près (paddock de 22 × 26 m au départ, bergerie, enclos des lapins, paddocks, pré, carrière et ranch construits) : barrières, porte, places des animaux et équipements suivent. On y **rallonge l'écurie** (8 → 12 → 16 box), on déplace, tourne et vend
+- **Métiers** (💼) aussi : **guide de randonnée** 🧭 (des cavaliers à emmener en balade, la liste à cocher avant de partir) et **concours de beauté** (inscription par classe, préparation, tresses, juge) ; concours de saut et de dressage à l'extérieur ; école vétérinaire
+- Animaux **réalistes** (chevaux, chiens race par race, chats, lapins, moutons, chèvres, vaches) et cavalier assis en selle, pieds aux étriers ; un vrai saut d'obstacles (appel, bascule, réception)
+- **Sauvegarde en ligne** facultative (compte Google) pour retrouver ses parties sur tous ses appareils ; sinon on joue en invité, tout reste sur l'appareil
 - Installable sur téléphone (« Ajouter à l'écran d'accueil ») et jouable sans réseau après la première ouverture
 
 Les règles du jeu sont décrites dans [docs/GDD.md](docs/GDD.md).

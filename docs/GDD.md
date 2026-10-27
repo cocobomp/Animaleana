@@ -166,7 +166,16 @@ réussite au dressage…).
 - **Quêtes secondaires** (🎯), rangées par thème (animaux, voyages, activités et concours, métiers) : l'enfant
   **rejoint** celles qu'elle veut (3 au plus en même temps) et les **enlève** quand elle veut, sans rien perdre.
   Une quête qu'on ne peut pas encore faire dit pourquoi (« Il te faut un mâle et une femelle ») ; elle ne se
-  suit pas (🧭 ne guide jamais vers l'impossible) et rien n'est imposé. Ce qu'on trouve au refuge (un animal, un
+  suit pas (🧭 ne guide jamais vers l'impossible) et rien n'est imposé.
+- **Jongler et passer** (0.5), au téléphone comme à l'ordinateur : avec plusieurs quêtes en cours (le chapitre et
+  les quêtes rejointes), le suivi à l'écran a un bouton **⇄** (touche **N** au clavier) qui met la suivante devant ;
+  ses petits points disent combien il y en a. La bulle d'une quête (toucher son nom) montre **« Tes quêtes : »**,
+  une pastille par quête en cours : la toucher la met devant. Si on suivait une quête (🧭), on suit celle qu'on
+  met devant, **reprise à la même étape** (une quête pas encore possible s'affiche avec ce qu'il faut d'abord, et
+  le suivi reprend à la suivante). **⏭️ Passer pour l'instant** marche pour toutes : le chapitre en cours (le
+  suivant arrive) comme une quête rejointe, qui va dans **« ⏭️ Mises de côté »** (journal, 🎯 Mes quêtes) d'où
+  **↩️ Reprendre** la remet. Après avoir passé, la bulle montre la quête qui est maintenant devant. Le journal
+  marque la quête du suivi « 📌 À l'écran », et « 👉 Montre-moi » la met devant. Ce qu'on trouve au refuge (un animal, un
   cheval) ne bloque pas : le suivi y emmène d'abord.
 - Toute quête finie donne sa récompense, rejointe ou non. Le suivi sur le côté de l'écran montre la quête suivie
   (🧭), sinon le chapitre en cours, sinon la première quête rejointe (src/sim/quests.js). La fin d'un chapitre est
@@ -191,6 +200,7 @@ réussite au dressage…).
 |---|---|
 | **0.1** (prototype, fait) | Profils, avatar, maison + écurie + carrière, 4 espèces et 39 races, besoins, personnalités, vieillissement et mort de vieillesse, bébés, refuge et élevages locaux, vétérinaire (mini-jeu), dressage des tours, entraînement, longe et liberté, monter à cheval, caméra 1ʳᵉ/3ᵉ personne, jour/nuit, météo par lieu et saison, voyage dans 6 lieux (voiture, van, cheval, bateau, avion), quêtes et succès, petits boulots, modes bac à sable et gestion, FR/EN, hors ligne |
 | **0.2** (fait) | Concours et spectacles sur le terrain de concours, apprentissage du saut, parcours d'obstacles, agility, balade, lapin-hop ; mini-jeux pour chaque soin (brosser, laver, ferrer, tonte, traite…) ; vétérinaire à jouer soi-même |
-| **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison |
-| **0.4** (en cours) | Fait : graphismes plus beaux (sol, végétation, lumière, bâtiments, animaux, animations), sons synthétisés (ambiance, voix des animaux, pas, interface), mini-jeux des corvées (curer, pailler, balayer, ranger, vaisselle), vignettes 3D des cartes (sellerie, animalerie, construction, véhicules). À venir : notation « juste ce qu'il faut » dans tous les mini-jeux, voyage à cheval en temps réel, nouvelles espèces |
+| **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison (reportée en 0.5) |
+| **0.4** (fait) | Graphismes plus beaux (sol, végétation, lumière, bâtiments, animations), animaux réalistes (chevaux, chiens race par race, chats, lapins, moutons, chèvres, vaches) et cavalier en selle, vrai saut d'obstacles ; sons synthétisés (ambiance, voix des animaux, pas, interface) ; mini-jeux des corvées et notation « juste ce qu'il faut » dans tous les mini-jeux ; vignettes 3D des cartes (sellerie, animalerie, construction, véhicules) ; vue construction (grille, enclos à la taille voulue, écurie qui s'agrandit) ; 4x4 et van à chevaux ; métiers toiletteur, éducateur canin, guide de randonnée, concours de beauté, concours à l'extérieur, école vétérinaire ; espèces proposées au fil de la partie ; sauvegarde en ligne facultative ; jeu au clavier ; histoire de la ferme (10 chapitres) et quêtes secondaires à rejoindre ; version « à emporter » en un seul fichier |
+| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape. À venir : voyage à cheval en temps réel, décoration de l'intérieur de la maison |
 | 1.0 | Publication |

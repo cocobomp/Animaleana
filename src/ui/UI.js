@@ -1014,9 +1014,10 @@ export class UI {
       check = g.canCare(a, action);
     }
     if (!check.ok) return this.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name, g: a.sex }));
-    const quality = await runMinigame(this, a, action);
+    const opts = {}; // (le mini-jeu y écrit ce qu'il a vu : le pansage, les pieds curés — opts.out.hooves)
+    const quality = await runMinigame(this, a, action, opts);
     if (quality === null) return null; // fermé avec ✕ : rien n'est appliqué
-    return g.care(a, action, quality);
+    return g.care(a, action, quality, opts.out ?? {});
   }
 
   /**

@@ -140,6 +140,7 @@ function renderAnimal(ui, g, a) {
       h('span', { class: `chip swatch${lightCoat(a.look.coat) ? ' light' : ''}`, style: { background: hexColor(a.look.coat) } }, coatName(a)),
     )),
     a.sick ? h('p', { class: 'warn' }, `🤒 ${t('r_sick', { name: a.name, g: a.sex })}`) : null,
+    a.lame && !a.sick ? h('p', { class: 'warn' }, `🩹 ${t('r_lame', { name: a.name, g: a.sex })}`) : null, // (un caillou dans le pied)
     clientInfo(a, g), // animal confié : propriétaire, jours restants, soin
     !here ? h('p', { class: 'note' }, t('isAt', { place: `${PLACES[a.location].flag} ${L(PLACES[a.location].name)}` })) : null,
   );

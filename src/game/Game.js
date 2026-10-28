@@ -34,7 +34,7 @@ import {
 } from '../sim/farm.js';
 import { SPECIES, isOffered, coreShown } from '../sim/species.js';
 import {
-  NEEDS, createAnimal, tickAnimal, applyCare, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
+  NEEDS, createAnimal, tickAnimal, applyCare, careFull, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
   namesInUse,
 } from '../sim/animal.js';
 import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
@@ -903,7 +903,8 @@ export class Game {
   }
 
   handleEvents(a, events) {
-    if (events.includes('sick')) this.ui.toast(t('gotSick', { name: a.name, g: a.sex }), 6000);
+    if (events.includes('sick')) this.ui.toast(t(a.lame?.cause === 'abscess' ? 'gotAbscess' : 'gotSick', { name: a.name, g: a.sex }), 6000);
+    if (events.includes('lame')) this.ui.toast(t('gotLame', { name: a.name, g: a.sex }), 7000);
     if (events.includes('died')) this.animalDied(a);
   }
 
@@ -1438,6 +1439,7 @@ export class Game {
     const out = [];
     for (const a of this.animalsHere()) {
       if (a.sick) out.push({ a, what: 'sick' });
+      else if (a.lame) out.push({ a, what: 'lame' });
       else {
         const low = NEEDS.filter((n) => a.needs[n] < 40).sort((x, y) => a.needs[x] - a.needs[y])[0];
         if (low) out.push({ a, what: low });
@@ -1818,21 +1820,23 @@ export class Game {
     const tool = missingTool(this.profile, action);
     if (tool) return { ok: false, reason: 'needTool', tool };
     if (!canAfford(this.profile, care.cost)) return { ok: false, reason: 'money' };
-    if (care.full && a.needs[care.full] >= 96) return { ok: false, reason: 'full' };
+    if (careFull(a, action)) return { ok: false, reason: 'full' };
     if (care.tiring && a.needs.energy < 15) return { ok: false, reason: 'tired' };
     if (care.tiring && a.sick) return { ok: false, reason: 'sick' };
     return { ok: true };
   }
 
-  care(a, action, quality = 1) {
+  /** opts : ce que dit le mini-jeu (le pansage : opts.hooves, les pieds curés et le caillou ; voir applyCare). */
+  care(a, action, quality = 1, opts = {}) {
     const care = CARE[action];
     const tool = missingTool(this.profile, action);
     if (tool) return this.ui.toast(t('r_needTool', { tool: `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}` }), 5000);
     if (!canAfford(this.profile, care.cost)) return this.ui.toast(t('r_money'));
     const before = { ...a.needs };
-    const res = applyCare(a, action, quality);
+    const res = applyCare(a, action, quality, opts);
     if (res.ok) this.ui.showDeltas(a, before);
     if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name, g: a.sex }));
+    if (res.unlame) this.ui.toast(t('unlame', { name: a.name, g: a.sex }), 6000);
     spend(this.profile, care.cost);
     addStat(this.profile, action);
     if (a.species === 'horse') addStat(this.profile, `horse_${action}`); // (l'histoire de ton premier cheval)

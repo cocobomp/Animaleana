@@ -42,6 +42,39 @@ export const ILLNESSES = {
   flu: { zone: 'head', treatment: 'injection', fever: true },
 };
 
+/**
+ * Les pieds du cheval. Chaque jour, de la terre se tasse dans ses sabots (plus vite sous la pluie ou la neige) :
+ * a.hoofDirt, de 0 (propres) à 1. Pas curés pendant trois jours environ, un caillou finit par s'y coincer et il boite
+ * (a.lame = { cause: 'stone', foot, hours }) : on ne le monte plus. Le cure-pied du pansage enlève la terre et le
+ * caillou (pickHooves) ; laissé deux jours, le caillou fait un abcès : il est malade ('paw' : le vétérinaire le
+ * soigne, et il ne boite plus).
+ */
+export const HOOF = { perDay: 0.3, wetPerDay: 0.5, stoneAt: 0.8, stonePerHour: 0.015, abscessHours: 48, needsPick: 0.5 };
+
+/** Ses pieds ont besoin du cure-pied (terre tassée, ou le caillou qui le fait boiter) ? */
+export const hoovesNeedCare = (a) => a.species === 'horse' && (a.lame?.cause === 'stone' || (a.hoofDirt ?? 0) >= HOOF.needsPick);
+
+/**
+ * Le cure-pied : cleaned (0 → 1) = la part de terre enlevée ; stoneOut : le caillou qui le faisait boiter est sorti.
+ * Renvoie true s'il ne boite plus grâce à ça.
+ */
+export function pickHooves(a, cleaned = 1, stoneOut = cleaned >= 1) {
+  if (a.species !== 'horse') return false;
+  a.hoofDirt = Math.max(0, (a.hoofDirt ?? 0) * (1 - clamp(cleaned, 0, 1)));
+  if (a.lame?.cause === 'stone' && stoneOut) {
+    a.lame = null;
+    return true;
+  }
+  return false;
+}
+
+/** Ce soin est-il inutile pour l'instant (besoin plein) ? Un cheval aux pieds sales se panse quand même. */
+export function careFull(a, actionId) {
+  const care = CARE[actionId];
+  if (!care?.full || a.needs[care.full] < 96) return false;
+  return !(actionId === 'brush' && hoovesNeedCare(a));
+}
+
 export const CARE = {
   feed: { needs: { hunger: 45 }, cost: 3, full: 'hunger' },
   water: { needs: { thirst: 55 }, cost: 0, full: 'thirst' },
@@ -236,6 +269,7 @@ export function happiness(a) {
   }
   let h = (sum / weights) * (0.55 + 0.45 * (a.health / 100));
   if (a.sick) h -= 20;
+  if (a.lame) h -= 10; // (il boite : un caillou dans le pied)
   // Stress du voyage (voir sim/trip.js) : un animal stressé est moins heureux.
   if (a.stress) h -= a.stress * 0.3;
   return clamp(Math.round(h));
@@ -272,6 +306,22 @@ export function tickAnimal(a, hours, ctx = {}) {
     // Des crottins tout autour : on se salit plus vite.
     if (n === 'hygiene' && ctx.dirt) rate *= 1 + Math.min(2, ctx.dirt * 0.25);
     a.needs[n] = clamp(a.needs[n] - rate * hours);
+  }
+  // Les pieds du cheval (HOOF) : la terre se tasse, puis un caillou… puis un abcès.
+  if (a.species === 'horse') {
+    const wet = ctx.weather === 'rain' || ctx.weather === 'storm' || ctx.weather === 'snow';
+    a.hoofDirt = Math.min(1, (a.hoofDirt ?? 0) + (hours / 24) * (wet ? HOOF.wetPerDay : HOOF.perDay));
+    if (a.lame) {
+      a.lame.hours += hours;
+      if (a.lame.cause === 'stone' && a.lame.hours >= HOOF.abscessHours && !a.sick) {
+        a.lame.cause = 'abscess';
+        a.sick = 'paw';
+        events.push('sick');
+      }
+    } else if (!a.sick && a.hoofDirt >= HOOF.stoneAt && rng() < HOOF.stonePerHour * hours) {
+      a.lame = { cause: 'stone', foot: Math.floor(rng() * 4), hours: 0 };
+      events.push('lame');
+    }
   }
   if (ctx.companions > 0) a.needs.affection = clamp(a.needs.affection + Math.min(2, ctx.companions) * 0.8 * hours);
   // Poids : il baisse avec l'exercice, il monte quand on mange trop sans bouger.
@@ -334,10 +384,10 @@ export function availableActions(a) {
  * Applique un soin. quality (0 à 1) vient du mini-jeu : un soin bien fait remplit plus.
  * Renvoie { ok, reason }.
  */
-export function applyCare(a, actionId, quality = 1) {
+export function applyCare(a, actionId, quality = 1, opts = {}) {
   const care = CARE[actionId];
   if (!care) return { ok: false, reason: 'unknown' };
-  if (care.full && a.needs[care.full] >= 96) return { ok: false, reason: 'full' };
+  if (careFull(a, actionId)) return { ok: false, reason: 'full' };
   if (care.tiring && a.needs.energy < 15) return { ok: false, reason: 'tired' };
   if (care.tiring && a.sick) return { ok: false, reason: 'sick' };
   const bonus = actionId === 'pet' && a.personality === 'cuddly' ? 1.5 : 1;
@@ -355,7 +405,10 @@ export function applyCare(a, actionId, quality = 1) {
   if (actionId === 'treat') a.weight = Math.min(100, a.weight + 5);
   if (actionId === 'feed' && a.needs.hunger > 90) a.weight = Math.min(100, a.weight + 2);
   if (care.tiring) a.weight = Math.max(0, a.weight - 2);
-  return { ok: true };
+  // Panser un cheval, c'est aussi curer ses pieds. opts.hooves (le mini-jeu) : { cleaned, stoneOut } ; sans mini-jeu
+  // (soin de groupe, aide), les pieds sont bien curés.
+  const unlame = actionId === 'brush' && pickHooves(a, opts.hooves?.cleaned ?? 1, opts.hooves ? !!opts.hooves.stoneOut : true);
+  return { ok: true, unlame };
 }
 
 function successChance(a) {
@@ -410,6 +463,7 @@ export function canRide(a) {
   if (ageYears(a) < sp.rideYears) return { ok: false, reason: 'tooYoung' };
   if (a.sick) return { ok: false, reason: 'sick' };
   if (a.pregnant) return { ok: false, reason: 'pregnant' };
+  if (a.lame) return { ok: false, reason: 'lame' };
   if (a.needs.energy < 10) return { ok: false, reason: 'tired' };
   return { ok: true };
 }
@@ -418,6 +472,7 @@ export function canRide(a) {
 export function cure(a, day) {
   if (day !== undefined) a.lastVet = day;
   a.sick = null;
+  a.lame = null; // (le vétérinaire enlève aussi le caillou, ou soigne l'abcès)
   a.neglect = 0;
   a.health = clamp(a.health + 40);
   a.needs.affection = clamp(a.needs.affection + 10);
@@ -426,6 +481,8 @@ export function cure(a, day) {
 export function checkup(a, day) {
   if (day !== undefined) a.lastVet = day;
   a.health = clamp(a.health + 10);
+  // (il boitait : le vétérinaire trouve le caillou et cure le pied)
+  if (a.lame) pickHooves(a, 1, true);
 }
 
 const BREED_COOLDOWN_DAYS = 6;

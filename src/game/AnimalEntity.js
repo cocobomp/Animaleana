@@ -519,7 +519,7 @@ export class AnimalEntity {
   /** Changement d'emoji au-dessus de la tête selon l'humeur. */
   updateStatus() {
     const m = mood(this.data);
-    const emoji = this.sleeping ? '💤' : MOOD_EMOJI[m] ?? null;
+    const emoji = this.sleeping ? '💤' : this.data.lame && m !== 'sick' ? '🩹' : MOOD_EMOJI[m] ?? null; // (il boite)
     if (emoji !== this.statusEmoji) {
       this.statusEmoji = emoji;
       this.status.visible = !!emoji;
@@ -1027,6 +1027,7 @@ export class AnimalEntity {
           else if (this.state === 'walk' && Math.abs(diff) > 0.8 && (this.turnHold = (this.turnHold ?? 0) + dt) < 8) this.timer += dt;
         } else this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 3.5);
       }
+      if (d.lame) this.targetSpeed = Math.min(this.targetSpeed, this.sp.walkSpeed * 0.55); // (il boite : il marche doucement)
       if (this.perch?.phase !== 'on') this.speed += (this.targetSpeed - this.speed) * Math.min(1, dt * 3);
       // (l'animal se relève avant de partir : le modèle demande d'attendre — catReal.js, chat couché ou en boule)
       if (this.holdMove > 0) {

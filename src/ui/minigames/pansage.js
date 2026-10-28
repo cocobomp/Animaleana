@@ -49,13 +49,17 @@ export function pansageGame(ctx) {
     .map((q) => ({ x: q.x, y: q.y, r: q.r, seed: q.seed, mud: 1, dust: 0 }));
   // ---- 2. brosse : la poussière décollée, plus un peu de poussière partout (posée au début de l'étape)
   let dust = [];
-  // ---- 3. cure-pied
-  const stoneFoot = rng() < 0.6 ? Math.floor(rng() * 4) : -1;
+  // ---- 3. cure-pied (il boite : le caillou est dans le pied qui boite — src/sim/animal.js HOOF)
+  const lame = a?.lame?.cause === 'stone';
+  const r0 = rng();
+  const r1 = rng();
+  const stoneFoot = lame ? (a.lame.foot ?? 0) % 4 : r0 < 0.6 ? Math.floor(r1 * 4) : -1;
   const hooves = PANSAGE_FEET.map((foot, i) => makeHoof(foot, i === stoneFoot, rng, dirt));
   let foot = 0;
   let footAt = 0; // quand le pied en cours est arrivé (glisse depuis le bas)
   let footDoneAt = -1; // quand le pied en cours a été fini (on passe au suivant un peu après)
   let pokeAt = -9; // dernier coup sur la fourchette (le pied bouge)
+  let stoneOut = false; // le caillou enlevé
   // ---- 4. peigne : les nœuds dans les crins
   const nKnots = 2 + Math.round(dirt * 4);
   const knots = [];
@@ -130,7 +134,8 @@ export function pansageGame(ctx) {
     }
     const n = count();
     rule = justRule(ctx, { lo: 1 - 0.5 / n, hi: st === 'hoof' ? 1.1 : 1.05, max: MAX, slack: SLACK });
-    ctx.hint(st === 'hoof' ? `${t('mg_pansage_hoof_hint')} (${t(`mg_pansage_foot_${PANSAGE_FEET[0]}`)})` : t(`mg_pansage_${st}_hint`));
+    if (st === 'hoof' && lame) ctx.hint(t('mg_pansage_hoof_lame', { name, foot: t(`mg_pansage_foot_${PANSAGE_FEET[stoneFoot]}`) }), 'warn');
+    else ctx.hint(st === 'hoof' ? `${t('mg_pansage_hoof_hint')} (${t(`mg_pansage_foot_${PANSAGE_FEET[0]}`)})` : t(`mg_pansage_${st}_hint`));
     ctx.progress(value() / MAX);
     setStopLabel();
   }
@@ -148,6 +153,10 @@ export function pansageGame(ctx) {
   }
 
   function finishAll() {
+    // Pour le jeu : la part de terre enlevée des sabots, et le caillou (src/game/Game.js care → applyCare).
+    const b = hoofBlobs();
+    const cleaned = 1 - b.reduce((n, q) => n + Math.min(1, q.dirt / q.hard), 0) / b.length;
+    if (ctx.opts) ctx.opts.out = { hooves: { cleaned, stoneOut } };
     const q = results.reduce((n, r) => n + r.q, 0) / results.length;
     const worst = results.reduce((w, r) => (r.q < w.q ? r : w), results[0]);
     const just = results.every((r) => r.verdict === 'just');
@@ -301,7 +310,8 @@ export function pansageGame(ctx) {
       if (q.dirt <= 0.12) {
         q.dirt = 0;
         if (q.stone) {
-          fx.text(q.x, q.y - 30, t('mg_pansage_hoof_stone'), '#2f8a5f', 20);
+          stoneOut = true;
+          fx.text(q.x, q.y - 30, t(lame ? 'mg_pansage_hoof_stoneLame' : 'mg_pansage_hoof_stone', { name }), '#2f8a5f', 20);
           fx.dot(q.x, q.y, '#8d8d8d', 7, { vx: 70, vy: 60, grav: 300, life: 0.8 });
         } else fx.burst(q.x, q.y, '✨', 2, { speed: 60, size: 14 });
       }

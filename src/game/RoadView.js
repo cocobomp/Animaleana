@@ -82,12 +82,41 @@ function groundTexture() {
   }, [60, 60]);
 }
 
+/** Chemin de terre (voyage à cheval, src/game/TrailView.js) : terre battue, traces de sabots, herbe au milieu. */
+function trailTexture() {
+  return canvasTex('trail', 128, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#9a7d58';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1400; i++) {
+      const v = 120 + Math.random() * 60;
+      ctx.fillStyle = `rgba(${v}, ${v * 0.82}, ${v * 0.6}, ${0.25 + Math.random() * 0.3})`;
+      ctx.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 3, 2 + Math.random() * 3);
+    }
+    // Une bande d'herbe au milieu, et des bords qui se fondent dans l'herbe.
+    ctx.fillStyle = 'rgba(96, 128, 60, 0.55)';
+    for (let y = 0; y < h; y += 3) ctx.fillRect(w / 2 - 8 + Math.sin(y * 0.2) * 3, y, 16, 3);
+    const edge = ctx.createLinearGradient(0, 0, w, 0);
+    edge.addColorStop(0, 'rgba(96, 128, 60, 0.9)');
+    edge.addColorStop(0.14, 'rgba(96, 128, 60, 0)');
+    edge.addColorStop(0.86, 'rgba(96, 128, 60, 0)');
+    edge.addColorStop(1, 'rgba(96, 128, 60, 0.9)');
+    ctx.fillStyle = edge;
+    ctx.fillRect(0, 0, w, h);
+  });
+}
+
 export class RoadView {
-  constructor(game, vehicle, trip) {
+  /**
+   * vehicle : le véhicule du voyage (voiture, van) ; null pour le chemin à cheval (TrailView, qui installe le
+   * cavalier à la place). opts.trail : chemin de terre, piquets de clôture en bois, aire de pause à l'abreuvoir.
+   */
+  constructor(game, vehicle, trip, opts = {}) {
     this.game = game;
     this.vehicle = vehicle;
     this.trip = trip;
-    this.cameraMode = 'cab';
+    this.trail = !!opts.trail;
+    this.opts = opts; // (lu par TrailView.attachCarrier, appelé ici même)
+    this.cameraMode = this.trail ? 'behind' : 'cab';
     this.resetLook(); // un peu vers le bas : on voit le tableau de bord et la route
     this.orbit = 0.6;
     this.time = 0;
@@ -115,8 +144,18 @@ export class RoadView {
     this.biomeB = BIOMES[to.biome] ?? BIOMES.countryside;
     this.snowy = game.season === 'winter' && ['mountain', 'tundra'].includes(from.biome);
     this.build();
+    this.lookAt = new THREE.Vector3();
+    this.v1 = new THREE.Vector3();
+    this.v2 = new THREE.Vector3();
+    this.dummy = new THREE.Object3D();
+    this.attachCarrier();
+    this.applyBiome(0);
+  }
 
-    // Le véhicule (et ses passagers) passe dans cette scène pour la durée du trajet.
+  /** Le véhicule (et ses passagers) passe dans cette scène pour la durée du trajet. */
+  attachCarrier() {
+    const vehicle = this.vehicle;
+    const scene = this.scene;
     vehicle.removeColliders();
     vehicle.root.removeFromParent();
     vehicle.lead.visible = false;
@@ -131,11 +170,6 @@ export class RoadView {
     vehicle.heading = 0;
     vehicle.root.visible = true;
     scene.add(vehicle.root);
-    this.lookAt = new THREE.Vector3();
-    this.v1 = new THREE.Vector3();
-    this.v2 = new THREE.Vector3();
-    this.dummy = new THREE.Object3D();
-    this.applyBiome(0);
   }
 
   track(obj) {
@@ -151,14 +185,14 @@ export class RoadView {
     const ground = new THREE.Mesh(this.track(new THREE.PlaneGeometry(1400, 1400).rotateX(-Math.PI / 2)), this.groundMat);
     ground.position.y = -0.02;
     scene.add(ground);
-    this.roadTex = this.track(roadTexture());
-    const road = new THREE.Mesh(this.track(new THREE.PlaneGeometry(7.6, SPAN * 2).rotateX(-Math.PI / 2)),
+    this.roadTex = this.track(this.trail ? trailTexture() : roadTexture());
+    const road = new THREE.Mesh(this.track(new THREE.PlaneGeometry(this.trail ? 3.4 : 7.6, SPAN * 2).rotateX(-Math.PI / 2)),
       this.track(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, map: this.roadTex })));
     road.position.set(0, 0.0, SPAN / 2);
     this.roadTex.repeat.set(1, (SPAN * 2) / 12);
     scene.add(road);
     this.shoulderMat = this.track(new THREE.MeshStandardMaterial({ color: 0x9a8f78, roughness: 1 }));
-    for (const x of [-1, 1]) {
+    for (const x of this.trail ? [] : [-1, 1]) {
       const s = new THREE.Mesh(this.track(new THREE.PlaneGeometry(1.6, SPAN * 2).rotateX(-Math.PI / 2)), this.shoulderMat);
       s.position.set(x * 4.6, 0.005, SPAN / 2);
       scene.add(s);
@@ -194,8 +228,9 @@ export class RoadView {
     this.crowns = new THREE.InstancedMesh(this.track(new THREE.IcosahedronGeometry(1, 0)), this.leafMat, N);
     this.firs = new THREE.InstancedMesh(this.track(new THREE.ConeGeometry(1, 1, 7)), this.leafMat2, N);
     this.bushes = new THREE.InstancedMesh(this.track(new THREE.IcosahedronGeometry(1, 0)), this.leafMat2, N);
-    this.postMat = this.track(new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.6 }));
-    this.posts = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.12, 1, 0.12)), this.postMat, 48);
+    // (sur le chemin à cheval : des piquets de clôture en bois, un peu plus loin du chemin)
+    this.postMat = this.track(new THREE.MeshStandardMaterial({ color: this.trail ? 0x8a6a44 : 0xf2f2ee, roughness: this.trail ? 0.95 : 0.6 }));
+    this.posts = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(this.trail ? 0.14 : 0.12, this.trail ? 1.2 : 1, this.trail ? 0.14 : 0.12)), this.postMat, 48);
     for (const m of [this.trunks, this.crowns, this.firs, this.bushes, this.posts]) {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.frustumCulled = false;
@@ -206,7 +241,7 @@ export class RoadView {
     this.bushItems = [];
     for (let i = 0; i < N; i++) this.bushItems.push({ z: Math.random() * SPAN - BEHIND, x: this.side() * (6.5 + Math.random() * 30), s: 0.5 + Math.random() * 0.9 });
     this.postItems = [];
-    for (let i = 0; i < 48; i++) this.postItems.push({ z: -BEHIND + (i % 24) * (SPAN / 24), x: (i < 24 ? 1 : -1) * 5.3 });
+    for (let i = 0; i < 48; i++) this.postItems.push({ z: -BEHIND + (i % 24) * (SPAN / 24), x: (i < 24 ? 1 : -1) * (this.trail ? 4.2 : 5.3) });
 
     // Aire de repos (pauses) et écurie d'étape (le soir), cachées pendant qu'on roule.
     this.restArea = this.buildRestArea();
@@ -305,8 +340,8 @@ export class RoadView {
     this.time += dt;
     const trip = this.trip;
     const stop = currentStop(trip);
-    const want = speedMul > 0 ? BASE_SPEED * (1 + (speedMul - 1) * 0.35) : 0;
-    this.speed += (want - this.speed) * Math.min(1, dt * (want > this.speed ? 0.6 : 1.2));
+    const want = this.wantedSpeed(speedMul);
+    this.speed += (want - this.speed) * Math.min(1, dt * (want > this.speed ? this.accel ?? 0.6 : 1.2));
     if (this.speed < 0.05 && want === 0) this.speed = 0;
     const step = this.speed * dt;
     this.offset += step;
@@ -381,7 +416,18 @@ export class RoadView {
       else if (this.restArea.position.z < -60) this.restArea.visible = false;
     }
 
-    // Le véhicule : roues, petit roulis, volant ; les animaux à bord bougent.
+    this.updateCarrier(dt, step, ctrl, flow);
+    this.updateSky();
+    this.updateCamera(dt, ctrl);
+  }
+
+  /** Vitesse voulue (m/s) : la route défile selon la vitesse du trajet (0 pendant une pause). */
+  wantedSpeed(speedMul) {
+    return speedMul > 0 ? BASE_SPEED * (1 + (speedMul - 1) * 0.35) : 0;
+  }
+
+  /** Le véhicule : roues, petit roulis, volant ; les animaux à bord bougent. */
+  updateCarrier(dt, step) {
     const v = this.vehicle;
     v.spinWheels(step);
     v.update(dt);
@@ -389,9 +435,6 @@ export class RoadView {
     v.main.group.rotation.z = sway;
     if (v.trailer) v.trailer.group.rotation.z = -sway * 1.5;
     if (v.main.steering) v.main.steering.rotation.z = Math.sin(this.time * 0.5) * 0.05 * Math.min(1, this.speed / 10);
-
-    this.updateSky();
-    this.updateCamera(dt, ctrl);
   }
 
   /** Ciel et lumière selon l'heure du trajet. */
@@ -449,8 +492,15 @@ export class RoadView {
       this.lookAt.copy(center);
       cam.fov = 55;
     }
-    // La fiche du trajet cache une partie de l'écran : à droite sur un écran large ou un téléphone couché,
-    // en bas sur un téléphone debout. On décale l'image pour que la route et le véhicule restent visibles à côté.
+    this.finishCamera(dt);
+  }
+
+  /**
+   * La fiche du trajet cache une partie de l'écran : à droite sur un écran large ou un téléphone couché,
+   * en bas sur un téléphone debout. On décale l'image pour que la route et le véhicule restent visibles à côté.
+   */
+  finishCamera(dt) {
+    const cam = this.camera;
     const W = window.innerWidth;
     const H = window.innerHeight;
     this.sheetAcc = (this.sheetAcc ?? 1) + dt;
@@ -475,7 +525,7 @@ export class RoadView {
 
   setCameraMode(mode) {
     this.cameraMode = mode;
-    this.vehicle.setCutaway(mode === 'trailer');
+    this.vehicle?.setCutaway(mode === 'trailer');
     this.resetLook();
   }
 
@@ -491,9 +541,14 @@ export class RoadView {
   }
 
   dispose() {
-    this.vehicle.root.removeFromParent();
+    this.detachCarrier();
     for (const o of this.disposables) o.dispose?.();
     this.disposables = [];
     for (const m of [this.trunks, this.crowns, this.firs, this.bushes, this.posts]) m.dispose();
+  }
+
+  /** Le véhicule quitte la scène du trajet. */
+  detachCarrier() {
+    this.vehicle?.root.removeFromParent();
   }
 }

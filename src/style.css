@@ -1089,6 +1089,12 @@ body.construct #quest-tracker, body.construct #tuto-bubble, body.construct #tuto
 .trip-controls button { min-height: 44px; min-width: 52px; }
 .trip-controls button.active { background: var(--primary); color: #fff; border-color: transparent; }
 .trip-controls .trip-ff { margin-left: auto; }
+/* À cheval : l'allure (pas, trot, galop) et l'énergie du cheval monté. */
+.trip-gaits { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; color: var(--muted); font-size: 0.9rem; }
+.trip-gaits button { min-height: 44px; min-width: 64px; }
+.trip-gaits button.active { background: var(--primary); color: #fff; border-color: transparent; }
+.trip-gaits .trip-bar { flex: 1 1 140px; min-width: 120px; }
+.trip-gait-keys { flex-basis: 100%; font-size: 0.78rem; }
 
 .trip-report-facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .trip-rep-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }

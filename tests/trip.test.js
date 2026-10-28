@@ -7,6 +7,7 @@ import {
   planTrip, tickTrip, doStopAction, canStopAction, continueTrip, skipStop, sleepAtStop, canContinue,
   runToEnd, finishTrip, vehicleFor, placeFor, tipsFor, currentStop, remainingHours, stressLevel,
   MAX_DRIVE_HORSES, SICK_STRESS, TRAILER_SPECIES, nightStopAhead,
+  RIDE_GAITS, RIDE_GAIT_ORDER, CANTER_MIN_ENERGY, rideGait, ridePace, setRideGait,
 } from '../src/sim/trip.js';
 
 const rng = () => mulberry32(7);
@@ -292,5 +293,77 @@ describe('véhicules : bétail et étapes du soir', () => {
       drive(trip, [horse]);
     }
     expect(nightStopAhead(trip)).toBe(false); // on y est : il n'y en a pas d'autre après
+  });
+});
+
+describe('à cheval : l\'allure', () => {
+  const ride = (gait, energy = 90) => {
+    const horse = adult('horse');
+    horse.needs.energy = energy;
+    const dog = adult('dog');
+    const trip = planTrip({ mode: 'horse', km: 60, hours: 5, animals: [horse, dog], riderId: horse.id });
+    if (gait) expect(setRideGait(trip, horse, gait).ok).toBe(true);
+    return { trip, horse, dog };
+  };
+
+  it('au trot par défaut ; seulement à cheval', () => {
+    const { trip } = ride(null);
+    expect(rideGait(trip)).toBe('trot');
+    expect(ridePace(trip)).toBe(1);
+    const car = planTrip({ mode: 'car', hours: 3, animals: [adult('dog')] });
+    expect(rideGait(car)).toBeNull();
+    expect(ridePace(car)).toBe(1);
+    expect(setRideGait(car, null, 'canter')).toEqual({ ok: false, reason: 'notHorse' });
+    expect(setRideGait(trip, null, 'gallop')).toEqual({ ok: false, reason: 'unknown' });
+  });
+
+  it('le galop fait avancer plus vite, le pas moins vite', () => {
+    expect(RIDE_GAIT_ORDER.map((g) => RIDE_GAITS[g].pace)).toEqual([...RIDE_GAIT_ORDER.map((g) => RIDE_GAITS[g].pace)].sort((x, y) => x - y));
+    const { trip } = ride('canter');
+    expect(ridePace(trip)).toBeGreaterThan(1);
+    setRideGait(trip, null, 'walk');
+    expect(ridePace(trip)).toBeLessThan(1);
+  });
+
+  it('le galop fatigue le cheval monté (pas les autres), le pas le repose un peu', () => {
+    const run = (gait) => {
+      const { trip, horse, dog } = ride(gait, 80);
+      tickTrip(trip, [horse, dog], 1, { rng: rng() });
+      return { horse: horse.needs.energy, dog: dog.needs.energy };
+    };
+    const walk = run('walk');
+    const trot = run('trot');
+    const canter = run('canter');
+    expect(canter.horse).toBeLessThan(trot.horse);
+    expect(walk.horse).toBeGreaterThan(trot.horse);
+    expect(canter.dog).toBe(trot.dog);
+  });
+
+  it('le galop stresse un peu plus que le pas', () => {
+    const stress = (gait) => {
+      const { trip, horse, dog } = ride(gait);
+      tickTrip(trip, [horse, dog], 1, { rng: rng() });
+      return horse.stress;
+    };
+    expect(stress('canter')).toBeGreaterThan(stress('walk'));
+  });
+
+  it(`un cheval fatigué ne galope pas (moins de ${CANTER_MIN_ENERGY} d'énergie) ; en galopant, il repasse au trot tout seul`, () => {
+    const tired = ride(null, CANTER_MIN_ENERGY - 5);
+    expect(setRideGait(tired.trip, tired.horse, 'canter')).toEqual({ ok: false, reason: 'tired' });
+    expect(rideGait(tired.trip)).toBe('trot');
+    const { trip, horse, dog } = ride('canter', CANTER_MIN_ENERGY + 2);
+    let changed = null;
+    for (let i = 0; i < 20 && !changed && trip.status === 'moving'; i++) changed = tickTrip(trip, [horse, dog], 0.1, { rng: rng() }).gaitChanged ?? null;
+    expect(changed).toBe('tired');
+    expect(rideGait(trip)).toBe('trot');
+  });
+
+  it('l\'allure est gardée dans le voyage (même après une pause)', () => {
+    const { trip, horse, dog } = ride('walk');
+    drive(trip, [horse, dog]);
+    expect(trip.status).toBe('stop');
+    continueTrip(trip, [horse, dog]);
+    expect(rideGait(trip)).toBe('walk');
   });
 });

@@ -8,7 +8,7 @@ import { TRAVEL_MODES } from '../sim/places.js';
 import {
   STOP_ACTIONS, STOP_ACTION_EMOJI, canStopAction, doStopAction, continueTrip, skipStop, sleepAtStop, canContinue,
   currentStop, nextStop, remainingHours, progress, stressLevel, tipsFor, phaseAt, runToEnd, planTrip, vehicleFor,
-  isLongTrip, nightStopAhead,
+  isLongTrip, nightStopAhead, rideGait, RIDE_GAIT_ORDER,
 } from '../sim/trip.js';
 import { openVehicleMenu, openPackingModal, cargoSummary, cargoName } from './vehicle.js'; // véhicule, coffre
 import { luggageHere, luggageEmoji } from '../sim/cargo.js';
@@ -31,6 +31,9 @@ export function fmtHours(hours) {
 const STOP_EMOJI = { rest: '🅿️', night: '🌙', boarding: '🛫', landing: '🛬' };
 
 /** Petite barre : `good` dit si une valeur haute est bonne (soif, faim, confort) ou mauvaise (stress) ; cls : sa classe. */
+// Allures du voyage à cheval (boutons de la fiche du trajet).
+const GAIT_ICON = { walk: '🐢', trot: '🐴', canter: '💨' };
+
 function tripBar(icon, label, value, good = true, cls = '') {
   const v = Math.round(value);
   const score = good ? v : 100 - v;
@@ -190,9 +193,12 @@ export function renderJourney(ui, flow) {
   const phaseText = phase.kind === 'hold' ? t(`trip_phase_hold_${trip.mode}`) : trip.mode === 'horse' ? t('trip_phase_ride') : t('trip_phase_road');
 
   const cards = flow.animals.map((a) => animalCard(ui, flow, a, stop, refs));
-  // Vue 3D du trajet (game/RoadView.js) : de la cabine, de dehors, ou dans le van.
-  const rv = j.road;
-  const camList = rv ? [['cab', '🚙', 'veh_camCab'], ['outside', '🎥', 'veh_camOutside'], ...(j.vehicle?.trailer ? [['trailer', '🐴', 'veh_camTrailer']] : [])]
+  // Vue 3D du trajet (game/RoadView.js) : de la cabine, de dehors, ou dans le van ; à cheval (game/TrailView.js) :
+  // derrière le cavalier, en selle, ou autour.
+  const rv = j.road ?? j.trail;
+  const cams = j.trail ? [['behind', '🎥', 'trail_camBehind'], ['rider', '🏇', 'trail_camRider'], ['side', '🔄', 'trail_camSide']]
+    : [['cab', '🚙', 'veh_camCab'], ['outside', '🎥', 'veh_camOutside'], ...(j.vehicle?.trailer ? [['trailer', '🐴', 'veh_camTrailer']] : [])];
+  const camList = rv ? cams
     .map(([mode, icon, key]) => h('button', { class: `small ${rv.cameraMode === mode ? 'active' : ''}`, onClick: () => { rv.setCameraMode(mode); renderJourney(ui, flow); } }, `${icon} ${t(key)}`)) : [];
   // On peut replier la fiche pour regarder la route : pendant qu'on roule, et aussi aux pauses sur un téléphone
   // (sur un grand écran, la fiche est rangée à droite : elle reste dépliée aux pauses).
@@ -223,6 +229,22 @@ export function renderJourney(ui, flow) {
         h('button', { onClick: () => groupAction(ui, flow, 'feed') }, t('trip_allFeed')))));
   } else {
     body.push(h('p', { class: 'trip-phase' }, phaseText, ' ', refs.next));
+    // À cheval : l'allure (le galop fait arriver plus vite mais fatigue le cheval ; flèches ↑ ↓ au clavier).
+    if (trip.mode === 'horse') {
+      const cur = rideGait(trip);
+      const rider = flow.animals.find((a) => a.id === trip.riderId);
+      refs.energy = rider ? tripBar('⚡', t('need_energy'), rider.needs.energy, true, 'energy') : null;
+      refs.rider = rider ?? null;
+      body.push(h('div', { class: 'trip-gaits', role: 'group', 'aria-label': t('trail_gait') },
+        h('span', {}, t('trail_gait')),
+        RIDE_GAIT_ORDER.map((g) => h('button', {
+          class: `small ${cur === g ? 'active' : ''}`,
+          'aria-pressed': cur === g ? 'true' : 'false',
+          onClick: () => flow.setGait(g),
+        }, `${GAIT_ICON[g]} ${t(`trail_gait_${g}`)}`)),
+        refs.energy ? refs.energy.el : null,
+        matchMedia('(pointer: fine)').matches ? h('small', { class: 'trip-gait-keys' }, t('trail_keys')) : null));
+    }
   }
   if (!compact || brief) body.push(h('div', { class: `trip-animals ${brief ? 'strip' : ''}` }, cards));
   if (stop) {
@@ -353,6 +375,7 @@ export function updateJourney(ui, flow) {
     r.vehicle.setAttribute('y', p.y - 2);
     r.done.setAttribute('stroke-dasharray', `${f * r.len} ${r.len}`);
   }
+  if (refs.energy && refs.rider) refs.energy.set(refs.rider.needs.energy);
   for (const b of refs.bars) {
     b.thirst.set(b.a.needs.thirst);
     b.hunger.set(b.a.needs.hunger);

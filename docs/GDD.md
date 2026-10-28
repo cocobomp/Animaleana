@@ -121,6 +121,15 @@ réussite au dressage…).
 - Règles réalistes : pas de cheval dans une voiture (il faut le van), il faut
   le bateau ou l'avion pour traverser la mer, et on peut aller à cheval jusqu'en
   Suisse.
+- **À cheval, en temps réel** (0.5, `src/game/TrailView.js`) : on chevauche son cheval
+  sur un chemin de terre en 3D, à travers le paysage du départ puis celui de l'arrivée ;
+  les autres animaux du voyage suivent derrière. On choisit l'**allure** (🐢 pas,
+  🐴 trot, 💨 galop ; flèches ↑ ↓ au clavier) : le galop fait arriver plus vite mais
+  fatigue le cheval (il tient une demi-minute, puis repasse au trot tout seul), le pas
+  le repose et le calme (`RIDE_GAITS`, `src/sim/trip.js`). Trois caméras : derrière,
+  en selle (entre les oreilles), autour. Aux pauses, le cheval s'arrête près d'un
+  abreuvoir et d'une barre d'attache (l'écurie d'étape le soir) ; ×3, ×8 et « aller
+  jusqu'à l'arrivée » restent là.
 - Sur place : animaux uniques à adopter, concours, quêtes, exploration, photos.
 - Destinations (11) : Normandie (maison), plage de Bretagne, Alpes suisses, Islande,
   ranch en Alberta, campagne de Kyoto, Cotswolds, Andalousie, haras du Kentucky,
@@ -202,5 +211,5 @@ réussite au dressage…).
 | **0.2** (fait) | Concours et spectacles sur le terrain de concours, apprentissage du saut, parcours d'obstacles, agility, balade, lapin-hop ; mini-jeux pour chaque soin (brosser, laver, ferrer, tonte, traite…) ; vétérinaire à jouer soi-même |
 | **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison (reportée en 0.5) |
 | **0.4** (fait) | Graphismes plus beaux (sol, végétation, lumière, bâtiments, animations), animaux réalistes (chevaux, chiens race par race, chats, lapins, moutons, chèvres, vaches) et cavalier en selle, vrai saut d'obstacles ; sons synthétisés (ambiance, voix des animaux, pas, interface) ; mini-jeux des corvées et notation « juste ce qu'il faut » dans tous les mini-jeux ; vignettes 3D des cartes (sellerie, animalerie, construction, véhicules) ; vue construction (grille, enclos à la taille voulue, écurie qui s'agrandit) ; 4x4 et van à chevaux ; métiers toiletteur, éducateur canin, guide de randonnée, concours de beauté, concours à l'extérieur, école vétérinaire ; espèces proposées au fil de la partie ; sauvegarde en ligne facultative ; jeu au clavier ; histoire de la ferme (10 chapitres) et quêtes secondaires à rejoindre ; version « à emporter » en un seul fichier |
-| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape. À venir : voyage à cheval en temps réel, décoration de l'intérieur de la maison |
+| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras). À venir : décoration de l'intérieur de la maison |
 | 1.0 | Publication |

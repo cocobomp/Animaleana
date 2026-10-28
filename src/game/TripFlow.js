@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { TripVehicle, crateWithAnimal, CAB_PORTRAIT } from './Vehicle.js';
 import { RoadView } from './RoadView.js';
+import { TrailView } from './TrailView.js'; // le voyage à cheval en temps réel : le chemin, le cavalier, ceux qui suivent
 import { disposeVehicle } from './models/vehicles.js';
 import { disposeModel } from './models/animalModel.js';
 import { checkTravel, PLACES } from '../sim/places.js';
@@ -20,7 +21,7 @@ import { hasTool } from '../sim/tools.js';
 import { canAfford, spend, addStat } from '../sim/profile.js';
 import { hourOf } from '../sim/time.js';
 import {
-  planTrip, tickTrip, runToEnd, finishTrip, vehicleFor, placeFor, needsTrailer, nightStopAhead,
+  planTrip, tickTrip, runToEnd, finishTrip, vehicleFor, placeFor, needsTrailer, nightStopAhead, ridePace, setRideGait,
 } from '../sim/trip.js';
 import { capacityFor, suggestCargo, arriveWithCargo, inCargo } from '../sim/cargo.js';
 import { packCompetitionTack, missingCompetitionTack } from '../sim/competitions.js'; // selle et filet pour le concours
@@ -37,6 +38,9 @@ const LOAD_RADIUS = 5;
 const CRATE_TAP_RADIUS = 9;
 // Vitesse du trajet à l'écran : heures de voyage par seconde réelle (multipliée par le bouton de vitesse).
 export const HOURS_PER_SECOND = 0.6;
+// À cheval sur le chemin (src/game/TrailView.js), le voyage passe plus lentement : on a le temps de chevaucher entre
+// deux pauses (au trot, une étape de 2 h dure 8 s ; ×3 et ×8 restent là pour aller plus vite).
+export const TRAIL_HOURS_PER_SECOND = 0.25;
 
 export class TripFlow {
   constructor(game) {
@@ -851,11 +855,28 @@ export class TripFlow {
       this.journey.road = new RoadView(g, vehicle, trip);
       document.body.classList.add('trip-road'); // on cache le reste de l'interface : on regarde la route
     }
+    // À cheval : on chevauche son cheval sur le chemin, les autres suivent (src/game/TrailView.js).
+    const horse = !vehicle && l.mode === 'horse' && l.riderId ? g.entities.get(l.riderId) : null;
+    if (horse) {
+      const followers = animals.filter((a) => a.id !== l.riderId).map((a) => g.entities.get(a.id)).filter(Boolean);
+      this.journey.trail = new TrailView(g, trip, { horse, followers });
+      document.body.classList.add('trip-road');
+    }
     openJourney(this.ui, this);
   }
 
   get animals() {
     return this.journey ? this.travellers(this.journey.ids) : [];
+  }
+
+  /** À cheval : choisir l'allure (pas, trot, galop). Un cheval fatigué ne galope pas : on le dit. */
+  setGait(gait) {
+    const j = this.journey;
+    if (!j || j.report) return;
+    const rider = this.animals.find((a) => a.id === j.trip.riderId);
+    const r = setRideGait(j.trip, rider, gait);
+    if (!r.ok && r.reason === 'tired' && rider) this.ui.toast(ta('trail_tooTired', rider), 4500);
+    renderJourney(this.ui, this);
   }
 
   handleEvents(list) {
@@ -869,8 +890,14 @@ export class TripFlow {
     if (!j) return false;
     const trip = j.trip;
     if (trip.status === 'moving' && !j.report) {
-      const out = tickTrip(trip, this.animals, dt * HOURS_PER_SECOND * j.speed);
+      // (à cheval : le galop fait avancer le voyage plus vite, le pas moins vite — ridePace)
+      const out = tickTrip(trip, this.animals, dt * (j.trail ? TRAIL_HOURS_PER_SECOND : HOURS_PER_SECOND) * j.speed * ridePace(trip));
       this.handleEvents(out.events);
+      if (out.gaitChanged === 'tired') {
+        const rider = this.animals.find((a) => a.id === trip.riderId);
+        if (rider) this.ui.toast(ta('trail_tiredTrot', rider), 5000);
+        renderJourney(this.ui, this);
+      }
       if (out.reached === 'arrived') this.finish();
       else if (out.reached) renderJourney(this.ui, this);
     }
@@ -903,11 +930,12 @@ export class TripFlow {
   render3d(dt) {
     const g = this.game;
     const j = this.journey;
-    if (j?.road) {
+    const view = j?.road ?? j?.trail;
+    if (view) {
       const ctrl = g.input.poll();
-      j.road.update(dt, ctrl, j.trip.status === 'moving' && !j.report ? j.speed : 0, this);
-      if (j.road.cameraMode === 'cab') this.updateFeed(dt);
-      j.road.render();
+      view.update(dt, ctrl, j.trip.status === 'moving' && !j.report ? j.speed : 0, this);
+      if (j.road && view.cameraMode === 'cab') this.updateFeed(dt);
+      view.render();
       return;
     }
     let focus = g.player.position;
@@ -944,6 +972,8 @@ export class TripFlow {
     if (j.trip.skipped) addStat(g.profile, 'tripStopsSkipped', j.trip.skipped);
     j.road?.dispose();
     j.road = null;
+    j.trail?.dispose();
+    j.trail = null;
     document.body.classList.remove('trip-road');
     const byTrailer = j.vehicle?.kind === 'trailer' && j.mode !== 'horse'; // pour le conseil « décharger le van »
     j.vehicle?.dispose();

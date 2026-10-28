@@ -29,6 +29,20 @@ export const TRANSFER_HOURS = 1;
 // Temps passé pour chaque soin pendant un arrêt (5 minutes).
 export const ACTION_HOURS = 1 / 12;
 
+// À cheval, on choisit son allure (src/game/TrailView.js) : le pas repose et calme, le galop fait arriver plus
+// vite… mais fatigue le cheval. pace : vitesse à laquelle le voyage avance (×, par rapport au trot) ; speed : vitesse
+// du cheval à l'écran (m/s) ; energy : énergie perdue en plus par heure de voyage (le cheval monté) ; stress : ×.
+// (Une heure de voyage passe en une seconde ou deux à l'écran : au galop, le cheval tient une demi-minute environ,
+// de 70 d'énergie jusqu'à CANTER_MIN_ENERGY ; au pas, il récupère.)
+export const RIDE_GAITS = {
+  walk: { pace: 0.6, speed: 1.7, energy: -1.5, stress: 0.7 },
+  trot: { pace: 1, speed: 3.6, energy: 0, stress: 1 },
+  canter: { pace: 1.7, speed: 7, energy: 1.5, stress: 1.4 },
+};
+export const RIDE_GAIT_ORDER = ['walk', 'trot', 'canter'];
+/** En dessous de cette énergie, le cheval ne veut plus galoper (il repasse au trot tout seul). */
+export const CANTER_MIN_ENERGY = 25;
+
 /** Au-delà de ce stress à l'arrivée, l'animal risque de tomber malade (coliques, ventre…). */
 export const SICK_STRESS = 80;
 
@@ -139,7 +153,26 @@ export function planTrip({ mode, km = 0, hours, animals = [], from = null, to = 
     cares: 0,
     cargo: cargo ? { ...cargo } : null,
     safety: safety ? { ...safety } : null,
+    gait: mode === 'horse' ? 'trot' : null, // allure du cheval monté (RIDE_GAITS)
   };
+}
+
+/** L'allure du voyage à cheval (trot par défaut ; null pour les autres voyages). */
+export const rideGait = (trip) => (trip.mode === 'horse' ? (RIDE_GAITS[trip.gait] ? trip.gait : 'trot') : null);
+
+/** À quelle vitesse le voyage avance, selon l'allure (×1 au trot ; ×1 pour les voyages qui ne sont pas à cheval). */
+export const ridePace = (trip) => (trip.mode === 'horse' ? RIDE_GAITS[rideGait(trip)].pace : 1);
+
+/**
+ * Choisir l'allure du cheval monté (au pas, au trot, au galop). Un cheval fatigué ne galope pas.
+ * Renvoie { ok: true, gait } ou { ok: false, reason: 'notHorse' | 'unknown' | 'tired' }.
+ */
+export function setRideGait(trip, rider, gait) {
+  if (trip.mode !== 'horse') return { ok: false, reason: 'notHorse' };
+  if (!RIDE_GAITS[gait]) return { ok: false, reason: 'unknown' };
+  if (gait === 'canter' && rider && rider.needs.energy < CANTER_MIN_ENERGY) return { ok: false, reason: 'tired' };
+  trip.gait = gait;
+  return { ok: true, gait };
 }
 
 /** A-t-on emporté cette provision (foin, eau, gamelles, trousse) ? Sans coffre (ancien voyage) : oui. */
@@ -182,7 +215,10 @@ function shift(trip, hours) {
 export function stressRate(trip, a, phaseKind) {
   let rate = (TRAVEL_STRESS[a.species] ?? 3) * (PERSONALITY_STRESS[a.personality] ?? 1);
   if (phaseKind === 'hold') rate *= 1.8; // bruit, noir, seul dans la soute
-  if (trip.mode === 'horse') rate *= 0.35; // marcher à son rythme, c'est naturel
+  if (trip.mode === 'horse') {
+    rate *= 0.35; // marcher à son rythme, c'est naturel
+    if (a.id === trip.riderId) rate *= RIDE_GAITS[rideGait(trip)].stress; // (le pas calme, le galop excite)
+  }
   if (a.needs.thirst < 30) rate += 2;
   if (a.needs.hunger < 25) rate += 1.5;
   if ((trip.comfort[a.id] ?? 80) < 40) rate += 1.5;
@@ -224,12 +260,22 @@ export function tickTrip(trip, animals, hours, { rng = Math.random } = {}) {
     }
     // À cheval, on est ensemble toute la journée.
     if (trip.mode === 'horse') a.needs.affection = clamp(a.needs.affection + 3 * step);
+    // L'allure du cheval monté : le galop le fatigue, le pas le repose un peu.
+    if (ridden && phase.kind === 'road') a.needs.energy = clamp(a.needs.energy - RIDE_GAITS[rideGait(trip)].energy * step);
     // Le filet à foin : il grignote en route.
     if (eatsHayNet(trip, a, phase.kind)) a.needs.hunger = clamp(a.needs.hunger + 2.5 * step);
     trip.comfort[a.id] = clamp((trip.comfort[a.id] ?? 80) - (phase.kind === 'hold' ? 6 : trip.mode === 'horse' ? 2 : 4) * step);
     if (events.length) out.events.push({ a, events });
   }
   trip.elapsed += step;
+  // Trop fatigué pour galoper : il repasse au trot tout seul (l'écran le dit).
+  if (trip.gait === 'canter') {
+    const rider = mine.find((a) => a.id === trip.riderId);
+    if (rider && rider.needs.energy < CANTER_MIN_ENERGY) {
+      trip.gait = 'trot';
+      out.gaitChanged = 'tired';
+    }
+  }
   if (next && trip.elapsed >= next.at - 1e-9) {
     trip.elapsed = next.at;
     trip.status = 'stop';

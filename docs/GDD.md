@@ -64,6 +64,15 @@ réussite au dressage…).
 | Santé | Découle des autres besoins, et des soins chez le vétérinaire |
 | Bonheur | Moyenne pondérée de tout le reste |
 
+**Le pansage du cheval** (0.5, `src/ui/minigames/pansage.js`) : brosser un cheval, c'est « Panser », comme au
+club, avec les quatre outils dans l'ordre. ① L'étrille : des petits ronds sur la boue sèche pour la décoller (des
+traits droits la décollent mal), jamais sur la tête ni sur les jambes (le cheval couche les oreilles). ② La brosse :
+chasser la poussière décollée dans le sens du poil. ③ Le cure-pied : les quatre pieds l'un après l'autre (antérieur
+gauche, postérieur gauche, antérieur droit, postérieur droit), du talon vers la pince le long de la fourchette, sans
+piquer la fourchette ; parfois un caillou coincé. ④ Le peigne : démêler les nœuds de la crinière et de la queue, de
+haut en bas. Chaque étape a sa zone « juste ce qu'il faut » ; la note est la moyenne des quatre, et le message de
+fin parle de l'étape la moins bien faite. Plus le cheval est sale (après un galop), plus il y a de boue et de nœuds.
+
 ### Négligence
 1. Un animal négligé devient **triste** (animation, il boude, il obéit moins).
 2. Si ça continue, il **tombe malade** : il faut l'emmener chez le **vétérinaire**.
@@ -220,5 +229,5 @@ réussite au dressage…).
 | **0.2** (fait) | Concours et spectacles sur le terrain de concours, apprentissage du saut, parcours d'obstacles, agility, balade, lapin-hop ; mini-jeux pour chaque soin (brosser, laver, ferrer, tonte, traite…) ; vétérinaire à jouer soi-même |
 | **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison (reportée en 0.5) |
 | **0.4** (fait) | Graphismes plus beaux (sol, végétation, lumière, bâtiments, animations), animaux réalistes (chevaux, chiens race par race, chats, lapins, moutons, chèvres, vaches) et cavalier en selle, vrai saut d'obstacles ; sons synthétisés (ambiance, voix des animaux, pas, interface) ; mini-jeux des corvées et notation « juste ce qu'il faut » dans tous les mini-jeux ; vignettes 3D des cartes (sellerie, animalerie, construction, véhicules) ; vue construction (grille, enclos à la taille voulue, écurie qui s'agrandit) ; 4x4 et van à chevaux ; métiers toiletteur, éducateur canin, guide de randonnée, concours de beauté, concours à l'extérieur, école vétérinaire ; espèces proposées au fil de la partie ; sauvegarde en ligne facultative ; jeu au clavier ; histoire de la ferme (10 chapitres) et quêtes secondaires à rejoindre ; version « à emporter » en un seul fichier |
-| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras) ; allures en balade libre (arrêt, pas, trot, galop, grand galop ; fatigue, sueur, écarts). À venir : décoration de l'intérieur de la maison |
+| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras) ; allures en balade libre (arrêt, pas, trot, galop, grand galop ; fatigue, sueur, écarts) ; pansage complet du cheval (étrille, brosse, cure-pied sur les quatre pieds, peigne). À venir : décoration de l'intérieur de la maison |
 | 1.0 | Publication |

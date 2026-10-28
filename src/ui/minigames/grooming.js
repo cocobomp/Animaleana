@@ -10,7 +10,7 @@ import { isBig } from './food.js';
 import { justRight } from './score.js';
 
 /** Décor de toilette : sol de la cour (grands animaux) ou pièce claire. */
-function groomBackground(g, ctx, floorY = 300) {
+export function groomBackground(g, ctx, floorY = 300) {
   if (isBig(ctx.a)) sky(g, ctx.view, '#a9d8f2', '#e4f3fb', floorY, '#c9c2b4', '#ada596');
   else {
     fillView(g, ctx.view, '#e9f4ee', '#d6ebe0');
@@ -62,9 +62,9 @@ function tOr(t, key, fallback, params) {
 const pressStopHint = (t) => tOr(t, 'mg_pressStop', `${t('mg_perfect')} 👉 ✅ ${t('mg_stopHere')}`);
 
 /** Où poser le cadran : dans le coin du haut opposé à la tête, pour ne pas la cacher. */
-const dialX = (sh) => (sh.head.x > 200 ? 46 : 354);
+export const dialX = (sh) => (sh.head.x > 200 ? 46 : 354);
 
-function drawBrush(g, x, y, rot) {
+export function drawBrush(g, x, y, rot) {
   g.save();
   g.translate(x, y);
   g.rotate(rot);
@@ -137,7 +137,7 @@ function drawDial(g, x, y, value, lo, hi, max, r = 24) {
  * jauge (qui va de 0 à max), les consignes quand on entre dans la zone ou qu'on la dépasse,
  * le cadran dans la scène et la note finale (ctx.finishJust).
  */
-function justRule(ctx, { lo, hi, max, slack, msgs }) {
+export function justRule(ctx, { lo, hi, max, slack, msgs }) {
   const { t } = ctx;
   const name = ctx.a?.name ?? ctx.name;
   ctx.zone(lo / max, hi / max);
@@ -179,7 +179,7 @@ function justRule(ctx, { lo, hi, max, slack, msgs }) {
  * l'écart, et sur la chèvre, la vache ou le cheval les taches se fondaient en une seule plaque.
  * fixed : taches déjà posées (le garrot du cheval), que les autres évitent.
  */
-function dustPatches(sh, rng, count, r0, fixed = []) {
+export function dustPatches(sh, rng, count, r0, fixed = []) {
   let patches = fixed.slice();
   for (let r = r0; r > 6; r *= 0.92) {
     patches = fixed.slice();

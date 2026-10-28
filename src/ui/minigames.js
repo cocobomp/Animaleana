@@ -21,6 +21,7 @@ import { CHORE_GAMES, CHORE_ICONS } from './minigames/chores.js';
 import { justOutcome, starsFor } from './minigames/score.js'; // règle « juste ce qu'il faut »
 import { fitView, toLocalPoint, nbsp } from './minigames/frame.js'; // échelle, doigt, typographie
 import { braidGame, shineGame, bowGame, fluffGame } from './minigames/beauty.js'; // concours de beauté
+import { pansageGame } from './minigames/pansage.js'; // le pansage complet du cheval
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -167,7 +168,8 @@ class Fx {
  */
 export function runMinigame(ui, a, action, opts = {}) {
   if (action === 'collect') action = SPECIES[a.species].product?.action;
-  const make = GAMES[action];
+  // Brosser un cheval, c'est le pansage complet : étrille, brosse, cure-pied, peigne.
+  const make = a.species === 'horse' && action === 'brush' ? pansageGame : GAMES[action];
   if (!make) return Promise.resolve(1);
   const sp = SPECIES[a.species];
   return openMinigame(ui, {

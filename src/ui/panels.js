@@ -59,6 +59,7 @@ const sexIcon = (a) => (a.sex === 'f' ? '♀' : '♂');
 
 function actionLabel(a, action) {
   if (action === 'clean') return t(`act_${a.species}_clean`) || t('act_clean');
+  if (action === 'brush' && a.species === 'horse') return t('act_horse_brush');
   return t(`act_${action}`);
 }
 

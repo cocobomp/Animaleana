@@ -20,6 +20,9 @@ import { horseBoxItems } from './facilitiesPanel.js';
 import { activityRuns, openActivities } from './activities.js';
 import { isTrainingClient, nextProblem, canSession, PROBLEMS } from '../sim/dogTrainer.js'; // éducateur canin
 
+/** Nom d'un soin pour cet animal : « Curer le box » (cheval), « Panser » (brosser un cheval)… */
+const careLabel = (a, x) => (x === 'clean' || (x === 'brush' && a.species === 'horse') ? t(`act_${a.species}_${x}`) : t(`act_${x}`));
+
 const BUILDING_ICON = { petshop: '🛒', tackroom: '🏇', pethouse: '🐾', stable: '🐴', paddock: '🌾', kennel: '🐶', hutch: '🐰', pen: '🐑', house: '🏠', lodge: '🛏️', refuge: '🐾', vet: '🩺', jobs: '📋', showground: '🏆' };
 
 export function sheet(ui, title, subtitle, items, header = null, live = false) {
@@ -163,13 +166,13 @@ export function openAnimalActions(ui, a) {
       const allowed = g.animalActionAllowed(a, x);
       return {
         icon: icons[x],
-        label: x === 'clean' ? t(`act_${a.species}_clean`) : t(`act_${x}`),
+        label: careLabel(a, x),
         enabled: allowed.ok,
         why: allowed.ok ? '' : ta(`why_${allowed.reason}`, a),
         effect: effectText(x),
         run: () => ui.careWithGame(a, x),
         queue: {
-          label: `${x === 'clean' ? t(`act_${a.species}_clean`) : t(`act_${x}`)} · ${a.name}`,
+          label: `${careLabel(a, x)} · ${a.name}`,
           icon: icons[x],
           target: () => g.entities.get(a.id)?.position ?? null,
           radius: 1.8,

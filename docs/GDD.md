@@ -59,6 +59,9 @@ réussite au dressage…).
   sinon de temps en temps ; ensuite il est un peu moins propre (pansage −6) et content. Monté pendant une
   roulade, il se relève d'abord.
 - **Les mouches** : coups de queue et d'oreilles par moments (déjà là, `horseReal.js`).
+- **Le gourmand** (`src/sim/riding.js` nextGrazeIn) : en balade au pas sur l'herbe, il finit par baisser la tête
+  pour brouter et s'arrête (plus vite s'il a faim ou s'il est têtu, moins s'il est calme et bien dressé). On
+  raccourcit les rênes : une allure, ou avancer un moment, et il repart.
 - **Ses pieds** (`src/sim/animal.js` HOOF) : chaque jour, de la terre se tasse dans ses sabots (plus vite sous la
   pluie). Pas curés pendant trois jours environ, un caillou s'y coince et il **boite** (🩹 au-dessus de lui, il
   marche doucement, on ne le monte plus, un message le dit). Le cure-pied du pansage enlève la terre ; le caillou est

@@ -74,6 +74,19 @@ export function nextSpookIn(a, rng = Math.random) {
   return (60 + rng() * 120) * pers * (1 + obedience / 80);
 }
 
+/**
+ * Le cheval gourmand : au pas sur l'herbe, il finit par baisser la tête pour brouter (et s'arrête). Dans combien de
+ * secondes ? Plus vite s'il a faim, s'il est têtu ou joueur ; moins souvent s'il est calme et bien dressé (obéissance).
+ * rng : nombre au hasard entre 0 et 1.
+ */
+export function nextGrazeIn(a, rng = Math.random) {
+  const pers = { stubborn: 0.6, playful: 0.8, curious: 0.9, cuddly: 1, shy: 1.1, calm: 1.3 }[a?.personality] ?? 1;
+  const hunger = a?.needs?.hunger ?? 80;
+  const greed = hunger < 40 ? 0.45 : hunger < 70 ? 0.75 : 1;
+  const obedience = a?.skills?.obedience ?? 10;
+  return (35 + rng() * 70) * pers * greed * (1 + obedience / 60);
+}
+
 /** Les allures dans l'ordre : une de plus ou de moins (touches, joystick). */
 export function shiftGait(gait, dir) {
   const i = FREE_GAITS.indexOf(gait);

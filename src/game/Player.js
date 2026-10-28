@@ -10,7 +10,7 @@ import { rootToTorso, armIK } from './models/avatarRig.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 import { tackEffects } from '../sim/gear.js';
-import { rideSpeed, allowedGait, rideEffort, nextSpookIn, SPOOKY } from '../sim/riding.js'; // allures en balade libre
+import { rideSpeed, allowedGait, rideEffort, nextSpookIn, nextGrazeIn, SPOOKY } from '../sim/riding.js'; // allures en balade libre
 import { helmetModel, helmetStrapsModel } from './models/tackModels.js'; // bombe du cavalier et ses sangles
 import { helmetFit } from './models/avatarHair.js'; // la bombe à la taille de la coiffure
 import { prepareRiderFit, fitRider, seatOnSaddle, releaseRiderFit } from './models/riderFit.js'; // cavalier sur le cheval réaliste
@@ -192,6 +192,8 @@ export class Player {
     this.tiredSaid = null;
     this.canterFor = 0; // secondes de galop d'affilée (onCanter une fois par balade, à 3 s)
     this.cantered = false;
+    this.grazing = null; // il s'est arrêté pour brouter (rideStep) : { pull } secondes de joystick poussé
+    this.grazeIn = null;
     entity.ridden = true;
     entity.data.following = false;
     this.root.position.copy(entity.position);
@@ -465,6 +467,7 @@ export class Player {
   dismount() {
     const e = this.mount;
     if (!e) return null;
+    this.stopGrazing();
     if (this.reins) this.reins.visible = false;
     releaseRiderFit(this.fit); // (étriers remis à leur longueur)
     this.fit = null;
@@ -757,6 +760,12 @@ export class Player {
         bareback: this.bareback || !mount.data.gear?.saddle,
       });
       if (this.spook) max *= 0.6; // (l'écart : il se reprend)
+      if (this.grazing) {
+        // Il broute : il ne bouge plus. Pousser le joystick un moment (raccourcir les rênes) le fait repartir.
+        max = 0;
+        this.grazing.pull = amount > 0.5 ? this.grazing.pull + dt : 0;
+        if (this.grazing.pull > 0.6) this.stopGrazing();
+      }
     } else if (mount) {
       const skill = 1 + mount.data.skills.speed / 150;
       // À cru : un peu moins vite ; la selle de course fait aller plus vite (src/sim/gear.js).
@@ -829,6 +838,19 @@ export class Player {
    */
   rideStep(dt, mount, p) {
     rideEffort(mount.data, this.speed > 0.3 ? this.gaitNow : 'halt', dt); // (immobile : il souffle)
+    // Le cheval gourmand : au pas sur l'herbe, il finit par s'arrêter pour brouter (src/sim/riding.js nextGrazeIn).
+    if (this.grazing) {
+      const n = mount.data.needs;
+      n.hunger = Math.min(100, n.hunger + 0.4 * dt); // (quelques bouchées)
+    } else if ((this.gaitNow === 'walk' || this.gaitNow === 'halt') && !this.spook && this.onGrass?.()) {
+      this.grazeIn = (this.grazeIn ?? nextGrazeIn(mount.data)) - dt;
+      if (this.grazeIn <= 0) {
+        this.grazeIn = null;
+        this.grazing = { pull: 0 };
+        mount.rideGraze = true;
+        this.onGait?.(this.gait, 'graze');
+      }
+    }
     // Vraiment au galop (plus vite que le trot) pendant 3 s : le chapitre « au trot, puis au galop ».
     if ((this.gaitNow === 'canter' || this.gaitNow === 'gallop') && this.speed > 3.6 * (mount.scale ?? 1)) {
       this.canterFor = (this.canterFor ?? 0) + dt;
@@ -858,11 +880,19 @@ export class Player {
     }
   }
 
-  /** Choisir l'allure (boutons, touches) : 'halt', 'walk', 'trot', 'canter'. */
+  /** Choisir l'allure (boutons, touches) : 'halt', 'walk', 'trot', 'canter'. Il broutait : on raccourcit les rênes. */
   setGait(g) {
     if (!this.mount) return;
     this.gait = g;
     this.tiredSaid = null;
+    if (this.grazing && g !== 'halt') this.stopGrazing();
+  }
+
+  /** Rênes raccourcies : il relève la tête et repart (le prochain arrêt gourmand viendra plus tard). */
+  stopGrazing() {
+    if (this.mount) this.mount.rideGraze = false;
+    this.grazing = null;
+    this.grazeIn = null;
   }
 
   /**

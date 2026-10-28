@@ -587,12 +587,15 @@ export class Game {
       const m = this.player.mount?.data;
       if (!m) return;
       if (why === 'tired' || why === 'exhausted') this.ui.toast(t(`ride_${why}`, { name: m.name, g: m.sex }), 4500);
+      else if (why === 'graze') this.ui.toast(t('ride_graze', { name: m.name, g: m.sex }), 6000);
       else if (why === 'spook') {
         this.ui.toast(t('ride_spook', { name: m.name, g: m.sex, what: t(`ride_spookWhat${Math.floor(Math.random() * 4)}`) }), 5000);
         audio.animal('horse', 'sad', m.id); // (il s'ébroue)
       }
       this.ui.updateGaitPad?.();
     };
+    // Le cheval gourmand ne s'arrête pour brouter que sur l'herbe (pas dans la carrière, ni sur le chemin).
+    this.player.onGrass = () => this.surfaceAt() === 'grass';
     // Trois secondes de galop d'affilée (une fois par balade) : le chapitre « au trot, puis au galop ».
     this.player.onCanter = () => addStat(this.profile, 'rideCanter');
     audio.configure(profile.settings.sound);

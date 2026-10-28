@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { createAnimal } from '../src/sim/animal.js';
 import { seeded, mulberry32 } from '../src/sim/rng.js';
 import {
-  FREE_GAITS, GAIT_SPEED, rideSpeed, allowedGait, rideEffort, nextSpookIn, shiftGait, CANTER_MIN, TIRED_WALK, SPOOKY,
+  FREE_GAITS, GAIT_SPEED, rideSpeed, allowedGait, rideEffort, nextSpookIn, nextGrazeIn, shiftGait, CANTER_MIN, TIRED_WALK, SPOOKY,
 } from '../src/sim/riding.js';
 
 const horse = (extra = {}) => {
@@ -106,5 +106,27 @@ describe('les écarts', () => {
     expect(SPOOKY.has('walk')).toBe(false);
     expect(SPOOKY.has('canter')).toBe(true);
     expect(GAIT_SPEED.walk).toBeGreaterThan(0);
+  });
+});
+
+describe('le cheval gourmand', () => {
+  const avg = (a) => {
+    const rng = mulberry32(8);
+    let s = 0;
+    for (let i = 0; i < 200; i++) s += nextGrazeIn(a, rng);
+    return s / 200;
+  };
+  it('il s\'arrête pour brouter plus vite s\'il a faim ou s\'il est têtu ; moins s\'il est calme et bien dressé', () => {
+    const fed = horse({ personality: 'curious' });
+    const hungry = horse({ personality: 'curious' });
+    hungry.needs.hunger = 30;
+    expect(avg(hungry)).toBeLessThan(avg(fed) * 0.6);
+    expect(avg(horse({ personality: 'stubborn' }))).toBeLessThan(avg(horse({ personality: 'calm' })));
+    const schooled = horse({ personality: 'curious' });
+    schooled.skills.obedience = 90;
+    expect(avg(schooled)).toBeGreaterThan(avg(fed) * 1.5);
+    // jamais tout de suite : au moins un quart de minute
+    const rng = mulberry32(2);
+    for (let i = 0; i < 300; i++) expect(nextGrazeIn(hungry, rng)).toBeGreaterThan(14);
   });
 });

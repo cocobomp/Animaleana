@@ -22,6 +22,7 @@ import { justOutcome, starsFor } from './minigames/score.js'; // règle « juste
 import { fitView, toLocalPoint, nbsp } from './minigames/frame.js'; // échelle, doigt, typographie
 import { braidGame, shineGame, bowGame, fluffGame } from './minigames/beauty.js'; // concours de beauté
 import { pansageGame } from './minigames/pansage.js'; // le pansage complet du cheval
+import { sellerGame } from './minigames/seller.js'; // seller son cheval : tapis, selle, sangle
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -42,12 +43,14 @@ const GAMES = {
   lunge: lungeGame,
   liberty: libertyGame,
   braid: braidGame, shine: shineGame, bow: bowGame, fluff: fluffGame, // concours de beauté (src/ui/beauty.js)
+  saddle: sellerGame, // seller son cheval (src/ui/UI.js : saddleWithGame)
 };
 
 const ICONS = {
   feed: '🍽️', water: '💧', brush: '🪮', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨', pet: '🤚',
   treat: '🍪', play: '⚽', lunge: '🌀', liberty: '💛', shear: '🧶', milk: '🥛',
   braid: '🎀', shine: '✨', bow: '🎀', fluff: '🧶', // concours de beauté
+  saddle: '🏇',
 };
 
 /** Ajoute un mini-jeu (ex. séances d'éducation canine, src/ui/minigames/dogTraining.js). */

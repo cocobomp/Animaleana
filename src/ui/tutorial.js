@@ -445,7 +445,9 @@ export class Tutorial {
       case 'action': {
         const label = spec.id === 'more' ? t('more') : t(`act_${spec.id}`);
         // (brosser un cheval s'appelle « Panser » dans son menu)
-        const btn = this.sheetButton(label) ?? (spec.id === 'brush' ? this.sheetButton(t('act_horse_brush')) : null);
+        // (pas encore sellé : « Monter » devient « Seller et monter »)
+        const alt = { brush: 'act_horse_brush', ride: 'act_saddleRide' }[spec.id];
+        const btn = this.sheetButton(label) ?? (alt ? this.sheetButton(t(alt)) : null);
         if (btn) return { el: btn };
         return this.resolveAnimal(spec, true);
       }

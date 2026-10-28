@@ -52,6 +52,7 @@ import { enclosure } from './nav.js';
 import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
+  unsaddle, saddleUp,
 } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
@@ -1580,6 +1581,28 @@ export class Game {
   unequip(a, slot) {
     unequip(a, slot);
     this.entities.get(a.id)?.applyGear();
+  }
+
+  /** Desseller (menu du cheval) : la selle et le tapis retournent à la sellerie ; il pourra se rouler au pré. */
+  unsaddle(a) {
+    if (this.player.mount?.data === a) return null;
+    if (!unsaddle(a)) return null;
+    this.entities.get(a.id)?.applyGear();
+    this.ui.toast(t('unsaddled', { name: a.name, g: a.sex }), 4000);
+    this.save();
+    return true;
+  }
+
+  /** Seller (après le mini-jeu « Seller », src/ui/minigames/seller.js). */
+  saddle(a) {
+    const r = saddleUp(this.profile, a, { home: this.isHome });
+    if (!r.ok) {
+      this.ui.toast(t(`gear_${r.reason}`, { item: t('gear_saddle'), size: r.need ? t(`tk_size_${r.need}`) : '' }), 4500);
+      return null;
+    }
+    this.entities.get(a.id)?.applyGear();
+    this.save();
+    return r;
   }
 
   /**

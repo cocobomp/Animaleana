@@ -427,6 +427,45 @@ export function rideGear(a, wantBareback = false) {
   return { ok: true, bareback: wantBareback || !wears(a, 'saddle') };
 }
 
+/**
+ * Une selle libre pour ce cheval (rangée à la sellerie, à sa taille ; à la maison, la sellière échange la taille) :
+ * celle qu'il portait la dernière fois d'abord (a.lastSaddle, voir unsaddle), sinon une autre. Son id, sinon null.
+ */
+export function freeSaddle(profile, a, { home = true } = {}) {
+  ensureTack(profile);
+  const saddles = Object.keys(GEAR).filter((v) => GEAR[v].type === 'saddle' && !fitReason(v, a));
+  const pref = a.lastSaddle?.item;
+  const order = pref && saddles.includes(pref) ? [pref, ...saddles.filter((v) => v !== pref)] : saddles;
+  const sized = order.find((v) => freeStock(profile, v, sizeFor(v, a)) > 0);
+  if (sized) return sized;
+  if (!home || isAway(profile)) return null;
+  return order.find((v) => (GEAR[v].sizes ?? []).some((sz) => freeStock(profile, v, sz) > 0)) ?? null;
+}
+
+/**
+ * Desseller : la selle (et le tapis) retournent à la sellerie ; on se souvient de ce qu'il portait pour le
+ * reseller pareil. Renvoie true s'il y avait une selle.
+ */
+export function unsaddle(a) {
+  if (!a.gear?.saddle) return false;
+  a.lastSaddle = { ...a.gear.saddle };
+  if (a.gear.pad) a.lastPad = { ...a.gear.pad };
+  else delete a.lastPad;
+  unequip(a, 'saddle');
+  unequip(a, 'pad');
+  return true;
+}
+
+/** Seller : la selle d'avant (ou une libre), et son tapis s'il en avait un. Renvoie le résultat d'equip. */
+export function saddleUp(profile, a, { home = true } = {}) {
+  const item = freeSaddle(profile, a, { home });
+  if (!item) return { ok: false, reason: 'notOwned', item: 'saddle' };
+  const color = a.lastSaddle?.item === item ? a.lastSaddle.color : undefined;
+  const r = equip(profile, a, item, color, { autoSwap: home, exact: true });
+  if (r.ok && a.lastPad?.item) equip(profile, a, a.lastPad.item, a.lastPad.color, { autoSwap: home, exact: true });
+  return r;
+}
+
 /** Reste-t-il ici un filet ou un licol libre (rangé, porté par personne) ? */
 export const hasFreeHeadgear = (profile) => ['bridle', 'halter'].some((k) => owned(profile, k) > inUse(profile, k));
 

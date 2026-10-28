@@ -6,7 +6,7 @@ import { t, ta, hourParams } from '../i18n.js';
 import { SPECIES, speciesAvailable, CORE_SPECIES, coreShown } from '../sim/species.js';
 import { canRide } from '../sim/animal.js';
 import { canProduce } from '../sim/farm.js';
-import { canLeash, owned, inUse } from '../sim/gear.js';
+import { canLeash, owned, inUse, freeSaddle } from '../sim/gear.js';
 import { eligibility, knownTricks } from '../sim/activities.js';
 import { TOOLS } from '../sim/tools.js';
 import { isSandbox } from '../sim/profile.js';
@@ -190,7 +190,10 @@ export function openAnimalActions(ui, a) {
         run: () => ui.collectWithGame(a),
       });
     }
-    if (sp.rideable && a.gear?.saddle) {
+    // Sans selle, mais une selle libre à la sellerie : « Seller et monter » (le mini-jeu, puis en selle).
+    const saddled = !!a.gear?.saddle;
+    const canSaddle = sp.rideable && !saddled && !!freeSaddle(g.profile, a, { home: g.isHome });
+    if (sp.rideable && (saddled || canSaddle)) {
       const r = canRide(a);
       items.push({
         icon: '🐎',
@@ -205,12 +208,20 @@ export function openAnimalActions(ui, a) {
       const asleep = g.entities.get(a.id)?.sleeping;
       items.push({
         icon: '🏇',
-        label: t('act_ride'),
+        label: t(canSaddle ? 'act_saddleRide' : 'act_ride'),
         enabled: r.ok && !asleep,
         why: asleep ? ta('why_animalAsleep', a) : ta(`r_${r.reason}`, a),
         primary: true,
-        run: () => { if (g.ride(a)) ui.closePanel(); },
+        run: canSaddle
+          ? () => { ui.closePanel(); ui.saddleWithGame(a, true); }
+          : () => { if (g.ride(a)) ui.closePanel(); },
       });
+    }
+    // Seller sans monter (pour un concours, une balade plus tard…), ou desseller après la balade.
+    if (canSaddle) {
+      items.push({ icon: '🪢', label: t('act_saddle'), run: () => { ui.closePanel(); ui.saddleWithGame(a, false); } });
+    } else if (sp.rideable && saddled && g.player.mount?.data !== a) {
+      items.push({ icon: '🧰', label: t('act_unsaddle'), effect: t('unsaddleHint'), run: () => { g.unsaddle(a); ui.closePanel(); } });
     }
     if (a.species === 'dog') {
       items.push({

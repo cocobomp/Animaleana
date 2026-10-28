@@ -1019,6 +1019,20 @@ export class UI {
     return g.care(a, action, quality);
   }
 
+  /**
+   * Seller son cheval en jouant (tapis, selle, sangle : src/ui/minigames/seller.js), puis, si ride, monter.
+   * Fermé avec ✕ : rien ne change. La note dit comment c'était (message de fin du mini-jeu).
+   */
+  async saddleWithGame(a, ride = false) {
+    const g = this.game;
+    if (g.blockedByPause()) return null;
+    const quality = await runMinigame(this, a, 'saddle');
+    if (quality === null) return null;
+    if (!g.saddle(a)) return null;
+    if (ride) return g.ride(a);
+    return true;
+  }
+
   /** Tonte ou traite (mini-jeu aussi). */
   async collectWithGame(a) {
     if (this.game.blockedByPause()) return null;

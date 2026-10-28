@@ -36,7 +36,8 @@ export const TUTORIAL_STEPS = [
     done: (c) => c.refugeOpen,
   },
   {
-    id: 'adopt', emoji: '🐶', target: { type: 'adopt' },
+    // (le premier cheval de l'histoire : la carte d'un cheval d'abord, src/ui/tutorial.js)
+    id: 'adopt', emoji: '🐴', target: { type: 'adopt', species: 'horse' },
     skip: (c) => (c.base.animals ?? 0) > 0, // déjà des animaux (tutoriel rejoué)
     done: (c) => stat(c.profile, 'adopted') > (c.base.adopted ?? 0),
   },
@@ -249,6 +250,13 @@ const MOUNT = ['horse', 'grownHorse', 'tack'];
  * l'ordre : le premier qui manque est celui qu'on dit).
  */
 export const QUEST_GUIDE = {
+  // L'histoire de ton premier cheval (src/sim/quests.js STORY) : au refuge, puis avec lui.
+  horse1: { where: 'refuge', target: { type: 'building', id: 'refuge' } },
+  horsePet3: { where: 'horse', target: { type: 'action', id: 'pet', species: 'horse' }, need: ['horse'] },
+  horseFeed3: { where: 'horse', target: { type: 'action', id: 'feed', species: 'horse' }, need: ['horse'] },
+  horseWater2: { where: 'horse', target: { type: 'action', id: 'water', species: 'horse' }, need: ['horse'] },
+  horseBrush1: { where: 'horse', target: { type: 'action', id: 'brush', species: 'horse' }, need: ['horse'] },
+  rideCanter1: { where: 'horse', target: { type: 'action', id: 'ride', species: 'horse' }, need: MOUNT },
   adopt1: { where: 'refuge', target: { type: 'building', id: 'refuge' } },
   feed5: { where: 'animal', target: { type: 'action', id: 'feed' }, need: ['animal'] },
   pet3: { where: 'animal', target: { type: 'action', id: 'pet' }, need: ['animal'] },
@@ -350,6 +358,7 @@ export function followBlock(id, profile) {
 
 /** Ordre des quêtes, de la plus facile à la plus difficile (journal, thèmes des quêtes : src/sim/quests.js). */
 export const QUEST_ORDER = [
+  'horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'rideCanter1',
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
@@ -380,7 +389,7 @@ export function questGuide(id, profile) {
  * « Suivre la quête » : chaque quête est découpée en petites étapes (aller au bon endroit,
  * toucher le bon bouton…). Chaque étape se coche toute seule et le repère passe à la suivante.
  * Textes : clés quest_step_<id>. La dernière étape est réussie quand la quête l'est.
- * c = { profile, seen, questDone, refugeOpen, hasDropping, travelDest, travelMode }
+ * c = { profile, seen, questDone, refugeOpen, hasDropping, travelDest, travelMode, mounted (en selle) }
  */
 const seenAny = (...names) => (c) => names.some((n) => c.seen.has(n));
 const questDone = (c) => c.questDone;
@@ -392,7 +401,7 @@ export const FOLLOW_STEPS = {
   waitOpen: { target: { type: 'hud', id: 'timeFast' }, skip: (c) => c.refugeOpen, done: (c) => c.refugeOpen },
   adoptOne: { target: { type: 'adopt' }, done: questDone },
   adoptFirst: { target: { type: 'adopt' }, done: (c) => hasAnimal(c.profile) },
-  adoptHorse: { target: { type: 'adopt' }, done: (c) => hasHorse(c.profile) },
+  adoptHorse: { target: { type: 'adopt', species: 'horse' }, done: (c) => hasHorse(c.profile) },
   adoptMore: { target: { type: 'adopt' }, done: questDone, progress: true },
   tapAnimal: { target: { type: 'animal' }, done: seenAny('animalActions', 'panel:animal') },
   tapHorse: { target: { type: 'animal', species: 'horse' }, done: seenAny('animalActions', 'panel:animal') },
@@ -410,6 +419,15 @@ export const FOLLOW_STEPS = {
   trainTrick: { target: { type: 'section', h3: 'tricks', fallback: { type: 'action', id: 'more' } }, done: questDone },
   breedNow: { target: { type: 'section', h3: 'breedTitle', fallback: { type: 'action', id: 'more' } }, done: questDone },
   doRide: { target: { type: 'action', id: 'ride', species: 'horse' }, done: questDone },
+  // Les soins de son cheval (l'histoire), en selle, puis au galop (boutons d'allure, src/ui/UI.js)
+  horse_pet: { target: { type: 'action', id: 'pet', species: 'horse' }, done: questDone, progress: true },
+  horse_feed: { target: { type: 'action', id: 'feed', species: 'horse' }, done: questDone, progress: true },
+  horse_water: { target: { type: 'action', id: 'water', species: 'horse' }, done: questDone, progress: true },
+  horse_brush: { target: { type: 'action', id: 'brush', species: 'horse' }, done: questDone, progress: true },
+  // (déjà en selle : rien à toucher, on passe au galop)
+  tapHorseRide: { target: { type: 'animal', species: 'horse' }, skip: (c) => !!c.mounted, done: (c) => !!c.mounted || seenAny('animalActions', 'panel:animal')(c) },
+  doMount: { target: { type: 'action', id: 'ride', species: 'horse' }, done: (c) => !!c.mounted || c.questDone },
+  doCanter: { target: { type: 'gait', id: 'canter' }, done: questDone },
   openTravel: { target: { type: 'hud', id: 'travel' }, done: seenAny('panel:travel') },
   pickPlace: { target: travelEl('#panel .card.place:not([disabled])'), done: (c) => c.travelDest || c.questDone },
   pickAbroad: { target: travelEl('#panel .card.place:not([disabled])'), done: (c) => c.travelDest || c.questDone },
@@ -445,6 +463,12 @@ export const FOLLOW_STEPS = {
 };
 
 export const QUEST_STEPS = {
+  horse1: ['goRefuge', 'waitOpen', 'adoptHorse'],
+  horsePet3: ['tapHorse', 'horse_pet'],
+  horseFeed3: ['tapHorse', 'horse_feed'],
+  horseWater2: ['tapHorse', 'horse_water'],
+  horseBrush1: ['tapHorse', 'horse_brush'],
+  rideCanter1: ['tapHorseRide', 'doMount', 'doCanter'],
   adopt1: ['goRefuge', 'waitOpen', 'adoptOne'],
   species4: ['goRefuge', 'waitOpen', 'adoptMore'],
   pet3: ['tapAnimal', 'do_pet'],

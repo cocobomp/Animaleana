@@ -190,6 +190,8 @@ export class Player {
     this.spook = null;
     this.spookIn = null;
     this.tiredSaid = null;
+    this.canterFor = 0; // secondes de galop d'affilée (onCanter une fois par balade, à 3 s)
+    this.cantered = false;
     entity.ridden = true;
     entity.data.following = false;
     this.root.position.copy(entity.position);
@@ -827,6 +829,14 @@ export class Player {
    */
   rideStep(dt, mount, p) {
     rideEffort(mount.data, this.speed > 0.3 ? this.gaitNow : 'halt', dt); // (immobile : il souffle)
+    // Vraiment au galop (plus vite que le trot) pendant 3 s : le chapitre « au trot, puis au galop ».
+    if ((this.gaitNow === 'canter' || this.gaitNow === 'gallop') && this.speed > 3.6 * (mount.scale ?? 1)) {
+      this.canterFor = (this.canterFor ?? 0) + dt;
+      if (this.canterFor >= 3 && !this.cantered) {
+        this.cantered = true;
+        this.onCanter?.();
+      }
+    } else this.canterFor = 0;
     if (SPOOKY.has(this.gaitNow) && this.speed > 2 && !this.spook) {
       this.spookIn = (this.spookIn ?? nextSpookIn(mount.data)) - dt;
       if (this.spookIn <= 0) {

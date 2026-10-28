@@ -4,7 +4,7 @@
 
 export const QUESTS_FR = {
   // Journal : les quatre parties
-  qj_storyTitle: '⭐ Histoire de la ferme',
+  qj_storyTitle: '⭐ Ton premier cheval',
   qj_chapter: 'Chapitre {n} sur {total}',
   qj_skip: '⏭️ Passer pour l\'instant',
   qj_skipped: '⏭️ Chapitre passé. Tu pourras le reprendre dans 📖 Journal.',
@@ -18,7 +18,7 @@ export const QUESTS_FR = {
   qj_doneChapters: '✅ Déjà fait :',
   qj_upcoming: '🔒 Encore {n} chapitres après celui-ci',
   qj_upcoming_one: '🔒 Encore 1 chapitre après celui-ci',
-  qj_storyDone: '🎉 Tu as fini toute l\'histoire de la ferme ! Choisis d\'autres quêtes plus bas.',
+  qj_storyDone: '🎉 Tu as fini toute l\'histoire de ton premier cheval ! Choisis d\'autres quêtes plus bas.',
   qj_storyRest: 'Tu as passé les derniers chapitres. Reprends-en un quand tu veux.',
   qj_mineTitle: '🎯 Mes quêtes ({n}/{max})',
   qj_mineEmpty: 'Aucune pour l\'instant. Choisis-en plus bas avec ➕ Rejoindre ({max} au maximum).',
@@ -43,6 +43,7 @@ export const QUESTS_FR = {
   qj_wasChapter: '⭐ chapitre passé',
   qj_doneTitle: '✅ Terminées ({n})',
   qj_noneDone: 'Pas encore de quête finie.',
+  qj_theme_horse: '🐴 Ton cheval',
   qj_theme_animals: '🐾 Animaux',
   qj_theme_travel: '✈️ Voyages',
   qj_theme_activities: '🏅 Activités et concours',
@@ -58,7 +59,7 @@ export const QUESTS_FR = {
   // Fin d'un chapitre
   qj_chapterDone: 'Chapitre réussi : {name} !',
   qj_nextChapter: 'Prochain chapitre : {name}',
-  qj_storyFinished: 'Tu as fini toute l\'histoire de la ferme ! 🎉 Choisis d\'autres quêtes dans 📖 Journal.',
+  qj_storyFinished: 'Tu as fini toute l\'histoire de ton premier cheval ! 🎉 Choisis d\'autres quêtes dans 📖 Journal.',
   qj_skippedLeft: 'Il te reste {n} chapitres passés. Reprends-les dans 📖 Journal quand tu veux.',
   qj_skippedLeft_one: 'Il te reste 1 chapitre passé. Reprends-le dans 📖 Journal quand tu veux.',
   // Ce qu'il faut avant de pouvoir faire une quête (questBlock)
@@ -112,7 +113,7 @@ export const QUESTS_FR = {
 };
 
 export const QUESTS_EN = {
-  qj_storyTitle: '⭐ The farm\'s story',
+  qj_storyTitle: '⭐ Your first horse',
   qj_chapter: 'Chapter {n} of {total}',
   qj_skip: '⏭️ Skip for now',
   qj_skipped: '⏭️ Chapter skipped. You can pick it up again in the 📖 Journal.',
@@ -126,7 +127,7 @@ export const QUESTS_EN = {
   qj_doneChapters: '✅ Already done:',
   qj_upcoming: '🔒 {n} more chapters after this one',
   qj_upcoming_one: '🔒 1 more chapter after this one',
-  qj_storyDone: '🎉 You finished the whole farm story! Choose more quests below.',
+  qj_storyDone: '🎉 You finished the whole story of your first horse! Choose more quests below.',
   qj_storyRest: 'You skipped the last chapters. Pick one up again whenever you like.',
   qj_mineTitle: '🎯 My quests ({n}/{max})',
   qj_mineEmpty: 'None yet. Choose some below with ➕ Join ({max} at most).',
@@ -150,6 +151,7 @@ export const QUESTS_EN = {
   qj_wasChapter: '⭐ skipped chapter',
   qj_doneTitle: '✅ Finished ({n})',
   qj_noneDone: 'No quest finished yet.',
+  qj_theme_horse: '🐴 Your horse',
   qj_theme_animals: '🐾 Animals',
   qj_theme_travel: '✈️ Travel',
   qj_theme_activities: '🏅 Activities and contests',
@@ -163,7 +165,7 @@ export const QUESTS_EN = {
   qj_now: '👉 Now: {step}',
   qj_chapterDone: 'Chapter complete: {name}!',
   qj_nextChapter: 'Next chapter: {name}',
-  qj_storyFinished: 'You finished the whole farm story! 🎉 Choose more quests in the 📖 Journal.',
+  qj_storyFinished: 'You finished the whole story of your first horse! 🎉 Choose more quests in the 📖 Journal.',
   qj_skippedLeft: 'You still have {n} skipped chapters. Pick them up in the 📖 Journal whenever you like.',
   qj_skippedLeft_one: 'You still have 1 skipped chapter. Pick it up in the 📖 Journal whenever you like.',
   qneed_animal: 'you need an animal first (at the shelter 🐾).',

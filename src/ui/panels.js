@@ -312,7 +312,7 @@ export function openAdoption(ui) {
     return [h('div', { class: 'cards' }, list.map((a) => {
       const price = adoptionPrice(a);
       const afford = canAfford(g.profile, price);
-      return h('div', { class: 'card adopt' },
+      return h('div', { class: 'card adopt', 'data-species': a.species },
         animalPic(g, a, 72, 54, 'adopt-thumb'), // (vignette 3D de l'animal, comme à l'animalerie)
         h('span', { class: 'card-main' },
           h('b', {}, `${a.name} ${sexIcon(a)}`),

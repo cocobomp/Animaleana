@@ -245,6 +245,7 @@ export class Tutorial {
       travelMode: !!panel.querySelector('.card.mode.selected'),
       hasClient: g.profile.animals.some((a) => a.client && a.client.kind !== 'training'), // un animal confié par un client
       dtOwnerBack: !!g.dogTrainer?.visitor?.returning, // éducateur canin : le maître revient chercher son chien
+      mounted: !!g.player?.mount, // en selle (le chapitre « au trot, puis au galop »)
     };
   }
 
@@ -427,13 +428,20 @@ export class Tutorial {
       }
       case 'building': return this.resolveBuilding(spec.id);
       case 'adopt': {
-        const card = ui.panelEl.querySelector('.card.adopt button.primary:not([disabled])');
+        // (un cheval pour l'histoire de ton premier cheval : sa carte, sinon la première)
+        const card = (spec.species && ui.panelEl.querySelector(`.card.adopt[data-species="${spec.species}"] button.primary:not([disabled])`))
+          || ui.panelEl.querySelector('.card.adopt button.primary:not([disabled])');
         if (card) return { el: card };
         const btn = this.sheetButton(t('do_adopt'));
         if (btn && !btn.classList.contains('off')) return { el: btn };
         return this.resolveBuilding('refuge');
       }
       case 'animal': return this.resolveAnimal(spec);
+      // un bouton d'allure, en selle (src/ui/UI.js : #gait-pad)
+      case 'gait': {
+        const el = document.querySelector(`#gait-pad:not([hidden]) .gait-btn.${spec.id}`);
+        return el ? { el } : {};
+      }
       case 'action': {
         const label = spec.id === 'more' ? t('more') : t(`act_${spec.id}`);
         // (brosser un cheval s'appelle « Panser » dans son menu)

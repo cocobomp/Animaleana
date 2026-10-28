@@ -121,30 +121,41 @@ describe('quêtes claires', () => {
     }
   });
 
-  it('montre d\'abord l\'adoption, puis les soins (l\'histoire de la ferme)', () => {
+  it('montre d\'abord l\'adoption de ton premier cheval, puis ses soins (l\'histoire de la ferme)', () => {
     const p = createProfile('Lou');
-    expect(trackerQuest(p).id).toBe('adopt1');
-    p.completed.push('adopt1');
-    p.animals.push(fakeAnimal());
-    expect(trackerQuest(p).id).toBe('pet3');
+    expect(trackerQuest(p).id).toBe('horse1');
+    expect(questGuide('horse1', p)).toMatchObject({ where: 'refuge' });
+    p.completed.push('horse1');
+    p.animals.push(createAnimal({ species: 'horse', sex: 'f', ageDays: 60, rng: seeded('cheval') }));
+    expect(trackerQuest(p).id).toBe('horsePet3');
+    expect(questGuide('horsePet3', p)).toMatchObject({ where: 'horse' });
+  });
+
+  it('les soins de l\'histoire, sans cheval (un chat seulement) : d\'abord adopter un cheval', () => {
+    const p = createProfile('Lou');
+    p.animals.push(fakeAnimal('cat'));
+    p.completed.push('horse1'); // (une ancienne partie : son cheval est parti)
+    expect(questBlock('horsePet3', p)).toMatchObject({ key: 'qneed_horse' });
+    expect(questGuide('horsePet3', p)).toMatchObject({ where: 'refuge', first: 'horse' });
+    expect(followBlock('horsePet3', p)).toBeNull();
   });
 
   it("ne montre pas de monter à cheval sans cheval (sauf si on l'a choisi, et alors il dit pourquoi)", () => {
     const p = createProfile('Lou');
     p.animals.push(fakeAnimal('cat'));
-    p.completed.push(...OBJECTIVES.filter((o) => o.kind === 'quest' && o.id !== 'ride1' && o.id !== 'client1').map((o) => o.id));
-    expect(trackerQuest(p).id).toBe('client1'); // le dernier chapitre de l'histoire
-    expect(mainQuest(p)).toBe('client1');
-    p.completed.push('client1');
-    expect(trackerQuest(p)).toBeNull(); // ride1 n'est pas imposée
-    joinQuest(p, 'ride1');
-    expect(trackerQuest(p).id).toBe('ride1');
-    expect(questBlock('ride1', p)).toMatchObject({ key: 'qneed_horse' });
-    expect(followBlock('ride1', p)).toBeNull(); // 🧭 emmène d'abord au refuge
-    expect(questGuide('ride1', p)).toMatchObject({ where: 'refuge', first: 'horse' });
+    p.completed.push(...OBJECTIVES.filter((o) => o.kind === 'quest' && o.id !== 'actvClear1' && o.id !== 'actvTrail1').map((o) => o.id));
+    expect(trackerQuest(p).id).toBe('actvTrail1'); // le dernier chapitre de l'histoire
+    expect(mainQuest(p)).toBe('actvTrail1');
+    p.completed.push('actvTrail1');
+    expect(trackerQuest(p)).toBeNull(); // actvClear1 n'est pas imposée
+    joinQuest(p, 'actvClear1');
+    expect(trackerQuest(p).id).toBe('actvClear1');
+    expect(questBlock('actvClear1', p)).toMatchObject({ key: 'qneed_horse' });
+    expect(followBlock('actvClear1', p)).toBeNull(); // 🧭 emmène d'abord au refuge
+    expect(questGuide('actvClear1', p)).toMatchObject({ where: 'refuge', first: 'horse' });
     p.animals.push(createAnimal({ species: 'horse', sex: 'f', ageDays: 60, rng: seeded('cheval') })); // adulte
-    expect(questGuide('ride1', p).where).toBe('horse');
-    expect(questBlock('ride1', p)).toBeNull(); // (le filet offert, rangé à la sellerie, se met tout seul)
+    expect(questGuide('actvClear1', p).where).toBe('showground');
+    expect(questBlock('actvClear1', p)).toBeNull(); // (le filet offert, rangé à la sellerie, se met tout seul)
   });
 
   it('sans aucun animal, une quête à cheval commence par adopter un cheval (pas « un animal »)', () => {
@@ -331,5 +342,25 @@ describe('✋ touché par erreur, puis 🧭 : on reprend où on en était', () =
     expect(followQuest(p, 'vet1', { id: 'vet1' }).step).toBe(0);
     const steps = p.questFollow.steps;
     expect(followQuest(p, 'vet1', { id: 'vet1', steps, step: 99, seen: [] }).step).toBe(steps.length - 1);
+  });
+});
+
+describe('l\'histoire : au trot, puis au galop', () => {
+  it('suivi : en selle, on passe tout de suite au bouton galop', () => {
+    const p = createProfile('Lou');
+    p.animals.push(createAnimal({ species: 'horse', sex: 'f', ageDays: 60, rng: seeded('cheval') }));
+    p.completed.push('horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1');
+    expect(mainQuest(p)).toBe('rideCanter1');
+    followQuest(p, 'rideCanter1');
+    expect(p.questFollow.steps).toEqual(['tapHorseRide', 'doMount', 'doCanter']);
+    // à pied : d'abord toucher son cheval
+    updateFollow(p, OBJECTIVES, { mounted: false });
+    expect(p.questFollow.steps[p.questFollow.step]).toBe('tapHorseRide');
+    // en selle : directement « 💨 Galop »
+    updateFollow(p, OBJECTIVES, { mounted: true });
+    expect(p.questFollow.steps[p.questFollow.step]).toBe('doCanter');
+    expect(questBlock('rideCanter1', p)).toBeNull();
+    addStat(p, 'rideCanter');
+    expect(updateFollow(p, OBJECTIVES, { mounted: true })).toEqual({ questDone: true, id: 'rideCanter1' });
   });
 });

@@ -21,6 +21,14 @@ function speciesProgress(p) {
 }
 
 export const OBJECTIVES = [
+  // L'histoire de ton premier cheval (chapitres : STORY, src/sim/quests.js). Les soins d'un cheval comptent aussi à
+  // part (horse_pet, horse_feed… : src/game/Game.js care) ; galoper : 3 secondes de galop d'affilée (Player.rideStep).
+  { id: 'horse1', kind: 'quest', reward: 50, progress: (p) => [p.animals.some((a) => a.species === 'horse' && !a.client && !a.guest) ? 1 : 0, 1] },
+  { id: 'horsePet3', kind: 'quest', reward: 20, progress: (p) => [stat(p, 'horse_pet'), 3] },
+  { id: 'horseFeed3', kind: 'quest', reward: 30, progress: (p) => [stat(p, 'horse_feed'), 3] },
+  { id: 'horseWater2', kind: 'quest', reward: 20, progress: (p) => [stat(p, 'horse_water'), 2] },
+  { id: 'horseBrush1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'horse_brush'), 1] },
+  { id: 'rideCanter1', kind: 'quest', reward: 50, progress: (p) => [stat(p, 'rideCanter'), 1] },
   { id: 'adopt1', kind: 'quest', reward: 50, progress: (p) => [stat(p, 'adopted'), 1] },
   // Quêtes pour bien débuter (tutoriel) : voir aussi QUEST_GUIDE dans tutorial.js.
   { id: 'pet3', kind: 'quest', reward: 20, progress: (p) => [stat(p, 'pet'), 3] },

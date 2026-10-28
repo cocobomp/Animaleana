@@ -60,13 +60,17 @@ export function shopBreeds(placeId, isHome) {
   return breedsFor(placeId, isHome);
 }
 
-/** Liste du jour, identique tant que le jour ne change pas (graine fixe). */
+/**
+ * Liste du jour, identique tant que le jour ne change pas (graine fixe). À la maison, le premier cheval de la
+ * liste est toujours adulte : on peut le monter (l'histoire, c'est celle de ton premier cheval : src/sim/quests.js).
+ */
 export function adoptionCandidates(placeId, day, adoptedKeys = [], isHome = false) {
   const rng = seeded(`adopt-${placeId}-${day}`);
   const pool = breedsFor(placeId, isHome);
   const count = isHome ? 9 : 5;
   const ids = offeredSpeciesIds();
   const out = [];
+  let horse = false;
   for (let i = 0; i < count; i++) {
     const key = `${placeId}-${day}-${i}`;
     // Les espèces (proposées) sont tirées à tour de rôle pour qu'il y ait toujours de tout.
@@ -75,7 +79,9 @@ export function adoptionCandidates(placeId, day, adoptedKeys = [], isHome = fals
     const { breed } = choices.length ? pick(choices, rng) : pick(pool, rng);
     const species = choices.length ? sid : pool.find((p) => p.breed === breed).species;
     const sp = SPECIES[species];
-    const young = rng() < 0.35;
+    const firstHorse = isHome && species === 'horse' && !horse;
+    if (species === 'horse') horse = true;
+    const young = rng() < 0.35 && !firstHorse;
     const ageDays = young
       ? sp.adultYears * DAYS_PER_YEAR * (0.2 + rng() * 0.6)
       : sp.adultYears * DAYS_PER_YEAR + rng() * sp.lifespanYears * 0.45 * DAYS_PER_YEAR;

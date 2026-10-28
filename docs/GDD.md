@@ -50,6 +50,16 @@ Chaque animal a un caractère : *joueur, timide, câlin, têtu, curieux, calme*.
 Il change sa façon de réagir (vitesse de baisse du bonheur, envie de jouer,
 réussite au dressage…).
 
+### Le cheval vivant (0.5, `src/game/AnimalEntity.js` horseLife)
+- **Il t'accueille** : quand tu reviens après être resté loin (40 s à plus de 16 m), ton cheval hennit doucement,
+  lève la tête et te regarde ; s'il t'aime bien (lien ≥ 25), il vient vers toi jusqu'au bord de son pré ou de son
+  paddock (💕 si le lien est fort). Une fois par retour.
+- **Il se roule** : au pré ou au paddock (jamais au box), sans selle sur le dos (on la lui enlève d'abord), il se couche, se roule deux fois sur le flanc en
+  gigotant, se relève et s'ébroue. Tout de suite après une balade où il a galopé, souvent quand il a transpiré,
+  sinon de temps en temps ; ensuite il est un peu moins propre (pansage −6) et content. Monté pendant une
+  roulade, il se relève d'abord.
+- **Les mouches** : coups de queue et d'oreilles par moments (déjà là, `horseReal.js`).
+
 ## 4. Besoins (« comme dans la vraie vie »)
 
 | Besoin | Comment le remplir |
@@ -184,13 +194,17 @@ fin parle de l'étape la moins bien faite. Plus le cheval est sale (après un ga
 - La météo a un effet sur les animaux (froid → besoin d'abri ou de couverture).
 
 ## 10. Quêtes et succès
-- **Histoire de la ferme** (quête principale ⭐) : une suite de 10 chapitres, un seul à la fois, faisables par
-  tout le monde avec n'importe quel animal et sans gros budget : adopter, caresser, nourrir, donner à boire,
-  brosser, vétérinaire, un tour, un spectacle avec ce tour, un métier, un premier client. (Le premier voyage n'en
-  fait pas partie : depuis le Japon, l'Australie ou la Pampa, il coûte plus de 750 🪙 ; c'est une quête
-  secondaire.) Un chapitre trop dur se **passe pour l'instant** (le suivant arrive) et se **reprend** plus tard
+- **L'histoire : ton premier cheval** (quête principale ⭐, 0.5 ; avant, une histoire « n'importe quel animal ») :
+  le jeu est d'abord un jeu de cheval. 11 chapitres, un seul à la fois, faisables dans toutes les maisons sans
+  chance et sans gros budget : adopter son premier cheval au refuge (gratuit ; à la maison, le premier cheval de la
+  liste est toujours adulte, on peut le monter), faire connaissance (caresses), le foin, l'eau fraîche, le pansage
+  complet, monter en selle, passer au trot puis au galop (3 secondes de galop), la visite chez le vétérinaire, la
+  première leçon, le premier saut, la première balade. Les soins d'un cheval se comptent à part (un chien caressé
+  ne fait pas avancer l'histoire du cheval). Le tutoriel montre d'abord la carte d'un cheval au refuge. Les quêtes
+  des autres animaux (un tour, un spectacle, un métier, un premier client…) sont des quêtes secondaires ; une
+  ancienne partie qui a déjà un cheval finit tout de suite le premier chapitre. Un chapitre trop dur se **passe pour l'instant** (le suivant arrive) et se **reprend** plus tard
   depuis le journal : il redevient le chapitre en cours s'il vient avant, sinon il va dans « Mes quêtes ».
-- **Quêtes secondaires** (🎯), rangées par thème (animaux, voyages, activités et concours, métiers) : l'enfant
+- **Quêtes secondaires** (🎯), rangées par thème (ton cheval, animaux, voyages, activités et concours, métiers) : l'enfant
   **rejoint** celles qu'elle veut (3 au plus en même temps) et les **enlève** quand elle veut, sans rien perdre.
   Une quête qu'on ne peut pas encore faire dit pourquoi (« Il te faut un mâle et une femelle ») ; elle ne se
   suit pas (🧭 ne guide jamais vers l'impossible) et rien n'est imposé.
@@ -229,5 +243,5 @@ fin parle de l'étape la moins bien faite. Plus le cheval est sale (après un ga
 | **0.2** (fait) | Concours et spectacles sur le terrain de concours, apprentissage du saut, parcours d'obstacles, agility, balade, lapin-hop ; mini-jeux pour chaque soin (brosser, laver, ferrer, tonte, traite…) ; vétérinaire à jouer soi-même |
 | **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison (reportée en 0.5) |
 | **0.4** (fait) | Graphismes plus beaux (sol, végétation, lumière, bâtiments, animations), animaux réalistes (chevaux, chiens race par race, chats, lapins, moutons, chèvres, vaches) et cavalier en selle, vrai saut d'obstacles ; sons synthétisés (ambiance, voix des animaux, pas, interface) ; mini-jeux des corvées et notation « juste ce qu'il faut » dans tous les mini-jeux ; vignettes 3D des cartes (sellerie, animalerie, construction, véhicules) ; vue construction (grille, enclos à la taille voulue, écurie qui s'agrandit) ; 4x4 et van à chevaux ; métiers toiletteur, éducateur canin, guide de randonnée, concours de beauté, concours à l'extérieur, école vétérinaire ; espèces proposées au fil de la partie ; sauvegarde en ligne facultative ; jeu au clavier ; histoire de la ferme (10 chapitres) et quêtes secondaires à rejoindre ; version « à emporter » en un seul fichier |
-| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras) ; allures en balade libre (arrêt, pas, trot, galop, grand galop ; fatigue, sueur, écarts) ; pansage complet du cheval (étrille, brosse, cure-pied sur les quatre pieds, peigne). À venir : décoration de l'intérieur de la maison |
+| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras) ; allures en balade libre (arrêt, pas, trot, galop, grand galop ; fatigue, sueur, écarts) ; pansage complet du cheval (étrille, brosse, cure-pied sur les quatre pieds, peigne) ; l'histoire devient celle de ton premier cheval (11 chapitres, du refuge à la première balade) ; le cheval vivant (il t'accueille quand tu reviens, il se roule au pré). À venir : décoration de l'intérieur de la maison |
 | 1.0 | Publication |

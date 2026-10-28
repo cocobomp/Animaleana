@@ -13,7 +13,7 @@ import { canLeash, heelSkill, LEASH_LEN } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
 import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
 import { animateCat } from './catAnim.js'; // chats : assis, toilette, en boule, queue levée
-import { animateRealHorse } from './models/horseReal.js'; // cheval réaliste (GLB) : allures du mixeur
+import { animateRealHorse, realLegPose } from './models/horseReal.js'; // cheval réaliste (GLB) : allures du mixeur ; couché
 import { animateRealDog } from './models/dogReal.js'; // chien réaliste (GLB) : allures, postures, actions
 import { animateRealCat } from './models/catReal.js'; // chat réaliste (GLB) : allures, postures, gestes
 import { animateRealRabbit } from './models/rabbitReal.js'; // lapin réaliste (GLB) : allures, postures, gestes
@@ -96,6 +96,23 @@ function calfApproach(e, mother, out) {
 
 const MOOD_EMOJI = { sick: '🤒', sad: '😢' };
 const HERD = ['horse', 'sheep', 'goat', 'cow'];
+const smoothstep = (a, b, x) => {
+  const k = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
+
+/**
+ * Le cheval se roule (au pré, au paddock) : il se couche, se roule deux fois sur le flanc en gigotant, se relève et
+ * s'ébroue. Durées (s) : couché à DOWN, roulades jusqu'à UP, debout à STAND, fin de l'ébrouement à END.
+ */
+export const ROLL = { down: 1.3, up: 5.3, stand: 6.6, end: 7.6, tilt: 1.3 };
+/** Inclinaison sur le flanc à l'instant t (0 → 1 → 0 → 1 → 0 entre DOWN et UP : deux roulades). */
+export function rollTilt(t) {
+  if (t <= ROLL.down || t >= ROLL.up) return 0;
+  return 0.5 - 0.5 * Math.cos(((t - ROLL.down) / ((ROLL.up - ROLL.down) / 2)) * Math.PI * 2);
+}
+/** Couché (membres repliés) à l'instant t : 0 debout, 1 couché. */
+export const rollLie = (t) => smoothstep(0, ROLL.down, t) * (1 - smoothstep(ROLL.up, ROLL.stand, t));
 
 // Décalages de phase des pattes du cheval [AVG, AVD, ARG, ARD] :
 // pas latéral à quatre temps, trot en diagonale, galop à trois temps.
@@ -315,6 +332,142 @@ export class AnimalEntity {
     p.y = this.world.heightAt(p.x, p.z) + this.perchY;
   }
 
+  /**
+   * Le cheval vivant : quand tu reviens après être resté loin (40 s à plus de 16 m), il hennit doucement, lève la
+   * tête et te regarde ; s'il t'aime bien (lien), il vient vers toi, jusqu'au bord de son pré ou de son paddock. Et
+   * il se roule (wantsRoll, startRoll) : on fait avancer la roulade ici.
+   */
+  horseLife(dt, ctx, dist) {
+    const d = this.data;
+    if (dist > 16) this.awayFor = (this.awayFor ?? 0) + dt;
+    // (une roulade interrompue d'ailleurs — un client, un événement… l'emmène : on le remet droit)
+    if (this.state !== 'roll' && this.rollPosed) {
+      this.rollPosed = false;
+      this.scaleGroup.position.set(0, 0, 0);
+      this.scaleGroup.rotation.set(0, 0, 0);
+    }
+    this.greetT = Math.max(0, (this.greetT ?? 0) - dt);
+    this.rollCool = (this.rollCool ?? 60 + Math.random() * 120) - dt;
+    if (this.state === 'roll') {
+      if (this.ridden || this.scripted || this.herdCtrl || d.following || this.posing) this.stopRoll();
+      else {
+        const t0 = this.rollT;
+        this.rollT += dt;
+        if (t0 < ROLL.down + 0.6 && this.rollT >= ROLL.down + 0.6) this.emit('💨', 2); // (la poussière vole)
+        if (t0 < ROLL.stand && this.rollT >= ROLL.stand) audio.animal('horse', 'sad', d.id, { gain: 1 / (1 + dist / 7) }); // il s'ébroue
+        if (this.rollT >= ROLL.end) {
+          // (il s'est roulé dans l'herbe et la poussière : un peu moins propre, et content)
+          d.needs.grooming = Math.max(0, d.needs.grooming - 6);
+          d.needs.affection = Math.min(100, d.needs.affection + 2);
+          this.stopRoll();
+        }
+      }
+      return;
+    }
+    const free = !this.ridden && !this.scripted && !this.sleeping && !this.herdCtrl && !d.following && !this.posing
+      && this.state !== 'goTo' && this.state !== 'eat' && ctx.game?.player?.mount !== this;
+    if (dist < 12 && (this.awayFor ?? 0) > 40 && free) {
+      this.awayFor = 0;
+      this.greetT = 6;
+      this.speak('happy', dist);
+      const bond = d.bond ?? 0;
+      if (bond >= 40) this.emit('💕', 1);
+      const h = this.home;
+      if (bond >= 25 && !d.stalled && dist > 3 && h) {
+        // Il vient vers toi (en restant chez lui) et s'arrête à un peu moins de 2 m.
+        const p = this.root.position;
+        const pp = ctx.playerPos;
+        const k = (dist - 1.9) / dist;
+        let tx = p.x + (pp.x - p.x) * k;
+        let tz = p.z + (pp.z - p.z) * k;
+        if (h.hw) {
+          tx = Math.max(h.x - h.hw + 0.7, Math.min(h.x + h.hw - 0.7, tx));
+          tz = Math.max(h.z - h.hd + 0.7, Math.min(h.z + h.hd - 0.7, tz));
+        } else if (h.r) {
+          const r = Math.hypot(tx - h.x, tz - h.z);
+          if (r > h.r - 0.7) {
+            tx = h.x + ((tx - h.x) / r) * (h.r - 0.7);
+            tz = h.z + ((tz - h.z) / r) * (h.r - 0.7);
+          }
+        }
+        this.target.set(tx, 0, tz);
+        this.state = 'walk';
+        this.timer = 7;
+      } else if (this.state === 'walk') {
+        this.state = 'idle';
+        this.timer = 6;
+      }
+    }
+  }
+
+  /**
+   * Se rouler maintenant ? Chez lui (pré, paddock : pas au box), adulte, sans selle sur le dos (on dessangle
+   * d'abord : après la balade, il attend qu'on la lui enlève), pas trop souvent.
+   */
+  wantsRoll() {
+    const d = this.data;
+    if (d.stalled || this.stage === 'baby' || d.gear?.saddle || (this.rollCool ?? 1) > 0 || this.sleeping || this.greetT > 0) return false;
+    const h = this.home;
+    const p = this.root.position;
+    if (!h || (h.hw ? !inside(h, p.x, p.z, 1) : Math.hypot(p.x - h.x, p.z - h.z) > (h.r ?? 0) - 1)) return false;
+    // Après le travail (il a galopé) : tout de suite ; en sueur : souvent ; sinon, de temps en temps.
+    if (this.rollSoon) return true;
+    return Math.random() < (d.needs.grooming < 55 ? 0.35 : 0.06);
+  }
+
+  startRoll() {
+    this.state = 'roll';
+    this.rollT = 0;
+    this.rollSide = Math.random() < 0.5 ? -1 : 1;
+    this.rollSoon = false;
+    this.targetSpeed = 0;
+    this.speed = 0;
+    this.timer = ROLL.end + 1;
+  }
+
+  /** Fin (ou arrêt) de la roulade : le cheval est debout, la pose redevient celle de l'animation. */
+  stopRoll() {
+    if (this.state !== 'roll') return;
+    const sg = this.scaleGroup;
+    sg.position.set(0, 0, 0);
+    sg.rotation.set(0, 0, 0);
+    this.rollPosed = false;
+    this.state = 'idle';
+    this.timer = 2 + Math.random() * 3;
+    this.rollCool = 300 + Math.random() * 300;
+  }
+
+  /**
+   * La pose de la roulade, après l'animation : membres repliés (realLegPose 'down'), puis le cheval bascule sur le
+   * flanc autour de son ventre (le corps ne rentre pas dans le sol), les membres gigotent, et il s'ébroue debout.
+   */
+  rollPose() {
+    const md = this.model;
+    const sg = this.scaleGroup;
+    const t = this.rollT ?? 0;
+    this.rollPosed = true;
+    const lie = rollLie(t);
+    const tilt = rollTilt(t);
+    const theta = ROLL.tilt * tilt * (this.rollSide ?? 1);
+    const real = realLegPose(md, 'down', lie, sg);
+    if (!real) {
+      sg.position.y = -0.22 * lie;
+      for (const l of md.legs ?? []) l.pivot.rotation.x = (l.front ? -1.3 : 1.3) * lie;
+    }
+    if (tilt > 0.05) for (const l of md.legs ?? []) l.pivot.rotation.x += Math.sin(this.time * 6 + (l.front ? 0 : 1.7)) * 0.3 * tilt;
+    if (theta && real) {
+      // Pivot au milieu du ventre (1,25 × la hauteur du coude au-dessus du sol, debout) : couché sur le sternum, il est
+      // à 0,65 × ; sur le flanc, plus bas (la demi-largeur du cheval).
+      const L = (md.legTop ?? 0.9) * sg.scale.y;
+      const hc = 1.25 * L;
+      sg.position.x = hc * Math.sin(theta);
+      sg.position.y = L * (0.65 - 0.25 * Math.abs(Math.sin(theta))) - hc * Math.cos(theta);
+    } else sg.position.x = 0;
+    // Debout, il s'ébroue (secoue tout le corps).
+    const shake = t > ROLL.stand ? Math.sin((t - ROLL.stand) * 30) * 0.06 * (1 - smoothstep(ROLL.stand, ROLL.end, t)) : 0;
+    sg.rotation.z = (real ? theta : theta * 0.4) + shake;
+  }
+
   pickWanderTarget() {
     const h = this.home;
     for (let i = 0; i < 8; i++) {
@@ -446,6 +599,12 @@ export class AnimalEntity {
         }
         return;
       }
+    }
+
+    // Au pré ou au paddock, le cheval se roule de temps en temps : souvent quand il a transpiré (après le galop).
+    if (d.species === 'horse' && this.wantsRoll()) {
+      this.startRoll();
+      return;
     }
 
     // Les chevaux (et vaches, chèvres) se font des toilettages mutuels.
@@ -617,6 +776,7 @@ export class AnimalEntity {
       this.voiceTimer = (sad ? 20 : 40) + Math.random() * 50;
       if (!this.sleeping && !this.inside && distPlayer < 28 && Math.random() < 0.6) this.speak(null, distPlayer);
     }
+    if (d.species === 'horse' && !d.client && !d.guest) this.horseLife(dt, ctx, distPlayer);
 
     // Maison des animaux : on y va par la porte, puis on dort à l'abri dans son panier.
     if (d.housed && (d.following || this.ridden || this.herdCtrl?.pusher)) d.housed = false;
@@ -648,7 +808,7 @@ export class AnimalEntity {
       // Un cheval qui rentre au box ne s'endort pas en chemin.
       const stall = d.stalled ? this.world.stallOf?.(d) : null;
       const atBox = inStall(stall, p); // (déjà chez lui, pas en chemin vers son box)
-      const busy = this.herdCtrl || this.state === 'goTo' || this.state === 'eat' || den || (stall && !atBox);
+      const busy = this.herdCtrl || this.state === 'goTo' || this.state === 'eat' || this.state === 'roll' || den || (stall && !atBox);
       const tired = d.needs.energy < 12 || (this.sleeping && d.needs.energy < 60);
       this.sleeping = !busy && !d.following && (ctx.night || tired) && distPlayer > 2.5;
       this.targetSpeed = 0;
@@ -806,6 +966,9 @@ export class AnimalEntity {
             }
             break;
           }
+          case 'roll':
+            this.targetSpeed = 0; // (horseLife le fait rouler, puis le relève)
+            break;
           case 'walk': {
             const dx = this.target.x - p.x;
             const dz = this.target.z - p.z;
@@ -825,7 +988,8 @@ export class AnimalEntity {
       // Au box, le cheval vient voir le joueur qui s'approche : il s'arrête, se tourne vers lui et lève la tête
       // (avant, on ne voyait que sa croupe depuis l'allée). Seulement une fois dans son box : en chemin (« Rentrer
       // au box », « Rentrer les chevaux »), il continue jusqu'au box même si l'enfant marche à côté de lui.
-      this.attending = atBox && !this.sleeping && !this.herdCtrl && !d.following && this.state !== 'eat' && distPlayer < 4.5;
+      this.attending = (atBox || (this.greetT > 0 && this.state !== 'walk')) && !this.sleeping && !this.herdCtrl && !d.following
+        && this.state !== 'eat' && this.state !== 'roll' && distPlayer < (atBox ? 4.5 : 12);
       if (this.attending) {
         this.targetSpeed = 0;
         if (this.state === 'walk') {
@@ -889,6 +1053,7 @@ export class AnimalEntity {
 
     this.root.rotation.y = this.heading;
     this.animate(dt, sad);
+    if (this.state === 'roll') this.rollPose();
 
     // Petites particules (cœurs, étoiles…)
     for (let i = this.particles.length - 1; i >= 0; i--) {

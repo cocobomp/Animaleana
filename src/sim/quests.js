@@ -31,20 +31,19 @@ import { QUEST_ORDER, questBlock, followBlock } from './tutorial.js';
 export const MAX_JOINED = 3;
 
 /**
- * L'histoire de la ferme, dans l'ordre. Chaque chapitre se fait avec n'importe quel animal, sans chance et sans
- * gros budget, avec ce qu'on a gagné jusque-là (tests/quests.test.js le vérifie) :
- * adopter (gratuit), caresser, nourrir, donner à boire, brosser (le lien qu'il faut pour un tour), le vétérinaire,
- * un tour, un spectacle avec ce tour (gratuit, au terrain de concours), un métier (niveau 3, déjà atteint grâce aux
- * chapitres d'avant), puis un premier client.
- * Pas dans l'histoire : ramasser un crottin (les chats et les lapins n'en font pas : litière) et le premier voyage
- * (depuis le Japon, l'Australie ou la Pampa, le moins cher coûte 776 à 861 🪙 : trop pour tout le monde). Ce sont
- * des quêtes secondaires.
+ * L'histoire de la ferme, dans l'ordre : celle de ton premier cheval. On l'adopte au refuge (gratuit, et il y a
+ * toujours un cheval adulte, qu'on peut monter : src/sim/adoption.js), on fait connaissance (caresses, foin, eau),
+ * on le panse (étrille, brosse, cure-pied, peigne), on monte en selle, on passe au trot puis au galop, la visite
+ * chez le vétérinaire, la première leçon, le premier saut, puis la première balade. Chaque chapitre se fait sans
+ * chance et sans gros budget, avec ce qu'on a gagné jusque-là, dans toutes les maisons (tests/quests.test.js).
+ * Les quêtes des autres animaux (un tour, un spectacle, un métier, un client…) sont des quêtes secondaires.
  */
-export const STORY = ['adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'vet1', 'trick1', 'actvShow1', 'career1', 'client1'];
+export const STORY = ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1', 'vet1', 'actvLesson1', 'actvJump1', 'actvTrail1'];
 
 /** Thèmes des quêtes secondaires (journal : « 🗺️ Autres quêtes »). Chaque quête est dans un seul thème. */
 export const THEMES = [
-  { id: 'animals', quests: ['adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1', 'baby', 'species4'] },
+  { id: 'horse', quests: ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1'] },
+  { id: 'animals', quests: ['adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'baby', 'species4'] },
   { id: 'travel', quests: ['travel1', 'abroad', 'horseTrip'] },
   {
     id: 'activities',

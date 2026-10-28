@@ -592,6 +592,8 @@ export class Game {
       }
       this.ui.updateGaitPad?.();
     };
+    // Trois secondes de galop d'affilée (une fois par balade) : le chapitre « au trot, puis au galop ».
+    this.player.onCanter = () => addStat(this.profile, 'rideCanter');
     audio.configure(profile.settings.sound);
     audio.setActive(true);
     this.loadPlace(profile.place);
@@ -1343,6 +1345,7 @@ export class Game {
         if (n === 0) this.ui.showDeltas(a, before);
         spend(this.profile, CARE[action].cost);
         addStat(this.profile, action);
+        if (a.species === 'horse') addStat(this.profile, `horse_${action}`); // (l'histoire de ton premier cheval)
         this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️', 2);
         n++;
       } else reasons.add(res.reason);
@@ -1809,6 +1812,7 @@ export class Game {
     if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name, g: a.sex }));
     spend(this.profile, care.cost);
     addStat(this.profile, action);
+    if (a.species === 'horse') addStat(this.profile, `horse_${action}`); // (l'histoire de ton premier cheval)
     this.xp('care');
     this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
     this.ui.refresh();
@@ -1881,6 +1885,7 @@ export class Game {
       d.leashed = false;
       this.ui.toast(t('leashRide', { name: d.name, g: d.sex }), 5000);
     }
+    e.stopRoll?.(); // (il se roulait : debout d'abord, avant de mesurer la selle)
     // On monte toujours avec sa bombe, mise avant de monter : setHelmet refait l'avatar (mèches rentrées), qui
     // n'est ainsi posé en selle (et ajusté au cheval, riderFit) qu'une fois.
     this.player.setHelmet(riderHelmet(this.profile));
@@ -1893,7 +1898,14 @@ export class Game {
   }
 
   dismount() {
+    const e = this.player.mount;
+    const worked = !!this.player.cantered; // (il a galopé : de retour au pré, il ira se rouler)
     this.player.dismount();
+    if (e && worked) {
+      e.rollSoon = true;
+      // (sellé, il attend qu'on lui enlève sa selle pour aller se rouler : on le dit une fois)
+      if (e.data.gear?.saddle) this.ui.toast(t('ride_unsaddle', { name: e.data.name, g: e.data.sex }), 5000);
+    }
     this.ui.updateGaitPad?.();
   }
 

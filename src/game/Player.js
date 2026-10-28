@@ -10,6 +10,7 @@ import { rootToTorso, armIK } from './models/avatarRig.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 import { tackEffects } from '../sim/gear.js';
+import { rideSpeed, allowedGait, rideEffort, nextSpookIn, SPOOKY } from '../sim/riding.js'; // allures en balade libre
 import { helmetModel, helmetStrapsModel } from './models/tackModels.js'; // bombe du cavalier et ses sangles
 import { helmetFit } from './models/avatarHair.js'; // la bombe à la taille de la coiffure
 import { prepareRiderFit, fitRider, seatOnSaddle, releaseRiderFit } from './models/riderFit.js'; // cavalier sur le cheval réaliste
@@ -183,6 +184,12 @@ export class Player {
   /** Monter à cheval : l'avatar s'assoit sur le dos de l'animal. */
   ride(entity) {
     this.mount = entity;
+    // En selle, on part au pas (boutons d'allure : src/ui/UI.js ; touches 0 1 2 3 : Game.onKey).
+    this.gait = 'walk';
+    this.gaitNow = 'walk';
+    this.spook = null;
+    this.spookIn = null;
+    this.tiredSaid = null;
     entity.ridden = true;
     entity.data.following = false;
     this.root.position.copy(entity.position);
@@ -721,7 +728,34 @@ export class Player {
     const mount = this.mount;
     if (this.carried) run = false;
     let max = run ? RUN : this.carried ? CARRY : WALK;
-    if (mount) {
+    // Balade libre à cheval (pas pendant une activité, ni quand on se laisse guider) : l'allure choisie.
+    const freeRide = !!mount && this.gaitEnabled !== false && !this.auto;
+    if (mount && freeRide) {
+      let g = this.gait ?? 'walk';
+      // À l'arrêt, pousser le joystick fait repartir au pas.
+      if (g === 'halt' && amount > 0.05) {
+        g = this.gait = 'walk';
+        this.onGait?.('walk', 'start');
+      }
+      if (run && g !== 'halt') g = 'gallop'; // Maj, 🏃 ou joystick au bord : le grand galop
+      const ok = allowedGait(g, mount.data);
+      if (ok.reason) {
+        // Trop fatigué : il le dit une fois (et le bouton choisi redescend).
+        if (this.tiredSaid !== ok.reason) this.onGait?.(ok.gait, ok.reason);
+        this.tiredSaid = ok.reason;
+        const order = ['halt', 'walk', 'trot', 'canter'];
+        if (order.indexOf(this.gait) > order.indexOf(ok.gait)) this.gait = ok.gait;
+        g = ok.gait;
+      } else this.tiredSaid = null;
+      this.gaitNow = g;
+      max = rideSpeed(g, {
+        scale: mount.scale,
+        speedSkill: mount.data.skills.speed,
+        tack: tackEffects(mount.data).speed,
+        bareback: this.bareback || !mount.data.gear?.saddle,
+      });
+      if (this.spook) max *= 0.6; // (l'écart : il se reprend)
+    } else if (mount) {
       const skill = 1 + mount.data.skills.speed / 150;
       // À cru : un peu moins vite ; la selle de course fait aller plus vite (src/sim/gear.js).
       max = (run ? 11 : 4.5) * skill * Math.min(1.2, mount.scale + 0.2) * (this.bareback || !mount.data.gear?.saddle ? 0.8 : tackEffects(mount.data).speed);
@@ -749,6 +783,7 @@ export class Player {
     }
 
     const p = this.root.position;
+    if (freeRide) this.rideStep(dt, mount, p);
     if (this.speed > 0.01) {
       const moveDir = firstPerson && !mount && !this.auto && amount > 0.05 ? dir.normalize() : new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
       const nx = p.x + moveDir.x * this.speed * dt;
@@ -784,6 +819,40 @@ export class Player {
     } else {
       this.animateWalk(dt);
     }
+  }
+
+  /**
+   * Balade libre, une image : ce que l'allure coûte au cheval (src/sim/riding.js) et les écarts. Un écart : le cheval
+   * fait un bond de côté (un oiseau, un sac qui bouge…), ralentit, puis on repart ; au galop, il repasse au trot.
+   */
+  rideStep(dt, mount, p) {
+    rideEffort(mount.data, this.speed > 0.3 ? this.gaitNow : 'halt', dt); // (immobile : il souffle)
+    if (SPOOKY.has(this.gaitNow) && this.speed > 2 && !this.spook) {
+      this.spookIn = (this.spookIn ?? nextSpookIn(mount.data)) - dt;
+      if (this.spookIn <= 0) {
+        this.spookIn = null;
+        this.spook = { t: 0.9, side: Math.random() < 0.5 ? -1 : 1 };
+        if (this.gait === 'canter') this.gait = 'trot';
+        this.onGait?.(this.gait, 'spook');
+      }
+    }
+    if (this.spook) {
+      const s = this.spook;
+      s.t -= dt;
+      const k = s.t > 0.55 ? 1 : 0.25;
+      // Un pas de côté brusque et la tête qui part : le cavalier est secoué, puis tout se calme.
+      p.x += Math.cos(this.heading) * s.side * dt * 2.6 * k;
+      p.z -= Math.sin(this.heading) * s.side * dt * 2.6 * k;
+      this.heading += s.side * dt * 1.4 * k;
+      if (s.t <= 0) this.spook = null;
+    }
+  }
+
+  /** Choisir l'allure (boutons, touches) : 'halt', 'walk', 'trot', 'canter'. */
+  setGait(g) {
+    if (!this.mount) return;
+    this.gait = g;
+    this.tiredSaid = null;
   }
 
   /**

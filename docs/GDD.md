@@ -78,6 +78,15 @@ réussite au dressage…).
 - **Tours** : assis, couché, donner la patte, rapporter, sauter…
 - **Travail à pied** (chevaux) : longe, liberté, désensibilisation.
 - **Équitation** : balade libre, galop, saut d'obstacles, dressage, concours.
+- **Les allures en balade libre** (0.5, `src/sim/riding.js`) : en selle, des boutons ✋ Arrêt, 🐢 Pas, 🐴 Trot,
+  💨 Galop (touches 0 1 2 3 ; téléphone : une colonne à droite, paysage : une rangée au-dessus des boutons de
+  vue, ordinateur : en bas à gauche). On part au pas ; le joystick (ou les flèches) dirige, l'allure choisie donne la
+  vitesse (pas 1,6 m/s, trot 3, galop 5, rapportés à la taille du cheval : l'animation prend bien l'allure choisie).
+  Maj, 🏃 ou le joystick au bord : le grand galop. Le galop fatigue le cheval (énergie), le fait transpirer (pansage)
+  et lui donne soif ; le pas et l'arrêt le reposent. Fatigué (énergie < 25), il ne galope plus et le dit ; épuisé
+  (< 10), il ne fait plus que marcher. Au trot et au galop, il fait parfois un **écart** (un oiseau, un sac
+  plastique, son ombre…) : un bond de côté, il ralentit, on le rassure et on repart ; un cheval timide en fait plus,
+  un calme et un cheval obéissant (dressage) moins. Pendant une activité (saut, dressage…), c'est elle qui mène.
 - **Entraînement** : stats qui progressent (vitesse, endurance, obéissance,
   saut, dressage).
 - **Dressage des chevaux** (`src/sim/dressage.js`, `src/game/Dressage.js`) : un
@@ -211,5 +220,5 @@ réussite au dressage…).
 | **0.2** (fait) | Concours et spectacles sur le terrain de concours, apprentissage du saut, parcours d'obstacles, agility, balade, lapin-hop ; mini-jeux pour chaque soin (brosser, laver, ferrer, tonte, traite…) ; vétérinaire à jouer soi-même |
 | **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison (reportée en 0.5) |
 | **0.4** (fait) | Graphismes plus beaux (sol, végétation, lumière, bâtiments, animations), animaux réalistes (chevaux, chiens race par race, chats, lapins, moutons, chèvres, vaches) et cavalier en selle, vrai saut d'obstacles ; sons synthétisés (ambiance, voix des animaux, pas, interface) ; mini-jeux des corvées et notation « juste ce qu'il faut » dans tous les mini-jeux ; vignettes 3D des cartes (sellerie, animalerie, construction, véhicules) ; vue construction (grille, enclos à la taille voulue, écurie qui s'agrandit) ; 4x4 et van à chevaux ; métiers toiletteur, éducateur canin, guide de randonnée, concours de beauté, concours à l'extérieur, école vétérinaire ; espèces proposées au fil de la partie ; sauvegarde en ligne facultative ; jeu au clavier ; histoire de la ferme (10 chapitres) et quêtes secondaires à rejoindre ; version « à emporter » en un seul fichier |
-| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras). À venir : décoration de l'intérieur de la maison |
+| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras) ; allures en balade libre (arrêt, pas, trot, galop, grand galop ; fatigue, sueur, écarts). À venir : décoration de l'intérieur de la maison |
 | 1.0 | Publication |

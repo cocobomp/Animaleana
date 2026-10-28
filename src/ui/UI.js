@@ -2,7 +2,7 @@
 
 import { h, isPhone, safeInsets } from './dom.js';
 import { watchViewport, focusField } from './viewport.js'; // clavier à l'écran
-import { t, L, fmtHour } from '../i18n.js';
+import { t, L, fmtHour, getLang } from '../i18n.js';
 import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
@@ -75,7 +75,18 @@ export class UI {
     this.t = t;
     this.labels = h('div', { id: 'labels' });
     this.labelEls = new Map();
-    root.append(this.touchPad, this.statusBar, this.labels);
+    // À cheval, en balade libre : les allures (arrêt, pas, trot, galop). Les boutons sont créés une fois (seule leur
+    // classe change : pas de bouton remplacé sous le doigt) ; leurs textes suivent la langue (updateGaitPad).
+    this.gaitBtns = {};
+    this.gaitPad = h('div', { id: 'gait-pad', hidden: true, role: 'group' },
+      ['halt', 'walk', 'trot', 'canter'].map((g) => {
+        const b = h('button', { class: `gait-btn ${g}`, onClick: () => this.game?.setRideGait(g) },
+          h('span', { class: 'gait-icon', 'aria-hidden': 'true' }, { halt: '✋', walk: '🐢', trot: '🐴', canter: '💨' }[g]),
+          h('span', { class: 'gait-name' }), h('kbd', {}, { halt: '0', walk: '1', trot: '2', canter: '3' }[g]));
+        this.gaitBtns[g] = b;
+        return b;
+      }));
+    root.append(this.touchPad, this.gaitPad, this.statusBar, this.labels);
 
     // Un seul écouteur pour tous les boutons : petit « tic », plus chantant pour les boutons principaux,
     // descendant pour les boutons rouges. (Pas pour les boutons de direction qu'on garde appuyés.)
@@ -174,6 +185,7 @@ export class UI {
     this.actionBtn.hidden = true;
     this.camBtn.hidden = true;
     this.touchPad.hidden = true;
+    this.gaitPad.hidden = true;
     this.statusBar.replaceChildren();
     this.statusKey = '';
     this.clearLabels();
@@ -270,9 +282,41 @@ export class UI {
     ]);
   }
 
+  /**
+   * Les boutons d'allure : visibles quand on monte en balade libre (pas pendant une activité, un voyage, la vue
+   * d'ensemble ni une fenêtre qui prend l'écran) ; le bouton de l'allure choisie est allumé, et celui du galop
+   * clignote quand on « court » (grand galop).
+   */
+  updateGaitPad() {
+    const g = this.game;
+    const pl = g?.player;
+    const show = !!pl?.mount && g.running && !g.activities?.active && !g.tripFlow?.active && !g.mgmt?.active && !this.isBlocking();
+    if (this.gaitPad.hidden === show) this.gaitPad.hidden = !show;
+    if (!show) return;
+    const lang = getLang();
+    if (this.gaitLang !== lang) {
+      this.gaitLang = lang;
+      this.gaitPad.setAttribute('aria-label', t('ride_gait'));
+      for (const [k, b] of Object.entries(this.gaitBtns)) {
+        b.querySelector('.gait-name').textContent = t(`ride_gait_${k}`);
+        b.title = `${t(`ride_gait_${k}`)} (${b.querySelector('kbd').textContent})`;
+      }
+    }
+    for (const [k, b] of Object.entries(this.gaitBtns)) {
+      const on = pl.gait === k;
+      if (b.classList.contains('on') !== on) {
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+      const gal = k === 'canter' && pl.gaitNow === 'gallop';
+      if (b.classList.contains('gallop') !== gal) b.classList.toggle('gallop', gal);
+    }
+  }
+
   refresh() {
     const g = this.game;
     if (!g?.profile || !this.hudInfo) return;
+    this.updateGaitPad();
     const s = g.hud();
     const set = (el, text) => { if (el.textContent !== text) el.textContent = text; };
     const narrow = isPhone(); // téléphone : carte sur deux lignes + barre du temps

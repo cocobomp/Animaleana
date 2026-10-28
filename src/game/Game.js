@@ -581,6 +581,17 @@ export class Game {
     this.player.setAvatar(profile.avatar);
     // Bruit des pas selon le sol (herbe, terre, plancher, pierre…), sabots à cheval.
     this.player.onStep = (running, hoof) => audio.step(hoof ? 'hoof' : this.surfaceAt(), running);
+    // Balade libre à cheval : le cheval trop fatigué pour galoper, ou qui fait un écart (src/sim/riding.js).
+    this.player.onGait = (gait, why) => {
+      const m = this.player.mount?.data;
+      if (!m) return;
+      if (why === 'tired' || why === 'exhausted') this.ui.toast(t(`ride_${why}`, { name: m.name, g: m.sex }), 4500);
+      else if (why === 'spook') {
+        this.ui.toast(t('ride_spook', { name: m.name, g: m.sex, what: t(`ride_spookWhat${Math.floor(Math.random() * 4)}`) }), 5000);
+        audio.animal('horse', 'sad', m.id); // (il s'ébroue)
+      }
+      this.ui.updateGaitPad?.();
+    };
     audio.configure(profile.settings.sound);
     audio.setActive(true);
     this.loadPlace(profile.place);
@@ -970,9 +981,11 @@ export class Game {
     const entities = [...this.entities.values()];
     const ctx = { playerPos: this.player.position, night, entities, game: this };
     for (let i = 0; i < steps; i++) {
+      this.player.gaitEnabled = !this.activities.active; // (pendant une activité, c'est elle qui mène le cheval)
       this.player.update(mgmt ? 0 : wdt, pctrl, this.rig.yaw, this.rig.mode === 'first');
       for (const e of entities) e.update(wdt, ctx);
       this.player.lateUpdate?.(mgmt ? 0 : wdt); // le cavalier suit le cheval qu'on vient d'animer
+      if (i === 0) this.ui.updateGaitPad?.(); // (boutons d'allure : montrés ou cachés, allure allumée — très léger)
       for (const h of this.helpers.values()) h.update(wdt, this);
       this.dogTrainer.update(wdt); // maîtres en visite, promenade-séance, démonstration
       this.herding.update(wdt);
@@ -1722,6 +1735,9 @@ export class Game {
     }
     if (code === 'KeyC') this.toggleCamera();
     if (code === 'KeyN') this.ui.tutorial?.cycleQuest(1); // ⇄ la quête suivante dans le suivi à l'écran
+    // À cheval, en balade libre : 0 arrêt, 1 pas, 2 trot, 3 galop.
+    const gaitKey = { Digit0: 'halt', Numpad0: 'halt', Digit1: 'walk', Digit2: 'trot', Digit3: 'canter' }[code];
+    if (gaitKey && this.player.mount && !this.activities.active) this.setRideGait(gaitKey);
   }
 
   interact() {
@@ -1869,6 +1885,7 @@ export class Game {
     // n'est ainsi posé en selle (et ajusté au cheval, riderFit) qu'une fois.
     this.player.setHelmet(riderHelmet(this.profile));
     this.player.ride(e);
+    this.ui.updateGaitPad?.();
     addStat(this.profile, 'rides');
     this.xp('ride');
     this.ui.toast(t(gear.bareback ? 'ridingBareback' : 'ridingHint', { name: a.name, g: a.sex }));
@@ -1877,6 +1894,15 @@ export class Game {
 
   dismount() {
     this.player.dismount();
+    this.ui.updateGaitPad?.();
+  }
+
+  /** Choisir l'allure du cheval qu'on monte (boutons à l'écran, touches 0 1 2 3). */
+  setRideGait(g) {
+    const pl = this.player;
+    if (!pl.mount) return;
+    pl.setGait(g);
+    this.ui.updateGaitPad?.();
   }
 
   /** Laisses : un trait entre la main du joueur et le collier ; le chien qui tire entraîne le joueur. */

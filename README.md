@@ -48,7 +48,7 @@ rouvrir le même fichier (au même endroit) pour les retrouver. Ce fichier est p
 - **Mini-jeux pour chaque corvée** : curer le box, pailler, balayer l'allée, ranger le salon, faire la vaisselle
 - **Mini-jeux pour chaque soin** : nourrir, boire, brosser, laver, nettoyer, griffes, ferrer, caresser, friandise, jouer, longe, liberté, tonte et traite
 - Les animaux grandissent, vieillissent et peuvent avoir des bébés
-- Dressage de tours, entraînement, longe et travail en liberté ; équitation (même à cru) ; promenade en laisse
+- Dressage de tours, entraînement, longe et travail en liberté ; **équitation** (même à cru) avec de vraies allures (✋ arrêt, 🐢 pas, 🐴 trot, 💨 galop, grand galop) : le galop fatigue le cheval et le fait transpirer, et il fait parfois un écart ; promenade en laisse
 - **Activités** : apprendre à sauter pas à pas, saut d'obstacles, agility, balade, lapin-hop, spectacles et concours sur le terrain de concours
 - **Événements spéciaux** : orage, canicule, grand froid, animal blessé, cheval échappé, chiot perdu, voisin, naissance, fête du village
 - **Métiers** (💼) : vétérinaire, gardien de pension et **toiletteur** ✂️ : on construit un salon de toilettage, des clients arrivent avec leur chien, leur chat ou leur lapin (puis cheval et mouton aux rangs suivants) ; chaque étape est un mini-jeu (bain, séchage sans faire peur, brossage et démêlage, coupe au pochoir, griffes, oreilles, dents, parfum) et on finit par un nœud ou un bandana ; avant / après, étoiles du client, paye, pourboire, réputation et trois rangs

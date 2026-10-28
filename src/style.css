@@ -580,6 +580,48 @@ button.sv-card:hover { border-color: var(--primary); }
   user-select: none;
 }
 .pad-btn.run { background: rgba(47, 138, 95, 0.75); }
+/* À cheval : les allures (src/ui/UI.js updateGaitPad). Ordinateur : une rangée en bas à gauche (le milieu est au
+   bouton d'action et à la pastille « Tu montes… ») ; téléphone : une colonne à droite, au-dessus du bouton d'action ;
+   en paysage, une rangée à droite au-dessus des boutons de vue. */
+#gait-pad {
+  position: fixed;
+  left: calc(16px + var(--safe-l));
+  bottom: calc(20px + var(--safe-b));
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(20, 40, 30, 0.35);
+  backdrop-filter: blur(6px);
+}
+#gait-pad[hidden] { display: none; }
+.gait-btn {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 48px; padding: 0 14px;
+  border-radius: 999px; border: 2px solid rgba(255, 255, 255, 0.55);
+  background: var(--glass); color: #fff; font-weight: 700; font-size: 0.95rem;
+  touch-action: manipulation; user-select: none;
+}
+.gait-btn .gait-icon { font-size: 1.3rem; line-height: 1; }
+.gait-btn kbd { font-size: 0.72rem; background: rgba(255, 255, 255, 0.22); border-radius: 5px; padding: 1px 5px; }
+.gait-btn.on { background: var(--primary); border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35); }
+.gait-btn.gallop { animation: gait-gallop 0.5s ease-in-out infinite alternate; }
+@keyframes gait-gallop { to { background: #e07a3a; } }
+@media (pointer: coarse) {
+  .gait-btn kbd { display: none; }
+  #gait-pad { left: auto; right: calc(14px + var(--safe-r)); bottom: calc(246px + var(--safe-b)); flex-direction: column; border-radius: 30px; }
+  .gait-btn { width: 56px; height: 56px; min-height: 56px; padding: 0; justify-content: center; flex-direction: column; gap: 0; }
+  .gait-btn .gait-name { font-size: 0.62rem; line-height: 1; }
+  .gait-btn .gait-icon { font-size: 1.35rem; }
+}
+/* Paysage : une rangée à droite, juste au-dessus des boutons de vue (le milieu de l'écran reste au cheval). */
+@media (pointer: coarse) and (max-height: 480px) {
+  #gait-pad { right: calc(12px + var(--safe-r)); bottom: calc(166px + var(--safe-b)); flex-direction: row; gap: 6px; padding: 4px; }
+  .gait-btn { width: 46px; height: 46px; min-height: 46px; }
+  .gait-btn .gait-icon { font-size: 1.15rem; }
+  .gait-btn .gait-name { font-size: 0.56rem; }
+}
 #joystick { width: 150px; height: 150px; }
 #joystick .knob { width: 64px; height: 64px; }
 #action { bottom: calc(24px + var(--safe-b)); }

@@ -106,6 +106,7 @@ describe('les textes', () => {
     setLang('fr');
     expect(t('qk_fear', { g: 'f', what: t('qk_fear1') })).toBe('😲 Elle a peur des sacs plastique');
     expect(t('qk_title', { g: 'f' })).toBe('🔍 Ce que tu sais d\'elle');
+    expect(t('qk_treat', { what: t('qk_carrot'), icon: '🥕' })).toBe('🥕 Sa friandise préférée : la carotte');
     expect(t('ride_spookAgain', { name: 'Étoile', g: 'f', what: t('qk_fear1') })).toBe('😲 Étoile a toujours peur des sacs plastique : parle-lui doucement.');
   });
 });

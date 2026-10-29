@@ -3,7 +3,8 @@
 import { drawAnimal, animalShape, fitAnimal, hitAnimal, rrect, ellipse, circle, label, fillView, sky, clamp, lerp, dist, shade } from './draw.js';
 // emoji toujours opaque (voir food.js : un emoji prend l'opacité du dernier fillStyle)
 import { homeBackground, sizeFor, isBig, drawCountZone, emojiOpaque as emoji, stopLabel, nb, justMsgs, drawAnimalLifted } from './food.js';
-import { quirksOf, knows } from '../../sim/horseQuirks.js'; // 🔍 son coin préféré (cheval)
+import { quirksOf, knows, QUIRK_SPOTS } from '../../sim/horseQuirks.js'; // 🔍 son coin préféré (cheval)
+import { keepsMemories } from '../../sim/memories.js'; // (tes chevaux : pas ceux qu'on te confie)
 
 // ---------------------------------------------------------------- caresser
 
@@ -62,11 +63,13 @@ export function petGame(ctx) {
   const floorY = 305;
   const fit = fitAnimal(a, { groundY: floorY, maxW: 330, maxH: 240 });
   const sh = animalShape(a, { x: fit.x, y: floorY, s: fit.s, f: 1 });
-  // Un cheval a son coin à lui (src/sim/horseQuirks.js) ; tant qu'on ne le connaît pas, le 💡 attend plus longtemps.
-  const qk = a.species === 'horse' ? quirksOf(a) : null;
+  // Ton cheval a son coin à lui (src/sim/horseQuirks.js) ; tant qu'on ne le connaît pas, le 💡 attend plus longtemps.
+  const qk = keepsMemories(a) ? quirksOf(a) : null;
   const fav = sh[qk ? qk.spot : FAVORITE[a.species] ?? 'back'];
   const hintAfter = qk && !knows(a, 'spot') ? 8 : 3.5;
   const favR = 46;
+  // (ses 4 coins possibles sont à ~40 px l'un de l'autre : seul le plus proche du doigt compte)
+  const nearest = (p) => Object.keys(QUIRK_SPOTS).reduce((b, k) => (dist(p.x, p.y, sh[k].x, sh[k].y) < dist(p.x, p.y, sh[b].x, sh[b].y) ? k : b));
   const limit = SPEED_LIMIT[a.personality] ?? 420;
   const shy = a.personality === 'shy';
   // « Juste ce qu'il faut » : le cœur doit arriver dans la zone verte, puis on appuie sur
@@ -127,7 +130,7 @@ export function petGame(ctx) {
       }
       return;
     }
-    const atFav = dist(p.x, p.y, fav.x, fav.y) < favR;
+    const atFav = dist(p.x, p.y, fav.x, fav.y) < favR && (!qk || nearest(p) === qk.spot);
     prog = Math.min(1, prog + d * 0.0011 * (atFav ? 2.3 : 1));
     if (atFav) favDist += d;
     if (qk && !lipShown && favDist > 120) {

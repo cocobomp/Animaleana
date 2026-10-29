@@ -2,6 +2,7 @@
 
 import { drawAnimal, animalShape, rrect, ellipse, circle, emoji as emojiRaw, label, fillView, clamp, lerp, shade } from './draw.js';
 import { quirksOf, knows } from '../../sim/horseQuirks.js'; // 🔍 sa friandise préférée (cheval)
+import { keepsMemories } from '../../sim/memories.js'; // (tes chevaux : pas ceux qu'on te confie)
 
 /**
  * emoji() de draw.js, mais toujours bien opaque : sur un canvas, un emoji en couleur prend
@@ -578,8 +579,8 @@ export function treatGame(ctx) {
   const s = sizeFor(a, big ? 1.12 : 1.1);
   const ax = big ? 150 : 165;
   const treat = TREATS[a.species] ?? '🍪';
-  // Cheval : deux boutons, 🥕 et 🍎 ; sa préférée lui fait plaisir (le jeu la note : opts.out.quirk)
-  const qk = a.species === 'horse' ? quirksOf(a) : null;
+  // Ton cheval : deux boutons, 🥕 et 🍎 ; sa préférée lui fait plaisir (le jeu la note : opts.out.quirk)
+  const qk = keepsMemories(a) ? quirksOf(a) : null;
   let kind = 'carrot'; // (la dernière choisie : Espace et le doigt sur la scène donnent la même)
   let favFound = false;
   const calmTime = a.personality === 'shy' || a.personality === 'calm' ? 1.6 : a.personality === 'playful' ? 1.05 : 1.25;

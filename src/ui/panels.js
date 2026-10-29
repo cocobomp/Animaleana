@@ -203,8 +203,9 @@ function quirkSection(a) {
   const q = quirksOf(a);
   const p = { name: a.name, g: a.sex };
   const what = { spot: t(`qk_where_${q.spot}`), treat: t(`qk_${q.treat}`), fear: t(`qk_fear${q.fear}`) };
+  const icon = q.treat === 'carrot' ? '🥕' : '🍎'; // (qk_treat : l'icône de sa friandise à lui)
   return [h('h3', {}, t('qk_title', p)), h('ul', { class: 'qk-list' }, ['spot', 'treat', 'fear'].map((k) => (knows(a, k)
-    ? h('li', { class: 'known' }, t(`qk_${k}`, { ...p, what: what[k] }))
+    ? h('li', { class: 'known' }, t(`qk_${k}`, { ...p, what: what[k], icon }))
     : h('li', {}, t(`qk_hint_${k}`, p)))))];
 }
 

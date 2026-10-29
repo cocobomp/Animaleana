@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { justRight, verdict, JUST_FLOOR } from '../src/ui/minigames/score.js';
 import { makeRng, animalShape, fitAnimal } from '../src/ui/minigames/draw.js';
-import { quirksOf } from '../src/sim/horseQuirks.js';
+import { quirksOf, QUIRK_SPOTS } from '../src/sim/horseQuirks.js';
 
 let t;
 let food;
@@ -344,14 +344,27 @@ describe('friandise : n friandises, au bon moment, puis « C\'est bon ! »', () 
     dog.buttons[0].opts.onTap();
     expect(dog.opts.out).toBeUndefined();
   });
+
+  it('un cheval qu\'on te confie : un seul bouton 🍎 et la consigne habituelle, rien à découvrir', () => {
+    for (const o of [{ client: true }, { guest: true }]) {
+      const ctx = fakeCtx(animal('horse', o));
+      ctx.opts = {};
+      const game = food.treatGame(ctx);
+      expect(ctx.buttons.map((b) => b.text.split(' ')[0])).toEqual(['🍎', '✅']);
+      expect(ctx.hints[0].text).toBe(food.nb(`${t('mg_treat_hint_flat')} 🍎🍎🍎`));
+      expect(game.peek().fav).toBe(null);
+      run(game, ctx, 600, () => game.peek().state === 'calm');
+      ctx.buttons[0].opts.onTap();
+      expect(ctx.opts.out).toBeUndefined();
+    }
+  });
 });
 
 // ---------------------------------------------------------------- caresser
 
 describe('caresser : remplir le cœur jusqu\'à la zone verte, doucement', () => {
-  /** Caresse lentement autour de l'endroit préféré jusqu'à ce que cond(peek) soit vraie. */
-  function petUntil(game, ctx, cond, max = 4000) {
-    const f = game.peek().fav;
+  /** Caresse lentement autour de l'endroit préféré (ou de f) jusqu'à ce que cond(peek) soit vraie. */
+  function petUntil(game, ctx, cond, max = 4000, f = game.peek().fav) {
     let i = 0;
     let dir = 1;
     let x = f.x - 18;
@@ -467,6 +480,41 @@ describe('caresser : remplir le cœur jusqu\'à la zone verte, doucement', () =>
     expect(game.peek().spot).toBe(null);
     petUntil(game, ctx, (pp) => pp.value >= 0.4);
     expect(ctx.opts.out).toBeUndefined();
+  });
+
+  it('🔍 gratté sur un autre coin, même tout près (le garrot et l\'encolure : ~40 px), il ne tend pas la lèvre', () => {
+    const seen = new Set();
+    for (let i = 0; i < 16; i++) {
+      const a = animal('horse', { id: `cheval${i}` });
+      const q = quirksOf(a);
+      const fit = fitAnimal(a, { groundY: 305, maxW: 330, maxH: 240 });
+      const sh = animalShape(a, { x: fit.x, y: 305, s: fit.s, f: 1 });
+      for (const k of Object.keys(QUIRK_SPOTS).filter((s) => s !== q.spot)) {
+        const ctx = fakeCtx(a);
+        ctx.opts = {};
+        const game = fun.petGame(ctx);
+        const p = petUntil(game, ctx, (pp) => pp.lip > 0, 4000, sh[k]);
+        expect(p.lip, `${q.spot} gratté sur ${k}`).toBe(0);
+        expect(ctx.opts.out).toBeUndefined();
+        seen.add(`${q.spot}/${k}`);
+      }
+    }
+    for (const pair of ['withers/neck', 'withers/chest', 'neck/withers', 'chest/withers']) expect(seen.has(pair), pair).toBe(true);
+  });
+
+  it('un cheval qu\'on te confie : son endroit habituel (l\'encolure), rien à découvrir', () => {
+    for (const o of [{ client: true }, { guest: true }]) {
+      const a = animal('horse', { id: 'cheval0', ...o });
+      const ctx = fakeCtx(a);
+      ctx.opts = {};
+      const game = fun.petGame(ctx);
+      const fit = fitAnimal(a, { groundY: 305, maxW: 330, maxH: 240 });
+      const sh = animalShape(a, { x: fit.x, y: 305, s: fit.s, f: 1 });
+      expect(game.peek()).toMatchObject({ spot: null, fav: sh.neck });
+      const p = petUntil(game, ctx, (pp) => pp.value >= 0.4);
+      expect(p.lip).toBe(0);
+      expect(ctx.opts.out).toBeUndefined();
+    }
   });
 });
 

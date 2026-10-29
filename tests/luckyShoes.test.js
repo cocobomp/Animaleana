@@ -142,6 +142,39 @@ describe('le fer porte-bonheur du jour', () => {
     expect(toasts[0]).toMatch(/^🍀 Le fer du jour ! [^🪙]+$/);
   });
 
+  it('le jeu : sur le cheval d\'un client, le fer reste par terre pour le tien', async () => {
+    const THREE = await import('three');
+    const { LuckyShoes } = await import('../src/game/LuckyShoes.js');
+    const p = { ...fresh(), id: 'p1', place: 'maison', home: 'maison', animals: [] };
+    const mine = { id: 'h1', species: 'horse', bond: 10 };
+    const client = { id: 'c1', species: 'horse', bond: 10, client: { id: 'x' } };
+    p.animals.push(mine, client);
+    p.luckyShoes = { last: null, kinds: SHOE_KINDS.slice(0, 6), byHorse: {} };
+    const toasts = [];
+    const g = {
+      profile: p, isHome: true, day: 9,
+      player: { mount: { data: client, emit: () => {} }, root: new THREE.Object3D() },
+      ui: { toast: (m) => toasts.push(m) },
+      activities: { active: false }, world: {}, interiors: {},
+      bondNews: () => {}, remember: () => {}, save: () => {},
+    };
+    const ls = new LuckyShoes(g);
+    Object.assign(ls, { prof: p, where: p.place, acc: 0 }); // (pas de sync : le fer est posé à la main)
+    ls.item = { kind: 'alu', model: new THREE.Group(), glint: new THREE.Object3D(), found: false, pop: 0 };
+    ls.update(0.1);
+    expect(ls.item.found).toBe(false);
+    expect(p.luckyShoes.kinds).toHaveLength(6);
+    expect(p.luckyShoes.byHorse).toEqual({});
+    expect(toasts).toEqual([i18n.t('ls_onFoot')]);
+    // (sur le tien : ramassé, les 7)
+    g.player.mount.data = mine;
+    ls.update(0.1);
+    expect(ls.item.found).toBe(true);
+    expect(p.luckyShoes.byHorse).toEqual({ h1: ['alu'] });
+    expect(mine.bond).toBe(10 + LUCKY.bond);
+    expect(client.bond).toBe(10);
+  });
+
   it('dans le carnet, les souvenirs, et chaque texte en français et en anglais', () => {
     expect(LOGBOOK.some((x) => x.id === 'luckyShoes')).toBe(true);
     expect(MEMORIES.some((x) => x.id === 'luckyShoes')).toBe(true);

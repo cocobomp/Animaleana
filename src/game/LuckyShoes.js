@@ -8,6 +8,7 @@ import { t } from '../i18n.js';
 import { earn, addStat, isSandbox } from '../sim/profile.js';
 import { bondStage } from '../sim/animal.js';
 import { boxOccupants } from '../sim/facilities.js';
+import { keepsMemories } from '../sim/memories.js'; // (tes chevaux : pas ceux qu'on te confie)
 import { LUCKY, SHOE_KINDS, SHOE_SHAPES, dayKey, shoeOfDay, findShoe } from '../sim/luckyShoes.js';
 import { audio } from './audio.js';
 
@@ -182,13 +183,14 @@ export class LuckyShoes {
     this.time += dt;
     it.glint.scale.setScalar(0.2 + 0.6 * Math.abs(Math.sin((Math.PI * this.time) / 2)) ** 12); // (un éclat toutes les 2 s)
     const pl = g.player;
-    if (pl.mount && this.toldKey !== this.key) {
+    const own = keepsMemories(pl.mount?.data); // (un cheval de client ou invité : le fer reste par terre pour le tien)
+    if (own && this.toldKey !== this.key) {
       this.toldKey = this.key; // (la première fois en selle, ce jour-là)
       g.ui.toast(t('ls_today'), 6000);
     }
     const p = pl.root.position;
     if (Math.hypot(it.model.position.x - p.x, it.model.position.z - p.z) > LUCKY.reach) return;
-    if (!pl.mount) {
+    if (!own) {
       if (!this.footSaid) {
         this.footSaid = true;
         g.ui.toast(t('ls_onFoot'), 5000);

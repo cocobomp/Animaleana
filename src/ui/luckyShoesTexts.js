@@ -6,7 +6,7 @@ export const LUCKY_FR = {
   ls_found: '🍀 Un fer porte-bonheur ! {what} {n}/{total}',
   ls_again: '🍀 Le fer du jour !',
   ls_complete: '🍀 Les 7 fers ! On dit qu\'un fer porte bonheur…',
-  ls_onFoot: '🍀 Un fer ! Monte à cheval pour le ramasser.',
+  ls_onFoot: '🍀 Un fer ! Monte sur ton cheval pour le ramasser.',
   ls_kind_front: 'Fer de devant : bien rond.',
   ls_kind_hind: 'Fer de derrière : plus pointu.',
   ls_kind_pony: 'Fer de poney : tout petit !',

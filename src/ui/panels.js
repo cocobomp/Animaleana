@@ -34,6 +34,7 @@ import { thumb, portraitSpec } from '../game/thumbScenes.js'; // vignettes 3D (a
 import { healthPlan, HEALTH_PLAN, WORMER_COST } from '../sim/horseHealth.js'; // 📒 carnet de santé du cheval
 import { horseDayView } from '../sim/horseDay.js'; // ☀️ la journée de ton cheval
 import { galopLevel, nextGalop, practiceOf, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
+import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -150,6 +151,13 @@ function healthSection(ui, g, a, btn) {
       { cls: worm.state === 'ok' ? '' : 'primary' }))];
 }
 
+/** 👂 Ce que disent ses oreilles (src/sim/horseEars.js) : en avant, sur le côté ou couchées, et pourquoi. */
+function earsLine(g, a) {
+  const e = earsOf(a, { sleeping: !!g.entities?.get(a.id)?.sleeping, happy: happiness(a) });
+  if (!e) return null;
+  return h('p', { class: `note ears-line ears-${e.pose}` }, `👂 ${t(`ears_${e.pose}`)} ${t(`ears_why_${e.why}`, { name: a.name, g: a.sex })}`);
+}
+
 /** 🏅 Tes Galops (src/sim/galops.js) : le prochain, sa pratique, et le bouton vers le panneau des Galops. */
 function galopSection(ui, g) {
   const p = g.profile;
@@ -198,6 +206,7 @@ function renderAnimal(ui, g, a) {
     bar(t('happiness'), happiness(a), 'big'),
     bar(`🤝 ${t('bond')}`, a.bond ?? 0, 'big'),
     a.client || a.guest ? null : h('p', { class: 'note bond-stage' }, `💞 ${t(`bond_${bondStage(a)}`, { name: a.name, g: a.sex })}`),
+    earsLine(g, a), // 👂 (cheval)
     NEEDS.map((n) => bar(t(`need_${n}`), a.needs[n])),
   );
 

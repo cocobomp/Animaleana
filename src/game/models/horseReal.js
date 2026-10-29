@@ -4573,6 +4573,8 @@ class RealHorseAnim {
     this.skipN = 0;
     this.doze = 0;
     this.sadAmt = 0;
+    this.earsBack = 0; // (oreilles couchées, pointées vers toi : st.ears)
+    this.earsFwd = 0;
     this.proud = 1; // (port de tête relevé : voir overlay)
     if (gaits.natural) this.useGaits(gaits);
   }
@@ -4898,15 +4900,22 @@ class RealHorseAnim {
     const alert = 1 - this.doze;
     const both = Math.sin(t * 0.31 + 0.6) * 0.09;
     const kid = md.root.id % 7;
+    // Ce que disent ses oreilles (src/sim/horseEars.js) : couchées en arrière quand il n'est pas content, pointées
+    // vers toi quand tu t'approches et qu'il est attentif (lissé : elles pivotent en une demi-seconde).
+    const kE = Math.min(1, dt * 3);
+    this.earsBack = (this.earsBack ?? 0) + ((!photo && st.ears === 'back' && !st.sleeping ? 1 : 0) - (this.earsBack ?? 0)) * kE;
+    this.earsFwd = (this.earsFwd ?? 0) + ((!photo && st.ears === 'forward' && st.near && !st.moving ? 1 : 0) - (this.earsFwd ?? 0)) * kE;
+    const eb = this.earsBack * alert;
+    const ef = this.earsFwd * alert * (1 - eb);
     for (let i = 0; i < md.ears.length; i++) {
       const e = md.ears[i];
       const s = i === 0 ? 1 : -1;
       const n1 = Math.sin(t * 1.3 + i * 2.1) + Math.sin(t * 0.47 + i);
       // (coup d'oreille : le pavillon pivote vers l'arrière autour de l'axe de l'oreille, la pointe un peu en arrière)
-      const fl = photo || st.moving ? 0 : earFlick(t, kid + i * 2.9) * alert;
-      e.rotateX(n1 * 0.04 + this.doze * 0.2 - 0.08 * alert * this.proud - 0.12 * fl);
-      e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.06 + 0.04 * fl));
-      e.rotateY((s * Math.sin(t * 0.7 + i * 3) * 0.06 + both) * alert + s * 0.38 * fl);
+      const fl = photo || st.moving ? 0 : earFlick(t, kid + i * 2.9) * alert * (1 - eb);
+      e.rotateX(n1 * 0.04 * (1 - eb) + this.doze * 0.2 - 0.08 * alert * this.proud - 0.12 * fl + EAR_POSE.back.x * eb + EAR_POSE.fwd.x * ef);
+      e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.06 + 0.04 * fl + EAR_POSE.back.z * eb));
+      e.rotateY((s * Math.sin(t * 0.7 + i * 3) * 0.06 + both) * alert * (1 - eb - ef) + s * 0.38 * fl + s * (EAR_POSE.back.y * eb + EAR_POSE.fwd.y * ef));
     }
     // Port de queue de la race (arabe, saddlebred, welsh) : couard relevé, crins qui retombent en arc.
     const set = md.build.tailSet ?? 0;
@@ -4993,6 +5002,8 @@ class RealHorseAnim {
     this.savePose();
     this.doze = 0;
     this.sadAmt = 0;
+    this.earsBack = 0;
+    this.earsFwd = 0;
     this.proud = 1;
     this.photo = true;
     const t = this.t;
@@ -5168,6 +5179,14 @@ function springLimit(S, target, axis, lo, hi) {
  * moments (une période sur deux de 30 s environ), toutes les 5 s environ, décalé d'une oreille et d'un cheval à
  * l'autre (k). Aucun hasard : la même animation à chaque fois.
  */
+/**
+ * Oreilles couchées en arrière (st.ears === 'back' : il a mal, faim, soif ou il est grognon, src/sim/horseEars.js) et
+ * pointées vers toi (st.ears === 'forward', tout près) : rotations ajoutées à celles de l'oreille (x, y, z en radians).
+ * (Os de l'oreille : x négatif la couche vers l'encolure, positif la penche vers l'avant ; y tourne le pavillon ; z,
+ * de chaque côté, l'écarte vers l'extérieur. Réglé sur des vues de profil et de face.)
+ */
+export const EAR_POSE = { back: { x: -1.2, y: 0.45, z: 0.2 }, fwd: { x: 0.3, y: 0 } };
+
 export function earFlick(t, k = 0) {
   if (Math.sin(t * 0.21 + k * 1.3) < 0.2) return 0;
   const s = Math.sin(t * 1.27 + k * 2.17);
@@ -5447,6 +5466,8 @@ export function animateRealHorse(e, dt, sad) {
   st.moving = moving;
   st.sleeping = e.sleeping;
   st.sad = sad;
+  st.ears = e.earsPose ?? null; // (ses oreilles : src/sim/horseEars.js, AnimalEntity.update)
+  st.near = (e.distPlayer ?? 99) < 9;
   st.graze = e.grazeAmt;
   st.feeder = e.feedAmt;
   st.turn = turn;

@@ -2,7 +2,8 @@
 
 import * as THREE from 'three';
 import { SPECIES } from '../sim/species.js';
-import { growthScale, mood, lifeStage, stageLook } from '../sim/animal.js';
+import { growthScale, mood, lifeStage, stageLook, happiness } from '../sim/animal.js';
+import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { buildGltfAnimal } from './models/gltfAnimal.js';
 import { emojiTexture } from './textures.js';
@@ -826,6 +827,14 @@ export class AnimalEntity {
     if (this.voiceTimer <= 0) {
       this.voiceTimer = (sad ? 20 : 40) + Math.random() * 50;
       if (!this.sleeping && !this.inside && distPlayer < 28 && Math.random() < 0.6) this.speak(null, distPlayer);
+    }
+    if (d.species === 'horse') {
+      // 👂 Ses oreilles (src/sim/horseEars.js), revues chaque seconde : le modèle 3D les couche ou les pointe.
+      this.earsT = (this.earsT ?? 0) - dt;
+      if (this.earsT <= 0) {
+        this.earsT = 1;
+        this.earsPose = earsOf(d, { sleeping: this.sleeping, happy: happiness(d) })?.pose ?? null;
+      }
     }
     if (d.species === 'horse' && !d.client && !d.guest) this.horseLife(dt, ctx, distPlayer);
 

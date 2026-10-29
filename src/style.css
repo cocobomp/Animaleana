@@ -468,6 +468,8 @@ button.sv-card:hover { border-color: var(--primary); }
 .hd-row.done { background: rgba(63, 174, 98, 0.14); }
 .hd-row.missed { color: var(--muted); }
 .note.good { color: #1e8a4a; font-weight: 600; }
+/* 👂 Ses oreilles (src/ui/panels.js earsLine) */
+.ears-line.ears-back { color: #b5452f; font-weight: 600; }
 /* 🏅 Les Galops (src/ui/galops.js) */
 .gl-card { display: grid; gap: 6px; padding: 10px 12px; border-radius: 16px; background: #fff; border: 1px solid var(--line); margin-bottom: 8px; }
 .gl-card.open { border: 2px solid #f2b824; }

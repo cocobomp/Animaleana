@@ -70,4 +70,26 @@ describe('la ration du cheval', () => {
     }
     setLang('fr');
   });
+
+  it('le soir d\'un jour sans travail : presque que du foin (la zone des granulés est plus petite)', () => {
+    const noop = () => {};
+    const a = { species: 'horse', name: 'Étoile', sex: 'f', today: { day: 4, done: ['feedAm'], perfect: false } };
+    const c = {
+      a, action: 'feed', W: 400, H: 360, opts: {}, day: 4, hour: 18,
+      view: { x0: 0, y0: 0, x1: 400, y1: 360, w: 400, h: 360, scale: 1, ox: 0, oy: 0 },
+      col: { coat: '#8a5a2b', mane: '#222' }, fx: { add: noop, burst: noop, float: noop, text: noop, dot: noop }, rng: makeRng(3),
+      time: 0, done: false, pointer: { x: 0, y: 0 }, t, name: a.name, hints: [], buttons: [], finished: null,
+      hint(text, kind = '') { this.hints.push({ text, kind }); }, progress() {}, zone() {},
+      button(text, opts = {}) { const b = { text, opts }; this.buttons.push(b); return b; },
+      finish(q, msg, why) { this.done = true; this.finished = { q, msg, why }; },
+      stopButton(onStop) { return this.button('✅', { cls: 'stop', onTap: onStop }); },
+    };
+    const g = ration.rationGame(c);
+    expect(g.peek().rest).toBe(true);
+    expect(g.peek().grainHi).toBe(ration.RATION.restHi);
+    expect(ration.restDay(a, 4, 9)).toBe(false); // (le matin : on ne sait pas encore)
+    a.today.done.push('work');
+    expect(ration.restDay(a, 4, 18)).toBe(false); // (il a travaillé : la ration habituelle)
+    expect(ration.restDay(a, 5, 18)).toBe(false); // (sa journée d'hier ne compte pas)
+  });
 });

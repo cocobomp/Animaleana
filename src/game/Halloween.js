@@ -204,6 +204,7 @@ export class Halloween {
     let worn = false;
     if (a?.species === 'horse' && a.gear?.saddle) worn = !!g.equip(a, item, 'orange', { exact: true })?.ok; // (il le porte tout de suite)
     addStat(p, 'halloweenHunts');
+    g.remember?.(a, 'halloween');
     e?.emit('🎉', 5);
     const money = isSandbox(p) ? '' : ` +${coins} 🪙`;
     g.ui.toast(`${t(worn ? 'hw_doneWorn' : 'hw_done', { name: a?.name ?? '', g: a?.sex })}${money}`, 9000);

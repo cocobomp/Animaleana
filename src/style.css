@@ -2762,3 +2762,26 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 /* « 💡 Le savais-tu ? » sous le message de fin d'un mini-jeu avec un cheval (src/ui/minigames.js) */
 .mg-fact { margin: 6px 0 10px; padding: 8px 10px; border-radius: 10px; background: #fff6d6; color: #5a4636; font-size: 0.9em; line-height: 1.35; }
 .mg-end.tight .mg-fact { margin: 4px 0 6px; padding: 6px 8px; font-size: 0.82em; }
+
+/* 📸 Ses souvenirs (fiche du cheval, src/ui/panels.js memorySection) */
+.mem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mem-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); }
+.mem-list li span:nth-child(2) { flex: 1; }
+.mem-list .mem-icon { font-size: 1.2rem; }
+.mem-list small { opacity: 0.7; white-space: nowrap; }
+
+/* 🎓 Le diplôme d'un Galop (src/ui/galops.js diplomaCard) : une carte crème à double bordure, comme un vrai diplôme */
+.gl-diploma {
+  margin: 10px auto; max-width: 320px; padding: 14px 16px; text-align: center; color: #3b2a17;
+  background: linear-gradient(160deg, #fff8e6, #f3e3bd); border: 3px double #b08a3a; border-radius: 12px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+}
+.gl-diploma .gl-dip-top { font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase; color: #8a6420; }
+.gl-diploma .gl-dip-galop { font-size: 1.6rem; font-weight: 800; margin: 4px 0; }
+.gl-diploma .gl-dip-sub { font-style: italic; font-size: 0.9rem; }
+.gl-diploma .gl-dip-name { font-size: 1.3rem; font-weight: 800; margin-top: 8px; font-family: Georgia, 'Times New Roman', serif; }
+.gl-diploma .gl-dip-horse { font-size: 1rem; }
+.gl-diploma .gl-dip-day { font-size: 0.8rem; opacity: 0.75; margin-top: 6px; }
+.gl-diploma.g2 { border-color: #9aa3ad; }
+.gl-diploma.g3 { border-color: #c9a227; }
+.gl-dip-btn { margin-top: 4px; }

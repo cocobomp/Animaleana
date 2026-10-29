@@ -37,6 +37,7 @@ import { galopLevel, nextGalop, practiceOf, canTakeExam } from '../sim/galops.js
 import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
 import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
 import { huntView } from '../sim/halloween.js'; // 🎃 la chasse aux citrouilles
+import { memoriesOf } from '../sim/memories.js'; // 📸 ses souvenirs
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -171,6 +172,16 @@ function earsLine(g, a) {
   return h('p', { class: `note ears-line ears-${e.pose}` }, `👂 ${t(`ears_${e.pose}`)} ${t(`ears_why_${e.why}`, { name: a.name, g: a.sex })}`);
 }
 
+/** 📸 Ses souvenirs (src/sim/memories.js) : vos premières fois, datées. */
+function memorySection(a) {
+  const list = memoriesOf(a);
+  const p = { name: a.name, g: a.sex };
+  return [h('h3', {}, t('mem_title')), list.length
+    ? h('ul', { class: 'mem-list' }, list.map((m) => h('li', {}, h('span', { class: 'mem-icon', 'aria-hidden': 'true' }, m.icon),
+      h('span', {}, t(`mem_${m.id}`, p)), h('small', {}, t('mem_day', { n: m.day })))))
+    : h('p', { class: 'note' }, t('mem_none', p))];
+}
+
 /** 🏅 Tes Galops (src/sim/galops.js) : le prochain, sa pratique, et le bouton vers le panneau des Galops. */
 function galopSection(ui, g) {
   const p = g.profile;
@@ -238,7 +249,7 @@ function renderAnimal(ui, g, a) {
     careActions.map((x) => btn(`${CARE_ICONS[x] ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => ui.careWithGame(a, x))),
   ));
 
-  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(g, a), ...healthSection(ui, g, a, btn), ...galopSection(ui, g));
+  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(g, a), ...healthSection(ui, g, a, btn), ...galopSection(ui, g), ...memorySection(a));
 
   const acts = [];
   if (sp.actions.includes('play')) acts.push(btn(`⚽ ${t('act_play')}`, () => ui.careWithGame(a, 'play')));

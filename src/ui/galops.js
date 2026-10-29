@@ -7,9 +7,30 @@ import { t } from '../i18n.js';
 import { earn, isSandbox } from '../sim/profile.js';
 import {
   GALOPS, EXAM_QUESTIONS, EXAM_PASS, galopDef, galopsSummary, galopLevel, canTakeExam, makeExam, isRight, finishExam, isOpen, logbook,
+  galopsState,
 } from '../sim/galops.js';
 import { openOverlay } from './vetExam.js';
 import { fmtCross } from '../sim/freeJumps.js'; // ⏱️ le record du cross
+
+/** 🎓 Le diplôme d'un Galop obtenu : ton prénom, le cheval avec qui tu l'as passé, le jour. */
+export function diplomaCard(ui, id) {
+  const p = ui.game.profile;
+  const def = galopDef(id);
+  const horse = p.galopHorses?.[id] ?? null;
+  return h('div', { class: `gl-diploma g${id}` },
+    h('div', { class: 'gl-dip-top' }, `🎓 ${t('dip_title')}`),
+    h('div', { class: 'gl-dip-galop' }, `${def.emoji} ${t('galop_n', { n: id })}`),
+    h('div', { class: 'gl-dip-sub' }, t(`galop_sub_${id}`)),
+    h('div', { class: 'gl-dip-name' }, p.name),
+    horse ? h('div', { class: 'gl-dip-horse' }, t('dip_with', { name: horse })) : null,
+    h('div', { class: 'gl-dip-day' }, t('dip_day', { n: galopsState(p)[id] ?? 1 })));
+}
+
+/** Le diplôme en grand (depuis le panneau des Galops). */
+function showDiploma(ui, id) {
+  ui.showModal([diplomaCard(ui, id),
+    h('div', { class: 'row end' }, h('button', { class: 'primary', 'data-escape': true, onClick: () => ui.hideModal() }, t('dip_close')))]);
+}
 
 export function openGalops(ui) {
   const g = ui.game;
@@ -32,7 +53,10 @@ export function openGalops(ui) {
           h('span', { style: { flex: '1' } }, h('b', {}, t('galop_n', { n: x.id })), h('small', {}, t(`galop_sub_${x.id}`))),
           h('span', { class: 'vs-lesson-side' }, x.done ? '✅' : !x.open ? '🔒' : isSandbox(p) ? '' : t('galop_reward', { coins: x.coins })));
         const body = [];
-        if (x.done) body.push(h('small', { class: 'note good' }, t('galop_got', { day: x.day })));
+        if (x.done) {
+          body.push(h('small', { class: 'note good' }, t('galop_got', { day: x.day })),
+            h('button', { class: 'small gl-dip-btn', onClick: () => showDiploma(ui, x.id) }, `🎓 ${t('dip_see')}`));
+        }
         else if (!x.open) body.push(h('small', { class: 'note' }, t('galop_locked', { n: x.id - 1 })));
         else {
           body.push(h('small', { class: 'gl-label' }, t('galop_practice')));
@@ -120,6 +144,9 @@ export function openGalopExam(ui, id) {
     const next = GALOPS.find((x) => x.id === id + 1);
     if (r?.passed) {
       earn(p, r.coins);
+      const horse = g.mainHorse?.();
+      if (horse) p.galopHorses = { ...(p.galopHorses ?? {}), [id]: horse.name }; // (sur le diplôme)
+      g.remember?.(horse, `galop${id}`); // 📸 (un souvenir avec ton cheval)
       g.emit('galop', id);
       g.checkAcc = Infinity; // (quêtes et succès vérifiés tout de suite)
       g.save?.();
@@ -127,6 +154,7 @@ export function openGalopExam(ui, id) {
       body.replaceChildren(h('div', { class: 'vs-done gl-done' },
         h('div', { class: 'vs-done-emoji' }, def.emoji),
         h('h2', {}, t('galop_passed', { n: id })),
+        diplomaCard(ui, id),
         score,
         isSandbox(p) ? null : h('p', { class: 'vs-big-news' }, t('galop_reward', { coins: r.coins })), // (pièces illimitées : rien à gagner)
         h('p', { class: 'note' }, t('galop_passedMore')),

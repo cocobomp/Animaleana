@@ -299,6 +299,8 @@ export class CompetitionVenue {
     recordResult(p, e, { rank, animal: a, score: result.total ?? result.points ?? 0 });
     addStat(p, SESSION_TYPES[comp.discipline]?.stat ?? 'actvOther');
     addStat(p, 'actvCompetitions');
+    g.remember?.(a, 'firstShow'); // 📸 (src/sim/memories.js)
+    if (rank <= 3) g.remember?.(a, 'firstPodium');
     if (away) addStat(p, 'compAway');
     if (rank <= 3) addStat(p, 'actvPodiums');
     if (rank <= 3 && away) addStat(p, 'compAwayPodiums');

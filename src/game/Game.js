@@ -66,6 +66,7 @@ import { FreeJumps } from './FreeJumps.js'; // ⤴️ sauter des troncs en balad
 import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au poney-club (fin octobre)
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
 import { WARMUP, dismountVerdict } from '../sim/warmup.js'; // 🐢 le retour au calme
+import { remember } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
 import { t, L, getLang, fmtHour } from '../i18n.js';
@@ -619,7 +620,10 @@ export class Game {
     // Le cheval gourmand ne s'arrête pour brouter que sur l'herbe (pas dans la carrière, ni sur le chemin).
     this.player.onGrass = () => this.surfaceAt() === 'grass';
     // Trois secondes de galop d'affilée (une fois par balade) : le chapitre « au trot, puis au galop ».
-    this.player.onCanter = () => addStat(this.profile, 'rideCanter');
+    this.player.onCanter = () => {
+      addStat(this.profile, 'rideCanter');
+      this.remember(this.player.mount?.data, 'firstCanter');
+    };
     audio.configure(profile.settings.sound);
     audio.setActive(true);
     this.loadPlace(profile.place);
@@ -902,6 +906,7 @@ export class Game {
     this.bondNews(a, stage0);
     if (!r.perfect) return r;
     addStat(this.profile, 'perfectDays');
+    this.remember(a, 'firstPerfect');
     this.xp('quest');
     this.entities.get(a.id)?.emit('💕', 4);
     this.ui.toast(t('perfectDay', { name: a.name, g: a.sex }), 7000);
@@ -947,6 +952,24 @@ export class Game {
     audio.ui('coin');
     const coins = isSandbox(p) ? '' : ` +${CHALLENGE_REWARD.coins} 🪙`;
     this.ui.toast(`${t('ch_done', { what: t(`ch_${c.def.id}`), name: horse.name, g: horse.sex })}${coins}`, 7000);
+  }
+
+  /** 📸 Un souvenir pour ce cheval (une première fois : src/sim/memories.js). Le tout premier : un petit mot. */
+  remember(a, id) {
+    if (!a || !remember(a, id, this.day)) return false;
+    if (!this.profile.memoryTip) {
+      this.profile.memoryTip = true;
+      this.ui.toast(t('memTip', { name: a.name, g: a.sex }), 6000);
+    }
+    return true;
+  }
+
+  /** Ton cheval du moment : celui que tu montes, sinon le dernier dont tu t'es occupé, sinon le plus proche de toi. */
+  mainHorse() {
+    const mine = this.profile.animals.filter((a) => a.species === 'horse' && !a.client && !a.guest);
+    const m = this.player?.mount?.data;
+    if (m && mine.includes(m)) return m;
+    return mine.find((a) => a.id === this.lastHorseId) ?? [...mine].sort((x, y) => (y.bond ?? 0) - (x.bond ?? 0))[0] ?? null;
   }
 
   /** Le lien vient de passer une étape (src/sim/animal.js BOND_STAGES) : un petit mot et des cœurs. */
@@ -2092,6 +2115,7 @@ export class Game {
     this.ui.updateGaitPad?.();
     addStat(this.profile, 'rides');
     this.markHorseDay(a, 'ride');
+    this.remember(a, 'firstRide');
     this.xp('ride');
     this.ui.toast(t(gear.bareback ? 'ridingBareback' : 'ridingHint', { name: a.name, g: a.sex }));
     return r;
@@ -2112,6 +2136,7 @@ export class Game {
         a.needs.affection = Math.min(100, (a.needs.affection ?? 50) + WARMUP.coolAffection);
         a.sweat = (a.sweat ?? 0) * 0.5; // (il a séché un peu en marchant)
         if (!a.client && !a.guest) addStat(this.profile, 'cooldowns');
+        this.remember(a, 'firstCool');
         e.emit('😌', 2);
         this.bondNews(a, s0);
       }
@@ -2273,6 +2298,7 @@ export class Game {
       const s0 = bondStage(a);
       const grew = cameWhenCalled(a, this.day);
       this.bondNews(a, s0);
+      this.remember(a, 'firstCall');
       this.ui.toast(t(grew ? 'call_comeBond' : 'call_come', p), 5000);
       addStat(this.profile, 'horse_came');
       return 'come';
@@ -2307,6 +2333,7 @@ export class Game {
     delete a.adoptKey;
     this.profile.animals.push(a);
     addStat(this.profile, 'adopted');
+    this.remember(a, 'arrived');
     this.xp('adopt');
     // Le premier cheval reçoit tout de suite le licol, le filet et la selle offerts (à sa taille : un poney ou un
     // cheval de trait aussi), le premier chien son collier et sa laisse (src/sim/gear.js).

@@ -450,6 +450,8 @@ export class Session {
       addStat(p, 'actvCompetitions');
       if (rank <= 3) addStat(p, 'actvPodiums');
       if (rank === 1) addStat(p, 'actvWins');
+      g.remember?.(main, 'firstShow'); // 📸 (src/sim/memories.js)
+      if (rank <= 3) g.remember?.(main, 'firstPodium');
       g.xp('competition');
       if (rank <= 3) g.xp('podium');
     } else {

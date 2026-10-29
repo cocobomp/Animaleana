@@ -69,6 +69,11 @@ export const GALOPS_FR = {
   lb_horse_came: 'Fois où il est venu à ton appel',
   lb_perfectDays: 'Journées parfaites',
   lb_horseTravels: 'Voyages à cheval',
+  dip_title: 'Diplôme d\'équitation',
+  dip_with: 'avec {name}',
+  dip_day: 'obtenu le jour {n}',
+  dip_see: 'Mon diplôme',
+  dip_close: 'Bravo !',
   lb_cooldowns: 'Retours au calme au pas',
 
   // Galop 1
@@ -263,6 +268,11 @@ export const GALOPS_EN = {
   lb_horse_came: 'Times he came when called',
   lb_perfectDays: 'Perfect days',
   lb_horseTravels: 'Trips on horseback',
+  dip_title: 'Riding certificate',
+  dip_with: 'with {name}',
+  dip_day: 'earned on day {n}',
+  dip_see: 'My certificate',
+  dip_close: 'Well done!',
   lb_cooldowns: 'Walking cool-downs',
 
   gq_1_1: 'How do you approach a horse?',

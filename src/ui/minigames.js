@@ -325,6 +325,8 @@ function openMinigame(ui, o) {
       pointer: { x: MG_W / 2, y: MG_H / 2, down: false, over: false, type: 'mouse' },
       t,
       name: a?.name ?? '',
+      day: ui.game?.day, // (le jour et l'heure du jeu : la ration du soir d'un jour sans travail, ration.js)
+      hour: ui.game?.hour,
       /** Consigne en une ligne. kind : '' | 'good' | 'warn'. (Typographie française : nbsp.) */
       hint(text, kind = '') {
         text = nbsp(text);

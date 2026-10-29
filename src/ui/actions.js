@@ -195,16 +195,6 @@ export function openAnimalActions(ui, a) {
     // Sans selle, mais une selle libre à la sellerie : « Seller et monter » (le mini-jeu, puis en selle).
     const saddled = !!a.gear?.saddle;
     const canSaddle = sp.rideable && !saddled && !!freeSaddle(g.profile, a, { home: g.isHome });
-    if (sp.rideable && (saddled || canSaddle)) {
-      const r = canRide(a);
-      items.push({
-        icon: '🐎',
-        label: t('rideBareback'),
-        enabled: r.ok,
-        why: ta(`r_${r.reason}`, a),
-        run: () => { if (g.ride(a, true)) ui.closePanel(); },
-      });
-    }
     if (sp.rideable) {
       const r = canRide(a);
       const asleep = g.entities.get(a.id)?.sleeping;
@@ -217,6 +207,17 @@ export function openAnimalActions(ui, a) {
         run: canSaddle
           ? () => { ui.closePanel(); ui.saddleWithGame(a, true); }
           : () => { if (g.ride(a)) ui.closePanel(); },
+      });
+    }
+    // À cru (sans selle) : après « Seller et monter », comme au club (à cru, pas d'étriers : pas de trot enlevé)
+    if (sp.rideable && (saddled || canSaddle)) {
+      const r = canRide(a);
+      items.push({
+        icon: '🐎',
+        label: t('rideBareback'),
+        enabled: r.ok,
+        why: ta(`r_${r.reason}`, a),
+        run: () => { if (g.ride(a, true)) ui.closePanel(); },
       });
     }
     // Seller sans monter (pour un concours, une balade plus tard…), ou desseller après la balade.

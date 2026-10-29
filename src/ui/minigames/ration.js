@@ -4,7 +4,9 @@
 //   1. Le filet à foin : on garde le doigt sur « 🌾 Remplir » (ou Espace) ; il doit être bien plein (≥ 75 %).
 //   2. Les granulés : on verse dans le seau, une petite mesure seulement (la zone verte, vers le fond). Trop de
 //      granulés d'un coup, c'est le mal de ventre (les coliques) : le jeu le dit, et il peut tomber malade
-//      (ctx.opts.out.colic, src/game/Game.js care).
+//      (ctx.opts.out.colic, src/game/Game.js care). La ration suit le travail, comme en vrai : le soir d'un jour
+//      sans travail (rien de coché dans « 🏇 » de sa journée, src/sim/horseDay.js), presque que du foin
+//      (RATION.restLo–restHi : quelques granulés seulement).
 //
 // La note : la moyenne des deux étapes « juste ce qu'il faut » (score.js).
 
@@ -14,7 +16,11 @@ import { nbsp } from './frame.js';
 import { drawHorseHead } from './deworm.js';
 
 /** Le filet : bien plein. Les granulés : une petite mesure (part du seau) ; au-delà de colicAt, trop. */
-export const RATION = { hayLo: 0.75, hayHi: 1, hayRate: 0.32, grainLo: 0.15, grainHi: 0.3, grainRate: 0.22, colicAt: 0.55 };
+export const RATION = { hayLo: 0.75, hayHi: 1, hayRate: 0.32, grainLo: 0.15, grainHi: 0.3, restLo: 0.03, restHi: 0.14, grainRate: 0.22, colicAt: 0.55 };
+
+/** Un jour de repos : le soir (dès 14 h), il n'a pas travaillé aujourd'hui (src/sim/horseDay.js « work »). */
+export const restDay = (a, day, hour) =>
+  hour >= 14 && day !== undefined && a?.today?.day === day && !a.today.done?.includes('work');
 
 const NET = { x: 70, top: 40, w: 96, h: 150 };
 const BUCKET = { x: 108, y: 300, w: 92, h: 70 };
@@ -35,6 +41,10 @@ export function rationGame(ctx) {
   ctx.zone(RATION.hayLo, RATION.hayHi);
   ctx.progress(0);
   ctx.hint(t('mg_ration_hay_hint', { name }));
+  // (le soir d'un jour sans travail : presque que du foin)
+  const rest = restDay(a, ctx.day, ctx.hour);
+  const grainLo = rest ? RATION.restLo : RATION.grainLo;
+  const grainHi = rest ? RATION.restHi : RATION.grainHi;
   const pourBtn = ctx.button(`🌾 ${t('mg_ration_hay_btn')}`, { hold: true, cls: 'primary', onDown: () => start(), onUp: () => stop() });
   const stopBtn = ctx.stopButton(() => next());
   const setText = (b, text) => {
@@ -58,9 +68,9 @@ export function rationGame(ctx) {
       results.push({ stage: 'hay', value: hay, ...justOutcome(hay, RATION.hayLo, RATION.hayHi, { slack: 0.5 }) });
       stage = 'grain';
       pause = 0.5;
-      ctx.zone(RATION.grainLo, RATION.grainHi);
+      ctx.zone(grainLo, grainHi);
       ctx.progress(0);
-      ctx.hint(t('mg_ration_grain_hint', { name }));
+      ctx.hint(t(rest ? 'mg_ration_grain_rest' : 'mg_ration_grain_hint', { name, g: a?.sex }));
       setText(pourBtn, `🥣 ${t('mg_feed_btn')}`);
       setText(stopBtn, `✅ ${t('mg_stopHere')}`);
       return;
@@ -70,19 +80,20 @@ export function rationGame(ctx) {
 
   function finish() {
     if (ctx.done) return;
-    results.push({ stage: 'grain', value: grain, ...justOutcome(grain, RATION.grainLo, RATION.grainHi, { slack: 0.3 }) });
+    results.push({ stage: 'grain', value: grain, ...justOutcome(grain, grainLo, grainHi, { slack: 0.3 }) });
     const colic = grain >= RATION.colicAt;
     if (ctx.opts) ctx.opts.out = { ...(ctx.opts.out ?? {}), colic };
     const q = results.reduce((n, r) => n + r.q, 0) / results.length;
     const worst = results.reduce((w, r) => (r.q < w.q ? r : w), results[0]);
     const just = results.every((r) => r.verdict === 'just');
     const p = { name, g: a?.sex };
-    const msg = colic ? t('mg_ration_colic', p) : just ? t('mg_ration_just', p) : t(`mg_ration_${worst.verdict}_${worst.stage}`, p);
+    const key = `mg_ration_${worst.verdict}_${worst.stage}${rest && worst.stage === 'grain' && worst.verdict === 'high' ? '_rest' : ''}`;
+    const msg = colic ? t('mg_ration_colic', p) : just ? t(rest ? 'mg_ration_justRest' : 'mg_ration_just', p) : t(key, p);
     ctx.finish(colic ? Math.min(q, 0.4) : q, msg, colic ? 'high' : just ? 'just' : worst.verdict);
   }
 
   return {
-    peek: () => ({ stage, hay, grain, pouring, pause, results: results.map((r) => ({ ...r })) }),
+    peek: () => ({ stage, hay, grain, pouring, pause, rest, grainLo, grainHi, results: results.map((r) => ({ ...r })) }),
     down() { start(); },
     up() { stop(); },
     key(code, isDown) {

@@ -287,6 +287,7 @@ export class FreeJumps {
     const great = !j.auto && j.timing > 0.7;
     a.skills.jump = Math.min(100, (a.skills.jump ?? 10) + (great ? 0.4 : 0.2)); // (il s'habitue à sauter)
     addStat(g.profile, 'freeJumps');
+    g.remember?.(a, 'firstLog');
     e.emit(great ? '⭐' : '💨', 1.5);
     const p = { name: a.name, g: a.sex };
     if (crossNews) g.ui.toast(crossNews, 5000); // (le cross dit déjà « hop »)
@@ -322,6 +323,7 @@ export class FreeJumps {
     const record = best === null || r.time < best;
     if (record) s.crossBest = Math.round(r.time);
     addStat(g.profile, 'crossDone');
+    g.remember?.(g.player.mount?.data, 'firstCross');
     return t(record ? 'cross_record' : 'cross_done', { time: fmtCross(r.time), best: fmtCross(best ?? r.time) });
   }
 

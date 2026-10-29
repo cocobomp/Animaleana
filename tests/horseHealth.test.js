@@ -81,3 +81,22 @@ describe('le carnet de santé du cheval', () => {
     expect(a.weight).toBeGreaterThanOrEqual(50 - 10 * 1.5 - 10 * 1);
   });
 });
+
+describe('le palefrenier et le carnet', () => {
+  it('quand le maréchal-ferrant est dû (ou un fer perdu), le palefrenier ferre, et le carnet est à jour', async () => {
+    const { helperTask, doHelperTask } = await import('../src/sim/farm.js');
+    const p = { clock: 10 * 24 * 60, helpers: [], equipment: [], droppings: [], animals: [] };
+    const day = 10;
+    const groom = { id: 'h1', type: 'groom', name: 'Lucie', sex: 'f', place: 'maison' };
+    const a = horse();
+    a.location = 'maison';
+    for (const n of Object.keys(a.needs)) a.needs[n] = 90;
+    healthPlan(a, day);
+    expect(helperTask(p, groom, [a])).toBeNull(); // rien à faire
+    a.healthLog.farrier = day - 20; // en retard
+    const task = helperTask(p, groom, [a]);
+    expect(task).toMatchObject({ kind: 'care', action: 'shoe', animalId: a.id });
+    expect(doHelperTask(p, task, [a], groom).ok).toBe(true);
+    expect(healthPlan(a, day).find((x) => x.id === 'farrier').state).toBe('ok');
+  });
+});

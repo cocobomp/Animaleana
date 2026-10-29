@@ -10,6 +10,7 @@ import { pick, uid } from './rng.js';
 import { onBreak, helperQuality } from './helpers.js'; // progression des aides
 import { droppingsAt, removeDroppings } from './droppings.js';
 import { settleFleece } from './sheepLook.js';
+import { healthPlan, noteHealth } from './horseHealth.js'; // le palefrenier ferre quand le carnet le dit
 
 const PETS = ['dog', 'cat', 'rabbit'];
 const LIVESTOCK = ['sheep', 'goat', 'cow'];
@@ -197,8 +198,14 @@ export function helperTask(profile, helper, animals) {
     if (poop) return { kind: 'scoop', droppingId: poop.id };
   }
   let best = null;
+  const day = dayOf(profile.clock ?? 0);
   for (const a of animals) {
     if (!def.species.includes(a.species)) continue;
+    // Le carnet de santé dit que c'est l'heure du maréchal-ferrant (ou il a perdu un fer) : on le ferre d'abord.
+    if (a.species === 'horse' && duties.includes('shoe') && careable(a, 'shoe')
+      && (a.lame?.cause === 'shoe' || healthPlan(a, day).some((it) => it.id === 'farrier' && it.left <= 0))) {
+      return { kind: 'care', animalId: a.id, action: 'shoe' };
+    }
     if (a.produceReady) {
       const action = SPECIES[a.species].product.action;
       if (duties.includes(action)) return { kind: 'product', animalId: a.id, action };
@@ -232,7 +239,9 @@ export function doHelperTask(profile, task, animals, helper = null) {
     return { ok: true };
   }
   if (task.kind === 'product') return collectProduct(profile, a);
-  return applyCare(a, task.action, helper ? helperQuality(helper) : 1); // une aide expérimentée soigne mieux
+  const r = applyCare(a, task.action, helper ? helperQuality(helper) : 1); // une aide expérimentée soigne mieux
+  if (r.ok && task.action === 'shoe' && a.species === 'horse') noteHealth(a, 'farrier', dayOf(profile.clock ?? 0)); // (fers neufs)
+  return r;
 }
 
 // ---------------------------------------------------------------- produits

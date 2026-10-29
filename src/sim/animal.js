@@ -424,6 +424,19 @@ function successChance(a) {
 /** Apprendre un tour. Renvoie { ok, reason, success, learned, progress }. */
 // Lien minimum avant de pouvoir apprendre des tours / s'entraîner : il faut d'abord jouer avec l'animal.
 export const BOND_FOR_TRICKS = 20;
+
+/**
+ * Les étapes du lien avec l'animal : 'new' (vous faites connaissance), 'trust' (il te fait confiance, dès 25),
+ * 'love' (il t'adore, dès 50), 'best' (ton meilleur ami, dès 75). Un cheval en confiance fait moins d'écarts
+ * (src/sim/riding.js nextSpookIn).
+ */
+export const BOND_STAGES = [['new', 0], ['trust', 25], ['love', 50], ['best', 75]];
+export function bondStage(a) {
+  const b = a?.bond ?? 0;
+  let out = 'new';
+  for (const [id, min] of BOND_STAGES) if (b >= min) out = id;
+  return out;
+}
 export const BOND_FOR_TRAINING = 35;
 
 export function trainTrick(a, trickId, rng = Math.random) {

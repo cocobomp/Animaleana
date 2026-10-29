@@ -130,3 +130,17 @@ describe('le cheval gourmand', () => {
     for (let i = 0; i < 300; i++) expect(nextGrazeIn(hungry, rng)).toBeGreaterThan(14);
   });
 });
+
+describe('le lien', () => {
+  it('les étapes du lien ; un cheval qui te fait confiance fait moins d\'écarts', async () => {
+    const { bondStage } = await import('../src/sim/animal.js');
+    expect([0, 24, 25, 49, 50, 74, 75, 100].map((b) => bondStage({ bond: b }))).toEqual(['new', 'new', 'trust', 'trust', 'love', 'love', 'best', 'best']);
+    const avg = (a) => {
+      const rng = mulberry32(6);
+      let s = 0;
+      for (let i = 0; i < 200; i++) s += nextSpookIn(a, rng);
+      return s / 200;
+    };
+    expect(avg(horse({ personality: 'curious', bond: 80 }))).toBeGreaterThan(avg(horse({ personality: 'curious', bond: 5 })) * 1.5);
+  });
+});

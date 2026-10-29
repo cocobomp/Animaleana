@@ -6,7 +6,7 @@ import { isTrainingClient } from '../sim/dogTrainer.js';
 import { h, bar, hexColor } from './dom.js';
 import { t, L, getLang, setLang } from '../i18n.js';
 import { SPECIES, getBreed, allOffered, anyAvailable, LIVESTOCK_IDS } from '../sim/species.js';
-import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass } from '../sim/animal.js';
+import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass, bondStage } from '../sim/animal.js';
 import { DAYS_PER_YEAR } from '../sim/time.js';
 import { adoptionCandidates, adoptionPrice, shopPrice, shopBreeds, AGE_STAGES, stageAgeDays } from '../sim/adoption.js';
 import { createAnimal, freeName, namesInUse } from '../sim/animal.js';
@@ -179,6 +179,7 @@ function renderAnimal(ui, g, a) {
     bar(t('health'), a.health, 'big'),
     bar(t('happiness'), happiness(a), 'big'),
     bar(`🤝 ${t('bond')}`, a.bond ?? 0, 'big'),
+    a.client || a.guest ? null : h('p', { class: 'note bond-stage' }, `💞 ${t(`bond_${bondStage(a)}`, { name: a.name, g: a.sex })}`),
     NEEDS.map((n) => bar(t(`need_${n}`), a.needs[n])),
   );
 

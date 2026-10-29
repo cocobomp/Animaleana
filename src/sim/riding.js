@@ -71,7 +71,8 @@ export const SPOOKY = new Set(['trot', 'canter', 'gallop']);
 export function nextSpookIn(a, rng = Math.random) {
   const pers = { shy: 0.55, calm: 1.7, curious: 0.9, playful: 0.85, cuddly: 1.1, stubborn: 1 }[a?.personality] ?? 1;
   const obedience = a?.skills?.obedience ?? 10;
-  return (60 + rng() * 120) * pers * (1 + obedience / 80);
+  const trust = 1 + (a?.bond ?? 0) / 100; // (il te fait confiance : il s'effraie moins)
+  return (60 + rng() * 120) * pers * (1 + obedience / 80) * trust;
 }
 
 /**

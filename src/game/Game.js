@@ -34,7 +34,7 @@ import {
 } from '../sim/farm.js';
 import { SPECIES, isOffered, coreShown } from '../sim/species.js';
 import {
-  NEEDS, createAnimal, tickAnimal, applyCare, careFull, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
+  NEEDS, createAnimal, tickAnimal, applyCare, careFull, bondStage, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
   namesInUse,
 } from '../sim/animal.js';
 import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
@@ -874,13 +874,25 @@ export class Game {
    * (récompense, petit mot, statistique perfectDays).
    */
   markHorseDay(a, kind) {
+    const stage0 = bondStage(a);
     const r = markHorseDay(a, kind, this.hour, this.day);
+    this.bondNews(a, stage0);
     if (!r.perfect) return r;
     addStat(this.profile, 'perfectDays');
     this.xp('quest');
     this.entities.get(a.id)?.emit('💕', 4);
     this.ui.toast(t('perfectDay', { name: a.name, g: a.sex }), 7000);
     return r;
+  }
+
+  /** Le lien vient de passer une étape (src/sim/animal.js BOND_STAGES) : un petit mot et des cœurs. */
+  bondNews(a, before) {
+    const now = bondStage(a);
+    if (now === before || a.client || a.guest) return;
+    const order = ['new', 'trust', 'love', 'best'];
+    if (order.indexOf(now) < order.indexOf(before)) return;
+    this.entities.get(a.id)?.emit('💞', 5);
+    this.ui.toast(t(`bondUp_${now}`, { name: a.name, g: a.sex }), 7000);
   }
 
   /** Le vermifuge (carnet de santé, dans la fiche du cheval). */
@@ -1877,6 +1889,7 @@ export class Game {
     if (tool) return this.ui.toast(t('r_needTool', { tool: `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}` }), 5000);
     if (!canAfford(this.profile, care.cost)) return this.ui.toast(t('r_money'));
     const before = { ...a.needs };
+    const stage0 = bondStage(a);
     const res = applyCare(a, action, quality, opts);
     if (res.ok) this.ui.showDeltas(a, before);
     if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name, g: a.sex }));
@@ -1891,6 +1904,7 @@ export class Game {
     addStat(this.profile, action);
     if (a.species === 'horse') addStat(this.profile, `horse_${action}`); // (l'histoire de ton premier cheval)
     if (a.species === 'horse') this.markHorseDay(a, action);
+    this.bondNews(a, stage0);
     this.xp('care');
     this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
     this.ui.refresh();

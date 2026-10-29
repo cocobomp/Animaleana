@@ -108,6 +108,11 @@ fin parle de l'étape la moins bien faite. Plus le cheval est sale (après un ga
 2. Si ça continue, il **tombe malade** : il faut l'emmener chez le **vétérinaire**.
 3. Pas d'abandon ni de mort par négligence (seulement de vieillesse).
 
+### Les étapes du lien (0.5, `src/sim/animal.js` BOND_STAGES)
+Le lien ❤️ avec chaque animal a quatre étapes, écrites dans sa fiche : « Vous faites connaissance » (0), « Il te fait
+confiance » (25), « Il t'adore » (50), « Vous êtes les meilleurs amis du monde » (75). Passer une étape : un petit mot
+et des 💞. Un cheval qui te fait confiance fait moins d'écarts en balade.
+
 ### « 💡 Le savais-tu ? » (0.5, `src/sim/horseFacts.js`)
 À la fin de chaque mini-jeu fait avec un cheval, un fait vrai sur les chevaux (22, qui défilent sans se répéter) :
 il boit 30 à 50 litres par jour, il dort debout, on monte par la gauche, la fourchette aide le sang à remonter…

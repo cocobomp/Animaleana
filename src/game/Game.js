@@ -69,7 +69,7 @@ import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au pone
 import { LuckyShoes } from './LuckyShoes.js'; // 🍀 le fer porte-bonheur du jour, sur le chemin de balade
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
 import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
-import { remember, anniversaryDue, togetherSince, BOND_MEMORIES } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
+import { remember, anniversaryDue, togetherSince, BOND_MEMORIES, PHOTO_MEMORIES, PHOTO, attachPhoto } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
 import { collectFact } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
 import { quirksOf, discoverQuirk, spookCause, noteFear, QUIRK_BOND } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
 import { matchyOf } from '../sim/matchy.js'; // 🎨 tout assorti : tapis, guêtres et bombe
@@ -990,14 +990,63 @@ export class Game {
     this.ui.toast(`${t('ch_done', { what: t(`ch_${c.def.id}`), name: horse.name, g: horse.sex })}${coins}`, 7000);
   }
 
-  /** 📸 Un souvenir pour ce cheval (une première fois : src/sim/memories.js). Le tout premier : un petit mot. */
+  /**
+   * 📸 Un souvenir pour ce cheval (une première fois : src/sim/memories.js). Le tout premier : un petit mot. Une grande
+   * première fois en selle (PHOTO_MEMORIES) : sa photo, un peu après (memoryPhoto).
+   */
   remember(a, id, day = this.day) {
     if (!a || !remember(a, id, day)) return false;
     if (!this.profile.memoryTip) {
       this.profile.memoryTip = true;
       this.ui.toast(t('memTip', { name: a.name, g: a.sex }), 6000);
     }
+    if (PHOTO_MEMORIES[id] > 0) {
+      const prof = this.profile;
+      setTimeout(() => this.memoryPhoto?.(a, id, prof), PHOTO_MEMORIES[id] * 1000);
+    }
     return true;
+  }
+
+  /**
+   * 📸 La photo d'un souvenir (src/sim/memories.js attachPhoto) : l'écran tel quel, s'il montre bien le cheval (monté,
+   * ou en vue à moins de 25 m) et que rien ne cache la 3D (fiche, fenêtre, mini-jeu, vue d'en haut, trajet…). Sinon,
+   * pas de photo : le souvenir garde son icône. Gardée : 📸 au-dessus de lui.
+   */
+  memoryPhoto(a, id, prof) {
+    try {
+      const ui = this.ui;
+      if (!this.running || this.profile !== prof) return;
+      if (ui.panel || ui.modalOpen || ui.minigameOpen || ui.vxOpen > 0 || ui.vxCover || this.mgmt.active || this.tripFlow?.view) return;
+      const e = this.entities.get(a.id);
+      if (!e) return;
+      if (e !== this.player.mount) {
+        const v = (this.photoAt ??= new THREE.Vector3()).copy(e.position);
+        v.y += 1;
+        if (v.distanceTo(this.camera.position) > 25) return;
+        v.project(this.camera);
+        if (Math.abs(v.x) > 0.9 || Math.abs(v.y) > 0.9 || v.z >= 1) return; // (hors de l'écran, ou derrière)
+      }
+      // Comme les photos de balade (src/game/Activities.js takePhoto) : le centre de l'écran, en 16:10.
+      this.renderer.render(this.scene, this.camera);
+      const src = this.renderer.domElement;
+      const c = document.createElement('canvas');
+      c.width = PHOTO.w;
+      c.height = PHOTO.h;
+      const ctx = c.getContext('2d');
+      const ratio = c.width / c.height;
+      let sw = src.width;
+      let sh = sw / ratio;
+      if (sh > src.height) {
+        sh = src.height;
+        sw = sh * ratio;
+      }
+      ctx.drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+      if (!attachPhoto(prof, a, id, c.toDataURL('image/jpeg', PHOTO.q))) return;
+      e.emit('📸', 2);
+      this.save();
+    } catch {
+      /* pas de photo possible : tant pis */
+    }
   }
 
   /**

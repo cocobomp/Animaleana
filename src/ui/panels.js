@@ -207,12 +207,21 @@ function bondPerks(a) {
     next ? h('li', { class: 'next' }, `🔒 ${t('perk_next', { n: next[1] })} ${next[2]} ${t(`perk_${next[0]}`, p)}`) : null);
 }
 
-/** 📸 Ses souvenirs (src/sim/memories.js) : vos premières fois, datées. */
-function memorySection(a) {
+/**
+ * 📸 Ses souvenirs (src/sim/memories.js) : vos premières fois, datées. Une grande première fois en selle a sa petite
+ * photo (m.ph) à la place de l'icône ; la toucher l'ouvre en grand (une fenêtre : la fiche se redessine sans cesse).
+ */
+function memorySection(ui, a) {
   const list = memoriesOf(a);
   const p = { name: a.name, g: a.sex };
+  const icon = (m) => (m.ph
+    ? h('img', { class: 'mem-photo', src: m.ph, alt: t(`mem_${m.id}`, p), onClick: () => ui.showModal([
+      h('img', { class: 'mem-photo-big', src: m.ph, alt: '' }),
+      h('p', {}, `${t(`mem_${m.id}`, p)} · ${t('mem_day', { n: m.day })}`),
+      h('div', { class: 'row end' }, h('button', { class: 'primary', 'data-escape': true, onClick: () => ui.hideModal() }, t('close')))]) })
+    : h('span', { class: 'mem-icon', 'aria-hidden': 'true' }, m.icon));
   return [h('h3', {}, t('mem_title')), list.length
-    ? h('ul', { class: 'mem-list' }, list.map((m) => h('li', {}, h('span', { class: 'mem-icon', 'aria-hidden': 'true' }, m.icon),
+    ? h('ul', { class: 'mem-list' }, list.map((m) => h('li', {}, icon(m),
       h('span', {}, t(`mem_${m.id}`, p)), h('small', {}, t('mem_day', { n: m.day })))))
     : h('p', { class: 'note' }, t('mem_none', p))];
 }
@@ -298,7 +307,7 @@ function renderAnimal(ui, g, a) {
     careActions.map((x) => btn(`${CARE_ICONS[x] ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => ui.careWithGame(a, x))),
   ));
 
-  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(ui, g, a), ...healthSection(ui, g, a, btn), ...galopSection(ui, g), ...quirkSection(a), ...memorySection(a));
+  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(ui, g, a), ...healthSection(ui, g, a, btn), ...galopSection(ui, g), ...quirkSection(a), ...memorySection(ui, a));
 
   const acts = [];
   if (sp.actions.includes('play')) acts.push(btn(`⚽ ${t('act_play')}`, () => ui.careWithGame(a, 'play')));

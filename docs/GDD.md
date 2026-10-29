@@ -278,6 +278,13 @@ compte à partir du premier jour où le jeu le trouve près de toi. Une étape d
 balade guidée, un concours de beauté) devient un souvenir au soin suivant.
 Ses **flots** de concours (or, argent, bronze pour le podium, puis vert, blanc, rose ; 6 au plus, les meilleurs
 d'abord) sont accrochés sous la plaque à son nom, sur la porte de son box (src/sim/competitions.js rosettesOf).
+**📸 De vraies photos** (src/sim/memories.js attachPhoto) : les grandes premières fois en selle (la première balade, le
+premier galop, le premier tronc sauté, sous la pluie ou dans la neige, le jour où il vient à ton appel, le premier retour
+au calme, le cross fini, la chasse aux citrouilles finie) prennent leur photo un instant après, si rien ne cache le jeu
+et que le cheval se voit bien (monté, ou à moins de 25 m dans l'écran) : 📸 au-dessus de lui. Dans sa fiche, la petite
+photo remplace l'icône ; la toucher l'ouvre en grand, avec sa phrase et son jour. Les souvenirs des menus (Galops,
+vétérinaire, vermifuge…) gardent leur icône. Au plus 6 photos par cheval et 18 dans la partie (192 × 120, en JPEG) ;
+la sauvegarde garde toujours 25 % de marge sous la limite en ligne, sinon la photo n'est pas gardée.
 
 ### Ce que tu sais de lui (0.5, `src/sim/horseQuirks.js`)
 Chaque cheval a ses goûts, toujours les mêmes (tirés de son id, rien à sauvegarder) : son **coin à gratouilles** (le

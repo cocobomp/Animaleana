@@ -88,3 +88,33 @@ export function anniversaryDue(a, day) {
   a.anniv = k;
   return k;
 }
+
+/**
+ * 📸 Les souvenirs en selle qui ont leur vraie photo (src/game/Game.js memoryPhoto) : prise un peu après, en secondes
+ * (la pluie et la neige plus tard que la première balade : deux photos différentes). Les autres gardent leur icône.
+ */
+export const PHOTO_MEMORIES = { firstRide: 1.5, firstCanter: 0.2, firstLog: 0.15, firstCross: 0.3, firstCall: 1.2, firstCool: 0.8, firstRain: 4, firstSnow: 4, halloween: 0.4 };
+/**
+ * La photo : 192 × 120, en JPEG ; au plus 6 par cheval et 18 dans la partie. saveMax : la sauvegarde garde 25 % de
+ * marge sous la limite en ligne (src/cloud/firebase.js MAX_SAVE_BYTES, 900 000).
+ */
+export const PHOTO = { w: 192, h: 120, q: 0.55, perHorse: 6, total: 18, bytes: 14000, saveMax: 675000 };
+
+const photosOf = (a) => (Array.isArray(a?.memories) ? a.memories.filter((m) => m.ph).length : 0);
+
+/** Garde la photo data (image JPEG en data URL) dans son souvenir id (m.ph, sauvegardé). Renvoie true si elle est gardée. */
+export function attachPhoto(profile, a, id, data) {
+  if (!keepsMemories(a) || !(PHOTO_MEMORIES[id] > 0)) return false;
+  const m = Array.isArray(a.memories) ? a.memories.find((x) => x.id === id) : null;
+  if (!m || m.ph) return false;
+  if (typeof data !== 'string' || !data.startsWith('data:image/jpeg') || data.length > PHOTO.bytes) return false;
+  if (photosOf(a) >= PHOTO.perHorse) return false;
+  if ((profile?.animals ?? []).filter(keepsMemories).reduce((n, x) => n + photosOf(x), 0) >= PHOTO.total) return false;
+  m.ph = data;
+  // (jamais une sauvegarde trop grosse pour être envoyée à cause d'une photo : sans elle, le souvenir garde son icône)
+  if (profile && new TextEncoder().encode(JSON.stringify(profile)).length > PHOTO.saveMax) {
+    delete m.ph;
+    return false;
+  }
+  return true;
+}

@@ -168,7 +168,7 @@ export function dewormGame(ctx) {
       g.fillRect(v.x0, v.y0, v.w, v.h);
       g.fillStyle = '#d9c39a';
       g.fillRect(v.x0, 250, v.w, v.y1 - 250);
-      drawHead(g, col, annoyed, grimace, ctx.time);
+      drawHorseHead(g, col, annoyed, grimace, ctx.time);
       // le poids du cheval
       g.save();
       g.fillStyle = 'rgba(255,255,255,0.9)';
@@ -197,7 +197,8 @@ export function dewormGame(ctx) {
 
 // ---------------------------------------------------------------- dessins
 
-function drawHead(g, col, annoyed, grimace, time) {
+/** La tête du cheval de profil (le nez à gauche) : aussi pour la ration (ration.js). */
+export function drawHorseHead(g, col, annoyed, grimace, time) {
   const lift = annoyed * 18;
   g.save();
   g.translate(0, -lift);

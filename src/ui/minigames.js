@@ -22,6 +22,7 @@ import { justOutcome, starsFor } from './minigames/score.js'; // règle « juste
 import { fitView, toLocalPoint, nbsp } from './minigames/frame.js'; // échelle, doigt, typographie
 import { braidGame, shineGame, bowGame, fluffGame } from './minigames/beauty.js'; // concours de beauté
 import { pansageGame } from './minigames/pansage.js'; // le pansage complet du cheval
+import { rationGame } from './minigames/ration.js'; // la ration du cheval : foin, puis un peu de granulés
 import { sellerGame } from './minigames/seller.js'; // seller son cheval : tapis, selle, sangle
 import { dewormGame } from './minigames/deworm.js'; // le vermifuge (carnet de santé du cheval)
 import { nextHorseFact } from '../sim/horseFacts.js'; // « 💡 Le savais-tu ? » à la fin des mini-jeux avec un cheval
@@ -176,7 +177,7 @@ class Fx {
 export function runMinigame(ui, a, action, opts = {}) {
   if (action === 'collect') action = SPECIES[a.species].product?.action;
   // Brosser un cheval, c'est le pansage complet : étrille, brosse, cure-pied, peigne.
-  const make = a.species === 'horse' && action === 'brush' ? pansageGame : GAMES[action];
+  const make = a.species === 'horse' && action === 'brush' ? pansageGame : a.species === 'horse' && action === 'feed' ? rationGame : GAMES[action];
   if (!make) return Promise.resolve(1);
   const sp = SPECIES[a.species];
   return openMinigame(ui, {

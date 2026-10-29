@@ -1057,6 +1057,7 @@ export class Game {
     const ctx = { playerPos: this.player.position, night, entities, game: this };
     for (let i = 0; i < steps; i++) {
       this.player.gaitEnabled = !this.activities.active; // (pendant une activité, c'est elle qui mène le cheval)
+      this.player.postAuto = !!this.tripFlow?.active; // (voyage à cheval : trot enlevé sans le bouton)
       this.player.update(mgmt ? 0 : wdt, pctrl, this.rig.yaw, this.rig.mode === 'first');
       for (const e of entities) e.update(wdt, ctx);
       this.player.lateUpdate?.(mgmt ? 0 : wdt); // le cavalier suit le cheval qu'on vient d'animer
@@ -1915,6 +1916,12 @@ export class Game {
     if (res.ok) this.ui.showDeltas(a, before);
     if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name, g: a.sex }));
     if (res.unlame) this.ui.toast(t('unlame', { name: a.name, g: a.sex }), 6000);
+    // Beaucoup trop de granulés (la ration, src/ui/minigames/ration.js) : une fois sur deux, les coliques.
+    if (action === 'feed' && opts.colic && a.species === 'horse' && !a.sick && Math.random() < 0.5) {
+      a.sick = 'belly';
+      this.entities.get(a.id)?.emit('🤢', 3);
+      this.ui.toast(t('colicSick', { name: a.name, g: a.sex }), 7000);
+    }
     // Ferrer : les fers neufs (carnet de santé) ; il avait perdu un fer : il ne boite plus.
     if (action === 'shoe' && a.species === 'horse') {
       const lostShoe = a.lame?.cause === 'shoe';
@@ -2136,7 +2143,7 @@ export class Game {
   /** ⬆️ Tu te lèves (bouton ou Espace) : au temps fort, la série monte ; trop tôt ou trop tard, elle repart à zéro. */
   postTrot() {
     const pl = this.player;
-    if (!pl.posting) return null;
+    if (!pl.posting || !pl.mount) return null;
     const r = tapPost(pl.posting, pl.stride ?? 0);
     this.ui.postFeedback?.(r);
     if (r.ok && postMilestone(pl.posting)) {

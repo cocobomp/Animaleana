@@ -43,13 +43,14 @@ describe('les troncs du chemin de balade', () => {
     expect(r.timing).toBeCloseTo(1, 5);
   });
 
-  it('rien demandé : il saute tout seul au dernier moment (moins bien) ; de travers ou au trot : rien', () => {
+  it('rien demandé : il saute tout seul au dernier moment (moins bien) ; au trot, il l\'enjambe ; de travers : rien', () => {
     const o = logs[1];
     const at = (u, side = 0) => ({ x: o.x - Math.sin(o.heading) * u + Math.cos(o.heading) * side, z: o.z - Math.cos(o.heading) * u - Math.sin(o.heading) * side });
     const p = at(0.5);
     const view = logView(o, p.x, p.z, o.heading);
     expect(jumpNow(view, -0.8, 5, false)).toEqual({ what: 'auto', timing: LOG.autoTiming });
-    expect(jumpNow(view, -0.8, 2, false)).toBeNull();
+    expect(jumpNow(view, -0.8, 2, false)).toEqual({ what: 'step', timing: 0.2 }); // (au trot : il l'enjambe)
+    expect(jumpNow(view, -0.8, 0.5, false)).toBeNull(); // (au pas : il passe)
     const skew = logView(o, p.x, p.z, o.heading + 1.4);
     expect(jumpNow(skew, -0.8, 5, false)).toBeNull();
     const q = at(0.5, 3); // (à côté du tronc)

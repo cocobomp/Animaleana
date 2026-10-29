@@ -5,8 +5,9 @@ import { h } from './dom.js';
 import { t } from '../i18n.js';
 
 /** Change quand une nouvelle liste arrive : elle est montrée une fois de plus. */
-export const NEWS_ID = 'cheval1';
+export const NEWS_ID = 'cheval2';
 export const NEWS = [
+  { icon: '🌾', key: 'ration' },
   { icon: '🪮', key: 'pansage' },
   { icon: '🪢', key: 'saddle' },
   { icon: '🦶', key: 'hooves' },
@@ -17,7 +18,7 @@ export const NEWS = [
   { icon: '📣', key: 'call' },
   { icon: '⬆️', key: 'post' },
   { icon: '⤴️', key: 'jumps' },
-  { icon: '🌾', key: 'life' },
+  { icon: '🐎', key: 'life' },
 ];
 
 /** La liste (pour la fenêtre et l'aide). */

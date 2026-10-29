@@ -23,6 +23,7 @@ import {
   activeQuests, nextQuest, setFront, passQuest, asideQuests, resumeAside, holdFollow, heldFollow,
 } from '../src/sim/quests.js';
 import { NoticeQueue } from '../src/ui/questNotices.js';
+import { GALOPS, finishExam } from '../src/sim/galops.js'; // 🏅 le chapitre du Galop 1
 
 const QUEST_IDS = OBJECTIVES.filter((o) => o.kind === 'quest').map((o) => o.id);
 const pet = (species = 'dog', sex = 'f', seed = species + sex) => createAnimal({ species, sex, ageDays: 80, rng: seeded(seed) });
@@ -90,6 +91,8 @@ describe('l\'histoire de la ferme', () => {
     expect(storyView(p).done).toEqual(['horse1', 'vet1', 'actvJump1']);
     // les chapitres finis ne reviennent jamais
     finish(p, 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1');
+    expect(mainQuest(p)).toBe('galop1');
+    finish(p, 'galop1');
     expect(mainQuest(p)).toBe('actvLesson1');
   });
 
@@ -602,6 +605,14 @@ function playChapter(p, id, breed) {
     }
     case 'rideCanter1': a.needs.energy = 80; expect(allowedGait('canter', a).gait, breed).toBe('canter'); addStat(p, 'rideCanter'); break;
     case 'vet1': addStat(p, 'vet'); xp('vet'); pay(30); break; // la clinique (VET_COST.clinic)
+    case 'galop1': {
+      // 🏅 le Galop 1 : encore un pansage et une balade, puis l'examen
+      care('brush', 'grooming', 1);
+      addStat(p, 'rides');
+      for (const it of GALOPS[0].practice) expect(p.stats[it.stat] ?? 0, `${breed} ${it.id}`).toBeGreaterThanOrEqual(it.n);
+      expect(finishExam(p, 1, 5, 1).passed, breed).toBe(true);
+      break;
+    }
     case 'actvLesson1': activity('lesson', 'actvLessons'); break; // (gratuit)
     case 'actvJump1': activity('jumping', 'actvJumping'); break;
     case 'actvTrail1': activity('trail', 'actvTrail'); break;

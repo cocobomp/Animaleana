@@ -1,7 +1,7 @@
 // ⤴️ Sauter en balade : des troncs d'arbre couchés le long du chemin de balade (src/sim/activities.js TRAIL), à la
 // ferme. Au galop, bien droit, on touche « ⤴️ Sauter » (ou Espace) au bon moment, à environ 1,8 m du tronc : un beau
-// saut ; sinon, lancé au galop, le cheval saute tout seul au dernier moment (moins bien). Au pas et au trot, il
-// l'enjambe. Logique pure (tests/freeJumps.test.js) ; le jeu : src/game/FreeJumps.js.
+// saut ; sinon, lancé au galop, le cheval saute tout seul au dernier moment (moins bien). Au trot, il l'enjambe d'un
+// petit bond. Logique pure (tests/freeJumps.test.js) ; le jeu : src/game/FreeJumps.js.
 
 import { TRAIL, approach, alignment, takeoffQuality } from './activities.js';
 
@@ -15,6 +15,7 @@ export const LOG = {
   late: -0.4, // (… et 0,4 m avant le tronc)
   auto: -0.6, // (rien touché : il saute tout seul ici)
   autoTiming: 0.35,
+  stepSpeed: 0.9, // (au trot, ou au pas allongé : il l'enjambe d'un petit bond)
 };
 
 /** Les troncs : au milieu d'un tronçon de balade sur deux, couchés en travers du chemin. */
@@ -43,12 +44,18 @@ export const jumpAhead = (view, speed) => view.inLane && view.align >= LOG.minAl
 
 /**
  * Ce qui se passe cette image : 'jump' (appel demandé, au bon endroit), 'auto' (rien demandé, il saute tout seul au
- * dernier moment) ou null. prevU : u de l'image d'avant ; wanted : le cavalier a demandé de sauter (il y a peu).
+ * dernier moment), 'step' (au trot : il l'enjambe d'un petit bond) ou null. prevU : u de l'image d'avant ; wanted :
+ * le cavalier a demandé de sauter (il y a peu).
  * Renvoie { what, timing } (timing : 0 à 1, la qualité de l'appel).
  */
 export function jumpNow(view, prevU, speed, wanted) {
-  if (!view.inLane || view.align < LOG.minAlign || speed < LOG.minSpeed) return null;
+  if (!view.inLane) return null;
+  const crossing = prevU !== null && prevU < LOG.auto && view.u >= LOG.auto;
+  if (view.align < LOG.minAlign || speed < LOG.minSpeed) {
+    // (pas assez vite pour sauter : au trot, il l'enjambe ; au pas, il passe tranquillement)
+    return crossing && speed >= LOG.stepSpeed && view.align >= 0.3 ? { what: 'step', timing: 0.2 } : null;
+  }
   if (wanted && view.u > LOG.early && view.u < LOG.late) return { what: 'jump', timing: takeoffQuality(view.u) };
-  if (prevU !== null && prevU < LOG.auto && view.u >= LOG.auto) return { what: 'auto', timing: LOG.autoTiming };
+  if (crossing) return { what: 'auto', timing: LOG.autoTiming };
   return null;
 }

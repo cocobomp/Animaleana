@@ -40,7 +40,7 @@ export const MAX_JOINED = 3;
  * toutes les maisons (tests/quests.test.js).
  * Les quêtes des autres animaux (un tour, un spectacle, un métier, un client…) sont des quêtes secondaires.
  */
-export const STORY = ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1', 'vet1', 'actvLesson1', 'actvJump1', 'actvTrail1',
+export const STORY = ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1', 'vet1', 'galop1', 'actvLesson1', 'actvJump1', 'actvTrail1',
   'beautyBraid1', 'drTrain3', 'drReprise1', 'actvCompete1'];
 
 /** Thèmes des quêtes secondaires (journal : « 🗺️ Autres quêtes »). Chaque quête est dans un seul thème. */

@@ -139,10 +139,17 @@ Les oreilles du cheval 3D disent comment il va, comme en vrai : en avant (attent
 il les pointe vers toi), sur le côté (il somnole, il est fatigué), couchées en arrière (il a mal, faim, soif, ou il est
 grognon). Sa fiche le dit aussi : « 👂 Oreilles couchées en arrière : Étoile a faim… ». (Question du Galop 1.)
 
+### La ration du cheval (0.5, `src/ui/minigames/ration.js`)
+« Nourrir » le cheval est un mini-jeu en deux temps, comme en vrai : d'abord bien remplir son filet à foin (il mange
+du foin presque toute la journée : au moins 75 %), puis une petite mesure de granulés dans le seau (la zone verte,
+15 à 30 % du seau). Trop de granulés (55 % et plus) : le jeu prévient, la note est basse, et une fois sur deux il a
+mal au ventre (les coliques : malade, « ventre », le vétérinaire le soigne).
+
 ### Sauter en balade (0.5, `src/sim/freeJumps.js`, `src/game/FreeJumps.js`)
 À la ferme, quatre troncs couchés en travers du chemin de balade (un tronçon sur deux). Au galop, bien droit, à moins
 de 12 m : un bouton orange « ⤴️ Sauter » (Espace). Appel entre 3,6 et 0,4 m du tronc, idéal à 1,8 m : un beau saut
-(⭐) ; rien touché, lancé au galop, il saute tout seul au dernier moment (moins bien). Au pas et au trot, il l'enjambe.
+(⭐) ; rien touché, lancé au galop, il saute tout seul au dernier moment (moins bien). Au trot, il l'enjambe d'un
+petit bond ; au pas, il passe tranquillement. Pendant une activité ou une balade guidée, les troncs sont rangés.
 Le saut reprend celui des séances d'obstacles (bascule, membres repliés, cavalier en suspension) ; chaque saut
 entraîne un peu le cheval (+0,2 à +0,4 en saut). Ils se sautent dans les deux sens.
 
@@ -278,16 +285,18 @@ Galops ») ; quête « Passer ton Galop 1 » dans le thème du cheval.
 
 ## 10. Quêtes et succès
 - **L'histoire : ton premier cheval** (quête principale ⭐, 0.5 ; avant, une histoire « n'importe quel animal ») :
-  le jeu est d'abord un jeu de cheval. 15 chapitres, un seul à la fois, faisables dans toutes les maisons sans
+  le jeu est d'abord un jeu de cheval. 16 chapitres, un seul à la fois, faisables dans toutes les maisons sans
   chance et sans gros budget : adopter son premier cheval au refuge (gratuit ; à la maison, le premier cheval de la
   liste est toujours adulte, on peut le monter), faire connaissance (caresses), le foin, l'eau fraîche, le pansage
-  complet, monter en selle, passer au trot puis au galop (3 secondes de galop), la visite chez le vétérinaire, la
-  première leçon, le premier saut, la première balade ; puis vers le concours : tresser sa crinière, trois séances de
-  dressage, une reprise, et le premier concours du club (10 🪙, tous les trois jours à la maison). Les soins d'un cheval se comptent à part (un chien caressé
-  ne fait pas avancer l'histoire du cheval). Le tutoriel montre d'abord la carte d'un cheval au refuge. Les quêtes
-  des autres animaux (un tour, un spectacle, un métier, un premier client…) sont des quêtes secondaires ; une
-  ancienne partie qui a déjà un cheval finit tout de suite le premier chapitre. Un chapitre trop dur se **passe pour l'instant** (le suivant arrive) et se **reprend** plus tard
-  depuis le journal : il redevient le chapitre en cours s'il vient avant, sinon il va dans « Mes quêtes ».
+  complet, monter en selle, passer au trot puis au galop (3 secondes de galop), la visite chez le vétérinaire, le
+  Galop 1 (src/sim/galops.js), la première leçon, le premier saut, la première balade ; puis vers le concours :
+  tresser sa crinière, trois séances de dressage, une reprise, et le premier concours du club (10 🪙, tous les trois
+  jours à la maison). Les soins d'un cheval se comptent à part (un chien caressé ne fait pas avancer l'histoire du
+  cheval). Le tutoriel montre d'abord la carte d'un cheval au refuge. Les quêtes des autres animaux (un tour, un
+  spectacle, un métier, un premier client…) sont des quêtes secondaires ; une ancienne partie qui a déjà un cheval
+  finit tout de suite le premier chapitre. Un chapitre trop dur se **passe pour l'instant** (le suivant arrive) et se
+  **reprend** plus tard depuis le journal : il redevient le chapitre en cours s'il vient avant, sinon il va dans « Mes
+  quêtes ».
 - **Quêtes secondaires** (🎯), rangées par thème (ton cheval, animaux, voyages, activités et concours, métiers) : l'enfant
   **rejoint** celles qu'elle veut (3 au plus en même temps) et les **enlève** quand elle veut, sans rien perdre.
   Une quête qu'on ne peut pas encore faire dit pourquoi (« Il te faut un mâle et une femelle ») ; elle ne se
@@ -327,5 +336,5 @@ Galops ») ; quête « Passer ton Galop 1 » dans le thème du cheval.
 | **0.2** (fait) | Concours et spectacles sur le terrain de concours, apprentissage du saut, parcours d'obstacles, agility, balade, lapin-hop ; mini-jeux pour chaque soin (brosser, laver, ferrer, tonte, traite…) ; vétérinaire à jouer soi-même |
 | **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison (reportée en 0.5) |
 | **0.4** (fait) | Graphismes plus beaux (sol, végétation, lumière, bâtiments, animations), animaux réalistes (chevaux, chiens race par race, chats, lapins, moutons, chèvres, vaches) et cavalier en selle, vrai saut d'obstacles ; sons synthétisés (ambiance, voix des animaux, pas, interface) ; mini-jeux des corvées et notation « juste ce qu'il faut » dans tous les mini-jeux ; vignettes 3D des cartes (sellerie, animalerie, construction, véhicules) ; vue construction (grille, enclos à la taille voulue, écurie qui s'agrandit) ; 4x4 et van à chevaux ; métiers toiletteur, éducateur canin, guide de randonnée, concours de beauté, concours à l'extérieur, école vétérinaire ; espèces proposées au fil de la partie ; sauvegarde en ligne facultative ; jeu au clavier ; histoire de la ferme (10 chapitres) et quêtes secondaires à rejoindre ; version « à emporter » en un seul fichier |
-| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras) ; allures en balade libre (arrêt, pas, trot, galop, grand galop ; fatigue, sueur, écarts) ; pansage complet du cheval (étrille, brosse, cure-pied sur les quatre pieds, peigne) ; l'histoire devient celle de ton premier cheval (15 chapitres, du refuge au premier concours) ; le cheval vivant (il t'accueille quand tu reviens, il se roule au pré) ; seller et desseller (tapis, selle, sangle en deux fois) ; les pieds du cheval (pas curés : un caillou, il boite) ; en balade, le cheval gourmand s'arrête pour brouter ; le carnet de santé du cheval (vermifuge en mini-jeu : la dose selon son poids, vaccins, dents, maréchal-ferrant) ; la journée de ton cheval (sa routine, « journée parfaite ») ; les Galops 1 à 3 (pratique avec ton cheval, puis un petit examen) ; ses oreilles disent comment il va ; l'appeler (il vient au trot) ; le trot enlevé en rythme ; sauter des troncs en balade. À venir : décoration de l'intérieur de la maison |
+| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras) ; allures en balade libre (arrêt, pas, trot, galop, grand galop ; fatigue, sueur, écarts) ; pansage complet du cheval (étrille, brosse, cure-pied sur les quatre pieds, peigne) ; l'histoire devient celle de ton premier cheval (16 chapitres, du refuge au premier concours, Galop 1 compris) ; le cheval vivant (il t'accueille quand tu reviens, il se roule au pré) ; seller et desseller (tapis, selle, sangle en deux fois) ; les pieds du cheval (pas curés : un caillou, il boite) ; en balade, le cheval gourmand s'arrête pour brouter ; le carnet de santé du cheval (vermifuge en mini-jeu : la dose selon son poids, vaccins, dents, maréchal-ferrant) ; la journée de ton cheval (sa routine, « journée parfaite ») ; les Galops 1 à 3 (pratique avec ton cheval, puis un petit examen) ; ses oreilles disent comment il va ; l'appeler (il vient au trot) ; le trot enlevé en rythme ; sauter des troncs en balade ; la ration (foin, puis un peu de granulés). À venir : décoration de l'intérieur de la maison |
 | 1.0 | Publication |

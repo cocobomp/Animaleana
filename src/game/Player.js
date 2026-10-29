@@ -968,8 +968,9 @@ export class Player {
     const st = this.ride0;
     st.gait = this.rideGait;
     st.phase = phase;
-    // (en balade libre, on se lève au trot seulement en trottant enlevé — le bouton ⬆️ en rythme ; sinon assis)
-    if (this.canPost !== undefined) st.posting = this.canPost && (this.gaitEnabled === false || this.auto ? true : !!this.postingNow);
+    // (en balade libre, on se lève au trot seulement en trottant enlevé — le bouton ⬆️ en rythme ; sinon assis ; en
+    // voyage à cheval, postAuto : le cavalier trotte enlevé tout seul, comme avant)
+    if (this.canPost !== undefined) st.posting = this.canPost && (this.gaitEnabled === false || this.auto || this.postAuto ? true : !!this.postingNow);
     st.bob = bob;
     // (saut d'obstacle : position en suspension, réglée par la séance, src/game/Activities.js)
     st.jump = this.jumpPose ?? 0;

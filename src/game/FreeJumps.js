@@ -85,9 +85,15 @@ export class FreeJumps {
     this.sync();
     const g = this.game;
     const pl = g.player;
+    // (pendant une activité ou une balade guidée, qui ont leur propre chemin : pas de troncs)
+    const hide = !!(g.activities.active || g.trailGuide?.session);
+    if (hide !== !!this.hidden) {
+      this.hidden = hide;
+      for (const o of this.logs) o.model.visible = !hide;
+    }
     if (this.jump) return this.updateJump(dt);
     this.ahead = null;
-    const free = pl.mount && pl.gaitEnabled !== false && !pl.auto && !g.activities.active && !g.tripFlow?.active;
+    const free = pl.mount && !hide && pl.gaitEnabled !== false && !pl.auto && !g.tripFlow?.active;
     if (!free || !this.logs.length) {
       for (const o of this.logs) o.prev = null;
       return;
@@ -97,8 +103,10 @@ export class FreeJumps {
     for (const o of this.logs) {
       const view = logView(o, p.x, p.z, pl.heading);
       if (jumpAhead(view, pl.speed)) this.ahead = o;
-      const r = jumpNow(view, o.prev, pl.speed, wanted);
+      // (u de l'image d'avant, s'il était pris dans le même sens : un demi-tour près du tronc n'est pas un passage)
+      const r = jumpNow(view, o.prevH === view.o.heading ? o.prev : null, pl.speed, wanted);
       o.prev = Math.abs(view.v) < o.width ? view.u : null;
+      o.prevH = view.o.heading;
       if (r) {
         this.start(o, view.o.heading, r);
         return;
@@ -108,15 +116,17 @@ export class FreeJumps {
 
   start(o, heading, r) {
     const pl = this.game.player;
-    const speed = Math.max(4.5, pl.speed);
-    const dur = 0.62 + o.height * 0.22;
+    const step = r.what === 'step'; // (au trot : un petit bond par-dessus)
+    const speed = step ? Math.max(1.5, pl.speed) : Math.max(4.5, pl.speed);
+    const dur = step ? 0.5 : 0.62 + o.height * 0.22;
     this.wantAt = -99;
     this.ahead = null;
     pl.spookIn = Math.max(pl.spookIn ?? 0, 6); // (pas d'écart en plein saut)
     this.jump = {
-      o, t: 0, dur, timing: r.timing, auto: r.what === 'auto',
+      o, t: 0, dur, timing: r.timing, auto: r.what === 'auto', step,
       from: pl.root.position.clone(), heading, h0: pl.heading,
-      dist: Math.max(3.6, speed * dur), height: o.height * 1.1 + 0.3 * (0.6 + 0.4 * r.timing), speed,
+      dist: step ? Math.max(1.6, speed * dur) : Math.max(3.6, speed * dur),
+      height: step ? o.height * 0.8 : o.height * 1.1 + 0.3 * (0.6 + 0.4 * r.timing), speed,
     };
   }
 
@@ -148,6 +158,7 @@ export class FreeJumps {
     pl.avatar.root.rotation.x = 0;
     pl.jumpPose = 0;
     for (const o of this.logs) o.prev = null;
+    if (j.step) return; // (enjambé au trot : rien à fêter)
     const a = e.data;
     const great = !j.auto && j.timing > 0.7;
     a.skills.jump = Math.min(100, (a.skills.jump ?? 10) + (great ? 0.4 : 0.2)); // (il s'habitue à sauter)

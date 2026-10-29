@@ -1099,6 +1099,7 @@ export class UI {
       const key = `${toolAtHome(g.profile, tool) ? 'buyToolAskAway' : 'buyToolAsk'}${isSandbox(g.profile) ? 'Free' : ''}`;
       const ok = await this.confirm(t(key, { tool: label, price: TOOLS[tool].price }));
       if (!ok || !g.buyTool(tool)?.ok) return null;
+      this.renderPanel(); // (la liste des activités ne dit plus « touche pour l'acheter »)
       check = g.canCare(a, action);
     }
     if (!check.ok) return this.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name, g: a.sex }));

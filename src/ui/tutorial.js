@@ -463,6 +463,13 @@ export class Tutorial {
         const el = this.sectionButton(spec.h3);
         return el ? { el } : this.resolve(spec.fallback);
       }
+      // ⬆️ Le trot enlevé : d'abord le bouton du trot, puis « Debout » dès qu'il est là (UI.updatePostBtn)
+      case 'post': {
+        const pb = ui.postBtn;
+        if (pb && !pb.hidden) return { el: pb };
+        const el = document.querySelector('#gait-pad:not([hidden]) .gait-btn.trot');
+        return el ? { el } : {};
+      }
       // ⤴️ Les troncs (src/game/FreeJumps.js) : d'abord le galop, puis la flèche vers un tronc (spec.first : le n° 1,
       // départ du cross ; pendant le cross, le tronc suivant, comme sa propre flèche)
       case 'log': {
@@ -513,6 +520,8 @@ export class Tutorial {
     if (spec.training) a = g.animalsHere().find((x) => x.client?.kind === 'training') ?? null; // chien en éducation
     const e = a && g.entities.get(a.id);
     if (!e) return {};
+    // (on le monte : on ne peut pas le toucher ; d'abord « ⬇️ Descendre »)
+    if (e.ridden || g.player.mount === e) return ui.panel ? { el: this.closeBtn(), why: 'close' } : (ui.actionBtn.hidden ? {} : { el: ui.actionBtn });
     if (ui.panel) return { el: this.closeBtn(), why: 'close', world: e, key: `a-${a.id}` };
     const onEdgeTap = () => g.walkTo(e.position, e.radius + 1.2, () => ui.openAnimalActions(a), true);
     let el = null;

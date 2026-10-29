@@ -37,7 +37,7 @@ export const GALOPS = [
   {
     id: 3, emoji: '🥇', coins: 150,
     practice: [
-      { id: 'lunge', icon: '🪢', stat: 'horse_lunge', n: 2 },
+      { id: 'lunge', icon: '🌀', stat: 'horse_lunge', n: 2 },
       { id: 'clear', icon: '🚧', stat: 'actvClear', n: 1 },
       { id: 'trail', icon: '🧭', stat: 'actvTrail', n: 1 },
       { id: 'deworm', icon: '🪱', stat: 'horse_deworm', n: 1 },

@@ -165,6 +165,13 @@ export class Marker {
     // Pas sur le suivi de quête rangé contre ce bord (src/ui/tutorial.js) : la flèche passe juste en dessous.
     const box = this.game.ui?.tutorial?.trackerBox;
     if (box && sx + 32 > box.left && sx - 32 < box.right && sy + 32 > box.top - 6 && sy - 32 < box.bottom + 6) sy = box.bottom + 40;
+    // Pas sur les boutons d'allure (ni « Debout », ni « Sauter ») : elle prenait leurs touchers ; juste au-dessus.
+    const ui = this.game.ui;
+    for (const el of [ui?.gaitPad, ui?.postBtn, ui?.jumpBtn]) {
+      if (!el || el.hidden) continue;
+      const b = el.getBoundingClientRect();
+      if (sx + 32 > b.left && sx - 32 < b.right && sy + 32 > b.top - 6 && sy - 32 < b.bottom + 6) sy = b.top - 40;
+    }
     this.edgeEl.hidden = false;
     this.edgeEl.style.left = `${sx - 32}px`;
     this.edgeEl.style.top = `${sy - 32}px`;

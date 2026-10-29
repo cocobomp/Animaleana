@@ -448,11 +448,12 @@ export const FOLLOW_STEPS = {
   openCalendar: { target: { type: 'hud', id: 'actv_hud' }, done: seenAny('panel:activities') }, // calendrier des concours
   doActivity: { target: null, done: questDone, progress: true },
   // 🏅 les Galops (src/ui/galops.js émet panel:galops)
-  openGalops: { target: SHOWGROUND, done: seenAny('panel:galops') },
-  doGalop: { target: { type: 'el', sel: '#panel .gl-take:not([disabled])', fallback: SHOWGROUND }, done: questDone, progress: true },
+  // (la fiche du terrain ouverte : le bouton « 🏅 Passer mes Galops », pas ✕ — sinon la main tournait en rond)
+  openGalops: { target: { type: 'sheet', label: 'do_galops', fallback: SHOWGROUND }, done: seenAny('panel:galops') },
+  doGalop: { target: { type: 'el', sel: '#panel .gl-take:not([disabled])', fallback: { type: 'sheet', label: 'do_galops', fallback: { type: 'el', sel: '#panel .gl-card.open', fallback: SHOWGROUND } } }, done: questDone, progress: true },
   // 📣 l'appeler, ⬆️ trotter enlevé, ⤴️ les troncs, ⏱️ le cross
   callHorse: { target: null, done: questDone },
-  doPost: { target: { type: 'gait', id: 'trot' }, done: questDone },
+  doPost: { target: { type: 'post' }, done: questDone }, // (le trot, puis le bouton « Debout »)
   doLogs: { target: { type: 'log' }, done: questDone, progress: true }, // (au galop, puis la flèche vers un tronc)
   doCross: { target: { type: 'log', first: true }, done: questDone }, // (le n° 1, puis les suivants)
   // éducateur canin

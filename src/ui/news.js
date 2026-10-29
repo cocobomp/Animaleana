@@ -14,6 +14,7 @@ export const NEWS = [
   { icon: '📒', key: 'health' },
   { icon: '☀️', key: 'day' },
   { icon: '🏅', key: 'galops' },
+  { icon: '✨', key: 'coat' },
   { icon: '👂', key: 'ears' },
   { icon: '📣', key: 'call' },
   { icon: '⬆️', key: 'post' },

@@ -173,15 +173,17 @@ vient toujours. Il ne vient pas s'il dort, s'il a mal (il boite, il est malade) 
 répondre). Pratique du Galop 2.
 
 ### Les Galops (0.5, `src/sim/galops.js`, `src/ui/galops.js`)
-Les examens des cavaliers dans les clubs français, en plus simple : Galop 1 « Je découvre mon cheval » (le caresser, le
-panser, foin, eau, le monter), Galop 2 « Je m'occupe de lui » (le seller soi-même, galoper, une leçon de saut, une
-journée parfaite, qu'il vienne quand tu l'appelles, trotter enlevé), Galop 3 « En route vers l'aventure » (longe, un sans-faute, une balade, le vermifuge, trois journées
-parfaites). La pratique se coche toute seule en jouant ; quand elle est finie, un petit mot le dit, et l'examen s'ouvre :
-5 questions tirées parmi 8 (les robes, les allures, la sécurité autour du cheval, ses soins, sa santé), une réponse par
-question et son explication, 4 bonnes réponses pour l'avoir (sinon on relit et on réessaie). Chaque Galop rapporte des
-pièces (60, 100, 150) et rend le cavalier plus sûr : en balade, le cheval fait moins d'écarts (+20 % de temps entre deux
-écarts par Galop). On y vient par le terrain de concours (« 🏅 Passer mes Galops ») ou la fiche du cheval (« 🏅 Tes
-Galops ») ; quête « Passer ton Galop 1 » dans le thème du cheval.
+Les examens des cavaliers dans les clubs français, en plus simple : Galop 1 « Je découvre mon cheval » (le caresser,
+le panser, foin, eau, le monter), Galop 2 « Je m'occupe de lui » (le seller soi-même, galoper, une leçon de saut, une
+journée parfaite, qu'il vienne quand tu l'appelles, trotter enlevé), Galop 3 « En route vers l'aventure » (longe, un
+sans-faute, une balade, le vermifuge, trois journées parfaites, trois troncs sautés en balade). La pratique se coche
+toute seule en jouant ; quand elle est finie, un petit mot le dit, et l'examen s'ouvre : 5 questions tirées parmi 8
+(les robes, les allures, la sécurité autour du cheval, ses soins, sa santé), une réponse par question et son
+explication, 4 bonnes réponses pour l'avoir (sinon on relit et on réessaie). Chaque Galop rapporte des pièces (60,
+100, 150) et rend le cavalier plus sûr : en balade, le cheval fait moins d'écarts (+20 % de temps entre deux écarts
+par Galop). On y vient par le terrain de concours (« 🏅 Passer mes Galops ») ou la fiche du cheval (« 🏅 Tes Galops ») ;
+le Galop 1 est aussi un chapitre de l'histoire. En bas du panneau, « 📔 Ton carnet de cavalier » : fois en selle,
+galops, trots enlevés, troncs sautés, sans-faute, balades, appels, journées parfaites, voyages à cheval.
 
 ### Vétérinaire : mini-jeux
 - Examen : trouver la zone qui fait mal.

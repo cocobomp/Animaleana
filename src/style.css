@@ -488,6 +488,8 @@ button.sv-card:hover { border-color: var(--primary); }
 .gl-practice li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 6px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.04); }
 .gl-practice li.done { background: rgba(63, 174, 98, 0.14); }
 .gl-take { width: 100%; }
+.gl-book { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
+.gl-book li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 6px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.04); }
 /* 📒 Carnet de santé du cheval (src/ui/panels.js healthSection) */
 .hp-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
 .hp-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.04); }

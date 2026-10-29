@@ -6,7 +6,7 @@ import { h } from './dom.js';
 import { t } from '../i18n.js';
 import { earn, isSandbox } from '../sim/profile.js';
 import {
-  GALOPS, EXAM_QUESTIONS, EXAM_PASS, galopDef, galopsSummary, galopLevel, canTakeExam, makeExam, isRight, finishExam, isOpen,
+  GALOPS, EXAM_QUESTIONS, EXAM_PASS, galopDef, galopsSummary, galopLevel, canTakeExam, makeExam, isRight, finishExam, isOpen, logbook,
 } from '../sim/galops.js';
 import { openOverlay } from './vetExam.js';
 
@@ -45,6 +45,12 @@ export function openGalops(ui) {
           if (!x.ready) body.push(h('small', { class: 'note' }, t('galop_needPractice')));
         }
         out.push(h('div', { class: `gl-card ${x.done ? 'done' : ''} ${x.open && !x.done ? 'open' : ''}` }, head, ...body));
+      }
+      // 📔 Le carnet du cavalier (ce qui a déjà commencé)
+      const book = logbook(p);
+      if (book.length) {
+        out.push(h('h3', {}, t('lb_title')), h('ul', { class: 'gl-book' }, book.map((x) => h('li', {},
+          h('span', {}, x.icon), h('span', {}, t(`lb_${x.id}`)), h('b', {}, String(x.n))))));
       }
       return out;
     },

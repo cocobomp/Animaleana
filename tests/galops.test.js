@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
   GALOPS, EXAM_QUESTIONS, EXAM_PASS, ANSWERS, galopLevel, nextGalop, isOpen, practiceOf, canTakeExam, makeExam, isRight,
-  finishExam, galopsSummary,
+  finishExam, galopsSummary, LOGBOOK, logbook,
 } from '../src/sim/galops.js';
 import { createProfile } from '../src/sim/profile.js';
 import { nextSpookIn } from '../src/sim/riding.js';
@@ -91,6 +91,20 @@ describe('les Galops', () => {
   it('les textes français et anglais ont les mêmes clés', async () => {
     const { GALOPS_FR, GALOPS_EN } = await import('../src/ui/galopsTexts.js');
     expect(Object.keys(GALOPS_EN).sort()).toEqual(Object.keys(GALOPS_FR).sort());
+  });
+
+  it('le carnet du cavalier : ce qui a commencé, dans l\'ordre, avec ses textes', () => {
+    const p = createProfile('Lou');
+    expect(logbook(p)).toEqual([]);
+    Object.assign(p.stats, { freeJumps: 2, rides: 5 });
+    expect(logbook(p).map((x) => [x.id, x.n])).toEqual([['rides', 5], ['freeJumps', 2]]);
+    const { t, setLang } = i18n;
+    for (const lang of ['fr', 'en']) {
+      setLang(lang);
+      expect(t('lb_title')).not.toBe('lb_title');
+      for (const x of LOGBOOK) expect(t(`lb_${x.id}`), `${lang} ${x.id}`).not.toBe(`lb_${x.id}`);
+    }
+    setLang('fr');
   });
 
   it('avec tes Galops, ton cheval s\'effraie moins souvent en balade', () => {

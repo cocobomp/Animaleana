@@ -42,6 +42,7 @@ export const GALOPS = [
       { id: 'trail', icon: '🧭', stat: 'actvTrail', n: 1 },
       { id: 'deworm', icon: '🪱', stat: 'horse_deworm', n: 1 },
       { id: 'perfect3', icon: '🗓️', stat: 'perfectDays', n: 3 },
+      { id: 'logs', icon: '⤴️', stat: 'freeJumps', n: 3 }, // (des troncs sautés en balade : src/sim/freeJumps.js)
     ],
     quiz: [1, 1, 1, 0, 1, 1, 1, 0],
   },
@@ -131,6 +132,26 @@ export function finishExam(profile, id, right, day = 1) {
   profile.stats = profile.stats ?? {};
   profile.stats.galops = (profile.stats.galops ?? 0) + 1;
   return { passed: true, coins: def.coins, level: galopLevel(profile) };
+}
+
+/**
+ * 📔 Le carnet du cavalier : ce que tu as fait à cheval (profile.stats), pour le panneau des Galops. Chaque ligne :
+ * { id, icon, n } ; seulement ce qui a déjà commencé (n > 0), dans l'ordre.
+ */
+export const LOGBOOK = [
+  { id: 'rides', icon: '🏇' },
+  { id: 'rideCanter', icon: '🐎' },
+  { id: 'risingTrot', icon: '⬆️' },
+  { id: 'freeJumps', icon: '⤴️' },
+  { id: 'actvClear', icon: '🚧' },
+  { id: 'actvTrail', icon: '🧭' },
+  { id: 'horse_came', icon: '📣' },
+  { id: 'perfectDays', icon: '⭐' },
+  { id: 'horseTravels', icon: '🗺️' },
+];
+export function logbook(profile) {
+  const s = profile.stats ?? {};
+  return LOGBOOK.map((x) => ({ ...x, n: s[x.id] ?? 0 })).filter((x) => x.n > 0);
 }
 
 /** Résumé pour l'interface. */

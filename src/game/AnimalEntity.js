@@ -10,7 +10,7 @@ import { emojiTexture } from './textures.js';
 import { enclosure, inside, navTarget } from './nav.js';
 import { buildGear, removeGear } from './gearModels.js';
 import { buildAccessories, removeAccessories } from './models/salon.js'; // accessoires de toilettage
-import { canLeash, heelSkill, LEASH_LEN } from '../sim/gear.js';
+import { canLeash, heelSkill, LEASH_LEN, feltWeather } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
 import { t } from '../i18n.js'; // (le cheval qui a faim t'appelle)
 import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
@@ -571,7 +571,8 @@ export class AnimalEntity {
 
   /**
    * Les soins se voient sur sa robe (cheval) : de la terre sur les jambes et le corps quand il s'est roulé ou qu'il
-   * n'est pas pansé (horseCoat.js, hDirt) ; bien pansé, le poil est plus satiné ; crotté, plus terne.
+   * n'est pas pansé (horseCoat.js, hDirt) ; bien pansé, le poil est plus satiné ; crotté, plus terne. Mouillé (la
+   * sueur après le galop, ou la pluie sans couverture) : le poil fonce par plaques (hSweat).
    */
   coatCare() {
     const m = this.model?.coatMesh?.material;
@@ -580,7 +581,7 @@ export class AnimalEntity {
     const g = this.data.needs?.grooming ?? 80;
     const dirt = this.data.muddy ? Math.max(0.85, (70 - g) / 50) : Math.max(0, Math.min(1, (55 - g) / 45));
     u.hDirt.value = dirt;
-    if (u.hSweat) u.hSweat.value = Math.min(1, this.data.sweat ?? 0);
+    if (u.hSweat) u.hSweat.value = Math.min(1, Math.max(this.data.sweat ?? 0, this.rainWet ?? 0)); // (sueur ou pluie)
     const base = m.userData.rimBase ?? u.hRim.value;
     u.hRim.value = base * (g >= 85 && !this.data.muddy ? 1.3 : 1 - 0.45 * dirt);
   }
@@ -866,6 +867,11 @@ export class AnimalEntity {
       if (this.earsT <= 0) {
         this.earsT = 1;
         this.earsPose = earsOf(d, { sleeping: this.sleeping, happy: happiness(d) })?.pose ?? null;
+        // (sous la pluie, dehors, sans couverture imperméable : il est mouillé ; au sec, il sèche peu à peu)
+        const gm = ctx.game;
+        const felt = gm && !this.inside && !d.stalled ? feltWeather(d, gm.weather, gm.temperature, gm.season) : 'clear';
+        const rainy = felt === 'rain' || felt === 'storm';
+        this.rainWet = Math.max(0, Math.min(0.8, (this.rainWet ?? 0) + (rainy ? 0.05 : -0.01)));
         this.coatCare();
       }
     }

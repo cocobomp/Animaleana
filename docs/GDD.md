@@ -145,6 +145,7 @@ Il s'est roulé, ou il n'a pas été pansé depuis longtemps (pansage sous 55) :
 brunes sur le corps (plus il est sale, plus il y en a) ; le pansage les enlève. Bien pansé (85 et plus), sa robe est
 plus satinée ; crotté, elle est terne. Après un galop (ou un long trot), il transpire : son poil mouillé fonce par
 plaques (la sueur monte avec l'effort, sèche en une heure de jeu environ ; le pansage ou la douche l'enlèvent).
+Sous la pluie, dehors et sans couverture imperméable, il est mouillé de la même façon ; au box ou couvert, il reste sec.
 
 ### Ses oreilles (0.5, `src/sim/horseEars.js`)
 Les oreilles du cheval 3D disent comment il va, comme en vrai : en avant (attentif, curieux ; quand tu t'approches,

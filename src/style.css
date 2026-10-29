@@ -462,6 +462,15 @@ button.sv-card:hover { border-color: var(--primary); }
 .mini-track { display: block; height: 6px; background: #e9e3d6; border-radius: 999px; overflow: hidden; }
 .mini-fill { display: block; height: 100%; background: var(--good); }
 .memorial { color: var(--muted); padding-left: 18px; }
+/* 📒 Carnet de santé du cheval (src/ui/panels.js healthSection) */
+.hp-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
+.hp-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.04); }
+.hp-row > span { flex: 1 1 auto; }
+.hp-row > b { font-weight: 600; }
+.hp-row > small { flex-basis: 100%; color: var(--muted); }
+.hp-soon > b, .hp-today > b { color: #b06a00; }
+.hp-late { background: rgba(224, 87, 74, 0.12); }
+.hp-late > b { color: #c0392b; }
 .checks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 
 .tabs { display: flex; gap: 6px; margin: 8px 0; }

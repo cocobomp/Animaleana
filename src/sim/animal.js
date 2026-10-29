@@ -70,6 +70,7 @@ export function pickHooves(a, cleaned = 1, stoneOut = cleaned >= 1) {
 
 /** Ce soin est-il inutile pour l'instant (besoin plein) ? Un cheval aux pieds sales se panse quand même. */
 export function careFull(a, actionId) {
+  if (actionId === 'shoe' && a.species === 'horse') return false; // (les fers, ce n'est pas une question de propreté)
   const care = CARE[actionId];
   if (!care?.full || a.needs[care.full] < 96) return false;
   return !(actionId === 'brush' && hoovesNeedCare(a));

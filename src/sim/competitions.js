@@ -107,6 +107,7 @@ export function eligibleForCompetition(a, discipline) {
   if (a.sick) return 'sick';
   if (a.pregnant) return 'pregnant';
   if (lifeStage(a) === 'baby') return 'baby';
+  if (a.lame) return 'lame'; // (il boite : un caillou, un fer perdu)
   if (DISCIPLINES[discipline]?.horse && a.species !== 'horse') return 'notHorse';
   const low = ['hunger', 'thirst', 'energy'].find((n) => (a.needs?.[n] ?? 100) < 50);
   if (low) return `low_${low}`;

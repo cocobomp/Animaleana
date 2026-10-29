@@ -31,6 +31,7 @@ import { clientBadge, clientInfo, clientsTab } from './clients.js'; // animaux c
 import { isCareerPatient } from './vet.js'; // animal confié en soins, métier commencé : examen gratuit
 import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
 import { thumb, portraitSpec } from '../game/thumbScenes.js'; // vignettes 3D (animalerie, voyage, portrait de la fiche)
+import { healthPlan, HEALTH_PLAN, WORMER_COST } from '../sim/horseHealth.js'; // 📒 carnet de santé du cheval
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -119,6 +120,24 @@ export function openAnimal(ui, a) {
   });
 }
 
+/** 📒 Le carnet de santé du cheval (src/sim/horseHealth.js) : chaque soin, quand, et le vermifuge à donner ici. */
+function healthSection(ui, g, a, btn) {
+  const plan = healthPlan(a, g.day);
+  const when = (it) => {
+    if (it.state === 'late') return t('hp_late', { n: -it.left });
+    if (it.state === 'today') return t('hp_today');
+    return t(it.state === 'soon' ? 'hp_soon' : 'hp_ok', { n: it.left });
+  };
+  const rows = plan.map((it) => h('li', { class: `hp-row hp-${it.state}` },
+    h('span', {}, `${HEALTH_PLAN[it.id].icon} ${t(`hp_${it.id}`)}`),
+    h('b', {}, when(it)),
+    HEALTH_PLAN[it.id].where !== 'sheet' && it.state !== 'ok' ? h('small', {}, ` ${t(`hp_where_${HEALTH_PLAN[it.id].where}`)}`) : null));
+  const worm = plan.find((it) => it.id === 'worm');
+  return [h('h3', {}, t('hp_title')), h('p', { class: 'note' }, t('hp_help')), h('ul', { class: 'hp-list' }, rows),
+    h('div', { class: 'grid' }, btn(`${t('hp_deworm')}${money(ui, WORMER_COST)}`, () => { if (g.deworm(a)) ui.renderPanel(); },
+      { cls: worm.state === 'ok' ? '' : 'primary' }))];
+}
+
 function renderAnimal(ui, g, a) {
   const sp = SPECIES[a.species];
   const here = a.location === g.profile.place;
@@ -140,7 +159,7 @@ function renderAnimal(ui, g, a) {
       h('span', { class: `chip swatch${lightCoat(a.look.coat) ? ' light' : ''}`, style: { background: hexColor(a.look.coat) } }, coatName(a)),
     )),
     a.sick ? h('p', { class: 'warn' }, `🤒 ${t('r_sick', { name: a.name, g: a.sex })}`) : null,
-    a.lame && !a.sick ? h('p', { class: 'warn' }, `🩹 ${t('r_lame', { name: a.name, g: a.sex })}`) : null, // (un caillou dans le pied)
+    a.lame && !a.sick ? h('p', { class: 'warn' }, `🩹 ${t(a.lame.cause === 'shoe' ? 'lostShoeSheet' : 'r_lame', { name: a.name, g: a.sex })}`) : null, // (un caillou, un fer)
     clientInfo(a, g), // animal confié : propriétaire, jours restants, soin
     !here ? h('p', { class: 'note' }, t('isAt', { place: `${PLACES[a.location].flag} ${L(PLACES[a.location].name)}` })) : null,
   );
@@ -166,6 +185,8 @@ function renderAnimal(ui, g, a) {
   out.push(h('h3', {}, t('care')), h('div', { class: 'grid' },
     careActions.map((x) => btn(`${CARE_ICONS[x] ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => ui.careWithGame(a, x))),
   ));
+
+  if (a.species === 'horse' && !a.client && !a.guest) out.push(...healthSection(ui, g, a, btn));
 
   const acts = [];
   if (sp.actions.includes('play')) acts.push(btn(`⚽ ${t('act_play')}`, () => ui.careWithGame(a, 'play')));

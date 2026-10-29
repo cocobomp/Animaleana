@@ -50,6 +50,7 @@ import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
 import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone } from '../sim/droppings.js';
 import { enclosure } from './nav.js';
 import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
+import { healthDay, noteHealth, WORMER_COST } from '../sim/horseHealth.js'; // le carnet de santé du cheval
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
   unsaddle, saddleUp,
@@ -854,6 +855,30 @@ export class Game {
     this.updateWeather();
   }
 
+  /** Le carnet de santé des chevaux (src/sim/horseHealth.js) : rappels, et effets des retards, une fois par jour. */
+  horseHealthDay(here) {
+    const day = this.day;
+    for (const a of here) {
+      if (a.species !== 'horse' || a.healthDay === day) continue;
+      for (const ev of healthDay(a, day)) {
+        if (ev.startsWith('remind:')) this.ui.toast(t(`remind_${ev.slice(7)}`, { name: a.name, g: a.sex }), 7000);
+        else if (ev === 'lostShoe') this.ui.toast(t('lostShoe', { name: a.name, g: a.sex }), 7000);
+        else if (ev === 'sick') this.handleEvents(a, ['sick']);
+      }
+    }
+  }
+
+  /** Le vermifuge (carnet de santé, dans la fiche du cheval). */
+  deworm(a) {
+    if (!canAfford(this.profile, WORMER_COST)) return this.ui.toast(t('r_money'));
+    spend(this.profile, WORMER_COST);
+    noteHealth(a, 'worm', this.day);
+    this.entities.get(a.id)?.emit('😝', 2);
+    this.ui.toast(t('wormed', { name: a.name, g: a.sex }), 5000);
+    this.save();
+    return true;
+  }
+
   socialCtx(a, here) {
     const companions = companionsOf(a, here);
     return { companions, alone: HERD_SPECIES.includes(a.species) && companions === 0 };
@@ -863,6 +888,7 @@ export class Game {
   farmTick(here, hours, skipped = false) {
     const p = this.profile;
     passiveEquipment(p, here, p.place, hours);
+    this.horseHealthDay(here);
     this.interiors.farmTick(here, hours); // propreté et usure des bâtiments
     this.structures.tick(here, hours, skipped); // confort de la maison pendant le sommeil
     for (const a of here) {
@@ -1840,6 +1866,12 @@ export class Game {
     if (res.ok) this.ui.showDeltas(a, before);
     if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name, g: a.sex }));
     if (res.unlame) this.ui.toast(t('unlame', { name: a.name, g: a.sex }), 6000);
+    // Ferrer : les fers neufs (carnet de santé) ; il avait perdu un fer : il ne boite plus.
+    if (action === 'shoe' && a.species === 'horse') {
+      const lostShoe = a.lame?.cause === 'shoe';
+      noteHealth(a, 'farrier', this.day);
+      if (lostShoe) this.ui.toast(t('shoeFixed', { name: a.name, g: a.sex }), 5000);
+    }
     spend(this.profile, care.cost);
     addStat(this.profile, action);
     if (a.species === 'horse') addStat(this.profile, `horse_${action}`); // (l'histoire de ton premier cheval)
@@ -2158,6 +2190,10 @@ export class Game {
     this.xp('vet');
     this.entities.get(a.id)?.emit('💚', 4);
     this.ui.toast(t(wasSick ? 'vetCured' : 'vetCheckupDone', { name: a.name, g: a.sex }));
+    // Le cheval : vaccins et dents contrôlés à chaque visite (carnet de santé).
+    if (a.species === 'horse' && noteHealth(a, 'vaccine', this.day) && noteHealth(a, 'teeth', this.day)) {
+      this.ui.toast(t('vetHorsePlan', { name: a.name, g: a.sex }), 5000);
+    }
     this.ui.refresh();
   }
 

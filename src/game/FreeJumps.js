@@ -1,11 +1,11 @@
 // ⤴️ Sauter en balade (src/sim/freeJumps.js) : les troncs couchés le long du chemin de balade, à la ferme, et le saut
-// au galop. Le saut reprend celui des séances d'obstacles (src/game/Activities.js : poseJump, la bascule du cheval et
+// au galop ; ⏱️ le cross : le premier tronc sauté lance le chrono, la flèche jaune montre le suivant. Le saut reprend celui des séances d'obstacles (src/game/Activities.js : poseJump, la bascule du cheval et
 // le cavalier en suspension). Mis à jour après les activités (Game.frame).
 
 import * as THREE from 'three';
 import { t } from '../i18n.js';
 import { addStat } from '../sim/profile.js';
-import { logSpots, logView, jumpAhead, jumpNow } from '../sim/freeJumps.js';
+import { logSpots, logView, jumpAhead, jumpNow, crossJump, crossTick, fmtCross } from '../sim/freeJumps.js';
 import { poseJump, resetPose } from './Activities.js';
 
 const BARK = new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.95 });
@@ -46,6 +46,20 @@ export class FreeJumps {
     this.wantAt = -99;
     this.time = 0;
     this.ahead = null; // (le tronc devant, au galop : le bouton « Sauter »)
+    this.cross = null; // ⏱️ le cross en cours : { next, t }
+  }
+
+  /** La flèche jaune vers le prochain tronc du cross (ou plus de flèche). */
+  pointNext() {
+    const g = this.game;
+    const o = this.cross ? this.logs[this.cross.next] : null;
+    if (o) {
+      g.marker?.show(new THREE.Vector3(o.x, 0, o.z), { hideNear: 3 });
+      this.marked = true;
+    } else if (this.marked) {
+      g.marker?.hide();
+      this.marked = false;
+    }
   }
 
   /** Les troncs de la ferme (ailleurs : aucun). Refaits quand on change de lieu. */
@@ -92,6 +106,13 @@ export class FreeJumps {
       for (const o of this.logs) o.model.visible = !hide;
     }
     if (this.jump) return this.updateJump(dt);
+    if (this.cross) {
+      this.cross = crossTick(this.cross, dt);
+      if (!this.cross) {
+        g.ui.toast(t('cross_timeout'), 5000);
+        this.pointNext();
+      }
+    }
     this.ahead = null;
     const free = pl.mount && !hide && pl.gaitEnabled !== false && !pl.auto && !g.tripFlow?.active;
     if (!free || !this.logs.length) {
@@ -160,20 +181,47 @@ export class FreeJumps {
     pl.onStep?.(true, true); // (les sabots retombent)
     for (const o of this.logs) o.prev = null;
     if (j.step) return; // (enjambé au trot : rien à fêter)
+    const crossNews = this.crossLanded(j.o);
     const a = e.data;
     const great = !j.auto && j.timing > 0.7;
     a.skills.jump = Math.min(100, (a.skills.jump ?? 10) + (great ? 0.4 : 0.2)); // (il s'habitue à sauter)
     addStat(g.profile, 'freeJumps');
     e.emit(great ? '⭐' : '💨', 1.5);
     const p = { name: a.name, g: a.sex };
-    if (!g.profile.freeJumpHint) {
+    if (crossNews) g.ui.toast(crossNews, 5000); // (le cross dit déjà « hop »)
+    else if (!g.profile.freeJumpHint) {
       g.profile.freeJumpHint = true;
       g.ui.toast(t('fj_first', p), 6000);
     } else g.ui.toast(t(great ? 'fj_great' : j.auto ? 'fj_auto' : 'fj_ok', p), 2500);
   }
 
-  /** On descend, on change de lieu… : le cheval se remet droit. */
+  /** ⏱️ Un tronc sauté pendant (ou au début d'un) cross : le texte à dire, ou null. */
+  crossLanded(o) {
+    const g = this.game;
+    const n = this.logs.length;
+    const r = crossJump(this.cross, this.logs.indexOf(o), n);
+    if (!r.what) return null;
+    const was = this.cross;
+    this.cross = r.cross;
+    this.pointNext();
+    if (r.what === 'start') return t('cross_start', { n });
+    if (r.what === 'next') return t('cross_next', { i: this.cross.next, n, time: fmtCross(this.cross.t) });
+    if (r.what === 'wrong') return t('cross_wrong', { i: was.next + 1 });
+    // fini : le temps, et le record
+    const s = g.profile.stats;
+    const best = s.crossBest ?? null;
+    const record = best === null || r.time < best;
+    if (record) s.crossBest = Math.round(r.time);
+    addStat(g.profile, 'crossDone');
+    return t(record ? 'cross_record' : 'cross_done', { time: fmtCross(r.time), best: fmtCross(best ?? r.time) });
+  }
+
+  /** On descend, on change de lieu… : le cheval se remet droit (et le cross s'arrête). */
   cancel() {
+    if (this.cross) {
+      this.cross = null;
+      this.pointNext();
+    }
     if (!this.jump) return;
     const pl = this.game.player;
     if (pl.mount) resetPose(pl.mount);

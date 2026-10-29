@@ -163,6 +163,9 @@ de 12 m : un bouton orange « ⤴️ Sauter » (Espace). Appel entre 3,6 et 0,4 
 petit bond ; au pas, il passe tranquillement. Pendant une activité ou une balade guidée, les troncs sont rangés.
 Le saut reprend celui des séances d'obstacles (bascule, membres repliés, cavalier en suspension) ; chaque saut
 entraîne un peu le cheval (+0,2 à +0,4 en saut). Ils se sautent dans les deux sens.
+⏱️ **Le cross** : sauter le premier tronc lance le chrono ; la flèche jaune montre le suivant, dans l'ordre du chemin ;
+le dernier sauté, c'est fini (temps, record gardé, « Cross terminés » et « Record du cross » dans le carnet du
+cavalier). Un tronc hors de l'ordre ne compte pas (le jeu le dit) ; descendre de cheval ou plus de 5 minutes : arrêté.
 
 ### Le trot enlevé (0.5, `src/sim/posting.js`)
 À cheval en balade libre, en selle (avec des étriers), au trot : un gros bouton rond « ⬆️ Enlever » (Espace au clavier).

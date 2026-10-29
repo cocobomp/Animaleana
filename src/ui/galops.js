@@ -9,6 +9,7 @@ import {
   GALOPS, EXAM_QUESTIONS, EXAM_PASS, galopDef, galopsSummary, galopLevel, canTakeExam, makeExam, isRight, finishExam, isOpen, logbook,
 } from '../sim/galops.js';
 import { openOverlay } from './vetExam.js';
+import { fmtCross } from '../sim/freeJumps.js'; // ⏱️ le record du cross
 
 export function openGalops(ui) {
   const g = ui.game;
@@ -50,7 +51,7 @@ export function openGalops(ui) {
       const book = logbook(p);
       if (book.length) {
         out.push(h('h3', {}, t('lb_title')), h('ul', { class: 'gl-book' }, book.map((x) => h('li', {},
-          h('span', {}, x.icon), h('span', {}, t(`lb_${x.id}`)), h('b', {}, String(x.n))))));
+          h('span', {}, x.icon), h('span', {}, t(`lb_${x.id}`)), h('b', {}, x.time ? fmtCross(x.n) : String(x.n))))));
       }
       return out;
     },

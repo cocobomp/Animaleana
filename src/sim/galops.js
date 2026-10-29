@@ -143,6 +143,8 @@ export const LOGBOOK = [
   { id: 'rideCanter', icon: '🐎' },
   { id: 'risingTrot', icon: '⬆️' },
   { id: 'freeJumps', icon: '⤴️' },
+  { id: 'crossDone', icon: '🏁' },
+  { id: 'crossBest', icon: '⏱️', time: true }, // (meilleur temps du cross, en secondes)
   { id: 'actvClear', icon: '🚧' },
   { id: 'actvTrail', icon: '🧭' },
   { id: 'horse_came', icon: '📣' },

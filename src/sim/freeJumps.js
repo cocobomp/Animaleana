@@ -59,3 +59,29 @@ export function jumpNow(view, prevU, speed, wanted) {
   if (crossing) return { what: 'auto', timing: LOG.autoTiming };
   return null;
 }
+
+/**
+ * ⏱️ Le cross : sauter le premier tronc (au galop) lance le chrono ; on saute les autres dans l'ordre du chemin de
+ * balade ; le dernier sauté, c'est fini (le meilleur temps est gardé). Trop long (CROSS.maxTime s) : abandonné.
+ * cross : { next (le tronc à sauter), t (secondes) } ou null.
+ */
+export const CROSS = { maxTime: 300 };
+
+/** Un tronc sauté (index dans l'ordre) : { cross (le nouvel état), what: 'start' | 'next' | 'done' | 'wrong' | null }. */
+export function crossJump(cross, index, total) {
+  if (!cross) return index === 0 ? { cross: { next: 1, t: 0 }, what: 'start' } : { cross: null, what: null };
+  if (index !== cross.next) return { cross, what: 'wrong' };
+  const next = cross.next + 1;
+  if (next >= total) return { cross: null, what: 'done', time: cross.t };
+  return { cross: { ...cross, next }, what: 'next' };
+}
+
+/** Le temps passe ; trop long : abandonné (null). */
+export function crossTick(cross, dt) {
+  if (!cross) return null;
+  const t = cross.t + dt;
+  return t > CROSS.maxTime ? null : { ...cross, t };
+}
+
+/** 1:05 */
+export const fmtCross = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;

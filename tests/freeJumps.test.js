@@ -2,7 +2,7 @@
 // au galop, bien droit : le bouton apparaît, l'appel au bon endroit fait un beau saut, sinon il saute tout seul au
 // dernier moment ; au trot ou de travers, rien.
 import { describe, it, expect, beforeAll } from 'vitest';
-import { LOG, logSpots, logView, jumpAhead, jumpNow } from '../src/sim/freeJumps.js';
+import { LOG, CROSS, logSpots, logView, jumpAhead, jumpNow, crossJump, crossTick, fmtCross } from '../src/sim/freeJumps.js';
 import { TRAIL, TAKEOFF } from '../src/sim/activities.js';
 
 let i18n;
@@ -67,11 +67,27 @@ describe('les troncs du chemin de balade', () => {
     expect(jumpAhead(view, 5)).toBe(true);
   });
 
+  it('le cross : le premier tronc lance le chrono, les autres dans l\'ordre, le dernier finit ; trop long : abandonné', () => {
+    expect(crossJump(null, 2, 4)).toEqual({ cross: null, what: null }); // (pas le premier : pas de cross)
+    let r = crossJump(null, 0, 4);
+    expect(r).toEqual({ cross: { next: 1, t: 0 }, what: 'start' });
+    let c = crossTick(r.cross, 20);
+    expect(crossJump(c, 3, 4).what).toBe('wrong');
+    r = crossJump(c, 1, 4);
+    expect(r.what).toBe('next');
+    c = crossTick(r.cross, 15);
+    c = crossJump(c, 2, 4).cross;
+    r = crossJump(crossTick(c, 30), 3, 4);
+    expect(r).toEqual({ cross: null, what: 'done', time: 65 });
+    expect(fmtCross(65)).toBe('1:05');
+    expect(crossTick({ next: 1, t: CROSS.maxTime - 1 }, 2)).toBeNull();
+  });
+
   it('les textes existent en français et en anglais', () => {
     const { t, setLang } = i18n;
     for (const lang of ['fr', 'en']) {
       setLang(lang);
-      for (const k of ['fj_btn', 'fj_btnHelp', 'fj_tip', 'fj_first', 'fj_great', 'fj_ok', 'fj_auto']) expect(t(k, { name: 'Étoile' })).not.toBe(k);
+      for (const k of ['fj_btn', 'fj_btnHelp', 'fj_tip', 'fj_first', 'fj_great', 'fj_ok', 'fj_auto', 'cross_start', 'cross_next', 'cross_wrong', 'cross_done', 'cross_record', 'cross_timeout']) expect(t(k, { name: 'Étoile' })).not.toBe(k);
     }
     setLang('fr');
   });

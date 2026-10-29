@@ -87,7 +87,7 @@ describe('les troncs du chemin de balade', () => {
     const { t, setLang } = i18n;
     for (const lang of ['fr', 'en']) {
       setLang(lang);
-      for (const k of ['fj_btn', 'fj_btnHelp', 'fj_tip', 'fj_first', 'fj_great', 'fj_ok', 'fj_auto', 'cross_start', 'cross_next', 'cross_wrong', 'cross_done', 'cross_record', 'cross_timeout']) expect(t(k, { name: 'Étoile' })).not.toBe(k);
+      for (const k of ['fj_btn', 'fj_btnHelp', 'fj_tip', 'fj_first', 'fj_great', 'fj_ok', 'fj_auto', 'cross_start', 'cross_next', 'cross_wrong', 'cross_done', 'cross_record', 'cross_timeout', 'cross_chip']) expect(t(k, { name: 'Étoile' })).not.toBe(k);
     }
     setLang('fr');
   });

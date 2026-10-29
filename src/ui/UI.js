@@ -22,6 +22,7 @@ import { TOOLS, toolAtHome } from '../sim/tools.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import { WORMER_COST } from '../sim/horseHealth.js'; // le prix du vermifuge
 import { beatRing } from '../sim/posting.js'; // ⬆️ trot enlevé
+import { fmtCross } from '../sim/freeJumps.js'; // ⏱️ le chrono du cross
 import { maybeShowNews } from './news.js'; // 🐴 quoi de neuf ?
 import { lifeStage } from '../sim/animal.js'; // étiquettes groupées des bébés
 import { openHelperChat } from './helperChat.js'; // parler aux aides
@@ -340,6 +341,13 @@ export class UI {
   /** ⬆️ Le bouton du trot enlevé : montré au trot en selle (Game.canPostTrot) ; le cercle suit la foulée. */
   updatePostBtn() {
     const g = this.game;
+    // ⏱️ Le chrono du cross, dans la pastille « Tu montes… » (seul le texte change)
+    const rc = g?.player?.mount ? this.statusBar.querySelector('.ride-chip') : null;
+    if (rc?.firstChild) {
+      const c = g.freeJumps?.cross;
+      const text = c ? `🏇 ⏱️ ${fmtCross(c.t)} · ${t('cross_chip', { n: c.next, total: g.freeJumps.logs.length })}` : rc.dataset.base;
+      if (rc.firstChild.textContent !== text) rc.firstChild.textContent = text;
+    }
     // ⤴️ Le bouton « Sauter » (au galop, un tronc devant)
     const jump = !!g?.freeJumps?.canJump() && !this.isBlocking();
     if (this.jumpBtn.hidden === jump) {
@@ -547,7 +555,10 @@ export class UI {
     const chip = (text, label, fn) => h('div', { class: 'status-chip' }, h('span', {}, text), h('button', { class: 'small', onClick: fn }, label));
     if (g.player.mount) {
       const a = g.player.mount.data;
-      chips.push(chip(`🏇 ${t('statusRiding', { name: a.name, g: a.sex })}`, t('dismount'), () => { g.dismount(); this.renderStatus(); }));
+      const c = chip(`🏇 ${t('statusRiding', { name: a.name, g: a.sex })}`, t('dismount'), () => { g.dismount(); this.renderStatus(); });
+      c.classList.add('ride-chip'); // (⏱️ le chrono du cross s'y ajoute : updatePostBtn)
+      c.dataset.base = c.firstChild.textContent;
+      chips.push(c);
     }
     // Pendant le chargement du véhicule, les voyageurs sont déjà dans le bandeau « Chargement » (moins de bandeaux sur téléphone).
     const loadingIds = g.tripFlow?.loading?.vehicle ? g.tripFlow.loading.ids : [];

@@ -277,6 +277,7 @@ const fr = {
   cross_done: '🏁 Cross fini en {time} ! (ton record : {best})',
   cross_record: '🏁 Cross fini en {time} : c\'est ton record ! 🏆',
   cross_timeout: '⏱️ Le cross est arrêté (trop long). Saute le premier tronc pour recommencer.',
+  cross_chip: 'tronc {n} sur {total}',
   // ⬆️ Trot enlevé (src/sim/posting.js)
   post_btn: 'Enlever',
   post_btnHelp: 'Trot enlevé : touche quand le cercle se referme (ou Espace)',
@@ -2471,6 +2472,7 @@ const en = {
   cross_done: '🏁 Cross finished in {time}! (your record: {best})',
   cross_record: '🏁 Cross finished in {time}: a new record! 🏆',
   cross_timeout: '⏱️ The cross stopped (too long). Jump the first log to start again.',
+  cross_chip: 'log {n} of {total}',
   post_btn: 'Post',
   post_btnHelp: 'Rising trot: tap when the circle closes (or Space)',
   post_hint: '⬆️ At trot, tap "Post" in rhythm when the circle closes: you rise and sit with every stride. It is gentler on your horse\'s back!',

@@ -37,7 +37,7 @@ import {
   NEEDS, createAnimal, tickAnimal, applyCare, careFull, bondStage, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
   namesInUse,
 } from '../sim/animal.js';
-import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf } from '../sim/time.js';
+import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf, DAYS_PER_YEAR } from '../sim/time.js';
 import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeason } from '../sim/places.js';
 import { adoptionPrice, shopPrice, stageAgeDays } from '../sim/adoption.js';
 import { checkObjectives, objectiveParams } from '../sim/objectives.js';
@@ -66,7 +66,7 @@ import { FreeJumps } from './FreeJumps.js'; // ⤴️ sauter des troncs en balad
 import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au poney-club (fin octobre)
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
 import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
-import { remember, anniversaryDue, BOND_MEMORIES } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
+import { remember, anniversaryDue, togetherSince, BOND_MEMORIES } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
 import { collectFact } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
@@ -958,8 +958,8 @@ export class Game {
   }
 
   /** 📸 Un souvenir pour ce cheval (une première fois : src/sim/memories.js). Le tout premier : un petit mot. */
-  remember(a, id) {
-    if (!a || !remember(a, id, this.day)) return false;
+  remember(a, id, day = this.day) {
+    if (!a || !remember(a, id, day)) return false;
     if (!this.profile.memoryTip) {
       this.profile.memoryTip = true;
       this.ui.toast(t('memTip', { name: a.name, g: a.sex }), 6000);
@@ -997,7 +997,8 @@ export class Game {
     a.annivDay = this.day;
     this.entities.get(a.id)?.emit('🎂', 4);
     this.ui.toast(t('anniv', { name: a.name, g: a.sex, n: k }), 8000);
-    this.remember(a, 'year1'); // (une seule fois : même s'il était loin le jour de son premier anniversaire)
+    // (une seule fois, à son vrai jour : même fêté en retard, s'il était loin ce jour-là ou dans une vieille partie)
+    this.remember(a, 'year1', togetherSince(a) + DAYS_PER_YEAR);
   }
 
   /** Ton cheval du moment : celui que tu montes, sinon le dernier dont tu t'es occupé, sinon le plus proche de toi. */
@@ -1011,10 +1012,11 @@ export class Game {
   /** Le lien vient de passer une étape (src/sim/animal.js BOND_STAGES) : un petit mot et des cœurs. */
   bondNews(a, before) {
     const now = bondStage(a);
+    // 📸 🤝 💖 🦮 (aussi une étape passée sans petit mot : un tour, une balade guidée, un concours de beauté…)
+    this.remember(a, BOND_MEMORIES[now]);
     if (now === before || a.client || a.guest) return;
     const order = ['new', 'trust', 'love', 'best'];
     if (order.indexOf(now) < order.indexOf(before)) return;
-    if (a.species === 'horse') this.remember(a, BOND_MEMORIES[now]); // 📸 🤝 💖 🦮
     // (un soin qui finit aussi la journée parfaite le dirait deux fois : une seule)
     this.bondShown = this.bondShown ?? new Map();
     if (this.bondShown.get(a.id) === now) return;

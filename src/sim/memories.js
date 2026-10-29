@@ -50,7 +50,9 @@ export function remember(a, id, day) {
   if (!Array.isArray(a.memories)) a.memories = [];
   if (a.memories.some((m) => m.id === id)) return false;
   if (a.memories.length >= MEMORY_MAX) return false;
-  a.memories.push({ id, day: Math.max(1, Math.round(day ?? 1)) });
+  const d = Math.max(1, Math.round(day ?? 1));
+  const i = a.memories.findIndex((m) => m.day > d); // (un souvenir d'un jour passé, ex. 🎂 fêté en retard : à sa place)
+  a.memories.splice(i < 0 ? a.memories.length : i, 0, { id, day: d });
   return true;
 }
 
@@ -60,13 +62,18 @@ export function memoriesOf(a) {
   return a.memories.filter((m) => BY_ID.has(m.id)).map((m) => ({ ...m, icon: BY_ID.get(m.id).icon }));
 }
 
+/** Depuis quel jour vous êtes ensemble : son souvenir 'arrived' (sinon a.arrivedDay). */
+export function togetherSince(a) {
+  return (Array.isArray(a?.memories) ? a.memories : []).find((m) => m.id === 'arrived')?.day ?? a?.arrivedDay;
+}
+
 /**
  * 🎂 Un an de plus ensemble aujourd'hui ? Renvoie le nombre d'années (1, 2…) une seule fois par année, sinon 0.
  * Compté depuis son souvenir 'arrived' (sinon a.arrivedDay, noté au premier appel).
  */
 export function anniversaryDue(a, day) {
   if (!keepsMemories(a)) return 0;
-  const from = (Array.isArray(a.memories) ? a.memories : []).find((m) => m.id === 'arrived')?.day ?? a.arrivedDay;
+  const from = togetherSince(a);
   if (from == null) {
     a.arrivedDay = day; // (vieille partie, poulain né à la ferme : on compte à partir d'aujourd'hui)
     return 0;

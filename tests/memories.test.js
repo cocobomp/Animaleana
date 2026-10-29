@@ -24,6 +24,15 @@ describe('les souvenirs de ton cheval', () => {
     expect(remember(a, 'nimporte', 4)).toBe(false);
   });
 
+  it('un souvenir d\'un jour passé se range à sa place (ex. 🎂 fêté en retard)', () => {
+    const a = horse();
+    remember(a, 'arrived', 3);
+    remember(a, 'firstRide', 40);
+    remember(a, 'firstCanter', 40);
+    expect(remember(a, 'year1', 15)).toBe(true);
+    expect(memoriesOf(a).map((m) => m.id)).toEqual(['arrived', 'year1', 'firstRide', 'firstCanter']);
+  });
+
   it('seulement tes chevaux (pas ceux qu\'on te confie, ni les autres animaux)', () => {
     const a = horse();
     a.client = true;
@@ -92,5 +101,42 @@ describe('🎂 un an ensemble', () => {
       expect(t('anniv', { name: 'Étoile', g: 'f', n: 2 })).toMatch(/^🎂 2 .*Étoile/);
     }
     setLang('fr');
+  });
+});
+
+describe('dans le jeu (src/game/Game.js)', () => {
+  let Game;
+  beforeAll(async () => {
+    ({ Game } = await import('../src/game/Game.js'));
+  }, 60000);
+
+  const fakeGame = (day) => {
+    const toasts = [];
+    return { toasts, day, profile: { memoryTip: true }, entities: new Map(), ui: { toast: (m) => toasts.push(m) },
+      remember: Game.prototype.remember, bondNews: Game.prototype.bondNews };
+  };
+
+  it('une étape du lien passée sans petit mot (un tour, une balade guidée…) devient un souvenir au soin suivant', () => {
+    const g = fakeGame(30);
+    const a = horse();
+    a.bond = 25.5; // (un tour réussi à 24,5 : 'trust', sans bondNews)
+    Game.prototype.bondNews.call(g, a, 'trust');
+    expect(memoriesOf(a).map((m) => [m.id, m.day])).toEqual([['bondTrust', 30]]);
+    expect(g.toasts).toEqual([]);
+    a.client = true;
+    a.bond = 60;
+    Game.prototype.bondNews.call(g, a, 'trust');
+    expect(memoriesOf(a).map((m) => m.id)).toEqual(['bondTrust']);
+  });
+
+  it('🎂 fêté en retard : « Un an ensemble » garde son vrai jour, à sa place', () => {
+    const g = fakeGame(60);
+    const a = horse();
+    a.bond = 0;
+    remember(a, 'arrived', 3);
+    remember(a, 'firstRide', 40);
+    Game.prototype.anniversary.call(g, a);
+    expect(g.toasts[0]).toMatch(/^🎂 4 /);
+    expect(memoriesOf(a).map((m) => [m.id, m.day])).toEqual([['arrived', 3], ['year1', 15], ['firstRide', 40]]);
   });
 });

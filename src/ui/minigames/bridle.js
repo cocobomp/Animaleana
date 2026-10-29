@@ -82,8 +82,8 @@ export function bridleGame(ctx) {
     const st = step();
     ctx.hint(t(`mg_bridle_${st}`, who));
     if (st !== 'throat') return ctx.progress(0);
-    // (ajouté à côté de ✅ ; ⏩ s'en va : il est trop tard pour aller vite)
-    if (quickBtn) quickBtn.hidden = true;
+    // (ajouté à côté de ✅ ; ⏩ s'en va, retiré et pas caché : un 3e bouton ferait sauter la fenêtre, style.css)
+    if (quickBtn) quickBtn.remove();
     rule = justRule(ctx, { lo: T.lo, hi: T.hi, max: T.max, slack: T.hi - T.lo });
     ctx.button(`🪢 ${t('mg_seller_tighten')}`, { cls: 'primary', hold: true, onDown: () => { tightening = true; }, onUp: () => { tightening = false; } });
     ctx.progress(0);
@@ -199,7 +199,7 @@ export function bridleGame(ctx) {
         pause -= dt;
         if (pause <= 0) {
           pause = 0;
-          startStep(si + 1);
+          if (!ctx.done) startStep(si + 1); // (⏩ pendant la pause : c'est déjà fini)
         }
         return;
       }

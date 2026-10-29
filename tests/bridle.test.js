@@ -1,10 +1,10 @@
 // Brider et débrider (src/sim/gear.js) : le filet ne reste jamais au box ni au pré. On se souvient duquel il
 // portait (et de sa couleur) pour le remettre pareil ; « Monter » met le filet libre, même par-dessus le licol.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { createProfile } from '../src/sim/profile.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { seeded } from '../src/sim/rng.js';
-import { starterTack, unbridle, bridleUp, freeBridle, tackUpForRide, equip, unequip, wears, rideGear, inUse } from '../src/sim/gear.js';
+import { starterTack, unbridle, bridleUp, freeBridle, tackUpForRide, equip, unequip, wears, rideGear, inUse, unsaddle } from '../src/sim/gear.js';
 
 const horse = (seed = 'filet') => {
   const a = createAnimal({ species: 'horse', breed: 'selle_francais', sex: 'f', ageDays: 2000, rng: seeded(seed) });
@@ -97,5 +97,65 @@ describe('avant de monter', () => {
     expect(tackUpForRide(p, b)).toMatchObject({ ok: true, item: null });
     expect(wears(b, 'bridle')).toBe(false);
     expect(rideGear(b).ok).toBe(true);
+  });
+});
+
+describe('« Tous au pré », « au paddock » et « Desseller » (src/game/Game.js)', () => {
+  let Game;
+  let t;
+  beforeAll(async () => {
+    ({ Game } = await import('../src/game/Game.js'));
+    ({ t } = await import('../src/i18n.js'));
+  }, 60000);
+
+  const fakeGame = (p, ridden = null) => {
+    const toasts = [];
+    const ent = (a) => ({ data: a, ridden: a === ridden, target: { set() {} }, applyGear() {} });
+    const g = {
+      profile: p, toasts, isHome: true, player: { mount: ridden ? ent(ridden) : null },
+      entities: new Map(p.animals.map((a) => [a.id, ent(a)])),
+      ui: { toast: (m) => toasts.push(m) }, save() {},
+    };
+    g.unbridle = Game.prototype.unbridle.bind(g);
+    return g;
+  };
+
+  it('envoyés au pré ou au paddock : débridés (la première fois, on dit pourquoi) ; celui qu\'on monte garde le sien', () => {
+    const p = createProfile('Lou');
+    p.items.bridle = 2;
+    const a = horse();
+    const b = horse('monté');
+    p.animals.push(a, b);
+    starterTack(p, a);
+    equip(p, b, 'bridle');
+    const g = fakeGame(p, b);
+    Game.prototype.sendHorses.call(g, 'field');
+    expect(wears(a, 'bridle')).toBe(false);
+    expect(wears(a, 'halter')).toBe(true);
+    expect(wears(b, 'bridle')).toBe(true);
+    expect(g.toasts).toContain(t('bridleOff'));
+    bridleUp(p, a);
+    Game.prototype.sendHorses.call(g, 'paddock');
+    expect(wears(a, 'bridle')).toBe(false);
+    expect(g.toasts.filter((m) => m === t('bridleOff'))).toHaveLength(1);
+  });
+
+  it('« Desseller » : selle et filet, la selle seule (sellé sans filet), ou le filet seul', () => {
+    const p = createProfile('Lou');
+    const a = horse();
+    p.animals.push(a);
+    starterTack(p, a);
+    const who = { name: 'Étoile', g: 'f' };
+    const g = fakeGame(p);
+    expect(Game.prototype.unsaddle.call(g, a)).toBe(true);
+    expect(g.toasts.at(-1)).toBe(t('unsaddled', who));
+    expect(equip(p, a, 'saddle').ok).toBe(true); // (✕ dans « Brider » : sellé, sans filet)
+    expect(Game.prototype.unsaddle.call(g, a)).toBe(true);
+    expect(g.toasts.at(-1)).toBe(t('unsaddledOnly', who));
+    expect(g.toasts.at(-1)).not.toMatch(/filet/);
+    bridleUp(p, a); // (monté à cru avec le filet)
+    expect(unsaddle(a)).toBe(false);
+    expect(Game.prototype.unsaddle.call(g, a)).toBe(true);
+    expect(g.toasts.at(-1)).toBe(t('unbridled', who));
   });
 });

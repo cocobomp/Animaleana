@@ -27,7 +27,11 @@ function fakeCtx(a, opts = {}) {
     col: { coat: '#8a5a2b', mane: '#222' }, fx: { float: noop, text: noop, burst: noop },
     hints: [], buttons: [], finished: null,
     hint(text, kind = '') { this.hints.push({ text, kind }); }, progress() {}, zone() {},
-    button(text, opts = {}) { const b = { text, opts }; this.buttons.push(b); return b; },
+    button(text, opts = {}) {
+      const b = { text, opts, remove: () => this.buttons.splice(this.buttons.indexOf(b), 1) };
+      this.buttons.push(b);
+      return b;
+    },
     finish(q, msg, why) {
       if (this.done) return;
       this.done = true;
@@ -128,6 +132,28 @@ describe('brider son cheval', () => {
     br.bridleGame(ctx);
     ctx.buttons.find((b) => b.text === t('mg_bridle_quick')).opts.onTap();
     expect(ctx.finished).toEqual({ q: 1, msg: t('mg_bridle_end'), why: 'just' });
+  });
+
+  it('⏩ pendant la pause entre deux étapes : c\'est fini, le jeu ne repart pas', () => {
+    const ctx = fakeCtx(horse(), { quick: true });
+    const g = br.bridleGame(ctx);
+    tap(g, g.peek().bar);
+    expect(g.peek().pause).toBeGreaterThan(0);
+    ctx.buttons.find((b) => b.text === t('mg_bridle_quick')).opts.onTap();
+    const hints = ctx.hints.length;
+    tick(g, ctx, 1.2);
+    expect(g.peek().step).toBe('bit');
+    expect(ctx.hints).toHaveLength(hints);
+    expect(holdBtn(ctx)).toBeUndefined();
+  });
+
+  it('à la sous-gorge, ⏩ est retiré (pas caché) : ✅ et 🪢 Serrer restent sur une ligne', () => {
+    const ctx = fakeCtx(horse(), { quick: true });
+    const g = br.bridleGame(ctx);
+    bitAndEars(g, ctx);
+    expect(g.peek().step).toBe('throat');
+    expect(ctx.buttons.some((b) => b.text === t('mg_bridle_quick'))).toBe(false);
+    expect(ctx.buttons).toHaveLength(2);
   });
 
   it('les zones : le coin des lèvres, les dents ; la sous-gorge juste, lâche, trop serrée', async () => {

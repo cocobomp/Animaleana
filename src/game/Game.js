@@ -1623,6 +1623,7 @@ export class Game {
       if (e.data.species !== 'horse' || e.ridden) continue;
       e.data.following = false;
       e.data.stalled = false; // il sort de son box
+      this.unbridle(e.data, where); // (au pré et au paddock, jamais de filet)
       e.data.zone = where === 'field' ? 'field' : undefined;
       e.state = 'walk';
       e.target.set(target.x + (Math.random() - 0.5) * 6, 0, target.z + (Math.random() - 0.5) * 6);
@@ -1847,7 +1848,8 @@ export class Game {
     const bridled = unbridle(this.profile, a, { home: this.isHome });
     if (!saddled && !bridled) return null;
     this.entities.get(a.id)?.applyGear();
-    this.ui.toast(t(saddled ? 'unsaddled' : 'unbridled', { name: a.name, g: a.sex }), 4000);
+    // (sellé sans filet, après ✕ dans « Brider » : la selle seule)
+    this.ui.toast(t(saddled && bridled ? 'unsaddled' : saddled ? 'unsaddledOnly' : 'unbridled', { name: a.name, g: a.sex }), 4000);
     this.save();
     return true;
   }

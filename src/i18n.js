@@ -1965,6 +1965,7 @@ const fr = {
   act_unsaddle: 'Desseller',
   unsaddleHint: 'Selle et filet rangés : au pré, il pourra se rouler',
   unsaddled: 'Selle et filet rangés. {name} va pouvoir se rouler au pré.',
+  unsaddledOnly: 'Selle rangée à la sellerie. {name} va pouvoir se rouler au pré.',
   // brider son cheval (src/ui/minigames/bridle.js)
   act_bridle: 'Brider',
   act_unbridle: 'Débrider',
@@ -4166,6 +4167,7 @@ const en = {
   act_unsaddle: 'Untack',
   unsaddleHint: 'Saddle and bridle put away: in the field, they can have a roll',
   unsaddled: 'Saddle and bridle put away. {name} can have a good roll in the field.',
+  unsaddledOnly: 'Saddle put away in the tack room. {name} can have a good roll in the field.',
   // bridling (src/ui/minigames/bridle.js)
   act_bridle: 'Bridle',
   act_unbridle: 'Unbridle',

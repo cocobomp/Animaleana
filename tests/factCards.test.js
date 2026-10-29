@@ -25,7 +25,7 @@ describe('les cartes « Le savais-tu ? »', () => {
   });
 
   it('chaque carte se cache dans un vrai mini-jeu du cheval, qui a son icône', () => {
-    const actions = new Set([...SPECIES.horse.actions, 'saddle', 'deworm']);
+    const actions = new Set([...SPECIES.horse.actions, 'saddle', 'bridle', 'deworm']);
     for (const c of FACT_CARDS) {
       for (const a of c.from) {
         expect(actions.has(a), `${c.id} ${a}`).toBe(true);
@@ -46,6 +46,7 @@ describe('les cartes « Le savais-tu ? »', () => {
     collectFact(p, 25);
     expect(drawFact(p, 'deworm')).toBe(17);
     expect(drawFact(p, 'braid')).toBe(17); // (un mini-jeu de beauté : les cartes de tous les soins)
+    expect(drawFact(p, 'bridle')).toBe(26); // (le flot accroché au filet)
   });
 
   it('tout trouvé : les faits défilent encore', () => {
@@ -62,7 +63,7 @@ describe('les cartes « Le savais-tu ? »', () => {
   });
 
   it('au hasard : toujours une carte de 1 à 27', () => {
-    const acts = [...SPECIES.horse.actions, 'saddle', 'deworm', 'braid', undefined, 'nimporte'];
+    const acts = [...SPECIES.horse.actions, 'saddle', 'bridle', 'deworm', 'braid', undefined, 'nimporte'];
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     for (let k = 0; k < 500; k++) {

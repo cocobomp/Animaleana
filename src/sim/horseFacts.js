@@ -42,14 +42,14 @@ export const FACT_CARDS = [
   { id: 23, icon: '🔥', from: ['lunge'] },
   { id: 24, icon: '😌', from: ['lunge'] },
   { id: 25, icon: '🪱', from: ['deworm'] },
-  { id: 26, icon: '🎀', from: [] },
+  { id: 26, icon: '🎀', from: ['bridle'] }, // (le flot accroché au filet : trouvé en bridant)
   { id: 27, icon: '🩺', from: ['feed'] },
 ];
 
 /** Où chercher une carte manquante (l'icône du soin ; any : n'importe quel soin). */
 export const FACT_WHERE = {
   water: '💧', feed: '🌾', brush: '🪮', wash: '🫧', shoe: '🔨', clean: '🧹', pet: '🤚', treat: '🍎', lunge: '🌀',
-  liberty: '💛', saddle: '🏇', deworm: '🪱', any: '⭐',
+  liberty: '💛', saddle: '🏇', bridle: '🪢', deworm: '🪱', any: '⭐',
 };
 
 /** Pièces gagnées à la 9e et à la 18e carte (en gestion). */

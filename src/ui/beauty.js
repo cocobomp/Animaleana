@@ -38,7 +38,7 @@ const className = (cls) => `${BEAUTY_CLASSES[cls]?.emoji ?? ''} ${t(`beauty_clas
 export function beautyBlock(a) {
   const why = eligibility(a, 'beauty');
   if (why) return why;
-  if (!canLead(a).ok) return 'needHalter';
+  if (!canLead(a, { strict: true }).ok) return 'needHalter';
   return null;
 }
 

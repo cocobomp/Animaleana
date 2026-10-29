@@ -527,8 +527,13 @@ export function heelSkill(a) {
 }
 
 /** Pour mener un cheval à la main, il faut un licol (ou le filet). */
-export function canLead(a) {
+/** Lien « meilleurs amis » (src/sim/animal.js BOND_PERKS) : il te suit en liberté, sans licol. */
+export const LIBERTY_BOND = 75;
+
+/** strict : un concours de présentation, un voyage en van… il faut le licol, même en liberté. */
+export function canLead(a, { strict = false } = {}) {
   if (a.species !== 'horse') return { ok: true };
+  if (!strict && (a.bond ?? 0) >= LIBERTY_BOND && !(wears(a, 'halter') || wears(a, 'bridle'))) return { ok: true, liberty: true };
   return wears(a, 'halter') || wears(a, 'bridle') ? { ok: true } : { ok: false, reason: 'needHalter' };
 }
 

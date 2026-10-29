@@ -11,10 +11,12 @@ export const CALL = {
   near: 5, // (plus près, pas besoin de l'appeler : il est là)
   bondGain: 1, // (il est venu : le lien grandit un peu…)
   bondPerDay: 3, // (… trois fois par jour au plus)
+  always: 50, // (lien « il t'adore » : il vient toujours)
 };
 
 /** La chance qu'il vienne quand tu l'appelles (0 à 1). */
 export function callChance(a) {
+  if ((a.bond ?? 0) >= CALL.always) return 1; // (il t'adore : il vient toujours, src/sim/animal.js BOND_PERKS)
   const hungry = (a.needs?.hunger ?? 100) < CALL.hungryAt ? CALL.hungry : 0;
   return Math.max(0, Math.min(1, CALL.base + (a.bond ?? 0) * CALL.perBond + hungry));
 }

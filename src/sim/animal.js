@@ -434,6 +434,12 @@ export const BOND_FOR_TRICKS = 20;
  * (src/sim/riding.js nextSpookIn).
  */
 export const BOND_STAGES = [['new', 0], ['trust', 25], ['love', 50], ['best', 75]];
+/**
+ * Ce que chaque étape du lien apporte avec un cheval (fiche du cheval, src/ui/panels.js) : trust, il s'effraie moins
+ * en balade (src/sim/riding.js) ; love, il vient toujours à ton appel (src/sim/horseCall.js) ; best, il te suit en
+ * liberté, même sans licol (src/sim/gear.js canLead).
+ */
+export const BOND_PERKS = [['trust', 25, '🤝'], ['love', 50, '📣'], ['best', 75, '🦮']];
 export function bondStage(a) {
   const b = a?.bond ?? 0;
   let out = 'new';

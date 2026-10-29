@@ -983,7 +983,9 @@ export class Game {
     if (this.bondShown.get(a.id) === now) return;
     this.bondShown.set(a.id, now);
     this.entities.get(a.id)?.emit('💞', 5);
-    this.ui.toast(t(`bondUp_${now}`, { name: a.name, g: a.sex }), 7000);
+    // (un cheval : ce que l'étape débloque, src/sim/animal.js BOND_PERKS)
+    const key = a.species === 'horse' && (now === 'love' || now === 'best') ? `bondUp_${now}Horse` : `bondUp_${now}`;
+    this.ui.toast(t(key, { name: a.name, g: a.sex }), 7000);
   }
 
   /**

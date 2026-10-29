@@ -100,7 +100,7 @@ export class TripFlow {
     if (mode === 'horse') {
       // À cheval : pas de véhicule. On monte le cheval, les autres suivent ; le matériel va dans les sacoches.
       const others = travellers.filter((a) => a !== horse);
-      const noLead = others.find((a) => !canLead(a).ok);
+      const noLead = others.find((a) => !canLead(a, { strict: true }).ok);
       if (noLead) return this.ui.toast(ta('r_needHalter', noLead), 5000);
       this.loading = { ...base, ids: travellers.map((a) => a.id), vehicle: null, riderId: horse.id };
       showDepartChoice(this.ui, this);
@@ -280,7 +280,7 @@ export class TripFlow {
       if (g.player.mount === e) g.dismount();
       // Le licol du cheval, ou le licol de secours rangé dans le van.
       if (!a.following) {
-        if (!canLead(a).ok) this.ui.toast(ta('veh_spareHalter', a), 4500);
+        if (!canLead(a, { strict: true }).ok) this.ui.toast(ta('veh_spareHalter', a), 4500);
         a.leashed = false;
         a.following = true;
       }

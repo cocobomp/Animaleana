@@ -63,3 +63,19 @@ describe('appeler ton cheval', () => {
     setLang('fr');
   });
 });
+
+describe('💞 ce que le lien débloque', () => {
+  it('il t\'adore (lien 50) : il vient toujours ; meilleurs amis (75) : il te suit sans licol', async () => {
+    const { canLead, LIBERTY_BOND } = await import('../src/sim/gear.js');
+    const { BOND_PERKS } = await import('../src/sim/animal.js');
+    expect(callChance(horse(49))).toBeLessThan(1);
+    expect(callChance(horse(CALL.always))).toBe(1);
+    const h = horse(LIBERTY_BOND - 1);
+    h.gear = {};
+    expect(canLead(h).ok).toBe(false);
+    h.bond = LIBERTY_BOND;
+    expect(canLead(h)).toEqual({ ok: true, liberty: true });
+    expect(canLead(h, { strict: true }).ok).toBe(false); // (concours de présentation, van : le licol)
+    expect(BOND_PERKS.map(([id, min]) => [id, min])).toEqual([['trust', 25], ['love', CALL.always], ['best', LIBERTY_BOND]]);
+  });
+});

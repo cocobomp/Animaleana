@@ -6,7 +6,7 @@ import { isTrainingClient } from '../sim/dogTrainer.js';
 import { h, bar, hexColor } from './dom.js';
 import { t, L, getLang, setLang } from '../i18n.js';
 import { SPECIES, getBreed, allOffered, anyAvailable, LIVESTOCK_IDS } from '../sim/species.js';
-import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass, bondStage } from '../sim/animal.js';
+import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass, bondStage, BOND_PERKS } from '../sim/animal.js';
 import { DAYS_PER_YEAR } from '../sim/time.js';
 import { adoptionCandidates, adoptionPrice, shopPrice, shopBreeds, AGE_STAGES, stageAgeDays } from '../sim/adoption.js';
 import { createAnimal, freeName, namesInUse } from '../sim/animal.js';
@@ -172,6 +172,17 @@ function earsLine(g, a) {
   return h('p', { class: `note ears-line ears-${e.pose}` }, `👂 ${t(`ears_${e.pose}`)} ${t(`ears_why_${e.why}`, { name: a.name, g: a.sex })}`);
 }
 
+/** 💞 Ce que votre lien a débloqué (src/sim/animal.js BOND_PERKS) : ✅ ce qui est là, 🔒 la prochaine étape. */
+function bondPerks(a) {
+  const b = a.bond ?? 0;
+  const p = { name: a.name, g: a.sex };
+  const got = BOND_PERKS.filter(([, min]) => b >= min);
+  const next = BOND_PERKS.find(([, min]) => b < min);
+  return h('ul', { class: 'bond-perks' },
+    got.map(([id, , icon]) => h('li', { class: 'got' }, `✅ ${icon} ${t(`perk_${id}`, p)}`)),
+    next ? h('li', { class: 'next' }, `🔒 ${t('perk_next', { n: next[1] })} ${next[2]} ${t(`perk_${next[0]}`, p)}`) : null);
+}
+
 /** 📸 Ses souvenirs (src/sim/memories.js) : vos premières fois, datées. */
 function memorySection(a) {
   const list = memoriesOf(a);
@@ -230,6 +241,7 @@ function renderAnimal(ui, g, a) {
     bar(t('happiness'), happiness(a), 'big'),
     bar(`🤝 ${t('bond')}`, a.bond ?? 0, 'big'),
     a.client || a.guest ? null : h('p', { class: 'note bond-stage' }, `💞 ${t(`bond_${bondStage(a)}`, { name: a.name, g: a.sex })}`),
+    a.species === 'horse' && !a.client && !a.guest ? bondPerks(a) : null,
     earsLine(g, a), // 👂 (cheval)
     NEEDS.map((n) => bar(t(`need_${n}`), a.needs[n])),
   );

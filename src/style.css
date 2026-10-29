@@ -2785,3 +2785,7 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .gl-diploma.g2 { border-color: #9aa3ad; }
 .gl-diploma.g3 { border-color: #c9a227; }
 .gl-dip-btn { margin-top: 4px; }
+
+/* 💞 Ce que le lien débloque (fiche du cheval, src/ui/panels.js bondPerks) */
+.bond-perks { list-style: none; margin: 2px 0 8px; padding: 0; font-size: 0.9rem; display: flex; flex-direction: column; gap: 2px; }
+.bond-perks .next { opacity: 0.7; }

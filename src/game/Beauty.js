@@ -524,7 +524,7 @@ class BeautySession extends Session {
     const g = this.game;
     const a = opts.animal;
     const e = g.entities.get(a?.id);
-    const why = a ? (eligibility(a, 'beauty') ?? (canLead(a).ok ? null : 'needHalter')) : 'notHere';
+    const why = a ? (eligibility(a, 'beauty') ?? (canLead(a, { strict: true }).ok ? null : 'needHalter')) : 'notHere';
     if (!e || why) {
       if (a) g.ui.toast(ta(`actv_why_${why ?? 'notHere'}`, a), 5000);
       this.ok = false;

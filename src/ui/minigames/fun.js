@@ -3,6 +3,7 @@
 import { drawAnimal, animalShape, fitAnimal, hitAnimal, rrect, ellipse, circle, label, fillView, sky, clamp, lerp, dist, shade } from './draw.js';
 // emoji toujours opaque (voir food.js : un emoji prend l'opacité du dernier fillStyle)
 import { homeBackground, sizeFor, isBig, drawCountZone, emojiOpaque as emoji, stopLabel, nb, justMsgs, drawAnimalLifted } from './food.js';
+import { quirksOf, knows } from '../../sim/horseQuirks.js'; // 🔍 son coin préféré (cheval)
 
 // ---------------------------------------------------------------- caresser
 
@@ -61,7 +62,10 @@ export function petGame(ctx) {
   const floorY = 305;
   const fit = fitAnimal(a, { groundY: floorY, maxW: 330, maxH: 240 });
   const sh = animalShape(a, { x: fit.x, y: floorY, s: fit.s, f: 1 });
-  const fav = sh[FAVORITE[a.species] ?? 'back'];
+  // Un cheval a son coin à lui (src/sim/horseQuirks.js) ; tant qu'on ne le connaît pas, le 💡 attend plus longtemps.
+  const qk = a.species === 'horse' ? quirksOf(a) : null;
+  const fav = sh[qk ? qk.spot : FAVORITE[a.species] ?? 'back'];
+  const hintAfter = qk && !knows(a, 'spot') ? 8 : 3.5;
   const favR = 46;
   const limit = SPEED_LIMIT[a.personality] ?? 420;
   const shy = a.personality === 'shy';
@@ -82,6 +86,8 @@ export function petGame(ctx) {
   let cool = 0;
   let calmStroke = 0;
   let purr = 0;
+  let lip = 0; // (cheval : il tend la lèvre, gratté à son coin préféré)
+  let lipShown = false;
   let lastLove = -9; // dernier « Ronron… » affiché
   let zoneState = 'low'; // 'low' | 'just' | 'high' : pour ne changer la consigne qu'en entrant dans une zone
 
@@ -124,6 +130,13 @@ export function petGame(ctx) {
     const atFav = dist(p.x, p.y, fav.x, fav.y) < favR;
     prog = Math.min(1, prog + d * 0.0011 * (atFav ? 2.3 : 1));
     if (atFav) favDist += d;
+    if (qk && !lipShown && favDist > 120) {
+      // 🔍 Gratté juste là, il tend la lèvre du haut : c'est son coin préféré (noté par le jeu : opts.out.quirk)
+      lipShown = true;
+      lip = 1.5;
+      fx.text(200, sh.head.y - sh.hr * 2, t('mg_pet_lip', { name: a.name, g: a.sex }), '#d6457a', 16);
+      if (ctx.opts) ctx.opts.out = { ...(ctx.opts.out ?? {}), quirk: 'spot' };
+    } else if (lipShown && atFav) lip = Math.max(lip, 0.6); // (tant qu'on le gratte là, la lèvre reste tendue)
     calmStroke += d;
     heartAcc += d;
     if (heartAcc > 48) {
@@ -147,12 +160,12 @@ export function petGame(ctx) {
       if (zoneState !== 'just') { zoneState = 'just'; hint(`✅ ${t('mg_stopHere')}`, 'good'); }
     } else if (calmStroke > 180) {
       zoneState = 'low';
-      hint(t(atFav ? 'mg_pet_fav' : 'mg_pet_good', { name: a.name }), 'good');
+      hint(t(lip > 0 ? 'mg_pet_lip' : atFav ? 'mg_pet_fav' : 'mg_pet_good', { name: a.name, g: a.sex }), 'good');
     }
   }
 
   return {
-    peek: () => ({ fav, prog, value: prog, lo, hi, fast, body: { x: sh.bx, y: sh.by } }),
+    peek: () => ({ fav, spot: qk?.spot ?? null, lip, prog, value: prog, lo, hi, fast, body: { x: sh.bx, y: sh.by } }),
     key(code, down) { if (down && (code === 'Enter' || code === 'NumpadEnter') && !stopBtn.disabled) end(); },
     down(p) { last = p; lastT = ctx.time; },
     move(p, down) { if (down) stroke(p); },
@@ -161,16 +174,17 @@ export function petGame(ctx) {
       flinch = Math.max(0, flinch - dt);
       cool = Math.max(0, cool - dt);
       purr = Math.max(0, purr - dt);
+      lip = Math.max(0, lip - dt);
       if (!ctx.pointer.down) speed = Math.max(0, speed - dt * 600);
     },
     draw(g) {
       if (isBig(a)) sky(g, ctx.view, '#a9d8f2', '#e4f3fb', floorY, '#8cc268', '#6fa94f');
       else homeBackground(g, ctx, floorY);
       const fedUp = prog > hi && !ctx.done;
-      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, happy: (ctx.pointer.down && flinch <= 0 && speed > 20 && !fedUp) || (ctx.done && prog <= hi), earsBack: flinch > 0 || fedUp, shake: flinch > 0 ? 0.6 : 0, wag: (purr > 0 && !fedUp) || (ctx.done && prog <= hi) });
+      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, happy: (ctx.pointer.down && flinch <= 0 && speed > 20 && !fedUp) || (ctx.done && prog <= hi), earsBack: flinch > 0 || fedUp, shake: flinch > 0 ? 0.6 : 0, wag: (purr > 0 && !fedUp) || (ctx.done && prog <= hi), lip: lip > 0 });
       if (fedUp) emoji(g, '😑', sh.head.x + sh.hr * 1.3, sh.head.y - sh.hr * 1.7, 26);
       // Endroit préféré : il scintille si on ne l'a pas encore trouvé
-      if (!ctx.done && ctx.time > 3.5 && favDist < 60) {
+      if (!ctx.done && ctx.time > hintAfter && favDist < 60) {
         g.save();
         g.globalAlpha = 0.35 + Math.sin(ctx.time * 5) * 0.25;
         g.strokeStyle = '#ff7aa8';

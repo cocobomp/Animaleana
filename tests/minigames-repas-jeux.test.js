@@ -7,7 +7,8 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { justRight, verdict, JUST_FLOOR } from '../src/ui/minigames/score.js';
-import { makeRng } from '../src/ui/minigames/draw.js';
+import { makeRng, animalShape, fitAnimal } from '../src/ui/minigames/draw.js';
+import { quirksOf } from '../src/sim/horseQuirks.js';
 
 let t;
 let food;
@@ -307,6 +308,42 @@ describe('friandise : n friandises, au bon moment, puis « C\'est bon ! »', () 
     game.key('Enter', true);
     expect(ctx.finished).toEqual({ q: 1, msg: 'just' });
   });
+
+  it('🔍 cheval : 🥕 ou 🍎 ; sa préférée est notée pour le jeu (opts.out.quirk), l\'autre non', () => {
+    const favs = new Set();
+    for (let i = 0; i < 6; i++) {
+      const a = animal('horse', { id: `cheval${i}` });
+      const fav = quirksOf(a).treat;
+      favs.add(fav);
+      for (const pick of ['carrot', 'apple']) {
+        const ctx = fakeCtx(a);
+        ctx.opts = {};
+        const game = food.treatGame(ctx);
+        const treats = ctx.buttons.filter((b) => !b.opts.cls?.includes('stop'));
+        expect(treats.map((b) => b.text.split(' ')[0])).toEqual(['🥕', '🍎']);
+        expect(ctx.hints[0].text).toBe(food.nb(t('mg_treat_which', { name: 'Pomme' })));
+        run(game, ctx, 600, () => game.peek().state === 'calm');
+        treats[pick === 'carrot' ? 0 : 1].opts.onTap();
+        expect(game.peek()).toMatchObject({ given: 1, kind: pick, fav });
+        expect(ctx.opts.out?.quirk).toBe(pick === fav ? 'treat' : undefined);
+      }
+    }
+    expect(favs.size).toBe(2);
+  });
+
+  it('sa préférée déjà connue : la consigne habituelle ; les autres animaux gardent un seul bouton', () => {
+    const ctx = fakeCtx(animal('horse', { known: { treat: true } }));
+    food.treatGame(ctx);
+    expect(ctx.hints[0].text).toBe(food.nb(`${t('mg_treat_hint_flat')} 🍎🍎🍎`));
+    const dog = fakeCtx(animal('dog'));
+    dog.opts = {};
+    const game = food.treatGame(dog);
+    expect(dog.buttons.length).toBe(2);
+    expect(game.peek().fav).toBe(null);
+    run(game, dog, 600, () => game.peek().state === 'calm');
+    dog.buttons[0].opts.onTap();
+    expect(dog.opts.out).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------- caresser
@@ -400,6 +437,36 @@ describe('caresser : remplir le cœur jusqu\'à la zone verte, doucement', () =>
     petUntil(game, ctx, (q) => q.value >= p0.lo + 0.03);
     game.key('Enter', true);
     expect(ctx.finished).toEqual({ q: 1, msg: 'just' });
+  });
+
+  it('🔍 un cheval a son coin à lui (garrot, encolure, poitrail ou front) : gratté là, il tend la lèvre', () => {
+    const spots = new Set();
+    for (let i = 0; i < 16; i++) {
+      const a = animal('horse', { id: `cheval${i}` });
+      const q = quirksOf(a);
+      spots.add(q.spot);
+      const ctx = fakeCtx(a);
+      ctx.opts = {};
+      const game = fun.petGame(ctx);
+      const fit = fitAnimal(a, { groundY: 305, maxW: 330, maxH: 240 });
+      const sh = animalShape(a, { x: fit.x, y: 305, s: fit.s, f: 1 });
+      expect(game.peek().spot).toBe(q.spot);
+      expect(game.peek().fav).toEqual(sh[q.spot]);
+      expect(ctx.opts.out).toBeUndefined();
+      const p = petUntil(game, ctx, (pp) => pp.lip > 0);
+      expect(p.lip, q.spot).toBeGreaterThan(0);
+      expect(p.fast).toBe(0);
+      expect(ctx.done).toBe(false);
+      expect(ctx.opts.out).toEqual({ quirk: 'spot' });
+    }
+    expect(spots).toEqual(new Set(['withers', 'neck', 'chest', 'forehead']));
+    // Les autres animaux : leur endroit préféré habituel, rien à découvrir.
+    const ctx = fakeCtx(animal('dog'));
+    ctx.opts = {};
+    const game = fun.petGame(ctx);
+    expect(game.peek().spot).toBe(null);
+    petUntil(game, ctx, (pp) => pp.value >= 0.4);
+    expect(ctx.opts.out).toBeUndefined();
   });
 });
 

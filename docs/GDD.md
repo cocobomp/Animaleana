@@ -241,6 +241,16 @@ balade guidée, un concours de beauté) devient un souvenir au soin suivant.
 Ses **flots** de concours (or, argent, bronze pour le podium, puis vert, blanc, rose ; 6 au plus, les meilleurs
 d'abord) sont accrochés sous la plaque à son nom, sur la porte de son box (src/sim/competitions.js rosettesOf).
 
+### Ce que tu sais de lui (0.5, `src/sim/horseQuirks.js`)
+Chaque cheval a ses goûts, toujours les mêmes (tirés de son id, rien à sauvegarder) : son **coin à gratouilles** (le
+garrot 40 %, là où les chevaux se grattent l'un l'autre au pré ; l'encolure 25 %, le poitrail 20 %, le front 15 %), sa
+**friandise préférée** (la carotte ou la pomme) et sa **peur en balade** (les oiseaux, les sacs plastique, son ombre,
+les lapins). Dans sa fiche, « 🔍 Ce que tu sais de lui » : trois lignes en ❓ tant qu'on ne sait pas. En le caressant,
+le 💡 du coin préféré attend 8 secondes (au lieu de 3,5) tant qu'on ne le connaît pas ; gratté juste là, il tend la
+lèvre du haut. La friandise : deux boutons, 🥕 et 🍎 ; sa préférée, « Miam, sa préférée ! » et un 💖 (le nombre juste
+ne change pas). En balade, 7 écarts sur 10 viennent de sa peur à lui : la deuxième fois, on a compris, puis le jeu
+rappelle de lui parler doucement. Chaque découverte : un petit mot 🔍, un souvenir et lien +2. Seulement tes chevaux.
+
 ### Halloween au poney-club (0.5, `src/sim/halloween.js`, `src/game/Halloween.js`)
 Comme dans les vrais clubs fin octobre, du 24 octobre au 2 novembre (date réelle) : des citrouilles-lanternes au départ
 du chemin de balade (elles s'allument le soir), et la **chasse aux citrouilles** : 8 citrouilles posées au bord du

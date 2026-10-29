@@ -39,6 +39,7 @@ import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
 import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
 import { huntView } from '../sim/halloween.js'; // 🎃 la chasse aux citrouilles
 import { memoriesOf } from '../sim/memories.js'; // 📸 ses souvenirs
+import { quirksOf, knows } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -197,6 +198,16 @@ function memorySection(a) {
     : h('p', { class: 'note' }, t('mem_none', p))];
 }
 
+/** 🔍 Ce que tu sais de lui (src/sim/horseQuirks.js) : son coin préféré, sa friandise, sa peur ; ❓ tant qu'on ne sait pas. */
+function quirkSection(a) {
+  const q = quirksOf(a);
+  const p = { name: a.name, g: a.sex };
+  const what = { spot: t(`qk_where_${q.spot}`), treat: t(`qk_${q.treat}`), fear: t(`qk_fear${q.fear}`) };
+  return [h('h3', {}, t('qk_title', p)), h('ul', { class: 'qk-list' }, ['spot', 'treat', 'fear'].map((k) => (knows(a, k)
+    ? h('li', { class: 'known' }, t(`qk_${k}`, { ...p, what: what[k] }))
+    : h('li', {}, t(`qk_hint_${k}`, p)))))];
+}
+
 /** 🏅 Tes Galops (src/sim/galops.js) : le prochain, sa pratique, le bouton vers le panneau des Galops et 🃏 mes cartes. */
 function galopSection(ui, g) {
   const p = g.profile;
@@ -266,7 +277,7 @@ function renderAnimal(ui, g, a) {
     careActions.map((x) => btn(`${CARE_ICONS[x] ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => ui.careWithGame(a, x))),
   ));
 
-  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(ui, g, a), ...healthSection(ui, g, a, btn), ...galopSection(ui, g), ...memorySection(a));
+  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(ui, g, a), ...healthSection(ui, g, a, btn), ...galopSection(ui, g), ...quirkSection(a), ...memorySection(a));
 
   const acts = [];
   if (sp.actions.includes('play')) acts.push(btn(`⚽ ${t('act_play')}`, () => ui.careWithGame(a, 'play')));

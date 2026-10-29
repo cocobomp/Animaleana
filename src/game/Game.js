@@ -68,6 +68,7 @@ import { inShowground } from '../sim/activities.js'; // (la carrière : du sable
 import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
 import { remember, anniversaryDue, togetherSince, BOND_MEMORIES } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
 import { collectFact } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
+import { quirksOf, discoverQuirk, spookCause, noteFear, QUIRK_BOND } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
 import { t, L, getLang, fmtHour } from '../i18n.js';
@@ -613,8 +614,14 @@ export class Game {
         }
       }
       else if (why === 'spook') {
-        this.ui.toast(t('ride_spook', { name: m.name, g: m.sex, what: t(`ride_spookWhat${Math.floor(Math.random() * 4)}`) }), 5000);
+        // 🔍 Le plus souvent, sa peur à lui (src/sim/horseQuirks.js) : la deuxième fois, tu as compris ; ensuite, le jeu
+        // te rappelle de lui parler doucement.
+        const cause = spookCause(m);
+        const seen = noteFear(m, cause);
+        if (seen === 'again') this.ui.toast(t('ride_spookAgain', { name: m.name, g: m.sex, what: t(`qk_fear${cause}`) }), 5000);
+        else this.ui.toast(t('ride_spook', { name: m.name, g: m.sex, what: t(`ride_spookWhat${cause}`) }), 5000);
         audio.animal('horse', 'sad', m.id); // (il s'ébroue)
+        if (seen === 'discovered') this.quirkFound(m, 'fear');
       }
       this.ui.updateGaitPad?.();
     };
@@ -999,6 +1006,18 @@ export class Game {
     this.ui.toast(t('anniv', { name: a.name, g: a.sex, n: k }), 8000);
     // (une seule fois, à son vrai jour : même fêté en retard, s'il était loin ce jour-là ou dans une vieille partie)
     this.remember(a, 'year1', togetherSince(a) + DAYS_PER_YEAR);
+  }
+
+  /** 🔍 Tu viens de découvrir un de ses goûts (src/sim/horseQuirks.js) : un petit mot, un souvenir, le lien grandit. */
+  quirkFound(a, key) {
+    const s0 = bondStage(a);
+    a.bond = Math.min(100, (a.bond ?? 0) + QUIRK_BOND);
+    this.bondNews(a, s0);
+    this.remember(a, { spot: 'quirkSpot', treat: 'quirkTreat', fear: 'quirkFear' }[key]);
+    this.entities.get(a.id)?.emit('🔍', 3);
+    const q = quirksOf(a);
+    const what = t(key === 'spot' ? `qk_where_${q.spot}` : key === 'treat' ? `qk_${q.treat}` : `qk_fear${q.fear}`);
+    this.ui.toast(t(`qk_found_${key}`, { name: a.name, g: a.sex, what }), 6000);
   }
 
   /** Ton cheval du moment : celui que tu montes, sinon le dernier dont tu t'es occupé, sinon le plus proche de toi. */
@@ -2082,6 +2101,8 @@ export class Game {
       this.markHorseDay(a, action);
     }
     this.bondNews(a, stage0);
+    // 🔍 Le mini-jeu a trouvé son coin préféré ou sa friandise préférée (opts.quirk) : la première fois, on le note.
+    if (opts.quirk && discoverQuirk(a, opts.quirk)) this.quirkFound(a, opts.quirk);
     this.xp('care');
     this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
     this.ui.refresh();

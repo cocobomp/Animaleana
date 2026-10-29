@@ -1,6 +1,7 @@
 // Mini-jeux « repas » : nourrir, donner à boire, donner une friandise.
 
 import { drawAnimal, animalShape, rrect, ellipse, circle, emoji as emojiRaw, label, fillView, clamp, lerp, shade } from './draw.js';
+import { quirksOf, knows } from '../../sim/horseQuirks.js'; // 🔍 sa friandise préférée (cheval)
 
 /**
  * emoji() de draw.js, mais toujours bien opaque : sur un canvas, un emoji en couleur prend
@@ -502,6 +503,8 @@ export const waterGame = (ctx) => pourGame(ctx, true);
 // ---------------------------------------------------------------- friandise
 
 const TREATS = { dog: '🦴', cat: '🐟', rabbit: '🥕', horse: '🍎', cow: '🌽', goat: '🥬', sheep: '🍏' };
+/** Cheval : carotte ou pomme (il a sa préférée, src/sim/horseQuirks.js). */
+const HORSE_TREATS = { carrot: '🥕', apple: '🍎' };
 
 /** Main tendue (paume à plat) qui tient une friandise. */
 export function drawHand(g, x, y, s = 1, flat = true, skin = '#f0c29a') {
@@ -575,6 +578,10 @@ export function treatGame(ctx) {
   const s = sizeFor(a, big ? 1.12 : 1.1);
   const ax = big ? 150 : 165;
   const treat = TREATS[a.species] ?? '🍪';
+  // Cheval : deux boutons, 🥕 et 🍎 ; sa préférée lui fait plaisir (le jeu la note : opts.out.quirk)
+  const qk = a.species === 'horse' ? quirksOf(a) : null;
+  let kind = 'carrot'; // (la dernière choisie : Espace et le doigt sur la scène donnent la même)
+  let favFound = false;
   const calmTime = a.personality === 'shy' || a.personality === 'calm' ? 1.6 : a.personality === 'playful' ? 1.05 : 1.25;
   // « Juste ce qu'il faut » : n friandises (selon l'animal), visibles en haut dans le cadre vert,
   // puis « ✅ C'est bon ! ». Une de plus ou de moins : un peu moins de points ; deux : le
@@ -592,9 +599,11 @@ export function treatGame(ctx) {
   let handBack = 0;
   const pose = a.species === 'rabbit' ? 'beg' : a.species === 'dog' || a.species === 'cat' ? 'sit' : 'stand';
 
-  hint(`${t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint')} ${treat.repeat(n)}`);
+  const asking = () => qk && !favFound && !knows(a, 'treat'); // (carotte ou pomme : on ne sait pas encore)
+  hint(asking() ? t('mg_treat_which', { name: a.name }) : `${t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint')} ${treat.repeat(n)}`);
   ctx.zone((n - 0.5) / max, (n + 0.5) / max);
-  ctx.button(`${treat} ${t('mg_treat_btn')}`, { cls: 'primary', onTap: () => give() });
+  if (qk) for (const k of Object.keys(HORSE_TREATS)) ctx.button(`${HORSE_TREATS[k]} ${t('mg_treat_btn')}`, { cls: 'primary', onTap: () => give(k) });
+  else ctx.button(`${treat} ${t('mg_treat_btn')}`, { cls: 'primary', onTap: () => give() });
   // « C'est bon ! » pour s'arrêter là : disponible dès la première friandise (on revérifie au
   // tap : un bouton grisé ne doit jamais finir le jeu, même si le navigateur transmet le geste).
   const stopBtn = ctx.stopButton(() => { if (given > 0) end(); }, stopLabel(t));
@@ -605,13 +614,14 @@ export function treatGame(ctx) {
     const sh = shape();
     return { x: Math.max(sh.mouth.x + 70, 300) + handBack * 30, y: Math.min(sh.mouth.y + 10, 250) };
   };
-  const waitHint = () => t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint');
+  const waitHint = () => (asking() ? t('mg_treat_which', { name: a.name }) : t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint'));
 
-  function give() {
+  function give(k = kind) {
     if (ctx.done || state === 'eat') return;
+    if (qk) kind = k;
     if (state === 'calm') {
       const hp = handPos();
-      fly = { x0: hp.x - 20, y0: hp.y - 14, k: 0 };
+      fly = { x0: hp.x - 20, y0: hp.y - 14, k: 0, ch: qk ? HORSE_TREATS[kind] : treat };
       state = 'eat';
       timer = 0;
       given++;
@@ -619,6 +629,16 @@ export function treatGame(ctx) {
       if (given === n) fx.text(hp.x - 40, hp.y - 60, t('mg_perfect'), '#2f8a5f', 24);
       else if (given < n) fx.text(hp.x - 40, hp.y - 60, t('mg_good'), '#2f8a5f', 24);
       else fx.text(hp.x - 40, hp.y - 60, t('mg_oops'), '#c8463c', 24);
+      if (qk && kind === qk.treat) {
+        // 🔍 Sa préférée : un cœur de plus
+        favFound = true;
+        if (given <= n) {
+          const sh = shape();
+          fx.text(hp.x - 40, hp.y - 92, t('mg_treat_fav'), '#d6457a', 22);
+          fx.burst(sh.head.x, sh.head.y - 20, '💖', 5);
+        }
+        if (ctx.opts) ctx.opts.out = { ...(ctx.opts.out ?? {}), quirk: 'treat' };
+      }
       ctx.progress(given / max);
     } else {
       // Trop tôt : la main recule, et l'animal, tout excité, met un peu plus longtemps à se calmer.
@@ -638,7 +658,7 @@ export function treatGame(ctx) {
   }
 
   return {
-    peek: () => ({ state, given, rounds: given, n, max, lo: n, hi: n, value: given, penalties }),
+    peek: () => ({ state, given, rounds: given, n, max, lo: n, hi: n, value: given, penalties, fav: qk?.treat ?? null, kind }),
     down() { give(); },
     key(code, down) {
       // Espace : donner ; Entrée : « C'est bon ! » (dès la première friandise).
@@ -724,15 +744,18 @@ export function treatGame(ctx) {
       // Main + friandise
       const hp = handPos();
       drawHand(g, hp.x, hp.y, 1.1, true);
-      if (!fly && state !== 'eat') emoji(g, treat, hp.x - 14, hp.y - 16, 30);
+      if (!fly && state !== 'eat') {
+        if (qk) { emoji(g, HORSE_TREATS.carrot, hp.x - 26, hp.y - 16, 26, -0.5); emoji(g, HORSE_TREATS.apple, hp.x + 2, hp.y - 16, 26); }
+        else emoji(g, treat, hp.x - 14, hp.y - 16, 30);
+      }
       if (fly) {
         const k = fly.k;
         const x = lerp(fly.x0, sh.mouth.x, k);
         const y = lerp(fly.y0, sh.mouth.y, k) - Math.sin(k * Math.PI) * 40;
-        if (k < 1) emoji(g, treat, x, y, 30 * (1 - k * 0.4));
+        if (k < 1) emoji(g, fly.ch, x, y, 30 * (1 - k * 0.4));
       }
       // Compteur : n friandises dans le cadre vert, les suivantes grisées (trop)
-      drawCountZone(g, 36, 32, given, n, max, treat);
+      drawCountZone(g, 36, 32, given, n, max, qk ? HORSE_TREATS[kind] : treat);
     },
   };
 }

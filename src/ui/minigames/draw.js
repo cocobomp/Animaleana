@@ -187,11 +187,13 @@ export function animalShape(a, o = {}) {
     mouth,
     chest: L(rx * 0.72, ry * 0.25),
     neck: a.species === 'horse' ? L(rx * 0.95, -ry * 1.15) : L(rx * 0.92, -ry * 0.5),
+    withers: L(rx * 0.5, -ry * 0.82), // (le garrot : en haut des épaules, au bout de la crinière)
     back: L(-rx * 0.1, -ry * 0.75),
     rump: L(-rx * 0.65, -ry * 0.3),
     belly: L(0, ry * 0.6),
     cheek: { x: head.x + f * hr * 0.25, y: head.y + hr * 0.35 },
     headTop: { x: head.x - f * hr * 0.15, y: head.y - hr * 0.75 },
+    forehead: { x: head.x + f * hr * 0.35, y: head.y - hr * 0.45 },
     udder: L(-rx * 0.22, ry * 0.88),
   };
 }
@@ -237,7 +239,7 @@ export function coatColors(a) {
 /**
  * Dessine l'animal de profil.
  * o : options d'animalShape + { walk (phase des pattes), blink, happy, mouth, wag, earsBack, shorn, noWool, shake,
- *       shadow (false : pas d'ombre au sol) }
+ *       shadow (false : pas d'ombre au sol), lip (cheval : il tend la lèvre du haut) }
  * lift (animalShape) : l'animal saute, pattes comprises (elles ne vont plus jusqu'au sol) ; son
  * ombre reste au sol, plus petite quand il est haut.
  * Renvoie la forme (animalShape) pour placer des choses dessus.
@@ -878,6 +880,24 @@ function drawHead(g, sh, c, { faceColor, earColor, earType, o, time, outline, fl
     g.fillStyle = '#7a2e36';
     ellipse(g, sh.mouth.x - f * 4 * s, sh.mouth.y + 2 * s, 6 * s, 4 * s + Math.abs(Math.sin(time * 12)) * 3 * s);
     g.fill();
+  }
+  // Gratté à son coin préféré, le cheval tend la lèvre du haut et la fait bouger (src/sim/horseQuirks.js)
+  if (o.lip && sp === 'horse') {
+    const { x: mx, y: my } = sh.mouth;
+    const w = Math.sin(time * 14) * 1.5 * s;
+    g.fillStyle = face;
+    g.strokeStyle = shade(faceColor, -0.4);
+    g.lineWidth = 1.6 * s;
+    g.beginPath();
+    g.moveTo(mx - f * hr * 0.2, my - hr * 0.25);
+    g.quadraticCurveTo(mx + f * hr * 0.75, my - hr * 0.15 + w, mx + f * hr * 0.6, my + hr * 0.18 + w);
+    g.quadraticCurveTo(mx + f * hr * 0.25, my + hr * 0.3, mx - f * hr * 0.15, my + hr * 0.12);
+    g.fill();
+    g.stroke();
+    g.beginPath();
+    g.moveTo(mx + f * hr * 0.05, my + hr * 0.05);
+    g.quadraticCurveTo(mx + f * hr * 0.3, my + hr * 0.02 + w, mx + f * hr * 0.5, my + hr * 0.12 + w);
+    g.stroke();
   }
 
   // Œil

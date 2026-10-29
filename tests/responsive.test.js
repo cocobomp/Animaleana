@@ -103,6 +103,7 @@ describe('cibles tactiles d\'au moins 44 px', () => {
     '.swatches.small .swatch-btn', // couleurs de la couverture
     '.animal-label', // noms au-dessus des animaux
     '.check', // cases à cocher
+    '.star-grp', // ⭐ ses étoiles (fiche du cheval)
   ])('%s', (sel) => {
     expect(minHeight(sel)).toBeGreaterThanOrEqual(44);
   });

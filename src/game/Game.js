@@ -946,7 +946,7 @@ export class Game {
     const n = this.starNews.shift();
     if (!n || !p.animals.includes(n.a)) return; // (parti entre-temps, autre partie)
     const { a, id, stars } = n;
-    const key = starUnlock(id, stars);
+    const key = canRide(a).reason === 'tooYoung' ? null : starUnlock(id, stars); // (un poulain ne se monte pas encore)
     const text = t('st_new', { skill: t(`skill_${id}`), name: a.name, n: stars }) + (key ? ` ${t(`st_unlock_${key}`, { g: a.sex })}` : '');
     this.ui.toast(text, 6000);
     this.entities.get(a.id)?.emit('⭐', 4);

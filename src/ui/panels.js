@@ -186,12 +186,14 @@ function starRow(ui, a) {
   const list = starsView(a);
   const open = list.find((s) => ui.starHint === `${a.id}:${s.id}`);
   const p = open && { icon: open.icon, skill: t(`skill_${open.id}`) };
+  // (un poulain ne se monte pas : pas de conseil d'équitation avant 3 ans)
+  const how = open && (canRide(a).reason === 'tooYoung' ? t('r_tooYoung', { name: a.name, g: a.sex }) : t(`st_how_${open.id}`));
   return [h('div', { class: 'star-row' }, list.map((s) => h('button', {
     class: `star-grp${open === s ? ' open' : ''}`, 'data-skill': s.id, title: t(`skill_${s.id}`), 'aria-label': `${t(`skill_${s.id}`)} ${s.stars}/5`,
     onClick: () => { ui.starHint = open === s ? null : `${a.id}:${s.id}`; ui.renderPanel(); },
   }, `${s.icon} ${'★'.repeat(s.stars)}${'☆'.repeat(5 - s.stars)}`))),
   open ? h('p', { class: 'note star-hint' }, open.stars < 5
-    ? t('st_next', { ...p, n: Math.ceil(open.toNext), how: t(`st_how_${open.id}`) }) : t('st_max', p)) : null];
+    ? t('st_next', { ...p, n: Math.ceil(open.toNext), how }) : t('st_max', p)) : null];
 }
 
 /** 💞 Ce que votre lien a débloqué (src/sim/animal.js BOND_PERKS) : ✅ ce qui est là, 🔒 la prochaine étape. */

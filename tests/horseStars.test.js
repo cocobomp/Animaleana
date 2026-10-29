@@ -127,4 +127,15 @@ describe('dans le jeu (src/game/Game.js starsTick)', () => {
     expect(toasts.find((x) => x.includes('Vitesse'))).toBe('⭐ Vitesse : Étoile a sa première étoile !');
     expect(emits).toEqual([['⭐', 4], ['⭐', 4]]);
   });
+
+  it('un cheval de 2 ans (trop jeune pour être monté) : son étoile de saut, sans parcours ouvert', () => {
+    const a = horse({ id: 'h3', ageDays: 2 * 12 });
+    const toasts = [];
+    const g = { profile: { animals: [a] }, ui: { toast: (m) => toasts.push(m) }, entities: new Map() };
+    a.skills.jump = 19;
+    Game.prototype.starsTick.call(g);
+    a.skills.jump = 41;
+    Game.prototype.starsTick.call(g);
+    expect(toasts).toEqual(['⭐ Saut : Étoile a maintenant 2 étoiles !']);
+  });
 });

@@ -860,7 +860,7 @@ export class Player {
       }
     } else this.canterFor = 0;
     if (SPOOKY.has(this.gaitNow) && this.speed > 2 && !this.spook) {
-      this.spookIn = (this.spookIn ?? nextSpookIn(mount.data)) - dt;
+      this.spookIn = (this.spookIn ?? nextSpookIn(mount.data, Math.random, this.riderLevel ?? 0)) - dt;
       if (this.spookIn <= 0) {
         this.spookIn = null;
         this.spook = { t: 0.9, side: Math.random() < 0.5 ? -1 : 1 };

@@ -33,6 +33,7 @@ import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder
 import { thumb, portraitSpec } from '../game/thumbScenes.js'; // vignettes 3D (animalerie, voyage, portrait de la fiche)
 import { healthPlan, HEALTH_PLAN, WORMER_COST } from '../sim/horseHealth.js'; // 📒 carnet de santé du cheval
 import { horseDayView } from '../sim/horseDay.js'; // ☀️ la journée de ton cheval
+import { galopLevel, nextGalop, practiceOf, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -149,6 +150,23 @@ function healthSection(ui, g, a, btn) {
       { cls: worm.state === 'ok' ? '' : 'primary' }))];
 }
 
+/** 🏅 Tes Galops (src/sim/galops.js) : le prochain, sa pratique, et le bouton vers le panneau des Galops. */
+function galopSection(ui, g) {
+  const p = g.profile;
+  const level = galopLevel(p);
+  const next = nextGalop(p);
+  const lines = [];
+  if (level) lines.push(t('galops_level', { n: level }));
+  if (next) {
+    const list = practiceOf(p, next.id);
+    lines.push(canTakeExam(p, next.id).ok ? t('galop_sheetReady', { n: next.id })
+      : t('galop_sheetNext', { n: next.id, have: list.filter((x) => x.done).length, total: list.length }));
+  } else lines.push(t('galops_all'));
+  const ready = next && canTakeExam(p, next.id).ok;
+  return [h('h3', {}, t('galop_sheet')), h('p', { class: ready ? 'note good' : 'note' }, lines.join(' ')),
+    h('div', { class: 'grid' }, h('button', { class: `act ${ready ? 'primary' : ''} gl-open`, onClick: () => ui.openGalops() }, t('galop_open')))];
+}
+
 function renderAnimal(ui, g, a) {
   const sp = SPECIES[a.species];
   const here = a.location === g.profile.place;
@@ -198,7 +216,7 @@ function renderAnimal(ui, g, a) {
     careActions.map((x) => btn(`${CARE_ICONS[x] ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => ui.careWithGame(a, x))),
   ));
 
-  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(g, a), ...healthSection(ui, g, a, btn));
+  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(g, a), ...healthSection(ui, g, a, btn), ...galopSection(ui, g));
 
   const acts = [];
   if (sp.actions.includes('play')) acts.push(btn(`⚽ ${t('act_play')}`, () => ui.careWithGame(a, 'play')));

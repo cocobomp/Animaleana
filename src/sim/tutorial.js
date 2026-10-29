@@ -258,6 +258,7 @@ export const QUEST_GUIDE = {
   horseBrush1: { where: 'horse', target: { type: 'action', id: 'brush', species: 'horse' }, need: ['horse'] },
   rideCanter1: { where: 'horse', target: { type: 'action', id: 'ride', species: 'horse' }, need: MOUNT },
   horsePerfect3: { where: 'horse', target: { type: 'action', id: 'feed', species: 'horse' }, need: ['horse'] },
+  galop1: { where: 'showground', target: SHOWGROUND, need: ['horse'] }, // 🎓 Passer mes Galops (src/ui/galops.js)
   adopt1: { where: 'refuge', target: { type: 'building', id: 'refuge' } },
   feed5: { where: 'animal', target: { type: 'action', id: 'feed' }, need: ['animal'] },
   pet3: { where: 'animal', target: { type: 'action', id: 'pet' }, need: ['animal'] },
@@ -359,7 +360,7 @@ export function followBlock(id, profile) {
 
 /** Ordre des quêtes, de la plus facile à la plus difficile (journal, thèmes des quêtes : src/sim/quests.js). */
 export const QUEST_ORDER = [
-  'horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'rideCanter1', 'horsePerfect3',
+  'horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'rideCanter1', 'horsePerfect3', 'galop1',
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
@@ -440,6 +441,9 @@ export const FOLLOW_STEPS = {
   goHutch: { target: { type: 'building', id: 'hutch' }, done: seenAny('building:hutch') },
   openCalendar: { target: { type: 'hud', id: 'actv_hud' }, done: seenAny('panel:activities') }, // calendrier des concours
   doActivity: { target: null, done: questDone, progress: true },
+  // 🏅 les Galops (src/ui/galops.js émet panel:galops)
+  openGalops: { target: SHOWGROUND, done: seenAny('panel:galops') },
+  doGalop: { target: { type: 'el', sel: '#panel .gl-take:not([disabled])', fallback: SHOWGROUND }, done: questDone, progress: true },
   // éducateur canin
   waitClient: { target: { type: 'building', id: 'kennel' }, done: seenAny('panel:dogTrainerChat') },
   acceptClient: { target: { type: 'el', sel: '#panel .dt-accept', fallback: { type: 'building', id: 'kennel' } }, done: questDone },
@@ -472,6 +476,7 @@ export const QUEST_STEPS = {
   horseBrush1: ['tapHorse', 'horse_brush'],
   rideCanter1: ['tapHorseRide', 'doMount', 'doCanter'],
   horsePerfect3: ['tapHorse', 'perfectDay'],
+  galop1: ['goShowground', 'openGalops', 'doGalop'],
   adopt1: ['goRefuge', 'waitOpen', 'adoptOne'],
   species4: ['goRefuge', 'waitOpen', 'adoptMore'],
   pet3: ['tapAnimal', 'do_pet'],

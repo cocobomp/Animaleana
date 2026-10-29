@@ -468,6 +468,18 @@ button.sv-card:hover { border-color: var(--primary); }
 .hd-row.done { background: rgba(63, 174, 98, 0.14); }
 .hd-row.missed { color: var(--muted); }
 .note.good { color: #1e8a4a; font-weight: 600; }
+/* 🏅 Les Galops (src/ui/galops.js) */
+.gl-card { display: grid; gap: 6px; padding: 10px 12px; border-radius: 16px; background: #fff; border: 1px solid var(--line); margin-bottom: 8px; }
+.gl-card.open { border: 2px solid #f2b824; }
+.gl-card.done { background: #f1faf3; border-color: #bfe3c9; }
+.gl-head { display: flex; gap: 8px; align-items: center; }
+.gl-head b, .gl-head small { display: block; }
+.gl-head small { color: var(--muted); }
+.gl-label { font-weight: 800; color: var(--muted); }
+.gl-practice { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.gl-practice li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 6px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.04); }
+.gl-practice li.done { background: rgba(63, 174, 98, 0.14); }
+.gl-take { width: 100%; }
 /* 📒 Carnet de santé du cheval (src/ui/panels.js healthSection) */
 .hp-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
 .hp-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.04); }

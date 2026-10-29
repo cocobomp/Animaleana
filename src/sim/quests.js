@@ -45,7 +45,7 @@ export const STORY = ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horse
 
 /** Thèmes des quêtes secondaires (journal : « 🗺️ Autres quêtes »). Chaque quête est dans un seul thème. */
 export const THEMES = [
-  { id: 'horse', quests: ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1', 'horsePerfect3'] },
+  { id: 'horse', quests: ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1', 'horsePerfect3', 'galop1'] },
   { id: 'animals', quests: ['adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'baby', 'species4'] },
   { id: 'travel', quests: ['travel1', 'abroad', 'horseTrip'] },
   {

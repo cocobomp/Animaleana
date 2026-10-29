@@ -31,6 +31,8 @@ export const OBJECTIVES = [
   { id: 'rideCanter1', kind: 'quest', reward: 50, progress: (p) => [stat(p, 'rideCanter'), 1] },
   // La journée de ton cheval (src/sim/horseDay.js) : tout ce qu'il lui faut dans une journée, trois fois.
   { id: 'horsePerfect3', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'perfectDays'), 3] },
+  // 🎓 Les Galops (src/sim/galops.js) : le premier examen de cavalier.
+  { id: 'galop1', kind: 'quest', reward: 50, progress: (p) => [p.galops?.[1] ? 1 : 0, 1] },
   { id: 'adopt1', kind: 'quest', reward: 50, progress: (p) => [stat(p, 'adopted'), 1] },
   // Quêtes pour bien débuter (tutoriel) : voir aussi QUEST_GUIDE dans tutorial.js.
   { id: 'pet3', kind: 'quest', reward: 20, progress: (p) => [stat(p, 'pet'), 3] },

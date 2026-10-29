@@ -52,6 +52,7 @@ import { enclosure } from './nav.js';
 import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import { healthDay, noteHealth, WORMER_COST } from '../sim/horseHealth.js'; // le carnet de santé du cheval
 import { markHorseDay } from '../sim/horseDay.js'; // la journée de ton cheval
+import { galopLevel, nextGalop, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
   unsaddle, saddleUp,
@@ -885,6 +886,15 @@ export class Game {
     return r;
   }
 
+  /** 🏅 Toute la pratique du prochain Galop est faite : on le dit une fois (src/sim/galops.js). */
+  galopNews() {
+    const p = this.profile;
+    const next = nextGalop(p);
+    if (!next || p.galopReady === next.id || !canTakeExam(p, next.id).ok) return;
+    p.galopReady = next.id;
+    this.ui.toast(t('galop_ready', { n: next.id }), 8000);
+  }
+
   /** Le lien vient de passer une étape (src/sim/animal.js BOND_STAGES) : un petit mot et des cœurs. */
   bondNews(a, before) {
     const now = bondStage(a);
@@ -900,6 +910,7 @@ export class Game {
     if (!canAfford(this.profile, WORMER_COST)) return this.ui.toast(t('r_money'));
     spend(this.profile, WORMER_COST);
     noteHealth(a, 'worm', this.day);
+    addStat(this.profile, 'horse_deworm'); // (Galop 3)
     this.entities.get(a.id)?.emit('😝', 2);
     this.ui.toast(t('wormed', { name: a.name, g: a.sex }), 5000);
     this.save();
@@ -1144,6 +1155,7 @@ export class Game {
     this.checkAcc += dt;
     if (this.checkAcc > 2) {
       this.checkAcc = 0;
+      this.galopNews();
       // Toute quête finie est récompensée, rejointe ou non ; une quête rejointe et finie quitte « Mes quêtes », et
       // la fin du chapitre en cours de l'histoire est fêtée par le guide, qui annonce le suivant (src/sim/quests.js).
       const chapterBefore = mainQuest(p);
@@ -1659,6 +1671,7 @@ export class Game {
       return null;
     }
     this.entities.get(a.id)?.applyGear();
+    if (a.species === 'horse') addStat(this.profile, 'horse_saddle'); // (Galop 2)
     this.save();
     return r;
   }
@@ -1981,6 +1994,7 @@ export class Game {
     // On monte toujours avec sa bombe, mise avant de monter : setHelmet refait l'avatar (mèches rentrées), qui
     // n'est ainsi posé en selle (et ajusté au cheval, riderFit) qu'une fois.
     this.player.setHelmet(riderHelmet(this.profile));
+    this.player.riderLevel = galopLevel(this.profile); // (Galops obtenus : il s'effraie moins)
     this.player.ride(e);
     this.ui.updateGaitPad?.();
     addStat(this.profile, 'rides');

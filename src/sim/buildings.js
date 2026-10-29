@@ -122,6 +122,7 @@ const RULES = {
   // Terrain de concours (activités) : on monte de jour, les spectacles se jouent aussi le soir.
   showground: [
     { id: 'actvLesson', icon: '🎓', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) },
+    { id: 'galops', icon: '🏅', when: () => null }, // 🎓 les Galops (src/ui/galops.js), à toute heure
     { id: 'actvJumping', icon: '🏇', when: (c) => need(c.count.horse) ?? dayOnly(c, 7, 21) },
     { id: 'actvAgility', icon: '🐕', when: (c) => dayOnly(c, 7, 21) },
     // (lapin-hop : caché tant que les lapins ne sont pas proposés, sauf s'il y a déjà un lapin ici)

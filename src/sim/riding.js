@@ -66,13 +66,15 @@ export const SPOOKY = new Set(['trot', 'canter', 'gallop']);
 
 /**
  * Dans combien de secondes de monte le prochain écart ? Un cheval timide en fait plus, un calme moins, et plus il
- * est obéissant (dressage, leçons), moins il en fait. rng : nombre au hasard entre 0 et 1.
+ * est obéissant (dressage, leçons), moins il en fait ; et plus tu as de Galops (galops : 0 à 3), moins il en fait.
+ * rng : nombre au hasard entre 0 et 1.
  */
-export function nextSpookIn(a, rng = Math.random) {
+export function nextSpookIn(a, rng = Math.random, galops = 0) {
   const pers = { shy: 0.55, calm: 1.7, curious: 0.9, playful: 0.85, cuddly: 1.1, stubborn: 1 }[a?.personality] ?? 1;
   const obedience = a?.skills?.obedience ?? 10;
   const trust = 1 + (a?.bond ?? 0) / 100; // (il te fait confiance : il s'effraie moins)
-  return (60 + rng() * 120) * pers * (1 + obedience / 80) * trust;
+  const rider = 1 + 0.2 * galops; // (tes Galops, src/sim/galops.js : plus d'assurance, il est plus tranquille)
+  return (60 + rng() * 120) * pers * (1 + obedience / 80) * trust * rider;
 }
 
 /**

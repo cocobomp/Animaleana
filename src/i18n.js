@@ -13,6 +13,7 @@ import { GROOMER_FR, GROOMER_EN } from './ui/groomerTexts.js'; // métier Toilet
 import { TRAIL_FR, TRAIL_EN } from './ui/trailGuideTexts.js'; // 🧭 métier guide de randonnée (tg_*, career_trailGuide)
 import { SPECIES_TXT_FR, SPECIES_TXT_EN } from './ui/speciesTexts.js'; // espèces proposées (« D'autres animaux arrivent bientôt ! »)
 import { QUESTS_FR, QUESTS_EN } from './ui/questsTexts.js'; // quêtes principales et secondaires (qj_*, qneed_*)
+import { GALOPS_FR, GALOPS_EN } from './ui/galopsTexts.js'; // 🎓 les Galops (galop_*, gp_*, gq_*)
 
 const fr = {
   title: 'La ferme à Madichelle',
@@ -266,7 +267,11 @@ const fr = {
   hd_pet: 'Un câlin',
   o_horsePerfect3: 'Trois journées parfaites avec ton cheval',
   quest_hint_horsePerfect3: 'Dans sa fiche, ☀️ Sa journée : foin du matin et du soir, eau, pansage, travail et câlin.',
+  o_galop1: 'Passer ton Galop 1',
+  quest_hint_galop1: 'Au terrain de concours : 🏅 Passer mes Galops (ou dans la fiche de ton cheval). Un peu de pratique, puis 5 questions.',
   quest_step_perfectDay: 'Coche toute sa journée ☀️',
+  quest_step_openGalops: 'Touche 🏅 Passer mes Galops',
+  quest_step_doGalop: 'La pratique avec ton cheval, puis l\'examen 🎓',
   actv_why_lame: '{name} boite : pas d\'activité aujourd\'hui.',
   remind_worm: '📒 {name} a besoin de son vermifuge : dans sa fiche, 📒 Carnet de santé.',
   remind_vaccine: '📒 Rappel de vaccin pour {name} : chez le vétérinaire 🩺.',
@@ -2346,7 +2351,11 @@ const en = {
   hd_pet: 'A cuddle',
   o_horsePerfect3: 'Three perfect days with your horse',
   quest_hint_horsePerfect3: 'In their sheet, ☀️ Their day: morning and evening hay, water, grooming, exercise and a cuddle.',
+  o_galop1: 'Pass your riding level 1',
+  quest_hint_galop1: 'At the showground: 🏅 Take my riding levels (or in your horse\'s sheet). Some practice, then 5 questions.',
   quest_step_perfectDay: 'Tick their whole day ☀️',
+  quest_step_openGalops: 'Tap 🏅 Take my riding levels',
+  quest_step_doGalop: 'Practice with your horse, then the exam 🎓',
   actv_why_lame: '{name} is limping: no activities today.',
   remind_worm: '📒 Time for {name}\'s wormer: in their sheet, 📒 Health record.',
   remind_vaccine: '📒 {name} is due a vaccine: at the vet 🩺.',
@@ -4083,6 +4092,8 @@ Object.assign(fr, SPECIES_TXT_FR); // espèces proposées (OFFERED_SPECIES)
 Object.assign(en, SPECIES_TXT_EN);
 Object.assign(fr, QUESTS_FR); // quêtes principales et secondaires (src/sim/quests.js)
 Object.assign(en, QUESTS_EN);
+Object.assign(fr, GALOPS_FR); // 🎓 les Galops (src/sim/galops.js)
+Object.assign(en, GALOPS_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

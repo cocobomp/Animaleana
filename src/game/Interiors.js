@@ -374,6 +374,7 @@ export class Interiors {
     a.following = false;
     delete a.zone;
     const e = this.game.entities.get(a.id);
+    if (!e?.ridden) this.game.unbridle(a, 'box'); // (au box, jamais de filet : src/sim/gear.js, unbridle)
     const home = this.stallOf(a);
     if (e && home && !e.ridden) {
       e.state = 'walk';
@@ -406,6 +407,7 @@ export class Interiors {
   unstall(a, where = 'paddock') {
     a.stalled = false;
     const e = this.game.entities.get(a.id);
+    if (!e?.ridden) this.game.unbridle(a, 'paddock'); // (au pré non plus)
     if (e && !e.ridden) {
       e.state = 'walk';
       e.target.set(HOME.horse.x + (Math.random() - 0.5) * 6, 0, HOME.horse.z + (Math.random() - 0.5) * 6);

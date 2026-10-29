@@ -226,6 +226,10 @@ export function openAnimalActions(ui, a) {
     } else if (sp.rideable && saddled && g.player.mount?.data !== a) {
       items.push({ icon: '🧰', label: t('act_unsaddle'), effect: t('unsaddleHint'), run: () => { g.unsaddle(a); ui.closePanel(); } });
     }
+    // Monté à cru avec le filet : on le lui enlève aussi (il ne le garde pas au pré).
+    if (sp.rideable && !saddled && a.gear?.bridle && g.player.mount?.data !== a) {
+      items.push({ icon: '🧰', label: t('act_unbridle'), effect: t('bridleOff'), run: () => { g.unsaddle(a); ui.closePanel(); } });
+    }
     if (a.species === 'dog') {
       items.push({
         icon: '🦮',

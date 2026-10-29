@@ -58,7 +58,7 @@ import { tapPost, postMilestone } from '../sim/posting.js'; // ⬆️ trot enlev
 import { todayChallenge, challengeJustDone, CHALLENGE_REWARD } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
-  unsaddle, saddleUp,
+  unsaddle, saddleUp, unbridle, bridleUp,
 } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
@@ -635,6 +635,10 @@ export class Game {
     };
     audio.configure(profile.settings.sound);
     audio.setActive(true);
+    // Anciennes sauvegardes : un cheval dessellé gardait son filet au box et au pré. On le range (en silence).
+    for (const a of profile.animals) {
+      if (a.species === 'horse' && !a.client && !a.guest && a.location === profile.place && a.gear?.bridle && !a.gear.saddle) unbridle(profile, a, { home: this.isHome });
+    }
     this.loadPlace(profile.place);
     this.running = true;
     this.clock.getDelta();
@@ -1836,14 +1840,40 @@ export class Game {
     this.entities.get(a.id)?.applyGear();
   }
 
-  /** Desseller (menu du cheval) : la selle et le tapis retournent à la sellerie ; il pourra se rouler au pré. */
+  /** Desseller (menu du cheval) : la selle, le tapis et le filet retournent à la sellerie ; il pourra se rouler au pré. */
   unsaddle(a) {
     if (this.player.mount?.data === a) return null;
-    if (!unsaddle(a)) return null;
+    const saddled = unsaddle(a);
+    const bridled = unbridle(this.profile, a, { home: this.isHome });
+    if (!saddled && !bridled) return null;
     this.entities.get(a.id)?.applyGear();
-    this.ui.toast(t('unsaddled', { name: a.name, g: a.sex }), 4000);
+    this.ui.toast(t(saddled ? 'unsaddled' : 'unbridled', { name: a.name, g: a.sex }), 4000);
     this.save();
     return true;
+  }
+
+  /** Débrider en le rentrant au box ou en le lâchant au pré (src/game/Interiors.js) ; la première fois, on dit pourquoi. */
+  unbridle(a, why = null) {
+    if (!unbridle(this.profile, a, { home: this.isHome })) return false;
+    this.entities.get(a.id)?.applyGear();
+    if (why && !this.profile.bridleTip) {
+      this.profile.bridleTip = true;
+      this.ui.toast(t('bridleOff'), 5000);
+    }
+    return true;
+  }
+
+  /** Brider (après le mini-jeu « Brider », src/ui/minigames/bridle.js). */
+  bridle(a) {
+    const r = bridleUp(this.profile, a, { home: this.isHome });
+    if (!r.ok) {
+      this.ui.toast(t(`gear_${r.reason}`, { item: t('gear_bridle'), size: r.need ? t(`tk_size_${r.need}`) : '' }), 4500);
+      return null;
+    }
+    this.entities.get(a.id)?.applyGear();
+    if (a.species === 'horse' && !a.client && !a.guest) addStat(this.profile, 'horse_bridle'); // (« ⏩ Brider vite » après 3)
+    this.save();
+    return r;
   }
 
   /** Seller (après le mini-jeu « Seller », src/ui/minigames/seller.js). */
@@ -2172,14 +2202,13 @@ export class Game {
     const r = canRide(a);
     if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
     let gear = rideGear(a, bareback);
-    if (!gear.ok) {
-      // Pas de filet ni de licol : on lui met celui qui reste à la sellerie, puis on monte (src/sim/gear.js).
-      const tack = tackUpForRide(this.profile, a, { home: this.isHome });
-      if (tack.ok && tack.item) {
-        this.entities.get(a.id)?.applyGear();
-        this.ui.toast(t(GEAR[tack.item]?.type === 'halter' ? 'r_putHalterFirst' : 'actv_putBridleFirst', { name: a.name, g: a.sex }), 3000);
-        gear = rideGear(a, bareback);
-      }
+    // Pas de filet (même avec son licol, ou sellé sans filet) : on lui met celui qui reste à la sellerie, puis on
+    // monte (src/sim/gear.js). Sans filet libre, on monte avec le licol.
+    const tack = tackUpForRide(this.profile, a, { home: this.isHome });
+    if (tack.ok && tack.item) {
+      this.entities.get(a.id)?.applyGear();
+      this.ui.toast(t(GEAR[tack.item]?.type === 'halter' ? 'r_putHalterFirst' : 'actv_putBridleFirst', { name: a.name, g: a.sex }), 3000);
+      gear = rideGear(a, bareback);
     }
     if (!gear.ok) return this.ui.toast(t('r_needBridle', { name: a.name, g: a.sex }), 5000);
     this.bareback = gear.bareback;

@@ -25,16 +25,20 @@ export const DOSE = { min: 100, max: 900, slack: 5, over: 50, step: 10 }; // (ju
 
 // La seringue (en bas) : la bague glisse le long du corps, de DOSE.min à DOSE.max.
 const SYR = { x0: 70, x1: 330, y: 300 };
-// La tête du cheval (à droite), et le coin de sa bouche (la barre) : là où va la seringue.
-const HEAD = { x: 250, y: 150 };
+// La tête du cheval (à droite), et le coin de sa bouche (la barre) : là où va la seringue (et le mors, bridle.js).
+export const HEAD = { x: 250, y: 150 };
+/** bar : le coin de la bouche, sans dents ; teeth : le bout du nez, les dents de devant. */
+export const MOUTH = { bar: { x: HEAD.x - 58, y: HEAD.y + 70 }, teeth: { x: HEAD.x - 96, y: HEAD.y + 78 } };
+/** De combien la tête se relève quand il n'est pas content (annoyed = 1). */
+export const HEAD_LIFT = 18;
 
 export function dewormGame(ctx) {
   const { a, t, fx } = ctx;
   const name = a?.name ?? ctx.name;
   const kg = horseKg(a);
   const col = ctx.col ?? { coat: '#8a5a2b', mane: '#2b1d14', light: '#b07a45', dark: '#5c3a1c' };
-  const bar = { x: HEAD.x - 58, y: HEAD.y + 70 }; // le coin de la bouche
-  const teeth = { x: HEAD.x - 96, y: HEAD.y + 78 }; // le bout du nez, les dents de devant
+  const bar = { ...MOUTH.bar }; // le coin de la bouche
+  const teeth = { ...MOUTH.teeth }; // le bout du nez, les dents de devant
   let stage = 'dose';
   let ring = 300 + Math.round((ctx.rng?.() ?? 0.5) * 300 / 10) * 10; // la bague, au départ
   let dragRing = false;
@@ -211,9 +215,13 @@ export function dewormGame(ctx) {
 
 // ---------------------------------------------------------------- dessins
 
-/** La tête du cheval de profil (le nez à gauche) : aussi pour la ration (ration.js). */
-export function drawHorseHead(g, col, annoyed, grimace, time) {
-  const lift = annoyed * 18;
+/**
+ * La tête du cheval de profil (le nez à gauche) : aussi pour la ration (ration.js) et le filet (bridle.js).
+ * o : { ears: [près, loin] (pliées vers l'avant, 0 à 1 : on dessine alors aussi l'oreille de derrière), earsBack }
+ */
+export function drawHorseHead(g, col, annoyed, grimace, time, o = {}) {
+  const lift = annoyed * HEAD_LIFT;
+  const ear = annoyed > 0 || o.earsBack ? 0.9 : Math.sin(time * 2) * 0.1;
   g.save();
   g.translate(0, -lift);
   // encolure
@@ -232,6 +240,16 @@ export function drawHorseHead(g, col, annoyed, grimace, time) {
   g.moveTo(HEAD.x + 36, HEAD.y - 76);
   g.lineTo(HEAD.x + 150, HEAD.y - 16);
   g.stroke();
+  // (l'autre oreille, derrière la tête)
+  if (o.ears) {
+    g.fillStyle = col.dark ?? col.coat;
+    g.save();
+    g.translate(HEAD.x + 8, HEAD.y - 44);
+    g.rotate(-0.5 + ear - o.ears[1] * 1.1);
+    ellipse(g, 0, -18, 9, 22);
+    g.fill();
+    g.restore();
+  }
   // tête (de profil, le nez à gauche)
   g.fillStyle = col.coat;
   ellipse(g, HEAD.x, HEAD.y, 58, 46, 0.25);
@@ -258,10 +276,9 @@ export function drawHorseHead(g, col, annoyed, grimace, time) {
   circle(g, HEAD.x + 4, HEAD.y - 8, 6);
   g.fill();
   g.fillStyle = col.coat;
-  const ear = annoyed > 0 ? 0.9 : Math.sin(time * 2) * 0.1;
   g.save();
   g.translate(HEAD.x + 28, HEAD.y - 40);
-  g.rotate(-0.3 + ear);
+  g.rotate(-0.3 + ear - (o.ears?.[0] ?? 0) * 1.1);
   ellipse(g, 0, -18, 9, 22);
   g.fill();
   g.restore();

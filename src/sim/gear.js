@@ -484,17 +484,60 @@ export function saddleUp(profile, a, { home = true } = {}) {
   return r;
 }
 
+/**
+ * Un filet libre pour ce cheval (comme freeSaddle) : celui qu'il portait la dernière fois d'abord (a.lastBridle, voir
+ * unbridle), sinon un autre qui lui va (pas la bride s'il n'est pas assez dressé). Son id, sinon null.
+ */
+export function freeBridle(profile, a, { home = true } = {}) {
+  ensureTack(profile);
+  const bridles = Object.keys(GEAR).filter((v) => GEAR[v].type === 'bridle' && !fitReason(v, a) && (a.skills?.obedience ?? 0) >= (GEAR[v].minObedience ?? 0));
+  const pref = a.lastBridle?.item;
+  const order = pref && bridles.includes(pref) ? [pref, ...bridles.filter((v) => v !== pref)] : bridles;
+  const sized = order.find((v) => freeStock(profile, v, sizeFor(v, a)) > 0);
+  if (sized) return sized;
+  if (!home || isAway(profile)) return null;
+  return order.find((v) => (GEAR[v].sizes ?? []).some((sz) => freeStock(profile, v, sz) > 0)) ?? null;
+}
+
+/**
+ * Débrider : le filet retourne à la sellerie (on se souvient duquel, pour le remettre pareil), et il retrouve un
+ * licol s'il en reste un libre. Au box et au pré, jamais de filet : il pourrait s'y accrocher, ou mâchouiller son mors.
+ * Renvoie true s'il avait un filet.
+ */
+export function unbridle(profile, a, { home = true } = {}) {
+  if (!a.gear?.bridle) return false;
+  a.lastBridle = { ...a.gear.bridle };
+  unequip(a, 'bridle');
+  if (!a.gear.halter && owned(profile, 'halter') > inUse(profile, 'halter')) equip(profile, a, 'halter', undefined, { autoSwap: home });
+  return true;
+}
+
+/** Brider : le filet d'avant (ou un libre), dans sa couleur. Renvoie le résultat d'equip. */
+export function bridleUp(profile, a, { home = true } = {}) {
+  const item = freeBridle(profile, a, { home });
+  if (!item) return { ok: false, reason: 'notOwned', item: 'bridle' };
+  const color = a.lastBridle?.item === item ? a.lastBridle.color : undefined;
+  return equip(profile, a, item, color, { autoSwap: home, exact: true });
+}
+
 /** Reste-t-il ici un filet ou un licol libre (rangé, porté par personne) ? */
 export const hasFreeHeadgear = (profile) => ['bridle', 'halter'].some((k) => owned(profile, k) > inUse(profile, k));
 
 /**
- * Avant de monter : un cheval sans filet ni licol reçoit celui qui reste à la sellerie (comme le bouton « Seller »
- * des activités). Avant, « 🏇 Monter » disait seulement « Il faut mettre un filet ou un licol » et l'enfant restait
- * coincée. home : à la maison, la sellière échange la taille gratuitement (un licol cheval devient un licol poney).
+ * Avant de monter : un cheval sans filet reçoit celui qui reste à la sellerie (le sien d'abord, voir bridleUp), même
+ * s'il a son licol ; sans filet libre, on monte avec le licol, et sans licol non plus, on lui met celui qui reste
+ * (comme le bouton « Seller » des activités). Avant, « 🏇 Monter » disait seulement « Il faut mettre un filet ou un
+ * licol » et l'enfant restait coincée. home : à la maison, la sellière échange la taille gratuitement (un licol
+ * cheval devient un licol poney).
  * Renvoie { ok: true, item } (item : ce qu'on vient de lui mettre, null s'il en portait déjà un) ou { ok: false, reason }.
  */
 export function tackUpForRide(profile, a, { home = true } = {}) {
-  if (rideGear(a).ok) return { ok: true, item: null };
+  if (wears(a, 'bridle')) return { ok: true, item: null };
+  if (freeBridle(profile, a, { home })) {
+    const r = bridleUp(profile, a, { home });
+    if (r.ok) return { ok: true, item: r.item, swapped: r.swapped ?? null };
+  }
+  if (rideGear(a).ok) return { ok: true, item: null }; // (pas de filet libre : avec le licol)
   let reason = 'needBridle';
   for (const item of ['bridle', 'halter']) {
     if (owned(profile, item) <= inUse(profile, item)) continue;

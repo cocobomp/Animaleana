@@ -25,6 +25,7 @@ import { pansageGame } from './minigames/pansage.js'; // le pansage complet du c
 import { rationGame } from './minigames/ration.js'; // la ration du cheval : foin, puis un peu de granulés
 import { sellerGame } from './minigames/seller.js'; // seller son cheval : tapis, selle, sangle
 import { dewormGame } from './minigames/deworm.js'; // le vermifuge (carnet de santé du cheval)
+import { bridleGame } from './minigames/bridle.js'; // brider son cheval : le mors, les oreilles, la sous-gorge
 import { drawFact, factIcon } from '../sim/horseFacts.js'; // « 💡 Le savais-tu ? » à la fin des mini-jeux avec un cheval (🃏 cartes)
 
 export const MG_W = 400;
@@ -48,6 +49,7 @@ const GAMES = {
   braid: braidGame, shine: shineGame, bow: bowGame, fluff: fluffGame, // concours de beauté (src/ui/beauty.js)
   saddle: sellerGame, // seller son cheval (src/ui/UI.js : saddleWithGame)
   deworm: dewormGame, // le vermifuge (src/ui/UI.js : dewormWithGame)
+  bridle: bridleGame, // brider, après la selle (src/ui/UI.js : saddleWithGame)
 };
 
 const ICONS = {
@@ -56,6 +58,7 @@ const ICONS = {
   braid: '🎀', shine: '✨', bow: '🎀', fluff: '🧶', // concours de beauté
   saddle: '🏇',
   deworm: '🪱',
+  bridle: '🪢',
 };
 
 /** Ajoute un mini-jeu (ex. séances d'éducation canine, src/ui/minigames/dogTraining.js). */

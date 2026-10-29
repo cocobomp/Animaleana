@@ -21,6 +21,7 @@ import { openActivities } from './activities.js';
 import { TOOLS, toolAtHome } from '../sim/tools.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import { WORMER_COST } from '../sim/horseHealth.js'; // le prix du vermifuge
+import { wears, freeBridle } from '../sim/gear.js'; // brider après la selle
 import { beatRing } from '../sim/posting.js'; // ⬆️ trot enlevé
 import { fmtCross } from '../sim/freeJumps.js'; // ⏱️ le chrono du cross
 import { maybeShowNews } from './news.js'; // 🐴 quoi de neuf ?
@@ -1110,8 +1111,10 @@ export class UI {
   }
 
   /**
-   * Seller son cheval en jouant (tapis, selle, sangle : src/ui/minigames/seller.js), puis, si ride, monter.
-   * Fermé avec ✕ : rien ne change. La note dit comment c'était (message de fin du mini-jeu).
+   * Seller son cheval en jouant (tapis, selle, sangle : src/ui/minigames/seller.js), puis le brider (le mors, les
+   * oreilles, la sous-gorge : src/ui/minigames/bridle.js ; comme au club, le filet en dernier), puis, si ride, monter.
+   * Fermé avec ✕ : rien ne change (le filet fermé avec ✕ : il reste sellé, sans filet). La note dit comment c'était
+   * (message de fin du mini-jeu). Après trois filets mis, « ⏩ Brider vite ».
    */
   async saddleWithGame(a, ride = false) {
     const g = this.game;
@@ -1119,6 +1122,11 @@ export class UI {
     const quality = await runMinigame(this, a, 'saddle');
     if (quality === null) return null;
     if (!g.saddle(a)) return null;
+    if (!wears(a, 'bridle') && freeBridle(g.profile, a, { home: g.isHome })) {
+      const q = await runMinigame(this, a, 'bridle', { quick: (g.profile.stats?.horse_bridle ?? 0) >= 3 });
+      if (q === null) return null;
+      g.bridle(a);
+    }
     if (ride) return g.ride(a);
     return true;
   }

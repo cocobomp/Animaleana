@@ -69,6 +69,7 @@ import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js
 import { remember, anniversaryDue, togetherSince, BOND_MEMORIES } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
 import { collectFact } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
 import { quirksOf, discoverQuirk, spookCause, noteFear, QUIRK_BOND } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
+import { matchyOf } from '../sim/matchy.js'; // 🎨 tout assorti : tapis, guêtres et bombe
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
 import { t, L, getLang, fmtHour } from '../i18n.js';
@@ -1792,16 +1793,20 @@ export class Game {
     return r;
   }
 
-  /** Bombe du cavalier : on la choisit à la sellerie, on la porte quand on monte. */
-  equipHelmet(item, color) {
+  /** Bombe du cavalier : on la choisit à la sellerie, on la porte quand on monte. horse : le cheval de l'ensemble (🎨). */
+  equipHelmet(item, color, horse = this.mainHorse()) {
+    const lv0 = horse ? matchyOf(horse, riderHelmet(this.profile)).level : 0;
     const r = equipHelmet(this.profile, item, color);
     if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`, { item: t(`gear_${item}`) }), 4500);
     this.ui.toast(t('tk_helmetOn', { item: t(`gear_${item}`) }));
     if (this.player.mount) this.player.setHelmet(riderHelmet(this.profile));
+    if (horse) this.matchyNews(horse, lv0);
     return r;
   }
 
   equip(a, item, color, opts = {}) {
+    const mine = a.species === 'horse' && !a.client && !a.guest;
+    const lv0 = mine ? matchyOf(a, riderHelmet(this.profile)).level : 0; // (🎨 son ensemble avant)
     // À la maison, la sellière échange gratuitement la taille si besoin (src/sim/gear.js).
     // opts.exact : CE modèle (boutons des fiches de la sellerie), jamais un autre du même type.
     const r = equip(this.profile, a, item, color, { autoSwap: this.isHome, exact: !!opts.exact });
@@ -1810,7 +1815,20 @@ export class Game {
     if (r.swapped) this.ui.toast(t('tk_swappedAuto', { item: t(`gear_${r.item}`), size: t(`tk_size_${r.swapped}`) }), 4000);
     this.entities.get(a.id)?.applyGear();
     if (this.player.mount?.data === a) this.player.seat();
+    if (mine) this.matchyNews(a, lv0);
     return r;
+  }
+
+  /**
+   * 🎨 Son ensemble vient de monter d'un cran (src/sim/matchy.js) : tapis et jambes de la même couleur, puis ta
+   * bombe aussi. Des étincelles, un petit mot, et la première fois, un souvenir.
+   */
+  matchyNews(a, lv0) {
+    const m = matchyOf(a, riderHelmet(this.profile));
+    if (m.level <= lv0) return;
+    this.entities.get(a.id)?.emit('✨', 6);
+    this.ui.toast(t(m.level === 2 ? 'mx_lvl2' : 'mx_lvl1', { color: t(`col_${m.color}`) }), 5000);
+    this.remember(a, 'firstMatchy');
   }
 
   unequip(a, slot) {
@@ -2190,6 +2208,11 @@ export class Game {
     const w = this.simWeather();
     if (w === 'rain' || w === 'storm') this.remember(a, 'firstRain');
     else if (w === 'snow') this.remember(a, 'firstSnow');
+    // 🎨 en selle avec un ensemble assorti (src/sim/matchy.js) : quelques étincelles (et le défi du jour le compte)
+    if (matchyOf(a, riderHelmet(this.profile)).level >= 1) {
+      addStat(this.profile, 'rideMatchy');
+      e.emit('✨', 2);
+    }
     this.xp('ride');
     this.ui.toast(t(gear.bareback ? 'ridingBareback' : 'ridingHint', { name: a.name, g: a.sex }));
     return r;

@@ -36,6 +36,7 @@ export const MEMORIES = [
   { id: 'quirkSpot', icon: '🤚' }, // 🔍 ce que tu sais de lui (src/sim/horseQuirks.js)
   { id: 'quirkTreat', icon: '🍎' },
   { id: 'quirkFear', icon: '😲' },
+  { id: 'firstMatchy', icon: '🎨' },
   { id: 'year1', icon: '🎂' },
 ];
 /** Une étape du lien (src/sim/animal.js BOND_STAGES) : son souvenir. */

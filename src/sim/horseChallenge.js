@@ -21,6 +21,8 @@ export const CHALLENGES = [
   { id: 'logs2', icon: '⤴️', stat: 'freeJumps', n: 2, ready: (s) => (s.rideCanter ?? 0) >= 1, when: (c) => c.canRide !== false && c.home !== false },
   // (une journée parfaite demande le foin du matin, avant 14 h : tiré l'après-midi, il serait impossible)
   { id: 'perfect1', icon: '⭐', stat: 'perfectDays', n: 1, ready: (s) => (s.horse_feed ?? 0) >= 2, when: (c) => !(c.hour >= 13) },
+  // (🎨 tapis et guêtres de la même couleur, src/sim/matchy.js : seulement si tu l'as déjà fait une fois)
+  { id: 'matchy1', icon: '🎨', stat: 'rideMatchy', n: 1, ready: (s) => (s.rideMatchy ?? 0) >= 1, when: (c) => c.canRide !== false },
 ];
 export const CHALLENGE_REWARD = { coins: 30, bond: 2 };
 

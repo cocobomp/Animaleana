@@ -9,6 +9,7 @@ import {
   wornBy, defaultSize, riderHelmet, sizeFor, swapSize, isAway, atHomeCount,
 } from '../sim/gear.js';
 import { TOOLS, hasTool, toolShown } from '../sim/tools.js';
+import { matchyOf, missingFor } from '../sim/matchy.js'; // 🎨 tout assorti
 import { SPECIES } from '../sim/species.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import { thumb, thumbsFor, photoDouble } from '../game/thumbScenes.js'; // vignettes 3D (src/game/thumbs.js)
@@ -445,5 +446,44 @@ export function animalGearSection(ui, a) {
       ...(spare.length ? [] : home.slice(0, 2)).map((id) => h('button', { class: 'small tk-athome', title: t('gearAtHome'), onClick: () => { g.equip(a, id, colorOf(p, id), { exact: true }); ui.renderPanel(); } },
         `🏠 ${name(id)} · ${t('tk_atHomeRow')}`))))
       : h('p', { class: 'note' }, t('tk_gearNone')),
+    a.species === 'horse' && !a.client && !a.guest ? matchyLine(ui, a) : null,
     h('button', { class: 'small tk-goshop', onClick: () => openTackShop(ui, { tab: firstCat }) }, `🏇 ${t('tk_goShop')}`));
+}
+
+/**
+ * 🎨 Son ensemble (src/sim/matchy.js) : trois pastilles (le tapis, les jambes, ta bombe ; grises tant qu'elles ne sont
+ * pas de la couleur du tapis), un petit mot, et la pièce qui manque : « Mettre » si elle est à toi, sinon sa fiche à
+ * la sellerie, dans la bonne couleur.
+ */
+function matchyLine(ui, a) {
+  const g = ui.game;
+  const p = g.profile;
+  const helmet = riderHelmet(p);
+  const m = matchyOf(a, helmet);
+  const miss = missingFor(p, a, helmet);
+  // (assorti : bravo, puis ce qui manque encore ; sinon ce qui manque, ou rien dans cette couleur)
+  const yay = m.level ? t(m.level === 2 ? 'mx_lvl2' : 'mx_lvl1', { color: t(`col_${m.color}`) }) : null;
+  const need = miss ? t('mx_need', { item: name(miss.item), color: t(`col_${miss.color}`) }) : m.level ? null : t('mx_noColor');
+  const put = () => {
+    if (GEAR[miss.item].type === 'helmet') g.equipHelmet(miss.item, miss.color, a);
+    else g.equip(a, miss.item, miss.color, { exact: true });
+    ui.renderPanel();
+  };
+  const shopIt = () => {
+    shop.color[miss.item] = miss.color;
+    if (GEAR[miss.item].sizes) shop.size[miss.item] = sizeFor(miss.item, a); // (à sa taille)
+    openTackItem(ui, miss.item);
+  };
+  const title = (x) => (x.slot === 'helmet' ? t('tk_tagHead') : t(`tk_slot_${x.slot}`));
+  return h('div', { class: 'mx-line' },
+    h('span', { class: 'mx-dots' }, h('b', {}, t('mx_title')), m.pieces.map((x) => h('span', {
+      class: `mx-dot ${x.ok ? 'ok' : ''}`,
+      style: x.ok ? { background: hex(x.color) } : null,
+      title: title(x),
+      role: 'img',
+      'aria-label': title(x),
+    }))),
+    h('small', { class: 'mx-tip' }, yay ? h('span', { class: 'mx-yay' }, yay) : null, need ? h('span', {}, need) : null),
+    miss ? h('button', { class: `small ${miss.owned ? 'primary' : ''}`, onClick: miss.owned ? put : shopIt },
+      miss.owned ? `${GEAR[miss.item].emoji} ${t('mx_put')}` : `🛒 ${t('tk_buy')}`) : null);
 }

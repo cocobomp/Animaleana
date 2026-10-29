@@ -319,6 +319,8 @@ galops, trots enlevés, troncs sautés, sans-faute, balades, appels, journées p
   **rejoint** celles qu'elle veut (3 au plus en même temps) et les **enlève** quand elle veut, sans rien perdre.
   Une quête qu'on ne peut pas encore faire dit pourquoi (« Il te faut un mâle et une femelle ») ; elle ne se
   suit pas (🧭 ne guide jamais vers l'impossible) et rien n'est imposé.
+  Le thème « Ton cheval » va plus loin que l'histoire : trois journées parfaites, le Galop 1, l'appeler (et qu'il
+  vienne), trotter enlevé, sauter 3 troncs en balade, finir un cross.
 - **Jongler et passer** (0.5), au téléphone comme à l'ordinateur : avec plusieurs quêtes en cours (le chapitre et
   les quêtes rejointes), le suivi à l'écran a un bouton **⇄** (touche **N** au clavier) qui met la suivante devant ;
   ses petits points disent combien il y en a. La bulle d'une quête (toucher son nom) montre **« Tes quêtes : »**,

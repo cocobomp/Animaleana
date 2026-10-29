@@ -62,6 +62,21 @@ describe('ce que ton cheval te demande', () => {
     expect(at(createAnimal({ species: 'dog', sex: 'f', ageDays: 900, rng: seeded('chien') }), 10)).toBe(null);
   });
 
+  it('pas un soin que le jeu refuserait (« il n\'en a pas besoin ») : la bulle passe au suivant, puis revient', () => {
+    const a = horse();
+    a.needs.hunger = 98;
+    expect(at(a, 8).id).toBe('water'); // (le foin du matin : rassasié, refusé)
+    a.needs.thirst = 99; // (il a bu seul à l'abreuvoir du paddock)
+    expect(at(a, 8).id).toBe('brush');
+    a.needs.thirst = 90;
+    expect(at(a, 8).id).toBe('water');
+    for (const k of ['feed', 'water', 'brush', 'ride']) markHorseDay(a, k, 9, DAY);
+    a.needs.affection = 100; // (deux friandises avant le câlin)
+    expect(at(a, 10)).toBe(null);
+    a.needs.affection = 70;
+    expect(at(a, 10)).toMatchObject({ id: 'pet' });
+  });
+
   it('une jument pleine ne se monte pas : pas de travail, un câlin', () => {
     const a = horse('f');
     a.pregnant = { due: 40 };

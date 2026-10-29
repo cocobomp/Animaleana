@@ -8,7 +8,7 @@
 
 import { DAY_TASKS } from './horseDay.js';
 import { keepsMemories } from './memories.js';
-import { canRide } from './animal.js';
+import { canRide, careFull } from './animal.js';
 
 /** À 10 m ; faim ou soif sous 45 ; le foin du soir à partir de 16 h ; le travail de 8 h à 19 h ; la nuit de 21 h à 6 h. */
 export const WISH = { near: 10, hungry: 45, thirsty: 45, eveningHay: 16, workFrom: 8, workTo: 19, nightFrom: 21, nightTo: 6 };
@@ -25,6 +25,8 @@ for (const [id, tasks] of Object.entries({ hay: ['hunger', 'feedAm', 'feedPm'], 
 }
 
 const doneToday = (a, day) => (a.today?.day === day ? a.today.done : NONE);
+// (pas un soin que le jeu refuserait, « il n'en a pas besoin » : il a bu seul à l'abreuvoir… la bulle passe au suivant)
+const asks = (a, done, task, care) => !done.includes(task) && !careFull(a, care);
 
 /**
  * Ce qu'il te demande maintenant : { id ('hay', 'water', 'brush', 'work', 'pet'), icon, task (ce qui l'exauce : 'hunger',
@@ -36,13 +38,13 @@ export function wishOf(a, { day, hour, sleeping = false } = {}) {
   const done = doneToday(a, day);
   const n = a.needs ?? {};
   if ((n.hunger ?? 100) < WISH.hungry) return BY_TASK.hunger;
-  if (hour < MORNING && !done.includes('feedAm')) return BY_TASK.feedAm;
-  if (hour >= WISH.eveningHay && !done.includes('feedPm')) return BY_TASK.feedPm;
+  if (hour < MORNING && asks(a, done, 'feedAm', 'feed')) return BY_TASK.feedAm;
+  if (hour >= WISH.eveningHay && asks(a, done, 'feedPm', 'feed')) return BY_TASK.feedPm;
   if ((n.thirst ?? 100) < WISH.thirsty) return BY_TASK.thirst;
-  if (!done.includes('water')) return BY_TASK.water;
-  if (!done.includes('brush')) return BY_TASK.brush;
+  if (asks(a, done, 'water', 'water')) return BY_TASK.water;
+  if (asks(a, done, 'brush', 'brush')) return BY_TASK.brush;
   if (hour >= WISH.workFrom && hour < WISH.workTo && !done.includes('work') && canRide(a).ok) return BY_TASK.work;
-  if (!done.includes('pet')) return BY_TASK.pet;
+  if (asks(a, done, 'pet', 'pet')) return BY_TASK.pet;
   return null;
 }
 

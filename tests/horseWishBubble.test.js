@@ -48,7 +48,7 @@ function setup({ tutorial = true } = {}) {
   e.root.position.set(0, 0, 0);
   const game = {
     profile: { tutorial: { done: tutorial } }, day: DAY, hour: 8, player: { mount: null }, camera: { fov: 60 },
-    wantedEquipment: () => null, socialMoment() {}, animalsHere: () => [a],
+    wantedEquipment: () => null, socialMoment() {}, animalsHere: () => [a], entities: new Map([[a.id, e]]),
   };
   const ctx = { playerPos: new THREE.Vector3(), entities: [e], game, night: false };
   // (la joueuse reste à « dist » mètres du cheval, qui se promène)
@@ -71,6 +71,7 @@ describe('la bulle de ce qu\'il te demande', () => {
     expect(e.status.visible).toBe(true);
     expect(e.status.material.map).toBe(bubbleTexture('🌾'));
     expect(e.status.scale.x).toBeCloseTo(bubbleScale(60, window.innerHeight)); // (même taille à l'écran, sous l'étiquette du nom)
+    expect(e.statusKey).toBe('hay'); // (l'id du vœu : pas de chaîne refaite à chaque image)
     expect(e.status.material.sizeAttenuation).toBe(false);
     expect(e.status.position.y).toBe(e.label.position.y);
     expect(e.status.center.y).toBeGreaterThan(0.95);
@@ -112,5 +113,22 @@ describe('la bulle de ce qu\'il te demande', () => {
     const t = setup({ tutorial: false });
     t.run(1.5);
     expect(t.e.wish).toBe(null);
+  });
+
+  it('pas de bulle pour le cheval d\'un visiteur (hors de game.entities) ni en vue d\'ensemble', () => {
+    const { a, e, game, run } = setup();
+    run(1.5);
+    expect(e.wish?.id).toBe('hay');
+    game.mgmt = { active: true };
+    run(1.2);
+    expect(e.wish).toBe(null);
+    run(0.05);
+    expect(e.status.visible).toBe(false);
+    game.mgmt.active = false;
+    run(1.2);
+    expect(e.wish?.id).toBe('hay');
+    game.entities.delete(a.id); // (comme le cheval qu'un client amène, src/game/Clients.js)
+    run(1.2);
+    expect(e.wish).toBe(null);
   });
 });

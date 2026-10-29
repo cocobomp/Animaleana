@@ -621,7 +621,7 @@ export class AnimalEntity {
     const base = this.sleeping ? '💤' : this.data.lame && m !== 'sick' ? '🩹' : m === 'sick' ? MOOD_EMOJI.sick : null; // (il boite)
     const wish = base ? null : this.wish; // (triste : sa bulle plutôt que 😢, c'est comme ça qu'on le console)
     const emoji = base ?? (wish ? wish.icon : MOOD_EMOJI[m] ?? null);
-    const key = wish ? `w:${wish.icon}` : emoji;
+    const key = wish ? wish.id : emoji; // (son id : 'hay', 'water'… jamais un emoji ; rien de créé à chaque image)
     const st = this.status;
     if (key !== this.statusKey) {
       this.statusKey = key;
@@ -909,9 +909,10 @@ export class AnimalEntity {
         const rainy = felt === 'rain' || felt === 'storm';
         this.rainWet = Math.max(0, Math.min(0.8, (this.rainWet ?? 0) + (rainy ? 0.05 : -0.01)));
         this.coatCare();
-        // 🫧 Près de toi (10 m), tutoriel fini : sa bulle (src/sim/horseWish.js ; pas sur son dos, ni pendant une activité)
+        // 🫧 Près de toi (10 m), tutoriel fini : sa bulle (src/sim/horseWish.js ; pas sur son dos, ni pendant une activité,
+        // ni en vue d'ensemble ; seulement tes chevaux : pas celui d'un visiteur, qui n'est pas dans game.entities)
         const can = gm?.profile && gm.profile.tutorial?.done !== false && distPlayer < WISH.near && !this.ridden && !this.scripted
-          && gm.player?.mount !== this;
+          && gm.player?.mount !== this && gm.entities?.get(d.id) === this && !gm.mgmt?.active;
         this.wish = can ? wishOf(d, { day: gm.day, hour: gm.hour, sleeping: this.sleeping }) : null;
       }
     }

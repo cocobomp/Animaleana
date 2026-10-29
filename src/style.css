@@ -682,7 +682,8 @@ button.sv-card:hover { border-color: var(--primary); }
   #post-btn, #jump-btn { left: auto; right: calc(92px + var(--safe-r)); bottom: calc(262px + var(--safe-b)); }
 }
 @media (pointer: coarse) and (max-height: 480px) {
-  #post-btn, #jump-btn { right: calc(14px + var(--safe-r)); bottom: calc(232px + var(--safe-b)); width: 70px; height: 70px; }
+  /* (à gauche de la rangée des allures : au-dessus, le suivi de quête le cachait) */
+  #post-btn, #jump-btn { right: calc(232px + var(--safe-r)); bottom: calc(166px + var(--safe-b)); width: 64px; height: 64px; }
 }
 /* Paysage : une rangée à droite, juste au-dessus des boutons de vue (le milieu de l'écran reste au cheval). */
 @media (pointer: coarse) and (max-height: 480px) {

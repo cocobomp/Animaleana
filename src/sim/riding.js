@@ -59,6 +59,10 @@ export function rideEffort(a, gait, dt, trotK = 1) {
     n.grooming = clamp(n.grooming - (gait === 'gallop' ? 0.08 : 0.04) * dt);
     n.thirst = clamp(n.thirst - (gait === 'gallop' ? 0.05 : 0.025) * dt);
   }
+  // La sueur (0 à 1) : sa robe mouillée se voit (src/game/models/horseCoat.js hSweat) ; elle sèche au repos
+  // (src/sim/animal.js tickAnimal), le pansage ou la douche l'enlèvent.
+  const sweat = { trot: 0.003, canter: 0.01, gallop: 0.02 }[gait];
+  if (sweat) a.sweat = Math.min(1, (a.sweat ?? 0) + sweat * dt);
 }
 
 /** Les allures où un écart peut arriver (le cheval avance assez vite pour être surpris). */

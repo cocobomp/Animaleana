@@ -580,6 +580,7 @@ export class AnimalEntity {
     const g = this.data.needs?.grooming ?? 80;
     const dirt = this.data.muddy ? Math.max(0.85, (70 - g) / 50) : Math.max(0, Math.min(1, (55 - g) / 45));
     u.hDirt.value = dirt;
+    if (u.hSweat) u.hSweat.value = Math.min(1, this.data.sweat ?? 0);
     const base = m.userData.rimBase ?? u.hRim.value;
     u.hRim.value = base * (g >= 85 && !this.data.muddy ? 1.3 : 1 - 0.45 * dirt);
   }

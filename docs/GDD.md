@@ -143,7 +143,8 @@ on glisse la seringue dans le coin de sa bouche (là où il n'a pas de dents) et
 ### Les soins se voient sur sa robe (0.5, `src/game/models/horseCoat.js`, AnimalEntity.coatCare)
 Il s'est roulé, ou il n'a pas été pansé depuis longtemps (pansage sous 55) : de la terre sur les jambes et des taches
 brunes sur le corps (plus il est sale, plus il y en a) ; le pansage les enlève. Bien pansé (85 et plus), sa robe est
-plus satinée ; crotté, elle est terne.
+plus satinée ; crotté, elle est terne. Après un galop (ou un long trot), il transpire : son poil mouillé fonce par
+plaques (la sueur monte avec l'effort, sèche en une heure de jeu environ ; le pansage ou la douche l'enlèvent).
 
 ### Ses oreilles (0.5, `src/sim/horseEars.js`)
 Les oreilles du cheval 3D disent comment il va, comme en vrai : en avant (attentif, curieux ; quand tu t'approches,

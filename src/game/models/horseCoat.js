@@ -477,6 +477,11 @@ hEarIn = 0.0;
     float mud = clamp(hDirt * (0.85 * legMud + 0.75 * bodyMud), 0.0, 0.75) * (1.0 - isHoof) * (1.0 - isSkin);
     c = mix(c, vec3(0.13, 0.085, 0.045), mud);
   }
+  // Sueur (hSweat, après le galop) : le poil mouillé est plus foncé, par plaques, sur le corps.
+  if (hSweat > 0.001) {
+    float wet = hSweat * bodyS * (0.25 + 0.75 * smoothstep(0.32, 0.52, hFbm(P * 3.5 + hSeed + 5.0)));
+    c *= mix(1.0, 0.5, clamp(wet, 0.0, 1.0));
+  }
   diffuseColor.rgb = c;
 }`;
 
@@ -666,6 +671,8 @@ export function coatMaterial(look, build, breed = null, real = null) {
     hRimTint: { value: rimTint },
     // (terre sur la robe : 0 propre, 1 crotté — AnimalEntity.coatCare)
     hDirt: { value: 0 },
+    // (sueur : poil mouillé, plus foncé — après un galop ; AnimalEntity.coatCare)
+    hSweat: { value: 0 },
     hSkyRim: gfx.skyRim,
     hFill: gfx.horseFill,
   };

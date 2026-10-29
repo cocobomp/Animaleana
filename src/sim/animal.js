@@ -310,6 +310,7 @@ export function tickAnimal(a, hours, ctx = {}) {
   }
   // Les pieds du cheval (HOOF) : la terre se tasse, puis un caillou… puis un abcès.
   if (a.species === 'horse') {
+    if (a.sweat) a.sweat = Math.max(0, a.sweat - hours * 0.8); // (la sueur sèche en une heure environ)
     const wet = ctx.weather === 'rain' || ctx.weather === 'storm' || ctx.weather === 'snow';
     a.hoofDirt = Math.min(1, (a.hoofDirt ?? 0) + (hours / 24) * (wet ? HOOF.wetPerDay : HOOF.perDay));
     if (a.lame) {
@@ -407,6 +408,7 @@ export function applyCare(a, actionId, quality = 1, opts = {}) {
   if (actionId === 'feed' && a.needs.hunger > 90) a.weight = Math.min(100, a.weight + 2);
   if (care.tiring) a.weight = Math.max(0, a.weight - 2);
   if (actionId === 'brush') delete a.muddy; // (la terre de sa roulade est partie)
+  if (actionId === 'brush' || actionId === 'wash') delete a.sweat; // (les traces de sueur aussi)
   // Panser un cheval, c'est aussi curer ses pieds. opts.hooves (le mini-jeu) : { cleaned, stoneOut } ; sans mini-jeu
   // (soin de groupe, aide), les pieds sont bien curés.
   const unlame = actionId === 'brush' && pickHooves(a, opts.hooves?.cleaned ?? 1, opts.hooves ? !!opts.hooves.stoneOut : true);

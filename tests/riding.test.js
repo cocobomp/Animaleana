@@ -144,3 +144,24 @@ describe('le lien', () => {
     expect(avg(horse({ personality: 'curious', bond: 80 }))).toBeGreaterThan(avg(horse({ personality: 'curious', bond: 5 })) * 1.5);
   });
 });
+
+describe('la sueur', () => {
+  it('au galop il transpire (plus qu\'au trot), au pas non ; elle sèche au repos ; le pansage l\'enlève', async () => {
+    const { rideEffort } = await import('../src/sim/riding.js');
+    const { createAnimal, tickAnimal, applyCare } = await import('../src/sim/animal.js');
+    const { seeded } = await import('../src/sim/rng.js');
+    const a = createAnimal({ species: 'horse', sex: 'f', ageDays: 2000, rng: seeded('sueur') });
+    for (const n of Object.keys(a.needs)) a.needs[n] = 90;
+    rideEffort(a, 'walk', 30);
+    expect(a.sweat ?? 0).toBe(0);
+    rideEffort(a, 'trot', 30);
+    const trot = a.sweat;
+    rideEffort(a, 'gallop', 30);
+    expect(a.sweat - trot).toBeGreaterThan(trot);
+    tickAnimal(a, 0.5, { rng: () => 0.99 });
+    expect(a.sweat).toBeLessThan(0.7);
+    a.sweat = 0.8;
+    applyCare(a, 'brush', 1);
+    expect(a.sweat).toBeUndefined();
+  });
+});

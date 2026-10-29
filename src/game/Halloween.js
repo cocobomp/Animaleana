@@ -97,6 +97,10 @@ export class Halloween {
     this.place = key;
     for (const it of this.items) it.model.removeFromParent();
     this.items = [];
+    if (this.guiding || this.marked) {
+      this.guiding = false;
+      this.pointNearest(); // (ailleurs : plus de flèche)
+    }
     if (!on) return;
     if (!this.mat) {
       const { map, glow } = faceTextures();
@@ -178,6 +182,42 @@ export class Halloween {
     }
   }
 
+  /**
+   * 🧭 « Guide-moi » (fiche du cheval) : la flèche jaune montre la citrouille la plus proche pas encore trouvée, puis
+   * la suivante à chaque trouvaille ; rendue (à la quête) quand la chasse est finie ou qu'on quitte la ferme.
+   */
+  guide(on = true) {
+    this.guiding = on;
+    this.pointNearest();
+  }
+
+  pointNearest() {
+    const g = this.game;
+    const p = g.player.root.position;
+    let best = null;
+    if (this.guiding) {
+      for (const it of this.items) {
+        if (!it.id || it.found) continue;
+        const d = Math.hypot(it.model.position.x - p.x, it.model.position.z - p.z);
+        if (!best || d < best.d) best = { it, d };
+      }
+    }
+    if (best) {
+      this.shown = new THREE.Vector3(best.it.model.position.x, 0, best.it.model.position.z);
+      g.marker?.show(this.shown, { hideNear: 2 });
+      this.marked = true;
+      return true;
+    }
+    this.guiding = false;
+    if (this.marked) {
+      if (g.marker?.target === this.shown) g.marker.hide();
+      if (g.ui?.tutorial) g.ui.tutorial.markerKey = null; // (la flèche de la quête reprend sa place)
+      this.marked = false;
+      this.shown = null;
+    }
+    return false;
+  }
+
   /** Une citrouille trouvée à cheval. */
   found(it) {
     const g = this.game;
@@ -185,6 +225,7 @@ export class Halloween {
     const r = findPumpkin(p, it.id, halloweenYear(), this.items.filter((x) => x.id).length);
     it.found = true;
     it.pop = 1;
+    if (this.guiding) this.pointNearest(); // (la suivante, ou la flèche rendue)
     if (!r.what) return;
     addStat(p, 'pumpkins');
     const e = g.player.mount;

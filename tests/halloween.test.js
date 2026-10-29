@@ -62,7 +62,7 @@ describe('Halloween au poney-club', () => {
     const { t, setLang } = i18n;
     for (const lang of ['fr', 'en']) {
       setLang(lang);
-      for (const k of ['hw_hello', 'hw_onFoot', 'hw_found', 'hw_done', 'hw_doneWorn', 'hw_line', 'hw_lineDone', 'lb_pumpkins']) {
+      for (const k of ['hw_hello', 'hw_onFoot', 'hw_found', 'hw_done', 'hw_doneWorn', 'hw_line', 'hw_lineDone', 'lb_pumpkins', 'hw_guide', 'hw_guiding']) {
         expect(t(k, { n: 3, total: 8, name: 'Étoile' }), `${lang} ${k}`).not.toBe(k);
       }
     }

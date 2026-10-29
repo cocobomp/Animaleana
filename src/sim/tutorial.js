@@ -453,8 +453,8 @@ export const FOLLOW_STEPS = {
   // 📣 l'appeler, ⬆️ trotter enlevé, ⤴️ les troncs, ⏱️ le cross
   callHorse: { target: null, done: questDone },
   doPost: { target: { type: 'gait', id: 'trot' }, done: questDone },
-  doLogs: { target: { type: 'gait', id: 'canter' }, done: questDone, progress: true },
-  doCross: { target: { type: 'gait', id: 'canter' }, done: questDone },
+  doLogs: { target: { type: 'log' }, done: questDone, progress: true }, // (au galop, puis la flèche vers un tronc)
+  doCross: { target: { type: 'log', first: true }, done: questDone }, // (le n° 1, puis les suivants)
   // éducateur canin
   waitClient: { target: { type: 'building', id: 'kennel' }, done: seenAny('panel:dogTrainerChat') },
   acceptClient: { target: { type: 'el', sel: '#panel .dt-accept', fallback: { type: 'building', id: 'kennel' } }, done: questDone },

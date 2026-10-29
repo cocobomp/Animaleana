@@ -463,6 +463,25 @@ export class Tutorial {
         const el = this.sectionButton(spec.h3);
         return el ? { el } : this.resolve(spec.fallback);
       }
+      // ⤴️ Les troncs (src/game/FreeJumps.js) : d'abord le galop, puis la flèche vers un tronc (spec.first : le n° 1,
+      // départ du cross ; pendant le cross, le tronc suivant, comme sa propre flèche)
+      case 'log': {
+        const el = document.querySelector('#gait-pad:not([hidden]) .gait-btn.canter');
+        const pl = g.player;
+        if (el && pl.gaitNow !== 'canter' && pl.gaitNow !== 'gallop') return { el };
+        const fj = g.freeJumps;
+        const logs = fj?.logs ?? [];
+        if (!logs.length) return el ? { el } : {};
+        let o = null;
+        if (fj.cross) o = logs[fj.cross.next];
+        else if (spec.first) o = logs[0];
+        else {
+          const p = pl.position;
+          const far = logs.map((x) => ({ x, d: Math.hypot(x.x - p.x, x.z - p.z) })).filter((x) => x.d > 5).sort((a, b) => a.d - b.d);
+          o = far[0]?.x ?? logs[0];
+        }
+        return o ? { world: { x: o.x, z: o.z }, key: `log:${o.id}`, height: 1.6 } : {};
+      }
       case 'dropping': {
         const pos = g.player.position;
         const poops = [...g.droppingMeshes.values()].filter((m) => m.userData.dropping.kind === 'poop');

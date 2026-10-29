@@ -128,13 +128,16 @@ export function openAnimal(ui, a) {
 
 /** ☀️ La journée de ton cheval (src/sim/horseDay.js) : ce qui est fait aujourd'hui, ce qui reste. */
 /** 🎃 La chasse aux citrouilles (pendant la fête d'Halloween, src/sim/halloween.js). */
-function huntLine(g) {
+function huntLine(ui, g) {
   const v = g.isHome ? huntView(g.profile) : null;
   if (!v) return null;
-  return h('p', { class: `note hw-line${v.done ? ' good' : ''}` }, v.done ? t('hw_lineDone') : t('hw_line', { n: v.n, total: v.total }));
+  const line = h('p', { class: `note hw-line${v.done ? ' good' : ''}` }, v.done ? t('hw_lineDone') : t('hw_line', { n: v.n, total: v.total }));
+  if (v.done) return line;
+  // 🧭 la flèche jaune vers la citrouille la plus proche (src/game/Halloween.js guide)
+  return h('div', {}, line, h('button', { class: 'small hw-guide', onClick: () => { g.halloween?.guide(true); ui.closePanel(); ui.toast(t('hw_guiding'), 4000); } }, `🧭 ${t('hw_guide')}`));
 }
 
-function daySection(g, a) {
+function daySection(ui, g, a) {
   const view = horseDayView(a, g.day, g.hour);
   const perfect = !!a.today?.perfect;
   const mark = (x) => (x.done ? '✅' : x.missed ? '⌛' : x.later ? '🕑' : '⬜');
@@ -144,7 +147,7 @@ function daySection(g, a) {
     `${t('ch_title')} : ${ch.def.icon} ${t(`ch_${ch.def.id}`)} ${ch.done ? '✅' : `(${ch.have}/${ch.def.n})`}`) : null;
   return [h('h3', {}, t('hd_title')), h('p', { class: perfect ? 'note good' : 'note' }, t(perfect ? 'hd_perfect' : 'hd_help')),
     h('ul', { class: 'hd-list' }, view.map((x) => h('li', { class: `hd-row${x.done ? ' done' : x.missed ? ' missed' : ''}` },
-      `${mark(x)} ${x.icon} ${t(`hd_${x.id}`)}`))), chLine, huntLine(g)];
+      `${mark(x)} ${x.icon} ${t(`hd_${x.id}`)}`))), chLine, huntLine(ui, g)];
 }
 
 /** 📒 Le carnet de santé du cheval (src/sim/horseHealth.js) : chaque soin, quand, et le vermifuge à donner ici. */
@@ -261,7 +264,7 @@ function renderAnimal(ui, g, a) {
     careActions.map((x) => btn(`${CARE_ICONS[x] ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => ui.careWithGame(a, x))),
   ));
 
-  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(g, a), ...healthSection(ui, g, a, btn), ...galopSection(ui, g), ...memorySection(a));
+  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(ui, g, a), ...healthSection(ui, g, a, btn), ...galopSection(ui, g), ...memorySection(a));
 
   const acts = [];
   if (sp.actions.includes('play')) acts.push(btn(`⚽ ${t('act_play')}`, () => ui.careWithGame(a, 'play')));

@@ -19,8 +19,8 @@ import { nbsp } from './frame.js';
 export const SELLER_STAGES = ['pad', 'saddle', 'girth'];
 /** Où va la selle (milieu, sur le dos, en fraction de la demi-longueur du corps, vers la tête) : juste derrière le garrot. */
 export const SADDLE_SPOT = { lo: 0.12, hi: 0.38 };
-/** La sangle : 0 lâche → 1,2 bien trop serrée ; juste entre 0,7 et 0,85. */
-export const GIRTH = { lo: 0.7, hi: 0.85, max: 1.2, rate: 0.32, bloat: 0.2, bloatAt: 0.5 };
+/** La sangle : 0 lâche → 1,2 bien trop serrée ; juste entre 0,68 et 0,88. */
+export const GIRTH = { lo: 0.68, hi: 0.88, max: 1.2, rate: 0.25, bloat: 0.2, bloatAt: 0.5 }; // (un peu moins d'une seconde dans la zone juste)
 
 const PAUSE = 0.9;
 const TRAY = { pad: { x: 92, y: 330 }, saddle: { x: 92, y: 330 } };

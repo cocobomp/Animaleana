@@ -740,6 +740,8 @@ export class Player {
     let max = run ? RUN : this.carried ? CARRY : WALK;
     // Balade libre à cheval (pas pendant une activité, ni quand on se laisse guider) : l'allure choisie.
     const freeRide = !!mount && this.gaitEnabled !== false && !this.auto;
+    // (une activité, un trajet, « aller vers » prend les rênes : il relève la tête, il ne broute plus)
+    if (!freeRide && this.grazing) this.stopGrazing();
     if (mount && freeRide) {
       let g = this.gait ?? 'walk';
       // À l'arrêt, pousser le joystick fait repartir au pas.
@@ -847,6 +849,11 @@ export class Player {
     const stride = this.stride ?? 0;
     this.canPost = !this.bareback && !!mount.data.gear?.saddle;
     const trotting = this.canPost && this.gaitNow === 'trot' && this.speed > 0.3;
+    // (à cru, sans étriers : on trotte assis ; on le dit une fois)
+    if (!this.canPost && this.gaitNow === 'trot' && this.speed > 0.3 && !this.sitTrotSaid) {
+      this.sitTrotSaid = true;
+      this.onGait?.(this.gait, 'sitTrot');
+    }
     postTick(this.posting, stride, trotting);
     this.postingNow = trotting && isPosting(this.posting, stride);
     rideEffort(mount.data, this.speed > 0.3 ? this.gaitNow : 'halt', dt, this.postingNow ? POST.save : 1); // (immobile : il souffle)

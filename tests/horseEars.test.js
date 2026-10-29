@@ -27,10 +27,10 @@ describe('les oreilles du cheval', () => {
     expect(earsOf(a)).toEqual({ pose: 'side', why: 'tired' });
   });
 
-  it('couchées en arrière : il a mal, faim, soif, ou il est grognon (le mal d\'abord)', () => {
+  it('couchées en arrière : il a mal ou il est grognon (le mal d\'abord) ; faim ou soif : il guette, oreilles pointées', () => {
     const a = horse();
     a.needs.hunger = 5;
-    expect(earsOf(a)).toEqual({ pose: 'back', why: 'hunger' });
+    expect(earsOf(a)).toEqual({ pose: 'forward', why: 'hunger' });
     a.lame = { cause: 'stone', foot: 1, hours: 0 };
     expect(earsOf(a).why).toBe('pain');
     a.lame = null;
@@ -58,6 +58,6 @@ describe('les oreilles du cheval', () => {
       }
     }
     setLang('fr');
-    expect(t('ears_why_hunger', { name: 'Étoile', g: 'f' })).toBe('Étoile a faim, et ça la rend grognonne !');
+    expect(t('ears_why_hunger', { name: 'Étoile', g: 'f' })).toBe('Étoile a faim : elle te guette et attend son foin.');
   });
 });

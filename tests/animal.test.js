@@ -31,6 +31,16 @@ describe('besoins', () => {
     a.needs.energy = 5;
     expect(applyCare(a, 'play').reason).toBe('tired');
   });
+
+  it('un cheval qui boite se repose : ni longe, ni liberté (le pansage, oui)', () => {
+    const a = adult('horse', 'f');
+    a.needs.exercise = 10;
+    a.lame = { cause: 'stone', foot: 1, hours: 0 };
+    expect(applyCare(a, 'lunge')).toEqual({ ok: false, reason: 'lameWork' });
+    expect(applyCare(a, 'liberty')).toEqual({ ok: false, reason: 'lameWork' });
+    a.needs.hygiene = 10;
+    expect(applyCare(a, 'brush').ok).toBe(true);
+  });
 });
 
 describe('négligence', () => {

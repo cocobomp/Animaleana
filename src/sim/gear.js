@@ -30,6 +30,7 @@ export const COLORS = {
   tan: 0x8e5627, // cuir fauve (western)
   gold: 0xc9a227,
   silver: 0xbfc5cc,
+  orange: 0xe8731c, // (le tapis citrouille d'Halloween)
 };
 
 /** Longueur de la laisse d'un chien (m) : retenue du chien (AnimalEntity) et mou du trait dessiné (Game). */
@@ -64,6 +65,8 @@ export const GEAR = {
   // --- Tapis et amortisseurs (sous la selle)
   saddlePad: { emoji: '🟦', price: 30, species: ['horse'], slot: 'pad', type: 'pad', discipline: 'comfort', sizes: ALL, colors: ['white', ...CLOTH, 'black'], fx: { comfort: 3 } },
   gelPad: { emoji: '🧽', price: 55, species: ['horse'], slot: 'pad', type: 'pad', discipline: 'comfort', sizes: ALL, colors: ['white', 'black', 'grey'], fx: { comfort: 5, trailFatigue: 0.9 } },
+  // (reward : ne se vend pas, se gagne — la chasse aux citrouilles d'Halloween, src/sim/halloween.js ; trim : son liseré)
+  padPumpkin: { emoji: '🎃', price: 40, species: ['horse'], slot: 'pad', type: 'pad', discipline: 'party', sizes: ALL, colors: ['orange'], fx: { comfort: 3 }, reward: 'halloween', trim: 0x1e1b19 },
   // --- Guêtres et cloches
   boots: { emoji: '🧦', price: 50, species: ['horse'], slot: 'legs', type: 'boots', discipline: 'protection', sizes: ALL, colors: ['navy', 'black', 'white', 'red', 'pink', 'sky'], fx: {} }, // +6 % au saut : voir activities.js (guêtres)
   bellBoots: { emoji: '🔔', price: 30, species: ['horse'], slot: 'bells', type: 'bells', discipline: 'protection', sizes: ALL, colors: ['black', 'navy', 'purple', 'pink'], fx: { jump: 0.03 } },
@@ -90,7 +93,7 @@ export const GEAR = {
 export const TACK_CATEGORIES = [
   { id: 'saddle', emoji: '🏇', items: ['saddle', 'saddleDressage', 'saddleJump', 'saddleTrail', 'saddleWestern', 'saddlePony', 'saddleRace'] },
   { id: 'bridle', emoji: '🪢', items: ['bridle', 'bridleOlive', 'hackamore', 'doubleBridle'] },
-  { id: 'pad', emoji: '🟦', items: ['saddlePad', 'gelPad'] },
+  { id: 'pad', emoji: '🟦', items: ['saddlePad', 'gelPad', 'padPumpkin'] },
   { id: 'legs', emoji: '🧦', items: ['boots', 'bellBoots'] },
   { id: 'blanket', emoji: '🧣', items: ['blanketSummer', 'blanketRain', 'blanket', 'flyMask'] },
   { id: 'halter', emoji: '🔗', items: ['halter', 'halterLeather', 'halterRope'] },
@@ -273,10 +276,22 @@ export function stockOf(profile, id) {
 }
 
 /** Acheter un objet (dans une taille). Gratuit en bac à sable. En voyage, il va dans le coffre : il est là. */
+/** Un objet gagné (pas acheté) : rangé dans la sellerie, à la taille donnée. */
+export function giveGear(profile, item, size = defaultSize(item)) {
+  ensureTack(profile);
+  const def = GEAR[item];
+  if (!def) return false;
+  profile.items = profile.items ?? {};
+  const key = stockKey(item, def.sizes ? size : null);
+  profile.items[key] = (profile.items[key] ?? 0) + 1;
+  return true;
+}
+
 export function buyGear(profile, item, size = defaultSize(item)) {
   ensureTack(profile);
   const def = GEAR[item];
   if (!def) return { ok: false, reason: 'unknown' };
+  if (def.reward) return { ok: false, reason: 'reward' }; // (il se gagne)
   if (def.sizes && !def.sizes.includes(size)) return { ok: false, reason: 'noSize' };
   if (!spend(profile, gearPrice(item, size))) return { ok: false, reason: 'money' };
   profile.items = profile.items ?? {};

@@ -50,10 +50,10 @@ import { addXp, isUnlocked, levelOf, UNLOCKS } from '../sim/progress.js';
 import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone } from '../sim/droppings.js';
 import { enclosure } from './nav.js';
 import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
-import { healthDay, noteHealth, WORMER_COST } from '../sim/horseHealth.js'; // le carnet de santé du cheval
+import { healthDay, noteHealth, WORMER_COST, WORMER_LOW_AGAIN, HEALTH_PLAN } from '../sim/horseHealth.js'; // le carnet de santé du cheval
 import { markHorseDay } from '../sim/horseDay.js'; // la journée de ton cheval
 import { galopLevel, nextGalop, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
-import { answerCall, cameWhenCalled } from '../sim/horseCall.js'; // 📣 appeler ton cheval
+import { CALL, answerCall, cameWhenCalled } from '../sim/horseCall.js'; // 📣 appeler ton cheval
 import { tapPost, postMilestone } from '../sim/posting.js'; // ⬆️ trot enlevé
 import { todayChallenge, challengeJustDone, CHALLENGE_REWARD } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
 import {
@@ -63,6 +63,8 @@ import {
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
 import { FreeJumps } from './FreeJumps.js'; // ⤴️ sauter des troncs en balade libre
+import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au poney-club (fin octobre)
+import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
 import { t, L, getLang, fmtHour } from '../i18n.js';
@@ -154,6 +156,7 @@ export class Game {
     this.clients = new Clients(this); // visiteurs, animaux confiés, métiers
     this.activities = new Activities(this);
     this.freeJumps = new FreeJumps(this); // ⤴️ les troncs du chemin de balade
+    this.halloween = new Halloween(this); // 🎃 citrouilles-lanternes et chasse aux citrouilles
     this.beauty = new Beauty(this); // concours de beauté (game.beauty)
     this.dogTrainer = new DogTrainer(this);
     this.trailGuide = new TrailGuide(this); // 🧭 guide de randonnée
@@ -596,6 +599,7 @@ export class Game {
       if (!m) return;
       if (why === 'tired' || why === 'exhausted') this.ui.toast(t(`ride_${why}`, { name: m.name, g: m.sex }), 4500);
       else if (why === 'graze') this.ui.toast(t('ride_graze', { name: m.name, g: m.sex }), 6000);
+      else if (why === 'sitTrot') this.ui.toast(t('ride_sitTrot', { name: m.name, g: m.sex }), 6000);
       else if (why === 'spook') {
         this.ui.toast(t('ride_spook', { name: m.name, g: m.sex, what: t(`ride_spookWhat${Math.floor(Math.random() * 4)}`) }), 5000);
         audio.animal('horse', 'sad', m.id); // (il s'ébroue)
@@ -627,6 +631,7 @@ export class Game {
   }
 
   stop() {
+    this.freeJumps?.cancel(); // (cross en cours : arrêté, sa flèche retirée)
     this.tasks.clear();
     this.mgmt.stop();
     this.activities.abort();
@@ -704,6 +709,7 @@ export class Game {
     const p = this.player.position;
     if (w.snowy) return 'snow';
     if (w.waterLevel !== null && w.waterLevel !== undefined && w.heightAt(p.x, p.z) < w.waterLevel + 0.9) return 'sand';
+    if (inShowground(p.x, p.z)) return 'sand'; // (la carrière : le cheval n'y broute pas, les pas sonnent sur le sable)
     return (w.dirtAt?.(p.x, p.z) ?? 0) > 0.5 ? 'dirt' : 'grass';
   }
 
@@ -880,6 +886,7 @@ export class Game {
    * (récompense, petit mot, statistique perfectDays).
    */
   markHorseDay(a, kind) {
+    if (a.species === 'horse' && !a.client && !a.guest) this.lastHorseId = a.id; // (le défi du jour : src/sim/horseChallenge.js)
     const stage0 = bondStage(a);
     const r = markHorseDay(a, kind, this.hour, this.day);
     this.bondNews(a, stage0);
@@ -901,15 +908,30 @@ export class Game {
   }
 
   /** 🎯 Le défi du jour (src/sim/horseChallenge.js) : annoncé le matin, fêté quand il est réussi. */
+  /** Ce qui rend un défi possible aujourd'hui, ici (src/sim/horseChallenge.js CHALLENGES.when). */
+  challengeCtx() {
+    const p = this.profile;
+    const here = p.animals.filter((a) => a.species === 'horse' && !a.client && !a.guest && a.location === p.place);
+    return { hour: this.hour, home: this.isHome, canRide: here.some((a) => canRide(a).ok) };
+  }
+
   challengeTick() {
     const p = this.profile;
-    const horse = p.animals.find((a) => a.species === 'horse' && !a.client && !a.guest);
-    const c = todayChallenge(p, this.day, !!horse);
+    const mine = p.animals.filter((a) => a.species === 'horse' && !a.client && !a.guest);
+    if (!mine.length) return;
+    const here = mine.filter((a) => a.location === p.place);
+    const c = todayChallenge(p, this.day, true, this.challengeCtx());
     if (!c) return;
+    // (le lien gagné va au cheval monté, sinon au dernier dont tu t'es occupé)
+    const mounted = this.player?.mount?.data;
+    const horse = (mounted && mine.includes(mounted) ? mounted : null)
+      ?? mine.find((a) => a.id === this.lastHorseId) ?? here[0] ?? mine[0];
     if (c.fresh && p.tutorial?.done !== false) this.ui.toast(t('ch_new', { what: t(`ch_${c.def.id}`) }), 7000);
     if (!challengeJustDone(p, this.day)) return;
     earn(p, CHALLENGE_REWARD.coins);
+    const s0 = bondStage(horse);
     horse.bond = Math.min(100, (horse.bond ?? 0) + CHALLENGE_REWARD.bond);
+    this.bondNews(horse, s0);
     addStat(p, 'challenges');
     this.entities.get(horse.id)?.emit('🎯', 2);
     audio.ui('coin');
@@ -923,14 +945,29 @@ export class Game {
     if (now === before || a.client || a.guest) return;
     const order = ['new', 'trust', 'love', 'best'];
     if (order.indexOf(now) < order.indexOf(before)) return;
+    // (un soin qui finit aussi la journée parfaite le dirait deux fois : une seule)
+    this.bondShown = this.bondShown ?? new Map();
+    if (this.bondShown.get(a.id) === now) return;
+    this.bondShown.set(a.id, now);
     this.entities.get(a.id)?.emit('💞', 5);
     this.ui.toast(t(`bondUp_${now}`, { name: a.name, g: a.sex }), 7000);
   }
 
-  /** Le vermifuge (carnet de santé, dans la fiche du cheval). */
-  deworm(a) {
+  /**
+   * Le vermifuge (carnet de santé, dans la fiche du cheval). dose : ce que dit le mini-jeu ('low' | 'just' | 'high').
+   * Sous-dosé : noté, mais à refaire bientôt (dans WORMER_LOW_AGAIN jours), et pas compté pour le Galop 3.
+   */
+  deworm(a, dose = 'just') {
     if (!canAfford(this.profile, WORMER_COST)) return this.ui.toast(t('r_money'));
     spend(this.profile, WORMER_COST);
+    if (dose === 'low') {
+      noteHealth(a, 'worm', this.day);
+      a.healthLog.worm -= HEALTH_PLAN.worm.every - WORMER_LOW_AGAIN; // (le prochain revient plus tôt)
+      this.entities.get(a.id)?.emit('😝', 2);
+      this.ui.toast(t('wormedLow', { name: a.name, g: a.sex, n: WORMER_LOW_AGAIN }), 6000);
+      this.save();
+      return true;
+    }
     noteHealth(a, 'worm', this.day);
     addStat(this.profile, 'horse_deworm'); // (Galop 3)
     this.entities.get(a.id)?.emit('😝', 2);
@@ -1087,6 +1124,7 @@ export class Game {
       this.tasks?.update();
       this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
       this.freeJumps.update(wdt); // ⤴️ en balade libre, le saut d'un tronc (même pose)
+      this.halloween.update(wdt); // 🎃 (pendant la fête)
     }
     this.player.afterSessions?.(); // rênes : à la place finale du cheval et du cavalier (saut soulevé)
     if (mgmt) this.mgmt.update(dt, ctrl);
@@ -1436,12 +1474,19 @@ export class Game {
         break;
       }
       const before = { ...a.needs };
+      const stage0 = bondStage(a);
       const res = applyCare(a, action, quality);
       if (res.ok) {
         if (n === 0) this.ui.showDeltas(a, before);
         spend(this.profile, CARE[action].cost);
         addStat(this.profile, action);
-        if (a.species === 'horse') addStat(this.profile, `horse_${action}`); // (l'histoire de ton premier cheval)
+        if (res.unlame) this.ui.toast(t('unlame', { name: a.name, g: a.sex }), 6000); // (pieds curés : le caillou est parti)
+        this.bondNews(a, stage0);
+        // (l'histoire de ton premier cheval, sa journée : tes chevaux, pas ceux qu'on te confie)
+        if (a.species === 'horse' && !a.client && !a.guest) {
+          addStat(this.profile, `horse_${action}`);
+          this.markHorseDay(a, action);
+        }
         this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️', 2);
         n++;
       } else reasons.add(res.reason);
@@ -1697,7 +1742,7 @@ export class Game {
       return null;
     }
     this.entities.get(a.id)?.applyGear();
-    if (a.species === 'horse') addStat(this.profile, 'horse_saddle'); // (Galop 2)
+    if (a.species === 'horse' && !a.client && !a.guest) addStat(this.profile, 'horse_saddle'); // (Galop 2 : tes chevaux)
     this.save();
     return r;
   }
@@ -1920,6 +1965,7 @@ export class Game {
     if (careFull(a, action)) return { ok: false, reason: 'full' };
     if (care.tiring && a.needs.energy < 15) return { ok: false, reason: 'tired' };
     if (care.tiring && a.sick) return { ok: false, reason: 'sick' };
+    if (care.tiring && a.lame) return { ok: false, reason: 'lameWork' };
     return { ok: true };
   }
 
@@ -1949,8 +1995,11 @@ export class Game {
     }
     spend(this.profile, care.cost);
     addStat(this.profile, action);
-    if (a.species === 'horse') addStat(this.profile, `horse_${action}`); // (l'histoire de ton premier cheval)
-    if (a.species === 'horse') this.markHorseDay(a, action);
+    // (l'histoire de ton premier cheval, sa journée, les Galops : tes chevaux, pas ceux qu'on te confie)
+    if (a.species === 'horse' && !a.client && !a.guest) {
+      addStat(this.profile, `horse_${action}`);
+      this.markHorseDay(a, action);
+    }
     this.bondNews(a, stage0);
     this.xp('care');
     this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
@@ -2178,10 +2227,17 @@ export class Game {
    * vient vers toi au trot (le lien grandit un peu), sinon il te regarde et reste là.
    */
   callHorse(a) {
+    if (this.blockedByPause()) return null;
     const e = this.entities.get(a.id);
     if (!e || a.location !== this.profile.place || this.player.mount === e) return null;
     const pp = this.player.position;
     const dist = Math.hypot(e.position.x - pp.x, e.position.z - pp.z);
+    const p0 = { name: a.name, g: a.sex };
+    // (il arrive déjà : rappeler ne compte pas une deuxième fois)
+    if (e.comeTrot && dist >= CALL.near) {
+      this.ui.toast(t('call_coming', p0), 4000);
+      return 'coming';
+    }
     const busy = e.ridden || e.scripted || e.herdCtrl || e.posing || a.following;
     const answer = busy ? 'near' : answerCall(a, { dist, sleeping: e.sleeping });
     const p = { name: a.name, g: a.sex };
@@ -2189,7 +2245,9 @@ export class Game {
     if (answer === 'come' && e.comeTo(pp, dist, true)) {
       e.speak('happy', dist);
       e.emit('❗', 1.5);
+      const s0 = bondStage(a);
       const grew = cameWhenCalled(a, this.day);
+      this.bondNews(a, s0);
       this.ui.toast(t(grew ? 'call_comeBond' : 'call_come', p), 5000);
       addStat(this.profile, 'horse_came');
       return 'come';

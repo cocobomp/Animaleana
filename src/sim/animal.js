@@ -392,6 +392,7 @@ export function applyCare(a, actionId, quality = 1, opts = {}) {
   if (careFull(a, actionId)) return { ok: false, reason: 'full' };
   if (care.tiring && a.needs.energy < 15) return { ok: false, reason: 'tired' };
   if (care.tiring && a.sick) return { ok: false, reason: 'sick' };
+  if (care.tiring && a.lame) return { ok: false, reason: 'lameWork' }; // (il boite : ni longe, ni liberté)
   const bonus = actionId === 'pet' && a.personality === 'cuddly' ? 1.5 : 1;
   for (const [n, v] of Object.entries(care.needs)) {
     a.needs[n] = clamp(a.needs[n] + v * (v > 0 ? bonus * (0.4 + 0.6 * quality) : 1));

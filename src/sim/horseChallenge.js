@@ -5,28 +5,34 @@
 //
 // Dans le profil (sauvegardé) : profile.challenge = { day, id, base (la statistique au début du jour), done }.
 
-/** stat : la statistique du profil qui compte ; n : combien de plus aujourd'hui ; ready : déjà possible pour toi. */
+/**
+ * stat : la statistique du profil qui compte ; n : combien de plus aujourd'hui ; ready : déjà possible pour toi ;
+ * when : possible aujourd'hui, là où tu es (ctx : { hour, home (à ta ferme : les troncs y sont), canRide (un de tes
+ * chevaux peut être monté : pas boiteux, pas malade…) } ; un champ absent ne bloque rien).
+ */
 export const CHALLENGES = [
   { id: 'pet3', icon: '❤️', stat: 'horse_pet', n: 3, ready: () => true },
   { id: 'brush1', icon: '🪮', stat: 'horse_brush', n: 1, ready: () => true },
   { id: 'treat2', icon: '🍎', stat: 'horse_treat', n: 2, ready: () => true },
-  { id: 'ride2', icon: '🏇', stat: 'rides', n: 2, ready: (s) => (s.rides ?? 0) >= 1 },
-  { id: 'canter1', icon: '🐎', stat: 'rideCanter', n: 1, ready: (s) => (s.rides ?? 0) >= 1 },
+  { id: 'ride2', icon: '🏇', stat: 'rides', n: 2, ready: (s) => (s.rides ?? 0) >= 1, when: (c) => c.canRide !== false },
+  { id: 'canter1', icon: '🐎', stat: 'rideCanter', n: 1, ready: (s) => (s.rides ?? 0) >= 1, when: (c) => c.canRide !== false },
   { id: 'call1', icon: '📣', stat: 'horse_came', n: 1, ready: (s) => (s.horse_pet ?? 0) >= 3 },
-  { id: 'post1', icon: '⬆️', stat: 'risingTrot', n: 1, ready: (s) => (s.horse_saddle ?? 0) >= 1 },
-  { id: 'logs2', icon: '⤴️', stat: 'freeJumps', n: 2, ready: (s) => (s.rideCanter ?? 0) >= 1 },
-  { id: 'perfect1', icon: '⭐', stat: 'perfectDays', n: 1, ready: (s) => (s.horse_feed ?? 0) >= 2 },
+  { id: 'post1', icon: '⬆️', stat: 'risingTrot', n: 1, ready: (s) => (s.horse_saddle ?? 0) >= 1, when: (c) => c.canRide !== false },
+  { id: 'logs2', icon: '⤴️', stat: 'freeJumps', n: 2, ready: (s) => (s.rideCanter ?? 0) >= 1, when: (c) => c.canRide !== false && c.home !== false },
+  // (une journée parfaite demande le foin du matin, avant 14 h : tiré l'après-midi, il serait impossible)
+  { id: 'perfect1', icon: '⭐', stat: 'perfectDays', n: 1, ready: (s) => (s.horse_feed ?? 0) >= 2, when: (c) => !(c.hour >= 13) },
 ];
 export const CHALLENGE_REWARD = { coins: 30, bond: 2 };
 
 export const challengeDef = (id) => CHALLENGES.find((c) => c.id === id) ?? null;
 
-/** Les défis possibles pour toi (d'après ce que tu as déjà fait). */
-export const readyChallenges = (profile) => CHALLENGES.filter((c) => c.ready(profile.stats ?? {}));
+/** Les défis possibles pour toi (d'après ce que tu as déjà fait), aujourd'hui, là où tu es (ctx : voir CHALLENGES). */
+export const readyChallenges = (profile, ctx = {}) =>
+  CHALLENGES.filter((c) => c.ready(profile.stats ?? {}) && (!c.when || c.when(ctx)));
 
 /** Le défi du jour day (tiré au hasard, mais toujours le même pour ce jour ; jamais celui d'hier si possible). */
-export function pickChallenge(profile, day) {
-  const list = readyChallenges(profile);
+export function pickChallenge(profile, day, ctx = {}) {
+  const list = readyChallenges(profile, ctx);
   if (!list.length) return null;
   const seed = (Math.imul(day + 7, 2654435761) >>> 0) + (profile.name?.length ?? 0) * 97;
   let c = list[seed % list.length];
@@ -36,14 +42,14 @@ export function pickChallenge(profile, day) {
 }
 
 /**
- * Le défi d'aujourd'hui (un nouveau chaque jour). Renvoie { def, have, done, fresh (il vient d'arriver) } ou null
+ * Le défi d'aujourd'hui (un nouveau chaque jour, tiré d'après ctx : voir CHALLENGES). Renvoie { def, have, done, fresh (il vient d'arriver) } ou null
  * (pas de cheval : pas de défi).
  */
-export function todayChallenge(profile, day, hasHorse = true) {
+export function todayChallenge(profile, day, hasHorse = true, ctx = {}) {
   if (!hasHorse) return null;
   let fresh = false;
   if (!profile.challenge || profile.challenge.day !== day || !challengeDef(profile.challenge.id)) {
-    const c = pickChallenge(profile, day);
+    const c = pickChallenge(profile, day, ctx);
     if (!c) return null;
     profile.challenge = { day, id: c.id, base: profile.stats?.[c.stat] ?? 0, done: false };
     fresh = true;

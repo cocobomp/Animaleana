@@ -348,8 +348,10 @@ export class UI {
       const text = c ? `🏇 ⏱️ ${fmtCross(c.t)} · ${t('cross_chip', { n: c.next, total: g.freeJumps.logs.length })}` : rc.dataset.base;
       if (rc.firstChild.textContent !== text) rc.firstChild.textContent = text;
     }
-    // ⤴️ Le bouton « Sauter » (au galop, un tronc devant)
+    // ⤴️ Le bouton « Sauter » (au galop, un tronc devant) : orange en approche, vert au bon moment
     const jump = !!g?.freeJumps?.canJump() && !this.isBlocking();
+    const nowJ = jump && !!g.freeJumps.jumpNowWindow();
+    if (this.jumpBtn.classList.contains('now') !== nowJ) this.jumpBtn.classList.toggle('now', nowJ);
     if (this.jumpBtn.hidden === jump) {
       this.jumpBtn.hidden = !jump;
       if (jump) {
@@ -1125,9 +1127,10 @@ export class UI {
     const g = this.game;
     if (g.blockedByPause()) return null;
     if (!canAfford(g.profile, WORMER_COST)) return this.toast(t('r_money'));
-    const quality = await runMinigame(this, a, 'deworm');
+    const opts = {}; // (le mini-jeu y dit la dose : opts.out.dose, 'low' | 'just' | 'high')
+    const quality = await runMinigame(this, a, 'deworm', opts);
     if (quality === null) return null;
-    return g.deworm(a);
+    return g.deworm(a, opts.out?.dose ?? 'just');
   }
 
   /** Tonte ou traite (mini-jeu aussi). */

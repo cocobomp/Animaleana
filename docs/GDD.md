@@ -67,7 +67,7 @@ réussite au dressage…).
   raccourcit les rênes : une allure, ou avancer un moment, et il repart.
 - **Ses pieds** (`src/sim/animal.js` HOOF) : chaque jour, de la terre se tasse dans ses sabots (plus vite sous la
   pluie). Pas curés pendant trois jours environ, un caillou s'y coince et il **boite** (🩹 au-dessus de lui, il
-  marche doucement, on ne le monte plus, un message le dit). Le cure-pied du pansage enlève la terre ; le caillou est
+  marche doucement, on ne le monte plus, ni longe ni liberté : il se repose ; un message le dit). Le cure-pied du pansage enlève la terre ; le caillou est
   dans le pied qui boite (la consigne le nomme) : l'enlever, et il ne boite plus. Le vétérinaire aussi. Laissé deux
   jours, le caillou fait un abcès : il est malade (vétérinaire). Les soins sans mini-jeu (pour tous les chevaux, les
   aides) curent les pieds aussi.
@@ -127,18 +127,25 @@ activité) et ❤️ un câlin. Tout coché : « 🌟 Journée parfaite » (lien
 Chaque jour de jeu, un petit défi avec ton cheval, tiré parmi ceux que tu sais déjà faire : le caresser 3 fois, le
 panser, 2 friandises, le monter 2 fois, galoper, qu'il vienne à ton appel, trotter enlevé (8 de suite), sauter 2
 troncs, une journée parfaite. Annoncé par un petit mot, affiché dans « ☀️ Sa journée » (où tu en es), compté depuis le
-début du jour. Réussi : 30 🪙 (en gestion) et un peu de lien (+2) ; jamais le même défi deux jours de suite.
+début du jour. Réussi : 30 🪙 (en gestion) et un peu de lien (+2) au cheval monté (sinon au dernier dont tu t'es
+occupé) ; jamais le même défi deux jours de suite. Jamais un défi impossible aujourd'hui : pas de défi à cheval si
+aucun de tes chevaux ne peut être monté (il boite, il est malade…), pas de troncs loin de la ferme, pas de journée
+parfaite tirée l'après-midi (le foin du matin est passé).
 
 ### Le carnet de santé du cheval (0.5, `src/sim/horseHealth.js`)
-Comme pour un vrai cheval (raccourci dans le temps du jeu) : 🪱 vermifuge tous les 20 jours (bouton dans sa fiche,
+Comme pour un vrai cheval, mais raccourci dans le temps du jeu (le carnet donne aussi les vrais rythmes : vermifuge 2
+à 4 fois par an après une analyse de crottin, vaccins et dents une fois par an, maréchal-ferrant toutes les 6 à 8
+semaines) : 🪱 vermifuge tous les 20 jours (bouton dans sa fiche,
 12 🪙), 💉 vaccins et 🦷 dents tous les 60 jours (contrôlés à chaque visite chez le vétérinaire), 🔨 maréchal-ferrant
 tous les 14 jours (« Ferrer »). Dans sa fiche, « 📒 Carnet de santé » dit pour chaque soin s'il est à jour, pour
 quand, ou en retard. Le jour venu, un rappel. En retard : sans vermifuge il maigrit et perd de la santé, les dents
 mal contrôlées le font maigrir (il mâche mal), sans vaccin il attrape plus facilement la grippe, et des fers usés
 depuis 3 jours finissent par tomber (il boite : on le ferre). Bien suivi : rien de tout ça.
 Le vermifuge est un mini-jeu (`src/ui/minigames/deworm.js`) : on règle la bague de la seringue sur son poids
-(environ 250 kg pour un poney, 500 pour un cheval, 750 pour un cheval de trait, selon qu'il est maigre ou rond), puis
-on glisse la seringue dans le coin de sa bouche (là où il n'a pas de dents) et on pousse toute la pâte.
+(environ 250 kg pour un poney, 500 pour un cheval, 750 pour un cheval de trait, selon qu'il est maigre ou rond) : son
+poids ou un peu plus (on arrondit au-dessus, jusqu'à 75 kg de plus), jamais moins (ça marche mal et les vers
+s'habituent au produit) ; puis on glisse la seringue dans le coin de sa bouche (là où il n'a pas de dents) et on pousse
+toute la pâte. Raté (moins de 2 étoiles) : ça ne compte pas, on recommence (la pâte n'est pas payée).
 
 ### Les soins se voient sur sa robe (0.5, `src/game/models/horseCoat.js`, AnimalEntity.coatCare)
 Il s'est roulé, ou il n'a pas été pansé depuis longtemps (pansage sous 55) : de la terre sur les jambes et des taches
@@ -149,8 +156,9 @@ Sous la pluie, dehors et sans couverture imperméable, il est mouillé de la mê
 
 ### Ses oreilles (0.5, `src/sim/horseEars.js`)
 Les oreilles du cheval 3D disent comment il va, comme en vrai : en avant (attentif, curieux ; quand tu t'approches,
-il les pointe vers toi), sur le côté (il somnole, il est fatigué), couchées en arrière (il a mal, faim, soif, ou il est
-grognon). Sa fiche le dit aussi : « 👂 Oreilles couchées en arrière : Étoile a faim… ». (Question du Galop 1.)
+il les pointe vers toi ; s'il a faim ou soif, il te guette en attendant son foin), sur le côté (il somnole, il est
+fatigué), couchées en arrière (il a mal, ou il est grognon). Sa fiche le dit aussi : « 👂 Oreilles en avant : Étoile a
+faim : elle te guette… ». (Question du Galop 1.)
 
 ### La ration du cheval (0.5, `src/ui/minigames/ration.js`)
 « Nourrir » le cheval est un mini-jeu en deux temps, comme en vrai : d'abord bien remplir son filet à foin (il mange
@@ -159,31 +167,46 @@ du foin presque toute la journée : au moins 75 %), puis une petite mesure de gr
 mal au ventre (les coliques : malade, « ventre », le vétérinaire le soigne).
 
 ### Sauter en balade (0.5, `src/sim/freeJumps.js`, `src/game/FreeJumps.js`)
-À la ferme, quatre troncs couchés en travers du chemin de balade (un tronçon sur deux). Au galop, bien droit, à moins
-de 12 m : un bouton orange « ⤴️ Sauter » (Espace). Appel entre 3,6 et 0,4 m du tronc, idéal à 1,8 m : un beau saut
-(⭐) ; rien touché, lancé au galop, il saute tout seul au dernier moment (moins bien). Au trot, il l'enjambe d'un
-petit bond ; au pas, il passe tranquillement. Pendant une activité ou une balade guidée, les troncs sont rangés.
+À la ferme, quatre troncs couchés en travers du chemin de balade (un tronçon sur deux), chacun avec un piquet numéroté
+(l'ordre du cross). Le premier galop à la ferme, un petit mot dit où ils sont. Au galop (c'est l'allure qui compte :
+un poney au galop saute, un cheval de trait au trot enjambe), bien droit, à moins de 12 m : un bouton orange
+« ⤴️ Sauter » (Espace). Appel entre 3,6 et 0,4 m du tronc, idéal à 1,8 m : un beau saut (⭐) ; trop tôt, le jeu le
+dit (« le tronc est à 6 m ») ; rien touché, lancé au galop, il saute tout seul au dernier moment (moins bien). Au
+trot, il l'enjambe d'un petit bond ; au pas, il passe tranquillement. Pendant une activité ou une balade guidée, les troncs sont rangés.
 Le saut reprend celui des séances d'obstacles (bascule, membres repliés, cavalier en suspension) ; chaque saut
 entraîne un peu le cheval (+0,2 à +0,4 en saut). Ils se sautent dans les deux sens.
 Un cheval pas encore habitué à sauter (compétence de saut sous 20) pile parfois devant le tronc (≈ 24 % à 10, deux
 fois moins bien appelé) : il s'arrête net et recule ; les leçons de saut et les troncs sautés l'habituent.
 ⏱️ **Le cross** : sauter le premier tronc lance le chrono ; la flèche jaune montre le suivant, dans l'ordre du chemin ;
 le dernier sauté, c'est fini (temps, record gardé, « Cross terminés » et « Record du cross » dans le carnet du
-cavalier). Un tronc hors de l'ordre ne compte pas (le jeu le dit) ; descendre de cheval ou plus de 5 minutes : arrêté.
+cavalier). Un tronc hors de l'ordre ne compte pas (le jeu le dit ; sauter un autre tronc que le n° 1 sans cross en
+cours explique comment le lancer) ; descendre de cheval, une activité, un voyage ou plus de 5 minutes : arrêté
+(aller quelque part en touchant le sol, à cheval, ne l'arrête pas).
 
 ### Le trot enlevé (0.5, `src/sim/posting.js`)
 À cheval en balade libre, en selle (avec des étriers), au trot : un gros bouton rond « ⬆️ Enlever » (Espace au clavier).
 Un cercle se referme sur lui à chaque foulée ; on touche quand il se referme (le sabot tape), à 20 % de foulée près,
 une fois par foulée. Trois bons temps de suite : le cavalier se lève et se rassoit en rythme (trot enlevé), et le trot
 fatigue deux fois moins le cheval ; sans toucher (1,6 foulée), on retombe assis (on rebondit dans la selle). Huit
-de suite : bravo (pratique du Galop 2). La première fois, un petit mot explique comment faire.
+de suite : bravo (pratique du Galop 2). La première fois, un petit mot explique comment faire. À cru (sans selle, donc
+sans étriers), on trotte assis : le jeu le dit une fois.
 
 ### Appeler ton cheval (0.5, `src/sim/horseCall.js`)
 « 📣 Appeler » (menu du cheval) : de loin, il lève la tête et hennit. S'il te fait assez confiance, il vient vers toi au
 trot et s'arrête près de toi, tout content (le lien grandit un peu, trois fois par jour au plus) ; sinon il te regarde
 et reste là. Chance qu'il vienne : 15 % + lien / 60 (+ 20 % s'il a faim : il espère du foin) ; lien 51 et plus : il
 vient toujours. Il ne vient pas s'il dort, s'il a mal (il boite, il est malade) ou s'il est au box (il hennit pour te
-répondre). Pratique du Galop 2.
+répondre). Trop près (moins de 5 m), pas besoin de l'appeler : le menu le dit (« éloigne-toi un peu d'abord »).
+Rappeler pendant qu'il arrive ne compte pas deux fois ; pendant la pause, rien. Pratique du Galop 2.
+
+### Halloween au poney-club (0.5, `src/sim/halloween.js`, `src/game/Halloween.js`)
+Comme dans les vrais clubs fin octobre, du 24 octobre au 2 novembre (date réelle) : des citrouilles-lanternes au départ
+du chemin de balade (elles s'allument le soir), et la **chasse aux citrouilles** : 8 citrouilles posées au bord du
+chemin de balade, une à chaque point (sauf l'écurie), le visage tourné vers le cavalier qui arrive. On les trouve **à
+cheval** en passant à côté (à pied, le jeu dit de monter). Annoncée une fois par partie ; « ☀️ Sa journée » montre où
+on en est. Toutes trouvées : 50 🪙 (en gestion), lien +3, et le **tapis citrouille** (orange à liseré noir), rangé dans
+la sellerie et mis tout de suite au cheval s'il est sellé ; il ne s'achète pas, il se gagne (« 🎃 À gagner »). Une
+chasse par an ; « 🎃 Citrouilles trouvées » dans le carnet du cavalier.
 
 ### Les Galops (0.5, `src/sim/galops.js`, `src/ui/galops.js`)
 Les examens des cavaliers dans les clubs français, en plus simple : Galop 1 « Je découvre mon cheval » (le caresser,
@@ -358,5 +381,5 @@ galops, trots enlevés, troncs sautés, sans-faute, balades, appels, journées p
 | **0.2** (fait) | Concours et spectacles sur le terrain de concours, apprentissage du saut, parcours d'obstacles, agility, balade, lapin-hop ; mini-jeux pour chaque soin (brosser, laver, ferrer, tonte, traite…) ; vétérinaire à jouer soi-même |
 | **0.3** (fait) | Vue d'ensemble et construction (niches, clapiers, paddocks, prés, abris, granges, carrières, écuries, ranchs, décorations), déplacement des équipements ; moutons, chèvres et vaches ; événements spéciaux ; aides à embaucher et à qui parler ; voyages réalistes (van, pauses, stress) ; tutoriel guidé ; 11 lieux ; publication sur GitHub Pages. Reste à faire : décoration de l'intérieur de la maison (reportée en 0.5) |
 | **0.4** (fait) | Graphismes plus beaux (sol, végétation, lumière, bâtiments, animations), animaux réalistes (chevaux, chiens race par race, chats, lapins, moutons, chèvres, vaches) et cavalier en selle, vrai saut d'obstacles ; sons synthétisés (ambiance, voix des animaux, pas, interface) ; mini-jeux des corvées et notation « juste ce qu'il faut » dans tous les mini-jeux ; vignettes 3D des cartes (sellerie, animalerie, construction, véhicules) ; vue construction (grille, enclos à la taille voulue, écurie qui s'agrandit) ; 4x4 et van à chevaux ; métiers toiletteur, éducateur canin, guide de randonnée, concours de beauté, concours à l'extérieur, école vétérinaire ; espèces proposées au fil de la partie ; sauvegarde en ligne facultative ; jeu au clavier ; histoire de la ferme (10 chapitres) et quêtes secondaires à rejoindre ; version « à emporter » en un seul fichier |
-| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras) ; allures en balade libre (arrêt, pas, trot, galop, grand galop ; fatigue, sueur, écarts) ; pansage complet du cheval (étrille, brosse, cure-pied sur les quatre pieds, peigne) ; l'histoire devient celle de ton premier cheval (16 chapitres, du refuge au premier concours, Galop 1 compris) ; le cheval vivant (il t'accueille quand tu reviens, il se roule au pré) ; seller et desseller (tapis, selle, sangle en deux fois) ; les pieds du cheval (pas curés : un caillou, il boite) ; en balade, le cheval gourmand s'arrête pour brouter ; le carnet de santé du cheval (vermifuge en mini-jeu : la dose selon son poids, vaccins, dents, maréchal-ferrant) ; la journée de ton cheval (sa routine, « journée parfaite ») ; les Galops 1 à 3 (pratique avec ton cheval, puis un petit examen) ; ses oreilles disent comment il va ; l'appeler (il vient au trot) ; le trot enlevé en rythme ; sauter des troncs en balade ; la ration (foin, puis un peu de granulés) ; la terre et le brillant de sa robe selon les soins ; le défi du jour ; le carnet du cavalier. À venir : décoration de l'intérieur de la maison |
+| **0.5** (en cours) | Fait : jongler entre le chapitre et les quêtes rejointes (⇄, touche N, pastilles « Tes quêtes »), passer n'importe quelle quête pour l'instant (⏭️ ; « Mises de côté » et ↩️ Reprendre), suivi pas à pas repris à la même étape ; voyage à cheval en temps réel (chemin en 3D, ceux qui suivent, allure pas / trot / galop qui fatigue ou repose le cheval, trois caméras) ; allures en balade libre (arrêt, pas, trot, galop, grand galop ; fatigue, sueur, écarts) ; pansage complet du cheval (étrille, brosse, cure-pied sur les quatre pieds, peigne) ; l'histoire devient celle de ton premier cheval (16 chapitres, du refuge au premier concours, Galop 1 compris) ; le cheval vivant (il t'accueille quand tu reviens, il se roule au pré) ; seller et desseller (tapis, selle, sangle en deux fois) ; les pieds du cheval (pas curés : un caillou, il boite) ; en balade, le cheval gourmand s'arrête pour brouter ; le carnet de santé du cheval (vermifuge en mini-jeu : la dose selon son poids, vaccins, dents, maréchal-ferrant) ; la journée de ton cheval (sa routine, « journée parfaite ») ; les Galops 1 à 3 (pratique avec ton cheval, puis un petit examen) ; ses oreilles disent comment il va ; l'appeler (il vient au trot) ; le trot enlevé en rythme ; sauter des troncs en balade ; la ration (foin, puis un peu de granulés) ; la terre et le brillant de sa robe selon les soins ; le défi du jour ; le carnet du cavalier ; Halloween au poney-club (chasse aux citrouilles à cheval, tapis citrouille). À venir : décoration de l'intérieur de la maison |
 | 1.0 | Publication |

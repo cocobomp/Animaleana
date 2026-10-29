@@ -102,7 +102,7 @@ describe('seller son cheval', () => {
     next(game, ctx);
     expect(game.peek().stage).toBe('girth');
     // première fois : jusqu'à 0,6 environ… il gonfle le ventre, la sangle se relâche
-    tighten(game, ctx, 1.9);
+    tighten(game, ctx, 0.6 / seller.GIRTH.rate);
     const first = game.peek().tension;
     tick(game, ctx, 1.5);
     p = game.peek();
@@ -126,7 +126,7 @@ describe('seller son cheval', () => {
     next(game, ctx);
     dragTo(game, game.peek().back);
     next(game, ctx);
-    tighten(game, ctx, 1.9);
+    tighten(game, ctx, 0.6 / seller.GIRTH.rate);
     tick(game, ctx, 1.5);
     while (game.peek().tension < 0.78) tighten(game, ctx, 0.1);
     press(ctx);

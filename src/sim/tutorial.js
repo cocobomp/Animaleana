@@ -486,7 +486,7 @@ export const QUEST_STEPS = {
   rideCanter1: ['tapHorseRide', 'doMount', 'doCanter'],
   horsePerfect3: ['tapHorse', 'perfectDay'],
   galop1: ['goShowground', 'openGalops', 'doGalop'],
-  horseCall1: ['tapHorse', 'callHorse'],
+  horseCall1: ['callHorse'], // (de loin, depuis sa fiche : tout près, pas besoin de l'appeler)
   horsePost1: ['tapHorseRide', 'doMount', 'doPost'],
   horseLogs3: ['tapHorseRide', 'doMount', 'doLogs'],
   horseCross1: ['tapHorseRide', 'doMount', 'doCross'],

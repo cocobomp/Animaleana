@@ -379,7 +379,12 @@ export class AnimalEntity {
       const away = ((ctx.game?.day ?? 0) * 2.399) % (Math.PI * 2) + Math.PI;
       const diff = Math.atan2(Math.sin(away - this.heading), Math.cos(away - this.heading));
       this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 0.6);
-      if (this.timer < 3) this.timer = 3 + Math.random() * 5; // (il reste là, le dos rond)
+      // (il reste là, le dos rond — sauf s'il a faim ou soif, et pas plus de 45 s d'affilée : il va quand même au
+      // râtelier ou à l'abreuvoir, decide ; avant, il ne bougeait plus du tout tant qu'il pleuvait)
+      const needy = d.needs.hunger < 50 || d.needs.thirst < 50;
+      this.rainHold = (this.rainHold ?? 0) + dt;
+      if (!needy && this.rainHold < 45 && this.timer < 3) this.timer = 3 + Math.random() * 5;
+      else if (this.rainHold > 60) this.rainHold = 0;
     }
     const free = !this.ridden && !this.scripted && !this.sleeping && !this.herdCtrl && !d.following && !this.posing
       && this.state !== 'goTo' && this.state !== 'eat' && ctx.game?.player?.mount !== this;

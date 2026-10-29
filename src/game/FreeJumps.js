@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { t } from '../i18n.js';
 import { addStat } from '../sim/profile.js';
-import { logSpots, logView, jumpAhead, jumpNow, logRefusal, crossJump, crossTick, fmtCross } from '../sim/freeJumps.js';
+import { LOG, logSpots, logView, jumpAhead, jumpNow, logRefusal, crossJump, crossTick, fmtCross } from '../sim/freeJumps.js';
 import { poseJump, resetPose } from './Activities.js';
 
 const BARK = new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.95 });
@@ -37,6 +37,38 @@ function logModel(o) {
   return g;
 }
 
+/** Le piquet numéroté au bout du tronc (l'ordre du cross) : un petit poteau et son numéro, toujours lisible. */
+function numberPost(o, n) {
+  const g = new THREE.Group();
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1, 6), BARK);
+  post.position.y = 0.5;
+  post.castShadow = true;
+  g.add(post);
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = n === 1 ? '#bfe6a8' : '#f4e3b5'; // (le n° 1, départ du cross : vert)
+  x.strokeStyle = n === 1 ? '#2f6b45' : '#6b4a2b';
+  x.lineWidth = 6;
+  x.beginPath();
+  x.arc(32, 32, 27, 0, Math.PI * 2);
+  x.fill();
+  x.stroke();
+  x.fillStyle = '#3b2a17';
+  x.font = 'bold 36px sans-serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.fillText(String(n), 32, 34);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false }));
+  sign.scale.set(0.42, 0.42, 1);
+  sign.position.y = 1.12;
+  g.add(sign);
+  g.position.set(o.width / 2 + 0.35, 0, 0);
+  return g;
+}
+
 export class FreeJumps {
   constructor(game) {
     this.game = game;
@@ -49,34 +81,52 @@ export class FreeJumps {
     this.cross = null; // ⏱️ le cross en cours : { next, t }
   }
 
-  /** La flèche jaune vers le prochain tronc du cross (ou plus de flèche). */
+  /**
+   * La flèche jaune vers le prochain tronc du cross (ou plus de flèche). Rendue : seulement si c'est encore la nôtre
+   * (la flèche de la quête reprend sa place au tour suivant du guide).
+   */
   pointNext() {
     const g = this.game;
     const o = this.cross ? this.logs[this.cross.next] : null;
     if (o) {
-      g.marker?.show(new THREE.Vector3(o.x, 0, o.z), { hideNear: 3 });
+      this.shown = new THREE.Vector3(o.x, 0, o.z);
+      g.marker?.show(this.shown, { hideNear: 3 });
       this.marked = true;
     } else if (this.marked) {
-      g.marker?.hide();
+      if (g.marker?.target === this.shown) g.marker.hide();
+      if (g.ui?.tutorial) g.ui.tutorial.markerKey = null;
       this.marked = false;
+      this.shown = null;
     }
   }
 
   /** Les troncs de la ferme (ailleurs : aucun). Refaits quand on change de lieu. */
   sync() {
     const g = this.game;
-    const key = g.profile?.place ?? null;
+    // (une autre partie, ou un autre lieu : on refait les troncs, et le cross s'arrête)
+    const key = g.profile ? `${g.profile.id}:${g.profile.place}` : null;
     if (key === this.place) return;
     this.place = key;
+    if (this.cross) {
+      this.cross = null;
+      this.pointNext();
+    }
     for (const o of this.logs) {
       o.model.removeFromParent();
-      o.model.traverse((m) => m.geometry?.dispose());
+      o.model.traverse((m) => {
+        m.geometry?.dispose();
+        if (m.isSprite) {
+          m.material.map?.dispose();
+          m.material.dispose();
+        }
+      });
     }
     this.logs = [];
     if (!g.profile || !g.isHome) return;
     for (const s of logSpots()) {
       if (g.world.isWater(s.x, s.z)) continue;
       const model = logModel(s);
+      model.add(numberPost(s, this.logs.length + 1));
       model.position.set(s.x, g.world.heightAt(s.x, s.z), s.z);
       model.rotation.y = s.heading;
       g.scene.add(model);
@@ -84,14 +134,28 @@ export class FreeJumps {
     }
   }
 
-  /** Espace ou le bouton : « saute ! » (compté un court moment, comme dans les séances). */
+  /** Espace ou le bouton : « saute ! » (compté un court moment, comme dans les séances). Trop loin : on le dit. */
   want() {
     this.wantAt = this.time;
+    const o = this.ahead;
+    const pl = this.game.player;
+    if (!o || this.jump || !pl.mount) return;
+    const view = logView(o, pl.root.position.x, pl.root.position.z, pl.heading);
+    // (même en comptant le petit moment où l'appel reste valable, il serait encore trop loin)
+    if (view.u + pl.speed * 0.45 < LOG.early && this.time - (this.earlyAt ?? -99) > 2) {
+      this.earlyAt = this.time;
+      this.game.ui.toast(t('fj_early', { m: Math.round(-view.u) }), 2200);
+    }
   }
 
   /** En balade libre, au galop, un tronc devant : le bouton « Sauter » est montré. */
   canJump() {
     return !!this.ahead && !this.jump;
+  }
+
+  /** Le bon moment pour appeler (le bouton devient vert) : entre LOG.early et LOG.late du tronc. */
+  jumpNowWindow() {
+    return this.canJump() && this.aheadU > LOG.early && this.aheadU < LOG.late;
   }
 
   update(dt) {
@@ -114,18 +178,38 @@ export class FreeJumps {
       }
     }
     this.ahead = null;
-    const free = pl.mount && !hide && pl.gaitEnabled !== false && !pl.auto && !g.tripFlow?.active;
-    if (!free || !this.logs.length) {
+    // (descendu, une activité, un voyage, un autre lieu : le cross et sa flèche s'arrêtent ; toucher le sol pour y
+    // aller à cheval ne l'arrête pas)
+    const off = !pl.mount || hide || !!g.tripFlow?.active || !this.logs.length || !g.isHome;
+    if (off && this.cross) {
+      this.cross = null;
+      this.pointNext();
+    }
+    const free = !off && pl.gaitEnabled !== false && !pl.auto;
+    if (!free) {
       for (const o of this.logs) o.prev = null;
       return;
     }
     const p = pl.root.position;
     const wanted = this.time - this.wantAt < 0.45;
+    // (c'est l'allure qui compte, pas la vitesse : un shetland au galop va moins vite qu'un cheval de trait au trot ;
+    // au galop lancé, il saute ; au trot ou au pas, il enjambe)
+    // (un galop à peine poussé, presque sur place, ne saute pas : vitesse rapportée à sa taille)
+    const canter = (pl.gaitNow === 'canter' || pl.gaitNow === 'gallop') && pl.speed / Math.max(0.3, pl.mount.scale ?? 1) > 2.4;
+    const v = canter ? Math.max(LOG.minSpeed, pl.speed) : Math.min(pl.speed, LOG.minSpeed * 0.95);
+    // (le premier galop à la ferme, sans avoir encore sauté : où sont les troncs)
+    if (v >= LOG.minSpeed && !this.whereHint && !(g.profile.stats?.freeJumps > 0)) {
+      this.whereHint = true;
+      g.ui.toast(t('fj_where', { n: this.logs.length }), 7000);
+    }
     for (const o of this.logs) {
       const view = logView(o, p.x, p.z, pl.heading);
-      if (jumpAhead(view, pl.speed)) this.ahead = o;
+      if (jumpAhead(view, v)) {
+        this.ahead = o;
+        this.aheadU = view.u; // (le bouton passe au vert dans la fenêtre d'appel)
+      }
       // (u de l'image d'avant, s'il était pris dans le même sens : un demi-tour près du tronc n'est pas un passage)
-      const r = jumpNow(view, o.prevH === view.o.heading ? o.prev : null, pl.speed, wanted);
+      const r = jumpNow(view, o.prevH === view.o.heading ? o.prev : null, v, wanted);
       o.prev = Math.abs(view.v) < o.width ? view.u : null;
       o.prevH = view.o.heading;
       if (r) {
@@ -216,8 +300,16 @@ export class FreeJumps {
   crossLanded(o) {
     const g = this.game;
     const n = this.logs.length;
-    const r = crossJump(this.cross, this.logs.indexOf(o), n);
-    if (!r.what) return null;
+    const i = this.logs.indexOf(o);
+    const r = crossJump(this.cross, i, n);
+    if (!r.what) {
+      // (pas de cross en cours, et pas le n° 1 : comment le lancer, une fois)
+      if (i > 0 && !this.crossHow) {
+        this.crossHow = true;
+        return t('cross_how');
+      }
+      return null;
+    }
     const was = this.cross;
     this.cross = r.cross;
     this.pointNext();

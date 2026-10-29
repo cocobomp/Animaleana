@@ -5,6 +5,7 @@ import { h } from './dom.js';
 import { t, ta, hourParams } from '../i18n.js';
 import { SPECIES, speciesAvailable, CORE_SPECIES, coreShown } from '../sim/species.js';
 import { canRide } from '../sim/animal.js';
+import { CALL } from '../sim/horseCall.js'; // 📣 (trop près : pas besoin de l'appeler)
 import { canProduce } from '../sim/farm.js';
 import { canLeash, owned, inUse, freeSaddle } from '../sim/gear.js';
 import { eligibility, knownTricks } from '../sim/activities.js';
@@ -241,7 +242,10 @@ export function openAnimalActions(ui, a) {
     });
     // 📣 L'appeler (src/sim/horseCall.js) : il vient vers toi au trot s'il te fait confiance.
     if (a.species === 'horse' && !a.client && !a.guest && a.location === g.profile.place && g.player.mount?.data !== a) {
-      items.push({ icon: '📣', label: t('act_call', { name: a.name }), effect: t('callHint'), free: true, run: () => { ui.closePanel(); g.callHorse(a); } });
+      const e = g.entities.get(a.id);
+      const pp = g.player.position;
+      const near = e && Math.hypot(e.position.x - pp.x, e.position.z - pp.z) < CALL.near; // (trop près : il est déjà là)
+      items.push({ icon: '📣', label: t('act_call', { name: a.name }), effect: t(near ? 'callTooNear' : 'callHint', { g: a.sex }), free: true, run: () => { ui.closePanel(); g.callHorse(a); } });
     }
     items.push(...horseBoxItems(ui, a)); // box à l'écurie
     // Longe, liberté, saut d'obstacles, balade, agility… : un sous-menu qui dit ce qui est possible.

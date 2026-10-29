@@ -400,7 +400,7 @@ function horsePad(model, gear, add, st) {
   const padT = pad?.item === 'gelPad' ? 0.02 : st.western ? 0.016 : 0.01; // épaisseur : la selle se pose dessus
   add(model.body, shell(torso, y0 - R * 0.2, zSeat - padHalf * 0.9, zSeat + padHalf, 8, deg(180 - padDrop), deg(padDrop), 14, padT), padMat);
   if (pad) {
-    const trim = pad.item === 'gelPad' ? padColor : padColor === COLORS.white ? COLORS.navy : 0xf1ede4;
+    const trim = GEAR[pad.item]?.trim ?? (pad.item === 'gelPad' ? padColor : padColor === COLORS.white ? COLORS.navy : 0xf1ede4);
     add(model.body, strap(loop(torso, [0, y0 - R * 0.2, zSeat + padHalf], 14, padT + 0.004, deg(180 - padDrop), deg(padDrop)), 0.008, 0.004), P.clothMat(trim));
   }
   return padT;

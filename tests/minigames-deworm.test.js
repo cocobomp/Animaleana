@@ -86,6 +86,35 @@ describe('le vermifuge', () => {
     expect(ctx.hints.at(-1)).toEqual({ text: t('mg_deworm_teeth', { name: 'Étoile' }), kind: 'warn' });
   });
 
+  it('la dose : un peu plus que son poids, c\'est juste (on arrondit au-dessus) ; moins, jamais', () => {
+    const g = dw.dewormGame(fakeCtx(horse()));
+    const { kg, doseLo, doseHi } = g.peek();
+    expect(doseHi - kg).toBeGreaterThan(kg - doseLo);
+    expect(doseLo).toBeGreaterThan(kg - 15);
+    expect(doseHi).toBeGreaterThanOrEqual(kg + 50);
+  });
+
+  it('les boutons −10 / +10 kg règlent la bague cran par cran ; sous-dosé, le jeu le dit au carnet (out.dose)', () => {
+    const ctx = fakeCtx(horse());
+    ctx.opts = {};
+    const g = dw.dewormGame(ctx);
+    const r0 = g.peek().ring;
+    const btn = (k) => ctx.buttons.find((b) => b.text.includes(k)).opts.onTap();
+    btn('➕');
+    expect(g.peek().ring).toBe(r0 + 10);
+    btn('➖');
+    btn('➖');
+    expect(g.peek().ring).toBe(r0 - 10);
+    setDose(g, g.peek().kg - 100);
+    press(ctx);
+    expect(ctx.opts.out.dose).toBe('low');
+    // (la pâte pas encore donnée : « C'est bon » ne finit pas, il redit quoi faire)
+    tick(g, ctx, 1);
+    press(ctx);
+    expect(ctx.finished).toBeNull();
+    expect(ctx.hints.at(-1).kind).toBe('warn');
+  });
+
   it('trop de vermifuge : moins d\'étoiles, et le message dit pourquoi', () => {
     const ctx = fakeCtx(horse());
     const g = dw.dewormGame(ctx);

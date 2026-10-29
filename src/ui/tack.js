@@ -62,7 +62,8 @@ function sizeChoice(g, id) {
   return a ? sizeOf(a) : defaultSize(id);
 }
 
-const priceLabel = (p, id, size) => (isSandbox(p) ? t('tk_free') : `${gearPrice(id, size ?? defaultSize(id))} 🪙`);
+const priceLabel = (p, id, size) => (GEAR[id].reward ? `${GEAR[id].emoji} ${t('tk_rewardBtn')}`
+  : isSandbox(p) ? t('tk_free') : `${gearPrice(id, size ?? defaultSize(id))} 🪙`);
 
 /**
  * « Taille Cheval : 2 · 1 rangé au mur » (singulier / pluriel) ; en voyage, « · 1 dans le coffre »
@@ -203,6 +204,7 @@ function renderItem(ui, id) {
       own ? h('span', { class: 'chip tk-own' }, ownedText(p, own))
         : h('span', { class: 'chip' }, atHomeCount(p, id) > 0 ? t('gearAtHome') : t('tk_ownedNone'))),
     h('p', { class: 'tk-desc' }, t(`tk_d_${id}`)),
+    def.reward && !own ? h('p', { class: 'note tk-reward' }, t('tk_rewardOnly')) : null,
     h('p', { class: 'tk-fx' }, h('b', {}, `🎮 ${t('tk_effect')} : `), t(`geard_${id}`)),
     def.minObedience ? h('p', { class: 'note' }, `🎓 ${t('tk_reqObedience', { n: def.minObedience })}`) : null,
   ];
@@ -233,7 +235,7 @@ function renderItem(ui, id) {
       class: `small ${s === size ? 'primary' : ''}`,
       disabled: !def.sizes.includes(s),
       onClick: () => { shop.size[id] = s; ui.renderPanel(); },
-    }, `${{ pony: '🐴', horse: '🐎', draft: '🐴💪' }[s]} ${t(`tk_size_${s}`)}${sandbox ? '' : ` · ${gearPrice(id, s)} 🪙`}`))));
+    }, `${{ pony: '🐴', horse: '🐎', draft: '🐴💪' }[s]} ${t(`tk_size_${s}`)}${sandbox || def.reward ? '' : ` · ${gearPrice(id, s)} 🪙`}`))));
     const stock = stockOf(p, id);
     for (const s of stock) out.push(h('p', { class: 'note' }, stockText(p, s)));
     // Échange gratuit : un exemplaire rangé d'une autre taille contre la taille choisie (à la maison seulement).
@@ -255,14 +257,15 @@ function renderItem(ui, id) {
 
   // Boutons : essayer, acheter, équiper (ou mettre sa bombe).
   const price = gearPrice(id, size ?? defaultSize(id));
-  const missing = canAfford(p, price) ? 0 : price - (p.money ?? 0); // mode argent : il manque des pièces
+  const missing = def.reward || canAfford(p, price) ? 0 : price - (p.money ?? 0); // mode argent : il manque des pièces
   const wearing = helmet && riderHelmet(p)?.item === id;
   // Essayer : une photo de l'animal (moteur des vignettes) ; sans WebGL (repli emoji), pas de bouton.
   const canTry = !!thumbsFor(g)?.enabled;
   out.push(h('div', { class: 'tk-actions' },
     !helmet && canTry ? h('button', { class: `big-action ${shop.pick === 'try' ? 'primary' : ''}`, onClick: () => { shop.pick = shop.pick === 'try' ? null : 'try'; ui.renderPanel(); } },
       h('span', { class: 'ba-icon' }, shop.trying ? '⏳' : '👀'), h('span', { class: 'ba-text' }, h('b', {}, t('tk_tryOn')))) : null, // (⏳ : la photo se prépare)
-    h('button', {
+    def.reward ? h('button', { class: 'big-action', disabled: true }, h('span', { class: 'ba-icon' }, def.emoji), h('span', { class: 'ba-text' }, h('b', {}, t('tk_rewardBtn'))))
+    : h('button', {
       class: `big-action ${missing ? 'tk-short' : 'primary'}`,
       onClick: () => {
         if (missing) {

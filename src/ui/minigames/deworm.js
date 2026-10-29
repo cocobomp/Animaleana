@@ -1,8 +1,10 @@
 // Donner le vermifuge, comme en vrai (le carnet de santé du cheval, src/sim/horseHealth.js) :
 //
 //   1. La dose : on règle la bague de la seringue sur le poids du cheval (un poney ≈ 250 kg, un cheval ≈ 500 kg,
-//      un cheval de trait ≈ 750 kg ; un peu plus s'il est gros). Juste : à 25 kg près. Trop peu, ça ne marche pas ;
-//      trop, ce n'est pas bon pour lui.
+//      un cheval de trait ≈ 750 kg ; un peu plus s'il est gros). Juste : son poids, ou un peu plus (on arrondit
+//      toujours au-dessus, jusqu'à DOSE.over kg de plus) ; moins, jamais : ça marche mal et les vers s'habituent au
+//      produit (sous-dosé : noté, mais à refaire plus tôt — ctx.opts.out.dose, src/game/Game.js deworm). Beaucoup
+//      trop, ce n'est pas bon pour lui. Deux boutons −10 / +10 kg pour régler au doigt près.
 //   2. La seringue : on la glisse dans le coin de sa bouche, là où il n'a pas de dents (la « barre »), pas devant
 //      ses dents (il relève la tête). Puis on garde le doigt sur le piston (ou Espace) : la pâte part, il fait la
 //      grimace.
@@ -19,7 +21,7 @@ export function horseKg(a) {
   const base = { pony: 250, horse: 500, draft: 750 }[sizeOf(a) ?? 'horse'] ?? 500;
   return Math.round((base * (0.8 + 0.4 * ((a?.weight ?? 50) / 100))) / 10) * 10;
 }
-export const DOSE = { min: 100, max: 900, slack: 25 };
+export const DOSE = { min: 100, max: 900, slack: 5, over: 50, step: 10 }; // (juste : son poids, jusqu'à un cran de 50 kg au-dessus)
 
 // La seringue (en bas) : la bague glisse le long du corps, de DOSE.min à DOSE.max.
 const SYR = { x0: 70, x1: 330, y: 300 };
@@ -45,7 +47,7 @@ export function dewormGame(ctx) {
 
   const ringX = () => lerp(SYR.x0, SYR.x1, (ring - DOSE.min) / (DOSE.max - DOSE.min));
   const doseLo = kg - DOSE.slack;
-  const doseHi = kg + DOSE.slack;
+  const doseHi = kg + DOSE.over;
   ctx.zone((doseLo - DOSE.min) / (DOSE.max - DOSE.min), (doseHi - DOSE.min) / (DOSE.max - DOSE.min));
   ctx.progress((ring - DOSE.min) / (DOSE.max - DOSE.min));
   ctx.hint(t('mg_deworm_dose_hint', { name, kg }));
@@ -56,18 +58,29 @@ export function dewormGame(ctx) {
     else if (stopBtn) stopBtn.text = text;
   };
   setLabel('mg_pansage_next');
+  // (régler la bague cran par cran, plus facile au doigt que de la faire glisser)
+  const nudge = (k) => { if (stage === 'dose' && !ctx.done && pause <= 0) setRing(ringX() + (k * DOSE.step * (SYR.x1 - SYR.x0)) / (DOSE.max - DOSE.min)); };
+  const minus = ctx.button(`➖ ${DOSE.step} kg`, { onTap: () => nudge(-1) });
+  const plus = ctx.button(`➕ ${DOSE.step} kg`, { onTap: () => nudge(1) });
 
   function next() {
     if (ctx.done || pause > 0) return;
     if (stage === 'dose') {
       const res = justOutcome(ring, doseLo, doseHi, { slack: 120 });
       results.push({ stage: 'dose', value: ring, ...res });
+      if (ctx.opts) ctx.opts.out = { ...(ctx.opts.out ?? {}), dose: res.verdict }; // (sous-dosé : à refaire plus tôt)
+      for (const b of [minus, plus]) if (b) b.hidden = true;
       stage = 'give';
       pause = 0.6;
       ctx.zone(null);
       ctx.progress(0);
       ctx.hint(t('mg_deworm_give_hint', { name }));
       setLabel('mg_stopHere');
+      return;
+    }
+    // (pas encore donné : on le dit, sans finir — la pâte doit aller dans sa bouche)
+    if (!syr.placed || syr.left > 0.05) {
+      ctx.hint(t('mg_deworm_give_hint', { name }), 'warn');
       return;
     }
     finish();

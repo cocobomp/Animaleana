@@ -36,6 +36,7 @@ import { horseDayView } from '../sim/horseDay.js'; // ☀️ la journée de ton 
 import { galopLevel, nextGalop, practiceOf, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
 import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
 import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
+import { huntView } from '../sim/halloween.js'; // 🎃 la chasse aux citrouilles
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -125,17 +126,24 @@ export function openAnimal(ui, a) {
 }
 
 /** ☀️ La journée de ton cheval (src/sim/horseDay.js) : ce qui est fait aujourd'hui, ce qui reste. */
+/** 🎃 La chasse aux citrouilles (pendant la fête d'Halloween, src/sim/halloween.js). */
+function huntLine(g) {
+  const v = g.isHome ? huntView(g.profile) : null;
+  if (!v) return null;
+  return h('p', { class: `note hw-line${v.done ? ' good' : ''}` }, v.done ? t('hw_lineDone') : t('hw_line', { n: v.n, total: v.total }));
+}
+
 function daySection(g, a) {
   const view = horseDayView(a, g.day, g.hour);
   const perfect = !!a.today?.perfect;
   const mark = (x) => (x.done ? '✅' : x.missed ? '⌛' : x.later ? '🕑' : '⬜');
   // 🎯 Le défi du jour (src/sim/horseChallenge.js)
-  const ch = todayChallenge(g.profile, g.day, true);
+  const ch = todayChallenge(g.profile, g.day, true, g.challengeCtx?.());
   const chLine = ch ? h('p', { class: `note ch-line${ch.done ? ' good' : ''}` },
     `${t('ch_title')} : ${ch.def.icon} ${t(`ch_${ch.def.id}`)} ${ch.done ? '✅' : `(${ch.have}/${ch.def.n})`}`) : null;
   return [h('h3', {}, t('hd_title')), h('p', { class: perfect ? 'note good' : 'note' }, t(perfect ? 'hd_perfect' : 'hd_help')),
     h('ul', { class: 'hd-list' }, view.map((x) => h('li', { class: `hd-row${x.done ? ' done' : x.missed ? ' missed' : ''}` },
-      `${mark(x)} ${x.icon} ${t(`hd_${x.id}`)}`))), chLine];
+      `${mark(x)} ${x.icon} ${t(`hd_${x.id}`)}`))), chLine, huntLine(g)];
 }
 
 /** 📒 Le carnet de santé du cheval (src/sim/horseHealth.js) : chaque soin, quand, et le vermifuge à donner ici. */
@@ -241,6 +249,10 @@ function renderAnimal(ui, g, a) {
     acts.push(btn(`🏇 ${t('act_ride')}`, () => { if (g.ride(a)) ui.closePanel(); }, { cls: 'primary', disabled: !r.ok && r.reason === 'tooYoung' }));
   }
   acts.push(btn(a.following ? `✋ ${t('act_stay')}` : `🦮 ${t('act_follow')}`, () => { g.toggleFollow(a); ui.renderPanel(); }));
+  // 📣 L'appeler d'ici (src/sim/horseCall.js) : la fiche s'ouvre de loin (🐾 Animaux), sans marcher jusqu'à lui.
+  if (a.species === 'horse' && !a.client && !a.guest && here && g.player.mount?.data !== a) {
+    acts.push(btn(`📣 ${t('act_call', { name: a.name })}`, () => { ui.closePanel(); g.callHorse(a); }));
+  }
   acts.push(btn(`📍 ${t('callHere')}`, () => g.callHere(a)));
   // Animal confié en soins et métier de vétérinaire commencé : c'est toi le docteur, sans prix affiché (gratuit).
   const vetLabel = isCareerPatient(g.profile, a) ? t('vx_examineDoctor') : `${t('act_vet')}${money(ui, g.vetCost(false))}`;

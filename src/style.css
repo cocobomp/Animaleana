@@ -665,8 +665,10 @@ button.sv-card:hover { border-color: var(--primary); }
   touch-action: manipulation; user-select: none; -webkit-user-select: none;
 }
 #post-btn[hidden], #jump-btn[hidden] { display: none; }
-#jump-btn { background: #e07a3a; animation: jump-pulse 0.6s ease-in-out infinite alternate; }
-@keyframes jump-pulse { to { box-shadow: 0 0 0 8px rgba(224, 122, 58, 0.35); } }
+#jump-btn { background: #e07a3a; }
+/* (le bon moment : vert, et il bat) */
+#jump-btn.now { background: #2e9e4f; animation: jump-pulse 0.35s ease-in-out infinite alternate; }
+@keyframes jump-pulse { to { box-shadow: 0 0 0 10px rgba(46, 158, 79, 0.4); } }
 #post-btn .post-icon, #jump-btn .post-icon { font-size: 1.6rem; line-height: 1; }
 #post-btn .post-count { position: absolute; top: -8px; right: -8px; min-width: 26px; padding: 2px 5px; border-radius: 999px; background: #f2b824; color: #3a2a00; font-size: 0.8rem; }
 #post-btn .post-count:empty { display: none; }
@@ -679,7 +681,8 @@ button.sv-card:hover { border-color: var(--primary); }
 @keyframes post-bad { 30% { transform: translateX(-5px); background: #c0503c; } 70% { transform: translateX(5px); } }
 @media (pointer: coarse) {
   #post-btn kbd, #jump-btn kbd { display: none; }
-  #post-btn, #jump-btn { left: auto; right: calc(92px + var(--safe-r)); bottom: calc(262px + var(--safe-b)); }
+  /* (assez haut pour qu'un toucher en rythme ne tombe jamais sur « ⬇️ Descendre », juste en dessous) */
+  #post-btn, #jump-btn { left: auto; right: calc(92px + var(--safe-r)); bottom: calc(306px + var(--safe-b)); }
 }
 @media (pointer: coarse) and (max-height: 480px) {
   /* (à gauche de la rangée des allures : au-dessus, le suivi de quête le cachait) */

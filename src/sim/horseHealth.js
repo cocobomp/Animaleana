@@ -20,6 +20,8 @@ export const HEALTH_IDS = Object.keys(HEALTH_PLAN);
 const START_AGO = { worm: 8, vaccine: 20, teeth: 35, farrier: 4 };
 /** Le prix du vermifuge (en mode gestion). */
 export const WORMER_COST = 12;
+/** Sous-dosé (pas assez pour son poids) : le prochain vermifuge revient dans ce nombre de jours. */
+export const WORMER_LOW_AGAIN = 8;
 
 const clampN = (v, min, max) => Math.max(min, Math.min(max, v));
 

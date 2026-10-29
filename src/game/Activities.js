@@ -544,7 +544,7 @@ export class Session {
 export { Session as ActivitySession, fmtTime as fmtActivityTime };
 
 /** Remet la monture droite (après un saut). */
-function resetPose(e) {
+export function resetPose(e) {
   e.scaleGroup.rotation.x = 0;
   e.scaleGroup.position.y = 0;
   e.scaleGroup.position.z = 0;

@@ -100,13 +100,21 @@ export class UI {
       e.preventDefault(); // (pas de focus : Espace reste au jeu)
       this.game?.postTrot();
     });
-    root.append(this.touchPad, this.gaitPad, this.postBtn, this.statusBar, this.labels);
+    // ⤴️ Sauter le tronc (src/game/FreeJumps.js) : au galop, un tronc droit devant ; même place que « Enlever ».
+    this.jumpName = h('span', { class: 'post-name' });
+    this.jumpBtn = h('button', { id: 'jump-btn', type: 'button', hidden: true },
+      h('span', { class: 'post-icon', 'aria-hidden': 'true' }, '⤴️'), this.jumpName, h('kbd', {}, '␣'));
+    this.jumpBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.game?.freeJumps?.want();
+    });
+    root.append(this.touchPad, this.gaitPad, this.postBtn, this.jumpBtn, this.statusBar, this.labels);
 
     // Un seul écouteur pour tous les boutons : petit « tic », plus chantant pour les boutons principaux,
     // descendant pour les boutons rouges. (Pas pour les boutons de direction qu'on garde appuyés.)
     root.addEventListener('click', (e) => {
       const b = e.target?.closest?.('button');
-      if (!b || b.disabled || b.classList.contains('pad-btn') || b.id === 'post-btn') return;
+      if (!b || b.disabled || b.classList.contains('pad-btn') || b.id === 'post-btn' || b.id === 'jump-btn') return;
       audio.ui(b.classList.contains('primary') ? 'ok' : b.classList.contains('danger') ? 'cancel' : 'tap');
     });
 
@@ -330,6 +338,20 @@ export class UI {
   /** ⬆️ Le bouton du trot enlevé : montré au trot en selle (Game.canPostTrot) ; le cercle suit la foulée. */
   updatePostBtn() {
     const g = this.game;
+    // ⤴️ Le bouton « Sauter » (au galop, un tronc devant)
+    const jump = !!g?.freeJumps?.canJump() && !this.isBlocking();
+    if (this.jumpBtn.hidden === jump) {
+      this.jumpBtn.hidden = !jump;
+      if (jump) {
+        this.jumpName.textContent = t('fj_btn');
+        this.jumpBtn.title = t('fj_btnHelp');
+        this.jumpBtn.setAttribute('aria-label', t('fj_btnHelp'));
+        if (!g.profile.freeJumpTip) {
+          g.profile.freeJumpTip = true;
+          this.toast(t('fj_tip'), 7000);
+        }
+      }
+    }
     const show = !!g?.canPostTrot?.() && !this.isBlocking();
     if (this.postBtn.hidden === show) {
       this.postBtn.hidden = !show;

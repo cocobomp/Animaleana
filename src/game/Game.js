@@ -61,6 +61,7 @@ import {
 } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
+import { FreeJumps } from './FreeJumps.js'; // ⤴️ sauter des troncs en balade libre
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
 import { t, L, getLang, fmtHour } from '../i18n.js';
@@ -151,6 +152,7 @@ export class Game {
     this.arrivals = new Arrivals({ clock: () => this.profile?.clock ?? 0 }); // (avant les métiers qui l'utilisent)
     this.clients = new Clients(this); // visiteurs, animaux confiés, métiers
     this.activities = new Activities(this);
+    this.freeJumps = new FreeJumps(this); // ⤴️ les troncs du chemin de balade
     this.beauty = new Beauty(this); // concours de beauté (game.beauty)
     this.dogTrainer = new DogTrainer(this);
     this.trailGuide = new TrailGuide(this); // 🧭 guide de randonnée
@@ -1065,6 +1067,7 @@ export class Game {
       this.herding.update(wdt);
       this.tasks?.update();
       this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
+      this.freeJumps.update(wdt); // ⤴️ en balade libre, le saut d'un tronc (même pose)
     }
     this.player.afterSessions?.(); // rênes : à la place finale du cheval et du cavalier (saut soulevé)
     if (mgmt) this.mgmt.update(dt, ctrl);
@@ -1838,7 +1841,8 @@ export class Game {
     // À cheval, en balade libre : 0 arrêt, 1 pas, 2 trot, 3 galop.
     const gaitKey = { Digit0: 'halt', Numpad0: 'halt', Digit1: 'walk', Digit2: 'trot', Digit3: 'canter' }[code];
     if (gaitKey && this.player.mount && !this.activities.active) this.setRideGait(gaitKey);
-    if (code === 'Space' && this.canPostTrot()) this.postTrot(); // ⬆️ trot enlevé
+    if (code === 'Space' && this.freeJumps.canJump()) this.freeJumps.want(); // ⤴️ sauter le tronc
+    else if (code === 'Space' && this.canPostTrot()) this.postTrot(); // ⬆️ trot enlevé
   }
 
   interact() {
@@ -2009,6 +2013,7 @@ export class Game {
   }
 
   dismount() {
+    this.freeJumps?.cancel(); // (en plein saut : droit d'abord)
     const e = this.player.mount;
     const worked = !!this.player.cantered; // (il a galopé : de retour au pré, il ira se rouler)
     this.player.dismount();

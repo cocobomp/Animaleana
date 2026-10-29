@@ -645,7 +645,7 @@ button.sv-card:hover { border-color: var(--primary); }
   .gait-btn .gait-icon { font-size: 1.35rem; }
 }
 /* ⬆️ Trot enlevé (src/ui/UI.js updatePostBtn) : au-dessus des allures ; téléphone : à gauche de leur colonne. */
-#post-btn {
+#post-btn, #jump-btn {
   position: fixed;
   left: calc(22px + var(--safe-l));
   bottom: calc(92px + var(--safe-b));
@@ -656,11 +656,13 @@ button.sv-card:hover { border-color: var(--primary); }
   background: var(--glass); color: #fff; font-weight: 800; font-size: 0.72rem;
   touch-action: manipulation; user-select: none; -webkit-user-select: none;
 }
-#post-btn[hidden] { display: none; }
-#post-btn .post-icon { font-size: 1.6rem; line-height: 1; }
+#post-btn[hidden], #jump-btn[hidden] { display: none; }
+#jump-btn { background: #e07a3a; animation: jump-pulse 0.6s ease-in-out infinite alternate; }
+@keyframes jump-pulse { to { box-shadow: 0 0 0 8px rgba(224, 122, 58, 0.35); } }
+#post-btn .post-icon, #jump-btn .post-icon { font-size: 1.6rem; line-height: 1; }
 #post-btn .post-count { position: absolute; top: -8px; right: -8px; min-width: 26px; padding: 2px 5px; border-radius: 999px; background: #f2b824; color: #3a2a00; font-size: 0.8rem; }
 #post-btn .post-count:empty { display: none; }
-#post-btn kbd { position: absolute; bottom: -8px; font-size: 0.7rem; background: rgba(0, 0, 0, 0.45); border-radius: 5px; padding: 0 5px; }
+#post-btn kbd, #jump-btn kbd { position: absolute; bottom: -8px; font-size: 0.7rem; background: rgba(0, 0, 0, 0.45); border-radius: 5px; padding: 0 5px; }
 #post-btn .post-ring { position: absolute; inset: -6px; border-radius: 50%; border: 4px solid #fff; pointer-events: none; }
 #post-btn.on { background: var(--primary); }
 #post-btn.good { animation: post-good 0.3s ease-out; }
@@ -668,11 +670,11 @@ button.sv-card:hover { border-color: var(--primary); }
 @keyframes post-good { from { box-shadow: 0 0 0 10px rgba(80, 220, 120, 0.8); } to { box-shadow: 0 0 0 0 rgba(80, 220, 120, 0); } }
 @keyframes post-bad { 30% { transform: translateX(-5px); background: #c0503c; } 70% { transform: translateX(5px); } }
 @media (pointer: coarse) {
-  #post-btn kbd { display: none; }
-  #post-btn { left: auto; right: calc(92px + var(--safe-r)); bottom: calc(262px + var(--safe-b)); }
+  #post-btn kbd, #jump-btn kbd { display: none; }
+  #post-btn, #jump-btn { left: auto; right: calc(92px + var(--safe-r)); bottom: calc(262px + var(--safe-b)); }
 }
 @media (pointer: coarse) and (max-height: 480px) {
-  #post-btn { right: calc(14px + var(--safe-r)); bottom: calc(232px + var(--safe-b)); width: 70px; height: 70px; }
+  #post-btn, #jump-btn { right: calc(14px + var(--safe-r)); bottom: calc(232px + var(--safe-b)); width: 70px; height: 70px; }
 }
 /* Paysage : une rangée à droite, juste au-dessus des boutons de vue (le milieu de l'écran reste au cheval). */
 @media (pointer: coarse) and (max-height: 480px) {

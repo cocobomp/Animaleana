@@ -2,7 +2,7 @@
 // au galop, bien droit : le bouton apparaît, l'appel au bon endroit fait un beau saut, sinon il saute tout seul au
 // dernier moment ; au trot ou de travers, rien.
 import { describe, it, expect, beforeAll } from 'vitest';
-import { LOG, CROSS, logSpots, logView, jumpAhead, jumpNow, crossJump, crossTick, fmtCross } from '../src/sim/freeJumps.js';
+import { LOG, CROSS, logSpots, logView, jumpAhead, jumpNow, logRefusal, crossJump, crossTick, fmtCross } from '../src/sim/freeJumps.js';
 import { TRAIL, TAKEOFF } from '../src/sim/activities.js';
 
 let i18n;
@@ -67,6 +67,13 @@ describe('les troncs du chemin de balade', () => {
     expect(jumpAhead(view, 5)).toBe(true);
   });
 
+  it('pas encore habitué à sauter, il pile parfois ; bien appelé, deux fois moins ; entraîné, jamais', () => {
+    expect(logRefusal(10, 0.35, () => 0.2)).toBe(true); // (≈ 24 % à 10 de saut)
+    expect(logRefusal(10, 0.9, () => 0.2)).toBe(false); // (bien appelé : ≈ 12 %)
+    expect(logRefusal(10, 0.9, () => 0.1)).toBe(true);
+    expect(logRefusal(25, 0.35, () => 0)).toBe(false); // (habitué : jamais)
+  });
+
   it('le cross : le premier tronc lance le chrono, les autres dans l\'ordre, le dernier finit ; trop long : abandonné', () => {
     expect(crossJump(null, 2, 4)).toEqual({ cross: null, what: null }); // (pas le premier : pas de cross)
     let r = crossJump(null, 0, 4);
@@ -87,7 +94,7 @@ describe('les troncs du chemin de balade', () => {
     const { t, setLang } = i18n;
     for (const lang of ['fr', 'en']) {
       setLang(lang);
-      for (const k of ['fj_btn', 'fj_btnHelp', 'fj_tip', 'fj_first', 'fj_great', 'fj_ok', 'fj_auto', 'cross_start', 'cross_next', 'cross_wrong', 'cross_done', 'cross_record', 'cross_timeout', 'cross_chip']) expect(t(k, { name: 'Étoile' })).not.toBe(k);
+      for (const k of ['fj_btn', 'fj_btnHelp', 'fj_tip', 'fj_first', 'fj_great', 'fj_ok', 'fj_auto', 'cross_start', 'cross_next', 'cross_wrong', 'cross_done', 'cross_record', 'cross_timeout', 'cross_chip', 'fj_refuse']) expect(t(k, { name: 'Étoile' })).not.toBe(k);
     }
     setLang('fr');
   });

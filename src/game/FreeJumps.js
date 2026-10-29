@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { t } from '../i18n.js';
 import { addStat } from '../sim/profile.js';
-import { logSpots, logView, jumpAhead, jumpNow, crossJump, crossTick, fmtCross } from '../sim/freeJumps.js';
+import { logSpots, logView, jumpAhead, jumpNow, logRefusal, crossJump, crossTick, fmtCross } from '../sim/freeJumps.js';
 import { poseJump, resetPose } from './Activities.js';
 
 const BARK = new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.95 });
@@ -129,10 +129,27 @@ export class FreeJumps {
       o.prev = Math.abs(view.v) < o.width ? view.u : null;
       o.prevH = view.o.heading;
       if (r) {
-        this.start(o, view.o.heading, r);
+        // (pas encore habitué à sauter : il pile devant le tronc)
+        if (r.what !== 'step' && logRefusal(pl.mount.data.skills?.jump ?? 10, r.timing)) this.refuse(o, view.o.heading);
+        else this.start(o, view.o.heading, r);
         return;
       }
     }
+  }
+
+  /** Il pile devant le tronc : il s'arrête net et recule de quelques pas ; on reprend de l'élan. */
+  refuse(o, heading) {
+    const g = this.game;
+    const pl = g.player;
+    const e = pl.mount;
+    pl.speed = 0;
+    pl.root.position.addScaledVector(fwd(heading), -2.4);
+    pl.root.position.y = g.world.heightAt(pl.root.position.x, pl.root.position.z);
+    e.position.copy(pl.root.position);
+    for (const x of this.logs) x.prev = null;
+    this.wantAt = -99;
+    e.emit('😨', 1.5);
+    g.ui.toast(t('fj_refuse', { name: e.data.name, g: e.data.sex }), 5000);
   }
 
   start(o, heading, r) {

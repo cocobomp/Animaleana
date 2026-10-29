@@ -3,7 +3,7 @@
 // saut ; sinon, lancé au galop, le cheval saute tout seul au dernier moment (moins bien). Au trot, il l'enjambe d'un
 // petit bond. Logique pure (tests/freeJumps.test.js) ; le jeu : src/game/FreeJumps.js.
 
-import { TRAIL, approach, alignment, takeoffQuality } from './activities.js';
+import { TRAIL, approach, alignment, takeoffQuality, refusalChance } from './activities.js';
 
 export const LOG = {
   height: 0.45, // (un petit tronc : ça passe pour tous les chevaux)
@@ -58,6 +58,15 @@ export function jumpNow(view, prevU, speed, wanted) {
   if (wanted && view.u > LOG.early && view.u < LOG.late) return { what: 'jump', timing: takeoffQuality(view.u) };
   if (crossing) return { what: 'auto', timing: LOG.autoTiming };
   return null;
+}
+
+/**
+ * Un cheval qui n'a pas encore l'habitude de sauter (compétence de saut faible) pile parfois devant le tronc : la
+ * même chance que devant une barre trop haute (src/sim/activities.js refusalChance), deux fois moins s'il est bien
+ * appelé (timing > 0,7). Les leçons et les sauts l'habituent. Renvoie true s'il refuse.
+ */
+export function logRefusal(skill, timing, rng = Math.random, height = LOG.height) {
+  return rng() < refusalChance(skill, height) * (timing > 0.7 ? 0.5 : 1);
 }
 
 /**

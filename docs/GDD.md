@@ -163,6 +163,8 @@ de 12 m : un bouton orange « ⤴️ Sauter » (Espace). Appel entre 3,6 et 0,4 
 petit bond ; au pas, il passe tranquillement. Pendant une activité ou une balade guidée, les troncs sont rangés.
 Le saut reprend celui des séances d'obstacles (bascule, membres repliés, cavalier en suspension) ; chaque saut
 entraîne un peu le cheval (+0,2 à +0,4 en saut). Ils se sautent dans les deux sens.
+Un cheval pas encore habitué à sauter (compétence de saut sous 20) pile parfois devant le tronc (≈ 24 % à 10, deux
+fois moins bien appelé) : il s'arrête net et recule ; les leçons de saut et les troncs sautés l'habituent.
 ⏱️ **Le cross** : sauter le premier tronc lance le chrono ; la flèche jaune montre le suivant, dans l'ordre du chemin ;
 le dernier sauté, c'est fini (temps, record gardé, « Cross terminés » et « Record du cross » dans le carnet du
 cavalier). Un tronc hors de l'ordre ne compte pas (le jeu le dit) ; descendre de cheval ou plus de 5 minutes : arrêté.

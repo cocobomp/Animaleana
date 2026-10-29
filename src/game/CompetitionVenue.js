@@ -18,6 +18,7 @@ import { spectators } from './models/course.js';
 import { mulberry32 } from '../sim/rng.js';
 import { addStat, earn, isSandbox } from '../sim/profile.js';
 import { emojiTexture } from './textures.js';
+import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 import { t, ta, L } from '../i18n.js';
 import { openVenuePanel, showCompetitionResults } from '../ui/competitions.js';
 
@@ -382,7 +383,7 @@ export class CompetitionVenue {
   takePhoto() {
     const g = this.game;
     try {
-      g.renderer.render(g.scene, g.camera);
+      renderForPhoto(g);
       const src = g.renderer.domElement;
       const c = document.createElement('canvas');
       c.width = 192;

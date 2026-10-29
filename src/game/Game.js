@@ -15,6 +15,7 @@ import { REAL_CAT_KEYS, realCatBase } from './models/catReal.js'; // chats réal
 import { REAL_RABBIT_KEYS, realRabbitBase } from './models/rabbitReal.js'; // lapins réalistes : chargés après les chats
 import { Weather3D } from './Weather3D.js';
 import { HorseBreath } from './HorseBreath.js'; // 🌬️ son souffle dans le froid
+import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
 import { Input } from './Input.js';
@@ -943,14 +944,24 @@ export class Game {
     this.ui.toast(t('galop_ready', { n: next.id }), 8000);
   }
 
-  /** ⭐ Une étoile de plus pour un de tes chevaux (src/sim/horseStars.js) : fêtée, une par une (un petit mot à la fois). */
+  /**
+   * ⭐ Une étoile de plus pour un de tes chevaux (src/sim/horseStars.js) : fêtée, une par une (un petit mot à la fois) ;
+   * les autres restent à fêter (pas encore notées : rien de perdu si on quitte la partie).
+   */
   starsTick() {
     const p = this.profile;
-    this.starNews = this.starNews ?? [];
-    for (const a of p.animals) if (a.species === 'horse' && !a.client && !a.guest) for (const s of newStars(a)) this.starNews.push({ a, ...s });
-    const n = this.starNews.shift();
-    if (!n || !p.animals.includes(n.a)) return; // (parti entre-temps, autre partie)
-    const { a, id, stars } = n;
+    let a = null;
+    let s = null;
+    for (const x of p.animals) {
+      if (x.species !== 'horse' || x.client || x.guest) continue;
+      s = newStars(x, 1)[0];
+      if (s) {
+        a = x;
+        break;
+      }
+    }
+    if (!s) return;
+    const { id, stars } = s;
     const key = canRide(a).reason === 'tooYoung' ? null : starUnlock(id, stars); // (un poulain ne se monte pas encore)
     const text = t('st_new', { skill: t(`skill_${id}`), name: a.name, n: stars }) + (key ? ` ${t(`st_unlock_${key}`, { g: a.sex })}` : '');
     this.ui.toast(text, 6000);
@@ -1045,7 +1056,7 @@ export class Game {
         sx = THREE.MathUtils.clamp(((1 + v.x) / 2) * src.width - sw / 2, 0, src.width - sw);
         sy = THREE.MathUtils.clamp(((1 - v.y) / 2) * src.height - sh / 2, 0, src.height - sh);
       }
-      this.renderer.render(this.scene, this.camera);
+      renderForPhoto(this);
       const c = document.createElement('canvas');
       c.width = PHOTO.w;
       c.height = PHOTO.h;

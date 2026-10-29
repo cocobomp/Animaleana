@@ -458,6 +458,7 @@ export class UI {
     const placed = [];
     const items = [];
     for (const e of entities) {
+      e.labelMoved = false; // (sa bulle « il te demande » pend sous son nom : cachée si le nom est écarté)
       if (e.ridden || e.inside) continue; // (dans la maison des animaux : on ne le voit pas)
       const d = e.position.distanceTo(playerPos);
       if (d > 14) continue;
@@ -491,6 +492,7 @@ export class UI {
       if (grp) {
         grp.extra++;
         el.hidden = true;
+        it.e.labelMoved = true;
         continue;
       }
       el.hidden = false;
@@ -503,6 +505,7 @@ export class UI {
         if (!hit) break;
         y = hit.y - 46;
       }
+      it.e.labelMoved = y !== it.y;
       placed.push({ x: it.x, y, w, ax: it.x, ay: it.y, baby, extra: 0, el, text });
       el.style.transform = `translate(${it.x - w / 2}px, ${y - 38}px)`;
       el.style.opacity = it.d > 10 ? 0.6 : 1;

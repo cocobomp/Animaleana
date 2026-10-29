@@ -50,3 +50,20 @@ export function bubbleTexture(icon) {
   cache.set(icon, tex);
   return tex;
 }
+
+/**
+ * Le rendu d'une photo (souvenir, balade, podium) : sans les bulles, qui sont une aide à l'écran, pas une partie de la
+ * scène. Remises tout de suite : la toile garde l'image jusqu'au prochain rendu (on la copie dans la même tâche).
+ */
+export function renderForPhoto(g) {
+  const hidden = [];
+  for (const e of g.entities?.values?.() ?? []) {
+    const st = e.status;
+    if (st?.visible && st.renderOrder === 10) {
+      st.visible = false;
+      hidden.push(st);
+    }
+  }
+  g.renderer.render(g.scene, g.camera);
+  for (const st of hidden) st.visible = true;
+}

@@ -159,7 +159,7 @@ describe('le fer porte-bonheur du jour', () => {
       bondNews: () => {}, remember: () => {}, save: () => {},
     };
     const ls = new LuckyShoes(g);
-    Object.assign(ls, { prof: p, where: p.place, acc: 0 }); // (pas de sync : le fer est posé à la main)
+    Object.assign(ls, { prof: p, where: p.place, acc: 0, key: 'p1:maison:jour' }); // (pas de sync : le fer est posé à la main)
     ls.item = { kind: 'alu', model: new THREE.Group(), glint: new THREE.Object3D(), found: false, pop: 0 };
     ls.update(0.1);
     expect(ls.item.found).toBe(false);

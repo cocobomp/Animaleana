@@ -151,6 +151,12 @@ describe('la buée en 3D', () => {
     const g2 = { ...fakeGame(0), profile: { seenBreath: true }, ui: { toast: vi.fn() } };
     run(again, g2, [horse()], 6);
     expect(g2.ui.toast).not.toHaveBeenCalled();
+    // (pendant le tutoriel : pas encore, il viendra après)
+    const tuto = new HorseBreath(new THREE.Scene());
+    const g3 = { ...fakeGame(0), profile: { tutorial: { done: false } }, ui: { toast: vi.fn() } };
+    run(tuto, g3, [horse()], 6);
+    expect(g3.ui.toast).not.toHaveBeenCalled();
+    expect(g3.profile.seenBreath).toBeUndefined();
   });
 
   it('en sueur à 2 °C : il fume du dos, même sans expirer ; sec, rien', () => {

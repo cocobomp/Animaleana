@@ -138,4 +138,24 @@ describe('dans le jeu (src/game/Game.js starsTick)', () => {
     Game.prototype.starsTick.call(g);
     expect(toasts).toEqual(['⭐ Saut : Étoile a maintenant 2 étoiles !']);
   });
+
+  it('deux étoiles d\'un coup : une seule notée par petit mot ; l\'autre reste à fêter, même après avoir quitté', () => {
+    const a = horse({ id: 'h4' });
+    const toasts = [];
+    const g = { profile: { animals: [a] }, ui: { toast: (m) => toasts.push(m) }, entities: new Map() };
+    a.skills.jump = 19;
+    a.skills.speed = 19;
+    Game.prototype.starsTick.call(g);
+    a.skills.jump = 21;
+    a.skills.speed = 21;
+    Game.prototype.starsTick.call(g);
+    expect(toasts).toHaveLength(1);
+    // (on quitte : la sauvegarde garde a.stars ; on revient, une autre partie du jeu)
+    const back = JSON.parse(JSON.stringify(a));
+    const g2 = { profile: { animals: [back] }, ui: { toast: (m) => toasts.push(m) }, entities: new Map() };
+    Game.prototype.starsTick.call(g2);
+    Game.prototype.starsTick.call(g2);
+    expect(toasts).toHaveLength(2);
+    expect(toasts.some((x) => x.includes('Saut')) && toasts.some((x) => x.includes('Vitesse'))).toBe(true);
+  });
 });

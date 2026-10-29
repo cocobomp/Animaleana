@@ -22,6 +22,7 @@ import { buildAvatar, animateAvatarWalk, updateAvatarLife, startAvatarGesture } 
 import { disposeModel } from './models/animalModel.js';
 import { judgeLines } from '../ui/beauty.js';
 import { t, ta } from '../i18n.js';
+import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const fwd = (h) => new THREE.Vector3(Math.sin(h), 0, Math.cos(h));
@@ -1106,7 +1107,7 @@ class BeautySession extends Session {
   takePhoto() {
     const g = this.game;
     try {
-      g.renderer.render(g.scene, g.camera);
+      renderForPhoto(g);
       const src = g.renderer.domElement;
       const c = document.createElement('canvas');
       c.width = 192;

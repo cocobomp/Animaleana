@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { t } from '../i18n.js';
 import { earn, addStat, isSandbox } from '../sim/profile.js';
-import { bondStage } from '../sim/animal.js';
+import { bondStage, canRide } from '../sim/animal.js';
 import { boxOccupants } from '../sim/facilities.js';
 import { keepsMemories } from '../sim/memories.js'; // (tes chevaux : pas ceux qu'on te confie)
 import { LUCKY, SHOE_KINDS, SHOE_SHAPES, dayKey, shoeOfDay, findShoe } from '../sim/luckyShoes.js';
@@ -115,6 +115,7 @@ export class LuckyShoes {
     this.prof = null;
     this.where = null;
     this.toldKey = null;
+    this.footKey = null;
   }
 
   /** Pose le fer du jour (ou le retire) : une autre partie, un autre lieu, un autre jour. */
@@ -123,7 +124,9 @@ export class LuckyShoes {
     const p = g.profile;
     this.prof = p;
     this.where = p?.place;
-    const on = !!p && g.isHome && p.tutorial?.done !== false && p.animals.some((a) => a.species === 'horse' && !a.client && !a.guest);
+    // (un cheval à toi, ici, assez grand pour être monté : sinon, rien à ramasser)
+    const on = !!p && g.isHome && p.tutorial?.done !== false
+      && p.animals.some((a) => keepsMemories(a) && a.location === p.place && canRide(a).reason !== 'tooYoung');
     const key = on ? `${p.id}:${p.place}:${dayKey()}` : null;
     if (key === this.key) return;
     this.key = key;
@@ -191,8 +194,8 @@ export class LuckyShoes {
     const p = pl.root.position;
     if (Math.hypot(it.model.position.x - p.x, it.model.position.z - p.z) > LUCKY.reach) return;
     if (!own) {
-      if (!this.footSaid) {
-        this.footSaid = true;
+      if (this.footKey !== this.key) {
+        this.footKey = this.key; // (une fois par jour et par partie)
         g.ui.toast(t('ls_onFoot'), 5000);
       }
       return;

@@ -59,6 +59,8 @@ export class TrailView extends RoadView {
       keep(e);
       e.world = FLAT;
       e.sleeping = false;
+      e.wish = null; // (pas de bulle « il te demande » sur le chemin : la ferme attend, rien ne la ferait éclater)
+      e.updateStatus?.();
       e.heading = 0;
       e.speed = 0;
       e.root.position.set(x, 0, z);

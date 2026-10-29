@@ -538,6 +538,7 @@ export class AnimalEntity {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture(emoji), transparent: true, depthWrite: false }));
       s.position.set((Math.random() - 0.5) * 0.4, y, (Math.random() - 0.5) * 0.4);
       s.scale.setScalar(0.35);
+      s.renderOrder = 11; // (après la bulle « il te demande » : ⭐ ✨ 📸 en sortent, pas dessous)
       s.userData = { life: 1.4 + Math.random() * 0.5, vy: 0.6 + Math.random() * 0.3, delay: i * 0.2 };
       s.visible = false;
       this.root.add(s);
@@ -640,6 +641,7 @@ export class AnimalEntity {
     }
     const cam = wish && ctx?.game?.camera;
     if (cam) {
+      st.visible = !this.labelMoved; // (son nom écarté par un voisin : la bulle serait sous le nom de l'autre)
       st.scale.setScalar(bubbleScale(cam.fov, window.innerHeight));
       st.center.y = 1 + Math.sin(this.time * 3) * 0.04; // (elle pend sous l'étiquette et flotte un peu)
     }

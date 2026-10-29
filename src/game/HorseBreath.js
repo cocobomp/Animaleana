@@ -156,7 +156,7 @@ export class HorseBreath {
     this.breaths++;
     // La première fois, tout près et bien visible : le petit mot.
     const p = g.profile;
-    if (p && !p.seenBreath && fog >= BREATH_FX.tip && g.player && e.position.distanceTo(g.player.position) < TIP_NEAR) {
+    if (p && !p.seenBreath && p.tutorial?.done !== false && fog >= BREATH_FX.tip && g.player && e.position.distanceTo(g.player.position) < TIP_NEAR) {
       p.seenBreath = true;
       g.ui.toast(t('breathCold', { name: e.data.name, g: e.data.sex }), 6000);
     }

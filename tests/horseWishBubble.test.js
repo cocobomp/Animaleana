@@ -131,4 +131,28 @@ describe('la bulle de ce qu\'il te demande', () => {
     run(1.2);
     expect(e.wish).toBe(null);
   });
+
+  it('son nom écarté par un voisin (src/ui/UI.js updateLabels) : sa bulle se cache, puis revient', () => {
+    const { e, run } = setup();
+    run(1.6);
+    expect(e.wish?.id).toBe('hay');
+    expect(e.status.visible).toBe(true);
+    e.labelMoved = true;
+    run(0.05);
+    expect(e.status.visible).toBe(false);
+    e.labelMoved = false;
+    run(0.05);
+    expect(e.status.visible).toBe(true);
+  });
+
+  it('en voyage à cheval (src/game/TrailView.js) : plus de bulle figée au-dessus de lui', () => {
+    const { e, run } = setup();
+    run(1.6);
+    expect(e.status.material.map).toBe(bubbleTexture('🌾'));
+    e.wish = null; // (comme TrailView.attachCarrier)
+    e.updateStatus();
+    expect(e.statusKey).not.toBe('hay');
+    // (content : rien au-dessus de lui ; sinon l'emoji de son humeur, à sa place)
+    expect(e.status.visible ? e.status.material.map : null).not.toBe(bubbleTexture('🌾'));
+  });
 });

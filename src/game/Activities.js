@@ -29,6 +29,7 @@ import { realGoatPose } from './models/goatReal.js'; // chèvre réaliste : saut
 import { realCowPose } from './models/cowReal.js'; // vache réaliste : « viens » sabots libres, salut tête baissée
 import { ActivityHud, showActivityResults } from '../ui/activities.js';
 import { t, ta } from '../i18n.js';
+import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 
 const COLLECT_EMOJI = { apple: '🍎', flower: '🌼', horseshoe: '🍀', carrot: '🥕' };
 const ARENA_SPEED = 7.2; // galop de concours, un peu plus calme que le galop de balade
@@ -1092,7 +1093,7 @@ class TrailSession extends Session {
   takePhoto(s) {
     const g = this.game;
     try {
-      g.renderer.render(g.scene, g.camera);
+      renderForPhoto(g);
       const src = g.renderer.domElement;
       const c = document.createElement('canvas');
       c.width = 192;

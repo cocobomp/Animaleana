@@ -29,6 +29,7 @@ import { isStarted } from '../sim/careers.js'; // registre des métiers (💼)
 import { GEAR, sizeOf } from '../sim/gear.js'; // sellerie (types d'objets : filet, licol, selle ; tailles)
 import { TOOLS } from '../sim/tools.js'; // 🧰 trousse de secours
 import { t, ta, L } from '../i18n.js';
+import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x5a3a24];
 const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xa63a1f, 0x3b2a20];
@@ -989,7 +990,7 @@ class GuidedRideSession extends ActivitySession {
   savePhoto() {
     const g = this.game;
     try {
-      g.renderer.render(g.scene, g.camera);
+      renderForPhoto(g);
       const src = g.renderer.domElement;
       const c = document.createElement('canvas');
       c.width = 192;

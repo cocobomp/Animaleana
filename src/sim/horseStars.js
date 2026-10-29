@@ -13,8 +13,8 @@ export const STAR_SKILLS = [
   { id: 'speed', icon: '🏃' },
   { id: 'endurance', icon: '💪' },
   { id: 'jump', icon: '⤴️' },
-  { id: 'dressage', icon: '🎩' },
-  { id: 'obedience', icon: '👂' },
+  { id: 'dressage', icon: '🎠' }, // (comme les boutons de dressage)
+  { id: 'obedience', icon: '🎓' }, // (pas 👂 : la ligne de ses oreilles est juste au-dessus)
 ];
 /** Ce qu'une étoile de saut ouvre (texte st_unlock_<clé>). */
 const UNLOCKS = { jump: [null, 'noRefuse', 'club', 'grand'] };
@@ -36,9 +36,10 @@ export function starsView(a) {
 
 /**
  * Les étoiles gagnées depuis la dernière fois : [{ id, stars }], et notées (a.stars). La première fois (vieille
- * partie, cheval qui arrive) : notées sans rien dire. Jamais pour un cheval qu'on te confie.
+ * partie, cheval qui arrive) : notées sans rien dire. Jamais pour un cheval qu'on te confie. max : au plus tant
+ * d'étoiles notées ; les autres restent à fêter la fois suivante (même après avoir quitté la partie).
  */
-export function newStars(a) {
+export function newStars(a, max = Infinity) {
   if (!keepsMemories(a)) return [];
   const first = !a.stars;
   const was = a.stars ?? {};
@@ -47,7 +48,12 @@ export function newStars(a) {
   for (const { id } of STAR_SKILLS) {
     const n = starsOf(skillOf(a, id));
     const before = was[id] ?? 0;
-    if (!first && n > before) out.push({ id, stars: n });
+    const fresh = !first && n > before;
+    if (fresh && out.length >= max) {
+      now[id] = before; // (fêtée à la prochaine fois)
+      continue;
+    }
+    if (fresh) out.push({ id, stars: n });
     now[id] = Math.max(n, before); // (une étoile fêtée ne l'est jamais deux fois)
   }
   a.stars = now;

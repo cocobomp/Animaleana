@@ -834,6 +834,12 @@ export class TripFlow {
     for (const w of vehicle?.walkers ?? []) vehicle.abortWalk(w);
     this.journey = { trip, watch, speed: 1, vehicle, destId: l.destId, mode: l.mode, ids: l.ids, cargo: l.cargo, startClock: p.clock, camT: 0, report: null, purpose: l.purpose ?? null };
     this.loading = null;
+    // (pendant le trajet, la ferme ne se met plus à jour : pas de bulle « il te demande » figée, à cheval ou en camion)
+    for (const e of g.entities?.values?.() ?? []) {
+      if (!e.wish) continue;
+      e.wish = null;
+      e.updateStatus?.();
+    }
     this.ui.renderStatus();
     g.focusKey = 'trip';
     g.focus = null;

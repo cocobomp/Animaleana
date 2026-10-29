@@ -21,6 +21,7 @@ import { openActivities } from './activities.js';
 import { TOOLS, toolAtHome } from '../sim/tools.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import { WORMER_COST } from '../sim/horseHealth.js'; // le prix du vermifuge
+import { beatRing } from '../sim/posting.js'; // ⬆️ trot enlevé
 import { lifeStage } from '../sim/animal.js'; // étiquettes groupées des bébés
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
@@ -88,13 +89,24 @@ export class UI {
         this.gaitBtns[g] = b;
         return b;
       }));
-    root.append(this.touchPad, this.gaitPad, this.statusBar, this.labels);
+    // ⬆️ Trot enlevé (src/sim/posting.js) : un gros bouton rond à toucher en rythme, une fois par foulée ; le cercle se
+    // referme sur lui au temps fort (updatePostBtn, à chaque image). Au doigt qui se pose (pas au clic) : sans retard.
+    this.postRing = h('span', { class: 'post-ring', 'aria-hidden': 'true' });
+    this.postCount = h('span', { class: 'post-count' });
+    this.postName = h('span', { class: 'post-name' });
+    this.postBtn = h('button', { id: 'post-btn', type: 'button', hidden: true },
+      this.postRing, h('span', { class: 'post-icon', 'aria-hidden': 'true' }, '⬆️'), this.postName, this.postCount, h('kbd', {}, '␣'));
+    this.postBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); // (pas de focus : Espace reste au jeu)
+      this.game?.postTrot();
+    });
+    root.append(this.touchPad, this.gaitPad, this.postBtn, this.statusBar, this.labels);
 
     // Un seul écouteur pour tous les boutons : petit « tic », plus chantant pour les boutons principaux,
     // descendant pour les boutons rouges. (Pas pour les boutons de direction qu'on garde appuyés.)
     root.addEventListener('click', (e) => {
       const b = e.target?.closest?.('button');
-      if (!b || b.disabled || b.classList.contains('pad-btn')) return;
+      if (!b || b.disabled || b.classList.contains('pad-btn') || b.id === 'post-btn') return;
       audio.ui(b.classList.contains('primary') ? 'ok' : b.classList.contains('danger') ? 'cancel' : 'tap');
     });
 
@@ -313,6 +325,43 @@ export class UI {
       const gal = k === 'canter' && pl.gaitNow === 'gallop';
       if (b.classList.contains('gallop') !== gal) b.classList.toggle('gallop', gal);
     }
+  }
+
+  /** ⬆️ Le bouton du trot enlevé : montré au trot en selle (Game.canPostTrot) ; le cercle suit la foulée. */
+  updatePostBtn() {
+    const g = this.game;
+    const show = !!g?.canPostTrot?.() && !this.isBlocking();
+    if (this.postBtn.hidden === show) {
+      this.postBtn.hidden = !show;
+      if (show) {
+        this.postName.textContent = t('post_btn');
+        this.postBtn.setAttribute('aria-label', t('post_btnHelp'));
+        this.postBtn.title = t('post_btnHelp');
+        // (la première fois : comment on fait)
+        if (!g.profile.postHint) {
+          g.profile.postHint = true;
+          this.toast(t('post_hint'), 9000);
+        }
+      }
+    }
+    if (!show) return;
+    const pl = g.player;
+    const ring = beatRing(pl.stride ?? 0);
+    this.postRing.style.transform = `scale(${(1 + ring * 0.75).toFixed(3)})`;
+    this.postRing.style.opacity = (0.3 + 0.7 * (1 - ring)).toFixed(3);
+    const n = pl.posting?.streak ?? 0;
+    const txt = n ? `×${n}` : '';
+    if (this.postCount.textContent !== txt) this.postCount.textContent = txt;
+    const on = !!pl.postingNow;
+    if (this.postBtn.classList.contains('on') !== on) this.postBtn.classList.toggle('on', on);
+  }
+
+  /** ⬆️ Bien en rythme (vert) ou pas (rouge) : un petit éclair sur le bouton. */
+  postFeedback(r) {
+    const b = this.postBtn;
+    b.classList.remove('good', 'bad');
+    void b.offsetWidth; // (relance l'animation)
+    b.classList.add(r.ok ? 'good' : 'bad');
   }
 
   refresh() {

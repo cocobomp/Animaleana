@@ -30,6 +30,7 @@ export const GALOPS = [
       { id: 'lesson', icon: '🎓', stat: 'actvLessons', n: 1 },
       { id: 'perfect', icon: '⭐', stat: 'perfectDays', n: 1 },
       { id: 'came', icon: '📣', stat: 'horse_came', n: 1 }, // (il vient quand tu l'appelles : src/sim/horseCall.js)
+      { id: 'post', icon: '⬆️', stat: 'risingTrot', n: 1 }, // (trotter enlevé : src/sim/posting.js)
     ],
     quiz: [2, 0, 0, 1, 1, 1, 0, 1],
   },

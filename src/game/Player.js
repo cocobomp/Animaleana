@@ -11,9 +11,11 @@ import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 import { tackEffects } from '../sim/gear.js';
 import { rideSpeed, allowedGait, rideEffort, nextSpookIn, nextGrazeIn, SPOOKY } from '../sim/riding.js'; // allures en balade libre
+import { newPosting, postTick, isPosting, POST } from '../sim/posting.js'; // ⬆️ trot enlevé
 import { helmetModel, helmetStrapsModel } from './models/tackModels.js'; // bombe du cavalier et ses sangles
 import { helmetFit } from './models/avatarHair.js'; // la bombe à la taille de la coiffure
 import { prepareRiderFit, fitRider, seatOnSaddle, releaseRiderFit } from './models/riderFit.js'; // cavalier sur le cheval réaliste
+const TAU = Math.PI * 2; // (un tour de foulée)
 
 const WALK = 3.2;
 const RUN = 6.2;
@@ -194,6 +196,9 @@ export class Player {
     this.cantered = false;
     this.grazing = null; // il s'est arrêté pour brouter (rideStep) : { pull } secondes de joystick poussé
     this.grazeIn = null;
+    this.posting = newPosting(); // ⬆️ trot enlevé (src/sim/posting.js : Game.postTrot)
+    this.postingNow = false;
+    this.canPost = undefined; // (en selle avec des étriers : rideStep)
     entity.ridden = true;
     entity.data.following = false;
     this.root.position.copy(entity.position);
@@ -837,7 +842,14 @@ export class Player {
    * fait un bond de côté (un oiseau, un sac qui bouge…), ralentit, puis on repart ; au galop, il repasse au trot.
    */
   rideStep(dt, mount, p) {
-    rideEffort(mount.data, this.speed > 0.3 ? this.gaitNow : 'halt', dt); // (immobile : il souffle)
+    // ⬆️ Trot enlevé (src/sim/posting.js) : en selle, au trot, la série de bons temps (Game.postTrot) ; enlevé, le trot
+    // le fatigue deux fois moins. Sans série, on trotte assis.
+    const stride = this.stride ?? 0;
+    this.canPost = !this.bareback && !!mount.data.gear?.saddle;
+    const trotting = this.canPost && this.gaitNow === 'trot' && this.speed > 0.3;
+    postTick(this.posting, stride, trotting);
+    this.postingNow = trotting && isPosting(this.posting, stride);
+    rideEffort(mount.data, this.speed > 0.3 ? this.gaitNow : 'halt', dt, this.postingNow ? POST.save : 1); // (immobile : il souffle)
     // Le cheval gourmand : au pas sur l'herbe, il finit par s'arrêter pour brouter (src/sim/riding.js nextGrazeIn).
     if (this.grazing) {
       const n = mount.data.needs;
@@ -933,6 +945,12 @@ export class Player {
       phase = this.ridePhase;
     }
     this.ridePh = phase;
+    // Les foulées comptées sans retour à zéro (la phase du cheval réaliste repart de 0 à chaque foulée) : le rythme
+    // du trot enlevé (src/sim/posting.js) ; stride = foulées entières + fraction.
+    const ph = ((phase % TAU) + TAU) % TAU;
+    if (this.stridePh !== undefined && ph < this.stridePh - Math.PI) this.strideK = (this.strideK ?? 0) + 1;
+    this.stridePh = ph;
+    this.stride = (this.strideK ?? 0) + ph / TAU;
     // Rebond du dos : la position de l'os du corps (GLB) ou du corps procédural. Cheval réaliste : le bassin
     // suit le siège de la selle (posée sur le tronc) à chaque image.
     let bob = 0;
@@ -950,6 +968,8 @@ export class Player {
     const st = this.ride0;
     st.gait = this.rideGait;
     st.phase = phase;
+    // (en balade libre, on se lève au trot seulement en trottant enlevé — le bouton ⬆️ en rythme ; sinon assis)
+    if (this.canPost !== undefined) st.posting = this.canPost && (this.gaitEnabled === false || this.auto ? true : !!this.postingNow);
     st.bob = bob;
     // (saut d'obstacle : position en suspension, réglée par la séance, src/game/Activities.js)
     st.jump = this.jumpPose ?? 0;

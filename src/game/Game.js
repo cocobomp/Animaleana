@@ -54,6 +54,7 @@ import { healthDay, noteHealth, WORMER_COST } from '../sim/horseHealth.js'; // l
 import { markHorseDay } from '../sim/horseDay.js'; // la journée de ton cheval
 import { galopLevel, nextGalop, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
 import { answerCall, cameWhenCalled } from '../sim/horseCall.js'; // 📣 appeler ton cheval
+import { tapPost, postMilestone } from '../sim/posting.js'; // ⬆️ trot enlevé
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
   unsaddle, saddleUp,
@@ -1057,6 +1058,7 @@ export class Game {
       this.player.update(mgmt ? 0 : wdt, pctrl, this.rig.yaw, this.rig.mode === 'first');
       for (const e of entities) e.update(wdt, ctx);
       this.player.lateUpdate?.(mgmt ? 0 : wdt); // le cavalier suit le cheval qu'on vient d'animer
+      if (i === 0) this.ui.updatePostBtn?.(); // ⬆️ le cercle du trot enlevé, au rythme des foulées
       if (i === 0) this.ui.updateGaitPad?.(); // (boutons d'allure : montrés ou cachés, allure allumée — très léger)
       for (const h of this.helpers.values()) h.update(wdt, this);
       this.dogTrainer.update(wdt); // maîtres en visite, promenade-séance, démonstration
@@ -1836,6 +1838,7 @@ export class Game {
     // À cheval, en balade libre : 0 arrêt, 1 pas, 2 trot, 3 galop.
     const gaitKey = { Digit0: 'halt', Numpad0: 'halt', Digit1: 'walk', Digit2: 'trot', Digit3: 'canter' }[code];
     if (gaitKey && this.player.mount && !this.activities.active) this.setRideGait(gaitKey);
+    if (code === 'Space' && this.canPostTrot()) this.postTrot(); // ⬆️ trot enlevé
   }
 
   interact() {
@@ -2116,6 +2119,26 @@ export class Game {
     a.following = !a.following;
     this.ui.toast(t(a.following ? 'following' : 'staying', { name: a.name, g: a.sex }));
     if (a.following) addStat(this.profile, 'walks');
+  }
+
+  /** ⬆️ Le bouton du trot enlevé est là : en balade libre, en selle (étriers), au trot. */
+  canPostTrot() {
+    const pl = this.player;
+    return !!pl.mount && pl.gaitEnabled !== false && !pl.auto && !this.activities.active && !this.tripFlow?.active
+      && !!pl.canPost && pl.gaitNow === 'trot' && pl.speed > 0.3;
+  }
+
+  /** ⬆️ Tu te lèves (bouton ou Espace) : au temps fort, la série monte ; trop tôt ou trop tard, elle repart à zéro. */
+  postTrot() {
+    const pl = this.player;
+    if (!pl.posting) return null;
+    const r = tapPost(pl.posting, pl.stride ?? 0);
+    this.ui.postFeedback?.(r);
+    if (r.ok && postMilestone(pl.posting)) {
+      addStat(this.profile, 'risingTrot'); // (Galop 2)
+      this.ui.toast(t('post_great', { name: pl.mount.data.name, g: pl.mount.data.sex }), 5000);
+    }
+    return r;
   }
 
   /**

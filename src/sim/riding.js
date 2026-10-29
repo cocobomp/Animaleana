@@ -50,11 +50,11 @@ export function allowedGait(gait, a) {
 
 /**
  * dt secondes de monte à cette allure : l'énergie baisse (ou remonte un peu au pas et à l'arrêt) ; au galop, il
- * transpire (pansage) et a soif.
+ * transpire (pansage) et a soif. trotK : le coût du trot (0,5 quand tu trottes enlevé, src/sim/posting.js).
  */
-export function rideEffort(a, gait, dt) {
+export function rideEffort(a, gait, dt, trotK = 1) {
   const n = a.needs;
-  n.energy = clamp(n.energy - (GAIT_COST[gait] ?? 0) * dt);
+  n.energy = clamp(n.energy - (GAIT_COST[gait] ?? 0) * (gait === 'trot' ? trotK : 1) * dt);
   if (gait === 'canter' || gait === 'gallop') {
     n.grooming = clamp(n.grooming - (gait === 'gallop' ? 0.08 : 0.04) * dt);
     n.thirst = clamp(n.thirst - (gait === 'gallop' ? 0.05 : 0.025) * dt);

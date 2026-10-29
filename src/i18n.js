@@ -231,6 +231,12 @@ const fr = {
   bondUp_trust: '💞 {name} te fait confiance maintenant !',
   bondUp_love: '💞 {name} t\'adore ! Continue à bien t\'occuper de lui.',
   bondUp_love_f: '💞 {name} t\'adore ! Continue à bien t\'occuper d\'elle.',
+  // ⬆️ Trot enlevé (src/sim/posting.js)
+  post_btn: 'Enlever',
+  post_btnHelp: 'Trot enlevé : touche quand le cercle se referme (ou Espace)',
+  post_hint: '⬆️ Au trot, touche « Enlever » en rythme, quand le cercle se referme : tu te lèves et tu te rassois à chaque foulée. C\'est plus doux pour le dos de ton cheval !',
+  post_great: '⬆️ Bravo, tu trottes enlevé ! C\'est plus doux pour le dos de {name} : il se fatigue moins.',
+  post_great_f: '⬆️ Bravo, tu trottes enlevé ! C\'est plus doux pour le dos de {name} : elle se fatigue moins.',
   // 📣 Appeler ton cheval (src/sim/horseCall.js)
   act_call: 'Appeler {name}',
   callHint: 'Au trot vers toi… si votre lien est assez fort !',
@@ -2343,6 +2349,10 @@ const en = {
   bond_best: 'You\'re the best of friends!',
   bondUp_trust: '💞 {name} trusts you now!',
   bondUp_love: '💞 {name} loves you! Keep taking good care of them.',
+  post_btn: 'Post',
+  post_btnHelp: 'Rising trot: tap when the circle closes (or Space)',
+  post_hint: '⬆️ At trot, tap "Post" in rhythm when the circle closes: you rise and sit with every stride. It is gentler on your horse\'s back!',
+  post_great: '⬆️ Well done, you\'re posting the trot! It is gentler on {name}\'s back: they tire less.',
   act_call: 'Call {name}',
   callHint: 'Trots over to you… if your bond is strong enough!',
   call_come: '📣 {name} lifts their head, neighs… and trots over!',

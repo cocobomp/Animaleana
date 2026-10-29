@@ -6,14 +6,19 @@ import { h } from './dom.js';
 import { t } from '../i18n.js';
 
 /** Change quand une nouvelle liste arrive : elle est montrée une fois de plus. */
-export const NEWS_ID = 'cheval7';
+export const NEWS_ID = 'cheval8';
 export const NEWS = [
-  { icon: '🃏', key: 'cards', fresh: true },
-  { icon: '🔍', key: 'quirks', fresh: true },
-  { icon: '🪢', key: 'bridle', fresh: true },
-  { icon: '🎨', key: 'matchy', fresh: true },
-  { icon: '🎂', key: 'anniv', fresh: true },
+  { icon: '💬', key: 'wish', fresh: true },
+  { icon: '⭐', key: 'stars', fresh: true },
+  { icon: '🍀', key: 'lucky', fresh: true },
+  { icon: '🌬️', key: 'breath', fresh: true },
+  { icon: '📸', key: 'photos', fresh: true },
   { icon: '🎃', key: 'halloween', fresh: true },
+  { icon: '🃏', key: 'cards' },
+  { icon: '🔍', key: 'quirks' },
+  { icon: '🪢', key: 'bridle' },
+  { icon: '🎨', key: 'matchy' },
+  { icon: '🎂', key: 'anniv' },
   { icon: '📖', key: 'story2' },
   { icon: '🐢', key: 'warmup' },
   { icon: '📸', key: 'memories' },

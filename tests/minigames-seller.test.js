@@ -7,7 +7,7 @@ import { makeRng } from '../src/ui/minigames/draw.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { createProfile } from '../src/sim/profile.js';
 import { seeded } from '../src/sim/rng.js';
-import { starterTack, freeSaddle, unsaddle, saddleUp, wears, rideGear } from '../src/sim/gear.js';
+import { starterTack, freeSaddle, unsaddle, saddleUp, wears, rideGear, equip } from '../src/sim/gear.js';
 
 let t;
 let seller;
@@ -184,6 +184,24 @@ describe('desseller, reseller', () => {
     expect(saddleUp(p, a).ok).toBe(true);
     expect(a.gear.saddle.item).toBe(was);
     expect(unsaddle(horse())).toBe(false); // (pas de selle : rien à faire)
+  });
+
+  it('un tapis mis sans selle (🎨 pour l\'assortir) reste quand on resselle', () => {
+    const p = createProfile('Lou');
+    p.items.saddlePad = 1;
+    const a = horse();
+    p.animals.push(a);
+    starterTack(p, a);
+    expect(equip(p, a, 'saddlePad', 'navy', { exact: true }).ok).toBe(true);
+    unsaddle(a);
+    expect(a.lastPad).toEqual({ item: 'saddlePad', color: 'navy' });
+    expect(equip(p, a, 'saddlePad', 'pink', { exact: true }).ok).toBe(true);
+    expect(saddleUp(p, a).ok).toBe(true);
+    expect(a.gear.pad).toEqual({ item: 'saddlePad', color: 'pink' });
+    // (sans tapis sur lui : celui d'avant revient, comme avant)
+    unsaddle(a);
+    expect(saddleUp(p, a).ok).toBe(true);
+    expect(a.gear.pad).toEqual({ item: 'saddlePad', color: 'pink' });
   });
 
   it('sans selle libre : on ne peut pas seller', () => {

@@ -471,13 +471,16 @@ export function unsaddle(a) {
   return true;
 }
 
-/** Seller : la selle d'avant (ou une libre), et son tapis s'il en avait un. Renvoie le résultat d'equip. */
+/**
+ * Seller : la selle d'avant (ou une libre), et son tapis s'il en avait un — sauf s'il porte déjà un tapis (mis
+ * depuis sa fiche, 🎨 pour l'assortir : on le garde). Renvoie le résultat d'equip.
+ */
 export function saddleUp(profile, a, { home = true } = {}) {
   const item = freeSaddle(profile, a, { home });
   if (!item) return { ok: false, reason: 'notOwned', item: 'saddle' };
   const color = a.lastSaddle?.item === item ? a.lastSaddle.color : undefined;
   const r = equip(profile, a, item, color, { autoSwap: home, exact: true });
-  if (r.ok && a.lastPad?.item) equip(profile, a, a.lastPad.item, a.lastPad.color, { autoSwap: home, exact: true });
+  if (r.ok && a.lastPad?.item && !a.gear?.pad) equip(profile, a, a.lastPad.item, a.lastPad.color, { autoSwap: home, exact: true });
   return r;
 }
 

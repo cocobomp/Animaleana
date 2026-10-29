@@ -2759,12 +2759,13 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .tk-slot { display: inline-block; min-width: 74px; color: var(--muted); }
 .tk-dot { display: inline-block; vertical-align: middle; width: 16px; height: 16px; margin-left: 6px; }
 .tk-goshop { justify-self: start; }
-/* 🎨 Son ensemble (fiche du cheval, src/ui/tack.js matchyLine) : tapis, jambes et bombe ; grise tant qu'elle n'est pas assortie */
+/* 🎨 Son ensemble (fiche du cheval, src/ui/tack.js matchyLine) : tapis, jambes et bombe ; vide tant qu'elle n'est pas assortie,
+   pleine et cerclée de vert sinon (même toute blanche, on la voit) */
 .mx-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
 .mx-dots { flex: 1 1 100%; display: flex; align-items: center; gap: 6px; }
 .mx-dots b { margin-right: 4px; }
-.mx-dot { width: 20px; height: 20px; border-radius: 50%; background: #e6e2d8; border: 2px dashed #c9c2b2; flex-shrink: 0; }
-.mx-dot.ok { border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+.mx-dot { width: 20px; height: 20px; border-radius: 50%; background: transparent; border: 2px dashed #c9c2b2; flex-shrink: 0; }
+.mx-dot.ok { border: 2px solid #fff; box-shadow: 0 0 0 2px var(--good); }
 .mx-tip { flex: 1 1 100%; color: var(--muted); }
 .mx-tip span { display: block; }
 .mx-tip .mx-yay { color: var(--ink); font-weight: 600; }

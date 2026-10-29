@@ -253,10 +253,12 @@ rappelle de lui parler doucement. Chaque découverte : un petit mot 🔍, un sou
 
 ### Tout assorti (0.5, `src/sim/matchy.js`)
 Comme au poney-club, où l'on aime les ensembles de la même couleur : dans sa fiche, sous l'équipement, la ligne
-« 🎨 Ensemble » a trois pastilles — le tapis, les jambes (guêtres ou cloches) et ta bombe —, grises tant qu'elles ne
-sont pas de la couleur du tapis (le tapis citrouille ne compte pas). Un petit mot nomme la pièce qui manque
+« 🎨 Ensemble » a trois pastilles — le tapis, les jambes (guêtres ou cloches) et ta bombe —, vides tant qu'elles ne
+sont pas de la couleur du tapis (le tapis citrouille ne compte pas), pleines et cerclées de vert sinon ; pas pour un
+poulain trop jeune pour être monté. Un petit mot nomme la pièce qui manque
 (« Il manque : Cloches (Rose) » : ce qui est déjà à toi d'abord, sinon la moins chère), avec un bouton : « Mettre »
-si elle est à toi (on change seulement sa couleur), sinon sa fiche à la sellerie, dans la bonne couleur. Tapis et
+si elle est à toi (on change seulement sa couleur ; un tapis mis sans selle reste quand on le selle), sinon sa fiche
+à la sellerie, dans la bonne couleur. Tapis et
 jambes assortis : « ✨ Assorti : Rose ! » et des étincelles sur le cheval ; ta bombe aussi : « 🌟 Tout assorti, même
 ta bombe ! ». Le premier ensemble est un souvenir ; ensuite, monter avec un ensemble fait quelques étincelles, et le
 défi du jour peut devenir « 🎨 monte avec un ensemble assorti ». Jusqu'à la bombe : blanc, bleu marine, noir, rose,

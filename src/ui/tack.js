@@ -11,6 +11,7 @@ import {
 import { TOOLS, hasTool, toolShown } from '../sim/tools.js';
 import { matchyOf, missingFor } from '../sim/matchy.js'; // 🎨 tout assorti
 import { SPECIES } from '../sim/species.js';
+import { ageYears } from '../sim/animal.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import { thumb, thumbsFor, photoDouble } from '../game/thumbScenes.js'; // vignettes 3D (src/game/thumbs.js)
 import { aboveGround } from '../game/thumbs.js';
@@ -446,12 +447,13 @@ export function animalGearSection(ui, a) {
       ...(spare.length ? [] : home.slice(0, 2)).map((id) => h('button', { class: 'small tk-athome', title: t('gearAtHome'), onClick: () => { g.equip(a, id, colorOf(p, id), { exact: true }); ui.renderPanel(); } },
         `🏠 ${name(id)} · ${t('tk_atHomeRow')}`))))
       : h('p', { class: 'note' }, t('tk_gearNone')),
-    a.species === 'horse' && !a.client && !a.guest ? matchyLine(ui, a) : null,
+    // (🎨 un ensemble pour monter : pas pour un poulain trop jeune)
+    a.species === 'horse' && !a.client && !a.guest && ageYears(a) >= SPECIES.horse.rideYears ? matchyLine(ui, a) : null,
     h('button', { class: 'small tk-goshop', onClick: () => openTackShop(ui, { tab: firstCat }) }, `🏇 ${t('tk_goShop')}`));
 }
 
 /**
- * 🎨 Son ensemble (src/sim/matchy.js) : trois pastilles (le tapis, les jambes, ta bombe ; grises tant qu'elles ne sont
+ * 🎨 Son ensemble (src/sim/matchy.js) : trois pastilles (le tapis, les jambes, ta bombe ; vides tant qu'elles ne sont
  * pas de la couleur du tapis), un petit mot, et la pièce qui manque : « Mettre » si elle est à toi, sinon sa fiche à
  * la sellerie, dans la bonne couleur.
  */

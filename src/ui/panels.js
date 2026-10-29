@@ -35,6 +35,7 @@ import { healthPlan, HEALTH_PLAN, WORMER_COST } from '../sim/horseHealth.js'; //
 import { horseDayView } from '../sim/horseDay.js'; // ☀️ la journée de ton cheval
 import { galopLevel, nextGalop, practiceOf, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
 import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
+import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -128,9 +129,13 @@ function daySection(g, a) {
   const view = horseDayView(a, g.day, g.hour);
   const perfect = !!a.today?.perfect;
   const mark = (x) => (x.done ? '✅' : x.missed ? '⌛' : x.later ? '🕑' : '⬜');
+  // 🎯 Le défi du jour (src/sim/horseChallenge.js)
+  const ch = todayChallenge(g.profile, g.day, true);
+  const chLine = ch ? h('p', { class: `note ch-line${ch.done ? ' good' : ''}` },
+    `${t('ch_title')} : ${ch.def.icon} ${t(`ch_${ch.def.id}`)} ${ch.done ? '✅' : `(${ch.have}/${ch.def.n})`}`) : null;
   return [h('h3', {}, t('hd_title')), h('p', { class: perfect ? 'note good' : 'note' }, t(perfect ? 'hd_perfect' : 'hd_help')),
     h('ul', { class: 'hd-list' }, view.map((x) => h('li', { class: `hd-row${x.done ? ' done' : x.missed ? ' missed' : ''}` },
-      `${mark(x)} ${x.icon} ${t(`hd_${x.id}`)}`)))];
+      `${mark(x)} ${x.icon} ${t(`hd_${x.id}`)}`))), chLine];
 }
 
 /** 📒 Le carnet de santé du cheval (src/sim/horseHealth.js) : chaque soin, quand, et le vermifuge à donner ici. */

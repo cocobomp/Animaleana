@@ -157,6 +157,7 @@ export class FreeJumps {
     resetPose(e);
     pl.avatar.root.rotation.x = 0;
     pl.jumpPose = 0;
+    pl.onStep?.(true, true); // (les sabots retombent)
     for (const o of this.logs) o.prev = null;
     if (j.step) return; // (enjambé au trot : rien à fêter)
     const a = e.data;

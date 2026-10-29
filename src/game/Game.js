@@ -42,7 +42,7 @@ import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeaso
 import { adoptionPrice, shopPrice, stageAgeDays } from '../sim/adoption.js';
 import { checkObjectives, objectiveParams } from '../sim/objectives.js';
 import { mainQuest, afterQuestsDone } from '../sim/quests.js'; // l'histoire de la ferme : fin d'un chapitre
-import { loadProfile, spend, earn, canAfford, addStat } from '../sim/profile.js';
+import { loadProfile, spend, earn, canAfford, addStat, isSandbox } from '../sim/profile.js';
 import { deviceStore, saveGuarded } from '../sim/saveStore.js'; // sauvegarde qui n'écrase rien en silence
 import { buildingActions, animalActionAllowed } from '../sim/buildings.js';
 import { addHelperXp, tireHelper, restHelper, updateBreak, onBreak, startBreak } from '../sim/helpers.js'; // les aides progressent
@@ -55,6 +55,7 @@ import { markHorseDay } from '../sim/horseDay.js'; // la journée de ton cheval
 import { galopLevel, nextGalop, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
 import { answerCall, cameWhenCalled } from '../sim/horseCall.js'; // 📣 appeler ton cheval
 import { tapPost, postMilestone } from '../sim/posting.js'; // ⬆️ trot enlevé
+import { todayChallenge, challengeJustDone, CHALLENGE_REWARD } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
   unsaddle, saddleUp,
@@ -899,6 +900,23 @@ export class Game {
     this.ui.toast(t('galop_ready', { n: next.id }), 8000);
   }
 
+  /** 🎯 Le défi du jour (src/sim/horseChallenge.js) : annoncé le matin, fêté quand il est réussi. */
+  challengeTick() {
+    const p = this.profile;
+    const horse = p.animals.find((a) => a.species === 'horse' && !a.client && !a.guest);
+    const c = todayChallenge(p, this.day, !!horse);
+    if (!c) return;
+    if (c.fresh && p.tutorial?.done !== false) this.ui.toast(t('ch_new', { what: t(`ch_${c.def.id}`) }), 7000);
+    if (!challengeJustDone(p, this.day)) return;
+    earn(p, CHALLENGE_REWARD.coins);
+    horse.bond = Math.min(100, (horse.bond ?? 0) + CHALLENGE_REWARD.bond);
+    addStat(p, 'challenges');
+    this.entities.get(horse.id)?.emit('🎯', 2);
+    audio.ui('coin');
+    const coins = isSandbox(p) ? '' : ` +${CHALLENGE_REWARD.coins} 🪙`;
+    this.ui.toast(`${t('ch_done', { what: t(`ch_${c.def.id}`), name: horse.name, g: horse.sex })}${coins}`, 7000);
+  }
+
   /** Le lien vient de passer une étape (src/sim/animal.js BOND_STAGES) : un petit mot et des cœurs. */
   bondNews(a, before) {
     const now = bondStage(a);
@@ -1163,6 +1181,7 @@ export class Game {
     if (this.checkAcc > 2) {
       this.checkAcc = 0;
       this.galopNews();
+      this.challengeTick();
       // Toute quête finie est récompensée, rejointe ou non ; une quête rejointe et finie quitte « Mes quêtes », et
       // la fin du chapitre en cours de l'histoire est fêtée par le guide, qui annonce le suivant (src/sim/quests.js).
       const chapterBefore = mainQuest(p);
@@ -2146,6 +2165,7 @@ export class Game {
     if (!pl.posting || !pl.mount) return null;
     const r = tapPost(pl.posting, pl.stride ?? 0);
     this.ui.postFeedback?.(r);
+    audio.ui(r.ok ? 'tap' : 'cancel'); // (un « toc » au bon temps)
     if (r.ok && postMilestone(pl.posting)) {
       addStat(this.profile, 'risingTrot'); // (Galop 2)
       this.ui.toast(t('post_great', { name: pl.mount.data.name, g: pl.mount.data.sex }), 5000);

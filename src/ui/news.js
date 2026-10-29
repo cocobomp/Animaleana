@@ -13,6 +13,7 @@ export const NEWS = [
   { icon: '🦶', key: 'hooves' },
   { icon: '📒', key: 'health' },
   { icon: '☀️', key: 'day' },
+  { icon: '🎯', key: 'challenge' },
   { icon: '🏅', key: 'galops' },
   { icon: '✨', key: 'coat' },
   { icon: '👂', key: 'ears' },

@@ -366,6 +366,20 @@ export class AnimalEntity {
       }
       return;
     }
+    // La nuit, chez lui, il se couche parfois pour dormir (une fois sur deux à peu près), et de temps en temps il
+    // s'allonge un moment sur le flanc : le sommeil profond. Il se relève quand il se réveille (sleepPose).
+    if (this.sleeping && !this.ridden && !this.scripted && !this.herdCtrl) {
+      if (this.lieWant === undefined) this.lieWant = d.needs.energy < 80 && Math.random() < 0.5;
+    } else this.lieWant = undefined;
+    this.lieK = Math.max(0, Math.min(1, (this.lieK ?? 0) + (this.lieWant ? dt / 1.6 : -dt / 1.3)));
+    // Sous la pluie (ou la neige), au pré : il bouge peu et tourne la croupe au vent (le vent change chaque jour).
+    const wet = ['rain', 'storm', 'snow'].includes(ctx.game?.weather) && !d.stalled;
+    if (wet && this.state === 'idle' && !this.sleeping && !this.attending && !d.following && !this.ridden && !this.scripted) {
+      const away = ((ctx.game?.day ?? 0) * 2.399) % (Math.PI * 2) + Math.PI;
+      const diff = Math.atan2(Math.sin(away - this.heading), Math.cos(away - this.heading));
+      this.heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * 0.6);
+      if (this.timer < 3) this.timer = 3 + Math.random() * 5; // (il reste là, le dos rond)
+    }
     const free = !this.ridden && !this.scripted && !this.sleeping && !this.herdCtrl && !d.following && !this.posing
       && this.state !== 'goTo' && this.state !== 'eat' && ctx.game?.player?.mount !== this;
     if (dist < 12 && (this.awayFor ?? 0) > 40 && free) {
@@ -404,6 +418,37 @@ export class AnimalEntity {
         this.timer = 6;
       }
     }
+  }
+
+  /** Couché pour dormir (lieK : 0 debout → 1 couché) ; à plat sur le flanc par moments, puis il se relève. */
+  sleepPose() {
+    const md = this.model;
+    const sg = this.scaleGroup;
+    const k = this.lieK ?? 0;
+    if (k <= 0) {
+      this.liePosed = false;
+      sg.position.set(0, 0, 0);
+      sg.rotation.set(0, 0, 0);
+      return;
+    }
+    this.liePosed = true;
+    const lie = k * k * (3 - 2 * k);
+    const real = realLegPose(md, 'down', lie, sg);
+    if (!real) {
+      sg.position.y = -0.22 * lie;
+      for (const l of md.legs ?? []) l.pivot.rotation.x = (l.front ? -1.3 : 1.3) * lie;
+      return;
+    }
+    // Le sommeil profond : un moment à plat sur le flanc (lentement), puis de nouveau sur le sternum.
+    const deep = k >= 1 ? Math.max(0, (Math.sin(this.time * 0.07 + (this.grazeSeed ?? 0)) - 0.55) / 0.45) : 0;
+    const theta = ROLL.tilt * 0.95 * deep * deep * (3 - 2 * deep);
+    const L = (md.legTop ?? 0.9) * sg.scale.y;
+    const hc = 1.25 * L;
+    if (theta > 0.001) {
+      sg.position.x = hc * Math.sin(theta);
+      sg.position.y = L * (0.65 - 0.25 * Math.sin(theta)) - hc * Math.cos(theta);
+    } else sg.position.x = 0;
+    sg.rotation.z = theta;
   }
 
   /**
@@ -1061,6 +1106,7 @@ export class AnimalEntity {
     this.root.rotation.y = this.heading;
     this.animate(dt, sad);
     if (this.state === 'roll') this.rollPose();
+    else if (this.lieK > 0 || this.liePosed) this.sleepPose();
 
     // Petites particules (cœurs, étoiles…)
     for (let i = this.particles.length - 1; i >= 0; i--) {

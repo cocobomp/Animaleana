@@ -161,3 +161,38 @@ describe('affamé, roulé', () => {
     expect(e.data.muddy).toBe(true);
   });
 });
+
+describe('dormir couché', () => {
+  it('la nuit, il se couche parfois pour dormir, et se relève au réveil (pose remise droite)', () => {
+    const e = horse();
+    e.data.needs.energy = 40;
+    e.sleeping = true;
+    e.lieWant = true; // (cette nuit, il se couche)
+    for (let k = 0; k < 30; k++) {
+      e.horseLife(0.1, ctxAt(30, 30), 40);
+      e.sleepPose();
+    }
+    expect(e.lieK).toBe(1);
+    expect(e.scaleGroup.position.y).toBeLessThan(0);
+    e.sleeping = false;
+    for (let k = 0; k < 30; k++) {
+      e.horseLife(0.1, ctxAt(30, 30), 40);
+      e.sleepPose();
+    }
+    expect(e.lieK).toBe(0);
+    expect(e.liePosed).toBe(false);
+    expect(e.scaleGroup.position.y).toBe(0);
+    expect(e.scaleGroup.rotation.z).toBe(0);
+  });
+
+  it('sous la pluie, au pré, il tourne la croupe au vent', () => {
+    const e = horse();
+    e.state = 'idle';
+    e.timer = 10;
+    e.heading = 0;
+    const ctx = { ...ctxAt(30, 30), game: { player: { mount: null }, weather: 'rain', day: 4 } };
+    for (let k = 0; k < 200; k++) e.horseLife(0.05, ctx, 40);
+    const away = (4 * 2.399) % (Math.PI * 2) + Math.PI;
+    expect(Math.abs(Math.atan2(Math.sin(away - e.heading), Math.cos(away - e.heading)))).toBeLessThan(0.05);
+  });
+});

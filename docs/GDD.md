@@ -59,6 +59,9 @@ réussite au dressage…).
   sinon de temps en temps ; ensuite il est un peu moins propre (pansage −6) et content. Monté pendant une
   roulade, il se relève d'abord. Au pansage suivant, il a deux plaques de terre de plus (« il s'est roulé »).
 - **Les mouches** : coups de queue et d'oreilles par moments (déjà là, `horseReal.js`).
+- **Il dort couché, parfois** : la nuit, une fois sur deux environ, il se couche sur le sternum pour dormir, et de
+  temps en temps s'allonge un moment sur le flanc (le sommeil profond) ; il se relève au réveil.
+- **Sous la pluie** (ou la neige), au pré : il bouge peu et tourne la croupe au vent (le vent change chaque jour).
 - **Le gourmand** (`src/sim/riding.js` nextGrazeIn) : en balade au pas sur l'herbe, il finit par baisser la tête
   pour brouter et s'arrête (plus vite s'il a faim ou s'il est têtu, moins s'il est calme et bien dressé). On
   raccourcit les rênes : une allure, ou avancer un moment, et il repart.

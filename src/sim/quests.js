@@ -34,11 +34,14 @@ export const MAX_JOINED = 3;
  * L'histoire de la ferme, dans l'ordre : celle de ton premier cheval. On l'adopte au refuge (gratuit, et il y a
  * toujours un cheval adulte, qu'on peut monter : src/sim/adoption.js), on fait connaissance (caresses, foin, eau),
  * on le panse (étrille, brosse, cure-pied, peigne), on monte en selle, on passe au trot puis au galop, la visite
- * chez le vétérinaire, la première leçon, le premier saut, puis la première balade. Chaque chapitre se fait sans
- * chance et sans gros budget, avec ce qu'on a gagné jusque-là, dans toutes les maisons (tests/quests.test.js).
+ * chez le vétérinaire, la première leçon, le premier saut, la première balade ; puis vers le concours : tresser sa
+ * crinière, trois séances de dressage, une reprise, et le premier concours (au terrain de concours, un tous les trois
+ * jours à la maison). Chaque chapitre se fait sans chance et sans gros budget, avec ce qu'on a gagné jusque-là, dans
+ * toutes les maisons (tests/quests.test.js).
  * Les quêtes des autres animaux (un tour, un spectacle, un métier, un client…) sont des quêtes secondaires.
  */
-export const STORY = ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1', 'vet1', 'actvLesson1', 'actvJump1', 'actvTrail1'];
+export const STORY = ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1', 'vet1', 'actvLesson1', 'actvJump1', 'actvTrail1',
+  'beautyBraid1', 'drTrain3', 'drReprise1', 'actvCompete1'];
 
 /** Thèmes des quêtes secondaires (journal : « 🗺️ Autres quêtes »). Chaque quête est dans un seul thème. */
 export const THEMES = [

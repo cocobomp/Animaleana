@@ -305,10 +305,10 @@ describe('fin d\'un chapitre', () => {
     const p = createProfile('Lou');
     finish(p, ...STORY.slice(0, -1));
     const before = mainQuest(p);
-    expect(before).toBe('actvTrail1');
-    addStat(p, 'actvTrail');
+    expect(before).toBe('actvCompete1');
+    addStat(p, 'actvCompetitions');
     const r = afterQuestsDone(p, checkObjectives(p), before);
-    expect(r).toMatchObject({ chapter: 'actvTrail1', next: null, storyDone: true, skippedLeft: 0 });
+    expect(r).toMatchObject({ chapter: 'actvCompete1', next: null, storyDone: true, skippedLeft: 0 });
     expect(chapterEnd(r).kind).toBe('finished');
   });
 
@@ -605,6 +605,10 @@ function playChapter(p, id, breed) {
     case 'actvLesson1': activity('lesson', 'actvLessons'); break; // (gratuit)
     case 'actvJump1': activity('jumping', 'actvJumping'); break;
     case 'actvTrail1': activity('trail', 'actvTrail'); break;
+    case 'beautyBraid1': addStat(p, 'beautyBraid'); addStat(p, 'beautyPrep'); xp('care'); break; // (le mini-jeu des tresses, gratuit)
+    case 'drTrain3': for (let i = 0; i < 3; i++) activity('flat', 'actvTraining'); break; // (séances gratuites)
+    case 'drReprise1': activity('dressage', 'actvDressage'); break;
+    case 'actvCompete1': activity('jumping', 'actvCompetitions'); pay(10); break; // (concours du club : 10 🪙)
     default: throw new Error(id);
   }
   for (const o of checkObjectives(p)) xp(o.kind);
@@ -624,7 +628,7 @@ describe('chaque chapitre est faisable quand il arrive', () => {
           if (mode === 'manage') expect(p.money, `${home} ${id}`).toBeGreaterThanOrEqual(0);
         }
         expect(storyView(p).finished).toBe(true);
-        expect(spent, home).toBeLessThanOrEqual(50); // (3 repas et la clinique)
+        expect(spent, home).toBeLessThanOrEqual(50); // (3 repas, la clinique et l'engagement au concours)
       }
     }
   });

@@ -143,10 +143,10 @@ describe('quêtes claires', () => {
   it("ne montre pas de monter à cheval sans cheval (sauf si on l'a choisi, et alors il dit pourquoi)", () => {
     const p = createProfile('Lou');
     p.animals.push(fakeAnimal('cat'));
-    p.completed.push(...OBJECTIVES.filter((o) => o.kind === 'quest' && o.id !== 'actvClear1' && o.id !== 'actvTrail1').map((o) => o.id));
-    expect(trackerQuest(p).id).toBe('actvTrail1'); // le dernier chapitre de l'histoire
-    expect(mainQuest(p)).toBe('actvTrail1');
-    p.completed.push('actvTrail1');
+    p.completed.push(...OBJECTIVES.filter((o) => o.kind === 'quest' && o.id !== 'actvClear1' && o.id !== 'actvCompete1').map((o) => o.id));
+    expect(trackerQuest(p).id).toBe('actvCompete1'); // le dernier chapitre de l'histoire
+    expect(mainQuest(p)).toBe('actvCompete1');
+    p.completed.push('actvCompete1');
     expect(trackerQuest(p)).toBeNull(); // actvClear1 n'est pas imposée
     joinQuest(p, 'actvClear1');
     expect(trackerQuest(p).id).toBe('actvClear1');

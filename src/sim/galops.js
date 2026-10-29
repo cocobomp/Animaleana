@@ -150,6 +150,7 @@ export const LOGBOOK = [
   { id: 'horse_came', icon: '📣' },
   { id: 'perfectDays', icon: '⭐' },
   { id: 'horseTravels', icon: '🗺️' },
+  { id: 'cooldowns', icon: '😌' }, // (retours au calme au pas : src/sim/warmup.js)
   { id: 'pumpkins', icon: '🎃' }, // (la chasse aux citrouilles d'Halloween : src/sim/halloween.js)
 ];
 export function logbook(profile) {

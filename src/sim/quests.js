@@ -38,15 +38,21 @@ export const MAX_JOINED = 3;
  * crinière, trois séances de dressage, une reprise, et le premier concours (au terrain de concours, un tous les trois
  * jours à la maison). Chaque chapitre se fait sans chance et sans gros budget, avec ce qu'on a gagné jusque-là, dans
  * toutes les maisons (tests/quests.test.js).
+ * Partie 2, après le premier concours : l'appeler, le trot enlevé, trois journées parfaites, le Galop 2, trois troncs
+ * sautés, le cross et le Galop 3 (la pratique des Galops se lit dans leur panneau).
  * Les quêtes des autres animaux (un tour, un spectacle, un métier, un client…) sont des quêtes secondaires.
  */
 export const STORY = ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1', 'vet1', 'galop1', 'actvLesson1', 'actvJump1', 'actvTrail1',
-  'beautyBraid1', 'drTrain3', 'drReprise1', 'actvCompete1'];
+  'beautyBraid1', 'drTrain3', 'drReprise1', 'actvCompete1',
+  // 📖 Partie 2, « Ton cheval et toi, vers le Galop 3 » (après le premier concours ; STORY_PART2 : son premier chapitre)
+  'horseCall1', 'horsePost1', 'horsePerfect3', 'galop2', 'horseLogs3', 'horseCross1', 'galop3'];
+/** Le premier chapitre de la partie 2 (une carte l'annonce : src/ui/tutorial.js chapterDone). */
+export const STORY_PART2 = 'horseCall1';
 
 /** Thèmes des quêtes secondaires (journal : « 🗺️ Autres quêtes »). Chaque quête est dans un seul thème. */
 export const THEMES = [
   { id: 'horse', quests: ['horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'ride1', 'rideCanter1', 'horsePerfect3', 'galop1',
-    'horseCall1', 'horsePost1', 'horseLogs3', 'horseCross1'] },
+    'horseCall1', 'horsePost1', 'horseLogs3', 'horseCross1', 'galop2', 'galop3'] },
   { id: 'animals', quests: ['adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'baby', 'species4'] },
   { id: 'travel', quests: ['travel1', 'abroad', 'horseTrip'] },
   {

@@ -259,7 +259,9 @@ export const QUEST_GUIDE = {
   rideCanter1: { where: 'horse', target: { type: 'action', id: 'ride', species: 'horse' }, need: MOUNT },
   horsePerfect3: { where: 'horse', target: { type: 'action', id: 'feed', species: 'horse' }, need: ['horse'] },
   galop1: { where: 'showground', target: SHOWGROUND, need: ['horse'] }, // 🏅 Passer mes Galops (src/ui/galops.js)
-  horseCall1: { where: 'horse', target: { type: 'animal', species: 'horse' }, need: ['horse'] }, // 📣 dans son menu
+  galop2: { where: 'showground', target: SHOWGROUND, need: ['horse'] },
+  galop3: { where: 'showground', target: SHOWGROUND, need: ['horse'] },
+  horseCall1: { where: 'horseSheet', target: { type: 'animal', species: 'horse' }, need: ['horse'] }, // 📣 dans sa fiche, de loin
   horsePost1: { where: 'horse', target: { type: 'action', id: 'ride', species: 'horse' }, need: MOUNT }, // ⬆️ au trot
   horseLogs3: { where: 'horse', target: { type: 'action', id: 'ride', species: 'horse' }, need: MOUNT }, // ⤴️ au galop
   horseCross1: { where: 'horse', target: { type: 'action', id: 'ride', species: 'horse' }, need: MOUNT }, // ⏱️ le cross
@@ -364,7 +366,7 @@ export function followBlock(id, profile) {
 
 /** Ordre des quêtes, de la plus facile à la plus difficile (journal, thèmes des quêtes : src/sim/quests.js). */
 export const QUEST_ORDER = [
-  'horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'rideCanter1', 'horsePerfect3', 'galop1', 'horseCall1', 'horsePost1', 'horseLogs3', 'horseCross1',
+  'horse1', 'horsePet3', 'horseFeed3', 'horseWater2', 'horseBrush1', 'rideCanter1', 'horsePerfect3', 'galop1', 'horseCall1', 'horsePost1', 'horseLogs3', 'horseCross1', 'galop2', 'galop3',
   'adopt1', 'pet3', 'feed5', 'water3', 'brush3', 'scoop1', 'vet1', 'trick1', 'ride1',
   'travel1', 'baby', 'abroad', 'horseTrip', 'species4',
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
@@ -486,6 +488,8 @@ export const QUEST_STEPS = {
   rideCanter1: ['tapHorseRide', 'doMount', 'doCanter'],
   horsePerfect3: ['tapHorse', 'perfectDay'],
   galop1: ['goShowground', 'openGalops', 'doGalop'],
+  galop2: ['goShowground', 'openGalops', 'doGalop'], // (le panneau montre la pratique qui reste)
+  galop3: ['goShowground', 'openGalops', 'doGalop'],
   horseCall1: ['callHorse'], // (de loin, depuis sa fiche : tout près, pas besoin de l'appeler)
   horsePost1: ['tapHorseRide', 'doMount', 'doPost'],
   horseLogs3: ['tapHorseRide', 'doMount', 'doLogs'],

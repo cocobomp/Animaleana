@@ -1168,7 +1168,9 @@ export class Tutorial {
     const end = chapterEnd(r);
     const text = `${t('qj_chapterDone', { name: questTitle(p, id) })}${reward ? ` ${reward}` : ''}`;
     if (this.busy() && !this.active) this.ui.toast(`⭐ ${text}`, 5000);
-    if (end.kind === 'next') this.notice({ emoji: '⭐', text, hint: t('qj_nextChapter', { name: questTitle(p, end.next) }), follow: end.next });
+    // (le premier concours fini : la partie 2 de l'histoire commence)
+    if (end.kind === 'next' && id === 'actvCompete1') this.notice({ emoji: '📖', text, hint: `${t('qj_part2')} ${t('qj_nextChapter', { name: questTitle(p, end.next) })}`, follow: end.next });
+    else if (end.kind === 'next') this.notice({ emoji: '⭐', text, hint: t('qj_nextChapter', { name: questTitle(p, end.next) }), follow: end.next });
     else if (end.kind === 'finished') this.notice({ emoji: '🎉', text, hint: t('qj_storyFinished'), journal: true });
     else this.notice({ emoji: '⭐', text, hint: t('qj_skippedLeft', { n: end.n }), journal: true });
   }

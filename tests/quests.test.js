@@ -21,9 +21,11 @@ import {
   joinedQuests, otherQuests, trackerQuest, afterQuestsDone, chapterEnd, questKind, isSideQuest, migrateQuests, doneQuests,
   questState, canFollow, tidyFollow, skippedLeft,
   activeQuests, nextQuest, setFront, passQuest, asideQuests, resumeAside, holdFollow, heldFollow,
+  STORY_PART2,
 } from '../src/sim/quests.js';
 import { NoticeQueue } from '../src/ui/questNotices.js';
-import { GALOPS, finishExam } from '../src/sim/galops.js'; // 🏅 le chapitre du Galop 1
+import { GALOPS, finishExam } from '../src/sim/galops.js'; // 🏅 les chapitres des Galops
+import { callChance } from '../src/sim/horseCall.js'; // 📣 partie 2 : l'appeler
 
 const QUEST_IDS = OBJECTIVES.filter((o) => o.kind === 'quest').map((o) => o.id);
 const pet = (species = 'dog', sex = 'f', seed = species + sex) => createAnimal({ species, sex, ageDays: 80, rng: seeded(seed) });
@@ -39,6 +41,20 @@ describe('les quêtes sont rangées', () => {
     for (const id of STORY) expect(QUEST_IDS, id).toContain(id);
     expect(new Set(STORY).size).toBe(STORY.length);
     for (const id of QUEST_IDS) expect(QUEST_ORDER, id).toContain(id);
+  });
+
+  it('partie 2 : après le premier concours, vers le Galop 3 (les Galops 2 et 3 lus dans profile.galops)', () => {
+    const at = STORY.indexOf('actvCompete1');
+    expect(STORY[at + 1]).toBe(STORY_PART2);
+    expect(STORY.indexOf('galop2')).toBeGreaterThan(at);
+    expect(STORY.at(-1)).toBe('galop3');
+    const p = createProfile('Lou');
+    const o2 = OBJECTIVES.find((x) => x.id === 'galop2');
+    const o3 = OBJECTIVES.find((x) => x.id === 'galop3');
+    expect(o2.progress(p)).toEqual([0, 1]);
+    p.galops = { 1: 3, 2: 9 };
+    expect(o2.progress(p)).toEqual([1, 1]);
+    expect(o3.progress(p)).toEqual([0, 1]);
   });
 
   it('l\'histoire est celle de ton premier cheval : chaque chapitre ne demande que lui (jamais caché)', () => {
@@ -308,10 +324,10 @@ describe('fin d\'un chapitre', () => {
     const p = createProfile('Lou');
     finish(p, ...STORY.slice(0, -1));
     const before = mainQuest(p);
-    expect(before).toBe('actvCompete1');
-    addStat(p, 'actvCompetitions');
+    expect(before).toBe('galop3');
+    p.galops = { 1: 1, 2: 2, 3: 3 };
     const r = afterQuestsDone(p, checkObjectives(p), before);
-    expect(r).toMatchObject({ chapter: 'actvCompete1', next: null, storyDone: true, skippedLeft: 0 });
+    expect(r).toMatchObject({ chapter: 'galop3', next: null, storyDone: true, skippedLeft: 0 });
     expect(chapterEnd(r).kind).toBe('finished');
   });
 
@@ -620,6 +636,34 @@ function playChapter(p, id, breed) {
     case 'drTrain3': for (let i = 0; i < 3; i++) activity('flat', 'actvTraining'); break; // (séances gratuites)
     case 'drReprise1': activity('dressage', 'actvDressage'); break;
     case 'actvCompete1': activity('jumping', 'actvCompetitions'); pay(10); break; // (concours du club : 10 🪙)
+    // 📖 Partie 2 : vers le Galop 3
+    case 'horseCall1': {
+      // (il vient s'il te fait confiance : à ce moment de l'histoire, quelques appels suffisent)
+      expect(callChance(a), breed).toBeGreaterThan(0.3);
+      addStat(p, 'horse_came');
+      break;
+    }
+    case 'horsePost1': expect(wears(a, 'saddle'), breed).toBe(true); addStat(p, 'risingTrot'); break; // (en selle, avec des étriers)
+    case 'horsePerfect3': addStat(p, 'perfectDays', 3); pay(3 * 2 * 3); break; // (foin du matin et du soir, trois jours)
+    case 'galop2': {
+      addStat(p, 'horse_saddle', 2); // (seller soi-même, deux fois : gratuit)
+      for (const it of GALOPS[1].practice) expect(p.stats[it.stat] ?? 0, `${breed} ${it.id}`).toBeGreaterThanOrEqual(it.n);
+      expect(finishExam(p, 2, 5, 1).passed, breed).toBe(true);
+      break;
+    }
+    case 'horseLogs3': a.needs.energy = 80; expect(allowedGait('canter', a).gait, breed).toBe('canter'); addStat(p, 'freeJumps', 3); break;
+    case 'horseCross1': addStat(p, 'crossDone'); break;
+    case 'galop3': {
+      // la longe (l'outil : 40 🪙), un sans-faute en séance de saut, le vermifuge (12 🪙)
+      care('lunge', 'exercise', 2);
+      pay(40);
+      activity('jumping', 'actvClear');
+      addStat(p, 'horse_deworm');
+      pay(12);
+      for (const it of GALOPS[2].practice) expect(p.stats[it.stat] ?? 0, `${breed} ${it.id}`).toBeGreaterThanOrEqual(it.n);
+      expect(finishExam(p, 3, 5, 1).passed, breed).toBe(true);
+      break;
+    }
     default: throw new Error(id);
   }
   for (const o of checkObjectives(p)) xp(o.kind);
@@ -639,7 +683,8 @@ describe('chaque chapitre est faisable quand il arrive', () => {
           if (mode === 'manage') expect(p.money, `${home} ${id}`).toBeGreaterThanOrEqual(0);
         }
         expect(storyView(p).finished).toBe(true);
-        expect(spent, home).toBeLessThanOrEqual(50); // (3 repas, la clinique et l'engagement au concours)
+        // (3 repas, la clinique, l'engagement au concours ; partie 2 : les repas de trois journées, la longe, le vermifuge)
+        expect(spent, home).toBeLessThanOrEqual(130);
       }
     }
   });

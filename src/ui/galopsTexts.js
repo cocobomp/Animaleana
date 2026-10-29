@@ -69,6 +69,7 @@ export const GALOPS_FR = {
   lb_horse_came: 'Fois où il est venu à ton appel',
   lb_perfectDays: 'Journées parfaites',
   lb_horseTravels: 'Voyages à cheval',
+  lb_cooldowns: 'Retours au calme au pas',
 
   // Galop 1
   gq_1_1: 'Comment approches-tu un cheval ?',
@@ -262,6 +263,7 @@ export const GALOPS_EN = {
   lb_horse_came: 'Times he came when called',
   lb_perfectDays: 'Perfect days',
   lb_horseTravels: 'Trips on horseback',
+  lb_cooldowns: 'Walking cool-downs',
 
   gq_1_1: 'How do you approach a horse?',
   gq_1_1_a1: 'From behind, without a sound',

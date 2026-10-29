@@ -12,6 +12,7 @@ import { navTarget } from './nav.js';
 import { tackEffects } from '../sim/gear.js';
 import { rideSpeed, allowedGait, rideEffort, nextSpookIn, nextGrazeIn, SPOOKY } from '../sim/riding.js'; // allures en balade libre
 import { newPosting, postTick, isPosting, POST } from '../sim/posting.js'; // ⬆️ trot enlevé
+import { newSession, sessionTick, effortFactor } from '../sim/warmup.js'; // 🐢 détente et retour au calme
 import { helmetModel, helmetStrapsModel } from './models/tackModels.js'; // bombe du cavalier et ses sangles
 import { helmetFit } from './models/avatarHair.js'; // la bombe à la taille de la coiffure
 import { prepareRiderFit, fitRider, seatOnSaddle, releaseRiderFit } from './models/riderFit.js'; // cavalier sur le cheval réaliste
@@ -194,6 +195,7 @@ export class Player {
     this.tiredSaid = null;
     this.canterFor = 0; // secondes de galop d'affilée (onCanter une fois par balade, à 3 s)
     this.cantered = false;
+    this.session = newSession(); // 🐢 détente au début, retour au calme à la fin (src/sim/warmup.js)
     this.grazing = null; // il s'est arrêté pour brouter (rideStep) : { pull } secondes de joystick poussé
     this.grazeIn = null;
     this.posting = newPosting(); // ⬆️ trot enlevé (src/sim/posting.js : Game.postTrot)
@@ -856,7 +858,11 @@ export class Player {
     }
     postTick(this.posting, stride, trotting);
     this.postingNow = trotting && isPosting(this.posting, stride);
-    rideEffort(mount.data, this.speed > 0.3 ? this.gaitNow : 'halt', dt, this.postingNow ? POST.save : 1); // (immobile : il souffle)
+    // 🐢 La détente : quelques tours au pas avant de trotter (et le retour au calme, compté pour la descente)
+    this.session = this.session ?? newSession();
+    const warmNews = sessionTick(this.session, this.speed > 0.3 ? this.gaitNow : 'halt', dt);
+    if (warmNews) this.onGait?.(this.gait, warmNews);
+    rideEffort(mount.data, this.speed > 0.3 ? this.gaitNow : 'halt', dt, this.postingNow ? POST.save : 1, effortFactor(this.session)); // (immobile : il souffle)
     // Le cheval gourmand : au pas sur l'herbe, il finit par s'arrêter pour brouter (src/sim/riding.js nextGrazeIn).
     if (this.grazing) {
       const n = mount.data.needs;

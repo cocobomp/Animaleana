@@ -33,6 +33,8 @@ export const OBJECTIVES = [
   { id: 'horsePerfect3', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'perfectDays'), 3] },
   // 🎓 Les Galops (src/sim/galops.js) : le premier examen de cavalier.
   { id: 'galop1', kind: 'quest', reward: 50, progress: (p) => [p.galops?.[1] ? 1 : 0, 1] },
+  { id: 'galop2', kind: 'quest', reward: 80, progress: (p) => [p.galops?.[2] ? 1 : 0, 1] }, // (l'histoire, partie 2)
+  { id: 'galop3', kind: 'quest', reward: 120, progress: (p) => [p.galops?.[3] ? 1 : 0, 1] },
   // Ton cheval, plus loin : l'appeler (src/sim/horseCall.js), trotter enlevé (posting.js), sauter des troncs et le
   // cross (freeJumps.js).
   { id: 'horseCall1', kind: 'quest', reward: 30, progress: (p) => [stat(p, 'horse_came'), 1] },

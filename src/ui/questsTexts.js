@@ -59,6 +59,7 @@ export const QUESTS_FR = {
   // Fin d'un chapitre
   qj_chapterDone: 'Chapitre réussi : {name} !',
   qj_nextChapter: 'Prochain chapitre : {name}',
+  qj_part2: '📖 Partie 2 : ton cheval et toi, vers le Galop 3 !',
   qj_storyFinished: 'Tu as fini toute l\'histoire de ton premier cheval ! 🎉 Choisis d\'autres quêtes dans 📖 Journal.',
   qj_skippedLeft: 'Il te reste {n} chapitres passés. Reprends-les dans 📖 Journal quand tu veux.',
   qj_skippedLeft_one: 'Il te reste 1 chapitre passé. Reprends-le dans 📖 Journal quand tu veux.',
@@ -165,6 +166,7 @@ export const QUESTS_EN = {
   qj_now: '👉 Now: {step}',
   qj_chapterDone: 'Chapter complete: {name}!',
   qj_nextChapter: 'Next chapter: {name}',
+  qj_part2: '📖 Part 2: you and your horse, on the way to riding level 3!',
   qj_storyFinished: 'You finished the whole story of your first horse! 🎉 Choose more quests in the 📖 Journal.',
   qj_skippedLeft: 'You still have {n} skipped chapters. Pick them up in the 📖 Journal whenever you like.',
   qj_skippedLeft_one: 'You still have 1 skipped chapter. Pick it up in the 📖 Journal whenever you like.',

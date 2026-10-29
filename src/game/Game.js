@@ -65,6 +65,7 @@ import { Activities } from './Activities.js'; // activités : saut, balade, agil
 import { FreeJumps } from './FreeJumps.js'; // ⤴️ sauter des troncs en balade libre
 import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au poney-club (fin octobre)
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
+import { WARMUP, dismountVerdict } from '../sim/warmup.js'; // 🐢 le retour au calme
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
 import { t, L, getLang, fmtHour } from '../i18n.js';
@@ -600,6 +601,15 @@ export class Game {
       if (why === 'tired' || why === 'exhausted') this.ui.toast(t(`ride_${why}`, { name: m.name, g: m.sex }), 4500);
       else if (why === 'graze') this.ui.toast(t('ride_graze', { name: m.name, g: m.sex }), 6000);
       else if (why === 'sitTrot') this.ui.toast(t('ride_sitTrot', { name: m.name, g: m.sex }), 6000);
+      // 🐢 la détente (src/sim/warmup.js) : dit les premières fois seulement
+      else if (why === 'cold' || why === 'warm') {
+        const k = why === 'cold' ? 'warmTipCold' : 'warmTipOk';
+        const n = this.profile[k] ?? 0;
+        if (n < 3) {
+          this.profile[k] = n + 1;
+          this.ui.toast(t(`ride_${why}`, { name: m.name, g: m.sex }), why === 'cold' ? 6500 : 3500);
+        }
+      }
       else if (why === 'spook') {
         this.ui.toast(t('ride_spook', { name: m.name, g: m.sex, what: t(`ride_spookWhat${Math.floor(Math.random() * 4)}`) }), 5000);
         audio.animal('horse', 'sad', m.id); // (il s'ébroue)
@@ -2091,7 +2101,22 @@ export class Game {
     this.freeJumps?.cancel(); // (en plein saut : droit d'abord)
     const e = this.player.mount;
     const worked = !!this.player.cantered; // (il a galopé : de retour au pré, il ira se rouler)
+    // 🐢 Le retour au calme (src/sim/warmup.js) : il a galopé, puis marché un moment au pas avant qu'on descende ?
+    const calm = e && this.player.gaitEnabled !== false && !this.tripFlow?.active ? dismountVerdict(this.player.session) : null;
     this.player.dismount();
+    if (calm && e.data.species === 'horse') {
+      const a = e.data;
+      if (calm === 'cooled') {
+        const s0 = bondStage(a);
+        a.bond = Math.min(100, (a.bond ?? 0) + WARMUP.coolBond);
+        a.needs.affection = Math.min(100, (a.needs.affection ?? 50) + WARMUP.coolAffection);
+        a.sweat = (a.sweat ?? 0) * 0.5; // (il a séché un peu en marchant)
+        if (!a.client && !a.guest) addStat(this.profile, 'cooldowns');
+        e.emit('😌', 2);
+        this.bondNews(a, s0);
+      }
+      this.ui.toast(t(`ride_${calm}`, { name: a.name, g: a.sex }), 6000);
+    }
     if (e && worked) {
       e.rollSoon = true;
       // (sellé, il attend qu'on lui enlève sa selle pour aller se rouler : on le dit une fois)

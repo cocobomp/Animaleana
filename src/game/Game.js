@@ -56,6 +56,7 @@ import { galopLevel, nextGalop, canTakeExam } from '../sim/galops.js'; // 🏅 l
 import { CALL, answerCall, cameWhenCalled } from '../sim/horseCall.js'; // 📣 appeler ton cheval
 import { tapPost, postMilestone } from '../sim/posting.js'; // ⬆️ trot enlevé
 import { todayChallenge, challengeJustDone, CHALLENGE_REWARD } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
+import { newStars, starUnlock } from '../sim/horseStars.js'; // ⭐ ses étoiles
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
   unsaddle, saddleUp, unbridle, bridleUp,
@@ -937,6 +938,21 @@ export class Game {
     this.ui.toast(t('galop_ready', { n: next.id }), 8000);
   }
 
+  /** ⭐ Une étoile de plus pour un de tes chevaux (src/sim/horseStars.js) : fêtée, une par une (un petit mot à la fois). */
+  starsTick() {
+    const p = this.profile;
+    this.starNews = this.starNews ?? [];
+    for (const a of p.animals) if (a.species === 'horse' && !a.client && !a.guest) for (const s of newStars(a)) this.starNews.push({ a, ...s });
+    const n = this.starNews.shift();
+    if (!n || !p.animals.includes(n.a)) return; // (parti entre-temps, autre partie)
+    const { a, id, stars } = n;
+    const key = starUnlock(id, stars);
+    const text = t('st_new', { skill: t(`skill_${id}`), name: a.name, n: stars }) + (key ? ` ${t(`st_unlock_${key}`, { g: a.sex })}` : '');
+    this.ui.toast(text, 6000);
+    this.entities.get(a.id)?.emit('⭐', 4);
+    audio.ui('ok');
+  }
+
   /** 🎯 Le défi du jour (src/sim/horseChallenge.js) : annoncé le matin, fêté quand il est réussi. */
   /** Ce qui rend un défi possible aujourd'hui, ici (src/sim/horseChallenge.js CHALLENGES.when). */
   challengeCtx() {
@@ -1319,6 +1335,7 @@ export class Game {
       this.checkAcc = 0;
       this.galopNews();
       this.challengeTick();
+      this.starsTick();
       // Toute quête finie est récompensée, rejointe ou non ; une quête rejointe et finie quitte « Mes quêtes », et
       // la fin du chapitre en cours de l'histoire est fêtée par le guide, qui annonce le suivant (src/sim/quests.js).
       const chapterBefore = mainQuest(p);

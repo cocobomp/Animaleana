@@ -40,6 +40,7 @@ import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du j
 import { huntView } from '../sim/halloween.js'; // 🎃 la chasse aux citrouilles
 import { memoriesOf } from '../sim/memories.js'; // 📸 ses souvenirs
 import { quirksOf, knows } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
+import { starsView } from '../sim/horseStars.js'; // ⭐ ses étoiles
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -177,6 +178,22 @@ function earsLine(g, a) {
   return h('p', { class: `note ears-line ears-${e.pose}` }, `👂 ${t(`ears_${e.pose}`)} ${t(`ears_why_${e.why}`, { name: a.name, g: a.sex })}`);
 }
 
+/**
+ * ⭐ Ses étoiles (src/sim/horseStars.js) : 5 groupes ; on en touche un, une ligne dit ce qui manque pour la suivante.
+ * (le choix est gardé dans ui : la fiche vivante se redessine toutes les 0,5 s)
+ */
+function starRow(ui, a) {
+  const list = starsView(a);
+  const open = list.find((s) => ui.starHint === `${a.id}:${s.id}`);
+  const p = open && { icon: open.icon, skill: t(`skill_${open.id}`) };
+  return [h('div', { class: 'star-row' }, list.map((s) => h('button', {
+    class: `star-grp${open === s ? ' open' : ''}`, 'data-skill': s.id, title: t(`skill_${s.id}`), 'aria-label': `${t(`skill_${s.id}`)} ${s.stars}/5`,
+    onClick: () => { ui.starHint = open === s ? null : `${a.id}:${s.id}`; ui.renderPanel(); },
+  }, `${s.icon} ${'★'.repeat(s.stars)}${'☆'.repeat(5 - s.stars)}`))),
+  open ? h('p', { class: 'note star-hint' }, open.stars < 5
+    ? t('st_next', { ...p, n: Math.ceil(open.toNext), how: t(`st_how_${open.id}`) }) : t('st_max', p)) : null];
+}
+
 /** 💞 Ce que votre lien a débloqué (src/sim/animal.js BOND_PERKS) : ✅ ce qui est là, 🔒 la prochaine étape. */
 function bondPerks(a) {
   const b = a.bond ?? 0;
@@ -260,6 +277,7 @@ function renderAnimal(ui, g, a) {
     a.client || a.guest ? null : h('p', { class: 'note bond-stage' }, `💞 ${t(`bond_${bondStage(a)}`, { name: a.name, g: a.sex })}`),
     a.species === 'horse' && !a.client && !a.guest ? bondPerks(a) : null,
     earsLine(g, a), // 👂 (cheval)
+    a.species === 'horse' && !a.client && !a.guest ? starRow(ui, a) : null, // ⭐
     NEEDS.map((n) => bar(t(`need_${n}`), a.needs[n])),
   );
 

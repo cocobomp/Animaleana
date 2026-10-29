@@ -476,6 +476,11 @@ button.sv-card:hover { border-color: var(--primary); }
 .help-news summary { font-weight: 800; cursor: pointer; }
 /* 👂 Ses oreilles (src/ui/panels.js earsLine) */
 .ears-line.ears-back { color: #b5452f; font-weight: 600; }
+/* ⭐ Ses étoiles (src/ui/panels.js starRow) */
+.star-row { display: flex; flex-wrap: wrap; gap: 2px 10px; margin: 2px 0 6px; }
+.star-grp { background: none; border: 0; border-radius: 8px; padding: 4px 2px; min-height: 32px; font: inherit; color: #d79a00; cursor: pointer; }
+.star-grp.open { background: rgba(242, 184, 36, 0.18); }
+.star-hint { margin: 0 0 6px; }
 /* 🏅 Les Galops (src/ui/galops.js) */
 .gl-card { display: grid; gap: 6px; padding: 10px 12px; border-radius: 16px; background: #fff; border: 1px solid var(--line); margin-bottom: 8px; }
 .gl-card.open { border: 2px solid #f2b824; }

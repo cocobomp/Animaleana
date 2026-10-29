@@ -11,6 +11,7 @@ import { BEAUTY_FR, BEAUTY_EN } from './ui/beautyTexts.js'; // concours de beaut
 import { DOG_TRAINER_FR, DOG_TRAINER_EN } from './ui/dogTrainerTexts.js'; // métier éducateur canin (dt_*, ca_dogTrainer_*)
 import { GROOMER_FR, GROOMER_EN } from './ui/groomerTexts.js'; // métier Toiletteur (grm_*, mg_g*, ca_groomer_*)
 import { TRAIL_FR, TRAIL_EN } from './ui/trailGuideTexts.js'; // 🧭 métier guide de randonnée (tg_*, career_trailGuide)
+import { STARS_FR, STARS_EN } from './ui/horseStarsTexts.js'; // ⭐ ses étoiles (st_*)
 import { SPECIES_TXT_FR, SPECIES_TXT_EN } from './ui/speciesTexts.js'; // espèces proposées (« D'autres animaux arrivent bientôt ! »)
 import { QUESTS_FR, QUESTS_EN } from './ui/questsTexts.js'; // quêtes principales et secondaires (qj_*, qneed_*)
 import { GALOPS_FR, GALOPS_EN } from './ui/galopsTexts.js'; // 🎓 les Galops (galop_*, gp_*, gq_*)
@@ -4606,6 +4607,8 @@ Object.assign(fr, GROOMER_FR); // métier Toiletteur : salon de toilettage
 Object.assign(en, GROOMER_EN);
 Object.assign(fr, TRAIL_FR); // 🧭 guide de randonnée
 Object.assign(en, TRAIL_EN);
+Object.assign(fr, STARS_FR); // ⭐ ses étoiles (src/sim/horseStars.js)
+Object.assign(en, STARS_EN);
 Object.assign(fr, SPECIES_TXT_FR); // espèces proposées (OFFERED_SPECIES)
 Object.assign(en, SPECIES_TXT_EN);
 Object.assign(fr, QUESTS_FR); // quêtes principales et secondaires (src/sim/quests.js)

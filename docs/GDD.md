@@ -191,6 +191,16 @@ il les pointe vers toi ; s'il a faim ou soif, il te guette en attendant son foin
 fatigué), couchées en arrière (il a mal, ou il est grognon). Sa fiche le dit aussi : « 👂 Oreilles en avant : Étoile a
 faim : elle te guette… ». (Question du Galop 1.)
 
+### Ses étoiles (0.5, `src/sim/horseStars.js`)
+Dans sa fiche, sous la ligne des oreilles : 🏃 vitesse, 💪 endurance, ⤴️ saut, 🎩 dressage, 👂 obéissance, de 0 à 5
+étoiles chacune (paliers 20, 40, 65, 85 et 100 ; les trois premiers sont ceux des parcours de saut). Toucher un groupe
+dit ce qui manque (« ⤴️ Saut : encore 6 points pour l'étoile suivante. Saute des troncs, prends des leçons. »). Une
+étoile de plus, d'où qu'elle vienne (tronc sauté, leçon, longe, entraînement, longue balade) : des ⭐ s'envolent du
+cheval, deux notes et un petit mot, un à la fois (« ⭐ Saut : Étoile a sa première étoile ! Elle ne pile plus devant
+les troncs. » : vrai, à 20 en saut le refus devant un tronc tombe à 0 ; la 2e ouvre le parcours du club, la 3e le grand).
+La première fois, une vieille partie note ses étoiles sans rien dire ; une étoile n'est fêtée qu'une fois. Seulement
+tes chevaux.
+
 ### La ration du cheval (0.5, `src/ui/minigames/ration.js`)
 « Nourrir » le cheval est un mini-jeu en deux temps, comme en vrai : d'abord bien remplir son filet à foin (il mange
 du foin presque toute la journée : au moins 75 %), puis une petite mesure de granulés dans le seau (la zone verte,

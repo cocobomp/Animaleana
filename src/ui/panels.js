@@ -220,10 +220,9 @@ function renderAnimal(ui, g, a) {
   const stage = lifeStage(a);
   const btn = (label, fn, opts = {}) => h('button', { class: `act ${opts.cls ?? ''}`, onClick: fn, disabled: opts.disabled }, label);
 
-  // En-tête : la vignette 3D de l'animal (même fabrique que l'animalerie) à côté de ses étiquettes.
-  const pic = animalThumbSpec(a) ? animalPic(g, a, 96, 72, 'animal-thumb') : null;
+  // En-tête : ses étiquettes (son portrait 3D est à côté, plus bas : une seule image, pas deux).
   const info = h('div', { class: 'animal-info' },
-    h('div', { class: pic ? 'animal-head' : '' }, pic, h('div', { class: 'chips' },
+    h('div', { class: 'chips' },
       h('span', { class: 'chip' }, `${speciesName(a)} · ${breedName(a)}`),
       h('span', { class: 'chip' }, `${sexIcon(a)} ${t(a.sex === 'f' ? 'female' : 'male')}`),
       h('span', { class: 'chip' }, `${ageText(a)} · ${t(`stage_${stage}`)}`),
@@ -232,7 +231,7 @@ function renderAnimal(ui, g, a) {
       h('span', { class: `chip weight-${weightClass(a)}` }, `⚖️ ${t(`weight_${weightClass(a)}`, { g: a.sex })}`),
       h('span', { class: `chip mood-${m}` }, `${MOOD_EMOJI[m]} ${t(`mood_${m}`, { g: a.sex })}`),
       h('span', { class: `chip swatch${lightCoat(a.look.coat) ? ' light' : ''}`, style: { background: hexColor(a.look.coat) } }, coatName(a)),
-    )),
+    ),
     a.sick ? h('p', { class: 'warn' }, `🤒 ${t('r_sick', { name: a.name, g: a.sex })}`) : null,
     a.lame && !a.sick ? h('p', { class: 'warn' }, `🩹 ${t(a.lame.cause === 'shoe' ? 'lostShoeSheet' : 'r_lame', { name: a.name, g: a.sex })}`) : null, // (un caillou, un fer)
     clientInfo(a, g), // animal confié : propriétaire, jours restants, soin

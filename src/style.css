@@ -582,6 +582,11 @@ button.sv-card:hover { border-color: var(--primary); }
 .big-action .ba-text { display: grid; gap: 2px; min-width: 0; }
 .big-action .ba-text b { overflow-wrap: anywhere; }
 .ba-wrap:has(.ba-queue) .big-action { padding-right: 42px; } /* le 📝 ne recouvre pas le libellé */
+/* (ordinateur : quelques pixels de plus pour le libellé — « Saut d'obstacles » se coupait en « obstacle | s ») */
+@media (min-width: 641px) {
+  .big-action { gap: 8px; }
+  .ba-wrap:has(.ba-queue) .big-action { padding-right: 40px; }
+}
 @media (max-width: 640px) {
   /* Deux colonnes qui se resserrent (minmax(0, 1fr)) : « Donner à boire » passe à la ligne au lieu d'être coupé. */
   .action-sheet { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -2704,9 +2709,6 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .id-head .thumb { width: 96px; height: 72px; --thumb-bg: #e3eedc; }
 /* Refuge et fiche : la vignette 3D de l'animal (même fabrique que l'animalerie) au lieu de l'emoji. */
 .adopt-thumb { width: 72px; height: 54px; --thumb-bg: #e3eedc; }
-.animal-head { display: flex; align-items: flex-start; gap: 10px; }
-.animal-head > .chips { flex: 1; min-width: 0; }
-.animal-thumb { width: 96px; height: 72px; margin-top: 8px; --thumb-bg: #e3eedc; }
 /* Construction et véhicules */
 .con-thumb { width: 92px; height: 69px; --thumb-bg: #dcebd2; }
 .veh-thumb { width: 92px; height: 60px; --thumb-bg: #e2e8ee; }

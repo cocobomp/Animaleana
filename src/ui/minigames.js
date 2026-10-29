@@ -23,6 +23,7 @@ import { fitView, toLocalPoint, nbsp } from './minigames/frame.js'; // échelle,
 import { braidGame, shineGame, bowGame, fluffGame } from './minigames/beauty.js'; // concours de beauté
 import { pansageGame } from './minigames/pansage.js'; // le pansage complet du cheval
 import { sellerGame } from './minigames/seller.js'; // seller son cheval : tapis, selle, sangle
+import { nextHorseFact } from '../sim/horseFacts.js'; // « 💡 Le savais-tu ? » à la fin des mini-jeux avec un cheval
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -185,6 +186,7 @@ export function runMinigame(ui, a, action, opts = {}) {
     seed: a.look?.seed ?? 1,
     endEmoji: sp.emoji,
     endText: (stars) => t(`mg_end${stars}`, { name: a.name }),
+    fact: a.species === 'horse' ? t(`fact_${nextHorseFact()}`) : null,
     // L'animal n'est plus là (il est parti, ou mort de vieillesse) : on ferme sans rien appliquer.
     // (a.guest : l'animal d'un client du salon de toilettage, qui n'est pas au joueur : il reste là.)
     stillThere: (game) => !game?.profile || !!a.guest || game.profile.animals.some((x) => x.id === a.id),
@@ -482,6 +484,7 @@ function openMinigame(ui, o) {
         h('h2', {}, nbsp(t(stars === 3 ? 'mg_bravo' : stars === 2 ? 'mg_wellDone' : 'mg_done'))),
         h('div', { class: 'mg-stars', 'aria-label': `${stars}/3` }, [1, 2, 3].map((i) => h('span', { class: i <= stars ? 'on' : 'off', style: { animationDelay: `${0.15 + i * 0.18}s` } }, '★'))),
         h('p', {}, nbsp(msg ?? o.endText(stars))),
+        o.fact ? h('p', { class: 'mg-fact' }, nbsp(`💡 ${t('factTitle')} ${o.fact}`)) : null,
         cont));
       endEl.hidden = false;
       // Le ✕ disparaît (fermer ici perdrait le soin) mais garde sa place (style.css,

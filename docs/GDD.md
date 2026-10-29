@@ -108,6 +108,10 @@ fin parle de l'étape la moins bien faite. Plus le cheval est sale (après un ga
 2. Si ça continue, il **tombe malade** : il faut l'emmener chez le **vétérinaire**.
 3. Pas d'abandon ni de mort par négligence (seulement de vieillesse).
 
+### « 💡 Le savais-tu ? » (0.5, `src/sim/horseFacts.js`)
+À la fin de chaque mini-jeu fait avec un cheval, un fait vrai sur les chevaux (22, qui défilent sans se répéter) :
+il boit 30 à 50 litres par jour, il dort debout, on monte par la gauche, la fourchette aide le sang à remonter…
+
 ### La journée de ton cheval (0.5, `src/sim/horseDay.js`)
 La routine d'un vrai propriétaire, chaque jour de jeu, dans sa fiche (« ☀️ Sa journée ») : 🌅 foin du matin (avant
 14 h), 🌇 foin du soir (dès 14 h), 💧 eau fraîche, 🪮 pansage, 🏇 le faire travailler (monter, longe, liberté, une

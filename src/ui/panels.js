@@ -34,6 +34,7 @@ import { thumb, portraitSpec } from '../game/thumbScenes.js'; // vignettes 3D (a
 import { healthPlan, HEALTH_PLAN, WORMER_COST } from '../sim/horseHealth.js'; // 📒 carnet de santé du cheval
 import { horseDayView } from '../sim/horseDay.js'; // ☀️ la journée de ton cheval
 import { galopLevel, nextGalop, practiceOf, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
+import { albumView } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
 import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
 import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
 import { huntView } from '../sim/halloween.js'; // 🎃 la chasse aux citrouilles
@@ -196,7 +197,7 @@ function memorySection(a) {
     : h('p', { class: 'note' }, t('mem_none', p))];
 }
 
-/** 🏅 Tes Galops (src/sim/galops.js) : le prochain, sa pratique, et le bouton vers le panneau des Galops. */
+/** 🏅 Tes Galops (src/sim/galops.js) : le prochain, sa pratique, le bouton vers le panneau des Galops et 🃏 mes cartes. */
 function galopSection(ui, g) {
   const p = g.profile;
   const level = galopLevel(p);
@@ -209,8 +210,10 @@ function galopSection(ui, g) {
       : t('galop_sheetNext', { n: next.id, have: list.filter((x) => x.done).length, total: list.length }));
   } else lines.push(t('galops_all'));
   const ready = next && canTakeExam(p, next.id).ok;
+  const album = albumView(p); // 🃏
   return [h('h3', {}, t('galop_sheet')), h('p', { class: ready ? 'note good' : 'note' }, lines.join(' ')),
-    h('div', { class: 'grid' }, h('button', { class: `act ${ready ? 'primary' : ''} gl-open`, onClick: () => ui.openGalops() }, t('galop_open')))];
+    h('div', { class: 'grid' }, h('button', { class: `act ${ready ? 'primary' : ''} gl-open`, onClick: () => ui.openGalops() }, t('galop_open')),
+      h('button', { class: 'act fc-open', onClick: () => ui.openFactAlbum() }, t('card_album', { n: album.n, total: album.total })))];
 }
 
 function renderAnimal(ui, g, a) {

@@ -9,7 +9,7 @@ import * as panels from './panels.js';
 import { openTackItem } from './tack.js'; // sellerie : fiche d'un objet
 import { openVet } from './vet.js';
 import { openVetSchool } from './vetSchool.js'; // 🎓 école vétérinaire
-import { openGalops } from './galops.js'; // 🎓 les Galops
+import { openGalops, openFactAlbum } from './galops.js'; // 🎓 les Galops, 🃏 les cartes « Le savais-tu ? »
 import { runMinigame, runChoreGame } from './minigames.js';
 import { nbsp } from './minigames/frame.js'; // typographie française des messages
 import { showProfiles, showAvatarEditor } from './screens.js';
@@ -1232,4 +1232,5 @@ export class UI {
   openVet(a, atClinic) { openVet(this, a, atClinic); this.game?.emit('panel', 'vetExam'); }
   openVetSchool() { openVetSchool(this); } // 🎓 école vétérinaire (src/ui/vetSchool.js)
   openGalops() { openGalops(this); } // 🎓 les Galops (src/ui/galops.js)
+  openFactAlbum() { openFactAlbum(this); } // 🃏 mes cartes « Le savais-tu ? » (src/ui/galops.js)
 }

@@ -25,7 +25,7 @@ import { pansageGame } from './minigames/pansage.js'; // le pansage complet du c
 import { rationGame } from './minigames/ration.js'; // la ration du cheval : foin, puis un peu de granulés
 import { sellerGame } from './minigames/seller.js'; // seller son cheval : tapis, selle, sangle
 import { dewormGame } from './minigames/deworm.js'; // le vermifuge (carnet de santé du cheval)
-import { nextHorseFact } from '../sim/horseFacts.js'; // « 💡 Le savais-tu ? » à la fin des mini-jeux avec un cheval
+import { drawFact, factIcon } from '../sim/horseFacts.js'; // « 💡 Le savais-tu ? » à la fin des mini-jeux avec un cheval (🃏 cartes)
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -180,6 +180,8 @@ export function runMinigame(ui, a, action, opts = {}) {
   const make = a.species === 'horse' && action === 'brush' ? pansageGame : a.species === 'horse' && action === 'feed' ? rationGame : GAMES[action];
   if (!make) return Promise.resolve(1);
   const sp = SPECIES[a.species];
+  // 🃏 (une carte pas encore trouvée de ce soin, d'abord : src/sim/horseFacts.js)
+  const factId = a.species === 'horse' ? drawFact(ui.game?.profile, action) : null;
   return openMinigame(ui, {
     make,
     action,
@@ -190,7 +192,8 @@ export function runMinigame(ui, a, action, opts = {}) {
     seed: a.look?.seed ?? 1,
     endEmoji: sp.emoji,
     endText: (stars) => t(`mg_end${stars}`, { name: a.name }),
-    fact: a.species === 'horse' ? t(`fact_${nextHorseFact()}`) : null,
+    factId,
+    fact: factId ? t(`fact_${factId}`) : null,
     // L'animal n'est plus là (il est parti, ou mort de vieillesse) : on ferme sans rien appliquer.
     // (a.guest : l'animal d'un client du salon de toilettage, qui n'est pas au joueur : il reste là.)
     stillThere: (game) => !game?.profile || !!a.guest || game.profile.animals.some((x) => x.id === a.id),
@@ -467,17 +470,36 @@ function openMinigame(ui, o) {
 
     /**
      * Carte de fin trop haute pour la scène (360 px de large, message de 3 lignes, long prénom) :
-     * version compacte (.mg-end.tight), plutôt qu'une carte coupée en bas qui défile.
+     * version compacte (.mg-end.tight ; encore trop haute : .tighter, sans la tête de l'animal), plutôt qu'une
+     * carte coupée en bas qui défile.
      */
     function fitEnd() {
       if (endEl.hidden) return;
       const card = endEl.firstElementChild;
       if (!card) return;
-      endEl.classList.remove('tight');
-      const cs = getComputedStyle(endEl);
-      const room = endEl.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
-      // offsetHeight : taille de mise en page, sans l'animation d'apparition (scale) de la carte.
-      if (card.offsetHeight > room + 0.5) endEl.classList.add('tight');
+      endEl.classList.remove('tight', 'tighter');
+      // (la place se remesure : la version compacte a moins de marge autour de la carte)
+      const tooTall = () => {
+        const cs = getComputedStyle(endEl);
+        const room = endEl.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+        // offsetHeight : taille de mise en page, sans l'animation d'apparition (scale) de la carte.
+        return card.offsetHeight > room + 0.5;
+      };
+      if (!tooTall()) return;
+      endEl.classList.add('tight');
+      // Encore trop haute (360 × 640, le plus long « Le savais-tu ? » et sa carte 🃏) : la tête de l'animal
+      // s'efface, pas la note ni le message.
+      if (tooTall()) endEl.classList.add('tighter');
+    }
+
+    /** 🃏 Une nouvelle carte se retourne (icône, fait, « ✨ Nouvelle carte ! 9/27 ») ; déjà trouvée : la ligne 💡. */
+    function factCard(card) {
+      if (!card?.isNew) return h('p', { class: 'mg-fact' }, nbsp(`💡 ${t('factTitle')} ${o.fact}`));
+      const badge = card.all ? t('card_all') : `${t('card_new', { n: card.n, total: card.total })}${card.coins ? ` +${card.coins} 🪙` : ''}`;
+      return h('div', { class: 'mg-fact mg-card new' },
+        h('span', { class: 'mg-card-icon' }, factIcon(o.factId)),
+        h('span', { class: 'mg-card-text' }, nbsp(o.fact)),
+        h('b', { class: 'mg-card-badge' }, nbsp(badge)));
     }
 
     function showEnd(msg) {
@@ -485,12 +507,14 @@ function openMinigame(ui, o) {
       const stars = starsFor(quality, endVerdict); // ★★★ = « juste ce qu'il fallait », et rien d'autre
       const cont = h('button', { class: 'primary mg-continue' }, `${t('mg_continue')} ➜`);
       cont.addEventListener('click', () => close(quality));
+      // 🃏 La carte est gagnée ici seulement (fermé avec ✕ : rien, et la même carte revient la fois suivante).
+      const card = o.factId ? ui.game?.collectFact?.(o.factId) : null;
       endEl.replaceChildren(h('div', { class: 'mg-end-card' },
         h('div', { class: 'mg-end-emoji' }, o.endEmoji),
         h('h2', {}, nbsp(t(stars === 3 ? 'mg_bravo' : stars === 2 ? 'mg_wellDone' : 'mg_done'))),
         h('div', { class: 'mg-stars', 'aria-label': `${stars}/3` }, [1, 2, 3].map((i) => h('span', { class: i <= stars ? 'on' : 'off', style: { animationDelay: `${0.15 + i * 0.18}s` } }, '★'))),
         h('p', {}, nbsp(msg ?? o.endText(stars))),
-        o.fact ? h('p', { class: 'mg-fact' }, nbsp(`💡 ${t('factTitle')} ${o.fact}`)) : null,
+        o.fact ? factCard(card) : null,
         cont));
       endEl.hidden = false;
       // Le ✕ disparaît (fermer ici perdrait le soin) mais garde sa place (style.css,

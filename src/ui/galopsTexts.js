@@ -75,6 +75,13 @@ export const GALOPS_FR = {
   dip_see: 'Mon diplôme',
   dip_close: 'Bravo !',
   lb_cooldowns: 'Retours au calme au pas',
+  // 🃏 Les cartes « Le savais-tu ? » (src/sim/horseFacts.js)
+  lb_factCards: 'Cartes « Le savais-tu ? »',
+  card_new: '✨ Nouvelle carte ! {n}/{total}',
+  card_all: '🃏 Toutes les cartes : tu es un vrai expert !',
+  card_album: '🃏 Mes cartes {n}/{total}',
+  card_title: '🃏 Mes cartes « Le savais-tu ? »',
+  card_help: 'Chaque soin cache des cartes. ❓ : où chercher.',
 
   // Galop 1
   gq_1_1: 'Comment approches-tu un cheval ?',
@@ -274,6 +281,12 @@ export const GALOPS_EN = {
   dip_see: 'My certificate',
   dip_close: 'Well done!',
   lb_cooldowns: 'Walking cool-downs',
+  lb_factCards: 'Did-you-know cards',
+  card_new: '✨ New card! {n}/{total}',
+  card_all: '🃏 All the cards: you\'re a real expert!',
+  card_album: '🃏 My cards {n}/{total}',
+  card_title: '🃏 My Did-you-know cards',
+  card_help: 'Each care hides cards. ❓: where to look.',
 
   gq_1_1: 'How do you approach a horse?',
   gq_1_1_a1: 'From behind, without a sound',

@@ -117,8 +117,17 @@ appel ; meilleurs amis (75), il te suit en liberté, même sans licol (un concou
 quand même le licol).
 
 ### « 💡 Le savais-tu ? » (0.5, `src/sim/horseFacts.js`)
-À la fin de chaque mini-jeu fait avec un cheval, un fait vrai sur les chevaux (22, qui défilent sans se répéter) :
+À la fin de chaque mini-jeu fait avec un cheval, un fait vrai sur les chevaux (27, qui défilent sans se répéter) :
 il boit 30 à 50 litres par jour, il dort debout, on monte par la gauche, la fourchette aide le sang à remonter…
+
+**🃏 Mes cartes** : chaque fait est une carte à collectionner, et chaque soin cache les siennes (l'eau : ce qu'il
+boit ; le vermifuge : ses dents, la dose ; la longe : les allures, la détente, le retour au calme…). Le mini-jeu
+montre d'abord une carte pas encore trouvée de ce soin, puis une carte « de tous les soins » (son âge, le poulain,
+le flot du concours). Une nouvelle carte se retourne sur la carte de fin (« ✨ Nouvelle carte ! 9/27 ») ; elle ne se
+gagne qu'en finissant (fermé avec ✕ : la même revient la fois suivante). À la 9e et à la 18e, 30 🪙 (en gestion) ;
+à la 27e, « tu es un vrai expert ! ». « 🃏 Mes cartes 9/27 » (panneau des Galops et fiche du cheval) ouvre l'album :
+les cartes trouvées (un toucher lit le fait en entier), et pour les autres ❓ et l'icône du soin où chercher (⭐ :
+n'importe lequel). Le carnet du cavalier les compte.
 
 ### La journée de ton cheval (0.5, `src/sim/horseDay.js`)
 La routine d'un vrai propriétaire, chaque jour de jeu, dans sa fiche (« ☀️ Sa journée ») : 🌅 foin du matin (avant

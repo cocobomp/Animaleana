@@ -152,6 +152,7 @@ export const LOGBOOK = [
   { id: 'horseTravels', icon: '🗺️' },
   { id: 'cooldowns', icon: '😌' }, // (retours au calme au pas : src/sim/warmup.js)
   { id: 'pumpkins', icon: '🎃' }, // (la chasse aux citrouilles d'Halloween : src/sim/halloween.js)
+  { id: 'factCards', icon: '🃏' }, // (les cartes « Le savais-tu ? » : src/sim/horseFacts.js)
 ];
 export function logbook(profile) {
   const s = profile.stats ?? {};

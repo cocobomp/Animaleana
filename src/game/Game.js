@@ -67,6 +67,7 @@ import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au pone
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
 import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
 import { remember } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
+import { collectFact } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
 import { t, L, getLang, fmtHour } from '../i18n.js';
@@ -963,6 +964,23 @@ export class Game {
       this.ui.toast(t('memTip', { name: a.name, g: a.sex }), 6000);
     }
     return true;
+  }
+
+  /**
+   * 🃏 La carte « Le savais-tu ? » id, lue à la fin d'un mini-jeu (src/sim/horseFacts.js). Nouvelle : comptée dans le
+   * carnet, et à la 9e et à la 18e, des pièces (en gestion ; sinon coins vaut 0). Renvoie { isNew, n, total, coins, all }.
+   */
+  collectFact(id) {
+    const p = this.profile;
+    const r = collectFact(p, id);
+    if (r.isNew) {
+      addStat(p, 'factCards');
+      if (r.coins && !isSandbox(p)) {
+        earn(p, r.coins);
+        audio.ui('coin');
+      } else r.coins = 0;
+    }
+    return r;
   }
 
   /** Ton cheval du moment : celui que tu montes, sinon le dernier dont tu t'es occupé, sinon le plus proche de toi. */

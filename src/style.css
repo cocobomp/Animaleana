@@ -1907,6 +1907,7 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 .mg-end.tight .mg-stars { font-size: 2rem; }
 .mg-end.tight .mg-end-card p { margin: 0.3em 0 0.6em; font-size: 1rem; }
 .mg-end.tight .mg-continue { min-height: 50px; }
+.mg-end.tighter .mg-end-emoji { display: none; } /* (toujours trop haute en compact : la tête de l'animal s'efface) */
 /* Le guide du tutoriel (bulle 55, anneau 60) ne passe jamais par-dessus un mini-jeu ouvert : il
    cachait la consigne et le ✕, et montrait un bouton caché sous le jeu (tutorial.js le cache aussi). */
 body.mg-open #tuto-bubble,
@@ -2763,7 +2764,32 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 
 /* « 💡 Le savais-tu ? » sous le message de fin d'un mini-jeu avec un cheval (src/ui/minigames.js) */
 .mg-fact { margin: 6px 0 10px; padding: 8px 10px; border-radius: 10px; background: #fff6d6; color: #5a4636; font-size: 0.9em; line-height: 1.35; }
-.mg-end.tight .mg-fact { margin: 4px 0 6px; padding: 6px 8px; font-size: 0.82em; }
+.mg-end.tight .mg-end-card .mg-fact { margin: 4px 0 6px; padding: 6px 8px; font-size: 0.82em; } /* (.mg-end-card : plus fort que « .mg-end.tight .mg-end-card p ») */
+/* 🃏 Une nouvelle carte se retourne (src/ui/minigames.js factCard), juste après l'apparition de la carte de fin */
+.mg-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: center; text-align: left; border: 2px solid #f2b824; font-weight: 600; }
+.mg-card-icon { font-size: 1.9em; line-height: 1; }
+.mg-card-badge { grid-column: 1 / -1; text-align: center; color: #9a5a00; }
+.mg-card.new { animation: mg-card-flip 0.45s ease-out 0.3s both; }
+@keyframes mg-card-flip { from { transform: perspective(600px) rotateY(90deg); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mg-card.new { animation: none; } }
+.mg-end.tight .mg-card { gap: 2px 8px; }
+.mg-end.tight .mg-card-icon { font-size: 1.5em; }
+
+/* 🃏 Mes cartes « Le savais-tu ? » (src/ui/galops.js openFactAlbum) : 3 colonnes, 5 sur un grand écran */
+.fact-album { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 6px 0; }
+.fc { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 96px; padding: 6px 4px; border-radius: 12px; text-align: center; font-size: 0.78rem; line-height: 1.25; }
+.fc.found { background: #fff6d6; color: #5a4636; border: 2px solid #f2b824; font-weight: 600; }
+.fc.missing { justify-content: center; background: rgba(0, 0, 0, 0.04); border: 2px dashed var(--line); color: var(--muted); }
+.fc-icon { font-size: 1.6rem; line-height: 1.1; }
+.fc-where { font-size: 1.2rem; }
+.fc-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+.fc.open .fc-text { display: block; -webkit-line-clamp: none; line-clamp: none; overflow: visible; }
+.fc-title { font-size: 1.25rem; }
+.fc-count { font-size: 0.8em; color: var(--muted); white-space: nowrap; }
+@media (min-width: 700px) {
+  .fact-album { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .modal-box:has(> .fact-album) { width: min(640px, 100%); }
+}
 
 /* 📸 Ses souvenirs (fiche du cheval, src/ui/panels.js memorySection) */
 .mem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }

@@ -11,6 +11,8 @@ import {
 } from '../sim/galops.js';
 import { openOverlay } from './vetExam.js';
 import { fmtCross } from '../sim/freeJumps.js'; // ⏱️ le record du cross
+import { albumView, FACT_WHERE } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
+import { nbsp } from './minigames/frame.js'; // typographie française (« ? » ne part pas seul à la ligne)
 
 /** 🎓 Le diplôme d'un Galop obtenu : ton prénom, le cheval avec qui tu l'as passé, le jour. */
 export function diplomaCard(ui, id) {
@@ -30,6 +32,28 @@ export function diplomaCard(ui, id) {
 function showDiploma(ui, id) {
   ui.showModal([diplomaCard(ui, id),
     h('div', { class: 'row end' }, h('button', { class: 'primary', 'data-escape': true, onClick: () => ui.hideModal() }, t('dip_close')))]);
+}
+
+/**
+ * 🃏 Mes cartes « Le savais-tu ? » (src/sim/horseFacts.js) : une trouvée montre son icône et le début du fait (la
+ * toucher le lit en entier) ; une manquante, ❓ et l'icône du soin qui la cache (⭐ : n'importe quel soin).
+ */
+export function openFactAlbum(ui) {
+  const v = albumView(ui.game.profile);
+  const flip = (e) => {
+    const b = e.currentTarget;
+    b.classList.toggle('open');
+    b.setAttribute('aria-expanded', String(b.classList.contains('open')));
+  };
+  const cards = v.cards.map((c) => (c.found
+    ? h('button', { class: 'fc found', type: 'button', 'aria-expanded': 'false', onClick: flip },
+      h('span', { class: 'fc-icon' }, c.icon), h('span', { class: 'fc-text' }, t(`fact_${c.id}`)))
+    : h('div', { class: 'fc missing' }, h('span', { class: 'fc-icon' }, '❓'), h('span', { class: 'fc-where' }, FACT_WHERE[c.from[0] ?? 'any']))));
+  ui.showModal([
+    h('h2', { class: 'fc-title' }, nbsp(t('card_title')), ' ', h('small', { class: 'fc-count' }, `${v.n}/${v.total}`)),
+    h('p', { class: 'note' }, nbsp(t('card_help'))),
+    h('div', { class: 'fact-album' }, cards),
+    h('div', { class: 'row end' }, h('button', { class: 'primary', 'data-escape': true, onClick: () => ui.hideModal() }, t('close')))]);
 }
 
 export function openGalops(ui) {
@@ -77,6 +101,8 @@ export function openGalops(ui) {
         out.push(h('h3', {}, t('lb_title')), h('ul', { class: 'gl-book' }, book.map((x) => h('li', {},
           h('span', {}, x.icon), h('span', {}, t(`lb_${x.id}`)), h('b', {}, x.time ? fmtCross(x.n) : String(x.n))))));
       }
+      const album = albumView(p); // 🃏
+      out.push(h('button', { class: 'big fc-open', onClick: () => ui.openFactAlbum() }, t('card_album', { n: album.n, total: album.total })));
       return out;
     },
   });

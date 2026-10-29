@@ -569,6 +569,21 @@ export class AnimalEntity {
     return true;
   }
 
+  /**
+   * Les soins se voient sur sa robe (cheval) : de la terre sur les jambes et le corps quand il s'est roulé ou qu'il
+   * n'est pas pansé (horseCoat.js, hDirt) ; bien pansé, le poil est plus satiné ; crotté, plus terne.
+   */
+  coatCare() {
+    const m = this.model?.coatMesh?.material;
+    const u = m?.userData?.horseUniforms;
+    if (!u?.hDirt) return;
+    const g = this.data.needs?.grooming ?? 80;
+    const dirt = this.data.muddy ? Math.max(0.85, (70 - g) / 50) : Math.max(0, Math.min(1, (55 - g) / 45));
+    u.hDirt.value = dirt;
+    const base = m.userData.rimBase ?? u.hRim.value;
+    u.hRim.value = base * (g >= 85 && !this.data.muddy ? 1.3 : 1 - 0.45 * dirt);
+  }
+
   /** Tu l'as appelé, mais il reste là : il lève la tête et te regarde un moment (même de loin). */
   lookAtPlayer(seconds = 5) {
     if (this.state === 'walk') this.state = 'idle';
@@ -850,6 +865,7 @@ export class AnimalEntity {
       if (this.earsT <= 0) {
         this.earsT = 1;
         this.earsPose = earsOf(d, { sleeping: this.sleeping, happy: happiness(d) })?.pose ?? null;
+        this.coatCare();
       }
     }
     if (d.species === 'horse' && !d.client && !d.guest) this.horseLife(dt, ctx, distPlayer);

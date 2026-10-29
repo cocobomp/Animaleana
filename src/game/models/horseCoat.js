@@ -467,6 +467,16 @@ hEarIn = 0.0;
   // (plancher plus haut dessous : le ventre et l'intérieur des cuisses ne tombent pas au noir)
   c *= mix(mix(0.42, 0.62, clamp(under + inner, 0.0, 1.0)), 1.0, vHAO);
   hDarkV = 1.0 - smoothstep(0.012, 0.05, dot(c, vec3(0.2126, 0.7152, 0.0722)));
+  // Terre (il s'est roulé, il n'est pas pansé : hDirt, de 0 propre à 1 crotté, src/game/AnimalEntity.js) : les jambes
+  // et des taches sur le corps, brun terre ; le pansage l'enlève.
+  if (hDirt > 0.001) {
+    // (bords des taches cassés par un bruit fin ; brun terre foncé, en couleur linéaire)
+    float dn = hFbm(P * 6.0 + hSeed) + (hNoise(P * 28.0 + hSeed) - 0.5) * 0.2;
+    float legMud = isLeg * (0.7 + 0.3 * hNoise(P * 30.0));
+    float bodyMud = bodyS * smoothstep(0.52, 0.66, dn); // (bodyS : poids du corps continu, comme les marques)
+    float mud = clamp(hDirt * (0.85 * legMud + 0.75 * bodyMud), 0.0, 0.75) * (1.0 - isHoof) * (1.0 - isSkin);
+    c = mix(c, vec3(0.13, 0.085, 0.045), mud);
+  }
   diffuseColor.rgb = c;
 }`;
 
@@ -654,6 +664,8 @@ export function coatMaterial(look, build, breed = null, real = null) {
     // (robes dorées : satiné un peu plus fort, le reflet doré se voit aussi sur téléphone)
     hRim: { value: (high ? 0.75 : 1) * (1 + 0.3 * gold) },
     hRimTint: { value: rimTint },
+    // (terre sur la robe : 0 propre, 1 crotté — AnimalEntity.coatCare)
+    hDirt: { value: 0 },
     hSkyRim: gfx.skyRim,
     hFill: gfx.horseFill,
   };
@@ -758,6 +770,7 @@ ${RIM_FRAGMENT}`);
   };
   m.customProgramCacheKey = () => `horsecoat${high ? 'p' : 's'}${real ? 'r' : ''}`;
   m.userData.horseUniforms = u;
+  m.userData.rimBase = u.hRim.value; // (le satiné : plus brillant bien pansé, terne crotté — AnimalEntity.coatCare)
   return m;
 }
 

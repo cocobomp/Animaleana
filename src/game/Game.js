@@ -65,7 +65,7 @@ import { Activities } from './Activities.js'; // activités : saut, balade, agil
 import { FreeJumps } from './FreeJumps.js'; // ⤴️ sauter des troncs en balade libre
 import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au poney-club (fin octobre)
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
-import { WARMUP, dismountVerdict } from '../sim/warmup.js'; // 🐢 le retour au calme
+import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
 import { remember } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
@@ -900,6 +900,7 @@ export class Game {
    * (récompense, petit mot, statistique perfectDays).
    */
   markHorseDay(a, kind) {
+    if (['lunge', 'liberty', 'activity'].includes(kind)) a.warmAt = this.profile.clock ?? 0; // 🐢 (il a travaillé : chaud ; monté : à la descente)
     if (a.species === 'horse' && !a.client && !a.guest) this.lastHorseId = a.id; // (le défi du jour : src/sim/horseChallenge.js)
     const stage0 = bondStage(a);
     const r = markHorseDay(a, kind, this.hour, this.day);
@@ -2114,6 +2115,8 @@ export class Game {
     this.player.setHelmet(riderHelmet(this.profile));
     this.player.riderLevel = galopLevel(this.profile); // (Galops obtenus : il s'effraie moins)
     this.player.ride(e);
+    // 🐢 il vient de travailler (une leçon, une balade…) : déjà chaud, pas besoin de le réchauffer (src/sim/warmup.js)
+    if ((this.profile.clock ?? 0) - (a.warmAt ?? -1e9) < WARM_FOR) this.player.session = warmSession();
     this.ui.updateGaitPad?.();
     addStat(this.profile, 'rides');
     this.markHorseDay(a, 'ride');
@@ -2129,6 +2132,7 @@ export class Game {
     const worked = !!this.player.cantered; // (il a galopé : de retour au pré, il ira se rouler)
     // 🐢 Le retour au calme (src/sim/warmup.js) : il a galopé, puis marché un moment au pas avant qu'on descende ?
     const calm = e && this.player.gaitEnabled !== false && !this.tripFlow?.active ? dismountVerdict(this.player.session) : null;
+    if (e && this.player.session?.started) e.data.warmAt = this.profile.clock ?? 0; // (encore chaud un moment)
     this.player.dismount();
     if (calm && e.data.species === 'horse') {
       const a = e.data;
@@ -2286,7 +2290,7 @@ export class Game {
     const dist = Math.hypot(e.position.x - pp.x, e.position.z - pp.z);
     const p0 = { name: a.name, g: a.sex };
     // (il arrive déjà : rappeler ne compte pas une deuxième fois)
-    if (e.comeTrot && dist >= CALL.near) {
+    if (e.comeTrot && e.state === 'walk' && dist >= CALL.near) {
       this.ui.toast(t('call_coming', p0), 4000);
       return 'coming';
     }

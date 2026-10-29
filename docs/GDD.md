@@ -173,7 +173,8 @@ vrai : le soir (dès 14 h) d'un jour où il n'a pas travaillé (« 🏇 » pas c
 
 ### Sauter en balade (0.5, `src/sim/freeJumps.js`, `src/game/FreeJumps.js`)
 À la ferme, quatre troncs couchés en travers du chemin de balade (un tronçon sur deux), chacun avec un piquet numéroté
-(l'ordre du cross). Le premier galop à la ferme, un petit mot dit où ils sont. Au galop (c'est l'allure qui compte :
+(l'ordre du cross). Le premier galop à la ferme, un petit mot dit où ils sont ; les quêtes « 3 troncs » et « cross »
+font d'abord passer au galop, puis la flèche jaune montre un tronc (le n° 1 pour le cross). Au galop (c'est l'allure qui compte :
 un poney au galop saute, un cheval de trait au trot enjambe), bien droit, à moins de 12 m : un bouton orange
 « ⤴️ Sauter » (Espace). Appel entre 3,6 et 0,4 m du tronc, idéal à 1,8 m : un beau saut (⭐) ; trop tôt, le jeu le
 dit (« le tronc est à 6 m ») ; rien touché, lancé au galop, il saute tout seul au dernier moment (moins bien). Au
@@ -189,7 +190,7 @@ cours explique comment le lancer) ; descendre de cheval, une activité, un voyag
 (aller quelque part en touchant le sol, à cheval, ne l'arrête pas).
 
 ### Le trot enlevé (0.5, `src/sim/posting.js`)
-À cheval en balade libre, en selle (avec des étriers), au trot : un gros bouton rond « ⬆️ Enlever » (Espace au clavier).
+À cheval en balade libre, en selle (avec des étriers), au trot : un gros bouton rond « ⬆️ Debout » (Espace au clavier ; au club, on apprend « debout, assis »).
 Un cercle se referme sur lui à chaque foulée ; on touche quand il se referme (le sabot tape), à 20 % de foulée près,
 une fois par foulée. Trois bons temps de suite : le cavalier se lève et se rassoit en rythme (trot enlevé), et le trot
 fatigue deux fois moins le cheval ; sans toucher (1,6 foulée), on retombe assis (on rebondit dans la selle). Huit
@@ -226,7 +227,7 @@ Comme dans les vrais clubs fin octobre, du 24 octobre au 2 novembre (date réell
 du chemin de balade (elles s'allument le soir), et la **chasse aux citrouilles** : 8 citrouilles posées au bord du
 chemin de balade, une à chaque point (sauf l'écurie), le visage tourné vers le cavalier qui arrive. On les trouve **à
 cheval** en passant à côté (à pied, le jeu dit de monter). Annoncée une fois par partie ; « ☀️ Sa journée » montre où
-on en est. Toutes trouvées : 50 🪙 (en gestion), lien +3, et le **tapis citrouille** (orange à liseré noir), rangé dans
+on en est, avec « 🧭 Guide-moi vers une citrouille » (la flèche jaune montre la plus proche, puis la suivante). Toutes trouvées : 50 🪙 (en gestion), lien +3, et le **tapis citrouille** (orange à liseré noir), rangé dans
 la sellerie et mis tout de suite au cheval s'il est sellé ; il ne s'achète pas, il se gagne (« 🎃 À gagner »). Une
 chasse par an ; « 🎃 Citrouilles trouvées » dans le carnet du cavalier.
 

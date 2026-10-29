@@ -55,7 +55,7 @@ export function allowedGait(gait, a) {
 export function rideEffort(a, gait, dt, trotK = 1, k = 1) {
   const n = a.needs;
   // (k : pas échauffé, l'effort fatigue un peu plus — src/sim/warmup.js)
-  n.energy = clamp(n.energy - (GAIT_COST[gait] ?? 0) * (gait === 'trot' ? trotK : 1) * (gait === 'walk' ? 1 : k) * dt);
+  n.energy = clamp(n.energy - (GAIT_COST[gait] ?? 0) * (gait === 'trot' ? trotK : 1) * (gait === 'walk' || gait === 'halt' ? 1 : k) * dt);
   if (gait === 'canter' || gait === 'gallop') {
     n.grooming = clamp(n.grooming - (gait === 'gallop' ? 0.08 : 0.04) * dt);
     n.thirst = clamp(n.thirst - (gait === 'gallop' ? 0.05 : 0.025) * dt);

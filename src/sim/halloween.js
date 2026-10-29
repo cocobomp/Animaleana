@@ -39,20 +39,25 @@ export function pumpkinSpots(trail = TRAIL) {
     const rx = (b.z - a.z) / len;
     const rz = -(b.x - a.x) / len;
     // (face : le visage tourné vers le cavalier qui arrive du point d'avant)
-    out.push({ id: `pk${i}`, n: i, x: b.x + rx * HALLOWEEN.side, z: b.z + rz * HALLOWEEN.side, face: Math.atan2(a.x - b.x, a.z - b.z) });
+    out.push({ id: `pk${i}`, n: i, x: b.x + rx * HALLOWEEN.side, z: b.z + rz * HALLOWEEN.side, cx: b.x, cz: b.z, face: Math.atan2(a.x - b.x, a.z - b.z) });
   }
   return out;
 }
 
-/** Le décor de la ferme : quelques citrouilles-lanternes au départ de la balade (près de l'écurie), le visage vers la cour. */
+/**
+ * Le décor de la ferme : des citrouilles-lanternes autour du départ de la balade. Des places possibles, en cercle ; le
+ * jeu garde les DECOR_MAX premières qui ne tombent ni dans un bâtiment ni dans l'eau (src/game/Halloween.js).
+ */
+export const DECOR_MAX = 4;
 export function decorSpots(trail = TRAIL) {
   const s = trail.start;
-  return [
-    { x: s.x - 2.2, z: s.z - 1.2, size: 1.2, face: 0.35 },
-    { x: s.x - 2.9, z: s.z - 0.2, size: 0.8, face: 0.6 },
-    { x: s.x + 2.4, z: s.z - 1.4, size: 1, face: -0.35 },
-    { x: s.x + 3.1, z: s.z - 0.5, size: 0.7, face: -0.6 },
-  ];
+  const out = [];
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    const r = 3.2 + (k % 3) * 0.6;
+    out.push({ x: s.x + Math.sin(a) * r, z: s.z + Math.cos(a) * r, size: [1.2, 0.8, 1, 0.7][k % 4], face: a + Math.PI });
+  }
+  return out;
 }
 
 /** La chasse de cette année (créée, ou remise à zéro l'année suivante). */

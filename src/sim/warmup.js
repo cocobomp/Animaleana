@@ -17,6 +17,10 @@ export const WARMUP = {
 };
 
 export const newSession = () => ({ walk: 0, warm: false, started: false, hard: 0, cool: 0 });
+/** Encore chaud (minutes de jeu) après un travail : une leçon, une balade, une séance… (src/game/Game.js ride). */
+export const WARM_FOR = 60;
+/** Une séance qui commence avec un cheval déjà chaud (il vient de travailler). */
+export const warmSession = () => ({ ...newSession(), walk: WARMUP.walk, warm: true });
 
 /**
  * Une image de balade à l'allure gait ('halt', 'walk', 'trot', 'canter', 'gallop') pendant dt secondes. Renvoie ce
@@ -38,10 +42,8 @@ export function sessionTick(s, gait, dt) {
     s.started = true;
     news = s.warm ? 'warm' : 'cold';
   }
-  if (gait === 'canter' || gait === 'gallop') {
-    s.hard += dt;
-    s.cool = 0;
-  }
+  if (gait === 'canter' || gait === 'gallop') s.hard += dt;
+  s.cool = 0; // (trotter ou galoper après le retour au calme : il faut le refaire)
   return news;
 }
 

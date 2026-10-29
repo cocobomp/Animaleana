@@ -8,7 +8,7 @@ import { earn, addStat, isSandbox } from '../sim/profile.js';
 import { giveGear, sizeFor } from '../sim/gear.js';
 import { bondStage } from '../sim/animal.js';
 import { hourOf } from '../sim/time.js';
-import { HALLOWEEN, halloweenOn, halloweenYear, pumpkinSpots, decorSpots, huntState, findPumpkin } from '../sim/halloween.js';
+import { HALLOWEEN, DECOR_MAX, halloweenOn, halloweenYear, pumpkinSpots, decorSpots, huntState, findPumpkin } from '../sim/halloween.js';
 import { audio } from './audio.js';
 
 const R = 0.32; // (le rayon d'une citrouille de taille 1)
@@ -92,7 +92,8 @@ export class Halloween {
   sync() {
     const g = this.game;
     const on = !!g.profile && g.isHome && halloweenOn();
-    const key = on ? g.profile.place : null;
+    // (une autre partie sur la même ferme : ses citrouilles à elle)
+    const key = on ? `${g.profile.id}:${g.profile.place}` : null;
     if (key === this.place) return;
     this.place = key;
     for (const it of this.items) it.model.removeFromParent();
@@ -110,8 +111,11 @@ export class Halloween {
       this.stemGeo = new THREE.CylinderGeometry(0.035, 0.06, 0.16, 6);
     }
     const hunt = huntState(g.profile, halloweenYear());
-    const put = (x, z, size, id = null) => {
-      if (g.world.isWater?.(x, z)) return;
+    // (pas dans l'eau, ni dans un bâtiment : l'écurie, la maison, la sellerie)
+    const blocked = (x, z) => !!g.world.isWater?.(x, z)
+      || Object.keys(g.world.interiors ?? {}).some((id) => g.interiors?.roomAt?.(id, x, z));
+    const put = (x, z, size, id = null, force = false) => {
+      if (!force && blocked(x, z)) return null;
       const m = new THREE.Group();
       const body = new THREE.Mesh(this.geo, this.mat);
       body.position.y = R * 0.78;
@@ -129,12 +133,19 @@ export class Halloween {
       this.items.push(it);
       return it;
     };
+    let decor = 0;
     for (const d of decorSpots()) {
+      if (decor >= DECOR_MAX) break;
       const it = put(d.x, d.z, d.size);
-      if (it) it.model.rotation.y = d.face;
+      if (!it) continue;
+      it.model.rotation.y = d.face;
+      decor++;
     }
     for (const s of pumpkinSpots()) {
-      const it = put(s.x, s.z, 1.5, s.id); // (plus grosses : on les voit de loin)
+      // (au bord du chemin ; dans l'eau ou un bâtiment : de l'autre côté, sinon sur le point du chemin)
+      const cp = { x: 2 * s.cx - s.x, z: 2 * s.cz - s.z };
+      const at = [s, cp].find((q) => !blocked(q.x, q.z)) ?? { x: s.cx, z: s.cz };
+      const it = put(at.x, at.z, 1.5, s.id, true); // (toujours posée : le compte « n/8 » reste juste)
       if (it) it.model.rotation.y = s.face;
     }
   }
@@ -158,7 +169,8 @@ export class Halloween {
       }
     }
     const pl = g.player;
-    if (g.activities.active || g.tripFlow?.active) return;
+    // (une activité qui mène le cheval ailleurs, un voyage : pas de chasse ; la balade, elle, passe par les citrouilles)
+    if ((g.activities.active && g.activities.type !== 'trail') || g.tripFlow?.active) return;
     const hunt = huntState(g.profile, halloweenYear());
     if (hunt.done) return;
     // Le mot de la fête, une fois par partie (à la ferme, quand rien d'autre ne parle)

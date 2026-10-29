@@ -34,6 +34,14 @@ describe('détente et retour au calme', () => {
     expect(effortFactor(s)).toBe(1);
   });
 
+  it('un cheval qui vient de travailler (leçon, balade) part déjà chaud', async () => {
+    const { warmSession, WARM_FOR } = await import('../src/sim/warmup.js');
+    const s = warmSession();
+    expect(run(s, 'trot', 1)).toEqual(['warm']);
+    expect(effortFactor(s)).toBe(1);
+    expect(WARM_FOR).toBeGreaterThan(0);
+  });
+
   it('à l\'arrêt, rien ne compte (ni échauffement, ni effort)', () => {
     const s = newSession();
     run(s, 'halt', 60);
@@ -52,6 +60,11 @@ describe('détente et retour au calme', () => {
     expect(dismountVerdict(s)).toBe('hot');
     run(s, 'walk', WARMUP.cool);
     expect(dismountVerdict(s)).toBe('cooled');
+    // (retrotté après le retour au calme : à refaire aussi)
+    run(s, 'trot', 2);
+    expect(dismountVerdict(s)).toBe('hot');
+    run(s, 'walk', WARMUP.cool + 1);
+    expect(dismountVerdict(s)).toBe('cooled');
     // (regalopé : le retour au calme recommence)
     run(s, 'gallop', 2);
     expect(dismountVerdict(s)).toBe('hot');
@@ -69,6 +82,11 @@ describe('détente et retour au calme', () => {
     rideEffort(c, 'walk', 10, 1, 1);
     rideEffort(d, 'walk', 10, 1, WARMUP.coldEffort);
     expect(d.needs.energy).toBe(c.needs.energy);
+    const e = { needs: { energy: 50 } };
+    const f = { needs: { energy: 50 } };
+    rideEffort(e, 'halt', 10, 1, 1);
+    rideEffort(f, 'halt', 10, 1, WARMUP.coldEffort);
+    expect(f.needs.energy).toBe(e.needs.energy); // (à l'arrêt, il souffle autant)
   });
 
   it('chaque message existe en français (au féminin aussi) et en anglais', () => {

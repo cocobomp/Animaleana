@@ -146,6 +146,13 @@ La routine d'un vrai propriétaire, chaque jour de jeu, dans sa fiche (« ☀️
 14 h), 🌇 foin du soir (dès 14 h), 💧 eau fraîche, 🪮 pansage, 🏇 le faire travailler (monter, longe, liberté, une
 activité) et ❤️ un câlin. Tout coché : « 🌟 Journée parfaite » (lien +3, affection +10, de l'XP). Quête du thème
 « 🐴 Ton cheval » : trois journées parfaites.
+« 🫧 Il te demande… » (`src/sim/horseWish.js`, `src/game/wishBubble.js`) : à 10 m de ton cheval, une petite bulle
+blanche flotte au-dessus de sa tête, sous son nom, avec une seule icône, la prochaine chose de sa journée : 🌾 (il a
+faim, ou le foin du matin manque avant 14 h, ou celui du soir dès 16 h), 💧, 🪮, 🏇 (de 8 h à 19 h, s'il peut être
+monté), puis ❤️. Le soin fait, la bulle éclate en ✨ et la suivante vient une seconde après ; tout fait, plus de bulle.
+Malade, boiteux ou endormi, son 🤒, son 🩹 ou son 💤 passent avant ; triste, il montre sa bulle plutôt que 😢 (c'est
+comme ça qu'on le console). Pas la nuit (21 h-6 h), ni sur son dos, ni pendant une activité, ni pour un cheval confié,
+ni pendant le tutoriel. À l'écurie, chacun montre la sienne.
 
 ### Le défi du jour (0.5, `src/sim/horseChallenge.js`)
 Chaque jour de jeu, un petit défi avec ton cheval, tiré parmi ceux que tu sais déjà faire : le caresser 3 fois, le

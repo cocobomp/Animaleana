@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { SPECIES } from '../sim/species.js';
 import { growthScale, mood, lifeStage, stageLook, happiness } from '../sim/animal.js';
 import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
+import { wishOf, wishDone, WISH } from '../sim/horseWish.js'; // 🫧 ce qu'il te demande
+import { bubbleTexture, bubbleScale } from './wishBubble.js';
 import { buildAnimalModel, disposeModel } from './models/animalModel.js';
 import { buildGltfAnimal } from './models/gltfAnimal.js';
 import { emojiTexture } from './textures.js';
@@ -269,6 +271,9 @@ export class AnimalEntity {
     this.label.scale.set(1.6 * s, 0.4 * s, 1);
     this.status.position.y = top + 0.8 * s;
     this.status.scale.setScalar(0.5 * s);
+    this.statusY = top + 0.8 * s;
+    this.statusS = 0.5 * s;
+    this.statusKey = undefined; // (refait au prochain updateStatus, avec la bulle de ce qu'il te demande)
   }
 
   rename() {
@@ -528,10 +533,10 @@ export class AnimalEntity {
     this.target.set(h.x, 0, h.z);
   }
 
-  emit(emoji, count = 3) {
+  emit(emoji, count = 3, y = this.label.position.y - 0.2) {
     for (let i = 0; i < count; i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture(emoji), transparent: true, depthWrite: false }));
-      s.position.set((Math.random() - 0.5) * 0.4, this.label.position.y - 0.2, (Math.random() - 0.5) * 0.4);
+      s.position.set((Math.random() - 0.5) * 0.4, y, (Math.random() - 0.5) * 0.4);
       s.scale.setScalar(0.35);
       s.userData = { life: 1.4 + Math.random() * 0.5, vy: 0.6 + Math.random() * 0.3, delay: i * 0.2 };
       s.visible = false;
@@ -606,17 +611,37 @@ export class AnimalEntity {
     return audio.animal(this.data.species, how, this.data.id, { pitch, gain: 1 / (1 + dist / 7) });
   }
 
-  /** Changement d'emoji au-dessus de la tête selon l'humeur. */
-  updateStatus() {
+  /**
+   * Changement d'emoji au-dessus de la tête selon l'humeur ; ou la bulle de ce qu'il te demande (this.wish) : toujours
+   * de la même taille à l'écran, comme l'étiquette de son nom (HTML), accrochée juste dessous, la queue vers sa tête (plus
+   * haut, l'étiquette et le haut de l'écran la cachaient).
+   */
+  updateStatus(ctx) {
     const m = mood(this.data);
-    const emoji = this.sleeping ? '💤' : this.data.lame && m !== 'sick' ? '🩹' : MOOD_EMOJI[m] ?? null; // (il boite)
-    if (emoji !== this.statusEmoji) {
+    const base = this.sleeping ? '💤' : this.data.lame && m !== 'sick' ? '🩹' : m === 'sick' ? MOOD_EMOJI.sick : null; // (il boite)
+    const wish = base ? null : this.wish; // (triste : sa bulle plutôt que 😢, c'est comme ça qu'on le console)
+    const emoji = base ?? (wish ? wish.icon : MOOD_EMOJI[m] ?? null);
+    const key = wish ? `w:${wish.icon}` : emoji;
+    const st = this.status;
+    if (key !== this.statusKey) {
+      this.statusKey = key;
       this.statusEmoji = emoji;
-      this.status.visible = !!emoji;
+      st.visible = !!emoji;
       if (emoji) {
-        this.status.material.map = emojiTexture(emoji);
-        this.status.material.needsUpdate = true;
+        st.material.map = wish ? bubbleTexture(emoji) : emojiTexture(emoji);
+        st.material.sizeAttenuation = !wish;
+        st.material.depthTest = !wish; // (comme l'étiquette : toujours devant)
+        st.material.needsUpdate = true;
+        st.renderOrder = wish ? 10 : 0;
+        st.position.y = wish ? this.label.position.y : this.statusY;
+        st.center.set(0.5, 0.5);
+        st.scale.setScalar(this.statusS);
       }
+    }
+    const cam = wish && ctx?.game?.camera;
+    if (cam) {
+      st.scale.setScalar(bubbleScale(cam.fov, window.innerHeight));
+      st.center.y = 1 + Math.sin(this.time * 3) * 0.04; // (elle pend sous l'étiquette et flotte un peu)
     }
     return m;
   }
@@ -850,7 +875,7 @@ export class AnimalEntity {
   update(dt, ctx) {
     this.time += dt;
     const d = this.data;
-    const m = this.updateStatus();
+    const m = this.updateStatus(ctx);
     const sad = m === 'sad' || m === 'sick';
     const p = this.root.position;
 
@@ -867,6 +892,12 @@ export class AnimalEntity {
       if (!this.sleeping && !this.inside && distPlayer < 28 && Math.random() < 0.6) this.speak(null, distPlayer);
     }
     if (d.species === 'horse') {
+      // 🫧 Ce qu'il te demandait est fait : la bulle éclate en étincelles, la suivante vient une seconde après.
+      if (this.wish && wishDone(d, this.wish, ctx.game?.day)) {
+        this.wish = null;
+        this.earsT = 1;
+        this.emit('✨', 3, this.label.position.y - 0.4);
+      }
       // 👂 Ses oreilles (src/sim/horseEars.js), revues chaque seconde : le modèle 3D les couche ou les pointe.
       this.earsT = (this.earsT ?? 0) - dt;
       if (this.earsT <= 0) {
@@ -878,6 +909,10 @@ export class AnimalEntity {
         const rainy = felt === 'rain' || felt === 'storm';
         this.rainWet = Math.max(0, Math.min(0.8, (this.rainWet ?? 0) + (rainy ? 0.05 : -0.01)));
         this.coatCare();
+        // 🫧 Près de toi (10 m), tutoriel fini : sa bulle (src/sim/horseWish.js ; pas sur son dos, ni pendant une activité)
+        const can = gm?.profile && gm.profile.tutorial?.done !== false && distPlayer < WISH.near && !this.ridden && !this.scripted
+          && gm.player?.mount !== this;
+        this.wish = can ? wishOf(d, { day: gm.day, hour: gm.hour, sleeping: this.sleeping }) : null;
       }
     }
     if (d.species === 'horse' && !d.client && !d.guest) this.horseLife(dt, ctx, distPlayer);

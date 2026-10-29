@@ -153,6 +153,7 @@ export const LOGBOOK = [
   { id: 'cooldowns', icon: '😌' }, // (retours au calme au pas : src/sim/warmup.js)
   { id: 'pumpkins', icon: '🎃' }, // (la chasse aux citrouilles d'Halloween : src/sim/halloween.js)
   { id: 'factCards', icon: '🃏' }, // (les cartes « Le savais-tu ? » : src/sim/horseFacts.js)
+  { id: 'luckyShoes', icon: '🍀' }, // (le fer porte-bonheur du jour : src/sim/luckyShoes.js)
 ];
 export function logbook(profile) {
   const s = profile.stats ?? {};

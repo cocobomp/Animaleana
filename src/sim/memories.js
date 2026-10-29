@@ -37,6 +37,7 @@ export const MEMORIES = [
   { id: 'quirkTreat', icon: '🍎' },
   { id: 'quirkFear', icon: '😲' },
   { id: 'firstMatchy', icon: '🎨' },
+  { id: 'luckyShoes', icon: '🍀' }, // (les 7 fers porte-bonheur : src/sim/luckyShoes.js)
   { id: 'year1', icon: '🎂' },
 ];
 /** Une étape du lien (src/sim/animal.js BOND_STAGES) : son souvenir. */

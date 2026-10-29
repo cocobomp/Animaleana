@@ -302,6 +302,17 @@ on en est, avec « 🧭 Guide-moi vers une citrouille » (la flèche jaune montr
 la sellerie et mis tout de suite au cheval s'il est sellé ; il ne s'achète pas, il se gagne (« 🎃 À gagner »). Une
 chasse par an ; « 🎃 Citrouilles trouvées » dans le carnet du cavalier.
 
+### Le fer porte-bonheur du jour (0.5, `src/sim/luckyShoes.js`, `src/game/LuckyShoes.js`)
+Chaque vrai jour (date de l'appareil), un vieux fer est posé au bord du chemin de balade de la ferme, à gauche (loin
+des troncs et des citrouilles), et brille toutes les 2 secondes pour qu'on le voie de loin ; le tutoriel fini, avec un
+cheval à toi. En selle à la ferme : « 🍀 Un fer porte-bonheur brille sur le chemin de balade ! ». On le ramasse **à
+cheval** en passant à côté (à pied, le jeu dit de monter) : il saute, 🍀 au-dessus du cheval, et un petit mot dit ce
+qu'il a de vrai (« Fer de derrière : plus pointu. 3/7 »). Il est cloué sur la porte du box du cheval qu'on montait,
+sous ses flots. 7 fers à collectionner, un nouveau chaque jour : de devant (rond), de derrière (plus pointu), de poney
+(tout petit), de cheval de trait (plus d'un kilo), à crampons (pour ne pas glisser sur l'herbe), en œuf (fermé
+derrière, il soutient les talons), en aluminium (très léger, pour les courses). Les 7 : 50 🪙 (en gestion), lien +3 et
+un souvenir ; ensuite, le fer du jour rapporte 5 🪙. « 🍀 Fers porte-bonheur » dans le carnet du cavalier.
+
 ### Les Galops (0.5, `src/sim/galops.js`, `src/ui/galops.js`)
 Les examens des cavaliers dans les clubs français, en plus simple : Galop 1 « Je découvre mon cheval » (le caresser,
 le panser, foin, eau, le monter), Galop 2 « Je m'occupe de lui » (le seller soi-même, galoper, une leçon de saut, une

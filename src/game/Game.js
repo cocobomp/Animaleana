@@ -65,6 +65,7 @@ import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
 import { FreeJumps } from './FreeJumps.js'; // ⤴️ sauter des troncs en balade libre
 import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au poney-club (fin octobre)
+import { LuckyShoes } from './LuckyShoes.js'; // 🍀 le fer porte-bonheur du jour, sur le chemin de balade
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
 import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
 import { remember, anniversaryDue, togetherSince, BOND_MEMORIES } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
@@ -163,6 +164,7 @@ export class Game {
     this.activities = new Activities(this);
     this.freeJumps = new FreeJumps(this); // ⤴️ les troncs du chemin de balade
     this.halloween = new Halloween(this); // 🎃 citrouilles-lanternes et chasse aux citrouilles
+    this.luckyShoes = new LuckyShoes(this); // 🍀 le fer du jour, puis sur la porte de son box
     this.beauty = new Beauty(this); // concours de beauté (game.beauty)
     this.dogTrainer = new DogTrainer(this);
     this.trailGuide = new TrailGuide(this); // 🧭 guide de randonnée
@@ -1240,6 +1242,7 @@ export class Game {
       this.activities.update(wdt); // après les animaux : l'activité ajuste leur pose (sauts, tours)
       this.freeJumps.update(wdt); // ⤴️ en balade libre, le saut d'un tronc (même pose)
       this.halloween.update(wdt); // 🎃 (pendant la fête)
+      this.luckyShoes.update(wdt); // 🍀 (à la ferme)
     }
     this.player.afterSessions?.(); // rênes : à la place finale du cheval et du cavalier (saut soulevé)
     if (mgmt) this.mgmt.update(dt, ctrl);

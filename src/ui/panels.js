@@ -145,7 +145,7 @@ function healthSection(ui, g, a, btn) {
     HEALTH_PLAN[it.id].where !== 'sheet' && it.state !== 'ok' ? h('small', {}, ` ${t(`hp_where_${HEALTH_PLAN[it.id].where}`)}`) : null));
   const worm = plan.find((it) => it.id === 'worm');
   return [h('h3', {}, t('hp_title')), h('p', { class: 'note' }, t('hp_help')), h('ul', { class: 'hp-list' }, rows),
-    h('div', { class: 'grid' }, btn(`${t('hp_deworm')}${money(ui, WORMER_COST)}`, () => { if (g.deworm(a)) ui.renderPanel(); },
+    h('div', { class: 'grid' }, btn(`${t('hp_deworm')}${money(ui, WORMER_COST)}`, async () => { if (await ui.dewormWithGame(a)) ui.renderPanel(); },
       { cls: worm.state === 'ok' ? '' : 'primary' }))];
 }
 

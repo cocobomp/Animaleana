@@ -18,7 +18,8 @@ import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtim
 import { tripChips } from './trip.js'; // voyages réalistes
 import { openActivities } from './activities.js';
 import { TOOLS, toolAtHome } from '../sim/tools.js';
-import { isSandbox } from '../sim/profile.js';
+import { isSandbox, canAfford } from '../sim/profile.js';
+import { WORMER_COST } from '../sim/horseHealth.js'; // le prix du vermifuge
 import { lifeStage } from '../sim/animal.js'; // étiquettes groupées des bébés
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
@@ -1032,6 +1033,16 @@ export class UI {
     if (!g.saddle(a)) return null;
     if (ride) return g.ride(a);
     return true;
+  }
+
+  /** Le vermifuge en jouant (src/ui/minigames/deworm.js), puis noté dans le carnet de santé. */
+  async dewormWithGame(a) {
+    const g = this.game;
+    if (g.blockedByPause()) return null;
+    if (!canAfford(g.profile, WORMER_COST)) return this.toast(t('r_money'));
+    const quality = await runMinigame(this, a, 'deworm');
+    if (quality === null) return null;
+    return g.deworm(a);
   }
 
   /** Tonte ou traite (mini-jeu aussi). */

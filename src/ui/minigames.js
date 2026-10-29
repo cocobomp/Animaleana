@@ -23,6 +23,7 @@ import { fitView, toLocalPoint, nbsp } from './minigames/frame.js'; // échelle,
 import { braidGame, shineGame, bowGame, fluffGame } from './minigames/beauty.js'; // concours de beauté
 import { pansageGame } from './minigames/pansage.js'; // le pansage complet du cheval
 import { sellerGame } from './minigames/seller.js'; // seller son cheval : tapis, selle, sangle
+import { dewormGame } from './minigames/deworm.js'; // le vermifuge (carnet de santé du cheval)
 import { nextHorseFact } from '../sim/horseFacts.js'; // « 💡 Le savais-tu ? » à la fin des mini-jeux avec un cheval
 
 export const MG_W = 400;
@@ -45,6 +46,7 @@ const GAMES = {
   liberty: libertyGame,
   braid: braidGame, shine: shineGame, bow: bowGame, fluff: fluffGame, // concours de beauté (src/ui/beauty.js)
   saddle: sellerGame, // seller son cheval (src/ui/UI.js : saddleWithGame)
+  deworm: dewormGame, // le vermifuge (src/ui/UI.js : dewormWithGame)
 };
 
 const ICONS = {
@@ -52,6 +54,7 @@ const ICONS = {
   treat: '🍪', play: '⚽', lunge: '🌀', liberty: '💛', shear: '🧶', milk: '🥛',
   braid: '🎀', shine: '✨', bow: '🎀', fluff: '🧶', // concours de beauté
   saddle: '🏇',
+  deworm: '🪱',
 };
 
 /** Ajoute un mini-jeu (ex. séances d'éducation canine, src/ui/minigames/dogTraining.js). */

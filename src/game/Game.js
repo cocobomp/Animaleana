@@ -51,6 +51,7 @@ import { digest, addDropping, dryPuddles, dirtNear, removeDroppings, scoopZone }
 import { enclosure } from './nav.js';
 import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import { healthDay, noteHealth, WORMER_COST } from '../sim/horseHealth.js'; // le carnet de santé du cheval
+import { markHorseDay } from '../sim/horseDay.js'; // la journée de ton cheval
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
   unsaddle, saddleUp,
@@ -866,6 +867,20 @@ export class Game {
         else if (ev === 'sick') this.handleEvents(a, ['sick']);
       }
     }
+  }
+
+  /**
+   * La journée de ton cheval (src/sim/horseDay.js) : un soin coche sa case ; tout coché, une journée parfaite
+   * (récompense, petit mot, statistique perfectDays).
+   */
+  markHorseDay(a, kind) {
+    const r = markHorseDay(a, kind, this.hour, this.day);
+    if (!r.perfect) return r;
+    addStat(this.profile, 'perfectDays');
+    this.xp('quest');
+    this.entities.get(a.id)?.emit('💕', 4);
+    this.ui.toast(t('perfectDay', { name: a.name, g: a.sex }), 7000);
+    return r;
   }
 
   /** Le vermifuge (carnet de santé, dans la fiche du cheval). */
@@ -1875,6 +1890,7 @@ export class Game {
     spend(this.profile, care.cost);
     addStat(this.profile, action);
     if (a.species === 'horse') addStat(this.profile, `horse_${action}`); // (l'histoire de ton premier cheval)
+    if (a.species === 'horse') this.markHorseDay(a, action);
     this.xp('care');
     this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
     this.ui.refresh();
@@ -1954,6 +1970,7 @@ export class Game {
     this.player.ride(e);
     this.ui.updateGaitPad?.();
     addStat(this.profile, 'rides');
+    this.markHorseDay(a, 'ride');
     this.xp('ride');
     this.ui.toast(t(gear.bareback ? 'ridingBareback' : 'ridingHint', { name: a.name, g: a.sex }));
     return r;

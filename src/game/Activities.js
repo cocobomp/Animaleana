@@ -437,6 +437,7 @@ export class Session {
     addStat(p, SESSION_TYPES[this.type]?.stat ?? 'actvOther');
     if (this.type === 'jumping' && result.clear) addStat(p, 'actvClear');
     g.xp(this.type === 'show' ? 'show' : 'activity');
+    for (const x of animals) if (x?.species === 'horse') g.markHorseDay?.(x, 'activity'); // (la journée de ton cheval : il a travaillé)
     let award = null;
     let rank = null;
     let table = null;

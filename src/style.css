@@ -462,6 +462,12 @@ button.sv-card:hover { border-color: var(--primary); }
 .mini-track { display: block; height: 6px; background: #e9e3d6; border-radius: 999px; overflow: hidden; }
 .mini-fill { display: block; height: 100%; background: var(--good); }
 .memorial { color: var(--muted); padding-left: 18px; }
+/* ☀️ La journée de ton cheval (src/ui/panels.js daySection) */
+.hd-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px; }
+.hd-row { padding: 6px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.04); }
+.hd-row.done { background: rgba(63, 174, 98, 0.14); }
+.hd-row.missed { color: var(--muted); }
+.note.good { color: #1e8a4a; font-weight: 600; }
 /* 📒 Carnet de santé du cheval (src/ui/panels.js healthSection) */
 .hp-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
 .hp-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.04); }

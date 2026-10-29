@@ -32,6 +32,7 @@ import { isCareerPatient } from './vet.js'; // animal confié en soins, métier 
 import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
 import { thumb, portraitSpec } from '../game/thumbScenes.js'; // vignettes 3D (animalerie, voyage, portrait de la fiche)
 import { healthPlan, HEALTH_PLAN, WORMER_COST } from '../sim/horseHealth.js'; // 📒 carnet de santé du cheval
+import { horseDayView } from '../sim/horseDay.js'; // ☀️ la journée de ton cheval
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -120,6 +121,16 @@ export function openAnimal(ui, a) {
   });
 }
 
+/** ☀️ La journée de ton cheval (src/sim/horseDay.js) : ce qui est fait aujourd'hui, ce qui reste. */
+function daySection(g, a) {
+  const view = horseDayView(a, g.day, g.hour);
+  const perfect = !!a.today?.perfect;
+  const mark = (x) => (x.done ? '✅' : x.missed ? '⌛' : x.later ? '🕑' : '⬜');
+  return [h('h3', {}, t('hd_title')), h('p', { class: perfect ? 'note good' : 'note' }, t(perfect ? 'hd_perfect' : 'hd_help')),
+    h('ul', { class: 'hd-list' }, view.map((x) => h('li', { class: `hd-row${x.done ? ' done' : x.missed ? ' missed' : ''}` },
+      `${mark(x)} ${x.icon} ${t(`hd_${x.id}`)}`)))];
+}
+
 /** 📒 Le carnet de santé du cheval (src/sim/horseHealth.js) : chaque soin, quand, et le vermifuge à donner ici. */
 function healthSection(ui, g, a, btn) {
   const plan = healthPlan(a, g.day);
@@ -186,7 +197,7 @@ function renderAnimal(ui, g, a) {
     careActions.map((x) => btn(`${CARE_ICONS[x] ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => ui.careWithGame(a, x))),
   ));
 
-  if (a.species === 'horse' && !a.client && !a.guest) out.push(...healthSection(ui, g, a, btn));
+  if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(g, a), ...healthSection(ui, g, a, btn));
 
   const acts = [];
   if (sp.actions.includes('play')) acts.push(btn(`⚽ ${t('act_play')}`, () => ui.careWithGame(a, 'play')));

@@ -14,6 +14,7 @@ import { renderSetup, PixelBudget, SLOW_KEY } from './pixelBudget.js'; // défin
 import { REAL_CAT_KEYS, realCatBase } from './models/catReal.js'; // chats réalistes : chargés après les chiens
 import { REAL_RABBIT_KEYS, realRabbitBase } from './models/rabbitReal.js'; // lapins réalistes : chargés après les chats
 import { Weather3D } from './Weather3D.js';
+import { HorseBreath } from './HorseBreath.js'; // 🌬️ son souffle dans le froid
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
 import { Input } from './Input.js';
@@ -137,6 +138,7 @@ export class Game {
     this.world = new World(this.scene, this.quality);
     this.world.setRenderer(renderer);
     this.weather3d = new Weather3D(this.scene, this.quality);
+    this.horseBreath = new HorseBreath(this.scene);
     this.rig = new CameraRig(this.camera);
     this.input = new Input(renderer.domElement, document.getElementById('joystick'));
     this.input.onKey = (code) => this.onKey(code);
@@ -753,6 +755,7 @@ export class Game {
     this.herding.stop(false);
     for (const e of this.entities.values()) e.dispose();
     this.entities.clear();
+    this.horseBreath.clear();
     for (const h of this.helpers.values()) h.dispose();
     this.helpers.clear();
     this.dogTrainer.onPlaceLoaded(); // éducateur canin : les maîtres en visite repartent
@@ -1262,6 +1265,7 @@ export class Game {
     this.ui.updateLabels(entities, this.camera, this.player.position);
     this.updateLeashes(entities);
     this.interiors.update(dt);
+    this.horseBreath.update(wdt, entities, this); // 🌬️ (buée des naseaux quand il fait froid, vapeur s'il a transpiré)
     this.groomer.update(wdt); // salon de toilettage : arrivée et départ des clients
     for (const q of this.equipment) {
       if (q.mesh.userData.spin) q.mesh.userData.spin.rotation.y += dt * 2;

@@ -243,6 +243,15 @@ pas (15 secondes) avant de descendre : « 😌 Retour au calme » (lien +0,5, af
 « Retours au calme au pas » dans le carnet du cavalier) ; descendu juste après le galop, le jeu dit qu'il est encore
 essoufflé. Pas pendant une activité ni un voyage (ils mènent le cheval).
 
+### Son souffle dans le froid (0.5, `src/sim/breath.js`, `src/game/HorseBreath.js`)
+Quand il fait froid (10 °C et moins, un peu plus visible sous la pluie, la neige ou le brouillard), on voit la buée de
+son souffle : deux petites bouffées blanches sortent de ses naseaux, vers le bas et l'avant, à chaque expiration (un
+cheval respire seulement par le nez). Au repos, une toutes les 5 secondes (12 respirations par minute, moins en
+dormant, au box aussi : l'écurie n'est pas chauffée) ; juste après un galop, presque une par seconde, puis de moins
+en moins pendant le retour au calme au pas. Un cheval en sueur fume un peu du dos, de moins en moins en séchant. La
+première fois, tout près : « 🌬️ Il fait froid : regarde la buée quand Étoile souffle ! ». Les 3 chevaux les plus
+proches de la caméra seulement (à 15 m), 24 bouffées au plus.
+
 ### Appeler ton cheval (0.5, `src/sim/horseCall.js`)
 « 📣 Appeler » (menu du cheval) : de loin, il lève la tête et hennit. S'il te fait assez confiance, il vient vers toi au
 trot et s'arrête près de toi, tout content (le lien grandit un peu, trois fois par jour au plus) ; sinon il te regarde

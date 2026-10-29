@@ -139,10 +139,17 @@ Les oreilles du cheval 3D disent comment il va, comme en vrai : en avant (attent
 il les pointe vers toi), sur le côté (il somnole, il est fatigué), couchées en arrière (il a mal, faim, soif, ou il est
 grognon). Sa fiche le dit aussi : « 👂 Oreilles couchées en arrière : Étoile a faim… ». (Question du Galop 1.)
 
+### Appeler ton cheval (0.5, `src/sim/horseCall.js`)
+« 📣 Appeler » (menu du cheval) : de loin, il lève la tête et hennit. S'il te fait assez confiance, il vient vers toi au
+trot et s'arrête près de toi, tout content (le lien grandit un peu, trois fois par jour au plus) ; sinon il te regarde
+et reste là. Chance qu'il vienne : 15 % + lien / 60 (+ 20 % s'il a faim : il espère du foin) ; lien 51 et plus : il
+vient toujours. Il ne vient pas s'il dort, s'il a mal (il boite, il est malade) ou s'il est au box (il hennit pour te
+répondre). Pratique du Galop 2.
+
 ### Les Galops (0.5, `src/sim/galops.js`, `src/ui/galops.js`)
 Les examens des cavaliers dans les clubs français, en plus simple : Galop 1 « Je découvre mon cheval » (le caresser, le
 panser, foin, eau, le monter), Galop 2 « Je m'occupe de lui » (le seller soi-même, galoper, une leçon de saut, une
-journée parfaite), Galop 3 « En route vers l'aventure » (longe, un sans-faute, une balade, le vermifuge, trois journées
+journée parfaite, qu'il vienne quand tu l'appelles), Galop 3 « En route vers l'aventure » (longe, un sans-faute, une balade, le vermifuge, trois journées
 parfaites). La pratique se coche toute seule en jouant ; quand elle est finie, un petit mot le dit, et l'examen s'ouvre :
 5 questions tirées parmi 8 (les robes, les allures, la sécurité autour du cheval, ses soins, sa santé), une réponse par
 question et son explication, 4 bonnes réponses pour l'avoir (sinon on relit et on réessaie). Chaque Galop rapporte des

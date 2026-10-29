@@ -29,6 +29,7 @@ export const GALOPS = [
       { id: 'canter', icon: '🐎', stat: 'rideCanter', n: 1 },
       { id: 'lesson', icon: '🎓', stat: 'actvLessons', n: 1 },
       { id: 'perfect', icon: '⭐', stat: 'perfectDays', n: 1 },
+      { id: 'came', icon: '📣', stat: 'horse_came', n: 1 }, // (il vient quand tu l'appelles : src/sim/horseCall.js)
     ],
     quiz: [2, 0, 0, 1, 1, 1, 0, 1],
   },

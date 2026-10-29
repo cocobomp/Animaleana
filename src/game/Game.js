@@ -53,6 +53,7 @@ import { missingTool, buyTool, TOOLS } from '../sim/tools.js';
 import { healthDay, noteHealth, WORMER_COST } from '../sim/horseHealth.js'; // le carnet de santé du cheval
 import { markHorseDay } from '../sim/horseDay.js'; // la journée de ton cheval
 import { galopLevel, nextGalop, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
+import { answerCall, cameWhenCalled } from '../sim/horseCall.js'; // 📣 appeler ton cheval
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
   unsaddle, saddleUp,
@@ -2115,6 +2116,36 @@ export class Game {
     a.following = !a.following;
     this.ui.toast(t(a.following ? 'following' : 'staying', { name: a.name, g: a.sex }));
     if (a.following) addStat(this.profile, 'walks');
+  }
+
+  /**
+   * 📣 Appeler ton cheval (src/sim/horseCall.js) : il lève la tête et hennit ; s'il te fait assez confiance, il
+   * vient vers toi au trot (le lien grandit un peu), sinon il te regarde et reste là.
+   */
+  callHorse(a) {
+    const e = this.entities.get(a.id);
+    if (!e || a.location !== this.profile.place || this.player.mount === e) return null;
+    const pp = this.player.position;
+    const dist = Math.hypot(e.position.x - pp.x, e.position.z - pp.z);
+    const busy = e.ridden || e.scripted || e.herdCtrl || e.posing || a.following;
+    const answer = busy ? 'near' : answerCall(a, { dist, sleeping: e.sleeping });
+    const p = { name: a.name, g: a.sex };
+    addStat(this.profile, 'horse_call');
+    if (answer === 'come' && e.comeTo(pp, dist, true)) {
+      e.speak('happy', dist);
+      e.emit('❗', 1.5);
+      const grew = cameWhenCalled(a, this.day);
+      this.ui.toast(t(grew ? 'call_comeBond' : 'call_come', p), 5000);
+      addStat(this.profile, 'horse_came');
+      return 'come';
+    }
+    if (answer === 'look' || answer === 'box') {
+      e.speak(null, dist);
+      e.lookAtPlayer(6);
+      e.emit('👀', 2);
+    } else if (answer === 'pain') e.speak('sad', dist);
+    this.ui.toast(t(`call_${answer}`, p), 5000);
+    return answer;
   }
 
   callHere(a) {

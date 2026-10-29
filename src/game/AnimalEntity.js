@@ -393,28 +393,8 @@ export class AnimalEntity {
         this.emit('🌾', 1);
         ctx.game?.ui?.toast?.(t('greetHungry', { name: d.name, g: d.sex }), 5000);
       } else if (bond >= 40) this.emit('💕', 1);
-      const h = this.home;
-      if (bond >= 25 && !d.stalled && dist > 3 && h) {
-        // Il vient vers toi (en restant chez lui) et s'arrête à un peu moins de 2 m.
-        const p = this.root.position;
-        const pp = ctx.playerPos;
-        const k = (dist - 1.9) / dist;
-        let tx = p.x + (pp.x - p.x) * k;
-        let tz = p.z + (pp.z - p.z) * k;
-        if (h.hw) {
-          tx = Math.max(h.x - h.hw + 0.7, Math.min(h.x + h.hw - 0.7, tx));
-          tz = Math.max(h.z - h.hd + 0.7, Math.min(h.z + h.hd - 0.7, tz));
-        } else if (h.r) {
-          const r = Math.hypot(tx - h.x, tz - h.z);
-          if (r > h.r - 0.7) {
-            tx = h.x + ((tx - h.x) / r) * (h.r - 0.7);
-            tz = h.z + ((tz - h.z) / r) * (h.r - 0.7);
-          }
-        }
-        this.target.set(tx, 0, tz);
-        this.state = 'walk';
-        this.timer = 7;
-      } else if (this.state === 'walk') {
+      if (bond >= 25 && !d.stalled && dist > 3 && this.home) this.comeTo(ctx.playerPos, dist); // il vient vers toi
+      else if (this.state === 'walk') {
         this.state = 'idle';
         this.timer = 6;
       }
@@ -560,6 +540,42 @@ export class AnimalEntity {
    * (plaintive s'il est triste ou malade). dist : distance au joueur (plus loin = plus doux).
    * Les bébés ont la voix plus aiguë, les gros animaux plus grave. Limité à une voix toutes les ~2 s.
    */
+  /**
+   * Il vient vers toi (en restant chez lui) et s'arrête à un peu moins de 2 m ; trot : il vient en trottant (tu l'as
+   * appelé, src/sim/horseCall.js) et, arrivé, il te regarde, tout content.
+   */
+  comeTo(pp, dist, trot = false) {
+    const h = this.home;
+    if (!h) return false;
+    const p = this.root.position;
+    const k = Math.max(0, (dist - 1.9) / dist);
+    let tx = p.x + (pp.x - p.x) * k;
+    let tz = p.z + (pp.z - p.z) * k;
+    if (h.hw) {
+      tx = Math.max(h.x - h.hw + 0.7, Math.min(h.x + h.hw - 0.7, tx));
+      tz = Math.max(h.z - h.hd + 0.7, Math.min(h.z + h.hd - 0.7, tz));
+    } else if (h.r) {
+      const r = Math.hypot(tx - h.x, tz - h.z);
+      if (r > h.r - 0.7) {
+        tx = h.x + ((tx - h.x) / r) * (h.r - 0.7);
+        tz = h.z + ((tz - h.z) / r) * (h.r - 0.7);
+      }
+    }
+    if (this.state === 'roll') this.stopRoll();
+    this.target.set(tx, 0, tz);
+    this.state = 'walk';
+    this.timer = trot ? 14 : 7;
+    this.comeTrot = trot;
+    return true;
+  }
+
+  /** Tu l'as appelé, mais il reste là : il lève la tête et te regarde un moment (même de loin). */
+  lookAtPlayer(seconds = 5) {
+    if (this.state === 'walk') this.state = 'idle';
+    this.lookT = seconds;
+    this.timer = Math.max(this.timer, seconds);
+  }
+
   speak(kind = null, dist = 0) {
     const m = mood(this.data);
     const how = kind ?? (m === 'sick' ? 'sick' : m === 'sad' ? 'sad' : m === 'happy' ? 'happy' : 'neutral');
@@ -1035,9 +1051,19 @@ export class AnimalEntity {
             if (Math.hypot(dx, dz) < 0.5) {
               this.state = 'idle';
               this.timer = 2 + Math.random() * 5;
+              if (this.comeTrot) {
+                // (appelé, il est arrivé : il te regarde, tout content)
+                this.comeTrot = false;
+                this.greetT = 6;
+                this.emit('💕', 2);
+              }
             }
-            this.targetSpeed = this.sp.walkSpeed * (sad ? 0.6 : 1);
-            if (this.timer <= 0) this.decide(ctx);
+            // (appelé : il trotte vers toi, src/sim/horseCall.js)
+            this.targetSpeed = this.sp.walkSpeed * (sad ? 0.6 : 1) * (this.comeTrot && this.state === 'walk' ? 1.9 : 1);
+            if (this.timer <= 0) {
+              this.comeTrot = false;
+              this.decide(ctx);
+            }
             break;
           }
           default:
@@ -1048,8 +1074,9 @@ export class AnimalEntity {
       // Au box, le cheval vient voir le joueur qui s'approche : il s'arrête, se tourne vers lui et lève la tête
       // (avant, on ne voyait que sa croupe depuis l'allée). Seulement une fois dans son box : en chemin (« Rentrer
       // au box », « Rentrer les chevaux »), il continue jusqu'au box même si l'enfant marche à côté de lui.
-      this.attending = (atBox || (this.greetT > 0 && this.state !== 'walk')) && !this.sleeping && !this.herdCtrl && !d.following
-        && this.state !== 'eat' && this.state !== 'roll' && distPlayer < (atBox ? 4.5 : 12);
+      this.lookT = Math.max(0, (this.lookT ?? 0) - dt); // (appelé, il te regarde de loin : lookAtPlayer)
+      this.attending = (atBox || ((this.greetT > 0 || this.lookT > 0) && this.state !== 'walk')) && !this.sleeping && !this.herdCtrl && !d.following
+        && this.state !== 'eat' && this.state !== 'roll' && distPlayer < (atBox ? 4.5 : this.lookT > 0 ? 80 : 12);
       if (this.attending) {
         this.targetSpeed = 0;
         if (this.state === 'walk') {

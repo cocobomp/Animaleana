@@ -239,6 +239,10 @@ export function openAnimalActions(ui, a) {
       label: a.following ? t('act_stay') : t('act_follow'),
       run: () => { g.toggleFollow(a); ui.closePanel(); },
     });
+    // 📣 L'appeler (src/sim/horseCall.js) : il vient vers toi au trot s'il te fait confiance.
+    if (a.species === 'horse' && !a.client && !a.guest && a.location === g.profile.place && g.player.mount?.data !== a) {
+      items.push({ icon: '📣', label: t('act_call', { name: a.name }), effect: t('callHint'), free: true, run: () => { ui.closePanel(); g.callHorse(a); } });
+    }
     items.push(...horseBoxItems(ui, a)); // box à l'écurie
     // Longe, liberté, saut d'obstacles, balade, agility… : un sous-menu qui dit ce qui est possible.
     const acts = activityItems(ui, a);

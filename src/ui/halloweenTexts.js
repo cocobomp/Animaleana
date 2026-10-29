@@ -3,6 +3,7 @@
 
 export const HALLOWEEN_FR = {
   hw_hello: '🎃 C\'est la fête d\'Halloween au poney-club ! {n} citrouilles se cachent le long du chemin de balade : trouve-les à cheval (🧭 dans la fiche de ton cheval pour te guider).',
+  hw_hello_one: '🎃 C\'est la fête d\'Halloween au poney-club ! Plus qu\'une citrouille cachée le long du chemin de balade : trouve-la à cheval (🧭 dans la fiche de ton cheval pour te guider).',
   hw_onFoot: '🎃 Une citrouille ! Pour la chasse, monte à cheval et passe à côté.',
   hw_found: '🎃 Citrouille trouvée ! {n}/{total}',
   hw_done: '🎉 Toutes les citrouilles ! Tu gagnes le tapis citrouille 🎃 (dans la sellerie, 🎒 Mon matériel).',
@@ -17,6 +18,7 @@ export const HALLOWEEN_FR = {
 
 export const HALLOWEEN_EN = {
   hw_hello: '🎃 It\'s Halloween at the pony club! {n} pumpkins are hiding along the trail: find them on horseback (🧭 in your horse\'s card to guide you).',
+  hw_hello_one: '🎃 It\'s Halloween at the pony club! Just 1 pumpkin is still hiding along the trail: find it on horseback (🧭 in your horse\'s card to guide you).',
   hw_onFoot: '🎃 A pumpkin! For the hunt, get on your horse and ride past it.',
   hw_found: '🎃 Pumpkin found! {n}/{total}',
   hw_done: '🎉 All the pumpkins! You win the pumpkin pad 🎃 (in the tack room, 🎒 My gear).',

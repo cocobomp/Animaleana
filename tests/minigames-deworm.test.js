@@ -115,6 +115,19 @@ describe('le vermifuge', () => {
     expect(ctx.hints.at(-1).kind).toBe('warn');
   });
 
+  it('la seringue lâchée hors de l\'écran reste dans la scène : on peut la reprendre et finir', () => {
+    const ctx = fakeCtx(horse());
+    const g = dw.dewormGame(ctx);
+    setDose(g, g.peek().kg);
+    press(ctx);
+    tick(g, ctx, 1);
+    syringeTo(g, { x: 120, y: 620 }); // (glissée bien en dessous de la scène)
+    const s = g.peek().syr;
+    expect(s.y).toBeLessThanOrEqual(340);
+    syringeTo(g, g.peek().bar);
+    expect(g.peek().syr.placed).toBe(true);
+  });
+
   it('trop de vermifuge : moins d\'étoiles, et le message dit pourquoi', () => {
     const ctx = fakeCtx(horse());
     const g = dw.dewormGame(ctx);

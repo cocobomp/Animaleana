@@ -2289,6 +2289,11 @@ export class Game {
     const pp = this.player.position;
     const dist = Math.hypot(e.position.x - pp.x, e.position.z - pp.z);
     const p0 = { name: a.name, g: a.sex };
+    // (il te suit déjà : il faut d'abord lui dire de rester, puis s'éloigner)
+    if (a.following) {
+      this.ui.toast(t('call_following', p0), 5000);
+      return 'following';
+    }
     // (il arrive déjà : rappeler ne compte pas une deuxième fois)
     if (e.comeTrot && e.state === 'walk' && dist >= CALL.near) {
       this.ui.toast(t('call_coming', p0), 4000);

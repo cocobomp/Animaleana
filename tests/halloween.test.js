@@ -67,5 +67,6 @@ describe('Halloween au poney-club', () => {
       }
     }
     setLang('fr');
+    expect(t('hw_hello', { n: 1 })).toContain('Plus qu\'une citrouille');
   });
 });

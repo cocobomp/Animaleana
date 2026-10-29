@@ -90,6 +90,7 @@ describe('la ration du cheval', () => {
     expect(ration.restDay(a, 4, 9)).toBe(false); // (le matin : on ne sait pas encore)
     a.today.done.push('work');
     expect(ration.restDay(a, 4, 18)).toBe(false); // (il a travaillé : la ration habituelle)
-    expect(ration.restDay(a, 5, 18)).toBe(false); // (sa journée d'hier ne compte pas)
+    expect(ration.restDay(a, 5, 18)).toBe(true); // (sa journée d'hier ne compte pas : rien de fait aujourd'hui)
+    expect(ration.restDay({ ...a, client: true }, 5, 18)).toBe(false); // (un cheval en pension : la ration habituelle)
   });
 });

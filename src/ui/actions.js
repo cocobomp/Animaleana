@@ -246,7 +246,7 @@ export function openAnimalActions(ui, a) {
       const e = g.entities.get(a.id);
       const pp = g.player.position;
       const near = e && Math.hypot(e.position.x - pp.x, e.position.z - pp.z) < CALL.near; // (trop près : il est déjà là)
-      items.push({ icon: '📣', label: t('act_call', { name: a.name }), effect: t(near ? 'callTooNear' : 'callHint', { g: a.sex }), free: true, run: () => { ui.closePanel(); g.callHorse(a); } });
+      items.push({ icon: '📣', label: t('act_call', { name: a.name }), effect: t(a.following ? 'call_following' : near ? 'callTooNear' : 'callHint', { name: a.name, g: a.sex }), free: true, run: () => { ui.closePanel(); g.callHorse(a); } });
     }
     items.push(...horseBoxItems(ui, a)); // box à l'écurie
     // Longe, liberté, saut d'obstacles, balade, agility… : un sous-menu qui dit ce qui est possible.

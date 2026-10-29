@@ -126,8 +126,9 @@ export function dewormGame(ctx) {
     move(p) {
       if (dragRing) setRing(p.x);
       if (dragSyr) {
-        syr.x = p.x + dragSyr.dx;
-        syr.y = p.y + dragSyr.dy;
+        // (gardée dans la scène de 400 × 360 : lâchée hors de l'écran, on ne pourrait plus la reprendre)
+        syr.x = clamp(p.x + dragSyr.dx, 20, 380);
+        syr.y = clamp(p.y + dragSyr.dy, 20, 340);
       }
     },
     up() {

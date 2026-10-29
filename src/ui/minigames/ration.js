@@ -18,9 +18,13 @@ import { drawHorseHead } from './deworm.js';
 /** Le filet : bien plein. Les granulés : une petite mesure (part du seau) ; au-delà de colicAt, trop. */
 export const RATION = { hayLo: 0.75, hayHi: 1, hayRate: 0.32, grainLo: 0.15, grainHi: 0.3, restLo: 0.03, restHi: 0.14, grainRate: 0.22, colicAt: 0.55 };
 
-/** Un jour de repos : le soir (dès 14 h), il n'a pas travaillé aujourd'hui (src/sim/horseDay.js « work »). */
+/**
+ * Un jour de repos : le soir (dès 14 h), ton cheval n'a pas travaillé aujourd'hui (« work » pas coché dans sa journée,
+ * src/sim/horseDay.js ; une journée d'hier, pas encore remise à zéro, ne compte pas).
+ */
 export const restDay = (a, day, hour) =>
-  hour >= 14 && day !== undefined && a?.today?.day === day && !a.today.done?.includes('work');
+  hour >= 14 && day !== undefined && a?.species === 'horse' && !a.client && !a.guest
+  && !(a.today?.day === day && a.today.done?.includes('work'));
 
 const NET = { x: 70, top: 40, w: 96, h: 150 };
 const BUCKET = { x: 108, y: 300, w: 92, h: 70 };

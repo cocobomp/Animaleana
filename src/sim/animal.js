@@ -405,6 +405,7 @@ export function applyCare(a, actionId, quality = 1, opts = {}) {
   if (actionId === 'treat') a.weight = Math.min(100, a.weight + 5);
   if (actionId === 'feed' && a.needs.hunger > 90) a.weight = Math.min(100, a.weight + 2);
   if (care.tiring) a.weight = Math.max(0, a.weight - 2);
+  if (actionId === 'brush') delete a.muddy; // (la terre de sa roulade est partie)
   // Panser un cheval, c'est aussi curer ses pieds. opts.hooves (le mini-jeu) : { cleaned, stoneOut } ; sans mini-jeu
   // (soin de groupe, aide), les pieds sont bien curés.
   const unlame = actionId === 'brush' && pickHooves(a, opts.hooves?.cleaned ?? 1, opts.hooves ? !!opts.hooves.stoneOut : true);

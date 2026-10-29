@@ -140,3 +140,24 @@ describe('l\'accueil', () => {
     expect(e.state).toBe('idle');
   });
 });
+
+describe('affamé, roulé', () => {
+  it('il a faim : il t\'appelle en te voyant (🌾), et après une roulade il est plein de terre', () => {
+    const toasts = [];
+    const e = horse();
+    e.data.needs.hunger = 30;
+    e.state = 'idle';
+    const ctx = { ...ctxAt(30, 0), game: { player: { mount: null }, ui: { toast: (s) => toasts.push(s) } } };
+    e.horseLife(50, ctx, 30);
+    e.horseLife(0.1, { ...ctx, playerPos: new THREE.Vector3(9, 0, 0) }, 9);
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]).toContain('🌾');
+    // la roulade
+    e.greetT = 0;
+    e.rollCool = 0;
+    e.rollSoon = true;
+    e.startRoll();
+    for (let k = 0; k < 90 && e.state === 'roll'; k++) e.horseLife(0.1, ctxAt(30, 30), 40);
+    expect(e.data.muddy).toBe(true);
+  });
+});

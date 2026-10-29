@@ -45,7 +45,9 @@ export function pansageGame(ctx) {
   const dirt = clamp(1 - (a?.needs?.grooming ?? 50) / 100);
 
   // ---- 1. étrille : plaques de boue sèche
-  const mud = dustPatches(sh, rng, 3 + Math.round(dirt * 4), 19 * Math.max(0.8, s))
+  // (il s'est roulé : de la terre partout, deux plaques de plus — src/game/AnimalEntity.js)
+  const rolled = !!a?.muddy;
+  const mud = dustPatches(sh, rng, 3 + Math.round(dirt * 4) + (rolled ? 2 : 0), 19 * Math.max(0.8, s))
     .map((q) => ({ x: q.x, y: q.y, r: q.r, seed: q.seed, mud: 1, dust: 0 }));
   // ---- 2. brosse : la poussière décollée, plus un peu de poussière partout (posée au début de l'étape)
   let dust = [];
@@ -134,7 +136,8 @@ export function pansageGame(ctx) {
     }
     const n = count();
     rule = justRule(ctx, { lo: 1 - 0.5 / n, hi: st === 'hoof' ? 1.1 : 1.05, max: MAX, slack: SLACK });
-    if (st === 'hoof' && lame) ctx.hint(t('mg_pansage_hoof_lame', { name, foot: t(`mg_pansage_foot_${PANSAGE_FEET[stoneFoot]}`) }), 'warn');
+    if (st === 'curry' && rolled) ctx.hint(`${t('mg_pansage_rolled', { name, g: a?.sex })} ${t('mg_pansage_curry_hint')}`);
+    else if (st === 'hoof' && lame) ctx.hint(t('mg_pansage_hoof_lame', { name, foot: t(`mg_pansage_foot_${PANSAGE_FEET[stoneFoot]}`) }), 'warn');
     else ctx.hint(st === 'hoof' ? `${t('mg_pansage_hoof_hint')} (${t(`mg_pansage_foot_${PANSAGE_FEET[0]}`)})` : t(`mg_pansage_${st}_hint`));
     ctx.progress(value() / MAX);
     setStopLabel();

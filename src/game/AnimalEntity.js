@@ -11,6 +11,7 @@ import { buildGear, removeGear } from './gearModels.js';
 import { buildAccessories, removeAccessories } from './models/salon.js'; // accessoires de toilettage
 import { canLeash, heelSkill, LEASH_LEN } from '../sim/gear.js';
 import { audio } from './audio.js'; // voix des animaux
+import { t } from '../i18n.js'; // (le cheval qui a faim t'appelle)
 import { legRig, gaitStride, gaitFrame, makeGaitFrame } from '../sim/horseGait.js'; // allures du cheval réaliste
 import { animateCat } from './catAnim.js'; // chats : assis, toilette, en boule, queue levée
 import { animateRealHorse, realLegPose } from './models/horseReal.js'; // cheval réaliste (GLB) : allures du mixeur ; couché
@@ -356,8 +357,9 @@ export class AnimalEntity {
         if (t0 < ROLL.down + 0.6 && this.rollT >= ROLL.down + 0.6) this.emit('💨', 2); // (la poussière vole)
         if (t0 < ROLL.stand && this.rollT >= ROLL.stand) audio.animal('horse', 'sad', d.id, { gain: 1 / (1 + dist / 7) }); // il s'ébroue
         if (this.rollT >= ROLL.end) {
-          // (il s'est roulé dans l'herbe et la poussière : un peu moins propre, et content)
+          // (il s'est roulé dans l'herbe et la poussière : un peu moins propre, plein de terre au prochain pansage — src/ui/minigames/pansage.js —, et content)
           d.needs.grooming = Math.max(0, d.needs.grooming - 6);
+          d.muddy = true;
           d.needs.affection = Math.min(100, d.needs.affection + 2);
           this.stopRoll();
         }
@@ -371,7 +373,11 @@ export class AnimalEntity {
       this.greetT = 6;
       this.speak('happy', dist);
       const bond = d.bond ?? 0;
-      if (bond >= 40) this.emit('💕', 1);
+      // (il a faim : il t'appelle, c'est l'heure du foin)
+      if (d.needs.hunger < 45) {
+        this.emit('🌾', 1);
+        ctx.game?.ui?.toast?.(t('greetHungry', { name: d.name, g: d.sex }), 5000);
+      } else if (bond >= 40) this.emit('💕', 1);
       const h = this.home;
       if (bond >= 25 && !d.stalled && dist > 3 && h) {
         // Il vient vers toi (en restant chez lui) et s'arrête à un peu moins de 2 m.

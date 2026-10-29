@@ -248,6 +248,19 @@ describe('le pansage du cheval', () => {
     expect(ctx.finished.msg).toBe(t('mg_pansage_low_hoof', { name: 'Étoile' }));
   });
 
+  it('il s\'est roulé : deux plaques de terre de plus, et le pansage le dit', async () => {
+    const plain = pansage.pansageGame(fakeCtx(horse(50)));
+    const a = horse(50);
+    a.muddy = true;
+    const ctx = fakeCtx(a);
+    const rolled = pansage.pansageGame(ctx);
+    expect(rolled.peek().mud.length).toBe(plain.peek().mud.length + 2);
+    expect(ctx.hints[0].text).toContain(t('mg_pansage_rolled', { name: 'Étoile', g: 'f' }));
+    const { applyCare } = await import('../src/sim/animal.js');
+    applyCare(a, 'brush', 1);
+    expect(a.muddy).toBeUndefined();
+  });
+
   it('un cheval sale a plus de boue et de nœuds qu\'un cheval presque propre', () => {
     const dirty = pansage.pansageGame(fakeCtx(horse(5)));
     const clean = pansage.pansageGame(fakeCtx(horse(95)));

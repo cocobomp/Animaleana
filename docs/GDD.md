@@ -53,11 +53,11 @@ réussite au dressage…).
 ### Le cheval vivant (0.5, `src/game/AnimalEntity.js` horseLife)
 - **Il t'accueille** : quand tu reviens après être resté loin (40 s à plus de 16 m), ton cheval hennit doucement,
   lève la tête et te regarde ; s'il t'aime bien (lien ≥ 25), il vient vers toi jusqu'au bord de son pré ou de son
-  paddock (💕 si le lien est fort). Une fois par retour.
+  paddock (💕 si le lien est fort ; 🌾 et « c'est l'heure du foin ! » s'il a faim). Une fois par retour.
 - **Il se roule** : au pré ou au paddock (jamais au box), sans selle sur le dos (on la lui enlève d'abord), il se couche, se roule deux fois sur le flanc en
   gigotant, se relève et s'ébroue. Tout de suite après une balade où il a galopé, souvent quand il a transpiré,
   sinon de temps en temps ; ensuite il est un peu moins propre (pansage −6) et content. Monté pendant une
-  roulade, il se relève d'abord.
+  roulade, il se relève d'abord. Au pansage suivant, il a deux plaques de terre de plus (« il s'est roulé »).
 - **Les mouches** : coups de queue et d'oreilles par moments (déjà là, `horseReal.js`).
 - **Le gourmand** (`src/sim/riding.js` nextGrazeIn) : en balade au pas sur l'herbe, il finit par baisser la tête
   pour brouter et s'arrête (plus vite s'il a faim ou s'il est têtu, moins s'il est calme et bien dressé). On

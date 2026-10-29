@@ -5,6 +5,7 @@ import { h } from './dom.js';
 import { t, L, getLang } from '../i18n.js';
 import { creditsBlock } from './credits.js'; // ℹ️ À propos : crédits des modèles 3D (CC-BY des chiens)
 import { anyAvailable, LIVESTOCK_IDS as LIVESTOCK } from '../sim/species.js';
+import { newsList } from './news.js'; // 🐴 quoi de neuf ?
 
 // where : bâtiment ('refuge', 'petshop', 'stable', 'tackroom', 'pen', 'paddock', 'kennel', 'hutch', 'vet', 'house', 'jobs')
 //         ou bouton de l'écran ('hud:farm', 'hud:travel', 'hud:journal', 'hud:animals', 'hud:time')
@@ -230,11 +231,13 @@ export function openHelp(ui) {
     e.preventDefault();
     input.blur();
   });
+  // 🐴 Quoi de neuf ? (src/ui/news.js) : repliable, en bas de l'aide.
+  const news = h('details', { class: 'help-news' }, h('summary', {}, `🐴 ${t('news_title')}`), newsList());
   ui.openPanel({
     title: `❓ ${t('help')}`,
     render: () => {
       drawList();
-      return [...head, results, creditsBlock()];
+      return [...head, results, news, creditsBlock()];
     },
   });
 }

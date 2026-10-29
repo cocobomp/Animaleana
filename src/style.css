@@ -468,6 +468,12 @@ button.sv-card:hover { border-color: var(--primary); }
 .hd-row.done { background: rgba(63, 174, 98, 0.14); }
 .hd-row.missed { color: var(--muted); }
 .note.good { color: #1e8a4a; font-weight: 600; }
+/* 🐴 Quoi de neuf ? (src/ui/news.js) */
+.news-list { list-style: none; margin: 8px 0 12px; padding: 0; display: grid; gap: 6px; max-height: 52vh; overflow-y: auto; }
+.news-list li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 6px; align-items: start; line-height: 1.3; }
+.news-icon { font-size: 1.3rem; text-align: center; }
+.help-news { margin: 12px 0; padding: 8px 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.04); }
+.help-news summary { font-weight: 800; cursor: pointer; }
 /* 👂 Ses oreilles (src/ui/panels.js earsLine) */
 .ears-line.ears-back { color: #b5452f; font-weight: 600; }
 /* 🏅 Les Galops (src/ui/galops.js) */

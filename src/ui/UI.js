@@ -22,6 +22,7 @@ import { TOOLS, toolAtHome } from '../sim/tools.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import { WORMER_COST } from '../sim/horseHealth.js'; // le prix du vermifuge
 import { beatRing } from '../sim/posting.js'; // ⬆️ trot enlevé
+import { maybeShowNews } from './news.js'; // 🐴 quoi de neuf ?
 import { lifeStage } from '../sim/animal.js'; // étiquettes groupées des bébés
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
@@ -239,6 +240,7 @@ export class UI {
       this.helpTimer = setTimeout(() => this.hideHelp(), 15000);
     }
     this.refresh();
+    setTimeout(() => { if (game.running) maybeShowNews(this); }, 1200); // 🐴 quoi de neuf ? (une fois)
   }
 
   hideHelp() {

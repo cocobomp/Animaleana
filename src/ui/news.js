@@ -11,6 +11,7 @@ export const NEWS = [
   { icon: '📖', key: 'story2', fresh: true },
   { icon: '🎃', key: 'halloween', fresh: true },
   { icon: '🐢', key: 'warmup', fresh: true },
+  { icon: '📸', key: 'memories', fresh: true },
   { icon: '🔢', key: 'logsNum', fresh: true },
   { icon: '🩺', key: 'real', fresh: true },
   { icon: '🌾', key: 'ration' },

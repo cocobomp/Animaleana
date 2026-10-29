@@ -219,3 +219,23 @@ describe('classement, barrage et prix', () => {
     expect(titleFor(p, 'nobody')).toBeNull();
   });
 });
+
+describe('🎖️ les flots sur la porte du box', () => {
+  it('les meilleures places d\'abord, puis les plus récentes ; 6 au plus ; seulement les siens', async () => {
+    const { rosettesOf, rosetteTier } = await import('../src/sim/competitions.js');
+    const { createProfile: make } = await import('../src/sim/profile.js');
+    const p = make('Lou');
+    p.activities = { awards: [{ kind: 'ribbon', tier: 'blue', animalId: 'a', rank: null, day: 1 }] }; // (entraînement : pas un flot de concours)
+    const res = p.activities.awards;
+    const add = (animalId, rank, day) => res.push({ kind: rank <= 3 ? 'trophy' : 'ribbon', animalId, rank, day, type: 'jumping' });
+    add('a', 5, 1); add('a', 1, 2); add('a', 2, 3); add('b', 1, 4); add('a', 1, 6);
+    for (let d = 7; d < 14; d++) add('a', 8, d);
+    const r = rosettesOf(p, 'a');
+    expect(r).toHaveLength(6);
+    expect(r.map((x) => x.rank)).toEqual([1, 1, 2, 5, 8, 8]);
+    expect(r[0].day).toBe(6);
+    expect(r.map((x) => x.tier).slice(0, 4)).toEqual(['gold', 'gold', 'silver', 'white']);
+    expect(rosettesOf(p, 'zz')).toEqual([]);
+    expect([1, 2, 3, 4, 5, 9].map(rosetteTier)).toEqual(['gold', 'silver', 'bronze', 'green', 'white', 'pink']);
+  });
+});

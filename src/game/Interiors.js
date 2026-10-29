@@ -23,6 +23,7 @@ import { droppingsAt } from '../sim/droppings.js';
 import { addStat } from '../sim/profile.js';
 import { SPECIES } from '../sim/species.js';
 import { isNight } from '../sim/time.js';
+import { rosettesOf } from '../sim/competitions.js'; // 🎖️ les flots gagnés, sur la porte du box
 import { t, L } from '../i18n.js';
 
 // ---------------------------------------------------------------- repères
@@ -203,6 +204,45 @@ const LIGHT_POS = { stable: [0, 0], house: [1.5, 0.5], tackroom: [0, -0.4] };
 // De jour, la sellerie n'est éclairée que par la lumière ambiante (le soleil ne passe pas le toit) : le visage
 // de la sellière était grisâtre. Une petite lampe douce devant le comptoir, plus faible que celle du soir.
 const TACK_DAY_LIGHT = { pos: [1.7, 1.1], y: 2.5, intensity: 3.2 };
+
+// 🎖️ Un flot : une cocarde plissée de la couleur de la place, un cœur crème, deux rubans qui pendent.
+const ROSETTE_COLORS = { gold: 0xd8b24a, silver: 0xc4cad1, bronze: 0xb0703c, green: 0x3f8a4a, white: 0xf2efe6, pink: 0xe07aa5 };
+let rosetteKit = null;
+function rosetteParts() {
+  if (rosetteKit) return rosetteKit;
+  const m = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.75, side: THREE.DoubleSide });
+  rosetteKit = {
+    disc: new THREE.CylinderGeometry(0.058, 0.058, 0.012, 16),
+    heart: new THREE.CylinderGeometry(0.028, 0.028, 0.016, 12),
+    tail: new THREE.BoxGeometry(0.026, 0.1, 0.004),
+    mats: Object.fromEntries(Object.entries(ROSETTE_COLORS).map(([k, c]) => [k, m(c)])),
+    cream: m(0xf4e6c0),
+  };
+  return rosetteKit;
+}
+/** Une rangée de flots (repère de la plaque : plan face à +z), sous la plaque. */
+function rosetteRow(list) {
+  const k = rosetteParts();
+  const row = new THREE.Group();
+  const gap = 0.145;
+  list.forEach((r, i) => {
+    const x = (i - (list.length - 1) / 2) * gap;
+    const disc = new THREE.Mesh(k.disc, k.mats[r.tier]);
+    disc.rotation.x = Math.PI / 2;
+    disc.position.set(x, -0.25, 0.032); // (devant la traverse de la porte)
+    const heart = new THREE.Mesh(k.heart, k.cream);
+    heart.rotation.x = Math.PI / 2;
+    heart.position.set(x, -0.25, 0.036);
+    row.add(disc, heart);
+    for (const s of [-1, 1]) {
+      const tail = new THREE.Mesh(k.tail, k.mats[r.tier]);
+      tail.position.set(x + s * 0.02, -0.33, 0.028);
+      tail.rotation.z = s * 0.18;
+      row.add(tail);
+    }
+  });
+  return row;
+}
 
 export class Interiors {
   constructor(game) {
@@ -645,6 +685,15 @@ export class Interiors {
         box.plate.material.map?.dispose();
         box.plate.material.map = plateTexture(text);
         box.plate.material.needsUpdate = true;
+      }
+      // 🎖️ Ses flots de concours, sous la plaque (les meilleurs d'abord)
+      const ros = !locked && occ[box.i] ? rosettesOf(this.profile, occ[box.i].id) : [];
+      const rosKey = ros.map((r) => r.tier).join(',');
+      if (rosKey !== (box.rosKey ?? '')) {
+        box.rosKey = rosKey;
+        box.rosettes?.removeFromParent();
+        box.rosettes = ros.length ? rosetteRow(ros) : null;
+        if (box.rosettes) box.plate.add(box.rosettes);
       }
     }
     const aisle = f.stable.rooms.aisle;

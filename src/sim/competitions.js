@@ -352,6 +352,22 @@ export function recordResult(p, entry, { rank, animal, score }) {
   return r;
 }
 
+/** La couleur du flot d'une place : or, argent, bronze sur le podium, puis vert, blanc, rose. */
+export const rosetteTier = (rank) => (rank <= 3 ? ['gold', 'silver', 'bronze'][rank - 1] : rank === 4 ? 'green' : rank === 5 ? 'white' : 'pink');
+
+/**
+ * 🎖️ Les flots d'un animal, accrochés à la porte de son box (src/game/Interiors.js) : ses max meilleurs classements en
+ * concours (club, calendrier, beauté : les récompenses classées de src/sim/activities.js addAward ; pas celles de
+ * l'entraînement), les meilleures places d'abord, puis les plus récents. [{ tier, rank, day }].
+ */
+export function rosettesOf(p, animalId, max = 6) {
+  return (p.activities?.awards ?? [])
+    .filter((r) => r.animalId === animalId && Number.isInteger(r.rank) && r.rank >= 1)
+    .sort((a, b) => a.rank - b.rank || (b.day ?? 0) - (a.day ?? 0))
+    .slice(0, max)
+    .map((r) => ({ tier: rosetteTier(r.rank), rank: r.rank, day: r.day }));
+}
+
 /** Les meilleurs résultats d'un animal, par discipline : { jumping: { rank, level, place, day }, … }. */
 export function bestResults(p, animalId) {
   const out = {};

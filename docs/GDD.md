@@ -281,7 +281,8 @@ d'abord) sont accrochés sous la plaque à son nom, sur la porte de son box (src
 **📸 De vraies photos** (src/sim/memories.js attachPhoto) : les grandes premières fois en selle (la première balade, le
 premier galop, le premier tronc sauté, sous la pluie ou dans la neige, le jour où il vient à ton appel, le premier retour
 au calme, le cross fini, la chasse aux citrouilles finie) prennent leur photo un instant après, si rien ne cache le jeu
-et que le cheval se voit bien (monté, ou à moins de 25 m dans l'écran) : 📸 au-dessus de lui. Dans sa fiche, la petite
+(une fenêtre, comme « ⭐ Tu passes au niveau 2 ! » : la photo attend qu'on la ferme, 10 s au plus) et que le cheval se
+voit bien (monté, ou à moins de 25 m dans l'écran ; photo cadrée sur lui) : 📸 au-dessus de lui. Dans sa fiche, la petite
 photo remplace l'icône ; la toucher l'ouvre en grand, avec sa phrase et son jour. Les souvenirs des menus (Galops,
 vétérinaire, vermifuge…) gardent leur icône. Au plus 6 photos par cheval et 18 dans la partie (192 × 120, en JPEG) ;
 la sauvegarde garde toujours 25 % de marge sous la limite en ligne, sinon la photo n'est pas gardée.

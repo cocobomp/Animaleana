@@ -1010,37 +1010,47 @@ export class Game {
   /**
    * 📸 La photo d'un souvenir (src/sim/memories.js attachPhoto) : l'écran tel quel, s'il montre bien le cheval (monté,
    * ou en vue à moins de 25 m) et que rien ne cache la 3D (fiche, fenêtre, mini-jeu, vue d'en haut, trajet…). Sinon,
-   * pas de photo : le souvenir garde son icône. Gardée : 📸 au-dessus de lui.
+   * pas de photo : le souvenir garde son icône. Gardée : 📸 au-dessus de lui. Seulement une fenêtre (« ⭐ Tu passes au
+   * niveau 2 ! » juste après la première balade) : on réessaie chaque seconde (tries fois au plus), jusqu'à sa fermeture.
    */
-  memoryPhoto(a, id, prof) {
+  memoryPhoto(a, id, prof, tries = 10) {
     try {
       const ui = this.ui;
       if (!this.running || this.profile !== prof) return;
-      if (ui.panel || ui.modalOpen || ui.minigameOpen || ui.vxOpen > 0 || ui.vxCover || this.mgmt.active || this.tripFlow?.view) return;
+      if (ui.panel || ui.minigameOpen || ui.vxOpen > 0 || ui.vxCover || this.mgmt.active || this.tripFlow?.view) return;
+      if (ui.modalOpen) {
+        if (tries > 0) setTimeout(() => this.memoryPhoto?.(a, id, prof, tries - 1), 1000);
+        return;
+      }
       const e = this.entities.get(a.id);
       if (!e) return;
-      if (e !== this.player.mount) {
-        const v = (this.photoAt ??= new THREE.Vector3()).copy(e.position);
-        v.y += 1;
-        if (v.distanceTo(this.camera.position) > 25) return;
-        v.project(this.camera);
-        if (Math.abs(v.x) > 0.9 || Math.abs(v.y) > 0.9 || v.z >= 1) return; // (hors de l'écran, ou derrière)
-      }
-      // Comme les photos de balade (src/game/Activities.js takePhoto) : le centre de l'écran, en 16:10.
-      this.renderer.render(this.scene, this.camera);
+      // Comme les photos de balade (src/game/Activities.js takePhoto) : en 16:10, le centre de l'écran ; pas monté,
+      // autour de lui (sur un téléphone en hauteur, la bande gardée est étroite : il n'était pas dans la photo).
       const src = this.renderer.domElement;
-      const c = document.createElement('canvas');
-      c.width = PHOTO.w;
-      c.height = PHOTO.h;
-      const ctx = c.getContext('2d');
-      const ratio = c.width / c.height;
+      const ratio = PHOTO.w / PHOTO.h;
       let sw = src.width;
       let sh = sw / ratio;
       if (sh > src.height) {
         sh = src.height;
         sw = sh * ratio;
       }
-      ctx.drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+      let sx = (src.width - sw) / 2;
+      let sy = (src.height - sh) / 2;
+      if (e !== this.player.mount) {
+        const v = (this.photoAt ??= new THREE.Vector3()).copy(e.position);
+        v.y += 1;
+        if (v.distanceTo(this.camera.position) > 25) return;
+        v.project(this.camera);
+        if (Math.abs(v.x) > 0.9 || Math.abs(v.y) > 0.9 || v.z >= 1) return; // (hors de l'écran, ou derrière)
+        sx = THREE.MathUtils.clamp(((1 + v.x) / 2) * src.width - sw / 2, 0, src.width - sw);
+        sy = THREE.MathUtils.clamp(((1 - v.y) / 2) * src.height - sh / 2, 0, src.height - sh);
+      }
+      this.renderer.render(this.scene, this.camera);
+      const c = document.createElement('canvas');
+      c.width = PHOTO.w;
+      c.height = PHOTO.h;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
       if (!attachPhoto(prof, a, id, c.toDataURL('image/jpeg', PHOTO.q))) return;
       e.emit('📸', 2);
       this.save();

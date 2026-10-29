@@ -89,18 +89,19 @@ describe('📸 la photo d\'un souvenir', () => {
 describe('📸 dans le jeu (src/game/Game.js)', () => {
   let Game;
   let shots;
+  let drawn; // (le morceau de l'écran gardé : sx, sy, sw, sh)
   beforeAll(async () => {
     globalThis.document = globalThis.document ?? { documentElement: {} };
     shots = 0;
-    globalThis.document.createElement = () => ({ width: 0, height: 0, getContext: () => ({ drawImage() {} }), toDataURL: () => { shots++; return jpeg(); } });
+    globalThis.document.createElement = () => ({ width: 0, height: 0, getContext: () => ({ drawImage(src, ...r) { drawn = r.slice(0, 4); } }), toDataURL: () => { shots++; return jpeg(); } });
     ({ Game } = await import('../src/game/Game.js'));
   }, 60000);
 
-  /** Un jeu pour de faux : la caméra à 5 m derrière le point (0, 0, 0), qui le regarde. */
-  const fakeGame = (a, { mounted = false, at = [0, 0, 0] } = {}) => {
+  /** Un jeu pour de faux, sur un téléphone en hauteur : la caméra à 5 m derrière le point (0, 0, 0), qui le regarde. */
+  const fakeGame = (a, { mounted = false, at = [0, 0, 0], cam = [0, 1.6, 5], aim = [0, 1, 0] } = {}) => {
     const camera = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
-    camera.position.set(0, 1.6, 5);
-    camera.lookAt(0, 1, 0);
+    camera.position.set(...cam);
+    camera.lookAt(...aim);
     camera.updateMatrixWorld();
     const e = { emitted: [], emit(x) { this.emitted.push(x); }, position: new THREE.Vector3(...at) };
     const profile = { memoryTip: true, animals: [a] };
@@ -129,6 +130,7 @@ describe('📸 dans le jeu (src/game/Game.js)', () => {
       expect(memoriesOf(a).find((m) => m.id === 'firstRide').ph).toBe(jpeg());
       expect(e.emitted).toEqual(['📸']);
       expect(g.saved).toBe(1);
+      expect(drawn).toEqual([0, (1688 - 780 / 1.6) / 2, 780, 780 / 1.6]); // (monté : le milieu de l'écran, en 16:10)
     } finally {
       vi.useRealTimers();
     }
@@ -137,7 +139,7 @@ describe('📸 dans le jeu (src/game/Game.js)', () => {
   it('pas de photo si quelque chose cache la 3D, ou si le cheval n\'est pas bien en vue', () => {
     const cases = [
       [{ mounted: true }, (g) => { g.ui.panel = {}; }],
-      [{ mounted: true }, (g) => { g.ui.modalOpen = true; }],
+      [{ mounted: true }, (g) => { g.ui.vxOpen = 1; }],
       [{ mounted: true }, (g) => { g.ui.minigameOpen = true; }],
       [{ mounted: true }, (g) => { g.mgmt.active = true; }],
       [{ mounted: true }, (g) => { g.tripFlow.view = 'cab'; }],
@@ -165,5 +167,62 @@ describe('📸 dans le jeu (src/game/Game.js)', () => {
     Game.prototype.memoryPhoto.call(g, a, 'firstCall', g.profile);
     expect(a.memories[0].ph).toBe(jpeg());
     expect(e.emitted).toEqual(['📸']);
+  });
+
+  it('pas monté, sur un téléphone en hauteur : la photo est cadrée sur lui (la bande 16:10 du milieu est étroite)', () => {
+    // La caméra de src/game/Player.js (CameraRig : 7 m, 0,35 rad, visée à 1,3 m) ; lui à 12 et 18 m, qui vient à ton appel.
+    for (const z of [-12, -18]) {
+      const a = horse();
+      remember(a, 'firstCall', 3);
+      const { g } = fakeGame(a, { at: [0, 0, z], cam: [0, 1.3 + 7 * Math.sin(0.35), 7 * Math.cos(0.35)], aim: [0, 1.3, 0] });
+      Game.prototype.memoryPhoto.call(g, a, 'firstCall', g.profile);
+      expect(a.memories[0].ph, `${z}`).toBe(jpeg());
+      const [sx, sy, sw, sh] = drawn;
+      const { width, height } = g.renderer.domElement;
+      const v = new THREE.Vector3(0, 1, z).project(g.camera);
+      expect(v.y).toBeGreaterThan(sh / height); // (au-dessus de la bande du milieu : il n'y était pas)
+      expect(sx + sw / 2).toBeCloseTo(((1 + v.x) / 2) * width);
+      expect(sy + sh / 2).toBeCloseTo(((1 - v.y) / 2) * height);
+      expect(sy).toBeGreaterThanOrEqual(0);
+    }
+    // Tout en haut de l'écran : la bande gardée s'arrête au bord, et il est dedans.
+    const a = horse();
+    remember(a, 'firstCall', 3);
+    const { g } = fakeGame(a, { at: [0, 0, -15], aim: [0, -1, 0] });
+    Game.prototype.memoryPhoto.call(g, a, 'firstCall', g.profile);
+    const v = new THREE.Vector3(0, 1, -15).project(g.camera);
+    expect(v.y).toBeGreaterThan(0.8);
+    expect(a.memories[0].ph).toBe(jpeg());
+    const [, sy, , sh] = drawn;
+    expect(sy).toBe(0);
+    expect(((1 - v.y) / 2) * 1688).toBeLessThan(sh * 0.4);
+  });
+
+  it('une fenêtre ouverte (« ⭐ Tu passes au niveau 2 ! » juste après la première balade) : la photo attend qu\'on la ferme', () => {
+    vi.useFakeTimers();
+    try {
+      const a = horse();
+      const { g, e } = fakeGame(a, { mounted: true });
+      g.ui.modalOpen = true;
+      g.remember(a, 'firstRide');
+      vi.advanceTimersByTime(PHOTO_MEMORIES.firstRide * 1000 + 4000);
+      expect(memoriesOf(a).find((m) => m.id === 'firstRide').ph).toBeUndefined();
+      g.ui.modalOpen = false;
+      vi.advanceTimersByTime(1000);
+      expect(memoriesOf(a).find((m) => m.id === 'firstRide').ph).toBe(jpeg());
+      expect(e.emitted).toEqual(['📸']);
+      expect(vi.getTimerCount()).toBe(0);
+      // Restée ouverte longtemps : pas de photo, le souvenir garde son icône (et plus rien n'attend).
+      const b = horse('b');
+      const other = fakeGame(b, { mounted: true });
+      other.g.ui.modalOpen = true;
+      other.g.remember(b, 'firstRide');
+      vi.advanceTimersByTime(60000);
+      expect(vi.getTimerCount()).toBe(0);
+      other.g.ui.modalOpen = false;
+      expect(memoriesOf(b).find((m) => m.id === 'firstRide').ph).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

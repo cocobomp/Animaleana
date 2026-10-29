@@ -30,13 +30,18 @@ const horse = (x = 0, z = 0, name = 'Étoile') => {
   };
 };
 
-const fakeGame = (temperature, weather = 'clear') => ({
-  temperature, weather,
-  camera: { position: new THREE.Vector3(0, 1.6, 4) },
-  player: { position: new THREE.Vector3(0, 0, 3) },
-  profile: {},
-  ui: { toast: vi.fn() },
-});
+/** La caméra à 4 m, tournée vers le cheval en 0 (vers -z). */
+const fakeGame = (temperature, weather = 'clear') => {
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 1.6, 4);
+  camera.lookAt(0, 1, 0);
+  return {
+    temperature, weather, camera,
+    player: { position: new THREE.Vector3(0, 0, 3) },
+    profile: {},
+    ui: { toast: vi.fn() },
+  };
+};
 
 /** sec secondes de jeu : la phase avance à hz respirations par seconde (comme horseReal.js), la buée suit. */
 const run = (fx, g, horses, sec, hz = 0.2, onStep = null) => {
@@ -109,6 +114,28 @@ describe('la buée en 3D', () => {
     hidden.inside = true;
     run(fx, fakeGame(0), [far, hidden], 6);
     expect(fx.breaths).toBe(0);
+  });
+
+  it('le troupeau derrière la caméra ne prend pas la place du cheval qu\'on regarde', () => {
+    const scene = new THREE.Scene();
+    const fx = new HorseBreath(scene);
+    const g = fakeGame(0);
+    // (trois chevaux broutent 2 à 4 m derrière la caméra, tout près du joueur ; celui qu'on regarde est à 10 m devant)
+    const herd = [horse(0, 6, 'Pomme'), horse(1, 7, 'Caramel'), horse(-1, 8, 'Noisette')];
+    const seen = horse(0, -6);
+    run(fx, g, [...herd, seen], 12);
+    expect(fx.track.has(seen)).toBe(true);
+    for (const e of herd) expect(fx.track.has(e)).toBe(false);
+    expect(fx.breaths).toBeGreaterThanOrEqual(2);
+    for (const p of fx.parts) expect(p.s.position.z).toBeLessThan(0);
+    // (pas de petit mot pour un cheval qu'on ne voit pas, même tout près du joueur)
+    expect(g.ui.toast).not.toHaveBeenCalled();
+    // Monté, à la première personne : son cheval est sous la caméra, il souffle quand même.
+    const ridden = horse(0, 6);
+    ridden.ridden = true;
+    const fx2 = new HorseBreath(new THREE.Scene());
+    run(fx2, fakeGame(0), [ridden], 5);
+    expect(fx2.breaths).toBe(1);
   });
 
   it('le petit mot, une seule fois', () => {

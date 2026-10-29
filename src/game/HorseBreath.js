@@ -9,6 +9,7 @@ import { t } from '../i18n.js';
 
 const _v = new THREE.Vector3();
 const _d = new THREE.Vector3();
+const _fwd = new THREE.Vector3();
 const _puff = {};
 const PUFF = { rise: 0.12, drag: 0.9 }; // (m/s² : l'air chaud monte ; freinage : la bouffée s'arrête en s'étalant)
 const TIP_NEAR = 8; // (m : le petit mot de la première fois, seulement tout près)
@@ -81,7 +82,7 @@ export class HorseBreath {
     this.live = live;
   }
 
-  /** Les (au plus 3) chevaux les plus proches de la caméra : bouffées à chaque expiration, vapeur s'il a transpiré. */
+  /** Les (au plus 3) chevaux les plus proches devant la caméra : bouffées à chaque expiration, vapeur s'il a transpiré. */
   spawnAll(dt, entities, g, temp, fog) {
     const near = this.near;
     const nearD = this.nearD;
@@ -89,11 +90,15 @@ export class HorseBreath {
     let n = 0;
     const cam = g.camera.position;
     const lim = BREATH_FX.near * BREATH_FX.near;
+    g.camera.getWorldDirection(_fwd);
     for (const e of entities) {
       const md = e.model;
       if (!md?.real || !md.anim || e.data?.species !== 'horse' || e.inside || !e.root.visible) continue;
       const d = e.position.distanceToSquared(cam);
       if (d > lim || (n === max && d >= nearD[max - 1])) continue;
+      // (derrière la caméra : on ne le voit pas, il ne prend pas la place de celui qu'on regarde ; monté, il est
+      // sous la caméra à la première personne)
+      if (!e.ridden && _v.subVectors(e.position, cam).dot(_fwd) < -1) continue;
       // (rangés du plus proche au plus loin)
       let j = n < max ? n++ : max - 1;
       while (j > 0 && nearD[j - 1] > d) {

@@ -228,6 +228,15 @@ première balade, le premier galop, le jour où il est venu à ton appel, la pre
 sauté, le premier retour au calme, chaque Galop (avec le cheval du moment), le premier concours et le premier podium,
 le premier cross, la chasse aux citrouilles. Le tout premier souvenir est annoncé par un petit mot ; seulement pour tes
 chevaux (pas ceux en pension).
+Aussi les souvenirs du quotidien : chaque étape du lien (🤝 il te fait confiance, 💖 il t'adore, 🦮 meilleurs amis du
+monde), la première balade sous la pluie (ou l'orage) et dans la neige, la première visite du vétérinaire, le premier
+vermifuge (bien dosé : un sous-dosage ne compte pas), le premier voyage ensemble (à cheval, en van, en bateau ou en avion).
+**🎂 Un an ensemble** : 12 jours de jeu après son arrivée (un an de jeu, comme pour l'âge), 🎂 au-dessus de lui, le
+lien +2 et un petit mot avec un conseil vrai (« une carotte coupée en long, jamais en rondelles » : une rondelle peut
+se coincer dans sa gorge) ; ce jour-là, sa première friandise lui fait encore plus plaisir (affection +15, une seule :
+pas plus de sucre). La première année devient un souvenir ; les suivantes, un petit mot (« 🎂 2 ans avec Étoile ! »). Un
+cheval sans souvenir d'arrivée (vieille partie, poulain né à la ferme) compte à partir du premier jour où le jeu le
+trouve près de toi.
 Ses **flots** de concours (or, argent, bronze pour le podium, puis vert, blanc, rose ; 6 au plus, les meilleurs
 d'abord) sont accrochés sous la plaque à son nom, sur la porte de son box (src/sim/competitions.js rosettesOf).
 

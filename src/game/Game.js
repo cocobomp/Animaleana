@@ -66,7 +66,7 @@ import { FreeJumps } from './FreeJumps.js'; // ⤴️ sauter des troncs en balad
 import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au poney-club (fin octobre)
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
 import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
-import { remember } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
+import { remember, anniversaryDue, BOND_MEMORIES } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
 import { collectFact } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
@@ -887,6 +887,7 @@ export class Game {
   horseHealthDay(here) {
     const day = this.day;
     for (const a of here) {
+      if (a.species === 'horse') this.anniversary(a); // 🎂
       if (a.species !== 'horse' || a.healthDay === day) continue;
       for (const ev of healthDay(a, day)) {
         if (ev.startsWith('remind:')) this.ui.toast(t(`remind_${ev.slice(7)}`, { name: a.name, g: a.sex }), 7000);
@@ -983,6 +984,22 @@ export class Game {
     return r;
   }
 
+  /**
+   * 🎂 Un an de plus avec ton cheval (src/sim/memories.js anniversaryDue) : 🎂 au-dessus de lui, un petit mot, un peu
+   * de lien ; ce jour-là, sa première friandise lui fait encore plus plaisir (care). La première année : un souvenir.
+   */
+  anniversary(a) {
+    const k = anniversaryDue(a, this.day);
+    if (!k) return;
+    const s0 = bondStage(a);
+    a.bond = Math.min(100, (a.bond ?? 0) + 2);
+    this.bondNews(a, s0);
+    a.annivDay = this.day;
+    this.entities.get(a.id)?.emit('🎂', 4);
+    this.ui.toast(t('anniv', { name: a.name, g: a.sex, n: k }), 8000);
+    this.remember(a, 'year1'); // (une seule fois : même s'il était loin le jour de son premier anniversaire)
+  }
+
   /** Ton cheval du moment : celui que tu montes, sinon le dernier dont tu t'es occupé, sinon le plus proche de toi. */
   mainHorse() {
     const mine = this.profile.animals.filter((a) => a.species === 'horse' && !a.client && !a.guest);
@@ -997,6 +1014,7 @@ export class Game {
     if (now === before || a.client || a.guest) return;
     const order = ['new', 'trust', 'love', 'best'];
     if (order.indexOf(now) < order.indexOf(before)) return;
+    if (a.species === 'horse') this.remember(a, BOND_MEMORIES[now]); // 📸 🤝 💖 🦮
     // (un soin qui finit aussi la journée parfaite le dirait deux fois : une seule)
     this.bondShown = this.bondShown ?? new Map();
     if (this.bondShown.get(a.id) === now) return;
@@ -1024,6 +1042,7 @@ export class Game {
     }
     noteHealth(a, 'worm', this.day);
     addStat(this.profile, 'horse_deworm'); // (Galop 3)
+    this.remember(a, 'firstDeworm'); // (pas sous-dosé)
     this.entities.get(a.id)?.emit('😝', 2);
     this.ui.toast(t('wormed', { name: a.name, g: a.sex }), 5000);
     this.save();
@@ -2032,6 +2051,12 @@ export class Game {
     const before = { ...a.needs };
     const stage0 = bondStage(a);
     const res = applyCare(a, action, quality, opts);
+    // 🎂 Le jour de votre anniversaire, sa première friandise lui fait encore plus plaisir (une seule : pas plus de sucre).
+    if (res.ok && action === 'treat' && a.annivDay === this.day && a.annivTreat !== this.day) {
+      a.annivTreat = this.day;
+      a.needs.affection = Math.min(100, (a.needs.affection ?? 50) + 15);
+      this.entities.get(a.id)?.emit('🎂', 3);
+    }
     if (res.ok) this.ui.showDeltas(a, before);
     if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name, g: a.sex }));
     if (res.unlame) this.ui.toast(t('unlame', { name: a.name, g: a.sex }), 6000);
@@ -2139,6 +2164,9 @@ export class Game {
     addStat(this.profile, 'rides');
     this.markHorseDay(a, 'ride');
     this.remember(a, 'firstRide');
+    const w = this.simWeather();
+    if (w === 'rain' || w === 'storm') this.remember(a, 'firstRain');
+    else if (w === 'snow') this.remember(a, 'firstSnow');
     this.xp('ride');
     this.ui.toast(t(gear.bareback ? 'ridingBareback' : 'ridingHint', { name: a.name, g: a.sex }));
     return r;
@@ -2460,6 +2488,7 @@ export class Game {
     this.xp('vet');
     this.entities.get(a.id)?.emit('💚', 4);
     this.ui.toast(t(wasSick ? 'vetCured' : 'vetCheckupDone', { name: a.name, g: a.sex }));
+    this.remember(a, 'firstVet');
     // Le cheval : vaccins et dents contrôlés à chaque visite (carnet de santé).
     if (a.species === 'horse' && noteHealth(a, 'vaccine', this.day) && noteHealth(a, 'teeth', this.day)) {
       this.ui.toast(t('vetHorsePlan', { name: a.name, g: a.sex }), 5000);
@@ -2680,6 +2709,7 @@ export class Game {
       if (events.includes('died')) this.animalDied(a);
       else if (events.includes('sick')) this.ui.toast(t('gotSick', { name: a.name, g: a.sex }), 6000);
     }
+    for (const a of travelers) if (a.species === 'horse') this.remember(a, 'firstTrip'); // 📸 (à cheval, en van…)
     p.place = destId;
     if (!p.visited.includes(destId)) p.visited.push(destId);
     addStat(p, 'travels');

@@ -1,7 +1,7 @@
 // 📸 Les souvenirs de ton cheval (src/sim/memories.js) : les premières fois, une seule fois, datées.
 import { describe, it, expect, beforeAll } from 'vitest';
-import { MEMORIES, remember, memoriesOf, keepsMemories, MEMORY_MAX } from '../src/sim/memories.js';
-import { createAnimal } from '../src/sim/animal.js';
+import { MEMORIES, remember, memoriesOf, keepsMemories, MEMORY_MAX, BOND_MEMORIES, anniversaryDue } from '../src/sim/memories.js';
+import { createAnimal, BOND_STAGES } from '../src/sim/animal.js';
 import { seeded } from '../src/sim/rng.js';
 
 let i18n;
@@ -48,5 +48,49 @@ describe('les souvenirs de ton cheval', () => {
     }
     setLang('fr');
     expect(t('mem_firstCall', { name: 'Étoile', g: 'f' })).toBe('Étoile est venue à ton appel');
+  });
+
+  it('chaque étape du lien a son souvenir ; pas deux souvenirs du même nom', () => {
+    const ids = MEMORIES.map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.length).toBeLessThanOrEqual(MEMORY_MAX);
+    for (const [stage] of BOND_STAGES.filter(([s]) => s !== 'new')) expect(ids, stage).toContain(BOND_MEMORIES[stage]);
+  });
+});
+
+describe('🎂 un an ensemble', () => {
+  it('tous les 12 jours après son arrivée, une seule fois par année', () => {
+    const a = horse();
+    remember(a, 'arrived', 3);
+    expect(anniversaryDue(a, 14)).toBe(0);
+    expect(anniversaryDue(a, 15)).toBe(1);
+    expect(anniversaryDue(a, 15)).toBe(0);
+    expect(anniversaryDue(a, 26)).toBe(0);
+    expect(anniversaryDue(a, 27)).toBe(2);
+  });
+
+  it('pas pour un cheval qu\'on te confie', () => {
+    const a = horse();
+    remember(a, 'arrived', 3);
+    a.client = true;
+    expect(anniversaryDue(a, 15)).toBe(0);
+  });
+
+  it('sans souvenir d\'arrivée (vieille partie, poulain né ici) : on compte à partir d\'aujourd\'hui', () => {
+    const a = horse();
+    expect(anniversaryDue(a, 40)).toBe(0);
+    expect(a.arrivedDay).toBe(40);
+    expect(anniversaryDue(a, 51)).toBe(0);
+    expect(anniversaryDue(a, 52)).toBe(1);
+  });
+
+  it('ses textes : un an (et le conseil de la carotte), puis n ans', () => {
+    const { t, setLang } = i18n;
+    for (const lang of ['fr', 'en']) {
+      setLang(lang);
+      expect(t('anniv', { name: 'Étoile', g: 'f', n: 1 })).toMatch(/^🎂 .*Étoile.*(carotte|carrot)/);
+      expect(t('anniv', { name: 'Étoile', g: 'f', n: 2 })).toMatch(/^🎂 2 .*Étoile/);
+    }
+    setLang('fr');
   });
 });

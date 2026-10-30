@@ -13,6 +13,8 @@ import { tackEffects } from '../sim/gear.js';
 import { rideSpeed, allowedGait, rideEffort, nextSpookIn, nextGrazeIn, SPOOKY } from '../sim/riding.js'; // allures en balade libre
 import { newPosting, postTick, isPosting, POST } from '../sim/posting.js'; // ⬆️ trot enlevé
 import { newSession, sessionTick, effortFactor } from '../sim/warmup.js'; // 🐢 détente et retour au calme
+import { PRAISE, newPraise, openPraise, coolJustDone } from '../sim/praise.js'; // 🤚 « Bravo ! » / « Rassure-le »
+import { spookFactor } from '../sim/horseQuirks.js'; // (💪 plus peur de sa peur : moins d'écarts)
 import { helmetModel, helmetStrapsModel } from './models/tackModels.js'; // bombe du cavalier et ses sangles
 import { helmetFit } from './models/avatarHair.js'; // la bombe à la taille de la coiffure
 import { prepareRiderFit, fitRider, seatOnSaddle, releaseRiderFit } from './models/riderFit.js'; // cavalier sur le cheval réaliste
@@ -196,6 +198,7 @@ export class Player {
     this.canterFor = 0; // secondes de galop d'affilée (onCanter une fois par balade, à 3 s)
     this.cantered = false;
     this.session = newSession(); // 🐢 détente au début, retour au calme à la fin (src/sim/warmup.js)
+    this.praise = newPraise(); // 🤚 le bouton « Bravo ! » / « Rassure-le » (src/sim/praise.js : Game.praiseHorse)
     this.grazing = null; // il s'est arrêté pour brouter (rideStep) : { pull } secondes de joystick poussé
     this.grazeIn = null;
     this.posting = newPosting(); // ⬆️ trot enlevé (src/sim/posting.js : Game.postTrot)
@@ -551,12 +554,14 @@ export class Player {
    * Geste de soin (Game émet 'care') : selon le soin, verser, tendre la main, brosser, caresser,
    * frotter… tourné vers l'animal ; on fait d'abord un petit pas vers lui s'il est un peu loin.
    */
-  careGesture(action, entity) {
+  careGesture(action, entity, opts = null) {
     const a = this.avatar;
     if (this.carried) return;
     if (this.mount) {
-      // À cheval : une petite tape sur l'encolure.
-      if (entity === this.mount && this.ride0) startAvatarGesture(a, 'pat', { local: true, x: -0.07, y: this.ride0.reinsY + 0.03, z: this.ride0.reinsZ + 0.12, duration: 1.2 });
+      // À cheval : une petite tape sur l'encolure (opts.withers : des gratouilles au garrot, juste devant la selle, sous
+      // les mains qui tiennent les rênes).
+      const w = !!opts?.withers;
+      if (entity === this.mount && this.ride0) startAvatarGesture(a, 'pat', { local: true, x: -0.07, y: this.ride0.reinsY + (w ? -0.07 : 0.03), z: this.ride0.reinsZ + (w ? 0.02 : 0.12), duration: 1.2 });
       return;
     }
     const kind = careGestureFor(action);
@@ -860,8 +865,10 @@ export class Player {
     this.postingNow = trotting && isPosting(this.posting, stride);
     // 🐢 La détente : quelques tours au pas avant de trotter (et le retour au calme, compté pour la descente)
     this.session = this.session ?? newSession();
+    const c0 = this.session.cool;
     const warmNews = sessionTick(this.session, this.speed > 0.3 ? this.gaitNow : 'halt', dt);
     if (warmNews) this.onGait?.(this.gait, warmNews);
+    if (coolJustDone(this.session, c0)) this.openPraise('cool'); // (🤚 bravo, il a repris son souffle)
     rideEffort(mount.data, this.speed > 0.3 ? this.gaitNow : 'halt', dt, this.postingNow ? POST.save : 1, effortFactor(this.session)); // (immobile : il souffle)
     // Le cheval gourmand : au pas sur l'herbe, il finit par s'arrêter pour brouter (src/sim/riding.js nextGrazeIn).
     if (this.grazing) {
@@ -885,7 +892,7 @@ export class Player {
       }
     } else this.canterFor = 0;
     if (SPOOKY.has(this.gaitNow) && this.speed > 2 && !this.spook) {
-      this.spookIn = (this.spookIn ?? nextSpookIn(mount.data, Math.random, this.riderLevel ?? 0)) - dt;
+      this.spookIn = (this.spookIn ?? nextSpookIn(mount.data, Math.random, this.riderLevel ?? 0) * spookFactor(mount.data)) - dt;
       if (this.spookIn <= 0) {
         this.spookIn = null;
         this.spook = { t: 0.9, side: Math.random() < 0.5 ? -1 : 1 };
@@ -901,8 +908,25 @@ export class Player {
       p.x += Math.cos(this.heading) * s.side * dt * 2.6 * k;
       p.z -= Math.sin(this.heading) * s.side * dt * 2.6 * k;
       this.heading += s.side * dt * 1.4 * k;
-      if (s.t <= 0) this.spook = null;
+      if (s.t <= 0) {
+        this.spook = null;
+        this.openPraise('spook'); // (🤚 rassure-le)
+      }
     }
+  }
+
+  /** 🤚 Le bouton « Bravo ! » / « Rassure-le » apparaît quelques secondes (src/sim/praise.js). */
+  openPraise(why) {
+    if (!this.mount) return;
+    this.praise = this.praise ?? newPraise();
+    openPraise(this.praise, why, this.mount.time);
+  }
+
+  /** 🤚 Touché (Game.praiseHorse) : rassuré après un écart, le prochain vient plus tard. */
+  praised(why) {
+    if (why !== 'spook' || !this.mount) return;
+    const a = this.mount.data;
+    this.spookIn = (this.spookIn ?? nextSpookIn(a, Math.random, this.riderLevel ?? 0) * spookFactor(a)) * PRAISE.calm;
   }
 
   /** Choisir l'allure (boutons, touches) : 'halt', 'walk', 'trot', 'canter'. Il broutait : on raccourcit les rênes. */

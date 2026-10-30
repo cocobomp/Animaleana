@@ -289,6 +289,7 @@ export class FreeJumps {
     addStat(g.profile, 'freeJumps');
     g.remember?.(a, 'firstLog');
     e.emit(great ? '⭐' : '💨', 1.5);
+    if (great) pl.openPraise?.('jump'); // (🤚 « Bravo ! » quelques secondes : src/sim/praise.js)
     const p = { name: a.name, g: a.sex };
     if (crossNews) g.ui.toast(crossNews, 5000); // (le cross dit déjà « hop »)
     else if (!g.profile.freeJumpHint) {

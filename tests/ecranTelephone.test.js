@@ -295,8 +295,8 @@ describe('à cheval, les messages attendent leur tour (P6)', () => {
 
   it('CSS : moins de 760 px de haut, la colonne passe à gauche de ⤴️ Sauter / ⬆️ Enlever (10 px d\'écart)', () => {
     const w = +css.match(/@media \(pointer: coarse\) and \(max-width: 640px\) and \(max-height: 760px\) \{\s*body\.riding #toasts \{ width: calc\(100vw - (\d+)px - var\(--safe-l\) - var\(--safe-r\)\); \}/)[1];
-    const right = +css.match(/#post-btn, #jump-btn \{ left: auto; right: calc\((\d+)px \+ var\(--safe-r\)\); bottom: calc\(306px/)[1];
-    const size = +css.match(/#post-btn, #jump-btn \{\s*position: fixed;[^}]*width: (\d+)px; height: \1px;/)[1];
+    const right = +css.match(/#post-btn, #jump-btn, #praise-btn \{ left: auto; right: calc\((\d+)px \+ var\(--safe-r\)\); bottom: calc\(306px/)[1];
+    const size = +css.match(/#post-btn, #jump-btn, #praise-btn \{\s*position: fixed;[^}]*width: (\d+)px; height: \1px;/)[1];
     expect(w - 12 - right - size).toBe(10); // (la colonne commence à 12 px du bord gauche)
     // (colonnes étroites, petit écran et paysage : texte un peu plus petit, « Tu montes… » ne descend plus sur ⬇️ Descendre)
     for (const q of ['\\(max-width: 640px\\) and \\(max-height: 760px\\)', '\\(max-height: 480px\\) and \\(min-width: 641px\\)']) {

@@ -327,6 +327,17 @@ lèvre du haut. La friandise : deux boutons, 🥕 et 🍎 ; sa préférée, « M
 ne change pas). En balade, 7 écarts sur 10 viennent de sa peur à lui : la deuxième fois, on a compris, puis le jeu
 rappelle de lui parler doucement. Chaque découverte : un petit mot 🔍, un souvenir et lien +2. Seulement tes chevaux.
 
+### « Bravo ! » et « Rassure-le » en selle (0.5, `src/sim/praise.js`)
+En balade libre, un bouton rond rose « 🤚 Bravo ! » apparaît à la place de ⬆️ (jamais de ⤴️ ; Espace au clavier) : 3
+secondes après un beau saut de tronc (⭐), 6 secondes quand le retour au calme au pas est fini ; « 🤚 Rassure-le » 4
+secondes juste après un écart. Touché : la main du cavalier gratte le garrot (les chevaux se grattent là entre eux, au
+pré : la première fois, un petit mot le dit), des 💕 montent (💖 si le garrot est son coin préféré, et qu'on le sait) ;
+lien +0,3 et affection +3, au plus 3 fois par balade et 6 par jour, seulement tes chevaux. Rassuré après un écart, il se
+calme et le prochain écart vient plus tard. Si c'était sa peur à lui (connue) : « 💪 Pomme a moins peur des oiseaux
+(2/5) », et sa fiche dit « · 💪 2/5 » ; la cinquième fois, il n'en a plus peur (lien +3, un souvenir) : plus jamais
+d'écart à cause d'elle, et un peu moins d'écarts en tout. Ne pas toucher ne coûte rien. « 🤚 Bravos en selle » dans le
+carnet du cavalier.
+
 ### Tout assorti (0.5, `src/sim/matchy.js`)
 Comme au poney-club, où l'on aime les ensembles de la même couleur : dans sa fiche, sous l'équipement, la ligne
 « 🎨 Ensemble » a trois pastilles — le tapis, les jambes (guêtres ou cloches) et ta bombe —, vides tant qu'elles ne

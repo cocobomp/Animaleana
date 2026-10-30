@@ -7,6 +7,7 @@
 //
 // Ses goûts viennent de son id (toujours les mêmes, rien n'est sauvegardé) ; ce que tu sais (sauvegardé) :
 // a.known = { spot, treat, fear } et a.fearSeen (combien de fois il a eu peur de sa peur, avant de la connaître).
+// 💪 Rassuré après un écart de sa peur (src/sim/praise.js) : a.fearCalm (combien de fois) ; à FEAR_CALM, a.fearGone.
 
 import { seeded, pickWeighted } from './rng.js';
 import { keepsMemories } from './memories.js';
@@ -40,6 +41,12 @@ export function discoverQuirk(a, key) {
 
 /** De quoi il a peur, cette fois (0 à 3) : ton cheval, le plus souvent de sa peur à lui ; un autre, de n'importe quoi. */
 export function spookCause(a, rng = Math.random) {
+  if (a?.fearGone) {
+    // (💪 il n'a plus peur de sa peur : de tout le reste)
+    const fear = quirksOf(a).fear;
+    const r = Math.floor(rng() * (QUIRK_FEARS - 1));
+    return r >= fear ? r + 1 : r;
+  }
   if (keepsMemories(a) && rng() < 0.6) return quirksOf(a).fear;
   return Math.floor(rng() * QUIRK_FEARS);
 }
@@ -54,3 +61,21 @@ export function noteFear(a, cause) {
   a.fearSeen = (a.fearSeen ?? 0) + 1;
   return a.fearSeen >= 2 && discoverQuirk(a, 'fear') ? 'discovered' : null;
 }
+
+/** 💪 Rassuré cinq fois après un écart de sa peur : elle s'en va. */
+export const FEAR_CALM = 5;
+
+/**
+ * Tu l'as rassuré juste après un écart de cause : null (pas sa peur, pas encore connue, déjà partie, ou un cheval
+ * confié), 'progress' (il en a un peu moins peur) ou 'gone' (la cinquième fois : il n'en a plus peur).
+ */
+export function calmFear(a, cause) {
+  if (!keepsMemories(a) || !knows(a, 'fear') || a.fearGone || cause !== quirksOf(a).fear) return null;
+  a.fearCalm = (a.fearCalm ?? 0) + 1;
+  if (a.fearCalm < FEAR_CALM) return 'progress';
+  a.fearGone = true;
+  return 'gone';
+}
+
+/** Il n'a plus peur de sa peur : un peu moins d'écarts (multiplie le temps avant le prochain, src/sim/riding.js nextSpookIn). */
+export const spookFactor = (a) => (a?.fearGone ? 1.25 : 1);

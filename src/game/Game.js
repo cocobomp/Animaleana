@@ -74,7 +74,8 @@ import { newRideLog, tickRideLog, rideReport, dayLeft } from '../sim/rideLog.js'
 import { showRideCard } from '../ui/rideCard.js';
 import { remember, anniversaryDue, togetherSince, BOND_MEMORIES, PHOTO_MEMORIES, PHOTO, attachPhoto } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
 import { collectFact } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
-import { quirksOf, discoverQuirk, spookCause, noteFear, QUIRK_BOND } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
+import { quirksOf, discoverQuirk, spookCause, noteFear, QUIRK_BOND, calmFear, FEAR_CALM } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
+import { doPraise, canPraise } from '../sim/praise.js'; // 🤚 « Bravo ! » / « Rassure-le » en selle
 import { matchyOf } from '../sim/matchy.js'; // 🎨 tout assorti : tapis, guêtres et bombe
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
@@ -626,6 +627,7 @@ export class Game {
         // 🔍 Le plus souvent, sa peur à lui (src/sim/horseQuirks.js) : la deuxième fois, tu as compris ; ensuite, le jeu
         // te rappelle de lui parler doucement.
         const cause = spookCause(m);
+        this.player.spookCause = cause; // (🤚 rassuré juste après : Game.praiseHorse)
         const seen = noteFear(m, cause);
         if (seen === 'again') this.ui.toast(t('ride_spookAgain', { name: m.name, g: m.sex, what: t(`qk_fear${cause}`) }), 5000);
         else this.ui.toast(t('ride_spook', { name: m.name, g: m.sex, what: t(`ride_spookWhat${cause}`) }), 5000);
@@ -2160,6 +2162,7 @@ export class Game {
     const gaitKey = { Digit0: 'halt', Numpad0: 'halt', Digit1: 'walk', Digit2: 'trot', Digit3: 'canter' }[code];
     if (gaitKey && this.player.mount && !this.activities.active) this.setRideGait(gaitKey);
     if (code === 'Space' && this.freeJumps.canJump()) this.freeJumps.want(); // ⤴️ sauter le tronc
+    else if (code === 'Space' && this.canPraise()) this.praiseHorse(); // 🤚 bravo, rassure-le
     else if (code === 'Space' && this.canPostTrot()) this.postTrot(); // ⬆️ trot enlevé
   }
 
@@ -2522,6 +2525,47 @@ export class Game {
       addStat(this.profile, 'risingTrot'); // (Galop 2)
       this.ui.toast(t('post_great', { name: pl.mount.data.name, g: pl.mount.data.sex }), 5000);
     }
+    return r;
+  }
+
+  /** 🤚 Le bouton « Bravo ! » / « Rassure-le » est là : en balade libre, quelques secondes (src/sim/praise.js). */
+  canPraise() {
+    const pl = this.player;
+    return !!pl?.mount && pl.gaitEnabled !== false && !this.activities.active && !this.tripFlow?.active && canPraise(pl.praise, pl.mount.time);
+  }
+
+  /**
+   * 🤚 Touché (bouton ou Espace) : la main gratte le garrot, des 💕 (💖 si c'est son coin préféré). Après un écart de sa
+   * peur à lui (connue) : elle recule, et la cinquième fois, elle s'en va (src/sim/horseQuirks.js calmFear).
+   */
+  praiseHorse() {
+    if (!this.canPraise()) return null;
+    const pl = this.player;
+    const e = pl.mount;
+    const a = e.data;
+    const s0 = bondStage(a);
+    const r = doPraise(pl.praise, a, e.time, this.day);
+    if (!r.ok) return null;
+    pl.careGesture('pet', e, { withers: true });
+    e.emit(r.fav ? '💖' : '💕', 3);
+    audio.animal('horse', 'happy', a.id);
+    addStat(this.profile, 'praises');
+    pl.praised(r.why);
+    const p = { name: a.name, g: a.sex };
+    if (r.why === 'spook') {
+      const f = calmFear(a, pl.spookCause);
+      const what = t(`qk_fear${pl.spookCause}`);
+      if (f === 'gone') {
+        a.bond = Math.min(100, (a.bond ?? 0) + 3);
+        this.remember(a, 'fearGone');
+        this.ui.toast(t('pr_fearGone', { ...p, what }), 6000);
+      } else if (f === 'progress') this.ui.toast(t('pr_fearStep', { ...p, what, n: a.fearCalm, total: FEAR_CALM }), 4500);
+      else this.ui.toast(t('pr_calm', p), 3500);
+    } else if (!this.profile.praiseTip) {
+      this.profile.praiseTip = true;
+      this.ui.toast(t('pr_tip', p), 6000);
+    } else if (r.fav) this.ui.toast(t('pr_fav', p), 2500);
+    this.bondNews(a, s0);
     return r;
   }
 

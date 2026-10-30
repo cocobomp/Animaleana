@@ -39,7 +39,7 @@ import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
 import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
 import { huntView } from '../sim/halloween.js'; // 🎃 la chasse aux citrouilles
 import { memoriesOf } from '../sim/memories.js'; // 📸 ses souvenirs
-import { quirksOf, knows } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
+import { quirksOf, knows, FEAR_CALM } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
 import { starsView, starHowKey } from '../sim/horseStars.js'; // ⭐ ses étoiles
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
@@ -232,8 +232,11 @@ function quirkSection(a) {
   const p = { name: a.name, g: a.sex };
   const what = { spot: t(`qk_where_${q.spot}`), treat: t(`qk_${q.treat}`), fear: t(`qk_fear${q.fear}`) };
   const icon = q.treat === 'carrot' ? '🥕' : '🍎'; // (qk_treat : l'icône de sa friandise à lui)
+  // (💪 sa peur recule quand tu le rassures après un écart : src/sim/praise.js)
+  const line = (k) => (k === 'fear' && a.fearGone ? t('qk_fearGone', { ...p, what: what.fear })
+    : `${t(`qk_${k}`, { ...p, what: what[k], icon })}${k === 'fear' && a.fearCalm > 0 ? ` · 💪 ${a.fearCalm}/${FEAR_CALM}` : ''}`);
   return [h('h3', {}, t('qk_title', p)), h('ul', { class: 'qk-list' }, ['spot', 'treat', 'fear'].map((k) => (knows(a, k)
-    ? h('li', { class: 'known' }, t(`qk_${k}`, { ...p, what: what[k], icon }))
+    ? h('li', { class: 'known' }, line(k))
     : h('li', {}, t(`qk_hint_${k}`, p)))))];
 }
 

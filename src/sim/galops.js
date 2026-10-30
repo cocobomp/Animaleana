@@ -154,6 +154,7 @@ export const LOGBOOK = [
   { id: 'pumpkins', icon: '🎃' }, // (la chasse aux citrouilles d'Halloween : src/sim/halloween.js)
   { id: 'factCards', icon: '🃏' }, // (les cartes « Le savais-tu ? » : src/sim/horseFacts.js)
   { id: 'luckyShoes', icon: '🍀' }, // (le fer porte-bonheur du jour : src/sim/luckyShoes.js)
+  { id: 'praises', icon: '🤚' }, // (« Bravo ! » et « Rassure-le » en selle : src/sim/praise.js)
 ];
 export function logbook(profile) {
   const s = profile.stats ?? {};

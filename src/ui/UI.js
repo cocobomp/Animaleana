@@ -132,13 +132,22 @@ export class UI {
       e.preventDefault();
       this.game?.freeJumps?.want();
     });
-    root.append(this.touchPad, this.gaitPad, this.postBtn, this.jumpBtn, this.statusBar, this.labels);
+    // 🤚 « Bravo ! » / « Rassure-le » (src/sim/praise.js) : quelques secondes après un beau saut, le retour au calme ou un
+    // écart ; même place que « Debout ».
+    this.praiseName = h('span', { class: 'post-name' });
+    this.praiseBtn = h('button', { id: 'praise-btn', type: 'button', hidden: true },
+      h('span', { class: 'post-icon', 'aria-hidden': 'true' }, '🤚'), this.praiseName, h('kbd', {}, '␣'));
+    this.praiseBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.game?.praiseHorse();
+    });
+    root.append(this.touchPad, this.gaitPad, this.postBtn, this.jumpBtn, this.praiseBtn, this.statusBar, this.labels);
 
     // Un seul écouteur pour tous les boutons : petit « tic », plus chantant pour les boutons principaux,
     // descendant pour les boutons rouges. (Pas pour les boutons de direction qu'on garde appuyés.)
     root.addEventListener('click', (e) => {
       const b = e.target?.closest?.('button');
-      if (!b || b.disabled || b.classList.contains('pad-btn') || b.id === 'post-btn' || b.id === 'jump-btn') return;
+      if (!b || b.disabled || b.classList.contains('pad-btn') || b.id === 'post-btn' || b.id === 'jump-btn' || b.id === 'praise-btn') return;
       audio.ui(b.classList.contains('primary') ? 'ok' : b.classList.contains('danger') ? 'cancel' : 'tap');
     });
 
@@ -397,7 +406,21 @@ export class UI {
       }
       this.fitToasts(); // (pas de message sur lui)
     }
-    const show = !!g?.canPostTrot?.() && !this.isBlocking();
+    // 🤚 « Bravo ! » / « Rassure-le » (Game.canPraise) : quelques secondes à la place de ⬆️ (jamais de ⤴️)
+    const praise = !jump && !!g?.canPraise?.() && !this.isBlocking();
+    const why = praise ? g.player.praise.why : null;
+    if (why && why !== this.praiseWhy) {
+      const txt = t(why === 'spook' ? 'pr_btnCalm' : 'pr_btn', { g: g.player.mount.data.sex });
+      this.praiseName.textContent = txt;
+      this.praiseBtn.title = t('pr_btnHelp');
+      this.praiseBtn.setAttribute('aria-label', `${txt} ${t('pr_btnHelp')}`);
+    }
+    this.praiseWhy = why;
+    if (this.praiseBtn.hidden === praise) {
+      this.praiseBtn.hidden = !praise;
+      this.fitToasts(); // (pas de message sur lui)
+    }
+    const show = !praise && !!g?.canPostTrot?.() && !this.isBlocking();
     if (this.postBtn.hidden === show) {
       this.postBtn.hidden = !show;
       if (show) {
@@ -957,7 +980,7 @@ export class UI {
     // au-dessus : un bouton à la hauteur du premier message compte aussi).
     if (document.body.classList.contains('riding')) {
       const r = box.getBoundingClientRect();
-      for (const el of [this.postBtn, this.jumpBtn, this.gaitPad, this.actionBtn]) {
+      for (const el of [this.postBtn, this.jumpBtn, this.praiseBtn, this.gaitPad, this.actionBtn]) {
         if (el.hidden) continue;
         const c = el.getBoundingClientRect();
         if (c.height && c.bottom > r.top && c.left < r.right && c.right > r.left) limit = Math.min(limit, c.top - 6);

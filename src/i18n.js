@@ -18,6 +18,7 @@ import { GALOPS_FR, GALOPS_EN } from './ui/galopsTexts.js'; // 🎓 les Galops (
 import { HALLOWEEN_FR, HALLOWEEN_EN } from './ui/halloweenTexts.js'; // 🎃 Halloween au poney-club (hw_*)
 import { LUCKY_FR, LUCKY_EN } from './ui/luckyShoesTexts.js'; // 🍀 le fer porte-bonheur du jour (ls_*)
 import { RIDE_CARD_FR, RIDE_CARD_EN } from './ui/rideCardTexts.js'; // 🏇 la carte « Ta balade » (rc_*)
+import { PRAISE_FR, PRAISE_EN } from './ui/praiseTexts.js'; // 🤚 « Bravo ! » / « Rassure-le » en selle (pr_*)
 
 const fr = {
   title: 'La ferme à Madichelle',
@@ -4671,6 +4672,8 @@ Object.assign(fr, LUCKY_FR); // 🍀 le fer porte-bonheur du jour (src/sim/lucky
 Object.assign(en, LUCKY_EN);
 Object.assign(fr, RIDE_CARD_FR); // 🏇 la carte « Ta balade » (src/sim/rideLog.js)
 Object.assign(en, RIDE_CARD_EN);
+Object.assign(fr, PRAISE_FR); // 🤚 « Bravo ! » / « Rassure-le » en selle (src/sim/praise.js)
+Object.assign(en, PRAISE_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

@@ -36,6 +36,7 @@ export const MEMORIES = [
   { id: 'quirkSpot', icon: '🤚' }, // 🔍 ce que tu sais de lui (src/sim/horseQuirks.js)
   { id: 'quirkTreat', icon: '🍎' },
   { id: 'quirkFear', icon: '😲' },
+  { id: 'fearGone', icon: '💪' }, // (rassuré cinq fois après un écart de sa peur : src/sim/praise.js)
   { id: 'firstMatchy', icon: '🎨' },
   { id: 'luckyShoes', icon: '🍀' }, // (les 7 fers porte-bonheur : src/sim/luckyShoes.js)
   { id: 'year1', icon: '🎂' },

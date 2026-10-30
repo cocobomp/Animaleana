@@ -1,6 +1,6 @@
 // 🔍 Ce que tu sais de lui (src/sim/horseQuirks.js) : son coin préféré, sa friandise préférée, sa peur en balade.
 import { describe, it, expect, beforeAll } from 'vitest';
-import { QUIRK_SPOTS, QUIRK_TREATS, QUIRK_FEARS, quirksOf, knows, discoverQuirk, spookCause, noteFear } from '../src/sim/horseQuirks.js';
+import { QUIRK_SPOTS, QUIRK_TREATS, QUIRK_FEARS, quirksOf, knows, discoverQuirk, spookCause, noteFear, FEAR_CALM, calmFear, spookFactor } from '../src/sim/horseQuirks.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { seeded } from '../src/sim/rng.js';
 
@@ -89,6 +89,51 @@ describe('les découvrir', () => {
     expect(a.fearSeen).toBe(1);
     expect(discoverQuirk(a, 'treat')).toBe(true);
     expect(a.known).toEqual({ treat: true });
+  });
+});
+
+describe('💪 rassuré, il a moins peur (src/sim/praise.js)', () => {
+  it('rien si tu ne connais pas encore sa peur, pour une autre peur, ou pour un cheval qu\'on te confie', () => {
+    const a = horse();
+    const fear = quirksOf(a).fear;
+    expect(calmFear(a, fear)).toBe(null);
+    a.known = { fear: true };
+    expect(calmFear(a, (fear + 1) % QUIRK_FEARS)).toBe(null);
+    expect(calmFear(horse({ client: true, known: { fear: true } }), fear)).toBe(null);
+    expect(a.fearCalm).toBeUndefined();
+  });
+
+  it('quatre fois un peu moins peur, la cinquième plus du tout ; ensuite, plus rien', () => {
+    const a = horse({ known: { fear: true } });
+    const fear = quirksOf(a).fear;
+    expect(FEAR_CALM).toBe(5);
+    for (let i = 1; i < FEAR_CALM; i++) {
+      expect(calmFear(a, fear)).toBe('progress');
+      expect(a.fearCalm).toBe(i);
+    }
+    expect(a.fearGone).toBeFalsy();
+    expect(calmFear(a, fear)).toBe('gone');
+    expect(a.fearGone).toBe(true);
+    expect(calmFear(a, fear)).toBe(null);
+    expect(a.fearCalm).toBe(FEAR_CALM);
+  });
+
+  it('sa peur partie : plus jamais d\'écart à cause d\'elle, et un peu moins d\'écarts', () => {
+    const a = horse({ known: { fear: true } });
+    expect(spookFactor(a)).toBe(1);
+    expect(spookFactor(null)).toBe(1);
+    a.fearGone = true;
+    expect(spookFactor(a)).toBe(1.25);
+    const fear = quirksOf(a).fear;
+    const rng = seeded('plus-peur');
+    const seen = new Set();
+    for (let i = 0; i < 500; i++) {
+      const c = spookCause(a, rng);
+      expect(c).not.toBe(fear);
+      seen.add(c);
+    }
+    expect(seen.size).toBe(QUIRK_FEARS - 1); // (les trois autres, oui)
+    expect(noteFear(a, spookCause(a, rng))).toBe(null);
   });
 });
 

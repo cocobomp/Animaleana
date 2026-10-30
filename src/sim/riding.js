@@ -3,6 +3,10 @@
 // (un oiseau, un sac qui bouge… le cheval fait un bond de côté). Logique pure, testée dans tests/riding.test.js ;
 // le cavalier dans src/game/Player.js, les boutons dans src/ui/UI.js.
 
+import { fitness, recovery, gallopCap, responsiveness } from './horseStars.js'; // ⭐ ses étoiles se sentent en selle
+
+export { responsiveness };
+
 const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 
 /** Les allures qu'on choisit avec les boutons (le grand galop vient en plus, en « courant » : Maj, 🏃). */
@@ -34,8 +38,9 @@ export const TIRED_WALK = 10;
 export function rideSpeed(gait, { scale = 1, speedSkill = 0, tack = 1, bareback = false } = {}) {
   const base = GAIT_SPEED[gait] ?? 0;
   if (gait !== 'canter' && gait !== 'gallop') return base * scale;
-  // (au galop, le bonus reste sous 1,12 : 5,6 m/s, sous le seuil où le cheval réaliste repasserait au grand galop)
-  const bonus = Math.min(gait === 'canter' ? 1.12 : 1.3, (1 + speedSkill / 150) * (bareback ? 0.85 : tack));
+  // (au galop, le bonus reste sous 1,12 : 5,6 m/s, sous le seuil où le cheval réaliste repasserait au grand galop ;
+  // au grand galop, ses étoiles de vitesse le font plafonner plus haut)
+  const bonus = Math.min(gait === 'canter' ? 1.12 : gallopCap(speedSkill), (1 + speedSkill / 150) * (bareback ? 0.85 : tack));
   return base * scale * bonus;
 }
 
@@ -57,8 +62,10 @@ export function allowedGait(gait, a) {
  */
 export function rideEffort(a, gait, dt, trotK = 1, k = 1) {
   const n = a.needs;
-  // (k : pas échauffé, l'effort fatigue un peu plus — src/sim/warmup.js)
-  n.energy = clamp(n.energy - (GAIT_COST[gait] ?? 0) * (gait === 'trot' ? trotK : 1) * (gait === 'walk' || gait === 'halt' ? 1 : k) * dt);
+  const cost = GAIT_COST[gait] ?? 0;
+  // (k : pas échauffé, l'effort fatigue un peu plus — src/sim/warmup.js ; ses étoiles d'endurance : moins, et il
+  // récupère plus vite au pas — src/sim/horseStars.js)
+  n.energy = clamp(n.energy - cost * (cost > 0 ? fitness(a) : recovery(a)) * (gait === 'trot' ? trotK : 1) * (gait === 'walk' || gait === 'halt' ? 1 : k) * dt);
   if (gait === 'canter' || gait === 'gallop') {
     n.grooming = clamp(n.grooming - (gait === 'gallop' ? 0.08 : 0.04) * dt);
     n.thirst = clamp(n.thirst - (gait === 'gallop' ? 0.05 : 0.025) * dt);

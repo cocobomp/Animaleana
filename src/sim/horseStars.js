@@ -1,6 +1,7 @@
 // ⭐ Ses étoiles : ce que ton cheval a appris grâce à toi, de 0 à 5 étoiles par compétence (vitesse, endurance, saut,
 // dressage, obéissance). Une étoile de plus : fêtée une fois (⭐ au-dessus de lui, un petit mot), avec ce qu'elle
-// ouvre (1re étoile de saut : il ne pile plus devant les troncs ; 2e et 3e : les parcours du club et le grand).
+// ouvre (1re étoile de saut : il ne pile plus devant les troncs ; 2e et 3e : les parcours du club et le grand) ou
+// ce qu'elle change en selle (💪 il galope plus longtemps, 🎠 plus à l'écoute, 🏃 plus vite : STAR_FX).
 // Logique pure (tests/horseStars.test.js) ; le jeu : src/game/Game.js (starsTick), sa fiche : src/ui/panels.js.
 //
 // Dans l'animal (sauvegardé) : a.stars = { speed, endurance, jump, dressage, obedience }, les étoiles déjà fêtées.
@@ -72,3 +73,23 @@ export function newStars(a, max = Infinity) {
 
 /** Ce que la stars-ième étoile de id ouvre : 'noRefuse', 'club', 'grand' (saut), sinon null. */
 export const starUnlock = (id, stars) => UNLOCKS[id]?.[stars] ?? null;
+
+// Ses étoiles se sentent en selle (src/sim/riding.js, src/sim/trip.js, src/game/Player.js), par étoile :
+// endurance : l'effort coûte 8 % de moins (0,6 à 5 étoiles), il récupère 10 % plus vite au pas ; dressage : il prend
+// l'allure demandée 12 % plus vite ; vitesse : chaque étoile au-delà de 2 lève de 0,05 le plafond de son grand galop.
+// (l'obéissance, elle, espace déjà ses écarts et ses arrêts pour brouter : riding.js nextSpookIn, nextGrazeIn)
+export const STAR_FX = { fit: 0.08, recover: 0.1, aids: 0.12, fast: 0.05 };
+/** Ce qu'une étoile change en selle (texte st_perk_<clé>). */
+const PERKS = { endurance: 'fit', dressage: 'aids', speed: 'fast', obedience: 'calm' };
+
+/** Ce que coûte un effort (×) : 1 sans étoile d'endurance, 0,6 à 5 étoiles. */
+export const fitness = (a) => 1 - STAR_FX.fit * starsOf(skillOf(a, 'endurance'));
+/** Ce qu'il récupère au pas et à l'arrêt (×) : 1 sans étoile d'endurance, 1,5 à 5 étoiles. */
+export const recovery = (a) => 1 + STAR_FX.recover * starsOf(skillOf(a, 'endurance'));
+/** À quelle vitesse il prend l'allure demandée (×) : 1 sans étoile de dressage, 1,6 à 5 étoiles. */
+export const responsiveness = (a) => 1 + STAR_FX.aids * starsOf(skillOf(a, 'dressage'));
+/** Le plafond du bonus de vitesse au grand galop (compétence de vitesse 0-100) : 1,3, jusqu'à 1,45 à 5 étoiles. */
+export const gallopCap = (speedSkill) => 1.3 + STAR_FX.fast * Math.max(0, starsOf(speedSkill) - 2);
+
+/** Ce que son étoile de id change en selle (clé st_perk_<…>), sinon null ; rien pour un poulain qui ne se monte pas encore. */
+export const starPerk = (id, a) => (a && canRide(a).reason === 'tooYoung' ? null : PERKS[id] ?? null);

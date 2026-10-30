@@ -499,6 +499,7 @@ button.sv-card:hover { border-color: var(--primary); }
 .star-grp { background: none; border: 0; border-radius: 8px; padding: 4px 2px; min-height: 44px; font: inherit; color: #d79a00; cursor: pointer; }
 .star-grp.open { background: rgba(242, 184, 36, 0.18); }
 .star-hint { margin: 0 0 6px; }
+.star-perk { margin: 0 0 6px; } /* (✅ ce qu'elles changent en selle) */
 /* 🏅 Les Galops (src/ui/galops.js) */
 .gl-card { display: grid; gap: 6px; padding: 10px 12px; border-radius: 16px; background: #fff; border: 1px solid var(--line); margin-bottom: 8px; }
 .gl-card.open { border: 2px solid #f2b824; }

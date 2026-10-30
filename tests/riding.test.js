@@ -41,6 +41,12 @@ describe('les allures', () => {
     expect(rideSpeed('canter', { speedSkill: 90 })).toBeGreaterThan(rideSpeed('canter'));
   });
 
+  it('⭐ ses étoiles de vitesse : son grand galop va plus vite (au galop, toujours sous le seuil du grand galop)', () => {
+    expect(rideSpeed('gallop', { speedSkill: 100 })).toBeGreaterThan(rideSpeed('gallop', { speedSkill: 40 }));
+    expect(rideSpeed('gallop', { speedSkill: 85 })).toBeGreaterThan(rideSpeed('gallop', { speedSkill: 65 }));
+    expect(rideSpeed('canter', { speedSkill: 100 })).toBe(rideSpeed('canter', { speedSkill: 40 }));
+  });
+
   it('une allure de plus ou de moins, sans sortir de la liste', () => {
     expect(shiftGait('walk', 1)).toBe('trot');
     expect(shiftGait('canter', 1)).toBe('canter');
@@ -79,6 +85,20 @@ describe('la fatigue', () => {
     expect(run('trot', 60).grooming).toBe(90);
     // Une minute de galop ne vide pas le cheval : on peut galoper un bon moment.
     expect(run('canter', 60).energy).toBeGreaterThan(50);
+  });
+
+  it('⭐ ses étoiles d\'endurance : le galop le fatigue moins, il récupère plus vite au pas', () => {
+    const run = (g, s, endurance) => {
+      const a = horse();
+      a.needs.energy = 60;
+      a.skills.endurance = endurance;
+      rideEffort(a, g, s);
+      return a.needs.energy;
+    };
+    expect(run('canter', 60, 90)).toBeGreaterThan(run('canter', 60, 10));
+    expect(60 - run('canter', 60, 100)).toBeCloseTo((60 - run('canter', 60, 10)) * 0.6, 5); // (40 % plus longtemps)
+    expect(run('walk', 60, 90) - 60).toBeGreaterThan(run('walk', 60, 10) - 60);
+    expect(run('trot', 60, 90)).toBeGreaterThan(run('trot', 60, 10));
   });
 });
 

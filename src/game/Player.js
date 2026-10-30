@@ -10,7 +10,7 @@ import { rootToTorso, armIK } from './models/avatarRig.js';
 import { disposeModel } from './models/animalModel.js';
 import { navTarget } from './nav.js';
 import { tackEffects } from '../sim/gear.js';
-import { rideSpeed, allowedGait, rideEffort, nextSpookIn, nextGrazeIn, SPOOKY } from '../sim/riding.js'; // allures en balade libre
+import { rideSpeed, allowedGait, rideEffort, nextSpookIn, nextGrazeIn, SPOOKY, responsiveness } from '../sim/riding.js'; // allures en balade libre
 import { newPosting, postTick, isPosting, POST } from '../sim/posting.js'; // ⬆️ trot enlevé
 import { newSession, sessionTick, effortFactor } from '../sim/warmup.js'; // 🐢 détente et retour au calme
 import { PRAISE, newPraise, openPraise, coolJustDone } from '../sim/praise.js'; // 🤚 « Bravo ! » / « Rassure-le »
@@ -787,7 +787,7 @@ export class Player {
       if (mount.data.needs.energy < 10) max = 2;
     }
     const target = amount > 0.05 ? max * Math.min(1, amount) : 0;
-    this.speed += (target - this.speed) * Math.min(1, dt * (mount ? 2.5 : 8));
+    this.speed += (target - this.speed) * Math.min(1, dt * (!mount ? 8 : freeRide ? 2.5 * responsiveness(mount.data) : 2.5)); // (⭐ dressage : plus à l'écoute)
 
     if (amount > 0.05) {
       const want = firstPerson && !mount && !this.auto ? camYaw : Math.atan2(dir.x, dir.z);

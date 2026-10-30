@@ -371,6 +371,18 @@ describe('à cheval : l\'allure', () => {
     expect(canter.dog).toBe(trot.dog);
   });
 
+  it('⭐ ses étoiles d\'endurance : le galop le fatigue moins, le pas le repose mieux', () => {
+    const run = (gait, endurance) => {
+      const { trip, horse, dog } = ride(gait, 80);
+      horse.skills.endurance = endurance;
+      tickTrip(trip, [horse, dog], 1, { rng: rng() });
+      return horse.needs.energy;
+    };
+    expect(run('canter', 100) - run('canter', 10)).toBeCloseTo(RIDE_GAITS.canter.energy * 0.4, 5);
+    expect(run('walk', 100)).toBeGreaterThan(run('walk', 10));
+    expect(run('trot', 100)).toBe(run('trot', 10)); // (le trot du voyage ne fatigue pas en plus)
+  });
+
   it('le galop stresse un peu plus que le pas', () => {
     const stress = (gait) => {
       const { trip, horse, dog } = ride(gait);

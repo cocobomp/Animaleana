@@ -7,6 +7,7 @@
 // Les arrêts (aires de repos, étapes pour la nuit, embarquement…) sont placés sur cette ligne du temps.
 
 import { tickAnimal, applyCare } from './animal.js';
+import { fitness, recovery } from './horseStars.js'; // ⭐ ses étoiles d'endurance
 
 const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 
@@ -260,8 +261,11 @@ export function tickTrip(trip, animals, hours, { rng = Math.random } = {}) {
     }
     // À cheval, on est ensemble toute la journée.
     if (trip.mode === 'horse') a.needs.affection = clamp(a.needs.affection + 3 * step);
-    // L'allure du cheval monté : le galop le fatigue, le pas le repose un peu.
-    if (ridden && phase.kind === 'road') a.needs.energy = clamp(a.needs.energy - RIDE_GAITS[rideGait(trip)].energy * step);
+    // L'allure du cheval monté : le galop le fatigue, le pas le repose un peu (moins et mieux avec ses étoiles d'endurance).
+    if (ridden && phase.kind === 'road') {
+      const en = RIDE_GAITS[rideGait(trip)].energy;
+      a.needs.energy = clamp(a.needs.energy - en * (en > 0 ? fitness(a) : recovery(a)) * step);
+    }
     // Le filet à foin : il grignote en route.
     if (eatsHayNet(trip, a, phase.kind)) a.needs.hunger = clamp(a.needs.hunger + 2.5 * step);
     trip.comfort[a.id] = clamp((trip.comfort[a.id] ?? 80) - (phase.kind === 'hold' ? 6 : trip.mode === 'horse' ? 2 : 4) * step);

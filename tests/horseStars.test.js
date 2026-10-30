@@ -1,7 +1,9 @@
 // ⭐ Ses étoiles (src/sim/horseStars.js) : 0 à 5 étoiles par compétence, fêtées une seule fois, jamais pour un cheval
 // qu'on te confie ; la 1re étoile de saut dit vrai (plus de refus devant les troncs), les 2e et 3e ouvrent les parcours.
 import { describe, it, expect, beforeAll } from 'vitest';
-import { STAR_STEPS, STAR_SKILLS, starsOf, starsView, newStars, starUnlock, starHowKey } from '../src/sim/horseStars.js';
+import {
+  STAR_STEPS, STAR_SKILLS, starsOf, starsView, newStars, starUnlock, starHowKey, fitness, recovery, responsiveness, gallopCap, starPerk,
+} from '../src/sim/horseStars.js';
 import { JUMP_STAGES, refusalChance } from '../src/sim/activities.js';
 import { LOG } from '../src/sim/freeJumps.js';
 import { createAnimal } from '../src/sim/animal.js';
@@ -27,6 +29,28 @@ describe('ses étoiles', () => {
     expect([1, 2, 3].map((n) => starUnlock('jump', n))).toEqual(['noRefuse', 'club', 'grand']);
     expect(starUnlock('jump', 4)).toBeNull();
     expect(starUnlock('speed', 1)).toBeNull();
+  });
+
+  it('elles se sentent en selle : 💪 moins fatigué, 🎠 plus à l\'écoute, 🏃 un grand galop plus rapide', () => {
+    const a = horse();
+    a.skills.endurance = 10;
+    expect(fitness(a)).toBe(1);
+    expect(recovery(a)).toBe(1);
+    a.skills.endurance = 100;
+    expect(fitness(a)).toBeCloseTo(0.6, 5);
+    expect(recovery(a)).toBeCloseTo(1.5, 5);
+    expect(responsiveness(a)).toBe(1); // (dressage 10 : pas encore d'étoile)
+    a.skills.dressage = 100;
+    expect(responsiveness(a)).toBeCloseTo(1.6, 5);
+    expect([0, 20, 40, 64].map(gallopCap)).toEqual([1.3, 1.3, 1.3, 1.3]);
+    expect(gallopCap(100)).toBeCloseTo(1.45, 5);
+    expect(fitness({ needs: {} })).toBe(1); // (sans compétences : comme à sa naissance)
+  });
+
+  it('ce que chaque étoile change en selle (rien pour le saut, qui ouvre des parcours ; rien pour un poulain)', () => {
+    expect(['endurance', 'dressage', 'speed', 'obedience', 'jump'].map((id) => starPerk(id))).toEqual(['fit', 'aids', 'fast', 'calm', null]);
+    expect(starPerk('endurance', horse())).toBe('fit');
+    expect(starPerk('endurance', horse({ ageDays: 18 }))).toBeNull();
   });
 
   it('1re étoile de saut : il ne pile plus devant les troncs (vrai dans le jeu)', () => {
@@ -104,6 +128,7 @@ describe('ses étoiles', () => {
         for (const k of [`skill_${id}`, `st_how_${id}`]) expect(t(k), `${lang} ${k}`).not.toBe(k);
       }
       for (const k of ['noRefuse', 'club', 'grand']) expect(t(`st_unlock_${k}`), `${lang} ${k}`).not.toBe(`st_unlock_${k}`);
+      for (const k of ['fit', 'aids', 'fast', 'calm']) expect(t(`st_perk_${k}`), `${lang} ${k}`).not.toBe(`st_perk_${k}`);
       expect(t('st_new', { skill: 'S', name: 'Étoile', n: 2 })).toContain('Étoile');
       expect(t('st_next', { icon: '⤴️', skill: 'S', n: 1, how: '' })).not.toMatch(/1 points/);
     }
@@ -112,6 +137,8 @@ describe('ses étoiles', () => {
     expect(t('st_unlock_noRefuse', { g: 'f' })).toBe('Elle ne pile plus devant les troncs.');
     expect(t('st_unlock_noRefuse', { g: 'm' })).toBe('Il ne pile plus devant les troncs.');
     expect(t('st_new', { skill: 'Saut', name: 'Étoile', n: 2 })).toBe('⭐ Saut : Étoile a maintenant 2 étoiles !');
+    expect(t('st_perk_fit', { g: 'f' })).toBe('Elle galope plus longtemps et récupère plus vite au pas.');
+    expect(t('st_perk_aids', { g: 'm' })).toBe('Il change d\'allure dès que tu le demandes.');
   });
 });
 
@@ -140,7 +167,7 @@ describe('dans le jeu (src/game/Game.js starsTick)', () => {
     Game.prototype.starsTick.call(g);
     expect(toasts).toHaveLength(2);
     expect(toasts.find((x) => x.includes('Saut'))).toBe('⭐ Saut : Étoile a sa première étoile ! Elle ne pile plus devant les troncs.');
-    expect(toasts.find((x) => x.includes('Vitesse'))).toBe('⭐ Vitesse : Étoile a sa première étoile !');
+    expect(toasts.find((x) => x.includes('Vitesse'))).toBe('⭐ Vitesse : Étoile a sa première étoile ! Son grand galop va plus vite.');
     expect(emits).toEqual([['⭐', 4], ['⭐', 4]]);
   });
 
@@ -153,6 +180,25 @@ describe('dans le jeu (src/game/Game.js starsTick)', () => {
     a.skills.jump = 41;
     Game.prototype.starsTick.call(g);
     expect(toasts).toEqual(['⭐ Saut : Étoile a maintenant 2 étoiles !']);
+    a.skills.endurance = 25; // (ni ce qu'elle change en selle)
+    Game.prototype.starsTick.call(g);
+    expect(toasts[1]).toBe('⭐ Endurance : Étoile a sa première étoile !');
+  });
+
+  it('une étoile d\'endurance, de dressage, d\'obéissance : ce qu\'elle change en selle (au féminin pour une jument)', () => {
+    const a = horse({ id: 'h5' });
+    const toasts = [];
+    const g = { profile: { animals: [a] }, ui: { toast: (m) => toasts.push(m) }, entities: new Map() };
+    Game.prototype.starsTick.call(g);
+    for (const id of ['endurance', 'dressage', 'obedience']) {
+      a.skills[id] = 41;
+      Game.prototype.starsTick.call(g);
+    }
+    expect(toasts).toEqual([
+      '⭐ Endurance : Étoile a maintenant 2 étoiles ! Elle galope plus longtemps et récupère plus vite au pas.',
+      '⭐ Dressage : Étoile a maintenant 2 étoiles ! Elle change d\'allure dès que tu le demandes.',
+      '⭐ Obéissance : Étoile a maintenant 2 étoiles ! Elle fait moins d\'écarts et broute moins en balade.',
+    ]);
   });
 
   it('deux étoiles d\'un coup : une seule notée par petit mot ; l\'autre reste à fêter, même après avoir quitté', () => {

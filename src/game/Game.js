@@ -59,7 +59,7 @@ import { galopLevel, nextGalop, canTakeExam } from '../sim/galops.js'; // 🏅 l
 import { CALL, answerCall, cameWhenCalled } from '../sim/horseCall.js'; // 📣 appeler ton cheval
 import { tapPost, postMilestone } from '../sim/posting.js'; // ⬆️ trot enlevé
 import { todayChallenge, challengeJustDone, CHALLENGE_REWARD } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
-import { newStars, starUnlock } from '../sim/horseStars.js'; // ⭐ ses étoiles
+import { newStars, starUnlock, starPerk } from '../sim/horseStars.js'; // ⭐ ses étoiles
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
   unsaddle, saddleUp, unbridle, bridleUp,
@@ -968,7 +968,9 @@ export class Game {
     if (!s) return;
     const { id, stars } = s;
     const key = canRide(a).reason === 'tooYoung' ? null : starUnlock(id, stars); // (un poulain ne se monte pas encore)
-    const text = t('st_new', { skill: t(`skill_${id}`), name: a.name, n: stars }) + (key ? ` ${t(`st_unlock_${key}`, { g: a.sex })}` : '');
+    const perk = key ? null : starPerk(id, a); // (ce qu'elle change en selle : 💪 🎠 🏃 🎓)
+    const text = t('st_new', { skill: t(`skill_${id}`), name: a.name, n: stars }) + (key ? ` ${t(`st_unlock_${key}`, { g: a.sex })}` : '')
+      + (perk ? ` ${t(`st_perk_${perk}`, { g: a.sex })}` : '');
     this.ui.toast(text, 6000);
     this.entities.get(a.id)?.emit('⭐', 4);
     audio.ui('ok');

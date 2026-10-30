@@ -223,6 +223,15 @@ les troncs. » : vrai, à 20 en saut le refus devant un tronc tombe à 0 ; la 2e
 La première fois, une vieille partie note ses étoiles sans rien dire ; une étoile n'est fêtée qu'une fois. Seulement
 tes chevaux.
 
+Elles se sentent en selle (`STAR_FX`). 💪 Chaque étoile d'endurance : l'effort lui coûte 8 % de moins (à 5 étoiles, le
+galop 40 % de moins : il galope bien plus longtemps avant « il ne veut plus galoper », en balade comme en voyage) et
+il récupère 10 % plus vite au pas. 🎠 Chaque étoile de dressage : il prend l'allure demandée 12 % plus vite (il
+accélère et s'arrête plus tôt). 🏃 La vitesse le faisait déjà galoper plus vite jusqu'à 2 étoiles ; au-delà, chaque
+étoile lève le plafond de son grand galop (de 1,3 à 1,45 × : le chrono du cross aussi). 🎓 L'obéissance espaçait déjà
+ses écarts et ses arrêts pour brouter. Le petit mot le dit (« ⭐ Endurance : Étoile a maintenant 2 étoiles ! Elle
+galope plus longtemps et récupère plus vite au pas. »), et dans sa fiche, un groupe touché qui a au moins une étoile
+ajoute « ✅ » et ce qu'elle change. Rien pour un poulain qui ne se monte pas encore.
+
 ### La ration du cheval (0.5, `src/ui/minigames/ration.js`)
 « Nourrir » le cheval est un mini-jeu en deux temps, comme en vrai : d'abord bien remplir son filet à foin (il mange
 du foin presque toute la journée : au moins 75 %), puis une petite mesure de granulés dans le seau (la zone verte,

@@ -133,7 +133,7 @@ export class HorseBreath {
           e.scaleGroup.updateWorldMatrix(true, false);
           e.scaleGroup.localToWorld(_v.set((Math.random() - 0.5) * 0.1, md.saddleY, tr.side * 0.4 * md.dims.L));
           const sc = e.scale ?? 1;
-          this.spawn(_v, _d.set(0, STEAM.rise * sc, 0), 0.2 * sc, 0.55 * sc, STEAM.life, STEAM.alpha * steam, 0, 0);
+          this.spawn(_v, _d.set(0, STEAM.rise * sc, 0), 0.2 * sc, 0.55 * sc, STEAM.life, STEAM.alpha * Math.min(1, steam / STEAM.full), 0, 0);
         }
       }
     }

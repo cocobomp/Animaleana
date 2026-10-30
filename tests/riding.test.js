@@ -164,4 +164,47 @@ describe('la sueur', () => {
     applyCare(a, 'brush', 1);
     expect(a.sweat).toBeUndefined();
   });
+
+  it('en selle, au rythme du jeu : 30 s de galop (💨) le font fumer dans le froid, encore un peu après le retour au calme', async () => {
+    const { rideEffort, GAIT_SWEAT } = await import('../src/sim/riding.js');
+    const { createAnimal, tickAnimal } = await import('../src/sim/animal.js');
+    const { seeded } = await import('../src/sim/rng.js');
+    const { minutesPerSecond } = await import('../src/sim/time.js');
+    const { steamOf } = await import('../src/sim/breath.js');
+    const { WARMUP } = await import('../src/sim/warmup.js');
+    // (comme le jeu : rideEffort à chaque image, tickAnimal toutes les 0,5 s ; à pied après la descente)
+    const ride = (a, gait, secs, speed, ridden = true) => {
+      let acc = 0;
+      for (let k = 0; k < secs * 30; k++) {
+        if (ridden) rideEffort(a, gait, 1 / 30);
+        acc += 1 / 30;
+        if (acc >= 0.5) {
+          tickAnimal(a, (acc * minutesPerSecond(speed)) / 60, { ridden, rng: () => 0.99 });
+          acc = 0;
+        }
+      }
+    };
+    for (const speed of ['slow', 'normal', 'fast']) {
+      const a = createAnimal({ species: 'horse', sex: 'f', ageDays: 2000, rng: seeded('vapeur') });
+      for (const n of Object.keys(a.needs)) a.needs[n] = 95;
+      ride(a, 'canter', 30, speed);
+      expect(a.sweat, speed).toBeCloseTo(30 * GAIT_SWEAT.canter, 5); // (la vitesse du temps n'y change rien)
+      expect(steamOf(a.sweat, 3), speed).toBeGreaterThan(0);
+      ride(a, 'walk', WARMUP.cool, speed); // (le retour au calme : elle sèche un peu)
+      expect(a.sweat, speed).toBeLessThan(0.3);
+      expect(steamOf(a.sweat, 3), speed).toBeGreaterThan(0);
+      ride(a, 'halt', 2, speed, false); // (pied à terre : il fume encore un instant)
+      expect(steamOf(a.sweat, 3), speed).toBeGreaterThan(0);
+      ride(a, 'halt', 120, speed, false); // (puis il sèche au repos)
+      expect(steamOf(a.sweat, 3), speed).toBe(0);
+    }
+    // Au pas, la sueur ne fait que baisser ; trotter longtemps finit par le faire transpirer un peu.
+    const b = { needs: { energy: 90, grooming: 90, thirst: 90 } };
+    rideEffort(b, 'walk', 10);
+    expect(b.sweat).toBeUndefined();
+    rideEffort(b, 'trot', 60);
+    expect(b.sweat).toBeCloseTo(0.18, 5);
+    rideEffort(b, 'halt', 1000);
+    expect(b.sweat).toBe(0);
+  });
 });

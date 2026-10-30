@@ -345,6 +345,24 @@ describe('friandise : n friandises, au bon moment, puis « C\'est bon ! »', () 
     expect(dog.opts.out).toBeUndefined();
   });
 
+  it('une jument, une lapine : « Attends qu\'elle soit calme… », au début comme entre deux friandises', () => {
+    const mare = fakeCtx(animal('horse', { sex: 'f', known: { treat: true } }));
+    const game = food.treatGame(mare);
+    expect(mare.hints[0].text).toBe(food.nb('Main bien à plat ! Attends qu\'elle soit calme… 🍎🍎🍎'));
+    run(game, mare, 600, () => game.peek().state === 'calm');
+    mare.buttons[0].opts.onTap();
+    run(game, mare, 600, () => game.peek().state !== 'eat');
+    expect(mare.hints.map((x) => x.text)).toContain(food.nb('Main bien à plat ! Attends qu\'elle soit calme…'));
+    expect(mare.hints.map((x) => x.text).join(' ')).not.toMatch(/qu'il soit/);
+    const doe = fakeCtx(animal('rabbit', { sex: 'f' }));
+    food.treatGame(doe);
+    expect(doe.hints[0].text).toBe(food.nb(`${t('mg_treat_hint', { g: 'f' })} 🥕`));
+    expect(t('mg_treat_hint', { g: 'f' })).toBe('Attends qu\'elle soit bien sage…');
+    const stallion = fakeCtx(animal('horse', { sex: 'm', known: { treat: true } }));
+    food.treatGame(stallion);
+    expect(stallion.hints[0].text).toBe(food.nb('Main bien à plat ! Attends qu\'il soit calme… 🍎🍎🍎'));
+  });
+
   it('un cheval qu\'on te confie : un seul bouton 🍎 et la consigne habituelle, rien à découvrir', () => {
     for (const o of [{ client: true }, { guest: true }]) {
       const ctx = fakeCtx(animal('horse', o));

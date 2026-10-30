@@ -19,6 +19,9 @@ export const GAIT_SPEED = { halt: 0, walk: 1.6, trot: 3, canter: 5, gallop: 8 };
 /** Énergie dépensée par seconde de monte (négatif : il récupère). */
 export const GAIT_COST = { halt: -0.03, walk: -0.01, trot: 0.03, canter: 0.12, gallop: 0.3 };
 
+/** Sueur par seconde de monte (négatif : elle sèche un peu, au pas et à l'arrêt). */
+export const GAIT_SWEAT = { halt: -0.004, walk: -0.004, trot: 0.003, canter: 0.01, gallop: 0.02 };
+
 /** En dessous de cette énergie, il ne veut plus galoper (il reste au trot) ; en dessous de TIRED_WALK, au pas. */
 export const CANTER_MIN = 25;
 export const TIRED_WALK = 10;
@@ -60,10 +63,12 @@ export function rideEffort(a, gait, dt, trotK = 1, k = 1) {
     n.grooming = clamp(n.grooming - (gait === 'gallop' ? 0.08 : 0.04) * dt);
     n.thirst = clamp(n.thirst - (gait === 'gallop' ? 0.05 : 0.025) * dt);
   }
-  // La sueur (0 à 1) : sa robe mouillée se voit (src/game/models/horseCoat.js hSweat) ; elle sèche au repos
-  // (src/sim/animal.js tickAnimal), le pansage ou la douche l'enlèvent.
-  const sweat = { trot: 0.003, canter: 0.01, gallop: 0.02 }[gait];
-  if (sweat) a.sweat = Math.min(1, (a.sweat ?? 0) + sweat * dt);
+  // La sueur (0 à 1) : sa robe mouillée se voit (src/game/models/horseCoat.js hSweat). En selle, elle sèche un peu au
+  // pas (le retour au calme), en secondes : la vitesse du temps n'y change rien ; descendu, elle sèche au repos
+  // (src/sim/animal.js tickAnimal) ; le pansage ou la douche l'enlèvent.
+  const sweat = GAIT_SWEAT[gait] ?? 0;
+  if (sweat > 0) a.sweat = Math.min(1, (a.sweat ?? 0) + sweat * dt);
+  else if (a.sweat) a.sweat = Math.max(0, a.sweat + sweat * dt);
 }
 
 /** Les allures où un écart peut arriver (le cheval avance assez vite pour être surpris). */

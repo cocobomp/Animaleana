@@ -168,6 +168,14 @@ describe('la buée en 3D', () => {
     expect(fx.live).toBeGreaterThan(0);
     const back = fx.parts.find((p) => p.age < p.life).s.position;
     expect(back.y).toBeGreaterThan(1.2);
+    // (un peu de sueur, après 30 s de galop : la vapeur se voit déjà bien, plus pâle qu'en grande sueur)
+    const light = new HorseBreath(new THREE.Scene());
+    const l = horse();
+    l.data.sweat = 0.3;
+    run(light, fakeGame(2), [l], 1, 0);
+    const a = (fx2) => Math.max(...fx2.parts.map((p) => p.alpha ?? 0));
+    expect(a(light)).toBeGreaterThanOrEqual(0.25);
+    expect(a(light)).toBeLessThan(a(fx));
     const dry = new HorseBreath(new THREE.Scene());
     run(dry, fakeGame(2), [horse()], 1, 0);
     expect(dry.live).toBe(0);

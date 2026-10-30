@@ -129,8 +129,8 @@ export function rationGame(ctx) {
         ctx.progress(grain);
         if (bits.length < 120 && Math.random() < dt * 30) bits.push({ dx: (Math.random() - 0.5) * 0.8, k: Math.random() });
         if (grain >= RATION.colicAt) ctx.hint(t('mg_ration_tooMuch', { name, g: a?.sex }), 'warn');
-        else if (grain > RATION.grainHi) ctx.hint(t('mg_stop'), 'warn');
-        else if (grain >= RATION.grainLo) ctx.hint(t('mg_nowStop'), 'good');
+        else if (grain > grainHi) ctx.hint(t('mg_stop'), 'warn');
+        else if (grain >= grainLo) ctx.hint(t('mg_nowStop'), 'good');
         if (grain >= 1) {
           pouring = false;
           finish();
@@ -145,7 +145,7 @@ export function rationGame(ctx) {
       g.fillRect(v.x0, 300, v.w, v.y1 - 300);
       drawHorseHead(g, col, 0, eat > 0 ? Math.sin(ctx.time * 8) * 0.3 + 0.3 : 0, ctx.time);
       drawNet(g, hay, stage === 'hay');
-      drawBucket(g, grain, bits, stage === 'grain');
+      drawBucket(g, grain, bits, stage === 'grain', grainLo, grainHi);
       // le sac (granulés) au-dessus du seau quand on verse
       if (stage === 'grain' && pouring) {
         g.save();
@@ -193,13 +193,13 @@ function drawNet(g, level, active) {
   g.restore();
 }
 
-function drawBucket(g, level, bits, active) {
+function drawBucket(g, level, bits, active, lo = RATION.grainLo, hi = RATION.grainHi) {
   const { x, y, w, h } = BUCKET;
   g.save();
-  // la zone juste (une petite mesure, vers le fond)
+  // la zone juste (une petite mesure, vers le fond ; un jour de repos, plus petite encore)
   if (active) {
     g.fillStyle = 'rgba(63, 174, 98, 0.25)';
-    g.fillRect(x - w / 2 + 6, y - h * RATION.grainHi, w - 12, h * (RATION.grainHi - RATION.grainLo));
+    g.fillRect(x - w / 2 + 6, y - h * hi, w - 12, h * (hi - lo));
     // (au-dessus de ce trait rouge : trop, les coliques)
     g.strokeStyle = 'rgba(200, 70, 60, 0.85)';
     g.lineWidth = 2;

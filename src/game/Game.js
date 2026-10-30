@@ -2357,7 +2357,6 @@ export class Game {
         const s0 = bondStage(a);
         a.bond = Math.min(100, (a.bond ?? 0) + WARMUP.coolBond);
         a.needs.affection = Math.min(100, (a.needs.affection ?? 50) + WARMUP.coolAffection);
-        a.sweat = (a.sweat ?? 0) * 0.5; // (il a séché un peu en marchant)
         if (!a.client && !a.guest) addStat(this.profile, 'cooldowns');
         this.remember(a, 'firstCool');
         e.emit('😌', 2);

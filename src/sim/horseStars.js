@@ -6,6 +6,7 @@
 // Dans l'animal (sauvegardé) : a.stars = { speed, endurance, jump, dressage, obedience }, les étoiles déjà fêtées.
 
 import { keepsMemories } from './memories.js'; // (tes chevaux : pas ceux qu'on te confie)
+import { canRide } from './animal.js';
 
 /** Les paliers (compétence de 0 à 100) : les 3 premiers sont ceux des parcours de saut (src/sim/activities.js JUMP_STAGES). */
 export const STAR_STEPS = [20, 40, 65, 85, 100];
@@ -32,6 +33,15 @@ export function starsView(a) {
     const stars = starsOf(v);
     return { id, icon, stars, toNext: stars < STAR_STEPS.length ? STAR_STEPS[stars] - v : 0 };
   });
+}
+
+/**
+ * Le conseil pour l'étoile suivante (une clé de texte) : un poulain trop jeune pour être monté n'a pas de conseil
+ * d'équitation (r_tooYoung), sauf l'obéissance, qui se travaille à pied (en liberté, tout en douceur).
+ */
+export function starHowKey(a, id) {
+  if (canRide(a).reason !== 'tooYoung') return `st_how_${id}`;
+  return id === 'obedience' ? 'st_how_obedience_young' : 'r_tooYoung';
 }
 
 /**

@@ -1,7 +1,7 @@
 // ⭐ Ses étoiles (src/sim/horseStars.js) : 0 à 5 étoiles par compétence, fêtées une seule fois, jamais pour un cheval
 // qu'on te confie ; la 1re étoile de saut dit vrai (plus de refus devant les troncs), les 2e et 3e ouvrent les parcours.
 import { describe, it, expect, beforeAll } from 'vitest';
-import { STAR_STEPS, STAR_SKILLS, starsOf, starsView, newStars, starUnlock } from '../src/sim/horseStars.js';
+import { STAR_STEPS, STAR_SKILLS, starsOf, starsView, newStars, starUnlock, starHowKey } from '../src/sim/horseStars.js';
 import { JUMP_STAGES, refusalChance } from '../src/sim/activities.js';
 import { LOG } from '../src/sim/freeJumps.js';
 import { createAnimal } from '../src/sim/animal.js';
@@ -76,6 +76,22 @@ describe('ses étoiles', () => {
     expect(old.stars.dressage).toBe(0);
     old.skills.dressage = 22;
     expect(newStars(old)).toEqual([{ id: 'dressage', stars: 1 }]);
+  });
+
+  it('un poulain : pas de conseil d\'équitation, mais l\'obéissance se travaille à pied (en liberté, en douceur)', () => {
+    const { t, setLang } = i18n;
+    const foal = horse({ ageDays: 18 }); // (1 an et demi)
+    expect(starHowKey(foal, 'obedience')).toBe('st_how_obedience_young');
+    for (const id of ['speed', 'endurance', 'jump', 'dressage']) expect(starHowKey(foal, id)).toBe('r_tooYoung');
+    for (const { id } of STAR_SKILLS) expect(starHowKey(horse(), id)).toBe(`st_how_${id}`);
+    expect(starHowKey(horse({ pregnant: { due: 40 } }), 'speed')).toBe('st_how_speed'); // (pleine : elle le sera de nouveau)
+    for (const lang of ['fr', 'en']) {
+      setLang(lang);
+      expect(t('st_how_obedience_young'), lang).not.toBe('st_how_obedience_young');
+    }
+    setLang('fr');
+    expect(t('st_how_obedience_young')).toContain('liberté');
+    expect(t(starHowKey(foal, 'jump'), { name: 'Caramel', g: 'f' })).toBe('Caramel est trop jeune pour être montée.');
   });
 
   it('les textes existent en français et en anglais (au féminin aussi, au singulier)', () => {

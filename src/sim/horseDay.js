@@ -1,9 +1,14 @@
 // La journée de ton cheval : la routine d'un vrai propriétaire, chaque jour de jeu. 🌅 le foin du matin (avant 14 h),
 // 🌇 le foin du soir (à partir de 14 h), 💧 l'eau, 🪮 le pansage, 🏇 le faire travailler (monter, longe, liberté, une
 // activité) et ❤️ un câlin. Tout coché : une journée parfaite (le lien et le bonheur montent, stat 'perfectDays').
+// Un poulain trop jeune pour être monté, ou une jument pleine, n'a pas de 🏇 à cocher (sa bulle ne le demande pas non
+// plus, src/sim/horseWish.js).
 // Logique pure (tests/horseDay.test.js) ; le jeu : src/game/Game.js (markHorseDay), la fiche : src/ui/panels.js.
 //
 // Dans l'animal (sauvegardé) : a.today = { day, done: [ids], perfect }.
+
+import { ageYears } from './animal.js';
+import { SPECIES } from './species.js';
 
 export const DAY_TASKS = [
   { id: 'feedAm', icon: '🌅', kinds: ['feed'], before: 14 },
@@ -13,6 +18,10 @@ export const DAY_TASKS = [
   { id: 'work', icon: '🏇', kinds: ['ride', 'lunge', 'liberty', 'activity'] },
   { id: 'pet', icon: '❤️', kinds: ['pet'] },
 ];
+const REST_TASKS = DAY_TASKS.filter((x) => x.id !== 'work');
+
+/** Ses tâches du jour : sans le travail pour un poulain trop jeune pour être monté, ou une jument pleine. */
+export const dayTasks = (a) => (a.pregnant || ageYears(a) < SPECIES.horse.rideYears ? REST_TASKS : DAY_TASKS);
 
 /** La journée du cheval (remise à zéro le jour suivant). */
 export function horseToday(a, day) {
@@ -37,7 +46,7 @@ export function markHorseDay(a, kind, hour, day) {
     break; // (un repas compte pour un seul créneau)
   }
   let perfect = false;
-  if (!today.perfect && DAY_TASKS.every((x) => today.done.includes(x.id))) {
+  if (!today.perfect && dayTasks(a).every((x) => today.done.includes(x.id))) {
     today.perfect = true;
     perfect = true;
     a.bond = Math.min(100, (a.bond ?? 5) + 3);
@@ -49,7 +58,7 @@ export function markHorseDay(a, kind, hour, day) {
 /** Ce qu'il reste à faire aujourd'hui (les tâches dont l'heure est passée comprises : on peut toujours les voir). */
 export function horseDayView(a, day, hour) {
   const today = horseToday(a, day);
-  return DAY_TASKS.map((x) => ({
+  return dayTasks(a).map((x) => ({
     id: x.id,
     icon: x.icon,
     done: today.done.includes(x.id),

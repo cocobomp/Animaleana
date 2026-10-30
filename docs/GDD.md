@@ -144,11 +144,11 @@ n'importe lequel). Le carnet du cavalier les compte.
 ### La journée de ton cheval (0.5, `src/sim/horseDay.js`)
 La routine d'un vrai propriétaire, chaque jour de jeu, dans sa fiche (« ☀️ Sa journée ») : 🌅 foin du matin (avant
 14 h), 🌇 foin du soir (dès 14 h), 💧 eau fraîche, 🪮 pansage, 🏇 le faire travailler (monter, longe, liberté, une
-activité) et ❤️ un câlin. Tout coché : « 🌟 Journée parfaite » (lien +3, affection +10, de l'XP). Quête du thème
-« 🐴 Ton cheval » : trois journées parfaites.
+activité) et ❤️ un câlin ; un poulain trop jeune pour être monté, ou une jument pleine, n'a pas de 🏇. Tout coché :
+« 🌟 Journée parfaite » (lien +3, affection +10, de l'XP). Quête du thème « 🐴 Ton cheval » : trois journées parfaites.
 « 🫧 Il te demande… » (`src/sim/horseWish.js`, `src/game/wishBubble.js`) : à 10 m de ton cheval, une petite bulle
 blanche flotte au-dessus de sa tête, sous son nom, avec une seule icône, la prochaine chose de sa journée : 🌾 (il a
-faim, ou le foin du matin manque avant 14 h, ou celui du soir dès 16 h), 💧, 🪮, 🏇 (de 8 h à 19 h, s'il peut être
+faim, ou le foin du matin manque avant 14 h, ou celui du soir dès 14 h), 💧, 🪮, 🏇 (de 8 h à 19 h, s'il peut être
 monté), puis ❤️. Le soin fait, la bulle éclate en ✨ et la suivante vient une seconde après ; tout fait, plus de bulle.
 Malade, boiteux ou endormi, son 🤒, son 🩹 ou son 💤 passent avant ; triste, il montre sa bulle plutôt que 😢 (c'est
 comme ça qu'on le console). Pas la nuit (21 h-6 h), ni sur son dos, ni pendant une activité, ni pour un cheval confié,
@@ -183,7 +183,8 @@ toute la pâte. Raté (moins de 2 étoiles) : ça ne compte pas, on recommence (
 Il s'est roulé, ou il n'a pas été pansé depuis longtemps (pansage sous 55) : de la terre sur les jambes et des taches
 brunes sur le corps (plus il est sale, plus il y en a) ; le pansage les enlève. Bien pansé (85 et plus), sa robe est
 plus satinée ; crotté, elle est terne. Après un galop (ou un long trot), il transpire : son poil mouillé fonce par
-plaques (la sueur monte avec l'effort, sèche en une heure de jeu environ ; le pansage ou la douche l'enlèvent).
+plaques (la sueur monte avec l'effort ; en selle, elle sèche un peu au pas, et au repos en une heure de jeu environ ;
+le pansage ou la douche l'enlèvent).
 Sous la pluie, dehors et sans couverture imperméable, il est mouillé de la même façon ; au box ou couvert, il reste sec.
 
 ### Ses oreilles (0.5, `src/sim/horseEars.js`)
@@ -195,7 +196,8 @@ faim : elle te guette… ». (Question du Galop 1.)
 ### Ses étoiles (0.5, `src/sim/horseStars.js`)
 Dans sa fiche, sous la ligne des oreilles : 🏃 vitesse, 💪 endurance, ⤴️ saut, 🎩 dressage, 👂 obéissance, de 0 à 5
 étoiles chacune (paliers 20, 40, 65, 85 et 100 ; les trois premiers sont ceux des parcours de saut). Toucher un groupe
-dit ce qui manque (« ⤴️ Saut : encore 6 points pour l'étoile suivante. Saute des troncs, prends des leçons. »). Une
+dit ce qui manque (« ⤴️ Saut : encore 6 points pour l'étoile suivante. Saute des troncs, prends des leçons. » ; un
+poulain : « trop jeune pour être monté », sauf l'obéissance : « Un peu de travail en liberté, tout en douceur. »). Une
 étoile de plus, d'où qu'elle vienne (tronc sauté, leçon, longe, entraînement, longue balade) : des ⭐ s'envolent du
 cheval, deux notes et un petit mot, un à la fois (« ⭐ Saut : Étoile a sa première étoile ! Elle ne pile plus devant
 les troncs. » : vrai, à 20 en saut le refus devant un tronc tombe à 0 ; la 2e ouvre le parcours du club, la 3e le grand).
@@ -240,7 +242,7 @@ sans étriers), on trotte assis : le jeu le dit une fois.
 Comme au club, en balade libre : on commence au pas (20 secondes de jeu : ses muscles s'échauffent) avant de trotter ;
 trotter ou galoper tout de suite, le jeu le dit gentiment (les trois premières fois) et l'effort le fatigue un peu plus
 (×1,25 au trot et au galop) ; bien échauffé, un petit « ✅ ». À la fin, après au moins 4 secondes de galop, on finit au
-pas (15 secondes) avant de descendre : « 😌 Retour au calme » (lien +0,5, affection +6, sa sueur sèche de moitié,
+pas (15 secondes) avant de descendre : « 😌 Retour au calme » (lien +0,5, affection +6, il a séché un peu en marchant,
 « Retours au calme au pas » dans le carnet du cavalier) ; descendu juste après le galop, le jeu dit qu'il est encore
 essoufflé. Pas pendant une activité ni un voyage (ils mènent le cheval).
 
@@ -249,7 +251,8 @@ Quand il fait froid (10 °C et moins, un peu plus visible sous la pluie, la neig
 son souffle : deux petites bouffées blanches sortent de ses naseaux, vers le bas et l'avant, à chaque expiration (un
 cheval respire seulement par le nez). Au repos, une toutes les 5 secondes (12 respirations par minute, moins en
 dormant, au box aussi : l'écurie n'est pas chauffée) ; juste après un galop, presque une par seconde, puis de moins
-en moins pendant le retour au calme au pas. Un cheval en sueur fume un peu du dos, de moins en moins en séchant. La
+en moins pendant le retour au calme au pas. Un cheval en sueur (30 secondes de galop suffisent) fume un peu du dos,
+de moins en moins en séchant, encore un instant après qu'on est descendu. La
 première fois, tout près : « 🌬️ Il fait froid : regarde la buée quand Étoile souffle ! ». Les 3 chevaux les plus
 proches de la caméra seulement (à 15 m), 24 bouffées au plus.
 

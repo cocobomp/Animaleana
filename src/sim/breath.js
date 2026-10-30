@@ -13,8 +13,11 @@
  */
 export const BREATH_FX = { warm: 10, cold: 2, humid: 0.2, near: 15, max: 3, pool: 24, exhaleAt: 1.24, tip: 0.35 };
 
-/** La vapeur d'un cheval en sueur : warm → cold (°C), min : en dessous, rien ; toutes les every s, montée, durée, opacité. */
-export const STEAM = { warm: 15, cold: 5, min: 0.15, every: 0.35, rise: 0.25, life: 2, alpha: 0.5 };
+/**
+ * La vapeur d'un cheval en sueur : warm → cold (°C), min : en dessous, rien ; toutes les every s, montée, durée, opacité
+ * (pleine dès full : un galop de 30 s, 0,3 de sueur, se voit déjà bien).
+ */
+export const STEAM = { warm: 15, cold: 5, min: 0.15, every: 0.35, rise: 0.25, life: 2, alpha: 0.5, full: 0.5 };
 
 const HUMID = ['rain', 'storm', 'snow', 'fog'];
 

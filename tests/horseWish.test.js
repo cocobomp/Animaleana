@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { createAnimal } from '../src/sim/animal.js';
 import { seeded } from '../src/sim/rng.js';
-import { markHorseDay } from '../src/sim/horseDay.js';
+import { markHorseDay, horseDayView } from '../src/sim/horseDay.js';
 import { wishOf, wishDone, ICONS } from '../src/sim/horseWish.js';
 
 const horse = (sex = 'f') => {
@@ -35,11 +35,12 @@ describe('ce que ton cheval te demande', () => {
     expect(at(a, 17)).toBe(null);
   });
 
-  it('le foin : raté le matin, il ne le réclame pas à 15 h ; le soir à partir de 16 h ; affamé, toujours', () => {
+  it('le foin : le matin jusqu\'à 14 h, le soir dès 14 h (comme dans sa journée) ; affamé, toujours', () => {
     const a = horse();
-    expect(at(a, 15).id).not.toBe('hay'); // (foin du matin raté, pas faim)
+    expect(at(a, 13.9)).toMatchObject({ id: 'hay', task: 'feedAm' });
+    expect(at(a, 14)).toMatchObject({ id: 'hay', task: 'feedPm' }); // (foin du matin raté : celui du soir)
+    markHorseDay(a, 'feed', 14.5, DAY);
     expect(at(a, 15).id).toBe('water');
-    expect(at(a, 17)).toMatchObject({ id: 'hay', task: 'feedPm' });
     const b = horse();
     markHorseDay(b, 'feed', 8, DAY);
     b.needs.hunger = 30;
@@ -75,6 +76,34 @@ describe('ce que ton cheval te demande', () => {
     expect(at(a, 10)).toBe(null);
     a.needs.affection = 70;
     expect(at(a, 10)).toMatchObject({ id: 'pet' });
+  });
+
+  it('de 14 h à 16 h, tout le reste fait : sa bulle demande le foin du soir que sa journée attend', () => {
+    const a = horse();
+    for (const [k, h] of [['feed', 8], ['water', 9], ['brush', 10], ['ride', 11], ['pet', 12]]) markHorseDay(a, k, h, DAY);
+    expect(at(a, 13.5)).toBe(null);
+    const pm = horseDayView(a, DAY, 14.7).find((x) => x.id === 'feedPm');
+    expect(pm).toMatchObject({ done: false, later: false });
+    expect(at(a, 14.7)).toMatchObject({ id: 'hay', task: 'feedPm' });
+    expect(markHorseDay(a, 'feed', 14.7, DAY)).toEqual({ added: ['feedPm'], perfect: true });
+    expect(at(a, 15)).toBe(null);
+  });
+
+  it('un poulain (pas de travail à cocher) : sa bulle s\'en va quand sa journée est parfaite', () => {
+    const a = createAnimal({ species: 'horse', sex: 'm', ageDays: 18, rng: seeded('poulain') }); // (1 an et demi)
+    Object.assign(a.needs, { hunger: 80, thirst: 80, energy: 80, affection: 60 });
+    const follow = (hour) => {
+      const seen = [];
+      for (let w = at(a, hour); w && seen.length < 6; w = at(a, hour)) {
+        seen.push(w.task);
+        markHorseDay(a, { hay: 'feed', water: 'water', brush: 'brush', pet: 'pet' }[w.id], hour, DAY);
+      }
+      return seen;
+    };
+    expect(follow(10)).toEqual(['feedAm', 'water', 'brush', 'pet']); // (pas de 🏇 : trop jeune pour être monté)
+    expect(follow(15)).toEqual(['feedPm']);
+    expect(a.today.perfect).toBe(true);
+    expect(horseDayView(a, DAY, 15).every((x) => x.done)).toBe(true);
   });
 
   it('une jument pleine ne se monte pas : pas de travail, un câlin', () => {

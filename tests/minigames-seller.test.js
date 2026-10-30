@@ -186,6 +186,12 @@ describe('desseller, reseller', () => {
     expect(unsaddle(horse())).toBe(false); // (pas de selle : rien à faire)
   });
 
+  it('« Desseller » dans son menu : au pré, elle pourra se rouler (une jument), il (un cheval)', async () => {
+    const { ta } = await import('../src/i18n.js');
+    expect(ta('unsaddleHint', horse())).toBe('Selle et filet rangés : au pré, elle pourra se rouler');
+    expect(ta('unsaddleHint', { ...horse(), sex: 'm' })).toBe('Selle et filet rangés : au pré, il pourra se rouler');
+  });
+
   it('un tapis mis sans selle (🎨 pour l\'assortir) reste quand on resselle', () => {
     const p = createProfile('Lou');
     p.items.saddlePad = 1;

@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { createAnimal } from '../src/sim/animal.js';
 import { seeded } from '../src/sim/rng.js';
-import { DAY_TASKS, markHorseDay, horseDayView } from '../src/sim/horseDay.js';
+import { DAY_TASKS, dayTasks, markHorseDay, horseDayView } from '../src/sim/horseDay.js';
 
 const horse = () => {
   const a = createAnimal({ species: 'horse', sex: 'f', ageDays: 2000, rng: seeded('journee') });
@@ -42,6 +42,25 @@ describe('la journée de ton cheval', () => {
     expect(v.find((x) => x.id === 'feedAm').missed).toBe(true);
     expect(horseDayView(a, 3, 9).find((x) => x.id === 'feedPm').later).toBe(true);
     expect(DAY_TASKS.map((x) => x.id)).toEqual(['feedAm', 'feedPm', 'water', 'brush', 'work', 'pet']);
+  });
+
+  it('un poulain trop jeune pour être monté, une jument pleine : pas de travail à cocher (une vieille journée reste bonne)', () => {
+    const foal = createAnimal({ species: 'horse', sex: 'f', ageDays: 18, rng: seeded('poulain') }); // (1 an et demi)
+    expect(dayTasks(foal).map((x) => x.id)).toEqual(['feedAm', 'feedPm', 'water', 'brush', 'pet']);
+    expect(horseDayView(foal, 1, 9).map((x) => x.id)).not.toContain('work');
+    for (const [k, h] of [['feed', 8], ['water', 9], ['brush', 10], ['pet', 11]]) expect(markHorseDay(foal, k, h, 1).perfect).toBe(false);
+    expect(markHorseDay(foal, 'feed', 15, 1)).toEqual({ added: ['feedPm'], perfect: true });
+    // (longé quand même : noté, pour la ration du soir, src/ui/minigames/ration.js)
+    expect(markHorseDay(foal, 'lunge', 16, 1).added).toEqual(['work']);
+    // (une journée sauvegardée avant, travail coché ou non : rien ne casse)
+    foal.today = { day: 2, done: ['feedAm', 'water', 'brush', 'pet'], perfect: false };
+    expect(markHorseDay(foal, 'feed', 15, 2)).toEqual({ added: ['feedPm'], perfect: true });
+    const mare = horse();
+    expect(dayTasks(mare)).toBe(DAY_TASKS);
+    mare.pregnant = { due: 40 };
+    expect(dayTasks(mare).map((x) => x.id)).not.toContain('work');
+    for (const [k, h] of [['feed', 8], ['water', 9], ['brush', 10], ['pet', 11]]) markHorseDay(mare, k, h, 1);
+    expect(markHorseDay(mare, 'feed', 15, 1).perfect).toBe(true);
   });
 
   it('le travail : monter, la longe, la liberté ou une activité ; un chien n\'a pas de journée de cheval', () => {

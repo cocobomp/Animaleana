@@ -224,7 +224,7 @@ export function openAnimalActions(ui, a) {
     if (canSaddle) {
       items.push({ icon: '🪢', label: t('act_saddle'), run: () => { ui.closePanel(); ui.saddleWithGame(a, false); } });
     } else if (sp.rideable && saddled && g.player.mount?.data !== a) {
-      items.push({ icon: '🧰', label: t('act_unsaddle'), effect: t('unsaddleHint'), run: () => { g.unsaddle(a); ui.closePanel(); } });
+      items.push({ icon: '🧰', label: t('act_unsaddle'), effect: ta('unsaddleHint', a), run: () => { g.unsaddle(a); ui.closePanel(); } });
     }
     // Monté à cru avec le filet : on le lui enlève aussi (il ne le garde pas au pré).
     if (sp.rideable && !saddled && a.gear?.bridle && g.player.mount?.data !== a) {

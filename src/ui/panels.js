@@ -40,7 +40,7 @@ import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du j
 import { huntView } from '../sim/halloween.js'; // 🎃 la chasse aux citrouilles
 import { memoriesOf } from '../sim/memories.js'; // 📸 ses souvenirs
 import { quirksOf, knows } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
-import { starsView } from '../sim/horseStars.js'; // ⭐ ses étoiles
+import { starsView, starHowKey } from '../sim/horseStars.js'; // ⭐ ses étoiles
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -186,8 +186,8 @@ function starRow(ui, a) {
   const list = starsView(a);
   const open = list.find((s) => ui.starHint === `${a.id}:${s.id}`);
   const p = open && { icon: open.icon, skill: t(`skill_${open.id}`) };
-  // (un poulain ne se monte pas : pas de conseil d'équitation avant 3 ans)
-  const how = open && (canRide(a).reason === 'tooYoung' ? t('r_tooYoung', { name: a.name, g: a.sex }) : t(`st_how_${open.id}`));
+  // (un poulain ne se monte pas : pas de conseil d'équitation avant 3 ans ; l'obéissance, à pied)
+  const how = open && t(starHowKey(a, open.id), { name: a.name, g: a.sex });
   return [h('div', { class: 'star-row' }, list.map((s) => h('button', {
     class: `star-grp${open === s ? ' open' : ''}`, 'data-skill': s.id, title: t(`skill_${s.id}`), 'aria-label': `${t(`skill_${s.id}`)} ${s.stars}/5`,
     onClick: () => { ui.starHint = open === s ? null : `${a.id}:${s.id}`; ui.renderPanel(); },

@@ -93,4 +93,63 @@ describe('la ration du cheval', () => {
     expect(ration.restDay(a, 5, 18)).toBe(true); // (sa journée d'hier ne compte pas : rien de fait aujourd'hui)
     expect(ration.restDay({ ...a, client: true }, 5, 18)).toBe(false); // (un cheval en pension : la ration habituelle)
   });
+
+  it('un jour de repos, le seau et les petits mots suivent la petite zone (pas « C\'est bon » à 20 %)', () => {
+    const noop = () => {};
+    const make = (rest) => {
+      const a = { species: 'horse', name: 'Noisette', sex: 'm', today: { day: 4, done: rest ? ['feedAm'] : ['feedAm', 'work'], perfect: false } };
+      const c = {
+        a, action: 'feed', W: 400, H: 360, opts: {}, day: 4, hour: 18,
+        view: { x0: 0, y0: 0, x1: 400, y1: 360, w: 400, h: 360, scale: 1, ox: 0, oy: 0 },
+        col: { coat: '#8a5a2b', mane: '#222' }, fx: { add: noop, burst: noop, float: noop, text: noop, dot: noop }, rng: makeRng(3),
+        time: 0, done: false, pointer: { x: 0, y: 0 }, t, name: a.name, hints: [], buttons: [], finished: null,
+        hint(text, kind = '') { this.hints.push({ text, kind }); }, progress() {}, zone() {},
+        button(text, opts = {}) { const b = { text, opts }; this.buttons.push(b); return b; },
+        finish(q, msg, why) { this.done = true; this.finished = { q, msg, why }; },
+        stopButton(onStop) { return this.button('✅', { cls: 'stop', onTap: onStop }); },
+      };
+      const g = ration.rationGame(c);
+      const tick = (sec) => { for (let k = 0; k < sec / 0.05; k++) { c.time += 0.05; g.update(0.05); } };
+      g.down(); tick(3.2); g.up();
+      c.buttons.find((b) => b.opts.cls === 'stop').opts.onTap();
+      tick(0.6);
+      return { c, g, tick };
+    };
+    // Le seau : la bande verte dessinée (un faux contexte 2D qui note les rectangles verts).
+    const band = (g) => {
+      const rects = [];
+      const st = {};
+      const ctx2d = new Proxy(st, {
+        get(o, k) {
+          if (k in o) return o[k];
+          if (k === 'fillRect') return (x, y, w, h) => { if (o.fillStyle === 'rgba(63, 174, 98, 0.25)') rects.push([y, h]); };
+          if (k === 'measureText') return (s) => ({ width: String(s).length * 8 });
+          if (k.startsWith('create')) return () => ({ addColorStop() {} });
+          return () => {};
+        },
+        set(o, k, v) { o[k] = v; return true; },
+      });
+      g.draw(ctx2d);
+      const [y, h] = rects[0];
+      return { lo: +((300 - y - h) / 70).toFixed(2), hi: +((300 - y) / 70).toFixed(2) };
+    };
+    const rest = make(true);
+    expect(rest.g.peek().rest).toBe(true);
+    expect(band(rest.g)).toEqual({ lo: ration.RATION.restLo, hi: ration.RATION.restHi });
+    rest.g.down();
+    rest.tick(0.4); // (≈ 9 % : dans la petite zone)
+    expect(rest.c.hints.at(-1)).toEqual({ text: t('mg_nowStop'), kind: 'good' });
+    rest.tick(0.5); // (≈ 20 % : trop pour un jour sans travail)
+    rest.g.up();
+    expect(rest.g.peek().grain).toBeGreaterThan(ration.RATION.restHi);
+    expect(rest.g.peek().grain).toBeLessThan(ration.RATION.grainHi);
+    expect(rest.c.hints.at(-1)).toEqual({ text: t('mg_stop'), kind: 'warn' });
+    // Un jour de travail : la zone habituelle, partout.
+    const work = make(false);
+    expect(band(work.g)).toEqual({ lo: ration.RATION.grainLo, hi: ration.RATION.grainHi });
+    work.g.down();
+    work.tick(0.9);
+    work.g.up();
+    expect(work.c.hints.at(-1)).toEqual({ text: t('mg_nowStop'), kind: 'good' });
+  });
 });

@@ -1947,7 +1947,9 @@ const fr = {
   mg_water_btn: 'Ouvrir le robinet',
   // friandise
   mg_treat_hint: 'Attends qu\'il soit bien sage…',
+  mg_treat_hint_f: 'Attends qu\'elle soit bien sage…',
   mg_treat_hint_flat: 'Main bien à plat ! Attends qu\'il soit calme…',
+  mg_treat_hint_flat_f: 'Main bien à plat ! Attends qu\'elle soit calme…',
   mg_treat_now: 'Maintenant ! Donne la friandise !',
   mg_treat_now_flat: 'C\'est le moment : donne-la, main à plat !',
   mg_treat_wait: 'Pas encore ! Attends que {name} soit sage.',
@@ -1987,6 +1989,7 @@ const fr = {
   act_saddleRide: 'Seller et monter',
   act_unsaddle: 'Desseller',
   unsaddleHint: 'Selle et filet rangés : au pré, il pourra se rouler',
+  unsaddleHint_f: 'Selle et filet rangés : au pré, elle pourra se rouler',
   unsaddled: 'Selle et filet rangés. {name} va pouvoir se rouler au pré.',
   unsaddledOnly: 'Selle rangée à la sellerie. {name} va pouvoir se rouler au pré.',
   // brider son cheval (src/ui/minigames/bridle.js)

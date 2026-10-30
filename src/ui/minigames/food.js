@@ -601,7 +601,7 @@ export function treatGame(ctx) {
   const pose = a.species === 'rabbit' ? 'beg' : a.species === 'dog' || a.species === 'cat' ? 'sit' : 'stand';
 
   const asking = () => qk && !favFound && !knows(a, 'treat'); // (carotte ou pomme : on ne sait pas encore)
-  hint(asking() ? t('mg_treat_which', { name: a.name }) : `${t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint')} ${treat.repeat(n)}`);
+  hint(asking() ? t('mg_treat_which', { name: a.name }) : `${t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint', { g: a.sex })} ${treat.repeat(n)}`);
   ctx.zone((n - 0.5) / max, (n + 0.5) / max);
   if (qk) for (const k of Object.keys(HORSE_TREATS)) ctx.button(`${HORSE_TREATS[k]} ${t('mg_treat_btn')}`, { cls: 'primary', onTap: () => give(k) });
   else ctx.button(`${treat} ${t('mg_treat_btn')}`, { cls: 'primary', onTap: () => give() });
@@ -615,7 +615,7 @@ export function treatGame(ctx) {
     const sh = shape();
     return { x: Math.max(sh.mouth.x + 70, 300) + handBack * 30, y: Math.min(sh.mouth.y + 10, 250) };
   };
-  const waitHint = () => (asking() ? t('mg_treat_which', { name: a.name }) : t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint'));
+  const waitHint = () => (asking() ? t('mg_treat_which', { name: a.name }) : t(big ? 'mg_treat_hint_flat' : 'mg_treat_hint', { g: a.sex }));
 
   function give(k = kind) {
     if (ctx.done || state === 'eat') return;

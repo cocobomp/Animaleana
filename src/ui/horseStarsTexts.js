@@ -16,6 +16,7 @@ export const STARS_FR = {
   st_how_endurance: 'Fais de longues balades.',
   st_how_dressage: 'Fais du dressage.',
   st_how_obedience: 'Longe et travail en liberté.',
+  st_how_obedience_young: 'Un peu de travail en liberté, tout en douceur.',
 };
 
 export const STARS_EN = {
@@ -32,4 +33,5 @@ export const STARS_EN = {
   st_how_endurance: 'Go on long rides.',
   st_how_dressage: 'Do dressage.',
   st_how_obedience: 'Lunging and liberty work.',
+  st_how_obedience_young: 'A little gentle liberty work.',
 };

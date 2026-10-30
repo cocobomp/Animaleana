@@ -34,6 +34,12 @@ class FakeEl extends FakeNode {
       this.children.push(x);
     }
   }
+  prepend(...xs) {
+    const kids = this.children;
+    this.children = [];
+    this.append(...xs);
+    this.children.push(...kids);
+  }
   replaceChildren(...xs) { this.children = []; this.append(...xs); }
   remove() {
     if (!this.parent) return;
@@ -80,9 +86,10 @@ function fakeUi(a, w, { paused = false } = {}) {
   p.animals.push(a);
   const e = { data: a, wish: w, position: new THREE.Vector3(3, 0, 4), radius: 0.8 };
   const g = {
-    profile: p, isHome: true, entities: new Map([[a.id, e]]),
+    profile: p, isHome: true, entities: new Map([[a.id, e]]), player: { mount: null },
     blockedByPause: () => paused,
     ride: (x) => calls.push(['ride', x.name]),
+    dismount: () => { calls.push(['dismount', g.player.mount.data.name]); g.player.mount = null; },
     unsaddle: (x) => calls.push(['unsaddle', x.name]),
     walkTo: (pos, r, done, follow) => calls.push(['walkTo', pos === e.position, r, follow, done]),
   };
@@ -122,6 +129,22 @@ describe('ce qu\'il demande, en un geste (UI.doWish)', () => {
     p.items.saddle = 0; // (plus de selle libre : à cru, comme « Monter » de son menu)
     ui.doWish(a);
     expect(calls).toEqual([['closePanel'], ['ride', 'Pomme']]);
+  });
+
+  it('🏇 en selle sur un autre cheval : on en descend d\'abord (il ne reste pas « monté » pour toujours)', () => {
+    const a = horse();
+    const { ui, g, p, calls } = fakeUi(a, wish('work'));
+    starterTack(p, a);
+    const other = createAnimal({ species: 'horse', breed: 'selle_francais', sex: 'm', ageDays: 2000, rng: seeded('caramel') });
+    other.name = 'Caramel';
+    g.player.mount = { data: other };
+    ui.doWish(a);
+    expect(calls).toEqual([['closePanel'], ['dismount', 'Caramel'], ['saddle', true]]);
+    calls.length = 0;
+    a.gear.saddle = { item: 'saddle' };
+    g.player.mount = { data: other };
+    ui.doWish(a);
+    expect(calls).toEqual([['closePanel'], ['dismount', 'Caramel'], ['ride', 'Pomme']]);
   });
 
   it('🧰 : desseller ; plus de bulle (il a bu seul en chemin) : son menu ; en pause : rien', () => {
@@ -222,6 +245,7 @@ describe('sa bulle se touche (UI.updateLabels)', () => {
     const [, bx, by] = b.style.transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\)/).map(Number);
     expect(by).toBeCloseTo(ly + 38); // (la bulle pend au point d'accroche de son nom)
     expect(bx + 30).toBeGreaterThan(lx); // (centrée sous lui)
+    expect(ui.labels.children[0]).toBe(b); // (sous les noms : un nom posé sur sa bulle gagne le toucher)
     let stopped = false;
     b.on.click({ stopPropagation: () => { stopped = true; } });
     expect(stopped).toBe(true);
@@ -280,5 +304,20 @@ describe('le guide des quêtes près de lui (Tutorial.resolveAnimal)', () => {
     expect(at({ type: 'animal' }, false)).toBe('label'); // (« touche ton cheval » : son menu)
     e.wish = null;
     expect(at({ type: 'animal' }, false)).toBe('action'); // (sans bulle : comme avant)
+  });
+});
+
+describe('le guide dit le bouton Nourrir de ton animal (Tutorial.stepText)', () => {
+  it('🌾 pour un cheval, 🍖 pour un chien', () => {
+    const feed = { id: 'feed' };
+    const a = horse();
+    const self = { animal: () => a, profile: { name: 'Lou' } };
+    expect(Tutorial.prototype.stepText.call(self, feed)).toContain('🌾');
+    const dog = createAnimal({ species: 'dog', sex: 'm', ageDays: 900, rng: seeded('rex') });
+    self.animal = () => dog;
+    const text = Tutorial.prototype.stepText.call(self, feed);
+    expect(text).toContain('🍖');
+    expect(text).not.toContain('🌾');
+    expect(text).not.toContain('{');
   });
 });

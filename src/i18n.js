@@ -1785,7 +1785,7 @@ const fr = {
   tuto_adopt_hint: 'Tu pourras lui donner un nom. (Les autres animaux viendront ensuite.)',
   tuto_tapAnimal: 'Voici {animal} ! Touche-le pour t\'occuper de lui.',
   tuto_tapAnimal_f: 'Voici {animal} ! Touche-la pour t\'occuper d\'elle.',
-  tuto_feed: 'Donne à manger : touche 🌾 Nourrir.',
+  tuto_feed: 'Donne à manger : touche {icon} Nourrir.', // (🌾 pour un cheval, 🍖 pour les autres : Tutorial.stepText)
   tuto_feed_hint: 'Un animal mange tous les jours.',
   tuto_pet: 'Maintenant, un câlin ! Touche 🤚 Caresser.',
   tuto_pet_hint: 'Il adore ça ❤️',
@@ -4024,7 +4024,7 @@ const en = {
   tuto_adopt_hint: 'You can give it a name. (The other animals will come later.)',
   tuto_tapAnimal: 'Here is {animal}! Tap him to take care of him.',
   tuto_tapAnimal_f: 'Here is {animal}! Tap her to take care of her.',
-  tuto_feed: 'Give food: press 🌾 Feed.',
+  tuto_feed: 'Give food: press {icon} Feed.',
   tuto_feed_hint: 'Animals eat every day.',
   tuto_pet: 'Now a cuddle! Press 🤚 Pet.',
   tuto_pet_hint: 'He loves it ❤️',

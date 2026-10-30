@@ -47,7 +47,7 @@ export const TUTORIAL_STEPS = [
     done: (c) => c.seen.has('animalActions'),
   },
   {
-    id: 'feed', emoji: '🌾', target: { type: 'action', id: 'feed' }, // (le foin du cheval : 🌾 dans son menu)
+    id: 'feed', emoji: '😋', target: { type: 'action', id: 'feed' }, // (son bouton : 🌾 pour un cheval, 🍖 sinon)
     skip: (c) => c.animals === 0,
     done: (c) => stat(c.profile, 'feed') > (c.base.feed ?? 0) || c.full.hunger,
   },

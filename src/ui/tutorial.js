@@ -305,7 +305,7 @@ export class Tutorial {
 
   stepText(step) {
     const a = this.animal();
-    const params = { name: this.profile.name, animal: a?.name ?? '', g: a?.sex };
+    const params = { name: this.profile.name, animal: a?.name ?? '', g: a?.sex, icon: a?.species === 'horse' ? '🌾' : '🍖' }; // (icon : son bouton Nourrir)
     let key = `tuto_${step.id}`;
     if (step.id === 'move') key = isTouch() ? 'tuto_move_touch' : 'tuto_move';
     return t(key, params);

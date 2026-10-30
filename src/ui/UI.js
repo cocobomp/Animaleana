@@ -580,7 +580,7 @@ export class UI {
         ev.stopPropagation();
         this.tapWish(a.id);
       } });
-      this.labels.append(b);
+      this.labels.prepend(b); // (sous les noms : le nom qu'on voit gagne le toucher)
       this.wishEls.set(a.id, b);
     }
     b.hidden = !on;
@@ -606,6 +606,7 @@ export class UI {
     const act = WISH_ACTION[wish.id];
     if (act === 'ride') {
       this.closePanel();
+      if (g.player.mount) g.dismount(); // (en selle sur un autre cheval : on en descend d'abord)
       return !a.gear?.saddle && freeSaddle(g.profile, a, { home: g.isHome }) ? this.saddleWithGame(a, true) : g.ride(a);
     }
     if (act === 'unsaddle') return g.unsaddle(a);

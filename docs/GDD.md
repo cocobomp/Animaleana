@@ -148,8 +148,9 @@ activité) et ❤️ un câlin ; un poulain trop jeune pour être monté, ou une
 « 🌟 Journée parfaite » (lien +3, affection +10, de l'XP). Quête du thème « 🐴 Ton cheval » : trois journées parfaites.
 « 🫧 Il te demande… » (`src/sim/horseWish.js`, `src/game/wishBubble.js`) : à 10 m de ton cheval, une petite bulle
 blanche flotte au-dessus de sa tête, sous son nom, avec une seule icône, la prochaine chose de sa journée : 🌾 (il a
-faim, ou le foin du matin manque avant 14 h, ou celui du soir dès 14 h), 💧, 🪮, 🏇 (de 8 h à 19 h, s'il peut être
-monté), puis ❤️. Le soin fait, la bulle éclate en ✨ et la suivante vient une seconde après ; tout fait, plus de bulle.
+faim, ou le foin du matin manque avant 14 h), 💧, 🪮, 🏇 (de 8 h à 19 h, s'il peut être monté), 🌾 le foin du soir
+(dès 14 h, après le travail : sa ration en dépend), puis ❤️. Le soin fait, la bulle éclate en ✨ et la suivante vient
+une seconde après ; tout fait, plus de bulle.
 Malade, boiteux ou endormi, son 🤒, son 🩹 ou son 💤 passent avant ; triste, il montre sa bulle plutôt que 😢 (c'est
 comme ça qu'on le console). Pas la nuit (21 h-6 h), ni sur son dos, ni pendant une activité, ni pour un cheval confié,
 ni pendant le tutoriel. À l'écurie, chacun montre la sienne. Son nom ou sa bulle sous une pastille d'état (« 🧭 Des
@@ -183,7 +184,7 @@ toute la pâte. Raté (moins de 2 étoiles) : ça ne compte pas, on recommence (
 Il s'est roulé, ou il n'a pas été pansé depuis longtemps (pansage sous 55) : de la terre sur les jambes et des taches
 brunes sur le corps (plus il est sale, plus il y en a) ; le pansage les enlève. Bien pansé (85 et plus), sa robe est
 plus satinée ; crotté, elle est terne. Après un galop (ou un long trot), il transpire : son poil mouillé fonce par
-plaques (la sueur monte avec l'effort ; en selle, elle sèche un peu au pas, et au repos en une heure de jeu environ ;
+plaques (la sueur monte avec l'effort ; en balade libre, elle sèche un peu au pas, sinon en une heure de jeu environ ;
 le pansage ou la douche l'enlèvent).
 Sous la pluie, dehors et sans couverture imperméable, il est mouillé de la même façon ; au box ou couvert, il reste sec.
 

@@ -286,7 +286,7 @@ export function mood(a) {
 
 /**
  * Fait passer `hours` heures de jeu pour l'animal.
- * ctx : { sleeping, moving, ridden, weather, rng, travelling (en voyage : le stress ne redescend pas) }
+ * ctx : { sleeping, moving, ridden, freeRide (monté en balade libre), weather, rng, travelling (en voyage : le stress ne redescend pas) }
  * Renvoie la liste des événements : 'sick', 'died'.
  */
 export function tickAnimal(a, hours, ctx = {}) {
@@ -310,8 +310,8 @@ export function tickAnimal(a, hours, ctx = {}) {
   }
   // Les pieds du cheval (HOOF) : la terre se tasse, puis un caillou… puis un abcès.
   if (a.species === 'horse') {
-    // (la sueur sèche en une heure environ ; en selle, seulement au pas : src/sim/riding.js rideEffort)
-    if (a.sweat && !ctx.ridden) a.sweat = Math.max(0, a.sweat - hours * 0.8);
+    // (la sueur sèche en une heure environ ; en balade libre, seulement au pas : src/sim/riding.js rideEffort)
+    if (a.sweat && !ctx.freeRide) a.sweat = Math.max(0, a.sweat - hours * 0.8);
     const wet = ctx.weather === 'rain' || ctx.weather === 'storm' || ctx.weather === 'snow';
     a.hoofDirt = Math.min(1, (a.hoofDirt ?? 0) + (hours / 24) * (wet ? HOOF.wetPerDay : HOOF.perDay));
     if (a.lame) {

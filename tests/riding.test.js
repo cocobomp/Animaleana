@@ -179,7 +179,7 @@ describe('la sueur', () => {
         if (ridden) rideEffort(a, gait, 1 / 30);
         acc += 1 / 30;
         if (acc >= 0.5) {
-          tickAnimal(a, (acc * minutesPerSecond(speed)) / 60, { ridden, rng: () => 0.99 });
+          tickAnimal(a, (acc * minutesPerSecond(speed)) / 60, { ridden, freeRide: ridden, rng: () => 0.99 });
           acc = 0;
         }
       }
@@ -206,5 +206,22 @@ describe('la sueur', () => {
     expect(b.sweat).toBeCloseTo(0.18, 5);
     rideEffort(b, 'halt', 1000);
     expect(b.sweat).toBe(0);
+  });
+
+  it('monté hors balade libre (voyage à cheval, activité, vue d\'ensemble) : elle sèche au rythme du jeu', async () => {
+    const { createAnimal, tickAnimal } = await import('../src/sim/animal.js');
+    const { planTrip, tickTrip } = await import('../src/sim/trip.js');
+    const { seeded } = await import('../src/sim/rng.js');
+    const a = createAnimal({ species: 'horse', sex: 'f', ageDays: 2000, rng: seeded('voyage') });
+    for (const n of Object.keys(a.needs)) a.needs[n] = 95;
+    a.sweat = 0.6;
+    tickAnimal(a, 0.5, { ridden: true, freeRide: true, rng: () => 0.99 });
+    expect(a.sweat).toBe(0.6); // (en balade libre, c'est rideEffort, en secondes)
+    tickAnimal(a, 0.5, { ridden: true, rng: () => 0.99 });
+    expect(a.sweat).toBeCloseTo(0.2, 5);
+    a.sweat = 0.6; // (30 s de galop, puis des heures de voyage : il arrive sec)
+    const trip = planTrip({ mode: 'horse', hours: 3, animals: [a], riderId: a.id });
+    tickTrip(trip, [a], 1, { rng: () => 0.99 });
+    expect(a.sweat).toBe(0);
   });
 });

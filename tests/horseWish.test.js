@@ -4,6 +4,7 @@ import { createAnimal } from '../src/sim/animal.js';
 import { seeded } from '../src/sim/rng.js';
 import { markHorseDay, horseDayView } from '../src/sim/horseDay.js';
 import { wishOf, wishDone, ICONS } from '../src/sim/horseWish.js';
+import { restDay } from '../src/ui/minigames/ration.js';
 
 const horse = (sex = 'f') => {
   const a = createAnimal({ species: 'horse', sex, ageDays: 2000, rng: seeded('voeu') });
@@ -35,12 +36,13 @@ describe('ce que ton cheval te demande', () => {
     expect(at(a, 17)).toBe(null);
   });
 
-  it('le foin : le matin jusqu\'à 14 h, le soir dès 14 h (comme dans sa journée) ; affamé, toujours', () => {
+  it('le foin : le matin jusqu\'à 14 h, le soir dès 14 h (comme dans sa journée), après le travail ; affamé, toujours', () => {
     const a = horse();
     expect(at(a, 13.9)).toMatchObject({ id: 'hay', task: 'feedAm' });
-    expect(at(a, 14)).toMatchObject({ id: 'hay', task: 'feedPm' }); // (foin du matin raté : celui du soir)
-    markHorseDay(a, 'feed', 14.5, DAY);
-    expect(at(a, 15).id).toBe('water');
+    expect(at(a, 14).id).toBe('water'); // (foin du matin raté : celui du soir viendra après le travail)
+    for (const k of ['water', 'brush']) markHorseDay(a, k, 14, DAY);
+    expect(at(a, 14.5).id).toBe('work');
+    expect(at(a, 19)).toMatchObject({ id: 'hay', task: 'feedPm' }); // (19 h : plus de travail)
     const b = horse();
     markHorseDay(b, 'feed', 8, DAY);
     b.needs.hunger = 30;
@@ -87,6 +89,16 @@ describe('ce que ton cheval te demande', () => {
     expect(at(a, 14.7)).toMatchObject({ id: 'hay', task: 'feedPm' });
     expect(markHorseDay(a, 'feed', 14.7, DAY)).toEqual({ added: ['feedPm'], perfect: true });
     expect(at(a, 15)).toBe(null);
+  });
+
+  it('de 14 h à 19 h : la balade d\'abord, puis le foin du soir, avec la ration d\'un jour de travail', () => {
+    const a = horse();
+    for (const [k, h] of [['feed', 8], ['water', 9], ['brush', 10]]) markHorseDay(a, k, h, DAY);
+    expect(at(a, 14.5)).toMatchObject({ id: 'work', icon: '🏇' });
+    expect(restDay(a, DAY, 14.5)).toBe(true); // (nourri maintenant : « un jour de repos »)
+    markHorseDay(a, 'ride', 14.5, DAY);
+    expect(at(a, 15)).toMatchObject({ id: 'hay', task: 'feedPm' });
+    expect(restDay(a, DAY, 15)).toBe(false);
   });
 
   it('un poulain (pas de travail à cocher) : sa bulle s\'en va quand sa journée est parfaite', () => {

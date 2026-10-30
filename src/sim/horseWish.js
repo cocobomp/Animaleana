@@ -1,8 +1,8 @@
 // 🫧 « Il te demande… » : ce que ton cheval voudrait maintenant, une seule chose à la fois, dans une bulle au-dessus de
-// sa tête quand tu passes près de lui. 🌾 le foin (il a faim, ou le foin du matin manque avant 14 h, ou celui du soir dès
-// 14 h, comme dans sa journée), 💧 l'eau, 🪮 le pansage, 🏇 le travail (de 8 h à 19 h, s'il peut être monté), ❤️ un
-// câlin. Tout est fait : plus de bulle (« Journée parfaite »). Rien la nuit, ni pour un cheval confié ; malade, boiteux
-// ou endormi, son 🤒, son 🩹 ou son 💤 passent avant.
+// sa tête quand tu passes près de lui. 🌾 le foin (il a faim, ou le foin du matin manque avant 14 h), 💧 l'eau, 🪮 le
+// pansage, 🏇 le travail (de 8 h à 19 h, s'il peut être monté), 🌾 le foin du soir (dès 14 h, comme dans sa journée, mais
+// après le travail : sa ration du soir dépend de sa journée), ❤️ un câlin. Tout est fait : plus de bulle (« Journée
+// parfaite »). Rien la nuit, ni pour un cheval confié ; malade, boiteux ou endormi, son 🤒, son 🩹 ou son 💤 passent avant.
 // Logique pure (tests/horseWish.test.js) : il lit sa journée (src/sim/horseDay.js) sans rien cocher. La bulle :
 // src/game/wishBubble.js, src/game/AnimalEntity.js (update, updateStatus).
 
@@ -40,11 +40,11 @@ export function wishOf(a, { day, hour, sleeping = false } = {}) {
   const n = a.needs ?? {};
   if ((n.hunger ?? 100) < WISH.hungry) return BY_TASK.hunger;
   if (hour < MORNING && asks(a, done, 'feedAm', 'feed')) return BY_TASK.feedAm;
-  if (hour >= EVENING && asks(a, done, 'feedPm', 'feed')) return BY_TASK.feedPm;
   if ((n.thirst ?? 100) < WISH.thirsty) return BY_TASK.thirst;
   if (asks(a, done, 'water', 'water')) return BY_TASK.water;
   if (asks(a, done, 'brush', 'brush')) return BY_TASK.brush;
   if (hour >= WISH.workFrom && hour < WISH.workTo && !done.includes('work') && canRide(a).ok) return BY_TASK.work;
+  if (hour >= EVENING && asks(a, done, 'feedPm', 'feed')) return BY_TASK.feedPm; // (après le travail : sa ration en dépend)
   if (asks(a, done, 'pet', 'pet')) return BY_TASK.pet;
   return null;
 }

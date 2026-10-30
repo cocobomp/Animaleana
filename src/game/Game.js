@@ -1389,6 +1389,7 @@ export class Game {
         const events = tickAnimal(a, hours, {
           dirt,
           weather: e?.inside ? 'clear' : this.interiors.feltWeather(a, feltWeather(a, weather, this.temperature, this.season)), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
+          freeRide: !!e?.ridden && !this.mgmt.active && this.player.gaitEnabled !== false && !this.player.auto, // (sa sueur : Player.rideStep)
         });
         tickProduce(a, hours);
         // Chaque promenade fait progresser le chien (obéissance et « Au pied »).

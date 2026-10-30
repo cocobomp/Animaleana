@@ -16,7 +16,7 @@ import { canAfford, isSandbox } from '../sim/profile.js';
 import { JOBS } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce, equipmentShown, helperShown } from '../sim/farm.js';
 import { speciesName, coatName, coatLabel, availableEmojis } from './names.js';
-import { GEAR } from '../sim/gear.js';
+import { GEAR, freeSaddle } from '../sim/gear.js';
 import { openTackShop, animalGearSection } from './tack.js'; // sellerie : catalogue, fiches, équipement
 import { hasTool } from '../sim/tools.js';
 import { audio } from '../game/audio.js'; // réglage des sons
@@ -315,7 +315,12 @@ function renderAnimal(ui, g, a) {
   if (sp.actions.includes('liberty')) acts.push(btn(`💛 ${t('act_liberty')}`, () => ui.careWithGame(a, 'liberty')));
   if (sp.rideable) {
     const r = canRide(a);
-    acts.push(btn(`🏇 ${t('act_ride')}`, () => { if (g.ride(a)) ui.closePanel(); }, { cls: 'primary', disabled: !r.ok && r.reason === 'tooYoung' }));
+    // Sans selle, mais une selle libre à la sellerie : « Seller et monter », comme son menu rapide (src/ui/actions.js).
+    // (il boite, trop fatigué… : le bouton dit pourquoi, sans jouer la selle et le filet pour rien)
+    const canSaddle = !a.gear?.saddle && !!freeSaddle(g.profile, a, { home: g.isHome });
+    acts.push(btn(`🏇 ${t(canSaddle ? 'act_saddleRide' : 'act_ride')}`, canSaddle && r.ok
+      ? () => { ui.closePanel(); ui.saddleWithGame(a, true); }
+      : () => { if (g.ride(a)) ui.closePanel(); }, { cls: 'primary', disabled: !r.ok && r.reason === 'tooYoung' }));
   }
   acts.push(btn(a.following ? `✋ ${t('act_stay')}` : `🦮 ${t('act_follow')}`, () => { g.toggleFollow(a); ui.renderPanel(); }));
   // 📣 L'appeler d'ici (src/sim/horseCall.js) : la fiche s'ouvre de loin (🐾 Animaux), sans marcher jusqu'à lui.

@@ -25,6 +25,18 @@ describe('textes des quêtes', () => {
     }
   });
 
+  it('monter : « 🏇 », pas « 🏇 Monter » (le bouton peut dire « Seller et monter »)', () => {
+    const { t, setLang } = i18n;
+    for (const lang of ['fr', 'en']) {
+      setLang(lang);
+      for (const k of ['quest_hint_ride1', 'quest_hint_rideCanter1', 'quest_step_doMount', 'quest_step_doRide']) {
+        expect(t(k), `${lang} ${k}`).toContain('🏇');
+        expect(t(k), `${lang} ${k}`).not.toContain(`🏇 ${t('act_ride')}`);
+      }
+    }
+    setLang('fr');
+  });
+
   it('chaque thème, et chaque raison « pas encore possible », a son texte dans le jeu', async () => {
     const { t, setLang } = i18n;
     const { THEMES } = await import('../src/sim/quests.js');

@@ -265,6 +265,23 @@ describe('le coffre pendant le trajet', () => {
     expect(reportLine({ level: 'panic', sick: true, ill: false, lame: 'stone' })).toBe('sick');
   });
 
+  it('un fer ne se perd pas en route (seulement à la ferme : healthDay) ; le bilan ne le dit pas', async () => {
+    const { healthDay } = await import('../src/sim/horseHealth.js');
+    const late = () => adult('horse', { name: 'Caramel', hoofDirt: 0, healthLog: { worm: 0, vaccine: 0, teeth: 0, farrier: -100 }, healthDay: 0 });
+    expect(healthDay(late(), 3, () => 0.1)).toContain('lostShoe'); // (à la ferme, ferrure en retard : il le perdrait)
+    const horse = late();
+    const trip = planTrip({ mode: 'horse', hours: 20, animals: [horse], riderId: horse.id });
+    runToEnd(trip, [horse], { rng: () => 0.1 });
+    expect(horse.lame).toBeFalsy();
+    globalThis.document = globalThis.document ?? { documentElement: {} };
+    const { t, setLang } = await import('../src/i18n.js');
+    for (const lang of ['fr', 'en']) {
+      setLang(lang);
+      for (const g of ['m', 'f']) expect(t('trip_rep_lameShoe', { name: 'Caramel', g }), `${lang} ${g}`).not.toMatch(/en route|on the way/);
+    }
+    setLang('fr');
+  });
+
   it('chaque voyage donne l\'habitude du van', () => {
     const horse = adult('horse');
     const trip = planTrip({ mode: 'van', hours: 2, animals: [horse] });

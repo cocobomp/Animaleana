@@ -2,6 +2,7 @@
 // en deux fois (il gonfle le ventre). Et desseller / reseller à la sellerie (src/sim/gear.js). Faux cadre, sans DOM.
 
 import { describe, it, expect, beforeAll } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { justRight, verdict } from '../src/ui/minigames/score.js';
 import { makeRng } from '../src/ui/minigames/draw.js';
 import { createAnimal } from '../src/sim/animal.js';
@@ -193,6 +194,20 @@ describe('desseller, reseller', () => {
     const { ta } = await import('../src/i18n.js');
     expect(ta('unsaddleHint', horse())).toBe('Selle et filet rangés : au pré, elle pourra se rouler');
     expect(ta('unsaddleHint', { ...horse(), sex: 'm' })).toBe('Selle et filet rangés : au pré, il pourra se rouler');
+  });
+
+  it('sa fiche aussi : « 🏇 Seller et monter » (selle, filet, puis en selle), comme son menu rapide', () => {
+    const card = readFileSync(new URL('../src/ui/panels.js', import.meta.url), 'utf8');
+    const ride = card.slice(card.indexOf('  if (sp.rideable) {'), card.indexOf('  acts.push(btn(a.following'));
+    expect(ride).toMatch(/const canSaddle = !a\.gear\?\.saddle && !!freeSaddle\(g\.profile, a, \{ home: g\.isHome \}\);/);
+    expect(ride).toMatch(/t\(canSaddle \? 'act_saddleRide' : 'act_ride'\)/);
+    expect(ride).toMatch(/canSaddle && r\.ok\n\s+\? \(\) => \{ ui\.closePanel\(\); ui\.saddleWithGame\(a, true\); \}/);
+    // (le premier cheval : sa selle l'attend à la sellerie)
+    const p = createProfile('Lou');
+    const a = horse();
+    p.animals.push(a);
+    starterTack(p, a);
+    expect(!a.gear?.saddle && !!freeSaddle(p, a)).toBe(true);
   });
 
   it('un tapis mis sans selle (🎨 pour l\'assortir) reste quand on resselle', () => {

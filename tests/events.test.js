@@ -245,6 +245,45 @@ describe('événements spéciaux', () => {
     setLang('fr');
   });
 
+  it('blessé : « Blessée » aussi pour choisir qui monter, sa « jambe » chez le vétérinaire ; l\'abcès d\'un caillou reste « Malade »', async () => {
+    globalThis.document = globalThis.document ?? { documentElement: {} };
+    const { t, ta, speciesKey, setLang } = await import('../src/i18n.js');
+    const { isHurt, canRide } = await import('../src/sim/animal.js');
+    const { eligibility } = await import('../src/sim/activities.js');
+    const { horseFit } = await import('../src/sim/trailGuide.js');
+    const { illName, signText } = await import('../src/ui/vetExam.js');
+    const { readFileSync } = await import('node:fs');
+    setLang('fr');
+    const mare = Object.assign(adult('horse', { sex: 'f' }), { name: 'Perle', sick: 'paw' });
+    const dog = Object.assign(adult('dog', { sex: 'm' }), { name: 'Rex', sick: 'paw' });
+    const kid = { id: 'r0', name: 'Léa', sex: 'f', age: 'adult', level: 'confirmed', weight: 'adult', fun: 60 };
+    // (les listes de chevaux : activités, concours, balade guidée ; la logique ne change pas : 'sick')
+    expect([eligibility(mare, 'jumping'), canRide(mare).reason, horseFit(mare, kid).reason]).toEqual(['sick', 'sick', 'sick']);
+    expect(ta('actv_why_sick', mare)).toBe('Perle est blessée : soigne-la d\'abord.');
+    expect(ta('actv_why_sick', dog)).toBe('Rex est blessé : soigne-le d\'abord.');
+    expect(ta('comp_why_sick', mare)).toBe('Perle est blessée : soigne-la d\'abord.');
+    expect(ta('tg_reason_sick', mare)).toBe('Blessée : il faut la soigner d\'abord.');
+    // chez le vétérinaire (l'examen, src/ui/vetExam.js) : la jambe d'un cheval, la patte d'un chien
+    expect([illName('paw', mare), illName('paw', dog), illName('ear', mare)]).toEqual(['Jambe blessée', 'Patte blessée', t('vx_ill_ear')]);
+    expect([signText(['painLeg', 'lame'], mare), signText(['painLeg'], dog)]).toEqual(['jambe douloureuse, boiterie', 'patte douloureuse']);
+    expect(ta(speciesKey('vx_look_limps', mare), mare)).toBe('elle boite et pose mal un pied');
+    expect(ta(speciesKey('vx_look_limps', dog), dog)).toBe('il boite et pose mal une patte');
+    expect(ta('vx_follow_pawHorse', mare)).toBe('Repos : on ne la monte pas. Change le pansement chaque jour et regarde si la jambe dégonfle.');
+    expect(readFileSync(new URL('../src/ui/vetExam.js', import.meta.url), 'utf8')).toContain('[\'belly\', \'paw\'].includes(cs.illness) && a.species === \'horse\' ? \'Horse\'');
+    // l'abcès d'un caillou (src/sim/animal.js) : une infection, « Malade », 🤒, comme son message
+    const abscess = Object.assign(adult('horse', { sex: 'f' }), { name: 'Perle', sick: 'paw', lame: { cause: 'abscess', foot: 0, hours: 50 } });
+    expect([isHurt(mare), isHurt(abscess), isHurt({ ...mare, lame: { cause: 'stone' } })]).toEqual([true, false, true]);
+    expect(ta('mood_sick', abscess)).toBe('Malade');
+    expect(ta('r_sick', abscess)).toBe('Perle est malade, emmène-la chez le vétérinaire.');
+    expect(ta('actv_why_sick', abscess)).toBe('Perle est malade : soigne-la d\'abord.');
+    setLang('en');
+    expect([ta('actv_why_sick', mare), ta('comp_why_sick', mare), ta('tg_reason_sick', mare)])
+      .toEqual(['Perle is hurt: get them treated first.', 'Perle is hurt: get them treated first.', 'Hurt: needs treating first.']);
+    expect([illName('paw', mare), signText(['painLeg'], mare), ta(speciesKey('vx_look_limps', mare), mare)]).toEqual(['Hurt leg', 'sore leg', 'limps and favours one foot']);
+    expect(ta('vx_follow_pawHorse', mare)).not.toMatch(/[éè]/);
+    setLang('fr');
+  });
+
   it('animal échappé : le rejoindre termine l\'événement', () => {
     const p = createProfile('A');
     const horse = adult('horse');

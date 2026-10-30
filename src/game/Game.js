@@ -931,10 +931,8 @@ export class Game {
    */
   markHorseDay(a, kind) {
     if (['lunge', 'liberty', 'activity'].includes(kind)) {
-      a.warmAt = this.profile.clock ?? 0; // 🐢 (il a travaillé : chaud ; monté : à la descente)
+      this.workedUnder(a); // 🐢 (il a travaillé : chaud ; monté : à la descente)
       delete a.freshTack; // (🧰 longé avec sa selle : elle a servi, comme en selle — Game.mountRider)
-      // (encore en selle après le parcours : la balade qui suit ne redemande pas de l'échauffer — src/sim/warmup.js)
-      if (kind === 'activity' && this.player?.mount?.data === a) this.player.session = workedSession();
     }
     if (a.species === 'horse' && !a.client && !a.guest) this.lastHorseId = a.id; // (le défi du jour : src/sim/horseChallenge.js)
     const stage0 = bondStage(a);
@@ -947,6 +945,15 @@ export class Game {
     this.entities.get(a.id)?.emit('💕', 4);
     this.ui.toast(t('perfectDay', { name: a.name, g: a.sex }), 7000);
     return r;
+  }
+
+  /**
+   * 🐢 Il vient de travailler (une séance, un concours et son échauffement, une balade guidée) : chaud. Encore en selle
+   * dessus après, la balade qui suit ne redemande pas de l'échauffer (src/sim/warmup.js).
+   */
+  workedUnder(a) {
+    a.warmAt = this.profile.clock ?? 0;
+    if (this.player?.mount?.data === a) this.player.session = workedSession();
   }
 
   /** 🏅 Toute la pratique du prochain Galop est faite : on le dit une fois (src/sim/galops.js). */

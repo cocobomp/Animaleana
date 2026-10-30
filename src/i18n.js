@@ -20,6 +20,7 @@ import { LUCKY_FR, LUCKY_EN } from './ui/luckyShoesTexts.js'; // 🍀 le fer por
 import { RIDE_CARD_FR, RIDE_CARD_EN } from './ui/rideCardTexts.js'; // 🏇 la carte « Ta balade » (rc_*)
 import { PRAISE_FR, PRAISE_EN } from './ui/praiseTexts.js'; // 🤚 « Bravo ! » / « Rassure-le » en selle (pr_*)
 import { LEGMUD_FR, LEGMUD_EN } from './ui/legMudTexts.js'; // 🧦 ses chaussettes de boue (mg_pansage_legmud*)
+import { isHurt } from './sim/animal.js'; // (blessé, pas malade : ta)
 
 const fr = {
   title: 'La ferme à Madichelle',
@@ -2232,6 +2233,8 @@ const fr = {
   actv_trailNeedAnimal: 'Pour la balade, monte à cheval ou emmène des animaux qui te suivent.',
   actv_why_sick: '{name} est malade : soigne-le d\'abord.',
   actv_why_sick_f: '{name} est malade : soigne-la d\'abord.',
+  actv_why_hurt: '{name} est blessé : soigne-le d\'abord.', // (malade d'une blessure : ta)
+  actv_why_hurt_f: '{name} est blessée : soigne-la d\'abord.',
   actv_why_baby: '{name} est encore un bébé.',
   actv_why_tired: '{name} est trop fatigué. Laisse-le se reposer.',
   actv_why_tired_f: '{name} est trop fatiguée. Laisse-la se reposer.',
@@ -4478,6 +4481,7 @@ const en = {
   actv_trailFootHelp: 'First ask an animal to follow you.',
   actv_trailNeedAnimal: 'For a trail, ride a horse or bring animals that follow you.',
   actv_why_sick: '{name} is sick: get them treated first.',
+  actv_why_hurt: '{name} is hurt: get them treated first.',
   actv_why_baby: '{name} is still a baby.',
   actv_why_tired: '{name} is too tired. Let them rest.',
   actv_why_notRideable: '{name} can\'t be ridden.',
@@ -4777,14 +4781,19 @@ export function hourParams(params = {}) {
 }
 
 // (blessé, pas malade : a.sick 'paw', une blessure — src/sim/events.js —, reste « malade » pour le jeu (mood, canRide…) ;
-// seuls les mots changent : « Blessée », « … est blessée, emmène-la chez le vétérinaire »)
-const HURT = { mood_sick: 'mood_hurt', r_sick: 'r_hurt' };
+// seuls les mots changent : « Blessée », « … est blessée, emmène-la chez le vétérinaire », aussi pour choisir qui monter)
+const HURT = {
+  mood_sick: 'mood_hurt', r_sick: 'r_hurt', actv_why_sick: 'actv_why_hurt', comp_why_sick: 'comp_why_hurt', tg_reason_sick: 'tg_reason_hurt',
+};
 
 /** Texte qui parle d'un animal (ou d'une aide) : prénom et accord au féminin automatiques. */
-export const ta = (key, who, params = {}) => t(who.sick === 'paw' ? HURT[key] ?? key : key, { name: who.name, g: who.sex, ...params });
+export const ta = (key, who, params = {}) => t(isHurt(who) ? HURT[key] ?? key : key, { name: who.name, g: who.sex, ...params });
+
+/** La clé propre à son espèce si elle existe (<clé>_<espèce>) : la « jambe » d'un cheval, la « patte » des autres. */
+export const speciesKey = (key, a) => (fr[`${key}_${a?.species}`] !== undefined ? `${key}_${a.species}` : key);
 
 /** Le nom d'une maladie pour cet animal : « patte blessée », mais « jambe blessée » pour un cheval (ill_<id>_<espèce>). */
-export const illText = (id, a) => (fr[`ill_${id}_${a?.species}`] !== undefined ? t(`ill_${id}_${a.species}`) : t(`ill_${id}`));
+export const illText = (id, a) => t(speciesKey(`ill_${id}`, a));
 
 /** Texte localisé d'un objet { fr, en }. */
 export const L = (obj) => (obj ? obj[lang] ?? obj.fr : '');

@@ -69,7 +69,7 @@ réussite au dressage…).
   pluie). Pas curés pendant trois jours environ, un caillou s'y coince et il **boite** (🩹 au-dessus de lui, il
   marche doucement, on ne le monte plus, ni longe ni liberté : il se repose ; un message le dit). Le cure-pied du pansage enlève la terre ; le caillou est
   dans le pied qui boite (la consigne le nomme) : l'enlever, et il ne boite plus. Le vétérinaire aussi. Laissé deux
-  jours, le caillou fait un abcès : il est malade (sa fiche dit « Blessé », 🩹 ; vétérinaire). Les soins sans mini-jeu (pour tous les chevaux, les
+  jours, le caillou fait un abcès : il est malade (une infection : « Malade », 🤒 ; vétérinaire). Une blessure (l'événement), elle, se dit « Blessé », 🩹 : sa fiche, son menu, le choix d'un cheval à monter, sa « jambe » chez le vétérinaire. Les soins sans mini-jeu (pour tous les chevaux, les
   aides) curent les pieds aussi.
 
 ## 4. Besoins (« comme dans la vraie vie »)
@@ -273,7 +273,7 @@ trotter ou galoper tout de suite, le jeu le dit gentiment (les trois premières 
 (×1,25 au trot et au galop) ; bien échauffé, un petit « ✅ ». À la fin, après au moins 4 secondes de galop, on finit au
 pas (15 secondes) avant de descendre : « 😌 Retour au calme » (lien +0,5, affection +6, il a séché un peu en marchant,
 « Retours au calme au pas » dans le carnet du cavalier) ; descendu juste après le galop, le jeu dit qu'il est encore
-essoufflé. Pas pendant une activité ni un voyage (ils mènent le cheval) ; encore en selle après, il a travaillé : échauffé, sans petit mot.
+essoufflé. Pas pendant une activité ni un voyage (ils mènent le cheval) ; encore en selle après (une séance, un concours et son échauffement, une balade guidée, l'arrivée d'un voyage), il a travaillé : échauffé, sans petit mot.
 
 ### Ta balade (0.5, `src/sim/rideLog.js`, `src/ui/rideCard.js`)
 En descendant d'une balade libre d'au moins 40 secondes en mouvement (avec un de tes chevaux, après le tutoriel), une

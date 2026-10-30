@@ -199,7 +199,8 @@ describe('desseller, reseller', () => {
   it('sa fiche aussi : « 🏇 Seller et monter » (selle, filet, puis en selle), comme son menu rapide', () => {
     const card = readFileSync(new URL('../src/ui/panels.js', import.meta.url), 'utf8');
     const ride = card.slice(card.indexOf('  if (sp.rideable) {'), card.indexOf('  acts.push(btn(a.following'));
-    expect(ride).toMatch(/const canSaddle = !a\.gear\?\.saddle && !!freeSaddle\(g\.profile, a, \{ home: g\.isHome \}\);/);
+    // (un poulain trop jeune : « 🏇 Monter » grisé, sans « Seller et monter », comme son menu rapide : src/ui/actions.js)
+    expect(ride).toMatch(/const r = canRide\(a\);[^]*const canSaddle = r\.reason !== 'tooYoung' && !a\.gear\?\.saddle && !!freeSaddle\(g\.profile, a, \{ home: g\.isHome \}\);/);
     expect(ride).toMatch(/t\(canSaddle \? 'act_saddleRide' : 'act_ride'\)/);
     expect(ride).toMatch(/canSaddle && r\.ok\n\s+\? \(\) => \{ ui\.closePanel\(\); ui\.saddleWithGame\(a, true\); \}/);
     // (le premier cheval : sa selle l'attend à la sellerie)

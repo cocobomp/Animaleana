@@ -5,7 +5,7 @@
 // dans le panneau 💼 (src/ui/careers.js), qui ouvre ce carnet.
 
 import { h } from './dom.js';
-import { t, L, getLang } from '../i18n.js';
+import { t, ta, L, getLang } from '../i18n.js';
 import { PLACES } from '../sim/places.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
@@ -19,6 +19,8 @@ import { TOOLS } from '../sim/tools.js';
 const placeName = (id) => L(PLACES[id]?.name) || id;
 const LEVEL_EMOJI = { beginner: '🌱', medium: '🌿', confirmed: '🌳' };
 const AGE_EMOJI = { child: '🧒', adult: '🧑', senior: '👵' };
+// (pourquoi pas ce cheval : « Blessée : il faut la soigner d'abord. » pour une jument blessée, ta)
+const horseWhy = (reason, a, params) => (a ? ta(`tg_reason_${reason}`, a, params) : t(`tg_reason_${reason}`, params));
 
 /** Une puce « Léa 🧒 · débutante · enfant ». */
 function riderChip(r) {
@@ -131,7 +133,7 @@ export function openTrailPrep(ui, tg) {
     const cards = horses().map((a) => {
       const fit = forGuide ? { ok: true } : horseFit(a, rider);
       const busy = taken.has(a.id);
-      const why = busy ? t('tg_reason_sameHorse') : fit.ok ? '' : t(`tg_reason_${fit.reason}`);
+      const why = busy ? t('tg_reason_sameHorse') : fit.ok ? '' : horseWhy(fit.reason, a);
       return h('button', {
         class: `card tg-horse ${fit.ok && !busy ? '' : 'locked'}`,
         onClick: () => {
@@ -173,7 +175,7 @@ export function openTrailPrep(ui, tg) {
         const horse = it?.horse ?? null;
         rows.push(line(it?.ok, horse ? t('tg_item_horse', { rider: r.name, horse: horse.name }) : t('tg_item_horseNone', { rider: r.name }),
           [h('button', { class: 'small', onClick: () => { state.pickFor = r.id; ui.renderPanel(); } }, t('tg_pick')), horse ? showBtn(entityOf(horse.id)) : null],
-          it?.ok ? `${LEVEL_EMOJI[r.level]} ${t(`tg_level_${r.level}`, { g: r.sex })} · ${t(`tg_weight_${r.weight}`)}` : it?.reason ? t(`tg_reason_${it.reason}`) : null));
+          it?.ok ? `${LEVEL_EMOJI[r.level]} ${t(`tg_level_${r.level}`, { g: r.sex })} · ${t(`tg_weight_${r.weight}`)}` : it?.reason ? horseWhy(it.reason, horse) : null));
         const gi = check.items.find((x) => x.id === 'gear' && x.rider === r);
         if (gi) {
           const size = gi.size ? t(`tk_size_${gi.size}`) : '';
@@ -189,7 +191,7 @@ export function openTrailPrep(ui, tg) {
       const ghGear = gh.horse && (gh.reason === 'needBridle' || gh.reason === 'wrongSize');
       rows.push(line(gh.ok, gh.horse ? t('tg_item_guideHorse', { horse: gh.horse.name }) : t('tg_item_guideHorseNone'),
         [ghGear ? saddleBtn(gh.horse, null) : null, h('button', { class: 'small', onClick: () => { state.pickFor = 'guide'; ui.renderPanel(); } }, t('tg_pick')), gh.horse && !ghGear ? showBtn(entityOf(gh.horse.id)) : null],
-        gh.ok ? null : gh.reason && gh.reason !== 'noHorse' ? t(`tg_reason_${gh.reason}`, { size: ghSize }) : null));
+        gh.ok ? null : gh.reason && gh.reason !== 'noHorse' ? horseWhy(gh.reason, gh.horse, { size: ghSize }) : null));
       // La sacoche : gourde, goûter (à la sellerie) et trousse de secours.
       for (const k of ['water', 'snack']) {
         const it = check.items.find((x) => x.id === k);

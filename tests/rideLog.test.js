@@ -459,6 +459,42 @@ describe('en descendant (Game.dismount)', () => {
     expect(g.rideLog.preWarm).toBe(true); // (la carte ne donne pas le tampon « Détente » pour ça)
   });
 
+  it('au concours (l\'échauffement, une épreuve : onResult) et après une balade guidée, encore en selle : échauffé aussi', async () => {
+    const { newSession, sessionTick, effortFactor } = await import('../src/sim/warmup.js');
+    const { Session } = await import('../src/game/Activities.js');
+    const { TrailGuide } = await import('../src/game/TrailGuide.js');
+    const { createProfile } = await import('../src/sim/profile.js');
+    const { rideResult } = await import('../src/sim/trailGuide.js');
+    const cold = (g) => sessionTick(g.player.session, 'trot', 0.1);
+    const a = horse();
+    const g = Object.create(Game.prototype);
+    Object.assign(g, { profile: createProfile('Lou'), player: { mount: { data: a }, session: newSession() } });
+    g.profile.clock = 600;
+    // Petit tour d'échauffement au concours (CompetitionVenue.warmUp) : le site gère la suite, sans Game.markHorseDay
+    const got = [];
+    const s = { game: g, opts: { onResult: (res) => got.push(res) }, hud: { setMain() {} }, end: (x) => got.push(['end', x]) };
+    Session.prototype.finish.call(s, { stars: 2 }, { animals: [a] });
+    expect(got).toEqual([['end', false], { stars: 2 }]); // (le reste ne change pas)
+    expect(a.warmAt).toBe(600);
+    expect(cold(g)).toBeNull(); // (le premier trot après : ni « 🐢 Pense à l'échauffer », ni « ✅ »)
+    expect(effortFactor(g.player.session)).toBe(1);
+    // 🧭 une balade guidée (TrailGuide.finishRide) : le cheval du guide, encore monté ; ceux des visiteurs aussi chauds
+    fakeDom();
+    i18n.setLang('fr');
+    const visitor = horse({ name: 'Caramel' });
+    const rider = { id: 'r0', name: 'Léa', sex: 'f', age: 'child', level: 'beginner', weight: 'child', fun: 80 };
+    const booking = { id: 'b1', group: 'family', riders: [rider], duration: 'short', place: 'maison', price: 20 };
+    g.profile.clock = 900;
+    Object.assign(g, { xp() {}, save() {}, ui: { refresh() {}, showModal() {}, hideModal() {} } }); // (Game.isHome, Game.day : du profil)
+    g.player.session = newSession();
+    const tg = Object.assign(Object.create(TrailGuide.prototype), { game: g, tutorial() {} });
+    const result = rideResult({ riders: [rider], legs: 4, totalLegs: 4, booking, perks: {} });
+    tg.finishRide({ booking, riders: [{ animal: visitor }], guide: a, end() {} }, result);
+    expect([a.warmAt, visitor.warmAt]).toEqual([900, 900]);
+    expect(cold(g)).toBeNull();
+    expect(effortFactor(g.player.session)).toBe(1);
+  });
+
   it('remonté en selle (Game.mountRider) ou une séance commence : la carte d\'avant s\'en va, elle ne revient pas après', async () => {
     i18n.setLang('fr');
     const { Activities, SESSION_TYPES } = await import('../src/game/Activities.js');

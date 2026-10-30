@@ -149,6 +149,8 @@ export const COMP_FR = {
   comp_resultsCount: 'Concours : {n} · podiums : {p}',
   comp_why_sick: '{name} est malade : soigne-le d\'abord.',
   comp_why_sick_f: '{name} est malade : soigne-la d\'abord.',
+  comp_why_hurt: '{name} est blessé : soigne-le d\'abord.', // (malade d'une blessure : ta, src/i18n.js)
+  comp_why_hurt_f: '{name} est blessée : soigne-la d\'abord.',
   comp_why_pregnant: '{name} attend un bébé : pas de concours.',
   comp_why_baby: '{name} est encore un bébé.',
   comp_why_notHorse: 'Cette discipline est pour les chevaux.',
@@ -370,6 +372,7 @@ export const COMP_EN = {
   comp_noResults: 'No away show yet. Enter one in 🏆 Activities → 📅 Shows!',
   comp_resultsCount: 'Shows: {n} · podiums: {p}',
   comp_why_sick: '{name} is sick: get them treated first.',
+  comp_why_hurt: '{name} is hurt: get them treated first.',
   comp_why_pregnant: '{name} is expecting a baby: no shows.',
   comp_why_baby: '{name} is still a baby.',
   comp_why_notHorse: 'This discipline is for horses.',

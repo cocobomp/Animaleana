@@ -278,8 +278,11 @@ export function happiness(a) {
   return clamp(Math.round(h));
 }
 
-/** Malade d'une blessure (a.sick 'paw' : un événement, l'abcès d'un caillou) : les mots disent « blessé », 🩹 ; le jeu, lui, le voit malade (mood, canRide…). */
-export const isHurt = (a) => a?.sick === 'paw';
+/**
+ * Malade d'une blessure (a.sick 'paw' : l'événement, src/sim/events.js) : les mots disent « blessé », 🩹 ; le jeu, lui,
+ * le voit malade (mood, canRide…). Pas l'abcès d'un caillou (aussi 'paw') : une infection, il est « malade », 🤒.
+ */
+export const isHurt = (a) => a?.sick === 'paw' && a.lame?.cause !== 'abscess';
 
 export function mood(a) {
   if (a.sick) return 'sick';

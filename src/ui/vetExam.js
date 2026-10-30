@@ -6,7 +6,7 @@
 // premiers secours, les clients « soins » du métier et les leçons de l'école (src/ui/vetSchool.js).
 
 import { h } from './dom.js';
-import { t, ta, getLang } from '../i18n.js';
+import { t, ta, getLang, speciesKey } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { canAfford } from '../sim/profile.js';
 import { isStarted } from '../sim/careers.js';
@@ -28,8 +28,8 @@ export function num(v) {
   return getLang() === 'fr' ? s.replace('.', ',') : s;
 }
 
-/** Le nom de la maladie (ou « en bonne santé »). */
-export const illName = (id) => t(`vx_ill_${id}`);
+/** Le nom de la maladie (ou « en bonne santé ») ; pour un cheval, sa « jambe blessée » (speciesKey). */
+export const illName = (id, a) => t(speciesKey(`vx_ill_${id}`, a));
 
 /** La norme rappelée sous une mesure (« normale : 37,2–38,3 °C »). */
 function normText(r) {
@@ -40,8 +40,8 @@ function normText(r) {
   return t(key, { lo: num(r.norm[0]), hi: num(r.norm[1]), u });
 }
 
-/** Les signes trouvés, accordés à l'animal (« trop grosse » pour une jument). */
-export const signText = (signs, a) => signs.map((s) => ta(`vx_sign_${s}`, a)).join(', ');
+/** Les signes trouvés, accordés à l'animal (« trop grosse » pour une jument, « jambe douloureuse » pour un cheval). */
+export const signText = (signs, a) => signs.map((s) => ta(speciesKey(`vx_sign_${s}`, a), a)).join(', ');
 
 /** Une ligne du carnet à partir d'un résultat de evaluate(). */
 export function noteLine(a, r) {
@@ -112,7 +112,7 @@ export function createExamView(ui, o) {
 
   const renderNotes = () => {
     const items = [];
-    if (o.observe !== false) items.push(noteEl({ icon: '👀', label: t('vx_obs'), value: ta(`vx_look_${cs.look}`, a), status: 'info' }));
+    if (o.observe !== false) items.push(noteEl({ icon: '👀', label: t('vx_obs'), value: ta(speciesKey(`vx_look_${cs.look}`, a), a), status: 'info' }));
     for (const r of results.values()) items.push(noteEl(noteLine(a, r)));
     if (!results.size) items.push(h('li', { class: 'vx-note empty' }, t('vx_notebookEmpty')));
     listEl.replaceChildren(...items);
@@ -339,7 +339,7 @@ export function openVetExam(ui, a, mode = 'clinic') {
       : h('p', { class: 'note' }, t('vx_dx_noSign'));
     const cards = dx.map((d, i) => h('button', { class: `vx-dx ${i === 0 ? 'best' : ''}`, onClick: () => choose(d.id) },
       h('span', { class: 'vx-dx-emoji' }, ILL_EMOJI[d.id]),
-      h('span', { class: 'vx-dx-main' }, h('b', {}, illName(d.id)),
+      h('span', { class: 'vx-dx-main' }, h('b', {}, illName(d.id, a)),
         d.matched.length ? h('small', {}, t('vx_dx_matches', { list: signText(d.matched, a) })) : h('small', {}, t('vx_dx_allNormal'))),
       i === 0 && dx.length > 1 ? h('span', { class: 'vx-dx-tag' }, t('vx_dx_best')) : null));
     const others = ['healthy', ...ILLNESS_IDS].filter((id) => !dx.some((d) => d.id === id));
@@ -351,7 +351,7 @@ export function openVetExam(ui, a, mode = 'clinic') {
       h('div', { class: 'vx-dx-list' }, cards),
       msgEl(),
       others.length ? h('details', { class: 'vx-others' }, h('summary', {}, t('vx_dx_others')),
-        h('div', { class: 'vx-other-grid' }, others.map((id) => h('button', { class: 'small', onClick: () => choose(id) }, `${ILL_EMOJI[id]} ${illName(id)}`)))) : null,
+        h('div', { class: 'vx-other-grid' }, others.map((id) => h('button', { class: 'small', onClick: () => choose(id) }, `${ILL_EMOJI[id]} ${illName(id, a)}`)))) : null,
       h('button', { class: 'vx-back', onClick: () => setStep('exam') }, `↩ ${t('vx_dx_back')}`),
     ];
   }
@@ -374,7 +374,7 @@ export function openVetExam(ui, a, mode = 'clinic') {
   function treatPanel() {
     return [
       msgEl(),
-      h('h3', {}, `${ILL_EMOJI[cs.illness]} ${t('vx_tx_title', { ill: illName(cs.illness) })}`),
+      h('h3', {}, `${ILL_EMOJI[cs.illness]} ${t('vx_tx_title', { ill: illName(cs.illness, a) })}`),
       h('div', { class: 'vx-tx-grid' }, TREATMENTS.map((x) => h('button', { class: 'vx-tx', onClick: () => treat(x) },
         h('span', { class: 'vx-tx-emoji' }, TREAT_EMOJI[x]), h('b', {}, t(`treat_${x}`)), h('small', {}, t(`vx_txd_${x}`))))),
     ];
@@ -404,7 +404,7 @@ export function openVetExam(ui, a, mode = 'clinic') {
       h('div', { class: 'vx-success' }, h('span', { class: 'vx-big' }, TREAT_EMOJI[x]), h('b', {}, `✅ ${t('vx_tx_right')}`)),
       dose ? h('p', { class: 'vx-dose' }, `⚖️ ${t('vx_tx_dose', { kg: num(weighed.value), n: num(dose.amount) })}`)
         : doseFor(x, 10) ? h('p', { class: 'note' }, `⚖️ ${t('vx_tx_weighTip')}`) : null,
-      h('div', { class: 'vx-follow' }, h('b', {}, `📋 ${t('vx_follow')}`), h('p', {}, ta(`vx_follow_${cs.illness}${cs.illness === 'belly' && a.species === 'horse' ? 'Horse' : ''}`, a))),
+      h('div', { class: 'vx-follow' }, h('b', {}, `📋 ${t('vx_follow')}`), h('p', {}, ta(`vx_follow_${cs.illness}${['belly', 'paw'].includes(cs.illness) && a.species === 'horse' ? 'Horse' : ''}`, a))),
       h('button', { class: 'primary big', onClick: finish }, `💚 ${t('vx_tx_heal', { name: a.name })}`),
     ];
   }

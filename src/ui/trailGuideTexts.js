@@ -112,6 +112,8 @@ export const TRAIL_FR = {
   tg_reason_noHorse: 'Choisis un cheval dans la liste.',
   tg_reason_notHorse: 'Ce n\'est pas un cheval !',
   tg_reason_sick: 'Malade : il faut le soigner d\'abord.',
+  tg_reason_hurt: 'Blessé : il faut le soigner d\'abord.', // (malade d'une blessure : ta, src/i18n.js)
+  tg_reason_hurt_f: 'Blessée : il faut la soigner d\'abord.',
   tg_reason_pregnant: 'Elle attend un bébé : elle reste à l\'écurie.',
   tg_reason_tired: 'Trop fatigué : laisse-le se reposer.',
   tg_reason_tooYoung: 'Trop jeune pour être monté.',
@@ -355,6 +357,7 @@ export const TRAIL_EN = {
   tg_reason_noHorse: 'Pick a horse from the list.',
   tg_reason_notHorse: 'That is not a horse!',
   tg_reason_sick: 'Sick: needs treating first.',
+  tg_reason_hurt: 'Hurt: needs treating first.',
   tg_reason_pregnant: 'She is expecting a baby: she stays at the stable.',
   tg_reason_tired: 'Too tired: let them rest.',
   tg_reason_tooYoung: 'Too young to be ridden.',

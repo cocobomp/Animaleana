@@ -437,6 +437,8 @@ export class Session {
     const main = animals[0];
     if (this.opts.onResult) {
       // Concours à l'extérieur (src/game/CompetitionVenue.js) : le site gère classement, barrage et podium.
+      // (🐢 son échauffement ou son épreuve : il a travaillé, et on reste en selle après — Game.workedUnder)
+      for (const x of animals) if (x?.species === 'horse') g.workedUnder?.(x);
       this.hud.setMain(null);
       const cb = this.opts.onResult;
       this.end(false);

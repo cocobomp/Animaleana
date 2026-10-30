@@ -581,6 +581,7 @@ export class TrailGuide {
       animal.bond = Math.min(100, (animal.bond ?? 0) + gains.bond);
       animal.needs.energy = Math.max(0, animal.needs.energy - (b.duration === 'short' ? 15 : 25));
       animal.needs.exercise = Math.min(100, animal.needs.exercise + 40);
+      g.workedUnder?.(animal); // 🐢 (chaud ; encore en selle sur le cheval du guide : pas « Pense à l'échauffer » après)
     }
     addStat(p, 'actvTrail');
     g.xp('activity');

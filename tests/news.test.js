@@ -32,4 +32,36 @@ describe('quoi de neuf', () => {
     const seen = { game: { profile: { animals: [{}], newsSeen: news.NEWS_ID } }, showModal: () => { throw new Error('pas deux fois'); } };
     expect(news.maybeShowNews(seen)).toBe(false);
   });
+
+  it('la fenêtre montre ce qui est venu depuis la dernière liste vue (« cheval6 » : aussi le filet, tout assorti…)', () => {
+    const keys = (seen) => news.freshNews(seen).map((n) => n.key);
+    const v8 = ['wish', 'stars', 'lucky', 'breath', 'photos', 'halloween'];
+    const v7 = ['cards', 'quirks', 'bridle', 'matchy', 'anniv'];
+    expect(keys('cheval7')).toEqual(v8);
+    expect(keys('cheval6')).toEqual([...v8, ...v7]); // (avant : seulement les six dernières, jamais le 🪢 filet)
+    // (plus ancienne, ou jamais vue : au plus les deux dernières listes, pas un mur de texte)
+    expect(keys('cheval2')).toEqual([...v8, ...v7]);
+    expect(keys(undefined)).toEqual([...v8, ...v7]);
+    expect(keys(news.NEWS_ID)).toEqual([]);
+  });
+
+  it('une partie restée à « cheval6 » : la fenêtre s\'ouvre une fois, avec les onze nouveautés', () => {
+    // (un tout petit DOM pour h() : src/ui/dom.js)
+    class El {
+      constructor(tag) { Object.assign(this, { tag, children: [], style: {}, className: '' }); }
+      append(c) { this.children.push(c); }
+      setAttribute() {}
+      addEventListener() {}
+    }
+    globalThis.Node = El;
+    Object.assign(globalThis.document, { createElement: (tag) => new El(tag), createTextNode: (data) => ({ data }) });
+    const find = (els, cls) => els.flat(Infinity).map((e) => (e?.className === cls ? e : e?.children && find(e.children, cls))).find(Boolean);
+    const shown = [];
+    const ui = { game: { profile: { animals: [{}], newsSeen: 'cheval6' } }, showModal: (c) => shown.push(c), hideModal() {} };
+    expect(news.maybeShowNews(ui)).toBe(true);
+    expect(shown).toHaveLength(1);
+    expect(find(shown[0], 'news-list').children).toHaveLength(11); // (avant : 6, sans le 🪢 filet)
+    expect(ui.game.profile.newsSeen).toBe(news.NEWS_ID);
+    expect(news.maybeShowNews(ui)).toBe(false);
+  });
 });

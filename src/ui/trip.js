@@ -8,7 +8,7 @@ import { TRAVEL_MODES } from '../sim/places.js';
 import {
   STOP_ACTIONS, STOP_ACTION_EMOJI, canStopAction, doStopAction, continueTrip, skipStop, sleepAtStop, canContinue,
   currentStop, nextStop, remainingHours, progress, stressLevel, tipsFor, phaseAt, runToEnd, planTrip, vehicleFor,
-  isLongTrip, nightStopAhead, rideGait, RIDE_GAIT_ORDER,
+  isLongTrip, nightStopAhead, rideGait, RIDE_GAIT_ORDER, reportLine,
 } from '../sim/trip.js';
 import { openVehicleMenu, openPackingModal, cargoSummary, cargoName } from './vehicle.js'; // véhicule, coffre
 import { luggageHere, luggageEmoji } from '../sim/cargo.js';
@@ -408,8 +408,11 @@ export function showReport(ui, flow, report) {
   ui.tripRefs = null;
   const j = flow.journey;
   const stopsMade = j.trip.stops.filter((s) => s.done).length;
-  const lines = report.animals.map(({ a, level, sick }) => h('li', { class: `trip-rep ${sick ? 'sick' : level}` },
-    ta(sick ? 'trip_rep_sick' : `trip_rep_${level}`, a)));
+  // (malade ou boiteux : on le dit d'abord, sans « Bravo ! » : src/sim/trip.js reportLine)
+  const lines = report.animals.map((r) => {
+    const k = reportLine(r);
+    return h('li', { class: `trip-rep ${k === r.level ? k : 'sick'}` }, ta(`trip_rep_${k}`, r.a));
+  });
   el.replaceChildren(h('div', { class: 'trip-sheet report enter' },
     h('header', { class: 'trip-head' }, h('div', { class: 'trip-title' }, h('span', { class: 'trip-mode' }, '🏁'), h('b', {}, t('trip_arrivedTitle', { place: flow.destName() })))),
     h('div', { class: 'trip-report-facts' },

@@ -485,7 +485,10 @@ export function stressLevel(stress = 0) {
 
 /**
  * Fin du voyage : un animal très stressé est fatigué, et peut tomber malade.
- * Renvoie le bilan { hours, skipped, cares, animals: [{ a, stress, level, sick }] }.
+ * Renvoie le bilan { hours, skipped, cares, animals: [{ a, stress, level, sick, ill, lame }] } : sick, malade du
+ * stress en arrivant ; ill, malade d'autre chose (tombé malade en route, un abcès au pied…) ; lame, il boite (la
+ * cause : 'stone', 'shoe'…, sinon null). Le bilan dit sa santé avant son stress (avant : « arrivé calme. Bravo ! »
+ * pour un cheval qui boitait).
  */
 export function finishTrip(trip, animals, { rng = Math.random } = {}) {
   const report = { hours: trip.elapsed, skipped: trip.skipped, cares: trip.cares, animals: [] };
@@ -504,11 +507,17 @@ export function finishTrip(trip, animals, { rng = Math.random } = {}) {
         sick = true;
       }
     }
-    report.animals.push({ a, stress, level: stressLevel(stress), sick });
+    report.animals.push({ a, stress, level: stressLevel(stress), sick, ill: !sick && !!a.sick, lame: a.lame?.cause ?? null });
   }
   trip.status = 'arrived';
   return report;
 }
+
+/**
+ * La ligne du bilan pour un animal (clé de texte, sans le préfixe « trip_rep_ ») : sa santé d'abord ('sick', 'ill',
+ * 'lameShoe' : un fer perdu, à ferrer ; 'lame' : un caillou, à curer), sinon son stress (stressLevel).
+ */
+export const reportLine = ({ level, sick, ill, lame }) => (sick ? 'sick' : ill ? 'ill' : lame === 'shoe' ? 'lameShoe' : lame ? 'lame' : level);
 
 /**
  * Les conseils à montrer pour ce voyage (clés de texte, sans le préfixe « trip_tip_ »).

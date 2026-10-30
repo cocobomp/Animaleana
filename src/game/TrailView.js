@@ -69,10 +69,10 @@ export class TrailView extends RoadView {
       this.scene.add(e.root);
     };
     place(horse, 0, 0);
-    // En selle (on monte s'il le faut : le voyage est « à cheval »).
+    // En selle (on monte s'il le faut : le voyage est « à cheval »), avec sa bombe (Game.mountRider).
     if (pl.mount !== horse) {
       if (pl.mount) pl.dismount();
-      pl.ride(horse);
+      g.mountRider(horse);
     }
     pl.root.position.set(0, 0, 0);
     pl.root.rotation.set(0, 0, 0);

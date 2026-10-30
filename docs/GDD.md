@@ -86,7 +86,9 @@ réussite au dressage…).
 | Santé | Découle des autres besoins, et des soins chez le vétérinaire |
 | Bonheur | Moyenne pondérée de tout le reste |
 
-**Seller et desseller** (0.5, `src/ui/minigames/seller.js`) : le premier cheval arrive sellé. « 🧰 Desseller » range
+**Seller et desseller** (0.5, `src/ui/minigames/seller.js`) : le premier cheval arrive avec son licol ; sa selle et
+son filet offerts l'attendent à la sellerie (son premier « 🏇 Seller et monter » apprend à seller, puis à brider).
+« 🧰 Desseller » range
 la selle et le tapis à la sellerie (après le galop, le jeu le rappelle : sans selle, au pré, le cheval va se rouler).
 Pas de selle sur le dos : « 🏇 Seller et monter » (ou « 🪢 Seller » seul, ou « 🐎 Monter à cru »). Le mini-jeu, en
 trois étapes « juste ce qu'il faut » : ① le tapis glissé sur le dos, juste derrière le garrot (trop en avant, il
@@ -311,7 +313,8 @@ poulain trop jeune pour être monté. Un petit mot nomme la pièce qui manque
 si elle est à toi (on change seulement sa couleur ; un tapis mis sans selle reste quand on le selle), sinon sa fiche
 à la sellerie, dans la bonne couleur. Tapis et
 jambes assortis : « ✨ Assorti : Rose ! » et des étincelles sur le cheval ; ta bombe aussi : « 🌟 Tout assorti, même
-ta bombe ! ». Le premier ensemble est un souvenir ; ensuite, monter avec un ensemble fait quelques étincelles, et le
+ta bombe ! » (ta bombe compte pour tous tes chevaux d'ici : des étincelles sur chacun, le petit mot une fois).
+Le premier ensemble est un souvenir ; ensuite, monter avec un ensemble fait quelques étincelles, et le
 défi du jour peut devenir « 🎨 monte avec un ensemble assorti ». Jusqu'à la bombe : blanc, bleu marine, noir, rose,
 bleu ciel, violet ; rouge sans la bombe (pas de bombe rouge) ; vert ou gris : pas de guêtres ni de cloches.
 
@@ -422,7 +425,10 @@ galops, trots enlevés, troncs sautés, sans-faute, balades, appels, journées p
   le repose et le calme (`RIDE_GAITS`, `src/sim/trip.js`). Trois caméras : derrière,
   en selle (entre les oreilles), autour. Aux pauses, le cheval s'arrête près d'un
   abreuvoir et d'une barre d'attache (l'écurie d'étape le soir) ; ×3, ×8 et « aller
-  jusqu'à l'arrivée » restent là.
+  jusqu'à l'arrivée » restent là. En selle toujours avec sa bombe (parti à pied, et
+  remis en selle à l'arrivée). Le bilan d'arrivée dit d'abord s'il boite (un caillou :
+  cure ses pieds ; un fer perdu : ferre-le) ou s'il est malade (le vétérinaire), sans
+  « Bravo ! ».
 - Sur place : animaux uniques à adopter, concours, quêtes, exploration, photos.
 - Destinations (11) : Normandie (maison), plage de Bretagne, Alpes suisses, Islande,
   ranch en Alberta, campagne de Kyoto, Cotswolds, Andalousie, haras du Kentucky,

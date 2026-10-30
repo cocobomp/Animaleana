@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { createProfile } from '../src/sim/profile.js';
 import { createAnimal } from '../src/sim/animal.js';
 import { seeded } from '../src/sim/rng.js';
-import { starterTack, unbridle, bridleUp, freeBridle, tackUpForRide, equip, unequip, wears, rideGear, inUse, unsaddle } from '../src/sim/gear.js';
+import { starterTack, unbridle, bridleUp, freeBridle, tackUpForRide, equip, unequip, wears, rideGear, inUse, unsaddle, saddleUp } from '../src/sim/gear.js';
 
 const horse = (seed = 'filet') => {
   const a = createAnimal({ species: 'horse', breed: 'selle_francais', sex: 'f', ageDays: 2000, rng: seeded(seed) });
@@ -32,6 +32,7 @@ describe('débrider', () => {
     const a = horse();
     p.animals.push(a);
     starterTack(p, a);
+    bridleUp(p, a);
     unequip(a, 'halter');
     expect(unbridle(p, a)).toBe(true);
     expect(a.gear.halter?.item).toBe('halter');
@@ -90,7 +91,8 @@ describe('avant de monter', () => {
     const a = horse();
     const b = horse('autre');
     p.animals.push(a, b);
-    starterTack(p, a); // (le seul filet est sur Étoile)
+    starterTack(p, a);
+    bridleUp(p, a); // (le seul filet est sur Étoile)
     expect(equip(p, b, 'halter').ok).toBe(false); // (et le seul licol aussi)
     p.items.halter = 2;
     expect(equip(p, b, 'halter').ok).toBe(true);
@@ -127,6 +129,7 @@ describe('« Tous au pré », « au paddock » et « Desseller » (src/game/Game
     const b = horse('monté');
     p.animals.push(a, b);
     starterTack(p, a);
+    bridleUp(p, a);
     equip(p, b, 'bridle');
     const g = fakeGame(p, b);
     Game.prototype.sendHorses.call(g, 'field');
@@ -145,6 +148,8 @@ describe('« Tous au pré », « au paddock » et « Desseller » (src/game/Game
     const a = horse();
     p.animals.push(a);
     starterTack(p, a);
+    saddleUp(p, a);
+    bridleUp(p, a);
     const who = { name: 'Étoile', g: 'f' };
     const g = fakeGame(p);
     expect(Game.prototype.unsaddle.call(g, a)).toBe(true);

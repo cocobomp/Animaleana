@@ -550,12 +550,13 @@ export function tackUpForRide(profile, a, { home = true } = {}) {
 
 /**
  * Le matériel offert au début, mis tout de suite au premier animal adopté qui en a besoin : collier et laisse pour un
- * chien ; licol, filet et selle pour un cheval. home : à la maison, la taille s'échange gratuitement (avant, un poney
- * ou un cheval de trait ne recevait rien : le licol offert était à la taille d'un cheval, et il ne pouvait pas être
- * monté). Renvoie la liste des objets mis.
+ * chien ; le licol pour un cheval. Sa selle et son filet offerts l'attendent à la sellerie : le premier « 🏇 Seller et
+ * monter » apprend à seller et à brider (et jamais de filet au pré). home : à la maison, la taille s'échange
+ * gratuitement (avant, un poney ou un cheval de trait ne recevait rien : le licol offert était à la taille d'un
+ * cheval, et il ne pouvait pas être monté). Renvoie la liste des objets mis.
  */
 export function starterTack(profile, a, { home = true } = {}) {
-  const items = a.species === 'dog' ? [['collar', 'red'], ['leash']] : a.species === 'horse' ? [['halter', 'red'], ['bridle'], ['saddle']] : [];
+  const items = a.species === 'dog' ? [['collar', 'red'], ['leash']] : a.species === 'horse' ? [['halter', 'red']] : [];
   const put = [];
   for (const [item, color] of items) if (equip(profile, a, item, color, { autoSwap: home }).ok) put.push(item);
   return put;

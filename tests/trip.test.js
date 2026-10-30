@@ -7,7 +7,7 @@ import {
   planTrip, tickTrip, doStopAction, canStopAction, continueTrip, skipStop, sleepAtStop, canContinue,
   runToEnd, finishTrip, vehicleFor, placeFor, tipsFor, currentStop, remainingHours, stressLevel,
   MAX_DRIVE_HORSES, SICK_STRESS, TRAILER_SPECIES, nightStopAhead,
-  RIDE_GAITS, RIDE_GAIT_ORDER, CANTER_MIN_ENERGY, rideGait, ridePace, setRideGait,
+  RIDE_GAITS, RIDE_GAIT_ORDER, CANTER_MIN_ENERGY, rideGait, ridePace, setRideGait, reportLine,
 } from '../src/sim/trip.js';
 
 const rng = () => mulberry32(7);
@@ -248,6 +248,21 @@ describe('le coffre pendant le trajet', () => {
     const trip = planTrip({ mode: 'van', hours: 9, animals: [horse], cargo: {} });
     runToEnd(trip, [horse], { rng: rng() });
     expect(trip.status).toBe('arrived');
+  });
+
+  it('le bilan dit d\'abord s\'il boite ou s\'il est malade (pas « arrivé calme. Bravo ! »)', () => {
+    const lame = adult('horse', { name: 'Caramel', lame: { cause: 'stone', foot: 0, hours: 2 } });
+    const shoe = adult('horse', { name: 'Éclair', lame: { cause: 'shoe', foot: 1, hours: 1 } });
+    const ill = adult('horse', { name: 'Étoile', sex: 'f', sick: 'paw', lame: { cause: 'abscess', foot: 2, hours: 30 } });
+    const calm = adult('horse', { name: 'Noisette' });
+    const all = [lame, shoe, ill, calm];
+    const trip = planTrip({ mode: 'horse', hours: 3, animals: all });
+    const report = finishTrip(trip, all, { rng: () => 1 });
+    expect(report.animals.map((r) => r.level)).toEqual(['calm', 'calm', 'calm', 'calm']);
+    expect(report.animals.map((r) => [r.lame, r.ill, r.sick])).toEqual([['stone', false, false], ['shoe', false, false], ['abscess', true, false], [null, false, false]]);
+    expect(report.animals.map(reportLine)).toEqual(['lame', 'lameShoe', 'ill', 'calm']);
+    // (malade du stress en arrivant : comme avant)
+    expect(reportLine({ level: 'panic', sick: true, ill: false, lame: 'stone' })).toBe('sick');
   });
 
   it('chaque voyage donne l\'habitude du van', () => {

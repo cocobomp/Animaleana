@@ -1893,14 +1893,20 @@ export class Game {
     return r;
   }
 
-  /** Bombe du cavalier : on la choisit à la sellerie, on la porte quand on monte. horse : le cheval de l'ensemble (🎨). */
-  equipHelmet(item, color, horse = this.mainHorse()) {
-    const lv0 = horse ? matchyOf(horse, riderHelmet(this.profile)).level : 0;
+  /**
+   * Bombe du cavalier : on la choisit à la sellerie, on la porte quand on monte. horse : le cheval de l'ensemble (🎨)
+   * d'où l'on vient. Ta bombe compte pour tous tes chevaux d'ici : chacun dont l'ensemble est complet a ses ✨ (avant,
+   * seulement mainHorse : la fiche de la bombe, ouverte depuis Étoile, fêtait le poulain soigné juste avant).
+   */
+  equipHelmet(item, color, horse = null) {
+    const mine = new Set([horse, ...this.animalsHere().filter((a) => a.species === 'horse' && !a.client && !a.guest)].filter(Boolean));
+    const lv0 = new Map([...mine].map((a) => [a, matchyOf(a, riderHelmet(this.profile)).level]));
     const r = equipHelmet(this.profile, item, color);
     if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`, { item: t(`gear_${item}`) }), 4500);
     this.ui.toast(t('tk_helmetOn', { item: t(`gear_${item}`) }));
     if (this.player.mount) this.player.setHelmet(riderHelmet(this.profile));
-    if (horse) this.matchyNews(horse, lv0);
+    let said = false; // (deux ensembles complets d'un coup : le petit mot une fois)
+    for (const a of mine) said = this.matchyNews(a, lv0.get(a), said) || said;
     return r;
   }
 
@@ -1921,14 +1927,16 @@ export class Game {
 
   /**
    * 🎨 Son ensemble vient de monter d'un cran (src/sim/matchy.js) : tapis et jambes de la même couleur, puis ta
-   * bombe aussi. Des étincelles, un petit mot, et la première fois, un souvenir.
+   * bombe aussi. Des étincelles, un petit mot (pas avec quiet : déjà dit pour un autre cheval), et la première fois,
+   * un souvenir. Renvoie true s'il est monté d'un cran.
    */
-  matchyNews(a, lv0) {
+  matchyNews(a, lv0, quiet = false) {
     const m = matchyOf(a, riderHelmet(this.profile));
-    if (m.level <= lv0) return;
+    if (m.level <= lv0) return false;
     this.entities.get(a.id)?.emit('✨', 6);
-    this.ui.toast(t(m.level === 2 ? 'mx_lvl2' : 'mx_lvl1', { color: t(`col_${m.color}`) }), 5000);
+    if (!quiet) this.ui.toast(t(m.level === 2 ? 'mx_lvl2' : 'mx_lvl1', { color: t(`col_${m.color}`) }), 5000);
     this.remember(a, 'firstMatchy');
+    return true;
   }
 
   unequip(a, slot) {
@@ -2320,11 +2328,8 @@ export class Game {
       this.ui.toast(t('leashRide', { name: d.name, g: d.sex }), 5000);
     }
     e.stopRoll?.(); // (il se roulait : debout d'abord, avant de mesurer la selle)
-    // On monte toujours avec sa bombe, mise avant de monter : setHelmet refait l'avatar (mèches rentrées), qui
-    // n'est ainsi posé en selle (et ajusté au cheval, riderFit) qu'une fois.
-    this.player.setHelmet(riderHelmet(this.profile));
     this.player.riderLevel = galopLevel(this.profile); // (Galops obtenus : il s'effraie moins)
-    this.player.ride(e);
+    this.mountRider(e);
     // 🐢 il vient de travailler (une leçon, une balade…) : déjà chaud, pas besoin de le réchauffer (src/sim/warmup.js)
     if ((this.profile.clock ?? 0) - (a.warmAt ?? -1e9) < WARM_FOR) this.player.session = warmSession();
     this.ui.updateGaitPad?.();
@@ -2342,6 +2347,16 @@ export class Game {
     this.xp('ride');
     this.ui.toast(t(gear.bareback ? 'ridingBareback' : 'ridingHint', { name: a.name, g: a.sex }));
     return r;
+  }
+
+  /**
+   * En selle sur l'entité e, toujours avec sa bombe (aussi en voyage à cheval, src/game/TrailView.js, et remis en
+   * selle à l'arrivée). Mise avant de monter : setHelmet refait l'avatar (mèches rentrées), qui n'est ainsi posé en
+   * selle (et ajusté au cheval, riderFit) qu'une fois.
+   */
+  mountRider(e) {
+    this.player.setHelmet(riderHelmet(this.profile));
+    this.player.ride(e);
   }
 
   dismount() {
@@ -2563,8 +2578,8 @@ export class Game {
     addStat(this.profile, 'adopted');
     this.remember(a, 'arrived');
     this.xp('adopt');
-    // Le premier cheval reçoit tout de suite le licol, le filet et la selle offerts (à sa taille : un poney ou un
-    // cheval de trait aussi), le premier chien son collier et sa laisse (src/sim/gear.js).
+    // Le premier cheval reçoit tout de suite le licol offert (à sa taille : un poney ou un cheval de trait aussi ; sa
+    // selle et son filet l'attendent à la sellerie), le premier chien son collier et sa laisse (src/sim/gear.js).
     starterTack(this.profile, a, { home: this.isHome });
     const door = this.world.interactables.find((i) => i.kind === from) ?? this.world.interactables.find((i) => i.kind === 'refuge');
     const e = this.spawnEntity(a, door);
@@ -2887,7 +2902,7 @@ export class Game {
     this.xp('travel');
     if (mode === 'horse') addStat(p, 'horseTravels');
     this.loadPlace(destId);
-    if (mode === 'horse' && horse && this.entities.get(horse.id)) this.player.ride(this.entities.get(horse.id));
+    if (mode === 'horse' && horse && this.entities.get(horse.id)) this.mountRider(this.entities.get(horse.id)); // (avec sa bombe)
     const def = PLACES[destId];
     this.ui.toast(t('arrived', { flag: def.flag, place: L(def.name) }), 5000);
     this.save();

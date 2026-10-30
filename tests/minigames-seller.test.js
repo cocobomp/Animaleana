@@ -174,6 +174,9 @@ describe('desseller, reseller', () => {
     const a = horse();
     p.animals.push(a);
     starterTack(p, a);
+    expect(wears(a, 'saddle')).toBe(false); // (sa selle offerte l'attend à la sellerie : le premier « Seller et monter »)
+    expect(freeSaddle(p, a)).toBe('saddle');
+    expect(saddleUp(p, a).ok).toBe(true);
     expect(wears(a, 'saddle')).toBe(true);
     expect(freeSaddle(p, a)).toBeNull(); // (la seule selle est sur son dos)
     const was = a.gear.saddle.item;
@@ -198,6 +201,7 @@ describe('desseller, reseller', () => {
     const a = horse();
     p.animals.push(a);
     starterTack(p, a);
+    saddleUp(p, a);
     expect(equip(p, a, 'saddlePad', 'navy', { exact: true }).ok).toBe(true);
     unsaddle(a);
     expect(a.lastPad).toEqual({ item: 'saddlePad', color: 'navy' });

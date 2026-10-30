@@ -12,7 +12,7 @@ import { canStart, startCareer } from '../src/sim/careers.js';
 import { eligibility, knownTricks } from '../src/sim/activities.js';
 import { adoptionCandidates } from '../src/sim/adoption.js';
 import { allowedGait } from '../src/sim/riding.js';
-import { rideGear, tackUpForRide, starterTack, wears, sizeOf } from '../src/sim/gear.js';
+import { rideGear, tackUpForRide, starterTack, wears, sizeOf, freeSaddle, freeBridle, saddleUp, bridleUp } from '../src/sim/gear.js';
 import { followQuest, stopFollow, questBlock, followBlock, questReady, cheapestTrip, QUEST_GUIDE, QUEST_ORDER } from '../src/sim/tutorial.js';
 import { serializeSave, parseSave, mergeProfiles } from '../src/sim/saveFile.js';
 import { mulberry32, seeded } from '../src/sim/rng.js';
@@ -556,12 +556,19 @@ describe('à cheval : un cheval adulte, avec un filet ou un licol', () => {
     for (const id of ['actvLesson1', 'actvJump1', 'actvTrail1', 'drTrain3', 'tgFirst']) expect(questBlock(id, p2)?.need, id).toBe('tack');
   });
 
-  it('le premier poney ou cheval de trait adopté reçoit aussi le licol, le filet et la selle offerts (taille échangée)', () => {
+  it('le premier poney ou cheval de trait adopté reçoit aussi le licol offert ; sa selle et son filet l\'attendent à la sellerie (taille échangée)', () => {
     for (const breed of ['shetland', 'connemara', 'percheron', 'irish_cob', 'selle_francais']) {
       const p = createProfile('Lou');
       const a = createAnimal({ species: 'horse', breed, sex: 'f', ageDays: 60, rng: seeded(breed) });
-      expect(starterTack(p, a), `${breed} (${sizeOf(a)})`).toEqual(['halter', 'bridle', 'saddle']);
+      expect(starterTack(p, a), `${breed} (${sizeOf(a)})`).toEqual(['halter']);
       expect(rideGear(a).ok, breed).toBe(true);
+      // (pas sellé ni bridé au pré : « 🏇 Seller et monter » apprend à seller et à brider, à sa taille)
+      expect(wears(a, 'saddle') || wears(a, 'bridle'), breed).toBe(false);
+      expect(freeSaddle(p, a), breed).toBeTruthy();
+      expect(freeBridle(p, a), breed).toBeTruthy();
+      expect(saddleUp(p, a).ok, breed).toBe(true);
+      expect(bridleUp(p, a).ok, breed).toBe(true);
+      expect(rideGear(a), breed).toMatchObject({ ok: true, bareback: false });
     }
     const p = createProfile('Lou');
     expect(starterTack(p, grown('dog'))).toEqual(['collar', 'leash']);
@@ -598,7 +605,7 @@ function playChapter(p, id, breed) {
   };
   switch (id) {
     case 'horse1': {
-      // au refuge (gratuit), le premier cheval de la liste est adulte ; il reçoit son licol, son filet et sa selle
+      // au refuge (gratuit), le premier cheval de la liste est adulte ; il reçoit son licol (selle et filet à la sellerie)
       const h = adoptionCandidates(p.home, 1, [], true).find((x) => x.species === 'horse');
       expect(h, breed).toBeTruthy();
       p.animals.push(h);
@@ -614,6 +621,8 @@ function playChapter(p, id, breed) {
     case 'ride1': {
       a.needs.energy = 80;
       expect(canRide(a).ok, breed).toBe(true);
+      // « 🏇 Seller et monter » : sa selle et son filet offerts, pris à la sellerie (src/ui/UI.js saddleWithGame)
+      expect(saddleUp(p, a).ok && bridleUp(p, a).ok, breed).toBe(true);
       if (!rideGear(a).ok) expect(tackUpForRide(p, a).ok, breed).toBe(true);
       addStat(p, 'rides');
       xp('ride');

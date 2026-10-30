@@ -1,6 +1,6 @@
 // 🎨 Tout assorti (src/sim/matchy.js) : le tapis et les jambes de la même couleur (niveau 1), ta bombe aussi
 // (niveau 2) ; jamais les cuirs ni le tapis citrouille ; la pièce qui manque, ce qu'on a d'abord, sinon la moins chère.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { matchyOf, missingFor, NEVER } from '../src/sim/matchy.js';
 import { GEAR, COLORS } from '../src/sim/gear.js';
 import { createProfile } from '../src/sim/profile.js';
@@ -89,5 +89,56 @@ describe('tout assorti', () => {
         }
       }
     }
+  });
+});
+
+describe('ta bombe complète l\'ensemble (src/game/Game.js equipHelmet)', () => {
+  let Game;
+  let t;
+  beforeAll(async () => {
+    ({ Game } = await import('../src/game/Game.js'));
+    ({ t } = await import('../src/i18n.js'));
+  }, 60000);
+
+  const fakeGame = (p) => {
+    const toasts = [];
+    const emits = [];
+    const g = {
+      profile: p, toasts, emits, player: { mount: null }, lastHorseId: null,
+      entities: new Map(p.animals.map((a) => [a.id, { emit: (e) => emits.push([a.name, e]) }])),
+      ui: { toast: (m) => toasts.push(m) }, remember() {},
+    };
+    for (const k of ['animalsHere', 'mainHorse', 'matchyNews']) g[k] = Game.prototype[k].bind(g);
+    return g;
+  };
+
+  it('depuis la fiche de la bombe (sans cheval) : fêté sur Étoile, même si on vient de soigner le poulain', () => {
+    const p = createProfile('Lou');
+    p.items.helmetSparkle = 1;
+    const etoile = { ...horse({ pad: put('saddlePad', 'pink'), bells: put('bellBoots', 'pink') }), id: 'e', name: 'Étoile', location: p.place };
+    const caramel = { ...horse(), id: 'c', name: 'Caramel', ageDays: 100, location: p.place };
+    const loin = { ...horse({ pad: put('saddlePad', 'pink'), legs: put('boots', 'pink') }), id: 'l', name: 'Loin', location: 'bretagne' };
+    p.animals.push(etoile, caramel, loin);
+    const g = fakeGame(p);
+    g.lastHorseId = 'c'; // (le dernier soigné : avant, seul lui était regardé)
+    expect(g.mainHorse()).toBe(caramel);
+    Game.prototype.equipHelmet.call(g, 'helmetSparkle', 'pink');
+    expect(g.toasts).toEqual([t('tk_helmetOn', { item: t('gear_helmetSparkle') }), t('mx_lvl2', { color: t('col_pink') })]);
+    expect(g.emits).toEqual([['Étoile', '✨']]); // (pas Caramel, ni le cheval resté en Bretagne)
+  });
+
+  it('deux ensembles complets d\'un coup : des ✨ sur chacun, le petit mot une seule fois', () => {
+    const p = createProfile('Lou');
+    p.items.helmetSparkle = 1;
+    const a = { ...horse({ pad: put('saddlePad', 'pink'), bells: put('bellBoots', 'pink') }), id: 'a', name: 'Étoile', location: p.place };
+    const b = { ...horse({ pad: put('saddlePad', 'pink'), legs: put('boots', 'pink') }), id: 'b', name: 'Éclair', location: p.place };
+    p.animals.push(a, b);
+    const g = fakeGame(p);
+    Game.prototype.equipHelmet.call(g, 'helmetSparkle', 'pink', b);
+    expect(g.toasts.filter((m) => m === t('mx_lvl2', { color: t('col_pink') }))).toHaveLength(1);
+    expect(g.emits.map(([n]) => n).sort()).toEqual(['Éclair', 'Étoile']);
+    // (déjà tout assorti : rien de plus)
+    Game.prototype.equipHelmet.call(g, 'helmetSparkle', 'pink');
+    expect(g.emits).toHaveLength(2);
   });
 });

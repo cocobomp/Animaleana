@@ -1308,7 +1308,7 @@ export class Game {
       this.player.update(mgmt ? 0 : wdt, pctrl, this.rig.yaw, this.rig.mode === 'first');
       if (this.rideLog && this.player.mount) { // 🏇 ta balade (en balade libre : pas menée par une activité, un voyage)
         if (this.activities.active || this.tripFlow.active) this.rideLog.skip = true;
-        else tickRideLog(this.rideLog, this.player.gaitNow, this.player.speed, mgmt ? 0 : wdt);
+        else tickRideLog(this.rideLog, this.player.auto ? null : this.player.gaitNow, this.player.speed, mgmt ? 0 : wdt, this.player.position); // (« aller vers » : l'allure d'après sa vitesse)
       }
       for (const e of entities) e.update(wdt, ctx);
       this.player.lateUpdate?.(mgmt ? 0 : wdt); // le cavalier suit le cheval qu'on vient d'animer
@@ -2378,7 +2378,7 @@ export class Game {
     this.player.dismount();
     // 🏇 Ta balade (src/sim/rideLog.js) : une balade libre d'au moins 40 s, la carte dit tout (à la place des petits mots)
     const h = e?.data;
-    const rep = log && h && this.player.gaitEnabled !== false && !this.tripFlow?.active && this.profile.tutorial?.done !== false
+    const rep = log && h && this.player.gaitEnabled !== false && !this.tripFlow?.active && !this.activities?.starting && this.profile.tutorial?.done !== false
       ? rideReport(log, { a: h, stats: this.profile.stats, session: this.player.session, postBest: this.player.posting?.best, verdict: calm, left: dayLeft(h, this.day, this.hour), worked, saddled: !!h.gear?.saddle })
       : null;
     if (calm && e.data.species === 'horse') {

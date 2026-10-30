@@ -15,7 +15,14 @@ beforeAll(async () => {
 });
 
 const horse = (o = {}) => Object.assign(createAnimal({ species: 'horse', breed: 'selle_francais', sex: 'f', ageDays: 2000, rng: seeded('balade') }), { name: 'Pomme' }, o);
-const run = (log, gait, speed, secs) => { for (let k = 0; k < secs * 10; k++) tickRideLog(log, gait, speed, 0.1); };
+// (il avance tout droit à sa vitesse ; la première image, dt 0, ne fait que poser où il est)
+const run = (log, gait, speed, secs, p = { x: 0, z: 0 }) => {
+  tickRideLog(log, gait, speed, 0, p);
+  for (let k = 0; k < secs * 10; k++) {
+    p.x += speed * 0.1;
+    tickRideLog(log, gait, speed, 0.1, p);
+  }
+};
 // (une balade d'une minute, au pas, au trot et au galop)
 const ride = (a, stats = {}, session = null) => {
   const log = newRideLog(a, stats, session);
@@ -62,8 +69,37 @@ describe('le carnet de balade', () => {
 
   it('la vitesse est plafonnée (un saut de place n\'est pas de la route)', () => {
     const log = newRideLog(horse());
-    tickRideLog(log, 'canter', 400, 0.5);
+    tickRideLog(log, 'canter', 5, 0.1, { x: 0, z: 0 });
+    expect(log.dist).toBe(0); // (la première image : où il est, rien à compter)
+    tickRideLog(log, 'canter', 5, 0.5, { x: 200, z: 0 });
     expect(log.dist).toBe(RIDE_LOG.maxSpeed * 0.5);
+    // (pas de temps qui passe, en gestion ou un voyage : il change de place sans rien compter)
+    tickRideLog(log, 'canter', 5, 0, { x: -300, z: 40 });
+    tickRideLog(log, 'canter', 5, 0.1, { x: -300, z: 40.5 });
+    expect(log.dist).toBeCloseTo(RIDE_LOG.maxSpeed * 0.5 + 0.5);
+  });
+
+  it('contre une barrière, il galope sur place : ni temps ni distance ; le long d\'elle, le chemin vraiment fait', () => {
+    const log = newRideLog(horse());
+    const p = { x: 10, z: 10 };
+    for (let k = 0; k < 300; k++) tickRideLog(log, 'canter', 6, 0.1, p); // (30 s, la tête dans la barrière)
+    expect(log.t).toBe(0);
+    expect(log.dist).toBe(0);
+    for (let k = 0; k < 100; k++) {
+      p.z += 0.2; // (il glisse le long d'elle : 2 m/s, pas 6)
+      tickRideLog(log, 'canter', 6, 0.1, p);
+    }
+    expect(log.t).toBeCloseTo(10);
+    expect(log.dist).toBeCloseTo(20);
+    expect(log.gaits.canter).toBeCloseTo(10);
+  });
+
+  it('il va tout seul où on a touché : l\'allure d\'après sa vitesse (pas l\'allure choisie avant)', () => {
+    const log = newRideLog(horse());
+    run(log, null, 12, 10); // (loin : il y va au galop)
+    run(log, null, 3, 5);
+    run(log, null, 1.6, 5);
+    expect(log.gaits).toEqual({ walk: expect.closeTo(5), trot: expect.closeTo(5), canter: expect.closeTo(10) });
   });
 
   it('jamais pour un cheval qu\'on te confie', () => {
@@ -296,6 +332,29 @@ describe('en descendant (Game.dismount)', () => {
     expect(g.toasts).toEqual([]);
     expect(a.bond).toBe(10.5);
     expect(a.rideBest).toBe(1400);
+    expect(g.rideLog).toBeNull();
+  });
+
+  it('une activité commence en selle (agility, spectacle, dressage…) : elle nous fait descendre, pas de carte, les petits mots d\'avant', async () => {
+    i18n.setLang('fr');
+    const { Activities, SESSION_TYPES } = await import('../src/game/Activities.js');
+    const a = horse({ gear: { saddle: { item: 'saddle' } } });
+    const log = newRideLog(a);
+    Object.assign(log, { t: 130, dist: 1400, gaits: { walk: 60, trot: 40, canter: 30 } });
+    const g = fakeGame(a, log);
+    Object.assign(g.ui, { closePanel() {} });
+    g.stopFollowers = () => {};
+    g.activities = new Activities(g);
+    // (comme les vraies séances : le constructeur fait descendre, avant que la séance soit active)
+    SESSION_TYPES.rcTest = { cls: class { constructor(mgr) { this.ok = true; mgr.game.dismount(); } } };
+    try {
+      expect(g.activities.start('rcTest')).toBeTruthy();
+    } finally {
+      delete SESSION_TYPES.rcTest;
+    }
+    expect(g.ui.root.children).toHaveLength(0);
+    expect(g.toasts).toEqual([i18n.t('ride_cooled', { name: 'Pomme', g: 'f' }), i18n.t('ride_unsaddle', { name: 'Pomme', g: 'f' })]);
+    expect(g.activities.starting).toBe(false);
     expect(g.rideLog).toBeNull();
   });
 

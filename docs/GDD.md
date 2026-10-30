@@ -268,7 +268,9 @@ grandi (« 💪 Encore 2 points pour sa 2e étoile », avec sa barre), « 📏 S
 première balade mesurée est notée sans rien dire), ce qui manque à sa journée parfaite (« 🌇 ❤️ », rien si le foin du
 matin est oublié) et, sellé après un galop, « 🧰 Desselle-le : il veut se rouler ». Elle remplace alors les petits mots
 du retour au calme et de « Desseller » (le lien du retour au calme est toujours donné). Pas de carte pour une balade
-plus courte, menée par une activité ou un voyage : les petits mots d'avant.
+plus courte, menée par une activité ou un voyage : les petits mots d'avant. Seul le chemin vraiment fait compte
+(il galope sur place contre une barrière : rien) ; quand il va tout seul où on a touché, son allure se lit à sa
+vitesse.
 
 ### Son souffle dans le froid (0.5, `src/sim/breath.js`, `src/game/HorseBreath.js`)
 Quand il fait froid (10 °C et moins, un peu plus visible sous la pluie, la neige ou le brouillard), on voit la buée de

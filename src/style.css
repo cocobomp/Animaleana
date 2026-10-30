@@ -2906,3 +2906,11 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 /* (paysage : sous les boutons du temps, au-dessus du gros bouton vert du milieu) */
 @media (max-height: 500px) { .ride-card { top: calc(104px + var(--safe-t)); bottom: auto; } }
 :is(body.riding, body.panel-open, body.modal-open, body.actv-running, body.mgmt) .ride-card { display: none; }
+/* (paysage : la carte prend la colonne du milieu ; tant qu'elle est là, les messages passent à sa gauche, sous la carte
+   d'infos, comme avec une fenêtre ouverte, au lieu de se poser dessus) */
+@media (max-height: 500px) {
+  body:has(.ride-card:not(.out)):not(.riding, .panel-open, .modal-open, .actv-running, .mgmt) #toasts {
+    left: calc(8px + var(--safe-l)); right: auto; transform: none; width: max(160px, calc(50vw - 196px - var(--safe-l)));
+  }
+  body:has(.ride-card:not(.out)):not(.riding, .panel-open, .modal-open, .actv-running, .mgmt) #toasts .toast { font-size: 0.85rem; padding: 6px 10px; }
+}

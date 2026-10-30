@@ -74,7 +74,13 @@ export class Activities {
     // Les animaux qui nous suivent attendent ici (pas ceux de l'activité ou du spectacle de tours : la séance
     // s'occupe d'eux ; ni pour une balade, où ils viennent avec nous : TrailSession, walkers).
     if (type !== 'trail') g.stopFollowers([opts.animal?.id, ...(opts.acts ?? []).map((x) => x.animalId)]);
-    this.session = new Cls(this, type, opts);
+    // (en selle, la séance nous fait descendre : pas de carte « Ta balade », les petits mots d'avant ; Game.dismount)
+    this.starting = true;
+    try {
+      this.session = new Cls(this, type, opts);
+    } finally {
+      this.starting = false;
+    }
     if (!this.session.ok) {
       this.session.end(true);
       return null;

@@ -2344,6 +2344,7 @@ export class Game {
     this.player.bareback = gear.bareback;
     const e = this.entities.get(a.id);
     if (!e) return null;
+    if (this.player.mount && this.player.mount !== e) this.dismount(); // (en selle sur un autre cheval : on en descend d'abord)
     // Pas de laisse à cheval (elle traversait les barrières) : le chien promené suit librement, comme un animal
     // qu'on emmène (il vient aussi en balade : Activities, walkers).
     for (const d of this.profile.animals) {

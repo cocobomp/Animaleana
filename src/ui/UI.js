@@ -1318,6 +1318,7 @@ export class UI {
   async saddleWithGame(a, ride = false) {
     const g = this.game;
     if (g.blockedByPause()) return null;
+    if (g.player.mount && g.player.mount.data !== a) g.dismount(); // (en selle sur un autre cheval : on en descend d'abord)
     const quality = await runMinigame(this, a, 'saddle');
     if (quality === null) return null;
     if (!g.saddle(a)) return null;

@@ -371,9 +371,16 @@ button.sv-card:hover { border-color: var(--primary); }
 @media (pointer: coarse) and (max-width: 640px) {
   body.riding #toasts { left: calc(12px + var(--safe-l)); transform: none; width: calc(100vw - 104px - var(--safe-l) - var(--safe-r)); }
 }
+/* (moins de 760 px de haut : ⤴️ Sauter / ⬆️ Enlever, 84 px à 92 px du bord, arrivent à la hauteur des messages ; ils
+   passent à leur gauche, 10 px d'écart, un seul à la fois ; colonne étroite, texte un peu plus petit : moins haut) */
+@media (pointer: coarse) and (max-width: 640px) and (max-height: 760px) {
+  body.riding #toasts { width: calc(100vw - 198px - var(--safe-l) - var(--safe-r)); }
+  body.riding #toasts .toast { font-size: 0.85rem; padding: 6px 10px; }
+}
 /* (paysage : entre le joystick et ⤴️ Sauter / ⬆️ Enlever, posés à 232 px du bord droit ; la colonne du milieu passait dessus) */
 @media (pointer: coarse) and (max-height: 480px) and (min-width: 641px) {
   body.riding #toasts { left: calc(182px + var(--safe-l)); right: calc(304px + var(--safe-r)); width: auto; }
+  body.riding #toasts .toast { font-size: 0.85rem; padding: 6px 10px; } /* (« Tu montes… » descendait sur « ⬇️ Descendre ») */
 }
 .toast {
   background: rgba(255, 255, 255, 0.96);
@@ -785,6 +792,9 @@ button.sv-card:hover { border-color: var(--primary); }
   .status-chip { font-size: 0.9rem; padding: 3px 4px 3px 12px; }
   /* (« 🏇 Tu montes… / Descendre » : le gros bouton « ⬇️ Descendre » le dit déjà ; reste pour le chrono du cross) */
   #status-bar .ride-chip:not(.timing) { display: none; }
+  /* (le chrono seul, petit à droite : la pastille large et opaque cachait le tronc suivant) */
+  #status-bar .ride-chip.timing { padding: 6px 12px; }
+  #status-bar .ride-chip.timing button { display: none; }
 }
 
 /* ---------- équipement */
@@ -1597,6 +1607,9 @@ body.trip-road #pause-banner, body.trip-road #quest-tracker, body.veh-view #ev-b
 #quest-tracker[hidden] { display: none; }
 #quest-tracker.following { border-color: var(--primary); }
 #quest-tracker.bump { animation: qt-bump 0.6s ease-out; }
+/* (le nom d'un animal proche dessous : il pâlit et on touche le nom à travers, UI.dodgeStatus) */
+#quest-tracker { transition: opacity 0.2s; }
+#quest-tracker.under { opacity: 0.2; pointer-events: none; }
 @keyframes qt-bump { 35% { transform: scale(1.07); } }
 body.actv-running #quest-tracker { display: none !important; } /* pendant une activité, l'écran est à elle */
 .qt-row { display: flex; align-items: center; gap: 4px; min-width: 0; }

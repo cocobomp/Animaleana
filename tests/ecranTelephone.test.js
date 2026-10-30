@@ -30,6 +30,7 @@ class FakeEl extends FakeNode {
   }
   set className(v) { for (const c of String(v).split(/\s+/).filter(Boolean)) this.classList.add(c); }
   get childNodes() { return this.children; }
+  get parentNode() { return this.parent; }
   get firstChild() { return this.children[0] ?? null; }
   get textContent() { return this.text + this.children.map((c) => c.textContent).join(''); }
   append(...xs) {
@@ -61,7 +62,7 @@ beforeAll(async () => {
   globalThis.document = { createElement: (tag) => new FakeEl(tag), createTextNode: (s) => new FakeText(s), body: { classList: classes() }, documentElement: { lang: 'fr' } };
   globalThis.window = { innerWidth: 390, innerHeight: 844 };
   ({ UI, labelsUnder } = await import('../src/ui/UI.js'));
-});
+}, 60000); // importer UI.js (et tout ce qu'il tire) peut être lent quand toute la suite tourne
 afterAll(() => {
   for (const [k, v] of Object.entries(saved)) globalThis[k] = v;
 });
@@ -131,12 +132,31 @@ describe('pastilles d\'état et noms des animaux (P1)', () => {
     expect(foot.statusBar.classList.contains('ahead')).toBe(false);
   });
 
+  it('le suivi de quête aussi : Praline à 8 m, son nom dessous ; il pâlit, puis revient (sa place : tutorial.trackerBox)', () => {
+    const tracker = { left: 140, right: 382, top: 156, bottom: 204 }; // (mesuré à 390 × 844 ; placeTracker ne garde pas height)
+    const praline = label(211); // (son nom de y 173 à 217)
+    expect(labelsUnder(tracker, [praline])).toBe(true);
+    const ui = fakeBar(null, 0);
+    ui.tutorial = { tracker: new FakeEl('div'), trackerBox: tracker };
+    const faded = () => ui.tutorial.tracker.classList.contains('under');
+    ui.dodgeStatus([praline]);
+    expect(faded()).toBe(true);
+    ui.dodgeStatus([label(500)]);
+    expect(faded()).toBe(false);
+    ui.tutorial.trackerBox = null; // (caché : pas de quête, une fiche ouverte…)
+    ui.dodgeStatus([praline]);
+    expect(faded()).toBe(false);
+  });
+
   it('CSS : transparentes, on touche le nom à travers ; le chrono du cross reste lisible ; « Tu montes » caché au doigt', () => {
     expect(css).toMatch(/#status-bar\.under \{ pointer-events: none; \}/);
     expect(css).toMatch(/#status-bar\.under > \.status-chip \{ opacity: 0\.2; \}/);
     expect(css).toMatch(/#status-bar\.ahead:not\(\.under\) > \.status-chip:not\(\.timing\) \{ opacity: 0\.35; \}/);
     const phone = css.match(/@media \(pointer: coarse\), \(max-width: 640px\) \{\s*#status-bar \{[^}]*\}[\s\S]*?\n\}/)[0];
     expect(phone).toMatch(/#status-bar \.ride-chip:not\(\.timing\) \{ display: none; \}/);
+    // (pendant le cross : le chrono seul, sans son « Descendre » qui l'élargissait sur le tronc suivant)
+    expect(phone).toMatch(/#status-bar \.ride-chip\.timing button \{ display: none; \}/);
+    expect(css).toMatch(/#quest-tracker\.under \{ opacity: 0\.2; pointer-events: none; \}/);
   });
 });
 
@@ -145,6 +165,7 @@ describe('à cheval, les messages attendent leur tour (P6)', () => {
     vi.useFakeTimers();
     document.body.classList.set.clear();
     window.innerWidth = 390;
+    window.innerHeight = 844;
   });
   afterEach(() => vi.useRealTimers());
 
@@ -204,6 +225,58 @@ describe('à cheval, les messages attendent leur tour (P6)', () => {
     expect(visible(ui)).toEqual(['m1', 'm2', 'm3', 'm4']);
   });
 
+  it('petit écran (667 px de haut) ou paysage : un seul à la fois (deux n\'y tiennent pas), les autres à leur tour', () => {
+    document.body.classList.add('riding');
+    for (const [w, hgt] of [[375, 667], [390, 760], [844, 390], [667, 375]]) {
+      window.innerWidth = w;
+      window.innerHeight = hgt;
+      const ui = fakeUi();
+      const seen = [];
+      for (let i = 1; i <= 3; i++) ui.toast(`m${i}`, 3200);
+      for (let k = 0; k < 4; k++) {
+        expect(visible(ui).length).toBeLessThanOrEqual(1);
+        visible(ui).forEach((x) => seen.includes(x) || seen.push(x));
+        vi.advanceTimersByTime(3200);
+      }
+      expect(seen).toEqual(['m1', 'm2', 'm3']);
+    }
+    window.innerWidth = 390;
+    window.innerHeight = 761; // (juste plus haut : deux)
+    const ui = fakeUi();
+    for (let i = 1; i <= 3; i++) ui.toast(`m${i}`);
+    expect(visible(ui)).toEqual(['m1', 'm2']);
+  });
+
+  it('deux n\'y tiennent plus (fitToasts ôte le premier, ⤴️ Sauter arrive) : la file ne passe pas d\'un coup', () => {
+    document.body.classList.add('riding');
+    const ui = fakeUi();
+    const seen = new Set();
+    for (let i = 1; i <= 5; i++) ui.toast(`m${i}`, 3200);
+    ui.fitToasts = function () { while (this.toasts.children.length > 1) this.toasts.firstChild.remove(); };
+    vi.advanceTimersByTime(3200); // (m1 et m2 s'en vont ensemble ; m2, ôté par m3, ne fait pas venir m4)
+    expect(visible(ui)).toEqual(['m3']);
+    expect(ui.toastWait.map((x) => x[0])).toEqual(['m4', 'm5']);
+    for (let k = 0; k < 3; k++) {
+      visible(ui).forEach((x) => seen.add(x));
+      vi.advanceTimersByTime(3200);
+    }
+    expect([...seen]).toEqual(['m3', 'm4', 'm5']);
+  });
+
+  it('le conseil de ⤴️ Sauter (opts.now) n\'attend pas : le tronc serait passé ; le plus ancien message s\'efface', () => {
+    document.body.classList.add('riding');
+    window.innerHeight = 667;
+    const ui = fakeUi();
+    ui.toast('fj_where', 7000);
+    ui.toast('quête', 4000);
+    ui.toast('fj_tip', 7000, { now: true });
+    // (ôté tout de suite : le conseil prend sa place en haut, pas en dessous d'un message qui s'efface)
+    expect(ui.toasts.children.map((x) => x.textContent)).toEqual(['fj_tip']);
+    expect(ui.toastWait.map((x) => x[0])).toEqual(['quête']);
+    vi.advanceTimersByTime(7000); // (le conseil s'en va : la quête vient à son tour)
+    expect(visible(ui)).toEqual(['quête']);
+  });
+
   it('à cheval sur un ordinateur : pas d\'attente (les messages sont loin des allures)', () => {
     document.body.classList.add('riding');
     window.innerWidth = 1280;
@@ -218,6 +291,17 @@ describe('à cheval, les messages attendent leur tour (P6)', () => {
     // (les allures : 56 px + 6 px de chaque côté, à 14 px du bord → 104 px laissent 10 px d'écart)
     expect(css).toMatch(/#gait-pad \{ left: auto; right: calc\(14px \+ var\(--safe-r\)\);[^}]*\}/);
     expect(css).toMatch(/\.gait-btn \{ width: 56px; height: 56px;/);
+  });
+
+  it('CSS : moins de 760 px de haut, la colonne passe à gauche de ⤴️ Sauter / ⬆️ Enlever (10 px d\'écart)', () => {
+    const w = +css.match(/@media \(pointer: coarse\) and \(max-width: 640px\) and \(max-height: 760px\) \{\s*body\.riding #toasts \{ width: calc\(100vw - (\d+)px - var\(--safe-l\) - var\(--safe-r\)\); \}/)[1];
+    const right = +css.match(/#post-btn, #jump-btn \{ left: auto; right: calc\((\d+)px \+ var\(--safe-r\)\); bottom: calc\(306px/)[1];
+    const size = +css.match(/#post-btn, #jump-btn \{\s*position: fixed;[^}]*width: (\d+)px; height: \1px;/)[1];
+    expect(w - 12 - right - size).toBe(10); // (la colonne commence à 12 px du bord gauche)
+    // (colonnes étroites, petit écran et paysage : texte un peu plus petit, « Tu montes… » ne descend plus sur ⬇️ Descendre)
+    for (const q of ['\\(max-width: 640px\\) and \\(max-height: 760px\\)', '\\(max-height: 480px\\) and \\(min-width: 641px\\)']) {
+      expect(css).toMatch(new RegExp(`@media \\(pointer: coarse\\) and ${q} \\{[^}]*\\}\\s*body\\.riding #toasts \\.toast \\{ font-size: 0\\.85rem;`));
+    }
   });
 });
 

@@ -35,6 +35,7 @@ import { BUBBLE_PX } from '../game/wishBubble.js'; // (la bulle « il te demande
 
 const STATUS_MAX = 3; // pastilles d'état visibles en même temps (les autres derrière « ➕ N de plus »)
 const RIDE_TOASTS = 2; // à cheval sur un téléphone : messages à l'écran en même temps (les suivants attendent, UI.toast)
+const RIDE_SHORT = 760; // (un écran moins haut, et le paysage : un seul, deux n'y tiennent pas au-dessus des boutons)
 // Le passage de niveau est annoncé ce temps (ms) après ce qui l'a fait gagner (UI.levelUp).
 export const LEVEL_UP_DELAY = 1200;
 // Ce qui peut prendre le focus au clavier (boutons, liens, champs).
@@ -43,13 +44,13 @@ const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), selec
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
 
 /**
- * Un nom d'animal, ou sa bulle 💬 qui pend dessous, sous les pastilles d'état (box : leur rectangle à l'écran) ?
- * placed : les étiquettes posées par updateLabels ({ x, y, w, wish, near }), y leur point d'accroche (l'étiquette va de
- * y − 38 à y + 6 ; la bulle, s'il en a une, de y à y + BUBBLE_PX). Seulement les animaux à 10 m au plus (near : plus
- * loin, leur nom est pâli). margin : un peu de marge en plus (sans clignoter au bord).
+ * Un nom d'animal, ou sa bulle 💬 qui pend dessous, sous les pastilles d'état (box : leur rectangle à l'écran ; ou celui
+ * du suivi de quête) ? placed : les étiquettes posées par updateLabels ({ x, y, w, wish, near }), y leur point
+ * d'accroche (l'étiquette va de y − 38 à y + 6 ; la bulle, s'il en a une, de y à y + BUBBLE_PX). Seulement les animaux
+ * à 10 m au plus (near : plus loin, leur nom est pâli). margin : un peu de marge en plus (sans clignoter au bord).
  */
 export function labelsUnder(box, placed, margin = 0) {
-  if (!box?.height) return false;
+  if (!(box?.bottom > box?.top)) return false; // (pas là, ou caché ; tutorial.trackerBox n'a pas de height)
   return placed.some((q) => {
     if (!q.near) return false;
     const half = Math.max(q.w, q.wish ? BUBBLE_PX + 8 : 0) / 2;
@@ -389,7 +390,7 @@ export class UI {
         this.jumpBtn.setAttribute('aria-label', t('fj_btnHelp'));
         if (!g.profile.freeJumpTip) {
           g.profile.freeJumpTip = true;
-          this.toast(t('fj_tip'), 7000);
+          this.toast(t('fj_tip'), 7000, { now: true });
         }
       }
       this.fitToasts(); // (pas de message sur lui)
@@ -404,7 +405,7 @@ export class UI {
         // (la première fois : comment on fait)
         if (!g.profile.postHint) {
           g.profile.postHint = true;
-          this.toast(t('post_hint'), 9000);
+          this.toast(t('post_hint'), 9000, { now: true });
         }
       }
     }
@@ -559,7 +560,8 @@ export class UI {
   /**
    * Les pastilles d'état en transparence (CSS #status-bar.under / .ahead), sans bouger : un nom d'animal ou sa bulle 💬
    * dessous (on touche le nom à travers), ou, à cheval sur un écran en hauteur, la vue devant le cheval (elles sont
-   * juste sous le suivi de quête, là où la caméra met sa tête et le chemin).
+   * juste sous le suivi de quête, là où la caméra met sa tête et le chemin). Le suivi de quête aussi pâlit sur un nom
+   * (CSS #quest-tracker.under ; sa place, tutorial.trackerBox, est relue quatre fois par seconde, pas ici).
    */
   dodgeStatus(placed) {
     const bar = this.statusBar;
@@ -568,6 +570,11 @@ export class UI {
     const ahead = !!box?.height && (this.game?.rig?.ride ?? 0) > 0.5 && box.top < window.innerHeight / 2;
     if (bar.classList.contains('under') !== under) bar.classList.toggle('under', under);
     if (bar.classList.contains('ahead') !== ahead) bar.classList.toggle('ahead', ahead);
+    const tr = this.tutorial?.tracker;
+    if (tr) {
+      const on = labelsUnder(this.tutorial.trackerBox, placed, tr.classList.contains('under') ? 12 : 0);
+      if (tr.classList.contains('under') !== on) tr.classList.toggle('under', on);
+    }
   }
 
   clearLabels() {
@@ -797,6 +804,8 @@ export class UI {
   /**
    * Petit message. opts.group : les messages d'un même groupe encore affichés sont réunis dans une seule
    * bulle (une ligne chacun) au lieu de s'empiler, par ex. 'visitors' pour les arrivées des métiers.
+   * opts.now : à cheval, il n'attend pas son tour (le conseil de ⤴️ Sauter : après, le tronc est passé) ; le plus
+   * ancien message lui laisse sa place.
    */
   toast(msg, ms = 3200, opts = null) {
     // (typographie française : « balade / ! Lis leur demande » se coupait avant le point d'exclamation)
@@ -806,9 +815,13 @@ export class UI {
     // À cheval sur un téléphone : RIDE_TOASTS messages au plus à la fois, les suivants attendent leur tour (nextToast)
     // au lieu de s'empiler sur le cheval et ses boutons (cinq d'un coup au premier tronc) ; rien n'est perdu.
     if (!same && this.toastsFull()) {
-      (this.toastWait ??= []).push([msg, Math.min(ms, 5000), opts]); // (5 s au plus : la file avance)
-      if (this.toastWait.length > 4) this.toastWait.shift(); // (une avalanche : les plus anciens partent)
-      return null;
+      // (ôté tout de suite, sans fondu : le conseil prend sa place en haut, pas en dessous de lui sur le joystick)
+      if (opts?.now) [...this.toasts.children].find((x) => !x.classList.contains('out')).remove();
+      else {
+        (this.toastWait ??= []).push([msg, Math.min(ms, 5000), opts]); // (5 s au plus : la file avance)
+        if (this.toastWait.length > 4) this.toastWait.shift(); // (une avalanche : les plus anciens partent)
+        return null;
+      }
     }
     audio.ui('toast');
     if (same) {
@@ -835,7 +848,8 @@ export class UI {
     clearTimeout(el._rmT);
     el._outT = setTimeout(() => {
       el.classList.add('out');
-      this.nextToast(); // (le suivant de la file d'attente, à cheval)
+      // (le suivant de la file d'attente, à cheval ; ôté avant par fitToasts, sa place est déjà prise par un autre)
+      if (el.parentNode) this.nextToast();
     }, ms);
     el._rmT = setTimeout(() => el.remove(), ms + 400);
   }
@@ -845,12 +859,17 @@ export class UI {
     if (!document.body.classList.contains('riding') || !isPhone()) return false;
     let n = 0;
     for (const x of this.toasts.children) if (!x.classList.contains('out')) n++;
-    return n >= RIDE_TOASTS;
+    return n >= (window.innerHeight <= RIDE_SHORT ? 1 : RIDE_TOASTS);
   }
 
   /** Les messages qui attendaient leur tour (toast) viennent dès qu'il y a de la place, ou tous quand on descend. */
   nextToast() {
-    while (this.toastWait?.length && !this.toastsFull()) this.toast(...this.toastWait.shift());
+    while (this.toastWait?.length && !this.toastsFull()) {
+      this.toast(...this.toastWait.shift());
+      // (à cheval, un par place libérée : si deux ne tiennent pas, fitToasts ôte le précédent, et toute la file passait
+      // dans la même milliseconde)
+      if (document.body.classList.contains('riding')) break;
+    }
   }
 
   /**
@@ -868,13 +887,14 @@ export class UI {
       // (seulement si la carte est sous le haut des messages et en face d'eux : en portrait, elle est au-dessus)
       if (c.height && c.top > r.top && c.left < r.right && c.right > r.left) limit = Math.min(limit, c.top - 6);
     }
-    // À cheval : ni sur ⬆️ Enlever / ⤴️ Sauter, ni sur les allures, ni sur « ⬇️ Descendre » (ceux plus bas, en face).
+    // À cheval : ni sur ⬆️ Enlever / ⤴️ Sauter, ni sur les allures, ni sur « ⬇️ Descendre » (en face, et pas tout entiers
+    // au-dessus : un bouton à la hauteur du premier message compte aussi).
     if (document.body.classList.contains('riding')) {
       const r = box.getBoundingClientRect();
       for (const el of [this.postBtn, this.jumpBtn, this.gaitPad, this.actionBtn]) {
         if (el.hidden) continue;
         const c = el.getBoundingClientRect();
-        if (c.height && c.top > r.top && c.left < r.right && c.right > r.left) limit = Math.min(limit, c.top - 6);
+        if (c.height && c.bottom > r.top && c.left < r.right && c.right > r.left) limit = Math.min(limit, c.top - 6);
       }
     }
     while (box.children.length > 1 && box.getBoundingClientRect().bottom > limit) box.firstChild.remove();

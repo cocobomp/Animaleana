@@ -70,6 +70,8 @@ import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au pone
 import { LuckyShoes } from './LuckyShoes.js'; // 🍀 le fer porte-bonheur du jour, sur le chemin de balade
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
 import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
+import { newRideLog, tickRideLog, rideReport, dayLeft } from '../sim/rideLog.js'; // 🏇 la carte « Ta balade »
+import { showRideCard } from '../ui/rideCard.js';
 import { remember, anniversaryDue, togetherSince, BOND_MEMORIES, PHOTO_MEMORIES, PHOTO, attachPhoto } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
 import { collectFact } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
 import { quirksOf, discoverQuirk, spookCause, noteFear, QUIRK_BOND } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
@@ -1304,6 +1306,10 @@ export class Game {
       this.player.gaitEnabled = !this.activities.active; // (pendant une activité, c'est elle qui mène le cheval)
       this.player.postAuto = !!this.tripFlow?.active; // (voyage à cheval : trot enlevé sans le bouton)
       this.player.update(mgmt ? 0 : wdt, pctrl, this.rig.yaw, this.rig.mode === 'first');
+      if (this.rideLog && this.player.mount) { // 🏇 ta balade (en balade libre : pas menée par une activité, un voyage)
+        if (this.activities.active || this.tripFlow.active) this.rideLog.skip = true;
+        else tickRideLog(this.rideLog, this.player.gaitNow, this.player.speed, mgmt ? 0 : wdt);
+      }
       for (const e of entities) e.update(wdt, ctx);
       this.player.lateUpdate?.(mgmt ? 0 : wdt); // le cavalier suit le cheval qu'on vient d'animer
       if (i === 0) this.ui.updatePostBtn?.(); // ⬆️ le cercle du trot enlevé, au rythme des foulées
@@ -2332,6 +2338,7 @@ export class Game {
     this.mountRider(e);
     // 🐢 il vient de travailler (une leçon, une balade…) : déjà chaud, pas besoin de le réchauffer (src/sim/warmup.js)
     if ((this.profile.clock ?? 0) - (a.warmAt ?? -1e9) < WARM_FOR) this.player.session = warmSession();
+    this.rideLog = newRideLog(a, this.profile.stats, this.player.session); // 🏇 (la carte en descendant)
     this.ui.updateGaitPad?.();
     addStat(this.profile, 'rides');
     this.markHorseDay(a, 'ride');
@@ -2362,11 +2369,18 @@ export class Game {
   dismount() {
     this.freeJumps?.cancel(); // (en plein saut : droit d'abord)
     const e = this.player.mount;
+    const log = this.rideLog; // 🏇 ta balade
+    this.rideLog = null;
     const worked = !!this.player.cantered; // (il a galopé : de retour au pré, il ira se rouler)
     // 🐢 Le retour au calme (src/sim/warmup.js) : il a galopé, puis marché un moment au pas avant qu'on descende ?
     const calm = e && this.player.gaitEnabled !== false && !this.tripFlow?.active ? dismountVerdict(this.player.session) : null;
     if (e && this.player.session?.started) e.data.warmAt = this.profile.clock ?? 0; // (encore chaud un moment)
     this.player.dismount();
+    // 🏇 Ta balade (src/sim/rideLog.js) : une balade libre d'au moins 40 s, la carte dit tout (à la place des petits mots)
+    const h = e?.data;
+    const rep = log && h && this.player.gaitEnabled !== false && !this.tripFlow?.active && this.profile.tutorial?.done !== false
+      ? rideReport(log, { a: h, stats: this.profile.stats, session: this.player.session, postBest: this.player.posting?.best, verdict: calm, left: dayLeft(h, this.day, this.hour), worked, saddled: !!h.gear?.saddle })
+      : null;
     if (calm && e.data.species === 'horse') {
       const a = e.data;
       if (calm === 'cooled') {
@@ -2378,14 +2392,15 @@ export class Game {
         e.emit('😌', 2);
         this.bondNews(a, s0);
       }
-      this.ui.toast(t(`ride_${calm}`, { name: a.name, g: a.sex }), 6000);
+      if (!rep?.show) this.ui.toast(t(`ride_${calm}`, { name: a.name, g: a.sex }), 6000);
     }
     if (e && worked) {
       e.rollSoon = true;
       // (sellé, il attend qu'on lui enlève sa selle pour aller se rouler : on le dit une fois)
-      if (e.data.gear?.saddle) this.ui.toast(t('ride_unsaddle', { name: e.data.name, g: e.data.sex }), 5000);
+      if (e.data.gear?.saddle && !rep?.show) this.ui.toast(t('ride_unsaddle', { name: e.data.name, g: e.data.sex }), 5000);
     }
     this.ui.updateGaitPad?.();
+    if (rep?.show) showRideCard(this.ui, rep, h); // (après : plus « en selle », la carte se montre et ses barres se remplissent)
   }
 
   /** Choisir l'allure du cheval qu'on monte (boutons à l'écran, touches 0 1 2 3). */

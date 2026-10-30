@@ -2877,3 +2877,32 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 /* 💞 Ce que le lien débloque (fiche du cheval, src/ui/panels.js bondPerks) */
 .bond-perks { list-style: none; margin: 2px 0 8px; padding: 0; font-size: 0.9rem; display: flex; flex-direction: column; gap: 2px; }
 .bond-perks .next { opacity: 0.7; }
+
+/* 🏇 « Ta balade » : la carte en descendant de cheval (src/ui/rideCard.js) ; au téléphone, au-dessus du gros bouton vert
+   (à droite, à 182 px du bord) ; en paysage, en haut ; cachée en selle, sous une fenêtre, pendant une activité */
+.ride-card {
+  position: fixed; left: 50%; bottom: calc(150px + var(--safe-b)); transform: translateX(-50%); width: min(92vw, 360px); z-index: 30;
+  display: grid; gap: 5px; padding: 10px 14px 12px; background: rgba(255, 255, 255, 0.97); color: var(--ink);
+  border-radius: 18px; box-shadow: var(--shadow); font-size: 0.92rem; text-align: center; cursor: pointer;
+  animation: rc-in 0.35s ease-out; transition: opacity 0.3s, transform 0.3s;
+}
+.ride-card.out { opacity: 0; transform: translate(-50%, 12px); }
+@keyframes rc-in { from { opacity: 0; transform: translate(-50%, 30px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.ride-card .rc-title { font-size: 1.14em; }
+.ride-card .rc-time { font-weight: 600; color: var(--muted); }
+.rc-bar { display: flex; height: 20px; margin: 2px 0; border-radius: 999px; overflow: hidden; background: rgba(0, 0, 0, 0.07); }
+.rc-bar span { width: 0; overflow: hidden; white-space: nowrap; font-size: 0.8rem; line-height: 20px; transition: width 0.8s ease-out; }
+.rc-bar .rc-walk { background: #9bd77a; }
+.rc-bar .rc-trot { background: #ffcf57; }
+.rc-bar .rc-canter { background: #ff9466; }
+.rc-stamps { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 2px 0; }
+.rc-stamp { padding: 1px 9px; border: 2px solid var(--good); border-radius: 999px; color: #23824a; font-weight: 700; font-size: 0.92em; transform: rotate(-2deg); }
+.rc-stamp.gold { border-color: #d9a400; color: #8a6400; background: #fff4cc; transform: rotate(2deg); }
+.rc-line.hot { color: #a8551b; }
+.rc-star { height: 8px; margin: 0 24px 2px; border-radius: 999px; background: rgba(0, 0, 0, 0.08); overflow: hidden; }
+.rc-star-fill { display: block; height: 100%; width: 0; background: #ffd23f; transition: width 0.8s ease-out; }
+@media (pointer: coarse) { .ride-card { bottom: calc(244px + var(--safe-b)); } }
+@media (pointer: coarse) and (max-height: 760px) { .ride-card { gap: 3px; padding: 8px 12px 10px; font-size: 0.85rem; } }
+/* (paysage : sous les boutons du temps, au-dessus du gros bouton vert du milieu) */
+@media (max-height: 500px) { .ride-card { top: calc(104px + var(--safe-t)); bottom: auto; } }
+:is(body.riding, body.panel-open, body.modal-open, body.actv-running, body.mgmt) .ride-card { display: none; }

@@ -257,6 +257,19 @@ pas (15 secondes) avant de descendre : « 😌 Retour au calme » (lien +0,5, af
 « Retours au calme au pas » dans le carnet du cavalier) ; descendu juste après le galop, le jeu dit qu'il est encore
 essoufflé. Pas pendant une activité ni un voyage (ils mènent le cheval).
 
+### Ta balade (0.5, `src/sim/rideLog.js`, `src/ui/rideCard.js`)
+En descendant d'une balade libre d'au moins 40 secondes en mouvement (avec un de tes chevaux, après le tutoriel), une
+petite carte monte pendant 8 secondes (un toucher la ferme) : « 🏇 Belle balade avec Pomme ! », le temps et la distance
+(« ⏱️ 6 min · 📏 1,4 km » ; au pas, 1,6 m/s, environ 6 km/h comme un vrai cheval), une barre des allures (🐢 pas, 🐴
+trot, 💨 galop), au plus 3 lignes de ce qui s'est passé (troncs sautés, cross fini, fer porte-bonheur, citrouilles,
+8 « Debout » de suite ou plus), les tampons « ✅ Détente » (pas s'il était déjà chaud) et « ✅ Retour au calme », les
+deux : « 🏅 Comme au club ! » (ou « 😮‍💨 Finis au pas, la prochaine fois »), l'étoile de la compétence qui a le plus
+grandi (« 💪 Encore 2 points pour sa 2e étoile », avec sa barre), « 📏 Sa plus longue balade ! » (dès 200 m ; la
+première balade mesurée est notée sans rien dire), ce qui manque à sa journée parfaite (« 🌇 ❤️ », rien si le foin du
+matin est oublié) et, sellé après un galop, « 🧰 Desselle-le : il veut se rouler ». Elle remplace alors les petits mots
+du retour au calme et de « Desseller » (le lien du retour au calme est toujours donné). Pas de carte pour une balade
+plus courte, menée par une activité ou un voyage : les petits mots d'avant.
+
 ### Son souffle dans le froid (0.5, `src/sim/breath.js`, `src/game/HorseBreath.js`)
 Quand il fait froid (10 °C et moins, un peu plus visible sous la pluie, la neige ou le brouillard), on voit la buée de
 son souffle : deux petites bouffées blanches sortent de ses naseaux, vers le bas et l'avant, à chaque expiration (un

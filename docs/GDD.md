@@ -201,7 +201,7 @@ Sous la pluie, dehors et sans couverture imperméable, il est mouillé de la mê
 en Normandie, tout sauf l'été), ou partout quand il pleut, la boue monte sur ses jambes
 jusqu'aux genoux en deux heures de jeu environ : foncée mouillée, claire et poussiéreuse en séchant (elle tombe peu à
 peu au sec). Au box, il reste propre. Sur un gris ou un blanc, ça se voit le plus, comme en vrai. Au pansage, la brosse
-trouve quatre taches sur ses jambes : « 🧦 Chaussettes de boue ! Brosse ses jambes de haut en bas ↓. » (le poil des
+trouve quatre taches sur ses jambes ; sa consigne ajoute « 🧦 Ses jambes : de haut en bas ↓. » (le poil des
 jambes pousse vers le bas ; l'étrille sur les jambes fait toujours mal). Ses jambes propres, la première fois, un
 conseil : « En hiver, on laisse sécher la boue, puis on brosse. Mouiller ses jambes tous les jours abîme sa peau. »
 Tant qu'il en a, le pansage n'est jamais « inutile ».

@@ -304,7 +304,8 @@ describe('🧦 ses chaussettes de boue (src/sim/legMud.js)', () => {
     expect(legs).toHaveLength(4);
     const { body } = game.peek();
     for (const q of legs) expect(q.y).toBeGreaterThan(body.y + body.ry); // (sous le ventre)
-    expect(ctx.hints.at(-1).text).toBe(t('mg_pansage_legmud'));
+    // (la règle du corps reste dite : ‹‹ vers la queue, puis ses jambes)
+    expect(ctx.hints.at(-1).text).toBe(`${t('mg_pansage_brush_hint')} ${t('mg_pansage_legmud')}`);
     brushLegs(game);
     expect(game.peek().dust.some((q) => q.leg)).toBe(false);
   });
@@ -351,6 +352,32 @@ describe('🧦 ses chaussettes de boue (src/sim/legMud.js)', () => {
     const seen = toBrush(muddy(), {});
     brushLegs(seen.game);
     expect(seen.ctx.hints.some((h) => h.text === t('mg_pansage_legmud_tip'))).toBe(false);
+  });
+
+  it('le conseil n\'est pas effacé par « Parfait ! » quand ses jambes propres font entrer la jauge dans le vert', () => {
+    const opts = { legMudTip: true };
+    const { ctx, game } = toBrush(muddy(), opts);
+    // Le corps presque propre : il reste un peu moins de 0,5 de poussière sur une tache (le vert commence à 0,5).
+    const body = () => game.peek().dust.filter((q) => !q.leg);
+    for (let guard = 0; guard < 60 && body().length > 1; guard++) {
+      const q = body()[0];
+      stroke(game, line(q.x + 24, q.y, q.x - 24, q.y, 12));
+    }
+    for (let guard = 0; guard < 60 && body()[0].dust > 0.45; guard++) {
+      const q = body()[0];
+      stroke(game, line(q.x + 4, q.y, q.x - 4, q.y, 2));
+    }
+    expect(body()[0].dust).toBeGreaterThan(0.35);
+    expect(game.peek().value).toBeLessThan(game.peek().lo);
+    brushLegs(game);
+    const p = game.peek();
+    expect(p.dust.some((q) => q.leg)).toBe(false);
+    expect(p.value).toBeGreaterThanOrEqual(p.lo); // (le même coup de brosse : jambes propres et zone verte)
+    expect(ctx.hints.at(-1)).toEqual({ text: t('mg_pansage_legmud_tip'), kind: 'good' });
+    expect(opts.out.legMudTip).toBe(true);
+    // lu : on redit ✅
+    tick(game, ctx, 4.5);
+    expect(ctx.hints.at(-1).text).toBe(t('mg_pressStop'));
   });
 
   it('ses textes existent en français et en anglais', async () => {

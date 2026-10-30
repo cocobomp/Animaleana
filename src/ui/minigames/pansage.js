@@ -58,6 +58,7 @@ export function pansageGame(ctx) {
   const legMud = (a?.legMud ?? 0) > LEG_MUD.patchesAt;
   let legs = [];
   let tipUntil = -1; // (le conseil reste lu quelques secondes)
+  let tipNow = false; // (dit après la jauge : son « Parfait ! » ne l'efface pas)
   // ---- 3. cure-pied (il boite : le caillou est dans le pied qui boite — src/sim/animal.js HOOF)
   const lame = a?.lame?.cause === 'stone';
   const r0 = rng();
@@ -151,7 +152,7 @@ export function pansageGame(ctx) {
     const n = count();
     rule = justRule(ctx, { lo: 1 - 0.5 / n, hi: st === 'hoof' ? 1.1 : 1.05, max: MAX, slack: SLACK });
     if (st === 'curry' && rolled) ctx.hint(`${t('mg_pansage_rolled', { name, g: a?.sex })} ${t('mg_pansage_curry_hint')}`);
-    else if (st === 'brush' && legs.length) ctx.hint(t('mg_pansage_legmud'));
+    else if (st === 'brush' && legs.length) ctx.hint(`${t('mg_pansage_brush_hint')} ${t('mg_pansage_legmud')}`);
     else if (st === 'hoof' && lame) ctx.hint(t('mg_pansage_hoof_lame', { name, foot: t(`mg_pansage_foot_${PANSAGE_FEET[stoneFoot]}`) }), 'warn');
     else ctx.hint(st === 'hoof' ? `${t('mg_pansage_hoof_hint')} (${t(`mg_pansage_foot_${PANSAGE_FEET[0]}`)})` : t(`mg_pansage_${st}_hint`));
     ctx.progress(value() / MAX);
@@ -212,6 +213,10 @@ export function pansageGame(ctx) {
     lastDir = dir;
     if (st === 'hoof') ctx.progress(value() / MAX);
     else rule.show(value());
+    if (tipNow) {
+      tipNow = false;
+      ctx.hint(t('mg_pansage_legmud_tip'), 'good');
+    }
     if (value() >= MAX) endStage();
   }
 
@@ -302,8 +307,8 @@ export function pansageGame(ctx) {
         // 🧦 Ses jambes sont propres : le conseil, la première fois.
         if (q.leg && ctx.opts?.legMudTip && tipUntil < 0 && legs.every((o) => o.dust <= 0)) {
           tipUntil = ctx.time + 4;
+          tipNow = true;
           ctx.opts.out = { ...(ctx.opts.out ?? {}), legMudTip: true };
-          ctx.hint(t('mg_pansage_legmud_tip'), 'good');
         }
       }
     }
@@ -442,6 +447,11 @@ export function pansageGame(ctx) {
           startStage(si + 1);
         }
         return;
+      }
+      // 🧦 Le conseil lu : dans la zone verte, on redit ✅.
+      if (tipUntil > 0 && ctx.time >= tipUntil) {
+        tipUntil = 0;
+        if (stage() === 'brush' && rule.state() === 'just') ctx.hint(t('mg_pressStop'), 'good');
       }
       // Pied propre : on passe au suivant, puis à l'étape suivante après le dernier.
       if (stage() === 'hoof' && footDoneAt >= 0 && ctx.time - footDoneAt > 0.7 && !ctx.done) {

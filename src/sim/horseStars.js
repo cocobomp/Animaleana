@@ -21,8 +21,13 @@ export const STAR_SKILLS = [
 /** Ce qu'une étoile de saut ouvre (texte st_unlock_<clé>). */
 const UNLOCKS = { jump: [null, 'noRefuse', 'club', 'grand'] };
 
-/** Nombre d'étoiles (0 à 5) pour une compétence v. */
-export const starsOf = (v) => STAR_STEPS.filter((s) => (Number(v) || 0) >= s).length;
+/** Nombre d'étoiles (0 à 5) pour une compétence v. (sans tableau : appelé à chaque image en selle) */
+export const starsOf = (v) => {
+  const x = Number(v) || 0;
+  let n = 0;
+  while (n < STAR_STEPS.length && x >= STAR_STEPS[n]) n++;
+  return n;
+};
 
 // (un ancien cheval sans dressage : 10, comme à sa naissance)
 const skillOf = (a, id) => a.skills?.[id] ?? 10;

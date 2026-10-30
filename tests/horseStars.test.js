@@ -22,6 +22,7 @@ describe('ses étoiles', () => {
   it('les paliers : 19 → 0, 20 → 1, 39 → 1, 40 → 2, 64 → 2, 65 → 3, 100 → 5', () => {
     expect([19, 20, 39, 40, 64, 65, 84, 85, 99, 100].map(starsOf)).toEqual([0, 1, 1, 2, 2, 3, 3, 4, 4, 5]);
     expect(starsOf(undefined)).toBe(0);
+    expect([-5, NaN, '65', 150].map((v) => starsOf(v))).toEqual([0, 0, 3, 5]);
   });
 
   it('les 3 premiers paliers sont ceux des parcours de saut (petites croix, club, grand)', () => {

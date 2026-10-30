@@ -2,7 +2,8 @@
 //
 //   1. L'étrille : des petits ronds sur la boue sèche pour la décoller (des traits droits la
 //      décollent mal). Pas sur la tête ni sur les jambes : c'est dur, il n'y a que des os.
-//   2. La brosse : chasser la poussière décollée, dans le sens du poil (vers la queue).
+//   2. La brosse : chasser la poussière décollée, dans le sens du poil (vers la queue). Revenu du pré
+//      boueux (src/sim/legMud.js) : ses chaussettes de boue, quatre taches sur les jambes, de haut en bas.
 //   3. Le cure-pied : les quatre pieds l'un après l'autre (antérieur gauche, postérieur gauche,
 //      antérieur droit, postérieur droit), en grattant la terre du talon vers la pince, le long
 //      de la fourchette, sans piquer la fourchette (sensible). Parfois, un caillou coincé.
@@ -20,6 +21,7 @@ import { drawAnimal, animalShape, fitAnimal, inBody, rrect, ellipse, circle, emo
 import { groomBackground, dialX, drawBrush, justRule, dustPatches } from './grooming.js';
 import { justOutcome } from './score.js';
 import { nbsp } from './frame.js';
+import { LEG_MUD } from '../../sim/legMud.js'; // 🧦 ses chaussettes de boue
 
 export const PANSAGE_STAGES = ['curry', 'brush', 'hoof', 'comb'];
 /** Les pieds, dans l'ordre où on les cure (on fait le tour du cheval). */
@@ -51,6 +53,11 @@ export function pansageGame(ctx) {
     .map((q) => ({ x: q.x, y: q.y, r: q.r, seed: q.seed, mud: 1, dust: 0 }));
   // ---- 2. brosse : la poussière décollée, plus un peu de poussière partout (posée au début de l'étape)
   let dust = [];
+  // (🧦 ses chaussettes de boue : une tache sur chaque jambe, à brosser de haut en bas ; le conseil, une fois —
+  // ctx.opts.legMudTip, src/ui/UI.js careWithGame)
+  const legMud = (a?.legMud ?? 0) > LEG_MUD.patchesAt;
+  let legs = [];
+  let tipUntil = -1; // (le conseil reste lu quelques secondes)
   // ---- 3. cure-pied (il boite : le caillou est dans le pied qui boite — src/sim/animal.js HOOF)
   const lame = a?.lame?.cause === 'stone';
   const r0 = rng();
@@ -128,6 +135,13 @@ export function pansageGame(ctx) {
       dust = mud.filter((q) => q.mud <= 0).map((q) => ({ x: q.x, y: q.y, r: q.r * 1.05, seed: q.seed, dust: 1 }));
       const extra = dustPatches(sh, rng, 2, 15 * Math.max(0.8, s), mud.map((q) => ({ ...q })));
       for (const q of extra.slice(mud.length)) dust.push({ x: q.x, y: q.y, r: q.r, seed: q.seed, dust: 1 });
+      if (legMud) {
+        // (sur le canon, sous le genou : les quatre jambes de bony)
+        const y = lerp(sh.L(0, sh.ry).y, floorY, 0.68);
+        legs = [sh.rx * 0.58, sh.rx * 0.58 - 10 * s, -sh.rx * 0.58, -sh.rx * 0.58 + 8 * s]
+          .map((lx) => ({ x: sh.L(lx, sh.ry * 0.35).x, y, r: 11 * Math.max(0.8, s), seed: rng() * 10, dust: 1, leg: true }));
+        dust.push(...legs);
+      }
     }
     if (st === 'hoof') {
       foot = 0;
@@ -137,6 +151,7 @@ export function pansageGame(ctx) {
     const n = count();
     rule = justRule(ctx, { lo: 1 - 0.5 / n, hi: st === 'hoof' ? 1.1 : 1.05, max: MAX, slack: SLACK });
     if (st === 'curry' && rolled) ctx.hint(`${t('mg_pansage_rolled', { name, g: a?.sex })} ${t('mg_pansage_curry_hint')}`);
+    else if (st === 'brush' && legs.length) ctx.hint(t('mg_pansage_legmud'));
     else if (st === 'hoof' && lame) ctx.hint(t('mg_pansage_hoof_lame', { name, foot: t(`mg_pansage_foot_${PANSAGE_FEET[stoneFoot]}`) }), 'warn');
     else ctx.hint(st === 'hoof' ? `${t('mg_pansage_hoof_hint')} (${t(`mg_pansage_foot_${PANSAGE_FEET[0]}`)})` : t(`mg_pansage_${st}_hint`));
     ctx.progress(value() / MAX);
@@ -159,7 +174,7 @@ export function pansageGame(ctx) {
     // Pour le jeu : la part de terre enlevée des sabots, et le caillou (src/game/Game.js care → applyCare).
     const b = hoofBlobs();
     const cleaned = 1 - b.reduce((n, q) => n + Math.min(1, q.dirt / q.hard), 0) / b.length;
-    if (ctx.opts) ctx.opts.out = { hooves: { cleaned, stoneOut } };
+    if (ctx.opts) ctx.opts.out = { ...(ctx.opts.out ?? {}), hooves: { cleaned, stoneOut } };
     const q = results.reduce((n, r) => n + r.q, 0) / results.length;
     const worst = results.reduce((w, r) => (r.q < w.q ? r : w), results[0]);
     const just = results.every((r) => r.verdict === 'just');
@@ -268,24 +283,37 @@ export function pansageGame(ctx) {
 
   function rubBrush(seg, p) {
     const withHair = -seg.dx > seg.d * 0.35; // le poil va de la tête (à droite) vers la queue
+    const down = seg.dy > seg.d * 0.35; // (sur les jambes, il pousse vers le bas)
     let touched = false;
+    let good = false;
+    let onLeg = false;
     for (const q of dust) {
       if (q.dust <= 0 || !near(q, seg, 14)) continue;
       touched = true;
-      q.dust -= seg.d * 0.0062 * (withHair ? 1 : 0.55);
+      const ok = q.leg ? down : withHair;
+      good = good || ok;
+      onLeg = onLeg || !!q.leg;
+      // (la boue des jambes, collée, part un peu moins vite)
+      q.dust -= seg.d * 0.0062 * (ok ? 1 : 0.55) * (q.leg ? 0.67 : 1);
       crumbs(p, 'rgba(150, 120, 90, 0.6)');
       if (q.dust <= 0.15) {
         q.dust = 0;
         fx.burst(q.x, q.y, '✨', 3, { speed: 80, size: 16 });
+        // 🧦 Ses jambes sont propres : le conseil, la première fois.
+        if (q.leg && ctx.opts?.legMudTip && tipUntil < 0 && legs.every((o) => o.dust <= 0)) {
+          tipUntil = ctx.time + 4;
+          ctx.opts.out = { ...(ctx.opts.out ?? {}), legMudTip: true };
+          ctx.hint(t('mg_pansage_legmud_tip'), 'good');
+        }
       }
     }
     if (touched) {
       grace = 2 * sh.rx;
-      if (withHair) goodLen += seg.d;
+      if (good) goodLen += seg.d;
       else badLen += seg.d;
-      if (rule.state() === 'low') {
-        if (badLen > 260 && badLen > goodLen) ctx.hint(t('mg_brush_dir'), 'warn');
-        else if (withHair && goodLen > 120) ctx.hint(t('mg_brush_good'), 'good');
+      if (rule.state() === 'low' && ctx.time >= tipUntil) {
+        if (badLen > 260 && badLen > goodLen) ctx.hint(t(onLeg ? 'mg_pansage_legmud' : 'mg_brush_dir'), 'warn');
+        else if (good && goodLen > 120) ctx.hint(t('mg_brush_good'), 'good');
       }
     } else overdo(seg, p, inBody(sh, p.x, p.y, 1.1));
   }
@@ -392,7 +420,7 @@ export function pansageGame(ctx) {
       stage: stage(), si, value: value(), lo: rule.lo, hi: rule.hi, max: MAX, over, pause,
       results: results.map((r) => ({ ...r })),
       mud: mud.filter((q) => q.mud > 0).map(({ x, y, r, mud: m }) => ({ x, y, r, mud: m })),
-      dust: dust.filter((q) => q.dust > 0).map(({ x, y, r, dust: m }) => ({ x, y, r, dust: m })),
+      dust: dust.filter((q) => q.dust > 0).map(({ x, y, r, dust: m, leg }) => ({ x, y, r, dust: m, leg: !!leg })),
       foot: PANSAGE_FEET[foot] ?? null, footIndex: foot, footReady: ctx.time - footAt >= 0.35 && footDoneAt < 0,
       blobs: (hooves[foot]?.blobs ?? []).filter((q) => q.dirt > 0).map(({ x, y, r, dirt: m, stone }) => ({ x, y, r, dirt: m, stone: !!stone })),
       frog: { x: HX, y: HY - 20 },
@@ -449,9 +477,15 @@ export function pansageGame(ctx) {
         if (st === 'brush' && pause <= 0 && dust.some((q) => q.dust > 0)) {
           g.save();
           g.globalAlpha = 0.45 + Math.sin(ctx.time * 3) * 0.15;
-          for (let i = -1; i <= 1; i++) {
-            const p = sh.L(i * sh.rx * 0.45, -sh.ry * 0.05);
-            label(g, '‹‹', p.x, p.y, 22, '#ffffff');
+          if (dust.some((q) => q.dust > 0 && !q.leg)) {
+            for (let i = -1; i <= 1; i++) {
+              const p = sh.L(i * sh.rx * 0.45, -sh.ry * 0.05);
+              label(g, '‹‹', p.x, p.y, 22, '#ffffff');
+            }
+          }
+          // (🧦 jambes : de haut en bas, une flèche par paire de jambes)
+          for (let i = 0; i + 1 < legs.length; i += 2) {
+            if (legs[i].dust > 0 || legs[i + 1].dust > 0) label(g, '↓', (legs[i].x + legs[i + 1].x) / 2, legs[i].y - legs[i].r * 2, 18, '#ffffff');
           }
           g.restore();
         }
@@ -624,8 +658,10 @@ function drawMud(g, q) {
 function drawDust(g, q) {
   g.save();
   g.globalAlpha = 0.25 + 0.6 * q.dust;
-  g.fillStyle = '#a88a63';
-  ellipse(g, q.x, q.y, q.r, q.r * 0.75, q.seed);
+  // (🧦 la boue d'une jambe : plus foncée, en long sur la jambe)
+  g.fillStyle = q.leg ? '#6b4a2b' : '#a88a63';
+  if (q.leg) ellipse(g, q.x, q.y, q.r * 0.75, q.r * 1.1);
+  else ellipse(g, q.x, q.y, q.r, q.r * 0.75, q.seed);
   g.fill();
   g.fillStyle = '#7d6343';
   for (let i = 0; i < 6; i++) {

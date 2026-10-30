@@ -197,6 +197,14 @@ plus satinée ; crotté, elle est terne. Après un galop (ou un long trot), il t
 plaques (la sueur monte avec l'effort ; en balade libre, elle sèche un peu au pas, sinon en une heure de jeu environ ;
 le pansage ou la douche l'enlèvent).
 Sous la pluie, dehors et sans couverture imperméable, il est mouillé de la même façon ; au box ou couvert, il reste sec.
+🧦 **Chaussettes de boue** (`src/sim/legMud.js`) : au pré, à la saison des pluies du lieu (poids de pluie de 3 et plus :
+en Normandie, tout sauf l'été), ou partout quand il pleut, la boue monte sur ses jambes
+jusqu'aux genoux en deux heures de jeu environ : foncée mouillée, claire et poussiéreuse en séchant (elle tombe peu à
+peu au sec). Au box, il reste propre. Sur un gris ou un blanc, ça se voit le plus, comme en vrai. Au pansage, la brosse
+trouve quatre taches sur ses jambes : « 🧦 Chaussettes de boue ! Brosse ses jambes de haut en bas ↓. » (le poil des
+jambes pousse vers le bas ; l'étrille sur les jambes fait toujours mal). Ses jambes propres, la première fois, un
+conseil : « En hiver, on laisse sécher la boue, puis on brosse. Mouiller ses jambes tous les jours abîme sa peau. »
+Tant qu'il en a, le pansage n'est jamais « inutile ».
 
 ### Ses oreilles (0.5, `src/sim/horseEars.js`)
 Les oreilles du cheval 3D disent comment il va, comme en vrai : en avant (attentif, curieux ; quand tu t'approches,

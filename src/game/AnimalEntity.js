@@ -595,6 +595,11 @@ export class AnimalEntity {
     if (u.hSweat) u.hSweat.value = Math.min(1, Math.max(this.data.sweat ?? 0, this.rainWet ?? 0)); // (sueur ou pluie)
     const base = m.userData.rimBase ?? u.hRim.value;
     u.hRim.value = base * (g >= 85 && !this.data.muddy ? 1.3 : 1 - 0.45 * dirt);
+    // 🧦 (ses chaussettes de boue, mouillées ou sèches : src/sim/legMud.js)
+    if (u.hLegMud) {
+      u.hLegMud.value = this.data.legMud ?? 0;
+      u.hLegWet.value = this.data.legMudWet ?? 0;
+    }
   }
 
   /** Tu l'as appelé, mais il reste là : il lève la tête et te regarde un moment (même de loin). */

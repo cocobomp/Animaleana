@@ -477,6 +477,15 @@ hEarIn = 0.0;
     float mud = clamp(hDirt * (0.85 * legMud + 0.75 * bodyMud), 0.0, 0.75) * (1.0 - isHoof) * (1.0 - isSkin);
     c = mix(c, vec3(0.13, 0.085, 0.045), mud);
   }
+  // 🧦 Chaussettes de boue (le pré boueux : hLegMud, de 0 propre à 1 ; src/sim/legMud.js) : du sabot au genou (h ≈ 0,45),
+  // bord cassé ; brun foncé mouillée, brun clair poussiéreux sèche (hLegWet) ; la corne un peu salie. (Bruns bien
+  // saturés : sous le ciel bleuté du pré, des bruns ternes se lisaient en gris, comme des guêtres.)
+  if (hLegMud > 0.001) {
+    float low = isLeg * (1.0 - smoothstep(0.36, 0.5, h + (hNoise(P * 22.0) - 0.5) * 0.12));
+    float m = clamp(hLegMud * low * (0.7 + 0.3 * hNoise(P * 30.0)), 0.0, 0.85) * (1.0 - isSkin);
+    c = mix(c, mix(vec3(0.4, 0.26, 0.13), vec3(0.12, 0.062, 0.022), hLegWet), m);
+    c = mix(c, c * 0.8, isHoof * hLegMud * 0.5);
+  }
   // Sueur (hSweat, après le galop) : le poil mouillé est plus foncé, par plaques, sur le corps.
   if (hSweat > 0.001) {
     float wet = hSweat * bodyS * (0.25 + 0.75 * smoothstep(0.32, 0.52, hFbm(P * 3.5 + hSeed + 5.0)));
@@ -671,6 +680,9 @@ export function coatMaterial(look, build, breed = null, real = null) {
     hRimTint: { value: rimTint },
     // (terre sur la robe : 0 propre, 1 crotté — AnimalEntity.coatCare)
     hDirt: { value: 0 },
+    // (chaussettes de boue : boue sur le bas des jambes, 0 à 1, et mouillée, 0 à 1 — AnimalEntity.coatCare)
+    hLegMud: { value: 0 },
+    hLegWet: { value: 0 },
     // (sueur : poil mouillé, plus foncé — après un galop ; AnimalEntity.coatCare)
     hSweat: { value: 0 },
     hSkyRim: gfx.skyRim,

@@ -279,3 +279,86 @@ describe('le pansage du cheval', () => {
     setLang?.('fr');
   });
 });
+
+describe('🧦 ses chaussettes de boue (src/sim/legMud.js)', () => {
+  /** L'étrille faite : on arrive à la brosse. */
+  const toBrush = (a, opts) => {
+    const ctx = fakeCtx(a);
+    if (opts) ctx.opts = opts;
+    const game = pansage.pansageGame(ctx);
+    curryAll(game);
+    nextStage(game, ctx);
+    expect(game.peek().stage).toBe('brush');
+    return { ctx, game };
+  };
+  const muddy = (legMud = 0.8) => Object.assign(horse(), { legMud });
+  const down = (q) => line(q.x, q.y - 22, q.x, q.y + 22, 11);
+  const up = (q) => line(q.x, q.y + 22, q.x, q.y - 22, 11);
+  function brushLegs(game) {
+    for (let guard = 0; guard < 40 && game.peek().dust.some((q) => q.leg); guard++) stroke(game, down(game.peek().dust.find((q) => q.leg)));
+  }
+
+  it('revenu du pré boueux : quatre taches sur ses jambes à la brosse, et le pansage le dit', () => {
+    const { ctx, game } = toBrush(muddy());
+    const legs = game.peek().dust.filter((q) => q.leg);
+    expect(legs).toHaveLength(4);
+    const { body } = game.peek();
+    for (const q of legs) expect(q.y).toBeGreaterThan(body.y + body.ry); // (sous le ventre)
+    expect(ctx.hints.at(-1).text).toBe(t('mg_pansage_legmud'));
+    brushLegs(game);
+    expect(game.peek().dust.some((q) => q.leg)).toBe(false);
+  });
+
+  it('de haut en bas, la boue part ; de bas en haut, moins bien', () => {
+    const run = (shape) => {
+      const { game } = toBrush(muddy());
+      const q = game.peek().dust.find((o) => o.leg);
+      stroke(game, shape(q));
+      return game.peek().dust.find((o) => o.leg && o.x === q.x).dust;
+    };
+    const withHair = run(down);
+    const against = run(up);
+    expect(withHair).toBeLessThan(against);
+    expect(1 - withHair).toBeGreaterThan((1 - against) * 1.5);
+  });
+
+  it('un cheval propre (ou à peine crotté) : pas de tache sur les jambes, les autres ne changent pas', () => {
+    const clean = toBrush(horse()).game.peek().dust;
+    expect(clean.some((q) => q.leg)).toBe(false);
+    const legs = toBrush(muddy()).game.peek().dust;
+    expect(legs.length).toBe(clean.length + 4);
+    expect(legs.filter((q) => !q.leg)).toEqual(clean);
+    expect(toBrush(muddy(0.15)).game.peek().dust.some((q) => q.leg)).toBe(false);
+  });
+
+  it('le conseil, une fois : ses jambes propres, la brosse dit pourquoi on laisse sécher', () => {
+    const opts = { legMudTip: true };
+    const { ctx, game } = toBrush(muddy(), opts);
+    brushLegs(game);
+    expect(ctx.hints.some((h) => h.text === t('mg_pansage_legmud_tip'))).toBe(true);
+    expect(opts.out.legMudTip).toBe(true);
+    // (le pansage fini garde la note, avec les pieds curés)
+    brushAll(game);
+    nextStage(game, ctx);
+    pickAllFeet(game, ctx);
+    tick(game, ctx, 1.2);
+    combAll(game);
+    press(ctx);
+    expect(ctx.finished).not.toBeNull();
+    expect(opts.out.legMudTip).toBe(true);
+    expect(opts.out.hooves).toBeDefined();
+    // déjà lu : plus de conseil
+    const seen = toBrush(muddy(), {});
+    brushLegs(seen.game);
+    expect(seen.ctx.hints.some((h) => h.text === t('mg_pansage_legmud_tip'))).toBe(false);
+  });
+
+  it('ses textes existent en français et en anglais', async () => {
+    const { setLang } = await import('../src/i18n.js');
+    for (const lang of ['fr', 'en']) {
+      setLang?.(lang);
+      for (const k of ['mg_pansage_legmud', 'mg_pansage_legmud_tip']) expect(t(k), `${lang} ${k}`).not.toBe(k);
+    }
+    setLang?.('fr');
+  });
+});

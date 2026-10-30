@@ -41,6 +41,7 @@ import {
 } from '../sim/animal.js';
 import { minutesPerSecond, dayOf, hourOf, isNight, seasonOf, DAYS_PER_YEAR } from '../sim/time.js';
 import { PLACES, rollWeather, temperature, checkTravel, TRAVEL_MODES, placeSeason } from '../sim/places.js';
+import { muddyGround } from '../sim/legMud.js'; // 🧦 ses chaussettes de boue
 import { adoptionPrice, shopPrice, stageAgeDays } from '../sim/adoption.js';
 import { checkObjectives, objectiveParams } from '../sim/objectives.js';
 import { mainQuest, afterQuestsDone } from '../sim/quests.js'; // l'histoire de la ferme : fin d'un chapitre
@@ -896,7 +897,7 @@ export class Game {
     this.profile.clock += hours * 60;
     const here = this.animalsHere();
     for (const a of here) {
-      const events = tickAnimal(a, hours * decayFactor, { ...ctx, weather: this.simWeather(), ...this.socialCtx(a, here) });
+      const events = tickAnimal(a, hours * decayFactor, { ...ctx, weather: this.simWeather(), ...this.socialCtx(a, here), ...this.mudCtx(a, this.entities.get(a.id)) });
       a.ageDays += (hours * (1 - decayFactor)) / 24;
       tickProduce(a, hours);
       this.handleEvents(a, events);
@@ -1175,6 +1176,17 @@ export class Game {
     return { companions, alone: HERD_SPECIES.includes(a.species) && companions === 0 };
   }
 
+  /**
+   * 🧦 Ses chaussettes de boue (src/sim/legMud.js) : dehors (ni dans la maison des animaux ni dans son box), sur un sol
+   * boueux. sky : le vrai ciel (une couverture de pluie ne couvre pas ses jambes).
+   */
+  mudCtx(a, e) {
+    if (a.species !== 'horse') return null;
+    const outdoors = !!e && !e.inside && !this.interiors.inBox(a);
+    const muddy = outdoors && muddyGround({ placeId: this.profile.place, season: this.season, weather: this.weather });
+    return { outdoors, muddy, sky: this.weather };
+  }
+
   /** Effets de la ferme pendant `hours` heures : litière, pâturage, aides (si temps sauté), salaires. */
   farmTick(here, hours, skipped = false) {
     const p = this.profile;
@@ -1398,6 +1410,7 @@ export class Game {
           dirt,
           weather: e?.inside ? 'clear' : this.interiors.feltWeather(a, feltWeather(a, weather, this.temperature, this.season)), sleeping: e?.sleeping, ridden: e?.ridden, moving: e && e.speed > 0.3, ...this.socialCtx(a, here),
           freeRide: !!e?.ridden && !this.mgmt.active && this.player.gaitEnabled !== false && !this.player.auto, // (sa sueur : Player.rideStep)
+          ...this.mudCtx(a, e), // 🧦
         });
         tickProduce(a, hours);
         // Chaque promenade fait progresser le chien (obéissance et « Au pied »).

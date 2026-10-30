@@ -4,6 +4,7 @@
 import { SPECIES, getBreed, PERSONALITIES, NAMES } from './species.js';
 import { DAYS_PER_YEAR } from './time.js';
 import { pick, randRange, uid } from './rng.js';
+import { legMudTick, cleanLegs, LEG_MUD } from './legMud.js';
 
 export const NEEDS = ['hunger', 'thirst', 'hygiene', 'energy', 'exercise', 'affection', 'grooming'];
 
@@ -70,6 +71,7 @@ export function pickHooves(a, cleaned = 1, stoneOut = cleaned >= 1) {
 
 /** Ce soin est-il inutile pour l'instant (besoin plein) ? Un cheval aux pieds sales se panse quand même. */
 export function careFull(a, actionId) {
+  if (actionId === 'brush' && (a.legMud ?? 0) >= LEG_MUD.brushAt) return false; // 🧦 (ses chaussettes de boue)
   if (actionId === 'shoe' && a.species === 'horse') return false; // (les fers, ce n'est pas une question de propreté)
   const care = CARE[actionId];
   if (!care?.full || a.needs[care.full] < 96) return false;
@@ -287,6 +289,7 @@ export function mood(a) {
 /**
  * Fait passer `hours` heures de jeu pour l'animal.
  * ctx : { sleeping, moving, ridden, freeRide (monté en balade libre), weather, rng, travelling (en voyage : le stress ne redescend pas) }
+ * (+ outdoors, muddy, sky : ses chaussettes de boue, src/sim/legMud.js)
  * Renvoie la liste des événements : 'sick', 'died'.
  */
 export function tickAnimal(a, hours, ctx = {}) {
@@ -314,6 +317,7 @@ export function tickAnimal(a, hours, ctx = {}) {
     if (a.sweat && !ctx.freeRide) a.sweat = Math.max(0, a.sweat - hours * 0.8);
     const wet = ctx.weather === 'rain' || ctx.weather === 'storm' || ctx.weather === 'snow';
     a.hoofDirt = Math.min(1, (a.hoofDirt ?? 0) + (hours / 24) * (wet ? HOOF.wetPerDay : HOOF.perDay));
+    legMudTick(a, hours, ctx); // 🧦 (au pré boueux, ses chaussettes de boue : src/sim/legMud.js)
     if (a.lame) {
       a.lame.hours += hours;
       if (a.lame.cause === 'stone' && a.lame.hours >= HOOF.abscessHours && !a.sick) {
@@ -411,6 +415,7 @@ export function applyCare(a, actionId, quality = 1, opts = {}) {
   if (care.tiring) a.weight = Math.max(0, a.weight - 2);
   if (actionId === 'brush') delete a.muddy; // (la terre de sa roulade est partie)
   if (actionId === 'brush' || actionId === 'wash') delete a.sweat; // (les traces de sueur aussi)
+  if (actionId === 'brush' || actionId === 'wash') cleanLegs(a); // 🧦 (et ses chaussettes de boue)
   // Panser un cheval, c'est aussi curer ses pieds. opts.hooves (le mini-jeu) : { cleaned, stoneOut } ; sans mini-jeu
   // (soin de groupe, aide), les pieds sont bien curés.
   const unlame = actionId === 'brush' && pickHooves(a, opts.hooves?.cleaned ?? 1, opts.hooves ? !!opts.hooves.stoneOut : true);

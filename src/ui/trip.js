@@ -3,6 +3,7 @@
 
 import { h } from './dom.js';
 import { t, ta } from '../i18n.js';
+import { needIcon } from './UI.js'; // (la faim : 🌾 pour un cheval)
 import { SPECIES } from '../sim/species.js';
 import { TRAVEL_MODES } from '../sim/places.js';
 import {
@@ -283,7 +284,7 @@ function animalCard(ui, flow, a, stop, refs) {
   const trip = flow.journey.trip;
   const lvl = stressLevel(a.stress ?? 0);
   const thirst = tripBar('💧', t('need_thirst'), a.needs.thirst, true, 'thirst');
-  const hunger = tripBar('🍖', t('need_hunger'), a.needs.hunger, true, 'hunger');
+  const hunger = tripBar(needIcon('hunger', a), t('need_hunger'), a.needs.hunger, true, 'hunger'); // (🌾 pour un cheval)
   const stress = tripBar('😰', t('trip_stress'), a.stress ?? 0, false, 'stress');
   const comfort = tripBar('🛋️', t('trip_comfort'), trip.comfort[a.id] ?? 80, true, 'comfort');
   const chip = h('span', { class: `chip trip-lv ${lvl}` }, ta(`trip_lv_${lvl}`, a));
@@ -471,7 +472,9 @@ export function travelAdvice(ui, { here, travelers, state, option }) {
   if (option.mode === 'plane' || option.mode === 'boat') notes.push(t(`trip_holdNote_${option.mode}`));
   out.push(h('div', { class: 'trip-notes' }, notes.map((n) => h('p', { class: 'note' }, n))));
   if (isLongTrip(option.hours, option.mode)) {
-    out.push(h('div', { class: 'trip-tip warn' }, h('span', {}, t('trip_longWarn', { t: fmtHours(plan.totalHours) }))));
+    // (avec des nuits en route, ce temps-là n'est pas celui de la carte « 1 j 17 h de voyage » : on le dit)
+    const nights = plan.stops.some((s) => s.kind === 'night');
+    out.push(h('div', { class: 'trip-tip warn' }, h('span', {}, t(nights ? 'trip_longWarnNights' : 'trip_longWarn', { t: fmtHours(plan.totalHours) }))));
   }
   return out;
 }

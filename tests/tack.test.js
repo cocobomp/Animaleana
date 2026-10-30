@@ -4,7 +4,7 @@ import { createAnimal } from '../src/sim/animal.js';
 import {
   GEAR, TACK_CATEGORIES, COLORS, SIZES, sizeOf, defaultSize, stockKey, parseKey, gearPrice, fitReason,
   ensureTack, owned, inUse, ownedStock, freeStock, stockOf, buyGear, equip, swapSize, wears, tackEffects,
-  feltWeather, riderHelmet, equipHelmet, rideGear, keepsWarm,
+  feltWeather, riderHelmet, equipHelmet, rideGear, keepsWarm, tooYoungForTack, RIDE_SLOTS,
 } from '../src/sim/gear.js';
 import { isWarm } from '../src/sim/events.js';
 import { jumpChance, horseJumpStats, trickWindow, trailResult, activitySkillGain } from '../src/sim/activities.js';
@@ -232,6 +232,26 @@ describe('acheter et équiper', () => {
     buyGear(p, 'boots', 'pony');
     buyGear(p, 'boots', 'draft');
     expect(stockOf(p, 'boots')).toEqual([{ size: 'pony', owned: 2, free: 2 }, { size: 'draft', owned: 1, free: 1 }]);
+  });
+});
+
+describe('un poulain trop jeune pour être monté (fiche, menu, « Équiper » de la sellerie)', () => {
+  it('ni selle, ni tapis, ni filet ; son licol, sa couverture, oui ; adulte : tout', async () => {
+    const { DAYS_PER_YEAR } = await import('../src/sim/time.js');
+    const { SPECIES } = await import('../src/sim/species.js');
+    const foal = horse('shetland', { ageDays: 1.5 * DAYS_PER_YEAR }); // (Noisette, 1 an et demi)
+    const grown = horse('shetland', { ageDays: (SPECIES.horse.rideYears + 0.1) * DAYS_PER_YEAR });
+    expect(RIDE_SLOTS).toEqual(['saddle', 'pad', 'bridle']);
+    for (const id of Object.keys(GEAR).filter((x) => GEAR[x].species.includes('horse'))) {
+      const riding = RIDE_SLOTS.includes(GEAR[id].slot);
+      expect(tooYoungForTack(id, foal), id).toBe(riding);
+      expect(tooYoungForTack(id, grown), id).toBe(false);
+    }
+    // (une vieille partie, poulain déjà sellé : « Enlever » marche toujours)
+    foal.gear = { saddle: { item: 'saddle', color: 'brown', size: 'pony' }, halter: { item: 'halter', color: 'red' } };
+    const { unequip } = await import('../src/sim/gear.js');
+    unequip(foal, 'saddle');
+    expect(Object.keys(foal.gear)).toEqual(['halter']);
   });
 });
 

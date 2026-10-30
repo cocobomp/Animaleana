@@ -105,6 +105,10 @@ const fr = {
   wish_tap_f: 'Ce qu\'elle demande',
   wish_btn_hay: '{name} a faim',
   wish_btn_water: '{name} a soif',
+  // (sa routine, ses barres encore presque pleines : le foin du matin, du soir, l'eau du jour ; wish.task)
+  wish_btn_feedAm: 'Le foin du matin de {name}',
+  wish_btn_feedPm: 'Le foin du soir de {name}',
+  wish_btn_dayWater: 'De l\'eau fraîche pour {name}',
   wish_btn_brush: 'Panse {name}',
   wish_btn_work: 'Monte {name}',
   wish_btn_pet: 'Un câlin pour {name}',
@@ -144,6 +148,7 @@ const fr = {
   mood_ok: 'Content',
   mood_sad: 'Triste',
   mood_sick: 'Malade',
+  mood_hurt: 'Blessé', // (malade d'une blessure, a.sick 'paw' : ta, plus bas)
   health: 'Santé',
   happiness: 'Bonheur',
   need_hunger: 'Faim',
@@ -221,6 +226,7 @@ const fr = {
   r_full: '{name} n\'en a pas besoin pour l\'instant.',
   r_tired: '{name} est trop fatigué.',
   r_sick: '{name} est malade, emmène-le chez le vétérinaire.',
+  r_hurt: '{name} est blessé, emmène-le chez le vétérinaire.',
   r_baby: '{name} est encore un bébé.',
   r_known: '{name} connaît déjà ce tour.',
   r_tooYoung: '{name} est trop jeune pour être monté.',
@@ -654,6 +660,7 @@ const fr = {
   treat_injection: 'Piqûre',
   ill_ear: 'otite',
   ill_paw: 'patte blessée',
+  ill_paw_horse: 'jambe blessée', // (un cheval a des jambes : illText)
   ill_belly: 'mal de ventre',
   ill_cold: 'rhume',
   ill_fleas: 'puces',
@@ -904,12 +911,14 @@ const fr = {
   // Accords au féminin (utilisés automatiquement par t() quand l'animal est une femelle)
   mood_happy_f: 'Heureuse',
   mood_ok_f: 'Contente',
+  mood_hurt_f: 'Blessée',
   p_playful_f: 'Joueuse',
   p_cuddly_f: 'Câline',
   p_stubborn_f: 'Têtue',
   p_curious_f: 'Curieuse',
   r_tired_f: '{name} est trop fatiguée.',
   r_sick_f: '{name} est malade, emmène-la chez le vétérinaire.',
+  r_hurt_f: '{name} est blessée, emmène-la chez le vétérinaire.',
   r_tooYoung_f: '{name} est trop jeune pour être montée.',
   died_f: '🌈 {name} s\'est éteinte paisiblement à {age}. Elle restera dans tes souvenirs.',
   gotSick_f: '🤒 {name} est tombée malade ! Emmène-la chez le vétérinaire.',
@@ -1649,6 +1658,8 @@ const fr = {
   trip_stayHomeNone: 'Tout le monde part avec toi. Personne ne reste chez le voisin.',
   trip_leaveAll: '🏡 Tous chez le voisin',
   trip_longWarn: '⚠️ Long trajet ({t}) : c\'est dur pour les animaux. Et si tu les laissais chez le voisin ?',
+  // (à cheval ou en van, avec des nuits en route : la carte du mode dit le temps de route seul, ici tout compris)
+  trip_longWarnNights: '⚠️ Long trajet : {t} avec les nuits en route. C\'est dur pour les animaux. Et si tu les laissais chez le voisin ?',
   trip_holdNote_plane: '✈️ Pendant le vol, tes animaux seront en soute : tu ne pourras pas t\'occuper d\'eux.',
   trip_holdNote_boat: '⛴️ Pendant la traversée, tes animaux resteront dans le garage du bateau : tu ne pourras pas t\'occuper d\'eux.',
   trip_vehicleNote_trailer: '🚐 Un 4x4 et son van à chevaux t\'attendront dans la cour.',
@@ -1735,15 +1746,17 @@ const fr = {
   ev_injury_title_f: '{name} s\'est blessée !',
   ev_injury_intro: 'Oh non ! {name} {cause}. Il boite un peu. Emmène-le chez le vétérinaire pour le soigner.',
   ev_injury_intro_f: 'Oh non ! {name} {cause}. Elle boite un peu. Emmène-la chez le vétérinaire pour la soigner.',
-  ev_injury_win: '{name} est soigné. Sa patte va vite guérir !',
-  ev_injury_win_f: '{name} est soignée. Sa patte va vite guérir !',
-  ev_injury_fail: '{name} a encore mal à la patte. Emmène-le vite chez le vétérinaire.',
-  ev_injury_fail_f: '{name} a encore mal à la patte. Emmène-la vite chez le vétérinaire.',
-  ev_cause_brambles: 's\'est égratigné la patte dans les ronces',
-  ev_cause_wire: 's\'est coupé la patte sur un fil de clôture',
-  ev_cause_stone: 'a un caillou coincé sous le pied',
-  ev_cause_sprain: 's\'est tordu la patte en jouant',
-  ev_cause_thorn: 'a une épine plantée dans la patte',
+  ev_injury_win: '{name} est soigné. Sa {part} va vite guérir !',
+  ev_injury_win_f: '{name} est soignée. Sa {part} va vite guérir !',
+  ev_injury_fail: '{name} a encore mal à la {part}. Emmène-le vite chez le vétérinaire.',
+  ev_injury_fail_f: '{name} a encore mal à la {part}. Emmène-la vite chez le vétérinaire.',
+  ev_part: 'patte', // ({part} : un cheval a des jambes, src/game/Events.js)
+  ev_part_horse: 'jambe',
+  ev_cause_brambles: 's\'est égratigné la {part} dans les ronces',
+  ev_cause_wire: 's\'est coupé la {part} sur un fil de clôture',
+  ev_cause_stone: 'a un caillou coincé sous le pied', // (pas pour un cheval : sa boiterie, src/sim/events.js)
+  ev_cause_sprain: 's\'est tordu la {part} en jouant',
+  ev_cause_thorn: 'a une épine plantée dans la {part}',
   ev_escape_title: '{name} s\'est échappé !',
   ev_escape_title_f: '{name} s\'est échappée !',
   ev_escape_intro: '{name} a sauté par-dessus la barrière et se promène dans les prés. Suis la flèche pour le retrouver avant qu\'il ne s\'éloigne trop !',
@@ -2507,6 +2520,9 @@ const en = {
   wish_tap: 'What they want',
   wish_btn_hay: '{name} is hungry',
   wish_btn_water: '{name} is thirsty',
+  wish_btn_feedAm: 'Morning hay for {name}',
+  wish_btn_feedPm: 'Evening hay for {name}',
+  wish_btn_dayWater: 'Fresh water for {name}',
   wish_btn_brush: 'Groom {name}',
   wish_btn_work: 'Ride {name}',
   wish_btn_pet: 'A cuddle for {name}',
@@ -2546,6 +2562,7 @@ const en = {
   mood_ok: 'Fine',
   mood_sad: 'Sad',
   mood_sick: 'Sick',
+  mood_hurt: 'Hurt',
   health: 'Health',
   happiness: 'Happiness',
   need_hunger: 'Food',
@@ -2623,6 +2640,7 @@ const en = {
   r_full: '{name} doesn\'t need that right now.',
   r_tired: '{name} is too tired.',
   r_sick: '{name} is sick, take them to the vet.',
+  r_hurt: '{name} is hurt, take them to the vet.',
   r_baby: '{name} is still a baby.',
   r_known: '{name} already knows this trick.',
   r_tooYoung: '{name} is too young to be ridden.',
@@ -3012,6 +3030,7 @@ const en = {
   treat_injection: 'Injection',
   ill_ear: 'ear infection',
   ill_paw: 'hurt leg',
+  ill_paw_horse: 'hurt leg',
   ill_belly: 'tummy ache',
   ill_cold: 'cold',
   ill_fleas: 'fleas',
@@ -3915,6 +3934,7 @@ const en = {
   trip_stayHomeNone: 'Everybody comes with you. Nobody stays with the neighbour.',
   trip_leaveAll: '🏡 All stay with the neighbour',
   trip_longWarn: '⚠️ Long trip ({t}): it\'s hard on animals. What about leaving them with the neighbour?',
+  trip_longWarnNights: '⚠️ Long trip: {t} including the nights on the way. It\'s hard on animals. What about leaving them with the neighbour?',
   trip_holdNote_plane: '✈️ During the flight your animals are in the hold: you can\'t look after them.',
   trip_holdNote_boat: '⛴️ During the crossing your animals stay on the car deck: you can\'t look after them.',
   trip_vehicleNote_trailer: '🚐 A 4x4 and its horse trailer will wait for you in the yard.',
@@ -3995,13 +4015,15 @@ const en = {
   ev_coldSnap_fail: 'These animals got cold: {names}.',
   ev_injury_title: '{name} is hurt!',
   ev_injury_intro: 'Oh no! {name} {cause} and is limping a little. Take them to the vet to get better.',
-  ev_injury_win: '{name} is patched up. The leg will heal quickly!',
-  ev_injury_fail: '{name} still has a sore leg. Take them to the vet quickly.',
-  ev_cause_brambles: 'scratched a leg in the brambles',
-  ev_cause_wire: 'cut a leg on a fence wire',
+  ev_injury_win: '{name} is patched up. The {part} will heal quickly!',
+  ev_injury_fail: '{name} still has a sore {part}. Take them to the vet quickly.',
+  ev_part: 'leg',
+  ev_part_horse: 'leg',
+  ev_cause_brambles: 'scratched a {part} in the brambles',
+  ev_cause_wire: 'cut a {part} on a fence wire',
   ev_cause_stone: 'has a stone stuck under a foot',
-  ev_cause_sprain: 'twisted a leg while playing',
-  ev_cause_thorn: 'has a thorn in a leg',
+  ev_cause_sprain: 'twisted a {part} while playing',
+  ev_cause_thorn: 'has a thorn in a {part}',
   ev_escape_title: '{name} ran away!',
   ev_escape_intro: '{name} jumped over the fence and is wandering in the fields. Follow the arrow to find them before they wander too far!',
   ev_escape_win: 'You found {name}! They follow you: take them back {shelter} whenever you like.',
@@ -4754,8 +4776,15 @@ export function hourParams(params = {}) {
   return out;
 }
 
+// (blessé, pas malade : a.sick 'paw', une blessure — src/sim/events.js —, reste « malade » pour le jeu (mood, canRide…) ;
+// seuls les mots changent : « Blessée », « … est blessée, emmène-la chez le vétérinaire »)
+const HURT = { mood_sick: 'mood_hurt', r_sick: 'r_hurt' };
+
 /** Texte qui parle d'un animal (ou d'une aide) : prénom et accord au féminin automatiques. */
-export const ta = (key, who, params = {}) => t(key, { name: who.name, g: who.sex, ...params });
+export const ta = (key, who, params = {}) => t(who.sick === 'paw' ? HURT[key] ?? key : key, { name: who.name, g: who.sex, ...params });
+
+/** Le nom d'une maladie pour cet animal : « patte blessée », mais « jambe blessée » pour un cheval (ill_<id>_<espèce>). */
+export const illText = (id, a) => (fr[`ill_${id}_${a?.species}`] !== undefined ? t(`ill_${id}_${a.species}`) : t(`ill_${id}`));
 
 /** Texte localisé d'un objet { fr, en }. */
 export const L = (obj) => (obj ? obj[lang] ?? obj.fr : '');

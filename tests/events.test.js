@@ -185,6 +185,66 @@ describe('événements spéciaux', () => {
     expect(eventOutcome(ev, w.ctx, eventProgress(ev, w.ctx))).toBe('success');
   });
 
+  it('cheval blessé : jamais « un caillou sous le pied » (c\'est sa boiterie : cure-pied ou vétérinaire) ; un seul tirage, comme avant', () => {
+    const causes = { horse: new Set(), dog: new Set() };
+    const draws = { horse: [], dog: [] };
+    for (const sp of ['horse', 'dog']) {
+      for (let i = 0; i < 80; i++) {
+        const p = createProfile('A');
+        const a = adult(sp);
+        const r = seeded(`blessure-${i}`);
+        let n = 0;
+        const ev = startEvent(p, 'injury', world(p, [a]).ctx, () => { n++; return r(); });
+        causes[sp].add(ev.data.cause);
+        draws[sp].push(n);
+        expect(a.sick).toBe('paw');
+      }
+    }
+    expect(causes.horse.has('stone')).toBe(false);
+    expect([...causes.horse].sort()).toEqual(['brambles', 'sprain', 'thorn', 'wire']);
+    expect(causes.dog.has('stone')).toBe(true); // (les autres animaux : comme avant)
+    expect(draws.horse).toEqual(draws.dog);
+  });
+
+  it('cheval blessé, les mots : sa « jambe » (pas sa patte), « Blessée » et pas « Malade » ; le jeu le voit toujours malade', async () => {
+    globalThis.document = globalThis.document ?? { documentElement: {} }; // (setLang écrit sa langue)
+    const i18n = await import('../src/i18n.js');
+    const { Events } = await import('../src/game/Events.js');
+    const { mood, canRide } = await import('../src/sim/animal.js');
+    const { t, ta, illText, setLang } = i18n;
+    setLang('fr');
+    const intro = (species, cause) => Events.prototype.intro.call({}, { type: 'injury', data: { cause, who: { name: 'Perle', sex: 'f', species } } });
+    for (const cause of ['brambles', 'wire', 'sprain', 'thorn']) {
+      expect(intro('horse', cause), cause).toContain('jambe');
+      expect(intro('horse', cause), cause).not.toMatch(/patte|\{/);
+      expect(intro('dog', cause), cause).toContain('patte');
+    }
+    expect(t('ev_injury_win', { name: 'Perle', g: 'f', part: t('ev_part_horse') })).toBe('Perle est soignée. Sa jambe va vite guérir !');
+    expect(t('ev_injury_fail', { name: 'Rex', part: t('ev_part') })).toBe('Rex a encore mal à la patte. Emmène-le vite chez le vétérinaire.');
+    const mare = adult('horse', { sex: 'f' });
+    mare.name = 'Perle';
+    mare.sick = 'paw';
+    const dog = adult('dog', { sex: 'm' });
+    dog.name = 'Rex';
+    dog.sick = 'paw';
+    expect(illText('paw', mare)).toBe('jambe blessée');
+    expect(illText('paw', dog)).toBe('patte blessée');
+    expect(illText('ear', mare)).toBe(t('ill_ear'));
+    expect(ta('mood_sick', mare)).toBe('Blessée');
+    expect(ta('mood_sick', dog)).toBe('Blessé');
+    expect(ta(`r_${canRide(mare).reason}`, mare)).toBe('Perle est blessée, emmène-la chez le vétérinaire.');
+    expect([mood(mare), canRide(mare).reason]).toEqual(['sick', 'sick']); // (la logique ne change pas)
+    mare.sick = 'cold';
+    expect(ta('mood_sick', mare)).toBe('Malade');
+    expect(ta('r_sick', mare)).toBe('Perle est malade, emmène-la chez le vétérinaire.');
+    setLang('en');
+    mare.sick = 'paw';
+    expect(ta('mood_sick', mare)).toBe('Hurt');
+    expect(illText('paw', mare)).toBe('hurt leg');
+    expect(intro('horse', 'thorn')).toContain('has a thorn in a leg');
+    setLang('fr');
+  });
+
   it('animal échappé : le rejoindre termine l\'événement', () => {
     const p = createProfile('A');
     const horse = adult('horse');

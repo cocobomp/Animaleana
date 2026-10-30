@@ -69,7 +69,7 @@ réussite au dressage…).
   pluie). Pas curés pendant trois jours environ, un caillou s'y coince et il **boite** (🩹 au-dessus de lui, il
   marche doucement, on ne le monte plus, ni longe ni liberté : il se repose ; un message le dit). Le cure-pied du pansage enlève la terre ; le caillou est
   dans le pied qui boite (la consigne le nomme) : l'enlever, et il ne boite plus. Le vétérinaire aussi. Laissé deux
-  jours, le caillou fait un abcès : il est malade (vétérinaire). Les soins sans mini-jeu (pour tous les chevaux, les
+  jours, le caillou fait un abcès : il est malade (sa fiche dit « Blessé », 🩹 ; vétérinaire). Les soins sans mini-jeu (pour tous les chevaux, les
   aides) curent les pieds aussi.
 
 ## 4. Besoins (« comme dans la vraie vie »)
@@ -90,6 +90,7 @@ réussite au dressage…).
 son filet offerts l'attendent à la sellerie (son premier « 🏇 Seller et monter » apprend à seller, puis à brider).
 « 🧰 Desseller » range
 la selle et le tapis à la sellerie (après le galop, le jeu le rappelle : sans selle, au pré, le cheval va se rouler).
+Un poulain trop jeune pour être monté : ni selle, ni tapis, ni filet (son menu, sa fiche, « Équiper » à la sellerie ; ce qu'il porte s'enlève toujours).
 Pas de selle sur le dos : « 🏇 Seller et monter » (ou « 🪢 Seller » seul, ou « 🐎 Monter à cru »). Le mini-jeu, en
 trois étapes « juste ce qu'il faut » : ① le tapis glissé sur le dos, juste derrière le garrot (trop en avant, il
 gêne les épaules ; trop en arrière, il appuie sur les reins) ; ② la selle posée sur le tapis, au même endroit ;
@@ -159,10 +160,10 @@ ni pendant le tutoriel. À l'écurie, chacun montre la sienne. Son nom ou sa bul
 visiteurs t'attendent »…) ou sous le suivi de quête : ils pâlissent et laissent le doigt toucher le nom à travers.
 « Sa bulle, son bouton » : toucher la bulle te fait marcher jusqu'à lui, puis fait ce qu'il demande : le mini-jeu du
 soin (🌾 la ration, 💧, 🪮 le pansage, ❤️), 🏇 « Seller et monter » (ou monter, s'il est déjà sellé), ou 🧰 desseller.
-Près de lui, le bouton vert le dit (« 🌾 Pomme a faim », « 💧 Pomme a soif », « 🪮 Panse Pomme », « 🏇 Monte Pomme »,
+Près de lui, le bouton vert le dit (« 🌾 Pomme a faim » et « 💧 Pomme a soif » sous 45, sinon sa routine : « 🌾 Le foin du matin de Pomme », « 🌾 Le foin du soir de Pomme », « 💧 De l'eau fraîche pour Pomme » ; « 🪮 Panse Pomme », « 🏇 Monte Pomme »,
 « ❤️ Un câlin pour Pomme », « 🧰 Desselle Pomme », ou « Débride Pomme » s'il n'a que son filet) et E le fait ; dans son menu, ce qu'il demande vient en premier, cerclé d'or. Son nom
 ouvre toujours son menu : une quête qui veut autre chose (« caresse-le » quand il a faim) le montre du doigt, pas le
-bouton vert. Nourrir un cheval, c'est 🌾 (son menu, sa fiche, le tutoriel, les quêtes). Après le travail, descendu encore sellé ou bridé : 🧰 avant le reste
+bouton vert. Nourrir un cheval, c'est 🌾 (son menu, sa fiche, le tutoriel, les quêtes, sa barre de faim, ce qui monte au-dessus de lui). Après le travail, descendu encore sellé ou bridé : 🧰 avant le reste
 (même s'il a faim : on le desselle avant de le nourrir ; pas pour une selle qu'on vient de lui remettre et qui n'a pas encore servi) ; un toucher range la selle et le filet à la sellerie, ✨, puis
 la suite. En sueur, il se panse même tout propre.
 
@@ -203,7 +204,7 @@ jusqu'aux genoux en deux heures de jeu environ : foncée mouillée, claire et po
 peu au sec). Au box, il reste propre. Sur un gris ou un blanc, ça se voit le plus, comme en vrai. Au pansage, la brosse
 trouve quatre taches sur ses jambes (foncées mouillées, claires sèches, comme en 3D) ; sa consigne ajoute « 🧦 Ses jambes : de haut en bas ↓. » (le poil des
 jambes pousse vers le bas ; l'étrille sur les jambes fait toujours mal). Ses jambes propres, la première fois, un
-conseil en message après le pansage (9 s) : « 🧦 En hiver, on laisse sécher la boue au box, puis on brosse. Mouiller ses jambes tous les jours abîme sa peau. »
+conseil en message après le pansage (9 s) : « 🧦 Quand le pré est boueux, on laisse sécher la boue au box, puis on brosse. Mouiller ses jambes tous les jours abîme sa peau. »
 Tant qu'il en a, le pansage n'est jamais « inutile ».
 
 ### Ses oreilles (0.5, `src/sim/horseEars.js`)
@@ -272,7 +273,7 @@ trotter ou galoper tout de suite, le jeu le dit gentiment (les trois premières 
 (×1,25 au trot et au galop) ; bien échauffé, un petit « ✅ ». À la fin, après au moins 4 secondes de galop, on finit au
 pas (15 secondes) avant de descendre : « 😌 Retour au calme » (lien +0,5, affection +6, il a séché un peu en marchant,
 « Retours au calme au pas » dans le carnet du cavalier) ; descendu juste après le galop, le jeu dit qu'il est encore
-essoufflé. Pas pendant une activité ni un voyage (ils mènent le cheval).
+essoufflé. Pas pendant une activité ni un voyage (ils mènent le cheval) ; encore en selle après, il a travaillé : échauffé, sans petit mot.
 
 ### Ta balade (0.5, `src/sim/rideLog.js`, `src/ui/rideCard.js`)
 En descendant d'une balade libre d'au moins 40 secondes en mouvement (avec un de tes chevaux, après le tutoriel), une
@@ -287,7 +288,7 @@ matin est oublié) et, sellé après un galop, « 🧰 Desselle-le : il veut se 
 du retour au calme et de « Desseller » (le lien du retour au calme est toujours donné). Pas de carte pour une balade
 plus courte, menée par une activité ou un voyage, ni en passant d'un cheval à l'autre en selle : les petits mots d'avant (encore en selle après une activité ou un voyage, la balade libre qui suit a sa carte). Seul le chemin vraiment fait compte
 (il galope sur place contre une barrière : rien) ; quand il va tout seul où on a touché, son allure se lit à sa
-vitesse.
+vitesse. Téléphone en paysage : plus serrée, toujours au-dessus du bouton vert ; sa journée parfaite s'efface et 🧰 passe avant l'étoile.
 
 ### Son souffle dans le froid (0.5, `src/sim/breath.js`, `src/game/HorseBreath.js`)
 Quand il fait froid (10 °C et moins, un peu plus visible sous la pluie, la neige ou le brouillard), on voit la buée de
@@ -551,7 +552,7 @@ galops, trots enlevés, troncs sautés, sans-faute, balades, appels, journées p
   cheval) ne bloque pas : le suivi y emmène d'abord.
 - Toute quête finie donne sa récompense, rejointe ou non. Le suivi sur le côté de l'écran montre la quête suivie
   (🧭), sinon le chapitre en cours, sinon la première quête rejointe (src/sim/quests.js). La fin d'un chapitre est
-  fêtée par le guide dès qu'aucune fenêtre n'est ouverte (le petit mot attend : src/ui/questNotices.js).
+  fêtée par le guide dès qu'aucune fenêtre n'est ouverte (le petit mot attend : src/ui/questNotices.js) ; en selle, un message dit tout de suite la suite et la bulle attend qu'on descende.
 - Succès à débloquer.
 
 ## 11. Technique

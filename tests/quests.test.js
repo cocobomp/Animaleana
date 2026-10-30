@@ -382,6 +382,18 @@ describe('le petit mot de fin de chapitre attend qu\'aucune fenêtre ne soit ouv
     q.clear();
     expect(q.update(false, 40)).toBeNull();
   });
+
+  it('à cheval, le mot attend (busy) ; un chapitre fini pendant la balade efface celui qui l\'annonçait (drop)', () => {
+    const q = new NoticeQueue(1000);
+    q.add({ text: 'ride1 réussi', follow: 'rideCanter1' });
+    expect(q.update(true, 0)).toBeNull(); // (en selle)
+    q.drop((n) => n.follow === 'rideCanter1');
+    q.add({ text: 'rideCanter1 réussi', follow: 'vet1' });
+    expect(q.size).toBe(1);
+    expect(q.update(false, 10)).toMatchObject({ follow: 'vet1' }); // (descendu : seulement la suite qui compte)
+    q.drop(() => true);
+    expect(q.size).toBe(1); // (pas celui affiché)
+  });
 });
 
 describe('le suivi à l\'écran', () => {

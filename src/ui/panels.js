@@ -4,9 +4,9 @@ import { checkForUpdate } from './updates.js';
 import { dogTrainerSection, trainingBadge } from './dogTrainer.js'; // éducateur canin : séances dans la fiche, badge
 import { isTrainingClient } from '../sim/dogTrainer.js';
 import { h, bar, hexColor } from './dom.js';
-import { t, L, getLang, setLang } from '../i18n.js';
+import { t, ta, L, getLang, setLang } from '../i18n.js';
 import { SPECIES, getBreed, allOffered, anyAvailable, LIVESTOCK_IDS } from '../sim/species.js';
-import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass, bondStage, BOND_PERKS } from '../sim/animal.js';
+import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass, bondStage, BOND_PERKS, isHurt } from '../sim/animal.js';
 import { DAYS_PER_YEAR } from '../sim/time.js';
 import { adoptionCandidates, adoptionPrice, shopPrice, shopBreeds, AGE_STAGES, stageAgeDays } from '../sim/adoption.js';
 import { createAnimal, freeName, namesInUse } from '../sim/animal.js';
@@ -277,10 +277,10 @@ function renderAnimal(ui, g, a) {
       h('span', { class: 'chip' }, t(`p_${a.personality}`, { g: a.sex })),
       a.pregnant ? h('span', { class: 'chip' }, `🤰 ${t('pregnantChip')}`) : null,
       h('span', { class: `chip weight-${weightClass(a)}` }, `⚖️ ${t(`weight_${weightClass(a)}`, { g: a.sex })}`),
-      h('span', { class: `chip mood-${m}` }, `${MOOD_EMOJI[m]} ${t(`mood_${m}`, { g: a.sex })}`),
+      h('span', { class: `chip mood-${m}` }, `${isHurt(a) ? '🩹' : MOOD_EMOJI[m]} ${ta(`mood_${m}`, a)}`), // (blessée, pas malade : ta)
       h('span', { class: `chip swatch${lightCoat(a.look.coat) ? ' light' : ''}`, style: { background: hexColor(a.look.coat) } }, coatName(a)),
     ),
-    a.sick ? h('p', { class: 'warn' }, `🤒 ${t('r_sick', { name: a.name, g: a.sex })}`) : null,
+    a.sick ? h('p', { class: 'warn' }, `${isHurt(a) ? '🩹' : '🤒'} ${ta('r_sick', a)}`) : null,
     a.lame && !a.sick ? h('p', { class: 'warn' }, `🩹 ${t(a.lame.cause === 'shoe' ? 'lostShoeSheet' : 'r_lame', { name: a.name, g: a.sex })}`) : null, // (un caillou, un fer)
     clientInfo(a, g), // animal confié : propriétaire, jours restants, soin
     !here ? h('p', { class: 'note' }, t('isAt', { place: `${PLACES[a.location].flag} ${L(PLACES[a.location].name)}` })) : null,
@@ -443,7 +443,7 @@ export function openAnimals(ui) {
             h('small', {}, `${speciesName(a)} · ${breedName(a)} · ${ageText(a)}`),
             clientBadge(a, g) ?? trainingBadge(a), // 🏡 en pension / 🩺 en soins / 🐕 en éducation
             h('span', { class: 'mini-track' }, h('span', { class: 'mini-fill', style: { width: `${happiness(a)}%` } }))),
-          h('span', { class: 'card-side' }, MOOD_EMOJI[m], h('small', {}, here ? '' : PLACES[a.location].flag)));
+          h('span', { class: 'card-side' }, isHurt(a) ? '🩹' : MOOD_EMOJI[m], h('small', {}, here ? '' : PLACES[a.location].flag)));
       });
       const out = [h('div', { class: 'cards' }, cards)];
       if (p.memorial.length) {

@@ -3,7 +3,7 @@
 // des animaux confiés. La logique est dans src/sim/clients.js, la 3D dans src/game/Clients.js.
 
 import { h, bar } from './dom.js';
-import { t, ta } from '../i18n.js';
+import { t, ta, illText } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
 import { animalCard } from './panels.js';
@@ -61,7 +61,7 @@ export function showRequest(ui, visit, { accept, refuse, later }) {
       bubble(ta(helloKey, a, { days: visit.days })),
       bubble(ta(`cl_todo_${career}`, a, { owner: visit.owner.name }), 'hint')),
     h('div', { class: 'cl-animal' },
-      h('div', { class: 'cl-animal-name' }, `${SPECIES[a.species].emoji} ${a.name}`, a.sick ? h('span', { class: 'chip mood-sick' }, `🤒 ${t(`ill_${a.sick}`)}`) : null),
+      h('div', { class: 'cl-animal-name' }, `${SPECIES[a.species].emoji} ${a.name}`, a.sick ? h('span', { class: 'chip mood-sick' }, `🤒 ${illText(a.sick, a)}`) : null),
       animalCard(a)),
     h('div', { class: 'cl-deal' },
       h('span', { class: 'cl-deal-item' }, `📅 ${t('cl_days', { n: visit.days })}`),

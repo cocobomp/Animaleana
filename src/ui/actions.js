@@ -15,7 +15,7 @@ import { isSandbox } from '../sim/profile.js';
 const canLeashNow = (a) => canLeash(a) || (a.following && a.leashed);
 import { speciesName, speciesList } from './names.js';
 import { CARE, NEEDS, happiness } from '../sim/animal.js';
-import { NEED_ICON } from './UI.js';
+import { needIcon } from './UI.js'; // (🌾 la faim d'un cheval)
 import { bar } from './dom.js';
 import { horseBoxItems } from './facilitiesPanel.js';
 import { activityRuns, openActivities } from './activities.js';
@@ -174,7 +174,7 @@ export function openAnimalActions(ui, a) {
         label: careLabel(a, x),
         enabled: allowed.ok,
         why: allowed.ok ? '' : ta(`why_${allowed.reason}`, a),
-        effect: effectText(x),
+        effect: effectText(x, a),
         run: () => ui.careWithGame(a, x),
         queue: {
           label: `${careLabel(a, x)} · ${a.name}`,
@@ -195,9 +195,10 @@ export function openAnimalActions(ui, a) {
         run: () => ui.collectWithGame(a),
       });
     }
-    // Sans selle, mais une selle libre à la sellerie : « Seller et monter » (le mini-jeu, puis en selle).
+    // Sans selle, mais une selle libre à la sellerie : « Seller et monter » (le mini-jeu, puis en selle) ; pas pour un
+    // poulain trop jeune pour être monté (ni « 🪢 Seller » : sa selle restait au pré).
     const saddled = !!a.gear?.saddle;
-    const canSaddle = sp.rideable && !saddled && !!freeSaddle(g.profile, a, { home: g.isHome });
+    const canSaddle = sp.rideable && !saddled && canRide(a).reason !== 'tooYoung' && !!freeSaddle(g.profile, a, { home: g.isHome });
     if (sp.rideable) {
       const r = canRide(a);
       const asleep = g.entities.get(a.id)?.sleeping;
@@ -287,7 +288,7 @@ export function openAnimalActions(ui, a) {
     return wishFirst(items, WISH_ACTION[g.entities.get(a.id)?.wish?.id] ?? null); // (🫧 ce qu'il demande, cerclé d'or)
   }, () => h('div', { class: 'bars compact' },
     bar(t('happiness'), happiness(a), 'big'),
-    NEEDS.map((n) => bar(`${NEED_ICON[n]} ${t(`need_${n}`)}`, a.needs[n]))), true);
+    NEEDS.map((n) => bar(`${needIcon(n, a)} ${t(`need_${n}`)}`, a.needs[n]))), true);
 }
 
 /**
@@ -309,7 +310,7 @@ export function activityItems(ui, a) {
       label: t(`act_${x}`),
       enabled: check.ok || missing,
       why: check.ok || missing ? '' : ta(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, a),
-      effect: missing ? t(sandbox ? 'needToolTapFree' : 'needToolTap', { tool, price: TOOLS[check.tool].price }) : effectText(x),
+      effect: missing ? t(sandbox ? 'needToolTapFree' : 'needToolTap', { tool, price: TOOLS[check.tool].price }) : effectText(x, a),
       run: () => ui.careWithGame(a, x),
     });
   };
@@ -347,11 +348,11 @@ export function openAnimalActivities(ui, a) {
   sheet(ui, `🎯 ${t('actv_hud')} · ${a.name}`, `${sp.emoji} ${t('actv_sheetHelp')}`, () => activityItems(ui, a));
 }
 
-/** « 🍖 Faim +45 · ❤️ +6 » : ce que remplit chaque soin. */
-function effectText(action) {
+/** « 🍖 Faim +45 · ❤️ +6 » : ce que remplit chaque soin (pour un cheval, « 🌾 Faim +45 »). */
+function effectText(action, a) {
   return Object.entries(CARE[action]?.needs ?? {})
     .filter(([, v]) => v > 0)
-    .map(([n, v]) => `${NEED_ICON[n]} ${t(`need_${n}`)} +${v}`)
+    .map(([n, v]) => `${needIcon(n, a)} ${t(`need_${n}`)} +${v}`)
     .join(' · ');
 }
 

@@ -2,7 +2,7 @@
 
 import { h, isPhone, safeInsets } from './dom.js';
 import { watchViewport, focusField } from './viewport.js'; // clavier à l'écran
-import { t, L, fmtHour, getLang } from '../i18n.js';
+import { t, ta, L, fmtHour, getLang } from '../i18n.js';
 import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
@@ -25,7 +25,7 @@ import { wears, freeBridle, freeSaddle } from '../sim/gear.js'; // brider après
 import { beatRing } from '../sim/posting.js'; // ⬆️ trot enlevé
 import { fmtCross } from '../sim/freeJumps.js'; // ⏱️ le chrono du cross
 import { maybeShowNews } from './news.js'; // 🐴 quoi de neuf ?
-import { lifeStage } from '../sim/animal.js'; // étiquettes groupées des bébés
+import { lifeStage, isHurt } from '../sim/animal.js'; // étiquettes groupées des bébés ; 🩹 blessé
 import { openHelperChat } from './helperChat.js'; // parler aux aides
 import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notifications)
 import { openDogTrainerPanel } from './dogTrainer.js'; // métier éducateur canin
@@ -43,6 +43,10 @@ export const LEVEL_UP_DELAY = 1200;
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
+/** L'icône d'un besoin pour cet animal : la faim d'un cheval, c'est 🌾 (le foin, comme son bouton Nourrir et sa bulle). */
+export const needIcon = (n, a) => (n === 'hunger' && a?.species === 'horse' ? '🌾' : NEED_ICON[n]);
+// 🫧 Le bouton vert d'un vœu de sa routine (src/sim/horseWish.js, wish.task) ; la faim et la soif gardent « a faim ».
+const WISH_BTN_TASK = { feedAm: 'wish_btn_feedAm', feedPm: 'wish_btn_feedPm', water: 'wish_btn_dayWater' };
 
 /**
  * Un nom d'animal, ou sa bulle 💬 qui pend dessous, sous les pastilles d'état (box : leur rectangle à l'écran ; ou celui
@@ -542,7 +546,7 @@ export class UI {
         this.labelEls.set(a.id, el);
       }
       const m = this.game.moodOf(a);
-      const text = `${{ happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' }[m]} ${a.name}${it.e.sleeping ? ' 💤' : ''}`;
+      const text = `${isHurt(a) ? '🩹' : { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' }[m]} ${a.name}${it.e.sleeping ? ' 💤' : ''}`; // (🩹 blessé)
       // Bébés serrés (portée, chiots achetés ensemble) : une seule étiquette « 😄 Oscar +2 » pour le groupe (celle
       // du plus proche), au lieu d'une pile de bulles qui cache les petits ; et une pastille plus petite.
       const baby = lifeStage(a) === 'baby';
@@ -824,8 +828,9 @@ export class UI {
     const wish = f.kind === 'animal' ? f.entity.wish : null;
     if (wish) {
       const a = f.entity.data;
-      // (🧰 avec seulement son filet, après « Monter à cru » : « Débride Pomme », comme son menu)
-      const key = wish.id === 'untack' && !a.gear?.saddle ? 'wish_btn_unbridle' : `wish_btn_${wish.id}`;
+      // (🧰 avec seulement son filet, après « Monter à cru » : « Débride Pomme », comme son menu ; sa routine, ses
+      // barres presque pleines : « Le foin du soir de Pomme », pas « Pomme a faim »)
+      const key = wish.id === 'untack' && !a.gear?.saddle ? 'wish_btn_unbridle' : WISH_BTN_TASK[wish.task] ?? `wish_btn_${wish.id}`;
       this.actionBtn.replaceChildren(h('span', {}, wish.icon), ` ${t(key, { name: a.name, g: a.sex })}`, h('kbd', {}, 'E'));
       this.actionBtn.hidden = false;
       return;
@@ -857,12 +862,12 @@ export class UI {
     this.actionBtn.hidden = false;
   }
 
-  /** Montre ce que le soin a changé : « 🍖 Faim 30 → 75 ». */
+  /** Montre ce que le soin a changé : « 🍖 Faim 30 → 75 » (« 🌾 Faim » pour un cheval). */
   showDeltas(a, before) {
     const parts = [];
     for (const [n, v] of Object.entries(a.needs)) {
       const d = Math.round(v - before[n]);
-      if (Math.abs(d) >= 1) parts.push(`${NEED_ICON[n]} ${t(`need_${n}`)} ${Math.round(before[n])} → ${Math.round(v)}`);
+      if (Math.abs(d) >= 1) parts.push(`${needIcon(n, a)} ${t(`need_${n}`)} ${Math.round(before[n])} → ${Math.round(v)}`);
     }
     if (parts.length) this.toast(t('careDeltas', { name: a.name, parts: parts.join(' · ') }), 3500);
   }
@@ -1311,7 +1316,7 @@ export class UI {
       this.renderPanel(); // (la liste des activités ne dit plus « touche pour l'acheter »)
       check = g.canCare(a, action);
     }
-    if (!check.ok) return this.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name, g: a.sex }));
+    if (!check.ok) return this.toast(ta(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, a));
     const opts = {}; // (le mini-jeu y écrit ce qu'il a vu : le pansage, les pieds curés — opts.out.hooves)
     opts.legMudTip = !g.profile.legMudTip; // 🧦 (le pansage : le conseil des chaussettes de boue, une fois)
     const quality = await runMinigame(this, a, action, opts);

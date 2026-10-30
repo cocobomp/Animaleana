@@ -18,6 +18,11 @@ export class NoticeQueue {
     else this.waiting.push(n);
   }
 
+  /** Les mots en attente qui ne disent plus rien (stale(n) vrai : le chapitre qu'ils annonçaient est fini) s'en vont. */
+  drop(stale) {
+    if (this.waiting.some(stale)) this.waiting = this.waiting.filter((n) => !stale(n));
+  }
+
   /** Le mot affiché retourne en tête de file (une autre bulle prend sa place un moment). */
   hold() {
     if (!this.current) return;

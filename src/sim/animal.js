@@ -278,6 +278,9 @@ export function happiness(a) {
   return clamp(Math.round(h));
 }
 
+/** Malade d'une blessure (a.sick 'paw' : un événement, l'abcès d'un caillou) : les mots disent « blessé », 🩹 ; le jeu, lui, le voit malade (mood, canRide…). */
+export const isHurt = (a) => a?.sick === 'paw';
+
 export function mood(a) {
   if (a.sick) return 'sick';
   const h = happiness(a);

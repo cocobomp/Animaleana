@@ -33,7 +33,7 @@ class FakeEl extends FakeNode {
     this.parent = null;
     this.hidden = false;
     const s = new Set();
-    this.classList = { set: s, add: (c) => s.add(c), toggle: (c, on) => (on ? s.add(c) : s.delete(c)), contains: (c) => s.has(c) };
+    this.classList = { set: s, add: (c) => s.add(c), toggle: (c, on) => (on ? s.add(c) : s.delete(c)), contains: (c) => s.has(c), remove: (...cs) => cs.forEach((c) => s.delete(c)) };
   }
   set className(v) { for (const c of String(v).split(/\s+/).filter(Boolean)) this.classList.add(c); }
   get textContent() { return this.children.map((c) => c.textContent).join(''); }
@@ -226,6 +226,37 @@ describe('le bouton vert près de lui (UI.setFocus, Game.interact)', () => {
     e.wish = null;
     UI.prototype.setFocus.call(ui, { kind: 'animal', entity: e });
     expect(btn.textContent).toContain(t('interact', { name: 'Pomme' }));
+  });
+
+  it('sa routine, barres presque pleines : « Le foin du soir de Pomme » ; « a faim » seulement quand il a faim', async () => {
+    const { wishOf } = await import('../src/sim/horseWish.js');
+    const a = horse();
+    for (const k of Object.keys(a.needs)) a.needs[k] = 100;
+    const btn = new FakeEl('button');
+    const ui = { actionBtn: btn, game: {} };
+    const e = { data: a, wish: null };
+    const label = (hour) => {
+      e.wish = wishOf(a, { day: 3, hour });
+      UI.prototype.setFocus.call(ui, { kind: 'animal', entity: e });
+      return `${e.wish?.id}/${e.wish?.task} ${btn.textContent}`;
+    };
+    setLang('fr');
+    a.needs.hunger = 86; // (le foin du soir, comme au test de jeu : 86/100)
+    expect(label(19.5)).toBe('hay/feedPm 🌾 Le foin du soir de PommeE');
+    a.needs.hunger = 80;
+    expect(label(7.5)).toBe('hay/feedAm 🌾 Le foin du matin de PommeE');
+    a.needs.hunger = 100;
+    a.needs.thirst = 77;
+    expect(label(9)).toBe('water/water 💧 De l\'eau fraîche pour PommeE');
+    a.needs.thirst = 30;
+    expect(label(9)).toBe('water/thirst 💧 Pomme a soifE');
+    a.needs.hunger = 30;
+    expect(label(19.5)).toBe('hay/hunger 🌾 Pomme a faimE');
+    setLang('en');
+    a.needs.hunger = 86;
+    a.needs.thirst = 100;
+    expect(label(19.5)).toContain('Evening hay for Pomme');
+    setLang('fr');
   });
 
   it('E (ou un toucher) : ce qu\'il demande ; sans bulle, son menu', () => {
@@ -541,5 +572,105 @@ describe('le guide dit le bouton Nourrir de ton animal (Tutorial.stepText)', () 
     expect(text).toContain('🍖');
     expect(text).not.toContain('🌾');
     expect(text).not.toContain('{');
+  });
+});
+
+describe('après un rechargement, le suivi dit le bouton Nourrir de l\'animal que montre la flèche (Tutorial.renderTracker)', () => {
+  it('près du chien : « Touche 🍖 Nourrir » ; près de Perle, sans l\'avoir touchée : « Touche 🌾 Nourrir »', async () => {
+    const { followQuest } = await import('../src/sim/tutorial.js');
+    const { joinQuest } = await import('../src/sim/quests.js');
+    setLang('fr');
+    const a = horse();
+    const dog = createAnimal({ species: 'dog', sex: 'm', ageDays: 900, rng: seeded('rex') });
+    dog.name = 'Pirate';
+    const p = createProfile('Lou');
+    p.animals.push(dog, a);
+    joinQuest(p, 'feed5'); // (Journal → 🧭, comme au test de jeu)
+    followQuest(p, 'feed5');
+    p.questFollow.step = 1; // (« Touche ton animal » coché avant le rechargement : on en est à « Touche Nourrir »)
+    p.questFollow.seen = ['tapAnimal'];
+    const tracker = new FakeEl('div');
+    tracker.querySelector = () => null;
+    let near = dog;
+    const self = {
+      profile: p, active: false, folded: false, trackerKey: '', animalId: null, // (rien touché depuis le rechargement)
+      ui: { isBlocking: () => false, panel: null },
+      tracker, animal: () => near, layoutTop() {}, bumpTracker() {},
+    };
+    for (const k of ['whereText', 'trackerContent', 'stepLabel']) self[k] = Tutorial.prototype[k].bind(self);
+    Tutorial.prototype.renderTracker.call(self);
+    expect(tracker.textContent).toMatch(/Touche 🍖\sNourrir/); // (\u00a0 : « Nourrir » pas seul sur sa ligne)
+    near = a; // (on marche jusqu'à Perle : la flèche et la main la montrent)
+    Tutorial.prototype.renderTracker.call(self);
+    expect(tracker.textContent).toMatch(/Touche 🌾\sNourrir/);
+    expect(tracker.textContent).not.toContain('🍖');
+  });
+});
+
+describe('à cheval, le petit mot de fin de chapitre attend qu\'on descende (Tutorial.chapterDone, notice, riding)', () => {
+  it('un message tout de suite avec la suite ; la bulle après ; un chapitre fini pendant la balade efface le mot qui l\'annonçait', async () => {
+    const { NoticeQueue } = await import('../src/ui/questNotices.js');
+    setLang('fr');
+    const toasts = [];
+    const p = createProfile('Lou');
+    const self = {
+      profile: p, active: false, questBubble: null, qbKey: '', notices: new NoticeQueue(25000),
+      ui: { toast: (m, ms) => toasts.push(m), gaitPad: { hidden: false }, panel: null, modalOpen: false, minigameOpen: false, isBlocking: () => false },
+      game: { activities: { active: null } },
+      tick() {},
+    };
+    for (const k of ['busy', 'riding', 'notice']) self[k] = Tutorial.prototype[k].bind(self);
+    const hold = () => self.notices.update(self.busy() || self.riding(), 0); // (comme tick)
+    // ride1 fini en montant : la suite (« au trot, puis au galop ») dans un message, le suivi la montre aussi
+    Tutorial.prototype.chapterDone.call(self, 'ride1', { chapter: 'ride1', next: 'rideCanter1', storyDone: false, skippedLeft: 0 });
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]).toContain('Chapitre réussi');
+    expect(toasts[0]).toContain(t('qj_nextChapter', { name: t('o_rideCanter1') }));
+    expect(hold()).toBeNull(); // (pas de bulle sur ⤴️ / 🤚 / ⬆️ ni sur le cheval devant)
+    expect(self.notices.size).toBe(1);
+    // au galop pendant la même balade : rideCanter1 fini ; le mot de ride1 ne dit plus rien
+    Tutorial.prototype.chapterDone.call(self, 'rideCanter1', { chapter: 'rideCanter1', next: 'vet1', storyDone: false, skippedLeft: 0 });
+    expect(toasts).toHaveLength(2);
+    expect(self.notices.size).toBe(1);
+    // la réponse à un bouton touché en selle (🧭 d'une quête pas encore possible) : tout de suite, en message
+    self.notice({ emoji: '🔒', text: 'Pas encore', now: true });
+    expect(toasts[2]).toContain('Pas encore');
+    // descendu : la bulle, avec 🧭 pour suivre le chapitre suivant
+    self.ui.gaitPad.hidden = true;
+    expect(hold()).toMatchObject({ follow: 'vet1' });
+  });
+
+  it('à pied, une fenêtre ouverte : comme avant (un message court, la bulle à la fermeture)', () => {
+    setLang('fr');
+    const toasts = [];
+    const p = createProfile('Lou');
+    const self = {
+      profile: p, active: false, questBubble: null, qbKey: '', notices: { drop() {}, add: (n) => toasts.push(['add', n.follow]), hold() {} },
+      ui: { toast: (m) => toasts.push(m), gaitPad: { hidden: true }, panel: {}, modalOpen: false, minigameOpen: false, isBlocking: () => false },
+      game: { activities: { active: null } },
+      tick() {},
+    };
+    for (const k of ['busy', 'riding', 'notice']) self[k] = Tutorial.prototype[k].bind(self);
+    Tutorial.prototype.chapterDone.call(self, 'horse1', { chapter: 'horse1', next: 'horsePet3', storyDone: false, skippedLeft: 0 });
+    expect(toasts).toEqual([`⭐ ${t('qj_chapterDone', { name: t('o_horse1') })}`, ['add', 'horsePet3']]);
+  });
+});
+
+describe('la faim d\'un cheval, c\'est 🌾 (UI.needIcon, UI.showDeltas)', () => {
+  it('« Perle : 🌾 Faim 75 → 100 » ; un chien garde 🍖', async () => {
+    const { needIcon } = await import('../src/ui/UI.js');
+    setLang('fr');
+    const a = horse();
+    const dog = createAnimal({ species: 'dog', sex: 'm', ageDays: 900, rng: seeded('rex') });
+    expect(needIcon('hunger', a)).toBe('🌾');
+    expect(needIcon('hunger', dog)).toBe('🍖');
+    expect(needIcon('thirst', a)).toBe('💧');
+    const toasts = [];
+    const ui = { toast: (m) => toasts.push(m) };
+    const before = { ...a.needs, hunger: 75 };
+    a.needs.hunger = 100;
+    UI.prototype.showDeltas.call(ui, a, before);
+    expect(toasts[0]).toContain('🌾 Faim 75 → 100');
+    expect(toasts[0]).not.toContain('🍖');
   });
 });

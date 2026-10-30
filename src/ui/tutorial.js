@@ -30,6 +30,7 @@ import { hintText, blockText, shortBlockText, feedIcon } from './quests.js';
 import { NoticeQueue } from './questNotices.js'; // les petits mots du guide, qui attendent qu'aucune fenêtre ne soit ouverte
 import { ringSpot } from './ringSpot.js'; // où poser le cercle et le doigt
 import { WISH_ACTION } from '../sim/horseWish.js'; // 🫧 (le bouton vert fait ce que sa bulle demande)
+import { rideCardShown } from './rideCard.js'; // 🏇 (descendu : la carte « Ta balade » d'abord, le petit mot après)
 
 const GUIDE = '🐶';
 /** Nom d'une quête (« Adopte {n} espèces… » : le total suit les espèces proposées). */
@@ -203,8 +204,9 @@ export class Tutorial {
       if (step.manual && !this.ui.modalOpen) this.applyTarget({ el: this.bubble.querySelector('.tuto-ok') });
     } else {
       // Pas de tutoriel : la bulle sert à la quête (son nom touché) ou aux petits mots du guide (la fin d'un
-      // chapitre…), qui attendent qu'aucune fenêtre ne soit ouverte.
-      const n = this.questBubble ? null : this.notices.update(this.busy(), performance.now());
+      // chapitre…), qui attendent qu'aucune fenêtre ne soit ouverte, qu'on descende de cheval (riding), puis que la
+      // carte « Ta balade » s'en aille (en paysage, toutes deux au milieu : la bulle la couvrait en descendant).
+      const n = this.questBubble ? null : this.notices.update(this.busy() || this.riding() || rideCardShown(), performance.now());
       if (this.questBubble) this.renderQuestBubble();
       else if (n) this.renderQuestBubble(n);
       else this.hideQuestBubble();
@@ -664,7 +666,9 @@ export class Tutorial {
     const mode = trackerMode();
     const stepsKey = view ? view.steps.map((s) => s.state[0]).join('') : '';
     const active = activeQuests(p);
-    const key = `${q.id}|${kind}|${count}|${where}|${block}|${getLang()}|${stepsKey}|${this.folded}|${mode}|${active.join(',')}|${this.animalId}`; // (l'animal touché : 🌾 ou 🍖 Nourrir)
+    // (l'animal du guide, touché ou, après un rechargement, le plus proche, comme la flèche : 🌾 ou 🍖 Nourrir)
+    const icon = view ? feedIcon(this.animal()) : '';
+    const key = `${q.id}|${kind}|${count}|${where}|${block}|${getLang()}|${stepsKey}|${this.folded}|${mode}|${active.join(',')}|${icon}`;
     if (key !== this.trackerKey) {
       // La même quête a avancé : petit rebond (surtout utile quand le suivi est rangé en pastille).
       const moved = !!this.trackerKey && this.trackerWas?.id === q.id && (this.trackerWas.count !== count || this.trackerWas.steps !== stepsKey);
@@ -1170,6 +1174,15 @@ export class Tutorial {
   }
 
   /**
+   * En selle, en balade libre (les allures à l'écran, comme body.riding) : la bulle d'un petit mot, 25 s, couvrait le
+   * cheval devant et, en paysage, ⤴️ / 🤚 / ⬆️ (le premier « Bravo ! » perdu) ; il attend qu'on descende, et un
+   * message dit tout de suite la suite (chapterDone). Pas busy() : la bulle d'une quête qu'on touche reste possible.
+   */
+  riding() {
+    return this.ui.gaitPad?.hidden === false;
+  }
+
+  /**
    * Un petit mot du guide dans la bulle (pas pendant le tutoriel : alors un message) :
    * { emoji, text, hint?, follow? (id d'une quête : bouton 🧭 Suivre), journal? (bouton 📖 Mes quêtes), now? }.
    * Il attend qu'aucune fenêtre ne soit ouverte (avant, il disparaissait sans être vu quand le menu des soins, la
@@ -1178,7 +1191,7 @@ export class Tutorial {
    */
   notice(n) {
     if (!this.profile) return;
-    if (this.active || (n.now && this.busy())) {
+    if (this.active || (n.now && (this.busy() || this.riding()))) { // (en selle : la réponse tout de suite, en message)
       this.ui.toast(`${n.emoji} ${n.text}${n.hint ? ` ${n.hint}` : ''}`, 6000);
       return;
     }
@@ -1196,19 +1209,25 @@ export class Tutorial {
    * Un chapitre de l'histoire vient d'être fini (src/game/Game.js) : bravo, et la suite (r : afterQuestsDone de
    * src/sim/quests.js) : le chapitre suivant (🧭 pour le suivre), la fin de toute l'histoire, ou les chapitres
    * passés qui restent. reward : « +20 🪙 » ou ''. Une fenêtre est ouverte : un message tout de suite (avec la
-   * récompense), et la bulle quand la fenêtre se ferme.
+   * récompense), et la bulle quand la fenêtre se ferme. En selle : un message avec la suite (« Prochain chapitre… »,
+   * que le suivi de quête montre aussi), et la bulle quand on descend.
    */
   chapterDone(id, r, reward = '') {
     const p = this.profile;
     if (!p) return;
     const end = chapterEnd(r);
     const text = `${t('qj_chapterDone', { name: questTitle(p, id) })}${reward ? ` ${reward}` : ''}`;
-    if (this.busy() && !this.active) this.ui.toast(`⭐ ${text}`, 5000);
     // (le premier concours fini : la partie 2 de l'histoire commence)
-    if (end.kind === 'next' && id === 'actvCompete1') this.notice({ emoji: '📖', text, hint: `${t('qj_part2')} ${t('qj_nextChapter', { name: questTitle(p, end.next) })}`, follow: end.next });
-    else if (end.kind === 'next') this.notice({ emoji: '⭐', text, hint: t('qj_nextChapter', { name: questTitle(p, end.next) }), follow: end.next });
-    else if (end.kind === 'finished') this.notice({ emoji: '🎉', text, hint: t('qj_storyFinished'), journal: true });
-    else this.notice({ emoji: '⭐', text, hint: t('qj_skippedLeft', { n: end.n }), journal: true });
+    let n;
+    if (end.kind === 'next' && id === 'actvCompete1') n = { emoji: '📖', text, hint: `${t('qj_part2')} ${t('qj_nextChapter', { name: questTitle(p, end.next) })}`, follow: end.next };
+    else if (end.kind === 'next') n = { emoji: '⭐', text, hint: t('qj_nextChapter', { name: questTitle(p, end.next) }), follow: end.next };
+    else if (end.kind === 'finished') n = { emoji: '🎉', text, hint: t('qj_storyFinished'), journal: true };
+    else n = { emoji: '⭐', text, hint: t('qj_skippedLeft', { n: end.n }), journal: true };
+    // (le petit mot pas encore vu qui annonçait ce chapitre-ci : fini pendant la balade, il ne dit plus rien)
+    this.notices.drop((x) => x.follow === id);
+    if (!this.active && this.riding()) this.ui.toast(`${n.emoji} ${text} ${n.hint}`, 8000);
+    else if (!this.active && this.busy()) this.ui.toast(`⭐ ${text}`, 5000);
+    this.notice(n);
   }
 
   /** Ferme la bulle (celle d'une quête touchée, ou le petit mot affiché : le suivant viendra). */

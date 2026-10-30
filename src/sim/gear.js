@@ -13,6 +13,7 @@
 
 import { spend } from './profile.js';
 import { getBreed } from './species.js';
+import { canRide } from './animal.js';
 
 /** Couleurs des couvertures, licols et colliers (les anciennes sauvegardes utilisent ces clés). */
 export const BLANKET_COLORS = { red: 0xb7322c, navy: 0x23395d, green: 0x2f6b45, purple: 0x6b3fa0, pink: 0xe07aa5 };
@@ -142,6 +143,15 @@ export function gearPrice(id, size = defaultSize(id)) {
   const k = size === 'pony' ? 0.85 : size === 'draft' ? 1.15 : 1;
   return Math.round((base * k) / 5) * 5;
 }
+
+/** Ce qui sert à monter : la selle, son tapis, le filet. */
+export const RIDE_SLOTS = ['saddle', 'pad', 'bridle'];
+
+/**
+ * Un poulain trop jeune pour être monté : pas de selle, de tapis ni de filet à lui mettre (sa fiche, son menu, la
+ * sellerie). Ce qu'il porte déjà (une vieille partie) s'enlève toujours.
+ */
+export const tooYoungForTack = (id, a) => RIDE_SLOTS.includes(GEAR[id]?.slot) && canRide(a).reason === 'tooYoung';
 
 /** L'objet est-il fait pour cet animal (espèce et taille) ? Renvoie null ou la raison. */
 export function fitReason(id, a) {

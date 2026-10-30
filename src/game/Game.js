@@ -70,7 +70,7 @@ import { FreeJumps } from './FreeJumps.js'; // ⤴️ sauter des troncs en balad
 import { Halloween } from './Halloween.js'; // 🎃 la fête d'Halloween au poney-club (fin octobre)
 import { LuckyShoes } from './LuckyShoes.js'; // 🍀 le fer porte-bonheur du jour, sur le chemin de balade
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
-import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
+import { WARMUP, WARM_FOR, warmSession, workedSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
 import { newRideLog, tickRideLog, rideReport, dayLeft } from '../sim/rideLog.js'; // 🏇 la carte « Ta balade »
 import { showRideCard, closeRideCard } from '../ui/rideCard.js';
 import { remember, anniversaryDue, togetherSince, BOND_MEMORIES, PHOTO_MEMORIES, PHOTO, attachPhoto } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
@@ -80,7 +80,7 @@ import { doPraise, canPraise } from '../sim/praise.js'; // 🤚 « Bravo ! » / 
 import { matchyOf } from '../sim/matchy.js'; // 🎨 tout assorti : tapis, guêtres et bombe
 import { Beauty } from './Beauty.js'; // concours de beauté : préparation visible sur l'animal, présentation au juge
 import { TrailGuide } from './TrailGuide.js'; // 🧭 métier guide de randonnée : visiteurs, balades guidées
-import { t, L, getLang, fmtHour } from '../i18n.js';
+import { t, ta, L, getLang, fmtHour } from '../i18n.js'; // (ta : « blessée » plutôt que « malade », src/i18n.js)
 // Vue d'ensemble (d'en haut) et constructions du joueur.
 import { Structures } from './Structures.js';
 import { ManagementView } from './ManagementView.js';
@@ -106,6 +106,10 @@ const CARE_EMOJI = {
   feed: '🍖', water: '💧', brush: '✨', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨',
   pet: '❤️', treat: '🍪', play: '⚽', lunge: '⭐', liberty: '💛',
 };
+/** L'emoji qui monte après un soin : 🌾 le foin d'un cheval (comme son bouton Nourrir), 🍖 pour les autres. */
+const careEmoji = (action, a) => (action === 'feed' && a.species === 'horse' ? '🌾' : CARE_EMOJI[action] ?? '❤️');
+// (ce qu'il a pris seul à une mangeoire, un abreuvoir, une brosse : la faim d'un cheval, 🌾)
+const USE_EMOJI = { hunger: '🍖', thirst: '💧', grooming: '✨' };
 
 export const JOBS = [
   { id: 'walk', pay: 25, hours: 1 },
@@ -929,6 +933,8 @@ export class Game {
     if (['lunge', 'liberty', 'activity'].includes(kind)) {
       a.warmAt = this.profile.clock ?? 0; // 🐢 (il a travaillé : chaud ; monté : à la descente)
       delete a.freshTack; // (🧰 longé avec sa selle : elle a servi, comme en selle — Game.mountRider)
+      // (encore en selle après le parcours : la balade qui suit ne redemande pas de l'échauffer — src/sim/warmup.js)
+      if (kind === 'activity' && this.player?.mount?.data === a) this.player.session = workedSession();
     }
     if (a.species === 'horse' && !a.client && !a.guest) this.lastHorseId = a.id; // (le défi du jour : src/sim/horseChallenge.js)
     const stage0 = bondStage(a);
@@ -1704,7 +1710,7 @@ export class Game {
           addStat(this.profile, `horse_${action}`);
           this.markHorseDay(a, action);
         }
-        this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️', 2);
+        this.entities.get(a.id)?.emit(careEmoji(action, a), 2);
         n++;
       } else reasons.add(res.reason);
     }
@@ -1714,7 +1720,7 @@ export class Game {
     } else if (!group.length) this.ui.toast(t('nobody'));
     else if (reasons.has('money')) this.ui.toast(t('r_money'));
     else if (reasons.has('full')) this.ui.toast(t(`allFull_${CARE[action].full ?? 'x'}`));
-    else this.ui.toast(t(`r_${[...reasons][0]}`, { name: group[0].name, g: group[0].sex }));
+    else this.ui.toast(ta(`r_${[...reasons][0]}`, group[0]));
     this.ui.refresh();
     return n;
   }
@@ -2047,7 +2053,7 @@ export class Game {
           key,
           urgency: a.needs[need],
           label: `${action === 'clean' ? t(`act_${a.species}_clean`) : t(`act_${action}`)} · ${a.name}`,
-          icon: ICON[action],
+          icon: action === 'feed' && a.species === 'horse' ? '🌾' : ICON[action], // (le foin d'un cheval)
           target: () => this.entities.get(a.id)?.position ?? null,
           radius: 1.8,
           auto: () => this.autoCare(a, action),
@@ -2081,7 +2087,7 @@ export class Game {
   /** Soin fait automatiquement (liste de tâches) : un peu moins bien qu'à la main. */
   autoCare(a, action) {
     const check = this.canCare(a, action);
-    if (!check.ok) return this.ui.toast(t(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, { name: a.name, g: a.sex }));
+    if (!check.ok) return this.ui.toast(ta(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, a));
     return this.care(a, action, 0.75);
   }
 
@@ -2161,7 +2167,7 @@ export class Game {
         }
       }
     }
-    const key = best ? `${best.kind}-${best.entity?.data.id ?? best.id ?? best.key ?? ''}-${best.entity?.wish?.id ?? ''}` : ''; // (🫧 le bouton suit sa bulle)
+    const key = best ? `${best.kind}-${best.entity?.data.id ?? best.id ?? best.key ?? ''}-${best.entity?.wish?.task ?? ''}` : ''; // (🫧 le bouton suit sa bulle, et sa tâche : le foin du matin, puis « a faim »)
     if (key !== this.focusKey) {
       this.focusKey = key;
       this.focus = best;
@@ -2264,7 +2270,7 @@ export class Game {
       this.entities.get(a.id)?.emit('🎂', 3);
     }
     if (res.ok) this.ui.showDeltas(a, before);
-    if (!res.ok) return this.ui.toast(t(`r_${res.reason}`, { name: a.name, g: a.sex }));
+    if (!res.ok) return this.ui.toast(ta(`r_${res.reason}`, a));
     if (res.unlame) this.ui.toast(t('unlame', { name: a.name, g: a.sex }), 6000);
     // Beaucoup trop de granulés (la ration, src/ui/minigames/ration.js) : une fois sur deux, les coliques.
     if (action === 'feed' && opts.colic && a.species === 'horse' && !a.sick && Math.random() < 0.5) {
@@ -2289,7 +2295,7 @@ export class Game {
     // 🔍 Le mini-jeu a trouvé son coin préféré ou sa friandise préférée (opts.quirk) : la première fois, on le note.
     if (opts.quirk && discoverQuirk(a, opts.quirk)) this.quirkFound(a, opts.quirk);
     this.xp('care');
-    this.entities.get(a.id)?.emit(CARE_EMOJI[action] ?? '❤️');
+    this.entities.get(a.id)?.emit(careEmoji(action, a));
     this.ui.refresh();
     this.emit('care', { a, action, quality });
     return { ...res, quality }; // (la qualité du mini-jeu : le bain du concours en a besoin, src/ui/beauty.js)
@@ -2298,7 +2304,7 @@ export class Game {
   trick(a, trickId) {
     if (a.client) return this.ui.toast(t('cl_notYours', { name: a.name, g: a.sex })); // animal confié (src/sim/clients.js)
     const r = trainTrick(a, trickId);
-    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex, n: r.need }));
+    if (!r.ok) return this.ui.toast(ta(`r_${r.reason}`, a, { n: r.need }));
     const e = this.entities.get(a.id);
     this.xp(r.learned ? 'trickLearned' : 'trick');
     if (r.learned) {
@@ -2327,7 +2333,7 @@ export class Game {
     const tool = missingTool(this.profile, trainingId);
     if (tool) return this.ui.toast(t('r_needTool', { tool: `${TOOLS[tool].emoji} ${t(`tool_${tool}`)}` }), 5000);
     const r = trainSkill(a, trainingId);
-    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex, n: r.need }));
+    if (!r.ok) return this.ui.toast(ta(`r_${r.reason}`, a, { n: r.need }));
     addStat(this.profile, 'trainings');
     this.entities.get(a.id)?.emit('💪', 2);
     this.ui.toast(t('skillGain', { name: a.name, g: a.sex, skill: t(`skill_${r.skill}`), n: r.gain }));
@@ -2337,7 +2343,7 @@ export class Game {
 
   ride(a, bareback = false) {
     const r = canRide(a);
-    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
+    if (!r.ok) return this.ui.toast(ta(`r_${r.reason}`, a));
     let gear = rideGear(a, bareback);
     // Pas de filet (même avec son licol, ou sellé sans filet) : on lui met celui qui reste à la sellerie, puis on
     // monte (src/sim/gear.js). Sans filet libre, on monte avec le licol.
@@ -2819,7 +2825,7 @@ export class Game {
   animalUsedEquipment(entity, entry) {
     if (!entry) return;
     const r = useEquipment(this.profile, entity.data, entry.eq);
-    if (r.ok) entity.emit({ hunger: '🍖', thirst: '💧', grooming: '✨' }[r.need] ?? '❤️', 2);
+    if (r.ok) entity.emit(r.need === 'hunger' && entity.data.species === 'horse' ? '🌾' : USE_EMOJI[r.need] ?? '❤️', 2);
   }
 
   socialMoment(entity, kind) {
@@ -2898,7 +2904,7 @@ export class Game {
 
   collect(a) {
     const r = collectProduct(this.profile, a);
-    if (!r.ok) return this.ui.toast(t(`r_${r.reason}`, { name: a.name, g: a.sex }));
+    if (!r.ok) return this.ui.toast(ta(`r_${r.reason}`, a));
     const e = this.entities.get(a.id);
     e?.emit(r.product === 'wool' ? '🧶' : '🥛', 3);
     // La joueuse fait le geste : la main aux trayons pour traire (vache, chèvre : Player.milkAtUdder), la tonte au flanc
@@ -3010,7 +3016,12 @@ export class Game {
     this.xp('travel');
     if (mode === 'horse') addStat(p, 'horseTravels');
     this.loadPlace(destId);
-    if (mode === 'horse' && horse && this.entities.get(horse.id)) this.mountRider(this.entities.get(horse.id)); // (avec sa bombe)
+    if (mode === 'horse' && horse && this.entities.get(horse.id)) {
+      this.mountRider(this.entities.get(horse.id)); // (avec sa bombe)
+      // 🐢 (des heures de route sous toi : il est chaud, la balade qui suit ne redemande pas de l'échauffer)
+      horse.warmAt = p.clock ?? 0;
+      this.player.session = workedSession();
+    }
     const def = PLACES[destId];
     this.ui.toast(t('arrived', { flag: def.flag, place: L(def.name) }), 5000);
     this.save();

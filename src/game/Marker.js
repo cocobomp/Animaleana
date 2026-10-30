@@ -11,6 +11,8 @@ import * as THREE from 'three';
 
 const YELLOW = 0xffd23f;
 const NEAR_RING_ONLY = 2.5; // m : l'avatar est à côté de la cible, le cercle au sol suffit
+/** La flèche du bord (64 px, centrée en x, y) touche-t-elle la boîte b (à 6 px près en hauteur) ? */
+const edgeHits = (x, y, b) => x + 32 > b.left && x - 32 < b.right && y + 32 > b.top - 6 && y - 32 < b.bottom + 6;
 
 export class Marker {
   constructor(game) {
@@ -160,17 +162,24 @@ export class Marker {
     const W = window.innerWidth;
     const H = window.innerHeight;
     const ny = ahead ? Math.max(-0.4, Math.min(0.3, v.y)) : -0.1;
-    const sx = right ? W - 44 : 44;
+    let sx = right ? W - 44 : 44;
     let sy = (1 - (ny + 1) / 2) * H;
     // Pas sur le suivi de quête rangé contre ce bord (src/ui/tutorial.js) : la flèche passe juste en dessous.
     const box = this.game.ui?.tutorial?.trackerBox;
-    if (box && sx + 32 > box.left && sx - 32 < box.right && sy + 32 > box.top - 6 && sy - 32 < box.bottom + 6) sy = box.bottom + 40;
+    if (box && edgeHits(sx, sy, box)) sy = box.bottom + 40;
     // Pas sur les boutons d'allure (ni « Debout », ni « Sauter », ni « Bravo ! ») : elle prenait leurs touchers ; juste au-dessus.
     const ui = this.game.ui;
     for (const el of [ui?.gaitPad, ui?.postBtn, ui?.jumpBtn, ui?.praiseBtn]) {
       if (!el || el.hidden) continue;
       const b = el.getBoundingClientRect();
-      if (sx + 32 > b.left && sx - 32 < b.right && sy + 32 > b.top - 6 && sy - 32 < b.bottom + 6) sy = b.top - 40;
+      if (edgeHits(sx, sy, b)) sy = b.top - 40;
+    }
+    // (téléphone en paysage : entre le suivi et les allures, moins que sa hauteur ; au-dessus des allures, elle retombait
+    // sur le suivi et prenait le toucher de 🧭 : elle se pose à côté de lui, côté écran, son haut 6 px au-dessus du sien
+    // — au ras des boutons du haut — : une pastille d'état, juste dessous, garde son bouton)
+    if (box && edgeHits(sx, sy, box)) {
+      sx = right ? box.left - 40 : box.right + 40;
+      sy = box.top + 26;
     }
     this.edgeEl.hidden = false;
     this.edgeEl.style.left = `${sx - 32}px`;

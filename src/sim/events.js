@@ -57,6 +57,8 @@ const BIRTH_NEAR_HOURS = 0.75;
 const NEIGHBOURS = { f: ['Martine', 'Sophie', 'Claire', 'Inès', 'Lucie'], m: ['Paul', 'Jacques', 'Karim', 'Louis', 'Hugo'] };
 const NEIGHBOUR_TASKS = ['hay', 'fence', 'hens', 'apples'];
 const INJURIES = ['brambles', 'wire', 'stone', 'sprain', 'thorn'];
+// (un caillou sous le pied d'un cheval, c'est sa boiterie : le cure-pied ou le vétérinaire, src/sim/animal.js)
+const HORSE_INJURIES = INJURIES.filter((c) => c !== 'stone');
 
 /**
  * Où mettre les animaux à l'abri avant l'orage (texte d'annonce ev_storm_intro) : seulement les groupes qui
@@ -203,8 +205,8 @@ export function startEvent(profile, type, ctx, rng = Math.random, force = false)
     case 'injury': {
       const a = pick(plan.candidates, rng);
       ev.targetId = a.id;
-      ev.data.cause = pick(INJURIES, rng);
-      a.sick = 'paw'; // une blessure à la patte : le vétérinaire met un pansement
+      ev.data.cause = pick(a.species === 'horse' ? HORSE_INJURIES : INJURIES, rng); // (un seul tirage, comme avant)
+      a.sick = 'paw'; // une blessure à la patte (la jambe d'un cheval) : le vétérinaire met un pansement
       a.needs.affection = clamp(a.needs.affection - 10);
       break;
     }

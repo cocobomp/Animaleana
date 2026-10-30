@@ -411,3 +411,42 @@ describe('à cheval : l\'allure', () => {
     expect(rideGait(trip)).toBe('walk');
   });
 });
+
+describe('l\'alerte « long trajet » dit ce qu\'elle compte (src/ui/trip.js travelAdvice)', () => {
+  // (un tout petit DOM pour h() : src/ui/dom.js)
+  class El {
+    constructor(tag) { Object.assign(this, { tag, children: [], style: {}, attrs: {}, className: '' }); }
+    append(...c) { this.children.push(...c); }
+    setAttribute(k, v) { this.attrs[k] = v; }
+    addEventListener() {}
+    get text() { return this.children.map((c) => (c instanceof El ? c.text : c.data)).join(' '); }
+  }
+  const advice = async (mode, dest) => {
+    const saved = { document: globalThis.document, Node: globalThis.Node };
+    globalThis.Node = El;
+    globalThis.document = { documentElement: {}, createElement: (tag) => new El(tag), createTextNode: (data) => ({ data }) };
+    try {
+      const { travelAdvice } = await import('../src/ui/trip.js');
+      const { createProfile } = await import('../src/sim/profile.js');
+      const { setLang } = await import('../src/i18n.js');
+      setLang('fr');
+      const p = createProfile('Lou');
+      const horse = adult('horse');
+      p.animals.push(horse);
+      const option = { ...checkTravel(p.place, dest, mode, [horse], true), mode };
+      const ui = { game: { profile: p }, renderPanel() {} };
+      const out = travelAdvice(ui, { here: [horse], travelers: [horse], state: { bring: new Set() }, option });
+      return { option, warn: out.find((x) => x.className === 'trip-tip warn')?.text ?? null };
+    } finally {
+      Object.assign(globalThis, saved);
+    }
+  };
+
+  it('à cheval vers la Bretagne : « 1 j 17 h de voyage » sur la carte, « 4 j 5 h avec les nuits en route » ici', async () => {
+    const { option, warn } = await advice('horse', 'bretagne');
+    expect(option.ok).toBe(true);
+    expect(option.hours).toBeGreaterThan(40);
+    expect(warn).toContain('avec les nuits en route');
+    expect(warn).toContain('4 j 5 h');
+  });
+});

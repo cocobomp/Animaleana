@@ -398,6 +398,8 @@ describe('🧦 ses chaussettes de boue (src/sim/legMud.js)', () => {
     for (const lang of ['fr', 'en']) {
       setLang?.(lang);
       for (const k of ['mg_pansage_legmud', 'mg_pansage_legmud_tip']) expect(t(k), `${lang} ${k}`).not.toBe(k);
+      // (la boue vient de la pluie, au printemps et à l'automne aussi : le conseil ne nomme pas de saison)
+      expect(t('mg_pansage_legmud_tip'), lang).not.toMatch(/hiver|été|automne|printemps|winter|summer|autumn|spring/i);
     }
     setLang?.('fr');
   });

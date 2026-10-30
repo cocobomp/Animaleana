@@ -20,7 +20,7 @@ describe('la bombe en voyage à cheval', () => {
       calls, mount: null, helmet: null, heading: 0, speed: 0,
       root: new THREE.Group(), avatar: { root: new THREE.Group() },
       setHelmet(h) { this.helmet = h; calls.push(['helmet', h?.item ?? null]); },
-      ride(e) { this.mount = e; calls.push(['ride', e.data.name]); },
+      ride(e) { this.mount = e; this.session = { walk: 0, warm: false, started: false, hard: 0, cool: 0 }; calls.push(['ride', e.data.name]); }, // (Player.ride : une séance neuve)
       dismount() { this.mount = null; this.setHelmet(null); },
       seat() {},
     };
@@ -77,5 +77,8 @@ describe('la bombe en voyage à cheval', () => {
     expect(g.player.mount).toBe(e);
     expect(g.player.helmet?.item).toBe('helmetSparkle');
     expect(g.player.calls.slice(-2)).toEqual([['helmet', 'helmetSparkle'], ['ride', 'Étoile']]);
+    // 🐢 des heures de route sous toi : échauffée (pas de « Pense à l'échauffer » au premier trot, ni d'effort en plus)
+    expect(g.player.session).toMatchObject({ warm: true, started: true });
+    expect(a.warmAt).toBe(p.clock);
   });
 });

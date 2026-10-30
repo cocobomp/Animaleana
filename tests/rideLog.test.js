@@ -261,7 +261,7 @@ describe('la carte à l\'écran', () => {
   it('le temps, la distance en français, les allures ; un toucher la ferme, une seule à la fois, partie après 12 s vue', async () => {
     fakeDom();
     vi.useFakeTimers();
-    const { showRideCard } = await import('../src/ui/rideCard.js');
+    const { showRideCard, rideCardShown } = await import('../src/ui/rideCard.js');
     i18n.setLang('fr');
     const a = horse({ sex: 'm' });
     a.rideBest = 300;
@@ -269,7 +269,9 @@ describe('la carte à l\'écran', () => {
     Object.assign(log, { t: 130, dist: 1400, gaits: { walk: 60, trot: 40, canter: 30 } });
     const rep = rideReport(log, { a, session: { warm: true, started: true }, verdict: 'cooled', left: ['❤️'], worked: true, saddled: true });
     const ui = { root: new El('div') };
+    expect(rideCardShown()).toBe(false);
     const el = showRideCard(ui, rep, a);
+    expect(rideCardShown()).toBe(true); // (le petit mot du guide attend qu'elle parte : src/ui/tutorial.js tick)
     expect(ui.root.children).toEqual([el]);
     expect(el.attrs.role).toBe('status');
     const text = el.text;
@@ -286,6 +288,7 @@ describe('la carte à l\'écran', () => {
     expect(el.removed).toBe(true);
     // un toucher la ferme
     el2.on.click();
+    expect(rideCardShown()).toBe(false);
     vi.advanceTimersByTime(400);
     expect(el2.removed).toBe(true);
     // toute seule après 12 s vue à l'écran
@@ -428,6 +431,32 @@ describe('en descendant (Game.dismount)', () => {
     g.player.mount = { data: horse({ client: { id: 'x' } }) };
     step(3);
     expect(g.rideLog).toBeNull();
+  });
+
+  it('un parcours fini encore en selle, cheval froid avant : échauffé, sans « 🐢 Pense à l\'échauffer » ni « ✅ Bien échauffé »', async () => {
+    const { newSession, sessionTick, effortFactor } = await import('../src/sim/warmup.js');
+    const a = horse();
+    const other = horse({ name: 'Caramel' });
+    const g = Object.create(Game.prototype);
+    Object.assign(g, {
+      rideLog: null,
+      profile: { clock: 600, stats: {}, animals: [a, other] }, // (10 h, jour 1 : Game.hour, Game.day)
+      activities: { active: null },
+      tripFlow: { active: false },
+      player: { mount: { data: a }, auto: false, gaitNow: 'trot', speed: 3, session: newSession(), position: { x: 0, z: 0 } },
+      bondNews() {},
+      entities: new Map(),
+    });
+    // (Activities.finish : chaque cheval de la séance ; celui d'à côté, longé ou en liberté, ne touche pas ta séance)
+    Game.prototype.markHorseDay.call(g, other, 'activity');
+    expect(g.player.session).toMatchObject({ warm: false, started: false });
+    Game.prototype.markHorseDay.call(g, a, 'activity');
+    expect(a.warmAt).toBe(600);
+    const s = g.player.session;
+    expect(sessionTick(s, 'trot', 0.1)).toBeNull(); // (le premier trot après : pas de petit mot)
+    expect(effortFactor(s)).toBe(1);
+    g.tickRide(0.1);
+    expect(g.rideLog.preWarm).toBe(true); // (la carte ne donne pas le tampon « Détente » pour ça)
   });
 
   it('remonté en selle (Game.mountRider) ou une séance commence : la carte d\'avant s\'en va, elle ne revient pas après', async () => {

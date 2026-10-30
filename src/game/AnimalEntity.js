@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 import { SPECIES } from '../sim/species.js';
-import { growthScale, mood, lifeStage, stageLook, happiness } from '../sim/animal.js';
+import { growthScale, mood, lifeStage, stageLook, happiness, isHurt } from '../sim/animal.js';
 import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
 import { wishOf, wishDone, WISH } from '../sim/horseWish.js'; // 🫧 ce qu'il te demande
 import { bubbleTexture, bubbleScale } from './wishBubble.js';
@@ -624,7 +624,7 @@ export class AnimalEntity {
    */
   updateStatus(ctx) {
     const m = mood(this.data);
-    const base = this.sleeping ? '💤' : this.data.lame && m !== 'sick' ? '🩹' : m === 'sick' ? MOOD_EMOJI.sick : null; // (il boite)
+    const base = this.sleeping ? '💤' : (this.data.lame && m !== 'sick') || isHurt(this.data) ? '🩹' : m === 'sick' ? MOOD_EMOJI.sick : null; // (il boite, il est blessé)
     const wish = base ? null : this.wish; // (triste : sa bulle plutôt que 😢, c'est comme ça qu'on le console)
     const emoji = base ?? (wish ? wish.icon : MOOD_EMOJI[m] ?? null);
     const key = wish ? wish.id : emoji; // (son id : 'hay', 'water'… jamais un emoji ; rien de créé à chaque image)

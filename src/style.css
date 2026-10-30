@@ -720,8 +720,10 @@ button.sv-card:hover { border-color: var(--primary); }
   #post-btn, #jump-btn, #praise-btn { left: auto; right: calc(92px + var(--safe-r)); bottom: calc(306px + var(--safe-b)); }
 }
 @media (pointer: coarse) and (max-height: 480px) {
-  /* (à gauche de la rangée des allures : au-dessus, le suivi de quête le cachait) */
-  #post-btn, #jump-btn, #praise-btn { right: calc(232px + var(--safe-r)); bottom: calc(166px + var(--safe-b)); width: 64px; height: 64px; }
+  /* (à gauche de la rangée des allures : au-dessus, le suivi de quête le cachait ; par-dessus les pastilles d'état (11) :
+     la 2e pastille, « 🧭 Des visiteurs t'attendent », descendait sur eux et prenait le doigt — « Parler aux visiteurs »
+     au lieu de sauter) */
+  #post-btn, #jump-btn, #praise-btn { right: calc(232px + var(--safe-r)); bottom: calc(166px + var(--safe-b)); width: 64px; height: 64px; z-index: 12; }
 }
 /* Paysage : une rangée à droite, juste au-dessus des boutons de vue (le milieu de l'écran reste au cheval). */
 @media (pointer: coarse) and (max-height: 480px) {
@@ -2907,8 +2909,23 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .rc-star-fill { display: block; height: 100%; width: 0; background: #ffd23f; transition: width 0.8s ease-out; }
 @media (pointer: coarse) { .ride-card { bottom: calc(244px + var(--safe-b)); } }
 @media (pointer: coarse) and (max-height: 760px) { .ride-card { gap: 3px; padding: 8px 12px 10px; font-size: 0.85rem; } }
-/* (paysage : sous les boutons du temps, au-dessus du gros bouton vert du milieu) */
-@media (max-height: 500px) { .ride-card { top: calc(104px + var(--safe-t)); bottom: auto; } }
+/* (paysage : sous les boutons du temps, au-dessus du gros bouton vert du milieu — « 🧰 Desselle Prune » — : plus serrée,
+   et jamais à moins de 8 px de lui ; sa journée parfaite, que sa bulle et son message disent déjà, s'efface, et 🧰 passe
+   avant l'étoile et le record : si elle est encore trop haute (petit écran, tout à la fois), c'est le record ou le bas
+   de l'étoile qui est coupé, jamais 🧰) */
+@media (max-height: 500px) {
+  .ride-card {
+    top: calc(104px + var(--safe-t)); bottom: auto; gap: 1px; padding: 6px 12px 8px; font-size: 0.8rem; line-height: 1.15;
+    max-height: calc(100vh - 182px - var(--safe-t) - var(--safe-b)); max-height: calc(100dvh - 182px - var(--safe-t) - var(--safe-b));
+    overflow: hidden;
+  }
+  .ride-card .rc-bar { height: 14px; margin: 1px 0; }
+  .ride-card .rc-bar span { line-height: 14px; font-size: 0.7rem; }
+  .ride-card .rc-stamps { margin: 0; gap: 4px; }
+  .ride-card .rc-stamp { padding: 0 8px; }
+  .ride-card .rc-later { order: 1; }
+  .ride-card .rc-day { display: none; }
+}
 :is(body.riding, body.panel-open, body.modal-open, body.actv-running, body.mgmt) .ride-card { display: none; }
 /* (paysage : la carte prend la colonne du milieu ; tant qu'elle est là, les messages passent à sa gauche, sous la carte
    d'infos, comme avec une fenêtre ouverte, au lieu de se poser dessus) */

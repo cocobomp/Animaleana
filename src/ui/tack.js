@@ -6,7 +6,7 @@ import { h } from './dom.js';
 import { t } from '../i18n.js';
 import {
   GEAR, TACK_CATEGORIES, COLORS, SIZES, gearPrice, sizeOf, fitReason, stockOf, ownedVariant, freeStock,
-  wornBy, defaultSize, riderHelmet, sizeFor, swapSize, isAway, atHomeCount,
+  wornBy, defaultSize, riderHelmet, sizeFor, swapSize, isAway, atHomeCount, tooYoungForTack,
 } from '../sim/gear.js';
 import { TOOLS, hasTool, toolShown } from '../sim/tools.js';
 import { matchyOf, missingFor } from '../sim/matchy.js'; // 🎨 tout assorti
@@ -52,8 +52,8 @@ function colorOf(p, id) {
   return def.colors?.includes(c) ? c : def.colors?.[0];
 }
 
-/** Animaux d'ici qui peuvent porter cet objet (espèce et taille). */
-const fitting = (g, id) => g.animalsHere().filter((a) => !fitReason(id, a) && !a.client);
+/** Animaux d'ici qui peuvent porter cet objet (espèce et taille ; pas de selle ni de filet pour un poulain). */
+const fitting = (g, id) => g.animalsHere().filter((a) => !fitReason(id, a) && !a.client && !tooYoungForTack(id, a));
 
 /** Taille proposée à l'achat : celle du premier animal d'ici à qui l'objet va, sinon la taille par défaut. */
 function sizeChoice(g, id) {
@@ -424,11 +424,12 @@ export function animalGearSection(ui, a) {
   const forMe = (id) => GEAR[id].species.includes(a.species);
   const slots = SLOT_ORDER.filter((slot) => Object.keys(GEAR).some((id) => GEAR[id].slot === slot && forMe(id)));
   if (!slots.length) return null;
-  // Rangé à la sellerie et à sa taille (à la maison, une autre taille s'échange toute seule).
-  const spareOf = (id) => !fitReason(id, a) && (freeStock(p, id, sizeFor(id, a)) > 0
+  // Rangé à la sellerie et à sa taille (à la maison, une autre taille s'échange toute seule) ; pour un poulain trop
+  // jeune, ni selle, ni tapis, ni filet (ce qu'il porte garde « Enlever »).
+  const spareOf = (id) => !fitReason(id, a) && !tooYoungForTack(id, a) && (freeStock(p, id, sizeFor(id, a)) > 0
     || (g.isHome && (GEAR[id].sizes ?? []).some((sz) => freeStock(p, id, sz) > 0)));
   // En voyage : ce qui lui irait (à sa taille) mais qui n'est pas dans le coffre.
-  const homeOf = (id) => !fitReason(id, a) && !spareOf(id) && atHomeCount(p, id, sizeFor(id, a)) > 0;
+  const homeOf = (id) => !fitReason(id, a) && !tooYoungForTack(id, a) && !spareOf(id) && atHomeCount(p, id, sizeFor(id, a)) > 0;
   const rows = slots.map((slot) => {
     const worn = a.gear?.[slot];
     const spare = Object.keys(GEAR).filter((id) => GEAR[id].slot === slot && worn?.item !== id && spareOf(id));

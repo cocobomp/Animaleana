@@ -18,6 +18,9 @@ let card = null; // (la carte affichée : { el, timer })
 /** Se voit-elle ? Pas cachée par le CSS (display: none : getClientRects vide), ni sous un mini-jeu, ni l'onglet caché. */
 const seen = (el) => !document.hidden && el.getClientRects().length > 0 && !document.querySelector('.mg-overlay');
 
+/** Une carte est-elle là (même cachée sous une fenêtre) ? Les petits mots du guide attendent (src/ui/tutorial.js tick). */
+export const rideCardShown = () => !!card;
+
 /** Ferme la carte affichée (d'un toucher, après 12 s vue, quand une autre arrive, en selle, au début d'une activité). */
 export function closeRideCard() {
   if (!card) return;
@@ -50,11 +53,12 @@ export function showRideCard(ui, rep, a) {
     rep.lines.map((l) => line(t(l.key, { n: l.n }))),
     stamps.length ? h('div', { class: 'rc-stamps' }, stamps) : null,
     st.cool === 'hot' ? line(t('rc_hot'), 'hot') : null,
-    s ? line(t(s.next === 1 ? 'rc_star_first' : 'rc_star', { icon: s.icon, n: s.toNext, k: s.next })) : null,
-    s ? h('div', { class: 'rc-star', 'aria-hidden': 'true' }, fill) : null,
-    rep.best ? line(t('rc_best')) : null,
-    rep.perfect ? line(t('rc_perfect')) : rep.left ? line(t('rc_left', { icons: rep.left.join(' ') })) : null,
-    rep.unsaddle ? line(t('rc_unsaddle', p)) : null);
+    // (classes : en paysage, le CSS passe 🧰 avant l'étoile et cache la journée parfaite, pour tenir au-dessus du bouton vert)
+    s ? line(t(s.next === 1 ? 'rc_star_first' : 'rc_star', { icon: s.icon, n: s.toNext, k: s.next }), 'rc-later') : null,
+    s ? h('div', { class: 'rc-star rc-later', 'aria-hidden': 'true' }, fill) : null,
+    rep.best ? line(t('rc_best'), 'rc-later') : null,
+    rep.perfect ? line(t('rc_perfect'), 'rc-day') : rep.left ? line(t('rc_left', { icons: rep.left.join(' ') }), 'rc-day') : null,
+    rep.unsaddle ? line(t('rc_unsaddle', p), 'rc-untack') : null);
   ui.root.append(el);
   // (les barres partent de zéro et se remplissent : la transition CSS, après une mise en page)
   el.getBoundingClientRect();

@@ -303,6 +303,19 @@ describe('à cheval, les messages attendent leur tour (P6)', () => {
       expect(css).toMatch(new RegExp(`@media \\(pointer: coarse\\) and ${q} \\{[^}]*\\}\\s*body\\.riding #toasts \\.toast \\{ font-size: 0\\.85rem;`));
     }
   });
+
+  it('CSS paysage (test de jeu 4) : ⤴️ / 🤚 / ⬆️ par-dessus les pastilles d\'état ; « Ta balade » jamais sur le bouton vert, 🧰 jamais coupé', () => {
+    const z = (re) => +css.match(re)[1];
+    const bar = z(/#status-bar \{[^}]*z-index: (\d+);/);
+    const ride = z(/@media \(pointer: coarse\) and \(max-height: 480px\) \{[^}]*#post-btn, #jump-btn, #praise-btn \{ right: calc\(232px[^}]*z-index: (\d+); \}/);
+    expect(ride).toBeGreaterThan(bar);
+    expect(ride).toBeLessThan(z(/#tuto-bubble \{[^}]*z-index: (\d+);/)); // (la bulle du guide, une fenêtre, restent dessus)
+    // (la carte : en haut, 104 px ; le bouton vert : 20 px du bas + 49 px ; 8 px d'écart → 104 + 69 + 8 = 181 au moins)
+    const cap = +css.match(/\.ride-card \{\s*top: calc\(104px \+ var\(--safe-t\)\);[^}]*max-height: calc\(100dvh - (\d+)px/)[1];
+    expect(cap).toBeGreaterThanOrEqual(181);
+    expect(css).toMatch(/\.ride-card \.rc-later \{ order: 1; \}/); // (🧰 avant l'étoile et le record)
+    expect(css).toMatch(/\.ride-card \.rc-day \{ display: none; \}/); // (sa journée parfaite : sa bulle la dit déjà)
+  });
 });
 
 describe('« ⭐ Niveau 2 » et la bulle du guide (P6, tutoriel)', () => {

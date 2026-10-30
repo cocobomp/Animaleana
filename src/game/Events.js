@@ -314,6 +314,7 @@ export class Events {
       g: ev.type === 'neighbour' ? ev.data.neighbour.sex : who.sex,
       names, kind: t(`ev_kind_${who.species}`), babies: extra ?? '',
       shelter: t(`ev_shelter_${who.species === 'horse' ? 'paddock' : 'pen'}`),
+      part: t(who.species === 'horse' ? 'ev_part_horse' : 'ev_part'), // (« Sa jambe va vite guérir » : un cheval a des jambes)
     };
     if (ev.type === 'fair' && win) {
       const w = p.animals.find((x) => x.id === ev.data.winnerId);
@@ -363,7 +364,7 @@ export class Events {
   intro(ev) {
     const who = ev.data.who ?? {};
     const p = { name: who.name, g: who.sex, kind: t(`ev_kind_${who.species}`) };
-    if (ev.type === 'injury') p.cause = t(`ev_cause_${ev.data.cause}`);
+    if (ev.type === 'injury') p.cause = t(`ev_cause_${ev.data.cause}`, { part: t(who.species === 'horse' ? 'ev_part_horse' : 'ev_part') }); // (la jambe d'un cheval, la patte des autres)
     if (ev.type === 'escape') p.shelter = t(`ev_shelter_${who.species === 'horse' ? 'paddock' : 'pen'}`);
     if (ev.type === 'neighbour') Object.assign(p, { name: ev.data.neighbour.name, g: ev.data.neighbour.sex, task: t(`ev_task_${ev.data.task}`) });
     if (ev.type === 'birth') Object.assign(p, { g: 'f', baby: t(`ev_baby_${who.species}`) });

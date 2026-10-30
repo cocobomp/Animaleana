@@ -21,6 +21,11 @@ export const newSession = () => ({ walk: 0, warm: false, started: false, hard: 0
 export const WARM_FOR = 60;
 /** Une séance qui commence avec un cheval déjà chaud (il vient de travailler). */
 export const warmSession = () => ({ ...newSession(), walk: WARMUP.walk, warm: true });
+/**
+ * Encore en selle après une séance (un parcours, une reprise…) ou un voyage à cheval : il vient de travailler sous toi,
+ * la détente est faite (ni « 🐢 Pense à l'échauffer », ni « ✅ Bien échauffé », pas d'effort en plus).
+ */
+export const workedSession = () => ({ ...warmSession(), started: true });
 
 /**
  * Une image de balade à l'allure gait ('halt', 'walk', 'trot', 'canter', 'gallop') pendant dt secondes. Renvoie ce

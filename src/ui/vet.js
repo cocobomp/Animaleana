@@ -6,7 +6,7 @@
 // repli si le dessin n'est pas possible sur l'appareil.
 
 import { h } from './dom.js';
-import { t, ta, L } from '../i18n.js';
+import { t, ta, L, illText } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { ILLNESSES } from '../sim/animal.js';
 import { canAfford } from '../sim/profile.js';
@@ -178,10 +178,10 @@ export function openVetClassic(ui, a, atClinic) {
             }
             ui.renderPanel();
           },
-        }, d === 'healthy' ? `💚 ${t('vetHealthy')}` : `🤒 ${cap(t(`ill_${d}`))}`))),
+        }, d === 'healthy' ? `💚 ${t('vetHealthy')}` : `🤒 ${cap(illText(d, a))}`))),
         h('button', { class: 'small', onClick: () => { st.step = 'exam'; st.msg = ''; ui.renderPanel(); } }, `↩ ${t('vetBackExams')}`));
     } else if (st.step === 'treat') {
-      out.push(h('h3', {}, t('vetWhichTreatment', { ill: t(`ill_${illness}`) })),
+      out.push(h('h3', {}, t('vetWhichTreatment', { ill: illText(illness, a) })),
         h('div', { class: 'grid' }, TREATMENTS.map((x) => h('button', {
           class: 'act',
           onClick: () => {

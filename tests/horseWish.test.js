@@ -3,7 +3,8 @@ import { describe, it, expect } from 'vitest';
 import { createAnimal } from '../src/sim/animal.js';
 import { seeded } from '../src/sim/rng.js';
 import { markHorseDay, horseDayView } from '../src/sim/horseDay.js';
-import { wishOf, wishDone, ICONS } from '../src/sim/horseWish.js';
+import { wishOf, wishDone, wishFirst, ICONS, WISH_ACTION } from '../src/sim/horseWish.js';
+import { SPECIES } from '../src/sim/species.js';
 import { restDay } from '../src/ui/minigames/ration.js';
 
 const horse = (sex = 'f') => {
@@ -150,5 +151,42 @@ describe('ce que ton cheval te demande', () => {
     const before = JSON.stringify(a.today);
     expect(wishOf(a, { day: DAY + 1, hour: 8 }).task).toBe('feedAm');
     expect(JSON.stringify(a.today)).toBe(before);
+  });
+
+  it('descendu, encore sellé : 🧰 d\'abord, même affamé ; dessellé et débridé : exaucé', () => {
+    const a = horse();
+    a.gear = { saddle: { item: 'x' } };
+    expect(at(a, 10).id).not.toBe('untack'); // (sellé pour plus tard : pas encore travaillé)
+    markHorseDay(a, 'ride', 10, DAY);
+    a.needs.hunger = 30;
+    const w = at(a, 11);
+    expect(w).toMatchObject({ id: 'untack', icon: '🧰', task: 'untack' });
+    a.gear.bridle = { item: 'y' };
+    delete a.gear.saddle;
+    expect(wishDone(a, w, DAY)).toBe(false); // (le filet encore)
+    expect(at(a, 11).id).toBe('untack');
+    delete a.gear.bridle;
+    expect(wishDone(a, w, DAY)).toBe(true);
+    expect(at(a, 11)).toMatchObject({ id: 'hay', task: 'hunger' });
+    a.gear.halter = { item: 'halter' };
+    expect(at(a, 11).id).toBe('hay'); // (son licol, il le garde au pré)
+  });
+
+  it('chaque bulle a son geste : un soin du cheval, monter ou desseller', () => {
+    for (const id of Object.keys(ICONS)) {
+      const act = WISH_ACTION[id];
+      expect(SPECIES.horse.actions.includes(act) || ['ride', 'unsaddle'].includes(act), id).toBe(true);
+    }
+  });
+
+  it('son menu : ce qu\'il demande en premier, cerclé d\'or ; les autres dans le même ordre', () => {
+    const items = [{ act: 'feed' }, { act: 'water' }, { icon: '📣' }, { act: 'ride', cls: 'x' }, { act: 'unsaddle' }];
+    const out = wishFirst(items, 'ride');
+    expect(out.map((it) => it.act ?? it.icon)).toEqual(['ride', 'feed', 'water', '📣', 'unsaddle']);
+    expect(out[0].cls).toBe('x wish');
+    expect(wishFirst(items, 'water')[0]).toMatchObject({ act: 'water', cls: 'wish' });
+    expect(items[1].cls).toBeUndefined(); // (le menu d'origine n'est pas touché)
+    expect(wishFirst(items, null)).toBe(items);
+    expect(wishFirst(items, 'pet')).toBe(items); // (pas de bouton pour ça)
   });
 });

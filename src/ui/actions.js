@@ -20,6 +20,7 @@ import { bar } from './dom.js';
 import { horseBoxItems } from './facilitiesPanel.js';
 import { activityRuns, openActivities } from './activities.js';
 import { isTrainingClient, nextProblem, canSession, PROBLEMS } from '../sim/dogTrainer.js'; // éducateur canin
+import { wishFirst, WISH_ACTION } from '../sim/horseWish.js'; // 🫧 ce qu'il demande, en premier
 
 /** Nom d'un soin pour cet animal : « Curer le box » (cheval), « Panser » (brosser un cheval)… */
 const careLabel = (a, x) => (x === 'clean' || (x === 'brush' && a.species === 'horse') ? t(`act_${a.species}_${x}`) : t(`act_${x}`));
@@ -162,11 +163,13 @@ export function openAnimalActions(ui, a) {
   const icons = {
     feed: '🍖', water: '💧', brush: '🪮', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨', pet: '🤚', treat: '🍪', play: '⚽', lunge: '🌀', liberty: '💛',
   };
+  if (a.species === 'horse') icons.feed = '🌾'; // (le foin, comme sa bulle)
   const main = ['feed', 'water', 'pet', 'brush', 'play', 'wash', 'clean', 'treat'].filter((x) => sp.actions.includes(x));
   sheet(ui, `${sp.emoji} ${a.name}`, `${speciesName(a)} · ${ta('mood_' + g.moodOf(a), a)}`, () => {
     const items = main.map((x) => {
       const allowed = g.animalActionAllowed(a, x);
       return {
+        act: x,
         icon: icons[x],
         label: careLabel(a, x),
         enabled: allowed.ok,
@@ -199,6 +202,7 @@ export function openAnimalActions(ui, a) {
       const r = canRide(a);
       const asleep = g.entities.get(a.id)?.sleeping;
       items.push({
+        act: 'ride',
         icon: '🏇',
         label: t(canSaddle ? 'act_saddleRide' : 'act_ride'),
         enabled: r.ok && !asleep,
@@ -224,11 +228,11 @@ export function openAnimalActions(ui, a) {
     if (canSaddle) {
       items.push({ icon: '🪢', label: t('act_saddle'), run: () => { ui.closePanel(); ui.saddleWithGame(a, false); } });
     } else if (sp.rideable && saddled && g.player.mount?.data !== a) {
-      items.push({ icon: '🧰', label: t('act_unsaddle'), effect: ta('unsaddleHint', a), run: () => { g.unsaddle(a); ui.closePanel(); } });
+      items.push({ act: 'unsaddle', icon: '🧰', label: t('act_unsaddle'), effect: ta('unsaddleHint', a), run: () => { g.unsaddle(a); ui.closePanel(); } });
     }
     // Monté à cru avec le filet : on le lui enlève aussi (il ne le garde pas au pré).
     if (sp.rideable && !saddled && a.gear?.bridle && g.player.mount?.data !== a) {
-      items.push({ icon: '🧰', label: t('act_unbridle'), effect: t('bridleOff'), run: () => { g.unsaddle(a); ui.closePanel(); } });
+      items.push({ act: 'unsaddle', icon: '🧰', label: t('act_unbridle'), effect: t('bridleOff'), run: () => { g.unsaddle(a); ui.closePanel(); } });
     }
     if (a.species === 'dog') {
       items.push({
@@ -280,7 +284,7 @@ export function openAnimalActions(ui, a) {
       });
     }
     items.push({ icon: '📋', label: t('more'), free: true, run: () => ui.openAnimal(a) });
-    return items;
+    return wishFirst(items, WISH_ACTION[g.entities.get(a.id)?.wish?.id] ?? null); // (🫧 ce qu'il demande, cerclé d'or)
   }, () => h('div', { class: 'bars compact' },
     bar(t('happiness'), happiness(a), 'big'),
     NEEDS.map((n) => bar(`${NEED_ICON[n]} ${t(`need_${n}`)}`, a.needs[n]))), true);

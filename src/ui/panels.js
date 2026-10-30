@@ -304,7 +304,7 @@ function renderAnimal(ui, g, a) {
 
   const careActions = sp.actions.filter((x) => !['play', 'lunge', 'liberty', 'ride', 'follow', 'shear', 'milk'].includes(x));
   out.push(h('h3', {}, t('care')), h('div', { class: 'grid' },
-    careActions.map((x) => btn(`${CARE_ICONS[x] ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => ui.careWithGame(a, x))),
+    careActions.map((x) => btn(`${(a.species === 'horse' && x === 'feed' ? '🌾' : CARE_ICONS[x]) ?? ''} ${actionLabel(a, x)}${money(ui, CARE[x].cost)}`, () => ui.careWithGame(a, x))), // (🌾 le foin du cheval)
   ));
 
   if (a.species === 'horse' && !a.client && !a.guest) out.push(...daySection(ui, g, a), ...healthSection(ui, g, a, btn), ...galopSection(ui, g), ...quirkSection(a), ...memorySection(ui, a));

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createAnimal, tickAnimal, applyCare, happiness, mood, lifeStage, canBreed, breed,
-  trainTrick, canRide, cure, NEGLECT_LIMIT, breedingChecklist, mate, checkup,
+  trainTrick, canRide, cure, NEGLECT_LIMIT, breedingChecklist, mate, checkup, careFull,
 } from '../src/sim/animal.js';
 import { mulberry32 } from '../src/sim/rng.js';
 import { DAYS_PER_YEAR } from '../src/sim/time.js';
@@ -40,6 +40,16 @@ describe('besoins', () => {
     expect(applyCare(a, 'liberty')).toEqual({ ok: false, reason: 'lameWork' });
     a.needs.hygiene = 10;
     expect(applyCare(a, 'brush').ok).toBe(true);
+  });
+
+  it('un cheval déjà tout propre ne se panse pas ; en sueur après le travail, si', () => {
+    const a = adult('horse', 'm');
+    a.needs.grooming = 98;
+    expect(careFull(a, 'brush')).toBe(true);
+    a.sweat = 0.5;
+    expect(careFull(a, 'brush')).toBe(false);
+    expect(applyCare(a, 'brush').ok).toBe(true);
+    expect(a.sweat).toBeUndefined();
   });
 });
 

@@ -21,7 +21,7 @@ import { openActivities } from './activities.js';
 import { TOOLS, toolAtHome } from '../sim/tools.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import { WORMER_COST } from '../sim/horseHealth.js'; // le prix du vermifuge
-import { wears, freeBridle } from '../sim/gear.js'; // brider après la selle
+import { wears, freeBridle, freeSaddle } from '../sim/gear.js'; // brider après la selle
 import { beatRing } from '../sim/posting.js'; // ⬆️ trot enlevé
 import { fmtCross } from '../sim/freeJumps.js'; // ⏱️ le chrono du cross
 import { maybeShowNews } from './news.js'; // 🐴 quoi de neuf ?
@@ -32,6 +32,7 @@ import { openDogTrainerPanel } from './dogTrainer.js'; // métier éducateur can
 import { openCareers, careerChips } from './careers.js'; // 💼 métiers
 import { openTrailCarnet } from './trailGuide.js'; // 🧭 guide de randonnée
 import { BUBBLE_PX } from '../game/wishBubble.js'; // (la bulle « il te demande » pend sous le nom)
+import { WISH, WISH_ACTION } from '../sim/horseWish.js'; // 🫧 toucher sa bulle fait ce qu'il demande
 
 const STATUS_MAX = 3; // pastilles d'état visibles en même temps (les autres derrière « ➕ N de plus »)
 const RIDE_TOASTS = 2; // à cheval sur un téléphone : messages à l'écran en même temps (les suivants attendent, UI.toast)
@@ -100,6 +101,7 @@ export class UI {
     this.t = t;
     this.labels = h('div', { id: 'labels' });
     this.labelEls = new Map();
+    this.wishEls = new Map(); // (🫧 sa bulle, qu'on touche : updateLabels)
     // À cheval, en balade libre : les allures (arrêt, pas, trot, galop). Les boutons sont créés une fois (seule leur
     // classe change : pas de bouton remplacé sous le doigt) ; leurs textes suivent la langue (updateGaitPad).
     this.gaitBtns = {};
@@ -527,6 +529,7 @@ export class UI {
         grp.extra++;
         el.hidden = true;
         it.e.labelMoved = true;
+        this.wishHit(it, false);
         continue;
       }
       el.hidden = false;
@@ -543,6 +546,7 @@ export class UI {
       placed.push({ x: it.x, y, w, ax: it.x, ay: it.y, baby, extra: 0, el, text, wish: !!it.e.wish && !it.e.labelMoved, near: it.d <= 10 });
       el.style.transform = `translate(${it.x - w / 2}px, ${y - 38}px)`;
       el.style.opacity = it.d > 10 ? 0.6 : 1;
+      this.wishHit(it, !!it.e.wish && !it.e.labelMoved && it.d <= WISH.near);
     }
     for (const q of placed) {
       const text = q.extra ? `${q.text} +${q.extra}` : q.text;
@@ -554,7 +558,58 @@ export class UI {
         this.labelEls.delete(id);
       }
     }
+    for (const [id, b] of this.wishEls) {
+      if (!seen.has(id)) {
+        b.remove();
+        this.wishEls.delete(id);
+      }
+    }
     this.dodgeStatus(placed);
+  }
+
+  /**
+   * 🫧 Sa bulle « il te demande » se touche : un bouton transparent posé dessus (elle pend BUBBLE_PX sous le point
+   * d'accroche de son nom, it.y : AnimalEntity.updateStatus). Créé la première fois qu'elle se montre. on : visible.
+   */
+  wishHit(it, on) {
+    const a = it.e.data;
+    let b = this.wishEls.get(a.id);
+    if (!b && !on) return;
+    if (!b) {
+      b = h('button', { class: 'wish-hit', type: 'button', 'aria-label': t('wish_tap', { g: a.sex }), onClick: (ev) => {
+        ev.stopPropagation();
+        this.tapWish(a.id);
+      } });
+      this.labels.append(b);
+      this.wishEls.set(a.id, b);
+    }
+    b.hidden = !on;
+    if (on) b.style.transform = `translate(${it.x - 30}px, ${it.y}px)`;
+  }
+
+  /** Sa bulle touchée : tu vas vers lui, puis tu fais ce qu'il demande (doWish). */
+  tapWish(id) {
+    const e = this.game?.entities.get(id); // (retrouvée au toucher : l'entité change à chaque rechargement du lieu)
+    if (e?.wish) this.game.walkTo(e.position, e.radius + 1.2, () => this.doWish(e.data), true);
+  }
+
+  /**
+   * 🫧 Ce qu'il te demande (sa bulle touchée, ou E près de lui) : le soin et son mini-jeu (🌾 💧 🪮 ❤️), monter (sellé
+   * d'abord s'il le faut, comme « Seller et monter » de son menu), ou 🧰 desseller. Plus rien (il a bu seul en
+   * chemin…) : son menu.
+   */
+  doWish(a) {
+    const g = this.game;
+    const wish = g.entities.get(a.id)?.wish;
+    if (!wish) return this.openAnimalActions(a);
+    if (g.blockedByPause()) return null;
+    const act = WISH_ACTION[wish.id];
+    if (act === 'ride') {
+      this.closePanel();
+      return !a.gear?.saddle && freeSaddle(g.profile, a, { home: g.isHome }) ? this.saddleWithGame(a, true) : g.ride(a);
+    }
+    if (act === 'unsaddle') return g.unsaddle(a);
+    return this.careWithGame(a, act);
   }
 
   /**
@@ -580,6 +635,8 @@ export class UI {
   clearLabels() {
     for (const el of this.labelEls.values()) el.remove();
     this.labelEls.clear();
+    for (const b of this.wishEls.values()) b.remove();
+    this.wishEls.clear();
   }
 
   /** « Ma liste de tâches », en bas à droite. */
@@ -727,6 +784,14 @@ export class UI {
     }
     if (f.kind === 'vehicle') { // voyage : faire monter les animaux (game/TripFlow.js)
       this.actionBtn.replaceChildren(this.game.tripFlow.focusLabel(), h('kbd', {}, 'E'));
+      this.actionBtn.hidden = false;
+      return;
+    }
+    // 🫧 Ce qu'il te demande : « 🌾 Pomme a faim » ; E ou un toucher le fait (Game.interact → doWish).
+    const wish = f.kind === 'animal' ? f.entity.wish : null;
+    if (wish) {
+      const a = f.entity.data;
+      this.actionBtn.replaceChildren(h('span', {}, wish.icon), ` ${t(`wish_btn_${wish.id}`, { name: a.name, g: a.sex })}`, h('kbd', {}, 'E'));
       this.actionBtn.hidden = false;
       return;
     }

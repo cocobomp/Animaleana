@@ -1,5 +1,5 @@
 // 🫧 La bulle de ce que ton cheval te demande (src/sim/horseWish.js) : un petit cadre blanc arrondi, une queue en bas
-// au milieu, l'icône dedans. Une texture par icône, gardée (cinq en tout) ; posée par AnimalEntity.updateStatus, sous
+// au milieu, l'icône dedans. Une texture par icône, gardée (six en tout) ; posée par AnimalEntity.updateStatus, sous
 // l'étiquette de son nom.
 
 import * as THREE from 'three';

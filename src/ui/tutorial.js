@@ -29,6 +29,7 @@ import {
 import { hintText, blockText, shortBlockText } from './quests.js';
 import { NoticeQueue } from './questNotices.js'; // les petits mots du guide, qui attendent qu'aucune fenêtre ne soit ouverte
 import { ringSpot } from './ringSpot.js'; // où poser le cercle et le doigt
+import { WISH_ACTION } from '../sim/horseWish.js'; // 🫧 (le bouton vert fait ce que sa bulle demande)
 
 const GUIDE = '🐶';
 /** Nom d'une quête (« Adopte {n} espèces… » : le total suit les espèces proposées). */
@@ -525,7 +526,9 @@ export class Tutorial {
     if (ui.panel) return { el: this.closeBtn(), why: 'close', world: e, key: `a-${a.id}` };
     const onEdgeTap = () => g.walkTo(e.position, e.radius + 1.2, () => ui.openAnimalActions(a), true);
     let el = null;
-    if (g.focus?.kind === 'animal' && g.focus.entity === e && !ui.actionBtn.hidden) el = ui.actionBtn;
+    // (🫧 sa bulle : le bouton vert fait ce qu'elle demande, pas son menu ; son nom, lui, ouvre toujours le menu)
+    const wished = !e.wish || (forAction && WISH_ACTION[e.wish.id] === spec.id);
+    if (g.focus?.kind === 'animal' && g.focus.entity === e && !ui.actionBtn.hidden && wished) el = ui.actionBtn;
     else el = ui.labelEls.get(a.id) ?? null;
     return { el, world: e, key: `a-${a.id}`, onEdgeTap, why: forAction ? 'tapAnimal' : null };
   }

@@ -2130,7 +2130,7 @@ export class Game {
         }
       }
     }
-    const key = best ? `${best.kind}-${best.entity?.data.id ?? best.id ?? best.key ?? ''}` : '';
+    const key = best ? `${best.kind}-${best.entity?.data.id ?? best.id ?? best.key ?? ''}-${best.entity?.wish?.id ?? ''}` : ''; // (🫧 le bouton suit sa bulle)
     if (key !== this.focusKey) {
       this.focusKey = key;
       this.focus = best;
@@ -2162,7 +2162,7 @@ export class Game {
     const f = this.focus;
     if (!f) return;
     switch (f.kind) {
-      case 'animal': this.ui.openAnimalActions(f.entity.data); break;
+      case 'animal': f.entity.wish ? this.ui.doWish(f.entity.data) : this.ui.openAnimalActions(f.entity.data); break; // (🫧 ce qu'il demande)
       case 'helper': this.ui.openHelper(f.helper.data); break;
       case 'refuge':
       case 'petshop':

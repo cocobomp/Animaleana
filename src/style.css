@@ -834,6 +834,10 @@ button.sv-card:hover { border-color: var(--primary); }
 /* Bébés : pastille plus petite (la zone à toucher garde ses 44 px), groupée quand ils sont serrés (UI.updateLabels). */
 .animal-label.baby { padding: 2px 8px; font-size: 0.74rem; }
 .animal-label[hidden] { display: none; }
+/* 🫧 Sa bulle « il te demande » (un sprite 3D) se touche : un bouton transparent posé dessus (UI.wishHit). */
+.wish-hit { position: absolute; left: 0; top: 0; width: 60px; height: 56px; pointer-events: auto; background: none; border: 0; padding: 0; will-change: transform; }
+.wish-hit[hidden] { display: none; }
+.big-action.wish { box-shadow: 0 0 0 3px #f2b824; } /* ce qu'il demande, en premier dans son menu */
 .big-action small.effect { color: var(--primary); font-weight: 600; }
 .big-action.primary small.effect { color: #e9fff2; }
 .bars.compact { gap: 3px; margin: 4px 0 10px; }

@@ -145,6 +145,27 @@ describe('la bulle de ce qu\'il te demande', () => {
     expect(e.status.visible).toBe(true);
   });
 
+  it('descendu de son dos, encore sellé : 🧰 ; dessellé, ✨ puis la suite de sa journée', () => {
+    const { a, e, game, run } = setup();
+    a.gear = { ...a.gear, saddle: { item: 'saddle' } };
+    game.player.mount = e;
+    markHorseDay(a, 'ride', 8, DAY);
+    run(1.2, 0.5);
+    expect(e.wish).toBe(null); // (sur son dos : rien)
+    game.player.mount = null;
+    run(1.2);
+    expect(e.wish).toMatchObject({ id: 'untack', icon: '🧰' });
+    run(0.05);
+    expect(e.status.material.map).toBe(bubbleTexture('🧰'));
+    const n = e.particles.length;
+    delete a.gear.saddle;
+    run(0.05);
+    expect(e.wish).toBe(null);
+    expect(e.particles.length).toBe(n + 3); // (✨)
+    run(1.2);
+    expect(e.wish?.id).toBe('hay');
+  });
+
   it('en voyage à cheval (src/game/TrailView.js) : plus de bulle figée au-dessus de lui', () => {
     const { e, run } = setup();
     run(1.6);

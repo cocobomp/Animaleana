@@ -157,6 +157,14 @@ Malade, boiteux ou endormi, son 🤒, son 🩹 ou son 💤 passent avant ; trist
 comme ça qu'on le console). Pas la nuit (21 h-6 h), ni sur son dos, ni pendant une activité, ni pour un cheval confié,
 ni pendant le tutoriel. À l'écurie, chacun montre la sienne. Son nom ou sa bulle sous une pastille d'état (« 🧭 Des
 visiteurs t'attendent »…) ou sous le suivi de quête : ils pâlissent et laissent le doigt toucher le nom à travers.
+« Sa bulle, son bouton » : toucher la bulle te fait marcher jusqu'à lui, puis fait ce qu'il demande : le mini-jeu du
+soin (🌾 la ration, 💧, 🪮 le pansage, ❤️), 🏇 « Seller et monter » (ou monter, s'il est déjà sellé), ou 🧰 desseller.
+Près de lui, le bouton vert le dit (« 🌾 Pomme a faim », « 💧 Pomme a soif », « 🪮 Panse Pomme », « 🏇 Monte Pomme »,
+« ❤️ Un câlin pour Pomme ») et E le fait ; dans son menu, ce qu'il demande vient en premier, cerclé d'or. Son nom
+ouvre toujours son menu : une quête qui veut autre chose (« caresse-le » quand il a faim) le montre du doigt, pas le
+bouton vert. Nourrir un cheval, c'est 🌾 (son menu, sa fiche, le tutoriel). Après le travail, descendu encore sellé ou bridé : 🧰 avant le reste
+(même s'il a faim : on le desselle avant de le nourrir) ; un toucher range la selle et le filet à la sellerie, ✨, puis
+la suite. En sueur, il se panse même tout propre.
 
 ### Le défi du jour (0.5, `src/sim/horseChallenge.js`)
 Chaque jour de jeu, un petit défi avec ton cheval, tiré parmi ceux que tu sais déjà faire : le caresser 3 fois, le

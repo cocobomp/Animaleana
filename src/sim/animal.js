@@ -73,7 +73,7 @@ export function careFull(a, actionId) {
   if (actionId === 'shoe' && a.species === 'horse') return false; // (les fers, ce n'est pas une question de propreté)
   const care = CARE[actionId];
   if (!care?.full || a.needs[care.full] < 96) return false;
-  return !(actionId === 'brush' && hoovesNeedCare(a));
+  return !(actionId === 'brush' && (hoovesNeedCare(a) || (a.sweat ?? 0) >= 0.3)); // (en sueur : on le panse aussi)
 }
 
 export const CARE = {

@@ -172,6 +172,16 @@ describe('ce que ton cheval te demande', () => {
     expect(at(a, 11).id).toBe('hay'); // (son licol, il le garde au pré)
   });
 
+  it('sellé à nouveau pour une deuxième balade (a.freshTack) : pas de 🧰 avant d\'être monté ; une vieille partie : comme avant', () => {
+    const a = horse();
+    markHorseDay(a, 'ride', 9, DAY); // (la balade du matin, puis dessellé)
+    a.gear = { saddle: { item: 'x' }, bridle: { item: 'y' } };
+    a.freshTack = true; // (Game.saddle, Game.bridle : la selle qu'on vient de lui mettre pour plus tard)
+    expect(at(a, 15)?.id).not.toBe('untack');
+    delete a.freshTack; // (Game.ride : monté avec, elle a servi)
+    expect(at(a, 15).id).toBe('untack');
+  });
+
   it('chaque bulle a son geste : un soin du cheval, monter ou desseller', () => {
     for (const id of Object.keys(ICONS)) {
       const act = WISH_ACTION[id];

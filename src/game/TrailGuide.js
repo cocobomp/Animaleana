@@ -654,7 +654,9 @@ class GuidedRideSession extends ActivitySession {
       this.ok = false;
       return;
     }
-    if (g.player.mount && g.player.mount !== ge) g.dismount();
+    // (sur un autre cheval : on change de monture, sans la carte « Ta balade » que la balade guidée cacherait ; la séance
+    // ne passe pas par Activities.start, qui s'en charge pour les autres)
+    if (g.player.mount && g.player.mount !== ge) g.dismount({ card: false });
     if (!g.player.mount) {
       ge.position.set(STABLE_DOOR.x, 0, STABLE_DOOR.z - 2);
       ge.snap();

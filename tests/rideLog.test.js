@@ -43,13 +43,20 @@ class El {
   setAttribute(k, v) { this.attrs[k] = v; }
   addEventListener(k, f) { this.on[k] = f; }
   getBoundingClientRect() { return {}; }
+  getClientRects() { return this.cssHidden ? [] : [{}]; } // (cssHidden : display none, en selle ou sous une fenêtre)
   remove() { this.removed = true; }
   get text() { return this.children.map((c) => (c instanceof El ? c.text : c.data)).join(' '); }
 }
 const find = (el, cls) => (el.className?.split(' ').includes(cls) ? el : el.children?.map((c) => c instanceof El && find(c, cls)).find(Boolean));
+let mgOpen = false; // (un mini-jeu ouvert : .mg-overlay)
 const fakeDom = () => {
   globalThis.Node = El;
-  Object.assign(globalThis.document, { createElement: (tag) => new El(tag), createTextNode: (data) => ({ data }) });
+  Object.assign(globalThis.document, {
+    createElement: (tag) => new El(tag),
+    createTextNode: (data) => ({ data }),
+    querySelector: (sel) => (sel === '.mg-overlay' && mgOpen ? {} : null),
+    hidden: false,
+  });
 };
 
 describe('le carnet de balade', () => {
@@ -107,14 +114,11 @@ describe('le carnet de balade', () => {
     expect(newRideLog(horse({ guest: true }))).toBeNull();
   });
 
-  it('pas de carte sous 40 s, ni quand une activité ou un voyage l\'a mené', () => {
+  it('pas de carte sous 40 s (une activité ou un voyage : pas de carnet du tout, Game.tickRide)', () => {
     const a = horse();
     const short = newRideLog(a);
     run(short, 'walk', 1.6, RIDE_LOG.minTime - 1);
     expect(rideReport(short, { a }).show).toBe(false);
-    const led = ride(a);
-    led.skip = true;
-    expect(rideReport(led, { a }).show).toBe(false);
     expect(rideReport(ride(a), { a }).show).toBe(true);
   });
 
@@ -254,7 +258,7 @@ describe('le carnet de balade', () => {
 });
 
 describe('la carte à l\'écran', () => {
-  it('le temps, la distance en français, les allures ; un toucher la ferme, une seule à la fois, partie après 8 s', async () => {
+  it('le temps, la distance en français, les allures ; un toucher la ferme, une seule à la fois, partie après 12 s vue', async () => {
     fakeDom();
     vi.useFakeTimers();
     const { showRideCard } = await import('../src/ui/rideCard.js');
@@ -284,11 +288,20 @@ describe('la carte à l\'écran', () => {
     el2.on.click();
     vi.advanceTimersByTime(400);
     expect(el2.removed).toBe(true);
-    // toute seule après 8 s
+    // toute seule après 12 s vue à l'écran
     const el3 = showRideCard(ui, rep, a);
-    vi.advanceTimersByTime(7900);
+    vi.advanceTimersByTime(11500);
     expect(el3.removed).toBe(false);
-    vi.advanceTimersByTime(500);
+    // cachée (on remonte en selle, une fenêtre s'ouvre) ou sous un mini-jeu : ce temps-là ne compte pas
+    el3.cssHidden = true;
+    vi.advanceTimersByTime(30000);
+    expect(el3.removed).toBe(false);
+    el3.cssHidden = false;
+    mgOpen = true;
+    vi.advanceTimersByTime(30000);
+    expect(el3.removed).toBe(false);
+    mgOpen = false;
+    vi.advanceTimersByTime(1000);
     expect(el3.removed).toBe(true);
     // pas de carte à montrer : rien
     expect(showRideCard(ui, { show: false }, a)).toBeNull();
@@ -355,6 +368,65 @@ describe('en descendant (Game.dismount)', () => {
     expect(g.ui.root.children).toHaveLength(0);
     expect(g.toasts).toEqual([i18n.t('ride_cooled', { name: 'Pomme', g: 'f' }), i18n.t('ride_unsaddle', { name: 'Pomme', g: 'f' })]);
     expect(g.activities.starting).toBe(false);
+    expect(g.rideLog).toBeNull();
+  });
+
+  it('changer de cheval en selle (Game.ride, la balade guidée) : pas de carte qu\'on ne verrait pas, les petits mots d\'avant, pas de record', () => {
+    i18n.setLang('fr');
+    const a = horse({ gear: { saddle: { item: 'saddle' } }, bond: 10 });
+    const log = newRideLog(a);
+    Object.assign(log, { t: 130, dist: 1400, gaits: { walk: 60, trot: 40, canter: 30 } });
+    fakeDom();
+    const g = fakeGame(a, log);
+    Game.prototype.dismount.call(g, { card: false });
+    expect(g.ui.root.children).toHaveLength(0);
+    expect(g.toasts).toEqual([i18n.t('ride_cooled', { name: 'Pomme', g: 'f' }), i18n.t('ride_unsaddle', { name: 'Pomme', g: 'f' })]);
+    expect(a.bond).toBe(10.5); // (le retour au calme compte quand même)
+    expect(a.rideBest).toBeUndefined();
+    expect(g.rideLog).toBeNull();
+  });
+
+  it('après une activité ou un voyage, encore en selle : un carnet neuf à la première image libre (Game.tickRide)', () => {
+    const a = horse();
+    const p = { x: 0, z: 0 };
+    const g = Object.create(Game.prototype);
+    Object.assign(g, {
+      rideLog: null,
+      profile: { stats: { freeJumps: 2 } },
+      activities: { active: null },
+      tripFlow: { active: false },
+      player: { mount: { data: a }, auto: false, gaitNow: 'trot', speed: 3, session: { warm: true }, position: p },
+    });
+    const step = (n) => {
+      for (let k = 0; k < n; k++) {
+        p.x += 0.3;
+        g.tickRide(0.1);
+      }
+    };
+    // (Game.ride ouvre le carnet dans le constructeur de la séance : plus de carnet tant qu'elle mène le cheval)
+    g.rideLog = newRideLog(a, g.profile.stats);
+    g.activities.active = { type: 'jump' };
+    step(50);
+    expect(g.rideLog).toBeNull();
+    // la séance finie, toujours en selle : un carnet neuf, qui compte la suite (déjà chaud : la détente n'est pas à toi)
+    g.activities.active = null;
+    step(50);
+    expect(g.rideLog).toMatchObject({ preWarm: true, stats: { freeJumps: 2 } });
+    expect(g.rideLog.t).toBeCloseTo(4.9);
+    expect(g.rideLog.gaits.trot).toBeCloseTo(4.9);
+    // un voyage à cheval (et son arrivée, remis en selle) : pareil
+    g.tripFlow.active = true;
+    step(5);
+    expect(g.rideLog).toBeNull();
+    g.tripFlow.active = false;
+    step(1);
+    expect(g.rideLog).not.toBeNull();
+    // descendu sans Game.dismount (on change de lieu) : plus de carnet ; un cheval qu'on te confie : jamais
+    g.player.mount = null;
+    step(1);
+    expect(g.rideLog).toBeNull();
+    g.player.mount = { data: horse({ client: { id: 'x' } }) };
+    step(3);
     expect(g.rideLog).toBeNull();
   });
 

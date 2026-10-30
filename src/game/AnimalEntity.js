@@ -916,10 +916,12 @@ export class AnimalEntity {
         const rainy = felt === 'rain' || felt === 'storm';
         this.rainWet = Math.max(0, Math.min(0.8, (this.rainWet ?? 0) + (rainy ? 0.05 : -0.01)));
         this.coatCare();
-        // 🫧 Près de toi (10 m), tutoriel fini : sa bulle (src/sim/horseWish.js ; pas sur son dos, ni pendant une activité,
-        // ni en vue d'ensemble ; seulement tes chevaux : pas celui d'un visiteur, qui n'est pas dans game.entities)
+        // 🫧 Près de toi (10 m), tutoriel fini : sa bulle (src/sim/horseWish.js ; pas sur son dos, ni pendant une activité
+        // ou un voyage — un cheval qui nous suit en balade aussi : la toucher la gâchait —, ni en vue d'ensemble ;
+        // seulement tes chevaux : pas celui d'un visiteur, qui n'est pas dans game.entities)
         const can = gm?.profile && gm.profile.tutorial?.done !== false && distPlayer < WISH.near && !this.ridden && !this.scripted
-          && gm.player?.mount !== this && gm.entities?.get(d.id) === this && !gm.mgmt?.active;
+          && gm.player?.mount !== this && gm.entities?.get(d.id) === this && !gm.mgmt?.active
+          && !gm.activities?.active && !gm.tripFlow?.active;
         this.wish = can ? wishOf(d, { day: gm.day, hour: gm.hour, sleeping: this.sleeping }) : null;
       }
     }

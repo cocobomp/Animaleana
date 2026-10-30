@@ -926,7 +926,10 @@ export class Game {
    * (récompense, petit mot, statistique perfectDays).
    */
   markHorseDay(a, kind) {
-    if (['lunge', 'liberty', 'activity'].includes(kind)) a.warmAt = this.profile.clock ?? 0; // 🐢 (il a travaillé : chaud ; monté : à la descente)
+    if (['lunge', 'liberty', 'activity'].includes(kind)) {
+      a.warmAt = this.profile.clock ?? 0; // 🐢 (il a travaillé : chaud ; monté : à la descente)
+      delete a.freshTack; // (🧰 longé avec sa selle : elle a servi, comme en selle — Game.ride)
+    }
     if (a.species === 'horse' && !a.client && !a.guest) this.lastHorseId = a.id; // (le défi du jour : src/sim/horseChallenge.js)
     const stage0 = bondStage(a);
     const r = markHorseDay(a, kind, this.hour, this.day);
@@ -1322,10 +1325,7 @@ export class Game {
       this.player.gaitEnabled = !this.activities.active; // (pendant une activité, c'est elle qui mène le cheval)
       this.player.postAuto = !!this.tripFlow?.active; // (voyage à cheval : trot enlevé sans le bouton)
       this.player.update(mgmt ? 0 : wdt, pctrl, this.rig.yaw, this.rig.mode === 'first');
-      if (this.rideLog && this.player.mount) { // 🏇 ta balade (en balade libre : pas menée par une activité, un voyage)
-        if (this.activities.active || this.tripFlow.active) this.rideLog.skip = true;
-        else tickRideLog(this.rideLog, this.player.auto ? null : this.player.gaitNow, this.player.speed, mgmt ? 0 : wdt, this.player.position); // (« aller vers » : l'allure d'après sa vitesse)
-      }
+      this.tickRide(mgmt ? 0 : wdt); // 🏇 ta balade
       for (const e of entities) e.update(wdt, ctx);
       this.player.lateUpdate?.(mgmt ? 0 : wdt); // le cavalier suit le cheval qu'on vient d'animer
       if (i === 0) this.ui.updatePostBtn?.(); // ⬆️ le cercle du trot enlevé, au rythme des foulées
@@ -1973,6 +1973,7 @@ export class Game {
     const saddled = unsaddle(a);
     const bridled = unbridle(this.profile, a, { home: this.isHome });
     if (!saddled && !bridled) return null;
+    delete a.freshTack;
     this.entities.get(a.id)?.applyGear();
     // (sellé sans filet, après ✕ dans « Brider » : la selle seule)
     this.ui.toast(t(saddled && bridled ? 'unsaddled' : saddled ? 'unsaddledOnly' : 'unbridled', { name: a.name, g: a.sex }), 4000);
@@ -1998,6 +1999,7 @@ export class Game {
       this.ui.toast(t(`gear_${r.reason}`, { item: t('gear_bridle'), size: r.need ? t(`tk_size_${r.need}`) : '' }), 4500);
       return null;
     }
+    a.freshTack = true; // (🧰 pas encore monté avec : il ne demande pas qu'on le lui enlève, src/sim/horseWish.js)
     this.entities.get(a.id)?.applyGear();
     if (a.species === 'horse' && !a.client && !a.guest) addStat(this.profile, 'horse_bridle'); // (« ⏩ Brider vite » après 3)
     this.save();
@@ -2011,6 +2013,7 @@ export class Game {
       this.ui.toast(t(`gear_${r.reason}`, { item: t('gear_saddle'), size: r.need ? t(`tk_size_${r.need}`) : '' }), 4500);
       return null;
     }
+    a.freshTack = true; // (🧰 sellé pour plus tard, après une première balade : pas « desselle-moi » tout de suite)
     this.entities.get(a.id)?.applyGear();
     if (a.species === 'horse' && !a.client && !a.guest) addStat(this.profile, 'horse_saddle'); // (Galop 2 : tes chevaux)
     this.save();
@@ -2344,7 +2347,9 @@ export class Game {
     this.player.bareback = gear.bareback;
     const e = this.entities.get(a.id);
     if (!e) return null;
-    if (this.player.mount && this.player.mount !== e) this.dismount(); // (en selle sur un autre cheval : on en descend d'abord)
+    // (en selle sur un autre cheval : on en descend d'abord, sans la carte « Ta balade » qu'on ne verrait pas — on est
+    // aussitôt sur l'autre — mais avec les petits mots d'avant : « Retour au calme », « Desselle-le »)
+    if (this.player.mount && this.player.mount !== e) this.dismount({ card: false });
     // Pas de laisse à cheval (elle traversait les barrières) : le chien promené suit librement, comme un animal
     // qu'on emmène (il vient aussi en balade : Activities, walkers).
     for (const d of this.profile.animals) {
@@ -2355,6 +2360,7 @@ export class Game {
     e.stopRoll?.(); // (il se roulait : debout d'abord, avant de mesurer la selle)
     this.player.riderLevel = galopLevel(this.profile); // (Galops obtenus : il s'effraie moins)
     this.mountRider(e);
+    delete a.freshTack; // (🧰 la selle qu'on vient de lui mettre a servi : après, il demandera qu'on la lui enlève)
     // 🐢 il vient de travailler (une leçon, une balade…) : déjà chaud, pas besoin de le réchauffer (src/sim/warmup.js)
     if ((this.profile.clock ?? 0) - (a.warmAt ?? -1e9) < WARM_FOR) this.player.session = warmSession();
     this.rideLog = newRideLog(a, this.profile.stats, this.player.session); // 🏇 (la carte en descendant)
@@ -2376,6 +2382,21 @@ export class Game {
   }
 
   /**
+   * 🏇 Ta balade, à chaque image (src/sim/rideLog.js) : le carnet d'une balade libre seulement. Pendant une activité
+   * ou un voyage, qui mènent le cheval, pas de carnet ; on reste en selle après (une séance, l'arrivée d'un voyage à
+   * cheval) : un carnet neuf à la première image libre, avec la détente de ce moment (src/sim/warmup.js).
+   */
+  tickRide(dt) {
+    const pl = this.player;
+    if (!pl.mount || this.activities.active || this.tripFlow.active) {
+      this.rideLog = null;
+      return;
+    }
+    this.rideLog ??= newRideLog(pl.mount.data, this.profile.stats, pl.session); // (null pour un cheval confié)
+    tickRideLog(this.rideLog, pl.auto ? null : pl.gaitNow, pl.speed, dt, pl.position); // (« aller vers » : l'allure d'après sa vitesse)
+  }
+
+  /**
    * En selle sur l'entité e, toujours avec sa bombe (aussi en voyage à cheval, src/game/TrailView.js, et remis en
    * selle à l'arrivée). Mise avant de monter : setHelmet refait l'avatar (mèches rentrées), qui n'est ainsi posé en
    * selle (et ajusté au cheval, riderFit) qu'une fois.
@@ -2385,7 +2406,8 @@ export class Game {
     this.player.ride(e);
   }
 
-  dismount() {
+  /** Descendre de cheval. card : false pour changer de cheval (pas de carte « Ta balade », les petits mots d'avant). */
+  dismount({ card = true } = {}) {
     this.freeJumps?.cancel(); // (en plein saut : droit d'abord)
     const e = this.player.mount;
     const log = this.rideLog; // 🏇 ta balade
@@ -2397,7 +2419,7 @@ export class Game {
     this.player.dismount();
     // 🏇 Ta balade (src/sim/rideLog.js) : une balade libre d'au moins 40 s, la carte dit tout (à la place des petits mots)
     const h = e?.data;
-    const rep = log && h && this.player.gaitEnabled !== false && !this.tripFlow?.active && !this.activities?.starting && this.profile.tutorial?.done !== false
+    const rep = card && log && h && this.player.gaitEnabled !== false && !this.tripFlow?.active && !this.activities?.starting && this.profile.tutorial?.done !== false
       ? rideReport(log, { a: h, stats: this.profile.stats, session: this.player.session, postBest: this.player.posting?.best, verdict: calm, left: dayLeft(h, this.day, this.hour), worked, saddled: !!h.gear?.saddle })
       : null;
     if (calm && e.data.species === 'horse') {

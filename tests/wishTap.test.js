@@ -1,12 +1,24 @@
 // 🫧 Toucher la bulle de ton cheval (src/ui/UI.js : wishHit, tapWish, doWish ; src/game/Game.js : interact) : tu vas
 // vers lui et tu fais ce qu'il demande. Le bouton vert près de lui le dit (« 🌾 Pomme a faim ») et E le fait aussi.
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as THREE from 'three';
 import { createAnimal } from '../src/sim/animal.js';
 import { createProfile } from '../src/sim/profile.js';
 import { seeded } from '../src/sim/rng.js';
 import { starterTack } from '../src/sim/gear.js';
 import { ICONS } from '../src/sim/horseWish.js';
+
+// (les mini-jeux pour de faux : ce que l'enfant en fait, mg.result — null : fermé avec ✕ — et ce qu'il y a vu, mg.out)
+const mg = vi.hoisted(() => ({ result: 1, out: null, played: [], opts: null }));
+vi.mock('../src/ui/minigames.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  runMinigame: async (ui, a, action, opts = {}) => {
+    mg.played.push(action);
+    mg.opts = opts;
+    if (mg.out) opts.out = { ...mg.out };
+    return mg.result;
+  },
+}));
 
 // Un tout petit DOM : ce que h() (src/ui/dom.js) utilise, et les clics.
 class FakeNode {}
@@ -57,6 +69,7 @@ let UI;
 let Game;
 let Tutorial;
 let t;
+let setLang;
 const saved = {};
 beforeAll(async () => {
   for (const k of ['document', 'window', 'Node']) saved[k] = globalThis[k];
@@ -66,7 +79,7 @@ beforeAll(async () => {
   ({ UI } = await import('../src/ui/UI.js'));
   ({ Game } = await import('../src/game/Game.js'));
   ({ Tutorial } = await import('../src/ui/tutorial.js'));
-  ({ t } = await import('../src/i18n.js'));
+  ({ t, setLang } = await import('../src/i18n.js'));
 }, 60000); // (UI.js et Game.js tirent beaucoup de modules : lent quand toute la suite tourne)
 afterAll(() => {
   for (const [k, v] of Object.entries(saved)) globalThis[k] = v;
@@ -100,8 +113,7 @@ function fakeUi(a, w, { paused = false } = {}) {
     saddleWithGame: (x, ride) => calls.push(['saddle', ride]),
     openAnimalActions: (x) => calls.push(['menu', x.name]),
   };
-  ui.doWish = UI.prototype.doWish.bind(ui);
-  ui.tapWish = UI.prototype.tapWish.bind(ui);
+  for (const k of ['doWish', 'tapWish', 'busyForWish']) ui[k] = UI.prototype[k].bind(ui);
   return { ui, g, e, p, calls };
 }
 
@@ -131,7 +143,7 @@ describe('ce qu\'il demande, en un geste (UI.doWish)', () => {
     expect(calls).toEqual([['closePanel'], ['ride', 'Pomme']]);
   });
 
-  it('🏇 en selle sur un autre cheval : on en descend d\'abord (il ne reste pas « monté » pour toujours)', () => {
+  it('🏇 en selle sur un autre cheval : on y reste pendant qu\'on selle (✕ ne change rien) ; Game.ride fait changer de cheval', () => {
     const a = horse();
     const { ui, g, p, calls } = fakeUi(a, wish('work'));
     starterTack(p, a);
@@ -139,12 +151,28 @@ describe('ce qu\'il demande, en un geste (UI.doWish)', () => {
     other.name = 'Caramel';
     g.player.mount = { data: other };
     ui.doWish(a);
-    expect(calls).toEqual([['closePanel'], ['dismount', 'Caramel'], ['saddle', true]]);
+    expect(calls).toEqual([['closePanel'], ['saddle', true]]);
+    expect(g.player.mount.data).toBe(other);
     calls.length = 0;
     a.gear.saddle = { item: 'saddle' };
-    g.player.mount = { data: other };
     ui.doWish(a);
-    expect(calls).toEqual([['closePanel'], ['dismount', 'Caramel'], ['ride', 'Pomme']]);
+    expect(calls).toEqual([['closePanel'], ['ride', 'Pomme']]);
+  });
+
+  it('pendant une activité (un cheval qui te suit en balade) ou un voyage : sa bulle touchée ne fait rien', () => {
+    const a = horse();
+    const { ui, g, calls } = fakeUi(a, wish('work'));
+    g.activities = { active: { type: 'trail' } };
+    ui.tapWish(a.id);
+    ui.doWish(a);
+    expect(calls).toEqual([]);
+    g.activities.active = null;
+    g.tripFlow = { active: true };
+    ui.tapWish(a.id);
+    expect(calls).toEqual([]);
+    g.tripFlow.active = false;
+    ui.tapWish(a.id);
+    expect(calls.map((c) => c[0])).toEqual(['walkTo']);
   });
 
   it('🧰 : desseller ; plus de bulle (il a bu seul en chemin) : son menu ; en pause : rien', () => {
@@ -189,8 +217,12 @@ describe('le bouton vert près de lui (UI.setFocus, Game.interact)', () => {
     expect(btn.textContent).toBe(`🌾 ${t('wish_btn_hay', { name: 'Pomme' })}E`);
     expect(btn.textContent).toContain('Pomme a faim');
     e.wish = wish('untack');
+    a.gear = { saddle: { item: 'saddle' }, bridle: { item: 'bridle' } };
     UI.prototype.setFocus.call(ui, { kind: 'animal', entity: e });
     expect(btn.textContent).toContain('🧰 Desselle Pomme');
+    delete a.gear.saddle; // (monté à cru : seulement son filet, comme « 🧰 Débrider » dans son menu)
+    UI.prototype.setFocus.call(ui, { kind: 'animal', entity: e });
+    expect(btn.textContent).toContain('🧰 Débride Pomme');
     e.wish = null;
     UI.prototype.setFocus.call(ui, { kind: 'animal', entity: e });
     expect(btn.textContent).toContain(t('interact', { name: 'Pomme' }));
@@ -229,7 +261,7 @@ describe('sa bulle se touche (UI.updateLabels)', () => {
       wishEls: new Map(),
       dodgeStatus() {},
     };
-    for (const k of ['updateLabels', 'wishHit', 'tapWish', 'clearLabels', 'doWish']) ui[k] = UI.prototype[k].bind(ui);
+    for (const k of ['updateLabels', 'wishHit', 'tapWish', 'clearLabels', 'doWish', 'busyForWish']) ui[k] = UI.prototype[k].bind(ui);
     return { a, e, ui };
   };
   const hits = (ui) => ui.labels.children.filter((x) => x.classList.contains('wish-hit'));
@@ -281,6 +313,137 @@ describe('sa bulle se touche (UI.updateLabels)', () => {
   });
 });
 
+describe('seller un autre cheval, en selle sur le premier (UI.saddleWithGame)', () => {
+  it('on reste sur le premier pendant le mini-jeu ; ✕ : rien ne change ; réussi : Game.ride fait changer de cheval', async () => {
+    const a = horse();
+    const calls = [];
+    const p = createProfile('Lou');
+    p.animals.push(a);
+    starterTack(p, a);
+    const other = { data: { name: 'Caramel' } };
+    const g = {
+      profile: p, isHome: true, player: { mount: other },
+      blockedByPause: () => false,
+      dismount: () => calls.push(['dismount']),
+      saddle: (x) => { calls.push(['saddle', x.name]); x.gear.saddle = { item: 'saddle' }; return { ok: true }; },
+      bridle: (x) => { calls.push(['bridle', x.name]); x.gear.bridle = { item: 'bridle' }; return { ok: true }; },
+      ride: (x) => calls.push(['ride', x.name]),
+    };
+    const ui = { game: g };
+    Object.assign(mg, { result: null, out: null, played: [] });
+    expect(await UI.prototype.saddleWithGame.call(ui, a, true)).toBeNull();
+    expect(mg.played).toEqual(['saddle']);
+    expect(calls).toEqual([]);
+    expect(g.player.mount).toBe(other);
+    mg.result = 1;
+    await UI.prototype.saddleWithGame.call(ui, a, true);
+    const kinds = calls.map((c) => c[0]);
+    expect(kinds[0]).toBe('saddle');
+    expect(kinds.at(-1)).toBe('ride');
+    expect(kinds).not.toContain('dismount');
+  });
+});
+
+describe('changer de cheval en selle (Game.ride) ; 🧰 pas pour une selle toute neuve (a.freshTack)', () => {
+  const rideGame = () => {
+    const p = createProfile('Lou');
+    const a = horse();
+    const b = createAnimal({ species: 'horse', breed: 'selle_francais', sex: 'm', ageDays: 2000, rng: seeded('caramel') });
+    b.name = 'Caramel';
+    p.animals.push(a, b);
+    starterTack(p, a);
+    starterTack(p, b);
+    const calls = [];
+    const ent = (x) => ({ data: x, applyGear() {}, stopRoll() {}, emit() {} });
+    const g = Object.create(Game.prototype);
+    Object.assign(g, {
+      profile: p, entities: new Map([[a.id, ent(a)], [b.id, ent(b)]]), // (isHome, day, hour : lus dans le profil)
+      player: { mount: null, session: null },
+      ui: { toast: (m) => calls.push(['toast', m]), updateGaitPad() {} },
+      dismount(o) { calls.push(['dismount', this.player.mount.data.name, o]); this.player.mount = null; },
+      mountRider(e) { calls.push(['mount', e.data.name]); this.player.mount = e; },
+      markHorseDay() {}, remember() {}, bondNews() {}, simWeather: () => 'clear', xp() {}, save() {},
+    });
+    g.player.mount = g.entities.get(a.id);
+    return { g, a, b, p, calls };
+  };
+
+  it('en selle sur Pomme, monter Caramel : on descend sans la carte (on ne la verrait pas), puis on monte', () => {
+    const { g, b, calls } = rideGame();
+    Game.prototype.ride.call(g, b);
+    const steps = calls.filter((c) => c[0] !== 'toast');
+    expect(steps).toEqual([['dismount', 'Pomme', { card: false }], ['mount', 'Caramel']]);
+    expect(g.player.mount.data).toBe(b);
+  });
+
+  it('Caramel ne peut pas être monté : on reste sur Pomme', () => {
+    const { g, a, b, calls } = rideGame();
+    b.lame = { cause: 'stone', foot: 0 };
+    Game.prototype.ride.call(g, b);
+    expect(calls.filter((c) => c[0] !== 'toast')).toEqual([]);
+    expect(g.player.mount.data).toBe(a);
+  });
+
+  it('sellé et bridé (Game.saddle, Game.bridle) : la selle est neuve ; monté avec (Game.ride) ou dessellé : plus', () => {
+    const { g, b } = rideGame();
+    g.player.mount = null;
+    expect(Game.prototype.saddle.call(g, b)).toBeTruthy();
+    expect(b.freshTack).toBe(true);
+    delete b.freshTack;
+    expect(Game.prototype.bridle.call(g, b)).toBeTruthy();
+    expect(b.freshTack).toBe(true);
+    Game.prototype.ride.call(g, b);
+    expect(g.player.mount.data).toBe(b);
+    expect(b.freshTack).toBeUndefined();
+    g.player.mount = null;
+    b.freshTack = true;
+    expect(Game.prototype.unsaddle.call(g, b)).toBe(true);
+    expect(b.freshTack).toBeUndefined();
+    // (longé avec sa selle : elle a servi aussi)
+    b.freshTack = true;
+    Game.prototype.markHorseDay.call(g, b, 'lunge');
+    expect(b.freshTack).toBeUndefined();
+  });
+});
+
+describe('🧦 le conseil des chaussettes de boue, après le pansage (UI.careWithGame)', () => {
+  const careUi = () => {
+    const p = createProfile('Lou');
+    const cared = [];
+    const toasts = [];
+    const g = { profile: p, blockedByPause: () => false, canCare: () => ({ ok: true }), care: (x, act, q) => { cared.push([act, q]); return true; } };
+    return { p, cared, toasts, ui: { game: g, toast: (m, ms) => toasts.push([m, ms]) } };
+  };
+
+  it('ses jambes brossées : un message de 9 s après le mini-jeu, une seule fois', async () => {
+    const a = horse();
+    const { p, cared, toasts, ui } = careUi();
+    Object.assign(mg, { result: 0.9, out: { legMudTip: true }, played: [] });
+    expect(await UI.prototype.careWithGame.call(ui, a, 'brush')).toBe(true);
+    expect(mg.opts.legMudTip).toBe(true);
+    expect(cared).toEqual([['brush', 0.9]]);
+    expect(toasts).toEqual([[`🧦 ${t('mg_pansage_legmud_tip')}`, 9000]]);
+    expect(p.legMudTip).toBe(true);
+    // déjà lu : le mini-jeu ne le note plus
+    mg.out = { hooves: { cleaned: 1 } };
+    await UI.prototype.careWithGame.call(ui, a, 'brush');
+    expect(mg.opts.legMudTip).toBe(false);
+    expect(toasts).toHaveLength(1);
+    mg.out = null;
+  });
+
+  it('fermé avec ✕ après ses jambes : le conseil quand même, rien d\'appliqué', async () => {
+    const a = horse();
+    const { p, cared, toasts, ui } = careUi();
+    Object.assign(mg, { result: null, out: { legMudTip: true }, played: [] });
+    expect(await UI.prototype.careWithGame.call(ui, a, 'brush')).toBeNull();
+    expect(cared).toEqual([]);
+    expect(toasts).toHaveLength(1);
+    expect(p.legMudTip).toBe(true);
+    Object.assign(mg, { result: 1, out: null });
+  });
+});
+
 describe('le guide des quêtes près de lui (Tutorial.resolveAnimal)', () => {
   const make = (w) => {
     const a = horse();
@@ -304,6 +467,39 @@ describe('le guide des quêtes près de lui (Tutorial.resolveAnimal)', () => {
     expect(at({ type: 'animal' }, false)).toBe('label'); // (« touche ton cheval » : son menu)
     e.wish = null;
     expect(at({ type: 'animal' }, false)).toBe('action'); // (sans bulle : comme avant)
+  });
+});
+
+describe('les quêtes disent aussi 🌾 Nourrir pour un cheval (Tutorial.stepLabel, hintText)', () => {
+  it('« Touche 🌾 Nourrir » pour son cheval, 🍖 pour un chien, rien quand on ne sait pas lequel ; jamais « {icon} »', async () => {
+    const { hintText } = await import('../src/ui/quests.js');
+    const { FOLLOW_STEPS, QUEST_ORDER } = await import('../src/sim/tutorial.js');
+    const a = horse();
+    const dog = createAnimal({ species: 'dog', sex: 'm', ageDays: 900, rng: seeded('rex') });
+    const p = createProfile('Lou');
+    p.animals.push(a, dog);
+    const label = (x, id) => Tutorial.prototype.stepLabel.call({ animal: () => x }, id);
+    setLang('fr');
+    expect(label(a, 'do_feed')).toBe('Touche 🌾 Nourrir');
+    expect(label(dog, 'do_feed')).toBe('Touche 🍖 Nourrir');
+    expect(label(null, 'do_feed')).toBe('Touche Nourrir');
+    expect(label(dog, 'horse_feed')).toBe('Touche 🌾 Nourrir'); // (l'histoire de ton cheval)
+    expect(hintText(p, 'horseFeed3')).toContain('🌾 Nourrir');
+    expect(hintText(p, 'feed5')).toBe('Touche ton animal, puis Nourrir.'); // (le journal : n'importe quel animal)
+    expect(hintText(p, 'feed5', dog)).toBe('Touche ton animal, puis 🍖 Nourrir.');
+    for (const lang of ['fr', 'en']) {
+      setLang(lang);
+      for (const x of [a, dog, null]) {
+        for (const id of Object.keys(FOLLOW_STEPS)) {
+          expect(label(x, id), `${lang} ${id}`).not.toMatch(/\{icon\}/);
+          if (x === a) expect(label(x, id), `${lang} ${id}`).not.toContain('🍖'); // (pas de 🍖 pour son cheval)
+        }
+      }
+      for (const id of QUEST_ORDER) expect(hintText(p, id), `${lang} ${id}`).not.toMatch(/\{icon\}/);
+      expect(t('quest_step_horse_feed')).toContain('🌾');
+      expect(t('quest_hint_horseFeed3')).toContain('🌾');
+    }
+    setLang('fr');
   });
 });
 

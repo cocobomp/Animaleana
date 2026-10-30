@@ -38,11 +38,20 @@ export function shortBlockText(p, id) {
   const s = t(key, b.params);
   return s === key ? cap(t(b.key, b.params)) : s;
 }
-/** Comment faire la quête : l'aide du suivi (sans animal ou sans cheval, d'abord le refuge). */
-export function hintText(p, id) {
+/**
+ * Le bouton Nourrir de cet animal, pour les textes de quête « Touche {icon}Nourrir » : « 🌾 » pour un cheval, « 🍖 »
+ * pour les autres (comme son menu, src/ui/actions.js), suivi d'une espace ; rien quand on ne sait pas encore lequel.
+ */
+export const feedIcon = (a) => (a ? `${a.species === 'horse' ? '🌾' : '🍖'} ` : '');
+
+/**
+ * Comment faire la quête : l'aide du suivi (sans animal ou sans cheval, d'abord le refuge). a : l'animal dont on parle,
+ * s'il est connu (le bouton Nourrir de « Nourris 5 fois » : feedIcon).
+ */
+export function hintText(p, id, a = null) {
   const g = questGuide(id, p);
   if (!g) return '';
-  return t(g.first ? `quest_hint_first_${g.first}` : `quest_hint_${id}`);
+  return t(g.first ? `quest_hint_first_${g.first}` : `quest_hint_${id}`, { icon: feedIcon(a) });
 }
 
 // Parties ouvertes du journal (les thèmes des autres quêtes, les terminées) : le temps de la partie.

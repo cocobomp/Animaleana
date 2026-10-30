@@ -1,23 +1,28 @@
 // 🏇 « Ta balade » : la petite carte qui monte en descendant de cheval (src/sim/rideLog.js rideReport). Le temps et la
 // distance, la barre des allures (🐢 🐴 💨, comme les boutons), ce qui s'est passé, les tampons de la détente et du
 // retour au calme, l'étoile qui approche, le record, ce qui manque à sa journée. Une seule à la fois ; elle se ferme
-// d'un toucher, ou toute seule après 8 s (CSS : cachée en selle, sous une fenêtre, pendant une activité).
+// d'un toucher, ou toute seule après 12 s vue à l'écran (CSS : cachée en selle, sous une fenêtre, pendant une activité ;
+// ce temps-là ne compte pas, ni sous un mini-jeu : l'enfant la retrouve en entier).
 
 import { h } from './dom.js';
 import { t, getLang } from '../i18n.js';
 import { fmtDist } from '../sim/rideLog.js';
 
-const SHOW_MS = 8000;
+const SHOW_MS = 12000; // (vue à l'écran : jusqu'à douze lignes à lire)
+const TICK_MS = 250;
 const GAITS = [['walk', '🐢'], ['trot', '🐴'], ['canter', '💨']];
 const ICON_MIN = 0.12; // (une part plus petite : la couleur seule, l'icône n'y tient pas)
 let card = null; // (la carte affichée : { el, timer })
 
-/** Ferme la carte affichée (d'un toucher, après 8 s, ou quand une autre arrive). */
+/** Se voit-elle ? Pas cachée par le CSS (display: none : getClientRects vide), ni sous un mini-jeu, ni l'onglet caché. */
+const seen = (el) => !document.hidden && el.getClientRects().length > 0 && !document.querySelector('.mg-overlay');
+
+/** Ferme la carte affichée (d'un toucher, après 12 s vue, ou quand une autre arrive). */
 export function closeRideCard() {
   if (!card) return;
   const { el, timer } = card;
   card = null;
-  clearTimeout(timer);
+  clearInterval(timer);
   el.classList.add('out');
   setTimeout(() => el.remove(), 300);
 }
@@ -54,6 +59,11 @@ export function showRideCard(ui, rep, a) {
   el.getBoundingClientRect();
   GAITS.forEach(([k], i) => { segs[i].style.width = `${Math.round(rep.share[k] * 100)}%`; });
   if (fill) fill.style.width = `${Math.round(s.fill * 100)}%`;
-  card = { el, timer: setTimeout(closeRideCard, SHOW_MS) };
+  // (le temps ne compte que quand elle se voit)
+  let left = SHOW_MS;
+  card = { el, timer: setInterval(() => {
+    if (seen(el)) left -= TICK_MS;
+    if (left <= 0) closeRideCard();
+  }, TICK_MS) };
   return el;
 }

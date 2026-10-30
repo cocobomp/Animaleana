@@ -332,12 +332,13 @@ describe('🧦 ses chaussettes de boue (src/sim/legMud.js)', () => {
     expect(toBrush(muddy(0.15)).game.peek().dust.some((q) => q.leg)).toBe(false);
   });
 
-  it('le conseil, une fois : ses jambes propres, la brosse dit pourquoi on laisse sécher', () => {
+  it('le conseil, une fois : ses jambes propres, il est noté pour après le pansage (pas dans la ligne d\'aide)', () => {
     const opts = { legMudTip: true };
     const { ctx, game } = toBrush(muddy(), opts);
     brushLegs(game);
-    expect(ctx.hints.some((h) => h.text === t('mg_pansage_legmud_tip'))).toBe(true);
     expect(opts.out.legMudTip).toBe(true);
+    // (UI.careWithGame le dit en message après le mini-jeu : la ligne d'aide, trop occupée, l'effaçait en 4 s)
+    expect(ctx.hints.some((h) => h.text === t('mg_pansage_legmud_tip'))).toBe(false);
     // (le pansage fini garde la note, avec les pieds curés)
     brushAll(game);
     nextStage(game, ctx);
@@ -351,10 +352,10 @@ describe('🧦 ses chaussettes de boue (src/sim/legMud.js)', () => {
     // déjà lu : plus de conseil
     const seen = toBrush(muddy(), {});
     brushLegs(seen.game);
-    expect(seen.ctx.hints.some((h) => h.text === t('mg_pansage_legmud_tip'))).toBe(false);
+    expect(seen.ctx.opts.out?.legMudTip).toBeUndefined();
   });
 
-  it('le conseil n\'est pas effacé par « Parfait ! » quand ses jambes propres font entrer la jauge dans le vert', () => {
+  it('ses jambes propres font entrer la jauge dans le vert : « Parfait ! Appuie sur ✅ » tout de suite', () => {
     const opts = { legMudTip: true };
     const { ctx, game } = toBrush(muddy(), opts);
     // Le corps presque propre : il reste un peu moins de 0,5 de poussière sur une tache (le vert commence à 0,5).
@@ -373,11 +374,23 @@ describe('🧦 ses chaussettes de boue (src/sim/legMud.js)', () => {
     const p = game.peek();
     expect(p.dust.some((q) => q.leg)).toBe(false);
     expect(p.value).toBeGreaterThanOrEqual(p.lo); // (le même coup de brosse : jambes propres et zone verte)
-    expect(ctx.hints.at(-1)).toEqual({ text: t('mg_pansage_legmud_tip'), kind: 'good' });
+    expect(ctx.hints.at(-1)).toEqual({ text: t('mg_pressStop'), kind: 'good' });
     expect(opts.out.legMudTip).toBe(true);
-    // lu : on redit ✅
-    tick(game, ctx, 4.5);
-    expect(ctx.hints.at(-1).text).toBe(t('mg_pressStop'));
+  });
+
+  it('la boue de ses jambes : foncée encore mouillée, claire et poussiéreuse sèche (comme en 3D)', () => {
+    const colorAt = (wet) => toBrush(Object.assign(muddy(), { legMudWet: wet })).game.peek().dust.find((q) => q.leg).color;
+    const rgb = (c) => c.match(/\d+/g).map(Number);
+    const lum = (c) => rgb(c).reduce((n, v) => n + v, 0);
+    const soaked = colorAt(1);
+    const half = colorAt(0.5); // (au pré boueux à la saison des pluies, sans pluie : humide)
+    const dry = colorAt(0); // (rentré au box : elle a séché)
+    expect(soaked).toBe(pansage.legMudColor(1));
+    expect(dry).toBe(pansage.legMudColor(0));
+    expect(lum(soaked)).toBeLessThan(lum(half));
+    expect(lum(half)).toBeLessThan(lum(dry));
+    expect(lum(dry) - lum(soaked)).toBeGreaterThan(150);
+    expect(toBrush(muddy()).game.peek().dust.find((q) => q.leg).color).toBe(dry); // (un ancien cheval sans legMudWet)
   });
 
   it('ses textes existent en français et en anglais', async () => {

@@ -2,11 +2,11 @@
 // ensemble : le temps et la distance, la part de pas, de trot et de galop, ce qui s'est passé (troncs, cross, fer
 // porte-bonheur, citrouilles, trot enlevé), les tampons de la détente et du retour au calme, l'étoile qui approche, sa
 // plus longue balade et ce qui manque à sa journée. Logique pure (tests/rideLog.test.js) ; le jeu : src/game/Game.js
-// (ride, frame, dismount), la carte : src/ui/rideCard.js.
+// (ride, tickRide, dismount), la carte : src/ui/rideCard.js.
 //
-// Le carnet de balade (dans le jeu, pas sauvegardé) : { t (s en mouvement), dist (m), gaits { walk, trot, canter } (s),
-// skills, stats (au départ), preWarm (déjà chaud en montant), skip (une activité ou un voyage l'a mené), x, z (où il
-// était à l'image d'avant) }.
+// Le carnet de balade (dans le jeu, pas sauvegardé ; seulement en balade libre : pendant une activité ou un voyage, le
+// jeu n'en tient pas, Game.tickRide) : { t (s en mouvement), dist (m), gaits { walk, trot, canter } (s), skills, stats
+// (au départ), preWarm (déjà chaud en montant), x, z (où il était à l'image d'avant) }.
 // Dans le cheval (sauvegardé) : a.rideBest, sa plus longue balade (en mètres).
 
 import { keepsMemories } from './memories.js'; // (tes chevaux : pas ceux qu'on te confie)
@@ -31,7 +31,7 @@ export function newRideLog(a, stats = {}, session = null) {
   if (!keepsMemories(a)) return null;
   const s = {};
   for (const [k] of EVENTS) s[k] = stats?.[k] ?? 0;
-  return { t: 0, dist: 0, gaits: { walk: 0, trot: 0, canter: 0 }, skills: { ...a.skills }, stats: s, preWarm: !!session?.warm, skip: false, x: null, z: null };
+  return { t: 0, dist: 0, gaits: { walk: 0, trot: 0, canter: 0 }, skills: { ...a.skills }, stats: s, preWarm: !!session?.warm, x: null, z: null };
 }
 
 /**
@@ -60,13 +60,13 @@ export function dayLeft(a, day, hour) {
 }
 
 /**
- * La carte, en descendant : { show } (false : une balade trop courte, ou menée par une activité), puis min, dist,
+ * La carte, en descendant : { show } (false : une balade trop courte), puis min, dist,
  * share { walk, trot, canter } (parts du temps), lines [{ key, n }] (3 au plus), stamps { warm, cool (le verdict de
  * dismountVerdict), pro }, star ({ id, icon, toNext, next, fill } ou null), best (et a.rideBest noté), left (icônes ou
  * null), perfect, unsaddle. Le premier record est noté sans rien dire (rien à battre).
  */
 export function rideReport(log, { a, stats = {}, session = null, postBest = 0, verdict = null, left = null, worked = false, saddled = false } = {}) {
-  if (!log || log.skip || log.t < RIDE_LOG.minTime || !a) return { show: false };
+  if (!log || log.t < RIDE_LOG.minTime || !a) return { show: false };
   const total = GAITS.reduce((s, k) => s + log.gaits[k], 0);
   const share = {};
   for (const k of GAITS) share[k] = total > 0 ? log.gaits[k] / total : 0;

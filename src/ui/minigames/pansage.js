@@ -53,12 +53,12 @@ export function pansageGame(ctx) {
     .map((q) => ({ x: q.x, y: q.y, r: q.r, seed: q.seed, mud: 1, dust: 0 }));
   // ---- 2. brosse : la poussière décollée, plus un peu de poussière partout (posée au début de l'étape)
   let dust = [];
-  // (🧦 ses chaussettes de boue : une tache sur chaque jambe, à brosser de haut en bas ; le conseil, une fois —
-  // ctx.opts.legMudTip, src/ui/UI.js careWithGame)
+  // (🧦 ses chaussettes de boue : une tache sur chaque jambe, à brosser de haut en bas, foncée si elle est encore
+  // mouillée, claire et poussiéreuse sèche, comme sur ses jambes en 3D ; ses jambes propres, le conseil, une fois :
+  // ctx.opts.legMudTip, dit après le pansage par src/ui/UI.js careWithGame, pas dans la ligne d'aide, trop occupée)
   const legMud = (a?.legMud ?? 0) > LEG_MUD.patchesAt;
+  const legWet = clamp(a?.legMudWet ?? 0);
   let legs = [];
-  let tipUntil = -1; // (le conseil reste lu quelques secondes)
-  let tipNow = false; // (dit après la jauge : son « Parfait ! » ne l'efface pas)
   // ---- 3. cure-pied (il boite : le caillou est dans le pied qui boite — src/sim/animal.js HOOF)
   const lame = a?.lame?.cause === 'stone';
   const r0 = rng();
@@ -140,7 +140,7 @@ export function pansageGame(ctx) {
         // (sur le canon, sous le genou : les quatre jambes de bony)
         const y = lerp(sh.L(0, sh.ry).y, floorY, 0.68);
         legs = [sh.rx * 0.58, sh.rx * 0.58 - 10 * s, -sh.rx * 0.58, -sh.rx * 0.58 + 8 * s]
-          .map((lx) => ({ x: sh.L(lx, sh.ry * 0.35).x, y, r: 11 * Math.max(0.8, s), seed: rng() * 10, dust: 1, leg: true }));
+          .map((lx) => ({ x: sh.L(lx, sh.ry * 0.35).x, y, r: 11 * Math.max(0.8, s), seed: rng() * 10, dust: 1, leg: true, wet: legWet }));
         dust.push(...legs);
       }
     }
@@ -213,10 +213,6 @@ export function pansageGame(ctx) {
     lastDir = dir;
     if (st === 'hoof') ctx.progress(value() / MAX);
     else rule.show(value());
-    if (tipNow) {
-      tipNow = false;
-      ctx.hint(t('mg_pansage_legmud_tip'), 'good');
-    }
     if (value() >= MAX) endStage();
   }
 
@@ -304,10 +300,8 @@ export function pansageGame(ctx) {
       if (q.dust <= 0.15) {
         q.dust = 0;
         fx.burst(q.x, q.y, '✨', 3, { speed: 80, size: 16 });
-        // 🧦 Ses jambes sont propres : le conseil, la première fois.
-        if (q.leg && ctx.opts?.legMudTip && tipUntil < 0 && legs.every((o) => o.dust <= 0)) {
-          tipUntil = ctx.time + 4;
-          tipNow = true;
+        // 🧦 Ses jambes sont propres : le conseil, la première fois (dit après le pansage, UI.careWithGame).
+        if (q.leg && ctx.opts?.legMudTip && !ctx.opts.out?.legMudTip && legs.every((o) => o.dust <= 0)) {
           ctx.opts.out = { ...(ctx.opts.out ?? {}), legMudTip: true };
         }
       }
@@ -316,7 +310,7 @@ export function pansageGame(ctx) {
       grace = 2 * sh.rx;
       if (good) goodLen += seg.d;
       else badLen += seg.d;
-      if (rule.state() === 'low' && ctx.time >= tipUntil) {
+      if (rule.state() === 'low') {
         if (badLen > 260 && badLen > goodLen) ctx.hint(t(onLeg ? 'mg_pansage_legmud' : 'mg_brush_dir'), 'warn');
         else if (good && goodLen > 120) ctx.hint(t('mg_brush_good'), 'good');
       }
@@ -425,7 +419,7 @@ export function pansageGame(ctx) {
       stage: stage(), si, value: value(), lo: rule.lo, hi: rule.hi, max: MAX, over, pause,
       results: results.map((r) => ({ ...r })),
       mud: mud.filter((q) => q.mud > 0).map(({ x, y, r, mud: m }) => ({ x, y, r, mud: m })),
-      dust: dust.filter((q) => q.dust > 0).map(({ x, y, r, dust: m, leg }) => ({ x, y, r, dust: m, leg: !!leg })),
+      dust: dust.filter((q) => q.dust > 0).map(({ x, y, r, dust: m, leg, wet }) => ({ x, y, r, dust: m, leg: !!leg, ...(leg ? { color: legMudColor(wet) } : {}) })),
       foot: PANSAGE_FEET[foot] ?? null, footIndex: foot, footReady: ctx.time - footAt >= 0.35 && footDoneAt < 0,
       blobs: (hooves[foot]?.blobs ?? []).filter((q) => q.dirt > 0).map(({ x, y, r, dirt: m, stone }) => ({ x, y, r, dirt: m, stone: !!stone })),
       frog: { x: HX, y: HY - 20 },
@@ -447,11 +441,6 @@ export function pansageGame(ctx) {
           startStage(si + 1);
         }
         return;
-      }
-      // 🧦 Le conseil lu : dans la zone verte, on redit ✅.
-      if (tipUntil > 0 && ctx.time >= tipUntil) {
-        tipUntil = 0;
-        if (stage() === 'brush' && rule.state() === 'just') ctx.hint(t('mg_pressStop'), 'good');
       }
       // Pied propre : on passe au suivant, puis à l'étape suivante après le dernier.
       if (stage() === 'hoof' && footDoneAt >= 0 && ctx.time - footDoneAt > 0.7 && !ctx.done) {
@@ -665,11 +654,22 @@ function drawMud(g, q) {
   g.restore();
 }
 
+/**
+ * 🧦 La couleur de la boue d'une jambe (wet : 0 sèche → 1 mouillée, a.legMudWet de src/sim/legMud.js) : brun foncé
+ * mouillée, brun clair poussiéreux sèche, comme sur ses jambes en 3D (src/game/models/horseCoat.js, hLegWet).
+ */
+export function legMudColor(wet = 0) {
+  const k = clamp(wet);
+  const dry = [170, 139, 101]; // (les bruns du modèle 3D, en sRGB)
+  const soaked = [97, 70, 41];
+  return `rgb(${dry.map((c, i) => Math.round(lerp(c, soaked[i], k))).join(', ')})`;
+}
+
 function drawDust(g, q) {
   g.save();
   g.globalAlpha = 0.25 + 0.6 * q.dust;
-  // (🧦 la boue d'une jambe : plus foncée, en long sur la jambe)
-  g.fillStyle = q.leg ? '#6b4a2b' : '#a88a63';
+  // (🧦 la boue d'une jambe : en long sur la jambe, foncée mouillée, claire sèche)
+  g.fillStyle = q.leg ? legMudColor(q.wet) : '#a88a63';
   if (q.leg) ellipse(g, q.x, q.y, q.r * 0.75, q.r * 1.1);
   else ellipse(g, q.x, q.y, q.r, q.r * 0.75, q.seed);
   g.fill();

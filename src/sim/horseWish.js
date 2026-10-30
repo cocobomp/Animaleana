@@ -3,7 +3,8 @@
 // pansage, 🏇 le travail (de 8 h à 19 h, s'il peut être monté), 🌾 le foin du soir (dès 14 h, comme dans sa journée, mais
 // après le travail : sa ration du soir dépend de sa journée), ❤️ un câlin. Tout est fait : plus de bulle (« Journée
 // parfaite »). Rien la nuit, ni pour un cheval confié ; malade, boiteux ou endormi, son 🤒, son 🩹 ou son 💤 passent avant.
-// Après le travail, encore sellé ou bridé : 🧰 d'abord (même s'il a faim : on le desselle avant de le nourrir).
+// Après le travail, encore sellé ou bridé : 🧰 d'abord (même s'il a faim : on le desselle avant de le nourrir) ; pas
+// pour une selle qu'on vient de lui mettre et qui n'a pas encore servi (a.freshTack : src/game/Game.js saddle, ride).
 // Toucher la bulle (ou E près de lui) fait ce qu'il demande : WISH_ACTION, src/ui/UI.js (doWish).
 // Logique pure (tests/horseWish.test.js) : il lit sa journée (src/sim/horseDay.js) sans rien cocher. La bulle :
 // src/game/wishBubble.js, src/game/AnimalEntity.js (update, updateStatus).
@@ -42,7 +43,8 @@ export function wishOf(a, { day, hour, sleeping = false } = {}) {
   if (!keepsMemories(a) || a.sick || a.lame || sleeping) return null;
   if (hour < WISH.nightTo || hour >= WISH.nightFrom) return null; // (la nuit, il se repose)
   const done = doneToday(a, day);
-  if (done.includes('work') && (a.gear?.saddle || a.gear?.bridle)) return BY_TASK.untack; // (descendu : 🧰 d'abord)
+  // (descendu : 🧰 d'abord ; sellé à nouveau pour plus tard, pas encore monté : non)
+  if (done.includes('work') && !a.freshTack && (a.gear?.saddle || a.gear?.bridle)) return BY_TASK.untack;
   const n = a.needs ?? {};
   if ((n.hunger ?? 100) < WISH.hungry) return BY_TASK.hunger;
   if (hour < MORNING && asks(a, done, 'feedAm', 'feed')) return BY_TASK.feedAm;

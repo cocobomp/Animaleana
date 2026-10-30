@@ -154,16 +154,16 @@ faim, ou le foin du matin manque avant 14 h), 💧, 🪮, 🏇 (de 8 h à 19 h, 
 (dès 14 h, après le travail : sa ration en dépend), puis ❤️. Le soin fait, la bulle éclate en ✨ et la suivante vient
 une seconde après ; tout fait, plus de bulle.
 Malade, boiteux ou endormi, son 🤒, son 🩹 ou son 💤 passent avant ; triste, il montre sa bulle plutôt que 😢 (c'est
-comme ça qu'on le console). Pas la nuit (21 h-6 h), ni sur son dos, ni pendant une activité, ni pour un cheval confié,
+comme ça qu'on le console). Pas la nuit (21 h-6 h), ni sur son dos, ni pendant une activité ou un voyage, ni pour un cheval confié,
 ni pendant le tutoriel. À l'écurie, chacun montre la sienne. Son nom ou sa bulle sous une pastille d'état (« 🧭 Des
 visiteurs t'attendent »…) ou sous le suivi de quête : ils pâlissent et laissent le doigt toucher le nom à travers.
 « Sa bulle, son bouton » : toucher la bulle te fait marcher jusqu'à lui, puis fait ce qu'il demande : le mini-jeu du
 soin (🌾 la ration, 💧, 🪮 le pansage, ❤️), 🏇 « Seller et monter » (ou monter, s'il est déjà sellé), ou 🧰 desseller.
 Près de lui, le bouton vert le dit (« 🌾 Pomme a faim », « 💧 Pomme a soif », « 🪮 Panse Pomme », « 🏇 Monte Pomme »,
-« ❤️ Un câlin pour Pomme ») et E le fait ; dans son menu, ce qu'il demande vient en premier, cerclé d'or. Son nom
+« ❤️ Un câlin pour Pomme », « 🧰 Desselle Pomme », ou « Débride Pomme » s'il n'a que son filet) et E le fait ; dans son menu, ce qu'il demande vient en premier, cerclé d'or. Son nom
 ouvre toujours son menu : une quête qui veut autre chose (« caresse-le » quand il a faim) le montre du doigt, pas le
-bouton vert. Nourrir un cheval, c'est 🌾 (son menu, sa fiche, le tutoriel). Après le travail, descendu encore sellé ou bridé : 🧰 avant le reste
-(même s'il a faim : on le desselle avant de le nourrir) ; un toucher range la selle et le filet à la sellerie, ✨, puis
+bouton vert. Nourrir un cheval, c'est 🌾 (son menu, sa fiche, le tutoriel, les quêtes). Après le travail, descendu encore sellé ou bridé : 🧰 avant le reste
+(même s'il a faim : on le desselle avant de le nourrir ; pas pour une selle qu'on vient de lui remettre et qui n'a pas encore servi) ; un toucher range la selle et le filet à la sellerie, ✨, puis
 la suite. En sueur, il se panse même tout propre.
 
 ### Le défi du jour (0.5, `src/sim/horseChallenge.js`)
@@ -201,9 +201,9 @@ Sous la pluie, dehors et sans couverture imperméable, il est mouillé de la mê
 en Normandie, tout sauf l'été), ou partout quand il pleut, la boue monte sur ses jambes
 jusqu'aux genoux en deux heures de jeu environ : foncée mouillée, claire et poussiéreuse en séchant (elle tombe peu à
 peu au sec). Au box, il reste propre. Sur un gris ou un blanc, ça se voit le plus, comme en vrai. Au pansage, la brosse
-trouve quatre taches sur ses jambes ; sa consigne ajoute « 🧦 Ses jambes : de haut en bas ↓. » (le poil des
+trouve quatre taches sur ses jambes (foncées mouillées, claires sèches, comme en 3D) ; sa consigne ajoute « 🧦 Ses jambes : de haut en bas ↓. » (le poil des
 jambes pousse vers le bas ; l'étrille sur les jambes fait toujours mal). Ses jambes propres, la première fois, un
-conseil : « En hiver, on laisse sécher la boue, puis on brosse. Mouiller ses jambes tous les jours abîme sa peau. »
+conseil en message après le pansage (9 s) : « 🧦 En hiver, on laisse sécher la boue au box, puis on brosse. Mouiller ses jambes tous les jours abîme sa peau. »
 Tant qu'il en a, le pansage n'est jamais « inutile ».
 
 ### Ses oreilles (0.5, `src/sim/horseEars.js`)
@@ -276,7 +276,7 @@ essoufflé. Pas pendant une activité ni un voyage (ils mènent le cheval).
 
 ### Ta balade (0.5, `src/sim/rideLog.js`, `src/ui/rideCard.js`)
 En descendant d'une balade libre d'au moins 40 secondes en mouvement (avec un de tes chevaux, après le tutoriel), une
-petite carte monte pendant 8 secondes (un toucher la ferme) : « 🏇 Belle balade avec Pomme ! », le temps et la distance
+petite carte reste 12 secondes à l'écran (cachée en selle, sous une fenêtre ou un mini-jeu, ce temps ne compte pas ; un toucher la ferme) : « 🏇 Belle balade avec Pomme ! », le temps et la distance
 (« ⏱️ 6 min · 📏 1,4 km » ; au pas, 1,6 m/s, environ 6 km/h comme un vrai cheval), une barre des allures (🐢 pas, 🐴
 trot, 💨 galop), au plus 3 lignes de ce qui s'est passé (troncs sautés, cross fini, fer porte-bonheur, citrouilles,
 8 « Debout » de suite ou plus), les tampons « ✅ Détente » (pas s'il était déjà chaud) et « ✅ Retour au calme », les
@@ -285,7 +285,7 @@ grandi (« 💪 Encore 2 points pour sa 2e étoile », avec sa barre), « 📏 S
 première balade mesurée est notée sans rien dire), ce qui manque à sa journée parfaite (« 🌇 ❤️ », rien si le foin du
 matin est oublié) et, sellé après un galop, « 🧰 Desselle-le : il veut se rouler ». Elle remplace alors les petits mots
 du retour au calme et de « Desseller » (le lien du retour au calme est toujours donné). Pas de carte pour une balade
-plus courte, menée par une activité ou un voyage : les petits mots d'avant. Seul le chemin vraiment fait compte
+plus courte, menée par une activité ou un voyage, ni en passant d'un cheval à l'autre en selle : les petits mots d'avant (encore en selle après une activité ou un voyage, la balade libre qui suit a sa carte). Seul le chemin vraiment fait compte
 (il galope sur place contre une barrière : rien) ; quand il va tout seul où on a touché, son allure se lit à sa
 vitesse.
 

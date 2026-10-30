@@ -24,6 +24,18 @@ describe('quoi de neuf', () => {
     expect(new Set(news.NEWS.map((n) => n.key)).size).toBe(news.NEWS.length);
   });
 
+  it('🧰 : sa selle et son filet (monté à cru, il n\'a qu\'un filet) ; 🧦 : ce que le jeu fait (la boue sèche au box)', () => {
+    const { t, setLang } = i18n;
+    setLang('fr');
+    expect(t('news_wishTap_d')).toContain('il veut qu\'on lui enlève sa selle et son filet.');
+    expect(t('news_legMud_d')).toContain('Au box, la boue sèche ; au pansage, brosse ses jambes de haut en bas.');
+    expect(t('news_legMud_d')).not.toContain('laisse sécher');
+    setLang('en');
+    expect(t('news_wishTap_d')).toContain('they want their saddle and bridle off.');
+    expect(t('news_legMud_d')).not.toContain('let it dry');
+    setLang('fr');
+  });
+
   it('une nouvelle partie ne la voit pas (elle découvre tout avec son premier cheval) ; c\'est noté', () => {
     const ui = { game: { profile: { animals: [], tutorial: { done: false } } }, showModal: () => { throw new Error('pas de fenêtre'); } };
     expect(news.maybeShowNews(ui)).toBe(false);

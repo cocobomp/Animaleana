@@ -26,7 +26,7 @@ import {
   trackerQuest, questKind, storyView, joinQuest, leaveQuest, resumeChapter, chapterEnd, joinedQuests, canFollow, questState, STORY, MAX_JOINED,
   activeQuests, nextQuest, holdFollow, heldFollow, setFront, passQuest, resumeAside as resumeAsideQuest, mainQuest,
 } from '../sim/quests.js';
-import { hintText, blockText, shortBlockText } from './quests.js';
+import { hintText, blockText, shortBlockText, feedIcon } from './quests.js';
 import { NoticeQueue } from './questNotices.js'; // les petits mots du guide, qui attendent qu'aucune fenêtre ne soit ouverte
 import { ringSpot } from './ringSpot.js'; // où poser le cercle et le doigt
 import { WISH_ACTION } from '../sim/horseWish.js'; // 🫧 (le bouton vert fait ce que sa bulle demande)
@@ -309,6 +309,11 @@ export class Tutorial {
     let key = `tuto_${step.id}`;
     if (step.id === 'move') key = isTouch() ? 'tuto_move_touch' : 'tuto_move';
     return t(key, params);
+  }
+
+  /** Une étape de quête suivie (« Touche 🌾 Nourrir » : le bouton de l'animal qu'on vient de toucher, comme stepText). */
+  stepLabel(id) {
+    return t(`quest_step_${id}`, { icon: feedIcon(this.animal()) });
   }
 
   /** Petite aide qui change selon la situation (« Ferme d'abord la fenêtre ✕ »…). */
@@ -659,7 +664,7 @@ export class Tutorial {
     const mode = trackerMode();
     const stepsKey = view ? view.steps.map((s) => s.state[0]).join('') : '';
     const active = activeQuests(p);
-    const key = `${q.id}|${kind}|${count}|${where}|${block}|${getLang()}|${stepsKey}|${this.folded}|${mode}|${active.join(',')}`;
+    const key = `${q.id}|${kind}|${count}|${where}|${block}|${getLang()}|${stepsKey}|${this.folded}|${mode}|${active.join(',')}|${this.animalId}`; // (l'animal touché : 🌾 ou 🍖 Nourrir)
     if (key !== this.trackerKey) {
       // La même quête a avancé : petit rebond (surtout utile quand le suivi est rangé en pastille).
       const moved = !!this.trackerKey && this.trackerWas?.id === q.id && (this.trackerWas.count !== count || this.trackerWas.steps !== stepsKey);
@@ -724,7 +729,7 @@ export class Tutorial {
     let sub;
     if (block) sub = [countEl, h('span', { class: 'qt-where qt-block' }, `🔒 ${block}`)];
     else if (!view) sub = [countEl, where ? h('span', { class: 'qt-where' }, `📍 ${where}`) : null];
-    else if (!w) sub = [countEl, view.current ? h('span', { class: 'qt-now' }, `👉 ${keepLast(t(`quest_step_${view.current.id}`))}`) : null];
+    else if (!w) sub = [countEl, view.current ? h('span', { class: 'qt-now' }, `👉 ${keepLast(this.stepLabel(view.current.id))}`) : null];
     else {
       // Longue quête : des petits points disent où on en est (comme dans la bulle du guide).
       const n = view.steps.findIndex((s) => s.state === 'now') + 1;
@@ -759,7 +764,7 @@ export class Tutorial {
     if (w) {
       out.push(h('ol', { class: 'qt-steps' }, w.steps.map((s) => h('li', { class: `qt-step ${s.state}` },
         h('span', { class: 'qt-check', 'aria-hidden': 'true' }, s.state === 'done' ? '✅' : s.state === 'now' ? '👉' : '⬜'),
-        h('span', { class: 'qt-label' }, t(`quest_step_${s.id}`))))));
+        h('span', { class: 'qt-label' }, this.stepLabel(s.id))))));
     }
     return out;
   }
@@ -927,7 +932,7 @@ export class Tutorial {
     }
     this.trackerKey = '';
     const v = followView(p, OBJECTIVES);
-    if (v?.current) this.ui.toast(`🧭 ${questTitle(p, id)} — ${t(`quest_step_${v.current.id}`)}`, 5000); // (rien pour une quête cachée)
+    if (v?.current) this.ui.toast(`🧭 ${questTitle(p, id)} — ${this.stepLabel(v.current.id)}`, 5000); // (rien pour une quête cachée)
     this.tick();
   }
 
@@ -1114,7 +1119,7 @@ export class Tutorial {
     }
     if (r?.stepDone) {
       const v = followView(p, OBJECTIVES);
-      if (v?.current) this.ui.toast(`✅ → 👉 ${t(`quest_step_${v.current.id}`)}`, 3500);
+      if (v?.current) this.ui.toast(`✅ → 👉 ${this.stepLabel(v.current.id)}`, 3500);
     }
     const v = followView(p, OBJECTIVES);
     const res = this.resolve(v?.current?.target);
@@ -1262,7 +1267,7 @@ export class Tutorial {
       const s = storyView(p);
       const label = kind === 'main' ? t('qj_bubbleMain', { n: s.chapter, total: s.total })
         : kind === 'story' ? t('qj_bubbleStory') : kind === 'side' ? t('qj_bubbleOther') : t('qj_bubbleSide');
-      const step = view?.current ? t(`quest_step_${view.current.id}`) : '';
+      const step = view?.current ? this.stepLabel(view.current.id) : '';
       const active = activeQuests(p);
       key = `q|${id}|${kind}|${followed}|${cur}/${max}|${why}|${step}|${getLang()}|${active.join(',')}`;
       const lines = [];

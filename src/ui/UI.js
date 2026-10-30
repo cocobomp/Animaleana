@@ -612,8 +612,15 @@ export class UI {
 
   /** Sa bulle touchée : tu vas vers lui, puis tu fais ce qu'il demande (doWish). */
   tapWish(id) {
+    if (this.busyForWish()) return; // (une bulle restée de la dernière seconde : elle ne gâche pas l'activité)
     const e = this.game?.entities.get(id); // (retrouvée au toucher : l'entité change à chaque rechargement du lieu)
     if (e?.wish) this.game.walkTo(e.position, e.radius + 1.2, () => this.doWish(e.data), true);
+  }
+
+  /** Pendant une activité (balade, saut, concours…) ou un voyage : sa bulle ne fait rien (src/game/AnimalEntity.js). */
+  busyForWish() {
+    const g = this.game;
+    return !!(g?.activities?.active || g?.tripFlow?.active);
   }
 
   /**
@@ -623,13 +630,15 @@ export class UI {
    */
   doWish(a) {
     const g = this.game;
+    if (this.busyForWish()) return null; // (arrivé près de lui pendant qu'une activité commençait)
     const wish = g.entities.get(a.id)?.wish;
     if (!wish) return this.openAnimalActions(a);
     if (g.blockedByPause()) return null;
     const act = WISH_ACTION[wish.id];
     if (act === 'ride') {
       this.closePanel();
-      if (g.player.mount) g.dismount(); // (en selle sur un autre cheval : on en descend d'abord)
+      // (en selle sur un autre cheval : on reste dessus pendant qu'on selle ; Game.ride en fait descendre au moment de
+      // monter, et ✕ dans le mini-jeu ne change rien)
       return !a.gear?.saddle && freeSaddle(g.profile, a, { home: g.isHome }) ? this.saddleWithGame(a, true) : g.ride(a);
     }
     if (act === 'unsaddle') return g.unsaddle(a);
@@ -815,7 +824,9 @@ export class UI {
     const wish = f.kind === 'animal' ? f.entity.wish : null;
     if (wish) {
       const a = f.entity.data;
-      this.actionBtn.replaceChildren(h('span', {}, wish.icon), ` ${t(`wish_btn_${wish.id}`, { name: a.name, g: a.sex })}`, h('kbd', {}, 'E'));
+      // (🧰 avec seulement son filet, après « Monter à cru » : « Débride Pomme », comme son menu)
+      const key = wish.id === 'untack' && !a.gear?.saddle ? 'wish_btn_unbridle' : `wish_btn_${wish.id}`;
+      this.actionBtn.replaceChildren(h('span', {}, wish.icon), ` ${t(key, { name: a.name, g: a.sex })}`, h('kbd', {}, 'E'));
       this.actionBtn.hidden = false;
       return;
     }
@@ -1304,9 +1315,13 @@ export class UI {
     const opts = {}; // (le mini-jeu y écrit ce qu'il a vu : le pansage, les pieds curés — opts.out.hooves)
     opts.legMudTip = !g.profile.legMudTip; // 🧦 (le pansage : le conseil des chaussettes de boue, une fois)
     const quality = await runMinigame(this, a, action, opts);
-    if (opts.out?.legMudTip) g.profile.legMudTip = true;
-    if (quality === null) return null; // fermé avec ✕ : rien n'est appliqué
-    return g.care(a, action, quality, opts.out ?? {});
+    // 🧦 Ses jambes brossées : le conseil, une fois, en message après le mini-jeu (le temps de le lire ; dans le jeu,
+    // la ligne d'aide le remplaçait en quelques secondes)
+    const tip = !!opts.out?.legMudTip;
+    if (tip) g.profile.legMudTip = true;
+    const done = quality === null ? null : g.care(a, action, quality, opts.out ?? {}); // (fermé avec ✕ : rien n'est appliqué)
+    if (tip) this.toast(`🧦 ${t('mg_pansage_legmud_tip')}`, 9000);
+    return done;
   }
 
   /**
@@ -1318,7 +1333,7 @@ export class UI {
   async saddleWithGame(a, ride = false) {
     const g = this.game;
     if (g.blockedByPause()) return null;
-    if (g.player.mount && g.player.mount.data !== a) g.dismount(); // (en selle sur un autre cheval : on en descend d'abord)
+    // (en selle sur un autre cheval : on y reste — fermé avec ✕, rien ne change ; Game.ride en fait descendre pour monter)
     const quality = await runMinigame(this, a, 'saddle');
     if (quality === null) return null;
     if (!g.saddle(a)) return null;

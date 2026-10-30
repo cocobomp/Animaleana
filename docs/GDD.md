@@ -330,7 +330,8 @@ rappelle de lui parler doucement. Chaque découverte : un petit mot 🔍, un sou
 ### « Bravo ! » et « Rassure-le » en selle (0.5, `src/sim/praise.js`)
 En balade libre, un bouton rond rose « 🤚 Bravo ! » apparaît à la place de ⬆️ (jamais de ⤴️ ; Espace au clavier) : 3
 secondes après un beau saut de tronc (⭐), 6 secondes quand le retour au calme au pas est fini ; « 🤚 Rassure-le » 4
-secondes juste après un écart. Touché : la main du cavalier gratte le garrot (les chevaux se grattent là entre eux, au
+secondes juste après un écart (pas en pleine série de trot enlevé : ⬆️ garde sa place). Touché : la main du cavalier
+gratte le garrot (les chevaux se grattent là entre eux, au
 pré : la première fois, un petit mot le dit), des 💕 montent (💖 si le garrot est son coin préféré, et qu'on le sait) ;
 lien +0,3 et affection +3, au plus 3 fois par balade et 6 par jour, seulement tes chevaux. Rassuré après un écart, il se
 calme et le prochain écart vient plus tard. Si c'était sa peur à lui (connue) : « 💪 Pomme a moins peur des oiseaux

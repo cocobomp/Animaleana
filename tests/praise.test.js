@@ -195,6 +195,16 @@ describe('dans le jeu (src/game/Game.js praiseHorse)', () => {
     expect(g.canPraise()).toBe(false);
   });
 
+  it('en pleine série de trot enlevé, ⬆️ garde sa place : « Rassure-le » attend que la série retombe', () => {
+    const g = fakeGame(horse({ id: 'p3', name: 'Pomme' }));
+    openPraise(g.player.praise, 'spook', 0);
+    g.player.postingNow = true;
+    expect(g.canPraise()).toBe(false);
+    expect(g.praiseHorse()).toBeNull();
+    g.player.postingNow = false; // (trot assis, galop, ou la série est retombée)
+    expect(g.canPraise()).toBe(true);
+  });
+
   it('« Rassure-le » après un écart de sa peur à lui : 💪 2/5… puis plus jamais peur (souvenir, lien +3)', () => {
     const a = horse({ id: 'p2', name: 'Pomme', known: { fear: true } });
     const fear = quirksOf(a).fear;

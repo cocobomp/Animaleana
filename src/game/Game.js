@@ -2528,10 +2528,14 @@ export class Game {
     return r;
   }
 
-  /** 🤚 Le bouton « Bravo ! » / « Rassure-le » est là : en balade libre, quelques secondes (src/sim/praise.js). */
+  /**
+   * 🤚 Le bouton « Bravo ! » / « Rassure-le » est là : en balade libre, quelques secondes (src/sim/praise.js). Pas en
+   * pleine série de trot enlevé : ⬆️ (et Espace) garde sa place, la série ne casse pas.
+   */
   canPraise() {
     const pl = this.player;
-    return !!pl?.mount && pl.gaitEnabled !== false && !this.activities.active && !this.tripFlow?.active && canPraise(pl.praise, pl.mount.time);
+    return !!pl?.mount && pl.gaitEnabled !== false && !pl.postingNow && !this.activities.active && !this.tripFlow?.active
+      && canPraise(pl.praise, pl.mount.time);
   }
 
   /**

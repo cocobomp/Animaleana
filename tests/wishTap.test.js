@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { createAnimal } from '../src/sim/animal.js';
 import { createProfile } from '../src/sim/profile.js';
 import { seeded } from '../src/sim/rng.js';
-import { starterTack } from '../src/sim/gear.js';
+import { starterTack, GEAR } from '../src/sim/gear.js';
 import { ICONS } from '../src/sim/horseWish.js';
 
 // (les mini-jeux pour de faux : ce que l'enfant en fait, mg.result — null : fermé avec ✕ — et ce qu'il y a vu, mg.out)
@@ -358,10 +358,10 @@ describe('changer de cheval en selle (Game.ride) ; 🧰 pas pour une selle toute
     const g = Object.create(Game.prototype);
     Object.assign(g, {
       profile: p, entities: new Map([[a.id, ent(a)], [b.id, ent(b)]]), // (isHome, day, hour : lus dans le profil)
-      player: { mount: null, session: null },
+      // (Game.mountRider pour de vrai : sa bombe, puis Player.ride)
+      player: { mount: null, session: null, setHelmet() {}, seat() {}, ride(e) { calls.push(['mount', e.data.name]); this.mount = e; } },
       ui: { toast: (m) => calls.push(['toast', m]), updateGaitPad() {} },
       dismount(o) { calls.push(['dismount', this.player.mount.data.name, o]); this.player.mount = null; },
-      mountRider(e) { calls.push(['mount', e.data.name]); this.player.mount = e; },
       markHorseDay() {}, remember() {}, bondNews() {}, simWeather: () => 'clear', xp() {}, save() {},
     });
     g.player.mount = g.entities.get(a.id);
@@ -404,6 +404,32 @@ describe('changer de cheval en selle (Game.ride) ; 🧰 pas pour une selle toute
     Game.prototype.markHorseDay.call(g, b, 'lunge');
     expect(b.freshTack).toBeUndefined();
   });
+
+  it('mis depuis sa fiche ou la sellerie (Game.equip) : neuf aussi ; pas pour une autre couleur, ni en selle sur lui', () => {
+    const { g, b } = rideGame();
+    g.player.mount = null;
+    const put = (item, color) => Game.prototype.equip.call(g, b, item, color)?.ok;
+    expect(put('saddle')).toBe(true);
+    expect(b.freshTack).toBe(true);
+    // (la même selle, d'une autre couleur : elle a peut-être déjà servi ce matin)
+    delete b.freshTack;
+    const id = b.gear.saddle.item;
+    expect(put(id, GEAR[id].colors.find((c) => c !== b.gear.saddle.color))).toBe(true);
+    expect(b.freshTack).toBeUndefined();
+    // en selle sur lui : le filet sert tout de suite
+    g.player.mount = g.entities.get(b.id);
+    expect(put('bridle')).toBe(true);
+    expect(b.freshTack).toBeUndefined();
+  });
+
+  it('monté pour un voyage à cheval ou remis en selle à l\'arrivée (Game.mountRider, pas Game.ride) : la selle a servi', () => {
+    const { g, b } = rideGame();
+    g.player.mount = null;
+    b.freshTack = true;
+    Game.prototype.mountRider.call(g, g.entities.get(b.id));
+    expect(g.player.mount.data).toBe(b);
+    expect(b.freshTack).toBeUndefined();
+  });
 });
 
 describe('🧦 le conseil des chaussettes de boue, après le pansage (UI.careWithGame)', () => {
@@ -412,17 +438,17 @@ describe('🧦 le conseil des chaussettes de boue, après le pansage (UI.careWit
     const cared = [];
     const toasts = [];
     const g = { profile: p, blockedByPause: () => false, canCare: () => ({ ok: true }), care: (x, act, q) => { cared.push([act, q]); return true; } };
-    return { p, cared, toasts, ui: { game: g, toast: (m, ms) => toasts.push([m, ms]) } };
+    return { p, cared, toasts, ui: { game: g, toast: (m, ms, o) => toasts.push([m, ms, o]) } };
   };
 
-  it('ses jambes brossées : un message de 9 s après le mini-jeu, une seule fois', async () => {
+  it('ses jambes brossées : un message de 9 s après le mini-jeu (en selle : pas en file), une seule fois', async () => {
     const a = horse();
     const { p, cared, toasts, ui } = careUi();
     Object.assign(mg, { result: 0.9, out: { legMudTip: true }, played: [] });
     expect(await UI.prototype.careWithGame.call(ui, a, 'brush')).toBe(true);
     expect(mg.opts.legMudTip).toBe(true);
     expect(cared).toEqual([['brush', 0.9]]);
-    expect(toasts).toEqual([[`🧦 ${t('mg_pansage_legmud_tip')}`, 9000]]);
+    expect(toasts).toEqual([[`🧦 ${t('mg_pansage_legmud_tip')}`, 9000, { now: true }]]);
     expect(p.legMudTip).toBe(true);
     // déjà lu : le mini-jeu ne le note plus
     mg.out = { hooves: { cleaned: 1 } };

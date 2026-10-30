@@ -430,6 +430,46 @@ describe('en descendant (Game.dismount)', () => {
     expect(g.rideLog).toBeNull();
   });
 
+  it('remonté en selle (Game.mountRider) ou une séance commence : la carte d\'avant s\'en va, elle ne revient pas après', async () => {
+    i18n.setLang('fr');
+    const { Activities, SESSION_TYPES } = await import('../src/game/Activities.js');
+    const a = horse({ gear: { saddle: { item: 'saddle' } } });
+    const shown = () => {
+      const log = newRideLog(a);
+      Object.assign(log, { t: 130, dist: 1400, gaits: { walk: 60, trot: 40, canter: 30 } });
+      fakeDom();
+      const g = fakeGame(a, log);
+      Game.prototype.dismount.call(g);
+      expect(g.ui.root.children).toHaveLength(1);
+      return { g, card: g.ui.root.children[0] };
+    };
+    vi.useFakeTimers();
+    try {
+      // (en selle, cachée, son temps ne compte pas : après une balade de 20 s sur Caramel, pas de carte, elle revenait)
+      let { g, card } = shown();
+      Object.assign(g.player, { setHelmet() {}, ride(e) { this.mount = e; } });
+      Game.prototype.mountRider.call(g, { data: horse({ name: 'Caramel' }) });
+      expect(card.classList.contains('out')).toBe(true);
+      vi.advanceTimersByTime(400);
+      expect(card.removed).toBe(true);
+      // une séance à pied (longe, liberté…) : cachée pendant des minutes, elle revenait aux résultats
+      ({ g, card } = shown());
+      Object.assign(g.ui, { closePanel() {} });
+      g.stopFollowers = () => {};
+      g.activities = new Activities(g);
+      SESSION_TYPES.rcTest = { cls: class { constructor() { this.ok = true; } } };
+      try {
+        expect(g.activities.start('rcTest')).toBeTruthy();
+      } finally {
+        delete SESSION_TYPES.rcTest;
+      }
+      vi.advanceTimersByTime(400);
+      expect(card.removed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('une balade de 10 s : pas de carte, les petits mots d\'avant', () => {
     i18n.setLang('fr');
     const a = horse({ gear: { saddle: { item: 'saddle' } } });

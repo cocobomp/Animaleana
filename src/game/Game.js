@@ -72,7 +72,7 @@ import { LuckyShoes } from './LuckyShoes.js'; // 🍀 le fer porte-bonheur du jo
 import { inShowground } from '../sim/activities.js'; // (la carrière : du sable)
 import { WARMUP, WARM_FOR, warmSession, dismountVerdict } from '../sim/warmup.js'; // 🐢 détente et retour au calme
 import { newRideLog, tickRideLog, rideReport, dayLeft } from '../sim/rideLog.js'; // 🏇 la carte « Ta balade »
-import { showRideCard } from '../ui/rideCard.js';
+import { showRideCard, closeRideCard } from '../ui/rideCard.js';
 import { remember, anniversaryDue, togetherSince, BOND_MEMORIES, PHOTO_MEMORIES, PHOTO, attachPhoto } from '../sim/memories.js'; // 📸 les souvenirs de ton cheval
 import { collectFact } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
 import { quirksOf, discoverQuirk, spookCause, noteFear, QUIRK_BOND, calmFear, FEAR_CALM } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
@@ -928,7 +928,7 @@ export class Game {
   markHorseDay(a, kind) {
     if (['lunge', 'liberty', 'activity'].includes(kind)) {
       a.warmAt = this.profile.clock ?? 0; // 🐢 (il a travaillé : chaud ; monté : à la descente)
-      delete a.freshTack; // (🧰 longé avec sa selle : elle a servi, comme en selle — Game.ride)
+      delete a.freshTack; // (🧰 longé avec sa selle : elle a servi, comme en selle — Game.mountRider)
     }
     if (a.species === 'horse' && !a.client && !a.guest) this.lastHorseId = a.id; // (le défi du jour : src/sim/horseChallenge.js)
     const stage0 = bondStage(a);
@@ -1936,12 +1936,17 @@ export class Game {
   equip(a, item, color, opts = {}) {
     const mine = a.species === 'horse' && !a.client && !a.guest;
     const lv0 = mine ? matchyOf(a, riderHelmet(this.profile)).level : 0; // (🎨 son ensemble avant)
+    const slot = GEAR[item]?.slot; // (le même pour tous les modèles d'un type)
+    const was = a.gear?.[slot]?.item;
     // À la maison, la sellière échange gratuitement la taille si besoin (src/sim/gear.js).
     // opts.exact : CE modèle (boutons des fiches de la sellerie), jamais un autre du même type.
     const r = equip(this.profile, a, item, color, { autoSwap: this.isHome, exact: !!opts.exact });
     // (en voyage : resté à la maison, ou pas la bonne taille dans le coffre — on nomme l'objet et la taille)
     if (!r.ok) return this.ui.toast(t(`gear_${r.reason}`, { item: t(`gear_${r.item ?? item}`), size: r.need ? t(`tk_size_${r.need}`) : '' }), 4500);
     if (r.swapped) this.ui.toast(t('tk_swappedAuto', { item: t(`gear_${r.item}`), size: t(`tk_size_${r.swapped}`) }), 4000);
+    // 🧰 une selle ou un filet mis depuis sa fiche ou la sellerie (pas le même dans une autre couleur) : pas encore
+    // monté avec, comme Game.saddle (src/sim/horseWish.js) ; en selle sur lui, il sert déjà
+    if ((slot === 'saddle' || slot === 'bridle') && r.item !== was && this.player.mount?.data !== a) a.freshTack = true;
     this.entities.get(a.id)?.applyGear();
     if (this.player.mount?.data === a) this.player.seat();
     if (mine) this.matchyNews(a, lv0);
@@ -2360,7 +2365,6 @@ export class Game {
     e.stopRoll?.(); // (il se roulait : debout d'abord, avant de mesurer la selle)
     this.player.riderLevel = galopLevel(this.profile); // (Galops obtenus : il s'effraie moins)
     this.mountRider(e);
-    delete a.freshTack; // (🧰 la selle qu'on vient de lui mettre a servi : après, il demandera qu'on la lui enlève)
     // 🐢 il vient de travailler (une leçon, une balade…) : déjà chaud, pas besoin de le réchauffer (src/sim/warmup.js)
     if ((this.profile.clock ?? 0) - (a.warmAt ?? -1e9) < WARM_FOR) this.player.session = warmSession();
     this.rideLog = newRideLog(a, this.profile.stats, this.player.session); // 🏇 (la carte en descendant)
@@ -2399,11 +2403,14 @@ export class Game {
   /**
    * En selle sur l'entité e, toujours avec sa bombe (aussi en voyage à cheval, src/game/TrailView.js, et remis en
    * selle à l'arrivée). Mise avant de monter : setHelmet refait l'avatar (mèches rentrées), qui n'est ainsi posé en
-   * selle (et ajusté au cheval, riderFit) qu'une fois.
+   * selle (et ajusté au cheval, riderFit) qu'une fois. La carte « Ta balade » d'avant s'en va : cachée en selle, elle
+   * revenait après une balade trop courte pour avoir la sienne, avec le temps et le cheval d'avant.
    */
   mountRider(e) {
+    closeRideCard();
     this.player.setHelmet(riderHelmet(this.profile));
     this.player.ride(e);
+    delete e.data.freshTack; // (🧰 sa selle toute neuve sert, aussi en voyage : après, il demandera qu'on la lui enlève)
   }
 
   /** Descendre de cheval. card : false pour changer de cheval (pas de carte « Ta balade », les petits mots d'avant). */

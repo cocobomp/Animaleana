@@ -4,7 +4,8 @@
 // après le travail : sa ration du soir dépend de sa journée), ❤️ un câlin. Tout est fait : plus de bulle (« Journée
 // parfaite »). Rien la nuit, ni pour un cheval confié ; malade, boiteux ou endormi, son 🤒, son 🩹 ou son 💤 passent avant.
 // Après le travail, encore sellé ou bridé : 🧰 d'abord (même s'il a faim : on le desselle avant de le nourrir) ; pas
-// pour une selle qu'on vient de lui mettre et qui n'a pas encore servi (a.freshTack : src/game/Game.js saddle, ride).
+// pour une selle qu'on vient de lui mettre et qui n'a pas encore servi (a.freshTack : src/game/Game.js saddle, bridle,
+// equip ; servi : mountRider).
 // Toucher la bulle (ou E près de lui) fait ce qu'il demande : WISH_ACTION, src/ui/UI.js (doWish).
 // Logique pure (tests/horseWish.test.js) : il lit sa journée (src/sim/horseDay.js) sans rien cocher. La bulle :
 // src/game/wishBubble.js, src/game/AnimalEntity.js (update, updateStatus).

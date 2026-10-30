@@ -1320,7 +1320,7 @@ export class UI {
     const tip = !!opts.out?.legMudTip;
     if (tip) g.profile.legMudTip = true;
     const done = quality === null ? null : g.care(a, action, quality, opts.out ?? {}); // (fermé avec ✕ : rien n'est appliqué)
-    if (tip) this.toast(`🧦 ${t('mg_pansage_legmud_tip')}`, 9000);
+    if (tip) this.toast(`🧦 ${t('mg_pansage_legmud_tip')}`, 9000, { now: true }); // (en selle au téléphone : pas en file, coupé à 5 s)
     return done;
   }
 

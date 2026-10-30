@@ -28,6 +28,7 @@ import { realSheepPose } from './models/sheepReal.js'; // mouton réaliste : sab
 import { realGoatPose } from './models/goatReal.js'; // chèvre réaliste : saut par son clip (tours, agility), salut
 import { realCowPose } from './models/cowReal.js'; // vache réaliste : « viens » sabots libres, salut tête baissée
 import { ActivityHud, showActivityResults } from '../ui/activities.js';
+import { closeRideCard } from '../ui/rideCard.js'; // 🏇 (la carte « Ta balade » d'avant : pas après la séance)
 import { t, ta } from '../i18n.js';
 import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 
@@ -85,6 +86,7 @@ export class Activities {
       this.session.end(true);
       return null;
     }
+    closeRideCard(); // (cachée pendant la séance, elle revenait après, des minutes plus tard)
     return this.session;
   }
 

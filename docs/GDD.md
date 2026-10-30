@@ -276,7 +276,7 @@ essoufflé. Pas pendant une activité ni un voyage (ils mènent le cheval).
 
 ### Ta balade (0.5, `src/sim/rideLog.js`, `src/ui/rideCard.js`)
 En descendant d'une balade libre d'au moins 40 secondes en mouvement (avec un de tes chevaux, après le tutoriel), une
-petite carte reste 12 secondes à l'écran (cachée en selle, sous une fenêtre ou un mini-jeu, ce temps ne compte pas ; un toucher la ferme) : « 🏇 Belle balade avec Pomme ! », le temps et la distance
+petite carte reste 12 secondes à l'écran (cachée sous une fenêtre ou un mini-jeu, ce temps ne compte pas ; un toucher la ferme ; remonté en selle ou au début d'une activité, elle s'en va) : « 🏇 Belle balade avec Pomme ! », le temps et la distance
 (« ⏱️ 6 min · 📏 1,4 km » ; au pas, 1,6 m/s, environ 6 km/h comme un vrai cheval), une barre des allures (🐢 pas, 🐴
 trot, 💨 galop), au plus 3 lignes de ce qui s'est passé (troncs sautés, cross fini, fer porte-bonheur, citrouilles,
 8 « Debout » de suite ou plus), les tampons « ✅ Détente » (pas s'il était déjà chaud) et « ✅ Retour au calme », les

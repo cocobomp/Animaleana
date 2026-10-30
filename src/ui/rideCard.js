@@ -1,8 +1,9 @@
 // 🏇 « Ta balade » : la petite carte qui monte en descendant de cheval (src/sim/rideLog.js rideReport). Le temps et la
 // distance, la barre des allures (🐢 🐴 💨, comme les boutons), ce qui s'est passé, les tampons de la détente et du
 // retour au calme, l'étoile qui approche, le record, ce qui manque à sa journée. Une seule à la fois ; elle se ferme
-// d'un toucher, ou toute seule après 12 s vue à l'écran (CSS : cachée en selle, sous une fenêtre, pendant une activité ;
-// ce temps-là ne compte pas, ni sous un mini-jeu : l'enfant la retrouve en entier).
+// d'un toucher, ou toute seule après 12 s vue à l'écran (CSS : cachée sous une fenêtre ; ce temps-là ne compte pas, ni
+// sous un mini-jeu : l'enfant la retrouve en entier). On remonte en selle ou une activité commence : elle s'en va
+// (src/game/Game.js mountRider, src/game/Activities.js start), sinon elle reviendrait après, d'une autre balade.
 
 import { h } from './dom.js';
 import { t, getLang } from '../i18n.js';
@@ -17,7 +18,7 @@ let card = null; // (la carte affichée : { el, timer })
 /** Se voit-elle ? Pas cachée par le CSS (display: none : getClientRects vide), ni sous un mini-jeu, ni l'onglet caché. */
 const seen = (el) => !document.hidden && el.getClientRects().length > 0 && !document.querySelector('.mg-overlay');
 
-/** Ferme la carte affichée (d'un toucher, après 12 s vue, ou quand une autre arrive). */
+/** Ferme la carte affichée (d'un toucher, après 12 s vue, quand une autre arrive, en selle, au début d'une activité). */
 export function closeRideCard() {
   if (!card) return;
   const { el, timer } = card;

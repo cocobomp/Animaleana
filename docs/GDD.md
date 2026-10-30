@@ -152,7 +152,8 @@ faim, ou le foin du matin manque avant 14 h, ou celui du soir dès 16 h), 💧, 
 monté), puis ❤️. Le soin fait, la bulle éclate en ✨ et la suivante vient une seconde après ; tout fait, plus de bulle.
 Malade, boiteux ou endormi, son 🤒, son 🩹 ou son 💤 passent avant ; triste, il montre sa bulle plutôt que 😢 (c'est
 comme ça qu'on le console). Pas la nuit (21 h-6 h), ni sur son dos, ni pendant une activité, ni pour un cheval confié,
-ni pendant le tutoriel. À l'écurie, chacun montre la sienne.
+ni pendant le tutoriel. À l'écurie, chacun montre la sienne. Son nom ou sa bulle sous une pastille d'état (« 🧭 Des
+visiteurs t'attendent »…) : la pastille pâlit et laisse le doigt toucher le nom à travers.
 
 ### Le défi du jour (0.5, `src/sim/horseChallenge.js`)
 Chaque jour de jeu, un petit défi avec ton cheval, tiré parmi ceux que tu sais déjà faire : le caresser 3 fois, le
@@ -362,6 +363,9 @@ galops, trots enlevés, troncs sautés, sans-faute, balades, appels, journées p
   (< 10), il ne fait plus que marcher. Au trot et au galop, il fait parfois un **écart** (un oiseau, un sac
   plastique, son ombre…) : un bond de côté, il ralentit, on le rassure et on repart ; un cheval timide en fait plus,
   un calme et un cheval obéissant (dressage) moins. Pendant une activité (saut, dressage…), c'est elle qui mène.
+  Au téléphone, en selle : deux messages au plus à la fois, à côté des allures et de ⤴️ Sauter (les suivants attendent
+  leur tour) ; les pastilles d'état pâlissent en portrait pour laisser voir le chemin (le chrono du cross reste net), et
+  « Tu montes… » laisse la place au gros bouton « ⬇️ Descendre ».
 - **Entraînement** : stats qui progressent (vitesse, endurance, obéissance,
   saut, dressage).
 - **Dressage des chevaux** (`src/sim/dressage.js`, `src/game/Dressage.js`) : un

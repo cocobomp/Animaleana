@@ -31,14 +31,32 @@ import { audio } from '../game/audio.js'; // sons de l'interface (boutons, notif
 import { openDogTrainerPanel } from './dogTrainer.js'; // métier éducateur canin
 import { openCareers, careerChips } from './careers.js'; // 💼 métiers
 import { openTrailCarnet } from './trailGuide.js'; // 🧭 guide de randonnée
+import { BUBBLE_PX } from '../game/wishBubble.js'; // (la bulle « il te demande » pend sous le nom)
 
 const STATUS_MAX = 3; // pastilles d'état visibles en même temps (les autres derrière « ➕ N de plus »)
+const RIDE_TOASTS = 2; // à cheval sur un téléphone : messages à l'écran en même temps (les suivants attendent, UI.toast)
 // Le passage de niveau est annoncé ce temps (ms) après ce qui l'a fait gagner (UI.levelUp).
 export const LEVEL_UP_DELAY = 1200;
 // Ce qui peut prendre le focus au clavier (boutons, liens, champs).
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export const NEED_ICON = { hunger: '🍖', thirst: '💧', hygiene: '🫧', energy: '⚡', exercise: '🏃', affection: '❤️', grooming: '🪮' };
+
+/**
+ * Un nom d'animal, ou sa bulle 💬 qui pend dessous, sous les pastilles d'état (box : leur rectangle à l'écran) ?
+ * placed : les étiquettes posées par updateLabels ({ x, y, w, wish, near }), y leur point d'accroche (l'étiquette va de
+ * y − 38 à y + 6 ; la bulle, s'il en a une, de y à y + BUBBLE_PX). Seulement les animaux à 10 m au plus (near : plus
+ * loin, leur nom est pâli). margin : un peu de marge en plus (sans clignoter au bord).
+ */
+export function labelsUnder(box, placed, margin = 0) {
+  if (!box?.height) return false;
+  return placed.some((q) => {
+    if (!q.near) return false;
+    const half = Math.max(q.w, q.wish ? BUBBLE_PX + 8 : 0) / 2;
+    const bottom = q.y + (q.wish ? BUBBLE_PX + 6 : 6);
+    return q.x + half > box.left - margin && q.x - half < box.right + margin && q.y - 38 < box.bottom + margin && bottom > box.top - margin;
+  });
+}
 
 export class UI {
   constructor(root) {
@@ -168,6 +186,8 @@ export class UI {
     // Messages : quand on les déplace (tutorial.layoutTop pose leur top) ou qu'on en ajoute, ils restent dans l'écran.
     if (typeof MutationObserver === 'function') {
       new MutationObserver(() => this.fitToasts()).observe(this.toasts, { attributes: true, attributeFilter: ['style'], childList: true });
+      // (les pastilles d'état changent, ou tutorial.layoutTop les déplace : leur place est relue, voir updateLabels)
+      new MutationObserver(() => { this.statusBox = undefined; }).observe(this.statusBar, { attributes: true, attributeFilter: ['style'], childList: true });
     }
     // La bulle du guide s'efface pendant qu'on tape (CSS) : la fenêtre reprend alors sa place en haut.
     for (const ev of ['focusin', 'focusout']) {
@@ -211,6 +231,8 @@ export class UI {
     this.camBtn.hidden = true;
     this.touchPad.hidden = true;
     this.gaitPad.hidden = true;
+    document.body.classList.remove('riding');
+    this.toastWait = []; // (les messages en attente de la partie quittée)
     this.statusBar.replaceChildren();
     this.statusKey = '';
     this.clearLabels();
@@ -318,6 +340,11 @@ export class UI {
     const pl = g?.player;
     const show = !!pl?.mount && g.running && !g.activities?.active && !g.tripFlow?.active && !g.mgmt?.active && !this.isBlocking();
     if (this.gaitPad.hidden === show) this.gaitPad.hidden = !show;
+    // (body.riding : les messages se rangent à côté des allures, et attendent leur tour, voir toast)
+    if (document.body.classList.contains('riding') !== show) {
+      document.body.classList.toggle('riding', show);
+      if (!show) this.nextToast();
+    }
     if (!show) return;
     const lang = getLang();
     if (this.gaitLang !== lang) {
@@ -348,6 +375,7 @@ export class UI {
       const c = g.freeJumps?.cross;
       const text = c ? `🏇 ⏱️ ${fmtCross(c.t)} · ${t('cross_chip', { n: c.next, total: g.freeJumps.logs.length })}` : rc.dataset.base;
       if (rc.firstChild.textContent !== text) rc.firstChild.textContent = text;
+      if (rc.classList.contains('timing') !== !!c) rc.classList.toggle('timing', !!c); // (téléphone : montrée pour le chrono seulement)
     }
     // ⤴️ Le bouton « Sauter » (au galop, un tronc devant) : orange en approche, vert au bon moment
     const jump = !!g?.freeJumps?.canJump() && !this.isBlocking();
@@ -364,6 +392,7 @@ export class UI {
           this.toast(t('fj_tip'), 7000);
         }
       }
+      this.fitToasts(); // (pas de message sur lui)
     }
     const show = !!g?.canPostTrot?.() && !this.isBlocking();
     if (this.postBtn.hidden === show) {
@@ -437,6 +466,7 @@ export class UI {
       if (changed && this.panel && !this.panel.live) this.renderPanel();
     }
     this.renderStatus();
+    this.statusBox = undefined; // (relue par updateLabels : deux fois par seconde, pas à chaque image)
     this.pauseBanner.hidden = !g.paused;
     this.fitToasts();
   }
@@ -454,6 +484,9 @@ export class UI {
     }
     const W = window.innerWidth;
     const H = window.innerHeight;
+    // (où sont les pastilles d'état, pour dodgeStatus : relu seulement quand elles ont changé ou bougé, avant
+    // d'écrire les étiquettes)
+    if (this.statusBox === undefined) this.statusBox = this.statusBar.childElementCount ? this.statusBar.getBoundingClientRect() : null;
     const seen = new Set();
     const placed = [];
     const items = [];
@@ -506,7 +539,7 @@ export class UI {
         y = hit.y - 46;
       }
       it.e.labelMoved = y !== it.y;
-      placed.push({ x: it.x, y, w, ax: it.x, ay: it.y, baby, extra: 0, el, text });
+      placed.push({ x: it.x, y, w, ax: it.x, ay: it.y, baby, extra: 0, el, text, wish: !!it.e.wish && !it.e.labelMoved, near: it.d <= 10 });
       el.style.transform = `translate(${it.x - w / 2}px, ${y - 38}px)`;
       el.style.opacity = it.d > 10 ? 0.6 : 1;
     }
@@ -520,6 +553,21 @@ export class UI {
         this.labelEls.delete(id);
       }
     }
+    this.dodgeStatus(placed);
+  }
+
+  /**
+   * Les pastilles d'état en transparence (CSS #status-bar.under / .ahead), sans bouger : un nom d'animal ou sa bulle 💬
+   * dessous (on touche le nom à travers), ou, à cheval sur un écran en hauteur, la vue devant le cheval (elles sont
+   * juste sous le suivi de quête, là où la caméra met sa tête et le chemin).
+   */
+  dodgeStatus(placed) {
+    const bar = this.statusBar;
+    const box = this.statusBox;
+    const under = labelsUnder(box, placed, bar.classList.contains('under') ? 12 : 0);
+    const ahead = !!box?.height && (this.game?.rig?.ride ?? 0) > 0.5 && box.top < window.innerHeight / 2;
+    if (bar.classList.contains('under') !== under) bar.classList.toggle('under', under);
+    if (bar.classList.contains('ahead') !== ahead) bar.classList.toggle('ahead', ahead);
   }
 
   clearLabels() {
@@ -563,6 +611,7 @@ export class UI {
       const a = g.player.mount.data;
       const c = chip(`🏇 ${t('statusRiding', { name: a.name, g: a.sex })}`, t('dismount'), () => { g.dismount(); this.renderStatus(); });
       c.classList.add('ride-chip'); // (⏱️ le chrono du cross s'y ajoute : updatePostBtn)
+      if (g.freeJumps?.cross) c.classList.add('timing');
       c.dataset.base = c.firstChild.textContent;
       chips.push(c);
     }
@@ -727,6 +776,9 @@ export class UI {
   flushLevelUps() {
     clearTimeout(this.levelTimer);
     this.levelTimer = null;
+    // Téléphone en portrait, une fiche ouverte sous la bulle du guide (le refuge, juste après la première adoption) :
+    // pas de place entre les deux, « ⭐ Niveau 2 » passait sous la bulle ; il attend que la fiche se ferme (closePanel).
+    if (this.panel && !this.modalOpen && this.tutorial?.bubble?.hidden === false && window.innerWidth <= 640) return;
     const list = (this.levelQueue ?? []).splice(0);
     if (!list.length || !this.game?.running) return;
     audio.ui('levelUp');
@@ -747,11 +799,18 @@ export class UI {
    * bulle (une ligne chacun) au lieu de s'empiler, par ex. 'visitors' pour les arrivées des métiers.
    */
   toast(msg, ms = 3200, opts = null) {
-    audio.ui('toast');
     // (typographie française : « balade / ! Lis leur demande » se coupait avant le point d'exclamation)
     const text = typeof msg === 'string' ? nbsp(msg) : msg;
     const group = opts?.group;
     const same = group && [...this.toasts.children].find((x) => x.dataset.group === group && !x.classList.contains('out'));
+    // À cheval sur un téléphone : RIDE_TOASTS messages au plus à la fois, les suivants attendent leur tour (nextToast)
+    // au lieu de s'empiler sur le cheval et ses boutons (cinq d'un coup au premier tronc) ; rien n'est perdu.
+    if (!same && this.toastsFull()) {
+      (this.toastWait ??= []).push([msg, Math.min(ms, 5000), opts]); // (5 s au plus : la file avance)
+      if (this.toastWait.length > 4) this.toastWait.shift(); // (une avalanche : les plus anciens partent)
+      return null;
+    }
+    audio.ui('toast');
     if (same) {
       if (!same.querySelector('.toast-line')) same.replaceChildren(h('div', { class: 'toast-line' }, ...same.childNodes));
       same.classList.add('grouped');
@@ -774,8 +833,24 @@ export class UI {
   toastTimers(el, ms) {
     clearTimeout(el._outT);
     clearTimeout(el._rmT);
-    el._outT = setTimeout(() => el.classList.add('out'), ms);
+    el._outT = setTimeout(() => {
+      el.classList.add('out');
+      this.nextToast(); // (le suivant de la file d'attente, à cheval)
+    }, ms);
     el._rmT = setTimeout(() => el.remove(), ms + 400);
+  }
+
+  /** À cheval sur un téléphone (body.riding, updateGaitPad), RIDE_TOASTS messages sont déjà à l'écran ? */
+  toastsFull() {
+    if (!document.body.classList.contains('riding') || !isPhone()) return false;
+    let n = 0;
+    for (const x of this.toasts.children) if (!x.classList.contains('out')) n++;
+    return n >= RIDE_TOASTS;
+  }
+
+  /** Les messages qui attendaient leur tour (toast) viennent dès qu'il y a de la place, ou tous quand on descend. */
+  nextToast() {
+    while (this.toastWait?.length && !this.toastsFull()) this.toast(...this.toastWait.shift());
   }
 
   /**
@@ -792,6 +867,15 @@ export class UI {
       const r = box.getBoundingClientRect();
       // (seulement si la carte est sous le haut des messages et en face d'eux : en portrait, elle est au-dessus)
       if (c.height && c.top > r.top && c.left < r.right && c.right > r.left) limit = Math.min(limit, c.top - 6);
+    }
+    // À cheval : ni sur ⬆️ Enlever / ⤴️ Sauter, ni sur les allures, ni sur « ⬇️ Descendre » (ceux plus bas, en face).
+    if (document.body.classList.contains('riding')) {
+      const r = box.getBoundingClientRect();
+      for (const el of [this.postBtn, this.jumpBtn, this.gaitPad, this.actionBtn]) {
+        if (el.hidden) continue;
+        const c = el.getBoundingClientRect();
+        if (c.height && c.top > r.top && c.left < r.right && c.right > r.left) limit = Math.min(limit, c.top - 6);
+      }
     }
     while (box.children.length > 1 && box.getBoundingClientRect().bottom > limit) box.firstChild.remove();
   }
@@ -1080,6 +1164,7 @@ export class UI {
     this.panelEl.style.maxHeight = '';
     if (this.game) this.game.input.enabled = true;
     this.tutorial?.layoutTop?.();
+    if (this.levelQueue?.length && !this.levelTimer) this.levelTimer = setTimeout(() => this.flushLevelUps(), 400); // (il attendait, voir flushLevelUps)
   }
 
   closePanelFor(animalId) {

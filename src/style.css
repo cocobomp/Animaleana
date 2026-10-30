@@ -366,6 +366,15 @@ button.sv-card:hover { border-color: var(--primary); }
 @media (max-width: 640px) {
   #toasts { top: calc(210px + var(--safe-t)); }
 }
+/* À cheval sur un téléphone en portrait (body.riding, UI.updateGaitPad) : à gauche de la colonne des allures (68 px à
+   14 px du bord), pas dessus ; deux au plus à la fois (UI.toast), jamais sur ⤴️ Sauter (UI.fitToasts). */
+@media (pointer: coarse) and (max-width: 640px) {
+  body.riding #toasts { left: calc(12px + var(--safe-l)); transform: none; width: calc(100vw - 104px - var(--safe-l) - var(--safe-r)); }
+}
+/* (paysage : entre le joystick et ⤴️ Sauter / ⬆️ Enlever, posés à 232 px du bord droit ; la colonne du milieu passait dessus) */
+@media (pointer: coarse) and (max-height: 480px) and (min-width: 641px) {
+  body.riding #toasts { left: calc(182px + var(--safe-l)); right: calc(304px + var(--safe-r)); width: auto; }
+}
 .toast {
   background: rgba(255, 255, 255, 0.96);
   padding: 10px 16px;
@@ -470,6 +479,8 @@ button.sv-card:hover { border-color: var(--primary); }
 .note.good { color: #1e8a4a; font-weight: 600; }
 /* 🐴 Quoi de neuf ? (src/ui/news.js) */
 .news-list { list-style: none; margin: 8px 0 12px; padding: 0; display: grid; gap: 6px; max-height: 52vh; overflow-y: auto; }
+/* (dans la fenêtre, c'est elle qui défile : la liste coupée net au 5e, 🎃 restait caché sans signe qu'il y en avait un 6e) */
+.modal-box > .news-list { max-height: none; overflow: visible; }
 .news-list li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 6px; align-items: start; line-height: 1.3; }
 .news-icon { font-size: 1.3rem; text-align: center; }
 .help-news { margin: 12px 0; padding: 8px 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.04); }
@@ -603,6 +614,9 @@ button.sv-card:hover { border-color: var(--primary); }
 .big-action small { color: var(--muted); font-size: 0.78rem; font-weight: 400; }
 .big-action.primary small { color: rgba(255, 255, 255, 0.85); }
 .big-action.off { opacity: 0.55; background: #f1ede4; }
+/* (grisée, l'action principale garde un texte sombre : « 🏇 Monter » d'un poulain, blanc sur beige, ne se lisait pas) */
+.big-action.off.primary { color: var(--ink); }
+.big-action.off.primary small { color: var(--muted); }
 
 /* ---------- boutons à l'écran */
 #touch-pad {
@@ -760,9 +774,17 @@ button.sv-card:hover { border-color: var(--primary); }
 .status-chip button { min-height: 44px; }
 .status-chip.status-more { padding: 4px; background: transparent; backdrop-filter: none; justify-self: center; }
 .status-chip.status-more button { background: var(--glass); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); padding: 0 16px; }
+/* En transparence (UI.updateLabels) : le nom d'un animal ou sa bulle 💬 dessous (on touche le nom à travers), ou la vue
+   devant le cheval quand on monte en portrait (le chrono du cross reste lisible). */
+#status-bar > .status-chip { transition: opacity 0.2s; }
+#status-bar.under { pointer-events: none; }
+#status-bar.under > .status-chip { opacity: 0.2; }
+#status-bar.ahead:not(.under) > .status-chip:not(.timing) { opacity: 0.35; }
 @media (pointer: coarse), (max-width: 640px) {
   #status-bar { bottom: auto; top: calc(200px + var(--safe-t)); left: auto; right: calc(10px + var(--safe-r)); transform: none; justify-items: end; }
   .status-chip { font-size: 0.9rem; padding: 3px 4px 3px 12px; }
+  /* (« 🏇 Tu montes… / Descendre » : le gros bouton « ⬇️ Descendre » le dit déjà ; reste pour le chrono du cross) */
+  #status-bar .ride-chip:not(.timing) { display: none; }
 }
 
 /* ---------- équipement */

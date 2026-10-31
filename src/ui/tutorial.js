@@ -12,7 +12,7 @@
 // La logique (étapes, réussite) est dans src/sim/tutorial.js ; l'histoire et les quêtes rejointes dans
 // src/sim/quests.js ; le journal dans src/ui/quests.js.
 
-import { h, isPhone } from './dom.js';
+import { h, isPhone, isDesk } from './dom.js';
 import { t, getLang } from '../i18n.js';
 import { nbsp } from './minigames/frame.js'; // typographie française (« Adopter » ! ne se coupe pas)
 import { OBJECTIVES, objectiveParams } from '../sim/objectives.js';
@@ -31,11 +31,14 @@ import { NoticeQueue } from './questNotices.js'; // les petits mots du guide, qu
 import { ringSpot } from './ringSpot.js'; // où poser le cercle et le doigt
 import { WISH_ACTION } from '../sim/horseWish.js'; // 🫧 (le bouton vert fait ce que sa bulle demande)
 import { rideCardShown } from './rideCard.js'; // 🏇 (descendu : la carte « Ta balade » d'abord, le petit mot après)
+import { keyLabel, moveKeys } from './keys.js'; // ⌨️ (« utilise les touches Z Q S D » : les lettres de ce clavier)
+import { keycaps } from './controls.js';
 
 const GUIDE = '🐶';
 /** Nom d'une quête (« Adopte {n} espèces… » : le total suit les espèces proposées). */
 const questTitle = (p, id) => t(`o_${id}`, objectiveParams(p, OBJECTIVES.find((o) => o.id === id)));
-const isTouch = () => matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+// (au doigt : « touche le sol » ; sur ordinateur, même un portable à écran tactile avec sa souris : les touches)
+const isTouch = () => !isDesk();
 const isNarrow = isPhone;
 // Taille du suivi de quête : téléphone en portrait (comme le CSS @media (max-width: 640px)), téléphone en paysage,
 // ou ordinateur / tablette.
@@ -308,9 +311,9 @@ export class Tutorial {
   stepText(step) {
     const a = this.animal();
     const params = { name: this.profile.name, animal: a?.name ?? '', g: a?.sex, icon: a?.species === 'horse' ? '🌾' : '🍖' }; // (icon : son bouton Nourrir)
-    let key = `tuto_${step.id}`;
-    if (step.id === 'move') key = isTouch() ? 'tuto_move_touch' : 'tuto_move';
-    return t(key, params);
+    // (sur ordinateur, marcher : « utilise les touches Z Q S D », les lettres de ce clavier)
+    if (step.id === 'move') return t(isTouch() ? 'tuto_move_touch' : 'tuto_move', { ...params, keys: moveKeys() });
+    return t(`tuto_${step.id}`, params);
   }
 
   /** Une étape de quête suivie (« Touche 🌾 Nourrir » : le bouton de l'animal qu'on vient de toucher, comme stepText). */
@@ -326,7 +329,7 @@ export class Tutorial {
     if (this.ui.modalOpen) return t(this.ui.modal.querySelector('input') ? 'tuto_hint_modal' : 'tuto_hint_modalOk');
     if (why) return t(`tuto_hint_${why}`, params);
     if (step.id === 'end' && this.profile.mode === 'manage') return t('tuto_end_money', params);
-    if (step.id === 'move') return isTouch() ? t('tuto_move_touch_hint') : t('tuto_move_hint');
+    if (step.id === 'move') return isTouch() ? t('tuto_move_touch_hint') : t('tuto_move_hint', { shift: keyLabel('ShiftLeft') });
     const key = `tuto_${step.id}_hint`;
     return t(key, params) === key ? '' : t(key, params);
   }
@@ -394,9 +397,9 @@ export class Tutorial {
 
   // ------------------------------------------------------------ cibles
 
-  /** Bouton du haut (barre d'outils) ou de la barre du temps (⏸ ▶ ⏩), reconnu par son titre. */
+  /** Bouton du haut (barre d'outils) ou de la barre du temps (⏸ ▶ ⏩), reconnu par la clé de son libellé (data-id). */
   hudButton(id) {
-    return [...this.ui.hud.querySelectorAll('.hud-btn, .time-btn')].find((b) => b.title === t(id)) ?? null;
+    return this.ui.hud.querySelector(`.hud-btn[data-id="${id}"], .time-btn[data-id="${id}"]`);
   }
 
   sheetButton(label) {
@@ -758,11 +761,12 @@ export class Tutorial {
     const juggle = active.length > 1
       ? h('button', {
         class: 'qt-switch',
-        title: `${t('qj_switch')} (${at + 1}/${active.length})${mode === 'desk' ? ' · N' : ''}`,
+        title: `${t('qj_switch')} (${at + 1}/${active.length})${mode === 'desk' ? ` · ${keyLabel('KeyN')}` : ''}`,
         'aria-label': `${t('qj_switch')} (${at + 1}/${active.length})`,
         onClick: () => this.cycleQuest(1),
       }, h('span', { class: 'qt-switch-icon', 'aria-hidden': 'true' }, '⇄'),
-      h('span', { class: 'qt-switch-dots', 'aria-hidden': 'true' }, active.map((x) => h('i', { class: x === q.id ? 'on' : '' }))))
+      h('span', { class: 'qt-switch-dots', 'aria-hidden': 'true' }, active.map((x) => h('i', { class: x === q.id ? 'on' : '' }))),
+      mode === 'desk' ? keycaps(['KeyN'], 'kb-badge') : null) // (⌨️ sa touche, sur ordinateur : CSS)
       : null;
     const out = [fold, h('div', { class: 'qt-row' }, head, juggle, quick)];
     if (w) {

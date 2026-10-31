@@ -18,7 +18,7 @@ import { HorseBreath } from './HorseBreath.js'; // 🌬️ son souffle dans le f
 import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 import { Player, CameraRig } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
-import { Input } from './Input.js';
+import { Input, MENU_CODES } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
 import { DogTrainer } from './DogTrainer.js'; // métier éducateur canin : clients, séances, livraison
 import { Herding } from './Herding.js';
@@ -85,6 +85,8 @@ import { t, ta, L, getLang, fmtHour } from '../i18n.js'; // (ta : « blessée »
 import { Structures } from './Structures.js';
 import { ManagementView } from './ManagementView.js';
 import { openStructure } from '../ui/construction.js';
+import { runMenuKey } from '../ui/controls.js'; // ⌨️ J le journal, P la pause, H les touches, Échap le menu
+import { isDesk } from '../ui/dom.js';
 import { doorOf, equipmentPos, STRUCTURES, structureShown } from '../sim/construction.js';
 import { applyCoreLayout } from './coreLayout.js';
 import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, trajet, pauses)
@@ -98,6 +100,7 @@ import { Groomer } from './Groomer.js'; // métier Toiletteur : salon, clients e
 
 // Animaux qu'on range dans la maison des animaux.
 const PET_HOUSED = ['dog', 'cat', 'rabbit'];
+const MENU_KEYS = new Set(MENU_CODES); // (J, P, H, Échap : Game.onKey)
 // Attente du cheval réaliste au plus (ms après l'ouverture de la page) avant d'ouvrir une partie : un fichier en
 // cache arrive avant ; sur un réseau lent, on joue avec le cheval sculpté en attendant (voir onRealHorse).
 const HORSE_GRACE_MS = 1500;
@@ -1838,7 +1841,7 @@ export class Game {
   /** Les actions sont bloquées pendant la pause. Renvoie vrai si c'est bloqué. */
   blockedByPause() {
     if (!this.paused) return false;
-    this.ui.toast(t('pausedNoAction'));
+    this.ui.toast(t(isDesk() ? 'pausedNoAction_desk' : 'pausedNoAction')); // (sur ordinateur : « appuie sur P »)
     return true;
   }
 
@@ -2184,6 +2187,9 @@ export class Game {
 
   onKey(code) {
     if (!this.running || this.ui.isBlocking()) return;
+    // ⌨️ J le journal, P la pause, H les touches, Échap le menu (src/ui/controls.js) ; dans le véhicule, Échap n'ouvre
+    // pas le menu : on en sort, juste dessous.
+    if (MENU_KEYS.has(code) && runMenuKey(this.ui, code)) return;
     if (code === 'Escape' && this.tripFlow.view && this.tripFlow.view !== 'ramp') this.tripFlow.setView(null); // sortir du véhicule
     if (code === 'KeyE' || code === 'Enter' || code === 'NumpadEnter') {
       const before = this.ui.panel;

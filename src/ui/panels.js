@@ -3,7 +3,7 @@
 import { checkForUpdate } from './updates.js';
 import { dogTrainerSection, trainingBadge } from './dogTrainer.js'; // éducateur canin : séances dans la fiche, badge
 import { isTrainingClient } from '../sim/dogTrainer.js';
-import { h, bar, hexColor } from './dom.js';
+import { h, bar, hexColor, isDesk } from './dom.js';
 import { t, ta, L, getLang, setLang } from '../i18n.js';
 import { SPECIES, getBreed, allOffered, anyAvailable, LIVESTOCK_IDS } from '../sim/species.js';
 import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass, bondStage, BOND_PERKS, isHurt } from '../sim/animal.js';
@@ -38,6 +38,8 @@ import { albumView } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savai
 import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
 import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
 import { huntView } from '../sim/halloween.js'; // 🎃 la chasse aux citrouilles
+import { keycaps, openKeysCard, stripWanted, setStripWanted } from './controls.js'; // ⌨️ les touches sur ordinateur
+import { controlsHelp } from './keys.js';
 import { memoriesOf } from '../sim/memories.js'; // 📸 ses souvenirs
 import { quirksOf, knows, FEAR_CALM } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
 import { starsView, starHowKey, starPerk } from '../sim/horseStars.js'; // ⭐ ses étoiles
@@ -599,6 +601,7 @@ export function openJournal(ui, tab = 'quest') {
   const state = { tab };
   ui.openPanel({
     title: `📖 ${t('journal')}`,
+    kind: 'journal', // (J le referme, src/ui/controls.js)
     live: true,
     render: () => {
       const p = g.profile;
@@ -708,6 +711,16 @@ export function openSettings(ui) {
           class: ui.onScreenControls() === on ? 'primary' : '',
           onClick: () => { ui.setOnScreenControls(on); ui.renderPanel(); },
         }, t(key)))),
+        // ⌨️ Ordinateur : toutes les touches (comme H), et le bandeau des touches en bas de l'écran.
+        isDesk() ? [
+          h('h3', {}, `⌨️ ${t('kc_settings')}`),
+          h('button', { class: 'big', onClick: () => openKeysCard(ui) }, `⌨️ ${t('kc_show')}`, keycaps(['KeyH'], 'kb-badge')),
+          h('p', { class: 'note' }, t('ks_setting')),
+          h('div', { class: 'row wrap' }, [[true, 'ks_on'], [false, 'ks_off']].map(([on, key]) => h('button', {
+            class: stripWanted() === on ? 'primary' : '',
+            onClick: () => { setStripWanted(on); ui.keyStrip.update(); ui.renderPanel(); },
+          }, t(key)))),
+        ] : null,
         h('h3', {}, t('language')),
         h('div', { class: 'row wrap' }, [['fr', 'Français'], ['en', 'English']].map(([l, name]) => h('button', {
           class: getLang() === l ? 'primary' : '',
@@ -741,7 +754,7 @@ export function openSettings(ui) {
             },
           }, `📂 ${t('sv_restore')}`)),
         h('p', { class: 'note' }, t('sv_why')),
-        h('p', { class: 'note' }, t('controlsHelp')),
+        isDesk() ? null : h('p', { class: 'note' }, controlsHelp()), // (au doigt : la ligne des touches, comme avant)
         // Revoir le tutoriel guidé (src/ui/tutorial.js).
         ui.tutorial ? h('button', { class: 'big', onClick: () => ui.tutorial.replay() }, `🎓 ${t('tuto_replay')}`) : null,
         // Mise à jour du jeu installé (src/ui/updates.js) : cherche, puis bandeau « Recharger » si une version est prête.

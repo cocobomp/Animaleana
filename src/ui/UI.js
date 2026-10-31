@@ -1,6 +1,6 @@
 // Interface : barre du haut, bouton d'action, notifications, fenêtres.
 
-import { h, isPhone, safeInsets } from './dom.js';
+import { h, isPhone, isDesk, safeInsets } from './dom.js';
 import { watchViewport, focusField } from './viewport.js'; // clavier à l'écran
 import { t, ta, L, fmtHour, getLang } from '../i18n.js';
 import { formatClock } from '../sim/time.js';
@@ -33,6 +33,9 @@ import { openCareers, careerChips } from './careers.js'; // 💼 métiers
 import { openTrailCarnet } from './trailGuide.js'; // 🧭 guide de randonnée
 import { BUBBLE_PX } from '../game/wishBubble.js'; // (la bulle « il te demande » pend sous le nom)
 import { WISH, WISH_ACTION } from '../sim/horseWish.js'; // 🫧 toucher sa bulle fait ce qu'il demande
+import { KeyStrip, keycaps, relabelKeycaps, openKeysCard, keysCardOpen, maybeKeysCard } from './controls.js'; // ⌨️ bandeau et carte des touches
+import { keyLabel, controlsHelp, loadKeyLayout, onKeyLayout } from './keys.js'; // (la lettre écrite sur la touche)
+import { isTextEntry } from '../game/Input.js';
 
 const STATUS_MAX = 3; // pastilles d'état visibles en même temps (les autres derrière « ➕ N de plus »)
 const RIDE_TOASTS = 2; // à cheval sur un téléphone : messages à l'écran en même temps (les suivants attendent, UI.toast)
@@ -74,7 +77,7 @@ export class UI {
 
     this.hud = h('div', { id: 'hud', hidden: true });
     this.actionBtn = h('button', { id: 'action', hidden: true, onClick: () => this.game?.interact() });
-    this.camBtn = h('button', { id: 'cam-btn', title: t('camera'), onClick: () => this.game?.toggleCamera() }, '🎥');
+    this.camBtn = h('button', { id: 'cam-btn', title: t('camera'), onClick: () => this.game?.toggleCamera() }, '🎥', keycaps(['KeyC'], 'kb-badge'));
     this.toasts = h('div', { id: 'toasts' });
     this.panelEl = h('aside', { id: 'panel', hidden: true });
     this.screen = h('div', { id: 'screen' });
@@ -82,6 +85,17 @@ export class UI {
     this.help = h('div', { id: 'help', hidden: true });
     root.append(this.hud, this.actionBtn, this.camBtn, this.toasts, this.panelEl, this.screen, this.modal, this.help);
     this.camBtn.hidden = true;
+    // ⌨️ Ordinateur : le bandeau des touches en bas de l'écran (src/ui/controls.js) ; les lettres suivent le vrai
+    // clavier dès que le navigateur le dit (Z Q S D sur un clavier français).
+    this.keyStrip = new KeyStrip(this);
+    root.append(this.keyStrip.el);
+    loadKeyLayout();
+    onKeyLayout(() => { relabelKeycaps(); this.keyStrip.key = ''; this.keyStrip.update(); });
+    // (le bandeau dit ce que fait [E] : le texte du bouton vert, dès qu'il change — setFocus, voyage, salon…)
+    if (typeof MutationObserver === 'function') {
+      new MutationObserver(() => this.syncStripAction())
+        .observe(this.actionBtn, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
+    }
 
     // Boutons à l'écran : tourner la vue et courir (en plus du joystick).
     const hold = (el, down, up) => {
@@ -90,7 +104,7 @@ export class UI {
     };
     const left = h('button', { class: 'pad-btn', 'aria-label': '⟲' }, '⟲');
     const right = h('button', { class: 'pad-btn', 'aria-label': '⟳' }, '⟳');
-    const runBtn = h('button', { class: 'pad-btn run' }, '🏃');
+    const runBtn = h('button', { class: 'pad-btn run' }, '🏃', keycaps(['ShiftLeft'], 'kb-badge')); // (Maj au clavier)
     hold(left, () => { this.game.input.btnLook = 1; }, () => { this.game.input.btnLook = 0; });
     hold(right, () => { this.game.input.btnLook = -1; }, () => { this.game.input.btnLook = 0; });
     hold(runBtn, () => { this.game.input.btnRun = true; }, () => { this.game.input.btnRun = false; });
@@ -98,7 +112,7 @@ export class UI {
     this.statusBar = h('div', { id: 'status-bar' });
     this.pauseBanner = h('div', { id: 'pause-banner', hidden: true },
       h('span', {}, `⏸ ${t('pause')}`),
-      h('button', { class: 'primary', onClick: () => this.game.setTimeScale(1) }, `▶ ${t('resume')}`));
+      h('button', { class: 'primary', onClick: () => this.game.setTimeScale(1) }, `▶ ${t('resume')}`, keycaps(['KeyP'], 'kb-badge')));
     root.append(this.pauseBanner);
     this.taskBox = h('div', { id: 'task-list', hidden: true });
     root.append(this.taskBox);
@@ -123,7 +137,7 @@ export class UI {
     this.postCount = h('span', { class: 'post-count' });
     this.postName = h('span', { class: 'post-name' });
     this.postBtn = h('button', { id: 'post-btn', type: 'button', hidden: true },
-      this.postRing, h('span', { class: 'post-icon', 'aria-hidden': 'true' }, '⬆️'), this.postName, this.postCount, h('kbd', {}, '␣'));
+      this.postRing, h('span', { class: 'post-icon', 'aria-hidden': 'true' }, '⬆️'), this.postName, this.postCount, keycaps(['Space']));
     this.postBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault(); // (pas de focus : Espace reste au jeu)
       this.game?.postTrot();
@@ -131,7 +145,7 @@ export class UI {
     // ⤴️ Sauter le tronc (src/game/FreeJumps.js) : au galop, un tronc droit devant ; même place que « Enlever ».
     this.jumpName = h('span', { class: 'post-name' });
     this.jumpBtn = h('button', { id: 'jump-btn', type: 'button', hidden: true },
-      h('span', { class: 'post-icon', 'aria-hidden': 'true' }, '⤴️'), this.jumpName, h('kbd', {}, '␣'));
+      h('span', { class: 'post-icon', 'aria-hidden': 'true' }, '⤴️'), this.jumpName, keycaps(['Space']));
     this.jumpBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.game?.freeJumps?.want();
@@ -140,7 +154,7 @@ export class UI {
     // écart ; même place que « Debout ».
     this.praiseName = h('span', { class: 'post-name' });
     this.praiseBtn = h('button', { id: 'praise-btn', type: 'button', hidden: true },
-      h('span', { class: 'post-icon', 'aria-hidden': 'true' }, '🤚'), this.praiseName, h('kbd', {}, '␣'));
+      h('span', { class: 'post-icon', 'aria-hidden': 'true' }, '🤚'), this.praiseName, keycaps(['Space']));
     this.praiseBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.game?.praiseHorse();
@@ -178,7 +192,16 @@ export class UI {
       // defaultPrevented : touche déjà traitée (Échap dans la fenêtre du nom ne ferme pas aussi le panneau dessous).
       if (e.code === 'Escape' && !e.defaultPrevented) {
         if (this.modalOpen) return this.escapeModal(e);
-        if (this.panel) this.closePanel();
+        // (preventDefault : le jeu ne le reçoit pas en plus — Échap ferme le panneau, il n'ouvre pas le menu derrière)
+        if (this.panel) {
+          e.preventDefault();
+          this.closePanel();
+        }
+      }
+      // ⌨️ H referme la carte des touches qu'il a ouverte (src/ui/controls.js) ; le jeu ne la rouvre pas (preventDefault).
+      if (e.code === 'KeyH' && !e.repeat && !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && keysCardOpen(this) && !isTextEntry(e.target)) {
+        e.preventDefault();
+        this.hideModal();
       }
     });
     // Une fenêtre qui se redessine elle-même (📸 photo, inscription…) : le bouton qui avait le focus disparaît,
@@ -195,7 +218,7 @@ export class UI {
     // Hauteur de la barre du haut, pour le CSS (#panel commence sous la barre d'outils en paysage et sur ordinateur).
     this.hudObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.syncHudVars()) : null;
     this.hudObserver?.observe(this.hud);
-    window.addEventListener('resize', () => this.syncHudVars());
+    window.addEventListener('resize', () => { this.syncHudVars(); this.keyStrip.update(); });
     // Hauteur du panneau depuis le bas de l'écran (CSS : messages juste au-dessus du panneau, sur téléphone).
     if (typeof ResizeObserver === 'function') new ResizeObserver(() => this.syncPanelSpace()).observe(this.panelEl);
     window.addEventListener('resize', () => this.syncPanelSpace());
@@ -253,6 +276,7 @@ export class UI {
     this.statusKey = '';
     this.clearLabels();
     document.getElementById('joystick').hidden = true;
+    this.keyStrip.update(); // (plus de partie : plus de bandeau)
     showProfiles(this);
   }
 
@@ -273,12 +297,17 @@ export class UI {
     this.applyControls();
     this.buildHud();
     {
+      // Ordinateur : le bandeau des touches en bas de l'écran remplace la longue ligne d'aide (et la carte ⌨️ vient
+      // toute seule, une fois : maybeKeysCard) ; au doigt, « Touche le sol pour y aller » comme avant.
+      const desk = isDesk();
       const touch = matchMedia('(pointer: coarse)').matches;
-      this.help.textContent = touch ? t('tapHint') : `${t('tapHint')} · ${t('controlsHelp')}`;
-      this.help.hidden = false;
+      this.help.textContent = desk ? '' : touch ? t('tapHint') : `${t('tapHint')} · ${controlsHelp()}`;
+      this.help.hidden = desk;
       clearTimeout(this.helpTimer);
-      this.helpTimer = setTimeout(() => this.hideHelp(), 15000);
+      if (!desk) this.helpTimer = setTimeout(() => this.hideHelp(), 15000);
     }
+    this.startedAt = performance.now();
+    this.keyStrip.update();
     this.refresh();
     setTimeout(() => { if (game.running) maybeShowNews(this); }, 1200); // 🐴 quoi de neuf ? (une fois)
   }
@@ -287,12 +316,26 @@ export class UI {
     this.help.hidden = true;
   }
 
+  /** ⌨️ [E] dans le bandeau des touches : le texte du bouton vert, sans sa touche (rien : « Agir »). */
+  syncStripAction() {
+    const b = this.actionBtn;
+    const kbd = b.querySelector('kbd');
+    this.keyStrip.setAction(b.hidden ? '' : b.textContent.slice(0, kbd ? -kbd.textContent.length : undefined).trim());
+  }
+
   buildHud() {
-    // Le tutoriel et l'aide retrouvent chaque bouton par son title (= le libellé traduit) : on le garde exact.
-    const btn = (emoji, label, fn, cls = '') => h('button', { class: `hud-btn ${cls}`, onClick: fn, title: label }, h('span', {}, emoji), h('small', {}, label));
+    // Le tutoriel et l'aide retrouvent chaque bouton par son data-id (la clé de son libellé) ; sur ordinateur, son
+    // info-bulle dit aussi sa touche (« Journal (J) ») et une petite touche est dessinée dans son coin.
+    const desk = isDesk();
+    const btn = (emoji, id, fn, cls = '', code = null) => h('button', {
+      class: `hud-btn ${cls}`, onClick: fn, 'data-id': id,
+      title: code && desk ? `${t(id)} (${keyLabel(code)})` : t(id), 'aria-keyshortcuts': code ? keyLabel(code) : null,
+    }, h('span', {}, emoji), h('small', {}, t(id)), code ? keycaps([code], 'kb-badge') : null);
+    this.camBtn.title = desk ? `${t('camera')} (${keyLabel('KeyC')})` : t('camera');
+    relabelKeycaps(); // (la langue a pu changer : « Maj » / « Shift », « Espace » / « Space »)
     // Refait avec l'interface : il garde ainsi la langue choisie dans les réglages.
     this.pauseBanner.replaceChildren(h('span', {}, `⏸ ${t('pause')}`),
-      h('button', { class: 'primary', onClick: () => this.game.setTimeScale(1) }, `▶ ${t('resume')}`));
+      h('button', { class: 'primary', onClick: () => this.game.setTimeScale(1) }, `▶ ${t('resume')}`, keycaps(['KeyP'], 'kb-badge')));
     // Carte d'infos : les nœuds sont créés une fois ici ; refresh() ne change que les textes.
     // (Recréer les boutons à chaque rafraîchissement faisait perdre le tap qu'on était en train de donner.)
     this.hudName = h('span', { class: 'hud-name' });
@@ -313,36 +356,47 @@ export class UI {
     this.hud.replaceChildren(
       this.hudInfo,
       h('nav', { class: 'hud-buttons' },
-        btn('🐾', t('animals'), () => this.openAnimals()),
-        btn('🚜', t('farm'), () => this.openFarm()),
+        btn('🐾', 'animals', () => this.openAnimals()),
+        btn('🚜', 'farm', () => this.openFarm()),
         // Vue d'ensemble : dans « ⋯ Plus » sur téléphone (sept boutons d'au moins 44 px tiennent sur la rangée, pas huit).
-        btn('🗺️', t('mgmt_btn'), () => this.game.mgmt.toggle(), 'secondary'),
+        btn('🗺️', 'mgmt_btn', () => this.game.mgmt.toggle(), 'secondary'),
         // Vue construction : grille, agrandir le paddock et les enclos, construire (src/game/ConstructionView.js).
-        btn('🏗️', t('hud_build'), () => this.game.mgmt.openBuild(), 'build'),
-        btn('💼', t('careers'), () => this.openCareers()), // métiers (src/ui/careers.js)
-        btn('🧭', t('travel'), () => this.openTravel()),
-        btn('📖', t('journal'), () => this.openJournal()),
+        btn('🏗️', 'hud_build', () => this.game.mgmt.openBuild(), 'build'),
+        btn('💼', 'careers', () => this.openCareers()), // métiers (src/ui/careers.js)
+        btn('🧭', 'travel', () => this.openTravel()),
+        btn('📖', 'journal', () => this.openJournal(), '', 'KeyJ'),
         // Sur téléphone (une seule rangée), ceux-là passent dans « ⋯ Plus » ; sur ordinateur ils restent visibles.
-        btn('🏆', t('actv_hud'), () => this.openActivities(), 'secondary'),
-        btn('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen()), 'secondary'),
-        btn('❓', t('help'), () => openHelp(this), 'secondary'),
-        btn('⚙️', t('settings'), () => this.openSettings(), 'secondary'),
-        btn('⋯', t('hud_more'), () => this.openMore(), 'more')),
+        btn('🏆', 'actv_hud', () => this.openActivities(), 'secondary'),
+        btn('👕', 'avatar', () => this.showAvatarEditor(this.game.profile, () => this.clearScreen()), 'secondary'),
+        btn('❓', 'help', () => openHelp(this), 'secondary'),
+        btn('⚙️', 'settings', () => this.openSettings(), 'secondary'),
+        btn('⋯', 'hud_more', () => this.openMore(), 'more')),
     );
   }
 
-  /** « ⋯ Plus » (téléphone) : Vue d'ensemble, Activités, Avatar, Aide et Réglages dans une petite feuille. */
+  /**
+   * « ⋯ Plus » (téléphone) : Vue d'ensemble, Activités, Avatar, Aide et Réglages dans une petite feuille. Sur ordinateur,
+   * c'est le menu d'Échap (src/ui/controls.js) : en plus, ⌨️ les touches, 📖 le journal et ⏸ la pause, avec leur touche.
+   */
   openMore() {
-    const item = (emoji, label, fn) => h('button', { class: 'big-action', onClick: () => { this.hideModal(); fn(); } },
-      h('span', { class: 'ba-icon' }, emoji), h('span', { class: 'ba-text' }, h('b', {}, label)));
+    const g = this.game;
+    const desk = isDesk();
+    const item = (emoji, label, fn, code = null) => h('button', {
+      class: 'big-action', title: code && desk ? `${label} (${keyLabel(code)})` : null, onClick: () => { this.hideModal(); fn(); },
+    }, h('span', { class: 'ba-icon' }, emoji), h('span', { class: 'ba-text' }, h('b', {}, label)), code && desk ? keycaps([code], 'kb-badge') : null);
     this.showModal([
-      h('div', { class: 'action-sheet more-sheet' },
-        item('🗺️', t('mgmt_btn'), () => this.game.mgmt.toggle()),
+      desk ? h('h3', {}, `⋯ ${t('kc_menu')}`) : null,
+      h('div', { class: `action-sheet more-sheet ${desk ? 'desk' : ''}`.trim() },
+        desk ? item('⌨️', t('kc_btn'), () => openKeysCard(this), 'KeyH') : null,
+        desk ? item('📖', t('journal'), () => this.openJournal(), 'KeyJ') : null,
+        desk ? (g.paused ? item('▶', t('resume'), () => g.setTimeScale(1), 'KeyP') : item('⏸', t('pause'), () => g.setTimeScale(0), 'KeyP')) : null,
+        item('🗺️', t('mgmt_btn'), () => g.mgmt.toggle()),
         item('🏆', t('actv_hud'), () => this.openActivities()),
-        item('👕', t('avatar'), () => this.showAvatarEditor(this.game.profile, () => this.clearScreen())),
+        item('👕', t('avatar'), () => this.showAvatarEditor(g.profile, () => this.clearScreen())),
         item('❓', t('help'), () => openHelp(this)),
         item('⚙️', t('settings'), () => this.openSettings())),
-      h('div', { class: 'row end' }, h('button', { onClick: () => this.hideModal() }, t('cancel'))),
+      // (data-escape : Échap ferme le menu, comme il l'a ouvert)
+      h('div', { class: 'row end' }, h('button', { 'data-escape': true, onClick: () => this.hideModal() }, t('cancel'))),
     ]);
   }
 
@@ -385,6 +439,7 @@ export class UI {
   /** ⬆️ Le bouton du trot enlevé : montré au trot en selle (Game.canPostTrot) ; le cercle suit la foulée. */
   updatePostBtn() {
     const g = this.game;
+    if (!!g?.player?.mount !== this.keyStrip.ride) this.keyStrip.update(); // ⌨️ (monté, descendu : le bandeau change tout de suite)
     // ⏱️ Le chrono du cross, dans la pastille « Tu montes… » (seul le texte change)
     const rc = g?.player?.mount ? this.statusBar.querySelector('.ride-chip') : null;
     if (rc?.firstChild) {
@@ -405,10 +460,11 @@ export class UI {
         this.jumpBtn.setAttribute('aria-label', t('fj_btnHelp'));
         if (!g.profile.freeJumpTip) {
           g.profile.freeJumpTip = true;
-          this.toast(t('fj_tip'), 7000, { now: true });
+          this.toast(t(isDesk() ? 'fj_tip_desk' : 'fj_tip'), 7000, { now: true }); // (sur ordinateur : la touche Espace)
         }
       }
       this.fitToasts(); // (pas de message sur lui)
+      this.keyStrip.update(); // ([Espace] Sauter dans le bandeau)
     }
     // 🤚 « Bravo ! » / « Rassure-le » (Game.canPraise) : quelques secondes à la place de ⬆️ (jamais de ⤴️)
     const praise = !jump && !!g?.canPraise?.() && !this.isBlocking();
@@ -423,6 +479,7 @@ export class UI {
     if (this.praiseBtn.hidden === praise) {
       this.praiseBtn.hidden = !praise;
       this.fitToasts(); // (pas de message sur lui)
+      this.keyStrip.update();
     }
     const show = !praise && !!g?.canPostTrot?.() && !this.isBlocking();
     if (this.postBtn.hidden === show) {
@@ -434,9 +491,10 @@ export class UI {
         // (la première fois : comment on fait)
         if (!g.profile.postHint) {
           g.profile.postHint = true;
-          this.toast(t('post_hint'), 9000, { now: true });
+          this.toast(t(isDesk() ? 'post_hint_desk' : 'post_hint'), 9000, { now: true });
         }
       }
+      this.keyStrip.update();
     }
     if (!show) return;
     const pl = g.player;
@@ -499,6 +557,8 @@ export class UI {
     this.statusBox = undefined; // (relue par updateLabels : deux fois par seconde, pas à chaque image)
     this.pauseBanner.hidden = !g.paused;
     this.fitToasts();
+    this.keyStrip.update();
+    maybeKeysCard(this); // ⌨️ la carte des touches, la première fois sur un ordinateur
   }
 
   /**
@@ -755,16 +815,20 @@ export class UI {
   /** Barre du temps : pause, ▶, ⏩ et 🤖 Auto. Créée une fois ; updateTimeBar() allume le bon bouton. */
   timeControls() {
     const g = this.game;
-    const b = (label, scale, title) => h('button', {
+    // (data-id : le tutoriel retrouve ⏩ ; P au clavier met en pause et repart, src/ui/controls.js)
+    const desk = isDesk();
+    const b = (label, scale, id, code = null, badge = true) => h('button', {
       class: 'time-btn',
       'data-scale': scale,
-      title,
+      'data-id': id,
+      title: code && desk ? `${t(id)} (${keyLabel(code)})` : t(id),
       onClick: () => g.setTimeScale(scale),
-    }, label);
-    this.timeBtns = [b('⏸', 0, t('pause')), b('▶', 1, t('timeNormal')), b('⏩', 3, t('timeFast'))];
+    }, label, code && badge ? keycaps([code], 'kb-badge') : null);
+    this.timeBtns = [b('⏸', 0, 'pause', 'KeyP'), b('▶', 1, 'timeNormal', 'KeyP', false), b('⏩', 3, 'timeFast')]; // (P : la petite touche sur ⏸)
     // 🤖 Auto : le personnage s'occupe tout seul des tâches simples (visibles dans « Ma liste »).
     this.autoBtn = h('button', {
       class: 'time-btn auto',
+      'data-id': 'autoModeHelp',
       title: t('autoModeHelp'),
       onClick: () => g.tasks.setAuto(!g.tasks.autoMode),
     }, `🤖 ${t('autoMode')}`);
@@ -1455,6 +1519,7 @@ export class UI {
     const on = this.onScreenControls();
     document.getElementById('joystick').hidden = !on;
     this.touchPad.hidden = !on;
+    this.keyStrip.update(); // (le joystick à l'écran prend la place du bandeau des touches)
   }
   openVetClinic() { panels.openVetClinic(this); this.game?.emit('panel', 'vetClinic'); }
   openVet(a, atClinic) { openVet(this, a, atClinic); this.game?.emit('panel', 'vetExam'); }

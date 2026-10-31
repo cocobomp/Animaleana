@@ -677,7 +677,7 @@ export function milkGame(ctx) {
     down(p) { press(p.x < 200 ? 'L' : 'R'); },
     key(code, down) {
       if (!down) return;
-      if (code === 'ArrowLeft' || code === 'KeyA' || code === 'KeyQ') press('L');
+      if (code === 'ArrowLeft' || code === 'KeyA') press('L'); // (KeyA : la touche Q d'un clavier français)
       if (code === 'ArrowRight' || code === 'KeyD') press('R');
       if (code === 'Space') press(expect);
       if ((code === 'Enter' || code === 'NumpadEnter') && !stopBtn.disabled) end();

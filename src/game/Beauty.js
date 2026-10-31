@@ -22,6 +22,7 @@ import { buildAvatar, animateAvatarWalk, updateAvatarLife, startAvatarGesture } 
 import { disposeModel } from './models/animalModel.js';
 import { judgeLines } from '../ui/beauty.js';
 import { t, ta } from '../i18n.js';
+import { MENU_CODES } from './Input.js'; // (les touches des menus ne font pas bouger l'animal)
 import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -826,7 +827,7 @@ class BeautySession extends Session {
     if (ev.code === 'Space') {
       ev.preventDefault();
       this.action();
-    } else if (this.phase === 'stand') this.touched = true;
+    } else if (this.phase === 'stand' && !MENU_CODES.includes(ev.code)) this.touched = true; // (J, P, H, Échap : rien ne bouge)
   }
 
   onTap() {

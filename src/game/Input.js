@@ -1,13 +1,28 @@
 // Contrôles : clavier + souris sur ordinateur, joystick virtuel + glisser sur téléphone.
+// Les touches de menu (J, P, H, Échap) passent par Game.onKey vers src/ui/controls.js.
 
 /** Touches qui « appuient » sur le bouton qui a le focus. */
 export const isPress = (code) => code === 'Enter' || code === 'NumpadEnter' || code === 'Space';
 
-/** L'élément qui reçoit la touche est un bouton, ou se trouve dans un panneau, une fenêtre ou un mini-jeu. */
+/** L'élément qui reçoit la touche est un bouton (ou une case à cocher), ou se trouve dans un panneau, une fenêtre ou un mini-jeu. */
 export function onControl(el) {
   if (!el?.closest || el === document.body || el === document.documentElement) return false;
-  return !!el.closest('button, a[href], [role="button"], summary, #panel, #modal, .mg-overlay, .vx-overlay');
+  return !!el.closest('button, a[href], input, select, [role="button"], summary, #panel, #modal, .mg-overlay, .vx-overlay');
 }
+
+// (ces champs-là ne prennent pas les lettres : une case à cocher cliquée laisse marcher avec Z Q S D)
+const NOT_TYPED = ['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'image', 'color'];
+
+/** L'enfant tape dans un champ (un nom, la recherche de l'Aide) : les touches sont pour lui, pas pour le jeu. */
+export function isTextEntry(el) {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+  return el.tagName === 'INPUT' && !NOT_TYPED.includes(String(el.type || 'text').toLowerCase());
+}
+
+/** Les touches des menus (J journal, P pause, H les touches, Échap) : elles ne font jamais bouger personne. */
+export const MENU_CODES = ['KeyJ', 'KeyP', 'KeyH', 'Escape'];
 
 export class Input {
   constructor(canvas, joystickEl) {
@@ -24,17 +39,17 @@ export class Input {
     this.lookPointers = new Map();
     this.pinchDist = 0;
 
-    const isTyping = (e) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName);
     window.addEventListener('keydown', (e) => {
-      if (isTyping(e)) return;
+      if (isTextEntry(e.target)) return;
       // Entrée ou Espace sur un bouton (choisi avec Tab) ou dans un panneau, une fenêtre, un mini-jeu :
       // c'est le bouton qui la reçoit (clic natif). Avant, Entrée relançait « s'occuper de l'animal » à
       // portée, qui redessinait le panneau sous le bouton : « Caresser », « Monter »… ne faisaient rien.
       if (isPress(e.code) && onControl(e.target)) return;
-      // Échap déjà utilisé (il vient de fermer une fenêtre) : le jeu ne le reçoit pas en plus.
-      if (e.code === 'Escape' && e.defaultPrevented) return;
+      // Touche déjà utilisée (Échap vient de fermer une fenêtre, H la carte des touches) : le jeu ne la reçoit pas en plus.
+      if (e.defaultPrevented) return;
       this.keys.add(e.code);
-      if (!e.repeat) this.onKey?.(e.code);
+      // (Ctrl, Cmd ou Alt avec : c'est pour le navigateur — Ctrl+P imprime, Cmd+H cache la fenêtre, Ctrl+C copie)
+      if (!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) this.onKey?.(e.code);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -120,10 +135,11 @@ export class Input {
     let x = 0;
     let y = 0;
     if (this.enabled) {
-      if (k.has('KeyW') || k.has('KeyZ') || k.has('ArrowUp')) y += 1;
+      // Les touches par leur place (event.code) : Z Q S D sur un clavier français, W A S D ailleurs (src/ui/keys.js).
+      if (k.has('KeyW') || k.has('ArrowUp')) y += 1;
       if (k.has('KeyS') || k.has('ArrowDown')) y -= 1;
       if (k.has('KeyD') || k.has('ArrowRight')) x += 1;
-      if (k.has('KeyA') || k.has('KeyQ') || k.has('ArrowLeft')) x -= 1;
+      if (k.has('KeyA') || k.has('ArrowLeft')) x -= 1;
       x += this.joy.x;
       y += this.joy.y;
     }

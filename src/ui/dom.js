@@ -42,6 +42,12 @@ export function safeInsets() {
 /** Écran de téléphone : étroit (portrait) ou peu haut (paysage). Même règle que le CSS (@media … 640px / 480px). */
 export const isPhone = () => window.innerWidth <= 640 || window.innerHeight <= 480;
 
+/**
+ * Ordinateur : une souris ou un pavé tactile (pointeur fin qui survole). Un portable à écran tactile avec sa souris
+ * aussi ; un téléphone ou une tablette, non. Même règle que le CSS : @media (pointer: fine) and (hover: hover).
+ */
+export const isDesk = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine) and (hover: hover)').matches;
+
 export function bar(label, value, kind = '') {
   const v = Math.round(value);
   const level = v >= 60 ? 'good' : v >= 30 ? 'mid' : 'low';

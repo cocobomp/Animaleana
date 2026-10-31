@@ -17,6 +17,7 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
+  --keys-b: 0px; /* ⌨️ la place du bandeau des touches, en bas (ordinateur : body.keys-strip, plus bas) */
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--ink);
 }
@@ -271,7 +272,7 @@ button.sv-card:hover { border-color: var(--primary); }
 #action {
   position: fixed;
   left: 50%;
-  bottom: calc(24px + var(--safe-b));
+  bottom: calc(24px + var(--safe-b) + var(--keys-b));
   transform: translateX(-50%);
   z-index: 10;
   background: var(--primary);
@@ -288,7 +289,8 @@ button.sv-card:hover { border-color: var(--primary); }
   text-overflow: ellipsis;
 }
 #action:active { transform: translateX(-50%) scale(0.96); }
-#action kbd { margin-left: 10px; background: rgba(255, 255, 255, 0.25); padding: 2px 7px; border-radius: 6px; font-size: 0.8em; }
+/* (E : une vraie touche blanche, bien lisible sur le vert) */
+#action kbd { margin-left: 10px; background: #fff; color: #1f5e3f; padding: 2px 8px; border-radius: 6px; font-size: 0.85em; font-weight: 800; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2); }
 @media (pointer: coarse) {
   #action kbd { display: none; }
   #action { left: auto; right: calc(16px + var(--safe-r)); transform: none; bottom: calc(110px + var(--safe-b)); }
@@ -298,7 +300,7 @@ button.sv-card:hover { border-color: var(--primary); }
 #cam-btn {
   position: fixed;
   right: calc(14px + var(--safe-r));
-  bottom: calc(24px + var(--safe-b));
+  bottom: calc(24px + var(--safe-b) + var(--keys-b));
   z-index: 10;
   width: 54px;
   height: 54px;
@@ -350,6 +352,73 @@ button.sv-card:hover { border-color: var(--primary); }
   text-align: center;
 }
 #help[hidden] { display: none; }
+
+/* ---------- ⌨️ les touches sur ordinateur (src/ui/controls.js, src/ui/keys.js) */
+/* Une touche dessinée comme sur le clavier : [Z] [Maj] [Espace]. */
+kbd.kc {
+  display: inline-grid; place-items: center; min-width: 1.65em; height: 1.65em; padding: 0 0.4em;
+  border-radius: 5px; background: #fff; color: #23302a; font-size: 0.78rem; font-weight: 800; line-height: 1; font-family: inherit;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.25); white-space: nowrap;
+}
+kbd.kc + kbd.kc { margin-left: 3px; }
+kbd.kc.big { min-width: 1.95em; height: 1.95em; font-size: 0.9rem; border-radius: 7px; border: 1px solid #c9d3cc; }
+/* Le bandeau des touches : en bas au milieu, sous le bouton vert ; tout ce qui est posé en bas (bouton vert, allures,
+   ⬆️, pastilles, 🎥…) monte de --keys-b. Sous une fenêtre ou un panneau il se cache, sa place reste (rien ne saute). */
+body.keys-strip { --keys-b: 28px; }
+body.keys-strip:is(.actv-running, .mgmt, .veh-view, .trip-road) { --keys-b: 0px; }
+#key-strip {
+  position: fixed; left: 50%; bottom: calc(8px + var(--safe-b)); transform: translateX(-50%); z-index: 9;
+  display: flex; align-items: center; max-width: calc(100vw - 24px); overflow: hidden;
+  padding: 4px 14px; border-radius: 999px; background: rgba(20, 40, 30, 0.6); backdrop-filter: blur(6px);
+  color: #fff; font-size: 0.85rem; font-weight: 600; white-space: nowrap; pointer-events: none;
+}
+#key-strip[hidden] { display: none; }
+body:is(.panel-open, .modal-open, .vx-open) #key-strip { visibility: hidden; }
+body:is(.actv-running, .mgmt, .veh-view, .trip-road) #key-strip { display: none; }
+.ks-item { display: inline-flex; align-items: center; min-width: 0; }
+.ks-item > span:last-child { margin-left: 5px; }
+.ks-item + .ks-item::before { content: '·'; margin: 0 9px; opacity: 0.55; }
+.ks-act { flex-shrink: 1; overflow: hidden; }
+.ks-act .ks-label { overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+.ks-mouse { font-size: 1rem; line-height: 1; }
+/* ([H] Touches : on peut aussi cliquer dessus) */
+#key-strip .ks-help { pointer-events: auto; background: none; border: none; border-radius: 6px; color: inherit; font: inherit; padding: 0; min-height: 0; }
+@media (hover: hover) { #key-strip .ks-help:hover { text-decoration: underline; } }
+/* (moins large : les allures, sur leurs boutons, et « Regarder » laissent la place) */
+@media (max-width: 900px) { #key-strip .ks-gaits, #key-strip .ks-look { display: none; } }
+/* Petite touche dans le coin d'un bouton (📖 J, ⏸ P, 🎥 C, 🏃 Maj, ⇄ N…) : seulement avec une souris. */
+kbd.kb-badge { display: none; }
+@media (pointer: fine) and (hover: hover) {
+  kbd.kb-badge { display: inline-grid; }
+  .hud-btn, .time-btn, .pad-btn.run, .qt-switch { position: relative; } /* (#cam-btn est déjà posé : fixed) */
+  :is(.hud-btn, .time-btn, #cam-btn, .pad-btn, .qt-switch) > kbd.kb-badge {
+    position: absolute; top: -5px; right: -5px; min-width: 1.5em; height: 1.5em; font-size: 0.66rem; pointer-events: none;
+  }
+  .qt-switch > kbd.kb-badge { top: auto; bottom: -4px; right: -4px; }
+  :is(.big-action, button.big, #pause-banner button) > kbd.kb-badge { margin-left: 10px; }
+  .big-action > kbd.kb-badge { margin-left: auto; flex-shrink: 0; }
+}
+@media (max-width: 640px), (max-height: 480px) { kbd.kb-badge { display: none !important; } }
+/* La carte « Les touches » (H) : trois colonnes de grosses touches. */
+.modal-box:has(> .keys-card) { width: min(900px, 100%); }
+.keys-card h3 { margin: 0 0 10px; font-size: 1.35rem; text-transform: none; letter-spacing: 0; color: var(--ink); }
+.kc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
+.kc-col { display: grid; gap: 10px; align-content: start; }
+.kc-group { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px 10px; }
+.kc-group h4 { margin: 0 0 4px; font-size: 1.02rem; display: flex; align-items: center; gap: 6px; }
+.kc-icon { font-size: 1.3rem; line-height: 1; }
+.kc-row { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 10px; padding: 3px 0; }
+.kc-keys { display: inline-flex; align-items: center; }
+.kc-text { font-size: 0.92rem; line-height: 1.25; }
+.kc-mouse { display: inline-block; width: 1.95em; font-size: 1.3rem; text-align: center; line-height: 1; }
+.keys-card .kc-again { margin: 10px 0 0; text-align: center; }
+@media (max-width: 860px) { .kc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .kc-grid { grid-template-columns: 1fr; } }
+/* Le menu d'Échap sur ordinateur (« ⋯ Plus » avec ⌨️, 📖 et ⏸) : deux colonnes. */
+.modal-box:has(> .more-sheet.desk) { width: min(560px, 100%); }
+.modal-box > h3 + .more-sheet.desk { margin-top: 0; }
+.modal-box .action-sheet.more-sheet.desk { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.modal-box .more-sheet.desk .big-action { min-height: 56px; }
 
 /* ---------- notifications */
 #toasts {
@@ -655,7 +724,7 @@ button.sv-card:hover { border-color: var(--primary); }
 #gait-pad {
   position: fixed;
   left: calc(16px + var(--safe-l));
-  bottom: calc(20px + var(--safe-b));
+  bottom: calc(20px + var(--safe-b) + var(--keys-b));
   z-index: 10;
   display: flex;
   gap: 8px;
@@ -673,7 +742,7 @@ button.sv-card:hover { border-color: var(--primary); }
   touch-action: manipulation; user-select: none;
 }
 .gait-btn .gait-icon { font-size: 1.3rem; line-height: 1; }
-.gait-btn kbd { font-size: 0.72rem; background: rgba(255, 255, 255, 0.22); border-radius: 5px; padding: 1px 5px; }
+.gait-btn kbd { font-size: 0.72rem; font-weight: 800; background: #fff; color: #23302a; border-radius: 5px; padding: 1px 5px; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2); }
 .gait-btn.on { background: var(--primary); border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35); }
 .gait-btn.gallop { animation: gait-gallop 0.5s ease-in-out infinite alternate; }
 @keyframes gait-gallop { to { background: #e07a3a; } }
@@ -688,7 +757,7 @@ button.sv-card:hover { border-color: var(--primary); }
 #post-btn, #jump-btn, #praise-btn {
   position: fixed;
   left: calc(22px + var(--safe-l));
-  bottom: calc(92px + var(--safe-b));
+  bottom: calc(92px + var(--safe-b) + var(--keys-b));
   z-index: 10;
   width: 84px; height: 84px; border-radius: 50%;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
@@ -707,7 +776,8 @@ button.sv-card:hover { border-color: var(--primary); }
 #post-btn .post-icon, #jump-btn .post-icon, #praise-btn .post-icon { font-size: 1.6rem; line-height: 1; }
 #post-btn .post-count { position: absolute; top: -8px; right: -8px; min-width: 26px; padding: 2px 5px; border-radius: 999px; background: #f2b824; color: #3a2a00; font-size: 0.8rem; }
 #post-btn .post-count:empty { display: none; }
-#post-btn kbd, #jump-btn kbd, #praise-btn kbd { position: absolute; bottom: -8px; font-size: 0.7rem; background: rgba(0, 0, 0, 0.45); border-radius: 5px; padding: 0 5px; }
+/* (« Espace » : une touche blanche sous le bouton, qu'on lit) */
+#post-btn kbd, #jump-btn kbd, #praise-btn kbd { position: absolute; bottom: -10px; height: 1.7em; font-size: 0.7rem; background: #fff; color: #23302a; border-radius: 5px; padding: 0 7px; }
 #post-btn .post-ring { position: absolute; inset: -6px; border-radius: 50%; border: 4px solid #fff; pointer-events: none; }
 #post-btn.on { background: var(--primary); }
 #post-btn.good { animation: post-good 0.3s ease-out; }
@@ -734,7 +804,12 @@ button.sv-card:hover { border-color: var(--primary); }
 }
 #joystick { width: 150px; height: 150px; }
 #joystick .knob { width: 64px; height: 64px; }
-#action { bottom: calc(24px + var(--safe-b)); }
+#action { bottom: calc(24px + var(--safe-b) + var(--keys-b)); }
+/* Ordinateur moins large (1024 à 1280 px) : à cheval, le bouton vert passe à droite des allures (elles le cachaient). */
+@media (pointer: fine) and (min-width: 641px) and (max-width: 1339px) {
+  body.riding #action { left: calc(566px + var(--safe-l)); transform: none; max-width: calc(100vw - 566px - 84px - var(--safe-l) - var(--safe-r)); }
+  body.riding #action:active { transform: scale(0.96); }
+}
 @media (pointer: coarse) {
   #action { bottom: calc(182px + var(--safe-b)); }
 }
@@ -766,7 +841,7 @@ button.sv-card:hover { border-color: var(--primary); }
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(86px + var(--safe-b));
+  bottom: calc(86px + var(--safe-b) + var(--keys-b));
   display: grid;
   gap: 6px;
   z-index: 11;
@@ -924,7 +999,7 @@ button.sv-card:hover { border-color: var(--primary); }
 #task-list {
   position: fixed;
   right: calc(10px + var(--safe-r));
-  bottom: calc(90px + var(--safe-b));
+  bottom: calc(90px + var(--safe-b) + var(--keys-b));
   width: min(330px, calc(100vw - 20px));
   max-height: 45vh;
   overflow-y: auto;
@@ -1410,7 +1485,7 @@ body.trip-road #pause-banner, body.trip-road #quest-tracker, body.veh-view #ev-b
 #ev-banner {
   position: fixed;
   left: calc(10px + var(--safe-l));
-  bottom: calc(24px + var(--safe-b));
+  bottom: calc(24px + var(--safe-b) + var(--keys-b));
   z-index: 12;
   width: min(360px, calc(100vw - 20px));
   display: grid;
@@ -2887,7 +2962,7 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 /* 🏇 « Ta balade » : la carte en descendant de cheval (src/ui/rideCard.js) ; au téléphone, au-dessus du gros bouton vert
    (à droite, à 182 px du bord) ; en paysage, en haut ; cachée en selle, sous une fenêtre, pendant une activité */
 .ride-card {
-  position: fixed; left: 50%; bottom: calc(150px + var(--safe-b)); transform: translateX(-50%); width: min(92vw, 360px); z-index: 30;
+  position: fixed; left: 50%; bottom: calc(150px + var(--safe-b) + var(--keys-b)); transform: translateX(-50%); width: min(92vw, 360px); z-index: 30;
   display: grid; gap: 5px; padding: 10px 14px 12px; background: rgba(255, 255, 255, 0.97); color: var(--ink);
   border-radius: 18px; box-shadow: var(--shadow); font-size: 0.92rem; text-align: center; cursor: pointer;
   animation: rc-in 0.35s ease-out; transition: opacity 0.3s, transform 0.3s;

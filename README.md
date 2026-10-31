@@ -32,13 +32,24 @@ rouvrir le même fichier (au même endroit) pour les retrouver. Ce fichier est p
 
 ## Commandes
 
+Les touches sont lues à leur place sur le clavier : **Z Q S D** sur un clavier français (AZERTY), **W A S D** sur un
+clavier anglais (QWERTY), et le jeu montre les lettres du clavier de l'enfant. Sur ordinateur, un bandeau en bas de
+l'écran dit les touches utiles (à pied, en selle) ; **H** ouvre la carte « Les touches » (montrée une fois, au début).
+
 | Ordinateur | Téléphone | Action |
 |---|---|---|
-| ZQSD / WASD / flèches | joystick (à gauche) | marcher |
-| Maj | pousser le joystick jusqu'au bord | courir / galoper |
-| E | bouton vert | interagir |
+| ZQSD (AZERTY) / WASD (QWERTY) / flèches | joystick (à gauche) | marcher ; en selle, diriger (garder appuyé) |
+| Maj | pousser le joystick jusqu'au bord, 🏃 | courir ; en selle, le grand galop |
+| E ou Entrée | bouton vert | agir (ce que dit le bouton vert) ; en selle, descendre |
+| 1 2 3, 0 | boutons d'allure | en selle : pas, trot, galop ; arrêt |
+| Espace | ⤴️ 🤚 ⬆️ | en selle : sauter un tronc, « Bravo ! », trot enlevé |
 | C | 🎥 | caméra 1ʳᵉ / 3ᵉ personne |
-| glisser la souris, molette | glisser, pincer | tourner la vue, zoomer |
+| J | 📖 | journal (ouvrir, fermer) |
+| P | ⏸ / ▶ | pause, reprendre |
+| N | ⇄ | quête suivante |
+| H | — | la carte de toutes les touches |
+| Échap | ✕ | fermer la fenêtre ouverte ; rien d'ouvert : le menu |
+| glisser la souris, molette, pavé numérique 4 6 8 2 | glisser, pincer, ⟲ ⟳ | tourner la vue, zoomer |
 
 ## Contenu (version 0.5)
 

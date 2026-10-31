@@ -14,6 +14,7 @@ import {
 import { openVehicleMenu, openPackingModal, cargoSummary, cargoName } from './vehicle.js'; // véhicule, coffre
 import { luggageHere, luggageEmoji } from '../sim/cargo.js';
 import { thumb } from '../game/thumbScenes.js'; // vignette 3D du véhicule du voyage
+import { keyLabel } from './keys.js'; // ⌨️ (« Z S ou ↑ ↓ » : les lettres de ce clavier)
 
 // ------------------------------------------------------------ outils
 
@@ -244,7 +245,7 @@ export function renderJourney(ui, flow) {
           onClick: () => flow.setGait(g),
         }, `${GAIT_ICON[g]} ${t(`trail_gait_${g}`)}`)),
         refs.energy ? refs.energy.el : null,
-        matchMedia('(pointer: fine)').matches ? h('small', { class: 'trip-gait-keys' }, t('trail_keys')) : null));
+        matchMedia('(pointer: fine)').matches ? h('small', { class: 'trip-gait-keys' }, t('trail_keys', { up: keyLabel('KeyW'), down: keyLabel('KeyS') })) : null));
     }
   }
   if (!compact || brief) body.push(h('div', { class: `trip-animals ${brief ? 'strip' : ''}` }, cards));

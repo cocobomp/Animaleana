@@ -20,6 +20,7 @@ import { LUCKY_FR, LUCKY_EN } from './ui/luckyShoesTexts.js'; // 🍀 le fer por
 import { RIDE_CARD_FR, RIDE_CARD_EN } from './ui/rideCardTexts.js'; // 🏇 la carte « Ta balade » (rc_*)
 import { PRAISE_FR, PRAISE_EN } from './ui/praiseTexts.js'; // 🤚 « Bravo ! » / « Rassure-le » en selle (pr_*)
 import { LEGMUD_FR, LEGMUD_EN } from './ui/legMudTexts.js'; // 🧦 ses chaussettes de boue (mg_pansage_legmud*)
+import { KEYS_FR, KEYS_EN } from './ui/keysTexts.js'; // ⌨️ les touches sur ordinateur (key_*, ks_*, kc_*)
 import { isHurt } from './sim/animal.js'; // (blessé, pas malade : ta)
 
 const fr = {
@@ -99,7 +100,7 @@ const fr = {
   quit: 'Sauver et quitter',
   close: 'Fermer',
   saved: 'Partie sauvegardée',
-  controlsHelp: 'ZQSD / flèches : marcher · Maj : courir · E : interagir · C : caméra · N : changer de quête · glisser ou pavé numérique (4 6 8 2) : tourner la vue',
+  controlsHelp: '{move} ou flèches : marcher · Maj : courir · E : agir · Espace : sauter, à cheval · C : caméra · J : journal · P : pause · N : quête suivante · H : toutes les touches · glisser la souris : tourner la vue',
 
   interact: 'S\'occuper de {name}',
   wish_tap: 'Ce qu\'il demande', // (🫧 sa bulle, qu'on touche ; le bouton E : wish_btn_<id>)
@@ -1561,7 +1562,7 @@ const fr = {
   trail_gait_walk: 'Pas',
   trail_gait_trot: 'Trot',
   trail_gait_canter: 'Galop',
-  trail_keys: '↑ ↓ : changer d\'allure',
+  trail_keys: '{up} {down} ou ↑ ↓ : changer d\'allure',
   trail_tooTired: '{name} est trop fatigué pour galoper. Au pas, il se repose un peu.',
   trail_tooTired_f: '{name} est trop fatiguée pour galoper. Au pas, elle se repose un peu.',
   trail_tiredTrot: '{name} est fatigué : il repasse au trot.',
@@ -1802,8 +1803,8 @@ const fr = {
   // ---------- Tutoriel guidé et quêtes claires (src/sim/tutorial.js, src/ui/tutorial.js)
   tuto_welcome: 'Bonjour {name} ! Moi, c\'est Biscuit. Je vais t\'aider.',
   tuto_welcome_hint: 'Tu vas adopter ton premier cheval 🐴 !',
-  tuto_move: 'Pour marcher, clique sur le sol.',
-  tuto_move_hint: 'Tu peux aussi utiliser les flèches du clavier ⌨️.',
+  tuto_move: 'Pour marcher, utilise les touches {keys} ou les flèches ⌨️.',
+  tuto_move_hint: 'Tu peux aussi cliquer sur le sol 🖱️. Pour courir, garde la touche {shift} appuyée.',
   tuto_move_touch: 'Pour marcher, touche le sol.',
   tuto_move_touch_hint: 'Tu peux aussi pousser le rond en bas à gauche 🕹️.',
   tuto_refuge: 'Va au refuge 🐾. Suis la flèche jaune !',
@@ -2517,7 +2518,7 @@ const en = {
   quit: 'Save and quit',
   close: 'Close',
   saved: 'Game saved',
-  controlsHelp: 'WASD / arrows: walk · Shift: run · E: interact · C: camera · N: switch quest · drag or numpad (4 6 8 2): look around',
+  controlsHelp: '{move} or arrows: walk · Shift: run · E: act · Space: jump, when riding · C: camera · J: journal · P: pause · N: next quest · H: all the keys · drag the mouse: look around',
 
   interact: 'Take care of {name}',
   wish_tap: 'What they want',
@@ -3854,7 +3855,7 @@ const en = {
   trail_gait_walk: 'Walk',
   trail_gait_trot: 'Trot',
   trail_gait_canter: 'Canter',
-  trail_keys: '↑ ↓: change gait',
+  trail_keys: '{up} {down} or ↑ ↓: change gait',
   trail_tooTired: '{name} is too tired to canter. At a walk, they rest a little.',
   trail_tiredTrot: '{name} is tired and slows back to a trot.',
   trail_camBehind: 'Behind',
@@ -4063,8 +4064,8 @@ const en = {
   // ---------- Guided tutorial and clear quests (src/sim/tutorial.js, src/ui/tutorial.js)
   tuto_welcome: 'Hello {name}! I\'m Biscuit. I\'ll help you.',
   tuto_welcome_hint: 'You\'re going to adopt your first horse 🐴!',
-  tuto_move: 'To walk, click on the ground.',
-  tuto_move_hint: 'You can also use the arrow keys ⌨️.',
+  tuto_move: 'To walk, use the {keys} keys or the arrow keys ⌨️.',
+  tuto_move_hint: 'You can also click on the ground 🖱️. To run, hold {shift}.',
   tuto_move_touch: 'To walk, tap the ground.',
   tuto_move_touch_hint: 'You can also push the circle at the bottom left 🕹️.',
   tuto_refuge: 'Go to the shelter 🐾. Follow the yellow arrow!',
@@ -4725,6 +4726,8 @@ Object.assign(fr, PRAISE_FR); // 🤚 « Bravo ! » / « Rassure-le » en selle 
 Object.assign(en, PRAISE_EN);
 Object.assign(fr, LEGMUD_FR); // 🧦 ses chaussettes de boue (src/sim/legMud.js)
 Object.assign(en, LEGMUD_EN);
+Object.assign(fr, KEYS_FR); // ⌨️ les touches sur ordinateur (src/ui/controls.js)
+Object.assign(en, KEYS_EN);
 
 const DICTS = { fr, en };
 const LANG_KEY = 'animaleana.lang';

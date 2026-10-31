@@ -1,11 +1,13 @@
 // ❓ Aide : des fiches « Comment faire ? » avec les étapes et l'endroit où aller,
 // une recherche (« acheter une laisse ») et un bouton « Montre-moi » qui guide l'enfant.
 
-import { h } from './dom.js';
+import { h, isDesk } from './dom.js';
 import { t, L, getLang } from '../i18n.js';
 import { creditsBlock } from './credits.js'; // ℹ️ À propos : crédits des modèles 3D (CC-BY des chiens)
 import { anyAvailable, LIVESTOCK_IDS as LIVESTOCK } from '../sim/species.js';
 import { newsList } from './news.js'; // 🐴 quoi de neuf ?
+import { moveKeys } from './keys.js'; // ⌨️ ({move} : Z Q S D sur un clavier français, W A S D ailleurs)
+import { keycaps, openKeysCard } from './controls.js';
 
 // where : bâtiment ('refuge', 'petshop', 'stable', 'tackroom', 'pen', 'paddock', 'kennel', 'hutch', 'vet', 'house', 'jobs')
 //         ou bouton de l'écran ('hud:farm', 'hud:travel', 'hud:journal', 'hud:animals', 'hud:time')
@@ -52,7 +54,7 @@ const TOPICS = [
   { id: 'ride', icon: '🏇', where: 'paddock',
     title: { fr: 'Monter à cheval', en: 'Ride a horse' },
     keys: 'monter cheval équitation selle filet licol cru galoper ride horse saddle bridle gallop',
-    steps: { fr: ['Ton cheval doit porter un licol ou un filet (fiche → Équipement).', 'Touche le cheval → « Monter » (ou « Monter à cru »).', 'Avance avec le joystick, Maj ou 🏃 pour galoper.', 'Touche « Descendre » pour mettre pied à terre.'], en: ['Your horse needs a halter or bridle (card → Equipment).', 'Tap the horse → "Ride" (or "Ride bareback").', 'Move with the joystick, Shift or 🏃 to gallop.', 'Tap "Get off" to dismount.'] } },
+    steps: { fr: ['Ton cheval doit porter un licol ou un filet (fiche → Équipement).', 'Touche le cheval → « Monter » (ou « Monter à cru »).', 'Avance avec le joystick, ou au clavier avec {move} (garde appuyé) ; 🏃 ou Maj pour le grand galop.', 'Touche « Descendre » pour mettre pied à terre.'], en: ['Your horse needs a halter or bridle (card → Equipment).', 'Tap the horse → "Ride" (or "Ride bareback").', 'Move with the joystick, or on the keyboard with {move} (hold it down); 🏃 or Shift to gallop.', 'Tap "Get off" to dismount.'] } },
   { id: 'dressage', icon: '🎠', where: 'showground',
     title: { fr: 'Faire du dressage (plat, figures, reprise)', en: 'Do dressage (flat work, figures, test)' },
     keys: 'dressage reprise plat figures allure pas trot galop juge note lettres rectangle arrêt reculer dressage test flat figures gait walk trot canter judge mark letters halt rein back',
@@ -156,7 +158,7 @@ export function topicSteps(topic, profile = null) {
   const steps = [...(topic.steps[lang] ?? topic.steps.fr)];
   const more = topic.more ? [topic.more].flat() : [];
   for (const m of more) if (!profile || anyAvailable(profile, m.needs)) steps.push(m[lang] ?? m.fr);
-  return steps;
+  return steps.map((s) => s.replace('{move}', moveKeys()));
 }
 
 /** profile : seulement les fiches de cette partie (pas celles des espèces pas encore proposées). */
@@ -187,9 +189,9 @@ function showMe(ui, where) {
   const g = ui.game;
   ui.closePanel();
   if (where?.startsWith('hud:')) {
-    // Le bouton est reconnu par son titre (comme dans src/ui/tutorial.js), pas par sa position.
+    // Le bouton est reconnu par la clé de son libellé (data-id, comme dans src/ui/tutorial.js), pas par sa position.
     const el = where === 'hud:time' ? document.querySelector('.time-bar')
-      : [...document.querySelectorAll('.hud-buttons .hud-btn')].find((b) => b.title === t(where.slice(4))) ?? null;
+      : document.querySelector(`.hud-buttons .hud-btn[data-id="${where.slice(4)}"]`);
     el?.classList.add('pulse');
     setTimeout(() => el?.classList.remove('pulse'), 5000);
     return;
@@ -212,6 +214,8 @@ export function openHelp(ui) {
   });
   const results = h('div', { class: 'help-results' });
   const head = [h('p', { class: 'note' }, t('helpIntro')), h('label', { class: 'field' }, input)];
+  // ⌨️ Sur ordinateur : toutes les touches, sur une carte (comme H)
+  if (isDesk()) head.unshift(h('button', { class: 'big help-keys', onClick: () => openKeysCard(ui) }, `⌨️ ${t('kc_helpBtn')}`, keycaps(['KeyH'], 'kb-badge')));
   const drawList = () => {
     const list = searchHelp(st.q, ui.game?.profile);
     results.replaceChildren(

@@ -311,10 +311,11 @@ button.sv-card:hover { border-color: var(--primary); }
 }
 #cam-btn[hidden] { display: none; }
 
+/* (+ --keys-b : un portable à écran tactile a le joystick et le bandeau des touches, l'un au-dessus de l'autre) */
 #joystick {
   position: fixed;
   left: calc(24px + var(--safe-l));
-  bottom: calc(28px + var(--safe-b));
+  bottom: calc(28px + var(--safe-b) + var(--keys-b));
   width: 130px;
   height: 130px;
   border-radius: 50%;
@@ -391,11 +392,12 @@ kbd.kb-badge { display: none; }
 @media (pointer: fine) and (hover: hover) {
   kbd.kb-badge { display: inline-grid; }
   .hud-btn, .time-btn, .pad-btn.run, .qt-switch { position: relative; } /* (#cam-btn est déjà posé : fixed) */
-  :is(.hud-btn, .time-btn, #cam-btn, .pad-btn, .qt-switch) > kbd.kb-badge {
+  /* (:where : sans le poids de #cam-btn, les règles de ⇄ et du menu juste dessous s'appliquent) */
+  :where(.hud-btn, .time-btn, #cam-btn, .pad-btn, .qt-switch) > kbd.kb-badge {
     position: absolute; top: -5px; right: -5px; min-width: 1.5em; height: 1.5em; font-size: 0.66rem; pointer-events: none;
   }
   .qt-switch > kbd.kb-badge { top: auto; bottom: -4px; right: -4px; }
-  :is(.big-action, button.big, #pause-banner button) > kbd.kb-badge { margin-left: 10px; }
+  :where(.big-action, button.big, #pause-banner button) > kbd.kb-badge { margin-left: 10px; }
   .big-action > kbd.kb-badge { margin-left: auto; flex-shrink: 0; }
 }
 @media (max-width: 640px), (max-height: 480px) { kbd.kb-badge { display: none !important; } }
@@ -699,7 +701,7 @@ kbd.kb-badge { display: none; }
 #touch-pad {
   position: fixed;
   right: calc(16px + var(--safe-r));
-  bottom: calc(96px + var(--safe-b));
+  bottom: calc(96px + var(--safe-b) + var(--keys-b)); /* (monte avec 🎥 au-dessus du bandeau des touches) */
   display: flex;
   gap: 10px;
   z-index: 10;

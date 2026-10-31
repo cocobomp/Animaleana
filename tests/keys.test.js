@@ -215,6 +215,14 @@ describe('les touches des menus : J, P, H, Échap (src/ui/controls.js)', () => {
     expect(controls.menuAction('KeyP', { ...free, mgmt: true })).toBe('pause');
   });
 
+  it('pendant le tutoriel guidé : pas de menu d\'Échap (la bulle dirait « touche OK ») ; J, P et H, si', () => {
+    expect(controls.menuAction('Escape', { ...free, tuto: true })).toBe(null);
+    expect(['KeyJ', 'KeyP', 'KeyH'].map((c) => controls.menuAction(c, { ...free, tuto: true }))).toEqual(['journal', 'pause', 'keys']);
+    const { ui, calls } = fakeUi({ tutorial: { active: true, bubble: null } });
+    expect(controls.runMenuKey(ui, 'Escape')).toBe(null);
+    expect(calls).toEqual([]);
+  });
+
   const fakeUi = (over = {}) => {
     const calls = [];
     const game = {
@@ -264,6 +272,26 @@ describe('les touches des menus : J, P, H, Échap (src/ui/controls.js)', () => {
     const { ui, calls } = fakeUi({ modalOpen: true });
     for (const c of ['KeyJ', 'KeyP', 'KeyH', 'Escape']) expect(controls.runMenuKey(ui, c)).toBe(null);
     expect(calls).toEqual([]);
+  });
+
+  it('le menu d\'Échap ouvert : J, P et H choisissent ce que disent ses petites touches ; H referme la carte', () => {
+    const clicked = [];
+    const sheet = { KeyJ: '📖', KeyP: '⏸', KeyH: '⌨️' };
+    const menu = {
+      modalOpen: true,
+      modal: { querySelector: (sel) => { const k = /data-key="(\w+)"/.exec(sel)?.[1]; return sheet[k] ? { click: () => clicked.push(sheet[k]) } : null; } },
+      hideModal() { clicked.push('fermé'); },
+    };
+    for (const c of ['KeyJ', 'KeyP', 'KeyH']) expect(controls.modalMenuKey(menu, c), c).toBe(true);
+    expect(controls.modalMenuKey(menu, 'Escape')).toBe(false); // (Échap : son bouton « Annuler », UI.escapeModal)
+    expect(controls.modalMenuKey(menu, 'KeyE')).toBe(false);
+    expect(clicked).toEqual(['📖', '⏸', '⌨️']);
+    // la carte des touches : H la referme ; J et P ne font rien sous elle
+    const card = { modalOpen: true, modal: { querySelector: (sel) => (sel === '.keys-card' ? {} : null) }, hideModal() { clicked.push('fermé'); } };
+    expect(controls.modalMenuKey(card, 'KeyJ')).toBe(false);
+    expect(controls.modalMenuKey(card, 'KeyH')).toBe(true);
+    expect(clicked.at(-1)).toBe('fermé');
+    expect(controls.modalMenuKey({ ...card, modalOpen: false }, 'KeyH')).toBe(false);
   });
 
   it('pendant une activité (le concours de beauté…), un mini-jeu ou un voyage : rien', () => {
@@ -344,6 +372,9 @@ describe('la carte « Les touches » (H)', () => {
     expect(words).toContain('Les touches');
     expect(words).toContain('Appuie sur H pour revoir cette carte.');
     expect(words).not.toMatch(RAW);
+    // (typographie française : « Bravo ! », « Pavé numérique : » ne se coupent pas avant la ponctuation)
+    expect(words).toContain('«\u00a0Bravo\u00a0!\u00a0»');
+    expect(words).not.toMatch(/ [!?:;»]|« /);
     const kbds = nodes.filter((n) => n?.tag === 'kbd');
     expect(kbds.slice(0, 4).map((k) => k.children[0].data)).toEqual(['Z', 'Q', 'S', 'D']);
     expect(nodes.some((n) => n?.tag === 'button' && 'data-escape' in n.attrs)).toBe(true);
@@ -368,6 +399,66 @@ describe('la carte « Les touches » (H)', () => {
     expect(ui.game.profile.keysCard).toBe(true);
     expect(controls.maybeKeysCard(ui)).toBe(false);
     expect(shown).toHaveLength(1);
+  });
+});
+
+describe('le bandeau des touches et le menu d\'Échap (src/ui/controls.js, src/ui/UI.js)', () => {
+  // (un tout petit DOM pour h() : src/ui/dom.js)
+  class El {
+    constructor(tag) { Object.assign(this, { tag, children: [], attrs: {}, className: '', style: {}, textContent: '' }); }
+    append(c) { this.children.push(c); }
+    replaceChildren(...c) { this.children = c; }
+    setAttribute(k, v) { this.attrs[k] = v; }
+    addEventListener() {}
+  }
+  const dom = () => {
+    globalThis.Node = El;
+    const body = { classes: new Set(), classList: { toggle: (c, on) => (on ? body.classes.add(c) : body.classes.delete(c)) } };
+    Object.assign(globalThis.document, { createElement: (tag) => new El(tag), createTextNode: (data) => ({ data }), body });
+    return body;
+  };
+  const desk = () => {
+    vi.stubGlobal('matchMedia', (q) => ({ matches: /pointer: fine/.test(q) }));
+    vi.stubGlobal('window', { innerWidth: 1280, innerHeight: 800 });
+  };
+
+  it('un portable à écran tactile (joystick deviné, rien choisi) garde son bandeau ; le joystick choisi dans les Réglages le remplace', () => {
+    const body = dom();
+    desk();
+    lang('fr-FR');
+    let choice = null;
+    const ui = {
+      game: { running: true, player: { mount: null } }, screen: { hidden: true },
+      onScreenControls: () => true, // ('ontouchstart' dans Chrome : le joystick est montré)
+      onScreenChoice: () => choice,
+    };
+    const strip = new controls.KeyStrip(ui);
+    strip.update();
+    expect(strip.on).toBe(true);
+    expect(body.classes.has('keys-strip')).toBe(true);
+    choice = 'off';
+    strip.update();
+    expect(strip.on).toBe(true);
+    choice = 'on';
+    strip.update();
+    expect(strip.on).toBe(false);
+    expect(body.classes.has('keys-strip')).toBe(false);
+  });
+
+  it('le menu d\'Échap sur ordinateur : ⌨️, 📖 et ⏸ portent leur touche (data-key), que J, P et H choisissent', async () => {
+    dom();
+    desk();
+    lang('fr-FR');
+    const { UI } = await import('../src/ui/UI.js');
+    const shown = [];
+    UI.prototype.openMore.call({ game: { paused: false, profile: {} }, showModal: (c) => shown.push(c) });
+    const flat = (x) => [x].flat(Infinity).flatMap((e) => (e?.children ? [e, ...flat(e.children)] : [e]));
+    const keyed = flat(shown[0]).filter((n) => n?.tag === 'button' && n.attrs['data-key']);
+    expect(keyed.map((b) => b.attrs['data-key'])).toEqual(['KeyH', 'KeyJ', 'KeyP']);
+    // (sur téléphone, « ⋯ Plus » comme avant : pas de touches)
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    UI.prototype.openMore.call({ game: { paused: false, profile: {} }, showModal: (c) => shown.push(c) });
+    expect(flat(shown[1]).filter((n) => n?.tag === 'button' && n.attrs['data-key'])).toEqual([]);
   });
 });
 

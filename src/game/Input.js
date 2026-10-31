@@ -10,6 +10,9 @@ export function onControl(el) {
   return !!el.closest('button, a[href], input, select, [role="button"], summary, #panel, #modal, .mg-overlay, .vx-overlay');
 }
 
+/** Dans un panneau, une fenêtre, un écran (profils, avatar) ou un mini-jeu : Entrée et Espace y vont toujours au bouton. */
+export const inWindow = (el) => !!el?.closest?.('#panel, #modal, #screen, .mg-overlay, .vx-overlay');
+
 // (ces champs-là ne prennent pas les lettres : une case à cocher cliquée laisse marcher avec Z Q S D)
 const NOT_TYPED = ['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'image', 'color'];
 
@@ -38,21 +41,31 @@ export class Input {
     this.joy = { id: null, cx: 0, cy: 0, x: 0, y: 0 };
     this.lookPointers = new Map();
     this.pinchDist = 0;
+    // Le bouton choisi avec Tab (hors panneau et fenêtre, lui seul prend Entrée et Espace). Un bouton du haut pris à la
+    // souris (📖, ⏸…) ou rendu par une fenêtre qui se ferme garde le focus, mais Espace reste au jeu : le trot enlevé,
+    // sauter, bravo (avant, Espace rouvrait le journal ou remettait la pause).
+    this.tabbed = null;
 
     window.addEventListener('keydown', (e) => {
       if (isTextEntry(e.target)) return;
       // Entrée ou Espace sur un bouton (choisi avec Tab) ou dans un panneau, une fenêtre, un mini-jeu :
       // c'est le bouton qui la reçoit (clic natif). Avant, Entrée relançait « s'occuper de l'animal » à
       // portée, qui redessinait le panneau sous le bouton : « Caresser », « Monter »… ne faisaient rien.
-      if (isPress(e.code) && onControl(e.target)) return;
+      const press = isPress(e.code) && onControl(e.target);
+      if (press && (e.target === this.tabbed || inWindow(e.target))) return;
       // Touche déjà utilisée (Échap vient de fermer une fenêtre, H la carte des touches) : le jeu ne la reçoit pas en plus.
       if (e.defaultPrevented) return;
       this.keys.add(e.code);
       // (Ctrl, Cmd ou Alt avec : c'est pour le navigateur — Ctrl+P imprime, Cmd+H cache la fenêtre, Ctrl+C copie)
       if (!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) this.onKey?.(e.code);
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+      // (press : le bouton pris à la souris ne se clique pas en plus)
+      if (press || ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    window.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      if (e.code === 'Tab') this.tabbed = document.activeElement; // (là où Tab vient de poser le focus)
+    });
+    window.addEventListener('pointerdown', () => { this.tabbed = null; }, true);
     window.addEventListener('blur', () => this.keys.clear());
 
     // Vue : glisser sur l'écran (souris ou doigt), molette ou pincer pour zoomer.

@@ -5,6 +5,7 @@
 import { h, isDesk, isPhone } from './dom.js';
 import { t, getLang } from '../i18n.js';
 import { keyLabel, moveKeys, MOVE_CODES, ARROW_CODES } from './keys.js';
+import { nbsp } from './minigames/frame.js'; // typographie française (« Bravo ! » ne se coupe pas)
 
 /** Des touches dessinées comme sur le clavier : [Z][Q][S][D] (les lettres de ce clavier-là). */
 export const keycaps = (codes, cls = '') => codes.map((c) => h('kbd', { class: `kc ${cls}`.trim(), 'data-code': c }, keyLabel(c)));
@@ -50,10 +51,10 @@ export function openKeysCard(ui) {
   const group = (id) => {
     const gr = groups.find((x) => x.id === id);
     return h('section', { class: `kc-group kc-${id}` },
-      h('h4', {}, h('span', { class: 'kc-icon', 'aria-hidden': 'true' }, gr.icon), ` ${gr.title}`),
+      h('h4', {}, h('span', { class: 'kc-icon', 'aria-hidden': 'true' }, gr.icon), ` ${nbsp(gr.title)}`),
       gr.rows.map((r) => h('div', { class: 'kc-row' },
         h('span', { class: 'kc-keys' }, r.keys ? keycaps(r.keys, 'big') : h('span', { class: 'kc-mouse', 'aria-hidden': 'true' }, r.mouse)),
-        h('span', { class: 'kc-text' }, r.text))));
+        h('span', { class: 'kc-text' }, nbsp(r.text)))));
   };
   ui.showModal([
     h('div', { class: 'keys-card' },
@@ -62,8 +63,8 @@ export function openKeysCard(ui) {
         h('div', { class: 'kc-col' }, group('walk'), group('run'), group('act')),
         h('div', { class: 'kc-col' }, group('ride')),
         h('div', { class: 'kc-col' }, group('look'), group('menus'))),
-      h('p', { class: 'note kc-again' }, t('kc_again', { h: keyLabel('KeyH') }))),
-    h('div', { class: 'row end' }, h('button', { class: 'primary', 'data-escape': true, onClick: () => ui.hideModal() }, `👍 ${t('kc_ok')}`)),
+      h('p', { class: 'note kc-again' }, nbsp(t('kc_again', { h: keyLabel('KeyH') })))),
+    h('div', { class: 'row end' }, h('button', { class: 'primary', 'data-escape': true, onClick: () => ui.hideModal() }, `👍 ${nbsp(t('kc_ok'))}`)),
   ]);
 }
 
@@ -101,20 +102,22 @@ export function menuState(ui) {
     mgmt: !!g?.mgmt?.active, // vue d'ensemble, construction : Échap reste à la construction
     panel: !!ui.panel,
     questBubble: !!b && !b.hidden && b.classList.contains('quest-bubble'),
+    tuto: !!ui.tutorial?.active, // (le tutoriel guidé : pas de menu d'Échap, sa bulle dirait « touche OK »)
   };
 }
 
 /**
  * Ce que fait une touche de menu dans cet état (s : menuState), ou null : rien (la touche est pour autre chose).
  * Jamais pendant une fenêtre, un mini-jeu, l'examen véto, une activité ni un voyage. Échap ferme d'abord ce qui est
- * ouvert (la fenêtre et le panneau : UI ; la bulle d'une quête : ici) ; le menu seulement quand rien ne l'est.
+ * ouvert (la fenêtre et le panneau : UI ; la bulle d'une quête : ici) ; le menu seulement quand rien ne l'est, et pas
+ * pendant le tutoriel guidé (tous ses choix sont déjà en haut de l'écran).
  */
 export function menuAction(code, s) {
   const act = MENU[code];
   if (!act || !s.running || s.blocking || s.minigame || s.activity || s.trip) return null;
   if (act === 'menu') {
     if (s.questBubble) return 'bubble';
-    if (s.panel || s.mgmt || s.tripView) return null;
+    if (s.panel || s.mgmt || s.tripView || s.tuto) return null;
   }
   return act;
 }
@@ -131,6 +134,19 @@ export function runMenuKey(ui, code) {
   else if (act === 'menu') ui.openMore();
   else if (act === 'bubble') ui.tutorial.closeQuestBubble();
   return act;
+}
+
+/**
+ * J, P ou H pendant qu'une fenêtre est ouverte (UI, écouteur du clavier) : dans le menu d'Échap, la touche choisit ce
+ * que dit sa petite touche (⌨️ H, 📖 J, ⏸ P) ; H referme aussi la carte des touches. Renvoie true si c'est fait.
+ */
+export function modalMenuKey(ui, code) {
+  if (!ui.modalOpen || !MENU[code] || code === 'Escape') return false;
+  const item = ui.modal.querySelector(`.more-sheet [data-key="${code}"]`);
+  if (item) item.click();
+  else if (code === 'KeyH' && keysCardOpen(ui)) ui.hideModal();
+  else return false;
+  return true;
 }
 
 // ------------------------------------------------------------ le bandeau des touches
@@ -194,7 +210,8 @@ export class KeyStrip {
     const g = ui.game;
     const ride = !!g?.player?.mount;
     this.ride = ride;
-    const on = !!g?.running && isDesk() && !isPhone() && stripWanted() && !ui.onScreenControls() && ui.screen.hidden;
+    // (un portable à écran tactile garde son bandeau ; seul le joystick choisi dans les Réglages prend sa place)
+    const on = !!g?.running && isDesk() && !isPhone() && stripWanted() && ui.onScreenChoice() !== 'on' && ui.screen.hidden;
     if (on !== this.on) {
       this.on = on;
       this.el.hidden = !on;

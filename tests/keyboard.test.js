@@ -61,11 +61,37 @@ describe('Entrée et Espace sur un bouton (src/game/Input.js)', () => {
     expect(r.prevented).toBe(false);
   });
 
-  it('Espace sur un bouton : pas de preventDefault (sinon le bouton ne se clique pas)', () => {
+  it('Espace sur un bouton choisi avec Tab : pas de preventDefault (sinon le bouton ne se clique pas)', () => {
     const { keys, press } = make();
-    const r = press('Space', fakeEl(['button']));
+    const b = fakeEl(['button']);
+    globalThis.document.activeElement = b;
+    listeners.keyup.at(-1)({ code: 'Tab' }); // (Tab vient de poser le focus sur lui)
+    const r = press('Space', b);
     expect(keys).toEqual([]);
     expect(r.prevented).toBe(false);
+    expect(press('Enter', b).prevented).toBe(false);
+  });
+
+  it('un bouton du haut pris à la souris (📖, ⏸) ou rendu par une fenêtre : Espace et Entrée restent au jeu, sans le recliquer', () => {
+    const { keys, press } = make();
+    const journal = fakeEl(['button']);
+    // (cliqué à la souris : il garde le focus, rien n'a été choisi avec Tab)
+    let r = press('Space', journal);
+    expect(r.prevented).toBe(true); // (pas de clic natif : le journal ne se rouvre pas)
+    r = press('Enter', journal);
+    expect(r.prevented).toBe(true);
+    expect(keys).toEqual(['Space', 'Enter']); // (Espace : trot enlevé, sauter, bravo ; Entrée : agir)
+    // choisi avec Tab, puis repris à la souris : la souris l'emporte
+    globalThis.document.activeElement = journal;
+    listeners.keyup.at(-1)({ code: 'Tab' });
+    listeners.pointerdown.at(-1)({});
+    expect(press('Space', journal).prevented).toBe(true);
+    // dans un panneau, une fenêtre ou un écran : toujours le bouton, souris ou pas
+    for (const where of ['#panel', '#modal', '#screen', '.mg-overlay']) {
+      const before = keys.length;
+      expect(press('Space', fakeEl(['button', where])).prevented, where).toBe(false);
+      expect(keys.length).toBe(before);
+    }
   });
 
   it('Entrée sur le jeu (rien de choisi) : « s\'occuper de… » comme avant ; Espace ne fait pas défiler la page', () => {

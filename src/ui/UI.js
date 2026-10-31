@@ -33,7 +33,7 @@ import { openCareers, careerChips } from './careers.js'; // 💼 métiers
 import { openTrailCarnet } from './trailGuide.js'; // 🧭 guide de randonnée
 import { BUBBLE_PX } from '../game/wishBubble.js'; // (la bulle « il te demande » pend sous le nom)
 import { WISH, WISH_ACTION } from '../sim/horseWish.js'; // 🫧 toucher sa bulle fait ce qu'il demande
-import { KeyStrip, keycaps, relabelKeycaps, openKeysCard, keysCardOpen, maybeKeysCard } from './controls.js'; // ⌨️ bandeau et carte des touches
+import { KeyStrip, keycaps, relabelKeycaps, openKeysCard, modalMenuKey, maybeKeysCard } from './controls.js'; // ⌨️ bandeau et carte des touches
 import { keyLabel, controlsHelp, loadKeyLayout, onKeyLayout } from './keys.js'; // (la lettre écrite sur la touche)
 import { isTextEntry } from '../game/Input.js';
 
@@ -198,10 +198,10 @@ export class UI {
           this.closePanel();
         }
       }
-      // ⌨️ H referme la carte des touches qu'il a ouverte (src/ui/controls.js) ; le jeu ne la rouvre pas (preventDefault).
-      if (e.code === 'KeyH' && !e.repeat && !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && keysCardOpen(this) && !isTextEntry(e.target)) {
+      // ⌨️ Dans le menu d'Échap, J, P et H font ce que disent leurs petites touches ; H referme la carte des touches qu'il
+      // a ouverte (src/ui/controls.js). preventDefault : le jeu ne reçoit pas la touche en plus (il rouvrirait la carte).
+      if (!e.repeat && !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && !isTextEntry(e.target) && modalMenuKey(this, e.code)) {
         e.preventDefault();
-        this.hideModal();
       }
     });
     // Une fenêtre qui se redessine elle-même (📸 photo, inscription…) : le bouton qui avait le focus disparaît,
@@ -296,18 +296,19 @@ export class UI {
     this.camBtn.hidden = false;
     this.applyControls();
     this.buildHud();
+    this.keyStrip.update();
     {
       // Ordinateur : le bandeau des touches en bas de l'écran remplace la longue ligne d'aide (et la carte ⌨️ vient
-      // toute seule, une fois : maybeKeysCard) ; au doigt, « Touche le sol pour y aller » comme avant.
-      const desk = isDesk();
+      // toute seule, une fois : maybeKeysCard) ; sans bandeau (caché, joystick choisi, fenêtre étroite), la ligne revient
+      // comme avant ; au doigt, « Touche le sol pour y aller ».
+      const strip = this.keyStrip.on;
       const touch = matchMedia('(pointer: coarse)').matches;
-      this.help.textContent = desk ? '' : touch ? t('tapHint') : `${t('tapHint')} · ${controlsHelp()}`;
-      this.help.hidden = desk;
+      this.help.textContent = strip ? '' : touch ? t('tapHint') : `${t('tapHint')} · ${controlsHelp()}`;
+      this.help.hidden = strip;
       clearTimeout(this.helpTimer);
-      if (!desk) this.helpTimer = setTimeout(() => this.hideHelp(), 15000);
+      if (!strip) this.helpTimer = setTimeout(() => this.hideHelp(), 15000);
     }
     this.startedAt = performance.now();
-    this.keyStrip.update();
     this.refresh();
     setTimeout(() => { if (game.running) maybeShowNews(this); }, 1200); // 🐴 quoi de neuf ? (une fois)
   }
@@ -381,8 +382,10 @@ export class UI {
   openMore() {
     const g = this.game;
     const desk = isDesk();
+    // (data-key : J, P et H choisissent aussi ces trois-là au clavier, src/ui/controls.js modalMenuKey)
     const item = (emoji, label, fn, code = null) => h('button', {
-      class: 'big-action', title: code && desk ? `${label} (${keyLabel(code)})` : null, onClick: () => { this.hideModal(); fn(); },
+      class: 'big-action', title: code && desk ? `${label} (${keyLabel(code)})` : null, 'data-key': desk ? code : null,
+      onClick: () => { this.hideModal(); fn(); },
     }, h('span', { class: 'ba-icon' }, emoji), h('span', { class: 'ba-text' }, h('b', {}, label)), code && desk ? keycaps([code], 'kb-badge') : null);
     this.showModal([
       desk ? h('h3', {}, `⋯ ${t('kc_menu')}`) : null,
@@ -1496,13 +1499,18 @@ export class UI {
 
   // ------------------------------------------------------------ commandes à l'écran
 
-  onScreenControls() {
+  /** Ce qu'a choisi l'enfant dans les Réglages : 'on', 'off', ou null (rien choisi : on devine, onScreenControls). */
+  onScreenChoice() {
     try {
-      const v = localStorage.getItem('animaleana.onscreen');
-      if (v) return v === 'on';
+      return localStorage.getItem('animaleana.onscreen') || null;
     } catch {
-      /* rien */
+      return null;
     }
+  }
+
+  onScreenControls() {
+    const v = this.onScreenChoice();
+    if (v) return v === 'on';
     return matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   }
 

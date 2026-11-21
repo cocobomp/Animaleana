@@ -50,9 +50,27 @@ const UP = V(0, 1, 0);
 
 // ---------------------------------------------------------------- ce sur quoi on voltige
 
+/** Sommets du dessus du dos (sur l'échine) aux z donnés (repère du corps) : le plus haut à moins de 3 cm. */
+function backVertices(coat, zs) {
+  const pos = coat.geometry.attributes.position;
+  return zs.map((z) => {
+    let best = -1;
+    let y = -Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      if (Math.abs(pos.getX(i)) > 0.04 || Math.abs(pos.getZ(i) - z) > 0.03) continue;
+      if (pos.getY(i) > y) {
+        y = pos.getY(i);
+        best = i;
+      }
+    }
+    return best;
+  });
+}
+
 /**
  * Le cheval : repère « du tapis » (origine sur le dessus du tapis, au siège ; x à sa gauche, y en haut, z vers
- * l'avant, en mètres), mis à jour à chaque image d'après l'os du tronc (il monte et descend avec la foulée).
+ * l'avant, en mètres), mis à jour à chaque image d'après l'os du tronc ; puis posé sur la peau du dos telle qu'elle
+ * est à cette image (au galop, le dos ne suit pas tout à fait l'os : le voltigeur flottait de 15 cm au-dessus).
  */
 function horseMount(e) {
   const md = e.model;
@@ -62,6 +80,14 @@ function horseMount(e) {
   const PAD = 0.045; // tapis de voltige (mousse et écart), le dessus
   const back = (z) => md.backTop?.(z) ?? md.saddleY;
   const seatB = V(0, back(zSeat) + PAD, zSeat);
+  // Le dessus du dos, lu sur la peau à quatre endroits (devant le siège, au siège, derrière, aux reins).
+  const coat = md.coatMesh?.isSkinnedMesh ? md.coatMesh : null;
+  const SZ = [0.18, 0, -0.25, -0.5];
+  const zs = SZ.map((dz) => zSeat + dz);
+  const ids = coat ? backVertices(coat, zs) : [];
+  const ok = coat && ids.every((i) => i >= 0);
+  const tops = SZ.map(() => 0); // hauteur du dessus (repère du tapis) à chaque z de SZ
+  let lift = 0; // (lissé : la peau tremble un peu d'une image à l'autre)
   const m = {
     kind: 'horse', frame: new THREE.Matrix4(), inv: new THREE.Matrix4(), pos: V(), quat: new THREE.Quaternion(), scale: 1,
     grips: [V(0.08, 0.15, 0.25), V(-0.08, 0.15, 0.25)], wL: 0.32, ground: -1.6,
@@ -70,12 +96,33 @@ function horseMount(e) {
       md.body.matrixWorld.decompose(_v, m.quat, _s);
       m.scale = _s.y;
       m.pos.copy(seatB).applyMatrix4(md.body.matrixWorld);
+      if (ok) {
+        // la peau au siège : de combien est-elle sous (ou sur) l'os, le long du « haut » du tronc
+        _w.set(0, 1, 0).applyQuaternion(m.quat);
+        coat.getVertexPosition(ids[1], _p).applyMatrix4(coat.matrixWorld);
+        _v.copy(_p).sub(m.pos);
+        const d = _v.dot(_w) + PAD * m.scale;
+        lift = Math.abs(lift - d) > 0.3 ? d : lift + (d - lift) * 0.5;
+        m.pos.addScaledVector(_w, lift);
+      }
       m.frame.compose(m.pos, m.quat, ONE);
       m.inv.copy(m.frame).invert();
       m.ground = world.heightAt(m.pos.x, m.pos.z) - m.pos.y;
+      if (ok) {
+        for (let k = 0; k < SZ.length; k++) {
+          coat.getVertexPosition(ids[k], _p).applyMatrix4(coat.matrixWorld).applyMatrix4(m.inv);
+          tops[k] = _p.y + PAD * m.scale;
+        }
+      }
     },
     topAt(z) {
-      return (back(zSeat + z / m.scale) - back(zSeat)) * m.scale;
+      if (!ok) return (back(zSeat + z / m.scale) - back(zSeat)) * m.scale;
+      // entre les sommets lus (z décroissant), prolongé au-delà
+      const u = z / m.scale;
+      let k = 0;
+      while (k < SZ.length - 2 && u < SZ[k + 1]) k++;
+      const f = (u - SZ[k]) / (SZ[k + 1] - SZ[k]);
+      return tops[k] + (tops[k + 1] - tops[k]) * f;
     },
   };
   m.update(e.world);
@@ -148,17 +195,19 @@ function makePoses(mt) {
     arms: [{ local: [0.7, 1.34, 0.08], pole: [0.1, -1, -0.4], hand: [0, 0, -0.2] }, { local: [-0.7, 1.34, 0.08], pole: [-0.1, -1, -0.4], hand: [0, 0, 0.2] }],
   });
   // À genoux (deux genoux sur le tapis), puis le drapeau : jambe droite tendue en arrière, bras gauche en avant.
-  // Le genou posé sur le tapis, la cuisse presque droite au-dessus de lui, le tibia couché vers l'arrière.
-  const knee = (x, zk, extra = {}) => leg(x, top(zk - 0.36) + 0.06, zk - 0.36, [0, -1, 0.25], { toe: 1.3, ...extra });
+  // Le genou posé sur le tapis (son centre 6 cm au-dessus), le tibia couché vers l'arrière ; la hanche à la longueur
+  // de la cuisse du genou, reculée de back (assis vers les talons) : hipOn(zk, back) donne sa hauteur.
+  const knee = (x, zk, extra = {}) => leg(x, top(zk - 0.35) + 0.06, zk - 0.35, [0, -1, 0.35], { toe: 1.35, ...extra });
+  const hipOn = (zk, backBy) => top(zk) + 0.06 + Math.sqrt(0.4 * 0.4 - backBy * backBy) - 0.005;
   P.kneel = pose({
-    hip: [0, top(-0.18) + 0.47, -0.13], bend: 0.55, head: [-0.4, 0],
-    legs: [knee(0.11, -0.18), knee(-0.11, -0.18)],
+    hip: [0, hipOn(0, 0.2), -0.2], bend: 1.2, head: [-0.85, 0],
+    legs: [knee(0.11, 0), knee(-0.11, 0)],
     arms: [grip(0, [0.5, -1, -0.4]), grip(1, [-0.5, -1, -0.4])],
   });
   P.flag = pose({
-    hip: [0.04, top(-0.14) + 0.47, -0.09], bend: 1.2, side: -0.04, head: [-1.15, 0],
-    legs: [knee(0.11, -0.14), { local: [-0.13, HIP + 0.08, -0.76], pole: [0, 1, 0], toe: 0.9 }],
-    arms: [{ local: [0.16, 1.14, 0.97], pole: [0.3, -1, 0], hand: [0, 0, -0.3] }, { local: [-0.34, 0.92, -0.04], pole: [-0.4, 0.2, 1], hand: [0, 0, 0.3] }],
+    hip: [0.04, hipOn(-0.08, 0.06), -0.14], bend: 1.35, side: -0.04, head: [-1.25, 0],
+    legs: [knee(0.11, -0.08), { local: [-0.13, HIP + 0.12, -0.76], pole: [0, 1, 0], toe: 0.9 }],
+    arms: [{ local: [0.17, 1.02, 1.02], pole: [0.3, -1, 0], hand: [0, 0, -0.3] }, { local: [-0.33, 0.84, 0.12], pole: [-0.4, 0.2, 1], hand: [0, 0, 0.3] }],
   });
   // Moulin : assis de côté (face à l'intérieur), à l'envers, de l'autre côté, puis en avant ; une jambe passe par-dessus
   // l'encolure ou la croupe à chaque quart.
@@ -330,7 +379,7 @@ class VaultingSession extends Session {
   constructor(mgr, type, opts) {
     super(mgr, type, opts);
     const g = this.game;
-    document.body.classList.add('actv-nomove');
+    document.body.classList.add('actv-nomove', 'vt-on');
     this.level = VAULT_LEVELS[opts.level] ? opts.level : 'walk';
     this.L = VAULT_LEVELS[this.level];
     const a = this.L.horse ? opts.animal : null;
@@ -417,7 +466,8 @@ class VaultingSession extends Session {
     bakeMeshes(judges);
     this.judges = judges;
     // Le longeur, au centre, avec sa longe et sa chambrière ; ou l'entraîneur à côté du tonneau.
-    const coach = buildAvatar({ skin: 0xd9a27e, hair: 0x3b2a20, hairStyle: 'ponytail', top: 0x2a4d7a, bottom: 0x3a3a3a, shoes: 0x2b2b2b, hat: true }, 57);
+    // (veste bordeaux et pantalon beige : on ne le confond pas avec ton avatar)
+    const coach = buildAvatar({ skin: 0xd9a27e, hair: 0x3b2a20, hairStyle: 'ponytail', top: 0x7a2633, bottom: 0xcbb994, shoes: 0x3b2a1e, hat: true }, 57);
     coach.root.scale.setScalar(1.14);
     g.scene.add(coach.root);
     this.coach = coach;
@@ -650,6 +700,7 @@ class VaultingSession extends Session {
     this.endPart();
     this.phase = 'outro';
     this.outroT = 0;
+    this.hud2.idle(true); // (plus rien à toucher : on salue)
   }
 
   // ------------------------------------------------------------ chaque image
@@ -1014,11 +1065,12 @@ class VaultingSession extends Session {
     const g = this.game;
     const portrait = g.camera.aspect < 0.8;
     const at = _v.copy(this.mt.pos);
-    at.y += 0.35;
+    // (en hauteur, la visée est plus basse : le cheval est au-dessus du gros bouton rond)
+    at.y += portrait ? -0.25 : 0.3;
     const h = this.e ? this.e.heading : Math.atan2(_w.set(0, 0, 1).applyQuaternion(this.mt.quat).x, _w.z);
     let yaw = 1.25;
     let pitch = 0.2;
-    let dist = portrait ? 7.4 : 5.4;
+    let dist = portrait ? 6.6 : 4.4;
     if (this.state === 'countdown' || this.phase === 'salute' || this.phase === 'approach') {
       // plan large : le cercle, le longeur, le cheval
       if (this.e) {
@@ -1026,7 +1078,9 @@ class VaultingSession extends Session {
         yaw = 0;
         pitch = 0.42;
         dist = portrait ? 17 : 13;
-        g.rig.focus = { shot: { at: at.clone(), heading: -Math.PI / 2, yaw: 0, pitch, dist } };
+        // (en hauteur : plus près, visé entre le centre et le cheval, pour qu'on les voie bien)
+        if (portrait) at.lerp(_w.set(this.e.position.x, this.cy + 1.0, this.e.position.z), 0.35);
+        g.rig.focus = { shot: { at: at.clone(), heading: -Math.PI / 2, yaw: 0, pitch, dist: portrait ? 12.5 : dist } };
         return;
       }
       dist += 1;
@@ -1113,6 +1167,7 @@ class VaultingSession extends Session {
     const pl = this.pl;
     if (this.keyUp) window.removeEventListener('keyup', this.keyUp);
     this.hud2?.remove();
+    document.body.classList.remove('vt-on');
     if (g.rig && this.camMode) g.rig.mode = this.camMode;
     if (this.coach) {
       g.scene.remove(this.coach.root);

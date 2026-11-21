@@ -180,7 +180,7 @@ export function vaultBarrel(padKey = 'navy') {
 /** La chambrière du longeur : un manche effilé (1,8 m), dans le repère du groupe le long de +y depuis la main. */
 export function lungeWhip() {
   const g = new THREE.Group();
-  const stick = new THREE.CylinderGeometry(0.004, 0.011, 1.8, 6);
+  const stick = new THREE.CylinderGeometry(0.006, 0.015, 1.8, 6);
   stick.translate(0, 0.9, 0);
   add(g, stick, mat(0x1e1b19, 0.4));
   const grip = new THREE.CylinderGeometry(0.014, 0.014, 0.22, 8);

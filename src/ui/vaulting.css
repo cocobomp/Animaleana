@@ -5,7 +5,8 @@
 .vt-pad { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
 #actv-hud .actv-top, #actv-hud .actv-controls, #actv-hud .actv-hint, #actv-hud .actv-big, #actv-hud .vt-marks { z-index: 1; }
 
-.vt-controls { display: grid; justify-items: center; gap: 10px; width: 100%; pointer-events: none; }
+.vt-controls { display: grid; justify-items: center; gap: 44px; width: 100%; pointer-events: none; }
+.vt-controls[hidden] { display: none; }
 .vt-btn-row { display: grid; justify-items: center; gap: 4px; }
 .vt-btn-row[hidden] { display: none; }
 .vt-btn-say {
@@ -87,7 +88,10 @@
 .vt-total { text-align: center; margin: 2px 0 8px; }
 .vt-total b { font-size: 2.6rem; font-weight: 900; color: #1e7a40; font-variant-numeric: tabular-nums; }
 .vt-total small { font-weight: 800; color: var(--muted); }
-.vt-protocol th { font-size: 0.8rem; color: var(--muted); text-align: center; }
+.vt-protocol { font-size: 0.92rem; }
+.vt-protocol th { font-size: 0.78rem; color: var(--muted); text-align: center; padding: 2px 4px; }
+.vt-protocol td { padding: 3px 4px; }
+.vt-protocol td:first-child { white-space: nowrap; font-weight: 700; }
 .vt-protocol td.num { text-align: center; font-variant-numeric: tabular-nums; }
 
 /* Choix du niveau et des chevaux (menu des activités). */
@@ -99,6 +103,16 @@
 .vt-fig.ok { opacity: 1; background: #d9f2df; }
 
 @media (max-height: 500px) {
+  /* Paysage sur téléphone : le bouton et la jauge à droite, le cheval au milieu de l'écran. */
+  body.vt-on #actv-hud .actv-controls {
+    left: auto; right: calc(12px + var(--safe-r)); transform: none; width: auto; bottom: calc(10px + var(--safe-b));
+    justify-items: end;
+  }
+  body.vt-on .vt-controls { justify-items: end; width: auto; }
+  .vt-card { max-width: 250px; padding: 6px 12px; }
+  .vt-balance { width: min(330px, 42vw); padding: 6px 10px 10px; }
+  .vt-balance-bar { height: 34px; }
+  .vt-btn-say { max-width: 200px; font-size: 0.75rem; }
   .vt-btn { width: 84px; height: 84px; }
   .vt-btn .vt-ico { line-height: 84px; font-size: 2.1rem; }
   .vt-marks { top: calc(8px + var(--safe-t)); }

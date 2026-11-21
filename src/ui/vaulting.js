@@ -95,6 +95,11 @@ export class VaultHud {
     this.cardEl.hidden = false;
   }
 
+  /** Rien à toucher pendant un moment (le salut de la fin) : le bouton rond disparaît. */
+  idle(on) {
+    this.box.hidden = on;
+  }
+
   balance(on) {
     this.gauge.hidden = !on;
     this.btn.parentElement.hidden = on;

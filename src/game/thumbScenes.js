@@ -235,6 +235,8 @@ export function sizeFrame(size, { whole = false } = {}) {
  */
 const WORN_VIEW = {
   pad: { dir: [1, 0.85, 0.4], grow: 1.3, min: 0.62, shadow: false }, // le tapis seul, vu d'en haut : sa forme et son galon
+  // (voltige : le surfaix sur son tapis, de trois quarts : les deux poignées et la sangle)
+  surcingle: { dir: [1, 0.55, 0.5], grow: 1.15, min: 0.7, shadow: false },
   blanket: { dir: [1, 0.36, 0.62], whole: true }, // le cheval entier : la couverture le couvre presque tout
   // (filets : cadrés sur le mors et la muserolle, sur un alezan — sauf le havane, trop proche : sur le gris)
   bridle: { dir: [1, 0.12, 0.62], grow: 1.08, min: 0.15, shadow: false, mouth: [0.4, 0.5], tone: (c) => (c === 'havana' ? 'light' : 'mid') },
@@ -263,6 +265,7 @@ function wornThumb(def, id, color, size) {
   const tone = view.tone?.(color) ?? mannequinTone(COLORS[color] ?? BLANKET_COLORS[color] ?? 0x5a3418);
   const m = mannequin(kind, tone);
   const gear = { [def.slot]: { item: id, color, size } };
+  if (def.slot === 'surcingle') gear.pad = { item: 'vaultPad', color: 'navy', size }; // (le surfaix va sur son tapis)
   const worn = buildGear(m.model, m.look, gear);
   let meshes = worn.userData.meshes ?? [];
   if (view.front) {

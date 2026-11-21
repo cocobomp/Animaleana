@@ -415,7 +415,7 @@ function equipOn(ui, id, a, color) {
 
 // ---------------------------------------------------------------- dans la fiche d'un animal
 
-const SLOT_ORDER = ['saddle', 'pad', 'bridle', 'halter', 'blanket', 'legs', 'bells', 'head', 'neck', 'leash'];
+const SLOT_ORDER = ['saddle', 'surcingle', 'pad', 'bridle', 'halter', 'blanket', 'legs', 'bells', 'head', 'neck', 'leash'];
 
 /** Équipement d'un animal : ce qu'il porte, par emplacement, et ce qu'on a de rangé qui lui va. */
 export function animalGearSection(ui, a) {

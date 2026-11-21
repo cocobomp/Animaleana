@@ -68,6 +68,10 @@ export const GEAR = {
   gelPad: { emoji: '🧽', price: 55, species: ['horse'], slot: 'pad', type: 'pad', discipline: 'comfort', sizes: ALL, colors: ['white', 'black', 'grey'], fx: { comfort: 5, trailFatigue: 0.9 } },
   // (reward : ne se vend pas, se gagne — la chasse aux citrouilles d'Halloween, src/sim/halloween.js ; trim : son liseré)
   padPumpkin: { emoji: '🎃', price: 40, species: ['horse'], slot: 'pad', type: 'pad', discipline: 'party', sizes: ALL, colors: ['orange'], fx: { comfort: 3 }, reward: 'halloween', trim: 0x1e1b19 },
+  // --- Voltige (src/sim/vaulting.js) : le surfaix à deux poignées (avec ses enrênements), sur un tapis épais.
+  // Le surfaix prend la place de la selle (on ne met pas les deux) ; le tapis de voltige est un tapis (emplacement pad).
+  surcingle: { emoji: '🤸', price: 130, species: ['horse'], slot: 'surcingle', type: 'surcingle', discipline: 'vaulting', sizes: ALL, colors: ['black', 'brown', 'havana'], fx: {} },
+  vaultPad: { emoji: '🟪', price: 70, species: ['horse'], slot: 'pad', type: 'pad', discipline: 'vaulting', sizes: ALL, colors: ['navy', 'purple', 'sky', 'pink', 'red', 'turquoise', 'black'], fx: { comfort: 4 } },
   // --- Guêtres et cloches
   boots: { emoji: '🧦', price: 50, species: ['horse'], slot: 'legs', type: 'boots', discipline: 'protection', sizes: ALL, colors: ['navy', 'black', 'white', 'red', 'pink', 'sky'], fx: {} }, // +6 % au saut : voir activities.js (guêtres)
   bellBoots: { emoji: '🔔', price: 30, species: ['horse'], slot: 'bells', type: 'bells', discipline: 'protection', sizes: ALL, colors: ['black', 'navy', 'purple', 'pink'], fx: { jump: 0.03 } },
@@ -95,6 +99,7 @@ export const TACK_CATEGORIES = [
   { id: 'saddle', emoji: '🏇', items: ['saddle', 'saddleDressage', 'saddleJump', 'saddleTrail', 'saddleWestern', 'saddlePony', 'saddleRace'] },
   { id: 'bridle', emoji: '🪢', items: ['bridle', 'bridleOlive', 'hackamore', 'doubleBridle'] },
   { id: 'pad', emoji: '🟦', items: ['saddlePad', 'gelPad', 'padPumpkin'] },
+  { id: 'vaulting', emoji: '🤸', items: ['surcingle', 'vaultPad'] }, // voltige
   { id: 'legs', emoji: '🧦', items: ['boots', 'bellBoots'] },
   { id: 'blanket', emoji: '🧣', items: ['blanketSummer', 'blanketRain', 'blanket', 'flyMask'] },
   { id: 'halter', emoji: '🔗', items: ['halter', 'halterLeather', 'halterRope'] },
@@ -363,6 +368,12 @@ export function equip(profile, a, item, color, { autoSwap = false, exact = false
     swapped = size();
   }
   a.gear = a.gear ?? {};
+  // Le surfaix de voltige prend la place de la selle, et la selle celle du surfaix (ils retournent à la sellerie).
+  const other = EXCLUSIVE[def.slot];
+  if (other && a.gear[other]) {
+    if (other === 'saddle') a.lastSaddle = { ...a.gear.saddle };
+    delete a.gear[other];
+  }
   const colors = def.colors ?? [];
   const c = colors.includes(color) ? color : colors.includes(a.gear[def.slot]?.color) && a.gear[def.slot]?.item === id ? a.gear[def.slot].color : colors[0];
   const entry = { item: id, color: c };
@@ -371,6 +382,9 @@ export function equip(profile, a, item, color, { autoSwap = false, exact = false
   a.gear[def.slot] = entry;
   return { ok: true, item: id, swapped };
 }
+
+/** Emplacements qui ne vont pas ensemble : la selle ou le surfaix de voltige. */
+const EXCLUSIVE = { saddle: 'surcingle', surcingle: 'saddle' };
 
 /**
  * Échange gratuit à la sellerie : un exemplaire rangé change de taille (le bon gabarit pour un autre cheval).

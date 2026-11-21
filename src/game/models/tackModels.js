@@ -642,11 +642,87 @@ export function padModel(id, color) {
     mesh(g, shared('gelTop', () => new RoundedBoxGeometry(0.28, 0.012, 0.4, q(2, 1), 0.005)), cached(`gelTop:${hexOf(c)}`, () => new THREE.MeshStandardMaterial({ color: new THREE.Color(hexOf(c)).lerp(new THREE.Color(0x888888), 0.25), roughness: 0.35 })), [0, 0.052, 0]);
     return g;
   }
+  if (id === 'vaultPad') {
+    // Tapis de voltige plié : une mousse épaisse, bords arrondis, passepoil plus foncé et son écusson à étoile.
+    const trim = new THREE.Color(hexOf(c)).multiplyScalar(0.55).getHex();
+    mesh(g, shared('vaultFold', () => new RoundedBoxGeometry(0.42, 0.075, 0.56, q(4, 1), 0.03)), quiltMat(c), [0, 0.0375, 0]);
+    mesh(g, shared('vaultFoldEdge', () => new RoundedBoxGeometry(0.43, 0.02, 0.57, q(3, 1), 0.009)), clothMat(trim), [0, 0.038, 0]);
+    mesh(g, shared('vaultBadgeFlat', () => new THREE.CircleGeometry(0.06, 20)), clothMat(0xf4efe4, THREE.FrontSide), [0.06, 0.0765, 0.12], [-Math.PI / 2, 0, 0]);
+    mesh(g, shared('vaultStarFlat', () => starShape(0.038, 0.016, 5)), clothMat(c, THREE.FrontSide), [0.06, 0.078, 0.12], [-Math.PI / 2, 0, 0]);
+    return g;
+  }
   // Tapis matelassé plié en deux, avec son galon de couleur.
   mesh(g, shared('padFold', () => new RoundedBoxGeometry(0.34, 0.035, 0.5, q(3, 1), 0.015)), quiltMat(c), [0, 0.018, 0]);
   const trim = c === 'white' ? 0x23395d : 0xf1ede4;
   mesh(g, shared('padTrim', () => new RoundedBoxGeometry(0.352, 0.012, 0.512, q(2, 1), 0.005)), clothMat(trim), [0, 0.012, 0]);
   mesh(g, shared('padLogo', () => new THREE.CircleGeometry(0.03, 14)), clothMat(trim), [0.09, 0.0365, 0.15], [-Math.PI / 2, 0, 0]);
+  return g;
+}
+
+/** Étoile plate dans le plan xy (écusson du tapis de voltige). */
+function starShape(r1, r2, k) {
+  const sh = new THREE.Shape();
+  for (let i = 0; i < k * 2; i++) {
+    const a = Math.PI / 2 + (i * Math.PI) / k;
+    const r = i % 2 ? r2 : r1;
+    if (i) sh.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    else sh.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  return new THREE.ShapeGeometry(sh);
+}
+
+/**
+ * Surfaix de voltige posé debout sur l'étagère : l'arche rembourrée (le dessus, qui épouse le garrot), les deux
+ * poignées gainées, la boucle du milieu, les anneaux des enrênements, et la sangle repliée dessous. Repère :
+ * posé en (0, 0, 0), l'arche dans le plan x-y, l'avant vers +Z.
+ */
+export function surcingleModel(color) {
+  const g = new THREE.Group();
+  const c = color ?? 'black';
+  const leather = leatherMat(c);
+  const edge = edgeMat(c);
+  const R0 = 0.2; // rayon de l'arche
+  const yc = 0.04;
+  const arc = (r, a0, a1, n) => Array.from({ length: n }, (_, i) => {
+    const a = a0 + ((a1 - a0) * i) / (n - 1);
+    return [Math.cos(a) * r, yc + Math.sin(a) * r * 0.85, 0];
+  });
+  // Dessus rembourré (large, épais) et sa surpiqûre.
+  mesh(g, shared('vaultArch', () => loft(arc(R0, 0.12, Math.PI - 0.12, 16).map((p) => ({ p, rx: 0.065, ry: 0.016 })), { radial: q(10, 6), sub: q(2, 1), side: [0, 0, 1], exp: 4 })), leather);
+  mesh(g, shared('vaultArchSeam', () => loft(arc(R0 + 0.017, 0.16, Math.PI - 0.16, 16).map((p) => ({ p, rx: 0.058, ry: 0.0015 })), { radial: q(6, 4), sub: 1, side: [0, 0, 1], exp: 4 })), edge);
+  // Poignées : anses droites, le haut gainé de cuir clair.
+  for (const s of [1, -1]) {
+    const a = Math.PI / 2 - s * 0.55;
+    const base = [Math.cos(a) * (R0 + 0.02), yc + Math.sin(a) * (R0 + 0.02) * 0.85, 0];
+    const up = [Math.cos(a) * 0.6 + s * 0.2, Math.sin(a) * 0.6 + 0.65, 0];
+    const L = Math.hypot(up[0], up[1]);
+    const u = [up[0] / L, up[1] / L];
+    const path = [];
+    for (let i = 0; i <= 12; i++) {
+      const t = Math.PI * (i / 12);
+      const sz = Math.sign(Math.cos(t)) * Math.abs(Math.cos(t)) ** 0.6;
+      const h = Math.abs(Math.sin(t)) ** 0.45;
+      path.push([base[0] + u[0] * 0.14 * h, base[1] + u[1] * 0.14 * h, 0.055 * sz]);
+    }
+    mesh(g, tube(path, 0.016, false, 10), leather);
+    mesh(g, tube(path.slice(3, 10), 0.0185, false, 10), suedeMat(0x7a4a26));
+  }
+  // Boucle du milieu.
+  const top = [0, yc + R0 * 0.85 + 0.018, 0];
+  mesh(g, tube(Array.from({ length: 9 }, (_, i) => {
+    const t = Math.PI * (i / 8);
+    return [top[0], top[1] + 0.06 * Math.sin(t) ** 0.7, 0.04 * Math.cos(t)];
+  }), 0.007, false, 6), edge);
+  // Anneaux des enrênements, sur les côtés de l'arche.
+  for (const s of [1, -1]) {
+    for (const k of [0, 1, 2]) {
+      const a = (s > 0 ? 0.22 : Math.PI - 0.22) + (s > 0 ? -1 : 1) * k * 0.14;
+      mesh(g, shared('vaultRingFlat', () => new THREE.TorusGeometry(0.02, 0.004, 6, 14)), steelMat(), [Math.cos(a) * (R0 + 0.025), yc + Math.sin(a) * (R0 + 0.025) * 0.85, 0], [0, Math.PI / 2, 0]);
+    }
+  }
+  // La sangle repliée sur l'étagère, sous l'arche, et sa partie élastique.
+  mesh(g, shared('vaultGirthFold', () => new RoundedBoxGeometry(0.34, 0.03, 0.07, q(2, 1), 0.01)), leather, [0, 0.015, 0]);
+  mesh(g, shared('vaultGirthElastic', () => new RoundedBoxGeometry(0.12, 0.032, 0.05, q(2, 1), 0.008)), nylonMat(0x2a2a2a), [0.04, 0.016, 0]);
   return g;
 }
 
@@ -875,6 +951,7 @@ export function tackModel(id, color, opts = {}) {
     case 'bridle': return bridleModel(id, c);
     case 'halter': return halterModel(id, c);
     case 'pad': return padModel(id, c);
+    case 'surcingle': return surcingleModel(c); // voltige
     case 'boots': return bootsModel(c);
     case 'bells': return bellsModel(c);
     case 'blanket': return blanketModel(id, c);

@@ -96,7 +96,7 @@
 
 /* Choix du niveau et des chevaux (menu des activités). */
 .vt-levels { display: grid; gap: 8px; margin-bottom: 10px; }
-.vt-level.primary { outline: 3px solid #f0a516; }
+.vt-level.vt-sel { outline: 3px solid #f0a516; background: #fff7dc; }
 .vt-horse .card-side button { white-space: nowrap; }
 .vt-figs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .vt-fig { background: #f4efe4; border-radius: 999px; padding: 3px 10px; font-weight: 700; font-size: 0.85rem; opacity: 0.55; }

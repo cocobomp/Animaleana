@@ -195,7 +195,7 @@ export function vaultingPick(ui, state) {
     const locked = id === 'canter' && !canterUnlocked(p);
     const best = d.best[id];
     return h('button', {
-      class: `card vt-level ${id === level ? 'primary' : ''} ${locked ? 'locked' : ''}`,
+      class: `card vt-level ${id === level ? 'vt-sel' : ''} ${locked ? 'locked' : ''}`,
       onClick: () => {
         if (id === 'barrel') return g.activities.start('vaulting', { level: 'barrel' });
         if (locked) ui.toast(t('vt_why_canterLocked', { n: CANTER_UNLOCK }), 4500);

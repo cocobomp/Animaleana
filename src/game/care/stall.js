@@ -30,11 +30,13 @@ export function stallSet(stage) {
   const scale = stage.double.scale;
   // Le cheval se place d'après sa pose « à la mangeoire » (mesurée sur son gabarit : un Shetland ou un Frison) :
   // la bouche au-dessus du milieu de la mangeoire, à 33 cm du mur de droite ; le dos à ~1 m du mur du fond.
+  // (une seule mesure : déplacer le cheval en x déplace sa bouche d'autant)
   stage.holder.position.set(0, 0, -0.2);
-  const eat0 = stage.eatMuzzle();
-  stage.holder.position.x += S.halfW - 0.33 - eat0.x;
-  stage.measure();
   const eat = stage.eatMuzzle();
+  const dx = S.halfW - 0.33 - eat.x;
+  stage.holder.position.x += dx;
+  eat.x += dx;
+  stage.measure();
   const L = stage.marks;
 
   // ---------------------------------------------------------------- matières

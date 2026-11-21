@@ -308,6 +308,7 @@ export class CareStage {
       this.lost = true;
     });
 
+    this.timing = {};
     try {
       this.build(o);
     } catch (e) {
@@ -327,7 +328,9 @@ export class CareStage {
     this.shake = 0;
 
     // L'animal, puis le décor autour de lui (le décor a besoin de sa taille : mangeoire à hauteur de bouche…).
+    const t0 = performance.now();
     this.double = buildDouble(o.a, o.entity ?? null);
+    this.timing.animal = Math.round(performance.now() - t0);
     this.model = this.double.model;
     this.holder = this.double.holder;
     this.holder.rotation.y = Math.PI / 2; // (il regarde vers +x : vu de profil, tête à droite, comme les jeux dessinés)
@@ -347,7 +350,9 @@ export class CareStage {
     this.st.fat = 1 + (w - 50) / 50 * 0.18;
     this.measure();
 
+    const t1 = performance.now();
     this.decor = o.set ? o.set(this) : null;
+    this.timing.decor = Math.round(performance.now() - t1);
     if (this.decor?.group) this.scene.add(this.decor.group);
     this.pickables = [];
     // (le pelage seul, avec l'index réduit du modèle s'il en a un : deux fois moins de triangles à tester)
@@ -400,7 +405,7 @@ export class CareStage {
     const md = this.model;
     if (!md.anim) return this.marks.muzzle.clone();
     const st = { ...this.st, feeder: 1, graze: 0 };
-    for (let i = 0; i < 40; i++) md.anim.update(0.1, st);
+    for (let i = 0; i < 16; i++) md.anim.update(0.25, st);
     this.holder.updateMatrixWorld(true);
     const p = this.live('muzzle');
     md.photoPose();
@@ -670,14 +675,49 @@ export class CareStage {
 
   // ---------------------------------------------------------------- image
 
-  /** Prépare les shaders sans bloquer (si le navigateur sait compiler en parallèle), puis la scène est prête. */
+  /**
+   * Préparation avant la première image, étalée sur plusieurs images (pendant ce temps, le cadre montre l'emoji qui
+   * respire) : shaders de la scène (en parallèle si le navigateur sait), textures envoyées à la carte graphique trois
+   * par image, puis les ombres seules (leurs shaders de profondeur), puis la scène est prête. Avant : tout dans la
+   * première image (1,4 s d'un coup en SwiftShader).
+   */
   async warm() {
     this.updateCamera(0);
+    const t0 = performance.now();
+    const frame = () => new Promise((r) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 16)));
     try {
       await trackListeners(this.listeners, () => this.renderer.compileAsync(this.scene, this.camera));
     } catch {
       /* compilé à la première image */
     }
+    this.timing.shaders = Math.round(performance.now() - t0);
+    const t1 = performance.now();
+    const textures = new Set();
+    this.scene.traverse((o) => {
+      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      for (const m of mats) for (const v of Object.values(m)) if (v?.isTexture && !v.isRenderTargetTexture) textures.add(v);
+    });
+    let n = 0;
+    for (const tex of textures) {
+      if (this.disposed) return;
+      trackListeners(this.listeners, () => this.renderer.initTexture(tex));
+      if (++n % 3 === 0) await frame();
+    }
+    this.timing.textures = Math.round(performance.now() - t1);
+    // Une image dans un seul pixel : la carte des ombres (et ses shaders de profondeur) et les géométries envoyées à
+    // la carte graphique, sans presque rien peindre ; la vraie première image est alors une image ordinaire.
+    await frame();
+    if (this.disposed) return;
+    const t2 = performance.now();
+    const r = this.renderer;
+    r.setScissorTest(true);
+    r.setScissor(0, 0, 1, 1);
+    r.setViewport(0, 0, 1, 1);
+    trackListeners(this.listeners, () => r.render(this.scene, this.camera));
+    r.setScissorTest(false);
+    r.setViewport(0, 0, this.size.w, this.size.h);
+    this.timing.shadows = Math.round(performance.now() - t2);
+    await frame();
     this.ready = true;
   }
 
@@ -691,13 +731,15 @@ export class CareStage {
 
   render() {
     if (this.lost || this.disposed) return;
+    const t0 = this.timing.first === undefined ? performance.now() : 0;
     trackListeners(this.listeners, () => this.renderer.render(this.scene, this.camera));
+    if (t0) this.timing.first = Math.round(performance.now() - t0);
   }
 
   /** Mesure pour les planches (mémoire de ce rendu). */
   info() {
     const i = this.renderer.info;
-    return { geometries: i.memory.geometries, textures: i.memory.textures, calls: i.render.calls, triangles: i.render.triangles, programs: i.programs?.length ?? 0 };
+    return { geometries: i.memory.geometries, textures: i.memory.textures, calls: i.render.calls, triangles: i.render.triangles, programs: i.programs?.length ?? 0, timing: { ...this.timing } };
   }
 
   dispose() {

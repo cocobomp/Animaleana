@@ -821,7 +821,7 @@ export function groomTool(kind, keep) {
   return g;
 }
 
-/** Tache de boue séchée ou de poussière (carte posée sur le poil) : dessin craquelé ou poudré. */
+/** Tache de boue séchée (craquelée, bords irréguliers), de poussière (poudre claire) ou de boue des jambes (traînées). */
 export function mudTexture(kind = 'mud', seed = 1) {
   const S = 128;
   const c = document.createElement('canvas');
@@ -829,45 +829,72 @@ export function mudTexture(kind = 'mud', seed = 1) {
   c.height = S;
   const x = c.getContext('2d');
   const r = rng(seed);
-  const blob = (cx, cy, rad, col) => {
-    const gr = x.createRadialGradient(cx, cy, 0, cx, cy, rad);
-    gr.addColorStop(0, col);
-    gr.addColorStop(0.7, col);
-    gr.addColorStop(1, 'rgba(0,0,0,0)');
-    x.fillStyle = gr;
+  /** Une forme irrégulière (polygone aux rayons tirés au hasard, lissé). */
+  const splat = (cx, cy, rad, col, n = 14, jag = 0.35) => {
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const k = 1 - jag / 2 + r() * jag;
+      pts.push([cx + Math.cos(a) * rad * k, cy + Math.sin(a) * rad * k]);
+    }
+    x.fillStyle = col;
     x.beginPath();
-    x.arc(cx, cy, rad, 0, Math.PI * 2);
+    for (let i = 0; i < n; i++) {
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[(i + 1) % n];
+      if (i === 0) x.moveTo((x0 + x1) / 2, (y0 + y1) / 2);
+      else x.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+    }
+    const [xa, ya] = pts[0];
+    const [xb, yb] = pts[1];
+    x.quadraticCurveTo(xa, ya, (xa + xb) / 2, (ya + yb) / 2);
     x.fill();
   };
-  if (kind === 'mud') {
-    for (let i = 0; i < 9; i++) blob(S / 2 + (r() - 0.5) * 50, S / 2 + (r() - 0.5) * 50, 20 + r() * 24, `rgba(${110 + r() * 25},${82 + r() * 18},${52 + r() * 12},0.95)`);
+  if (kind === 'dust') {
+    // poussière : un voile sableux, des grains plus clairs
+    for (let i = 0; i < 26; i++) splat(S / 2 + (r() - 0.5) * 56, S / 2 + (r() - 0.5) * 50, 10 + r() * 16, `rgba(${196 + r() * 24},${172 + r() * 20},${136 + r() * 18},0.22)`, 10, 0.5);
+    for (let i = 0; i < 160; i++) {
+      x.fillStyle = `rgba(${215 + r() * 30},${195 + r() * 30},${160 + r() * 30},${0.3 + r() * 0.4})`;
+      x.fillRect(S / 2 + (r() - 0.5) * 80, S / 2 + (r() - 0.5) * 70, 1 + r() * 1.5, 1 + r() * 1.5);
+    }
+  } else {
+    const leg = kind === 'leg';
+    // bord séché plus clair, cœur sombre et humide, puis craquelures et croûtes claires
+    const blobs = leg ? 5 : 6;
+    for (let i = 0; i < blobs; i++) {
+      const cx = S / 2 + (r() - 0.5) * (leg ? 22 : 40);
+      const cy = S / 2 + (r() - 0.5) * (leg ? 70 : 36);
+      const rad = (leg ? 14 : 18) + r() * (leg ? 10 : 16);
+      splat(cx, cy, rad * 1.12, 'rgba(150,108,70,0.88)');
+      splat(cx, cy, rad, `rgba(${92 + r() * 18},${58 + r() * 12},${32 + r() * 8},0.97)`);
+    }
+    // éclaboussures autour
+    for (let i = 0; i < 10; i++) {
+      const a = r() * Math.PI * 2;
+      const d = 34 + r() * 18;
+      splat(S / 2 + Math.cos(a) * d * (leg ? 0.5 : 1), S / 2 + Math.sin(a) * d, 2 + r() * 4, 'rgba(96,68,42,0.9)', 8, 0.4);
+    }
     // craquelures
-    x.strokeStyle = 'rgba(60,40,22,0.75)';
-    x.lineWidth = 1.4;
-    for (let i = 0; i < 12; i++) {
+    x.strokeStyle = 'rgba(40,26,14,0.8)';
+    x.lineWidth = 1.2;
+    for (let i = 0; i < 9; i++) {
       x.beginPath();
-      let px = S / 2 + (r() - 0.5) * 60;
-      let py = S / 2 + (r() - 0.5) * 60;
+      let px = S / 2 + (r() - 0.5) * 40;
+      let py = S / 2 + (r() - 0.5) * 40;
       x.moveTo(px, py);
-      for (let k = 0; k < 4; k++) {
-        px += (r() - 0.5) * 22;
-        py += (r() - 0.5) * 22;
+      for (let k = 0; k < 3; k++) {
+        px += (r() - 0.5) * 18;
+        py += (r() - 0.5) * 18;
         x.lineTo(px, py);
       }
       x.stroke();
     }
-    x.fillStyle = 'rgba(200,175,140,0.35)';
-    for (let i = 0; i < 40; i++) x.fillRect(S / 2 + (r() - 0.5) * 70, S / 2 + (r() - 0.5) * 70, 2, 2);
-  } else {
-    for (let i = 0; i < 60; i++) blob(S / 2 + (r() - 0.5) * 70, S / 2 + (r() - 0.5) * 70, 6 + r() * 12, `rgba(${190 + r() * 30},${165 + r() * 25},${125 + r() * 20},0.45)`);
+    // croûtes sèches (petits éclats clairs)
+    for (let i = 0; i < 40; i++) {
+      x.fillStyle = `rgba(${170 + r() * 30},${142 + r() * 25},${104 + r() * 20},${0.4 + r() * 0.4})`;
+      x.fillRect(S / 2 + (r() - 0.5) * 56, S / 2 + (r() - 0.5) * (leg ? 80 : 50), 1.5 + r() * 2, 1 + r() * 1.5);
+    }
   }
-  // bord doux
-  x.globalCompositeOperation = 'destination-in';
-  const edge = x.createRadialGradient(S / 2, S / 2, S * 0.25, S / 2, S / 2, S / 2);
-  edge.addColorStop(0, 'rgba(0,0,0,1)');
-  edge.addColorStop(1, 'rgba(0,0,0,0)');
-  x.fillStyle = edge;
-  x.fillRect(0, 0, S, S);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;

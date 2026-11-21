@@ -2040,6 +2040,8 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 .mg-3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 0.45s ease-out; }
 .mg-3d.ready { opacity: 1; }
 .mg-box.care3d .mg-canvas { z-index: 1; }
+/* (un léger voile sombre sur les bords de la scène : l'œil va au milieu, vers l'animal) */
+.mg-box.care3d .mg-stage::after { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; box-shadow: inset 0 0 48px rgba(30, 16, 4, 0.38); }
 /* Carte de fin : par-dessus la toile des effets, et la scène reste visible au-dessus d'elle (il mange, il boit). */
 .mg-box.care3d .mg-end { z-index: 2; background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.12) 35%, rgba(255, 248, 236, 0.6) 100%); backdrop-filter: none; }
 .mg-box.care3d .mg-end-card { margin: auto 0 0; }

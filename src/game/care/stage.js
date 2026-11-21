@@ -149,58 +149,86 @@ export function buildDouble(a, entity = null) {
  * (LOD) s'il y en a un. Chaque triangle garde son os principal (région du corps).
  */
 class PickProxy {
-  constructor(meshes) {
+  /** meshes : maillages de l'animal ; index : (maillage) → index à utiliser (réduit), ou celui de sa géométrie. */
+  constructor(meshes, index = null) {
     this.meshes = meshes.filter((m) => m.isSkinnedMesh || m.isMesh);
+    this.index = index;
     this.geo = new THREE.BufferGeometry();
     this.mesh = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
     this.mesh.matrixAutoUpdate = false;
-    this.bones = []; // par sommet : os principal (indice dans skeleton.bones)
+    this.bones = []; // par sommet gardé : os principal (indice dans skeleton.bones)
     this.skeleton = null;
     this.at = -Infinity;
     this.ray = new THREE.Raycaster();
+    this.parts = null; // par maillage : sommets utiles et index renuméroté (calculés une fois)
   }
 
-  bake() {
-    const pos = [];
+  /** Une fois : pour chaque maillage, les sommets que l'index utilise, et l'index renuméroté sur eux. */
+  prepare() {
+    let base = 0;
     const idx = [];
     const bone = [];
-    let base = 0;
-    for (const m of this.meshes) {
+    this.parts = this.meshes.map((m) => {
       const g = m.geometry;
       const p = g.attributes.position;
-      if (!p) continue;
-      m.updateWorldMatrix(true, false);
+      const index = this.index?.(m) ?? g.index;
+      const used = new Map();
+      const list = [];
+      const n = index ? index.count : p.count;
+      for (let i = 0; i < n; i++) {
+        const v = index ? index.getX(i) : i;
+        let k = used.get(v);
+        if (k === undefined) {
+          k = list.length;
+          used.set(v, k);
+          list.push(v);
+        }
+        idx.push(base + k);
+      }
       const si = g.attributes.skinIndex;
       const sw = g.attributes.skinWeight;
-      if (m.isSkinnedMesh) this.skeleton ??= m.skeleton;
-      for (let i = 0; i < p.count; i++) {
-        _v.fromBufferAttribute(p, i);
-        if (m.isSkinnedMesh) m.applyBoneTransform(i, _v);
-        _v.applyMatrix4(m.matrixWorld);
-        pos.push(_v.x, _v.y, _v.z);
+      for (const v of list) {
         let b = -1;
         if (si && sw) {
           let best = -1;
           for (let k = 0; k < 4; k++) {
-            const wk = sw.getComponent(i, k);
+            const wk = sw.getComponent(v, k);
             if (wk > best) {
               best = wk;
-              b = si.getComponent(i, k);
+              b = si.getComponent(v, k);
             }
           }
         }
         bone.push(b);
       }
-      const index = g.index;
-      if (index) for (let i = 0; i < index.count; i++) idx.push(base + index.getX(i));
-      else for (let i = 0; i < p.count; i++) idx.push(base + i);
-      base += p.count;
-    }
-    this.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      if (m.isSkinnedMesh) this.skeleton ??= m.skeleton;
+      base += list.length;
+      return { m, list };
+    });
+    this.pos = new Float32Array(base * 3);
+    this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
     this.geo.setIndex(idx);
+    this.bones = bone;
+  }
+
+  bake() {
+    if (!this.parts) this.prepare();
+    let o = 0;
+    for (const { m, list } of this.parts) {
+      const p = m.geometry.attributes.position;
+      m.updateWorldMatrix(true, false);
+      for (const v of list) {
+        _v.fromBufferAttribute(p, v);
+        if (m.isSkinnedMesh) m.applyBoneTransform(v, _v);
+        _v.applyMatrix4(m.matrixWorld);
+        this.pos[o++] = _v.x;
+        this.pos[o++] = _v.y;
+        this.pos[o++] = _v.z;
+      }
+    }
+    this.geo.attributes.position.needsUpdate = true;
     this.geo.computeBoundingSphere();
     this.geo.computeBoundingBox();
-    this.bones = bone;
   }
 
   /** Premier point touché par le rayon (ray : THREE.Ray, repère monde), ou null. */
@@ -213,9 +241,23 @@ class PickProxy {
     const hits = this.ray.intersectObject(this.mesh, false);
     const h = hits[0];
     if (!h) return null;
+    return this.wrap(h, ray);
+  }
+
+  /** Un point touché : os principal du triangle, normale tournée vers le rayon (l'ordre des sommets peut varier). */
+  wrap(h, ray) {
     const b = this.bones[h.face.a];
     const boneObj = this.skeleton && b >= 0 ? this.skeleton.bones[b] : null;
-    return { point: h.point.clone(), normal: h.face.normal.clone(), distance: h.distance, bone: boneObj, boneName: boneObj?.name ?? '' };
+    const normal = h.face.normal.clone();
+    if (normal.dot(ray.direction) > 0) normal.negate();
+    return { point: h.point.clone(), normal, distance: h.distance, bone: boneObj, boneName: boneObj?.name ?? '' };
+  }
+
+  /** Tous les points touchés, du plus proche au plus loin (même forme que hit). */
+  hitAll(ray) {
+    if (!this.parts) this.bake();
+    this.ray.ray.copy(ray);
+    return this.ray.intersectObject(this.mesh, false).map((h) => this.wrap(h, ray));
   }
 
   dispose() {
@@ -244,12 +286,17 @@ export class CareStage {
     canvas.className = 'mg-3d';
     this.canvas = canvas;
     let renderer = null;
+    // Même budget que le rendu du jeu sur cet appareil (src/game/pixelBudget.js : définition, anticrénelage) : la
+    // scène est plus petite que l'écran, elle coûte donc moins qu'une image du jeu.
+    const gameRenderer = this.game?.renderer ?? null;
+    const msaa = gameRenderer ? !!gfx.msaa || this.high : true;
     trackListeners(this.listeners, () => {
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: msaa, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
     });
     if (!renderer.getContext()) throw new Error('webgl');
     this.renderer = renderer;
-    this.pixelRatio = o.pixelRatio ?? Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, this.high ? 2 : 1.6);
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    this.pixelRatio = o.pixelRatio ?? Math.min(dpr, 2, Math.max(1, gameRenderer?.getPixelRatio?.() ?? (this.high ? 2 : 1.5)));
     renderer.setPixelRatio(this.pixelRatio);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -293,7 +340,14 @@ export class CareStage {
     this.decor = o.set ? o.set(this) : null;
     if (this.decor?.group) this.scene.add(this.decor.group);
     this.pickables = [];
-    this.proxy = new PickProxy(this.model.coatMesh ? [this.model.coatMesh] : collectMeshes(this.model.root));
+    // (le pelage seul, avec l'index réduit du modèle s'il en a un : deux fois moins de triangles à tester)
+    let lodIndex = null;
+    if (this.model.coatMesh && this.model.setLod) {
+      this.model.setLod(1);
+      lodIndex = this.model.coatMesh.geometry.index;
+      this.model.setLod(0);
+    }
+    this.proxy = new PickProxy(this.model.coatMesh ? [this.model.coatMesh] : collectMeshes(this.model.root), lodIndex ? () => lodIndex : null);
     this.raycaster = new THREE.Raycaster();
     this.ndc = new THREE.Vector2();
     this.size = { w: 1, h: 1 };
@@ -377,7 +431,11 @@ export class CareStage {
     goal.position.y += lift;
     goal.target.y += lift;
     this.lastFrame = { points: pts, dir, pad, half, lift };
-    if (now || !this.ready) {
+    // (de l'autre côté de l'animal : on coupe, plutôt que de traverser le cheval pendant le fondu)
+    const from = _v.copy(this.camPos).sub(this.camTarget);
+    const to = _w.copy(goal.position).sub(goal.target);
+    const across = from.lengthSq() > 1e-6 && from.normalize().dot(to.normalize()) < -0.05;
+    if (now || !this.ready || across) {
       this.camPos.copy(goal.position);
       this.camTarget.copy(goal.target);
       this.camGoal = null;
@@ -695,13 +753,15 @@ export function regionOf(bone = '') {
  */
 function liftLeg(l, k) {
   if (!k) return;
+  // (le membre s'écarte un peu du corps, comme quand on tient le pied pour le curer : la sole sort de sous le ventre)
+  l.top.rotateZ(l.side * 0.3 * k);
   if (l.front) {
-    l.pivot.rotateX(-0.25 * k);
-    l.knee.rotateX(1.35 * k);
-    l.fetlock.rotateX(0.75 * k);
+    l.pivot.rotateX(-0.3 * k);
+    l.knee.rotateX(1.45 * k);
+    l.fetlock.rotateX(1.25 * k);
   } else {
-    l.pivot.rotateX(0.35 * k);
-    l.knee.rotateX(-0.55 * k);
-    l.fetlock.rotateX(0.95 * k);
+    l.pivot.rotateX(-0.45 * k);
+    l.knee.rotateX(1.15 * k);
+    l.fetlock.rotateX(1.2 * k);
   }
 }

@@ -56,7 +56,7 @@ export function stallSet(stage) {
   const plaster = keep(new THREE.MeshStandardMaterial({ color: 0xe8dcc4, roughness: 0.95 }));
 
   // Murs en groupes : un mur entre la caméra et le cheval disparaît (la caméra peut se placer hors du box).
-  const walls = { back: new THREE.Group(), left: new THREE.Group(), right: new THREE.Group(), roof: new THREE.Group() };
+  const walls = { back: new THREE.Group(), left: new THREE.Group(), right: new THREE.Group(), roof: new THREE.Group(), front: new THREE.Group() };
   for (const w of Object.values(walls)) g.add(w);
   let into = g;
   const mesh = (geo, mat, pos, rot = null, shadow = true) => {
@@ -163,6 +163,32 @@ export function stallSet(stage) {
   mesh(new THREE.PlaneGeometry(S.halfW * 2 + 0.3, S.front - S.back + 1), plaster, [0, S.roof, (S.back + S.front) / 2], [Math.PI / 2, 0, 0], false);
   // Porte du box (de notre côté) : les deux montants, au bord de la vue.
   for (const s of [-1, 1]) (into = s < 0 ? walls.left : walls.right) && mesh(new THREE.BoxGeometry(0.14, S.roof, 0.14), beamMat, [s * (S.halfW - 0.05), S.roof / 2, S.front - 0.05]);
+
+  // Devant (la porte du box, de notre côté) : planches en bas, barreaux au-dessus, l'ouverture de la porte au milieu.
+  // On ne le voit que quand la caméra passe de l'autre côté du cheval (cure-pied des pieds gauches).
+  into = walls.front;
+  {
+    const door = 1.3;
+    const seg = (x0, x1) => {
+      const w = x1 - x0;
+      const geo = new THREE.BoxGeometry(w, S.low, wallT);
+      const uv = geo.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 1.2, uv.getY(i) * S.low / S.roof);
+      mesh(geo, plankSideMat, [(x0 + x1) / 2, S.low / 2, S.front + wallT / 2]);
+      mesh(new THREE.BoxGeometry(w, 0.09, 0.14), beamMat, [(x0 + x1) / 2, S.low + 0.04, S.front]);
+    };
+    seg(-S.halfW, -door / 2);
+    seg(door / 2, S.halfW);
+    mesh(new THREE.BoxGeometry(S.halfW * 2, 0.1, 0.14), beamMat, [0, S.high, S.front]);
+    const n = Math.floor((S.halfW * 2) / 0.16);
+    const bars = new THREE.InstancedMesh(keep(new THREE.CylinderGeometry(0.014, 0.014, S.high - S.low, 8)), metal, n);
+    const m4 = new THREE.Matrix4();
+    for (let i = 0; i < n; i++) bars.setMatrixAt(i, m4.makeTranslation(-S.halfW + 0.08 + i * 0.16, (S.low + S.high) / 2, S.front));
+    walls.front.add(bars);
+    // l'allée au-delà : dalles et pénombre
+    mesh(new THREE.PlaneGeometry(S.halfW * 2 + 4, 3), keep(new THREE.MeshStandardMaterial({ color: 0x8e877c, roughness: 0.95 })), [0, 0.005, S.front + 1.5], [-Math.PI / 2, 0, 0], false);
+    mesh(new THREE.PlaneGeometry(S.halfW * 2 + 4, S.roof), keep(new THREE.MeshStandardMaterial({ map: woodSide, color: 0x6a5038, roughness: 1, emissive: 0x1e140a })), [0, S.roof / 2, S.front + 3], [0, Math.PI, 0], false);
+  }
 
   // Plaque à son nom, sur le mur du fond.
   into = walls.back;
@@ -292,6 +318,7 @@ export function stallSet(stage) {
       walls.left.visible = c.x > -S.halfW + 0.02;
       walls.back.visible = c.z > S.back + 0.02;
       walls.roof.visible = c.y < S.roof - 0.02;
+      walls.front.visible = c.z < S.front - 0.02;
       motes.update(dt);
       shaft.material.uniforms.uTime.value += dt;
       for (const p of Object.values(props)) p.update?.(dt, st);

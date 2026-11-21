@@ -308,6 +308,16 @@ export class CareStage {
       this.lost = true;
     });
 
+    try {
+      this.build(o);
+    } catch (e) {
+      this.dispose();
+      throw e;
+    }
+  }
+
+  /** La scène, l'animal, le décor (voir le constructeur). */
+  build(o) {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 60);
     this.camPos = new THREE.Vector3(0, 1.6, 4);
@@ -422,7 +432,7 @@ export class CareStage {
    * Cadrage : la caméra va voir ces points (repère monde) depuis la direction dir (vers la caméra), avec la marge
    * pad. o.now : sans fondu. o.half : demi-vie du fondu (s). o.fov.
    */
-  frame(points, { dir = [0.4, 0.25, 1], pad = 1.12, now = false, half = 0.45, lift = 0 } = {}) {
+  frame(points, { dir = [0.4, 0.25, 1], pad = 1.12, now = false, half = 0.45, lift = 0, raise = 0 } = {}) {
     const pts = points.filter(Boolean).map((p) => (p.isVector3 ? p.toArray() : p));
     if (!pts.length) return;
     const aspect = this.size.w / Math.max(1, this.size.h);
@@ -430,7 +440,8 @@ export class CareStage {
     const goal = { position: new THREE.Vector3(...f.position), target: new THREE.Vector3(...f.target) };
     goal.position.y += lift;
     goal.target.y += lift;
-    this.lastFrame = { points: pts, dir, pad, half, lift };
+    if (raise) goal.target.y -= raise * f.distance * Math.tan((FOV * Math.PI) / 360);
+    this.lastFrame = { points: pts, dir, pad, half, lift, raise };
     // (de l'autre côté de l'animal : on coupe, plutôt que de traverser le cheval pendant le fondu)
     const from = _v.copy(this.camPos).sub(this.camTarget);
     const to = _w.copy(goal.position).sub(goal.target);
@@ -592,7 +603,7 @@ export class CareStage {
     // Lever un pied (cure-pied) : le membre se plie (genou ou jarret, boulet), le sabot montre sa sole.
     if (md.legs && m.lift !== null) {
       const l = md.legs[m.lift];
-      m.liftAmt = Math.min(1, m.liftAmt + dt * 1.6);
+      m.liftAmt = Math.min(m.liftMax ?? 1, m.liftAmt + dt * 1.6);
       if (l) liftLeg(l, smoothstep(m.liftAmt));
     } else if (md.legs && m.liftAmt > 0) {
       m.liftAmt = Math.max(0, m.liftAmt - dt * 2);
@@ -692,7 +703,7 @@ export class CareStage {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    for (const f of this.fx) {
+    for (const f of this.fx ?? []) {
       f.obj.parent?.remove(f.obj);
       f.obj.traverse((m) => {
         if (m.geometry && m.geometry !== PUFF_GEO) m.geometry.dispose();
@@ -701,11 +712,11 @@ export class CareStage {
     }
     this.fx = [];
     this.decor?.dispose?.();
-    this.proxy.dispose();
-    this.scene.remove(this.holder);
-    this.double.dispose();
+    this.proxy?.dispose();
+    if (this.holder) this.scene?.remove(this.holder);
+    this.double?.dispose();
     for (const d of this.disposables) d.dispose?.();
-    this.scene.traverse((o) => {
+    this.scene?.traverse((o) => {
       if (o.isLight) o.dispose?.();
     });
     this.renderer.renderLists.dispose();

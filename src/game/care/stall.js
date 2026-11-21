@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { plateTexture } from '../models/interiorKit.js';
-import { hayNet, feeder, bucket, waterTap } from './props.js';
+import { hayNet, feeder, bucket, waterTap, SPOUT } from './props.js';
 import { canvasTex, woodTexture, strawFloorTexture, noiseTexture } from './textures.js';
 
 export const STALL = { halfW: 1.85, back: -1.45, front: 2.2, low: 1.3, high: 2.6, roof: 3.05 };
@@ -244,7 +244,8 @@ export function stallSet(stage) {
     }
     if (which === 'water') {
       props.bucket.group.position.set(S.halfW - 0.24, Math.max(0.36, eat.y + 0.1), eat.z);
-      props.tap.group.position.set(S.halfW - 0.06, props.bucket.group.position.y + 0.55, eat.z + 0.02);
+      // (le bec du robinet juste au-dessus du milieu du seau)
+      props.tap.group.position.set(S.halfW - 0.24 - SPOUT, props.bucket.group.position.y + 0.5, eat.z);
     } else {
       props.bucket.group.position.set(S.halfW - 0.3, 0.33, S.front - 0.75);
     }

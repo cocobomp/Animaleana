@@ -141,7 +141,7 @@ export function pansage3dGame(ctx) {
   const tools = Object.fromEntries(['curry', 'brush', 'pick', 'comb'].map((k) => [k, groomTool(k, own)]));
   for (const tl of Object.values(tools)) {
     tl.visible = false;
-    tl.scale.setScalar(1.2);
+    tl.scale.setScalar(1.7 * Math.max(0.8, S));
     sc.scene.add(tl);
   }
   const toolOf = { curry: 'curry', brush: 'brush', hoof: 'pick', comb: 'comb' };
@@ -209,11 +209,12 @@ export function pansage3dGame(ctx) {
   let combOn = null;
   function frameComb() {
     const maneLeft = knots.some((q) => q.part === 'mane' && q.tangle > 0);
-    const part = maneLeft || !knots.some((q) => q.tail) ? 'mane' : 'tail';
+    const tailLeft = knots.some((q) => q.part === 'tail' && q.tangle > 0);
+    const part = maneLeft || !tailLeft ? 'mane' : 'tail';
     if (combOn === part) return;
     combOn = part;
     const pts = knots.filter((q) => q.part === part).map((q) => q.mesh.getWorldPosition(v3()));
-    if (part === 'mane') sc.frame([...pts, L.withers, L.poll, ...L.ears, L.neck.clone().add(v3(0, -0.25 * S, 0))], { dir: [0.15, 0.2, 1], pad: 1.2 });
+    if (part === 'mane') sc.frame([...pts, L.withers, L.poll, ...L.ears, L.neck.clone().add(v3(0, -0.25 * S, 0))], { dir: [0.15, 0.2, 1], pad: 1.3 });
     else sc.frame([...pts, L.tail, L.croup, L.tailTip, L.tailTip.clone().add(v3(0, -0.1, 0))], { dir: [-0.25, 0.15, 1], pad: 1.25 });
   }
 
@@ -306,7 +307,7 @@ export function pansage3dGame(ctx) {
     m.nod = 1;
     nicker(sc);
     snort(sc);
-    sc.frame([L.muzzle, L.poll, ...L.ears, L.tail, L.croup, ...L.hooves], { dir: [0.35, 0.22, 1], pad: 1.05, half: 0.8 });
+    sc.frame([L.muzzle, L.poll, ...L.ears, L.tail, L.croup, ...L.hooves], { dir: [0.4, 0.18, 1], pad: 1.08, half: 0.7, raise: 0.5 });
   }
 
   // ---------------------------------------------------------------- les gestes (comme pansage.js)
@@ -586,6 +587,7 @@ export function pansage3dGame(ctx) {
         return { x: sp.x, y: sp.y, r: sp.r, dirt: q.dirt, stone: !!q.stone };
       }),
       frog: hooves[foot]?.sole ? hooves[foot].sole.frogScreen() : null,
+      frogOk: hooves[foot]?.sole ? (() => { const f = hooves[foot].sole.frogScreen(); return hooves[foot].sole.inFrog(f.x, f.y); })() : null,
       toe: hooves[foot]?.sole ? hooves[foot].sole.toeDir() : null,
       sole: hooves[foot]?.sole ? { ...hooves[foot].sole.where(), cam: sc.camera.position.toArray().map((x) => +x.toFixed(3)), lift: m.liftAmt } : null,
       knots: knots.filter((q) => q.tangle > 0).map((q) => {

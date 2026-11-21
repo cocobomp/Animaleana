@@ -103,7 +103,12 @@ export function ration3dGame(ctx) {
         m.lookAmt = s.pouring ? 1 : 0.7;
         if (s.pouring && Math.random() < dt * 0.4) m.nod = Math.max(m.nod, 0.5);
       } else {
-        // Il mange : le foin du filet (granulés : la tête dans la mangeoire).
+        // Il mange : le foin du filet (granulés : la tête dans la mangeoire). Cadré en haut de la scène : la carte de
+        // fin vient en bas.
+        if (eatT === 0) {
+          const fd = P.feeder.group.getWorldPosition(v3());
+          sc.frame([fd.clone().add(v3(0, -0.25, 0)), sc.marks.poll, ...sc.marks.ears, sc.marks.withers, P.net.group.localToWorld(v3(0, -0.4, 0))], { dir: [-0.35, 0.25, 1], pad: 1.1, half: 0.6, raise: 0.55 });
+        }
         eatT += dt;
         if (s.grain > 0.02) {
           m.feeder = 1;
@@ -168,6 +173,9 @@ export function water3dGame(ctx) {
   const bk = P.bucket.group.getWorldPosition(v3());
   const tap = P.tap.group.getWorldPosition(v3());
   sc.frame([bk.clone().add(v3(0, -0.32, 0.18)), tap.clone().add(v3(0, 0.08, 0)), L.muzzle, L.poll, ...L.ears], { dir: [-0.25, 0.32, 1], pad: 1.12, now: true });
+  // (la ligne 🎯 de la consigne, dans le seau)
+  const s0 = play.peek();
+  const mark = P.bucket.setMark(s0.lo, s0.hi, s0.target);
   let drinkT = 0;
   let saidIn = false;
   let snortIn = 2;
@@ -189,6 +197,10 @@ export function water3dGame(ctx) {
         nicker(sc);
       }
       if (ctx.done) {
+        if (drinkT === 0) {
+          const bk2 = P.bucket.group.getWorldPosition(v3());
+          sc.frame([bk2.clone().add(v3(0, -0.32, 0)), sc.marks.poll, ...sc.marks.ears, sc.marks.withers], { dir: [-0.3, 0.25, 1], pad: 1.1, half: 0.6, raise: 0.55 });
+        }
         drinkT += dt;
         if (drinkT > 0.6) {
           m.feeder = 1;
@@ -211,6 +223,17 @@ export function water3dGame(ctx) {
         const t = sc.project(P.bucket.group.localToWorld(v3(0, 0, 0.2)));
         const h = Math.max(60, Math.min(140, b.y - t.y));
         sideGauge(g, ctx.view.x1 - 24, b.y, h, s.value, s.lo, s.hi, { icon: '💧', time: ctx.time });
+        // 🎯 au bord de la ligne, côté droit du seau
+        const m2 = sc.project(P.bucket.group.localToWorld(v3(0, mark.y, mark.r + 0.02)));
+        const m3 = sc.project(P.bucket.group.localToWorld(v3(-mark.r - 0.02, mark.y, 0)));
+        const tx = Math.max(m2.x, m3.x) + 16;
+        g.save();
+        g.font = '20px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillStyle = '#000';
+        g.fillText('🎯', tx, m2.y);
+        g.restore();
       }
     },
     destroy() {

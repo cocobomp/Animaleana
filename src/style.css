@@ -2044,7 +2044,11 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 .mg-box.care3d .mg-stage::after { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; box-shadow: inset 0 0 48px rgba(30, 16, 4, 0.38); }
 /* Carte de fin : par-dessus la toile des effets, et la scène reste visible au-dessus d'elle (il mange, il boit). */
 .mg-box.care3d .mg-end { z-index: 2; background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.12) 35%, rgba(255, 248, 236, 0.6) 100%); backdrop-filter: none; }
-.mg-box.care3d .mg-end-card { margin: auto 0 0; }
+.mg-box.care3d .mg-end-card { margin: auto 0 0; padding: 12px 16px 10px; }
+.mg-box.care3d .mg-end-emoji { font-size: 2rem; line-height: 1.1; }
+.mg-box.care3d .mg-end-card h2 { font-size: 1.5rem; }
+.mg-box.care3d .mg-stars { font-size: 2rem; }
+.mg-box.care3d .mg-end-card p { margin: 0.3em 0 0.6em; }
 .mg-box.care3d .mg-stage {
   background: radial-gradient(120% 85% at 55% 40%, #7a5532 0%, #4a3220 55%, #24180f 100%);
   box-shadow: inset 0 0 0 1px rgba(40, 24, 10, 0.25), 0 2px 10px rgba(40, 24, 10, 0.18);

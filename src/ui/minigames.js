@@ -83,6 +83,20 @@ function titleFor(a, action) {
   return tt(`mg_act_${a.species}_${action}`) ?? tt(`act_${a.species}_${action}`) ?? t(`act_${action}`);
 }
 
+/** La scène 3D se prépare (shaders) : l'emoji de l'animal qui respire doucement au milieu, sur la pénombre du box. */
+function drawWaiting(g, view, time, emoji = '🐴') {
+  const x = (view.x0 + view.x1) / 2;
+  const y = (view.y0 + view.y1) / 2;
+  const k = 1 + Math.sin(time * 4) * 0.08;
+  g.globalAlpha = 0.85;
+  g.font = `${Math.round(54 * k)}px ${EMOJI_FONT}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = '#000';
+  g.fillText(emoji, x, y);
+  g.globalAlpha = 1;
+}
+
 /** Effets : emoji qui s'envolent, petits textes, poussières… */
 class Fx {
   constructor() { this.list = []; }
@@ -670,7 +684,8 @@ function openMinigame(ui, o) {
       g2.clearRect(0, 0, canvas.width, canvas.height);
       g2.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
       g2.save();
-      play.draw?.(g2);
+      if (waiting) drawWaiting(g2, view, ctx.time + now / 1000, o.endEmoji);
+      else play.draw?.(g2);
       g2.restore();
       ctx.fx.draw(g2);
       raf = requestAnimationFrame(loop);

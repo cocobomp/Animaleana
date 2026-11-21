@@ -38,7 +38,7 @@ export function treat3dGame(ctx) {
   }
   treats.carrot.rotation.set(0, 0.3, 0);
   const head = [L.muzzle, L.poll, ...L.ears, L.withers.clone().lerp(L.poll, 0.55)];
-  sc.frame([...head, rest.clone().add(v3(0, -0.08, 0.1)), rest.clone().add(v3(-0.3, 0, 0))], { dir: [0.62, 0.12, 1], pad: 1.12, now: true });
+  sc.frame([...head, rest.clone().add(v3(0, -0.08, 0.1)), rest.clone().add(v3(-0.3, 0, 0))], { dir: [0.62, 0.12, 1], pad: 1.28, now: true });
 
   let given = 0;
   let pen = 0;
@@ -97,6 +97,7 @@ export function treat3dGame(ctx) {
         m.lookAmt = 1;
         m.ears = Math.sin(ctx.time * 3) > 0 ? 'forward' : null;
         m.lift = Math.sin(ctx.time * 2.2) > 0.75 ? 0 : null; // (il gratte du pied, impatient)
+        m.liftMax = 0.3;
       } else {
         m.look = hand.position;
         m.lookAmt = 1;

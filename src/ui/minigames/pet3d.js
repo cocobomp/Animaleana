@@ -10,7 +10,6 @@ import { stopLabel, nb, justMsgs, emojiOpaque as emoji } from './food.js';
 import { quirksOf, knows, QUIRK_SPOTS } from '../../sim/horseQuirks.js';
 import { keepsMemories } from '../../sim/memories.js';
 import { rrect, circle, clamp, lerp } from './draw.js';
-import { handModel, aimHand } from '../../game/care/props.js';
 import { nicker, snort } from './feed3d.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -69,17 +68,6 @@ export function pet3dGame(ctx) {
   const m = sc.mood;
   m.ears = 'forward';
 
-  // Notre main, paume sur son poil.
-  const keep = [];
-  const own = (x) => {
-    keep.push(x);
-    return x;
-  };
-  const avatar = sc.game?.profile?.avatar ?? {};
-  const hand = handModel(own, { skin: typeof avatar.skin === 'number' ? avatar.skin : 0xf0c29a, sleeve: typeof avatar.top === 'number' ? avatar.top : 0x3f7fd0 });
-  hand.scale.setScalar(1.2);
-  hand.visible = false;
-  sc.scene.add(hand);
 
   hint(t(shy ? 'mg_pet_hint_shy' : 'mg_pet_hint', { name: a.name }));
   ctx.zone(lo, hi);
@@ -229,14 +217,6 @@ export function pet3dGame(ctx) {
         snortIn = 3 + Math.random() * 4;
         snort(sc, happy);
       }
-      // Notre main : posée là où le doigt touche son poil, le bras qui vient de nous.
-      hand.visible = !!touch && ctx.pointer.down && !ctx.done;
-      if (hand.visible) {
-        const pos = touch.point.clone().addScaledVector(touch.normal, 0.025);
-        hand.position.lerp(pos, hand.userData.on ? Math.min(1, dt * 18) : 1);
-        aimHand(hand, shoulder(sc), touch.point.clone().add(v3(0.1, 0.05, 0)), false, touch.normal);
-        hand.userData.on = true;
-      } else hand.userData.on = false;
     },
     draw(g) {
       if (!sc.ready) return;
@@ -287,14 +267,20 @@ export function pet3dGame(ctx) {
       g.fill();
       g.restore();
       drawHeartGauge(g, v.x1 - 34, v.y0 + 42, HEART.r, prog, lo, hi);
-      // (souris, sans toucher : la petite main qui montre où on caresse)
+      // La main qui caresse (doigt posé sur lui : une lueur douce sur son poil) ; à la souris, elle montre où on va caresser.
       const pp = ctx.pointer;
-      if (pp.over && !pp.down && pp.type === 'mouse') emoji(g, '🤚', pp.x + 4, pp.y - 6, 30, -0.3);
+      if (pp.down && touch && !ctx.done) {
+        const gl = g.createRadialGradient(pp.x, pp.y, 2, pp.x, pp.y, 34);
+        gl.addColorStop(0, purr > 0 ? 'rgba(255,170,200,0.55)' : 'rgba(255,240,220,0.45)');
+        gl.addColorStop(1, 'rgba(255,240,220,0)');
+        g.fillStyle = gl;
+        g.beginPath();
+        g.arc(pp.x, pp.y, 34, 0, Math.PI * 2);
+        g.fill();
+      }
+      if ((pp.down && touch) || (pp.over && pp.type === 'mouse')) emoji(g, '🤚', pp.x + 6, pp.y - 8, 40, -0.3 + Math.sin(ctx.time * 8) * (pp.down ? 0.08 : 0));
     },
-    destroy() {
-      sc.scene.remove(hand);
-      for (const x of keep) x.dispose?.();
-    },
+    destroy() {},
   };
 }
 

@@ -506,9 +506,32 @@ export function bucket({ high = true } = {}) {
     water.scale.setScalar(lerp(B.rBot - B.th, B.r - B.th, (y + B.depth) / B.depth) * 0.99);
   };
   apply();
+  // la bande verte et la ligne 🎯 (setMark), sur la paroi intérieure
+  const band = new THREE.Mesh(keep(new THREE.CylinderGeometry(1, 1, 1, 36, 1, true)), keep(new THREE.MeshBasicMaterial({ color: 0x3fae62, transparent: true, opacity: 0.38, side: THREE.BackSide, depthWrite: false })));
+  band.visible = false;
+  g.add(band);
+  const line = new THREE.Mesh(keep(new THREE.TorusGeometry(1, 0.035, 6, 40)), keep(new THREE.MeshBasicMaterial({ color: 0xffffff })));
+  line.rotation.x = Math.PI / 2;
+  line.visible = false;
+  g.add(line);
+  const yAt = (k) => -B.depth + B.th + (B.depth - B.th - 0.02) * k;
+  const rAt = (y) => lerp(B.rBot - B.th, B.r - B.th, (y + B.depth) / B.depth) * 0.995;
   return {
     group: g,
     water,
+    /** La zone juste [lo, hi] et la ligne 🎯 (parts du seau). Renvoie la hauteur de la ligne (repère du seau). */
+    setMark(lo, hi, target) {
+      const y0 = yAt(lo);
+      const y1 = yAt(hi);
+      band.position.y = (y0 + y1) / 2;
+      const r = rAt(band.position.y);
+      band.scale.set(r, y1 - y0, r);
+      band.visible = true;
+      line.position.y = yAt(target);
+      line.scale.setScalar(rAt(line.position.y));
+      line.visible = true;
+      return { y: line.position.y, r: rAt(line.position.y) };
+    },
     get level() { return level; },
     setLevel(k) {
       level = clamp(k);
@@ -551,24 +574,35 @@ export function bucket({ high = true } = {}) {
   };
 }
 
-/** Robinet en laiton au mur, et son filet d'eau (setFlow(k) : 0 fermé, 1 grand ouvert ; to : hauteur de l'eau). */
+/**
+ * Robinet en laiton au mur (origine contre le mur, le tuyau part vers -x, dans le box), et son filet d'eau qui tombe
+ * du bec (en SPOUT) : setFlow(k, to) (0 fermé, 1 grand ouvert ; to : hauteur de l'eau, repère du robinet).
+ */
+export const SPOUT = -0.2;
 export function waterTap() {
   const keep = bag();
   const g = new THREE.Group();
   const brass = keep(new THREE.MeshStandardMaterial({ color: 0xc89a48, roughness: 0.25, metalness: 0.9 }));
-  const pipe = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.018, 0.018, 0.14, 12)), brass));
+  const flange = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.035, 0.035, 0.012, 16)), brass));
+  flange.rotation.z = Math.PI / 2;
+  g.add(flange);
+  const pipe = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.016, 0.016, -SPOUT, 12)), brass));
   pipe.rotation.z = Math.PI / 2;
-  pipe.position.x = 0.07;
+  pipe.position.x = SPOUT / 2;
   g.add(pipe);
-  const body = shadowed(new THREE.Mesh(keep(new THREE.SphereGeometry(0.034, 14, 10)), brass));
+  const body = shadowed(new THREE.Mesh(keep(new THREE.SphereGeometry(0.03, 14, 10)), brass));
+  body.position.x = SPOUT;
   g.add(body);
-  const spout = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.014, 0.017, 0.07, 12)), brass));
-  spout.position.set(-0.01, -0.045, 0);
+  const spout = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.013, 0.016, 0.07, 12)), brass));
+  spout.position.set(SPOUT, -0.045, 0);
   g.add(spout);
   const red = keep(new THREE.MeshStandardMaterial({ color: 0xc23b2e, roughness: 0.5 }));
   const handleG = new THREE.Group();
-  handleG.position.y = 0.04;
+  handleG.position.set(SPOUT, 0.04, 0);
   g.add(handleG);
+  const stem = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.006, 0.006, 0.03, 8)), brass));
+  stem.position.y = -0.012;
+  handleG.add(stem);
   const handle = shadowed(new THREE.Mesh(keep(new THREE.BoxGeometry(0.12, 0.016, 0.026)), red));
   handleG.add(handle);
   // le filet d'eau : un cylindre transparent dont la texture défile vers le bas
@@ -596,7 +630,7 @@ export function waterTap() {
         const top = -0.08;
         const len = Math.max(0.02, top - to);
         stream.scale.set(0.006 + flow * 0.009, len, 0.006 + flow * 0.009);
-        stream.position.set(-0.01, top - len / 2, 0);
+        stream.position.set(SPOUT, top - len / 2, 0);
         streamTex.offset.y = (t * 3.5) % 1;
         streamTex.repeat.set(1, len * 3);
       }

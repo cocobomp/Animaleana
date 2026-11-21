@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createAnimal } from '../src/sim/animal.js';
-import { createProfile } from '../src/sim/profile.js';
+import { createProfile, migrate } from '../src/sim/profile.js';
 import { DAYS_PER_YEAR } from '../src/sim/time.js';
 import { SPECIES } from '../src/sim/species.js';
 import { GEAR, TACK_CATEGORIES, equip, buyGear, wears, freeStock } from '../src/sim/gear.js';
@@ -310,6 +310,25 @@ describe('progrès, récompenses et effets', () => {
     expect(q('vaultAll').progress(p)).toEqual([2, 6]);
     p.stats.actvVaulting = 1;
     expect(q('vaultFirst').progress(p)).toEqual([1, 1]);
+  });
+});
+
+describe('sauvegarde', () => {
+  it('les progrès de voltige et le matériel porté passent par la sauvegarde (et une vieille partie n\'en a pas)', () => {
+    const p = createProfile('Lina');
+    const a = readyHorse(p);
+    const figs = PROGRAM.map((id) => ({ id, score: 7, marks: [7, 7, 7], comment: 'good' }));
+    recordVault(p, 'walk', vaultResult(figs));
+    const back = migrate(JSON.parse(JSON.stringify(p)));
+    expect(vaultData(back).best.walk).toBe(7);
+    expect(canterUnlocked(back)).toBe(true);
+    expect(figuresOnHorse(back)).toEqual(PROGRAM);
+    const h = back.animals.find((x) => x.id === a.id);
+    expect(h.gear.surcingle.item).toBe('surcingle');
+    expect(h.gear.pad.item).toBe('vaultPad');
+    const old = migrate(JSON.parse(JSON.stringify(createProfile('Zoé'))));
+    expect(vaultData(old).sessions).toBe(0);
+    expect(canterUnlocked(old)).toBe(false);
   });
 });
 

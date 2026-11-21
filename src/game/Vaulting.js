@@ -984,7 +984,7 @@ class VaultingSession extends Session {
     } else {
       // l'entraîneur, debout à côté du tonneau, qui frappe des mains en rythme
       const s = this.mt.pos;
-      _v.set(-(this.mt.wL + 1.25), 0, 0.75).applyQuaternion(this.mt.quat);
+      _v.set(-(this.mt.wL + 0.75), 0, 1.15).applyQuaternion(this.mt.quat);
       c.root.position.set(s.x + _v.x, this.y(s.x + _v.x, s.z + _v.z), s.z + _v.z);
       target = s;
     }
@@ -1079,17 +1079,19 @@ class VaultingSession extends Session {
         pitch = 0.42;
         dist = portrait ? 17 : 13;
         // (en hauteur : plus près, visé entre le centre et le cheval, pour qu'on les voie bien)
-        if (portrait) at.lerp(_w.set(this.e.position.x, this.cy + 1.0, this.e.position.z), 0.35);
+        if (portrait) at.lerp(_w.set(this.e.position.x, this.cy + 1.0, this.e.position.z), 0.5);
         g.rig.focus = { shot: { at: at.clone(), heading: -Math.PI / 2, yaw: 0, pitch, dist: portrait ? 12.5 : dist } };
         return;
       }
       dist += 1;
     }
     if (this.phase === 'outro') {
+      // le salut : de face (les juges sont derrière la caméra)
       const pl = this.pl.root.position;
-      at.set(pl.x, pl.y + 1.0, pl.z);
-      dist = portrait ? 6 : 4.5;
-      yaw = 0.4;
+      at.set(pl.x, pl.y + (portrait ? 0.75 : 1.0), pl.z);
+      dist = portrait ? 5.2 : 4.2;
+      g.rig.focus = { shot: { at: at.clone(), heading: this.ground.h, yaw: 0.55, pitch: 0.15, dist } };
+      return;
     }
     if (!this.e) {
       yaw = 0.95;

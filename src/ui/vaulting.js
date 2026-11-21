@@ -147,9 +147,11 @@ export function showVaultResults(ui, r) {
   const lines = [];
   if (r.record) lines.push(h('li', { class: 'good' }, `🎖️ ${t('vt_record', { level: t(`vt_level_${r.level}`) })}`));
   if (r.unlockedCanter) lines.push(h('li', { class: 'good' }, `🐎 ${t('vt_canterUnlocked')}`));
-  for (const id of r.newFigures ?? []) lines.push(h('li', { class: 'good' }, `${FIGURES[id].icon} ${t('vt_newFigure', { fig: t(`vt_fig_${id}`) })}`));
+  const nf = r.newFigures ?? [];
+  if (nf.length === 1) lines.push(h('li', { class: 'good' }, `${FIGURES[nf[0]].icon} ${t('vt_newFigure', { fig: t(`vt_fig_${nf[0]}`) })}`));
+  else if (nf.length) lines.push(h('li', { class: 'good' }, `${nf.map((id) => FIGURES[id].icon).join(' ')} ${t('vt_newFigures', { n: nf.length })}`));
   if (res.best) lines.push(h('li', {}, `✨ ${t('vt_best', { fig: t(`vt_fig_${res.best.id}`), n: fmtMark(res.best.score) })}`));
-  if (res.worst && res.worst.score < res.best.score) lines.push(h('li', {}, `💭 ${t(`vt_tip_${res.worst.comment}`, { fig: t(`vt_fig_${res.worst.id}`) })}`));
+  if (res.worst && res.worst.score < Math.min(8, res.best.score)) lines.push(h('li', {}, `💭 ${t(`vt_tip_${res.worst.comment}`, { fig: t(`vt_fig_${res.worst.id}`) })}`));
   if (r.animal && r.horse) lines.push(h('li', {}, `${SPECIES.horse.emoji} ${ta('vt_horseFx', r.animal, { n: r.horse.obedience })}`));
   const title = res.stars === 3 ? t('vt_resBravo') : res.stars === 2 ? t('vt_resGood') : t('vt_resTry');
   const who = r.animal ? `${SPECIES.horse.emoji} ${r.animal.name} · ${VAULT_LEVELS[r.level].icon} ${t(`vt_level_${r.level}`)}` : `${VAULT_LEVELS.barrel.icon} ${t(`vt_level_${r.level}`)}`;

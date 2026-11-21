@@ -96,6 +96,7 @@ export const VAULT_FR = {
   vt_record: 'Ta meilleure note ({level}) !',
   vt_canterUnlocked: 'Tu peux maintenant faire de la voltige au galop !',
   vt_newFigure: '{fig} réussi sur un cheval !',
+  vt_newFigures: '{n} figures réussies sur un cheval !',
   vt_best: 'Ta plus belle figure : {fig} ({n}/10)',
   vt_horseFx: '{name} devient plus calme à la longe (obéissance +{n}).',
   // Quêtes et succès
@@ -191,6 +192,7 @@ export const VAULT_EN = {
   vt_record: 'Your best score ({level})!',
   vt_canterUnlocked: 'You can now vault at canter!',
   vt_newFigure: '{fig} done on a horse!',
+  vt_newFigures: '{n} moves done on a horse!',
   vt_best: 'Your best move: {fig} ({n}/10)',
   vt_horseFx: '{name} is getting calmer on the lunge (obedience +{n}).',
   o_vaultFirst: 'Do your first vaulting session',

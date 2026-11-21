@@ -105,7 +105,7 @@
 @media (max-height: 500px) {
   /* Paysage sur téléphone : le bouton et la jauge à droite, le cheval au milieu de l'écran. */
   body.vt-on #actv-hud .actv-controls {
-    left: auto; right: calc(12px + var(--safe-r)); transform: none; width: auto; bottom: calc(10px + var(--safe-b));
+    left: auto; right: calc(92px + var(--safe-r)); transform: none; width: auto; bottom: calc(10px + var(--safe-b));
     justify-items: end;
   }
   body.vt-on .vt-controls { justify-items: end; width: auto; }

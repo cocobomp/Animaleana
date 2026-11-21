@@ -27,13 +27,13 @@ export const PANSAGE_STAGES = ['curry', 'brush', 'hoof', 'comb'];
 /** Les pieds, dans l'ordre où on les cure (on fait le tour du cheval). */
 export const PANSAGE_FEET = ['fl', 'hl', 'fr', 'hr'];
 
-const MAX = 1.4; // la jauge de chaque étape va de 0 à 1,4 (au-delà de 1 : trop)
-const SLACK = 0.3;
-const STEP = 4; // longueur (px) d'un petit bout de geste
-const PAUSE = 0.9; // secondes entre deux étapes
+export const MAX = 1.4; // la jauge de chaque étape va de 0 à 1,4 (au-delà de 1 : trop)
+export const SLACK = 0.3;
+export const STEP = 4; // longueur (px) d'un petit bout de geste
+export const PAUSE = 0.9; // secondes entre deux étapes
 // Le pied en gros plan
-const HX = 200;
-const HY = 178;
+export const HX = 200;
+export const HY = 178;
 
 /** Le pansage du cheval (le soin « brosser » d'un cheval, voir src/ui/minigames.js). */
 export function pansageGame(ctx) {
@@ -512,7 +512,7 @@ const quad = (a, b, c, k) => (1 - k) * (1 - k) * a + 2 * (1 - k) * k * b + k * k
 // ---------------------------------------------------------------- le pied
 
 /** Un pied à curer : de la terre tassée le long de la fourchette et à la pince (et parfois un caillou). */
-function makeHoof(foot, stone, rng, dirt) {
+export function makeHoof(foot, stone, rng, dirt) {
   const blobs = [];
   for (const side of [-1, 1]) {
     for (const k of [0.12, 0.45, 0.78]) {
@@ -531,7 +531,7 @@ function makeHoof(foot, stone, rng, dirt) {
 }
 
 /** Le milieu de la fourchette (le triangle du pied, en plus petit) : sensible. */
-function inFrog(x, y) {
+export function inFrog(x, y) {
   const top = HY - 70;
   const tip = HY + 36;
   if (y < top || y > tip) return false;
@@ -696,7 +696,7 @@ function drawKnot(g, p, q, s) {
 }
 
 /** En haut : « 2/4 · Brosse » (et au cure-pied, les quatre pieds ●●○○). */
-function drawStagePill(g, si, name, foot, t) {
+export function drawStagePill(g, si, name, foot, t) {
   const text = `${si + 1}/${PANSAGE_STAGES.length} · ${name}`;
   g.save();
   g.fillStyle = 'rgba(255,255,255,0.88)';
@@ -717,7 +717,7 @@ function drawStagePill(g, si, name, foot, t) {
 }
 
 /** En bas : les quatre outils, celui qu'on tient en jaune, ceux déjà passés cochés. */
-function drawTray(g, si, results, pausing, time) {
+export function drawTray(g, si, results, pausing, time) {
   PANSAGE_STAGES.forEach((st, i) => {
     const x = 200 + (i - 1.5) * 50;
     const y = 333;

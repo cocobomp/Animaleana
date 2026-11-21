@@ -1,0 +1,707 @@
+// Scène de soin en 3D : quand un mini-jeu de soin s'ouvre, on voit le VRAI animal du joueur (même race, robe,
+// âge, crins, équipement), construit avec les constructeurs du jeu, dans un décor crédible (le box de l'écurie
+// pour le cheval : src/game/care/stall.js), cadré selon le soin, et vivant (il respire, bouge les oreilles,
+// chasse les mouches avec la queue, tourne la tête vers ce qu'on lui apporte, mange vraiment).
+//
+// - UN rendu WebGL en plus, le temps du mini-jeu (sa propre toile, sous la toile 2D du cadre qui garde les
+//   effets et les petits dessins par-dessus) ; le rendu du jeu, caché derrière, est mis en pause (ui.vxCover) ;
+//   tout est libéré à la fermeture (dispose) : géométries et matières à nous, cibles de rendu, contexte WebGL,
+//   et les écouteurs « dispose » que ce rendu a posés sur les ressources partagées du jeu (géométries de la
+//   race, textures du GLB : voir trackListeners), sinon chaque ouverture laisserait un rendu mort en mémoire ;
+// - le doigt : lancer de rayon sur l'animal (pick) à travers une copie figée de sa pose (pickProxy, refaite
+//   quand il bouge), et sur les accessoires ; projection d'un point 3D dans l'espace 400 × 360 du cadre
+//   (project) pour poser un effet, une bulle, une cible au bon endroit ;
+// - la caméra : des cadrages (frame) calculés sur les repères du modèle (tête, garrot, croupe, sabots…) avec le
+//   cadrage automatique des vignettes (thumbs.js fitView), et des fondus doux de l'un à l'autre.
+//
+// Pas de DOM ici hormis la toile : le cadre des mini-jeux (src/ui/minigames.js) la pose dans la scène.
+
+import * as THREE from 'three';
+import { fitView as fitCamera } from '../thumbs.js';
+import { buildAnimalModel, disposeModel } from '../models/animalModel.js';
+import { buildGltfAnimal } from '../models/gltfAnimal.js';
+import { buildGear, removeGear } from '../gearModels.js';
+import { stageLook, growthScale } from '../../sim/animal.js';
+import { gfx } from '../gfx.js';
+import { getModel } from '../assets.js';
+import { REAL_HORSE_KEY } from '../models/horseReal.js';
+
+// ---------------------------------------------------------------- logique pure (tests/care3d.test.js)
+
+/** Réglage par l'adresse ou le stockage local : ?care3d=off (toujours le mini-jeu dessiné, pour tester le repli). */
+export function care3dSetting(search = null, storage = null) {
+  try {
+    const q = new URLSearchParams(search ?? (typeof location !== 'undefined' ? location.search : '')).get('care3d');
+    if (q) return q;
+    const st = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+    return st?.getItem?.('care3d') ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** Espèces qui ont déjà leur scène de soin en 3D (les autres gardent le mini-jeu dessiné). */
+export const CARE3D_SPECIES = new Set(['horse']);
+
+/**
+ * Peut-on ouvrir la scène 3D pour cet animal ? L'espèce a sa scène, son modèle réaliste est chargé (sinon le
+ * mini-jeu dessiné, plutôt qu'un cheval sculpté), le réglage ne l'interdit pas.
+ * has : (clé du modèle) → chargé ? (getModel en jeu ; injecté par les tests).
+ */
+export function care3dPossible(a, { setting = '', has = (k) => !!getModel(k) } = {}) {
+  if (!a || setting === 'off') return false;
+  if (!CARE3D_SPECIES.has(a.species)) return false;
+  if (a.species === 'horse') return has(REAL_HORSE_KEY);
+  return false;
+}
+
+/** Point (x, y) de l'espace du cadre (400 × 360, vue view) → coordonnées normalisées de la toile (-1 à 1). */
+export function virtualToNdc(x, y, view, w, h) {
+  const px = x * view.scale + view.ox;
+  const py = y * view.scale + view.oy;
+  return { x: (px / Math.max(1, w)) * 2 - 1, y: -((py / Math.max(1, h)) * 2 - 1) };
+}
+
+/** Coordonnées normalisées (-1 à 1) → point de l'espace du cadre. */
+export function ndcToVirtual(nx, ny, view, w, h) {
+  const px = (nx * 0.5 + 0.5) * w;
+  const py = (-ny * 0.5 + 0.5) * h;
+  return { x: (px - view.ox) / view.scale, y: (py - view.oy) / view.scale };
+}
+
+/** Lissage exponentiel indépendant de l'image : part du chemin faite en dt pour une demi-vie de half secondes. */
+export const ease = (dt, half) => 1 - Math.pow(0.5, dt / Math.max(1e-4, half));
+
+/** Angle borné et lissé vers target (rad). */
+export function approachAngle(cur, target, dt, half = 0.25, max = Math.PI) {
+  const t = Math.max(-max, Math.min(max, target));
+  return cur + (t - cur) * ease(dt, half);
+}
+
+// ---------------------------------------------------------------- écouteurs posés sur les ressources partagées
+
+/**
+ * Pendant fn(), note chaque écouteur « dispose » ajouté (par le rendu de la scène de soin : géométries,
+ * textures, matières, cibles). Le rendu du jeu n'en ajoute pas en même temps (tout est synchrone).
+ */
+function trackListeners(list, fn) {
+  const proto = THREE.EventDispatcher.prototype;
+  const orig = proto.addEventListener;
+  proto.addEventListener = function add(type, listener) {
+    if (type === 'dispose') list.push([this, listener]);
+    return orig.call(this, type, listener);
+  };
+  try {
+    return fn();
+  } finally {
+    proto.addEventListener = orig;
+  }
+}
+
+// ---------------------------------------------------------------- l'animal
+
+const _v = new THREE.Vector3();
+const _w = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+
+/**
+ * Un double de l'animal (comme photoDouble des vignettes, mais en pleine finesse) : même espèce, race, robe, âge,
+ * taille et équipement que lui. Renvoie { holder, model, gear, scale, dispose }.
+ */
+export function buildDouble(a, entity = null) {
+  const look = stageLook(a);
+  const model = buildGltfAnimal(a.species, look) ?? buildAnimalModel(a.species, look, a.breed);
+  // (l'ombre de contact au sol du modèle : la scène a de vraies ombres)
+  model.root.traverse((o) => {
+    if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false;
+  });
+  model.setLod?.(0);
+  const holder = new THREE.Group();
+  holder.add(model.root);
+  const scale = entity?.scale ?? (a.look?.scale ?? 1) * growthScale(a);
+  holder.scale.setScalar(scale);
+  let gear = null;
+  try {
+    gear = buildGear(model, a.look, a.gear ?? {});
+  } catch {
+    gear = null; // (un équipement qui ne se pose pas : l'animal sans, plutôt qu'aucune scène)
+  }
+  return {
+    holder,
+    model,
+    gear,
+    scale,
+    dispose() {
+      if (gear) removeGear(gear);
+      model.dispose?.();
+      disposeModel(model.root);
+    },
+  };
+}
+
+// ---------------------------------------------------------------- copie figée de la pose (lancer de rayon)
+
+/**
+ * Lancer de rayon sur un animal lié à un squelette : three.js déforme chaque sommet de chaque triangle testé à
+ * chaque rayon (des millisecondes par rayon sur un cheval). Ici, une copie figée de la pose (positions déformées
+ * une fois, repère monde), refaite au plus toutes les `every` secondes quand on la demande, avec l'index réduit
+ * (LOD) s'il y en a un. Chaque triangle garde son os principal (région du corps).
+ */
+class PickProxy {
+  constructor(meshes) {
+    this.meshes = meshes.filter((m) => m.isSkinnedMesh || m.isMesh);
+    this.geo = new THREE.BufferGeometry();
+    this.mesh = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+    this.mesh.matrixAutoUpdate = false;
+    this.bones = []; // par sommet : os principal (indice dans skeleton.bones)
+    this.skeleton = null;
+    this.at = -Infinity;
+    this.ray = new THREE.Raycaster();
+  }
+
+  bake() {
+    const pos = [];
+    const idx = [];
+    const bone = [];
+    let base = 0;
+    for (const m of this.meshes) {
+      const g = m.geometry;
+      const p = g.attributes.position;
+      if (!p) continue;
+      m.updateWorldMatrix(true, false);
+      const si = g.attributes.skinIndex;
+      const sw = g.attributes.skinWeight;
+      if (m.isSkinnedMesh) this.skeleton ??= m.skeleton;
+      for (let i = 0; i < p.count; i++) {
+        _v.fromBufferAttribute(p, i);
+        if (m.isSkinnedMesh) m.applyBoneTransform(i, _v);
+        _v.applyMatrix4(m.matrixWorld);
+        pos.push(_v.x, _v.y, _v.z);
+        let b = -1;
+        if (si && sw) {
+          let best = -1;
+          for (let k = 0; k < 4; k++) {
+            const wk = sw.getComponent(i, k);
+            if (wk > best) {
+              best = wk;
+              b = si.getComponent(i, k);
+            }
+          }
+        }
+        bone.push(b);
+      }
+      const index = g.index;
+      if (index) for (let i = 0; i < index.count; i++) idx.push(base + index.getX(i));
+      else for (let i = 0; i < p.count; i++) idx.push(base + i);
+      base += p.count;
+    }
+    this.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    this.geo.setIndex(idx);
+    this.geo.computeBoundingSphere();
+    this.geo.computeBoundingBox();
+    this.bones = bone;
+  }
+
+  /** Premier point touché par le rayon (ray : THREE.Ray, repère monde), ou null. */
+  hit(ray, time, every = 0.3) {
+    if (time - this.at > every) {
+      this.at = time;
+      this.bake();
+    }
+    this.ray.ray.copy(ray);
+    const hits = this.ray.intersectObject(this.mesh, false);
+    const h = hits[0];
+    if (!h) return null;
+    const b = this.bones[h.face.a];
+    const boneObj = this.skeleton && b >= 0 ? this.skeleton.bones[b] : null;
+    return { point: h.point.clone(), normal: h.face.normal.clone(), distance: h.distance, bone: boneObj, boneName: boneObj?.name ?? '' };
+  }
+
+  dispose() {
+    this.geo.dispose();
+    this.mesh.material.dispose();
+  }
+}
+
+// ---------------------------------------------------------------- la scène
+
+const FOV = 38;
+
+/**
+ * La scène de soin. o : { game, a, entity, set(stage) → décor ({ group, anchors, update(dt, stage), dispose }),
+ * pixelRatio }. Lève une erreur si WebGL manque (le cadre retombe alors sur le mini-jeu dessiné).
+ */
+export class CareStage {
+  constructor(o) {
+    this.game = o.game ?? null;
+    this.a = o.a;
+    this.time = 0;
+    this.listeners = [];
+    this.disposables = [];
+    this.high = gfx.quality === 'high';
+    const canvas = document.createElement('canvas');
+    canvas.className = 'mg-3d';
+    this.canvas = canvas;
+    let renderer = null;
+    trackListeners(this.listeners, () => {
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+    });
+    if (!renderer.getContext()) throw new Error('webgl');
+    this.renderer = renderer;
+    this.pixelRatio = o.pixelRatio ?? Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, this.high ? 2 : 1.6);
+    renderer.setPixelRatio(this.pixelRatio);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = this.high ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    this.lost = false;
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.lost = true;
+    });
+
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 60);
+    this.camPos = new THREE.Vector3(0, 1.6, 4);
+    this.camTarget = new THREE.Vector3(0, 1, 0);
+    this.camGoal = null; // { position, target } visé (fondu)
+    this.camHalf = 0.35;
+    this.shake = 0;
+
+    // L'animal, puis le décor autour de lui (le décor a besoin de sa taille : mangeoire à hauteur de bouche…).
+    this.double = buildDouble(o.a, o.entity ?? null);
+    this.model = this.double.model;
+    this.holder = this.double.holder;
+    this.holder.rotation.y = Math.PI / 2; // (il regarde vers +x : vu de profil, tête à droite, comme les jeux dessinés)
+    this.scene.add(this.holder);
+    this.holder.traverse((m) => {
+      if (m.isMesh) {
+        m.castShadow = m.castShadow !== false;
+        m.receiveShadow = true;
+      }
+    });
+    // État de l'animal, lu à chaque image (les jeux l'écrivent) : voir life().
+    this.st = { v: 0, moving: false, sleeping: false, sad: false, graze: 0, feeder: 0, turn: 0, fat: 1, ears: null, near: true };
+    this.mood = { look: null, lookAmt: 0, feeder: 0, chew: 0, ears: null, nod: 0, nuzzle: 0, lift: null, liftAmt: 0, happy: 0, annoyed: 0 };
+    this.yaw = 0;
+    this.pitch = 0;
+    const w = a0(o.a?.weight);
+    this.st.fat = 1 + (w - 50) / 50 * 0.18;
+    this.measure();
+
+    this.decor = o.set ? o.set(this) : null;
+    if (this.decor?.group) this.scene.add(this.decor.group);
+    this.pickables = [];
+    this.proxy = new PickProxy(this.model.coatMesh ? [this.model.coatMesh] : collectMeshes(this.model.root));
+    this.raycaster = new THREE.Raycaster();
+    this.ndc = new THREE.Vector2();
+    this.size = { w: 1, h: 1 };
+    this.view = { scale: 1, ox: 0, oy: 0 };
+    this.fx = []; // petites choses 3D qui vivent un instant (souffle, brins…), voir puff()
+    this.ready = false;
+  }
+
+  /** Repères du modèle au repos (pose de photo) : bouche, oreilles, garrot, croupe, sabots… (repère monde). */
+  measure() {
+    const md = this.model;
+    md.photoPose?.();
+    this.holder.updateMatrixWorld(true);
+    const L = {};
+    const at = (obj, x = 0, y = 0, z = 0) => obj ? obj.localToWorld(new THREE.Vector3(x, y, z)) : null;
+    const snout = md.dims?.snoutZ ?? 0.5;
+    L.muzzle = md.head ? at(md.head, 0, -0.12 * snout, snout * 0.97) : at(md.root, 0, 1.2, 1.2);
+    L.head = md.head ? at(md.head, 0, -0.05, snout * 0.45) : L.muzzle;
+    L.poll = md.head ? at(md.head) : L.head;
+    L.ears = (md.ears ?? []).map((e) => at(e, 0, 0.12, 0));
+    L.neck = md.neck ? at(md.neck) : L.head;
+    L.withers = md.neck ? at(md.neck, 0, 0.12, -0.1) : at(md.root, 0, 1.4, 0.4);
+    L.tail = md.tail ? at(md.tail) : at(md.root, 0, 1.2, -1);
+    L.tailTip = md.tailTip ? at(md.tailTip, 0, -0.6, 0) : L.tail;
+    L.hooves = (md.legs ?? []).map((l) => this.holder.localToWorld(l.hoof.clone()));
+    L.body = md.body ? at(md.body, 0, md.y0 ?? 1, 0) : at(md.root, 0, 1, 0);
+    L.belly = md.body ? at(md.body, 0, (md.y0 ?? 1) - (md.dims?.R ?? 0.35), 0) : L.body;
+    L.back = md.backTop ? this.holder.localToWorld(new THREE.Vector3(0, md.backTop(-0.1), -0.1)) : L.body;
+    L.croup = md.backTop ? this.holder.localToWorld(new THREE.Vector3(0, md.backTop(-0.55), -0.55)) : L.tail;
+    L.chest = md.legs?.[0] ? this.holder.localToWorld(new THREE.Vector3(0, md.legTop ?? 1, (md.legs[0].kneeRest?.z ?? 0.5) + 0.12)) : L.body;
+    this.marks = L;
+    this.box = new THREE.Box3().setFromObject(this.holder);
+  }
+
+  /**
+   * Où est sa bouche quand il mange à la mangeoire (pose « eat » + tête à la mangeoire, mesurée sur ce gabarit) ?
+   * Repère monde ; puis il reprend sa pose debout.
+   */
+  eatMuzzle() {
+    const md = this.model;
+    if (!md.anim) return this.marks.muzzle.clone();
+    const st = { ...this.st, feeder: 1, graze: 0 };
+    for (let i = 0; i < 40; i++) md.anim.update(0.1, st);
+    this.holder.updateMatrixWorld(true);
+    const p = this.live('muzzle');
+    md.photoPose();
+    this.holder.updateMatrixWorld(true);
+    return p;
+  }
+
+  /** Repères dans la pose du moment (la tête bouge) : bouche, tête. */
+  live(name) {
+    const md = this.model;
+    const snout = md.dims?.snoutZ ?? 0.5;
+    if (name === 'muzzle' && md.head) return md.head.localToWorld(_w.set(0, -0.12 * snout, snout * 0.97)).clone();
+    if (name === 'nose' && md.head) return md.head.localToWorld(_w.set(0, -0.02 * snout, snout * 1.0)).clone();
+    if (name === 'head' && md.head) return md.head.localToWorld(_w.set(0, -0.05, snout * 0.45)).clone();
+    if (name === 'forehead' && md.head) return md.head.localToWorld(_w.set(0, 0.06, snout * 0.25)).clone();
+    return this.marks[name]?.clone?.() ?? null;
+  }
+
+  /** Ajoute un objet qu'on peut toucher du doigt (pickHit le renverra avec son nom). */
+  pickable(obj, name) {
+    obj.userData.pick = name;
+    this.pickables.push(obj);
+    return obj;
+  }
+
+  // ---------------------------------------------------------------- caméra
+
+  /**
+   * Cadrage : la caméra va voir ces points (repère monde) depuis la direction dir (vers la caméra), avec la marge
+   * pad. o.now : sans fondu. o.half : demi-vie du fondu (s). o.fov.
+   */
+  frame(points, { dir = [0.4, 0.25, 1], pad = 1.12, now = false, half = 0.45, lift = 0 } = {}) {
+    const pts = points.filter(Boolean).map((p) => (p.isVector3 ? p.toArray() : p));
+    if (!pts.length) return;
+    const aspect = this.size.w / Math.max(1, this.size.h);
+    const f = fitCamera(pts, { dir, fov: FOV, aspect, pad });
+    const goal = { position: new THREE.Vector3(...f.position), target: new THREE.Vector3(...f.target) };
+    goal.position.y += lift;
+    goal.target.y += lift;
+    this.lastFrame = { points: pts, dir, pad, half, lift };
+    if (now || !this.ready) {
+      this.camPos.copy(goal.position);
+      this.camTarget.copy(goal.target);
+      this.camGoal = null;
+    } else {
+      this.camGoal = goal;
+      this.camHalf = half;
+    }
+  }
+
+  /** Refait le dernier cadrage (la forme de la toile a changé). */
+  reframe() {
+    const f = this.lastFrame;
+    if (f) this.frame(f.points, { ...f, now: true });
+  }
+
+  updateCamera(dt) {
+    if (this.camGoal) {
+      const k = ease(dt, this.camHalf);
+      this.camPos.lerp(this.camGoal.position, k);
+      this.camTarget.lerp(this.camGoal.target, k);
+      if (this.camPos.distanceToSquared(this.camGoal.position) < 1e-6) this.camGoal = null;
+    }
+    const c = this.camera;
+    c.position.copy(this.camPos);
+    // (respiration de la caméra : à peine, la scène n'est jamais figée)
+    c.position.y += Math.sin(this.time * 0.6) * 0.004;
+    if (this.shake > 0) {
+      c.position.x += (Math.random() - 0.5) * this.shake * 0.02;
+      c.position.y += (Math.random() - 0.5) * this.shake * 0.02;
+      this.shake = Math.max(0, this.shake - dt * 3);
+    }
+    c.lookAt(this.camTarget);
+    c.updateMatrixWorld();
+  }
+
+  // ---------------------------------------------------------------- taille, projection, doigt
+
+  /** Taille de la toile (px CSS, mise en page) et vue du cadre (fitView de frame.js). */
+  resize(w, h, view) {
+    this.size = { w: Math.max(1, w), h: Math.max(1, h) };
+    this.view = view;
+    this.renderer.setSize(this.size.w, this.size.h, false);
+    this.camera.aspect = this.size.w / this.size.h;
+    this.camera.updateProjectionMatrix();
+    this.reframe();
+  }
+
+  /** Point 3D (monde) → point de l'espace du cadre ({ x, y, behind }). */
+  project(p) {
+    _v.copy(p).project(this.camera);
+    const q = ndcToVirtual(_v.x, _v.y, this.view, this.size.w, this.size.h);
+    q.behind = _v.z > 1;
+    return q;
+  }
+
+  /** Taille (en unités du cadre) d'un objet de r mètres posé en p. */
+  projectRadius(p, r) {
+    const d = this.camera.position.distanceTo(p);
+    const fovR = (this.camera.fov * Math.PI) / 360;
+    const px = (r / (2 * Math.tan(fovR) * Math.max(0.01, d))) * this.size.h;
+    return px / this.view.scale;
+  }
+
+  /** Rayon (monde) sous un point de l'espace du cadre. */
+  rayAt(x, y) {
+    const n = virtualToNdc(x, y, this.view, this.size.w, this.size.h);
+    this.ndc.set(n.x, n.y);
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    return this.raycaster.ray;
+  }
+
+  /** Le doigt sur l'animal ? { point, normal, bone, boneName, region } ou null. */
+  pickAnimal(x, y) {
+    const ray = this.rayAt(x, y);
+    const h = this.proxy.hit(ray, this.time);
+    if (!h) return null;
+    h.region = regionOf(h.boneName);
+    return h;
+  }
+
+  /** Le doigt sur un accessoire touchable ? Renvoie son nom (pickable) et le point, ou null. */
+  pickProp(x, y) {
+    if (!this.pickables.length) return null;
+    this.rayAt(x, y);
+    const hits = this.raycaster.intersectObjects(this.pickables, true);
+    for (const h of hits) {
+      let o = h.object;
+      while (o && !o.userData.pick) o = o.parent;
+      if (o && o.visible !== false) return { name: o.userData.pick, point: h.point, object: o };
+    }
+    return null;
+  }
+
+  /** Point sur un plan horizontal à la hauteur y (pour poser un outil sous le doigt hors de l'animal). */
+  pointOnPlane(x, y, planeY) {
+    const ray = this.rayAt(x, y);
+    if (Math.abs(ray.direction.y) < 1e-4) return null;
+    const t = (planeY - ray.origin.y) / ray.direction.y;
+    return t > 0 ? ray.origin.clone().addScaledVector(ray.direction, t) : null;
+  }
+
+  /** Point à la distance d de la caméra sous le doigt. */
+  pointAtDepth(x, y, d) {
+    const ray = this.rayAt(x, y);
+    return ray.origin.clone().addScaledVector(ray.direction, d);
+  }
+
+  // ---------------------------------------------------------------- la vie de l'animal
+
+  /**
+   * Une image de vie : animation du modèle (allures, repos, broutage, respiration, oreilles, queue), puis ce que
+   * le jeu demande (mood) : tourner la tête vers un point, tête à la mangeoire, mâcher, oreilles, hocher, lever un
+   * pied.
+   */
+  life(dt) {
+    const md = this.model;
+    const m = this.mood;
+    const st = this.st;
+    // (tête à la mangeoire : lissée par l'animation elle-même)
+    st.feeder = m.feeder;
+    st.graze = 0;
+    st.ears = m.annoyed > 0 ? 'back' : m.ears;
+    st.near = true;
+    if (md.anim) md.anim.update(dt, st);
+    else md.update?.(dt, st);
+    if (!md.neck || !md.head) return;
+    // Tourner la tête vers ce qu'on lui montre (repère du cheval : +z devant, +x à sa gauche).
+    let yawT = 0;
+    let pitchT = 0;
+    if (m.look && m.lookAmt > 0) {
+      const local = this.holder.worldToLocal(_v.copy(m.look));
+      const base = this.holder.worldToLocal(md.neck.getWorldPosition(_w));
+      const dx = local.x - base.x;
+      const dz = local.z - base.z;
+      const dy = local.y - base.y;
+      yawT = Math.atan2(dx, Math.max(0.2, dz)) * m.lookAmt;
+      pitchT = -Math.atan2(dy - 0.35, Math.hypot(dx, dz)) * 0.35 * m.lookAmt;
+    }
+    this.yaw = approachAngle(this.yaw, yawT, dt, 0.35, 0.75);
+    this.pitch = approachAngle(this.pitch, pitchT, dt, 0.4, 0.35);
+    if (this.yaw) md.neck.quaternion.premultiply(_q.setFromAxisAngle(AXIS_Y, this.yaw * 0.7));
+    if (this.yaw) md.head.quaternion.premultiply(_q.setFromAxisAngle(AXIS_Y, this.yaw * 0.3));
+    let pitch = this.pitch;
+    // Mâcher (petit mouvement de la tête), hocher de contentement, tendre le nez.
+    if (m.chew > 0) pitch += Math.sin(this.time * 9) * 0.025 * m.chew;
+    if (m.nod > 0) {
+      pitch += Math.sin(this.time * 7) * 0.08 * m.nod;
+      m.nod = Math.max(0, m.nod - dt * 0.8);
+    }
+    if (m.nuzzle > 0) pitch -= 0.12 * m.nuzzle;
+    if (pitch) md.neck.rotateX(pitch);
+    if (m.chew > 0) md.head.rotateX(Math.sin(this.time * 9 + 1) * 0.03 * m.chew);
+    m.annoyed = Math.max(0, m.annoyed - dt);
+    // Lever un pied (cure-pied) : le membre se plie (genou ou jarret, boulet), le sabot montre sa sole.
+    if (md.legs && m.lift !== null) {
+      const l = md.legs[m.lift];
+      m.liftAmt = Math.min(1, m.liftAmt + dt * 1.6);
+      if (l) liftLeg(l, smoothstep(m.liftAmt));
+    } else if (md.legs && m.liftAmt > 0) {
+      m.liftAmt = Math.max(0, m.liftAmt - dt * 2);
+      const l = md.legs[m.lastLift ?? 0];
+      if (l) liftLeg(l, smoothstep(m.liftAmt));
+    }
+    if (m.lift !== null) m.lastLift = m.lift;
+  }
+
+  /** Une petite bouffée (souffle des naseaux) : sphères douces qui grossissent et s'effacent. */
+  puff(at, dir, { color = 0xf3efe6, n = 5, size = 0.022 } = {}) {
+    for (let i = 0; i < n; i++) {
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.0, depthWrite: false });
+      const s = new THREE.Mesh(PUFF_GEO, mat);
+      s.position.copy(at);
+      const v = dir.clone().multiplyScalar(0.5 + Math.random() * 0.4).add(new THREE.Vector3((Math.random() - 0.5) * 0.15, (Math.random() - 0.2) * 0.12, (Math.random() - 0.5) * 0.15));
+      this.scene.add(s);
+      this.fx.push({ obj: s, v, age: -i * 0.04, life: 0.9, size, kind: 'puff' });
+    }
+  }
+
+  /** Objet 3D éphémère : il vit life secondes (update(o, k) le fait bouger), puis il est retiré et libéré. */
+  spawn(obj, { life = 1, v = null, grav = 0, spin = 0, update = null, fade = true } = {}) {
+    this.scene.add(obj);
+    this.fx.push({ obj, v: v?.clone?.() ?? null, age: 0, life, grav, spin, update, fade, kind: 'obj' });
+    return obj;
+  }
+
+  updateFx(dt) {
+    for (const f of this.fx) {
+      f.age += dt;
+      if (f.age < 0) continue;
+      const k = f.age / f.life;
+      const o = f.obj;
+      if (f.kind === 'puff') {
+        o.position.addScaledVector(f.v, dt);
+        f.v.multiplyScalar(1 - dt * 1.8);
+        o.scale.setScalar(f.size * (1 + k * 3));
+        o.material.opacity = 0.12 * Math.sin(Math.min(1, k) * Math.PI);
+      } else {
+        if (f.v) {
+          f.v.y -= f.grav * dt;
+          o.position.addScaledVector(f.v, dt);
+        }
+        if (f.spin) o.rotation.z += f.spin * dt;
+        f.update?.(o, k, dt);
+        if (f.fade) o.traverse((m) => {
+          if (m.material?.transparent) m.material.opacity = Math.min(m.material.userData.baseOpacity ?? 1, (1 - k) * 3);
+        });
+      }
+    }
+    const dead = this.fx.filter((f) => f.age >= f.life);
+    if (dead.length) {
+      for (const f of dead) {
+        f.obj.parent?.remove(f.obj);
+        f.obj.traverse((m) => {
+          if (m.geometry && m.geometry !== PUFF_GEO && !m.geometry.userData.shared) m.geometry.dispose();
+          if (m.material && !m.material.userData?.shared) m.material.dispose();
+        });
+      }
+      this.fx = this.fx.filter((f) => f.age < f.life);
+    }
+  }
+
+  // ---------------------------------------------------------------- image
+
+  /** Prépare les shaders sans bloquer (si le navigateur sait compiler en parallèle), puis la scène est prête. */
+  async warm() {
+    this.updateCamera(0);
+    try {
+      await trackListeners(this.listeners, () => this.renderer.compileAsync(this.scene, this.camera));
+    } catch {
+      /* compilé à la première image */
+    }
+    this.ready = true;
+  }
+
+  update(dt) {
+    this.time += dt;
+    this.life(dt);
+    this.decor?.update?.(dt, this);
+    this.updateFx(dt);
+    this.updateCamera(dt);
+  }
+
+  render() {
+    if (this.lost || this.disposed) return;
+    trackListeners(this.listeners, () => this.renderer.render(this.scene, this.camera));
+  }
+
+  /** Mesure pour les planches (mémoire de ce rendu). */
+  info() {
+    const i = this.renderer.info;
+    return { geometries: i.memory.geometries, textures: i.memory.textures, calls: i.render.calls, triangles: i.render.triangles, programs: i.programs?.length ?? 0 };
+  }
+
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const f of this.fx) {
+      f.obj.parent?.remove(f.obj);
+      f.obj.traverse((m) => {
+        if (m.geometry && m.geometry !== PUFF_GEO) m.geometry.dispose();
+        m.material?.dispose?.();
+      });
+    }
+    this.fx = [];
+    this.decor?.dispose?.();
+    this.proxy.dispose();
+    this.scene.remove(this.holder);
+    this.double.dispose();
+    for (const d of this.disposables) d.dispose?.();
+    this.scene.traverse((o) => {
+      if (o.isLight) o.dispose?.();
+    });
+    this.renderer.renderLists.dispose();
+    this.renderer.dispose();
+    try {
+      this.renderer.forceContextLoss();
+    } catch {
+      /* déjà perdu */
+    }
+    // Les écouteurs posés par ce rendu sur les ressources partagées du jeu : retirés (voir trackListeners).
+    for (const [obj, fn] of this.listeners) obj.removeEventListener('dispose', fn);
+    this.listeners = [];
+    this.canvas.remove();
+  }
+}
+
+const PUFF_GEO = new THREE.SphereGeometry(1, 10, 8);
+PUFF_GEO.userData.shared = true;
+
+const a0 = (v) => (Number.isFinite(v) ? v : 50);
+const smoothstep = (k) => k * k * (3 - 2 * k);
+
+function collectMeshes(root) {
+  const out = [];
+  root.traverse((o) => { if (o.isMesh && o.visible) out.push(o); });
+  return out;
+}
+
+/** Région du corps d'après l'os (cheval réaliste) : tête, encolure, corps, croupe, membre, queue, crins. */
+export function regionOf(bone = '') {
+  if (/^Head|^Ear/.test(bone)) return 'head';
+  if (/^Mane/.test(bone)) return 'mane';
+  if (/^Neck/.test(bone)) return 'neck';
+  if (/^Tail/.test(bone)) return 'tail';
+  if (/^(F|H)(L|R)[34]$/.test(bone)) return 'leg';
+  if (/^(F|H)(L|R)2$/.test(bone)) return /^F/.test(bone) ? 'shoulder' : 'hip';
+  if (/^(F|H)(L|R)1$/.test(bone)) return /^F/.test(bone) ? 'shoulder' : 'hip';
+  if (/^Ribs|^Spine/.test(bone)) return 'body';
+  return bone ? 'body' : '';
+}
+
+/**
+ * Plie un membre (k : 0 posé, 1 levé) : antérieur, genou vers l'arrière et boulet replié (la sole regarde vers
+ * l'arrière et le haut, comme quand on cure un pied) ; postérieur, jarret et boulet pliés vers l'avant.
+ */
+function liftLeg(l, k) {
+  if (!k) return;
+  if (l.front) {
+    l.pivot.rotateX(-0.25 * k);
+    l.knee.rotateX(1.35 * k);
+    l.fetlock.rotateX(0.75 * k);
+  } else {
+    l.pivot.rotateX(0.35 * k);
+    l.knee.rotateX(-0.55 * k);
+    l.fetlock.rotateX(0.95 * k);
+  }
+}

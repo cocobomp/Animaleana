@@ -2035,6 +2035,18 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 .mg-end.tight .mg-end-card p { margin: 0.3em 0 0.6em; font-size: 1rem; }
 .mg-end.tight .mg-continue { min-height: 50px; }
 .mg-end.tighter .mg-end-emoji { display: none; } /* (toujours trop haute en compact : la tête de l'animal s'efface) */
+/* Scène de soin en 3D (src/game/care/stage.js) : le vrai animal dans son box, sous la toile 2D des effets. La
+   toile 3D apparaît en fondu quand ses shaders sont prêts ; en attendant, la pénombre chaude du box. */
+.mg-3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 0.45s ease-out; }
+.mg-3d.ready { opacity: 1; }
+.mg-box.care3d .mg-canvas { z-index: 1; }
+/* Carte de fin : par-dessus la toile des effets, et la scène reste visible au-dessus d'elle (il mange, il boit). */
+.mg-box.care3d .mg-end { z-index: 2; background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.12) 35%, rgba(255, 248, 236, 0.6) 100%); backdrop-filter: none; }
+.mg-box.care3d .mg-end-card { margin: auto 0 0; }
+.mg-box.care3d .mg-stage {
+  background: radial-gradient(120% 85% at 55% 40%, #7a5532 0%, #4a3220 55%, #24180f 100%);
+  box-shadow: inset 0 0 0 1px rgba(40, 24, 10, 0.25), 0 2px 10px rgba(40, 24, 10, 0.18);
+}
 /* Le guide du tutoriel (bulle 55, anneau 60) ne passe jamais par-dessus un mini-jeu ouvert : il
    cachait la consigne et le ✕, et montrait un bouton caché sous le jeu (tutorial.js le cache aussi). */
 body.mg-open #tuto-bubble,
@@ -2048,6 +2060,12 @@ body.mg-open #tuto-ring { display: none !important; }
   .mg-stage { flex: 0 1 auto; min-height: 160px; aspect-ratio: 400 / 390; max-height: 64vh; }
   .mg-title { font-size: 1.1rem; }
   .mg-hint { font-size: 1rem; }
+}
+/* Téléphone en portrait, scène 3D : la fenêtre prend toute la hauteur et la scène tout ce qui reste (le cheval en
+   grand), au lieu de la forme fixe du jeu dessiné. */
+@media (max-width: 640px) {
+  .mg-box.care3d { height: 100%; }
+  .mg-box.care3d .mg-stage { flex: 1 1 auto; aspect-ratio: auto; max-height: none; min-height: 220px; }
 }
 /* Téléphone en portrait : avec deux boutons d'action en plus (Gauche / Droite, Doucement / Allez !),
    « C'est bon ! » passe sur sa propre ligne, en entier, sous les deux autres. */

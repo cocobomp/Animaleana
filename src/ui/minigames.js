@@ -27,6 +27,7 @@ import { sellerGame } from './minigames/seller.js'; // seller son cheval : tapis
 import { dewormGame } from './minigames/deworm.js'; // le vermifuge (carnet de santé du cheval)
 import { bridleGame } from './minigames/bridle.js'; // brider son cheval : le mors, les oreilles, la sous-gorge
 import { drawFact, factIcon } from '../sim/horseFacts.js'; // « 💡 Le savais-tu ? » à la fin des mini-jeux avec un cheval (🃏 cartes)
+import { care3dGameFor, openCareScene } from './minigames/care3d.js'; // le vrai animal en 3D dans son box (soins du cheval)
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -187,6 +188,8 @@ export function runMinigame(ui, a, action, opts = {}) {
   const factId = a.species === 'horse' ? drawFact(ui.game?.profile, action) : null;
   return openMinigame(ui, {
     make,
+    // (le même soin en 3D, s'il existe : le vrai animal dans son décor ; sinon, ou si la 3D échoue, le jeu dessiné)
+    make3d: care3dGameFor(a, action),
     action,
     a,
     icon: ICONS[action] ?? '⭐',
@@ -274,6 +277,10 @@ function openMinigame(ui, o) {
     document.body?.classList?.add('mg-open');
 
     const g2 = canvas.getContext('2d');
+    // Scène de soin en 3D (src/game/care/stage.js) : le vrai animal dans son décor, sous la toile 2D qui garde les
+    // effets et ce qui flotte par-dessus. Impossible (WebGL, modèle pas chargé, réglage) : le jeu dessiné.
+    let scene3d = o.make3d && a ? openCareScene(ui, a, stage, canvas) : null;
+    if (scene3d) box.classList.add('care3d');
     const view = { x0: 0, y0: 0, x1: MG_W, y1: MG_H, w: MG_W, h: MG_H, scale: 1, ox: 0, oy: 0 };
     let dpr = 1;
     const layout = { w: 0, h: 0 }; // taille de mise en page du canvas, en pixels CSS
@@ -297,6 +304,7 @@ function openMinigame(ui, o) {
       canvas.width = Math.max(1, Math.round(layout.w * dpr));
       canvas.height = Math.max(1, Math.round(layout.h * dpr));
       Object.assign(view, fitView(layout.w, layout.h, MG_W, MG_H));
+      scene3d?.resize(layout.w, layout.h, view); // (la scène 3D, sous la toile 2D, a la même taille)
       fitEnd(); // écran tourné, fenêtre redimensionnée : la carte de fin tient-elle encore ?
     };
     const ro = new ResizeObserver(resize);
@@ -420,7 +428,8 @@ function openMinigame(ui, o) {
         audio.minigame('done');
         ctx.hint(`🎉 ${t('mg_done')}`, 'good');
         controls.querySelectorAll('button').forEach((b) => { b.disabled = true; });
-        setTimeout(() => showEnd(msg), 900);
+        // (scène 3D : un peu plus longtemps, le temps de le voir manger, boire, se régaler)
+        setTimeout(() => showEnd(msg), scene3d ? 1900 : 900);
       },
       /**
        * Montre la zone « juste ce qu'il faut » sur la jauge : bande verte entre lo et hi
@@ -467,9 +476,42 @@ function openMinigame(ui, o) {
       },
     };
 
-    const play = make(ctx);
+    ctx.scene = scene3d; // (jeux 3D : la scène ; null pour les jeux dessinés)
+    let play = null;
+    if (scene3d) {
+      try {
+        play = o.make3d(ctx);
+      } catch (e) {
+        // Le jeu 3D n'a pas pu démarrer : le jeu dessiné, sur une scène propre.
+        console.warn('[care3d] jeu 3D impossible, jeu dessiné', e?.message ?? e);
+        closeScene3d();
+        ctx.clearButtons();
+        ctx.zone(null);
+        ctx.progress(0);
+      }
+    }
+    if (!play) play = make(ctx);
+    if (scene3d) {
+      resize();
+      // Shaders préparés sans bloquer ; la scène apparaît en fondu quand elle est prête (le jeu attend jusque-là).
+      scene3d.warm().then(() => scene3d?.canvas.classList.add('ready'));
+    }
     // État lisible par les tests automatiques (peek).
-    ui.minigame = { action, chore: o.chore ?? null, ctx, peek: () => play.peek?.(), get zone() { return zoneRange; } };
+    ui.minigame = { action, chore: o.chore ?? null, ctx, get scene3d() { return scene3d; }, peek: () => play.peek?.(), get zone() { return zoneRange; } };
+
+    /** Ferme la scène 3D (fin du jeu, ou repli sur le jeu dessiné) et rend la main au rendu du jeu. */
+    function closeScene3d() {
+      if (!scene3d) return;
+      const sc = scene3d;
+      scene3d = null;
+      ctx.scene = null;
+      box.classList.remove('care3d');
+      try {
+        sc.dispose();
+      } finally {
+        sc.release?.();
+      }
+    }
 
     /**
      * Carte de fin trop haute pour la scène (360 px de large, message de 3 lignes, long prénom) :
@@ -613,8 +655,17 @@ function openMinigame(ui, o) {
       ctx.time += dt;
       // L'animal n'est plus là, ou la partie est finie : on ferme sans rien appliquer.
       if (!o.stillThere(game)) return close(null);
-      play.update?.(dt);
-      ctx.fx.update(dt);
+      // (scène 3D pas encore prête : le jeu attend, le temps ne compte pas)
+      const waiting = scene3d && !scene3d.ready;
+      if (waiting) ctx.time -= dt;
+      else {
+        play.update?.(dt);
+        ctx.fx.update(dt);
+      }
+      if (scene3d && !waiting) {
+        scene3d.update(dt);
+        scene3d.render();
+      }
       g2.setTransform(1, 0, 0, 1, 0, 0);
       g2.clearRect(0, 0, canvas.width, canvas.height);
       g2.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
@@ -634,6 +685,7 @@ function openMinigame(ui, o) {
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('keyup', onKey, true);
       play.destroy?.();
+      closeScene3d();
       overlay.remove();
       document.body?.classList?.remove('mg-open');
       ui.minigameOpen = false;

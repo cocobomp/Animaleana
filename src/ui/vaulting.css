@@ -1,0 +1,106 @@
+/* Voltige (src/ui/vaulting.js) : le bouton rond du rythme, la carte de la figure, la jauge d'équilibre, les notes
+   des juges, le protocole des résultats, et le choix du niveau. */
+
+/* La couche du doigt : tout l'écran, sous la barre du haut et les boutons (toucher, glisser). */
+.vt-pad { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
+#actv-hud .actv-top, #actv-hud .actv-controls, #actv-hud .actv-hint, #actv-hud .actv-big, #actv-hud .vt-marks { z-index: 1; }
+
+.vt-controls { display: grid; justify-items: center; gap: 10px; width: 100%; pointer-events: none; }
+.vt-btn-row { display: grid; justify-items: center; gap: 4px; }
+.vt-btn-row[hidden] { display: none; }
+.vt-btn-say {
+  color: #fff; font-weight: 700; font-size: 0.85rem; text-align: center; max-width: 300px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* Le gros bouton rond : un disque doré, l'anneau du rythme qui se resserre dessus. */
+.vt-btn {
+  position: relative; width: 104px; height: 104px; border-radius: 50%; padding: 0; border: none;
+  background: radial-gradient(circle at 35% 30%, #fff7d6, #ffd34d 45%, #f0a516 100%);
+  box-shadow: 0 6px 0 #b46f08, 0 10px 22px rgba(0, 0, 0, 0.35);
+  pointer-events: auto; touch-action: manipulation; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.vt-btn:active { transform: translateY(3px); box-shadow: 0 3px 0 #b46f08, 0 6px 14px rgba(0, 0, 0, 0.35); }
+.vt-btn .vt-ico { position: relative; font-size: 2.6rem; line-height: 104px; display: block; }
+.vt-btn .vt-target {
+  position: absolute; inset: -7px; border-radius: 50%; border: 4px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18);
+}
+.vt-btn .vt-ring {
+  position: absolute; inset: -7px; border-radius: 50%; border: 5px solid #ffe066;
+  box-shadow: 0 0 14px rgba(255, 224, 102, 0.85); pointer-events: none; will-change: transform, opacity;
+}
+.vt-btn.vt-idle { filter: saturate(0.4) brightness(0.9); }
+.vt-btn.vt-idle .vt-ring { display: none; }
+.vt-btn.vt-beat .vt-target { animation: vt-beat 0.28s ease-out; }
+@keyframes vt-beat { from { border-color: #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18), 0 0 26px 8px rgba(255, 240, 160, 0.9); } to { box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18); } }
+
+/* La carte de la figure à faire. */
+.vt-card {
+  display: grid; gap: 2px; text-align: center; background: rgba(255, 255, 255, 0.95); border-radius: 16px;
+  padding: 8px 16px; box-shadow: var(--shadow); max-width: min(440px, calc(100vw - 24px));
+}
+.vt-card[hidden] { display: none; }
+.vt-card b { font-size: 1.15rem; }
+.vt-card small { color: var(--muted); font-weight: 600; font-size: 0.86rem; }
+
+/* La jauge d'équilibre : la bulle doit rester dans la zone verte. */
+.vt-balance {
+  width: min(440px, calc(100vw - 24px)); background: rgba(255, 255, 255, 0.95); border-radius: 18px;
+  padding: 8px 14px 14px; box-shadow: var(--shadow);
+}
+.vt-balance[hidden] { display: none; }
+.vt-balance-say { text-align: center; font-weight: 800; margin-bottom: 8px; }
+.vt-balance-bar {
+  position: relative; height: 40px; border-radius: 999px;
+  background: linear-gradient(90deg, #ff9a8a 0%, #ffd27a 22%, #f4efe4 40%, #f4efe4 60%, #ffd27a 78%, #ff9a8a 100%);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.18);
+}
+.vt-balance-zone {
+  position: absolute; left: 41%; width: 18%; top: 3px; bottom: 3px; border-radius: 999px;
+  background: rgba(63, 174, 98, 0.45); border: 2px solid #1e7a40;
+}
+.vt-bubble {
+  position: absolute; top: 50%; left: 50%; width: 46px; height: 46px; margin-left: -23px; margin-top: -23px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #ffd2c8 60%, #f08a74); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  display: grid; place-items: center; font-size: 1.5rem; transition: background 0.2s;
+}
+.vt-bubble.ok { background: radial-gradient(circle at 35% 30%, #fff, #c9f3d3 60%, #4cbf6c); }
+
+/* Les notes des trois juges, sous la barre du haut. */
+.vt-marks {
+  position: absolute; top: calc(104px + var(--safe-t)); right: calc(10px + var(--safe-r)); width: min(270px, calc(100vw - 20px));
+  background: rgba(255, 255, 255, 0.96); border-radius: 16px; padding: 8px 12px 10px; box-shadow: var(--shadow);
+}
+.vt-marks[hidden] { display: none; }
+.vt-marks.vt-in { animation: vt-in 0.35s ease-out; }
+@keyframes vt-in { from { transform: translateY(-12px) scale(0.95); opacity: 0; } to { transform: none; opacity: 1; } }
+.vt-marks-head { display: flex; justify-content: space-between; align-items: center; font-weight: 800; gap: 8px; }
+.vt-marks-score { font-size: 1.6rem; color: #1e7a40; font-variant-numeric: tabular-nums; }
+.vt-marks-judges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0; }
+.vt-judge { display: grid; justify-items: center; background: #f4efe4; border-radius: 10px; padding: 2px 0; }
+.vt-judge small { font-size: 0.72rem; color: var(--muted); font-weight: 700; }
+.vt-judge b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.vt-marks-say { font-weight: 600; font-size: 0.88rem; text-align: center; }
+
+/* Résultats : la note finale et le protocole. */
+.vt-total { text-align: center; margin: 2px 0 8px; }
+.vt-total b { font-size: 2.6rem; font-weight: 900; color: #1e7a40; font-variant-numeric: tabular-nums; }
+.vt-total small { font-weight: 800; color: var(--muted); }
+.vt-protocol th { font-size: 0.8rem; color: var(--muted); text-align: center; }
+.vt-protocol td.num { text-align: center; font-variant-numeric: tabular-nums; }
+
+/* Choix du niveau et des chevaux (menu des activités). */
+.vt-levels { display: grid; gap: 8px; margin-bottom: 10px; }
+.vt-level.primary { outline: 3px solid #f0a516; }
+.vt-horse .card-side button { white-space: nowrap; }
+.vt-figs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.vt-fig { background: #f4efe4; border-radius: 999px; padding: 3px 10px; font-weight: 700; font-size: 0.85rem; opacity: 0.55; }
+.vt-fig.ok { opacity: 1; background: #d9f2df; }
+
+@media (max-height: 500px) {
+  .vt-btn { width: 84px; height: 84px; }
+  .vt-btn .vt-ico { line-height: 84px; font-size: 2.1rem; }
+  .vt-marks { top: calc(8px + var(--safe-t)); }
+  .vt-card small { display: none; }
+}

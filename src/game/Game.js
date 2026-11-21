@@ -92,6 +92,7 @@ import { applyCoreLayout } from './coreLayout.js';
 import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, trajet, pauses)
 import { CompetitionVenue } from './CompetitionVenue.js'; // concours à l'extérieur : site, épreuve, podium
 import './Dressage.js'; // séances de dressage (s'enregistrent dans Activities)
+import './Vaulting.js'; // 🤸 voltige (s'enregistre dans Activities)
 import { Marker } from './Marker.js';
 import { Arrivals } from './arrivals.js'; // les visiteurs des métiers arrivent chacun leur tour
 import { Emitter } from './emitter.js'; // petit système d'événements (on / emit)

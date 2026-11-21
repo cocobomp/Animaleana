@@ -114,8 +114,11 @@ export function balanceAmp(level, figure, calm = 0.5) {
   return L.wobble * (FIGURES[figure]?.balance ?? 1) * (1.15 - 0.3 * clamp(calm));
 }
 
-/** Le penché du voltigeur : la poussée moins ce que fait le doigt (control, −1 à 1). */
-export const leanOf = (push, control) => clamp(push - control, -1.5, 1.5);
+/**
+ * Le penché du voltigeur : la poussée plus ce que fait le doigt (control, −1 à 1 : glisser vers la gauche ramène la
+ * bulle à gauche). Bien joué, control ≈ −push.
+ */
+export const leanOf = (push, control) => clamp(push + control, -1.5, 1.5);
 
 /**
  * Note d'équilibre (0 à 1) d'après les penchés relevés pendant la figure (un par image, à intervalles égaux) :

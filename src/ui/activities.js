@@ -13,10 +13,12 @@ import {
   COMPETITION_TYPES, competitionsAt, entryBlock, eligibility, knownTricks, rivals, activityData, awardCounts, MAX_ACTS,
   JUMP_STAGES, comfortHeight, courseForStage, stageForLevel, stageFor, HUTCH_TOYS, hutchPlayBlock,
 } from '../sim/activities.js';
+import { vaultBlock } from '../sim/vaulting.js'; // 🤸 voltige
 import { awayCalendar, venueBanner, trainingCard } from './competitions.js'; // concours à l'extérieur et dressage
 import { openBeauty, beautyPick, beautyAnimalButtons, beautyRuns } from './beauty.js'; // concours de beauté
+import { vaultingPick } from './vaulting.js'; // 🤸 voltige
 
-export const TYPE_ICON = { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', hop: '🐇', show: '🎪', flat: '🎠', figures: '🔤', dressage: '🎠', beauty: '🎀' };
+export const TYPE_ICON = { jumping: '🏇', lesson: '🎓', trail: '🧭', agility: '🐕', hop: '🐇', show: '🎪', flat: '🎠', figures: '🔤', dressage: '🎠', beauty: '🎀', vaulting: '🤸' };
 const TIER_ICON = { gold: '🏆', silver: '🥈', bronze: '🥉' };
 const SKILL_OF = { jumping: ['jump', 'obedience'], lesson: ['jump', 'obedience'], trail: ['endurance', 'speed'], agility: ['jump', 'obedience', 'speed'], hop: ['jump', 'obedience'], show: ['obedience'], flat: ['dressage', 'obedience'], figures: ['dressage', 'obedience'], dressage: ['dressage', 'obedience'] };
 const DRESSAGE_TYPES = ['flat', 'figures', 'dressage'];
@@ -56,10 +58,11 @@ function playTab(ui, state) {
   const here = g.animalsHere();
   const count = (type) => here.filter((a) => !eligibility(a, type)).length;
   // (lapin-hop : seulement si les lapins sont proposés, ou s'il y a déjà un lapin)
-  const types = ['lesson', 'jumping', 'flat', 'figures', 'dressage', 'trail', 'agility', 'hop', 'show', 'beauty']
+  const types = ['lesson', 'jumping', 'flat', 'figures', 'dressage', 'vaulting', 'trail', 'agility', 'hop', 'show', 'beauty']
     .filter((type) => type !== 'hop' || speciesAvailable(g.profile, 'rabbit'));
   const cards = types.map((type) => {
-    const n = type === 'trail' ? count('trail') + here.filter((a) => a.following).length : count(type);
+    // (voltige : le tonneau est toujours là ; on compte les chevaux prêts au pas)
+    const n = type === 'trail' ? count('trail') + here.filter((a) => a.following).length : type === 'vaulting' ? 1 + here.filter((a) => !vaultBlock(a, 'walk')).length : count(type);
     return h('button', { class: 'card actv-card', onClick: () => { if (type === 'beauty') return openBeauty(ui); state.pick = type; ui.renderPanel(); } },
       h('span', { class: 'card-emoji' }, TYPE_ICON[type]),
       h('span', { class: 'card-main' }, h('b', {}, t(`actv_type_${type}`)), h('small', {}, t(`actv_desc_${type}`))),
@@ -97,6 +100,7 @@ function pickAnimal(ui, state) {
   const back = h('button', { class: 'small', onClick: () => { state.pick = null; state.comp = null; ui.renderPanel(); } }, `← ${t('actv_back')}`);
   const head = [h('div', { class: 'row' }, back, h('b', {}, `${TYPE_ICON[type]} ${state.comp ? compName(state.comp) : t(`actv_type_${type}`)}`))];
   if (type === 'beauty') return [...head, ...beautyPick(ui, state)]; // concours de beauté (src/ui/beauty.js)
+  if (type === 'vaulting') return [...head, ...vaultingPick(ui, state)]; // 🤸 voltige (src/ui/vaulting.js)
   if (state.comp) {
     head.push(h('p', { class: 'note' }, isSandbox(g.profile) ? t('actv_compHelpSandbox') : t('actv_compHelp', { fee: state.comp.fee, a: state.comp.prizes[0] })));
     head.push(rivalsList(state.comp));

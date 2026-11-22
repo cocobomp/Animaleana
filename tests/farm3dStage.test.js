@@ -215,6 +215,15 @@ describe('nourrir et abreuver en 3D', () => {
       const ctx = ctxFor(a, sc);
       const game = farm3d.farmFeed3dGame(ctx);
       const pour = ctx.buttons[0].opts;
+      {
+        // (la ligne 🎯 ne passe pas devant sa bouche : elle commence à côté de sa tête, vers l'allée)
+        let ln = null;
+        sc.decor.props.rack.group.traverse((o) => {
+          if (o.isMesh && o.renderOrder === 3) ln = o;
+        });
+        const box = new THREE.Box3().setFromObject(ln);
+        expect(box.min.z).toBeGreaterThan(sc.marks.muzzle.z + 0.05 * sc.marks.u);
+      }
       const s0 = game.peek();
       pour.onDown();
       for (let i = 0; i < 400 && game.peek().value < s0.target; i++) run(ctx, game, sc, 1 / 30);
@@ -233,6 +242,13 @@ describe('nourrir et abreuver en 3D', () => {
       }
       // le râtelier et sa tête sont dans l'image
       for (const p of [sc.marks.poll, sc.decor.props.rack.barsAt(0.5)]) expect(inView(sc.project(p), ctx.view)).toBe(true);
+      // la ligne 🎯 : à côté de sa tête, pas derrière son nez ; et effacée pendant qu'il mange
+      let line = null;
+      sc.decor.props.rack.group.traverse((o) => {
+        if (o.isMesh && o.material?.color?.getHex() === 0xffffff && o.renderOrder === 3) line = o;
+      });
+      expect(line).toBeTruthy();
+      expect(line.visible && line.parent.visible).toBe(false);
       game.destroy();
       sc.dispose();
     }, 30000);

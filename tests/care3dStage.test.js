@@ -2,7 +2,7 @@
 // cheval réaliste (GLB chargé dans node), son box, la caméra, le doigt et la projection. On y vérifie ce qui ne se
 // voit qu'avec le modèle : chaque pied levé reste dans l'image au cure-pied, le pansage complet (les gestes sur les
 // taches, les pieds, les nœuds), le décor d'un poulain, le retour du contexte WebGL, la libération.
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import * as THREE from 'three';
 import { fakeCtx as fakeCtxOf, fakeDocument } from './fixtures/careCtx.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
@@ -29,6 +29,20 @@ beforeAll(async () => {
   animalMod = await import('../src/sim/animal.js');
   frameMod = await import('../src/ui/minigames/frame.js');
 }, 60000);
+
+// (le hasard des jeux et de l'animation, fixé : chaque test rejoue la même partie)
+const random = Math.random;
+let seed = 1;
+beforeEach(() => {
+  seed = 12345;
+  Math.random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+});
+afterAll(() => {
+  Math.random = random;
+});
 
 /** Une scène de soin headless : le cheval (race, âge) dans son box, toile de téléphone en portrait. */
 export function makeStage({ breed = 'selle_francais', foal = false, w = 390, h = 600, name = 'Honey', needs = 25 } = {}) {
@@ -184,11 +198,12 @@ describe('le décor suit le gabarit (poulain, poney, grand cheval)', () => {
       const ctx = ctxFor(a, sc);
       const game = feed3d.water3dGame(ctx);
       const tap = sc.decor.props.tap.group;
+      // (une tête de cheval : une vingtaine de centimètres de large aux joues, une douzaine au bout du nez)
       const S = sc.double.scale;
       const check = () => {
         const poll = sc.model.head.getWorldPosition(new THREE.Vector3());
         const d = minDistToSegment(tap, poll, sc.live('nose'));
-        expect(d, `${breed} : ${d.toFixed(3)} m`).toBeGreaterThan(0.11 * S);
+        expect(d, `${breed} : robinet ou tuyau à ${d.toFixed(3)} m de l'axe de la tête`).toBeGreaterThan(0.1 * S);
       };
       // il regarde le seau pendant qu'on le remplit, puis il boit (la tête dans le seau)
       for (let k = 0; k < 4; k++) {

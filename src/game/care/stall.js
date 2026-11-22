@@ -269,7 +269,7 @@ export function stallSet(stage) {
       // Le robinet au mur, à côté du seau (vers nous, loin de la tête), et le tuyau dont la lance est accrochée au
       // bord du seau côté mur. (Avant : un robinet au-dessus du seau, en plein là où la tête descend boire : il
       // traversait la tête d'un poulain.)
-      const tap = props.tap.group.position.set(S.halfW, b.y + (onFloor ? 0.45 : 0.52), b.z + 0.42);
+      const tap = props.tap.group.position.set(S.halfW, b.y + (onFloor ? 0.45 : 0.52), b.z + 0.55);
       const rim = new THREE.Vector3(BUCKET.r * 0.45, 0.035, BUCKET.r * 0.88).multiplyScalar(ps).add(b);
       props.tap.hookUp(rim.clone().sub(tap), b.clone().sub(rim), onFloor ? 0.04 - tap.y : null);
     } else {

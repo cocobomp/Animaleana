@@ -27,6 +27,9 @@ const AZ = V(0, 0, 1);
 const _v = V();
 const _w = V();
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+/** Pied levé : angles (rad, autour de l'axe en travers du corps) de l'épaule ou de la hanche, du coude ou du grasset,
+ * du genou ou du jarret, du boulet. */
+export const LIFT = { front: [0, 0, 2.4, 0, 0], hind: [0, 0, 2.4, 0, 0] };
 /** Durée d'un bêlement ou d'un meuglement doux (s). */
 const CALL_S = 0.9;
 
@@ -249,6 +252,32 @@ export function ruminantLife(stage, dt) {
   if (m.flinch > 0) {
     anim.turn(neck, AX, -0.2 * m.flinch);
     m.flinch = Math.max(0, m.flinch - dt * 2.5);
+  }
+  // Un pied levé et tenu (parer les onglons) : mood.lift = n° du membre (md.legs : 0 et 1 devant, 2 et 3 derrière),
+  // en douceur. Devant : le genou plié, le canon et le pied repliés vers l'arrière, la sole vers le haut ; derrière :
+  // le membre tiré en arrière, le jarret ouvert, le paturon plié, la sole vers le haut. (Les angles : LIFT.)
+  const want = Number.isInteger(m.lift) ? m.lift : null;
+  if (want !== null) stage.liftLeg = want;
+  stage.liftK = (stage.liftK ?? 0) + ((want !== null ? 1 : 0) - (stage.liftK ?? 0)) * Math.min(1, dt * 3.5);
+  if (stage.liftK < 0.002 && want === null) stage.liftLeg = null;
+  const lifted = stage.liftLeg !== null && stage.liftLeg !== undefined ? md.legs?.[stage.liftLeg] : null;
+  if (lifted && stage.liftK > 0.001) {
+    const k = stage.liftK * stage.liftK * (3 - 2 * stage.liftK);
+    const A = (stage.liftTune ?? LIFT)[lifted.front ? 'front' : 'hind'];
+    // (le pied tenu ne bouge plus avec l'animation du membre : la pose du membre au moment où on le lève, figée ;
+    // sinon le clip de l'arrêt le faisait aller et venir de 3 cm sous la caméra, toute proche)
+    const chain = [lifted.pivot, lifted.knee, lifted.fetlock, lifted.paw];
+    if (stage.liftBaseOf !== lifted) {
+      stage.liftBaseOf = lifted;
+      stage.liftBase = chain.map((b) => b.quaternion.clone());
+    }
+    chain.forEach((b, i) => b.quaternion.slerp(stage.liftBase[i], k));
+    anim.turn(lifted.pivot, AX, A[0] * k);
+    anim.turn(lifted.knee, AX, A[1] * k);
+    anim.turn(lifted.fetlock, AX, A[2] * k);
+    anim.turn(lifted.paw, AX, A[3] * k);
+    // (et un peu écarté du corps, vers l'extérieur : on voit la sole d'en haut, à côté du ventre, pas dessous)
+    if (A[4]) anim.turn(lifted.pivot, AZ, (lifted.side ?? 1) * A[4] * k);
   }
   // Petite queue du mouton et de la chèvre : elle frétille quand il est content.
   if (sp !== 'cow' && md.tail && m.wag > 0) anim.turn(md.tail, AY, Math.sin(t * 15) * 0.4 * m.wag);

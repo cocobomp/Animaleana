@@ -26,7 +26,7 @@ export const CARE3D_SPECIES = new Set(['horse', ...RUMINANTS]);
 /** Soins refaits en 3D, par espèce (les jeux eux-mêmes : CARE3D_GAMES de src/ui/minigames/care3d.js). */
 export const CARE3D_ACTIONS = { horse: ['feed', 'water', 'treat', 'pet', 'brush', 'wash'] };
 // (moutons, chèvres, vaches : leurs soins en 3D, src/ui/minigames/farm3d.js et suivants)
-Object.assign(CARE3D_ACTIONS, { sheep: ['feed', 'water', 'treat', 'pet', 'brush', 'shear'], goat: ['feed', 'water', 'treat', 'pet', 'brush', 'milk'], cow: ['feed', 'water', 'treat', 'pet', 'brush', 'milk', 'wash'] });
+Object.assign(CARE3D_ACTIONS, { sheep: ['feed', 'water', 'treat', 'pet', 'brush', 'shear'], goat: ['feed', 'water', 'treat', 'pet', 'brush', 'milk', 'nails'], cow: ['feed', 'water', 'treat', 'pet', 'brush', 'milk', 'wash'] });
 
 // Chiens, chats, lapins : leur scène (petStage.js) et leurs soins en 3D (petWhich.js).
 for (const s of Object.keys(PET_CARE3D_ACTIONS)) CARE3D_SPECIES.add(s);

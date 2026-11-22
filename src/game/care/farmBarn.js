@@ -269,8 +269,14 @@ export function barnSet(stage) {
   const plateX = clamp(win.x + win.w / 2 + 0.75, -S.halfW + 0.5, S.halfW - 0.5);
   const plateY = clamp(Math.max(u * 1.35, 1.1), 0.9, win.y + 0.1);
   const plate = keep(plateTexture(stage.a?.name ?? ''));
-  const plateMesh = mesh(new THREE.BoxGeometry(0.56, 0.18, 0.025), keep(new THREE.MeshStandardMaterial({ map: plate, roughness: 0.6 })), [plateX, plateY, S.back + 0.013]);
-  for (const k of [-0.23, 0.23]) mesh(new THREE.SphereGeometry(0.011, 8, 6), iron, [plateX + k, plateY, S.back + 0.03], null, false);
+  // (la plaque et ses deux clous ensemble : elle se déplace le long du mur si un cadrage la coupe, voir fitPlate)
+  const plateG = new THREE.Group();
+  plateG.position.set(plateX, plateY, S.back);
+  walls.back.add(plateG);
+  into = plateG;
+  const plateMesh = mesh(new THREE.BoxGeometry(0.56, 0.18, 0.025), keep(new THREE.MeshStandardMaterial({ map: plate, roughness: 0.6 })), [0, 0, 0.013]);
+  for (const k of [-0.23, 0.23]) mesh(new THREE.SphereGeometry(0.011, 8, 6), iron, [k, 0, 0.03], null, false);
+  into = walls.back;
   // pierre à sel au mur du fond, à hauteur de bouche
   const salt = saltLick(keep);
   salt.position.set(clamp(L.body.x + 0.15 * u, -S.halfW + 0.4, S.halfW - 0.5), clamp(L.muzzle.y * 0.85, 0.35, 1.3), S.back);
@@ -394,6 +400,112 @@ export function barnSet(stage) {
   stage.scene.background = new THREE.Color(0x2a1e14);
   stage.scene.fog = new THREE.Fog(0x2a1e14, 7, 17);
 
+  /**
+   * La plaque à son nom, la touche personnelle : coupée par le bord de l'image, cachée par un poteau, par l'animal ou
+   * par une réglette du jeu (le haut de l'image : 🐢/🐇, le cœur, les cadrans), on la déplace le long du mur du fond,
+   * au plus près de sa place, là où on la lit en entier. (Seulement caméra posée, et une fois par cadrage.)
+   */
+  const ray = new THREE.Raycaster();
+  // (tout le décor qui peut passer devant : poteaux, barrière, poutres, râtelier… — pas la litière, ni les brins et les
+  // poussières, ni la plaque elle-même)
+  const blockers = [];
+  const solid = (o) => {
+    if (!o.isMesh || o.isInstancedMesh || plateG.children.includes(o)) return false;
+    // (ni le rai de soleil, ni ce qui est transparent ou découpé — les brins de foin —, ni la litière à plat)
+    const mt = o.material;
+    if (!mt || Array.isArray(mt) || mt.isShaderMaterial || mt.transparent || mt.depthWrite === false || mt.alphaTest > 0) return false;
+    return !(o.geometry?.type === 'PlaneGeometry' && Math.abs(o.rotation.x + Math.PI / 2) < 0.01);
+  };
+  g.traverse((o) => solid(o) && blockers.push(o));
+  /** Visible (lui et tous ses parents : un mur caché parce que la caméra est derrière ne cache rien). */
+  const shown = (o) => {
+    for (let p = o; p; p = p.parent) if (!p.visible) return false;
+    return true;
+  };
+  /** Ce qui gêne la lecture de la plaque en (x, y) : 0 si on la lit en entier (plus c'est grand, moins on la lit). */
+  const plateBad = (st, x, y, why = null) => {
+    const v = st.view;
+    if (!v) return 0;
+    const top = v.y0 + 70;
+    let bad = 0;
+    for (const [dx, dy] of [[-0.3, -0.1], [0.3, -0.1], [-0.3, 0.1], [0.3, 0.1]]) {
+      const q = st.project(V(x + dx, y + dy, S.back + 0.03));
+      if (q.behind || q.x < v.x0 + 6 || q.x > v.x1 - 6 || q.y < top || q.y > v.y1 - 20) {
+        bad += 2;
+        why?.push(`coin ${dx},${dy} hors de l'image`);
+      }
+    }
+    // (rien devant elle, d'un bout à l'autre : ni poteau, ni râtelier, ni l'animal — sept rayons, aux deux hauteurs du
+    // texte : un poteau qui dépasse du mur en cache vite un bout)
+    const cam = st.camera.position;
+    const live = blockers.filter(shown);
+    for (const p of Object.values(props)) p.group?.traverse((o) => solid(o) && shown(o) && live.push(o));
+    for (const [dx, dy] of [[-0.28, 0.04], [-0.19, -0.04], [-0.09, 0.04], [0, -0.04], [0.09, 0.04], [0.19, -0.04], [0.28, 0.04]]) {
+      const c = V(x + dx, y + dy, S.back + 0.03);
+      const dir = c.clone().sub(cam);
+      const d = dir.length();
+      dir.normalize();
+      ray.set(cam, dir);
+      ray.far = d - 0.04;
+      const hs = ray.intersectObjects(live, true);
+      if (hs.length) {
+        bad++;
+        why?.push(`${dx},${dy} : ${hs[0].object.geometry?.type} ${hs[0].point.toArray().map((k) => k.toFixed(2))}`);
+      } else {
+        const h = st.proxy?.hit?.(new THREE.Ray(cam.clone(), dir), -9, 1e9);
+        if (h && h.point.distanceTo(cam) < d - 0.04) {
+          // (l'animal bouge : il compte moins qu'un poteau, voir fitPlate)
+          bad += 0.3;
+          why?.push(`${dx},${dy} : l'animal`);
+        }
+      }
+    }
+    return bad;
+  };
+  /** Près de sa tête, qui bouge (elle se tourne vers nous, vers la friandise) : à éviter si on peut (0 à 3). */
+  const nearHead = (st, x, y) => {
+    const hd = st.live?.('head');
+    if (!hd) return 0;
+    const hc = st.project(hd);
+    const hr = st.projectRadius(hd, 0.34 * u);
+    let n = 0;
+    for (const dx of [-0.28, 0, 0.28]) {
+      const q = st.project(V(x + dx, y, S.back + 0.03));
+      if (Math.hypot(q.x - hc.x, q.y - hc.y) < hr) n++;
+    }
+    return n;
+  };
+  const lastCam = V(1e9, 0, 0);
+  let lastKey = '';
+  function fitPlate(st) {
+    if (!walls.back.visible) return;
+    // (une fois par cadrage : ni la caméra ni le cadre — la zone libre au-dessus d'une réglette — n'ont bougé depuis,
+    // rien à refaire)
+    const key = `${Math.round(st.viewY ?? 0)}|${st.size?.w}|${st.size?.h}|${st.view?.y0}`;
+    if (st.camera.position.distanceToSquared(lastCam) < 1e-4 && key === lastKey) return;
+    lastCam.copy(st.camera.position);
+    lastKey = key;
+    // (les places du monde à jour, même sans image rendue depuis : les rayons s'en servent)
+    g.updateMatrixWorld(true);
+    const bad0 = plateBad(st, plateG.position.x, plateG.position.y);
+    const near0 = nearHead(st, plateG.position.x, plateG.position.y);
+    if (bad0 === 0 && near0 === 0) return;
+    // (la place la plus lisible, la plus proche de la sienne et loin de sa tête ; à défaut d'une place parfaite, la
+    // moins gênée)
+    const score = (bad, near, cost) => bad * 10 + near * 2 + cost;
+    let best = { x: plateG.position.x, y: plateG.position.y, s: score(bad0, near0, 0) };
+    for (let x = -S.halfW + 0.4; x <= S.halfW - 0.4; x += 0.1) {
+      for (const y of [plateY, plateY + 0.3, plateY - 0.25, plateY + 0.6]) {
+        if (y < 0.75 || y > S.eave - 0.15 || (Math.abs(y - win.y) < win.h / 2 + 0.12 && Math.abs(x - win.x) < win.w / 2 + 0.35)) continue;
+        const cost = Math.abs(x - plateX) + Math.abs(y - plateY) * 1.5;
+        if (cost >= best.s) continue;
+        const sc2 = score(plateBad(st, x, y), nearHead(st, x, y), cost);
+        if (sc2 < best.s) best = { x, y, s: sc2 };
+      }
+    }
+    plateG.position.set(best.x, best.y, S.back);
+  }
+
   return {
     group: g,
     props,
@@ -402,6 +514,11 @@ export function barnSet(stage) {
     win,
     walls,
     plate: plateMesh,
+    /** Ce qui gêne la lecture de la plaque à sa place du moment (0 : on la lit en entier ; why : les raisons ; tests). */
+    plateBad: (st, why = null) => {
+      g.updateMatrixWorld(true);
+      return plateBad(st, plateG.position.x, plateG.position.y, why);
+    },
     anchors: { eat },
     layout,
     restore(st) {
@@ -418,6 +535,9 @@ export function barnSet(stage) {
       walls.back.visible = c.z > S.back + 0.02;
       walls.roof.visible = c.y < S.eave - 0.05;
       walls.front.visible = c.z < S.front - 0.02;
+      // (la plaque à son nom : toujours lisible — refait seulement quand le cadrage a changé, et après avoir caché les
+      // murs entre la caméra et l'animal, voir fitPlate)
+      if (st.ready && st.settled?.(0.02)) fitPlate(st);
       motes.update(dt);
       shaft.material.uniforms.uTime.value += dt;
       for (const p of Object.values(props)) p.update?.(dt, st);

@@ -8,8 +8,12 @@ let hoofTrim;
 let goatPlay;
 let barnClean;
 let farmTreat;
+let farmPet;
+let farmBrush;
 beforeAll(async () => {
   await loadFarm();
+  farmPet = await import('../src/ui/minigames/farmPet3d.js');
+  farmBrush = await import('../src/ui/minigames/farmBrush3d.js');
   farmTreat = await import('../src/ui/minigames/farmTreat3d.js');
   barnClean = await import('../src/ui/minigames/barnClean3d.js');
   hoofTrim = await import('../src/ui/minigames/hoofTrim3d.js');
@@ -248,4 +252,26 @@ describe('les petits (agneau, chevreau) : à leur taille', () => {
     expect(worst).toBeLessThan(0.015);
     sc.dispose();
   }, 60000);
+});
+
+describe('la plaque à son nom se lit en entier', () => {
+  for (const c of [{ species: 'goat', breed: 'alpine', name: 'Biquette' }, { species: 'cow', breed: 'holstein', name: 'Marguerite' }, { species: 'sheep', breed: 'merinos', name: 'Flocon' }]) {
+    it(`${c.species} : friandise, caresses, brosse — ni coupée, ni cachée par un poteau, ni sous une réglette`, () => {
+      for (const make of [() => farmTreat.farmTreat3dGame, () => farmPet.farmPet3dGame, () => farmBrush.farmBrush3dGame]) {
+        const { sc, ctx } = farmStage(c);
+        const game = make()(ctx);
+        run(ctx, game, sc, 1.5);
+        // (ses quatre coins dans l'image ; rien du décor devant le nom — au plus un bout de la plaque frôlé par un
+        // poteau — : le nom se lit. L'animal, lui, bouge : il peut passer un moment devant, comme dans une vraie étable)
+        const why = [];
+        sc.decor.plateBad(sc, why);
+        const still = why.filter((w) => !/l'animal/.test(w));
+        const text = still.filter((w) => /hors de l'image/.test(w) || /^(-0\.09|0|0\.09),/.test(w));
+        expect(text, `${make().name} : ${why.join(' ; ')}`).toEqual([]);
+        expect(still.length, `${make().name} : ${why.join(' ; ')}`).toBeLessThanOrEqual(1);
+        game.destroy();
+        sc.dispose();
+      }
+    }, 60000);
+  }
 });

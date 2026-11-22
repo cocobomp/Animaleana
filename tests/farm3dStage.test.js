@@ -17,6 +17,11 @@ let ruminant;
 let animalMod;
 let frameMod;
 let farm3d;
+let treat3d;
+let pet3d;
+let brush3d;
+let shear3d;
+let milk3d;
 beforeAll(async () => {
   fakeDocument();
   ({ t } = await import('../src/i18n.js'));
@@ -27,6 +32,11 @@ beforeAll(async () => {
   animalMod = await import('../src/sim/animal.js');
   frameMod = await import('../src/ui/minigames/frame.js');
   farm3d = await import('../src/ui/minigames/farm3d.js');
+  treat3d = await import('../src/ui/minigames/farmTreat3d.js');
+  pet3d = await import('../src/ui/minigames/farmPet3d.js');
+  brush3d = await import('../src/ui/minigames/farmBrush3d.js');
+  shear3d = await import('../src/ui/minigames/shear3d.js');
+  milk3d = await import('../src/ui/minigames/milk3d.js');
 }, 60000);
 
 const random = Math.random;
@@ -171,4 +181,170 @@ describe('nourrir et abreuver en 3D', () => {
       sc.dispose();
     }, 30000);
   }
+});
+
+describe('friandise, caresses, brosse en 3D', () => {
+  for (const species of ['sheep', 'goat', 'cow']) {
+    it(`${species} : la friandise quand il est calme, juste le bon nombre`, () => {
+      const { a, sc } = makeStage({ species });
+      const ctx = ctxFor(a, sc);
+      const game = treat3d.farmTreat3dGame(ctx);
+      const give = ctx.buttons.find((b) => !b.opts.cls?.includes('stop')).opts;
+      for (let i = 0; i < 600 && game.peek().given < game.peek().n; i++) {
+        if (game.peek().state === 'calm') give.onTap();
+        run(ctx, game, sc, 1 / 15, 1 / 15);
+      }
+      run(ctx, game, sc, 1.5);
+      ctx.pressStop();
+      expect(ctx.finished.why).toBe('just');
+      expect(game.peek().penalties).toBe(0);
+      game.destroy();
+      sc.dispose();
+    }, 30000);
+
+    it(`${species} : caresser doucement l'encolure jusqu'à la zone verte`, () => {
+      const { a, sc } = makeStage({ species });
+      sc.updateCamera(0);
+      const ctx = ctxFor(a, sc);
+      const game = pet3d.farmPet3dGame(ctx);
+      run(ctx, game, sc, 0.5);
+      const spots = pet3d.farmSpots(sc);
+      const c = sc.project(spots.neck);
+      const r = Math.max(12, sc.projectRadius(spots.neck, 0.12 * sc.marks.u));
+      let regions = new Set();
+      for (let k = 0; k < 400 && game.peek().value < game.peek().lo + 0.02; k++) {
+        const p = { x: c.x + Math.cos(k * 0.35) * r, y: c.y + Math.sin(k * 0.35) * r * 0.5 };
+        if (k === 0) game.down(p);
+        ctx.pointer.down = true;
+        game.move(p, true);
+        if (game.peek().region) regions.add(game.peek().region);
+        run(ctx, game, sc, 1 / 30);
+      }
+      game.up();
+      expect([...regions].some((x) => ['neck', 'head', 'body', 'shoulder'].includes(x))).toBe(true);
+      ctx.pressStop();
+      expect(ctx.finished.why).toBe('just');
+      game.destroy();
+      sc.dispose();
+    }, 30000);
+
+    it(`${species} : brosser les sept taches dans le sens du poil`, () => {
+      const { a, sc } = makeStage({ species });
+      sc.updateCamera(0);
+      const ctx = ctxFor(a, sc);
+      const game = brush3d.farmBrush3dGame(ctx);
+      run(ctx, game, sc, 0.3);
+      expect(game.peek().n).toBe(7);
+      for (const q of game.peek().patches) expect(inView(q, ctx.view), `tache (${q.x.toFixed(0)}, ${q.y.toFixed(0)})`).toBe(true);
+      for (let pass = 0; pass < 12 && game.peek().patches.length; pass++) {
+        for (const q of game.peek().patches) {
+          // vers la gauche (vers la queue) : dans le sens du poil
+          game.down({ x: q.x + q.r * 1.5, y: q.y });
+          for (let k = 1; k <= 8; k++) game.move({ x: q.x + q.r * 1.5 - (k / 8) * q.r * 3, y: q.y }, true);
+          game.up();
+        }
+        run(ctx, game, sc, 0.1);
+      }
+      expect(game.peek().patches.length).toBe(0);
+      ctx.pressStop();
+      expect(ctx.finished.why).toBe('just');
+      game.destroy();
+      sc.dispose();
+    }, 30000);
+  }
+});
+
+describe('la tonte en 3D', () => {
+  for (const c of [{ breed: 'merinos' }, { breed: 'islandais_mouton' }, { breed: 'ouessant' }]) {
+    it(`${c.breed} : une passe partout, la toison se coupe vraiment, les flocons tombent, sans toucher au gabarit du jeu`, () => {
+      const { a, sc } = makeStage({ species: 'sheep', ...c });
+      sc.updateCamera(0);
+      const src = sc.model.mesh.geometry;
+      const ctx = ctxFor(a, sc);
+      const game = shear3d.shear3dGame(ctx);
+      run(ctx, game, sc, 0.3);
+      const geo = sc.model.mesh.geometry;
+      expect(geo).not.toBe(src);
+      expect(src.attributes.careCut).toBeUndefined(); // (le gabarit partagé avec les moutons du jeu reste tel quel)
+      expect(game.peek().total).toBeGreaterThan(30);
+      // une passe par rangée de touffes, de la tête vers la queue
+      const rows = new Map();
+      for (const q of game.peek().longAt) {
+        const k = Math.round(q.y / 6);
+        (rows.get(k) ?? rows.set(k, []).get(k)).push(q);
+      }
+      for (const [, row] of rows) {
+        row.sort((p, q) => q.x - p.x);
+        game.down({ x: row[0].x + 4, y: row[0].y });
+        for (let k = 1; k <= 20; k++) game.move({ x: row[0].x + 4 - (k / 20) * (row[0].x - row[row.length - 1].x + 8), y: row[0].y }, true);
+        game.up();
+        run(ctx, game, sc, 0.05);
+      }
+      // ce qui reste long : une petite passe dessus, chacun
+      for (const q of game.peek().longAt) {
+        game.down({ x: q.x + 3, y: q.y });
+        game.move({ x: q.x - 3, y: q.y }, true);
+        game.up();
+      }
+      run(ctx, game, sc, 1);
+      const s = game.peek();
+      expect(s.long).toBe(0);
+      expect(s.value).toBeGreaterThan(0.85);
+      expect(s.fallen).toBeGreaterThan(10);
+      // la laine coupée : la plupart des sommets de laine ont leur coupe
+      const cut = geo.attributes.careCut.array;
+      const nCut = [...cut].filter((x) => x > 0.4).length;
+      expect(nCut).toBeGreaterThan(cut.length * 0.3);
+      ctx.pressStop();
+      expect(['just', 'high']).toContain(ctx.finished.why);
+      game.destroy();
+      expect(sc.model.mesh.geometry).toBe(src);
+      sc.dispose();
+    }, 60000);
+  }
+});
+
+describe('la traite en 3D', () => {
+  for (const c of [{ species: 'goat', breed: 'saanen' }, { species: 'cow', breed: 'holstein' }, { species: 'cow', breed: 'highland' }]) {
+    it(`${c.species} ${c.breed} : ses trayons trouvés, gauche-droite en rythme, le lait monte, la mamelle se vide`, () => {
+      const { a, sc } = makeStage(c);
+      sc.updateCamera(0);
+      const ctx = ctxFor(a, sc);
+      const game = milk3d.milk3dGame(ctx);
+      run(ctx, game, sc, 0.3);
+      const s0 = game.peek();
+      for (const k of ['L', 'R']) expect(inView(s0.teats[k], ctx.view), k).toBe(true);
+      expect(s0.teats.L.x).toBeLessThan(s0.teats.R.x);
+      const full = sc.model.udderFill;
+      const left = ctx.buttons.find((b) => b.text.includes('👈')).opts;
+      const right = ctx.buttons.find((b) => b.text.includes('👉')).opts;
+      for (let i = 0; i < 400; i++) {
+        const s = game.peek();
+        if (s.value >= (s.lo + s.hi) / 2) break;
+        if (s.phase < 0.06) (s.expect === 'L' ? left : right).onTap();
+        run(ctx, game, sc, 1 / 30);
+      }
+      ctx.pressStop();
+      expect(ctx.finished.why).toBe('just');
+      expect(sc.model.udderFill).toBeLessThan(full);
+      game.destroy();
+      sc.dispose();
+    }, 60000);
+  }
+});
+
+describe('la fermeture rend tout', () => {
+  it('le décor, ses accessoires et le rendu sont libérés', () => {
+    const { sc } = makeStage({ species: 'cow' });
+    const r = sc.renderer;
+    let decor = 0;
+    const d0 = sc.decor.dispose;
+    sc.decor.dispose = () => {
+      decor++;
+      d0();
+    };
+    sc.dispose();
+    expect(decor).toBe(1);
+    expect(r.calls.dispose).toBe(1);
+  });
 });

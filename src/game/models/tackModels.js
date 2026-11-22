@@ -705,7 +705,16 @@ export function surcingleModel(color) {
       path.push([base[0] + u[0] * 0.14 * h, base[1] + u[1] * 0.14 * h, 0.055 * sz]);
     }
     mesh(g, tube(path, 0.016, false, 10), leather);
-    mesh(g, tube(path.slice(3, 10), 0.0185, false, 10), suedeMat(0x7a4a26));
+    // (un manchon ouvert qui s'amincit à ses bouts : pas de bouchon de travers, qui se voyait comme une pastille)
+    // (parcouru dans l'autre sens que l'anse : ses faces regardent dehors — le daim n'a qu'une face)
+    mesh(g, loft(path.slice(3, 10).reverse().map((p, i) => ({ p, rx: i === 0 || i === 6 ? 0.0162 : 0.0185, ry: i === 0 || i === 6 ? 0.0162 : 0.0185 })), { radial: q(10, 5), sub: q(2, 1), capStart: false, capEnd: false }), suedeMat(0xb07a44));
+    // (ses deux ligatures de cuir foncé)
+    for (const [i, j] of [[3, 4], [9, 8]]) {
+      const tg = new THREE.Vector3(...path[j]).sub(new THREE.Vector3(...path[i])).normalize();
+      const tie = mesh(g, shared('vaultGripTieShelf', () => new THREE.TorusGeometry(0.0182, 0.004, 6, 12)), edge, path[i]);
+      tie.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tg);
+      tie.position.addScaledVector(tg, 0.004);
+    }
   }
   // Boucle du milieu.
   const top = [0, yc + R0 * 0.85 + 0.018, 0];

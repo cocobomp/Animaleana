@@ -449,11 +449,15 @@ function pieceBatch(parent, add) {
   };
 }
 
-/** Où est le tapis de voltige (repère du modèle) : de devant le garrot jusqu'aux reins, retombant sur les flancs. */
+/**
+ * Où est le tapis de voltige (repère du modèle) : du garrot jusqu'aux reins, retombant sur les flancs. (Le bord avant
+ * s'arrête juste derrière les dernières mèches de la crinière : plus en avant, elles passaient sur le tapis et son
+ * bord paraissait déchiré.)
+ */
 export function vaultPadSpan(model) {
   const { L } = model.dims;
   const zSeat = -L * 0.05;
-  return { z0: zSeat - 0.3 * (L / 1.5), z1: (model.dims.zGirth ?? zSeat + L * 0.25) + 0.08 * (L / 1.5), drop: 30 };
+  return { z0: zSeat - 0.3 * (L / 1.5), z1: (model.dims.zGirth ?? zSeat + L * 0.25) + 0.02 * (L / 1.5), drop: 30 };
 }
 
 /**
@@ -632,9 +636,21 @@ function horseSurcingle(model, gear, add, padT = 0) {
     // Embase cousue sur le dessus, et le haut de l'anse gainé d'un cuir plus clair (là où la main tient).
     batch.put(P.shared('vaultGripBase', () => new THREE.BoxGeometry(0.05, 0.012, 0.15)), edgeM, { pos: p, quat: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n) });
     const grip = p.clone().addScaledVector(up, H - 0.004);
+    // (un manchon ouvert, qui s'amincit à ses deux bouts jusqu'à l'anse : son bouchon, posé de travers dans le coin
+    // de l'anse, dépassait du cuir et se voyait comme une pastille cuivrée)
     const wrap = [];
-    for (let i = 3; i <= 9; i++) wrap.push(path[i]);
-    batch.put(P.tube(wrap, 0.0195 * k, false, 10), P.suedeMat(0x7a4a26));
+    for (let i = 3; i <= 9; i++) {
+      const r = (i === 3 || i === 9 ? 0.0172 : 0.0195) * k;
+      wrap.push({ p: path[i], rx: r, ry: r });
+    }
+    // (dans l'autre sens que l'anse : ses faces regardent dehors — le daim n'a qu'une face, il était invisible)
+    batch.put(loft(wrap.reverse(), { radial: 10, sub: 2, capStart: false, capEnd: false }), P.suedeMat(0xb07a44));
+    // deux ligatures de cuir foncé aux bouts du gainage (comme sur une vraie poignée : elles le tiennent)
+    for (const [i, j] of [[3, 4], [9, 8]]) {
+      const tg = new THREE.Vector3(...path[j]).sub(new THREE.Vector3(...path[i])).normalize();
+      batch.put(P.shared('vaultGripTie', () => new THREE.TorusGeometry(0.0192, 0.0042, 6, 14)), edgeM,
+        { pos: new THREE.Vector3(...path[i]).addScaledVector(tg, 0.004), quat: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), tg) });
+    }
     grips.push(grip);
   }
   // Boucle souple du milieu (pour le pied ou la main), entre les poignées, plus basse.

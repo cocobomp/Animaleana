@@ -28,6 +28,13 @@ import { addStat, isSandbox } from '../sim/profile.js';
 import { t, ta } from '../i18n.js';
 
 const HIP = RIG.hipY;
+/**
+ * La main sur une poignée : le milieu de la paume 4 cm au-dessus du milieu du cuir de l'anse (la paume posée dessus,
+ * les doigts qui l'entourent ; à 2,5 cm, la poignée traversait la main), le poignet plié pour que les doigts
+ * passent devant.
+ */
+const GRIP_UP = 0.04;
+const GRIP_FLEX = 0.55;
 const TAU = Math.PI * 2;
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const smooth = (u) => u * u * (3 - 2 * u);
@@ -187,7 +194,7 @@ function makePoses(mt) {
   // (jambes pendantes : 60 cm sous le dessus du tapis, mais jamais à moins de 32 cm du sol — un grand poney)
   const low = (y) => Math.max(y, G + 0.32);
   const hang = (s, z = 0.06) => leg(s * (w + 0.05), low(-0.6), z, [s * 0.35, -0.1, 1]);
-  const grip = (k, pole) => ({ grip: k, pole, hand: [0.2, 0, 0] });
+  const grip = (k, pole) => ({ grip: k, pole, hand: [GRIP_FLEX, 0, 0] });
   const pad = (x, z, pole) => ({ at: [x, top(z) + 0.035, z], pole, hand: [0.5, 0, 0] });
   const P = {};
   // Assise : en avant, les mains aux poignées ; puis bras écartés (l'assise de base).
@@ -270,7 +277,7 @@ function resolve(P, mt) {
   const toPad = (local) => V(...local).applyQuaternion(q).add(rootPos);
   const end = (s, isArm) => {
     let at;
-    if (s.grip !== undefined) at = mt.grips[s.grip].clone().add(V(0, 0.025, 0));
+    if (s.grip !== undefined) at = mt.grips[s.grip].clone().add(V(0, GRIP_UP, 0));
     else if (s.local) at = toPad(s.local);
     else at = V(...s.at);
     void isArm;
@@ -942,7 +949,7 @@ class VaultingSession extends Session {
     const a = this.av;
     a.root.updateMatrixWorld(true);
     for (let i = 0; i < 2; i++) {
-      _p.copy(mt.grips[i]).add(_w.set(0, 0.025, 0)).applyMatrix4(mt.frame);
+      _p.copy(mt.grips[i]).add(_w.set(0, GRIP_UP, 0)).applyMatrix4(mt.frame);
       a.root.worldToLocal(_p);
       rootToTorso(a, _p);
       armIK(a, i, _p, _w.set(i ? -0.6 : 0.6, -1, -0.4), 0.85);
@@ -957,7 +964,7 @@ class VaultingSession extends Session {
     const a = this.av;
     a.root.updateMatrixWorld(true);
     for (let i = 0; i < 2; i++) {
-      _p.copy(this.mt.grips[i]).add(_w.set(0, 0.025, 0)).applyMatrix4(this.mt.frame);
+      _p.copy(this.mt.grips[i]).add(_w.set(0, GRIP_UP, 0)).applyMatrix4(this.mt.frame);
       a.root.worldToLocal(_p);
       rootToTorso(a, _p);
       armIK(a, i, _p, _w.set(i ? -0.6 : 0.6, -1, -0.4), 0.9);

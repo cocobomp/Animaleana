@@ -683,3 +683,113 @@ export function lantern(keep) {
   g.add(base);
   return g;
 }
+
+// ---------------------------------------------------------------- friandises de la ferme
+
+/**
+ * La friandise de chaque espèce (comme le jeu dessiné : 🍏 pour le mouton, 🥬 pour la chèvre, 🌽 pour la vache) :
+ * une pomme verte, des feuilles de chou, un épi de maïs. Origine au milieu ; posée à plat dans la main.
+ */
+export function farmTreat(species, keep) {
+  const g = new THREE.Group();
+  if (species === 'goat') {
+    // trois feuilles de chou froissées, nervures claires
+    const tex = keep(canvasTex(64, 64, (c) => {
+      const r = rng(41);
+      c.fillStyle = '#5fae3e';
+      c.fillRect(0, 0, 64, 64);
+      for (let i = 0; i < 200; i++) {
+        c.fillStyle = r() < 0.5 ? 'rgba(20,70,10,0.12)' : 'rgba(220,255,180,0.14)';
+        c.fillRect(r() * 64, r() * 64, 2, 2);
+      }
+      c.strokeStyle = 'rgba(225,245,190,0.85)';
+      c.lineWidth = 3;
+      c.beginPath();
+      c.moveTo(32, 64);
+      c.lineTo(32, 0);
+      c.stroke();
+      c.lineWidth = 1.5;
+      for (let y = 8; y < 60; y += 9) {
+        c.beginPath();
+        c.moveTo(32, y + 6);
+        c.quadraticCurveTo(18, y + 2, 4, y - 4);
+        c.moveTo(32, y + 6);
+        c.quadraticCurveTo(46, y + 2, 60, y - 4);
+        c.stroke();
+      }
+    }, { key: 'cabbageLeaf' }));
+    const mat = keep(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, side: THREE.DoubleSide }));
+    for (let i = 0; i < 3; i++) {
+      const geo = keep(new THREE.SphereGeometry(0.055, 14, 10, 0, Math.PI * 1.1, 0, Math.PI * 0.55));
+      const p = geo.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const x = p.getX(k);
+        const y = p.getY(k);
+        const z = p.getZ(k);
+        p.setXYZ(k, x * 1.25, y * 0.55 + Math.sin(x * 60 + z * 40) * 0.004, z);
+      }
+      geo.computeVertexNormals();
+      const leaf = shadowed(new THREE.Mesh(geo, mat));
+      leaf.rotation.set(-0.2 + i * 0.15, i * 2.1, 0.1 * i);
+      leaf.position.set((i - 1) * 0.012, 0.01 + i * 0.006, (i - 1) * 0.01);
+      g.add(leaf);
+    }
+  } else if (species === 'cow') {
+    // épi de maïs : grains en rangées, deux feuilles de l'enveloppe ouvertes
+    const tex = keep(canvasTex(64, 128, (c) => {
+      c.fillStyle = '#c98a14';
+      c.fillRect(0, 0, 64, 128);
+      for (let y = 0; y < 128; y += 7) {
+        for (let x = (y / 7) % 2 ? 0 : 4; x < 64; x += 8) {
+          const gr = c.createRadialGradient(x + 3, y + 3, 0, x + 3, y + 3, 4);
+          gr.addColorStop(0, '#ffe27a');
+          gr.addColorStop(0.7, '#f2bc2e');
+          gr.addColorStop(1, '#b07a10');
+          c.fillStyle = gr;
+          c.beginPath();
+          c.ellipse(x + 3.5, y + 3.2, 3.6, 3.2, 0, 0, Math.PI * 2);
+          c.fill();
+        }
+      }
+    }, { key: 'cornCob' }));
+    const corn = keep(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.45 }));
+    const pts = [];
+    for (let i = 0; i <= 12; i++) {
+      const k = i / 12;
+      pts.push(new THREE.Vector2(Math.max(0.002, 0.021 * Math.sin(Math.min(1, k * 1.3 + 0.12) * Math.PI * 0.55) * (1 - 0.35 * k)), (k - 0.5) * 0.17));
+    }
+    const cob = shadowed(new THREE.Mesh(keep(new THREE.LatheGeometry(pts, 18)), corn));
+    cob.rotation.z = Math.PI / 2;
+    g.add(cob);
+    const husk = keep(new THREE.MeshStandardMaterial({ color: 0xb7c27a, roughness: 0.7, side: THREE.DoubleSide }));
+    for (let i = 0; i < 3; i++) {
+      const geo = keep(new THREE.PlaneGeometry(0.11, 0.035, 6, 1));
+      const p = geo.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const x = p.getX(k);
+        p.setXYZ(k, x, p.getY(k) * (0.5 + (x + 0.055) * 8), -Math.pow(Math.max(0, -x + 0.02), 2) * 6);
+      }
+      geo.computeVertexNormals();
+      const h = shadowed(new THREE.Mesh(geo, husk));
+      h.position.set(0.1, 0, 0);
+      h.rotation.set(i * 2.1, 0.5 - i * 0.3, 0.25);
+      g.add(h);
+    }
+  } else {
+    // pomme verte
+    const pts = [];
+    for (let i = 0; i <= 16; i++) {
+      const a = (i / 16) * Math.PI;
+      const r = Math.sin(a) * (0.038 + 0.006 * Math.sin(a * 2));
+      pts.push(new THREE.Vector2(Math.max(0.0001, r), -Math.cos(a) * 0.036 - (i < 3 || i > 13 ? 0.004 : 0)));
+    }
+    const skin = keep(new THREE.MeshStandardMaterial({ color: 0x9cc94a, roughness: 0.32, map: keep(noiseTexture('#a8d058', 0.2, 8, 64)) }));
+    const apple = shadowed(new THREE.Mesh(keep(new THREE.LatheGeometry(pts, 24)), skin));
+    g.add(apple);
+    const stem = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.003, 0.004, 0.026, 6)), keep(new THREE.MeshStandardMaterial({ color: 0x5a3a1c }))));
+    stem.position.y = 0.04;
+    stem.rotation.z = 0.3;
+    g.add(stem);
+  }
+  return g;
+}

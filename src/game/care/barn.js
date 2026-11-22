@@ -325,7 +325,8 @@ export function barnSet(stage) {
    * bouche et le robinet), 'rest' (un peu de foin au râtelier : il a déjà mangé ; tête libre pour la friandise, les
    * caresses, la brosse).
    */
-  const troughRest = V(S.halfW - tr.r - 0.12, 0, S.front - 0.55 - tr.len / 2);
+  // (au repos, l'abreuvoir est le long du mur du fond, à droite : derrière lui, jamais entre nous et lui)
+  const troughRest = V(S.halfW - tr.len / 2 - 0.25, 0, S.back + tr.r + 0.1);
   const baseX = stage.holder.position.x;
   const layout = (which) => {
     props.tap.group.visible = which === 'water';
@@ -348,7 +349,7 @@ export function barnSet(stage) {
       props.tap.hookUp(rim.clone().sub(tap).divideScalar(s), V(-1, 0, -0.1), (0.06 - tap.y) / s);
     } else {
       props.trough.group.position.set(troughRest.x, tr.r + 0.1, troughRest.z);
-      props.trough.group.rotation.y = 0;
+      props.trough.group.rotation.y = Math.PI / 2;
       props.trough.setFloor(-(tr.r + 0.1) + 0.04);
     }
   };

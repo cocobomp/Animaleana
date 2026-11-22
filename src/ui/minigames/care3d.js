@@ -19,13 +19,16 @@ import { wash3dGame } from './wash3d.js';
 import { barnSet } from '../../game/care/barn.js'; // la bergerie, la chèvrerie, l'étable
 import { RUMINANT_FIT } from '../../game/care/ruminant.js'; // moutons, chèvres, vaches : leurs repères, leur vie
 import { farmFeed3dGame, farmWater3dGame } from './farm3d.js';
+import { farmTreat3dGame } from './farmTreat3d.js';
+import { farmPet3dGame } from './farmPet3d.js';
+import { farmBrush3dGame } from './farmBrush3d.js';
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
 export const CARE3D_GAMES = {
   horse: { feed: ration3dGame, water: water3dGame, treat: treat3dGame, pet: pet3dGame, brush: pansage3dGame, wash: wash3dGame },
 };
 // Moutons, chèvres, vaches (src/ui/minigames/farm3d.js et suivants).
-for (const sp of ['sheep', 'goat', 'cow']) CARE3D_GAMES[sp] = { feed: farmFeed3dGame, water: farmWater3dGame };
+for (const sp of ['sheep', 'goat', 'cow']) CARE3D_GAMES[sp] = { feed: farmFeed3dGame, water: farmWater3dGame, treat: farmTreat3dGame, pet: farmPet3dGame, brush: farmBrush3dGame };
 
 /** Le jeu 3D de ce soin pour cet animal, ou null. */
 export function care3dGameFor(a, action) {

@@ -31,15 +31,21 @@ export function farmTreat3dGame(ctx) {
     return x;
   };
   const hand = handModel(own, avatarHand(sc.game?.profile));
-  hand.scale.setScalar(1.1);
+  // (une main d'enfant — la joueuse —, un peu plus petite devant un agneau ou un chevreau ; la friandise à la taille
+  // de sa bouche : un quartier de pomme pour un agneau, pas une pomme plus grosse que sa tête)
+  const small = THREE.MathUtils.clamp((0.62 - u) / 0.3, 0, 1);
+  hand.scale.setScalar(1.1 - 0.25 * small);
   sc.scene.add(hand);
   const treat = farmTreat(sp, own);
+  treat.scale.multiplyScalar(THREE.MathUtils.clamp(u / 0.7, 0.5, 1.15) / (1.1 - 0.25 * small) * 1.1);
   hand.add(treat);
   treat.position.set(0.012, sp === 'cow' ? 0.03 : 0.04, 0);
   if (sp === 'cow') treat.rotation.y = Math.PI / 2 - 0.3;
   // (toute la tête, cornes et oreilles comprises, même quand il la tourne ; la main au repos)
   const head = [L.muzzle, L.poll.clone().add(v3(0, 0.2 * u, 0)), ...L.ears.map((e) => e.clone().add(v3(0, 0.1 * u, 0))), L.withers.clone().lerp(L.poll, 0.5), L.chest, L.muzzle.clone().add(v3(0.12 * u, 0, 0))];
-  sc.frame([...head, rest.clone().add(v3(0, -0.05, 0.08)), rest.clone().add(v3(-0.25, 0, 0))], { dir: [0.6, 0.14, 1], pad: 1.25, now: true });
+  // (de trois quarts, à hauteur de sa tête ; un petit, on le regarde d'en haut, comme on se penche vers lui — au ras
+  // de la paille, les brins devenaient des planches et l'allée en terre prenait le bas de l'image)
+  sc.frame([...head, rest.clone().add(v3(0, -0.05, 0.08)), rest.clone().add(v3(-0.25, 0, 0))], { dir: [0.6, 0.14 + 0.55 * small, 1], pad: 1.25, now: true });
 
   let given = 0;
   let pen = 0;

@@ -7,8 +7,10 @@ import { loadFarm, farmStage, run, inView } from './fixtures/farmStage.js';
 let hoofTrim;
 let goatPlay;
 let barnClean;
+let farmTreat;
 beforeAll(async () => {
   await loadFarm();
+  farmTreat = await import('../src/ui/minigames/farmTreat3d.js');
   barnClean = await import('../src/ui/minigames/barnClean3d.js');
   hoofTrim = await import('../src/ui/minigames/hoofTrim3d.js');
   goatPlay = await import('../src/ui/minigames/goatPlay3d.js');
@@ -200,4 +202,50 @@ describe('nettoyer l\'étable de la vache', () => {
       sc.dispose();
     }, 60000);
   }
+});
+
+describe('les petits (agneau, chevreau) : à leur taille', () => {
+  it('agneau d\'Ouessant, friandise : vu d\'en haut, un morceau à la taille de sa bouche, une main d\'enfant', () => {
+    const sizes = {};
+    for (const young of [false, true]) {
+      const { sc, ctx } = farmStage({ species: 'sheep', breed: 'ouessant', young, name: 'Flocon' });
+      const before = new Set(sc.scene.children);
+      const game = farmTreat.farmTreat3dGame(ctx);
+      run(ctx, game, sc, 0.3);
+      const hand = sc.scene.children.find((o) => !before.has(o) && o.isGroup);
+      const box = new THREE.Box3().setFromObject(hand.children[hand.children.length - 1]);
+      const head = sc.marks.poll.distanceTo(sc.marks.muzzle);
+      // (la caméra : son angle au-dessus de l'horizontale)
+      const d = sc.camTarget.clone().sub(sc.camera.position);
+      const pitch = Math.atan2(-d.y, Math.hypot(d.x, d.z));
+      sizes[young ? 'petit' : 'adulte'] = { treat: box.getSize(new THREE.Vector3()).length(), head, hand: hand.scale.x, pitch };
+      game.destroy();
+      sc.dispose();
+    }
+    // la friandise plus petite que sa tête ; la main plus petite que pour un adulte ; on le regarde d'en haut
+    expect(sizes.petit.treat).toBeLessThan(sizes.petit.head);
+    expect(sizes.petit.hand).toBeLessThan(sizes.adulte.hand);
+    // (l'Ouessant adulte est déjà petit : on le regarde aussi un peu d'en haut ; l'agneau davantage)
+    expect(sizes.petit.pitch).toBeGreaterThan(sizes.adulte.pitch + 0.05);
+    expect(sizes.petit.pitch).toBeGreaterThan(0.45);
+  }, 60000);
+  it('la paille posée sur la litière (pas de brins en l\'air)', async () => {
+    const { litterHeight } = await import('../src/game/care/farmBarn.js');
+    const { sc } = farmStage({ species: 'sheep', breed: 'ouessant', young: true });
+    let strands = null;
+    sc.decor.group.traverse((o) => {
+      if (o.isInstancedMesh && o.geometry.parameters?.width === 1 && o.geometry.parameters?.height === 0.004) strands = o;
+    });
+    expect(strands).toBeTruthy();
+    const m4 = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    let worst = 0;
+    for (let i = 0; i < strands.count; i++) {
+      strands.getMatrixAt(i, m4);
+      p.setFromMatrixPosition(m4);
+      worst = Math.max(worst, p.y - litterHeight(sc.decor.dims, p.x, p.z));
+    }
+    expect(worst).toBeLessThan(0.015);
+    sc.dispose();
+  }, 60000);
 });

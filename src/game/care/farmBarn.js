@@ -41,7 +41,7 @@ export function barnSet(stage) {
   stage.measure();
   const L0 = stage.marks;
   const u = L0.u; // (hauteur au garrot : l'unité de tout le décor)
-  const kp = clamp(u / 0.72, 0.55, 2.2); // (taille des accessoires : 1 pour un mouton adulte)
+  const kp = clamp(u / 0.72, 0.42, 2.2); // (taille des accessoires : 1 pour un mouton adulte ; un agneau d'Ouessant : 0,42)
   const box = stage.box;
   const lenX = box.max.x - box.min.x;
   const halfZ = (box.max.z - box.min.z) / 2;
@@ -555,12 +555,13 @@ function strawStrands(keep, n, S) {
   for (let i = 0; i < n; i++) {
     const x = (rnd() * 2 - 1) * (S.halfW - 0.05);
     const z = S.back + 0.05 + rnd() * (S.front - S.back - 0.1);
-    const edge = Math.max(0, 1 - Math.min(S.halfW - Math.abs(x), z - S.back) / 0.55);
-    const y = 0.05 + rnd() * 0.04 + 0.12 * edge * edge;
-    e.set((rnd() - 0.5) * 0.5, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.6);
+    // (posés sur la litière, à plat ou presque : ils flottaient jusqu'à 6 cm au-dessus, et de près — un agneau, la
+    // caméra basse — on aurait dit des planches en l'air)
+    const y = litterHeight(S, x, z) + 0.003 + rnd() * 0.008;
+    e.set((rnd() - 0.5) * 0.16, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.2);
     q.setFromEuler(e);
-    const len = 0.08 + rnd() * 0.22;
-    m4.compose(V(x, y, z), q, V(len, 1, 1 + rnd()));
+    const len = 0.08 + rnd() * 0.2;
+    m4.compose(V(x, y, z), q, V(len, 0.8, 0.6 + 0.5 * rnd()));
     inst.setMatrixAt(i, m4);
     inst.setColorAt(i, c.setHex(palette[Math.floor(rnd() * palette.length)]).multiplyScalar(0.85 + rnd() * 0.3));
   }

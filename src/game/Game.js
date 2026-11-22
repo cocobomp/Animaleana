@@ -16,7 +16,7 @@ import { REAL_RABBIT_KEYS, realRabbitBase } from './models/rabbitReal.js'; // la
 import { Weather3D } from './Weather3D.js';
 import { HorseBreath } from './HorseBreath.js'; // 🌬️ son souffle dans le froid
 import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
-import { Player, CameraRig } from './Player.js';
+import { Player, CameraRig, placeRidePhotoCamera, restorePhotoCamera } from './Player.js';
 import { AnimalEntity } from './AnimalEntity.js';
 import { Input, MENU_CODES } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
@@ -1064,6 +1064,8 @@ export class Game {
       if (!e) return;
       // Comme les photos de balade (src/game/Activities.js takePhoto) : en 16:10, le centre de l'écran ; pas monté,
       // autour de lui (sur un téléphone en hauteur, la bande gardée est étroite : il n'était pas dans la photo).
+      // Monté : une prise à part, de trois quarts avant (placeRidePhotoCamera) — la caméra du jeu, derrière, ne
+      // montrait que le dos de la cavalière — puis la caméra est remise.
       const src = this.renderer.domElement;
       const ratio = PHOTO.w / PHOTO.h;
       let sw = src.width;
@@ -1074,7 +1076,8 @@ export class Game {
       }
       let sx = (src.width - sw) / 2;
       let sy = (src.height - sh) / 2;
-      if (e !== this.player.mount) {
+      const mounted = e === this.player.mount;
+      if (!mounted) {
         const v = (this.photoAt ??= new THREE.Vector3()).copy(e.position);
         v.y += 1;
         if (v.distanceTo(this.camera.position) > 25) return;
@@ -1083,12 +1086,26 @@ export class Game {
         sx = THREE.MathUtils.clamp(((1 + v.x) / 2) * src.width - sw / 2, 0, src.width - sw);
         sy = THREE.MathUtils.clamp(((1 - v.y) / 2) * src.height - sh / 2, 0, src.height - sh);
       }
-      renderForPhoto(this);
       const c = document.createElement('canvas');
       c.width = PHOTO.w;
       c.height = PHOTO.h;
       const ctx = c.getContext('2d');
-      ctx.drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      let saved = null;
+      const avatar = this.player.avatar?.root;
+      const hidden = mounted && avatar && !avatar.visible;
+      try {
+        if (mounted) {
+          const sun = this.world?.sun;
+          const dir = sun ? (this.photoSun ??= new THREE.Vector3()).subVectors(sun.position, sun.target.position) : null;
+          saved = placeRidePhotoCamera(this.camera, this.player, this.world, { band: sh / src.height, sun: dir });
+          if (hidden) avatar.visible = true; // (vue de la selle : la cavalière est cachée)
+        }
+        renderForPhoto(this);
+        ctx.drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      } finally {
+        restorePhotoCamera(this.camera, saved);
+        if (hidden) avatar.visible = false;
+      }
       if (!attachPhoto(prof, a, id, c.toDataURL('image/jpeg', PHOTO.q))) return;
       e.emit('📸', 2);
       this.save();

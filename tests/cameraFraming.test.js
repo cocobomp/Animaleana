@@ -1,10 +1,12 @@
-// Bien montrer le cheval (étape 5) : à cheval sur un écran en hauteur, la caméra se met un peu de côté (on voit
-// l'encolure et la tête, pas seulement la croupe) ; au concours de beauté, elle cadre l'animal mené avec l'enfant.
+// Bien montrer le cheval (étape 5) : à cheval, la caméra se met de trois quarts arrière, à droite du cheval (on voit
+// l'encolure et la tête, pas seulement la croupe : voir aussi tests/cameras-ride.test.js) ; au concours de beauté,
+// elle cadre l'animal mené avec l'enfant.
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 
 let CameraRig;
-let MOUNT_SIDE;
+let RIDE_CAM;
+let rideAzimuth;
 beforeAll(async () => {
   const mem = new Map();
   globalThis.localStorage = globalThis.localStorage ?? {
@@ -19,7 +21,7 @@ beforeAll(async () => {
     addEventListener() {}, hidden: false, documentElement: { lang: 'fr' }, body: { classList: { add() {}, remove() {} } }, getElementById: () => null, createElement: () => ({ getContext: () => null, style: {} }),
   };
   globalThis.matchMedia = globalThis.matchMedia ?? (() => ({ matches: true }));
-  ({ CameraRig, MOUNT_SIDE } = await import('../src/game/Player.js'));
+  ({ CameraRig, RIDE_CAM, rideAzimuth } = await import('../src/game/Player.js'));
 }, 60000);
 
 const world = { insideBuilding: () => false, heightAt: () => 0 };
@@ -31,7 +33,7 @@ const rider = (mount) => ({
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 describe('caméra du jeu', () => {
-  it('à cheval sur un téléphone en hauteur : décalée sur le côté (côté montoir), plus près, la tête du cheval dans le cadre', () => {
+  it('à cheval sur un téléphone en hauteur : de trois quarts arrière, à droite du cheval, plus près, la tête du cheval dans le cadre', () => {
     const cam = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
     const rig = new CameraRig(cam);
     rig.yaw = 0.4;
@@ -39,31 +41,41 @@ describe('caméra du jeu', () => {
     for (let i = 0; i < 900; i++) rig.update(1 / 30, still(), p, world);
     // (le lacet, qui oriente le joystick, reste derrière le cheval : sinon il tournerait en rond)
     expect(Math.abs(wrap(rig.yaw - p.heading))).toBeLessThan(0.03);
-    // caméra à gauche de la ligne du cheval (repère : avant = cap, gauche = (cos, -sin))
+    // caméra à droite de la ligne du cheval (repère : avant = cap, gauche = (cos, -sin)), derrière lui
     const fwd = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
     const left = new THREE.Vector3(Math.cos(p.heading), 0, -Math.sin(p.heading));
     const c = cam.position.clone().setY(0);
-    // (caméra décalée de 0,85 × MOUNT_SIDE ; sa cible reste sur le cheval : il est au milieu de l'écran)
-    expect(c.dot(left)).toBeGreaterThan(MOUNT_SIDE * 0.8);
-    expect(c.dot(fwd)).toBeLessThan(-4);
-    // plus près qu'avant (dist + 2 = 9 m) : vers 6,5 m
+    expect(c.dot(left)).toBeLessThan(-2.5);
+    expect(c.dot(fwd)).toBeLessThan(-3.5);
+    // angle depuis l'arrière ≈ RIDE_CAM.az (vu de la visée, un peu devant la selle)
+    const aim = fwd.clone().multiplyScalar(RIDE_CAM.ahead);
+    const rel = Math.atan2(-c.clone().sub(aim).dot(left), -c.clone().sub(aim).dot(fwd));
+    expect(rel).toBeCloseTo(rideAzimuth(1), 1);
+    // plus près qu'avant (9 m) : vers 7 m de l'œil du cavalier
     const d = cam.position.distanceTo(new THREE.Vector3(0, p.eyeHeight, 0));
-    expect(d).toBeLessThan(rig.dist + 0.5);
-    expect(d).toBeGreaterThan(rig.dist - 1.5);
+    expect(d).toBeLessThan(7.5);
+    expect(d).toBeGreaterThan(5);
   });
 
-  it('écran en largeur, ou à pied : la caméra revient derrière, comme avant', () => {
+  it('écran en largeur : à cheval aussi de trois quarts (plus près) ; à pied : la caméra revient derrière, comme avant', () => {
     const cam = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 500);
     const rig = new CameraRig(cam);
     rig.yaw = 0;
     const p = rider({ scale: 1, position: new THREE.Vector3() });
     for (let i = 0; i < 900; i++) rig.update(1 / 30, still(), p, world);
     expect(Math.abs(wrap(rig.yaw - p.heading))).toBeLessThan(0.03);
+    const left = new THREE.Vector3(Math.cos(p.heading), 0, -Math.sin(p.heading));
+    expect(cam.position.clone().setY(0).dot(left)).toBeLessThan(-2);
+    expect(cam.position.distanceTo(new THREE.Vector3(0, p.eyeHeight, 0))).toBeLessThan(6);
     const cam2 = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
     const rig2 = new CameraRig(cam2);
     const walker = rider(null);
     for (let i = 0; i < 900; i++) rig2.update(1 / 30, still(), walker, world);
     expect(Math.abs(wrap(rig2.yaw - walker.heading))).toBeLessThan(0.03);
+    // (à pied : juste derrière, à 7 m)
+    const back = cam2.position.clone().sub(walker.position).setY(0);
+    const lw = new THREE.Vector3(Math.cos(walker.heading), 0, -Math.sin(walker.heading));
+    expect(Math.abs(back.dot(lw))).toBeLessThan(0.05);
   });
 
   it('concours de beauté : la caméra vise entre l\'enfant et l\'animal mené, et recule', () => {
@@ -88,7 +100,7 @@ describe('caméra du jeu', () => {
     expect(cam.position.distanceTo(alone)).toBeLessThan(0.05);
   });
 
-  it('à cheval en portrait : le cheval entier au milieu de l\'écran (croupe et queue loin des boutons du bas à droite)', () => {
+  it('à cheval en portrait : le cheval entier à l\'écran, au-dessus des boutons du bas (croupe et queue au-dessus du joystick)', () => {
     const cam = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
     const rig = new CameraRig(cam);
     rig.yaw = 0.4;
@@ -97,31 +109,36 @@ describe('caméra du jeu', () => {
     cam.updateMatrixWorld(true);
     const fwd = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
     const at = (back, y) => new THREE.Vector3(0, y, 0).addScaledVector(fwd, -back).project(cam);
-    // croupe (1 m derrière le cavalier), bout de la queue, sabots arrière, tête (1,6 m devant)
-    const rump = at(1.0, 1.5);
-    const tail = at(1.3, 0.9);
-    const hoof = at(1.0, 0);
-    const head = at(-1.6, 1.9);
-    for (const q of [rump, tail, head]) expect(Math.abs(q.x)).toBeLessThan(0.6);
-    // (rangée des boutons ronds et de « Descendre » : le bas de l'écran, ndc y < −0,72 environ)
-    expect(hoof.y).toBeGreaterThan(-0.72);
-    expect(tail.x).toBeLessThan(0.45);
+    // bout de la queue (1,35 m derrière le cavalier), croupe, sabots arrière, tête (1,6 m devant), casque
+    const tail = at(1.35, 0.9);
+    const rump = at(0.75, 1.5);
+    const hoof = at(0.6, 0);
+    const head = at(-1.6, 1.8);
+    const helmet = at(0, p.eyeHeight - 1.15 + 1.05); // (haut du casque : la selle + 1,05 m)
+    for (const q of [rump, tail, head, hoof]) expect(Math.abs(q.x)).toBeLessThan(0.9);
+    // (la tête à droite de la cavalière, pas sous la colonne des boutons d'allure : x < 0,56)
+    expect(head.x).toBeGreaterThan(helmet.x);
+    expect(head.x).toBeLessThan(0.56);
+    // (rangée des boutons ronds et du joystick : le bas de l'écran, ndc y < −0,6 ; bandeau du haut : y > 0,5)
+    expect(hoof.y).toBeGreaterThan(-0.6);
+    expect(helmet.y).toBeLessThan(0.48);
+    expect(tail.x).toBeLessThan(head.x);
   });
 
-  it('à cheval en portrait le long d\'un mur côté montoir : le décalage de côté ne fait pas entrer la caméra dans le bâtiment', () => {
+  it('à cheval en portrait le long d\'un mur à sa droite : la caméra ne rentre pas dans le bâtiment (elle revient derrière)', () => {
     const cam = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
     const rig = new CameraRig(cam);
     rig.yaw = 0;
     const p = { ...rider({ scale: 1, position: new THREE.Vector3() }), heading: 0 };
-    // mur à 1,2 m à gauche du cheval (gauche = +x pour un cap 0) : un bâtiment au-delà
-    const walled = { insideBuilding: (x) => x > 1.2, heightAt: () => 0 };
+    // mur à 1,2 m à droite du cheval (droite = −x pour un cap 0) : un bâtiment au-delà
+    const walled = { insideBuilding: (x) => x < -1.2, heightAt: () => 0 };
     for (let i = 0; i < 900; i++) rig.update(1 / 30, still(), p, walled);
     expect(walled.insideBuilding(cam.position.x, cam.position.y, cam.position.z)).toBe(false);
-    // et sans mur, il est bien là (au-delà de 1,2 m)
+    // et sans mur, elle est bien là (au-delà de 1,2 m)
     const rig2 = new CameraRig(new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500));
     rig2.yaw = 0;
     for (let i = 0; i < 900; i++) rig2.update(1 / 30, still(), p, world);
-    expect(rig2.camera.position.x).toBeGreaterThan(1.2);
+    expect(rig2.camera.position.x).toBeLessThan(-1.2);
   });
 
   it('concours de beauté : un grand décor entre la caméra et l\'enfant (arche, panneau) la fait passer devant, pas derrière', () => {

@@ -96,6 +96,8 @@ export function petNails3dGame(ctx) {
   const sc = ctx.scene;
   const sp = sc.species;
   sc.decor.layout('rest');
+  // (gros plan : le poil remplit l'écran ; un peu moins de pixels, invisible de si près, l'image coûte moins)
+  sc.closeUp?.(0.7);
   const md = sc.model;
   const L = sc.marks;
   const keep = own();
@@ -469,6 +471,7 @@ export function petNails3dGame(ctx) {
     },
     destroy() {
       m.pose = null;
+      sc.closeUp?.(1);
       for (const c of claws) c.g.parent?.remove(c.g);
       for (const p of pads) p.parent?.remove(p);
       sc.scene.remove(tool);

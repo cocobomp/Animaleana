@@ -429,6 +429,17 @@ export class PetStage extends CareStage {
     }
   }
 
+  /**
+   * Gros plan (les griffes) : le poil remplit tout l'écran, et chaque point de poil coûte cher à peindre ; on peint
+   * un peu moins de points (densité de pixels × k), ce qui ne se voit pas de si près. closeUp(1) : comme avant.
+   */
+  closeUp(k = 1) {
+    const r = Math.max(1, (this.pixelRatio ?? 1) * k);
+    if (Math.abs(r - this.renderer.getPixelRatio?.()) < 1e-3) return;
+    this.renderer.setPixelRatio(r);
+    if (this.size) this.renderer.setSize(this.size.w, this.size.h, false);
+  }
+
   /** Le doigt sur l'animal ? Régions des modèles de compagnie (petRegionOf). */
   pickAnimal(x, y) {
     const h = super.pickAnimal(x, y);

@@ -140,6 +140,9 @@ function penRig(ctx, kind) {
   // l'enfant : son avatar (ses couleurs, sa coiffure)
   const look = sc.game?.profile?.avatar ?? DEFAULT_AVATAR;
   const kid = buildAvatar(look, 31);
+  // (une enfant d'une dizaine d'années : un peu plus petite que l'avatar du jeu, 1,55 m)
+  const KID = 0.88;
+  kid.root.scale.setScalar(KID);
   kid.root.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = true;
@@ -148,6 +151,7 @@ function penRig(ctx, kind) {
   });
   sc.scene.add(kid.root);
   const kidLife = { speed: 0, riding: false, carry: false, busy: true, noGestures: true };
+  const kidR = clamp(0.12 * R, 0.25, 0.6); // (le petit cercle qu'elle marche, à la longe)
   let kidPhase = 0;
 
   // l'anneau « juste ce qu'il faut », peint sur le sable entre la piste et la clôture
@@ -339,11 +343,16 @@ function penRig(ctx, kind) {
         pts.push(p, p.clone().setY(top));
       }
     }
-    pts.push(V(0, 1.75, 0));
+    pts.push(V(0, 1.75 * KID, 0));
     // (le premier cadrage à la vraie taille de la toile : sans fondu)
     const first = !framed && w > 2;
     if (w > 2) framed = true;
-    sc.frame(pts, { dir: portrait ? [0, 0.78, 1] : [0, 0.62, 1], pad: 1.03, now: now || first || !sc.ready });
+    // (assez haute pour que l'enfant, au milieu, ne cache jamais le cheval qui passe derrière elle : dans un petit rond
+    // de poney, la caméra monte — l'ombre de sa tête sur le sable s'arrête avant le cheval)
+    const kidH = 1.75 * KID + 0.05;
+    const room = Math.max(0.5, R - kidR - 0.3 - 0.25 * Lb);
+    const k = Math.max(portrait ? 0.78 : 0.62, (kidH / room) * 1.05);
+    sc.frame(pts, { dir: [0, k, 1], pad: 1.03, now: now || first || !sc.ready });
   }
   /** Décalage de la jauge des allures vers le bas de la scène (espace du cadre). */
   const gaugeDy = () => Math.max(0, (ctx.view?.y1 ?? 360) - 8 - GAIT_GAUGE.bottom);
@@ -383,7 +392,7 @@ function penRig(ctx, kind) {
   }
 
   return {
-    sc, md, R, F, Lb, u, scale, ss, plan, pen, kid, kidPos, keep,
+    sc, md, R, F, Lb, u, scale, ss, plan, pen, kid, kidPos, keep, kidR,
     frameCamera, gaugeDy, paintRing, checkAt, moveKid, reach,
     get kidHeading() { return kidHeading; },
     listen(s = 1.8) { earT = Math.max(earT, s); },
@@ -475,7 +484,7 @@ export function lunge3dGame(ctx) {
     sc.holder.rotation.y = headingOf(Math.sin(phi), -Math.cos(phi));
   };
   place();
-  const rc = clamp(0.12 * R, 0.25, 0.6); // (le petit cercle de l'enfant)
+  const rc = rig.kidR; // (le petit cercle de l'enfant)
   rig.kidPos.set(Math.cos(phi) * rc, 0, Math.sin(phi) * rc);
   rig.frameCamera(true);
   sc.pen = { toWorld: (x, y) => rig.plan.toWorld(x, y), toLogic: rig.plan.toLogic, R, F: rig.F };

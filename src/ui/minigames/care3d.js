@@ -22,6 +22,8 @@ import { farmFeed3dGame, farmWater3dGame } from './farm3d.js';
 import { farmTreat3dGame } from './farmTreat3d.js';
 import { farmPet3dGame } from './farmPet3d.js';
 import { farmBrush3dGame } from './farmBrush3d.js';
+import { shear3dGame } from './shear3d.js';
+import { milk3dGame } from './milk3d.js';
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
 export const CARE3D_GAMES = {
@@ -29,6 +31,9 @@ export const CARE3D_GAMES = {
 };
 // Moutons, chèvres, vaches (src/ui/minigames/farm3d.js et suivants).
 for (const sp of ['sheep', 'goat', 'cow']) CARE3D_GAMES[sp] = { feed: farmFeed3dGame, water: farmWater3dGame, treat: farmTreat3dGame, pet: farmPet3dGame, brush: farmBrush3dGame };
+CARE3D_GAMES.sheep.shear = shear3dGame;
+CARE3D_GAMES.goat.milk = milk3dGame;
+CARE3D_GAMES.cow.milk = milk3dGame;
 
 /** Le jeu 3D de ce soin pour cet animal, ou null. */
 export function care3dGameFor(a, action) {

@@ -793,3 +793,133 @@ export function farmTreat(species, keep) {
   }
   return g;
 }
+
+// ---------------------------------------------------------------- traite : le seau à lait et le tabouret
+
+/** Profil d'un seau (rayon du haut, du bas, profondeur, épaisseur) pour un LatheGeometry. */
+function pailProfile(rTop, rBot, depth, th) {
+  const lip = 0.01;
+  return [
+    [0.0, -depth], [rBot, -depth], [rTop, -lip], [rTop + lip * 0.7, 0], [rTop - th + 0.002, lip * 0.3],
+    [rTop - th, -lip], [rBot - th, -depth + th], [0.0, -depth + th],
+  ].map(([x, y]) => new THREE.Vector2(x, y));
+}
+
+/**
+ * Seau à lait en inox (le bord du haut à l'origine) : même interface que le seau d'eau du cheval (setLevel, level,
+ * surfaceY, setMark) ; le lait est blanc crème, avec de la mousse quand il gicle (froth). size : rayon du haut (m).
+ */
+export function milkPail({ size = 0.13, high = true } = {}) {
+  const keep = bag();
+  const g = new THREE.Group();
+  const P = { r: size, rBot: size * 0.8, depth: size * 2.1, th: 0.006 };
+  const steel = keep(new THREE.MeshStandardMaterial({ color: 0xdfe3e6, roughness: 0.22, metalness: 0.9, side: THREE.DoubleSide }));
+  steel.envMapIntensity = 1.4;
+  const shell = shadowed(new THREE.Mesh(keep(new THREE.LatheGeometry(pailProfile(P.r, P.rBot, P.depth, P.th), high ? 40 : 28)), steel));
+  g.add(shell);
+  for (const y of [-P.depth * 0.2, -P.depth * 0.75]) {
+    const ring = shadowed(new THREE.Mesh(keep(new THREE.TorusGeometry(lerp(P.r, P.rBot, -y / P.depth) + 0.002, 0.004, 6, 40)), steel));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = y;
+    g.add(ring);
+  }
+  const handle = shadowed(new THREE.Mesh(keep(new THREE.TorusGeometry(P.r + 0.008, 0.004, 6, 32, Math.PI)), steel));
+  handle.rotation.y = Math.PI / 2;
+  handle.rotation.z = -0.5;
+  g.add(handle);
+  const milkTex = keep(noiseTexture('#fbf8ef', 0.06, 19, 64));
+  const milkMat = keep(new THREE.MeshStandardMaterial({ color: 0xfbf7ec, roughness: 0.35, map: milkTex }));
+  const milk = new THREE.Mesh(keep(new THREE.CircleGeometry(1, 40)), milkMat);
+  milk.rotation.x = -Math.PI / 2;
+  milk.receiveShadow = true;
+  g.add(milk);
+  // mousse : petites bulles sur le lait, autour de là où le jet tombe
+  const foamMat = keep(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, transparent: true, opacity: 0.9 }));
+  const foam = new THREE.InstancedMesh(keep(new THREE.SphereGeometry(1, 8, 6)), foamMat, 40);
+  foam.count = 0;
+  g.add(foam);
+  keep({ dispose: () => foam.dispose() });
+  const yAt = (k) => -P.depth + P.th + (P.depth - P.th - 0.015) * clamp(k);
+  const rAt = (y) => lerp(P.rBot - P.th, P.r - P.th, (y + P.depth) / P.depth) * 0.99;
+  let level = 0;
+  let froth = 0;
+  const m4 = new THREE.Matrix4();
+  const bubbles = [];
+  const fr = rng(5);
+  for (let i = 0; i < 40; i++) bubbles.push({ a: fr() * Math.PI * 2, d: Math.sqrt(fr()), s: 0.003 + fr() * 0.006 });
+  const apply = () => {
+    const k = clamp(level);
+    milk.visible = k > 0.01;
+    const y = yAt(k);
+    milk.position.y = y;
+    milk.scale.setScalar(rAt(y));
+    const nb = Math.round(clamp(froth) * 40 * (k > 0.01 ? 1 : 0));
+    foam.count = nb;
+    for (let i = 0; i < nb; i++) {
+      const b = bubbles[i];
+      const r = rAt(y) * b.d * 0.85;
+      m4.makeScale(b.s, b.s * 0.5, b.s).setPosition(Math.cos(b.a) * r, y + 0.001, Math.sin(b.a) * r);
+      foam.setMatrixAt(i, m4);
+    }
+    foam.instanceMatrix.needsUpdate = true;
+  };
+  apply();
+  const band = new THREE.Mesh(keep(new THREE.CylinderGeometry(1, 1, 1, 36, 1, true)), keep(new THREE.MeshBasicMaterial({ color: 0x3fae62, transparent: true, opacity: 0.4, side: THREE.BackSide, depthWrite: false })));
+  band.visible = false;
+  g.add(band);
+  const line = new THREE.Mesh(keep(new THREE.TorusGeometry(1, 0.03, 6, 40)), keep(new THREE.MeshBasicMaterial({ color: 0x1e7a40 })));
+  line.rotation.x = Math.PI / 2;
+  line.visible = false;
+  g.add(line);
+  return {
+    group: g,
+    size: P,
+    setMark(lo, hi, target) {
+      const y0 = yAt(lo);
+      const y1 = yAt(hi);
+      band.position.y = (y0 + y1) / 2;
+      const r = rAt(band.position.y);
+      band.scale.set(r, y1 - y0, r);
+      band.visible = true;
+      line.position.y = yAt(target);
+      line.scale.setScalar(rAt(line.position.y));
+      line.visible = true;
+      return { y: line.position.y, r: rAt(line.position.y) };
+    },
+    get level() { return level; },
+    setLevel(k) {
+      level = clamp(k);
+      apply();
+    },
+    surfaceY() { return milk.position.y; },
+    /** Un jet arrive : la mousse monte, puis retombe. */
+    froth(k) {
+      froth = Math.max(froth, k);
+      apply();
+    },
+    update(dt) {
+      if (froth > 0) {
+        froth = Math.max(0, froth - dt * 0.35);
+        apply();
+      }
+    },
+    dispose() { keep.dispose(); },
+  };
+}
+
+/** Tabouret de traite à trois pieds (origine au sol, au milieu). h : hauteur de l'assise. */
+export function milkStool(keep, h = 0.32) {
+  const g = new THREE.Group();
+  const wood = keep(new THREE.MeshStandardMaterial({ map: keep(barnWood(23, false, 'pale')), roughness: 0.7 }));
+  const seat = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.15, 0.15, 0.035, 24)), wood));
+  seat.position.y = h;
+  g.add(seat);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.3;
+    const leg = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.016, 0.02, h * 1.05, 8)), wood));
+    leg.position.set(Math.cos(a) * 0.08, h / 2, Math.sin(a) * 0.08);
+    leg.rotation.set(Math.sin(a) * 0.18, 0, -Math.cos(a) * 0.18);
+    g.add(leg);
+  }
+  return g;
+}

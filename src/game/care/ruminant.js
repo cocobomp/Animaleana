@@ -190,6 +190,8 @@ export function ruminantLife(stage, dt) {
   st.flies = sp === 'cow';
   st.fly = sp === 'cow' && !m.still && Math.random() < dt * 0.025;
   anim.update(dt, st);
+  // (la tonte : les mèches de la laine longue raccourcissent avec la toison coupée, shear3d.js)
+  if (md.lockUniforms && Number.isFinite(m.lockK)) md.lockUniforms.hState.value.x *= m.lockK;
 
   // ------------------------------------------------ par-dessus le clip
   const t = (stage.lifeT = (stage.lifeT ?? 0) + dt);

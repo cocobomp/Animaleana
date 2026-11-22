@@ -204,7 +204,7 @@ export function stallSet(stage) {
   into = walls.back;
   const plate = keep(plateTexture(stage.a?.name ?? ''));
   const plateMat = keep(new THREE.MeshStandardMaterial({ map: plate, roughness: 0.6 }));
-  mesh(new THREE.BoxGeometry(0.62, 0.2, 0.025), plateMat, [win.x + win.w / 2 + 0.75, 2.2, S.back + 0.012]);
+  const plateMesh = mesh(new THREE.BoxGeometry(0.62, 0.2, 0.025), plateMat, [win.x + win.w / 2 + 0.75, 2.2, S.back + 0.012]);
   // (deux clous)
   for (const dx of [-0.26, 0.26]) mesh(new THREE.SphereGeometry(0.012, 8, 6), metal, [win.x + win.w / 2 + 0.75 + dx, 2.2, S.back + 0.03], null, false);
   // Une bride accrochée et un licol (taches de couleur sur le mur, comme dans un vrai box).
@@ -328,6 +328,7 @@ export function stallSet(stage) {
     win,
     anchors: { muzzle, eat },
     walls,
+    plate: plateMesh,
     layout,
     /** Le contexte WebGL est revenu : l'image de l'environnement est à refaire (l'ancienne est perdue). */
     restore(st) {

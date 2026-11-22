@@ -70,12 +70,21 @@ export function withLogic(ctx, make, anchor, { hints = null } = {}) {
   const lctx = Object.create(ctx);
   // (une consigne qui parle du dessin — « dans le seau », alors qu'en 3D c'est une mangeoire — : remplacée)
   if (hints) lctx.hint = (text, kind) => ctx.hint(hints.get(text) ?? text, kind);
+  // Les mots (« Bien ! ») à côté du point (du côté où il y a de la place), pas dessus : les cœurs et les étoiles
+  // partent du point vers le haut et recouvraient le mot (« B💛n! »). Deux mots de suite : l'un au-dessus de l'autre.
+  let lastText = -9;
+  let stack = 0;
   lctx.fx = {
     add() {},
     dot() {},
     text(x, y, text, color, size) {
       const p = at();
-      fx.text(p.x, p.y - 34, text, color, size);
+      const v = ctx.view ?? { x0: 0, x1: 400, y0: 0 };
+      stack = ctx.time - lastText < 0.6 ? stack + 1 : 0;
+      lastText = ctx.time;
+      const side = p.x > (v.x0 + v.x1) / 2 ? -1 : 1;
+      const tx = Math.max(v.x0 + 60, Math.min(v.x1 - 60, p.x + side * 78));
+      fx.text(tx, Math.max(v.y0 + 30, p.y - 26 - stack * 30), text, color, size);
     },
     burst(x, y, ch, n, o) {
       const p = at();

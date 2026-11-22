@@ -31,12 +31,13 @@ export function treat3dGame(ctx) {
   const hand = handModel(own, { skin: colorOf(avatar.skin, 0xf0c29a), sleeve: colorOf(avatar.top ?? avatar.shirt, 0x3f7fd0) });
   hand.scale.setScalar(1.15);
   sc.scene.add(hand);
+  // (posées à plat au creux de la main : la carotte en travers de la paume, la pomme au milieu)
   const treats = { carrot: treatModel('carrot', own), apple: treatModel('apple', own) };
-  for (const tm of Object.values(treats)) {
-    tm.position.set(0.035, 0.035, 0);
-    hand.add(tm);
-  }
-  treats.carrot.rotation.set(0, 0.3, 0);
+  for (const tm of Object.values(treats)) hand.add(tm);
+  treats.carrot.position.set(0.012, 0.024, 0.004);
+  treats.carrot.rotation.set(0, Math.PI / 2 - 0.35, 0);
+  treats.carrot.scale.setScalar(0.85);
+  treats.apple.position.set(0.012, 0.045, 0);
   const head = [L.muzzle, L.poll, ...L.ears, L.withers.clone().lerp(L.poll, 0.55)];
   sc.frame([...head, rest.clone().add(v3(0, -0.08, 0.1)), rest.clone().add(v3(-0.3, 0, 0))], { dir: [0.62, 0.12, 1], pad: 1.28, now: true });
 
@@ -82,7 +83,7 @@ export function treat3dGame(ctx) {
       const pos = rest.clone().lerp(target, smooth(reach)).add(v3(0.05, -0.05, 0.18).multiplyScalar(back));
       hand.position.copy(pos);
       // paume vers le haut, le bras qui vient de nous (en bas à droite de l'image), les doigts vers sa bouche
-      aimHand(hand, shoulder(sc), target.clone().lerp(pos, 0.3).add(v3(0, 0.05, 0)), true);
+      aimHand(hand, shoulder(sc, pos), target.clone().lerp(pos, 0.3).add(v3(0, 0.02, 0)), true);
       for (const [k, tm] of Object.entries(treats)) tm.visible = k === held && !taken && !(ctx.done && s.given >= s.max);
       // Le cheval : agité (il regarde partout, hoche, gratte), puis sage (il regarde la main, oreilles en avant).
       const calm = s.state === 'calm' || s.state === 'eat';
@@ -116,14 +117,24 @@ export function treat3dGame(ctx) {
     draw(g) {
       if (!sc.ready) return;
       const s = play.peek();
-      // Les friandises données, dans le cadre vert (comme le jeu dessiné).
+      // Les friandises données, dans le cadre vert (comme le jeu dessiné) : en haut à gauche, ou en haut à droite
+      // si la plaque à son nom est là (le compteur la cachait).
+      const v = ctx.view;
+      const w = 34 * s.max + 22;
+      let x = v.x0 + 8;
+      const plate = sc.decor.plate;
+      if (plate) {
+        const c = sc.project(plate.getWorldPosition(v3()));
+        const half = sc.projectRadius(plate.getWorldPosition(v3()), 0.62) / 2 + 10;
+        if (c.x + half > x && c.x - half < x + w && c.y < v.y0 + 8 + 46 + 24) x = v.x1 - 8 - w;
+      }
       g.save();
       g.fillStyle = 'rgba(255,255,255,0.86)';
       g.beginPath();
-      g.roundRect(ctx.view.x0 + 8, ctx.view.y0 + 8, 34 * s.max + 22, 46, 16);
+      g.roundRect(x, v.y0 + 8, w, 46, 16);
       g.fill();
       g.restore();
-      drawCountZone(g, ctx.view.x0 + 30, ctx.view.y0 + 31, s.given, s.n, s.max, TREAT_ICON[held] ?? '🍎');
+      drawCountZone(g, x + 22, v.y0 + 31, s.given, s.n, s.max, TREAT_ICON[held] ?? '🍎');
     },
     destroy() {
       sc.scene.remove(hand);
@@ -134,13 +145,18 @@ export function treat3dGame(ctx) {
 
 const smooth = (k) => k * k * (3 - 2 * k);
 
-/** Notre épaule : sous la caméra, un peu à droite (le bras entre dans l'image par le bas). */
-function shoulder(sc) {
+/**
+ * Notre épaule : à droite de la caméra, un peu plus bas, et assez loin devant elle : le bras entre dans l'image par
+ * le côté, presque à plat, et on voit la main de profil, paume ouverte (avant : le bras venait d'en bas, droit vers
+ * le cheval, on ne voyait qu'un gros cylindre bleu et le dos de la main).
+ */
+function shoulder(sc, hand) {
   const c = sc.camera;
   const right = v3(1, 0, 0).applyQuaternion(c.quaternion);
   const up = v3(0, 1, 0).applyQuaternion(c.quaternion);
-  const fwd = v3(0, 0, -1).applyQuaternion(c.quaternion);
-  return c.position.clone().addScaledVector(right, 0.28).addScaledVector(up, -0.42).addScaledVector(fwd, 0.15);
+  const d = c.position.distanceTo(hand);
+  const fwd = hand.clone().sub(c.position).normalize();
+  return c.position.clone().addScaledVector(fwd, d * 0.8).addScaledVector(right, 0.5).addScaledVector(up, -0.16);
 }
 
 function colorOf(c, fallback) {

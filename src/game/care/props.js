@@ -803,62 +803,74 @@ function carrotTexture() {
 }
 
 /**
- * Une main ouverte, paume vers le haut (la nôtre : couleur de peau de l'avatar), avec le poignet et le bas de la
- * manche. Origine au milieu de la paume ; les doigts vers +x.
+ * Une main ouverte et bien à plat, paume vers le haut (la nôtre : couleur de peau de l'avatar), comme on tend une
+ * friandise à un cheval (les doigts serrés, le pouce le long de la main : rien qu'il puisse pincer), avec le
+ * poignet et le bas de la manche. Origine au milieu de la paume ; les doigts vers +x, la paume vers +y, le pouce vers
+ * +z.
  */
 export function handModel(keep, { skin = 0xf0c29a, sleeve = 0x3f7fd0 } = {}) {
   const g = new THREE.Group();
-  const skinMat = keep(new THREE.MeshStandardMaterial({ color: skin, roughness: 0.62 }));
-  // paume : un coussin arrondi un peu plus large vers les doigts
-  const palm = shadowed(new THREE.Mesh(keep(new THREE.SphereGeometry(0.05, 20, 14)), skinMat));
-  palm.scale.set(1.05, 0.36, 0.92);
+  const skinMat = keep(new THREE.MeshStandardMaterial({ color: skin, roughness: 0.6 }));
+  // paume : un coussin plat, un peu plus large vers les doigts, creusé au milieu (le creux de la main)
+  const palmGeo = keep(new THREE.SphereGeometry(0.05, 24, 14));
+  const pp = palmGeo.attributes.position;
+  for (let i = 0; i < pp.count; i++) {
+    const x = pp.getX(i);
+    const y = pp.getY(i);
+    const z = pp.getZ(i);
+    const w = 1 + 0.18 * (x / 0.05); // (plus large côté doigts)
+    const hollow = y > 0 ? 1 - 0.35 * Math.max(0, 1 - (x * x + z * z) / 0.0016) : 1;
+    pp.setXYZ(i, x * 1.08, y * 0.3 * hollow, z * 0.9 * w);
+  }
+  palmGeo.computeVertexNormals();
+  const palm = shadowed(new THREE.Mesh(palmGeo, skinMat));
   g.add(palm);
-  const heel = shadowed(new THREE.Mesh(keep(new THREE.SphereGeometry(0.04, 16, 12)), skinMat));
-  heel.scale.set(1, 0.42, 0.95);
-  heel.position.x = -0.035;
-  g.add(heel);
-  // doigts (deux phalanges, légèrement repliés vers le haut : main en coupe)
-  const seg = keep(new THREE.CapsuleGeometry(0.0105, 0.026, 4, 10));
-  const lens = [0.95, 1.08, 1.02, 0.82];
+  // doigts : quatre, longs et serrés, presque droits (main à plat), le bout un peu relevé
+  const seg = keep(new THREE.CapsuleGeometry(0.0085, 0.03, 4, 10));
+  const tipSeg = keep(new THREE.CapsuleGeometry(0.0078, 0.022, 4, 10));
+  const lens = [0.92, 1.05, 1.0, 0.8];
   for (let i = 0; i < 4; i++) {
     const f = new THREE.Group();
-    f.position.set(0.045, 0.004, -0.031 + i * 0.0205);
-    f.rotation.y = (i - 1.5) * 0.07;
+    f.position.set(0.05 - Math.abs(i - 1.5) * 0.004, 0.003, -0.026 + i * 0.0175);
+    f.rotation.y = (i - 1.5) * 0.03;
     g.add(f);
     const p1 = shadowed(new THREE.Mesh(seg, skinMat));
     p1.rotation.z = -Math.PI / 2;
-    p1.position.x = 0.018 * lens[i];
+    p1.position.x = 0.02 * lens[i];
     p1.scale.set(1, lens[i], 1);
     f.add(p1);
     const j = new THREE.Group();
-    j.position.x = 0.036 * lens[i];
-    j.rotation.z = 0.28;
+    j.position.x = 0.042 * lens[i];
+    j.rotation.z = 0.12;
     f.add(j);
-    const p2 = shadowed(new THREE.Mesh(seg, skinMat));
+    const p2 = shadowed(new THREE.Mesh(tipSeg, skinMat));
     p2.rotation.z = -Math.PI / 2;
-    p2.position.x = 0.015 * lens[i];
-    p2.scale.set(0.92, lens[i] * 0.85, 0.92);
+    p2.position.x = 0.014 * lens[i];
+    p2.scale.set(1, lens[i], 1);
     j.add(p2);
   }
+  // le pouce, le long de la main
   const thumb = shadowed(new THREE.Mesh(seg, skinMat));
-  thumb.position.set(0.0, 0.012, 0.05);
-  thumb.rotation.set(0.25, -0.75, -Math.PI / 2 + 0.35);
-  thumb.scale.set(1.1, 1.2, 1.1);
+  thumb.position.set(0.012, 0.004, 0.046);
+  thumb.rotation.set(0, -0.35, -Math.PI / 2);
+  thumb.scale.set(1.12, 1.05, 1.12);
   g.add(thumb);
-  // poignet, avant-bras et manche (longue : elle sort de l'image)
-  const wrist = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.029, 0.033, 0.14, 16)), skinMat));
+  // poignet et bas de la manche (court : la main entre dans l'image par le côté)
+  const wrist = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.026, 0.03, 0.11, 16)), skinMat));
   wrist.rotation.z = Math.PI / 2;
-  wrist.position.x = -0.1;
-  wrist.scale.set(1, 1, 0.72);
+  wrist.position.x = -0.085;
+  wrist.scale.set(1, 1, 0.68);
   g.add(wrist);
   const sleeveMat = keep(new THREE.MeshStandardMaterial({ color: sleeve, roughness: 0.88 }));
-  const cuff = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.043, 0.05, 0.75, 18, 1, true)), sleeveMat));
+  const cuff = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.036, 0.042, 0.34, 18, 1, true)), sleeveMat));
   cuff.rotation.z = Math.PI / 2;
-  cuff.position.x = -0.53;
+  cuff.position.x = -0.31;
+  cuff.scale.set(1, 1, 0.85);
   g.add(cuff);
-  const band = shadowed(new THREE.Mesh(keep(new THREE.TorusGeometry(0.041, 0.007, 8, 22)), sleeveMat));
+  const band = shadowed(new THREE.Mesh(keep(new THREE.TorusGeometry(0.034, 0.006, 8, 22)), sleeveMat));
   band.rotation.y = Math.PI / 2;
-  band.position.x = -0.157;
+  band.position.x = -0.142;
+  band.scale.set(1, 1, 0.85);
   g.add(band);
   return g;
 }

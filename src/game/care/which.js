@@ -24,7 +24,7 @@ export const CARE3D_SPECIES = new Set(['horse']);
 /** Soins refaits en 3D, par espèce (les jeux eux-mêmes : CARE3D_GAMES de src/ui/minigames/care3d.js). */
 export const CARE3D_ACTIONS = { horse: ['feed', 'water', 'treat', 'pet', 'brush', 'wash'] };
 // (seller, brider, vermifuge, maréchal, curer le box : chantier « chevalplus », src/ui/minigames/saddle3d.js…)
-CARE3D_ACTIONS.horse.push('saddle', 'bridle');
+CARE3D_ACTIONS.horse.push('saddle', 'bridle', 'deworm');
 
 /** Ce soin a-t-il un jeu 3D pour cette espèce ? */
 export const care3dWanted = (a, action) => !!CARE3D_ACTIONS[a?.species]?.includes(action);

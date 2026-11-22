@@ -3,5 +3,6 @@
 
 import { saddle3dGame } from './saddle3d.js';
 import { bridle3dGame } from './bridle3d.js';
+import { deworm3dGame } from './deworm3d.js';
 
-export const HORSE_PLUS_GAMES = { saddle: saddle3dGame, bridle: bridle3dGame };
+export const HORSE_PLUS_GAMES = { saddle: saddle3dGame, bridle: bridle3dGame, deworm: deworm3dGame };

@@ -272,8 +272,8 @@ export function hutchSet(stage) {
   const layout = (which) => {
     const f = which === 'feed' ? feedAt : restAt(0);
     props.food.group.position.copy(f);
-    props.water.group.position.copy(which === 'water' ? feedAt : which === 'feed' ? v3(feedAt.x + bowlR * 2.4, bowlDepth, feedAt.z - bowlR * 1.2) : restAt(1));
-    if (which === 'water') props.food.group.position.set(feedAt.x + bowlR * 2.4, bowlDepth, feedAt.z - bowlR * 1.2);
+    props.water.group.position.copy(which === 'water' ? feedAt : which === 'feed' ? v3(feedAt.x + bowlR * 1.7, bowlDepth, feedAt.z - bowlR * 3.1) : restAt(1));
+    if (which === 'water') props.food.group.position.set(feedAt.x + bowlR * 1.7, bowlDepth, feedAt.z - bowlR * 3.1);
   };
   layout('rest');
 

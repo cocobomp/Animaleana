@@ -23,6 +23,20 @@ import { petHand, shoulderFor } from '../../game/care/petHand.js';
 import { audio } from '../../game/audio.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+/**
+ * De la place autour de sa tête (repère monde, pose du moment) : au-dessus des oreilles, devant le nez, sous le menton.
+ * À ajouter aux points d'un cadrage : il lève la tête, la tourne, et elle reste dans l'image (surtout en paysage, où
+ * la hauteur est comptée).
+ */
+export function headRoom(sc, k = 1) {
+  const L = sc.marks;
+  const hl = L.size.headLen;
+  const up = v3(0, hl * 0.45 * k, 0);
+  const nose = sc.live('nose');
+  const fwd = nose.clone().sub(sc.live('head')).normalize();
+  return [sc.live('poll').add(up), ...L.ears.map((e) => e.clone().add(v3(0, hl * 0.25 * k, 0))), nose.addScaledVector(fwd, hl * 0.3 * k), sc.live('muzzle').add(v3(0, -hl * 0.35 * k, 0))];
+}
+
 const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
 /** Un petit bruit de contentement de l'animal (aboiement doux, miaulement, rien pour le lapin). */
@@ -64,13 +78,22 @@ function pour3d(ctx, water) {
   const play = withLogic(wctx, water ? waterGame : feedGame, () => sc.project(bowlW().add(v3(0, D.r * 0.8, 0))));
   const s0 = play.peek();
   const mark = bowl.setMark(s0.lo, s0.hi, s0.target);
-  // La source : le sac tenu par notre main, ou la carafe, au-dessus de la gamelle, de l'autre côté de sa tête.
-  const size = Math.max(0.42, Math.min(1.25, D.r / 0.09));
+  // La source : le sac tenu par notre main, ou la carafe, au-dessus de la gamelle, de l'autre côté de sa tête. Tant
+  // qu'on ne verse pas, on la tient plus haut : elle ne cache jamais la gamelle ; on la baisse en la penchant.
+  const size = Math.max(0.34, Math.min(1.1, (0.8 * D.r) / 0.09));
+  const SRC = water ? { w: 0.13, h: 0.2 } : { w: 0.16, h: 0.24 };
   const hand = { ...(P.hand ?? {}), size: handSize(L) };
   const src = water ? pitcher({ size, hand, shoulder: (at) => shoulderOf(sc, at) }) : kibbleBag({ kind: sp, size, hand, shoulder: (at) => shoulderOf(sc, at) });
   sc.scene.add(src.group);
-  const srcAt = bowlW().add(v3(D.r * 0.1, D.r * 0.9 + 0.05 * size, -D.r * 0.2));
-  src.group.position.copy(srcAt);
+  // Vu de devant lui et d'assez haut (VIEW) : la gamelle au premier plan, lui derrière, qui la regarde ; la source
+  // (le sac, la carafe) tournée vers la droite de l'image, son ouverture au-dessus de la gamelle : elle ne passe pas
+  // devant sa tête, et notre bras arrive par le bas à droite.
+  const VIEW = v3(1, 0.62, 0.62).normalize();
+  const camRight = new THREE.Vector3().crossVectors(VIEW.clone().negate(), v3(0, 1, 0)).normalize();
+  const srcAt = bowlW().add(v3(0, D.r * 0.9 + 0.05 * size, 0)).addScaledVector(camRight, D.r * 0.15);
+  const lift = SRC.h * size * 0.92;
+  src.group.position.copy(srcAt).add(v3(0, lift, 0));
+  src.group.rotation.y = Math.atan2(-camRight.z, camRight.x);
   src.setTilt(0.1);
   const food = FOODS[sp] ?? FOODS.dog;
   const rain = water ? null : kibbleRain(food, 70);
@@ -81,10 +104,12 @@ function pour3d(ctx, water) {
   m.lookAmt = 0.8;
   m.ears = 'forward';
   m.happy = 0.4;
-  // Cadrage : sa tête (assis, il lève la tête), la gamelle, la source au-dessus ; vu de face, un peu de haut.
+  // Cadrage : sa tête (assis, il lève la tête), la gamelle, la source au-dessus ; de trois quarts et d'assez haut
+  // pour voir dans la gamelle (la ligne 🎯, le tas qui monte) ; la gamelle au premier plan.
   const frameWait = (now = false) => {
     const b = bowlW();
-    sc.frame([L.muzzle, L.poll, ...L.ears, L.chest, L.croup, L.paws[0], L.paws[1], b.clone().add(v3(-D.r, -D.depth, 0)), b.clone().add(v3(D.r * 1.3, -D.depth, D.r)), srcAt.clone().add(v3(0.22 * size, 0.2 * size, 0))], { dir: [0.7, 0.3, 1], pad: 1.02, now, raise: -0.15 });
+    const top = srcAt.clone().add(v3(0, lift, 0));
+    sc.frame([L.muzzle, L.poll, ...L.ears, ...headRoom(sc), L.chest, L.croup, L.paws[0], L.paws[1], b.clone().add(v3(-D.r, -D.depth, -D.r)), b.clone().add(v3(D.r * 1.2, -D.depth, D.r * 1.2)), top, top.clone().addScaledVector(camRight, SRC.w * size)], { dir: VIEW.toArray(), pad: 1.06, now });
   };
   frameWait(true);
   let spawnAcc = 0;
@@ -102,6 +127,8 @@ function pour3d(ctx, water) {
       const pouring = s.pouring && !ctx.done;
       src.setTilt(pouring ? 1 : s.finishing ? 0.5 : 0.1);
       src.update(dt);
+      // (penchée, la source descend sur la gamelle ; droite, on la tient plus haut)
+      if (!ctx.done) src.group.position.y = srcAt.y + lift * Math.max(0, 1 - (src.tilt - 0.1) / 0.9);
       bowl.setLevel(ctx.done && doneT > 0.1 ? bowl.level : s.level);
       if (water) {
         const surf = bowl.group.localToWorld(v3(0, bowl.surfaceY(), 0)).y;
@@ -114,7 +141,9 @@ function pour3d(ctx, water) {
           while (spawnAcc > 1) {
             spawnAcc -= 1;
             const p = src.mouth(v3());
-            rain.spawn(p, v3(-0.15 - Math.random() * 0.15, -0.1, (Math.random() - 0.5) * 0.12), food.size * Math.pow(D.r / 0.09, 0.35));
+            // (vers l'avant du sac penché : sa gauche, puisqu'il est tourné vers la droite de l'image)
+            const vel = camRight.clone().multiplyScalar(-0.12 - Math.random() * 0.12).add(v3((Math.random() - 0.5) * 0.08, -0.1, (Math.random() - 0.5) * 0.08));
+            rain.spawn(p, vel, food.size * Math.pow(D.r / 0.09, 0.35));
           }
         }
         const c = bowlW();
@@ -161,7 +190,10 @@ function pour3d(ctx, water) {
         const b = sc.project(bowl.group.localToWorld(v3(D.r, -D.depth, 0)));
         const t = sc.project(bowl.group.localToWorld(v3(D.r, 0, 0)));
         const h = Math.max(60, Math.min(130, (b.y - t.y) * 2.2));
-        sideGauge(g, Math.min(ctx.view.x1 - 22, b.x + 30), b.y, h, s.value, s.lo, s.hi, { icon: water ? '💧' : '🥣', time: ctx.time });
+        // (à droite de la gamelle, ou à gauche si le bord de l'image est trop près)
+        const left = sc.project(bowl.group.localToWorld(v3(-D.r, -D.depth, 0)));
+        const gx = b.x + 30 < ctx.view.x1 - 20 ? b.x + 30 : Math.max(ctx.view.x0 + 20, left.x - 30);
+        sideGauge(g, gx, Math.min(b.y, ctx.view.y1 - 12), h, s.value, s.lo, s.hi, { icon: water ? '💧' : '🥣', time: ctx.time });
         // 🎯 au bord de la ligne, du côté de la caméra
         const m2 = sc.project(bowl.group.localToWorld(v3(-mark.r * 0.7, mark.y, mark.r * 0.7)));
         g.save();
@@ -188,9 +220,9 @@ function pour3d(ctx, water) {
   };
 
   function frameEat() {
-    const e = eatAt;
+    const e = eatAt.clone().add(v3(ahead, 0, 0)); // (la gamelle est restée là où on a versé)
     const A = (p) => p.clone().add(v3(ahead, 0, 0));
-    sc.frame([A(L.poll), A(L.withers), A(L.croup), A(L.tail), ...L.ears.map(A), ...L.paws.map(A), e.clone().add(v3(-D.r, -D.depth, 0)), e.clone().add(v3(D.r, -D.depth, D.r))], { dir: [0.5, 0.3, 1], pad: 1.45, half: 0.6 });
+    sc.frame([A(L.poll), A(L.withers), A(L.croup), A(L.tail), ...L.ears.map(A), ...L.paws.map(A), e.clone().add(v3(-D.r, -D.depth, 0)), e.clone().add(v3(D.r, -D.depth, D.r))], { dir: VIEW.toArray(), pad: 1.2, half: 0.6 });
   }
 }
 
@@ -228,7 +260,7 @@ export function petTreat3dGame(ctx) {
   const rest = L.muzzle.clone().add(v3(hl * 0.9 + 0.05, -hl * 0.15, hl * 0.6 + 0.06));
   // (le lapin se dresse pour la demander : sa tête monte de presque sa hauteur)
   const tall = sp === 'rabbit' ? [L.poll.clone().add(v3(-L.size.len * 0.25, L.size.h * 0.9, 0)), ...L.ears.map((e) => e.clone().add(v3(-L.size.len * 0.25, L.size.h * 0.9, 0)))] : [];
-  sc.frame([L.muzzle, L.poll, ...L.ears, ...tall, L.chest, L.withers, L.croup, L.paws[0], L.paws[1], rest.clone().add(v3(0.06, -0.03, 0.04)), rest.clone().add(v3(-0.04, 0.05, 0))], { dir: [1.05, 0.2, 1], pad: sp === 'rabbit' ? 1.25 : 1.12, now: true, raise: -0.1 });
+  sc.frame([L.muzzle, L.poll, ...L.ears, ...headRoom(sc), ...tall, L.chest, L.withers, L.croup, L.paws[0], L.paws[1], rest.clone().add(v3(0.06, -0.03, 0.04)), rest.clone().add(v3(-0.04, 0.05, 0))], { dir: [1.05, 0.2, 1], pad: sp === 'rabbit' ? 1.2 : 1.1, now: true });
   let given = 0;
   let pen = 0;
   let reachT = -1;
@@ -412,7 +444,7 @@ export function petPet3dGame(ctx) {
   m.ears = 'forward';
   m.happy = 0.35;
   // Le chien et le chat assis, le lapin ramassé : de trois quarts avant, un peu de haut.
-  sc.frame([L.muzzle, L.poll, ...L.ears, L.withers, L.back, L.chest, L.croup, ...L.paws], { dir: [0.7, 0.32, 1], pad: 1.08, now: true });
+  sc.frame([L.muzzle, L.poll, ...L.ears, ...headRoom(sc), L.withers, L.back, L.chest, L.croup, ...L.paws], { dir: [0.7, 0.32, 1], pad: 1.1, now: true });
 
   hint(t(shy ? 'mg_pet_hint_shy' : 'mg_pet_hint', { name: a.name }));
   ctx.zone(lo, hi);
@@ -556,7 +588,8 @@ export function petPet3dGame(ctx) {
         const from = shoulderOf(sc, touch.point);
         const along = touch.point.clone().sub(from);
         along.addScaledVector(n, -along.dot(n));
-        hand.position.copy(touch.point).addScaledVector(n, 0.012 * hs);
+        // (ce sont les doigts qui caressent : la paume un peu en arrière du doigt, vers le bras ; elle cache moins)
+        hand.position.copy(touch.point).addScaledVector(n, 0.012 * hs).addScaledVector(along.clone().normalize(), -0.055 * hs);
         aimHand(hand, touch.point.clone().addScaledVector(along.normalize(), -0.1), touch.point, false, n);
       }
     },
@@ -645,7 +678,7 @@ export function petBrush3dGame(ctx) {
   m.ears = 'forward';
   m.happy = 0.4;
   // de profil, un peu de haut, la tête à droite
-  sc.frame([L.nose, L.muzzle, L.poll, ...L.ears, L.withers, L.croup, L.tail, L.tailTip, L.chest, L.belly, ...L.paws], { dir: [0.25, 0.2, 1], pad: 1.06, now: true, raise: -0.12 });
+  sc.frame([L.nose, L.muzzle, L.poll, ...L.ears, ...headRoom(sc), L.withers, L.croup, L.tail, L.tailTip, L.chest, L.belly, ...L.paws], { dir: [0.25, 0.2, 1], pad: 1.1, now: true });
 
   // ---- les taches de poussière, posées sur le flanc (rayons lancés vers lui depuis notre côté)
   const dustTex = keep(mudTexture('dust', 5));
@@ -687,6 +720,7 @@ export function petBrush3dGame(ctx) {
   }
   const r0 = Math.max(0.012, Math.min(S.len * 0.1, (L.back.y - L.belly.y) * 0.22));
   const spots = bodyPoints(7, r0);
+  // (poussière claire sur un poil foncé, plus sombre sur un poil clair : elle se voit toujours)
   // (poussière claire sur un poil foncé, plus sombre sur un poil clair : elle se voit toujours)
   const coatL = new THREE.Color(ctx.col?.coat ?? '#c8a070').getHSL({}).l;
   const dustCol = coatL < 0.42 ? 0xd9ccb0 : 0x8a6a48;

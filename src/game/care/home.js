@@ -377,10 +377,10 @@ export function homeSet(stage) {
    */
   const layout = (which) => {
     const f = which === 'feed' ? feedAt : restAt(0);
-    const w = which === 'water' ? drinkAt : which === 'feed' ? v3(feedAt.x + bowlR * 2.4, bowlDepth, feedAt.z - bowlR * 1.2) : restAt(1);
+    const w = which === 'water' ? drinkAt : which === 'feed' ? v3(feedAt.x + bowlR * 1.7, bowlDepth, feedAt.z - bowlR * 3.1) : restAt(1);
     props.food.group.position.copy(f);
     props.water.group.position.copy(w);
-    if (which === 'water') props.food.group.position.set(drinkAt.x + bowlR * 2.4, bowlDepth, drinkAt.z - bowlR * 1.2);
+    if (which === 'water') props.food.group.position.set(drinkAt.x + bowlR * 1.7, bowlDepth, drinkAt.z - bowlR * 3.1);
     const a = props.food.group.position;
     const b = props.water.group.position;
     mat.position.set((a.x + b.x) / 2, 0.003, (a.z + b.z) / 2);

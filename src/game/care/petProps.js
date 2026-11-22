@@ -506,6 +506,7 @@ export function pitcher({ size = 1, color = 0xe9f0f2, hand = null, shoulder = nu
     group: g,
     spout,
     setTilt(k) { want = clamp(k); },
+    get tilt() { return tilt; },
     setStream(k, y) {
       flow = k;
       toY = y;

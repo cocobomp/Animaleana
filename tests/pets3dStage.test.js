@@ -75,6 +75,34 @@ describe('la scène des animaux de compagnie : repères et cadrages pour toutes 
   }
 });
 
+describe('les cadrages en paysage et sur ordinateur', () => {
+  // (la toile 3D d'un téléphone en paysage, 844 × 390 : 496 × 370 ; la fenêtre du jeu sur un ordinateur : 660 × 460)
+  for (const gab of [GAUGES[0], GAUGES[1], GAUGES[2], GAUGES[3], GAUGES[5], GAUGES[6], GAUGES[7], { species: 'rabbit', breed: 'tete_de_lion' }]) {
+    for (const [w, h] of [[496, 370], [660, 460]]) {
+      it(`${label(gab)} ${w}×${h} : la tête, les oreilles et les pattes dans l'image pour chaque soin`, () => {
+        const { a, sc } = makePetStage({ ...gab, w, h });
+        for (const act of GAMES) {
+          const ctx = ctxFor(a, sc, w, h);
+          const game = pets3d.PET_CARE3D_GAMES[gab.species][act](ctx);
+          run(ctx, game, sc, 0.8);
+          const v = ctx.view;
+          for (const k of ['muzzle', 'poll', 'ear0', 'ear1']) expect(inView(sc.project(sc.live(k)), v, 2), `${act} ${k}`).toBe(true);
+          if (act !== 'feed' && act !== 'water') for (const [i, p] of sc.marks.paws.entries()) expect(inView(sc.project(p), v, 2), `${act} patte ${i}`).toBe(true);
+          if (act === 'feed' || act === 'water') {
+            const bowl = sc.decor.props[act === 'feed' ? 'food' : 'water'].group.getWorldPosition(new THREE.Vector3());
+            expect(inView(sc.project(bowl), v, 10), `${act} gamelle`).toBe(true);
+          }
+          game.destroy();
+          sc.mood.posture = null;
+          sc.mood.walkTo = null;
+          sc.mood.eat = null;
+        }
+        sc.dispose();
+      }, 60000);
+    }
+  }
+});
+
 /** Appuie (bouton « tenir ») : le premier bouton du jeu qui se tient. */
 const holdBtn = (ctx) => ctx.buttons.find((b) => b.opts.hold);
 

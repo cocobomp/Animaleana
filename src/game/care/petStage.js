@@ -155,22 +155,32 @@ export class PetStage extends CareStage {
     if (L.muzzle.distanceTo(L.nose) > headLen * 0.45) L.muzzle = L.nose.clone().add(new THREE.Vector3(-headLen * 0.12, -headLen * 0.12, 0));
     L.poll = acc.skull && md.head ? at(md.head, acc.skull) : new THREE.Vector3(L.head.x, headBox.max.y, L.head.z);
     L.forehead = L.poll.clone().lerp(L.nose, 0.35);
-    // oreilles : le sommet de chaque oreille le plus loin du centre de la tête (le bout)
+    // oreilles : le sommet de chaque oreille le plus loin du centre de la tête (le bout) ; aussi sur les autres
+    // maillages liés au squelette (les grandes oreilles en chauve-souris du chihuahua, du bouledogue sont à part)
+    const skins = [sk];
+    md.root.traverse((o) => {
+      // (pas les couches de poil des chats, qui copient le pelage : seulement de petits maillages à part)
+      const n = o.geometry?.attributes?.position?.count ?? 0;
+      if (o.isSkinnedMesh && o !== mesh && o.visible && o.renderOrder <= 0 && o.geometry?.attributes?.skinIndex && n < mesh.geometry.attributes.position.count * 0.4) skins.push(skinPoints(o, 1));
+    });
     L.ears = [];
     for (const side of ['L', 'R']) {
       let best = null;
       let bd = -1;
-      for (let i = 0; i < sk.n; i++) {
-        const b = sk.bone[i];
-        if (!b.startsWith('ear') || !b.endsWith(side)) continue;
-        const d = (sk.pos[i * 3] - L.head.x) ** 2 + (sk.pos[i * 3 + 1] - L.head.y) ** 2 + (sk.pos[i * 3 + 2] - L.head.z) ** 2;
-        if (d > bd) {
-          bd = d;
-          best = P(i);
+      for (const s of skins) {
+        for (let i = 0; i < s.n; i++) {
+          const b = s.bone[i];
+          if (!b.startsWith('ear') || !b.endsWith(side)) continue;
+          const d = (s.pos[i * 3] - L.head.x) ** 2 + (s.pos[i * 3 + 1] - L.head.y) ** 2 + (s.pos[i * 3 + 2] - L.head.z) ** 2;
+          if (d > bd) {
+            bd = d;
+            best = new THREE.Vector3(s.pos[i * 3], s.pos[i * 3 + 1], s.pos[i * 3 + 2]);
+          }
         }
       }
       if (best) L.ears.push(best);
     }
+    for (const s of skins.slice(1)) for (let i = 0; i < s.n; i++) all.expandByPoint(new THREE.Vector3(s.pos[i * 3], s.pos[i * 3 + 1], s.pos[i * 3 + 2]));
     if (!L.ears.length) L.ears = (md.ears ?? []).map((e) => at(e));
     L.neck = at(md.neck) ?? L.head.clone();
     const len = Math.max(0.05, bodyBox.max.x - bodyBox.min.x);
@@ -226,7 +236,8 @@ export class PetStage extends CareStage {
       }
     }
     L.tailTip = tip ?? L.tail.clone();
-    L.hooves = legs.map((l) => at(l.paw ?? l.fetlock ?? l.knee)).filter(Boolean);
+    // (les pattes : sous l'os des doigts, au sol — la plante du pied, pour que le cadrage garde les pieds)
+    L.hooves = legs.map((l) => at(l.paw ?? l.fetlock ?? l.knee)).filter(Boolean).map((p) => p.setY(Math.min(p.y, Math.max(0, all.min.y))));
     L.paws = L.hooves;
     L.top = new THREE.Vector3(L.head.x, all.max.y, cz);
     L.size = { len: all.max.x - all.min.x, h: all.max.y, w: all.max.z - all.min.z, headLen };
@@ -235,6 +246,8 @@ export class PetStage extends CareStage {
     // (la place des repères de la tête dans le repère de son os, au repos : live les suit quand la tête bouge)
     this.restHead = {};
     if (md.head) for (const k of ['muzzle', 'nose', 'head', 'forehead', 'poll']) this.restHead[k] = md.head.worldToLocal(L[k].clone());
+    // (le bout des oreilles aussi, 'ear0' et 'ear1' : approché par l'os de la tête, pour vérifier les cadrages)
+    if (md.head) L.ears.forEach((e, i) => { this.restHead[`ear${i}`] = md.head.worldToLocal(e.clone()); });
   }
 
   /** Repères dans la pose du moment (la tête bouge) : bouche, nez, tête, front. */

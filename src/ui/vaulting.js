@@ -82,8 +82,11 @@ export class VaultHud {
     this.btn.classList.add('vt-beat');
   }
 
-  /** La figure à faire (null : rien à toucher maintenant). */
-  cue(icon, label, how) {
+  /**
+   * La figure à faire (null : rien à toucher maintenant). part / parts : le temps en cours d'une figure en plusieurs
+   * temps (le moulin en quatre), montrés par des points : ceux déjà faits en vert, celui à faire en doré.
+   */
+  cue(icon, label, how, part = 0, parts = 1) {
     if (!icon) {
       this.cardEl.hidden = true;
       this.btn.classList.add('vt-idle');
@@ -91,7 +94,11 @@ export class VaultHud {
     }
     this.icoEl.textContent = icon;
     this.btn.classList.remove('vt-idle');
-    this.cardEl.replaceChildren(h('b', {}, `${icon} ${label}`), how ? h('small', {}, how) : null);
+    const dots = parts > 1
+      ? h('span', { class: 'vt-dots', role: 'img', 'aria-label': `${part + 1}/${parts}` },
+        Array.from({ length: parts }, (_, i) => h('i', { class: i < part ? 'done' : i === part ? 'now' : '' })))
+      : null;
+    this.cardEl.replaceChildren(h('b', {}, `${icon} ${label}`, dots), how ? h('small', {}, how) : null);
     this.cardEl.hidden = false;
   }
 

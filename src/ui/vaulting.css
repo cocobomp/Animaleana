@@ -42,7 +42,12 @@
   padding: 8px 16px; box-shadow: var(--shadow); max-width: min(440px, calc(100vw - 24px));
 }
 .vt-card[hidden] { display: none; }
-.vt-card b { font-size: 1.15rem; }
+.vt-card b { font-size: 1.15rem; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+/* Les temps d'une figure (le moulin en quatre) : faits en vert, celui à faire en doré. */
+.vt-dots { display: inline-flex; gap: 6px; margin-left: 8px; }
+.vt-dots i { width: 12px; height: 12px; border-radius: 50%; background: #ece5d6; border: 2px solid #c9bfa9; }
+.vt-dots i.done { background: #4cbf6c; border-color: #1e7a40; }
+.vt-dots i.now { background: #ffd34d; border-color: #c98208; transform: scale(1.3); }
 .vt-card small { color: var(--muted); font-weight: 600; font-size: 0.86rem; }
 
 /* La jauge d'équilibre : la bulle doit rester dans la zone verte. */

@@ -587,7 +587,8 @@ class VaultingSession extends Session {
     const sum = this.figures.reduce((x, f) => x + f.score, 0);
     this.hud.stats([
       [this.L.icon, t(`vt_level_${this.level}`)],
-      ['🎯', fig ? `${FIGURES[fig].icon} ${t(`vt_fig_${fig}`)} ${PROGRAM.indexOf(fig) + 1}/${PROGRAM.length}` : `${PROGRAM.length} ${t('vt_figures')}`],
+      // (la barre du haut compte les figures ; la carte du bas, les temps d'une figure : des points)
+      ['🎯', fig ? t('vt_figN', { n: PROGRAM.indexOf(fig) + 1, total: PROGRAM.length }) : `${PROGRAM.length} ${t('vt_figures')}`],
       ['⭐', done ? fmtMark(sum / done) : '—'],
     ]);
   }
@@ -607,8 +608,7 @@ class VaultingSession extends Session {
     this.cueAt = this.time;
     const name = s.fig === 'mount' ? t('vt_mount') : t(`vt_fig_${s.fig}`);
     const parts = s.fig !== 'mount' ? FIGURES[s.fig].parts : 1;
-    const label = parts > 1 ? `${name} ${s.part + 1}/${parts}` : name;
-    this.hud2.cue(s.fig === 'mount' ? '🤸' : FIGURES[s.fig].icon, label, s.part === 0 ? t(`vt_how_${s.fig}`) : t('vt_howNext'));
+    this.hud2.cue(s.fig === 'mount' ? '🤸' : FIGURES[s.fig].icon, name, s.part === 0 ? t(`vt_how_${s.fig}`) : t('vt_howNext'), s.part, parts);
     this.refreshHud();
   }
 

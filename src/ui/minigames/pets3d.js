@@ -53,7 +53,14 @@ function pour3d(ctx, water) {
   bowl.group.position.x += ahead;
   const homeX = sc.holder.position.x;
   const bowlW = () => bowl.group.getWorldPosition(v3());
-  const play = withLogic(ctx, water ? waterGame : feedGame, () => sc.project(bowlW().add(v3(0, D.r * 0.8, 0))));
+  // (eau : on verse avec une carafe, pas au robinet du jeu dessiné — consigne et bouton changés)
+  const norm = (x) => String(x).replace(/\u00a0/g, ' ');
+  const wctx = Object.create(ctx);
+  if (water) {
+    wctx.button = (text, o) => ctx.button(norm(text).includes(norm(ctx.t('mg_water_btn'))) ? `💧 ${ctx.t('mg_water_btn3d')}` : text, o);
+    wctx.hint = (text, kind) => ctx.hint(norm(text) === norm(ctx.t('mg_water_hint')) ? ctx.t('mg_water_hint3d') : text, kind);
+  }
+  const play = withLogic(wctx, water ? waterGame : feedGame, () => sc.project(bowlW().add(v3(0, D.r * 0.8, 0))));
   const s0 = play.peek();
   const mark = bowl.setMark(s0.lo, s0.hi, s0.target);
   // La source : le sac tenu par notre main, ou la carafe, au-dessus de la gamelle, de l'autre côté de sa tête.

@@ -152,7 +152,7 @@ export function petNails3dGame(ctx) {
   // Cadrage : sa patte tendue en grand, et sa tête (il nous regarde faire).
   // (la patte seule, en gros plan : une griffe fait un centimètre ; sa tête est dans la bulle, en haut à droite)
   const knee = (leg.knee ?? leg.fetlock).getWorldPosition(v3());
-  const frame = (now = false) => sc.frame([tip.clone().addScaledVector(lat, width * 1.4), tip.clone().addScaledVector(lat, -width * 1.4), tip.clone().addScaledVector(dir, clawLen * 1.8), tip.clone().addScaledVector(down, width * 0.6), back, knee, L.chest, ...(L.size.len < 0.5 ? [sc.live('muzzle'), sc.live('poll')] : [])], { dir: [0.85, 0.45, 1], pad: 1.04, now });
+  const frame = (now = false) => sc.frame([tip.clone().addScaledVector(lat, width * 1.4), tip.clone().addScaledVector(lat, -width * 1.4), tip.clone().addScaledVector(dir, clawLen * 1.8), tip.clone().addScaledVector(down, width * 0.6), back, knee, L.chest, ...(L.size.len < 0.5 || sp === 'cat' ? [sc.live('muzzle'), sc.live('poll'), ...L.ears] : [])], { dir: sp === 'cat' ? [1.25, 0.3, 1] : [0.85, 0.45, 1], pad: sp === 'cat' ? 1.14 : 1.04, now });
   frame(true);
   return {
     peek: () => ({ ...play.peek(), clawTip: sc.project(claws[Math.min(3, cur)].g.localToWorld(v3(0, 1, 0))) }),

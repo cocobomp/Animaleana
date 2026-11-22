@@ -9,8 +9,12 @@ import { audio } from '../../game/audio.js';
 import { rationGame, RATION } from './ration.js';
 import { waterGame } from './food.js';
 import { withLogic, sideGauge, bubble } from './care3d.js';
+import { headShape, headFollow } from './headFrame.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+
+/** Cadrages (tests) : marge autour du filet, de la mangeoire, du seau et de toute la tête. */
+export const FEED3D = { pad: 1.18, eatPad: 1.28 };
 
 /** Petit souffle de contentement par les naseaux, et parfois un hennissement doux (« nicker »). */
 export function snort(scene, sound = true) {
@@ -54,7 +58,12 @@ export function ration3dGame(ctx) {
   m.ears = 'forward';
   m.look = P.net.bite(v3());
   m.lookAmt = 0.8;
+  // (toute la tête, pose du moment : bout du nez tendu, bouts des oreilles ; recadrée en douceur quand il tourne la
+  // tête vers le filet, la mangeoire, ou la plonge dans la mangeoire)
+  const shape = headShape(sc);
+  const follow = headFollow(sc, shape, () => [], { reach: 0.12 });
   frameFor('hay', true);
+  let started = false;
   let saidOk = false;
   let saidGrain = false;
   let eatT = 0;
@@ -66,12 +75,15 @@ export function ration3dGame(ctx) {
     net.updateWorldMatrix(true, false);
     const fd = P.feeder.group.getWorldPosition(v3());
     // (le filet entier, et un peu de place à sa droite pour la jauge ; la tête, les oreilles, le haut de l'encolure)
-    const netPts = [v3(0, 0.12, 0), v3(0, -0.8, 0), v3(0, -0.4, 0.32), v3(0, -0.4, -0.3), v3(0, -0.45, 0.75)].map((p) => net.localToWorld(p));
+    // (petit gabarit : un peu moins de place pour la jauge, sa tête reste grande)
+    const room = 0.4 + 0.35 * Math.min(1, Math.max(0, (sc.double.scale - 0.5) / 0.45));
+    const netPts = [v3(0, 0.12, 0), v3(0, -0.8, 0), v3(0, -0.4, 0.32), v3(0, -0.4, -0.3), v3(0, -0.45, room)].map((p) => net.localToWorld(p));
     // (toute la tête et le haut de l'encolure : chez un poulain ou un poney, petit à côté du filet, la tête était
     // coupée au bord de l'image)
-    const head = [L.muzzle, L.poll, ...L.ears, L.withers.clone().lerp(L.poll, 0.3), L.muzzle.clone().add(v3(-0.12, -0.1, 0))];
-    if (which === 'hay') sc.frame([...netPts, ...head, fd.clone().add(v3(0, 0.05, 0))], { dir: [-0.42, 0.24, 1], pad: 1.1, now });
-    else sc.frame([fd.clone().add(v3(0, -0.24, 0)), fd.clone().add(v3(0, 0.4, 0.25)), fd.clone().add(v3(0, -0.1, 0.7)), ...head, netPts[1]], { dir: [-0.42, 0.5, 1], pad: 1.1, now });
+    const neck = [L.withers.clone().lerp(L.poll, 0.3), L.muzzle.clone().add(v3(-0.12, -0.1, 0))];
+    if (which === 'hay') follow.set({ dir: [-0.42, 0.24, 1], pad: FEED3D.pad, half: 0.45 }, () => [...netPts, ...neck, fd.clone().add(v3(0, 0.05, 0))]);
+    else follow.set({ dir: [-0.42, 0.5, 1], pad: FEED3D.pad, half: 0.45 }, () => [fd.clone().add(v3(0, -0.24, 0)), fd.clone().add(v3(0, 0.4, 0.25)), fd.clone().add(v3(0, -0.1, 0.7)), ...neck, netPts[1]]);
+    follow.frame(now);
   }
 
   return {
@@ -81,6 +93,9 @@ export function ration3dGame(ctx) {
     key: (c, d) => play.key(c, d),
     update(dt) {
       play.update(dt);
+      if (!started) follow.frame(true);
+      started = true;
+      follow.update(dt);
       const s = play.peek();
       const was = stage;
       stage = s.stage;
@@ -111,8 +126,11 @@ export function ration3dGame(ctx) {
         // Il mange : le foin du filet (granulés : la tête dans la mangeoire). Cadré en haut de la scène : la carte de
         // fin vient en bas.
         if (eatT === 0) {
+          // (la mangeoire ou le filet, et toute sa tête : elle descend dans la mangeoire, on la suit)
           const fd = P.feeder.group.getWorldPosition(v3());
-          sc.frame([fd.clone().add(v3(-0.4, -0.22, 0)), fd.clone().add(v3(0.1, -0.22, 0.3)), fd.clone().add(v3(-0.2, 0.55, 0)), sc.marks.withers.clone().lerp(fd, 0.35)], { dir: [-0.4, 0.42, 1], pad: 1.1, half: 0.5 });
+          const pts = [fd.clone().add(v3(-0.4, -0.22, 0)), fd.clone().add(v3(0.1, -0.22, 0.3)), fd.clone().add(v3(-0.2, 0.55, 0)), sc.marks.withers.clone().lerp(fd, 0.35)];
+          follow.set({ dir: [-0.4, 0.42, 1], pad: FEED3D.eatPad, half: 0.5 }, () => pts);
+          follow.frame(false);
         }
         eatT += dt;
         if (s.grain > 0.02) {
@@ -178,7 +196,13 @@ export function water3dGame(ctx) {
   const bkG = P.bucket.group;
   bkG.updateWorldMatrix(true, false);
   const tap = P.tap.group.getWorldPosition(v3());
-  sc.frame([bkG.localToWorld(v3(0, -0.32, 0.18)), bkG.localToWorld(v3(0, 0.05, -0.18)), tap.clone().add(v3(0, 0.08, 0)), L.muzzle, L.poll, ...L.ears], { dir: [-0.25, 0.32, 1], pad: 1.12, now: true });
+  // Le seau, le robinet, l'encolure et toute la tête (pose du moment) ; recadré en douceur (il tourne la tête vers le
+  // seau, puis la plonge dedans pour boire : elle reste dans l'image).
+  const shape = headShape(sc);
+  const waitPts = [bkG.localToWorld(v3(0, -0.32, 0.18)), bkG.localToWorld(v3(0, 0.05, -0.18)), tap.clone().add(v3(0, 0.08, 0)), L.withers.clone().lerp(L.poll, 0.3)];
+  const follow = headFollow(sc, shape, () => waitPts, { dir: [-0.25, 0.32, 1], pad: FEED3D.pad, half: 0.45, reach: 0.12 });
+  follow.frame(true);
+  let started = false;
   // (la ligne 🎯 de la consigne, dans le seau)
   const s0 = play.peek();
   const mark = P.bucket.setMark(s0.lo, s0.hi, s0.target);
@@ -193,6 +217,9 @@ export function water3dGame(ctx) {
     key: (c, d) => play.key(c, d),
     update(dt) {
       play.update(dt);
+      if (!started) follow.frame(true);
+      started = true;
+      follow.update(dt);
       const s = play.peek();
       P.bucket.setLevel(ctx.done && drinkT > 0 ? P.bucket.level : s.level);
       const flow = s.pouring ? 0.4 + 0.6 * Math.min(1, s.value * 3) : 0;
@@ -205,8 +232,12 @@ export function water3dGame(ctx) {
       }
       if (ctx.done) {
         if (drinkT === 0) {
+          // (le seau et toute sa tête : elle descend boire, on la suit ; avant, le cadrage glissait vers le seau et
+          // perdait la tête)
           const bk2 = P.bucket.group.getWorldPosition(v3());
-          sc.frame([bk2.clone().add(v3(-0.4, -0.32, 0)), bk2.clone().add(v3(0.1, -0.32, 0.3)), bk2.clone().add(v3(-0.2, 0.55, 0)), sc.marks.withers.clone().lerp(bk2, 0.35)], { dir: [-0.35, 0.42, 1], pad: 1.1, half: 0.5 });
+          const pts = [bk2.clone().add(v3(-0.25, -0.32, 0)), bk2.clone().add(v3(0.1, -0.32, 0.3)), sc.marks.withers.clone().lerp(bk2, 0.35)];
+          follow.set({ dir: [-0.35, 0.42, 1], pad: FEED3D.eatPad, half: 0.5 }, () => pts);
+          follow.frame(false);
         }
         drinkT += dt;
         if (drinkT > 0.6) {

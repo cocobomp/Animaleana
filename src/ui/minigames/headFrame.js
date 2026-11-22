@@ -132,7 +132,7 @@ function measure(sc) {
  * gardées), reach (nez tendu) }. Renvoie { update(dt), frame(now), set(o), reset(), on }.
  */
 export function headFollow(sc, shape, fixed = () => [], o = {}) {
-  const opts = { dir: [0.4, 0.2, 1], pad: 1.4, half: 0.6, every: 0.3, memory: 6, reach: 0.12, ...o };
+  const opts = { dir: [0.4, 0.2, 1], pad: 1.4, half: 0.6, every: 0.3, memory: 10, reach: 0.12, ...o };
   const recent = [];
   let t = 0;
   const f = {

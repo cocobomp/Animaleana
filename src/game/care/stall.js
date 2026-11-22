@@ -31,6 +31,9 @@ export function stallSet(stage) {
   // Accessoires à la taille de l'animal : un poney ou un poulain a un plus petit seau, une plus petite mangeoire,
   // un plus petit filet (comme dans une vraie écurie de poneys), sinon il disparaît derrière.
   const ps = Math.min(1, Math.max(0.72, 0.35 + 0.65 * scale));
+  // Petit gabarit (Falabella 0, Shetland 0,2, poulain 0,3 ; cheval 1) : le filet et le robinet se rapprochent de sa
+  // bouche (sinon, à côté d'eux, sa petite tête restait toute petite dans un coin de l'image).
+  const big = Math.min(1, Math.max(0, (scale - 0.5) / 0.45));
   // Le cheval se place d'après sa pose « à la mangeoire » (mesurée sur son gabarit : un Shetland ou un Frison) :
   // la bouche au-dessus du milieu de la mangeoire accrochée au mur de droite ; le dos à ~1 m du mur du fond. Mais
   // tête haute, son nez reste à 15 cm du mur au moins : un poulain baisse la tête jusqu'au sol en reculant le nez
@@ -240,7 +243,7 @@ export function stallSet(stage) {
   // Filet à foin : accroché au mur de droite, un peu devant la mangeoire, le bas à hauteur de bouche (tête haute).
   props.net = hayNet({ high, hand });
   props.net.group.scale.setScalar(ps);
-  props.net.group.position.set(S.halfW - 0.25 * ps, Math.max(feedAt.y + (NET_DEPTH + 0.2) * ps, muzzle.y + 0.62 * ps), feedAt.z + 0.85 * Math.max(0.85, ps));
+  props.net.group.position.set(S.halfW - 0.25 * ps, Math.max(feedAt.y + (NET_DEPTH + 0.2) * ps, muzzle.y + 0.62 * ps), feedAt.z + (0.42 + 0.43 * big) * Math.max(0.85, ps));
   g.add(props.net.group);
   // Seau d'eau : posé dans la litière, à l'angle avant droit (pour boire, il prend la place de la mangeoire).
   props.bucket = bucket({ high });
@@ -273,7 +276,7 @@ export function stallSet(stage) {
       // Le robinet au mur, à côté du seau (vers nous, loin de la tête), et le tuyau dont la lance est accrochée au
       // bord du seau côté mur. (Avant : un robinet au-dessus du seau, en plein là où la tête descend boire : il
       // traversait la tête d'un poulain.)
-      const tap = props.tap.group.position.set(S.halfW, b.y + (onFloor ? 0.45 : 0.52), b.z + 0.55);
+      const tap = props.tap.group.position.set(S.halfW, b.y + (onFloor ? 0.45 : 0.36 + 0.16 * big), b.z + 0.36 + 0.19 * big);
       const rim = new THREE.Vector3(BUCKET.r * 0.45, 0.035, BUCKET.r * 0.88).multiplyScalar(ps).add(b);
       props.tap.hookUp(rim.clone().sub(tap), b.clone().sub(rim), onFloor ? 0.04 - tap.y : null);
     } else {

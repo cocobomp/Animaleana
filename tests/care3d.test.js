@@ -36,7 +36,8 @@ describe('quand ouvrir la scène 3D', () => {
   });
 
   it('les autres espèces gardent leur jeu dessiné (pour l\'instant)', () => {
-    for (const sp of ['dog', 'cat', 'rabbit', 'sheep', 'goat', 'cow']) expect(stage.care3dPossible({ species: sp }, { has: () => true })).toBe(false);
+    // (chiens, chats, lapins : leur scène est là, voir tests/pets3dStage.test.js)
+    for (const sp of ['sheep', 'goat', 'cow', 'pig']) expect(stage.care3dPossible({ species: sp }, { has: () => true })).toBe(false);
   });
 
   it('le réglage se lit dans l\'adresse, puis dans le stockage local', () => {
@@ -52,14 +53,14 @@ describe('quand ouvrir la scène 3D', () => {
       for (const act of acts) expect(which.care3dWanted({ species: sp }, act)).toBe(true);
     }
     expect(which.care3dWanted({ species: 'horse' }, 'deworm')).toBe(false);
-    expect(which.care3dWanted({ species: 'dog' }, 'feed')).toBe(false);
+    expect(which.care3dWanted({ species: 'pig' }, 'feed')).toBe(false);
   });
 
   it('les soins du cheval refaits en 3D : nourrir, abreuver, friandise, caresser, pansage, laver', () => {
     const h = { species: 'horse' };
     for (const act of ['feed', 'water', 'treat', 'pet', 'brush', 'wash']) expect(typeof care3d.care3dGameFor(h, act), act).toBe('function');
     expect(care3d.care3dGameFor(h, 'deworm')).toBe(null);
-    expect(care3d.care3dGameFor({ species: 'dog' }, 'feed')).toBe(null);
+    expect(care3d.care3dGameFor({ species: 'pig' }, 'feed')).toBe(null);
     expect(care3d.care3dGameFor(null, 'feed')).toBe(null);
   });
 });

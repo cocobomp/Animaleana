@@ -2,9 +2,10 @@
 // SON filet (celui que le jeu va lui mettre : celui d'avant, ou un libre de la sellerie, dans sa couleur), construit
 // par le jeu (gearModels.js buildGear) :
 //
-//   1. le mors : il baisse la tête vers nous ; notre main tient le filet devant sa tête, le mors devant ses lèvres ; on
-//      touche le coin de ses lèvres (là où il n'a pas de dents) : le mors entre, le filet monte en place, il mâchonne
-//      son mors. Devant ses dents, il relève la tête et couche les oreilles ;
+//   1. le mors : il baisse la tête vers nous ; le filet est posé sur sa tête, un peu bas (la têtière devant les
+//      oreilles), et notre main, venue d'en bas, tient le mors sous ses lèvres ; on touche le coin de ses lèvres (là où
+//      il n'a pas de dents) : le mors glisse dans sa bouche, le filet monte en place, il mâchonne son mors. Devant ses
+//      dents, il relève la tête et couche les oreilles ;
 //   2. les oreilles : la têtière est devant ses oreilles ; on touche une oreille (elle se plie sous la têtière), puis
 //      l'autre ; la têtière passe sur la nuque, le frontal se pose ;
 //   3. la sous-gorge : elle pend sous la ganache ; on la serre (🪢, ou le doigt sur sa gorge) en laissant un poing de
@@ -165,7 +166,6 @@ export function bridle3dGame(ctx) {
     throatStrap.geometry.dispose();
     throatStrap.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 28, 0.0085, 6, false);
   }
-  const crownTop = crownBox ? v3(0, crownBox.max.y, (crownBox.min.z + crownBox.max.z) / 2) : v3(0, hr, dims.earZ ?? 0);
   const cheekPivots = cheeks.map((c) => {
     const b = boxOf(c);
     const pv = v3((b.min.x + b.max.x) / 2, b.min.y, b.max.z);
@@ -186,8 +186,12 @@ export function bridle3dGame(ctx) {
   const halter = (sc.double.gear?.userData?.meshes ?? []).filter((x) => x.parent === head && x.visible);
 
   // ---------------------------------------------------------------- notre main
-  const hand = handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.9 });
-  hand.scale.setScalar(0.9 * Math.max(0.8, S));
+  // (la main tient l'anneau du mors par dessous, la paume vers le haut, les doigts refermés dessus ; le poignet et la
+  // manche descendent vers nous, hors de l'image. Avant : la main tenait la têtière, tournée vers nous, on ne voyait
+  // que quatre doigts collés sur sa joue)
+  const hand = handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.55 });
+  const handK = 0.95 * Math.max(0.8, S);
+  hand.scale.setScalar(handK);
   sc.scene.add(hand);
   const ring = pulseRing(own, { r: 0.03 * Math.max(0.8, S) });
   sc.scene.add(ring);
@@ -217,10 +221,12 @@ export function bridle3dGame(ctx) {
     ? ctx.button(t('mg_bridle_quick'), { onTap: () => { if (!ctx.done) { bitIn = true; earDone[0] = earDone[1] = true; throat = (T.lo + T.hi) / 2; ctx.finish(1, t('mg_bridle_end'), 'just'); } } })
     : null;
 
+  /** La consigne d'une étape (le mors : la bouche du modèle ne s'ouvre pas, on ne le promet pas). */
+  const stepHint = (st) => t(st === 'bit' ? 'mg_bridle_bit3d' : `mg_bridle_${st}`, who);
   function startStep(i) {
     si = i;
     const st = step();
-    ctx.hint(t(`mg_bridle_${st}`, who));
+    ctx.hint(stepHint(st));
     frameFor(st);
     busy.poke();
     if (st !== 'throat') return ctx.progress(0);
@@ -232,7 +238,7 @@ export function bridle3dGame(ctx) {
 
   function next() {
     if (ctx.done || pause > 0) return;
-    if (step() !== 'throat') return ctx.hint(t(`mg_bridle_${step()}`, who), 'warn');
+    if (step() !== 'throat') return ctx.hint(stepHint(step()), 'warn');
     tightening = false;
     results.push({ step: 'throat', value: throat, ...throatVerdict(throat) });
     finishAll();
@@ -273,16 +279,23 @@ export function bridle3dGame(ctx) {
 
   // ---------------------------------------------------------------- caméra
   function frameFor(st, now = false) {
+    sc.holder.updateMatrixWorld(true); // (la pose du moment : à l'ouverture, la tête n'a pas encore été dessinée)
     const ptsHead = [L.muzzle, L.poll, ...L.ears, L.head, W(throatLocal.clone().add(v3(0, -hr * 0.6, 0)))];
-    if (st === 'bit') sc.frame([...ptsHead, W(v3(0, -hr * 2.2, snout * 0.9)), W(v3(0, -hr * 1.6, snout * 1.25))], { dir: [0.75, 0.12, 1], pad: 1.18, now });
+    // (le mors : la tête telle qu'elle est — il la baisse vers nous —, le bout du nez avec de la marge, et notre main
+    // sous ses lèvres. Avant : cadré sur la pose de repos, le nez sortait de l'image en portrait)
+    // (à l'ouverture, la pose du modèle n'est pas encore celle du box : les repères de repos, avec de la marge)
+    if (st === 'bit' && !framedLow) sc.frame([...ptsHead, W(v3(0, -hr * 2.2, snout * 0.9)), W(v3(0, -hr * 1.6, snout * 1.3)), L.muzzle.clone().add(v3(0.2 * S, -0.12 * S, 0))], { dir: [0.75, 0.12, 1], pad: 1.2, now });
+    else if (st === 'bit') sc.frame([W(v3(0, hr * 1.2, -0.02)), ...[0, 1].map((i) => earTip(i)), W(v3(0, -hr * 0.2, snout * 1.14)), W(teethLocal.clone().add(v3(0, -hr * 0.4, hr * 0.5))), W(barLocal.clone().add(v3(-hr * 0.5, -hr * 1.9, 0))), W(throatLocal.clone().add(v3(0, -hr * 0.6, 0)))], { dir: [0.75, 0.12, 1], pad: 1.16, now });
     else if (st === 'ears') sc.frame([...ptsHead, ...L.ears.map((e) => e.clone().add(v3(0, 0.08 * S, 0)))], { dir: [0.6, 0.35, 1], pad: 1.22, now });
     else sc.frame([...ptsHead, L.neck, W(throatLocal.clone().add(v3(0, -hr * 1.2, 0)))], { dir: [0.42, -0.12, 1], pad: 1.2, now });
   }
 
   // ---------------------------------------------------------------- la pose : oreilles pliées, tête relevée
   let lower = 0; // (il baisse la tête vers nous pour qu'on lui mette le filet, tant que le mors n'est pas entré)
+  let framedLow = false;
   const unhook = afterLife(sc, (dt) => {
-    lower += ((step() === 'bit' && !bitIn && annoyed <= 0 ? 1 : 0) - lower) * Math.min(1, dt * 2.5);
+    // (il garde la tête baissée jusqu'aux oreilles : relevée tout de suite, son nez sortait de l'image)
+    lower += ((step() === 'bit' && annoyed <= 0 ? 1 : 0) - lower) * Math.min(1, dt * 2.5);
     if (lower > 0.01 && md.neck) md.neck.rotateX(0.16 * smooth(lower));
     if (annoyed > 0 && md.neck) md.neck.rotateX(-0.28 * smooth(Math.min(1, annoyed)));
     for (let i = 0; i < 2; i++) {
@@ -297,12 +310,13 @@ export function bridle3dGame(ctx) {
   startStep(0);
   frameFor('bit', true);
 
-  /** Le filet : tenu devant sa tête (k = 0), puis en place (k = 1). */
+  /** Le filet : sur sa tête mais plus bas, le mors sous ses lèvres (k = 0), puis en place (k = 1). */
   function poseBridle() {
     const k = smooth(bitK);
-    // (tenu : un peu plus bas et devant le bout du nez, penché)
-    root.position.set(-hr * 0.15 * (1 - k), -hr * 1.1 * (1 - k), snout * 0.32 * (1 - k));
-    root.rotation.set(0.35 * (1 - k), 0, 0);
+    // (tenu : le filet descendu le long de sa tête et un peu écarté du chanfrein, le mors juste sous la bouche ;
+    // avant : décalé devant le bout du nez, on ne voyait que deux lanières et une boucle qui pendaient)
+    root.position.set(0, -hr * 0.42 * (1 - k), hr * 0.12 * (1 - k));
+    root.rotation.set(0, 0, 0);
     // la têtière : devant les oreilles tant qu'elles ne sont pas passées
     const tilt = bitIn ? 0.45 * (1 - smooth(crownK)) : 0.2;
     crownPivot.rotation.x = tilt;
@@ -323,6 +337,7 @@ export function bridle3dGame(ctx) {
       step: step(), si, annoyed, throat, tightening, bitIn, crown: crownK, pause, teethTaps, lo: T.lo, hi: T.hi,
       earDone: [...earDone], results: results.map((r) => ({ ...r })),
       bar: sc.project(W(barLocal)), teeth: sc.project(W(teethLocal)), ears: [0, 1].map((i) => sc.project(earTip(i))),
+      nose: sc.project(W(v3(0, -0.02 * snout, snout))), hand: hand.visible ? sc.project(hand.position) : null,
       throatSpot: sc.project(W(throatAt())), halterHidden: halter.every((x) => !x.visible),
       sag: sagNow,
     }),
@@ -341,8 +356,10 @@ export function bridle3dGame(ctx) {
           for (const x of halter) x.visible = false;
           results.push({ step: 'bit', value: teethTaps, q: [1, 0.7][teethTaps] ?? 0.4, verdict: teethTaps ? 'low' : 'just' });
           ctx.progress(1);
-          ctx.hint(t('mg_bridle_bitIn', who), 'good');
-          fx.text(bar.x, bar.y - 40, `✓ ${t('mg_bridle_stage_bit')}`, '#2f8a5f', 26);
+          ctx.hint(t('mg_bridle_bitIn3d', who), 'good');
+          // (le mot reste dans l'image, même quand la bouche est près du bord)
+          const v = ctx.view;
+          fx.text(Math.min(v.x1 - 80, Math.max(v.x0 + 80, bar.x)), bar.y - 40, `✓ ${t('mg_bridle_stage_bit')}`, '#2f8a5f', 26);
           pause = PAUSE;
         } else if (dTeeth < 52) {
           teethTaps++;
@@ -405,24 +422,28 @@ export function bridle3dGame(ctx) {
       if (annoyed > 0) m.ears = 'back';
       else if (!(st === 'throat' && throat > T.hi)) m.ears = 'forward';
       m.look = hand.position;
-      m.lookAmt = st === 'bit' && !bitIn ? 0.35 : 0;
+      m.lookAmt = st === 'bit' && !bitIn ? 0.2 : 0;
       poseBridle();
-      // la main : elle tient la têtière (devant sa tête, puis devant les oreilles) ; le bras vient d'en haut, hors de
-      // l'image (avant : de face, on ne voyait qu'une manche bleue devant sa tête). À la sous-gorge, elle s'en va.
-      const grip = crownPivot.localToWorld(crownTop.clone().sub(crownPivot.position).add(v3(-hr * 0.3, hr * 0.05, 0)));
-      // (la main tient le filet devant sa tête ; une fois le mors en place, elle s'efface : on touche les oreilles)
-      hand.visible = !ctx.done && st === 'bit' && !bitIn;
-      hand.position.lerp(grip, Math.min(1, dt * 10));
-      const cq = sc.camera.quaternion;
-      const right = v3(1, 0, 0).applyQuaternion(cq);
-      const toCam = sc.camera.position.clone().sub(grip).normalize();
-      // (le bras passe par-dessus l'encolure, derrière la tête — comme quand on bride — : il ne cache pas son visage)
-      const from = grip.clone().add(v3(-0.62 * Math.max(0.8, S), 0.28 * Math.max(0.8, S), -0.05));
-      void right;
-      const x = grip.clone().sub(from).normalize();
-      const z = new THREE.Vector3().crossVectors(x, toCam).normalize();
-      const y = new THREE.Vector3().crossVectors(z, x).normalize();
-      hand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+      // (la tête baissée vers nous : on recadre une fois, en douceur, sur sa tête telle qu'elle est)
+      if (st === 'bit' && !framedLow && lower > 0.92) {
+        framedLow = true;
+        frameFor('bit');
+      }
+      // la main : elle tient l'anneau du mors (de notre côté) par dessous et l'accompagne quand il entre ; puis elle
+      // s'en va (on touche les oreilles, on serre la sous-gorge)
+      hand.visible = !ctx.done && st === 'bit' && bitK < 1;
+      if (hand.visible && ringNear) {
+        const at = ringNear.getWorldPosition(v3());
+        const toCam = sc.camera.position.clone().sub(at).normalize();
+        // (le bras vient de notre côté, d'en bas : le poignet descend vers nous)
+        const from = at.clone().addScaledVector(toCam, 0.32).add(v3(0, -0.42, 0));
+        const x = at.clone().sub(from).normalize();
+        const z = new THREE.Vector3().crossVectors(x, v3(0, 1, 0)).normalize();
+        const y = new THREE.Vector3().crossVectors(z, x).normalize();
+        hand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+        // (l'anneau dans le creux des doigts : un peu au-delà de la paume, au-dessus d'elle)
+        hand.position.copy(at).addScaledVector(x, -0.05 * handK).addScaledVector(y, -0.022 * handK);
+      }
       // la cible : le coin des lèvres, puis les oreilles
       ring.visible = !ctx.done && pause <= 0 && sc.ready && !(st === 'throat' && (tightening || throat > 0));
       if (ring.visible) updateRing(ring, sc, ctx.time, st === 'bit' ? W(barLocal) : st === 'ears' ? earTip(earDone[0] ? 1 : 0) : W(throatAt()));

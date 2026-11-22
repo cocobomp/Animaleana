@@ -174,6 +174,11 @@ describe('brider en 3D, chaque gabarit', () => {
       let s = game.peek();
       expect(inView(s.bar, ctx.view), 'le coin des lèvres est dans l\'image').toBe(true);
       expect(s.halterHidden).toBe(false);
+      // il baisse la tête vers nous : la caméra le suit ; le bout du nez, ses dents et notre main restent dans l'image
+      run(ctx, game, sc, 2.5);
+      s = game.peek();
+      for (const k of ['bar', 'teeth', 'nose', 'hand']) expect(inView(s[k], ctx.view), `${k} dans l'image`).toBe(true);
+      expect(ctx.hints.at(-1).text, 'la consigne ne promet pas une bouche qui s\'ouvre').toBe(t('mg_bridle_bit3d', { name: a.name, g: a.sex }));
       game.down(s.bar);
       expect(game.peek().bitIn).toBe(true);
       expect(game.peek().halterHidden, 'le licol s\'en va quand le mors entre').toBe(true);

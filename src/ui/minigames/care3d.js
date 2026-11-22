@@ -70,13 +70,17 @@ export function openCareScene(ui, a, host, above) {
   if (!care3dPossible(a, { setting: care3dSetting() })) return null;
   const game = ui.game ?? null;
   let scene = null;
+  const fit = FITS[a.species] ?? null;
+  let model = null;
   try {
-    const fit = FITS[a.species] ?? null;
-    scene = new (STAGES[a.species] ?? CareStage)({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species], fit, model: fit?.model?.(a) ?? null });
+    model = fit?.model?.(a) ?? null;
+    scene = new (STAGES[a.species] ?? CareStage)({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species], fit, model });
   } catch (e) {
     console.warn('[care3d] scène 3D impossible, jeu dessiné', e?.message ?? e);
     try {
       scene?.dispose();
+      // (le double construit par l'adaptation avant la scène — WebGL refusé avant qu'elle le prenne — : libéré)
+      fit?.drop?.(model);
     } catch {
       /* rien */
     }

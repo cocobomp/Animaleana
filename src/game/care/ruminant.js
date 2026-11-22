@@ -16,6 +16,7 @@ import { goatLookOf, goatUdderFill } from '../../sim/goatLook.js';
 import { cowLookOf, cowUdderFill, cowModelKind } from '../../sim/cowLook.js';
 import { audio } from '../audio.js';
 import { refineLocks } from './locks.js';
+import { disposeModel } from '../models/animalModel.js';
 
 /** Espèces de la ferme qui ont leur scène de soin (la bergerie, la chèvrerie, l'étable : farmBarn.js). */
 export const RUMINANTS = ['sheep', 'goat', 'cow'];
@@ -308,6 +309,12 @@ export function ruminantLife(stage, dt) {
 /** L'adaptation de la scène pour ces espèces (voir CareStage, o.fit). */
 export const RUMINANT_FIT = {
   model: (a) => buildRuminantModel(a),
+  /** Libère un double construit (model) que la scène n'a pas pu prendre (WebGL refusé avant de le poser). */
+  drop(md) {
+    if (!md || md.root?.parent) return;
+    md.dispose?.();
+    disposeModel(md.root);
+  },
   marks: ruminantMarks,
   live: ruminantLive,
   region: ruminantRegion,

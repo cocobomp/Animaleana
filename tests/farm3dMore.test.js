@@ -277,3 +277,45 @@ describe('la plaque à son nom se lit en entier', () => {
     }, 60000);
   }
 });
+
+describe('repli : la scène ne peut pas s\'ouvrir', () => {
+  it('WebGL refusé : jeu dessiné, et le double du ruminant déjà construit est libéré', async () => {
+    const { vi } = await import('vitest');
+    const which = await import('../src/game/care/which.js');
+    const care3d = await import('../src/ui/minigames/care3d.js');
+    const { RUMINANT_FIT } = await import('../src/game/care/ruminant.js');
+    const M = await loadFarm();
+    const a = M.animal.createAnimal({ species: 'goat', breed: 'alpine', colorIndex: 0, ageDays: 900, seed: 77, sex: 'f' });
+    // (le modèle est « chargé » ; la toile n'a pas de WebGL : la scène lève une erreur avant de prendre le double)
+    const spyPossible = vi.spyOn(which, 'care3dPossible').mockReturnValue(true);
+    void spyPossible;
+    const built = [];
+    const model0 = RUMINANT_FIT.model;
+    const drop0 = RUMINANT_FIT.drop;
+    const dropped = [];
+    RUMINANT_FIT.model = (x) => {
+      const md = M.ruminant.buildRuminantModel(x, M.gltf.goat);
+      built.push(md);
+      return md;
+    };
+    RUMINANT_FIT.drop = (md) => {
+      dropped.push(md);
+      drop0.call(RUMINANT_FIT, md);
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const host = { insertBefore() { throw new Error('ne doit pas être appelé'); } };
+    try {
+      const sc = care3d.openCareScene({ game: null }, a, host, null);
+      expect(sc).toBe(null);
+    } finally {
+      RUMINANT_FIT.model = model0;
+      RUMINANT_FIT.drop = drop0;
+      warn.mockRestore();
+      vi.restoreAllMocks();
+    }
+    // (il a été construit, puis rendu ; jamais posé dans une scène)
+    expect(built.length).toBe(1);
+    expect(dropped).toEqual(built);
+    for (const md of built) expect(md.root.parent).toBe(null);
+  }, 60000);
+});

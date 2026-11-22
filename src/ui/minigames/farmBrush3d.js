@@ -198,6 +198,9 @@ export function farmBrush3dGame(ctx) {
     brush.position.lerp(toolPos, brush.visible ? Math.min(1, dt * 25) : 1);
     brush.quaternion.setFromUnitVectors(v3(0, 1, 0), nn);
     brush.rotateY(rot * 1.5);
+    // (penchée sur la tranche, vers le bas, comme on la tient : vue de face sur le flanc, on voit les poils sous le bois
+    // et l'anse dessus, pas seulement le dos de la brosse)
+    brush.rotateX(0.55);
     brush.visible = true;
   }
 

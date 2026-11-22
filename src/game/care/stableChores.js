@@ -272,6 +272,8 @@ export function farmBrushModel(keep) {
   g.add(back);
   // les touffes de poils : quatre rangées, bien visibles de profil (2,5 cm de poils sous le bois)
   const tuft = keep(new THREE.CylinderGeometry(0.0055, 0.0075, 0.03, 6));
+  // (les rangées du bord s'écartent vers l'extérieur et dépassent du bois : vue de dessus, une frange de poils
+  // clairs autour du dos en bois)
   const rows = 4;
   const cols = 11;
   const tufts = new THREE.InstancedMesh(tuft, bristleMat, rows * cols);
@@ -282,8 +284,10 @@ export function farmBrushModel(keep) {
     for (let c = 0; c < cols; c++) {
       const x = -L / 2 + 0.014 + (c / (cols - 1)) * (L - 0.028);
       const z = -W / 2 + 0.012 + (r / (rows - 1)) * (W - 0.024);
-      q.setFromAxisAngle(V(1, 0, 0), ((r - 1.5) / 1.5) * 0.12);
-      m4.compose(V(x, 0.017, z), q, V(1, 1 + 0.08 * Math.sin(c * 2.3 + r), 1));
+      const side = (r - 1.5) / 1.5;
+      const end = (c - (cols - 1) / 2) / ((cols - 1) / 2);
+      q.setFromEuler(new THREE.Euler(side * 0.38, 0, -end * 0.22));
+      m4.compose(V(x, 0.017, z), q, V(1, 1.15 + 0.08 * Math.sin(c * 2.3 + r), 1));
       tufts.setMatrixAt(k++, m4);
     }
   }
@@ -294,7 +298,7 @@ export function farmBrushModel(keep) {
   // l'anse de cuir, d'un bout à l'autre du dos
   const strap = shadowed(new THREE.Mesh(keep(new THREE.TorusGeometry(L * 0.36, 0.008, 6, 22, Math.PI)), leather));
   strap.position.y = 0.064;
-  strap.scale.set(1, 0.55, 1);
+  strap.scale.set(1, 0.75, 1);
   strap.rotation.x = 0;
   g.add(strap);
   for (const sx of [-1, 1]) {

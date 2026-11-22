@@ -22,6 +22,9 @@ export const TYPE_ICON = { jumping: '🏇', lesson: '🎓', trail: '🧭', agili
 const TIER_ICON = { gold: '🏆', silver: '🥈', bronze: '🥉' };
 const SKILL_OF = { jumping: ['jump', 'obedience'], lesson: ['jump', 'obedience'], trail: ['endurance', 'speed'], agility: ['jump', 'obedience', 'speed'], hop: ['jump', 'obedience'], show: ['obedience'], flat: ['dressage', 'obedience'], figures: ['dressage', 'obedience'], dressage: ['dressage', 'obedience'] };
 const DRESSAGE_TYPES = ['flat', 'figures', 'dressage'];
+
+/** Le panneau défile jusqu'à y (un autre écran du menu des activités s'ouvre : en haut). */
+const scrollTo = (ui, y = 0) => { if (ui.panelBody) ui.panelBody.scrollTop = y; };
 const STAGE_ICON = ['🟫', '✖️', '🏇', '🏆'];
 
 // ---------------------------------------------------------------- menu principal
@@ -63,7 +66,9 @@ function playTab(ui, state) {
   const cards = types.map((type) => {
     // (voltige : le tonneau est toujours là ; on compte les chevaux prêts au pas)
     const n = type === 'trail' ? count('trail') + here.filter((a) => a.following).length : type === 'vaulting' ? 1 + here.filter((a) => !vaultBlock(a, 'walk')).length : count(type);
-    return h('button', { class: 'card actv-card', onClick: () => { if (type === 'beauty') return openBeauty(ui); state.pick = type; ui.renderPanel(); } },
+    // (on ouvre le choix en haut : la liste était défilée jusqu'à la carte, et le haut du choix restait caché —
+    // pour la voltige, le tonneau et « ← Retour » ; au retour, la liste revient où elle était)
+    return h('button', { class: 'card actv-card', onClick: () => { if (type === 'beauty') return openBeauty(ui); state.listY = ui.panelBody?.scrollTop ?? 0; state.pick = type; ui.renderPanel(); scrollTo(ui); } },
       h('span', { class: 'card-emoji' }, TYPE_ICON[type]),
       h('span', { class: 'card-main' }, h('b', {}, t(`actv_type_${type}`)), h('small', {}, t(`actv_desc_${type}`))),
       h('span', { class: 'card-side' }, n ? h('small', {}, t('actv_ready', { n })) : h('small', {}, '—')));
@@ -97,7 +102,7 @@ function whenText(g, c) {
 function pickAnimal(ui, state) {
   const g = ui.game;
   const type = state.pick;
-  const back = h('button', { class: 'small', onClick: () => { state.pick = null; state.comp = null; ui.renderPanel(); } }, `← ${t('actv_back')}`);
+  const back = h('button', { class: 'small', onClick: () => { state.pick = null; state.comp = null; ui.renderPanel(); scrollTo(ui, state.listY ?? 0); } }, `← ${t('actv_back')}`);
   const head = [h('div', { class: 'row' }, back, h('b', {}, `${TYPE_ICON[type]} ${state.comp ? compName(state.comp) : t(`actv_type_${type}`)}`))];
   if (type === 'beauty') return [...head, ...beautyPick(ui, state)]; // concours de beauté (src/ui/beauty.js)
   if (type === 'vaulting') return [...head, ...vaultingPick(ui, state)]; // 🤸 voltige (src/ui/vaulting.js)

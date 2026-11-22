@@ -242,6 +242,26 @@ describe('jouer avec le chat : la canne à plume', () => {
   }
 });
 
+describe('nourrir, donner à boire : la gamelle bien visible, le sac ne la cache pas', () => {
+  for (const gab of GAUGES) {
+    it(`${label(gab)} : gamelle assez grande, sous le sac (ou la carafe) tenu plus haut`, () => {
+      const { a, sc } = makePetStage(gab);
+      for (const act of ['feed', 'water']) {
+        const ctx = ctxFor(a, sc);
+        const game = pets3d.PET_CARE3D_GAMES[gab.species][act](ctx);
+        run(ctx, game, sc, 0.6);
+        const s = game.peek();
+        expect(s.bowlPx, `${act} rayon de la gamelle`).toBeGreaterThan(26);
+        // le bas du sac au repos est au-dessus du bord de la gamelle
+        expect(s.srcLowY, `${act} sac`).toBeLessThan(s.bowlRimY);
+        game.destroy();
+        sc.mood.posture = null;
+      }
+      sc.dispose();
+    }, 60000);
+  }
+});
+
 describe('les cadrages en paysage et sur ordinateur', () => {
   // (la toile 3D d'un téléphone en paysage, 844 × 390 : 496 × 370 ; la fenêtre du jeu sur un ordinateur : 660 × 460)
   for (const gab of [GAUGES[0], GAUGES[1], GAUGES[2], GAUGES[3], GAUGES[5], GAUGES[6], GAUGES[7], { species: 'rabbit', breed: 'tete_de_lion' }]) {

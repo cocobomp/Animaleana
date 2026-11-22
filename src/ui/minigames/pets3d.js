@@ -85,7 +85,7 @@ function pour3d(ctx, water) {
   const mark = bowl.setMark(s0.lo, s0.hi, s0.target);
   // La source : le sac tenu par notre main, ou la carafe, au-dessus de la gamelle, de l'autre côté de sa tête. Tant
   // qu'on ne verse pas, on la tient plus haut : elle ne cache jamais la gamelle ; on la baisse en la penchant.
-  const size = Math.max(0.34, Math.min(1.1, (0.8 * D.r) / 0.09));
+  const size = Math.max(0.3, Math.min(1.05, (0.7 * D.r) / 0.09));
   const SRC = water ? { w: 0.13, h: 0.2 } : { w: 0.16, h: 0.24 };
   const hand = { ...(P.hand ?? {}), size: handSize(L) };
   const src = water ? pitcher({ size, hand, shoulder: (at) => shoulderOf(sc, at) }) : kibbleBag({ kind: sp, size, hand, shoulder: (at) => shoulderOf(sc, at) });
@@ -122,7 +122,20 @@ function pour3d(ctx, water) {
   let doneT = 0;
   let snd = 1.5;
   return {
-    peek: () => ({ ...play.peek(), bowl: bowl.level, walkX: sc.holder.position.x - homeX }),
+    peek: () => {
+      // (pour les tests : la gamelle à l'écran, et le bas du sac ou de la carafe, sans la main)
+      const box = new THREE.Box3();
+      src.group.updateMatrixWorld(true);
+      src.group.traverse((o) => {
+        let h = o;
+        while (h && !h.userData?.pose) h = h.parent;
+        if (o.isMesh && !h && o.visible) box.expandByObject(o);
+      });
+      let low = -Infinity;
+      if (!box.isEmpty()) for (const x of [box.min.x, box.max.x]) for (const z of [box.min.z, box.max.z]) low = Math.max(low, sc.project(v3(x, box.min.y, z)).y);
+      const rim = sc.project(bowl.group.localToWorld(v3(0, 0, D.r)));
+      return { ...play.peek(), bowl: bowl.level, walkX: sc.holder.position.x - homeX, bowlPx: sc.projectRadius(bowlW(), D.r), bowlRimY: Math.min(rim.y, sc.project(bowl.group.localToWorld(v3(0, 0, -D.r))).y), srcLowY: low };
+    },
     down: (p) => play.down(p),
     up: (p) => play.up(p),
     key: (c, d) => play.key(c, d),

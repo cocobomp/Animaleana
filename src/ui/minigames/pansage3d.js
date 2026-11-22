@@ -200,12 +200,18 @@ export function pansage3dGame(ctx) {
     } else if (st === 'hoof') frameHoof();
     else frameComb();
   }
-  function frameHoof() {
+  /**
+   * Le pied levé, vu de près. Appelé à chaque image de l'étape : la caméra suit la sole (le membre se plie, le cheval
+   * respire, il reporte son poids) ; avant, elle ne la suivait que 1,2 s et un postérieur pouvait sortir de l'image.
+   */
+  function frameHoof(half = 0.55) {
     const hf = hooves[foot];
     if (!hf?.sole) return;
     const f = hf.sole.frameInfo();
-    sc.frame(f.points, { dir: f.dir, pad: 2.3, half: 0.55 });
+    sc.frame(f.points, { dir: f.dir, pad: 2.3, half });
   }
+  /** On peut curer ce pied : il est levé et la caméra s'est posée sur lui (ou, au plus tard, après 2 s). */
+  const footReady = () => footDoneAt < 0 && ctx.time - footAt >= 0.6 && (sc.settled(0.04) || ctx.time - footAt > 2);
   let combOn = null;
   function frameComb() {
     const maneLeft = knots.some((q) => q.part === 'mane' && q.tangle > 0);
@@ -268,6 +274,8 @@ export function pansage3dGame(ctx) {
       m.lift = LEG_OF[PANSAGE_FEET[0]];
       m.liftAmt = 0;
     } else m.lift = null;
+    // (au cure-pied, il se tient carré : pas de repos sur un postérieur, voir stage.life)
+    m.square = st === 'hoof';
     if (st === 'comb') combOn = null;
     frameStage();
     const n = count();
@@ -453,7 +461,7 @@ export function pansage3dGame(ctx) {
 
   function pick(seg, p) {
     const hf = hooves[foot];
-    if (!hf || !hf.sole || footDoneAt >= 0 || ctx.time - footAt < 0.6) return;
+    if (!hf || !hf.sole || !footReady()) return;
     const sole = hf.sole;
     if (sole.inFrog(p.x, p.y) && ctx.time - pokeAt > 0.6) {
       pokeAt = ctx.time;
@@ -581,7 +589,7 @@ export function pansage3dGame(ctx) {
       results: results.map((r) => ({ ...r })),
       mud: mud.filter((q) => q.mud > 0).map((q) => ({ x: place(q).x, y: q.y, r: q.rr, mud: q.mud })),
       dust: dust.filter((q) => q.dust > 0).map((q) => ({ x: place(q).x, y: q.y, r: q.rr, dust: q.dust, leg: !!q.leg })),
-      foot: PANSAGE_FEET[foot] ?? null, footIndex: foot, footReady: ctx.time - footAt >= 0.6 && footDoneAt < 0,
+      foot: PANSAGE_FEET[foot] ?? null, footIndex: foot, footReady: stage() === 'hoof' && footReady(),
       blobs: (hooves[foot]?.blobs ?? []).map((q, i) => ({ q, i })).filter(({ q }) => q.dirt > 0).map(({ q, i }) => {
         const sp = hooves[foot].sole.blobScreen(i);
         return { x: sp.x, y: sp.y, r: sp.r, dirt: q.dirt, stone: !!q.stone };
@@ -638,8 +646,8 @@ export function pansage3dGame(ctx) {
       if (zone === 'high') m.annoyed = Math.max(m.annoyed, 0.2);
       m.look = sc.camera.position;
       m.lookAmt = stage() === 'comb' ? 0.2 : 0.45;
-      // (pied levé : la caméra suit la sole qui monte)
-      if (stage() === 'hoof' && pause <= 0 && ctx.time - footAt < 1.2) frameHoof();
+      // (pied levé : la caméra suit la sole, doucement au début du geste, puis de près)
+      if (stage() === 'hoof' && pause <= 0) frameHoof(ctx.time - footAt < 1.2 ? 0.55 : 0.2);
       if (stage() === 'comb' && pause <= 0) frameComb();
       showTool(dt);
     },
@@ -695,7 +703,7 @@ export function pansage3dGame(ctx) {
       if (st === 'hoof' && pause <= 0) {
         // talon → pince : la flèche du bon sens, à côté du pied
         const sole = hooves[foot]?.sole;
-        if (sole && ctx.time - footAt > 0.8) {
+        if (sole && footReady()) {
           const c = sole.center();
           const d = sole.toeDir();
           g.save();

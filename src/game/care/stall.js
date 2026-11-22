@@ -291,18 +291,9 @@ export function stallSet(stage) {
   g.add(motes.points);
 
   // Environnement (reflets doux du pelage, du seau, du métal) : un petit box chaud « photographié » une fois.
-  const pmrem = new THREE.PMREMGenerator(stage.renderer);
-  const room = new RoomEnvironment();
-  room.traverse((o) => {
-    if (o.isMesh && o.material?.color) o.material.color.multiply(new THREE.Color(1.0, 0.86, 0.68));
-  });
-  const env = pmrem.fromScene(room, 0.04, 0.1, 100, { size: high ? 128 : 64 });
-  room.traverse((o) => {
-    o.geometry?.dispose?.();
-    o.material?.dispose?.();
-  });
-  pmrem.dispose();
-  stage.scene.environment = env.texture;
+  // (sans WebGL, dans les tests : pas d'environnement)
+  const env = stage.headless ? null : roomEnvironment(stage.renderer, high);
+  stage.scene.environment = env?.texture ?? null;
   stage.scene.environmentIntensity = 0.42;
   stage.scene.background = new THREE.Color(0x2a1e14);
   stage.scene.fog = new THREE.Fog(0x2a1e14, 7, 16);
@@ -328,13 +319,29 @@ export function stallSet(stage) {
     },
     dispose() {
       for (const p of Object.values(props)) p.dispose?.();
-      env.dispose();
+      env?.dispose();
       for (const x of own) x.dispose?.();
       g.traverse((o) => {
         if (o.isInstancedMesh) o.dispose();
       });
     },
   };
+}
+
+/** Environnement des reflets : un petit box chaud « photographié » une fois (PMREM). */
+function roomEnvironment(renderer, high) {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const room = new RoomEnvironment();
+  room.traverse((o) => {
+    if (o.isMesh && o.material?.color) o.material.color.multiply(new THREE.Color(1.0, 0.86, 0.68));
+  });
+  const env = pmrem.fromScene(room, 0.04, 0.1, 100, { size: high ? 128 : 64 });
+  room.traverse((o) => {
+    o.geometry?.dispose?.();
+    o.material?.dispose?.();
+  });
+  pmrem.dispose();
+  return env;
 }
 
 /** Brins de paille posés sur la litière (un seul InstancedMesh, couleurs variées). */

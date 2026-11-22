@@ -109,9 +109,10 @@ const AXIS_Y = new THREE.Vector3(0, 1, 0);
  * Un double de l'animal (comme photoDouble des vignettes, mais en pleine finesse) : même espèce, race, robe, âge,
  * taille et équipement que lui. Renvoie { holder, model, gear, scale, dispose }.
  */
-export function buildDouble(a, entity = null) {
+export function buildDouble(a, entity = null, built = null) {
   const look = stageLook(a);
-  const model = buildGltfAnimal(a.species, look) ?? buildAnimalModel(a.species, look, a.breed);
+  // (built : modèle déjà construit, pour les tests sans navigateur)
+  const model = built ?? buildGltfAnimal(a.species, look) ?? buildAnimalModel(a.species, look, a.breed);
   // (l'ombre de contact au sol du modèle : la scène a de vraies ombres)
   model.root.traverse((o) => {
     if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false;
@@ -273,6 +274,8 @@ const FOV = 38;
 /**
  * La scène de soin. o : { game, a, entity, set(stage) → décor ({ group, anchors, update(dt, stage), dispose }),
  * pixelRatio }. Lève une erreur si WebGL manque (le cadre retombe alors sur le mini-jeu dessiné).
+ * Tests sans navigateur : o.renderer (un faux rendu : headlessRenderer) et o.model (le modèle déjà construit) ; la
+ * scène est alors complète (vrai modèle, décor, caméra, doigt, projection) mais rien n'est peint.
  */
 export class CareStage {
   constructor(o) {
@@ -282,17 +285,20 @@ export class CareStage {
     this.listeners = [];
     this.disposables = [];
     this.high = gfx.quality === 'high';
-    const canvas = document.createElement('canvas');
+    this.headless = !!o.renderer?.headless;
+    const canvas = o.renderer?.domElement ?? document.createElement('canvas');
     canvas.className = 'mg-3d';
     this.canvas = canvas;
-    let renderer = null;
+    let renderer = o.renderer ?? null;
     // Même budget que le rendu du jeu sur cet appareil (src/game/pixelBudget.js : définition, anticrénelage) : la
     // scène est plus petite que l'écran, elle coûte donc moins qu'une image du jeu.
     const gameRenderer = this.game?.renderer ?? null;
     const msaa = gameRenderer ? !!gfx.msaa || this.high : true;
-    trackListeners(this.listeners, () => {
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: msaa, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
-    });
+    if (!renderer) {
+      trackListeners(this.listeners, () => {
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: msaa, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+      });
+    }
     if (!renderer.getContext()) throw new Error('webgl');
     this.renderer = renderer;
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -303,7 +309,7 @@ export class CareStage {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = this.high ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.lost = false;
-    canvas.addEventListener('webglcontextlost', (e) => {
+    canvas.addEventListener?.('webglcontextlost', (e) => {
       e.preventDefault();
       this.lost = true;
     });
@@ -329,7 +335,7 @@ export class CareStage {
 
     // L'animal, puis le décor autour de lui (le décor a besoin de sa taille : mangeoire à hauteur de bouche…).
     const t0 = performance.now();
-    this.double = buildDouble(o.a, o.entity ?? null);
+    this.double = buildDouble(o.a, o.entity ?? null, o.model ?? null);
     this.timing.animal = Math.round(performance.now() - t0);
     this.model = this.double.model;
     this.holder = this.double.holder;
@@ -461,6 +467,12 @@ export class CareStage {
     }
   }
 
+  /** La caméra est-elle posée (à moins de eps mètres de son cadrage) ? */
+  settled(eps = 0.03) {
+    const g = this.camGoal;
+    return !g || (this.camPos.distanceTo(g.position) < eps && this.camTarget.distanceTo(g.target) < eps);
+  }
+
   /** Refait le dernier cadrage (la forme de la toile a changé). */
   reframe() {
     const f = this.lastFrame;
@@ -575,6 +587,12 @@ export class CareStage {
     st.graze = 0;
     st.ears = m.annoyed > 0 ? 'back' : m.ears;
     st.near = true;
+    // Pied levé (ou sur le point de l'être) : il se tient carré sur ses trois autres membres, jamais au repos sur un
+    // postérieur (le clip « rest » plie un postérieur et déplace tout l'arrière-main : le pied tenu bougeait de 35 cm).
+    if (md.anim && (m.square || m.lift !== null)) {
+      md.anim.resting = false;
+      md.anim.restTimer = Math.max(md.anim.restTimer ?? 0, 2);
+    }
     if (md.anim) md.anim.update(dt, st);
     else md.update?.(dt, st);
     if (!md.neck || !md.head) return;
@@ -817,4 +835,43 @@ function liftLeg(l, k) {
     l.knee.rotateX(1.15 * k);
     l.fetlock.rotateX(1.2 * k);
   }
+}
+
+/**
+ * Un faux rendu pour les tests (pas de WebGL dans node) : la scène se construit, la caméra, le doigt et la projection
+ * marchent, rien n'est peint. Il émet les événements de perte et de retour du contexte comme une vraie toile.
+ */
+export function headlessRenderer() {
+  const handlers = {};
+  const canvas = {
+    className: '',
+    classList: { add() {}, remove() {} },
+    addEventListener: (type, fn) => { (handlers[type] ??= []).push(fn); },
+    removeEventListener: (type, fn) => { handlers[type] = (handlers[type] ?? []).filter((f) => f !== fn); },
+    dispatch: (type) => { for (const fn of handlers[type] ?? []) fn({ type, preventDefault() {} }); },
+    remove() {},
+  };
+  const calls = { render: 0, dispose: 0 };
+  return {
+    headless: true,
+    domElement: canvas,
+    calls,
+    toneMapping: 0,
+    toneMappingExposure: 1,
+    shadowMap: { enabled: false, type: 0 },
+    info: { memory: { geometries: 0, textures: 0 }, render: { calls: 0, triangles: 0 }, programs: [] },
+    renderLists: { dispose() {} },
+    getContext: () => ({ isContextLost: () => false }),
+    getPixelRatio: () => 1,
+    setPixelRatio() {},
+    setSize() {},
+    setScissorTest() {},
+    setScissor() {},
+    setViewport() {},
+    compileAsync: async () => {},
+    initTexture() {},
+    render() { calls.render++; },
+    dispose() { calls.dispose++; },
+    forceContextLoss() {},
+  };
 }

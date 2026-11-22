@@ -330,6 +330,24 @@ export class PetStage extends CareStage {
         st.action = null;
       }
     }
+    // Conduit par le jeu (jouer à la balle) : sa place sur le sol (x, z) et sa vitesse ; il se tourne vers où il va.
+    if (m.drive) {
+      const d = m.drive;
+      const sc = this.double.scale;
+      if (d.speed > 0.02 && d.heading !== undefined) {
+        let dh = d.heading - this.holder.rotation.y;
+        dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+        this.holder.rotation.y += dh * ease(dt, 0.12);
+      }
+      this.baseX = d.x;
+      this.holder.position.z = d.z;
+      st.moving = d.speed > 0.04 * sc;
+      st.v = d.speed / sc;
+      if (st.moving) {
+        st.posture = this.species === 'rabbit' ? 'crouch' : 'stand';
+        st.action = null;
+      }
+    }
     if (md.anim) md.anim.update(dt, st);
     const x = this.extra;
     m.annoyed = Math.max(0, (m.annoyed ?? 0) - dt);

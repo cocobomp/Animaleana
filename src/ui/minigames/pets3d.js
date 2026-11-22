@@ -15,6 +15,7 @@ import { mudTexture } from '../../game/care/props.js';
 import { petBrush } from '../../game/care/petProps.js';
 import { softDot } from '../../game/care/textures.js';
 import { petNails3dGame } from './petNails3d.js';
+import { petPlay3dGame } from './petPlay3d.js';
 import { withLogic, sideGauge, bubble } from './care3d.js';
 import { kibbleBag, kibbleRain, pitcher, FOODS, own, treatFor } from '../../game/care/petProps.js';
 import { handModel, aimHand } from '../../game/care/props.js';
@@ -917,7 +918,7 @@ export function shoulderOf(sc) {
 
 /** Les soins 3D des animaux de compagnie, par espèce (branchés dans CARE3D_GAMES : src/ui/minigames/care3d.js). */
 export const PET_CARE3D_GAMES = {
-  dog: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame, nails: petNails3dGame },
+  dog: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame, nails: petNails3dGame, play: petPlay3dGame },
   cat: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame, nails: petNails3dGame },
-  rabbit: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame },
+  rabbit: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame, play: petPlay3dGame },
 };

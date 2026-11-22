@@ -74,6 +74,8 @@ export function run(ctx, game, sc, s, dt = 1 / 30) {
     ctx.time += dt;
     game?.update(dt);
     sc.update(dt);
+    // (comme le rendu : les matrices des os et des objets sont mises à jour à chaque image)
+    sc.scene.updateMatrixWorld();
   }
 }
 

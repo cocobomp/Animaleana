@@ -249,6 +249,39 @@ describe('les griffes (chien, chat)', () => {
   }
 });
 
+describe('jouer à la balle (chien, lapin)', () => {
+  for (const gab of [{ species: 'dog', breed: 'labrador' }, { species: 'rabbit', breed: 'rex' }]) {
+    it(`${label(gab)} : on touche le sol, la balle vole, il court la chercher, la rapporte ; trois fois : juste`, () => {
+      const { a, sc } = makePetStage(gab);
+      const ctx = ctxFor(a, sc);
+      const game = pets3d.PET_CARE3D_GAMES[gab.species].play(ctx);
+      run(ctx, game, sc, 0.5);
+      const n = game.peek().n;
+      for (let k = 0; k < n; k++) {
+        for (let i = 0; i < 300 && game.peek().ball !== 'hand'; i++) run(ctx, game, sc, 1 / 30);
+        // on touche le sol juste devant lui
+        const at = sc.project(sc.holder.position.clone().add(new THREE.Vector3(0.05, 0, 0.12)));
+        game.down({ x: at.x, y: at.y });
+        expect(game.peek().ball, `lancer ${k}`).toBe('fly');
+        const x0 = sc.holder.position.clone();
+        let moved = 0;
+        for (let i = 0; i < 400 && game.peek().ball !== 'hand'; i++) {
+          run(ctx, game, sc, 1 / 30);
+          moved = Math.max(moved, sc.holder.position.distanceTo(x0));
+          if (game.peek().ball === 'mouth') expect(game.peek().ball3d.distanceTo(sc.live('muzzle'))).toBeLessThan(0.1);
+        }
+        expect(moved).toBeGreaterThan(0.02); // il a couru
+        expect(inView(sc.project(sc.holder.position), ctx.view)).toBe(true);
+      }
+      expect(game.peek().rounds).toBe(n);
+      ctx.pressStop();
+      expect(ctx.finished?.why).toBe('just');
+      game.destroy();
+      sc.dispose();
+    }, 90000);
+  }
+});
+
 describe('libération', () => {
   it('fermer la scène retire tout (jeu, décor, accessoires) et libère le rendu', () => {
     const { a, sc } = makePetStage({ species: 'dog', breed: 'caniche' });

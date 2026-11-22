@@ -9,7 +9,8 @@ import * as THREE from 'three';
 import { justRule } from './grooming.js';
 import { clamp, lerp, distToSegment, label } from './draw.js';
 import { emojiOpaque as emoji } from './food.js';
-import { groomTool, mudTexture } from '../../game/care/props.js';
+import { mudTexture } from '../../game/care/props.js';
+import { farmBrushModel } from '../../game/care/stableChores.js';
 import { pickFarm } from './farmPet3d.js';
 import { callOut } from './farm3d.js';
 
@@ -171,7 +172,8 @@ export function farmBrush3dGame(ctx) {
   }
 
   // la brosse, sous le doigt
-  const brush = groomTool('brush', own);
+  // (la brosse en chiendent : dos en bois, anse de cuir, touffes de poils clairs — de profil, on la reconnaît)
+  const brush = farmBrushModel(own);
   brush.scale.setScalar(clamp(0.8 + u * 0.3, 0.9, 1.3));
   brush.visible = false;
   sc.scene.add(brush);
@@ -196,6 +198,9 @@ export function farmBrush3dGame(ctx) {
     brush.position.lerp(toolPos, brush.visible ? Math.min(1, dt * 25) : 1);
     brush.quaternion.setFromUnitVectors(v3(0, 1, 0), nn);
     brush.rotateY(rot * 1.5);
+    // (penchée sur la tranche, vers le bas, comme on la tient : vue de face sur le flanc, on voit les poils sous le bois
+    // et l'anse dessus, pas seulement le dos de la brosse)
+    brush.rotateX(0.55);
     brush.visible = true;
   }
 

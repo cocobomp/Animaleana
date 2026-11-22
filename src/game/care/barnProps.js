@@ -1,5 +1,5 @@
 // Accessoires 3D de la bergerie, de la chèvrerie et de l'étable (scène de soin des moutons, chèvres et vaches :
-// barn.js) : le râtelier à foin en bois qui se remplit vraiment (et l'auge dessous), l'abreuvoir en tôle galvanisée
+// farmBarn.js) : le râtelier à foin en bois qui se remplit vraiment (et l'auge dessous), l'abreuvoir en tôle galvanisée
 // qui se remplit au tuyau, les bottes de paille, la pierre à sel, la fourche, la lanterne. Même forme que les
 // accessoires du box (props.js) : chaque fabrique renvoie { group, …, update(dt), dispose() } et libère ce qu'elle
 // crée. Tailles en mètres, données par le décor d'après l'animal (un agneau, une vache).
@@ -212,9 +212,10 @@ export function hayRack({ w = 0.9, h = 0.55, d = 0.12, trough = 0.13, troughW = 
   markG.visible = false;
   g.add(markG);
   const bandMat = keep(new THREE.MeshBasicMaterial({ color: 0x3fae62, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false }));
-  const lineMat = keep(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  const lineMat = keep(new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
   // (point du plan des barreaux à la part f de leur hauteur, devant eux et devant le foin qui dépasse)
-  const out0 = 0.03 + 0.03 * Math.max(1, h / 0.5);
+  // (juste devant les barreaux, derrière son nez : posée plus en avant, la ligne lui entrait dans le nez)
+  const out0 = 0.008 + 0.006 * Math.max(1, h / 0.5);
   const onBars = (f, out = V()) => out.set(-d * f - Math.cos(tilt) * out0, 0.03 + h * f - Math.sin(tilt) * out0, 0);
   hold.position.copy(holdAt);
   const floorOf = { y: -1 };
@@ -254,12 +255,26 @@ export function hayRack({ w = 0.9, h = 0.55, d = 0.12, trough = 0.13, troughW = 
       band.position.copy(onBars((lo + hi) / 2));
       band.renderOrder = 2;
       markG.add(band);
-      const line = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008 * Math.max(1, h / 0.5), w * 1.02), lineMat);
+      // (un trait peint sur la bande, pas une baguette ; seulement sur la moitié du râtelier vers l'allée, à côté de sa
+      // tête : derrière son nez, de trois quarts, on aurait dit qu'il lui entrait dans le nez)
+      const z0 = w * 0.17;
+      const z1 = w * 0.48;
+      const line = new THREE.Mesh(new THREE.PlaneGeometry(0.012 * Math.max(1, h / 0.5), z1 - z0).rotateZ(Math.PI / 2).rotateY(Math.PI / 2), lineMat);
+      line.rotation.z = tilt;
       line.position.copy(onBars(target));
-      line.position.x -= 0.004;
+      line.position.x -= 0.002;
+      line.position.z = (z0 + z1) / 2;
+      line.renderOrder = 3;
       markG.add(line);
       markG.visible = true;
       return onBars(target);
+    },
+    /** Montre ou cache la zone et la ligne (cachées quand il mange). */
+    showMark(on) { markG.visible = !!on && markG.children.length > 0; },
+    /** Bout de la ligne 🎯, côté allée (monde), pour y poser la cible. */
+    markEnd(target, out = V()) {
+      g.updateWorldMatrix(true, false);
+      return g.localToWorld(onBars(target, out).add(V(0, 0, w * 0.5)));
     },
     /** Point (monde) à la part f de la hauteur des barreaux, devant eux. */
     barsAt(f, out = V()) {

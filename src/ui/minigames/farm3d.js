@@ -1,5 +1,5 @@
 // Nourrir, abreuver et donner une friandise aux moutons, chèvres et vaches, en 3D (la bergerie, la chèvrerie,
-// l'étable : src/game/care/barn.js). La logique est celle des jeux dessinés (food.js : verser jusqu'à la ligne 🎯,
+// l'étable : src/game/care/farmBarn.js). La logique est celle des jeux dessinés (food.js : verser jusqu'à la ligne 🎯,
 // le robinet, la friandise quand il est calme) : la note et les textes ne changent pas, seule l'image change. Le
 // râtelier se remplit vraiment de foin (des brassées tombent de notre main), l'abreuvoir se remplit au tuyau ; il
 // regarde ce qu'on lui prépare, bêle ou meugle doucement, puis mange au râtelier ou boit vraiment, en mâchant.
@@ -72,8 +72,10 @@ export function farmFeed3dGame(ctx) {
         if (s.pouring && Math.random() < dt * 0.4) m.nod = Math.max(m.nod, 0.5);
         m.wag = s.pouring ? 0.4 : 0;
       } else {
-        // Il mange au râtelier : tête baissée, il tire le foin et mâche (cadré au-dessus de la carte de fin).
+        // Il mange au râtelier : tête baissée, il tire le foin et mâche (cadré au-dessus de la carte de fin). La bande
+        // et la ligne s'effacent.
         if (eatT === 0) {
+          rack.showMark(false);
           const bite = rack.bite(v3());
           sc.frame([rack.barsAt(0.9), rack.mouthAt().add(v3(0, -rack.trough, rack.w * 0.45)), rack.mouthAt().add(v3(0, -rack.trough, -rack.w * 0.45)), bite.clone().add(v3(0.05 * u, -0.05 * u, 0)), L.withers, L.poll, L.chest, L.back],
             { dir: [-0.38, 0.36, 1], pad: 1.1, half: 0.5 });
@@ -85,19 +87,30 @@ export function farmFeed3dGame(ctx) {
         m.chew = m.eat ? 0 : Math.min(1, eatT);
         m.wag = 0.5;
         rack.nibble(m.eat && eatT > 0.8);
-        if (Math.random() < dt * 0.15) callOut(sc);
+        // (il mange : la tête reste dans le foin, il ne s'interrompt pas pour bêler)
       }
     },
     draw(g) {
       if (!sc.ready) return;
       const s = play.peek();
       if (!ctx.done) {
-        // La jauge à côté du râtelier (même bande verte que la jauge du haut).
+        // La jauge à gauche, à la hauteur du râtelier (même bande verte que la jauge du haut) : posée sur le
+        // râtelier, elle cachait le foin.
         const b = sc.project(rack.barsAt(0));
         const t = sc.project(rack.barsAt(1));
         const h = Math.max(60, Math.min(150, b.y - t.y));
-        const x = Math.min(ctx.view.x1 - 24, Math.max(b.x, t.x) + 40);
-        sideGauge(g, x, b.y, h, s.value, s.lo, s.hi, { icon: '🌾', time: ctx.time });
+        sideGauge(g, ctx.view.x0 + 24, b.y, h, s.value, s.lo, s.hi, { icon: '🌾', time: ctx.time });
+        // 🎯 au bout de la ligne, côté allée (la consigne dit « Lâche sur la ligne 🎯 »)
+        const e = sc.project(rack.markEnd(s.target));
+        if (!e.behind) {
+          g.save();
+          g.font = '20px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+          g.textAlign = 'center';
+          g.textBaseline = 'middle';
+          g.fillStyle = '#000';
+          g.fillText('🎯', Math.min(ctx.view.x1 - 52, e.x + 12), e.y);
+          g.restore();
+        }
       } else {
         const p = sc.project(sc.live('poll').add(v3(0, 0.25 * u, 0)));
         if (!p.behind) bubble(g, p.x, p.y - 6, '😋', { size: 18 });

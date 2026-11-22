@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { plateTexture } from '../models/interiorKit.js';
+import { cowBrushModel } from './stableChores.js';
 import { waterTap, avatarHand } from './props.js';
 import { canvasTex, strawFloorTexture, noiseTexture, rng } from './textures.js';
 import { hayRack, waterTrough, strawBale, saltLick, pitchfork, lantern, barnWood, bag } from './barnProps.js';
@@ -41,7 +42,7 @@ export function barnSet(stage) {
   stage.measure();
   const L0 = stage.marks;
   const u = L0.u; // (hauteur au garrot : l'unité de tout le décor)
-  const kp = clamp(u / 0.72, 0.55, 2.2); // (taille des accessoires : 1 pour un mouton adulte)
+  const kp = clamp(u / 0.72, 0.42, 2.2); // (taille des accessoires : 1 pour un mouton adulte ; un agneau d'Ouessant : 0,42)
   const box = stage.box;
   const lenX = box.max.x - box.min.x;
   const halfZ = (box.max.z - box.min.z) / 2;
@@ -71,6 +72,12 @@ export function barnSet(stage) {
   stage.measure();
   const L = stage.marks;
   const eat = eat0.clone().add(V(dx, 0, 0));
+  // (la litière tassée là où il se tient et piétine — de la queue à l'auge, la largeur de ses sabots — : on voit ses
+  // sabots, la paille ne passe plus par-dessus)
+  {
+    const hz = L.hooves.map((h) => h.z);
+    S.trod = { x0: L.tailTip.x - 0.2 * u, x1: S.halfW, z0: Math.min(...hz) - 0.12 * u, z1: Math.max(...hz) + 0.12 * u };
+  }
 
   // ---------------------------------------------------------------- matières
   const wallTex = keep(barnWood(etable ? 17 : 7, true, 'old'));
@@ -121,11 +128,8 @@ export function barnSet(stage) {
   const bp = bed.attributes.position;
   for (let i = 0; i < bp.count; i++) {
     const x = bp.getX(i);
-    const y = bp.getY(i);
-    const zw = (S.back + S.front) / 2 - y; // (z du monde : le plan est tourné)
-    const edge = Math.max(0, 1 - Math.min(S.halfW - Math.abs(x), zw - S.back) / 0.55);
-    const h = 0.05 + 0.025 * Math.sin(x * 6.1 + y * 3.3) * Math.cos(y * 5.2 - x * 2.4) + 0.014 * Math.sin(x * 17 + y * 21) + 0.12 * edge * edge;
-    bp.setZ(i, h);
+    const zw = (S.back + S.front) / 2 - bp.getY(i); // (z du monde : le plan est tourné)
+    bp.setZ(i, litterHeight(S, x, zw));
   }
   bed.computeVertexNormals();
   mesh(bed, strawMat, [0, 0, (S.back + S.front) / 2], [-Math.PI / 2, 0, 0], false);
@@ -272,8 +276,14 @@ export function barnSet(stage) {
   const plateX = clamp(win.x + win.w / 2 + 0.75, -S.halfW + 0.5, S.halfW - 0.5);
   const plateY = clamp(Math.max(u * 1.35, 1.1), 0.9, win.y + 0.1);
   const plate = keep(plateTexture(stage.a?.name ?? ''));
-  const plateMesh = mesh(new THREE.BoxGeometry(0.56, 0.18, 0.025), keep(new THREE.MeshStandardMaterial({ map: plate, roughness: 0.6 })), [plateX, plateY, S.back + 0.013]);
-  for (const k of [-0.23, 0.23]) mesh(new THREE.SphereGeometry(0.011, 8, 6), iron, [plateX + k, plateY, S.back + 0.03], null, false);
+  // (la plaque et ses deux clous ensemble : elle se déplace le long du mur si un cadrage la coupe, voir fitPlate)
+  const plateG = new THREE.Group();
+  plateG.position.set(plateX, plateY, S.back);
+  walls.back.add(plateG);
+  into = plateG;
+  const plateMesh = mesh(new THREE.BoxGeometry(0.56, 0.18, 0.025), keep(new THREE.MeshStandardMaterial({ map: plate, roughness: 0.6 })), [0, 0, 0.013]);
+  for (const k of [-0.23, 0.23]) mesh(new THREE.SphereGeometry(0.011, 8, 6), iron, [k, 0, 0.03], null, false);
+  into = walls.back;
   // pierre à sel au mur du fond, à hauteur de bouche
   const salt = saltLick(keep);
   salt.position.set(clamp(L.body.x + 0.15 * u, -S.halfW + 0.4, S.halfW - 0.5), clamp(L.muzzle.y * 0.85, 0.35, 1.3), S.back);
@@ -295,14 +305,15 @@ export function barnSet(stage) {
     plankBox(bw, 0.06, 0.42, railMat, [-S.halfW + 0.7, bh, S.back + 0.95], 0.9);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) plankBox(0.07, bh, 0.07, beamMat, [-S.halfW + 0.7 + sx * (bw / 2 - 0.08), bh / 2, S.back + 0.95 + sz * 0.15], 0.9);
   }
+  let cowBrush = null;
   if (etable) {
     into = walls.back;
     const by = clamp(u * 0.95, 0.9, 1.6);
     const bxp = clamp(L.croup.x - 0.2, -S.halfW + 0.6, S.halfW - 0.8);
-    mesh(new THREE.BoxGeometry(0.12, 0.12, 0.42), iron, [bxp, by + 0.33, S.back + 0.21]);
-    const brush = mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.62, 18), keep(new THREE.MeshStandardMaterial({ color: 0xe0b23a, roughness: 1, map: keep(noiseTexture('#e2b43c', 0.35, 4, 64)) })), [bxp, by, S.back + 0.3]);
-    brush.castShadow = true;
-    mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.72, 8), iron, [bxp, by, S.back + 0.3]);
+    // (le rouleau de poils jaunes et noirs sous son capot rouge, au bout de son bras : il tourne doucement)
+    cowBrush = cowBrushModel(keep);
+    cowBrush.group.position.set(bxp, by, S.back + 0.52);
+    walls.back.add(cowBrush.group);
   }
   into = g;
 
@@ -397,6 +408,112 @@ export function barnSet(stage) {
   stage.scene.background = new THREE.Color(0x2a1e14);
   stage.scene.fog = new THREE.Fog(0x2a1e14, 7, 17);
 
+  /**
+   * La plaque à son nom, la touche personnelle : coupée par le bord de l'image, cachée par un poteau, par l'animal ou
+   * par une réglette du jeu (le haut de l'image : 🐢/🐇, le cœur, les cadrans), on la déplace le long du mur du fond,
+   * au plus près de sa place, là où on la lit en entier. (Seulement caméra posée, et une fois par cadrage.)
+   */
+  const ray = new THREE.Raycaster();
+  // (tout le décor qui peut passer devant : poteaux, barrière, poutres, râtelier… — pas la litière, ni les brins et les
+  // poussières, ni la plaque elle-même)
+  const blockers = [];
+  const solid = (o) => {
+    if (!o.isMesh || o.isInstancedMesh || plateG.children.includes(o)) return false;
+    // (ni le rai de soleil, ni ce qui est transparent ou découpé — les brins de foin —, ni la litière à plat)
+    const mt = o.material;
+    if (!mt || Array.isArray(mt) || mt.isShaderMaterial || mt.transparent || mt.depthWrite === false || mt.alphaTest > 0) return false;
+    return !(o.geometry?.type === 'PlaneGeometry' && Math.abs(o.rotation.x + Math.PI / 2) < 0.01);
+  };
+  g.traverse((o) => solid(o) && blockers.push(o));
+  /** Visible (lui et tous ses parents : un mur caché parce que la caméra est derrière ne cache rien). */
+  const shown = (o) => {
+    for (let p = o; p; p = p.parent) if (!p.visible) return false;
+    return true;
+  };
+  /** Ce qui gêne la lecture de la plaque en (x, y) : 0 si on la lit en entier (plus c'est grand, moins on la lit). */
+  const plateBad = (st, x, y, why = null) => {
+    const v = st.view;
+    if (!v) return 0;
+    const top = v.y0 + 70;
+    let bad = 0;
+    for (const [dx, dy] of [[-0.3, -0.1], [0.3, -0.1], [-0.3, 0.1], [0.3, 0.1]]) {
+      const q = st.project(V(x + dx, y + dy, S.back + 0.03));
+      if (q.behind || q.x < v.x0 + 6 || q.x > v.x1 - 6 || q.y < top || q.y > v.y1 - 20) {
+        bad += 2;
+        why?.push(`coin ${dx},${dy} hors de l'image`);
+      }
+    }
+    // (rien devant elle, d'un bout à l'autre : ni poteau, ni râtelier, ni l'animal — sept rayons, aux deux hauteurs du
+    // texte : un poteau qui dépasse du mur en cache vite un bout)
+    const cam = st.camera.position;
+    const live = blockers.filter(shown);
+    for (const p of Object.values(props)) p.group?.traverse((o) => solid(o) && shown(o) && live.push(o));
+    for (const [dx, dy] of [[-0.28, 0.04], [-0.19, -0.04], [-0.09, 0.04], [0, -0.04], [0.09, 0.04], [0.19, -0.04], [0.28, 0.04]]) {
+      const c = V(x + dx, y + dy, S.back + 0.03);
+      const dir = c.clone().sub(cam);
+      const d = dir.length();
+      dir.normalize();
+      ray.set(cam, dir);
+      ray.far = d - 0.04;
+      const hs = ray.intersectObjects(live, true);
+      if (hs.length) {
+        bad++;
+        why?.push(`${dx},${dy} : ${hs[0].object.geometry?.type} ${hs[0].point.toArray().map((k) => k.toFixed(2))}`);
+      } else {
+        const h = st.proxy?.hit?.(new THREE.Ray(cam.clone(), dir), -9, 1e9);
+        if (h && h.point.distanceTo(cam) < d - 0.04) {
+          // (l'animal bouge : il compte moins qu'un poteau, voir fitPlate)
+          bad += 0.3;
+          why?.push(`${dx},${dy} : l'animal`);
+        }
+      }
+    }
+    return bad;
+  };
+  /** Près de sa tête, qui bouge (elle se tourne vers nous, vers la friandise) : à éviter si on peut (0 à 3). */
+  const nearHead = (st, x, y) => {
+    const hd = st.live?.('head');
+    if (!hd) return 0;
+    const hc = st.project(hd);
+    const hr = st.projectRadius(hd, 0.34 * u);
+    let n = 0;
+    for (const dx of [-0.28, 0, 0.28]) {
+      const q = st.project(V(x + dx, y, S.back + 0.03));
+      if (Math.hypot(q.x - hc.x, q.y - hc.y) < hr) n++;
+    }
+    return n;
+  };
+  const lastCam = V(1e9, 0, 0);
+  let lastKey = '';
+  function fitPlate(st) {
+    if (!walls.back.visible) return;
+    // (une fois par cadrage : ni la caméra ni le cadre — la zone libre au-dessus d'une réglette — n'ont bougé depuis,
+    // rien à refaire)
+    const key = `${Math.round(st.viewY ?? 0)}|${st.size?.w}|${st.size?.h}|${st.view?.y0}`;
+    if (st.camera.position.distanceToSquared(lastCam) < 1e-4 && key === lastKey) return;
+    lastCam.copy(st.camera.position);
+    lastKey = key;
+    // (les places du monde à jour, même sans image rendue depuis : les rayons s'en servent)
+    g.updateMatrixWorld(true);
+    const bad0 = plateBad(st, plateG.position.x, plateG.position.y);
+    const near0 = nearHead(st, plateG.position.x, plateG.position.y);
+    if (bad0 === 0 && near0 === 0) return;
+    // (la place la plus lisible, la plus proche de la sienne et loin de sa tête ; à défaut d'une place parfaite, la
+    // moins gênée)
+    const score = (bad, near, cost) => bad * 10 + near * 2 + cost;
+    let best = { x: plateG.position.x, y: plateG.position.y, s: score(bad0, near0, 0) };
+    for (let x = -S.halfW + 0.4; x <= S.halfW - 0.4; x += 0.1) {
+      for (const y of [plateY, plateY + 0.3, plateY - 0.25, plateY + 0.6]) {
+        if (y < 0.75 || y > S.eave - 0.15 || (Math.abs(y - win.y) < win.h / 2 + 0.12 && Math.abs(x - win.x) < win.w / 2 + 0.35)) continue;
+        const cost = Math.abs(x - plateX) + Math.abs(y - plateY) * 1.5;
+        if (cost >= best.s) continue;
+        const sc2 = score(plateBad(st, x, y), nearHead(st, x, y), cost);
+        if (sc2 < best.s) best = { x, y, s: sc2 };
+      }
+    }
+    plateG.position.set(best.x, best.y, S.back);
+  }
+
   return {
     group: g,
     props,
@@ -405,6 +522,11 @@ export function barnSet(stage) {
     win,
     walls,
     plate: plateMesh,
+    /** Ce qui gêne la lecture de la plaque à sa place du moment (0 : on la lit en entier ; why : les raisons ; tests). */
+    plateBad: (st, why = null) => {
+      g.updateMatrixWorld(true);
+      return plateBad(st, plateG.position.x, plateG.position.y, why);
+    },
     anchors: { eat },
     layout,
     restore(st) {
@@ -421,7 +543,11 @@ export function barnSet(stage) {
       walls.back.visible = c.z > S.back + 0.02;
       walls.roof.visible = c.y < S.eave - 0.05;
       walls.front.visible = c.z < S.front - 0.02;
+      // (la plaque à son nom : toujours lisible — refait seulement quand le cadrage a changé, et après avoir caché les
+      // murs entre la caméra et l'animal, voir fitPlate)
+      if (st.ready && st.settled?.(0.02)) fitPlate(st);
       motes.update(dt);
+      cowBrush?.spin(dt);
       shaft.material.uniforms.uTime.value += dt;
       for (const p of Object.values(props)) p.update?.(dt, st);
     },
@@ -436,8 +562,25 @@ export function barnSet(stage) {
   };
 }
 
+/**
+ * Hauteur de la litière (m) en (x, z) du monde : épaisse et bosselée, relevée contre les murs. S : dims du décor. (Les
+ * jeux qui posent des choses sur la litière s'en servent : la corvée de l'étable, barnClean3d.js.)
+ */
+export function litterHeight(S, x, z) {
+  const y = (S.back + S.front) / 2 - z;
+  const edge = Math.max(0, 1 - Math.min(S.halfW - Math.abs(x), z - S.back) / 0.55);
+  const h = 0.05 + 0.025 * Math.sin(x * 6.1 + y * 3.3) * Math.cos(y * 5.2 - x * 2.4) + 0.014 * Math.sin(x * 17 + y * 21) + 0.12 * edge * edge;
+  const t = S.trod;
+  if (!t) return h;
+  // (tassée sous ses pas : 1 à 2 cm, avec un bord doux de 12 cm)
+  const dxs = Math.max(t.x0 - x, x - t.x1, 0);
+  const dzs = Math.max(t.z0 - z, z - t.z1, 0);
+  const k = Math.max(0, 1 - Math.hypot(dxs, dzs) / 0.12);
+  return h + (0.012 + 0.006 * Math.sin(x * 23 + z * 19) - h) * k * k * (3 - 2 * k);
+}
+
 /** Mur chaulé : des moellons irréguliers sous la chaux blanche, la chaux usée par endroits, des coulures en bas. */
-function limeWallTexture(seed = 4) {
+export function limeWallTexture(seed = 4) {
   return canvasTex(512, 512, (c) => {
     const r = rng(seed);
     const S = 512;
@@ -519,7 +662,7 @@ function limeWallTexture(seed = 4) {
 }
 
 /** Environnement des reflets : une petite pièce chaude « photographiée » une fois. */
-function roomEnvironment(renderer, high) {
+export function roomEnvironment(renderer, high) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
   room.traverse((o) => {
@@ -548,12 +691,13 @@ function strawStrands(keep, n, S) {
   for (let i = 0; i < n; i++) {
     const x = (rnd() * 2 - 1) * (S.halfW - 0.05);
     const z = S.back + 0.05 + rnd() * (S.front - S.back - 0.1);
-    const edge = Math.max(0, 1 - Math.min(S.halfW - Math.abs(x), z - S.back) / 0.55);
-    const y = 0.05 + rnd() * 0.04 + 0.12 * edge * edge;
-    e.set((rnd() - 0.5) * 0.5, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.6);
+    // (posés sur la litière, à plat ou presque : ils flottaient jusqu'à 6 cm au-dessus, et de près — un agneau, la
+    // caméra basse — on aurait dit des planches en l'air)
+    const y = litterHeight(S, x, z) + 0.003 + rnd() * 0.008;
+    e.set((rnd() - 0.5) * 0.16, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.2);
     q.setFromEuler(e);
-    const len = 0.08 + rnd() * 0.22;
-    m4.compose(V(x, y, z), q, V(len, 1, 1 + rnd()));
+    const len = 0.08 + rnd() * 0.2;
+    m4.compose(V(x, y, z), q, V(len, 0.8, 0.6 + 0.5 * rnd()));
     inst.setMatrixAt(i, m4);
     inst.setColorAt(i, c.setHex(palette[Math.floor(rnd() * palette.length)]).multiplyScalar(0.85 + rnd() * 0.3));
   }

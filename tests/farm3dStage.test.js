@@ -23,12 +23,13 @@ let brush3d;
 let shear3d;
 let milk3d;
 let cowWash3d;
+let fleeceMod;
 beforeAll(async () => {
   fakeDocument();
   ({ t } = await import('../src/i18n.js'));
   gltf = { sheep: await loadRealSheepGltf(), goat: await loadRealGoatGltf(), cow: await loadRealCowGltf() };
   stageMod = await import('../src/game/care/stage.js');
-  barnMod = await import('../src/game/care/barn.js');
+  barnMod = await import('../src/game/care/farmBarn.js');
   ruminant = await import('../src/game/care/ruminant.js');
   animalMod = await import('../src/sim/animal.js');
   frameMod = await import('../src/ui/minigames/frame.js');
@@ -39,6 +40,7 @@ beforeAll(async () => {
   shear3d = await import('../src/ui/minigames/shear3d.js');
   milk3d = await import('../src/ui/minigames/milk3d.js');
   cowWash3d = await import('../src/ui/minigames/cowWash3d.js');
+  fleeceMod = await import('../src/game/care/fleece.js');
 }, 60000);
 
 const random = Math.random;
@@ -135,6 +137,77 @@ describe('la bergerie, la chèvrerie, l\'étable', () => {
   }
 });
 
+describe('il bêle ou meugle doucement', () => {
+  for (const species of ['sheep', 'goat', 'cow']) {
+    it(`${species} : le son, la tête à peine levée, les lèvres entrouvertes (pas le clip du jeu, gueule béante vers le plafond)`, () => {
+      const { a, sc } = makeStage({ species });
+      const ctx = ctxFor(a, sc);
+      const game = pet3d.farmPet3dGame(ctx);
+      run(ctx, game, sc, 1);
+      const u = sc.marks.u;
+      const jaw = sc.model.bone('jaw');
+      const angle = (b) => new THREE.Quaternion().copy(b.quaternion);
+      const m0 = sc.live('muzzle');
+      const p0 = sc.live('poll');
+      const j0 = angle(jaw);
+      sc.mood.call = 1;
+      let lift = 0;
+      let open = 0;
+      for (let k = 0; k < 30; k++) {
+        run(ctx, game, sc, 1 / 30);
+        expect(sc.model.anim.bleatOn).toBe(false);
+        expect(sc.model.anim.mooOn ?? false).toBe(false);
+        lift = Math.max(lift, sc.live('muzzle').y - m0.y);
+        open = Math.max(open, angle(jaw).angleTo(j0));
+      }
+      // (la tête : quelques centimètres au plus — le clip levait le nez vers le plafond)
+      expect(lift).toBeLessThan(0.06 * u);
+      expect(sc.live('muzzle').y - sc.live('poll').y).toBeLessThan(m0.y - p0.y + 0.05 * u);
+      // (la bouche s'entrouvre, un peu)
+      expect(open).toBeGreaterThan(0.04);
+      expect(open).toBeLessThan(0.3);
+      game.destroy();
+      sc.dispose();
+    }, 30000);
+  }
+});
+
+describe('les mèches de la laine et du poil longs, de près', () => {
+  it('islandais, col noir, Highland : mèches lisses et rondes, à la scène seulement ; le poil de la chèvre ne pend pas sous le ventre', async () => {
+    const locks = await import('../src/game/care/locks.js');
+    for (const [species, breed, name] of [['sheep', 'islandais_mouton', 'sheep_locks'], ['goat', 'col_noir', 'goat_hair'], ['cow', 'highland', 'cow_hair']]) {
+      const { sc } = makeStage({ species, breed, sex: species === 'goat' ? 'm' : 'f' });
+      let mesh = null;
+      sc.model.root.traverse((o) => {
+        if (o.name === name) mesh = o;
+      });
+      expect(mesh, `${breed} : ses mèches`).toBeTruthy();
+      const geo = mesh.geometry;
+      // (une géométrie à la scène, pas celle du gabarit partagé avec les animaux du jeu)
+      expect(geo.userData.shared).toBeFalsy();
+      expect(mesh.userData.careLocks).toBe(true);
+      // (des rangées lisses : 9 par carte ; carte en croix pour le mouton et la chèvre)
+      expect(geo.attributes.position.count).toBe(geo.userData.cards * 18);
+      // (la recette du dessin : l'ombrage rond des mèches, sous une autre clé que celle du jeu)
+      const sh = { vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader, uniforms: {}, defines: {} };
+      mesh.material.onBeforeCompile(sh, sc.renderer);
+      expect(sh.fragmentShader).toContain('float cyl = sqrt(max(0.0, 1.0 - lx * lx));');
+      expect(sh.vertexShader).toContain('vCareLock = fract(');
+      expect(mesh.material.customProgramCacheKey()).toMatch(/-care$/);
+      if (species === 'goat') {
+        const floor = sc.model.legTop / sc.model.root.scale.x + 0.035;
+        const p = geo.attributes.position.array;
+        let low = Infinity;
+        for (let i = 1; i < p.length; i += 3) low = Math.min(low, p[i]);
+        // (aucune pointe sous la ligne du ventre, à part les mèches qui y prennent racine, gardées très courtes)
+        expect(low).toBeGreaterThan(floor - 0.06);
+      }
+      sc.dispose();
+    }
+    expect(typeof locks.refineLockGeometry).toBe('function');
+  }, 60000);
+});
+
 describe('nourrir et abreuver en 3D', () => {
   for (const species of ['sheep', 'goat', 'cow']) {
     it(`${species} : nourrir jusqu'à la ligne, il mange au râtelier`, () => {
@@ -142,6 +215,15 @@ describe('nourrir et abreuver en 3D', () => {
       const ctx = ctxFor(a, sc);
       const game = farm3d.farmFeed3dGame(ctx);
       const pour = ctx.buttons[0].opts;
+      {
+        // (la ligne 🎯 ne passe pas devant sa bouche : elle commence à côté de sa tête, vers l'allée)
+        let ln = null;
+        sc.decor.props.rack.group.traverse((o) => {
+          if (o.isMesh && o.renderOrder === 3) ln = o;
+        });
+        const box = new THREE.Box3().setFromObject(ln);
+        expect(box.min.z).toBeGreaterThan(sc.marks.muzzle.z + 0.05 * sc.marks.u);
+      }
       const s0 = game.peek();
       pour.onDown();
       for (let i = 0; i < 400 && game.peek().value < s0.target; i++) run(ctx, game, sc, 1 / 30);
@@ -152,13 +234,21 @@ describe('nourrir et abreuver en 3D', () => {
       expect(ctx.done).toBe(true);
       expect(ctx.finished.why).toBe('just');
       expect(sc.decor.props.rack.fill).toBeGreaterThan(s0.lo - 0.05);
-      // il mange : la bouche descend au râtelier
-      run(ctx, game, sc, 3);
-      const mouth = sc.live('muzzle');
+      // il mange : la bouche descend au râtelier, et elle y reste (il ne lève pas la tête pour bêler en plein repas)
       const bite = sc.decor.props.rack.bite(new THREE.Vector3());
-      expect(mouth.distanceTo(bite)).toBeLessThan(0.3 * Math.max(1, sc.marks.u));
+      for (let k = 0; k < 16; k++) {
+        run(ctx, game, sc, 0.5);
+        if (k >= 5) expect(sc.live('muzzle').distanceTo(bite)).toBeLessThan(0.3 * Math.max(1, sc.marks.u));
+      }
       // le râtelier et sa tête sont dans l'image
       for (const p of [sc.marks.poll, sc.decor.props.rack.barsAt(0.5)]) expect(inView(sc.project(p), ctx.view)).toBe(true);
+      // la ligne 🎯 : à côté de sa tête, pas derrière son nez ; et effacée pendant qu'il mange
+      let line = null;
+      sc.decor.props.rack.group.traverse((o) => {
+        if (o.isMesh && o.material?.color?.getHex() === 0xffffff && o.renderOrder === 3) line = o;
+      });
+      expect(line).toBeTruthy();
+      expect(line.visible && line.parent.visible).toBe(false);
       game.destroy();
       sc.dispose();
     }, 30000);
@@ -297,8 +387,40 @@ describe('la tonte en 3D', () => {
       const cut = geo.attributes.careCut.array;
       const nCut = [...cut].filter((x) => x > 0.4).length;
       expect(nCut).toBeGreaterThan(cut.length * 0.3);
+      // pas de voile : AUCUN sommet que la toison déplace (masque de laine, volume lissé au-delà du masque — la lisière
+      // du garrot et de l'encolure) ne garde sa laine pleine
+      const mask = geo.attributes.sheepMask;
+      const puffW = geo.attributes.sheepPuffW;
+      const seen = new Set(sc.proxy.parts.flatMap((p) => p.list));
+      let left = 0;
+      let border = 0;
+      for (let v = 0; v < cut.length; v++) {
+        if (!seen.has(v)) continue;
+        const moved = mask.getX(v) > 0.01 || puffW.getX(v) > 0.002;
+        if (!moved) continue;
+        if (mask.getX(v) < 0.3) border++;
+        if (cut[v] < 0.4) left++;
+      }
+      expect(border).toBeGreaterThan(0);
+      expect(left).toBe(0);
+      // le dessin de la laine reçoit bien la coupe (les textes visés de sheepCoat.js existent : sinon la tonte ne se
+      // verrait pas, sans erreur)
+      const sh = { vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader, uniforms: {}, defines: {} };
+      sc.model.mesh.material.onBeforeCompile(sh, sc.renderer);
+      expect(sh.vertexShader).toContain('attribute float careCut;');
+      expect(sh.vertexShader).toContain('float pm = sheepPuffW * (1.0 - careCutS);');
+      expect(sh.vertexShader).toContain('getMorph( gl_VertexID, 0, 0 ).xyz * careCutS');
+      if (c.breed === 'islandais_mouton') expect(sh.vertexShader).toContain('(1.0 - max(sState.x, careCutS))');
+      expect(sh.fragmentShader).toContain('float sh = max(sState.x, min(1.0, vCareCut * 2.0)) * wool;');
+      expect(sh.fragmentShader).toContain('float cutL = smoothstep(0.05, 0.45, vCareCut) * wool;');
+      expect(sh.fragmentShader).toContain('(1.0 - max(sState.x, min(1.0, vCareCut * 2.0))) * sFade(vSRest)');
+      const dsh = { vertexShader: THREE.ShaderLib.depth.vertexShader, fragmentShader: THREE.ShaderLib.depth.fragmentShader, uniforms: {}, defines: {} };
+      sc.model.mesh.customDepthMaterial.onBeforeCompile(dsh, sc.renderer);
+      expect(dsh.vertexShader).toContain('float pm = sheepPuffW * (1.0 - careCutS);');
+      expect(fleeceMod.patchVertex({ vertexShader: 'rien' })).toHaveLength(5);
       ctx.pressStop();
-      expect(['just', 'high']).toContain(ctx.finished.why);
+      // une passe partout, sans raser : juste ce qu'il faut
+      expect(ctx.finished.why).toBe('just');
       game.destroy();
       expect(sc.model.mesh.geometry).toBe(src);
       sc.dispose();
@@ -307,16 +429,23 @@ describe('la tonte en 3D', () => {
 });
 
 describe('la traite en 3D', () => {
-  for (const c of [{ species: 'goat', breed: 'saanen' }, { species: 'cow', breed: 'holstein' }, { species: 'cow', breed: 'highland' }]) {
+  for (const c of [{ species: 'goat', breed: 'saanen' }, { species: 'goat', breed: 'alpine' }, { species: 'cow', breed: 'holstein' }, { species: 'cow', breed: 'highland' }]) {
     it(`${c.species} ${c.breed} : ses trayons trouvés, gauche-droite en rythme, le lait monte, la mamelle se vide`, () => {
       const { a, sc } = makeStage(c);
       sc.updateCamera(0);
+      const udder0 = sc.model.uniforms?.gUdder?.value.clone();
       const ctx = ctxFor(a, sc);
       const game = milk3d.milk3dGame(ctx);
       run(ctx, game, sc, 0.3);
       const s0 = game.peek();
       for (const k of ['L', 'R']) expect(inView(s0.teats[k], ctx.view), k).toBe(true);
       expect(s0.teats.L.x).toBeLessThan(s0.teats.R.x);
+      if (c.species === 'goat') {
+        // (vue de derrière : les deux trayons bien l'un à côté de l'autre, pas l'un derrière l'autre)
+        expect(s0.teats.R.x - s0.teats.L.x).toBeGreaterThan(40);
+        // (la mamelle sombre de l'alpine éclaircie le temps de la traite)
+        if (c.breed === 'alpine') expect(sc.model.uniforms.gUdder.value.getHSL({}).l).toBeGreaterThan(udder0.getHSL({}).l + 0.08);
+      }
       const full = sc.model.udderFill;
       const left = ctx.buttons.find((b) => b.text.includes('👈')).opts;
       const right = ctx.buttons.find((b) => b.text.includes('👉')).opts;
@@ -330,6 +459,7 @@ describe('la traite en 3D', () => {
       expect(ctx.finished.why).toBe('just');
       expect(sc.model.udderFill).toBeLessThan(full);
       game.destroy();
+      if (udder0) expect(sc.model.uniforms.gUdder.value.equals(udder0)).toBe(true);
       sc.dispose();
     }, 60000);
   }

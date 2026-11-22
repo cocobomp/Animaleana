@@ -15,8 +15,10 @@ import { sheepLookOf, sheepFleece } from '../../sim/sheepLook.js';
 import { goatLookOf, goatUdderFill } from '../../sim/goatLook.js';
 import { cowLookOf, cowUdderFill, cowModelKind } from '../../sim/cowLook.js';
 import { audio } from '../audio.js';
+import { refineLocks } from './locks.js';
+import { disposeModel } from '../models/animalModel.js';
 
-/** Espèces de la ferme qui ont leur scène de soin (la bergerie, la chèvrerie, l'étable : barn.js). */
+/** Espèces de la ferme qui ont leur scène de soin (la bergerie, la chèvrerie, l'étable : farmBarn.js). */
 export const RUMINANTS = ['sheep', 'goat', 'cow'];
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -26,6 +28,11 @@ const AZ = V(0, 0, 1);
 const _v = V();
 const _w = V();
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+/** Pied levé : angles (rad, autour de l'axe en travers du corps) de l'épaule ou de la hanche, du coude ou du grasset,
+ * du genou ou du jarret, du boulet. */
+export const LIFT = { front: [0, 0, 2.4, 0, 0], hind: [0, 0, 2.4, 0, 0] };
+/** Durée d'un bêlement ou d'un meuglement doux (s). */
+const CALL_S = 0.9;
 
 /** Le gabarit de cet animal dans le jeu (même fonction que AnimalEntity.build). */
 export function ruminantLook(a) {
@@ -54,6 +61,8 @@ export function buildRuminantModel(a, gltf = null) {
   if (!md) return null;
   if (md.setFleece) md.setFleece(sheepFleece(a));
   if (md.setUdder && md.build?.milker) md.setUdder(a.species === 'goat' ? goatUdderFill(a) : cowUdderFill(a));
+  // (laine longue, poil long : des mèches qui tiennent le gros plan, locks.js)
+  refineLocks(md);
   return md;
 }
 
@@ -166,10 +175,31 @@ export function ruminantLife(stage, dt) {
   st.v = 0;
   st.moving = false;
   st.size = stage.double.scale * (md.size ?? 1);
+  st.play = false;
+  // Il se déplace (jouer à la balle, goatPlay3d.js) : mood.drive = { x, z (place au sol, monde), speed (m/s), heading
+  // (vers où il va : atan2(dx, dz) ; π/2 : vers +x, de profil) } ; le jeu le mène, le mixeur choisit l'allure (pas, trot,
+  // galop) et cale les sabots. (Même forme que la scène des chiens et des chats, petStage.js.)
+  if (m.drive) {
+    const dv = m.drive;
+    stage.holder.position.x = dv.x;
+    stage.holder.position.z = dv.z;
+    // (il se tourne en douceur vers où il va)
+    let dh = dv.heading - stage.holder.rotation.y;
+    dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+    stage.holder.rotation.y += dh * Math.min(1, dt * (dv.speed > 0.3 ? 8 : 4));
+    st.moving = dv.speed > 0.06;
+    st.v = dv.speed / Math.max(0.15, stage.double.scale);
+    st.play = !!dv.play && st.moving;
+    stage.holder.updateMatrixWorld(true);
+  }
   st.posture = 'stand';
   st.noLock = false;
-  st.sad = false;
-  st.action = m.eat ? 'eat' : m.milk ? 'milk' : m.brush ? 'brush' : m.graze ? 'graze' : null;
+  st.sad = !!m.tired; // (fatiguée : la tête basse, goatPlay3d.js)
+  st.action = m.eat ? 'eat' : m.milk ? 'milk' : m.brush ? 'brush' : m.graze ? 'graze' : m.frolic ? 'play' : null;
+  // (coup de tête — la chèvre pousse la balle —, une fois ; se dresser sur les postérieurs : mood.posture 'rear')
+  st.butt = m.butt > 0;
+  m.butt = 0;
+  if (m.posture) st.posture = m.posture;
   st.reachY = m.eat && Number.isFinite(m.reachY) ? m.reachY : null;
   // Regard : vers ce qu'on lui montre (repère du modèle, depuis la base de l'encolure, comme le joueur dans le jeu).
   st.look = null;
@@ -178,12 +208,14 @@ export function ruminantLife(stage, dt) {
     const n = stage.holder.worldToLocal(neckBone(md).getWorldPosition(_w));
     st.look = st.lookV.set((p.x - n.x) * m.lookAmt, (p.y - n.y) * m.lookAmt, Math.max(0.05, p.z - n.z * 0.5));
   }
-  // Bêler (mouton, chèvre) ou meugler (vache), doucement : une fois quand le jeu le demande.
-  const call = m.call > 0;
-  st.bleat = call && sp !== 'cow';
-  st.moo = call && sp === 'cow';
-  if (call) {
+  // Bêler (mouton, chèvre) ou meugler (vache), doucement : une fois quand le jeu le demande. Pas le clip du jeu (la
+  // tête levée vers le plafond, la gueule grande ouverte, vue de près sans langue ni dents) : le son, et par-dessus
+  // (plus bas) la tête à peine levée et les lèvres entrouvertes, le temps du son (CALL_S).
+  st.bleat = false;
+  st.moo = false;
+  if (m.call > 0) {
     m.call = 0;
+    stage.callT = CALL_S;
     audio.animal?.(sp, m.callMood ?? 'happy', stage.a?.id ?? null, { gain: 0.7 });
   }
   // Mouches : la vache balance la queue de temps en temps (et se retourne vers son flanc, rarement).
@@ -198,13 +230,22 @@ export function ruminantLife(stage, dt) {
   const neck = neckBone(md);
   const head = headBone(md);
   const jaw = md.bone?.('jaw');
+  // Son appel doux (voir plus haut) : 0 → 1 → 0 pendant CALL_S secondes.
+  stage.callT = Math.max(0, (stage.callT ?? 0) - dt);
+  const calling = stage.callT > 0 ? Math.sin(Math.PI * (1 - stage.callT / CALL_S)) : 0;
   // Ruminer debout : la mâchoire va de côté, en rond, sans fin (quand il ne mange pas déjà au râtelier). Le jeu le
-  // demande (mood.chew) ; sinon il rumine de lui-même, par moments, comme au pré.
-  const chew = m.chew > 0 ? m.chew : !m.call && Math.sin(t * 0.23 + 1) > 0.1 ? 0.5 : 0;
-  const ru = (stage.ruminK = (stage.ruminK ?? 0) + ((chew > 0 && !m.eat ? 1 : 0) - (stage.ruminK ?? 0)) * Math.min(1, dt * 3));
+  // demande (mood.chew) ; sinon il rumine de lui-même, par moments, comme au pré. Pas pendant qu'il bêle.
+  const chew = stage.callT > 0 ? 0 : m.chew > 0 ? m.chew : Math.sin(t * 0.23 + 1) > 0.1 ? 0.5 : 0;
+  const ru = (stage.ruminK = (stage.ruminK ?? 0) + ((chew > 0 && !m.eat ? 1 : 0) - (stage.ruminK ?? 0)) * Math.min(1, dt * (stage.callT > 0 ? 9 : 3)));
   if (jaw && ru > 0.01) {
     anim.turn(jaw, AX, (0.05 + 0.045 * Math.sin(t * 6.3)) * ru * Math.min(1, chew + 0.2));
     anim.turn(jaw, AY, Math.sin(t * 6.3 + 1.2) * 0.06 * ru);
+  }
+  if (calling > 0.01) {
+    // (la tête levée de quelques degrés seulement — elle reste où elle est, à l'auge comme ailleurs —, les lèvres
+    // entrouvertes : la vache, plus grave, ouvre un peu plus et plus longtemps)
+    if (!m.eat) anim.turn(neck, AX, -0.07 * calling);
+    if (jaw) anim.turn(jaw, AX, (sp === 'cow' ? 0.13 : 0.1) * calling);
   }
   // Hocher la tête (contente, ou impatiente quand on prépare son repas).
   if (m.nod > 0) {
@@ -234,6 +275,32 @@ export function ruminantLife(stage, dt) {
     anim.turn(neck, AX, -0.2 * m.flinch);
     m.flinch = Math.max(0, m.flinch - dt * 2.5);
   }
+  // Un pied levé et tenu (parer les onglons) : mood.lift = n° du membre (md.legs : 0 et 1 devant, 2 et 3 derrière),
+  // en douceur. Devant : le genou plié, le canon et le pied repliés vers l'arrière, la sole vers le haut ; derrière :
+  // le membre tiré en arrière, le jarret ouvert, le paturon plié, la sole vers le haut. (Les angles : LIFT.)
+  const want = Number.isInteger(m.lift) ? m.lift : null;
+  if (want !== null) stage.liftLeg = want;
+  stage.liftK = (stage.liftK ?? 0) + ((want !== null ? 1 : 0) - (stage.liftK ?? 0)) * Math.min(1, dt * 3.5);
+  if (stage.liftK < 0.002 && want === null) stage.liftLeg = null;
+  const lifted = stage.liftLeg !== null && stage.liftLeg !== undefined ? md.legs?.[stage.liftLeg] : null;
+  if (lifted && stage.liftK > 0.001) {
+    const k = stage.liftK * stage.liftK * (3 - 2 * stage.liftK);
+    const A = (stage.liftTune ?? LIFT)[lifted.front ? 'front' : 'hind'];
+    // (le pied tenu ne bouge plus avec l'animation du membre : la pose du membre au moment où on le lève, figée ;
+    // sinon le clip de l'arrêt le faisait aller et venir de 3 cm sous la caméra, toute proche)
+    const chain = [lifted.pivot, lifted.knee, lifted.fetlock, lifted.paw];
+    if (stage.liftBaseOf !== lifted) {
+      stage.liftBaseOf = lifted;
+      stage.liftBase = chain.map((b) => b.quaternion.clone());
+    }
+    chain.forEach((b, i) => b.quaternion.slerp(stage.liftBase[i], k));
+    anim.turn(lifted.pivot, AX, A[0] * k);
+    anim.turn(lifted.knee, AX, A[1] * k);
+    anim.turn(lifted.fetlock, AX, A[2] * k);
+    anim.turn(lifted.paw, AX, A[3] * k);
+    // (et un peu écarté du corps, vers l'extérieur : on voit la sole d'en haut, à côté du ventre, pas dessous)
+    if (A[4]) anim.turn(lifted.pivot, AZ, (lifted.side ?? 1) * A[4] * k);
+  }
   // Petite queue du mouton et de la chèvre : elle frétille quand il est content.
   if (sp !== 'cow' && md.tail && m.wag > 0) anim.turn(md.tail, AY, Math.sin(t * 15) * 0.4 * m.wag);
   md.root.updateMatrixWorld(true);
@@ -242,6 +309,12 @@ export function ruminantLife(stage, dt) {
 /** L'adaptation de la scène pour ces espèces (voir CareStage, o.fit). */
 export const RUMINANT_FIT = {
   model: (a) => buildRuminantModel(a),
+  /** Libère un double construit (model) que la scène n'a pas pu prendre (WebGL refusé avant de le poser). */
+  drop(md) {
+    if (!md || md.root?.parent) return;
+    md.dispose?.();
+    disposeModel(md.root);
+  },
   marks: ruminantMarks,
   live: ruminantLive,
   region: ruminantRegion,

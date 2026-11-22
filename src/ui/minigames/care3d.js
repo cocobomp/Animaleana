@@ -20,7 +20,7 @@ import { PetStage } from '../../game/care/petStage.js'; // chiens, chats, lapins
 import { homeSet } from '../../game/care/home.js';
 import { hutchSet } from '../../game/care/hutch.js';
 import { PET_CARE3D_GAMES } from './pets3d.js';
-import { barnSet } from '../../game/care/barn.js'; // la bergerie, la chèvrerie, l'étable
+import { barnSet } from '../../game/care/farmBarn.js'; // la bergerie, la chèvrerie, l'étable
 import { RUMINANT_FIT } from '../../game/care/ruminant.js'; // moutons, chèvres, vaches : leurs repères, leur vie
 import { farmFeed3dGame, farmWater3dGame } from './farm3d.js';
 import { farmTreat3dGame } from './farmTreat3d.js';
@@ -29,6 +29,9 @@ import { farmBrush3dGame } from './farmBrush3d.js';
 import { shear3dGame } from './shear3d.js';
 import { milk3dGame } from './milk3d.js';
 import { cowWash3dGame } from './cowWash3d.js';
+import { hoofTrim3dGame } from './hoofTrim3d.js';
+import { goatPlay3dGame } from './goatPlay3d.js';
+import { barnClean3dGame } from './barnClean3d.js';
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
 export const CARE3D_GAMES = {
@@ -41,6 +44,9 @@ CARE3D_GAMES.sheep.shear = shear3dGame;
 CARE3D_GAMES.goat.milk = milk3dGame;
 CARE3D_GAMES.cow.milk = milk3dGame;
 CARE3D_GAMES.cow.wash = cowWash3dGame;
+CARE3D_GAMES.goat.nails = hoofTrim3dGame; // (parer les onglons : le pied levé, hoofTrim3d.js)
+CARE3D_GAMES.goat.play = goatPlay3dGame; // (la balle dans le pré : goatPlay3d.js, paddock.js)
+CARE3D_GAMES.cow.clean = barnClean3dGame; // (nettoyer l'étable : les bouses, la brouette, la paille : barnClean3d.js)
 
 /** Le jeu 3D de ce soin pour cet animal, ou null. */
 export function care3dGameFor(a, action) {
@@ -64,13 +70,17 @@ export function openCareScene(ui, a, host, above) {
   if (!care3dPossible(a, { setting: care3dSetting() })) return null;
   const game = ui.game ?? null;
   let scene = null;
+  const fit = FITS[a.species] ?? null;
+  let model = null;
   try {
-    const fit = FITS[a.species] ?? null;
-    scene = new (STAGES[a.species] ?? CareStage)({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species], fit, model: fit?.model?.(a) ?? null });
+    model = fit?.model?.(a) ?? null;
+    scene = new (STAGES[a.species] ?? CareStage)({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species], fit, model });
   } catch (e) {
     console.warn('[care3d] scène 3D impossible, jeu dessiné', e?.message ?? e);
     try {
       scene?.dispose();
+      // (le double construit par l'adaptation avant la scène — WebGL refusé avant qu'elle le prenne — : libéré)
+      fit?.drop?.(model);
     } catch {
       /* rien */
     }

@@ -1,4 +1,4 @@
-// Laver la vache, en 3D (dans l'étable : src/game/care/barn.js). C'est le jeu du cheval (wash3d.js : même logique et
+// Laver la vache, en 3D (dans l'étable : src/game/care/farmBarn.js). C'est le jeu du cheval (wash3d.js : même logique et
 // même note que le jeu dessiné grooming.js washGame) adapté à la vache : ses os (régions du corps lues par
 // l'adaptation de la scène, sc.fit), sa taille (unité : sa hauteur au garrot), sa voix (elle meugle doucement). Étape 1,
 // l'éponge : la mousse monte et la boue part dessous ; étape 2, la douche : notre main tient la lance, la mousse coule.
@@ -50,28 +50,37 @@ export function cowWash3dGame(ctx) {
       if (!h) continue;
       const region = h.boneName ? sc.fit?.region?.(h.boneName) ?? 'body' : 'body';
       if (!BODY.has(region)) continue;
-      cells.push({ p: h.point, n: h.normal, bone: h.bone, soap: 0, peak: 0, mud: rng() < 0.45, k: rng() });
+      // (la boue : surtout en bas — le ventre, le bas des flancs — et sur l'arrière-main, pas semée partout)
+      const low = 1 - clamp((jy - L.belly.y) / Math.max(0.05, L.withers.y - L.belly.y), 0, 1);
+      const rear = 1 - clamp((jx - L.croup.x) / Math.max(0.05, L.withers.x - L.croup.x), 0, 1);
+      cells.push({ p: h.point, n: h.normal, bone: h.bone, soap: 0, peak: 0, mud: rng() < 0.03 + 0.55 * low * low + 0.25 * rear * low, k: rng() });
     }
   }
   // (mousse et boue : des cartes posées sur le poil, liées aux os)
   const foamTex = own(new THREE.CanvasTexture(foamCanvas()));
   foamTex.colorSpace = THREE.SRGBColorSpace;
-  const mudTex = own(mudTexture('mud', 6));
+  // (trois boues différentes, plus une éclaboussure : pas des pois tous pareils)
+  const mudTexs = [own(mudTexture('mud', 6)), own(mudTexture('mud', 11)), own(mudTexture('mud', 17))];
   const plane = own(new THREE.PlaneGeometry(1, 1));
-  function card(c, tex, size, order) {
+  function card(c, tex, size, order, stretch = 1) {
     const mat = own(new THREE.MeshStandardMaterial({ map: tex, transparent: true, depthWrite: false, roughness: 0.6, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4 - order, polygonOffsetUnits: -4 - order }));
     const mesh = new THREE.Mesh(plane, mat);
-    mesh.scale.set(size, size, 1);
+    mesh.scale.set(size * stretch, size, 1);
     mesh.position.copy(c.p).addScaledVector(c.n, 0.006 + order * 0.002);
     mesh.lookAt(c.p.clone().add(c.n));
-    mesh.rotateZ(rng() * Math.PI * 2);
+    // (la boue est allongée dans le sens du poil, presque à plat ; la mousse tourne au hasard)
+    if (order === 0) {
+      const up = v3(0, 1, 0).projectOnPlane(c.n).normalize();
+      const yAxis = v3(0, 1, 0).applyQuaternion(mesh.quaternion);
+      mesh.rotateZ(Math.atan2(new THREE.Vector3().crossVectors(yAxis, up).dot(c.n), yAxis.dot(up)) + (rng() - 0.5) * 0.5);
+    } else mesh.rotateZ(rng() * Math.PI * 2);
     mesh.renderOrder = 2 + order;
     sc.scene.add(mesh);
     (c.bone ?? sc.holder).attach(mesh);
     return mesh;
   }
   for (const c of cells) {
-    if (c.mud) c.mudMesh = card(c, mudTex, step * 1.1, 0);
+    if (c.mud) c.mudMesh = card(c, mudTexs[Math.floor(rng() * 3)], step * (0.8 + rng() * 0.9), 0, 1.3 + rng() * 0.6);
     c.foam = card(c, foamTex, step * 1.6, 1);
     c.foam.visible = false;
   }
@@ -335,28 +344,41 @@ function foamCanvas() {
   return paint(128, 128, (x) => {
     let s = 7;
     const r = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
-    // un nuage de mousse doux (les bords s'effacent : les endroits voisins se fondent en une seule mousse), puis
-    // les bulles par-dessus
-    const base = x.createRadialGradient(64, 64, 8, 64, 64, 62);
-    base.addColorStop(0, 'rgba(250,252,255,0.95)');
-    base.addColorStop(0.6, 'rgba(240,247,255,0.8)');
-    base.addColorStop(1, 'rgba(230,242,255,0)');
+    // Un nuage de mousse (les bords s'effacent : les endroits voisins se fondent en une seule mousse), puis les bulles.
+    // Sur le blanc d'une Holstein, une mousse toute blanche ne se voyait pas : une ombre bleutée sous le nuage, et
+    // chaque bulle a son liseré gris-bleu et son reflet — on voit où on a savonné, sur le blanc comme sur le noir.
+    const shade = x.createRadialGradient(66, 70, 10, 66, 70, 62);
+    shade.addColorStop(0, 'rgba(120,150,185,0.55)');
+    shade.addColorStop(0.7, 'rgba(130,160,195,0.35)');
+    shade.addColorStop(1, 'rgba(130,160,195,0)');
+    x.fillStyle = shade;
+    x.fillRect(0, 0, 128, 128);
+    const base = x.createRadialGradient(62, 60, 8, 62, 60, 56);
+    base.addColorStop(0, 'rgba(252,253,255,0.95)');
+    base.addColorStop(0.6, 'rgba(238,245,252,0.75)');
+    base.addColorStop(1, 'rgba(225,238,250,0)');
     x.fillStyle = base;
     x.fillRect(0, 0, 128, 128);
-    for (let i = 0; i < 46; i++) {
+    for (let i = 0; i < 52; i++) {
       const a = r() * Math.PI * 2;
-      const d = Math.sqrt(r()) * 38;
+      const d = Math.sqrt(r()) * 40;
       const cx = 64 + Math.cos(a) * d;
       const cy = 64 + Math.sin(a) * d * 0.85;
-      const rad = 6 + r() * 12 * (1 - d / 70);
+      const rad = 4 + r() * 11 * (1 - d / 70);
       const gr = x.createRadialGradient(cx - rad * 0.3, cy - rad * 0.3, rad * 0.1, cx, cy, rad);
       gr.addColorStop(0, 'rgba(255,255,255,1)');
-      gr.addColorStop(0.75, 'rgba(240,248,255,0.95)');
-      gr.addColorStop(1, 'rgba(170,205,235,0.55)');
+      gr.addColorStop(0.62, 'rgba(236,244,252,0.95)');
+      gr.addColorStop(0.86, 'rgba(150,178,210,0.95)');
+      gr.addColorStop(1, 'rgba(110,140,180,0.85)');
       x.fillStyle = gr;
       x.beginPath();
       x.arc(cx, cy, rad, 0, Math.PI * 2);
       x.fill();
+      // le reflet de la bulle
+      x.fillStyle = 'rgba(255,255,255,0.95)';
+      x.beginPath();
+      x.arc(cx - rad * 0.35, cy - rad * 0.38, Math.max(0.8, rad * 0.16), 0, Math.PI * 2);
+      x.fill();
     }
-  }, 'foam2');
+  }, 'foam-cow');
 }

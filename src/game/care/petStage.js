@@ -376,6 +376,33 @@ export class PetStage extends CareStage {
     }
   }
 
+  /**
+   * Une image : la vie (l'animation du modèle), puis ce qu'un jeu impose au modèle par-dessus son animation
+   * (sc.mood.pose(dt) : une patte présentée pour les griffes…), avant le rendu.
+   */
+  update(dt) {
+    super.update(dt);
+    if (this.mood.pose) {
+      this.holder.updateMatrixWorld(true);
+      this.mood.pose(dt);
+      this.holder.updateMatrixWorld(true);
+    }
+  }
+
+  /**
+   * La caméra, avec son plan proche à la mesure du gros plan : à 6 cm de la patte d'un chihuahua, le plan proche du
+   * cheval (5 cm) coupait les coussinets en anneaux.
+   */
+  updateCamera(dt) {
+    super.updateCamera(dt);
+    const d = this.camPos.distanceTo(this.camTarget);
+    const near = Math.min(0.05, Math.max(0.004, d * 0.12));
+    if (Math.abs(near - this.camera.near) > 1e-4) {
+      this.camera.near = near;
+      this.camera.updateProjectionMatrix();
+    }
+  }
+
   /** Le doigt sur l'animal ? Régions des modèles de compagnie (petRegionOf). */
   pickAnimal(x, y) {
     const h = super.pickAnimal(x, y);

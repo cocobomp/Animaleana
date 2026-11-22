@@ -927,5 +927,5 @@ export function shoulderOf(sc) {
 export const PET_CARE3D_GAMES = {
   dog: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame, nails: petNails3dGame, play: petPlay3dGame },
   cat: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame, nails: petNails3dGame },
-  rabbit: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame, play: petPlay3dGame },
+  rabbit: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame, nails: petNails3dGame, play: petPlay3dGame },
 };

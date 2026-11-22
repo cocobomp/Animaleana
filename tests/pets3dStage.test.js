@@ -221,9 +221,56 @@ describe('le brossage', () => {
   }
 });
 
-describe('les griffes (chien, chat)', () => {
-  for (const gab of [{ species: 'dog', breed: 'labrador' }, { species: 'cat', breed: 'persan' }]) {
-    it(`${label(gab)} : il donne la patte, quatre griffes au bout ; trois dans la zone, une dans le rose : « aïe »`, () => {
+describe('les griffes (chien, chat, lapin) : un gros plan lisible', () => {
+  // Une griffe vue de près : au moins 55 px du cadre (le jeu dessiné : 74), dans l'image, devant la patte (rien de
+  // l'animal entre la caméra et elle), en portrait comme en paysage, du chihuahua au saint-bernard.
+  const NAILS = [
+    { species: 'dog', breed: 'chihuahua' }, { species: 'dog', breed: 'teckel' }, { species: 'dog', breed: 'saint_bernard' },
+    { species: 'dog', breed: 'labrador', ageDays: 40 }, { species: 'cat', breed: 'persan' }, { species: 'cat', breed: 'maine_coon' },
+    { species: 'cat', breed: 'sphynx' }, { species: 'rabbit', breed: 'nain' }, { species: 'rabbit', breed: 'tete_de_lion' },
+  ];
+  const visible = (sc, p) => {
+    // (le premier point de l'animal sur le rayon caméra → griffe est derrière elle, ou il n'y en a pas)
+    const cam = sc.camera.position.clone();
+    const d = p.clone().sub(cam);
+    const h = sc.proxy.hit(new THREE.Ray(cam, d.clone().normalize()), -9, 1e9);
+    return !h || h.distance > d.length() - 0.002;
+  };
+  for (const gab of NAILS) {
+    for (const [w, h] of [[390, 600], [844, 390]]) {
+      it(`${label(gab)} ${w}×${h} : la patte en gros plan, quatre griffes bien grandes, devant la patte`, () => {
+        const { a, sc } = makePetStage({ ...gab, w, h });
+        const ctx = ctxFor(a, sc, w, h);
+        const game = pets3d.PET_CARE3D_GAMES[gab.species].nails(ctx);
+        run(ctx, game, sc, 0.5);
+        const v = ctx.view;
+        const s = game.peek();
+        expect(s.clawPx, 'longueur de la griffe à l\'écran').toBeGreaterThan(55);
+        expect(inView(s.clawBase, v, 4) && inView(s.clawTip, v, 4), 'griffe dans l\'image').toBe(true);
+        sc.proxy.bake();
+        const c = sc.scene.getObjectsByProperty('renderOrder', 53).map((m) => m.parent);
+        expect(c.length).toBe(4);
+        // (la mesure voit bien la peau : l'os des doigts, dans la patte, est caché par elle)
+        expect(visible(sc, c[0].parent.getWorldPosition(new THREE.Vector3()))).toBe(false);
+        // de gauche à droite, toutes dans l'image et devant la patte
+        let x = -Infinity;
+        for (const g of c.sort((p, q) => sc.project(p.getWorldPosition(new THREE.Vector3())).x - sc.project(q.getWorldPosition(new THREE.Vector3())).x)) {
+          const mid = g.localToWorld(new THREE.Vector3(0, 0.6, 0));
+          const q = sc.project(mid);
+          expect(inView(q, v, 4)).toBe(true);
+          expect(q.x).toBeGreaterThan(x);
+          x = q.x;
+          expect(visible(sc, mid), 'griffe cachée par la patte').toBe(true);
+        }
+        game.destroy();
+        expect(sc.mood.pose).toBe(null);
+        sc.dispose();
+      }, 60000);
+    }
+  }
+
+  for (const gab of [{ species: 'dog', breed: 'labrador' }, { species: 'cat', breed: 'persan' }, { species: 'rabbit', breed: 'belier' }]) {
+    it(`${label(gab)} : trois griffes dans la zone, une dans le rose : « aïe », il retire la patte`, () => {
       const { a, sc } = makePetStage(gab);
       const ctx = ctxFor(a, sc);
       const game = pets3d.PET_CARE3D_GAMES[gab.species].nails(ctx);
@@ -238,9 +285,16 @@ describe('les griffes (chien, chat)', () => {
         }
         // la griffe en cours est dans l'image, et la pince sur elle
         expect(inView(game.peek().clawTip, ctx.view), `griffe ${k}`).toBe(true);
+        const paw0 = game.peek().clawBase;
         cut.opts.onTap();
         run(ctx, game, sc, 0.3);
-        if (bad) expect(sc.mood.annoyed).toBeGreaterThan(0); // il retire la patte, oreilles en arrière
+        if (bad) {
+          expect(sc.mood.annoyed).toBeGreaterThan(0); // oreilles en arrière
+          // il retire la patte : elle bouge à l'écran, puis revient
+          const p1 = game.peek().clawBase;
+          expect(Math.hypot(p1.x - paw0.x, p1.y - paw0.y)).toBeGreaterThan(5);
+          run(ctx, game, sc, 1.2);
+        }
       }
       expect(ctx.finished?.why).toBe('high');
       game.destroy();

@@ -234,7 +234,7 @@ export function openAnimalActions(ui, a) {
     }
     // 🤸 Après la voltige : enlever le surfaix et le tapis de voltige (sinon une selle se posait sur le tapis épais).
     if (a.species === 'horse' && (a.gear?.surcingle || a.gear?.pad?.item === 'vaultPad') && g.player.mount?.data !== a) {
-      items.push({ act: 'unsaddle', icon: '🧰', label: t('vt_gearOffBtn'), effect: ta('vt_gearOffHint', a), run: () => { g.removeVaultGear(a); ui.closePanel(); } });
+      items.push({ act: 'vaultGearOff', icon: '🧰', label: t('vt_gearOffBtn'), effect: ta('vt_gearOffHint', a), run: () => { g.removeVaultGear(a); ui.closePanel(); } });
     }
     // Monté à cru avec le filet : on le lui enlève aussi (il ne le garde pas au pré).
     if (sp.rideable && !saddled && a.gear?.bridle && g.player.mount?.data !== a) {

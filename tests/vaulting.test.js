@@ -5,11 +5,12 @@ import { DAYS_PER_YEAR } from '../src/sim/time.js';
 import { SPECIES } from '../src/sim/species.js';
 import { GEAR, TACK_CATEGORIES, equip, buyGear, wears, freeStock } from '../src/sim/gear.js';
 import {
-  VAULT_LEVELS, LEVEL_IDS, FIGURES, PROGRAM, CIRCLE_R, onCircle, tapQuality, tapGrade, BALANCE_ZONE, balancePush, balanceAmp,
+  VAULT_LEVELS, LEVEL_IDS, FIGURES, PROGRAM, CIRCLE_R, onCircle, tapError, tapQuality, tapGrade, TAP_LATENCY, BALANCE_ZONE, balancePush, balanceAmp,
   leanOf, balanceScore, horseCalm, figureMark, judgesMarks, figureScore, judgeComment, vaultResult, vaultBlock, vaultData,
   canterUnlocked, CANTER_UNLOCK, figuresOnHorse, recordVault, vaultHorseEffect,
 } from '../src/sim/vaulting.js';
 import { practiceAward } from '../src/sim/activities.js';
+import { seeded } from '../src/sim/rng.js';
 import { OBJECTIVES } from '../src/sim/objectives.js';
 import { VAULT_FR, VAULT_EN } from '../src/ui/vaultingTexts.js';
 
@@ -64,31 +65,70 @@ describe('le programme et les niveaux', () => {
   it('le tonneau est le plus facile, puis le pas, puis le galop', () => {
     expect(LEVEL_IDS).toEqual(['barrel', 'walk', 'canter']);
     expect(VAULT_LEVELS.barrel.horse).toBe(false);
-    expect(VAULT_LEVELS.barrel.window).toBeGreaterThan(VAULT_LEVELS.walk.window);
-    expect(VAULT_LEVELS.walk.window).toBeGreaterThan(VAULT_LEVELS.canter.window);
+    for (const k of [0, 1]) {
+      expect(VAULT_LEVELS.barrel.tol[k]).toBeGreaterThan(VAULT_LEVELS.walk.tol[k]);
+      expect(VAULT_LEVELS.walk.tol[k]).toBeGreaterThan(VAULT_LEVELS.canter.tol[k]);
+    }
     expect(VAULT_LEVELS.barrel.wobble).toBeLessThan(VAULT_LEVELS.canter.wobble);
   });
 });
 
+/** Note moyenne d'une figure non tenue pour une enfant qui touche à ±sigma s, reçue lat s plus tard (au hasard si
+ * sigma vaut null), sur 4000 touchers tirés toujours de la même façon. Le jeu retire TAP_LATENCY (fix : sans). */
+function childMark(level, sigma, lat, fix = TAP_LATENCY) {
+  const r = seeded(`enfant-${level}-${sigma}-${lat}`);
+  const randn = () => Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());
+  const stride = { barrel: 1.25, walk: 1.1, canter: 0.62 }[level];
+  let sum = 0;
+  for (let i = 0; i < 4000; i++) {
+    const at = sigma === null ? r() * stride : sigma * randn() + lat;
+    const q = tapQuality(tapError((at - fix) / stride, stride), level);
+    sum += figureMark({ timing: q, calm: 0.45 });
+  }
+  return sum / 4000;
+}
+
 describe('toucher en rythme', () => {
   it('le bon moment est le début de la foulée (juste avant ou juste après)', () => {
+    expect(tapError(0, 0.6)).toBe(0);
+    expect(tapError(0.1, 0.6)).toBeCloseTo(0.06, 9); // en retard
+    expect(tapError(0.9, 0.6)).toBeCloseTo(-0.06, 9); // en avance
+    expect(tapError(1.1, 0.6)).toBeCloseTo(0.06, 9); // (phase prise modulo 1)
     expect(tapQuality(0)).toBe(1);
-    expect(tapQuality(0.999)).toBeGreaterThan(0.95);
-    expect(tapQuality(0.5)).toBe(0);
-    expect(tapQuality(0.1)).toBeGreaterThan(tapQuality(0.2));
-    expect(tapQuality(1.02)).toBeCloseTo(tapQuality(0.02), 9); // (phase prise modulo 1)
+    expect(tapQuality(0.05)).toBe(1); // (tout près : parfait)
+    expect(tapQuality(-0.05)).toBe(1);
+    expect(tapQuality(0.15)).toBeGreaterThan(tapQuality(0.2));
+    expect(tapQuality(0.3, 'canter')).toBe(0);
   });
 
-  it('plus de tolérance sur le tonneau qu\'au galop', () => {
-    const ph = 0.2;
-    expect(tapQuality(ph, VAULT_LEVELS.barrel.window)).toBeGreaterThan(tapQuality(ph, VAULT_LEVELS.canter.window));
+  it('la tolérance est en secondes : le galop, plus rapide, ne demande pas une précision de 37 ms', () => {
+    // au galop : « parfait » jusqu'à 80 ms d'écart, « bien » encore à 150 ms
+    expect(tapGrade(0.08, 'canter')).toBe('perfect');
+    expect(tapGrade(0.15, 'canter')).toBe('good');
+    expect(tapQuality(0.2, 'barrel')).toBeGreaterThan(tapQuality(0.2, 'canter'));
   });
 
   it('ce qu\'on dit : parfait, bien, un peu tôt, un peu tard', () => {
-    expect(tapGrade(0.01)).toBe('perfect');
-    expect(tapGrade(0.12)).toBe('good');
-    expect(tapGrade(0.3)).toBe('late'); // après le temps
-    expect(tapGrade(0.7)).toBe('early'); // avant le prochain
+    expect(tapGrade(0.02)).toBe('perfect');
+    expect(tapGrade(0.13)).toBe('good');
+    expect(tapGrade(0.24)).toBe('late'); // après le temps
+    expect(tapGrade(-0.24)).toBe('early'); // avant
+  });
+
+  it('une enfant au téléphone, un peu en retard (80 ms), a une bonne note au galop', () => {
+    expect(childMark('canter', 0.1, 0.08)).toBeGreaterThanOrEqual(8); // (le succès « 8/10 au galop » est atteignable)
+    expect(childMark('canter', 0.15, 0.08)).toBeGreaterThanOrEqual(6.5);
+    expect(childMark('walk', 0.15, 0.08)).toBeGreaterThanOrEqual(7.5);
+    expect(childMark('barrel', 0.15, 0.08)).toBeGreaterThanOrEqual(8);
+    // le retard du tactile est corrigé : sans la correction, c'était moins bien
+    expect(childMark('canter', 0.1, 0.08)).toBeGreaterThan(childMark('canter', 0.1, 0.08, 0) + 0.2);
+  });
+
+  it('toucher n\'importe quand ne suffit pas : le rythme compte vraiment', () => {
+    for (const level of LEVEL_IDS) {
+      expect(childMark(level, null, 0), level).toBeLessThan(6);
+      expect(childMark(level, 0.1, 0.08) - childMark(level, null, 0), level).toBeGreaterThan(2.5);
+    }
   });
 });
 

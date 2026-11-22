@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { Session, SESSION_TYPES } from './Activities.js';
 import { toWorld, practiceAward, addAward } from '../sim/activities.js';
 import {
-  VAULT_LEVELS, FIGURES, PROGRAM, CIRCLE_R, CIRCLE_AT, onCircle, tapQuality, tapGrade, balancePush, balanceAmp, leanOf,
+  VAULT_LEVELS, FIGURES, PROGRAM, CIRCLE_R, CIRCLE_AT, onCircle, tapError, tapQuality, tapGrade, TAP_LATENCY, balancePush, balanceAmp, leanOf,
   balanceScore, BALANCE_ZONE, horseCalm, figureMark, judgesMarks, figureScore, judgeComment, vaultResult, vaultBlock,
   recordVault, vaultHorseEffect,
 } from '../sim/vaulting.js';
@@ -420,7 +420,7 @@ class VaultingSession extends Session {
     this.lean = 0;
     this.control = 0;
     this.hud2 = new VaultHud(this.hud, {
-      onTap: () => this.tap(),
+      onTap: (ts) => this.tap(ts),
       onDrag: (d) => { this.control = clamp(this.control + d, -1.2, 1.2); },
     });
     this.hud.hint(this.e ? ta(`vt_hint_${this.level}`, this.animal) : t('vt_hint_barrel'), 7000);
@@ -610,20 +610,31 @@ class VaultingSession extends Session {
     this.refreshHud();
   }
 
-  tap() {
+  /** Un toucher (ts : heure de l'événement, en ms comme performance.now). */
+  tap(ts = performance.now()) {
     if (this.state !== 'run') return;
     if (this.phase !== 'cue') {
       if (this.phase === 'approach') this.hud.big(t('vt_wait'), 700);
       return;
     }
-    this.go(this.stridePhase(), true);
+    this.go(this.phaseAt(ts), true);
+  }
+
+  /**
+   * La phase de la foulée au moment où le doigt a touché : la dernière image peut dater un peu (on prolonge la
+   * foulée jusqu'à l'heure de l'événement), et le doigt a touché TAP_LATENCY avant que le jeu le reçoive.
+   */
+  phaseAt(ts) {
+    const wall = clamp((ts - (this.wallAt ?? ts)) / 1000, -0.3, 0.3) - TAP_LATENCY;
+    return (this.phAt ?? this.stridePhase()) + (wall * (this.rate ?? 1)) / this.strideTime();
   }
 
   /** On lance l'étape : la qualité du toucher (en rythme ou pas), puis le mouvement. */
   go(phase, tapped) {
     const s = STEPS[this.stepI];
-    const q = tapped ? tapQuality(phase, this.L.window) : 0;
-    const grade = tapped ? tapGrade(phase, this.L.window) : 'late';
+    const err = tapError(phase, this.strideTime());
+    const q = tapped ? tapQuality(err, this.level) : 0;
+    const grade = tapped ? tapGrade(err, this.level) : 'late';
     this.taps.push(q);
     this.hud.big(t(`vt_tap_${grade}`), 750, q >= 0.45 ? 'good' : 'bad');
     if (q >= 0.8 && this.e) this.e.emit('✨', 1);
@@ -714,6 +725,10 @@ class VaultingSession extends Session {
       this.mt.update(g.world);
     }
     this.trackBeat(dt);
+    // (pour situer un toucher entre deux images : où en était la foulée, à quelle heure, à quelle vitesse du jeu)
+    this.phAt = this.stridePhase();
+    this.wallAt = performance.now();
+    this.rate = g.paused ? 0 : Math.max(1, Math.round(g.timeScale ?? 1));
     this.updateCoach(dt);
     if (this.state === 'countdown' || this.phase === 'salute') this.updateSalute(dt);
     else if (this.state === 'run' || this.state === 'finishing') this.updateRun(dt);
@@ -1201,7 +1216,7 @@ class VaultingSession extends Session {
   onKeyDown(e) {
     if (e.code === 'Space' || e.code === 'Enter') {
       e.preventDefault();
-      this.tap();
+      if (!e.repeat) this.tap(e.timeStamp);
     }
     if (e.code === 'ArrowLeft' || e.code === 'KeyA' || e.code === 'KeyQ') this.keysLR = -1;
     if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keysLR = 1;

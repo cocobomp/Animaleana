@@ -22,7 +22,7 @@ export function fmtMark(n, digits = 1) {
 /**
  * Ce que la séance ajoute à la barre des activités (ActivityHud) : une couche qui reçoit le doigt (toucher, glisser),
  * le bouton rond du rythme, la carte de la figure, la jauge d'équilibre et le panneau des juges.
- * cb : { onTap(), onDrag(dx) } (dx : part de la largeur de l'écran, × 3,5).
+ * cb : { onTap(ts), onDrag(dx) } (ts : heure du toucher, en ms ; dx : part de la largeur de l'écran, × 3,5).
  */
 export class VaultHud {
   constructor(hud, cb) {
@@ -35,7 +35,7 @@ export class VaultHud {
       e.preventDefault();
       lastX = e.clientX;
       this.pad.setPointerCapture?.(e.pointerId);
-      cb.onTap();
+      cb.onTap(e.timeStamp);
     });
     this.pad.addEventListener('pointermove', (e) => {
       if (lastX === null) return;
@@ -53,7 +53,7 @@ export class VaultHud {
     this.btn = h('button', {
       class: 'vt-btn',
       'aria-label': t('vt_tapBtn'),
-      onPointerdown: (e) => { e.preventDefault(); e.stopPropagation(); cb.onTap(); },
+      onPointerdown: (e) => { e.preventDefault(); e.stopPropagation(); cb.onTap(e.timeStamp); },
     }, this.ringEl, h('span', { class: 'vt-target' }), this.icoEl);
     this.cardEl = h('div', { class: 'vt-card', hidden: true });
     // La jauge d'équilibre.

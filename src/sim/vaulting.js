@@ -5,7 +5,8 @@
 // (un cheval de bois), puis le cheval au pas, et enfin au galop.
 //
 // Le jeu, pour une enfant : toucher au bon moment, en rythme avec la foulée (le « temps » du galop), pour lancer
-// chaque figure ; puis garder l'équilibre en glissant le doigt pendant que la figure tient quelques foulées.
+// chaque figure ; puis garder l'équilibre en glissant le doigt pendant que la figure tient quelques foulées. Réglé
+// pour une enfant de 8 à 12 ans sur un téléphone (voir tests/vaulting.test.js : « une enfant au téléphone »).
 // Les juges notent chaque figure sur 10.
 //
 // Logique pure, sans 3D (testée dans tests/vaulting.test.js). La partie 3D est dans src/game/Vaulting.js.
@@ -39,15 +40,23 @@ export function onCircle(c, h, r = CIRCLE_R) {
 
 /**
  * Les trois niveaux. horse : il faut un cheval ; gait : son allure ; beat : durée d'un temps (s) sur le tonneau
- * (avec un cheval, c'est sa foulée) ; window : tolérance du toucher (part de la foulée) ; wobble : ce que le
- * mouvement du cheval pousse le voltigeur (équilibre) ; hold : foulées tenues pendant une figure.
+ * (avec un cheval, c'est sa foulée) ; tol : tolérance du toucher, en secondes d'écart au temps fort ([parfait
+ * jusqu'à, plus rien à partir de] : en secondes et pas en part de foulée, sinon le galop, plus rapide, demandait
+ * une précision de 37 ms) ; wobble : ce que le mouvement du cheval pousse le voltigeur (équilibre) ; hold : foulées
+ * tenues pendant une figure.
  */
 export const VAULT_LEVELS = {
-  barrel: { horse: false, gait: null, beat: 1.25, window: 0.42, wobble: 0.38, hold: 3, icon: '🛢️' },
-  walk: { horse: true, gait: 'walk', beat: null, window: 0.36, wobble: 0.55, hold: 3, icon: '🚶' },
-  canter: { horse: true, gait: 'canter', beat: null, window: 0.3, wobble: 0.8, hold: 4, icon: '🐎' },
+  barrel: { horse: false, gait: null, beat: 1.25, tol: [0.1, 0.36], wobble: 0.38, hold: 3, icon: '🛢️' },
+  walk: { horse: true, gait: 'walk', beat: null, tol: [0.09, 0.32], wobble: 0.55, hold: 3, icon: '🚶' },
+  canter: { horse: true, gait: 'canter', beat: null, tol: [0.08, 0.25], wobble: 0.8, hold: 4, icon: '🐎' },
 };
 export const LEVEL_IDS = ['barrel', 'walk', 'canter'];
+
+/**
+ * Retard moyen d'un toucher sur un téléphone (s) : entre le doigt qui touche et le moment où le jeu le reçoit (écran
+ * tactile, image en cours). On le retire de l'heure du toucher.
+ */
+export const TAP_LATENCY = 0.06;
 
 /** Note au pas qu'il faut avoir pour passer au galop (sur 10). */
 export const CANTER_UNLOCK = 6;
@@ -72,22 +81,26 @@ export const PROGRAM = ['basicSeat', 'flag', 'mill', 'scissors', 'stand', 'flank
 // ---------------------------------------------------------------- le bon moment
 
 /**
- * Qualité d'un toucher (0 à 1) selon la phase de la foulée (0 → 1) au moment où l'on touche : le bon moment est
- * le début de la foulée (phase 0, ou 1 juste avant). window : tolérance (part de la foulée) du niveau.
+ * Écart (s) entre un toucher et le temps fort le plus proche : phase de la foulée (0 → 1) au moment du toucher,
+ * stride la durée d'une foulée (s). Positif : après le temps (en retard) ; négatif : avant.
  */
-export function tapQuality(phase, window = VAULT_LEVELS.canter.window) {
+export function tapError(phase, stride) {
   const p = ((phase % 1) + 1) % 1;
-  const err = Math.min(p, 1 - p);
-  return clamp(1 - err / window);
+  return (p < 0.5 ? p : p - 1) * stride;
+}
+
+/** Qualité d'un toucher (0 à 1) selon son écart au temps fort (s) : parfait tout près, puis de moins en moins. */
+export function tapQuality(err, level = 'canter') {
+  const [perfect, zero] = (VAULT_LEVELS[level] ?? VAULT_LEVELS.canter).tol;
+  return clamp(1 - (Math.abs(err) - perfect) / (zero - perfect));
 }
 
 /** Ce qu'on dit d'un toucher : 'perfect', 'good', 'early' (avant le temps) ou 'late' (après). */
-export function tapGrade(phase, window = VAULT_LEVELS.canter.window) {
-  const q = tapQuality(phase, window);
-  if (q >= 0.8) return 'perfect';
-  if (q >= 0.45) return 'good';
-  const p = ((phase % 1) + 1) % 1;
-  return p < 0.5 ? 'late' : 'early';
+export function tapGrade(err, level = 'canter') {
+  const q = tapQuality(err, level);
+  if (q >= 0.85) return 'perfect';
+  if (q >= 0.4) return 'good';
+  return err > 0 ? 'late' : 'early';
 }
 
 // ---------------------------------------------------------------- l'équilibre

@@ -314,6 +314,7 @@ export function floorGame3d(ctx, make, o) {
 
   // ---------------------------------------------------------------- l'outil sous le doigt : fourche, brassée
   const fork = pitchfork(own);
+  fork.scale.setScalar(1.2); // (un peu plus grande que nature : elle se lit au téléphone)
   fork.visible = false;
   root.add(fork);
   const armful = o.cells ? strawArmful(own, mats) : null;
@@ -481,8 +482,10 @@ export function floorGame3d(ctx, make, o) {
         const cam = sc.camera.position;
         const yaw = Math.atan2(cam.x - at.x, cam.z - at.z);
         if (fork.visible) {
+          // (le manche part vers la droite de l'image et vers nous, pas droit vers la caméra : vue d'en haut, on voit
+          // la fourche de côté — avant, elle n'était qu'un trait)
           fork.position.copy(at).add(v3(0, held ? 0.08 : 0.02, 0));
-          fork.rotation.set(held ? -0.15 : 0, yaw, 0);
+          fork.rotation.set(held ? -0.15 : 0, yaw + 1.05, 0);
         }
         if (armful?.visible) {
           armful.position.copy(at).add(v3(0, 0.12, 0));
@@ -491,7 +494,7 @@ export function floorGame3d(ctx, make, o) {
         }
       }
       if (held) {
-        const tip = fork.visible ? fork.localToWorld(v3(0, 0.03, 0.12)) : at ?? held.obj.position;
+        const tip = fork.visible ? fork.localToWorld(v3(0, 0.04, 0.14)) : at ?? held.obj.position;
         held.obj.position.copy(tip);
       }
       // le cheval mange au filet, tourne la tête vers nous de temps en temps ; impatient si on traîne

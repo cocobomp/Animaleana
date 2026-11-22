@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { CareStage } from '../../game/care/stage.js';
-import { boxFloorSet, bareBoxSet, aisleSet, AISLE, pushBroom, bigDustpan } from '../../game/care/barn.js';
+import { boxFloorSet, bareBoxSet, aisleSet, AISLE, pushBroom, bigDustpan, rubberMatTexture } from '../../game/care/barn.js';
 import { sweepGame } from './chores.js';
 import { drawMiniGauge } from './clean.js';
 import { label, rrect } from './draw.js';
@@ -162,14 +162,30 @@ export function sweep3dGame(ctx) {
   const pan = s0.pan;
   const c0 = toWorld(pan.x + 10, pan.y, 0);
   const c1 = toWorld(pan.x + pan.w, pan.y + pan.h, 0);
-  const rubber = new THREE.Mesh(own(new THREE.BoxGeometry(c1.x - c0.x + 0.12, 0.012, c1.z - c0.z + 0.1)), own(new THREE.MeshStandardMaterial({ color: 0x232325, roughness: 0.92 })));
-  rubber.position.set((c0.x + c1.x) / 2 + 0.04, 0.006, (c0.z + c1.z) / 2);
+  // (un tapis à picots, brun, avec son bord jaune : on voit que c'est un tapis où l'on pousse le tas — avant, un pavé
+  // noir uni ; la grande pelle rouge posée dessus, la lèvre vers l'allée)
+  const matW = c1.x - c0.x + 0.12;
+  const matD = c1.z - c0.z + 0.1;
+  const matTex = own(rubberMatTexture());
+  matTex.repeat.set(matW / 0.6, matD / 0.6);
+  const rubber = new THREE.Mesh(own(new THREE.BoxGeometry(matW, 0.014, matD)), own(new THREE.MeshStandardMaterial({ map: matTex, color: 0xc8b8a4, roughness: 0.85 })));
+  rubber.position.set((c0.x + c1.x) / 2 + 0.04, 0.007, (c0.z + c1.z) / 2);
   rubber.receiveShadow = true;
   root.add(rubber);
-  const dustpan = bigDustpan(own, 0.5);
-  dustpan.group.position.set(c0.x + 0.12, 0.012, (c0.z + c1.z) / 2 + 0.2);
+  const rimMat = own(new THREE.MeshStandardMaterial({ color: 0xe2b42a, roughness: 0.6 }));
+  for (const [w, d, x, z] of [[matW, 0.035, 0, -matD / 2], [matW, 0.035, 0, matD / 2], [0.035, matD, -matW / 2, 0], [0.035, matD, matW / 2, 0]]) {
+    const rim = new THREE.Mesh(own(new THREE.BoxGeometry(w, 0.022, d)), rimMat);
+    rim.position.set(rubber.position.x + x, 0.011, rubber.position.z + z);
+    rim.receiveShadow = true;
+    rim.castShadow = true;
+    root.add(rim);
+  }
+  const dustpan = bigDustpan(own, 0.62);
+  dustpan.group.position.set(c0.x + 0.1, 0.016, (c0.z + c1.z) / 2 + 0.45);
+  dustpan.group.rotation.y = -0.18;
   root.add(dustpan.group);
   const broom = pushBroom(own);
+  broom.scale.setScalar(1.3); // (plus grand : on le voit bien au téléphone)
   broom.visible = false;
   root.add(broom);
   let dir = v3(1, 0, 0);
@@ -194,6 +210,9 @@ export function sweep3dGame(ctx) {
   // ---------------------------------------------------------------- caméra
   function frame(now = false) {
     const pts = [toWorld(0, 104, 0), toWorld(400, 104, 0), toWorld(0, 354, 0), toWorld(400, 354, 0), v3(W.x0, 0.75, A.zBoxes), v3(W.x1, 0.75, A.zBoxes)];
+    // (en portrait : les devants des box, leurs barreaux et leurs plaques remplissent le haut, plutôt que 40 % de
+    // béton vide en bas)
+    if (sc.size.h > sc.size.w * 1.15) pts.push(v3(W.x0, 2.55, A.zBoxes), v3(W.x1, 2.55, A.zBoxes));
     sc.frame(pts, { dir: [0.02, 1.25, 1], pad: 1.0, now });
   }
   frame(true);

@@ -314,49 +314,112 @@ export function wheelbarrow(own) {
     leg.position.set(s * 0.2, 0.17, 0.3);
     g.add(leg);
   }
-  // le tas dedans
-  const fillMat = own(new THREE.MeshStandardMaterial({ color: 0x4a3420, roughness: 0.75, map: own(noiseTexture('#5a3e24', 0.3, 27, 64)) }));
-  const heap = shade(new THREE.Mesh(own(new THREE.SphereGeometry(1, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2)), fillMat));
+  // le tas dedans : un fond de litière sale (une nappe bosselée qui monte), et des pommes de crottin posées dessus
+  const fillTex = own(dirtyBeddingTexture(9));
+  fillTex.repeat.set(0.8, 0.8);
+  const fillMat = own(new THREE.MeshStandardMaterial({ map: fillTex, color: 0xb59a74, roughness: 0.95 }));
+  const bedGeo = own(new THREE.PlaneGeometry(1, 1, 10, 10));
+  {
+    const p = bedGeo.attributes.position;
+    const rr = rng(31);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i) * 2;
+      const y = p.getY(i) * 2;
+      const dome = Math.max(0, 1 - (x * x + y * y) * 0.85);
+      p.setZ(i, dome * 0.6 + (rr() - 0.5) * 0.12 * dome);
+    }
+    bedGeo.computeVertexNormals();
+  }
+  const heap = shade(new THREE.Mesh(bedGeo, fillMat));
+  heap.rotation.x = -Math.PI / 2;
   heap.visible = false;
   g.add(heap);
+  const ballGeo = own(lumpGeometry(13));
+  const ballMats = [own(new THREE.MeshStandardMaterial({ color: 0x4b3a1e, roughness: 0.38 })), own(new THREE.MeshStandardMaterial({ color: 0x5d4a26, roughness: 0.5 }))];
+  const NB = 34;
+  const balls = [];
+  {
+    const rr = rng(57);
+    for (let i = 0; i < NB; i++) {
+      const b = shade(new THREE.Mesh(ballGeo, ballMats[i % 2]));
+      const s = 0.026 + rr() * 0.012;
+      b.scale.set(s * 1.1, s * 0.85, s);
+      b.rotation.set(rr() * 3, rr() * 3, rr() * 3);
+      // (au fond d'abord, au milieu ensuite : le tas monte)
+      const k = i / NB;
+      const rad = Math.sqrt(rr()) * (0.5 - 0.3 * k);
+      const a = rr() * Math.PI * 2;
+      b.userData.u = { x: Math.cos(a) * rad, z: Math.sin(a) * rad, k };
+      b.visible = false;
+      balls.push(b);
+      g.add(b);
+    }
+  }
   return {
     group: g,
     /** Le haut de la caisse (là où on jette), repère du groupe. */
     mouth: v3(0, y1 + 0.05, -0.05),
     setFill(k) {
-      heap.visible = k > 0.01;
       const kk = Math.min(1, k);
-      heap.scale.set(0.22 + 0.06 * kk, 0.04 + 0.16 * kk, 0.3 + 0.08 * kk);
-      heap.position.set(0, y0 + 0.04 + H * 0.75 * kk, -0.04);
+      if (kk === this.k) return;
+      this.k = kk;
+      heap.visible = kk > 0.01;
+      // (la nappe : de la largeur de la caisse à sa hauteur ; elle monte avec ce qu'on y jette)
+      const top = y0 + 0.03 + H * 0.7 * kk;
+      const f = (top - y0) / H; // (la caisse s'évase en montant)
+      const wx = (W0 + (W1 - W0) * f) * 0.92;
+      const lz = (L0 + (L1 - L0) * f) * 0.92;
+      heap.scale.set(wx, lz, 0.05 + 0.12 * kk);
+      heap.position.set(0, top - (0.05 + 0.12 * kk) * 0.6 * 0.5, -0.04);
+      for (const b of balls) {
+        const u = b.userData.u;
+        b.visible = kk > 0.01 && u.k < kk * 1.1;
+        if (!b.visible) continue;
+        const dome = Math.max(0, 1 - ((u.x * 2) ** 2 + (u.z * 2) ** 2) * 0.85);
+        b.position.set(u.x * wx, top - (0.05 + 0.12 * kk) * 0.6 * 0.5 + dome * (0.05 + 0.12 * kk) * 0.6 + 0.012, u.z * lz - 0.04);
+      }
     },
   };
 }
 
-/** Fourche à fumier : manche en bois, cinq dents en acier ; origine au bout des dents, le manche vers +y et +z. */
+/**
+ * Fourche à fumier : une large tête de huit dents en acier (recourbées, bien visibles d'en haut), un manche en bois
+ * avec sa poignée en D. Origine au bout des dents, le manche vers +y et +z. (Avant : cinq dents fines, on ne voyait
+ * qu'un trait.)
+ */
 export function pitchfork(own) {
   const g = new THREE.Group();
-  const steel = own(new THREE.MeshStandardMaterial({ color: 0xaab1b8, roughness: 0.3, metalness: 0.85 }));
-  const wood = own(new THREE.MeshStandardMaterial({ color: 0xb4834f, roughness: 0.55 }));
-  const tine = own(new THREE.CylinderGeometry(0.007, 0.009, 0.26, 6));
-  for (let i = 0; i < 5; i++) {
+  const steel = own(new THREE.MeshStandardMaterial({ color: 0xb9c0c6, roughness: 0.28, metalness: 0.8 }));
+  const dark = own(new THREE.MeshStandardMaterial({ color: 0x2c2e31, roughness: 0.5, metalness: 0.6 }));
+  const wood = own(new THREE.MeshStandardMaterial({ color: 0xc08a50, roughness: 0.5 }));
+  // une dent : un tube recourbé (droit, puis le bout relevé)
+  const curve = new THREE.CatmullRomCurve3([v3(0, 0.035, 0.3), v3(0, 0.02, 0.18), v3(0, 0.008, 0.06), v3(0, 0.018, 0)]);
+  const tine = own(new THREE.TubeGeometry(curve, 12, 0.0085, 6, false));
+  const n = 8;
+  for (let i = 0; i < n; i++) {
     const t = shade(new THREE.Mesh(tine, steel));
-    const x = (i - 2) * 0.034;
-    t.position.set(x, 0.015, 0.12);
-    t.rotation.x = Math.PI / 2 - 0.18;
+    const x = (i - (n - 1) / 2) * 0.042;
+    t.position.set(x * (1 + 0.0), 0, 0);
+    t.rotation.y = (i - (n - 1) / 2) * -0.025;
     g.add(t);
   }
-  const bar = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 8)), steel));
-  bar.rotation.z = Math.PI / 2;
-  bar.position.set(0, 0.04, 0.245);
+  // la traverse (noire), d'où partent les dents
+  const bar = shade(new THREE.Mesh(own(new THREE.BoxGeometry(n * 0.042 + 0.02, 0.026, 0.03)), dark));
+  bar.position.set(0, 0.04, 0.3);
   g.add(bar);
-  const neck = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.012, 0.016, 0.1, 8)), steel));
-  neck.position.set(0, 0.07, 0.28);
-  neck.rotation.x = -0.6;
+  const neck = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.014, 0.02, 0.12, 8)), dark));
+  neck.position.set(0, 0.075, 0.35);
+  neck.rotation.x = -0.75;
   g.add(neck);
-  const handle = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.022, 0.022, 0.9, 10)), wood));
-  handle.position.set(0, 0.4, 0.55);
+  const handle = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.02, 0.022, 0.95, 10)), wood));
+  handle.position.set(0, 0.42, 0.66);
   handle.rotation.x = -0.75;
   g.add(handle);
+  // la poignée en D au bout du manche
+  const grip = shade(new THREE.Mesh(own(new THREE.TorusGeometry(0.055, 0.012, 6, 14, Math.PI)), dark));
+  grip.position.set(0, 0.78, 0.98);
+  grip.rotation.set(-0.75 + Math.PI / 2, 0, 0);
+  g.add(grip);
   return g;
 }
 

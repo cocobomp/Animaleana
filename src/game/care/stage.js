@@ -118,6 +118,14 @@ export function buildDouble(a, entity = null, built = null) {
   };
 }
 
+/** Pas d'animal (corvées) : un groupe vide à sa place ; les repères tombent sur leurs valeurs par défaut (measure). */
+function emptyDouble() {
+  const root = new THREE.Group();
+  const holder = new THREE.Group();
+  holder.add(root);
+  return { holder, model: { root, noAnimal: true }, gear: null, scale: 1, dispose() {} };
+}
+
 // ---------------------------------------------------------------- copie figée de la pose (lancer de rayon)
 
 /**
@@ -320,7 +328,9 @@ export class CareStage {
 
     // L'animal, puis le décor autour de lui (le décor a besoin de sa taille : mangeoire à hauteur de bouche…).
     const t0 = performance.now();
-    this.double = buildDouble(o.a, o.entity ?? null, o.model ?? null);
+    // (o.noAnimal : pas d'animal — les corvées dans le box vide, l'allée : src/ui/minigames/chores3d.js)
+    this.noAnimal = !!o.noAnimal;
+    this.double = this.noAnimal ? emptyDouble() : buildDouble(o.a, o.entity ?? null, o.model ?? null);
     this.timing.animal = Math.round(performance.now() - t0);
     this.model = this.double.model;
     this.holder = this.double.holder;
@@ -576,6 +586,7 @@ export class CareStage {
 
   /** Le doigt sur l'animal ? { point, normal, bone, boneName, region } ou null. */
   pickAnimal(x, y) {
+    if (this.noAnimal) return null;
     const ray = this.rayAt(x, y);
     const h = this.proxy.hit(ray, this.time);
     if (!h) return null;

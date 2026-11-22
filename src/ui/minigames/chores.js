@@ -278,7 +278,7 @@ export function strawGame(ctx) {
   }
 
   return {
-    peek: () => ({ bale, floor, covered: covered(), layers: layers(), arm, armfuls, value: value(), lo: STRAW.lo, hi: STRAW.hi, max: STRAW.max }),
+    peek: () => ({ bale, floor, covered: covered(), layers: layers(), arm, armfuls, value: value(), lo: STRAW.lo, hi: STRAW.hi, max: STRAW.max, step, cells: cells.map((c) => ({ x: c.x, y: c.y, n: c.n })) }), // (cells : la paille posée, pour la 3D)
     down(p) {
       last = p;
       if (onBale(p)) grab();
@@ -480,7 +480,8 @@ export function sweepGame(ctx) {
   }
 
   return {
-    peek: () => ({ pan, handle, aisle, collected, total, emptyStrokes, strokes, value: value(), lo: SWEEP.lo, hi: SWEEP.hi, max: SWEEP.max, bits: bits.filter((b) => !b.done).map((b) => ({ x: b.x, y: b.y })) }),
+    peek: () => ({ pan, handle, aisle, collected, total, emptyStrokes, strokes, value: value(), lo: SWEEP.lo, hi: SWEEP.hi, max: SWEEP.max, bits: bits.filter((b) => !b.done).map((b) => ({ x: b.x, y: b.y })),
+      all: bits.map((b) => ({ x: b.x, y: b.y, kind: b.kind, rot: b.rot, r: b.r, done: b.done })) }), // (all : chaque brin, pour la 3D)
     down(p) {
       last = p;
       strokeGain = 0;

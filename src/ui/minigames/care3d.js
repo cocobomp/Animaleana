@@ -17,6 +17,7 @@ import { pet3dGame } from './pet3d.js';
 import { pansage3dGame } from './pansage3d.js';
 import { wash3dGame } from './wash3d.js';
 import { HORSE_PLUS_GAMES } from './horsePlus3d.js'; // (seller, brider, vermifuge, maréchal, curer le box)
+export { openChoreScene, chore3dGameFor } from './chores3d.js'; // (les corvées : le box, l'allée, sans animal)
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
 export const CARE3D_GAMES = {

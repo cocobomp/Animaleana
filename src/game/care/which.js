@@ -24,7 +24,7 @@ export const CARE3D_SPECIES = new Set(['horse']);
 /** Soins refaits en 3D, par espèce (les jeux eux-mêmes : CARE3D_GAMES de src/ui/minigames/care3d.js). */
 export const CARE3D_ACTIONS = { horse: ['feed', 'water', 'treat', 'pet', 'brush', 'wash'] };
 // (seller, brider, vermifuge, maréchal, curer le box : chantier « chevalplus », src/ui/minigames/saddle3d.js…)
-CARE3D_ACTIONS.horse.push('saddle', 'bridle', 'deworm', 'shoe');
+CARE3D_ACTIONS.horse.push('saddle', 'bridle', 'deworm', 'shoe', 'clean');
 
 /** Ce soin a-t-il un jeu 3D pour cette espèce ? */
 export const care3dWanted = (a, action) => !!CARE3D_ACTIONS[a?.species]?.includes(action);
@@ -40,3 +40,11 @@ export function care3dPossible(a, { setting = '', has = (k) => !!getModel(k) } =
   if (a.species === 'horse') return has(REAL_HORSE_KEY);
   return false;
 }
+
+// ---------------------------------------------------------------- corvées (chantier « chevalplus »)
+
+/** Corvées refaites en 3D (le box, l'allée de l'écurie : src/ui/minigames/chores3d.js), sans animal. */
+export const CHORE3D_KINDS = new Set(['muck', 'straw', 'sweep']);
+
+/** Cette corvée a-t-elle sa scène 3D ? (?care3d=off : toujours le jeu dessiné) */
+export const chore3dWanted = (kind, setting = care3dSetting()) => setting !== 'off' && CHORE3D_KINDS.has(kind);

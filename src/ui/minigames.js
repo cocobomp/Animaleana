@@ -27,7 +27,7 @@ import { sellerGame } from './minigames/seller.js'; // seller son cheval : tapis
 import { dewormGame } from './minigames/deworm.js'; // le vermifuge (carnet de santé du cheval)
 import { bridleGame } from './minigames/bridle.js'; // brider son cheval : le mors, les oreilles, la sous-gorge
 import { drawFact, factIcon } from '../sim/horseFacts.js'; // « 💡 Le savais-tu ? » à la fin des mini-jeux avec un cheval (🃏 cartes)
-import { care3dWanted, care3dPossible, care3dSetting } from '../game/care/which.js'; // quels soins s'ouvrent en 3D
+import { care3dWanted, care3dPossible, care3dSetting, chore3dWanted } from '../game/care/which.js'; // quels soins s'ouvrent en 3D
 import * as care3d from './minigames/care3d.js'; // le vrai animal en 3D dans son box (soins du cheval)
 
 export const MG_W = 400;
@@ -234,6 +234,7 @@ export function runChoreGame(ui, kind, target = null, o = {}) {
   const icon = CHORE_ICONS[kind] ?? '🧹';
   return openMinigame(ui, {
     make,
+    make3d: chore3dWanted(kind), // (le box, l'allée en 3D, sans animal : src/ui/minigames/chores3d.js)
     action: kind,
     a: o.a ?? null,
     chore: { kind, target },
@@ -295,7 +296,7 @@ function openMinigame(ui, o) {
     // Scène de soin en 3D (src/game/care/stage.js) : le vrai animal dans son décor, sous la toile 2D qui garde les
     // effets et ce qui flotte par-dessus. Impossible (WebGL, modèle pas chargé, réglage) : le jeu dessiné.
     let scene3d = null;
-    const want3d = !!(o.make3d && a && care3dPossible(a, { setting: care3dSetting() }));
+    const want3d = !!(o.make3d && (o.chore ? true : a && care3dPossible(a, { setting: care3dSetting() })));
     if (want3d) box.classList.add('care3d');
     const view = { x0: 0, y0: 0, x1: MG_W, y1: MG_H, w: MG_W, h: MG_H, scale: 1, ox: 0, oy: 0 };
     let dpr = 1;
@@ -502,11 +503,11 @@ function openMinigame(ui, o) {
     };
     /** Le code des soins 3D est là : la scène, puis le jeu 3D de ce soin. */
     const start3d = (mod) => {
-      scene3d = mod.openCareScene(ui, a, stage, canvas);
+      scene3d = o.chore ? mod.openChoreScene(ui, o.chore, stage, canvas) : mod.openCareScene(ui, a, stage, canvas);
       if (!scene3d) return start2d();
       ctx.scene = scene3d;
       try {
-        play = mod.care3dGameFor(a, action)(ctx);
+        play = (o.chore ? mod.chore3dGameFor(o.chore.kind) : mod.care3dGameFor(a, action))(ctx);
       } catch (e) {
         // Le jeu 3D n'a pas pu démarrer : le jeu dessiné, sur une scène propre.
         console.warn('[care3d] jeu 3D impossible, jeu dessiné', e?.message ?? e);

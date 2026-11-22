@@ -406,6 +406,42 @@ describe('les caresses', () => {
   }, 60000);
 });
 
+describe('les caresses, jouées naturellement : de longs gestes lents, on s\'arrête dans le vert', () => {
+  for (const gab of [{ species: 'dog', breed: 'teckel' }, { species: 'dog', breed: 'saint_bernard' }, { species: 'dog', breed: 'chihuahua', ageDays: 40 }, { species: 'cat', breed: 'persan' }, { species: 'rabbit', breed: 'tete_de_lion' }, { species: 'rabbit', breed: 'angora' }, { species: 'cat', breed: 'sphynx', ageDays: 30 }]) {
+    it(`${label(gab)} : le cœur n'enjambe jamais la zone verte en un geste ; juste`, () => {
+      const { a, sc } = makePetStage(gab);
+      const ctx = ctxFor(a, sc);
+      const game = pets3d.petPet3dGame(ctx);
+      run(ctx, game, sc, 1.5);
+      const pts = regionPoints(sc, ['body', 'shoulder', 'hip', 'neck']).sort((p, q) => p.x - q.x);
+      const p0 = pts[Math.floor(pts.length * 0.12)];
+      const p1 = pts[Math.floor(pts.length * 0.88)];
+      let strokes = 0;
+      for (; strokes < 60 && game.peek().value < game.peek().lo; strokes++) {
+        const before = game.peek().value;
+        game.down(p0);
+        for (let i = 1; i <= 40; i++) {
+          const p = { x: p0.x + ((p1.x - p0.x) * i) / 40, y: p0.y + ((p1.y - p0.y) * i) / 40 };
+          ctx.pointer = { ...ctx.pointer, ...p, down: true };
+          game.move(p, true);
+          run(ctx, game, sc, 1 / 30);
+        }
+        game.up();
+        ctx.pointer = { ...ctx.pointer, down: false };
+        expect(game.peek().fast, 'jamais trop vite').toBe(0);
+        // (un geste, même le long de tout son corps, ne fait pas plus d'un dixième du cœur)
+        expect(game.peek().value - before).toBeLessThanOrEqual(0.1001);
+      }
+      expect(strokes).toBeGreaterThan(3);
+      expect(game.peek().value).toBeLessThanOrEqual(game.peek().hi);
+      ctx.pressStop();
+      expect(ctx.finished?.why).toBe('just');
+      game.destroy();
+      sc.dispose();
+    }, 60000);
+  }
+});
+
 describe('le brossage', () => {
   for (const gab of [{ species: 'dog', breed: 'border_collie' }, { species: 'rabbit', breed: 'angora' }]) {
     it(`${label(gab)} : toutes les taches dans le sens du poil, puis « C'est bon » : juste`, () => {

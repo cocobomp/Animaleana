@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { feedGame, waterGame, treatGame, drawCountZone, stopLabel, nb, justMsgs, emojiOpaque as emoji } from './food.js';
 import { FAVORITE, SPEED_LIMIT, PET_AMOUNT, drawHeartGauge, HEART } from './fun.js';
-import { rrect, circle, clamp, lerp, distToSegment } from './draw.js';
+import { rrect, circle, clamp, lerp, distToSegment, fitAnimal, animalShape } from './draw.js';
 import { justRule } from './grooming.js';
 import { petDirtTexture } from '../../game/care/petTextures.js';
 import { petBrush } from '../../game/care/petProps.js';
@@ -458,6 +458,18 @@ export function petPet3dGame(ctx) {
   let touchAge = 9;
   let purrIn = 0;
   let saidHappy = false;
+  // Douceur : un geste le long de son corps compte comme dans le jeu dessiné. Ici l'animal remplit l'image, un geste
+  // est bien plus long : on le ramène à la longueur du corps dessiné. Et un seul geste (doigt posé → levé) ne remplit
+  // jamais plus de STROKE_MAX du cœur : on lève le doigt dans la zone verte (0,24 de large) sans la dépasser.
+  const sh2d = animalShape(a, (() => { const f = fitAnimal(a, { groundY: 305, maxW: 330, maxH: 240 }); return { x: f.x, y: 305, s: f.s, f: 1 }; })());
+  const REF = sh2d.rx * 2;
+  const STROKE_MAX = 0.1;
+  let strokeProg = 0;
+  const bodyPx = () => {
+    const w = sc.project(L.withers);
+    const c = sc.project(L.croup);
+    return Math.max(40, Math.hypot(w.x - c.x, w.y - c.y) * 1.25);
+  };
   // Notre main, à plat sur son poil, un peu plus petite pour un tout petit animal (sinon elle le cache tout entier).
   const keep = own();
   const hs = handSize(L);
@@ -524,7 +536,9 @@ export function petPet3dGame(ctx) {
     }
     const spots = petSpots(sc);
     const atFav = hit.point.distanceTo(spots[favKey]) < favR;
-    prog = Math.min(1, prog + d * 0.0011 * (atFav ? 2.3 : 1));
+    const inc = Math.min(Math.max(0, STROKE_MAX - strokeProg), d * Math.min(1, REF / bodyPx()) * 0.0011 * (atFav ? 2.3 : 1));
+    strokeProg += inc;
+    prog = Math.min(1, prog + inc);
     if (atFav) favDist += d;
     calmStroke += d;
     heartAcc += d;
@@ -567,6 +581,7 @@ export function petPet3dGame(ctx) {
     down(p) {
       last = p;
       lastT = ctx.time;
+      strokeProg = 0;
       const hit = sc.pickAnimal(p.x, p.y);
       if (hit && hit.region !== 'leg' && hit.region !== 'tail') {
         touch = hit;
@@ -578,6 +593,7 @@ export function petPet3dGame(ctx) {
       last = null;
       touch = null;
       speed *= 0.5;
+      strokeProg = 0;
     },
     update(dt) {
       if (!ctx.done) sc.setFocus(78 * ctx.view.scale, sc.size.h);

@@ -245,17 +245,25 @@ function makePoses(mt) {
   P.sc3 = pose({ hip: [0, 0.5, -0.1], yaw: Math.PI, pitch: 0.9, bend: 0.2, head: [-0.5, 0], legs: [straight(0.12, -0.05, -0.1), straight(-0.12, -0.05, -0.1)], arms: [grip(1, [0.7, -0.3, 0.6]), grip(0, [-0.7, -0.3, 0.6])] });
   P.sc4 = pose({ hip: [0, 0.98, 0.1], yaw: Math.PI * 1.5, pitch: 2.5, bend: 0.15, head: [-0.9, 0], legs: [straight(0.32, -0.02, 0.28), straight(-0.3, 0.02, -0.26)], arms: armsGrip });
   P.sc5 = pose({ hip: [0, 0.4, -0.08], yaw: TAU, pitch: 0.9, bend: 0.2, head: [-0.4, 0], legs: [straight(0.12, -0.05, -0.1), straight(-0.12, -0.05, -0.1)], arms: armsGrip });
-  // Debout : accroupi les pieds sur le tapis, puis debout, genoux souples, bras en avant.
+  // Debout : accroupi les pieds sur le tapis, puis debout, genoux souples, les bras tendus sur les côtés, les mains
+  // à hauteur des yeux (comme en vraie voltige).
   const feet = (z1, z2) => [leg(0.13, top(z1) + 0.065, z1, [0.25, 0, 1], { flat: true }), leg(-0.13, top(z2) + 0.065, z2, [-0.25, 0, 1], { flat: true })];
   P.crouch = pose({ hip: [0, top(-0.15) + 0.4, -0.18], bend: 0.75, head: [-0.55, 0], legs: feet(-0.1, -0.16), arms: [grip(0, [0.6, -1, -0.4]), grip(1, [-0.6, -1, -0.4])] });
   P.stand = pose({
     hip: [0, top(-0.15) + 0.775, -0.16], bend: 0.1, head: [-0.08, 0], legs: feet(-0.08, -0.24),
-    arms: [{ local: [0.5, HIP + 0.5, 0.42], pole: [0.3, -1, -0.3], hand: [0, 0, -0.2] }, { local: [-0.5, HIP + 0.5, 0.42], pole: [-0.3, -1, -0.3], hand: [0, 0, 0.2] }],
+    arms: [{ local: [0.68, RIG.shoulderY + 0.11, 0.12], pole: [0.2, -1, -0.3], hand: [0, 0, -0.25] }, { local: [-0.68, RIG.shoulderY + 0.11, 0.12], pole: [-0.2, -1, -0.3], hand: [0, 0, 0.25] }],
   });
   // Flanc : élan, le corps à l'horizontale de côté au-dessus du cheval, puis assis de côté, face à l'intérieur.
   P.fl1 = pose({ hip: [-0.04, 0.5, -0.08], pitch: 1.1, roll: 0.25, bend: 0.2, head: [-0.6, 0], legs: [straight(0.12, -0.05, -0.12), straight(-0.12, -0.05, -0.12)], arms: armsGrip });
   P.fl2 = pose({ hip: [-0.46, 0.66, 0.16], yaw: Math.PI / 2, pitch: 1.45, roll: 0, bend: 0.05, head: [-0.4, 0], legs: [straight(0.12, -0.02, 0), straight(-0.12, -0.02, 0)], arms: [grip(0, [0.5, -0.2, -0.8]), grip(1, [-0.5, -0.2, -0.8])] });
   P.sideLGrip = pose({ ...P.sideL, arms: [grip(1, [0.2, -1, 0.3]), grip(0, [-0.3, -1, -0.2])] });
+  // Flanc, 2e partie : de l'assise de côté, élan des deux jambes serrées vers le haut, par-dessus le dos du cheval
+  // (vers l'extérieur), le corps tendu, les hanches plus haut que les épaules, les mains aux poignées ; puis on
+  // repousse et on redescend côté intérieur.
+  P.fl3 = pose({
+    hip: [-0.3, 0.75, 0.08], yaw: Math.PI / 2, pitch: 2.3, bend: 0.05, head: [-0.5, 0],
+    legs: [straight(0.08, -0.02, 0), straight(-0.08, -0.02, 0)], arms: [grip(0, [0.5, -0.2, -0.8]), grip(1, [-0.5, -0.2, -0.8])],
+  });
   // Saut à terre (côté intérieur), puis réception les genoux pliés.
   P.off1 = pose({ hip: [0.42, 0.18, 0.02], yaw: Math.PI / 2, pitch: 0.3, bend: 0.2, legs: [leg(w + 0.45, -0.5, -0.1, [0, 0.2, 1]), leg(w + 0.45, -0.5, 0.1, [0, 0.2, 1])], arms: [grip(1, [0.2, -1, 0.3]), grip(0, [-0.3, -1, -0.2])] });
   P.off2 = pose({ hip: [w + 0.62, G + 1.05, 0.05], yaw: Math.PI * 0.35, pitch: 0.1, bend: 0.15, legs: [leg(w + 0.68, G + 0.3, -0.05, [0.2, 0, 1]), leg(w + 0.62, G + 0.3, 0.15, [0.2, 0, 1])], arms: [{ local: [0.45, HIP + 0.75, 0.25], pole: [0.3, -1, 0] }, { local: [-0.45, HIP + 0.75, 0.25], pole: [-0.3, -1, 0] }] });
@@ -379,7 +387,7 @@ const STEPS = [
   { fig: 'scissors', part: 1, move: ['backGrip', 'sc3', 'sc4', 'sc5', 'seat2'], reset: true },
   { fig: 'stand', part: 0, move: ['seatGrip', 'kneel', 'crouch', 'stand'], hold: 'stand', back: ['stand', 'crouch', 'seatGrip'] },
   { fig: 'flank', part: 0, move: ['seatGrip', 'fl1', 'fl2', 'sideLGrip'] },
-  { fig: 'flank', part: 1, move: ['sideLGrip', 'off1', 'off2', 'land'], dismount: true },
+  { fig: 'flank', part: 1, move: ['sideLGrip', 'fl3', 'off1', 'off2', 'land'], dismount: true },
 ];
 
 // ---------------------------------------------------------------- la séance
@@ -615,7 +623,9 @@ class VaultingSession extends Session {
     this.cueAt = this.time;
     const name = s.fig === 'mount' ? t('vt_mount') : t(`vt_fig_${s.fig}`);
     const parts = s.fig !== 'mount' ? FIGURES[s.fig].parts : 1;
-    this.hud2.cue(s.fig === 'mount' ? '🤸' : FIGURES[s.fig].icon, name, s.part === 0 ? t(`vt_how_${s.fig}`) : t('vt_howNext'), s.part, parts);
+    // (sur le tonneau, qui ne bouge pas, on ne court pas à côté pour monter)
+    const how = s.part > 0 ? t('vt_howNext') : t(s.fig === 'mount' && !this.e ? 'vt_how_mount_barrel' : `vt_how_${s.fig}`);
+    this.hud2.cue(s.fig === 'mount' ? '🤸' : FIGURES[s.fig].icon, name, how, s.part, parts);
     this.refreshHud();
   }
 
@@ -1004,12 +1014,17 @@ class VaultingSession extends Session {
     const cz = this.center.z;
     let target;
     let speed = 0;
+    let face = null;
     if (this.e) {
-      // il tourne sur un petit cercle au centre, face au cheval, à la même vitesse angulaire
-      const r = 0.7;
+      // il marche un petit cercle au centre (1,1 m de rayon), à la même vitesse angulaire que le cheval, tourné vers
+      // lui de trois quarts (il avance en le regardant : sa longe et sa chambrière restent vers le cheval)
+      const r = 1.1;
       const pos = onCircle(this.center, this.theta, r);
-      speed = Math.min(0.35, (this.speed / CIRCLE_R) * r); // (de petits pas sur place)
+      const along = (this.speed / CIRCLE_R) * r; // (sa vitesse sur son petit cercle)
       c.root.position.set(pos.x, this.y(pos.x, pos.z), pos.z);
+      const toHorse = Math.atan2(this.e.position.x - pos.x, this.e.position.z - pos.z);
+      face = toHorse + wrap(this.e.heading - toHorse) * 0.6; // (entre « vers le cheval » et « là où il va »)
+      speed = along * Math.cos(wrap(this.e.heading - face)); // (la part de ses pas qui va vers l'avant)
       target = this.e.position;
     } else {
       // l'entraîneur, debout à côté du tonneau, qui frappe des mains en rythme
@@ -1018,7 +1033,7 @@ class VaultingSession extends Session {
       c.root.position.set(s.x + _v.x, this.y(s.x + _v.x, s.z + _v.z), s.z + _v.z);
       target = s;
     }
-    c.root.rotation.y = Math.atan2(target.x - c.root.position.x, target.z - c.root.position.z);
+    c.root.rotation.y = face ?? Math.atan2(target.x - c.root.position.x, target.z - c.root.position.z);
     this.coachPhase += dt * speed * 2.2;
     animateAvatarWalk(c, this.coachPhase, speed);
     this.coachLife.speed = speed;

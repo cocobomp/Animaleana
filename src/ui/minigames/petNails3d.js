@@ -456,7 +456,7 @@ export function petNails3dGame(ctx) {
       for (let i = 0; i < 4; i++) {
         if (s.cuts[i] === null) continue;
         const c = claws[i];
-        const p = sc.project(c.g.localToWorld(v3(0, c.cutAt + 0.45, 0)));
+        const p = sc.project(c.g.localToWorld(v3(0, c.cutAt + 0.2, 0)));
         const bad = c.cutAt < s.quick + 0.04;
         g.save();
         g.font = `17px ${EMOJI}`;

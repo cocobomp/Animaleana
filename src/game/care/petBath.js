@@ -14,7 +14,7 @@ function shadowed(m, cast = true) {
 }
 
 /** Le zinc martelé de la bassine : gris doux, reflets, quelques traces d'eau. */
-function zincTexture() {
+export function zincTexture() {
   return canvasTex(128, 128, (c) => {
     c.fillStyle = '#b9c1c4';
     c.fillRect(0, 0, 128, 128);

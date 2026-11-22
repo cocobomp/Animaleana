@@ -157,6 +157,51 @@ describe('le bain du chien', () => {
   }
 });
 
+describe('nettoyer : la litière du chat, la litière du clapier', () => {
+  for (const gab of [{ species: 'cat', breed: 'persan' }, { species: 'cat', breed: 'europeen', ageDays: 30 }, { species: 'rabbit', breed: 'belier' }, { species: 'rabbit', breed: 'nain' }]) {
+    it(`${label(gab)} : chaque saleté d'une tape dans le sac (le seau), puis du propre partout : juste`, () => {
+      const { a, sc } = makePetStage(gab);
+      const ctx = ctxFor(a, sc);
+      const before = sc.scene.children.length;
+      const game = pets3d.PET_CARE3D_GAMES[gab.species].clean(ctx);
+      run(ctx, game, sc, 0.3);
+      let s = game.peek();
+      // le bac (ou le coin de paille), le sac, et lui : dans l'image
+      const f = s.floor;
+      for (const [x, y] of [[f.x, f.y], [f.x + f.w, f.y + f.h], [s.bin.x, s.bin.y]]) expect(inView(s.toScreen(x, y), ctx.view), `${x},${y}`).toBe(true);
+      expect(inView(sc.project(sc.live('poll')), ctx.view)).toBe(true);
+      for (let n = 0; n < 20 && s.phase === 'pick'; n++) {
+        const it = s.all.find((i) => i.state === 'floor' && !i.good);
+        if (!it) break;
+        const q = s.toScreen(it.x, it.y);
+        game.down(q);
+        game.up(q);
+        run(ctx, game, sc, 0.5);
+        s = game.peek();
+      }
+      expect(s.phase).toBe('spread');
+      // une couche partout : une rangée par rangée de cases
+      for (let y = f.y + 18; y < f.y + f.h; y += 36) {
+        const a0 = s.toScreen(f.x + 4, y);
+        const b0 = s.toScreen(f.x + f.w - 4, y);
+        game.down(a0);
+        for (let k = 0; k <= 30; k++) game.move({ x: a0.x + ((b0.x - a0.x) * k) / 30, y: a0.y + ((b0.y - a0.y) * k) / 30 }, true);
+        game.up(b0);
+        run(ctx, game, sc, 0.05);
+      }
+      s = game.peek();
+      expect(s.value).toBeGreaterThanOrEqual(s.lo);
+      expect(s.value).toBeLessThanOrEqual(s.hi);
+      ctx.pressStop();
+      expect(ctx.finished?.why).toBe('just');
+      run(ctx, game, sc, 0.5);
+      game.destroy();
+      expect(sc.scene.children.length).toBe(before);
+      sc.dispose();
+    }, 90000);
+  }
+});
+
 describe('les cadrages en paysage et sur ordinateur', () => {
   // (la toile 3D d'un téléphone en paysage, 844 × 390 : 496 × 370 ; la fenêtre du jeu sur un ordinateur : 660 × 460)
   for (const gab of [GAUGES[0], GAUGES[1], GAUGES[2], GAUGES[3], GAUGES[5], GAUGES[6], GAUGES[7], { species: 'rabbit', breed: 'tete_de_lion' }]) {

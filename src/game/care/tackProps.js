@@ -163,22 +163,26 @@ export function syringeModel(own, { marks = [100, 900] } = {}) {
 }
 
 /**
- * Marteau du maréchal : tête en acier, manche en bois. Origine au milieu de la face qui frappe ; la tête le long de
- * +y (vers le haut, la panne derrière), le manche le long de -x.
+ * Marteau du maréchal : tête en acier, manche en bois. Origine au milieu de la face qui frappe (elle frappe vers -y) ;
+ * la tête monte le long de +y, le manche part vers -x.
  */
 export function hammerModel(own) {
   const g = new THREE.Group();
   const steel = own(new THREE.MeshStandardMaterial({ color: 0x8d949c, roughness: 0.32, metalness: 0.85 }));
   const wood = own(new THREE.MeshStandardMaterial({ color: 0xb0814e, roughness: 0.55 }));
-  const head = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.013, 0.015, 0.1, 16)), steel));
-  head.position.y = -0.05;
+  // (la face qui frappe à l'origine, vers -y ; la tête monte vers +y ; le manche part vers -x)
+  const head = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.014, 0.016, 0.09, 16)), steel));
+  head.position.y = 0.045;
   g.add(head);
-  const face = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.017, 0.017, 0.012, 18)), steel));
-  face.position.y = -0.006;
+  const face = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.018, 0.018, 0.012, 18)), steel));
+  face.position.y = 0.006;
   g.add(face);
-  const handle = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.009, 0.011, 0.3, 12)), wood));
+  const peen = shade(new THREE.Mesh(own(new THREE.SphereGeometry(0.015, 12, 8)), steel));
+  peen.position.y = 0.09;
+  g.add(peen);
+  const handle = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(0.009, 0.012, 0.3, 12)), wood));
   handle.rotation.z = Math.PI / 2;
-  handle.position.set(-0.15, -0.055, 0);
+  handle.position.set(-0.155, 0.05, 0);
   g.add(handle);
   return g;
 }

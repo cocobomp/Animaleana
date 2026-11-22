@@ -379,6 +379,8 @@ export function feeder({ high = true } = {}) {
       this.setLevel(level);
     },
     showScoop(on) { scoop.visible = !!on; },
+    /** Posée dans la paille (poulain) : sans son support de mur. */
+    setFloor(on) { bracket.visible = !on; },
     pour(on) { pouring = !!on; },
     update(dt) {
       tilt += ((pouring ? 1 : scoop.visible ? 0.15 : 0) - tilt) * Math.min(1, dt * 8);
@@ -495,6 +497,7 @@ export function bucket({ high = true } = {}) {
   // éclaboussures : anneaux qui s'élargissent à la surface
   const splashTex = keep(softDot('255,255,255'));
   const rings = [];
+  const splash = new THREE.Vector3(0.02, 0, 0); // (là où l'eau tombe, repère du seau)
   let level = 0;
   let pour = 0;
   let t = 0;
@@ -537,6 +540,8 @@ export function bucket({ high = true } = {}) {
       level = clamp(k);
       apply();
     },
+    /** Où tombe l'eau (repère du seau) : les anneaux d'éclaboussure naissent là. */
+    splashAt(p) { splash.set(p.x, 0, p.z); },
     /** Hauteur de l'eau (repère du seau). */
     surfaceY() { return water.position.y; },
     flow(k) { pour = k; },
@@ -551,7 +556,7 @@ export function bucket({ high = true } = {}) {
       if (pour > 0 && water.visible && Math.random() < dt * 12 * pour) {
         const m = new THREE.Mesh(keep(new THREE.RingGeometry(0.6, 1, 24)), keep(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false, alphaMap: splashTex })));
         m.rotation.x = -Math.PI / 2;
-        m.position.set((Math.random() - 0.5) * 0.04 + 0.02, water.position.y + 0.003, (Math.random() - 0.5) * 0.04);
+        m.position.set((Math.random() - 0.5) * 0.04 + splash.x, water.position.y + 0.003, (Math.random() - 0.5) * 0.04 + splash.z);
         m.scale.setScalar(0.01);
         g.add(m);
         rings.push({ m, age: 0 });
@@ -575,36 +580,57 @@ export function bucket({ high = true } = {}) {
 }
 
 /**
- * Robinet en laiton au mur (origine contre le mur, le tuyau part vers -x, dans le box), et son filet d'eau qui tombe
- * du bec (en SPOUT) : setFlow(k, to) (0 fermé, 1 grand ouvert ; to : hauteur de l'eau, repère du robinet).
+ * Robinet en laiton au mur (origine contre le mur, le corps sort vers -x, dans le box), un tuyau d'arrosage vert
+ * qui descend le long du mur et passe par-dessus le bord du seau, où sa lance verse l'eau. Rien ne dépasse du mur
+ * de plus de 7 cm au-dessus du seau : la tête du cheval (même d'un poulain qui baisse le nez vers le seau) ne
+ * traverse jamais le robinet. hookUp(nozzle, inward) : pose la lance (repère du robinet) et y tire le tuyau ;
+ * setFlow(k, toY) : 0 fermé, 1 grand ouvert ; toY : hauteur de l'eau (repère du robinet).
  */
-export const SPOUT = -0.2;
 export function waterTap() {
   const keep = bag();
   const g = new THREE.Group();
   const brass = keep(new THREE.MeshStandardMaterial({ color: 0xc89a48, roughness: 0.25, metalness: 0.9 }));
-  const flange = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.035, 0.035, 0.012, 16)), brass));
+  const flange = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.03, 0.03, 0.01, 18)), brass));
   flange.rotation.z = Math.PI / 2;
+  flange.position.x = -0.005;
   g.add(flange);
-  const pipe = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.016, 0.016, -SPOUT, 12)), brass));
+  const pipe = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.014, 0.014, 0.05, 12)), brass));
   pipe.rotation.z = Math.PI / 2;
-  pipe.position.x = SPOUT / 2;
+  pipe.position.x = -0.03;
   g.add(pipe);
-  const body = shadowed(new THREE.Mesh(keep(new THREE.SphereGeometry(0.03, 14, 10)), brass));
-  body.position.x = SPOUT;
+  const body = shadowed(new THREE.Mesh(keep(new THREE.SphereGeometry(0.022, 14, 10)), brass));
+  body.position.x = -0.055;
   g.add(body);
-  const spout = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.013, 0.016, 0.07, 12)), brass));
-  spout.position.set(SPOUT, -0.045, 0);
-  g.add(spout);
+  const outlet = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.011, 0.013, 0.045, 12)), brass));
+  outlet.position.set(-0.055, -0.035, 0);
+  g.add(outlet);
+  // poignée papillon rouge, sur le dessus (elle tourne quand on ouvre)
   const red = keep(new THREE.MeshStandardMaterial({ color: 0xc23b2e, roughness: 0.5 }));
   const handleG = new THREE.Group();
-  handleG.position.set(SPOUT, 0.04, 0);
+  handleG.position.set(-0.055, 0.03, 0);
   g.add(handleG);
-  const stem = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.006, 0.006, 0.03, 8)), brass));
-  stem.position.y = -0.012;
+  const stem = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.005, 0.005, 0.025, 8)), brass));
+  stem.position.y = -0.01;
   handleG.add(stem);
-  const handle = shadowed(new THREE.Mesh(keep(new THREE.BoxGeometry(0.12, 0.016, 0.026)), red));
-  handleG.add(handle);
+  const wing = keep(new THREE.SphereGeometry(0.018, 12, 8));
+  for (const s of [-1, 1]) {
+    const w = shadowed(new THREE.Mesh(wing, red));
+    w.scale.set(1.5, 0.45, 0.8);
+    w.position.set(0, 0.004, s * 0.024);
+    handleG.add(w);
+  }
+  // le tuyau (fait par hookUp) et sa lance
+  const hoseMat = keep(new THREE.MeshStandardMaterial({ color: 0x2f8a3c, roughness: 0.55, map: keep(hoseTexture()) }));
+  let hose = null;
+  const black = keep(new THREE.MeshStandardMaterial({ color: 0x24262a, roughness: 0.6 }));
+  const nozzle = new THREE.Group();
+  const nzBody = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.014, 0.017, 0.07, 14)), black));
+  nzBody.position.y = 0.035;
+  nozzle.add(nzBody);
+  const nzTip = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.009, 0.012, 0.02, 12)), brass));
+  nzTip.position.y = -0.005;
+  nozzle.add(nzTip);
+  g.add(nozzle);
   // le filet d'eau : un cylindre transparent dont la texture défile vers le bas
   const streamTex = keep(new THREE.CanvasTexture(streamCanvas()));
   streamTex.wrapS = THREE.RepeatWrapping;
@@ -613,30 +639,99 @@ export function waterTap() {
   const stream = new THREE.Mesh(keep(new THREE.CylinderGeometry(1, 1, 1, 12, 1, true)), streamMat);
   stream.visible = false;
   g.add(stream);
+  const tip = new THREE.Vector3(-0.055, -0.06, 0);
   let flow = 0;
   let to = -0.5;
   let t = 0;
   return {
     group: g,
+    /**
+     * Pose la lance en nz (repère du robinet : sur le bord du seau, côté mur) et tire le tuyau du robinet jusqu'à
+     * elle : il descend le long du mur, puis passe par-dessus le bord. inward : direction (repère du robinet, à plat)
+     * du bord vers le milieu du seau.
+     */
+    hookUp(nz, inward, floorY = null) {
+      const inn = inward.clone().setY(0).normalize();
+      nozzle.position.copy(nz);
+      // (la lance penche vers le milieu du seau)
+      nozzle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, 0).addScaledVector(inn, -0.45).normalize());
+      tip.copy(nz).addScaledVector(inn, 0.02).add(new THREE.Vector3(0, -0.012, 0));
+      const top = nz.clone().addScaledVector(inn, -0.035).add(new THREE.Vector3(0, 0.09, 0));
+      const wallX = Math.max(-0.02, Math.min(nz.x, -0.02));
+      const end = [top, nz.clone().add(new THREE.Vector3(0, 0.07, 0)).addScaledVector(inn, -0.015)];
+      // Seau loin du mur (posé dans la paille) : le tuyau descend le long du mur jusqu'au sol, traverse la paille
+      // et remonte le long du seau ; seau au mur : il descend le long du mur et passe par-dessus le bord.
+      const pts = floorY !== null && nz.x < -0.12
+        ? [
+          new THREE.Vector3(-0.055, -0.055, 0),
+          new THREE.Vector3(-0.04, -0.2, 0.02),
+          new THREE.Vector3(-0.03, floorY + 0.08, nz.z * 0.4),
+          new THREE.Vector3(-0.07, floorY + 0.012, nz.z * 0.7),
+          new THREE.Vector3(nz.x + 0.12, floorY + 0.012, nz.z + 0.02),
+          new THREE.Vector3(nz.x + 0.05, floorY + 0.03, nz.z),
+          new THREE.Vector3(nz.x + 0.025, (floorY + nz.y) / 2, nz.z),
+          ...end,
+        ]
+        : [
+          new THREE.Vector3(-0.055, -0.055, 0),
+          new THREE.Vector3(-0.05, -0.16, 0.01),
+          new THREE.Vector3(wallX, (nz.y + -0.16) / 2 + 0.02, nz.z * 0.55),
+          top.clone().setX((top.x + wallX) / 2).add(new THREE.Vector3(0, 0.06, 0)),
+          ...end,
+        ];
+      if (hose) {
+        g.remove(hose);
+        hose.geometry.dispose();
+      }
+      hose = shadowed(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 64, 0.0115, 10, false), hoseMat));
+      g.add(hose);
+    },
     setFlow(k, toY = to) {
       flow = clamp(k);
       to = toY;
+    },
+    /** Le bout de la lance, d'où tombe l'eau (repère monde). */
+    tipWorld(out = new THREE.Vector3()) {
+      g.updateWorldMatrix(true, false);
+      return g.localToWorld(out.copy(tip));
     },
     update(dt) {
       t += dt;
       handleG.rotation.y += ((flow > 0 ? -1.2 : 0) - handleG.rotation.y) * Math.min(1, dt * 10);
       stream.visible = flow > 0.02;
       if (stream.visible) {
-        const top = -0.08;
-        const len = Math.max(0.02, top - to);
-        stream.scale.set(0.006 + flow * 0.009, len, 0.006 + flow * 0.009);
-        stream.position.set(SPOUT, top - len / 2, 0);
+        const len = Math.max(0.02, tip.y - to);
+        stream.scale.set(0.005 + flow * 0.007, len, 0.005 + flow * 0.007);
+        stream.position.set(tip.x, tip.y - len / 2, tip.z);
         streamTex.offset.y = (t * 3.5) % 1;
         streamTex.repeat.set(1, len * 3);
       }
     },
-    dispose() { keep.dispose(); },
+    dispose() {
+      hose?.geometry.dispose();
+      keep.dispose();
+    },
   };
+}
+
+/** Tuyau d'arrosage : vert, une fine rayure claire le long du tuyau. */
+function hoseTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 16;
+  const x = c.getContext('2d');
+  x.fillStyle = '#3a9a46';
+  x.fillRect(0, 0, 64, 16);
+  x.fillStyle = 'rgba(255,255,255,0.35)';
+  x.fillRect(0, 6, 64, 2);
+  x.fillStyle = 'rgba(0,0,0,0.12)';
+  for (let i = 0; i < 64; i += 4) x.fillRect(i, 0, 1, 16);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(8, 1);
+  return t;
 }
 
 function streamCanvas() {

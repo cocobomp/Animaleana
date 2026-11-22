@@ -64,8 +64,10 @@ export function ration3dGame(ctx) {
     const fd = P.feeder.group.getWorldPosition(v3());
     // (le filet entier, et un peu de place à sa droite pour la jauge ; la tête, les oreilles, le haut de l'encolure)
     const netPts = [v3(0, 0.12, 0), v3(0, -0.8, 0), v3(0, -0.4, 0.32), v3(0, -0.4, -0.3), v3(0, -0.45, 0.75)].map((p) => net.localToWorld(p));
-    const head = [L.muzzle, L.poll, ...L.ears, L.withers.clone().lerp(L.poll, 0.45)];
-    if (which === 'hay') sc.frame([...netPts, ...head, fd.clone().add(v3(0, -0.2, 0))], { dir: [-0.5, 0.26, 1], pad: 1.08, now });
+    // (toute la tête et le haut de l'encolure : chez un poulain ou un poney, petit à côté du filet, la tête était
+    // coupée au bord de l'image)
+    const head = [L.muzzle, L.poll, ...L.ears, L.withers.clone().lerp(L.poll, 0.3), L.muzzle.clone().add(v3(-0.12, -0.1, 0))];
+    if (which === 'hay') sc.frame([...netPts, ...head, fd.clone().add(v3(0, 0.05, 0))], { dir: [-0.42, 0.24, 1], pad: 1.1, now });
     else sc.frame([fd.clone().add(v3(0, -0.24, 0)), fd.clone().add(v3(0, 0.4, 0.25)), fd.clone().add(v3(0, -0.1, 0.7)), ...head, netPts[1]], { dir: [-0.42, 0.5, 1], pad: 1.1, now });
   }
 
@@ -170,12 +172,14 @@ export function water3dGame(ctx) {
   m.look = P.bucket.group.getWorldPosition(v3()).add(v3(0, 0.3, 0));
   m.lookAmt = 0.8;
   const L = sc.marks;
-  const bk = P.bucket.group.getWorldPosition(v3());
+  const bkG = P.bucket.group;
+  bkG.updateWorldMatrix(true, false);
   const tap = P.tap.group.getWorldPosition(v3());
-  sc.frame([bk.clone().add(v3(0, -0.32, 0.18)), tap.clone().add(v3(0, 0.08, 0)), L.muzzle, L.poll, ...L.ears], { dir: [-0.25, 0.32, 1], pad: 1.12, now: true });
+  sc.frame([bkG.localToWorld(v3(0, -0.32, 0.18)), bkG.localToWorld(v3(0, 0.05, -0.18)), tap.clone().add(v3(0, 0.08, 0)), L.muzzle, L.poll, ...L.ears], { dir: [-0.25, 0.32, 1], pad: 1.12, now: true });
   // (la ligne 🎯 de la consigne, dans le seau)
   const s0 = play.peek();
   const mark = P.bucket.setMark(s0.lo, s0.hi, s0.target);
+  P.bucket.splashAt(P.bucket.group.worldToLocal(P.tap.tipWorld()));
   let drinkT = 0;
   let saidIn = false;
   let snortIn = 2;
@@ -189,7 +193,7 @@ export function water3dGame(ctx) {
       const s = play.peek();
       P.bucket.setLevel(ctx.done && drinkT > 0 ? P.bucket.level : s.level);
       const flow = s.pouring ? 0.4 + 0.6 * Math.min(1, s.value * 3) : 0;
-      P.tap.setFlow(flow, P.bucket.group.position.y + P.bucket.surfaceY() - P.tap.group.position.y);
+      P.tap.setFlow(flow, P.bucket.group.localToWorld(v3(0, P.bucket.surfaceY(), 0)).y - P.tap.group.position.y);
       P.bucket.flow(flow);
       if (!saidIn && s.level > 0.2) {
         saidIn = true;

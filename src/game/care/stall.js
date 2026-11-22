@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { plateTexture } from '../models/interiorKit.js';
-import { hayNet, feeder, bucket, waterTap, SPOUT } from './props.js';
+import { hayNet, feeder, bucket, waterTap, BUCKET, FEEDER, NET_DEPTH } from './props.js';
 import { canvasTex, woodTexture, strawFloorTexture, noiseTexture } from './textures.js';
 
 export const STALL = { halfW: 1.85, back: -1.45, front: 2.2, low: 1.3, high: 2.6, roof: 3.05 };
@@ -28,12 +28,20 @@ export function stallSet(stage) {
   const S = STALL;
   const M = stage.marks;
   const scale = stage.double.scale;
+  // Accessoires à la taille de l'animal : un poney ou un poulain a un plus petit seau, une plus petite mangeoire,
+  // un plus petit filet (comme dans une vraie écurie de poneys), sinon il disparaît derrière.
+  const ps = Math.min(1, Math.max(0.72, 0.35 + 0.65 * scale));
   // Le cheval se place d'après sa pose « à la mangeoire » (mesurée sur son gabarit : un Shetland ou un Frison) :
-  // la bouche au-dessus du milieu de la mangeoire, à 33 cm du mur de droite ; le dos à ~1 m du mur du fond.
+  // la bouche au-dessus du milieu de la mangeoire accrochée au mur de droite ; le dos à ~1 m du mur du fond. Mais
+  // tête haute, son nez reste à 15 cm du mur au moins : un poulain baisse la tête jusqu'au sol en reculant le nez
+  // de 35 cm, il avait le bout du nez dans le mur ; sa mangeoire et son seau sont alors posés dans la paille.
   // (une seule mesure : déplacer le cheval en x déplace sa bouche d'autant)
   stage.holder.position.set(0, 0, -0.2);
+  const standX = stage.marks.muzzle.x - stage.marks.body.x; // (nez debout, par rapport au corps)
+  const bodyX = stage.marks.body.x;
   const eat = stage.eatMuzzle();
-  const dx = S.halfW - 0.33 - eat.x;
+  const feedX = S.halfW - (FEEDER.r * ps + 0.06);
+  const dx = Math.min(feedX - eat.x, S.halfW - 0.15 - (bodyX + standX));
   stage.holder.position.x += dx;
   eat.x += dx;
   stage.measure();
@@ -214,17 +222,25 @@ export function stallSet(stage) {
   // ---------------------------------------------------------------- accessoires (posés à hauteur de sa bouche)
   const props = {};
   const muzzle = L.muzzle;
-  // Mangeoire : au mur de droite, sous sa bouche quand il mange (le bord juste au-dessus du bout du nez).
+  // Mangeoire : au mur de droite, sous sa bouche quand il mange (le bord juste au-dessus du bout du nez) ; ou, si sa
+  // bouche n'arrive pas jusqu'au mur (poulain), posée dans la paille sous sa bouche.
+  const onFloor = eat.x < feedX - 0.04;
   props.feeder = feeder({ high });
-  const feedAt = new THREE.Vector3(S.halfW - 0.33, Math.max(0.3, eat.y + 0.07), eat.z);
+  props.feeder.group.scale.setScalar(ps);
+  props.feeder.setFloor(onFloor);
+  const feedAt = onFloor
+    ? new THREE.Vector3(eat.x + 0.04, FEEDER.depth * ps + 0.045, eat.z)
+    : new THREE.Vector3(feedX, Math.max(0.3, eat.y + 0.07), eat.z);
   props.feeder.group.position.copy(feedAt);
   g.add(props.feeder.group);
   // Filet à foin : accroché au mur de droite, un peu devant la mangeoire, le bas à hauteur de bouche (tête haute).
   props.net = hayNet({ high });
-  props.net.group.position.set(S.halfW - 0.25, Math.max(feedAt.y + 0.98, muzzle.y + 0.62), feedAt.z + 0.85);
+  props.net.group.scale.setScalar(ps);
+  props.net.group.position.set(S.halfW - 0.25 * ps, Math.max(feedAt.y + (NET_DEPTH + 0.2) * ps, muzzle.y + 0.62 * ps), feedAt.z + 0.85 * Math.max(0.85, ps));
   g.add(props.net.group);
   // Seau d'eau : posé dans la litière, à l'angle avant droit (pour boire, il prend la place de la mangeoire).
   props.bucket = bucket({ high });
+  props.bucket.group.scale.setScalar(ps);
   g.add(props.bucket.group);
   props.tap = waterTap();
   g.add(props.tap.group);
@@ -245,11 +261,19 @@ export function stallSet(stage) {
       props.feeder.group.position.copy(feedAt);
     }
     if (which === 'water') {
-      props.bucket.group.position.set(S.halfW - 0.24, Math.max(0.36, eat.y + 0.1), eat.z);
-      // (le bec du robinet juste au-dessus du milieu du seau)
-      props.tap.group.position.set(S.halfW - 0.24 - SPOUT, props.bucket.group.position.y + 0.5, eat.z);
+      // Seau accroché au mur sous sa bouche, ou posé dans la paille sous sa bouche (poulain : voir la mangeoire).
+      const bx = S.halfW - (BUCKET.r * ps + 0.07);
+      const b = onFloor
+        ? props.bucket.group.position.set(eat.x + 0.03, BUCKET.depth * ps + 0.045, eat.z)
+        : props.bucket.group.position.set(bx, Math.max(0.36, eat.y + 0.1), eat.z);
+      // Le robinet au mur, à côté du seau (vers nous, loin de la tête), et le tuyau dont la lance est accrochée au
+      // bord du seau côté mur. (Avant : un robinet au-dessus du seau, en plein là où la tête descend boire : il
+      // traversait la tête d'un poulain.)
+      const tap = props.tap.group.position.set(S.halfW, b.y + (onFloor ? 0.45 : 0.52), b.z + 0.42);
+      const rim = new THREE.Vector3(BUCKET.r * 0.45, 0.035, BUCKET.r * 0.88).multiplyScalar(ps).add(b);
+      props.tap.hookUp(rim.clone().sub(tap), b.clone().sub(rim), onFloor ? 0.04 - tap.y : null);
     } else {
-      props.bucket.group.position.set(S.halfW - 0.3, 0.33, S.front - 0.75);
+      props.bucket.group.position.set(S.halfW - 0.3, BUCKET.depth * ps + 0.03, S.front - 0.75);
     }
   };
   layout('none');

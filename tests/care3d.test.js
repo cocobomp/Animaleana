@@ -144,6 +144,7 @@ function fakeScene() {
         if (k === 'level') return 0;
         if (k === 'surfaceY') return () => 0;
         if (k === 'bite') return (out = V()) => out.set(1, 1.2, 0.5);
+        if (k === 'tipWorld') return (out = V()) => out.set(1.7, 0.6, 0);
         return (...args) => rec.push([name, k, ...args]);
       },
     });

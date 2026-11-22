@@ -12,6 +12,7 @@ let gltf;
 let stageMod;
 let stallMod;
 let pansage;
+let feed3d;
 let horseReal;
 let animalMod;
 let frameMod;
@@ -24,13 +25,14 @@ beforeAll(async () => {
   stageMod = await import('../src/game/care/stage.js');
   stallMod = await import('../src/game/care/stall.js');
   pansage = await import('../src/ui/minigames/pansage3d.js');
+  feed3d = await import('../src/ui/minigames/feed3d.js');
   animalMod = await import('../src/sim/animal.js');
   frameMod = await import('../src/ui/minigames/frame.js');
 }, 60000);
 
 /** Une scène de soin headless : le cheval (race, âge) dans son box, toile de téléphone en portrait. */
 export function makeStage({ breed = 'selle_francais', foal = false, w = 390, h = 600, name = 'Honey', needs = 25 } = {}) {
-  const a = animalMod.createAnimal({ species: 'horse', breed, colorIndex: 0, ageDays: foal ? 60 : 900, seed: 77 });
+  const a = animalMod.createAnimal({ species: 'horse', breed, colorIndex: 0, ageDays: foal ? 7 : 900, seed: 77 });
   a.name = name;
   for (const k in a.needs) a.needs[k] = needs;
   const model = horseReal.buildRealHorseModel(animalMod.stageLook(a), a.breed, gltf);
@@ -134,4 +136,75 @@ describe('le contexte WebGL perdu, puis rendu', () => {
     r.domElement.dispatch('webglcontextlost');
     expect(sc.lost).toBe(false);
   });
+});
+
+describe('le décor suit le gabarit (poulain, poney, grand cheval)', () => {
+  /** Plus courte distance (m) d'un sommet de obj au segment [a, b] (la tête : de la nuque au bout du nez). */
+  function minDistToSegment(obj, a, b) {
+    const seg = new THREE.Line3(a, b);
+    const p = new THREE.Vector3();
+    const q = new THREE.Vector3();
+    let best = Infinity;
+    obj.updateWorldMatrix(true, true);
+    obj.traverse((m) => {
+      if (!m.isMesh || !m.visible || m.material?.transparent) return;
+      const pos = m.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i += 3) {
+        p.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+        seg.closestPointToPoint(p, true, q);
+        best = Math.min(best, p.distanceTo(q));
+      }
+    });
+    return best;
+  }
+
+  const GABARITS = [['haflinger', true], ['selle_francais', true], ['shetland', false], ['selle_francais', false], ['frison', false]];
+  for (const [breed, foal] of GABARITS) {
+    it(`son nez reste dans le box, et sa bouche arrive dans la mangeoire et dans le seau (${breed}${foal ? ', poulain' : ''})`, () => {
+      const { sc } = makeStage({ breed, foal });
+      const P = sc.decor.props;
+      const eat = sc.decor.anchors.eat;
+      // debout, le bout du nez n'est pas dans le mur (un poulain de 7 jours l'y avait : 1,87 m pour un mur à 1,85 m)
+      expect(sc.marks.muzzle.x).toBeLessThan(stallMod.STALL.halfW - 0.12);
+      for (const which of ['feed', 'water']) {
+        sc.decor.layout(which);
+        const c = (which === 'feed' ? P.feeder : P.bucket).group;
+        c.updateWorldMatrix(true, false);
+        const local = c.worldToLocal(eat.clone());
+        const r = which === 'feed' ? 0.27 : 0.17;
+        expect(Math.hypot(local.x, local.z), `${which} : la bouche au-dessus du récipient`).toBeLessThan(r * 0.8);
+        expect(local.y, `${which} : la bouche dans le récipient`).toBeLessThan(0.08);
+        expect(local.y).toBeGreaterThan(-0.3);
+      }
+      sc.dispose();
+    });
+
+    it(`abreuver : le robinet et le tuyau ne passent jamais dans la tête (${breed}${foal ? ', poulain' : ''})`, () => {
+      const { a, sc } = makeStage({ breed, foal });
+      const ctx = ctxFor(a, sc);
+      const game = feed3d.water3dGame(ctx);
+      const tap = sc.decor.props.tap.group;
+      const S = sc.double.scale;
+      const check = () => {
+        const poll = sc.model.head.getWorldPosition(new THREE.Vector3());
+        const d = minDistToSegment(tap, poll, sc.live('nose'));
+        expect(d, `${breed} : ${d.toFixed(3)} m`).toBeGreaterThan(0.11 * S);
+      };
+      // il regarde le seau pendant qu'on le remplit, puis il boit (la tête dans le seau)
+      for (let k = 0; k < 4; k++) {
+        run(ctx, game, sc, 0.5);
+        check();
+      }
+      game.down();
+      run(ctx, game, sc, 2);
+      game.up();
+      ctx.pressStop();
+      for (let k = 0; k < 6; k++) {
+        run(ctx, game, sc, 0.5);
+        check();
+      }
+      game.destroy();
+      sc.dispose();
+    }, 30000);
+  }
 });

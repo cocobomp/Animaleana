@@ -950,6 +950,88 @@ export function groomTool(kind, keep) {
   return g;
 }
 
+/**
+ * Chaussette de boue (à enrouler autour d'un canon : u autour de la jambe, v de bas en haut) : une boue épaisse en
+ * bas, qui remonte en traînées et en éclaboussures, au bord haut déchiqueté. base : couleur de la boue (mouillée,
+ * foncée ; sèche, claire et craquelée). Des taches plus sombres et des croûtes plus claires : elle se voit sur une
+ * jambe noire comme sur une balzane blanche.
+ */
+export function sockTexture(base = 'rgb(130,100,70)', wet = 0, seed = 3) {
+  const W = 128;
+  const H = 256;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const x = c.getContext('2d');
+  const r = rng(seed);
+  const m = /(\d+)\D+(\d+)\D+(\d+)/.exec(base) ?? [0, 130, 100, 70];
+  const [R, G, B] = [+m[1], +m[2], +m[3]];
+  const col = (k, a = 1) => `rgba(${Math.round(R * k)},${Math.round(G * k)},${Math.round(B * k)},${a})`;
+  // (en canvas, y vers le bas : le bas de la jambe est en bas de l'image)
+  // le bord haut, déchiqueté : des coulées qui remontent plus ou moins haut
+  x.fillStyle = col(1);
+  x.beginPath();
+  x.moveTo(0, H);
+  const n = 18;
+  for (let i = 0; i <= n; i++) {
+    const u = (i / n) * W;
+    const top = H * (0.22 + 0.2 * r()) - (r() < 0.3 ? H * 0.12 * r() : 0);
+    x.lineTo(u, top);
+  }
+  x.lineTo(W, H);
+  x.closePath();
+  x.fill();
+  // plus épaisse et plus foncée en bas (le sabot a traîné dans la boue)
+  const gr = x.createLinearGradient(0, H * 0.4, 0, H);
+  gr.addColorStop(0, col(1, 0));
+  gr.addColorStop(1, col(0.7, 0.9));
+  x.fillStyle = gr;
+  x.fillRect(0, H * 0.4, W, H * 0.6);
+  // taches sombres (mottes) et éclaboussures au-dessus du bord
+  for (let i = 0; i < 46; i++) {
+    const u = r() * W;
+    const v = H * (0.35 + 0.65 * r());
+    x.fillStyle = col(0.6 + r() * 0.2, 0.85);
+    x.beginPath();
+    x.ellipse(u, v, 3 + r() * 7, 2 + r() * 5, r() * 3, 0, Math.PI * 2);
+    x.fill();
+  }
+  for (let i = 0; i < 40; i++) {
+    const u = r() * W;
+    const v = H * (0.04 + 0.3 * r());
+    x.fillStyle = col(0.85 + r() * 0.3, 0.95);
+    x.beginPath();
+    x.arc(u, v, 1 + r() * 3.2, 0, Math.PI * 2);
+    x.fill();
+  }
+  // sèche : croûtes claires et fines craquelures ; mouillée : reflets
+  if (wet < 0.5) {
+    for (let i = 0; i < 70; i++) {
+      x.fillStyle = col(1.3 + r() * 0.2, 0.8);
+      x.fillRect(r() * W, H * (0.3 + 0.7 * r()), 2 + r() * 4, 1.5 + r() * 2.5);
+    }
+    x.strokeStyle = col(0.45, 0.7);
+    x.lineWidth = 1;
+    for (let i = 0; i < 14; i++) {
+      let u = r() * W;
+      let v = H * (0.5 + 0.5 * r());
+      x.beginPath();
+      x.moveTo(u, v);
+      for (let k = 0; k < 3; k++) x.lineTo((u += (r() - 0.5) * 16), (v += (r() - 0.5) * 16));
+      x.stroke();
+    }
+  } else {
+    for (let i = 0; i < 30; i++) {
+      x.fillStyle = 'rgba(255,255,255,0.18)';
+      x.fillRect(r() * W, H * (0.45 + 0.5 * r()), 1 + r() * 2, 4 + r() * 8);
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+
 /** Tache de boue séchée (craquelée, bords irréguliers), de poussière (poudre claire) ou de boue des jambes (traînées). */
 export function mudTexture(kind = 'mud', seed = 1) {
   const S = 128;

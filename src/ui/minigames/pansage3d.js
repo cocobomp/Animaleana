@@ -20,7 +20,7 @@ import { nbsp } from './frame.js';
 import { clamp, lerp, distToSegment } from './draw.js';
 import { LEG_MUD } from '../../sim/legMud.js';
 import { PANSAGE_STAGES, PANSAGE_FEET, MAX, SLACK, STEP, PAUSE, HX, HY, makeHoof, drawStagePill, drawTray, legMudColor } from './pansage.js';
-import { groomTool, mudTexture } from '../../game/care/props.js';
+import { groomTool, mudTexture, sockTexture } from '../../game/care/props.js';
 import { hoofSole } from '../../game/care/hoof.js';
 import { nicker, snort } from './feed3d.js';
 import { rng as seeded } from '../../game/care/textures.js';
@@ -53,7 +53,6 @@ export function pansage3dGame(ctx) {
   // ---------------------------------------------------------------- les taches, posées sur le modèle
   const mudTex = own(mudTexture('mud', 3));
   const dustTex = own(mudTexture('dust', 5));
-  const legTex = own(mudTexture('leg', 9));
   const patchGeo = own(new THREE.PlaneGeometry(1, 1));
   /** Une carte posée sur le poil au point p (normale n), liée à l'os bone (elle suit le corps). */
   function decal(p, n, bone, r, tex, color = 0xffffff, spin = true) {
@@ -68,6 +67,42 @@ export function pansage3dGame(ctx) {
     (bone ?? sc.holder).attach(mesh);
     return mesh;
   }
+  /**
+   * Un manchon de boue autour du canon (du boulet presque au genou), un peu plus large que la jambe : sa coupe est
+   * mesurée au milieu du canon (rayons lancés de devant, de derrière et des deux côtés : un canon est plus profond
+   * que large, tendons compris). Lié à l'os du canon.
+   */
+  const sockTex = legMud ? [own(sockTexture(legMudColor(legWet), legWet, 5)), own(sockTexture(legMudColor(legWet), legWet, 8))] : null;
+  function legSock(knee, fet, bone, i, prefix) {
+    const axis = knee.clone().sub(fet);
+    const len = axis.length();
+    axis.normalize();
+    const mid = fet.clone().addScaledVector(axis, len * 0.4);
+    const hitFrom = (d) => sc.proxy.hitAll(new THREE.Ray(mid.clone().addScaledVector(d, 1.5), d.clone().negate())).find((x) => x.boneName.startsWith(prefix))?.point ?? null;
+    const px = hitFrom(v3(1, 0, 0));
+    const nx = hitFrom(v3(-1, 0, 0));
+    const pz = hitFrom(v3(0, 0, 1));
+    const nz = hitFrom(v3(0, 0, -1));
+    const legR = (sc.model.dims?.legR ?? 0.06) * S;
+    const rx = px && nx ? Math.abs(px.x - nx.x) / 2 : legR;
+    const rz = pz && nz ? Math.abs(pz.z - nz.z) / 2 : legR * 0.8;
+    const cx = px && nx ? (px.x + nx.x) / 2 : mid.x;
+    const cz = pz && nz ? (pz.z + nz.z) / 2 : mid.z;
+    const bottom = fet.clone().addScaledVector(axis, -0.03 * S);
+    const top = fet.clone().addScaledVector(axis, len * 0.8);
+    const geo = own(new THREE.CylinderGeometry(0.97, 1.12, 1, 20, 1, true));
+    // (un peu de lumière propre : sous le ventre, à l'ombre, une boue claire sur une jambe noire restait sombre)
+    const mat = own(new THREE.MeshStandardMaterial({ map: sockTex[i % 2], emissiveMap: sockTex[i % 2], emissive: 0x4a4038, transparent: true, alphaTest: 0.05, depthWrite: false, roughness: legWet > 0.5 ? 0.45 : 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(top).add(bottom).multiplyScalar(0.5).setX(cx).setZ(cz);
+    mesh.quaternion.setFromUnitVectors(v3(0, 1, 0), axis);
+    mesh.scale.set(rx * 1.1 + 0.004, top.distanceTo(bottom), rz * 1.12 + 0.004);
+    mesh.renderOrder = 2;
+    sc.scene.add(mesh);
+    bone.attach(mesh);
+    return mesh;
+  }
+
   /** Des points du flanc (côté caméra), sur le corps : rayons lancés vers lui depuis devant. */
   function bodyPoints(count, r0, avoid = []) {
     const out = [];
@@ -246,8 +281,9 @@ export function pansage3dGame(ctx) {
       const extra = bodyPoints(2, 0.085 * S, mud);
       for (const q of extra) dust.push({ ...q, dust: 1, seed: rng() * 10, mesh: decal(q.p, q.n, q.bone, q.r, dustTex) });
       if (legMud) {
-        // (🧦 ses chaussettes de boue : une tache sur chaque canon, foncée mouillée, claire sèche)
-        const col = new THREE.Color(legMudColor(legWet));
+        // (🧦 ses chaussettes de boue : un manchon de boue autour de chaque canon, du boulet presque au genou,
+        // épaisse en bas, en coulées vers le haut ; foncée mouillée, claire et craquelée sèche. Avant : une petite
+        // tache plate, de la couleur du poil, qu'on ne voyait pas sur une jambe noire ni sur une balzane.)
         legs = (sc.model.legs ?? []).map((l, i) => {
           const knee = l.knee.getWorldPosition(v3());
           const fet = l.fetlock.getWorldPosition(v3());
@@ -258,10 +294,7 @@ export function pansage3dGame(ctx) {
           const h = hits.find((x) => x.boneName.startsWith(prefix)) ?? { point: at.clone().addScaledVector(toUs, (sc.model.dims?.legR ?? 0.06) * S), normal: toUs.clone(), bone: null };
           const bone = h.bone ?? l.knee;
           const q = { p: h.point, n: h.normal, bone, r: 0.065 * S, dust: 1, leg: true, wet: legWet, seed: rng() * 10 };
-          q.mesh = decal(h.point, h.normal, bone, q.r, legTex, col.getHex(), false);
-          // (une chaussette : étroite comme le canon, longue du genou au boulet)
-          q.mesh.scale.x *= 0.55;
-          q.mesh.scale.y *= 1.9;
+          q.mesh = legSock(knee, fet, bone, i, prefix);
           return q;
         });
         dust.push(...legs);

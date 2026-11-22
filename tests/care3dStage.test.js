@@ -138,6 +138,126 @@ describe('la fermeture rend tout', () => {
   });
 });
 
+describe('pansage en 3D : les gestes sur le vrai cheval (même règle que le jeu dessiné)', () => {
+  /** Un geste du doigt : de point en point (espace du cadre), par petits pas. */
+  function stroke(game, pts, step = 5) {
+    game.down(pts[0]);
+    for (let i = 1; i < pts.length; i++) {
+      const [a, b] = [pts[i - 1], pts[i]];
+      const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step));
+      for (let k = 1; k <= n; k++) game.move({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n }, true);
+    }
+    game.up();
+  }
+  const circle = (q, r, turns = 2) => Array.from({ length: turns * 14 + 1 }, (_, i) => ({ x: q.x + r * Math.cos((i / 14) * Math.PI * 2), y: q.y + r * Math.sin((i / 14) * Math.PI * 2) }));
+  const waitStage = (ctx, game, sc, st) => {
+    for (let i = 0; i < 60 && !(game.peek().stage === st && game.peek().pause <= 0); i++) run(ctx, game, sc, 0.1);
+    expect(game.peek().stage).toBe(st);
+  };
+  /** Cure les quatre pieds (comme au test du cure-pied). */
+  function pickFeet(ctx, game, sc) {
+    for (let f = 0; f < 4; f++) {
+      run(ctx, game, sc, 2.5);
+      const s = game.peek();
+      for (let pass = 0; pass < 6 && game.peek().blobs.length && game.peek().foot === s.foot; pass++) {
+        for (const q of game.peek().blobs) {
+          const r = Math.max(10, q.r) * 1.3;
+          stroke(game, [{ x: q.x - s.toe.x * r, y: q.y - s.toe.y * r }, { x: q.x + s.toe.x * r, y: q.y + s.toe.y * r }], 4);
+        }
+      }
+      run(ctx, game, sc, 1);
+    }
+  }
+
+  it('bien fait d\'un bout à l\'autre (ronds à l\'étrille, brosse vers la queue, pieds, peigne vers le bas) : trois étoiles', () => {
+    const { a, sc } = makeStage();
+    const ctx = ctxFor(a, sc);
+    const game = pansage.pansage3dGame(ctx);
+    run(ctx, game, sc, 0.5);
+    // 1. l'étrille : des petits ronds sur chaque plaque de boue (toutes à l'écran, sur le flanc)
+    let s = game.peek();
+    expect(s.mud.length).toBeGreaterThanOrEqual(3);
+    for (const q of s.mud) expect(inView(q, ctx.view), 'plaque dans l\'image').toBe(true);
+    for (let pass = 0; pass < 6 && game.peek().mud.length && game.peek().value < game.peek().lo; pass++) {
+      for (const q of game.peek().mud) stroke(game, circle(q, Math.max(6, q.r * 0.45)), 4);
+    }
+    s = game.peek();
+    expect(s.value).toBeGreaterThanOrEqual(s.lo);
+    expect(ctx.hints.some((h) => h.text === t('mg_pansage_curry_round'))).toBe(false); // (des ronds : pas de reproche)
+    ctx.pressStop();
+    waitStage(ctx, game, sc, 'brush');
+    expect(game.peek().results[0].verdict).toBe('just');
+    // 2. la brosse : dans le sens du poil (la tête est à droite de l'écran : vers la gauche)
+    for (let pass = 0; pass < 8 && game.peek().dust.length && game.peek().value < game.peek().lo; pass++) {
+      for (const q of game.peek().dust) stroke(game, [{ x: q.x + 26, y: q.y }, { x: q.x - 26, y: q.y }], 4);
+    }
+    s = game.peek();
+    expect(s.value).toBeGreaterThanOrEqual(s.lo);
+    ctx.pressStop();
+    waitStage(ctx, game, sc, 'hoof');
+    expect(game.peek().results[1].verdict).toBe('just');
+    // 3. les pieds
+    pickFeet(ctx, game, sc);
+    waitStage(ctx, game, sc, 'comb');
+    expect(game.peek().results[2].verdict).toBe('just');
+    // 4. le peigne : de haut en bas à travers chaque nœud
+    for (let pass = 0; pass < 10 && game.peek().knots.length; pass++) {
+      const q = game.peek().knots[0];
+      stroke(game, [{ x: q.x, y: q.y - 30 }, { x: q.x, y: q.y + 30 }], 4);
+      run(ctx, game, sc, 0.3);
+    }
+    expect(game.peek().knots.length).toBe(0);
+    ctx.pressStop();
+    expect(ctx.finished.why).toBe('just');
+    expect(ctx.finished.q).toBe(1);
+    expect(ctx.finished.msg).toBe(t('mg_pansage_just', { name: 'Honey' }));
+    expect(ctx.opts.out.hooves.cleaned).toBeGreaterThan(0.9);
+    game.destroy();
+    sc.dispose();
+  }, 60000);
+
+  it('la brosse à rebrousse-poil : ça avance moins vite, et la consigne le dit', () => {
+    const { a, sc } = makeStage();
+    const ctx = ctxFor(a, sc);
+    const game = pansage.pansage3dGame(ctx);
+    run(ctx, game, sc, 0.5);
+    ctx.pressStop(); // (étrille sautée : la brosse)
+    waitStage(ctx, game, sc, 'brush');
+    const dust0 = game.peek().dust.map((q) => q.dust);
+    for (let pass = 0; pass < 3; pass++) for (const q of game.peek().dust) stroke(game, [{ x: q.x - 26, y: q.y }, { x: q.x + 26, y: q.y }], 4);
+    expect(ctx.hints.some((h) => h.text === t('mg_brush_dir') && h.kind === 'warn')).toBe(true);
+    // (dans le bon sens, la même longueur de geste enlève plus de poussière)
+    const { sc: sc2, a: a2 } = makeStage();
+    const ctx2 = ctxFor(a2, sc2);
+    const game2 = pansage.pansage3dGame(ctx2);
+    run(ctx2, game2, sc2, 0.5);
+    ctx2.pressStop();
+    waitStage(ctx2, game2, sc2, 'brush');
+    for (let pass = 0; pass < 3; pass++) for (const q of game2.peek().dust) stroke(game2, [{ x: q.x + 26, y: q.y }, { x: q.x - 26, y: q.y }], 4);
+    expect(game2.peek().value).toBeGreaterThan(game.peek().value);
+    expect(dust0.length).toBeGreaterThan(0);
+    game.destroy();
+    game2.destroy();
+    sc.dispose();
+    sc2.dispose();
+  }, 60000);
+
+  it('l\'étrille sur la tête : 💢, il couche les oreilles, et la consigne le dit', () => {
+    const { a, sc } = makeStage();
+    const ctx = ctxFor(a, sc);
+    const game = pansage.pansage3dGame(ctx);
+    run(ctx, game, sc, 0.5);
+    // la tête, à l'écran (le bas du front)
+    const h = sc.project(sc.live('head'));
+    stroke(game, circle(h, 10, 3), 4);
+    expect(ctx.hints.some((x) => x.text === t('mg_pansage_curry_bony') && x.kind === 'warn')).toBe(true);
+    expect(sc.mood.annoyed).toBeGreaterThan(0);
+    expect(game.peek().over).toBeGreaterThan(0);
+    game.destroy();
+    sc.dispose();
+  });
+});
+
 describe('le contexte WebGL perdu, puis rendu', () => {
   it('perdu : la scène attend ; rendu : les écouteurs de l\'ancien contexte sont retirés, le décor refait son image, la scène reprend', async () => {
     const { sc } = makeStage();

@@ -56,6 +56,66 @@ export function dirtyBeddingTexture(seed = 3) {
   }, { key: `dirtyBedding|${seed}` });
 }
 
+/**
+ * Sol nu du box, curé et balayé : tapis de caoutchouc noir-brun (joints entre les plaques, petits picots), encore humide
+ * par endroits, quelques brins oubliés et un peu de sciure. C'est le sol qu'on paille (corvée « pailler »).
+ */
+export function rubberMatTexture() {
+  const S = 512;
+  return canvasTex(S, S, (c) => {
+    const r = rng(17);
+    c.fillStyle = '#3f3935';
+    c.fillRect(0, 0, S, S);
+    // picots du caoutchouc
+    for (let y = 6; y < S; y += 12) {
+      for (let x = (y / 12) % 2 ? 6 : 12; x < S; x += 12) {
+        c.fillStyle = `rgba(255,245,230,${0.04 + r() * 0.04})`;
+        c.beginPath();
+        c.arc(x, y, 2.6, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+    // humide par endroits (plus sombre)
+    for (let i = 0; i < 8; i++) {
+      const x = r() * S;
+      const y = r() * S;
+      const rad = 40 + r() * 80;
+      const g = c.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, 'rgba(20,16,14,0.35)');
+      g.addColorStop(1, 'rgba(20,16,14,0)');
+      c.fillStyle = g;
+      c.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    }
+    // sciure et poussière claire
+    for (let i = 0; i < 1400; i++) {
+      c.fillStyle = `rgba(${170 + r() * 50},${140 + r() * 40},${100 + r() * 30},${0.08 + r() * 0.18})`;
+      c.fillRect(r() * S, r() * S, 1 + r() * 2, 1 + r() * 2);
+    }
+    // quelques brins oubliés
+    for (let i = 0; i < 26; i++) {
+      const x = r() * S;
+      const y = r() * S;
+      const a = r() * Math.PI * 2;
+      const l = 10 + r() * 22;
+      c.strokeStyle = `rgba(${200 + r() * 40},${165 + r() * 35},${90 + r() * 30},${0.55 + r() * 0.35})`;
+      c.lineWidth = 1.5 + r() * 1.5;
+      c.beginPath();
+      c.moveTo(x, y);
+      c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+      c.stroke();
+    }
+    // joints entre les plaques
+    c.strokeStyle = 'rgba(12,10,9,0.8)';
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(0, 1.5);
+    c.lineTo(S, 1.5);
+    c.moveTo(1.5, 0);
+    c.lineTo(1.5, S);
+    c.stroke();
+  }, { key: 'rubberMat' });
+}
+
 /** Béton brossé de l'allée : gris chaud, stries du balai, joints de dilatation, quelques taches. */
 export function concreteTexture() {
   const S = 512;
@@ -140,23 +200,54 @@ export function manurePile(own, mats, seed = 1) {
   return g;
 }
 
-/** Une touffe de paille propre (à laisser !) : une petite gerbe de brins dorés. */
+/**
+ * Une touffe de paille propre (à laisser !) : un petit tas doré, bosselé, hérissé de brins dorés couchés dans tous les
+ * sens — comme les bottillons jaunes du jeu dessiné. (Avant : des brins pâles partant d'un point, on aurait dit une
+ * petite étoile blanche, une étincelle de bonus à ramasser.)
+ */
 export function strawTuft(own, mats, seed = 1) {
   const g = new THREE.Group();
   const r = rng(seed + 11);
-  const n = 22;
-  const inst = new THREE.InstancedMesh(mats.strand, mats.strandMat, n);
+  // le tas (partagé par toutes les touffes : une demi-boule bosselée, la paille du box en plus doré)
+  if (!mats.tuftGeo) {
+    const geo = new THREE.SphereGeometry(1, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2);
+    const p = geo.attributes.position;
+    const rr = rng(23);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const z = p.getZ(i);
+      const a = Math.atan2(z, x);
+      const k = 0.82 + 0.14 * Math.sin(a * 3 + 0.7) + (rr() - 0.5) * 0.16;
+      p.setXYZ(i, x * k, p.getY(i) * (0.8 + rr() * 0.35), z * k);
+    }
+    geo.computeVertexNormals();
+    mats.tuftGeo = own(geo);
+    const tex = own(strawFloorTexture());
+    tex.repeat.set(0.5, 0.5);
+    mats.tuftMat = own(new THREE.MeshStandardMaterial({ map: tex, color: 0xffd774, roughness: 0.95 }));
+    mats.tuftStrandMat = own(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }));
+  }
+  const heap = shade(new THREE.Mesh(mats.tuftGeo, mats.tuftMat));
+  heap.scale.set(0.075, 0.042, 0.06);
+  heap.rotation.y = r() * Math.PI;
+  g.add(heap);
+  // les brins, couchés sur le tas et autour, dorés (pas pâles : on doit voir que c'est de la belle paille)
+  const n = 34;
+  const inst = new THREE.InstancedMesh(mats.strand, mats.tuftStrandMat, n);
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
   const c = new THREE.Color();
   for (let i = 0; i < n; i++) {
-    e.set((r() - 0.5) * 0.6, r() * Math.PI * 2, (r() - 0.5) * 0.5);
+    const a = r() * Math.PI * 2;
+    const d = Math.sqrt(r()) * 0.06;
+    const y = 0.042 * Math.max(0, 1 - (d / 0.07) ** 2) * 0.9 + 0.004;
+    e.set((r() - 0.5) * 0.35, r() * Math.PI * 2, (r() - 0.5) * 0.35);
     q.setFromEuler(e);
-    const len = 0.1 + r() * 0.1;
-    m4.compose(v3((r() - 0.5) * 0.06, 0.01 + r() * 0.03, (r() - 0.5) * 0.06), q, v3(len, 1.4, 1.3));
+    const len = 0.07 + r() * 0.09;
+    m4.compose(v3(Math.cos(a) * d, y, Math.sin(a) * d), q, v3(len, 1.6, 1.6));
     inst.setMatrixAt(i, m4);
-    inst.setColorAt(i, c.setHex([0xf0d88e, 0xe6c66e, 0xd8b45a, 0xf6e2a0][i % 4]));
+    inst.setColorAt(i, c.setHex([0xe2b648, 0xd9a83c, 0xf0c95e, 0xc99634, 0xeccb6a][i % 5]));
   }
   inst.castShadow = true;
   inst.receiveShadow = true;
@@ -363,7 +454,7 @@ export function bigDustpan(own, w = 0.8) {
  * corvées (boxFloorSet) et au box du cheval qu'on cure (floor3d.js clean3dGame). Renvoie { dirty, update, dispose }
  * (dispose remet le box comme avant).
  */
-export function dirtyBox(stage, d) {
+export function dirtyBox(stage, d, { bare = false } = {}) {
   const own = [];
   const keep = (x) => {
     own.push(x);
@@ -384,18 +475,20 @@ export function dirtyBox(stage, d) {
   }
   const S = STALL;
   const added = [];
-  const tex = keep(dirtyBeddingTexture(3));
-  tex.repeat.set(2.4, 2.4);
+  // (bare : le sol nu d'un box curé — le tapis de caoutchouc —, à pailler ; sinon la vieille litière sale, à curer)
+  const tex = keep(bare ? rubberMatTexture() : dirtyBeddingTexture(3));
+  if (bare) tex.repeat.set(2.2 / 1.2, 3.2 / 1.6); // (des plaques de 1,2 × 1,6 m)
+  else tex.repeat.set(2.4, 2.4);
   const geo = keep(new THREE.PlaneGeometry(S.halfW * 2 + 0.1, S.front - S.back + 0.2, 40, 30));
   const p = geo.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i);
     const y = p.getY(i);
     const edge = Math.max(0, 1 - Math.min(S.halfW - Math.abs(x), y - (-(S.front - S.back) / 2)) / 0.45);
-    p.setZ(i, 0.012 + 0.008 * Math.sin(x * 6.3 + y * 4.1) * Math.cos(y * 5.1 - x * 2.7) + 0.06 * edge * edge);
+    p.setZ(i, bare ? 0.006 : 0.012 + 0.008 * Math.sin(x * 6.3 + y * 4.1) * Math.cos(y * 5.1 - x * 2.7) + 0.06 * edge * edge);
   }
   geo.computeVertexNormals();
-  const dirty = new THREE.Mesh(geo, keep(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, color: 0xffffff })));
+  const dirty = new THREE.Mesh(geo, keep(new THREE.MeshStandardMaterial({ map: tex, roughness: bare ? 0.75 : 0.95, color: 0xffffff })));
   dirty.rotation.x = -Math.PI / 2;
   dirty.position.set(0, 0, (S.back + S.front) / 2);
   dirty.receiveShadow = true;
@@ -426,10 +519,10 @@ export function dirtyBox(stage, d) {
   };
 }
 
-/** Le box vide des corvées : le box (stall.js) devenu box à curer (dirtyBox). */
-export function boxFloorSet(stage) {
+/** Le box vide des corvées : le box (stall.js) devenu box à curer (dirtyBox), ou, curé (bare), à pailler. */
+export function boxFloorSet(stage, { bare = false } = {}) {
   const d = stallSet(stage);
-  const x = dirtyBox(stage, d);
+  const x = dirtyBox(stage, d, { bare });
   return {
     ...d,
     dirty: x.dirty,
@@ -443,6 +536,9 @@ export function boxFloorSet(stage) {
     },
   };
 }
+
+/** Le box curé, sol nu (tapis de caoutchouc), à pailler. */
+export const bareBoxSet = (stage) => boxFloorSet(stage, { bare: true });
 
 // ---------------------------------------------------------------- l'allée de l'écurie
 

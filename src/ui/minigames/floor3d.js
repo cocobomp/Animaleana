@@ -105,7 +105,7 @@ export function floorGame3d(ctx, make, o) {
     const obj = it.good ? strawTuft(own, mats, i + 1) : manurePile(own, mats, i + 1);
     obj.position.copy(toWorld(it.x, it.y, 0.012));
     obj.rotation.y = i * 1.7;
-    const s = (it.good ? 1.2 : 1.45) * (1 + (seeded(i + 5)() - 0.5) * 0.25);
+    const s = (it.good ? 1.6 : 1.45) * (1 + (seeded(i + 5)() - 0.5) * 0.25);
     obj.scale.setScalar(s);
     root.add(obj);
     return { key: keyOf(it), x: it.x, y: it.y, good: !!it.good, obj, state: 'floor', k: 0, from: null };
@@ -144,9 +144,18 @@ export function floorGame3d(ctx, make, o) {
     cells.step = step;
   }
   const cover = cells ? coverLayer() : null;
+  /**
+   * La paille fraîche posée : une couche dorée sur tout le sol du box (jusqu'aux murs pour les cases du bord), peinte
+   * case par case dans une carte de transparence avec des brins (un bord en fibres, pas un rectangle net) ; des brins
+   * 3D dessus ; et, quand on repasse, des mottes bosselées posées au hasard autour de la case (pas en rangées).
+   */
   function coverLayer() {
-    const CW = 128;
-    const CH = Math.round((128 * F.h) / F.w);
+    const X0 = -S.halfW;
+    const X1 = S.halfW;
+    const Z0 = S.back;
+    const Z1 = S.front;
+    const CW = 256;
+    const CH = Math.round((CW * (Z1 - Z0)) / (X1 - X0));
     const canvas = document.createElement('canvas');
     canvas.width = CW;
     canvas.height = CH;
@@ -155,17 +164,19 @@ export function floorGame3d(ctx, make, o) {
     c2.fillRect(0, 0, CW, CH);
     const alpha = own(new THREE.CanvasTexture(canvas));
     const tex = own(strawFloorTexture());
-    tex.repeat.set(2.2, 1.8);
-    const mat = own(new THREE.MeshStandardMaterial({ map: tex, alphaMap: alpha, transparent: true, depthWrite: false, roughness: 1, color: 0xffffff, emissive: 0x2a1e08, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
-    const geo = own(new THREE.PlaneGeometry(W.x1 - W.x0 + 0.3, W.z1 - W.z0 + 0.3, 1, 1));
+    tex.repeat.set((X1 - X0) / 0.9, (Z1 - Z0) / 0.9);
+    const mat = own(new THREE.MeshStandardMaterial({ map: tex, alphaMap: alpha, transparent: true, depthWrite: false, roughness: 1, color: 0xffe2a0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    const geo = own(new THREE.PlaneGeometry(X1 - X0, Z1 - Z0, 1, 1));
     const mesh = new THREE.Mesh(geo, mat);
     mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set((W.x0 + W.x1) / 2, 0.026, (W.z0 + W.z1) / 2);
+    mesh.position.set((X0 + X1) / 2, 0.026, (Z0 + Z1) / 2);
     mesh.receiveShadow = true;
     mesh.renderOrder = 1;
     root.add(mesh);
+    const pxOf = (x) => ((x - X0) / (X1 - X0)) * CW;
+    const pyOf = (z) => ((z - Z0) / (Z1 - Z0)) * CH;
     // les brins (une gerbe par couche et par case) et les tas
-    const cap = cells.length * 3 * 9;
+    const cap = cells.length * 3 * 12;
     const strands = new THREE.InstancedMesh(mats.strand, mats.strandMat, cap);
     strands.count = 0;
     strands.castShadow = false;
@@ -174,9 +185,9 @@ export function floorGame3d(ctx, make, o) {
     root.add(strands);
     const heapTex = own(strawFloorTexture());
     heapTex.repeat.set(0.6, 0.6);
-    // (un tas : une motte de paille bosselée, pas un disque bien rond)
+    // (une motte : une demi-boule bosselée, chaque motte tournée, étirée et posée un peu à côté de sa case)
     const heapGeo = own(lumpyHeap());
-    const heaps = new THREE.InstancedMesh(heapGeo, own(new THREE.MeshStandardMaterial({ map: heapTex, color: 0xf6e2a6, roughness: 1 })), cells.length);
+    const heaps = new THREE.InstancedMesh(heapGeo, own(new THREE.MeshStandardMaterial({ map: heapTex, color: 0xffdc8c, roughness: 1 })), cells.length);
     heaps.count = 0;
     heaps.castShadow = true;
     heaps.receiveShadow = true;
@@ -189,43 +200,75 @@ export function floorGame3d(ctx, make, o) {
     const r = seeded(77);
     const sx = (W.x1 - W.x0) / F.w;
     const sz = (W.z1 - W.z0) / F.h;
+    const st = cells.step;
     return {
       /** Une couche de plus dans la case c. */
       add(c) {
-        // la couche (douce) sur la carte de transparence
-        const px = ((c.x - F.x) / F.w) * CW;
-        const py = ((c.y - F.y) / F.h) * CH;
-        const rad = (cells.step / F.w) * CW * 0.95;
-        const g = c2.createRadialGradient(px, py, 0, px, py, rad);
-        g.addColorStop(0, 'rgba(255,255,255,1)');
-        g.addColorStop(0.6, 'rgba(255,255,255,0.85)');
+        const w = toWorld(c.x, c.y);
+        // (les cases du bord : la paille va jusqu'au mur, comme dans un vrai box)
+        const ext = {
+          x0: c.x - F.x < st ? w.x - X0 - st * sx * 0.5 : 0,
+          x1: F.x + F.w - c.x < st ? X1 - w.x - st * sx * 0.5 : 0,
+          z0: c.y - F.y < st ? w.z - Z0 - st * sz * 0.5 : 0,
+          z1: F.y + F.h - c.y < st ? Z1 - w.z - st * sz * 0.5 : 0,
+        };
+        const hx = st * sx * 0.62;
+        const hz = st * sz * 0.62;
+        // la couche : un fond doux, puis des brins (le bord est en fibres)
+        const cx = pxOf(w.x);
+        const cy = pyOf(w.z);
+        const rad = pxOf(w.x + hx) - cx;
+        // (assez large pour recouvrir le joint avec les cases voisines : une case couverte ne laisse pas voir le sol)
+        const R2 = rad * 1.45;
+        const g = c2.createRadialGradient(cx, cy, 0, cx, cy, R2);
+        g.addColorStop(0, 'rgba(255,255,255,0.95)');
+        g.addColorStop(0.62, 'rgba(255,255,255,0.85)');
         g.addColorStop(1, 'rgba(255,255,255,0)');
         c2.fillStyle = g;
-        c2.fillRect(px - rad, py - rad, rad * 2, rad * 2);
+        c2.fillRect(cx - R2, cy - R2, R2 * 2, R2 * 2);
+        const nStroke = 70 + Math.round(((ext.x0 + ext.x1) / (X1 - X0) + (ext.z0 + ext.z1) / (Z1 - Z0)) * 400);
+        for (let i = 0; i < nStroke; i++) {
+          const ax = w.x - hx - ext.x0 + r() * (2 * hx + ext.x0 + ext.x1);
+          const az = w.z - hz - ext.z0 + r() * (2 * hz + ext.z0 + ext.z1);
+          const a = r() * Math.PI * 2;
+          const l = rad * (0.25 + r() * 0.55);
+          const x = pxOf(ax);
+          const y = pyOf(az);
+          c2.strokeStyle = `rgba(255,255,255,${0.45 + r() * 0.55})`;
+          c2.lineWidth = 1 + r() * 1.6;
+          c2.beginPath();
+          c2.moveTo(x, y);
+          c2.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+          c2.stroke();
+        }
         alpha.needsUpdate = true;
-        // les brins
-        for (let i = 0; i < 9 && strands.count < cap; i++) {
-          const lx = c.x + (r() - 0.5) * cells.step * 1.2;
-          const ly = c.y + (r() - 0.5) * cells.step * 1.2;
+        // les brins 3D
+        for (let i = 0; i < 12 && strands.count < cap; i++) {
+          const lx = c.x + (r() - 0.5) * st * 1.3;
+          const ly = c.y + (r() - 0.5) * st * 1.3;
           e.set((r() - 0.5) * 0.4, r() * Math.PI * 2, (r() - 0.5) * 0.4);
           q.setFromEuler(e);
           const len = 0.1 + r() * 0.16;
           m4.compose(toWorld(lx, ly, 0.03 + Math.min(3, c.n) * 0.012 + r() * 0.01), q, v3(len, 1, 1 + r()));
           strands.setMatrixAt(strands.count, m4);
-          strands.setColorAt(strands.count, col.setHex([0xf0d88e, 0xe6c66e, 0xd8b45a, 0xf6e2a0, 0xe9cf86][Math.floor(r() * 5)]).multiplyScalar(0.9 + r() * 0.2));
+          strands.setColorAt(strands.count, col.setHex([0xe8c46a, 0xdcb052, 0xf0d282, 0xcfa046, 0xe9c870][Math.floor(r() * 5)]).multiplyScalar(0.92 + r() * 0.16));
           strands.count++;
         }
         strands.instanceMatrix.needsUpdate = true;
         if (strands.instanceColor) strands.instanceColor.needsUpdate = true;
-        // un tas, si on repasse au même endroit
+        // une motte, si on repasse au même endroit : posée au hasard autour de la case, de taille et de forme variées
         if (c.n >= 2) {
-          if (c.heap === undefined && heaps.count < cells.length) c.heap = heaps.count++;
+          if (c.heap === undefined && heaps.count < cells.length) {
+            c.heap = heaps.count++;
+            c.hj = { dx: (r() - 0.5) * st * 0.9, dy: (r() - 0.5) * st * 0.9, a: r() * Math.PI * 2, kx: 0.75 + r() * 0.6, kz: 0.7 + r() * 0.5, ky: 0.8 + r() * 0.5 };
+          }
           if (c.heap !== undefined) {
             const k = Math.min(4, c.n) - 1;
-            const w = cells.step * 0.55;
-            e.set(0, r() * Math.PI * 2, 0);
+            const j = c.hj;
+            const ww = st * 0.6;
+            e.set(0, j.a, 0);
             q.setFromEuler(e);
-            m4.compose(toWorld(c.x + (r() - 0.5) * 6, c.y + (r() - 0.5) * 6, 0.015), q, v3(w * sx * (0.75 + 0.12 * k), 0.05 * k + 0.03, w * sz * (0.6 + 0.12 * k)));
+            m4.compose(toWorld(c.x + j.dx, c.y + j.dy, 0.015), q, v3(ww * sx * (0.7 + 0.14 * k) * j.kx, (0.045 * k + 0.03) * j.ky, ww * sz * (0.6 + 0.14 * k) * j.kz));
             heaps.setMatrixAt(c.heap, m4);
             heaps.instanceMatrix.needsUpdate = true;
           }
@@ -321,6 +364,9 @@ export function floorGame3d(ctx, make, o) {
     if (barrow) pts.push(barrow.group.localToWorld(barrow.mouth.clone().add(v3(0.32, 0, 0))), barrow.group.localToWorld(v3(-0.32, 0.6, 0)), barrow.group.localToWorld(v3(0, 0.45, 0.9)));
     if (bale) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(bale.group.localToWorld(v3(x * bale.w / 2, bale.h, z * bale.d / 2)));
     if (horse) pts.push(sc.marks.withers, sc.marks.croup, sc.marks.poll);
+    // (en portrait, l'image est plus haute que le sol : on y met le mur du fond et sa fenêtre, plutôt que 20 à 25 %
+    // de béton vide sous le box)
+    if (sc.size.h > sc.size.w * 1.15) pts.push(v3(-S.halfW, 1.45, S.back), v3(S.halfW, 1.45, S.back));
     sc.frame(pts, { dir: [0.04, horse ? 1.0 : 1.2, 1], pad: 1.04, now });
   }
   frame(true);
@@ -471,7 +517,9 @@ export function floorGame3d(ctx, make, o) {
         g.fillText('⬇️', b.x, b.y - 34 + Math.sin(ctx.time * 5) * 4);
         g.restore();
       }
-      const tx = v.x1 - 44;
+      // (à gauche, sur le mur : à droite, ils couvraient la tête du cheval et la mangeoire, et la flèche de la botte
+      // cachait le pourcentage)
+      const tx = v.x0 + 44;
       const ty = Math.max(16, v.y0 + 16);
       if (s.phase === 'pick' || (s.phase === undefined && !cells)) {
         g.save();

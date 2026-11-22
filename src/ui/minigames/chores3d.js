@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { CareStage } from '../../game/care/stage.js';
-import { boxFloorSet, aisleSet, AISLE, pushBroom, bigDustpan } from '../../game/care/barn.js';
+import { boxFloorSet, bareBoxSet, aisleSet, AISLE, pushBroom, bigDustpan } from '../../game/care/barn.js';
 import { sweepGame } from './chores.js';
 import { drawMiniGauge } from './clean.js';
 import { label, rrect } from './draw.js';
@@ -15,8 +15,8 @@ import { softDot } from '../../game/care/textures.js';
 import { muck3dGame, straw3dGame } from './floor3d.js';
 import { v3, owner } from './horse3dKit.js';
 
-/** Le décor de chaque corvée. */
-const CHORE_SETS = { muck: boxFloorSet, straw: boxFloorSet, sweep: aisleSet };
+/** Le décor de chaque corvée (pailler : le box curé, sol nu — pas de la paille sur de la paille). */
+const CHORE_SETS = { muck: boxFloorSet, straw: bareBoxSet, sweep: aisleSet };
 
 /** Le jeu 3D d'une corvée, ou undefined. */
 export function chore3dGameFor(kind) {

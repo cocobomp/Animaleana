@@ -211,7 +211,7 @@ function penRig(ctx, kind) {
       }
     }
     // (le pavillon tourne vers le côté de l'oreille, un peu vers l'arrière : il écoute sur le côté)
-    const s = best.position.x >= 0 ? 1 : -1;
+    const s = best.userData?.side ?? (best.position.x >= 0 ? 1 : -1);
     best.rotateY(s * 1.15 * earK);
     best.rotateX(-0.22 * earK);
   };
@@ -220,8 +220,8 @@ function penRig(ctx, kind) {
   // Les sabots posés restent où ils sont posés. Les allures du modèle sont faites pour marcher droit : sur un cercle,
   // le corps tourne pendant l'appui, et un sabot posé à 60 cm du milieu du corps glissait de côté (ω × 0,6 m : 13 cm
   // par appui au trot). Pendant l'appui, chaque membre pivote un peu à l'épaule (ou à la hanche) pour garder son sabot
-  // à l'endroit où il s'est posé ; levé, la correction s'efface en l'air. (Au-delà d'un cinquième de la longueur du
-  // membre — un pivot sur place —, le sabot fait un petit pas.)
+  // à l'endroit où il s'est posé ; levé, la correction s'efface en l'air. (Au-delà de trois dixièmes de la longueur
+  // du membre — un pivot sur place —, le sabot fait un petit pas.)
   const pins = (md.legs ?? []).map((l) => ({ on: false, P: V(), off: V(), cool: 0, z: null, len: Math.max(0.3, (l.kneeRest?.y ?? 0.6) * 1.6) * scale }));
   const _J = V();
   const _H = V();

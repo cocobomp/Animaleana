@@ -1097,7 +1097,7 @@ export class Game {
         if (mounted) {
           const sun = this.world?.sun;
           const dir = sun ? (this.photoSun ??= new THREE.Vector3()).subVectors(sun.position, sun.target.position) : null;
-          saved = placeRidePhotoCamera(this.camera, this.player, this.world, { band: sh / src.height, sun: dir });
+          saved = placeRidePhotoCamera(this.camera, this.player, this.world, { band: sh / src.height, sun: dir, occluders: this.photoOccluders?.() });
           if (hidden) avatar.visible = true; // (vue de la selle : la cavalière est cachée)
         }
         renderForPhoto(this);
@@ -1506,6 +1506,26 @@ export class Game {
     this.trailGuide.update(dt); // 🧭 visiteurs qui demandent une balade
     // Examen ou école vétérinaire en plein écran (téléphone, src/ui/vetExam.js) : la 3D est cachée, on ne la dessine pas.
     if (!this.ui.vxCover) this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * 📸 Les grands objets du lieu (bâtiments, barrières, arbres…) qui peuvent cacher le cheval sur une photo souvenir
+   * (placeRidePhotoCamera) : ceux du lieu, calculés une fois par lieu (comme fadeOccluders), sans le sol.
+   */
+  photoOccluders() {
+    const group = this.world?.group;
+    if (!group) return null;
+    if (this.photoOccGroup !== group) {
+      this.photoOccGroup = group;
+      this.photoOcc = [];
+      group.traverse((o) => {
+        if (!o.isMesh || o.userData.noOccluder || o.geometry?.type === 'PlaneGeometry') return;
+        if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        const r = o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z);
+        if (r > 0.4 && r < 120) this.photoOcc.push(o);
+      });
+    }
+    return this.photoOcc;
   }
 
   /** Les murs et toits qui cachent le personnage deviennent transparents. */

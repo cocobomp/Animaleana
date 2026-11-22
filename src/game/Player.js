@@ -1104,10 +1104,11 @@ export function rideDistance(sc, aspect) {
  * 📸 Photo souvenir à cheval (Game.memoryPhoto) : la caméra posée de trois quarts avant du cheval monté (≈ 43° depuis
  * le devant, un peu au-dessus), du côté éclairé par le soleil si on le connaît, assez loin pour que le cheval et sa
  * cavalière tiennent dans la bande gardée (band : sa hauteur / celle de l'écran) avec un champ vertical de ≈ 30° dans
- * cette bande. Évite un bâtiment (l'autre côté, puis de face). Ne touche pas au CameraRig : remettre la caméra avec
- * restorePhotoCamera. Renvoie l'état d'avant (ou null : pas de cheval monté).
+ * cette bande. Pas dans un bâtiment, et sans décor devant eux (occluders : grands objets du lieu, une barrière le long
+ * de laquelle on passe cachait le poney) : l'autre côté, un autre angle, un peu plus haut. Ne touche pas au CameraRig :
+ * remettre la caméra avec restorePhotoCamera. Renvoie l'état d'avant (ou null : pas de cheval monté).
  */
-export function placeRidePhotoCamera(cam, player, world = null, { band = 1, sun = null } = {}) {
+export function placeRidePhotoCamera(cam, player, world = null, { band = 1, sun = null, occluders = null } = {}) {
   const m = player.mount;
   if (!m) return null;
   const saved = { pos: cam.position.clone(), quat: cam.quaternion.clone(), fov: cam.fov };
@@ -1117,39 +1118,64 @@ export function placeRidePhotoCamera(cam, player, world = null, { band = 1, sun 
   const seat = seatOf(player);
   // (le sujet : des sabots au casque, de la queue au bout du nez ; visée un peu devant la selle, à mi-hauteur)
   const H = seat + RIDER_TOP + 0.05;
-  const aim = _lv.set(p.x + Math.sin(h) * 0.25 * sc, p.y + H * 0.47, p.z + Math.cos(h) * 0.25 * sc);
+  const fx = Math.sin(h);
+  const fz = Math.cos(h);
+  const aim = new THREE.Vector3(p.x + fx * 0.25 * sc, p.y + H * 0.52, p.z + fz * 0.25 * sc);
   const vb = THREE.MathUtils.degToRad(30);
   cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(vb / 2) / Math.max(0.2, Math.min(1, band))));
   cam.updateProjectionMatrix();
-  const dist = Math.max(H / 0.78 / (2 * Math.tan(vb / 2)), 3.2 * sc + 1.2);
-  const pitch = 0.1;
+  const dist = Math.max(H / 0.74 / (2 * Math.tan(vb / 2)), 3.2 * sc + 1.2);
   // côté gauche (+) ou droit (−) du cheval : celui que le soleil éclaire d'abord
   let first = 1;
-  if (sun) {
-    const left = Math.cos(h) * sun.x - Math.sin(h) * sun.z;
-    first = left >= 0 ? 1 : -1;
-  }
-  const at = (side, yaw) => {
+  if (sun) first = fz * sun.x - fx * sun.z >= 0 ? 1 : -1;
+  const at = (side, yaw, pitch) => {
     const a = h + side * yaw;
-    return _sv.set(aim.x + Math.sin(a) * Math.cos(pitch) * dist, aim.y + Math.sin(pitch) * dist, aim.z + Math.cos(a) * Math.cos(pitch) * dist);
+    return new THREE.Vector3(aim.x + Math.sin(a) * Math.cos(pitch) * dist, aim.y + Math.sin(pitch) * dist, aim.z + Math.cos(a) * Math.cos(pitch) * dist);
   };
-  const clear = (q) => {
-    if (!world?.insideBuilding) return true;
+  const inside = (q) => {
+    if (!world?.insideBuilding) return false;
     for (let i = 1; i <= 8; i++) {
       const u = i / 8;
-      if (world.insideBuilding(aim.x + (q.x - aim.x) * u, aim.y + (q.y - aim.y) * u, aim.z + (q.z - aim.z) * u)) return false;
+      if (world.insideBuilding(aim.x + (q.x - aim.x) * u, aim.y + (q.y - aim.y) * u, aim.z + (q.z - aim.z) * u)) return true;
     }
-    return true;
+    return false;
+  };
+  // (ce que la photo doit montrer : la tête du cheval, la cavalière, le corps et les jambes du cheval)
+  const subject = [
+    new THREE.Vector3(p.x + fx * 1.35 * sc, p.y + seat + 0.35 * sc, p.z + fz * 1.35 * sc),
+    new THREE.Vector3(p.x, p.y + seat + 0.6, p.z),
+    new THREE.Vector3(p.x, p.y + seat * 0.75, p.z),
+    new THREE.Vector3(p.x + fx * 0.5 * sc, p.y + seat * 0.35, p.z + fz * 0.5 * sc),
+  ];
+  const hidden = (q) => {
+    if (!occluders?.length) return 0;
+    _photoRay ??= new THREE.Raycaster();
+    let n = 0;
+    for (const t of subject) {
+      _rv.subVectors(q, t);
+      const L = _rv.length();
+      _photoRay.set(t, _rv.normalize());
+      _photoRay.far = L;
+      if (_photoRay.intersectObjects(occluders, true).some((x) => x.object.visible !== false)) n++;
+    }
+    return n;
   };
   let pos = null;
-  for (const [side, yaw] of [[first, 0.75], [-first, 0.75], [first, 0.35], [-first, 0.35]]) {
-    const q = at(side, yaw);
-    if (clear(q)) {
-      pos = q;
-      break;
+  let best = Infinity;
+  for (const [yaw, pitch] of [[0.75, 0.1], [0.5, 0.1], [1.05, 0.1], [0.75, 0.32]]) {
+    for (const side of [first, -first]) {
+      const q = at(side, yaw, pitch);
+      if (inside(q)) continue;
+      const n = hidden(q);
+      if (n < best) {
+        best = n;
+        pos = q;
+      }
+      if (n === 0) break;
     }
+    if (best === 0) break;
   }
-  if (!pos) pos = at(first, 0.75);
+  if (!pos) pos = at(first, 0.75, 0.1);
   const ground = (world?.heightAt?.(pos.x, pos.z) ?? p.y) + 0.5;
   if (pos.y < ground) pos.y = ground;
   cam.position.copy(pos);
@@ -1157,6 +1183,7 @@ export function placeRidePhotoCamera(cam, player, world = null, { band = 1, sun 
   cam.updateMatrixWorld(true);
   return saved;
 }
+let _photoRay = null;
 
 /** Remet la caméra comme avant placeRidePhotoCamera. */
 export function restorePhotoCamera(cam, saved) {

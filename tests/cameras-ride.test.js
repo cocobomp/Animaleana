@@ -279,6 +279,21 @@ describe('📸 photo souvenir à cheval (placeRidePhotoCamera)', () => {
     expect(cam.position.clone().sub(pl.position).dot(left)).toBeLessThan(-1);
   });
 
+  it('une barrière le long du chemin, du côté du soleil : la photo se prend de l\'autre côté (le poney n\'est pas derrière)', () => {
+    const h = HORSES.shetland;
+    const cam = new THREE.PerspectiveCamera(60, PORTRAIT, 0.1, 500);
+    const pl = mountedPlayer(h, 0);
+    // barrière de 1,2 m de haut, 20 m de long, à 1,5 m à gauche du poney (gauche : +x au cap 0)
+    const fence = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 20));
+    fence.position.set(pl.position.x + 1.5, 0.6, pl.position.z);
+    fence.updateMatrixWorld(true);
+    P.placeRidePhotoCamera(cam, pl, world, { band, sun: V(5, 8, 1), occluders: [fence] });
+    expect(cam.position.x).toBeLessThan(pl.position.x - 1);
+    // sans la barrière : du côté du soleil
+    P.placeRidePhotoCamera(cam, pl, world, { band, sun: V(5, 8, 1), occluders: [] });
+    expect(cam.position.x).toBeGreaterThan(pl.position.x + 1);
+  });
+
   it('pas monté : rien', () => {
     const cam = new THREE.PerspectiveCamera(60, PORTRAIT, 0.1, 500);
     expect(P.placeRidePhotoCamera(cam, { mount: null, position: V() }, world)).toBeNull();

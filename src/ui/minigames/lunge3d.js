@@ -459,7 +459,8 @@ export function lunge3dGame(ctx) {
     if (fast) whipK = 1;
     rig.listen();
   };
-  const head = () => sc.holder.position.clone().add(V(0, Math.max(0.6, sc.marks.withers.y) * 1.05, 0));
+  // (les mots de la logique, « Parfait ! » : au-dessus de ses oreilles, à côté de lui)
+  const head = () => sc.holder.position.clone().add(V(0, Math.max(0.6, sc.marks.withers.y) * 1.75, 0));
   const anchor = () => sc.project(head());
   const logic = withLogic(speakingCtx(ctx, say), lungeGame, anchor);
   const FAST_KEYS = new Set(['ArrowUp', 'Space', 'ArrowRight']);
@@ -604,7 +605,8 @@ export function liberty3dGame(ctx) {
   const rig = penRig(ctx, 'liberty');
   const { sc, md, R, Lb, scale, kid, plan } = rig;
   const m = sc.mood;
-  const head = () => sc.holder.position.clone().add(V(0, Math.max(0.6, sc.marks.withers.y) * 1.05, 0));
+  // (les mots et les cœurs de la logique : au-dessus de ses oreilles, jamais sur sa tête)
+  const head = () => sc.holder.position.clone().add(V(0, Math.max(0.6, sc.marks.withers.y) * 1.75, 0));
   const anchor = () => sc.project(head());
   const logic = withLogic(ctx, libertyGame, anchor);
   const P0 = logic.peek();

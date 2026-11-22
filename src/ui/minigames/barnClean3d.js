@@ -12,7 +12,7 @@ import { withLogic } from './care3d.js';
 import { distToSegment } from './draw.js';
 import { litterHeight } from '../../game/care/farmBarn.js';
 import { lumpy } from '../../game/care/barnProps.js';
-import { dirtyLitterTexture, cowPat, patMaterials, wheelbarrow, strawFork } from '../../game/care/stableChores.js';
+import { dirtyLitterTexture, cowPatParts, patField, patMaterials, wheelbarrow, strawFork } from '../../game/care/stableChores.js';
 import { strawFloorTexture } from '../../game/care/textures.js';
 import { callOut } from './farm3d.js';
 
@@ -88,11 +88,13 @@ export function barnClean3dGame(ctx) {
   // les bouses, à la place de celles du jeu dessiné, et leurs mouches
   const pm = patMaterials(keep);
   const pats = s0.items.map((it, i) => {
-    const g = cowPat(keep, pm, THREE.MathUtils.clamp(0.26 + 0.1 * u, 0.26, 0.38), i + 1);
+    // (g : la place de la bouse ; ses morceaux sont dessinés tous ensemble, patField)
+    const g = new THREE.Object3D();
     g.position.copy(toWorld(it.x, it.y));
-    sc.scene.add(g);
-    return { g, x: it.x, y: it.y, state: 'floor', k: 0, from: null };
+    return { g, obj: g, parts: cowPatParts(THREE.MathUtils.clamp(0.26 + 0.1 * u, 0.26, 0.38), i + 1), x: it.x, y: it.y, state: 'floor', k: 0, from: null };
   });
+  const field = patField(sc.scene, pm, pats);
+  field.write();
   const flyGeo = keep(new THREE.SphereGeometry(0.006, 6, 4));
   const flyMat = keep(new THREE.MeshBasicMaterial({ color: 0x15130f }));
   const flies = new THREE.InstancedMesh(flyGeo, flyMat, pats.length * 2);
@@ -108,10 +110,11 @@ export function barnClean3dGame(ctx) {
   // (la même paille que la litière de l'étable, en plus doré : on voit bien ce qui est frais)
   const strawTex = keep(strawFloorTexture());
   strawTex.repeat.set(0.9, 0.9);
-  const strawGeo = keep(lumpy(new THREE.SphereGeometry(1, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), 0.16, 2, 6));
+  const strawGeo = keep(lumpy(new THREE.SphereGeometry(1, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2), 0.16, 2, 6));
   const straw = new THREE.InstancedMesh(strawGeo, keep(new THREE.MeshStandardMaterial({ map: strawTex, roughness: 1, color: 0xffe9b0 })), cells.length);
   straw.receiveShadow = true;
-  straw.castShadow = true;
+  // (pas d'ombre portée : une brassée de 3 cm au ras de la litière ; une passe d'ombre de moins à chaque image)
+  straw.castShadow = false;
   straw.count = cells.length;
   sc.scene.add(straw);
   const q = new THREE.Quaternion();
@@ -265,6 +268,7 @@ export function barnClean3dGame(ctx) {
           }
         }
       }
+      field.write();
       barrow.fill(pats.filter((pt) => pt.state === 'bin').length, pats.length);
       // les mouches, au-dessus des bouses encore là
       let k = 0;
@@ -349,7 +353,7 @@ export function barnClean3dGame(ctx) {
       }
     },
     destroy() {
-      for (const pt of pats) sc.scene.remove(pt.g);
+      field.dispose();
       sc.scene.remove(litter, barrow.group, straw, fork.group, flies);
       straw.dispose();
       flies.dispose();

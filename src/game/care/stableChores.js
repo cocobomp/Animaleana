@@ -65,28 +65,65 @@ export function freshStrawTexture(seed = 3) {
 
 /**
  * Une bouse : une galette en deux ou trois couches affaissées, brun-vert et luisante, quelques brins de paille
- * collés. size : son diamètre (m). Origine : au sol, au milieu.
+ * collés. size : son diamètre (m). Renvoie les places de ses morceaux dans son repère (origine : au sol, au milieu) :
+ * { layers: [Matrix4], straws: [Matrix4] } — dessinés tous ensemble (patField : deux maillages répétés pour toutes
+ * les bouses, au lieu de six maillages par bouse).
  */
-export function cowPat(keep, mats, size = 0.26, seed = 1) {
-  const g = new THREE.Group();
+export function cowPatParts(size = 0.26, seed = 1) {
   const r = rng(seed * 7 + 3);
-  const layers = 2 + (r() < 0.5 ? 1 : 0);
-  for (let i = 0; i < layers; i++) {
+  const layers = [];
+  const straws = [];
+  const n = 2 + (r() < 0.5 ? 1 : 0);
+  const q = new THREE.Quaternion();
+  for (let i = 0; i < n; i++) {
     const k = 1 - i * 0.28;
-    const m = shadowed(new THREE.Mesh(mats.geo, mats.pat), i === 0);
-    m.scale.set(size * 0.5 * k * (0.9 + r() * 0.2), size * (0.09 - i * 0.012), size * 0.5 * k * (0.85 + r() * 0.2));
-    m.position.set((r() - 0.5) * size * 0.08, size * (0.02 + i * 0.055), (r() - 0.5) * size * 0.08);
-    m.rotation.y = r() * 6;
-    g.add(m);
+    const sc = V(size * 0.5 * k * (0.9 + r() * 0.2), size * (0.09 - i * 0.012), size * 0.5 * k * (0.85 + r() * 0.2));
+    q.setFromAxisAngle(V(0, 1, 0), r() * 6);
+    layers.push(new THREE.Matrix4().compose(V((r() - 0.5) * size * 0.08, size * (0.02 + i * 0.055), (r() - 0.5) * size * 0.08), q, sc));
   }
   for (let i = 0; i < 3; i++) {
-    const s = new THREE.Mesh(mats.straw, mats.strawMat);
-    s.scale.set(size * (0.35 + r() * 0.3), 1, 1);
-    s.position.set((r() - 0.5) * size * 0.5, size * (0.05 + r() * 0.06), (r() - 0.5) * size * 0.5);
-    s.rotation.set(0, r() * 6, (r() - 0.5) * 0.5);
-    g.add(s);
+    const sx = size * (0.35 + r() * 0.3);
+    const p = V((r() - 0.5) * size * 0.5, size * (0.05 + r() * 0.06), (r() - 0.5) * size * 0.5);
+    q.setFromEuler(new THREE.Euler(0, r() * 6, (r() - 0.5) * 0.5));
+    straws.push(new THREE.Matrix4().compose(p, q, V(sx, 1, 1)));
   }
-  return g;
+  return { layers, straws };
+}
+
+/**
+ * Toutes les bouses d'un coup : deux maillages répétés (les couches, les brins). pats : [{ parts (cowPatParts),
+ * obj (Object3D : place, rotation et visibilité de la bouse) }] ; write() recopie leurs places.
+ */
+export function patField(scene, mats, pats) {
+  const nl = pats.reduce((s, p) => s + p.parts.layers.length, 0);
+  const ns = pats.reduce((s, p) => s + p.parts.straws.length, 0);
+  const layers = new THREE.InstancedMesh(mats.geo, mats.pat, nl);
+  const straws = new THREE.InstancedMesh(mats.straw, mats.strawMat, ns);
+  layers.castShadow = true;
+  layers.receiveShadow = true;
+  layers.frustumCulled = false;
+  straws.frustumCulled = false;
+  scene.add(layers, straws);
+  const m = new THREE.Matrix4();
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  return {
+    write() {
+      let a = 0;
+      let b = 0;
+      for (const p of pats) {
+        p.obj.updateMatrix();
+        for (const l of p.parts.layers) layers.setMatrixAt(a++, p.obj.visible ? m.multiplyMatrices(p.obj.matrix, l) : zero);
+        for (const t of p.parts.straws) straws.setMatrixAt(b++, p.obj.visible ? m.multiplyMatrices(p.obj.matrix, t) : zero);
+      }
+      layers.instanceMatrix.needsUpdate = true;
+      straws.instanceMatrix.needsUpdate = true;
+    },
+    dispose() {
+      scene.remove(layers, straws);
+      layers.dispose();
+      straws.dispose();
+    },
+  };
 }
 
 /** Les matières et formes partagées des bouses. */

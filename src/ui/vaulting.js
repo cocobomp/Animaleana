@@ -59,9 +59,9 @@ export class VaultHud {
     // La jauge d'équilibre.
     this.bubble = h('span', { class: 'vt-bubble' }, '🤸');
     this.gauge = h('div', { class: 'vt-balance', hidden: true },
-      h('div', { class: 'vt-balance-say' }, `⬅️ ${t('vt_balanceSay')} ➡️`),
+      h('div', { class: 'vt-balance-say' }, `⬅️ ${t('vt_balanceSay')} ➡️`, h('kbd', { class: 'vt-kbd' }, '← →')),
       h('div', { class: 'vt-balance-bar' }, h('span', { class: 'vt-balance-zone' }), this.bubble));
-    this.box = h('div', { class: 'vt-controls' }, this.cardEl, this.gauge, h('div', { class: 'vt-btn-row' }, this.btn, h('small', { class: 'vt-btn-say' }, t('vt_tapSay'))));
+    this.box = h('div', { class: 'vt-controls' }, this.cardEl, this.gauge, h('div', { class: 'vt-btn-row' }, this.btn, h('small', { class: 'vt-btn-say' }, t('vt_tapSay'), h('kbd', { class: 'vt-kbd' }, t('actv_key_space')))));
     hud.controls.append(this.box);
     // Les notes des juges.
     this.marksEl = h('div', { class: 'vt-marks', hidden: true });

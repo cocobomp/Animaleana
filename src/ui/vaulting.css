@@ -118,3 +118,7 @@
   .vt-marks { top: calc(8px + var(--safe-t)); }
   .vt-card small { display: none; }
 }
+
+/* Au clavier : Espace pour toucher, flèches pour l'équilibre (caché sur un écran tactile). */
+.vt-kbd { margin-left: 6px; background: rgba(255, 255, 255, 0.85); color: #333; padding: 1px 6px; border-radius: 6px; font-size: 0.8em; text-shadow: none; }
+@media (pointer: coarse) { .vt-kbd { display: none; } }

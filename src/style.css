@@ -2082,6 +2082,9 @@ body.mg-open #tuto-ring { display: none !important; }
    « C'est bon ! » passe sur sa propre ligne, en entier, sous les deux autres. */
 @media (max-width: 640px) and (orientation: portrait) {
   .mg-controls:has(> .mg-btn:nth-child(3)) > .mg-btn.stop { flex-basis: 100%; }
+  /* Deux boutons côte à côte (« 🌾 Remplir » et « ✅ C'est bon ! ➜ ») : « C'est bon » prend plus de place que
+     son voisin, il se lisait « C'est bon … » (coupé). */
+  .mg-controls:has(> .mg-btn:nth-child(2):last-child) > .mg-btn.stop { flex-grow: 1.45; padding-inline: 8px; }
 }
 /* Petit téléphone (360 px) : boutons de ~160 px côte à côte, « ✅ C'est bon ! » y tient sur une ligne. */
 @media (max-width: 380px) {

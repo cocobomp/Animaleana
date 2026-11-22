@@ -720,7 +720,7 @@ class VaultingSession extends Session {
     const q = tapped ? tapQuality(err, this.level) : 0;
     const grade = tapped ? tapGrade(err, this.level) : 'late';
     this.taps.push(q);
-    this.hud2.say(t(`vt_tap_${grade}`), 800, q >= 0.45 ? 'good' : 'bad');
+    this.hud2.say(t(`vt_tap_${grade}`), 800, grade === 'perfect' || grade === 'good' ? 'good' : 'bad');
     if (q >= 0.8 && this.e) this.e.emit('✨', 1);
     this.hud2.cue(null);
     this.phase = 'move';

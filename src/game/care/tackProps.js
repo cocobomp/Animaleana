@@ -103,8 +103,9 @@ export function syringeModel(own, { marks = [100, 900] } = {}) {
   const uv = bodyGeo.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, 1 - uv.getY(i), uv.getX(i));
   const body = shade(new THREE.Mesh(bodyGeo, bodyMat));
-  body.rotation.z = -Math.PI / 2;
-  body.rotation.y = Math.PI * 0.75;
+  // (couché le long de +x, puis tourné sur lui-même pour que la graduation se lise. Avant : tourné autour de y après
+  // être couché, le corps partait de travers, loin de l'embout)
+  body.rotation.set(Math.PI * 0.75, 0, -Math.PI / 2);
   body.position.x = tip + len / 2;
   g.add(body);
   // la pâte (blanc cassé), qui recule quand on pousse
@@ -112,7 +113,7 @@ export function syringeModel(own, { marks = [100, 900] } = {}) {
   const paste = shade(new THREE.Mesh(own(new THREE.CylinderGeometry(r * 0.86, r * 0.86, 1, 20)), pasteMat), false);
   paste.rotation.z = -Math.PI / 2;
   g.add(paste);
-  // collerette et piston (bleu)
+  // collerette et piston (bleu) : la tige part du joint, derrière la pâte, et sort par l'arrière du corps
   const blue = own(new THREE.MeshStandardMaterial({ color: 0x2f6fd0, roughness: 0.45 }));
   const flange = shade(new THREE.Mesh(own(new THREE.BoxGeometry(0.008, 0.05, 0.03)), plastic));
   flange.position.x = tip + len + 0.004;
@@ -147,7 +148,8 @@ export function syringeModel(own, { marks = [100, 900] } = {}) {
       paste.scale.set(1, l, 1);
       paste.position.x = tip + len - 0.004 - l / 2 - len * 0.94 * (1 - k);
       paste.visible = k > 0.005;
-      plunger.position.x = tip + 0.006 + len * 0.94 * (1 - k);
+      // (le joint du piston pousse la pâte : pleine, la tige sort par l'arrière ; vide, elle est rentrée dans le corps)
+      plunger.position.x = tip + len - 0.004 - len * 0.94 * (1 - k);
     },
     /** Point du corps à la part k (0 embout, 1 fond), repère du groupe (pour le doigt). */
     at(k) {

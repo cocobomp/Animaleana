@@ -258,6 +258,58 @@ describe('vermifuge en 3D', () => {
   }
 });
 
+describe('vermifuge en 3D : la seringue et la langue restent à la bouche', () => {
+  for (const [breed, foal] of [['selle_francais', false], ['frison', false]]) {
+    it(`il mâchonne et secoue la tête : l'embout reste au coin des lèvres, puis sort ; la langue sort au coin des lèvres (${breed})`, () => {
+      const { a, sc } = makeStage({ breed, foal });
+      const ctx = ctxFor(a, sc);
+      ctx.opts = {};
+      const game = games.deworm(ctx);
+      run(ctx, game, sc, 0.3);
+      // la dose : au clavier, jusqu'à son poids (+ 10 à 20 kg)
+      for (let i = 0; i < 90 && game.peek().ring < game.peek().kg + 10; i++) game.key('ArrowRight', true);
+      for (let i = 0; i < 90 && game.peek().ring > game.peek().kg + 20; i++) game.key('ArrowLeft', true);
+      ctx.pressStop();
+      run(ctx, game, sc, 1.5);
+      let s = game.peek();
+      game.down(s.syringe);
+      game.move(s.bar, true);
+      game.move(game.peek().bar, true);
+      game.up();
+      expect(game.peek().syr.placed).toBe(true);
+      game.down(game.peek().bar);
+      const hr = sc.model.dims.hr;
+      let maxOff = 0;
+      while (game.peek().syr.left > 0) {
+        run(ctx, game, sc, 0.1);
+        s = game.peek();
+        if (!s.out) maxOff = Math.max(maxOff, s.tipInHead.distanceTo(s.barLocal));
+      }
+      // (pendant qu'il mâchonne et secoue la tête, l'embout ne quitte pas le coin des lèvres)
+      expect(maxOff, 'embout au coin des lèvres').toBeLessThan(hr * 0.25);
+      game.up();
+      expect(game.peek().out, 'la seringue vide sort de la bouche').toBe(true);
+      let shown = false;
+      for (let i = 0; i < 20; i++) {
+        run(ctx, game, sc, 0.1);
+        s = game.peek();
+        if (s.tongueShown) {
+          shown = true;
+          expect(s.tongueBase.distanceTo(s.barLocal), 'la langue sort au coin des lèvres').toBeLessThan(hr * 0.4);
+        }
+      }
+      expect(shown, 'il tire la langue').toBe(true);
+      // (sortie, la seringue est revenue dans notre main, loin de sa bouche)
+      expect(game.peek().tipInHead.distanceTo(game.peek().barLocal)).toBeGreaterThan(hr);
+      ctx.pressStop();
+      expect(ctx.finished?.why).toBe('just');
+      game.destroy();
+      expect(sc.model.head.children.includes(sc.model.head.children.find((c) => c.isMesh && c.geometry?.type === 'CapsuleGeometry')), 'la langue est retirée').toBe(false);
+      sc.dispose();
+    }, 60000);
+  }
+});
+
 describe('maréchal-ferrant en 3D', () => {
   for (const [breed, foal] of GABARITS) {
     it(`il lève le pied ; trois coups par clou : juste ; les clous restent dans l'image (${breed}${foal ? ', poulain' : ''})`, () => {

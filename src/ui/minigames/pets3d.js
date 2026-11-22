@@ -101,7 +101,7 @@ function pour3d(ctx, water) {
   const rain = water ? null : kibbleRain(food, 70);
   if (rain) sc.scene.add(rain.mesh);
   const m = sc.mood;
-  m.posture = WAIT[sp];
+  m.posture = sp === 'rabbit' && !rabbitRears(sc) ? 'crouch' : WAIT[sp];
   m.look = bowlW().add(v3(0, D.r, 0));
   m.lookAmt = 0.8;
   m.ears = 'forward';
@@ -235,6 +235,13 @@ const TREAT_ICON = { dog: '🦴', cat: '🐟', rabbit: '🥕' };
 const CALM = { dog: 'sit', cat: 'sit', rabbit: 'rear' };
 
 /**
+ * Le lapin peut-il se redresser (assis sur son derrière, dressé) ? Pas le tête de lion (ni un lapin à « jupe » de poil
+ * long) : redressé, la barbe de sa crinière, poussée par le poil long, pendait sous son menton en une grande nappe
+ * pâle, parfois jusqu'au sol. Il reste ramassé, le nez levé.
+ */
+export const rabbitRears = (sc) => !(sc.model?.build?.skirt > 0.1);
+
+/**
  * La friandise en 3D : la logique est celle du jeu dessiné (food.js treatGame : attendre qu'il soit sage, en donner
  * juste le bon nombre). Notre main tendue, paume ouverte, avec la friandise de son espèce (biscuit en os, petit
  * poisson, bâtonnet de carotte) ; il s'agite (le chien frétille et tourne la tête partout, le lapin renifle), puis
@@ -261,7 +268,8 @@ export function petTreat3dGame(ctx) {
   // Main au repos : devant le bout de son nez, de notre côté, un peu plus bas (il doit lever la tête vers elle).
   const rest = L.muzzle.clone().add(v3(hl * 0.9 + 0.05, -hl * 0.15, hl * 0.6 + 0.06));
   // (le lapin se dresse pour la demander : sa tête monte de presque sa hauteur)
-  const tall = sp === 'rabbit' ? [L.poll.clone().add(v3(-L.size.len * 0.25, L.size.h * 0.9, 0)), ...L.ears.map((e) => e.clone().add(v3(-L.size.len * 0.25, L.size.h * 0.9, 0)))] : [];
+  const calmPose = sp === 'rabbit' && !rabbitRears(sc) ? 'crouch' : CALM[sp];
+  const tall = sp === 'rabbit' && calmPose === 'rear' ? [L.poll.clone().add(v3(-L.size.len * 0.25, L.size.h * 0.9, 0)), ...L.ears.map((e) => e.clone().add(v3(-L.size.len * 0.25, L.size.h * 0.9, 0)))] : [];
   sc.frame([L.muzzle, L.poll, ...L.ears, ...headRoom(sc), ...tall, L.chest, L.withers, L.croup, L.paws[0], L.paws[1], rest.clone().add(v3(0.06, -0.03, 0.04)), rest.clone().add(v3(-0.04, 0.05, 0))], { dir: [1.05, 0.2, 1], pad: sp === 'rabbit' ? 1.2 : 1.1, now: true });
   let given = 0;
   let pen = 0;
@@ -318,7 +326,7 @@ export function petTreat3dGame(ctx) {
       } else {
         m.look = hand.position;
         m.lookAmt = 1;
-        m.posture = calm || ctx.done ? CALM[sp] : 'stand';
+        m.posture = calm || ctx.done ? calmPose : 'stand';
         m.sniff = false;
         m.action = null;
         m.happy = s.given > s.n ? 0.2 : 0.9;

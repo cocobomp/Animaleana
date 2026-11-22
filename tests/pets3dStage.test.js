@@ -91,6 +91,29 @@ describe('brosser : la saleté se voit sur toutes les robes', () => {
   }
 });
 
+describe('le lapin tête de lion ne se redresse pas (la barbe de sa crinière pendait en nappe)', () => {
+  it('friandise, nourrir, griffes : il reste ramassé ; un autre lapin se dresse pour sa friandise', () => {
+    for (const [breed, rears] of [['tete_de_lion', false], ['nain', true]]) {
+      const { a, sc } = makePetStage({ species: 'rabbit', breed });
+      expect(pets3d.rabbitRears(sc)).toBe(rears);
+      for (const act of ['treat', 'feed', 'nails']) {
+        const ctx = ctxFor(a, sc);
+        const game = pets3d.PET_CARE3D_GAMES.rabbit[act](ctx);
+        const seen = new Set();
+        for (let i = 0; i < 90; i++) {
+          run(ctx, game, sc, 1 / 15);
+          seen.add(sc.mood.posture);
+        }
+        if (!rears) expect([...seen].filter((p) => p === 'rear' || p === 'sit'), act).toEqual([]);
+        game.destroy();
+        sc.mood.posture = null;
+        sc.mood.pose = null;
+      }
+      sc.dispose();
+    }
+  }, 90000);
+});
+
 describe('les cadrages en paysage et sur ordinateur', () => {
   // (la toile 3D d'un téléphone en paysage, 844 × 390 : 496 × 370 ; la fenêtre du jeu sur un ordinateur : 660 × 460)
   for (const gab of [GAUGES[0], GAUGES[1], GAUGES[2], GAUGES[3], GAUGES[5], GAUGES[6], GAUGES[7], { species: 'rabbit', breed: 'tete_de_lion' }]) {

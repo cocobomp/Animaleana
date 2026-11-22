@@ -19,6 +19,7 @@ import { realDogPose } from '../../game/models/dogReal.js';
 import { realCatPose } from '../../game/models/catReal.js';
 import { own, shadowed } from '../../game/care/petProps.js';
 import { skinPoints } from '../../game/care/petStage.js';
+import { rabbitRears } from './pets3d.js';
 import { audio } from '../../game/audio.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -125,12 +126,13 @@ export function petNails3dGame(ctx) {
   const FWD = v3(1, 0, 0).applyQuaternion(hq);
   const UP = v3(0, 1, 0);
   const SIDE = v3(0, 0, 1).applyQuaternion(hq); // (notre côté)
-  // Il donne la patte : le chien assis (« donne la patte »), le chat (« tape-m'en cinq »), le lapin dressé.
+  // Il donne la patte : le chien assis (« donne la patte »), le chat (« tape-m'en cinq »), le lapin dressé (le tête de lion, ramassé).
   const clip = () => {
     if (sp === 'dog') realDogPose(md, 'paw', 1);
     else if (sp === 'cat') realCatPose(md, 'paw', 1);
   };
-  m.posture = sp === 'rabbit' ? 'rear' : 'sit';
+  // (le tête de lion ne se dresse pas : il reste ramassé, et c'est le jeu qui lui avance la patte)
+  m.posture = sp === 'rabbit' ? (rabbitRears(sc) ? 'rear' : 'crouch') : 'sit';
   m.ears = 'forward';
   m.happy = 0.4;
   for (let i = 0; i < 25; i++) {

@@ -159,7 +159,7 @@ export function homeSet(stage) {
 
   // ---------------------------------------------------------------- le tapis tressé (sous lui)
   const rugR = Math.max(0.3, len * 0.7 + 0.1);
-  const rug = mesh(new THREE.CircleGeometry(rugR, 48), keep(new THREE.MeshStandardMaterial({ map: keep(braidedRugTexture()), roughness: 1 })), [L.body.x - len * 0.15, 0.004, 0.02], [-Math.PI / 2, 0, 0], false);
+  const rug = mesh(new THREE.CircleGeometry(rugR, 48), keep(new THREE.MeshStandardMaterial({ map: keep(braidedRugTexture()), roughness: 1, color: 0xbdb2a0 })), [L.body.x - len * 0.15, 0.004, 0.02], [-Math.PI / 2, 0, 0], false);
   rug.scale.set(1.25, 0.9, 1);
   // (son épaisseur : un bord arrondi)
   const rugEdge = mesh(new THREE.TorusGeometry(rugR, 0.006, 4, 64), keep(new THREE.MeshStandardMaterial({ color: 0xb98f6c, roughness: 1 })), [L.body.x - len * 0.15, 0.004, 0.02], [Math.PI / 2, 0, 0], false);
@@ -393,7 +393,7 @@ export function homeSet(stage) {
   const hemi = new THREE.HemisphereLight(0xfff1dc, 0x8a6a4c, high ? 0.7 : 0.8);
   g.add(hemi);
   // Lumière principale : douce et chaude, de notre côté (une fenêtre derrière nous) ; elle dessine le flanc.
-  const key = new THREE.DirectionalLight(0xffe6c4, 2.0);
+  const key = new THREE.DirectionalLight(0xffe6c4, 1.75);
   const span = Math.max(1.2, len * 2 + 0.9);
   key.position.set(L.body.x - 1.6 * span, 2.6 * span + 1, 2.4 * span);
   key.target.position.set(L.body.x, H * 0.4, 0);
@@ -420,7 +420,7 @@ export function homeSet(stage) {
   fill.position.set(R.side + 2, 1.4, 3);
   g.add(fill);
   // tache de soleil sur le parquet, rai de lumière et poussières
-  const patch = mesh(new THREE.PlaneGeometry(1, 1), keep(new THREE.MeshBasicMaterial({ map: keep(sunPatchTexture(2, 3)), color: 0xffd9a0, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })), [winX + 0.35, 0.006, R.back + 0.75], [-Math.PI / 2, 0, -0.35], false);
+  const patch = mesh(new THREE.PlaneGeometry(1, 1), keep(new THREE.MeshBasicMaterial({ map: keep(sunPatchTexture(2, 3)), color: 0xffd9a0, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false })), [winX + 0.35, 0.006, R.back + 0.75], [-Math.PI / 2, 0, -0.35], false);
   patch.scale.set(winW * 0.95, 1.25, 1);
   patch.renderOrder = 1;
   const shaft = sunShaft(keep, winX, winW, winH, R.back);

@@ -553,18 +553,18 @@ function streamCanvas() {
 /** Biscuit en forme d'os (chien). Longueur ~ len, couché le long de x. */
 export function boneTreat(keep, len = 0.07) {
   const g = new THREE.Group();
-  const mat = keep(new THREE.MeshStandardMaterial({ color: 0xc89a5e, roughness: 0.75, map: keep(noiseTexture('#c8945a', 0.35, 21, 64)) }));
-  const r = len * 0.16;
+  const mat = keep(new THREE.MeshStandardMaterial({ color: 0xe8c48e, roughness: 0.8, map: keep(noiseTexture('#e0b47a', 0.3, 21, 64)) }));
+  const r = len * 0.14;
   const mid = shadowed(new THREE.Mesh(keep(new THREE.CapsuleGeometry(r, len * 0.62, 4, 10)), mat));
   mid.rotation.z = Math.PI / 2;
   mid.scale.set(1, 1, 0.75);
   g.add(mid);
-  const knob = keep(new THREE.SphereGeometry(r * 1.25, 12, 8));
+  const knob = keep(new THREE.SphereGeometry(r * 1.45, 12, 8));
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
       const k = shadowed(new THREE.Mesh(knob, mat));
-      k.position.set(sx * len * 0.42, 0, sz * r * 0.85);
-      k.scale.set(1, 0.78, 1);
+      k.position.set(sx * len * 0.42, 0, sz * r * 1.05);
+      k.scale.set(1, 0.7, 1);
       g.add(k);
     }
   }
@@ -622,31 +622,38 @@ export function treatFor(species, keep, scale = 1) {
 export function petBrush(keep, size = 1) {
   const g = new THREE.Group();
   const s = size;
-  const wood = keep(new THREE.MeshStandardMaterial({ color: 0xb07a46, roughness: 0.45, map: keep(noiseTexture('#b07a46', 0.25, 13, 64)) }));
-  const head = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.035 * s, 0.035 * s, 0.014 * s, 24)), wood));
-  head.scale.set(1.25, 1, 0.85);
-  head.position.y = 0.022 * s;
+  const wood = keep(new THREE.MeshStandardMaterial({ color: 0xc08a52, roughness: 0.4, map: keep(noiseTexture('#c08a52', 0.22, 13, 64)) }));
+  // la tête ovale (dos en bois verni), un peu bombée
+  const head = shadowed(new THREE.Mesh(keep(new THREE.SphereGeometry(0.04 * s, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2)), wood));
+  head.scale.set(1.3, 0.35, 0.9);
+  head.position.y = 0.016 * s;
   g.add(head);
-  const handle = shadowed(new THREE.Mesh(keep(new THREE.CapsuleGeometry(0.011 * s, 0.09 * s, 4, 10)), wood));
-  handle.rotation.z = Math.PI / 2 - 0.25;
-  handle.position.set(0.085 * s, 0.04 * s, 0);
-  handle.scale.set(1, 1, 0.75);
+  const rim = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.04 * s, 0.04 * s, 0.008 * s, 28)), wood));
+  rim.scale.set(1.3, 1, 0.9);
+  rim.position.y = 0.012 * s;
+  g.add(rim);
+  // le manche, qui part vers +x en remontant
+  const handle = shadowed(new THREE.Mesh(keep(new THREE.CapsuleGeometry(0.012 * s, 0.1 * s, 4, 12)), wood));
+  handle.rotation.z = Math.PI / 2 - 0.3;
+  handle.position.set(0.1 * s, 0.035 * s, 0);
+  handle.scale.set(1, 1, 0.7);
   g.add(handle);
-  const pad = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.031 * s, 0.031 * s, 0.006 * s, 24)), keep(new THREE.MeshStandardMaterial({ color: 0x2f6aa8, roughness: 0.6 }))));
-  pad.scale.set(1.25, 1, 0.85);
-  pad.position.y = 0.012 * s;
+  // le coussin de caoutchouc rose et ses picots
+  const pad = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.036 * s, 0.036 * s, 0.006 * s, 28)), keep(new THREE.MeshStandardMaterial({ color: 0xe0708a, roughness: 0.55 }))));
+  pad.scale.set(1.3, 1, 0.9);
+  pad.position.y = 0.007 * s;
   g.add(pad);
-  // les picots
   const pins = [];
-  for (let i = -4; i <= 4; i++) for (let j = -3; j <= 3; j++) {
-    const x = i * 0.0072 * s;
-    const z = j * 0.0072 * s;
-    if ((x / (0.036 * s)) ** 2 + (z / (0.025 * s)) ** 2 > 1) continue;
+  for (let i = -6; i <= 6; i++) for (let j = -4; j <= 4; j++) {
+    const x = i * 0.0068 * s;
+    const z = j * 0.0068 * s;
+    if ((x / (0.044 * s)) ** 2 + (z / (0.03 * s)) ** 2 > 1) continue;
     pins.push([x, z]);
   }
-  const pin = new THREE.InstancedMesh(keep(new THREE.CylinderGeometry(0.0009 * s, 0.0009 * s, 0.01 * s, 4)), keep(new THREE.MeshStandardMaterial({ color: 0xd8dde2, metalness: 0.8, roughness: 0.3 })), pins.length);
+  const pin = new THREE.InstancedMesh(keep(new THREE.CylinderGeometry(0.0011 * s, 0.0011 * s, 0.008 * s, 4)), keep(new THREE.MeshStandardMaterial({ color: 0xe8ecf0, metalness: 0.85, roughness: 0.25 })), pins.length);
   const m4 = new THREE.Matrix4();
-  pins.forEach(([x, z], i) => pin.setMatrixAt(i, m4.makeTranslation(x, 0.005 * s, z)));
+  pins.forEach(([x, z], i) => pin.setMatrixAt(i, m4.makeTranslation(x, 0.002 * s, z)));
+  pin.castShadow = true;
   keep({ dispose: () => pin.dispose() });
   g.add(pin);
   return g;

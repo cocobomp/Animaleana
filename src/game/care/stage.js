@@ -479,8 +479,11 @@ export class CareStage {
   frame(points, { dir = [0.4, 0.25, 1], pad = 1.12, now = false, half = 0.45, lift = 0, raise = 0 } = {}) {
     const pts = points.filter(Boolean).map((p) => (p.isVector3 ? p.toArray() : p));
     if (!pts.length) return;
-    const aspect = this.size.w / Math.max(1, this.size.h);
-    const f = fitCamera(pts, { dir, fov: FOV, aspect, pad });
+    // (zone libre : la scène doit tenir dans la partie de la toile que la carte de fin laisse voir, voir setFocus)
+    const fh = this.focus ? this.focus.bottom - this.focus.top : this.size.h;
+    const aspect = this.size.w / Math.max(1, fh);
+    const fov = this.focus ? (2 * Math.atan(Math.tan((FOV * Math.PI) / 360) * (fh / this.size.h)) * 180) / Math.PI : FOV;
+    const f = fitCamera(pts, { dir, fov, aspect, pad });
     const goal = { position: new THREE.Vector3(...f.position), target: new THREE.Vector3(...f.target) };
     goal.position.y += lift;
     goal.target.y += lift;
@@ -507,9 +510,24 @@ export class CareStage {
   }
 
   /** Refait le dernier cadrage (la forme de la toile a changé). */
-  reframe() {
+  reframe(now = true) {
     const f = this.lastFrame;
-    if (f) this.frame(f.points, { ...f, now: true });
+    if (f) this.frame(f.points, { ...f, now });
+  }
+
+  /**
+   * La partie de la toile qu'on voit encore (px CSS, de top à bottom) : la carte de fin couvre le bas, la scène se
+   * recadre en douceur dans le haut (l'animal qui mange, qui boit, qui croque sa friandise reste visible au-dessus
+   * de la carte). null : toute la toile. Le centre de l'image glisse au milieu de cette zone (setViewOffset : le
+   * doigt et la projection suivent, ils passent par la caméra).
+   */
+  setFocus(top, bottom) {
+    const f = top === null || top === undefined ? null : { top: Math.max(0, top), bottom: Math.min(this.size.h, bottom) };
+    if (f && f.bottom - f.top < 80) return;
+    const same = (a, b) => (!a && !b) || (a && b && Math.abs(a.top - b.top) < 1 && Math.abs(a.bottom - b.bottom) < 1);
+    if (same(f, this.focus)) return;
+    this.focus = f;
+    this.reframe(false);
   }
 
   updateCamera(dt) {
@@ -520,6 +538,11 @@ export class CareStage {
       if (this.camPos.distanceToSquared(this.camGoal.position) < 1e-6) this.camGoal = null;
     }
     const c = this.camera;
+    // (zone libre : le centre de l'image glisse vers son milieu)
+    const offGoal = this.focus ? this.size.h / 2 - (this.focus.top + this.focus.bottom) / 2 : 0;
+    this.viewY = (this.viewY ?? 0) + (offGoal - (this.viewY ?? 0)) * (dt > 0 ? ease(dt, this.camHalf) : 1);
+    if (Math.abs(this.viewY) > 0.5) c.setViewOffset(this.size.w, this.size.h, 0, this.viewY, this.size.w, this.size.h);
+    else if (c.view?.enabled) c.clearViewOffset();
     c.position.copy(this.camPos);
     // (respiration de la caméra : à peine, la scène n'est jamais figée)
     c.position.y += Math.sin(this.time * 0.6) * 0.004;
@@ -540,6 +563,7 @@ export class CareStage {
     this.view = view;
     this.renderer.setSize(this.size.w, this.size.h, false);
     this.camera.aspect = this.size.w / this.size.h;
+    if (this.camera.view?.enabled) this.camera.setViewOffset(this.size.w, this.size.h, 0, this.viewY ?? 0, this.size.w, this.size.h);
     this.camera.updateProjectionMatrix();
     this.reframe();
   }

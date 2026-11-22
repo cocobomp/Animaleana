@@ -315,7 +315,7 @@ export function pansage3dGame(ctx) {
     m.nod = 1;
     nicker(sc);
     snort(sc);
-    sc.frame([L.muzzle, L.poll, ...L.ears, L.tail, L.croup, ...L.hooves], { dir: [0.4, 0.18, 1], pad: 1.08, half: 0.7, raise: 0.5 });
+    sc.frame([L.muzzle, L.poll, ...L.ears, L.tail, L.croup, ...L.hooves], { dir: [0.4, 0.18, 1], pad: 1.08, half: 0.7 });
   }
 
   // ---------------------------------------------------------------- les gestes (comme pansage.js)

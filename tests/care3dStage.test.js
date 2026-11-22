@@ -223,3 +223,33 @@ describe('le décor suit le gabarit (poulain, poney, grand cheval)', () => {
     }, 30000);
   }
 });
+
+describe('la carte de fin laisse voir l\'animal', () => {
+  it('setFocus : la scène se recadre dans la partie que la carte laisse voir (le doigt suit)', () => {
+    const { sc } = makeStage({ h: 560 });
+    const L = sc.marks;
+    const fd = sc.decor.props.feeder.group.getWorldPosition(new THREE.Vector3());
+    const pts = [L.muzzle, L.poll, ...L.ears, fd, L.withers];
+    sc.frame(pts, { dir: [-0.4, 0.42, 1], pad: 1.1, now: true });
+    const toPx = (p) => {
+      const q = sc.project(p);
+      return { x: q.x * sc.view.scale + sc.view.ox, y: q.y * sc.view.scale + sc.view.oy };
+    };
+    for (let i = 0; i < 90; i++) sc.update(1 / 30);
+    // (toute la toile : la scène en occupe le milieu, plus bas que la moitié)
+    expect(Math.max(...pts.map((p) => toPx(p).y))).toBeGreaterThan(560 * 0.5);
+    sc.setFocus(0, 250);
+    for (let i = 0; i < 120; i++) sc.update(1 / 30);
+    const ys = pts.map((p) => toPx(p).y);
+    expect(Math.max(...ys)).toBeLessThan(250);
+    expect(Math.min(...ys)).toBeGreaterThan(0);
+    // le doigt : un rayon sous le point projeté du garrot passe par le garrot
+    const w = toPx(L.withers);
+    const ray = sc.rayAt((w.x - sc.view.ox) / sc.view.scale, (w.y - sc.view.oy) / sc.view.scale);
+    expect(ray.distanceToPoint(L.withers)).toBeLessThan(1e-3);
+    sc.setFocus(null);
+    for (let i = 0; i < 120; i++) sc.update(1 / 30);
+    expect(sc.camera.view?.enabled ?? false).toBe(false);
+    sc.dispose();
+  });
+});

@@ -572,11 +572,14 @@ function openMinigame(ui, o) {
         // offsetHeight : taille de mise en page, sans l'animation d'apparition (scale) de la carte.
         return card.offsetHeight > room + 0.5;
       };
-      if (!tooTall()) return;
-      endEl.classList.add('tight');
-      // Encore trop haute (360 × 640, le plus long « Le savais-tu ? » et sa carte 🃏) : la tête de l'animal
-      // s'efface, pas la note ni le message.
-      if (tooTall()) endEl.classList.add('tighter');
+      if (tooTall()) {
+        endEl.classList.add('tight');
+        // Encore trop haute (360 × 640, le plus long « Le savais-tu ? » et sa carte 🃏) : la tête de l'animal
+        // s'efface, pas la note ni le message.
+        if (tooTall()) endEl.classList.add('tighter');
+      }
+      // Scène 3D : elle se recadre au-dessus de la carte (on le voit manger, boire, croquer sa friandise).
+      if (scene3d) scene3d.setFocus(0, card.offsetTop - 6);
     }
 
     /** 🃏 Une nouvelle carte se retourne (icône, fait, « ✨ Nouvelle carte ! 9/27 ») ; déjà trouvée : la ligne 💡. */

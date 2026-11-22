@@ -344,6 +344,64 @@ describe('curer le box du cheval en 3D (soin « clean »)', () => {
   }
 });
 
+/** Glisser un crottin du sol jusqu'à la brouette 3D (là où on la voit), et le lâcher dessus. */
+function dragToBarrow(ctx, game, sc) {
+  const s = game.peek();
+  const it = s.itemsScreen.find((x) => !x.good);
+  const to = { x: s.binScreen.x, y: s.binScreen.y + 12 };
+  game.down(it);
+  for (let k = 1; k <= 8; k++) game.move({ x: it.x + ((to.x - it.x) * k) / 8, y: it.y + ((to.y - it.y) * k) / 8 }, true);
+  game.up(to);
+  run(ctx, game, sc, 0.8);
+  return s.itemsScreen.length;
+}
+
+describe('glisser le crottin jusqu\'à la brouette 3D', () => {
+  for (const [breed, foal] of [['selle_francais', false], ['shetland', false]]) {
+    it(`soin « clean » (le cheval au fond) : lâché sur la brouette, il y est (${breed})`, () => {
+      const { a, sc } = makeStage({ breed, foal });
+      const ctx = ctxFor(a, sc);
+      const game = games.clean(ctx);
+      run(ctx, game, sc, 0.3);
+      const n = dragToBarrow(ctx, game, sc);
+      const s = game.peek();
+      expect(s.dirtInBin, 'compté dans la brouette').toBe(1);
+      expect(s.itemsScreen.length, 'un de moins par terre').toBe(n - 1);
+      game.destroy();
+      sc.dispose();
+    }, 60000);
+  }
+  it('corvée « curer » (box vide) : lâché sur la brouette, il y est', () => {
+    const sc = makeEmpty(barnMod.boxFloorSet);
+    const ctx = ctxFor(null, sc);
+    const game = floor3d.muck3dGame(ctx);
+    run(ctx, game, sc, 0.3);
+    dragToBarrow(ctx, game, sc);
+    expect(game.peek().dirtInBin).toBe(1);
+    game.destroy();
+    sc.dispose();
+  }, 60000);
+  it('lâché loin de la brouette : il retombe par terre, à la vue, et se reprend', () => {
+    const { a, sc } = makeStage();
+    const ctx = ctxFor(a, sc);
+    const game = games.clean(ctx);
+    run(ctx, game, sc, 0.3);
+    const s = game.peek();
+    const it = s.itemsScreen.find((x) => !x.good);
+    const to = { x: it.x + 40, y: it.y + 10 };
+    game.down(it);
+    for (let k = 1; k <= 4; k++) game.move({ x: it.x + (40 * k) / 4, y: it.y + (10 * k) / 4 }, true);
+    game.up(to);
+    run(ctx, game, sc, 0.5);
+    const after = game.peek();
+    expect(after.dirtInBin).toBe(0);
+    expect(after.itemsScreen.length).toBe(s.itemsScreen.length);
+    expect(after.itemsScreen.some((q) => Math.hypot(q.x - to.x, q.y - to.y) < 30), 'retombé sous le doigt').toBe(true);
+    game.destroy();
+    sc.dispose();
+  }, 60000);
+});
+
 describe('les corvées en 3D, sans animal (le box vide, l\'allée)', () => {
   it('la scène s\'ouvre sans animal : pas de double, le doigt ne touche aucun animal, tout est rendu à la fermeture', () => {
     const sc = makeEmpty(barnMod.boxFloorSet);

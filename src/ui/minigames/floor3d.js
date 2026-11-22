@@ -293,6 +293,28 @@ export function floorGame3d(ctx, make, o) {
     setTimeout(() => strawBits.splice(strawBits.indexOf(mesh), 1), 800);
   }
 
+  /** Le doigt (espace du cadre) est-il sur la brouette 3D ? (son contour à l'écran, élargi d'un doigt) */
+  root.updateMatrixWorld(true);
+  const barrowBox = barrow ? new THREE.Box3().setFromObject(barrow.group) : null;
+  const corner = new THREE.Vector3();
+  function overBarrow(p) {
+    if (!barrowBox) return false;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      corner.set(i & 1 ? barrowBox.max.x : barrowBox.min.x, i & 2 ? barrowBox.max.y : barrowBox.min.y, i & 4 ? barrowBox.max.z : barrowBox.min.z);
+      const q = sc.project(corner);
+      x0 = Math.min(x0, q.x);
+      y0 = Math.min(y0, q.y);
+      x1 = Math.max(x1, q.x);
+      y1 = Math.max(y1, q.y);
+    }
+    const m = 14;
+    return p.x > x0 - m && p.x < x1 + m && p.y > y0 - m && p.y < y1 + m;
+  }
+
   // ---------------------------------------------------------------- caméra
   function frame(now = false) {
     const pts = [toWorld(F.x, F.y, 0), toWorld(F.x + F.w, F.y, 0), toWorld(F.x, F.y + F.h, 0), toWorld(F.x + F.w, F.y + F.h, 0)];
@@ -353,7 +375,10 @@ export function floorGame3d(ctx, make, o) {
       if (down && cells && o.cells === 'replicate' && play.peek().phase === 'spread') replicateSpread(q);
     },
     up(p) {
-      const q = fingerToLogic(p) ?? lp;
+      let q = fingerToLogic(p) ?? lp;
+      // (glissé sur la brouette 3D : il va dans la brouette. Elle n'est pas toujours pile à la place de celle du jeu
+      // dessiné — avec le cheval, elle recule pour tenir dans le box — : la logique reçoit alors sa brouette à elle)
+      if (held && p0.bin && overBarrow(p)) q = { ...q, x: p0.bin.x, y: p0.bin.y };
       const before = floorKeys();
       play.up?.(q);
       last = null;

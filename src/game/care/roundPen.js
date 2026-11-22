@@ -24,7 +24,7 @@ export function sandTexture(seed = 4) {
     for (let i = 0; i < 30; i++) {
       const g = c.createRadialGradient(0, 0, 0, 0, 0, 1);
       const light = r() < 0.5;
-      g.addColorStop(0, light ? 'rgba(240,226,196,0.35)' : 'rgba(176,148,104,0.28)');
+      g.addColorStop(0, light ? 'rgba(240,226,196,0.18)' : 'rgba(176,148,104,0.12)');
       g.addColorStop(1, 'rgba(0,0,0,0)');
       c.save();
       c.translate(r() * 256, r() * 256);
@@ -173,7 +173,7 @@ function skyDome(keep, r = 60) {
  */
 export function penSize({ L, ss = 1, scale = 1 }) {
   const R = Math.max(1.4, 1.5 * L, (4.25 * ss * scale) / 1.25);
-  const F = R + Math.max(0.85, 0.55 * L);
+  const F = R + Math.max(1.1, 0.7 * L);
   return { R, F };
 }
 

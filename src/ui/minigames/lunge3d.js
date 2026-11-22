@@ -171,7 +171,7 @@ function penRig(ctx, kind) {
   ring.renderOrder = 2;
   sc.scene.add(ring);
   let ringAt = null;
-  const WHITE = [1, 1, 1, 0.55];
+  const WHITE = [1, 1, 1, 0.32];
   const GREEN = [0.25, 0.68, 0.38, 0.95];
   const BLUE = [0.24, 0.48, 0.85, 1];
   /** L'anneau : rempli en bleu jusqu'au travail fait, la zone juste en vert. */
@@ -233,7 +233,10 @@ function penRig(ctx, kind) {
   let lastRot = 0;
   const pinStats = { drops: 0 };
   const pinHook = (dt) => {
-    if (!md.legs?.length || !(dt > 0)) return;
+    if (!md.legs?.length || !(dt > 0)) {
+      md.skeleton?.update();
+      return;
+    }
     const hp = sc.holder.position;
     const rot = sc.holder.rotation.y;
     const moved = lastPos ? Math.hypot(hp.x - lastPos.x, hp.z - lastPos.z) / dt + Math.abs(wrap(rot - lastRot)) / dt : 0;
@@ -284,6 +287,11 @@ function penRig(ctx, kind) {
       l.top.quaternion.premultiply(_qw);
       l.top.updateMatrixWorld(true);
     }
+    // Le squelette du pelage, remis à jour ici, à chaque image. three.js le met à jour une fois par image… en le
+    // comptant à la passe des ombres de l'image d'avant ; en qualité basse, la scène ne refait ses ombres qu'une image
+    // sur deux (stage.js render) : une image sur deux, le cheval était dessiné avec les os de l'image précédente,
+    // en retard sur son licol et sa longe (50 cm au galop dans un navigateur lent : le licol flottait devant le nez).
+    md.skeleton?.update();
   };
   sc.afterLife.push(pinHook);
 
@@ -335,7 +343,7 @@ function penRig(ctx, kind) {
     // (le premier cadrage à la vraie taille de la toile : sans fondu)
     const first = !framed && w > 2;
     if (w > 2) framed = true;
-    sc.frame(pts, { dir: portrait ? [0, 1.08, 1] : [0, 0.66, 1], pad: 1.03, now: now || first || !sc.ready });
+    sc.frame(pts, { dir: portrait ? [0, 0.78, 1] : [0, 0.62, 1], pad: 1.03, now: now || first || !sc.ready });
   }
   /** Décalage de la jauge des allures vers le bas de la scène (espace du cadre). */
   const gaugeDy = () => Math.max(0, (ctx.view?.y1 ?? 360) - 8 - GAIT_GAUGE.bottom);
@@ -453,8 +461,8 @@ export function lunge3dGame(ctx) {
   const wl = clamp(R / 4.2, 0.55, 1);
   whip.scale.setScalar(wl);
   sc.scene.add(whip);
-  const lash = ribbon(0x2a2a2a, 0.004, 12);
-  const line = ribbon(0xf2eee6, 0.009, 20);
+  const lash = ribbon(0x2a2a2a, 0.006, 12);
+  const line = ribbon(0xf4efe2, 0.014, 20);
   sc.scene.add(lash, line);
   const lineA = Array.from({ length: 20 }, () => V());
   const lashA = Array.from({ length: 12 }, () => V());
@@ -520,7 +528,7 @@ export function lunge3dGame(ctx) {
       place();
       // il plie l'encolure vers le dedans : il regarde l'enfant
       m.look = rig.kidHead(_w).clone();
-      m.lookAmt = moving ? 0.34 : 0.6;
+      m.lookAmt = moving ? 0.2 : 0.5;
       // l'enfant marche son petit cercle, tournée vers lui (un peu vers là où il va), à la même vitesse angulaire
       const hp = sc.holder.position;
       const goal = V(Math.cos(phi) * rc, 0, Math.sin(phi) * rc);
@@ -541,7 +549,7 @@ export function lunge3dGame(ctx) {
       // la chambrière : pointée vers l'arrière du cheval, bas ; elle se lève et sa mèche claque sur ✨
       kid.hands[1].getWorldPosition(_v);
       _p.subVectors(sc.holder.localToWorld(_w.set(0, 0.5, -1.2)), _v).normalize();
-      _p.y = Math.min(_p.y, -0.15) + 0.55 * Math.sin(Math.min(1, whipK * 1.4) * Math.PI) * whipK;
+      _p.y = Math.min(_p.y, -0.32) + 0.55 * Math.sin(Math.min(1, whipK * 1.4) * Math.PI) * whipK;
       _p.normalize();
       whip.position.copy(_v);
       whip.quaternion.setFromUnitVectors(_w.set(0, 1, 0), _p);

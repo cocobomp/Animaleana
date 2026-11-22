@@ -559,6 +559,31 @@ describe('les corvées en 3D, sans animal (le box vide, l\'allée)', () => {
     sc.dispose();
   }, 60000);
 
+  it('le cheval qui habite le box est dans la scène de la corvée (curer, pailler), pas dans l\'allée ni dans un box vide', () => {
+    const horse = { id: 'h1', species: 'horse', name: 'Honey' };
+    const game = { interiors: { boxOccupant: (i) => (i === 0 ? horse : null) } };
+    const has = () => true;
+    expect(chores3d.choreHorse(game, { kind: 'muck', target: 0 }, has)).toBe(horse);
+    expect(chores3d.choreHorse(game, { kind: 'straw', target: 0 }, has)).toBe(horse);
+    expect(chores3d.choreHorse(game, { kind: 'muck', target: 1 }, has), 'box libre').toBe(null);
+    expect(chores3d.choreHorse(game, { kind: 'sweep' }, has), 'l\'allée').toBe(null);
+    expect(chores3d.choreHorse(game, { kind: 'muck', target: 0 }, () => false), 'modèle pas chargé : box vide').toBe(null);
+    // et la corvée se joue avec lui : il mange au fond, le sol de la logique est devant lui
+    const { a, sc } = (() => {
+      const r = makeStage();
+      return r;
+    })();
+    const ctx = ctxFor(a, sc);
+    const game2 = floor3d.muck3dGame(ctx);
+    run(ctx, game2, sc, 0.3);
+    for (const q of game2.peek().itemsScreen) expect(inView(q, ctx.view)).toBe(true);
+    pickAll(ctx, game2, sc);
+    run(ctx, game2, sc, 1);
+    expect(ctx.finished?.why).toBe('just');
+    game2.destroy();
+    sc.dispose();
+  }, 60000);
+
   it('sans WebGL, la scène d\'une corvée ne s\'ouvre pas (le jeu dessiné prend la main)', () => {
     const ui = { game: null };
     const host = { insertBefore() {} };

@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { CareStage } from '../../game/care/stage.js';
+import { care3dPossible, care3dSetting } from '../../game/care/which.js';
 import { boxFloorSet, bareBoxSet, aisleSet, AISLE, pushBroom, bigDustpan, rubberMatTexture } from '../../game/care/barn.js';
 import { sweepGame } from './chores.js';
 import { drawMiniGauge } from './clean.js';
@@ -33,9 +34,11 @@ export function openChoreScene(ui, chore, host, above) {
   const game = ui.game ?? null;
   // (le box d'un cheval : sa plaque à son nom ; sinon une plaque vierge)
   const a = Number.isInteger(chore.target) ? game?.interiors?.boxOccupant?.(chore.target) ?? null : null;
+  // (le cheval qui habite le box est là : il mange au fond pendant qu'on cure ou qu'on paille devant lui)
+  const horse = choreHorse(game, chore);
   let scene = null;
   try {
-    scene = new CareStage({ game, a, noAnimal: true, set });
+    scene = new CareStage({ game, a, noAnimal: !horse, entity: horse ? game?.entities?.get?.(horse.id) ?? null : null, set });
   } catch (e) {
     console.warn('[care3d] scène 3D impossible, jeu dessiné', e?.message ?? e);
     try {
@@ -51,6 +54,19 @@ export function openChoreScene(ui, chore, host, above) {
     ui.vxCover = Math.max(0, (ui.vxCover ?? 1) - 1);
   };
   return scene;
+}
+
+/**
+ * Le cheval à montrer dans la scène d'une corvée : celui qui habite le box qu'on cure ou qu'on paille (comme le jeu
+ * dessiné : « le cheval qui y habite regarde faire »), si son modèle réaliste est chargé ; sinon null (box vide).
+ * has : (clé du modèle) → chargé ? (injecté par les tests).
+ */
+export function choreHorse(game, chore, has = undefined) {
+  if (chore?.kind !== 'muck' && chore?.kind !== 'straw') return null;
+  if (!Number.isInteger(chore.target)) return null;
+  const a = game?.interiors?.boxOccupant?.(chore.target) ?? null;
+  if (a?.species !== 'horse') return null;
+  return care3dPossible(a, { setting: care3dSetting(), ...(has ? { has } : {}) }) ? a : null;
 }
 
 // ---------------------------------------------------------------- balayer l'allée

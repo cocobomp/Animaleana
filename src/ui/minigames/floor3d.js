@@ -364,7 +364,7 @@ export function floorGame3d(ctx, make, o) {
     const pts = [toWorld(F.x, F.y, 0), toWorld(F.x + F.w, F.y, 0), toWorld(F.x, F.y + F.h, 0), toWorld(F.x + F.w, F.y + F.h, 0)];
     if (barrow) pts.push(barrow.group.localToWorld(barrow.mouth.clone().add(v3(0.32, 0, 0))), barrow.group.localToWorld(v3(-0.32, 0.6, 0)), barrow.group.localToWorld(v3(0, 0.45, 0.9)));
     if (bale) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(bale.group.localToWorld(v3(x * bale.w / 2, bale.h, z * bale.d / 2)));
-    if (horse) pts.push(sc.marks.withers, sc.marks.croup, sc.marks.poll);
+    if (horse) pts.push(sc.marks.withers, sc.marks.croup, sc.marks.poll, sc.marks.muzzle);
     // (en portrait, l'image est plus haute que le sol : on y met le mur du fond et sa fenêtre, plutôt que 20 à 25 %
     // de béton vide sous le box)
     if (sc.size.h > sc.size.w * 1.15) pts.push(v3(-S.halfW, 1.45, S.back), v3(S.halfW, 1.45, S.back));

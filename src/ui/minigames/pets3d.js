@@ -14,6 +14,7 @@ import { justRule } from './grooming.js';
 import { mudTexture } from '../../game/care/props.js';
 import { petBrush } from '../../game/care/petProps.js';
 import { softDot } from '../../game/care/textures.js';
+import { petNails3dGame } from './petNails3d.js';
 import { withLogic, sideGauge, bubble } from './care3d.js';
 import { kibbleBag, kibbleRain, pitcher, FOODS, own, treatFor } from '../../game/care/petProps.js';
 import { handModel, aimHand } from '../../game/care/props.js';
@@ -179,7 +180,7 @@ function pour3d(ctx, water) {
   function frameEat() {
     const e = eatAt;
     const A = (p) => p.clone().add(v3(ahead, 0, 0));
-    sc.frame([A(L.poll), A(L.withers), A(L.croup), A(L.tail), ...L.ears.map(A), ...L.paws.map(A), e.clone().add(v3(-D.r, -D.depth, 0)), e.clone().add(v3(D.r, -D.depth, D.r))], { dir: [0.5, 0.32, 1], pad: 1.2, half: 0.6 });
+    sc.frame([A(L.poll), A(L.withers), A(L.croup), A(L.tail), ...L.ears.map(A), ...L.paws.map(A), e.clone().add(v3(-D.r, -D.depth, 0)), e.clone().add(v3(D.r, -D.depth, D.r))], { dir: [0.5, 0.3, 1], pad: 1.45, half: 0.6 });
   }
 }
 
@@ -206,6 +207,7 @@ export function petTreat3dGame(ctx) {
   const play = withLogic(ctx, treatGame, () => sc.project(sc.live('muzzle').add(v3(0, hl * 0.4, 0))));
   const keep = own();
   const hand = handModel(keep, sc.decor.props.hand ?? {});
+  hand.scale.setScalar(Math.max(0.7, Math.min(1, 0.6 + (0.4 * L.size.len) / 0.9)));
   sc.scene.add(hand);
   const tscale = Math.max(0.45, Math.min(1.2, hl / 0.2));
   const treat = treatFor(sp, keep, tscale);
@@ -909,7 +911,7 @@ export function shoulderOf(sc) {
 
 /** Les soins 3D des animaux de compagnie, par espèce (branchés dans CARE3D_GAMES : src/ui/minigames/care3d.js). */
 export const PET_CARE3D_GAMES = {
-  dog: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame },
-  cat: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame },
+  dog: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame, nails: petNails3dGame },
+  cat: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame, nails: petNails3dGame },
   rabbit: { feed: petFeed3dGame, water: petWater3dGame, treat: petTreat3dGame, pet: petPet3dGame, brush: petBrush3dGame },
 };

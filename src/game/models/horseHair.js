@@ -218,7 +218,7 @@ export function hairMassPixels() {
     const cy = acc + h / 2;
     acc += h;
     return {
-      cy, hw: h * 0.62, tone: 0.62 + 0.38 * rng(), shift: rng(), u0: rng() * 0.06, end: 0.8 + 0.2 * rng(),
+      cy, hw: h * 0.62, tone: 0.62 + 0.38 * rng(), shift: rng(), u0: rng() * 0.06, end: 0.86 + 0.14 * rng(),
       wf: 0.8 + rng() * 1.4, wp: rng() * 6.28, wa: 1.5 + rng() * 3, seed: Math.floor(rng() * 1e6),
       // (deux jours plus sombres le long de la mèche, qui la divisent sur une partie de sa longueur)
       splits: [0, 1].map(() => ({ at: rng() * 1.6 - 0.8, u0: 0.1 + rng() * 0.5, u1: 0.55 + rng() * 0.45 })),
@@ -239,11 +239,14 @@ export function hairMassPixels() {
       const u = (x + 0.5) / W;
       if (u > C.end) break;
       if (u < C.u0) continue;
-      // (la mèche s'effile sur son dernier tiers, et s'efface au bout ; au bord gauche, elle commence en pointe)
-      const tip = smooth(C.end - 0.3, C.end, u);
+      // (la mèche se resserre un peu sur son dernier tiers, mais finit en crins de longueurs inégales — chaque crin
+      // s'arrête à sa place, plus tôt au bord de la mèche — et pas en une seule pointe : avant, chaque mèche de la
+      // masse finissait en triangle lisse et le bas de la crinière se lisait en glaçons ou en dents de scie. Au bord
+      // gauche, de même, chaque crin commence à sa place : un bord effrangé, pas des dents.)
+      const tip = smooth(C.end - 0.18, C.end, u);
       const head = smooth(C.u0, C.u0 + 0.05, u);
-      const wt = C.hw * (1 - 0.85 * tip) * (0.2 + 0.8 * head);
-      const fade = (1 - smooth(C.end - 0.04, C.end, u)) * smooth(C.u0, C.u0 + 0.008, u);
+      const wt = C.hw * (1 - 0.35 * tip) * (0.55 + 0.45 * head);
+      const fade = smooth(C.u0, C.u0 + 0.008, u);
       const vc = C.cy + Math.sin(u * 6.28 * C.wf + C.wp) * C.wa * smooth(0.04, 0.4, u);
       const sp = C.splits.map((q) => smooth(q.u0, q.u0 + 0.08, u) * (1 - smooth(q.u1 - 0.08, q.u1, u)));
       for (let o = -1; o <= 1; o++) {
@@ -252,12 +255,20 @@ export function hairMassPixels() {
         const yb = Math.min(Hh - 1, Math.ceil(c0 + wt + 1));
         for (let y = ya; y <= yb; y++) {
           const dy = y + 0.5 - c0;
-          const cov = Math.min(1, Math.max(0, wt + 0.5 - Math.abs(dy))) * fade;
-          if (cov <= 0) continue;
           const e = Math.max(-1, Math.min(1, dy / Math.max(0.8, wt)));
           // crins de la mèche : un ton et un reflet par crin (1,6 px), le long de la mèche
           const sIdx = Math.floor((dy + 64) / 1.6);
           const hs = hash(C.seed + sIdx * 131);
+          // (bout de ce crin : jusqu'à 20 % de la longueur avant le bout de la mèche, plus tôt au bord, jamais avant la fin
+          // du fond opaque (u ≈ 0,77 : pas de bord droit) ; début, au bord gauche, entre celui de la mèche et u = 0,085 :
+          // racines pleines de la queue et du toupet en HAIR_MASS.root)
+          const he = hash(C.seed + sIdx * 313 + 7);
+          const ae = Math.abs(dy) / Math.max(0.8, C.hw);
+          const endS = 0.8 + (C.end - 0.8) * (0.15 + 0.85 * he) * (1 - 0.6 * Math.min(1, ae * ae));
+          const startS = C.u0 + Math.max(0, 0.085 - C.u0) * hash(C.seed + sIdx * 571 + 3);
+          const cov = Math.min(1, Math.max(0, wt + 0.5 - Math.abs(dy))) * fade
+            * (1 - smooth(endS - 0.035, endS, u)) * smooth(startS, startS + 0.01, u);
+          if (cov <= 0) continue;
           // (jours : creux étroits aux places tirées, sur une partie de la longueur)
           let gap = 1;
           C.splits.forEach((q, j) => {

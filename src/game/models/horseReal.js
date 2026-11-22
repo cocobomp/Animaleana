@@ -512,51 +512,56 @@ function solesOf(coat, rest) {
 }
 
 /**
- * Mèches de gauche de la masse de la crinière (celles qui passent par-dessus la crête) : en grappes de une à quatre
- * mèches qui se chevauchent, séparées par des vides inégaux, de largeurs et de longueurs très dispersées (une longue
- * par grappe, les autres courtes) et d'un ton propre à chacune ; dans une grappe, chacune un peu au-dessus de la
- * précédente (h : pas de scintillement là où elles se recouvrent). Avant : une par huitième de la crête, à peine
- * décalées, de formes voisines — au téléphone, une rangée régulière de pétales gris (crins clairs) ou de flammes
- * (crins foncés) sous le rouleau. t : place le long de la crête (0 garrot, 1 nuque) ; w : demi-largeur (part de la
- * crête) ; L : longueur sous le bord du rouleau (m) ; v0 : bande de la texture ; tone : ton ; h : écart à la peau (m).
+ * Mèches de gauche de la masse de la crinière (celles qui passent par-dessus la crête) : une frange continue le long de
+ * la crête, de mèches qui se chevauchent toutes (jamais de vide entre deux voisines), surtout courtes (3 à 8 cm sous le
+ * bord du rouleau pour une crinière de cheval de selle), quelques-unes plus longues (plus pour une crinière longue ou
+ * épaisse), de largeurs et de tons propres à chacune, sur deux couches (une sur deux un peu au-dessus de ses voisines :
+ * pas de scintillement là où elles se recouvrent). Avant : trois ou quatre grappes séparées par de grands vides, une
+ * longue mèche effilée par grappe — vue de gauche, des glaçons ou des dents de scie sous la crête. t : place le long de
+ * la crête (0 garrot, 1 nuque) ; w : demi-largeur (part de la crête) ; L : longueur sous le bord du rouleau (m) ; v0 :
+ * bande de la texture ; tone : ton ; h : écart à la peau (m) ; long : une des longues.
  */
-export function leftLocks(n, rng, crestSpan, len0) {
+export function leftLocks(n, rng, crestSpan, len0, longShare = 0.15) {
   if (!n) return [];
-  const nG = n >= 10 ? 4 : 3;
-  const sizes = new Array(nG).fill(1);
-  for (let k = nG; k < n; k++) {
-    let g = Math.floor(rng() * nG);
-    while (sizes[g] >= 4) g = (g + 1) % nG;
-    sizes[g]++;
-  }
-  // (vides inégaux entre les grappes, plus courts aux deux bouts)
-  const gaps = Array.from({ length: nG + 1 }, (_, i) => (i === 0 || i === nG ? 0.35 : 0.55) + rng());
-  const tot = gaps.reduce((a, b) => a + b, 0);
+  // (la première un peu après le bout du rouleau, au garrot : avant, elle dépassait du rouleau en aileron)
+  const t0 = 0.1;
+  const t1 = 0.9;
+  const s = (t1 - t0) / Math.max(1, n - 1);
+  // (places un peu inégales, bouts fixés)
+  const ts = Array.from({ length: n }, (_, k) => t0 + s * (k + (k > 0 && k < n - 1 ? (rng() - 0.5) * 0.5 : 0)));
+  // (longueurs : un tirage par mèche, lissé avec ses voisines — la frange monte et descend doucement, pas en marches
+  // d'escalier ; les longues vont par passages de deux à quatre voisines, aux bords adoucis : une partie de la crinière
+  // qui tombe à gauche, pas des glaçons isolés entre des courtes)
+  const raw = Array.from({ length: n }, () => rng());
+  const ph = [rng() * 6.283, rng() * 6.283];
+  const f1 = 1.6 + 0.8 * rng();
   const out = [];
-  let acc = 0;
-  for (let g = 0; g < nG; g++) {
-    acc += gaps[g];
-    const tc = 0.14 + (acc / tot) * 0.7;
-    const sz = sizes[g];
-    const lead = Math.floor(rng() * sz);
-    // (demi-largeurs 2,1 à 4,2 cm, le plus souvent étroites)
-    const ws = Array.from({ length: sz }, () => 0.021 + 0.021 * rng() ** 1.5);
-    // (voisines qui se chevauchent : centres écartés de 40 à 65 % de leurs demi-largeurs mises bout à bout)
-    const pos = [0];
-    for (let k = 1; k < sz; k++) pos.push(pos[k - 1] + (ws[k - 1] + ws[k]) * (0.4 + 0.25 * rng()));
-    const mid = pos[sz - 1] / 2;
-    for (let k = 0; k < sz; k++) {
-      out.push({
-        t: tc + (pos[k] - mid) / crestSpan,
-        w: ws[k] / crestSpan,
-        L: (k === lead ? 0.3 + 0.16 * rng() : 0.12 + 0.14 * rng()) * len0,
-        v0: rng() * (1 - LEFT_VSPAN),
-        tone: 0.86 + 0.2 * rng(),
-        h: 0.003 + 0.002 * k,
-      });
-    }
+  for (let k = 0; k < n; k++) {
+    // (demi-largeur : 60 à 90 % du plus grand écart avec une voisine — deux voisines se recouvrent toujours d'au moins
+    // un cinquième —, entre 2 et 4,5 cm)
+    const gap = Math.max(k > 0 ? ts[k] - ts[k - 1] : 0, k < n - 1 ? ts[k + 1] - ts[k] : 0);
+    const w = Math.min(0.045, Math.max(0.02, (0.6 + 0.3 * rng()) * gap * crestSpan)) / crestSpan;
+    const at = (j) => raw[Math.min(n - 1, Math.max(0, j))];
+    const r = (at(k - 2) + 2 * at(k - 1) + 3 * at(k) + 2 * at(k + 1) + at(k + 2)) / 9;
+    // (passages longs : une onde lente le long de la crête, au-dessus du seuil qui en laisse la part longShare)
+    const wave = 0.5 + 0.4 * Math.sin(6.283 * f1 * ts[k] + ph[0]) + 0.08 * Math.sin(6.283 * f1 * 2.3 * ts[k] + ph[1]);
+    const th = 1 - 1.3 * longShare;
+    const lg = longShare > 0 ? smooth(th - 0.1, th + 0.1, wave) : 0;
+    // (plus courtes au garrot, où la crinière finit, et vers la nuque, où passe la têtière)
+    const prof = 0.45 + 0.55 * smooth(0, 0.3, ts[k]) * (1 - 0.45 * smooth(0.72, 0.92, ts[k]));
+    // (r lissé sur cinq voisines : de 0,3 à 0,7 le plus souvent)
+    const short = 0.07 + 0.22 * r;
+    out.push({
+      t: ts[k],
+      w,
+      L: (short + (0.26 + 0.06 * r - short) * lg) * len0 * prof,
+      v0: rng() * (1 - LEFT_VSPAN),
+      tone: 0.86 + 0.2 * rng(),
+      h: 0.003 + 0.0025 * (k % 2) + 0.0015 * lg,
+      long: lg > 0.5,
+    });
   }
-  return out.sort((a, b) => a.t - b.t);
+  return out;
 }
 
 /**
@@ -1022,8 +1027,9 @@ const FORELOCK = { normal: 0.46, long: 0.56, thick: 0.48, short: 0.26, brush: 0.
 const MANE_CARDS = 0.52;
 const MANE_LEFT = 0.2;
 const MANE_ROLL = 0.055;
-const LEFT_TAPER = 0.7;
-const LEFT_VSPAN = 0.45;
+const LEFT_TAPER = 0.25;
+const LEFT_VSPAN = 0.5;
+const LEFT_STEP = 0.05;
 const MANE_MASS_LEN = 0.8;
 const FORE_CARDS = 0.55;
 const FORE_THICK = 0.02;
@@ -1479,17 +1485,21 @@ function maneCards(S, B, body, pos, coat) {
   // bombée au milieu, resserrée en pointe vers le bas, plus longue au milieu (une mèche, pas un rabat coupé droit).
   // Places et longueurs tirées d'une suite à part (la répartition des cartes ne change pas).
   const lrng = mulberry(4127);
-  const nLeft = style === 'short' ? 0 : style === 'long' || style === 'thick' ? 10 : 8;
-  const lefts = leftLocks(nLeft, lrng, crestSpan, len0);
+  // (une mèche tous les 5 cm environ)
+  const nLeft = style === 'short' ? 0 : Math.max(8, Math.round(crestSpan / LEFT_STEP));
+  const lefts = leftLocks(nLeft, lrng, crestSpan, len0, style === 'long' ? 0.3 : style === 'thick' ? 0.22 : 0.12);
   // (part d'une mèche de gauche à la place t : les cartes courtes de gauche n'y vont pas, la mèche a les siennes)
   const leftLock = (t) => {
     let e = 0;
     for (const m of lefts) e = Math.max(e, 1 - smooth(m.w * 0.45, m.w, Math.abs(t - m.t)));
     return e;
   };
-  const LR = 5;
-  const LP = 10;
-  const lockT = 0.016 * Math.sqrt(S.D.scale.gx ?? 1);
+  // (rangées en travers et points le long des crins : 3 × 10 pour une longue, 3 × 9 pour une courte — la frange en a
+  // beaucoup ; trois rangées suffisent à son bas arrondi et à son relief bombé)
+  const LRL = 3;
+  const LPL = 10;
+  // (bombée d'à peine 8 mm : voisines, elles se chevauchent ; plus bombées, la frange se lisait en écailles)
+  const lockT = 0.008 * Math.sqrt(S.D.scale.gx ?? 1);
   // Chemin d'une mèche qui passe à gauche, à la place t : sur le flanc gauche du rouleau (les points de la nappe, de la
   // crête à son bord gauche, entre deux stations), à la part keep de son épaisseur (1 : dessus, à h ; moins : dedans),
   // puis le long de la peau sur L sous le bord du rouleau. (Posées par la pesanteur sur le champ « corps + épaisseur »,
@@ -1501,37 +1511,72 @@ function maneCards(S, B, body, pos, coat) {
     const u = Math.min(1, Math.max(0, (t - rows[i].t) / (rows[i + 1].t - rows[i].t)));
     return rows[i].pts[k].clone().lerp(rows[i + 1].pts[k], u);
   };
-  const leftPath = (t, L, keep = 1, h = 0.003) => {
+  // (sink : la racine, sur le dessus de la crête, enfoncée d'autant dans le rouleau, de moins en moins vers son bord — la
+  // mèche sort du rouleau : son haut ne dépasse pas de la silhouette de la crête en marches)
+  const rollAt = (t, keep = 1, h = 0.003, sink = 0) => {
     const roll = [];
     for (let k = NL - 1; k >= 0; k--) {
       const p = rowAt(t, k);
       const d = body(p);
-      roll.push(p.addScaledVector(body.grad(p, V(), d), h - (1 - keep) * Math.max(0, d)));
+      const sk = sink * (k / (NL - 1)) ** 2;
+      roll.push(p.addScaledVector(body.grad(p, V(), d), h - (1 - keep) * Math.max(0, d) - sk));
     }
+    return roll;
+  };
+  const hangFrom = (roll, t, L, np = 6) => {
     const edge = roll[NL - 1];
     const dir = edge.clone().sub(roll[NL - 2]).normalize();
     // (peignée à demi vers le garrot, comme la nappe de droite : la mèche tombe en biais, pas à plomb)
-    const hang = drape(body, edge, dir, L, { h: 0.004, bend: 0.04, np: 6, steps: Math.max(8, Math.round(L / 0.012)), stick: 0.02, grav: gravAt(frameAt(t).dir) });
+    return drape(body, edge, dir, L, { h: 0.004, bend: 0.04, np, steps: Math.max(8, Math.round(L / 0.012)), stick: 0.02, grav: gravAt(frameAt(t).dir) });
+  };
+  const rollLen = (roll) => {
     let rl = 0;
     for (let k = 1; k < NL; k++) rl += roll[k].distanceTo(roll[k - 1]);
-    return { pts: [...roll, ...hang.slice(1)], f0: rl / (rl + L) };
+    return rl;
+  };
+  const leftPath = (t, L, keep = 1, h = 0.003, sink = 0) => {
+    const roll = rollAt(t, keep, h, sink);
+    const hang = hangFrom(roll, t, L);
+    return { pts: [...roll, ...hang.slice(1)], f0: rollLen(roll) / (rollLen(roll) + L) };
   };
   const locks = lefts.map((m) => {
+    const LR = m.long ? LRL : 3;
+    const LP = m.long ? LPL : 9;
     const lr = [];
+    const sink = m.h + 0.004;
     for (let j = 0; j < LR; j++) {
       const r = (j / (LR - 1)) * 2 - 1;
       const t = m.t + r * m.w;
-      const path = leftPath(t, m.L * (1 - 0.15 * r * r), 1, m.h);
+      // (un peu plus longue au milieu : le bas de la mèche s'arrondit à peine — trois rangées : plus, elle finissait en V)
+      const path = leftPath(t, m.L * (1 - 0.15 * r * r), 1, m.h, sink);
       lr.push({ r, t, pts: resample(path.pts, LP), f0: path.f0 });
     }
-    // (pleine sur le rouleau, resserrée vers la rangée du milieu en dessous : la mèche finit en pointe — toutes les
-    // rangées d'autant, dans leur ordre : resserrées chacune à sa mesure, elles se croisaient et la pointe se repliait,
-    // tachée de noir)
+    // (resserrée à peine vers la rangée du milieu en dessous ; toutes les rangées d'autant, dans leur ordre : resserrées
+    // chacune à sa mesure, elles se croisaient et la pointe se repliait, tachée de noir)
     const mid = lr[(LR - 1) / 2];
     for (const row of lr) {
       row.pts.forEach((p, k) => {
         const f = k / (LP - 1);
         p.lerp(mid.pts[k], LEFT_TAPER * smooth(mid.f0, 1, f));
+      });
+    }
+    // (jamais plus étroite en dessous que 60 % de sa largeur en haut : posées chacune par la pesanteur sur la pente de
+    // l'encolure, les rangées se rapprochaient parfois de plusieurs centimètres et la mèche finissait en pointe — un
+    // glaçon. Le bord écarté de la rangée du milieu, en travers, le long de la crête.)
+    const cdir = frameAt(m.t).dir;
+    const half = m.w * crestSpan;
+    const sd = V();
+    const dq = V();
+    for (const row of lr) {
+      if (!row.r) continue;
+      row.pts.forEach((p, k) => {
+        const f = k / (LP - 1);
+        if (f <= mid.f0) return;
+        const n = body.grad(p, gq);
+        sd.copy(cdir).addScaledVector(n, -n.dot(cdir)).normalize().multiplyScalar(Math.sign(row.r));
+        const a = dq.subVectors(p, mid.pts[k]).dot(sd);
+        const need = 0.6 * half * smooth(mid.f0, mid.f0 + 0.15, f) + a * (1 - smooth(mid.f0, mid.f0 + 0.15, f));
+        if (a < need) p.addScaledVector(sd, need - a);
       });
     }
     // (lissée le long des crins : au bord du rouleau, le chemin tournait d'un coup et la mèche se pliait en arête — de
@@ -1560,7 +1605,7 @@ function maneCards(S, B, body, pos, coat) {
     const root = Fm.c.addScaledVector(Fm.up, -0.006);
     const w = lockWeights(root, 0, 0.6);
     return {
-      m, rows: lr, root,
+      m, rows: lr, root, LR, LP,
       mass: {
         // (texture prise dès le bord en pointes : la mèche commence sur le rouleau en crins épars, pas en bord droit)
         // (normales à moitié celles du corps : une mèche souple, sans arêtes d'ombre)
@@ -1671,8 +1716,9 @@ function maneCards(S, B, body, pos, coat) {
   // Cartes des mèches de gauche : deux par mèche, posées sur elle (entre ses rangées), aussi longues qu'elle :
   // ses bords et sa pointe qui bougent.
   locks.forEach((lk, li) => {
-    // (deux par mèche : elles sont étroites et nombreuses)
-    const nc = 2;
+    // (une par mèche courte, deux par longue : la frange en a beaucoup)
+    const nc = lk.m.long ? 2 : 1;
+    const { LR, LP } = lk;
     for (let q = 0; q < nc; q++) {
       const r = ((q + 0.5) / nc) * 2 - 1 + (lrng() - 0.5) * 0.3;
       const x = ((r + 1) / 2) * (LR - 1);
@@ -1681,18 +1727,20 @@ function maneCards(S, B, body, pos, coat) {
       const h = 0.001 + 0.002 * lrng();
       const pts = [];
       const normals = [];
-      for (let k = 0; k < LP; k += 1) {
+      // (une courte : un point sur deux, sa carte est courte)
+      for (let k = 0; k < LP; k += lk.m.long ? 1 : 2) {
         const p = lk.rows[j0].pts[k].clone().lerp(lk.rows[j0 + 1].pts[k], u);
         const nn = body.grad(p, V());
         pts.push(p.addScaledVector(nn, h + (k ? 0.002 : 0)));
         normals.push(nn);
       }
-      const m = Math.floor(LP / 2);
+      const m = Math.floor(pts.length / 2);
       const w = lockWeights(lk.root, 0, 0.6);
       const card = {
         // (racine celle de la mèche, sur la peau de la crête : tressée, la carte s'y replie sous le bouton — repliée
         // vers son premier point, au-dessus du rouleau, elle dépassait des boutons)
-        pts, normals, root: lk.root, side: cardSide(normals[m], alongAt(pts, m), (lrng() - 0.5) * 0.3), w0: 0.045, w1: 0.008,
+        // (bout large : la carte finit en crins de longueurs inégales, par la texture, pas en pointe)
+        pts, normals, root: lk.root, side: cardSide(normals[m], alongAt(pts, m), (lrng() - 0.5) * 0.3), w0: 0.045, w1: 0.03,
         // (même part le long des crins que la mèche dessous — hairG — : elles bougent avec elle au vent et au galop, et
         // leurs racines ne sont pas assombries sur toute leur longueur)
         color: grey(0.95 + lrng() * 0.1), uv: [0.055, 1, ...HAIR_ROWS[(li + q) % 4]], kind: 0,

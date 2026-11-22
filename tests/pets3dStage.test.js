@@ -202,6 +202,46 @@ describe('nettoyer : la litière du chat, la litière du clapier', () => {
   }
 });
 
+describe('jouer avec le chat : la canne à plume', () => {
+  for (const gab of [{ species: 'cat', breed: 'maine_coon' }, { species: 'cat', breed: 'sphynx', ageDays: 30 }]) {
+    it(`${label(gab)} : la plume suit le doigt, il bondit, l'attrape ; le bon nombre de bonds : juste`, () => {
+      const { a, sc } = makePetStage(gab);
+      const ctx = ctxFor(a, sc);
+      const before = sc.scene.children.length;
+      const game = pets3d.PET_CARE3D_GAMES.cat.play(ctx);
+      run(ctx, game, sc, 0.3);
+      // la plume va là où est le doigt (plan du jeu dessiné, ramené en 3D)
+      let s = game.peek();
+      const q = s.toScreen(250, 170);
+      game.down(q);
+      expect(game.peek().feather.x).toBeCloseTo(250, 0);
+      expect(game.peek().feather.y).toBeCloseTo(170, 0);
+      let maxLift = 0;
+      let k = 0;
+      for (let i = 0; i < 1500 && game.peek().catches < game.peek().n; i++) {
+        s = game.peek();
+        const p = s.toScreen(Math.max(40, Math.min(360, s.x + s.f * 100 + (k++ % 2 ? 25 : -25))), 190);
+        // (la plume reste dans l'image : on peut toujours l'atteindre)
+        expect(inView(p, ctx.view), `plume ${i}`).toBe(true);
+        game.move(p, true);
+        run(ctx, game, sc, 1 / 30);
+        maxLift = Math.max(maxLift, sc.holder.position.y);
+        if (game.peek().held) expect(game.peek().feather3d.distanceTo(sc.live('muzzle'))).toBeLessThan(0.08);
+      }
+      expect(game.peek().catches).toBe(game.peek().n);
+      expect(maxLift).toBeGreaterThan(0.03); // il a bondi
+      expect(inView(sc.project(sc.live('poll')), ctx.view)).toBe(true);
+      run(ctx, game, sc, 1);
+      ctx.pressStop();
+      expect(ctx.finished?.why).toBe('just');
+      game.destroy();
+      expect(sc.scene.children.length).toBe(before);
+      expect(sc.holder.position.y).toBe(0);
+      sc.dispose();
+    }, 120000);
+  }
+});
+
 describe('les cadrages en paysage et sur ordinateur', () => {
   // (la toile 3D d'un téléphone en paysage, 844 × 390 : 496 × 370 ; la fenêtre du jeu sur un ordinateur : 660 × 460)
   for (const gab of [GAUGES[0], GAUGES[1], GAUGES[2], GAUGES[3], GAUGES[5], GAUGES[6], GAUGES[7], { species: 'rabbit', breed: 'tete_de_lion' }]) {

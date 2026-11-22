@@ -15,10 +15,11 @@ import { ration3dGame, water3dGame } from './feed3d.js';
 import { treat3dGame } from './treat3d.js';
 import { pet3dGame } from './pet3d.js';
 import { pansage3dGame } from './pansage3d.js';
+import { wash3dGame } from './wash3d.js';
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
 export const CARE3D_GAMES = {
-  horse: { feed: ration3dGame, water: water3dGame, treat: treat3dGame, pet: pet3dGame, brush: pansage3dGame },
+  horse: { feed: ration3dGame, water: water3dGame, treat: treat3dGame, pet: pet3dGame, brush: pansage3dGame, wash: wash3dGame },
 };
 
 /** Le jeu 3D de ce soin pour cet animal, ou null. */

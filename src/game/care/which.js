@@ -22,7 +22,7 @@ export function care3dSetting(search = null, storage = null) {
 export const CARE3D_SPECIES = new Set(['horse']);
 
 /** Soins refaits en 3D, par espèce (les jeux eux-mêmes : CARE3D_GAMES de src/ui/minigames/care3d.js). */
-export const CARE3D_ACTIONS = { horse: ['feed', 'water', 'treat', 'pet', 'brush'] };
+export const CARE3D_ACTIONS = { horse: ['feed', 'water', 'treat', 'pet', 'brush', 'wash'] };
 
 /** Ce soin a-t-il un jeu 3D pour cette espèce ? */
 export const care3dWanted = (a, action) => !!CARE3D_ACTIONS[a?.species]?.includes(action);

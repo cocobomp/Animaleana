@@ -51,14 +51,14 @@ describe('quand ouvrir la scène 3D', () => {
       expect(Object.keys(care3d.CARE3D_GAMES[sp]).sort()).toEqual([...acts].sort());
       for (const act of acts) expect(which.care3dWanted({ species: sp }, act)).toBe(true);
     }
-    expect(which.care3dWanted({ species: 'horse' }, 'wash')).toBe(false);
+    expect(which.care3dWanted({ species: 'horse' }, 'deworm')).toBe(false);
     expect(which.care3dWanted({ species: 'dog' }, 'feed')).toBe(false);
   });
 
-  it('les soins du cheval refaits en 3D : nourrir, abreuver, friandise, caresser, pansage', () => {
+  it('les soins du cheval refaits en 3D : nourrir, abreuver, friandise, caresser, pansage, laver', () => {
     const h = { species: 'horse' };
-    for (const act of ['feed', 'water', 'treat', 'pet', 'brush']) expect(typeof care3d.care3dGameFor(h, act), act).toBe('function');
-    expect(care3d.care3dGameFor(h, 'wash')).toBe(null);
+    for (const act of ['feed', 'water', 'treat', 'pet', 'brush', 'wash']) expect(typeof care3d.care3dGameFor(h, act), act).toBe('function');
+    expect(care3d.care3dGameFor(h, 'deworm')).toBe(null);
     expect(care3d.care3dGameFor({ species: 'dog' }, 'feed')).toBe(null);
     expect(care3d.care3dGameFor(null, 'feed')).toBe(null);
   });

@@ -13,6 +13,7 @@ let stageMod;
 let stallMod;
 let pansage;
 let feed3d;
+let wash3d;
 let horseReal;
 let animalMod;
 let frameMod;
@@ -26,6 +27,7 @@ beforeAll(async () => {
   stallMod = await import('../src/game/care/stall.js');
   pansage = await import('../src/ui/minigames/pansage3d.js');
   feed3d = await import('../src/ui/minigames/feed3d.js');
+  wash3d = await import('../src/ui/minigames/wash3d.js');
   animalMod = await import('../src/sim/animal.js');
   frameMod = await import('../src/ui/minigames/frame.js');
 }, 60000);
@@ -443,4 +445,59 @@ describe('la sole du cure-pied couvre le sabot du modèle', () => {
     game.destroy();
     sc.dispose();
   });
+});
+
+describe('laver en 3D (même logique que le jeu dessiné)', () => {
+  function stroke(game, pts, step = 5) {
+    game.down(pts[0]);
+    for (let i = 1; i < pts.length; i++) {
+      const [a, b] = [pts[i - 1], pts[i]];
+      const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step));
+      for (let k = 1; k <= n; k++) game.move({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n }, true);
+    }
+    game.up();
+  }
+
+  it('savonner tout le flanc (une passe), puis rincer à la douche : trois étoiles ; il s\'ébroue', () => {
+    const { a, sc } = makeStage();
+    const ctx = ctxFor(a, sc);
+    const game = wash3d.wash3dGame(ctx);
+    run(ctx, game, sc, 0.5);
+    const n = game.peek().cells;
+    expect(n).toBeGreaterThan(20);
+    // des rangées de gauche à droite sur tout le flanc (là où sont les endroits à savonner, à l'écran)
+    const pts = [];
+    sc.proxy.bake();
+    for (let y = 60; y <= 330 && game.peek().soaped < 0.9; y += 16) {
+      stroke(game, [{ x: 0, y }, { x: 400, y }], 6);
+    }
+    let s = game.peek();
+    expect(s.value).toBeGreaterThanOrEqual(s.lo);
+    expect(s.value).toBeLessThanOrEqual(s.hi);
+    ctx.pressStop();
+    expect(game.peek().phase).toBe('rinse');
+    // la douche balaie toute seule (bouton gardé appuyé)
+    game.key('Space', true);
+    for (let i = 0; i < 300 && !ctx.done; i++) run(ctx, game, sc, 0.1);
+    game.key('Space', false);
+    expect(ctx.done).toBe(true);
+    expect(ctx.finished.why).toBe('just');
+    expect(ctx.finished.q).toBe(1);
+    expect(sc.mood.nod).toBeGreaterThan(0);
+    expect(pts.length).toBe(0);
+    game.destroy();
+    sc.dispose();
+  }, 60000);
+
+  it('frotter encore et encore sur la mousse : trop de mousse', () => {
+    const { a, sc } = makeStage();
+    const ctx = ctxFor(a, sc);
+    const game = wash3d.wash3dGame(ctx);
+    run(ctx, game, sc, 0.5);
+    for (let k = 0; k < 6; k++) for (let y = 60; y <= 330; y += 16) stroke(game, [{ x: 0, y }, { x: 400, y }], 6);
+    const s = game.peek();
+    expect(s.value).toBeGreaterThan(s.hi);
+    game.destroy();
+    sc.dispose();
+  }, 60000);
 });

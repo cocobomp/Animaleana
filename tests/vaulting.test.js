@@ -3,7 +3,7 @@ import { createAnimal } from '../src/sim/animal.js';
 import { createProfile, migrate } from '../src/sim/profile.js';
 import { DAYS_PER_YEAR } from '../src/sim/time.js';
 import { SPECIES } from '../src/sim/species.js';
-import { GEAR, TACK_CATEGORIES, equip, buyGear, wears, freeStock } from '../src/sim/gear.js';
+import { GEAR, TACK_CATEGORIES, equip, buyGear, wears, freeStock, saddleUp, removeVaultGear } from '../src/sim/gear.js';
 import {
   VAULT_LEVELS, LEVEL_IDS, FIGURES, PROGRAM, CIRCLE_R, onCircle, tapError, tapQuality, tapGrade, TAP_LATENCY, BALANCE_ZONE, balancePush, balanceAmp,
   leanOf, balanceScore, horseCalm, figureMark, judgesMarks, figureScore, judgeComment, vaultResult, vaultBlock, vaultData,
@@ -373,6 +373,39 @@ describe('le matériel de voltige à la sellerie', () => {
     expect(equip(p, a, 'saddle').ok).toBe(true);
     expect(a.gear.surcingle).toBeUndefined();
     expect(freeStock(p, 'surcingle', 'horse')).toBe(1);
+  });
+});
+
+describe('après la voltige : seller ou ranger le matériel', () => {
+  it('seller après la voltige : le tapis de voltige (épais) retourne à la sellerie, le tapis d\'avant revient', () => {
+    const p = createProfile('Lina');
+    const a = horse();
+    p.animals.push(a);
+    for (const id of ['saddle', 'saddlePad', 'surcingle', 'vaultPad']) buyGear(p, id, 'horse');
+    equip(p, a, 'saddle');
+    equip(p, a, 'saddlePad', 'red');
+    // le matériel de voltige (comme le bouton « Surfaix et tapis »)
+    equip(p, a, 'vaultPad');
+    equip(p, a, 'surcingle');
+    expect(a.gear.pad.item).toBe('vaultPad');
+    expect(a.gear.saddle).toBeUndefined();
+    // on selle pour une balade
+    expect(saddleUp(p, a).ok).toBe(true);
+    expect(a.gear.saddle.item).toBe('saddle');
+    expect(a.gear.surcingle).toBeUndefined();
+    expect(a.gear.pad).toEqual({ item: 'saddlePad', color: 'red' }); // (pas la selle sur le tapis épais)
+    expect(freeStock(p, 'vaultPad', 'horse')).toBe(1); // (rangé)
+  });
+
+  it('« Enlever le surfaix » : le surfaix et le tapis de voltige retournent à la sellerie', () => {
+    const p = createProfile('Lina');
+    const a = readyHorse(p);
+    expect(removeVaultGear(a)).toBe(true);
+    expect(wears(a, 'surcingle') || wears(a, 'vaultPad')).toBe(false);
+    expect(wears(a, 'bridle')).toBe(true); // (le filet reste)
+    expect(freeStock(p, 'surcingle', 'horse')).toBe(1);
+    expect(removeVaultGear(a)).toBe(false);
+    for (const k of ['vt_gearOffBtn', 'vt_gearOffHint', 'vt_gearOff']) expect(VAULT_EN[k], k).toBeTruthy();
   });
 });
 

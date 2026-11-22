@@ -374,6 +374,10 @@ export function equip(profile, a, item, color, { autoSwap = false, exact = false
     if (other === 'saddle') a.lastSaddle = { ...a.gear.saddle };
     delete a.gear[other];
   }
+  // Le tapis de voltige (épais) n'est pas fait pour une selle : il retourne à la sellerie quand on selle (saddleUp
+  // remet alors le tapis d'avant). En le mettant, on se souvient du tapis qu'il remplace.
+  if (def.slot === 'saddle' && a.gear.pad?.item === 'vaultPad') delete a.gear.pad;
+  if (id === 'vaultPad' && a.gear.pad && a.gear.pad.item !== 'vaultPad') a.lastPad = { ...a.gear.pad };
   const colors = def.colors ?? [];
   const c = colors.includes(color) ? color : colors.includes(a.gear[def.slot]?.color) && a.gear[def.slot]?.item === id ? a.gear[def.slot].color : colors[0];
   const entry = { item: id, color: c };
@@ -493,6 +497,17 @@ export function unsaddle(a) {
   unequip(a, 'saddle');
   unequip(a, 'pad');
   return true;
+}
+
+/**
+ * Enlever le matériel de voltige (après la séance) : le surfaix et le tapis de voltige retournent à la sellerie.
+ * Renvoie true s'il portait l'un ou l'autre.
+ */
+export function removeVaultGear(a) {
+  const had = !!a.gear?.surcingle || a.gear?.pad?.item === 'vaultPad';
+  unequip(a, 'surcingle');
+  if (a.gear?.pad?.item === 'vaultPad') unequip(a, 'pad');
+  return had;
 }
 
 /**

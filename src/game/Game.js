@@ -62,7 +62,7 @@ import { todayChallenge, challengeJustDone, CHALLENGE_REWARD } from '../sim/hors
 import { newStars, starUnlock, starPerk } from '../sim/horseStars.js'; // ⭐ ses étoiles
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
-  unsaddle, saddleUp, unbridle, bridleUp,
+  unsaddle, saddleUp, unbridle, bridleUp, removeVaultGear,
 } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
@@ -1999,6 +1999,15 @@ export class Game {
     this.entities.get(a.id)?.applyGear();
     // (sellé sans filet, après ✕ dans « Brider » : la selle seule)
     this.ui.toast(t(saddled && bridled ? 'unsaddled' : saddled ? 'unsaddledOnly' : 'unbridled', { name: a.name, g: a.sex }), 4000);
+    this.save();
+    return true;
+  }
+
+  /** 🤸 Enlever le surfaix et le tapis de voltige (menu du cheval) : ils retournent à la sellerie. */
+  removeVaultGear(a) {
+    if (this.player.mount?.data === a || !removeVaultGear(a)) return null;
+    this.entities.get(a.id)?.applyGear();
+    this.ui.toast(ta('vt_gearOff', a), 3500);
     this.save();
     return true;
   }

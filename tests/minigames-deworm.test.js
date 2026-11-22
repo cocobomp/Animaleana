@@ -57,6 +57,16 @@ describe('le vermifuge', () => {
     expect(dw.horseKg(fat)).toBeGreaterThan(dw.horseKg(horse()));
   });
 
+  it('le poids suit l\'âge : un poulain pèse bien moins qu\'un adulte, jamais moins que la plus petite dose', () => {
+    const adult = horse();
+    const foal = { ...horse(), ageDays: 2 }; // (12 jours de jeu par an)
+    const yearling = { ...horse(), ageDays: 12 };
+    expect(dw.horseKg(foal)).toBeLessThan(dw.horseKg(yearling));
+    expect(dw.horseKg(yearling)).toBeLessThan(dw.horseKg(adult));
+    expect(dw.horseKg(foal)).toBeGreaterThanOrEqual(dw.DOSE.min);
+    expect(dw.horseKg(foal)).toBeLessThanOrEqual(150);
+  });
+
   it('bonne dose, dans le coin de la bouche, toute la pâte : trois étoiles', () => {
     const ctx = fakeCtx(horse());
     const g = dw.dewormGame(ctx);

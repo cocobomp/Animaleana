@@ -14,14 +14,21 @@
 import { rrect, ellipse, circle, label, clamp, lerp, dist, css, shade } from './draw.js';
 import { justOutcome } from './score.js';
 import { sizeOf } from '../../sim/gear.js';
+import { growthScale } from '../../sim/animal.js';
 import { nbsp } from './frame.js';
 
-/** Le poids du cheval (kg), d'après sa taille et son embonpoint (a.weight : 50 = idéal). */
+export const DOSE = { min: 100, max: 900, slack: 5, over: 50, step: 10 }; // (juste : son poids, jusqu'à un cran de 50 kg au-dessus)
+
+/**
+ * Le poids du cheval (kg), d'après sa taille, son embonpoint (a.weight : 50 = idéal) et son âge : un poulain pèse bien
+ * moins qu'un adulte (le poids suit la taille au cube, growthScale). Jamais moins que la plus petite dose de la
+ * seringue (DOSE.min) : pour un tout petit poulain, on donne cette dose-là.
+ */
 export function horseKg(a) {
   const base = { pony: 250, horse: 500, draft: 750 }[sizeOf(a) ?? 'horse'] ?? 500;
-  return Math.round((base * (0.8 + 0.4 * ((a?.weight ?? 50) / 100))) / 10) * 10;
+  const grow = a?.species && Number.isFinite(a?.ageDays) ? growthScale(a) ** 3 : 1;
+  return Math.max(DOSE.min, Math.round((base * (0.8 + 0.4 * ((a?.weight ?? 50) / 100)) * grow) / 10) * 10);
 }
-export const DOSE = { min: 100, max: 900, slack: 5, over: 50, step: 10 }; // (juste : son poids, jusqu'à un cran de 50 kg au-dessus)
 
 // La seringue (en bas) : la bague glisse le long du corps, de DOSE.min à DOSE.max.
 const SYR = { x0: 70, x1: 330, y: 300 };

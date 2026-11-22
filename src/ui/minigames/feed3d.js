@@ -46,7 +46,10 @@ export function ration3dGame(ctx) {
   // Point des effets : le filet pendant le foin, la mangeoire pendant les granulés.
   let stage = 'hay';
   const anchor = () => sc.project(stage === 'hay' ? P.net.bite(v3()) : P.feeder.group.getWorldPosition(v3()).add(v3(0, 0.12, 0)));
-  const play = withLogic(ctx, rationGame, anchor);
+  // (« dans le seau » : ici, une mangeoire, et la jauge est à côté d'elle)
+  const name = ctx.a?.name ?? ctx.name;
+  const hints = new Map([[ctx.t('mg_ration_grain_hint', { name, g: ctx.a?.sex }), ctx.t('mg_ration_grain_hint3d', { name, g: ctx.a?.sex })]]);
+  const play = withLogic(ctx, rationGame, anchor, { hints });
   const m = sc.mood;
   m.ears = 'forward';
   m.look = P.net.bite(v3());

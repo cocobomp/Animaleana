@@ -201,12 +201,18 @@ describe('pansage en 3D : les gestes sur le vrai cheval (même règle que le jeu
     waitStage(ctx, game, sc, 'comb');
     expect(game.peek().results[2].verdict).toBe('just');
     // 4. le peigne : de haut en bas à travers chaque nœud
-    for (let pass = 0; pass < 10 && game.peek().knots.length; pass++) {
-      const q = game.peek().knots[0];
-      stroke(game, [{ x: q.x, y: q.y - 30 }, { x: q.x, y: q.y + 30 }], 4);
-      run(ctx, game, sc, 0.3);
+    // (la crinière d'abord, puis la queue : la caméra va de l'une à l'autre)
+    for (let pass = 0; pass < 12 && game.peek().knots.length; pass++) {
+      const ks = game.peek().knots;
+      const q = ks.find((k) => k.part === 'mane') ?? ks[0];
+      run(ctx, game, sc, 1.2);
+      const q2 = game.peek().knots.find((k) => k.part === q.part) ?? q;
+      stroke(game, [{ x: q2.x, y: q2.y - 30 }, { x: q2.x, y: q2.y + 30 }], 4);
     }
     expect(game.peek().knots.length).toBe(0);
+    run(ctx, game, sc, 1.5);
+    // tout est démêlé après le dernier nœud de la queue : la caméra reste sur la queue (elle repartait sur la crinière)
+    expect(sc.camTarget.distanceTo(sc.marks.tail)).toBeLessThan(sc.camTarget.distanceTo(sc.marks.withers));
     ctx.pressStop();
     expect(ctx.finished.why).toBe('just');
     expect(ctx.finished.q).toBe(1);

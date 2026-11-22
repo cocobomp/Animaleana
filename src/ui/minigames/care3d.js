@@ -62,12 +62,14 @@ export function openCareScene(ui, a, host, above) {
 /**
  * Logique d'un jeu dessiné réutilisée telle quelle : ses consignes, boutons, jauge, fin et note passent par le
  * vrai cadre ; ses petits effets (mots, emoji) sont reposés sur le point 3D anchor() (projeté), ses poussières
- * et gouttes (dot) sont faites en 3D par le jeu 3D.
+ * et gouttes (dot) sont faites en 3D par le jeu 3D. hints : Map (consigne du jeu dessiné → consigne en 3D).
  */
-export function withLogic(ctx, make, anchor) {
+export function withLogic(ctx, make, anchor, { hints = null } = {}) {
   const fx = ctx.fx;
   const at = () => anchor?.() ?? { x: 200, y: 140 };
   const lctx = Object.create(ctx);
+  // (une consigne qui parle du dessin — « dans le seau », alors qu'en 3D c'est une mangeoire — : remplacée)
+  if (hints) lctx.hint = (text, kind) => ctx.hint(hints.get(text) ?? text, kind);
   lctx.fx = {
     add() {},
     dot() {},

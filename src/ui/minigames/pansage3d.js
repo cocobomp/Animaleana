@@ -251,7 +251,8 @@ export function pansage3dGame(ctx) {
   function frameComb() {
     const maneLeft = knots.some((q) => q.part === 'mane' && q.tangle > 0);
     const tailLeft = knots.some((q) => q.part === 'tail' && q.tangle > 0);
-    const part = maneLeft || !tailLeft ? 'mane' : 'tail';
+    // (tout est démêlé : la caméra reste où elle est ; avant, elle repartait sur la crinière après la queue)
+    const part = maneLeft ? 'mane' : tailLeft ? 'tail' : combOn ?? 'mane';
     if (combOn === part) return;
     combOn = part;
     const pts = knots.filter((q) => q.part === part).map((q) => q.mesh.getWorldPosition(v3()));

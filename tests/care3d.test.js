@@ -173,6 +173,9 @@ describe('les jeux 3D gardent la règle « juste ce qu\'il faut » des jeux dess
     game.down(); tick(3.2); game.up();
     press(); tick(0.6);
     expect(game.peek().stage).toBe('grain');
+    // (la consigne parle de la mangeoire et de la jauge, pas du seau du jeu dessiné)
+    expect(ctx.hints.at(-1).text).toBe(t('mg_ration_grain_hint3d', { name: 'Étoile', g: 'f' }));
+    expect(ctx.hints.some((h) => h.text === t('mg_ration_grain_hint', { name: 'Étoile', g: 'f' }))).toBe(false);
     game.down(); tick(1); game.up();
     press();
     expect(ctx.finished.q).toBe(1);

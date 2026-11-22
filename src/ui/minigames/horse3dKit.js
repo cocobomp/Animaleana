@@ -131,3 +131,17 @@ export function updateRing(ring, sc, time, at) {
   ring.scale.setScalar(k);
   ring.material.opacity = 0.55 + Math.sin(time * 5) * 0.25;
 }
+
+/**
+ * La manche de notre main (props.js handModel) est un tube ouvert : vu de face, on voyait l'intérieur. On la ferme
+ * (nouvelle géométrie à nous, rendue par own à la fermeture du jeu) ; ne touche qu'à cette main-là.
+ */
+export function closeSleeve(hand, own) {
+  hand.traverse((o) => {
+    const p = o.geometry?.parameters;
+    if (o.isMesh && o.geometry?.type === 'CylinderGeometry' && p?.openEnded) {
+      o.geometry = own(new THREE.CylinderGeometry(p.radiusTop, p.radiusBottom, p.height, p.radialSegments, 1, false));
+    }
+  });
+  return hand;
+}

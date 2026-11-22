@@ -18,7 +18,7 @@ import { horseKg, DOSE } from './deworm.js';
 import { syringeModel } from '../../game/care/tackProps.js';
 import { handModel, avatarHand } from '../../game/care/props.js';
 import { nicker, snort } from './feed3d.js';
-import { v3, owner, impatience, afterLife, smooth, dist2, pulseRing, updateRing } from './horse3dKit.js';
+import { closeSleeve, v3, owner, impatience, afterLife, smooth, dist2, pulseRing, updateRing } from './horse3dKit.js';
 
 export function deworm3dGame(ctx) {
   const { a, t, fx } = ctx;
@@ -54,7 +54,7 @@ export function deworm3dGame(ctx) {
   const syr = syringeModel(own);
   const holder = new THREE.Group(); // (la seringue et la main ensemble)
   holder.add(syr.group);
-  const hand = handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.95 });
+  const hand = closeSleeve(handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.95 }), own);
   hand.scale.setScalar(0.9);
   // (la main tient le corps près de la collerette, le pouce vers le piston)
   // (la paume sous le corps, près de la collerette, les doigts qui l'entourent par-derrière, le pouce vers le piston ;

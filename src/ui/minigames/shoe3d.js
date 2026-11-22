@@ -14,7 +14,7 @@ import { horseshoeModel, nailModel, hammerModel } from '../../game/care/tackProp
 import { handModel, avatarHand } from '../../game/care/props.js';
 import { snort, nicker } from './feed3d.js';
 import { circle, label } from './draw.js';
-import { v3, owner, impatience, smooth, dist2, pulseRing, updateRing } from './horse3dKit.js';
+import { closeSleeve, v3, owner, impatience, smooth, dist2, pulseRing, updateRing } from './horse3dKit.js';
 
 const JUST = 3;
 const MAXHITS = 5;
@@ -87,7 +87,24 @@ export function shoe3dGame(ctx) {
   const hammer = hammerModel(own);
   hammer.scale.setScalar(0.85 * Math.max(0.85, S));
   sc.scene.add(hammer);
-  const hand = handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.7 });
+  // (notre autre main tient le marteau par le bout du manche, le poing autour, le pouce vers la tête ; l'avant-bras
+  // remonte derrière — avant, le marteau flottait tout seul)
+  const hammerHand = closeSleeve(handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.95 }), own);
+  {
+    // (le poing par-dessus le manche : le dos de la main vers nous, la paume et les doigts qui l'entourent par-dessous,
+    // le pouce vers la tête du marteau ; l'avant-bras repart vers le bas de l'image)
+    const xh = v3(0, -0.35, 1).normalize(); // (les doigts, avant de se refermer)
+    const yh = v3(0, -1, -0.35).normalize(); // (la paume, vers le manche)
+    const zh = new THREE.Vector3().crossVectors(xh, yh).normalize(); // (le long du manche, vers la tête)
+    hammerHand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xh, yh, zh));
+    const k = 1.05 / 0.85;
+    hammerHand.scale.setScalar(k);
+    // (le manche passe dans le creux des doigts refermés)
+    const grip = v3(-0.235, 0.05, 0);
+    hammerHand.position.copy(grip).addScaledVector(xh, -0.045 * k).addScaledVector(yh, -0.026 * k);
+  }
+  hammer.add(hammerHand);
+  const hand = closeSleeve(handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.7 }), own);
   hand.scale.setScalar(0.95 * Math.max(0.85, S));
   sc.scene.add(hand);
   const ring = pulseRing(own, { color: 0xf2c84b, r: 0.022 * Math.max(0.8, S) });
@@ -154,10 +171,10 @@ export function shoe3dGame(ctx) {
     }
     nl.hits++;
     if (nl.hits < JUST) {
-      fx.text(at.x, at.y - 40, t('mg_hop'), '#3c7bd9', 22);
+      fx.text(at.x, at.y - 40, t('mg_hop'), '#1f55a8', 24);
       fx.burst(at.x, at.y, '💥', 2, { speed: 60, size: 14 });
     } else if (nl.hits === JUST) {
-      fx.text(at.x, at.y - 40, t('mg_perfect'), '#2f8a5f', 24);
+      fx.text(at.x, at.y - 40, t('mg_perfect'), '#11573a', 27); // (vert foncé : lisible sur la paille claire)
       fx.burst(at.x, at.y, '✨', 5, { speed: 120, size: 14 });
     } else {
       nl.bend = Math.min(1, nl.bend + 0.5);
@@ -182,7 +199,9 @@ export function shoe3dGame(ctx) {
   function frameFoot(half = 0.5) {
     if (!sole) return;
     const f = sole.frameInfo();
-    sc.frame(f.points, { dir: f.dir, pad: 2.1, half });
+    // (en paysage, l'image est large : plus serré sur la sole et la main, sans les deux canons en V autour)
+    const wide = sc.size.w > sc.size.h * 1.2;
+    sc.frame(f.points, { dir: f.dir, pad: wide ? 1.45 : 2.1, half });
   }
 
   return {

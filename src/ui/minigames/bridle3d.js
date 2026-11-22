@@ -19,7 +19,7 @@ import { BRIDLE, throatVerdict } from './bridle.js';
 import { freeBridle } from '../../sim/gear.js';
 import { handModel, avatarHand } from '../../game/care/props.js';
 import { nicker, snort } from './feed3d.js';
-import { v3, owner, rigidGear, impatience, stagePill, afterLife, smooth, dist2, pulseRing, updateRing } from './horse3dKit.js';
+import { closeSleeve, v3, owner, rigidGear, impatience, stagePill, afterLife, smooth, dist2, pulseRing, updateRing } from './horse3dKit.js';
 
 const PAUSE = 0.9;
 const EAR_FOLD = 0.45;
@@ -189,7 +189,7 @@ export function bridle3dGame(ctx) {
   // (la main tient l'anneau du mors par dessous, la paume vers le haut, les doigts refermés dessus ; le poignet et la
   // manche descendent vers nous, hors de l'image. Avant : la main tenait la têtière, tournée vers nous, on ne voyait
   // que quatre doigts collés sur sa joue)
-  const hand = handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.55 });
+  const hand = closeSleeve(handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.55 }), own);
   const handK = 0.95 * Math.max(0.8, S);
   hand.scale.setScalar(handK);
   sc.scene.add(hand);

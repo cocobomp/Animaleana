@@ -7,7 +7,7 @@ import { GEAR, TACK_CATEGORIES, equip, buyGear, wears, freeStock } from '../src/
 import {
   VAULT_LEVELS, LEVEL_IDS, FIGURES, PROGRAM, CIRCLE_R, onCircle, tapError, tapQuality, tapGrade, TAP_LATENCY, BALANCE_ZONE, balancePush, balanceAmp,
   leanOf, balanceScore, horseCalm, figureMark, judgesMarks, figureScore, judgeComment, vaultResult, vaultBlock, vaultData,
-  canterUnlocked, CANTER_UNLOCK, figuresOnHorse, recordVault, vaultHorseEffect,
+  canterUnlocked, CANTER_UNLOCK, figuresOnHorse, recordVault, vaultHorseEffect, VAULT_MIN_SIZE, vaultSize,
 } from '../src/sim/vaulting.js';
 import { practiceAward } from '../src/sim/activities.js';
 import { seeded } from '../src/sim/rng.js';
@@ -290,10 +290,29 @@ describe('qui peut faire de la voltige ?', () => {
     const tired = readyHorse(p);
     tired.needs.energy = 15;
     expect(vaultBlock(tired, 'walk', p)).toBe('tired');
-    for (const why of ['tooYoung', 'sick', 'hurt', 'lame', 'tired', 'pregnant', 'noSurcingle', 'noVaultPad', 'needBridle', 'canterLocked', 'notHorse']) {
+    for (const why of ['tooYoung', 'sick', 'hurt', 'lame', 'tooSmall', 'tired', 'pregnant', 'noSurcingle', 'noVaultPad', 'needBridle', 'canterLocked', 'notHorse']) {
       expect(VAULT_FR[`vt_why_${why}`], why).toBeTruthy();
       expect(VAULT_EN[`vt_why_${why}`], why).toBeTruthy();
     }
+  });
+
+  it('un poney trop petit (Shetland, Falabella, Welsh) : non ; un grand poney (Connemara, islandais) : oui', () => {
+    const p = createProfile('Lina');
+    const of = (breed) => {
+      const a = { ...createAnimal({ species: 'horse', breed, ageDays: 8 * DAYS_PER_YEAR }) };
+      p.animals.push(a);
+      for (const id of ['surcingle', 'vaultPad', 'bridle']) buyGear(p, id, 'pony');
+      for (const id of ['bridle', 'vaultPad', 'surcingle']) equip(p, a, id);
+      return a;
+    };
+    for (const breed of ['shetland', 'falabella', 'welsh']) {
+      const a = of(breed);
+      expect(vaultSize(a), breed).toBeLessThan(VAULT_MIN_SIZE);
+      expect(vaultBlock(a, 'walk', p), breed).toBe('tooSmall');
+      expect(vaultBlock(a, 'barrel', p)).toBeNull(); // (le tonneau reste là)
+    }
+    for (const breed of ['connemara', 'islandais']) expect(vaultBlock(of(breed), 'walk', p), breed).toBeNull();
+    expect(vaultSize(horse())).toBeCloseTo(1, 1);
   });
 
   it('sans surfaix ou sans tapis de voltige : non ; un chien non plus', () => {

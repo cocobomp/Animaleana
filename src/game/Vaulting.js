@@ -184,7 +184,9 @@ function makePoses(mt) {
   const G = mt.ground;
   const top = (z) => mt.topAt(z);
   const leg = (x, y, z, pole, extra = {}) => ({ at: [x, y, z], pole, toe: 0.75, ...extra });
-  const hang = (s, z = 0.06) => leg(s * (w + 0.05), -0.6, z, [s * 0.35, -0.1, 1]);
+  // (jambes pendantes : 60 cm sous le dessus du tapis, mais jamais à moins de 32 cm du sol — un grand poney)
+  const low = (y) => Math.max(y, G + 0.32);
+  const hang = (s, z = 0.06) => leg(s * (w + 0.05), low(-0.6), z, [s * 0.35, -0.1, 1]);
   const grip = (k, pole) => ({ grip: k, pole, hand: [0.2, 0, 0] });
   const pad = (x, z, pole) => ({ at: [x, top(z) + 0.035, z], pole, hand: [0.5, 0, 0] });
   const P = {};
@@ -211,7 +213,7 @@ function makePoses(mt) {
   });
   // Moulin : assis de côté (face à l'intérieur), à l'envers, de l'autre côté, puis en avant ; une jambe passe par-dessus
   // l'encolure ou la croupe à chaque quart.
-  const sideLegs = (s) => [leg(s * (w + 0.12), -0.5, -s * 0.1, [0, 0.3, 1]), leg(s * (w + 0.12), -0.5, s * 0.1, [0, 0.3, 1])];
+  const sideLegs = (s) => [leg(s * (w + 0.12), low(-0.5), -s * 0.1, [0, 0.3, 1]), leg(s * (w + 0.12), low(-0.5), s * 0.1, [0, 0.3, 1])];
   P.sideL = pose({ hip: [0.03, 0.085, -0.04], yaw: Math.PI / 2, legs: sideLegs(1), bend: 0.05, arms: [pad(0.06, -0.32, [0.3, -1, -0.3]), grip(0, [-0.3, -1, -0.2])] });
   P.back = pose({
     hip: [0, 0.085, -0.08], yaw: Math.PI, bend: 0.3, head: [-0.25, 0],

@@ -11,7 +11,7 @@
 //
 // Logique pure, sans 3D (testée dans tests/vaulting.test.js). La partie 3D est dans src/game/Vaulting.js.
 
-import { canRide } from './animal.js';
+import { canRide, growthScale } from './animal.js';
 import { wears } from './gear.js';
 import { seeded } from './rng.js';
 
@@ -199,14 +199,27 @@ export function vaultResult(figures) {
 // ---------------------------------------------------------------- qui peut faire de la voltige ?
 
 /**
+ * Gabarit qu'il faut pour la voltige (taille du modèle : race × croissance ; un cheval de selle vaut 1) : un grand
+ * poney (Connemara, islandais : 0,86) ou un cheval. Un Shetland (0,58), un Falabella ou un petit poney Welsh (0,8)
+ * est trop petit pour porter un voltigeur qui fait des figures sur son dos : assis, ses pieds touchaient presque
+ * le sable.
+ */
+export const VAULT_MIN_SIZE = 0.85;
+
+/** Taille d'un cheval pour la voltige (voir VAULT_MIN_SIZE). */
+export const vaultSize = (a) => (a?.look?.scale ?? 1) * growthScale(a);
+
+/**
  * Pourquoi ce cheval ne peut pas faire de voltige à ce niveau (null : il peut). Le tonneau, lui, est toujours là.
- * Raisons : notHorse, tooYoung, sick, pregnant, lame, tired, noSurcingle, noVaultPad, needBridle, canterLocked.
+ * Raisons : notHorse, tooYoung, sick, pregnant, lame, tooSmall, tired, noSurcingle, noVaultPad, needBridle,
+ * canterLocked.
  */
 export function vaultBlock(a, level = 'walk', profile = null) {
   if (level === 'barrel') return null;
   if (!a || a.species !== 'horse') return 'notHorse';
   const r = canRide(a);
   if (!r.ok) return r.reason;
+  if (vaultSize(a) < VAULT_MIN_SIZE) return 'tooSmall';
   if ((a.needs?.energy ?? 100) < 20) return 'tired';
   if (!wears(a, 'surcingle')) return 'noSurcingle';
   if (!wears(a, 'vaultPad')) return 'noVaultPad';

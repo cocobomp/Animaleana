@@ -132,17 +132,43 @@ describe('toucher en rythme', () => {
   });
 });
 
+/**
+ * Note d'équilibre moyenne (20 figures) d'une enfant qui voit la bulle `delay` s en retard et glisse le doigt à la
+ * vitesse `gain` × penché (gain 0 : elle ne fait rien). Même modèle que la relecture du jeu.
+ */
+function childBalance(level, fig, delay, gain) {
+  const amp = balanceAmp(level, fig, level === 'barrel' ? 1 : 0.45);
+  const len = VAULT_LEVELS[level].hold * { barrel: 1.25, walk: 1.1, canter: 0.62 }[level];
+  let tot = 0;
+  for (let seed = 1; seed <= 20; seed++) {
+    const leans = [];
+    let control = 0;
+    const dt = 1 / 30;
+    for (let t = 0; t < len; t += dt) {
+      leans.push(leanOf(balancePush(t, amp, seed, len), control));
+      const seen = leans[Math.max(0, leans.length - 1 - Math.round(delay / dt))];
+      if (Math.abs(seen) > BALANCE_ZONE * 0.5) control -= seen * gain * dt;
+    }
+    tot += balanceScore(leans);
+  }
+  return tot / 20;
+}
+
 describe('garder l\'équilibre', () => {
-  it('la poussée est lisse, bornée, et la même pour une même figure', () => {
+  it('la poussée est lisse, bornée, part du milieu, et la même pour une même figure', () => {
     const amp = balanceAmp('canter', 'stand', 0.5);
-    let prev = balancePush(0, amp, 3);
-    for (let t = 0.05; t < 6; t += 0.05) {
-      const p = balancePush(t, amp, 3);
+    expect(balancePush(0, amp, 3, 3)).toBeCloseTo(0, 9);
+    let prev = 0;
+    for (let t = 0.05; t < 3; t += 0.05) {
+      const p = balancePush(t, amp, 3, 3);
       expect(Math.abs(p)).toBeLessThanOrEqual(amp + 1e-9);
       expect(Math.abs(p - prev)).toBeLessThan(0.25); // pas d'à-coup d'une image à l'autre
       prev = p;
     }
-    expect(balancePush(1.3, amp, 3)).toBe(balancePush(1.3, amp, 3));
+    expect(balancePush(1.3, amp, 3, 3)).toBe(balancePush(1.3, amp, 3, 3));
+    // elle sort bien de la zone verte : il faut glisser le doigt
+    const peak = Math.max(...Array.from({ length: 60 }, (_, i) => Math.abs(balancePush(i * 0.05, amp, 3, 3))));
+    expect(peak).toBeGreaterThan(BALANCE_ZONE * 2.5);
   });
 
   it('debout au galop pousse plus que l\'assise sur le tonneau ; un cheval calme pousse moins', () => {
@@ -160,15 +186,32 @@ describe('garder l\'équilibre', () => {
     const good = [];
     const none = [];
     for (let t = 0; t < 3; t += 1 / 30) {
-      const push = balancePush(t, amp, 8);
+      const push = balancePush(t, amp, 8, 3);
       good.push(leanOf(push, -push * 0.95));
       none.push(leanOf(push, 0));
     }
     expect(balanceScore(good)).toBe(1);
-    expect(balanceScore(none)).toBeLessThan(0.8);
+    expect(balanceScore(none)).toBeLessThan(0.5);
     expect(balanceScore([1.2, -1.2, 1])).toBe(0);
     expect(balanceScore([BALANCE_ZONE * 1.5])).toBeGreaterThan(0);
     expect(balanceScore([])).toBe(1);
+  });
+
+  it('le geste compte à tous les niveaux : sans rien faire, moins bien ; une enfant lente, mieux ; attentive, bien', () => {
+    for (const level of LEVEL_IDS) {
+      for (const fig of ['basicSeat', 'flag', 'stand']) {
+        const none = childBalance(level, fig, 0, 0);
+        const slow = childBalance(level, fig, 0.6, 1.2);
+        const quick = childBalance(level, fig, 0.35, 2.5);
+        expect(none, `${level} ${fig}`).toBeLessThan(0.8);
+        expect(slow, `${level} ${fig}`).toBeGreaterThanOrEqual(none);
+        expect(quick - none, `${level} ${fig}`).toBeGreaterThan(0.2);
+        expect(quick, `${level} ${fig}`).toBeGreaterThan(0.6);
+      }
+    }
+    // le tonneau et le pas, où l'on passe le plus de temps : ne rien faire n'y est plus presque parfait
+    expect(childBalance('barrel', 'stand', 0, 0)).toBeLessThan(0.6);
+    expect(childBalance('walk', 'flag', 0, 0)).toBeLessThan(0.6);
   });
 });
 

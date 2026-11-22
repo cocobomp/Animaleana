@@ -625,7 +625,7 @@ class VaultingSession extends Session {
    * foulée jusqu'à l'heure de l'événement), et le doigt a touché TAP_LATENCY avant que le jeu le reçoive.
    */
   phaseAt(ts) {
-    const wall = clamp((ts - (this.wallAt ?? ts)) / 1000, -0.3, 0.3) - TAP_LATENCY;
+    const wall = clamp((ts - (this.wallAt ?? ts)) / 1000, -0.5, 0.5) - TAP_LATENCY;
     return (this.phAt ?? this.stridePhase()) + (wall * (this.rate ?? 1)) / this.strideTime();
   }
 
@@ -725,10 +725,16 @@ class VaultingSession extends Session {
       this.mt.update(g.world);
     }
     this.trackBeat(dt);
-    // (pour situer un toucher entre deux images : où en était la foulée, à quelle heure, à quelle vitesse du jeu)
+    // (pour situer un toucher entre deux images : où en était la foulée, à quelle heure, et combien de temps de jeu
+    // passe par seconde — 1 d'habitude ; plus en ×2 ; moins sur un appareil lent, où une image dure plus de 0,1 s)
+    const now = performance.now();
+    if (this.wallAt !== undefined && now - this.wallAt > 4) {
+      const r = clamp((this.time - this.timeAt) / ((now - this.wallAt) / 1000), 0, 4);
+      this.rate = this.rate === undefined ? r : this.rate * 0.8 + r * 0.2;
+    }
+    if (this.wallAt === undefined || now - this.wallAt > 4) this.wallAt = now;
+    this.timeAt = this.time;
     this.phAt = this.stridePhase();
-    this.wallAt = performance.now();
-    this.rate = g.paused ? 0 : Math.max(1, Math.round(g.timeScale ?? 1));
     this.updateCoach(dt);
     if (this.state === 'countdown' || this.phase === 'salute') this.updateSalute(dt);
     else if (this.state === 'run' || this.state === 'finishing') this.updateRun(dt);
@@ -819,7 +825,7 @@ class VaultingSession extends Session {
   updateHold(dt) {
     const s = STEPS[this.stepI];
     this.holdT += dt;
-    const push = balancePush(this.holdT, this.amp, this.pushSeed);
+    const push = balancePush(this.holdT, this.amp, this.pushSeed, this.holdLen);
     // le clavier pousse aussi (flèches)
     const keys = this.keysLR ?? 0;
     if (keys) this.control = clamp(this.control + keys * dt * 1.6, -1.2, 1.2);

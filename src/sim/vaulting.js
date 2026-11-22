@@ -46,9 +46,9 @@ export function onCircle(c, h, r = CIRCLE_R) {
  * tenues pendant une figure.
  */
 export const VAULT_LEVELS = {
-  barrel: { horse: false, gait: null, beat: 1.25, tol: [0.1, 0.36], wobble: 0.38, hold: 3, icon: '🛢️' },
-  walk: { horse: true, gait: 'walk', beat: null, tol: [0.09, 0.32], wobble: 0.55, hold: 3, icon: '🚶' },
-  canter: { horse: true, gait: 'canter', beat: null, tol: [0.08, 0.25], wobble: 0.8, hold: 4, icon: '🐎' },
+  barrel: { horse: false, gait: null, beat: 1.25, tol: [0.1, 0.36], wobble: 0.7, hold: 3, icon: '🛢️' },
+  walk: { horse: true, gait: 'walk', beat: null, tol: [0.09, 0.32], wobble: 0.75, hold: 3, icon: '🚶' },
+  canter: { horse: true, gait: 'canter', beat: null, tol: [0.08, 0.25], wobble: 0.85, hold: 5, icon: '🐎' },
 };
 export const LEVEL_IDS = ['barrel', 'walk', 'canter'];
 
@@ -69,11 +69,11 @@ export const CANTER_UNLOCK = 6;
  * de l'équilibre ; icon : pour l'affichage.
  */
 export const FIGURES = {
-  basicSeat: { parts: 1, hold: true, balance: 0.75, icon: '🧘' },
-  flag: { parts: 1, hold: true, balance: 1.05, icon: '🚩' },
+  basicSeat: { parts: 1, hold: true, balance: 0.8, icon: '🧘' },
+  flag: { parts: 1, hold: true, balance: 1, icon: '🚩' },
   mill: { parts: 4, hold: false, balance: 0, icon: '🌀' },
   scissors: { parts: 2, hold: false, balance: 0, icon: '✂️' },
-  stand: { parts: 1, hold: true, balance: 1.3, icon: '🧍' },
+  stand: { parts: 1, hold: true, balance: 1.2, icon: '🧍' },
   flank: { parts: 2, hold: false, balance: 0, icon: '🤸' },
 };
 export const PROGRAM = ['basicSeat', 'flag', 'mill', 'scissors', 'stand', 'flank'];
@@ -109,16 +109,19 @@ export function tapGrade(err, level = 'canter') {
 export const BALANCE_ZONE = 0.3;
 
 /**
- * Ce que le mouvement du cheval pousse le voltigeur à l'instant t (−1 à 1 environ, lisse) : deux ondulations
- * lentes, différentes à chaque figure (seed). amp : force du niveau, de la figure et du cheval.
+ * Ce que le mouvement du cheval pousse le voltigeur à l'instant t (s depuis le début de la figure), lisse : il part
+ * du milieu, pousse d'un côté (le côté change à chaque figure : seed) jusque vers le milieu de la figure (len : sa
+ * durée, s), puis revient, avec un petit tremblement par-dessus. Bien plus fort que la zone verte : sans glisser le
+ * doigt, la bulle en sort ; assez lent pour qu'une enfant ait le temps de voir la bulle partir et de la rattraper.
+ * amp : force du niveau, de la figure et du cheval (balanceAmp) ; |poussée| ≤ amp.
  */
-export function balancePush(t, amp, seed = 1) {
+export function balancePush(t, amp, seed = 1, len = 3) {
   const r = seeded(`push-${seed}`);
-  const p1 = r() * 6.28;
+  const dir = r() < 0.5 ? -1 : 1;
+  const f1 = Math.PI / (len * (0.85 + 0.15 * r())); // (une seule bosse pendant la figure)
+  const f2 = 2.6 + r() * 0.9;
   const p2 = r() * 6.28;
-  const f1 = 0.9 + r() * 0.5;
-  const f2 = 2.1 + r() * 0.9;
-  return amp * (0.65 * Math.sin(f1 * t + p1) + 0.35 * Math.sin(f2 * t + p2));
+  return amp * (0.85 * dir * Math.sin(f1 * t) + 0.15 * (Math.sin(f2 * t + p2) - Math.sin(p2)) / 2);
 }
 
 /** Force de la poussée : niveau, figure, et cheval calme à la longe (obéissance) qui pousse moins. */
@@ -135,14 +138,14 @@ export const leanOf = (push, control) => clamp(push + control, -1.5, 1.5);
 
 /**
  * Note d'équilibre (0 à 1) d'après les penchés relevés pendant la figure (un par image, à intervalles égaux) :
- * dans la zone, c'est parfait ; un peu dehors, ça compte à moitié ; trop penché, rien.
+ * dans la zone, c'est parfait ; un peu dehors, ça compte de moins en moins ; trop penché (deux fois la zone), rien.
  */
 export function balanceScore(leans) {
   if (!leans.length) return 1;
   let s = 0;
   for (const l of leans) {
     const a = Math.abs(l);
-    s += a <= BALANCE_ZONE ? 1 : a <= BALANCE_ZONE * 2 ? 0.5 * (1 - (a - BALANCE_ZONE) / BALANCE_ZONE) + 0.25 : 0;
+    s += a <= BALANCE_ZONE ? 1 : a <= BALANCE_ZONE * 2 ? 0.6 * (1 - (a - BALANCE_ZONE) / BALANCE_ZONE) : 0;
   }
   return clamp(s / leans.length);
 }

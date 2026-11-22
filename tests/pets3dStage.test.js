@@ -2,7 +2,7 @@
 // réalistes chargés dans node) : repères pris sur la peau pour toutes les tailles (chihuahua, bouvier bernois, chiot,
 // sphynx, maine coon, chaton, lapin nain, bélier, géant des Flandres), l'animal et ce qu'on lui tend dans l'image pour
 // chaque soin, les parties jouées jusqu'au bout (nourrir, donner à boire, friandise, caresses, brossage), la libération.
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import * as THREE from 'three';
 import { loadPets, makePetStage, ctxFor, run, inView } from './fixtures/petStage.js';
 
@@ -25,6 +25,9 @@ beforeEach(() => {
 afterAll(() => {
   Math.random = random;
 });
+// (rend la main à la boucle d'événements entre deux tests : sans ça, le fichier, plus d'une minute de calcul, ne
+// laisse jamais passer la réponse du processus principal de vitest, qui s'arrête sur « Timeout calling onTaskUpdate »)
+afterEach(() => new Promise((resolve) => setImmediate(resolve)));
 
 const GAUGES = [
   { species: 'dog', breed: 'chihuahua' },

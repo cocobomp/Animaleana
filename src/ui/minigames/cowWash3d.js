@@ -1,4 +1,4 @@
-// Laver la vache, en 3D (dans l'étable : src/game/care/barn.js). C'est le jeu du cheval (wash3d.js : même logique et
+// Laver la vache, en 3D (dans l'étable : src/game/care/farmBarn.js). C'est le jeu du cheval (wash3d.js : même logique et
 // même note que le jeu dessiné grooming.js washGame) adapté à la vache : ses os (régions du corps lues par
 // l'adaptation de la scène, sc.fit), sa taille (unité : sa hauteur au garrot), sa voix (elle meugle doucement). Étape 1,
 // l'éponge : la mousse monte et la boue part dessous ; étape 2, la douche : notre main tient la lance, la mousse coule.

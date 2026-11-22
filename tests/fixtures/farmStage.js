@@ -16,7 +16,7 @@ export async function loadFarm() {
     t: (await import('../../src/i18n.js')).t,
     gltf: { sheep: await loadRealSheepGltf(), goat: await loadRealGoatGltf(), cow: await loadRealCowGltf() },
     stage: await import('../../src/game/care/stage.js'),
-    barn: await import('../../src/game/care/barn.js'),
+    barn: await import('../../src/game/care/farmBarn.js'),
     ruminant: await import('../../src/game/care/ruminant.js'),
     animal: await import('../../src/sim/animal.js'),
     frame: await import('../../src/ui/minigames/frame.js'),

@@ -6,7 +6,7 @@
 import { getModel } from '../assets.js';
 import { REAL_HORSE_KEY } from '../models/horseReal.js';
 import { PET_CARE3D_ACTIONS, PET_MODEL_KEYS } from './petWhich.js'; // chiens, chats, lapins (petStage.js)
-import { RUMINANTS, ruminantKey } from './ruminant.js'; // moutons, chèvres, vaches (bergerie, étable : barn.js)
+import { RUMINANTS, ruminantKey } from './ruminant.js'; // moutons, chèvres, vaches (bergerie, étable : farmBarn.js)
 
 /** Réglage par l'adresse ou le stockage local : ?care3d=off (toujours le mini-jeu dessiné, pour tester le repli). */
 export function care3dSetting(search = null, storage = null) {

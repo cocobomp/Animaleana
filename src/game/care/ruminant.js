@@ -17,7 +17,7 @@ import { cowLookOf, cowUdderFill, cowModelKind } from '../../sim/cowLook.js';
 import { audio } from '../audio.js';
 import { refineLocks } from './locks.js';
 
-/** Espèces de la ferme qui ont leur scène de soin (la bergerie, la chèvrerie, l'étable : barn.js). */
+/** Espèces de la ferme qui ont leur scène de soin (la bergerie, la chèvrerie, l'étable : farmBarn.js). */
 export const RUMINANTS = ['sheep', 'goat', 'cow'];
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);

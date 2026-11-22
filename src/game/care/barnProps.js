@@ -1,5 +1,5 @@
 // Accessoires 3D de la bergerie, de la chèvrerie et de l'étable (scène de soin des moutons, chèvres et vaches :
-// barn.js) : le râtelier à foin en bois qui se remplit vraiment (et l'auge dessous), l'abreuvoir en tôle galvanisée
+// farmBarn.js) : le râtelier à foin en bois qui se remplit vraiment (et l'auge dessous), l'abreuvoir en tôle galvanisée
 // qui se remplit au tuyau, les bottes de paille, la pierre à sel, la fourche, la lanterne. Même forme que les
 // accessoires du box (props.js) : chaque fabrique renvoie { group, …, update(dt), dispose() } et libère ce qu'elle
 // crée. Tailles en mètres, données par le décor d'après l'animal (un agneau, une vache).

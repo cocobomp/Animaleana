@@ -20,7 +20,7 @@ import { PetStage } from '../../game/care/petStage.js'; // chiens, chats, lapins
 import { homeSet } from '../../game/care/home.js';
 import { hutchSet } from '../../game/care/hutch.js';
 import { PET_CARE3D_GAMES } from './pets3d.js';
-import { barnSet } from '../../game/care/barn.js'; // la bergerie, la chèvrerie, l'étable
+import { barnSet } from '../../game/care/farmBarn.js'; // la bergerie, la chèvrerie, l'étable
 import { RUMINANT_FIT } from '../../game/care/ruminant.js'; // moutons, chèvres, vaches : leurs repères, leur vie
 import { farmFeed3dGame, farmWater3dGame } from './farm3d.js';
 import { farmTreat3dGame } from './farmTreat3d.js';

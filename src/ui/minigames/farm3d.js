@@ -1,5 +1,5 @@
 // Nourrir, abreuver et donner une friandise aux moutons, chèvres et vaches, en 3D (la bergerie, la chèvrerie,
-// l'étable : src/game/care/barn.js). La logique est celle des jeux dessinés (food.js : verser jusqu'à la ligne 🎯,
+// l'étable : src/game/care/farmBarn.js). La logique est celle des jeux dessinés (food.js : verser jusqu'à la ligne 🎯,
 // le robinet, la friandise quand il est calme) : la note et les textes ne changent pas, seule l'image change. Le
 // râtelier se remplit vraiment de foin (des brassées tombent de notre main), l'abreuvoir se remplit au tuyau ; il
 // regarde ce qu'on lui prépare, bêle ou meugle doucement, puis mange au râtelier ou boit vraiment, en mâchant.

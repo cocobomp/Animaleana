@@ -172,6 +172,42 @@ describe('il bêle ou meugle doucement', () => {
   }
 });
 
+describe('les mèches de la laine et du poil longs, de près', () => {
+  it('islandais, col noir, Highland : mèches lisses et rondes, à la scène seulement ; le poil de la chèvre ne pend pas sous le ventre', async () => {
+    const locks = await import('../src/game/care/locks.js');
+    for (const [species, breed, name] of [['sheep', 'islandais_mouton', 'sheep_locks'], ['goat', 'col_noir', 'goat_hair'], ['cow', 'highland', 'cow_hair']]) {
+      const { sc } = makeStage({ species, breed, sex: species === 'goat' ? 'm' : 'f' });
+      let mesh = null;
+      sc.model.root.traverse((o) => {
+        if (o.name === name) mesh = o;
+      });
+      expect(mesh, `${breed} : ses mèches`).toBeTruthy();
+      const geo = mesh.geometry;
+      // (une géométrie à la scène, pas celle du gabarit partagé avec les animaux du jeu)
+      expect(geo.userData.shared).toBeFalsy();
+      expect(mesh.userData.careLocks).toBe(true);
+      // (des rangées lisses : 9 par carte ; carte en croix pour le mouton et la chèvre)
+      expect(geo.attributes.position.count).toBe(geo.userData.cards * 18);
+      // (la recette du dessin : l'ombrage rond des mèches, sous une autre clé que celle du jeu)
+      const sh = { vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader, uniforms: {}, defines: {} };
+      mesh.material.onBeforeCompile(sh, sc.renderer);
+      expect(sh.fragmentShader).toContain('float cyl = sqrt(max(0.0, 1.0 - lx * lx));');
+      expect(sh.vertexShader).toContain('vCareLock = fract(');
+      expect(mesh.material.customProgramCacheKey()).toMatch(/-care$/);
+      if (species === 'goat') {
+        const floor = sc.model.legTop / sc.model.root.scale.x + 0.035;
+        const p = geo.attributes.position.array;
+        let low = Infinity;
+        for (let i = 1; i < p.length; i += 3) low = Math.min(low, p[i]);
+        // (aucune pointe sous la ligne du ventre, à part les mèches qui y prennent racine, gardées très courtes)
+        expect(low).toBeGreaterThan(floor - 0.06);
+      }
+      sc.dispose();
+    }
+    expect(typeof locks.refineLockGeometry).toBe('function');
+  }, 60000);
+});
+
 describe('nourrir et abreuver en 3D', () => {
   for (const species of ['sheep', 'goat', 'cow']) {
     it(`${species} : nourrir jusqu'à la ligne, il mange au râtelier`, () => {

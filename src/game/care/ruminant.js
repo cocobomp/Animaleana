@@ -15,6 +15,7 @@ import { sheepLookOf, sheepFleece } from '../../sim/sheepLook.js';
 import { goatLookOf, goatUdderFill } from '../../sim/goatLook.js';
 import { cowLookOf, cowUdderFill, cowModelKind } from '../../sim/cowLook.js';
 import { audio } from '../audio.js';
+import { refineLocks } from './locks.js';
 
 /** Espèces de la ferme qui ont leur scène de soin (la bergerie, la chèvrerie, l'étable : barn.js). */
 export const RUMINANTS = ['sheep', 'goat', 'cow'];
@@ -56,6 +57,8 @@ export function buildRuminantModel(a, gltf = null) {
   if (!md) return null;
   if (md.setFleece) md.setFleece(sheepFleece(a));
   if (md.setUdder && md.build?.milker) md.setUdder(a.species === 'goat' ? goatUdderFill(a) : cowUdderFill(a));
+  // (laine longue, poil long : des mèches qui tiennent le gros plan, locks.js)
+  refineLocks(md);
   return md;
 }
 

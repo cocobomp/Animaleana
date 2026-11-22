@@ -292,7 +292,7 @@ export function stallSet(stage) {
 
   // Environnement (reflets doux du pelage, du seau, du métal) : un petit box chaud « photographié » une fois.
   // (sans WebGL, dans les tests : pas d'environnement)
-  const env = stage.headless ? null : roomEnvironment(stage.renderer, high);
+  let env = stage.headless ? null : stage.track(() => roomEnvironment(stage.renderer, high));
   stage.scene.environment = env?.texture ?? null;
   stage.scene.environmentIntensity = 0.42;
   stage.scene.background = new THREE.Color(0x2a1e14);
@@ -305,6 +305,13 @@ export function stallSet(stage) {
     anchors: { muzzle, eat },
     walls,
     layout,
+    /** Le contexte WebGL est revenu : l'image de l'environnement est à refaire (l'ancienne est perdue). */
+    restore(st) {
+      if (st.headless) return;
+      env?.dispose();
+      env = st.track(() => roomEnvironment(st.renderer, high));
+      st.scene.environment = env.texture;
+    },
     update(dt, st) {
       // (un mur entre la caméra et le cheval : caché)
       const c = st.camera.position;

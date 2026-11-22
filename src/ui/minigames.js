@@ -513,6 +513,34 @@ function openMinigame(ui, o) {
     // État lisible par les tests automatiques (peek).
     ui.minigame = { action, chore: o.chore ?? null, ctx, get scene3d() { return scene3d; }, peek: () => play.peek?.(), get zone() { return zoneRange; } };
 
+    /**
+     * La scène 3D ne peut plus continuer (contexte WebGL qui ne revient pas, erreur) : on la ferme et on rejoue le
+     * soin avec le jeu dessiné, depuis le début (consigne, boutons, jauge remis à zéro). Partie déjà finie : la carte
+     * de fin reste, seule la scène se ferme.
+     */
+    function fallback2d(why) {
+      if (!scene3d || closed) return;
+      console.warn('[care3d] retour au jeu dessiné :', why);
+      const old = play;
+      try {
+        old?.destroy?.();
+      } catch {
+        /* le jeu 3D se libère comme il peut */
+      }
+      closeScene3d();
+      if (ended) {
+        play = { peek: () => old?.peek?.() };
+        return;
+      }
+      ctx.fx.list.length = 0;
+      ctx.clearButtons();
+      ctx.zone(null);
+      ctx.progress(0);
+      ctx.time = 0;
+      play = make(ctx);
+      resize();
+    }
+
     /** Ferme la scène 3D (fin du jeu, ou repli sur le jeu dessiné) et rend la main au rendu du jeu. */
     function closeScene3d() {
       if (!scene3d) return;
@@ -669,8 +697,13 @@ function openMinigame(ui, o) {
       ctx.time += dt;
       // L'animal n'est plus là, ou la partie est finie : on ferme sans rien appliquer.
       if (!o.stillThere(game)) return close(null);
-      // (scène 3D pas encore prête : le jeu attend, le temps ne compte pas)
-      const waiting = scene3d && !scene3d.ready;
+      // (scène 3D pas encore prête, ou son contexte WebGL perdu : le jeu attend, le temps ne compte pas ; contexte
+      // toujours perdu après 4 s de jeu : le jeu dessiné)
+      if (scene3d?.lost) {
+        scene3d.lostFor += dt;
+        if (scene3d.lostFor > 4) fallback2d('contexte WebGL perdu');
+      }
+      const waiting = scene3d && (!scene3d.ready || scene3d.lost);
       if (waiting) ctx.time -= dt;
       else {
         play.update?.(dt);

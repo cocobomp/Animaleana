@@ -308,11 +308,19 @@ export class CareStage {
     renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = this.high ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    // Contexte WebGL perdu (téléphone en arrière-plan, mémoire pleine) : le jeu attend (le cadre montre l'emoji) ;
+    // rendu : on reprend (voir restore). Le cadre retombe sur le jeu dessiné s'il ne revient pas (lostFor).
     this.lost = false;
-    canvas.addEventListener?.('webglcontextlost', (e) => {
+    this.lostFor = 0;
+    this.onLost = (e) => {
       e.preventDefault();
       this.lost = true;
-    });
+      this.lostFor = 0;
+      canvas.classList?.remove?.('ready');
+    };
+    this.onRestored = () => this.restore();
+    canvas.addEventListener?.('webglcontextlost', this.onLost);
+    canvas.addEventListener?.('webglcontextrestored', this.onRestored);
 
     this.timing = {};
     try {
@@ -375,6 +383,31 @@ export class CareStage {
     this.view = { scale: 1, ox: 0, oy: 0 };
     this.fx = []; // petites choses 3D qui vivent un instant (souffle, brins…), voir puff()
     this.ready = false;
+  }
+
+  /** fn() avec le rendu de la scène : les écouteurs « dispose » qu'il pose sont notés (voir trackListeners). */
+  track(fn) {
+    return trackListeners(this.listeners, fn);
+  }
+
+  /**
+   * Le contexte WebGL est revenu : three.js a tout remis à neuf (ressources renvoyées à la carte graphique à la
+   * prochaine image). Les écouteurs « dispose » posés du temps de l'ancien contexte visent des objets WebGL morts :
+   * retirés (sinon 256 avertissements à la fermeture). Le décor refait son environnement (une image rendue), puis la
+   * scène se prépare à nouveau, comme à l'ouverture.
+   */
+  restore() {
+    if (this.disposed) return;
+    for (const [obj, fn] of this.listeners) obj.removeEventListener('dispose', fn);
+    this.listeners = [];
+    this.decor?.restore?.(this);
+    this.lost = false;
+    this.lostFor = 0;
+    this.ready = false;
+    this.restored = (this.restored ?? 0) + 1;
+    return this.warm().then(() => {
+      if (!this.disposed && !this.lost) this.canvas.classList?.add?.('ready');
+    });
   }
 
   /** Repères du modèle au repos (pose de photo) : bouche, oreilles, garrot, croupe, sabots… (repère monde). */
@@ -781,14 +814,19 @@ export class CareStage {
     });
     this.renderer.renderLists.dispose();
     this.renderer.dispose();
-    try {
-      this.renderer.forceContextLoss();
-    } catch {
-      /* déjà perdu */
+    // (contexte déjà perdu : rien à rendre, et l'extension n'existe plus)
+    if (!this.lost) {
+      try {
+        this.renderer.forceContextLoss();
+      } catch {
+        /* déjà perdu */
+      }
     }
     // Les écouteurs posés par ce rendu sur les ressources partagées du jeu : retirés (voir trackListeners).
     for (const [obj, fn] of this.listeners) obj.removeEventListener('dispose', fn);
     this.listeners = [];
+    this.canvas.removeEventListener?.('webglcontextlost', this.onLost);
+    this.canvas.removeEventListener?.('webglcontextrestored', this.onRestored);
     this.canvas.remove();
   }
 }

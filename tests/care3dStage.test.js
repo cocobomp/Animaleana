@@ -101,3 +101,37 @@ describe('pansage en 3D : le cure-pied', () => {
     sc.dispose();
   }, 60000);
 });
+
+describe('le contexte WebGL perdu, puis rendu', () => {
+  it('perdu : la scène attend ; rendu : les écouteurs de l\'ancien contexte sont retirés, le décor refait son image, la scène reprend', async () => {
+    const { sc } = makeStage();
+    const r = sc.renderer;
+    // (un écouteur posé par le rendu sur une ressource du jeu, du temps de l'ancien contexte)
+    const shared = new THREE.BufferGeometry();
+    let stale = 0;
+    sc.track(() => shared.addEventListener('dispose', () => stale++));
+    let restoredDecor = 0;
+    const decorRestore = sc.decor.restore;
+    sc.decor.restore = (st) => { restoredDecor++; decorRestore(st); };
+    r.domElement.dispatch('webglcontextlost');
+    expect(sc.lost).toBe(true);
+    const before = r.calls.render;
+    sc.render();
+    expect(r.calls.render).toBe(before); // (rien à peindre sans contexte)
+    r.domElement.dispatch('webglcontextrestored');
+    expect(sc.lost).toBe(false);
+    expect(sc.ready).toBe(false); // (elle se prépare à nouveau, le cadre montre l'emoji)
+    expect(restoredDecor).toBe(1);
+    await new Promise((ok) => setTimeout(ok, 200));
+    expect(sc.ready).toBe(true);
+    shared.dispose();
+    expect(stale).toBe(0); // (l'écouteur de l'ancien contexte n'est plus là)
+    sc.render();
+    expect(r.calls.render).toBe(before + 2); // (l'image d'un pixel de la préparation, puis une vraie image)
+    sc.dispose();
+    expect(r.calls.dispose).toBe(1);
+    // (après la fermeture, la toile n'écoute plus rien)
+    r.domElement.dispatch('webglcontextlost');
+    expect(sc.lost).toBe(false);
+  });
+});

@@ -552,6 +552,9 @@ export function gfinish3dGame(ctx) {
   let started = false;
   let color = null;
   let doneT = 0;
+  // (la crinière rentre dans les boutons à mesure qu'on tresse, comme au jeu des tresses)
+  const maneU = sc.model.hairMesh?.material?.userData?.hairBraid ?? null;
+  let tuck = 0;
   return {
     peek: () => ({ ...play.peek(), knobs: B.knobs.filter((k) => k.g.visible).length, ribbon: B.knobs.some((k) => k.band.visible), color: color, tailBow: !!B.tailBow?.visible, three: true }),
     down(p) {
@@ -588,6 +591,8 @@ export function gfinish3dGame(ctx) {
         k.band.visible = k.pom.visible = !!ch.id && k.g.visible;
       }
       if (B.tailBow) B.tailBow.visible = ch.id === 'tailBow' && s.puffs >= s.need;
+      tuck += (Math.min(1, s.puffs / Math.max(1, s.need)) - tuck) * Math.min(1, dt * 3);
+      if (maneU) maneU.value = tuck;
       m.look = sc.camera.position;
       m.lookAmt = 0.3;
       if (ctx.done) {
@@ -601,6 +606,7 @@ export function gfinish3dGame(ctx) {
     draw() {},
     destroy() {
       B.remove();
+      if (maneU) maneU.value = 0;
       for (const x of keep) x.dispose?.();
     },
   };

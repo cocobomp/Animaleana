@@ -390,7 +390,7 @@ export function horsePhoto(g, a, { before = false, style = null } = {}) {
   const W = 220;
   const H = 170;
   const box = h('div', { class: `grm-photo grm-photo3d ${before ? 'before' : 'after'}`, style: { position: 'relative', aspectRatio: `${W} / ${H}`, overflow: 'hidden', background: before ? 'linear-gradient(#ece7ed, #d9d2d8)' : 'linear-gradient(#fdebf3, #f7cfe0)' } });
-  const pic = thumb(g, spec, { w: W, h: H, emoji: SPECIES.horse.emoji, cls: 'grm-photo-pic', alt: a.name ?? '' });
+  const pic = thumb(g, spec, { w: W, h: H, emoji: SPECIES.horse.emoji, cls: 'grm-photo-pic', alt: a.name ?? '', urgent: true });
   Object.assign(pic.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', borderRadius: '0', background: 'transparent', boxShadow: 'none' });
   // (avant : un peu terne, poussiéreux)
   if (before) pic.style.filter = 'saturate(0.7) brightness(0.93) sepia(0.12)';

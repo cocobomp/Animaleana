@@ -75,6 +75,10 @@ export function treat3dGame(ctx) {
   putInHand('carrot');
   putInHand('apple');
 
+  // Ses lèvres (repère de la tête du modèle : model.mouth), pose du moment.
+  const snout = sc.model.dims?.snoutZ ?? 0.5;
+  const mouthLocal = sc.model.mouth?.clone?.() ?? v3(0, -0.2 * snout, 0.86 * snout);
+  const lips = () => (sc.model.head ? sc.model.head.localToWorld(mouthLocal.clone()) : sc.live('muzzle').add(v3(0, -0.05, 0)));
   let started = false;
   let away = 0; // (fini : la main s'en va, par le bas de l'image)
   // Cadrage : la tête (pose du moment et des dernières secondes) et la main au repos ; recadré en douceur.
@@ -144,7 +148,8 @@ export function treat3dGame(ctx) {
         const tm = treats[held];
         const mouth = sc.model.mouth ?? v3(0, -0.2 * (sc.model.dims?.snoutZ ?? 0.5), 0.86 * (sc.model.dims?.snoutZ ?? 0.5));
         sc.model.head.add(tm);
-        tm.position.copy(mouth).add(v3(held === 'carrot' ? -0.03 : -0.01, 0.025, 0.02));
+        // (la carotte en travers de la bouche, qui dépasse de notre côté ; la pomme entre les lèvres)
+        tm.position.copy(mouth).add(v3(held === 'carrot' ? -0.065 : -0.02, 0.02, 0.03));
         tm.rotation.set(0, held === 'carrot' ? 0.35 : 0, 0);
         tm.scale.setScalar((held === 'carrot' ? 0.8 : 0.85) / Math.max(0.3, sc.model.head.getWorldScale(v3()).x));
         bite = { tm, k: held, t: 0, s0: tm.scale.x };
@@ -158,7 +163,8 @@ export function treat3dGame(ctx) {
           bite = null;
         }
       }
-      const target = sc.live('muzzle').add(v3(0.04, -0.06, 0.04));
+      // (la paume juste sous ses lèvres : la friandise posée dessus arrive à sa bouche)
+      const target = lips().add(v3(0.015, -0.05 * S - 0.012, 0.02));
       away = ctx.done ? Math.min(1, away + dt * 1.2) : 0;
       const arm = armDir(sc);
       const pos = rest.clone().lerp(target, smooth(reach)).add(v3(0.05, -0.05, 0.18).multiplyScalar(back)).addScaledVector(arm, smooth(away) * 0.7);

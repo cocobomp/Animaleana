@@ -2241,6 +2241,8 @@ export class Game {
   }
 
   toggleCamera() {
+    // (une activité qui mène la caméra a ses propres vues : 🎥 passe de l'une à l'autre — voltige)
+    if (this.activities?.session?.cameraButton?.()) return;
     this.rig.mode = this.rig.mode === 'third' ? 'first' : 'third';
     this.profile.settings.camera = this.rig.mode;
   }

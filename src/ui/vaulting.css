@@ -4,6 +4,8 @@
 /* La couche du doigt : tout l'écran, sous la barre du haut et les boutons (toucher, glisser). */
 .vt-pad { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
 #actv-hud .actv-top, #actv-hud .actv-controls, #actv-hud .actv-hint, #actv-hud .actv-big, #actv-hud .vt-marks { z-index: 1; }
+/* 🎥 au-dessus de la couche du doigt (sinon il ne répondait pas) : il change de vue pendant la voltige. */
+body.vt-on #cam-btn { z-index: 16; }
 
 .vt-controls { display: grid; justify-items: center; gap: 44px; width: 100%; pointer-events: none; }
 .vt-controls[hidden] { display: none; }

@@ -1215,8 +1215,26 @@ class VaultingSession extends Session {
     }
     // (debout : un peu plus bas, pour voir la hauteur)
     if (this.phase === 'hold' && STEPS[this.stepI]?.fig === 'stand') pitch = 0.1;
+    // 🎥 la vue choisie : de trois quarts (au départ), de près, ou de loin (plus haut : le cheval entier et la piste ;
+    // pas tout à fait de côté, sinon le longeur, au centre, passait devant la caméra)
+    if (this.view === 1) {
+      dist *= 0.62;
+      pitch = 0.12;
+      at.y += portrait ? 0.45 : 0.25;
+    } else if (this.view === 2) {
+      yaw = 1.05;
+      dist *= 1.7;
+      pitch = 0.32;
+    }
     g.rig.focus = { shot: { at: at.clone(), heading: h, yaw, pitch, dist } };
     void dt;
+  }
+
+  /** 🎥 (ou la touche C) : la vue suivante — de trois quarts, de près, de loin. Renvoie true (le bouton est pris). */
+  cameraButton() {
+    this.view = ((this.view ?? 0) + 1) % 3;
+    this.hud.hint(t(`vt_cam_${this.view}`), 1600);
+    return true;
   }
 
   // ------------------------------------------------------------ clavier

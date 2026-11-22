@@ -135,6 +135,10 @@ beforeEach(() => {
   ctl.game3d = null;
   ctl.opened = 0;
   rafQueue = [];
+  // (l'horloge simulée part de l'heure réelle : la boucle du cadre prend sa première heure sur performance.now() ;
+  // partie de 0, elle avait des secondes de retard sur une machine chargée — longs imports —, et les 25 s d'attente
+  // de « la préparation ne finit jamais » n'étaient pas atteintes en 26 s simulées)
+  now = Math.max(now, performance.now());
 });
 
 describe('le cadre et la scène 3D', () => {

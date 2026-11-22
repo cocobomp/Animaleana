@@ -20,6 +20,7 @@ import { LUCKY_FR, LUCKY_EN } from './ui/luckyShoesTexts.js'; // 🍀 le fer por
 import { RIDE_CARD_FR, RIDE_CARD_EN } from './ui/rideCardTexts.js'; // 🏇 la carte « Ta balade » (rc_*)
 import { PRAISE_FR, PRAISE_EN } from './ui/praiseTexts.js'; // 🤚 « Bravo ! » / « Rassure-le » en selle (pr_*)
 import { LEGMUD_FR, LEGMUD_EN } from './ui/legMudTexts.js'; // 🧦 ses chaussettes de boue (mg_pansage_legmud*)
+import { PETS3D_FR, PETS3D_EN } from './ui/pets3dTexts.js'; // soins des compagnons en 3D (mg_*3d)
 import { KEYS_FR, KEYS_EN } from './ui/keysTexts.js'; // ⌨️ les touches sur ordinateur (key_*, ks_*, kc_*)
 import { VAULT_FR, VAULT_EN } from './ui/vaultingTexts.js'; // 🤸 la voltige (vt_*)
 import { isHurt } from './sim/animal.js'; // (blessé, pas malade : ta)
@@ -4729,6 +4730,8 @@ Object.assign(fr, PRAISE_FR); // 🤚 « Bravo ! » / « Rassure-le » en selle 
 Object.assign(en, PRAISE_EN);
 Object.assign(fr, LEGMUD_FR); // 🧦 ses chaussettes de boue (src/sim/legMud.js)
 Object.assign(en, LEGMUD_EN);
+Object.assign(fr, PETS3D_FR); // soins des compagnons en 3D (src/ui/minigames/pets3d.js)
+Object.assign(en, PETS3D_EN);
 Object.assign(fr, KEYS_FR); // ⌨️ les touches sur ordinateur (src/ui/controls.js)
 Object.assign(en, KEYS_EN);
 Object.assign(fr, VAULT_FR); // 🤸 la voltige (src/sim/vaulting.js)

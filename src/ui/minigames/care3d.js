@@ -16,11 +16,16 @@ import { treat3dGame } from './treat3d.js';
 import { pet3dGame } from './pet3d.js';
 import { pansage3dGame } from './pansage3d.js';
 import { wash3dGame } from './wash3d.js';
+import { PetStage } from '../../game/care/petStage.js'; // chiens, chats, lapins : leur scène, leurs décors, leurs soins
+import { homeSet } from '../../game/care/home.js';
+import { hutchSet } from '../../game/care/hutch.js';
+import { PET_CARE3D_GAMES } from './pets3d.js';
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
 export const CARE3D_GAMES = {
   horse: { feed: ration3dGame, water: water3dGame, treat: treat3dGame, pet: pet3dGame, brush: pansage3dGame, wash: wash3dGame },
 };
+Object.assign(CARE3D_GAMES, PET_CARE3D_GAMES); // (chien, chat, lapin : src/ui/minigames/pets3d.js)
 
 /** Le jeu 3D de ce soin pour cet animal, ou null. */
 export function care3dGameFor(a, action) {
@@ -29,6 +34,10 @@ export function care3dGameFor(a, action) {
 
 /** Décor de chaque espèce. */
 const SETS = { horse: stallSet };
+Object.assign(SETS, { dog: homeSet, cat: homeSet, rabbit: hutchSet }); // (le coin de la maison, le clapier)
+
+/** Scène de chaque espèce (celle du cheval par défaut ; chien, chat, lapin : PetStage, leurs repères et leur vie). */
+const STAGES = { dog: PetStage, cat: PetStage, rabbit: PetStage };
 
 /**
  * Ouvre la scène 3D dans la scène du cadre (host), sous la toile 2D (above). Renvoie la scène, ou null (WebGL
@@ -39,7 +48,7 @@ export function openCareScene(ui, a, host, above) {
   const game = ui.game ?? null;
   let scene = null;
   try {
-    scene = new CareStage({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species] });
+    scene = new (STAGES[a.species] ?? CareStage)({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species] });
   } catch (e) {
     console.warn('[care3d] scène 3D impossible, jeu dessiné', e?.message ?? e);
     try {

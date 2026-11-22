@@ -144,18 +144,32 @@ export function sweep3dGame(ctx) {
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
-  function syncBits() {
-    const list = play.peek().all ?? [];
+  const at = new THREE.Vector3();
+  const off = new THREE.Vector3();
+  const scl = new THREE.Vector3();
+  // (où était chaque brin à la dernière mise à jour : on ne refait les matrices que si l'un d'eux a bougé)
+  const lastXY = new Float32Array(all.length * 2).fill(NaN);
+  function syncBits(list = play.peek().all ?? []) {
+    let moved = false;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].x !== lastXY[i * 2] || list[i].y !== lastXY[i * 2 + 1]) {
+        moved = true;
+        lastXY[i * 2] = list[i].x;
+        lastXY[i * 2 + 1] = list[i].y;
+      }
+    }
+    if (!moved) return;
     let si = 0;
     let di = 0;
-    list.forEach((b, idx) => {
-      const at = toWorld(b.x, b.y, 0.006);
+    for (let idx = 0; idx < list.length; idx++) {
+      const b = list[idx];
+      at.set(W.x0 + (b.x / 400) * (W.x1 - W.x0), 0.006, W.z0 + ((b.y - p0Logic.aisle.y) / p0Logic.aisle.h) * (W.z1 - W.z0));
       if (b.kind === 'straw') {
         for (let k = 0; k < 3; k++) {
           e.set(0, -b.rot + k * 0.5 - 0.5, 0.05 * k);
           q.setFromEuler(e);
-          const off = v3(Math.cos(idx + k * 2) * 0.012, 0.003 * k, Math.sin(idx + k * 3) * 0.012);
-          m4.compose(at.clone().add(off), q, v3(0.16 + 0.05 * ((idx + k) % 3), 1, 1));
+          off.set(Math.cos(idx + k * 2) * 0.012, 0.003 * k, Math.sin(idx + k * 3) * 0.012).add(at);
+          m4.compose(off, q, scl.set(0.16 + 0.05 * ((idx + k) % 3), 1, 1));
           strawInst.setMatrixAt(si * 3 + k, m4);
         }
         si++;
@@ -163,10 +177,11 @@ export function sweep3dGame(ctx) {
         const r = (b.r ?? 4) * 0.008;
         e.set(idx, idx * 2, 0);
         q.setFromEuler(e);
-        m4.compose(at.clone().setY(r * 0.25), q, v3(r * 1.3, r * 0.45, r));
+        at.y = r * 0.25;
+        m4.compose(at, q, scl.set(r * 1.3, r * 0.45, r));
         dustInst.setMatrixAt(di++, m4);
       }
-    });
+    }
     strawInst.instanceMatrix.needsUpdate = true;
     dustInst.instanceMatrix.needsUpdate = true;
   }
@@ -209,10 +224,12 @@ export function sweep3dGame(ctx) {
 
   // ---------------------------------------------------------------- la poussière qui se soulève
   const puffTex = own(softDot('170,155,130'));
-  let puffs = 0;
+  // (les bouffées en l'air : leur fin, en temps de la scène — pas setTimeout, qui compte en temps réel)
+  const puffEnds = [];
   function puff(at, k = 1) {
-    if (puffs > 24) return;
-    puffs++;
+    while (puffEnds.length && puffEnds[0] <= sc.time) puffEnds.shift();
+    if (puffEnds.length > 24) return;
+    puffEnds.push(sc.time + 0.95);
     const mat = new THREE.SpriteMaterial({ map: puffTex, transparent: true, opacity: 0.55 * k, depthWrite: false });
     mat.userData.baseOpacity = 0.55 * k;
     const sp = new THREE.Sprite(mat);
@@ -220,7 +237,6 @@ export function sweep3dGame(ctx) {
     const s = 0.12 + Math.random() * 0.1;
     sp.scale.set(s, s, s);
     sc.spawn(sp, { life: 0.9, v: v3((Math.random() - 0.5) * 0.3, 0.25 + Math.random() * 0.25, (Math.random() - 0.5) * 0.3), update: (o, kk) => o.scale.setScalar(s * (1 + kk * 1.6)) });
-    setTimeout(() => { puffs--; }, 950);
   }
 
   // ---------------------------------------------------------------- caméra
@@ -279,7 +295,7 @@ export function sweep3dGame(ctx) {
         size = key;
         frame(true);
       }
-      syncBits();
+      syncBits(play.peek().all ?? []);
       const pp = ctx.pointer;
       const at = (pp.over || pp.down) && !ctx.done && sc.ready ? sc.pointOnPlane(pp.x, pp.y, Y) : null;
       broom.visible = !!at;

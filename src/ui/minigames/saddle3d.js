@@ -80,7 +80,9 @@ export function saddle3dGame(ctx) {
   meshes.forEach((mesh, i) => (i < nPad ? padCarrier : saddleCarrier).add(mesh));
   // Le tapis blanc tout simple (pas de tapis à soi) : le même, mais on voit son coton piqué et ses coins arrondis
   // (sans cela, une feuille blanche toute plate sur son dos).
+  let padMat0 = null; // (la matière du jeu, remise avant de rendre l'équipement : removeGear la libère comme d'habitude)
   if (!real.pad && meshes[0]?.isMesh) {
+    padMat0 = meshes[0].material;
     const cloth = own(meshes[0].material.clone());
     cloth.map = own(padClothTexture());
     cloth.alphaTest = 0.5;
@@ -579,6 +581,7 @@ export function saddle3dGame(ctx) {
       for (const c of [padCarrier, saddleCarrier]) c.parent?.remove(c);
       body.remove(girthSet.group);
       girthSet.dispose();
+      if (padMat0) meshes[0].material = padMat0;
       gear.dispose();
       for (const mesh of hidden) mesh.visible = true;
       sc.scene.remove(stand.group);

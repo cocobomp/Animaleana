@@ -73,6 +73,7 @@ export function bridle3dGame(ctx) {
   const brow = real.item === 'hackamore' ? straps[2] : straps[2] ?? null;
   const cheeks = straps.slice(3);
   // La têtière : sa matière à elle (elle rougit quand la sous-gorge est trop serrée).
+  const crownMat0 = crown?.material ?? null; // (remise avant de rendre l'équipement : removeGear la libère)
   if (crown) {
     crown.material = own(crown.material.clone());
     crown.material.userData = {};
@@ -480,6 +481,7 @@ export function bridle3dGame(ctx) {
       unhook();
       root.parent?.remove(root);
       throatStrap.geometry.dispose();
+      if (crown && crownMat0) crown.material = crownMat0;
       gear.dispose();
       for (const x of halter) x.visible = true;
       sc.scene.remove(hand, ring);

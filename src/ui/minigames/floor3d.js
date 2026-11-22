@@ -277,10 +277,10 @@ export function floorGame3d(ctx, make, o) {
     };
   }
   /** Les couches de paille : celles de la logique (peek) ou refaites comme clean.js (même calcul). */
-  function syncCells() {
+  function syncCells(s) {
     if (!cells) return;
     if (o.cells === 'peek') {
-      const pc = play.peek().cells ?? [];
+      const pc = s.cells ?? [];
       pc.forEach((q, i) => {
         if (cells[i]) cells[i].n = q.n;
       });
@@ -322,9 +322,13 @@ export function floorGame3d(ctx, make, o) {
     armful.visible = false;
     root.add(armful);
   }
-  const strawBits = [];
+  // (les brins qui volent : leur fin, en temps de la scène — avant, un setTimeout en temps réel, et splice(indexOf)
+  // pouvait retirer le mauvais brin)
+  const strawEnds = [];
   function spawnStraw(at) {
-    if (strawBits.length > 40) return;
+    while (strawEnds.length && strawEnds[0] <= sc.time) strawEnds.shift();
+    if (strawEnds.length > 40) return;
+    strawEnds.push(sc.time + 0.8);
     const mesh = new THREE.Mesh(mats.strand, mats.strandMat);
     mesh.scale.set(0.12, 1, 1.5);
     mesh.position.copy(at);
@@ -332,9 +336,7 @@ export function floorGame3d(ctx, make, o) {
     mesh.material = mats.strandMat;
     mats.strand.userData.shared = true;
     mats.strandMat.userData.shared = true;
-    strawBits.push(mesh);
     sc.spawn(mesh, { life: 0.7, v: v3((Math.random() - 0.5) * 0.8, 0.9 + Math.random() * 0.6, (Math.random() - 0.5) * 0.8), grav: 4, spin: 6, fade: false });
-    setTimeout(() => strawBits.splice(strawBits.indexOf(mesh), 1), 800);
   }
 
   /** Le doigt (espace du cadre) est-il sur la brouette 3D ? (son contour à l'écran, élargi d'un doigt) */
@@ -385,6 +387,7 @@ export function floorGame3d(ctx, make, o) {
     return toWorld(it.x, it.y, 0.012);
   }
   let size = '';
+  let lastPeek = null;
   return {
     peek: () => {
       const s = play.peek();
@@ -453,7 +456,10 @@ export function floorGame3d(ctx, make, o) {
         size = key;
         frame(true);
       }
-      syncCells();
+      // (un seul peek par image : celui de pailler recopie toutes les cases ; draw reprend le même)
+      const s = play.peek();
+      lastPeek = s;
+      syncCells(s);
       // ce qui vole vers la brouette
       for (const it of items) {
         if (it.state !== 'fly') continue;
@@ -473,7 +479,6 @@ export function floorGame3d(ctx, make, o) {
       const pp = ctx.pointer;
       const show = (pp.over || pp.down) && !ctx.done && sc.ready;
       const at = show ? sc.pointOnPlane(pp.x, pp.y, Y) : null;
-      const s = play.peek();
       const spreading = !!cells && (o.cells === 'peek' ? true : s.phase === 'spread');
       const withArm = spreading && (o.cells === 'peek' ? s.arm > 0 : true);
       fork.visible = !!at && !spreading;
@@ -508,7 +513,7 @@ export function floorGame3d(ctx, make, o) {
     },
     draw(g) {
       if (!sc.ready) return;
-      const s = play.peek();
+      const s = lastPeek ?? play.peek();
       const v = ctx.view;
       if (barrow && s.phase !== 'spread' && (s.dirtInBin ?? 0) < (s.nDirt ?? nDirt) && !ctx.done) {
         const b = sc.project(barrow.group.localToWorld(barrow.mouth.clone()));

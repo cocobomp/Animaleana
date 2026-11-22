@@ -275,6 +275,7 @@ describe('les cadrages en paysage et sur ordinateur', () => {
           const v = ctx.view;
           for (const k of ['muzzle', 'poll', 'ear0', 'ear1']) expect(inView(sc.project(sc.live(k)), v, 2), `${act} ${k}`).toBe(true);
           if (act !== 'feed' && act !== 'water') for (const [i, p] of sc.marks.paws.entries()) expect(inView(sc.project(p), v, 2), `${act} patte ${i}`).toBe(true);
+          if (act === 'brush' || act === 'pet') expect(inView(sc.project(sc.marks.rump), v, 2), `${act} croupe`).toBe(true);
           if (act === 'feed' || act === 'water') {
             const bowl = sc.decor.props[act === 'feed' ? 'food' : 'water'].group.getWorldPosition(new THREE.Vector3());
             expect(inView(sc.project(bowl), v, 10), `${act} gamelle`).toBe(true);

@@ -224,6 +224,18 @@ export class PetStage extends CareStage {
     }
     L.chest = chest ?? L.body.clone();
     L.chest.z = cz;
+    // la croupe, tout au bout : le point du corps le plus en arrière (le derrière rond d'un lapin dépasse la queue)
+    let rump = null;
+    for (let i = 0; i < sk.n; i++) {
+      const r = reg[i];
+      if (r !== 'body' && r !== 'hip') continue;
+      if (!rump || sk.pos[i * 3] < rump.x) rump = P(i);
+    }
+    L.rump = rump ?? new THREE.Vector3(bodyBox.min.x, L.back.y, cz);
+    // (le poil long, poussé au rendu, dépasse la peau : angora, jupe du tête de lion)
+    const b = md.build ?? {};
+    const fluffy = (b.fur ?? 0) > 0.002 || (b.skirt ?? 0) > 0.1;
+    if (fluffy) L.rump.x -= Math.max(0.01, (bodyBox.max.x - bodyBox.min.x) * 0.1);
     L.tail = at(md.tail) ?? new THREE.Vector3(bodyBox.min.x, L.back.y, cz);
     let tip = null;
     let td = -1;
@@ -240,7 +252,8 @@ export class PetStage extends CareStage {
     L.hooves = legs.map((l) => at(l.paw ?? l.fetlock ?? l.knee)).filter(Boolean).map((p) => p.setY(Math.min(p.y, Math.max(0, all.min.y))));
     L.paws = L.hooves;
     L.top = new THREE.Vector3(L.head.x, all.max.y, cz);
-    L.size = { len: all.max.x - all.min.x, h: all.max.y, w: all.max.z - all.min.z, headLen };
+    // (fluff : marge de cadrage en plus pour le poil long, qui déborde de la peau au rendu)
+    L.size = { len: all.max.x - all.min.x, h: all.max.y, w: all.max.z - all.min.z, headLen, fluff: fluffy ? 1.1 : 1 };
     this.marks = L;
     this.box = all;
     // (la place des repères de la tête dans le repère de son os, au repos : live les suit quand la tête bouge)

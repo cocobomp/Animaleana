@@ -470,7 +470,7 @@ export function petPet3dGame(ctx) {
   m.ears = 'forward';
   m.happy = 0.35;
   // Le chien et le chat assis, le lapin ramassé : de trois quarts avant, un peu de haut.
-  sc.frame([L.muzzle, L.poll, ...L.ears, ...headRoom(sc), L.withers, L.back, L.chest, L.croup, ...L.paws], { dir: [0.7, 0.32, 1], pad: 1.1, now: true });
+  sc.frame([L.muzzle, L.poll, ...L.ears, ...headRoom(sc), L.withers, L.back, L.chest, L.croup, L.rump, ...L.paws], { dir: [0.7, 0.32, 1], pad: 1.1 * (L.size.fluff ?? 1), now: true });
 
   hint(t(shy ? 'mg_pet_hint_shy' : 'mg_pet_hint', { name: a.name }));
   ctx.zone(lo, hi);
@@ -704,7 +704,7 @@ export function petBrush3dGame(ctx) {
   m.ears = 'forward';
   m.happy = 0.4;
   // de profil, un peu de haut, la tête à droite
-  sc.frame([L.nose, L.muzzle, L.poll, ...L.ears, ...headRoom(sc), L.withers, L.croup, L.tail, L.tailTip, L.chest, L.belly, ...L.paws], { dir: [0.25, 0.2, 1], pad: 1.1, now: true });
+  sc.frame([L.nose, L.muzzle, L.poll, ...L.ears, ...headRoom(sc), L.withers, L.croup, L.rump, L.tail, L.tailTip, L.chest, L.belly, ...L.paws], { dir: [0.25, 0.2, 1], pad: 1.1 * (S.fluff ?? 1), now: true });
 
   // ---- les taches de poussière, posées sur le flanc (rayons lancés vers lui depuis notre côté)
   // (la saleté qui se voit le mieux sur cette robe : terre sombre, ou poussière claire sur un poil foncé ou roux)

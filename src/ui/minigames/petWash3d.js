@@ -162,7 +162,7 @@ export function petWash3dGame(ctx) {
   // de profil, un peu de haut, la tête à droite ; toute la bassine
   const B = bath.size;
   const bx = bath.group.position;
-  sc.frame([L.nose, L.poll, ...L.ears, L.withers, L.croup, L.tail, L.tailTip, L.chest, L.belly, bx.clone().add(v3(-B.len / 2, 0, B.wid / 2)), bx.clone().add(v3(B.len / 2, 0, B.wid / 2))], { dir: [0.5, 0.45, 1], pad: 1.08, now: true });
+  sc.frame([L.nose, L.poll, ...L.ears, L.withers, L.croup, L.rump, L.tail, L.tailTip, L.chest, L.belly, bx.clone().add(v3(-B.len / 2, 0, B.wid / 2)), bx.clone().add(v3(B.len / 2, 0, B.wid / 2))], { dir: [0.5, 0.45, 1], pad: 1.08, now: true });
 
   function scrub(p) {
     if (!last) {

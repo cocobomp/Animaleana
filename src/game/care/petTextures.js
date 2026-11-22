@@ -444,3 +444,67 @@ export function sunPatchTexture(cols = 2, rows = 3) {
   }, { key: `sunpatch|${cols}|${rows}`, repeat: false, srgb: false });
 }
 
+
+/**
+ * Saleté dans le poil, à brosser : des mottes de terre séchée et des poils collés, allongées dans le sens du poil,
+ * bords qui s'effacent. light : poussière claire (gris beige) pour un poil foncé ; sinon terre sombre (brun gris),
+ * qui se voit sur un poil roux, fauve, blanc ou tricolore. Transparente autour ; aussi bonne carte de relief.
+ */
+export function petDirtTexture(light = false, seed = 5) {
+  const S = 128;
+  return canvasTex(S, S, (c) => {
+    const r = rng(seed);
+    const base = light ? [214, 204, 184] : [78, 62, 48];
+    const core = light ? [236, 230, 216] : [48, 36, 27];
+    const fleck = light ? [250, 247, 238] : [150, 128, 100];
+    const rgb = (k, j = 12) => k.map((v) => Math.max(0, Math.min(255, Math.round(v + (r() - 0.5) * j)))).join(',');
+    const soft = (cx, cy, rx, ry, col, a) => {
+      c.save();
+      c.translate(cx, cy);
+      c.scale(1, ry / rx);
+      const g = c.createRadialGradient(0, 0, 0, 0, 0, rx);
+      g.addColorStop(0, `rgba(${col},${a})`);
+      g.addColorStop(0.6, `rgba(${col},${a * 0.88})`);
+      g.addColorStop(1, `rgba(${col},0)`);
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc(0, 0, rx, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+    };
+    // la tache : plusieurs mottes qui se chevauchent, allongées (le sens du poil est horizontal dans la texture)
+    for (let i = 0; i < 12; i++) {
+      const rx = 13 + r() * 20;
+      soft(S / 2 + (r() - 0.5) * 56, S / 2 + (r() - 0.5) * 30, rx, rx * (0.45 + r() * 0.25), rgb(base), 0.95);
+    }
+    // cœurs plus marqués
+    for (let i = 0; i < 9; i++) soft(S / 2 + (r() - 0.5) * 46, S / 2 + (r() - 0.5) * 24, 5 + r() * 8, 3 + r() * 4, rgb(core), 0.85);
+    // poils collés en traînées, et éclats de croûte, seulement sur la tache
+    c.save();
+    c.globalCompositeOperation = 'source-atop';
+    c.lineCap = 'round';
+    for (let i = 0; i < 300; i++) {
+      const px = r() * S;
+      const py = r() * S;
+      const a = (r() - 0.5) * 0.3;
+      const l = 4 + r() * 9;
+      c.strokeStyle = `rgba(${rgb(r() < 0.5 ? core : fleck, 30)},${0.35 + r() * 0.5})`;
+      c.lineWidth = 0.8 + r();
+      c.beginPath();
+      c.moveTo(px, py);
+      c.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l);
+      c.stroke();
+    }
+    for (let i = 0; i < 80; i++) {
+      c.fillStyle = `rgba(${rgb(fleck, 24)},${0.5 + r() * 0.45})`;
+      c.fillRect(r() * S, r() * S, 1.5 + r() * 2.5, 1 + r() * 1.5);
+    }
+    c.restore();
+    // quelques projections autour
+    for (let i = 0; i < 8; i++) {
+      const a = r() * Math.PI * 2;
+      const d = 40 + r() * 16;
+      soft(S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d * 0.6, 2 + r() * 3, 2 + r() * 2, rgb(core), 0.9);
+    }
+  }, { repeat: false, key: `petDirt|${light ? 1 : 0}|${seed}` });
+}

@@ -11,7 +11,7 @@ import { feedGame, waterGame, treatGame, drawCountZone, stopLabel, nb, justMsgs,
 import { FAVORITE, SPEED_LIMIT, PET_AMOUNT, drawHeartGauge, HEART } from './fun.js';
 import { rrect, circle, clamp, lerp, distToSegment } from './draw.js';
 import { justRule } from './grooming.js';
-import { mudTexture } from '../../game/care/props.js';
+import { petDirtTexture } from '../../game/care/petTextures.js';
 import { petBrush } from '../../game/care/petProps.js';
 import { softDot } from '../../game/care/textures.js';
 import { petNails3dGame } from './petNails3d.js';
@@ -37,6 +37,8 @@ export function headRoom(sc, k = 1) {
   return [sc.live('poll').add(up), ...L.ears.map((e) => e.clone().add(v3(0, hl * 0.25 * k, 0))), nose.addScaledVector(fwd, hl * 0.3 * k), sc.live('muzzle').add(v3(0, -hl * 0.35 * k, 0))];
 }
 
+/** Luminance relative d'une couleur (THREE.Color, composantes linéaires). */
+const relLum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
 const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
 /** Un petit bruit de contentement de l'animal (aboiement doux, miaulement, rien pour le lapin). */
@@ -681,7 +683,10 @@ export function petBrush3dGame(ctx) {
   sc.frame([L.nose, L.muzzle, L.poll, ...L.ears, ...headRoom(sc), L.withers, L.croup, L.tail, L.tailTip, L.chest, L.belly, ...L.paws], { dir: [0.25, 0.2, 1], pad: 1.1, now: true });
 
   // ---- les taches de poussière, posées sur le flanc (rayons lancés vers lui depuis notre côté)
-  const dustTex = keep(mudTexture('dust', 5));
+  // (la saleté qui se voit le mieux sur cette robe : terre sombre, ou poussière claire sur un poil foncé ou roux)
+  const coatLum = relLum(new THREE.Color(ctx.col?.coat ?? '#c8a070'));
+  const lightDirt = (0.65 + 0.05) / (coatLum + 0.05) > (coatLum + 0.05) / (0.045 + 0.05);
+  const dustTex = keep(petDirtTexture(lightDirt, 5));
   const patchGeo = keep(new THREE.PlaneGeometry(1, 1));
   function decal(p, n, bone, r, tex, color = 0xffffff, opacity = 1) {
     const mat = keep(new THREE.MeshStandardMaterial({ map: tex, bumpMap: tex, bumpScale: 1.5, transparent: true, depthWrite: false, roughness: 1, color, opacity, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
@@ -691,7 +696,8 @@ export function petBrush3dGame(ctx) {
     mesh.position.copy(p).addScaledVector(n, 0.003);
     mesh.lookAt(p.clone().add(n));
     mesh.rotateZ((rng() - 0.5) * 0.5);
-    mesh.renderOrder = 2;
+    // (après les couches de poil des chats et des lapins, qui la couvraient)
+    mesh.renderOrder = 40;
     sc.scene.add(mesh);
     (bone ?? sc.holder).attach(mesh);
     return mesh;
@@ -721,10 +727,7 @@ export function petBrush3dGame(ctx) {
   const r0 = Math.max(0.012, Math.min(S.len * 0.1, (L.back.y - L.belly.y) * 0.22));
   const spots = bodyPoints(7, r0);
   // (poussière claire sur un poil foncé, plus sombre sur un poil clair : elle se voit toujours)
-  // (poussière claire sur un poil foncé, plus sombre sur un poil clair : elle se voit toujours)
-  const coatL = new THREE.Color(ctx.col?.coat ?? '#c8a070').getHSL({}).l;
-  const dustCol = coatL < 0.42 ? 0xd9ccb0 : 0x8a6a48;
-  const patches = spots.map((q) => ({ ...q, dirt: 1, mesh: decal(q.p, q.n, q.bone, q.r, dustTex, dustCol) }));
+  const patches = spots.map((q) => ({ ...q, dirt: 1, mesh: decal(q.p, q.n, q.bone, q.r, dustTex) }));
   const n0 = Math.max(1, patches.length);
   const MAX = 1.4;
   const OVER_RATE = 0.0002;
@@ -740,6 +743,7 @@ export function petBrush3dGame(ctx) {
   let touchT = 9;
   let shine = 0;
   let saidHappy = false;
+  let lastRub = 0;
   const pinkTex = keep(softDot('240,140,165'));
   // ---- la brosse, sous le doigt, sur son poil
   const brush = petBrush(keep, Math.max(0.6, Math.min(1.25, S.len / 0.7)));
@@ -815,6 +819,7 @@ export function petBrush3dGame(ctx) {
       }
     }
     if (touched) {
+      lastRub = ctx.time;
       if (withHair) good += d;
       else bad += d;
       grace = GRACE_PX();
@@ -847,6 +852,7 @@ export function petBrush3dGame(ctx) {
   return {
     peek: () => ({
       value: value(), lo: rule.lo, hi: rule.hi, max: MAX, clean: clean(), over, n: n0, marks: marks.length,
+      dirt: lightDirt ? 'light' : 'dark', contrast: lightDirt ? (0.65 + 0.05) / (coatLum + 0.05) : (coatLum + 0.05) / (0.045 + 0.05),
       patches: patches.filter((q) => q.dirt > 0).map((q) => ({ ...proj(q), dirt: q.dirt })),
       hair: hairDir(),
     }),
@@ -898,13 +904,30 @@ export function petBrush3dGame(ctx) {
         g.font = '900 22px system-ui, sans-serif';
         g.textAlign = 'center';
         g.textBaseline = 'middle';
-        g.fillStyle = '#ffffff';
-        g.strokeStyle = 'rgba(60,40,20,0.35)';
-        g.lineWidth = 3;
+        // (blanches sur un poil foncé, brun sombre sur un poil clair : elles se voient toujours)
+        g.fillStyle = coatLum > 0.3 ? '#4a2e18' : '#ffffff';
+        g.strokeStyle = coatLum > 0.3 ? 'rgba(255,250,240,0.8)' : 'rgba(50,32,18,0.6)';
+        g.lineWidth = 3.5;
         for (const k of [0.25, 0.5, 0.75]) {
           const c = sc.project(L.withers.clone().lerp(L.croup, k).lerp(L.belly, 0.35).add(v3(0, 0, S.w * 0.5)));
           g.strokeText('‹‹', c.x, c.y);
           g.fillText('‹‹', c.x, c.y);
+        }
+        g.restore();
+      }
+      // Les taches qui restent : un cercle pointillé qui palpite, si l'on n'en a pas frotté depuis un moment
+      if (!ctx.done && clean() < 0.999 && ctx.time - lastRub > 3.5 && !ctx.pointer.down) {
+        g.save();
+        g.globalAlpha = 0.55 + Math.sin(ctx.time * 5) * 0.3;
+        g.strokeStyle = coatLum > 0.3 ? '#4a2e18' : '#ffffff';
+        g.lineWidth = 3;
+        g.setLineDash([6, 5]);
+        for (const q of patches) {
+          if (q.dirt <= 0) continue;
+          const c = proj(q);
+          g.beginPath();
+          g.arc(c.x, c.y, Math.max(14, c.r * 1.25), 0, Math.PI * 2);
+          g.stroke();
         }
         g.restore();
       }

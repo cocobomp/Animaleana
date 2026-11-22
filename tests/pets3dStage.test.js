@@ -75,6 +75,22 @@ describe('la scène des animaux de compagnie : repères et cadrages pour toutes 
   }
 });
 
+describe('brosser : la saleté se voit sur toutes les robes', () => {
+  for (const gab of [{ species: 'dog', breed: 'teckel' }, { species: 'dog', breed: 'saint_bernard' }, { species: 'dog', breed: 'bouvier_bernois' }, { species: 'dog', breed: 'labrador', colorIndex: 1 }, { species: 'rabbit', breed: 'tete_de_lion' }, { species: 'rabbit', breed: 'angora' }, { species: 'cat', breed: 'sphynx' }]) {
+    it(`${label(gab)} : terre sombre ou poussière claire, contraste d'au moins 2,5`, () => {
+      const { a, sc } = makePetStage(gab);
+      const ctx = ctxFor(a, sc);
+      const game = pets3d.PET_CARE3D_GAMES[gab.species].brush(ctx);
+      run(ctx, game, sc, 0.2);
+      const s = game.peek();
+      expect(s.contrast, `${s.dirt} sur ${ctx.col.coat}`).toBeGreaterThan(2.5);
+      expect(s.patches.length).toBeGreaterThan(3);
+      game.destroy();
+      sc.dispose();
+    }, 60000);
+  }
+});
+
 describe('les cadrages en paysage et sur ordinateur', () => {
   // (la toile 3D d'un téléphone en paysage, 844 × 390 : 496 × 370 ; la fenêtre du jeu sur un ordinateur : 660 × 460)
   for (const gab of [GAUGES[0], GAUGES[1], GAUGES[2], GAUGES[3], GAUGES[5], GAUGES[6], GAUGES[7], { species: 'rabbit', breed: 'tete_de_lion' }]) {

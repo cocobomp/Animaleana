@@ -31,6 +31,7 @@ export async function loadPets() {
     catLook: await import('../../src/sim/catLook.js'),
     rabbitLook: await import('../../src/sim/rabbitLook.js'),
     animalModel: await import('../../src/game/models/animalModel.js'),
+    draw: await import('../../src/ui/minigames/draw.js'),
   };
   return M;
 }
@@ -66,7 +67,7 @@ export function makePetStage({ species = 'dog', breed = 'labrador', ageDays = 90
 }
 
 /** Le cadre autour de la scène. */
-export const ctxFor = (a, sc, w = 390, h = 600) => fakeCtxOf(a, M.t, { scene: sc, view: M.frame.fitView(w, h, 400, 360) });
+export const ctxFor = (a, sc, w = 390, h = 600) => fakeCtxOf(a, M.t, { scene: sc, view: M.frame.fitView(w, h, 400, 360), col: M.draw.coatColors(a) });
 
 /** s secondes de jeu : le jeu, puis la scène (comme la boucle du cadre). */
 export function run(ctx, game, sc, s, dt = 1 / 30) {

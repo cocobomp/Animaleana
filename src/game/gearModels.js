@@ -10,6 +10,7 @@ import { loft } from './models/shapes.js';
 import { rayHit, sdfNormal } from './models/sdf.js';
 import { SADDLE_STYLES, TACK_PARTS, flapOutline } from './models/tackModels.js';
 import { shellGeometry } from './models/ruminantGear.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const mat = (color, roughness = 0.7, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
 const LEATHER = 0x2a1a10;
@@ -131,21 +132,6 @@ export function buildGear(model, look, gear = {}) {
     const sk = model.skinGear(mesh);
     holders[holders.indexOf(mesh)] = sk;
     return sk;
-  };
-  // Petite pièce posée (position, rotation) sur une pièce liée au squelette (écusson du tapis de voltige, anneaux du
-  // surfaix) : sa géométrie est copiée dans le repère du corps, puis liée elle aussi (skinGear veut des sommets dans
-  // le repère du corps, et modifie la géométrie : jamais une géométrie partagée).
-  add.skinPiece = (mesh) => {
-    if (!model.skinGear) return mesh;
-    mesh.updateMatrix();
-    const g = mesh.geometry.clone();
-    delete g.userData.shared;
-    g.applyMatrix4(mesh.matrix);
-    mesh.geometry = g;
-    mesh.position.set(0, 0, 0);
-    mesh.quaternion.identity();
-    mesh.scale.set(1, 1, 1);
-    return add.skin(mesh);
   };
   // Un petit groupe tout fait (ex. un étrier du catalogue) : ses pièces sont partagées, on le retire en bloc.
   add.group = (parent, obj) => {
@@ -427,6 +413,42 @@ function horsePad(model, gear, add, st) {
   return padT;
 }
 
+/**
+ * Petites pièces regroupées par matériau en un seul maillage (moins d'appels de rendu : anneaux, boucles, poignées,
+ * écussons). put(géométrie, matériau, { pos, quat, skin }) : copiée dans le repère du parent ; flush() les pose (liées
+ * au squelette si skin, comme add.skin).
+ */
+function pieceBatch(parent, add) {
+  const groups = new Map();
+  const m = new THREE.Matrix4();
+  const one = new THREE.Vector3(1, 1, 1);
+  return {
+    put(geo, material, { pos = null, quat = null, skin = false } = {}) {
+      let g = geo.index ? geo.toNonIndexed() : geo.clone();
+      for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+      if (!g.attributes.normal) g.computeVertexNormals();
+      if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+      g.clearGroups();
+      g.morphAttributes = {};
+      delete g.userData.shared;
+      g.applyMatrix4(m.compose(pos ?? new THREE.Vector3(), quat ?? new THREE.Quaternion(), one));
+      const key = `${material.uuid}|${skin ? 1 : 0}`;
+      if (!groups.has(key)) groups.set(key, { material, skin, list: [] });
+      groups.get(key).list.push(g);
+    },
+    flush() {
+      for (const { material, skin, list } of groups.values()) {
+        const merged = list.length === 1 ? list[0] : mergeGeometries(list);
+        if (list.length > 1) list.forEach((x) => x.dispose());
+        if (!merged) continue;
+        const mesh = add(parent, merged, material);
+        if (skin) add.skin(mesh);
+      }
+      groups.clear();
+    },
+  };
+}
+
 /** Où est le tapis de voltige (repère du modèle) : de devant le garrot jusqu'aux reins, retombant sur les flancs. */
 export function vaultPadSpan(model) {
   const { L } = model.dims;
@@ -509,19 +531,18 @@ function horseVaultPad(model, gear, add) {
   const trim = new THREE.Color(color).multiplyScalar(0.42).getHex();
   add.skin(add(model.body, P.tube(edge.map((v) => v.toArray()), T / 2 + 0.004, true, 8), P.clothMat(trim)));
   // Écusson : un disque clair à étoile sur chaque flanc, vers l'arrière du tapis.
+  const batch = pieceBatch(model.body, add);
   for (const sd of [1, -1]) {
     const zc = z0 + (z1 - z0) * 0.3;
     const a = aTop - sd * deg(72);
     const p = at(zc, a, gap + T + 0.011);
     const q = rayHit(torso, [0, yc, zc], [Math.cos(a), Math.sin(a), 0], 1.2);
     const nrm = sdfNormal(torso, q, 0.004);
-    const disc = add(model.body, P.shared('vaultBadge', () => new THREE.CircleGeometry(0.06 * k, 24)), P.clothMat(0xf4efe4, THREE.FrontSide), p.toArray());
-    disc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), nrm);
-    add.skinPiece(disc);
-    const star = add(model.body, P.shared('vaultStar', () => starGeometry(0.04 * k, 0.017 * k, 5)), P.clothMat(color, THREE.FrontSide), p.clone().addScaledVector(nrm, 0.003).toArray());
-    star.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), nrm);
-    add.skinPiece(star);
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), nrm);
+    batch.put(P.shared('vaultBadge', () => new THREE.CircleGeometry(0.06, 24)), P.clothMat(0xf4efe4, THREE.FrontSide), { pos: p, quat, skin: true });
+    batch.put(P.shared('vaultStar', () => starGeometry(0.04, 0.017, 5)), P.clothMat(color, THREE.FrontSide), { pos: p.clone().addScaledVector(nrm, 0.003), quat, skin: true });
   }
+  batch.flush();
   return gap + T;
 }
 
@@ -572,18 +593,17 @@ function horseSurcingle(model, gear, add, padT = 0) {
   const girth = loop(torso, [0, yc, zc], 22, (model.skinGear ? 0.016 : 0.012), wingA + deg(4), -Math.PI - wingA - deg(4), tilt);
   add.skin(add(body, strap(girth, 0.035 * k, 0.006), leather));
   add.skin(add(body, strap(loop(torso, [0, yc, zc], 9, (model.skinGear ? 0.0225 : 0.0185), deg(-62), deg(-118), tilt), 0.026 * k, 0.003), P.nylonMat(0x2a2a2a)));
-  // Fourreau en mouton sous la sangle, là où elle frotte (blanc).
+  // Fourreau en mouton sous la sangle, là où elle frotte (blanc). Petites pièces : regroupées (pieceBatch).
+  const batch = pieceBatch(body, add);
   for (const [b0, b1] of [[deg(-30), deg(-56)], [deg(-124), deg(-150)]]) {
-    add.skin(add(body, strap(loop(torso, [0, yc, zc], 6, (model.skinGear ? 0.024 : 0.018), b0, b1, tilt), 0.04 * k, 0.009), P.fleeceMat(0xf2eee6)));
+    batch.put(strap(loop(torso, [0, yc, zc], 6, (model.skinGear ? 0.024 : 0.018), b0, b1, tilt), 0.04 * k, 0.009), P.fleeceMat(0xf2eee6), { skin: true });
   }
   // Boucles de la sangle, au bas des ailes.
   for (const a of [wingA + deg(3), Math.PI - wingA - deg(3)]) {
     const p = rayHit(torso, [0, yc, zc], [Math.cos(a), Math.sin(a) * Math.cos(tilt), -Math.sin(a) * Math.sin(tilt)], 1.2);
     const nrm = sdfNormal(torso, p, 0.004);
-    const bk = add(body, P.shared('vaultBuckle', () => new THREE.TorusGeometry(0.03, 0.005, 6, 4)), P.steelMat(), p.addScaledVector(nrm, onTop + 0.02).toArray());
-    bk.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), nrm);
-    bk.rotateZ(Math.PI / 4);
-    add.skinPiece(bk);
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), nrm).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4));
+    batch.put(P.shared('vaultBuckle', () => new THREE.TorusGeometry(0.03, 0.005, 6, 4)), P.steelMat(), { pos: p.addScaledVector(nrm, onTop + 0.02), quat, skin: true });
   }
   // Repère du dessus pour les poignées : point du dessus, sa normale, et l'axe du dos (vers l'avant).
   const at = (a, out = onTop + 0.023) => {
@@ -608,13 +628,13 @@ function horseSurcingle(model, gear, add, padT = 0) {
       const h = Math.abs(Math.sin(a)) ** 0.45;
       path.push(p.clone().addScaledVector(fwd, W * s).addScaledVector(up, H * h - 0.004).toArray());
     }
-    add(body, P.tube(path, 0.017 * k, false, 10), leather);
+    batch.put(P.tube(path, 0.017 * k, false, 10), leather);
     // Embase cousue sur le dessus, et le haut de l'anse gainé d'un cuir plus clair (là où la main tient).
-    add(body, P.shared('vaultGripBase', () => new THREE.BoxGeometry(0.05, 0.012, 0.15)), edgeM, p.toArray()).quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+    batch.put(P.shared('vaultGripBase', () => new THREE.BoxGeometry(0.05, 0.012, 0.15)), edgeM, { pos: p, quat: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n) });
     const grip = p.clone().addScaledVector(up, H - 0.004);
     const wrap = [];
     for (let i = 3; i <= 9; i++) wrap.push(path[i]);
-    add(body, P.tube(wrap, 0.0195 * k, false, 10), P.suedeMat(0x7a4a26));
+    batch.put(P.tube(wrap, 0.0195 * k, false, 10), P.suedeMat(0x7a4a26));
     grips.push(grip);
   }
   // Boucle souple du milieu (pour le pied ou la main), entre les poignées, plus basse.
@@ -624,18 +644,17 @@ function horseSurcingle(model, gear, add, padT = 0) {
     const a = Math.PI * (i / 10);
     loopPts.push(mid.p.clone().addScaledVector(fwd, 0.045 * k * Math.cos(a)).addScaledVector(mid.n, 0.07 * k * Math.sin(a) ** 0.7).toArray());
   }
-  add(body, P.tube(loopPts, 0.008 * k, false, 6), edgeM);
+  batch.put(P.tube(loopPts, 0.008 * k, false, 6), edgeM);
   // Anneaux des enrênements : trois sur chaque flanc, à différentes hauteurs ; on se sert de celui du milieu.
   const rings = [];
   for (const sd of [1, -1]) {
     for (const [a, i] of [[deg(sd > 0 ? 28 : 152), 0], [deg(sd > 0 ? 14 : 166), 1], [deg(sd > 0 ? 0 : 180), 2]]) {
       const { p, n } = at(a, onTop + 0.026);
-      const ring = add(body, P.shared('vaultRing', () => new THREE.TorusGeometry(0.024, 0.005, 6, 16)), P.steelMat(), p.toArray());
-      ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
-      add.skinPiece(ring);
+      batch.put(P.shared('vaultRing', () => new THREE.TorusGeometry(0.024, 0.005, 6, 16)), P.steelMat(), { pos: p, quat: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), n), skin: true });
       if (i === 1) rings.push(p.clone().addScaledVector(n, 0.01));
     }
   }
+  batch.flush();
   add.surcingle = { parent: body, grips, rings, loop: mid.p.clone(), z: zTop };
 }
 

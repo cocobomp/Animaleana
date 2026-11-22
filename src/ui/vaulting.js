@@ -172,23 +172,28 @@ export function showVaultResults(ui, r) {
   if (r.animal && r.horse) lines.push(h('li', {}, `${SPECIES.horse.emoji} ${ta('vt_horseFx', r.animal, { n: r.horse.obedience })}`));
   const title = res.stars === 3 ? t('vt_resBravo') : res.stars === 2 ? t('vt_resGood') : t('vt_resTry');
   const who = r.animal ? `${SPECIES.horse.emoji} ${r.animal.name} · ${VAULT_LEVELS[r.level].icon} ${t(`vt_level_${r.level}`)}` : `${VAULT_LEVELS.barrel.icon} ${t(`vt_level_${r.level}`)}`;
+  // Deux parties : la note (titre, étoiles, note finale, ce que la séance a apporté) et le protocole des juges ;
+  // l'une sous l'autre en hauteur, côte à côte en paysage (vaulting.css). Les boutons sont en dehors, en bas de la
+  // fenêtre : ils restent collés en bas, toujours visibles, même quand le reste défile.
   ui.showModal([
     h('div', { class: 'actv-result vt-result' },
-      h('h2', {}, `🤸 ${title}`),
-      h('div', { class: 'actv-stars', 'aria-label': `${res.stars}/3` }, [0, 1, 2].map((i) => h('span', { class: i < res.stars ? 'on' : '' }, '★'))),
-      h('p', { class: 'actv-who' }, who),
-      h('div', { class: 'vt-total' }, h('b', {}, fmtMark(res.score, 2)), h('small', {}, ' / 10')),
-      h('table', { class: 'actv-table vt-protocol' },
-        h('thead', {}, h('tr', {}, h('th', {}, t('vt_colFigure')), h('th', {}, '🧑‍⚖️ A'), h('th', {}, 'B'), h('th', {}, 'C'), h('th', {}, t('vt_colScore')))),
-        h('tbody', {}, res.figures.map((f) => h('tr', {},
-          h('td', {}, `${FIGURES[f.id].icon} ${t(`vt_fig_${f.id}`)}`),
-          f.marks.map((m) => h('td', { class: 'num' }, fmtMark(m))),
-          h('td', { class: 'num' }, h('b', {}, fmtMark(f.score))))))),
-      lines.length ? h('ul', { class: 'actv-lines' }, lines) : null,
-      r.award ? h('div', { class: 'actv-won' }, awardEl(r.award, true), h('b', {}, t('actv_wonRibbon'))) : null,
-      h('div', { class: 'row end' },
-        r.onAgain ? h('button', { onClick: close(r.onAgain) }, `🔁 ${t('actv_again')}`) : null,
-        h('button', { class: 'primary', onClick: close(r.onClose) }, t('actv_done')))),
+      h('div', { class: 'vt-res-side' },
+        h('h2', {}, `🤸 ${title}`),
+        h('div', { class: 'actv-stars', 'aria-label': `${res.stars}/3` }, [0, 1, 2].map((i) => h('span', { class: i < res.stars ? 'on' : '' }, '★'))),
+        h('p', { class: 'actv-who' }, who),
+        h('div', { class: 'vt-total' }, h('b', {}, fmtMark(res.score, 2)), h('small', {}, ' / 10')),
+        r.award ? h('div', { class: 'actv-won' }, awardEl(r.award, true), h('b', {}, t('actv_wonRibbon'))) : null),
+      h('div', { class: 'vt-res-main' },
+        h('table', { class: 'actv-table vt-protocol' },
+          h('thead', {}, h('tr', {}, h('th', {}, t('vt_colFigure')), h('th', {}, '🧑‍⚖️ A'), h('th', {}, 'B'), h('th', {}, 'C'), h('th', {}, t('vt_colScore')))),
+          h('tbody', {}, res.figures.map((f) => h('tr', {},
+            h('td', {}, `${FIGURES[f.id].icon} ${t(`vt_fig_${f.id}`)}`),
+            f.marks.map((m) => h('td', { class: 'num' }, fmtMark(m))),
+            h('td', { class: 'num' }, h('b', {}, fmtMark(f.score))))))),
+        lines.length ? h('ul', { class: 'actv-lines' }, lines) : null)),
+    h('div', { class: 'row end vt-res-btns' },
+      r.onAgain ? h('button', { onClick: close(r.onAgain) }, `🔁 ${t('actv_again')}`) : null,
+      h('button', { class: 'primary', onClick: close(r.onClose) }, t('actv_done'))),
   ]);
 }
 

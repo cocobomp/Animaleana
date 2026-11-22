@@ -89,7 +89,9 @@
 .vt-judge b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 .vt-marks-say { font-weight: 600; font-size: 0.88rem; text-align: center; }
 
-/* Résultats : la note finale et le protocole. */
+/* Résultats : la note finale et le protocole ; les boutons en bas de la fenêtre (collés en bas, voir style.css). */
+.modal-box > .vt-res-btns { justify-content: center; }
+.modal-box > .vt-res-btns button { min-height: 52px; min-width: 130px; }
 .vt-total { text-align: center; margin: 2px 0 8px; }
 .vt-total b { font-size: 2.6rem; font-weight: 900; color: #1e7a40; font-variant-numeric: tabular-nums; }
 .vt-total small { font-weight: 800; color: var(--muted); }
@@ -107,6 +109,25 @@
 .vt-fig { background: #f4efe4; border-radius: 999px; padding: 3px 10px; font-weight: 700; font-size: 0.85rem; opacity: 0.55; }
 .vt-fig.ok { opacity: 1; background: #d9f2df; }
 
+/* Paysage sur téléphone : les résultats sur deux colonnes (la note à gauche, le protocole à droite), sans défiler. */
+@media (max-height: 500px) and (min-width: 600px) {
+  .modal-box:has(> .vt-result) { width: min(780px, 100%); }
+  .vt-result { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); column-gap: 18px; align-items: center; }
+  .vt-result h2 { font-size: 1.25rem; margin: 0 0 2px; }
+  .vt-result .actv-stars { font-size: 1.6rem; }
+  .vt-result .actv-who { margin: 2px 0; }
+  .vt-total { margin: 0; }
+  .vt-total b { font-size: 2.2rem; }
+  .vt-protocol { font-size: 0.86rem; }
+  .vt-protocol td { padding: 1px 4px; }
+  .vt-result .actv-lines { margin: 6px 0 0; font-size: 0.8rem; gap: 3px; }
+  .vt-result .actv-lines li { padding: 3px 10px; }
+  .vt-result .actv-won { margin: 4px 0 0; }
+  /* (s'il reste un peu à défiler, une ombre au-dessus des boutons le montre) */
+  .modal-box > .vt-res-btns { box-shadow: 0 -10px 12px -10px rgba(0, 0, 0, 0.25); }
+  .modal-box > .vt-res-btns button { min-height: 46px; }
+}
+
 @media (max-height: 500px) {
   /* Paysage sur téléphone : le bouton et la jauge à droite, le cheval au milieu de l'écran. */
   body.vt-on #actv-hud .actv-controls {
@@ -121,7 +142,8 @@
   .vt-btn { width: 84px; height: 84px; }
   .vt-btn .vt-ico { line-height: 84px; font-size: 2.1rem; }
   .vt-marks { top: calc(8px + var(--safe-t)); }
-  .vt-card small { display: none; }
+  .vt-controls { gap: 30px; }
+  .vt-card small { font-size: 0.76rem; line-height: 1.2; }
 }
 
 /* Au clavier : Espace pour toucher, flèches pour l'équilibre (caché sur un écran tactile). */

@@ -34,7 +34,7 @@ const STAGE_ICON = ['🟫', '✖️', '🏇', '🏆'];
  */
 export function openActivities(ui, opts = {}) {
   const g = ui.game;
-  const state = { tab: opts.tab ?? 'play', pick: opts.pick ?? null, comp: null, acts: [], autoJump: true };
+  const state = { tab: opts.tab ?? 'play', pick: opts.pick ?? null, comp: null, acts: [], autoJump: true, animalId: opts.animal?.id ?? null };
   if (opts.pick === 'show' && opts.animal) {
     const first = knownTricks(opts.animal)[0];
     if (first) state.acts.push({ animalId: opts.animal.id, trick: first });
@@ -348,6 +348,10 @@ export function animalActivitySection(ui, a) {
   }, `${TYPE_ICON[type]} ${label}`);
   const btns = [];
   if (sp.rideable) btns.push(btn('lesson', t('actv_type_lesson')), btn('jumping', t('actv_type_jumping')), btn('trail', t('actv_type_trail')));
+  // 🤸 Voltige : le menu de la voltige (niveau, matériel à mettre, ou pourquoi ce cheval ne peut pas)
+  if (a.species === 'horse' && !a.client) {
+    btns.push(h('button', { class: 'act', onClick: () => openActivities(ui, { pick: 'vaulting', animal: a }) }, `${TYPE_ICON.vaulting} ${t('actv_type_vaulting')}`));
+  }
   if (a.species === 'rabbit') {
     btns.push(btn('hop', t('actv_type_hop')));
     btns.push(h('button', { class: 'act', onClick: () => openHutchPlay(ui, a) }, `🎡 ${t('do_actvHutchPlay')}`));

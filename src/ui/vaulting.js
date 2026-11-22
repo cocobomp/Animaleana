@@ -249,7 +249,9 @@ export function vaultingPick(ui, state) {
     h('span', { class: 'card-side' }, best ? h('small', {}, `⭐ ${fmtMark(best)}`) : id === 'barrel' ? '▶️' : null));
   })));
   // Les chevaux, au niveau choisi.
-  const horses = g.animalsHere().filter((a) => a.species === 'horse' && !a.client && !a.guest);
+  // (le cheval dont on vient — sa fiche, son menu rapide — en premier)
+  const horses = g.animalsHere().filter((a) => a.species === 'horse' && !a.client && !a.guest)
+    .sort((x, y) => (y.id === state.animalId) - (x.id === state.animalId));
   if (!horses.length) out.push(h('p', { class: 'warn' }, t('vt_noHorse')));
   out.push(h('div', { class: 'cards' }, horses.map((a) => {
     const why = vaultBlock(a, level, p);

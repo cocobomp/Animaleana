@@ -198,10 +198,12 @@ export function ruminantLife(stage, dt) {
   const neck = neckBone(md);
   const head = headBone(md);
   const jaw = md.bone?.('jaw');
-  // Ruminer debout : la mâchoire va de côté, en rond, sans fin (quand il ne mange pas déjà au râtelier).
-  const ru = (stage.ruminK = (stage.ruminK ?? 0) + ((m.chew > 0 && !m.eat ? 1 : 0) - (stage.ruminK ?? 0)) * Math.min(1, dt * 3));
+  // Ruminer debout : la mâchoire va de côté, en rond, sans fin (quand il ne mange pas déjà au râtelier). Le jeu le
+  // demande (mood.chew) ; sinon il rumine de lui-même, par moments, comme au pré.
+  const chew = m.chew > 0 ? m.chew : !m.call && Math.sin(t * 0.23 + 1) > 0.1 ? 0.5 : 0;
+  const ru = (stage.ruminK = (stage.ruminK ?? 0) + ((chew > 0 && !m.eat ? 1 : 0) - (stage.ruminK ?? 0)) * Math.min(1, dt * 3));
   if (jaw && ru > 0.01) {
-    anim.turn(jaw, AX, (0.05 + 0.045 * Math.sin(t * 6.3)) * ru * Math.min(1, m.chew + 0.2));
+    anim.turn(jaw, AX, (0.05 + 0.045 * Math.sin(t * 6.3)) * ru * Math.min(1, chew + 0.2));
     anim.turn(jaw, AY, Math.sin(t * 6.3 + 1.2) * 0.06 * ru);
   }
   // Hocher la tête (contente, ou impatiente quand on prépare son repas).

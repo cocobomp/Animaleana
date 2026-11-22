@@ -11,6 +11,14 @@
 
 import { drawAnimal, animalShape, fitAnimal, sky, fillView, ellipse, circle, emoji, label, rrect, clamp, lerp, dist, css, shade } from './draw.js';
 import { RIBBON_COLORS, BOW_PATTERNS } from '../../sim/beauty.js';
+import { drawHorseVet } from '../vetHorse.js';
+
+/**
+ * Le cheval dessiné des tresses et du lustrage (repli sans 3D) : le beau cheval de profil du vétérinaire
+ * (drawHorseVet : mêmes options et même géométrie que drawAnimal, les zones tombent juste) ; les autres animaux
+ * gardent drawAnimal.
+ */
+const drawBody = (g, a, o) => (a.species === 'horse' ? drawHorseVet(g, a, o) : drawAnimal(g, a, o));
 
 const COLOR_EMOJI = { red: '🔴', pink: '🩷', blue: '🔵', yellow: '🟡', green: '🟢', purple: '🟣', white: '⚪' };
 const PATTERN_EMOJI = { plain: '⬜', dots: '🔘', stripes: '📏' };
@@ -359,6 +367,9 @@ export function braidGame(ctx) {
   }
 
   return {
+    // (le jeu 3D, beauty3d.js : la même loupe, posée sur la vraie crinière ; et où en est chaque tresse)
+    loupe: { rect: LOUPE, draw: drawLoupe },
+    sections,
     peek: () => ({
       phase,
       color,
@@ -399,7 +410,7 @@ export function braidGame(ctx) {
     },
     draw(g) {
       ringBackground(g, ctx, floorY);
-      drawAnimal(g, a, { x: fit.x, y: floorY, s, f: 1, happy: phase !== 'braid' || cur > 0, shake: shake > 0 ? 1 : 0 });
+      drawBody(g, a, { x: fit.x, y: floorY, s, f: 1, happy: phase !== 'braid' || cur > 0, shake: shake > 0 ? 1 : 0, time: ctx.time });
       sections.forEach((sec, i) => {
         if (sec.done > 0) drawBraid(g, sec.top, sec.bottom, 9 * s, mane, sec.done);
         if (sec.ribbon) drawBow(g, sec.bottom.x, sec.bottom.y, 8 * s, RIBBON_COLORS[color] ?? RIBBON_COLORS.red, 'plain', -0.2);
@@ -514,6 +525,11 @@ export function shineGame(ctx) {
   }
 
   return {
+    // (le jeu 3D, beauty3d.js : la forme du cheval dessiné, pour reporter le chiffon sur elle ; les sabots)
+    shape: sh,
+    step,
+    overAt: OVER_AT,
+    hoofSpots: hooves,
     peek: () => ({
       value: value(), lo: LO, hi: HI, max: MAX, coverage: coverage(), over: over(),
       cells: cells.filter((c) => c.v < 1).map((c) => ({ x: c.x, y: c.y })),
@@ -536,7 +552,7 @@ export function shineGame(ctx) {
     update(dt) { sparkle += dt; },
     draw(g) {
       ringBackground(g, ctx, floorY);
-      drawAnimal(g, a, { x: fit.x, y: floorY, s, f: 1, happy: state === 'just' || coverage() > 0.4, earsBack: state === 'high' });
+      drawBody(g, a, { x: fit.x, y: floorY, s, f: 1, happy: state === 'just' || coverage() > 0.4, earsBack: state === 'high', time: ctx.time });
       // Le brillant : des taches claires là où on a lustré ; trop de lustrant : des traces jaunes qui collent
       for (const c of cells) {
         if (c.v <= 0) continue;

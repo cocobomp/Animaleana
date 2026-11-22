@@ -31,6 +31,7 @@ import { farmBrush3dGame } from './farmBrush3d.js';
 import { shear3dGame } from './shear3d.js';
 import { milk3dGame } from './milk3d.js';
 import { cowWash3dGame } from './cowWash3d.js';
+import { shine3dGame, braid3dGame } from './beauty3d.js'; // (concours de beauté du cheval : lustrer, tresser)
 import { hoofTrim3dGame } from './hoofTrim3d.js';
 import { goatPlay3dGame } from './goatPlay3d.js';
 import { barnClean3dGame } from './barnClean3d.js';
@@ -46,6 +47,7 @@ for (const sp of ['sheep', 'goat', 'cow']) CARE3D_GAMES[sp] = { feed: farmFeed3d
 CARE3D_GAMES.sheep.shear = shear3dGame;
 CARE3D_GAMES.goat.milk = milk3dGame;
 CARE3D_GAMES.cow.milk = milk3dGame;
+Object.assign(CARE3D_GAMES.horse, { shine: shine3dGame, braid: braid3dGame });
 CARE3D_GAMES.cow.wash = cowWash3dGame;
 CARE3D_GAMES.goat.nails = hoofTrim3dGame; // (parer les onglons : le pied levé, hoofTrim3d.js)
 CARE3D_GAMES.goat.play = goatPlay3dGame; // (la balle dans le pré : goatPlay3d.js, paddock.js)

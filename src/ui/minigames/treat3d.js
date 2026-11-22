@@ -107,7 +107,7 @@ export function treat3dGame(ctx) {
   }
 
   return {
-    peek: () => ({ ...play.peek(), look: m.look ? m.look.toArray() : null, lookAmt: m.lookAmt, bite: !!bite }),
+    peek: () => ({ ...play.peek(), look: m.look ? m.look.toArray() : null, lookAmt: m.lookAmt, bite: !!bite, reach }),
     down: (p) => play.down(p),
     key: (c, d) => play.key(c, d),
     update(dt) {
@@ -146,18 +146,24 @@ export function treat3dGame(ctx) {
       // Il la prend : elle passe entre ses lèvres (on la voit un instant dépasser de sa bouche), puis elle fond.
       if (reachT >= 0.55 && !bite && sc.model.head) {
         const tm = treats[held];
-        const mouth = sc.model.mouth ?? v3(0, -0.2 * (sc.model.dims?.snoutZ ?? 0.5), 0.86 * (sc.model.dims?.snoutZ ?? 0.5));
-        sc.model.head.add(tm);
-        // (la carotte en travers de la bouche, qui dépasse de notre côté ; la pomme entre les lèvres)
-        tm.position.copy(mouth).add(v3(held === 'carrot' ? -0.065 : -0.02, 0.02, 0.03));
-        tm.rotation.set(0, held === 'carrot' ? 0.35 : 0, 0);
-        tm.scale.setScalar((held === 'carrot' ? 0.8 : 0.85) / Math.max(0.3, sc.model.head.getWorldScale(v3()).x));
-        bite = { tm, k: held, t: 0, s0: tm.scale.x };
+        sc.scene.add(tm);
+        tm.scale.setScalar(held === 'carrot' ? 0.85 : 0.9);
+        bite = { tm, k: held, t: 0 };
       }
       if (bite) {
+        // (entre ses lèvres : la carotte en travers, qui dépasse de notre côté ; la pomme au bord des lèvres ; il la
+        // garde un instant en mâchant, puis elle disparaît dans sa bouche)
         bite.t += dt;
-        bite.tm.scale.setScalar(bite.s0 * Math.max(0.05, 1 - bite.t / 0.9));
-        bite.tm.visible = bite.t < 0.85;
+        sc.model.head.getWorldQuaternion(_hq);
+        const side = v3(-1, 0, 0).applyQuaternion(_hq);
+        const down = v3(0, -1, 0).applyQuaternion(_hq);
+        const carrot = bite.k === 'carrot';
+        bite.tm.position.copy(sc.live('muzzle')).addScaledVector(down, 0.025 * S).addScaledVector(side, (carrot ? 0.06 : 0.02) * S);
+        bite.tm.quaternion.copy(_hq);
+        if (carrot) bite.tm.rotateY(0.25);
+        const k = bite.t < 0.5 ? 1 : Math.max(0.05, 1 - (bite.t - 0.5) / 0.4);
+        bite.tm.scale.setScalar((carrot ? 0.85 : 0.9) * k);
+        bite.tm.visible = bite.t < 0.88;
         if (bite.t > 0.9) {
           putInHand(bite.k);
           bite = null;
@@ -238,6 +244,7 @@ export function treat3dGame(ctx) {
 }
 
 const smooth = (k) => k * k * (3 - 2 * k);
+const _hq = new THREE.Quaternion();
 
 /**
  * Le sens du bras, de la main vers l'épaule (repère monde, normé) : vers nous et vers la droite de l'image, un peu

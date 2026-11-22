@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { rippleNormal, softDot, noiseTexture, rng } from './textures.js';
 import { bowlTexture, bagTexture } from './petTextures.js';
-import { handModel } from './props.js';
+import { petHand } from './petHand.js';
 
 const lerp = (a, b, k) => a + (b - a) * k;
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
@@ -280,7 +280,7 @@ export function petBowl({ r = 0.09, color = 0xd9574a, name = '', content = 'food
 
 /**
  * Pose notre main sur un objet tenu : la paume en grip (repère monde), tournée vers `toward` (direction monde de la
- * paume), le bras qui vient d'en haut à droite, de notre côté (hors de l'image).
+ * paume), le bras qui vient de notre épaule (petHand.js shoulderFor : en bas à droite de l'image, vers nous).
  */
 export function holdHand(hand, grip, toward, shoulder = null) {
   // (de l'épaule vers la main : l'épaule est près de la caméra, à droite — le bras entre par le bord de l'image)
@@ -340,7 +340,7 @@ export function kibbleBag({ kind = 'dog', size = 1, hand = null, shoulder = null
   lip.position.set(W * 0.5, 0, 0);
   pivot.add(lip);
   // notre main, qui tient le sac par sa face avant, près du fond (posée à chaque image : holdHand)
-  const h = hand ? handModel(keep, { ...hand, grip: 0.55 }) : null;
+  const h = hand ? petHand(keep, { ...hand, grip: 0.62, size: hand.size ?? clamp(0.55 + 0.4 * size, 0.62, 1) }) : null;
   if (h) g.add(h);
   let tilt = 0;
   let want = 0;
@@ -357,7 +357,7 @@ export function kibbleBag({ kind = 'dog', size = 1, hand = null, shoulder = null
       if (h) {
         g.updateMatrixWorld(true);
         const grip = pivot.localToWorld(v3(W * 0.78, -H * 0.62, Dp * 0.62));
-        holdHand(h, grip, v3(0, 0, -1), shoulder?.());
+        holdHand(h, grip, v3(0, 0, -1), shoulder?.(grip));
       }
     },
     dispose() { keep.dispose(); },
@@ -484,7 +484,7 @@ export function pitcher({ size = 1, color = 0xe9f0f2, hand = null, shoulder = nu
   inside.rotation.x = -Math.PI / 2;
   inside.position.set(0.064 * s, -0.19 * s + 0.165 * s, 0);
   pivot.add(inside);
-  const h = hand ? handModel(keep, { ...hand, grip: 0.9 }) : null;
+  const h = hand ? petHand(keep, { ...hand, grip: 0.85, size: hand.size ?? clamp(0.55 + 0.4 * s, 0.62, 1) }) : null;
   if (h) g.add(h);
   // le filet d'eau : un cylindre transparent dont la texture défile vers le bas
   const streamTex = keep(new THREE.CanvasTexture(streamCanvas()));
@@ -516,7 +516,10 @@ export function pitcher({ size = 1, color = 0xe9f0f2, hand = null, shoulder = nu
       pivot.rotation.z = tilt * 1.05;
       g.updateMatrixWorld(true);
       // (notre main tient l'anse)
-      if (h) holdHand(h, pivot.localToWorld(v3(0.064 * s + 0.1 * s, -0.19 * s + 0.12 * s, 0)), v3(0, 0, -1), shoulder?.());
+      if (h) {
+        const grip = pivot.localToWorld(v3(0.064 * s + 0.1 * s, -0.19 * s + 0.12 * s, 0));
+        holdHand(h, grip, v3(0, 0, -1), shoulder?.(grip));
+      }
       stream.visible = flow > 0.02 && tilt > 0.6;
       if (stream.visible) {
         const sp = spout(tip);

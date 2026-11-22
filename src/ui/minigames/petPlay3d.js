@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { playGame } from './fun.js';
 import { drawCountZone } from './food.js';
 import { withLogic } from './care3d.js';
-import { handModel } from '../../game/care/props.js';
+import { petHand } from '../../game/care/petHand.js';
 import { own, shadowed } from '../../game/care/petProps.js';
 import { canvasTex } from '../../game/care/textures.js';
 import { audio } from '../../game/audio.js';
@@ -74,7 +74,8 @@ export function petPlay3dGame(ctx) {
   const ballR = Math.max(0.022, Math.min(0.034, S.headLen * 0.2));
   const ball = ballModel(keep, sp, ballR);
   sc.scene.add(ball);
-  const hand = handModel(keep, sc.decor.props.hand ?? {});
+  const hand = petHand(keep, { ...(sc.decor.props.hand ?? {}), size: Math.max(0.7, Math.min(1, 0.6 + S.len * 0.45)) });
+  hand.userData.pose({ curl: 0.35, thumb: 0.3 });
   sc.scene.add(hand);
   let handAt = toWorld(200, 340).add(v3(0, Math.max(0.25, S.h * 0.9), 0));
   hand.position.copy(handAt);

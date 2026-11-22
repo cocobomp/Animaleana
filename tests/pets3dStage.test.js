@@ -221,6 +221,31 @@ describe('le brossage', () => {
   }
 });
 
+describe('notre main : une main d\'enfant, à la taille de l\'animal, le bras entre par le bas', () => {
+  for (const gab of GAUGES) {
+    it(`${label(gab)} : friandise et caresses`, () => {
+      const { a, sc } = makePetStage(gab);
+      const L = sc.marks;
+      // (une main de 12 cm au plus, jamais plus du tiers de la taille de l'animal)
+      const size = pets3d.handSize(L);
+      expect(size * 0.12).toBeLessThan(0.36 * Math.max(L.size.len, L.size.h));
+      const ctx = ctxFor(a, sc);
+      const game = pets3d.PET_CARE3D_GAMES[gab.species].treat(ctx);
+      run(ctx, game, sc, 0.6);
+      const hand = sc.scene.children.find((o) => o.userData?.pose);
+      expect(hand).toBeTruthy();
+      // le bras : la manche part vers le bas de l'image, et sort de l'image
+      const palm = sc.project(hand.getWorldPosition(new THREE.Vector3()));
+      const elbow = sc.project(hand.localToWorld(new THREE.Vector3(-0.3 * size, 0, 0)));
+      expect(elbow.y).toBeGreaterThan(palm.y);
+      const far = sc.project(hand.localToWorld(new THREE.Vector3(-0.7 * size, 0, 0)));
+      expect(far.behind || !inView(far, ctx.view)).toBe(true);
+      game.destroy();
+      sc.dispose();
+    }, 60000);
+  }
+});
+
 describe('les griffes (chien, chat, lapin) : un gros plan lisible', () => {
   // Une griffe vue de près : au moins 55 px du cadre (le jeu dessiné : 74), dans l'image, devant la patte (rien de
   // l'animal entre la caméra et elle), en portrait comme en paysage, du chihuahua au saint-bernard.

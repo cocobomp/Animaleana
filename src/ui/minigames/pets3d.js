@@ -18,7 +18,8 @@ import { petNails3dGame } from './petNails3d.js';
 import { petPlay3dGame } from './petPlay3d.js';
 import { withLogic, sideGauge, bubble } from './care3d.js';
 import { kibbleBag, kibbleRain, pitcher, FOODS, own, treatFor } from '../../game/care/petProps.js';
-import { handModel, aimHand } from '../../game/care/props.js';
+import { aimHand } from '../../game/care/props.js';
+import { petHand, shoulderFor } from '../../game/care/petHand.js';
 import { audio } from '../../game/audio.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -65,7 +66,8 @@ function pour3d(ctx, water) {
   const mark = bowl.setMark(s0.lo, s0.hi, s0.target);
   // La source : le sac tenu par notre main, ou la carafe, au-dessus de la gamelle, de l'autre côté de sa tête.
   const size = Math.max(0.42, Math.min(1.25, D.r / 0.09));
-  const src = water ? pitcher({ size, hand: P.hand, shoulder: () => shoulderOf(sc) }) : kibbleBag({ kind: sp, size, hand: P.hand, shoulder: () => shoulderOf(sc) });
+  const hand = { ...(P.hand ?? {}), size: handSize(L) };
+  const src = water ? pitcher({ size, hand, shoulder: (at) => shoulderOf(sc, at) }) : kibbleBag({ kind: sp, size, hand, shoulder: (at) => shoulderOf(sc, at) });
   sc.scene.add(src.group);
   const srcAt = bowlW().add(v3(D.r * 0.1, D.r * 0.9 + 0.05 * size, -D.r * 0.2));
   src.group.position.copy(srcAt);
@@ -214,8 +216,8 @@ export function petTreat3dGame(ctx) {
   const hl = L.size.headLen;
   const play = withLogic(ctx, treatGame, () => sc.project(sc.live('muzzle').add(v3(0, hl * 0.4, 0))));
   const keep = own();
-  const hand = handModel(keep, sc.decor.props.hand ?? {});
-  hand.scale.setScalar(Math.max(0.7, Math.min(1, 0.6 + (0.4 * L.size.len) / 0.9)));
+  const hand = petHand(keep, { ...(sc.decor.props.hand ?? {}), size: handSize(L) });
+  hand.userData.pose({ curl: 0.08, thumb: 0, spread: 0.2 });
   sc.scene.add(hand);
   const tscale = Math.max(0.45, Math.min(1.2, hl / 0.2));
   const treat = treatFor(sp, keep, tscale);
@@ -263,7 +265,7 @@ export function petTreat3dGame(ctx) {
       const target = mouth.clone().add(v3(hl * 0.25, -hl * 0.12, hl * 0.12));
       const pos = rest.clone().lerp(target, smooth(reach)).add(v3(0.04, -0.03, 0.12).multiplyScalar(back));
       hand.position.copy(pos);
-      aimHand(hand, shoulderOf(sc), target.clone().lerp(pos, 0.2).add(v3(0, 0.01, 0)), true);
+      aimHand(hand, shoulderOf(sc, pos), target.clone().lerp(pos, 0.2).add(v3(0, 0.01, 0)), true);
       treat.visible = !taken && !(ctx.done && s.given >= s.max) && !(s.state === 'eat' && reachT < 0);
       const calm = s.state === 'calm' || s.state === 'eat';
       if (!ctx.done && s.state === 'wiggle') {
@@ -400,8 +402,9 @@ export function petPet3dGame(ctx) {
   let saidHappy = false;
   // Notre main, à plat sur son poil, un peu plus petite pour un tout petit animal (sinon elle le cache tout entier).
   const keep = own();
-  const hand = handModel(keep, sc.decor.props.hand ?? {});
-  hand.scale.setScalar(Math.max(0.5, Math.min(1, 0.35 + (0.65 * L.size.len) / 0.9)));
+  const hs = handSize(L);
+  const hand = petHand(keep, { ...(sc.decor.props.hand ?? {}), size: hs });
+  hand.userData.pose({ curl: 0.2, thumb: 0.1, spread: 0.1 });
   hand.visible = false;
   sc.scene.add(hand);
   const m = sc.mood;
@@ -547,15 +550,13 @@ export function petPet3dGame(ctx) {
       const pp = ctx.pointer;
       hand.visible = !!(pp.down && touch && !ctx.done);
       if (hand.visible) {
-        // (le bras vient d'en haut, de notre côté : il ne passe jamais devant sa tête ; les doigts vers le bas du corps)
+        // (le bras vient de nous, par le bas de l'image : il ne passe jamais devant sa tête ; la main à plat sur le
+        // poil, les doigts dans le prolongement du bras)
         const n = touch.normal.clone().normalize();
-        const c = sc.camera;
-        const up = v3(0, 1, 0).applyQuaternion(c.quaternion);
-        const toCam = c.position.clone().sub(touch.point).normalize();
-        const from = touch.point.clone().addScaledVector(up, 0.4).addScaledVector(toCam, 0.2);
+        const from = shoulderOf(sc, touch.point);
         const along = touch.point.clone().sub(from);
         along.addScaledVector(n, -along.dot(n));
-        hand.position.copy(touch.point).addScaledVector(n, 0.011 * hand.scale.x);
+        hand.position.copy(touch.point).addScaledVector(n, 0.012 * hs);
         aimHand(hand, touch.point.clone().addScaledVector(along.normalize(), -0.1), touch.point, false, n);
       }
     },
@@ -910,17 +911,18 @@ function petRegionOfName(bone = '') {
   return bone ? 'body' : '';
 }
 
+/** Notre épaule, pour une main posée en `at` (petHand.js shoulderFor : le bras entre par le bas de l'image). */
+export function shoulderOf(sc, at = sc.camTarget) {
+  return shoulderFor(sc, at);
+}
+
 /**
- * Notre épaule : près de la caméra, à droite et un peu plus bas (le bras entre dans l'image par le bord droit, comme
- * quand on tend la main ; il ne traverse pas la scène).
+ * La taille de notre main (une main d'enfant de 12 cm) près de cet animal : plus petite près des tout petits (chiot
+ * chihuahua, lapin nain : la moitié), sinon elle les cacherait tout entiers.
  */
-export function shoulderOf(sc) {
-  const c = sc.camera;
-  const right = v3(1, 0, 0).applyQuaternion(c.quaternion);
-  const up = v3(0, 1, 0).applyQuaternion(c.quaternion);
-  const fwd = v3(0, 0, -1).applyQuaternion(c.quaternion);
-  const d = c.position.distanceTo(sc.camTarget);
-  return c.position.clone().addScaledVector(fwd, d * 0.35).addScaledVector(right, d * 0.45).addScaledVector(up, d * 0.12);
+export function handSize(L) {
+  const m = (L.size.len + L.size.h) / 2;
+  return Math.max(0.45, Math.min(1, 0.2 + 1.5 * m));
 }
 
 /** Les soins 3D des animaux de compagnie, par espèce (branchés dans CARE3D_GAMES : src/ui/minigames/care3d.js). */

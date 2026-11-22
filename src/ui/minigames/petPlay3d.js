@@ -19,8 +19,12 @@ const happySound = (sc) => audio.animal?.(sc.a?.species ?? 'dog', 'happy', sc.a?
 // Le terrain du jeu dessiné (fun.js ballGame) : x de 0 à 400, y de l'horizon (150) au premier plan (315) ; la main en (200, 325).
 const YARD = { x0: 0, x1: 400, y0: 150, y1: 315 };
 
-/** Ce qu'on compte, et ce que montrent les consignes : la balle de tennis du chien, la balle d'osier du lapin. */
-const BALL_ICON = { dog: '🎾', rabbit: '🥎' };
+/**
+ * Ce qu'on compte, et ce que montrent les consignes : une balle jaune 🥎, pour la balle de tennis du chien comme pour
+ * la balle d'osier du lapin. (🎾 se dessine en raquette sur les téléphones Android ; ⚽ n'est pas sa balle ; les ronds
+ * rouges du lapin ressemblaient à des erreurs.)
+ */
+const BALL_ICON = { dog: '🥎', rabbit: '🥎' };
 
 /** Une balle de tennis (chien) ou une balle en osier tressé (lapin : il la pousse du nez, il ne la porte pas). */
 function ballModel(keep, sp, r) {

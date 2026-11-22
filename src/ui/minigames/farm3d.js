@@ -85,7 +85,7 @@ export function farmFeed3dGame(ctx) {
         m.chew = m.eat ? 0 : Math.min(1, eatT);
         m.wag = 0.5;
         rack.nibble(m.eat && eatT > 0.8);
-        if (Math.random() < dt * 0.15) callOut(sc);
+        // (il mange : la tête reste dans le foin, il ne s'interrompt pas pour bêler)
       }
     },
     draw(g) {

@@ -49,6 +49,7 @@ export function farmTreat3dGame(ctx) {
   const wander = v3();
   let callIn = 0.8;
   let chewFor = 0;
+  let thank = false;
   m.ears = 'forward';
   return {
     peek: () => play.peek(),
@@ -60,7 +61,8 @@ export function farmTreat3dGame(ctx) {
       if (s.given > given) {
         given = s.given;
         reachT = 0;
-        if (s.given <= s.n) callOut(sc);
+        // (il remercie une fois la friandise mâchée et avalée, pas la bouche pleine)
+        thank = s.given <= s.n;
       }
       if (s.penalties > pen) {
         pen = s.penalties;
@@ -84,7 +86,12 @@ export function farmTreat3dGame(ctx) {
       treat.visible = !taken || reachT < 0;
       if (reachT < 0) treat.visible = !(ctx.done && s.given >= s.max);
       if (taken && reachT < 0.7) chewFor = 3.5;
+      const wasChewing = chewFor > 0;
       chewFor = Math.max(0, chewFor - dt);
+      if (wasChewing && chewFor === 0 && thank) {
+        thank = false;
+        callOut(sc);
+      }
       // Agité : il regarde partout, secoue la tête, bêle ; calme : il regarde la main, oreilles en avant.
       if (s.state === 'wiggle' && !ctx.done) {
         wanderAt -= dt;

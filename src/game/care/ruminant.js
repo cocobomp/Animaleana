@@ -26,6 +26,8 @@ const AZ = V(0, 0, 1);
 const _v = V();
 const _w = V();
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+/** Durée d'un bêlement ou d'un meuglement doux (s). */
+const CALL_S = 0.9;
 
 /** Le gabarit de cet animal dans le jeu (même fonction que AnimalEntity.build). */
 export function ruminantLook(a) {
@@ -178,12 +180,14 @@ export function ruminantLife(stage, dt) {
     const n = stage.holder.worldToLocal(neckBone(md).getWorldPosition(_w));
     st.look = st.lookV.set((p.x - n.x) * m.lookAmt, (p.y - n.y) * m.lookAmt, Math.max(0.05, p.z - n.z * 0.5));
   }
-  // Bêler (mouton, chèvre) ou meugler (vache), doucement : une fois quand le jeu le demande.
-  const call = m.call > 0;
-  st.bleat = call && sp !== 'cow';
-  st.moo = call && sp === 'cow';
-  if (call) {
+  // Bêler (mouton, chèvre) ou meugler (vache), doucement : une fois quand le jeu le demande. Pas le clip du jeu (la
+  // tête levée vers le plafond, la gueule grande ouverte, vue de près sans langue ni dents) : le son, et par-dessus
+  // (plus bas) la tête à peine levée et les lèvres entrouvertes, le temps du son (CALL_S).
+  st.bleat = false;
+  st.moo = false;
+  if (m.call > 0) {
     m.call = 0;
+    stage.callT = CALL_S;
     audio.animal?.(sp, m.callMood ?? 'happy', stage.a?.id ?? null, { gain: 0.7 });
   }
   // Mouches : la vache balance la queue de temps en temps (et se retourne vers son flanc, rarement).
@@ -198,13 +202,22 @@ export function ruminantLife(stage, dt) {
   const neck = neckBone(md);
   const head = headBone(md);
   const jaw = md.bone?.('jaw');
+  // Son appel doux (voir plus haut) : 0 → 1 → 0 pendant CALL_S secondes.
+  stage.callT = Math.max(0, (stage.callT ?? 0) - dt);
+  const calling = stage.callT > 0 ? Math.sin(Math.PI * (1 - stage.callT / CALL_S)) : 0;
   // Ruminer debout : la mâchoire va de côté, en rond, sans fin (quand il ne mange pas déjà au râtelier). Le jeu le
-  // demande (mood.chew) ; sinon il rumine de lui-même, par moments, comme au pré.
-  const chew = m.chew > 0 ? m.chew : !m.call && Math.sin(t * 0.23 + 1) > 0.1 ? 0.5 : 0;
-  const ru = (stage.ruminK = (stage.ruminK ?? 0) + ((chew > 0 && !m.eat ? 1 : 0) - (stage.ruminK ?? 0)) * Math.min(1, dt * 3));
+  // demande (mood.chew) ; sinon il rumine de lui-même, par moments, comme au pré. Pas pendant qu'il bêle.
+  const chew = stage.callT > 0 ? 0 : m.chew > 0 ? m.chew : Math.sin(t * 0.23 + 1) > 0.1 ? 0.5 : 0;
+  const ru = (stage.ruminK = (stage.ruminK ?? 0) + ((chew > 0 && !m.eat ? 1 : 0) - (stage.ruminK ?? 0)) * Math.min(1, dt * (stage.callT > 0 ? 9 : 3)));
   if (jaw && ru > 0.01) {
     anim.turn(jaw, AX, (0.05 + 0.045 * Math.sin(t * 6.3)) * ru * Math.min(1, chew + 0.2));
     anim.turn(jaw, AY, Math.sin(t * 6.3 + 1.2) * 0.06 * ru);
+  }
+  if (calling > 0.01) {
+    // (la tête levée de quelques degrés seulement — elle reste où elle est, à l'auge comme ailleurs —, les lèvres
+    // entrouvertes : la vache, plus grave, ouvre un peu plus et plus longtemps)
+    if (!m.eat) anim.turn(neck, AX, -0.07 * calling);
+    if (jaw) anim.turn(jaw, AX, (sp === 'cow' ? 0.13 : 0.1) * calling);
   }
   // Hocher la tête (contente, ou impatiente quand on prépare son repas).
   if (m.nod > 0) {

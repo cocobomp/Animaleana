@@ -135,6 +135,41 @@ describe('la bergerie, la chèvrerie, l\'étable', () => {
   }
 });
 
+describe('il bêle ou meugle doucement', () => {
+  for (const species of ['sheep', 'goat', 'cow']) {
+    it(`${species} : le son, la tête à peine levée, les lèvres entrouvertes (pas le clip du jeu, gueule béante vers le plafond)`, () => {
+      const { a, sc } = makeStage({ species });
+      const ctx = ctxFor(a, sc);
+      const game = pet3d.farmPet3dGame(ctx);
+      run(ctx, game, sc, 1);
+      const u = sc.marks.u;
+      const jaw = sc.model.bone('jaw');
+      const angle = (b) => new THREE.Quaternion().copy(b.quaternion);
+      const m0 = sc.live('muzzle');
+      const p0 = sc.live('poll');
+      const j0 = angle(jaw);
+      sc.mood.call = 1;
+      let lift = 0;
+      let open = 0;
+      for (let k = 0; k < 30; k++) {
+        run(ctx, game, sc, 1 / 30);
+        expect(sc.model.anim.bleatOn).toBe(false);
+        expect(sc.model.anim.mooOn ?? false).toBe(false);
+        lift = Math.max(lift, sc.live('muzzle').y - m0.y);
+        open = Math.max(open, angle(jaw).angleTo(j0));
+      }
+      // (la tête : quelques centimètres au plus — le clip levait le nez vers le plafond)
+      expect(lift).toBeLessThan(0.06 * u);
+      expect(sc.live('muzzle').y - sc.live('poll').y).toBeLessThan(m0.y - p0.y + 0.05 * u);
+      // (la bouche s'entrouvre, un peu)
+      expect(open).toBeGreaterThan(0.04);
+      expect(open).toBeLessThan(0.3);
+      game.destroy();
+      sc.dispose();
+    }, 30000);
+  }
+});
+
 describe('nourrir et abreuver en 3D', () => {
   for (const species of ['sheep', 'goat', 'cow']) {
     it(`${species} : nourrir jusqu'à la ligne, il mange au râtelier`, () => {
@@ -152,11 +187,12 @@ describe('nourrir et abreuver en 3D', () => {
       expect(ctx.done).toBe(true);
       expect(ctx.finished.why).toBe('just');
       expect(sc.decor.props.rack.fill).toBeGreaterThan(s0.lo - 0.05);
-      // il mange : la bouche descend au râtelier
-      run(ctx, game, sc, 3);
-      const mouth = sc.live('muzzle');
+      // il mange : la bouche descend au râtelier, et elle y reste (il ne lève pas la tête pour bêler en plein repas)
       const bite = sc.decor.props.rack.bite(new THREE.Vector3());
-      expect(mouth.distanceTo(bite)).toBeLessThan(0.3 * Math.max(1, sc.marks.u));
+      for (let k = 0; k < 16; k++) {
+        run(ctx, game, sc, 0.5);
+        if (k >= 5) expect(sc.live('muzzle').distanceTo(bite)).toBeLessThan(0.3 * Math.max(1, sc.marks.u));
+      }
       // le râtelier et sa tête sont dans l'image
       for (const p of [sc.marks.poll, sc.decor.props.rack.barsAt(0.5)]) expect(inView(sc.project(p), ctx.view)).toBe(true);
       game.destroy();

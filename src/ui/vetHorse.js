@@ -13,13 +13,80 @@
 // dégradés sont calculés une fois par cheval (caches), rien n'est alloué de gros à chaque image.
 
 import { animalShape, coatColors, shade, css, makeRng } from './minigames/draw.js';
+import { horseBreedOf, horseBuild, foalBuild, horseCoatTraits } from '../sim/horseLook.js';
+import { lifeStage } from '../sim/animal.js';
 
 const TAU = Math.PI * 2;
 /** La tête est un peu agrandie autour de l'œil (qui reste à sa place, comme les zones de l'examen). */
 const HEAD_K = 1.1;
 
-/** Où palper les pattes (repère local, s = 1) : avant-bras et jambe (au-dessus du jarret). */
+/** Où palper les pattes (repère local, s = 1, cheval de selle) : avant-bras et jambe (au-dessus du jarret). */
 export const HORSE_LEG_ZONES = { front: [46.5, 46], hind: [-61, 45] };
+
+/** Sol, dans le repère local, quand le cheval est posé (animalShape : jambe 78 + 0,72 × ry 33). */
+const FEET = 101.76;
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/**
+ * Le gabarit dessiné du cheval, d'après sa race et son âge (src/sim/horseLook.js : horseBuild, foalBuild). La
+ * géométrie d'animalShape ne bouge pas (le dos, le centre du corps, la tête et le sol restent où sont les zones de
+ * l'examen) : un poney a le ventre plus bas (membres courts sous un tronc profond), un poulain le ventre haut (longues
+ * jambes, tronc court et peu profond), un cheval de trait la croupe ronde, l'encolure épaisse et les canons forts.
+ * Renvoie { belly (ligne du ventre), len (longueur du tronc), croup, crest, neckW, headK, bone, ears, profile,
+ * mane (style), maneLen, tail, tailSet, feathers, foal }.
+ */
+export function vetBuild(a) {
+  const look = a?.look ?? {};
+  const breed = horseBreedOf(look, a?.breed);
+  let foal = false;
+  try {
+    foal = lifeStage(a) === 'baby';
+  } catch {
+    foal = !!look.foal;
+  }
+  const base = horseBuild(breed, look);
+  const b = foal ? foalBuild(base) : base;
+  // (membres : ceux du type, et la finesse propre de la race — le Shetland a ses jambes plus courtes que le type mini)
+  const legK = (b.legs ?? 1) * Math.sqrt(breed?.legs ?? 1);
+  // (au plus haut 28 : les taches et les zones posées dans l'ellipse du corps d'animalShape restent sur un poulain)
+  const belly = clampN(34 + 67.8 * (1 - legK) + ((b.girth ?? 1) - 1) * 14 * (b.depth ?? 1), 28, 48);
+  const style = foal ? 'foal' : b.maneStyle ?? 'normal';
+  return {
+    belly,
+    len: clampN(b.back ?? 1, 0.9, 1.08),
+    croup: clampN(b.croup ?? 1, 0.9, 1.25),
+    crest: clampN(b.crest ?? 1, 0.6, 1.6),
+    neckW: clampN(b.neckW ?? 1, 0.8, 1.35),
+    headK: clampN((b.head ?? 1) ** 0.7, 0.94, 1.18),
+    bone: clampN((b.bone ?? 1) ** 0.6, 0.85, 1.25),
+    ears: clampN(b.ears ?? 1, 0.75, 1.1),
+    profile: foal ? 'foal' : b.profile ?? 'straight',
+    mane: style,
+    maneLen: { long: 2.4, thick: 1.45, brush: 0.4, short: 0.65, foal: 0.45 }[style] ?? 1,
+    tail: clampN(b.tail ?? 1, 0.4, 1.35),
+    tailSet: clampN(b.tailSet ?? 0, 0, 1),
+    feathers: Math.max(b.feathers ?? 0, (look.fluff ?? 1) >= 1.1 ? 0.35 : 0),
+    foal,
+  };
+}
+
+const BUILDS = new Map();
+/** Gabarit gardé en cache (il est relu à chaque image). */
+function buildOf(a) {
+  const key = `${a?.breed ?? ''}|${a?.look?.breed ?? ''}|${a?.look?.fluff ?? 1}|${a?.ageDays ?? ''}|${a?.birthDay ?? ''}|${a?.look?.coat ?? ''}`;
+  let B = BUILDS.get(key);
+  if (!B) {
+    B = vetBuild(a);
+    BUILDS.set(key, B);
+    if (BUILDS.size > 40) BUILDS.delete(BUILDS.keys().next().value);
+  }
+  return B;
+}
+
+/** Ordonnée d'un point du corps dessiné (repère local) : le bas du corps suit la ligne du ventre du gabarit. */
+const bodyY = (B, y) => (y > 0 ? (y * B.belly) / 34 : y);
+/** Abscisse : le tronc s'allonge ou se raccourcit autour du milieu ; la croupe s'arrondit vers l'arrière. */
+const bodyX = (B, x) => x * B.len - (x < -40 ? (B.croup - 1) * 10 * Math.min(1, (-x - 40) / 45) : 0);
 
 // ---------------------------------------------------------------- couleurs et marques (une fois par cheval)
 
@@ -33,12 +100,12 @@ function sat(n) {
   return mx ? (mx - Math.min(r, g, b)) / mx : 0;
 }
 
-/** Couleurs et marques blanches du cheval (balzanes, liste, taches), gardées en cache. */
-function paletteOf(a) {
+/** Couleurs et marques blanches du cheval (balzanes, liste, taches, pommelures), gardées en cache. */
+export function paletteOf(a) {
   const c = coatColors(a).raw;
   const seed = a.look?.seed ?? 7;
   const fluff = a.look?.fluff ?? 1;
-  const key = `${c.coat}|${c.sec}|${c.mane}|${c.pattern}|${seed}|${fluff}`;
+  const key = `${c.coat}|${c.sec}|${c.mane}|${c.pattern}|${seed}|${fluff}|${a.look?.colorName?.fr ?? ''}|${a.look?.dapple ?? ''}`;
   let p = PALETTES.get(key);
   if (p) return p;
   const rng = makeRng(seed * 7 + 3);
@@ -47,7 +114,9 @@ function paletteOf(a) {
   const points = lum(c.mane) < lc * 0.55 && lc > 0.14;
   const pattern = c.pattern;
   const leopard = pattern === 'spots' && lc > lum(c.sec);
-  const grey = sat(c.coat) < 0.08 && lc > 0.45 && lc < 0.88 && pattern !== 'spots';
+  // Pommelures : seulement les gris pommelés (horseLook.js horseCoatTraits : la robe le dit), en taches claires
+  // pleines sur un fond plus foncé — en anneaux, elles faisaient des bulles, ou une maladie de peau.
+  const grey = horseCoatTraits(a.look ?? {}).grey >= 1 && pattern !== 'spots';
   // Balzanes (0 : aucune, 1 : couronne, 2 : boulet, 3 : mi-canon, 4 : jusqu'au genou) : avant proche,
   // arrière proche, avant loin, arrière loin. Liste, étoile ou ladre sur la tête.
   let socks = [0, 0, 0, 0];
@@ -79,7 +148,16 @@ function paletteOf(a) {
     if (leopard) for (let i = 0; i < 12; i++) spots.push([58 + rng() * 34, -84 + rng() * 76, 1.4 + rng() * 2]); // encolure
   }
   const dapples = [];
-  if (grey) for (let i = 0; i < 18; i++) dapples.push([-70 + rng() * 130, -26 + rng() * 44, 3 + rng() * 3.5]);
+  if (grey) {
+    // (plus serrées sur la croupe et le flanc, plus rares vers le ventre et l'épaule ; quelques-unes sur l'encolure)
+    for (let i = 0; i < 60; i++) {
+      const x = -84 + rng() * 150;
+      const y = -30 + rng() * 54;
+      if (y > 14 && rng() < 0.6) continue;
+      dapples.push([x, y, 3.2 + rng() * 3.2 + (x < -30 ? 1 : 0)]);
+    }
+    for (let i = 0; i < 9; i++) dapples.push([56 + rng() * 26, -70 + rng() * 52, 2.4 + rng() * 2]);
+  }
 
   const white = 0xf3efe7;
   const legLow = points ? c.mane : c.coat;
@@ -115,10 +193,12 @@ function paletteOf(a) {
     spots,
     leopard,
     dapples,
-    feather: fluff >= 1.1,
+    dapple: grey ? 'rgba(250, 249, 246, 0.42)' : null,
+    dappleCore: grey ? 'rgba(255, 255, 255, 0.3)' : null,
     fluff,
     key,
-    stops: [shade(c.coat, 0.12), css(c.coat), shade(c.coat, -0.08), shade(c.coat, -0.2)],
+    // (gris pommelé : le fond un peu plus foncé, les pommelures claires par-dessus)
+    stops: grey ? [shade(c.coat, -0.02), shade(c.coat, -0.12), shade(c.coat, -0.2), shade(c.coat, -0.3)] : [shade(c.coat, 0.12), css(c.coat), shade(c.coat, -0.08), shade(c.coat, -0.2)],
   };
   PALETTES.set(key, p);
   if (PALETTES.size > 40) PALETTES.delete(PALETTES.keys().next().value);
@@ -154,50 +234,67 @@ function gradsOf(g, p) {
 
 // ---------------------------------------------------------------- formes
 
-function bodyPath(g) {
-  g.moveTo(31, -35.6); // garrot
-  g.bezierCurveTo(12, -30.4, -15.6, -30.4, -32.8, -33); // dos
-  g.bezierCurveTo(-48.4, -35.6, -67, -33.7, -77.2, -23.8); // croupe
-  g.bezierCurveTo(-85.8, -14.9, -85.8, 1.7, -76.4, 10.6); // fesse
-  g.bezierCurveTo(-71.8, 18.2, -67, 23.1, -62.4, 28.4); // cuisse
-  g.lineTo(-40.6, 27.7); // grasset
-  g.bezierCurveTo(-23.4, 31.4, 7.8, 35.6, 35.1, 33.7); // ventre
-  g.quadraticCurveTo(42.9, 34, 48.4, 30.4); // passage de sangle
-  g.bezierCurveTo(62.4, 28, 76.4, 14.9, 78, 1.7); // poitrail
-  g.bezierCurveTo(78, -9.9, 58.5, -31.4, 31, -35.6); // épaule
+function bodyPath(g, B) {
+  const X = (x) => bodyX(B, x);
+  const Y = (y) => bodyY(B, y);
+  const cr = (B.croup - 1) * 6; // (croupe ronde : plus haute)
+  g.moveTo(X(31), -35.6); // garrot
+  g.bezierCurveTo(X(12), -30.4, X(-15.6), -30.4, X(-32.8), -33); // dos
+  g.bezierCurveTo(X(-48.4), -35.6 - cr, X(-67), -33.7 - cr, X(-77.2), -23.8 - cr * 0.5); // croupe
+  g.bezierCurveTo(X(-85.8), -14.9, X(-85.8), Y(1.7), X(-76.4), Y(10.6)); // fesse
+  g.bezierCurveTo(X(-71.8), Y(18.2), X(-67), Y(23.1), X(-62.4), Y(28.4)); // cuisse
+  g.lineTo(X(-40.6), Y(27.7)); // grasset
+  g.bezierCurveTo(X(-23.4), Y(31.4), X(7.8), Y(35.6), X(35.1), Y(33.7)); // ventre
+  g.quadraticCurveTo(X(42.9), Y(34), X(48.4), Y(30.4)); // passage de sangle
+  g.bezierCurveTo(X(62.4), Y(28), X(76.4), Y(14.9), X(78), Y(1.7)); // poitrail
+  g.bezierCurveTo(X(78), -9.9, X(58.5), -31.4, X(31), -35.6); // épaule
   g.closePath();
 }
 
 /** La crête de l'encolure (du garrot à la nuque) : points de la courbe de Bézier. */
-function crest(t, hx, hy, out) {
+function crest(t, hx, hy, out, B) {
   const u = 1 - t;
-  const x0 = 20; const y0 = -33;
-  const x1 = 30; const y1 = -60;
-  const x2 = hx - 38; const y2 = hy - 18;
+  const k = B.crest - 1;
+  const x0 = bodyX(B, 20); const y0 = -33;
+  const x1 = bodyX(B, 30); const y1 = -60 - 14 * k;
+  const x2 = hx - 38; const y2 = hy - 18 - 8 * k;
   const x3 = hx - 11; const y3 = hy - 17;
   out[0] = u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3;
   out[1] = u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3;
 }
 
 /** L'encolure, tracée dans le même sens que le corps (remplis et découpés d'un seul chemin). */
-function neckPath(g, hx, hy) {
-  g.moveTo(50, 8);
-  g.lineTo(79, 2);
-  g.bezierCurveTo(80, -22, hx - 16, hy + 34, hx - 10, hy + 18); // poitrail → dessous de l'encolure
+function neckPath(g, hx, hy, B) {
+  const k = B.crest - 1;
+  const w = B.neckW - 1;
+  g.moveTo(bodyX(B, 50), bodyY(B, 8));
+  g.lineTo(bodyX(B, 79), bodyY(B, 2));
+  g.bezierCurveTo(bodyX(B, 80) + 4 * w, -22 + 10 * w, hx - 16 + 5 * w, hy + 34 + 12 * w, hx - 10, hy + 18); // poitrail → dessous de l'encolure
   g.bezierCurveTo(hx - 12, hy + 14, hx - 16, hy + 8, hx - 15, hy - 6); // gorge
   g.lineTo(hx - 11, hy - 17); // nuque
-  g.bezierCurveTo(hx - 38, hy - 18, 30, -60, 20, -33); // crête de l'encolure → garrot
+  g.bezierCurveTo(hx - 38, hy - 18 - 8 * k, bodyX(B, 30), -60 - 14 * k, bodyX(B, 20), -33); // crête de l'encolure → garrot
   g.closePath();
 }
 
-function headPath(g, x, y) {
+function headPath(g, x, y, B, o = null) {
+  const pr = B?.profile ?? 'straight';
+  // (il mâche : le menton descend ; il tend la lèvre : la lèvre du haut avance)
+  const chew = o?.chew ?? 0;
+  const lip = o?.lip ? 1 : 0;
   g.moveTo(x - 10, y - 17); // nuque
-  g.bezierCurveTo(x - 4, y - 20, x + 4, y - 15, x + 8, y - 11); // front
-  g.lineTo(x + 32, y + 13); // chanfrein
-  g.bezierCurveTo(x + 37, y + 18, x + 42, y + 21, x + 41.5, y + 26.5); // bout du nez
-  g.quadraticCurveTo(x + 41, y + 30.5, x + 36, y + 29.8); // lèvre du haut
-  g.bezierCurveTo(x + 37, y + 32.5, x + 33.5, y + 34.5, x + 29, y + 33.5); // lèvre du bas, menton
-  g.lineTo(x + 17, y + 27.5); // auge
+  if (pr === 'foal') {
+    // (poulain : le front bombé, le chanfrein court et droit)
+    g.bezierCurveTo(x - 4, y - 22, x + 6, y - 17, x + 10, y - 10);
+  } else g.bezierCurveTo(x - 4, y - 20, x + 4, y - 15, x + 8, y - 11); // front
+  // chanfrein : droit, creux (tête « camuse » de l'arabe), busqué (lusitanien), ou carré
+  if (pr === 'dish') g.quadraticCurveTo(x + 17.5, y + 4.5, x + 32, y + 13);
+  else if (pr === 'convex') g.quadraticCurveTo(x + 22.5, y - 3, x + 32, y + 13);
+  else g.lineTo(x + 32, y + 13);
+  if (pr === 'square') g.bezierCurveTo(x + 38, y + 17, x + 43, y + 20, x + 42.5, y + 27);
+  else g.bezierCurveTo(x + 37, y + 18, x + 42, y + 21, x + 41.5, y + 26.5); // bout du nez
+  g.quadraticCurveTo(x + 41 + 3.5 * lip, y + 30.5 + lip, x + 36, y + 29.8 + chew * 1.2); // lèvre du haut
+  g.bezierCurveTo(x + 37, y + 32.5 + chew * 3, x + 33.5, y + 34.5 + chew * 3, x + 29, y + 33.5 + chew * 2.4); // lèvre du bas, menton
+  g.lineTo(x + 17, y + 27.5 + chew); // auge
   g.bezierCurveTo(x + 8, y + 31, x - 5, y + 28, x - 9.5, y + 18); // ganache
   g.bezierCurveTo(x - 13, y + 11, x - 14.5, y + 2, x - 14, y - 5);
   g.quadraticCurveTo(x - 14, y - 14, x - 10, y - 17);
@@ -222,14 +319,17 @@ function rot(P, from, to, cx, cy, ang) {
 }
 
 /** Calcule la patte (repère local). swing > 0 : le sabot part vers l'avant ; flex : la patte se plie. */
-function legPoints(P, hind, dx, swing, flex, feet) {
-  const H = feet - 30;
+function legPoints(P, hind, dx, swing, flex, feet, B) {
+  // (le coude, le grasset : sur la ligne du ventre du gabarit ; les pattes avancent ou reculent avec la longueur du tronc)
+  const top = bodyY(B, 30);
+  const H = feet - top;
+  const X = (x) => bodyX(B, x);
   if (hind) {
-    P[0] = -50; P[1] = 2; P[2] = -58; P[3] = 31; P[4] = -67; P[5] = 30 + 0.38 * H;
-    P[6] = -63; P[7] = 30 + 0.79 * H; P[8] = -60.3; P[9] = 30 + 0.895 * H;
+    P[0] = X(-50); P[1] = 2; P[2] = X(-58); P[3] = top + 1; P[4] = X(-67); P[5] = top + 0.38 * H;
+    P[6] = X(-63); P[7] = top + 0.79 * H; P[8] = X(-60.3); P[9] = top + 0.895 * H;
   } else {
-    P[0] = 52; P[1] = 6; P[2] = 47; P[3] = 30; P[4] = 45.5; P[5] = 30 + 0.42 * H;
-    P[6] = 46.2; P[7] = 30 + 0.78 * H; P[8] = 49.2; P[9] = 30 + 0.895 * H;
+    P[0] = X(52); P[1] = 6; P[2] = X(47); P[3] = top; P[4] = X(45.5); P[5] = top + 0.42 * H;
+    P[6] = X(46.2); P[7] = top + 0.78 * H; P[8] = X(49.2); P[9] = top + 0.895 * H;
   }
   for (let i = 0; i < 10; i += 2) P[i] += dx;
   const cx = P[8];
@@ -287,8 +387,9 @@ const TMP = new Float32Array(2);
  * Dessine une patte. mode 'stroke' : le contour (avant de remplir tout le groupe), 'fill' : les couleurs.
  * colors : { up (haut, souvent le dégradé de la robe), low (bas : noir du bai), white, hoof, hoofWhite }.
  */
-function drawLeg(g, P, hind, mode, colors, sock) {
-  const w = hind ? [34, 22, 12.5, 10.2, 9, 8.2, 8.8] : [28, 19, 11, 9.6, 8.6, 8.2, 8.8];
+function drawLeg(g, P, hind, mode, colors, sock, bone = 1) {
+  // (canons forts d'un cheval de trait, fins d'un poulain ou d'un pur-sang)
+  const w = (hind ? [34, 22, 12.5, 10.2, 9, 8.2, 8.8] : [28, 19, 11, 9.6, 8.6, 8.2, 8.8]).map((v, i) => (i < 2 ? v : v * bone));
   const run = (style, from) => {
     // from : 0 toute la patte, 1 depuis le genou/jarret, 2 depuis le boulet…
     if (mode === 'fill') g.fillStyle = style;
@@ -384,26 +485,36 @@ function drawLeg(g, P, hind, mode, colors, sock) {
   g.stroke();
 }
 
-/** Fanons (chevaux de trait, poneys) : longs poils sur le boulet et le sabot. */
-function drawFeather(g, P, color, t) {
+/**
+ * Fanons (Frison, cobs, chevaux de trait, poneys) : longs poils du milieu du canon au sabot, qui couvrent la couronne.
+ * k : leur abondance (breed.feathers : 1 pour le Frison, 0,35 pour un poney à poil épais).
+ */
+function drawFeather(g, P, color, t, k = 0.5) {
   const x = P[6];
   const y = P[7];
+  // (départ : sur le canon, plus haut s'ils sont abondants ; ils retombent en arrière et couvrent le sabot)
+  const up = 7 + 10 * k;
+  const back = 6 + 7 * k;
+  const sw = Math.sin(t * 2) * 0.6;
   g.fillStyle = color;
   g.beginPath();
-  g.moveTo(x - 2, y - 7);
-  g.quadraticCurveTo(x - 9, y + 2, P[14] - 4 + Math.sin(t * 2) * 0.6, P[15] - 0.5);
-  g.lineTo(P[14] + 1.5, P[15] - 1);
-  g.quadraticCurveTo(P[16] + 3, P[17] - 2, P[10] + 1, P[11] + 1.5);
-  g.lineTo(P[12] + 1.2, P[13] - 2);
-  g.quadraticCurveTo(P[10] + 4, P[11] - 4, x + 3, y - 3);
+  g.moveTo(P[4] + (x - P[4]) * (1 - k * 0.45) - 2, y - up);
+  g.quadraticCurveTo(x - back - 3, y + 2, P[14] - back * 0.7 + sw, P[15] - 0.3);
+  // (pointes en mèches au ras du sol)
+  for (let i = 1; i <= 4; i++) {
+    const qx = P[14] - back * 0.7 + ((P[12] + 2 * k - (P[14] - back * 0.7)) * i) / 4;
+    g.quadraticCurveTo(qx - 1.5, P[15] - 2.5 - k * 2, qx + sw * 0.5, P[15] - 0.4);
+  }
+  g.quadraticCurveTo(P[10] + 4 + 2 * k, P[11] - 3, x + 3, y - up * 0.55);
   g.closePath();
   g.fill();
   g.strokeStyle = 'rgba(0, 0, 0, 0.18)';
   g.lineWidth = 0.7;
   g.beginPath();
-  for (let i = 0; i < 4; i++) {
-    g.moveTo(x - 3 - i, y - 2 + i * 2);
-    g.lineTo(P[14] - 2 + i * 2.5, P[15] - 1.5);
+  const n = 3 + Math.round(3 * k);
+  for (let i = 0; i < n; i++) {
+    g.moveTo(x - 2 - i * 0.8, y - up * 0.6 + i * 2);
+    g.lineTo(P[14] - back * 0.5 + i * ((P[12] - P[14] + back * 0.5) / n), P[15] - 1.2);
   }
   g.stroke();
 }
@@ -413,26 +524,36 @@ function drawFeather(g, P, color, t) {
 const CP = new Float32Array(2);
 const CN = new Float32Array(2);
 
-/** Crinière tombant sur l'encolure, côté visible. */
-function drawMane(g, p, hx, hy, t) {
-  const n = 10;
-  const thick = 15 * p.fluff;
+/**
+ * Crinière, côté visible, selon la race : tombante (normale), longue et ondulée (Frison, baroques), épaisse et
+ * touffue (poneys), courte et dressée en brosse (Fjord, poulain).
+ */
+function drawMane(g, p, hx, hy, t, B) {
+  const n = B.mane === 'long' ? 14 : 10;
+  const up = B.mane === 'brush' || B.mane === 'foal';
+  const thick = 15 * p.fluff * B.maneLen;
+  const wave = B.mane === 'long' || B.mane === 'thick' ? 1 : 0;
+  const lenAt = (i, u) => thick * (up ? 1 : 1.1 - 0.45 * u) * (i % 2 ? 1 : 0.82);
   const fillPath = () => {
     g.beginPath();
-    crest(0.1, hx, hy, CP);
+    crest(0.1, hx, hy, CP, B);
     g.moveTo(CP[0], CP[1] - 2);
     for (let i = 1; i <= n; i++) {
-      crest(0.1 + (0.86 * i) / n, hx, hy, CP);
+      crest(0.1 + (0.86 * i) / n, hx, hy, CP, B);
       g.lineTo(CP[0], CP[1] - 2.2);
     }
-    // Retour par le bas, mèche par mèche (les mèches tombent vers le bas et un peu en arrière).
+    // Retour mèche par mèche : elles tombent vers le bas et un peu en arrière (dressées : vers le haut).
     for (let i = n; i >= 0; i--) {
       const u = 0.1 + (0.86 * i) / n;
-      crest(u, hx, hy, CP);
-      crest(Math.max(0, u - 0.05), hx, hy, CN);
-      const len = thick * (1.1 - 0.45 * u) * (i % 2 ? 1 : 0.82);
+      crest(u, hx, hy, CP, B);
+      crest(Math.max(0, u - 0.05), hx, hy, CN, B);
+      const len = lenAt(i, u);
       const sway = Math.sin(t * 2 + i) * 0.8;
-      g.quadraticCurveTo(CN[0] - 3, CN[1] + len * 0.7, CP[0] - 3.5 + sway, CP[1] + len);
+      if (up) g.quadraticCurveTo(CN[0] - 1, CN[1] - len * 0.6, CP[0] - 1.5 + sway * 0.3, CP[1] - 2 - len);
+      else {
+        const wv = wave * Math.sin(i * 1.7) * 2.5;
+        g.quadraticCurveTo(CN[0] - 3 + wv, CN[1] + len * 0.7, CP[0] - 3.5 + sway - wv, CP[1] + len);
+      }
     }
     g.closePath();
   };
@@ -446,32 +567,40 @@ function drawMane(g, p, hx, hy, t) {
   g.beginPath();
   for (let i = 1; i < n; i++) {
     const u = 0.1 + (0.86 * i) / n;
-    crest(u, hx, hy, CP);
-    const len = thick * (1.1 - 0.45 * u) * (i % 2 ? 0.9 : 0.7);
+    crest(u, hx, hy, CP, B);
+    const len = lenAt(i, u) * (i % 2 ? 0.9 : 0.7);
     g.moveTo(CP[0] + 1, CP[1]);
-    g.quadraticCurveTo(CP[0] - 1.5, CP[1] + len * 0.5, CP[0] - 3 + Math.sin(t * 2 + i) * 0.8, CP[1] + len);
+    if (up) g.lineTo(CP[0] - 1, CP[1] - len);
+    else g.quadraticCurveTo(CP[0] - 1.5 + wave * 2, CP[1] + len * 0.5, CP[0] - 3 + Math.sin(t * 2 + i) * 0.8, CP[1] + len);
   }
   g.strokeStyle = p.maneDark;
   g.lineWidth = 1.1;
   g.stroke();
+  if (up) return;
   g.beginPath();
   for (let i = 1; i < n; i += 2) {
     const u = 0.12 + (0.86 * i) / n;
-    crest(u, hx, hy, CP);
+    crest(u, hx, hy, CP, B);
     g.moveTo(CP[0] + 2.5, CP[1] - 0.5);
-    g.quadraticCurveTo(CP[0] + 0.5, CP[1] + 4, CP[0] - 0.5, CP[1] + 7);
+    g.quadraticCurveTo(CP[0] + 0.5, CP[1] + 4, CP[0] - 0.5, CP[1] + 7 * Math.min(2, B.maneLen));
   }
   g.strokeStyle = p.maneLight;
   g.lineWidth = 0.8;
   g.stroke();
 }
 
-function drawTail(g, p, t, swish, mode) {
+function drawTail(g, p, t, swish, mode, B) {
   const sw = Math.sin(t * 1.7) * 2.2 + swish;
-  const end = -24 + 80 * (0.92 + 0.12 * p.fluff);
+  // (longueur de la race : courte et touffue d'un poulain, jusqu'aux jarrets ou plus bas d'un baroque ou d'un poney)
+  const end = Math.min(FEET - 6, -14 + (70 + 10 * p.fluff) * B.tail);
+  const set = B.tailSet;
+  const dx = bodyX(B, -73) + 73;
+  g.save();
+  g.translate(dx, 0);
   g.beginPath();
   g.moveTo(-73, -27.5);
-  g.bezierCurveTo(-84, -33, -94, -26, -96, -12); // le tronçon de la queue se cambre
+  // (queue portée haut, arabe : le tronçon se relève en arc avant que les crins retombent)
+  g.bezierCurveTo(-84, -33 - 12 * set, -94 - 6 * set, -26 - 14 * set, -96 - 4 * set, -12 - 6 * set); // le tronçon de la queue se cambre
   g.bezierCurveTo(-100 + sw * 0.3, 12, -104 + sw * 0.7, end - 30, -100 + sw, end);
   g.quadraticCurveTo(-95 + sw, end + 6, -91 + sw, end - 1);
   g.quadraticCurveTo(-87 + sw, end + 5, -83 + sw, end - 2);
@@ -481,6 +610,7 @@ function drawTail(g, p, t, swish, mode) {
   g.closePath();
   if (mode === 'stroke') {
     g.stroke();
+    g.restore();
     return;
   }
   g.fillStyle = p.mane;
@@ -500,14 +630,16 @@ function drawTail(g, p, t, swish, mode) {
   g.strokeStyle = p.maneLight;
   g.lineWidth = 0.9;
   g.stroke();
+  g.restore();
 }
 
 // ---------------------------------------------------------------- tête
 
-function drawEar(g, x, y, back, color, inner, mode) {
+function drawEar(g, x, y, back, color, inner, mode, k = 1) {
   g.save();
   g.translate(x, y);
   g.rotate(-0.12 - back * 0.95);
+  if (k !== 1) g.scale(k, k);
   g.beginPath();
   g.moveTo(-4.2, 1.5);
   g.bezierCurveTo(-6, -7, -3, -15, 0.4, -19.5);
@@ -530,11 +662,11 @@ function drawEar(g, x, y, back, color, inner, mode) {
   g.restore();
 }
 
-function drawHeadDetails(g, p, gr, x, y, o, t) {
+function drawHeadDetails(g, p, gr, x, y, o, t, B) {
   // Dans la tête : bout du nez plus sombre, ganache, liste.
   g.save();
   g.beginPath();
-  headPath(g, x, y);
+  headPath(g, x, y, B, o);
   g.clip();
   g.fillStyle = gr.cheek;
   g.translate(x, y);
@@ -657,8 +789,14 @@ function drawHeadDetails(g, p, gr, x, y, o, t) {
   g.stroke();
 }
 
-function drawForelock(g, p, x, y, t) {
+function drawForelock(g, p, x, y, t, B) {
   const sw = Math.sin(t * 1.9) * 0.6;
+  // (toupet long d'un Frison, d'un poney : il descend sur le front ; court, en brosse, d'un poulain)
+  const L = B.mane === 'long' || B.mane === 'thick' ? 1.6 : B.mane === 'foal' || B.mane === 'brush' ? 0.55 : 1;
+  g.save();
+  g.translate(x - 11, y - 18);
+  g.scale(1, L);
+  g.translate(-x + 11, -y + 18);
   g.fillStyle = p.mane;
   g.beginPath();
   g.moveTo(x - 11, y - 18);
@@ -678,6 +816,7 @@ function drawForelock(g, p, x, y, t) {
   g.moveTo(x - 6, y - 16);
   g.quadraticCurveTo(x - 1.5, y - 11, x - 0.2 + sw, y - 6);
   g.stroke();
+  g.restore();
 }
 
 /** Licol bleu (le cheval est tenu pour l'examen). */
@@ -728,6 +867,7 @@ export function drawHorseVet(g, a, o = {}) {
   const t = o.time ?? performance.now() / 1000;
   const p = paletteOf(a);
   const gr = gradsOf(g, p);
+  const B = buildOf(a);
   const feet = (sh.groundY - sh.lift - by) / s;
   const hx = (sh.head.x - bx) / (f * s);
   const hy = (sh.head.y - by) / s;
@@ -751,30 +891,35 @@ export function drawHorseVet(g, a, o = {}) {
   g.scale(f * s, s);
 
   // Pattes du fond (plus sombres), puis la queue.
-  legPoints(FAR, false, -8, swing(Math.PI), flex(Math.PI), feet);
-  legPoints(FAR_H, true, 8, swing(0), flex(0), feet);
+  legPoints(FAR, false, -8, swing(Math.PI), flex(Math.PI), feet, B);
+  legPoints(FAR_H, true, 8, swing(0), flex(0), feet, B);
   const farColors = gr.far;
   g.strokeStyle = p.outline;
   g.lineWidth = 2.2;
-  drawLeg(g, FAR_H, true, 'stroke', farColors, p.socks[3]);
-  drawLeg(g, FAR, false, 'stroke', farColors, p.socks[2]);
-  drawLeg(g, FAR_H, true, 'fill', farColors, p.socks[3]);
-  drawLeg(g, FAR, false, 'fill', farColors, p.socks[2]);
-  if (p.feather) {
-    drawFeather(g, FAR_H, p.socks[3] ? p.whiteFar : farColors.low, t);
-    drawFeather(g, FAR, p.socks[2] ? p.whiteFar : farColors.low, t);
+  drawLeg(g, FAR_H, true, 'stroke', farColors, p.socks[3], B.bone);
+  drawLeg(g, FAR, false, 'stroke', farColors, p.socks[2], B.bone);
+  drawLeg(g, FAR_H, true, 'fill', farColors, p.socks[3], B.bone);
+  drawLeg(g, FAR, false, 'fill', farColors, p.socks[2], B.bone);
+  if (B.feathers > 0.05) {
+    drawFeather(g, FAR_H, p.socks[3] ? p.whiteFar : farColors.low === gr.coat ? p.far : farColors.low, t, B.feathers);
+    drawFeather(g, FAR, p.socks[2] ? p.whiteFar : farColors.low === gr.coat ? p.far : farColors.low, t, B.feathers);
   }
   g.strokeStyle = p.outline;
   g.lineWidth = 2.2;
   const swish = walking ? Math.sin(ph * 0.5) * 4 : 0;
-  drawTail(g, p, t, swish, 'stroke');
-  drawTail(g, p, t, swish, 'fill');
+  drawTail(g, p, t, swish, 'stroke', B);
+  drawTail(g, p, t, swish, 'fill', B);
 
   // La tête est agrandie autour de l'œil (headIn) : l'œil, le nez et la bouche restent sur leurs zones.
+  // Gabarit : la tête plus grosse d'un poulain, d'un poney ou d'un trait, plus fine d'un pur-sang, agrandie autour d'un
+  // point entre l'œil et la bouche (l'un et l'autre restent sur leurs zones).
+  const hk = HEAD_K * B.headK;
+  const hcx = hx + (B.headK === 1 ? 5.9 : 17.8);
+  const hcy = hy + (B.headK === 1 ? -3.15 : 8.6);
   const headIn = () => {
-    g.translate(hx + 5.9, hy - 3.15);
-    g.scale(HEAD_K, HEAD_K);
-    g.translate(-hx - 5.9, -hy + 3.15);
+    g.translate(hcx, hcy);
+    g.scale(hk, hk);
+    g.translate(-hcx, -hcy);
   };
   // Oreille du fond
   const earBack = o.earsBack ? 1 : 0;
@@ -782,29 +927,29 @@ export function drawHorseVet(g, a, o = {}) {
   headIn();
   g.strokeStyle = p.outline;
   g.lineWidth = 2;
-  drawEar(g, hx - 10.5, hy - 14, earBack * 0.9 + 0.12, p.far, null, 'stroke');
-  drawEar(g, hx - 10.5, hy - 14, earBack * 0.9 + 0.12, p.far, null, 'fill');
+  drawEar(g, hx - 10.5, hy - 14, earBack * 0.9 + 0.12, p.far, null, 'stroke', B.ears);
+  drawEar(g, hx - 10.5, hy - 14, earBack * 0.9 + 0.12, p.far, null, 'fill', B.ears);
   g.restore();
 
   // Le groupe du devant (encolure, corps, pattes proches, tête) : d'abord tous les contours,
   // puis toutes les couleurs, pour qu'il ne reste que le contour de la silhouette.
-  legPoints(NEAR, false, 0, swing(0), flex(0), feet);
-  legPoints(NEAR_H, true, 0, swing(Math.PI), flex(Math.PI), feet);
+  legPoints(NEAR, false, 0, swing(0), flex(0), feet, B);
+  legPoints(NEAR_H, true, 0, swing(Math.PI), flex(Math.PI), feet, B);
   const nearColors = gr.near;
   const group = (mode) => {
     if (mode === 'fill') g.fillStyle = gr.coat;
     g.beginPath();
-    neckPath(g, hx, hy);
-    bodyPath(g);
+    neckPath(g, hx, hy, B);
+    bodyPath(g, B);
     if (mode === 'stroke') g.stroke();
     else g.fill();
-    drawLeg(g, NEAR_H, true, mode, nearColors, p.socks[1]);
-    drawLeg(g, NEAR, false, mode, nearColors, p.socks[0]);
+    drawLeg(g, NEAR_H, true, mode, nearColors, p.socks[1], B.bone);
+    drawLeg(g, NEAR, false, mode, nearColors, p.socks[0], B.bone);
     if (mode === 'fill') g.fillStyle = gr.coat;
     g.save();
     headIn();
     g.beginPath();
-    headPath(g, hx, hy);
+    headPath(g, hx, hy, B, o);
     if (mode === 'stroke') g.stroke();
     else g.fill();
     g.restore();
@@ -813,16 +958,16 @@ export function drawHorseVet(g, a, o = {}) {
   g.lineWidth = 2.4;
   group('stroke');
   group('fill');
-  if (p.feather) {
-    drawFeather(g, NEAR_H, p.socks[1] ? p.white : nearColors.low === gr.coat ? p.mid : nearColors.low, t);
-    drawFeather(g, NEAR, p.socks[0] ? p.white : nearColors.low === gr.coat ? p.mid : nearColors.low, t);
+  if (B.feathers > 0.05) {
+    drawFeather(g, NEAR_H, p.socks[1] ? p.white : nearColors.low === gr.coat ? p.mid : nearColors.low, t, B.feathers);
+    drawFeather(g, NEAR, p.socks[0] ? p.white : nearColors.low === gr.coat ? p.mid : nearColors.low, t, B.feathers);
   }
 
   // Robe et relief, dans le corps et l'encolure.
   g.save();
   g.beginPath();
-  neckPath(g, hx, hy);
-  bodyPath(g);
+  neckPath(g, hx, hy, B);
+  bodyPath(g, B);
   g.clip();
   if (p.blobs.length) {
     g.fillStyle = p.sec;
@@ -851,14 +996,15 @@ export function drawHorseVet(g, a, o = {}) {
     g.fill();
   }
   if (p.dapples.length) {
-    g.strokeStyle = 'rgba(255, 255, 255, 0.22)';
-    g.lineWidth = 1.6;
+    // Pommelures : des taches claires pleines (le cœur plus clair encore), le fond plus foncé fait le réseau entre elles.
+    g.fillStyle = p.dapple;
     g.beginPath();
-    for (const [x, y, r] of p.dapples) {
-      g.moveTo(x + r, y);
-      g.arc(x, y, r, 0, TAU);
-    }
-    g.stroke();
+    for (const [x, y, r] of p.dapples) blob(g, bodyX(B, x), bodyY(B, y), r, r * 0.86, 0.3);
+    g.fill();
+    g.fillStyle = p.dappleCore;
+    g.beginPath();
+    for (const [x, y, r] of p.dapples) blob(g, bodyX(B, x) + 0.4, bodyY(B, y) - 0.4, r * 0.55, r * 0.5, 0.3);
+    g.fill();
   }
   // Muscles : croupe et épaule éclairées, encolure ; lignes de l'épaule et du grasset.
   g.fillStyle = gr.hip;
@@ -880,21 +1026,67 @@ export function drawHorseVet(g, a, o = {}) {
   g.restore();
 
   // Crinière, tête, oreille du devant, toupet, licol
-  drawMane(g, p, hx, hy, t);
+  drawMane(g, p, hx, hy, t, B);
   headIn();
-  drawHeadDetails(g, p, gr, hx, hy, o, t);
+  drawHeadDetails(g, p, gr, hx, hy, o, t, B);
   g.strokeStyle = p.outline;
   g.lineWidth = 2;
-  drawEar(g, hx - 5, hy - 15, earBack, p.light, p.points ? p.maneDark : 'rgba(0, 0, 0, 0.28)', 'stroke');
-  drawEar(g, hx - 5, hy - 15, earBack, p.light, p.points ? p.maneDark : 'rgba(0, 0, 0, 0.28)', 'fill');
-  drawForelock(g, p, hx, hy, t);
+  drawEar(g, hx - 5, hy - 15, earBack, p.light, p.points ? p.maneDark : 'rgba(0, 0, 0, 0.28)', 'stroke', B.ears);
+  drawEar(g, hx - 5, hy - 15, earBack, p.light, p.points ? p.maneDark : 'rgba(0, 0, 0, 0.28)', 'fill', B.ears);
+  drawForelock(g, p, hx, hy, t, B);
   drawHalter(g, hx, hy);
   g.restore();
   return sh;
 }
 
-/** Où se trouvent les zones des pattes du cheval (écran), pour la palpation. */
+/**
+ * Le cheval de l'examen en gros plan, la tête en (hx, hy) (la ration : il mange au filet à foin, src/ui/minigames/
+ * ration.js) : le même dessin, agrandi (s), le corps sort de l'image en bas. o : les options de drawHorseVet, plus
+ * chew (0 à 1 : il mâche). Renvoie la forme (animalShape).
+ */
+export function drawHorseVetHead(g, a, { hx = 250, hy = 150, s = 2.4, f = -1, ...o } = {}) {
+  const P = { hdx: 100, hdy: -88 };
+  const x = hx - f * P.hdx * s;
+  const y = hy - P.hdy * s + FEET * s;
+  return drawHorseVet(g, a, { ...o, x, y, s, f, shadow: false });
+}
+
+/**
+ * Où se trouvent les zones des pattes du cheval (écran), pour la palpation : sur l'avant-bras et la jambe du dessin,
+ * à son gabarit (ventre plus bas d'un poney, tronc plus court d'un poulain).
+ */
 export function horseLegZone(sh, which) {
-  const [x, y] = HORSE_LEG_ZONES[which];
+  const [x, y] = horseLegLocal(sh.a, which);
   return sh.L(x * sh.s, y * sh.s);
+}
+
+/** Zone d'une patte (repère local du dessin, s = 1) pour ce cheval. */
+export function horseLegLocal(a, which) {
+  const B = a ? buildOf(a) : null;
+  const [x, y] = HORSE_LEG_ZONES[which];
+  if (!B) return [x, y];
+  // (même part de la patte que pour le cheval de selle : 22 % de la hauteur du coude au sol)
+  const top = bodyY(B, 30);
+  return [bodyX(B, x), top + ((y - 30) / (FEET - 30)) * (FEET - top)];
+}
+
+/**
+ * Repères du dessin (repère local, s = 1), pour vérifier que les zones de l'examen tombent sur le cheval dessiné :
+ * ligne du ventre, du dos, pointe des fesses et du poitrail, l'œil et la bouche (la tête agrandie autour de son point).
+ */
+export function horseVetMarks(a) {
+  const B = buildOf(a);
+  const k = HEAD_K * B.headK;
+  const c = B.headK === 1 ? [5.9, -3.15] : [17.8, 8.6];
+  const inHead = (x, y) => [c[0] + (x - c[0]) * k, c[1] + (y - c[1]) * k];
+  return {
+    belly: B.belly,
+    back: -30.4,
+    rumpX: bodyX(B, -85.8),
+    chestX: bodyX(B, 78),
+    // (relatifs à la tête d'animalShape)
+    eye: inHead(5.9, -3.15),
+    mouth: inHead(33.5, 30.5),
+    build: B,
+  };
 }

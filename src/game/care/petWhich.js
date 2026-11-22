@@ -7,7 +7,7 @@ import { REAL_RABBIT_KEYS } from '../models/rabbitReal.js';
 
 /** Soins refaits en 3D, par espèce (les jeux : PET_CARE3D_GAMES de src/ui/minigames/pets3d.js). */
 export const PET_CARE3D_ACTIONS = {
-  dog: ['feed', 'water', 'treat', 'pet', 'brush', 'nails', 'play'],
+  dog: ['feed', 'water', 'treat', 'pet', 'brush', 'nails', 'play', 'wash'],
   cat: ['feed', 'water', 'treat', 'pet', 'brush', 'nails'],
   rabbit: ['feed', 'water', 'treat', 'pet', 'brush', 'nails', 'play'],
 };

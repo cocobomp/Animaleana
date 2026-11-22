@@ -114,6 +114,49 @@ describe('le lapin tête de lion ne se redresse pas (la barbe de sa crinière pe
   }, 90000);
 });
 
+describe('le bain du chien', () => {
+  for (const gab of [{ species: 'dog', breed: 'chihuahua' }, { species: 'dog', breed: 'bouvier_bernois' }]) {
+    it(`${label(gab)} : debout dans la bassine, l'éponge partout, la douchette, il s'ébroue ; juste`, () => {
+      const { a, sc } = makePetStage(gab);
+      const ctx = ctxFor(a, sc);
+      const before = sc.scene.children.length;
+      const game = pets3d.PET_CARE3D_GAMES.dog.wash(ctx);
+      run(ctx, game, sc, 0.5);
+      // la bassine sous lui, ses pattes dedans ; lui et la bassine dans l'image
+      const s0 = game.peek();
+      expect(s0.cells).toBeGreaterThan(5);
+      for (const k of ['muzzle', 'poll']) expect(inView(sc.project(sc.live(k)), ctx.view)).toBe(true);
+      // on frotte chaque endroit une fois
+      for (const c of s0.cellsAt) {
+        game.down({ x: c.x - 32, y: c.y });
+        for (let k = 0; k <= 12; k++) game.move({ x: c.x - 32 + (64 * k) / 12, y: c.y }, true);
+        game.up();
+      }
+      run(ctx, game, sc, 0.2);
+      expect(game.peek().soaped).toBeGreaterThan(0.85);
+      ctx.pressStop();
+      expect(game.peek().phase).toBe('rinse');
+      // la douchette, bouton gardé appuyé : elle balaie le chien toute seule
+      const shower = ctx.buttons.find((b) => b.opts.hold);
+      shower.opts.onDown();
+      let shook = 0;
+      for (let i = 0; i < 600 && !ctx.finished; i++) run(ctx, game, sc, 1 / 30);
+      shower.opts.onUp();
+      expect(ctx.finished?.why).toBe('just');
+      for (let i = 0; i < 30; i++) {
+        run(ctx, game, sc, 1 / 30);
+        shook = Math.max(shook, Math.abs(sc.holder.rotation.x));
+      }
+      expect(shook).toBeGreaterThan(0.05); // il s'ébroue
+      run(ctx, game, sc, 1.5);
+      expect(sc.holder.rotation.x).toBe(0);
+      game.destroy();
+      expect(sc.scene.children.length).toBe(before);
+      sc.dispose();
+    }, 90000);
+  }
+});
+
 describe('les cadrages en paysage et sur ordinateur', () => {
   // (la toile 3D d'un téléphone en paysage, 844 × 390 : 496 × 370 ; la fenêtre du jeu sur un ordinateur : 660 × 460)
   for (const gab of [GAUGES[0], GAUGES[1], GAUGES[2], GAUGES[3], GAUGES[5], GAUGES[6], GAUGES[7], { species: 'rabbit', breed: 'tete_de_lion' }]) {

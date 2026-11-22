@@ -7,9 +7,9 @@
 // Le petit terrain du jeu dessiné (le sol de 312 × 246, la brouette à droite) est posé sur la litière, devant elle.
 
 import * as THREE from 'three';
-import { cleanGame, SPREAD_ZONE } from './clean.js';
+import { cleanGame } from './clean.js';
 import { withLogic } from './care3d.js';
-import { dist, distToSegment } from './draw.js';
+import { distToSegment } from './draw.js';
 import { litterHeight } from '../../game/care/farmBarn.js';
 import { lumpy } from '../../game/care/barnProps.js';
 import { dirtyLitterTexture, cowPat, patMaterials, wheelbarrow, strawFork } from '../../game/care/stableChores.js';
@@ -143,9 +143,7 @@ export function barnClean3dGame(ctx) {
 
   let phase = s0.phase;
   let held = null; // la bouse qu'on tient
-  let downAt = null;
   let lastD = null;
-  let inBin = 0;
   let t = 0;
   let saidEnd = false;
 
@@ -204,7 +202,6 @@ export function barnClean3dGame(ctx) {
           if (gone) {
             held = gone;
             gone.state = 'held';
-            downAt = h.d;
           }
         }
       } else {
@@ -242,8 +239,6 @@ export function barnClean3dGame(ctx) {
       }
       lastD = null;
       for (const c of cells) c.hit = false;
-      void downAt;
-      void dist;
     },
     update(dt) {
       t += dt;
@@ -270,7 +265,6 @@ export function barnClean3dGame(ctx) {
           }
         }
       }
-      if (s.inBin > inBin) inBin = s.inBin;
       barrow.fill(pats.filter((pt) => pt.state === 'bin').length, pats.length);
       // les mouches, au-dessus des bouses encore là
       let k = 0;
@@ -353,7 +347,6 @@ export function barnClean3dGame(ctx) {
           g.restore();
         }
       }
-      void SPREAD_ZONE;
     },
     destroy() {
       for (const pt of pats) sc.scene.remove(pt.g);

@@ -252,13 +252,12 @@ export function paddockSet(stage, yard) {
   const dH = Math.max(1.85, 0.9 * u + 1.3);
   const dark = keep(new THREE.MeshStandardMaterial({ color: 0x1d1610, roughness: 1 }));
   mesh(new THREE.PlaneGeometry(dW, dH), dark, [door.x, dH / 2, F.z0 - 0.39], null, false);
-  const low = mesh(new THREE.BoxGeometry(dW, dH * 0.5, 0.05), doorMat, [door.x, dH * 0.25, F.z0 - 0.37]);
+  mesh(new THREE.BoxGeometry(dW, dH * 0.5, 0.05), doorMat, [door.x, dH * 0.25, F.z0 - 0.37]);
   const top = mesh(new THREE.BoxGeometry(dW, dH * 0.48, 0.05), doorMat, [door.x - dW / 2, dH * 0.75, F.z0 - 0.37 + dW / 2]);
   top.geometry.translate(dW / 2, 0, 0);
   top.position.x = door.x - dW / 2;
   top.position.z = F.z0 - 0.37;
   top.rotation.y = -1.9; // (le battant du haut ouvert contre le mur)
-  void low;
   // l'encadrement de la porte
   for (const sx of [-1, 1]) mesh(new THREE.BoxGeometry(0.1, dH + 0.08, 0.1), postMat, [door.x + sx * (dW / 2 + 0.05), (dH + 0.08) / 2, F.z0 - 0.36]);
   mesh(new THREE.BoxGeometry(dW + 0.3, 0.1, 0.12), postMat, [door.x, dH + 0.05, F.z0 - 0.36]);

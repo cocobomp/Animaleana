@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { nailsGame } from './grooming.js';
 import { withLogic } from './care3d.js';
-import { goatHoofModel, hoofTrimmer, TOE } from '../../game/care/goatHoof.js';
+import { goatHoofModel, hoofTrimmer } from '../../game/care/goatHoof.js';
 import { handModel, aimHand, avatarHand } from '../../game/care/props.js';
 import { callOut } from './farm3d.js';
 
@@ -126,7 +126,6 @@ export function hoofTrim3dGame(ctx) {
     const dir = n.clone().add(v3(0, 0.1, 0.9)).normalize();
     // (un plan serré, pris d'un coup : le pied est levé et tenu, on regarde la sole)
     sc.frame(pts3, { dir: dir.toArray(), pad: 1.3, now: true });
-    footN = n;
     footZ = z;
   }
 
@@ -134,7 +133,6 @@ export function hoofTrim3dGame(ctx) {
    * La main tient le pied : posée sur le dessus du paturon (du côté opposé à la sole), les doigts qui l'entourent
    * vers nous ; on n'en voit que le bout des doigts et le pouce, derrière la jambe.
    */
-  let footN = v3(0, 1, 0);
   let footZ = v3(0, 0, 1);
   function placeHand() {
     if (foot < 0 || !hoof) return;
@@ -347,4 +345,3 @@ export function hoofTrim3dGame(ctx) {
   };
 }
 
-export { TOE };

@@ -174,10 +174,31 @@ export function ruminantLife(stage, dt) {
   st.v = 0;
   st.moving = false;
   st.size = stage.double.scale * (md.size ?? 1);
+  st.play = false;
+  // Il se déplace (jouer à la balle, goatPlay3d.js) : mood.drive = { x, z (place au sol, monde), speed (m/s), heading
+  // (vers où il va : atan2(dx, dz) ; π/2 : vers +x, de profil) } ; le jeu le mène, le mixeur choisit l'allure (pas, trot,
+  // galop) et cale les sabots. (Même forme que la scène des chiens et des chats, petStage.js.)
+  if (m.drive) {
+    const dv = m.drive;
+    stage.holder.position.x = dv.x;
+    stage.holder.position.z = dv.z;
+    // (il se tourne en douceur vers où il va)
+    let dh = dv.heading - stage.holder.rotation.y;
+    dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+    stage.holder.rotation.y += dh * Math.min(1, dt * (dv.speed > 0.3 ? 8 : 4));
+    st.moving = dv.speed > 0.06;
+    st.v = dv.speed / Math.max(0.15, stage.double.scale);
+    st.play = !!dv.play && st.moving;
+    stage.holder.updateMatrixWorld(true);
+  }
   st.posture = 'stand';
   st.noLock = false;
-  st.sad = false;
-  st.action = m.eat ? 'eat' : m.milk ? 'milk' : m.brush ? 'brush' : m.graze ? 'graze' : null;
+  st.sad = !!m.tired; // (fatiguée : la tête basse, goatPlay3d.js)
+  st.action = m.eat ? 'eat' : m.milk ? 'milk' : m.brush ? 'brush' : m.graze ? 'graze' : m.frolic ? 'play' : null;
+  // (coup de tête — la chèvre pousse la balle —, une fois ; se dresser sur les postérieurs : mood.posture 'rear')
+  st.butt = m.butt > 0;
+  m.butt = 0;
+  if (m.posture) st.posture = m.posture;
   st.reachY = m.eat && Number.isFinite(m.reachY) ? m.reachY : null;
   // Regard : vers ce qu'on lui montre (repère du modèle, depuis la base de l'encolure, comme le joueur dans le jeu).
   st.look = null;

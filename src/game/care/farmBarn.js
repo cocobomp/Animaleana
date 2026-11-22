@@ -437,7 +437,7 @@ export function barnSet(stage) {
 }
 
 /** Mur chaulé : des moellons irréguliers sous la chaux blanche, la chaux usée par endroits, des coulures en bas. */
-function limeWallTexture(seed = 4) {
+export function limeWallTexture(seed = 4) {
   return canvasTex(512, 512, (c) => {
     const r = rng(seed);
     const S = 512;
@@ -519,7 +519,7 @@ function limeWallTexture(seed = 4) {
 }
 
 /** Environnement des reflets : une petite pièce chaude « photographiée » une fois. */
-function roomEnvironment(renderer, high) {
+export function roomEnvironment(renderer, high) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
   room.traverse((o) => {

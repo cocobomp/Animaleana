@@ -5,9 +5,11 @@ import * as THREE from 'three';
 import { loadFarm, farmStage, run, inView } from './fixtures/farmStage.js';
 
 let hoofTrim;
+let goatPlay;
 beforeAll(async () => {
   await loadFarm();
   hoofTrim = await import('../src/ui/minigames/hoofTrim3d.js');
+  goatPlay = await import('../src/ui/minigames/goatPlay3d.js');
 }, 60000);
 
 const random = Math.random;
@@ -87,4 +89,58 @@ describe('parer les onglons de la chèvre en 3D', () => {
     game.destroy();
     sc.dispose();
   }, 60000);
+});
+
+describe('jouer à la balle avec la chèvre, dans le pré', () => {
+  for (const c of [{ breed: 'alpine' }, { breed: 'saanen', young: true }]) {
+    it(`${c.breed}${c.young ? ' (chevreau)' : ''} : le pré à la place de la chèvrerie, elle court chercher la balle et la ramène, juste le bon nombre de fois`, () => {
+      const { sc, ctx } = farmStage({ species: 'goat', ...c });
+      const barn = sc.decor;
+      const game = goatPlay.goatPlay3dGame(ctx);
+      // le pré est posé, la chèvrerie cachée
+      expect(sc.decor).not.toBe(barn);
+      expect(sc.decor.kind).toBe('pre');
+      expect(barn.group.parent).toBe(null);
+      run(ctx, game, sc, 0.5);
+      let s = game.peek();
+      expect(inView(sc.project(s.goat), ctx.view)).toBe(true);
+      expect(inView(sc.project(s.ball3d), ctx.view)).toBe(true);
+      for (let r = 0; r < s.n; r++) {
+        // on lance tout près d'elle
+        const g = sc.holder.position;
+        const tap = sc.project(new THREE.Vector3(g.x + 0.25 * sc.marks.u, 0, g.z + 0.2 * sc.marks.u));
+        const x0 = sc.holder.position.clone();
+        game.down(tap);
+        expect(game.peek().fly).toBe(true);
+        let moved = 0;
+        let pushT = 0;
+        for (let k = 0; k < 400 && game.peek().ball !== 'hand'; k++) {
+          run(ctx, game, sc, 1 / 15);
+          moved = Math.max(moved, sc.holder.position.distanceTo(x0));
+          // la balle ramenée : devant son nez, au ras de l'herbe (après le coup de tête qui l'arrête)
+          pushT = game.peek().ball === 'mouth' ? pushT + 1 / 15 : 0;
+          if (pushT > 0.6) {
+            const b = game.peek().ball3d;
+            expect(b.y).toBeLessThan(0.2);
+            expect(b.distanceTo(sc.live('nose'))).toBeLessThan(0.45 * Math.max(0.6, sc.marks.u));
+          }
+        }
+        expect(game.peek().ball).toBe('hand');
+        expect(moved).toBeGreaterThan(0.2);
+        run(ctx, game, sc, 0.5);
+      }
+      s = game.peek();
+      expect(s.rounds).toBe(s.n);
+      ctx.pressStop();
+      expect(ctx.done).toBe(true);
+      expect(ctx.finished.why).toBe('just');
+      run(ctx, game, sc, 2);
+      game.destroy();
+      // la chèvrerie revient
+      expect(sc.decor).toBe(barn);
+      expect(barn.group.parent).toBe(sc.scene);
+      expect(sc.mood.drive).toBe(null);
+      sc.dispose();
+    }, 60000);
+  }
 });

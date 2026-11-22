@@ -30,6 +30,7 @@ import { shear3dGame } from './shear3d.js';
 import { milk3dGame } from './milk3d.js';
 import { cowWash3dGame } from './cowWash3d.js';
 import { hoofTrim3dGame } from './hoofTrim3d.js';
+import { goatPlay3dGame } from './goatPlay3d.js';
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
 export const CARE3D_GAMES = {
@@ -43,6 +44,7 @@ CARE3D_GAMES.goat.milk = milk3dGame;
 CARE3D_GAMES.cow.milk = milk3dGame;
 CARE3D_GAMES.cow.wash = cowWash3dGame;
 CARE3D_GAMES.goat.nails = hoofTrim3dGame; // (parer les onglons : le pied levé, hoofTrim3d.js)
+CARE3D_GAMES.goat.play = goatPlay3dGame; // (la balle dans le pré : goatPlay3d.js, paddock.js)
 
 /** Le jeu 3D de ce soin pour cet animal, ou null. */
 export function care3dGameFor(a, action) {

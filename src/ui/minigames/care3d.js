@@ -16,11 +16,16 @@ import { treat3dGame } from './treat3d.js';
 import { pet3dGame } from './pet3d.js';
 import { pansage3dGame } from './pansage3d.js';
 import { wash3dGame } from './wash3d.js';
+import { barnSet } from '../../game/care/barn.js'; // la bergerie, la chèvrerie, l'étable
+import { RUMINANT_FIT } from '../../game/care/ruminant.js'; // moutons, chèvres, vaches : leurs repères, leur vie
+import { farmFeed3dGame, farmWater3dGame } from './farm3d.js';
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
 export const CARE3D_GAMES = {
   horse: { feed: ration3dGame, water: water3dGame, treat: treat3dGame, pet: pet3dGame, brush: pansage3dGame, wash: wash3dGame },
 };
+// Moutons, chèvres, vaches (src/ui/minigames/farm3d.js et suivants).
+for (const sp of ['sheep', 'goat', 'cow']) CARE3D_GAMES[sp] = { feed: farmFeed3dGame, water: farmWater3dGame };
 
 /** Le jeu 3D de ce soin pour cet animal, ou null. */
 export function care3dGameFor(a, action) {
@@ -28,7 +33,9 @@ export function care3dGameFor(a, action) {
 }
 
 /** Décor de chaque espèce. */
-const SETS = { horse: stallSet };
+const SETS = { horse: stallSet, sheep: barnSet, goat: barnSet, cow: barnSet };
+/** Adaptation de la scène aux espèces dont le modèle n'est pas celui du cheval (CareStage, o.fit). */
+const FITS = { sheep: RUMINANT_FIT, goat: RUMINANT_FIT, cow: RUMINANT_FIT };
 
 /**
  * Ouvre la scène 3D dans la scène du cadre (host), sous la toile 2D (above). Renvoie la scène, ou null (WebGL
@@ -39,7 +46,8 @@ export function openCareScene(ui, a, host, above) {
   const game = ui.game ?? null;
   let scene = null;
   try {
-    scene = new CareStage({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species] });
+    const fit = FITS[a.species] ?? null;
+    scene = new CareStage({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species], fit, model: fit?.model?.(a) ?? null });
   } catch (e) {
     console.warn('[care3d] scène 3D impossible, jeu dessiné', e?.message ?? e);
     try {

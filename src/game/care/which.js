@@ -5,6 +5,7 @@
 
 import { getModel } from '../assets.js';
 import { REAL_HORSE_KEY } from '../models/horseReal.js';
+import { RUMINANTS, ruminantKey } from './ruminant.js'; // moutons, chèvres, vaches (bergerie, étable : barn.js)
 
 /** Réglage par l'adresse ou le stockage local : ?care3d=off (toujours le mini-jeu dessiné, pour tester le repli). */
 export function care3dSetting(search = null, storage = null) {
@@ -19,10 +20,12 @@ export function care3dSetting(search = null, storage = null) {
 }
 
 /** Espèces qui ont déjà leur scène de soin en 3D (les autres gardent le mini-jeu dessiné). */
-export const CARE3D_SPECIES = new Set(['horse']);
+export const CARE3D_SPECIES = new Set(['horse', ...RUMINANTS]);
 
 /** Soins refaits en 3D, par espèce (les jeux eux-mêmes : CARE3D_GAMES de src/ui/minigames/care3d.js). */
 export const CARE3D_ACTIONS = { horse: ['feed', 'water', 'treat', 'pet', 'brush', 'wash'] };
+// (moutons, chèvres, vaches : leurs soins en 3D, src/ui/minigames/farm3d.js et suivants)
+Object.assign(CARE3D_ACTIONS, { sheep: ['feed', 'water'], goat: ['feed', 'water'], cow: ['feed', 'water'] });
 
 /** Ce soin a-t-il un jeu 3D pour cette espèce ? */
 export const care3dWanted = (a, action) => !!CARE3D_ACTIONS[a?.species]?.includes(action);
@@ -36,5 +39,6 @@ export function care3dPossible(a, { setting = '', has = (k) => !!getModel(k) } =
   if (!a || setting === 'off') return false;
   if (!CARE3D_SPECIES.has(a.species)) return false;
   if (a.species === 'horse') return has(REAL_HORSE_KEY);
+  if (RUMINANTS.includes(a.species)) return has(ruminantKey(a));
   return false;
 }

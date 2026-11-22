@@ -36,7 +36,8 @@ describe('quand ouvrir la scène 3D', () => {
   });
 
   it('les autres espèces gardent leur jeu dessiné (pour l\'instant)', () => {
-    for (const sp of ['dog', 'cat', 'rabbit', 'sheep', 'goat', 'cow']) expect(stage.care3dPossible({ species: sp }, { has: () => true })).toBe(false);
+    // (moutons, chèvres, vaches : leur scène 3D, voir tests/farm3dStage.test.js)
+    for (const sp of ['dog', 'cat', 'rabbit']) expect(stage.care3dPossible({ species: sp }, { has: () => true })).toBe(false);
   });
 
   it('le réglage se lit dans l\'adresse, puis dans le stockage local', () => {

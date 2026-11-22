@@ -169,6 +169,66 @@ function barrelMount(group, world) {
   return m;
 }
 
+// ---------------------------------------------------------------- cadrer un groupe
+
+const _fitCam = new THREE.PerspectiveCamera();
+const _fitV = V();
+
+/**
+ * Visée d'un plan (caméra en az / pitch autour de la visée, à la distance d) qui place le point mid au milieu de la
+ * partie libre de l'écran (frame.box : x0, x1, y0, y1 de -1 à 1) au lieu du milieu de l'écran. frame : { fov, aspect,
+ * box, az, pitch }. Renvoie la visée (dans out).
+ */
+export function shotAim(mid, d, frame, out = V()) {
+  const { az, pitch, box } = frame;
+  const tanV = Math.tan((frame.fov * Math.PI) / 360);
+  const cx = (box.x0 + box.x1) / 2;
+  const cy = (box.y0 + box.y1) / 2;
+  // (droite et haut de la caméra)
+  const rx = Math.cos(az);
+  const rz = -Math.sin(az);
+  const ux = -Math.sin(az) * Math.sin(pitch);
+  const uy = Math.cos(pitch);
+  const uz = -Math.cos(az) * Math.sin(pitch);
+  const kx = -cx * d * tanV * frame.aspect;
+  const ky = -cy * d * tanV;
+  return out.set(mid.x + rx * kx + ux * ky, mid.y + uy * ky, mid.z + rz * kx + uz * ky);
+}
+
+/** Tous les points pts sont-ils dans la partie libre de l'écran, vus de ce plan (visée at, distance d) ? */
+export function shotFits(pts, at, d, frame) {
+  const { az, pitch, box } = frame;
+  const c = _fitCam;
+  c.fov = frame.fov;
+  c.aspect = frame.aspect;
+  c.near = 0.1;
+  c.far = 500;
+  c.updateProjectionMatrix();
+  c.position.set(at.x + Math.sin(az) * Math.cos(pitch) * d, at.y + Math.sin(pitch) * d, at.z + Math.cos(az) * Math.cos(pitch) * d);
+  c.lookAt(at);
+  c.updateMatrixWorld(true);
+  for (const q of pts) {
+    _fitV.copy(q).project(c);
+    if (_fitV.x < box.x0 || _fitV.x > box.x1 || _fitV.y < box.y0 || _fitV.y > box.y1) return false;
+  }
+  return true;
+}
+
+/**
+ * Cap du plan large (vu depuis pref, le côté des juges), d'après la ligne avatar → cheval (line) : en hauteur, tourné
+ * vers cette ligne (ils s'étagent dans la profondeur) ; en paysage, en travers (ils s'étalent en largeur). Au plus de
+ * 0,6 rad, et sans à-coup quand la ligne tourne (sin 2·écart).
+ */
+export const wideAzimuth = (pref, line, portrait) => pref + (portrait ? 0.6 : -0.6) * Math.sin(2 * wrap(line - pref));
+
+/** La plus petite distance (de 5 à 40 m) où tous les points tiennent dans la partie libre de l'écran. */
+export function fitDistance(pts, mid, frame) {
+  const at = V();
+  let d = 5;
+  while (d < 40 && !shotFits(pts, shotAim(mid, d, frame, at), d, frame)) d += 0.75;
+  return d;
+}
+
 // ---------------------------------------------------------------- les poses
 
 /**
@@ -1168,45 +1228,15 @@ class VaultingSession extends Session {
     // vu du côté des juges ; en hauteur, tourné vers la ligne avatar → cheval (ils s'étagent dans la profondeur) ;
     // en paysage, tourné en travers de cette ligne (ils s'étalent en largeur). Au plus de 0,6 rad, sans à-coup.
     const pref = Math.atan2(this.judgeAt.x - this.center.x, this.judgeAt.z - this.center.z);
-    const line = Math.atan2(e.position.x - pl.x, e.position.z - pl.z);
-    const az = pref + (portrait ? 0.6 : -0.6) * Math.sin(2 * wrap(line - pref));
+    const az = wideAzimuth(pref, Math.atan2(e.position.x - pl.x, e.position.z - pl.z), portrait);
     this.wideAz = this.wideAz === undefined ? az : this.wideAz + wrap(az - this.wideAz) * Math.min(1, dt * 1.5);
     const pitch = portrait ? 0.55 : 0.3;
     const box = this.freeBox();
     const cam = g.camera;
-    const sc = (this.fitCam ??= new THREE.PerspectiveCamera());
-    sc.fov = cam.fov;
-    sc.aspect = cam.aspect;
-    sc.updateProjectionMatrix();
-    // la visée décalée pour que le groupe se place au milieu de la partie libre (pas au milieu de l'écran)
-    const tanV = Math.tan((cam.fov * Math.PI) / 360);
-    const cx = (box.x0 + box.x1) / 2;
-    const cyN = (box.y0 + box.y1) / 2;
-    const at = (this.wideAt ??= V());
-    const right = (this.wideR ??= V());
-    const up = (this.wideU ??= V());
-    const back = (this.wideB ??= V());
-    const sp = (this.wideS ??= V());
-    const fits = (d) => {
-      const a = this.wideAz;
-      back.set(Math.sin(a) * Math.cos(pitch), Math.sin(pitch), Math.cos(a) * Math.cos(pitch));
-      right.set(Math.cos(a), 0, -Math.sin(a));
-      up.set(-Math.sin(a) * Math.sin(pitch), Math.cos(pitch), -Math.cos(a) * Math.sin(pitch));
-      at.copy(mid).addScaledVector(right, -cx * d * tanV * cam.aspect).addScaledVector(up, -cyN * d * tanV);
-      sc.position.copy(at).addScaledVector(back, d);
-      sc.lookAt(at);
-      sc.updateMatrixWorld(true);
-      for (const q of pts) {
-        sp.copy(q).project(sc);
-        if (sp.x < box.x0 || sp.x > box.x1 || sp.y < box.y0 || sp.y > box.y1) return false;
-      }
-      return true;
-    };
-    let d = 5;
-    while (d < 40 && !fits(d)) d += 0.75;
-    fits(d);
+    const frame = { fov: cam.fov, aspect: cam.aspect, box, az: this.wideAz, pitch };
+    const d = fitDistance(pts, mid, frame);
     this.wideDist = this.wideDist === undefined ? d : this.wideDist + (d - this.wideDist) * Math.min(1, dt * 2);
-    fits(this.wideDist);
+    const at = shotAim(mid, this.wideDist, frame, (this.wideAt ??= V()));
     return { at: at.clone(), heading: this.wideAz, yaw: 0, pitch, dist: this.wideDist };
   }
 
@@ -1345,11 +1375,7 @@ class VaultingSession extends Session {
     }
     if (this.props) {
       g.scene.remove(this.props);
-      this.props.traverse((o) => {
-        if (!o.isMesh) return;
-        if (!o.geometry.userData.shared) o.geometry.dispose();
-        for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (!this.sharedMats.has(m)) m.dispose();
-      });
+      disposeProps(this.props, this.sharedMats);
     }
     // Le voltigeur revient à pied, debout, au bord du cercle.
     if (pl && this.av) {
@@ -1375,6 +1401,18 @@ class VaultingSession extends Session {
   }
 }
 
+/**
+ * Libère le décor de la séance (table et juges, tonneau…) : ses géométries, sauf celles partagées entre plusieurs
+ * modèles (userData.shared), et ses matériaux, sauf ceux de sharedMats (le bois du tonneau, gardé pour la suivante).
+ */
+export function disposeProps(root, sharedMats = new Set()) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (!o.geometry.userData.shared) o.geometry.dispose();
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (!sharedMats.has(m)) m.dispose();
+  });
+}
+
 /** Un juge assis sur sa chaise (pose fixe : hanches à 46 cm, genoux pliés, mains sur la table). */
 function seat(j) {
   const a = j;
@@ -1398,4 +1436,4 @@ function seat(j) {
 
 SESSION_TYPES.vaulting = { cls: VaultingSession, icon: '🤸', stat: 'actvVaulting' };
 
-export { VaultingSession };
+export { VaultingSession, makePoses, resolve, applyPose, barrelMount, GRIP_UP };

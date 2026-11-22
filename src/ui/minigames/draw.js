@@ -965,11 +965,13 @@ export function drawHorseTop(g, a, x, y, dir, s = 1, phase = 0) {
   const light = shade(c.coat, 0.18);
   const mane = css(c.mane);
   const white = 0xf4f0e8;
-  // proportions (cheval de selle = 1)
-  const bl = 30 * (b.back ?? 1); // demi-longueur du tronc
-  const bw = 13 * (b.girth ?? 1); // demi-largeur
-  const nk = 17 * (b.neck ?? 1); // encolure
-  const hd = 1.0 * (b.head ?? 1); // tête
+  // proportions (cheval de selle = 1) : tronc, encolure nettement plus fine que lui, tête longue et étroite
+  const bl = 28 * (b.back ?? 1); // demi-longueur du tronc
+  const bw = 13 * (b.girth ?? 1); // demi-largeur du tronc (aux côtes)
+  const nk = 15 * (b.neck ?? 1); // encolure (du garrot à la nuque)
+  const hl = 18.5 * (b.head ?? 1); // tête (de la nuque au bout du nez)
+  const nw = 0.6 * bw * (b.neckW ?? 1); // demi-largeur de l'encolure à sa base
+  const xp = bl * 0.92 + nk; // la nuque
   g.save();
   g.translate(x, y);
   g.rotate(dir);
@@ -978,96 +980,121 @@ export function drawHorseTop(g, a, x, y, dir, s = 1, phase = 0) {
   g.lineJoin = 'round';
   // ombre douce sous lui
   g.fillStyle = 'rgba(0,0,0,0.16)';
-  ellipse(g, 3, 5, bl + 8, bw + 3);
+  ellipse(g, 3, 5, bl + 10, bw + 2);
+  g.fill();
+  ellipse(g, xp + hl * 0.4, 4, hl * 0.6 + 4, bw * 0.35);
   g.fill();
 
-  // --- membres : le bas des jambes dépasse sous le ventre et avance / recule avec la foulée (diagonaux ensemble)
-  const legs = [[bl * 0.62, -bw * 0.62, 0, 0], [bl * 0.62, bw * 0.62, Math.PI, 1], [-bl * 0.6, -bw * 0.66, Math.PI, 2], [-bl * 0.6, bw * 0.66, 0, 3]];
-  const lw = 4.6 * (b.bone ?? 1);
-  for (const [lx, ly, ph, i] of legs) {
-    const sw = Math.sin(phase + ph) * 7;
-    const x1 = lx + sw;
-    const y1 = ly * 1.42;
-    // (bai : le bas des membres noir ; balzane : blanche, du sabot jusqu'à sa hauteur seulement)
-    g.strokeStyle = coat;
+  // --- membres : vus de dessus, ils sont sous le corps ; on voit le bas des jambes et les sabots dépasser de ses flancs,
+  // qui avancent et reculent avec la foulée (diagonaux ensemble) : les balzanes s'y voient
+  const legs = [[bl * 0.55, -1, 0, 0], [bl * 0.55, 1, Math.PI, 1], [-bl * 0.55, -1, Math.PI, 2], [-bl * 0.55, 1, 0, 3]];
+  const lw = 3.4 * (b.bone ?? 1);
+  for (const [lx, side, ph, i] of legs) {
+    const k = Math.sin(phase + ph);
+    const x0 = lx + k * 2;
+    const y0 = side * bw * 0.7;
+    const x1 = lx + k * 6;
+    const y1 = side * (bw * 0.86 + 3.2);
+    g.strokeStyle = shade(c.coat, -0.12);
     g.lineWidth = lw;
     g.beginPath();
-    g.moveTo(lx, ly);
+    g.moveTo(x0, y0);
     g.lineTo(x1, y1);
     g.stroke();
+    // (bai : le bas des membres noir ; balzane : blanche, seulement en bas)
     const low = socks[i] > 0 ? css(white) : tr.points ? mane : null;
     if (low) {
-      const k = socks[i] > 0 ? Math.min(0.85, 0.35 + socks[i] * 1.2) : 0.6;
       g.strokeStyle = low;
       g.beginPath();
-      g.moveTo(lx + (x1 - lx) * (1 - k), ly + (y1 - ly) * (1 - k));
+      g.moveTo(x0 + (x1 - x0) * 0.35, y0 + (y1 - y0) * 0.35);
       g.lineTo(x1, y1);
       g.stroke();
     }
-    // sabot (et fanons d'un frison, d'un trait)
     if (b.feathers > 0.3) {
       g.fillStyle = shade(c.mane, 0.05);
-      ellipse(g, x1, y1, lw * 0.95, lw * 0.8);
+      ellipse(g, x1, y1, lw * 1.05, lw * 0.85);
       g.fill();
     }
     g.fillStyle = '#3a3029';
-    ellipse(g, x1 + 0.6, y1, lw * 0.45, lw * 0.42);
+    ellipse(g, x1 + 0.4, y1 + side * 0.5, lw * 0.5, lw * 0.42);
     g.fill();
   }
 
-  // --- queue : du haut de la croupe vers l'arrière, en mèches, elle se balance au rythme des pas
-  const tl = 22 * (b.tail ?? 1) + 6;
-  const sway = Math.sin(phase * 0.5) * 6;
-  g.strokeStyle = mane;
-  for (let k = 0; k < 4; k++) {
-    g.lineWidth = 6.5 - k * 1.2;
-    g.beginPath();
-    g.moveTo(-bl + 2, (k - 1.5) * 1.2);
-    g.quadraticCurveTo(-bl - tl * 0.45, sway * 0.6 + (k - 1.5) * 2.2, -bl - tl, sway + (k - 1.5) * 3.2);
-    g.stroke();
+  // --- queue : une mèche qui part du haut de la croupe, s'élargit puis s'effile, et se balance avec les pas
+  const tl = (16 + 10 * (b.tail ?? 1)) * (b.tail ?? 1);
+  const sway = Math.sin(phase * 0.5) * 5;
+  g.fillStyle = mane;
+  g.beginPath();
+  g.moveTo(-bl + 3, -2.2);
+  g.quadraticCurveTo(-bl - tl * 0.45, -4.5 + sway * 0.4, -bl - tl, sway - 1.5);
+  g.quadraticCurveTo(-bl - tl - 2, sway + 1, -bl - tl + 1, sway + 2.5);
+  g.quadraticCurveTo(-bl - tl * 0.45, 4.5 + sway * 0.4, -bl + 3, 2.2);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = shade(c.mane, lum(c.mane) < 0.2 ? 0.25 : -0.25);
+  g.lineWidth = 0.7;
+  g.beginPath();
+  for (const k of [-1, 0, 1]) {
+    g.moveTo(-bl + 1, k * 1.2);
+    g.quadraticCurveTo(-bl - tl * 0.5, k * 2.6 + sway * 0.4, -bl - tl + 2, sway + k * 1.6);
   }
+  g.stroke();
 
-  // --- encolure : de l'épaule à la nuque, plus fine en haut (dessinée avant le tronc : elle part sous le garrot)
-  const nx0 = bl * 0.72;
-  const nx1 = bl * 0.72 + nk;
-  const nw0 = bw * 0.72 * (b.neckW ?? 1);
-  const nw1 = 5.2 * (b.neckW ?? 1);
-  const neckPath = () => {
-    g.beginPath();
-    g.moveTo(nx0 - 4, -nw0);
-    g.quadraticCurveTo((nx0 + nx1) / 2, -nw0 * 0.72, nx1, -nw1);
-    g.lineTo(nx1 + 2, nw1);
-    g.quadraticCurveTo((nx0 + nx1) / 2, nw0 * 0.72, nx0 - 4, nw0);
-    g.closePath();
-  };
+  // --- encolure (dessinée avant le tronc : elle sort d'entre les épaules), bien plus fine que lui, jusqu'à la nuque
+  const nx0 = bl * 0.35;
+  const nwp = nw * 0.6; // à la nuque
+  const neckFill = g.createLinearGradient(0, -nw, 0, nw);
+  neckFill.addColorStop(0, dark);
+  neckFill.addColorStop(0.45, light);
+  neckFill.addColorStop(1, dark);
+  g.fillStyle = neckFill;
+  g.beginPath();
+  g.moveTo(nx0, -nw);
+  g.bezierCurveTo(nx0 + nk * 0.55, -nw * 0.98, xp - nk * 0.25, -nwp, xp, -nwp);
+  g.lineTo(xp, nwp);
+  g.bezierCurveTo(xp - nk * 0.25, nwp, nx0 + nk * 0.55, nw * 0.98, nx0, nw);
+  g.closePath();
+  g.fill();
 
-  // --- tronc : épaules, dos, croupe plus large ; dégradé (dos clair, flancs plus sombres) pour le volume
+  // --- tronc vu de dessus : épaules plus étroites, côtes, et la croupe large en cœur (les deux hanches, la queue au
+  // milieu) ; éclairé sur le dos (garrot, croupe), plus sombre sur les flancs, un fin contour
   const bodyPath = () => {
     g.beginPath();
-    g.moveTo(bl * 0.92, 0);
-    g.bezierCurveTo(bl * 0.92, -bw * 0.85, bl * 0.45, -bw, 0, -bw * 0.94);
-    g.bezierCurveTo(-bl * 0.55, -bw * 0.9, -bl * 0.7, -bw * 1.06, -bl * 0.92, -bw * 0.72);
-    g.bezierCurveTo(-bl * 1.04, -bw * 0.4, -bl * 1.04, bw * 0.4, -bl * 0.92, bw * 0.72);
-    g.bezierCurveTo(-bl * 0.7, bw * 1.06, -bl * 0.55, bw * 0.9, 0, bw * 0.94);
-    g.bezierCurveTo(bl * 0.45, bw, bl * 0.92, bw * 0.85, bl * 0.92, 0);
+    g.moveTo(bl * 0.98, 0);
+    g.bezierCurveTo(bl * 0.98, -bw * 0.5, bl * 0.75, -bw * 0.78, bl * 0.42, -bw * 0.86);
+    g.bezierCurveTo(bl * 0.05, -bw * 0.98, -bl * 0.35, -bw * 1.0, -bl * 0.6, -bw * 0.98);
+    g.bezierCurveTo(-bl * 0.9, -bw * 0.94, -bl * 1.06, -bw * 0.55, -bl * 0.96, -bw * 0.16);
+    g.quadraticCurveTo(-bl * 0.9, 0, -bl * 0.96, bw * 0.16);
+    g.bezierCurveTo(-bl * 1.06, bw * 0.55, -bl * 0.9, bw * 0.94, -bl * 0.6, bw * 0.98);
+    g.bezierCurveTo(-bl * 0.35, bw * 1.0, bl * 0.05, bw * 0.98, bl * 0.42, bw * 0.86);
+    g.bezierCurveTo(bl * 0.75, bw * 0.78, bl * 0.98, bw * 0.5, bl * 0.98, 0);
     g.closePath();
   };
-  const shadeFill = () => {
-    const gr = g.createLinearGradient(0, -bw, 0, bw);
+  const shadeFill = (w) => {
+    const gr = g.createLinearGradient(0, -w, 0, w);
     gr.addColorStop(0, dark);
-    gr.addColorStop(0.32, coat);
-    gr.addColorStop(0.5, light);
-    gr.addColorStop(0.68, coat);
+    gr.addColorStop(0.28, coat);
+    gr.addColorStop(0.72, coat);
     gr.addColorStop(1, dark);
     return gr;
   };
-  g.fillStyle = shadeFill();
-  neckPath();
-  g.fill();
+  g.fillStyle = shadeFill(bw);
   bodyPath();
   g.fill();
+  // (le dos éclairé : la croupe et le garrot, deux reflets doux)
+  g.save();
+  bodyPath();
+  g.clip();
+  for (const [hx0, r0] of [[-bl * 0.55, bw * 0.95], [bl * 0.3, bw * 0.75]]) {
+    const gl = g.createRadialGradient(hx0, 0, 0, hx0, 0, r0);
+    gl.addColorStop(0, lum(c.coat) > 0.6 ? 'rgba(255,255,255,0.35)' : 'rgba(255,240,220,0.22)');
+    gl.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gl;
+    g.fillRect(hx0 - r0, -r0, r0 * 2, r0 * 2);
+  }
+  g.restore();
   // taches (pie : grandes plaques ; appaloosa : petits ronds, ou une couverture blanche sur la croupe), tirées de sa
-  // graine, découpées au tronc et à l'encolure
+  // graine, découpées au tronc
   if (tr.pinto || tr.leopard || tr.blanket) {
     g.save();
     bodyPath();
@@ -1075,17 +1102,17 @@ export function drawHorseTop(g, a, x, y, dir, s = 1, phase = 0) {
     const sec = css(c.sec);
     if (tr.blanket) {
       g.fillStyle = sec;
-      ellipse(g, -bl * 0.55, 0, bl * 0.55, bw * 1.1);
+      ellipse(g, -bl * 0.62, 0, bl * 0.5, bw * 1.1);
       g.fill();
       g.fillStyle = coat;
       for (let i = 0; i < 9; i++) {
-        circle(g, -bl * (0.2 + rnd() * 0.8), (rnd() - 0.5) * bw * 1.6, 1.4 + rnd() * 1.6);
+        circle(g, -bl * (0.3 + rnd() * 0.65), (rnd() - 0.5) * bw * 1.6, 1.1 + rnd() * 1.3);
         g.fill();
       }
     } else if (tr.leopard) {
       g.fillStyle = sec;
-      for (let i = 0; i < 26; i++) {
-        ellipse(g, (rnd() - 0.5) * bl * 1.9, (rnd() - 0.5) * bw * 1.9, 1.4 + rnd() * 1.8, 1.2 + rnd() * 1.4, rnd() * 3);
+      for (let i = 0; i < 30; i++) {
+        ellipse(g, (rnd() - 0.5) * bl * 1.9, (rnd() - 0.5) * bw * 1.9, 1.1 + rnd() * 1.4, 0.9 + rnd() * 1.1, rnd() * 3);
         g.fill();
       }
     } else {
@@ -1093,12 +1120,12 @@ export function drawHorseTop(g, a, x, y, dir, s = 1, phase = 0) {
       const n = 3 + Math.floor(rnd() * 2);
       for (let i = 0; i < n; i++) {
         const px = (rnd() - 0.5) * bl * 1.6;
-        const py = (rnd() - 0.5) * bw * 1.2;
+        const py = (rnd() - 0.5) * bw * 1.3;
         g.beginPath();
-        const r0 = 6 + rnd() * 7;
-        for (let k = 0; k <= 9; k++) {
-          const t = (k / 9) * Math.PI * 2;
-          const r = r0 * (0.7 + rnd() * 0.5);
+        const r0 = 5 + rnd() * 6;
+        for (let k = 0; k <= 10; k++) {
+          const t = (k / 10) * Math.PI * 2;
+          const r = r0 * (0.75 + rnd() * 0.4);
           const qx = px + Math.cos(t) * r * 1.3;
           const qy = py + Math.sin(t) * r;
           if (k === 0) g.moveTo(qx, qy);
@@ -1110,116 +1137,128 @@ export function drawHorseTop(g, a, x, y, dir, s = 1, phase = 0) {
     }
     g.restore();
   }
-  // ligne du dos (la colonne), à peine
-  g.strokeStyle = 'rgba(0,0,0,0.12)';
-  g.lineWidth = 1.2;
+  // un fin contour, la colonne et les hanches, à peine
+  g.strokeStyle = 'rgba(0,0,0,0.22)';
+  g.lineWidth = 0.8;
+  bodyPath();
+  g.stroke();
+  g.strokeStyle = 'rgba(0,0,0,0.1)';
+  g.lineWidth = 1;
   g.beginPath();
-  g.moveTo(bl * 0.6, 0);
-  g.lineTo(-bl * 0.85, 0);
+  g.moveTo(bl * 0.5, 0);
+  g.lineTo(-bl * 0.9, 0);
+  g.moveTo(-bl * 0.45, -bw * 0.7);
+  g.quadraticCurveTo(-bl * 0.62, -bw * 0.2, -bl * 0.85, -bw * 0.35);
+  g.moveTo(-bl * 0.45, bw * 0.7);
+  g.quadraticCurveTo(-bl * 0.62, bw * 0.2, -bl * 0.85, bw * 0.35);
   g.stroke();
 
-  // --- tête vue de dessus : le front large entre les yeux, le chanfrein qui s'affine, le bout du nez arrondi
-  const hx0 = nx1 - 1; // nuque
-  const hl = 19 * hd; // longueur de la tête
-  const hw = 6.6 * hd; // demi-largeur au front
-  const mw = 4.0 * hd; // demi-largeur au bout du nez
-  const dish = b.profile === 'dish' ? 0.85 : 1;
+  // --- tête vue de dessus : les ganaches et le front larges, le chanfrein qui s'affine, le bout du nez arrondi
+  const hw = 0.47 * bw * Math.sqrt(b.head ?? 1); // demi-largeur au front
+  const mw = hw * 0.62; // au bout du nez
+  const dish = b.profile === 'dish' ? 0.88 : 1;
   const headPath = () => {
     g.beginPath();
-    g.moveTo(hx0, -hw * 0.75);
-    g.quadraticCurveTo(hx0 + hl * 0.2, -hw * 1.08, hx0 + hl * 0.42, -hw * 0.92);
-    g.quadraticCurveTo(hx0 + hl * 0.72, -mw * 1.05 * dish, hx0 + hl * 0.93, -mw);
-    g.quadraticCurveTo(hx0 + hl * 1.06, 0, hx0 + hl * 0.93, mw);
-    g.quadraticCurveTo(hx0 + hl * 0.72, mw * 1.05 * dish, hx0 + hl * 0.42, hw * 0.92);
-    g.quadraticCurveTo(hx0 + hl * 0.2, hw * 1.08, hx0, hw * 0.75);
+    g.moveTo(xp - 1.5, -hw * 0.8);
+    g.quadraticCurveTo(xp + hl * 0.12, -hw * 1.08, xp + hl * 0.34, -hw);
+    g.quadraticCurveTo(xp + hl * 0.66, -mw * 1.08 * dish, xp + hl * 0.9, -mw);
+    g.quadraticCurveTo(xp + hl * 1.04, 0, xp + hl * 0.9, mw);
+    g.quadraticCurveTo(xp + hl * 0.66, mw * 1.08 * dish, xp + hl * 0.34, hw);
+    g.quadraticCurveTo(xp + hl * 0.12, hw * 1.08, xp - 1.5, hw * 0.8);
     g.closePath();
   };
-  const hg = g.createLinearGradient(0, -hw, 0, hw);
-  hg.addColorStop(0, dark);
-  hg.addColorStop(0.5, light);
-  hg.addColorStop(1, dark);
-  g.fillStyle = hg;
+  g.fillStyle = shadeFill(hw);
   headPath();
   g.fill();
-  // bout du nez : plus clair (ou grisé sur une robe noire), naseaux
-  const nose = tr.grey || lum(c.coat) > 0.5 ? 0xb9a9a0 : lum(c.coat) < 0.12 ? 0x4a403c : null;
+  // liste, bout du nez plus clair (ou grisé sur une robe noire), naseaux
+  const nose = tr.grey || lum(c.coat) > 0.5 ? 0xb9a9a0 : lum(c.coat) < 0.12 ? 0x55494a : null;
   g.save();
   headPath();
   g.clip();
   if (face) {
-    // liste, étoile : du front vers le nez (étoile seule pour 1)
     g.fillStyle = css(white);
     if (face === 1) {
-      ellipse(g, hx0 + hl * 0.3, 0, 2.6, 2.2);
+      ellipse(g, xp + hl * 0.3, 0, 2.2, 1.8);
       g.fill();
     } else {
-      const w0 = face === 3 ? 3.2 : 1.6;
+      const w0 = face === 3 ? 2.6 : 1.2;
       g.beginPath();
-      g.moveTo(hx0 + hl * 0.22, -w0);
-      g.lineTo(hx0 + hl * 1.05, -w0 * (face === 3 ? 1.1 : 0.9));
-      g.lineTo(hx0 + hl * 1.05, w0 * (face === 3 ? 1.1 : 0.9));
-      g.lineTo(hx0 + hl * 0.22, w0);
+      g.moveTo(xp + hl * 0.24, -w0);
+      g.lineTo(xp + hl * 1.05, -w0 * (face === 3 ? 1.2 : 1));
+      g.lineTo(xp + hl * 1.05, w0 * (face === 3 ? 1.2 : 1));
+      g.lineTo(xp + hl * 0.24, w0);
       g.closePath();
       g.fill();
     }
   }
   if (nose !== null) {
     g.fillStyle = css(nose);
-    ellipse(g, hx0 + hl * 0.98, 0, hl * 0.13, mw * 1.05);
+    ellipse(g, xp + hl * 0.98, 0, hl * 0.12, mw * 1.05);
     g.fill();
   }
   g.restore();
-  g.fillStyle = 'rgba(30,20,15,0.75)';
+  g.fillStyle = 'rgba(25,15,10,0.8)';
   for (const sy of [-1, 1]) {
-    ellipse(g, hx0 + hl * 0.95, sy * mw * 0.55, 1.4, 0.9, sy * 0.5);
+    ellipse(g, xp + hl * 0.93, sy * mw * 0.55, 1.3, 0.8, sy * 0.5);
     g.fill();
   }
-  // yeux : sur les côtés, un peu en relief
+  // yeux : sur les côtés du front, en relief
   for (const sy of [-1, 1]) {
     g.fillStyle = '#1d140f';
-    ellipse(g, hx0 + hl * 0.3, sy * hw * 0.98, 2.1, 1.3);
+    ellipse(g, xp + hl * 0.3, sy * hw * 0.98, 1.7, 1.1);
     g.fill();
-    g.fillStyle = 'rgba(255,255,255,0.7)';
-    circle(g, hx0 + hl * 0.33, sy * hw * 0.98 - sy * 0.4, 0.5);
+    g.fillStyle = 'rgba(255,255,255,0.75)';
+    circle(g, xp + hl * 0.33, sy * hw * 0.98 - sy * 0.3, 0.45);
     g.fill();
   }
-  // oreilles : deux feuilles pointues derrière le front, l'intérieur plus clair
+  // crinière : une bande souple le long du dessus de l'encolure, qui tombe d'un côté (plus large si elle est longue)
+  const mLong = b.maneStyle === 'long' ? 2 : b.maneStyle === 'thick' ? 1.5 : b.maneStyle === 'brush' || b.maneStyle === 'foal' ? 0.45 : 1;
+  const mw0 = 1.6 + 1.6 * mLong;
+  g.fillStyle = mane;
+  g.beginPath();
+  g.moveTo(nx0 - 2, -1);
+  g.quadraticCurveTo((nx0 + xp) / 2, -1.6, xp + 0.5, -0.8);
+  g.lineTo(xp + 0.5, mw0 * 0.45);
+  g.quadraticCurveTo((nx0 + xp) / 2, mw0 * 1.15 + Math.sin(phase * 0.5) * 0.4, nx0 - 2, mw0 * 0.9);
+  g.closePath();
+  g.fill();
+  // (deux mèches plus claires, à peine : pas de « fermeture éclair »)
+  g.strokeStyle = shade(c.mane, lum(c.mane) < 0.2 ? 0.18 : -0.18);
+  g.lineWidth = 0.5;
+  g.beginPath();
+  for (const k of [0.35, 0.7]) {
+    const mx = nx0 + (xp - nx0) * k;
+    g.moveTo(mx + 2, -0.4);
+    g.quadraticCurveTo(mx, mw0 * 0.5, mx - 2.5, mw0 * 0.9);
+  }
+  g.stroke();
+  // oreilles : deux feuilles pointues sur l'arrière du crâne, tournées vers l'arrière, l'intérieur plus clair
+  // (dressées : vues d'en haut, deux pointes qui partent du haut du crâne vers l'avant et un peu vers l'extérieur)
+  const ek = b.ears ?? 1;
   for (const sy of [-1, 1]) {
-    const ex = hx0 + 1.5;
-    const ey = sy * hw * 0.58;
+    const ex = xp + 1.5;
+    const ey = sy * hw * 0.55;
+    const tx = ex + 6.5 * ek;
+    const ty = ey + sy * 2.6 * ek;
     g.fillStyle = dark;
     g.beginPath();
-    g.moveTo(ex - 3.2, ey - sy * 0.2);
-    g.quadraticCurveTo(ex + 1, ey + sy * 3.6 * (b.ears ?? 1), ex + 6.5 * (b.ears ?? 1), ey + sy * 1.2);
-    g.quadraticCurveTo(ex + 1.5, ey - sy * 1.8, ex - 3.2, ey - sy * 0.2);
+    g.moveTo(ex - 2, ey - sy * 1.8);
+    g.quadraticCurveTo(ex + 3, ey - sy * 1.2, tx, ty);
+    g.quadraticCurveTo(ex + 2, ey + sy * 2.6, ex - 2, ey + sy * 1.6);
+    g.closePath();
     g.fill();
     g.fillStyle = 'rgba(255,225,215,0.55)';
-    ellipse(g, ex + 1.8, ey + sy * 0.9, 2.2, 0.8, sy * 0.3);
+    ellipse(g, ex + 1.8, ey + sy * 0.3, 2.4, 0.7, sy * 0.35);
     g.fill();
   }
-  // crinière : une bande de crins le long du dessus de l'encolure, tombant d'un côté ; le toupet entre les oreilles
-  const mLong = b.maneStyle === 'long' ? 2.2 : b.maneStyle === 'thick' ? 1.4 : b.maneStyle === 'brush' ? 0.35 : 1;
-  g.strokeStyle = mane;
-  g.lineWidth = 3.4;
+  // toupet : entre les oreilles, sur le front
+  g.fillStyle = mane;
   g.beginPath();
-  g.moveTo(nx0 - 6, 0);
-  g.lineTo(hx0 + 1, 0);
-  g.stroke();
-  g.lineWidth = 1.6;
-  for (let i = 0; i <= 8; i++) {
-    const mx = nx0 - 4 + ((hx0 - nx0 + 3) * i) / 8;
-    g.beginPath();
-    g.moveTo(mx, 0);
-    g.quadraticCurveTo(mx - 1.5, 2.5 * mLong, mx - 3, (3 + 2.5 * rnd()) * mLong);
-    g.stroke();
-  }
-  g.lineWidth = 2;
-  for (const k of [-1, 0, 1]) {
-    g.beginPath();
-    g.moveTo(hx0, k * 0.8);
-    g.quadraticCurveTo(hx0 + 4, k * 1.6, hx0 + 6.5 * (b.maneStyle === 'long' ? 1.3 : 1), k * 2.2);
-    g.stroke();
-  }
+  g.moveTo(xp - 1, -1.6);
+  g.quadraticCurveTo(xp + 4, -2, xp + 4 + 3 * Math.min(1.5, mLong), 0);
+  g.quadraticCurveTo(xp + 4, 2, xp - 1, 1.6);
+  g.closePath();
+  g.fill();
   g.restore();
 }
 

@@ -150,13 +150,14 @@ export function paletteOf(a) {
   const dapples = [];
   if (grey) {
     // (plus serrées sur la croupe et le flanc, plus rares vers le ventre et l'épaule ; quelques-unes sur l'encolure)
-    for (let i = 0; i < 60; i++) {
+    // (de grandes taches rondes, serrées, presque jointives : le fond plus foncé ne reste qu'en réseau entre elles)
+    for (let i = 0; i < 70; i++) {
       const x = -84 + rng() * 150;
       const y = -30 + rng() * 54;
-      if (y > 14 && rng() < 0.6) continue;
-      dapples.push([x, y, 3.2 + rng() * 3.2 + (x < -30 ? 1 : 0)]);
+      if (y > 12 && rng() < 0.7) continue;
+      dapples.push([x, y, 5 + rng() * 3.5 + (x < -30 ? 1.2 : 0)]);
     }
-    for (let i = 0; i < 9; i++) dapples.push([56 + rng() * 26, -70 + rng() * 52, 2.4 + rng() * 2]);
+    for (let i = 0; i < 10; i++) dapples.push([56 + rng() * 26, -70 + rng() * 52, 3.5 + rng() * 2.5]);
   }
 
   const white = 0xf3efe7;
@@ -185,6 +186,7 @@ export function paletteOf(a) {
     nostril: lc < 0.2 ? '#050404' : shade(c.coat, -0.72),
     eye: '#1d130d',
     iris: '#4a2c19',
+    darkCoat: lc < 0.16,
     hoof: '#3b3330',
     hoofLight: '#cdb89a',
     socks,
@@ -193,8 +195,8 @@ export function paletteOf(a) {
     spots,
     leopard,
     dapples,
-    dapple: grey ? 'rgba(250, 249, 246, 0.42)' : null,
-    dappleCore: grey ? 'rgba(255, 255, 255, 0.3)' : null,
+    dapple: grey ? 'rgba(250, 249, 246, 0.26)' : null,
+    dappleCore: grey ? 'rgba(250, 249, 246, 0.3)' : null,
     fluff,
     key,
     // (gris pommelé : le fond un peu plus foncé, les pommelures claires par-dessus)
@@ -755,11 +757,19 @@ function drawHeadDetails(g, p, gr, x, y, o, t, B) {
     g.stroke();
     return;
   }
+  // (robe noire ou très foncée : un fin cercle clair autour de l'œil, l'iris plus brun ; sinon l'œil disparaît)
+  if (p.darkCoat) {
+    g.strokeStyle = 'rgba(255, 240, 225, 0.28)';
+    g.lineWidth = 1.3;
+    g.beginPath();
+    g.ellipse(ex, ey, 6.2, 4.9, 0.32, 0, TAU);
+    g.stroke();
+  }
   g.fillStyle = p.eye;
   g.beginPath();
   g.ellipse(ex, ey, 5.1, 3.9, 0.32, 0, TAU);
   g.fill();
-  g.fillStyle = p.iris;
+  g.fillStyle = p.darkCoat ? '#6d4126' : p.iris;
   g.beginPath();
   g.ellipse(ex + 0.5, ey + 0.4, 3.1, 2.3, 0.32, 0, TAU);
   g.fill();
@@ -1003,7 +1013,8 @@ export function drawHorseVet(g, a, o = {}) {
     g.fill();
     g.fillStyle = p.dappleCore;
     g.beginPath();
-    for (const [x, y, r] of p.dapples) blob(g, bodyX(B, x) + 0.4, bodyY(B, y) - 0.4, r * 0.55, r * 0.5, 0.3);
+    // (le cœur, au même centre : un bord fondu plutôt qu'un anneau ou une bulle)
+    for (const [x, y, r] of p.dapples) blob(g, bodyX(B, x), bodyY(B, y), r * 0.72, r * 0.62, 0.3);
     g.fill();
   }
   // Muscles : croupe et épaule éclairées, encolure ; lignes de l'épaule et du grasset.

@@ -118,6 +118,26 @@ describe('pansage en 3D : le cure-pied', () => {
   }, 60000);
 });
 
+describe('la fermeture rend tout', () => {
+  it('le rendu est libéré, et les écouteurs qu\'il a posés sur les ressources du jeu sont retirés', () => {
+    const { sc } = makeStage();
+    const r = sc.renderer;
+    const shared = new THREE.BufferGeometry(); // (une géométrie de la race, partagée avec le jeu)
+    let called = 0;
+    sc.track(() => shared.addEventListener('dispose', () => called++));
+    const decorDispose = sc.decor.dispose;
+    let decor = 0;
+    sc.decor.dispose = () => { decor++; decorDispose(); };
+    sc.dispose();
+    expect(r.calls.dispose).toBe(1);
+    expect(decor).toBe(1);
+    shared.dispose();
+    expect(called).toBe(0); // (sinon le rendu fermé restait accroché aux ressources du jeu, donc en mémoire)
+    sc.dispose(); // (deux fois : rien)
+    expect(r.calls.dispose).toBe(1);
+  });
+});
+
 describe('le contexte WebGL perdu, puis rendu', () => {
   it('perdu : la scène attend ; rendu : les écouteurs de l\'ancien contexte sont retirés, le décor refait son image, la scène reprend', async () => {
     const { sc } = makeStage();

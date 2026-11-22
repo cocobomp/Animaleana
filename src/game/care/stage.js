@@ -767,11 +767,21 @@ export class CareStage {
     this.unify();
     const t0 = performance.now();
     const frame = () => new Promise((r) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 16)));
-    try {
-      await trackListeners(this.listeners, () => this.renderer.compileAsync(this.scene, this.camera));
-    } catch {
-      /* compilé à la première image */
-    }
+    // Les shaders : demandés tous ensemble, puis on attend qu'ils soient prêts (en parallèle si le navigateur sait).
+    // (Pas renderer.compileAsync : fermé pendant l'attente, sa boucle relisait les matières d'un rendu libéré —
+    // TypeError dans un setTimeout.)
+    this.track(() => this.renderer.compile(this.scene, this.camera));
+    await new Promise((resolve) => {
+      const t = performance.now();
+      const check = () => {
+        if (this.disposed || this.lost || performance.now() - t > 8000) return resolve();
+        const progs = this.renderer.info.programs ?? [];
+        if (progs.every((p) => !p.isReady || p.isReady())) return resolve();
+        setTimeout(check, 10);
+      };
+      check();
+    });
+    if (this.disposed) return;
     this.timing.shaders = Math.round(performance.now() - t0);
     const t1 = performance.now();
     const textures = new Set();
@@ -971,7 +981,7 @@ export function headlessRenderer() {
     setScissorTest() {},
     setScissor() {},
     setViewport() {},
-    compileAsync: async () => {},
+    compile: () => new Set(),
     initTexture() {},
     render() { calls.render++; },
     dispose() { calls.dispose++; },

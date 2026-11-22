@@ -521,6 +521,8 @@ function openMinigame(ui, o) {
       const sc = scene3d;
       sc.warm().then(() => {
         if (scene3d === sc) sc.canvas.classList.add('ready');
+      }, (e) => {
+        if (scene3d === sc) fallback2d(`préparation impossible : ${e?.message ?? e}`);
       });
     };
     if (want3d) start3d(care3d);
@@ -721,24 +723,40 @@ function openMinigame(ui, o) {
         scene3d.lostFor += dt;
         if (scene3d.lostFor > 4) fallback2d('contexte WebGL perdu');
       }
+      // (préparation qui n'en finit pas, 25 s de jeu : le jeu dessiné)
+      if (scene3d && !scene3d.ready && !scene3d.lost && (scene3d.waitedFor = (scene3d.waitedFor ?? 0) + dt) > 25) fallback2d('préparation trop longue');
       const waiting = !play || (scene3d && (!scene3d.ready || scene3d.lost));
-      if (waiting) ctx.time -= dt;
+      // Une erreur de la scène 3D ou du jeu 3D pendant la partie : le jeu dessiné, plutôt qu'une partie figée.
+      const step = () => {
+        if (waiting) ctx.time -= dt;
+        else {
+          play.update?.(dt);
+          ctx.fx.update(dt);
+        }
+        if (scene3d && !waiting) {
+          scene3d.update(dt);
+          scene3d.render();
+        }
+        g2.setTransform(1, 0, 0, 1, 0, 0);
+        g2.clearRect(0, 0, canvas.width, canvas.height);
+        g2.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
+        g2.save();
+        try {
+          if (waiting) drawWaiting(g2, view, ctx.time + now / 1000, o.endEmoji);
+          else play.draw?.(g2);
+        } finally {
+          g2.restore();
+        }
+        ctx.fx.draw(g2);
+      };
+      if (!scene3d) step();
       else {
-        play.update?.(dt);
-        ctx.fx.update(dt);
+        try {
+          step();
+        } catch (e) {
+          fallback2d(`erreur : ${e?.message ?? e}`);
+        }
       }
-      if (scene3d && !waiting) {
-        scene3d.update(dt);
-        scene3d.render();
-      }
-      g2.setTransform(1, 0, 0, 1, 0, 0);
-      g2.clearRect(0, 0, canvas.width, canvas.height);
-      g2.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
-      g2.save();
-      if (waiting) drawWaiting(g2, view, ctx.time + now / 1000, o.endEmoji);
-      else play.draw?.(g2);
-      g2.restore();
-      ctx.fx.draw(g2);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);

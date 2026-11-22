@@ -2,7 +2,6 @@
 // navigateur ni WebGL — quand on ouvre la 3D, quand on retombe sur le jeu dessiné, la projection du doigt, la sole
 // du cure-pied, et la règle de score des jeux 3D (la même que celle des jeux dessinés : même logique).
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { fakeCtx as fakeCtxOf, fakeDocument } from './fixtures/careCtx.js';
 import * as THREE from 'three';
 
@@ -65,28 +64,8 @@ describe('quand ouvrir la scène 3D', () => {
   });
 });
 
-describe('le cadre : repli sur le jeu dessiné, et tout est rendu à la fermeture', () => {
-  const frame = readFileSync(new URL('../src/ui/minigames.js', import.meta.url), 'utf8');
-  const glue = readFileSync(new URL('../src/ui/minigames/care3d.js', import.meta.url), 'utf8');
-  const st = readFileSync(new URL('../src/game/care/stage.js', import.meta.url), 'utf8');
-
-  it('la scène 3D échoue (WebGL, erreur) : null, et le jeu dessiné', () => {
-    expect(glue).toMatch(/catch \(e\) \{[\s\S]*return null;/);
-    expect(frame).toMatch(/if \(!scene3d\) return start2d\(\);/);
-    // (le jeu 3D lui-même échoue au démarrage : scène fermée, boutons et jauge remis à zéro, jeu dessiné)
-    expect(frame).toMatch(/closeScene3d\(\);\s*ctx\.clearButtons\(\);/);
-  });
-
-  it('fermeture : la scène est libérée, et le rendu du jeu reprend (vxCover rendu)', () => {
-    expect(frame).toMatch(/play\?\.destroy\?\.\(\);\s*closeScene3d\(\);/);
-    expect(frame).toMatch(/sc\.release\?\.\(\)/);
-    expect(glue).toMatch(/ui\.vxCover = Math\.max\(0, \(ui\.vxCover \?\? 1\) - 1\)/);
-    expect(st).toMatch(/this\.renderer\.dispose\(\);/);
-    expect(st).toMatch(/forceContextLoss\(\)/);
-    // (les écouteurs posés par ce rendu sur les ressources partagées du jeu sont retirés)
-    expect(st).toMatch(/obj\.removeEventListener\('dispose', fn\)/);
-  });
-});
+// (le repli sur le jeu dessiné et ce qui est rendu à la fermeture : vérifiés en vrai, avec le cadre, dans
+// tests/care3dFrame.test.js ; la libération de la scène elle-même : tests/care3dStage.test.js)
 
 describe('projection : le doigt et la scène tombent au même endroit', () => {
   it('espace du cadre ↔ coordonnées normalisées, aller-retour exact', () => {

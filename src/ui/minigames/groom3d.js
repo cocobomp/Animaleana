@@ -81,11 +81,21 @@ export function gdry3dGame(ctx) {
   m.ears = 'forward';
   const F = bodyFrame(sc);
   const body = onBody(sc, F);
-  // La robe mouillée : un voile sombre et brillant (eau sur le poil), partout sur le corps au départ.
-  const wet = coatGloss(sc, own, { additive: false, base: [0.06, 0.08, 0.11], alpha: 0.55, roughness: 0.12, env: 2.5, over: 99 });
+  // La robe mouillée : la couleur de sa robe, plus foncée, et luisante d'eau (un poil mouillé fonce et brille),
+  // partout sauf la tête au départ (le bain l'a trempé de l'encolure aux sabots).
+  const coatCol = new THREE.Color(a?.look?.coat ?? 0x8a5a2b);
+  const wet = coatGloss(sc, own, { additive: false, base: [coatCol.r * 0.42, coatCol.g * 0.4, coatCol.b * 0.42], alpha: 0.5, roughness: 0.1, env: 2.2, over: 99 });
+  const notHead = (() => {
+    const q = v3();
+    return (x, y, z) => {
+      q.set(x, y, z);
+      sc.holder.worldToLocal(q);
+      return q.z < F.z1 + 0.22;
+    };
+  })();
   if (wet) {
     const pos = wet.positions(0);
-    for (let i = 0; i < wet.count; i++) if (body(i, pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])) wet.set(i, WET);
+    for (let i = 0; i < wet.count; i++) if (notHead(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])) wet.set(i, WET);
     wet.flush();
   }
   // Ce qu'on compte : des points du flanc qu'on voit (rayons lancés vers lui depuis notre côté, comme le lavage),
@@ -172,7 +182,7 @@ export function gdry3dGame(ctx) {
       c.wet -= k;
       took += k;
     }
-    wet.wipe(h.point, r, rate, ctx.time, body);
+    wet.wipe(h.point, r, rate, ctx.time, tool === 'towel' ? null : body);
     if (took > 0) {
       goodLen += d;
       if (Math.random() < 0.6) drops(sc, h.point, tool === 'scraper' ? 3 : 1, own, dropMat, dropGeo);
@@ -210,6 +220,8 @@ export function gdry3dGame(ctx) {
       peak = Math.max(peak, stress);
       ctx.stress = peak;
       ctx.progress(1 - w);
+      // (fini : ce qui reste d'eau, sur les jambes et l'encolure, s'évapore doucement)
+      if (ctx.done && wet) wet.fade(dt, 1.2);
       wet?.flush();
       if (w <= 0.05 && !ctx.done) {
         ctx.finish(1 - peak * 0.6, peak < 0.25 ? t('mg_gdry_end', { name: a.name, g: a.sex }) : undefined);

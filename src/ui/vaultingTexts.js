@@ -104,6 +104,7 @@ export const VAULT_FR = {
   vt_newFigure: 'Nouvelle figure réussie sur un cheval : {fig} !',
   vt_newFigures: '{n} figures réussies sur un cheval !',
   vt_best: 'Ta plus belle figure : {fig} ({n}/10)',
+  vt_barrelOnce: 'Sur le tonneau, un flot par jour : reviens demain, ou essaie avec ton cheval !',
   vt_horseFx: '{name} devient plus calme à la longe (obéissance +{n}).',
   // Quêtes et succès
   o_vaultFirst: 'Faire ta première voltige',
@@ -205,6 +206,7 @@ export const VAULT_EN = {
   vt_newFigure: 'New move done on a horse: {fig}!',
   vt_newFigures: '{n} moves done on a horse!',
   vt_best: 'Your best move: {fig} ({n}/10)',
+  vt_barrelOnce: 'On the barrel, one rosette a day: come back tomorrow, or try with your horse!',
   vt_horseFx: '{name} is getting calmer on the lunge (obedience +{n}).',
   o_vaultFirst: 'Do your first vaulting session',
   o_vaultCanter1: 'Vault at canter',

@@ -14,7 +14,7 @@ import { toWorld, practiceAward, addAward } from '../sim/activities.js';
 import {
   VAULT_LEVELS, FIGURES, PROGRAM, CIRCLE_R, CIRCLE_AT, onCircle, tapError, tapQuality, tapGrade, TAP_LATENCY, balancePush, balanceAmp, leanOf,
   balanceScore, horseCalm, figureMark, judgesMarks, figureScore, judgeComment, vaultResult, vaultBlock,
-  recordVault, vaultHorseEffect,
+  recordVault, vaultHorseEffect, barrelReward,
 } from '../sim/vaulting.js';
 import { NATURAL_SPEED } from './models/horseReal.js';
 import { buildAvatar, animateAvatarWalk, updateAvatarLife } from './models/avatarModel.js';
@@ -1277,9 +1277,11 @@ class VaultingSession extends Session {
     if (this.level === 'canter') addStat(p, 'actvVaultingCanter');
     if (this.level === 'canter' && result.score >= 8) addStat(p, 'vaultCanter8');
     const fx = vaultHorseEffect(this.animal, this.level, result.score / 10);
-    g.xp('activity');
+    // (sur le tonneau : l'XP une fois par jour, le flot une fois par jour)
+    const bar = this.e ? null : barrelReward(p, g.day, result.stars);
+    if (!bar || bar.xp) g.xp('activity');
     if (this.animal) g.markHorseDay?.(this.animal, 'activity');
-    const award = practiceAward('vaulting', result.stars, 3);
+    const award = !bar || bar.ribbon ? practiceAward('vaulting', result.stars, 3) : null;
     let saved = null;
     if (award) {
       saved = addAward(p, award, {
@@ -1292,7 +1294,7 @@ class VaultingSession extends Session {
     this.applause(result.stars / 3);
     showVaultResults(g.ui, {
       level: this.level, result, animal: this.animal, record: rec.record, unlockedCanter: rec.unlockedCanter,
-      newFigures: rec.newFigures, horse: fx, award: saved, sandbox: isSandbox(p),
+      newFigures: rec.newFigures, horse: fx, award: saved, sandbox: isSandbox(p), barrelDone: !!bar && result.stars >= 3 && !bar.ribbon,
       onAgain: () => this.again(),
       onClose: () => this.end(false),
     });

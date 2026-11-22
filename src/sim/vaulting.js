@@ -267,6 +267,21 @@ export function recordVault(p, level, result) {
 }
 
 /**
+ * Récompenses d'une séance sur le tonneau, le jour `day` (stars : ses étoiles) : l'XP pour la première séance du
+ * jour, et le flot pour la première à trois étoiles du jour. Sans cette limite, on pouvait enchaîner « Recommencer »
+ * sur le tonneau (ni cheval, ni fatigue) et gagner un flot à chaque fois. Avec un cheval, pas de limite : il se
+ * fatigue. Renvoie { xp, ribbon } (true : on le donne) et note le jour.
+ */
+export function barrelReward(p, day, stars) {
+  const d = vaultData(p);
+  const xp = d.barrelXpDay !== day;
+  if (xp) d.barrelXpDay = day;
+  const ribbon = stars >= 3 && d.barrelRibbonDay !== day;
+  if (ribbon) d.barrelRibbonDay = day;
+  return { xp, ribbon };
+}
+
+/**
  * Ce que la séance fait au cheval : un peu fatigué, il s'est dépensé, plus calme à la longe (obéissance), et
  * plus proche de toi. Renvoie les changements.
  */

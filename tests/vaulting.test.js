@@ -7,7 +7,7 @@ import { GEAR, TACK_CATEGORIES, equip, buyGear, wears, freeStock } from '../src/
 import {
   VAULT_LEVELS, LEVEL_IDS, FIGURES, PROGRAM, CIRCLE_R, onCircle, tapError, tapQuality, tapGrade, TAP_LATENCY, BALANCE_ZONE, balancePush, balanceAmp,
   leanOf, balanceScore, horseCalm, figureMark, judgesMarks, figureScore, judgeComment, vaultResult, vaultBlock, vaultData,
-  canterUnlocked, CANTER_UNLOCK, figuresOnHorse, recordVault, vaultHorseEffect, VAULT_MIN_SIZE, vaultSize,
+  canterUnlocked, CANTER_UNLOCK, figuresOnHorse, recordVault, vaultHorseEffect, VAULT_MIN_SIZE, vaultSize, barrelReward,
 } from '../src/sim/vaulting.js';
 import { practiceAward } from '../src/sim/activities.js';
 import { seeded } from '../src/sim/rng.js';
@@ -402,6 +402,16 @@ describe('progrès, récompenses et effets', () => {
     expect(a.skills.obedience).toBe(ob + 2);
     expect(fx.obedience).toBe(2);
     expect(vaultHorseEffect(null, 'barrel')).toBeNull();
+  });
+
+  it('sur le tonneau : l\'XP et le flot une fois par jour (on ne les enchaîne pas avec « Recommencer »)', () => {
+    const p = createProfile('Lina');
+    expect(barrelReward(p, 4, 2)).toEqual({ xp: true, ribbon: false }); // (1re séance du jour, deux étoiles)
+    expect(barrelReward(p, 4, 3)).toEqual({ xp: false, ribbon: true }); // (1re à trois étoiles : le flot)
+    expect(barrelReward(p, 4, 3)).toEqual({ xp: false, ribbon: false }); // (encore : rien)
+    expect(barrelReward(p, 5, 3)).toEqual({ xp: true, ribbon: true }); // (le lendemain)
+    const back = migrate(JSON.parse(JSON.stringify(p))); // (gardé dans la sauvegarde)
+    expect(barrelReward(back, 5, 3)).toEqual({ xp: false, ribbon: false });
   });
 
   it('un flot à l\'entraînement pour trois étoiles', () => {

@@ -170,6 +170,7 @@ export function showVaultResults(ui, r) {
   if (res.best) lines.push(h('li', {}, `✨ ${t('vt_best', { fig: t(`vt_fig_${res.best.id}`), n: fmtMark(res.best.score) })}`));
   if (res.worst && res.worst.score < Math.min(8, res.best.score)) lines.push(h('li', {}, `💭 ${t(`vt_tip_${res.worst.comment}`, { fig: t(`vt_fig_${res.worst.id}`) })}`));
   if (r.animal && r.horse) lines.push(h('li', {}, `${SPECIES.horse.emoji} ${ta('vt_horseFx', r.animal, { n: r.horse.obedience })}`));
+  if (r.barrelDone) lines.push(h('li', {}, `🛢️ ${t('vt_barrelOnce')}`)); // (le flot du tonneau : une fois par jour)
   const title = res.stars === 3 ? t('vt_resBravo') : res.stars === 2 ? t('vt_resGood') : t('vt_resTry');
   const who = r.animal ? `${SPECIES.horse.emoji} ${r.animal.name} · ${VAULT_LEVELS[r.level].icon} ${t(`vt_level_${r.level}`)}` : `${VAULT_LEVELS.barrel.icon} ${t(`vt_level_${r.level}`)}`;
   // Deux parties : la note (titre, étoiles, note finale, ce que la séance a apporté) et le protocole des juges ;

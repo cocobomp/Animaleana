@@ -13,7 +13,7 @@ import { Session, SESSION_TYPES } from './Activities.js';
 import { toWorld, practiceAward, addAward } from '../sim/activities.js';
 import {
   VAULT_LEVELS, FIGURES, PROGRAM, CIRCLE_R, CIRCLE_AT, onCircle, tapError, tapQuality, tapGrade, TAP_LATENCY, balancePush, balanceAmp, leanOf,
-  balanceScore, BALANCE_ZONE, horseCalm, figureMark, judgesMarks, figureScore, judgeComment, vaultResult, vaultBlock,
+  balanceScore, horseCalm, figureMark, judgesMarks, figureScore, judgeComment, vaultResult, vaultBlock,
   recordVault, vaultHorseEffect,
 } from '../sim/vaulting.js';
 import { NATURAL_SPEED } from './models/horseReal.js';
@@ -833,7 +833,7 @@ class VaultingSession extends Session {
     if (keys) this.control = clamp(this.control + keys * dt * 1.6, -1.2, 1.2);
     this.lean = leanOf(push, this.control);
     this.leans.push(this.lean);
-    this.hud2.setBalance(this.lean / (BALANCE_ZONE * 3.3), Math.abs(this.lean) <= BALANCE_ZONE);
+    this.hud2.setBalance(this.lean);
     this.holdPose(this.R[s.hold], dt, this.lean);
     if (this.holdT >= this.holdLen) {
       this.balance = balanceScore(this.leans);

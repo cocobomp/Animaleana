@@ -13,6 +13,7 @@ import { practiceAward } from '../src/sim/activities.js';
 import { seeded } from '../src/sim/rng.js';
 import { OBJECTIVES } from '../src/sim/objectives.js';
 import { VAULT_FR, VAULT_EN } from '../src/ui/vaultingTexts.js';
+import { gaugeAt, GAUGE_ZONE } from '../src/ui/vaulting.js';
 
 const horse = (extra = {}) => ({ ...createAnimal({ species: 'horse', breed: 'selle_francais', ageDays: 8 * DAYS_PER_YEAR }), ...extra });
 
@@ -174,6 +175,16 @@ describe('garder l\'équilibre', () => {
   it('debout au galop pousse plus que l\'assise sur le tonneau ; un cheval calme pousse moins', () => {
     expect(balanceAmp('canter', 'stand')).toBeGreaterThan(balanceAmp('barrel', 'basicSeat'));
     expect(balanceAmp('canter', 'flag', 1)).toBeLessThan(balanceAmp('canter', 'flag', 0));
+  });
+
+  it('la zone verte dessinée est la vraie zone : la bulle est verte tant qu\'elle est dans le vert dessiné', () => {
+    expect(GAUGE_ZONE[0]).toBeCloseTo(gaugeAt(-BALANCE_ZONE), 9);
+    expect(GAUGE_ZONE[1]).toBeCloseTo(gaugeAt(BALANCE_ZONE), 9);
+    expect(GAUGE_ZONE[0] + GAUGE_ZONE[1]).toBeCloseTo(100, 9); // (centrée)
+    expect(gaugeAt(0)).toBe(50);
+    // (avant : zone dessinée de 41 à 59 %, bulle verte jusqu'à 63,9 %)
+    expect(GAUGE_ZONE[1]).toBeGreaterThan(63);
+    expect(gaugeAt(9)).toBe(96); // (au bout, la bulle reste dans la jauge)
   });
 
   it('glisser le doigt du bon côté ramène la bulle au milieu', () => {

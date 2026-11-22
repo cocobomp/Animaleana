@@ -8,7 +8,7 @@ import { h } from './dom.js';
 import { t, ta, getLang } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { GEAR, freeStock, sizeFor, wears } from '../sim/gear.js';
-import { VAULT_LEVELS, LEVEL_IDS, FIGURES, PROGRAM, vaultBlock, vaultData, canterUnlocked, CANTER_UNLOCK, figuresOnHorse } from '../sim/vaulting.js';
+import { VAULT_LEVELS, LEVEL_IDS, FIGURES, PROGRAM, BALANCE_ZONE, vaultBlock, vaultData, canterUnlocked, CANTER_UNLOCK, figuresOnHorse } from '../sim/vaulting.js';
 import { awardEl } from './activities.js';
 
 /** Une note dans la langue du joueur : « 7,5 » en français, « 7.5 » en anglais. */
@@ -18,6 +18,15 @@ export function fmtMark(n, digits = 1) {
 }
 
 // ---------------------------------------------------------------- pendant la séance
+
+/** Penché qui envoie la bulle tout au bout de la jauge d'équilibre. */
+export const GAUGE_RANGE = BALANCE_ZONE * 3.3;
+
+/** Place de la bulle sur la jauge (% de la largeur, 50 au milieu) pour un penché donné. */
+export const gaugeAt = (lean) => 50 + Math.max(-1, Math.min(1, lean / GAUGE_RANGE)) * 46;
+
+/** La zone verte dessinée : exactement la vraie zone d'équilibre ([gauche, droite] en %). */
+export const GAUGE_ZONE = [gaugeAt(-BALANCE_ZONE), gaugeAt(BALANCE_ZONE)];
 
 /**
  * Ce que la séance ajoute à la barre des activités (ActivityHud) : une couche qui reçoit le doigt (toucher, glisser),
@@ -60,7 +69,9 @@ export class VaultHud {
     this.bubble = h('span', { class: 'vt-bubble' }, '🤸');
     this.gauge = h('div', { class: 'vt-balance', hidden: true },
       h('div', { class: 'vt-balance-say' }, `⬅️ ${t('vt_balanceSay')} ➡️`, h('kbd', { class: 'vt-kbd' }, '← →')),
-      h('div', { class: 'vt-balance-bar' }, h('span', { class: 'vt-balance-zone' }), this.bubble));
+      h('div', { class: 'vt-balance-bar' },
+        h('span', { class: 'vt-balance-zone', style: `left:${GAUGE_ZONE[0].toFixed(2)}%;width:${(GAUGE_ZONE[1] - GAUGE_ZONE[0]).toFixed(2)}%` }),
+        this.bubble));
     this.box = h('div', { class: 'vt-controls' }, this.cardEl, this.gauge, h('div', { class: 'vt-btn-row' }, this.btn, h('small', { class: 'vt-btn-say' }, t('vt_tapSay'), h('kbd', { class: 'vt-kbd' }, t('actv_key_space')))));
     hud.controls.append(this.box);
     // Les notes des juges.
@@ -113,11 +124,10 @@ export class VaultHud {
     if (on) this.cardEl.hidden = true;
   }
 
-  /** La bulle : x de −1 (tout à gauche) à 1 (tout à droite) ; ok : dans la zone verte. */
-  setBalance(x, ok) {
-    const c = Math.max(-1, Math.min(1, x));
-    this.bubble.style.left = `${(50 + c * 46).toFixed(1)}%`;
-    this.bubble.classList.toggle('ok', ok);
+  /** La bulle au penché lean (verte dans la zone d'équilibre, la même que la zone dessinée). */
+  setBalance(lean) {
+    this.bubble.style.left = `${gaugeAt(lean).toFixed(1)}%`;
+    this.bubble.classList.toggle('ok', Math.abs(lean) <= BALANCE_ZONE);
   }
 
   /** Les trois notes des juges, la note retenue et le petit mot. */

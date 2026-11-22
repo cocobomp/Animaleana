@@ -7,7 +7,8 @@
 // messages et ce que le jeu écrit dans ctx.opts.out restent ceux du jeu dessiné : pour nourrir, abreuver et la
 // friandise, la logique EST celle du jeu dessiné (withLogic), seule l'image change.
 
-import { CareStage, care3dPossible, care3dSetting } from '../../game/care/stage.js';
+import { CareStage } from '../../game/care/stage.js';
+import { care3dPossible, care3dSetting } from '../../game/care/which.js';
 import { stallSet } from '../../game/care/stall.js';
 import { rrect, clamp } from './draw.js';
 import { ration3dGame, water3dGame } from './feed3d.js';

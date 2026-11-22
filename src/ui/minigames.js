@@ -27,7 +27,8 @@ import { sellerGame } from './minigames/seller.js'; // seller son cheval : tapis
 import { dewormGame } from './minigames/deworm.js'; // le vermifuge (carnet de santé du cheval)
 import { bridleGame } from './minigames/bridle.js'; // brider son cheval : le mors, les oreilles, la sous-gorge
 import { drawFact, factIcon } from '../sim/horseFacts.js'; // « 💡 Le savais-tu ? » à la fin des mini-jeux avec un cheval (🃏 cartes)
-import { care3dGameFor, openCareScene } from './minigames/care3d.js'; // le vrai animal en 3D dans son box (soins du cheval)
+import { care3dWanted, care3dPossible, care3dSetting } from '../game/care/which.js'; // quels soins s'ouvrent en 3D
+import * as care3d from './minigames/care3d.js'; // le vrai animal en 3D dans son box (soins du cheval)
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -203,7 +204,7 @@ export function runMinigame(ui, a, action, opts = {}) {
   return openMinigame(ui, {
     make,
     // (le même soin en 3D, s'il existe : le vrai animal dans son décor ; sinon, ou si la 3D échoue, le jeu dessiné)
-    make3d: care3dGameFor(a, action),
+    make3d: care3dWanted(a, action),
     action,
     a,
     icon: ICONS[action] ?? '⭐',
@@ -293,8 +294,9 @@ function openMinigame(ui, o) {
     const g2 = canvas.getContext('2d');
     // Scène de soin en 3D (src/game/care/stage.js) : le vrai animal dans son décor, sous la toile 2D qui garde les
     // effets et ce qui flotte par-dessus. Impossible (WebGL, modèle pas chargé, réglage) : le jeu dessiné.
-    let scene3d = o.make3d && a ? openCareScene(ui, a, stage, canvas) : null;
-    if (scene3d) box.classList.add('care3d');
+    let scene3d = null;
+    const want3d = !!(o.make3d && a && care3dPossible(a, { setting: care3dSetting() }));
+    if (want3d) box.classList.add('care3d');
     const view = { x0: 0, y0: 0, x1: MG_W, y1: MG_H, w: MG_W, h: MG_H, scale: 1, ox: 0, oy: 0 };
     let dpr = 1;
     const layout = { w: 0, h: 0 }; // taille de mise en page du canvas, en pixels CSS
@@ -490,11 +492,21 @@ function openMinigame(ui, o) {
       },
     };
 
-    ctx.scene = scene3d; // (jeux 3D : la scène ; null pour les jeux dessinés)
+    ctx.scene = null; // (jeux 3D : la scène ; null pour les jeux dessinés)
     let play = null;
-    if (scene3d) {
+    /** Le jeu dessiné (pas de 3D, ou repli). */
+    const start2d = () => {
+      box.classList.remove('care3d');
+      play = make(ctx);
+      resize();
+    };
+    /** Le code des soins 3D est là : la scène, puis le jeu 3D de ce soin. */
+    const start3d = (mod) => {
+      scene3d = mod.openCareScene(ui, a, stage, canvas);
+      if (!scene3d) return start2d();
+      ctx.scene = scene3d;
       try {
-        play = o.make3d(ctx);
+        play = mod.care3dGameFor(a, action)(ctx);
       } catch (e) {
         // Le jeu 3D n'a pas pu démarrer : le jeu dessiné, sur une scène propre.
         console.warn('[care3d] jeu 3D impossible, jeu dessiné', e?.message ?? e);
@@ -502,16 +514,19 @@ function openMinigame(ui, o) {
         ctx.clearButtons();
         ctx.zone(null);
         ctx.progress(0);
+        return start2d();
       }
-    }
-    if (!play) play = make(ctx);
-    if (scene3d) {
       resize();
       // Shaders préparés sans bloquer ; la scène apparaît en fondu quand elle est prête (le jeu attend jusque-là).
-      scene3d.warm().then(() => scene3d?.canvas.classList.add('ready'));
-    }
+      const sc = scene3d;
+      sc.warm().then(() => {
+        if (scene3d === sc) sc.canvas.classList.add('ready');
+      });
+    };
+    if (want3d) start3d(care3d);
+    else play = make(ctx);
     // État lisible par les tests automatiques (peek).
-    ui.minigame = { action, chore: o.chore ?? null, ctx, get scene3d() { return scene3d; }, peek: () => play.peek?.(), get zone() { return zoneRange; } };
+    ui.minigame = { action, chore: o.chore ?? null, ctx, get scene3d() { return scene3d; }, peek: () => play?.peek?.(), get zone() { return zoneRange; } };
 
     /**
      * La scène 3D ne peut plus continuer (contexte WebGL qui ne revient pas, erreur) : on la ferme et on rejoue le
@@ -635,28 +650,28 @@ function openMinigame(ui, o) {
         const old = activeId;
         activeId = null;
         try { canvas.releasePointerCapture?.(old); } catch { /* déjà relâché */ }
-        play.up?.({ x: ctx.pointer.x, y: ctx.pointer.y, id: old, type: ctx.pointer.type });
+        play?.up?.({ x: ctx.pointer.x, y: ctx.pointer.y, id: old, type: ctx.pointer.type });
       }
       ctx.pointer = { ...ctx.pointer, ...p, down: true, over: true };
       if (activeId === null) {
         activeId = e.pointerId;
         try { canvas.setPointerCapture?.(e.pointerId); } catch { /* doigt déjà levé */ }
       }
-      play.down?.(p);
+      play?.down?.(p);
     });
     canvas.addEventListener('pointermove', (e) => {
       if (ended) return;
       const p = toLocal(e);
       if (activeId !== null && e.pointerId !== activeId) return;
       ctx.pointer = { ...ctx.pointer, ...p, over: true };
-      play.move?.(p, ctx.pointer.down);
+      play?.move?.(p, ctx.pointer.down);
     });
     const up = (e) => {
       if (e.pointerId !== activeId) return;
       activeId = null;
       const p = toLocal(e);
       ctx.pointer = { ...ctx.pointer, ...p, down: false, over: e.pointerType === 'mouse' };
-      if (!ended) play.up?.(p);
+      if (!ended) play?.up?.(p);
     };
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', up);
@@ -684,7 +699,7 @@ function openMinigame(ui, o) {
         if (down && !e.repeat && ['Space', 'Enter', 'NumpadEnter'].includes(e.code) && !endEl.hidden) close(quality);
         return;
       }
-      if (!down || !e.repeat) play.key?.(e.code, down);
+      if (!down || !e.repeat) play?.key?.(e.code, down);
     };
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('keyup', onKey, true);
@@ -706,7 +721,7 @@ function openMinigame(ui, o) {
         scene3d.lostFor += dt;
         if (scene3d.lostFor > 4) fallback2d('contexte WebGL perdu');
       }
-      const waiting = scene3d && (!scene3d.ready || scene3d.lost);
+      const waiting = !play || (scene3d && (!scene3d.ready || scene3d.lost));
       if (waiting) ctx.time -= dt;
       else {
         play.update?.(dt);
@@ -735,7 +750,7 @@ function openMinigame(ui, o) {
       ro.disconnect();
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('keyup', onKey, true);
-      play.destroy?.();
+      play?.destroy?.();
       closeScene3d();
       overlay.remove();
       document.body?.classList?.remove('mg-open');

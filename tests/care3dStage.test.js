@@ -143,7 +143,7 @@ describe('le contexte WebGL perdu, puis rendu', () => {
     shared.dispose();
     expect(stale).toBe(0); // (l'écouteur de l'ancien contexte n'est plus là)
     sc.render();
-    expect(r.calls.render).toBe(before + 2); // (l'image d'un pixel de la préparation, puis une vraie image)
+    expect(r.calls.render).toBe(before + 4); // (les trois images d'un pixel de la préparation, puis une vraie image)
     sc.dispose();
     expect(r.calls.dispose).toBe(1);
     // (après la fermeture, la toile n'écoute plus rien)
@@ -222,6 +222,36 @@ describe('le décor suit le gabarit (poulain, poney, grand cheval)', () => {
       sc.dispose();
     }, 30000);
   }
+});
+
+describe('l\'ouverture coûte moins cher', () => {
+  it('décor et accessoires partagent leurs programmes (image blanche) ; l\'animal et son équipement ne sont pas touchés', async () => {
+    const { sc } = makeStage();
+    const horseMats = [];
+    sc.holder.traverse((o) => { if (o.material) horseMats.push(...[].concat(o.material).map((m) => [m, m.map])); });
+    await sc.warm();
+    const mapless = [];
+    sc.decor.group.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of [].concat(o.material)) if ((m.isMeshStandardMaterial || m.isMeshBasicMaterial) && !m.transparent && !m.map) mapless.push(o.name || m.type);
+      if (o.isInstancedMesh) expect(o.instanceColor).toBeTruthy();
+    });
+    expect(mapless).toEqual([]);
+    for (const [m, map] of horseMats) expect(m.map).toBe(map);
+    // (les ombres des sabots peintes : cachées, la scène a de vraies ombres)
+    expect(sc.model.root.getObjectByName('soleShadows')?.visible ?? false).toBe(false);
+    sc.dispose();
+  });
+
+  it('les toiles peintes sont gardées d\'une ouverture à l\'autre (les textures, elles, sont neuves)', () => {
+    const a = makeStage().sc;
+    const b = makeStage().sc;
+    const img = (sc) => sc.decor.props.net.net.material.map;
+    expect(img(a)).not.toBe(img(b));
+    expect(img(a).image).toBe(img(b).image);
+    a.dispose();
+    b.dispose();
+  });
 });
 
 describe('la carte de fin laisse voir l\'animal', () => {

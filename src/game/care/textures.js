@@ -1,5 +1,7 @@
-// Textures peintes de la scène de soin (src/game/care/) : bois, paille, foin, filet, granulés… Chacune est neuve
-// (pas de cache partagé) : la scène les libère toutes en se fermant.
+// Textures peintes de la scène de soin (src/game/care/) : bois, paille, foin, filet, granulés… La peinture (une
+// toile 2D, tirée d'une graine : toujours la même) est gardée d'une ouverture à l'autre : rouvrir un soin ne
+// repeint rien. Chaque texture, elle, est neuve (elle vit sur la carte graphique du rendu de la scène) : la scène
+// les libère toutes en se fermant.
 
 import * as THREE from 'three';
 
@@ -12,12 +14,27 @@ export function rng(seed = 1) {
   };
 }
 
-/** Texture d'une toile peinte par draw(ctx2d, w, h). */
-export function canvasTex(w, h, draw, { repeat = true, srgb = true } = {}) {
+/** Toiles déjà peintes (clé → toile) : voir paint. */
+const painted = new Map();
+
+/**
+ * Une toile w × h peinte par draw(ctx2d, w, h). key : la même clé redonne la même toile, peinte une seule fois
+ * (draw doit alors ne dépendre que de la clé : graine, couleurs) ; sans clé, une toile neuve.
+ */
+export function paint(w, h, draw, key = null) {
+  const old = key ? painted.get(key) : null;
+  if (old) return old;
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
   draw(c.getContext('2d'), w, h);
+  if (key) painted.set(key, c);
+  return c;
+}
+
+/** Texture d'une toile peinte par draw(ctx2d, w, h) (key : voir paint). */
+export function canvasTex(w, h, draw, { repeat = true, srgb = true, key = null } = {}) {
+  const c = paint(w, h, draw, key);
   const t = new THREE.CanvasTexture(c);
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   if (repeat) {
@@ -82,7 +99,7 @@ export function woodTexture({ base = '#9b6a3f', dark = '#5d3a1f', vertical = tru
     g.addColorStop(1, 'rgba(40,25,10,0.0)');
     c.fillStyle = g;
     c.fillRect(0, 0, S, S);
-  });
+  }, { key: `wood|${base}|${dark}|${vertical}|${seed}|${boards}` });
 }
 
 /** Litière de paille vue d'en haut : brins dorés entremêlés, ombres entre eux. */
@@ -109,7 +126,7 @@ export function strawFloorTexture() {
         c.stroke();
       }
     }
-  });
+  }, { key: 'straw' });
 }
 
 /** Bruit doux d'une couleur (terre battue, caoutchouc…). */
@@ -123,7 +140,7 @@ export function noiseTexture(base = '#7a5a3c', amount = 0.15, seed = 1, S = 128)
       c.fillStyle = v < 0.5 ? `rgba(0,0,0,${r() * amount})` : `rgba(255,255,255,${r() * amount * 0.7})`;
       c.fillRect(r() * S, r() * S, 1 + r() * 2, 1 + r() * 2);
     }
-  });
+  }, { key: `noise|${base}|${amount}|${seed}|${S}` });
 }
 
 /** Foin : brins vert-doré, plus fins et plus verts que la paille, avec des épis. */
@@ -147,7 +164,7 @@ export function hayTexture(seed = 3) {
       c.quadraticCurveTo(x + Math.cos(a) * l * 0.5 + (r() - 0.5) * 8, y + Math.sin(a) * l * 0.5, x + Math.cos(a) * l, y + Math.sin(a) * l);
       c.stroke();
     }
-  });
+  }, { key: `hay|${seed}` });
 }
 
 /** Brins de foin isolés (cartes transparentes qui dépassent du filet). */
@@ -166,7 +183,7 @@ export function hayStrandTexture() {
       c.quadraticCurveTo(x + (r() - 0.5) * 30, H * 0.5, x + (r() - 0.5) * 50, r() * H * 0.25);
       c.stroke();
     }
-  }, { repeat: false });
+  }, { key: 'hayStrand', repeat: false });
 }
 
 /** Mailles du filet à foin : losanges en corde tressée, transparents entre les cordes. */
@@ -216,7 +233,7 @@ export function netTexture(color = [38, 92, 64]) {
       c.arc(x, y, 6, 0, Math.PI * 2);
       c.fill();
     }
-  });
+  }, { key: `net|${color}` });
 }
 
 /** Granulés : petits cylindres bruns serrés (le dessus du tas dans la mangeoire). */
@@ -244,7 +261,7 @@ export function pelletTexture() {
       c.fillRect(-l / 2, -w / 2, l, w * 0.35);
       c.restore();
     }
-  });
+  }, { key: 'pellet' });
 }
 
 /** Ondulations de l'eau (carte de normales douce), pour le seau. */
@@ -266,7 +283,7 @@ export function rippleNormal() {
       }
     }
     c.putImageData(img, 0, 0);
-  }, { srgb: false });
+  }, { key: 'ripple', srgb: false });
 }
 
 /** Tache douce (ombre de contact, éclaboussure…). */
@@ -278,5 +295,5 @@ export function softDot(rgba = '0,0,0', S = 64) {
     g.addColorStop(1, `rgba(${rgba},0)`);
     c.fillStyle = g;
     c.fillRect(0, 0, S, S);
-  }, { repeat: false });
+  }, { key: `dot|${rgba}|${S}`, repeat: false });
 }

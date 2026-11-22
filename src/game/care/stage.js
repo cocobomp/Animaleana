@@ -23,37 +23,11 @@ import { buildGltfAnimal } from '../models/gltfAnimal.js';
 import { buildGear, removeGear } from '../gearModels.js';
 import { stageLook, growthScale } from '../../sim/animal.js';
 import { gfx } from '../gfx.js';
-import { getModel } from '../assets.js';
-import { REAL_HORSE_KEY } from '../models/horseReal.js';
 
 // ---------------------------------------------------------------- logique pure (tests/care3d.test.js)
 
-/** Réglage par l'adresse ou le stockage local : ?care3d=off (toujours le mini-jeu dessiné, pour tester le repli). */
-export function care3dSetting(search = null, storage = null) {
-  try {
-    const q = new URLSearchParams(search ?? (typeof location !== 'undefined' ? location.search : '')).get('care3d');
-    if (q) return q;
-    const st = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
-    return st?.getItem?.('care3d') ?? '';
-  } catch {
-    return '';
-  }
-}
-
-/** Espèces qui ont déjà leur scène de soin en 3D (les autres gardent le mini-jeu dessiné). */
-export const CARE3D_SPECIES = new Set(['horse']);
-
-/**
- * Peut-on ouvrir la scène 3D pour cet animal ? L'espèce a sa scène, son modèle réaliste est chargé (sinon le
- * mini-jeu dessiné, plutôt qu'un cheval sculpté), le réglage ne l'interdit pas.
- * has : (clé du modèle) → chargé ? (getModel en jeu ; injecté par les tests).
- */
-export function care3dPossible(a, { setting = '', has = (k) => !!getModel(k) } = {}) {
-  if (!a || setting === 'off') return false;
-  if (!CARE3D_SPECIES.has(a.species)) return false;
-  if (a.species === 'horse') return has(REAL_HORSE_KEY);
-  return false;
-}
+// (quand ouvrir la scène : src/game/care/which.js, dans le jeu dès le départ ; redit ici pour les tests)
+export { care3dSetting, CARE3D_SPECIES, care3dPossible } from './which.js';
 
 /** Point (x, y) de l'espace du cadre (400 × 360, vue view) → coordonnées normalisées de la toile (-1 à 1). */
 export function virtualToNdc(x, y, view, w, h) {
@@ -118,6 +92,9 @@ export function buildDouble(a, entity = null, built = null) {
     if (o.isMesh && o.parent === model.root && o.material?.depthWrite === false) o.visible = false;
   });
   model.setLod?.(0);
+  // (les ombres des sabots peintes sous lui, en qualité basse : ici il y a de vraies ombres)
+  const soles = model.root.getObjectByName?.('soleShadows');
+  if (soles) soles.visible = false;
   const holder = new THREE.Group();
   holder.add(model.root);
   const scale = entity?.scale ?? (a.look?.scale ?? 1) * growthScale(a);
@@ -347,6 +324,11 @@ export class CareStage {
     this.timing.animal = Math.round(performance.now() - t0);
     this.model = this.double.model;
     this.holder = this.double.holder;
+    // (les matières de l'animal et de son équipement : peut-être celles du jeu, on n'y touche pas, voir unify)
+    this.foreign = new Set();
+    this.holder.traverse((o) => {
+      for (const m of [].concat(o.material ?? [])) this.foreign.add(m);
+    });
     this.holder.rotation.y = Math.PI / 2; // (il regarde vers +x : vu de profil, tête à droite, comme les jeux dessinés)
     this.scene.add(this.holder);
     this.holder.traverse((m) => {
@@ -756,8 +738,33 @@ export class CareStage {
    * par image, puis les ombres seules (leurs shaders de profondeur), puis la scène est prête. Avant : tout dans la
    * première image (1,4 s d'un coup en SwiftShader).
    */
+  /**
+   * Moins de programmes à compiler (chacun coûte cher à l'ouverture, surtout sur un téléphone modeste) : les matières
+   * du décor et des accessoires sans image reçoivent une image blanche d'un pixel, les objets répétés sans couleur
+   * par exemplaire reçoivent du blanc ; ils partagent alors le programme de leurs voisins. (Pas les matières de
+   * l'animal ni de son équipement : elles peuvent être celles du jeu ; celles des jeux, posées sur lui, oui.)
+   */
+  unify() {
+    const white = (this.white ??= whiteTexture());
+    const c = new THREE.Color(1, 1, 1);
+    this.scene.traverse((o) => {
+      if ([].concat(o.material ?? []).some((m) => this.foreign.has(m))) return;
+      // (la première couleur crée la couleur de tous les exemplaires, blanche)
+      if (o.isInstancedMesh && !o.instanceColor && o.instanceMatrix.count > 0) o.setColorAt(0, c);
+      if (!o.isMesh) return;
+      for (const m of [].concat(o.material)) {
+        if (!m || m.map || m.transparent || m.userData.shared) continue;
+        if (m.isMeshStandardMaterial || m.isMeshBasicMaterial) {
+          m.map = white;
+          m.needsUpdate = true;
+        }
+      }
+    });
+  }
+
   async warm() {
     this.updateCamera(0);
+    this.unify();
     const t0 = performance.now();
     const frame = () => new Promise((r) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 16)));
     try {
@@ -779,19 +786,37 @@ export class CareStage {
       if (++n % 3 === 0) await frame();
     }
     this.timing.textures = Math.round(performance.now() - t1);
-    // Une image dans un seul pixel : la carte des ombres (et ses shaders de profondeur) et les géométries envoyées à
-    // la carte graphique, sans presque rien peindre ; la vraie première image est alors une image ordinaire.
-    await frame();
-    if (this.disposed) return;
-    const t2 = performance.now();
+    // Des images dans un seul pixel : la carte des ombres (et ses shaders de profondeur) et les géométries envoyées
+    // à la carte graphique, sans presque rien peindre ; la vraie première image est alors une image ordinaire. En
+    // trois fois (l'animal, puis le décor, puis le reste) : trois images moyennes plutôt qu'une très longue.
     const r = this.renderer;
-    r.setScissorTest(true);
-    r.setScissor(0, 0, 1, 1);
-    r.setViewport(0, 0, 1, 1);
-    trackListeners(this.listeners, () => r.render(this.scene, this.camera));
-    r.setScissorTest(false);
-    r.setViewport(0, 0, this.size.w, this.size.h);
-    this.timing.shadows = Math.round(performance.now() - t2);
+    const all = [];
+    this.scene.traverse((o) => {
+      if ((o.isMesh || o.isPoints) && o.visible) all.push(o);
+    });
+    const inside = (o, root) => {
+      for (let p = o; p; p = p.parent) if (p === root) return true;
+      return false;
+    };
+    const steps = [(o) => inside(o, this.holder), (o) => !!this.decor?.group && inside(o, this.decor.group), () => true];
+    this.timing.shadows = 0;
+    for (let i = 0; i < steps.length; i++) {
+      await frame();
+      if (this.disposed || this.lost) return;
+      const t2 = performance.now();
+      for (const o of all) o.visible = steps.slice(0, i + 1).some((f) => f(o));
+      r.setScissorTest(true);
+      r.setScissor(0, 0, 1, 1);
+      r.setViewport(0, 0, 1, 1);
+      try {
+        trackListeners(this.listeners, () => r.render(this.scene, this.camera));
+      } finally {
+        for (const o of all) o.visible = true;
+        r.setScissorTest(false);
+        r.setViewport(0, 0, this.size.w, this.size.h);
+      }
+      this.timing.shadows += Math.round(performance.now() - t2);
+    }
     await frame();
     this.ready = true;
   }
@@ -806,6 +831,13 @@ export class CareStage {
 
   render() {
     if (this.lost || this.disposed) return;
+    // Qualité basse : la carte des ombres une image sur deux (l'animal bouge à peine d'une image à l'autre ; c'est
+    // une passe de plus sur toute la scène, à chaque image).
+    if (!this.high) {
+      const sm = this.renderer.shadowMap;
+      sm.autoUpdate = false;
+      sm.needsUpdate = (this.frames = (this.frames ?? 0) + 1) % 2 === 1;
+    }
     const t0 = this.timing.first === undefined ? performance.now() : 0;
     trackListeners(this.listeners, () => this.renderer.render(this.scene, this.camera));
     if (t0) this.timing.first = Math.round(performance.now() - t0);
@@ -833,6 +865,7 @@ export class CareStage {
     if (this.holder) this.scene?.remove(this.holder);
     this.double?.dispose();
     for (const d of this.disposables) d.dispose?.();
+    this.white?.dispose();
     this.scene?.traverse((o) => {
       if (o.isLight) o.dispose?.();
     });
@@ -853,6 +886,14 @@ export class CareStage {
     this.canvas.removeEventListener?.('webglcontextrestored', this.onRestored);
     this.canvas.remove();
   }
+}
+
+/** Une image blanche d'un pixel (voir unify). */
+function whiteTexture() {
+  const t = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.needsUpdate = true;
+  return t;
 }
 
 const PUFF_GEO = new THREE.SphereGeometry(1, 10, 8);

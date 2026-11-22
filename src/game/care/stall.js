@@ -130,7 +130,7 @@ export function stallSet(stage) {
     c.beginPath();
     c.ellipse(96, 86, 40, 26, 0, 0, Math.PI * 2);
     c.fill();
-  }));
+  }, { key: 'sky' }));
   const pane = mesh(new THREE.PlaneGeometry(win.w, win.h), keep(new THREE.MeshBasicMaterial({ map: sky, color: 0xffffff, toneMapped: false })), [win.x, win.y, S.back - wallT - 0.01], null, false);
   pane.material.color.setScalar(1.6);
   const frameMat = keep(new THREE.MeshStandardMaterial({ color: 0xf1ead8, roughness: 0.7 }));

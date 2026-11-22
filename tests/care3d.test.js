@@ -46,6 +46,16 @@ describe('quand ouvrir la scène 3D', () => {
     expect(stage.care3dSetting('', { getItem: () => null })).toBe('');
   });
 
+  it('la liste des soins 3D (which.js, sans le code de la scène) et les jeux 3D disent les mêmes soins', async () => {
+    const which = await import('../src/game/care/which.js');
+    for (const [sp, acts] of Object.entries(which.CARE3D_ACTIONS)) {
+      expect(Object.keys(care3d.CARE3D_GAMES[sp]).sort()).toEqual([...acts].sort());
+      for (const act of acts) expect(which.care3dWanted({ species: sp }, act)).toBe(true);
+    }
+    expect(which.care3dWanted({ species: 'horse' }, 'wash')).toBe(false);
+    expect(which.care3dWanted({ species: 'dog' }, 'feed')).toBe(false);
+  });
+
   it('les soins du cheval refaits en 3D : nourrir, abreuver, friandise, caresser, pansage', () => {
     const h = { species: 'horse' };
     for (const act of ['feed', 'water', 'treat', 'pet', 'brush']) expect(typeof care3d.care3dGameFor(h, act), act).toBe('function');
@@ -62,13 +72,13 @@ describe('le cadre : repli sur le jeu dessiné, et tout est rendu à la fermetur
 
   it('la scène 3D échoue (WebGL, erreur) : null, et le jeu dessiné', () => {
     expect(glue).toMatch(/catch \(e\) \{[\s\S]*return null;/);
-    expect(frame).toMatch(/if \(!play\) play = make\(ctx\);/);
+    expect(frame).toMatch(/if \(!scene3d\) return start2d\(\);/);
     // (le jeu 3D lui-même échoue au démarrage : scène fermée, boutons et jauge remis à zéro, jeu dessiné)
     expect(frame).toMatch(/closeScene3d\(\);\s*ctx\.clearButtons\(\);/);
   });
 
   it('fermeture : la scène est libérée, et le rendu du jeu reprend (vxCover rendu)', () => {
-    expect(frame).toMatch(/play\.destroy\?\.\(\);\s*closeScene3d\(\);/);
+    expect(frame).toMatch(/play\?\.destroy\?\.\(\);\s*closeScene3d\(\);/);
     expect(frame).toMatch(/sc\.release\?\.\(\)/);
     expect(glue).toMatch(/ui\.vxCover = Math\.max\(0, \(ui\.vxCover \?\? 1\) - 1\)/);
     expect(st).toMatch(/this\.renderer\.dispose\(\);/);

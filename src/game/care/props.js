@@ -3,7 +3,7 @@
 // fabrique renvoie { group, …, update(dt), dispose() } ; ce qu'elle crée est à elle (libéré par dispose).
 
 import * as THREE from 'three';
-import { hayTexture, hayStrandTexture, netTexture, pelletTexture, rippleNormal, noiseTexture, softDot, rng } from './textures.js';
+import { hayTexture, hayStrandTexture, netTexture, pelletTexture, rippleNormal, noiseTexture, softDot, rng, paint } from './textures.js';
 
 const lerp = (a, b, k) => a + (b - a) * k;
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
@@ -716,16 +716,14 @@ export function waterTap() {
 
 /** Tuyau d'arrosage : vert, une fine rayure claire le long du tuyau. */
 function hoseTexture() {
-  const c = document.createElement('canvas');
-  c.width = 64;
-  c.height = 16;
-  const x = c.getContext('2d');
-  x.fillStyle = '#3a9a46';
-  x.fillRect(0, 0, 64, 16);
-  x.fillStyle = 'rgba(255,255,255,0.35)';
-  x.fillRect(0, 6, 64, 2);
-  x.fillStyle = 'rgba(0,0,0,0.12)';
-  for (let i = 0; i < 64; i += 4) x.fillRect(i, 0, 1, 16);
+  const c = paint(64, 16, (x) => {
+    x.fillStyle = '#3a9a46';
+    x.fillRect(0, 0, 64, 16);
+    x.fillStyle = 'rgba(255,255,255,0.35)';
+    x.fillRect(0, 6, 64, 2);
+    x.fillStyle = 'rgba(0,0,0,0.12)';
+    for (let i = 0; i < 64; i += 4) x.fillRect(i, 0, 1, 16);
+  }, 'hose');
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = THREE.RepeatWrapping;
@@ -735,17 +733,15 @@ function hoseTexture() {
 }
 
 function streamCanvas() {
-  const c = document.createElement('canvas');
-  c.width = 16;
-  c.height = 64;
-  const x = c.getContext('2d');
-  x.fillStyle = '#b8dcff';
-  x.fillRect(0, 0, 16, 64);
-  for (let i = 0; i < 18; i++) {
-    x.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.5})`;
-    x.fillRect(Math.random() * 16, Math.random() * 64, 1 + Math.random() * 2, 4 + Math.random() * 10);
-  }
-  return c;
+  return paint(16, 64, (x) => {
+    const r = rng(17);
+    x.fillStyle = '#b8dcff';
+    x.fillRect(0, 0, 16, 64);
+    for (let i = 0; i < 18; i++) {
+      x.fillStyle = `rgba(255,255,255,${0.3 + r() * 0.5})`;
+      x.fillRect(r() * 16, r() * 64, 1 + r() * 2, 4 + r() * 10);
+    }
+  }, 'stream');
 }
 
 // ---------------------------------------------------------------- friandises et main
@@ -792,16 +788,15 @@ export function treatModel(kind = 'carrot', keep) {
 }
 
 function carrotTexture() {
-  const c = document.createElement('canvas');
-  c.width = 64;
-  c.height = 64;
-  const x = c.getContext('2d');
-  x.fillStyle = '#f08a2e';
-  x.fillRect(0, 0, 64, 64);
-  for (let i = 0; i < 14; i++) {
-    x.fillStyle = 'rgba(150,60,10,0.35)';
-    x.fillRect(0, Math.random() * 64, 64, 1);
-  }
+  const c = paint(64, 64, (x) => {
+    const r = rng(5);
+    x.fillStyle = '#f08a2e';
+    x.fillRect(0, 0, 64, 64);
+    for (let i = 0; i < 14; i++) {
+      x.fillStyle = 'rgba(150,60,10,0.35)';
+      x.fillRect(0, r() * 64, 64, 1);
+    }
+  }, 'carrot');
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
@@ -959,10 +954,14 @@ export function groomTool(kind, keep) {
 export function sockTexture(base = 'rgb(130,100,70)', wet = 0, seed = 3) {
   const W = 128;
   const H = 256;
-  const c = document.createElement('canvas');
-  c.width = W;
-  c.height = H;
-  const x = c.getContext('2d');
+  const c = paint(W, H, (x) => drawSock(x, W, H, base, wet, seed), `sock|${base}|${wet < 0.5}|${seed}`);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+
+function drawSock(x, W, H, base, wet, seed) {
   const r = rng(seed);
   const m = /(\d+)\D+(\d+)\D+(\d+)/.exec(base) ?? [0, 130, 100, 70];
   const [R, G, B] = [+m[1], +m[2], +m[3]];
@@ -1026,19 +1025,18 @@ export function sockTexture(base = 'rgb(130,100,70)', wet = 0, seed = 3) {
       x.fillRect(r() * W, H * (0.45 + 0.5 * r()), 1 + r() * 2, 4 + r() * 8);
     }
   }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = THREE.RepeatWrapping;
-  return t;
 }
 
 /** Tache de boue séchée (craquelée, bords irréguliers), de poussière (poudre claire) ou de boue des jambes (traînées). */
 export function mudTexture(kind = 'mud', seed = 1) {
   const S = 128;
-  const c = document.createElement('canvas');
-  c.width = S;
-  c.height = S;
-  const x = c.getContext('2d');
+  const c = paint(S, S, (x) => drawMud(x, S, kind, seed), `mud|${kind}|${seed}`);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function drawMud(x, S, kind, seed) {
   const r = rng(seed);
   /** Une forme irrégulière (polygone aux rayons tirés au hasard, lissé). */
   const splat = (cx, cy, rad, col, n = 14, jag = 0.35) => {
@@ -1106,7 +1104,4 @@ export function mudTexture(kind = 'mud', seed = 1) {
       x.fillRect(S / 2 + (r() - 0.5) * 56, S / 2 + (r() - 0.5) * (leg ? 80 : 50), 1.5 + r() * 2, 1 + r() * 1.5);
     }
   }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
 }

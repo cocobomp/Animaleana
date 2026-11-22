@@ -36,7 +36,8 @@ describe('quand ouvrir la scène 3D', () => {
   });
 
   it('les autres espèces gardent leur jeu dessiné (pour l\'instant)', () => {
-    for (const sp of ['dog', 'cat', 'rabbit', 'sheep', 'goat', 'cow']) expect(stage.care3dPossible({ species: sp }, { has: () => true })).toBe(false);
+    // (chiens, chats, lapins : tests/pets3dStage.test.js ; moutons, chèvres, vaches : tests/farm3dStage.test.js)
+    for (const sp of ['pig']) expect(stage.care3dPossible({ species: sp }, { has: () => true })).toBe(false);
   });
 
   it('le réglage se lit dans l\'adresse, puis dans le stockage local', () => {
@@ -51,17 +52,17 @@ describe('quand ouvrir la scène 3D', () => {
       expect(Object.keys(care3d.CARE3D_GAMES[sp]).sort()).toEqual([...acts].sort());
       for (const act of acts) expect(which.care3dWanted({ species: sp }, act)).toBe(true);
     }
-    // (la longe reste dessinée ; le vermifuge est en 3D depuis le chantier « chevalplus »)
+    // (la longe reste dessinée ; le vermifuge est en 3D depuis le chantier « chevalplus » ; le cochon reste dessiné)
     expect(which.care3dWanted({ species: 'horse' }, 'lunge')).toBe(false);
     expect(which.care3dWanted({ species: 'horse' }, 'deworm')).toBe(true);
-    expect(which.care3dWanted({ species: 'dog' }, 'feed')).toBe(false);
+    expect(which.care3dWanted({ species: 'pig' }, 'feed')).toBe(false);
   });
 
   it('les soins du cheval refaits en 3D : nourrir, abreuver, friandise, caresser, pansage, laver, seller, brider, vermifuge, ferrer, curer', () => {
     const h = { species: 'horse' };
     for (const act of ['feed', 'water', 'treat', 'pet', 'brush', 'wash', 'saddle', 'bridle', 'deworm', 'shoe', 'clean']) expect(typeof care3d.care3dGameFor(h, act), act).toBe('function');
     expect(care3d.care3dGameFor(h, 'lunge')).toBe(null);
-    expect(care3d.care3dGameFor({ species: 'dog' }, 'feed')).toBe(null);
+    expect(care3d.care3dGameFor({ species: 'pig' }, 'feed')).toBe(null);
     expect(care3d.care3dGameFor(null, 'feed')).toBe(null);
   });
 });

@@ -266,6 +266,10 @@ export class CareStage {
   constructor(o) {
     this.game = o.game ?? null;
     this.a = o.a;
+    // Adaptation d'une espèce dont le modèle n'est pas celui du cheval (moutons, chèvres, vaches : ruminant.js) :
+    // { marks(stage), live(stage, nom), region(os), eatMuzzle(stage), life(stage, dt) } ; chaque fonction absente
+    // garde le comportement du cheval.
+    this.fit = o.fit ?? null;
     this.time = 0;
     this.listeners = [];
     this.disposables = [];
@@ -364,8 +368,10 @@ export class CareStage {
     // (le pelage seul, avec l'index réduit du modèle s'il en a un : deux fois moins de triangles à tester)
     let lodIndex = null;
     if (this.model.coatMesh && this.model.setLod) {
+      const g0 = this.model.coatMesh.geometry;
       this.model.setLod(1);
-      lodIndex = this.model.coatMesh.geometry.index;
+      // (le mouton, la chèvre, la vache changent de géométrie au loin, pas seulement d'index : alors l'index complet)
+      if (this.model.coatMesh.geometry === g0) lodIndex = g0.index;
       this.model.setLod(0);
     }
     this.proxy = new PickProxy(this.model.coatMesh ? [this.model.coatMesh] : collectMeshes(this.model.root), lodIndex ? () => lodIndex : null);
@@ -404,6 +410,11 @@ export class CareStage {
 
   /** Repères du modèle au repos (pose de photo) : bouche, oreilles, garrot, croupe, sabots… (repère monde). */
   measure() {
+    if (this.fit?.marks) {
+      this.marks = this.fit.marks(this);
+      this.box = new THREE.Box3().setFromObject(this.holder);
+      return;
+    }
     const md = this.model;
     md.photoPose?.();
     this.holder.updateMatrixWorld(true);
@@ -433,6 +444,7 @@ export class CareStage {
    * Repère monde ; puis il reprend sa pose debout.
    */
   eatMuzzle() {
+    if (this.fit?.eatMuzzle) return this.fit.eatMuzzle(this);
     const md = this.model;
     if (!md.anim) return this.marks.muzzle.clone();
     const st = { ...this.st, feeder: 1, graze: 0 };
@@ -446,6 +458,8 @@ export class CareStage {
 
   /** Repères dans la pose du moment (la tête bouge) : bouche, tête. */
   live(name) {
+    const own = this.fit?.live?.(this, name);
+    if (own) return own;
     const md = this.model;
     const snout = md.dims?.snoutZ ?? 0.5;
     if (name === 'muzzle' && md.head) return md.head.localToWorld(_w.set(0, -0.12 * snout, snout * 0.97)).clone();
@@ -590,7 +604,7 @@ export class CareStage {
     const ray = this.rayAt(x, y);
     const h = this.proxy.hit(ray, this.time);
     if (!h) return null;
-    h.region = regionOf(h.boneName);
+    h.region = this.fit?.region ? this.fit.region(h.boneName) : regionOf(h.boneName);
     return h;
   }
 
@@ -629,6 +643,7 @@ export class CareStage {
    * pied.
    */
   life(dt) {
+    if (this.fit?.life) return this.fit.life(this, dt);
     const md = this.model;
     const m = this.mood;
     const st = this.st;

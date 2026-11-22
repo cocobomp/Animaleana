@@ -231,6 +231,10 @@ export function cleanGame(ctx, o = {}) {
       lo: withSpread ? Z.lo : PICK.lo,
       hi: withSpread ? Z.hi : PICK.hi,
       max: withSpread ? Z.max : PICK.max,
+      // (pour les jeux 3D qui reprennent cette logique : chaque saleté, et les couches posées case par case)
+      all: items.map((x) => ({ x: x.x, y: x.y, state: x.state, k: x.k, good: x.good, seed: x.seed })),
+      cells: cells.map((c) => ({ x: c.x, y: c.y, n: c.n })),
+      step,
     }),
     // Clavier : Entrée fait comme « C'est bon ! » une fois qu'on étale (comme à la longe).
     key(code, down) {

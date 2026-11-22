@@ -471,7 +471,11 @@ function featherGame(ctx) {
   const catShape = (lift = 0) => animalShape(a, { x: cat.x, y: floorY, s, f: cat.f, lift });
 
   return {
-    peek: () => ({ x: cat.x, catches, n, max, lo: n, hi: n, value: catches, jumping: !!cat.jump, held: held > 0 }),
+    peek: () => ({
+      x: cat.x, catches, n, max, lo: n, hi: n, value: catches, jumping: !!cat.jump, held: held > 0,
+      // (pour le jeu 3D qui reprend cette logique : le bond, le sens, l'affût, la plume)
+      jump: cat.jump ? { k: cat.jump.k, h: cat.jump.h } : null, f: cat.f, crouch: cat.crouch, bored: cat.bored > 1.4, tired: tired(), feather: { ...feather },
+    }),
     key(code, down) { if (down && (code === 'Enter' || code === 'NumpadEnter') && !stopBtn.disabled) end(); },
     move(p) {
       if (held > 0) return;

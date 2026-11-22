@@ -986,6 +986,13 @@ export class UI {
     const same = group && [...this.toasts.children].find((x) => x.dataset.group === group && !x.classList.contains('out'));
     // À cheval sur un téléphone : RIDE_TOASTS messages au plus à la fois, les suivants attendent leur tour (nextToast)
     // au lieu de s'empiler sur le cheval et ses boutons (cinq d'un coup au premier tronc) ; rien n'est perdu.
+    // Pendant la voltige (body.vt-on), les messages du jeu attendent la fin de la séance : ils se posaient sur le cheval
+    // au milieu du plan large (« Défi du jour », « Tu passes au niveau 2 »…) ; nextToast les montre ensuite.
+    if (document.body.classList.contains('vt-on')) {
+      (this.toastWait ??= []).push([msg, Math.min(ms, 5000), opts]);
+      if (this.toastWait.length > 4) this.toastWait.shift();
+      return null;
+    }
     if (!same && this.toastsFull()) {
       // (ôté tout de suite, sans fondu : le conseil prend sa place en haut, pas en dessous de lui sur le joystick)
       if (opts?.now) [...this.toasts.children].find((x) => !x.classList.contains('out')).remove();

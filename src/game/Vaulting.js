@@ -461,7 +461,7 @@ class VaultingSession extends Session {
   constructor(mgr, type, opts) {
     super(mgr, type, opts);
     const g = this.game;
-    document.body.classList.add('actv-nomove', 'vt-on');
+    document.body.classList.add('actv-nomove');
     this.level = VAULT_LEVELS[opts.level] ? opts.level : 'walk';
     this.L = VAULT_LEVELS[this.level];
     const a = this.L.horse ? opts.animal : null;
@@ -480,6 +480,8 @@ class VaultingSession extends Session {
       this.ok = false;
       return;
     }
+    // (body.vt-on : la mise en page de la voltige ; les petits messages du jeu attendent la fin de la séance, UI.toast)
+    document.body.classList.add('vt-on');
     this.calm = horseCalm(a);
     this.center = toWorld(CIRCLE_AT);
     this.cy = this.y(this.center.x, this.center.z);
@@ -1363,6 +1365,7 @@ class VaultingSession extends Session {
     if (this.keyUp) window.removeEventListener('keyup', this.keyUp);
     this.hud2?.remove();
     document.body.classList.remove('vt-on');
+    g.ui.nextToast?.(); // (les messages qui attendaient la fin de la séance)
     if (g.rig && this.camMode) g.rig.mode = this.camMode;
     if (this.coach) {
       g.scene.remove(this.coach.root);

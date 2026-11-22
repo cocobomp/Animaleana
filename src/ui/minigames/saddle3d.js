@@ -21,10 +21,12 @@ import { clamp } from './draw.js';
 import { SELLER_STAGES, SADDLE_SPOT, GIRTH } from './seller.js';
 import { freeSaddle } from '../../sim/gear.js';
 import { saddleStand, padClothTexture } from '../../game/care/tackProps.js';
+import { STALL } from '../../game/care/stall.js';
 import { nicker, snort } from './feed3d.js';
 import { v3, owner, rigidGear, impatience, stagePill, afterLife, smooth, dist2 } from './horse3dKit.js';
 
 const PAUSE = 0.9;
+const STALL_FRONT = STALL.front;
 
 /** La selle et le tapis que le jeu va lui mettre (Game.saddle → saddleUp) : { saddle, pad }. */
 export function realSaddleGear(profile, a, home = true) {
@@ -103,20 +105,15 @@ export function saddle3dGame(ctx) {
    * cheval : à mi-chemin de son dos, sous ce point de l'écran ; sa hauteur va jusqu'à la paille.
    */
   function placeStand() {
-    sc.updateCamera(0);
-    const v = ctx.view;
-    // (le pied du porte-selle : la paille sous le bas gauche de l'image, assez loin de nous, pas sous le cheval)
-    let base = sc.pointOnPlane(v.x0 + 78, v.y1 - 30, 0) ?? v3(L.croup.x, 0, sc.holder.position.z + 1.2);
-    const minZ = sc.holder.position.z + 0.75 * S + 0.25;
-    if (base.z < minZ) base = sc.pointOnPlane(v.x0 + 78, v.y1 - 30, 0)?.setZ(minZ) ?? base.setZ(minZ);
-    const cam = sc.camera.position;
-    const far = Math.hypot(base.x - cam.x, base.z - cam.z);
-    if (far < 0.9) base.lerp(v3(L.croup.x, 0, minZ), 0.5);
-    stand.group.position.set(base.x, 0.02, base.z);
+    // (devant lui, du côté de la croupe, entre lui et nous ; la caméra le cadre avec le cheval : voir frameFor)
+    const k = clamp(0.85 + 0.15 * S, 0.8, 1);
+    stand.group.scale.setScalar(k);
+    const z = Math.min(STALL_FRONT - 0.35, sc.holder.position.z + 0.45 * S + 0.75);
+    stand.group.position.set(L.croup.x - 0.05 * S, 0.02, z);
     stand.group.rotation.y = -0.25;
-    stand.group.scale.setScalar(clamp(0.85 + 0.15 * S, 0.8, 1));
     stand.group.updateMatrixWorld(true);
   }
+  placeStand();
   const seatLocal = v3(0, backY(zSeat) + 0.02, zSeat); // (le creux du siège, repère de body)
   const tmpQ = new THREE.Quaternion();
   const tmpS = new THREE.Vector3();
@@ -316,7 +313,10 @@ export function saddle3dGame(ctx) {
       const gb = body.localToWorld(girthC.clone().add(v3(0, -dims.R * 1.25, 0)));
       sc.frame([L.withers, L.back, L.belly, L.chest, gb, L.poll, L.muzzle, L.hooves[0], L.hooves[1], L.croup], { dir: [0.32, 0.02, 1], pad: 1.06, now });
     } else {
-      sc.frame([L.withers, L.croup, L.tail, L.tail.clone().add(v3(-0.12 * S, 0, 0)), L.back, L.belly, L.chest, L.muzzle, L.poll, ...L.ears, ...L.hooves], { dir: [0.3, 0.72, 1], pad: 1.1, now });
+      // (de la queue au bout du nez, avec de la marge : au repos, il tend parfois l'encolure)
+      const st0 = stand.group.localToWorld(stand.top.clone().add(v3(0, 0.15, 0)));
+      const st1 = stand.group.localToWorld(stand.low.clone().add(v3(0, -0.25, 0.05)));
+      sc.frame([L.withers, L.croup, L.tail, L.tail.clone().add(v3(-0.15 * S, 0, 0)), L.back, L.belly, L.chest, L.muzzle, L.muzzle.clone().add(v3(0.18 * S, -0.1 * S, 0)), L.poll, ...L.ears, ...L.hooves, st0, st1], { dir: [0.3, 0.72, 1], pad: 1.1, now });
     }
   }
 
@@ -344,7 +344,6 @@ export function saddle3dGame(ctx) {
     if (key === standFor || sc.size.w < 2) return;
     standFor = key;
     if (stage() !== 'girth') frameFor(stage(), true);
-    placeStand();
     for (const k of ['pad', 'saddle']) if (!items[k].placed && drag?.key !== k) toStand(k, true);
   }
   startStage(0);

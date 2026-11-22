@@ -17,7 +17,7 @@ import { muckGame, strawGame } from './chores.js';
 import { distToSegment, label, rrect } from './draw.js';
 import { drawMiniGauge } from './clean.js';
 import { STALL } from '../../game/care/stall.js';
-import { manurePile, strawTuft, wheelbarrow, pitchfork, strawBale, strawArmful, lumpGeometry } from '../../game/care/barn.js';
+import { manurePile, strawTuft, wheelbarrow, pitchfork, strawBale, strawArmful, lumpGeometry, dirtyBox } from '../../game/care/barn.js';
 import { strawFloorTexture, softDot, rng as seeded } from '../../game/care/textures.js';
 import { v3, owner, impatience } from './horse3dKit.js';
 
@@ -33,6 +33,20 @@ export function floorGame3d(ctx, make, o) {
   const S = STALL;
   const horse = !sc.noAnimal;
   const m = sc.mood;
+  // (le box du cheval, celui des soins : il devient box à curer le temps du jeu — litière sale, porte ouverte)
+  let undoBox = null;
+  if (!sc.decor?.dirty && sc.decor?.walls) {
+    const over = dirtyBox(sc, sc.decor);
+    const base = sc.decor.update;
+    sc.decor.update = (dt, st) => {
+      base(dt, st);
+      over.update();
+    };
+    undoBox = () => {
+      sc.decor.update = base;
+      over.dispose();
+    };
+  }
   // ---------------------------------------------------------------- le sol du jeu dessiné, posé sur le box
   const z0 = horse ? sc.holder.position.z + 0.5 * sc.double.scale + 0.2 : S.back + 0.3;
   const W = { x0: -S.halfW + 0.28, x1: S.halfW - 0.82, z0, z1: S.front - 0.3 };
@@ -459,6 +473,7 @@ export function floorGame3d(ctx, make, o) {
     destroy() {
       play.destroy?.();
       sc.scene.remove(root);
+      undoBox?.();
       own.free();
     },
   };

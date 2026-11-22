@@ -412,7 +412,9 @@ export function bridle3dGame(ctx) {
       const cq = sc.camera.quaternion;
       const right = v3(1, 0, 0).applyQuaternion(cq);
       const toCam = sc.camera.position.clone().sub(grip).normalize();
-      const from = grip.clone().add(v3(0, 0.3 * Math.max(0.8, S), 0)).addScaledVector(right, -0.5).addScaledVector(toCam, 0.12);
+      // (le bras passe par-dessus l'encolure, derrière la tête — comme quand on bride — : il ne cache pas son visage)
+      const from = grip.clone().add(v3(-0.62 * Math.max(0.8, S), 0.28 * Math.max(0.8, S), -0.05));
+      void right;
       const x = grip.clone().sub(from).normalize();
       const z = new THREE.Vector3().crossVectors(x, toCam).normalize();
       const y = new THREE.Vector3().crossVectors(z, x).normalize();

@@ -357,24 +357,33 @@ export function bigDustpan(own, w = 0.8) {
 // ---------------------------------------------------------------- le box à curer et à pailler
 
 /**
- * Le box (stall.js) pour les corvées et le curage : sa litière propre est remplacée par une litière sale, tassée et
- * mouillée par endroits ; le seau est rangé. Avec ou sans cheval (stage.noAnimal). Renvoie le décor de stall.js, plus
- * dirty (la litière sale).
+ * Le box à curer : sur le décor du box (stall.js, déjà construit : d), la litière propre et ses brins sont cachés et
+ * remplacés par une litière sale, tassée et mouillée par endroits ; le seau est rangé ; devant la porte ouverte, le
+ * seuil et le béton de l'allée (là où l'on se tient : le devant du box ne cache jamais le sol). Sert au box vide des
+ * corvées (boxFloorSet) et au box du cheval qu'on cure (floor3d.js clean3dGame). Renvoie { dirty, update, dispose }
+ * (dispose remet le box comme avant).
  */
-export function boxFloorSet(stage) {
-  const d = stallSet(stage);
+export function dirtyBox(stage, d) {
   const own = [];
   const keep = (x) => {
     own.push(x);
     return x;
   };
-  // (la litière propre du box et ses brins : cachés — on les reconnaît à leur forme)
+  const hidden = [];
+  // (la litière propre du box et ses brins : on les reconnaît à leur forme)
   d.group.traverse((o) => {
-    if (o.isMesh && o.geometry?.type === 'PlaneGeometry' && o.geometry.parameters?.widthSegments === 48) o.visible = false;
-    if (o.isInstancedMesh && o.count > 1000) o.visible = false;
+    const bed = o.isMesh && o.geometry?.type === 'PlaneGeometry' && o.geometry.parameters?.widthSegments === 48;
+    if ((bed || (o.isInstancedMesh && o.count > 1000)) && o.visible) {
+      o.visible = false;
+      hidden.push(o);
+    }
   });
-  d.props.bucket.group.visible = false;
+  if (d.props?.bucket?.group?.visible) {
+    d.props.bucket.group.visible = false;
+    hidden.push(d.props.bucket.group);
+  }
   const S = STALL;
+  const added = [];
   const tex = keep(dirtyBeddingTexture(3));
   tex.repeat.set(2.4, 2.4);
   const geo = keep(new THREE.PlaneGeometry(S.halfW * 2 + 0.1, S.front - S.back + 0.2, 40, 30));
@@ -390,33 +399,47 @@ export function boxFloorSet(stage) {
   dirty.rotation.x = -Math.PI / 2;
   dirty.position.set(0, 0, (S.back + S.front) / 2);
   dirty.receiveShadow = true;
-  d.group.add(dirty);
-  // Devant la porte ouverte : le seuil en bois et le béton de l'allée (là où l'on se tient).
+  added.push(dirty);
   const sill = new THREE.Mesh(keep(new THREE.BoxGeometry(S.halfW * 2 + 0.3, 0.07, 0.16)), keep(new THREE.MeshStandardMaterial({ map: keep(woodTexture({ base: '#6f4a2a', dark: '#3f2614', vertical: false, seed: 5 })), roughness: 0.85 })));
   sill.position.set(0, 0.035, S.front + 0.08);
   sill.receiveShadow = true;
   sill.castShadow = true;
-  d.group.add(sill);
+  added.push(sill);
   const aTex = keep(concreteTexture());
   aTex.repeat.set(3, 1.5);
   const aisle = new THREE.Mesh(keep(new THREE.PlaneGeometry(S.halfW * 2 + 6, 3.5)), keep(new THREE.MeshStandardMaterial({ map: aTex, roughness: 0.9 })));
   aisle.rotation.x = -Math.PI / 2;
   aisle.position.set(0, 0.006, S.front + 0.16 + 1.75);
   aisle.receiveShadow = true;
-  d.group.add(aisle);
-  const base = d.dispose;
-  const baseUpdate = d.update;
+  added.push(aisle);
+  for (const m of added) d.group.add(m);
   return {
-    ...d,
     dirty,
-    update(dt, st) {
-      baseUpdate(dt, st);
-      // (on travaille depuis la porte ouverte : le devant du box ne cache jamais le sol)
+    update() {
       d.walls.front.visible = false;
     },
     dispose() {
-      base();
+      for (const m of added) d.group.remove(m);
+      for (const o of hidden) o.visible = true;
       for (const x of own) x.dispose?.();
+    },
+  };
+}
+
+/** Le box vide des corvées : le box (stall.js) devenu box à curer (dirtyBox). */
+export function boxFloorSet(stage) {
+  const d = stallSet(stage);
+  const x = dirtyBox(stage, d);
+  return {
+    ...d,
+    dirty: x.dirty,
+    update(dt, st) {
+      d.update(dt, st);
+      x.update();
+    },
+    dispose() {
+      x.dispose();
+      d.dispose();
     },
   };
 }

@@ -35,6 +35,119 @@ function loop(sdf, c, n, out, a0 = 0, a1 = Math.PI * 2, tilt = 0, maxDist = 1.2)
 }
 
 /**
+ * Boucle posée sur la vraie peau de la tête (sdf.skin : rayons contre ses triangles au repos, horseReal.js headSkin) :
+ * même plan et mêmes angles que loop(), le point de la peau le plus loin de c sur chaque rayon, écarté de out (en m,
+ * ou fonction de l'angle) le long de sa normale, puis lissée sans jamais se rapprocher de la peau. Sans peau mesurée
+ * (cheval sculpté, cheval GLB), la forme approchée (loop). (Posée sur la forme approchée — coupes tous les 2,5 cm —,
+ * la muserolle rentrait dans le chanfrein bombé des traits et la sous-gorge dans les ganaches.)
+ */
+function skinRing(sdf, c, n, out, a0 = 0, a1 = Math.PI * 2, tilt = 0, maxDist = 1.2, halfWidth = 0, first = false) {
+  const outAt = typeof out === 'function' ? out : () => out;
+  const ct = Math.cos(tilt);
+  const st = Math.sin(tilt);
+  const C = new THREE.Vector3(...c);
+  // (une sangle plate a sa largeur de part et d'autre du plan de la boucle : ses deux bords aussi hors de la peau)
+  const pn = new THREE.Vector3(0, st, ct);
+  const centers = halfWidth ? [C, C.clone().addScaledVector(pn, halfWidth), C.clone().addScaledVector(pn, -halfWidth)] : [C];
+  const dirs = [];
+  const rad = [];
+  // (boucle fermée : n points différents, le premier n'est pas répété à la fin — répété, la sangle se tordait à la
+  // jonction, sur le côté de la tête)
+  const closed = Math.abs(a1 - a0 - Math.PI * 2) < 1e-6;
+  const angle = (i) => a0 + ((a1 - a0) * i) / (closed ? n : n - 1);
+  for (let i = 0; i < n; i++) {
+    const a = angle(i);
+    const d = new THREE.Vector3(Math.cos(a), Math.sin(a) * ct, -Math.sin(a) * st);
+    dirs.push(d);
+    if (!sdf.skin) {
+      const p = rayHit(sdf, c, d.toArray(), maxDist);
+      rad.push(p.addScaledVector(sdfNormal(sdf, p, 0.004), outAt(a)).sub(C).dot(d));
+      continue;
+    }
+    let r = null;
+    for (const o of centers) {
+      const v = skinRadius(sdf.skin, o, d, outAt(a), maxDist, first);
+      if (v !== null) r = Math.max(r ?? -Infinity, v);
+    }
+    rad.push(r);
+  }
+  // (rayon sans peau — un trou à la base d'une oreille — : celui des voisins)
+  for (let i = 0; i < n; i++) {
+    if (rad[i] !== null) continue;
+    let k = 1;
+    let v = null;
+    while (v === null && k < n) {
+      const l = closed ? rad[(i - k + n) % n] : rad[Math.max(0, i - k)];
+      const r = closed ? rad[(i + k) % n] : rad[Math.min(n - 1, i + k)];
+      v = l !== null && r !== null ? (l + r) / 2 : l ?? r;
+      k++;
+    }
+    rad[i] = v ?? 0.05;
+  }
+  // (lissée vers l'extérieur seulement : une sangle tendue ne suit pas chaque creux de la peau, et n'y entre jamais)
+  for (let pass = 0; pass < 2; pass++) {
+    const r0 = rad.slice();
+    for (let i = 0; i < n; i++) {
+      const l = closed ? r0[(i - 1 + n) % n] : r0[Math.max(0, i - 1)];
+      const r = closed ? r0[(i + 1) % n] : r0[Math.min(n - 1, i + 1)];
+      rad[i] = Math.max(r0[i], (l + 2 * r0[i] + r) / 4);
+    }
+  }
+  const pts = dirs.map((d, i) => C.clone().addScaledVector(d, rad[i]));
+  // (et jamais plus près de la peau que out, même là où elle déborde entre deux rayons — la base d'une oreille contre la
+  // têtière : ses deux bords aussi, la sangle déplacée d'autant)
+  if (sdf.skin?.clear) {
+    const zA = new THREE.Vector3(0, 0, 1);
+    const side = new THREE.Vector3();
+    const tg = new THREE.Vector3();
+    const at = (i) => pts[closed ? (i + n) % n : Math.min(n - 1, Math.max(0, i))];
+    const clearAll = () => pts.forEach((p, i) => {
+      const want = outAt(angle(i));
+      if (halfWidth) {
+        tg.subVectors(at(i + 1), at(i - 1)).normalize();
+        side.copy(zA).addScaledVector(tg, -tg.dot(zA)).normalize();
+        const push = new THREE.Vector3();
+        for (const e of [1, -1]) {
+          const q = p.clone().addScaledVector(side, e * halfWidth);
+          const q0 = q.clone();
+          sdf.skin.clear(q, want);
+          const dq = q.sub(q0);
+          if (dq.lengthSq() > push.lengthSq()) push.copy(dq);
+        }
+        p.add(push);
+      }
+      sdf.skin.clear(p, want);
+    });
+    clearAll();
+    // (puis lissée et reposée, trois fois : écartée point par point de la base des oreilles, la têtière faisait des
+    // marches et des zigzags sur la nuque et sous la gorge)
+    for (let pass = 0; pass < 3; pass++) {
+      const q = pts.map((p) => p.clone());
+      for (let i = 0; i < n; i++) {
+        if (!closed && (i === 0 || i === n - 1)) continue;
+        pts[i].copy(q[closed ? (i - 1 + n) % n : i - 1]).add(q[closed ? (i + 1) % n : i + 1]).multiplyScalar(0.25).addScaledVector(q[i], 0.5);
+      }
+      clearAll();
+    }
+  }
+  return pts;
+}
+
+/** Distance le long de d depuis o où poser une sangle à out de la vraie peau (null : pas de peau de ce côté). */
+function skinRadius(skin, o, d, out, maxDist, first = false) {
+  const hit = skin.ray(o, d, maxDist, first);
+  return hit ? hit.t + out / Math.max(0.35, hit.n.dot(d)) : null;
+}
+
+/** Point de la vraie peau de la tête dans la direction d depuis c, écarté de out (forme approchée sans peau mesurée). */
+function skinPoint(sdf, c, d, out, maxDist = 1, first = false) {
+  const hit = sdf.skin?.ray(new THREE.Vector3(...c), d, maxDist, first);
+  if (hit) return hit.p.addScaledVector(hit.n, out);
+  const p = rayHit(sdf, c, d, maxDist);
+  return p.addScaledVector(sdfNormal(sdf, p, 0.004), out);
+}
+
+/**
  * Retourne les faces d'un tube de loft() (ses faces regardent vers l'intérieur) : sans ça, on voit la
  * paroi du fond (un siège de selle devient deux arcs fins, une sangle paraît creuse).
  */
@@ -50,11 +163,17 @@ function solid(geo) {
   return geo;
 }
 
-/** Sangle plate qui suit une liste de points (fermée si closed). */
-function strap(pts, halfWidth, thick, closed = false) {
+/**
+ * Sangle plate qui suit une liste de points (fermée si closed). side : direction de sa largeur (rabattue
+ * perpendiculairement à la sangle) ; [0, 0, 1] pour une boucle autour de la tête ou du corps, la largeur le long de
+ * l'axe : elle est à plat sur la peau. Pour une sangle qui court le long de la tête (montant), [0, 1, 0] : avec [0, 0, 1],
+ * presque le long d'elle, sa largeur se tournait vers la peau et la sangle était posée sur la tranche — sa moitié
+ * dans la joue, l'autre dressée (un bâton, un point rouge qui sortait de la joue).
+ */
+function strap(pts, halfWidth, thick, closed = false, side = [0, 0, 1]) {
   const list = closed ? [pts[pts.length - 1], ...pts, pts[0], pts[1]] : pts;
   return solid(loft(list.map((p) => ({ p: [p.x, p.y, p.z], rx: halfWidth, ry: thick })), {
-    radial: 6, sub: closed ? 1 : 2, side: [0, 0, 1], capStart: !closed, capEnd: !closed,
+    radial: 6, sub: closed ? 1 : 2, side, capStart: !closed, capEnd: !closed,
   }));
 }
 
@@ -145,6 +264,8 @@ export function buildGear(model, look, gear = {}) {
   else if (model.headFit) buildRuminantGear(model, gear, add); // vache, taureau, veau, chèvre réalistes
   else buildGenericGear(model, look, gear, add, L, R, y0);
   group.userData.meshes = holders;
+  // (lignes du milieu des sangles de la tête — muserolle, têtière, montants —, repère de la tête : tests)
+  if (add.headLines) group.userData.headLines = add.headLines;
   // Où s'attachent les rênes (anneaux du mors, ou côtés de la muserolle du hackamore) : Player les tend
   // jusqu'aux mains du cavalier. { parent, points (repère du parent), color }.
   if (add.reins) group.userData.reins = add.reins;
@@ -220,58 +341,112 @@ function buildHorseGear(model, look, gear, add) {
     const color = bridle ? gearColor(bridle, LEATHER) : gearColor(gear.halter, BLANKET_COLORS.red);
     const strapMat = bridle || leatherHalter ? P.leatherMat(color) : P.nylonMat(color);
     const metal = leatherHalter ? P.brassMat() : P.steelMat();
-    const w = rope ? 0.006 : halter ? 0.015 : 0.011; // demi-largeur des sangles (le licol est en toile plus large)
+    const w = rope ? 0.006 : halter ? 0.0125 : 0.011; // demi-largeur des sangles (le licol est en toile plus large)
     const th = rope ? 0.006 : 0.0045;
     // Corde ronde (licol éthologique) ou sangle plate ; une boucle fermée ne répète pas son premier point.
-    const band = (pts, closed = false) => (rope ? P.tube(closed ? pts.slice(0, -1).map((v) => v.toArray()) : pts.map((v) => v.toArray()), 0.005, closed, 6) : strap(pts, w, th, closed));
+    // (les boucles de skinRing ne répètent pas leur premier point)
+    const band = (pts, closed = false, side = [0, 0, 1]) => (rope ? P.tube(pts.map((v) => v.toArray()), 0.005, closed, 6) : strap(pts, w, th, closed, side));
     const yc = -hr * 0.2;
-    // Muserolle : autour du nez, entre les yeux et les naseaux (en mouton pour le hackamore).
+    // Muserolle : autour du nez, entre les yeux et les naseaux (en mouton pour le hackamore). Posée sur la vraie peau,
+    // 6 à 7 mm au-dessus (skinRing).
     const zNose = snoutZ - hr * (halter ? 1.45 : bid === 'hackamore' ? 1.1 : 1.3);
-    const nose = loop(head, [0, yc, zNose], 22, bid === 'hackamore' ? 0.014 : 0.006);
+    // (corde ronde : un peu plus loin, son rayon est plus grand que la demi-épaisseur d'une sangle)
+    // (sa jonction — le bout de la sangle fermée — sous la mâchoire, où on ne la voit pas)
+    const nose = skinRing(head, [0, yc, zNose], 30, bid === 'hackamore' ? 0.014 : rope ? 0.009 : 0.0065, -PI / 2, PI * 1.5, 0, 1.2, (bid === 'hackamore' ? 0.02 : w) * 0.9);
     if (bid === 'hackamore') add(model.head, strap(nose, 0.02, 0.012, true), P.fleeceMat(0xf2eee6));
     else add(model.head, band(nose, true), strapMat);
-    // Têtière et sous-gorge : boucle derrière les oreilles, qui passe sous la gorge.
-    const zCrown = earZ - hr * 0.15;
-    const crown = loop(head, [0, hr * 0.05, zCrown], 22, 0.006, 0, PI * 2, 0.38);
-    add(model.head, band(crown, true), strapMat);
-    // Montants : de la têtière (côté) vers la muserolle ou le mors.
-    const sideOf = (pts) => [pts[0], pts[Math.round(pts.length / 2) - 1]];
-    // Montant : il suit la joue (la ligne droite entre ses deux bouts rentrerait dans la tête).
+    // Têtière et sous-gorge : boucle bien derrière les oreilles (une oreille couchée passe par-dessus, pas dessous),
+    // plaquée sur la nuque sous les crins, qui passe sous la gorge, décollée des ganaches. (Avant : à 1,7 cm derrière le
+    // milieu des oreilles, sur la forme approchée : elle dépassait de la crinière comme un bâton, l'oreille couchée
+    // passait dessous et, sous la ganache, la vraie peau passait par-dessus : un point rouge sortait de la joue.)
+    const zCrown = earZ - hr * 0.38;
+    // (sur la nuque et sur les côtés, 3 mm de plus ; sous la gorge, jusqu'à 1,4 cm)
+    const crownOut = (a) => (rope ? 0.011 : 0.005) + (rope ? 0.014 : 0.009) * Math.max(0, -Math.sin(a)) ** 1.5
+      + 0.003 * Math.min(1, Math.max(0, (Math.sin(a) + 0.45) / 0.35));
+    // (le premier point de la peau sur chaque rayon : la nuque, pas l'encolure derrière elle)
+    // (sa jonction sur le dessus de la nuque, sous les crins : sur le côté de la tête, on la voyait)
+    const crown = skinRing(head, [0, hr * 0.05, zCrown], 30, crownOut, PI / 2, PI * 2.5, 0.38, 1.2, w * 0.8 * 0.9, true);
+    // (la têtière un peu plus étroite que le reste du licol : sous les crins de la nuque)
+    add(model.head, rope ? band(crown, true) : strap(crown, w * 0.8, th, true), strapMat);
+    // Montants : de la têtière, sur le côté de la tête sous l'oreille (à la hauteur de l'articulation de la mâchoire, en
+    // dessous et en arrière de l'œil), vers la muserolle ou le mors.
+    // (les deux points de côté d'une boucle : le plus à gauche, le plus à droite)
+    const sideOf = (pts) => [pts.reduce((a, p) => (p.x > a.x ? p : a)), pts.reduce((a, p) => (p.x < a.x ? p : a))];
+    const crownSide = (sd) => {
+      const a = sd > 0 ? -0.95 : PI + 0.95;
+      const ct = Math.cos(0.38);
+      const st = Math.sin(0.38);
+      // (2 mm plus loin que la boucle : le bout du montant, plat, est posé dessus)
+      const p = skinPoint(head, [0, hr * 0.05, zCrown], [Math.cos(a), Math.sin(a) * ct, -Math.sin(a) * st], crownOut(a) + 0.002, 1.2, true);
+      return head.skin?.clear ? head.skin.clear(p, crownOut(a) + 0.002) : p;
+    };
+    // Montant : il suit la joue (la ligne droite entre ses deux bouts rentrerait dans la tête), sur la vraie peau, ses
+    // deux bords aussi (la sangle est plate : sur la joue bombée, ses bords y rentraient).
     const cheek = (a, b) => {
       const pts = [a];
-      for (const f of [0.25, 0.5, 0.75]) {
-        const m = new THREE.Vector3().lerpVectors(a, b, f);
-        const p = rayHit(head, [0, yc, m.z], [m.x, m.y - yc, 0], hr * 4);
-        pts.push(p.addScaledVector(sdfNormal(head, p, 0.004), rope ? 0.008 : 0.007));
+      const along = new THREE.Vector3().subVectors(b, a);
+      const sv = new THREE.Vector3(0, -along.z, along.y).normalize();
+      const out = rope ? 0.008 : 0.0075;
+      for (let k = 1; k < 12; k++) {
+        const m = new THREE.Vector3().lerpVectors(a, b, k / 12);
+        const d = new THREE.Vector3(m.x, m.y - yc, 0).normalize();
+        if (!head.skin) {
+          pts.push(skinPoint(head, [0, yc, m.z], d.toArray(), out, hr * 4));
+          continue;
+        }
+        let r = null;
+        for (const e of [0, 0.9, -0.9]) {
+          const o = new THREE.Vector3(0, yc, m.z).addScaledVector(sv, e * w);
+          const v = skinRadius(head.skin, o, d, out, hr * 4);
+          if (v !== null) r = Math.max(r ?? -Infinity, v);
+        }
+        pts.push(r === null ? m : new THREE.Vector3(0, yc, m.z).addScaledVector(d, r));
       }
       pts.push(b);
+      // (lissé vers l'extérieur seulement : tendu, le montant ne suit pas chaque bosse de la joue — avant, il ondulait ;
+      // puis jamais plus près de la peau que out)
+      for (let pass = 0; pass < 3; pass++) {
+        const q = pts.map((p) => p.clone());
+        for (let k = 1; k < pts.length - 1; k++) {
+          const c = new THREE.Vector3(0, yc, q[k].z);
+          const avg = q[k - 1].clone().add(q[k + 1]).multiplyScalar(0.25).addScaledVector(q[k], 0.5);
+          const r0 = q[k].distanceTo(c);
+          const ra = new THREE.Vector3(avg.x, avg.y, q[k].z).distanceTo(c);
+          if (ra > r0) pts[k].copy(avg);
+          else pts[k].copy(c).addScaledVector(new THREE.Vector3(avg.x, avg.y - yc, 0).normalize(), r0).setZ(avg.z);
+        }
+      }
+      if (head.skin?.clear) for (let k = 1; k < pts.length - 1; k++) head.skin.clear(pts[k], out * 0.85);
+      add.headLines?.cheeks.push(pts);
       return pts;
     };
-    const [cR, cL] = sideOf(crown);
+    const [cR, cL] = [crownSide(1), crownSide(-1)];
+    add.headLines = { nose, crown, cheeks: [] };
     const [nR, nL] = sideOf(nose);
     if (bridle) {
-      add(model.head, strap(loop(head, [0, hr * 0.15, earZ + hr * 0.3], 12, 0.006, deg(20), deg(160)), w, th), strapMat); // frontal
+      add(model.head, strap(skinRing(head, [0, hr * 0.15, earZ + hr * 0.3], 12, 0.006, deg(20), deg(160)), w, th), strapMat); // frontal
       if (bid === 'doubleBridle' || bid === 'bridleOlive') {
         // Frontal à strass.
-        for (const p of loop(head, [0, hr * 0.15, earZ + hr * 0.3], 9, 0.012, deg(30), deg(150))) {
+        for (const p of skinRing(head, [0, hr * 0.15, earZ + hr * 0.3], 9, 0.012, deg(30), deg(150))) {
           add(model.head, P.shared('gearGem', () => new THREE.SphereGeometry(0.006, 6, 5)), P.steelMat(), p.toArray());
         }
       }
       const reinPts = [];
       add.reins = { parent: model.head, points: reinPts, color };
       for (const [c, s] of [[cR, 1], [cL, -1]]) {
-        const m = rayHit(head, [0, -hr * 0.42, snoutZ - hr * 0.8], [s, -0.1, 0], hr * 3);
+        const m = skinPoint(head, [0, -hr * 0.42, snoutZ - hr * 0.8], [s, -0.1, 0], 0, hr * 3);
         const ring = m.clone().add(new THREE.Vector3(s * hr * 0.1, 0, 0));
         reinPts.push(ring.clone());
         if (bid === 'hackamore') {
           // Pas de mors : le montant descend à la muserolle, une branche en métal pend sur le côté du nez.
           const n = s > 0 ? nR : nL;
           reinPts[reinPts.length - 1] = n.clone().add(new THREE.Vector3(s * 0.01, -hr * 0.6, hr * 0.12));
-          add(model.head, strap(cheek(c, n), w * 0.9, th), strapMat);
+          add(model.head, strap(cheek(c, n), w * 0.9, th, false, [0, 1, 0]), strapMat);
           add(model.head, P.tube([n.toArray(), [n.x + s * 0.01, n.y - hr * 0.35, n.z + hr * 0.15], [n.x + s * 0.008, n.y - hr * 0.7, n.z + hr * 0.1]], 0.005), P.steelMat());
           continue;
         }
-        add(model.head, strap(cheek(c, ring), w * 0.9, th), strapMat);
+        // (le montant s'attache en haut de l'anneau, à l'extérieur : il ne passe pas dans le coin de la bouche)
+        add(model.head, strap(cheek(c, ring.clone().add(new THREE.Vector3(s * 0.004, hr * 0.2, 0))), w * 0.9, th, false, [0, 1, 0]), strapMat);
         add(model.head, new THREE.TorusGeometry(hr * (bid === 'doubleBridle' ? 0.18 : 0.24), hr * 0.035, 6, 16), P.steelMat(), ring.toArray(), [0, PI / 2, 0]);
         if (bid === 'bridleOlive') {
           // Mors à olives : la barrette en olive où passe l'anneau, debout dans l'anneau, côté extérieur
@@ -287,14 +462,25 @@ function buildHorseGear(model, look, gear, add) {
       }
     } else {
       for (const [c, n] of [[cR, nR], [cL, nL]]) {
-        add(model.head, band(cheek(c, n)), strapMat);
-        if (rope) add(model.head, P.shared('gearKnot', () => new THREE.SphereGeometry(0.011, 8, 6)), strapMat, n.toArray());
+        add(model.head, band(cheek(c, n), false, [0, 1, 0]), strapMat);
+        // (nœud posé sur la muserolle, pas dans le nez)
+        if (rope) add(model.head, P.shared('gearKnot', () => new THREE.SphereGeometry(0.011, 8, 6)), strapMat, n.clone().add(new THREE.Vector3(n.x, n.y - yc, 0).setLength(0.006)).toArray());
       }
       // Anneau (ou gros nœud) sous le menton, pour la longe.
-      const chin = nose[Math.round(nose.length * 0.75)];
+      const chin = nose.reduce((a, p) => (p.y < a.y ? p : a));
       if (rope) add(model.head, P.shared('gearKnot', () => new THREE.SphereGeometry(0.011, 8, 6)), strapMat, [chin.x, chin.y - hr * 0.08, chin.z]);
       else add(model.head, new THREE.TorusGeometry(hr * 0.14, hr * 0.03, 6, 12), metal, [chin.x, chin.y - hr * 0.1, chin.z], [0, 0, 0]);
-      if (leatherHalter) for (const p of [cR, cL]) add(model.head, P.shared('gearBuckle', () => new THREE.BoxGeometry(0.02, 0.016, 0.006)), metal, p.toArray());
+      // (boucles posées sur la sangle, pas dans la joue)
+      if (leatherHalter) for (const p of [cR, cL]) add(model.head, P.shared('gearBuckle', () => new THREE.BoxGeometry(0.02, 0.016, 0.006)), metal, p.clone().add(new THREE.Vector3(Math.sign(p.x) * 0.004, 0, 0)).toArray());
+      // Anneaux où se rejoignent têtière, sous-gorge et montant, à plat sur la joue, comme sur un vrai licol : ils cachent la
+      // jonction des sangles (sans eux, le bout du montant dépassait de la têtière).
+      else if (!rope) {
+        for (const p of [cR, cL]) {
+          const nrm = new THREE.Vector3(p.x, p.y - yc, 0).normalize();
+          const ring = add(model.head, P.shared('gearJoinRing', () => new THREE.TorusGeometry(0.011, 0.0028, 6, 14)), metal, p.clone().addScaledVector(nrm, 0.004).toArray());
+          ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), nrm);
+        }
+      }
     }
   }
 

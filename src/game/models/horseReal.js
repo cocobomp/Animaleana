@@ -2797,6 +2797,11 @@ function measureShape(S, pos, coat, base) {
   const hq = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), base.headTilt).invert();
   const toHead = (p) => p.clone().sub(poll).applyQuaternion(hq);
   const head = sections(pos, headTri, toHead, -0.16, S.headLen + 0.02, 0.025);
+  // La vraie peau de la tête et du haut de l'encolure (sans les oreilles), dans le même repère : le licol et le filet y
+  // sont posés par des rayons (gearModels.js). La forme approchée ci-dessus (coupes tous les 2,5 cm, un rayon par 15°)
+  // passait sous la peau sur le chanfrein bombé des traits et sous les ganaches : la muserolle rentrait dans le nez, la
+  // sous-gorge dans la joue.
+  head.skin = headSkin(pos, coat, idx, toHead, poll, [heads[BONE_INDEX.EarL], heads[BONE_INDEX.EarR]]);
   // Ligne du dos : le haut de chaque coupe du tronc (interpolé).
   const rings = torso.rings;
   const dz = rings[1][0] - rings[0][0];
@@ -2811,6 +2816,137 @@ function measureShape(S, pos, coat, base) {
     return rings[i][4] + (rings[i + 1][4] - rings[i][4]) * (f - i);
   };
   return { torso, head, backTop, bellyAt };
+}
+
+/**
+ * Peau de la tête au repos (repère de la tête) : triangles de la robe liés à la tête, et ceux qui sont devant zMin et à
+ * moins de 45 cm de la nuque (dessus de la nuque, gorge, dessous des ganaches), quel que soit l'os qui les porte ; des
+ * oreilles, seulement leur base. ray(o, d, max, first) : le point de la peau le plus loin de o le long de d (jusqu'à max ;
+ * la surface extérieure, pas le dedans de la bouche) — ou, first, le premier — et sa normale tournée vers d, ou null.
+ */
+export function headSkin(pos, coat, idx, toHead, poll, earRoots = [], zMin = -0.2) {
+  const keep = new Uint8Array(coat.count);
+  const ears = new Set([BONE_INDEX.EarL, BONE_INDEX.EarR]);
+  // (la base des oreilles, à moins de 4 cm de leur racine : sans elle, un trou entre les oreilles et derrière, où les
+  // rayons de la têtière ne trouvaient pas la nuque)
+  // (et ce qui, lié aux oreilles, est plus bas que leur racine dans le repère de la tête : le dessus de la nuque entre
+  // elles et derrière, porté par leurs os ; pas le pavillon, qui monte au-dessus)
+  const rootsH = earRoots.map((r) => toHead(r.clone()));
+  const earTop = rootsH.length ? Math.min(...rootsH.map((r) => r.y)) + 0.015 : -Infinity;
+  const q1 = V();
+  const nearEar = (i) => earRoots.some((r) => Math.hypot(pos[i * 3] - r.x, pos[i * 3 + 1] - r.y, pos[i * 3 + 2] - r.z) < 0.04)
+    || toHead(q1.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])).y < earTop;
+  // (tout ce qui est devant zMin dans le repère de la tête et à moins de 45 cm de la nuque, quel que soit l'os qui le
+  // porte : le dessus de la nuque est lié aux os de la crinière, aux oreilles, à l'encolure)
+  const q0 = V();
+  for (let i = 0; i < coat.count; i++) {
+    const b = dominant(coat, i);
+    if (ears.has(b) && !nearEar(i)) continue;
+    if (b === BONE_INDEX.Head) {
+      keep[i] = 1;
+      continue;
+    }
+    if (Math.hypot(pos[i * 3] - poll.x, pos[i * 3 + 1] - poll.y, pos[i * 3 + 2] - poll.z) > 0.45) continue;
+    if (toHead(q0.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])).z > zMin) keep[i] = 1;
+  }
+  const tri = [];
+  const q = V();
+  const frame = new Map();
+  const at = (i) => {
+    let v = frame.get(i);
+    if (!v) frame.set(i, (v = toHead(q.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]))));
+    return v;
+  };
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t];
+    const b = idx[t + 1];
+    const c = idx[t + 2];
+    if (!keep[a] || !keep[b] || !keep[c]) continue;
+    for (const v of [at(a), at(b), at(c)]) tri.push(v.x, v.y, v.z);
+  }
+  const T = new Float32Array(tri);
+  const e1 = V();
+  const e2 = V();
+  const pv = V();
+  const tv = V();
+  const qv = V();
+  const A = V();
+  const nn = V();
+  // (first : le premier point de la peau rencontré — depuis l'intérieur de la tête, sa sortie —, et non le plus loin :
+  // vers le haut et l'arrière de la nuque, le rayon ressortait de la tête puis rentrait dans l'encolure)
+  const ray = (o, d, max = 1, first = false) => {
+    const D = V(...(Array.isArray(d) ? d : [d.x, d.y, d.z])).normalize();
+    const O = Array.isArray(o) ? V(...o) : o;
+    let best = -1;
+    let bt = first ? Infinity : -1;
+    for (let k = 0; k < T.length; k += 9) {
+      A.set(T[k], T[k + 1], T[k + 2]);
+      e1.set(T[k + 3], T[k + 4], T[k + 5]).sub(A);
+      e2.set(T[k + 6], T[k + 7], T[k + 8]).sub(A);
+      pv.crossVectors(D, e2);
+      const det = e1.dot(pv);
+      if (Math.abs(det) < 1e-12) continue;
+      const inv = 1 / det;
+      tv.subVectors(O, A);
+      const u = tv.dot(pv) * inv;
+      if (u < 0 || u > 1) continue;
+      qv.crossVectors(tv, e1);
+      const v = D.dot(qv) * inv;
+      if (v < 0 || u + v > 1) continue;
+      const t = e2.dot(qv) * inv;
+      if (t <= 0 || t > max || (first ? t >= bt : t <= bt)) continue;
+      bt = t;
+      best = k;
+    }
+    if (best < 0) return null;
+    A.set(T[best], T[best + 1], T[best + 2]);
+    e1.set(T[best + 3], T[best + 4], T[best + 5]).sub(A);
+    e2.set(T[best + 6], T[best + 7], T[best + 8]).sub(A);
+    nn.crossVectors(e1, e2).normalize();
+    if (nn.dot(D) < 0) nn.negate();
+    return { p: O.clone().addScaledVector(D, bt), n: nn.clone(), t: bt };
+  };
+  // (écarte p de la peau jusqu'à want, s'il en est plus près : depuis le point de la peau le plus proche, quatre fois — une
+  // sangle tendue entre deux rayons passait par endroits contre la base d'une oreille ou une bosse de la joue)
+  const tr3 = new THREE.Triangle();
+  const cp = V();
+  const ta = V();
+  const tb = V();
+  const tc = V();
+  const clear = (p, want) => {
+    for (let it = 0; it < 4; it++) {
+      let bd = Infinity;
+      let bk = -1;
+      const best = V();
+      for (let k = 0; k < T.length; k += 9) {
+        const m = want + 0.03;
+        if (Math.abs(T[k] - p.x) > m + 0.1 || Math.abs(T[k + 1] - p.y) > m + 0.1 || Math.abs(T[k + 2] - p.z) > m + 0.1) continue;
+        ta.set(T[k], T[k + 1], T[k + 2]);
+        tb.set(T[k + 3], T[k + 4], T[k + 5]);
+        tc.set(T[k + 6], T[k + 7], T[k + 8]);
+        tr3.set(ta, tb, tc).closestPointToPoint(p, cp);
+        const d = cp.distanceTo(p);
+        if (d < bd) {
+          bd = d;
+          bk = k;
+          best.copy(cp);
+        }
+      }
+      if (bk < 0 || bd >= want) return p;
+      ta.set(T[bk], T[bk + 1], T[bk + 2]);
+      tb.set(T[bk + 3], T[bk + 4], T[bk + 5]).sub(ta);
+      tc.set(T[bk + 6], T[bk + 7], T[bk + 8]).sub(ta);
+      const n = V().crossVectors(tb, tc).normalize();
+      const away = V().subVectors(p, best);
+      // (dehors : à l'écart du point le plus proche ; tout contre la peau : le long de la normale du triangle, tournée
+      // du côté où est p)
+      if (away.lengthSq() > 1e-10) away.normalize();
+      else away.copy(n);
+      p.copy(best).addScaledVector(away, want);
+    }
+    return p;
+  };
+  return { tris: T, ray, clear };
 }
 
 /**

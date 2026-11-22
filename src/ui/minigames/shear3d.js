@@ -7,7 +7,6 @@
 import * as THREE from 'three';
 import { justRule } from './grooming.js';
 import { clamp, distToSegment, dist, label } from './draw.js';
-import { emojiOpaque as emoji } from './food.js';
 import { cuttableFleece, fleeceFall, clipperModel } from '../../game/care/fleece.js';
 import { pickFarm } from './farmPet3d.js';
 import { woolOut } from './farmBrush3d.js';
@@ -221,9 +220,9 @@ export function shear3dGame(ctx) {
       const pp = ctx.pointer;
       if (!ctx.done && value() === 0 && !(pp.over || pp.down)) {
         // Rien de coupé encore : ↔ au-dessus du dos, pour montrer le geste.
-        const q = sc.project(L.back.clone().add(v3(0, 0.22 * u, 0)));
-        label(g, '↔', q.x, q.y, 30, 'rgba(255, 255, 255, 0.85)');
-        emoji(g, '✂️', q.x - 30, q.y, 20, 0, 0.6);
+        const q = sc.project(L.croup.clone().lerp(L.withers, 0.5).add(v3(0, 0.28 * u, 0)));
+        const k = Math.sin(ctx.time * 2.2);
+        label(g, '↔', q.x + k * 14, q.y, 30, 'rgba(35, 48, 42, 0.6)');
       }
     },
     destroy() {

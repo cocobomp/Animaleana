@@ -148,9 +148,10 @@ export function petNails3dGame(ctx) {
     : front.reduce((b, l) => (l.paw.getWorldPosition(v3()).y > b.paw.getWorldPosition(v3()).y ? l : b), front[0]);
   const ax = restAxes.get(leg);
   const sd = sideOf(leg);
-  // Où va la patte (repère de l'animal) : « tape-m'en cinq ». L'avant-bras vers l'avant et un peu vers le haut, le
-  // poignet plié en arrière, les doigts vers le haut, la paume (les coussinets) vers nous : comme le jeu dessiné, les
-  // griffes dressées au bout des doigts. La caméra : devant lui, à hauteur de la patte, de notre côté.
+  // Où va la patte : « tape-m'en cinq ». L'avant-bras levé, le poignet plié en arrière, les doigts vers le haut, la
+  // paume (les coussinets) vers la caméra : comme le jeu dessiné, les griffes dressées au bout des doigts. La caméra
+  // fait face à la paume, à hauteur de la patte, un peu de côté. (FWD et SIDE sont les axes x et z du support de
+  // l'animal ; seule compte la composition : patte, paume et griffes face à la caméra, vérifiée pour 9 gabarits.)
   const toCam = FWD.clone().addScaledVector(UP, 0.12).addScaledVector(SIDE, 0.45).normalize();
   const ARM = FWD.clone().addScaledVector(UP, 0.5).addScaledVector(SIDE, 0.15 * sd).normalize();
   const TOES = FWD.clone().multiplyScalar(0.2).addScaledVector(UP, 1).addScaledVector(SIDE, 0.05 * sd).normalize();

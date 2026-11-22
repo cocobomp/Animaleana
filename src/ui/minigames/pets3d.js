@@ -13,6 +13,7 @@ import { rrect, circle, clamp, lerp, distToSegment, fitAnimal, animalShape } fro
 import { justRule } from './grooming.js';
 import { petDirtTexture } from '../../game/care/petTextures.js';
 import { petBrush } from '../../game/care/petProps.js';
+import { petRegionOf } from '../../game/care/petStage.js';
 import { softDot } from '../../game/care/textures.js';
 import { petNails3dGame } from './petNails3d.js';
 import { petPlay3dGame } from './petPlay3d.js';
@@ -756,7 +757,7 @@ export function petBrush3dGame(ctx) {
       for (let tries = 0; out.length < count && tries < 200; tries++) {
         ray.set(v3(lerp(x0, x1, rng()), lerp(y0, y1, rng()), z0), v3(0, 0, -1));
         const h = sc.proxy.hit(ray, -9, 1e9);
-        if (!h || !BODY.has(petRegionOfName(h.boneName))) continue;
+        if (!h || !BODY.has(petRegionOf(h.boneName))) continue;
         const rr = r * (0.9 + rng() * 0.2);
         if (out.some((q) => q.p.distanceTo(h.point) < (q.r + rr) * 1.1)) continue;
         out.push({ p: h.point, n: h.normal, bone: h.bone, r: rr });
@@ -994,18 +995,6 @@ export function petBrush3dGame(ctx) {
       keep.dispose();
     },
   };
-}
-
-/** Région d'après l'os (sans importer la scène : même règle que petStage.js petRegionOf). */
-function petRegionOfName(bone = '') {
-  if (/^ear/.test(bone)) return 'ear';
-  if (/^(head|jaw|tongue|lid|eye|nose)/.test(bone)) return 'head';
-  if (/^neck/.test(bone)) return 'neck';
-  if (/^tail/.test(bone)) return 'tail';
-  if (/^(scap|humerus)/.test(bone)) return 'shoulder';
-  if (/^(femur|haunch)/.test(bone)) return 'hip';
-  if (/^(radius|metacarpus|toes|tibia|metatarsus|htoes)/.test(bone)) return 'leg';
-  return bone ? 'body' : '';
 }
 
 /** Notre épaule, pour une main posée en `at` (petHand.js shoulderFor : le bras entre par le bas de l'image). */

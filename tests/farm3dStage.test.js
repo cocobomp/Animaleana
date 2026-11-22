@@ -23,6 +23,7 @@ let brush3d;
 let shear3d;
 let milk3d;
 let cowWash3d;
+let fleeceMod;
 beforeAll(async () => {
   fakeDocument();
   ({ t } = await import('../src/i18n.js'));
@@ -39,6 +40,7 @@ beforeAll(async () => {
   shear3d = await import('../src/ui/minigames/shear3d.js');
   milk3d = await import('../src/ui/minigames/milk3d.js');
   cowWash3d = await import('../src/ui/minigames/cowWash3d.js');
+  fleeceMod = await import('../src/game/care/fleece.js');
 }, 60000);
 
 const random = Math.random;
@@ -333,8 +335,40 @@ describe('la tonte en 3D', () => {
       const cut = geo.attributes.careCut.array;
       const nCut = [...cut].filter((x) => x > 0.4).length;
       expect(nCut).toBeGreaterThan(cut.length * 0.3);
+      // pas de voile : AUCUN sommet que la toison déplace (masque de laine, volume lissé au-delà du masque — la lisière
+      // du garrot et de l'encolure) ne garde sa laine pleine
+      const mask = geo.attributes.sheepMask;
+      const puffW = geo.attributes.sheepPuffW;
+      const seen = new Set(sc.proxy.parts.flatMap((p) => p.list));
+      let left = 0;
+      let border = 0;
+      for (let v = 0; v < cut.length; v++) {
+        if (!seen.has(v)) continue;
+        const moved = mask.getX(v) > 0.01 || puffW.getX(v) > 0.002;
+        if (!moved) continue;
+        if (mask.getX(v) < 0.3) border++;
+        if (cut[v] < 0.4) left++;
+      }
+      expect(border).toBeGreaterThan(0);
+      expect(left).toBe(0);
+      // le dessin de la laine reçoit bien la coupe (les textes visés de sheepCoat.js existent : sinon la tonte ne se
+      // verrait pas, sans erreur)
+      const sh = { vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader, uniforms: {}, defines: {} };
+      sc.model.mesh.material.onBeforeCompile(sh, sc.renderer);
+      expect(sh.vertexShader).toContain('attribute float careCut;');
+      expect(sh.vertexShader).toContain('float pm = sheepPuffW * (1.0 - careCutS);');
+      expect(sh.vertexShader).toContain('getMorph( gl_VertexID, 0, 0 ).xyz * careCutS');
+      if (c.breed === 'islandais_mouton') expect(sh.vertexShader).toContain('(1.0 - max(sState.x, careCutS))');
+      expect(sh.fragmentShader).toContain('float sh = max(sState.x, min(1.0, vCareCut * 2.0)) * wool;');
+      expect(sh.fragmentShader).toContain('float cutL = smoothstep(0.05, 0.45, vCareCut) * wool;');
+      expect(sh.fragmentShader).toContain('(1.0 - max(sState.x, min(1.0, vCareCut * 2.0))) * sFade(vSRest)');
+      const dsh = { vertexShader: THREE.ShaderLib.depth.vertexShader, fragmentShader: THREE.ShaderLib.depth.fragmentShader, uniforms: {}, defines: {} };
+      sc.model.mesh.customDepthMaterial.onBeforeCompile(dsh, sc.renderer);
+      expect(dsh.vertexShader).toContain('float pm = sheepPuffW * (1.0 - careCutS);');
+      expect(fleeceMod.patchVertex({ vertexShader: 'rien' })).toHaveLength(5);
       ctx.pressStop();
-      expect(['just', 'high']).toContain(ctx.finished.why);
+      // une passe partout, sans raser : juste ce qu'il faut
+      expect(ctx.finished.why).toBe('just');
       game.destroy();
       expect(sc.model.mesh.geometry).toBe(src);
       sc.dispose();

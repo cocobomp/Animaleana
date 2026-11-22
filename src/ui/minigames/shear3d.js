@@ -53,13 +53,14 @@ export function shear3dGame(ctx) {
       }
     }
   }
-  // Chaque sommet de laine va à la touffe la plus proche (flancs repliés l'un sur l'autre).
+  // Chaque sommet de laine va à la touffe la plus proche (flancs repliés l'un sur l'autre), même loin de la grille (le
+  // haut de l'encolure, le dessous du ventre, la lisière de la toison) : aucun sommet ne garde sa laine seul.
   if (fleece) {
     const tufts = wool.map((w) => fold(w.p));
     fleece.pos.forEach((p, i) => {
       const f = fold(p);
       let best = -1;
-      let bd = (step * 3) ** 2;
+      let bd = Infinity;
       for (let k = 0; k < tufts.length; k++) {
         const d = tufts[k].distanceToSquared(f);
         if (d < bd) {

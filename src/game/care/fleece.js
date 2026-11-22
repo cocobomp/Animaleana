@@ -29,22 +29,55 @@ transformed += getMorph( gl_VertexID, 0, 0 ).xyz * careCutS * ( 1.0 - morphTarge
 #endif
 `;
 
-/** Ajoute la coupe sommet par sommet au dessin de la laine (vertex et, pour la matière, fragment). */
-function patchVertex(sh) {
-  sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', `#include <common>\n${COMMON_V}`)
-    .replace('#include <begin_vertex>', `#include <begin_vertex>\n${BEGIN_V}`)
-    .replace('#include <morphtarget_vertex>', `#include <morphtarget_vertex>\n${MORPH_V}`)
-    .replace('float pm = sheepPuffW;', 'float pm = sheepPuffW * (1.0 - careCutS);')
-    .replace('0.0) * (1.0 - sState.x);', '0.0) * (1.0 - max(sState.x, careCutS));');
+// La toison pas encore tondue : le bout des mèches, terni par le temps (gris-jaune). Tondue : la laine du dessous,
+// propre et crème, avec les bandes des passages de la tondeuse (du ventre vers le dos, côte à côte le long du corps,
+// effacées de loin). Rasée : la peau rose.
+const CUT_F = /* glsl */ `
+  {
+    float cutL = smoothstep(0.05, 0.45, vCareCut) * wool;
+    float blow = 0.5 + 0.5 * sin(vSRest.z * 84.0 + sin(vSRest.y * 18.0) * 1.2);
+    vec3 under = vec3(1.05, 1.03, 0.98) * (1.0 - 0.06 * blow * sFade(vSRest));
+    col *= mix(vec3(0.92, 0.89, 0.81), under, cutL);
+    col = mix(col, vec3(0.88, 0.67, 0.63), smoothstep(0.6, 1.0, vCareCut) * wool * 0.8);
+  }
+`;
+
+/**
+ * La coupe sommet par sommet dans le dessin de la laine : des remplacements de texte dans la recette du jeu
+ * (sheepCoat.js). Chaque texte visé doit s'y trouver : sinon la coupe ne se verrait pas, sans erreur. Les textes
+ * absents sont comptés (patchVertex / patchFragment les renvoient) et signalés une fois dans la console ; un test
+ * vérifie qu'il n'en manque aucun (tests/farm3dStage.test.js).
+ */
+const VERTEX_PATCH = [
+  ['#include <common>', `#include <common>\n${COMMON_V}`],
+  ['#include <begin_vertex>', `#include <begin_vertex>\n${BEGIN_V}`],
+  ['#include <morphtarget_vertex>', `#include <morphtarget_vertex>\n${MORPH_V}`],
+  ['float pm = sheepPuffW;', 'float pm = sheepPuffW * (1.0 - careCutS);'],
+  ['0.0) * (1.0 - sState.x);', '0.0) * (1.0 - max(sState.x, careCutS));'],
+];
+const FRAGMENT_PATCH = [
+  ['#include <common>', '#include <common>\nvarying float vCareCut;'],
+  ['float sh = sState.x * wool;', 'float sh = max(sState.x, min(1.0, vCareCut * 2.0)) * wool;'],
+  ['vec3 col = mix(skin, wc, wool);', `vec3 col = mix(skin, wc, wool);\n${CUT_F}`],
+  ['(1.0 - sState.x) * sFade(vSRest)', '(1.0 - max(sState.x, min(1.0, vCareCut * 2.0))) * sFade(vSRest)'],
+];
+let warned = false;
+function apply(sh, key, list) {
+  const missing = [];
+  for (const [a, b] of list) {
+    if (!sh[key].includes(a)) missing.push(a);
+    else sh[key] = sh[key].replace(a, b);
+  }
+  if (missing.length && !warned) {
+    warned = true;
+    console.warn('[care3d] tonte : textes introuvables dans le dessin de la laine', missing);
+  }
+  return missing;
 }
-function patchFragment(sh) {
-  sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying float vCareCut;')
-    .replace('float sh = sState.x * wool;', 'float sh = max(sState.x, min(1.0, vCareCut * 2.0)) * wool;')
-    .replace('vec3 col = mix(skin, wc, wool);', 'vec3 col = mix(skin, wc, wool);\n  col = mix(col, vec3(0.88, 0.67, 0.63), smoothstep(0.6, 1.0, vCareCut) * wool * 0.8);')
-    .replace('(1.0 - sState.x) * sFade(vSRest)', '(1.0 - max(sState.x, min(1.0, vCareCut * 2.0))) * sFade(vSRest)');
-}
+/** Ajoute la coupe au vertex shader ; renvoie les textes visés introuvables (aucun : tout va bien). */
+export const patchVertex = (sh) => apply(sh, 'vertexShader', VERTEX_PATCH);
+/** Ajoute la coupe et les couleurs de la laine tondue au fragment shader ; renvoie les textes introuvables. */
+export const patchFragment = (sh) => apply(sh, 'fragmentShader', FRAGMENT_PATCH);
 
 /**
  * Prépare la toison du double pour la tonte. Renvoie { verts (indices des sommets de laine), pos (positions monde,
@@ -93,9 +126,16 @@ export function cuttableFleece(sc) {
     depth.customProgramCacheKey = () => `${origDepthKey.call(depth)}-care-cut`;
     depth.needsUpdate = true;
   }
-  // Les sommets de laine (masque de la robe : sheepMask.x), et leur place dans la pose figée (la copie du lancer de
-  // rayon : sc.proxy, sommets de la peau dans l'ordre de sa liste).
+  // Les sommets de laine, et leur place dans la pose figée (la copie du lancer de rayon : sc.proxy, sommets de la peau
+  // dans l'ordre de sa liste). Laine : le masque de la robe (sheepMask.x), mais aussi tout sommet que la toison
+  // déplace — le volume (sheepPuffW, lissé sur 9 cm au-delà du masque) ou la cible « shorn » : les sommets de la
+  // lisière (masque entre 0 et 0,3, au garrot et à la base de l'encolure) gardaient leur volume pendant que la laine
+  // autour rentrait, et dressaient une voile blanche au garrot.
   const mask = src.attributes.sheepMask;
+  const puffW = src.attributes.sheepPuffW;
+  const shorn = src.morphAttributes?.position?.[0] ?? null;
+  const moved = (v) => (mask ? mask.getX(v) > 0.01 : true) || (puffW && puffW.getX(v) > 0.002)
+    || (shorn && Math.abs(shorn.getX(v)) + Math.abs(shorn.getY(v)) + Math.abs(shorn.getZ(v)) > 1e-4);
   sc.proxy.bake();
   const part = sc.proxy.parts?.find((p) => p.m === mesh) ?? sc.proxy.parts?.[0];
   const where = new Map();
@@ -110,7 +150,7 @@ export function cuttableFleece(sc) {
   const verts = [];
   const pos = [];
   for (let v = 0; v < n; v++) {
-    if (mask && mask.getX(v) < 0.3) continue;
+    if (!moved(v)) continue;
     const k = where.get(v);
     if (k === undefined) continue;
     verts.push(v);

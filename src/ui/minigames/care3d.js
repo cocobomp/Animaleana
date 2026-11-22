@@ -20,12 +20,27 @@ import { PetStage } from '../../game/care/petStage.js'; // chiens, chats, lapins
 import { homeSet } from '../../game/care/home.js';
 import { hutchSet } from '../../game/care/hutch.js';
 import { PET_CARE3D_GAMES } from './pets3d.js';
+import { barnSet } from '../../game/care/barn.js'; // la bergerie, la chèvrerie, l'étable
+import { RUMINANT_FIT } from '../../game/care/ruminant.js'; // moutons, chèvres, vaches : leurs repères, leur vie
+import { farmFeed3dGame, farmWater3dGame } from './farm3d.js';
+import { farmTreat3dGame } from './farmTreat3d.js';
+import { farmPet3dGame } from './farmPet3d.js';
+import { farmBrush3dGame } from './farmBrush3d.js';
+import { shear3dGame } from './shear3d.js';
+import { milk3dGame } from './milk3d.js';
+import { cowWash3dGame } from './cowWash3d.js';
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
 export const CARE3D_GAMES = {
   horse: { feed: ration3dGame, water: water3dGame, treat: treat3dGame, pet: pet3dGame, brush: pansage3dGame, wash: wash3dGame },
 };
 Object.assign(CARE3D_GAMES, PET_CARE3D_GAMES); // (chien, chat, lapin : src/ui/minigames/pets3d.js)
+// Moutons, chèvres, vaches (src/ui/minigames/farm3d.js et suivants).
+for (const sp of ['sheep', 'goat', 'cow']) CARE3D_GAMES[sp] = { feed: farmFeed3dGame, water: farmWater3dGame, treat: farmTreat3dGame, pet: farmPet3dGame, brush: farmBrush3dGame };
+CARE3D_GAMES.sheep.shear = shear3dGame;
+CARE3D_GAMES.goat.milk = milk3dGame;
+CARE3D_GAMES.cow.milk = milk3dGame;
+CARE3D_GAMES.cow.wash = cowWash3dGame;
 
 /** Le jeu 3D de ce soin pour cet animal, ou null. */
 export function care3dGameFor(a, action) {
@@ -33,11 +48,13 @@ export function care3dGameFor(a, action) {
 }
 
 /** Décor de chaque espèce. */
-const SETS = { horse: stallSet };
+const SETS = { horse: stallSet, sheep: barnSet, goat: barnSet, cow: barnSet };
 Object.assign(SETS, { dog: homeSet, cat: homeSet, rabbit: hutchSet }); // (le coin de la maison, le clapier)
 
 /** Scène de chaque espèce (celle du cheval par défaut ; chien, chat, lapin : PetStage, leurs repères et leur vie). */
 const STAGES = { dog: PetStage, cat: PetStage, rabbit: PetStage };
+/** Adaptation de la scène aux espèces dont le modèle n'est pas celui du cheval (CareStage, o.fit). */
+const FITS = { sheep: RUMINANT_FIT, goat: RUMINANT_FIT, cow: RUMINANT_FIT };
 
 /**
  * Ouvre la scène 3D dans la scène du cadre (host), sous la toile 2D (above). Renvoie la scène, ou null (WebGL
@@ -48,7 +65,8 @@ export function openCareScene(ui, a, host, above) {
   const game = ui.game ?? null;
   let scene = null;
   try {
-    scene = new (STAGES[a.species] ?? CareStage)({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species] });
+    const fit = FITS[a.species] ?? null;
+    scene = new (STAGES[a.species] ?? CareStage)({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species], fit, model: fit?.model?.(a) ?? null });
   } catch (e) {
     console.warn('[care3d] scène 3D impossible, jeu dessiné', e?.message ?? e);
     try {

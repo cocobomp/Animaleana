@@ -439,7 +439,7 @@ function speakingCtx(ctx, onSay) {
 
 export function lunge3dGame(ctx) {
   const rig = penRig(ctx, 'lunge');
-  const { sc, md, R, Lb, u, scale, ss, kid } = rig;
+  const { sc, md, R, scale, ss, kid } = rig;
   const m = sc.mood;
   let said = null; // { text, t } : la bulle de l'enfant
   let whipK = 0; // claquement de la chambrière (1 → 0)

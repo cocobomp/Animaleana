@@ -528,6 +528,7 @@ export function shineGame(ctx) {
     // (le jeu 3D, beauty3d.js : la forme du cheval dessiné, pour reporter le chiffon sur elle ; les sabots)
     shape: sh,
     step,
+    cells,
     overAt: OVER_AT,
     hoofSpots: hooves,
     peek: () => ({

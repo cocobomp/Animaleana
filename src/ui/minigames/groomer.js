@@ -4,11 +4,18 @@
 // Ces jeux sont inscrits auprès de runMinigame par registerMinigames (fait dans src/ui/groomer.js).
 
 import { drawAnimal, animalShape, fitAnimal, rrect, ellipse, circle, emoji, label, fillView, tiles, clamp, lerp, dist, distToSegment, shade } from './draw.js';
+import { drawHorseVet } from '../vetHorse.js';
 import { ACCESSORIES, ACC_COLORS } from '../../sim/groomer.js';
 
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 
 /** Décor du salon : carrelage pastel et tapis. */
+/**
+ * Le cheval dessiné du salon (repli sans 3D) : le beau cheval de profil du vétérinaire (drawHorseVet : mêmes options
+ * et même géométrie que drawAnimal, les zones tombent juste) ; les autres animaux gardent drawAnimal.
+ */
+const drawBody = (g, a, o) => (a.species === 'horse' ? drawHorseVet(g, a, o) : drawAnimal(g, a, o));
+
 function salonBackground(g, ctx, floorY = 300) {
   fillView(g, ctx.view, '#fdf0f5', '#f7dbe6');
   tiles(g, ctx.view, '#fbe6ee', '#f3cfdd', 44);
@@ -184,7 +191,7 @@ export function knotsGame(ctx) {
     update(dt) { shake = Math.max(0, shake - dt); },
     draw(g) {
       salonBackground(g, ctx, floorY);
-      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, shake: shake > 0 ? 1 : 0, happy: ctx.done });
+      drawBody(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, shake: shake > 0 ? 1 : 0, happy: ctx.done, time: ctx.time });
       for (const k of knots) {
         g.save();
         g.globalAlpha = 0.25 + 0.75 * k.left;
@@ -257,13 +264,14 @@ export function cutGame(ctx) {
       const u = lx / sh.rx;
       const v = ly / sh.ry;
       const k = Math.sqrt(u * u + v * v);
-      if (k > 1.28) continue;
+      // (le cheval : la tonte, sur le corps seulement ; les autres : une bande de poils autour du corps aussi)
+      if (k > (a.species === 'horse' ? 1.0 : 1.28)) continue;
       const p = sh.L(lx + (rng() - 0.5) * 4, ly + (rng() - 0.5) * 4);
       tufts.push({ ...p, u, v, k, head: false, keep: !!keep(u, v, k, false), cut: false, r: 7 * Math.max(0.8, s), seed: rng() * 10 });
     }
   }
-  // Et sur la tête.
-  for (let i = 0; i < 10; i++) {
+  // Et sur la tête (pas le cheval : on ne tond jamais sa tête, et il n'a pas de houppette de caniche).
+  for (let i = 0; i < (a.species === 'horse' ? 0 : 10); i++) {
     const ang = (i / 10) * Math.PI * 2;
     const rr = sh.hr * (1.05 + (i % 2) * 0.15);
     tufts.push({ x: sh.head.x + Math.cos(ang) * rr, y: sh.head.y + Math.sin(ang) * rr, u: 0, v: 0, k: 1.1, head: true, keep: !!keep(0, 0, 1.1, true), cut: false, r: 6 * Math.max(0.8, s), seed: rng() * 10 });
@@ -305,6 +313,8 @@ export function cutGame(ctx) {
   }
 
   return {
+    shape: sh, // (le jeu 3D, groom3d.js : la tonte sur le vrai cheval, reportée sur lui)
+    tufts,
     peek: () => ({ style, toCut: toCut.filter((q) => !q.cut).map((q) => ({ x: q.x, y: q.y })), keep: tufts.filter((q) => q.keep && !q.cut).map((q) => ({ x: q.x, y: q.y })), mistakes }),
     down(p) { last = p; },
     move(p, down) { if (down) clip(p); },
@@ -312,15 +322,29 @@ export function cutGame(ctx) {
     update(dt) { flash = Math.max(0, flash - dt); },
     draw(g) {
       salonBackground(g, ctx, floorY);
-      drawAnimal(g, a, { x: fit.x, y: floorY, s, f: 1, happy: ctx.done, shake: flash > 0 ? 0.6 : 0 });
+      drawBody(g, a, { x: fit.x, y: floorY, s, f: 1, happy: ctx.done, shake: flash > 0 ? 0.6 : 0, time: ctx.time });
       // Touffes : roses à couper, vertes à garder.
+      const horse = a.species === 'horse';
       for (const q of tufts) {
         if (q.cut) continue;
-        g.fillStyle = shade(ctx.col.raw.coat, 0.18);
-        for (let i = 0; i < 3; i++) {
-          const a0 = q.seed + i * 2.1;
-          circle(g, q.x + Math.cos(a0) * q.r * 0.45, q.y + Math.sin(a0) * q.r * 0.45, q.r * 0.75);
-          g.fill();
+        if (horse) {
+          // Cheval : son poil d'hiver, en bandes droites (la tondeuse les enlève une à une), pas en touffes rondes.
+          g.strokeStyle = shade(ctx.col.raw.coat, 0.22);
+          g.lineWidth = 2.2;
+          g.lineCap = 'round';
+          for (let i = -1; i <= 1; i++) {
+            g.beginPath();
+            g.moveTo(q.x + i * q.r * 0.5 - q.r * 0.15, q.y - q.r * 0.8);
+            g.lineTo(q.x + i * q.r * 0.5 + q.r * 0.15, q.y + q.r * 0.8);
+            g.stroke();
+          }
+        } else {
+          g.fillStyle = shade(ctx.col.raw.coat, 0.18);
+          for (let i = 0; i < 3; i++) {
+            const a0 = q.seed + i * 2.1;
+            circle(g, q.x + Math.cos(a0) * q.r * 0.45, q.y + Math.sin(a0) * q.r * 0.45, q.r * 0.75);
+            g.fill();
+          }
         }
         g.strokeStyle = q.keep ? 'rgba(63,174,98,0.85)' : 'rgba(224,87,74,0.55)';
         g.lineWidth = q.keep ? 2.2 : 1.4;
@@ -431,7 +455,7 @@ export function earsGame(ctx) {
     update(dt) { shake = Math.max(0, shake - dt); },
     draw(g) {
       salonBackground(g, ctx, 300);
-      drawAnimal(g, a, { x: fit.x, y: 300, s: fit.s, f: 1, shake: shake > 0 ? 0.8 : 0, happy: ctx.done });
+      drawBody(g, a, { x: fit.x, y: 300, s: fit.s, f: 1, shake: shake > 0 ? 0.8 : 0, happy: ctx.done, time: ctx.time });
       // Loupe sur l'oreille
       g.fillStyle = '#fff';
       circle(g, cx, cy, R + 8);
@@ -628,7 +652,7 @@ export function dryGame(ctx) {
     },
     draw(g) {
       salonBackground(g, ctx, floorY);
-      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, shake: stress > 0.3 ? stress : 0, happy: ctx.done });
+      drawBody(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, shake: stress > 0.3 ? stress : 0, happy: ctx.done, time: ctx.time });
       // Poils mouillés : reflets bleutés
       if (wet > 0) {
         g.save();
@@ -719,6 +743,7 @@ export function finishGame(ctx) {
   ctx.hint(t('mg_gfinish_hint'));
 
   return {
+    shape: sh, // (le jeu 3D, groom3d.js : un geste sur le vrai cheval compte comme un geste sur lui)
     peek: () => ({ puffs, need: NEED, choice: ctx.choice, accessories: accs, colors }),
     down(p) {
       if (ctx.done) return;
@@ -745,7 +770,7 @@ export function finishGame(ctx) {
       g.lineWidth = 6;
       rrect(g, 60, 30, 280, 160, 24);
       g.stroke();
-      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, happy: true });
+      drawBody(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, happy: true, time: ctx.time });
       if (ctx.choice.id) drawAccessoryOn(g, sh, ctx.choice, fit.s);
       if (ctx.pointer.over && !ctx.done) emoji(g, '🧴', ctx.pointer.x + 14, ctx.pointer.y - 14, 34, 0.3);
     },

@@ -34,7 +34,8 @@ export const STEPS = {
   brush: { emoji: '🪮', game: 'brush', care: 'brush', rank: 0, carnet: 'brush' },
   knots: { emoji: '🧶', game: 'gknots', rank: 0, carnet: 'brush' },
   nails: { emoji: '💅', game: 'nails', care: 'nails', rank: 0, species: ['dog', 'cat', 'rabbit'], carnet: 'nails' },
-  ears: { emoji: '👂', game: 'gears', rank: 0, species: ['dog', 'cat', 'rabbit', 'horse'] },
+  // (pas le cheval : on ne nettoie pas l'intérieur de l'oreille d'un cheval, elle se protège seule avec ses poils)
+  ears: { emoji: '👂', game: 'gears', rank: 0, species: ['dog', 'cat', 'rabbit'] },
   teeth: { emoji: '🦷', game: 'gteeth', rank: 0, species: ['dog', 'cat'] },
   cut: { emoji: '✂️', game: 'gcut', rank: 0, carnet: 'cut' },
   finish: { emoji: '🎀', game: 'gfinish', rank: 0, carnet: 'finish' },

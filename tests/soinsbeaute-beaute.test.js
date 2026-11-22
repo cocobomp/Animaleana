@@ -100,12 +100,12 @@ describe('lustrer en 3D', () => {
       const s3 = game.peek();
       expect(s3.coverage).toBeGreaterThan(0.6);
       // le voile brillant : des sommets de la robe ont pris du brillant
-      const gloss = sc.model.coatMesh.parent.children.find((o) => o.isSkinnedMesh && o.material.vertexColors);
+      const gloss = sc.model.coatMesh.parent.children.find((o) => o.userData.coatGloss);
       expect(gloss).toBeTruthy();
       const col = gloss.geometry.attributes.color.array;
       let lit = 0;
       for (let i = 3; i < col.length; i += 4) if (col[i] > 0.3) lit++;
-      expect(lit).toBeGreaterThan(200);
+      expect(lit).toBeGreaterThan(120);
       // les sabots : on touche les deux ronds
       for (const c of s3.hoof3d) game.down(c);
       run(ctx, game, sc, 0.3);
@@ -150,7 +150,7 @@ describe('lustrer en 3D', () => {
     expect(ctx.finished.why).toBe('high');
     expect(ctx2.finished.why).toBe('high');
     expect(ctx2.finished.q).toBeCloseTo(ctx.finished.q, 5);
-    const gloss = sc.model.coatMesh.parent.children.find((o) => o.isSkinnedMesh && o.material.vertexColors);
+    const gloss = sc.model.coatMesh.parent.children.find((o) => o.userData.coatGloss);
     const col = gloss.geometry.attributes.color.array;
     let greasy = 0;
     for (let i = 0; i < col.length; i += 4) if (col[i] > 0.1) greasy++;

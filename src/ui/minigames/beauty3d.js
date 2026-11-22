@@ -21,6 +21,7 @@ import { nicker, snort } from './feed3d.js';
 import { circle, emoji } from './draw.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const GLOSS_K = 1.4; // (une case du jeu dessiné frottée une fois, 1 : le reflet à fond)
 const clamp01 = (k) => Math.max(0, Math.min(1, k));
 
 // ---------------------------------------------------------------- le voile brillant (commun : lustrer, sécher)
@@ -31,7 +32,7 @@ const clamp01 = (k) => Math.max(0, Math.min(1, k));
  * amount) : frotter autour du point p (monde). Les valeurs vont de 0 (rien) à 1 (brille) ; au-delà de over, le reflet
  * devient gras (trop de lustrant).
  */
-export function coatGloss(sc, own, { color = 0xffffff, roughness = 0.2, over = 2.5, tint = [0.42, 0.33, 0.05] } = {}) {
+export function coatGloss(sc, own, { color = 0xffffff, roughness = 0.2, over = 2.5, tint = [0.42, 0.33, 0.05], base = [0, 0, 0], alpha = 1, additive = true, env = 2.2 } = {}) {
   const coat = sc.model.coatMesh;
   if (!coat?.isSkinnedMesh) return null;
   const src = coat.geometry;
@@ -44,13 +45,15 @@ export function coatGloss(sc, own, { color = 0xffffff, roughness = 0.2, over = 2
   colAttr.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('color', colAttr);
   const mat = own(new THREE.MeshStandardMaterial({
-    color, roughness, metalness: 0.05, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, envMapIntensity: 2.2,
+    color, roughness, metalness: 0.05, vertexColors: true, transparent: true, depthWrite: false,
+    blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, envMapIntensity: env,
   }));
   mat.userData.shared = false;
   const mesh = new THREE.SkinnedMesh(geo, mat);
   mesh.bind(coat.skeleton, coat.bindMatrix);
   mesh.frustumCulled = false;
+  mesh.userData.coatGloss = true;
   mesh.castShadow = false;
   mesh.receiveShadow = false;
   mesh.renderOrder = 3;
@@ -77,13 +80,13 @@ export function coatGloss(sc, own, { color = 0xffffff, roughness = 0.2, over = 2
     const v = val[i];
     const g = Math.min(1, v * 0.7);
     const o = clamp01((v - over) * 0.8);
-    col[i * 4] = tint[0] * o;
-    col[i * 4 + 1] = tint[1] * o;
-    col[i * 4 + 2] = tint[2] * o;
-    col[i * 4 + 3] = Math.min(1, g * (1 - 0.5 * o) + 0.45 * o);
+    col[i * 4] = base[0] * (1 - o) + tint[0] * o;
+    col[i * 4 + 1] = base[1] * (1 - o) + tint[1] * o;
+    col[i * 4 + 2] = base[2] * (1 - o) + tint[2] * o;
+    col[i * 4 + 3] = alpha * Math.min(1, g * (1 - 0.5 * o) + 0.45 * o);
     dirty = true;
   };
-  return {
+  const api = {
     mesh,
     /** Frotter autour de p (rayon r, mètres) ; keep(i, x, y, z) : ce sommet compte-t-il (la robe, pas la tête) ? */
     paint(at, r, amount, time = 0, keep = null) {
@@ -121,12 +124,48 @@ export function coatGloss(sc, own, { color = 0xffffff, roughness = 0.2, over = 2
       }
     },
     value: (i) => val[i],
+    /** Fixe la valeur d'un sommet (départ : tout mouillé, poil d'hiver partout). */
+    set(i, v) {
+      val[i] = v;
+      show(i);
+    },
+    /** Sommets dans la pose du moment (monde), refaits si besoin. */
+    positions(time = 0) {
+      if (time - bakedAt > 0.5) {
+        bake();
+        bakedAt = time;
+      }
+      return pos;
+    },
     count: n,
     /** Envoie les couleurs changées à la carte graphique (une fois par image). */
     flush() {
       if (!dirty) return;
       colAttr.needsUpdate = true;
       dirty = false;
+    },
+    /** Efface autour de p (rayon r) : amount retiré au centre (séchage, tonte). Renvoie ce qui a été retiré. */
+    wipe(at, r, amount, time = 0, keep = null) {
+      if (time - bakedAt > 0.5) {
+        bake();
+        bakedAt = time;
+      }
+      const r2 = r * r;
+      let took = 0;
+      for (let i = 0; i < n; i++) {
+        if (val[i] <= 0) continue;
+        const dx = pos[i * 3] - at.x;
+        const dy = pos[i * 3 + 1] - at.y;
+        const dz = pos[i * 3 + 2] - at.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > r2) continue;
+        if (keep && !keep(i, pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])) continue;
+        const k = Math.min(val[i], amount * (1 - (0.6 * d2) / r2));
+        val[i] -= k;
+        took += k;
+        show(i);
+      }
+      return took;
     },
     /** Tout s'efface (séchage : l'eau qui s'en va) : k par seconde. */
     fade(dt, k) {
@@ -140,6 +179,8 @@ export function coatGloss(sc, own, { color = 0xffffff, roughness = 0.2, over = 2
       mesh.parent?.remove(mesh);
     },
   };
+  mesh.userData.api = api;
+  return api;
 }
 
 /**
@@ -157,7 +198,7 @@ export function bodyTo2d(sc, sh) {
 }
 
 /** Le cadre du corps du cheval dans son repère (z : vers la tête ; y : vers le haut), pour reporter un geste. */
-function bodyFrame(sc) {
+export function bodyFrame(sc) {
   const L = sc.marks;
   const loc = (p) => sc.holder.worldToLocal(p.clone());
   const tail = loc(L.tail);
@@ -169,7 +210,7 @@ function bodyFrame(sc) {
 }
 
 /** Notre main, paume posée sur la robe, et un chiffon dessous (peau de chamois). */
-function clothHand(sc, own) {
+export function clothHand(sc, own, color = 0xe9c77b) {
   const hand = handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.35 });
   hand.userData.hand = true;
   // (manche longue : l'avant-bras sort toujours du cadre)
@@ -188,18 +229,18 @@ function clothHand(sc, own) {
     pp.setZ(i, 0.008 * Math.sin(x * 60 + y * 25) + 0.006 * Math.cos(y * 70) - 0.25 * (x * x + y * y));
   }
   geo.computeVertexNormals();
-  const cloth = new THREE.Mesh(geo, own(new THREE.MeshStandardMaterial({ color: 0xe9c77b, roughness: 0.95, side: THREE.DoubleSide })));
+  const cloth = new THREE.Mesh(geo, own(new THREE.MeshStandardMaterial({ color, roughness: 0.95, side: THREE.DoubleSide })));
   cloth.rotation.x = Math.PI / 2; // (à plat sous la paume : la paume regarde vers +y)
   cloth.position.set(0.01, 0.022, 0);
   cloth.castShadow = true;
   hand.add(cloth);
   hand.visible = false;
   sc.scene.add(hand);
-  return { hand, cloth };
+  return { hand, cloth, geo };
 }
 
 /** Pose la main sur le pelage au point h (point, normale) : paume contre lui, doigts vers le haut, bras d'en bas. */
-function handOnCoat(hand, h, press = 1) {
+export function handOnCoat(hand, h, press = 1) {
   const n = h.normal;
   const up = v3(0, 1, 0).addScaledVector(n, -n.y).normalize();
   const at = h.point.clone().addScaledVector(n, 0.028 + 0.02 * (1 - press));
@@ -228,10 +269,40 @@ export function shine3dGame(ctx) {
   const sh = play.shape;
   const F = bodyFrame(sc);
   const to2d = bodyTo2d(sc, sh);
-  // (rayon d'un passage de chiffon : celui du jeu dessiné, reporté sur le vrai corps)
-  const bodyLen = (F.z1 - F.z0) * S;
-  const rubR = ((play.step * 0.9) / (2 * sh.rx)) * bodyLen * 1.15;
-  const gloss = coatGloss(sc, own, { over: play.overAt });
+  const gloss = coatGloss(sc, own, { over: play.overAt * GLOSS_K });
+  // Chaque sommet de la robe (corps seulement) et les cases du cheval dessiné qui l'entourent : il brille comme
+  // elles (ce qui brille, c'est ce que la jauge compte ; trop de lustrant : le reflet devient gras).
+  const near = [];
+  if (gloss) {
+    const pos = gloss.positions(0);
+    const cells = play.cells;
+    const reach = play.step * 1.2;
+    const w = v3();
+    for (let i = 0; i < gloss.count; i++) {
+      w.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
+      const q = sc.holder.worldToLocal(w.clone());
+      if (q.z < F.z0 - 0.05 || q.z > F.z1 + 0.02 || q.y < F.y0 - 0.04) continue;
+      const p2 = to2d(w);
+      const list = [];
+      for (let c = 0; c < cells.length; c++) {
+        const d = Math.hypot(cells[c].x - p2.x, cells[c].y - p2.y);
+        if (d < reach) list.push([c, 1 - d / reach]);
+      }
+      if (!list.length) continue;
+      const sum = list.reduce((n, x) => n + x[1], 0);
+      near.push([i, list.map(([c, k]) => [c, k / sum])]);
+    }
+  }
+  let shineDirty = false;
+  function shineFromCells() {
+    if (!gloss) return;
+    const cells = play.cells;
+    for (const [i, list] of near) {
+      let v = 0;
+      for (const [c, k] of list) v += cells[c].v * k;
+      gloss.set(i, v * GLOSS_K);
+    }
+  }
   const body = new Set(['body', 'shoulder', 'hip']);
   // Les deux sabots de notre côté (le cheval dessiné en a deux : devant, derrière).
   const legs = sc.model.legs ?? [];
@@ -268,12 +339,8 @@ export function shine3dGame(ctx) {
     const d = Math.hypot(p2.x - last.p2.x, p2.y - last.p2.y);
     if (d < 1) return;
     play.move(p2, true);
-    // (le reflet là où passe le chiffon, au rythme de la jauge du jeu dessiné)
-    gloss?.paint(h.point, rubR, d * 0.012, ctx.time, (i, x, y, z) => {
-      // (pas la tête, l'encolure, les jambes : comme le jeu dessiné, seul le corps compte)
-      const q = sc.holder.worldToLocal(v3(x, y, z));
-      return q.z > F.z0 - 0.05 && q.z < F.z1 + 0.02 && q.y > F.y0 - 0.04;
-    });
+    // (le reflet suit la jauge du jeu dessiné : voir shineFromCells)
+    shineDirty = true;
     last = { p2, w: h.point };
   }
 
@@ -327,6 +394,10 @@ export function shine3dGame(ctx) {
       if (!started) follow.frame(true);
       started = true;
       follow.update(dt);
+      if (shineDirty) {
+        shineDirty = false;
+        shineFromCells();
+      }
       gloss?.flush();
       sparkleT += dt;
       const s = play.peek();
@@ -408,25 +479,15 @@ function crestSpots(sc) {
     .sort((a, b) => a.w.distanceTo(withers) - b.w.distanceTo(withers));
 }
 
-export function braid3dGame(ctx) {
-  const sc = ctx.scene;
-  sc.decor.layout('rest');
-  const S = sc.double.scale;
-  const L = sc.marks;
+/**
+ * Les tresses « boutons » de concours sur la vraie crête (model.braidSpots, horseReal.js), cachées au départ : la
+ * boule de crins, le ruban et le pompon de chaque bouton, le bourrelet de crins jusqu'au suivant ; les perles de la
+ * queue et son nœud. Chaque bouton a sa section (du garrot, 0, à la nuque, sections - 1). show(k) fait apparaître
+ * un bouton en douceur (dt). Libérés avec own ; remove() les retire du cheval.
+ */
+export function crestBraids(sc, own, { mane = 0x4a2f1d, sections = 4 } = {}) {
   const md = sc.model;
-  const keep = [];
-  const own = (x) => {
-    keep.push(x);
-    return x;
-  };
-  const m = sc.mood;
-  m.ears = 'forward';
-  let fxAt = null;
-  const play = withLogic(ctx, braidGame, () => (fxAt ? sc.project(fxAt) : sc.project(L.poll)));
-  const sections = play.sections;
-  const nMane = sections.filter((x) => !x.tail).length;
   const spots = crestSpots(sc);
-  const mane = ctx.a?.look?.mane ?? ctx.a?.look?.secondary ?? 0x4a2f1d;
   const r = (md.dims?.R ?? 0.32) * 0.085;
   const hairMat = own(new THREE.MeshStandardMaterial({ color: mane, roughness: 0.7 }));
   const ribbonMat = own(new THREE.MeshStandardMaterial({ color: 0xd8402f, roughness: 0.5 }));
@@ -435,7 +496,6 @@ export function braid3dGame(ctx) {
   const pomGeo = own(new THREE.SphereGeometry(r * 0.5, 10, 8));
   const ridgeGeo = own(new THREE.SphereGeometry(1, 12, 6));
   const zAxis = v3(0, 0, 1);
-  // Chaque bouton : la boule de crins (tout de suite), le ruban et le pompon (quand on noue le ruban).
   const knobs = spots.map((sp, i) => {
     const g = new THREE.Group();
     const knob = new THREE.Mesh(knobGeo, hairMat);
@@ -454,7 +514,6 @@ export function braid3dGame(ctx) {
     g.add(band, pom);
     // (le bourrelet de crins jusqu'au bouton suivant : les boutons sont reliés, comme de vraies tresses de concours)
     const next = spots[i + 1];
-    let ridge = null;
     if (next) {
       const d = next.p.clone().sub(sp.p);
       const len = d.length();
@@ -462,7 +521,7 @@ export function braid3dGame(ctx) {
         d.divideScalar(len);
         const side = v3().crossVectors(d, sp.up).normalize();
         const nn = v3().crossVectors(side, d);
-        ridge = new THREE.Mesh(ridgeGeo, hairMat);
+        const ridge = new THREE.Mesh(ridgeGeo, hairMat);
         ridge.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side, d, nn));
         ridge.position.copy(sp.mid ?? sp.p.clone().add(next.p).multiplyScalar(0.5)).addScaledVector(nn, r * 0.2);
         ridge.scale.set(r * 0.62, len * 0.6, r * 0.45);
@@ -472,9 +531,8 @@ export function braid3dGame(ctx) {
     g.visible = false;
     g.scale.setScalar(0.01);
     md.neck.add(g);
-    // section du jeu dessiné : du garrot (0) à la nuque (nMane - 1)
-    const sec = Math.min(nMane - 1, Math.floor((i / Math.max(1, spots.length)) * nMane));
-    return { g, band, pom, ridge, sec, shown: 0, w: () => md.neck.localToWorld(knob.position.clone()) };
+    const sec = Math.min(sections - 1, Math.floor((i / Math.max(1, spots.length)) * sections));
+    return { g, band, pom, sec, shown: 0, w: () => md.neck.localToWorld(knob.position.clone()) };
   });
   // La queue : des perles de crins entrelacées le long du dessus de la queue, et un nœud en haut.
   const tailSpots = md.braidSpots?.tail ?? [];
@@ -497,6 +555,52 @@ export function braid3dGame(ctx) {
     tailBow.visible = false;
     parent.add(tailBow);
   }
+  return {
+    knobs,
+    beads,
+    tailBow,
+    tailSpots,
+    ribbonMat,
+    r,
+    /** Le bouton apparaît (ou grandit) : à appeler à chaque image. */
+    grow(k, on, dt) {
+      if (on && !k.g.visible) {
+        k.g.visible = true;
+        k.shown = 0;
+      }
+      if (!on) k.g.visible = false;
+      if (k.g.visible) {
+        k.shown = Math.min(1, k.shown + dt * 4);
+        k.g.scale.setScalar(0.2 + 0.8 * smooth(k.shown));
+      }
+    },
+    remove() {
+      for (const k of knobs) k.g.parent?.remove(k.g);
+      for (const b of beads) b.parent?.remove(b);
+      tailBow?.parent?.remove(tailBow);
+    },
+  };
+}
+
+export function braid3dGame(ctx) {
+  const sc = ctx.scene;
+  sc.decor.layout('rest');
+  const S = sc.double.scale;
+  const L = sc.marks;
+  const md = sc.model;
+  const keep = [];
+  const own = (x) => {
+    keep.push(x);
+    return x;
+  };
+  const m = sc.mood;
+  m.ears = 'forward';
+  let fxAt = null;
+  const play = withLogic(ctx, braidGame, () => (fxAt ? sc.project(fxAt) : sc.project(L.poll)));
+  const sections = play.sections;
+  const nMane = sections.filter((x) => !x.tail).length;
+  const B = crestBraids(sc, own, { mane: ctx.a?.look?.mane ?? ctx.a?.look?.secondary ?? 0x4a2f1d, sections: nMane });
+  const { knobs, beads, tailBow, ribbonMat, tailSpots } = B;
   const maneU = md.hairMesh?.material?.userData?.hairBraid ?? null;
   let tuck = 0;
 
@@ -668,9 +772,7 @@ export function braid3dGame(ctx) {
       g.restore();
     },
     destroy() {
-      for (const k of knobs) k.g.parent?.remove(k.g);
-      for (const b of beads) b.parent?.remove(b);
-      tailBow?.parent?.remove(tailBow);
+      B.remove();
       if (maneU) maneU.value = 0;
       for (const x of keep) x.dispose?.();
     },

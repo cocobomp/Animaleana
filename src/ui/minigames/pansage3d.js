@@ -225,7 +225,9 @@ export function pansage3dGame(ctx) {
   // ---------------------------------------------------------------- caméra selon l'étape
   function frameStage() {
     const st = stage();
-    const body = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, L.neck.clone().lerp(L.poll, 0.3)];
+    // (les fesses, derrière la queue : en paysage, la croupe touchait le bord)
+    const rump = L.croup.clone().lerp(L.tail, 0.8).add(v3(-0.16 * S, -0.12 * S, 0));
+    const body = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, rump, L.neck.clone().lerp(L.poll, 0.3)];
     // (de trois quarts avant : le flanc où sont les taches, et sa tête, qui réagit)
     const head = [L.poll, L.muzzle, ...L.ears];
     if (st === 'curry') sc.frame([...body, ...head, L.belly.clone().add(v3(0, -0.15 * S, 0))], { dir: [0.42, 0.2, 1], pad: 1.04 });
@@ -683,6 +685,10 @@ export function pansage3dGame(ctx) {
       // (pied levé : la caméra suit la sole, doucement au début du geste, puis de près)
       if (stage() === 'hoof' && pause <= 0) frameHoof(ctx.time - footAt < 1.2 ? 0.55 : 0.2);
       if (stage() === 'comb' && pause <= 0) frameComb();
+      // La pastille de l'étape et le cadran en haut, les quatre outils en bas : la scène se cadre entre les deux
+      // (en paysage, la tête passait sous le cadran et la croupe touchait le bord). La carte de fin, elle, a sa zone.
+      // (le cadran, en haut à droite, descend jusqu'à 88 unités du haut)
+      if (!ctx.done) sc.setFocus(88 * ctx.view.scale, sc.size.h - 54 * ctx.view.scale);
       showTool(dt);
     },
     draw(g) {

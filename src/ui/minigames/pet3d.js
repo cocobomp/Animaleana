@@ -196,6 +196,8 @@ export function pet3dGame(ctx) {
       speed *= 0.5;
     },
     update(dt) {
+      // (la tortue et le lièvre, le grand cœur en haut : la scène se cadre dessous)
+      if (!ctx.done) sc.setFocus(78 * ctx.view.scale, sc.size.h);
       flinch = Math.max(0, flinch - dt);
       cool = Math.max(0, cool - dt);
       purr = Math.max(0, purr - dt);
@@ -208,8 +210,9 @@ export function pet3dGame(ctx) {
       const happy = (ctx.pointer.down && flinch <= 0 && speed > 20 && !fedUp) || (ctx.done && prog <= hi);
       m.ears = fedUp ? 'back' : 'forward';
       if (fedUp) m.annoyed = Math.max(m.annoyed, 0.3);
-      m.look = fedUp ? sc.marks.muzzle.clone().add(v3(0.4, 0, -1.2)) : sc.camera.position;
-      m.lookAmt = fedUp ? 1 : happy ? 0.55 : 0.4;
+      // (il en a assez : il détourne un peu la tête, sans sortir de l'image)
+      m.look = fedUp ? sc.marks.muzzle.clone().add(v3(0.3, 0.1, -0.7)) : sc.camera.position;
+      m.lookAmt = fedUp ? 0.6 : happy ? 0.55 : 0.4;
       m.nuzzle = lerp(m.nuzzle, (purr > 0 ? 0.9 : happy ? 0.4 : 0) + (lip > 0 ? 0.5 : 0), Math.min(1, dt * 3));
       m.chew = lip > 0 ? 0.8 : Math.max(0, m.chew - dt);
       snortIn -= dt;
@@ -224,7 +227,7 @@ export function pet3dGame(ctx) {
       const fedUp = prog > hi && !ctx.done;
       if (fedUp) {
         const h = headAt();
-        emoji(g, '😑', h.x + 34, h.y - 26, 26);
+        emoji(g, '😑', clamp(h.x + 34, v.x0 + 22, v.x1 - 22), clamp(h.y - 26, v.y0 + 70, v.y1 - 22), 26);
       }
       // Son coin préféré : il scintille si on ne l'a pas encore trouvé (après quelques secondes).
       if (!ctx.done && ctx.time > hintAfter && favDist < 60) {

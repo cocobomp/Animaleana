@@ -171,8 +171,11 @@ export function stallSet(stage) {
   into = walls.roof;
   for (const z of [S.back + 0.4, 0.45, S.front - 0.5]) mesh(new THREE.BoxGeometry(S.halfW * 2 + 0.3, 0.18, 0.16), beamMat, [0, S.roof - 0.09, z]);
   mesh(new THREE.PlaneGeometry(S.halfW * 2 + 0.3, S.front - S.back + 1), plaster, [0, S.roof, (S.back + S.front) / 2], [Math.PI / 2, 0, 0], false);
-  // Porte du box (de notre côté) : les deux montants, au bord de la vue.
-  for (const s of [-1, 1]) (into = s < 0 ? walls.left : walls.right) && mesh(new THREE.BoxGeometry(0.14, S.roof, 0.14), beamMat, [s * (S.halfW - 0.05), S.roof / 2, S.front - 0.05]);
+  // Porte du box (de notre côté) : les deux montants, au bord de la vue. Avec le devant du box : quand la caméra
+  // recule hors du box (paysage, tout le cheval dans peu de hauteur), ils disparaissent avec lui (avant : un grand
+  // coin brun en travers de l'image).
+  into = walls.front;
+  for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.14, S.roof, 0.14), beamMat, [s * (S.halfW - 0.05), S.roof / 2, S.front - 0.05]);
 
   // Devant (la porte du box, de notre côté) : planches en bas, barreaux au-dessus, l'ouverture de la porte au milieu.
   // On ne le voit que quand la caméra passe de l'autre côté du cheval (cure-pied des pieds gauches).

@@ -156,6 +156,8 @@ function fakeScene() {
     model: { dims: { R: 0.35 } },
     game: { profile: { avatar: {} } },
     frame: () => {},
+    size: { w: 390, h: 560 },
+    setFocus() {},
     project: (p) => ({ x: p.x * 100, y: p.y * 100 }),
     projectRadius: () => 20,
     live: (k) => (k === 'forehead' ? V(1.0, 1.55, 0) : V(1.1, 1.3, 0)),

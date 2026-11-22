@@ -212,3 +212,118 @@ export function strawFork(keep) {
 
 /** Tout ce qui est créé ici, à libérer ensemble. */
 export const choreBag = bag;
+
+/**
+ * La brosse des moutons, chèvres et vaches (brosse en chiendent, src/ui/minigames/farmBrush3d.js) : un dos en bois
+ * verni, bombé, avec une poignée en anse de cuir posée par-dessus (on y glisse la main) ; dessous, des touffes de
+ * poils raides et clairs, en rangées, qui dépassent bien du bois. Vue de profil comme de dessus, on la reconnaît.
+ * Origine : le bout des poils (contre le poil de l'animal) ; +y : vers le dos de la brosse ; la longueur le long de x.
+ */
+export function farmBrushModel(keep) {
+  const g = new THREE.Group();
+  const L = 0.19;
+  const W = 0.075;
+  const wood = keep(new THREE.MeshStandardMaterial({ color: 0xa8662e, roughness: 0.38, metalness: 0.05 }));
+  const leather = keep(new THREE.MeshStandardMaterial({ color: 0x6b3a1e, roughness: 0.6 }));
+  const bristleMat = keep(new THREE.MeshStandardMaterial({ color: 0xe6d2a0, roughness: 0.9 }));
+  // le dos : un pavé arrondi, bombé dessus
+  const backGeo = keep(new THREE.CapsuleGeometry(W / 2, L - W, 6, 16));
+  backGeo.rotateZ(Math.PI / 2);
+  const back = shadowed(new THREE.Mesh(backGeo, wood));
+  back.scale.set(1, 0.42, 1);
+  back.position.y = 0.05;
+  g.add(back);
+  // les touffes de poils : quatre rangées, bien visibles de profil (2,5 cm de poils sous le bois)
+  const tuft = keep(new THREE.CylinderGeometry(0.0055, 0.0075, 0.03, 6));
+  const rows = 4;
+  const cols = 11;
+  const tufts = new THREE.InstancedMesh(tuft, bristleMat, rows * cols);
+  const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  let k = 0;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = -L / 2 + 0.014 + (c / (cols - 1)) * (L - 0.028);
+      const z = -W / 2 + 0.012 + (r / (rows - 1)) * (W - 0.024);
+      q.setFromAxisAngle(V(1, 0, 0), ((r - 1.5) / 1.5) * 0.12);
+      m4.compose(V(x, 0.017, z), q, V(1, 1 + 0.08 * Math.sin(c * 2.3 + r), 1));
+      tufts.setMatrixAt(k++, m4);
+    }
+  }
+  tufts.castShadow = true;
+  tufts.receiveShadow = true;
+  keep({ dispose: () => tufts.dispose() });
+  g.add(tufts);
+  // l'anse de cuir, d'un bout à l'autre du dos
+  const strap = shadowed(new THREE.Mesh(keep(new THREE.TorusGeometry(L * 0.36, 0.008, 6, 22, Math.PI)), leather));
+  strap.position.y = 0.064;
+  strap.scale.set(1, 0.55, 1);
+  strap.rotation.x = 0;
+  g.add(strap);
+  for (const sx of [-1, 1]) {
+    const rivet = shadowed(new THREE.Mesh(keep(new THREE.SphereGeometry(0.006, 8, 6)), keep(new THREE.MeshStandardMaterial({ color: 0xcfc6b0, metalness: 0.8, roughness: 0.3 }))));
+    rivet.position.set(sx * L * 0.36, 0.066, 0);
+    g.add(rivet);
+  }
+  return g;
+}
+
+/**
+ * La brosse à vaches de l'étable : un gros rouleau de poils jaunes et noirs qui tourne sur son axe quand la vache s'y
+ * frotte, sous son capot rouge, au bout d'un bras accroché au mur. Origine : l'axe du rouleau, au milieu ; spin(dt).
+ */
+export function cowBrushModel(keep, s = 1) {
+  const g = new THREE.Group();
+  const red = keep(new THREE.MeshStandardMaterial({ color: 0xc23a2b, roughness: 0.45, metalness: 0.2 }));
+  const steel = keep(new THREE.MeshStandardMaterial({ color: 0x6e7378, roughness: 0.4, metalness: 0.8 }));
+  // le rouleau : des disques de poils, jaunes et noirs en alternance, ébouriffés
+  const roll = new THREE.Group();
+  g.add(roll);
+  const tex = keep(canvasTex(64, 128, (c) => {
+    const r = rng(14);
+    c.fillStyle = '#e0b23a';
+    c.fillRect(0, 0, 64, 128);
+    for (let i = 0; i < 900; i++) {
+      const dark = r() < 0.38;
+      c.strokeStyle = dark ? `rgba(30,24,20,${0.6 + r() * 0.4})` : `rgba(${230 + r() * 25},${180 + r() * 40},${50 + r() * 30},0.9)`;
+      c.lineWidth = 1;
+      const x = r() * 64;
+      const y = r() * 128;
+      c.beginPath();
+      c.moveTo(x, y);
+      c.lineTo(x + (r() - 0.5) * 3, y + 4 + r() * 6);
+      c.stroke();
+    }
+  }, { key: 'cow-brush' }));
+  tex.repeat.set(5, 1);
+  const bristleGeo = keep(lumpy(new THREE.CylinderGeometry(0.21 * s, 0.21 * s, 0.56 * s, 28, 8), 0.012 * s, 5, 22));
+  const bristles = shadowed(new THREE.Mesh(bristleGeo, keep(new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }))));
+  roll.add(bristles);
+  for (const y of [-0.29, 0.29]) {
+    const cap = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.06 * s, 0.06 * s, 0.03 * s, 14)), steel));
+    cap.position.y = y * s;
+    roll.add(cap);
+  }
+  // le capot rouge, au-dessus, et le bras jusqu'au mur
+  // (le capot : un demi-cylindre derrière le rouleau, côté mur, et son couvercle rond dessus)
+  const hoodMat = keep(red.clone());
+  hoodMat.side = THREE.DoubleSide;
+  const hood = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.255 * s, 0.255 * s, 0.6 * s, 24, 1, true, Math.PI / 2, Math.PI)), hoodMat));
+  g.add(hood);
+  const lid = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.265 * s, 0.265 * s, 0.04 * s, 28)), red));
+  lid.position.y = 0.32 * s;
+  g.add(lid);
+  const motor = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.08 * s, 0.09 * s, 0.12 * s, 16)), red));
+  motor.position.set(0, 0.4 * s, 0);
+  g.add(motor);
+  const arm = shadowed(new THREE.Mesh(keep(new THREE.BoxGeometry(0.07 * s, 0.07 * s, 0.46 * s)), steel));
+  arm.position.set(0, 0.4 * s, -0.25 * s);
+  g.add(arm);
+  const plate = shadowed(new THREE.Mesh(keep(new THREE.BoxGeometry(0.22 * s, 0.3 * s, 0.025 * s)), steel));
+  plate.position.set(0, 0.4 * s, -0.49 * s);
+  g.add(plate);
+  return {
+    group: g,
+    spin(dt, k = 0.4) { roll.rotation.y += dt * k; },
+  };
+}

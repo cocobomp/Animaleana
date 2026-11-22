@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { plateTexture } from '../models/interiorKit.js';
+import { cowBrushModel } from './stableChores.js';
 import { waterTap, avatarHand } from './props.js';
 import { canvasTex, strawFloorTexture, noiseTexture, rng } from './textures.js';
 import { hayRack, waterTrough, strawBale, saltLick, pitchfork, lantern, barnWood, bag } from './barnProps.js';
@@ -298,14 +299,15 @@ export function barnSet(stage) {
     plankBox(bw, 0.06, 0.42, railMat, [-S.halfW + 0.7, bh, S.back + 0.95], 0.9);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) plankBox(0.07, bh, 0.07, beamMat, [-S.halfW + 0.7 + sx * (bw / 2 - 0.08), bh / 2, S.back + 0.95 + sz * 0.15], 0.9);
   }
+  let cowBrush = null;
   if (etable) {
     into = walls.back;
     const by = clamp(u * 0.95, 0.9, 1.6);
     const bxp = clamp(L.croup.x - 0.2, -S.halfW + 0.6, S.halfW - 0.8);
-    mesh(new THREE.BoxGeometry(0.12, 0.12, 0.42), iron, [bxp, by + 0.33, S.back + 0.21]);
-    const brush = mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.62, 18), keep(new THREE.MeshStandardMaterial({ color: 0xe0b23a, roughness: 1, map: keep(noiseTexture('#e2b43c', 0.35, 4, 64)) })), [bxp, by, S.back + 0.3]);
-    brush.castShadow = true;
-    mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.72, 8), iron, [bxp, by, S.back + 0.3]);
+    // (le rouleau de poils jaunes et noirs sous son capot rouge, au bout de son bras : il tourne doucement)
+    cowBrush = cowBrushModel(keep);
+    cowBrush.group.position.set(bxp, by, S.back + 0.52);
+    walls.back.add(cowBrush.group);
   }
   into = g;
 
@@ -539,6 +541,7 @@ export function barnSet(stage) {
       // murs entre la caméra et l'animal, voir fitPlate)
       if (st.ready && st.settled?.(0.02)) fitPlate(st);
       motes.update(dt);
+      cowBrush?.spin(dt);
       shaft.material.uniforms.uTime.value += dt;
       for (const p of Object.values(props)) p.update?.(dt, st);
     },

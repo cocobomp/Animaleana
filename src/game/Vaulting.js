@@ -1061,6 +1061,105 @@ class VaultingSession extends Session {
 
   // ------------------------------------------------------------ la caméra
 
+  /**
+   * La partie de l'écran que rien ne cache (coordonnées de -1 à 1, y vers le haut) : sous la barre du haut et la
+   * bulle d'aide, au-dessus du gros bouton rond (en hauteur) ou à sa gauche (en paysage). Relue deux fois par seconde.
+   */
+  freeBox() {
+    if (this.box && this.time - this.boxAt < 0.5) return this.box;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    let top = H * 0.12;
+    let bottom = H * 0.92;
+    let right = W * 0.92;
+    const left = W * 0.08;
+    const r = (el) => (el && !el.hidden && el.offsetParent ? el.getBoundingClientRect() : null);
+    const bar = r(this.hud.root.querySelector('.actv-top'));
+    if (bar && bar.width > W * 0.6) top = Math.max(top, bar.bottom + 8);
+    const tip = W < H ? r(this.hud.hintEl) : null; // (en paysage, la bulle d'aide est courte : on passe dessous)
+    if (tip && tip.width > W * 0.6) top = Math.max(top, tip.bottom + 6);
+    const btn = r(this.hud2.btn);
+    if (btn) {
+      if (btn.left > W * 0.55) right = Math.min(right, btn.left - 36); // (paysage : le bouton à droite)
+      else bottom = Math.min(bottom, btn.top - 60); // (l'anneau déborde du bouton)
+    }
+    const nx = (x) => (x / W) * 2 - 1;
+    const ny = (y) => 1 - (y / H) * 2;
+    this.box = { x0: nx(left), x1: nx(right), y0: ny(bottom), y1: ny(top) };
+    this.boxAt = this.time;
+    return this.box;
+  }
+
+  /**
+   * Plan large du départ (salut et course vers le cheval) : vu du côté des juges (on voit ton avatar de face quand il
+   * salue), tourné vers la ligne qui va de ton avatar à ton cheval (ils s'étagent dans la profondeur, ce qui tient
+   * mieux dans un écran en hauteur), assez loin pour que ton avatar, le longeur et le cheval entier tiennent dans la
+   * partie libre de l'écran. Lissé : le plan suit doucement le cheval qui tourne.
+   */
+  wideShot(dt, portrait) {
+    const g = this.game;
+    const e = this.e;
+    const S = e.scale ?? 1;
+    const pl = this.pl.root.position;
+    const co = this.coach.root.position;
+    const pts = (this.widePts ??= Array.from({ length: 8 }, () => V()));
+    pts[0].set(pl.x, pl.y, pl.z);
+    pts[1].set(pl.x, pl.y + 1.55, pl.z);
+    pts[2].set(co.x, co.y, co.z);
+    pts[3].set(co.x, co.y + 1.95, co.z);
+    e.root.localToWorld(pts[4].set(0, 0, 1.35 * S)); // (la tête et la croupe, en bas et en haut)
+    e.root.localToWorld(pts[5].set(0, 1.95 * S, 1.2 * S));
+    e.root.localToWorld(pts[6].set(0, 0, -1.25 * S));
+    e.root.localToWorld(pts[7].set(0, 1.6 * S, -1.25 * S));
+    // le centre du groupe
+    const mid = _p.set(0, 0, 0);
+    for (const q of pts) mid.add(q);
+    mid.multiplyScalar(1 / pts.length);
+    // vu du côté des juges ; en hauteur, tourné vers la ligne avatar → cheval (ils s'étagent dans la profondeur) ;
+    // en paysage, tourné en travers de cette ligne (ils s'étalent en largeur). Au plus de 0,6 rad, sans à-coup.
+    const pref = Math.atan2(this.judgeAt.x - this.center.x, this.judgeAt.z - this.center.z);
+    const line = Math.atan2(e.position.x - pl.x, e.position.z - pl.z);
+    const az = pref + (portrait ? 0.6 : -0.6) * Math.sin(2 * wrap(line - pref));
+    this.wideAz = this.wideAz === undefined ? az : this.wideAz + wrap(az - this.wideAz) * Math.min(1, dt * 1.5);
+    const pitch = portrait ? 0.55 : 0.3;
+    const box = this.freeBox();
+    const cam = g.camera;
+    const sc = (this.fitCam ??= new THREE.PerspectiveCamera());
+    sc.fov = cam.fov;
+    sc.aspect = cam.aspect;
+    sc.updateProjectionMatrix();
+    // la visée décalée pour que le groupe se place au milieu de la partie libre (pas au milieu de l'écran)
+    const tanV = Math.tan((cam.fov * Math.PI) / 360);
+    const cx = (box.x0 + box.x1) / 2;
+    const cyN = (box.y0 + box.y1) / 2;
+    const at = (this.wideAt ??= V());
+    const right = (this.wideR ??= V());
+    const up = (this.wideU ??= V());
+    const back = (this.wideB ??= V());
+    const sp = (this.wideS ??= V());
+    const fits = (d) => {
+      const a = this.wideAz;
+      back.set(Math.sin(a) * Math.cos(pitch), Math.sin(pitch), Math.cos(a) * Math.cos(pitch));
+      right.set(Math.cos(a), 0, -Math.sin(a));
+      up.set(-Math.sin(a) * Math.sin(pitch), Math.cos(pitch), -Math.cos(a) * Math.sin(pitch));
+      at.copy(mid).addScaledVector(right, -cx * d * tanV * cam.aspect).addScaledVector(up, -cyN * d * tanV);
+      sc.position.copy(at).addScaledVector(back, d);
+      sc.lookAt(at);
+      sc.updateMatrixWorld(true);
+      for (const q of pts) {
+        sp.copy(q).project(sc);
+        if (sp.x < box.x0 || sp.x > box.x1 || sp.y < box.y0 || sp.y > box.y1) return false;
+      }
+      return true;
+    };
+    let d = 5;
+    while (d < 40 && !fits(d)) d += 0.75;
+    fits(d);
+    this.wideDist = this.wideDist === undefined ? d : this.wideDist + (d - this.wideDist) * Math.min(1, dt * 2);
+    fits(this.wideDist);
+    return { at: at.clone(), heading: this.wideAz, yaw: 0, pitch, dist: this.wideDist };
+  }
+
   camera(dt) {
     const g = this.game;
     const portrait = g.camera.aspect < 0.8;
@@ -1072,15 +1171,9 @@ class VaultingSession extends Session {
     let pitch = 0.2;
     let dist = portrait ? 6.6 : 4.4;
     if (this.state === 'countdown' || this.phase === 'salute' || this.phase === 'approach') {
-      // plan large : le cercle, le longeur, le cheval
+      // plan large : ton avatar, le longeur et ton cheval, tous les trois dans la partie libre de l'écran
       if (this.e) {
-        at.set(this.center.x, this.cy + 1.0, this.center.z);
-        yaw = 0;
-        pitch = 0.42;
-        dist = portrait ? 17 : 13;
-        // (en hauteur : plus près, visé entre le centre et le cheval, pour qu'on les voie bien)
-        if (portrait) at.lerp(_w.set(this.e.position.x, this.cy + 1.0, this.e.position.z), 0.5);
-        g.rig.focus = { shot: { at: at.clone(), heading: -Math.PI / 2, yaw: 0, pitch, dist: portrait ? 12.5 : dist } };
+        g.rig.focus = { shot: this.wideShot(dt, portrait) };
         return;
       }
       dist += 1;

@@ -56,12 +56,14 @@ export function pansage3dGame(ctx) {
   const patchGeo = own(new THREE.PlaneGeometry(1, 1));
   /** Une carte posée sur le poil au point p (normale n), liée à l'os bone (elle suit le corps). */
   function decal(p, n, bone, r, tex, color = 0xffffff, spin = true) {
-    const mat = own(new THREE.MeshStandardMaterial({ map: tex, transparent: true, depthWrite: false, roughness: 1, color, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    // (la même image en relief : la croûte accroche la lumière)
+    const mat = own(new THREE.MeshStandardMaterial({ map: tex, bumpMap: tex, bumpScale: 2.5, transparent: true, depthWrite: false, roughness: 1, color, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
     const mesh = new THREE.Mesh(patchGeo, mat);
-    mesh.scale.set(r * 2.2, r * 2.2, 1);
+    // (allongée dans le sens du poil, à peine penchée : une tache de boue suit le poil, ce n'est pas un rond)
+    mesh.scale.set(r * 2.8, r * 1.8, 1);
     mesh.position.copy(p).addScaledVector(n, 0.006);
     mesh.lookAt(p.clone().add(n));
-    if (spin) mesh.rotateZ(rng() * Math.PI * 2);
+    if (spin) mesh.rotateZ((rng() - 0.5) * 0.5);
     mesh.renderOrder = 2;
     sc.scene.add(mesh);
     (bone ?? sc.holder).attach(mesh);
@@ -140,10 +142,27 @@ export function pansage3dGame(ctx) {
   const r0 = rng();
   const r1 = rng();
   const stoneFoot = lame ? (a.lame.foot ?? 0) % 4 : r0 < 0.6 ? Math.floor(r1 * 4) : -1;
+  /** Rayon du bas du sabot de ce membre (repère monde), mesuré sur la pose figée : les sommets de ses os tout en bas. */
+  function hoofRadius(leg, prefix) {
+    const px = sc.proxy;
+    if (!px.skeleton) return null;
+    const at = sc.holder.localToWorld(leg.hoof.clone());
+    const names = px.skeleton.bones.map((b) => b.name);
+    let r = 0;
+    for (let i = 0; i < px.bones.length; i++) {
+      if (!names[px.bones[i]]?.startsWith(prefix)) continue;
+      const y = px.pos[i * 3 + 1];
+      if (y > at.y + 0.03 * S) continue;
+      const d = Math.hypot(px.pos[i * 3] - at.x, px.pos[i * 3 + 2] - at.z);
+      if (d < 0.2 * S) r = Math.max(r, d);
+    }
+    return r || null;
+  }
   const hooves = PANSAGE_FEET.map((foot, i) => {
     const hf = makeHoof(foot, i === stoneFoot, rng, dirt);
-    const leg = sc.model.legs?.[LEG_OF[foot]];
-    hf.sole = leg ? hoofSole(sc, leg, hf.blobs.map((q) => ({ u: (q.y - HY) / 86, w: (q.x - HX) / 50, r: q.r / 50, stone: !!q.stone, seed: q.seed })), own) : null;
+    const li = LEG_OF[foot];
+    const leg = sc.model.legs?.[li];
+    hf.sole = leg ? hoofSole(sc, leg, hf.blobs.map((q) => ({ u: (q.y - HY) / 86, w: (q.x - HX) / 50, r: q.r / 50, stone: !!q.stone, seed: q.seed })), own, { radius: hoofRadius(leg, ['FL', 'FR', 'HL', 'HR'][li]) }) : null;
     return hf;
   });
   let foot = 0;
@@ -230,10 +249,10 @@ export function pansage3dGame(ctx) {
     const body = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, rump, L.neck.clone().lerp(L.poll, 0.3)];
     // (de trois quarts avant : le flanc où sont les taches, et sa tête, qui réagit)
     const head = [L.poll, L.muzzle, ...L.ears];
-    if (st === 'curry') sc.frame([...body, ...head, L.belly.clone().add(v3(0, -0.15 * S, 0))], { dir: [0.42, 0.2, 1], pad: 1.04 });
+    if (st === 'curry') sc.frame([...body, ...head, L.belly.clone().add(v3(0, -0.15 * S, 0))], { dir: [0.42, 0.2, 1], pad: 1.08 });
     else if (st === 'brush') {
       const low = legs.length ? L.hooves : [L.belly.clone().add(v3(0, -0.2 * S, 0))];
-      sc.frame([...body, ...head, ...low], { dir: [0.42, 0.18, 1], pad: 1.03 });
+      sc.frame([...body, ...head, ...low], { dir: [0.42, 0.18, 1], pad: 1.07 });
     } else if (st === 'hoof') frameHoof();
     else frameComb();
   }

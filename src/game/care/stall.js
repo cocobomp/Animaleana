@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { plateTexture } from '../models/interiorKit.js';
-import { hayNet, feeder, bucket, waterTap, BUCKET, FEEDER, NET_DEPTH } from './props.js';
+import { hayNet, feeder, bucket, waterTap, BUCKET, FEEDER, NET_DEPTH, avatarHand } from './props.js';
 import { canvasTex, woodTexture, strawFloorTexture, noiseTexture } from './textures.js';
 
 export const STALL = { halfW: 1.85, back: -1.45, front: 2.2, low: 1.3, high: 2.6, roof: 3.05 };
@@ -228,7 +228,8 @@ export function stallSet(stage) {
   // Mangeoire : au mur de droite, sous sa bouche quand il mange (le bord juste au-dessus du bout du nez) ; ou, si sa
   // bouche n'arrive pas jusqu'au mur (poulain), posée dans la paille sous sa bouche.
   const onFloor = eat.x < feedX - 0.04;
-  props.feeder = feeder({ high });
+  const hand = avatarHand(stage.game?.profile);
+  props.feeder = feeder({ high, hand });
   props.feeder.group.scale.setScalar(ps);
   props.feeder.setFloor(onFloor);
   const feedAt = onFloor
@@ -237,7 +238,7 @@ export function stallSet(stage) {
   props.feeder.group.position.copy(feedAt);
   g.add(props.feeder.group);
   // Filet à foin : accroché au mur de droite, un peu devant la mangeoire, le bas à hauteur de bouche (tête haute).
-  props.net = hayNet({ high });
+  props.net = hayNet({ high, hand });
   props.net.group.scale.setScalar(ps);
   props.net.group.position.set(S.halfW - 0.25 * ps, Math.max(feedAt.y + (NET_DEPTH + 0.2) * ps, muzzle.y + 0.62 * ps), feedAt.z + 0.85 * Math.max(0.85, ps));
   g.add(props.net.group);

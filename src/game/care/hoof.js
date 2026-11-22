@@ -43,9 +43,11 @@ export function inTriangle(px, py, a, b, c) {
  * La sole sous le sabot de ce membre (leg : un élément de model.legs). blobs : [{ u, w, r, stone, seed }] (u, w, r en
  * part du rayon du sabot). own(x) : à libérer avec le jeu.
  */
-export function hoofSole(sc, leg, blobs, own) {
+export function hoofSole(sc, leg, blobs, own, { radius = null } = {}) {
   const md = sc.model;
-  const R = (md.dims?.legR ?? 0.065) * 1.08;
+  // (radius : le rayon du bas du sabot du modèle, mesuré ; la sole le couvre tout entier, sinon le bord du sabot,
+  // en grosses facettes, dépassait autour d'elle)
+  const R = Math.max((md.dims?.legR ?? 0.065) * 1.08, (radius ?? 0) / sc.double.scale * 1.06);
   const g = new THREE.Group();
   g.scale.setScalar(R);
   // (au repos, les groupes des membres n'ont pas de rotation : la sole est sous le boulet, normale vers le bas)
@@ -93,7 +95,7 @@ export function hoofSole(sc, leg, blobs, own) {
   g.add(cleft);
   // mottes de terre
   const r = rng(31);
-  const dirtTex = own(noiseTexture('#5b3f27', 0.35, 17, 64));
+  const dirtTex = own(noiseTexture('#4e3622', 0.22, 17, 64));
   const dirtMat = own(new THREE.MeshStandardMaterial({ map: dirtTex, color: 0xffffff, roughness: 1 }));
   const lump = own(lumpyBall(5));
   const stoneMat = own(new THREE.MeshStandardMaterial({ color: 0x8f8b86, roughness: 0.6 }));
@@ -207,8 +209,9 @@ export function hoofSole(sc, leg, blobs, own) {
 }
 
 /** Petite boule bosselée (motte de terre, caillou). */
-function lumpyBall(seed, amp = 0.35) {
-  const geo = new THREE.IcosahedronGeometry(1, 2);
+function lumpyBall(seed, amp = 0.22) {
+  // (plus fine et moins bosselée : une motte de terre tassée, pas une boule de papier froissé)
+  const geo = new THREE.IcosahedronGeometry(1, 3);
   const p = geo.attributes.position;
   const r = rng(seed);
   for (let i = 0; i < p.count; i++) {

@@ -675,16 +675,25 @@ export class CareStage {
     if (m.lift !== null) m.lastLift = m.lift;
   }
 
-  /** Une petite bouffée (souffle des naseaux) : sphères douces qui grossissent et s'effacent. */
-  puff(at, dir, { color = 0xf3efe6, n = 5, size = 0.022 } = {}) {
+  /**
+   * Le souffle des naseaux : seulement quand il fait froid (en dessous de 8 °C, la buée se voit ; dans un box au
+   * chaud, rien), et en voile léger : de petites images douces, blanches, toujours face à nous, qui partent des deux
+   * naseaux, s'élargissent et s'effacent vite (avant : une boule grise floue qui flottait).
+   */
+  puff(at, dir, { n = 4, size = 0.03 } = {}) {
+    const temp = this.game?.temperature;
+    if (!(Number.isFinite(temp) && temp <= 8)) return false;
+    this.puffMap ??= puffTexture();
+    const side = new THREE.Vector3(0, 1, 0).cross(dir).normalize().multiplyScalar(0.022 * this.double.scale);
     for (let i = 0; i < n; i++) {
-      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.0, depthWrite: false });
-      const s = new THREE.Mesh(PUFF_GEO, mat);
-      s.position.copy(at);
-      const v = dir.clone().multiplyScalar(0.5 + Math.random() * 0.4).add(new THREE.Vector3((Math.random() - 0.5) * 0.15, (Math.random() - 0.2) * 0.12, (Math.random() - 0.5) * 0.15));
+      const mat = new THREE.SpriteMaterial({ map: this.puffMap, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+      const s = new THREE.Sprite(mat);
+      s.position.copy(at).addScaledVector(side, i % 2 ? 1 : -1);
+      const v = dir.clone().multiplyScalar(0.35 + Math.random() * 0.25).add(new THREE.Vector3((Math.random() - 0.5) * 0.06, -0.03 + Math.random() * 0.05, (Math.random() - 0.5) * 0.06));
       this.scene.add(s);
-      this.fx.push({ obj: s, v, age: -i * 0.04, life: 0.9, size, kind: 'puff' });
+      this.fx.push({ obj: s, v, age: -Math.floor(i / 2) * 0.06, life: 0.7, size, kind: 'puff' });
     }
+    return true;
   }
 
   /** Objet 3D éphémère : il vit life secondes (update(o, k) le fait bouger), puis il est retiré et libéré. */
@@ -703,8 +712,8 @@ export class CareStage {
       if (f.kind === 'puff') {
         o.position.addScaledVector(f.v, dt);
         f.v.multiplyScalar(1 - dt * 1.8);
-        o.scale.setScalar(f.size * (1 + k * 3));
-        o.material.opacity = 0.12 * Math.sin(Math.min(1, k) * Math.PI);
+        o.scale.setScalar(f.size * (1 + k * 2.5));
+        o.material.opacity = 0.45 * Math.sin(Math.min(1, k) * Math.PI) * (1 - k * 0.5);
       } else {
         if (f.v) {
           f.v.y -= f.grav * dt;
@@ -722,7 +731,8 @@ export class CareStage {
       for (const f of dead) {
         f.obj.parent?.remove(f.obj);
         f.obj.traverse((m) => {
-          if (m.geometry && m.geometry !== PUFF_GEO && !m.geometry.userData.shared) m.geometry.dispose();
+          // (pas la géométrie d'une image face à nous : three.js la partage entre toutes, celles du jeu comprises)
+          if (m.geometry && !m.isSprite && !m.geometry.userData.shared) m.geometry.dispose();
           if (m.material && !m.material.userData?.shared) m.material.dispose();
         });
       }
@@ -865,7 +875,7 @@ export class CareStage {
     for (const f of this.fx ?? []) {
       f.obj.parent?.remove(f.obj);
       f.obj.traverse((m) => {
-        if (m.geometry && m.geometry !== PUFF_GEO) m.geometry.dispose();
+        if (m.geometry && !m.isSprite && !m.geometry.userData.shared) m.geometry.dispose();
         m.material?.dispose?.();
       });
     }
@@ -876,6 +886,7 @@ export class CareStage {
     this.double?.dispose();
     for (const d of this.disposables) d.dispose?.();
     this.white?.dispose();
+    this.puffMap?.dispose();
     this.scene?.traverse((o) => {
       if (o.isLight) o.dispose?.();
     });
@@ -898,6 +909,23 @@ export class CareStage {
   }
 }
 
+/** Une petite buée : un rond blanc très doux (voir puff). */
+function puffTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const x = c.getContext('2d');
+  const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,0.9)');
+  gr.addColorStop(0.4, 'rgba(255,255,255,0.4)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr;
+  x.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 /** Une image blanche d'un pixel (voir unify). */
 function whiteTexture() {
   const t = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
@@ -906,8 +934,6 @@ function whiteTexture() {
   return t;
 }
 
-const PUFF_GEO = new THREE.SphereGeometry(1, 10, 8);
-PUFF_GEO.userData.shared = true;
 
 const a0 = (v) => (Number.isFinite(v) ? v : 50);
 const smoothstep = (k) => k * k * (3 - 2 * k);

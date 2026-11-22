@@ -429,3 +429,18 @@ describe('la carte de fin laisse voir l\'animal', () => {
     sc.dispose();
   });
 });
+
+describe('la sole du cure-pied couvre le sabot du modèle', () => {
+  it('le rayon de la sole suit le bas du sabot mesuré sur le modèle (son bord ne dépasse plus)', async () => {
+    const { a, sc } = makeStage();
+    const ctx = ctxFor(a, sc);
+    const game = pansage.pansage3dGame(ctx);
+    const R0 = (sc.model.dims?.legR ?? 0.065) * 1.08;
+    const soles = [];
+    sc.scene.traverse((o) => { if (o.isGroup && o.parent && sc.model.legs.some((l) => l.fetlock === o.parent) && o.children.length > 8) soles.push(o); });
+    expect(soles.length).toBe(4);
+    for (const g of soles) expect(g.scale.x).toBeGreaterThanOrEqual(R0 - 1e-9);
+    game.destroy();
+    sc.dispose();
+  });
+});

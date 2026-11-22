@@ -54,7 +54,7 @@ export const NET_DEPTH = 0.765;
  * plat) à 1 plein (rond, des brins dépassent des mailles). pour(on) : des poignées de foin tombent dedans.
  * nibble(on) : le cheval tire du foin (le filet bouge, des brins tombent).
  */
-export function hayNet({ high = true, keep: outer = null } = {}) {
+export function hayNet({ high = true, keep: outer = null, hand: handCols = null } = {}) {
   const keep = bag();
   const g = new THREE.Group();
   const pts = NET_PROFILE.map(([r, y]) => new THREE.Vector2(r, y));
@@ -150,11 +150,30 @@ export function hayNet({ high = true, keep: outer = null } = {}) {
   };
   apply();
 
-  // Poignées de foin qui tombent dans le filet (petites cartes).
+  // Poignées de foin qui tombent dans le filet (petites cartes), d'une poignée de foin tenue dans notre main,
+  // au-dessus de l'ouverture du filet (avant : elles tombaient de nulle part).
   const flakes = [];
   const flakeGeo = keep(crossCard(0.12, 0.1));
   let pouring = false;
   let spawn = 0;
+  const hold = new THREE.Group();
+  hold.visible = false;
+  g.add(hold);
+  const handM = handModel(keep, { ...(handCols ?? {}), grip: 0.75 });
+  handM.rotation.set(Math.PI, 0, -0.5); // (paume vers le bas, les doigts serrés sur le foin, le bras qui vient vers nous)
+  handM.rotation.order = 'YXZ';
+  handM.rotation.y = -Math.PI / 2 - 0.4;
+  hold.add(handM);
+  const bundle = new THREE.Group();
+  for (let i = 0; i < 7; i++) {
+    const m = new THREE.Mesh(flakeGeo, strandMat);
+    m.position.set((Math.random() - 0.5) * 0.05, -0.02 - Math.random() * 0.05, (Math.random() - 0.5) * 0.05);
+    m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+    m.scale.setScalar(0.7 + Math.random() * 0.5);
+    bundle.add(m);
+  }
+  hold.add(bundle);
+  hold.position.set(-0.05, 0.36, 0.06);
 
   return {
     group: g,
@@ -180,6 +199,8 @@ export function hayNet({ high = true, keep: outer = null } = {}) {
       const amp = nib * 0.05 + (pouring ? 0.02 : 0);
       g.rotation.z = Math.sin(swing * 5.5) * amp + Math.sin(swing * 1.3) * 0.006;
       g.rotation.x = Math.sin(swing * 3.7 + 1) * amp * 0.6;
+      hold.visible = pouring;
+      if (pouring) hold.position.y = 0.36 + Math.sin(swing * 7) * 0.012; // (la main secoue un peu le foin)
       if (pouring) {
         spawn += dt * 14;
         while (spawn > 1) {
@@ -282,7 +303,7 @@ export const FEEDER = { r: 0.27, rBot: 0.2, depth: 0.2, th: 0.025 };
  * Mangeoire en caoutchouc noir accrochée au mur (le bord du haut à l'origine du groupe). setLevel(k) : les
  * granulés dedans (0 vide, 1 pleine). pourFrom(on, from) : la pelle verse (des granulés tombent dedans).
  */
-export function feeder({ high = true } = {}) {
+export function feeder({ high = true, hand: handCols = null } = {}) {
   const keep = bag();
   const g = new THREE.Group();
   const F = FEEDER;
@@ -352,8 +373,12 @@ export function feeder({ high = true } = {}) {
   };
   apply();
 
-  // La pelle à grain (plastique rouge) et les granulés qui tombent.
+  // La pelle à grain et les granulés qui tombent ; notre main tient la poignée (avant : la pelle flottait seule).
   const scoop = scoopModel(keep);
+  const grip = handModel(keep, { ...(handCols ?? {}), grip: 0.85 });
+  grip.position.set(0.255, 0.035, 0);
+  grip.rotation.set(Math.PI / 2, 0, Math.PI / 2 + 0.35);
+  scoop.add(grip);
   scoop.visible = false;
   g.add(scoop);
   const falling = [];
@@ -808,7 +833,7 @@ function carrotTexture() {
  * poignet et le bas de la manche. Origine au milieu de la paume ; les doigts vers +x, la paume vers +y, le pouce vers
  * +z.
  */
-export function handModel(keep, { skin = 0xf0c29a, sleeve = 0x3f7fd0 } = {}) {
+export function handModel(keep, { skin = 0xf0c29a, sleeve = 0x3f7fd0, grip = 0 } = {}) {
   const g = new THREE.Group();
   const skinMat = keep(new THREE.MeshStandardMaterial({ color: skin, roughness: 0.6 }));
   // paume : un coussin plat, un peu plus large vers les doigts, creusé au milieu (le creux de la main)
@@ -833,6 +858,7 @@ export function handModel(keep, { skin = 0xf0c29a, sleeve = 0x3f7fd0 } = {}) {
     const f = new THREE.Group();
     f.position.set(0.05 - Math.abs(i - 1.5) * 0.004, 0.003, -0.026 + i * 0.0175);
     f.rotation.y = (i - 1.5) * 0.03;
+    f.rotation.z = grip * 1.25; // (grip : la main se ferme sur un manche, une poignée de foin)
     g.add(f);
     const p1 = shadowed(new THREE.Mesh(seg, skinMat));
     p1.rotation.z = -Math.PI / 2;
@@ -841,7 +867,7 @@ export function handModel(keep, { skin = 0xf0c29a, sleeve = 0x3f7fd0 } = {}) {
     f.add(p1);
     const j = new THREE.Group();
     j.position.x = 0.042 * lens[i];
-    j.rotation.z = 0.12;
+    j.rotation.z = 0.12 + grip * 1.3;
     f.add(j);
     const p2 = shadowed(new THREE.Mesh(tipSeg, skinMat));
     p2.rotation.z = -Math.PI / 2;
@@ -851,8 +877,8 @@ export function handModel(keep, { skin = 0xf0c29a, sleeve = 0x3f7fd0 } = {}) {
   }
   // le pouce, le long de la main
   const thumb = shadowed(new THREE.Mesh(seg, skinMat));
-  thumb.position.set(0.012, 0.004, 0.046);
-  thumb.rotation.set(0, -0.35, -Math.PI / 2);
+  thumb.position.set(0.012 + grip * 0.02, 0.004 + grip * 0.018, 0.046 - grip * 0.012);
+  thumb.rotation.set(grip * 0.6, -0.35 - grip * 0.5, -Math.PI / 2);
   thumb.scale.set(1.12, 1.05, 1.12);
   g.add(thumb);
   // poignet et bas de la manche (court : la main entre dans l'image par le côté)
@@ -873,6 +899,13 @@ export function handModel(keep, { skin = 0xf0c29a, sleeve = 0x3f7fd0 } = {}) {
   band.scale.set(1, 1, 0.85);
   g.add(band);
   return g;
+}
+
+/** Couleurs de notre main (celles de l'avatar : peau, haut), pour les mains des soins. */
+export function avatarHand(profile) {
+  const av = profile?.avatar ?? {};
+  const col = (c, fallback) => (typeof c === 'number' ? c : typeof c === 'string' && /^#?[0-9a-f]{6}$/i.test(c) ? parseInt(c.replace('#', ''), 16) : fallback);
+  return { skin: col(av.skin, 0xf0c29a), sleeve: col(av.top ?? av.shirt, 0x3f7fd0) };
 }
 
 /**
@@ -1042,7 +1075,7 @@ function drawSock(x, W, H, base, wet, seed) {
 /** Tache de boue séchée (craquelée, bords irréguliers), de poussière (poudre claire) ou de boue des jambes (traînées). */
 export function mudTexture(kind = 'mud', seed = 1) {
   const S = 128;
-  const c = paint(S, S, (x) => drawMud(x, S, kind, seed), `mud|${kind}|${seed}`);
+  const c = paint(S, S, (x) => drawMud(x, S, kind, seed), `mud3|${kind}|${seed}`);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
@@ -1071,14 +1104,72 @@ function drawMud(x, S, kind, seed) {
     x.quadraticCurveTo(xa, ya, (xa + xb) / 2, (ya + yb) / 2);
     x.fill();
   };
-  if (kind === 'dust') {
-    // poussière : un voile sableux, des grains plus clairs
-    for (let i = 0; i < 26; i++) splat(S / 2 + (r() - 0.5) * 56, S / 2 + (r() - 0.5) * 50, 10 + r() * 16, `rgba(${196 + r() * 24},${172 + r() * 20},${136 + r() * 18},0.22)`, 10, 0.5);
-    for (let i = 0; i < 160; i++) {
-      x.fillStyle = `rgba(${215 + r() * 30},${195 + r() * 30},${160 + r() * 30},${0.3 + r() * 0.4})`;
-      x.fillRect(S / 2 + (r() - 0.5) * 80, S / 2 + (r() - 0.5) * 70, 1 + r() * 1.5, 1 + r() * 1.5);
+  /** Une tache douce : opaque au milieu, qui s'efface sur les bords (ellipse allongée dans le sens du poil). */
+  const soft = (cx, cy, rx, ry, rgb, a) => {
+    x.save();
+    x.translate(cx, cy);
+    x.scale(1, ry / rx);
+    const gr = x.createRadialGradient(0, 0, 0, 0, 0, rx);
+    gr.addColorStop(0, `rgba(${rgb},${a})`);
+    gr.addColorStop(0.55, `rgba(${rgb},${a * 0.85})`);
+    gr.addColorStop(1, `rgba(${rgb},0)`);
+    x.fillStyle = gr;
+    x.beginPath();
+    x.arc(0, 0, rx, 0, Math.PI * 2);
+    x.fill();
+    x.restore();
+  };
+  /** Des poils collés : petits traits presque horizontaux (le sens du poil), seulement là où il y a déjà de la tache. */
+  const hair = (n, rgbs, len, alpha) => {
+    x.save();
+    x.globalCompositeOperation = 'source-atop';
+    x.lineCap = 'round';
+    for (let i = 0; i < n; i++) {
+      const px = r() * S;
+      const py = r() * S;
+      const a = (r() - 0.5) * 0.35 + 0.12;
+      const l = len * (0.5 + r());
+      x.strokeStyle = `rgba(${rgbs[Math.floor(r() * rgbs.length)]},${alpha * (0.5 + r() * 0.5)})`;
+      x.lineWidth = 0.8 + r() * 1.2;
+      x.beginPath();
+      x.moveTo(px, py);
+      x.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l);
+      x.stroke();
     }
-  } else {
+    x.restore();
+  };
+  if (kind === 'dust') {
+    // poussière décollée par l'étrille : un voile clair et léger dans le poil, en traînées (pas un rond blanc)
+    for (let i = 0; i < 9; i++) soft(S / 2 + (r() - 0.5) * 60, S / 2 + (r() - 0.5) * 30, 18 + r() * 20, 9 + r() * 9, '150,130,104', 0.22);
+    hair(260, ['168,148,120', '128,110,88', '182,164,136'], 7, 0.6);
+    return;
+  }
+  if (kind === 'mud') {
+    // boue séchée dans le poil : une croûte d'argile pâle aux bords qui s'effacent, allongée dans le sens du poil,
+    // des poils collés en traînées, des éclats plus clairs, quelques projections autour
+    // (brun-gris de la terre séchée : ni crème — on aurait dit des taches blanches de pie — ni la couleur du poil)
+    for (let i = 0; i < 11; i++) {
+      const rx = 14 + r() * 22;
+      soft(S / 2 + (r() - 0.5) * 54, S / 2 + (r() - 0.5) * 30, rx, rx * (0.45 + r() * 0.3), `${104 + r() * 14},${86 + r() * 12},${66 + r() * 10}`, 0.92);
+    }
+    // mottes plus sombres, poils collés en traînées, éclats de croûte plus clairs
+    for (let i = 0; i < 8; i++) soft(S / 2 + (r() - 0.5) * 50, S / 2 + (r() - 0.5) * 26, 5 + r() * 7, 3 + r() * 4, '70,56,42', 0.75);
+    hair(320, ['72,58,44', '138,118,92', '60,48,36', '150,130,102'], 9, 0.95);
+    x.save();
+    x.globalCompositeOperation = 'source-atop';
+    for (let i = 0; i < 90; i++) {
+      x.fillStyle = `rgba(${160 + r() * 24},${142 + r() * 20},${112 + r() * 18},${0.55 + r() * 0.4})`;
+      x.fillRect(r() * S, r() * S, 1.5 + r() * 2.5, 1 + r() * 1.5);
+    }
+    x.restore();
+    for (let i = 0; i < 9; i++) {
+      const a = r() * Math.PI * 2;
+      const d = 40 + r() * 16;
+      soft(S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d * 0.6, 2 + r() * 3, 2 + r() * 2, '96,78,60', 0.85);
+    }
+    return;
+  }
+  {
     const leg = kind === 'leg';
     // bord séché plus clair, cœur sombre et humide, puis craquelures et croûtes claires
     const blobs = leg ? 5 : 6;

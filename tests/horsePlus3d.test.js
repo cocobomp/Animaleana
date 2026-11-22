@@ -197,6 +197,7 @@ describe('brider en 3D, chaque gabarit', () => {
         s = game.peek();
         const e = s.ears[s.earDone[0] ? 1 : 0];
         expect(inView(e, ctx.view), `oreille ${i}`).toBe(true);
+        expect(e.y, 'sous la pastille de l\'étape').toBeGreaterThan(ctx.view.y0 + 44);
         game.down(e);
         run(ctx, game, sc, 0.3);
       }

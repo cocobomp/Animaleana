@@ -409,9 +409,9 @@ export function deworm3dGame(ctx) {
       // le poids du cheval
       g.save();
       g.fillStyle = 'rgba(255,255,255,0.9)';
-      rrect(g, v.x0 + 12, Math.max(12, v.y0 + 12), 170, 40, 12);
+      rrect(g, v.x0 + 12, v.y0 + 12, 170, 40, 12);
       g.fill();
-      label(g, `⚖️ ${t('mg_deworm_weight', { kg })}`, v.x0 + 97, Math.max(12, v.y0 + 12) + 20, 16, '#23302a');
+      label(g, `⚖️ ${t('mg_deworm_weight', { kg })}`, v.x0 + 97, v.y0 + 12 + 20, 16, '#23302a');
       g.restore();
       if (stage === 'dose') {
         // la dose réglée, au-dessus de la bague

@@ -300,7 +300,7 @@ export function shoe3dGame(ctx) {
         }
         if (nl.hits === JUST) label(gc, '✓', q.x + 18, q.y - 10, 16, '#1e8a4a');
       }
-      label(gc, `${nails.filter((x) => x.hits >= JUST).length} / ${n}`, ctx.view.x0 + 50, Math.max(40, ctx.view.y0 + 40), 20);
+      label(gc, `${nails.filter((x) => x.hits >= JUST).length} / ${n}`, ctx.view.x0 + 50, ctx.view.y0 + 40, 20);
     },
     destroy() {
       m.square = false;

@@ -143,14 +143,17 @@ export function bridle3dGame(ctx) {
     sc.proxy.bake();
     const top = tl.a.clone();
     const end = tl.c.clone();
-    const side = head.localToWorld(v3(1, 0, 0)).sub(head.localToWorld(v3(0, 0, 0))).normalize();
     throatPath = [];
     for (let i = 0; i <= 8; i++) {
       const k = i / 8;
       const q = top.clone().lerp(end, k);
-      // (le rayon part de notre côté, loin, vers la tête)
-      const from = head.localToWorld(q.clone().setX(-0.6));
-      const hit = sc.proxy.hitAll(new THREE.Ray(from, side.clone()))[0];
+      // (le rayon part de notre côté, vers la tête ; en bas, il vient de dessous : la lanière passe SOUS la gorge —
+      // avant, ces rayons tombaient dans la ganache et la sous-gorge y paraissait plantée comme un bâton)
+      const u = smooth(Math.min(1, Math.max(0, (k - 0.35) / 0.5)));
+      const dirL = v3(1 - u, u, 0).normalize();
+      const from = head.localToWorld(q.clone().addScaledVector(dirL, -0.6));
+      const dirW = head.localToWorld(dirL.clone()).sub(head.localToWorld(v3())).normalize();
+      const hit = sc.proxy.hitAll(new THREE.Ray(from, dirW))[0];
       const p = hit ? head.worldToLocal(hit.point.clone()) : q.clone().setX(-hr * 0.5 * (1 - k));
       throatPath.push(p.add(v3(-0.006, 0, 0)));
     }
@@ -287,7 +290,8 @@ export function bridle3dGame(ctx) {
     // (à l'ouverture, la pose du modèle n'est pas encore celle du box : les repères de repos, avec de la marge)
     if (st === 'bit' && !framedLow) sc.frame([...ptsHead, W(v3(0, -hr * 2.2, snout * 0.9)), W(v3(0, -hr * 1.6, snout * 1.3)), L.muzzle.clone().add(v3(0.2 * S, -0.12 * S, 0))], { dir: [0.75, 0.12, 1], pad: 1.2, now });
     else if (st === 'bit') sc.frame([W(v3(0, hr * 1.2, -0.02)), ...[0, 1].map((i) => earTip(i)), W(v3(0, -hr * 0.2, snout * 1.14)), W(teethLocal.clone().add(v3(0, -hr * 0.4, hr * 0.5))), W(barLocal.clone().add(v3(-hr * 0.5, -hr * 1.9, 0))), W(throatLocal.clone().add(v3(0, -hr * 0.6, 0)))], { dir: [0.75, 0.12, 1], pad: 1.16, now });
-    else if (st === 'ears') sc.frame([...ptsHead, ...L.ears.map((e) => e.clone().add(v3(0, 0.08 * S, 0)))], { dir: [0.6, 0.35, 1], pad: 1.22, now });
+    // (de la place au-dessus des oreilles : la pastille de l'étape ne se pose plus dessus, ni sur leur cible)
+    else if (st === 'ears') sc.frame([...ptsHead, ...L.ears.map((e) => e.clone().add(v3(0, 0.2 * S, 0)))], { dir: [0.6, 0.35, 1], pad: 1.22, now });
     else sc.frame([...ptsHead, L.neck, W(throatLocal.clone().add(v3(0, -hr * 1.2, 0)))], { dir: [0.42, -0.12, 1], pad: 1.2, now });
   }
 
@@ -329,7 +333,7 @@ export function bridle3dGame(ctx) {
       measureThroat();
       setSag(hr * 0.55 * Math.max(0, 1 - throat / T.hi) - (throat > T.hi ? 0.004 : 0));
       const red = throat > T.hi ? Math.min(1, (throat - T.hi) / 0.2) : 0;
-      throatMat.emissive.setRGB(0.6 * red, 0.04 * red, 0.02 * red);
+      throatMat.emissive.setRGB(0.32 * red, 0.03 * red, 0.02 * red); // (elle rougit, sans devenir orange vif)
     }
   }
 
@@ -423,7 +427,8 @@ export function bridle3dGame(ctx) {
       if (annoyed > 0) m.ears = 'back';
       else if (!(st === 'throat' && throat > T.hi)) m.ears = 'forward';
       m.look = hand.position;
-      m.lookAmt = st === 'bit' && !bitIn ? 0.2 : 0;
+      // (il regarde la main jusqu'aux oreilles : il ne retourne pas la tête vers le bord de l'image une fois le mors entré)
+      m.lookAmt = st === 'bit' ? 0.2 : 0;
       poseBridle();
       // (la tête baissée vers nous : on recadre une fois, en douceur, sur sa tête telle qu'elle est)
       if (st === 'bit' && !framedLow && lower > 0.92) {
@@ -475,7 +480,7 @@ export function bridle3dGame(ctx) {
       if (!sc.ready) return;
       const st = step();
       if (rule && st === 'throat') rule.dial(g, throat, 354, ctx.view.y0 + 56);
-      stagePill(g, si, BRIDLE.steps.length, t(`mg_bridle_stage_${st}`), Math.max(8, ctx.view.y0 + 8));
+      stagePill(g, si, BRIDLE.steps.length, t(`mg_bridle_stage_${st}`), ctx.view.y0 + 10);
     },
     destroy() {
       unhook();

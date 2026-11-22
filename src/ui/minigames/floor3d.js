@@ -528,7 +528,7 @@ export function floorGame3d(ctx, make, o) {
       // (à gauche, sur le mur : à droite, ils couvraient la tête du cheval et la mangeoire, et la flèche de la botte
       // cachait le pourcentage)
       const tx = v.x0 + 44;
-      const ty = Math.max(16, v.y0 + 16);
+      const ty = v.y0 + 16;
       if (s.phase === 'pick' || (s.phase === undefined && !cells)) {
         g.save();
         g.fillStyle = 'rgba(255,255,255,0.88)';

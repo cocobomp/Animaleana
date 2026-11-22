@@ -316,7 +316,7 @@ export function sweep3dGame(ctx) {
       g.fill();
       label(g, `${s.collected} / ${s.total}`, c.x, c.y - 16, 16, '#23302a');
       g.restore();
-      drawMiniGauge(g, v.x0 + 30, Math.max(14, v.y0 + 14), Math.min(250, v.x1 - v.x0 - 140), 14, s.value / s.max, s.lo / s.max, s.hi / s.max);
+      drawMiniGauge(g, v.x0 + 30, v.y0 + 14, Math.min(250, v.x1 - v.x0 - 140), 14, s.value / s.max, s.lo / s.max, s.hi / s.max);
       if (s.collected < s.total && !ctx.done && s.value < s.lo) {
         const a = sc.project(toWorld(pan.x - 40, pan.y + pan.h / 2 + 40, 0.05));
         g.save();

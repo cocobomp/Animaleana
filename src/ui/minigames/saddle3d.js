@@ -573,7 +573,7 @@ export function saddle3dGame(ctx) {
         g.restore();
       }
       if (st === 'girth' && rule && pause <= 0) rule.dial(g, tension, 354, ctx.view.y0 + 56);
-      stagePill(g, si, SELLER_STAGES.length, t(`mg_seller_stage_${st}`), Math.max(8, ctx.view.y0 + 8));
+      stagePill(g, si, SELLER_STAGES.length, t(`mg_seller_stage_${st}`), ctx.view.y0 + 10);
     },
     destroy() {
       unhook();

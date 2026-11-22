@@ -89,7 +89,6 @@ export function saddle3dGame(ctx) {
     cloth.userData = {};
     meshes[0].material = cloth;
   }
-  for (const c of [padCarrier, saddleCarrier]) c.traverse((o) => { if (o.isMesh) o.userData.pickPart = c; });
   sc.pickable(padCarrier, 'pad');
   sc.pickable(saddleCarrier, 'saddle');
   // La sangle : un tour sous le ventre ; lâche, elle pend (agrandie vers le bas autour de son point haut).
@@ -100,10 +99,7 @@ export function saddle3dGame(ctx) {
   // ---------------------------------------------------------------- le porte-selle, dans la paille devant lui
   const stand = saddleStand(own, { h: 0.84 });
   sc.scene.add(stand.group);
-  /**
-   * Le porte-selle se pose près de nous, en bas à gauche de l'image (comme le plateau du jeu dessiné), entre nous et le
-   * cheval : à mi-chemin de son dos, sous ce point de l'écran ; sa hauteur va jusqu'à la paille.
-   */
+  /** Le porte-selle (le plateau du jeu dessiné) : dans la paille devant lui, du côté de la croupe, entre lui et nous. */
   function placeStand() {
     // (devant lui, du côté de la croupe, entre lui et nous ; la caméra le cadre avec le cheval : voir frameFor)
     const k = clamp(0.85 + 0.15 * S, 0.8, 1);

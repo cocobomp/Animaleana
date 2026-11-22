@@ -250,6 +250,8 @@ describe('les petits (agneau, chevreau) : à leur taille', () => {
       worst = Math.max(worst, p.y - litterHeight(sc.decor.dims, p.x, p.z));
     }
     expect(worst).toBeLessThan(0.015);
+    // (et tassée sous ses sabots : on les voit, la paille ne passe pas par-dessus)
+    for (const h of sc.marks.hooves) expect(litterHeight(sc.decor.dims, h.x, h.z)).toBeLessThan(0.025);
     sc.dispose();
   }, 60000);
 });

@@ -72,6 +72,12 @@ export function barnSet(stage) {
   stage.measure();
   const L = stage.marks;
   const eat = eat0.clone().add(V(dx, 0, 0));
+  // (la litière tassée là où il se tient et piétine — de la queue à l'auge, la largeur de ses sabots — : on voit ses
+  // sabots, la paille ne passe plus par-dessus)
+  {
+    const hz = L.hooves.map((h) => h.z);
+    S.trod = { x0: L.tailTip.x - 0.2 * u, x1: S.halfW, z0: Math.min(...hz) - 0.12 * u, z1: Math.max(...hz) + 0.12 * u };
+  }
 
   // ---------------------------------------------------------------- matières
   const wallTex = keep(barnWood(etable ? 17 : 7, true, 'old'));
@@ -563,7 +569,14 @@ export function barnSet(stage) {
 export function litterHeight(S, x, z) {
   const y = (S.back + S.front) / 2 - z;
   const edge = Math.max(0, 1 - Math.min(S.halfW - Math.abs(x), z - S.back) / 0.55);
-  return 0.05 + 0.025 * Math.sin(x * 6.1 + y * 3.3) * Math.cos(y * 5.2 - x * 2.4) + 0.014 * Math.sin(x * 17 + y * 21) + 0.12 * edge * edge;
+  const h = 0.05 + 0.025 * Math.sin(x * 6.1 + y * 3.3) * Math.cos(y * 5.2 - x * 2.4) + 0.014 * Math.sin(x * 17 + y * 21) + 0.12 * edge * edge;
+  const t = S.trod;
+  if (!t) return h;
+  // (tassée sous ses pas : 1 à 2 cm, avec un bord doux de 12 cm)
+  const dxs = Math.max(t.x0 - x, x - t.x1, 0);
+  const dzs = Math.max(t.z0 - z, z - t.z1, 0);
+  const k = Math.max(0, 1 - Math.hypot(dxs, dzs) / 0.12);
+  return h + (0.012 + 0.006 * Math.sin(x * 23 + z * 19) - h) * k * k * (3 - 2 * k);
 }
 
 /** Mur chaulé : des moellons irréguliers sous la chaux blanche, la chaux usée par endroits, des coulures en bas. */

@@ -214,11 +214,11 @@ export function bodyFrame(sc) {
 export function clothHand(sc, own, color = 0xe9c77b) {
   const hand = handModel(own, { ...avatarHand(sc.game?.profile), grip: 0.35 });
   hand.userData.hand = true;
-  // (manche longue : l'avant-bras sort toujours du cadre)
+  // (manche très longue : le bras vient de nous et sort toujours du cadre, on n'en voit jamais le bout)
   for (const c of hand.children) {
     if (c.geometry?.type === 'CylinderGeometry' && c.geometry.parameters.height > 0.3) {
-      c.scale.y = 2.4;
-      c.position.x = -0.142 - (0.34 * 2.4) / 2;
+      c.scale.y = 5;
+      c.position.x = -0.142 - (0.34 * 5) / 2;
     }
   }
   const geo = own(new THREE.PlaneGeometry(0.2, 0.15, 10, 8));
@@ -293,7 +293,8 @@ export function shine3dGame(ctx) {
   const sh = play.shape;
   const F = bodyFrame(sc);
   const to2d = bodyTo2d(sc, sh);
-  const gloss = coatGloss(sc, own, { over: play.overAt * GLOSS_K });
+  // (un reflet satiné, pas une robe de plastique : assez lisse pour briller au soleil de la fenêtre, pas plus)
+  const gloss = coatGloss(sc, own, { over: play.overAt * GLOSS_K, roughness: 0.27, env: 1.5, alpha: 0.85 });
   // Chaque sommet de la robe (corps seulement) et les cases du cheval dessiné qui l'entourent : il brille comme
   // elles (ce qui brille, c'est ce que la jauge compte ; trop de lustrant : le reflet devient gras).
   const near = [];
@@ -336,7 +337,7 @@ export function shine3dGame(ctx) {
   const { hand } = clothHand(sc, own);
 
   // Cadrage : tout le cheval de profil (la robe, les sabots), et toute sa tête.
-  const fixed = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, L.tail.clone().lerp(L.tailTip, 0.6), L.croup.clone().lerp(L.tail, 0.8).add(v3(-0.16 * S, -0.12 * S, 0)), ...L.hooves];
+  const fixed = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, L.tail.clone().lerp(L.tailTip, 0.6), L.tail.clone().add(v3(-0.18 * S, -0.3 * S, 0)), L.croup.clone().lerp(L.tail, 0.8).add(v3(-0.16 * S, -0.12 * S, 0)), ...L.hooves];
   const follow = headFollow(sc, headShape(sc), () => fixed, { dir: [0.34, 0.16, 1], pad: 1.16, half: 0.5, reach: 0.1 });
   follow.frame(true);
   let started = false;
@@ -520,23 +521,28 @@ export function crestBraids(sc, own, { mane = 0x4a2f1d, sections = 4 } = {}) {
   const ridgeGeo = own(new THREE.SphereGeometry(1, 12, 6));
   const zAxis = v3(0, 0, 1);
   const knobs = spots.map((sp, i) => {
+    // (le groupe est posé au centre du bouton : il grandit sur place, au lieu de glisser depuis l'encolure)
     const g = new THREE.Group();
+    g.position.copy(sp.p).addScaledVector(sp.up, r * 0.45);
+    g.quaternion.setFromUnitVectors(zAxis, sp.up);
     const knob = new THREE.Mesh(knobGeo, hairMat);
-    knob.position.copy(sp.p).addScaledVector(sp.up, r * 0.45);
-    knob.quaternion.setFromUnitVectors(zAxis, sp.up);
     knob.scale.set(1, 1, 0.85);
     knob.castShadow = true;
     g.add(knob);
     const band = new THREE.Mesh(bandGeo, ribbonMat);
-    band.position.copy(knob.position).addScaledVector(sp.up, -r * 0.15);
-    band.quaternion.copy(knob.quaternion);
+    band.position.set(0, 0, -r * 0.15);
     const pom = new THREE.Mesh(pomGeo, ribbonMat);
-    pom.position.copy(knob.position).addScaledVector(sp.up, r * 0.8);
+    pom.position.set(0, 0, r * 0.8);
     band.visible = false;
     pom.visible = false;
     g.add(band, pom);
-    // (le bourrelet de crins jusqu'au bouton suivant : les boutons sont reliés, comme de vraies tresses de concours)
+    g.visible = false;
+    g.scale.setScalar(0.01);
+    md.neck.add(g);
+    // (le bourrelet de crins jusqu'au bouton suivant : les boutons sont reliés, comme de vraies tresses de concours ;
+    // il n'apparaît que quand les deux boutons sont faits)
     const next = spots[i + 1];
+    let ridge = null;
     if (next) {
       const d = next.p.clone().sub(sp.p);
       const len = d.length();
@@ -544,19 +550,23 @@ export function crestBraids(sc, own, { mane = 0x4a2f1d, sections = 4 } = {}) {
         d.divideScalar(len);
         const side = v3().crossVectors(d, sp.up).normalize();
         const nn = v3().crossVectors(side, d);
-        const ridge = new THREE.Mesh(ridgeGeo, hairMat);
+        ridge = new THREE.Mesh(ridgeGeo, hairMat);
         ridge.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side, d, nn));
         ridge.position.copy(sp.mid ?? sp.p.clone().add(next.p).multiplyScalar(0.5)).addScaledVector(nn, r * 0.2);
         ridge.scale.set(r * 0.62, len * 0.6, r * 0.45);
-        g.add(ridge);
+        ridge.visible = false;
+        md.neck.add(ridge);
       }
     }
-    g.visible = false;
-    g.scale.setScalar(0.01);
-    md.neck.add(g);
     const sec = Math.min(sections - 1, Math.floor((i / Math.max(1, spots.length)) * sections));
-    return { g, band, pom, sec, shown: 0, w: () => md.neck.localToWorld(knob.position.clone()) };
+    return { g, band, pom, ridge, sec, shown: 0, w: () => md.neck.localToWorld(g.position.clone()) };
   });
+  /** Les bourrelets entre deux boutons faits. */
+  const ridges = () => {
+    knobs.forEach((k, i) => {
+      if (k.ridge) k.ridge.visible = k.shown >= 1 && !!knobs[i + 1]?.g.visible && knobs[i + 1].shown >= 1;
+    });
+  };
   // La queue : des perles de crins entrelacées le long du dessus de la queue, et un nœud en haut.
   const tailSpots = md.braidSpots?.tail ?? [];
   const beads = tailSpots.map(([parent, p], j) => {
@@ -596,9 +606,14 @@ export function crestBraids(sc, own, { mane = 0x4a2f1d, sections = 4 } = {}) {
         k.shown = Math.min(1, k.shown + dt * 4);
         k.g.scale.setScalar(0.2 + 0.8 * smooth(k.shown));
       }
+      ridges();
     },
+    ridges,
     remove() {
-      for (const k of knobs) k.g.parent?.remove(k.g);
+      for (const k of knobs) {
+        k.g.parent?.remove(k.g);
+        k.ridge?.parent?.remove(k.ridge);
+      }
       for (const b of beads) b.parent?.remove(b);
       tailBow?.parent?.remove(tailBow);
     },
@@ -637,23 +652,26 @@ export function braid3dGame(ctx) {
     if (framed === what) return;
     framed = what;
     if (what === 'end') {
+      sc.setFocus(null);
       follow.on = true;
       follow.set({ dir: [0.3, 0.22, 1], pad: 1.15 }, () => [L.withers, L.croup, L.tail, L.tailTip, L.chest, ...L.hooves]);
       follow.frame(false);
       return;
     }
     follow.on = false;
+    // (la scène au-dessus de la loupe : rien de la crinière ne passe dessous)
+    const o = loupeAt();
+    sc.setFocus(0, Math.max(sc.size.h * 0.5, (o.y * ctx.view.scale + ctx.view.oy) - 6));
     if (what === 'tail') {
-      const pts = [L.tail, L.croup, L.tailTip, L.tail.clone().lerp(L.tailTip, 0.5).add(v3(0, 0, 0.15 * S)), L.croup.clone().add(v3(0.25 * S, 0.1 * S, 0))];
-      sc.frame(pts, { dir: [-0.55, 0.25, 1], pad: 1.3, half: 0.6 });
+      const pts = [L.tail, L.croup, L.tailTip, L.tail.clone().lerp(L.tailTip, 0.5).add(v3(0, 0, 0.15 * S)), L.croup.clone().add(v3(0.3 * S, 0.12 * S, 0)), L.croup.clone().add(v3(0.1 * S, -0.45 * S, 0))];
+      sc.frame(pts, { dir: [-0.6, 0.22, 1], pad: 1.2, half: 0.6 });
       return;
     }
-    // section i de la crinière : ses boutons, ses voisins, la crinière qui pend dessous
-    const i = what;
-    const mine = knobs.filter((k) => Math.abs(k.sec - i) <= 1).map((k) => k.w());
-    const pts = mine.length ? mine : [L.withers.clone().lerp(L.poll, (i + 0.5) / nMane)];
-    const low = pts.map((p) => p.clone().add(v3(0, -0.32 * S, 0.06 * S)));
-    sc.frame([...pts, ...low], { dir: [0.12, 0.35, 1], pad: 1.25, half: 0.6 });
+    // la crinière : toute l'encolure et la tête, de notre côté, un peu d'en haut ; la même vue pour chaque tresse
+    // (le rond jaune montre celle qu'on tresse) : on voit le cheval, et les boutons qui viennent un à un
+    const crest = knobs.map((k) => k.w());
+    const low = [L.withers.clone().add(v3(-0.05 * S, -0.38 * S, 0.05 * S)), L.neck.clone().add(v3(0, -0.3 * S, 0))];
+    sc.frame([...crest, L.withers, L.poll, ...L.ears, L.muzzle, ...low], { dir: [0.2, 0.32, 1], pad: 1.15, half: 0.6 });
   }
 
   // La loupe du jeu dessiné, plus petite, en bas à droite (on y touche les mèches, comme dans le jeu dessiné).
@@ -704,6 +722,7 @@ export function braid3dGame(ctx) {
         k.band.visible = k.pom.visible = !!sec.ribbon;
       });
     }
+    B.ridges();
     // la crinière rentre dans les boutons à mesure qu'on tresse (toute tressée : elle est rentrée)
     const maneDone = sections.slice(0, nMane).reduce((n, x) => n + Math.min(1, x.done), 0) / Math.max(1, nMane);
     tuck += (Math.min(1, maneDone >= 1 ? 1 : maneDone * 0.6) - tuck) * Math.min(1, dt * 3);

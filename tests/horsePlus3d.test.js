@@ -324,6 +324,70 @@ describe('vermifuge en 3D : la seringue et la langue restent à la bouche', () =
   }
 });
 
+describe('l\'animal vit : impatience, mâchonnement, grimace', () => {
+  for (const act of ['saddle', 'bridle', 'deworm', 'clean']) {
+    it(`${act} : trop long sans rien faire, il gratte du pied et couche les oreilles`, () => {
+      const { a, sc } = makeStage();
+      const ctx = ctxFor(a, sc);
+      ctx.opts = {};
+      const game = games[act](ctx);
+      run(ctx, game, sc, 0.3);
+      let pawed = false;
+      let annoyed = false;
+      for (let i = 0; i < 25 * 10 && !(pawed && annoyed); i++) {
+        run(ctx, game, sc, 0.1);
+        pawed ||= sc.mood.lift === 1;
+        annoyed ||= sc.mood.annoyed > 0;
+      }
+      expect(pawed, 'il gratte du pied').toBe(true);
+      expect(annoyed, 'oreilles couchées').toBe(true);
+      game.destroy();
+      sc.dispose();
+    }, 60000);
+  }
+
+  it('brider : le mors entré, il le mâchonne', () => {
+    const { a, sc } = makeStage();
+    const ctx = ctxFor(a, sc);
+    const game = games.bridle(ctx);
+    run(ctx, game, sc, 0.3);
+    expect(sc.mood.chew ?? 0).toBe(0);
+    game.down(game.peek().bar);
+    run(ctx, game, sc, 0.2);
+    expect(sc.mood.chew).toBeGreaterThan(0.5);
+    game.destroy();
+    sc.dispose();
+  }, 60000);
+
+  it('vermifuge : la pâte donnée, il fait la grimace (il secoue la tête, mâchonne) puis hennit', () => {
+    const { a, sc } = makeStage();
+    const ctx = ctxFor(a, sc);
+    ctx.opts = {};
+    const game = games.deworm(ctx);
+    run(ctx, game, sc, 0.3);
+    ctx.pressStop();
+    run(ctx, game, sc, 1.5);
+    const s = game.peek();
+    game.down(s.syringe);
+    game.move(s.bar, true);
+    game.up();
+    game.down(game.peek().bar);
+    const head = sc.model.head;
+    const rz = [];
+    while (game.peek().syr.left > 0) run(ctx, game, sc, 0.1);
+    game.up();
+    for (let i = 0; i < 12; i++) {
+      run(ctx, game, sc, 0.05);
+      rz.push(head.rotation.z);
+      expect(sc.mood.chew).toBeGreaterThan(0);
+    }
+    // (la tête bouge d'une image à l'autre : il la secoue)
+    expect(Math.max(...rz) - Math.min(...rz)).toBeGreaterThan(0.02);
+    game.destroy();
+    sc.dispose();
+  }, 60000);
+});
+
 describe('maréchal-ferrant en 3D', () => {
   for (const [breed, foal] of GABARITS) {
     it(`il lève le pied ; trois coups par clou : juste ; les clous restent dans l'image (${breed}${foal ? ', poulain' : ''})`, () => {

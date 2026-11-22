@@ -2,9 +2,9 @@
 // SON filet (celui que le jeu va lui mettre : celui d'avant, ou un libre de la sellerie, dans sa couleur), construit
 // par le jeu (gearModels.js buildGear) :
 //
-//   1. le mors : notre main tient le filet devant sa tête, le mors devant ses lèvres ; on touche le coin de ses lèvres
-//      (là où il n'a pas de dents) : le mors entre, le filet monte en place, il mâchonne son mors. Devant ses dents, il
-//      relève la tête et couche les oreilles ;
+//   1. le mors : il baisse la tête vers nous ; notre main tient le filet devant sa tête, le mors devant ses lèvres ; on
+//      touche le coin de ses lèvres (là où il n'a pas de dents) : le mors entre, le filet monte en place, il mâchonne
+//      son mors. Devant ses dents, il relève la tête et couche les oreilles ;
 //   2. les oreilles : la têtière est devant ses oreilles ; on touche une oreille (elle se plie sous la têtière), puis
 //      l'autre ; la têtière passe sur la nuque, le frontal se pose ;
 //   3. la sous-gorge : elle pend sous la ganache ; on la serre (🪢, ou le doigt sur sa gorge) en laissant un poing de
@@ -280,7 +280,10 @@ export function bridle3dGame(ctx) {
   }
 
   // ---------------------------------------------------------------- la pose : oreilles pliées, tête relevée
-  const unhook = afterLife(sc, () => {
+  let lower = 0; // (il baisse la tête vers nous pour qu'on lui mette le filet, tant que le mors n'est pas entré)
+  const unhook = afterLife(sc, (dt) => {
+    lower += ((step() === 'bit' && !bitIn && annoyed <= 0 ? 1 : 0) - lower) * Math.min(1, dt * 2.5);
+    if (lower > 0.01 && md.neck) md.neck.rotateX(0.16 * smooth(lower));
     if (annoyed > 0 && md.neck) md.neck.rotateX(-0.28 * smooth(Math.min(1, annoyed)));
     for (let i = 0; i < 2; i++) {
       if (ears[i] <= 0) continue;
@@ -407,7 +410,8 @@ export function bridle3dGame(ctx) {
       // la main : elle tient la têtière (devant sa tête, puis devant les oreilles) ; le bras vient d'en haut, hors de
       // l'image (avant : de face, on ne voyait qu'une manche bleue devant sa tête). À la sous-gorge, elle s'en va.
       const grip = crownPivot.localToWorld(crownTop.clone().sub(crownPivot.position).add(v3(-hr * 0.3, hr * 0.05, 0)));
-      hand.visible = !ctx.done && st !== 'throat' && !(bitIn && earDone.every(Boolean));
+      // (la main tient le filet devant sa tête ; une fois le mors en place, elle s'efface : on touche les oreilles)
+      hand.visible = !ctx.done && st === 'bit' && !bitIn;
       hand.position.lerp(grip, Math.min(1, dt * 10));
       const cq = sc.camera.quaternion;
       const right = v3(1, 0, 0).applyQuaternion(cq);

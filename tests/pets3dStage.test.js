@@ -599,12 +599,23 @@ describe('jouer à la balle (chien, lapin)', () => {
         for (let i = 0; i < 400 && game.peek().ball !== 'hand'; i++) {
           run(ctx, game, sc, 1 / 30);
           moved = Math.max(moved, sc.holder.position.distanceTo(x0));
-          if (game.peek().ball === 'mouth') expect(game.peek().ball3d.distanceTo(sc.live('muzzle'))).toBeLessThan(0.1);
+          if (game.peek().ball === 'mouth') {
+            const b = game.peek().ball3d;
+            // le chien la rapporte dans la gueule ; le lapin la pousse du nez, elle roule par terre devant lui
+            if (gab.species === 'dog') expect(b.distanceTo(sc.live('muzzle'))).toBeLessThan(0.1);
+            else {
+              expect(b.y).toBeLessThan(0.05);
+              const n = sc.live('nose');
+              expect(Math.hypot(b.x - n.x, b.z - n.z)).toBeLessThan(0.06);
+            }
+          }
         }
         expect(moved).toBeGreaterThan(0.02); // il a couru
         expect(inView(sc.project(sc.holder.position), ctx.view)).toBe(true);
       }
       expect(game.peek().rounds).toBe(n);
+      // les consignes montrent la balle de son espèce (pas ⚽, pas de ronds rouges)
+      for (const h of ctx.hints) expect(h.text).not.toMatch(/⚽|🔴/);
       ctx.pressStop();
       expect(ctx.finished?.why).toBe('just');
       game.destroy();

@@ -19,16 +19,35 @@ const happySound = (sc) => audio.animal?.(sc.a?.species ?? 'dog', 'happy', sc.a?
 // Le terrain du jeu dessiné (fun.js ballGame) : x de 0 à 400, y de l'horizon (150) au premier plan (315) ; la main en (200, 325).
 const YARD = { x0: 0, x1: 400, y0: 150, y1: 315 };
 
-/** Une balle de tennis (chien) ou une balle à grelot colorée (lapin). */
+/** Ce qu'on compte, et ce que montrent les consignes : la balle de tennis du chien, la balle d'osier du lapin. */
+const BALL_ICON = { dog: '🎾', rabbit: '🥎' };
+
+/** Une balle de tennis (chien) ou une balle en osier tressé (lapin : il la pousse du nez, il ne la porte pas). */
 function ballModel(keep, sp, r) {
   const tex = keep(canvasTex(128, 64, (c) => {
-    c.fillStyle = sp === 'rabbit' ? '#e86a8a' : '#cfe03a';
+    if (sp === 'rabbit') {
+      // osier : des brins clairs tressés, en losanges
+      c.fillStyle = '#c99a4e';
+      c.fillRect(0, 0, 128, 64);
+      for (let k = -8; k < 24; k++) {
+        for (const sd of [-1, 1]) {
+          c.strokeStyle = sd > 0 ? 'rgba(240,210,140,0.95)' : 'rgba(150,105,45,0.9)';
+          c.lineWidth = 4;
+          c.beginPath();
+          c.moveTo(k * 8, sd > 0 ? 0 : 64);
+          c.lineTo(k * 8 + 64, sd > 0 ? 64 : 0);
+          c.stroke();
+        }
+      }
+      return;
+    }
+    c.fillStyle = '#cfe03a';
     c.fillRect(0, 0, 128, 64);
     for (let i = 0; i < 900; i++) {
       c.fillStyle = `rgba(255,255,255,${Math.random() * 0.12})`;
       c.fillRect(Math.random() * 128, Math.random() * 64, 1, 1);
     }
-    c.strokeStyle = sp === 'rabbit' ? '#fff3c4' : '#ffffff';
+    c.strokeStyle = '#ffffff';
     c.lineWidth = 5;
     c.beginPath();
     for (let x = 0; x <= 128; x += 2) {
@@ -37,8 +56,8 @@ function ballModel(keep, sp, r) {
       else c.lineTo(x, y);
     }
     c.stroke();
-  }, { key: `ball|${sp}`, repeat: false }));
-  const m = shadowed(new THREE.Mesh(keep(new THREE.SphereGeometry(r, 20, 14)), keep(new THREE.MeshStandardMaterial({ map: tex, roughness: sp === 'rabbit' ? 0.5 : 0.85 }))));
+  }, { key: `ball2|${sp}`, repeat: false }));
+  const m = shadowed(new THREE.Mesh(keep(new THREE.SphereGeometry(r, 20, 14)), keep(new THREE.MeshStandardMaterial({ map: tex, roughness: sp === 'rabbit' ? 0.75 : 0.85 }))));
   return m;
 }
 
@@ -64,9 +83,11 @@ export function petPlay3dGame(ctx) {
   // (les consignes du jeu dessiné ajoutent les ⚽ à la fin : on garde ce qui suit)
   // (le jeu dessiné passe ses consignes par nb() : espaces insécables avant « ! »)
   const norm = (x) => String(x).replace(/\u00a0/g, ' ');
+  // (les ⚽ du jeu dessiné : la balle de son espèce)
+  const icon = BALL_ICON[sp] ?? '🎾';
   const lctxHint = (text) => {
-    for (const [k, v] of hints) if (norm(text).startsWith(norm(k))) return v + norm(text).slice(norm(k).length);
-    return text;
+    for (const [k, v] of hints) if (norm(text).startsWith(norm(k))) return (v + norm(text).slice(norm(k).length)).replace(/⚽/g, icon);
+    return String(text).replace(/⚽/g, icon);
   };
   const petAt = () => sc.holder.position.clone();
   const play = withLogic(ctx, playGame, () => sc.project(petAt().add(v3(0, S.h * 1.1, 0))), { hints: { get: lctxHint } });
@@ -112,6 +133,17 @@ export function petPlay3dGame(ctx) {
     hand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, new THREE.Vector3().crossVectors(x, y)));
   };
   placeHand();
+  let pushing = false;
+  // (le lapin pousse la balle : elle roule devant son nez, placée après son animation de l'image)
+  m.pose = () => {
+    if (!pushing) return;
+    const nose = sc.live('nose');
+    const fwd = nose.clone().sub(sc.live('head')).setY(0).normalize();
+    const want = nose.clone().addScaledVector(fwd, ballR * 1.1).setY(ballR);
+    const moved = want.distanceTo(ball.position);
+    ball.position.copy(want);
+    if (moved > 1e-5) ball.rotateOnWorldAxis(v3(fwd.z, 0, -fwd.x).normalize(), moved / ballR);
+  };
   let fly = null; // { from, to, k }
   let ground = null;
   let rounds = 0;
@@ -156,6 +188,8 @@ export function petPlay3dGame(ctx) {
       m.pant = tired || s.state === 'back';
       m.posture = ctx.done || (tired && s.state === 'wander' && m.drive.speed < 0.05) ? (sp === 'rabbit' ? 'crouch' : 'sit') : sp === 'rabbit' ? 'crouch' : 'stand';
       // la balle
+      if (sp === 'rabbit') m.sniff = false;
+      pushing = false;
       if (s.ball !== 'mouth' && ball.parent !== sc.scene) sc.scene.attach(ball);
       if (fly && s.ball !== 'fly') {
         // (la logique a fini le vol : attrapée en l'air, ou tombée au sol)
@@ -171,6 +205,12 @@ export function petPlay3dGame(ctx) {
           ground = fly.to.clone();
           fly = null;
         }
+      } else if (s.ball === 'mouth' && sp === 'rabbit') {
+        // le lapin ne la porte pas : il la pousse du nez, elle roule devant lui (posée après son animation : pose)
+        ground = null;
+        ring.visible = false;
+        pushing = true;
+        m.sniff = true;
       } else if (s.ball === 'mouth') {
         ground = null;
         ring.visible = false;
@@ -203,12 +243,13 @@ export function petPlay3dGame(ctx) {
       if (!sc.ready) return;
       const s = play.peek();
       const v = ctx.view;
-      drawCountZone(g, v.x1 - 24 - (s.max - 1) * 30, v.y0 + 30, s.rounds, s.n, s.max, sp === 'rabbit' ? '🔴' : '🎾', 30);
+      drawCountZone(g, v.x1 - 24 - (s.max - 1) * 30, v.y0 + 30, s.rounds, s.n, s.max, icon, 30);
     },
     destroy() {
       ball.parent?.remove(ball);
       sc.scene.remove(hand, ring);
       m.drive = null;
+      m.pose = null;
       keep.dispose();
     },
   };

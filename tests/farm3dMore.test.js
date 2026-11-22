@@ -6,8 +6,10 @@ import { loadFarm, farmStage, run, inView } from './fixtures/farmStage.js';
 
 let hoofTrim;
 let goatPlay;
+let barnClean;
 beforeAll(async () => {
   await loadFarm();
+  barnClean = await import('../src/ui/minigames/barnClean3d.js');
   hoofTrim = await import('../src/ui/minigames/hoofTrim3d.js');
   goatPlay = await import('../src/ui/minigames/goatPlay3d.js');
 }, 60000);
@@ -140,6 +142,61 @@ describe('jouer à la balle avec la chèvre, dans le pré', () => {
       expect(sc.decor).toBe(barn);
       expect(barn.group.parent).toBe(sc.scene);
       expect(sc.mood.drive).toBe(null);
+      sc.dispose();
+    }, 60000);
+  }
+});
+
+describe('nettoyer l\'étable de la vache', () => {
+  for (const c of [{ breed: 'holstein' }, { breed: 'highland' }, { breed: 'normande', young: true }]) {
+    it(`${c.breed}${c.young ? ' (veau)' : ''} : les bouses à la brouette, puis une couche de paille fraîche partout`, () => {
+      const { sc, ctx } = farmStage({ species: 'cow', name: 'Marguerite', ...c });
+      const game = barnClean.barnClean3dGame(ctx);
+      run(ctx, game, sc, 0.5);
+      let s = game.peek();
+      expect(s.phase).toBe('pick');
+      // les bouses, la brouette et elle dans l'image
+      expect(s.pats3d.length).toBe(s.nDirt);
+      for (const q of s.pats3d) expect(inView(q, ctx.view, 4)).toBe(true);
+      expect(inView(s.barrow3d, ctx.view, 4)).toBe(true);
+      expect(inView(sc.project(sc.marks.withers), ctx.view)).toBe(true);
+      // une bouse glissée jusqu'à la brouette, les autres touchées
+      const q0 = s.pats3d[0];
+      game.down(q0);
+      for (let k = 1; k <= 10; k++) game.move({ x: q0.x + (s.barrow3d.x - q0.x) * (k / 10), y: q0.y + (s.barrow3d.y - q0.y) * (k / 10) }, true);
+      game.up(s.barrow3d);
+      run(ctx, game, sc, 0.6);
+      expect(game.peek().inBin).toBe(1);
+      for (let i = 0; i < 12 && game.peek().phase === 'pick'; i++) {
+        const q = game.peek().pats3d[0];
+        game.down(q);
+        game.up(q);
+        run(ctx, game, sc, 0.5);
+      }
+      s = game.peek();
+      expect(s.phase).toBe('spread');
+      expect(s.dirtInBin).toBe(s.nDirt);
+      // la paille : un passage par rangée, d'un bord à l'autre du terrain (points du jeu dessiné projetés)
+      const rows = [];
+      for (let y = 112; y < 342; y += 34) rows.push(y);
+      for (const y of rows) {
+        const a = game.toScreen(16, y);
+        const b = game.toScreen(324, y);
+        game.down(a);
+        for (let k = 1; k <= 24; k++) game.move({ x: a.x + (b.x - a.x) * (k / 24), y: a.y + (b.y - a.y) * (k / 24) }, true);
+        game.up(b);
+        run(ctx, game, sc, 0.1);
+      }
+      run(ctx, game, sc, 1);
+      s = game.peek();
+      expect(s.covered).toBeGreaterThan(0.95);
+      // la paille posée en 3D est celle du jeu dessiné, case par case
+      expect(game.strawCells()).toBeCloseTo(s.covered, 5);
+      ctx.pressStop();
+      expect(ctx.done).toBe(true);
+      expect(ctx.finished.why).toBe('just');
+      run(ctx, game, sc, 1);
+      game.destroy();
       sc.dispose();
     }, 60000);
   }

@@ -121,11 +121,8 @@ export function barnSet(stage) {
   const bp = bed.attributes.position;
   for (let i = 0; i < bp.count; i++) {
     const x = bp.getX(i);
-    const y = bp.getY(i);
-    const zw = (S.back + S.front) / 2 - y; // (z du monde : le plan est tourné)
-    const edge = Math.max(0, 1 - Math.min(S.halfW - Math.abs(x), zw - S.back) / 0.55);
-    const h = 0.05 + 0.025 * Math.sin(x * 6.1 + y * 3.3) * Math.cos(y * 5.2 - x * 2.4) + 0.014 * Math.sin(x * 17 + y * 21) + 0.12 * edge * edge;
-    bp.setZ(i, h);
+    const zw = (S.back + S.front) / 2 - bp.getY(i); // (z du monde : le plan est tourné)
+    bp.setZ(i, litterHeight(S, x, zw));
   }
   bed.computeVertexNormals();
   mesh(bed, strawMat, [0, 0, (S.back + S.front) / 2], [-Math.PI / 2, 0, 0], false);
@@ -434,6 +431,16 @@ export function barnSet(stage) {
       });
     },
   };
+}
+
+/**
+ * Hauteur de la litière (m) en (x, z) du monde : épaisse et bosselée, relevée contre les murs. S : dims du décor. (Les
+ * jeux qui posent des choses sur la litière s'en servent : la corvée de l'étable, barnClean3d.js.)
+ */
+export function litterHeight(S, x, z) {
+  const y = (S.back + S.front) / 2 - z;
+  const edge = Math.max(0, 1 - Math.min(S.halfW - Math.abs(x), z - S.back) / 0.55);
+  return 0.05 + 0.025 * Math.sin(x * 6.1 + y * 3.3) * Math.cos(y * 5.2 - x * 2.4) + 0.014 * Math.sin(x * 17 + y * 21) + 0.12 * edge * edge;
 }
 
 /** Mur chaulé : des moellons irréguliers sous la chaux blanche, la chaux usée par endroits, des coulures en bas. */

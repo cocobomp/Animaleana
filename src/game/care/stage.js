@@ -844,6 +844,8 @@ export class CareStage {
   update(dt) {
     this.time += dt;
     this.life(dt);
+    // (retouches de la pose par le jeu, après l'animation : oreilles pliées, ventre gonflé… — horse3dKit.js afterLife)
+    for (const f of this.afterLife ?? []) f(dt, this);
     this.decor?.update?.(dt, this);
     this.updateFx(dt);
     this.updateCamera(dt);

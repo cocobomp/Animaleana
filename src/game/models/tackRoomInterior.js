@@ -31,9 +31,10 @@ const HOOKS = ['bridle', 'bridleOlive', 'hackamore', 'doubleBridle', 'halter', '
 const BLANKETS = ['blanketSummer', 'blanketRain', 'blanket'];
 const SHELF_Y = [0.42, 0.9, 1.38, 1.84];
 const SHELVES = [
-  { id: 'saddlePad', x: 0.95, row: 0 }, { id: 'gelPad', x: 1.85, row: 0 },
+  { id: 'saddlePad', x: 0.75, row: 0 }, { id: 'gelPad', x: 1.5, row: 0 }, { id: 'vaultPad', x: 2.27, row: 0 },
   { id: 'boots', x: 0.95, row: 1 }, { id: 'bellBoots', x: 1.85, row: 1 }, { id: 'flyMask', x: 2.8, row: 1 },
   { id: 'helmet', x: 1.15, row: 2 }, { id: 'helmetSparkle', x: 2.25, row: 2 },
+  { id: 'surcingle', x: 1.6, row: 3 }, // voltige : en haut, à la place d'un flot
 ];
 const COUNTER = [{ id: 'collar', z: 0.95 }, { id: 'leash', z: 1.38 }, { id: 'dogCoat', z: 1.85 }];
 
@@ -262,6 +263,7 @@ export function tackRoomModel(label, boardLabel = 'Filets, licols') {
   for (let i = 0; i < 4; i++) {
     // Coupes et flots gagnés (décor du haut).
     const x = 0.75 + i * 0.85;
+    if (i === 1) continue; // (la place du surfaix de voltige)
     if (i % 2 === 0) {
       add(shelf, new THREE.CylinderGeometry(0.07, 0.035, 0.12, 14), mat(0xd8b24a, 0.25, { metalness: 0.85 }), [x, SHELF_Y[3] + 0.14, -2.68]);
       add(shelf, new THREE.CylinderGeometry(0.03, 0.05, 0.06, 12), mat(0x3a2a20, 0.5), [x, SHELF_Y[3] + 0.05, -2.68]);

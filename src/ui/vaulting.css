@@ -1,0 +1,170 @@
+/* Voltige (src/ui/vaulting.js) : le bouton rond du rythme, la carte de la figure, la jauge d'équilibre, les notes
+   des juges, le protocole des résultats, et le choix du niveau. */
+
+/* La couche du doigt : tout l'écran, sous la barre du haut et les boutons (toucher, glisser). */
+.vt-pad { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
+#actv-hud .actv-top, #actv-hud .actv-controls, #actv-hud .actv-hint, #actv-hud .actv-big, #actv-hud .vt-marks { z-index: 1; }
+/* 🎥 au-dessus de la couche du doigt (sinon il ne répondait pas) : il change de vue pendant la voltige. */
+body.vt-on #cam-btn { z-index: 16; }
+
+.vt-controls { display: grid; justify-items: center; gap: 36px; width: 100%; pointer-events: none; }
+.vt-controls[hidden] { display: none; }
+.vt-btn-row { display: grid; justify-items: center; gap: 4px; }
+.vt-btn-row[hidden] { display: none; }
+/* La légende sous le bouton : sur une pastille sombre (lisible sur le sable clair), au-dessus de l'anneau. */
+.vt-btn-say {
+  position: relative; z-index: 2; color: #fff; font-weight: 700; font-size: 0.85rem; text-align: center; max-width: min(400px, calc(100vw - 24px));
+  background: rgba(24, 30, 38, 0.72); border-radius: 999px; padding: 4px 12px; margin-top: 6px;
+}
+.vt-btn { z-index: 1; }
+
+/* « Parfait ! » : gros mot coloré juste au-dessus du bouton. */
+.vt-say {
+  position: relative; z-index: 2; font-size: clamp(1.7rem, 8vw, 2.6rem); font-weight: 900; color: #fff; text-align: center;
+  white-space: nowrap; text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35), 0 0 16px rgba(0, 0, 0, 0.45);
+}
+.vt-say[hidden] { display: none; }
+.vt-say.good { color: #ffe066; }
+.vt-say.bad { color: #ffb3a6; }
+.vt-say.vt-pop { animation: vt-pop 0.3s ease-out; }
+@keyframes vt-pop { from { transform: scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Le gros bouton rond : un disque doré, l'anneau du rythme qui se resserre dessus. */
+.vt-btn {
+  position: relative; width: 104px; height: 104px; border-radius: 50%; padding: 0; border: none;
+  background: radial-gradient(circle at 35% 30%, #fff7d6, #ffd34d 45%, #f0a516 100%);
+  box-shadow: 0 6px 0 #b46f08, 0 10px 22px rgba(0, 0, 0, 0.35);
+  pointer-events: auto; touch-action: manipulation; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.vt-btn:active { transform: translateY(3px); box-shadow: 0 3px 0 #b46f08, 0 6px 14px rgba(0, 0, 0, 0.35); }
+.vt-btn .vt-ico { position: relative; font-size: 2.6rem; line-height: 104px; display: block; }
+.vt-btn .vt-target {
+  position: absolute; inset: -7px; border-radius: 50%; border: 4px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18);
+}
+.vt-btn .vt-ring {
+  position: absolute; inset: -7px; border-radius: 50%; border: 5px solid #ffe066;
+  box-shadow: 0 0 14px rgba(255, 224, 102, 0.85); pointer-events: none; will-change: transform, opacity;
+}
+.vt-btn.vt-idle { filter: saturate(0.4) brightness(0.9); }
+.vt-btn.vt-idle .vt-ring { display: none; }
+.vt-btn.vt-beat .vt-target { animation: vt-beat 0.28s ease-out; }
+@keyframes vt-beat { from { border-color: #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18), 0 0 26px 8px rgba(255, 240, 160, 0.9); } to { box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18); } }
+
+/* La carte de la figure à faire. */
+.vt-card {
+  position: relative; z-index: 2; display: grid; gap: 2px; text-align: center; background: rgba(255, 255, 255, 0.95); border-radius: 16px;
+  padding: 8px 16px; box-shadow: var(--shadow); max-width: min(440px, calc(100vw - 24px));
+}
+.vt-card[hidden] { display: none; }
+.vt-card b { font-size: 1.15rem; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+/* Les temps d'une figure (le moulin en quatre) : faits en vert, celui à faire en doré. */
+.vt-dots { display: inline-flex; gap: 6px; margin-left: 8px; }
+.vt-dots i { width: 12px; height: 12px; border-radius: 50%; background: #ece5d6; border: 2px solid #c9bfa9; }
+.vt-dots i.done { background: #4cbf6c; border-color: #1e7a40; }
+.vt-dots i.now { background: #ffd34d; border-color: #c98208; transform: scale(1.3); }
+.vt-card small { color: var(--muted); font-weight: 600; font-size: 0.86rem; }
+
+/* La jauge d'équilibre : la bulle doit rester dans la zone verte. (En hauteur, posée au-dessus du bouton 🎥, qui
+   cachait le bout droit de la jauge.) */
+@media (min-height: 501px) { .vt-balance { margin-bottom: 66px; } }
+.vt-balance {
+  width: min(440px, calc(100vw - 24px)); background: rgba(255, 255, 255, 0.95); border-radius: 18px;
+  padding: 8px 14px 14px; box-shadow: var(--shadow);
+}
+.vt-balance[hidden] { display: none; }
+.vt-balance-say { text-align: center; font-weight: 800; margin-bottom: 8px; }
+.vt-balance-bar {
+  position: relative; height: 40px; border-radius: 999px;
+  background: linear-gradient(90deg, #ff9a8a 0%, #ffd27a 18%, #f4efe4 36%, #f4efe4 64%, #ffd27a 82%, #ff9a8a 100%);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.18);
+}
+.vt-balance-zone {
+  position: absolute; top: 3px; bottom: 3px; border-radius: 999px; /* (left et width : GAUGE_ZONE, la vraie zone) */
+  background: rgba(63, 174, 98, 0.45); border: 2px solid #1e7a40;
+}
+.vt-bubble {
+  position: absolute; top: 50%; left: 50%; width: 46px; height: 46px; margin-left: -23px; margin-top: -23px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #ffd2c8 60%, #f08a74); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  display: grid; place-items: center; font-size: 1.5rem; transition: background 0.2s;
+}
+.vt-bubble.ok { background: radial-gradient(circle at 35% 30%, #fff, #c9f3d3 60%, #4cbf6c); }
+
+/* Les notes des trois juges, sous la barre du haut. */
+.vt-marks {
+  position: absolute; top: calc(104px + var(--safe-t)); right: calc(10px + var(--safe-r)); width: min(270px, calc(100vw - 20px));
+  background: rgba(255, 255, 255, 0.96); border-radius: 16px; padding: 8px 12px 10px; box-shadow: var(--shadow);
+}
+.vt-marks[hidden] { display: none; }
+.vt-marks.vt-in { animation: vt-in 0.35s ease-out; }
+@keyframes vt-in { from { transform: translateY(-12px) scale(0.95); opacity: 0; } to { transform: none; opacity: 1; } }
+.vt-marks-head { display: flex; justify-content: space-between; align-items: center; font-weight: 800; gap: 8px; }
+.vt-marks-score { font-size: 1.6rem; color: #1e7a40; font-variant-numeric: tabular-nums; }
+.vt-marks-judges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0; }
+.vt-judge { display: grid; justify-items: center; background: #f4efe4; border-radius: 10px; padding: 2px 0; }
+.vt-judge small { font-size: 0.72rem; color: var(--muted); font-weight: 700; }
+.vt-judge b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.vt-marks-say { font-weight: 600; font-size: 0.88rem; text-align: center; }
+
+/* Résultats : la note finale et le protocole ; les boutons en bas de la fenêtre (collés en bas, voir style.css). */
+.modal-box > .vt-res-btns { justify-content: center; }
+.modal-box > .vt-res-btns button { min-height: 52px; min-width: 130px; }
+.vt-total { text-align: center; margin: 2px 0 8px; }
+.vt-total b { font-size: 2.6rem; font-weight: 900; color: #1e7a40; font-variant-numeric: tabular-nums; }
+.vt-total small { font-weight: 800; color: var(--muted); }
+.vt-protocol { font-size: 0.92rem; }
+.vt-protocol th { font-size: 0.78rem; color: var(--muted); text-align: center; padding: 2px 4px; }
+.vt-protocol td { padding: 3px 4px; }
+.vt-protocol td:first-child { white-space: nowrap; font-weight: 700; }
+.vt-protocol td.num { text-align: center; font-variant-numeric: tabular-nums; }
+
+/* Choix du niveau et des chevaux (menu des activités). */
+.vt-levels { display: grid; gap: 8px; margin-bottom: 10px; }
+.vt-level.vt-sel { outline: 3px solid #f0a516; background: #fff7dc; }
+.vt-horse .card-side button { white-space: nowrap; }
+.vt-figs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.vt-fig { background: #f4efe4; border-radius: 999px; padding: 3px 10px; font-weight: 700; font-size: 0.85rem; opacity: 0.55; }
+.vt-fig.ok { opacity: 1; background: #d9f2df; }
+
+/* Paysage sur téléphone : les résultats sur deux colonnes (la note à gauche, le protocole à droite), sans défiler. */
+@media (max-height: 500px) and (min-width: 600px) {
+  .modal-box:has(> .vt-result) { width: min(780px, 100%); }
+  .vt-result { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); column-gap: 18px; align-items: center; }
+  .vt-result h2 { font-size: 1.25rem; margin: 0 0 2px; }
+  .vt-result .actv-stars { font-size: 1.6rem; }
+  .vt-result .actv-who { margin: 2px 0; }
+  .vt-total { margin: 0; }
+  .vt-total b { font-size: 2.2rem; }
+  .vt-protocol { font-size: 0.86rem; }
+  .vt-protocol td { padding: 1px 4px; }
+  .vt-result .actv-lines { margin: 6px 0 0; font-size: 0.8rem; gap: 3px; }
+  .vt-result .actv-lines li { padding: 3px 10px; }
+  .vt-result .actv-won { margin: 4px 0 0; }
+  /* (s'il reste un peu à défiler, une ombre au-dessus des boutons le montre) */
+  .modal-box > .vt-res-btns { box-shadow: 0 -10px 12px -10px rgba(0, 0, 0, 0.25); }
+  .modal-box > .vt-res-btns button { min-height: 46px; }
+}
+
+@media (max-height: 500px) {
+  /* Paysage sur téléphone : le bouton et la jauge à droite, le cheval au milieu de l'écran. */
+  body.vt-on #actv-hud .actv-controls {
+    left: auto; right: calc(92px + var(--safe-r)); transform: none; width: auto; bottom: calc(10px + var(--safe-b));
+    justify-items: end;
+  }
+  body.vt-on .vt-controls { justify-items: end; width: auto; }
+  .vt-card { max-width: 250px; padding: 6px 12px; }
+  .vt-balance { width: min(330px, 42vw); padding: 6px 10px 10px; }
+  .vt-balance-bar { height: 34px; }
+  .vt-btn-say { max-width: 200px; font-size: 0.75rem; }
+  .vt-btn { width: 84px; height: 84px; }
+  .vt-btn .vt-ico { line-height: 84px; font-size: 2.1rem; }
+  .vt-marks { top: calc(8px + var(--safe-t)); }
+  .vt-controls { gap: 30px; }
+  .vt-card small { font-size: 0.76rem; line-height: 1.2; }
+}
+
+/* Au clavier : Espace pour toucher, flèches pour l'équilibre (caché sur un écran tactile). */
+.vt-kbd { margin-left: 6px; background: #3a4654; color: #fff; padding: 1px 7px; border-radius: 6px; font-size: 0.8em; text-shadow: none; }
+.vt-balance-say .vt-kbd { font-size: 1em; letter-spacing: 2px; padding: 1px 8px; }
+.vt-btn-say .vt-kbd { background: rgba(255, 255, 255, 0.92); color: #1f2a36; }
+@media (pointer: coarse) { .vt-kbd { display: none; } }

@@ -58,7 +58,7 @@ export const THEMES = [
   {
     id: 'activities',
     quests: ['actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
-      'drTrain3', 'drReprise1', 'compRegister1', 'compAway1', 'beautyPrep1', 'beautyBraid1', 'beauty1'],
+      'drTrain3', 'drReprise1', 'compRegister1', 'compAway1', 'beautyPrep1', 'beautyBraid1', 'beauty1', 'vaultFirst', 'vaultCanter1', 'vaultAll'],
   },
   {
     id: 'careers',

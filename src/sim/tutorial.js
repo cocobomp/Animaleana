@@ -295,6 +295,10 @@ export const QUEST_GUIDE = {
   drReprise1: { where: 'showground', target: SHOWGROUND, horse: true, need: MOUNT },
   compRegister1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, need: ['animal'] },
   compAway1: { where: 'calendar', target: { type: 'hud', id: 'actv_hud' }, animal: true, need: ['animal'] },
+  // 🤸 Voltige (src/sim/vaulting.js) : au terrain de concours ; le tonneau est toujours là, le galop demande un cheval
+  vaultFirst: { where: 'showground', target: SHOWGROUND },
+  vaultCanter1: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse', 'grownHorse'] },
+  vaultAll: { where: 'showground', target: SHOWGROUND, horse: true, need: ['horse', 'grownHorse'] },
   // Concours de beauté (src/sim/beauty.js) : préparer depuis la fiche, présenter au terrain de concours
   beautyPrep1: { where: 'sheet', target: { type: 'action', id: 'more' }, animal: true, need: ['animal'] },
   beautyBraid1: { where: 'sheet', target: { type: 'action', id: 'more' }, horse: true, need: ['horse'] },
@@ -372,6 +376,7 @@ export const QUEST_ORDER = [
   'actvLesson1', 'actvJump1', 'actvTrail1', 'actvAgility1', 'actvHutch5', 'actvHop1', 'actvShow1', 'actvClear1', 'actvCompete1',
   'drTrain3', 'drReprise1', 'compRegister1', 'compAway1',
   'beautyPrep1', 'beautyBraid1', 'beauty1',
+  'vaultFirst', 'vaultCanter1', 'vaultAll', // 🤸 voltige
   'grmSalon', 'grmOwn1', 'grmAccessory1', 'grmClient1', 'grmFive1',
   'career1', 'client1', 'clientVet1', 'dtClient1', 'dtSession3', 'dtDeliver1', 'dtCoach1', 'clientHappy5', 'clientMoney500',
   'tgFirst', 'tgStars3', 'tgRiders10', 'tgAbroad', // 🧭 guide de randonnée
@@ -526,6 +531,9 @@ export const QUEST_STEPS = {
   beautyPrep1: ['tapAnimal', 'openMore', 'doActivity'],
   beautyBraid1: ['tapHorse', 'openMore', 'doActivity'],
   beauty1: ['goShowground', 'doActivity'],
+  vaultFirst: ['goShowground', 'doActivity'],
+  vaultCanter1: ['goShowground', 'doActivity'],
+  vaultAll: ['goShowground', 'doActivity'],
   dtClient1: ['waitClient', 'acceptClient'],
   dtSession3: ['tapDog', 'doSession'],
   dtCoach1: ['tapAnimal', 'openMore', 'doCoach'],

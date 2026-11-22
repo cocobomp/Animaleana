@@ -481,7 +481,10 @@ export function showgroundModel(hw, hd, label) {
   rail(hd - gate, hw, (hd + gate) / 2, false);
   // Portique d'entrée
   for (const s of [-1, 1]) add(g, new THREE.BoxGeometry(0.22, 3.4, 0.22), mat(0x2f6fd8, 0.6), [hw + 0.4, 1.7, s * (gate + 0.3)]);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 1.3), new THREE.MeshStandardMaterial({ map: fitSign(`🏆 ${label}`), roughness: 0.6, side: THREE.DoubleSide }));
+  // (deux faces dos à dos, une seule pièce : de l'autre côté, le panneau se lit aussi à l'endroit — avant, en
+  // DoubleSide, on voyait son texte en miroir depuis le terrain, en plein dans les plans de la voltige)
+  const back = new THREE.PlaneGeometry(5.2, 1.3).rotateY(Math.PI).translate(0, 0, -0.004);
+  const sign = new THREE.Mesh(mergeGeometries([new THREE.PlaneGeometry(5.2, 1.3), back]), new THREE.MeshStandardMaterial({ map: fitSign(`🏆 ${label}`), roughness: 0.6 }));
   sign.position.set(hw + 0.45, 3.3, 0);
   sign.rotation.y = Math.PI / 2;
   g.add(sign);

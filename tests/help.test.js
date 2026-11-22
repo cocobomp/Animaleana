@@ -20,5 +20,9 @@ describe('aide', () => {
     expect(searchHelp('enlever une quête')[0].id).toBe('quests');
     expect(searchHelp('passer un chapitre de l\'histoire')[0].id).toBe('quests');
     expect(searchHelp('how do I remove a quest')[0].id).toBe('quests');
+    // 🤸 Voltige
+    expect(searchHelp('faire de la voltige')[0].id).toBe('vaulting');
+    expect(searchHelp('acheter un surfaix')[0].id).toBe('vaulting');
+    expect(searchHelp('vaulting on the barrel')[0].id).toBe('vaulting');
   });
 });

@@ -62,7 +62,7 @@ import { todayChallenge, challengeJustDone, CHALLENGE_REWARD } from '../sim/hors
 import { newStars, starUnlock, starPerk } from '../sim/horseStars.js'; // ⭐ ses étoiles
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
-  unsaddle, saddleUp, unbridle, bridleUp,
+  unsaddle, saddleUp, unbridle, bridleUp, removeVaultGear,
 } from '../sim/gear.js';
 import { PEN, FIELD } from './AnimalEntity.js';
 import { Activities } from './Activities.js'; // activités : saut, balade, agility, spectacles, concours
@@ -92,6 +92,7 @@ import { applyCoreLayout } from './coreLayout.js';
 import { TripFlow } from './TripFlow.js'; // voyages réalistes (véhicule, trajet, pauses)
 import { CompetitionVenue } from './CompetitionVenue.js'; // concours à l'extérieur : site, épreuve, podium
 import './Dressage.js'; // séances de dressage (s'enregistrent dans Activities)
+import './Vaulting.js'; // 🤸 voltige (s'enregistre dans Activities)
 import { Marker } from './Marker.js';
 import { Arrivals } from './arrivals.js'; // les visiteurs des métiers arrivent chacun leur tour
 import { Emitter } from './emitter.js'; // petit système d'événements (on / emit)
@@ -2002,6 +2003,15 @@ export class Game {
     return true;
   }
 
+  /** 🤸 Enlever le surfaix et le tapis de voltige (menu du cheval) : ils retournent à la sellerie. */
+  removeVaultGear(a) {
+    if (this.player.mount?.data === a || !removeVaultGear(a)) return null;
+    this.entities.get(a.id)?.applyGear();
+    this.ui.toast(ta('vt_gearOff', a), 3500);
+    this.save();
+    return true;
+  }
+
   /** Débrider en le rentrant au box ou en le lâchant au pré (src/game/Interiors.js) ; la première fois, on dit pourquoi. */
   unbridle(a, why = null) {
     if (!unbridle(this.profile, a, { home: this.isHome })) return false;
@@ -2240,6 +2250,8 @@ export class Game {
   }
 
   toggleCamera() {
+    // (une activité qui mène la caméra a ses propres vues : 🎥 passe de l'une à l'autre — voltige)
+    if (this.activities?.session?.cameraButton?.()) return;
     this.rig.mode = this.rig.mode === 'third' ? 'first' : 'third';
     this.profile.settings.camera = this.rig.mode;
   }

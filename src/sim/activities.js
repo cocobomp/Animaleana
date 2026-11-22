@@ -598,7 +598,7 @@ export function placementAward(comp, rank) {
 /** Flot gagné à l'entraînement (sans concours) selon le nombre d'étoiles. */
 export function practiceAward(type, stars, maxStars = 3) {
   if (stars < maxStars - (type === 'show' ? 1 : 0)) return null;
-  const tier = { jumping: 'blue', agility: 'yellow', trail: 'green', show: 'purple', hop: 'pink', lesson: 'white', dressage: 'purple', flat: 'white', figures: 'white', beauty: 'red' }[type];
+  const tier = { jumping: 'blue', agility: 'yellow', trail: 'green', show: 'purple', hop: 'pink', lesson: 'white', dressage: 'purple', flat: 'white', figures: 'white', beauty: 'red', vaulting: 'yellow' }[type];
   return { kind: 'ribbon', tier, money: 0 };
 }
 

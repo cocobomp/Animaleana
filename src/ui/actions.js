@@ -9,6 +9,7 @@ import { CALL } from '../sim/horseCall.js'; // 📣 (trop près : pas besoin de 
 import { canProduce } from '../sim/farm.js';
 import { canLeash, owned, inUse, freeSaddle } from '../sim/gear.js';
 import { eligibility, knownTricks } from '../sim/activities.js';
+import { vaultBlock } from '../sim/vaulting.js'; // 🤸 voltige
 import { TOOLS } from '../sim/tools.js';
 import { isSandbox } from '../sim/profile.js';
 
@@ -231,6 +232,10 @@ export function openAnimalActions(ui, a) {
     } else if (sp.rideable && saddled && g.player.mount?.data !== a) {
       items.push({ act: 'unsaddle', icon: '🧰', label: t('act_unsaddle'), effect: ta('unsaddleHint', a), run: () => { g.unsaddle(a); ui.closePanel(); } });
     }
+    // 🤸 Après la voltige : enlever le surfaix et le tapis de voltige (sinon une selle se posait sur le tapis épais).
+    if (a.species === 'horse' && (a.gear?.surcingle || a.gear?.pad?.item === 'vaultPad') && g.player.mount?.data !== a) {
+      items.push({ act: 'vaultGearOff', icon: '🧰', label: t('vt_gearOffBtn'), effect: ta('vt_gearOffHint', a), run: () => { g.removeVaultGear(a); ui.closePanel(); } });
+    }
     // Monté à cru avec le filet : on le lui enlève aussi (il ne le garde pas au pré).
     if (sp.rideable && !saddled && a.gear?.bridle && g.player.mount?.data !== a) {
       items.push({ act: 'unsaddle', icon: '🧰', label: t('act_unbridle'), effect: t('bridleOff'), run: () => { g.unsaddle(a); ui.closePanel(); } });
@@ -335,6 +340,19 @@ export function activityItems(ui, a) {
     activity('lesson', '🎓');
     activity('jumping', '🏇');
     activity('trail', '🧭');
+  }
+  // 🤸 Voltige (src/sim/vaulting.js) : au pas d'abord ; sans surfaix ni tapis, le menu de la voltige dit quoi faire.
+  if (a.species === 'horse' && !a.client) {
+    const why = vaultBlock(a, 'walk');
+    const gear = why === 'noSurcingle' || why === 'noVaultPad';
+    items.push({
+      icon: '🤸',
+      label: t('actv_type_vaulting'),
+      enabled: !why || gear,
+      why: why && !gear ? ta(`vt_why_${why}`, a) : '',
+      effect: gear ? ta(`vt_why_${why}`, a) : t('actv_desc_vaulting'),
+      run: () => openActivities(ui, { pick: 'vaulting', animal: a }),
+    });
   }
   if (sp.training?.includes('agility')) activity('agility', '🐕');
   if (a.species === 'rabbit') activity('hop', '🐇');

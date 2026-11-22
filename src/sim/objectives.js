@@ -5,6 +5,7 @@ import { happiness } from './animal.js';
 import { PLACE_IDS, PLACES } from './places.js';
 import { CAREERS } from './careers.js'; // paliers du métier Toiletteur
 import { SPECIES_IDS, isOffered, anyAvailable } from './species.js';
+import { figuresOnHorse, PROGRAM } from './vaulting.js'; // 🤸 voltige
 
 const stat = (p, k) => p.stats[k] ?? 0;
 
@@ -72,6 +73,10 @@ export const OBJECTIVES = [
   { id: 'drReprise1', kind: 'quest', reward: 80, progress: (p) => [stat(p, 'actvDressage'), 1] },
   { id: 'compRegister1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'compRegistered'), 1] },
   { id: 'compAway1', kind: 'quest', reward: 150, progress: (p) => [stat(p, 'compAway'), 1] },
+  // 🤸 voltige (src/sim/vaulting.js) : la première (le tonneau compte), au galop, toutes les figures sur un cheval
+  { id: 'vaultFirst', kind: 'quest', reward: 50, progress: (p) => [stat(p, 'actvVaulting'), 1] },
+  { id: 'vaultCanter1', kind: 'quest', reward: 100, progress: (p) => [stat(p, 'actvVaultingCanter'), 1] },
+  { id: 'vaultAll', kind: 'quest', reward: 150, progress: (p) => [figuresOnHorse(p).length, PROGRAM.length] },
   // concours de beauté (src/sim/beauty.js)
   { id: 'beautyPrep1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'beautyReady'), 1] },
   { id: 'beautyBraid1', kind: 'quest', reward: 40, progress: (p) => [stat(p, 'beautyBraid'), 1] },
@@ -121,6 +126,7 @@ export const OBJECTIVES = [
   { id: 'actvPhotos', kind: 'achievement', progress: (p) => [stat(p, 'actvPhotos'), 8] },
   { id: 'actvStar', kind: 'achievement', progress: (p) => [stat(p, 'actvShows'), 10] },
   { id: 'drGood', kind: 'achievement', progress: (p) => [stat(p, 'actvDressage70'), 1] },
+  { id: 'vaultStar', kind: 'achievement', progress: (p) => [stat(p, 'vaultCanter8'), 1] }, // 🤸 voltige au galop, 8/10
   { id: 'compPodium3', kind: 'achievement', progress: (p) => [stat(p, 'compAwayPodiums'), 3] },
   { id: 'compGrand', kind: 'achievement', progress: (p) => [stat(p, 'compGrandWins'), 1] },
   { id: 'beautyPodium', kind: 'achievement', progress: (p) => [stat(p, 'beautyPodium'), 1] }, // concours de beauté

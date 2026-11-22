@@ -95,6 +95,13 @@ export function saddle3dGame(ctx) {
   const zG = dims.zGirth ?? zSeat + dims.L * 0.13;
   const girthC = v3(0, (md.y0 ?? 1) - dims.R * 0.2, zG);
   girth.visible = false;
+  // La sangle de la scène : celle du jeu est rigide ici (sans skinGear) et flottait sur le flanc, devant le quartier.
+  // On la refait sur la peau du cheval (rayons sur la copie figée de sa pose) : elle sort de sous le quartier, côté
+  // avant-bas, avec ses deux boucles, descend en biais jusqu'au passage de sangle derrière le coude, passe sous le
+  // ventre et remonte de l'autre côté. Lâche, elle pend sous le ventre ; serrée, elle le touche.
+  const girthSet = girthOnSkin(sc, { body, girthMat: girth.material, carrier: saddleCarrier, skip: new Set([girth, ...meshes.slice(0, nPad)]), zG, R: dims.R, y0: md.y0 ?? 1, wide: real.saddle.item === 'saddleWestern', own });
+  body.add(girthSet.group);
+  girthSet.group.visible = false;
 
   // ---------------------------------------------------------------- le porte-selle, dans la paille devant lui
   const stand = saddleStand(own, { h: 0.84 });
@@ -195,7 +202,10 @@ export function saddle3dGame(ctx) {
       holdBtn = ctx.button(`🪢 ${t('mg_seller_tighten')}`, { cls: 'primary', hold: true, onDown: () => { tightening = true; }, onUp: () => release() });
     }
     // (la sangle pend sous la selle posée ; sans selle, rien à sangler — le jeu dessiné ne la montrait pas non plus)
-    if (st === 'girth') girth.visible = items.saddle.placed;
+    if (st === 'girth' && items.saddle.placed) {
+      girthSet.measure();
+      girthSet.group.visible = true;
+    }
     if (st === 'girth' && items.pad.placed && items.saddle.placed) stand.group.visible = false;
     ctx.hint(t(`mg_seller_${st}_hint`, { name }));
     ctx.progress(value() / z.max);
@@ -302,6 +312,32 @@ export function saddle3dGame(ctx) {
   /** Où est la pièce à l'écran (le creux du siège ; le tapis : son milieu). */
   const screenOf = (key) => sc.project(items[key].carrier.localToWorld(seatLocal.clone()));
 
+  /** Les 8 coins (monde) de ce que contient un porteur. */
+  const box3 = new THREE.Box3();
+  function boxCorners(obj) {
+    obj.updateWorldMatrix(true, true);
+    box3.setFromObject(obj);
+    if (box3.isEmpty()) return [];
+    const out = [];
+    for (let i = 0; i < 8; i++) out.push(v3(i & 1 ? box3.max.x : box3.min.x, i & 2 ? box3.max.y : box3.min.y, i & 4 ? box3.max.z : box3.min.z));
+    return out;
+  }
+  /** Le rectangle (espace du cadre) d'une pièce à l'écran. */
+  function screenBox(obj) {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const c of boxCorners(obj)) {
+      const q = sc.project(c);
+      x0 = Math.min(x0, q.x);
+      y0 = Math.min(y0, q.y);
+      x1 = Math.max(x1, q.x);
+      y1 = Math.max(y1, q.y);
+    }
+    return { x0, y0, x1, y1 };
+  }
+
   // ---------------------------------------------------------------- caméra
   function frameFor(st, now = false) {
     if (st === 'girth') {
@@ -309,10 +345,13 @@ export function saddle3dGame(ctx) {
       const gb = body.localToWorld(girthC.clone().add(v3(0, -dims.R * 1.25, 0)));
       sc.frame([L.withers, L.back, L.belly, L.chest, gb, L.poll, L.muzzle, L.hooves[0], L.hooves[1], L.croup], { dir: [0.32, 0.02, 1], pad: 1.06, now });
     } else {
-      // (de la queue au bout du nez, avec de la marge : au repos, il tend parfois l'encolure)
+      // (de la queue au bout du nez, avec de la marge : au repos, il tend parfois l'encolure ; et les pièces encore sur
+      // le porte-selle, en entier — avant, le tapis qui pend était à moitié coupé par le bord gauche)
       const st0 = stand.group.localToWorld(stand.top.clone().add(v3(0, 0.15, 0)));
       const st1 = stand.group.localToWorld(stand.low.clone().add(v3(0, -0.25, 0.05)));
-      sc.frame([L.withers, L.croup, L.tail, L.tail.clone().add(v3(-0.15 * S, 0, 0)), L.back, L.belly, L.chest, L.muzzle, L.muzzle.clone().add(v3(0.18 * S, -0.1 * S, 0)), L.poll, ...L.ears, ...L.hooves, st0, st1], { dir: [0.3, 0.72, 1], pad: 1.1, now });
+      const onStandPts = [];
+      for (const k of ['pad', 'saddle']) if (!items[k].placed) onStandPts.push(...boxCorners(items[k].carrier));
+      sc.frame([L.withers, L.croup, L.tail, L.tail.clone().add(v3(-0.15 * S, 0, 0)), L.back, L.belly, L.chest, L.muzzle, L.muzzle.clone().add(v3(0.18 * S, -0.1 * S, 0)), L.poll, ...L.ears, ...L.hooves, st0, st1, ...onStandPts], { dir: [0.3, 0.72, 1], pad: 1.1, now });
     }
   }
 
@@ -339,8 +378,8 @@ export function saddle3dGame(ctx) {
     const key = `${sc.size.w}x${sc.size.h}`;
     if (key === standFor || sc.size.w < 2) return;
     standFor = key;
-    if (stage() !== 'girth') frameFor(stage(), true);
     for (const k of ['pad', 'saddle']) if (!items[k].placed && drag?.key !== k) toStand(k, true);
+    if (stage() !== 'girth') frameFor(stage(), true);
   }
   startStage(0);
   keepStand();
@@ -358,8 +397,12 @@ export function saddle3dGame(ctx) {
         items: Object.fromEntries(Object.entries(items).map(([k, it]) => [k, { placed: it.placed, u: it.u }])),
         spot, forward: fwd, back,
         tray: st !== 'girth' ? screenOf(st === 'pad' ? 'pad' : 'saddle') : null,
+        trayBox: st !== 'girth' ? screenBox(items[st].carrier) : null,
         belly: sc.project(body.localToWorld(girthC.clone().add(v3(0, -dims.R, 0.15)))),
-        girthScale: girth.scale.y,
+        girthSag: girthSet.sag,
+        girthShown: girthSet.group.visible,
+        /** (tests) la sangle : son bout de notre côté (sous le quartier), son point le plus bas, dans le repère du corps */
+        girthEnds: girthSet.ends,
       };
     },
     down(p) {
@@ -454,14 +497,9 @@ export function saddle3dGame(ctx) {
         }
         return;
       }
-      // la sangle : elle pend quand elle est lâche, colle au ventre quand elle est serrée
+      // la sangle : elle pend quand elle est lâche, colle au ventre quand elle est serrée (gonflé : un peu plus loin)
       const loose = Math.max(0, 0.78 - tension) / 0.78;
-      const sx = 1 + 0.06 * loose - (tension > 0.95 ? 0.012 : 0);
-      const sy = 1 + 0.2 * loose - (tension > 0.95 ? 0.02 : 0);
-      girth.scale.set(sx, sy, 1);
-      // (agrandie autour de son point haut, sous le quartier : le bas descend)
-      const top = girthC.clone().add(v3(0, dims.R * 0.55, 0));
-      girth.position.set(top.x * (1 - sx), top.y * (1 - sy), 0);
+      if (girthSet.group.visible) girthSet.setSag(dims.R * 0.24 * loose + 0.012 * bloatK - (tension > 0.95 ? 0.003 : 0));
       if (ctx.done || st !== 'girth') return;
       if (tightening) {
         tension = Math.min(GIRTH.max, tension + GIRTH.rate * dt);
@@ -517,6 +555,21 @@ export function saddle3dGame(ctx) {
         g.stroke();
         g.restore();
       }
+      // La pièce à prendre, sur le porte-selle : un cadre bleu qui pulse autour d'elle (comme le jeu dessiné)
+      if (!ctx.done && pause <= 0 && st !== 'girth' && !items[st].placed && drag?.key !== st && !tween.has(items[st].carrier)) {
+        const b = screenBox(items[st].carrier);
+        const k = 0.5 + 0.5 * Math.sin(ctx.time * 4);
+        const m2 = 6 + 3 * k;
+        g.save();
+        g.lineWidth = 4;
+        g.strokeStyle = `rgba(60, 123, 217, ${0.65 + 0.3 * k})`;
+        g.shadowColor = 'rgba(255,255,255,0.9)';
+        g.shadowBlur = 6;
+        g.beginPath();
+        g.roundRect(b.x0 - m2, b.y0 - m2, b.x1 - b.x0 + 2 * m2, b.y1 - b.y0 + 2 * m2, 12);
+        g.stroke();
+        g.restore();
+      }
       if (st === 'girth' && rule && pause <= 0) rule.dial(g, tension, 354, ctx.view.y0 + 56);
       stagePill(g, si, SELLER_STAGES.length, t(`mg_seller_stage_${st}`), Math.max(8, ctx.view.y0 + 8));
     },
@@ -524,6 +577,8 @@ export function saddle3dGame(ctx) {
       unhook();
       if (md.ribs) md.ribs.scale.set(1, 1, 1);
       for (const c of [padCarrier, saddleCarrier]) c.parent?.remove(c);
+      body.remove(girthSet.group);
+      girthSet.dispose();
       gear.dispose();
       for (const mesh of hidden) mesh.visible = true;
       sc.scene.remove(stand.group);
@@ -531,4 +586,152 @@ export function saddle3dGame(ctx) {
       own.free();
     },
   };
+}
+
+/**
+ * La sangle posée sur la peau, côté nous et de l'autre côté. Elle part de sous le quartier (le coin avant-bas, mesuré
+ * sur les pièces de la selle telles qu'elles sont posées), descend en biais jusqu'au passage de sangle (zG), passe sous
+ * le ventre et remonte symétriquement. Deux boucles en acier de chaque côté, juste sous le bord du quartier.
+ * measure() : prend les mesures (la selle posée) ; setSag(m) : lâche, la sangle s'écarte du ventre (surtout dessous).
+ */
+function girthOnSkin(sc, { body, girthMat, carrier, skip, zG, R, y0, wide, own }) {
+  const group = new THREE.Group();
+  const strapMesh = new THREE.Mesh(new THREE.BufferGeometry(), girthMat);
+  strapMesh.castShadow = true;
+  strapMesh.receiveShadow = true;
+  group.add(strapMesh);
+  const steel = own(new THREE.MeshStandardMaterial({ color: 0xc9ccd1, roughness: 0.28, metalness: 0.85 }));
+  const buckleGeo = own(new THREE.TorusGeometry(0.02, 0.0038, 6, 4));
+  const buckles = [];
+  for (let i = 0; i < 4; i++) {
+    const b = new THREE.Mesh(buckleGeo, steel);
+    b.castShadow = true;
+    buckles.push(b);
+    group.add(b);
+  }
+  const W = wide ? 0.072 : 0.052; // (largeur de la sangle)
+  const TH = 0.007;
+  const cy = y0 - R * 0.2; // (l'axe du tronc, comme gearModels.js)
+  let samples = null; // [{ p (peau), n (vers dehors), t (0 en haut côté nous … 1 dessous … 2 en haut de l'autre côté) }]
+  let sagNow = -1;
+  const api = { group, sag: 0, ends: null };
+
+  /** Le coin avant-bas du quartier de notre côté (repère du corps), et le côté (x) où est la caméra. */
+  function flapCorner() {
+    body.updateWorldMatrix(true, true);
+    const cam = body.worldToLocal(sc.camera.position.clone());
+    const side = cam.x < 0 ? -1 : 1;
+    const inv = new THREE.Matrix4().copy(body.matrixWorld).invert();
+    const m = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    let yMin = Infinity;
+    const pts = [];
+    carrier.traverse((o) => {
+      // (les plaques de cuir de la selle seulement : pas les étriers — des groupes, ou des anneaux —, pas les petites
+      // pièces rondes, pas la sangle du jeu)
+      if (!o.isMesh || skip.has(o) || o.parent !== carrier) return;
+      if (/Torus|Cylinder|Sphere/.test(o.geometry?.type ?? '')) return;
+      const pos = o.geometry?.attributes?.position;
+      if (!pos) return;
+      m.multiplyMatrices(inv, o.matrixWorld);
+      for (let i = 0; i < pos.count; i += 2) {
+        p.fromBufferAttribute(pos, i).applyMatrix4(m);
+        if (p.x * side < R * 0.55) continue; // (seulement le flanc de notre côté)
+        pts.push(p.clone());
+        yMin = Math.min(yMin, p.y);
+      }
+    });
+    if (!pts.length) return { side, corner: v3(side * R * 0.9, cy, zG - 0.12) };
+    // (le bas du quartier, puis ce qu'il y a de plus en avant dans ce bas)
+    let best = null;
+    for (const q of pts) if (q.y < yMin + 0.1 && (!best || q.z > best.z)) best = q;
+    return { side, corner: best };
+  }
+
+  api.measure = () => {
+    if (samples) return;
+    const { side, corner } = flapCorner();
+    // (le départ : sous le quartier, un peu en arrière et au-dessus de son coin)
+    const E = corner.clone().add(v3(0, 0.035, -0.05));
+    const aE = Math.atan2(side * E.x, E.y - cy); // (angle depuis le haut, autour de l'axe du tronc)
+    sc.proxy.bake();
+    const q = new THREE.Quaternion();
+    body.getWorldQuaternion(q);
+    const dC = 1.2 * body.getWorldScale(v3()).x; // (distance du départ du rayon à l'axe du tronc, en mètres du monde)
+    const N = 26;
+    samples = [];
+    for (let i = 0; i <= N; i++) {
+      const t = (i / N) * 2; // 0 … 2
+      const half = t <= 1 ? t : 2 - t;
+      const sd = t <= 1 ? side : -side;
+      const a = aE + (Math.PI - aE) * half;
+      const z = E.z + (zG - E.z) * smooth(Math.min(1, half / 0.75));
+      const dir = v3(sd * Math.sin(a), Math.cos(a), 0);
+      const c = v3(0, cy, z);
+      const from = body.localToWorld(c.clone().addScaledVector(dir, 1.2));
+      const wdir = dir.clone().negate().applyQuaternion(q).normalize();
+      const hits = sc.proxy.hitAll(new THREE.Ray(from, wdir)).filter((h) => h.distance < dC * 0.97);
+      const h = hits.length ? hits[hits.length - 1] : null; // (l'entrée dans le tronc, pas un coude devant)
+      const pSkin = h ? body.worldToLocal(h.point.clone()) : c.clone().addScaledVector(dir, R);
+      samples.push({ p: pSkin, n: dir, t, half });
+    }
+    api.ends = { near: samples[0].p.clone(), low: samples[N / 2].p.clone() };
+    sagNow = -1;
+    api.setSag(api.sag);
+  };
+
+  api.setSag = (sag) => {
+    api.sag = sag;
+    if (!samples || Math.abs(sag - sagNow) < 0.002) return;
+    sagNow = sag;
+    // (lâche : elle pend sous le ventre ; sur les flancs elle reste contre lui, et sous le quartier en haut)
+    const P = samples.map((sm) => sm.p.clone().addScaledVector(sm.n, 0.005 + TH / 2 + Math.max(-0.002, sag) * smooth(Math.max(0, (sm.half - 0.4) / 0.6)) ** 1.2));
+    const pos = [];
+    const idx = [];
+    for (let i = 0; i < P.length; i++) {
+      const tan = P[Math.min(P.length - 1, i + 1)].clone().sub(P[Math.max(0, i - 1)]).normalize();
+      const n = samples[i].n;
+      const across = new THREE.Vector3().crossVectors(tan, n).normalize().multiplyScalar(W / 2);
+      const out = n.clone().multiplyScalar(TH / 2);
+      for (const [a, b] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+        const v = P[i].clone().addScaledVector(across, a).addScaledVector(out, b);
+        pos.push(v.x, v.y, v.z);
+      }
+      if (i > 0) {
+        const o = (i - 1) * 4;
+        for (let f = 0; f < 4; f++) {
+          const a0 = o + f;
+          const a1 = o + ((f + 1) % 4);
+          idx.push(a0, a0 + 4, a1, a1, a0 + 4, a1 + 4);
+        }
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    strapMesh.geometry.dispose();
+    strapMesh.geometry = geo;
+    // les boucles : juste sous le bord du quartier, de chaque côté (deux par côté, l'une à côté de l'autre)
+    const at = (k) => {
+      const i = Math.round(k * (P.length - 1));
+      return { p: P[i], n: samples[i].n, tan: P[Math.min(P.length - 1, i + 1)].clone().sub(P[Math.max(0, i - 1)]).normalize() };
+    };
+    [at(0.11), at(0.89)].forEach((b, s2) => {
+      const across = new THREE.Vector3().crossVectors(b.tan, b.n).normalize();
+      for (let j = 0; j < 2; j++) {
+        const m = buckles[s2 * 2 + j];
+        m.position.copy(b.p).addScaledVector(b.n, TH * 0.7).addScaledVector(across, (j ? 1 : -1) * W * 0.24);
+        // (le cadre de la boucle à plat sur la sangle, ses côtés le long d'elle)
+        const basis = new THREE.Matrix4().makeBasis(across, b.tan, b.n);
+        m.quaternion.setFromRotationMatrix(basis).multiply(new THREE.Quaternion().setFromAxisAngle(v3(0, 0, 1), Math.PI / 4));
+        m.scale.set(1, 1.35, 1);
+      }
+    });
+  };
+
+  api.dispose = () => {
+    strapMesh.geometry.dispose();
+  };
+  return api;
 }

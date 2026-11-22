@@ -107,6 +107,9 @@ describe('seller en 3D, chaque gabarit', () => {
       run(ctx, game, sc, 0.3);
       let s = game.peek();
       expect(inView(s.tray, ctx.view), 'le tapis sur le porte-selle est dans l\'image').toBe(true);
+      // (tout le tapis, pas seulement un point : avant, il pendait à moitié hors du bord gauche)
+      const tb = s.trayBox;
+      expect(tb.x0 >= ctx.view.x0 && tb.x1 <= ctx.view.x1 && tb.y0 >= ctx.view.y0 && tb.y1 <= ctx.view.y1, `tapis entier dans l'image ${JSON.stringify(tb)}`).toBe(true);
       expect(inView(s.spot, ctx.view), 'la place de la selle est dans l\'image').toBe(true);
       // le tapis : du porte-selle au dos, à la bonne place
       for (const key of ['pad', 'saddle']) {
@@ -120,6 +123,12 @@ describe('seller en 3D, chaque gabarit', () => {
         run(ctx, game, sc, 1.2);
       }
       expect(game.peek().stage).toBe('girth');
+      // la sangle : elle part de sous le quartier (côté nous) et passe sous le ventre, sur la peau
+      run(ctx, game, sc, 0.2);
+      const ge = game.peek();
+      expect(ge.girthShown).toBe(true);
+      expect(ge.girthEnds.near.y, 'son bout est plus haut que le ventre').toBeGreaterThan(ge.girthEnds.low.y + sc.model.dims.R * 0.6);
+      expect(Math.abs(ge.girthEnds.low.x), 'dessous, elle passe au milieu du ventre').toBeLessThan(0.06);
       // la sangle : on serre, il gonfle le ventre, on resserre dans le vert
       const hold = btn(ctx, /🪢/);
       hold.opts.onDown();

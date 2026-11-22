@@ -4,6 +4,7 @@ import { drawAnimal, animalShape, fitAnimal, hitAnimal, rrect, ellipse, circle, 
 // emoji toujours opaque (voir food.js : un emoji prend l'opacité du dernier fillStyle)
 import { homeBackground, sizeFor, isBig, drawCountZone, emojiOpaque as emoji, stopLabel, nb, justMsgs, drawAnimalLifted } from './food.js';
 import { quirksOf, knows, QUIRK_SPOTS } from '../../sim/horseQuirks.js'; // 🔍 son coin préféré (cheval)
+import { drawHorseVet } from '../vetHorse.js'; // (le cheval dessiné du vétérinaire : sa race, sa robe, ses marques)
 import { keepsMemories } from '../../sim/memories.js'; // (tes chevaux : pas ceux qu'on te confie)
 
 // ---------------------------------------------------------------- caresser
@@ -184,7 +185,8 @@ export function petGame(ctx) {
       if (isBig(a)) sky(g, ctx.view, '#a9d8f2', '#e4f3fb', floorY, '#8cc268', '#6fa94f');
       else homeBackground(g, ctx, floorY);
       const fedUp = prog > hi && !ctx.done;
-      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, happy: (ctx.pointer.down && flinch <= 0 && speed > 20 && !fedUp) || (ctx.done && prog <= hi), earsBack: flinch > 0 || fedUp, shake: flinch > 0 ? 0.6 : 0, wag: (purr > 0 && !fedUp) || (ctx.done && prog <= hi), lip: lip > 0 });
+      // (le cheval : le dessin du vétérinaire, même géométrie, il tend la lèvre aussi)
+      (a.species === 'horse' ? drawHorseVet : drawAnimal)(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, time: ctx.time, happy: (ctx.pointer.down && flinch <= 0 && speed > 20 && !fedUp) || (ctx.done && prog <= hi), earsBack: flinch > 0 || fedUp, shake: flinch > 0 ? 0.6 : 0, wag: (purr > 0 && !fedUp) || (ctx.done && prog <= hi), lip: lip > 0 });
       if (fedUp) emoji(g, '😑', sh.head.x + sh.hr * 1.3, sh.head.y - sh.hr * 1.7, 26);
       // Endroit préféré : il scintille si on ne l'a pas encore trouvé
       if (!ctx.done && ctx.time > hintAfter && favDist < 60) {

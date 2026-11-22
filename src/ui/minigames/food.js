@@ -1,6 +1,7 @@
 // Mini-jeux « repas » : nourrir, donner à boire, donner une friandise.
 
 import { drawAnimal, animalShape, rrect, ellipse, circle, emoji as emojiRaw, label, fillView, clamp, lerp, shade } from './draw.js';
+import { drawHorseVet } from '../vetHorse.js'; // (le cheval dessiné du vétérinaire : sa race, sa robe, ses marques)
 import { quirksOf, knows } from '../../sim/horseQuirks.js'; // 🔍 sa friandise préférée (cheval)
 import { keepsMemories } from '../../sim/memories.js'; // (tes chevaux : pas ceux qu'on te confie)
 
@@ -136,8 +137,9 @@ function pourGame(ctx, water) {
   const band = 0.12;
   const lo = target - band;
   const hi = target + band;
-  const s = sizeFor(a);
-  const animalX = big ? 110 : 125;
+  // (le cheval qui boit : plus grand que son seau, 0,9 plutôt que 0,6 ; les autres comme avant)
+  const s = a.species === 'horse' && water ? 0.9 : sizeFor(a);
+  const animalX = a.species === 'horse' && water ? 92 : big ? 110 : 125;
   const mouthOff = animalShape(a, { x: animalX, y: floorY, s, f: 1 }).mouth.x - animalX;
   const eatTarget = Math.max(0, box.x - box.w * 0.3 - animalX - mouthOff);
 
@@ -291,7 +293,9 @@ function pourGame(ctx, water) {
       drawContainer(g, box, level, water, food, pile, lo, hi, target, ctx);
       // Animal (il regarde le récipient)
       const eating = ctx.done && eatX >= eatTarget - 1;
-      drawAnimal(g, a, { x: animalX + eatX, y: floorY, s, f: 1, headDip: eating ? 0.6 + Math.sin(ctx.time * 8) * 0.08 : 0, mouth: eating, wag: !ctx.done ? level > 0.2 : true, walk: ctx.done && eatX < eatTarget - 1 ? ctx.time * 10 : null, happy: eating });
+      // (le cheval : le dessin du vétérinaire, même géométrie ; il boit tête baissée, il mâche)
+      const paint = a.species === 'horse' ? drawHorseVet : drawAnimal;
+      paint(g, a, { x: animalX + eatX, y: floorY, s, f: 1, headDip: eating ? 0.6 + Math.sin(ctx.time * 8) * 0.08 : 0, mouth: eating, chew: eating ? Math.max(0, Math.sin(ctx.time * 8)) : 0, wag: !ctx.done ? level > 0.2 : true, walk: ctx.done && eatX < eatTarget - 1 ? ctx.time * 10 : null, happy: eating, time: ctx.time });
       // Source : sac ou robinet
       if (water) drawTap(g, box, pouring, flow);
       else drawBag(g, sourceX, sourceY, pouring, t(food.label), ctx.time);

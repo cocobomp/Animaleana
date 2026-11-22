@@ -391,7 +391,7 @@ function animalThumb(spec) {
   return {
     object: holder,
     points,
-    dir: portrait ? [0.95, 0.24, 1] : species === 'horse' || species === 'cow' ? [1, 0.38, 0.72] : [1, 0.5, 0.95],
+    dir: animalThumbDir(species, portrait),
     ground: 0,
     pad: portrait ? 1.04 : 1.06,
     dispose: (onMat) => {
@@ -400,6 +400,18 @@ function animalThumb(spec) {
       disposeModel(model.root);
     },
   };
+}
+
+/**
+ * Direction de la caméra des vignettes d'animaux (de l'animal vers la caméra ; x > 0 : son côté gauche). Cheval : du
+ * côté droit (x < 0), où tombe sa crinière, et un peu plus bas qu'avant — vu de gauche et d'assez haut, on ne voyait
+ * de la crinière que le dessus du rouleau, un « peigne », et le Frison avait l'air rasé. Portrait (fiche) : de trois
+ * quarts avant, à hauteur d'épaule ; autres vignettes : plus de côté. Les autres espèces ne changent pas.
+ */
+export function animalThumbDir(species, portrait = false) {
+  if (species === 'horse') return portrait ? [-0.95, 0.2, 1] : [-1, 0.28, 0.72];
+  if (portrait) return [0.95, 0.24, 1];
+  return species === 'cow' ? [1, 0.38, 0.72] : [1, 0.5, 0.95];
 }
 
 /** Signature courte d'une robe (clé de vignette du portrait : une autre robe, une autre image). */

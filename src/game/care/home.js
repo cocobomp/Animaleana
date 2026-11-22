@@ -354,7 +354,7 @@ export function homeSet(stage) {
   const props = {};
   const scale = stage.double.scale;
   // gamelle à la taille de sa tête (un chihuahua : 6 cm de rayon ; un saint-bernard : 14 cm)
-  const bowlR = Math.max(0.055, Math.min(0.15, L.size.headLen * 0.75 + 0.02));
+  const bowlR = Math.max(0.045, Math.min(0.15, L.size.headLen * 0.62 + 0.014));
   const food = FOODS[sp];
   props.food = petBowl({ r: bowlR, color: ST.food, name: stage.a?.name ?? '', content: 'food', food, high });
   props.water = petBowl({ r: bowlR, color: ST.water, name: stage.a?.name ?? '', content: 'water', high });

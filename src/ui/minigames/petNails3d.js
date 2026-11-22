@@ -109,9 +109,10 @@ export function petNails3dGame(ctx) {
   if (down.y > 0) down.negate();
   const tip = pw.clone().addScaledVector(dir, tipD * 0.82).addScaledVector(lat, (w0 + w1) / 2).addScaledVector(down, width * 0.12);
   // ---- les quatre griffes
-  const clawLen = width * 0.5;
+  // (un peu plus grandes que nature chez les tout petits : une griffe de chihuahua ferait 4 mm)
+  const clawLen = Math.max(width * 0.58, 0.011);
   const geo = keep(clawGeometry());
-  const clawMat = keep(new THREE.MeshStandardMaterial({ color: 0xf6efe2, roughness: 0.3, transparent: true, opacity: 0.72, depthWrite: false }));
+  const clawMat = keep(new THREE.MeshStandardMaterial({ color: 0xe9dcc2, roughness: 0.3, transparent: true, opacity: 0.8, depthWrite: false, emissive: 0x2a2014, emissiveIntensity: 0.15 }));
   const quickMat = keep(new THREE.MeshStandardMaterial({ color: 0xee8aa0, roughness: 0.5, emissive: 0x6a1a28, emissiveIntensity: 0.25 }));
   const greenMat = keep(new THREE.MeshBasicMaterial({ color: 0x3fae62, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
   let claws = [];
@@ -120,7 +121,7 @@ export function petNails3dGame(ctx) {
   const s0 = play.peek();
   claws = [-0.3, -0.1, 0.1, 0.3].map((k) => {
     const g = new THREE.Group();
-    const base = tip.clone().addScaledVector(lat, k * width);
+    const base = tip.clone().addScaledVector(lat, k * Math.max(width, clawLen * 1.9));
     g.position.copy(base);
     // pointe : le long de la patte, un peu vers le bas
     const along = dir.clone().addScaledVector(down, 0.35).normalize();
@@ -141,7 +142,7 @@ export function petNails3dGame(ctx) {
     return { g, claw, quick, band, cutAt: 1 };
   });
   // ---- la pince
-  const tool = clipper(keep, Math.max(0.45, Math.min(1.1, width / 0.06)));
+  const tool = clipper(keep, Math.max(0.4, Math.min(0.9, width / 0.07)));
   sc.scene.add(tool);
   let cuts = [null, null, null, null];
   let snip = 0;
@@ -150,7 +151,8 @@ export function petNails3dGame(ctx) {
   let saidHappy = false;
   // Cadrage : sa patte tendue en grand, et sa tête (il nous regarde faire).
   // (la patte seule, en gros plan : une griffe fait un centimètre ; sa tête est dans la bulle, en haut à droite)
-  const frame = (now = false) => sc.frame([tip.clone().addScaledVector(lat, width * 0.85), tip.clone().addScaledVector(lat, -width * 0.85), tip.clone().addScaledVector(dir, clawLen * 1.5), tip.clone().addScaledVector(down, width * 0.45), back.clone().lerp(tip, 0.2)], { dir: [0.9, 0.5, 1], pad: 1.3, now });
+  const knee = (leg.knee ?? leg.fetlock).getWorldPosition(v3());
+  const frame = (now = false) => sc.frame([tip.clone().addScaledVector(lat, width * 1.4), tip.clone().addScaledVector(lat, -width * 1.4), tip.clone().addScaledVector(dir, clawLen * 1.8), tip.clone().addScaledVector(down, width * 0.6), back, knee, L.chest, ...(L.size.len < 0.5 ? [sc.live('muzzle'), sc.live('poll')] : [])], { dir: [0.85, 0.45, 1], pad: 1.04, now });
   frame(true);
   return {
     peek: () => ({ ...play.peek(), clawTip: sc.project(claws[Math.min(3, cur)].g.localToWorld(v3(0, 1, 0))) }),
@@ -239,6 +241,21 @@ export function petNails3dGame(ctx) {
         g.fill();
       }
       g.restore();
+      // la griffe en cours : un cercle doré qui pulse autour d'elle (elle ne fait qu'un centimètre)
+      if (!ctx.done && s.cur < 4) {
+        const c = claws[s.cur];
+        const mid = c.g.localToWorld(v3(0, 0.5, 0));
+        const p = sc.project(mid);
+        const r = Math.max(16, sc.projectRadius(mid, clawLen * 1.3)) * (1 + Math.sin(ctx.time * 6) * 0.08);
+        g.save();
+        g.strokeStyle = 'rgba(242,200,75,0.9)';
+        g.lineWidth = 3;
+        g.setLineDash([5, 4]);
+        g.beginPath();
+        g.arc(p.x, p.y, r, 0, Math.PI * 2);
+        g.stroke();
+        g.restore();
+      }
       // sa tête (il réagit) : dans une bulle, en haut à droite
       g.save();
       g.fillStyle = 'rgba(255,255,255,0.88)';

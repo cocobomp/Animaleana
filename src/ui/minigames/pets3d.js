@@ -56,7 +56,7 @@ function pour3d(ctx, water) {
   const s0 = play.peek();
   const mark = bowl.setMark(s0.lo, s0.hi, s0.target);
   // La source : le sac tenu par notre main, ou la carafe, au-dessus de la gamelle, de l'autre côté de sa tête.
-  const size = Math.max(0.55, Math.min(1.25, D.r / 0.09));
+  const size = Math.max(0.42, Math.min(1.25, D.r / 0.09));
   const src = water ? pitcher({ size, hand: P.hand, shoulder: () => shoulderOf(sc) }) : kibbleBag({ kind: sp, size, hand: P.hand, shoulder: () => shoulderOf(sc) });
   sc.scene.add(src.group);
   const srcAt = bowlW().add(v3(D.r * 0.1, D.r * 0.9 + 0.05 * size, -D.r * 0.2));
@@ -74,7 +74,7 @@ function pour3d(ctx, water) {
   // Cadrage : sa tête (assis, il lève la tête), la gamelle, la source au-dessus ; vu de face, un peu de haut.
   const frameWait = (now = false) => {
     const b = bowlW();
-    sc.frame([L.muzzle, L.poll, ...L.ears, L.chest, L.croup, L.paws[0], L.paws[1], b.clone().add(v3(-D.r, -D.depth, 0)), b.clone().add(v3(D.r * 1.3, -D.depth, D.r)), srcAt.clone().add(v3(0.22 * size, 0.2 * size, 0))], { dir: [0.55, 0.3, 1], pad: 1.04, now, raise: -0.22 });
+    sc.frame([L.muzzle, L.poll, ...L.ears, L.chest, L.croup, L.paws[0], L.paws[1], b.clone().add(v3(-D.r, -D.depth, 0)), b.clone().add(v3(D.r * 1.3, -D.depth, D.r)), srcAt.clone().add(v3(0.22 * size, 0.2 * size, 0))], { dir: [0.7, 0.3, 1], pad: 1.02, now, raise: -0.15 });
   };
   frameWait(true);
   let spawnAcc = 0;
@@ -216,7 +216,9 @@ export function petTreat3dGame(ctx) {
   treat.rotation.set(0, 0.5, 0);
   // Main au repos : devant le bout de son nez, de notre côté, un peu plus bas (il doit lever la tête vers elle).
   const rest = L.muzzle.clone().add(v3(hl * 0.9 + 0.05, -hl * 0.15, hl * 0.6 + 0.06));
-  sc.frame([L.muzzle, L.poll, ...L.ears, L.chest, L.withers, L.croup, L.paws[0], L.paws[1], rest.clone().add(v3(0.06, -0.03, 0.04)), rest.clone().add(v3(-0.04, 0.05, 0))], { dir: [1.05, 0.2, 1], pad: 1.12, now: true, raise: -0.1 });
+  // (le lapin se dresse pour la demander : sa tête monte de presque sa hauteur)
+  const tall = sp === 'rabbit' ? [L.poll.clone().add(v3(-L.size.len * 0.25, L.size.h * 0.9, 0)), ...L.ears.map((e) => e.clone().add(v3(-L.size.len * 0.25, L.size.h * 0.9, 0)))] : [];
+  sc.frame([L.muzzle, L.poll, ...L.ears, ...tall, L.chest, L.withers, L.croup, L.paws[0], L.paws[1], rest.clone().add(v3(0.06, -0.03, 0.04)), rest.clone().add(v3(-0.04, 0.05, 0))], { dir: [1.05, 0.2, 1], pad: sp === 'rabbit' ? 1.25 : 1.12, now: true, raise: -0.1 });
   let given = 0;
   let pen = 0;
   let reachT = -1;
@@ -537,9 +539,13 @@ export function petPet3dGame(ctx) {
       const pp = ctx.pointer;
       hand.visible = !!(pp.down && touch && !ctx.done);
       if (hand.visible) {
+        // (le bras vient d'en haut, de notre côté : il ne passe jamais devant sa tête ; les doigts vers le bas du corps)
         const n = touch.normal.clone().normalize();
-        const sh = shoulderOf(sc);
-        const along = touch.point.clone().sub(sh);
+        const c = sc.camera;
+        const up = v3(0, 1, 0).applyQuaternion(c.quaternion);
+        const toCam = c.position.clone().sub(touch.point).normalize();
+        const from = touch.point.clone().addScaledVector(up, 0.4).addScaledVector(toCam, 0.2);
+        const along = touch.point.clone().sub(from);
         along.addScaledVector(n, -along.dot(n));
         hand.position.copy(touch.point).addScaledVector(n, 0.011 * hand.scale.x);
         aimHand(hand, touch.point.clone().addScaledVector(along.normalize(), -0.1), touch.point, false, n);
@@ -630,7 +636,7 @@ export function petBrush3dGame(ctx) {
   m.ears = 'forward';
   m.happy = 0.4;
   // de profil, un peu de haut, la tête à droite
-  sc.frame([L.nose, L.muzzle, L.poll, ...L.ears, L.withers, L.croup, L.tail, L.tailTip, L.chest, L.belly, ...L.paws], { dir: [0.2, 0.16, 1], pad: 1.16, now: true, raise: -0.18 });
+  sc.frame([L.nose, L.muzzle, L.poll, ...L.ears, L.withers, L.croup, L.tail, L.tailTip, L.chest, L.belly, ...L.paws], { dir: [0.25, 0.2, 1], pad: 1.06, now: true, raise: -0.12 });
 
   // ---- les taches de poussière, posées sur le flanc (rayons lancés vers lui depuis notre côté)
   const dustTex = keep(mudTexture('dust', 5));

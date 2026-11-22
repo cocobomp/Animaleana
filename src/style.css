@@ -2035,6 +2035,29 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 .mg-end.tight .mg-end-card p { margin: 0.3em 0 0.6em; font-size: 1rem; }
 .mg-end.tight .mg-continue { min-height: 50px; }
 .mg-end.tighter .mg-end-emoji { display: none; } /* (toujours trop haute en compact : la tête de l'animal s'efface) */
+/* Scène de soin en 3D (src/game/care/stage.js) : le vrai animal dans son box, sous la toile 2D des effets. La
+   toile 3D apparaît en fondu quand ses shaders sont prêts ; en attendant, la pénombre chaude du box. */
+.mg-3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 0.45s ease-out; }
+.mg-3d.ready { opacity: 1; }
+.mg-box.care3d .mg-canvas { z-index: 1; }
+/* (un léger voile sombre sur les bords de la scène : l'œil va au milieu, vers l'animal) */
+.mg-box.care3d .mg-stage::after { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; box-shadow: inset 0 0 48px rgba(30, 16, 4, 0.38); }
+/* Carte de fin : par-dessus la toile des effets, et la scène reste visible au-dessus d'elle (il mange, il boit). */
+.mg-box.care3d .mg-end { z-index: 2; background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.12) 35%, rgba(255, 248, 236, 0.6) 100%); backdrop-filter: none; }
+/* (carte compacte : l'animal est là, au-dessus d'elle, donc pas d'emoji ; le titre et les étoiles sur une ligne ;
+   la scène se recadre dans ce que la carte laisse voir, voir CareStage.setFocus) */
+.mg-box.care3d .mg-end-card { margin: auto 0 0; padding: 10px 14px 10px; display: grid; grid-template-columns: auto auto; justify-content: center; align-items: center; column-gap: 12px; }
+.mg-box.care3d .mg-end-card > :not(h2):not(.mg-stars) { grid-column: 1 / -1; }
+.mg-box.care3d .mg-end-emoji { display: none; }
+.mg-box.care3d .mg-end-card h2 { font-size: 1.45rem; }
+.mg-box.care3d .mg-stars { font-size: 1.8rem; }
+.mg-box.care3d .mg-end-card p { margin: 0.25em 0 0.5em; font-size: 1rem; }
+.mg-box.care3d .mg-end-card .mg-fact { margin: 2px 0 8px; padding: 6px 8px; font-size: 0.82em; }
+.mg-box.care3d .mg-card-icon { font-size: 1.5em; }
+.mg-box.care3d .mg-stage {
+  background: radial-gradient(120% 85% at 55% 40%, #7a5532 0%, #4a3220 55%, #24180f 100%);
+  box-shadow: inset 0 0 0 1px rgba(40, 24, 10, 0.25), 0 2px 10px rgba(40, 24, 10, 0.18);
+}
 /* Le guide du tutoriel (bulle 55, anneau 60) ne passe jamais par-dessus un mini-jeu ouvert : il
    cachait la consigne et le ✕, et montrait un bouton caché sous le jeu (tutorial.js le cache aussi). */
 body.mg-open #tuto-bubble,
@@ -2049,10 +2072,19 @@ body.mg-open #tuto-ring { display: none !important; }
   .mg-title { font-size: 1.1rem; }
   .mg-hint { font-size: 1rem; }
 }
+/* Téléphone en portrait, scène 3D : la fenêtre prend toute la hauteur et la scène tout ce qui reste (le cheval en
+   grand), au lieu de la forme fixe du jeu dessiné. */
+@media (max-width: 640px) {
+  .mg-box.care3d { height: 100%; }
+  .mg-box.care3d .mg-stage { flex: 1 1 auto; aspect-ratio: auto; max-height: none; min-height: 220px; }
+}
 /* Téléphone en portrait : avec deux boutons d'action en plus (Gauche / Droite, Doucement / Allez !),
    « C'est bon ! » passe sur sa propre ligne, en entier, sous les deux autres. */
 @media (max-width: 640px) and (orientation: portrait) {
   .mg-controls:has(> .mg-btn:nth-child(3)) > .mg-btn.stop { flex-basis: 100%; }
+  /* Deux boutons côte à côte (« 🌾 Remplir » et « ✅ C'est bon ! ➜ ») : « C'est bon » prend plus de place que
+     son voisin, il se lisait « C'est bon … » (coupé). */
+  .mg-controls:has(> .mg-btn:nth-child(2):last-child) > .mg-btn.stop { flex-grow: 1.45; padding-inline: 8px; }
 }
 /* Petit téléphone (360 px) : boutons de ~160 px côte à côte, « ✅ C'est bon ! » y tient sur une ligne. */
 @media (max-width: 380px) {

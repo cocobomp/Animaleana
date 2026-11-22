@@ -8,11 +8,11 @@ import { keepsMemories } from '../../sim/memories.js'; // (tes chevaux : pas ceu
 
 // ---------------------------------------------------------------- caresser
 
-const FAVORITE = { dog: 'chest', cat: 'cheek', rabbit: 'headTop', horse: 'neck', cow: 'neck', sheep: 'cheek', goat: 'neck' };
-const SPEED_LIMIT = { shy: 300, calm: 380, cuddly: 430, playful: 520, curious: 460, stubborn: 400 };
+export const FAVORITE = { dog: 'chest', cat: 'cheek', rabbit: 'headTop', horse: 'neck', cow: 'neck', sheep: 'cheek', goat: 'neck' };
+export const SPEED_LIMIT = { shy: 300, calm: 380, cuddly: 430, playful: 520, curious: 460, stubborn: 400 };
 // Combien de câlins « juste ce qu'il faut » (cœur rempli, 0 à 1) selon le caractère :
 // un timide en veut moins, un câlin en veut plus. Au-delà, l'animal en a assez.
-const PET_AMOUNT = { shy: 0.5, calm: 0.62, cuddly: 0.8, playful: 0.66, curious: 0.66, stubborn: 0.56 };
+export const PET_AMOUNT = { shy: 0.5, calm: 0.62, cuddly: 0.8, playful: 0.66, curious: 0.66, stubborn: 0.56 };
 
 /**
  * Le grand cœur du jeu « caresser », en haut à droite. Avant (340, 62, r 34), il recouvrait
@@ -30,7 +30,7 @@ function heartPath(g, x, y, r) {
 }
 
 /** Le grand cœur qui se remplit, avec la zone verte « juste ce qu'il faut » et son ✓. */
-function drawHeartGauge(g, x, y, r, value, lo, hi) {
+export function drawHeartGauge(g, x, y, r, value, lo, hi) {
   const top = y - r * 1.05;
   const bottom = y + r * 0.95;
   const yOf = (v) => bottom - v * (bottom - top);

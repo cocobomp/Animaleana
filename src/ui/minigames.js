@@ -27,6 +27,8 @@ import { sellerGame } from './minigames/seller.js'; // seller son cheval : tapis
 import { dewormGame } from './minigames/deworm.js'; // le vermifuge (carnet de santé du cheval)
 import { bridleGame } from './minigames/bridle.js'; // brider son cheval : le mors, les oreilles, la sous-gorge
 import { drawFact, factIcon } from '../sim/horseFacts.js'; // « 💡 Le savais-tu ? » à la fin des mini-jeux avec un cheval (🃏 cartes)
+import { care3dWanted, care3dPossible, care3dSetting } from '../game/care/which.js'; // quels soins s'ouvrent en 3D
+import * as care3d from './minigames/care3d.js'; // le vrai animal en 3D dans son box (soins du cheval)
 
 export const MG_W = 400;
 export const MG_H = 360;
@@ -80,6 +82,20 @@ const tt = (key, params) => {
 
 function titleFor(a, action) {
   return tt(`mg_act_${a.species}_${action}`) ?? tt(`act_${a.species}_${action}`) ?? t(`act_${action}`);
+}
+
+/** La scène 3D se prépare (shaders) : l'emoji de l'animal qui respire doucement au milieu, sur la pénombre du box. */
+function drawWaiting(g, view, time, emoji = '🐴') {
+  const x = (view.x0 + view.x1) / 2;
+  const y = (view.y0 + view.y1) / 2;
+  const k = 1 + Math.sin(time * 4) * 0.08;
+  g.globalAlpha = 0.85;
+  g.font = `${Math.round(54 * k)}px ${EMOJI_FONT}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = '#000';
+  g.fillText(emoji, x, y);
+  g.globalAlpha = 1;
 }
 
 /** Effets : emoji qui s'envolent, petits textes, poussières… */
@@ -187,6 +203,8 @@ export function runMinigame(ui, a, action, opts = {}) {
   const factId = a.species === 'horse' ? drawFact(ui.game?.profile, action) : null;
   return openMinigame(ui, {
     make,
+    // (le même soin en 3D, s'il existe : le vrai animal dans son décor ; sinon, ou si la 3D échoue, le jeu dessiné)
+    make3d: care3dWanted(a, action),
     action,
     a,
     icon: ICONS[action] ?? '⭐',
@@ -274,6 +292,11 @@ function openMinigame(ui, o) {
     document.body?.classList?.add('mg-open');
 
     const g2 = canvas.getContext('2d');
+    // Scène de soin en 3D (src/game/care/stage.js) : le vrai animal dans son décor, sous la toile 2D qui garde les
+    // effets et ce qui flotte par-dessus. Impossible (WebGL, modèle pas chargé, réglage) : le jeu dessiné.
+    let scene3d = null;
+    const want3d = !!(o.make3d && a && care3dPossible(a, { setting: care3dSetting() }));
+    if (want3d) box.classList.add('care3d');
     const view = { x0: 0, y0: 0, x1: MG_W, y1: MG_H, w: MG_W, h: MG_H, scale: 1, ox: 0, oy: 0 };
     let dpr = 1;
     const layout = { w: 0, h: 0 }; // taille de mise en page du canvas, en pixels CSS
@@ -297,6 +320,7 @@ function openMinigame(ui, o) {
       canvas.width = Math.max(1, Math.round(layout.w * dpr));
       canvas.height = Math.max(1, Math.round(layout.h * dpr));
       Object.assign(view, fitView(layout.w, layout.h, MG_W, MG_H));
+      scene3d?.resize(layout.w, layout.h, view); // (la scène 3D, sous la toile 2D, a la même taille)
       fitEnd(); // écran tourné, fenêtre redimensionnée : la carte de fin tient-elle encore ?
     };
     const ro = new ResizeObserver(resize);
@@ -420,7 +444,8 @@ function openMinigame(ui, o) {
         audio.minigame('done');
         ctx.hint(`🎉 ${t('mg_done')}`, 'good');
         controls.querySelectorAll('button').forEach((b) => { b.disabled = true; });
-        setTimeout(() => showEnd(msg), 900);
+        // (scène 3D : un peu plus longtemps, le temps de le voir manger, boire, se régaler)
+        setTimeout(() => showEnd(msg), scene3d ? 1900 : 900);
       },
       /**
        * Montre la zone « juste ce qu'il faut » sur la jauge : bande verte entre lo et hi
@@ -467,9 +492,85 @@ function openMinigame(ui, o) {
       },
     };
 
-    const play = make(ctx);
+    ctx.scene = null; // (jeux 3D : la scène ; null pour les jeux dessinés)
+    let play = null;
+    /** Le jeu dessiné (pas de 3D, ou repli). */
+    const start2d = () => {
+      box.classList.remove('care3d');
+      play = make(ctx);
+      resize();
+    };
+    /** Le code des soins 3D est là : la scène, puis le jeu 3D de ce soin. */
+    const start3d = (mod) => {
+      scene3d = mod.openCareScene(ui, a, stage, canvas);
+      if (!scene3d) return start2d();
+      ctx.scene = scene3d;
+      try {
+        play = mod.care3dGameFor(a, action)(ctx);
+      } catch (e) {
+        // Le jeu 3D n'a pas pu démarrer : le jeu dessiné, sur une scène propre.
+        console.warn('[care3d] jeu 3D impossible, jeu dessiné', e?.message ?? e);
+        closeScene3d();
+        ctx.clearButtons();
+        ctx.zone(null);
+        ctx.progress(0);
+        return start2d();
+      }
+      resize();
+      // Shaders préparés sans bloquer ; la scène apparaît en fondu quand elle est prête (le jeu attend jusque-là).
+      const sc = scene3d;
+      sc.warm().then(() => {
+        if (scene3d === sc) sc.canvas.classList.add('ready');
+      }, (e) => {
+        if (scene3d === sc) fallback2d(`préparation impossible : ${e?.message ?? e}`);
+      });
+    };
+    if (want3d) start3d(care3d);
+    else play = make(ctx);
     // État lisible par les tests automatiques (peek).
-    ui.minigame = { action, chore: o.chore ?? null, ctx, peek: () => play.peek?.(), get zone() { return zoneRange; } };
+    ui.minigame = { action, chore: o.chore ?? null, ctx, get scene3d() { return scene3d; }, peek: () => play?.peek?.(), get zone() { return zoneRange; } };
+
+    /**
+     * La scène 3D ne peut plus continuer (contexte WebGL qui ne revient pas, erreur) : on la ferme et on rejoue le
+     * soin avec le jeu dessiné, depuis le début (consigne, boutons, jauge remis à zéro). Partie déjà finie : la carte
+     * de fin reste, seule la scène se ferme.
+     */
+    function fallback2d(why) {
+      if (!scene3d || closed) return;
+      console.warn('[care3d] retour au jeu dessiné :', why);
+      const old = play;
+      try {
+        old?.destroy?.();
+      } catch {
+        /* le jeu 3D se libère comme il peut */
+      }
+      closeScene3d();
+      if (ended) {
+        play = { peek: () => old?.peek?.() };
+        return;
+      }
+      ctx.fx.list.length = 0;
+      ctx.clearButtons();
+      ctx.zone(null);
+      ctx.progress(0);
+      ctx.time = 0;
+      play = make(ctx);
+      resize();
+    }
+
+    /** Ferme la scène 3D (fin du jeu, ou repli sur le jeu dessiné) et rend la main au rendu du jeu. */
+    function closeScene3d() {
+      if (!scene3d) return;
+      const sc = scene3d;
+      scene3d = null;
+      ctx.scene = null;
+      box.classList.remove('care3d');
+      try {
+        sc.dispose();
+      } finally {
+        sc.release?.();
+      }
+    }
 
     /**
      * Carte de fin trop haute pour la scène (360 px de large, message de 3 lignes, long prénom) :
@@ -488,11 +589,14 @@ function openMinigame(ui, o) {
         // offsetHeight : taille de mise en page, sans l'animation d'apparition (scale) de la carte.
         return card.offsetHeight > room + 0.5;
       };
-      if (!tooTall()) return;
-      endEl.classList.add('tight');
-      // Encore trop haute (360 × 640, le plus long « Le savais-tu ? » et sa carte 🃏) : la tête de l'animal
-      // s'efface, pas la note ni le message.
-      if (tooTall()) endEl.classList.add('tighter');
+      if (tooTall()) {
+        endEl.classList.add('tight');
+        // Encore trop haute (360 × 640, le plus long « Le savais-tu ? » et sa carte 🃏) : la tête de l'animal
+        // s'efface, pas la note ni le message.
+        if (tooTall()) endEl.classList.add('tighter');
+      }
+      // Scène 3D : elle se recadre au-dessus de la carte (on le voit manger, boire, croquer sa friandise).
+      if (scene3d) scene3d.setFocus(0, card.offsetTop - 6);
     }
 
     /** 🃏 Une nouvelle carte se retourne (icône, fait, « ✨ Nouvelle carte ! 9/27 ») ; déjà trouvée : la ligne 💡. */
@@ -548,28 +652,28 @@ function openMinigame(ui, o) {
         const old = activeId;
         activeId = null;
         try { canvas.releasePointerCapture?.(old); } catch { /* déjà relâché */ }
-        play.up?.({ x: ctx.pointer.x, y: ctx.pointer.y, id: old, type: ctx.pointer.type });
+        play?.up?.({ x: ctx.pointer.x, y: ctx.pointer.y, id: old, type: ctx.pointer.type });
       }
       ctx.pointer = { ...ctx.pointer, ...p, down: true, over: true };
       if (activeId === null) {
         activeId = e.pointerId;
         try { canvas.setPointerCapture?.(e.pointerId); } catch { /* doigt déjà levé */ }
       }
-      play.down?.(p);
+      play?.down?.(p);
     });
     canvas.addEventListener('pointermove', (e) => {
       if (ended) return;
       const p = toLocal(e);
       if (activeId !== null && e.pointerId !== activeId) return;
       ctx.pointer = { ...ctx.pointer, ...p, over: true };
-      play.move?.(p, ctx.pointer.down);
+      play?.move?.(p, ctx.pointer.down);
     });
     const up = (e) => {
       if (e.pointerId !== activeId) return;
       activeId = null;
       const p = toLocal(e);
       ctx.pointer = { ...ctx.pointer, ...p, down: false, over: e.pointerType === 'mouse' };
-      if (!ended) play.up?.(p);
+      if (!ended) play?.up?.(p);
     };
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', up);
@@ -597,7 +701,7 @@ function openMinigame(ui, o) {
         if (down && !e.repeat && ['Space', 'Enter', 'NumpadEnter'].includes(e.code) && !endEl.hidden) close(quality);
         return;
       }
-      if (!down || !e.repeat) play.key?.(e.code, down);
+      if (!down || !e.repeat) play?.key?.(e.code, down);
     };
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('keyup', onKey, true);
@@ -613,15 +717,46 @@ function openMinigame(ui, o) {
       ctx.time += dt;
       // L'animal n'est plus là, ou la partie est finie : on ferme sans rien appliquer.
       if (!o.stillThere(game)) return close(null);
-      play.update?.(dt);
-      ctx.fx.update(dt);
-      g2.setTransform(1, 0, 0, 1, 0, 0);
-      g2.clearRect(0, 0, canvas.width, canvas.height);
-      g2.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
-      g2.save();
-      play.draw?.(g2);
-      g2.restore();
-      ctx.fx.draw(g2);
+      // (scène 3D pas encore prête, ou son contexte WebGL perdu : le jeu attend, le temps ne compte pas ; contexte
+      // toujours perdu après 4 s de jeu : le jeu dessiné)
+      if (scene3d?.lost) {
+        scene3d.lostFor += dt;
+        if (scene3d.lostFor > 4) fallback2d('contexte WebGL perdu');
+      }
+      // (préparation qui n'en finit pas, 25 s de jeu : le jeu dessiné)
+      if (scene3d && !scene3d.ready && !scene3d.lost && (scene3d.waitedFor = (scene3d.waitedFor ?? 0) + dt) > 25) fallback2d('préparation trop longue');
+      const waiting = !play || (scene3d && (!scene3d.ready || scene3d.lost));
+      // Une erreur de la scène 3D ou du jeu 3D pendant la partie : le jeu dessiné, plutôt qu'une partie figée.
+      const step = () => {
+        if (waiting) ctx.time -= dt;
+        else {
+          play.update?.(dt);
+          ctx.fx.update(dt);
+        }
+        if (scene3d && !waiting) {
+          scene3d.update(dt);
+          scene3d.render();
+        }
+        g2.setTransform(1, 0, 0, 1, 0, 0);
+        g2.clearRect(0, 0, canvas.width, canvas.height);
+        g2.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
+        g2.save();
+        try {
+          if (waiting) drawWaiting(g2, view, ctx.time + now / 1000, o.endEmoji);
+          else play.draw?.(g2);
+        } finally {
+          g2.restore();
+        }
+        ctx.fx.draw(g2);
+      };
+      if (!scene3d) step();
+      else {
+        try {
+          step();
+        } catch (e) {
+          fallback2d(`erreur : ${e?.message ?? e}`);
+        }
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -633,7 +768,8 @@ function openMinigame(ui, o) {
       ro.disconnect();
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('keyup', onKey, true);
-      play.destroy?.();
+      play?.destroy?.();
+      closeScene3d();
       overlay.remove();
       document.body?.classList?.remove('mg-open');
       ui.minigameOpen = false;

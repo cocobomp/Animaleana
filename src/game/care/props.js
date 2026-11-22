@@ -888,7 +888,8 @@ export function handModel(keep, { skin = 0xf0c29a, sleeve = 0x3f7fd0, grip = 0 }
   wrist.scale.set(1, 1, 0.68);
   g.add(wrist);
   const sleeveMat = keep(new THREE.MeshStandardMaterial({ color: sleeve, roughness: 0.88 }));
-  const cuff = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.036, 0.042, 0.34, 18, 1, true)), sleeveMat));
+  // (une manche fermée aux deux bouts : vue de face, on ne voit jamais l'intérieur d'un tube creux)
+  const cuff = shadowed(new THREE.Mesh(keep(new THREE.CylinderGeometry(0.036, 0.042, 0.34, 18, 1, false)), sleeveMat));
   cuff.rotation.z = Math.PI / 2;
   cuff.position.x = -0.31;
   cuff.scale.set(1, 1, 0.85);

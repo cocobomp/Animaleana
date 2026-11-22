@@ -36,8 +36,8 @@ function setup(ctx) {
   };
   const S = sc.double.scale;
   const L = sc.marks;
-  const whole = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, L.croup.clone().lerp(L.tail, 0.8).add(v3(-0.16 * S, -0.12 * S, 0)), ...L.hooves];
-  const follow = headFollow(sc, headShape(sc), () => whole, { dir: [0.38, 0.16, 1], pad: 1.12, half: 0.5, reach: 0.1 });
+  const whole = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, L.tail.clone().lerp(L.tailTip, 0.6), L.croup.clone().lerp(L.tail, 0.8).add(v3(-0.16 * S, -0.12 * S, 0)), ...L.hooves];
+  const follow = headFollow(sc, headShape(sc), () => whole, { dir: [0.34, 0.16, 1], pad: 1.16, half: 0.5, reach: 0.1 });
   return { sc, keep, own, S, L, follow, whole };
 }
 
@@ -225,7 +225,7 @@ export function gdry3dGame(ctx) {
       if (h && tool === 'scraper') {
         scraper.position.lerp(h.point.clone().addScaledVector(h.normal, pp.down ? 0.004 : 0.03), scraper.visible ? Math.min(1, dt * 25) : 1);
         scraper.quaternion.setFromUnitVectors(v3(0, 1, 0), h.normal);
-      } else if (h) handOnCoat(towel.hand, h, pp.down ? 1 : 0);
+      } else if (h) handOnCoat(towel.hand, h, pp.down ? 1 : 0, sc);
       m.ears = stress > 0.3 ? 'back' : 'forward';
       m.look = sc.camera.position;
       m.lookAmt = 0.35;

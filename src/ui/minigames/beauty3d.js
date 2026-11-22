@@ -18,6 +18,7 @@ import { handModel, avatarHand, aimHand } from '../../game/care/props.js';
 import { RIBBON_COLORS } from '../../sim/beauty.js';
 import { headShape, headFollow } from './headFrame.js';
 import { nicker, snort } from './feed3d.js';
+import { armDir } from './treat3d.js';
 import { circle, emoji } from './draw.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -234,19 +235,42 @@ export function clothHand(sc, own, color = 0xe9c77b) {
   cloth.position.set(0.01, 0.022, 0);
   cloth.castShadow = true;
   hand.add(cloth);
+  // L'avant-bras (poignet, manche, revers) sur un pivot au poignet : la paume reste à plat sur le poil, l'avant-bras
+  // vient vers nous, d'en bas à droite (comme quand on frotte un cheval, le bras tendu vers lui).
+  const forearm = new THREE.Group();
+  forearm.position.set(-0.045, 0, 0);
+  hand.add(forearm);
+  for (const c of [...hand.children]) if (c !== forearm && c !== cloth && c.position.x < -0.06) forearm.attach(c);
+  hand.userData.forearm = forearm;
   hand.visible = false;
   sc.scene.add(hand);
   return { hand, cloth, geo };
 }
 
-/** Pose la main sur le pelage au point h (point, normale) : paume contre lui, doigts vers le haut, bras d'en bas. */
-export function handOnCoat(hand, h, press = 1) {
+const _fa = new THREE.Vector3();
+const _fq = new THREE.Quaternion();
+const BACK_X = new THREE.Vector3(-1, 0, 0);
+
+/**
+ * Pose la main sur le pelage au point h (point, normale) : paume contre lui, doigts vers le haut (un peu vers sa
+ * tête), et l'avant-bras plié au poignet qui vient vers nous, d'en bas à droite (sc : la scène, pour la caméra).
+ */
+export function handOnCoat(hand, h, press = 1, sc = null) {
   const n = h.normal;
-  const up = v3(0, 1, 0).addScaledVector(n, -n.y).normalize();
+  const up = v3(0.35, 1, 0).addScaledVector(n, -n.y).normalize();
   const at = h.point.clone().addScaledVector(n, 0.028 + 0.02 * (1 - press));
   hand.position.copy(at);
-  const from = at.clone().addScaledVector(up, -0.3).addScaledVector(n, 0.12);
+  const from = at.clone().addScaledVector(up, -0.3);
   aimHand(hand, from, at.clone().addScaledVector(up, 0.05), false, n);
+  const forearm = hand.userData.forearm;
+  if (!forearm || !sc) return;
+  hand.updateMatrixWorld(true);
+  _fa.copy(at).addScaledVector(armDir(sc), 0.5);
+  hand.worldToLocal(_fa).sub(forearm.position).normalize();
+  const ang = BACK_X.angleTo(_fa);
+  _fq.setFromUnitVectors(BACK_X, _fa);
+  if (ang > 1.45) forearm.quaternion.identity().slerp(_fq, 1.45 / ang);
+  else forearm.quaternion.copy(_fq);
 }
 
 // ---------------------------------------------------------------- lustrer
@@ -312,8 +336,8 @@ export function shine3dGame(ctx) {
   const { hand } = clothHand(sc, own);
 
   // Cadrage : tout le cheval de profil (la robe, les sabots), et toute sa tête.
-  const fixed = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, L.croup.clone().lerp(L.tail, 0.8).add(v3(-0.16 * S, -0.12 * S, 0)), ...L.hooves];
-  const follow = headFollow(sc, headShape(sc), () => fixed, { dir: [0.38, 0.16, 1], pad: 1.12, half: 0.5, reach: 0.1 });
+  const fixed = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, L.tail.clone().lerp(L.tailTip, 0.6), L.croup.clone().lerp(L.tail, 0.8).add(v3(-0.16 * S, -0.12 * S, 0)), ...L.hooves];
+  const follow = headFollow(sc, headShape(sc), () => fixed, { dir: [0.34, 0.16, 1], pad: 1.16, half: 0.5, reach: 0.1 });
   follow.frame(true);
   let started = false;
   let last = null;
@@ -390,7 +414,6 @@ export function shine3dGame(ctx) {
     key: (c, d) => play.key(c, d),
     update(dt) {
       play.update(dt);
-      if (!ctx.done) sc.setFocus(56 * ctx.view.scale, sc.size.h);
       if (!started) follow.frame(true);
       started = true;
       follow.update(dt);
@@ -405,7 +428,7 @@ export function shine3dGame(ctx) {
       // la main et le chiffon sous le doigt, sur sa robe
       const h = !ctx.done && (pp.down || pp.over) ? sc.pickAnimal(pp.x, pp.y) : null;
       hand.visible = !!h;
-      if (h) handOnCoat(hand, h, pp.down ? 1 : 0);
+      if (h) handOnCoat(hand, h, pp.down ? 1 : 0, sc);
       // Lui : content quand ça brille, oreilles en arrière quand ça colle.
       const high = s.value > s.hi;
       m.ears = high ? 'back' : 'forward';

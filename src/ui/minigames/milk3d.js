@@ -65,6 +65,11 @@ export function milk3dGame(ctx) {
   // La mamelle pleine (c'est l'heure de la traite) ; elle se vide à mesure que le lait monte dans le seau.
   const md = sc.model;
   const udder0 = Math.max(0.85, md.udderFill ?? 0.5);
+  // (une mamelle très sombre — l'alpine — se perdait dans l'ombre du ventre : sa peau un peu éclaircie, le temps de
+  // la traite, pour qu'on voie les trayons)
+  const ugu = md.uniforms?.gUdder ?? null;
+  const udderCol = ugu ? ugu.value.clone() : null;
+  if (ugu && ugu.value.getHSL({}).l < 0.3) ugu.value.lerp(new THREE.Color(0x9a7d72), 0.55);
   md.setUdder?.(udder0);
   sc.measure();
   // Les deux trayons qu'on trait : de notre côté (vache : l'arrière et l'avant), ou les deux de la chèvre.
@@ -93,7 +98,10 @@ export function milk3dGame(ctx) {
   // Caméra : basse, de notre côté (un peu en avant de la cuisse), à hauteur de la mamelle : le ventre, la mamelle et
   // ses trayons, nos mains, le seau et le tabouret.
   const tipPts = pair.map((q) => q.tip());
-  const camDir = cow ? [0.42, 0.06, 1] : [0.55, 0.06, 1];
+  // (la chèvre : ses deux trayons sont l'un à côté de l'autre, en travers du corps — vus de côté, l'un cachait l'autre,
+  // et nos deux mains se collaient d'un seul côté ; vus de derrière et de notre côté, entre ses jarrets, ils sont l'un à
+  // gauche et l'autre à droite, une main sur chacun)
+  const camDir = cow ? [0.42, 0.06, 1] : [-1, 0.2, 0.12];
   const ub = L.udder.clone();
   sc.frame([...tipPts, ub.clone().add(v3(0.24 * u, 0.16 * u, 0)), ub.clone().add(v3(-0.22 * u, 0.16 * u, 0)),
     pail.group.position.clone().add(v3(0, -pail.size.depth * 0.45, 0)), pail.group.position.clone().add(v3(pail.size.r, 0, pail.size.r)), pail.group.position.clone().add(v3(-pail.size.r, 0, -pail.size.r))],
@@ -168,13 +176,25 @@ export function milk3dGame(ctx) {
         const k = squirt[side] > 0 ? Math.sin(Math.min(1, 1 - squirt[side] / 0.45) * Math.PI) : 0;
         const top = q.top();
         const tip = q.tip();
-        const at = top.clone().lerp(tip, 0.12 + 0.3 * k);
+        // (la chèvre : le haut du repère du trayon est dans la mamelle — la main prend le milieu du trayon visible)
+        const at = top.clone().lerp(tip, cow ? 0.12 + 0.3 * k : 0.5 + 0.22 * k);
         const out = sc.camera.position.clone().sub(at).setY(0).normalize();
         const h = hands[side];
-        h.position.copy(at).addScaledVector(out, 0.014 * HS);
-        // (les doigts autour du trayon, depuis notre côté ; le pouce en haut)
-        aimHand(h, at.clone().addScaledVector(out, 0.3).add(v3(0, -0.05, 0)), at.clone().addScaledVector(out, -0.1), false);
-        h.rotateX(side === 'L' ? -0.6 : 0.6);
+        if (!cow) {
+          // (la chèvre, vue de derrière : chaque main vient de son côté, la paume derrière le trayon, les doigts
+          // repliés devant lui, vers nous — on voit les doigts serrer le trayon)
+          const right = v3(1, 0, 0).applyQuaternion(sc.camera.quaternion).setY(0).normalize();
+          const toCam = v3(0, 0, 1).applyQuaternion(sc.camera.quaternion).setY(0).normalize();
+          const x = right.clone().multiplyScalar(side === 'L' ? 1 : -1);
+          const y = toCam;
+          h.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, new THREE.Vector3().crossVectors(x, y)));
+          h.position.copy(at).addScaledVector(x, -0.062 * HS).addScaledVector(y, -0.02 * HS);
+        } else {
+          h.position.copy(at).addScaledVector(out, 0.014 * HS);
+          // (les doigts autour du trayon, depuis notre côté ; le pouce en haut)
+          aimHand(h, at.clone().addScaledVector(out, 0.3).add(v3(0, -0.05, 0)), at.clone().addScaledVector(out, -0.1), false);
+          h.rotateX(side === 'L' ? -0.6 : 0.6);
+        }
         h.scale.setScalar(HS * (1 - 0.06 * k));
       }
       // Elle : tranquille, elle mâche ; la queue chasse les mouches (vache) ; un meuglement, un bêlement doux.
@@ -202,21 +222,23 @@ export function milk3dGame(ctx) {
       g.fill();
       emoji(g, '🎵', v.x0 + 44, v.y0 + 46, 28 + pulse * 6);
       if (!ctx.done) {
-        // 👇 au-dessus du trayon à presser, qui bat la mesure
-        const q = sc.project(teat[s.expect].top().add(v3(0, 0.05 * u, 0)));
+        // le cercle autour du trayon à presser (son milieu), et 👇 au-dessus, qui battent la mesure
+        const tq = teat[s.expect];
+        const c = sc.project(tq.top().lerp(tq.tip(), cow ? 0.5 : 0.68));
+        const r = Math.max(16, sc.projectRadius(tq.tip(), tq.len * (cow ? 0.75 : 0.55)));
         g.save();
         g.globalAlpha = 0.45 + pulse * 0.55;
         g.strokeStyle = '#f2c84b';
         g.lineWidth = 5;
-        circle(g, q.x, q.y + 24, 18 + pulse * 4);
+        circle(g, c.x, c.y, r + pulse * 4);
         g.stroke();
         g.restore();
-        emoji(g, '👇', q.x, q.y - 8, 24 + pulse * 6);
+        emoji(g, '👇', c.x, c.y - r - 18, 24 + pulse * 6);
         // la jauge du lait, à côté du seau (même bande verte que celle du haut)
         const b = sc.project(pail.group.localToWorld(v3(0, -pail.size.depth, pail.size.r)));
         const t = sc.project(pail.group.localToWorld(v3(0, 0, pail.size.r)));
-        const r = sc.projectRadius(pail.group.position, pail.size.r);
-        sideGauge(g, Math.min(v.x1 - 24, Math.max(b.x, t.x) + r + 26), Math.min(b.y, v.y1 - 12), Math.max(70, Math.min(140, b.y - t.y)), s.level, s.lo, s.hi, { icon: '🥛', time: ctx.time });
+        const pr = sc.projectRadius(pail.group.position, pail.size.r);
+        sideGauge(g, Math.min(v.x1 - 24, Math.max(b.x, t.x) + pr + 26), Math.min(b.y, v.y1 - 12), Math.max(70, Math.min(140, b.y - t.y)), s.level, s.lo, s.hi, { icon: '🥛', time: ctx.time });
       }
     },
     destroy() {
@@ -232,6 +254,7 @@ export function milk3dGame(ctx) {
       pail.dispose();
       m.milk = false;
       m.still = false;
+      if (ugu && udderCol) ugu.value.copy(udderCol);
       for (const x of keep) x.dispose?.();
     },
   };

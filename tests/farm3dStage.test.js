@@ -413,16 +413,23 @@ describe('la tonte en 3D', () => {
 });
 
 describe('la traite en 3D', () => {
-  for (const c of [{ species: 'goat', breed: 'saanen' }, { species: 'cow', breed: 'holstein' }, { species: 'cow', breed: 'highland' }]) {
+  for (const c of [{ species: 'goat', breed: 'saanen' }, { species: 'goat', breed: 'alpine' }, { species: 'cow', breed: 'holstein' }, { species: 'cow', breed: 'highland' }]) {
     it(`${c.species} ${c.breed} : ses trayons trouvés, gauche-droite en rythme, le lait monte, la mamelle se vide`, () => {
       const { a, sc } = makeStage(c);
       sc.updateCamera(0);
+      const udder0 = sc.model.uniforms?.gUdder?.value.clone();
       const ctx = ctxFor(a, sc);
       const game = milk3d.milk3dGame(ctx);
       run(ctx, game, sc, 0.3);
       const s0 = game.peek();
       for (const k of ['L', 'R']) expect(inView(s0.teats[k], ctx.view), k).toBe(true);
       expect(s0.teats.L.x).toBeLessThan(s0.teats.R.x);
+      if (c.species === 'goat') {
+        // (vue de derrière : les deux trayons bien l'un à côté de l'autre, pas l'un derrière l'autre)
+        expect(s0.teats.R.x - s0.teats.L.x).toBeGreaterThan(40);
+        // (la mamelle sombre de l'alpine éclaircie le temps de la traite)
+        if (c.breed === 'alpine') expect(sc.model.uniforms.gUdder.value.getHSL({}).l).toBeGreaterThan(udder0.getHSL({}).l + 0.08);
+      }
       const full = sc.model.udderFill;
       const left = ctx.buttons.find((b) => b.text.includes('👈')).opts;
       const right = ctx.buttons.find((b) => b.text.includes('👉')).opts;
@@ -436,6 +443,7 @@ describe('la traite en 3D', () => {
       expect(ctx.finished.why).toBe('just');
       expect(sc.model.udderFill).toBeLessThan(full);
       game.destroy();
+      if (udder0) expect(sc.model.uniforms.gUdder.value.equals(udder0)).toBe(true);
       sc.dispose();
     }, 60000);
   }

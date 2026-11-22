@@ -446,6 +446,12 @@ describe('sauvegarde', () => {
 });
 
 describe('textes de la voltige', () => {
+  it('des phrases justes : accordées quelle que soit la figure, sans supposer que tu es une fille ou un garçon', () => {
+    // (« Assise de base réussi », « Ciseaux réussi » : la figure n'est plus le sujet)
+    expect(VAULT_FR.vt_newFigure).not.toMatch(/^\{fig\} réussi/);
+    expect(VAULT_FR.vt_steady).not.toMatch(/droite|droit\b/);
+  });
+
   it('les mêmes clés en français et en anglais, et chaque figure a son nom et son « comment faire »', () => {
     const fr = Object.keys(VAULT_FR).filter((k) => !k.endsWith('_f')).sort();
     expect(Object.keys(VAULT_EN).sort()).toEqual(fr);

@@ -2,6 +2,7 @@
 // (avec la vraie robe de l'animal : a.look.coat, a.look.secondary, a.look.mane).
 
 import { catTraits } from '../../sim/catBreeds.js'; // chats : poil long, masque colourpoint, gants blancs…
+import { horseBreedOf, horseBuild, foalBuild, horseCoatTraits, horseSocks, horseFaceMark } from '../../sim/horseLook.js'; // cheval vu de dessus
 
 export const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 export const TEXT_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -940,65 +941,292 @@ function drawHead(g, sh, c, { faceColor, earColor, earType, o, time, outline, fl
 
 // ---------------------------------------------------------------- cheval vu de dessus (longe, liberté)
 
-/** Cheval vu d'en haut, centré en (x, y), qui avance dans la direction `dir` (radians). */
+/**
+ * Cheval vu d'en haut, centré en (x, y), qui avance dans la direction `dir` (radians) : le repli dessiné de la longe
+ * et de la liberté (horse.js). s : sa taille (horse.js topScale : race et âge) ; phase : la foulée (les membres).
+ *
+ * Gabarit de sa race (horseLook.js : tronc, encolure, tête, crins), sa robe : la couleur, les taches de pie ou
+ * d'appaloosa tirées de sa graine (toujours les mêmes pour lui), les balzanes au bas des membres seulement, le bas des
+ * membres noir d'un bai ; une vraie tête vue de dessus : le front large, le chanfrein qui s'affine jusqu'au bout du
+ * nez plus clair, les naseaux, les yeux sur les côtés, les deux oreilles pointues, le toupet, la liste.
+ */
 export function drawHorseTop(g, a, x, y, dir, s = 1, phase = 0) {
   const c = colorsOf(a);
+  const look = a.look ?? {};
+  const breed = horseBreedOf(look, a.breed);
+  // (poulain, look.foal : stageLook : longues jambes, grosse tête, encolure courte, crinière en brosse)
+  const b = look.foal ? foalBuild(horseBuild(breed, look)) : horseBuild(breed, look);
+  const tr = horseCoatTraits(look);
+  const socks = horseSocks(look);
+  const face = horseFaceMark(look, breed);
+  const rnd = makeRng((look.seed ?? 7) * 7919 + 13);
+  const coat = css(c.coat);
+  const dark = shade(c.coat, -0.3);
+  const light = shade(c.coat, 0.18);
+  const mane = css(c.mane);
+  const white = 0xf4f0e8;
+  // proportions (cheval de selle = 1)
+  const bl = 30 * (b.back ?? 1); // demi-longueur du tronc
+  const bw = 13 * (b.girth ?? 1); // demi-largeur
+  const nk = 17 * (b.neck ?? 1); // encolure
+  const hd = 1.0 * (b.head ?? 1); // tête
   g.save();
   g.translate(x, y);
   g.rotate(dir);
+  g.scale(s, s);
   g.lineCap = 'round';
-  // ombre
-  g.fillStyle = 'rgba(0,0,0,0.15)';
-  ellipse(g, 3 * s, 5 * s, 34 * s, 15 * s);
+  g.lineJoin = 'round';
+  // ombre douce sous lui
+  g.fillStyle = 'rgba(0,0,0,0.16)';
+  ellipse(g, 3, 5, bl + 8, bw + 3);
   g.fill();
-  // pattes
-  g.strokeStyle = css(c.pattern === 'socks' ? c.sec : c.coat);
-  g.lineWidth = 5 * s;
-  const legs = [[18, -10, 0], [18, 10, Math.PI], [-18, -10, Math.PI], [-18, 10, 0]];
-  for (const [lx, ly, ph] of legs) {
-    const sw = Math.sin(phase + ph) * 7 * s;
+
+  // --- membres : le bas des jambes dépasse sous le ventre et avance / recule avec la foulée (diagonaux ensemble)
+  const legs = [[bl * 0.62, -bw * 0.62, 0, 0], [bl * 0.62, bw * 0.62, Math.PI, 1], [-bl * 0.6, -bw * 0.66, Math.PI, 2], [-bl * 0.6, bw * 0.66, 0, 3]];
+  const lw = 4.6 * (b.bone ?? 1);
+  for (const [lx, ly, ph, i] of legs) {
+    const sw = Math.sin(phase + ph) * 7;
+    const x1 = lx + sw;
+    const y1 = ly * 1.42;
+    // (bai : le bas des membres noir ; balzane : blanche, du sabot jusqu'à sa hauteur seulement)
+    g.strokeStyle = coat;
+    g.lineWidth = lw;
     g.beginPath();
-    g.moveTo(lx * s, ly * s);
-    g.lineTo(lx * s + sw, ly * s * 1.35);
+    g.moveTo(lx, ly);
+    g.lineTo(x1, y1);
+    g.stroke();
+    const low = socks[i] > 0 ? css(white) : tr.points ? mane : null;
+    if (low) {
+      const k = socks[i] > 0 ? Math.min(0.85, 0.35 + socks[i] * 1.2) : 0.6;
+      g.strokeStyle = low;
+      g.beginPath();
+      g.moveTo(lx + (x1 - lx) * (1 - k), ly + (y1 - ly) * (1 - k));
+      g.lineTo(x1, y1);
+      g.stroke();
+    }
+    // sabot (et fanons d'un frison, d'un trait)
+    if (b.feathers > 0.3) {
+      g.fillStyle = shade(c.mane, 0.05);
+      ellipse(g, x1, y1, lw * 0.95, lw * 0.8);
+      g.fill();
+    }
+    g.fillStyle = '#3a3029';
+    ellipse(g, x1 + 0.6, y1, lw * 0.45, lw * 0.42);
+    g.fill();
+  }
+
+  // --- queue : du haut de la croupe vers l'arrière, en mèches, elle se balance au rythme des pas
+  const tl = 22 * (b.tail ?? 1) + 6;
+  const sway = Math.sin(phase * 0.5) * 6;
+  g.strokeStyle = mane;
+  for (let k = 0; k < 4; k++) {
+    g.lineWidth = 6.5 - k * 1.2;
+    g.beginPath();
+    g.moveTo(-bl + 2, (k - 1.5) * 1.2);
+    g.quadraticCurveTo(-bl - tl * 0.45, sway * 0.6 + (k - 1.5) * 2.2, -bl - tl, sway + (k - 1.5) * 3.2);
     g.stroke();
   }
-  // queue
-  g.strokeStyle = css(c.mane);
-  g.lineWidth = 7 * s;
-  g.beginPath();
-  g.moveTo(-28 * s, 0);
-  g.quadraticCurveTo(-40 * s, Math.sin(phase * 0.5) * 6 * s, -50 * s, Math.sin(phase * 0.5 + 1) * 8 * s);
-  g.stroke();
-  // corps
-  g.fillStyle = css(c.coat);
-  ellipse(g, 0, 0, 32 * s, 14 * s);
+
+  // --- encolure : de l'épaule à la nuque, plus fine en haut (dessinée avant le tronc : elle part sous le garrot)
+  const nx0 = bl * 0.72;
+  const nx1 = bl * 0.72 + nk;
+  const nw0 = bw * 0.72 * (b.neckW ?? 1);
+  const nw1 = 5.2 * (b.neckW ?? 1);
+  const neckPath = () => {
+    g.beginPath();
+    g.moveTo(nx0 - 4, -nw0);
+    g.quadraticCurveTo((nx0 + nx1) / 2, -nw0 * 0.72, nx1, -nw1);
+    g.lineTo(nx1 + 2, nw1);
+    g.quadraticCurveTo((nx0 + nx1) / 2, nw0 * 0.72, nx0 - 4, nw0);
+    g.closePath();
+  };
+
+  // --- tronc : épaules, dos, croupe plus large ; dégradé (dos clair, flancs plus sombres) pour le volume
+  const bodyPath = () => {
+    g.beginPath();
+    g.moveTo(bl * 0.92, 0);
+    g.bezierCurveTo(bl * 0.92, -bw * 0.85, bl * 0.45, -bw, 0, -bw * 0.94);
+    g.bezierCurveTo(-bl * 0.55, -bw * 0.9, -bl * 0.7, -bw * 1.06, -bl * 0.92, -bw * 0.72);
+    g.bezierCurveTo(-bl * 1.04, -bw * 0.4, -bl * 1.04, bw * 0.4, -bl * 0.92, bw * 0.72);
+    g.bezierCurveTo(-bl * 0.7, bw * 1.06, -bl * 0.55, bw * 0.9, 0, bw * 0.94);
+    g.bezierCurveTo(bl * 0.45, bw, bl * 0.92, bw * 0.85, bl * 0.92, 0);
+    g.closePath();
+  };
+  const shadeFill = () => {
+    const gr = g.createLinearGradient(0, -bw, 0, bw);
+    gr.addColorStop(0, dark);
+    gr.addColorStop(0.32, coat);
+    gr.addColorStop(0.5, light);
+    gr.addColorStop(0.68, coat);
+    gr.addColorStop(1, dark);
+    return gr;
+  };
+  g.fillStyle = shadeFill();
+  neckPath();
   g.fill();
-  if (c.pattern === 'patches' || c.pattern === 'spots') {
-    g.fillStyle = css(c.sec);
-    circle(g, -12 * s, -4 * s, 6 * s); g.fill();
-    circle(g, 8 * s, 5 * s, 5 * s); g.fill();
+  bodyPath();
+  g.fill();
+  // taches (pie : grandes plaques ; appaloosa : petits ronds, ou une couverture blanche sur la croupe), tirées de sa
+  // graine, découpées au tronc et à l'encolure
+  if (tr.pinto || tr.leopard || tr.blanket) {
+    g.save();
+    bodyPath();
+    g.clip();
+    const sec = css(c.sec);
+    if (tr.blanket) {
+      g.fillStyle = sec;
+      ellipse(g, -bl * 0.55, 0, bl * 0.55, bw * 1.1);
+      g.fill();
+      g.fillStyle = coat;
+      for (let i = 0; i < 9; i++) {
+        circle(g, -bl * (0.2 + rnd() * 0.8), (rnd() - 0.5) * bw * 1.6, 1.4 + rnd() * 1.6);
+        g.fill();
+      }
+    } else if (tr.leopard) {
+      g.fillStyle = sec;
+      for (let i = 0; i < 26; i++) {
+        ellipse(g, (rnd() - 0.5) * bl * 1.9, (rnd() - 0.5) * bw * 1.9, 1.4 + rnd() * 1.8, 1.2 + rnd() * 1.4, rnd() * 3);
+        g.fill();
+      }
+    } else {
+      g.fillStyle = sec;
+      const n = 3 + Math.floor(rnd() * 2);
+      for (let i = 0; i < n; i++) {
+        const px = (rnd() - 0.5) * bl * 1.6;
+        const py = (rnd() - 0.5) * bw * 1.2;
+        g.beginPath();
+        const r0 = 6 + rnd() * 7;
+        for (let k = 0; k <= 9; k++) {
+          const t = (k / 9) * Math.PI * 2;
+          const r = r0 * (0.7 + rnd() * 0.5);
+          const qx = px + Math.cos(t) * r * 1.3;
+          const qy = py + Math.sin(t) * r;
+          if (k === 0) g.moveTo(qx, qy);
+          else g.lineTo(qx, qy);
+        }
+        g.closePath();
+        g.fill();
+      }
+    }
+    g.restore();
   }
-  // cou et tête
-  g.strokeStyle = css(c.coat);
-  g.lineWidth = 13 * s;
+  // ligne du dos (la colonne), à peine
+  g.strokeStyle = 'rgba(0,0,0,0.12)';
+  g.lineWidth = 1.2;
   g.beginPath();
-  g.moveTo(24 * s, 0);
-  g.lineTo(42 * s, 0);
+  g.moveTo(bl * 0.6, 0);
+  g.lineTo(-bl * 0.85, 0);
   g.stroke();
-  ellipse(g, 50 * s, 0, 12 * s, 7 * s);
+
+  // --- tête vue de dessus : le front large entre les yeux, le chanfrein qui s'affine, le bout du nez arrondi
+  const hx0 = nx1 - 1; // nuque
+  const hl = 19 * hd; // longueur de la tête
+  const hw = 6.6 * hd; // demi-largeur au front
+  const mw = 4.0 * hd; // demi-largeur au bout du nez
+  const dish = b.profile === 'dish' ? 0.85 : 1;
+  const headPath = () => {
+    g.beginPath();
+    g.moveTo(hx0, -hw * 0.75);
+    g.quadraticCurveTo(hx0 + hl * 0.2, -hw * 1.08, hx0 + hl * 0.42, -hw * 0.92);
+    g.quadraticCurveTo(hx0 + hl * 0.72, -mw * 1.05 * dish, hx0 + hl * 0.93, -mw);
+    g.quadraticCurveTo(hx0 + hl * 1.06, 0, hx0 + hl * 0.93, mw);
+    g.quadraticCurveTo(hx0 + hl * 0.72, mw * 1.05 * dish, hx0 + hl * 0.42, hw * 0.92);
+    g.quadraticCurveTo(hx0 + hl * 0.2, hw * 1.08, hx0, hw * 0.75);
+    g.closePath();
+  };
+  const hg = g.createLinearGradient(0, -hw, 0, hw);
+  hg.addColorStop(0, dark);
+  hg.addColorStop(0.5, light);
+  hg.addColorStop(1, dark);
+  g.fillStyle = hg;
+  headPath();
   g.fill();
-  // crinière
-  g.strokeStyle = css(c.mane);
-  g.lineWidth = 4 * s;
-  g.beginPath();
-  g.moveTo(20 * s, 0);
-  g.lineTo(44 * s, 0);
-  g.stroke();
-  // oreilles
-  g.fillStyle = shade(c.coat, -0.2);
-  ellipse(g, 44 * s, -5 * s, 4 * s, 2.5 * s); g.fill();
-  ellipse(g, 44 * s, 5 * s, 4 * s, 2.5 * s); g.fill();
+  // bout du nez : plus clair (ou grisé sur une robe noire), naseaux
+  const nose = tr.grey || lum(c.coat) > 0.5 ? 0xb9a9a0 : lum(c.coat) < 0.12 ? 0x4a403c : null;
+  g.save();
+  headPath();
+  g.clip();
+  if (face) {
+    // liste, étoile : du front vers le nez (étoile seule pour 1)
+    g.fillStyle = css(white);
+    if (face === 1) {
+      ellipse(g, hx0 + hl * 0.3, 0, 2.6, 2.2);
+      g.fill();
+    } else {
+      const w0 = face === 3 ? 3.2 : 1.6;
+      g.beginPath();
+      g.moveTo(hx0 + hl * 0.22, -w0);
+      g.lineTo(hx0 + hl * 1.05, -w0 * (face === 3 ? 1.1 : 0.9));
+      g.lineTo(hx0 + hl * 1.05, w0 * (face === 3 ? 1.1 : 0.9));
+      g.lineTo(hx0 + hl * 0.22, w0);
+      g.closePath();
+      g.fill();
+    }
+  }
+  if (nose !== null) {
+    g.fillStyle = css(nose);
+    ellipse(g, hx0 + hl * 0.98, 0, hl * 0.13, mw * 1.05);
+    g.fill();
+  }
   g.restore();
+  g.fillStyle = 'rgba(30,20,15,0.75)';
+  for (const sy of [-1, 1]) {
+    ellipse(g, hx0 + hl * 0.95, sy * mw * 0.55, 1.4, 0.9, sy * 0.5);
+    g.fill();
+  }
+  // yeux : sur les côtés, un peu en relief
+  for (const sy of [-1, 1]) {
+    g.fillStyle = '#1d140f';
+    ellipse(g, hx0 + hl * 0.3, sy * hw * 0.98, 2.1, 1.3);
+    g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.7)';
+    circle(g, hx0 + hl * 0.33, sy * hw * 0.98 - sy * 0.4, 0.5);
+    g.fill();
+  }
+  // oreilles : deux feuilles pointues derrière le front, l'intérieur plus clair
+  for (const sy of [-1, 1]) {
+    const ex = hx0 + 1.5;
+    const ey = sy * hw * 0.58;
+    g.fillStyle = dark;
+    g.beginPath();
+    g.moveTo(ex - 3.2, ey - sy * 0.2);
+    g.quadraticCurveTo(ex + 1, ey + sy * 3.6 * (b.ears ?? 1), ex + 6.5 * (b.ears ?? 1), ey + sy * 1.2);
+    g.quadraticCurveTo(ex + 1.5, ey - sy * 1.8, ex - 3.2, ey - sy * 0.2);
+    g.fill();
+    g.fillStyle = 'rgba(255,225,215,0.55)';
+    ellipse(g, ex + 1.8, ey + sy * 0.9, 2.2, 0.8, sy * 0.3);
+    g.fill();
+  }
+  // crinière : une bande de crins le long du dessus de l'encolure, tombant d'un côté ; le toupet entre les oreilles
+  const mLong = b.maneStyle === 'long' ? 2.2 : b.maneStyle === 'thick' ? 1.4 : b.maneStyle === 'brush' ? 0.35 : 1;
+  g.strokeStyle = mane;
+  g.lineWidth = 3.4;
+  g.beginPath();
+  g.moveTo(nx0 - 6, 0);
+  g.lineTo(hx0 + 1, 0);
+  g.stroke();
+  g.lineWidth = 1.6;
+  for (let i = 0; i <= 8; i++) {
+    const mx = nx0 - 4 + ((hx0 - nx0 + 3) * i) / 8;
+    g.beginPath();
+    g.moveTo(mx, 0);
+    g.quadraticCurveTo(mx - 1.5, 2.5 * mLong, mx - 3, (3 + 2.5 * rnd()) * mLong);
+    g.stroke();
+  }
+  g.lineWidth = 2;
+  for (const k of [-1, 0, 1]) {
+    g.beginPath();
+    g.moveTo(hx0, k * 0.8);
+    g.quadraticCurveTo(hx0 + 4, k * 1.6, hx0 + 6.5 * (b.maneStyle === 'long' ? 1.3 : 1), k * 2.2);
+    g.stroke();
+  }
+  g.restore();
+}
+
+/** Luminance (0 à 1) d'une couleur 0xRRGGBB. */
+function lum(n) {
+  const [r, gg, bb] = rgb(n);
+  return (r * 0.2126 + gg * 0.7152 + bb * 0.0722) / 255;
 }
 
 /** Petit personnage vu de dessus (le joueur). */

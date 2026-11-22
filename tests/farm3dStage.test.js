@@ -22,6 +22,7 @@ let pet3d;
 let brush3d;
 let shear3d;
 let milk3d;
+let cowWash3d;
 beforeAll(async () => {
   fakeDocument();
   ({ t } = await import('../src/i18n.js'));
@@ -37,6 +38,7 @@ beforeAll(async () => {
   brush3d = await import('../src/ui/minigames/farmBrush3d.js');
   shear3d = await import('../src/ui/minigames/shear3d.js');
   milk3d = await import('../src/ui/minigames/milk3d.js');
+  cowWash3d = await import('../src/ui/minigames/cowWash3d.js');
 }, 60000);
 
 const random = Math.random;
@@ -327,6 +329,35 @@ describe('la traite en 3D', () => {
       ctx.pressStop();
       expect(ctx.finished.why).toBe('just');
       expect(sc.model.udderFill).toBeLessThan(full);
+      game.destroy();
+      sc.dispose();
+    }, 60000);
+  }
+});
+
+describe('laver la vache en 3D', () => {
+  for (const breed of ['holstein', 'highland']) {
+    it(`${breed} : savonner tout le flanc (une passe), puis rincer à la douche : trois étoiles`, () => {
+      const { a, sc } = makeStage({ species: 'cow', breed });
+      sc.updateCamera(0);
+      const ctx = ctxFor(a, sc);
+      const game = cowWash3d.cowWash3dGame(ctx);
+      run(ctx, game, sc, 0.5);
+      expect(game.peek().cells).toBeGreaterThan(20);
+      for (let y = 40; y <= 340 && game.peek().soaped < 0.9; y += 14) {
+        game.down({ x: 0, y });
+        for (let x = 6; x <= 400; x += 6) game.move({ x, y }, true);
+        game.up();
+      }
+      const s = game.peek();
+      expect(s.value).toBeGreaterThanOrEqual(s.lo);
+      expect(s.value).toBeLessThanOrEqual(s.hi);
+      ctx.pressStop();
+      expect(game.peek().phase).toBe('rinse');
+      game.key('Space', true);
+      for (let i = 0; i < 300 && !ctx.done; i++) run(ctx, game, sc, 0.1);
+      game.key('Space', false);
+      expect(ctx.finished.why).toBe('just');
       game.destroy();
       sc.dispose();
     }, 60000);

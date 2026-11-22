@@ -623,7 +623,7 @@ class VaultingSession extends Session {
   tap(ts = performance.now()) {
     if (this.state !== 'run') return;
     if (this.phase !== 'cue') {
-      if (this.phase === 'approach') this.hud.big(t('vt_wait'), 700);
+      if (this.phase === 'approach') this.hud2.say(t('vt_wait'), 900);
       return;
     }
     this.go(this.phaseAt(ts), true);
@@ -645,7 +645,7 @@ class VaultingSession extends Session {
     const q = tapped ? tapQuality(err, this.level) : 0;
     const grade = tapped ? tapGrade(err, this.level) : 'late';
     this.taps.push(q);
-    this.hud.big(t(`vt_tap_${grade}`), 750, q >= 0.45 ? 'good' : 'bad');
+    this.hud2.say(t(`vt_tap_${grade}`), 800, q >= 0.45 ? 'good' : 'bad');
     if (q >= 0.8 && this.e) this.e.emit('✨', 1);
     this.hud2.cue(null);
     this.phase = 'move';
@@ -845,7 +845,7 @@ class VaultingSession extends Session {
     if (this.holdT >= this.holdLen) {
       this.balance = balanceScore(this.leans);
       this.hud2.balance(false);
-      this.hud.big(this.balance >= 0.75 ? t('vt_steady') : this.balance >= 0.45 ? t('vt_okBalance') : t('vt_wobbly'), 900, this.balance >= 0.45 ? 'good' : 'bad');
+      this.hud2.say(this.balance >= 0.75 ? t('vt_steady') : this.balance >= 0.45 ? t('vt_okBalance') : t('vt_wobbly'), 1000, this.balance >= 0.45 ? 'good' : 'bad');
       this.phase = 'back';
       this.moveList = s.back;
       this.moveT = 0;

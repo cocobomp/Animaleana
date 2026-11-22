@@ -65,6 +65,9 @@ export class VaultHud {
       onPointerdown: (e) => { e.preventDefault(); e.stopPropagation(); cb.onTap(e.timeStamp); },
     }, this.ringEl, h('span', { class: 'vt-target' }), this.icoEl);
     this.cardEl = h('div', { class: 'vt-card', hidden: true });
+    // « Parfait ! », « Un peu tard »… : juste au-dessus du bouton, à la place de la carte (au milieu de l'écran, le
+    // mot se posait sur le visage de l'avatar)
+    this.sayEl = h('div', { class: 'vt-say', hidden: true });
     // La jauge d'équilibre.
     this.bubble = h('span', { class: 'vt-bubble' }, '🤸');
     this.gauge = h('div', { class: 'vt-balance', hidden: true },
@@ -72,7 +75,7 @@ export class VaultHud {
       h('div', { class: 'vt-balance-bar' },
         h('span', { class: 'vt-balance-zone', style: `left:${GAUGE_ZONE[0].toFixed(2)}%;width:${(GAUGE_ZONE[1] - GAUGE_ZONE[0]).toFixed(2)}%` }),
         this.bubble));
-    this.box = h('div', { class: 'vt-controls' }, this.cardEl, this.gauge, h('div', { class: 'vt-btn-row' }, this.btn, h('small', { class: 'vt-btn-say' }, t('vt_tapSay'), h('kbd', { class: 'vt-kbd' }, t('actv_key_space')))));
+    this.box = h('div', { class: 'vt-controls' }, this.sayEl, this.cardEl, this.gauge, h('div', { class: 'vt-btn-row' }, this.btn, h('small', { class: 'vt-btn-say' }, t('vt_tapSay'), h('kbd', { class: 'vt-kbd' }, t('actv_key_space')))));
     hud.controls.append(this.box);
     // Les notes des juges.
     this.marksEl = h('div', { class: 'vt-marks', hidden: true });
@@ -81,8 +84,9 @@ export class VaultHud {
 
   /** L'anneau à la phase de la foulée (0 → 1) : il se resserre, et touche le bouton au début de chaque foulée. */
   ring(phase) {
-    const k = 1 + 0.9 * phase; // (de grand à petit, puis il recommence)
-    this.ringEl.style.transform = `scale(${(k > 1.85 ? 1 : 2.9 - k).toFixed(3)})`;
+    // (de grand à petit, puis il recommence ; au plus 1,6 fois le bouton : plus grand, il passait sur la carte et la
+    // légende)
+    this.ringEl.style.transform = `scale(${(phase > 0.98 ? 1 : 1.6 - 0.6 * phase).toFixed(3)})`;
     this.ringEl.style.opacity = phase > 0.92 || phase < 0.08 ? '1' : (0.35 + 0.6 * phase).toFixed(2);
   }
 
@@ -111,6 +115,17 @@ export class VaultHud {
       : null;
     this.cardEl.replaceChildren(h('b', {}, `${icon} ${label}`, dots), how ? h('small', {}, how) : null);
     this.cardEl.hidden = false;
+  }
+
+  /** Un mot pour le toucher ou l'équilibre (cls : 'good' en doré, 'bad' en rose), ms millisecondes. */
+  say(text, ms = 800, cls = '') {
+    this.sayEl.textContent = text;
+    this.sayEl.className = `vt-say ${cls}`;
+    this.sayEl.hidden = false;
+    void this.sayEl.offsetWidth;
+    this.sayEl.classList.add('vt-pop');
+    clearTimeout(this.sayTimer);
+    this.sayTimer = setTimeout(() => { this.sayEl.hidden = true; }, ms);
   }
 
   /** Rien à toucher pendant un moment (le salut de la fin) : le bouton rond disparaît. */
@@ -146,6 +161,7 @@ export class VaultHud {
 
   remove() {
     clearTimeout(this.marksTimer);
+    clearTimeout(this.sayTimer);
     this.pad.remove();
     this.box.remove();
     this.marksEl.remove();

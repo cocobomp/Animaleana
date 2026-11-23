@@ -2869,6 +2869,11 @@ body.vv-short.kb-open .menu:has(input[type='text']) > .row.end:last-child { bott
 .id-head .thumb { width: 96px; height: 72px; --thumb-bg: #e3eedc; }
 /* Refuge et fiche : la vignette 3D de l'animal (même fabrique que l'animalerie) au lieu de l'emoji. */
 .adopt-thumb { width: 72px; height: 54px; --thumb-bg: #e3eedc; }
+/* Listes (Mes animaux, vétérinaire, activités, concours, clients…) : le vrai animal au lieu de l'emoji de l'espèce. */
+.list-thumb { width: 64px; height: 48px; border-radius: 10px; --thumb-bg: #e3eedc; }
+.list-thumb .thumb-ph { font-size: 1.7rem; }
+span.card-emoji.list-thumb { width: 64px; height: auto; border-radius: 0; }
+@media (max-width: 360px) { .list-thumb { width: 54px; height: 40px; } }
 /* Construction et véhicules */
 .con-thumb { width: 92px; height: 69px; --thumb-bg: #dcebd2; }
 .veh-thumb { width: 92px; height: 60px; --thumb-bg: #e2e8ee; }

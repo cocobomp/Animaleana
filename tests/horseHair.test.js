@@ -271,26 +271,30 @@ describe('crinière, toupet et queue en cartes de crins', () => {
     }
   }, 60000);
 
-  it('mèches de gauche de la masse : sous le bord du rouleau, étroites, nombreuses, effilées ; aucune pour une crinière courte', () => {
+  it('mèches de gauche de la masse : une frange sous le bord du rouleau, étroites, nombreuses, au bout large ; aucune pour une crinière courte', () => {
     const locks = (md) => {
       // (mèches de gauche : les grilles de la masse dont toutes les rangées partent de la même racine)
       const g = md.hairMesh.geometry.attributes;
-      // (et dont les points sont pris par neuvièmes le long des crins : la nappe en a 15 ou 16, une rangée de la nappe
-      // peut avoir la même racine qu'une mèche ; ses rangées de bord de bande, en double, partagent aussi une racine)
+      // (et dont les points sont pris par huitièmes ou neuvièmes le long des crins — une courte en a 9, une longue 10 — :
+      // la nappe en a 15 ou 16, une rangée de la nappe peut avoir la même racine qu'une mèche ; ses rangées de bord de
+      // bande, en double, partagent aussi une racine)
       const by = new Map();
       for (let i = 0; i < g.position.count; i++) {
         const f = g.hairG.getX(i);
-        if (g.hairRoot.getW(i) !== 8 || Math.abs(f * 9 - Math.round(f * 9)) > 1e-4) continue;
+        if (g.hairRoot.getW(i) !== 8) continue;
+        if (Math.abs(f * 9 - Math.round(f * 9)) > 1e-4 && Math.abs(f * 8 - Math.round(f * 8)) > 1e-4) continue;
         const k = [0, 1, 2].map((c) => g.hairRoot.getComponent(i, c).toFixed(5)).join(',');
         if (!by.has(k)) by.set(k, []);
         by.get(k).push({ p: new THREE.Vector3().fromBufferAttribute(g.position, i), f });
       }
-      return [...by.values()].filter((l) => l.length >= 35);
+      return [...by.values()].filter((l) => l.length >= 27);
     };
-    for (const [breed, n] of [['selle_francais', 8], ['frison', 10], ['akhal_teke', 0]]) {
+    for (const [breed, lo, hi] of [['selle_francais', 12, 24], ['frison', 12, 24], ['akhal_teke', 0, 0]]) {
       const md = horse(breed);
       const L = locks(md);
-      expect(L.length, breed).toBe(n);
+      expect(L.length, breed).toBeGreaterThanOrEqual(lo);
+      expect(L.length, breed).toBeLessThanOrEqual(hi);
+      const ratios = [];
       for (const l of L) {
         // (plus grand écart entre deux points de la mèche pris au même endroit le long des crins)
         const span = (sel) => {
@@ -301,15 +305,21 @@ describe('crinière, toupet et queue en cartes de crins', () => {
         };
         const top = span((v) => v.f < 0.15);
         const tip = span((v) => v.f > 0.95);
-        // (4,4 à 8 cm de large en haut — plus larges, au téléphone, des languettes « en flammes » ou des pétales —,
-        // resserrée vers le bas : elle finit en crins de longueurs inégales, par la texture)
-        expect(top, breed).toBeGreaterThan(0.04);
-        expect(top, breed).toBeLessThan(0.11);
-        expect(tip, breed).toBeLessThan(top * 0.62);
-        // (du côté gauche, et plus bas que le bord du rouleau : 9,5 cm sous la crête)
+        if (process.env.CRINS_DBG) console.log('LOCK', breed, top.toFixed(3), tip.toFixed(3), (tip / top).toFixed(2), l.length);
+        // (4 à 11 cm de large en haut)
+        expect(top, breed).toBeGreaterThan(0.035);
+        expect(top, breed).toBeLessThan(0.115);
+        ratios.push(tip / top);
+        // (du côté gauche, et plus bas que le haut du rouleau)
         const low = l.reduce((a, v) => (v.p.y < a.p.y ? v : a));
         expect(low.p.x, breed).toBeGreaterThan(0.03);
-        expect(l[0].p.y - low.p.y, breed).toBeGreaterThan(0.1);
+        expect(l[0].p.y - low.p.y, breed).toBeGreaterThan(0.05);
+      }
+      // (à peine resserrées vers le bas : elles finissent en crins de longueurs inégales, par la texture, pas en pointe —
+      // effilées, elles se lisaient en glaçons ; avant, toutes au tiers de leur largeur ou moins)
+      if (L.length) {
+        expect(Math.min(...ratios), breed).toBeGreaterThan(0.35);
+        expect(ratios.reduce((a, b) => a + b, 0) / ratios.length, breed).toBeGreaterThan(0.65);
       }
       md.dispose();
     }

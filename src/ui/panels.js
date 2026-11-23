@@ -31,6 +31,7 @@ import { clientBadge, clientInfo, clientsTab } from './clients.js'; // animaux c
 import { isCareerPatient } from './vet.js'; // animal confié en soins, métier commencé : examen gratuit
 import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
 import { thumb, portraitSpec } from '../game/thumbScenes.js'; // vignettes 3D (animalerie, voyage, portrait de la fiche)
+import { animalThumbSpec, animalPic, listPic } from './animalPic.js'; // vignette du vrai animal (refuge, listes)
 import { healthPlan, HEALTH_PLAN, WORMER_COST } from '../sim/horseHealth.js'; // 📒 carnet de santé du cheval
 import { horseDayView } from '../sim/horseDay.js'; // ☀️ la journée de ton cheval
 import { galopLevel, nextGalop, practiceOf, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
@@ -80,29 +81,9 @@ function money(ui, n) {
 }
 
 /** Petite fiche d'identité : espèce, race, âge, sexe, caractère, robe. pic : vignette 3D (sinon l'emoji). */
-/**
- * Vignette 3D d'un animal du jeu (refuge, fiche) : la même fabrique que l'animalerie (src/game/thumbScenes.js),
- * avec sa race, sa robe, son sexe, son âge et sa graine de marques. null si sa robe n'est pas au catalogue de
- * la race (croisement) : on garde alors l'emoji.
- */
-export function animalThumbSpec(a) {
-  const breed = getBreed(a.species, a.breed);
-  if (!breed?.colors?.length || !a.look) return null;
-  const same = (c) => c.coat === a.look.coat && (c.pattern ?? breed.pattern) === a.look.pattern;
-  let ci = breed.colors.findIndex((c) => same(c) && (c.secondary ?? null) === (a.look.secondary ?? null));
-  if (ci < 0) ci = breed.colors.findIndex(same);
-  if (ci < 0) return null;
-  const st = lifeStage(a);
-  return { kind: 'animal', species: a.species, breed: breed.id, colorIndex: ci, sex: a.sex, stage: st === 'senior' ? 'adult' : st, seed: a.look.seed };
-}
-
-/** Élément vignette (ou emoji) d'un animal du jeu, w × h pixels affichés. */
-function animalPic(g, a, w, hh, cls = '') {
-  const emoji = SPECIES[a.species].emoji;
-  const spec = animalThumbSpec(a);
-  if (!spec || !g) return h('span', { class: cls ? `card-emoji ${cls}` : 'card-emoji' }, emoji);
-  return thumb(g, spec, { w, h: hh, emoji, cls, alt: a.name ?? '' });
-}
+// Vignette 3D d'un animal du jeu (refuge, fiche, listes) : src/ui/animalPic.js (module à part, sans le jeu : les
+// écrans des activités, des concours… l'importent sans boucle d'imports).
+export { animalThumbSpec, animalPic, listPic } from './animalPic.js';
 
 export function animalCard(a, pic = null) {
   const row = (k, v) => h('div', { class: 'id-row' }, h('span', {}, k), h('b', {}, v));
@@ -440,7 +421,7 @@ export function openAnimals(ui) {
         const m = mood(a);
         const here = a.location === p.place;
         return h('button', { class: 'card', onClick: () => ui.openAnimal(a) },
-          h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+          listPic(g, a),
           h('span', { class: 'card-main' },
             h('b', {}, `${a.name} ${sexIcon(a)}`),
             h('small', {}, `${speciesName(a)} · ${breedName(a)} · ${ageText(a)}`),
@@ -509,7 +490,7 @@ export function openVetClinic(ui) {
         class: `card ${a.sick ? 'sick' : ''}`,
         onClick: () => ui.openVet(a, true),
       },
-      h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+      listPic(g, a),
       h('span', { class: 'card-main' }, h('b', {}, a.name), h('small', {}, `${t('health')} : ${Math.round(a.health)}`)),
       h('span', { class: 'card-side' }, a.sick ? '🤒' : '💚')))), school];
     },

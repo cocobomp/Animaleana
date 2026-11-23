@@ -10,6 +10,7 @@ import { SPECIES } from '../sim/species.js';
 import { GEAR, freeStock, sizeFor, wears } from '../sim/gear.js';
 import { VAULT_LEVELS, LEVEL_IDS, FIGURES, PROGRAM, BALANCE_ZONE, vaultBlock, vaultData, canterUnlocked, CANTER_UNLOCK, figuresOnHorse } from '../sim/vaulting.js';
 import { awardEl } from './activities.js';
+import { listPic } from './animalPic.js'; // vignette du vrai cheval dans les cartes
 
 /** Une note dans la langue du joueur : « 7,5 » en français, « 7.5 » en anglais. */
 export function fmtMark(n, digits = 1) {
@@ -258,7 +259,7 @@ export function vaultingPick(ui, state) {
     const gearWhy = why === 'noSurcingle' || why === 'noVaultPad';
     const canPut = gearWhy && spareVaultGear(g, a);
     return h('div', { class: `card vt-horse ${why && !canPut ? 'locked' : ''}` },
-      h('span', { class: 'card-emoji' }, SPECIES.horse.emoji),
+      listPic(g, a),
       h('span', { class: 'card-main' }, h('b', {}, a.name),
         why ? h('small', {}, canPut ? ta('vt_putGearHint', a) : ta(`vt_why_${why}`, a, { n: CANTER_UNLOCK })) : h('small', {}, ta('vt_ready', a))),
       h('span', { class: 'card-side' },

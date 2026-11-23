@@ -21,6 +21,12 @@ import sharp from 'sharp';
 
 const [inp, out, ...flags] = process.argv.slice(2);
 const measureOnly = flags.includes('--mesure');
+// --coutures-tete : refait aussi, sur la tête et l'encolure (u < U_MIN), le bord des îlots le long des seules COUTURES
+// (arêtes de deux triangles voisins aux UV différentes), à partir de u ≥ TETE_U_MIN. Une couture tête / encolure,
+// de l'arrière de l'oreille à la ganache, gardait ses dents (un fin trait sombre en pointillé, de profil, des deux
+// côtés). Les naseaux, les lèvres et les yeux sont des bords ouverts du maillage, pas des coutures : pas touchés.
+const headSeams = flags.includes('--coutures-tete');
+const TETE_U_MIN = 0.15; // (en deçà : le bout du nez, où le relief des facettes est voulu)
 const RING = 3; // (texels d'îlot refaits au bord ; les dents mesurent 1 à 3 texels, voir --mesure)
 // Pas sur la tête (u < U_MIN, comme normfix.mjs et dilate.mjs) : ses îlots sont petits, leurs bords passent au ras des
 // naseaux, des lèvres et des yeux, et leur relief marqué y est voulu (refait, le bout du nez montrait ses facettes).
@@ -213,10 +219,55 @@ const fmt = (a) => a.map((e) => e.toFixed(1)).join(' ');
 console.log(`écart au fond de l'îlot par profondeur (1 = bord), sur 255 : tout ${fmt(ringError(px, depth, W, H))} ; corps (u ≥ ${U_MIN}) ${fmt(ringError(px, depth, W, H, 6, U_MIN))}`);
 if (measureOnly) process.exit(0);
 
+/** Texels à moins de RING + 1 texels d'une couture (des deux côtés : chaque triangle a ses UV), u < U_MIN. */
+function seamBand() {
+  const band = new Uint8Array(W * H);
+  const pos = prim.getAttribute('POSITION');
+  const p = [0, 0, 0];
+  const key = (v) => { pos.getElement(v, p); return p.map((c) => Math.round(c * 1e5)).join(','); };
+  const keys = [];
+  for (let v = 0; v < pos.getCount(); v++) keys.push(key(v));
+  const edges = new Map();
+  for (let t = 0; t < index.length; t += 3) {
+    for (let k = 0; k < 3; k++) {
+      const a = index[t + k];
+      const b = index[t + (k + 1) % 3];
+      const id = keys[a] < keys[b] ? keys[a] + '|' + keys[b] : keys[b] + '|' + keys[a];
+      const e = keys[a] < keys[b] ? [a, b] : [b, a];
+      if (!edges.has(id)) edges.set(id, []);
+      edges.get(id).push(e);
+    }
+  }
+  const same = (i, j) => Math.abs(uv[i][0] - uv[j][0]) < 1e-5 && Math.abs(uv[i][1] - uv[j][1]) < 1e-5;
+  const R = RING + 1;
+  let n = 0;
+  for (const list of edges.values()) {
+    if (list.length < 2) continue;
+    const [e0, e1] = list;
+    if (same(e0[0], e1[0]) && same(e0[1], e1[1])) continue;
+    n++;
+    for (const [a, b] of [e0, e1]) {
+      const ax = uv[a][0] * W; const ay = uv[a][1] * H; const bx = uv[b][0] * W; const by = uv[b][1] * H;
+      const steps = Math.ceil(Math.hypot(bx - ax, by - ay)) + 1;
+      for (let s = 0; s <= steps; s++) {
+        const x = ax + ((bx - ax) * s) / steps; const y = ay + ((by - ay) * s) / steps;
+        for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+          const xx = Math.floor(x + dx); const yy = Math.floor(y + dy);
+          if (xx >= 0 && yy >= 0 && xx < W && yy < H) band[yy * W + xx] = 1;
+        }
+      }
+    }
+  }
+  console.log(`coutures : ${n} arêtes`);
+  return band;
+}
+const band = headSeams ? seamBand() : null;
 const ok = new Uint8Array(W * H);
 let ring = 0;
 for (let i = 0; i < W * H; i++) {
-  ok[i] = mask[i] && !(depth[i] && depth[i] <= RING && ((i % W) + 0.5) / W >= U_MIN) ? 1 : 0;
+  const u = ((i % W) + 0.5) / W;
+  const redo = depth[i] && depth[i] <= RING && (u >= U_MIN || (band && band[i] && u >= TETE_U_MIN));
+  ok[i] = mask[i] && !redo ? 1 : 0;
   if (mask[i] && !ok[i]) ring++;
 }
 const filled = dilate(px, ok, W, H);

@@ -62,7 +62,7 @@ const glf = (x) => Number(x).toFixed(4);
 /** Ombre du toupet sur le front (part de lumière en moins sous lui). */
 export const FORE_SHADE = 0.34;
 /** Ombre du toupet en plus (part de FORE_SHADE) quand des crins clairs sont sur une robe claire. */
-export const FORE_SHADE_LIGHT = 0.6;
+export const FORE_SHADE_LIGHT = 0.75;
 /**
  * Mèches du toupet (géométrie : horseReal.js, forelockCards ; ombre sur le front : ici, le même dessin). En demi-largeurs
  * du toupet en haut (entre les oreilles) et en part f de sa longueur : les mèches partent côte à côte et se chevauchent

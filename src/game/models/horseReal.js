@@ -1031,7 +1031,7 @@ const LEFT_TAPER = 0.25;
 const LEFT_VSPAN = 0.5;
 const LEFT_STEP = 0.05;
 const MANE_MASS_LEN = 0.8;
-const FORE_CARDS = 0.55;
+const FORE_CARDS = 0.6;
 const FORE_THICK = 0.02;
 const FORE_LOCKS = 3;
 const FORE_LOCK_BUMP = 0.008;
@@ -1840,7 +1840,8 @@ function forelockCards(S, B, body, base) {
   // mi-longueur, et le bas du toupet finit en plusieurs pointes de longueurs inégales (la plus longue au milieu). Avant :
   // un V qui se refermait en une seule pointe, ses mèches serrées l'une contre l'autre jusqu'en bas et des cartes posées
   // en travers de leurs creux — de face, une plaque pâle, striée, aux bords droits, sur un front clair.
-  const NL = FORE_LOCKS + (style === 'thick' ? 1 : 0);
+  // (quatre au plus : l'ombre des mèches sur le front en a quatre, horseCoat.js hForeL)
+  const NL = Math.min(4, FORE_LOCKS + (style === 'thick' ? 1 : 0));
   const lockLen = [];
   // (plus courtes sur les côtés : la pointe la plus longue reste au milieu)
   for (let l = 0; l < NL; l++) lockLen.push(1 - 0.1 * rng() - 0.36 * Math.abs(((l + 0.5) / NL) * 2 - 1));
@@ -1924,7 +1925,8 @@ function forelockCards(S, B, body, base) {
       // (racine dans la peau, 4 mm sous elle : rentrée sous un bonnet, la mèche se replie sous le voile)
       pts.push(surfX(x, f, k ? thick(x, Math.min(1, f)) + h : -0.004, zTop));
       const [, hw] = foreLock(fl, len, lk, NL);
-      widths.push(Math.min((primary ? 0.026 : 0.02) * (1 - (0.8 * k) / 4) + 0.003, 1.1 * hw * halfM + 0.001));
+      // (plus fines qu'avant et plus nombreuses : des crins, pas des rubans plats)
+      widths.push(Math.min((primary ? 0.019 : 0.015) * (1 - (0.85 * k) / 4) + 0.002, 1.1 * hw * halfM + 0.001));
     }
     const normals = pts.map((p) => hd.grad(p, V()));
     const m = 2;
@@ -5098,7 +5100,7 @@ class RealHorseAnim {
       // (coup d'oreille : le pavillon pivote vers l'arrière autour de l'axe de l'oreille, la pointe un peu en arrière)
       const fl = photo || st.moving ? 0 : earFlick(t, kid + i * 2.9) * alert * (1 - eb);
       e.rotateX(n1 * 0.04 * (1 - eb) + this.doze * 0.2 - 0.08 * alert * this.proud - 0.12 * fl + EAR_POSE.back.x * eb + EAR_POSE.fwd.x * ef);
-      e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.06 + 0.04 * fl + EAR_POSE.back.z * eb));
+      e.rotateZ(-s * (this.doze * 0.45 + Math.max(0, Math.sin(t * 0.9 + i * 1.7)) * 0.06 + 0.04 * fl + EAR_POSE.back.z * eb + EAR_POSE.fwd.z * ef));
       e.rotateY((s * Math.sin(t * 0.7 + i * 3) * 0.06 + both) * alert * (1 - eb - ef) + s * 0.38 * fl + s * (EAR_POSE.back.y * eb + EAR_POSE.fwd.y * ef));
     }
     // Port de queue de la race (arabe, saddlebred, welsh) : couard relevé, crins qui retombent en arc.
@@ -5367,9 +5369,11 @@ function springLimit(S, target, axis, lo, hi) {
  * Oreilles couchées en arrière (st.ears === 'back' : il a mal, faim, soif ou il est grognon, src/sim/horseEars.js) et
  * pointées vers toi (st.ears === 'forward', tout près) : rotations ajoutées à celles de l'oreille (x, y, z en radians).
  * (Os de l'oreille : x négatif la couche vers l'encolure, positif la penche vers l'avant ; y tourne le pavillon ; z,
- * de chaque côté, l'écarte vers l'extérieur. Réglé sur des vues de profil et de face.)
+ * de chaque côté, l'écarte vers l'extérieur. Réglé sur des vues de profil et de face.) Pointées vers toi : le pavillon
+ * tourné vers l'avant et les deux oreilles rapprochées (y et z) — penchées en avant seulement, l'oreille lointaine partait
+ * de côté comme une corne.
  */
-export const EAR_POSE = { back: { x: -1.2, y: 0.45, z: 0.2 }, fwd: { x: 0.3, y: 0 } };
+export const EAR_POSE = { back: { x: -1.2, y: 0.45, z: 0.2 }, fwd: { x: 0.3, y: -0.25, z: -0.18 } };
 
 export function earFlick(t, k = 0) {
   if (Math.sin(t * 0.21 + k * 1.3) < 0.2) return 0;

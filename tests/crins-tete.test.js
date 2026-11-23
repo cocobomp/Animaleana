@@ -1,0 +1,72 @@
+// Tête du cheval (chantier « crins ») : oreilles pointées vers toi sans partir de côté comme une corne, toupet en mèches
+// plus fines. Cheval réaliste au repos (GLB chargé dans node, sans textures).
+import { describe, it, expect, beforeAll } from 'vitest';
+import * as THREE from 'three';
+import { buildRealHorseModel, EAR_POSE } from '../src/game/models/horseReal.js';
+import { FORE_SHADE_LIGHT } from '../src/game/models/horseCoat.js';
+import { createAnimal } from '../src/sim/animal.js';
+import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
+
+let gltf;
+beforeAll(async () => {
+  gltf = await loadRealHorseGltf();
+}, 60000);
+
+const horse = (breed, colorIndex = 0) => {
+  const a = createAnimal({ species: 'horse', breed, colorIndex, ageDays: 900, seed: 21 });
+  return buildRealHorseModel(a.look, a.breed, gltf);
+};
+const compile = (m) => {
+  const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader };
+  m.onBeforeCompile(sh);
+  return sh.fragmentShader;
+};
+
+/** Bout de chaque oreille (point de l'oreille le plus loin de sa racine) dans le repère de la tête, après n images. */
+function earTips(md, ears) {
+  const st = { v: 0, moving: false, graze: 0, feeder: 0, turn: 0, fat: 1, near: true, ears };
+  md.anim.photo = false;
+  for (let f = 0; f < 60; f++) md.anim.update(1 / 30, st, {});
+  md.root.updateMatrixWorld(true);
+  const inv = md.head.matrixWorld.clone().invert();
+  return md.ears.map((e) => new THREE.Vector3(0, 0.12, 0).applyMatrix4(e.matrixWorld).applyMatrix4(inv));
+}
+
+describe('oreilles pointées vers toi', () => {
+  it('pavillon tourné vers l\'avant et oreilles rapprochées : la pose les règle (y et z), pas seulement penchées', () => {
+    expect(EAR_POSE.fwd.y).toBeLessThan(0);
+    expect(EAR_POSE.fwd.z).toBeLessThan(0);
+  });
+
+  it.each(['arabe', 'selle_francais', 'shetland'])('%s : bouts des oreilles pas plus écartés qu\'au repos, plus en avant', (breed) => {
+    const md = horse(breed);
+    const rest = earTips(md, null);
+    const fwd = earTips(md, 'forward');
+    const spread = (t) => Math.abs(t[0].x - t[1].x);
+    // (avant : l'oreille lointaine partait de côté comme une corne)
+    expect(spread(fwd), breed).toBeLessThanOrEqual(spread(rest) + 0.005);
+    for (let i = 0; i < 2; i++) expect(fwd[i].z, `${breed} oreille ${i}`).toBeGreaterThan(rest[i].z);
+    md.dispose();
+  }, 60000);
+});
+
+describe('toupet', () => {
+  it('mèches plus fines (cartes de 2,1 cm au plus, avant 2,9) et ombre de contact plus marquée sur les robes claires', () => {
+    const md = horse('arabe'); // gris clair, crins clairs
+    const g = md.hairMesh.geometry.attributes;
+    // (cartes du toupet : sorte 1 ; deux sommets par point, largeur = écart entre les deux)
+    let maxW = 0;
+    let n = 0;
+    for (let i = 0; i + 1 < g.position.count; i += 2) {
+      if (g.hairRoot.getW(i) !== 1 || g.hairRoot.getW(i + 1) !== 1) continue;
+      const a = new THREE.Vector3().fromBufferAttribute(g.position, i);
+      const b = new THREE.Vector3().fromBufferAttribute(g.position, i + 1);
+      maxW = Math.max(maxW, a.distanceTo(b));
+      n++;
+    }
+    expect(n).toBeGreaterThan(40);
+    expect(maxW).toBeLessThan(0.0215);
+    expect(FORE_SHADE_LIGHT).toBeGreaterThan(0.6);
+    md.dispose();
+  }, 60000);
+});

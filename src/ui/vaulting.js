@@ -10,7 +10,7 @@ import { SPECIES } from '../sim/species.js';
 import { GEAR, freeStock, sizeFor, wears } from '../sim/gear.js';
 import { VAULT_LEVELS, LEVEL_IDS, FIGURES, PROGRAM, BALANCE_ZONE, vaultBlock, vaultData, canterUnlocked, CANTER_UNLOCK, figuresOnHorse } from '../sim/vaulting.js';
 import { awardEl } from './activities.js';
-import { listPic } from './panels.js'; // vignette du vrai cheval dans les cartes
+import { listPic } from './animalPic.js'; // vignette du vrai cheval dans les cartes
 
 /** Une note dans la langue du joueur : « 7,5 » en français, « 7.5 » en anglais. */
 export function fmtMark(n, digits = 1) {

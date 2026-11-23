@@ -14,7 +14,7 @@ import {
 } from '../sim/competitions.js';
 import { cooldownLeft, dressageSkill, learnFactor } from '../sim/dressage.js';
 import { awardEl } from './activities.js';
-import { listPic } from './panels.js'; // vignette du vrai animal dans les cartes
+import { listPic } from './animalPic.js'; // vignette du vrai animal dans les cartes
 import { owned } from '../sim/gear.js'; // filet à la sellerie (inscription)
 
 const TIER_ICON = { gold: '🏆', silver: '🥈', bronze: '🥉' };

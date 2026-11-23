@@ -6,7 +6,8 @@ import { h, bar } from './dom.js';
 import { t, ta, illText } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
-import { animalCard, listPic } from './panels.js'; // listPic : vignette du vrai animal dans les cartes
+import { animalCard } from './panels.js';
+import { listPic } from './animalPic.js'; // vignette du vrai animal dans les cartes
 import { speciesName } from './names.js';
 import { clientState, clientAnimals, canAccept, daysLeft, dailyCareScore, maxClients } from '../sim/clients.js';
 import { CAREERS, startedCareers, reputationOf, RANKS, rankOf } from '../sim/careers.js';

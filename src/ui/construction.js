@@ -17,7 +17,7 @@ import { buildingActions } from '../sim/buildings.js';
 import { EQUIPMENT, equipmentShown } from '../sim/farm.js';
 import { actionSheet } from './actions.js';
 import { thumb } from '../game/thumbScenes.js'; // vignettes 3D du catalogue
-import { listPic } from './panels.js'; // vignette du vrai animal dans les cartes
+import { listPic } from './animalPic.js'; // vignette du vrai animal dans les cartes
 import { openSalon } from './groomer.js'; // salon de toilettage (métier Toiletteur)
 
 /** Catégories de la vue construction → catégories du catalogue. */

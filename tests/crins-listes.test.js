@@ -7,12 +7,15 @@ import fs from 'node:fs';
 const src = (f) => fs.readFileSync(new URL(`../src/ui/${f}`, import.meta.url), 'utf8');
 
 describe('cartes des listes : la vignette du vrai animal', () => {
-  it('panels.js exporte animalPic et listPic (vignette 64 × 48, emoji en attendant ou hors catalogue)', () => {
-    const s = src('panels.js');
+  it('animalPic.js : animalPic et listPic (vignette 64 × 48, emoji en attendant ou hors catalogue), redonnés par panels.js', () => {
+    const s = src('animalPic.js');
     expect(s).toMatch(/export function animalPic\(g, a, w, hh, cls = ''\)/);
     expect(s).toMatch(/export function listPic\(g, a\) \{\n\s*return animalPic\(g, a, 64, 48, 'list-thumb'\);/);
     // (sans vignette possible : l'emoji de l'espèce, comme avant)
     expect(s).toContain("if (!spec || !g) return h('span', { class: cls ? `card-emoji ${cls}` : 'card-emoji' }, emoji);");
+    // (module sans le jeu : pas de boucle d'imports avec les écrans des activités)
+    expect(s).not.toMatch(/from '\.\.\/game\/Game\.js'|from '\.\/panels\.js'/);
+    expect(src('panels.js')).toContain("export { animalThumbSpec, animalPic, listPic } from './animalPic.js';");
   });
 
   it.each([

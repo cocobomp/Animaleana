@@ -13,7 +13,7 @@ import {
 } from '../sim/beauty.js';
 import { canLead } from '../sim/gear.js';
 import { runMinigame } from './minigames.js';
-import { listPic } from './panels.js'; // vignette du vrai animal dans les cartes
+import { listPic } from './animalPic.js'; // vignette du vrai animal dans les cartes
 
 const COLOR_EMOJI = { red: '🔴', pink: '🩷', blue: '🔵', yellow: '🟡', green: '🟢', purple: '🟣', white: '⚪' };
 const PART_ICON = { presentation: '🎀', coat: '🧼', health: '💚', weight: '⚖️', calm: '🤝', allure: '🌟', mood: '😊' };

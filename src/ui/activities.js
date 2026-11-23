@@ -5,7 +5,7 @@ import { h, bar } from './dom.js';
 import { t, ta, L } from '../i18n.js';
 import { SPECIES, SPECIES_IDS, speciesAvailable } from '../sim/species.js';
 import { speciesList } from './names.js';
-import { listPic } from './panels.js'; // vignette du vrai animal dans les cartes
+import { listPic } from './animalPic.js'; // vignette du vrai animal dans les cartes
 import { PLACES } from '../sim/places.js';
 import { isSandbox } from '../sim/profile.js';
 import { owned, inUse } from '../sim/gear.js';

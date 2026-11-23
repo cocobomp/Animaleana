@@ -3,6 +3,7 @@
 
 import { catTraits } from '../../sim/catBreeds.js'; // chats : poil long, masque colourpoint, gants blancs…
 import { horseBreedOf, horseBuild, foalBuild, horseCoatTraits, horseSocks, horseFaceMark } from '../../sim/horseLook.js'; // cheval vu de dessus
+import { lifeStage } from '../../sim/animal.js';
 
 export const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 export const TEXT_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -147,6 +148,45 @@ const BODY = {
  * Calcule où se trouvent les parties de l'animal (sans dessiner).
  * o : { x, y (sol), s (taille), f (1 = regarde à droite, -1 = à gauche), pose: 'stand' | 'sit' | 'beg' | 'down' (couché), lift }
  */
+const GEOM = new Map();
+/**
+ * Gabarit d'un cheval dessiné de profil, d'après sa race et son âge (horseLook.js : horseBuild, foalBuild ; accentué
+ * pour se lire sur un petit dessin) : { leg, head }. leg : longueur des membres (un Shetland court sur pattes, 0,66 ;
+ * un cheval de trait plus près du sol, 0,86 ; un poulain haut sur jambes, 1,3). head : taille de la tête (un poulain
+ * 1,3, un poney ou un trait 1,1, un pur-sang 0,92). Toute la géométrie (le corps, la tête, les zones qu'on touche) en
+ * tient compte : elle reste juste.
+ */
+export function horseGeom(a) {
+  const look = a?.look ?? {};
+  let foal = false;
+  try {
+    foal = lifeStage(a) === 'baby';
+  } catch {
+    foal = !!look.foal;
+  }
+  const key = `${a?.breed ?? ''}|${look.breed ?? ''}|${foal ? 1 : 0}`;
+  let g = GEOM.get(key);
+  if (!g) {
+    let legs = 1;
+    let head = 1;
+    try {
+      const breed = horseBreedOf(look, a?.breed);
+      const base = horseBuild(breed, look);
+      const b = foal ? foalBuild(base) : base;
+      legs = (b.legs ?? 1) * Math.sqrt(breed?.legs ?? 1);
+      head = b.head ?? 1;
+    } catch {
+      /* gabarit inconnu : celui du cheval de selle */
+    }
+    const ok = (v) => (Number.isFinite(v) ? v : 1);
+    g = { leg: ok(Math.min(1.32, Math.max(0.64, 1 + (legs - 1) * 1.4))), head: ok(Math.min(1.3, Math.max(0.9, head))) };
+    GEOM.set(key, g);
+  }
+  return g;
+}
+/** Longueur des membres d'un cheval dessiné (voir horseGeom). */
+export const horseLegK = (a) => horseGeom(a).leg;
+
 export function animalShape(a, o = {}) {
   const P = BODY[a.species] ?? BODY.dog;
   const s = o.s ?? 1;
@@ -155,7 +195,8 @@ export function animalShape(a, o = {}) {
   const lift = o.lift ?? 0;
   const rx = P.rx * s * (a.species === 'sheep' && o.shorn ? 0.86 : 1);
   const ry = P.ry * s * (a.species === 'sheep' && o.shorn ? 0.78 : 1);
-  const leg = P.leg * s;
+  const hg = a.species === 'horse' ? horseGeom(a) : null;
+  const leg = P.leg * s * (hg ? hg.leg : 1);
   const pose = o.pose ?? 'stand';
   const rot = pose === 'sit' ? -0.45 : pose === 'beg' ? -0.95 : 0;
   const ang = rot * f;
@@ -179,7 +220,7 @@ export function animalShape(a, o = {}) {
   head.y += dip * (P.leg + 30) * 0.9;
   head.x += f * dip * 10;
   if (pose === 'sit') head.y -= 6 * s;
-  const hr = P.hr * s;
+  const hr = P.hr * s * (hg ? hg.head : 1);
   const mouth = { x: head.x + f * (hr * 0.6 + P.snout * s * 0.9), y: head.y + hr * 0.45 };
   if (a.species === 'horse') { mouth.x = head.x + f * hr * 1.7; mouth.y = head.y + hr * 1.25; }
   return {

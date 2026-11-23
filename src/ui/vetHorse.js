@@ -12,7 +12,7 @@
 // y vers le bas, en unités du dessin pour s = 1. Les couleurs, les marques de la robe et les
 // dégradés sont calculés une fois par cheval (caches), rien n'est alloué de gros à chaque image.
 
-import { animalShape, coatColors, shade, css, makeRng } from './minigames/draw.js';
+import { animalShape, coatColors, shade, css, makeRng, horseLegK, horseGeom } from './minigames/draw.js';
 import { horseBreedOf, horseBuild, foalBuild, horseCoatTraits } from '../sim/horseLook.js';
 import { lifeStage } from '../sim/animal.js';
 
@@ -25,6 +25,8 @@ export const HORSE_LEG_ZONES = { front: [46.5, 46], hind: [-61, 45] };
 
 /** Sol, dans le repère local, quand le cheval est posé (animalShape : jambe 78 + 0,72 × ry 33). */
 const FEET = 101.76;
+/** Le sol de ce cheval (ses membres à son gabarit : horseLegK). */
+const feetOf = (a) => FEET - 78 * (1 - (a ? horseLegK(a) : 1));
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 
 /**
@@ -46,10 +48,10 @@ export function vetBuild(a) {
   }
   const base = horseBuild(breed, look);
   const b = foal ? foalBuild(base) : base;
-  // (membres : ceux du type, et la finesse propre de la race — le Shetland a ses jambes plus courtes que le type mini)
-  const legK = (b.legs ?? 1) * Math.sqrt(breed?.legs ?? 1);
-  // (au plus haut 28 : les taches et les zones posées dans l'ellipse du corps d'animalShape restent sur un poulain)
-  const belly = clampN(34 + 67.8 * (1 - legK) + ((b.girth ?? 1) - 1) * 14 * (b.depth ?? 1), 28, 48);
+  // (les membres : leur longueur est dans la géométrie d'animalShape, horseLegK ; ici, la profondeur du tronc : un
+  // poney ou un cheval de trait a le ventre rond et bas, un poulain le tronc mince ; au plus haut 28 : les taches et
+  // les zones posées dans l'ellipse du corps restent sur le dessin)
+  const belly = clampN(34 + ((b.girth ?? 1) - 1) * 30 * (b.depth ?? 1), 28, 44);
   const style = foal ? 'foal' : b.maneStyle ?? 'normal';
   return {
     belly,
@@ -57,7 +59,7 @@ export function vetBuild(a) {
     croup: clampN(b.croup ?? 1, 0.9, 1.25),
     crest: clampN(b.crest ?? 1, 0.6, 1.6),
     neckW: clampN(b.neckW ?? 1, 0.8, 1.35),
-    headK: clampN((b.head ?? 1) ** 0.7, 0.94, 1.18),
+    headK: horseGeom(a).head,
     bone: clampN((b.bone ?? 1) ** 0.6, 0.85, 1.25),
     ears: clampN(b.ears ?? 1, 0.75, 1.1),
     profile: foal ? 'foal' : b.profile ?? 'straight',
@@ -67,6 +69,7 @@ export function vetBuild(a) {
     tailSet: clampN(b.tailSet ?? 0, 0, 1),
     feathers: Math.max(b.feathers ?? 0, (look.fluff ?? 1) >= 1.1 ? 0.35 : 0),
     foal,
+    feet: feetOf(a),
   };
 }
 
@@ -594,7 +597,7 @@ function drawMane(g, p, hx, hy, t, B) {
 function drawTail(g, p, t, swish, mode, B) {
   const sw = Math.sin(t * 1.7) * 2.2 + swish;
   // (longueur de la race : courte et touffue d'un poulain, jusqu'aux jarrets ou plus bas d'un baroque ou d'un poney)
-  const end = Math.min(FEET - 6, -14 + (70 + 10 * p.fluff) * B.tail);
+  const end = Math.min(B.feet - 6, -14 + (70 + 10 * p.fluff) * B.tail);
   const set = B.tailSet;
   const dx = bodyX(B, -73) + 73;
   g.save();
@@ -923,12 +926,16 @@ export function drawHorseVet(g, a, o = {}) {
   // La tête est agrandie autour de l'œil (headIn) : l'œil, le nez et la bouche restent sur leurs zones.
   // Gabarit : la tête plus grosse d'un poulain, d'un poney ou d'un trait, plus fine d'un pur-sang, agrandie autour d'un
   // point entre l'œil et la bouche (l'un et l'autre restent sur leurs zones).
-  const hk = HEAD_K * B.headK;
-  const hcx = hx + (B.headK === 1 ? 5.9 : 17.8);
-  const hcy = hy + (B.headK === 1 ? -3.15 : 8.6);
+  // La tête est agrandie autour de l'œil (HEAD_K : l'œil reste sur sa zone), puis à son gabarit autour du centre de la
+  // tête (B.headK : la grosse tête d'un poulain, d'un poney ou d'un trait, la tête fine d'un pur-sang) ; animalShape
+  // agrandit les zones de la tête autour du même point, du même facteur.
+  const hcx = hx + 5.9;
+  const hcy = hy - 3.15;
   const headIn = () => {
-    g.translate(hcx, hcy);
-    g.scale(hk, hk);
+    g.translate(hx, hy);
+    g.scale(B.headK, B.headK);
+    g.translate(hcx - hx, hcy - hy);
+    g.scale(HEAD_K, HEAD_K);
     g.translate(-hcx, -hcy);
   };
   // Oreille du fond
@@ -1058,7 +1065,7 @@ export function drawHorseVet(g, a, o = {}) {
 export function drawHorseVetHead(g, a, { hx = 250, hy = 150, s = 2.4, f = -1, ...o } = {}) {
   const P = { hdx: 100, hdy: -88 };
   const x = hx - f * P.hdx * s;
-  const y = hy - P.hdy * s + FEET * s;
+  const y = hy - P.hdy * s + feetOf(a) * s;
   return drawHorseVet(g, a, { ...o, x, y, s, f, shadow: false });
 }
 
@@ -1078,7 +1085,8 @@ export function horseLegLocal(a, which) {
   if (!B) return [x, y];
   // (même part de la patte que pour le cheval de selle : 22 % de la hauteur du coude au sol)
   const top = bodyY(B, 30);
-  return [bodyX(B, x), top + ((y - 30) / (FEET - 30)) * (FEET - top)];
+  const feet = feetOf(a);
+  return [bodyX(B, x), top + ((y - 30) / (FEET - 30)) * (feet - top)];
 }
 
 /**
@@ -1087,9 +1095,8 @@ export function horseLegLocal(a, which) {
  */
 export function horseVetMarks(a) {
   const B = buildOf(a);
-  const k = HEAD_K * B.headK;
-  const c = B.headK === 1 ? [5.9, -3.15] : [17.8, 8.6];
-  const inHead = (x, y) => [c[0] + (x - c[0]) * k, c[1] + (y - c[1]) * k];
+  const k = B.headK;
+  const inHead = (x, y) => [k * (5.9 + (x - 5.9) * HEAD_K), k * (-3.15 + (y + 3.15) * HEAD_K)];
   return {
     belly: B.belly,
     back: -30.4,

@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { createAnimal } from '../src/sim/animal.js';
 import { mulberry32 as makeRng } from '../src/sim/rng.js';
 import { SPECIES } from '../src/sim/species.js';
-import { animalShape, fitAnimal } from '../src/ui/minigames/draw.js';
+import { animalShape, fitAnimal, horseGeom } from '../src/ui/minigames/draw.js';
 import { fakeDocument } from './fixtures/careCtx.js';
 
 let vet;
@@ -44,12 +44,30 @@ describe('le cheval du vétérinaire à sa race et à son âge', () => {
     const foal = vet.vetBuild(horse('selle_francais', 0, true));
     const perch = vet.vetBuild(horse('percheron'));
     const arabe = vet.vetBuild(horse('arabe'));
-    // (ventre plus bas : membres courts sous un tronc profond)
-    expect(shet.belly).toBeGreaterThan(sf.belly + 10);
+    // (les membres et la tête, dans la géométrie d'animalShape : un Shetland court sur pattes, un poulain haut sur
+    // jambes à grosse tête, un trait plus près du sol, la tête fine d'un arabe)
+    const G = (b, f = false) => horseGeom(horse(b, 0, f));
+    expect(G('shetland').leg).toBeLessThan(0.75);
+    expect(G('falabella').leg).toBeLessThan(1);
+    expect(G('percheron').leg).toBeLessThan(0.9);
+    expect(G('selle_francais').leg).toBe(1);
+    expect(G('selle_francais', true).leg).toBeGreaterThan(1.25);
+    expect(G('selle_francais', true).head).toBeGreaterThanOrEqual(1.3);
+    expect(G('shetland').head).toBeGreaterThan(1.05);
+    expect(G('arabe').head).toBeLessThan(0.95);
+    // sur le dessin : le sol plus près du dos d'un poney, plus loin d'un poulain
+    const ground = (a) => {
+      const sh = animalShape(a, { x: 0, y: 300, s: 1, f: 1 });
+      return sh.groundY - sh.by;
+    };
+    expect(ground(horse('shetland'))).toBeLessThan(ground(horse('selle_francais')) - 20);
+    expect(ground(horse('selle_francais', 0, true))).toBeGreaterThan(ground(horse('selle_francais')) + 20);
+    // (ventre : un tronc profond d'un poney ou d'un trait, mince d'un poulain)
+    expect(shet.belly).toBeGreaterThan(sf.belly + 3);
     expect(fala.belly).toBeGreaterThan(sf.belly);
     expect(perch.belly).toBeGreaterThan(sf.belly + 4);
     // (poulain : le ventre haut, le tronc court, la grosse tête, la crinière en brosse, la queue courte)
-    expect(foal.belly).toBeLessThan(sf.belly - 5);
+    expect(foal.belly).toBeLessThan(sf.belly - 3);
     expect(foal.len).toBeLessThan(sf.len);
     expect(foal.headK).toBeGreaterThan(sf.headK + 0.1);
     expect(foal.mane).toBe('foal');
@@ -107,7 +125,7 @@ describe('le cheval du vétérinaire à sa race et à son âge', () => {
         for (const k of ['legFront', 'legHind']) {
           const q = loc(z[k]);
           expect(q.y, `${name} ${k}`).toBeGreaterThan(m.belly + 4);
-          expect(q.y, `${name} ${k}`).toBeLessThan(101.76 - 30);
+          expect(q.y, `${name} ${k}`).toBeLessThan(m.build.feet - 25);
         }
         // l'œil et la bouche dessinés sur leurs zones (tête agrandie selon le gabarit)
         const hd = { x: (sh.head.x - sh.bx) / (f * sh.s), y: (sh.head.y - sh.by) / sh.s };

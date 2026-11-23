@@ -75,6 +75,20 @@ function drops(sc, at, n, own, mat, geo) {
 
 // ---------------------------------------------------------------- 💨 séchage
 
+/**
+ * La robe mouillée selon la robe : plus foncée et luisante d'eau. Sur une robe claire (gris, blanc), un voile très
+ * lisse et à peine foncé ressemblait à une cire grise en plastique, et le mouillé se distinguait mal du sec : là, le
+ * poil mouillé est nettement plus sombre (on voit la peau foncée à travers) et le reflet plus mat.
+ */
+export function wetLook(coat = 0x8a5a2b) {
+  const c = new THREE.Color(coat);
+  const srgb = c.clone().convertLinearToSRGB();
+  const lum = 0.299 * srgb.r + 0.587 * srgb.g + 0.114 * srgb.b;
+  const k = clamp((lum - 0.35) / 0.45, 0, 1); // (0 : robe foncée ; 1 : robe blanche)
+  const dark = 0.42 - 0.12 * k;
+  return { base: [c.r * dark, c.g * (dark - 0.02), c.b * dark], alpha: 0.5 + 0.18 * k, roughness: 0.1 + 0.25 * k, env: 2.2 - 1.1 * k };
+}
+
 export function gdry3dGame(ctx) {
   const { a, t } = ctx;
   const { sc, keep, own, S, L, follow } = setup(ctx);
@@ -84,8 +98,7 @@ export function gdry3dGame(ctx) {
   const body = onBody(sc, F);
   // La robe mouillée : la couleur de sa robe, plus foncée, et luisante d'eau (un poil mouillé fonce et brille),
   // partout sauf la tête au départ (le bain l'a trempé de l'encolure aux sabots).
-  const coatCol = new THREE.Color(a?.look?.coat ?? 0x8a5a2b);
-  const wet = coatGloss(sc, own, { additive: false, base: [coatCol.r * 0.42, coatCol.g * 0.4, coatCol.b * 0.42], alpha: 0.5, roughness: 0.1, env: 2.2, over: 99 });
+  const wet = coatGloss(sc, own, { additive: false, over: 99, ...wetLook(a?.look?.coat) });
   const notHead = (() => {
     const q = v3();
     return (x, y, z) => {
@@ -112,6 +125,8 @@ export function gdry3dGame(ctx) {
     }
   }
   const wetNow = () => (cells.length ? cells.reduce((n, c) => n + c.wet, 0) / cells.length : 0);
+  /** Les coins encore mouillés, montrés à la serviette (au plus 14, les plus mouillés). */
+  const wetMarks = () => (tool === 'towel' && !ctx.done ? cells.filter((c) => c.wet > 0.12).sort((x, y) => y.wet - x.wet).slice(0, 14) : []);
   // Les outils : le couteau de chaleur (une lame d'alu courbe et sa poignée rouge), puis la serviette dans la main.
   const scraper = scraperModel(own);
   scraper.scale.setScalar(1.6 * Math.max(0.8, S));
@@ -195,7 +210,7 @@ export function gdry3dGame(ctx) {
   }
 
   return {
-    peek: () => ({ wet: wetNow(), tool, stress, peak, three: true }),
+    peek: () => ({ wet: wetNow(), tool, stress, peak, three: true, marks: wetMarks().map((c) => sc.project(c.p)) }),
     down(p) {
       last = null;
       stroke(p);
@@ -250,6 +265,11 @@ export function gdry3dGame(ctx) {
     },
     draw(g) {
       if (!sc.ready || ctx.done) return;
+      // à la serviette : des gouttes 💧 sur les coins encore mouillés (sinon on cherche les derniers longtemps)
+      for (const c of wetMarks()) {
+        const q = sc.project(c.p);
+        emoji(g, '💧', q.x, q.y, 14, 0, 0.75 + 0.25 * Math.sin(ctx.time * 5 + c.p.x * 40));
+      }
       // la jauge de peur, en haut à droite (comme le séchoir du jeu dessiné)
       const v = ctx.view;
       const x = v.x1 - 104;

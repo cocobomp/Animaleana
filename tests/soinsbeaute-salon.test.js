@@ -129,6 +129,42 @@ describe('séchage en 3D', () => {
     sc.dispose();
   }, 60000);
 
+  it('cheval gris : le mouillé est nettement plus sombre et plus mat ; à la serviette, des gouttes 💧 montrent les derniers coins mouillés, et les essuyer finit le séchage', () => {
+    // (la robe mouillée d'un gris : plus sombre qu'avant, et moins lisse qu'une cire)
+    const grey = groom3d.wetLook(0xd8d4cc);
+    const bay = groom3d.wetLook(0x5a3420);
+    expect(grey.roughness).toBeGreaterThanOrEqual(0.3);
+    expect(grey.alpha).toBeGreaterThan(bay.alpha);
+    expect(grey.env).toBeLessThan(bay.env);
+    const { a, sc } = makeStage({ breed: 'arabe' });
+    const ctx = salonCtx(a, sc);
+    const game = groom3d.gdry3dGame(ctx);
+    run(ctx, game, sc, 0.3);
+    expect(game.peek().marks.length).toBe(0); // (au racloir : pas de gouttes)
+    // le racloir sur le haut du flanc seulement : il en reste en bas
+    for (let i = 0; i < 12 && game.peek().tool === 'scraper'; i++) sweep(sc, game, ctx, { rows: 6, dir: -1 });
+    expect(game.peek().tool).toBe('towel');
+    let guard = 0;
+    while (!ctx.done && guard++ < 40) {
+      const marks = game.peek().marks;
+      expect(marks.length, `encore ${game.peek().wet.toFixed(3)}`).toBeGreaterThan(0);
+      // la serviette sur la goutte : un petit frottement
+      const p = marks[0];
+      ctx.pointer.down = true;
+      game.down(p);
+      for (let j = 0; j < 8; j++) {
+        game.move({ x: p.x + (j % 2 ? 12 : -12), y: p.y + (j % 3) * 3 }, true);
+        run(ctx, game, sc, 1 / 30, 1 / 30);
+      }
+      game.up();
+      ctx.pointer.down = false;
+    }
+    expect(ctx.done).toBe(true);
+    expect(game.peek().marks.length).toBe(0);
+    game.destroy();
+    sc.dispose();
+  }, 60000);
+
   it('le racloir sur la tête : il a peur (la note du salon le compte)', () => {
     const { a, sc } = makeStage({ breed: 'arabe' });
     const ctx = salonCtx(a, sc);

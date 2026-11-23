@@ -204,6 +204,32 @@ describe('vermifuge en 3D : la seringue au coin des lèvres, la grimace', () => 
   }
 });
 
+describe('vermifuge en 3D : la bonne dose se règle au doigt, même au bout de la règle', () => {
+  for (const breed of ['falabella', 'shetland', 'percheron']) {
+    it(`${breed} : la zone verte dans l'image, assez large pour un doigt, et la bague y va`, () => {
+      const { sc, ctx } = makeStage(breed);
+      ctx.opts = {};
+      const game = games.deworm(ctx);
+      run(ctx, game, sc, 0.5);
+      const s = game.peek();
+      const lo = s.doseAt(Math.max(dw.DOSE.min, s.doseLo));
+      const hi = s.doseAt(Math.min(dw.DOSE.max, s.doseHi));
+      for (const q of [lo, hi, ...s.ends]) expect(inView(q, ctx.view, 4), 'la règle et la zone verte dans l\'image').toBe(true);
+      expect(Math.hypot(hi.x - lo.x, hi.y - lo.y), 'la zone verte assez large pour un doigt').toBeGreaterThan(14);
+      // (le doigt pose la bague au milieu de la zone verte, même quand elle touche le bout de la règle)
+      const target = s.doseAt(Math.min(dw.DOSE.max, (Math.max(dw.DOSE.min, s.doseLo) + s.doseHi) / 2));
+      game.down(s.ringX);
+      for (let k = 1; k <= 8; k++) game.move({ x: s.ringX.x + ((target.x - s.ringX.x) * k) / 8, y: s.ringX.y + ((target.y - s.ringX.y) * k) / 8 });
+      game.up();
+      const d = game.peek().ring;
+      expect(d, `bague à ${d} kg pour ${s.kg} kg`).toBeGreaterThanOrEqual(s.doseLo);
+      expect(d).toBeLessThanOrEqual(s.doseHi);
+      game.destroy();
+      sc.dispose();
+    }, 90000);
+  }
+});
+
 describe('seller : la sangle, cadrée avec le nez et la croupe', () => {
   for (const breed of ['selle_francais', 'shetland', 'percheron', 'frison', 'falabella']) {
     it(`${breed} : le nez (avec de la marge) et la croupe dans l'image ; trop serrée, il tourne la tête vers la sangle et reste dans l'image`, () => {

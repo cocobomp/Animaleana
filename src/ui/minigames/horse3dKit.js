@@ -236,8 +236,13 @@ export function gluePoint(g, out) {
     gluedAt(g, out.p, g.remap);
     _tri.set(_gv[0], _gv[1], _gv[2]).getNormal(out.n);
     out.n.multiplyScalar(g.sign);
-    const up = _gt.sub(out.p).dot(out.n);
-    if (up > 0) out.p.addScaledVector(out.n, up);
+    // (la peau qui a bougé : sa hauteur au-dessus du point, moins ce qu'elle a glissé de côté — partie ailleurs,
+    // elle ne soulève plus la lanière ici)
+    const d = _gt.sub(out.p);
+    const up = d.dot(out.n);
+    const side = Math.sqrt(Math.max(0, d.lengthSq() - up * up));
+    const lift = up - 0.5 * side;
+    if (lift > 0) out.p.addScaledVector(out.n, lift);
     return out;
   }
   gluedAt(g, out.p, null);

@@ -215,6 +215,22 @@ describe('brider en 3D : le filet posé sur la peau, la tête toujours belle', (
       }
       c = strapsInside(sc, game);
       expect(c.bad / c.all, `trop serrée : ${c.bad}/${c.all} ${c.where}`).toBeLessThan(0.03);
+      {
+        // aucune lanière ne s'écarte de la peau (une lanière qui flotte se voit autant qu'une lanière dedans)
+        const far = {};
+        const st = game.straps();
+        for (const m of [st.crown, st.brow, st.nose, st.throat, ...st.cheeks].filter((x) => x?.visible)) {
+          m.updateWorldMatrix(true, false);
+          const line = m.userData.line;
+          let worst = 0;
+          for (let i = 1; i < line.length - 1; i++) worst = Math.max(worst, dist(line[i].clone().applyMatrix4(m.matrixWorld)));
+          far[m.name] = Math.max(far[m.name] ?? 0, worst);
+        }
+        // (la têtière : la nuque se plie quand il relève la tête, et la jonction sous l'oreille est une boucle — un
+        // peu plus de jeu ; le reste reste plaqué)
+        const most = { 'bridle-crown': 0.045, 'bridle-throat': 0.03, 'bridle-brow': 0.015, 'bridle-nose': 0.015, 'bridle-cheek': 0.02 };
+        for (const k in far) expect(far[k], `${k} : à ${(far[k] * 1000).toFixed(0)} mm de la peau au plus`).toBeLessThan(most[k]);
+      }
       // la sous-gorge passe SOUS la gorge : son milieu est plus bas que le coin des lèvres... et derrière la ganache
       const mid = P.p[Math.floor(P.p.length / 2)];
       expect(mid.y, 'sous la gorge').toBeLessThan(-sc.model.dims.hr * 2);

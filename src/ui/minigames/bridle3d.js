@@ -284,6 +284,8 @@ export function bridle3dGame(ctx) {
       const ang = ((20 + (140 * i) / 8) * Math.PI) / 180;
       return [v3(0, hr * 0.15, earZ + hr * 0.3), v3(Math.cos(ang), Math.sin(ang), 0)];
     }), 0.006, { keepEnds: false });
+    // (le frontal, devant les oreilles, sur la peau de leur base qui avance quand il les couche : il la suit)
+    for (const g of P.brow.glue) if (g) g.remap = null;
     // (le frontal de notre côté vers le leur : du même sens que la têtière)
     P.brow.p.reverse();
     P.brow.n.reverse();

@@ -625,6 +625,9 @@ class BeautySession extends Session {
     // chemin de l'aller, et le cheval, mené à 1,1 m à droite de l'enfant, passait à travers)
     const flags = flagPair(FLAG_WIDTH, t('actv_finish'));
     this.flags = this.put(flags, this.back.x, this.back.z, Math.PI / 2);
+    // (montrés seulement pour le retour au trot, qu'ils marquent : à l'aller, la caméra de côté passait derrière eux,
+    // un poteau coupait l'enfant et son cheval, et on lisait « Arrivée » à l'envers en gros plan)
+    flags.visible = false;
     const tbl = new THREE.Group();
     const top = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 1.0), mat(0xf6f4ee, 0.8));
     top.position.y = this.tableTop;
@@ -784,6 +787,7 @@ class BeautySession extends Session {
     this.hud.setGauge(null);
     this.hud.setMain(null);
     const a = this.animal;
+    if (this.flags) this.flags.visible = this.phase === 'trot';
     switch (this.phase) {
       case 'walk':
         this.hud.big(t('beauty_step_walk'), 1200);
@@ -1121,10 +1125,6 @@ class BeautySession extends Session {
     this.game.rig.focus = { shot: beautyShot(e, 'judge', (this.shotAt ??= new THREE.Vector3()), this.game.camera.aspect) };
   }
 
-  updatePodium(dt) {
-    const pl = this.game.player;
-    this.holdPlayer(this.hold.x, this.hold.z, 0);
-    // (photo : la caméra cadre l'animal sur sa marche, de face, à 2,5 m environ — il restait petit et loin, derrière la
   /** Le plan du podium (rig.focus.shot) : un cheval et l'enfant sur sa marche (beautyPodiumShot), sinon l'animal sur sa marche. */
   podiumShot() {
     const e = this.e;
@@ -1134,6 +1134,10 @@ class BeautySession extends Session {
     return { at: at.set(e.position.x, e.position.y + 0.4 * sc, e.position.z), heading: e.heading, dist: 1.1 + 1.4 * sc, yaw: 0.12, pitch: 0.16 };
   }
 
+  updatePodium(dt) {
+    const pl = this.game.player;
+    this.holdPlayer(this.hold.x, this.hold.z, 0);
+    // (photo : la caméra cadre l'animal sur sa marche, de face, à 2,5 m environ — il restait petit et loin, derrière la
     // joueuse)
     // Un cheval : de trois quarts (beautyShot, 'podium'), la tête, le corps et l'enfant dans l'image (visé à 0,4 m et
     // à 2,5 m, la photo de l'album ne montrait que ses pattes).
@@ -1199,11 +1203,11 @@ class BeautySession extends Session {
     const g = this.game;
     const cam = g.camera;
     const fov = cam.fov;
+    let saved = null;
     try {
       const src = g.renderer.domElement;
       const c = document.createElement('canvas');
       c.width = 192;
-    let saved = null;
       c.height = 120;
       const ctx = c.getContext('2d');
       const ratio = c.width / c.height;
@@ -1220,10 +1224,6 @@ class BeautySession extends Session {
         cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
         cam.updateProjectionMatrix();
       }
-      renderForPhoto(g);
-      ctx.drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, c.width, c.height);
-      const d = activityData(g.profile);
-      d.photos.push({ sight: 'podium', day: g.day, place: g.profile.place, data: c.toDataURL('image/jpeg', 0.7) });
       // (la caméra à la place exacte du plan, même si elle n'y est pas encore arrivée : téléphone lent)
       if (this.e) {
         const shot = this.podiumShot();
@@ -1232,6 +1232,10 @@ class BeautySession extends Session {
         cam.lookAt(shot.at);
         cam.updateMatrixWorld(true);
       }
+      renderForPhoto(g);
+      ctx.drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+      const d = activityData(g.profile);
+      d.photos.push({ sight: 'podium', day: g.day, place: g.profile.place, data: c.toDataURL('image/jpeg', 0.7) });
       if (d.photos.length > 24) d.photos.shift();
       addStat(g.profile, 'actvPhotos');
       g.ui.toast(t('actv_photoTaken', { what: t('beauty_sight_podium') }), 3000);
@@ -1242,15 +1246,15 @@ class BeautySession extends Session {
         cam.fov = fov;
         cam.updateProjectionMatrix();
       }
-    }
-  }
-
-  cleanup() {
       if (saved) {
         cam.position.copy(saved.p);
         cam.quaternion.copy(saved.q);
         cam.updateMatrixWorld(true);
       }
+    }
+  }
+
+  cleanup() {
     this.releaseArms();
     this.game.rig.frameWith = null;
     this.game.rig.occluders = null;

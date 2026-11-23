@@ -33,6 +33,7 @@ Object.assign(CARE3D_ACTIONS, { sheep: ['feed', 'water', 'treat', 'pet', 'brush'
 // Chiens, chats, lapins : leur scène (petStage.js) et leurs soins en 3D (petWhich.js).
 for (const s of Object.keys(PET_CARE3D_ACTIONS)) CARE3D_SPECIES.add(s);
 Object.assign(CARE3D_ACTIONS, PET_CARE3D_ACTIONS);
+CARE3D_ACTIONS.horse.push('lunge', 'liberty'); // (longe et liberté dans le rond de longe : lunge3d.js, roundPen.js)
 
 /** Ce soin a-t-il un jeu 3D pour cette espèce ? */
 export const care3dWanted = (a, action) => !!CARE3D_ACTIONS[a?.species]?.includes(action);

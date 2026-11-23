@@ -11,10 +11,16 @@
 
 import { drawHorseTop, drawPersonTop, rrect, circle, emoji, label, fillView, clamp, lerp, dist } from './draw.js';
 import { tOr } from './clean.js';
+import { stageLook, growthScale, lifeStage } from '../../sim/animal.js';
 
 const C = { x: 200, y: 158 };
 const ARENA = 126;
 const PATH = 102;
+/**
+ * Le manège du jeu dessiné : centre, rayon du bord, rayon de la piste (espace du cadre). La longe et la liberté en 3D
+ * (lunge3d.js) posent ce plan sur le sable du rond de longe : la piste PATH tombe sur la piste du rond.
+ */
+export const ARENA_PLAN = { x: C.x, y: C.y, arena: ARENA, path: PATH };
 
 /** Anneau « juste ce qu'il faut » autour du manège : centre, rayon, épaisseur du trait le plus large. */
 export const WORK_RING = { x: C.x, y: C.y, r: ARENA + 12, width: 16 };
@@ -77,13 +83,44 @@ function drawWorkRing(g, value, lo, hi, max) {
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
+/**
+ * Taille du cheval vu de dessus : celle de sa race et de son âge (a.look.scale × growthScale), resserrée pour qu'un
+ * Falabella ou un poulain restent lisibles, et un peu plus grand qu'avant (1,22 pour un selle français : sa tête se lit),
+ * sans qu'un percheron sorte de la piste.
+ */
+export function topScale(a) {
+  let k = (a?.look?.scale ?? 1) * (a?.species ? growthScale(a) : 1);
+  if (!Number.isFinite(k)) k = a?.look?.scale ?? 1;
+  return clamp(0.4 + 0.82 * k, 0.74, 1.3);
+}
+
+/** Le cheval à dessiner de dessus : sa robe à son âge (poulain : stageLook), et sa taille. */
+function topHorse(a) {
+  let look = a?.look;
+  try {
+    look = stageLook(a) ?? look;
+  } catch {
+    /* pas d'âge connu : la robe telle quelle */
+  }
+  return { a: { ...a, look }, s: topScale(a) };
+}
+
 // ---------------------------------------------------------------- longe
 
-const GAITS = { walk: [12, 38], trot: [38, 66], canter: [66, 92] };
+/** Les bandes de vitesse (0 à 100) de chaque allure à la longe. */
+export const GAITS = { walk: [12, 38], trot: [38, 66], canter: [66, 92] };
 
 export function lungeGame(ctx) {
   const { a, t, fx } = ctx;
-  const steps = ['walk', 'trot', 'canter', 'trot'];
+  const top = topHorse(a);
+  // (un poulain ne se longe pas au galop : ses articulations sont encore tendres ; on lui demande le pas et le trot)
+  let young = false;
+  try {
+    young = lifeStage(a) === 'baby';
+  } catch {
+    young = false;
+  }
+  const steps = young ? ['walk', 'trot', 'walk', 'trot'] : ['walk', 'trot', 'canter', 'trot'];
   const NEED = 3; // secondes à la bonne allure avant de passer à la suivante
   // « Juste ce qu'il faut » : le travail (secondes à la bonne allure) doit s'arrêter entre
   // LO et HI ; à MAX, le cheval n'en peut plus et c'est fini (trop).
@@ -113,7 +150,7 @@ export function lungeGame(ctx) {
   function slow() { if (!ctx.done) v = Math.max(0, v - 13); }
   function fast() {
     if (ctx.done) return;
-    v = Math.min(100, v + 13);
+    v = Math.min(young ? GAITS.trot[1] - 4 : 100, v + 13);
     whip = 0.5;
   }
 
@@ -133,7 +170,7 @@ export function lungeGame(ctx) {
   }
 
   return {
-    peek: () => ({ v, gait: gait(), step, value: work, lo: LO, hi: HI, max: MAX, gaits: GAITS }),
+    peek: () => ({ v, gait: gait(), step, value: work, lo: LO, hi: HI, max: MAX, gaits: GAITS, theta }),
     destroy() { unstack?.(); },
     // Toucher le manège : au centre, doucement ; ailleurs, allez ! (pas sur la jauge des allures).
     down(p) { if (p.y > GAIT_GAUGE.top) return; if (dist(p.x, p.y, C.x, C.y) < 60) slow(); else fast(); },
@@ -152,7 +189,7 @@ export function lungeGame(ctx) {
         natT -= dt;
         if (natT <= 0) {
           natT = 2 + ctx.rng() * 2.5;
-          natural = clamp(20 + ctx.rng() * 60 + lazy, 8, 95);
+          natural = clamp(20 + ctx.rng() * 60 + lazy, 8, young ? 58 : 95);
         }
         v += (natural - v) * 0.3 * dt;
         const [lo, hi] = GAITS[gait()];
@@ -201,7 +238,7 @@ export function lungeGame(ctx) {
       const hy = C.y + Math.sin(theta) * PATH;
       const dir = theta + Math.PI / 2;
       // longe
-      const head = { x: hx + Math.cos(dir) * 50, y: hy + Math.sin(dir) * 50 };
+      const head = { x: hx + Math.cos(dir) * 49 * top.s, y: hy + Math.sin(dir) * 49 * top.s };
       g.strokeStyle = '#3c7bd9';
       g.lineWidth = 3;
       g.beginPath();
@@ -217,7 +254,7 @@ export function lungeGame(ctx) {
       g.moveTo(C.x, C.y);
       g.lineTo(C.x + Math.cos(wa) * (60 + whip * 30), C.y + Math.sin(wa) * (60 + whip * 30));
       g.stroke();
-      drawHorseTop(g, a, hx, hy, dir, 1, legs);
+      drawHorseTop(g, top.a, hx, hy, dir, top.s, legs);
       drawPersonTop(g, C.x, C.y, ang, 1);
       if (whip > 0) emoji(g, '✨', C.x + Math.cos(wa) * 90, C.y + Math.sin(wa) * 90, 20);
       if (ctx.done && work >= MAX) emoji(g, '💨', hx + 24, hy - 24, 22);
@@ -252,8 +289,16 @@ function stopOnOwnRow(btn) {
   return () => mq.removeEventListener?.('change', apply);
 }
 
-function drawGaitGauge(g, t, v, target, done) {
-  const { x0, y0, w, top, bottom } = GAIT_GAUGE;
+/**
+ * La jauge des allures (pas, trot, galop) et le 🐴 à la vitesse v. dy : décalage vers le bas (la longe en 3D la pose
+ * au bas de la scène, plus haute que le cadre dessiné).
+ */
+export function drawGaitGauge(g, t, v, target, done, dy = 0) {
+  const { x0, w, top, bottom } = GAIT_GAUGE;
+  const y0 = GAIT_GAUGE.y0 + dy;
+  if (dy) g.save();
+  if (dy) g.translate(0, dy);
+  const yb = GAIT_GAUGE.y0;
   g.fillStyle = 'rgba(255,255,255,0.9)';
   rrect(g, x0 - 10, top, w + 20, bottom - top, 16);
   g.fill();
@@ -262,18 +307,21 @@ function drawGaitGauge(g, t, v, target, done) {
     const xb = x0 + (hi / 100) * w;
     const on = id === target && !done;
     g.fillStyle = on ? '#3fae62' : '#dfe8e2';
-    rrect(g, xa + 2, y0 - 8, xb - xa - 4, 16, 8);
+    rrect(g, xa + 2, yb - 8, xb - xa - 4, 16, 8);
     g.fill();
     // 14 px du cadre : environ 12 px à l'écran sur un téléphone de 360 px (12 px du cadre y faisait moins de 10 px).
-    label(g, t(`mg_gait_${id}`), (xa + xb) / 2, y0 + 18, GAIT_LABEL_SIZE, on ? '#1e7a40' : '#66746c');
+    label(g, t(`mg_gait_${id}`), (xa + xb) / 2, yb + 18, GAIT_LABEL_SIZE, on ? '#1e7a40' : '#66746c');
   }
-  emoji(g, '🐴', x0 + (clamp(v, 0, 100) / 100) * w, y0 - 4, 24);
+  emoji(g, '🐴', x0 + (clamp(v, 0, 100) / 100) * w, yb - 4, 24);
+  if (dy) g.restore();
+  return y0;
 }
 
 // ---------------------------------------------------------------- liberté
 
 export function libertyGame(ctx) {
   const { a, t, fx } = ctx;
+  const top = topHorse(a);
   // « Juste ce qu'il faut » : la pression (secondes où le cheval avance parce que tu es
   // derrière lui) doit s'arrêter entre LO et HI avant de l'appeler ; à MAX il est épuisé.
   // Trop près de lui (moins de CLOSE px), il se presse : la pression compte double.
@@ -427,7 +475,7 @@ export function libertyGame(ctx) {
         g.restore();
       }
       const heading = join ? Math.atan2(me.y - hp.y, me.x - hp.x) : theta + (dirSign * Math.PI) / 2;
-      drawHorseTop(g, a, hp.x, hp.y, heading, 1, legs);
+      drawHorseTop(g, top.a, hp.x, hp.y, heading, top.s, legs);
       const meDir = Math.atan2(hp.y - me.y, hp.x - me.x);
       drawPersonTop(g, me.x, me.y, meDir, 1);
       if (phase === 'drive' && drive >= LO) {

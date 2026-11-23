@@ -22,6 +22,7 @@ import { groomBackground, dialX, drawBrush, justRule, dustPatches } from './groo
 import { justOutcome } from './score.js';
 import { nbsp } from './frame.js';
 import { LEG_MUD } from '../../sim/legMud.js'; // 🧦 ses chaussettes de boue
+import { drawHorseVet } from '../vetHorse.js'; // (le cheval dessiné du vétérinaire : sa race, sa robe, ses marques)
 
 export const PANSAGE_STAGES = ['curry', 'brush', 'hoof', 'comb'];
 /** Les pieds, dans l'ordre où on les cure (on fait le tour du cheval). */
@@ -464,7 +465,8 @@ export function pansageGame(ctx) {
       if (st === 'hoof' && pause <= 0) drawHoofScene(g, ctx, hooves[foot], foot, Math.max(0, 1 - (ctx.time - footAt) / 0.35), ctx.time - pokeAt < 0.5 ? 1 - (ctx.time - pokeAt) / 0.5 : 0);
       else {
         groomBackground(g, ctx, floorY);
-        drawAnimal(g, a, {
+        // (le cheval : le dessin du vétérinaire, même géométrie : les taches et la boue restent sur lui)
+        (a.species === 'horse' ? drawHorseVet : drawAnimal)(g, a, {
           x: fit.x, y: floorY, s, f: 1, time: ctx.time,
           happy: zone === 'just' && annoyed <= 0, wag: ctx.done && zone !== 'high',
           earsBack: annoyed > 0 || zone === 'high', shake: annoyed > 0 && ctx.pointer.down ? 0.4 : 0,

@@ -52,6 +52,8 @@ afterAll(() => {
 const BREEDS = ['selle_francais', 'frison', 'shetland', 'falabella', 'percheron', 'appaloosa'];
 const PORTRAIT = [358, 520];
 const LANDSCAPE = [520, 300];
+/** Liberté au téléphone : le cheval, du nez à la queue, au moins (px CSS ; 35 à 66 avec la caméra fixe du premier passage). */
+const MIN_FREE = 100;
 
 function makeStage({ breed = 'selle_francais', foal = false, size = PORTRAIT, gear = { halter: { item: 'halter', color: 'red' } } } = {}) {
   const a = animalMod.createAnimal({ species: 'horse', breed, colorIndex: 0, ageDays: foal ? 7 : 900, seed: 77 });
@@ -413,6 +415,7 @@ describe('liberté en 3D : le doigt sur le sable, la même note que le jeu dessi
       expect(game.peek().kid3d.distanceTo(sc.pen.toWorld(250, 120))).toBeLessThan(0.25);
       // on le pousse : il galope (petit galop), puis, serré de trop près, il s'emballe
       let maxGait = 'idle';
+      let minLen = Infinity;
       const rank = { idle: 0, walk: 1, trot: 2, canter: 3, gallop: 4 };
       for (let k = 0; k < 30 * 4; k++) {
         const s = game.peek();
@@ -420,7 +423,17 @@ describe('liberté en 3D : le doigt sur le sable, la même note que le jeu dessi
         game.move({ ...sc.project(sc.pen.toWorld(200 + Math.cos(a) * 64, 158 + Math.sin(a) * 64)), type: 'touch' }, true);
         step(ctx, game, sc);
         if (rank[game.peek().gait3d] > rank[maxGait]) maxGait = game.peek().gait3d;
+        if (k > 45 && k % 10 === 0) {
+          // (la caméra le suit : grand dans l'image, la tête comprise ; avant cette reprise, tout le rond de loin)
+          sc.holder.updateMatrixWorld(true);
+          const a2 = sc.project(sc.live('muzzle'));
+          const b2 = sc.project(sc.model.tail.getWorldPosition(new THREE.Vector3()));
+          minLen = Math.min(minLen, Math.hypot(a2.x - b2.x, a2.y - b2.y) * st.view.scale);
+          for (const Q of [sc.live('muzzle'), sc.live('forehead')]) if (!inView(sc.project(Q), st.view)) out++;
+        }
       }
+      if (process.env.SLIP_LOG) console.log(breed, 'liberté, longueur min', minLen.toFixed(0));
+      expect(minLen).toBeGreaterThan(MIN_FREE);
       expect(maxGait).toBe('canter');
       expect(game.peek().maxSlide).toBeLessThan(0.15 * sc.double.scale);
       expect(out).toBe(0);

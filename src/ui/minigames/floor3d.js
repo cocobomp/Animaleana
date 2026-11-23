@@ -361,12 +361,25 @@ export function floorGame3d(ctx, make, o) {
     return p.x > x0 - m && p.x < x1 + m && p.y > y0 - m && p.y < y1 + m;
   }
 
+  /** Le compteur du crottin : en bas à gauche (sur l'allée, devant nous). */
+  const counterBox = () => ({ x: ctx.view.x0 + 8, y: ctx.view.y1 - 46, w: 72, h: 30 });
+
   // ---------------------------------------------------------------- caméra
   function frame(now = false) {
     const pts = [toWorld(F.x, F.y, 0), toWorld(F.x + F.w, F.y, 0), toWorld(F.x, F.y + F.h, 0), toWorld(F.x + F.w, F.y + F.h, 0)];
     if (barrow) pts.push(barrow.group.localToWorld(barrow.mouth.clone().add(v3(0.32, 0, 0))), barrow.group.localToWorld(v3(-0.32, 0.6, 0)), barrow.group.localToWorld(v3(0, 0.45, 0.9)));
     if (bale) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(bale.group.localToWorld(v3(x * bale.w / 2, bale.h, z * bale.d / 2)));
-    if (horse) pts.push(sc.marks.withers, sc.marks.croup, sc.marks.poll, sc.marks.muzzle);
+    // (le cheval mange au filet à foin, au fond : son museau tel qu'il est et le filet, avec de la marge — avant, les
+    // repères de la photo, le bout du nez sortait de l'image)
+    if (horse) {
+      pts.push(sc.marks.withers, sc.marks.croup, sc.marks.poll, sc.marks.muzzle, sc.live('muzzle'), sc.live('poll'));
+      const net = sc.decor.props?.net?.group;
+      if (net) {
+        net.updateWorldMatrix(true, false);
+        const c = net.getWorldPosition(v3());
+        pts.push(c.clone().add(v3(0.15, 0.2, 0)), c.clone().add(v3(-0.15, -0.25, 0)));
+      }
+    }
     // (en portrait, l'image est plus haute que le sol : on y met le mur du fond et sa fenêtre, plutôt que 20 à 25 %
     // de béton vide sous le box)
     if (sc.size.h > sc.size.w * 1.15) pts.push(v3(-S.halfW, 1.45, S.back), v3(S.halfW, 1.45, S.back));
@@ -393,6 +406,9 @@ export function floorGame3d(ctx, make, o) {
       const s = play.peek();
       return {
         ...s,
+        /** (tests) la place du compteur (cadre) et la tête du cheval (points du cadre) */
+        counter: counterBox(),
+        headPts: horse ? [sc.live('muzzle'), sc.live('poll'), ...(sc.model.ears ?? []).map((e) => e.localToWorld(v3(0, 0.1, 0)))].map((p) => sc.project(p)) : [],
         /** (tests et captures) un point du sol de la logique → l'espace du cadre */
         screen: (x, y) => sc.project(toWorld(x, y)),
         itemsScreen: (s.items ?? []).map((it) => ({ ...sc.project(toWorld(it.x, it.y, 0.04)), good: it.good })),
@@ -526,10 +542,14 @@ export function floorGame3d(ctx, make, o) {
         g.restore();
       }
       // (à gauche, sur le mur : à droite, ils couvraient la tête du cheval et la mangeoire, et la flèche de la botte
-      // cachait le pourcentage)
+      // cachait le pourcentage ; le compteur du crottin, lui, va en bas à gauche, sur l'allée : en haut, il tombait
+      // sur la tête du cheval qui mange au fond)
       const tx = v.x0 + 44;
       const ty = v.y0 + 16;
       if (s.phase === 'pick' || (s.phase === undefined && !cells)) {
+        const cb = counterBox();
+        const tx = cb.x + 36;
+        const ty = cb.y;
         g.save();
         g.fillStyle = 'rgba(255,255,255,0.88)';
         rrect(g, tx - 36, ty, 72, 30, 15);

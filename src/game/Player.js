@@ -1066,7 +1066,7 @@ export const RIDER_TOP = 1.05;
  * TrailView) : avec 60°, on ne voyait que la nuque et deux oreilles géantes. On voit les oreilles, le toupet, la
  * crinière et les rênes en bas de l'écran, le chemin au-dessus.
  */
-export const RIDE_FP = { eye: 0.85, ahead: -0.1, down: -0.35, downMax: -0.5, fovTall: 80 };
+export const RIDE_FP = { eye: 0.85, ahead: -0.1, down: -0.35, downMax: -0.72, fovTall: 80 };
 /**
  * Un cheval qui suit la joueuse (« Me suivre ») ou qu'elle mène en main : il marche derrière elle, entre elle et la
  * caméra (on ne voyait que sa tête géante, coupée en bas, ou rien). La caméra se met de côté (az rad, à droite), vise

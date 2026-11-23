@@ -195,7 +195,7 @@ describe('👀 vue de la selle (1re personne)', () => {
     expect(p.avatar.root.visible).toBe(true);
   });
 
-  it('un petit poney : le regard plus baissé (sa tête est bien plus bas), les oreilles dans l\'image', () => {
+  it('un petit poney : le regard plus baissé (sa tête est bien plus bas), les oreilles au-dessus des boutons du bas', () => {
     const h = HORSES.shetland;
     const { cam, rig, p } = settle(h, PORTRAIT);
     rig.mode = 'first';
@@ -205,7 +205,8 @@ describe('👀 vue de la selle (1re personne)', () => {
     for (const q of h.walk.slice(0, 2)) {
       const s = V(...q).project(cam);
       expect(Math.abs(s.x)).toBeLessThan(0.8);
-      expect(s.y).toBeGreaterThan(-0.85);
+      // (« Descendre » et le joystick occupent le quart du bas de l'écran : y < −0,45)
+      expect(s.y).toBeGreaterThan(-0.4);
     }
   });
 

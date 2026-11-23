@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { withLogic } from './care3d.js';
 import { finishGame, cutGame } from './groomer.js';
 import { groomTool } from '../../game/care/props.js';
+import { softDot } from '../../game/care/textures.js';
 import { ACC_COLORS } from '../../sim/groomer.js';
 import { coatGloss, bodyFrame, bodyTo2d, clothHand, handOnCoat, crestBraids } from './beauty3d.js';
 import { headShape, headFollow } from './headFrame.js';
@@ -551,8 +552,8 @@ export function gfinish3dGame(ctx) {
   const play = withLogic(ctx, finishGame, () => sc.project(fxAt ?? L.poll.clone().lerp(L.withers, 0.4)), { hints });
   const sh = play.shape;
   const B = crestBraids(sc, own, { mane: a?.look?.mane ?? a?.look?.secondary ?? 0x4a2f1d, sections: 3 });
-  // (le parfum : un petit nuage blanc qui s'envole)
-  const puffMat = own(new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false }));
+  // (le parfum : un petit nuage blanc et rond qui s'envole — une tache douce, pas un carré plat)
+  const puffMat = own(new THREE.SpriteMaterial({ map: own(softDot('255,255,255')), color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false }));
   // Cadrage : l'encolure et la crête (les tresses), la tête, de trois quarts.
   const neckPts = () => [L.withers, L.poll, ...L.ears, L.muzzle, L.chest, L.withers.clone().add(v3(-0.25 * S, -0.1 * S, 0)), L.neck.clone().add(v3(0, -0.35 * S, 0))];
   const follow = headFollow(sc, headShape(sc), neckPts, { dir: [0.35, 0.25, 1], pad: 1.25, half: 0.5, reach: 0.1 });

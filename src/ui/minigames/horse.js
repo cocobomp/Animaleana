@@ -85,12 +85,13 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 /**
  * Taille du cheval vu de dessus : celle de sa race et de son âge (a.look.scale × growthScale), resserrée pour qu'un
- * Falabella ou un poulain restent lisibles (0,67 et 0,77 d'un selle français) et qu'un percheron tienne sur la piste.
+ * Falabella ou un poulain restent lisibles, et un peu plus grand qu'avant (1,22 pour un selle français : sa tête se lit),
+ * sans qu'un percheron sorte de la piste.
  */
 export function topScale(a) {
   let k = (a?.look?.scale ?? 1) * (a?.species ? growthScale(a) : 1);
   if (!Number.isFinite(k)) k = a?.look?.scale ?? 1;
-  return clamp(0.32 + 0.7 * k, 0.62, 1.12);
+  return clamp(0.4 + 0.82 * k, 0.74, 1.3);
 }
 
 /** Le cheval à dessiner de dessus : sa robe à son âge (poulain : stageLook), et sa taille. */

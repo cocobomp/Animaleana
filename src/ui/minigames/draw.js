@@ -1010,7 +1010,7 @@ export function drawHorseTop(g, a, x, y, dir, s = 1, phase = 0) {
   const bl = 28 * (b.back ?? 1); // demi-longueur du tronc
   const bw = 13 * (b.girth ?? 1); // demi-largeur du tronc (aux côtes)
   const nk = 15 * (b.neck ?? 1); // encolure (du garrot à la nuque)
-  const hl = 18.5 * (b.head ?? 1); // tête (de la nuque au bout du nez)
+  const hl = 20 * (b.head ?? 1); // tête (de la nuque au bout du nez ; un peu grande, pour qu'on la lise de loin)
   const nw = 0.6 * bw * (b.neckW ?? 1); // demi-largeur de l'encolure à sa base
   const xp = bl * 0.92 + nk; // la nuque
   g.save();

@@ -100,8 +100,8 @@ describe('longe et liberté dessinées (sans 3D) : le cheval vu de dessus à sa 
     expect(fala).toBeLessThan(sf - 0.25);
     expect(foal).toBeLessThan(sf - 0.15);
     expect(perch).toBeGreaterThan(sf);
-    expect(fala).toBeGreaterThanOrEqual(0.62);
+    expect(fala).toBeGreaterThanOrEqual(0.74);
     // (sans âge connu, dans un essai : la taille de la race)
-    expect(horse.topScale({ species: 'horse', look: { seed: 3 } })).toBeCloseTo(1.02, 6);
+    expect(horse.topScale({ species: 'horse', look: { seed: 3 } })).toBeCloseTo(1.22, 6);
   });
 });

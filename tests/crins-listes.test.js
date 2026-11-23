@@ -35,3 +35,67 @@ describe('cartes des listes : la vignette du vrai animal', () => {
     expect(css).toMatch(/\.list-thumb \{ width: 64px; height: 48px;/);
   });
 });
+
+// Comportement (reprise) : ce que listPic demande vraiment à la file des vignettes, avec un jeu factice qui note les
+// demandes (sans WebGL), et un document minimal pour l'emoji de repli.
+import { listPic, animalThumbSpec } from '../src/ui/animalPic.js';
+import { createAnimal, lifeStage } from '../src/sim/animal.js';
+
+describe('listPic : la vignette demandée pour chaque animal', () => {
+  const fakeGame = () => {
+    const calls = [];
+    return { calls, thumbs: { view: (spec, opts) => (calls.push({ spec, opts }), { thumb: true, spec, opts }) } };
+  };
+  const withDocument = (fn) => {
+    const had = 'document' in globalThis;
+    const prev = globalThis.document;
+    const prevNode = globalThis.Node;
+    class FakeNode {}
+    globalThis.Node = FakeNode;
+    globalThis.document = {
+      createElement: (tag) => Object.assign(new FakeNode(), { tag, className: '', children: [], attrs: {}, append(...c) { this.children.push(...c); }, setAttribute(k, v) { this.attrs[k] = v; } }),
+      createTextNode: (text) => Object.assign(new FakeNode(), { text }),
+    };
+    try {
+      return fn();
+    } finally {
+      if (had) globalThis.document = prev;
+      else delete globalThis.document;
+      globalThis.Node = prevNode;
+    }
+  };
+
+  it('deux chevaux de races et de robes différentes : deux vignettes différentes, à leur race, leur robe et leur âge', () => {
+    const g = fakeGame();
+    const a = createAnimal({ species: 'horse', breed: 'selle_francais', colorIndex: 1, ageDays: 900, seed: 3 });
+    const b = createAnimal({ species: 'horse', breed: 'frison', colorIndex: 0, ageDays: 1, seed: 4 });
+    listPic(g, a);
+    listPic(g, b);
+    expect(g.calls).toHaveLength(2);
+    const [ca, cb] = g.calls;
+    expect(ca.spec).toMatchObject({ kind: 'animal', species: 'horse', breed: 'selle_francais', colorIndex: 1, sex: a.sex, seed: a.look.seed });
+    expect(cb.spec).toMatchObject({ kind: 'animal', species: 'horse', breed: 'frison', colorIndex: 0, stage: lifeStage(b) });
+    expect(cb.spec.stage).not.toBe(ca.spec.stage);
+    // (64 × 48 pixels affichés, classe des cartes de liste, l'emoji en attendant l'image)
+    expect(ca.opts).toMatchObject({ w: 64, h: 48, cls: 'list-thumb', emoji: '🐴' });
+  });
+
+  it('toutes les espèces en profitent (chien, chat, lapin)', () => {
+    const g = fakeGame();
+    for (const species of ['dog', 'cat', 'rabbit']) listPic(g, createAnimal({ species, colorIndex: 0, ageDays: 400, seed: 5 }));
+    expect(g.calls.map((c) => c.spec.species)).toEqual(['dog', 'cat', 'rabbit']);
+  });
+
+  it('robe hors du catalogue de la race (croisement) ou pas de jeu : l\'emoji de l\'espèce, aucune vignette demandée', () => {
+    const g = fakeGame();
+    const a = createAnimal({ species: 'horse', breed: 'arabe', colorIndex: 0, ageDays: 900, seed: 6 });
+    const odd = { ...a, look: { ...a.look, coat: 0x123456 } };
+    expect(animalThumbSpec(odd)).toBeNull();
+    const el = withDocument(() => listPic(g, odd));
+    expect(g.calls).toHaveLength(0);
+    expect(el.className).toBe('card-emoji list-thumb');
+    expect(el.children[0].text).toBe('🐴');
+    const el2 = withDocument(() => listPic(null, a));
+    expect(el2.className).toBe('card-emoji list-thumb');
+  });
+});

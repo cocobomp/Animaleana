@@ -157,15 +157,42 @@ describe('vermifuge en 3D : la seringue au coin des lèvres, la grimace', () => 
       game.up();
       expect(pasteSeen, 'la pâte blanche au coin des lèvres').toBe(true);
       let tongue = 0;
+      let tongueChecked = 0;
+      // (le pli des lèvres sur le côté : au-dessus de la racine, la lèvre du haut est plus large que celle du bas)
+      const head = sc.model.head;
+      const hr = sc.model.dims.hr;
+      const base = game.peek().tongueBase;
+      kit.bakeSkin(sc);
+      const sideAt = (dy) => {
+        const o = head.localToWorld(new THREE.Vector3(-0.6, base.y + dy, base.z));
+        const e = head.localToWorld(new THREE.Vector3(0.6, base.y + dy, base.z));
+        const h = sc.proxy.hitAll(new THREE.Ray(o, e.sub(o).normalize()))[0];
+        return h ? -head.worldToLocal(h.point.clone()).x : 0;
+      };
+      expect(sideAt(hr * 0.1) - Math.min(sideAt(0), sideAt(-hr * 0.06)), 'la racine de la langue sur le pli des lèvres').toBeGreaterThan(hr * 0.08);
       for (let i = 0; i < 60; i++) {
         run(ctx, game, sc, 0.1);
         const p = game.peek();
         if (p.tongueShown) {
           tongue += 0.1;
           expect(inView(p.tongueTip, ctx.view), 'la langue dans l\'image').toBe(true);
+          // elle sort d'ENTRE les lèvres : sa racine est sur le pli des lèvres (la lèvre du haut déborde au-dessus,
+          // la lèvre du bas est en retrait dessous), elle pend vers le bas, hors de la peau, assez grande pour se voir
+          if (p.tongueWorld && i % 5 === 0) {
+            tongueChecked++;
+            const [root, mid, tip] = p.tongueWorld;
+            expect(root.y - tip.y, 'la langue pend vers le bas').toBeGreaterThan(0.4 * root.distanceTo(tip));
+            const d = skinDistance(sc);
+            expect(d(mid), 'le milieu de la langue hors de la peau').toBeGreaterThan(0);
+            expect(d(tip), 'le bout de la langue hors de la peau').toBeGreaterThan(0.004);
+            const a2 = sc.project(root);
+            const b2 = sc.project(tip);
+            if (tongue > 0.6) expect(Math.hypot(a2.x - b2.x, a2.y - b2.y), 'la langue se voit (longueur à l\'écran)').toBeGreaterThan(18);
+          }
         }
       }
       expect(tongue, 'la langue sort au moins 1,5 s').toBeGreaterThanOrEqual(1.5);
+      expect(tongueChecked, 'la langue regardée de près').toBeGreaterThanOrEqual(4);
       // la base de la langue au coin des lèvres (à moins de 3 cm de l'embout posé)
       expect(game.peek().tongueBase.distanceTo(game.peek().barLocal)).toBeLessThan(0.05);
       game.destroy();

@@ -115,7 +115,30 @@ export function deworm3dGame(ctx) {
   // la mâchoire, détachée de la bouche.)
   // (la commissure : sur la peau, au bout du pli des lèvres, un peu au-dessus et en arrière de la barre où l'on pose
   // l'embout — mesurée sur le modèle avec des repères de couleur)
-  const tongueAt = onSkin(v3(0, barLocal.y + hr * 0.23, barLocal.z - hr * 0.15));
+  // (le pli des lèvres, cherché sur le côté de la bouche : la hauteur où la peau rentre le plus d'un coup, la lèvre du
+  // haut qui déborde au-dessus de celle du bas ; d'un gabarit à l'autre, d'un poulain à un cheval de trait, il bouge)
+  const creaseY = (() => {
+    const z = barLocal.z - hr * 0.15;
+    const depth = (y) => {
+      const from = head.localToWorld(v3(-0.6, y, z));
+      const hit = sc.proxy.hitAll(new THREE.Ray(from, sideW()))[0];
+      return hit ? -head.worldToLocal(hit.point.clone()).x : null;
+    };
+    let best = barLocal.y + hr * 0.23;
+    let drop = 0;
+    for (let k = 0; k <= 16; k++) {
+      const y = hr * (0.05 - k * 0.03);
+      const a = depth(y + hr * 0.04);
+      const b = depth(y - hr * 0.04);
+      if (a !== null && b !== null && a - b > drop) {
+        drop = a - b;
+        best = y;
+      }
+    }
+    return best;
+  })();
+  // (la racine un peu sous le pli : sur la lèvre du bas, juste sous celle du haut)
+  const tongueAt = onSkin(v3(0, creaseY - hr * 0.04, barLocal.z - hr * 0.15));
   // (une vraie langue : plate, plus large et arrondie au bout, plus étroite à la racine, qui retombe un peu ; la racine
   // au coin des lèvres, elle s'allonge vers +y)
   const tongueGeo = own(new THREE.SphereGeometry(0.5, 20, 14));
@@ -136,23 +159,37 @@ export function deworm3dGame(ctx) {
   tongue.castShadow = true;
   tongue.visible = false;
   const tonguePivot = new THREE.Group();
-  tonguePivot.position.copy(tongueAt).add(v3(0.008, 0, 0)); // (un peu dans la lèvre : la langue sort d'entre les lèvres)
-  // (vers nous et un peu vers le bas et l'avant : la langue qui pend au coin de la bouche)
-  tonguePivot.quaternion.setFromUnitVectors(v3(0, 1, 0), v3(-1, -0.75, 0.35).normalize());
+  tonguePivot.position.copy(tongueAt).add(v3(0.01, 0, 0)); // (la racine dans la lèvre : la langue sort d'entre les lèvres)
   tonguePivot.add(tongue);
   head.add(tonguePivot);
   const tongueR = 0.018 / Math.max(0.6, head.getWorldScale(v3()).x);
-  // La pâte blanche au coin des lèvres (un peu en reste, comme en vrai), qu'il lèche ensuite.
-  const pasteMat = own(new THREE.MeshStandardMaterial({ color: 0xf6f1e6, roughness: 0.55 }));
+  // (elle pend : vers le bas du monde, en s'écartant de la lèvre, un peu vers l'avant ; sa face large vers nous, le bout
+  // qui se recourbe vers le dehors. Refait à chaque image : quand il relève la tête, elle pend toujours vers le bas)
+  const _td = v3();
+  const _tx = v3();
+  const _tz = v3();
+  const _tq = new THREE.Quaternion();
+  const _tm = new THREE.Matrix4();
+  function hangTongue(sway) {
+    head.getWorldQuaternion(_tq).invert();
+    _td.set(0, -1, 0).applyQuaternion(_tq).multiplyScalar(0.9).add(v3(-0.3, 0, 0.25 + sway)).normalize();
+    _tz.set(1, 0, 0).addScaledVector(_td, -_td.x).normalize();
+    _tx.crossVectors(_td, _tz).normalize();
+    tonguePivot.quaternion.setFromRotationMatrix(_tm.makeBasis(_tx, _td, _tz));
+  }
+  hangTongue(0);
+  // La pâte blanche au coin des lèvres (un peu en reste, comme en vrai), qu'il lèche ensuite : de petites boules
+  // rondes et blanches, posées sur la lèvre du bas, devant la langue.
+  const pasteMat = own(new THREE.MeshStandardMaterial({ color: 0xfbf8f0, roughness: 0.45, emissive: 0x2a2822 }));
   const pasteGeo = own(new THREE.SphereGeometry(0.007, 12, 9));
   const paste = new THREE.Group();
-  for (const [dx, dy, dz, r] of [[0, 0, 0, 1], [0.002, -0.009, 0.008, 0.75], [0.001, 0.006, 0.012, 0.6], [0.003, -0.016, -0.004, 0.5]]) {
+  for (const [dx, dy, dz, r] of [[0, 0, 0, 1.25], [0.002, -0.01, 0.009, 1], [0.001, 0.004, 0.014, 0.8], [0.003, -0.018, 0.002, 0.7], [0.002, -0.006, -0.01, 0.85]]) {
     const b = new THREE.Mesh(pasteGeo, pasteMat);
     b.position.set(-dx, dy, dz);
-    b.scale.set(0.35 * r, r, 1.1 * r);
+    b.scale.set(0.7 * r, r, 1.1 * r);
     paste.add(b);
   }
-  paste.position.copy(tongueAt).add(v3(-0.002, -0.004, 0.006));
+  paste.position.copy(onSkin(v3(0, creaseY - hr * 0.1, barLocal.z + hr * 0.05))).add(v3(0.002, 0, 0));
   paste.visible = false;
   head.add(paste);
   const ring = pulseRing(own, { r: 0.028 * Math.max(0.8, S) });
@@ -366,6 +403,8 @@ export function deworm3dGame(ctx) {
         bodyWorld: [holder.localToWorld(v3()), holder.localToWorld(syr.at(0.5)), holder.localToWorld(syr.at(1))],
         bodyScreen: [sc.project(holder.localToWorld(v3())), sc.project(holder.localToWorld(syr.at(1)))],
         tongueTip: tongue.visible ? sc.project(tongue.localToWorld(v3(0, 1, 0))) : null,
+        /** (tests) la langue, repère monde : la racine, le milieu, le bout */
+        tongueWorld: tongue.visible ? [0.05, 0.5, 0.95].map((u) => tongue.localToWorld(v3(0, u, -0.35 * u * u * 0.42 / 0.42))) : null,
         syringe: rp ? sc.project(holder.localToWorld(syr.at(0.45))) : null,
         ringX: sc.project(holder.localToWorld(syr.ringAt(kOf(dose)))),
         doseAt: (w) => sc.project(holder.localToWorld(syr.ringAt(kOf(w)))),
@@ -485,10 +524,11 @@ export function deworm3dGame(ctx) {
       tongue.visible = tk > 0.02;
       if (tongue.visible) {
         // (elle sort, lèche le coin des lèvres, rentre à moitié et ressort ; le bout bouge)
-        const lick = 0.6 + 0.4 * Math.abs(Math.sin(sc.time * 4.2));
-        const len = tongueR * 4.2 * tk * lick;
-        tongue.scale.set(tongueR * 2.6, len, tongueR * 2.6);
-        tongue.rotation.z = Math.sin(sc.time * 3.1) * 0.12;
+        // (elle reste bien visible : elle ne rentre jamais à moins des trois quarts)
+        const lick = 0.78 + 0.22 * Math.abs(Math.sin(sc.time * 4.2));
+        const len = Math.max(tongueR * 4.4, hr * 0.9) * tk * lick;
+        tongue.scale.set(tongueR * 2.9, len, tongueR * 3.2);
+        hangTongue(Math.sin(sc.time * 3.1) * 0.15);
       }
       // la pâte au coin des lèvres : dès qu'elle sort, jusqu'à ce qu'il l'ait léchée
       const pk = sy.left < 0.95 ? (sy.out ? clamp((grimace - 0.05) / 0.3) : 1) : 0;

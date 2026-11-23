@@ -5,7 +5,7 @@
 
 import { h } from './dom.js';
 import { t, getLang, hourParams } from '../i18n.js';
-import { SPECIES, anyAvailable } from '../sim/species.js';
+import { anyAvailable } from '../sim/species.js';
 import { availableEmojis } from './names.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
 import {
@@ -17,6 +17,7 @@ import { buildingActions } from '../sim/buildings.js';
 import { EQUIPMENT, equipmentShown } from '../sim/farm.js';
 import { actionSheet } from './actions.js';
 import { thumb } from '../game/thumbScenes.js'; // vignettes 3D du catalogue
+import { listPic } from './panels.js'; // vignette du vrai animal dans les cartes
 import { openSalon } from './groomer.js'; // salon de toilettage (métier Toiletteur)
 
 /** Catégories de la vue construction → catégories du catalogue. */
@@ -354,7 +355,7 @@ export function openResidents(ui, s) {
             },
           }, t('con_moveInShort'));
         return h('div', { class: `card ${here ? 'selected' : ''}` },
-          h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+          listPic(g, a),
           h('span', { class: 'card-main' }, h('b', {}, a.name),
             h('small', {}, home ? t('con_homeIs', { home: structureName(home.type) }) : t('con_homeNone'))),
           btn);

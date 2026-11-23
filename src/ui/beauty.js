@@ -5,7 +5,6 @@
 
 import { h, bar } from './dom.js';
 import { t, ta } from '../i18n.js';
-import { SPECIES } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
 import { competitionsAt, eligibility } from '../sim/activities.js';
 import {
@@ -14,6 +13,7 @@ import {
 } from '../sim/beauty.js';
 import { canLead } from '../sim/gear.js';
 import { runMinigame } from './minigames.js';
+import { listPic } from './panels.js'; // vignette du vrai animal dans les cartes
 
 const COLOR_EMOJI = { red: '🔴', pink: '🩷', blue: '🔵', yellow: '🟡', green: '🟢', purple: '🟣', white: '⚪' };
 const PART_ICON = { presentation: '🎀', coat: '🧼', health: '💚', weight: '⚖️', calm: '🤝', allure: '🌟', mood: '😊' };
@@ -188,7 +188,7 @@ export function beautyPick(ui, state) {
   out.push(h('div', { class: 'cards' }, here.map((a) => {
     const why = beautyBlock(a);
     return h('div', { class: `card beauty-card ${why ? 'locked' : ''}` },
-      h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+      listPic(g, a),
       h('span', { class: 'card-main' },
         h('b', {}, a.name, h('span', { class: 'beauty-cls' }, className(classOf(a.species)))),
         h('div', { class: 'bars small' }, scoreBar(a, now)),

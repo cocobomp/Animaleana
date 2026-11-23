@@ -14,6 +14,7 @@ import {
 } from '../sim/competitions.js';
 import { cooldownLeft, dressageSkill, learnFactor } from '../sim/dressage.js';
 import { awardEl } from './activities.js';
+import { listPic } from './panels.js'; // vignette du vrai animal dans les cartes
 import { owned } from '../sim/gear.js'; // filet à la sellerie (inscription)
 
 const TIER_ICON = { gold: '🏆', silver: '🥈', bronze: '🥉' };
@@ -196,7 +197,7 @@ export function openVenuePanel(ui, venue) {
         const tack = why === 'needSaddle' || why === 'needBridle'; // il suffit de le seller (coffre du voyage)
         // (pas grisée quand il suffit de le seller : le bouton « Seller » doit avoir l'air actif)
         return h('div', { class: `card comp-athlete ${why && !tack ? 'locked' : ''}` },
-          h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+          listPic(g, a),
           h('span', { class: 'card-main' },
             h('b', {}, a.name),
             why ? h('small', { class: 'actv-warn' }, ta(`comp_why_${why}`, a)) : h('small', { class: 'good' }, `✅ ${t('comp_ready')}${a.warmedUp === g.day ? ` · 🔥 ${t('comp_warmedUp')}` : ''}`),
@@ -295,7 +296,7 @@ export function trainingCard(ui, a, type) {
       g.activities.start(type, { animal: a });
     },
   },
-  h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+  listPic(g, a),
   h('span', { class: 'card-main' }, h('b', {}, a.name),
     h('div', { class: 'bars small' }, bar(t('skill_dressage'), dressageSkill(a)), bar(t('skill_obedience'), a.skills.obedience ?? 0)),
     left ? h('small', { class: 'actv-warn' }, ta('dr_cooldown', a, { n: left })) : h('small', { class: factor < 1 ? 'actv-warn' : '' }, `${factor < 1 ? '😴' : '😀'} ${learn}`)),

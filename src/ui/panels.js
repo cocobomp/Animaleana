@@ -97,11 +97,20 @@ export function animalThumbSpec(a) {
 }
 
 /** Élément vignette (ou emoji) d'un animal du jeu, w × h pixels affichés. */
-function animalPic(g, a, w, hh, cls = '') {
+export function animalPic(g, a, w, hh, cls = '') {
   const emoji = SPECIES[a.species].emoji;
   const spec = animalThumbSpec(a);
   if (!spec || !g) return h('span', { class: cls ? `card-emoji ${cls}` : 'card-emoji' }, emoji);
   return thumb(g, spec, { w, h: hh, emoji, cls, alt: a.name ?? '' });
+}
+
+/**
+ * Vignette d'un animal dans une carte de liste (Mes animaux, vétérinaire, activités, concours, clients…) : le vrai
+ * animal en 3D, sa race et sa robe (l'emoji en attendant l'image, ou pour une robe hors du catalogue de la race).
+ * Avant : l'emoji de l'espèce pour tous, le même 🐴 pour chaque cheval.
+ */
+export function listPic(g, a) {
+  return animalPic(g, a, 64, 48, 'list-thumb');
 }
 
 export function animalCard(a, pic = null) {
@@ -440,7 +449,7 @@ export function openAnimals(ui) {
         const m = mood(a);
         const here = a.location === p.place;
         return h('button', { class: 'card', onClick: () => ui.openAnimal(a) },
-          h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+          listPic(g, a),
           h('span', { class: 'card-main' },
             h('b', {}, `${a.name} ${sexIcon(a)}`),
             h('small', {}, `${speciesName(a)} · ${breedName(a)} · ${ageText(a)}`),
@@ -509,7 +518,7 @@ export function openVetClinic(ui) {
         class: `card ${a.sick ? 'sick' : ''}`,
         onClick: () => ui.openVet(a, true),
       },
-      h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+      listPic(g, a),
       h('span', { class: 'card-main' }, h('b', {}, a.name), h('small', {}, `${t('health')} : ${Math.round(a.health)}`)),
       h('span', { class: 'card-side' }, a.sick ? '🤒' : '💚')))), school];
     },

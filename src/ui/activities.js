@@ -5,6 +5,7 @@ import { h, bar } from './dom.js';
 import { t, ta, L } from '../i18n.js';
 import { SPECIES, SPECIES_IDS, speciesAvailable } from '../sim/species.js';
 import { speciesList } from './names.js';
+import { listPic } from './panels.js'; // vignette du vrai animal dans les cartes
 import { PLACES } from '../sim/places.js';
 import { isSandbox } from '../sim/profile.js';
 import { owned, inUse } from '../sim/gear.js';
@@ -141,7 +142,7 @@ function pickAnimal(ui, state) {
         g.activities.start(type, { animal: a, comp: state.comp });
       },
     },
-    h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+    listPic(g, a),
     h('span', { class: 'card-main' }, h('b', {}, a.name),
       why ? h('small', {}, ta(`actv_why_${why}`, a)) : h('div', { class: 'bars small' }, SKILL_OF[type].map((k) => bar(t(`skill_${k}`), a.skills[k] ?? 0))),
       tooHigh ? h('small', { class: 'actv-warn' }, ta('actv_tooHighWarn', a)) : null),
@@ -166,7 +167,7 @@ function stageCard(ui, a) {
   const skill = a.skills.jump;
   const best = stageFor(skill);
   return h('div', { class: 'card actv-stages' },
-    h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+    listPic(g, a),
     h('span', { class: 'card-main' },
       h('b', {}, a.name),
       h('div', { class: 'bars small' }, SKILL_OF.jumping.map((k) => bar(t(`skill_${k}`), a.skills[k] ?? 0))),

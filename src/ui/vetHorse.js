@@ -834,14 +834,18 @@ function drawForelock(g, p, x, y, t, B) {
 
 /** Licol bleu (le cheval est tenu pour l'examen). */
 function drawHalter(g, x, y) {
+  // (comme un vrai licol : la muserolle fait le tour du nez, aux deux tiers entre l'œil et les naseaux ; le montant
+  // descend de la nuque le long de la ganache, bien en dessous et en arrière de l'œil, jusqu'à l'anneau du côté)
+  const ring = [x + 14.5, y + 22];
   const straps = () => {
     g.beginPath();
-    g.moveTo(x + 21.5, y + 1.6); // muserolle
-    g.quadraticCurveTo(x + 19, y + 16, x + 20.4, y + 29.4);
-    g.moveTo(x + 19.6, y + 21); // montant
-    g.quadraticCurveTo(x + 6, y + 6, x - 9.5, y - 12.5);
-    g.lineTo(x - 11, y - 16.5);
-    g.moveTo(x - 9.5, y - 9); // sous-gorge
+    g.moveTo(x + 26, y + 7); // muserolle : sur le chanfrein…
+    g.quadraticCurveTo(x + 18.5, y + 14, ring[0], ring[1]); // …le long du nez jusqu'à l'anneau…
+    g.quadraticCurveTo(x + 17, y + 27, x + 21, y + 29.6); // …et sous la mâchoire
+    g.moveTo(x - 11, y - 16.5); // montant : derrière l'oreille…
+    g.lineTo(x - 10, y - 11);
+    g.bezierCurveTo(x - 9.5, y + 4, x - 3, y + 16, ring[0], ring[1]); // …le long de la ganache
+    g.moveTo(x - 9.8, y - 8); // sous-gorge
     g.quadraticCurveTo(x - 13.5, y + 2, x - 11.5, y + 12);
   };
   g.lineCap = 'round';
@@ -855,7 +859,7 @@ function drawHalter(g, x, y) {
   g.stroke();
   g.strokeStyle = '#c9ced3';
   g.lineWidth = 1.1;
-  for (const [cx, cy] of [[x + 19.6, y + 21], [x + 20.4, y + 30.6]]) {
+  for (const [cx, cy] of [ring, [x + 21, y + 30.8]]) {
     g.beginPath();
     g.arc(cx, cy, 1.9, 0, TAU);
     g.stroke();

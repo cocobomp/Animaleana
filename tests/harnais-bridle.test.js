@@ -147,6 +147,10 @@ describe('brider en 3D : le filet posé sur la peau, la tête toujours belle', (
       expect(c.meshes, 'têtière, muserolle, deux montants').toBeGreaterThanOrEqual(4);
       expect(c.bad / c.all, `étape 1 : ${c.bad}/${c.all} ${c.where} points de lanière dans la tête (pire ${c.worst})`).toBeLessThan(0.03);
       for (const k of ['bar', 'teeth', 'nose']) expect(inView(s[k], v, 4), `${k} dans l'image`).toBe(true);
+      // la main qui tient le mors : on voit aussi le poignet et le début de la manche, et la pastille ne la cache pas
+      expect(s.hand && s.wrist, 'la main est là').toBeTruthy();
+      expect(inView(s.wrist, v, 4), `le poignet dans l'image ${JSON.stringify(s.wrist)}`).toBe(true);
+      if (s.hand.y > v.y1 - 80) expect(Math.abs(s.hand.x - s.pillX), 'la pastille à côté de la main').toBeGreaterThan(90);
       game.down(s.bar);
       run(ctx, game, sc, 1.4);
       s = game.peek();
@@ -171,8 +175,18 @@ describe('brider en 3D : le filet posé sur la peau, la tête toujours belle', (
       expect(game.straps().crown.visible && game.straps().brow.visible && game.straps().throat.visible).toBe(true);
       // la sous-gorge lâche pend sous la gorge (plus bas que la peau)
       expect(s.sag, 'lâche : elle pend').toBeGreaterThan(0.02);
+      {
+        // lâche, elle pend en U souple sous la gorge (pas un V cassé), derrière la ganache, pas sur l'encolure
+        const line = game.straps().throat.userData.line;
+        const d = sc.model.dims;
+        const mid = line[Math.floor(line.length / 2)];
+        expect(bendOf(line, 1), `lâche : un U souple (${(bendOf(line, 1) * 57.3).toFixed(0)}°)`).toBeLessThan(0.62);
+        expect(mid.z, 'derrière la ganache, pas sur l\'encolure').toBeGreaterThan(d.earZ + d.hr * 0.8);
+        expect(mid.y, 'sous la gorge').toBeLessThan(-d.hr * 2);
+      }
       c = strapsInside(sc, game);
       expect(c.bad / c.all, `sous-gorge lâche : ${c.bad}/${c.all} ${c.where}`).toBeLessThan(0.03);
+      for (const e of s.ears) expect(inView(e, v, 4), `la sous-gorge : les oreilles dans l'image ${JSON.stringify(e)}`).toBe(true);
       expect(inView(s.nose, v, 4) && inView(s.throatSpot, v, 4), `le nez et la gorge dans l'image ${JSON.stringify([s.nose, s.throatSpot, v])}`).toBe(true);
       // trop serrée : sur la peau, 6 à 8 mm de marge, jamais dedans
       const hold = ctx.buttons.find((b) => /🪢/.test(b.text));

@@ -94,12 +94,12 @@ export function impatience(sc, { after = 9, every = 4.5, leg = 1 } = {}) {
 }
 
 /** La pastille de l'étape en haut (« 2/3 · La selle »), comme les jeux dessinés. */
-export function stagePill(g, i, n, name, y = 8) {
+export function stagePill(g, i, n, name, y = 8, x = 200) {
   g.save();
   g.fillStyle = 'rgba(255,255,255,0.88)';
-  rrect(g, 200 - 82, y, 164, 30, 15);
+  rrect(g, x - 82, y, 164, 30, 15);
   g.fill();
-  label(g, `${i + 1}/${n} · ${name}`, 200, y + 15, 16, '#23302a');
+  label(g, `${i + 1}/${n} · ${name}`, x, y + 15, 16, '#23302a');
   g.restore();
 }
 

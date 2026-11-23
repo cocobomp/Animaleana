@@ -388,17 +388,19 @@ export function bridle3dGame(ctx) {
    * Une lanière de cuir ne fait pas d'angle : chaque point glisse vers le milieu de ses voisins (les bouts restent),
    * mais jamais plus près de la peau qu'avant (le long de sa normale) : elle ne rentre pas dans les bosses.
    */
-  function relax(pts, nrm, passes = 6) {
+  function relax(pts, nrm, passes = 6, keep = null) {
     const n = pts.length;
     for (let k = 0; k < passes; k++) {
       for (let i = 1; i < n - 1; i++) _rq[i].copy(pts[i]).multiplyScalar(0.5).addScaledVector(pts[i - 1], 0.25).addScaledVector(pts[i + 1], 0.25);
       for (let i = 1; i < n - 1; i++) {
-        const lift = Math.max(0, _off.copy(pts[i]).sub(_rq[i]).dot(nrm[i]));
+        // (keep : 1 contre la peau, 0 là où la lanière pend librement, loin de la peau)
+        const lift = Math.max(0, _off.copy(pts[i]).sub(_rq[i]).dot(nrm[i])) * (keep ? keep[i] : 1);
         pts[i].copy(_rq[i]).addScaledVector(nrm[i], lift);
       }
     }
     return [pts, nrm];
   }
+  const throatKeep = new Array(THROAT).fill(1);
   const DOWN = v3();
   const _off = v3();
   const _q = new THREE.Quaternion();
@@ -446,11 +448,13 @@ export function bridle3dGame(ctx) {
       DOWN.set(0, -1, 0).applyQuaternion(_q.invert());
       const [pts, nrm] = mix(P.throat, P.throat, 0, THROAT);
       // (vers le bas, et en s'écartant de la peau : sur les côtés de la ganache, elle ne glisse pas dans la joue)
+      // (surtout vers le bas : un U souple sous la gorge, pas un V cassé qui part sur les côtés ; puis adoucie)
       for (let i = 0; i < THROAT; i++) {
         const w = throatSag * Math.pow(Math.sin((Math.PI * i) / (THROAT - 1)), 1.4);
-        pts[i].addScaledVector(_off.copy(DOWN).add(nrm[i]).normalize(), w);
+        pts[i].addScaledVector(_off.copy(DOWN).addScaledVector(nrm[i], 0.35).normalize(), w);
+        throatKeep[i] = 1 - Math.min(1, w / (hr * 0.3));
       }
-      throatS.set(pts, nrm);
+      throatS.set(...relax(pts, nrm, 6, throatKeep));
     }
   }
 
@@ -549,15 +553,23 @@ export function bridle3dGame(ctx) {
 
   // ---------------------------------------------------------------- où toucher (à l'écran)
   const W = (local) => head.localToWorld(local.clone());
+  /** Où mettre la pastille de l'étape (en bas) : au milieu, sauf si la main ou la cible du mors y est. */
+  const pillX = () => {
+    const v = ctx.view;
+    if (step() !== 'bit' || !sc.ready) return 200;
+    const b = sc.project(W(barLocal));
+    if (Math.abs(b.x - 200) > 110 || b.y < v.y1 - 130) return 200;
+    return b.x > 200 ? Math.max(v.x0 + 92, b.x - 200) : Math.min(v.x1 - 92, b.x + 200);
+  };
   // (même serrée, elle enjambe le creux entre la mâchoire et l'encolure : un rien de mou)
-  const sagOf = () => hr * 0.06 + hr * 0.5 * Math.max(0, 1 - throat / T.hi);
+  const sagOf = () => hr * 0.06 + hr * 0.3 * Math.max(0, 1 - throat / T.hi);
   /** Là où toucher pour serrer : le milieu de la sous-gorge, sinon sous la ganache. */
   const throatAt = () => {
     if (!P.throat) return throatLocal;
     const i = Math.floor(THROAT * 0.35);
     head.getWorldQuaternion(_q);
     const down = v3(0, -1, 0).applyQuaternion(_q.invert());
-    return P.throat.p[i].clone().addScaledVector(down.add(P.throat.n[i]).normalize(), sagOf() * Math.pow(Math.sin((Math.PI * i) / (THROAT - 1)), 1.4));
+    return P.throat.p[i].clone().addScaledVector(down.addScaledVector(P.throat.n[i], 0.35).normalize(), sagOf() * Math.pow(Math.sin((Math.PI * i) / (THROAT - 1)), 1.4));
   };
   const earTip = (i) => {
     const e = md.ears?.[i === 0 ? 1 : 0]; // (model.ears : [gauche, droite] ; celle de notre côté est la droite)
@@ -578,9 +590,14 @@ export function bridle3dGame(ctx) {
   const keyPts = (st) => {
     const pts = [nosePt(), W(v3(0, -hr * 0.3, snout * 0.95)), sc.live('poll') ?? L.poll, earTip(0), earTip(1), W(throatLocal)];
     if (st !== 'bit' && lower > 0.01) pts.push(...pts.map(risen));
-    if (st === 'bit') pts.push(W(barLocal), W(teethLocal), W(barLocal.clone().add(BIT_DROP)).add(v3(0, -0.1 * S, 0)));
+    // (le mors, et sous lui la main, le poignet et le début de la manche : sur un petit cheval, on ne voyait qu'une
+    // main posée en l'air)
+    if (st === 'bit') pts.push(W(barLocal), W(teethLocal), W(barLocal.clone().add(BIT_DROP)).add(v3(0, -0.1 * S, 0)), W(barLocal).add(v3(0, -0.24 * handK, 0)));
     if (st === 'ears') pts.push(earTip(0).add(v3(0, 0.12 * S, 0)), earTip(1).add(v3(0, 0.12 * S, 0)));
     if (st === 'throat') {
+      // (de la place sous le bout du nez et au-dessus des oreilles : il bouge la tête, la caméra ne recadre pas à
+      // chaque fois)
+      pts.push(nosePt().add(v3(0, -0.06 * S, 0)), W(v3(0, -hr * 0.9, snout * 0.95)), earTip(0).add(v3(0, 0.09 * S, 0)), earTip(1).add(v3(0, 0.09 * S, 0)));
       pts.push(W(throatAt()).add(v3(0, -0.06 * S, 0)));
       if (P.throat) pts.push(W(P.throat.p[Math.floor(THROAT / 2)]).add(v3(0, -0.07 * S, 0)), W(P.throat.p[2]));
     }
@@ -605,7 +622,8 @@ export function bridle3dGame(ctx) {
     if (guard > 0 || !sc.settled(0.05)) return;
     guard = 1;
     const v = ctx.view;
-    const pad = 2;
+    // (une garde assez large : il bouge la tête, on recadre avant que le nez ou une oreille touche le bord)
+    const pad = 16;
     for (const p of mustSee(step())) {
       const q = sc.project(p);
       if (q.behind || q.x < v.x0 + pad || q.x > v.x1 - pad || q.y < v.y0 + pad || q.y > v.y1 - pad) {
@@ -646,6 +664,8 @@ export function bridle3dGame(ctx) {
       earDone: [...earDone], results: results.map((r) => ({ ...r })),
       bar: sc.project(W(barLocal)), teeth: sc.project(W(teethLocal)), ears: [0, 1].map((i) => sc.project(earTip(i))),
       nose: sc.project(nosePt()), hand: hand.visible ? sc.project(hand.position) : null,
+      /** (tests) le poignet et le début de la manche, à l'écran */
+      wrist: hand.visible ? sc.project(hand.localToWorld(v3(-0.16, 0, 0))) : null, pillX: pillX(),
       throatSpot: sc.project(W(throatAt())), halterHidden: halter.every((x) => !x.visible),
       sag: throatS.mesh.visible ? sagOf() : -1, measured, item: real.item,
     }),
@@ -679,7 +699,8 @@ export function bridle3dGame(ctx) {
           annoyed = 1;
           m.annoyed = 1.2;
           const h = sc.project(sc.live('poll') ?? L.poll);
-          fx.float(h.x, h.y - 20, '💢', 22);
+          // (dans l'image même quand il relève la tête : avant, le 💢 était coupé en haut)
+          fx.float(h.x, Math.max(ctx.view.y0 + 34, h.y - 20), '💢', 22);
           ctx.hint(t('mg_deworm_teeth', who), 'warn');
           snort(sc);
         }
@@ -757,7 +778,7 @@ export function bridle3dGame(ctx) {
         const at = ringNear.getWorldPosition(v3());
         const toCam = sc.camera.position.clone().sub(at).normalize();
         // (le bras vient de notre côté, d'en bas et de devant : on voit le poignet et la manche)
-        const from = at.clone().addScaledVector(toCam, 0.3).add(v3(0, -0.3, 0));
+        const from = at.clone().addScaledVector(toCam, 0.2).add(v3(0, -0.36, 0));
         const x = at.clone().sub(from).normalize();
         const z = new THREE.Vector3().crossVectors(x, v3(0, 1, 0)).normalize();
         const y = new THREE.Vector3().crossVectors(z, x).normalize();
@@ -782,7 +803,7 @@ export function bridle3dGame(ctx) {
         if (throat > 0.95) {
           if (fuss <= 0.2) {
             const h = sc.project(sc.live('poll') ?? L.poll);
-            fx.float(h.x + 20, h.y - 30, '💢', 20);
+            fx.float(h.x + 20, Math.max(ctx.view.y0 + 34, h.y - 30), '💢', 20);
             snort(sc);
           }
           fuss = 1;
@@ -796,7 +817,8 @@ export function bridle3dGame(ctx) {
       const st = step();
       if (rule && st === 'throat') rule.dial(g, throat, 354, ctx.view.y0 + 56);
       // (la pastille en bas : en haut, elle se posait sur les oreilles et sur leur cible)
-      stagePill(g, si, BRIDLE.steps.length, t(`mg_bridle_stage_${st}`), ctx.view.y1 - 42);
+      // (et loin de la main qui tient le mors : en paysage, l'image est basse, la pastille la cachait)
+      stagePill(g, si, BRIDLE.steps.length, t(`mg_bridle_stage_${st}`), ctx.view.y1 - 42, pillX());
     },
     destroy() {
       unhook();

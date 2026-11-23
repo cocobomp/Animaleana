@@ -195,10 +195,20 @@ describe('tresser en 3D', () => {
       run(ctx, game, sc, 2, 1 / 30, () => { worst = Math.min(worst, headFrame.headMargins(sc, shape.points(0)).min); });
       expect(worst, key).toBeGreaterThanOrEqual(0.05);
       const seen = [];
+      let lastView = null;
       braidKeys(game, ctx, 'blue', () => {
         run(ctx, game, sc, 0.2);
         seen.push(game.peek().knobs);
+        // (gros plan de la crinière, tresses puis rubans : la tête toujours entière)
+        // (la caméra qui revient de la queue glisse le long du dos : on mesure une fois arrivée, 1,5 s plus tard)
+        const v = game.peek().view;
+        if (!ctx.done && typeof v === 'number') {
+          if (lastView === 'tail') run(ctx, game, sc, 1.5);
+          run(ctx, game, sc, 1.2, 1 / 30, () => { worst = Math.min(worst, headFrame.headMargins(sc, shape.points(0)).min); });
+        }
+        lastView = v;
       });
+      expect(worst, `${key} (tresses et rubans)`).toBeGreaterThanOrEqual(0.05);
       // les boutons sont venus un par un (jamais moins qu'avant), tous à la fin
       for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeGreaterThanOrEqual(seen[i - 1]);
       const s = game.peek();

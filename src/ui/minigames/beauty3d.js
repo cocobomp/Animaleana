@@ -650,6 +650,7 @@ export function braid3dGame(ctx) {
   let framed = null;
   function frameFor(what) {
     if (framed === what) return;
+    const from = framed;
     framed = what;
     if (what === 'end') {
       sc.setFocus(null);
@@ -669,9 +670,12 @@ export function braid3dGame(ctx) {
     }
     // la crinière : toute l'encolure et la tête (ses vrais bords : bout du nez, oreilles), de notre côté, un peu d'en haut ; la même vue pour chaque tresse
     // (le rond jaune montre celle qu'on tresse) : on voit le cheval, et les boutons qui viennent un à un
-    const crest = knobs.map((k) => k.w());
+    // (suivie en douceur : quand il baisse ou tourne un peu la tête, elle reste dans l'image)
     const low = [L.withers.clone().add(v3(-0.05 * S, -0.38 * S, 0.05 * S)), L.neck.clone().add(v3(0, -0.3 * S, 0))];
-    sc.frame([...crest, L.withers, ...head.points(0.05), ...low], { dir: [0.2, 0.32, 1], pad: 1.15, half: 0.6 });
+    follow.on = true;
+    // (en revenant de la queue, la caméra glisse plus vite jusqu'à l'encolure)
+    follow.set({ dir: [0.2, 0.32, 1], pad: 1.22, half: from === 'tail' ? 0.3 : 0.5, reach: 0.08 }, () => [...knobs.map((k) => k.w()), L.withers, ...low]);
+    follow.frame(false);
   }
 
   // La loupe du jeu dessiné, plus petite, en bas à droite (on y touche les mèches, comme dans le jeu dessiné).
@@ -737,7 +741,7 @@ export function braid3dGame(ctx) {
   }
 
   return {
-    peek: () => ({ ...play.peek(), knobs: knobs.filter((k) => k.g.visible).length, ribbons: knobs.filter((k) => k.band.visible).length, beads: beads.filter((b) => b.visible).length, tailBow: !!tailBow?.visible, tuck, loupe: loupeAt(), three: true }),
+    peek: () => ({ ...play.peek(), knobs: knobs.filter((k) => k.g.visible).length, ribbons: knobs.filter((k) => k.band.visible).length, beads: beads.filter((b) => b.visible).length, tailBow: !!tailBow?.visible, tuck, loupe: loupeAt(), view: framed, three: true }),
     down(p) {
       const s = play.peek();
       if (s.phase === 'braid') {

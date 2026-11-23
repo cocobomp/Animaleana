@@ -22,6 +22,46 @@ import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles «
 import { t, ta, L } from '../i18n.js';
 import { openVenuePanel, showCompetitionResults } from '../ui/competitions.js';
 
+/** Marches du podium : 1,6 m de côté (models/venue.js). Le devant (numéros) regarde la carrière (−x). */
+const STEP_HALF = 0.8;
+
+/**
+ * Places de la cérémonie (repère du monde) : { player: { x, z, y (hauteur au-dessus du sol), heading }, horse: { x, z,
+ * heading } }. Monté (mounted) : le cheval et sa cavalière au pied de la marche, devant elle, face à la carrière (−x),
+ * sa croupe (≈ 1 m × sa taille derrière son centre) à 25 cm de la marche. À pied : la joueuse sur sa marche (y = sa
+ * hauteur), le cheval au pied du podium à côté d'elle, de profil vers la carrière. Après la 3e place : à côté du
+ * podium, au sol. Le cheval n'est jamais sur une marche.
+ */
+export function ceremonySpot(pod, rank, { mounted = true, scale = 1 } = {}) {
+  const step = rank <= 3 ? pod.steps[Math.min(2, rank - 1)] : null;
+  const face = -Math.PI / 2;
+  if (!step) {
+    const x = pod.x - STEP_HALF - 1.2;
+    const z = pod.z + 4.5;
+    return { player: { x, z, y: 0, heading: face }, horse: mounted ? { x, z, heading: face } : { x: x - 0.4, z: z + 1.6, heading: face } };
+  }
+  if (mounted) {
+    const x = step.x - STEP_HALF - 0.25 - 1.0 * scale;
+    return { player: { x, z: step.z, y: 0, heading: face }, horse: { x, z: step.z, heading: face } };
+  }
+  // (à pied, sur sa marche ; le cheval de profil, son épaule devant elle, au pied de la marche)
+  return {
+    player: { x: step.x, z: step.z, y: step.y, heading: face },
+    horse: { x: step.x - STEP_HALF - 0.35 - 0.35 * scale, z: step.z - 0.3 * scale, heading: Math.PI },
+  };
+}
+
+/**
+ * Plan de la cérémonie (rig.focus.shot) : de trois quarts avant du cheval, le podium derrière ; monté (rider), le
+ * cheval et sa cavalière entiers (visée à mi-hauteur entre les sabots et son casque).
+ */
+export function ceremonyShot(e, rider, at) {
+  const sc = e.scale ?? 1;
+  const top = rider ? Math.max(1.4, rider.eyeHeight - 0.1) : 2.1 * sc;
+  at.set(e.position.x, e.position.y + top * 0.5, e.position.z);
+  return { at, heading: e.heading, dist: 1.2 + top * 1.75, yaw: 0.6, pitch: 0.12 };
+}
+
 export class CompetitionVenue {
   constructor(game) {
     this.game = game;
@@ -54,6 +94,12 @@ export class CompetitionVenue {
   /** Chaque image : le public, les confettis ; toutes les 2 s, l'état des inscriptions. */
   update(dt) {
     this.time += dt;
+    // Cérémonie : le cheval (et sa cavalière) de trois quarts avant, le podium derrière eux, jusqu'à la photo et un peu après.
+    if (this.ceremonyT > 0 && this.ceremonyE && this.built) {
+      this.ceremonyT -= dt;
+      const pl = this.game.player;
+      this.game.rig.focus = { shot: ceremonyShot(this.ceremonyE, pl.mount === this.ceremonyE ? pl : null, (this.shotAt ??= new THREE.Vector3())) };
+    }
     if (this.built) {
       this.cheer = Math.max(0, this.cheer - dt * 0.35);
       for (const c of this.built.crowds) c.userData.cheer(this.time, this.cheer);
@@ -121,6 +167,8 @@ export class CompetitionVenue {
   }
 
   dispose() {
+    this.ceremonyT = 0;
+    this.ceremonyE = null;
     const b = this.built;
     if (!b) return;
     const g = this.game;
@@ -339,31 +387,38 @@ export class CompetitionVenue {
     }, 1500);
   }
 
-  /** Le joueur et son cheval montent sur la marche du podium (ou à côté), le public acclame. */
+  /**
+   * Cérémonie, comme en vrai : le cheval ne monte jamais sur la marche (ses sabots restaient calés sur le terrain,
+   * jambes enfoncées dans la marche). À cheval : devant sa marche, face à la carrière, la croupe à 25 cm de la marche ;
+   * à pied : la joueuse sur sa marche, son cheval au pied du podium à côté d'elle (ceremonySpot). Au-delà de la 3e
+   * place : à côté du podium. La caméra les montre de trois quarts avant (update : ceremonyShot), puis la photo.
+   */
   ceremony(a, rank) {
     const g = this.game;
     const b = this.built;
     if (!b) return;
     const pod = b.podium;
-    const step = pod.steps[Math.min(2, rank - 1)];
-    const x = rank <= 3 ? step.x : pod.x;
-    const z = rank <= 3 ? step.z : pod.z + 4.5;
     const e = g.entities.get(a.id);
     const pl = g.player;
     pl.cancelGoTo();
-    const y = g.world.heightAt(x, z) + (rank <= 3 ? step.y : 0);
+    const mounted = !!e && pl.mount === e;
+    const spot = ceremonySpot(pod, rank, { mounted, scale: e?.scale ?? 1 });
+    const { x, z } = spot.player;
+    const y = g.world.heightAt(x, z) + spot.player.y;
     pl.root.position.set(x, y, z);
-    pl.heading = -Math.PI / 2;
+    pl.heading = spot.player.heading;
     pl.speed = 0;
-    if (pl.mount === e) {
+    if (mounted) {
       e.position.copy(pl.root.position);
       e.heading = pl.heading;
     } else if (e) {
-      e.position.set(x, g.world.heightAt(x, z), z + 1.6);
-      e.heading = -Math.PI / 2;
+      e.position.set(spot.horse.x, g.world.heightAt(spot.horse.x, spot.horse.z), spot.horse.z);
+      e.heading = spot.horse.heading;
       e.state = 'idle';
       e.timer = 6;
     }
+    this.ceremonyE = e ?? null;
+    this.ceremonyT = 3.5;
     g.rig.yaw = pl.heading;
     g.rig.reset();
     this.cheer = rank <= 3 ? 1 : 0.5;
@@ -382,8 +437,9 @@ export class CompetitionVenue {
   /** Photo souvenir du podium, gardée dans l'album (comme les photos de balade). */
   takePhoto() {
     const g = this.game;
+    const cam = g.camera;
+    const fov = cam.fov;
     try {
-      renderForPhoto(g);
       const src = g.renderer.domElement;
       const c = document.createElement('canvas');
       c.width = 192;
@@ -395,6 +451,14 @@ export class CompetitionVenue {
         sh = src.height;
         sw = sh * (c.width / c.height);
       }
+      // (bande gardée étroite sur un téléphone en hauteur : champ élargi le temps de la photo, ≈ 40° de haut dans la
+      // bande, pour qu'on y voie le cheval et sa cavalière entiers)
+      const band = sh / src.height;
+      if (band < 0.9) {
+        cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
+        cam.updateProjectionMatrix();
+      }
+      renderForPhoto(g);
       ctx.drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, c.width, c.height);
       const data = c.toDataURL('image/jpeg', 0.7);
       const d = activityData(g.profile);
@@ -404,6 +468,11 @@ export class CompetitionVenue {
       return data;
     } catch {
       return null;
+    } finally {
+      if (cam.fov !== fov) {
+        cam.fov = fov;
+        cam.updateProjectionMatrix();
+      }
     }
   }
 

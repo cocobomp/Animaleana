@@ -1,7 +1,7 @@
 // Donner le vermifuge, comme en vrai (le carnet de santé du cheval, src/sim/horseHealth.js) :
 //
-//   1. La dose : on règle la bague de la seringue sur le poids du cheval (un poney ≈ 250 kg, un cheval ≈ 500 kg,
-//      un cheval de trait ≈ 750 kg ; un peu plus s'il est gros). Juste : son poids, ou un peu plus (on arrondit
+//   1. La dose : on règle la bague de la seringue sur le poids du cheval (un Shetland ≈ 165 kg, un cheval ≈ 500 kg,
+//      un cheval de trait ≈ 800 kg ; un peu plus s'il est gros). Juste : son poids, ou un peu plus (on arrondit
 //      toujours au-dessus, jusqu'à DOSE.over kg de plus) ; moins, jamais : ça marche mal et les vers s'habituent au
 //      produit (sous-dosé : noté, mais à refaire plus tôt — ctx.opts.out.dose, src/game/Game.js deworm). Beaucoup
 //      trop, ce n'est pas bon pour lui. Deux boutons −10 / +10 kg pour régler au doigt près.
@@ -20,12 +20,17 @@ import { nbsp } from './frame.js';
 export const DOSE = { min: 100, max: 900, slack: 5, over: 50, step: 10 }; // (juste : son poids, jusqu'à un cran de 50 kg au-dessus)
 
 /**
- * Le poids du cheval (kg), d'après sa taille, son embonpoint (a.weight : 50 = idéal) et son âge : un poulain pèse bien
- * moins qu'un adulte (le poids suit la taille au cube, growthScale). Jamais moins que la plus petite dose de la
- * seringue (DOSE.min) : pour un tout petit poulain, on donne cette dose-là.
+ * Le poids du cheval (kg), d'après sa race (sa taille : look.scale, son épaisseur : look.fluff, un cheval de trait est
+ * plus lourd), son embonpoint (a.weight : 50 = idéal) et son âge : un poulain pèse bien moins qu'un adulte (le poids
+ * suit la taille au cube, growthScale). Un Falabella ≈ 100 kg, un Shetland ≈ 165 kg, un selle français ≈ 500 kg, un
+ * percheron ≈ 800 kg. Jamais moins que la plus petite dose de la seringue (DOSE.min) : pour un tout petit poulain ou un
+ * Falabella, on donne cette dose-là.
  */
 export function horseKg(a) {
-  const base = { pony: 250, horse: 500, draft: 750 }[sizeOf(a) ?? 'horse'] ?? 500;
+  const size = sizeOf(a) ?? 'horse';
+  const scale = a?.look?.scale ?? { pony: 0.75, horse: 1, draft: 1.06 }[size] ?? 1;
+  const fluff = a?.look?.fluff ?? 1;
+  const base = 500 * scale ** 2.3 * fluff * (size === 'draft' ? 1.4 : 1);
   const grow = a?.species && Number.isFinite(a?.ageDays) ? growthScale(a) ** 3 : 1;
   return Math.max(DOSE.min, Math.round((base * (0.8 + 0.4 * ((a?.weight ?? 50) / 100)) * grow) / 10) * 10);
 }

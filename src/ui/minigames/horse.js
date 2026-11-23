@@ -11,7 +11,7 @@
 
 import { drawHorseTop, drawPersonTop, rrect, circle, emoji, label, fillView, clamp, lerp, dist } from './draw.js';
 import { tOr } from './clean.js';
-import { stageLook, growthScale } from '../../sim/animal.js';
+import { stageLook, growthScale, lifeStage } from '../../sim/animal.js';
 
 const C = { x: 200, y: 158 };
 const ARENA = 126;
@@ -113,7 +113,14 @@ export const GAITS = { walk: [12, 38], trot: [38, 66], canter: [66, 92] };
 export function lungeGame(ctx) {
   const { a, t, fx } = ctx;
   const top = topHorse(a);
-  const steps = ['walk', 'trot', 'canter', 'trot'];
+  // (un poulain ne se longe pas au galop : ses articulations sont encore tendres ; on lui demande le pas et le trot)
+  let young = false;
+  try {
+    young = lifeStage(a) === 'baby';
+  } catch {
+    young = false;
+  }
+  const steps = young ? ['walk', 'trot', 'walk', 'trot'] : ['walk', 'trot', 'canter', 'trot'];
   const NEED = 3; // secondes à la bonne allure avant de passer à la suivante
   // « Juste ce qu'il faut » : le travail (secondes à la bonne allure) doit s'arrêter entre
   // LO et HI ; à MAX, le cheval n'en peut plus et c'est fini (trop).
@@ -143,7 +150,7 @@ export function lungeGame(ctx) {
   function slow() { if (!ctx.done) v = Math.max(0, v - 13); }
   function fast() {
     if (ctx.done) return;
-    v = Math.min(100, v + 13);
+    v = Math.min(young ? GAITS.trot[1] - 4 : 100, v + 13);
     whip = 0.5;
   }
 
@@ -182,7 +189,7 @@ export function lungeGame(ctx) {
         natT -= dt;
         if (natT <= 0) {
           natT = 2 + ctx.rng() * 2.5;
-          natural = clamp(20 + ctx.rng() * 60 + lazy, 8, 95);
+          natural = clamp(20 + ctx.rng() * 60 + lazy, 8, young ? 58 : 95);
         }
         v += (natural - v) * 0.3 * dt;
         const [lo, hi] = GAITS[gait()];

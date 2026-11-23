@@ -329,6 +329,29 @@ describe('longe en 3D : même note que le jeu dessiné, à ses vraies allures', 
   }, 60000);
 });
 
+describe('un poulain à la longe', () => {
+  it('on ne lui demande que le pas et le trot, et il ne part jamais au galop (dessin et 3D : la même logique)', () => {
+    const a = animalMod.createAnimal({ species: 'horse', breed: 'selle_francais', colorIndex: 0, ageDays: 7, seed: 77 });
+    a.name = 'Bambi';
+    const ctx = fakeCtxOf(a, t, {});
+    ctx.rng = makeRngSeed(5);
+    const game = horse2d.lungeGame(ctx);
+    let maxV = 0;
+    const asked = new Set();
+    for (let k = 0; k < 30 * 40; k++) {
+      if (k % 5 === 0) btn(ctx, '✨').opts.onTap();
+      ctx.time += 1 / 30;
+      game.update(1 / 30);
+      const s = game.peek();
+      maxV = Math.max(maxV, s.v);
+      asked.add(s.gait);
+    }
+    expect(asked.has('canter')).toBe(false);
+    expect(maxV).toBeLessThan(horse2d.GAITS.canter[0]);
+    expect(lunge3d.bandOf(maxV)).not.toBe('canter');
+  });
+});
+
 describe('liberté en 3D : le doigt sur le sable, la même note que le jeu dessiné', () => {
   /** Logique (x, y) → point du cadre où toucher (3D : le sable sous ce point du plan). */
   const screenOf = (sc, game, x, y) => (sc ? sc.project(sc.pen.toWorld(x, y)) : { x, y });

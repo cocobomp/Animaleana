@@ -295,7 +295,9 @@ function pourGame(ctx, water) {
       const eating = ctx.done && eatX >= eatTarget - 1;
       // (le cheval : le dessin du vétérinaire, même géométrie ; il boit tête baissée, il mâche)
       const paint = a.species === 'horse' ? drawHorseVet : drawAnimal;
-      paint(g, a, { x: animalX + eatX, y: floorY, s, f: 1, headDip: eating ? 0.6 + Math.sin(ctx.time * 8) * 0.08 : 0, mouth: eating, chew: eating ? Math.max(0, Math.sin(ctx.time * 8)) : 0, wag: !ctx.done ? level > 0.2 : true, walk: ctx.done && eatX < eatTarget - 1 ? ctx.time * 10 : null, happy: eating, time: ctx.time });
+      // (le cheval assoiffé tend le nez vers le seau qui se remplit, il le flaire ; il boit quand c'est fini)
+      const sniff = a.species === 'horse' && water && !ctx.done && level > 0.12 ? 0.22 + Math.sin(ctx.time * 3) * 0.05 : 0;
+      paint(g, a, { x: animalX + eatX, y: floorY, s, f: 1, headDip: eating ? 0.6 + Math.sin(ctx.time * 8) * 0.08 : sniff, mouth: eating, chew: eating ? Math.max(0, Math.sin(ctx.time * 8)) : 0, wag: !ctx.done ? level > 0.2 : true, walk: ctx.done && eatX < eatTarget - 1 ? ctx.time * 10 : null, happy: eating, time: ctx.time });
       // Source : sac ou robinet
       if (water) drawTap(g, box, pouring, flow);
       else drawBag(g, sourceX, sourceY, pouring, t(food.label), ctx.time);

@@ -82,10 +82,10 @@ describe('📸 la caméra de la cérémonie', () => {
       rig.yaw = e.heading;
       const at = new THREE.Vector3();
       for (let i = 0; i < 400; i++) {
-        rig.focus = { shot: C.ceremonyShot(e, rider, at) };
+        rig.focus = { shot: C.ceremonyShot(e, rider, at, aspect) };
         rig.update(1 / 30, { look: { dx: 0, dy: 0 }, zoom: 0 }, rider, { insideBuilding: () => false, heightAt: () => 0 });
       }
-      // devant le cheval, du côté de la carrière
+      // devant le cheval, du côté de la carrière (le podium derrière lui)
       expect(cam.position.x).toBeLessThan(e.position.x - 2);
       const band = aspect < 1 ? (390 / 1.6) / 844 : 1;
       if (band < 0.9) cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
@@ -97,6 +97,36 @@ describe('📸 la caméra de la cérémonie', () => {
         const p = q.add(e.position).project(cam);
         expect(Math.abs(p.y)).toBeLessThan(band * 0.98);
         expect(Math.abs(p.x)).toBeLessThan(0.98);
+      }
+    }
+  });
+
+  it('à pied : la cavalière sur sa marche et son cheval au sol, tous les deux entiers à l\'écran et dans la photo', () => {
+    const s = C.ceremonySpot(POD, 2, { mounted: false, scale: 1 });
+    const step = POD.steps[1];
+    const e = { position: V(s.horse.x, 0, s.horse.z), heading: s.horse.heading, scale: 1 };
+    const player = { position: V(s.player.x, step.y, s.player.z), eyeHeight: 1.5, heading: s.player.heading, speed: 0, auto: false, mount: null, avatar: { root: { visible: true } } };
+    for (const aspect of [390 / 844, 844 / 390]) {
+      const cam = new THREE.PerspectiveCamera(60, aspect, 0.1, 500);
+      const rig = new CameraRig(cam);
+      rig.yaw = player.heading;
+      const at = new THREE.Vector3();
+      for (let i = 0; i < 400; i++) {
+        rig.focus = { shot: C.ceremonyShot(e, player, at, aspect) };
+        rig.update(1 / 30, { look: { dx: 0, dy: 0 }, zoom: 0 }, player, { insideBuilding: () => false, heightAt: () => 0 });
+      }
+      expect(cam.position.x).toBeLessThan(step.x - 3);
+      const band = aspect < 1 ? (390 / 1.6) / 844 : 1;
+      if (band < 0.9) cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
+      cam.updateProjectionMatrix();
+      cam.updateMatrixWorld(true);
+      const f = V(Math.sin(e.heading), 0, Math.cos(e.heading));
+      const horse = [V(0, 0, 0).addScaledVector(f, 0.75), V(0, 0, 0).addScaledVector(f, -0.6), V(0, 2.05, 0).addScaledVector(f, 1.3), V(0, 0.5, 0).addScaledVector(f, -1.35)].map((q) => q.add(e.position));
+      const kid = [player.position.clone(), player.position.clone().add(V(0, 1.45, 0))];
+      for (const q of [...horse, ...kid]) {
+        const p = q.clone().project(cam);
+        expect(Math.abs(p.y), `${aspect} ${q.toArray()}`).toBeLessThan(band * 0.98);
+        expect(Math.abs(p.x), `${aspect} ${q.toArray()}`).toBeLessThan(0.98);
       }
     }
   });

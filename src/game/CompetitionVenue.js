@@ -52,11 +52,24 @@ export function ceremonySpot(pod, rank, { mounted = true, scale = 1 } = {}) {
 }
 
 /**
- * Plan de la cérémonie (rig.focus.shot) : de trois quarts avant du cheval, le podium derrière ; monté (rider), le
- * cheval et sa cavalière entiers (visée à mi-hauteur entre les sabots et son casque).
+ * Plan de la cérémonie (rig.focus.shot) : de trois quarts avant, le podium derrière. Monté (rider.mount === e), le
+ * cheval et sa cavalière entiers (visée à mi-hauteur entre les sabots et son casque). À pied (rider = la joueuse sur sa
+ * marche), visée entre elle et son cheval, vue de la carrière (de face pour elle, de profil pour le cheval), reculée
+ * selon l'écart entre eux et la forme de l'écran (aspect), pour qu'on les voie tous les deux entiers.
  */
-export function ceremonyShot(e, rider, at) {
+export function ceremonyShot(e, rider, at, aspect = 1) {
   const sc = e.scale ?? 1;
+  if (rider && rider.mount !== e && rider.position) {
+    const p = rider.position;
+    const ground = e.position.y;
+    const top = Math.max(2.1 * sc, p.y - ground + 1.55);
+    at.set((e.position.x + p.x) / 2, ground + top * 0.5, (e.position.z + p.z) / 2);
+    // écart (largeur à montrer) : de la tête à la croupe du cheval et jusqu'à la joueuse
+    const span = Math.hypot(e.position.x - p.x, e.position.z - p.z) + 2.6 * sc;
+    const h = aspect < 1 ? 1 : aspect;
+    const dist = Math.max(1.4 + top * 1.6, (span * 0.5) / (0.36 * Math.min(1, h)) + 1);
+    return { at, heading: rider.heading, dist, yaw: 0.3, pitch: 0.1 };
+  }
   const top = rider ? Math.max(1.4, rider.eyeHeight - 0.1) : 2.1 * sc;
   at.set(e.position.x, e.position.y + top * 0.5, e.position.z);
   return { at, heading: e.heading, dist: 1.2 + top * 1.75, yaw: 0.6, pitch: 0.12 };
@@ -98,7 +111,7 @@ export class CompetitionVenue {
     if (this.ceremonyT > 0 && this.ceremonyE && this.built) {
       this.ceremonyT -= dt;
       const pl = this.game.player;
-      this.game.rig.focus = { shot: ceremonyShot(this.ceremonyE, pl.mount === this.ceremonyE ? pl : null, (this.shotAt ??= new THREE.Vector3())) };
+      this.game.rig.focus = { shot: ceremonyShot(this.ceremonyE, pl.mount === this.ceremonyE || this.ceremonyFoot ? pl : null, (this.shotAt ??= new THREE.Vector3()), this.game.camera?.aspect ?? 1) };
     }
     if (this.built) {
       this.cheer = Math.max(0, this.cheer - dt * 0.35);
@@ -418,6 +431,7 @@ export class CompetitionVenue {
       e.timer = 6;
     }
     this.ceremonyE = e ?? null;
+    this.ceremonyFoot = !mounted && rank <= 3;
     this.ceremonyT = 3.5;
     g.rig.yaw = pl.heading;
     g.rig.reset();

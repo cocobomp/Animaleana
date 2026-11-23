@@ -116,14 +116,17 @@ describe('🏆 le podium avec un cheval (beautyPodiumSpot, beautyPodiumShot)', (
           // la photo (Beauty.takePhoto) : la caméra à la place exacte du plan, bande 16:10, 40° de haut dans la bande
           const photo = cam.clone();
           const { shotPose } = PlayerMod;
-          const shot = B.beautyPodiumShot(e, child, new THREE.Vector3(), aspect);
+          // (la photo de l'album est en largeur, 16:10 : son plan est pris pour cette forme-là, plus près)
+          const shot = B.beautyPodiumShot(e, child, new THREE.Vector3(), 1.6);
           shotPose(shot, photo.position);
           photo.lookAt(shot.at);
           const band = Math.min(1, (aspect / 1.6));
           if (band < 0.9) photo.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
           photo.updateProjectionMatrix();
           photo.updateMatrixWorld(true);
-          expect(photo.position.distanceTo(cam.position)).toBeLessThan(0.1);
+          // (ils remplissent la photo : au moins 40 % de sa hauteur (30 % en largeur, champ de 60°), de ses sabots à la tête de l'enfant)
+          const ys = [V(step.x, step.h + 1.55, step.z), toWorld(e, [0.15, 0, 0.75])].map((w) => w.clone().project(photo).y);
+          expect((ys[0] - ys[1]) / (2 * (band < 0.9 ? band : 1))).toBeGreaterThan(band < 0.9 ? 0.4 : 0.3);
           const pts = [...HORSE.map((q) => toWorld(e, q)), V(step.x, step.h, step.z), V(step.x, step.h + 1.55, step.z)];
           for (const [c, lim] of [[cam, 0.92], [photo, band < 0.9 ? band * 0.95 : 0.92]]) {
             for (const w of pts) {

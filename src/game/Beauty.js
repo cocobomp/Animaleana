@@ -555,8 +555,10 @@ export function beautyPodiumShot(e, player, at, aspect = 1) {
   // (le milieu entre l'enfant et le centre du cheval, à mi-hauteur)
   at.set((e.position.x + p.x) / 2, ground + top * 0.48, (e.position.z + p.z) / 2);
   const span = Math.hypot(e.position.x - p.x, e.position.z - p.z) + 1.6 * sc + 0.6;
-  const w = aspect < 1 ? Math.max(0.4, aspect) : 1;
-  const dist = Math.max(1.6 + top * 1.7, (span * 0.5) / (0.4 * w) + 1);
+  // (demi-largeur du champ : ≈ 0,48 × la forme de l'image, avec une marge ; en largeur, le champ vertical de l'écran,
+  // 60°, est aussi celui de la photo : un peu plus près)
+  const tanH = 0.48 * THREE.MathUtils.clamp(aspect, 0.4, 1.6);
+  const dist = Math.max(1.6 + top * (aspect < 1 ? 1.7 : 1.45), (span * 0.5) / tanH + 1);
   // (de face au podium : heading π ; un peu du côté de la tête du cheval, qui regarde vers l'enfant)
   const headSide = Math.sign(p.x - e.position.x) || 1;
   return { at, heading: Math.PI, dist, yaw: -0.35 * headSide, pitch: 0.12 };
@@ -1125,12 +1127,15 @@ class BeautySession extends Session {
     this.game.rig.focus = { shot: beautyShot(e, 'judge', (this.shotAt ??= new THREE.Vector3()), this.game.camera.aspect) };
   }
 
-  /** Le plan du podium (rig.focus.shot) : un cheval et l'enfant sur sa marche (beautyPodiumShot), sinon l'animal sur sa marche. */
-  podiumShot() {
+  /**
+   * Le plan du podium (rig.focus.shot) : un cheval et l'enfant sur sa marche (beautyPodiumShot), sinon l'animal sur sa
+   * marche. aspect : celui de l'écran, ou 1,6 pour la photo de l'album (en largeur : on peut s'approcher).
+   */
+  podiumShot(aspect = this.game.camera.aspect) {
     const e = this.e;
     const sc = e.scale ?? 1;
     const at = (this.shotAt ??= new THREE.Vector3());
-    if (e.data.species === 'horse') return beautyPodiumShot(e, this.game.player, at, this.game.camera.aspect);
+    if (e.data.species === 'horse') return beautyPodiumShot(e, this.game.player, at, aspect);
     return { at: at.set(e.position.x, e.position.y + 0.4 * sc, e.position.z), heading: e.heading, dist: 1.1 + 1.4 * sc, yaw: 0.12, pitch: 0.16 };
   }
 
@@ -1226,7 +1231,8 @@ class BeautySession extends Session {
       }
       // (la caméra à la place exacte du plan, même si elle n'y est pas encore arrivée : téléphone lent)
       if (this.e) {
-        const shot = this.podiumShot();
+        // (la photo est en largeur, 16:10 : plus près qu'à l'écran d'un téléphone en hauteur, où ils semblaient petits)
+        const shot = this.podiumShot(c.width / c.height);
         saved = { p: cam.position.clone(), q: cam.quaternion.clone() };
         shotPose(shot, cam.position, (x, z) => g.world.heightAt(x, z));
         cam.lookAt(shot.at);

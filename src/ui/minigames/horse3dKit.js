@@ -145,3 +145,204 @@ export function closeSleeve(hand, own) {
   });
   return hand;
 }
+
+const _hw = new THREE.Vector3();
+const _hd = new THREE.Vector3();
+const _hw2 = new THREE.Vector3();
+const _hq = new THREE.Quaternion();
+const _hray = new THREE.Ray();
+
+/**
+ * La copie figée de la pose refaite MAINTENANT (os et repères de l'image en cours) : la peau qu'on mesure est celle
+ * qu'on voit.
+ */
+export function bakeSkin(sc) {
+  sc.holder.updateMatrixWorld(true);
+  const px = sc.proxy;
+  if (!px) return null;
+  if (!px.parts) px.prepare();
+  px.skeleton?.update?.();
+  px.bake();
+  px.at = sc.time ?? 0;
+  return px;
+}
+
+/** Les points touchés par un rayon (repère monde) sur la copie figée, du plus proche au plus loin, avec leur triangle. */
+function skinHits(px, ray) {
+  if (!px.parts) px.bake();
+  px.ray.ray.copy(ray);
+  return px.ray.intersectObject(px.mesh, false).map((h) => {
+    const w = px.wrap(h, ray);
+    w.face = h.face;
+    return w;
+  });
+}
+
+/** Où est un sommet de la copie figée dans son maillage d'origine (maillage, indice). */
+function sourceOf(px, k) {
+  let base = 0;
+  for (const part of px.parts) {
+    if (k < base + part.list.length) return { m: part.m, i: part.list[k - base] };
+    base += part.list.length;
+  }
+  return null;
+}
+
+const _ga = new THREE.Vector3();
+const _gb = new THREE.Vector3();
+const _gc = new THREE.Vector3();
+const _tri = new THREE.Triangle();
+/**
+ * Une « colle » sur la peau : le triangle touché et la place du point dedans (coordonnées barycentriques). À chaque
+ * image, gluePoint refait le point avec la peau déformée de l'image (os de la tête, de l'encolure…) : une lanière
+ * collée suit la gorge qui se plie quand il baisse la tête.
+ */
+function glueOf(px, h) {
+  const f = h.face;
+  if (!f) return null;
+  const P = px.pos;
+  _tri.set(_ga.fromArray(P, f.a * 3), _gb.fromArray(P, f.b * 3), _gc.fromArray(P, f.c * 3));
+  const bary = _tri.getBarycoord(h.point, new THREE.Vector3());
+  if (!bary) return null;
+  const src = [f.a, f.b, f.c].map((k) => sourceOf(px, k));
+  if (src.some((x) => !x)) return null;
+  // (le sens de la normale du triangle vers le dehors : celui du rayon qui l'a touché)
+  const n = _tri.getNormal(new THREE.Vector3());
+  return { src, bary, sign: n.dot(h.normal) >= 0 ? 1 : -1 };
+}
+const _gv = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+/** Le point collé et sa normale (repère monde), avec la pose de l'image. out : { p, n }. */
+export function gluePoint(g, out) {
+  for (let k = 0; k < 3; k++) {
+    const { m, i } = g.src[k];
+    const v = _gv[k].fromBufferAttribute(m.geometry.attributes.position, i);
+    if (m.isSkinnedMesh) m.applyBoneTransform(i, v);
+    v.applyMatrix4(m.matrixWorld);
+  }
+  out.p.set(0, 0, 0).addScaledVector(_gv[0], g.bary.x).addScaledVector(_gv[1], g.bary.y).addScaledVector(_gv[2], g.bary.z);
+  _tri.set(_gv[0], _gv[1], _gv[2]).getNormal(out.n);
+  out.n.multiplyScalar(g.sign);
+  return out;
+}
+/** La peau de l'image en cours : les os à jour (avant le rendu), pour gluePoint. */
+export function skinNow(sc) {
+  sc.model?.root?.updateMatrixWorld(true);
+  sc.proxy?.skeleton?.update?.();
+}
+
+/**
+ * Un point posé sur la peau, dans le repère de obj (la tête) : un rayon part de loin, du côté d (repère de obj), et
+ * descend vers p ; le premier point de peau touché (skip(h) : un point à ne pas prendre, une oreille par exemple),
+ * décalé de margin le long de la normale. Renvoie { p, n, glue } (repère de obj ; glue : de quoi le refaire à chaque
+ * image avec gluePoint), ou le point du guide (miss) si le rayon ne touche rien avant p. bakeSkin avant.
+ */
+export function skinPoint(sc, obj, p, d, { margin = 0.007, reach = 0.6, skip = null } = {}) {
+  const dl = _hd.copy(d).normalize();
+  const from = obj.localToWorld(_hw.copy(p).addScaledVector(dl, reach));
+  const scale = obj.getWorldScale(_hw2).x;
+  obj.getWorldQuaternion(_hq);
+  _hray.origin.copy(from);
+  _hray.direction.copy(dl).applyQuaternion(_hq).negate();
+  const h = skinHits(sc.proxy, _hray).find((x) => x.distance < reach * scale && !(skip && skip(x)));
+  if (!h) return { p: p.clone(), n: d.clone().normalize(), miss: true };
+  const n = h.normal.clone().applyQuaternion(_hq.invert()).normalize();
+  const q = obj.worldToLocal(h.point.clone()).addScaledVector(n, margin / scale);
+  return { p: q, n, bone: h.bone, glue: glueOf(sc.proxy, h) };
+}
+
+/**
+ * Pour skinPoint : un point sur une oreille elle-même (elle dépasse du crâne de plus de 12 mm au-dessus de sa base),
+ * pas sur le crâne autour de sa base (sa peau suit aussi l'os de l'oreille).
+ */
+export function earSkip(model) {
+  const head = model.head;
+  const ears = (model.ears ?? []).filter((e) => e.parent === head);
+  const v = new THREE.Vector3();
+  const out = ears.map((e) => e.position.clone().setZ(0).setY(e.position.y + 0.02).normalize());
+  return (h) => {
+    if (!/Ear/.test(h.boneName) || !head) return false;
+    head.worldToLocal(v.copy(h.point));
+    const s = head.getWorldScale(new THREE.Vector3()).x || 1;
+    return ears.some((e, i) => {
+      const d = v.clone().sub(e.position);
+      return d.dot(out[i]) * s > 0.012;
+    });
+  };
+}
+
+/**
+ * Une lanière de cuir plate (section rectangulaire, faces nettes) le long de points et de leurs normales (la peau) :
+ * hw demi-largeur, th épaisseur. Renvoie { geo, set(pts, nrm) } : set refait les sommets sans rien réallouer (même
+ * nombre de points).
+ */
+export function ribbon(n, { hw = 0.011, th = 0.0045, closed = false } = {}) {
+  const geo = new THREE.BufferGeometry();
+  const segs = closed ? n : n - 1;
+  const vCount = 4 * 2 * n + (closed ? 0 : 8);
+  const pos = new Float32Array(vCount * 3);
+  const nor = new Float32Array(vCount * 3);
+  const idx = [];
+  for (let s = 0; s < 4; s++) {
+    for (let i = 0; i < segs; i++) {
+      const a = s * 2 * n + i * 2;
+      const b = s * 2 * n + ((i + 1) % n) * 2;
+      idx.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  if (!closed) {
+    const c0 = 8 * n;
+    idx.push(c0, c0 + 2, c0 + 1, c0, c0 + 3, c0 + 2, c0 + 4, c0 + 5, c0 + 6, c0 + 4, c0 + 6, c0 + 7);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  geo.setIndex(idx);
+  const T = new THREE.Vector3();
+  const B = new THREE.Vector3();
+  const N = new THREE.Vector3();
+  const c = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const put = (arr, k, v) => {
+    arr[k * 3] = v.x;
+    arr[k * 3 + 1] = v.y;
+    arr[k * 3 + 2] = v.z;
+  };
+  function set(pts, nrm) {
+    for (let i = 0; i < n; i++) {
+      const prev = pts[closed ? (i - 1 + n) % n : Math.max(0, i - 1)];
+      const next = pts[closed ? (i + 1) % n : Math.min(n - 1, i + 1)];
+      T.subVectors(next, prev).normalize();
+      N.copy(nrm[i]).addScaledVector(T, -nrm[i].dot(T)).normalize();
+      B.crossVectors(T, N).normalize();
+      const p = pts[i];
+      // coins : 0 dessus-gauche, 1 dessus-droite, 2 dessous-droite, 3 dessous-gauche
+      c[0].copy(p).addScaledVector(N, th / 2).addScaledVector(B, -hw);
+      c[1].copy(p).addScaledVector(N, th / 2).addScaledVector(B, hw);
+      c[2].copy(p).addScaledVector(N, -th / 2).addScaledVector(B, hw);
+      c[3].copy(p).addScaledVector(N, -th / 2).addScaledVector(B, -hw);
+      // faces : dessus (c0,c1 ; +N), droite (c1,c2 ; +B), dessous (c2,c3 ; -N), gauche (c3,c0 ; -B)
+      const faces = [[0, 1, N, 1], [1, 2, B, 1], [2, 3, N, -1], [3, 0, B, -1]];
+      for (let s = 0; s < 4; s++) {
+        const [u, v, dir, sg] = faces[s];
+        const k = s * 2 * n + i * 2;
+        put(pos, k, c[u]);
+        put(pos, k + 1, c[v]);
+        nor[k * 3] = nor[k * 3 + 3] = dir.x * sg;
+        nor[k * 3 + 1] = nor[k * 3 + 4] = dir.y * sg;
+        nor[k * 3 + 2] = nor[k * 3 + 5] = dir.z * sg;
+      }
+      if (!closed && (i === 0 || i === n - 1)) {
+        const k0 = 8 * n + (i === 0 ? 0 : 4);
+        const sg = i === 0 ? -1 : 1;
+        for (let j = 0; j < 4; j++) {
+          put(pos, k0 + j, c[j]);
+          nor[(k0 + j) * 3] = T.x * sg;
+          nor[(k0 + j) * 3 + 1] = T.y * sg;
+          nor[(k0 + j) * 3 + 2] = T.z * sg;
+        }
+      }
+    }
+    geo.attributes.position.needsUpdate = true;
+    geo.attributes.normal.needsUpdate = true;
+    geo.computeBoundingSphere();
+  }
+  return { geo, set };
+}

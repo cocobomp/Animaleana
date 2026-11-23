@@ -182,7 +182,7 @@ describe('brider en 3D, chaque gabarit', () => {
       run(ctx, game, sc, 0.3);
       let s = game.peek();
       expect(inView(s.bar, ctx.view), 'le coin des lèvres est dans l\'image').toBe(true);
-      expect(s.halterHidden).toBe(false);
+      expect(s.halterHidden, 'le licol est enlevé dès le début (jamais deux harnachements l\'un sur l\'autre)').toBe(true);
       // il baisse la tête vers nous : la caméra le suit ; le bout du nez, ses dents et notre main restent dans l'image
       run(ctx, game, sc, 2.5);
       s = game.peek();

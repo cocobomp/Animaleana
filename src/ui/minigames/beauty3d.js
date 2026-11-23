@@ -275,6 +275,20 @@ export function handOnCoat(hand, h, press = 1, sc = null) {
 
 // ---------------------------------------------------------------- lustrer
 
+/**
+ * Le reflet du lustrage selon la robe. Le reflet s'ajoute à la robe : sur une robe foncée (alezan, noir, bai), il se
+ * voit bien ; sur une robe claire (gris, blanc, Appaloosa), la même force brûle la robe en une tache blanc-jaune là
+ * où le soleil tape, et ne se voit pas ailleurs. Plus la robe est claire, plus le reflet est doux (alpha) et étalé
+ * (rugosité) : un satin sur toute la partie frottée, pas une tache.
+ */
+export function glossFor(coat = 0x8a5a2b) {
+  const c = new THREE.Color(coat);
+  // (clarté perçue de la robe, de 0 à 1 : luminance des composantes linéaires, ramenée à l'écran)
+  const lum = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) ** (1 / 2.2);
+  const k = clamp01((lum - 0.35) / 0.5); // (0 : robe foncée ; 1 : robe blanche)
+  return { roughness: 0.27 + 0.2 * k, env: 1.5 - 0.6 * k, alpha: 0.85 * (1 - 0.68 * k), tint: [0.42 - 0.2 * k, 0.33 - 0.15 * k, 0.05] };
+}
+
 export function shine3dGame(ctx) {
   const { a } = ctx;
   const sc = ctx.scene;
@@ -293,8 +307,9 @@ export function shine3dGame(ctx) {
   const sh = play.shape;
   const F = bodyFrame(sc);
   const to2d = bodyTo2d(sc, sh);
-  // (un reflet satiné, pas une robe de plastique : assez lisse pour briller au soleil de la fenêtre, pas plus)
-  const gloss = coatGloss(sc, own, { over: play.overAt * GLOSS_K, roughness: 0.27, env: 1.5, alpha: 0.85 });
+  // (un reflet satiné, pas une robe de plastique : assez lisse pour briller au soleil de la fenêtre, pas plus ;
+  // plus doux et plus étalé sur une robe claire, voir glossFor)
+  const gloss = coatGloss(sc, own, { over: play.overAt * GLOSS_K, ...glossFor(a?.look?.coat) });
   // Chaque sommet de la robe (corps seulement) et les cases du cheval dessiné qui l'entourent : il brille comme
   // elles (ce qui brille, c'est ce que la jauge compte ; trop de lustrant : le reflet devient gras).
   const near = [];

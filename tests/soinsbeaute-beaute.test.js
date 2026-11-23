@@ -180,6 +180,20 @@ function braidKeys(game, ctx, colorKey, tick = () => {}) {
   }
 }
 
+describe('lustrer : un reflet satiné sur toutes les robes, pas une tache brûlée', () => {
+  it('plus la robe est claire, plus le reflet ajouté est doux et étalé (gris, blanc, Appaloosa contre noir, alezan)', () => {
+    const dark = [0x1a1716, 0x7a4528].map((c) => beauty3d.glossFor(c));
+    const light = [0xb3b0aa, 0xf1ece2, 0xd8d4cc].map((c) => beauty3d.glossFor(c));
+    for (const l of light) for (const d of dark) {
+      expect(l.alpha).toBeLessThan(d.alpha * 0.6);
+      expect(l.roughness).toBeGreaterThan(d.roughness + 0.1);
+      expect(l.env).toBeLessThan(d.env);
+    }
+    // (une robe foncée garde le reflet franc d'avant)
+    for (const d of dark) expect(d.alpha).toBeGreaterThan(0.8);
+  });
+});
+
 describe('tresser en 3D', () => {
   for (const key of FIVE) {
     it(`${key} : chaque geste juste ajoute un bouton sur la vraie crinière ; rubans, queue ; même note et même couleur`, () => {

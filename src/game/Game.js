@@ -600,7 +600,7 @@ export class Game {
       e.rebuildModel();
       if (mounted) {
         pl.rideRest = undefined;
-        pl.seat(); // (la cavalière se remet en selle sur le nouveau modèle : hauteur, étriers, rênes)
+        pl.seat?.(); // (la cavalière se remet en selle sur le nouveau modèle : hauteur, étriers, rênes)
       }
       return;
     }

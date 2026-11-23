@@ -164,3 +164,34 @@ describe('friandise 3D : notre bras', () => {
     }
   }, 30000);
 });
+
+describe('friandise 3D : la carotte entre ses lèvres quand il croque', () => {
+  it('le milieu de la carotte passe contre ses lèvres (model.mouth), pas sous le menton (4 chevaux, et en paysage)', () => {
+    for (const h of [{ breed: 'appaloosa', w: 844 - 320, h: 390 }, { breed: 'appaloosa' }, { breed: 'selle_francais' }, { breed: 'frison' }, { breed: 'falabella' }]) {
+      const { a, sc } = makeStage({ ...h, personality: 'calm' });
+      const ctx = ctxFor(a, sc);
+      const game = treat3d.treat3dGame(ctx);
+      let d = null;
+      for (let i = 0; i < 1500 && d === null; i++) {
+        const s = game.peek();
+        if (s.state === 'calm' && s.given === 0) ctx.buttons.filter((b) => !b.opts.cls?.includes('stop'))[0].opts.onTap();
+        run(ctx, game, sc, 1 / 30, 1 / 30, () => {
+          if (d !== null || !game.peek().bite) return;
+          // (la carotte croquée : le corps conique de treatModel, 0,17 m de long, couché le long de son axe x)
+          const tm = sc.scene.children.find((o) => o.visible && o.children[0]?.geometry?.type === 'CylinderGeometry' && o.children[0].geometry.parameters.height === 0.17);
+          if (!tm) return;
+          const mouth = sc.model.head.localToWorld(sc.model.mouth.clone());
+          const ax = new THREE.Vector3(1, 0, 0).applyQuaternion(tm.getWorldQuaternion(new THREE.Quaternion())).multiplyScalar(0.085 * tm.scale.x);
+          const c = tm.getWorldPosition(new THREE.Vector3());
+          const q = new THREE.Line3(c.clone().sub(ax), c.clone().add(ax)).closestPointToPoint(mouth, true, new THREE.Vector3());
+          d = q.distanceTo(mouth);
+        });
+      }
+      expect(d, h.breed).not.toBeNull();
+      // (le rayon de la carotte est 1,7 cm : ses lèvres sont contre elle)
+      expect(d, h.breed).toBeLessThan(0.022 * Math.max(0.75, sc.double.scale));
+      game.destroy();
+      sc.dispose();
+    }
+  }, 120000);
+});

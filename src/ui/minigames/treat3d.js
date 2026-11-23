@@ -39,7 +39,14 @@ export function treat3dGame(ctx) {
   // Main au repos : devant le bout du nez, un peu vers nous et plus bas (tout près : la tête reste grande).
   const rest = muzzle.clone().add(v3(0.1, -0.16, 0.32).multiplyScalar(Math.max(0.75, S)));
   // (les cœurs et les mots partent d'au-dessus de son front, pas de ses yeux)
-  const play = withLogic(ctx, treatGame, () => sc.project(sc.live('forehead').add(v3(0.04, 0.12 * S, 0))));
+  // (les mots « Miam ! », « Bien ! » partent au-dessus de ce point, deux de suite l'un au-dessus de l'autre : quand
+  // sa tête est tout en haut de l'image — en paysage —, le point descend assez pour que les deux tiennent sans se
+  // chevaucher contre le haut)
+  const play = withLogic(ctx, treatGame, () => {
+    const p = sc.project(sc.live('forehead').add(v3(0.04, 0.12 * S, 0)));
+    const top = (ctx.view?.y0 ?? 0) + 30 + 26 + 2 * 30;
+    return { x: p.x, y: Math.max(p.y, top) };
+  });
   // Notre main (couleur de peau de l'avatar), et les deux friandises.
   const keep = [];
   const own = (x) => {
@@ -158,7 +165,9 @@ export function treat3dGame(ctx) {
         const side = v3(-1, 0, 0).applyQuaternion(_hq);
         const down = v3(0, -1, 0).applyQuaternion(_hq);
         const carrot = bite.k === 'carrot';
-        bite.tm.position.copy(sc.live('muzzle')).addScaledVector(down, 0.025 * S).addScaledVector(side, (carrot ? 0.06 : 0.02) * S);
+        // (posée sur ses lèvres, model.mouth, et non sur le repère du museau : celui-ci est 4 à 7 cm plus bas et plus
+        // en avant, et la carotte flottait sous le menton)
+        bite.tm.position.copy(lips()).addScaledVector(down, (carrot ? 0.004 : 0.02) * S).addScaledVector(side, (carrot ? 0.055 : 0.02) * S);
         bite.tm.quaternion.copy(_hq);
         if (carrot) bite.tm.rotateY(0.25);
         const k = bite.t < 0.5 ? 1 : Math.max(0.05, 1 - (bite.t - 0.5) / 0.4);

@@ -264,7 +264,9 @@ hEarIn = 0.0;
     vec3 q = P * vec3(1.7, 1.4, 1.7) + hSeed * 3.1;
     vec3 w = vec3(hNoise(P * 4.0 + 1.7), hNoise(P * 4.0 + 9.2), hNoise(P * 4.0 + 4.4)) - 0.5;
     float pn = hFbm(q + w * ${glf(PIN.warp)}) + (hNoise(P * 9.0) - 0.5) * 0.06;
-    float jag = (hNoise(P * 20.0 + hSeed) - 0.5) * ${glf(PIN.jag)};
+    // (sur la tête, une dentelure trois fois plus fine : au téléphone, de près, des dents de scie et des gouttes blanches
+    // détachées autour de la liste)
+    float jag = (hNoise(P * 20.0 + hSeed) - 0.5) * ${glf(PIN.jag)} * (1.0 - 0.67 * isHead);
     float back = bodyS * smoothstep(0.35, 0.9, up) * smoothstep(-0.6, -0.2, -abs(P.z + 0.1));
     float t = pn + jag + isLeg * (1.0 - smoothstep(0.1, 0.7, h)) * 0.45 - headW * 0.5 + back * 0.12;
     float wdt = max(fwidth(t) * 0.75, 0.002);
@@ -352,12 +354,14 @@ hEarIn = 0.0;
   // fine (avant : un ruban adhésif aux bords parallèles).
   float face = 0.0;
   if (hFace > 0.5 && isHead > 0.5) {
-    float fn = (hNoise(P * 40.0) - 0.5) * 0.06;
+    // (dentelure du bord divisée par 2,5 : à ± 3 cm sur une liste de 5 cm de demi-largeur, elle faisait des dents de
+    // scie et des gouttes blanches détachées ; le bord reste irrégulier par wob, mais net)
+    float fn = (hNoise(P * 40.0) - 0.5) * 0.024;
     float wob = (hNoise(vec3(hl.z * 9.0, hSeed, 1.7)) - 0.5) * 0.024 + (hNoise(vec3(hl.z * 31.0, hl.x * 18.0, hSeed)) - 0.5) * 0.01
       + (hNoise(vec3(hl.z * 6.0 + sign(hl.x) * 3.1, hSeed, 4.2)) - 0.5) * 0.014;
     float ax = abs(hl.x) + wob;
     float front = smoothstep(-0.02, 0.06, hl.y + 0.1 * smoothstep(0.75, 1.0, hl.z));
-    float star = 1.0 - smoothstep(0.8, 1.0, length(vec2(hl.x / 0.045, (hl.z - 0.31) / 0.05)) + fn * 6.0 + (hNoise(P * 90.0) - 0.5) * 0.35);
+    float star = 1.0 - smoothstep(0.8, 1.0, length(vec2(hl.x / 0.045, (hl.z - 0.31) / 0.05)) + fn * 6.0 + (hNoise(P * 90.0) - 0.5) * 0.14);
     float stripe = (1.0 - smoothstep(0.016, 0.027, ax + fn * 0.4)) * smoothstep(0.3, 0.34, hl.z) * (1.0 - smoothstep(0.9, 0.95, hl.z));
     float blaze = (1.0 - smoothstep(0.042, 0.054, ax - hl.z * 0.035 + fn)) * smoothstep(0.24, 0.28, hl.z);
     float snip = 1.0 - smoothstep(0.85, 1.05, length(vec2(hl.x / 0.05, (hl.z - 0.93) / 0.05)) + fn * 4.0);

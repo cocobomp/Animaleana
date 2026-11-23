@@ -8,7 +8,7 @@ import { t } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { perkParams } from './names.js'; // textes des rangs (espèces proposées)
 import { animalCard, animalThumbSpec } from './panels.js';
-import { thumb } from '../game/thumbScenes.js'; // vignettes 3D : le vrai cheval (listes, photos avant / après)
+import { thumb, thumbsFor } from '../game/thumbScenes.js'; // vignettes 3D : le vrai cheval (listes, photos avant / après)
 import { runMinigame, registerMinigames } from './minigames.js';
 import { GROOMER_GAMES, GROOMER_ICONS, setFinishOptions, setCutStyle, drawAccessoryOn } from './minigames/groomer.js';
 import { drawAnimal, fitAnimal, animalShape, circle, emoji as drawEmoji, shade } from './minigames/draw.js';
@@ -384,19 +384,21 @@ function sparkleCorners(g, W, H, styleCorner = false) {
 
 /**
  * Photo avant / après d'un cheval : sa vignette 3D (le vrai cheval), et par-dessus, sur une toile transparente, la
- * poussière et les poils en bataille (avant) ou les étincelles dans les coins et l'emoji de la coupe (après). null si
- * pas de vignette possible (le portrait dessiné prend le relais).
+ * poussière et les brins de paille posés sur sa robe (avant), ou les étincelles dans les coins, l'emoji de la coupe
+ * et ce qu'on a fait pendant la séance (après). null si pas de vignette possible (le portrait dessiné prend le
+ * relais). done : les étapes faites (emoji en bas de la photo « après ») ; acc : son accessoire (ruban, nœud).
  */
-export function horsePhoto(g, a, { before = false, style = null } = {}) {
+export function horsePhoto(g, a, { before = false, style = null, done = [], acc = null } = {}) {
   const spec = a.species === 'horse' && g ? animalThumbSpec(a) : null;
-  if (!spec) return null;
+  // (sans moteur de vignettes — pas de WebGL — : le portrait dessiné, pas l'emoji 🐴 dans les deux photos)
+  if (!spec || !thumbsFor(g)?.enabled) return null;
   const W = 220;
   const H = 170;
-  const box = h('div', { class: `grm-photo grm-photo3d ${before ? 'before' : 'after'}`, style: { position: 'relative', aspectRatio: `${W} / ${H}`, overflow: 'hidden', background: before ? 'linear-gradient(#ece7ed, #d9d2d8)' : 'linear-gradient(#fdebf3, #f7cfe0)' } });
+  const box = h('div', { class: `grm-photo grm-photo3d ${before ? 'before' : 'after'}`, style: { position: 'relative', aspectRatio: `${W} / ${H}`, overflow: 'hidden', background: before ? 'linear-gradient(#ece7ed, #d9d2d8)' : 'radial-gradient(circle at 50% 55%, #fff6fa, #f7cfe0 70%)' } });
   const pic = thumb(g, spec, { w: W, h: H, emoji: SPECIES.horse.emoji, cls: 'grm-photo-pic', alt: a.name ?? '', urgent: true });
   Object.assign(pic.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', borderRadius: '0', background: 'transparent', boxShadow: 'none' });
-  // (avant : un peu terne, poussiéreux)
-  if (before) pic.style.filter = 'saturate(0.7) brightness(0.93) sepia(0.12)';
+  // (avant : un peu terne, poussiéreux ; après : propre et lumineux, un halo doux autour de lui)
+  pic.style.filter = before ? 'saturate(0.7) brightness(0.93) sepia(0.12)' : 'saturate(1.12) brightness(1.05) contrast(1.04) drop-shadow(0 0 5px rgba(255,255,255,0.95))';
   const over = h('canvas', { class: 'grm-photo-over', style: { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' } });
   over.width = W * 2;
   over.height = H * 2;
@@ -404,34 +406,129 @@ export function horsePhoto(g, a, { before = false, style = null } = {}) {
   if (c) {
     c.setTransform(2, 0, 0, 2, 0, 0);
     if (before) {
-      // poussière : des taches brunes floues sur le corps (le milieu de la photo), quelques brins de paille
-      for (let i = 0; i < 9; i++) {
-        const x = W * (0.3 + 0.4 * ((i * 0.37) % 1));
-        const y = H * (0.42 + 0.22 * ((i * 0.61) % 1));
-        const gr = c.createRadialGradient(x, y, 0, x, y, 9 + (i % 3) * 4);
-        gr.addColorStop(0, 'rgba(120,92,62,0.45)');
-        gr.addColorStop(1, 'rgba(120,92,62,0)');
-        c.fillStyle = gr;
-        c.fillRect(x - 20, y - 20, 40, 40);
-      }
-      c.strokeStyle = 'rgba(214,184,96,0.85)';
-      c.lineWidth = 1.4;
-      for (let i = 0; i < 5; i++) {
-        const x = W * (0.28 + 0.45 * ((i * 0.53) % 1));
-        const y = H * (0.5 + 0.18 * ((i * 0.29) % 1));
-        c.beginPath();
-        c.moveTo(x, y);
-        c.lineTo(x + 9 - (i % 2) * 18, y + 3);
-        c.stroke();
-      }
       drawEmoji(c, '💨', 22, H - 26, 20);
     } else {
       sparkleCorners(c, W, H, !!style);
       if (style) drawEmoji(c, STYLES[style]?.emoji ?? '✂️', W - 22, 22, 20);
+      // ce qu'on a fait pendant la séance, en petit en bas (et son ruban ou son nœud, à sa couleur)
+      const icons = done.map((id) => STEPS[id]?.emoji).filter(Boolean);
+      if (acc?.id && ACCESSORIES[acc.id]) icons.push(ACCESSORIES[acc.id].emoji);
+      const n = icons.length;
+      if (n) {
+        const sz = 13;
+        const gap = 18;
+        const x0 = W / 2 - ((n - 1) * gap) / 2;
+        c.fillStyle = 'rgba(255,255,255,0.78)';
+        c.beginPath();
+        c.roundRect?.(x0 - 13, H - 22, (n - 1) * gap + 26, 19, 9.5);
+        c.fill();
+        icons.forEach((e, i) => drawEmoji(c, e, x0 + i * gap, H - 12.5, sz));
+        if (acc?.color && ACC_COLORS[acc.color] != null) {
+          c.fillStyle = `#${ACC_COLORS[acc.color].toString(16).padStart(6, '0')}`;
+          c.beginPath();
+          c.arc(x0 + (n - 1) * gap + 7, H - 6, 3.2, 0, Math.PI * 2);
+          c.fill();
+        }
+      }
     }
   }
   box.append(pic, over);
+  // Quand l'image du cheval est là : la poussière sur sa robe (avant). Si la vignette rate (contexte WebGL perdu…) :
+  // le portrait dessiné à sa place, pas un emoji.
+  whenThumb(box, pic, (img) => {
+    if (before && c) dustOn(c, bodySpots(img, W, H, 14));
+  }, () => {
+    const cv = h('canvas', { class: 'grm-photo-pic', style: { position: 'absolute', inset: '0', width: '100%', height: '100%' } });
+    drawPortrait(cv, a, { before, style });
+    pic.replaceWith(cv);
+  });
   return box;
+}
+
+/**
+ * Points du corps d'un cheval dans son image (vignette transparente autour de lui) : des pixels opaques du milieu
+ * de sa silhouette (le tronc : ni la tête, en haut à un bout, ni le bas des jambes). n points, en pixels de la photo
+ * (W × H). [] si l'image ne se lit pas.
+ */
+export function bodySpots(img, W, H, n = 9) {
+  const cw = 110;
+  const ch = Math.round((cw * H) / W);
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = cw;
+    cv.height = ch;
+    const cx = cv.getContext('2d');
+    cx.drawImage(img, 0, 0, cw, ch);
+    const data = cx.getImageData(0, 0, cw, ch).data;
+    const alpha = new Uint8Array(cw * ch);
+    for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * 4 + 3];
+    return spotsOnBody(alpha, cw, ch, W, H, n);
+  } catch {
+    return [];
+  }
+}
+
+/** Même chose, depuis l'opacité de chaque pixel (alpha, cw × ch) : les points, en pixels de la photo W × H. */
+export function spotsOnBody(alpha, cw, ch, W, H, n = 9) {
+  const on = (x, y) => x >= 0 && y >= 0 && x < cw && y < ch && alpha[y * cw + x] > 200;
+  let x0 = cw;
+  let x1 = -1;
+  let y0 = ch;
+  let y1 = -1;
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) if (on(x, y)) {
+    x0 = Math.min(x0, x);
+    x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }
+  if (x1 < 0) return [];
+  // (le tronc : la bande du milieu de la silhouette, en hauteur 40 à 68 %, en largeur 25 à 75 %)
+  const cand = [];
+  for (let y = Math.round(y0 + (y1 - y0) * 0.4); y <= y0 + (y1 - y0) * 0.68; y++) {
+    for (let x = Math.round(x0 + (x1 - x0) * 0.25); x <= x0 + (x1 - x0) * 0.75; x++) {
+      // (bien dedans : ses voisins aussi sont sur lui)
+      if (on(x, y) && on(x - 2, y) && on(x + 2, y) && on(x, y - 2) && on(x, y + 2)) cand.push([x, y]);
+    }
+  }
+  if (!cand.length) return [];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const [x, y] = cand[Math.floor(((i * 0.618034 + 0.13) % 1) * cand.length)];
+    out.push({ x: ((x + 0.5) / cw) * W, y: ((y + 0.5) / ch) * H });
+  }
+  return out;
+}
+
+/** Attend l'image de la vignette (au plus une minute) : ready(img), ou failed() si elle est restée un emoji. */
+function whenThumb(box, pic, ready, failed) {
+  const t0 = Date.now();
+  const tick = () => {
+    const img = pic.querySelector?.('img') ?? (pic.tagName === 'IMG' ? pic : null);
+    if (img && img.complete && img.naturalWidth) return ready(img);
+    if (pic.classList?.contains('is-emoji') && !pic.classList.contains('is-wait')) return failed();
+    if (Date.now() - t0 < 60000 && (box.isConnected || Date.now() - t0 < 3000)) setTimeout(tick, 400);
+  };
+  tick();
+}
+
+/** La poussière (taches brunes floues) et quelques brins de paille, aux points donnés de sa robe. */
+function dustOn(c, spots) {
+  spots.slice(0, 9).forEach((p, i) => {
+    const r = 8 + (i % 3) * 3;
+    const gr = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+    gr.addColorStop(0, 'rgba(120,92,62,0.5)');
+    gr.addColorStop(1, 'rgba(120,92,62,0)');
+    c.fillStyle = gr;
+    c.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+  });
+  c.strokeStyle = 'rgba(214,184,96,0.9)';
+  c.lineWidth = 1.4;
+  spots.slice(9).forEach((p, i) => {
+    c.beginPath();
+    c.moveTo(p.x, p.y);
+    c.lineTo(p.x + 8 - (i % 2) * 16, p.y + 3);
+    c.stroke();
+  });
 }
 
 function starsEl(n) {
@@ -448,7 +545,9 @@ function finishSession(ui, s) {
   // (le cheval : sa vignette 3D, le vrai cheval ; les autres animaux : le portrait dessiné)
   const styleNow = a.grooming?.style ?? s.style;
   let before = horsePhoto(g, a, { before: true });
-  let after = horsePhoto(g, a, { style: styleNow });
+  const doneIds = s.client ? s.client.steps.filter((x) => x.quality != null).map((x) => x.id) : s.done.map((x) => x.id);
+  const acc = ACC_SLOTS.map((sl) => a.accessories?.[sl]).find(Boolean) ?? null;
+  let after = horsePhoto(g, a, { style: styleNow, done: doneIds, acc });
   if (!before || !after) {
     before = h('canvas', { class: 'grm-photo' });
     after = h('canvas', { class: 'grm-photo' });

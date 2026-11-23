@@ -47,6 +47,10 @@ export function saddle3dGame(ctx) {
   const { a, t, fx } = ctx;
   const sc = ctx.scene;
   sc.decor.layout('rest');
+  // (le seau du box n'a rien à faire ici : chez un petit poney, il cachait les antérieurs au premier plan)
+  const bucket = sc.decor.props?.bucket?.group ?? null;
+  const bucketWas = bucket?.visible ?? false;
+  if (bucket) bucket.visible = false;
   const name = a?.name ?? ctx.name;
   const own = owner();
   const md = sc.model;
@@ -343,9 +347,11 @@ export function saddle3dGame(ctx) {
   // ---------------------------------------------------------------- caméra
   function frameFor(st, now = false) {
     if (st === 'girth') {
-      // (le ventre et la sangle, les antérieurs, et sa tête : on le voit se retourner quand c'est trop serré)
+      // (le ventre et la sangle, les antérieurs, toute la croupe et sa tête avec de la marge devant le nez — au repos,
+      // il tend l'encolure ; la tête telle qu'elle est quand il se retourne vers la sangle)
       const gb = body.localToWorld(girthC.clone().add(v3(0, -dims.R * 1.25, 0)));
-      sc.frame([L.withers, L.back, L.belly, L.chest, gb, L.poll, L.muzzle, L.hooves[0], L.hooves[1], L.croup], { dir: [0.32, 0.02, 1], pad: 1.06, now });
+      const mz = sc.live('muzzle') ?? L.muzzle;
+      sc.frame([L.withers, L.back, L.belly, L.chest, gb, L.poll, sc.live('poll'), L.muzzle, mz, L.muzzle.clone().add(v3(0.2 * S, 0, 0)), L.hooves[0], L.hooves[1], L.croup, L.tail, ...L.hooves], { dir: [0.32, 0.02, 1], pad: 1.15, now });
     } else {
       // (de la queue au bout du nez, avec de la marge : au repos, il tend parfois l'encolure ; et les pièces encore sur
       // le porte-selle, en entier — avant, le tapis qui pend était à moitié coupé par le bord gauche)
@@ -359,7 +365,22 @@ export function saddle3dGame(ctx) {
 
   // ---------------------------------------------------------------- l'animal : ventre gonflé, réactions
   const ribs0 = new THREE.Vector3();
-  const unhook = afterLife(sc, () => {
+  // trop serrée : il se retourne vers la sangle, l'encolure et la tête bien tournées vers le flanc (jusqu'à ≈ 0,8 rad
+  // en tout ; la vie de la scène seule ne le tournait presque pas)
+  let turnK = 0;
+  let turnFramed = false;
+  const _tq = new THREE.Quaternion();
+  const UP = v3(0, 1, 0);
+  const unhook = afterLife(sc, (dt) => {
+    turnK += ((stage() === 'girth' && tension > 0.95 ? 1 : 0) - turnK) * Math.min(1, (dt ?? 0.016) * 3);
+    if (turnK > 0.01 && md.neck && md.head) {
+      // (du côté de la sangle qu'on voit : le même sens que là où il regarde)
+      const side = Math.sign(sc.yaw || 1);
+      // (l'encolure en tout ≈ 0,8 rad : ce que la vie lui donne déjà, plus le reste ; la tête un peu plus)
+      const extra = Math.max(0, 0.8 - Math.abs((sc.yaw ?? 0) * 0.7));
+      md.neck.quaternion.premultiply(_tq.setFromAxisAngle(UP, side * extra * smooth(turnK)));
+      md.head.quaternion.premultiply(_tq.setFromAxisAngle(UP, side * 0.18 * smooth(turnK)));
+    }
     if (md.ribs && bloatK > 0.001) {
       ribs0.copy(md.ribs.scale);
       md.ribs.scale.set(ribs0.x * (1 + 0.07 * bloatK), ribs0.y * (1 + 0.05 * bloatK), ribs0.z);
@@ -514,6 +535,11 @@ export function saddle3dGame(ctx) {
           annoyed = 0.6;
         }
       }
+      // (il s'est retourné : la caméra garde sa tête dans l'image)
+      if (tension > 0.95 && turnK > 0.6 && !turnFramed) {
+        turnFramed = true;
+        frameFor('girth');
+      }
       if (tension > 0.95) {
         // trop serrée : oreilles couchées, il tourne la tête vers la sangle, lève un postérieur
         m.ears = 'back';
@@ -577,6 +603,7 @@ export function saddle3dGame(ctx) {
     },
     destroy() {
       unhook();
+      if (bucket) bucket.visible = bucketWas;
       if (md.ribs) md.ribs.scale.set(1, 1, 1);
       for (const c of [padCarrier, saddleCarrier]) c.parent?.remove(c);
       body.remove(girthSet.group);

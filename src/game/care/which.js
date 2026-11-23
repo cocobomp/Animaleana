@@ -37,6 +37,7 @@ CARE3D_ACTIONS.horse.push('lunge', 'liberty'); // (longe et liberté dans le ron
 
 /** Ce soin a-t-il un jeu 3D pour cette espèce ? */
 export const care3dWanted = (a, action) => !!CARE3D_ACTIONS[a?.species]?.includes(action);
+CARE3D_ACTIONS.horse.push('shine', 'braid', 'gdry', 'gknots', 'gfinish', 'gcut'); // (concours de beauté et salon de toilettage du cheval en 3D : src/ui/minigames/beauty3d.js, groom3d.js)
 
 /**
  * Peut-on ouvrir la scène 3D pour cet animal ? L'espèce a sa scène, son modèle réaliste est chargé (sinon le

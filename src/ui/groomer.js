@@ -7,13 +7,14 @@ import { h, hexColor } from './dom.js';
 import { t } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { perkParams } from './names.js'; // textes des rangs (espèces proposées)
-import { animalCard } from './panels.js';
+import { animalCard, animalThumbSpec } from './panels.js';
+import { thumb, thumbsFor } from '../game/thumbScenes.js'; // vignettes 3D : le vrai cheval (listes, photos avant / après)
 import { runMinigame, registerMinigames } from './minigames.js';
 import { GROOMER_GAMES, GROOMER_ICONS, setFinishOptions, setCutStyle, drawAccessoryOn } from './minigames/groomer.js';
 import { drawAnimal, fitAnimal, animalShape, circle, emoji as drawEmoji, shade } from './minigames/draw.js';
 import {
   STEPS, STEP_IDS, STYLES, REQUESTS, ACCESSORIES, ACC_COLORS, ACC_SLOTS, RANKS, GROOMER_LEVEL, CUT_DAYS,
-  ensureGroomer, rankOf, rankProgress, careerXp, canGroom, waitingClients, stepAllowed, stylesFor, accessoryAllowed,
+  ensureGroomer, rankOf, rankProgress, careerXp, canGroom, waitingClients, stepAllowed, stylesFor, accessoryAllowed, finishAccessories,
   recordStep, completeService, applyCut, wearAccessory, removeAccessory, recordOwnGrooming, speciesAllowed,
   salonAt, cutFresh, stepsDone, reputation, GROOMER_CAREER, maxWaiting, stepFor,
 } from '../sim/groomer.js';
@@ -29,6 +30,20 @@ const stepName = (id) => `${STEPS[id].emoji} ${t(`grm_step_${id}`)}`;
 const styleName = (id) => `${STYLES[id].emoji} ${t(`grm_style_${id}`)}`;
 const coins = (ui, n) => (isSandbox(ui.game.profile) ? '' : ` · ${n} 🪙`);
 const ownerEmoji = (o) => (o.sex === 'f' ? '👩' : '👨');
+
+/**
+ * Le cheval : sa vignette 3D (le vrai cheval, comme la fiche et l'animalerie : panels.js animalPic) à la place de
+ * l'emoji 🐴 ; les autres animaux gardent leur emoji. (Pas de jeu, pas de WebGL, robe hors catalogue : l'emoji.)
+ */
+function animalPic(g, a, w, hh, cls = '') {
+  const emoji = SPECIES[a.species].emoji;
+  const spec = a.species === 'horse' && g ? animalThumbSpec(a) : null;
+  if (!spec) return h('span', { class: 'card-emoji' }, emoji);
+  const el = thumb(g, spec, { w, h: hh, emoji, cls: `grm-thumb ${cls}`.trim(), alt: a.name ?? '' });
+  el.style.width = `${w}px`;
+  el.style.height = `${hh}px`;
+  return el;
+}
 
 // ---------------------------------------------------------------- le salon
 
@@ -79,7 +94,7 @@ function renderSalon(ui) {
   out.push(h('h3', {}, `🐾 ${t('grm_myAnimals')}`));
   if (!mine.length) out.push(h('p', { class: 'note' }, t('grm_noAnimal')));
   out.push(h('div', { class: 'cards' }, mine.map((a) => h('div', { class: 'card' },
-    h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+    animalPic(g, a, 60, 46),
     h('span', { class: 'card-main' }, h('b', {}, a.name), h('small', {}, groomStatus(a, g.day))),
     h('button', { class: 'primary', onClick: () => { gr.startOwn(a); ui.renderPanel(); } }, `✂️ ${t('grm_groom')}`)))));
   out.push(h('p', { class: 'note' }, t('grm_ownFree')));
@@ -109,7 +124,7 @@ function clientCard(ui, c) {
       h('div', { class: 'grm-bubble' },
         h('b', {}, c.owner.name),
         h('p', {}, t(`grm_req_${c.request}`, { name: a.name, g: a.sex })))),
-    animalCard(a),
+    animalCard(a, a.species === 'horse' ? animalPic(g, a, 72, 54) : null),
     h('div', { class: 'grm-steps' },
       ...req.steps.map((id) => h('span', { class: 'chip' }, stepName(id))),
       c.style ? h('span', { class: 'chip grm-style' }, styleName(c.style)) : null),
@@ -137,7 +152,7 @@ function renderSession(ui, s) {
   const c = s.client;
   const out = [];
   out.push(h('div', { class: 'grm-session-head' },
-    h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+    animalPic(g, a, 72, 54),
     h('div', {}, h('b', {}, a.name), h('small', {}, c ? t('grm_forOwner', { owner: c.owner.name }) : t('grm_yourAnimal')))));
   if (c) {
     out.push(h('div', { class: 'grm-chat small' },
@@ -164,7 +179,9 @@ function renderSession(ui, s) {
     // Mes animaux : on choisit la coupe, et toutes les étapes sont libres.
     const styles = stylesFor(p, a.species);
     out.push(h('h3', {}, `💇 ${t('grm_chooseStyle')}`));
-    out.push(h('div', { class: 'chips grm-styles' }, Object.keys(STYLES).map((id) => {
+    // (seules les coupes de son espèce : pas de « caniche en boules » verrouillée sous le nez d'un cheval)
+    const mine = Object.keys(STYLES).filter((id) => !STYLES[id].species || STYLES[id].species.includes(a.species));
+    out.push(h('div', { class: 'chips grm-styles' }, mine.map((id) => {
       const ok = styles.includes(id);
       return h('button', { class: `chip ${s.style === id ? 'on' : ''}`, disabled: !ok, onClick: () => { s.style = id; ui.renderPanel(); } }, ok ? styleName(id) : `🔒 ${t(`grm_style_${id}`)}`);
     })));
@@ -248,8 +265,9 @@ export async function runStep(ui, s, id) {
     setCutStyle(s.style);
   }
   if (id === 'finish') {
-    const current = ACC_SLOTS.map((sl) => a.accessories?.[sl]).find(Boolean) ?? null;
-    setFinishOptions({ accessories: Object.keys(ACCESSORIES).filter((k) => accessoryAllowed(p, k)), current, allowNone: true });
+    const accessories = finishAccessories(p, a.species);
+    const current = ACC_SLOTS.map((sl) => a.accessories?.[sl]).find((w) => w && accessories.includes(w.id)) ?? null;
+    setFinishOptions({ accessories, current, allowNone: true });
   }
   const promise = runMinigame(ui, a, def.game);
   const mg = ui.minigame; // (défini tout de suite : on lit stress / choix à la fin)
@@ -351,9 +369,168 @@ export function drawPortrait(canvas, a, { before = false, style = null } = {}) {
     drawEmoji(g, '💨', sh.rump.x - 20, sh.rump.y - 10, 18);
   } else {
     for (const w of Object.values(a.accessories ?? {})) drawAccessoryOn(g, sh, w, fit.s);
-    for (let i = 0; i < 5; i++) drawEmoji(g, '✨', 20 + i * 45 + (i % 2) * 10, 25 + (i % 2) * 18, 16 + (i % 2) * 6);
+    // (les étoiles dans les coins, jamais sur la tête ; avant : en rang en haut, la 4e tombait sur l'œil)
+    sparkleCorners(g, W, H, !!style);
     if (style) drawEmoji(g, STYLES[style]?.emoji ?? '✂️', W - 24, 24, 22);
   }
+}
+
+/** Des étincelles dans les coins de la photo (pas en haut à droite si l'emoji de la coupe y est). */
+function sparkleCorners(g, W, H, styleCorner = false) {
+  const spots = [[16, 18, 18], [38, 12, 12], [16, H - 46, 14], [W - 18, H - 46, 18], [W - 40, H - 36, 12]];
+  if (!styleCorner) spots.push([W - 18, 18, 16]);
+  for (const [x, y, sz] of spots) drawEmoji(g, '✨', x, y, sz);
+}
+
+/**
+ * Photo avant / après d'un cheval : sa vignette 3D (le vrai cheval), et par-dessus, sur une toile transparente, la
+ * poussière et les brins de paille posés sur sa robe (avant), ou les étincelles dans les coins, l'emoji de la coupe
+ * et ce qu'on a fait pendant la séance (après). null si pas de vignette possible (le portrait dessiné prend le
+ * relais). done : les étapes faites (emoji en bas de la photo « après ») ; acc : son accessoire (ruban, nœud).
+ */
+export function horsePhoto(g, a, { before = false, style = null, done = [], acc = null } = {}) {
+  const spec = a.species === 'horse' && g ? animalThumbSpec(a) : null;
+  // (sans moteur de vignettes — pas de WebGL — : le portrait dessiné, pas l'emoji 🐴 dans les deux photos)
+  if (!spec || !thumbsFor(g)?.enabled) return null;
+  const W = 220;
+  const H = 170;
+  const box = h('div', { class: `grm-photo grm-photo3d ${before ? 'before' : 'after'}`, style: { position: 'relative', aspectRatio: `${W} / ${H}`, overflow: 'hidden', background: before ? 'linear-gradient(#ece7ed, #d9d2d8)' : 'radial-gradient(circle at 50% 55%, #fff6fa, #f7cfe0 70%)' } });
+  const pic = thumb(g, spec, { w: W, h: H, emoji: SPECIES.horse.emoji, cls: 'grm-photo-pic', alt: a.name ?? '', urgent: true });
+  Object.assign(pic.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', borderRadius: '0', background: 'transparent', boxShadow: 'none' });
+  // (avant : un peu terne, poussiéreux ; après : propre et lumineux, un halo doux autour de lui)
+  pic.style.filter = before ? 'saturate(0.7) brightness(0.93) sepia(0.12)' : 'saturate(1.12) brightness(1.05) contrast(1.04) drop-shadow(0 0 5px rgba(255,255,255,0.95))';
+  const over = h('canvas', { class: 'grm-photo-over', style: { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' } });
+  over.width = W * 2;
+  over.height = H * 2;
+  const c = over.getContext('2d');
+  if (c) {
+    c.setTransform(2, 0, 0, 2, 0, 0);
+    if (before) {
+      drawEmoji(c, '💨', 22, H - 26, 20);
+    } else {
+      sparkleCorners(c, W, H, !!style);
+      if (style) drawEmoji(c, STYLES[style]?.emoji ?? '✂️', W - 22, 22, 20);
+      // ce qu'on a fait pendant la séance, en petit en bas (et son ruban ou son nœud, à sa couleur)
+      // (avec un accessoire, son emoji remplace celui des finitions : pas deux 🎀 de suite)
+      const withAcc = !!(acc?.id && ACCESSORIES[acc.id]);
+      const icons = done.filter((id) => !(withAcc && id === 'finish')).map((id) => STEPS[id]?.emoji).filter(Boolean);
+      if (withAcc) icons.push(ACCESSORIES[acc.id].emoji);
+      const n = icons.length;
+      if (n) {
+        const sz = 13;
+        const gap = 18;
+        const x0 = W / 2 - ((n - 1) * gap) / 2;
+        c.fillStyle = 'rgba(255,255,255,0.78)';
+        c.beginPath();
+        c.roundRect?.(x0 - 13, H - 22, (n - 1) * gap + 26, 19, 9.5);
+        c.fill();
+        icons.forEach((e, i) => drawEmoji(c, e, x0 + i * gap, H - 12.5, sz));
+        if (acc?.color && ACC_COLORS[acc.color] != null) {
+          c.fillStyle = `#${ACC_COLORS[acc.color].toString(16).padStart(6, '0')}`;
+          c.beginPath();
+          c.arc(x0 + (n - 1) * gap + 7, H - 6, 3.2, 0, Math.PI * 2);
+          c.fill();
+        }
+      }
+    }
+  }
+  box.append(pic, over);
+  // Quand l'image du cheval est là : la poussière sur sa robe (avant). Si la vignette rate (contexte WebGL perdu…) :
+  // le portrait dessiné à sa place, pas un emoji.
+  whenThumb(box, pic, (img) => {
+    if (before && c) dustOn(c, bodySpots(img, W, H, 14));
+  }, () => {
+    const cv = h('canvas', { class: 'grm-photo-pic', style: { position: 'absolute', inset: '0', width: '100%', height: '100%' } });
+    drawPortrait(cv, a, { before, style });
+    pic.replaceWith(cv);
+  });
+  return box;
+}
+
+/**
+ * Points du corps d'un cheval dans son image (vignette transparente autour de lui) : des pixels opaques du milieu
+ * de sa silhouette (le tronc : ni la tête, en haut à un bout, ni le bas des jambes). n points, en pixels de la photo
+ * (W × H). [] si l'image ne se lit pas.
+ */
+export function bodySpots(img, W, H, n = 9) {
+  const cw = 110;
+  const ch = Math.round((cw * H) / W);
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = cw;
+    cv.height = ch;
+    const cx = cv.getContext('2d');
+    cx.drawImage(img, 0, 0, cw, ch);
+    const data = cx.getImageData(0, 0, cw, ch).data;
+    const alpha = new Uint8Array(cw * ch);
+    for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * 4 + 3];
+    return spotsOnBody(alpha, cw, ch, W, H, n);
+  } catch {
+    return [];
+  }
+}
+
+/** Même chose, depuis l'opacité de chaque pixel (alpha, cw × ch) : les points, en pixels de la photo W × H. */
+export function spotsOnBody(alpha, cw, ch, W, H, n = 9) {
+  const on = (x, y) => x >= 0 && y >= 0 && x < cw && y < ch && alpha[y * cw + x] > 200;
+  let x0 = cw;
+  let x1 = -1;
+  let y0 = ch;
+  let y1 = -1;
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) if (on(x, y)) {
+    x0 = Math.min(x0, x);
+    x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }
+  if (x1 < 0) return [];
+  // (le tronc : la bande du milieu de la silhouette, en hauteur 40 à 68 %, en largeur 25 à 75 %)
+  const cand = [];
+  for (let y = Math.round(y0 + (y1 - y0) * 0.4); y <= y0 + (y1 - y0) * 0.68; y++) {
+    for (let x = Math.round(x0 + (x1 - x0) * 0.25); x <= x0 + (x1 - x0) * 0.75; x++) {
+      // (bien dedans : ses voisins aussi sont sur lui)
+      if (on(x, y) && on(x - 2, y) && on(x + 2, y) && on(x, y - 2) && on(x, y + 2)) cand.push([x, y]);
+    }
+  }
+  if (!cand.length) return [];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const [x, y] = cand[Math.floor(((i * 0.618034 + 0.13) % 1) * cand.length)];
+    out.push({ x: ((x + 0.5) / cw) * W, y: ((y + 0.5) / ch) * H });
+  }
+  return out;
+}
+
+/** Attend l'image de la vignette (au plus une minute) : ready(img), ou failed() si elle est restée un emoji. */
+function whenThumb(box, pic, ready, failed) {
+  const t0 = Date.now();
+  const tick = () => {
+    const img = pic.querySelector?.('img') ?? (pic.tagName === 'IMG' ? pic : null);
+    if (img && img.complete && img.naturalWidth) return ready(img);
+    if (pic.classList?.contains('is-emoji') && !pic.classList.contains('is-wait')) return failed();
+    if (Date.now() - t0 < 60000 && (box.isConnected || Date.now() - t0 < 3000)) setTimeout(tick, 400);
+  };
+  tick();
+}
+
+/** La poussière (taches brunes floues) et quelques brins de paille, aux points donnés de sa robe. */
+function dustOn(c, spots) {
+  spots.slice(0, 9).forEach((p, i) => {
+    const r = 8 + (i % 3) * 3;
+    const gr = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+    gr.addColorStop(0, 'rgba(120,92,62,0.5)');
+    gr.addColorStop(1, 'rgba(120,92,62,0)');
+    c.fillStyle = gr;
+    c.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+  });
+  c.strokeStyle = 'rgba(214,184,96,0.9)';
+  c.lineWidth = 1.4;
+  spots.slice(9).forEach((p, i) => {
+    c.beginPath();
+    c.moveTo(p.x, p.y);
+    c.lineTo(p.x + 8 - (i % 2) * 16, p.y + 3);
+    c.stroke();
+  });
 }
 
 function starsEl(n) {
@@ -367,10 +544,18 @@ function finishSession(ui, s) {
   const gr = g.groomer;
   const a = s.animal;
   const day = dayOf(p.clock);
-  const before = h('canvas', { class: 'grm-photo' });
-  const after = h('canvas', { class: 'grm-photo' });
-  drawPortrait(before, a, { before: true });
-  drawPortrait(after, a, { style: a.grooming?.style ?? s.style });
+  // (le cheval : sa vignette 3D, le vrai cheval ; les autres animaux : le portrait dessiné)
+  const styleNow = a.grooming?.style ?? s.style;
+  let before = horsePhoto(g, a, { before: true });
+  const doneIds = s.client ? s.client.steps.filter((x) => x.quality != null).map((x) => x.id) : s.done.map((x) => x.id);
+  const acc = ACC_SLOTS.map((sl) => a.accessories?.[sl]).find(Boolean) ?? null;
+  let after = horsePhoto(g, a, { style: styleNow, done: doneIds, acc });
+  if (!before || !after) {
+    before = h('canvas', { class: 'grm-photo' });
+    after = h('canvas', { class: 'grm-photo' });
+    drawPortrait(before, a, { before: true });
+    drawPortrait(after, a, { style: styleNow });
+  }
   const photos = h('div', { class: 'grm-photos' },
     h('figure', {}, before, h('figcaption', {}, t('grm_before'))),
     h('figure', {}, after, h('figcaption', {}, t('grm_after'))));

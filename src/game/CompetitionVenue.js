@@ -168,6 +168,12 @@ export class CompetitionVenue {
       this.game.rig.focus = { shot: ceremonyShot(this.ceremonyE, pl.mount === this.ceremonyE || this.ceremonyFoot ? pl : null, (this.shotAt ??= new THREE.Vector3()), this.game.camera?.aspect ?? 1) };
     }
     if (this.built?.arenaPodium && (this.arenaPodiumT -= dt) <= 0) this.hideArenaPodium();
+    const st = this.standOn;
+    if (st) {
+      const p = this.game.player.root.position;
+      if (!this.built || this.game.player.mount || Math.hypot(p.x - st.x, p.z - st.z) > 0.3) this.standOn = null;
+      else p.y = this.game.world.heightAt(st.x, st.z) + st.y;
+    }
     if (this.built) {
       this.cheer = Math.max(0, this.cheer - dt * 0.35);
       for (const c of this.built.crowds) c.userData.cheer(this.time, this.cheer);
@@ -236,6 +242,7 @@ export class CompetitionVenue {
 
   dispose() {
     this.ceremonyT = 0;
+    this.standOn = null;
     this.ceremonyE = null;
     const b = this.built;
     if (!b) return;
@@ -477,6 +484,8 @@ export class CompetitionVenue {
     if (inArena) this.showArenaPodium();
     const { x, z } = spot.player;
     const y = g.world.heightAt(x, z) + spot.player.y;
+    // (sur sa marche : Player.update la remet au sol à chaque image ; update la garde dessus tant qu'elle n'en part pas)
+    this.standOn = spot.player.y > 0 ? { x, z, y: spot.player.y } : null;
     pl.root.position.set(x, y, z);
     pl.heading = spot.player.heading;
     pl.speed = 0;

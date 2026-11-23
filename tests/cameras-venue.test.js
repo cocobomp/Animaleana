@@ -204,3 +204,22 @@ describe('📸 photo du podium', () => {
     expect(P.distanceTo(cam.position)).toBeLessThan(0.05);
   });
 });
+
+describe('🧍 à pied sur sa marche', () => {
+  it('la joueuse reste sur sa marche (Player.update la remettait au sol), jusqu\'à ce qu\'elle en parte', () => {
+    const pos = V(-35, 0, 12.3);
+    const game = { player: { root: { position: pos }, mount: null }, world: { heightAt: () => 0.2 } };
+    const v = Object.create(C.CompetitionVenue.prototype);
+    Object.assign(v, { game, built: { crowds: [] }, particles: [], acc: 0, time: 0, cheer: 0, ceremonyT: 0, standOn: { x: -35, z: 12.3, y: 0.5 } });
+    // (Player.update l'a remise au sol)
+    pos.y = 0.2;
+    v.update(1 / 30);
+    expect(pos.y).toBeCloseTo(0.7, 5);
+    // elle descend de sa marche : on la laisse
+    pos.x += 1;
+    pos.y = 0.2;
+    v.update(1 / 30);
+    expect(pos.y).toBeCloseTo(0.2, 5);
+    expect(v.standOn).toBe(null);
+  });
+});

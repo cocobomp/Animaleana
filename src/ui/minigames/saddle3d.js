@@ -371,11 +371,13 @@ export function saddle3dGame(ctx) {
   let turnFramed = false;
   const _tq = new THREE.Quaternion();
   const UP = v3(0, 1, 0);
+  const _cam = v3();
   const unhook = afterLife(sc, (dt) => {
     turnK += ((stage() === 'girth' && tension > 0.95 ? 1 : 0) - turnK) * Math.min(1, (dt ?? 0.016) * 3);
     if (turnK > 0.01 && md.neck && md.head) {
-      // (du côté de la sangle qu'on voit : le même sens que là où il regarde)
-      const side = Math.sign(sc.yaw || 1);
+      // (du côté de la sangle qu'on voit, vers nous : le côté de la caméra dans le repère du cheval — la sangle est sous
+      // le ventre, au milieu : regarder vers elle ne disait pas de quel côté tourner)
+      const side = Math.sign(sc.holder.worldToLocal(_cam.copy(sc.camera.position)).x) || 1;
       // (l'encolure en tout ≈ 0,8 rad : ce que la vie lui donne déjà, plus le reste ; la tête un peu plus)
       const extra = Math.max(0, 0.8 - Math.abs((sc.yaw ?? 0) * 0.7));
       md.neck.quaternion.premultiply(_tq.setFromAxisAngle(UP, side * extra * smooth(turnK)));

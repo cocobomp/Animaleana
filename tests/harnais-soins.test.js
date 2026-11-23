@@ -210,6 +210,10 @@ describe('seller : la sangle, cadrée avec le nez et la croupe', () => {
       const turn = Math.acos(Math.min(1, look0.dot(look1)));
       expect(Math.abs(sc.yaw), 'il regarde la sangle').toBeGreaterThan(yaw0);
       expect(turn, 'la tête tournée vers le flanc').toBeGreaterThan(0.35);
+      // (vers nous : le bout du nez s'est rapproché de la caméra)
+      const camL = sc.holder.worldToLocal(sc.camera.position.clone());
+      const noseL = sc.holder.worldToLocal(sc.live('muzzle'));
+      expect(Math.sign(noseL.x - sc.holder.worldToLocal(sc.model.neck.getWorldPosition(new THREE.Vector3())).x), 'tournée de notre côté').toBe(Math.sign(camL.x));
       expect(inView(P(sc.live('nose')), v, 0), 'le nez reste dans l\'image').toBe(true);
       hold.opts.onUp();
       game.destroy();

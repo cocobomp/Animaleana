@@ -52,7 +52,8 @@ export function ceremonySpot(pod, rank, { mounted = true, scale = 1 } = {}) {
 }
 
 /**
- * Plan de la cérémonie (rig.focus.shot) : de trois quarts avant, le podium derrière. Monté (rider.mount === e), le
+ * Plan de la cérémonie (rig.focus.shot) : de trois quarts avant, le podium derrière. La caméra reste hors de la
+ * carrière (7 m devant le podium : avec un angle plus faible, elle se mettait derrière sa palissade, qui cachait tout). Monté (rider.mount === e), le
  * cheval et sa cavalière entiers (visée à mi-hauteur entre les sabots et son casque). À pied (rider = la joueuse sur sa
  * marche), visée entre elle et son cheval, vue de la carrière (de face pour elle, de profil pour le cheval), reculée
  * selon l'écart entre eux et la forme de l'écran (aspect), pour qu'on les voie tous les deux entiers.
@@ -68,11 +69,11 @@ export function ceremonyShot(e, rider, at, aspect = 1) {
     const span = Math.hypot(e.position.x - p.x, e.position.z - p.z) + 2.6 * sc;
     const h = aspect < 1 ? 1 : aspect;
     const dist = Math.max(1.4 + top * 1.6, (span * 0.5) / (0.36 * Math.min(1, h)) + 1);
-    return { at, heading: rider.heading, dist, yaw: 0.3, pitch: 0.1 };
+    return { at, heading: rider.heading, dist, yaw: 0.75, pitch: 0.1 };
   }
   const top = rider ? Math.max(1.4, rider.eyeHeight - 0.1) : 2.1 * sc;
   at.set(e.position.x, e.position.y + top * 0.5, e.position.z);
-  return { at, heading: e.heading, dist: 1.2 + top * 1.75, yaw: 0.6, pitch: 0.12 };
+  return { at, heading: e.heading, dist: 1.2 + top * 1.75, yaw: 1.0, pitch: 0.12 };
 }
 
 export class CompetitionVenue {

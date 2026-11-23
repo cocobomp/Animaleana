@@ -87,6 +87,8 @@ describe('📸 la caméra de la cérémonie', () => {
       }
       // devant le cheval, du côté de la carrière (le podium derrière lui)
       expect(cam.position.x).toBeLessThan(e.position.x - 2);
+      // (hors de la carrière, dont la palissade est 7 m devant le podium : models/venue.js podX = hw + 7)
+      expect(cam.position.x).toBeGreaterThan(POD.x - 7 + 1.2);
       const band = aspect < 1 ? (390 / 1.6) / 844 : 1;
       if (band < 0.9) cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
       cam.updateProjectionMatrix();
@@ -116,6 +118,7 @@ describe('📸 la caméra de la cérémonie', () => {
         rig.update(1 / 30, { look: { dx: 0, dy: 0 }, zoom: 0 }, player, { insideBuilding: () => false, heightAt: () => 0 });
       }
       expect(cam.position.x).toBeLessThan(step.x - 3);
+      expect(cam.position.x).toBeGreaterThan(POD.x - 7 + 1.2);
       const band = aspect < 1 ? (390 / 1.6) / 844 : 1;
       if (band < 0.9) cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
       cam.updateProjectionMatrix();

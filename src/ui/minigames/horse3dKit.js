@@ -211,18 +211,95 @@ function glueOf(px, h) {
   return { src, bary, sign: n.dot(h.normal) >= 0 ? 1 : -1 };
 }
 const _gv = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-/** Le point collé et sa normale (repère monde), avec la pose de l'image. out : { p, n }. */
-export function gluePoint(g, out) {
+const _gt = new THREE.Vector3();
+/** Le point du triangle collé, pose de l'image (remap : des os remplacés, voir skinRemapped). */
+function gluedAt(g, out, remap) {
   for (let k = 0; k < 3; k++) {
     const { m, i } = g.src[k];
     const v = _gv[k].fromBufferAttribute(m.geometry.attributes.position, i);
-    if (m.isSkinnedMesh) m.applyBoneTransform(i, v);
+    if (m.isSkinnedMesh) {
+      if (remap) skinRemapped(m, i, v, remap);
+      else m.applyBoneTransform(i, v);
+    }
     v.applyMatrix4(m.matrixWorld);
   }
-  out.p.set(0, 0, 0).addScaledVector(_gv[0], g.bary.x).addScaledVector(_gv[1], g.bary.y).addScaledVector(_gv[2], g.bary.z);
+  return out.set(0, 0, 0).addScaledVector(_gv[0], g.bary.x).addScaledVector(_gv[1], g.bary.y).addScaledVector(_gv[2], g.bary.z);
+}
+/**
+ * Le point collé et sa normale (repère monde), avec la pose de l'image. out : { p, n }. Avec g.remap (des os
+ * remplacés, par exemple l'oreille par la tête) : le point suit la tête, sans glisser avec l'oreille, mais se soulève
+ * si la peau de la base de l'oreille gonfle vers le dehors (jamais dedans).
+ */
+export function gluePoint(g, out) {
+  if (g.remap) {
+    gluedAt(g, _gt, null);
+    gluedAt(g, out.p, g.remap);
+    _tri.set(_gv[0], _gv[1], _gv[2]).getNormal(out.n);
+    out.n.multiplyScalar(g.sign);
+    const up = _gt.sub(out.p).dot(out.n);
+    if (up > 0) out.p.addScaledVector(out.n, up);
+    return out;
+  }
+  gluedAt(g, out.p, null);
   _tri.set(_gv[0], _gv[1], _gv[2]).getNormal(out.n);
   out.n.multiplyScalar(g.sign);
   return out;
+}
+const _rb = new THREE.Vector3();
+const _rv = new THREE.Vector3();
+const _rm = new THREE.Matrix4();
+const _remaps = new WeakMap();
+/** Les indices d'os remplacés pour ce squelette (-1 : gardé), calculés une fois. */
+function remapIndex(sk, remap) {
+  let per = _remaps.get(sk);
+  if (!per) _remaps.set(sk, (per = new Map()));
+  let out = per.get(remap);
+  if (!out) {
+    out = sk.bones.map((b) => (remap[b.name] ? sk.bones.findIndex((x) => x.name === remap[b.name]) : -1));
+    per.set(remap, out);
+  }
+  return out;
+}
+/** Comme applyBoneTransform, mais un os (par son nom) est remplacé par un autre : remap = { EarL: 'Head', … }. */
+function skinRemapped(m, i, v, remap) {
+  const sk = m.skeleton;
+  const si = m.geometry.attributes.skinIndex;
+  const sw = m.geometry.attributes.skinWeight;
+  _rb.copy(v).applyMatrix4(m.bindMatrix);
+  v.set(0, 0, 0);
+  for (let k = 0; k < 4; k++) {
+    const w = sw.getComponent(i, k);
+    if (!w) continue;
+    let b = si.getComponent(i, k);
+    const j = remapIndex(sk, remap)[b];
+    if (j >= 0) b = j;
+    _rm.multiplyMatrices(sk.bones[b].matrixWorld, sk.boneInverses[b]);
+    v.addScaledVector(_rv.copy(_rb).applyMatrix4(_rm), w);
+  }
+  return v.applyMatrix4(m.bindMatrixInverse);
+}
+
+/**
+ * Combien la peau d'une colle suit des os dont le nom répond à re (0 à 1 : le plus fort des trois sommets). Sert à ne
+ * pas coller une lanière à la base d'une oreille : cette peau-là suit l'oreille quand il la couche.
+ */
+export function glueWeight(g, re) {
+  if (!g) return 0;
+  let best = 0;
+  for (const { m, i } of g.src) {
+    if (!m.isSkinnedMesh) continue;
+    const si = m.geometry.attributes.skinIndex;
+    const sw = m.geometry.attributes.skinWeight;
+    const bones = m.skeleton?.bones;
+    if (!si || !sw || !bones) continue;
+    let w = 0;
+    for (let k = 0; k < 4; k++) {
+      const b = bones[si.getComponent(i, k)];
+      if (b && re.test(b.name)) w += sw.getComponent(i, k);
+    }
+    best = Math.max(best, w);
+  }
+  return best;
 }
 /** La peau de l'image en cours : les os à jour (avant le rendu), pour gluePoint. */
 export function skinNow(sc) {

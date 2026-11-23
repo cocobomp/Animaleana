@@ -20,7 +20,7 @@ import { BRIDLE, throatVerdict } from './bridle.js';
 import { freeBridle } from '../../sim/gear.js';
 import { handModel, avatarHand } from '../../game/care/props.js';
 import { nicker, snort } from './feed3d.js';
-import { closeSleeve, v3, owner, rigidGear, impatience, stagePill, afterLife, smooth, dist2, pulseRing, updateRing, bakeSkin, skinPoint, earSkip, ribbon, gluePoint, skinNow } from './horse3dKit.js';
+import { closeSleeve, v3, owner, rigidGear, impatience, stagePill, afterLife, smooth, dist2, pulseRing, updateRing, bakeSkin, skinPoint, earSkip, ribbon, gluePoint, skinNow, glueWeight } from './horse3dKit.js';
 
 const PAUSE = 0.9;
 const EAR_TIME = 0.8; // (s) une oreille qui se plie, la têtière qui passe derrière
@@ -46,6 +46,9 @@ export function realBridle(profile, a, home = true) {
   const color = a?.lastBridle?.item === item ? a.lastBridle.color : undefined;
   return { item, color };
 }
+
+/** Pour la colle : la peau près de la base des oreilles suit la tête, pas l'oreille. */
+const EAR_STILL = { EarL: 'Head', EarR: 'Head' };
 
 export function bridle3dGame(ctx) {
   const { a, t, fx } = ctx;
@@ -111,7 +114,14 @@ export function bridle3dGame(ctx) {
     mesh.visible = false;
     mesh.frustumCulled = false;
     root.add(mesh);
-    return { mesh, set: r.set, n };
+    // (la ligne du milieu de la lanière, gardée pour les essais : angles, écart à la peau)
+    const line = Array.from({ length: n }, () => v3());
+    const set = (pts, nrm) => {
+      for (let i = 0; i < n; i++) line[i].copy(pts[i]);
+      r.set(pts, nrm);
+    };
+    mesh.userData.line = line;
+    return { mesh, set, n };
   };
   const crownS = strapOf(ARC, false, 'bridle-crown');
   const throatS = strapOf(THROAT, false, 'bridle-throat');
@@ -209,6 +219,9 @@ export function bridle3dGame(ctx) {
     const n = path.p.length;
     path.glue ??= Array(n).fill(null);
     path.margin ??= MARGIN;
+    // (la peau autour de la base des oreilles suit un peu l'os de l'oreille : quand il les couche, la lanière collée
+    // là se plierait en zigzag. On la colle à la peau comme si l'oreille restait droite : elle suit la tête)
+    for (const g of path.glue) if (g && glueWeight(g, /^Ear/) > 0) g.remap = EAR_STILL;
     return path;
   }
   const _g = { p: v3(), n: v3() };
@@ -370,6 +383,22 @@ export function bridle3dGame(ctx) {
     }
     return [pts, nrm];
   };
+  const _rq = Array.from({ length: Math.max(ARC, THROAT, NOSE, CHEEK) }, () => v3());
+  /**
+   * Une lanière de cuir ne fait pas d'angle : chaque point glisse vers le milieu de ses voisins (les bouts restent),
+   * mais jamais plus près de la peau qu'avant (le long de sa normale) : elle ne rentre pas dans les bosses.
+   */
+  function relax(pts, nrm, passes = 6) {
+    const n = pts.length;
+    for (let k = 0; k < passes; k++) {
+      for (let i = 1; i < n - 1; i++) _rq[i].copy(pts[i]).multiplyScalar(0.5).addScaledVector(pts[i - 1], 0.25).addScaledVector(pts[i + 1], 0.25);
+      for (let i = 1; i < n - 1; i++) {
+        const lift = Math.max(0, _off.copy(pts[i]).sub(_rq[i]).dot(nrm[i]));
+        pts[i].copy(_rq[i]).addScaledVector(nrm[i], lift);
+      }
+    }
+    return [pts, nrm];
+  }
   const DOWN = v3();
   const _off = v3();
   const _q = new THREE.Quaternion();
@@ -386,7 +415,7 @@ export function bridle3dGame(ctx) {
       const u = i / (ARC - 1); // 0 notre côté, 1 l'autre
       return u < 0.45 ? side[0] : u > 0.55 ? side[1] : (side[0] + side[1]) / 2;
     };
-    crownS.set(...mix(P.front, P.back, wOf, ARC, (i, wi) => 0.04 * S * Math.sin(Math.PI * wi) * Math.sin((Math.PI * i) / (ARC - 1))));
+    crownS.set(...relax(...mix(P.front, P.back, wOf, ARC, (i, wi) => 0.04 * S * Math.sin(Math.PI * wi) * Math.sin((Math.PI * i) / (ARC - 1)))));
     crownS.mesh.visible = true;
     browS.mesh.visible = side[0] > 0.98 && side[1] > 0.98;
     browGroup.visible = browS.mesh.visible;

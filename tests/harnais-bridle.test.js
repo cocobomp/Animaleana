@@ -211,3 +211,46 @@ describe('brider en 3D : le filet posé sur la peau, la tête toujours belle', (
     }, 90000);
   }
 });
+
+/** Le plus grand angle entre deux morceaux voisins d'une lanière (rad) ; les bouts (la boucle sous l'oreille) à part. */
+function bendOf(line, from = 2) {
+  let worst = 0;
+  for (let i = from; i < line.length - from; i++) {
+    const a = line[i].clone().sub(line[i - 1]);
+    const b = line[i + 1].clone().sub(line[i]);
+    if (a.length() < 1e-5 || b.length() < 1e-5) continue;
+    worst = Math.max(worst, a.angleTo(b));
+  }
+  return worst;
+}
+
+describe('brider en 3D : la têtière ne se plie pas en zigzag quand il couche les oreilles', () => {
+  for (const breed of ['shetland', 'appaloosa', 'arabe']) {
+    it(`${breed} : un tap sur les dents (tête relevée, oreilles couchées), la têtière garde sa forme`, () => {
+      const { a, sc } = makeStage(breed);
+      const ctx = fakeCtxOf(a, t, { scene: sc, view: frameMod.fitView(W, H, 400, 360) });
+      const game = games.bridle(ctx);
+      run(ctx, game, sc, 2.6);
+      const line = game.straps().crown.userData.line;
+      const before = bendOf(line);
+      expect(before, 'avant le tap : pas d\'angle cassé').toBeLessThan(0.85);
+      const ear = sc.model.ears[0];
+      const earBefore = ear.quaternion.clone();
+      game.down(game.peek().teeth);
+      expect(game.peek().teethTaps).toBe(1);
+      let worst = 0;
+      for (let k = 0; k < 24; k++) {
+        run(ctx, game, sc, 1 / 30);
+        worst = Math.max(worst, bendOf(line));
+      }
+      // (les oreilles ont vraiment bougé : sinon l'essai ne prouve rien)
+      expect(ear.quaternion.angleTo(earBefore), 'les oreilles couchées').toBeGreaterThan(0.5);
+      expect(worst, `pendant : ${(worst * 57.3).toFixed(0)}° (avant ${(before * 57.3).toFixed(0)}°)`).toBeLessThan(Math.min(0.96, before + 0.35));
+      // la lanière collée à la base de l'oreille suit la tête, pas l'oreille : tout le cuir reste hors de la peau
+      const c = strapsInside(sc, game);
+      expect(c.bad / c.all, `oreilles couchées : ${c.bad}/${c.all} ${c.where}`).toBeLessThan(0.03);
+      game.destroy();
+      sc.dispose();
+    }, 90000);
+  }
+});

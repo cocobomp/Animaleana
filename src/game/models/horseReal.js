@@ -2803,7 +2803,15 @@ function measureShape(S, pos, coat, base) {
   // sont posés par des rayons (gearModels.js). La forme approchée ci-dessus (coupes tous les 2,5 cm, un rayon par 15°)
   // passait sous la peau sur le chanfrein bombé des traits et sous les ganaches : la muserolle rentrait dans le nez, la
   // sous-gorge dans la joue.
-  head.skin = headSkin(pos, coat, idx, toHead, poll, [heads[BONE_INDEX.EarL], heads[BONE_INDEX.EarR]]);
+  // (mesurée la première fois qu'un licol ou un filet en a besoin, puis gardée avec le gabarit : un cheval sans licol — les
+  // vignettes des listes, les chevaux du pré — ne la paie pas)
+  const earRoots = [heads[BONE_INDEX.EarL], heads[BONE_INDEX.EarR]];
+  let skin;
+  Object.defineProperty(head, 'skin', {
+    get: () => (skin ??= headSkin(pos, coat, idx, toHead, poll, earRoots)),
+    enumerable: true,
+    configurable: true,
+  });
   // Ligne du dos : le haut de chaque coupe du tronc (interpolé).
   const rings = torso.rings;
   const dz = rings[1][0] - rings[0][0];
@@ -2823,8 +2831,11 @@ function measureShape(S, pos, coat, base) {
 /**
  * Peau de la tête au repos (repère de la tête) : triangles de la robe liés à la tête, et ceux qui sont devant zMin et à
  * moins de 45 cm de la nuque (dessus de la nuque, gorge, dessous des ganaches), quel que soit l'os qui les porte ; des
- * oreilles, seulement leur base. ray(o, d, max, first) : le point de la peau le plus loin de o le long de d (jusqu'à max ;
- * la surface extérieure, pas le dedans de la bouche) — ou, first, le premier — et sa normale tournée vers d, ou null.
+ * oreilles, seulement leur base. ray(o, d, max, first) : le point de la peau le plus loin de o le long de d
+ * (jusqu'à max ; la surface extérieure, pas le dedans de la bouche) — ou, first, le premier — et sa normale tournée vers
+ * d, ou null. clear(p, want) : écarte p de la peau jusqu'à want. cache : lignes des sangles déjà posées (gearModels.js).
+ * Les triangles sont rangés dans une grille de 3 cm : un rayon ou un point ne regarde que les cases qu'il traverse (avant,
+ * les quelque 4 000 triangles à chaque fois : un licol coûtait 150 à 400 ms à construire, au lieu de 5 à 10 ms).
  */
 export function headSkin(pos, coat, idx, toHead, poll, earRoots = [], zMin = -0.2) {
   const keep = new Uint8Array(coat.count);
@@ -2867,6 +2878,42 @@ export function headSkin(pos, coat, idx, toHead, poll, earRoots = [], zMin = -0.
     for (const v of [at(a), at(b), at(c)]) tri.push(v.x, v.y, v.z);
   }
   const T = new Float32Array(tri);
+  const NT = T.length / 9;
+  // Grille : chaque triangle dans toutes les cases que touche sa boîte.
+  const CELL = 0.03;
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (let k = 0; k < T.length; k += 3) {
+    for (let a = 0; a < 3; a++) {
+      lo[a] = Math.min(lo[a], T[k + a]);
+      hi[a] = Math.max(hi[a], T[k + a]);
+    }
+  }
+  const G = lo.map((l, a) => Math.max(1, Math.ceil((hi[a] - l) / CELL + 1e-6)));
+  const cellOf = (v, a) => Math.min(G[a] - 1, Math.max(0, Math.floor((v - lo[a]) / CELL)));
+  const cid = (x, y, z) => (z * G[1] + y) * G[0] + x;
+  const count = new Uint32Array(G[0] * G[1] * G[2] + 1);
+  const triBox = (t, fn) => {
+    const k = t * 9;
+    const c0 = [0, 1, 2].map((a) => cellOf(Math.min(T[k + a], T[k + 3 + a], T[k + 6 + a]), a));
+    const c1 = [0, 1, 2].map((a) => cellOf(Math.max(T[k + a], T[k + 3 + a], T[k + 6 + a]), a));
+    for (let z = c0[2]; z <= c1[2]; z++) for (let y = c0[1]; y <= c1[1]; y++) for (let x = c0[0]; x <= c1[0]; x++) fn(cid(x, y, z));
+  };
+  for (let t = 0; t < NT; t++) triBox(t, (c) => count[c + 1]++);
+  for (let c = 1; c < count.length; c++) count[c] += count[c - 1];
+  const cells = new Uint32Array(count[count.length - 1]);
+  const fill = count.slice(0, -1);
+  for (let t = 0; t < NT; t++) triBox(t, (c) => (cells[fill[c]++] = t));
+  // (un triangle de plusieurs cases n'est regardé qu'une fois par rayon ou par point)
+  const seen = new Uint32Array(NT);
+  let stamp = 0;
+  const next = () => {
+    if (++stamp >= 0xffffffff) {
+      seen.fill(0);
+      stamp = 1;
+    }
+    return stamp;
+  };
   const e1 = V();
   const e2 = V();
   const pv = V();
@@ -2881,24 +2928,66 @@ export function headSkin(pos, coat, idx, toHead, poll, earRoots = [], zMin = -0.
     const O = Array.isArray(o) ? V(...o) : o;
     let best = -1;
     let bt = first ? Infinity : -1;
-    for (let k = 0; k < T.length; k += 9) {
+    const st = next();
+    const test = (t) => {
+      if (seen[t] === st) return;
+      seen[t] = st;
+      const k = t * 9;
       A.set(T[k], T[k + 1], T[k + 2]);
       e1.set(T[k + 3], T[k + 4], T[k + 5]).sub(A);
       e2.set(T[k + 6], T[k + 7], T[k + 8]).sub(A);
       pv.crossVectors(D, e2);
       const det = e1.dot(pv);
-      if (Math.abs(det) < 1e-12) continue;
+      if (Math.abs(det) < 1e-12) return;
       const inv = 1 / det;
       tv.subVectors(O, A);
       const u = tv.dot(pv) * inv;
-      if (u < 0 || u > 1) continue;
+      if (u < 0 || u > 1) return;
       qv.crossVectors(tv, e1);
       const v = D.dot(qv) * inv;
-      if (v < 0 || u + v > 1) continue;
-      const t = e2.dot(qv) * inv;
-      if (t <= 0 || t > max || (first ? t >= bt : t <= bt)) continue;
-      bt = t;
+      if (v < 0 || u + v > 1) return;
+      const tt = e2.dot(qv) * inv;
+      if (tt <= 0 || tt > max || (first ? tt >= bt : tt <= bt)) return;
+      bt = tt;
       best = k;
+    };
+    // Parcours des cases le long du rayon (de o jusqu'à max, coupé à la boîte de la grille).
+    const o3 = [O.x, O.y, O.z];
+    const d3 = [D.x, D.y, D.z];
+    let t0 = 0;
+    let t1 = max;
+    for (let a = 0; a < 3; a++) {
+      const b0 = lo[a];
+      const b1 = lo[a] + G[a] * CELL;
+      if (Math.abs(d3[a]) < 1e-12) {
+        if (o3[a] < b0 || o3[a] > b1) return null;
+        continue;
+      }
+      let ta = (b0 - o3[a]) / d3[a];
+      let tb = (b1 - o3[a]) / d3[a];
+      if (ta > tb) [ta, tb] = [tb, ta];
+      t0 = Math.max(t0, ta);
+      t1 = Math.min(t1, tb);
+    }
+    if (t0 > t1) return null;
+    const cur = [0, 1, 2].map((a) => cellOf(o3[a] + d3[a] * (t0 + 1e-7), a));
+    const step = d3.map((v) => (v > 0 ? 1 : v < 0 ? -1 : 0));
+    const tMax = [0, 1, 2].map((a) => {
+      if (!step[a]) return Infinity;
+      const edge = lo[a] + (cur[a] + (step[a] > 0 ? 1 : 0)) * CELL;
+      return (edge - o3[a]) / d3[a];
+    });
+    const tDelta = d3.map((v) => (v ? CELL / Math.abs(v) : Infinity));
+    for (let guard = 0; guard < 4096; guard++) {
+      const c = cid(cur[0], cur[1], cur[2]);
+      for (let j = count[c]; j < count[c + 1]; j++) test(cells[j]);
+      const a = tMax[0] < tMax[1] ? (tMax[0] < tMax[2] ? 0 : 2) : tMax[1] < tMax[2] ? 1 : 2;
+      // (le premier : trouvé avant la sortie de cette case, rien de plus près plus loin)
+      if (first && best >= 0 && bt <= tMax[a]) break;
+      if (tMax[a] > t1) break;
+      cur[a] += step[a];
+      if (cur[a] < 0 || cur[a] >= G[a]) break;
+      tMax[a] += tDelta[a];
     }
     if (best < 0) return null;
     A.set(T[best], T[best + 1], T[best + 2]);
@@ -2915,23 +3004,35 @@ export function headSkin(pos, coat, idx, toHead, poll, earRoots = [], zMin = -0.
   const ta = V();
   const tb = V();
   const tc = V();
+  const best = V();
   const clear = (p, want) => {
     for (let it = 0; it < 4; it++) {
       let bd = Infinity;
       let bk = -1;
-      const best = V();
-      for (let k = 0; k < T.length; k += 9) {
-        const m = want + 0.03;
-        if (Math.abs(T[k] - p.x) > m + 0.1 || Math.abs(T[k + 1] - p.y) > m + 0.1 || Math.abs(T[k + 2] - p.z) > m + 0.1) continue;
-        ta.set(T[k], T[k + 1], T[k + 2]);
-        tb.set(T[k + 3], T[k + 4], T[k + 5]);
-        tc.set(T[k + 6], T[k + 7], T[k + 8]);
-        tr3.set(ta, tb, tc).closestPointToPoint(p, cp);
-        const d = cp.distanceTo(p);
-        if (d < bd) {
-          bd = d;
-          bk = k;
-          best.copy(cp);
+      const st = next();
+      const c0 = [cellOf(p.x - want, 0), cellOf(p.y - want, 1), cellOf(p.z - want, 2)];
+      const c1 = [cellOf(p.x + want, 0), cellOf(p.y + want, 1), cellOf(p.z + want, 2)];
+      for (let z = c0[2]; z <= c1[2]; z++) {
+        for (let y = c0[1]; y <= c1[1]; y++) {
+          for (let x = c0[0]; x <= c1[0]; x++) {
+            const c = cid(x, y, z);
+            for (let j = count[c]; j < count[c + 1]; j++) {
+              const t = cells[j];
+              if (seen[t] === st) continue;
+              seen[t] = st;
+              const k = t * 9;
+              ta.set(T[k], T[k + 1], T[k + 2]);
+              tb.set(T[k + 3], T[k + 4], T[k + 5]);
+              tc.set(T[k + 6], T[k + 7], T[k + 8]);
+              tr3.set(ta, tb, tc).closestPointToPoint(p, cp);
+              const d = cp.distanceTo(p);
+              if (d < bd) {
+                bd = d;
+                bk = k;
+                best.copy(cp);
+              }
+            }
+          }
         }
       }
       if (bk < 0 || bd >= want) return p;
@@ -2940,15 +3041,17 @@ export function headSkin(pos, coat, idx, toHead, poll, earRoots = [], zMin = -0.
       tc.set(T[bk + 6], T[bk + 7], T[bk + 8]).sub(ta);
       const n = V().crossVectors(tb, tc).normalize();
       const away = V().subVectors(p, best);
-      // (dehors : à l'écart du point le plus proche ; tout contre la peau : le long de la normale du triangle, tournée
-      // du côté où est p)
-      if (away.lengthSq() > 1e-10) away.normalize();
+      // (dehors : à l'écart du point le plus proche ; tout contre la peau, ou bien derrière elle — un bord de sangle entré
+      // dans la peau après le lissage — : le long de la normale du triangle, tournée vers l'extérieur par l'ordre de ses
+      // sommets. Avant, un point entré dans la peau était poussé plus loin dedans.)
+      const len = away.length();
+      if (len > 1e-5 && away.dot(n) > -0.5 * len) away.divideScalar(len);
       else away.copy(n);
       p.copy(best).addScaledVector(away, want);
     }
     return p;
   };
-  return { tris: T, ray, clear };
+  return { tris: T, ray, clear, cache: new Map() };
 }
 
 /**

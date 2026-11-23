@@ -113,7 +113,8 @@ function headGearPoints(md, group) {
   return out;
 }
 
-const BREEDS = [['selle_francais', 900], ['percheron', 900], ['trait_breton', 900], ['shetland', 900], ['falabella', 900], ['selle_francais', 60]];
+const BREEDS = [['selle_francais', 900], ['percheron', 900], ['trait_breton', 900], ['shetland', 900], ['falabella', 900], ['selle_francais', 60],
+  ['arabe', 900], ['appaloosa', 900], ['frison', 900], ['pre', 900]];
 
 describe('licol et filet sur la vraie peau de la tête', () => {
   it.each(BREEDS)('%s (%i jours) : licol, sangles à 4 mm au moins de la peau (ligne du milieu), aucun point dans la peau', (breed, age) => {
@@ -177,23 +178,99 @@ describe('licol et filet sur la vraie peau de la tête', () => {
     md.dispose();
   }, 120000);
 
-  it('têtière bien derrière les oreilles, sous-gorge décollée de la gorge', () => {
+  it('têtière bien derrière les oreilles', () => {
     const { md, look } = horse('selle_francais');
     const g = buildGear(md, look, { halter: { item: 'halter' } });
     const pts = headGearPoints(md, g);
-    const T = skinTris(md);
-    // (têtière : les points au-dessus de la nuque, plus de 6 cm en arrière du milieu des oreilles)
+    // (têtière : les points au-dessus de la nuque, plus de 3,5 cm en arrière du milieu des oreilles)
     const zC0 = md.dims.earZ - md.dims.hr * 0.38;
     const top = pts.filter((p) => p.y > md.dims.earY * 0.6 && Math.abs(p.z - zC0) < 0.1);
     expect(top.length).toBeGreaterThan(10);
     for (const p of top) expect(p.z, 'têtière').toBeLessThan(md.dims.earZ - 0.035);
-    // (sous-gorge : les points les plus bas de la boucle de la têtière, à plus d'un centimètre de la peau)
-    const zC = md.dims.earZ - md.dims.hr * 0.38;
-    const throat = pts.filter((p) => Math.abs(p.z - zC) < 0.12 && p.y < -md.dims.hr * 0.6 && Math.abs(p.x) < 0.03);
-    expect(throat.length).toBeGreaterThanOrEqual(3);
-    const d = Math.min(...throat.map((p) => distToSkin(T, p)));
-    expect(d).toBeGreaterThan(0.008);
     removeGear(g);
+    md.dispose();
+  }, 60000);
+
+  // Borne haute : une sangle qui flotte loin de la tête (la sous-gorge qui pendait à 5-12 cm sous la gorge de l'arabe et de
+  // l'appaloosa) ne passe plus. Mesure contre la peau au repos.
+  it.each(BREEDS)('%s (%i jours) : aucune sangle loin de la peau, sous-gorge juste sous la ganache', (breed, age) => {
+    const { md, look } = horse(breed, age);
+    const T = skinTris(md);
+    for (const item of ['halter', 'halterRope']) {
+      const g = buildGear(md, look, { halter: { item } });
+      const L = g.userData.headLines;
+      const far = (line) => Math.max(...line.map((p) => distToSkin(T, p)));
+      expect(far(L.nose), `${breed} ${item} muserolle`).toBeLessThan(0.025);
+      expect(far(L.cheeks.flat()), `${breed} ${item} montants`).toBeLessThan(0.03);
+      expect(far(L.crown), `${breed} ${item} têtière et sous-gorge`).toBeLessThan(0.035);
+      // (sous-gorge : le point le plus bas de la boucle de la têtière, décollé de la gorge mais tout près — avant, à 6 cm de
+      // la gorge de l'arabe, 12 cm de celle du Percheron —, et derrière la ganache, pas le long de la gorge)
+      const low = L.crown.reduce((a, p) => (p.y < a.y ? p : a));
+      const d = distToSkin(T, low);
+      expect(d, `${breed} ${item} sous-gorge décollée`).toBeGreaterThan(0.008);
+      expect(d, `${breed} ${item} sous-gorge proche`).toBeLessThan(0.035);
+      expect(low.y, `${breed} ${item} sous-gorge pas le long de la gorge`).toBeGreaterThan(-2.7 * md.dims.hr);
+      removeGear(g);
+    }
+    md.dispose();
+  }, 120000);
+
+  // La tête bouge par rapport à l'encolure (photo, brouter, manger à la mangeoire, trotter) : les pièces sont rigides sur la
+  // tête, la gorge suit l'encolure. La sangle reste près de la peau (sommet de la peau posée le plus proche, à moins de
+  // 4,5 cm : les sommets sont espacés de 1 à 2 cm).
+  it.each([['arabe'], ['appaloosa'], ['percheron'], ['shetland']])('%s : licol près de la tête, tête relevée ou baissée', (breed) => {
+    const { md, look } = horse(breed);
+    const g = buildGear(md, look, { halter: { item: 'halter' } });
+    const L = g.userData.headLines;
+    const mesh = md.coatMesh;
+    const v = new THREE.Vector3();
+    const st = (o) => ({ v: 0, moving: false, graze: 0, feeder: 0, turn: 0, fat: 1, near: true, ...o });
+    const check = (tag) => {
+      md.root.updateMatrixWorld(true);
+      const inv = md.head.matrixWorld.clone().invert();
+      const pv = [];
+      for (let i = 0; i < mesh.geometry.attributes.position.count; i++) {
+        mesh.getVertexPosition(i, v).applyMatrix4(mesh.matrixWorld).applyMatrix4(inv);
+        if (v.z > -0.3 && v.z < 0.8 && v.y > -0.7) pv.push(v.clone());
+      }
+      const far = (line) => Math.max(...line.map((p) => Math.min(...pv.map((q) => q.distanceToSquared(p)))).map(Math.sqrt));
+      expect(far(L.crown), `${breed} ${tag} têtière et sous-gorge`).toBeLessThan(0.045);
+      expect(far(L.nose), `${breed} ${tag} muserolle`).toBeLessThan(0.03);
+    };
+    md.photoPose();
+    check('photo');
+    md.anim.photo = false;
+    for (const [tag, o] of [['brouter', { graze: 1 }], ['mangeoire', { feeder: 1 }], ['trot', { v: 3, moving: true }]]) {
+      for (let i = 0; i < 90; i++) md.anim.update(1 / 30, st(o), {});
+      check(tag);
+    }
+    removeGear(g);
+    md.dispose();
+  }, 120000);
+
+  // Coût : la peau de la tête est rangée dans une grille, et les lignes des sangles sont gardées avec elle ; un deuxième
+  // licol du même modèle sur le même gabarit ne lance plus aucun rayon.
+  it('un deuxième licol du même gabarit ne refait pas les rayons', () => {
+    const { md, look } = horse('selle_francais');
+    const skin = md.sdf.head.skin;
+    skin.cache.clear();
+    let rays = 0;
+    let clears = 0;
+    const { ray, clear } = skin;
+    skin.ray = (...a) => (rays++, ray(...a));
+    skin.clear = (...a) => (clears++, clear(...a));
+    const g1 = buildGear(md, look, { halter: { item: 'halter' } });
+    expect(rays).toBeGreaterThan(100);
+    rays = 0;
+    clears = 0;
+    const g2 = buildGear(md, look, { halter: { item: 'halter' } });
+    expect(rays + clears).toBe(0);
+    // (mêmes lignes, mais des copies : une pièce ne déplace pas les points d'une autre)
+    expect(g2.userData.headLines.crown[3].distanceTo(g1.userData.headLines.crown[3])).toBeLessThan(1e-9);
+    expect(g2.userData.headLines.crown[3]).not.toBe(g1.userData.headLines.crown[3]);
+    Object.assign(skin, { ray, clear });
+    removeGear(g1);
+    removeGear(g2);
     md.dispose();
   }, 60000);
 });

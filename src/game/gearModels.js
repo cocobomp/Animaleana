@@ -43,12 +43,9 @@ function loop(sdf, c, n, out, a0 = 0, a1 = Math.PI * 2, tilt = 0, maxDist = 1.2)
  */
 function skinRing(sdf, c, n, out, a0 = 0, a1 = Math.PI * 2, tilt = 0, maxDist = 1.2, halfWidth = 0, first = false) {
   const outAt = typeof out === 'function' ? out : () => out;
-  const ct = Math.cos(tilt);
-  const st = Math.sin(tilt);
+  // (tilt : un angle, ou une fonction de l'angle autour de la boucle — la têtière penche plus en avant sous la gorge)
+  const tiltOf = typeof tilt === 'function' ? tilt : () => tilt;
   const C = new THREE.Vector3(...c);
-  // (une sangle plate a sa largeur de part et d'autre du plan de la boucle : ses deux bords aussi hors de la peau)
-  const pn = new THREE.Vector3(0, st, ct);
-  const centers = halfWidth ? [C, C.clone().addScaledVector(pn, halfWidth), C.clone().addScaledVector(pn, -halfWidth)] : [C];
   const dirs = [];
   const rad = [];
   // (boucle fermée : n points différents, le premier n'est pas répété à la fin — répété, la sangle se tordait à la
@@ -57,8 +54,12 @@ function skinRing(sdf, c, n, out, a0 = 0, a1 = Math.PI * 2, tilt = 0, maxDist = 
   const angle = (i) => a0 + ((a1 - a0) * i) / (closed ? n : n - 1);
   for (let i = 0; i < n; i++) {
     const a = angle(i);
-    const d = new THREE.Vector3(Math.cos(a), Math.sin(a) * ct, -Math.sin(a) * st);
+    const ti = tiltOf(a);
+    const d = new THREE.Vector3(Math.cos(a), Math.sin(a) * Math.cos(ti), -Math.sin(a) * Math.sin(ti));
     dirs.push(d);
+    // (une sangle plate a sa largeur de part et d'autre du plan de la boucle : ses deux bords aussi hors de la peau)
+    const pn = new THREE.Vector3(0, Math.sin(ti), Math.cos(ti));
+    const centers = halfWidth ? [C, C.clone().addScaledVector(pn, halfWidth), C.clone().addScaledVector(pn, -halfWidth)] : [C];
     if (!sdf.skin) {
       const p = rayHit(sdf, c, d.toArray(), maxDist);
       rad.push(p.addScaledVector(sdfNormal(sdf, p, 0.004), outAt(a)).sub(C).dot(d));
@@ -347,12 +348,21 @@ function buildHorseGear(model, look, gear, add) {
     // (les boucles de skinRing ne répètent pas leur premier point)
     const band = (pts, closed = false, side = [0, 0, 1]) => (rope ? P.tube(pts.map((v) => v.toArray()), 0.005, closed, 6) : strap(pts, w, th, closed, side));
     const yc = -hr * 0.2;
+    // Lignes des sangles gardées avec la peau du gabarit (head.skin.cache) : un deuxième licol du même modèle sur un cheval
+    // du même gabarit (vignettes, soins, cheval qui revient dans le pré) ne refait pas les rayons.
+    const memo = (key, fn) => {
+      const cache = head.skin?.cache;
+      const copy = (v) => (Array.isArray(v) ? v.map((p) => p.clone()) : v.clone());
+      if (!cache) return fn();
+      if (!cache.has(key)) cache.set(key, copy(fn()));
+      return copy(cache.get(key));
+    };
     // Muserolle : autour du nez, entre les yeux et les naseaux (en mouton pour le hackamore). Posée sur la vraie peau,
     // 6 à 7 mm au-dessus (skinRing).
     const zNose = snoutZ - hr * (halter ? 1.45 : bid === 'hackamore' ? 1.1 : 1.3);
     // (corde ronde : un peu plus loin, son rayon est plus grand que la demi-épaisseur d'une sangle)
     // (sa jonction — le bout de la sangle fermée — sous la mâchoire, où on ne la voit pas)
-    const nose = skinRing(head, [0, yc, zNose], 30, bid === 'hackamore' ? 0.014 : rope ? 0.009 : 0.0065, -PI / 2, PI * 1.5, 0, 1.2, (bid === 'hackamore' ? 0.02 : w) * 0.9);
+    const nose = memo(`nose|${bid}|${hid}`, () => skinRing(head, [0, yc, zNose], 48, bid === 'hackamore' ? 0.014 : rope ? 0.009 : 0.0065, -PI / 2, PI * 1.5, 0, 1.2, (bid === 'hackamore' ? 0.02 : w) * 0.9));
     if (bid === 'hackamore') add(model.head, strap(nose, 0.02, 0.012, true), P.fleeceMat(0xf2eee6));
     else add(model.head, band(nose, true), strapMat);
     // Têtière et sous-gorge : boucle bien derrière les oreilles (une oreille couchée passe par-dessus, pas dessous),
@@ -365,24 +375,33 @@ function buildHorseGear(model, look, gear, add) {
       + 0.003 * Math.min(1, Math.max(0, (Math.sin(a) + 0.45) / 0.35));
     // (le premier point de la peau sur chaque rayon : la nuque, pas l'encolure derrière elle)
     // (sa jonction sur le dessus de la nuque, sous les crins : sur le côté de la tête, on la voyait)
-    const crown = skinRing(head, [0, hr * 0.05, zCrown], 30, crownOut, PI / 2, PI * 2.5, 0.38, 1.2, w * 0.8 * 0.9, true);
+    // (penchée en avant sous la gorge, de 0,38 rad sur la nuque à 0,83 sous la gorge : la sous-gorge passe juste derrière
+    // les ganaches, là où la gorge rejoint la tête. Avec 0,38 partout, elle descendait le long de la gorge jusqu'à 45 cm de
+    // la nuque, et flottait loin sous la tête dès que la tête bougeait par rapport à l'encolure : photo, soins.)
+    const crownTilt = (a) => 0.38 + 0.45 * Math.min(1, Math.max(0, (-Math.sin(a) - 0.2) / 0.8));
+    const crown = memo(`crown|${rope}|${w}`, () => skinRing(head, [0, hr * 0.05, zCrown], 44, crownOut, PI / 2, PI * 2.5, crownTilt, 1.2, w * 0.8 * 0.9, true));
     // (la têtière un peu plus étroite que le reste du licol : sous les crins de la nuque)
     add(model.head, rope ? band(crown, true) : strap(crown, w * 0.8, th, true), strapMat);
     // Montants : de la têtière, sur le côté de la tête sous l'oreille (à la hauteur de l'articulation de la mâchoire, en
     // dessous et en arrière de l'œil), vers la muserolle ou le mors.
     // (les deux points de côté d'une boucle : le plus à gauche, le plus à droite)
     const sideOf = (pts) => [pts.reduce((a, p) => (p.x > a.x ? p : a)), pts.reduce((a, p) => (p.x < a.x ? p : a))];
-    const crownSide = (sd) => {
+    const crownSide = (sd) => memo(`side|${sd}|${rope}|${w}`, () => {
       const a = sd > 0 ? -0.95 : PI + 0.95;
-      const ct = Math.cos(0.38);
-      const st = Math.sin(0.38);
+      const ct = Math.cos(crownTilt(a));
+      const st = Math.sin(crownTilt(a));
       // (2 mm plus loin que la boucle : le bout du montant, plat, est posé dessus)
       const p = skinPoint(head, [0, hr * 0.05, zCrown], [Math.cos(a), Math.sin(a) * ct, -Math.sin(a) * st], crownOut(a) + 0.002, 1.2, true);
       return head.skin?.clear ? head.skin.clear(p, crownOut(a) + 0.002) : p;
-    };
+    });
     // Montant : il suit la joue (la ligne droite entre ses deux bouts rentrerait dans la tête), sur la vraie peau, ses
     // deux bords aussi (la sangle est plate : sur la joue bombée, ses bords y rentraient).
     const cheek = (a, b) => {
+      const pts = memo(`cheek|${rope}|${w}|${a.toArray()}|${b.toArray()}`, () => cheekLine(a, b));
+      add.headLines?.cheeks.push(pts);
+      return pts;
+    };
+    const cheekLine = (a, b) => {
       const pts = [a];
       const along = new THREE.Vector3().subVectors(b, a);
       const sv = new THREE.Vector3(0, -along.z, along.y).normalize();
@@ -417,7 +436,6 @@ function buildHorseGear(model, look, gear, add) {
         }
       }
       if (head.skin?.clear) for (let k = 1; k < pts.length - 1; k++) head.skin.clear(pts[k], out * 0.85);
-      add.headLines?.cheeks.push(pts);
       return pts;
     };
     const [cR, cL] = [crownSide(1), crownSide(-1)];

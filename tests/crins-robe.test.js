@@ -30,3 +30,18 @@ describe('liste blanche des pies : bords nets', () => {
     md.dispose();
   }, 60000);
 });
+
+describe('sueur et terre sur la cuisse : pas de tache en escalier', () => {
+  it('sueur et taches de terre suivent le poids du corps continu (bodyL), pas le numéro de partie des triangles', () => {
+    const md = horse('selle_francais', 1);
+    const fs = compile(md.coatMesh.material);
+    const sweat = fs.slice(fs.indexOf('if (hSweat > 0.001)'));
+    expect(sweat).toMatch(/float wet = hSweat \* bodyL \*/);
+    const dirt = fs.slice(fs.indexOf('if (hDirt > 0.001)'), fs.indexOf('if (hLegMud > 0.001)'));
+    expect(dirt).toMatch(/float bodyMud = bodyL \* smoothstep/);
+    expect(dirt.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')).not.toMatch(/bodyS/);
+    // la terre des membres s'arrête avant le coude et le grasset (hauteur continue h, pas la limite des triangles)
+    expect(dirt).toMatch(/float legMud = isLeg \*.*\(1\.0 - smoothstep\(0\.45, 0\.8, h/);
+    md.dispose();
+  }, 60000);
+});

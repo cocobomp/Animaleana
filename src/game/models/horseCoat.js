@@ -245,7 +245,7 @@ hEarIn = 0.0;
   float belly = under * bodyL;
   float lift = 0.03 * clamp(dot(hCoat, vec3(0.2126, 0.7152, 0.0722)) * 8.0 + 0.3, 0.0, 1.0);
   c = mix(c, c * 1.38 + lift, clamp(under + inner * 0.55, 0.0, 1.0) * 0.62);
-  c *= 1.0 - smoothstep(0.55, 1.0, up) * 0.06 * bodyS;
+  c *= 1.0 - smoothstep(0.55, 1.0, up) * 0.06 * bodyL;
   // Pangaré (Fjord, poneys) : ventre, tour des yeux et bout du nez plus clairs.
   float muzzleZone = isHead * smoothstep(0.82, 0.95, hl.z);
   c = mix(c, mix(c, vec3(0.94, 0.86, 0.72), 0.55), hMealy * clamp(belly * 1.4 + muzzleZone, 0.0, 1.0));
@@ -475,9 +475,16 @@ hEarIn = 0.0;
   // et des taches sur le corps, brun terre ; le pansage l'enlève.
   if (hDirt > 0.001) {
     // (bords des taches cassés par un bruit fin ; brun terre foncé, en couleur linéaire)
-    float dn = hFbm(P * 6.0 + hSeed) + (hNoise(P * 28.0 + hSeed) - 0.5) * 0.2;
-    float legMud = isLeg * (0.7 + 0.3 * hNoise(P * 30.0));
-    float bodyMud = bodyS * smoothstep(0.52, 0.66, dn); // (bodyS : poids du corps continu, comme les marques)
+    // (bruit tourné et déformé : sur la grille droite du bruit, les taches sortaient en carrés et en marches)
+    vec3 Pm = mat3(0.8, 0.36, -0.48, -0.6, 0.48, -0.64, 0.0, 0.8, 0.6) * P;
+    Pm += (vec3(hNoise(Pm * 2.2 + 3.1), hNoise(Pm * 2.2 + 8.7), hNoise(Pm * 2.2 + 5.3)) - 0.5) * 0.35;
+    float dn = hFbm(Pm * 6.0 + hSeed) + (hNoise(Pm * 22.0 + hSeed) - 0.5) * 0.12;
+    // (terre des membres : du sabot vers le genou, puis fondue avant le coude et le grasset ; elle couvrait tout le
+    // membre, jusqu'en haut de la cuisse, et son bord suivait les triangles en escalier)
+    float legMud = isLeg * (0.7 + 0.3 * hNoise(P * 30.0)) * (1.0 - smoothstep(0.45, 0.8, h + (dn - 0.5) * 0.3));
+    // (bodyL, continu au coude et au grasset : avec bodyS, constant par triangle, le bord des taches suivait les
+    // triangles en escalier sur la cuisse)
+    float bodyMud = bodyL * smoothstep(0.5, 0.68, dn);
     float mud = clamp(hDirt * (0.85 * legMud + 0.75 * bodyMud), 0.0, 0.75) * (1.0 - isHoof) * (1.0 - isSkin);
     c = mix(c, vec3(0.13, 0.085, 0.045), mud);
   }
@@ -492,7 +499,9 @@ hEarIn = 0.0;
   }
   // Sueur (hSweat, après le galop) : le poil mouillé est plus foncé, par plaques, sur le corps.
   if (hSweat > 0.001) {
-    float wet = hSweat * bodyS * (0.25 + 0.75 * smoothstep(0.32, 0.52, hFbm(P * 3.5 + hSeed + 5.0)));
+    // (bodyL et non bodyS : bodyS change d'un triangle à l'autre à la jonction de la cuisse et du coude, et la sueur
+    // y dessinait une tache sombre en escalier, très visible au concours et au travail)
+    float wet = hSweat * bodyL * (0.25 + 0.75 * smoothstep(0.32, 0.52, hFbm(P * 3.5 + hSeed + 5.0)));
     c *= mix(1.0, 0.5, clamp(wet, 0.0, 1.0));
   }
   diffuseColor.rgb = c;

@@ -395,33 +395,48 @@ export function roundPenSet(stage, pen) {
   const leafMats = [0x4f7a34, 0x5d8a3c, 0x46702f].map((c) => keep(new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true })));
   const crown = keep(lumpy(new THREE.IcosahedronGeometry(1, 2), 0.16, 4, 2.4));
   const trunkGeo = keep(new THREE.CylinderGeometry(0.12, 0.18, 1.8, 8));
-  for (let i = 0; i < 13; i++) {
-    // (en arc, derrière le rond : au fond de l'image)
-    const a = -Math.PI / 2 + (i - 6) * 0.26 + (r() - 0.5) * 0.12;
-    const d = F + 9 + r() * 7;
+  // (tout autour du rond : la caméra suit le cheval et fait le tour, il y a des arbres de tous les côtés ; en instances,
+  // un appel de dessin par sorte de pièce)
+  const spots = [];
+  const nTree = 30;
+  for (let i = 0; i < nTree; i++) {
+    const a = (i / nTree) * Math.PI * 2 + (r() - 0.5) * 0.14;
+    const d = F + 22 + r() * 8;
     const x = Math.cos(a) * d;
     const z = Math.sin(a) * d;
     if (Math.hypot(x - stable.position.x, z - stable.position.z) < 6) continue;
-    const sc = 1.1 + r() * 0.9;
-    const t = new THREE.Mesh(trunkGeo, trunkMat);
-    t.position.set(x, 0.9 * sc, z);
-    t.scale.setScalar(sc);
-    g.add(t);
-    for (let j = 0; j < 3; j++) {
-      const c = new THREE.Mesh(crown, leafMats[(i + j) % 3]);
-      c.position.set(x + (r() - 0.5) * 1.2 * sc, (2.2 + r() * 0.9) * sc, z + (r() - 0.5) * 0.8);
-      c.scale.setScalar((0.95 + r() * 0.5) * sc);
-      g.add(c);
-    }
+    spots.push({ x, z, sc: 1.1 + r() * 0.9 });
   }
+  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, spots.length);
+  const crowns = leafMats.map((m) => new THREE.InstancedMesh(crown, m, spots.length));
+  const nC = [0, 0, 0];
+  spots.forEach((t, i) => {
+    m4.compose(V(t.x, 0.9 * t.sc, t.z), q.identity(), s.setScalar(t.sc));
+    trunks.setMatrixAt(i, m4);
+    for (let j = 0; j < 3; j++) {
+      const c = (i + j) % 3;
+      const k2 = (0.95 + r() * 0.5) * t.sc;
+      m4.compose(V(t.x + (r() - 0.5) * 1.2 * t.sc, (2.2 + r() * 0.9) * t.sc, t.z + (r() - 0.5) * 0.8), q.identity(), s.setScalar(k2));
+      crowns[c].setMatrixAt(nC[c]++, m4);
+    }
+  });
+  crowns.forEach((c, j) => {
+    c.count = nC[j];
+  });
+  g.add(trunks, ...crowns);
   const hillMat = keep(new THREE.MeshStandardMaterial({ color: 0x7c9f5c, roughness: 1 }));
   const hillGeo = keep(new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2));
-  for (let i = 0; i < 6; i++) {
-    const h = new THREE.Mesh(hillGeo, hillMat);
-    h.scale.set(12 + r() * 7, 2.5 + r() * 3, 7);
-    h.position.set((i - 2.5) * 13 + (r() - 0.5) * 4, -0.2, -F - 26 - r() * 5);
-    g.add(h);
+  const nH = 12;
+  const hills = new THREE.InstancedMesh(hillGeo, hillMat, nH);
+  for (let i = 0; i < nH; i++) {
+    const a = (i / nH) * Math.PI * 2 + (r() - 0.5) * 0.2;
+    const d = F + 27 + r() * 5;
+    e.set(0, -a + Math.PI / 2, 0);
+    q.setFromEuler(e);
+    m4.compose(V(Math.cos(a) * d, -0.2, Math.sin(a) * d), q, s.set(13 + r() * 7, 2.5 + r() * 3, 7));
+    hills.setMatrixAt(i, m4);
   }
+  g.add(hills);
   g.add(skyDome(keep));
 
   // ---------------------------------------------------------------- lumière : l'après-midi

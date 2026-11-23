@@ -276,6 +276,40 @@ describe('longe en 3D : même note que le jeu dessiné, à ses vraies allures', 
     }
   }, 90000);
 
+  it('la caméra le suit de près : au téléphone, le cheval et sa tête sont grands dans l\'image tout le tour', () => {
+    // (avant cette reprise, la caméra fixe montrait tout le rond : 60 à 100 px CSS du nez à la queue, sur 358)
+    for (const breed of BREEDS) {
+      const st = makeStage({ breed });
+      const { ctx, game } = open3d(lunge3d.lunge3dGame, st);
+      const { sc } = st;
+      let minLen = Infinity;
+      let minHead = Infinity;
+      const tour = [];
+      for (let k = 0; k < 30 * 14; k++) {
+        if (k % 8 === 0 && game.peek().v < 50) btn(ctx, '✨').opts.onTap();
+        step(ctx, game, sc);
+        if (k < 30 || k % 10) continue;
+        sc.holder.updateMatrixWorld(true);
+        const px = (P, Q) => {
+          const a = sc.project(P);
+          const b = sc.project(Q);
+          return Math.hypot(a.x - b.x, a.y - b.y) * st.view.scale;
+        };
+        const muz = sc.live('muzzle');
+        minLen = Math.min(minLen, px(muz, sc.model.tail.getWorldPosition(new THREE.Vector3())));
+        minHead = Math.min(minHead, px(muz, sc.model.ears[0].localToWorld(new THREE.Vector3(0, 0.12, 0))));
+        tour.push(game.peek().phi);
+      }
+      // (il a fait plus d'un demi-tour pendant la mesure)
+      expect(Math.max(...tour) - Math.min(...tour)).toBeGreaterThan(Math.PI);
+      if (process.env.SLIP_LOG) console.log(breed, 'longueur min', minLen.toFixed(0), 'tête min', minHead.toFixed(0));
+      expect(minLen).toBeGreaterThan(120);
+      expect(minHead).toBeGreaterThan(40);
+      game.destroy();
+      sc.dispose();
+    }
+  }, 120000);
+
   it('sans licol ni filet, il porte un licol le temps de la longe ; la longe va de la main de l\'enfant à l\'anneau', () => {
     const st = makeStage({ gear: {} });
     const g0 = st.sc.double.gear;

@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { lungeGame, libertyGame, drawGaitGauge, GAIT_GAUGE, ARENA_PLAN, GAITS } from './horse.js';
 import { withLogic, bubble } from './care3d.js';
-import { label, emoji, clamp } from './draw.js';
+import { label, emoji, clamp, rrect } from './draw.js';
 import { roundPenSet, penSize } from '../../game/care/roundPen.js';
 import { ease } from '../../game/care/stage.js';
 import { buildAvatar, animateAvatarWalk, updateAvatarLife, armIK } from '../../game/models/avatarModel.js';
@@ -38,6 +38,8 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const _v = V();
 const _w = V();
 const _p = V();
+/** La caméra qui suit le cheval : angle en avant (rad), pente (hauteur par mètre), marge ; gros plan de la fin. */
+const CAM = { ahead: 0.3, rise: 0.5, closeRise: 0.3, pad: 1.06 };
 
 // ---------------------------------------------------------------- logique pure (tests/manege3d-*.test.js)
 
@@ -315,45 +317,83 @@ function penRig(ctx, kind) {
   if (tmpGear) sc.double.gear = tmpGear;
 
   // ---------------------------------------------------------------- caméra
+  // Elle suit le cheval de près, de trois quarts avant, un peu en hauteur, depuis le côté du centre : on le voit en
+  // grand, sa tête pliée vers l'enfant (donc vers nous), la piste et la clôture derrière lui. Placée au-delà du milieu
+  // du rond, elle voit l'enfant devant elle sans qu'elle cache le cheval (assez haute pour que sa tête passe sous ses
+  // sabots dans l'image). Elle tourne autour du rond avec lui, en douceur (au demi-tour, elle passe de l'autre côté).
+  // À la fin (le câlin de la liberté, le « c'est bon » de la longe), elle se rapproche : sa tête et l'enfant de près.
   let shape = '';
-  let framed = false;
-  /** Haute, de trois quarts : toute la piste et le cheval entier (la tête aussi) partout sur le cercle. */
-  function frameCamera(now = false) {
-    const w = sc.size.w;
+  const camDir = V();
+  let camSet = false;
+  const _f = V();
+  const _o = V();
+  const local = [];
+  {
+    // (le cheval au repos, dans le repère de son support : il regarde vers +z ; marks : de profil, il regarde vers +x)
+    const zN = M.muzzle.x;
+    const zT = M.tail.x;
+    const top = Math.max(M.muzzle.y, withers) + 0.32 * u;
+    const w = 0.28 * u;
+    for (const z of [zN, zT, (zN + zT) / 2]) local.push(V(w, 0, z), V(-w, 0, z), V(0, withers, z));
+    local.push(V(0, top, zN - 0.1 * Lb), V(0, M.muzzle.y, zN + 0.05 * Lb));
+  }
+  /** La jauge des allures en bas : la scène se cadre au-dessus d'elle (zone libre de setFocus). */
+  function focusZone() {
     const h = sc.size.h;
     const v = ctx.view;
-    // (la jauge des allures dessinée en bas : la scène se cadre au-dessus d'elle)
-    const gaugeTop = kind === 'lunge' ? (GAIT_GAUGE.top + gaugeDy()) * v.scale + v.oy - 6 : h - 34 * v.scale;
-    const key = `${w}x${h}|${Math.round(gaugeTop)}|${ctx.done ? 1 : 0}`;
-    if (key === shape && !now) return;
+    const gaugeTop = kind === 'lunge' ? (GAIT_GAUGE.top + gaugeDy()) * v.scale + v.oy - 6 : h - 40 * v.scale;
+    const key = `${sc.size.w}x${h}|${Math.round(gaugeTop)}`;
+    if (key === shape) return;
     shape = key;
-    if (!ctx.done) sc.setFocus(0, Math.min(h, gaugeTop));
-    const fh = !ctx.done && sc.focus ? sc.focus.bottom - sc.focus.top : h;
-    const portrait = w / Math.max(1, fh) < 1.05;
-    const top = withers * 1.35;
-    const pts = [];
-    // (le cheval partout sur la piste : son nez et ses fesses, au sol et à hauteur des oreilles)
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * TAU;
-      const c = V(Math.cos(a) * R, 0, Math.sin(a) * R);
-      const tg = V(-Math.sin(a), 0, Math.cos(a)).multiplyScalar(Lb * 0.55);
-      const out = V(Math.cos(a), 0, Math.sin(a)).multiplyScalar(0.3 * u);
-      for (const s of [1, -1]) {
-        const p = c.clone().addScaledVector(tg, s).add(out);
-        pts.push(p, p.clone().setY(top));
-      }
-    }
-    pts.push(V(0, 1.75 * KID, 0));
-    // (le premier cadrage à la vraie taille de la toile : sans fondu)
-    const first = !framed && w > 2;
-    if (w > 2) framed = true;
-    // (assez haute pour que l'enfant, au milieu, ne cache jamais le cheval qui passe derrière elle : dans un petit rond
-    // de poney, la caméra monte — l'ombre de sa tête sur le sable s'arrête avant le cheval)
-    const kidH = 1.75 * KID + 0.05;
-    const room = Math.max(0.5, R - kidR - 0.3 - 0.25 * Lb);
-    const k = Math.max(portrait ? 0.78 : 0.62, (kidH / room) * 1.05);
-    sc.frame(pts, { dir: [0, k, 1], pad: 1.03, now: now || first || !sc.ready });
+    sc.setFocus(0, Math.min(h, gaugeTop));
   }
+  /**
+   * Cadre la scène sur le cheval (et extra : d'autres points du monde à garder dans l'image). close : le gros plan de
+   * la fin (sa tête et l'enfant).
+   */
+  function aim(dt, { extra = [], close = false, now = false } = {}) {
+    focusZone();
+    const hp = sc.holder.position;
+    const fwd = _f.set(Math.sin(sc.holder.rotation.y), 0, Math.cos(sc.holder.rotation.y));
+    const kidP = kid.root.position;
+    let want;
+    if (close) {
+      // (de côté par rapport à la ligne cheval → enfant, du côté où elle est déjà, un peu plus bas)
+      const ln = _o.subVectors(kidP, hp).setY(0);
+      if (ln.lengthSq() < 1e-6) ln.copy(fwd);
+      ln.normalize();
+      want = V(-ln.z, 0, ln.x);
+      if (want.dot(camDir) < 0) want.negate();
+      want.addScaledVector(fwd, 0.35).normalize();
+    } else {
+      const out = _o.set(hp.x, 0, hp.z);
+      if (out.lengthSq() < 1e-6) out.copy(fwd).set(fwd.z, 0, -fwd.x);
+      out.normalize();
+      // (vers le centre, un peu en avant du cheval)
+      want = out.negate().multiplyScalar(Math.cos(CAM.ahead)).addScaledVector(fwd, Math.sin(CAM.ahead)).normalize();
+    }
+    if (!camSet || now) camDir.copy(want);
+    else camDir.lerp(want, ease(dt, close ? 0.6 : 0.35)).normalize();
+    camSet = true;
+    sc.holder.updateMatrixWorld(true);
+    const pts = local.map((p) => sc.holder.localToWorld(p.clone()));
+    if (close) {
+      pts.length = 0;
+      pts.push(sc.live('forehead'), sc.live('muzzle'), ...md.ears.map((e) => e.localToWorld(V(0, 0.14, 0))));
+      pts.push(rig.kidHead(V()), kidP.clone(), sc.holder.localToWorld(V(0, withers, M.muzzle.x - 0.35 * Lb)));
+      pts.push(rig.kidHead(V()).add(V(0, 0.45 * u + 0.2, 0)));
+    }
+    for (const p of extra) pts.push(p);
+    // (au téléphone, l'image est plus haute que large : c'est la largeur qui fixe la distance ; le haut en trop va au
+    // ciel et au pré au-dessus de lui, pas au sable sous ses pieds)
+    const fh = sc.focus ? sc.focus.bottom - sc.focus.top : sc.size.h;
+    if (!close && sc.size.w / Math.max(1, fh) < 0.95) pts.push(hp.clone().setY(withers * 2.3));
+    const e = close ? CAM.closeRise : CAM.rise;
+    sc.frame(pts, { dir: [camDir.x, e, camDir.z], pad: close ? 1.12 : CAM.pad, now: now || !close || !sc.ready, half: 0.6 });
+  }
+  /** Garde l'ancien nom : le premier cadrage. */
+  const frameCamera = (now = true) => aim(0, { now });
+  const rig = { kidHead: (out = V()) => kid.head.localToWorld(out.set(0, 0.32, 0)) };
   /** Décalage de la jauge des allures vers le bas de la scène (espace du cadre). */
   const gaugeDy = () => Math.max(0, (ctx.view?.y1 ?? 360) - 8 - GAIT_GAUGE.bottom);
 
@@ -393,13 +433,13 @@ function penRig(ctx, kind) {
 
   return {
     sc, md, R, F, Lb, u, scale, ss, plan, pen, kid, kidPos, keep, kidR,
-    frameCamera, gaugeDy, paintRing, checkAt, moveKid, reach,
+    frameCamera, aim, gaugeDy, paintRing, checkAt, moveKid, reach,
     get kidHeading() { return kidHeading; },
     listen(s = 1.8) { earT = Math.max(earT, s); },
     attach: lungeAttach(sc, 1),
     pinStats,
     /** Point de la tête de l'enfant (pour une bulle). */
-    kidHead: (out = V()) => kid.head.localToWorld(out.set(0, 0.32, 0)),
+    kidHead: rig.kidHead,
     destroy() {
       sc.afterLife = (sc.afterLife ?? []).filter((f) => f !== earHook && f !== pinHook);
       sc.scene.remove(kid.root, ring);
@@ -489,6 +529,7 @@ export function lunge3dGame(ctx) {
   rig.kidPos.set(Math.cos(phi) * rc, 0, Math.sin(phi) * rc);
   rig.frameCamera(true);
   sc.pen = { toWorld: (x, y) => rig.plan.toWorld(x, y), toLogic: rig.plan.toLogic, R, F: rig.F };
+  let endT = 0;
   let slid = 0; // (mesure : écart entre le chemin du cheval et la vitesse jouée par l'animation)
 
   return {
@@ -524,7 +565,6 @@ export function lunge3dGame(ctx) {
       dt = Math.max(0, dt);
       logic.update(dt);
       const s = logic.peek();
-      rig.frameCamera();
       // vitesse : celle de la logique, ramenée aux allures du modèle (lissée : il accélère, il ralentit)
       us += (lungeSpeed(s.v) - us) * ease(dt, 0.3);
       const moving = us > 0.25;
@@ -571,6 +611,9 @@ export function lunge3dGame(ctx) {
       if (said && (said.t -= dt) <= 0) said = null;
       rig.paintRing(s.value, s.lo, s.hi, s.max);
       slid = Math.abs(w * R - st.v * scale);
+      // la caméra le suit, l'enfant dans l'image ; à la fin, quand il s'est arrêté, elle se rapproche
+      endT = ctx.done ? endT + dt : 0;
+      rig.aim(dt, { close: ctx.done && endT > 0.8 && !moving, extra: [rig.kidHead(V()), kid.hands[0].getWorldPosition(V())] });
     },
     draw(g) {
       if (!sc.ready) return;
@@ -578,8 +621,10 @@ export function lunge3dGame(ctx) {
       const c = rig.checkAt(s.lo, s.hi, s.max);
       label(g, '✓', c.x, c.y, 18, '#1e5c3e');
       if (said) {
+        // (au-dessus de sa tête, jamais coupée au bord de l'image)
         const h = sc.project(rig.kidHead(_v));
-        bubble(g, h.x, h.y - 6, said.text, { size: 14 });
+        const v = ctx.view;
+        bubble(g, clamp(h.x, v.x0 + 60, v.x1 - 60), Math.max(v.y0 + 34, h.y - 6), said.text, { size: 14 });
       }
       drawGaitGauge(g, ctx.t, s.v, s.gait, ctx.done, rig.gaugeDy());
     },
@@ -728,7 +773,6 @@ export function liberty3dGame(ctx) {
       dt = Math.max(0, dt);
       logic.update(dt);
       const s = logic.peek();
-      rig.frameCamera();
       // le cheval : exactement à sa place du dessin ; sa vitesse (celle qu'il joue) : son vrai déplacement
       const P = plan.toWorld(s.horse.x, s.horse.y, _p);
       const hp = sc.holder.position;
@@ -767,7 +811,8 @@ export function liberty3dGame(ctx) {
       const goal = plan.toWorld(s.me.x, s.me.y);
       // (jamais dans le cheval : écartée de son corps, pour l'image seulement)
       const away = _v.subVectors(goal, hp).setY(0);
-      const minD = 0.55 * Lb;
+      // (au câlin, un pas entre son nez et l'enfant : on voit sa tête de profil, pas cachée derrière elle)
+      const minD = (s.phase === 'drive' ? 0.55 : 0.95) * Lb;
       if (away.length() < minD) goal.copy(hp).addScaledVector(away.lengthSq() > 1e-6 ? away.normalize() : V(1, 0, 0), minD);
       rig.moveKid(dt, goal, Math.atan2(hp.x - rig.kidPos.x, hp.z - rig.kidPos.z));
       // elle pousse : le bras tendu vers ses hanches ; sinon les bras le long du corps
@@ -790,6 +835,10 @@ export function liberty3dGame(ctx) {
         closeDisc.visible = false;
       }
       rig.paintRing(s.value, s.lo, s.hi, s.max);
+      // la caméra le suit, l'enfant et la zone verte dans l'image ; à l'appel, le câlin de près
+      const extra = [rig.kidHead(V()), kid.root.position.clone()];
+      if (s.phase === 'drive') extra.push(plan.toWorld(ARENA_PLAN.x + Math.cos(s.theta - 0.8 * s.dirSign) * 55, ARENA_PLAN.y + Math.sin(s.theta - 0.8 * s.dirSign) * 55));
+      rig.aim(dt, { close: s.phase === 'join' || ctx.done, extra });
     },
     draw(g) {
       if (!sc.ready) return;
@@ -804,10 +853,25 @@ export function liberty3dGame(ctx) {
         emoji(g, '👆', h.x, Math.max(v.y0 + 20, h.y - 10), 30 * k);
       }
       if (s.phase === 'join' || ctx.done) {
+        // (le cœur entre eux deux, au-dessus de la plus haute des deux têtes : jamais sur la sienne)
         const a = sc.project(rig.kidHead(_v));
-        if (endT < 3) emoji(g, '💛', a.x, a.y - 22 - Math.sin(ctx.time * 3) * 3, 24);
+        const b = sc.project(sc.live('forehead'));
+        const ears = Math.min(a.y, b.y, ...md.ears.map((e) => sc.project(e.localToWorld(_w.set(0, 0.14, 0))).y));
+        if (endT < 3) emoji(g, '💛', (a.x + b.x) / 2, Math.max(v.y0 + 20, ears - 26 - Math.sin(ctx.time * 3) * 3), 26);
       }
-      if (!ctx.done) label(g, `🟢 ${ctx.t('mg_liberty_zone')}`, (v.x0 + v.x1) / 2, v.y1 - 18, 15, '#1e5c3e');
+      if (!ctx.done) {
+        // la légende de la zone verte : une étiquette lisible, sur fond clair
+        const txt = `🟢 ${ctx.t('mg_liberty_zone')}`;
+        g.save();
+        g.font = '800 17px system-ui, sans-serif';
+        const w = g.measureText(txt).width + 24;
+        const y = v.y1 - 26;
+        g.fillStyle = 'rgba(255,255,255,0.9)';
+        rrect(g, (v.x0 + v.x1) / 2 - w / 2, y - 15, w, 30, 15);
+        g.fill();
+        g.restore();
+        label(g, txt, (v.x0 + v.x1) / 2, y, 17, '#1e5c3e');
+      }
     },
     destroy() {
       logic.destroy?.();

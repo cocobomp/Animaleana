@@ -20,6 +20,7 @@ import { headShape, headFollow } from './headFrame.js';
 import { nicker, snort } from './feed3d.js';
 import { armDir } from './treat3d.js';
 import { circle, emoji } from './draw.js';
+import { canvasTex } from '../../game/care/textures.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const GLOSS_K = 1.4; // (une case du jeu dessiné frottée une fois, 1 : le reflet à fond)
@@ -518,6 +519,37 @@ function crestSpots(sc) {
     .sort((a, b) => a.w.distanceTo(withers) - b.w.distanceTo(withers));
 }
 
+/** La couleur des tresses : celle de la crinière, assombrie si elle est claire (gris, blanc, crème). */
+export function braidColor(mane = 0x4a2f1d) {
+  const c = new THREE.Color(mane).convertLinearToSRGB();
+  const lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+  if (lum > 0.4) c.multiplyScalar(1 - 0.35 * clamp01((lum - 0.4) / 0.3));
+  return c.convertSRGBToLinear().getHex();
+}
+
+/** Des mèches tressées en biais (clair et sombre), en niveaux de gris : la couleur vient de la matière. */
+function plaitTexture() {
+  return canvasTex(64, 64, (c) => {
+    c.fillStyle = '#e6e6e6';
+    c.fillRect(0, 0, 64, 64);
+    c.lineWidth = 3;
+    for (let i = -64; i < 128; i += 10) {
+      c.strokeStyle = 'rgba(70,70,70,0.55)';
+      c.beginPath();
+      c.moveTo(i, 0);
+      c.lineTo(i + 32, 32);
+      c.lineTo(i, 64);
+      c.stroke();
+      c.strokeStyle = 'rgba(255,255,255,0.6)';
+      c.beginPath();
+      c.moveTo(i + 4, 0);
+      c.lineTo(i + 36, 32);
+      c.lineTo(i + 4, 64);
+      c.stroke();
+    }
+  }, { key: 'plait' });
+}
+
 /**
  * Les tresses « boutons » de concours sur la vraie crête (model.braidSpots, horseReal.js), cachées au départ : la
  * boule de crins, le ruban et le pompon de chaque bouton, le bourrelet de crins jusqu'au suivant ; les perles de la
@@ -528,11 +560,16 @@ export function crestBraids(sc, own, { mane = 0x4a2f1d, sections = 4 } = {}) {
   const md = sc.model;
   const spots = crestSpots(sc);
   const r = (md.dims?.R ?? 0.32) * 0.085;
-  const hairMat = own(new THREE.MeshStandardMaterial({ color: mane, roughness: 0.7 }));
+  // (les crins tressés : des mèches croisées en biais, d'une couleur un peu plus foncée que la crinière quand elle est
+  // claire — gris, blanc — : sur une crinière beige ou blanche, un bouton lisse de la même couleur se perdait et
+  // ressemblait à un petit œuf)
+  const plait = own(plaitTexture());
+  const hairMat = own(new THREE.MeshStandardMaterial({ color: braidColor(mane), roughness: 0.75, map: plait }));
   const ribbonMat = own(new THREE.MeshStandardMaterial({ color: 0xd8402f, roughness: 0.5 }));
   const knobGeo = own(new THREE.SphereGeometry(r, 14, 10));
-  const bandGeo = own(new THREE.TorusGeometry(r * 0.82, r * 0.2, 8, 16));
-  const pomGeo = own(new THREE.SphereGeometry(r * 0.5, 10, 8));
+  // (le ruban : un large anneau et un pompon bien visibles, pas un fil)
+  const bandGeo = own(new THREE.TorusGeometry(r * 0.88, r * 0.3, 8, 18));
+  const pomGeo = own(new THREE.SphereGeometry(r * 0.62, 12, 8));
   const ridgeGeo = own(new THREE.SphereGeometry(1, 12, 6));
   const zAxis = v3(0, 0, 1);
   const knobs = spots.map((sp, i) => {

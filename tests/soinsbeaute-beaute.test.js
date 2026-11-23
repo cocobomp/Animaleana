@@ -274,6 +274,27 @@ describe('tresser en 3D', () => {
   });
 });
 
+describe('tresses sur une crinière claire', () => {
+  it('les boutons sont tressés (mèches en biais) et un peu plus foncés qu\'une crinière grise ou blanche ; une crinière foncée garde sa couleur', () => {
+    const lum = (hex) => {
+      const c = new THREE.Color(hex).convertLinearToSRGB();
+      return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+    };
+    for (const mane of [0x8e8a85, 0xd8d4cc, 0xf1ece2]) expect(lum(mane) - lum(beauty3d.braidColor(mane)), mane.toString(16)).toBeGreaterThan(0.06);
+    for (const mane of [0x2a1c14, 0x0c0a09, 0x4a2f1d]) expect(beauty3d.braidColor(mane)).toBe(new THREE.Color(mane).getHex());
+    const { sc } = makeStage({ breed: 'arabe' });
+    const keep = [];
+    const B = beauty3d.crestBraids(sc, (x) => (keep.push(x), x), { mane: 0xd8d4cc, sections: 3 });
+    const knob = B.knobs[0].g.children[0];
+    expect(knob.material.map).toBeTruthy();
+    // (le ruban : un vrai anneau, pas un fil)
+    expect(B.knobs[0].band.geometry.parameters.tube).toBeGreaterThanOrEqual(B.r * 0.28);
+    B.remove();
+    for (const x of keep) x.dispose?.();
+    sc.dispose();
+  }, 30000);
+});
+
 describe('repli dessiné : le beau cheval du vétérinaire', () => {
   it('tresser et lustrer dessinent le cheval avec drawHorseVet, pas avec le cheval-girafe', async () => {
     const vet = await import('../src/ui/vetHorse.js');

@@ -202,7 +202,7 @@ describe('vermifuge en 3D : la seringue au coin des lèvres, la grimace', () => 
 });
 
 describe('seller : la sangle, cadrée avec le nez et la croupe', () => {
-  for (const breed of ['selle_francais', 'shetland', 'percheron']) {
+  for (const breed of ['selle_francais', 'shetland', 'percheron', 'frison', 'falabella']) {
     it(`${breed} : le nez (avec de la marge) et la croupe dans l'image ; trop serrée, il tourne la tête vers la sangle et reste dans l'image`, () => {
       const { sc, ctx } = makeStage(breed);
       const game = games.saddle(ctx);
@@ -224,6 +224,10 @@ describe('seller : la sangle, cadrée avec le nez et la croupe', () => {
       expect(inView(P(nose), v, 10), 'le bout du nez, avec de la marge').toBe(true);
       expect(inView(P(sc.marks.croup), v, 4), 'la croupe').toBe(true);
       expect(inView(P(sc.marks.tail), v, 0), 'la queue').toBe(true);
+      // (toute la croupe : la pointe de la fesse derrière la queue, et le bout de la queue)
+      const S = sc.double.scale;
+      const rearPts = () => [sc.marks.tail.clone().add(new THREE.Vector3(-0.1 * S, -0.25 * S, 0)), sc.marks.tailTip];
+      for (const q of rearPts()) expect(inView(P(q), v, 0), 'la fesse et le bout de la queue').toBe(true);
       expect(sc.decor.props.bucket.group.visible, 'pas de seau dans le champ').toBe(false);
       const yaw0 = Math.abs(sc.yaw);
       const flat = (p) => p.clone().setY(0);
@@ -242,6 +246,14 @@ describe('seller : la sangle, cadrée avec le nez et la croupe', () => {
       const noseL = sc.holder.worldToLocal(sc.live('muzzle'));
       expect(Math.sign(noseL.x - sc.holder.worldToLocal(sc.model.neck.getWorldPosition(new THREE.Vector3())).x), 'tournée de notre côté').toBe(Math.sign(camL.x));
       expect(inView(P(sc.live('nose')), v, 0), 'le nez reste dans l\'image').toBe(true);
+      for (const q of rearPts()) expect(inView(P(q), v, 0), 'trop serrée : la croupe et la queue restent dans l\'image').toBe(true);
+      // (il regarde son flanc, pas la caméra : le bout du nez part vers l'arrière, la tête vue de profil)
+      const fwd = sc.holder.localToWorld(new THREE.Vector3(0, 0, 1)).sub(sc.holder.localToWorld(new THREE.Vector3())).setY(0).normalize();
+      const headDir = flat(sc.live('muzzle')).sub(flat(sc.model.head.getWorldPosition(new THREE.Vector3()))).normalize();
+      const toCam = flat(sc.camera.position).sub(flat(sc.live('muzzle'))).normalize();
+      console.log('TURN', breed, Math.acos(headDir.dot(fwd)).toFixed(2), 'cam', Math.acos(headDir.dot(toCam)).toFixed(2));
+      expect(Math.acos(headDir.dot(fwd)), 'la tête tournée vers l\'arrière, vers le flanc').toBeGreaterThan(1.2);
+      expect(Math.acos(headDir.dot(toCam)), 'il ne regarde pas la caméra').toBeGreaterThan(0.6);
       hold.opts.onUp();
       game.destroy();
       expect(sc.decor.props.bucket.group.visible === false, 'le seau revient').toBe(false);

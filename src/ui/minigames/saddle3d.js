@@ -351,7 +351,10 @@ export function saddle3dGame(ctx) {
       // il tend l'encolure ; la tête telle qu'elle est quand il se retourne vers la sangle)
       const gb = body.localToWorld(girthC.clone().add(v3(0, -dims.R * 1.25, 0)));
       const mz = sc.live('muzzle') ?? L.muzzle;
-      sc.frame([L.withers, L.back, L.belly, L.chest, gb, L.poll, sc.live('poll'), L.muzzle, mz, L.muzzle.clone().add(v3(0.2 * S, 0, 0)), L.hooves[0], L.hooves[1], L.croup, L.tail, ...L.hooves], { dir: [0.32, 0.02, 1], pad: 1.15, now });
+      // (la croupe en entier : la pointe de la fesse derrière la queue, et la queue jusqu'au bout — un Frison a une
+      // grosse croupe et une longue queue)
+      const rear = [L.tail.clone().add(v3(-0.14 * S, 0, 0)), L.tail.clone().add(v3(-0.12 * S, -0.3 * S, 0)), L.tailTip ?? L.tail];
+      sc.frame([L.withers, L.back, L.belly, L.chest, gb, L.poll, sc.live('poll'), L.muzzle, mz, L.muzzle.clone().add(v3(0.2 * S, 0, 0)), L.hooves[0], L.hooves[1], L.croup, L.tail, ...rear, ...L.hooves], { dir: [0.32, 0.02, 1], pad: 1.15, now });
     } else {
       // (de la queue au bout du nez, avec de la marge : au repos, il tend parfois l'encolure ; et les pièces encore sur
       // le porte-selle, en entier — avant, le tapis qui pend était à moitié coupé par le bord gauche)
@@ -381,7 +384,9 @@ export function saddle3dGame(ctx) {
       // (l'encolure en tout ≈ 0,8 rad : ce que la vie lui donne déjà, plus le reste ; la tête un peu plus)
       const extra = Math.max(0, 0.8 - Math.abs((sc.yaw ?? 0) * 0.7));
       md.neck.quaternion.premultiply(_tq.setFromAxisAngle(UP, side * extra * smooth(turnK)));
-      md.head.quaternion.premultiply(_tq.setFromAxisAngle(UP, side * 0.18 * smooth(turnK)));
+      // (la tête encore un peu plus vers le flanc, et un peu baissée : il regarde la sangle, pas la caméra)
+      md.head.quaternion.premultiply(_tq.setFromAxisAngle(UP, side * 0.45 * smooth(turnK)));
+      md.head.rotateX(0.18 * smooth(turnK));
     }
     if (md.ribs && bloatK > 0.001) {
       ribs0.copy(md.ribs.scale);
@@ -531,7 +536,7 @@ export function saddle3dGame(ctx) {
         if (tension > 0.95) {
           if (annoyed <= 0) {
             const h = sc.project(sc.live('head'));
-            fx.float(h.x, h.y - 30, '💢', 20);
+            fx.float(h.x, Math.max(ctx.view.y0 + 34, h.y - 30), '💢', 20);
             snort(sc);
           }
           annoyed = 0.6;
@@ -546,7 +551,9 @@ export function saddle3dGame(ctx) {
         // trop serrée : oreilles couchées, il tourne la tête vers la sangle, lève un postérieur
         m.ears = 'back';
         m.annoyed = Math.max(m.annoyed, 0.3);
-        m.look = body.localToWorld(girthC.clone().add(v3(0, -dims.R, 0.4)));
+        // (la sangle sur son flanc DE NOTRE CÔTÉ : regarder le milieu du ventre ne disait pas de quel côté tourner)
+        const side = Math.sign(body.worldToLocal(_cam.copy(sc.camera.position)).x) || 1;
+        m.look = body.localToWorld(girthC.clone().add(v3(side * dims.R * 1.1, -dims.R * 0.5, -dims.R * 0.3)));
         m.lookAmt = 1;
         m.lift = 3;
         m.liftMax = 0.28;

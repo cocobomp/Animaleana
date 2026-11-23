@@ -14,7 +14,7 @@ import {
 } from '../sim/competitions.js';
 import { equip, owned } from '../sim/gear.js'; // seller le cheval avec ce qu'il y a dans le coffre
 import { competitionVenueModel } from './models/venue.js';
-import { spectators } from './models/course.js';
+import { spectators, numberTexture } from './models/course.js';
 import { mulberry32 } from '../sim/rng.js';
 import { addStat, earn, isSandbox } from '../sim/profile.js';
 import { emojiTexture } from './textures.js';
@@ -62,15 +62,45 @@ export function podiumBlocked(pod, insideBuilding, heightAt = () => 0) {
 }
 
 /**
- * Podium pris dans un bâtiment : la cérémonie se fait dans la carrière, à 4,5 m de sa lice d'entrée (+x), face à la
- * carrière, au sol (une marche « virtuelle » à hauteur 0, mêmes places que ceremonySpot). Le décor de la carrière
- * est alors derrière la caméra, rien ne la gêne.
+ * Podium pris dans un bâtiment : on installe un podium dans la carrière, le temps de la remise des prix (comme en vrai,
+ * au bord de la piste), dos à sa lice d'entrée (+x), face à la carrière, mêmes marches que celui du terrain
+ * (models/venue.js : 1 au milieu, 0,75 m ; 2 à −1,7 m, 0,5 m ; 3 à +1,7 m, 0,3 m). Avant, la cérémonie se faisait au
+ * sol au milieu de la carrière, sans marche : on ne comprenait pas qu'on était sur le podium.
  */
-export function arenaCeremonySpot(rank, opts = {}) {
-  const x = SHOWGROUND.x + SHOWGROUND.hw - 4.5;
+export function arenaPodium() {
+  const x = SHOWGROUND.x + SHOWGROUND.hw - 2.6;
   const z = SHOWGROUND.z;
-  const pod = { x, z, steps: [{ x, z, y: 0 }, { x, z, y: 0 }, { x, z, y: 0 }] };
-  return ceremonySpot(pod, rank <= 3 ? 1 : rank, opts);
+  const steps = [{ x, z, y: 0.75 }, { x, z: z - 1.7, y: 0.5 }, { x, z: z + 1.7, y: 0.3 }];
+  return { x, z, steps };
+}
+
+/** Places de la cérémonie au podium de la carrière (arenaPodium ; mêmes places que ceremonySpot). */
+export function arenaCeremonySpot(rank, opts = {}) {
+  return ceremonySpot(arenaPodium(), rank, opts);
+}
+
+/** Le podium de la carrière en 3D (repère du monde, posé au sol à ground m) : trois marches numérotées, un tapis rouge. */
+export function arenaPodiumModel(pod, ground = 0) {
+  const g = new THREE.Group();
+  g.name = 'arenaPodium';
+  g.position.set(pod.x, ground, pod.z);
+  const cols = [0xffcf2e, 0xd9d9d9, 0xcd7f32];
+  const carpet = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.1, 6.2), new THREE.MeshStandardMaterial({ color: 0xb7322c, roughness: 0.7 }));
+  carpet.position.y = 0.05;
+  carpet.receiveShadow = true;
+  g.add(carpet);
+  pod.steps.forEach((st, k) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1.6, st.y, 1.6), new THREE.MeshStandardMaterial({ color: cols[k], roughness: 0.5 }));
+    m.position.set(st.x - pod.x, st.y / 2, st.z - pod.z);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    const num = new THREE.Mesh(new THREE.PlaneGeometry(0.8, Math.min(0.8, st.y * 0.9)), new THREE.MeshStandardMaterial({ map: numberTexture(String(k + 1)), roughness: 0.5 }));
+    num.position.set(-0.81, 0, 0);
+    num.rotation.y = -Math.PI / 2;
+    m.add(num);
+    g.add(m);
+  });
+  return g;
 }
 
 /**
@@ -137,6 +167,7 @@ export class CompetitionVenue {
       const pl = this.game.player;
       this.game.rig.focus = { shot: ceremonyShot(this.ceremonyE, pl.mount === this.ceremonyE || this.ceremonyFoot ? pl : null, (this.shotAt ??= new THREE.Vector3()), this.game.camera?.aspect ?? 1) };
     }
+    if (this.built?.arenaPodium && (this.arenaPodiumT -= dt) <= 0) this.hideArenaPodium();
     if (this.built) {
       this.cheer = Math.max(0, this.cheer - dt * 0.35);
       for (const c of this.built.crowds) c.userData.cheer(this.time, this.cheer);
@@ -208,6 +239,7 @@ export class CompetitionVenue {
     this.ceremonyE = null;
     const b = this.built;
     if (!b) return;
+    this.hideArenaPodium();
     const g = this.game;
     g.scene.remove(b.group);
     b.group.traverse((o) => {
@@ -442,6 +474,7 @@ export class CompetitionVenue {
     // (à la maison, l'écurie occupe la place du podium : cérémonie dans la carrière)
     const inArena = podiumBlocked(pod, g.world.insideBuilding?.bind(g.world), (x, z) => g.world.heightAt(x, z));
     const spot = inArena ? arenaCeremonySpot(rank, { mounted, scale: e?.scale ?? 1 }) : ceremonySpot(pod, rank, { mounted, scale: e?.scale ?? 1 });
+    if (inArena) this.showArenaPodium();
     const { x, z } = spot.player;
     const y = g.world.heightAt(x, z) + spot.player.y;
     pl.root.position.set(x, y, z);
@@ -477,6 +510,33 @@ export class CompetitionVenue {
       g.scene.add(s);
       this.particles.push(s);
     }
+  }
+
+  /** Le podium de la carrière (arenaPodium), installé pour la remise des prix ; enlevé 30 s après (update). */
+  showArenaPodium() {
+    const g = this.game;
+    const b = this.built;
+    if (!b) return;
+    if (!b.arenaPodium) {
+      const pod = arenaPodium();
+      b.arenaPodium = arenaPodiumModel(pod, g.world.heightAt(pod.x, pod.z));
+      g.scene.add(b.arenaPodium);
+    }
+    this.arenaPodiumT = 30;
+  }
+
+  /** Enlève le podium de la carrière (et libère ce qu'il a créé). */
+  hideArenaPodium() {
+    const p = this.built?.arenaPodium;
+    if (!p) return;
+    this.game.scene.remove(p);
+    p.traverse((o) => {
+      if (!o.isMesh) return;
+      o.geometry.dispose();
+      o.material.map?.dispose?.();
+      o.material.dispose();
+    });
+    this.built.arenaPodium = null;
   }
 
   /** Photo souvenir du podium, gardée dans l'album (comme les photos de balade). */

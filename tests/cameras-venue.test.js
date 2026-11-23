@@ -27,13 +27,13 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const POD = { x: 40, z: -9, steps: [{ x: 40, z: -9, y: 0.75 }, { x: 40, z: -10.7, y: 0.5 }, { x: 40, z: -7.3, y: 0.3 }] };
 
 /** Le cheval (centre, cap, taille) touche-t-il une marche ? Emprise : 1,05 m devant et derrière, 0,35 m de côté (× taille). */
-function onAStep(h, sc) {
+function onAStep(h, sc, pod = POD) {
   const f = V(Math.sin(h.heading), 0, Math.cos(h.heading));
   const l = V(Math.cos(h.heading), 0, -Math.sin(h.heading));
   for (let i = -10; i <= 10; i++) {
     for (const j of [-1, 0, 1]) {
       const q = V(h.x, 0, h.z).addScaledVector(f, (i / 10) * 1.05 * sc).addScaledVector(l, j * 0.35 * sc);
-      if (POD.steps.some((s) => Math.abs(q.x - s.x) < 0.8 && Math.abs(q.z - s.z) < 0.8)) return true;
+      if (pod.steps.some((s) => Math.abs(q.x - s.x) < 0.8 && Math.abs(q.z - s.z) < 0.8)) return true;
     }
   }
   return false;
@@ -138,7 +138,7 @@ describe('📸 la caméra de la cérémonie', () => {
 });
 
 describe('🏠 podium pris dans un bâtiment (à la maison, l\'écurie occupe sa place)', () => {
-  it('détecté, et la cérémonie se fait dans la carrière, près de sa lice d\'entrée, face à la carrière', async () => {
+  it('détecté, et la cérémonie se fait sur un podium installé dans la carrière, près de sa lice d\'entrée', async () => {
     const { SHOWGROUND } = await import('../src/sim/activities.js');
     // (l'écurie de la maison : de x −27 à −17, de z −10 à 6 ; le podium du terrain de concours est à x −25, z 3,3 à 6,7)
     const stable = (x, y, z) => x > -27 && x < -17 && z > -10 && z < 6 && y < 6;
@@ -155,8 +155,19 @@ describe('🏠 podium pris dans un bâtiment (à la maison, l\'écurie occupe sa
           expect(Math.abs(q.z - SHOWGROUND.z)).toBeLessThan(SHOWGROUND.hd - 1);
           expect(stable(q.x, 0.5, q.z)).toBe(false);
         }
-        expect(s.player.y).toBe(0);
+        // (un vrai podium : à pied sur sa marche, à cheval devant elle ; le cheval jamais sur une marche)
+        const ap = C.arenaPodium();
+        if (!mounted && rank <= 3) expect(s.player.y).toBe(ap.steps[rank - 1].y);
+        else expect(s.player.y).toBe(0);
+        expect(onAStep(s.horse, 1, ap)).toBe(false);
       }
+    }
+    // le podium de la carrière : trois marches dans la carrière, loin du bâtiment
+    const ap = C.arenaPodium();
+    expect(ap.steps.map((st) => st.y)).toEqual([0.75, 0.5, 0.3]);
+    for (const st of ap.steps) {
+      expect(st.x + 0.8).toBeLessThan(SHOWGROUND.x + SHOWGROUND.hw);
+      expect(stable(st.x, 0.4, st.z)).toBe(false);
     }
     // la caméra de la cérémonie reste dans la carrière, loin de ses lices
     const s = C.arenaCeremonySpot(1, { mounted: true, scale: 1 });

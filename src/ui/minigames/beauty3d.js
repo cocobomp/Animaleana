@@ -673,9 +673,10 @@ export function braid3dGame(ctx) {
     // (suivie en douceur : quand il baisse ou tourne un peu la tête, elle reste dans l'image)
     const low = [L.withers.clone().add(v3(-0.05 * S, -0.38 * S, 0.05 * S)), L.neck.clone().add(v3(0, -0.3 * S, 0))];
     follow.on = true;
-    // (en revenant de la queue, la caméra glisse plus vite jusqu'à l'encolure)
-    follow.set({ dir: [0.2, 0.32, 1], pad: 1.22, half: from === 'tail' ? 0.3 : 0.5, reach: 0.08 }, () => [...knobs.map((k) => k.w()), L.withers, ...low]);
-    follow.frame(false);
+    // (en revenant de la queue pour les rubans : un changement de plan net, comme au cinéma, plutôt qu'un long
+    // glissement le long du dos pendant lequel la tête entrait par le bord)
+    follow.set({ dir: [0.2, 0.32, 1], pad: 1.22, half: 0.5, reach: 0.08 }, () => [...knobs.map((k) => k.w()), L.withers, ...low]);
+    follow.frame(from === 'tail');
   }
 
   // La loupe du jeu dessiné, plus petite, en bas à droite (on y touche les mèches, comme dans le jeu dessiné).

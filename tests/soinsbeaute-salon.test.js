@@ -284,3 +284,26 @@ describe('tonte en 3D', () => {
     sc.dispose();
   }, 60000);
 });
+
+describe('la tête dans l\'image au début de chaque jeu 3D du salon et du concours', () => {
+  it('séchage, tonte, finitions, lustrage : bout du nez et oreilles avec au moins 5 % de marge (5 chevaux)', async () => {
+    const headFrame = await import('../src/ui/minigames/headFrame.js');
+    const beauty3d = await import('../src/ui/minigames/beauty3d.js');
+    const games = { gdry: groom3d.gdry3dGame, gcut: groom3d.gcut3dGame, gfinish: groom3d.gfinish3dGame, shine: beauty3d.shine3dGame };
+    for (const [breed, foal] of [['selle_francais', false], ['frison', false], ['shetland', false], ['falabella', false], ['selle_francais', true]]) {
+      for (const [name, make] of Object.entries(games)) {
+        const { a, sc } = makeStage({ breed, foal });
+        const ctx = name === 'shine' ? ctxFor(a, sc, { opts: { out: {} } }) : salonCtx(a, sc);
+        const game = make(ctx);
+        const shape = headFrame.headShape(sc);
+        let worst = 9;
+        run(ctx, game, sc, 2, 1 / 30, (k) => {
+          if (k > 15) worst = Math.min(worst, headFrame.headMargins(sc, shape.points(0)).min);
+        });
+        expect(worst, `${name} ${breed}${foal ? ' poulain' : ''}`).toBeGreaterThanOrEqual(0.05);
+        game.destroy();
+        sc.dispose();
+      }
+    }
+  }, 120000);
+});

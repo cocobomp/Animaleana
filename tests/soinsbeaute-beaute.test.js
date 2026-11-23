@@ -12,12 +12,14 @@ let beauty;
 let beauty3d;
 let care3d;
 let which;
+let headFrame;
 beforeAll(async () => {
   ({ t } = await loadStageMods());
   beauty = await import('../src/ui/minigames/beauty.js');
   beauty3d = await import('../src/ui/minigames/beauty3d.js');
   care3d = await import('../src/ui/minigames/care3d.js');
   which = await import('../src/game/care/which.js');
+  headFrame = await import('../src/ui/minigames/headFrame.js');
 }, 60000);
 
 const random = Math.random;
@@ -187,6 +189,11 @@ describe('tresser en 3D', () => {
       const game = beauty3d.braid3dGame(ctx);
       run(ctx, game, sc, 0.3);
       expect(game.peek().knobs).toBe(0);
+      // la crinière en gros plan : toute la tête dans l'image (bout du nez et oreilles, marge ≥ 5 %)
+      const shape = headFrame.headShape(sc);
+      let worst = 9;
+      run(ctx, game, sc, 2, 1 / 30, () => { worst = Math.min(worst, headFrame.headMargins(sc, shape.points(0)).min); });
+      expect(worst, key).toBeGreaterThanOrEqual(0.05);
       const seen = [];
       braidKeys(game, ctx, 'blue', () => {
         run(ctx, game, sc, 0.2);

@@ -667,11 +667,11 @@ export function braid3dGame(ctx) {
       sc.frame(pts, { dir: [-0.6, 0.22, 1], pad: 1.2, half: 0.6 });
       return;
     }
-    // la crinière : toute l'encolure et la tête, de notre côté, un peu d'en haut ; la même vue pour chaque tresse
+    // la crinière : toute l'encolure et la tête (ses vrais bords : bout du nez, oreilles), de notre côté, un peu d'en haut ; la même vue pour chaque tresse
     // (le rond jaune montre celle qu'on tresse) : on voit le cheval, et les boutons qui viennent un à un
     const crest = knobs.map((k) => k.w());
     const low = [L.withers.clone().add(v3(-0.05 * S, -0.38 * S, 0.05 * S)), L.neck.clone().add(v3(0, -0.3 * S, 0))];
-    sc.frame([...crest, L.withers, L.poll, ...L.ears, L.muzzle, ...low], { dir: [0.2, 0.32, 1], pad: 1.15, half: 0.6 });
+    sc.frame([...crest, L.withers, ...head.points(0.05), ...low], { dir: [0.2, 0.32, 1], pad: 1.15, half: 0.6 });
   }
 
   // La loupe du jeu dessiné, plus petite, en bas à droite (on y touche les mèches, comme dans le jeu dessiné).

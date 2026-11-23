@@ -179,7 +179,9 @@ function renderSession(ui, s) {
     // Mes animaux : on choisit la coupe, et toutes les étapes sont libres.
     const styles = stylesFor(p, a.species);
     out.push(h('h3', {}, `💇 ${t('grm_chooseStyle')}`));
-    out.push(h('div', { class: 'chips grm-styles' }, Object.keys(STYLES).map((id) => {
+    // (seules les coupes de son espèce : pas de « caniche en boules » verrouillée sous le nez d'un cheval)
+    const mine = Object.keys(STYLES).filter((id) => !STYLES[id].species || STYLES[id].species.includes(a.species));
+    out.push(h('div', { class: 'chips grm-styles' }, mine.map((id) => {
       const ok = styles.includes(id);
       return h('button', { class: `chip ${s.style === id ? 'on' : ''}`, disabled: !ok, onClick: () => { s.style = id; ui.renderPanel(); } }, ok ? styleName(id) : `🔒 ${t(`grm_style_${id}`)}`);
     })));
